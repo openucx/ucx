@@ -517,7 +517,8 @@ static ucp_lane_index_t ucp_rndv_zcopy_get_lane(ucp_request_t *rndv_req,
     ucs_assert((proto == UCP_REQUEST_SEND_PROTO_RNDV_GET) ||
                (proto == UCP_REQUEST_SEND_PROTO_RNDV_PUT));
 
-    if (ucs_unlikely(!rndv_req->send.rndv.zcopy.lanes_map_all)) {
+    if (ucs_unlikely(UCS_STATIC_BITMAP_IS_ZERO(
+                rndv_req->send.rndv.zcopy.lanes_map_all))) {
         return UCP_NULL_LANE;
     }
 
@@ -538,10 +539,12 @@ static void ucp_rndv_zcopy_next_lane(ucp_request_t *rndv_req)
 {
     ucp_lane_map_t lanes_map_all = rndv_req->send.rndv.zcopy.lanes_map_all;
     ucp_lane_map_t lane_map;
-    lane_map = lanes_map_all & ~UCS_MASK(rndv_req->send.multi_lane_idx + 1);
 
-    rndv_req->send.multi_lane_idx = ucs_ffs64((lane_map > 0) ? lane_map :
-                                                               lanes_map_all);
+    UCS_STATIC_BITMAP_MASK(&lane_map, rndv_req->send.multi_lane_idx + 1);
+    lane_map = UCS_STATIC_BITMAP_AND_NOT(lanes_map_all, lane_map);
+
+    rndv_req->send.multi_lane_idx = UCS_STATIC_BITMAP_FFS(
+            UCS_STATIC_BITMAP_IS_ZERO(lane_map) ? lanes_map_all : lane_map);
 }
 
 static ucs_status_t
@@ -566,7 +569,6 @@ ucp_rndv_progress_rma_zcopy_common(ucp_request_t *req, ucp_lane_index_t lane,
     int pending_add_res;
 
     ucs_assert_always(req->send.lane != UCP_NULL_LANE);
-    ucs_assert(ucs_popcount(req->send.rndv.zcopy.lanes_map_all) > 0);
 
     if (req->send.rndv.mdesc == NULL) {
         status = ucp_request_send_reg_lane(req, lane);
@@ -598,8 +600,10 @@ ucp_rndv_progress_rma_zcopy_common(ucp_request_t *req, ucp_lane_index_t lane,
                     ucp_mtu, remaining);
         length = ucp_mtu - remaining;
     } else {
-        lanes_count = ucs_popcount(req->send.rndv.zcopy.lanes_map_all);
-        chunk       = ucs_align_up((size_t)(req->send.length /
+        lanes_count = UCS_STATIC_BITMAP_POPCOUNT(
+                req->send.rndv.zcopy.lanes_map_all);
+        ucs_assert(lanes_count > 0);
+        chunk  = ucs_align_up((size_t)(req->send.length /
                                             lanes_count * scale),
                                    align);
         length = ucs_min(chunk, req->send.length - offset);
@@ -717,7 +721,7 @@ static void ucp_rndv_req_init_lanes(ucp_request_t *req,
                                     ucp_lane_map_t lanes_map)
 {
     req->send.rndv.zcopy.lanes_map_all = lanes_map;
-    req->send.multi_lane_idx           = ucs_ffs64(lanes_map);
+    req->send.multi_lane_idx           = UCS_STATIC_BITMAP_FFS(lanes_map);
 }
 
 static void ucp_rndv_req_init_zcopy_lane_map(ucp_request_t *rndv_req,
@@ -728,8 +732,8 @@ static void ucp_rndv_req_init_zcopy_lane_map(ucp_request_t *rndv_req,
     ucp_ep_config_t *ep_config = ucp_ep_config(ep);
     ucp_context_h context      = ep->worker->context;
     ucp_rkey_h rkey            = rndv_req->send.rndv.rkey;
+    ucp_lane_map_t lane_map    = ucp_lane_map_zero;
     ucp_lane_index_t *lanes;
-    ucp_lane_map_t lane_map;
     ucp_lane_index_t lane, lane_idx;
     ucp_md_index_t md_index;
     uct_md_attr_v2_t *md_attr;
@@ -737,8 +741,8 @@ static void ucp_rndv_req_init_zcopy_lane_map(ucp_request_t *rndv_req,
     ucp_rsc_index_t rsc_index;
     uct_iface_attr_t *iface_attr;
     double max_lane_bw, lane_bw, max_ratio;
-    size_t chunk_count;
-    int i, lanes_count;
+    size_t chunk_count, lanes_count;
+    int i;
 
     ucs_assert((proto == UCP_REQUEST_SEND_PROTO_RNDV_GET) ||
                (proto == UCP_REQUEST_SEND_PROTO_RNDV_PUT));
@@ -748,7 +752,6 @@ static void ucp_rndv_req_init_zcopy_lane_map(ucp_request_t *rndv_req,
             ep_config->rndv.put_zcopy.lanes;
 
     max_lane_bw = 0;
-    lane_map    = 0;
     for (i = 0; i < UCP_MAX_LANES; i++) {
         lane = lanes[i];
         if (lane == UCP_NULL_LANE) {
@@ -766,8 +769,8 @@ static void ucp_rndv_req_init_zcopy_lane_map(ucp_request_t *rndv_req,
             /* Lane does not need rkey, can use the lane with invalid rkey  */
             if (!rkey || ((md_attr->access_mem_types & UCS_BIT(mem_type)) &&
                           (mem_type == rkey->mem_type))) {
-                lane_map                         |= UCS_BIT(i);
-                max_lane_bw                       = ucs_max(max_lane_bw, lane_bw);
+                UCS_STATIC_BITMAP_SET(&lane_map, i);
+                max_lane_bw = ucs_max(max_lane_bw, lane_bw);
                 continue;
             }
         }
@@ -786,12 +789,13 @@ static void ucp_rndv_req_init_zcopy_lane_map(ucp_request_t *rndv_req,
         dst_md_index = ep_config->key.lanes[lane].dst_md_index;
         if (rkey && ucs_likely(rkey->md_map & UCS_BIT(dst_md_index))) {
             /* Return first matching lane */
-            lane_map                         |= UCS_BIT(i);
-            max_lane_bw                       = ucs_max(max_lane_bw, lane_bw);
+            UCS_STATIC_BITMAP_SET(&lane_map, i);
+            max_lane_bw = ucs_max(max_lane_bw, lane_bw);
         }
     }
 
-    if (ucs_is_pow2_or_zero(lane_map)) {
+    lanes_count = UCS_STATIC_BITMAP_POPCOUNT(lane_map);
+    if (lanes_count <= 1) {
         goto out; /* No multi-rail */
     }
 
@@ -806,7 +810,7 @@ static void ucp_rndv_req_init_zcopy_lane_map(ucp_request_t *rndv_req,
      * exclude some lanes, so that there will be no more than 1 lane per
      * chunk.
      */
-    ucs_for_each_bit(lane_idx, lane_map) {
+    UCS_STATIC_BITMAP_FOR_EACH_BIT(lane_idx, &lane_map) {
         ucs_assert(lane_idx < UCP_MAX_LANES);
         lane       = lanes[lane_idx];
         rsc_index  = ep_config->key.lanes[lane].rsc_index;
@@ -816,13 +820,13 @@ static void ucp_rndv_req_init_zcopy_lane_map(ucp_request_t *rndv_req,
 
         if (((lane_bw / max_lane_bw) < max_ratio) ||
             (lanes_count > chunk_count)) {
-            lane_map                                &= ~UCS_BIT(lane_idx);
+            UCS_STATIC_BITMAP_RESET(&lane_map, lane_idx);
         }
     }
 
-    ucs_assertv(ucs_popcount(lane_map) <= chunk_count,
-                "lanes_count=%u chunk_count=%zu", ucs_popcount(lane_map),
-                chunk_count);
+    ucs_assertv(UCS_STATIC_BITMAP_POPCOUNT(lane_map) <= chunk_count,
+                "lanes_count=%lu chunk_count=%zu",
+                UCS_STATIC_BITMAP_POPCOUNT(lane_map), chunk_count);
 
 out:
     ucp_rndv_req_init_lanes(rndv_req, lane_map);
@@ -847,7 +851,7 @@ ucp_rndv_rkey_ptr_get_mem_type(ucp_request_t *sreq, size_t length,
                                ucs_memory_type_t remote_mem_type,
                                uct_completion_callback_t comp_cb)
 {
-    ucp_lane_map_t lanes_map = UCS_BIT(0);
+    ucp_lane_map_t lanes_map = UCP_LANE_MAP_BIT(0);
     ucp_worker_h worker      = sreq->send.ep->worker;
     ucp_request_t *freq;
     ucp_ep_h mem_type_ep;
@@ -1080,7 +1084,7 @@ ucp_rndv_recv_frag_put_mem_type(ucp_request_t *rreq, ucp_request_t *freq,
                                     rreq->recv.dt_iter.mem_info.type, length,
                                     ucp_rndv_progress_rma_put_zcopy);
 
-    ucp_rndv_req_init(freq, rreq, 0, NULL,
+    ucp_rndv_req_init(freq, rreq, ucp_lane_map_zero, NULL,
                       (uintptr_t)UCS_PTR_BYTE_OFFSET(
                               rreq->recv.dt_iter.type.contig.buffer, offset));
 
@@ -1869,7 +1873,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_put_zcopy, (self),
     ucp_request_t *sreq = ucs_container_of(self, ucp_request_t, send.uct);
     uct_rkey_t uct_rkey;
 
-    ucs_assert(ucs_popcount(sreq->send.rndv.zcopy.lanes_map_all) > 0);
+    ucs_assert(!UCS_STATIC_BITMAP_IS_ZERO(sreq->send.rndv.zcopy.lanes_map_all));
 
     /* Figure out which lane to use for put operation */
     sreq->send.lane = ucp_rndv_zcopy_get_lane(sreq, &uct_rkey,
@@ -2191,7 +2195,7 @@ static ucs_status_t ucp_rndv_send_start_put_pipeline(ucp_request_t *sreq,
             ucp_rndv_send_frag_get_mem_type(
                     fsreq, length,
                     (uint64_t)UCS_PTR_BYTE_OFFSET(fsreq->send.buffer, offset),
-                    fsreq->send.mem_type, NULL, UCS_BIT(0), 1,
+                    fsreq->send.mem_type, NULL, UCP_LANE_MAP_BIT(0), 1,
                     ucp_rndv_put_pipeline_frag_get_completion);
         }
 

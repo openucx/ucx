@@ -245,7 +245,8 @@ ucp_put_send_short(ucp_ep_h ep, const void *buffer, size_t length,
                                                    rkey_config->put_short.lane),
                               buffer, length, remote_addr, tl_rkey);
     if (status == UCS_OK) {
-        ep->ext->unflushed_lanes |= UCS_BIT(rkey_config->put_short.lane);
+        UCS_STATIC_BITMAP_SET(&ep->ext->unflushed_lanes,
+                              rkey_config->put_short.lane);
     }
 
     return status;

@@ -36,7 +36,7 @@ ucp_am_eager_multi_bcopy_proto_probe(const ucp_proto_init_params_t *init_params)
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE |
                                UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING |
                                UCP_PROTO_COMMON_INIT_FLAG_RESUME,
-        .super.exclude_map   = 0,
+        .super.exclude_map   = ucp_lane_map_zero,
         .super.reg_mem_info  = ucp_mem_info_unknown,
         .max_lanes           = context->config.ext.max_eager_lanes,
         .min_chunk           = 0,
@@ -203,7 +203,7 @@ ucp_am_eager_multi_zcopy_proto_probe(const ucp_proto_init_params_t *init_params)
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE |
                                UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
-        .super.exclude_map   = 0,
+        .super.exclude_map   = ucp_lane_map_zero,
         .super.reg_mem_info  = ucp_proto_common_select_param_mem_info(
                                                      init_params->select_param),
         .max_lanes           = context->config.ext.max_eager_lanes,

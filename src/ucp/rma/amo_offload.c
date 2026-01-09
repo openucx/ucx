@@ -89,7 +89,8 @@ ucp_proto_amo_progress(uct_pending_req_t *self, ucp_operation_id_t op_id,
                                ucp_amo_request_reply_mem_type(req), op_size);
         }
 
-        status = ucp_ep_rma_handle_fence(ep, req, UCS_BIT(spriv->super.lane));
+        status = ucp_ep_rma_handle_fence(ep, req,
+                                         UCP_LANE_MAP_BIT(spriv->super.lane));
         if (status != UCS_OK) {
             ucp_proto_request_abort(req, status);
             return UCS_OK;
@@ -176,7 +177,7 @@ static void ucp_proto_amo_probe(const ucp_proto_init_params_t *init_params,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
                                UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG,
-        .super.exclude_map   = 0,
+        .super.exclude_map   = ucp_lane_map_zero,
         .super.reg_mem_info  = ucp_mem_info_unknown,
         .lane_type           = UCP_LANE_TYPE_AMO,
         .tl_cap_flags        = 0
@@ -228,7 +229,7 @@ static void ucp_proto_amo_query(const ucp_proto_query_params_t *params,
 
     attr->max_msg_length = SIZE_MAX;
     attr->is_estimation  = 0;
-    attr->lane_map       = UCS_BIT(spriv->super.lane);
+    attr->lane_map       = UCP_LANE_MAP_BIT(spriv->super.lane);
     ucp_proto_common_lane_priv_str(params, &spriv->super, 1, 1, &config_strb);
 }
 

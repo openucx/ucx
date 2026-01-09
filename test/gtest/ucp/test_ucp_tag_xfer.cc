@@ -1210,9 +1210,52 @@ UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_stats)
 
 class multi_rail_max : public test_ucp_tag_xfer {
 public:
+    enum {
+        VARIANT_64_PATHS  = 100, /* start after parent's enum values */
+        VARIANT_128_PATHS = 101
+    };
+
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_with_value(variants, get_ctx_params(), VARIANT_64_PATHS,
+                               "64_paths");
+        add_variant_with_value(variants, get_ctx_params(), VARIANT_128_PATHS,
+                               "128_paths");
+    }
+
     void init() override
     {
+        /* TODO: 
+         *   1. Handle the MTU issue in the CI machines - increase all the MTUs
+         *      to 2k-4k and make sure it works.
+         *   2. Run this test using IB_NUM_PATHS=128 only, with both rc and dc.
+         *   3. Keep is_proto_enabled() condition for MAX_RNDV_LANES as it's
+         *      needed for dc. */
         stats_activate();
+        if ((get_variant_value() == VARIANT_128_PATHS) &&
+            (has_any_transport({"rc_x", "rc_v"}))) {
+            UCS_TEST_SKIP_R("128 paths tests not supported for RC transport");
+        }
+
+        if (get_variant_value() == VARIANT_64_PATHS) {
+            modify_config("IB_NUM_PATHS", "64", SETENV_IF_NOT_EXIST);
+            if (!is_proto_enabled()) {
+                modify_config("MAX_RNDV_LANES", "64", SETENV_IF_NOT_EXIST);
+            }
+        } else if (get_variant_value() == VARIANT_128_PATHS) {
+            modify_config("IB_NUM_PATHS", "128", SETENV_IF_NOT_EXIST);
+            if (!is_proto_enabled()) {
+                modify_config("MAX_RNDV_LANES", "128", SETENV_IF_NOT_EXIST);
+            }
+        }
+
+        static std::vector<std::string> devices;
+        get_devices(devices);
+
+        modify_config("NET_DEVICES", devices[0] + ":1");
+        create_entity(true);
+        create_entity(false);
+
         test_ucp_tag_xfer::init();
     }
 
@@ -1242,41 +1285,77 @@ public:
         return UCP_MAX_LANES;
     }
 
+    static void get_devices(std::vector<std::string> &devices)
+    {
+        static const char *ibdev_sysfs_dir = "/sys/class/infiniband";
+
+        DIR *dir = opendir(ibdev_sysfs_dir);
+        if (dir == NULL) {
+            UCS_TEST_SKIP_R(std::string(ibdev_sysfs_dir) + " not found");
+        }
+
+        for (;;) {
+            struct dirent *entry = readdir(dir);
+            if (entry == NULL) {
+                break;
+            }
+
+            if (entry->d_name[0] == '.') {
+                continue;
+            }
+
+            devices.push_back(entry->d_name);
+        }
+
+        closedir(dir);
+    }
+
+    void test_max_lanes(int num_paths)
+    {
+        receiver().connect(&sender(), get_ep_params());
+        test_run_xfer(true, true, true, true, false);
+
+        auto ep_num_lanes = ucp_ep_num_lanes(sender().ep());
+        ASSERT_EQ(ep_num_lanes, ucp_ep_num_lanes(receiver().ep()));
+
+        if (is_proto_enabled()) {
+            EXPECT_EQ(num_paths, ep_num_lanes);
+        }
+
+        size_t bytes_sent       = 0;
+        unsigned num_used_lanes = 0;
+        for (ucp_lane_index_t lane = 0; lane < ep_num_lanes; ++lane) {
+            size_t sender_tx   = get_bytes_sent(sender().ep(), lane);
+            size_t receiver_tx = get_bytes_sent(receiver().ep(), lane);
+            UCS_TEST_MESSAGE << "lane[" << static_cast<int>(lane) << "] : "
+                             << "sender " << sender_tx << " receiver "
+                             << receiver_tx;
+            if ((sender_tx > 0) || (receiver_tx > 0)) {
+                ++num_used_lanes;
+            }
+            bytes_sent += sender_tx + receiver_tx;
+        }
+
+        /* One lane could be reserved for tag offload and not selected for AM/RMA
+        bandwidth lane */
+        EXPECT_GE(num_used_lanes, ep_num_lanes - 1);
+
+        EXPECT_GE(bytes_sent, get_msg_size());
+    }
 };
 
-UCS_TEST_P(multi_rail_max, max_lanes, "IB_NUM_PATHS?=64", "TM_SW_RNDV=y",
-           "RNDV_THRESH=1", "MIN_RNDV_CHUNK_SIZE=1", "MULTI_PATH_RATIO=0.0001")
+UCS_TEST_P(multi_rail_max, max_lanes, "TM_SW_RNDV=y", "RNDV_THRESH=1",
+           "MIN_RNDV_CHUNK_SIZE=1", "MULTI_PATH_RATIO=0.0001")
 {
-    receiver().connect(&sender(), get_ep_params());
-    test_run_xfer(true, true, true, true, false);
-
-    auto ep_num_lanes = ucp_ep_num_lanes(sender().ep());
-    ASSERT_EQ(ep_num_lanes, ucp_ep_num_lanes(receiver().ep()));
-
-    if (is_proto_enabled()) {
-        EXPECT_EQ(num_lanes(), ep_num_lanes);
+    if (get_variant_value() == VARIANT_64_PATHS) {
+        test_max_lanes(64);
+    } else if (get_variant_value() == VARIANT_128_PATHS) {
+        test_max_lanes(128);
     }
-
-    size_t bytes_sent = 0;
-    unsigned num_used_lanes = 0;
-    for (ucp_lane_index_t lane = 0; lane < ep_num_lanes; ++lane) {
-        size_t sender_tx   = get_bytes_sent(sender().ep(), lane);
-        size_t receiver_tx = get_bytes_sent(receiver().ep(), lane);
-        UCS_TEST_MESSAGE << "lane[" << static_cast<int>(lane) << "] : "
-                         << "sender " << sender_tx << " receiver " << receiver_tx;
-        if ((sender_tx > 0) || (receiver_tx > 0)) {
-            ++num_used_lanes;
-        }
-        bytes_sent += sender_tx + receiver_tx;
-    }
-
-    /* One lane could be reserved for tag offload and not selected for AM/RMA
-       bandwidth lane */
-    EXPECT_GE(num_used_lanes, ep_num_lanes - 1);
-
-    EXPECT_GE(bytes_sent, get_msg_size());
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(multi_rail_max, rc, "rc")
+UCP_INSTANTIATE_TEST_CASE_TLS(multi_rail_max, rcv, "rc_v")
+UCP_INSTANTIATE_TEST_CASE_TLS(multi_rail_max, rcx, "rc_x")
+UCP_INSTANTIATE_TEST_CASE_TLS(multi_rail_max, dc, "dc")
 
 #endif

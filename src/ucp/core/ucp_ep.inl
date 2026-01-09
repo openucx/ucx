@@ -139,7 +139,7 @@ static inline ucp_lane_index_t ucp_ep_num_lanes(ucp_ep_h ep)
 
 static inline int ucp_ep_is_lane_p2p(ucp_ep_h ep, ucp_lane_index_t lane)
 {
-    return !!(ucp_ep_config(ep)->p2p_lanes & UCS_BIT(lane));
+    return UCS_STATIC_BITMAP_GET(ucp_ep_config(ep)->p2p_lanes, lane);
 }
 
 static inline ucp_md_index_t ucp_ep_md_index(ucp_ep_h ep, ucp_lane_index_t lane)
@@ -261,6 +261,11 @@ static inline int ucp_ep_has_cm_lane(ucp_ep_h ep)
 {
     return (ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL) &&
            ucp_ep_config_key_has_cm_lane(&ucp_ep_config(ep)->key);
+}
+
+static UCS_F_ALWAYS_INLINE int ucp_ep_has_p2p_lanes(ucp_ep_h ep)
+{
+    return !UCS_STATIC_BITMAP_IS_ZERO(ucp_ep_config(ep)->p2p_lanes);
 }
 
 static UCS_F_ALWAYS_INLINE ucp_lane_index_t ucp_ep_get_cm_lane(ucp_ep_h ep)

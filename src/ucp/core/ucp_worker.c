@@ -1797,13 +1797,13 @@ static void ucp_worker_add_feature_rsc(ucp_context_h context,
     ucp_rsc_index_t rsc_idx;
     ucp_lane_index_t lane;
 
-    if (!lanes_bitmap) {
+    if (UCS_STATIC_BITMAP_IS_ZERO(lanes_bitmap)) {
         return;
     }
 
     ucs_string_buffer_appendf(strb, " %s(", feature_str);
 
-    ucs_for_each_bit(lane, lanes_bitmap) {
+    UCS_STATIC_BITMAP_FOR_EACH_BIT(lane, &lanes_bitmap) {
         ucs_assert(lane < UCP_MAX_LANES); /* make coverity happy */
         rsc_idx = key->lanes[lane].rsc_index;
         ucs_assert(rsc_idx != UCP_NULL_RESOURCE);
@@ -1823,13 +1823,12 @@ ucp_worker_print_used_tls(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index)
                                                      cfg_index).key;
     ucp_context_h context          = worker->context;
     UCS_STRING_BUFFER_ONSTACK(strb, 256);
-    ucp_lane_map_t tag_lanes_map    = 0;
-    ucp_lane_map_t rma_lanes_map    = 0;
-    ucp_lane_map_t amo_lanes_map    = 0;
-    ucp_lane_map_t device_lanes_map = 0;
-    ucp_lane_map_t stream_lanes_map = 0;
-    ucp_lane_map_t am_lanes_map     = 0;
-    ucp_lane_map_t ka_lanes_map     = 0;
+    ucp_lane_map_t tag_lanes_map    = ucp_lane_map_zero;
+    ucp_lane_map_t rma_lanes_map    = ucp_lane_map_zero;
+    ucp_lane_map_t amo_lanes_map    = ucp_lane_map_zero;
+    ucp_lane_map_t stream_lanes_map = ucp_lane_map_zero;
+    ucp_lane_map_t am_lanes_map     = ucp_lane_map_zero;
+    ucp_lane_map_t ka_lanes_map     = ucp_lane_map_zero;
     int rma_emul                    = 0;
     int amo_emul                    = 0;
     int num_valid_lanes             = 0;
@@ -1850,27 +1849,27 @@ ucp_worker_print_used_tls(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index)
             (ucp_ep_config_get_multi_lane_prio(key->am_bw_lanes, lane) >= 0)  ||
             (ucp_ep_config_get_multi_lane_prio(key->rma_bw_lanes, lane) >= 0)) {
             if (context->config.features & UCP_FEATURE_TAG) {
-                tag_lanes_map |= UCS_BIT(lane);
+                UCS_STATIC_BITMAP_SET(&tag_lanes_map, lane);
             }
 
             if (context->config.features & UCP_FEATURE_AM) {
-                am_lanes_map |= UCS_BIT(lane);
+                UCS_STATIC_BITMAP_SET(&am_lanes_map, lane);
             }
         }
 
         if (key->tag_lane == lane) {
             /* tag_lane is initialized if TAG feature is requested */
             ucs_assert(context->config.features & UCP_FEATURE_TAG);
-            tag_lanes_map |= UCS_BIT(lane);
+            UCS_STATIC_BITMAP_SET(&tag_lanes_map, lane);
         }
 
         if ((key->am_lane == lane) &&
             (context->config.features & UCP_FEATURE_STREAM)) {
-            stream_lanes_map |= UCS_BIT(lane);
+            UCS_STATIC_BITMAP_SET(&stream_lanes_map, lane);
         }
 
         if (key->keepalive_lane == lane) {
-            ka_lanes_map |= UCS_BIT(lane);
+            UCS_STATIC_BITMAP_SET(&ka_lanes_map, lane);
         }
 
         if (key->lanes[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_DEVICE)) {
@@ -1878,11 +1877,11 @@ ucp_worker_print_used_tls(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index)
         }
 
         if ((ucp_ep_config_get_multi_lane_prio(key->rma_lanes, lane) >= 0)) {
-            rma_lanes_map |= UCS_BIT(lane);
+            UCS_STATIC_BITMAP_SET(&rma_lanes_map, lane);
         }
 
         if ((ucp_ep_config_get_multi_lane_prio(key->amo_lanes, lane) >= 0)) {
-            amo_lanes_map |= UCS_BIT(lane);
+            UCS_STATIC_BITMAP_SET(&amo_lanes_map, lane);
         }
     }
 
@@ -1890,16 +1889,18 @@ ucp_worker_print_used_tls(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index)
         return;
     }
 
-    if ((context->config.features & UCP_FEATURE_RMA) && (rma_lanes_map == 0)) {
+    if ((context->config.features & UCP_FEATURE_RMA) &&
+        UCS_STATIC_BITMAP_IS_ZERO(rma_lanes_map)) {
         ucs_assert(key->am_lane != UCP_NULL_LANE);
-        rma_lanes_map |= UCS_BIT(key->am_lane);
-        rma_emul       = 1;
+        UCS_STATIC_BITMAP_SET(&rma_lanes_map, key->am_lane);
+        rma_emul = 1;
     }
 
-    if ((context->config.features & UCP_FEATURE_AMO) && (amo_lanes_map == 0) &&
+    if ((context->config.features & UCP_FEATURE_AMO) &&
+        UCS_STATIC_BITMAP_IS_ZERO(amo_lanes_map) &&
         (key->am_lane != UCP_NULL_LANE)) {
-        amo_lanes_map |= UCS_BIT(key->am_lane);
-        amo_emul       = 1;
+        UCS_STATIC_BITMAP_SET(&amo_lanes_map, key->am_lane);
+        amo_emul = 1;
     }
 
     ucp_worker_add_feature_rsc(context, key, tag_lanes_map, "tag", &strb);
@@ -3769,9 +3770,10 @@ ucp_wiface_process_for_each_lane(ucp_worker_h worker,
     ucp_rsc_index_t rsc_index;
     ucp_worker_iface_t *wiface;
 
-    ucs_for_each_bit(lane, lane_map) {
+    UCS_STATIC_BITMAP_FOR_EACH_BIT(lane, &lane_map) {
         ucs_assertv(lane < UCP_MAX_LANES,
-                    "lane=%" PRIu8 ", lane_map=0x%" PRIx64, lane, lane_map);
+                    "lane=%" PRIu8 ", lane_map=" UCP_LANE_MAP_FMT,
+                    lane, UCP_LANE_MAP_ARG(&lane_map));
         rsc_index = ep_config->key.lanes[lane].rsc_index;
         wiface    = ucp_worker_iface(worker, rsc_index);
         wiface_process(wiface);

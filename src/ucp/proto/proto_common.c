@@ -35,7 +35,7 @@ ucp_proto_common_init_params(const ucp_proto_init_params_t *init_params)
         .send_op       = UCT_EP_OP_LAST,
         .memtype_op    = UCT_EP_OP_LAST,
         .flags         = 0,
-        .exclude_map   = 0
+        .exclude_map   = ucp_lane_map_zero
     };
     return params;
 }
@@ -601,8 +601,10 @@ ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
         goto out;
     }
 
-    lane_map = UCS_MASK(ep_config_key->num_lanes) & ~exclude_map;
-    ucs_for_each_bit(lane, lane_map) {
+    UCS_STATIC_BITMAP_MASK(&lane_map, ep_config_key->num_lanes);
+    UCS_STATIC_BITMAP_AND_INPLACE(&lane_map, UCS_STATIC_BITMAP_NOT(exclude_map));
+
+    UCS_STATIC_BITMAP_FOR_EACH_BIT(lane, &lane_map) {
         if (num_lanes >= max_lanes) {
             break;
         }
@@ -713,7 +715,7 @@ ucp_proto_common_reg_md_map(const ucp_proto_common_init_params_t *params,
     }
 
     reg_md_map = 0;
-    ucs_for_each_bit(lane, lane_map) {
+    UCS_STATIC_BITMAP_FOR_EACH_BIT(lane, &lane_map) {
         md_index = ucp_proto_common_get_md_index(&params->super, lane);
         md_attr  = &context->tl_mds[md_index].attr;
 
