@@ -289,4 +289,17 @@ ucp_ep_config_err_mode_eq(ucp_ep_h ep, ucp_err_handling_mode_t err_mode)
     return ucp_ep_config(ep)->key.err_mode == err_mode;
 }
 
+static UCS_F_ALWAYS_INLINE ucp_err_handling_mode_t
+ucp_ep_params_err_handling_mode(const ucp_ep_params_t *params)
+{
+    return UCP_PARAM_VALUE(EP, params, err_mode, ERR_HANDLING_MODE,
+                           UCP_ERR_HANDLING_MODE_NONE);
+}
+
+static UCS_F_ALWAYS_INLINE int ucp_ep_config_err_handling_enabled(ucp_ep_h ep)
+{
+    return ucp_ep_config_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_PEER) ||
+           ucp_ep_config_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_FAILOVER);
+}
+
 #endif

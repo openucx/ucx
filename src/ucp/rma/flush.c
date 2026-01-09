@@ -44,9 +44,8 @@ ucp_ep_flush_request_update_uct_comp(ucp_request_t *req, int diff,
 static void ucp_ep_flush_error(ucp_request_t *req, ucp_lane_index_t lane,
                                ucs_status_t status)
 {
-    ucs_log_level_t level = (ucp_ep_config(req->send.ep)->key.err_mode ==
-                             UCP_ERR_HANDLING_MODE_PEER) ?
-                             UCS_LOG_LEVEL_TRACE_REQ : UCS_LOG_LEVEL_ERROR;
+    ucs_log_level_t level = ucp_ep_config_err_handling_enabled(req->send.ep) ?
+                            UCS_LOG_LEVEL_TRACE_REQ : UCS_LOG_LEVEL_ERROR;
 
     ucs_assertv(lane != UCP_NULL_LANE, "req=%p ep=%p lane=%d status=%s",
                 req, req->send.ep, lane, ucs_status_string(status));

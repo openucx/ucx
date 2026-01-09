@@ -363,8 +363,7 @@ ucp_proto_request_pack_rkey(ucp_request_t *req, ucp_md_map_t md_map,
     /* Since global VA registration doesn't support invalidation yet, and error
      * handling is enabled on this EP, we replace GVA registrations with
      * regular ones */
-    if (ucp_ep_config_err_mode_eq(req->send.ep,
-                                  UCP_ERR_HANDLING_MODE_PEER) &&
+    if (ucp_ep_config_err_handling_enabled(req->send.ep) &&
         ucs_unlikely(memh->flags & UCP_MEMH_FLAG_HAS_AUTO_GVA)) {
         ucp_memh_disable_gva(memh, md_map);
     }
