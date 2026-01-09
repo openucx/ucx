@@ -161,6 +161,9 @@ typedef struct {
         uint64_t                      key;
         const ucp_proto_select_elem_t *value;
     } cache;
+
+    /* Epoch (generation) counter. @see ucp_worker::epoch_counter */
+    uint64_t                          epoch_counter;
 } ucp_proto_select_t;
 
 
@@ -177,7 +180,8 @@ typedef struct {
 } ucp_proto_select_short_t;
 
 
-ucs_status_t ucp_proto_select_init(ucp_proto_select_t *proto_select);
+ucs_status_t ucp_proto_select_init(ucp_proto_select_t *proto_select,
+                                   uint64_t epoch_counter);
 
 
 void ucp_proto_select_cleanup(ucp_proto_select_t *proto_select);
