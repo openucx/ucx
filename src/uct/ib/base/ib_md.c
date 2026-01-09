@@ -125,9 +125,9 @@ ucs_config_field_t uct_ib_md_config_table[] = {
      ucs_offsetof(uct_ib_md_config_t, ext.gda_max_hca_per_gpu),
      UCS_CONFIG_TYPE_UINT},
 
-    {"GDA_DMABUF_ENABLE", "n",
+    {"GDA_DMABUF_ENABLE", "try",
      "Enable DMA-BUF in GDA.",
-     ucs_offsetof(uct_ib_md_config_t, ext.gda_dmabuf_enable), UCS_CONFIG_TYPE_BOOL},
+     ucs_offsetof(uct_ib_md_config_t, ext.gda_dmabuf_enable), UCS_CONFIG_TYPE_TERNARY},
 
     {"PCI_BW", "",
      "Maximum effective data transfer rate of PCI bus connected to HCA\n",
