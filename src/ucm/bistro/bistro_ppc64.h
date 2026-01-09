@@ -51,7 +51,8 @@ static inline void ucm_bistro_patch_lock(void * UCS_V_UNUSED dst)
 
 static inline ucs_status_t
 ucm_bistro_patch(void *func_ptr, void *hook, const char *symbol,
-                 void **orig_func_p, ucm_bistro_restore_point_t **rp)
+                 void **orig_func_p, ucm_bistro_restore_point_t **rp,
+                 int syscall_num)
 {
     uint64_t toc;
 
@@ -60,7 +61,7 @@ ucm_bistro_patch(void *func_ptr, void *hook, const char *symbol,
     }
 
     asm volatile ("std 2, %0" : "=m" (toc));
-    return ucm_bistro_patch_toc(func_ptr, hook, rp, toc);
+    return ucm_bistro_patch_toc(func_ptr, hook, rp, toc, syscall_num);
 }
 
 #endif

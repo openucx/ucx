@@ -18,6 +18,7 @@
 #include <ucm/bistro/bistro_int.h>
 #include <ucs/type/serialize.h>
 #include <ucs/sys/ptr_arith.h>
+#include <ucs/sys/sys.h>
 #include <ucs/time/time.h>
 #include <ucs/arch/atomic.h>
 
@@ -67,12 +68,38 @@ void ucm_bistro_modify_code(void *dst, const ucm_bistro_lock_t *bytes)
     }
 }
 
-ucs_status_t
-ucm_bistro_apply_patch_atomic(void *dst, const void *patch, size_t len)
+static void ucm_bistro_wait_sec(double sec)
 {
-    size_t skip           = sizeof(ucm_bistro_lock_t);
-    double grace_duration = 5e-3;
-    double deadline;
+    double deadline = ucm_get_time() + sec;
+
+    while (ucm_get_time() < deadline) {
+        sched_yield();
+    }
+}
+
+static void ucm_bistro_wait_for_syscall_completion(int syscall_num)
+{
+    static double timeout_sec    = 5;
+    static double grace_duration = 5e-3;
+    double deadline              = ucm_get_time() + timeout_sec;
+
+    while (ucm_is_syscall_in_progress(syscall_num)) {
+        if (ucm_get_time() >= deadline) {
+            ucm_diag("wait_for_syscall_completion: timeout exceeded "
+                     "(syscall_num=%d)", syscall_num);
+            break;
+        }
+
+        ucm_bistro_wait_sec(grace_duration);
+    }
+
+    ucm_bistro_wait_sec(grace_duration);
+}
+
+ucs_status_t ucm_bistro_apply_patch_atomic(void *dst, const void *patch,
+                                           size_t len, int syscall_num)
+{
+    size_t skip = sizeof(ucm_bistro_lock_t);
     ucs_status_t status;
 
     status = ucm_bistro_protect(dst, len, UCM_PROT_READ_WRITE_EXEC);
@@ -83,11 +110,7 @@ ucm_bistro_apply_patch_atomic(void *dst, const void *patch, size_t len)
     /* Lock the codepatch and wait for existing flows to complete */
     ucm_bistro_patch_lock(dst);
     ucs_clear_cache(dst, UCS_PTR_BYTE_OFFSET(dst, len));
-
-    deadline = ucm_get_time() + grace_duration;
-    while (ucm_get_time() < deadline) {
-        sched_yield();
-    }
+    ucm_bistro_wait_for_syscall_completion(syscall_num);
 
     /* Copy the payload behind the lock */
     memcpy(UCS_PTR_BYTE_OFFSET(dst, skip), UCS_PTR_BYTE_OFFSET(patch, skip),

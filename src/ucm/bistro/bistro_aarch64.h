@@ -28,12 +28,15 @@
  *                     @ref UCS_ERR_UNSUPPORTED.
  * @param rp           Restore point used to restore original function.
  *                     Optional, may be NULL.
+ * @param syscall_num  Number of syscall which requires waiting on, after lock
+ *                     and before patching. If -1 is passed, no wait would be
+ *                     performed.
  *
  * @return Error code as defined by @ref ucs_status_t
  */
 ucs_status_t ucm_bistro_patch(void *func_ptr, void *hook, const char *symbol,
                               void **orig_func_p,
-                              ucm_bistro_restore_point_t **rp);
+                              ucm_bistro_restore_point_t **rp, int syscall_num);
 
 /* Instruction type */
 typedef uint32_t ucm_bistro_inst_t;
