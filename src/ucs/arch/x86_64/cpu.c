@@ -287,11 +287,13 @@ static double ucs_arch_x86_tsc_freq_from_cpu_model()
 
 static double ucs_arch_x86_tsc_freq_measure()
 {
-    static const double accuracy = 1e-5; /* 5 digits after decimal point */
-    static const double max_time = 1e-3; /* 1ms */
-    uint64_t tsc, tsc_start, tsc_end, min_tsc_diff;
-    double elapsed, curr_freq, avg_freq;
-    struct timeval tv_start, tv_end;
+    static const double relative_accuracy = 3e-6; /* 3KHz for every 1GHz */
+    static const double max_time          = 1e-3; /* 1ms */
+    static const unsigned init_iterations = 10;
+    static const unsigned max_count       = 10;
+    uint64_t tsc, tsc_start, tsc_end, min_tsc_diff, count;
+    double elapsed, curr_freq, prev_freq, relative_error;
+    struct timespec ts_start, ts_end;
     unsigned i;
 
     /* Start the timer when the time difference between consecutive measures
@@ -299,44 +301,64 @@ static double ucs_arch_x86_tsc_freq_measure()
        and random context switches. */
     min_tsc_diff     = UINT64_MAX;
     tsc_start        = 0;
-    tv_start.tv_sec  = 0;
-    tv_start.tv_usec = 0;
-    for (i = 0; i < 10; ++i) {
+    ts_start.tv_sec  = 0;
+    ts_start.tv_nsec = 0;
+    for (i = 0; i < init_iterations; ++i) {
+        /* Add lfences between operations to ensure consistency */
         tsc = ucs_arch_x86_read_tsc();
-        gettimeofday(&tv_end, NULL);
+        ucs_memory_bus_load_fence();
+        clock_gettime(CLOCK_MONOTONIC, &ts_end);
+        ucs_memory_bus_load_fence();
         tsc_end = ucs_arch_x86_read_tsc();
+
         if ((tsc_end - tsc) < min_tsc_diff) {
-            tv_start     = tv_end;
+            ts_start     = ts_end;
             tsc_start    = tsc_end;
             min_tsc_diff = tsc_end - tsc;
         }
     }
 
-    /* Calculate the frequency and stop when the difference between current
-       iteration and the geometric average of previous iterations is below
+    /* Calculate the frequency and stop when the relative error is below
        the required accuracy threshold */
-    avg_freq  = 0.0;
-    curr_freq = 1.0;
+    relative_error = 0.0;
+    curr_freq      = 0.0;
+    count          = 0;
     do {
-        gettimeofday(&tv_end, NULL);
-        tsc_end = ucs_arch_x86_read_tsc();
-        elapsed = ((tv_end.tv_usec - tv_start.tv_usec) /
-                   (double)UCS_USEC_PER_SEC) +
-                  (tv_end.tv_sec - tv_start.tv_sec);
-        if ((tv_start.tv_sec != tv_end.tv_sec) ||
-            (tv_start.tv_usec != tv_end.tv_usec)) {
-            curr_freq = (tsc_end - tsc_start) / elapsed;
-            avg_freq  = (avg_freq + curr_freq) / 2;
-        }
-    } while ((fabs(curr_freq - avg_freq) >
-              (ucs_max(curr_freq, avg_freq) * accuracy)) &&
-             (elapsed < max_time));
+        prev_freq = curr_freq;
 
-    ucs_trace("tsc measure start %lu.%06lu %lu (diff %lu) end %lu.%06lu %lu",
-              tv_start.tv_sec, tv_start.tv_usec, tsc_start, min_tsc_diff,
-              tv_end.tv_sec, tv_end.tv_usec, tsc_end);
-    ucs_debug("measured tsc frequency %.3f MHz after %.2f ms", curr_freq * 1e-6,
-              elapsed * UCS_MSEC_PER_SEC);
+        clock_gettime(CLOCK_MONOTONIC, &ts_end);
+        ucs_memory_bus_load_fence();
+        tsc_end = ucs_arch_x86_read_tsc();
+
+        elapsed = ((ts_end.tv_nsec - ts_start.tv_nsec) /
+                   (double)UCS_NSEC_PER_SEC) +
+                  (ts_end.tv_sec - ts_start.tv_sec);
+        if (ucs_unlikely(elapsed <= 0.0)) {
+            continue;
+        }
+
+        curr_freq      = (tsc_end - tsc_start) / elapsed;
+        relative_error = fabs(curr_freq - prev_freq) / curr_freq;
+
+        if (relative_error < relative_accuracy) {
+            count++;
+        } else {
+            count = 0;
+        }
+    } while ((count < max_count) && (elapsed < max_time));
+
+    ucs_trace("tsc measure start %lu.%09lu %lu (diff %lu) end %lu.%09lu %lu",
+              ts_start.tv_sec, ts_start.tv_nsec, tsc_start, min_tsc_diff,
+              ts_end.tv_sec, ts_end.tv_nsec, tsc_end);
+    ucs_debug("measured tsc frequency %.3f MHz after %.2f ms"
+              " (relative error %.2e)",
+              curr_freq * 1e-6, elapsed * UCS_MSEC_PER_SEC, relative_error);
+
+    if (ucs_unlikely(count < max_count)) {
+        ucs_debug("tsc frequency measurement reached maximal time limit!"
+                  " (%.2f ms)",
+                  max_time * UCS_MSEC_PER_SEC);
+    }
 
     return curr_freq;
 }
