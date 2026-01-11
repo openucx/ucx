@@ -423,7 +423,7 @@ int ucm_is_syscall_in_progress(int syscall_num)
         for (bpos = 0; bpos < nread;) {
             entry = (struct linux_dirent64*)(dir_buf + bpos);
 
-            if ((entry->d_name[0] == '.') || (entry->d_type != DT_DIR)) {
+            if (entry->d_name[0] == '.') {
                 bpos += entry->d_reclen;
                 continue;
             }
@@ -433,29 +433,30 @@ int ucm_is_syscall_in_progress(int syscall_num)
 
             fd = open(syscall_file, O_RDONLY);
             if (fd < 0) {
-                ucm_error("failed to open %s: %m", syscall_file);
-                break;
+                ucm_diag("failed to open %s: %m", syscall_file);
+                continue;
             }
 
             read_bytes = read(fd, line, sizeof(line) - 1);
             close(fd);
 
             if (read_bytes < 0) {
-                ucm_error("failed to read %s: %m", syscall_file);
-                break;
+                ucm_diag("failed to read %s: %m", syscall_file);
+                continue;
             }
 
             line[read_bytes] = '\0';
             if ((sscanf(line, "%d", &curr_syscall) == 1) &&
                 (curr_syscall == syscall_num)) {
                 found = 1;
-                break;
+                goto out;
             }
 
             bpos += entry->d_reclen;
         }
     }
 
+out:
     close(dir_fd);
     return found;
 }
