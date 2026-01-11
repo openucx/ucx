@@ -270,24 +270,25 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_db(uct_rc_gdaki_dev_ep_t *ep, unsigned cid,
     uct_rc_gdaki_dev_qp_t *qp = uct_rc_mlx5_gda_get_qp(ep, cid);
     cuda::atomic_ref<uint64_t, cuda::thread_scope_device> ref(
             qp->sq_ready_index);
-    uint64_t wqe_base_orig = wqe_base;
+    const uint64_t wqe_next = wqe_base + count;
+    const bool skip_db      = !(flags & UCT_DEVICE_FLAG_NODELAY) &&
+                              !((wqe_base ^ wqe_next) & 128);
 
     __threadfence();
-    while (!ref.compare_exchange_strong(wqe_base, wqe_base + count,
-                                        cuda::std::memory_order_relaxed)) {
-        wqe_base = wqe_base_orig;
+    if (skip_db) {
+        const uint64_t wqe_base_orig = wqe_base;
+        while (!ref.compare_exchange_strong(wqe_base, wqe_next,
+                                            cuda::std::memory_order_relaxed)) {
+            wqe_base = wqe_base_orig;
+        }
+    } else {
+        while (READ_ONCE(qp->sq_ready_index) != wqe_base) {
+        }
+        uct_rc_mlx5_gda_ring_db(ep, cid, wqe_next);
+        uct_rc_mlx5_gda_update_dbr(ep, cid, wqe_next);
+        uct_rc_mlx5_gda_ring_db(ep, cid, wqe_next);
+        ref.store(wqe_next, cuda::std::memory_order_release);
     }
-
-    if (!(flags & UCT_DEVICE_FLAG_NODELAY) &&
-        !((wqe_base ^ (wqe_base + count)) & 128)) {
-        return;
-    }
-
-    uct_rc_mlx5_gda_lock(&qp->sq_lock);
-    uct_rc_mlx5_gda_ring_db(ep, cid, qp->sq_ready_index);
-    uct_rc_mlx5_gda_update_dbr(ep, cid, qp->sq_ready_index);
-    uct_rc_mlx5_gda_ring_db(ep, cid, qp->sq_ready_index);
-    uct_rc_mlx5_gda_unlock(&qp->sq_lock);
 }
 
 UCS_F_DEVICE bool
@@ -347,11 +348,12 @@ template<ucs_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_single(
         uct_device_ep_h tl_ep, const uct_device_mem_element_t *tl_mem_elem,
         const void *address, uint64_t remote_address, size_t length,
-        unsigned cid, uint64_t flags, uct_device_completion_t *comp)
+        unsigned channel_id, uint64_t flags, uct_device_completion_t *comp)
 {
     auto ep       = reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(tl_ep);
     auto mem_elem = reinterpret_cast<const uct_rc_gdaki_device_mem_element_t*>(
             tl_mem_elem);
+    auto cid      = channel_id & ep->channel_mask;
 
     return uct_rc_mlx5_gda_ep_single<level>(ep, tl_mem_elem, address,
                                             mem_elem->lkey, remote_address,
@@ -363,12 +365,13 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_single(
 template<ucs_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_atomic_add(
         uct_device_ep_h tl_ep, const uct_device_mem_element_t *tl_mem_elem,
-        uint64_t value, uint64_t remote_address, unsigned cid, uint64_t flags,
-        uct_device_completion_t *comp)
+        uint64_t value, uint64_t remote_address, unsigned channel_id,
+        uint64_t flags, uct_device_completion_t *comp)
 {
     auto ep       = reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(tl_ep);
     auto mem_elem = reinterpret_cast<const uct_rc_gdaki_device_mem_element_t*>(
             tl_mem_elem);
+    auto cid      = channel_id & ep->channel_mask;
 
     return uct_rc_mlx5_gda_ep_single<level>(ep, tl_mem_elem, ep->atomic_va,
                                             ep->atomic_lkey, remote_address,
@@ -383,11 +386,12 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi(
         unsigned mem_list_count, void *const *addresses,
         const uint64_t *remote_addresses, const size_t *lengths,
         uint64_t counter_inc_value, uint64_t counter_remote_address,
-        unsigned cid, uint64_t flags, uct_device_completion_t *tl_comp)
+        unsigned channel_id, uint64_t flags, uct_device_completion_t *tl_comp)
 {
     auto ep       = reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(tl_ep);
     auto mem_list = reinterpret_cast<const uct_rc_gdaki_device_mem_element_t*>(
             tl_mem_list);
+    auto cid      = channel_id & ep->channel_mask;
     uct_rc_gda_completion_t *comp = &tl_comp->rc_gda;
     int count                     = mem_list_count;
     int counter_index             = count - 1;
@@ -476,11 +480,12 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi_partial(
         const size_t *local_offsets, const size_t *remote_offsets,
         const size_t *lengths, unsigned counter_index,
         uint64_t counter_inc_value, uint64_t counter_remote_address,
-        unsigned cid, uint64_t flags, uct_device_completion_t *tl_comp)
+        unsigned channel_id, uint64_t flags, uct_device_completion_t *tl_comp)
 {
     auto ep       = reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(tl_ep);
     auto mem_list = reinterpret_cast<const uct_rc_gdaki_device_mem_element_t*>(
             tl_mem_list);
+    auto cid      = channel_id & ep->channel_mask;
     uct_rc_gda_completion_t *comp = &tl_comp->rc_gda;
     unsigned count                = mem_list_count;
     bool atomic                   = false;

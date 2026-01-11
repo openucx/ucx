@@ -233,13 +233,19 @@ void test_md::modify_config(const std::string& name, const std::string& value,
 
 bool test_md::check_caps(uint64_t flags) const
 {
-    return ((md() == NULL) || ucs_test_all_flags(m_md_attr.flags, flags));
+    return ((md() == nullptr) || ucs_test_all_flags(m_md_attr.flags, flags));
 }
 
 bool test_md::check_reg_mem_type(ucs_memory_type_t mem_type)
 {
-    return ((md() == NULL) || (check_caps(UCT_MD_FLAG_REG) &&
+    return ((md() == nullptr) || (check_caps(UCT_MD_FLAG_REG) &&
                 (m_md_attr.reg_mem_types & UCS_BIT(mem_type))));
+}
+
+bool test_md::check_alloc_mem_type(ucs_memory_type_t mem_type)
+{
+    return ((md() == nullptr) || (check_caps(UCT_MD_FLAG_ALLOC) &&
+                (m_md_attr.alloc_mem_types & UCS_BIT(mem_type))));
 }
 
 void test_md::alloc_memory(void **address, size_t size, char *fill_buffer,
@@ -276,87 +282,103 @@ void test_md::dereg_cb(uct_completion_t *comp)
     md_comp->self->m_comp_count++;
 }
 
-UCS_TEST_SKIP_COND_P(test_md, rkey_ptr,
-                     !check_caps(UCT_MD_FLAG_ALLOC |
-                                 UCT_MD_FLAG_RKEY_PTR)) {
-    uct_md_h md_ref           = md();
-    uct_alloc_method_t method = UCT_ALLOC_METHOD_MD;
+UCS_TEST_SKIP_COND_P(test_md, rkey_ptr, !check_caps(UCT_MD_FLAG_RKEY_PTR)) {
+    uct_md_h md_ref                       = md();
+    uct_md_mkey_pack_params_t pack_params = {};
+    void *ptr                             = nullptr;
     size_t size;
     void *rkey_buffer;
     ucs_status_t status;
     unsigned *rva, *lva;
     uct_allocated_memory_t mem;
     uct_rkey_bundle_t rkey_bundle;
-    unsigned i;
-    uct_mem_alloc_params_t params;
+    unsigned mt;
+    uct_mem_h memh;
+    ucs_memory_type_t mem_type;
 
-    params.field_mask      = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS    |
-                             UCT_MEM_ALLOC_PARAM_FIELD_ADDRESS  |
-                             UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE |
-                             UCT_MEM_ALLOC_PARAM_FIELD_MDS      |
-                             UCT_MEM_ALLOC_PARAM_FIELD_NAME;
-    params.flags           = UCT_MD_MEM_ACCESS_ALL;
-    params.name            = "test";
-    params.mem_type        = UCS_MEMORY_TYPE_HOST;
-    params.mds.mds         = &md_ref;
-    params.mds.count       = 1;
-
-    // alloc (should work with both sysv and xpmem
-    size             = sizeof(unsigned) * UCS_MBYTE;
-    rva              = NULL;
-    params.address   = (void *)rva;
-    status = uct_mem_alloc(size, &method, 1, &params, &mem);
-    ASSERT_UCS_OK(status);
-    EXPECT_LE(sizeof(unsigned) * UCS_MBYTE, mem.length);
-    size   = mem.length;
-    rva    = (unsigned *)mem.address;
-
-    // pack
+    /* allocate rkey buffer once for all iterations */
     rkey_buffer = malloc(md_attr().rkey_packed_size);
-    if (rkey_buffer == NULL) {
-        // make coverity happy
-        uct_mem_free(&mem);
+    if (rkey_buffer == nullptr) {
         GTEST_FAIL();
     }
 
-    status = uct_md_mkey_pack(md(), mem.memh, rkey_buffer);
+    ucs_for_each_bit(mt, md_attr().reg_mem_types | md_attr().alloc_mem_types) {
+        UCS_TEST_MESSAGE << "rkey_ptr test for memory type "
+                         << ucs_memory_type_names[mt];
+        mem_type = static_cast<ucs_memory_type_t>(mt);
+        size     = sizeof(unsigned) * UCS_MBYTE;
+        if (check_alloc_mem_type(mem_type)) {
+            // allocate registered memory using md alloc
+            uct_alloc_method_t method = UCT_ALLOC_METHOD_MD;
+            uct_mem_alloc_params_t params;
 
-    // unpack
-    status = uct_rkey_unpack(GetParam().component, rkey_buffer, &rkey_bundle);
-    ASSERT_UCS_OK(status);
+            rva               = nullptr;
+            params.field_mask = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS |
+                                UCT_MEM_ALLOC_PARAM_FIELD_ADDRESS |
+                                UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE |
+                                UCT_MEM_ALLOC_PARAM_FIELD_MDS |
+                                UCT_MEM_ALLOC_PARAM_FIELD_NAME;
+            params.flags      = UCT_MD_MEM_ACCESS_ALL;
+            params.name       = "test";
+            params.mem_type   = mem_type;
+            params.mds.mds    = &md_ref;
+            params.mds.count  = 1;
+            params.address    = (void*)rva;
+            status            = uct_mem_alloc(size, &method, 1, &params, &mem);
+            ASSERT_UCS_OK(status);
+            EXPECT_LE(sizeof(unsigned) * UCS_MBYTE, mem.length);
+            size = mem.length;
+            rva  = static_cast<unsigned*>(mem.address);
+            memh = mem.memh;
+        } else {
+            // allocate memory using system allocator and register it
+            alloc_memory(&ptr, size, nullptr, mem_type);
+            rva = static_cast<unsigned *>(ptr);
+            ASSERT_UCS_OK(reg_mem(UCT_MD_MEM_ACCESS_ALL, ptr, size, &memh));
+        }
 
-    // get direct ptr
-    status = uct_rkey_ptr(GetParam().component, &rkey_bundle, (uintptr_t)rva,
-                          (void **)&lva);
-    ASSERT_UCS_OK(status);
-    // check direct access
-    // read
-    for (i = 0; i < size/sizeof(unsigned); i++) {
-        rva[i] = i;
+        // pack
+        status = uct_md_mkey_pack_v2(md(), memh, rva, size, &pack_params,
+                                     rkey_buffer);
+        ASSERT_UCS_OK(status);
+        // unpack
+        status = uct_rkey_unpack(GetParam().component, rkey_buffer, &rkey_bundle);
+        ASSERT_UCS_OK(status);
+        // get direct ptr
+        status = uct_rkey_ptr(GetParam().component, &rkey_bundle, (uintptr_t)rva,
+                              (void **)&lva);
+        ASSERT_UCS_OK(status);
+
+        const size_t nelems = size / sizeof(unsigned);
+        std::vector<unsigned> host(nelems);
+        // check_direct_access read
+        for (size_t i = 0; i < nelems; ++i) {
+            host[i] = static_cast<unsigned>(i);
+        }
+
+        mem_buffer::copy_to(rva, host.data(), size, mem_type);
+        EXPECT_TRUE(mem_buffer::compare(host.data(), lva, size,
+                                        UCS_MEMORY_TYPE_HOST, mem_type));
+        // check_direct_access write
+        for (size_t i = 0; i < nelems; ++i) {
+            host[i] = static_cast<unsigned>(nelems - i);
+        }
+
+        mem_buffer::copy_to(lva, host.data(), size, mem_type);
+        EXPECT_TRUE(mem_buffer::compare(host.data(), rva, size,
+                                        UCS_MEMORY_TYPE_HOST, mem_type));
+
+        if (check_alloc_mem_type(mem_type)) {
+            uct_mem_free(&mem);
+        } else {
+            EXPECT_UCS_OK(uct_md_mem_dereg(md(), memh));
+            free_memory(ptr, mem_type);
+        }
+
+        uct_rkey_release(GetParam().component, &rkey_bundle);
     }
-    EXPECT_EQ(memcmp(lva, rva, size), 0);
-
-    // write
-    for (i = 0; i < size/sizeof(unsigned); i++) {
-        lva[i] = size - i;
-    }
-    EXPECT_EQ(memcmp(lva, rva, size), 0);
-
-    // check bounds
-    //
-    status = uct_rkey_ptr(GetParam().component, &rkey_bundle, (uintptr_t)(rva-1),
-                          (void **)&lva);
-    UCS_TEST_MESSAGE << "rkey_ptr of invalid address returned "
-                     << ucs_status_string(status);
-
-    status = uct_rkey_ptr(GetParam().component, &rkey_bundle, (uintptr_t)rva+size,
-                          (void **)&lva);
-    UCS_TEST_MESSAGE << "rkey_ptr of invalid address returned "
-                     << ucs_status_string(status);
 
     free(rkey_buffer);
-    uct_mem_free(&mem);
-    uct_rkey_release(GetParam().component, &rkey_bundle);
 }
 
 static ucs_log_func_rc_t

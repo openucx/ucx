@@ -509,6 +509,69 @@ protected:
     {
         return e.ep()->cfg_index;
     }
+
+    static ucs::handle<ucp_mem_h, ucp_context_h>
+    mem_map(entity &e, void *address, size_t length,
+            ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST)
+    {
+        ucp_mem_map_params_t mem_map_params;
+        mem_map_params.field_mask  = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                                     UCP_MEM_MAP_PARAM_FIELD_LENGTH;
+        mem_map_params.address     = address;
+        mem_map_params.length      = length;
+        mem_map_params.memory_type = mem_type;
+        ucp_mem_h mem;
+        ASSERT_UCS_OK(ucp_mem_map(e.ucph(), &mem_map_params, &mem));
+        return {
+            mem,
+            [](ucp_mem_h mem, ucp_context_h context) {
+                 static_cast<void>(ucp_mem_unmap(context, mem));
+            },
+            e.ucph()
+        };
+    }
+
+    static ucs::handle<ucp_mem_h, ucp_context_h>
+    mem_map(entity &e, mem_buffer &buf)
+    {
+        return mem_map(e, buf.ptr(), buf.size(), buf.mem_type());
+    }
+
+    static ucs::handle<void*> rkey_pack(entity &e, ucp_mem_h memh)
+    {
+        void *rkey_buffer;
+        size_t rkey_buffer_size;
+        ASSERT_UCS_OK(ucp_rkey_pack(e.ucph(), memh, &rkey_buffer,
+                                    &rkey_buffer_size));
+        return {rkey_buffer, ucp_rkey_buffer_release};
+    }
+
+    static ucs::handle<ucp_rkey_h> rkey_unpack(ucp_ep_h ep, void *rkey_buffer)
+    {
+        ucp_rkey_h rkey;
+        ASSERT_UCS_OK(ucp_ep_rkey_unpack(ep, rkey_buffer, &rkey));
+        return {rkey, ucp_rkey_destroy};
+    }
+
+    void send_recv_rma_put(size_t size,
+                           ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST)
+    {
+        mem_buffer recv_buf(size, mem_type);
+        recv_buf.pattern_fill(1);
+        auto memh        = mem_map(receiver(), recv_buf);
+        auto rkey_packed = rkey_pack(receiver(), memh);
+        auto rkey        = rkey_unpack(sender().ep(), rkey_packed);
+
+        mem_buffer send_buf(size, mem_type);
+        send_buf.pattern_fill(2);
+
+        ucp_request_param_t req_param;
+        req_param.op_attr_mask = 0;
+        auto sptr = ucp_put_nbx(sender().ep(), send_buf.ptr(), size,
+                                (uint64_t)recv_buf.ptr(), rkey, &req_param);
+        EXPECT_EQ(UCS_OK, request_wait(sptr));
+        recv_buf.pattern_check(2);
+    }
 };
 
 class test_ucp_proto_mock_rcx : public test_ucp_proto_mock {
@@ -634,6 +697,21 @@ UCS_TEST_P(test_ucp_proto_mock_rcx, rndv_4_paths,
          "12% on rc_mlx5/mock_1:1/path0, 14% on rc_mlx5/mock_0:1/path0, "
          "14% on rc_mlx5/mock_0:1/path1, 12% on rc_mlx5/mock_1:1/path1, 14%"},
     }, key);
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx, rma_put_2_lanes,
+           "IB_NUM_PATHS?=1", "MAX_RMA_RAILS=2")
+{
+    send_recv_rma_put(64 * UCS_KBYTE);
+
+    ucp_proto_select_key_t key = any_key();
+    key.param.op_id_flags      = UCP_OP_ID_PUT;
+    key.param.op_attr          = 0;
+
+    check_rkey_config(sender(), {
+        {0,    2048, "short",     "rc_mlx5/mock_1:1"},
+        {2049, INF,  "zero-copy", "47% on rc_mlx5/mock_1:1 and 53% on rc_mlx5/mock_0:1"},
+    }, key, 0);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx, rcx, "rc_x")
@@ -1021,39 +1099,18 @@ protected:
 void test_ucp_proto_mock_rcx_twins_get::check_config(
         const proto_select_data_vec_t &data_vec)
 {
-    uint8_t remote;
-    ucp_mem_map_params_t mem_map_params;
-    mem_map_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
-                                UCP_MEM_MAP_PARAM_FIELD_LENGTH;
-    mem_map_params.address    = &remote;
-    mem_map_params.length     = sizeof(remote);
+    uint8_t remote   = 42;
+    auto memh        = mem_map(receiver(), &remote, sizeof(remote));
+    auto rkey_packed = rkey_pack(receiver(), memh);
+    auto rkey        = rkey_unpack(sender().ep(), rkey_packed);
 
-    ucp_mem_h mem;
-    ASSERT_UCS_OK(ucp_mem_map(receiver().ucph(), &mem_map_params, &mem));
-    ucs::handle<ucp_mem_h, ucp_context_h> mem_h{
-        mem,
-        [](ucp_mem_h mem, ucp_context_h context) {
-             static_cast<void>(ucp_mem_unmap(context, mem));
-        },
-        sender().ucph()
-    };
-
-    void *rkey_buffer;
-    size_t rkey_buffer_size;
-    ASSERT_UCS_OK(ucp_rkey_pack(receiver().ucph(), mem, &rkey_buffer,
-                                &rkey_buffer_size));
-    ucs::handle<void*> rkey_buffer_h{rkey_buffer, ucp_rkey_buffer_release};
-
-    ucp_rkey_h rkey;
-    ASSERT_UCS_OK(ucp_ep_rkey_unpack(sender().ep(), rkey_buffer, &rkey));
-    ucs::handle<ucp_rkey_h> rkey_h{rkey, ucp_rkey_destroy};
-
-    uint8_t local;
+    uint8_t local = 0;
     ucp_request_param_t req_param;
     req_param.op_attr_mask = 0;
     auto status            = ucp_get_nbx(sender().ep(), &local, sizeof(local),
                                          (uint64_t)&remote, rkey, &req_param);
     request_wait(status);
+    ASSERT_EQ(local, 42);
 
     ucp_proto_select_key_t key = any_key();
     key.param.op_id_flags      = UCP_OP_ID_GET;

@@ -804,7 +804,12 @@ static void ucp_worker_iface_async_cb_event(void *arg, unsigned flags)
     ucp_worker_iface_t *wiface = arg;
 
     ucs_assert(wiface->attr.cap.event_flags & UCT_IFACE_FLAG_EVENT_ASYNC_CB);
-    ucs_trace_func("async_cb for iface=%p", wiface->iface);
+    ucs_trace_func("async_cb for iface=%p flags=%u", wiface->iface, flags);
+
+    if (flags & UCT_EVENT_SPEED_CHANGE) {
+        /* TODO: handle speed changed event */
+        ucs_assert_always(0);
+    }
 
     ucp_worker_iface_event_common(wiface);
 }
@@ -2312,9 +2317,9 @@ static void ucp_warn_unused_uct_config(ucp_context_h context)
 
     if (num_unused_cached_kv > 0) {
         ucs_string_buffer_rtrim(&unused_cached_uct_cfg , ",");
-        ucs_warn("invalid configuration%s: %s",
-                 (num_unused_cached_kv > 1) ? "s" : "",
-                 ucs_string_buffer_cstr(&unused_cached_uct_cfg));
+        ucs_debug("configuration%s not applied due to missing resource: %s",
+                  (num_unused_cached_kv > 1) ? "s" : "",
+                  ucs_string_buffer_cstr(&unused_cached_uct_cfg));
     }
 
     ucs_string_buffer_cleanup(&unused_cached_uct_cfg);

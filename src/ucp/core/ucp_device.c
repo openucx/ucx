@@ -11,6 +11,7 @@
 #include <ucp/core/ucp_worker.h>
 #include <ucp/core/ucp_types.h>
 #include <ucp/core/ucp_mm.h>
+#include <ucp/dt/dt_contig.h>
 #include <ucp/api/device/ucp_host.h>
 #include <ucp/api/device/ucp_device_types.h>
 #include <ucs/type/param.h>
@@ -183,36 +184,14 @@ ucp_check_rkey_elem(const ucp_device_mem_list_elem_t *element, size_t i,
     return UCS_OK;
 }
 
-static ucs_status_t
-ucp_check_memh_elem(const ucp_device_mem_list_elem_t *element, size_t i,
-                    ucs_sys_device_t *local_sys_dev,
-                    ucp_md_map_t *local_md_map, ucs_memory_type_t *mem_type)
+static ucs_status_t ucp_check_memh_elem(const ucp_mem_h memh, size_t i,
+                                        ucs_sys_device_t *local_sys_dev,
+                                        ucp_md_map_t *local_md_map)
 {
-    ucp_mem_h memh = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, element,
-                                     memh, MEMH, NULL);
-
-    if (memh == NULL) {
-        return UCS_OK;
-    }
-
-    if (*local_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
-        *local_sys_dev = memh->sys_dev;
-        *local_md_map  = memh->md_map;
-        *mem_type      = memh->mem_type;
-        return UCS_OK;
-    }
-
     if (memh->sys_dev != *local_sys_dev) {
         ucs_debug("mismatched local sys_dev: ucp_memh[%zu].sys_dev=%u "
                   "first_sys_dev=%u",
                   i, memh->sys_dev, *local_sys_dev);
-        return UCS_ERR_UNSUPPORTED;
-    }
-
-    if (memh->mem_type != *mem_type) {
-        ucs_debug("mismatched mem_type: ucp_memh[%zu].mem_type=%d "
-                  "first_mem_type=%d",
-                  i, memh->mem_type, *mem_type);
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -221,16 +200,15 @@ ucp_check_memh_elem(const ucp_device_mem_list_elem_t *element, size_t i,
     return UCS_OK;
 }
 
-static ucs_status_t
-ucp_device_mem_list_params_check(ucp_context_h context,
-                                 const ucp_device_mem_list_params_t *params,
-                                 ucp_worker_cfg_index_t *rkey_cfg_index,
-                                 ucs_sys_device_t *local_sys_dev,
-                                 ucp_md_map_t *local_md_map,
-                                 ucs_memory_type_t *mem_type)
+static ucs_status_t ucp_device_mem_list_params_check(
+        ucp_context_h context, const ucp_device_mem_list_params_t *params,
+        ucs_memory_type_t mem_type, ucp_worker_cfg_index_t *rkey_cfg_index,
+        ucs_sys_device_t *local_sys_dev, ucp_md_map_t *local_md_map)
 {
+    int first_memh = 1;
     size_t i, num_elements, element_size;
     const ucp_device_mem_list_elem_t *elements, *element;
+    ucp_mem_h memh;
     ucs_status_t status;
 
     if (params == NULL) {
@@ -253,22 +231,31 @@ ucp_device_mem_list_params_check(ucp_context_h context,
 
     for (i = 0; i < num_elements; i++) {
         element = UCS_PTR_BYTE_OFFSET(elements, i * element_size);
-        status = ucp_check_rkey_elem(element, i, rkey_cfg_index);
+        status  = ucp_check_rkey_elem(element, i, rkey_cfg_index);
         if (status != UCS_OK) {
             return status;
         }
 
-        status = ucp_check_memh_elem(element, i, local_sys_dev,
-                                     local_md_map, mem_type);
-        if (status != UCS_OK) {
-            return status;
+        memh = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, element, memh,
+                               MEMH, NULL);
+        if (memh != NULL) {
+            if (first_memh) {
+                *local_sys_dev = memh->sys_dev;
+                *local_md_map  = memh->md_map;
+                first_memh     = 0;
+            } else {
+                status = ucp_check_memh_elem(memh, i, local_sys_dev,
+                                             local_md_map);
+                if (status != UCS_OK) {
+                    return status;
+                }
+            }
         }
     }
 
     if (*local_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
-        *mem_type = UCS_MEMORY_TYPE_CUDA;
-        status    = ucp_device_detect_local_sys_dev(context, *mem_type,
-                                                    local_sys_dev);
+        status = ucp_device_detect_local_sys_dev(context, mem_type,
+                                                 local_sys_dev);
         if (status != UCS_OK) {
             return status;
         }
@@ -303,7 +290,9 @@ static void ucp_device_mem_list_lane_lookup(
         }
 
         lane_key = &ep_config->key.lanes[lane];
-        if (lane_key->dst_sys_dev != remote_sys_dev) {
+        /* Check lane remote sys dev only when remote memory is not host */
+        if ((remote_sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) &&
+            (remote_sys_dev != lane_key->dst_sys_dev)) {
             ucs_trace("lane[%u] wrong destination sys_dev: dst_sys_dev=%u",
                       lane, lane_key->dst_sys_dev);
             continue;
@@ -539,8 +528,8 @@ ucp_device_mem_list_create(ucp_ep_h ep,
                            const ucp_device_mem_list_params_t *params,
                            ucp_device_mem_list_handle_h *handle_p)
 {
-    ucs_memory_type_t mem_type            = UCS_MEMORY_TYPE_UNKNOWN;
-    ucp_worker_cfg_index_t rkey_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
+    const ucs_memory_type_t export_mem_type = UCS_MEMORY_TYPE_CUDA;
+    ucp_worker_cfg_index_t rkey_cfg_index   = UCP_WORKER_CFG_INDEX_NULL;
     ucp_lane_index_t lanes[UCP_DEVICE_MEM_LIST_MAX_EPS];
     ucs_status_t status;
     ucp_rkey_config_t *rkey_config;
@@ -551,8 +540,8 @@ ucp_device_mem_list_create(ucp_ep_h ep,
 
     /* Parameter sanity checks and extraction */
     status = ucp_device_mem_list_params_check(ep->worker->context, params,
-                                              &rkey_cfg_index, &local_sys_dev,
-                                              &local_md_map, &mem_type);
+                                              export_mem_type, &rkey_cfg_index,
+                                              &local_sys_dev, &local_md_map);
     if (status != UCS_OK) {
         return status;
     }
@@ -570,9 +559,8 @@ ucp_device_mem_list_create(ucp_ep_h ep,
             ep, params->num_elements, params->element_size, local_sys_dev,
             remote_sys_dev, local_md_map, remote_md_map);
 
-    if ((remote_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) ||
-        (local_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN)) {
-        ucs_error("ep %p local or remote unknown sys_dev", ep);
+    if (local_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        ucs_error("ep %p unknown local sys_dev", ep);
         return UCS_ERR_NO_DEVICE;
     }
 
@@ -582,7 +570,8 @@ ucp_device_mem_list_create(ucp_ep_h ep,
 
     /* Handle creation with lanes and parameters */
     status = ucp_device_mem_list_create_handle(ep, local_sys_dev, params, lanes,
-                                               ep_config, mem_type, &mem);
+                                               ep_config, export_mem_type,
+                                               &mem);
     if (status != UCS_OK) {
         /*
          * Do not log error for UCS_ERR_NOT_CONNECTED because it is expected
@@ -658,8 +647,9 @@ ucs_status_t ucp_device_counter_init(ucp_worker_h worker,
 
     mem_type = ucp_device_counter_mem_type(worker->context, counter_ptr,
                                            params);
-    ucp_mem_type_unpack(worker, counter_ptr, &counter_value,
-                        sizeof(counter_value), mem_type);
+    ucp_dt_contig_unpack(worker, counter_ptr, &counter_value,
+                         sizeof(counter_value), mem_type,
+                         sizeof(counter_value));
     return UCS_OK;
 }
 
@@ -667,13 +657,12 @@ uint64_t ucp_device_counter_read(ucp_worker_h worker,
                                  const ucp_device_counter_params_t *params,
                                  void *counter_ptr)
 {
+    uint64_t counter_value = 0;
     ucs_memory_type_t mem_type;
-    uint64_t counter_value;
 
     mem_type = ucp_device_counter_mem_type(worker->context, counter_ptr,
                                            params);
-    ucp_mem_type_pack(worker, &counter_value, counter_ptr,
-                      sizeof(counter_value), mem_type);
+    ucp_dt_contig_pack(worker, &counter_value, counter_ptr,
+                       sizeof(counter_value), mem_type, sizeof(counter_value));
     return counter_value;
 }
-
