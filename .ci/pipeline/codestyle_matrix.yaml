@@ -1,0 +1,98 @@
+---
+job: ucx-codestyle
+
+failFast: false
+timeout_minutes: 30
+
+kubernetes:
+  cloud: il-ipp-blossom-prod
+  namespace: nbu-swx-nixl
+  limits: "{memory: 4Gi, cpu: 4000m}"
+  requests: "{memory: 4Gi, cpu: 4000m}"
+
+runs_on_dockers:
+  - { name: "fedora33", url: "harbor.mellanox.com/ucx/fedora33:2", arch: x86_64 }
+
+taskName: '${arch}/${name}'
+
+env:
+  BUILD_ID: "${BUILD_NUMBER}"
+
+steps:
+  - name: Commit Title
+    parallel: false
+    run: |
+      set -euo pipefail
+      source ./buildlib/tools/codestyle.sh
+
+      TARGET_BRANCH="${gitlabTargetBranch:-${gitlabTargetBranchName:-}}"
+      if [ -z "${TARGET_BRANCH}" ]; then
+        echo "ERROR: gitlabTargetBranch is not set (MR context required)." >&2
+        exit 2
+      fi
+
+      git rev-parse --verify "refs/remotes/origin/${TARGET_BRANCH}^{commit}" >/dev/null
+      base="$(git merge-base HEAD "origin/${TARGET_BRANCH}")"
+      range="${base}..HEAD"
+
+      codestyle_check_commit_title "${range}"
+
+  - name: Format Check
+    parallel: false
+    run: |
+      set -euo pipefail
+
+      TARGET_BRANCH="${gitlabTargetBranch:-${gitlabTargetBranchName:-}}"
+      if [ -z "${TARGET_BRANCH}" ]; then
+        echo "ERROR: gitlabTargetBranch is not set (MR context required)." >&2
+        exit 2
+      fi
+
+      base="$(git merge-base HEAD "origin/${TARGET_BRANCH}")"
+
+      echo "Checking code format on diff ${base}..HEAD"
+      git-clang-format --diff "${base}" HEAD > format.patch
+      cat format.patch
+
+      if [ "$(cat format.patch)" = "no modified files to format" ]; then
+        echo "No files to format."
+        exit 0
+      fi
+
+      git apply format.patch
+      if ! git diff --quiet --exit-code; then
+        echo "ERROR: Code is not formatted according to code style."
+        echo "See https://github.com/openucx/ucx/wiki/Code-style-checking"
+        exit 1
+      fi
+
+  - name: Authors Check
+    parallel: false
+    run: |
+      set -euo pipefail
+
+      TARGET_BRANCH="${gitlabTargetBranch:-${gitlabTargetBranchName:-}}"
+      if [ -z "${TARGET_BRANCH}" ]; then
+        echo "ERROR: gitlabTargetBranch is not set (MR context required)." >&2
+        exit 2
+      fi
+
+      base="$(git merge-base HEAD "origin/${TARGET_BRANCH}")"
+      range="${base}..HEAD"
+
+      echo "Looking for missing AUTHORS on commit range ${range}"
+      ./contrib/authors_update.sh "${range}"
+      git diff --exit-code
+
+  - name: Codespell
+    parallel: false
+    run: |
+      set -euo pipefail
+      source ./buildlib/tools/codestyle.sh
+      codestyle_check_spell
+
+  - name: Ctags
+    parallel: false
+    run: |
+      set -euo pipefail
+      ./buildlib/tools/test_ctags.sh

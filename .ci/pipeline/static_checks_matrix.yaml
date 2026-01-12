@@ -1,0 +1,25 @@
+---
+job: ucx-static-checks
+
+failFast: false
+timeout_minutes: 30
+
+kubernetes:
+  cloud: il-ipp-blossom-prod
+  namespace: nbu-swx-nixl
+  limits: "{memory: 8Gi, cpu: 8000m}"
+  requests: "{memory: 8Gi, cpu: 8000m}"
+
+runs_on_dockers:
+  - { name: "fedora33", url: "harbor.mellanox.com/ucx/fedora33:2", arch: x86_64 }
+
+taskName: '${arch}/${name}'
+
+env:
+  BUILD_ID: "${BUILD_NUMBER}"
+
+steps:
+  - name: Static Checks
+    parallel: false
+    run: |
+      ./buildlib/tools/static_checks.sh
