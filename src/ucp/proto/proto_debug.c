@@ -163,7 +163,6 @@ static int ucp_proto_debug_is_info_enabled(ucp_context_h context,
     const char *proto_info_config = context->config.ext.proto_info;
     int bool_value;
 
-    /* Handle "used" */
     if (show_used) {
         return context->config.trace_used_proto_selections;
     }
@@ -196,12 +195,24 @@ ucp_proto_select_elem_has_selections(const ucp_proto_select_elem_t *select_elem)
     return 0;
 }
 
-static void ucp_proto_selections_dump(ucp_worker_h worker,
-                                      const ucp_proto_query_attr_t *proto_attr,
-                                      char *counter_str, size_t size,
-                                      int show_used)
+static void
+ucp_proto_selections_dump(ucp_worker_h worker,
+                          const ucp_proto_query_attr_t *proto_attr,
+                          const ucp_proto_select_param_t *select_param,
+                          char *counter_str, size_t size, int show_used)
 {
+    ucp_operation_id_t op_id;
+
     if (!show_used) {
+        *counter_str = '\0';
+        return;
+    }
+
+    /* Short active messages protocol selections are not counted */
+    op_id = ucp_proto_select_op_id(select_param);
+    if ((op_id == UCP_OP_ID_AM_SEND || op_id == UCP_OP_ID_AM_SEND_REPLY) &&
+        strstr(proto_attr->desc, "short") != NULL) {
+        ucs_assert(proto_attr->selections == 0);
         *counter_str = '\0';
         return;
     }
@@ -268,7 +279,8 @@ ucp_proto_select_elem_info(ucp_worker_h worker,
         ucs_memunits_range_str(range_start, range_end, row_elem->range_str,
                                sizeof(row_elem->range_str));
 
-        ucp_proto_selections_dump(worker, &proto_attr, row_elem->counter_str,
+        ucp_proto_selections_dump(worker, &proto_attr, select_param,
+                                  row_elem->counter_str,
                                   sizeof(row_elem->counter_str), show_used);
 
         col_width[0] = ucs_max(col_width[0], strlen(row_elem->counter_str) +
