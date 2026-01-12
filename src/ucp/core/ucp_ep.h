@@ -956,6 +956,15 @@ void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index);
 ucs_status_t ucp_ep_flush_mem_progress(uct_pending_req_t *self);
 
 /**
+ * @brief Update EP configuration according to the latest interfaces state.
+ *
+ * @param [in] ep      Endpoint object.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_ep_update_config(ucp_ep_h ep);
+
+/**
  * @brief Update EP configuration and rkey configuration according to the latest
  * interfaces state.
  *
@@ -964,6 +973,6 @@ ucs_status_t ucp_ep_flush_mem_progress(uct_pending_req_t *self);
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-ucs_status_t ucp_ep_update_config(ucp_ep_h ep, ucp_rkey_h rkey);
+ucs_status_t ucp_ep_update_rkey_config(ucp_ep_h ep, ucp_rkey_h rkey);
 
 #endif

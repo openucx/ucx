@@ -3992,11 +3992,10 @@ static ucs_status_t ucp_rkey_update_config(ucp_rkey_h rkey, ucp_ep_h ep)
     return UCS_OK;
 }
 
-ucs_status_t ucp_ep_update_config(ucp_ep_h ep, ucp_rkey_h rkey)
+ucs_status_t ucp_ep_update_config(ucp_ep_h ep)
 {
-    ucp_worker_h worker                  = ep->worker;
-    ucp_ep_config_key_t cfg_key          = ucp_ep_config(ep)->key;
-    ucp_worker_cfg_index_t old_cfg_index = ep->cfg_index;
+    ucp_worker_h worker         = ep->worker;
+    ucp_ep_config_key_t cfg_key = ucp_ep_config(ep)->key;
     ucp_lane_index_t lane;
     ucp_worker_iface_t *wiface;
     ucs_status_t status;
@@ -4021,10 +4020,22 @@ ucs_status_t ucp_ep_update_config(ucp_ep_h ep, ucp_rkey_h rkey)
     ucp_ep_config_activate_worker_ifaces(worker, ep->cfg_index);
     /* Now EP config is up to date with worker epoch */
     ucp_ep_config(ep)->proto_select.worker_epoch_counter = worker->epoch_counter;
+    return UCS_OK;
+}
+
+ucs_status_t ucp_ep_update_rkey_config(ucp_ep_h ep, ucp_rkey_h rkey)
+{
+    ucp_worker_cfg_index_t old_cfg_index = ep->cfg_index;
+    ucs_status_t status;
+
+    status = ucp_ep_update_config(ep);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     if ((old_cfg_index != ep->cfg_index) && (rkey != NULL)) {
         return ucp_rkey_update_config(rkey, ep);
-    } else {
-        return UCS_OK;
     }
+
+    return UCS_OK;
 }
