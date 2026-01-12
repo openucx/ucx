@@ -165,8 +165,10 @@ enum {
     UCP_EP_INIT_CREATE_AM_LANE_ONLY    = UCS_BIT(8),  /**< Endpoint requires an AM lane only */
     UCP_EP_INIT_KA_FROM_EXIST_LANES    = UCS_BIT(9),  /**< Use only existing lanes to create
                                                            keepalive lane */
-    UCP_EP_INIT_ALLOW_AM_AUX_TL        = UCS_BIT(10)  /**< Endpoint allows selecting of auxiliary
+    UCP_EP_INIT_ALLOW_AM_AUX_TL        = UCS_BIT(10), /**< Endpoint allows selecting of auxiliary
                                                            transports for AM lane */
+    UCP_EP_INIT_ERR_MODE_FAILOVER      = UCS_BIT(11)  /**< Endpoint requires an
+                                                           @ref UCP_ERR_HANDLING_MODE_FAILOVER */
 };
 
 
@@ -556,7 +558,6 @@ typedef struct ucp_ep_ext {
      */
     uct_ep_h                     *uct_eps;
 
-
     /**
      * Map of system devices that require a flush operation
      */
@@ -617,8 +618,10 @@ enum {
  * ucp_wireup_sockaddr_data_base_t structure.
  */
 enum {
-    /* Indicates support of UCP_ERR_HANDLING_MODE_PEER error mode. */
-    UCP_SA_DATA_FLAG_ERR_MODE_PEER = UCS_BIT(0)
+    /* Indicates support of @ref UCP_ERR_HANDLING_MODE_PEER error mode. */
+    UCP_SA_DATA_FLAG_ERR_MODE_PEER     = UCS_BIT(0),
+    /* Indicates support of @ref UCP_ERR_HANDLING_MODE_FAILOVER error mode. */
+    UCP_SA_DATA_FLAG_ERR_MODE_FAILOVER = UCS_BIT(1)
 };
 
 
@@ -732,6 +735,8 @@ void ucp_ep_config_key_set_err_mode(ucp_ep_config_key_t *key,
 void ucp_ep_config_key_init_flags(ucp_ep_config_key_t *key,
                                   unsigned ep_init_flags);
 
+ucp_lane_map_t ucp_ep_config_get_failed_lanes(const ucp_ep_config_key_t *key);
+
 void ucp_ep_err_pending_purge(uct_pending_req_t *self, void *arg);
 
 void ucp_destroyed_ep_pending_purge(uct_pending_req_t *self, void *arg);
@@ -741,10 +746,10 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force);
 void ucp_ep_destroy_internal(ucp_ep_h ep);
 
 ucs_status_t
-ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status);
+ucp_ep_set_lane_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status);
 
-void ucp_ep_set_failed_schedule(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
-                                ucs_status_t status);
+void ucp_ep_set_lane_failed_schedule(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
+                                     ucs_status_t status);
 
 void ucp_ep_unprogress_uct_ep(ucp_ep_h ep, uct_ep_h uct_ep,
                               ucp_rsc_index_t rsc_index);

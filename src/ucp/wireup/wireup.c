@@ -183,7 +183,7 @@ ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
         }
 
         ucs_diag("failed to send wireup: %s", ucs_status_string(status));
-        ucp_ep_set_failed_schedule(ep, req->send.lane, status);
+        ucp_ep_set_lane_failed_schedule(ep, req->send.lane, status);
 
         status = UCS_OK;
         goto out_free_req;
@@ -295,7 +295,7 @@ ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type, const ucp_tl_bitmap_t *tl_bitmap,
     return UCS_OK;
 
 err:
-    ucp_ep_set_failed_schedule(ep, UCP_NULL_LANE, status);
+    ucp_ep_set_lane_failed_schedule(ep, UCP_NULL_LANE, status);
     return status;
 }
 
@@ -582,8 +582,16 @@ void ucp_wireup_remote_connected(ucp_ep_h ep)
 static UCS_F_ALWAYS_INLINE unsigned
 ucp_ep_err_mode_init_flags(ucp_err_handling_mode_t err_mode)
 {
-    return (err_mode == UCP_ERR_HANDLING_MODE_PEER) ?
-           UCP_EP_INIT_ERR_MODE_PEER_FAILURE : 0;
+    switch (err_mode) {
+    case UCP_ERR_HANDLING_MODE_NONE:
+        return 0;
+    case UCP_ERR_HANDLING_MODE_PEER:
+        return UCP_EP_INIT_ERR_MODE_PEER_FAILURE;
+    case UCP_ERR_HANDLING_MODE_FAILOVER:
+        return UCP_EP_INIT_ERR_MODE_FAILOVER;
+    default:
+        ucs_fatal("invalid error handling mode: %d", err_mode);
+    }
 }
 
 static UCS_F_NOINLINE void
@@ -629,7 +637,7 @@ ucp_wireup_process_pre_request(ucp_worker_h worker, ucp_ep_h ep,
     return;
 
 err_ep_set_failed:
-    ucp_ep_set_failed_schedule(ep, UCP_NULL_LANE, status);
+    ucp_ep_set_lane_failed_schedule(ep, UCP_NULL_LANE, status);
 }
 
 static UCS_F_NOINLINE void
@@ -770,7 +778,7 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
     return;
 
 err_set_ep_failed:
-    ucp_ep_set_failed_schedule(ep, UCP_NULL_LANE, status);
+    ucp_ep_set_lane_failed_schedule(ep, UCP_NULL_LANE, status);
 }
 
 static unsigned ucp_wireup_send_msg_ack(void *arg)
@@ -817,7 +825,7 @@ ucp_wireup_process_reply_common(ucp_worker_h worker, ucp_ep_h ep,
          */
         status = ucp_wireup_connect_local(ep, remote_address, NULL);
         if (status != UCS_OK) {
-            ucp_ep_set_failed_schedule(ep, UCP_NULL_LANE, status);
+            ucp_ep_set_lane_failed_schedule(ep, UCP_NULL_LANE, status);
             return;
         }
 
@@ -999,7 +1007,7 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
         ucp_wireup_send_ep_removed(worker, msg, &remote_address);
     } else if (msg->type == UCP_WIREUP_MSG_EP_REMOVED) {
         ucs_assert(msg->dst_ep_id != UCS_PTR_MAP_KEY_INVALID);
-        ucp_ep_set_failed_schedule(ep, UCP_NULL_LANE, UCS_ERR_CONNECTION_RESET);
+        ucp_ep_set_lane_failed_schedule(ep, UCP_NULL_LANE, UCS_ERR_CONNECTION_RESET);
     } else {
         ucs_bug("invalid wireup message");
     }
@@ -2228,13 +2236,6 @@ static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     ucs_free(unpacked_address.address_list);
 }
 
-static ucp_err_handling_mode_t
-ucp_ep_params_err_handling_mode(const ucp_ep_params_t *params)
-{
-    return (params->field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE) ?
-           params->err_mode : UCP_ERR_HANDLING_MODE_NONE;
-}
-
 static unsigned
 ucp_cm_ep_init_flags(const ucp_ep_params_t *params)
 {
@@ -2259,8 +2260,17 @@ unsigned ucp_ep_init_flags(const ucp_worker_h worker,
         flags |= UCP_EP_INIT_CREATE_AM_LANE;
     }
 
-    if (ucp_ep_params_err_handling_mode(params) == UCP_ERR_HANDLING_MODE_PEER) {
+    switch (ucp_ep_params_err_handling_mode(params)) {
+    case UCP_ERR_HANDLING_MODE_NONE:
+        break;
+    case UCP_ERR_HANDLING_MODE_PEER:
         flags |= UCP_EP_INIT_ERR_MODE_PEER_FAILURE;
+        break;
+    case UCP_ERR_HANDLING_MODE_FAILOVER:
+        flags |= UCP_EP_INIT_ERR_MODE_FAILOVER;
+        break;
+    default:
+        ucs_fatal("invalid error handling mode: %d", ucp_ep_params_err_handling_mode(params));
     }
 
     return flags;

@@ -823,8 +823,8 @@ public:
         if (level == UCS_LOG_LEVEL_ERROR) {
             std::string err_str = format_message(message, ap);
 
-            if (err_str.find("on CM lane will not be handled since no error"
-                             " callback is installed") != std::string::npos) {
+            if (err_str.find("will not be handled since no error callback is installed") !=
+                std::string::npos) {
                 UCS_TEST_MESSAGE << "< " << err_str << " >";
                 ++m_err_count;
                 return UCS_LOG_FUNC_RC_STOP;
@@ -984,7 +984,7 @@ protected:
 
         if (fail_send_ep) {
             UCS_ASYNC_BLOCK(&ep->worker->async);
-            ucp_ep_set_failed(ep, UCP_NULL_LANE, UCS_ERR_CONNECTION_RESET);
+            ucp_ep_set_lane_failed(ep, UCP_NULL_LANE, UCS_ERR_CONNECTION_RESET);
             UCS_ASYNC_UNBLOCK(&ep->worker->async);
         }
         void *close_req = ep_close_nbx(ep, UCP_EP_CLOSE_FLAG_FORCE);
@@ -1578,7 +1578,7 @@ protected:
             /* Emulate failure of the endpoint by invoking error handling
              * procedure */
             ++m_num_fail_injections;
-            ucp_ep_set_failed(e.ep(), UCP_NULL_LANE, UCS_ERR_ENDPOINT_TIMEOUT);
+            ucp_ep_set_lane_failed(e.ep(), UCP_NULL_LANE, UCS_ERR_ENDPOINT_TIMEOUT);
         } else {
             /* Make sure that stub WIREUP_EP is updated */
             for (auto lane = 0; lane < ucp_ep_num_lanes(e.ep()); ++lane) {
