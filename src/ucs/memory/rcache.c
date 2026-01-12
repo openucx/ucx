@@ -1324,11 +1324,10 @@ static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
     self->lru.enabled = ucs_rcache_lru_enabled(params);
     if (self->lru.enabled) {
         ucs_list_head_init(&self->lru.list);
-        ucs_spinlock_init(&self->lru.lock, 0);
     } else {
-        self->lru.list.prev = (void*)0xdead0042;
-        self->lru.list.next = (void*)0xdead0043;
+        ucs_list_head_invalidate(&self->lru.list);
     }
+    ucs_spinlock_init(&self->lru.lock, 0);
 
     self->distribution = ucs_calloc(ucs_rcache_distribution_get_num_bins(),
                                     sizeof(*self->distribution),
