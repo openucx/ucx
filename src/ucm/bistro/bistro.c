@@ -71,7 +71,7 @@ ucs_status_t
 ucm_bistro_apply_patch_atomic(void *dst, const void *patch, size_t len)
 {
     size_t skip           = sizeof(ucm_bistro_lock_t);
-    double grace_duration = 5e-3;
+    double grace_duration = 50e-3;
     double deadline;
     ucs_status_t status;
 
