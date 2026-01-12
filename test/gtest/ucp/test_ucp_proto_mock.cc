@@ -589,6 +589,9 @@ protected:
         } else if (op_id == UCP_OP_ID_GET) {
             sptr = ucp_get_nbx(sender().ep(), send_buf.ptr(), size,
                                (uint64_t)recv_buf.ptr(), rkey, &req_param);
+        } else {
+            FAIL() << "Invalid operation ID: " << op_id;
+            sptr = nullptr;
         }
 
         EXPECT_EQ(UCS_OK, request_wait(sptr));
