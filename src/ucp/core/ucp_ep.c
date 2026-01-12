@@ -4033,7 +4033,7 @@ ucs_status_t ucp_ep_update_rkey_config(ucp_ep_h ep, ucp_rkey_h rkey)
         return status;
     }
 
-    if ((old_cfg_index != ep->cfg_index) && (rkey != NULL)) {
+    if (old_cfg_index != ep->cfg_index) {
         return ucp_rkey_update_config(rkey, ep);
     }
 
