@@ -95,11 +95,9 @@ static void uct_rc_gdaki_calc_dev_ep_layout(size_t num_channels,
                            sizeof(uct_rc_gdaki_dev_qp_t) * num_channels;
     *dev_ep_size_p       = qp_attr->umem_offset + qp_attr->len * num_channels;
 
-    if (pgsz_bitmap_p != NULL) {
-        max_page_size  = ucs_min(UCT_GDAKI_DEV_EP_SIZE, UCT_GDAKI_DEV_QP_SIZE)
-                         << UCT_GDAKI_CQ_PAGE_OFFSET_SHIFT;
-        *pgsz_bitmap_p = (max_page_size << 1) - 1;
-    }
+    max_page_size  = ucs_min(UCT_GDAKI_DEV_EP_SIZE, UCT_GDAKI_DEV_QP_SIZE)
+                     << UCT_GDAKI_CQ_PAGE_OFFSET_SHIFT;
+    *pgsz_bitmap_p = (max_page_size << 1) - 1;
 }
 
 static int uct_gdaki_is_dmabuf_supported(const uct_ib_md_t *md)
@@ -475,6 +473,7 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
     uct_rc_gdaki_dev_ep_t *dev_ep;
     size_t cq_umem_offset, dev_ep_size;
     uct_rc_gdaki_channel_t *channel;
+    uint64_t pgsz_bitmap;
     ucs_status_t status;
     CUdeviceptr sq_db;
     unsigned i;
@@ -491,7 +490,8 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
                                iface->super.super.config.tx_qp_len, NULL);
         uct_ib_mlx5_wq_calc_sizes(&qp_attr);
         uct_rc_gdaki_calc_dev_ep_layout(iface->num_channels, &qp_attr,
-                                        &cq_umem_offset, &dev_ep_size, NULL);
+                                        &cq_umem_offset, &dev_ep_size,
+                                        &pgsz_bitmap);
 
         dev_ep = ucs_calloc(1, qp_attr.umem_offset, "dev_ep");
         if (dev_ep == NULL) {
