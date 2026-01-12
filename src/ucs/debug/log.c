@@ -264,7 +264,7 @@ ucs_log_print_single_line(const char *short_file, int line,
                  message);
         VALGRIND_PRINTF("%s", log_buf);
     } else if (ucs_log_initialized) {
-        if (ucs_unlikely(ucs_log_file_close)) { /* non-stdout/stderr */
+        if (ucs_log_file_close) { /* non-stdout/stderr */
             /* get log entry size */
             log_entry_len = snprintf(NULL, 0, UCS_LOG_FMT "%s\n",
                                      UCS_LOG_ARG(short_file, line, level,
@@ -357,7 +357,7 @@ ucs_log_print_multi_line(const char *short_file, int line,
     if (RUNNING_ON_VALGRIND) {
         VALGRIND_PRINTF("%s", strb_buffer);
     } else if (ucs_log_initialized) {
-        if (ucs_unlikely(ucs_log_file_close)) { /* non-stdout/stderr */
+        if (ucs_log_file_close) { /* non-stdout/stderr */
             ucs_log_handle_file_max_size(ucs_string_buffer_length(&strb));
         }
         fputs(strb_buffer, ucs_log_file);
@@ -375,7 +375,7 @@ static void ucs_log_print(const char *file, int line, ucs_log_level_t level,
     const char *short_file     = ucs_basename(file);
     const char *first_line_end = strchr(message, '\n');
 
-    if (ucs_unlikely(first_line_end != NULL)) {
+    if (first_line_end != NULL) {
         ucs_log_print_multi_line(short_file, line, level, comp_conf, tv,
                                  message, first_line_end);
     } else {
@@ -404,7 +404,7 @@ ucs_log_default_handler(const char *file, unsigned line, const char *function,
 
     ucs_spin_lock(&ucs_log_global_filter_lock);
     khiter = kh_get(ucs_log_filter, &ucs_log_global_filter, file);
-    if (ucs_unlikely(khiter == kh_end(&ucs_log_global_filter))) {
+    if (khiter == kh_end(&ucs_log_global_filter)) {
         /* Add source file name to the hash */
         match  = fnmatch(ucs_global_opts.log_component.file_filter, file, 0) !=
                  FNM_NOMATCH;
@@ -442,7 +442,7 @@ ucs_log_default_handler(const char *file, unsigned line, const char *function,
         message = buf;
     }
 
-    if (ucs_unlikely(level <= ucs_global_opts.log_level_trigger)) {
+    if (level <= ucs_global_opts.log_level_trigger) {
         ucs_fatal_error_message(file, line, function, message);
     } else {
         gettimeofday(&tv, NULL);
@@ -450,7 +450,7 @@ ucs_log_default_handler(const char *file, unsigned line, const char *function,
     }
 
     /* flush the log file if the log_level of this message is fatal or error */
-    if (ucs_unlikely(level <= UCS_LOG_LEVEL_ERROR)) {
+    if (level <= UCS_LOG_LEVEL_ERROR) {
         ucs_log_flush();
     }
 

@@ -206,7 +206,7 @@ const char *ucs_string_buffer_cstr(const ucs_string_buffer_t *strb)
 {
     char *c_str;
 
-    if (ucs_unlikely(ucs_array_is_empty(strb))) {
+    if (ucs_array_is_empty(strb)) {
         return "";
     }
 
