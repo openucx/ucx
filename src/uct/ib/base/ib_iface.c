@@ -2043,10 +2043,6 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface,
     iface_attr->bandwidth = uct_ib_iface_get_bandwidth(iface, wire_speed);
     iface_attr->priority  = uct_ib_device_spec(dev)->priority;
 
-#if HAVE_DECL_IBV_EVENT_PORT_SPEED_CHANGE
-    iface_attr->cap.event_flags    |= UCT_IFACE_FLAG_EVENT_ASYNC_CB;
-#endif
-
     return UCS_OK;
 }
 

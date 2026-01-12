@@ -863,8 +863,6 @@ static void ucp_worker_iface_handle_port_speed_event(ucp_worker_iface_t *wiface)
 {
     ucp_worker_h worker = wiface->worker;
 
-    UCS_ASYNC_BLOCK(&worker->async);
-
     /* There could be several ifaces updates from the same device. In order to
      * handle all of them at the same time, mark iface as pending to be updated
      * and defer the actual update
@@ -875,8 +873,6 @@ static void ucp_worker_iface_handle_port_speed_event(ucp_worker_iface_t *wiface)
             worker->uct, ucp_worker_iface_handle_port_speed_progress, worker, 0,
             &worker->dflow_service.cb_id);
     }
-
-    UCS_ASYNC_UNBLOCK(&worker->async);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -895,18 +891,14 @@ static void ucp_worker_iface_async_cb_event(void *arg, unsigned flags)
 {
     ucp_worker_iface_t *wiface = arg;
 
-    if (flags != 0) {
+    ucs_trace_func("async_cb for iface=%p flags=%u", wiface->iface, flags);
+
+    if (flags & UCT_EVENT_SPEED_CHANGE) {
         ucp_worker_iface_handle_port_speed_event(wiface);
         return;
     }
 
     ucs_assert(wiface->attr.cap.event_flags & UCT_IFACE_FLAG_EVENT_ASYNC_CB);
-    ucs_trace_func("async_cb for iface=%p flags=%u", wiface->iface, flags);
-
-    if (flags & UCT_EVENT_SPEED_CHANGE) {
-        /* TODO: handle speed changed event */
-        ucs_assert_always(0);
-    }
 
     ucp_worker_iface_event_common(wiface);
 }
