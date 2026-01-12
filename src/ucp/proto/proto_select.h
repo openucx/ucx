@@ -163,7 +163,7 @@ typedef struct {
     } cache;
 
     /* Epoch (generation) counter. @see ucp_worker::epoch_counter */
-    uint64_t                          epoch_counter;
+    uint64_t                          worker_epoch_counter;
 } ucp_proto_select_t;
 
 

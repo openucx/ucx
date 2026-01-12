@@ -3972,7 +3972,7 @@ void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index)
     ucp_ep_config_proto_init(ep->worker, cfg_index);
 }
 
-static ucs_status_t ucp_ep_update_rkey_config(ucp_ep_h ep, ucp_rkey_h rkey)
+static ucs_status_t ucp_rkey_update_config(ucp_rkey_h rkey, ucp_ep_h ep)
 {
     ucp_worker_h worker                = ep->worker;
     ucp_rkey_config_t *rkey_cfg        = ucp_rkey_config(worker, rkey);
@@ -3987,8 +3987,8 @@ static ucs_status_t ucp_ep_update_rkey_config(ucp_ep_h ep, ucp_rkey_h rkey)
     }
 
     /* Now rkey config is up to date with worker epoch */
-    rkey_cfg                             = ucp_rkey_config(worker, rkey);
-    rkey_cfg->proto_select.epoch_counter = worker->epoch_counter;
+    rkey_cfg                                    = ucp_rkey_config(worker, rkey);
+    rkey_cfg->proto_select.worker_epoch_counter = worker->epoch_counter;
     return UCS_OK;
 }
 
@@ -4007,7 +4007,7 @@ ucs_status_t ucp_ep_update_config(ucp_ep_h ep, ucp_rkey_h rkey)
     }
 
     if (ucp_ep_config_is_equal(&cfg_key, &ucp_ep_config(ep)->key)) {
-        ucp_ep_config(ep)->proto_select.epoch_counter = worker->epoch_counter;
+        ucp_ep_config(ep)->proto_select.worker_epoch_counter = worker->epoch_counter;
         return UCS_OK;
     }
 
@@ -4020,10 +4020,10 @@ ucs_status_t ucp_ep_update_config(ucp_ep_h ep, ucp_rkey_h rkey)
 
     ucp_ep_config_activate_worker_ifaces(worker, ep->cfg_index);
     /* Now EP config is up to date with worker epoch */
-    ucp_ep_config(ep)->proto_select.epoch_counter = worker->epoch_counter;
+    ucp_ep_config(ep)->proto_select.worker_epoch_counter = worker->epoch_counter;
 
     if ((old_cfg_index != ep->cfg_index) && (rkey != NULL)) {
-        return ucp_ep_update_rkey_config(ep, rkey);
+        return ucp_rkey_update_config(rkey, ep);
     } else {
         return UCS_OK;
     }

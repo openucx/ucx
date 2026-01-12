@@ -834,7 +834,7 @@ static unsigned ucp_worker_iface_handle_port_speed_progress(void *arg)
     ucp_rsc_index_t iface_id;
     uint8_t port_speed;
 
-    UCS_ASYNC_BLOCK(&worker->async);
+    UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(worker);
     uct_worker_progress_unregister_safe(worker->uct, &worker->dflow_service.cb_id);
 
     for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
@@ -855,13 +855,14 @@ static unsigned ucp_worker_iface_handle_port_speed_progress(void *arg)
         ++worker->epoch_counter;
     }
 
-    UCS_ASYNC_UNBLOCK(&worker->async);
     return progress_count;
 }
 
 static void ucp_worker_iface_handle_port_speed_event(ucp_worker_iface_t *wiface)
 {
     ucp_worker_h worker = wiface->worker;
+
+    UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(worker);
 
     /* There could be several ifaces updates from the same device. In order to
      * handle all of them at the same time, mark iface as pending to be updated
