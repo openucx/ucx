@@ -1755,8 +1755,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
     if (config->traffic_class == UCS_ULUNITS_AUTO) {
         self->config.traffic_class =
                 uct_ib_iface_is_roce_v2(self) ?
-                        uct_ib_device_query_roce_tclass(uct_ib_device_name(dev),
-                                                        port_num) :
+                        uct_ib_device_query_roce_tclass(dev, port_num) :
                         0;
     } else {
         self->config.traffic_class = config->traffic_class;
