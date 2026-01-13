@@ -282,25 +282,6 @@ ucs_log_print_single_line(const char *short_file, int line,
     }
 }
 
-static size_t
-ucs_log_calc_expected_length(ucs_string_buffer_t *prefix, const char *message)
-{
-    size_t prefix_length = ucs_string_buffer_length(prefix);
-    size_t line_count    = 1;
-    const char *ptr      = message;
-
-    while (*ptr != '\0') {
-        if (*ptr == '\n') {
-            line_count++;
-        }
-        ptr++;
-    }
-
-    return line_count * prefix_length /* total prefixes length */
-           + (ptr - message) /* total message length (including newlines) */
-           + 1; /* final newline */
-}
-
 static void
 ucs_log_print_multi_line(const char *short_file, int line,
                          ucs_log_level_t level,
@@ -308,64 +289,71 @@ ucs_log_print_multi_line(const char *short_file, int line,
                          const struct timeval *tv, const char *message,
                          const char *first_line_end)
 {
-    UCS_STRING_BUFFER_ONSTACK(prefix, 128);
-    const char *line_start   = message;
-    const char *line_end     = first_line_end;
-    const char *prefix_cstr;
-    char *strb_buffer;
-    ucs_string_buffer_t strb;
-    size_t strb_buffer_capacity;
+    size_t output_len      = 0;
+    const char *line_start = message;
+    const char *line_end   = first_line_end;
+    char prefix[256];
+    char output[2048];
+    int ret;
 
     /* Format the log prefix once */
     if (RUNNING_ON_VALGRIND || !ucs_log_initialized) {
-        ucs_string_buffer_appendf(&prefix, UCS_LOG_SHORT_FMT,
-                                  UCS_LOG_SHORT_ARG(short_file, line, level,
-                                                    comp_conf, tv));
+        ret = snprintf(prefix, sizeof(prefix), UCS_LOG_SHORT_FMT,
+                       UCS_LOG_SHORT_ARG(short_file, line, level, comp_conf,
+                                         tv));
     } else {
-        ucs_string_buffer_appendf(&prefix, UCS_LOG_FMT,
-                                  UCS_LOG_ARG(short_file, line, level,
-                                              comp_conf, tv));
+        ret = snprintf(prefix, sizeof(prefix), UCS_LOG_FMT,
+                       UCS_LOG_ARG(short_file, line, level, comp_conf, tv));
     }
-    ucs_assert(ucs_array_available_length(&prefix) > 1);
-    prefix_cstr = ucs_string_buffer_cstr(&prefix);
-
-    /* Allocate a buffer with the expected length of the log message,
-     * it may be allocated on the heap depending on the maximal allocation
-       size on the stack */
-    strb_buffer_capacity =
-            ucs_log_calc_expected_length(&prefix, message) /* string length */
-            + 1 /* null terminator */
-            + 1; /* extra space to validate that the buffer is not truncated */
-
-    strb_buffer = ucs_alloc_on_stack(strb_buffer_capacity,
-                                     "multi_line_strb_buffer");
-    ucs_string_buffer_init_fixed(&strb, strb_buffer, strb_buffer_capacity);
+    ucs_assert((ret >= 0) && ((size_t)ret < sizeof(prefix)));
 
     /* Append line by line */
     ucs_assert(line_end != NULL);
     do {
-        ucs_string_buffer_appendf(&strb, "%s%.*s\n", prefix_cstr,
-                                  (int)(line_end - line_start), line_start);
-        line_start = line_end + 1;
-    } while ((line_end = strchr(line_start, '\n')) != NULL);
+        size_t remaining_space = sizeof(output) - output_len;
 
-    /* Append last line */
-    ucs_string_buffer_appendf(&strb, "%s%s\n", prefix_cstr, line_start);
-    ucs_assert(ucs_array_available_length(&strb) == 2);
+        ret = snprintf(output + output_len, remaining_space, "%s%.*s\n", prefix,
+                       (int)(line_end - line_start), line_start);
+        ucs_assert(ret >= 0);
+
+        if ((size_t)ret >= remaining_space) {
+            output_len                 = sizeof(output) - 1;
+            output[sizeof(output) - 1] = '\0';
+            output[sizeof(output) - 2] = '\n';
+            output[sizeof(output) - 3] = '>'; /* Truncated indicator */
+            output[sizeof(output) - 4] = ' ';
+            break;
+        }
+
+        output_len += ret;
+
+        if (*line_end == '\0') {
+            break; /* This was the last line */
+        }
+
+        line_start = line_end + 1;
+        line_end   = strchr(line_start, '\n');
+        if (line_end == NULL) {
+            /* The last line is next, set to the end of the message */
+            line_end = line_start + strlen(line_start);
+        }
+    } while (1);
+
+    ucs_assert(output_len > 0);
 
     /* Print the entire buffer in a single operation to avoid interleaving */
     if (RUNNING_ON_VALGRIND) {
-        VALGRIND_PRINTF("%s", strb_buffer);
+        VALGRIND_PRINTF("%s", output);
     } else if (ucs_log_initialized) {
         if (ucs_log_file_close) { /* non-stdout/stderr */
-            ucs_log_handle_file_max_size(ucs_string_buffer_length(&strb));
+            ucs_log_handle_file_max_size(output_len);
         }
-        fputs(strb_buffer, ucs_log_file);
+        fputs(output, ucs_log_file);
+        fflush(ucs_log_file);
     } else {
-        fputs(strb_buffer, stdout);
+        fputs(output, stdout);
+        fflush(stdout);
     }
-
-    ucs_free_on_stack(strb_buffer, strb_buffer_capacity);
 }
 
 static void ucs_log_print(const char *file, int line, ucs_log_level_t level,

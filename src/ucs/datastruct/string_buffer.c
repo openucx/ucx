@@ -13,7 +13,6 @@
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack_int.h>
-#include <ucs/sys/compiler_def.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/sock.h>
