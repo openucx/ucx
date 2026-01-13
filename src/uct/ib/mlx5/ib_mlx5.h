@@ -209,6 +209,10 @@ enum {
     /* Device supports forcing ordering configuration */
     UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE    = UCS_BIT(18),
 
+    /* Device supports registering UMEM with DMA-BUF.
+     * NOTE: initiazlied in uct_gdaki_query_tl_devices */
+    UCT_IB_MLX5_MD_FLAG_REG_DMABUF_UMEM      = UCS_BIT(19),
+
     /* Object to be created by DevX */
     UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 20,
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP       = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCQP),
