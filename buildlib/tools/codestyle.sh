@@ -26,7 +26,7 @@ codestyle_check_commit_title() {
 codespell_skip_args() {
     for path in $(git config --file .gitmodules --get-regexp path | cut -f2 -d' ')
     do
-        echo --skip "./$path/*"
+        echo --skip "./$path"
     done
 }
 
@@ -34,5 +34,6 @@ codestyle_check_spell() {
     python3 -m venv /tmp/codespell_env
     source /tmp/codespell_env/bin/activate
     pip3 install codespell
+    echo codespell $(codespell_skip_args) "$@"
     codespell $(codespell_skip_args) "$@"
 }
