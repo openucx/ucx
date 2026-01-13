@@ -64,6 +64,12 @@ typedef struct ucs_rcache_distribution {
     size_t total_size; /**< Total size of regions in the group */
 } ucs_rcache_distribution_t;
 
+typedef enum {
+    UCS_RCACHE_LRU_DISABLED, /* LRU is completely disabled */
+    UCS_RCACHE_LRU_LOCKED,   /* LRU enabled and needs its own locking */
+    UCS_RCACHE_LRU_UNSAFE    /* LRU enabled and protected by other lock */
+} ucs_rcache_lru_mode;;
+
 struct ucs_rcache {
     ucs_rcache_params_t params;          /**< rcache parameters (immutable) */
 
@@ -94,9 +100,9 @@ struct ucs_rcache {
     size_t              unreleased_size; /**< Total size of the regions in gc_list and in inv_q */
 
     struct {
-        int             enabled;         /**< Whether lru is enabled */
-        ucs_spinlock_t  lock;            /**< Lock for this structure */
-        ucs_list_link_t list;            /**< List of regions, sorted by usage:
+        ucs_rcache_lru_mode mode;        /**< Whether lru is enabled and needs locking */
+        ucs_spinlock_t      lock;        /**< Lock for this structure */
+        ucs_list_link_t     list;        /**< List of regions, sorted by usage:
                                               The head of the list is the least
                                               recently used region, and the tail
                                               is the most recently used region. */

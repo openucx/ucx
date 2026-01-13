@@ -691,20 +691,22 @@ static void ucs_rcache_clean(ucs_rcache_t *rcache)
     ucs_rw_spinlock_write_unlock(&rcache->pgt_lock);
 }
 
-/* LRU must be enabled and lock must be held in write mode */
+/* Lock must be held in write mode */
 static void ucs_rcache_lru_evict(ucs_rcache_t *rcache)
 {
     int num_evicted, num_skipped;
     ucs_rcache_region_t *region;
 
-    if (!rcache->lru.enabled) {
+    if (rcache->lru.mode == UCS_RCACHE_LRU_DISABLED) {
         return;
     }
 
     num_evicted = 0;
     num_skipped = 0;
 
-    ucs_spin_lock(&rcache->lru.lock);
+    if (rcache->lru.mode == UCS_RCACHE_LRU_LOCKED) {
+        ucs_spin_lock(&rcache->lru.lock);
+    }
     while (!ucs_list_is_empty(&rcache->lru.list) &&
            ((rcache->num_regions > rcache->params.max_regions) ||
             (rcache->total_size > rcache->params.max_size))) {
@@ -715,12 +717,14 @@ static void ucs_rcache_lru_evict(ucs_rcache_t *rcache)
         if (!(region->flags & UCS_RCACHE_REGION_FLAG_PGTABLE) ||
             (region->refcount > 1)) {
             /* region is in use or not in page table - remove from lru */
-            ucs_rcache_region_lru_remove(rcache, region);
+            ucs_rcache_region_lru_get_impl(rcache, region);
             ++num_skipped;
             continue;
         }
 
-        ucs_spin_unlock(&rcache->lru.lock);
+        if (rcache->lru.mode == UCS_RCACHE_LRU_LOCKED) {
+            ucs_spin_unlock(&rcache->lru.lock);
+        }
 
         /* The region is expected to have refcount=1 and present in pgt, so it
          * would be destroyed immediately by this function
@@ -732,10 +736,14 @@ static void ucs_rcache_lru_evict(ucs_rcache_t *rcache)
                         UCS_RCACHE_REGION_PUT_FLAG_IN_PGTABLE);
         ++num_evicted;
 
-        ucs_spin_lock(&rcache->lru.lock);
+        if (rcache->lru.mode == UCS_RCACHE_LRU_LOCKED) {
+            ucs_spin_lock(&rcache->lru.lock);
+        }
     }
 
-    ucs_spin_unlock(&rcache->lru.lock);
+    if (rcache->lru.mode == UCS_RCACHE_LRU_LOCKED) {
+        ucs_spin_unlock(&rcache->lru.lock);
+    }
 
     if (num_evicted > 0) {
         ucs_debug("evicted %d regions, skipped %d regions, usage: %lu (%lu)",
@@ -1252,11 +1260,16 @@ size_t ucs_rcache_distribution_get_num_bins()
     return ucs_ilog2(ucs_rcache_stat_max_pow2() / UCS_RCACHE_STAT_MIN_POW2) + 2;
 }
 
-static int ucs_rcache_lru_enabled(const ucs_rcache_params_t *params)
+static ucs_rcache_lru_mode
+ucs_rcache_lru_get_mode(const ucs_rcache_params_t *params)
 {
-    /* Disable LRU in rcache if both max are "infinity" */
-    return (params->max_size != UCS_MEMUNITS_INF) ||
-           (params->max_regions != UCS_MEMUNITS_INF);
+    /* Disable LRU in rcache if both values are "infinity" */
+    if((params->max_size != UCS_MEMUNITS_INF) ||
+       (params->max_regions != UCS_MEMUNITS_INF)) {
+        return UCS_RCACHE_LRU_DISABLED;
+    }
+    return (params->flags & UCS_RCACHE_FLAG_NEED_LRU_LOCK) ?
+        UCS_RCACHE_LRU_LOCKED : UCS_RCACHE_LRU_UNSAFE;
 }
 
 static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
@@ -1321,12 +1334,8 @@ static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
     ucs_list_head_init(&self->gc_list);
     self->num_regions = 0;
     self->total_size  = 0;
-    self->lru.enabled = ucs_rcache_lru_enabled(params);
-    if (self->lru.enabled) {
-        ucs_list_head_init(&self->lru.list);
-    } else {
-        ucs_list_head_invalidate(&self->lru.list);
-    }
+    self->lru.mode    = ucs_rcache_lru_get_mode(params);
+    ucs_list_head_init(&self->lru.list);
     ucs_spinlock_init(&self->lru.lock, 0);
 
     self->distribution = ucs_calloc(ucs_rcache_distribution_get_num_bins(),
@@ -1384,15 +1393,12 @@ static UCS_CLASS_CLEANUP_FUNC(ucs_rcache_t)
     ucs_rcache_check_gc_list(self, 0);
     ucs_rcache_purge(self);
 
-    if (self->lru.enabled) {
-        if (!ucs_list_is_empty(&self->lru.list)) {
-            ucs_warn(
-                    "rcache %s: %lu regions remained on lru list, first region: %p",
-                    self->name, ucs_list_length(&self->lru.list),
-                    ucs_list_head(&self->lru.list, ucs_rcache_region_t, lru_list));
-        }
-        ucs_spinlock_destroy(&self->lru.lock);
+    if (!ucs_list_is_empty(&self->lru.list)) {
+        ucs_warn("rcache %s: %lu regions remained on lru list, first region: %p",
+                 self->name, ucs_list_length(&self->lru.list),
+                 ucs_list_head(&self->lru.list, ucs_rcache_region_t, lru_list));
     }
+    ucs_spinlock_destroy(&self->lru.lock);
 
     ucs_mpool_cleanup(&self->mp, 1);
     ucs_pgtable_cleanup(&self->pgtable);

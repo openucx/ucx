@@ -45,16 +45,6 @@ static inline void ucs_list_head_init(ucs_list_link_t *head)
     head->prev = head->next = head;
 }
 
-/**
- * Initialize list head with invalid values.
- *
- * @param head  List head struct to initialize.
- */
-static inline void ucs_list_head_invalidate(ucs_list_link_t *head)
-{
-    head->prev = (ucs_list_link_t*)0xdead0042;
-    head->next = (ucs_list_link_t*)0xdead0043;
-}
 
 /**
  * Insert an element in-between to list elements. Any elements which were in this
