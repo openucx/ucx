@@ -1,0 +1,3 @@
+[submodule "src/uct/ib/mlx5/gdaki/gpunetio"]
+	path = src/uct/ib/mlx5/gdaki/gpunetio
+	url = https://github.com/NVIDIA-DOCA/gpunetio

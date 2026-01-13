@@ -68,6 +68,7 @@
 #define UCT_IB_DEVICE_SYSFS_GID_ATTR_PFX  UCT_IB_DEVICE_SYSFS_PFX "/ports/%d/gid_attrs"
 #define UCT_IB_DEVICE_SYSFS_GID_TYPE_FMT  UCT_IB_DEVICE_SYSFS_GID_ATTR_PFX "/types/%d"
 #define UCT_IB_DEVICE_SYSFS_GID_NDEV_FMT  UCT_IB_DEVICE_SYSFS_GID_ATTR_PFX "/ndevs/%d"
+#define UCT_IB_DEVICE_SYSFS_ROCE_TC_FMT   UCT_IB_DEVICE_SYSFS_PFX "/tc/%d/traffic_class"
 #define UCT_IB_DEVICE_ECE_DEFAULT         0x0         /* default ECE */
 #define UCT_IB_DEVICE_ECE_MAX             0xffffffffU /* max ECE */
 #define UCT_IB_DEVICE_DEFAULT_GID_INDEX 0   /* The gid index used by default for an IB/RoCE port */
@@ -449,6 +450,9 @@ ucs_status_t uct_ib_device_query_gid_info(struct ibv_context *ctx, const char *d
 int uct_ib_device_test_roce_gid_index(uct_ib_device_t *dev, uint8_t port_num,
                                       const union ibv_gid *gid,
                                       uint8_t gid_index);
+
+unsigned long
+uct_ib_device_query_roce_tclass(uct_ib_device_t *dev, uint8_t port_num);
 
 ucs_status_t
 uct_ib_device_async_event_register(uct_ib_device_t *dev,
