@@ -146,7 +146,7 @@ out_ctx_release:
 static int uct_gdaki_is_dmabuf_supported(const uct_ib_md_t *md)
 {
     static int dmabuf_supported = -1;
-    int loglevel                = md->config.gda_dmabuf_enable == UCS_YES ?
+    int loglevel                = (md->config.gda_dmabuf_enable == UCS_YES) ?
                                                          UCS_LOG_LEVEL_DIAG :
                                                          UCS_LOG_LEVEL_DEBUG;
 
