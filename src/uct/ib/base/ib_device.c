@@ -1016,6 +1016,25 @@ int uct_ib_device_test_roce_gid_index(uct_ib_device_t *dev, uint8_t port_num,
     return 1;
 }
 
+unsigned long
+uct_ib_device_query_roce_tclass(uct_ib_device_t *dev, uint8_t port_num)
+{
+    char buf[64];
+    unsigned long tclass;
+    int ret;
+
+    ret = ucs_read_file(buf, sizeof(buf) - 1, 1,
+                        UCT_IB_DEVICE_SYSFS_ROCE_TC_FMT,
+                        uct_ib_device_name(dev), port_num);
+    if ((ret < 0) || (sscanf(buf, "Global tclass=%lu", &tclass) != 1)) {
+        tclass = UCT_IB_DEFAULT_ROCEV2_DSCP;
+    }
+
+    ucs_debug("'%s:%d' global_traffic_class=%lu",
+              uct_ib_device_name(dev), port_num, tclass);
+    return tclass;
+}
+
 ucs_status_t
 uct_ib_device_roce_gid_to_sockaddr(sa_family_t af, const void *gid,
                                    struct sockaddr_storage *sock_storage)
