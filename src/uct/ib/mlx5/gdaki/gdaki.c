@@ -94,7 +94,6 @@ static void uct_rc_gdaki_calc_dev_ep_layout(size_t num_channels,
     qp_attr->umem_offset = *cq_umem_offset_p +
                            sizeof(uct_rc_gdaki_dev_qp_t) * num_channels;
     *dev_ep_size_p       = qp_attr->umem_offset + qp_attr->len * num_channels;
-
     max_page_size  = ucs_min(UCT_GDAKI_DEV_EP_SIZE, UCT_GDAKI_DEV_QP_SIZE)
                      << UCT_GDAKI_CQ_PAGE_OFFSET_SHIFT;
     *pgsz_bitmap_p = (max_page_size << 1) - 1;
