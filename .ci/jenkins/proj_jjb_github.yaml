@@ -1,0 +1,172 @@
+# Jenkins Job Builder (JJB) configuration for UCX GitHub (Blossom) jobs
+#
+# Entry point: ucx-dispatcher-github (generic-webhook-trigger token must match job name)
+# Leaf jobs: ucx-*-github (triggered by dispatcher, not directly from GitHub)
+#
+# NOTE: This file is applied by DevOps to Jenkins.
+
+- job-template:
+    name: "{jjb_proj}-dispatcher-github"
+    folder: "UCX-GitHub"
+    project-type: pipeline
+    properties:
+      - github:
+          url: "https://github.com/openucx/ucx"
+      - build-discarder:
+          days-to-keep: 14
+          num-to-keep: 1000
+      - inject:
+          keep-system-variables: true
+          properties-content: |
+            jjb_proj={jjb_proj}-dispatcher-github
+    triggers:
+      - generic-webhook-trigger:
+          token: "{jjb_proj}-dispatcher-github"
+          print-contributors: true
+          print-posted-content: true
+          silent-response: false
+          cause: "GitHub Blossom trigger"
+          post-content-params:
+            - type: JSONPath
+              key: githubData
+              value: $
+            - type: JSONPath
+              key: VARIABLE_FROM_POST
+              value: $
+    description: "UCX GitHub dispatcher (Blossom). Do NOT edit via Web GUI!"
+    concurrent: true
+    sandbox: true
+    parameters:
+      - string:
+          name: "VARIABLE_FROM_POST"
+          default: ""
+          description: "Raw GitHub webhook payload (Blossom)"
+    dsl: |
+      @Library('blossom-github-lib@master')
+      import ipp.blossom.*
+
+      def githubHelper = null
+      withCredentials([usernamePassword(credentialsId: 'github-token', passwordVariable: 'GIT_PASSWORD', usernameVariable: 'GIT_USERNAME')]) {{
+        githubHelper = GithubHelper.getInstance("${{GIT_PASSWORD}}", VARIABLE_FROM_POST)
+      }}
+
+      def sha = githubHelper.getMergedSHA()
+
+      currentBuild.description = githubHelper.getBuildDescription()
+
+      def jobs = [
+        'ucx-codestyle-github',
+        'ucx-static-checks-github',
+        'ucx-coverity-github',
+        'ucx-build-github',
+        'ucx-build-static-github',
+      ]
+
+      def fanout = [:]
+      for (def j in jobs) {{
+        def jobName = "UCX-GitHub/${{j}}"
+        fanout[jobName] = {{
+          build job: jobName, parameters: [
+            string(name: 'sha1', value: sha),
+            string(name: 'githubData', value: VARIABLE_FROM_POST),
+          ], propagate: false, wait: true
+        }}
+      }}
+      parallel fanout
+
+- job-template:
+    name: "{jjb_proj}"
+    folder: "UCX-GitHub"
+    project-type: pipeline
+    disabled: false
+    properties:
+      - github:
+          url: "https://github.com/openucx/ucx"
+      - build-discarder:
+          days-to-keep: 14
+          num-to-keep: 1000
+      - inject:
+          keep-system-variables: true
+          properties-content: |
+            jjb_proj={jjb_proj}
+    description: "{jjb_description}"
+    concurrent: true
+    sandbox: true
+    parameters:
+      - string:
+          name: "sha1"
+          default: "master"
+          description: "Git ref/commit to build, set by dispatcher"
+      - string:
+          name: "githubData"
+          default: ""
+          description: "Webhook payload from Blossom"
+      - string:
+          name: "conf_file"
+          default: "{jjb_conf_file}"
+          description: "Matrix config file"
+      - bool:
+          name: "build_dockers"
+          default: false
+          description: "Force rebuild docker containers (if supported)"
+      - string:
+          name: "DEBUG"
+          default: 0
+          description: "Enable debug prints and traces, valid values are 0-9"
+    pipeline-scm:
+      scm:
+        - git:
+            url: "https://github.com/openucx/ucx.git"
+            branches: [ '$sha1' ]
+            shallow-clone: false
+            do-not-fetch-tags: false
+            refspec: "+refs/heads/*:refs/remotes/origin/* +refs/pull/*:refs/remotes/origin/pr/* +refs/tags/*:refs/remotes/origin/tags/*"
+            browser: githubweb
+            browser-url: "https://github.com/openucx/ucx"
+      script-path: ".ci/jenkins/Jenkinsfile.github"
+
+- project:
+    name: ucx-dispatcher-github
+    jjb_proj: "ucx"
+    jobs:
+      - "{jjb_proj}-dispatcher-github"
+
+- project:
+    name: ucx-codestyle-github
+    jjb_proj: "ucx-codestyle-github"
+    jjb_conf_file: ".ci/pipeline/codestyle_matrix.yaml"
+    jjb_description: "UCX Codestyle checks (GitHub Blossom). Do NOT edit via Web GUI!"
+    jobs:
+      - "{jjb_proj}"
+
+- project:
+    name: ucx-static-checks-github
+    jjb_proj: "ucx-static-checks-github"
+    jjb_conf_file: ".ci/pipeline/static_checks_matrix.yaml"
+    jjb_description: "UCX Static checks (GitHub Blossom). Do NOT edit via Web GUI!"
+    jobs:
+      - "{jjb_proj}"
+
+- project:
+    name: ucx-coverity-github
+    jjb_proj: "ucx-coverity-github"
+    jjb_conf_file: ".ci/pipeline/coverity_matrix.yaml"
+    jjb_description: "UCX Coverity (GitHub Blossom). Do NOT edit via Web GUI!"
+    jobs:
+      - "{jjb_proj}"
+
+- project:
+    name: ucx-build-github
+    jjb_proj: "ucx-build-github"
+    jjb_conf_file: ".ci/pipeline/build_matrix.yaml"
+    jjb_description: "UCX Build job (GitHub Blossom). Do NOT edit via Web GUI!"
+    jobs:
+      - "{jjb_proj}"
+
+- project:
+    name: ucx-build-static-github
+    jjb_proj: "ucx-build-static-github"
+    jjb_conf_file: ".ci/pipeline/build_static_matrix.yaml"
+    jjb_description: "UCX Static build (GitHub Blossom). Do NOT edit via Web GUI!"
+    jobs:
+      - "{jjb_proj}"
