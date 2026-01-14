@@ -1,5 +1,10 @@
 #!/usr/bin/groovy
 
+/**
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+ * See file LICENSE for terms.
+ */
+
 import hudson.model.TaskListener
 
 @Library('github.com/Mellanox/ci-demo@master')
