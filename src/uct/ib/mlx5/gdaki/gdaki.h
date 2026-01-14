@@ -21,6 +21,9 @@
 typedef struct uct_rc_gdaki_iface {
     uct_rc_mlx5_iface_common_t super;
     CUdevice                   cuda_dev;
+    struct ibv_mr              *atomic_mr;
+    CUdeviceptr                atomic_raw;
+    uint64_t                   *atomic_buff;
     CUcontext                  cuda_ctx;
     unsigned                   num_channels;
     pthread_mutex_t            ep_init_lock;
@@ -38,7 +41,6 @@ typedef struct uct_rc_gdaki_ep {
     struct mlx5dv_devx_umem      *umem;
     CUdeviceptr                  ep_raw;
     uct_rc_gdaki_dev_ep_t        *ep_gpu;
-    struct ibv_mr                *ep_mr;
     uint8_t                      dev_ep_init;
     uct_rc_gdaki_channel_t       *channels;
 } uct_rc_gdaki_ep_t;
