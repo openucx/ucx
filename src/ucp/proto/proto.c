@@ -103,7 +103,8 @@ const char *ucp_operation_descs[] = {
     [UCP_OP_ID_TAG_SEND]       = "tagged message by ucp_tag_send*",
     [UCP_OP_ID_TAG_SEND_SYNC]  = "synchronous tagged message by ucp_tag_send_sync*",
     [UCP_OP_ID_AM_SEND]        = "active message by ucp_am_send*",
-    [UCP_OP_ID_AM_SEND_REPLY]  = "active message by ucp_am_send* with reply flag",
+    [UCP_OP_ID_AM_SEND_REPLY]  = "active message by ucp_am_send* with reply "
+                                 "flag",
     [UCP_OP_ID_STREAM_SEND]    = "stream message by ucp_stream_send*",
     [UCP_OP_ID_PUT]            = "remote memory write by ucp_put*",
     [UCP_OP_ID_GET]            = "remote memory read by ucp_get*",
