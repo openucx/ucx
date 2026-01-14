@@ -26,7 +26,7 @@ codestyle_check_commit_title() {
 codespell_skip_args() {
     for path in $(git config --file .gitmodules --get-regexp path | cut -f2 -d' ')
     do
-        echo --skip "./$path/*"
+        echo --skip "./$path"
     done
 }
 

@@ -97,12 +97,13 @@ jobs:
     container: fedora
     steps:
       - checkout: self
+        submodules: true
         clean: true
         fetchDepth: 100
         retryCountOnTaskFailure: 5
 
       - bash: |
-          set -eE
+          set -eEx
           source ./buildlib/tools/codestyle.sh
           codestyle_check_spell
         displayName: codespell test
