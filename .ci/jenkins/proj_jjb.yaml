@@ -1,8 +1,15 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
 # Jenkins Job Builder (JJB) configuration for UCX project
 # NOTE: This file is not applied automatically. DevOps applies it to Jenkins.
 #
 # Requires: /etc/jenkins_jobs/ucx-defaults.yaml (site-specific configuration)
-# Deploy:   jenkins-jobs test /etc/jenkins_jobs/ucx-defaults.yaml:<this-file>
+#   - defaults:
+#       name: global
+#       jjb_git: "<repo-url>"
+#
+# Deploy: jenkins-jobs test /etc/jenkins_jobs/ucx-defaults.yaml:<this-file>
 #
 # Each job is triggered independently by GitLab and reports its own status.
 

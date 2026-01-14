@@ -1,4 +1,0 @@
-- defaults:
-    name: global
-    jjb_git: "ssh://git@gitlab-master.nvidia.com:12051/nbu-swx/ai/ucx.git"
-
