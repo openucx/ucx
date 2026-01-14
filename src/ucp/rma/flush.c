@@ -434,10 +434,22 @@ void ucp_ep_flush_request_ff(ucp_request_t *req, ucs_status_t status)
 
 void ucp_ep_flush_remote_completed(ucp_request_t *req)
 {
-    ucp_trace_req(req, "flush ep %p remote ops completed", req->send.ep);
+    ucp_ep_h ep       = req->send.ep;
+    ucp_context_h ctx = ep->worker->context;
+
+    ucp_trace_req(req, "flush ep %p remote ops completed", ep);
 
     if (!req->send.flush.sw_done) {
         req->send.flush.sw_done = 1;
+
+        /* Increment flush generation to invalidate cached round-robin state
+         * in multi-lane protocol configs, if configured to reset on flush.
+         * This provides lazy reset without tracking which protocols are used
+         * by this endpoint. */
+        if (ctx->config.ext.round_robin_mode == UCP_ROUND_ROBIN_MODE_FLUSH) {
+            ep->flush_generation++;
+        }
+
         ucp_flush_check_completion(req);
     }
 }
