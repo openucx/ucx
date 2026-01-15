@@ -9,6 +9,7 @@
 #endif
 
 #include "interval_tree.h"
+#include <ucs/debug/assert.h>
 #include <ucs/sys/math.h>
 
 
@@ -111,6 +112,8 @@ ucs_status_t ucs_interval_tree_insert(ucs_interval_tree_t *tree, uint64_t start,
     ucs_interval_node_t *current = tree->root;
     ucs_interval_node_t *parent  = NULL;
     ucs_interval_node_t *new_node;
+
+    ucs_assert(current != NULL);
 
     if (start > end) {
         return UCS_ERR_INVALID_PARAM;
