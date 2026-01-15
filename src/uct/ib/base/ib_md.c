@@ -598,12 +598,10 @@ ucs_status_t uct_ib_memh_alloc(uct_ib_md_t *md, size_t length,
                                unsigned mem_flags, size_t memh_base_size,
                                size_t mr_size, uct_ib_mem_t **memh_p)
 {
-    int num_mrs = md->relaxed_order ?
-                          2 /* UCT_IB_MR_DEFAULT and UCT_IB_MR_STRICT_ORDER */ :
-                          1 /* UCT_IB_MR_DEFAULT */;
+    size_t size = uct_ib_memh_alloc_size(md, memh_base_size, mr_size);
     uct_ib_mem_t *memh;
 
-    memh = ucs_calloc(1, memh_base_size + (mr_size * num_mrs), "ib_memh");
+    memh = ucs_calloc(1, size, "ib_memh");
     if (memh == NULL) {
         ucs_error("%s: failed to allocated memh struct",
                   uct_ib_device_name(&md->dev));
