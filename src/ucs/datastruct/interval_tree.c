@@ -21,15 +21,14 @@
  * efficient pruning during range coverage queries.
  */
 typedef struct ucs_interval_node {
-    struct ucs_interval_node *left; /**< Left child node */
-    struct ucs_interval_node *right; /**< Right child node */
-    struct ucs_interval_node *next; /**< used for stack push/pop */
-    uint64_t                 start; /**< Start of interval */
-    uint64_t                 end; /**< End of interval */
-    uint64_t                 max_end; /**< Maximum end value in this subtree,
+    struct ucs_interval_node *left;    /**< Left child node */
+    struct ucs_interval_node *right;   /**< Right child node */
+    struct ucs_interval_node *next;    /**< used for stack push/pop */
+    uint64_t                  start;   /**< Start of interval */
+    uint64_t                  end;     /**< End of interval */
+    uint64_t                  max_end; /**< Maximum end value in this subtree,
                                             used for pruning optimization */
 } ucs_interval_node_t;
-
 
 static ucs_interval_node_t *
 ucs_interval_tree_node_create(ucs_interval_tree_t *tree, uint64_t start,
@@ -113,7 +112,7 @@ ucs_status_t ucs_interval_tree_insert(ucs_interval_tree_t *tree, uint64_t start,
     ucs_interval_node_t *parent  = NULL;
     ucs_interval_node_t *new_node;
 
-    ucs_assert(current != NULL);
+    ucs_assert(tree->root != NULL);
 
     if (start > end) {
         return UCS_ERR_INVALID_PARAM;
