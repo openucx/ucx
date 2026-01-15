@@ -1260,7 +1260,7 @@ size_t ucs_rcache_distribution_get_num_bins()
     return ucs_ilog2(ucs_rcache_stat_max_pow2() / UCS_RCACHE_STAT_MIN_POW2) + 2;
 }
 
-static ucs_rcache_lru_mode
+static ucs_rcache_lru_mode_t
 ucs_rcache_lru_get_mode(const ucs_rcache_params_t *params)
 {
     /* Disable LRU in rcache if both values are "infinity" */

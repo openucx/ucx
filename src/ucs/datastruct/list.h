@@ -45,7 +45,6 @@ static inline void ucs_list_head_init(ucs_list_link_t *head)
     head->prev = head->next = head;
 }
 
-
 /**
  * Insert an element in-between to list elements. Any elements which were in this
  * section will be discarded.
