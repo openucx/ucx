@@ -230,6 +230,16 @@ typedef enum uct_tcp_ep_am_id {
 
 
 /**
+ * TCP Reachability mode.
+ */
+typedef enum {
+    UCT_TCP_REACHABILITY_MODE_ROUTE = 0,
+    UCT_TCP_REACHABILITY_MODE_ALL   = 1,
+    UCT_TCP_REACHABILITY_MODE_LAST
+} uct_tcp_reachability_mode_t;
+
+
+/**
  * TCP PUT request header
  */
 typedef struct uct_tcp_ep_put_req_hdr {
@@ -365,69 +375,70 @@ UCS_PTR_MAP_DEFINE(tcp_ep, 0);
  * TCP interface
  */
 typedef struct uct_tcp_iface {
-    uct_base_iface_t              super;             /* Parent class */
-    int                           listen_fd;         /* Server socket */
-    ucs_conn_match_ctx_t          conn_match_ctx;    /* Connection matching context that contains EPs
-                                                      * created with CONNECT_TO_IFACE method */
-    UCS_PTR_MAP_T(tcp_ep)         ep_ptr_map;        /* EP PTR map that contains
-                                                      * EPs created with
-                                                      * CONNECT_TO_EP method */
-    ucs_list_link_t               ep_list;           /* List of endpoints */
-    char                          if_name[IFNAMSIZ]; /* Network interface name */
-    ucs_sys_event_set_t           *event_set;        /* Event set identifier */
-    ucs_mpool_t                   tx_mpool;          /* TX memory pool */
-    ucs_mpool_t                   rx_mpool;          /* RX memory pool */
-    size_t                        outstanding;       /* How much data in the EP send buffers
-                                                      * + how many non-blocking connections
-                                                      * are in progress + how many EPs are
-                                                      * waiting for PUT Zcopy operation ACKs
-                                                      * (0/1 for each EP) */
-    ucs_range_spec_t              port_range;        /** Range of ports to use for bind() */
+    uct_base_iface_t                super;             /* Parent class */
+    int                             listen_fd;         /* Server socket */
+    ucs_conn_match_ctx_t            conn_match_ctx;    /* Connection matching context that contains EPs
+                                                        * created with CONNECT_TO_IFACE method */
+    UCS_PTR_MAP_T(tcp_ep)           ep_ptr_map;        /* EP PTR map that contains
+                                                        * EPs created with
+                                                        * CONNECT_TO_EP method */
+    ucs_list_link_t                 ep_list;           /* List of endpoints */
+    char                            if_name[IFNAMSIZ]; /* Network interface name */
+    ucs_sys_event_set_t             *event_set;        /* Event set identifier */
+    ucs_mpool_t                     tx_mpool;          /* TX memory pool */
+    ucs_mpool_t                     rx_mpool;          /* RX memory pool */
+    size_t                          outstanding;       /* How much data in the EP send buffers
+                                                        * + how many non-blocking connections
+                                                        * are in progress + how many EPs are
+                                                        * waiting for PUT Zcopy operation ACKs
+                                                        * (0/1 for each EP) */
+    ucs_range_spec_t                port_range;        /** Range of ports to use for bind() */
 
     struct {
-        size_t                    tx_seg_size;       /* TX AM buffer size */
-        size_t                    rx_seg_size;       /* RX AM buffer size */
-        size_t                    sendv_thresh;      /* Minimum size of user's payload from which
-                                                      * non-blocking vector send should be used */
-        size_t                    max_iov;           /* Maximum supported IOVs limited by
-                                                      * user configuration and service buffers
-                                                      * (TCP protocol and user's AM headers) */
+        size_t                      tx_seg_size;       /* TX AM buffer size */
+        size_t                      rx_seg_size;       /* RX AM buffer size */
+        size_t                      sendv_thresh;      /* Minimum size of user's payload from which
+                                                        * non-blocking vector send should be used */
+        size_t                      max_iov;           /* Maximum supported IOVs limited by
+                                                        * user configuration and service buffers
+                                                        * (TCP protocol and user's AM headers) */
         struct {
-            size_t                max_hdr;           /* Maximum supported AM Zcopy header */
-            size_t                hdr_offset;        /* Offset in TX buffer to empty space that
-                                                      * can be used for AM Zcopy header */
+            size_t                  max_hdr;           /* Maximum supported AM Zcopy header */
+            size_t                  hdr_offset;        /* Offset in TX buffer to empty space that
+                                                        * can be used for AM Zcopy header */
         } zcopy;
-        struct sockaddr_storage   ifaddr;            /* Network address */
-        struct sockaddr_storage   netmask;           /* Network address mask */
-        size_t                    sockaddr_len;      /* Network address length */
-        ucs_ternary_auto_value_t  ep_bind_src_addr;  /* Bind EP's FD to ifaddr */
-        int                       prefer_default;    /* Prefer default gateway */
-        int                       put_enable;        /* Enable PUT Zcopy operation support */
-        int                       conn_nb;           /* Use non-blocking connect() */
-        unsigned                  max_poll;          /* Number of events to poll per socket*/
-        uint8_t                   max_conn_retries;  /* How many connection establishment attempts
-                                                      * should be done if dropped connection was
-                                                      * detected due to lack of system resources */
-        unsigned                  syn_cnt;           /* Number of SYN retransmits that TCP should send
-                                                      * before aborting the attempt to connect.
-                                                      * It cannot exceed 255. */
-        double                    max_bw;            /* Upper bound to TCP iface bandwidth */
+        struct sockaddr_storage     ifaddr;            /* Network address */
+        struct sockaddr_storage     netmask;           /* Network address mask */
+        size_t                      sockaddr_len;      /* Network address length */
+        ucs_ternary_auto_value_t    ep_bind_src_addr;  /* Bind EP's FD to ifaddr */
+        int                         prefer_default;    /* Prefer default gateway */
+        int                         put_enable;        /* Enable PUT Zcopy operation support */
+        int                         conn_nb;           /* Use non-blocking connect() */
+        unsigned                    max_poll;          /* Number of events to poll per socket*/
+        uint8_t                     max_conn_retries;  /* How many connection establishment attempts
+                                                        * should be done if dropped connection was
+                                                        * detected due to lack of system resources */
+        unsigned                    syn_cnt;           /* Number of SYN retransmits that TCP should send
+                                                        * before aborting the attempt to connect.
+                                                        * It cannot exceed 255. */
+        double                      max_bw;            /* Upper bound to TCP iface bandwidth */
         struct {
-            ucs_time_t            idle;              /* The time the connection needs to remain
-                                                      * idle before TCP starts sending keepalive
-                                                      * probes (TCP_KEEPIDLE socket option) */
-            unsigned long         cnt;               /* The maximum number of keepalive probes TCP
-                                                      * should send before dropping the connection
-                                                      * (TCP_KEEPCNT socket option). */
-            ucs_time_t            intvl;             /* The time between individual keepalive
-                                                      * probes (TCP_KEEPINTVL socket option). */
+            ucs_time_t              idle;              /* The time the connection needs to remain
+                                                        * idle before TCP starts sending keepalive
+                                                        * probes (TCP_KEEPIDLE socket option) */
+            unsigned long           cnt;               /* The maximum number of keepalive probes TCP
+                                                        * should send before dropping the connection
+                                                        * (TCP_KEEPCNT socket option). */
+            ucs_time_t              intvl;             /* The time between individual keepalive
+                                                        * probes (TCP_KEEPINTVL socket option). */
         } keepalive;
+        uct_tcp_reachability_mode_t reachability_mode; /* Mode used for performing reachability check */
     } config;
 
     struct {
-        int                       nodelay;           /* TCP_NODELAY */
-        size_t                    sndbuf;            /* SO_SNDBUF */
-        size_t                    rcvbuf;            /* SO_RCVBUF */
+        int                         nodelay;           /* TCP_NODELAY */
+        size_t                      sndbuf;            /* SO_SNDBUF */
+        size_t                      rcvbuf;            /* SO_RCVBUF */
     } sockopt;
 } uct_tcp_iface_t;
 
@@ -459,6 +470,7 @@ typedef struct uct_tcp_iface_config {
         ucs_time_t                 intvl;
     } keepalive;
     ucs_ternary_auto_value_t       ep_bind_src_addr;
+    uct_tcp_reachability_mode_t    reachability_mode;
 } uct_tcp_iface_config_t;
 
 
