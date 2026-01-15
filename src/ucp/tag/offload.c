@@ -304,6 +304,7 @@ ucp_tag_offload_do_post(ucp_request_t *req)
         /* register the whole buffer to support SW RNDV fallback */
         status = ucp_datatype_iter_mem_reg(context, &req->recv.dt_iter,
                                            UCS_BIT(mdi),
+                                           UCT_MD_MEM_ACCESS_ALL |
                                            UCT_MD_MEM_FLAG_HIDE_ERRORS,
                                            UCS_BIT(UCP_DATATYPE_CONTIG));
         if (status != UCS_OK) {
