@@ -148,7 +148,6 @@ AC_DEFINE_UNQUOTED([UCX_MODULE_SUBDIR], ["${modulesubdir}"], [UCX module sub-dir
 #
 m4_include([config/m4/ax_prog_doxygen.m4])
 m4_include([config/m4/graphviz.m4])
-m4_include([config/m4/ucg.m4])
 
 AC_ARG_WITH([docs_only],
         AS_HELP_STRING([--with-docs-only],
@@ -361,7 +360,6 @@ build_modules="${build_modules}${uct_cuda_modules}"
 build_modules="${build_modules}${ucm_modules}"
 build_modules="${build_modules}${ucx_perftest_modules}"
 build_modules="${build_modules}${uct_rocm_modules}"
-build_modules="${build_modules}${ucg_modules}"
 AC_SUBST([build_modules], [${build_modules}])
 AC_SUBST([build_bindings], [${build_bindings}])
 
@@ -447,7 +445,5 @@ AC_MSG_NOTICE([          IB modules:   <$(echo ${uct_ib_modules}|tr ':' ' ') >])
 AC_MSG_NOTICE([        MLX5 modules:   <$(echo ${uct_ib_mlx5_modules}|tr ':' ' ') >])
 AC_MSG_NOTICE([         UCM modules:   <$(echo ${ucm_modules}|tr ':' ' ') >])
 AC_MSG_NOTICE([        Perf modules:   <$(echo ${ucx_perftest_modules}|tr ':' ' ') >])
-AS_IF([test "x$enable_ucg" != "xno"], [
-    AC_MSG_NOTICE([       UCG modules:   <$(echo ${ucg_modules}|tr ':' ' ') >])])
 ])
 AC_MSG_NOTICE([=========================================================])
