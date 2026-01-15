@@ -20,7 +20,7 @@
  * the maximum 'end' value among all intervals in its subtree. This enables
  * efficient pruning during range coverage queries.
  */
-typedef struct ucs_interval_node {
+struct ucs_interval_node {
     struct ucs_interval_node *left;    /**< Left child node */
     struct ucs_interval_node *right;   /**< Right child node */
     struct ucs_interval_node *next;    /**< used for stack push/pop */
@@ -28,7 +28,7 @@ typedef struct ucs_interval_node {
     uint64_t                  end;     /**< End of interval */
     uint64_t                  max_end; /**< Maximum end value in this subtree,
                                             used for pruning optimization */
-} ucs_interval_node_t;
+};
 
 static ucs_interval_node_t *
 ucs_interval_tree_node_create(ucs_interval_tree_t *tree, uint64_t start,
