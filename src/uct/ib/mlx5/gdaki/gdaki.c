@@ -24,6 +24,9 @@
 
 #define UCT_GDAKI_MAX_CUDA_PER_IB 64
 
+#define UCT_GDAKI_CQ_PAGE_OFFSET_SHIFT 6
+#define UCT_GDAKI_DEV_EP_SIZE          64
+#define UCT_GDAKI_DEV_QP_SIZE          128
 
 typedef struct {
     uct_rc_iface_common_config_t      super;
@@ -79,15 +82,21 @@ err:
 static void uct_rc_gdaki_calc_dev_ep_layout(size_t num_channels,
                                             uct_ib_mlx5_qp_attr_t *qp_attr,
                                             size_t *cq_umem_offset_p,
-                                            size_t *dev_ep_size_p)
+                                            size_t *dev_ep_size_p,
+                                            uint64_t *pgsz_bitmap_p)
 {
-    UCS_STATIC_ASSERT(sizeof(uct_rc_gdaki_dev_ep_t) == 64);
-    UCS_STATIC_ASSERT(sizeof(uct_rc_gdaki_dev_qp_t) == 128);
+    uint64_t max_page_size;
+
+    UCS_STATIC_ASSERT(sizeof(uct_rc_gdaki_dev_ep_t) == UCT_GDAKI_DEV_EP_SIZE);
+    UCS_STATIC_ASSERT(sizeof(uct_rc_gdaki_dev_qp_t) == UCT_GDAKI_DEV_QP_SIZE);
 
     *cq_umem_offset_p    = sizeof(uct_rc_gdaki_dev_ep_t);
     qp_attr->umem_offset = *cq_umem_offset_p +
                            sizeof(uct_rc_gdaki_dev_qp_t) * num_channels;
     *dev_ep_size_p       = qp_attr->umem_offset + qp_attr->len * num_channels;
+    max_page_size  = ucs_min(UCT_GDAKI_DEV_EP_SIZE, UCT_GDAKI_DEV_QP_SIZE)
+                     << UCT_GDAKI_CQ_PAGE_OFFSET_SHIFT;
+    *pgsz_bitmap_p = (max_page_size << 1) - 1;
 }
 
 static int uct_gdaki_check_umem_dmabuf(const uct_ib_md_t *md)
@@ -190,7 +199,7 @@ static uct_cuda_copy_md_dmabuf_t uct_rc_gdaki_get_dmabuf(const uct_ib_md_t *md,
 
 static struct mlx5dv_devx_umem *
 uct_rc_gdaki_umem_reg(const uct_ib_md_t *md, struct ibv_context *ibv_context,
-                      void *address, size_t length)
+                      void *address, size_t length, uint64_t pgsz_bitmap)
 {
     struct mlx5dv_devx_umem_in umem_in = {};
     uct_cuda_copy_md_dmabuf_t dmabuf UCS_V_UNUSED;
@@ -198,7 +207,7 @@ uct_rc_gdaki_umem_reg(const uct_ib_md_t *md, struct ibv_context *ibv_context,
     umem_in.addr        = address;
     umem_in.size        = length;
     umem_in.access      = IBV_ACCESS_LOCAL_WRITE;
-    umem_in.pgsz_bitmap = UINT64_MAX & ~(ucs_get_page_size() - 1);
+    umem_in.pgsz_bitmap = pgsz_bitmap;
 #if HAVE_DECL_MLX5DV_UMEM_MASK_DMABUF
     dmabuf              = uct_rc_gdaki_get_dmabuf(md, address, length);
     if (dmabuf.fd != UCT_DMABUF_FD_INVALID) {
@@ -219,6 +228,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
     uct_ib_iface_init_attr_t init_attr = {};
     uct_ib_mlx5_cq_attr_t cq_attr      = {};
     uct_ib_mlx5_qp_attr_t qp_attr      = {};
+    uint64_t pgsz_bitmap;
     ucs_status_t status;
     size_t dev_ep_size;
     uct_ib_mlx5_dbrec_t dbrec;
@@ -260,7 +270,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
      *            +----------+- -----+---------+----+-----
      */
     uct_rc_gdaki_calc_dev_ep_layout(iface->num_channels, &qp_attr,
-                                    &cq_attr.umem_offset, &dev_ep_size);
+                                    &cq_attr.umem_offset, &dev_ep_size,
+                                    &pgsz_bitmap);
 
     status      = uct_rc_gdaki_alloc(dev_ep_size, ucs_get_page_size(),
                                      (void**)&self->ep_gpu, &self->ep_raw);
@@ -269,7 +280,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
     }
 
     self->umem = uct_rc_gdaki_umem_reg(md, md->dev.ibv_context, self->ep_gpu,
-                                       dev_ep_size);
+                                       dev_ep_size, pgsz_bitmap);
     if (self->umem == NULL) {
         uct_ib_check_memlock_limit_msg(md->dev.ibv_context, UCS_LOG_LEVEL_ERROR,
                                        "mlx5dv_devx_umem_reg(ptr=%p size=%zu)",
@@ -528,6 +539,7 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
     uct_rc_gdaki_dev_ep_t *dev_ep;
     size_t cq_umem_offset, dev_ep_size;
     uct_rc_gdaki_channel_t *channel;
+    uint64_t pgsz_bitmap;
     ucs_status_t status;
     CUdeviceptr sq_db;
     unsigned i;
@@ -544,7 +556,8 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
                                iface->super.super.config.tx_qp_len, NULL);
         uct_ib_mlx5_wq_calc_sizes(&qp_attr);
         uct_rc_gdaki_calc_dev_ep_layout(iface->num_channels, &qp_attr,
-                                        &cq_umem_offset, &dev_ep_size);
+                                        &cq_umem_offset, &dev_ep_size,
+                                        &pgsz_bitmap);
 
         dev_ep = ucs_calloc(1, qp_attr.umem_offset, "dev_ep");
         if (dev_ep == NULL) {
