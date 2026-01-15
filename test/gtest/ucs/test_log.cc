@@ -377,3 +377,76 @@ UCS_MT_TEST_F(log_demo, indent, 4)
     EXPECT_EQ(0, ucs_log_get_current_indent());
     ucs_debug("done");
 }
+
+class log_test_multiline : public log_test {
+protected:
+    virtual void check_log_file()
+    {
+        std::string log_contents = read_logfile();
+
+        size_t first_newline = log_contents.find('\n');
+        EXPECT_NE(first_newline, std::string::npos);
+
+        /* Split by newline and verify all lines are present and in order */
+        unsigned marker_num = 0;
+        size_t start        = first_newline + 1; /* Skip filename */
+        size_t end;
+        while (marker_num < m_num_lines &&
+               (end = log_contents.find('\n', start)) != std::string::npos) {
+            std::string line   = log_contents.substr(start, end - start);
+            std::string marker = "multiline_" + ucs::to_string(marker_num);
+
+            if (line.find(marker) == std::string::npos) {
+                ADD_FAILURE() << "Marker " << marker << " was not found\n"
+                              << log_contents;
+                return;
+            }
+
+            marker_num++;
+            start = end + 1;
+        }
+
+        /* Verify that we have processed all the lines */
+        EXPECT_EQ(marker_num, m_num_lines);
+        EXPECT_EQ(start, log_contents.size() - 1);
+        EXPECT_EQ(log_contents[start], '\n'); /* Trailing newline */
+    }
+
+    unsigned m_num_lines;
+};
+
+UCS_TEST_F(log_test_multiline, multiline_raw) {
+    m_num_lines = 3;
+    ucs_info("multiline_0\nmultiline_1\nmultiline_2");
+}
+
+UCS_TEST_F(log_test_multiline, multiline_format_raw) {
+    m_num_lines = 3;
+    ucs_info("%s", "multiline_0\nmultiline_1\nmultiline_2");
+}
+
+UCS_TEST_F(log_test_multiline, multiline_format) {
+    m_num_lines = 3;
+    ucs_info("multiline_%d\nmultiline_%d\n%s%d", 0, 1, "multiline_", 2);
+}
+
+UCS_TEST_F(log_test_multiline, multiline_long) {
+    /* Log a multiline message that exceeds the output buffer size */
+    m_num_lines = 25;
+
+    std::string padding;
+    padding.assign(128, 'X');
+
+    std::string message;
+    for (unsigned i = 0; i < m_num_lines; i++) {
+        if (i > 0) {
+            message += "\n";
+        }
+        message += "multiline_" + ucs::to_string(i) + " " + padding;
+    }
+
+    ASSERT_GT(message.size(),
+              static_cast<size_t>(UCS_LOG_MULTILINE_OUTPUT_SIZE));
+
+    ucs_info("%s", message.c_str());
+}
