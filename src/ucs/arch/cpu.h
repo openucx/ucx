@@ -4,6 +4,7 @@
 * Copyright (C) Shanghai Zhaoxin Semiconductor Co., Ltd. 2020. ALL RIGHTS RESERVED.
 * Copyright (C) Tactical Computing Labs, LLC. 2022. ALL RIGHTS RESERVED.
 * Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
+* Copyright (C) Fujitsu Limited. 2025. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -32,6 +33,7 @@ typedef enum ucs_cpu_model {
     UCS_CPU_MODEL_INTEL_BROADWELL,
     UCS_CPU_MODEL_INTEL_SKYLAKE,
     UCS_CPU_MODEL_INTEL_ICELAKE,
+    UCS_CPU_MODEL_INTEL_EMERALD_RAPIDS,
     UCS_CPU_MODEL_ARM_AARCH64,
     UCS_CPU_MODEL_AMD_NAPLES,
     UCS_CPU_MODEL_AMD_ROME,
@@ -43,6 +45,8 @@ typedef enum ucs_cpu_model {
     UCS_CPU_MODEL_ZHAOXIN_LUJIAZUI,
     UCS_CPU_MODEL_RV64G,
     UCS_CPU_MODEL_NVIDIA_GRACE,
+    UCS_CPU_MODEL_FUJITSU_A64FX,
+    UCS_CPU_MODEL_FUJITSU_MONAKA,
     UCS_CPU_MODEL_LAST
 } ucs_cpu_model_t;
 
@@ -166,7 +170,9 @@ static inline int ucs_cpu_prefer_relaxed_order()
              (cpu_model == UCS_CPU_MODEL_AMD_ROME) ||
              (cpu_model == UCS_CPU_MODEL_AMD_MILAN) ||
              (cpu_model == UCS_CPU_MODEL_AMD_GENOA) ||
-             (cpu_model == UCS_CPU_MODEL_AMD_TURIN)));
+             (cpu_model == UCS_CPU_MODEL_AMD_TURIN))) ||
+           ((cpu_vendor == UCS_CPU_VENDOR_INTEL) &&
+            (cpu_model == UCS_CPU_MODEL_INTEL_EMERALD_RAPIDS));
 }
 
 
