@@ -282,6 +282,22 @@ ucs_log_print_single_line(const char *short_file, int line,
     }
 }
 
+static void ucs_log_print_string(const char *str)
+{
+    if (RUNNING_ON_VALGRIND) {
+        VALGRIND_PRINTF("%s", str);
+    } else if (ucs_log_initialized) {
+        if (ucs_log_file_close) { /* non-stdout/stderr */
+            ucs_log_handle_file_max_size(strlen(str));
+        }
+        fputs(str, ucs_log_file);
+        fflush(ucs_log_file);
+    } else {
+        fputs(str, stdout);
+        fflush(stdout);
+    }
+}
+
 static void
 ucs_log_print_multi_line(const char *short_file, int line,
                          ucs_log_level_t level,
@@ -292,8 +308,8 @@ ucs_log_print_multi_line(const char *short_file, int line,
     size_t output_len      = 0;
     const char *line_start = message;
     const char *line_end   = first_line_end;
-    char prefix[256];
-    char output[2048];
+    char prefix[UCS_LOG_MULTILINE_PREFIX_SIZE];
+    char output[UCS_LOG_MULTILINE_OUTPUT_SIZE];
     int ret;
 
     /* Format the log prefix once */
@@ -317,12 +333,19 @@ ucs_log_print_multi_line(const char *short_file, int line,
         ucs_assert(ret >= 0);
 
         if ((size_t)ret >= remaining_space) {
-            output_len                 = sizeof(output) - 1;
-            output[sizeof(output) - 1] = '\0';
-            output[sizeof(output) - 2] = '\n';
-            output[sizeof(output) - 3] = '>'; /* Truncated indicator */
-            output[sizeof(output) - 4] = ' ';
-            break;
+            if (output_len == 0) {
+                /* A single line overflowed the output buffer, should never happen */
+                ucs_fatal("log line is too long");
+            }
+
+            /* Terminate the string at the previous position */
+            output[output_len] = '\0';
+
+            /* Print the string and reset the output buffer */
+            ucs_log_print_string(output);
+            output_len = 0;
+
+            continue;
         }
 
         output_len += ret;
@@ -341,19 +364,7 @@ ucs_log_print_multi_line(const char *short_file, int line,
 
     ucs_assert(output_len > 0);
 
-    /* Print the entire buffer in a single operation to avoid interleaving */
-    if (RUNNING_ON_VALGRIND) {
-        VALGRIND_PRINTF("%s", output);
-    } else if (ucs_log_initialized) {
-        if (ucs_log_file_close) { /* non-stdout/stderr */
-            ucs_log_handle_file_max_size(output_len);
-        }
-        fputs(output, ucs_log_file);
-        fflush(ucs_log_file);
-    } else {
-        fputs(output, stdout);
-        fflush(stdout);
-    }
+    ucs_log_print_string(output);
 }
 
 static void ucs_log_print(const char *file, int line, ucs_log_level_t level,
