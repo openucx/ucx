@@ -92,6 +92,7 @@ stages:
             - ucx_docker_drp
         steps:
           - checkout: self
+            submodules: true
             fetchDepth: 100
             clean: true
             retryCountOnTaskFailure: 5

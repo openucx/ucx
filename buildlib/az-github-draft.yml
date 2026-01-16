@@ -15,6 +15,7 @@ jobs:
 
     steps:
     - checkout: self
+      submodules: true
       clean: true
       fetchDepth: 100
       path: "we/need/to/go/deeper"
