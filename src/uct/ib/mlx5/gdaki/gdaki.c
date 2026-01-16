@@ -753,9 +753,10 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
     gpu_name = ucs_string_buffer_next_token(&strb, NULL, "-");
     ib_name  = ucs_string_buffer_next_token(&strb, gpu_name, "-");
 
-    init_attr.seg_size = config->super.super.seg_size;
-    init_attr.qp_type  = IBV_QPT_RC;
-    init_attr.dev_name = ib_name;
+    init_attr.seg_size      = config->super.super.seg_size;
+    init_attr.qp_type       = IBV_QPT_RC;
+    init_attr.dev_name      = ib_name;
+    init_attr.max_rd_atomic = IBV_DEV_ATTR(&md->super.dev, max_qp_rd_atom);
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
                               &uct_rc_gdaki_iface_tl_ops,
