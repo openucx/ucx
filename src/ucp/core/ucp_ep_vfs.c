@@ -34,8 +34,9 @@ static const ucp_ep_vfs_attr_t ucp_ep_vfs_attrs[] = {
 };
 
 static const char *ucp_err_handling_mode_names[] = {
-    [UCP_ERR_HANDLING_MODE_NONE] = "none",
-    [UCP_ERR_HANDLING_MODE_PEER] = "peer"
+    [UCP_ERR_HANDLING_MODE_NONE]     = "none",
+    [UCP_ERR_HANDLING_MODE_PEER]     = "peer",
+    [UCP_ERR_HANDLING_MODE_FAILOVER] = "failover"
 };
 
 static void ucp_ep_vfs_read_peer_name(void *obj, ucs_string_buffer_t *strb,
