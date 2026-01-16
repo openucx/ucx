@@ -18,7 +18,6 @@ ucs_rcache_region_test(ucs_rcache_region_t *region, int prot, size_t alignment)
            ((alignment == 1) || (region->alignment >= alignment));
 }
 
-
 static UCS_F_ALWAYS_INLINE void
 ucs_rcache_region_lru_get_impl(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
 {
@@ -26,7 +25,6 @@ ucs_rcache_region_lru_get_impl(ucs_rcache_t *rcache, ucs_rcache_region_t *region
     ucs_list_del(&region->lru_list);
     region->lru_flags &= ~UCS_RCACHE_LRU_FLAG_IN_LRU;
 }
-
 
 static UCS_F_ALWAYS_INLINE void
 ucs_rcache_region_lru_get(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
