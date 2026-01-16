@@ -20,8 +20,7 @@ typedef struct {
     uint32_t                     sq_num;
 
     uint64_t                     *sq_db;
-    uint64_t                     atomic_buf;
-    uint8_t                      pad[8];
+    uint8_t                      pad[16];
 } uct_rc_gdaki_dev_qp_t;
 
 

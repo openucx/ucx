@@ -374,7 +374,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_atomic_add(
     auto cid      = channel_id & ep->channel_mask;
 
     return uct_rc_mlx5_gda_ep_single<level>(ep, tl_mem_elem,
-                                            (&ep->qps[cid].atomic_buf),
+                                            (&ep->qps[cid].cq_buff),
                                             __ldg(&ep->atomic_lkey),
                                             remote_address,
                                             mem_elem->rkey, sizeof(uint64_t),
@@ -429,7 +429,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi(
     for (uint32_t i = lane_id; i < count; i += num_lanes) {
         if (i == counter_index) {
             atomic         = true;
-            address        = &ep->qps[cid].atomic_buf;
+            address        = &ep->qps[cid].cq_buff;
             lkey           = __ldg(&ep->atomic_lkey);
             remote_address = counter_remote_address;
             length         = 8;
@@ -524,7 +524,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi_partial(
         if (i == mem_list_count) {
             idx            = counter_index;
             atomic         = true;
-            address        = &ep->qps[cid].atomic_buf;
+            address        = &ep->qps[cid].cq_buff;
             lkey           = __ldg(&ep->atomic_lkey);
             remote_address = counter_remote_address;
             length         = 8;
