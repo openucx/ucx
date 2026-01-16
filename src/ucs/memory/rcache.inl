@@ -18,34 +18,59 @@ ucs_rcache_region_test(ucs_rcache_region_t *region, int prot, size_t alignment)
            ((alignment == 1) || (region->alignment >= alignment));
 }
 
-
-/* LRU spinlock must be held */
 static UCS_F_ALWAYS_INLINE void
-ucs_rcache_region_lru_add(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
+ucs_rcache_region_lru_get_impl(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
 {
-    if (region->lru_flags & UCS_RCACHE_LRU_FLAG_IN_LRU) {
-        return;
-    }
-
-    ucs_rcache_region_trace(rcache, region, "lru add");
-    ucs_list_add_tail(&rcache->lru.list, &region->lru_list);
-    region->lru_flags |= UCS_RCACHE_LRU_FLAG_IN_LRU;
-}
-
-
-/* LRU spinlock must be held */
-static UCS_F_ALWAYS_INLINE void
-ucs_rcache_region_lru_remove(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
-{
-    if (!(region->lru_flags & UCS_RCACHE_LRU_FLAG_IN_LRU)) {
-        return;
-    }
-
     ucs_rcache_region_trace(rcache, region, "lru remove");
     ucs_list_del(&region->lru_list);
     region->lru_flags &= ~UCS_RCACHE_LRU_FLAG_IN_LRU;
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucs_rcache_region_lru_get(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
+{
+    if (rcache->lru.mode == UCS_RCACHE_LRU_DISABLED) {
+        return;
+    }
+    if (!(region->lru_flags & UCS_RCACHE_LRU_FLAG_IN_LRU)) {
+        return;
+    }
+    /* A used region cannot be evicted */
+    if (rcache->lru.mode == UCS_RCACHE_LRU_LOCKED) {
+        ucs_spin_lock(&rcache->lru.lock);
+        ucs_rcache_region_lru_get_impl(rcache, region);
+        ucs_spin_unlock(&rcache->lru.lock);
+    } else {
+        ucs_rcache_region_lru_get_impl(rcache, region);
+    }
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucs_rcache_region_lru_put_impl(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
+{
+    ucs_rcache_region_trace(rcache, region, "lru add");
+    ucs_list_add_tail(&rcache->lru.list, &region->lru_list);
+    region->lru_flags |= UCS_RCACHE_LRU_FLAG_IN_LRU;
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucs_rcache_region_lru_put(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
+{
+    if (rcache->lru.mode == UCS_RCACHE_LRU_DISABLED) {
+        return;
+    }
+    if (region->lru_flags & UCS_RCACHE_LRU_FLAG_IN_LRU) {
+        return;
+    }
+    /* When we finish using a region, it's a candidate for LRU eviction */
+    if (rcache->lru.mode == UCS_RCACHE_LRU_LOCKED) {
+        ucs_spin_lock(&rcache->lru.lock);
+        ucs_rcache_region_lru_put_impl(rcache, region);
+        ucs_spin_unlock(&rcache->lru.lock);
+    } else {
+        ucs_rcache_region_lru_put_impl(rcache, region);
+    }
+}
 
 static UCS_F_ALWAYS_INLINE ucs_rcache_region_t *
 ucs_rcache_lookup_unsafe(ucs_rcache_t *rcache, void *address, size_t length,
@@ -76,7 +101,7 @@ ucs_rcache_lookup_unsafe(ucs_rcache_t *rcache, void *address, size_t length,
     }
 
     region->refcount++;
-    ucs_rcache_region_lru_remove(rcache, region);
+    ucs_rcache_region_lru_get(rcache, region);
     UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_HITS_FAST, 1);
     return region;
 }
@@ -96,7 +121,7 @@ ucs_rcache_lookup(ucs_rcache_t *rcache, void *address, size_t length,
 static UCS_F_ALWAYS_INLINE void
 ucs_rcache_region_put_unsafe(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
 {
-    ucs_rcache_region_lru_add(rcache, region);
+    ucs_rcache_region_lru_put(rcache, region);
 
     ucs_assert(region->refcount > 0);
     if (ucs_unlikely(--region->refcount == 0)) {
