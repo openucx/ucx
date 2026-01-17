@@ -65,6 +65,8 @@ enum {
                                                         threads */
     UCT_IB_MEM_IMPORTED              = UCS_BIT(3), /**< The memory handle was
                                                         created by mem_attach */
+    UCT_IB_MEM_DIRECT_NIC            = UCS_BIT(6), /**< The memory handle was
+                                                        registered using Direct NIC */
 #if ENABLE_PARAMS_CHECK
     UCT_IB_MEM_ACCESS_REMOTE_RMA     = UCS_BIT(4), /**< RMA access was requested
                                                         for the memory region */

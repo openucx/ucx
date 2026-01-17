@@ -855,6 +855,7 @@ uct_ib_mlx5_devx_reg_mr(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mem_t *memh,
                                                                 length, params,
                                                                 access_flags);
     if (memh->mrs[mr_type].super.ib != NULL) {
+        memh->super.flags |= UCT_IB_MEM_DIRECT_NIC;
         goto out;
     }
 
@@ -2960,6 +2961,7 @@ uct_ib_mlx5_devx_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
         ((memh->super.flags & UCT_IB_MEM_ACCESS_REMOTE_ATOMIC) ||
          uct_ib_mlx5_devx_memh_has_ro(md, memh)) &&
         !(memh->super.flags & UCT_IB_MEM_IMPORTED) &&
+        !(memh->super.flags & UCT_IB_MEM_DIRECT_NIC) &&
         md->super.config.enable_indirect_atomic &&
         ucs_test_all_flags(md->flags,
                            UCT_IB_MLX5_MD_FLAG_KSM |
