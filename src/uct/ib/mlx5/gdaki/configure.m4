@@ -5,17 +5,33 @@
 
 UCX_CHECK_CUDA
 
+save_NVCCFLAGS="$NVCCFLAGS"
+NVCCFLAGS="$NVCCFLAGS -DCCCL_IGNORE_DEPRECATED_CPP_DIALECT"
+AC_MSG_CHECKING([checking cuda/atomic support])
+AC_LANG_PUSH([CUDA])
+AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
+#include <cuda/atomic>
+int v;
+cuda::atomic_ref<int> ref{v};
+]])],
+[AC_MSG_RESULT([yes])
+have_cuda_atomic_support=yes],
+[AC_MSG_RESULT([no])])
+AC_LANG_POP
+NVCCFLAGS="$save_NVCCFLAGS"
+
 AS_IF([test "x$cuda_happy" = "xyes"] && [test "x$have_mlx5" = "xyes"] &&
       ([test "$CUDA_MAJOR_VERSION" -eq 12 -a "$CUDA_MINOR_VERSION" -ge 2] ||
        [test "$CUDA_MAJOR_VERSION" -ge 13]) &&
-      [test "x$have_mlx5dv_devx_umem" = "xyes"],
+      [test "x$have_mlx5dv_devx_umem" = "xyes"] &&
+      [test "x$have_cuda_atomic_support" = "xyes"],
       [
-       GPUNETIO_CFLAGS="$GPUNETIO_CFLAGS -DCCCL_IGNORE_DEPRECATED_CPP_DIALECT"
+       NVCCFLAGS="$NVCCFLAGS -DCCCL_IGNORE_DEPRECATED_CPP_DIALECT"
 
        AS_IF([test "$CUDA_MAJOR_VERSION" -eq 12 -a "$CUDA_MINOR_VERSION" -ge 9] ||
              [test "$CUDA_MAJOR_VERSION" -ge 13],
              [
-              GPUNETIO_CFLAGS="$GPUNETIO_CFLAGS -D_LIBCUDACXX_ATOMIC_UNSAFE_AUTOMATIC_STORAGE"
+              NVCCFLAGS="$NVCCFLAGS -D_LIBCUDACXX_ATOMIC_UNSAFE_AUTOMATIC_STORAGE"
              ])
 
        # TODO check submodule version
@@ -27,7 +43,6 @@ AS_IF([test "x$cuda_happy" = "xyes"] && [test "x$have_mlx5" = "xyes"] &&
 AS_IF([test "x$gpunetio_happy" = "xyes"],
       [
        uct_ib_mlx5_modules="${uct_ib_mlx5_modules}:gda"
-       AC_SUBST(GPUNETIO_CFLAGS)
       ])
 
 AM_CONDITIONAL([HAVE_GPUNETIO], [test x$gpunetio_happy = xyes])

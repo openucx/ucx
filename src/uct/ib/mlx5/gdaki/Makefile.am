@@ -9,7 +9,6 @@ module_LTLIBRARIES             = libuct_ib_mlx5_gda.la
 libuct_ib_mlx5_gda_la_CPPFLAGS = $(BASE_CPPFLAGS) $(IBVERBS_CPPFLAGS) \
                                  $(CUDA_CPPFLAGS)
 libuct_ib_mlx5_gda_la_CFLAGS   = $(BASE_CFLAGS) $(LT_CFLAGS) $(CUDA_CFLAGS) \
-                                 $(GPUNETIO_CFLAGS) \
                                  -I$(top_srcdir)/src/uct/ib/mlx5/gdaki/gpunetio/include
 libuct_ib_mlx5_gda_la_LDFLAGS  = $(IBVERBS_LDFLAGS) $(CUDA_LDFLAGS) \
                                  -version-info $(SOVERSION)

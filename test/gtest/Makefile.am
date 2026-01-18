@@ -273,7 +273,6 @@ if HAVE_NVCC
 if HAVE_GPUNETIO # temporarily all device code depends on doca
 NVCC_EXTRA_FLAGS = \
 	$(CUDA_CPPFLAGS) \
-	$(GPUNETIO_CFLAGS) \
 	-I$(top_srcdir)/test \
 	-I$(top_srcdir)/test/gtest \
 	-I$(top_srcdir)/src/uct/ib/mlx5/gdaki/gpunetio/include

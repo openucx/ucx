@@ -20,9 +20,6 @@
 #define UCT_RC_GDA_WQE_ERR              UCS_BIT(63)
 #define UCT_RC_GDA_WQE_MASK             UCS_MASK(63)
 
-#define UCT_RC_GDA_WQE_SQ_SHIFT       6
-#define UCT_RC_GDA_WQE_CTRL_CQ_UPDATE (2 << 2)
-
 UCS_F_DEVICE uint32_t uct_rc_mlx5_gda_wqe_idx_inc_mask(uint32_t wqe_idx,
                                                        uint32_t increment)
 {
@@ -42,7 +39,7 @@ UCS_F_DEVICE void *uct_rc_mlx5_gda_get_wqe_ptr(uct_rc_gdaki_dev_ep_t *ep,
     const uintptr_t wqe_addr  = __ldg((uintptr_t*)&ep->sq_wqe_daddr);
     const uint32_t idx        = wqe_idx & (wqe_num - 1);
     const uint32_t full_idx   = idx + cid * wqe_num;
-    return (void*)(wqe_addr + (full_idx << UCT_RC_GDA_WQE_SQ_SHIFT));
+    return (void*)(wqe_addr + (full_idx << DOCA_GPUNETIO_IB_MLX5_WQE_SQ_SHIFT));
 }
 
 UCS_F_DEVICE void uct_rc_mlx5_gda_ring_db(uct_rc_gdaki_dev_ep_t *ep,
@@ -332,7 +329,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_single(
     if (lane_id == 0) {
         uint16_t wqe_idx = (uint16_t)wqe_base;
         if ((comp != nullptr) || uct_rc_mlx5_gda_fc(ep, wqe_idx)) {
-            cflag = UCT_RC_GDA_WQE_CTRL_CQ_UPDATE;
+            cflag = DOCA_GPUNETIO_IB_MLX5_WQE_CTRL_CQ_UPDATE;
             if (comp != nullptr) {
                 comp->wqe_idx = wqe_base;
                 comp->channel_id = cid;
@@ -457,7 +454,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi(
         cflag = 0;
         if (((comp != nullptr) && (i == count - 1)) ||
             ((comp == nullptr) && uct_rc_mlx5_gda_fc(ep, wqe_idx))) {
-            cflag = UCT_RC_GDA_WQE_CTRL_CQ_UPDATE;
+            cflag = DOCA_GPUNETIO_IB_MLX5_WQE_CTRL_CQ_UPDATE;
             if (comp != nullptr) {
                 comp->wqe_idx = wqe_base;
                 comp->channel_id = cid;
@@ -553,7 +550,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi_partial(
         cflag = 0;
         if (((comp != nullptr) && (i == count - 1)) ||
             ((comp == nullptr) && uct_rc_mlx5_gda_fc(ep, wqe_idx))) {
-            cflag = UCT_RC_GDA_WQE_CTRL_CQ_UPDATE;
+            cflag = DOCA_GPUNETIO_IB_MLX5_WQE_CTRL_CQ_UPDATE;
             if (comp != nullptr) {
                 comp->wqe_idx = wqe_base;
                 comp->channel_id = cid;
