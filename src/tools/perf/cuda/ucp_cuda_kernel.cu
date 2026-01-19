@@ -194,12 +194,10 @@ private:
             /* local elements - API v2 */
             local_elems[i].field_mask   =
                               UCP_DEVICE_LOCAL_MEM_LIST_ELEM_FIELD_MEMH |
-                              UCP_DEVICE_LOCAL_MEM_LIST_ELEM_FIELD_LOCAL_ADDR |
-                              UCP_DEVICE_LOCAL_MEM_LIST_ELEM_FIELD_LENGTH;
+                              UCP_DEVICE_LOCAL_MEM_LIST_ELEM_FIELD_LOCAL_ADDR;
             local_elems[i].memh         = perf.ucp.send_memh;
             local_elems[i].local_addr   = UCS_PTR_BYTE_OFFSET(perf.send_buffer,
                                                               offset);
-            local_elems[i].length       = perf.params.msg_size_list[i];
 
             /* remote elements - API v2 */
             remote_elems[i].field_mask  =
