@@ -70,6 +70,28 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put_single(
     return UCS_ERR_UNSUPPORTED;
 }
 
+template<ucs_device_level_t level>
+UCS_F_DEVICE ucs_status_t uct_device_ep_put_single(
+        uct_device_ep_h device_ep,
+        const uct_device_local_mem_list_elem_t *src_uct_elem,
+        const uct_device_mem_element_t *mem_elem, const void *address,
+        uint64_t remote_address, size_t length, unsigned channel_id,
+        uint64_t flags, uct_device_completion_t *comp)
+{
+    if (device_ep->uct_tl_id == UCT_DEVICE_TL_RC_MLX5_GDA) {
+        return uct_rc_mlx5_gda_ep_put_single<level>(device_ep, src_uct_elem,
+                                                    mem_elem, address,
+                                                    remote_address, length,
+                                                    channel_id, flags, comp);
+    } else if (device_ep->uct_tl_id == UCT_DEVICE_TL_CUDA_IPC) {
+        return uct_cuda_ipc_ep_put_single<level>(device_ep, mem_elem, address,
+                                                 remote_address, length, flags,
+                                                 comp);
+    }
+
+    return UCS_ERR_UNSUPPORTED;
+}
+
 
 /**
  * @ingroup UCT_DEVICE
@@ -114,6 +136,34 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_atomic_add(
     }
 
     return UCS_ERR_UNSUPPORTED;
+}
+
+
+/**
+ * @ingroup UCT_DEVICE
+ * @brief Gets a local pointer to remote memory.
+ *
+ * This device routine returns a local pointer
+ * to the remote memory if it is available.
+ *
+ * @param [in]  device_ep       Device endpoint to be used for the operation.
+ * @param [in]  mem_elem        Memory element representing the memory to be accessed.
+ * @param [in]  remote_address  Remote virtual address to get the pointer from.
+ * @param [out] addr_p          Local pointer to the remote memory.
+ *
+ * @return UCS_OK              - Operation completed successfully.
+ * @return Error code as defined by @ref ucs_status_t
+ */
+UCS_F_DEVICE ucs_status_t uct_device_ep_get_ptr(
+        uct_device_ep_h device_ep, const uct_device_mem_element_t *mem_elem,
+        uint64_t remote_address, void **addr_p)
+{
+    if (device_ep->uct_tl_id != UCT_DEVICE_TL_CUDA_IPC) {
+        *addr_p = NULL;
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    return uct_cuda_ipc_ep_get_ptr(device_ep, mem_elem, remote_address, addr_p);
 }
 
 

@@ -87,4 +87,65 @@ typedef struct ucp_device_mem_list_handle {
      */
 } ucp_device_mem_list_handle_t;
 
+
+/**
+ * @ingroup UCP_DEVICE
+ * @brief Descriptor list handle for remote memory stored on GPU memory.
+ *
+ * This handle is obtained and managed with functions called on host. It can be
+ * used repeatedly from GPU code to perform memory transfers.
+ *
+ * The handle and most of its content is stored on GPU memory, with the intent
+ * to be as memory-local as possible.
+ */
+typedef struct ucp_device_remote_mem_list_handle {
+    /**
+     * Structure version. Allow runtime ABI compatibility checks between host
+     * and device code.
+     */
+    uint16_t version;
+
+    /**
+     * Protocol index computed by host handle management functions when
+     * creating handle.
+     */
+    uint8_t  proto_idx;
+
+    /**
+     * Number of entries in the memory descriptors array @a elems.
+     */
+    uint32_t                          mem_list_length;
+
+    /**
+     * UCT memory element objects are allocated contiguously.
+     */
+    uct_device_remote_mem_list_elem_t mem_elements[0];
+} ucp_device_remote_mem_list_handle_t;
+
+
+/**
+ * @ingroup UCP_DEVICE
+ * @brief Descriptor list handle for local memory stored on GPU memory.
+ *
+ * This handle is obtained and managed with functions called on host. It can be
+ * used repeatedly from GPU code to perform memory transfers.
+ *
+ * The handle and most of its content is stored on GPU memory, with the intent
+ * to be as memory-local as possible.
+ */
+typedef struct ucp_device_local_mem_list_handle {
+    /**
+     * Structure version. Allow runtime ABI compatibility checks between host
+     * and device code.
+     */
+    uint16_t                         version;
+
+    /**
+     * Number of entries in the memory descriptors array @a elems.
+     */
+    uint32_t                         mem_list_length;
+
+    uct_device_local_mem_list_elem_t mem_elements[0];
+} ucp_device_local_mem_list_handle_t;
+
 #endif /* UCP_DEVICE_TYPES_H */
