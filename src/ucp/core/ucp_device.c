@@ -815,7 +815,8 @@ static ucp_ep_h ucp_device_remote_mem_list_get_first_ep(
     const ucp_device_remote_mem_list_elem_t *ucp_element =
             params->remote_elements;
     ucp_ep_h ep = NULL;
-    for (size_t i = 0; i < params->num_elements; i++) {
+    size_t i    = 0;
+    for (i = 0; i < params->num_elements; i++) {
         if (UCP_DEVICE_REMOTE_MEM_ELEMENT_IS_GAP(ucp_element)) {
             ucp_element = UCS_PTR_BYTE_OFFSET(ucp_element,
                                               params->element_size);
