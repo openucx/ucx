@@ -8,6 +8,9 @@
 #define UCT_DEVICE_TYPES_H
 
 #include <ucs/type/status.h>
+#include <uct/api/uct_def.h>
+#include <uct/ib/mlx5/gdaki/gdaki_device_types.h>
+#include <uct/cuda/cuda_ipc/cuda_ipc_device.h>
 #include <stdint.h>
 
 
@@ -45,8 +48,26 @@ typedef struct uct_device_ep {
 typedef union uct_device_completion uct_device_completion_t;
 
 
+/* Union of all uct device memory elements */
+union uct_tl_device_mem_element {
+    uct_rc_gdaki_device_mem_element_t gdaki_mem_element;
+    uct_cuda_ipc_device_mem_element_t cuda_ipc_mem_element;
+};
+
 /* Base structure for all device memory elements */
 struct uct_device_mem_element {
 };
+
+typedef struct uct_device_local_mem_list_elem {
+    void                     *local_addr;
+    size_t                   length;
+    uct_device_mem_element_t uct_mem_element;
+} uct_device_local_mem_list_elem_t;
+
+typedef struct uct_device_remote_mem_list_elem {
+    uct_device_ep_h          device_ep;
+    uint64_t                 remote_addr;
+    uct_device_mem_element_t uct_mem_element;
+} uct_device_remote_mem_list_elem_t;
 
 #endif
