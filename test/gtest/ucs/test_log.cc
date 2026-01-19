@@ -391,8 +391,8 @@ protected:
         unsigned marker_num = 0;
         size_t start        = first_newline + 1; /* Skip filename */
         size_t end;
-        while (marker_num < m_num_lines &&
-               (end = log_contents.find('\n', start)) != std::string::npos) {
+        while ((marker_num < m_num_lines) &&
+               ((end = log_contents.find('\n', start)) != std::string::npos)) {
             std::string line   = log_contents.substr(start, end - start);
             std::string marker = "multiline_" + ucs::to_string(marker_num);
 
@@ -432,21 +432,18 @@ UCS_TEST_F(log_test_multiline, multiline_format) {
 
 UCS_TEST_F(log_test_multiline, multiline_long) {
     /* Log a multiline message that exceeds the output buffer size */
-    m_num_lines = 25;
+    m_num_lines = 0;
 
-    std::string padding;
-    padding.assign(128, 'X');
+    std::string padding = " ";
+    padding.append(128, 'X');
 
     std::string message;
-    for (unsigned i = 0; i < m_num_lines; i++) {
-        if (i > 0) {
-            message += "\n";
-        }
-        message += "multiline_" + ucs::to_string(i) + " " + padding;
+    while (message.size() <= 2 * UCS_LOG_MULTILINE_OUTPUT_SIZE + 1) {
+        message += "multiline_" + ucs::to_string(m_num_lines) + padding + "\n";
+        m_num_lines++;
     }
 
-    ASSERT_GT(message.size(),
-              static_cast<size_t>(UCS_LOG_MULTILINE_OUTPUT_SIZE));
+    message.pop_back(); /* Remove the trailing newline */
 
     ucs_info("%s", message.c_str());
 }

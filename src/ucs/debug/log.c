@@ -48,11 +48,11 @@
 
 #define UCS_LOG_SHORT_ARG(_short_file, _line, _level, _comp_conf, _tv) \
     UCS_LOG_TIME_ARG(_tv), ucs_log_get_thread_name(), \
-            UCS_LOG_METADATA_ARG(_short_file, _line, _level, _comp_conf)
+    UCS_LOG_METADATA_ARG(_short_file, _line, _level, _comp_conf)
 
 #define UCS_LOG_ARG(_short_file, _line, _level, _comp_conf, _tv) \
     UCS_LOG_TIME_ARG(_tv), UCS_LOG_PROC_DATA_ARG(), \
-            UCS_LOG_METADATA_ARG(_short_file, _line, _level, _comp_conf)
+    UCS_LOG_METADATA_ARG(_short_file, _line, _level, _comp_conf)
 
 KHASH_MAP_INIT_STR(ucs_log_filter, char);
 
@@ -310,6 +310,7 @@ ucs_log_print_multi_line(const char *short_file, int line,
     const char *line_end   = first_line_end;
     char prefix[UCS_LOG_MULTILINE_PREFIX_SIZE];
     char output[UCS_LOG_MULTILINE_OUTPUT_SIZE];
+    size_t remaining_space;
     int ret;
 
     /* Format the log prefix once */
@@ -321,12 +322,12 @@ ucs_log_print_multi_line(const char *short_file, int line,
         ret = snprintf(prefix, sizeof(prefix), UCS_LOG_FMT,
                        UCS_LOG_ARG(short_file, line, level, comp_conf, tv));
     }
-    ucs_assert((ret >= 0) && ((size_t)ret < sizeof(prefix)));
+    ucs_assertv((ret >= 0) && ((size_t)ret < sizeof(prefix)), "ret=%d", ret);
 
     /* Append line by line */
     ucs_assert(line_end != NULL);
     do {
-        size_t remaining_space = sizeof(output) - output_len;
+        remaining_space = sizeof(output) - output_len;
 
         ret = snprintf(output + output_len, remaining_space, "%s%.*s\n", prefix,
                        (int)(line_end - line_start), line_start);
@@ -335,7 +336,7 @@ ucs_log_print_multi_line(const char *short_file, int line,
         if ((size_t)ret >= remaining_space) {
             if (output_len == 0) {
                 /* A single line overflowed the output buffer, should never happen */
-                ucs_fatal("log line is too long");
+                ucs_fatal("log line is too long: %d", ret);
             }
 
             /* Terminate the string at the previous position */
