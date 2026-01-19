@@ -5,8 +5,6 @@
  * See file LICENSE for terms.
  */
 
-import hudson.model.TaskListener
-
 @Library('github.com/Mellanox/ci-demo@master')
 def matrix = new com.mellanox.cicd.Matrix()
 
@@ -14,22 +12,16 @@ def matrix = new com.mellanox.cicd.Matrix()
 def statusName = env.JOB_BASE_NAME
 
 // Abort previous running builds of the SAME merge request only.
-def currentMrIid = env.gitlabMergeRequestIid
+def currentMrIid = env.gitlabMergeRequestIid?.toString()
 if (currentMrIid) {
   try {
     def job = Jenkins.instance.getItemByFullName(env.JOB_NAME)
-    job.builds.findAll { b ->
-      b.isBuilding() && b.number < currentBuild.number
-    }.each { b ->
-      try {
-        def bEnv = b.getEnvironment(TaskListener.NULL)
-        def mrIid = bEnv?.get('gitlabMergeRequestIid')
-        if (mrIid == currentMrIid) {
-          echo "Aborting previous build #${b.number} for same MR !${mrIid}"
-          b.doStop()
-        }
-      } catch (Exception e) {
-        echo "Could not check build #${b.number}: ${e.message}"
+    job.builds.findAll { it.isBuilding() && it.number < currentBuild.number }.each { b ->
+      def cause = b.getCause(com.dabsquared.gitlabjenkins.cause.GitLabWebHookCause)
+      def mrIid = cause?.getData()?.getMergeRequestIid()?.toString()
+      if (mrIid == currentMrIid) {
+        echo "Aborting previous build #${b.number} for same MR !${mrIid}"
+        b.doStop()
       }
     }
   } catch (Exception e) {
