@@ -1,5 +1,10 @@
 #!/usr/bin/groovy
 
+/**
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+ * See file LICENSE for terms.
+ */
+
 @Library('blossom-github-lib@master')
 @Library('github.com/Mellanox/ci-demo@master')
 def matrix = new com.mellanox.cicd.Matrix()
@@ -8,8 +13,28 @@ import ipp.blossom.*
 
 def githubHelper = null
 def blueOceanUrl = ""
+def currentPrNumber = null
 
 if (params.githubData) {
+  def slurper = new groovy.json.JsonSlurper()
+  currentPrNumber = slurper.parseText(params.githubData)?.pr?.toString()
+
+  // Abort previous running builds of the same PR
+  if (currentPrNumber) {
+    try {
+      Jenkins.instance.getItemByFullName(env.JOB_NAME).builds.findAll {
+        it.isBuilding() && it.number < currentBuild.number
+      }.each { b ->
+        def gd = b.getAction(hudson.model.ParametersAction)?.getParameters()?.find { it.name == 'githubData' }?.value
+        if (gd && slurper.parseText(gd)?.pr?.toString() == currentPrNumber) {
+          echo "Aborting build #${b.number} for same PR #${currentPrNumber}"
+          b.doStop()
+        }
+      }
+    } catch (Exception e) {
+      echo "Could not abort previous builds: ${e.message}"
+    }
+  }
   withCredentials([usernamePassword(credentialsId: 'github-token', passwordVariable: 'GIT_PASSWORD', usernameVariable: 'GIT_USERNAME')]) {
     githubHelper = GithubHelper.getInstance("${GIT_PASSWORD}", params.githubData)
   }
