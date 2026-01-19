@@ -8,7 +8,7 @@ failFast: false
 timeout_minutes: 30
 
 kubernetes:
-  cloud: il-ipp-blossom-prod
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
   namespace: nbu-swx-ucx
   limits: "{memory: 8Gi, cpu: 8000m}"
   requests: "{memory: 8Gi, cpu: 8000m}"
