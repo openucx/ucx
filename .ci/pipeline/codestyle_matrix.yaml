@@ -5,7 +5,7 @@
 job: ucx-codestyle
 
 failFast: false
-timeout_minutes: 30
+timeout_minutes: 90
 
 kubernetes:
   cloud: il-ipp-blossom-prod-nbu-swx-ucx
@@ -24,6 +24,7 @@ env:
 steps:
   - name: Commit Title
     parallel: false
+    timeout: 10
     run: |
       set -euo pipefail
       source ./buildlib/tools/codestyle.sh
@@ -42,6 +43,7 @@ steps:
 
   - name: Format Check
     parallel: false
+    timeout: 10
     run: |
       set -euo pipefail
 
@@ -71,6 +73,7 @@ steps:
 
   - name: Authors Check
     parallel: false
+    timeout: 10
     run: |
       set -euo pipefail
 
@@ -89,6 +92,7 @@ steps:
 
   - name: Codespell
     parallel: false
+    timeout: 10
     run: |
       set -euo pipefail
       source ./buildlib/tools/codestyle.sh
@@ -96,6 +100,7 @@ steps:
 
   - name: Ctags
     parallel: false
+    timeout: 10
     run: |
       set -euo pipefail
       ./buildlib/tools/test_ctags.sh

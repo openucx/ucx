@@ -31,6 +31,7 @@ env:
 steps:
   - name: Build Static
     parallel: false
+    timeout: 30
     run: |
       set -euo pipefail
       ./buildlib/tools/build_static.sh

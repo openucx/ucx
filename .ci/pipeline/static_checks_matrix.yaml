@@ -5,7 +5,7 @@
 job: ucx-static-checks
 
 failFast: false
-timeout_minutes: 30
+timeout_minutes: 90
 
 kubernetes:
   cloud: il-ipp-blossom-prod-nbu-swx-ucx
@@ -24,5 +24,6 @@ env:
 steps:
   - name: Static Checks
     parallel: false
+    timeout: 30
     run: |
       ./buildlib/tools/static_checks.sh
