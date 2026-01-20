@@ -731,11 +731,11 @@ void ucp_request_purge_enqueue_cb(uct_pending_req_t *self, void *arg)
 
 ucs_status_t ucp_request_progress_counter(uct_pending_req_t *self)
 {
-    ucp_request_t *req                = ucs_container_of(self, ucp_request_t, 
-                                                         send.uct);
-    ucp_proto_config_t *proto_config  = ucs_const_cast(ucp_proto_config_t*,
-                                                       req->send.proto_config);
-    const ucp_proto_t *proto          = proto_config->proto;
+    ucp_request_t *req               = ucs_container_of(self, ucp_request_t, 
+                                                        send.uct);
+    ucp_proto_config_t *proto_config = ucs_const_cast(ucp_proto_config_t*,
+                                                      req->send.proto_config);
+    const ucp_proto_t *proto         = proto_config->proto;
     ucs_status_t status;
 
     status = proto->progress[UCP_PROTO_STAGE_START](self);
