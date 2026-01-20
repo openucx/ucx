@@ -3789,8 +3789,10 @@ ucs_status_ptr_t ucp_get_nbx(ucp_ep_h ep, void *buffer, size_t count,
  *
  * @note    The user should not modify any part of the @a param->reply_buffer 
  *          in fetching operations, until the operation completes.
- * @note    For non-fethcing operations @a buffer can be modified / released 
- *          before the operation completes.
+ * @note    For non-fethcing operations @a buffer can be modified or released 
+ *          immediately after the call to this function, without waiting for the
+ *          operation completion.
+ * 
  * @note    Only ucp_dt_make_config(4) and ucp_dt_make_contig(8) are supported
  *          in @a param->datatype, see @ref ucp_dt_make_contig. Also, currently
  *          atomic operations can handle one element only. Thus, @a count
