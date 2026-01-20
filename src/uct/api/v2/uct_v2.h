@@ -1308,24 +1308,6 @@ ucs_status_t uct_iface_mem_element_pack(uct_iface_h iface, uct_mem_h memh,
                                         uct_rkey_t rkey,
                                         uct_device_mem_element_t *mem_element);
 
-
-/*TODO: make it part of uct_md API*/
-/**
- * @ingroup UCT_RESOURCE
- * @brief Pack a memh and rkey into a single memory element structure.
- *
- * @param [in] iface         Interface to pack the memh and rkey into.
- * @param [in] memh          Memory handle to pack.
- * @param [in] rkey          Remote key to pack.
- * @param [out] mem_element   Filled with the packed memh and rkey.
- *
- * @return UCS_OK on success or error code in case of failure.
- */
-ucs_status_t uct_iface_mem_element_pack_v2(uct_iface_h iface, uct_mem_h memh,
-                                           uct_rkey_t rkey,
-                                           uct_device_mem_element_t *mem_element);
-
-
 END_C_DECLS
 
 #endif

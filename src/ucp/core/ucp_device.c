@@ -567,9 +567,9 @@ static ucs_status_t ucp_device_local_mem_list_element_pack(
             return UCS_ERR_INVALID_PARAM;
         }
 
-        status = uct_iface_mem_element_pack_v2(wiface->iface, uct_memh,
-                                               UCT_INVALID_RKEY,
-                                               &mem_element->uct_mem_element);
+        status = uct_iface_mem_element_pack(wiface->iface, uct_memh,
+                                            UCT_INVALID_RKEY,
+                                            &mem_element->uct_mem_element);
         if (status != UCS_OK) {
             ucs_error("failed to pack local mem element for memh=%p", memh);
             return status;
@@ -784,8 +784,8 @@ static ucs_status_t ucp_device_remote_mem_list_element_pack(
     ucp_mem_type_unpack(ep->worker, &mem_element->remote_addr,
                         &element->remote_addr, sizeof(element->remote_addr),
                         mem_type);
-    status = uct_iface_mem_element_pack_v2(wiface->iface, NULL, uct_rkey,
-                                           &mem_element->uct_mem_element);
+    status = uct_iface_mem_element_pack(wiface->iface, NULL, uct_rkey,
+                                        &mem_element->uct_mem_element);
     if (status != UCS_OK) {
         ucs_error("failed to pack uct memory element for lane=%u", lane);
         return status;
