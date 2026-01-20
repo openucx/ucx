@@ -447,7 +447,7 @@ stages:
         name: gpu
         demands: ucx_gpu -equals yes
         test_perf: 0
-        container: centos8_cuda11_asan
+        container: ubuntu24_cuda13
         asan_check: yes
     - template: tests.yml
       parameters:
