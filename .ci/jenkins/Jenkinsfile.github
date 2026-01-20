@@ -16,11 +16,14 @@ def blueOceanUrl = ""
 def currentPrNumber = null
 
 if (params.githubData) {
-  def slurper = new groovy.json.JsonSlurper()
-  currentPrNumber = slurper.parseText(params.githubData)?.pr?.toString()
+  withCredentials([usernamePassword(credentialsId: 'github-token', passwordVariable: 'GIT_PASSWORD', usernameVariable: 'GIT_USERNAME')]) {
+    githubHelper = GithubHelper.getInstance("${GIT_PASSWORD}", params.githubData)
+  }
+  currentPrNumber = githubHelper.getPRNumber()?.toString()
 
   // Abort previous running builds of the same PR
   if (currentPrNumber) {
+    def slurper = new groovy.json.JsonSlurper()
     try {
       Jenkins.instance.getItemByFullName(env.JOB_NAME).builds.findAll {
         it.isBuilding() && it.number < currentBuild.number
@@ -34,9 +37,6 @@ if (params.githubData) {
     } catch (Exception e) {
       echo "Could not abort previous builds: ${e.message}"
     }
-  }
-  withCredentials([usernamePassword(credentialsId: 'github-token', passwordVariable: 'GIT_PASSWORD', usernameVariable: 'GIT_USERNAME')]) {
-    githubHelper = GithubHelper.getInstance("${GIT_PASSWORD}", params.githubData)
   }
 
   def blueOceanJobPath = env.JOB_NAME.replace('/', '%2F')
