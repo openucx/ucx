@@ -50,6 +50,7 @@ void ucp_am_ep_init(ucp_ep_h ep)
     if (ep->worker->context->config.features & UCP_FEATURE_AM) {
         ucs_list_head_init(&ep_ext->am.started_ams);
         ucs_queue_head_init(&ep_ext->am.mid_rdesc_q);
+        ep_ext->am.psn = 0;
     }
 }
 
@@ -1312,6 +1313,37 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_am_handler_common(
     return UCS_OK;
 }
 
+
+UCS_PROFILE_FUNC(ucs_status_t, ucp_am_handler_psn,
+                 (am_arg, am_data, am_length, am_flags), void *am_arg,
+                 void *am_data, size_t am_length, unsigned am_flags)
+{
+    ucp_worker_h worker   = am_arg;
+    ucp_am_hdr_t *hdr     = am_data;
+    ucp_am_mid_ftr_t *ftr = UCS_PTR_BYTE_OFFSET(am_data,
+                                                am_length - sizeof(*ftr));
+    ucp_ep_h ep;
+
+    UCP_WORKER_GET_VALID_EP_BY_ID(&ep, worker, ftr->ep_id, return UCS_OK,
+                                  "AM (psn proto)");
+
+    ucs_assertv(ftr->msg_id != 0, "msg_id=%lu", ftr->msg_id);
+
+    /* Drop packet if:
+     * 1. This is not the first message for this EP and
+     * 2. message id is less or equal to the last one seen */
+    if ((ep->ext->am.psn != 0) && (ftr->msg_id <= ep->ext->am.psn)) {
+        ucs_debug("ucp_am_handler_psn: dropped duplicate message ep_id=%lu"
+                  " msg_id=%lu", ftr->ep_id, ftr->msg_id);
+        return UCS_OK;
+    }
+
+    ep->ext->am.psn = ftr->msg_id;
+    return ucp_am_handler_common(worker, hdr, am_length - sizeof(*ftr), NULL,
+                                 am_flags, 0, "am_handler_psn");
+}
+
+
 UCS_PROFILE_FUNC(ucs_status_t, ucp_am_handler_reply,
                  (am_arg, am_data, am_length, am_flags),
                  void *am_arg, void *am_data, size_t am_length,
@@ -1731,6 +1763,8 @@ UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_AM, UCP_AM_ID_AM_MIDDLE,
                          ucp_am_long_middle_handler, NULL, 0);
 UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_AM, UCP_AM_ID_AM_SINGLE_REPLY,
                          ucp_am_handler_reply, NULL, 0);
+UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_AM, UCP_AM_ID_AM_SINGLE_PSN,
+                         ucp_am_handler_psn, NULL, 0);
 
 const ucp_request_send_proto_t ucp_am_proto = {
     .contig_short           = ucp_am_contig_short,

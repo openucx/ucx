@@ -2188,3 +2188,82 @@ UCS_TEST_P(test_ucp_am_nbx_rndv_ppln, cuda_managed_buff,
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_rndv_ppln);
 
 #endif
+
+/* Test class for AM PSN protocol */
+class test_ucp_am_psn : public test_ucp_am_nbx {
+public:
+    virtual ucs_status_t
+    am_data_handler(const void *header, size_t header_length, void *data,
+                    size_t length, const ucp_am_recv_param_t *rx_param)
+    {
+        EXPECT_LT(m_recv_counter, m_send_counter);
+        check_header(header, header_length);
+        mem_buffer::pattern_check(data, length, SEED + m_recv_counter);
+        m_recv_counter++;
+        return UCS_OK;
+    }
+
+    void test_psn_send_recv(size_t total_msgs, size_t num_duplicates)
+    {
+        const size_t msg_size = 1024;
+        std::vector<std::unique_ptr<mem_buffer>> sbufs;
+        std::vector<ucs_status_ptr_t> requests;
+
+        for (size_t i = 0; i < total_msgs; i++) {
+            sbufs.emplace_back(new mem_buffer(msg_size, tx_memtype()));
+            sbufs[i]->pattern_fill(SEED + i);
+        }
+
+        reset_counters();
+        set_am_data_handler(receiver(), TEST_AM_NBX_ID, am_data_cb, this);
+
+        /* Send num_duplicates messages with IDs 1-num_duplicates */
+        for (size_t i = 0; i < num_duplicates; i++) {
+            ucp::data_type_desc_t sdt_desc(m_dt, sbufs[i]->ptr(), msg_size);
+            requests.push_back(
+                    send_am(sdt_desc, get_send_flag(), NULL, 0, NULL));
+        }
+
+        /* Rewind worker's message ID counter by num_duplicates */
+        sender().worker()->am_message_id -= num_duplicates;
+
+        /* Send all messages */
+        for (size_t i = 0; i < total_msgs; i++) {
+            ucp::data_type_desc_t sdt_desc(m_dt, sbufs[i]->ptr(), msg_size);
+            requests.push_back(
+                    send_am(sdt_desc, get_send_flag(), NULL, 0, NULL));
+        }
+
+        for (auto request : requests) {
+            request_wait(request);
+        }
+
+        wait_for_value(&m_recv_counter, total_msgs);
+
+        /* Validate total messages sent but only expected were received (all
+         * duplicates dropped) */
+        EXPECT_EQ(total_msgs + num_duplicates, m_send_counter);
+        EXPECT_EQ(total_msgs, m_recv_counter);
+    }
+};
+
+UCS_TEST_P(test_ucp_am_psn, no_duplicates, "ZCOPY_THRESH=0", "RNDV_THRESH=inf")
+{
+    UCS_TEST_SKIP_R("TODO: Add Failover error handling mode");
+    test_psn_send_recv(300, 0);
+}
+
+UCS_TEST_P(test_ucp_am_psn, some_duplicates, "ZCOPY_THRESH=0",
+           "RNDV_THRESH=inf")
+{
+    UCS_TEST_SKIP_R("TODO: Add Failover error handling mode");
+    test_psn_send_recv(200, 100);
+}
+
+UCS_TEST_P(test_ucp_am_psn, all_duplicates, "ZCOPY_THRESH=0", "RNDV_THRESH=inf")
+{
+    UCS_TEST_SKIP_R("TODO: Add Failover error handling mode");
+    test_psn_send_recv(400, 400);
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_am_psn)

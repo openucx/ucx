@@ -309,7 +309,8 @@ ucp_proto_t ucp_am_eager_single_bcopy_reply_proto = {
 };
 
 static void ucp_am_eager_single_zcopy_probe_common(
-        const ucp_proto_init_params_t *init_params, ucp_operation_id_t op_id)
+        const ucp_proto_init_params_t *init_params, ucp_operation_id_t op_id,
+        size_t footer_size)
 {
     ucp_context_t *context                = init_params->worker->context;
     ucp_proto_single_init_params_t params = {
@@ -324,7 +325,7 @@ static void ucp_am_eager_single_zcopy_probe_common(
         .super.min_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.min_zcopy),
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.max_zcopy),
         .super.max_iov_offs  = ucs_offsetof(uct_iface_attr_t, cap.am.max_iov),
-        .super.hdr_size      = ucp_am_eager_single_hdr_size(op_id),
+        .super.hdr_size      = sizeof(ucp_am_hdr_t) + footer_size,
         .super.send_op       = UCT_EP_OP_AM_ZCOPY,
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
@@ -350,7 +351,7 @@ static void ucp_am_eager_single_zcopy_probe_common(
 static void
 ucp_am_eager_single_zcopy_probe(const ucp_proto_init_params_t *init_params)
 {
-    ucp_am_eager_single_zcopy_probe_common(init_params, UCP_OP_ID_AM_SEND);
+    ucp_am_eager_single_zcopy_probe_common(init_params, UCP_OP_ID_AM_SEND, 0);
 }
 
 static ucs_status_t
@@ -412,8 +413,8 @@ ucp_proto_t ucp_am_eager_single_zcopy_proto = {
 static void
 ucp_am_eager_single_zcopy_reply_probe(const ucp_proto_init_params_t *init_params)
 {
-    ucp_am_eager_single_zcopy_probe_common(init_params,
-                                           UCP_OP_ID_AM_SEND_REPLY);
+    ucp_am_eager_single_zcopy_probe_common(init_params, UCP_OP_ID_AM_SEND_REPLY,
+                                           sizeof(ucp_am_reply_ftr_t));
 }
 
 static ucs_status_t
@@ -461,6 +462,78 @@ ucp_proto_t ucp_am_eager_single_zcopy_reply_proto = {
     .probe    = ucp_am_eager_single_zcopy_reply_probe,
     .query    = ucp_proto_single_query,
     .progress = {ucp_am_eager_single_zcopy_reply_proto_progress},
+    .abort    = ucp_proto_am_request_zcopy_abort,
+    .reset    = ucp_am_proto_request_zcopy_reset
+};
+
+static void
+ucp_am_eager_single_zcopy_psn_probe(const ucp_proto_init_params_t *init_params)
+{
+    if (init_params->ep_config_key->err_mode !=
+        UCP_ERR_HANDLING_MODE_FAILOVER) {
+        return;
+    }
+
+    ucp_am_eager_single_zcopy_probe_common(init_params, UCP_OP_ID_AM_SEND,
+                                           sizeof(ucp_am_mid_ftr_t));
+}
+
+static ucs_status_t
+ucp_am_eager_single_zcopy_psn_init(ucp_request_t *req, ucp_md_map_t md_map,
+                                   uct_completion_callback_t comp_func,
+                                   unsigned uct_reg_flags, unsigned dt_mask)
+{
+    req->send.msg_proto.message_id = req->send.ep->worker->am_message_id++;
+    return ucp_am_eager_single_zcopy_init(req, md_map, comp_func, uct_reg_flags,
+                                          dt_mask);
+}
+
+static ucs_status_t
+ucp_am_eager_single_zcopy_psn_send_func(ucp_request_t *req,
+                                        const ucp_proto_single_priv_t *spriv,
+                                        uct_iov_t *iov)
+{
+    size_t iovcnt = 1;
+    ucp_am_hdr_t hdr;
+    ucp_am_mid_ftr_t *ftr;
+
+    ucp_am_fill_header(&hdr, req);
+    ucs_assert(req->send.msg_proto.am.header.reg_desc != NULL);
+
+    ftr = UCS_PTR_BYTE_OFFSET(req->send.msg_proto.am.header.reg_desc + 1,
+                              req->send.msg_proto.am.header.length);
+
+    ftr->msg_id = req->send.msg_proto.message_id;
+    ftr->ep_id  = ucp_send_request_get_ep_remote_id(req);
+
+    ucp_am_eager_zcopy_add_footer(req, 0, spriv->super.md_index, iov, &iovcnt,
+                                  req->send.msg_proto.am.header.length +
+                                          sizeof(*ftr));
+
+    return uct_ep_am_zcopy(ucp_ep_get_lane(req->send.ep, spriv->super.lane),
+                           UCP_AM_ID_AM_SINGLE_PSN, &hdr, sizeof(hdr), iov,
+                           iovcnt, 0, &req->send.state.uct_comp);
+}
+
+ucs_status_t
+ucp_am_eager_single_zcopy_psn_proto_progress(uct_pending_req_t *self)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+
+    return ucp_proto_zcopy_single_progress(
+            req, UCT_MD_MEM_ACCESS_LOCAL_READ,
+            ucp_am_eager_single_zcopy_psn_send_func,
+            ucp_request_invoke_uct_completion_success,
+            ucp_am_eager_zcopy_completion, ucp_am_eager_single_zcopy_psn_init);
+}
+
+ucp_proto_t ucp_am_eager_single_zcopy_psn_proto = {
+    .name     = "am/egr/single/zcopy/psn",
+    .desc     = UCP_PROTO_ZCOPY_DESC " psn",
+    .flags    = 0,
+    .probe    = ucp_am_eager_single_zcopy_psn_probe,
+    .query    = ucp_proto_single_query,
+    .progress = {ucp_am_eager_single_zcopy_psn_proto_progress},
     .abort    = ucp_proto_am_request_zcopy_abort,
     .reset    = ucp_am_proto_request_zcopy_reset
 };
