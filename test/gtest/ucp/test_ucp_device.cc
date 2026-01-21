@@ -489,10 +489,6 @@ UCS_TEST_P(test_ucp_device, create_local_fail)
 
     scoped_log_handler wrap_err(wrap_errors_logger);
 
-    // Null params
-    ASSERT_EQ(UCS_ERR_INVALID_PARAM,
-              ucp_device_local_mem_list_create(NULL, &handle));
-
     // Empty params
     ucp_device_mem_list_params_t empty_params;
     empty_params.field_mask = UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENTS;
@@ -559,10 +555,6 @@ UCS_TEST_P(test_ucp_device, create_remote_fail)
     ucp_device_remote_mem_list_handle_h handle = nullptr;
 
     scoped_log_handler wrap_err(wrap_errors_logger);
-
-    // Null params
-    ASSERT_EQ(UCS_ERR_INVALID_PARAM,
-              ucp_device_remote_mem_list_create(nullptr, &handle));
 
     // Empty params
     ucp_device_mem_list_params_t empty_params{};

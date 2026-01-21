@@ -700,10 +700,6 @@ ucp_device_local_mem_list_create(const ucp_device_mem_list_params_t *params,
     uct_allocated_memory_t mem;
     ucs_sys_device_t local_sys_dev;
 
-    if (params == NULL) {
-        return UCS_ERR_INVALID_PARAM;
-    }
-
     status = ucp_device_local_mem_list_params_check(params, export_mem_type,
                                                     &local_sys_dev);
     if (status != UCS_OK) {
@@ -961,10 +957,6 @@ ucp_device_remote_mem_list_create(const ucp_device_mem_list_params_t *params,
     const ucs_memory_type_t export_mem_type = UCS_MEMORY_TYPE_CUDA;
     ucs_status_t status;
     uct_allocated_memory_t mem;
-
-    if (params == NULL) {
-        return UCS_ERR_INVALID_PARAM;
-    }
 
     status = ucp_device_remote_mem_list_params_check(params);
     if (status != UCS_OK) {
