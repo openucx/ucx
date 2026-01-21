@@ -90,6 +90,8 @@ stages:
           name: MLNX
           demands:
             - ucx_docker_drp
+        workspace:
+          clean: all
         steps:
           - checkout: self
             fetchDepth: 100
