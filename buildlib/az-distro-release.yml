@@ -68,6 +68,8 @@ jobs:
     pool:
       name: MLNX
       demands: ${{ parameters.demands }}
+    workspace:
+      clean: all
 
 
     steps:

@@ -23,7 +23,7 @@ jobs:
     ${{ if parameters.container }}:
       container: ${{ parameters.container }}
     workspace:
-      clean: outputs
+      clean: all
     steps:
       - checkout: self
         clean: true
