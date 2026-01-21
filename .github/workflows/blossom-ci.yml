@@ -1,8 +1,4 @@
-# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
-# See file LICENSE for terms.
-
 # A workflow to trigger ci on hybrid infra (github + self hosted runner)
-
 name: Blossom-CI
 run-name: >
   ${{ github.event_name == 'workflow_dispatch' &&
