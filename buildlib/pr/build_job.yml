@@ -9,6 +9,8 @@ jobs:
       name: MLNX
       demands: ${{ parameters.demands }}
     container: $[ variables['CONTAINER'] ]
+    workspace:
+      clean: all
     strategy:
       # x86_64 matrix
       ${{ if contains(parameters.name, 'x86_64') }}:
