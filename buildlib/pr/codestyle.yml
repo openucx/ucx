@@ -4,8 +4,7 @@ jobs:
     displayName: commit title
     pool:
       name: MLNX
-      demands:
-      - ucx_docker -equals yes
+      demands: ucx-arm64
     steps:
       - checkout: self
         clean: true
