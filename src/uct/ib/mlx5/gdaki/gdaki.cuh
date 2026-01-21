@@ -9,12 +9,10 @@
 
 #include "gdaki_dev.h"
 
-#include <infiniband/mlx5dv.h>
-#include <cuda.h>
+#include <infiniband/mlx5dv.h> /* TODO add to gpunetio */
+#include <cuda.h>              /* TODO add to gpunetio */
 #include "device/doca_gpunetio_dev_verbs_qp.cuh"
 #include <cooperative_groups.h>
-#include <ucs/sys/device_code.h>
-#include <uct/api/uct_def.h>
 
 #define UCT_RC_GDA_RESV_WQE_NO_RESOURCE -1ULL
 #define UCT_RC_GDA_WQE_ERR              UCS_BIT(63)
