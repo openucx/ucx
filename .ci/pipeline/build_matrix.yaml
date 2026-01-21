@@ -1,0 +1,53 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+---
+job: ucx-build
+
+failFast: false
+timeout_minutes: 90
+
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  limits: "{memory: 16Gi, cpu: 16000m}"
+  requests: "{memory: 16Gi, cpu: 16000m}"
+
+runs_on_dockers:
+  # x86_64
+  - { name: "ubuntu2004-mofed5.0", url: "harbor.mellanox.com/ucx/x86_64/ubuntu20.04/builder:mofed-5.0-1.0.0.0", arch: x86_64 }
+  - { name: "ubuntu2204-mofed5.7", url: "harbor.mellanox.com/ucx/x86_64/ubuntu22.04/builder:mofed-5.7-0.2.3.0", arch: x86_64 }
+  - { name: "ubuntu2404-doca2.9", url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0", arch: x86_64 }
+  - { name: "rocky89-mofed24.10", url: "harbor.mellanox.com/hpcx/x86_64/rocky8.9/builder:mofed-24.10-3.2.5.0", arch: x86_64 }
+  - { name: "rocky96-mofed24.10", url: "harbor.mellanox.com/hpcx/x86_64/rocky9.6/builder:mofed-24.10-3.2.5.0", arch: x86_64 }
+  - { name: "debian125-doca2.9", url: "harbor.mellanox.com/hpcx/x86_64/debian12.5/builder:doca-2.9.0", arch: x86_64 }
+  - { name: "debian113-mofed5.8", url: "harbor.mellanox.com/hpcx/x86_64/debian11.3/builder:mofed-5.8-3.0.7.0", arch: x86_64 }
+  - { name: "debian130-doca3.2", url: "harbor.mellanox.com/hpcx/x86_64/debian13.0/builder:doca-3.2.0", arch: x86_64 }
+  - { name: "centos10stream-inbox", url: "harbor.mellanox.com/hpcx/x86_64/centos10stream/builder:inbox", arch: x86_64 }
+  - { name: "fedora41-inbox", url: "harbor.mellanox.com/hpcx/x86_64/fedora41/builder:inbox", arch: x86_64 }
+  - { name: "rhel82-mofed5.0", url: "harbor.mellanox.com/ucx/x86_64/rhel8.2/builder:mofed-5.0-1.0.0.0", arch: x86_64 }
+  - { name: "rhel90-mofed5.6", url: "harbor.mellanox.com/ucx/x86_64/rhel9.0/builder:mofed-5.6-0.5.0.0", arch: x86_64 }
+  - { name: "rhel100-mofed25.07", url: "harbor.mellanox.com/hpcx/x86_64/rhel10.0/builder:mofed-25.07-0.9.7.0", arch: x86_64 }
+  - { name: "sles15sp6-doca2.9", url: "harbor.mellanox.com/hpcx/x86_64/sles15sp6/builder:doca-2.9.0", arch: x86_64 }
+  - { name: "kylin10sp3-doca2.9", url: "harbor.mellanox.com/hpcx/x86_64/kylin10sp3/builder:doca-2.9.0", arch: x86_64 }
+  - { name: "euleros2sp12-doca2.9", url: "harbor.mellanox.com/hpcx/x86_64/euleros2.0sp12/builder:doca-2.9.0", arch: x86_64 }
+  - { name: "ubuntu2004-rocm5.4", url: "harbor.mellanox.com/ucx/x86_64/ubuntu2004:rocm_5_4_0", arch: x86_64 }
+  - { name: "ubuntu2204-rocm6.0", url: "harbor.mellanox.com/ucx/x86_64/ubuntu2204:rocm-6.0.0", arch: x86_64 }
+  # aarch64
+  - { name: "ubuntu2404-doca2.9", url: "harbor.mellanox.com/hpcx/aarch64/ubuntu24.04/builder:doca-2.9.0", arch: aarch64 }
+  - { name: "rocky89-mofed24.10", url: "harbor.mellanox.com/hpcx/aarch64/rocky8.9/builder:mofed-24.10-3.2.5.0", arch: aarch64 }
+  - { name: "rocky96-mofed24.10", url: "harbor.mellanox.com/hpcx/aarch64/rocky9.6/builder:mofed-24.10-3.2.5.0", arch: aarch64 }
+  - { name: "rhel100-mofed25.07", url: "harbor.mellanox.com/hpcx/aarch64/rhel10.0/builder:mofed-25.07-0.9.7.0", arch: aarch64 }
+
+taskName: '${arch}/${name}'
+
+env:
+  BUILD_ID: "${BUILD_NUMBER}"
+  long_test: "no"
+
+steps:
+  - name: Build
+    parallel: false
+    timeout: 60
+    run: |
+      ./buildlib/tools/builds.sh

@@ -24,6 +24,9 @@
 
 #define UCT_GDAKI_MAX_CUDA_PER_IB 64
 
+#define UCT_GDAKI_CQ_PAGE_OFFSET_SHIFT 6
+#define UCT_GDAKI_DEV_EP_SIZE          64
+#define UCT_GDAKI_DEV_QP_SIZE          128
 
 typedef struct {
     uct_rc_iface_common_config_t      super;
@@ -79,28 +82,100 @@ err:
 static void uct_rc_gdaki_calc_dev_ep_layout(size_t num_channels,
                                             uct_ib_mlx5_qp_attr_t *qp_attr,
                                             size_t *cq_umem_offset_p,
-                                            size_t *dev_ep_size_p)
+                                            size_t *dev_ep_size_p,
+                                            uint64_t *pgsz_bitmap_p)
 {
-    UCS_STATIC_ASSERT(sizeof(uct_rc_gdaki_dev_ep_t) == 64);
-    UCS_STATIC_ASSERT(sizeof(uct_rc_gdaki_dev_qp_t) == 128);
+    uint64_t max_page_size;
+
+    UCS_STATIC_ASSERT(sizeof(uct_rc_gdaki_dev_ep_t) == UCT_GDAKI_DEV_EP_SIZE);
+    UCS_STATIC_ASSERT(sizeof(uct_rc_gdaki_dev_qp_t) == UCT_GDAKI_DEV_QP_SIZE);
 
     *cq_umem_offset_p    = sizeof(uct_rc_gdaki_dev_ep_t);
     qp_attr->umem_offset = *cq_umem_offset_p +
                            sizeof(uct_rc_gdaki_dev_qp_t) * num_channels;
     *dev_ep_size_p       = qp_attr->umem_offset + qp_attr->len * num_channels;
+    max_page_size  = ucs_min(UCT_GDAKI_DEV_EP_SIZE, UCT_GDAKI_DEV_QP_SIZE)
+                     << UCT_GDAKI_CQ_PAGE_OFFSET_SHIFT;
+    *pgsz_bitmap_p = (max_page_size << 1) - 1;
+}
+
+static int uct_gdaki_check_umem_dmabuf(const uct_ib_md_t *md)
+{
+    ucs_status_t status = UCS_ERR_UNSUPPORTED;
+#if HAVE_DECL_MLX5DV_UMEM_MASK_DMABUF
+    struct mlx5dv_devx_umem_in umem_in = {};
+    struct mlx5dv_devx_umem *umem;
+    uct_cuda_copy_md_dmabuf_t dmabuf;
+    CUdeviceptr buff;
+    CUcontext cuda_ctx;
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDevicePrimaryCtxRetain(&cuda_ctx, 0));
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(cuda_ctx));
+    if (status != UCS_OK) {
+        goto out_ctx_release;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemAlloc(&buff, 1));
+    if (status != UCS_OK) {
+        goto out_ctx_pop;
+    }
+
+    dmabuf = uct_cuda_copy_md_get_dmabuf((void*)buff, 1,
+                                         UCS_SYS_DEVICE_ID_UNKNOWN);
+
+    umem_in.addr        = (void*)buff;
+    umem_in.size        = 1;
+    umem_in.access      = IBV_ACCESS_LOCAL_WRITE;
+    umem_in.pgsz_bitmap = UINT64_MAX & ~(ucs_get_page_size() - 1);
+    umem_in.comp_mask   = MLX5DV_UMEM_MASK_DMABUF;
+    umem_in.dmabuf_fd   = dmabuf.fd;
+
+    umem = mlx5dv_devx_umem_reg_ex(md->dev.ibv_context, &umem_in);
+    if (umem == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto out_free;
+    }
+
+    mlx5dv_devx_umem_dereg(umem);
+out_free:
+    cuMemFree(buff);
+out_ctx_pop:
+    UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
+out_ctx_release:
+    UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(0));
+#endif
+
+    return status == UCS_OK;
 }
 
 static int uct_gdaki_is_dmabuf_supported(const uct_ib_md_t *md)
 {
     static int dmabuf_supported = -1;
+    int loglevel                = (md->config.gda_dmabuf_enable == UCS_YES) ?
+                                                         UCS_LOG_LEVEL_DIAG :
+                                                         UCS_LOG_LEVEL_DEBUG;
 
     if (dmabuf_supported != -1) {
         return dmabuf_supported;
     }
 
-    dmabuf_supported = md->config.gda_dmabuf_enable &&
-                       !!(md->cap_flags & UCT_MD_FLAG_REG_DMABUF) &&
-                       uct_cuda_copy_md_is_dmabuf_supported();
+    if (!(md->cap_flags & UCT_MD_FLAG_REG_DMABUF)) {
+        dmabuf_supported = 0;
+        ucs_log(loglevel, "IB doesn't support DMA-BUF");
+    } else if (!uct_cuda_copy_md_is_dmabuf_supported()) {
+        dmabuf_supported = 0;
+        ucs_log(loglevel, "CUDA doesn't support DMA-BUF");
+    } else if (!uct_gdaki_check_umem_dmabuf(md)) {
+        dmabuf_supported = 0;
+        ucs_log(loglevel, "DEVX UMEM doesn't support DMA-BUF");
+    } else {
+        dmabuf_supported = 1;
+    }
+
     return dmabuf_supported;
 }
 
@@ -108,12 +183,13 @@ static uct_cuda_copy_md_dmabuf_t uct_rc_gdaki_get_dmabuf(const uct_ib_md_t *md,
                                                          const void *address,
                                                          size_t length)
 {
+    uct_ib_mlx5_md_t *ib_mlx5_md     = ucs_derived_of(md, uct_ib_mlx5_md_t);
     uct_cuda_copy_md_dmabuf_t dmabuf = {
         .fd     = UCT_DMABUF_FD_INVALID,
         .offset = 0
     };
 
-    if (uct_gdaki_is_dmabuf_supported(md)) {
+    if (ib_mlx5_md->flags & UCT_IB_MLX5_MD_FLAG_REG_DMABUF_UMEM) {
         return uct_cuda_copy_md_get_dmabuf(address, length,
                                            UCS_SYS_DEVICE_ID_UNKNOWN);
     }
@@ -123,22 +199,22 @@ static uct_cuda_copy_md_dmabuf_t uct_rc_gdaki_get_dmabuf(const uct_ib_md_t *md,
 
 static struct mlx5dv_devx_umem *
 uct_rc_gdaki_umem_reg(const uct_ib_md_t *md, struct ibv_context *ibv_context,
-                      void *address, size_t length)
+                      void *address, size_t length, uint64_t pgsz_bitmap)
 {
     struct mlx5dv_devx_umem_in umem_in = {};
-    uct_cuda_copy_md_dmabuf_t dmabuf;
+    uct_cuda_copy_md_dmabuf_t dmabuf UCS_V_UNUSED;
 
     umem_in.addr        = address;
     umem_in.size        = length;
     umem_in.access      = IBV_ACCESS_LOCAL_WRITE;
-    umem_in.pgsz_bitmap = UINT64_MAX & ~(ucs_get_page_size() - 1);
+    umem_in.pgsz_bitmap = pgsz_bitmap;
+#if HAVE_DECL_MLX5DV_UMEM_MASK_DMABUF
     dmabuf              = uct_rc_gdaki_get_dmabuf(md, address, length);
-    if (dmabuf.fd == UCT_DMABUF_FD_INVALID) {
-        umem_in.comp_mask = 0;
-    } else {
+    if (dmabuf.fd != UCT_DMABUF_FD_INVALID) {
         umem_in.comp_mask = MLX5DV_UMEM_MASK_DMABUF;
         umem_in.dmabuf_fd = dmabuf.fd;
     }
+#endif
 
     return mlx5dv_devx_umem_reg_ex(ibv_context, &umem_in);
 }
@@ -152,6 +228,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
     uct_ib_iface_init_attr_t init_attr = {};
     uct_ib_mlx5_cq_attr_t cq_attr      = {};
     uct_ib_mlx5_qp_attr_t qp_attr      = {};
+    uint64_t pgsz_bitmap;
     ucs_status_t status;
     size_t dev_ep_size;
     uct_ib_mlx5_dbrec_t dbrec;
@@ -193,7 +270,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
      *            +----------+- -----+---------+----+-----
      */
     uct_rc_gdaki_calc_dev_ep_layout(iface->num_channels, &qp_attr,
-                                    &cq_attr.umem_offset, &dev_ep_size);
+                                    &cq_attr.umem_offset, &dev_ep_size,
+                                    &pgsz_bitmap);
 
     status      = uct_rc_gdaki_alloc(dev_ep_size, ucs_get_page_size(),
                                      (void**)&self->ep_gpu, &self->ep_raw);
@@ -202,7 +280,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
     }
 
     self->umem = uct_rc_gdaki_umem_reg(md, md->dev.ibv_context, self->ep_gpu,
-                                       dev_ep_size);
+                                       dev_ep_size, pgsz_bitmap);
     if (self->umem == NULL) {
         uct_ib_check_memlock_limit_msg(md->dev.ibv_context, UCS_LOG_LEVEL_ERROR,
                                        "mlx5dv_devx_umem_reg(ptr=%p size=%zu)",
@@ -461,6 +539,7 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
     uct_rc_gdaki_dev_ep_t *dev_ep;
     size_t cq_umem_offset, dev_ep_size;
     uct_rc_gdaki_channel_t *channel;
+    uint64_t pgsz_bitmap;
     ucs_status_t status;
     CUdeviceptr sq_db;
     unsigned i;
@@ -477,7 +556,8 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
                                iface->super.super.config.tx_qp_len, NULL);
         uct_ib_mlx5_wq_calc_sizes(&qp_attr);
         uct_rc_gdaki_calc_dev_ep_layout(iface->num_channels, &qp_attr,
-                                        &cq_umem_offset, &dev_ep_size);
+                                        &cq_umem_offset, &dev_ep_size,
+                                        &pgsz_bitmap);
 
         dev_ep = ucs_calloc(1, qp_attr.umem_offset, "dev_ep");
         if (dev_ep == NULL) {
@@ -673,9 +753,10 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
     gpu_name = ucs_string_buffer_next_token(&strb, NULL, "-");
     ib_name  = ucs_string_buffer_next_token(&strb, gpu_name, "-");
 
-    init_attr.seg_size = config->super.super.seg_size;
-    init_attr.qp_type  = IBV_QPT_RC;
-    init_attr.dev_name = ib_name;
+    init_attr.seg_size      = config->super.super.seg_size;
+    init_attr.qp_type       = IBV_QPT_RC;
+    init_attr.dev_name      = ib_name;
+    init_attr.max_rd_atomic = IBV_DEV_ATTR(&md->super.dev, max_qp_rd_atom);
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
                               &uct_rc_gdaki_iface_tl_ops,
@@ -992,6 +1073,7 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
     ucs_sys_device_t dev;
     int i;
     uct_gdaki_dev_matrix_elem_t *ibdesc;
+    char dmabuf_str[8];
 
     UCS_INIT_ONCE(&dmat_once) {
         dmat = uct_gdaki_dev_matrix_init(ib_md->config.gda_max_hca_per_gpu,
@@ -1003,8 +1085,21 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
         goto out;
     }
 
-    if (!uct_gdaki_is_dmabuf_supported(ib_md) &&
-        !uct_gdaki_is_peermem_loaded(ib_md)) {
+    if ((ib_md->config.gda_dmabuf_enable != UCS_NO) &&
+        uct_gdaki_is_dmabuf_supported(ib_md)) {
+        ib_mlx5_md->flags |= UCT_IB_MLX5_MD_FLAG_REG_DMABUF_UMEM;
+        ucs_debug("%s: using dmabuf for gda transport",
+                  uct_ib_device_name(&ib_md->dev));
+    } else if ((ib_md->config.gda_dmabuf_enable != UCS_YES) &&
+               uct_cuda_copy_md_is_dmabuf_supported() &&
+               uct_gdaki_is_peermem_loaded(ib_md)) {
+        ucs_debug("%s: using peermem for gda transport",
+                  uct_ib_device_name(&ib_md->dev));
+    } else {
+        ucs_config_sprintf_ternary_auto(dmabuf_str, sizeof(dmabuf_str),
+                                        &ib_md->config.gda_dmabuf_enable, NULL);
+        ucs_diag("%s: GPU-direct RDMA is not available (GDA_DMABUF_ENABLE=%s)",
+                 uct_ib_device_name(&ib_md->dev), dmabuf_str);
         status = UCS_ERR_NO_DEVICE;
         goto out;
     }
