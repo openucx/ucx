@@ -41,43 +41,8 @@ enum ucp_device_mem_list_elem_field {
     UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY        = UCS_BIT(1), /**< Unpacked remote memory key (always required) */
     UCP_DEVICE_MEM_LIST_ELEM_FIELD_LOCAL_ADDR  = UCS_BIT(2), /**< Local address */
     UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR = UCS_BIT(3), /**< Remote address */
-    UCP_DEVICE_MEM_LIST_ELEM_FIELD_LENGTH      = UCS_BIT(4)  /**< Length of the local buffer in bytes */
-};
-
-
-/**
- * @ingroup UCP_DEVICE
- * @brief Local memory descriptor list attributes field mask.
- *
- * The enumeration allows specifying which fields in @ref
- * ucp_device_local_mem_list_elem are present.
- *
- * It is used to enable backward compatibility support.
- */
-enum ucp_device_local_mem_list_elem_field {
-    UCP_DEVICE_LOCAL_MEM_LIST_ELEM_FIELD_MEMH        = UCS_BIT(0), /**< Source memory handle */
-    UCP_DEVICE_LOCAL_MEM_LIST_ELEM_FIELD_LOCAL_ADDR  = UCS_BIT(1) /**< Local address */
-};
-
-
-/**
- * @ingroup UCP_DEVICE
- * @brief Remote memory descriptor list attributes field mask.
- *
- * The enumeration allows specifying which fields in @ref
- * ucp_device_remote_mem_list_elem are present.
- *
- * It is used to enable backward compatibility support.
- */
-enum ucp_device_remote_mem_list_elem_field {
-    UCP_DEVICE_REMOTE_MEM_LIST_ELEM_FIELD_EP          = UCS_BIT(
-            0), /**< Remote endpoint handle */
-    UCP_DEVICE_REMOTE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR = UCS_BIT(
-            1), /**< Remote address */
-    UCP_DEVICE_REMOTE_MEM_LIST_ELEM_FIELD_RKEY        = UCS_BIT(
-            2), /**< Unpacked remote memory key */
-    UCP_DEVICE_REMOTE_MEM_LIST_ELEM_FIELD_GAP         = UCS_BIT(
-            3), /**< Mark this element as a gap element, when set rest of the fields are ignored */
+    UCP_DEVICE_MEM_LIST_ELEM_FIELD_LENGTH      = UCS_BIT(4), /**< Length of the local buffer in bytes */
+    UCP_DEVICE_MEM_LIST_ELEM_FIELD_EP          = UCS_BIT(5),  /**< Remote endpoint handle */
 };
 
 
@@ -124,73 +89,12 @@ typedef struct ucp_device_mem_list_elem {
      * Always required.
      */
     ucp_rkey_h rkey;
-} ucp_device_mem_list_elem_t;
-
-
-/**
- * @ingroup UCP_DEVICE
- * @brief Local memory descriptor list entry.
- *
- * Local memory descriptor that can be reused for multiple operations with 
- * different offsets.
- */
-typedef struct ucp_device_local_mem_list_elem {
-    /**
-     * Mask of valid fields in this structure, using bits from
-     * @ref ucp_device_local_mem_list_elem_field.
-     * Fields not specified in this mask will be ignored.
-     * Provides ABI compatibility with respect to adding new fields.
-     */
-    uint64_t  field_mask;
-
-    /**
-     * Local memory registration handle.
-     */
-    ucp_mem_h memh;
-
-    /**
-     * Local memory address for the device transfer operations.
-     */
-    void      *local_addr;
-} ucp_device_local_mem_list_elem_t;
-
-
-/**
- * @ingroup UCP_DEVICE
- * @brief Remote memory descriptor list entry.
- *
- * Remote memory descriptor that can be reused for multiple operations with 
- * different offsets.
- */
-typedef struct ucp_device_remote_mem_list_elem {
-    /**
-     * Mask of valid fields in this structure, using bits from
-     * @ref ucp_device_remote_mem_list_elem_field.
-     * Fields not specified in this mask will be ignored.
-     * Provides ABI compatibility with respect to adding new fields.
-     */
-    uint64_t   field_mask;
 
     /**
      * Remote endpoint handle.
      */
     ucp_ep_h   ep;
-
-    /**
-     * Remote memory address for the device transfer operations.
-     */
-    uint64_t   remote_addr;
-
-    /**
-     * Unpacked memory key for the remote memory endpoint.
-     */
-    ucp_rkey_h rkey;
-
-    /**
-     * Flag to indicate if the element is a gap element.
-     */
-    int        is_gap;
-} ucp_device_remote_mem_list_elem_t;
+} ucp_device_mem_list_elem_t;
 
 
 /**
@@ -207,8 +111,6 @@ enum ucp_device_mem_list_params_field {
     UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENT_SIZE    = UCS_BIT(1), /**< Element size in bytes */
     UCP_DEVICE_MEM_LIST_PARAMS_FIELD_NUM_ELEMENTS    = UCS_BIT(2), /**< Number of elements */
     UCP_DEVICE_MEM_LIST_PARAMS_FIELD_WORKER          = UCS_BIT(3), /**< Worker handle */
-    UCP_DEVICE_MEM_LIST_PARAMS_FIELD_LOCAL_ELEMENTS  = UCS_BIT(4), /**< Local elements array base address */
-    UCP_DEVICE_MEM_LIST_PARAMS_FIELD_REMOTE_ELEMENTS = UCS_BIT(5)  /**< Remote elements array base address */
 };
 
 
@@ -247,16 +149,6 @@ typedef struct ucp_device_mem_list_params {
      * Base address of the array of descriptor elements.
      */
     const ucp_device_mem_list_elem_t        *elements;
-
-    /**
-     * Base address of the array of local descriptor elements.
-     */
-    const ucp_device_local_mem_list_elem_t  *local_elements;
-
-    /**
-     * Base address of the array of remote descriptor elements.
-     */
-    const ucp_device_remote_mem_list_elem_t *remote_elements;
 } ucp_device_mem_list_params_t;
 
 

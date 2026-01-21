@@ -34,10 +34,12 @@ ucp_test_kernel_do_operation(const test_ucp_device_kernel_params_t &params,
                                               channel_id, flags, req_ptr);
         break;
     case TEST_UCP_DEVICE_KERNEL_PUT_SINGLE_V2:
-        status = ucp_device_put_single<level>(
-                params.local_mem_list, params.single.mem_list_index, 0,
-                params.remote_mem_list, params.single.remote_mem_list_index, 0,
-                params.single.length, channel_id, flags, req_ptr);
+        status = ucp_device_put<level>(params.local_mem_list,
+                                       params.single.mem_list_index, 0,
+                                       params.remote_mem_list,
+                                       params.single.remote_mem_list_index, 0,
+                                       params.single.length, channel_id, flags,
+                                       req_ptr);
         break;
     case TEST_UCP_DEVICE_KERNEL_PUT_MULTI:
         status = ucp_device_put_multi<level>(params.mem_list,

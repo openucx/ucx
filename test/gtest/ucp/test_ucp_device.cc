@@ -191,24 +191,24 @@ test_ucp_device::mem_list::mem_list(test_ucp_device &test, size_t size,
 
     if (mode != MODE_COUNTER_ONLY) {
         // Initialize local elements
-        std::vector<ucp_device_local_mem_list_elem_t> local_elems(data_count);
+        std::vector<ucp_device_mem_list_elem_t> local_elems(data_count);
         for (auto i = 0; i < data_count; ++i) {
             local_elems[i].field_mask =
-                    UCP_DEVICE_LOCAL_MEM_LIST_ELEM_FIELD_MEMH |
-                    UCP_DEVICE_LOCAL_MEM_LIST_ELEM_FIELD_LOCAL_ADDR;
+                    UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH |
+                    UCP_DEVICE_MEM_LIST_ELEM_FIELD_LOCAL_ADDR;
             local_elems[i].memh       = m_src[i]->memh();
             local_elems[i].local_addr = m_src[i]->ptr();
         }
 
         // Initialize parameters
-        params.field_mask   = UCP_DEVICE_MEM_LIST_PARAMS_FIELD_LOCAL_ELEMENTS |
+        params.field_mask   = UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENTS |
                               UCP_DEVICE_MEM_LIST_PARAMS_FIELD_NUM_ELEMENTS |
                               UCP_DEVICE_MEM_LIST_PARAMS_FIELD_WORKER |
                               UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENT_SIZE;
         params.element_size = sizeof(local_elems[0]);
         params.num_elements = data_count;
-        params.local_elements = local_elems.data();
-        params.worker         = test.sender().worker();
+        params.elements     = local_elems.data();
+        params.worker       = test.sender().worker();
         // Create memory list (with retry on connection)
         {
             scoped_log_handler wrap_err(wrap_errors_logger);
@@ -221,18 +221,16 @@ test_ucp_device::mem_list::mem_list(test_ucp_device &test, size_t size,
 
     // Initialize remote elements
     size_t remote_count = count + gap_count;
-    std::vector<ucp_device_remote_mem_list_elem_t> remote_elems(remote_count);
+    std::vector<ucp_device_mem_list_elem_t> remote_elems(remote_count);
     for (auto i = 0; i < gap_count; ++i) {
-        remote_elems[i].field_mask = UCP_DEVICE_REMOTE_MEM_LIST_ELEM_FIELD_GAP;
-        remote_elems[i].is_gap     = 1;
+        remote_elems[i].field_mask = 0;
     }
 
     for (auto i = gap_count; i < data_count + gap_count; ++i) {
-        auto data_index = i - gap_count;
-        remote_elems[i].field_mask =
-                UCP_DEVICE_REMOTE_MEM_LIST_ELEM_FIELD_EP |
-                UCP_DEVICE_REMOTE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR |
-                UCP_DEVICE_REMOTE_MEM_LIST_ELEM_FIELD_RKEY;
+        auto data_index             = i - gap_count;
+        remote_elems[i].field_mask  = UCP_DEVICE_MEM_LIST_ELEM_FIELD_EP |
+                                      UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR |
+                                      UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY;
         remote_elems[i].ep          = test.sender().ep();
         remote_elems[i].remote_addr = reinterpret_cast<uint64_t>(
                 m_dst[data_index]->ptr());
@@ -241,9 +239,9 @@ test_ucp_device::mem_list::mem_list(test_ucp_device &test, size_t size,
 
     if (has_counter) {
         remote_elems[data_count + gap_count].field_mask =
-                UCP_DEVICE_REMOTE_MEM_LIST_ELEM_FIELD_EP |
-                UCP_DEVICE_REMOTE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR |
-                UCP_DEVICE_REMOTE_MEM_LIST_ELEM_FIELD_RKEY;
+                UCP_DEVICE_MEM_LIST_ELEM_FIELD_EP |
+                UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR |
+                UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY;
         remote_elems[data_count + gap_count].ep = test.sender().ep();
         remote_elems[data_count + gap_count].remote_addr =
                 reinterpret_cast<uint64_t>(m_dst[data_count]->ptr());
@@ -251,12 +249,12 @@ test_ucp_device::mem_list::mem_list(test_ucp_device &test, size_t size,
     }
 
     // Initialize parameters
-    params.field_mask      = UCP_DEVICE_MEM_LIST_PARAMS_FIELD_REMOTE_ELEMENTS |
-                             UCP_DEVICE_MEM_LIST_PARAMS_FIELD_NUM_ELEMENTS |
-                             UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENT_SIZE;
-    params.element_size    = sizeof(remote_elems[0]);
-    params.num_elements    = remote_count;
-    params.remote_elements = remote_elems.data();
+    params.field_mask   = UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENTS |
+                          UCP_DEVICE_MEM_LIST_PARAMS_FIELD_NUM_ELEMENTS |
+                          UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENT_SIZE;
+    params.element_size = sizeof(remote_elems[0]);
+    params.num_elements = remote_count;
+    params.elements     = remote_elems.data();
 
     // Create memory list (with retry on connection)
     {
@@ -497,39 +495,39 @@ UCS_TEST_P(test_ucp_device, create_local_fail)
 
     // Empty params
     ucp_device_mem_list_params_t empty_params;
-    empty_params.field_mask = UCP_DEVICE_MEM_LIST_PARAMS_FIELD_LOCAL_ELEMENTS;
+    empty_params.field_mask = UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENTS;
     EXPECT_EQ(UCS_ERR_INVALID_PARAM,
               ucp_device_local_mem_list_create(&empty_params, &handle));
     EXPECT_EQ(nullptr, handle);
 
     // Empty mem list
     ucp_device_mem_list_params_t invalid_params{};
-    invalid_params.field_mask = UCP_DEVICE_MEM_LIST_PARAMS_FIELD_LOCAL_ELEMENTS |
-                                UCP_DEVICE_MEM_LIST_PARAMS_FIELD_WORKER |
-                                UCP_DEVICE_MEM_LIST_PARAMS_FIELD_NUM_ELEMENTS |
-                                UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENT_SIZE;
-    invalid_params.local_elements = nullptr;
-    invalid_params.worker         = sender().worker();
-    invalid_params.num_elements   = 0;
-    invalid_params.element_size   = sizeof(ucp_device_local_mem_list_elem_t);
+    invalid_params.field_mask   = UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENTS |
+                                  UCP_DEVICE_MEM_LIST_PARAMS_FIELD_WORKER |
+                                  UCP_DEVICE_MEM_LIST_PARAMS_FIELD_NUM_ELEMENTS |
+                                  UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENT_SIZE;
+    invalid_params.elements     = nullptr;
+    invalid_params.worker       = sender().worker();
+    invalid_params.num_elements = 0;
+    invalid_params.element_size = sizeof(ucp_device_mem_list_elem_t);
     EXPECT_EQ(UCS_ERR_INVALID_PARAM,
               ucp_device_local_mem_list_create(&invalid_params, &handle));
     EXPECT_EQ(nullptr, handle);
 
     // Zero element size
-    ucp_device_local_mem_list_elem_t dummy_elem{};
-    invalid_params.local_elements = &dummy_elem;
-    invalid_params.num_elements   = 1;
-    invalid_params.element_size   = 0;
+    ucp_device_mem_list_elem_t dummy_elem{};
+    invalid_params.elements     = &dummy_elem;
+    invalid_params.num_elements = 1;
+    invalid_params.element_size = 0;
     EXPECT_EQ(UCS_ERR_INVALID_PARAM,
               ucp_device_local_mem_list_create(&invalid_params, &handle));
     EXPECT_EQ(nullptr, handle);
 
-    invalid_params.element_size = sizeof(ucp_device_local_mem_list_elem_t);
+    invalid_params.element_size = sizeof(ucp_device_mem_list_elem_t);
     mapped_buffer src_cuda(4096, sender(), 0, UCS_MEMORY_TYPE_CUDA);
     mapped_buffer src_host(4096, sender(), 0, UCS_MEMORY_TYPE_HOST);
 
-    ucp_device_local_mem_list_elem_t local_elems[2]{};
+    ucp_device_mem_list_elem_t local_elems[2]{};
     for (int i = 0; i < 2; i++) {
         local_elems[i].field_mask = UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH |
                                     UCP_DEVICE_MEM_LIST_ELEM_FIELD_LOCAL_ADDR |
@@ -539,18 +537,18 @@ UCS_TEST_P(test_ucp_device, create_local_fail)
     }
 
     // Missing worker
-    invalid_params.worker         = nullptr;
-    invalid_params.local_elements = local_elems;
+    invalid_params.worker   = nullptr;
+    invalid_params.elements = local_elems;
     EXPECT_EQ(UCS_ERR_INVALID_PARAM,
               ucp_device_local_mem_list_create(&invalid_params, &handle));
     EXPECT_EQ(nullptr, handle);
 
     // Mismatched local sys_dev
-    invalid_params.worker         = sender().worker();
-    local_elems[1].memh           = src_host.memh(); // Different sys_dev
-    local_elems[1].local_addr     = src_host.ptr();
-    invalid_params.num_elements   = 2;
-    invalid_params.local_elements = local_elems;
+    invalid_params.worker       = sender().worker();
+    local_elems[1].memh         = src_host.memh(); // Different sys_dev
+    local_elems[1].local_addr   = src_host.ptr();
+    invalid_params.num_elements = 2;
+    invalid_params.elements     = local_elems;
     EXPECT_EQ(UCS_ERR_UNSUPPORTED,
               ucp_device_local_mem_list_create(&invalid_params, &handle));
     EXPECT_EQ(nullptr, handle);
@@ -568,87 +566,81 @@ UCS_TEST_P(test_ucp_device, create_remote_fail)
 
     // Empty params
     ucp_device_mem_list_params_t empty_params{};
-    empty_params.field_mask = UCP_DEVICE_MEM_LIST_PARAMS_FIELD_REMOTE_ELEMENTS;
+    empty_params.field_mask = UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENTS;
     EXPECT_EQ(UCS_ERR_INVALID_PARAM,
               ucp_device_remote_mem_list_create(&empty_params, &handle));
     EXPECT_EQ(nullptr, handle);
 
     // Empty mem list
     ucp_device_mem_list_params_t invalid_params{};
-    invalid_params.field_mask =
-            UCP_DEVICE_MEM_LIST_PARAMS_FIELD_REMOTE_ELEMENTS |
-            UCP_DEVICE_MEM_LIST_PARAMS_FIELD_NUM_ELEMENTS |
-            UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENT_SIZE;
-    invalid_params.remote_elements = nullptr;
-    invalid_params.num_elements    = 0;
-    invalid_params.element_size    = sizeof(ucp_device_remote_mem_list_elem_t);
+    invalid_params.field_mask   = UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENTS |
+                                  UCP_DEVICE_MEM_LIST_PARAMS_FIELD_NUM_ELEMENTS |
+                                  UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENT_SIZE;
+    invalid_params.elements     = nullptr;
+    invalid_params.num_elements = 0;
+    invalid_params.element_size = sizeof(ucp_device_mem_list_elem_t);
     EXPECT_EQ(UCS_ERR_INVALID_PARAM,
               ucp_device_remote_mem_list_create(&invalid_params, &handle));
     EXPECT_EQ(nullptr, handle);
 
     // Zero element size
-    ucp_device_remote_mem_list_elem_t dummy_elem{};
-    invalid_params.remote_elements = &dummy_elem;
-    invalid_params.num_elements    = 1;
-    invalid_params.element_size    = 0;
+    ucp_device_mem_list_elem_t dummy_elem{};
+    invalid_params.elements     = &dummy_elem;
+    invalid_params.num_elements = 1;
+    invalid_params.element_size = 0;
     EXPECT_EQ(UCS_ERR_INVALID_PARAM,
               ucp_device_remote_mem_list_create(&invalid_params, &handle));
     EXPECT_EQ(nullptr, handle);
 
-    invalid_params.element_size = sizeof(ucp_device_remote_mem_list_elem_t);
+    invalid_params.element_size = sizeof(ucp_device_mem_list_elem_t);
     mapped_buffer dst1(4096, receiver(), 0, UCS_MEMORY_TYPE_CUDA);
     mapped_buffer dst2(4096, receiver(), 0, UCS_MEMORY_TYPE_HOST);
     auto rkey1          = dst1.rkey(sender());
     auto rkey2          = dst2.rkey(sender());
     ucp_rkey_h rkeys[2] = {rkey1, rkey2};
 
-    ucp_device_remote_mem_list_elem_t remote_elems[2]{};
+    ucp_device_mem_list_elem_t remote_elems[2]{};
     for (int i = 0; i < 2; i++) {
-        remote_elems[i].field_mask =
-                UCP_DEVICE_REMOTE_MEM_LIST_ELEM_FIELD_EP |
-                UCP_DEVICE_REMOTE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR |
-                UCP_DEVICE_REMOTE_MEM_LIST_ELEM_FIELD_RKEY;
+        remote_elems[i].field_mask  = UCP_DEVICE_MEM_LIST_ELEM_FIELD_EP |
+                                      UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR |
+                                      UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY;
         remote_elems[i].ep          = sender().ep();
         remote_elems[i].remote_addr = reinterpret_cast<uint64_t>(dst1.ptr());
         remote_elems[i].rkey        = rkeys[i];
 
         if (i == 1) {
-            remote_elems[i].field_mask |=
-                    UCP_DEVICE_REMOTE_MEM_LIST_ELEM_FIELD_GAP;
-            remote_elems[i].is_gap = 1;
+            remote_elems[i].field_mask = 0;
         }
     }
 
     // Missing rkey (always required)
-    remote_elems[0].field_mask &= ~UCP_DEVICE_REMOTE_MEM_LIST_ELEM_FIELD_RKEY;
+    remote_elems[0].field_mask &= ~UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY;
     invalid_params.num_elements = 1;
-    invalid_params.remote_elements = remote_elems;
+    invalid_params.elements     = remote_elems;
     EXPECT_EQ(UCS_ERR_INVALID_PARAM,
               ucp_device_remote_mem_list_create(&invalid_params, &handle));
     EXPECT_EQ(nullptr, handle);
-    remote_elems[0].field_mask |=
-            UCP_DEVICE_REMOTE_MEM_LIST_ELEM_FIELD_RKEY; // Restore
-    remote_elems[0].rkey = nullptr;
+    remote_elems[0].field_mask |= UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY; // Restore
+    remote_elems[0].rkey        = nullptr;
     EXPECT_EQ(UCS_ERR_INVALID_PARAM,
               ucp_device_remote_mem_list_create(&invalid_params, &handle));
     EXPECT_EQ(nullptr, handle);
     remote_elems[0].rkey = rkey1;
 
     // Missing ep (always required)
-    remote_elems[0].field_mask &= ~UCP_DEVICE_REMOTE_MEM_LIST_ELEM_FIELD_EP;
+    remote_elems[0].field_mask &= ~UCP_DEVICE_MEM_LIST_ELEM_FIELD_EP;
     EXPECT_EQ(UCS_ERR_INVALID_PARAM,
               ucp_device_remote_mem_list_create(&invalid_params, &handle));
     EXPECT_EQ(nullptr, handle);
-    remote_elems[0].field_mask |=
-            UCP_DEVICE_REMOTE_MEM_LIST_ELEM_FIELD_EP; // Restore
-    remote_elems[0].ep = nullptr;
+    remote_elems[0].field_mask |= UCP_DEVICE_MEM_LIST_ELEM_FIELD_EP; // Restore
+    remote_elems[0].ep          = nullptr;
     EXPECT_EQ(UCS_ERR_INVALID_PARAM,
               ucp_device_remote_mem_list_create(&invalid_params, &handle));
     EXPECT_EQ(nullptr, handle);
 
     // Only gap element
-    invalid_params.num_elements    = 1;
-    invalid_params.remote_elements = remote_elems + 1;
+    invalid_params.num_elements = 1;
+    invalid_params.elements     = remote_elems + 1;
     EXPECT_EQ(UCS_ERR_INVALID_PARAM,
               ucp_device_remote_mem_list_create(&invalid_params, &handle));
     EXPECT_EQ(nullptr, handle);

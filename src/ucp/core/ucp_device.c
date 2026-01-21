@@ -541,19 +541,19 @@ ucp_device_get_worker_iface_by_device_id(ucp_worker_h worker,
 
 static ucs_status_t ucp_device_local_mem_list_element_pack(
         const ucp_worker_h worker, const ucp_worker_iface_t *wiface,
-        const ucp_device_local_mem_list_elem_t *element,
+        const ucp_device_mem_list_elem_t *element,
         const ucs_memory_type_t mem_type,
         uct_device_local_mem_list_elem_t *mem_element)
 {
-    void *local_addr = UCS_PARAM_VALUE(UCP_DEVICE_LOCAL_MEM_LIST_ELEM_FIELD,
-                                       element, local_addr, LOCAL_ADDR, NULL);
+    void *local_addr = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, element,
+                                       local_addr, LOCAL_ADDR, NULL);
     ucp_tl_resource_desc_t *resource;
     ucp_md_index_t md_index;
     ucp_mem_h memh;
     uct_mem_h uct_memh;
     ucs_status_t status;
 
-    ucp_mem_type_unpack(worker, &mem_element->local_addr, &local_addr,
+    ucp_mem_type_unpack(worker, &mem_element->addr, &local_addr,
                         sizeof(local_addr), mem_type);
     if (wiface == NULL) {
         return UCS_OK;
@@ -561,8 +561,8 @@ static ucs_status_t ucp_device_local_mem_list_element_pack(
 
     resource = &worker->context->tl_rscs[wiface->rsc_index];
     md_index = resource->md_index;
-    memh = UCS_PARAM_VALUE(UCP_DEVICE_LOCAL_MEM_LIST_ELEM_FIELD, element, memh,
-                           MEMH, NULL);
+    memh = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, element, memh, MEMH,
+                           NULL);
     uct_memh = memh->uct[md_index];
     if (uct_memh == UCT_MEM_HANDLE_NULL) {
         ucs_error("invalid memh for md_index=%u", md_index);
@@ -588,7 +588,7 @@ static ucs_status_t ucp_device_local_mem_list_create_handle(
                                               uct_mem_element) +
                                  sizeof(uct_tl_device_mem_element_t);
     size_t handle_size         = 0;
-    const ucp_device_local_mem_list_elem_t *ucp_element;
+    const ucp_device_mem_list_elem_t *ucp_element;
     const ucp_worker_iface_t *wiface;
     ucp_device_local_mem_list_handle_t handle;
     uct_device_local_mem_list_elem_t *uct_element;
@@ -614,7 +614,7 @@ static ucs_status_t ucp_device_local_mem_list_create_handle(
     }
 
     /* Populate element specific parameters */
-    ucp_element = params->local_elements;
+    ucp_element = params->elements;
     uct_element = UCS_PTR_BYTE_OFFSET(mem->address, sizeof(handle));
     for (i = 0; i < params->num_elements; i++) {
         status = ucp_device_local_mem_list_element_pack(worker, wiface,
@@ -643,10 +643,9 @@ static ucs_status_t ucp_device_local_mem_list_params_check(
         const ucp_device_mem_list_params_t *params, ucs_memory_type_t mem_type,
         ucs_sys_device_t *local_sys_dev)
 {
-    const ucp_device_local_mem_list_elem_t *local_elements =
-            UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_PARAMS_FIELD, params,
-                            local_elements, LOCAL_ELEMENTS, NULL);
-    const ucp_worker_h worker = UCS_PARAM_VALUE(
+    const ucp_device_mem_list_elem_t *local_elements = UCS_PARAM_VALUE(
+            UCP_DEVICE_MEM_LIST_PARAMS_FIELD, params, elements, ELEMENTS, NULL);
+    const ucp_worker_h worker                        = UCS_PARAM_VALUE(
             UCP_DEVICE_MEM_LIST_PARAMS_FIELD, params, worker, WORKER, NULL);
     size_t element_size = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_PARAMS_FIELD,
                                           params, element_size, ELEMENT_SIZE,
@@ -654,7 +653,7 @@ static ucs_status_t ucp_device_local_mem_list_params_check(
     size_t num_elements = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_PARAMS_FIELD,
                                           params, num_elements, NUM_ELEMENTS,
                                           0);
-    const ucp_device_local_mem_list_elem_t *element;
+    const ucp_device_mem_list_elem_t *element;
     ucp_mem_h memh;
     size_t i;
     ucs_status_t status;
@@ -674,10 +673,10 @@ static ucs_status_t ucp_device_local_mem_list_params_check(
     }
 
     for (i = 0; i < num_elements; i++) {
-        element = (const ucp_device_local_mem_list_elem_t*)
+        element = (const ucp_device_mem_list_elem_t*)
                 UCS_PTR_BYTE_OFFSET(local_elements, i * element_size);
-        memh = UCS_PARAM_VALUE(UCP_DEVICE_LOCAL_MEM_LIST_ELEM_FIELD, element,
-                               memh, MEMH, NULL);
+        memh = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, element, memh,
+                               MEMH, NULL);
         if (memh == NULL) {
             ucs_error("missing memh for element=%zu", i);
             return UCS_ERR_INVALID_PARAM;
@@ -733,7 +732,7 @@ ucp_device_local_mem_list_create(const ucp_device_mem_list_params_t *params,
 }
 
 static ucs_status_t ucp_device_remote_mem_list_element_pack(
-        const ucp_device_remote_mem_list_elem_t *element,
+        const ucp_device_mem_list_elem_t *element,
         const ucs_sys_device_t local_sys_dev, const ucs_memory_type_t mem_type,
         uct_device_remote_mem_list_elem_t *mem_element)
 {
@@ -780,9 +779,8 @@ static ucs_status_t ucp_device_remote_mem_list_element_pack(
     wiface = ucp_worker_iface(ep->worker, ucp_ep_get_rsc_index(ep, lane));
     ucp_mem_type_unpack(ep->worker, &mem_element->device_ep, &device_ep,
                         sizeof(device_ep), mem_type);
-    ucp_mem_type_unpack(ep->worker, &mem_element->remote_addr,
-                        &element->remote_addr, sizeof(element->remote_addr),
-                        mem_type);
+    ucp_mem_type_unpack(ep->worker, &mem_element->addr, &element->remote_addr,
+                        sizeof(element->remote_addr), mem_type);
     status = uct_iface_mem_element_pack(wiface->iface, NULL, uct_rkey,
                                         &mem_element->uct_mem_element);
     if (status != UCS_OK) {
@@ -793,37 +791,35 @@ static ucs_status_t ucp_device_remote_mem_list_element_pack(
     return UCS_OK;
 }
 
-#define UCP_DEVICE_REMOTE_MEM_LIST_GET_ELEMENT(_params, _i) \
-    ((ucp_device_remote_mem_list_elem_t*)UCS_PTR_BYTE_OFFSET( \
-            (_params)->remote_elements, (_i) * (_params)->element_size))
-#define UCP_DEVICE_REMOTE_MEM_LIST_GET_EP(_params, _i) \
-    (UCS_PARAM_VALUE(UCP_DEVICE_REMOTE_MEM_LIST_ELEM_FIELD, \
-                     UCP_DEVICE_REMOTE_MEM_LIST_GET_ELEMENT(_params, _i), ep, \
-                     EP, NULL))
-#define UCP_DEVICE_REMOTE_MEM_LIST_GET_RKEY(_params, _i) \
-    (UCS_PARAM_VALUE(UCP_DEVICE_REMOTE_MEM_LIST_ELEM_FIELD, \
-                     UCP_DEVICE_REMOTE_MEM_LIST_GET_ELEMENT(_params, _i), \
-                     rkey, RKEY, NULL))
-#define UCP_DEVICE_REMOTE_MEM_ELEMENT_IS_GAP(_ucp_element) \
-    (UCS_PARAM_VALUE(UCP_DEVICE_REMOTE_MEM_LIST_ELEM_FIELD, (_ucp_element), \
-                     is_gap, GAP, 0) != 0)
+#define UCP_DEVICE_MEM_LIST_GET_ELEMENT(_params, _i) \
+    ((ucp_device_mem_list_elem_t*)UCS_PTR_BYTE_OFFSET( \
+            (_params)->elements, (_i) * (_params)->element_size))
+#define UCP_DEVICE_MEM_LIST_GET_EP(_params, _i) \
+    (UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, \
+                     UCP_DEVICE_MEM_LIST_GET_ELEMENT(_params, _i), ep, EP, \
+                     NULL))
+#define UCP_DEVICE_MEM_LIST_GET_RKEY(_params, _i) \
+    (UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, \
+                     UCP_DEVICE_MEM_LIST_GET_ELEMENT(_params, _i), rkey, RKEY, \
+                     NULL))
+#define UCP_DEVICE_MEM_ELEMENT_IS_GAP(_ucp_element) \
+    ((_ucp_element)->field_mask == 0)
 
 static ucp_ep_h ucp_device_remote_mem_list_get_first_ep(
         const ucp_device_mem_list_params_t *params)
 {
-    const ucp_device_remote_mem_list_elem_t *ucp_element =
-            params->remote_elements;
-    size_t i = 0;
+    const ucp_device_mem_list_elem_t *ucp_element = params->elements;
+    size_t i                                      = 0;
 
     for (i = 0; i < params->num_elements; i++) {
-        if (UCP_DEVICE_REMOTE_MEM_ELEMENT_IS_GAP(ucp_element)) {
+        if (UCP_DEVICE_MEM_ELEMENT_IS_GAP(ucp_element)) {
             ucp_element = UCS_PTR_BYTE_OFFSET(ucp_element,
                                               params->element_size);
             continue;
         }
 
-        return UCS_PARAM_VALUE(UCP_DEVICE_REMOTE_MEM_LIST_ELEM_FIELD,
-                               ucp_element, ep, EP, NULL);
+        return UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, ucp_element, ep,
+                               EP, NULL);
     }
 
     return NULL;
@@ -838,7 +834,7 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
                                               uct_mem_element) +
                                  sizeof(uct_tl_device_mem_element_t);
     size_t handle_size         = 0;
-    const ucp_device_remote_mem_list_elem_t *ucp_element;
+    const ucp_device_mem_list_elem_t *ucp_element;
     ucp_context_h context;
     ucp_device_remote_mem_list_handle_t handle;
     uct_device_remote_mem_list_elem_t *uct_element;
@@ -869,10 +865,10 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
         return status;
     }
 
-    ucp_element = params->remote_elements;
+    ucp_element = params->elements;
     uct_element = UCS_PTR_BYTE_OFFSET(mem->address, sizeof(handle));
     for (i = 0; i < params->num_elements; i++) {
-        if (!UCP_DEVICE_REMOTE_MEM_ELEMENT_IS_GAP(ucp_element)) {
+        if (!UCP_DEVICE_MEM_ELEMENT_IS_GAP(ucp_element)) {
             status = ucp_device_remote_mem_list_element_pack(ucp_element,
                                                              local_sys_dev,
                                                              mem_type,
@@ -900,16 +896,15 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
 static ucs_status_t ucp_device_remote_mem_list_params_check(
         const ucp_device_mem_list_params_t *params)
 {
-    const ucp_device_remote_mem_list_elem_t *remote_elements =
-            UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_PARAMS_FIELD, params,
-                            remote_elements, REMOTE_ELEMENTS, NULL);
+    const ucp_device_mem_list_elem_t *remote_elements = UCS_PARAM_VALUE(
+            UCP_DEVICE_MEM_LIST_PARAMS_FIELD, params, elements, ELEMENTS, NULL);
     size_t element_size = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_PARAMS_FIELD,
                                           params, element_size, ELEMENT_SIZE,
                                           0);
     size_t num_elements = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_PARAMS_FIELD,
                                           params, num_elements, NUM_ELEMENTS,
                                           0);
-    const ucp_device_remote_mem_list_elem_t *remote_element;
+    const ucp_device_mem_list_elem_t *remote_element;
     ucp_rkey_h rkey;
     ucp_ep_h ep;
     size_t i;
@@ -925,20 +920,20 @@ static ucs_status_t ucp_device_remote_mem_list_params_check(
     }
 
     for (i = 0; i < num_elements; i++) {
-        remote_element = UCP_DEVICE_REMOTE_MEM_LIST_GET_ELEMENT(params, i);
-        if (UCP_DEVICE_REMOTE_MEM_ELEMENT_IS_GAP(remote_element)) {
+        remote_element = UCP_DEVICE_MEM_LIST_GET_ELEMENT(params, i);
+        if (UCP_DEVICE_MEM_ELEMENT_IS_GAP(remote_element)) {
             continue;
         }
 
-        rkey = UCS_PARAM_VALUE(UCP_DEVICE_REMOTE_MEM_LIST_ELEM_FIELD,
-                               remote_element, rkey, RKEY, NULL);
-        ep   = UCS_PARAM_VALUE(UCP_DEVICE_REMOTE_MEM_LIST_ELEM_FIELD,
-                               remote_element, ep, EP, NULL);
+        rkey = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, remote_element,
+                               rkey, RKEY, NULL);
+        ep = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, remote_element, ep,
+                             EP, NULL);
         if ((rkey == NULL) || (ep == NULL)) {
             return UCS_ERR_INVALID_PARAM;
         }
 
-        remote_addr = UCS_PARAM_VALUE(UCP_DEVICE_REMOTE_MEM_LIST_ELEM_FIELD,
+        remote_addr = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD,
                                       remote_element, remote_addr, REMOTE_ADDR,
                                       0);
         status      = ucp_rkey_ptr(rkey, remote_addr, &addr_ptr);

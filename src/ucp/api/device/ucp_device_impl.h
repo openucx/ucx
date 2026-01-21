@@ -129,7 +129,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_prepare_send_remote(
             (uct_device_remote_mem_list_elem_t*)
                     UCS_PTR_BYTE_OFFSET(dst_mem_list_h->mem_elements,
                                         dst_mem_list_index * elem_size);
-    remote_address = dst_mem_element->remote_addr;
+    remote_address = dst_mem_element->addr;
     device_ep      = dst_mem_element->device_ep;
     uct_elem       = &dst_mem_element->uct_mem_element;
     ucp_device_request_init(device_ep, req, comp);
@@ -165,7 +165,7 @@ ucp_device_prepare_send(ucp_device_local_mem_list_handle_h src_mem_list_h,
 
     src_uct_elem = (uct_device_local_mem_list_elem_t*)UCS_PTR_BYTE_OFFSET(
             src_mem_list_h->mem_elements, src_mem_list_index * elem_size);
-    address      = src_uct_elem->local_addr;
+    address      = src_uct_elem->addr;
 
     return UCS_OK;
 }
@@ -255,10 +255,10 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_single(
  * @tparam      level              Level of cooperation of the transfer.
  * @param [in]  src_mem_list_h     Local memory descriptor list handle to use.
  * @param [in]  src_mem_list_index Index in descriptor list pointing to the memory
- * @param [in]  local_offset       Local offset to send data from.
+ * @param [in]  src_offset         Local offset to send data from.
  * @param [in]  dst_mem_list_h     Remote memory descriptor list handle to use.
  * @param [in]  dst_mem_list_index Index in descriptor list pointing to the memory
- * @param [in]  remote_offset      Remote offset to send data to.
+ * @param [in]  dst_offset         Remote offset to send data to.
  * @param [in]  length             Length in bytes of the data to send.
  * @param [in]  channel_id         Channel ID to use for the transfer.
  * @param [in]  flags              Flags usable to modify the function behavior.
@@ -271,11 +271,11 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_single(
  * @return Error code as defined by @ref ucs_status_t
  */
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_THREAD>
-UCS_F_DEVICE ucs_status_t ucp_device_put_single(
+UCS_F_DEVICE ucs_status_t ucp_device_put(
         ucp_device_local_mem_list_handle_h src_mem_list_h,
-        unsigned src_mem_list_index, size_t local_offset,
+        unsigned src_mem_list_index, size_t src_offset,
         ucp_device_remote_mem_list_handle_h dst_mem_list_h,
-        unsigned dst_mem_list_index, size_t remote_offset, size_t length,
+        unsigned dst_mem_list_index, size_t dst_offset, size_t length,
         unsigned channel_id, uint64_t flags, ucp_device_request_t *req)
 {
     const void *address;
@@ -294,10 +294,10 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_single(
         return status;
     }
 
-    return UCP_DEVICE_SEND_BLOCKING(level, uct_device_ep_put_single, device_ep,
-                                    req, src_uct_elem, uct_elem,
-                                    UCS_PTR_BYTE_OFFSET(address, local_offset),
-                                    remote_address + remote_offset, length,
+    return UCP_DEVICE_SEND_BLOCKING(level, uct_device_ep_put, device_ep, req,
+                                    src_uct_elem, uct_elem,
+                                    UCS_PTR_BYTE_OFFSET(address, src_offset),
+                                    remote_address + dst_offset, length,
                                     channel_id, flags, comp);
 }
 
@@ -446,7 +446,7 @@ ucp_device_get_ptr(ucp_device_remote_mem_list_handle_h mem_list_h,
 
     return uct_device_ep_get_ptr(mem_element->device_ep,
                                  &mem_element->uct_mem_element,
-                                 mem_element->remote_addr, addr_p);
+                                 mem_element->addr, addr_p);
 }
 
 
