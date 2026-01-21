@@ -42,7 +42,7 @@ enum ucp_device_mem_list_elem_field {
     UCP_DEVICE_MEM_LIST_ELEM_FIELD_LOCAL_ADDR  = UCS_BIT(2), /**< Local address */
     UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR = UCS_BIT(3), /**< Remote address */
     UCP_DEVICE_MEM_LIST_ELEM_FIELD_LENGTH      = UCS_BIT(4), /**< Length of the local buffer in bytes */
-    UCP_DEVICE_MEM_LIST_ELEM_FIELD_EP          = UCS_BIT(5),  /**< Remote endpoint handle */
+    UCP_DEVICE_MEM_LIST_ELEM_FIELD_EP          = UCS_BIT(5), /**< Remote endpoint handle */
 };
 
 
