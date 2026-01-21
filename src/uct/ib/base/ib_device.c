@@ -1444,7 +1444,8 @@ ucs_status_t uct_ib_device_mtu(const char *dev_name, uct_md_h md, int *p_mtu)
 
 int uct_ib_device_is_gid_valid(const union ibv_gid *gid)
 {
-    return gid->global.interface_id != 0;
+    return (gid->global.interface_id != 0) &&
+           memcmp(gid->raw, (uint8_t[sizeof(gid->raw)]){0}, sizeof(gid->raw));
 }
 
 ucs_status_t uct_ib_device_query_gid(uct_ib_device_t *dev, uint8_t port_num,
