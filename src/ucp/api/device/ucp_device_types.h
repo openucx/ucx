@@ -103,13 +103,7 @@ typedef struct ucp_device_remote_mem_list_handle {
      * Structure version. Allow runtime ABI compatibility checks between host
      * and device code.
      */
-    uint16_t version;
-
-    /**
-     * Protocol index computed by host handle management functions when
-     * creating handle.
-     */
-    uint8_t  proto_idx;
+    uint16_t                          version;
 
     /**
      * Number of entries in the memory descriptors array @a elems.

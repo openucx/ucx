@@ -638,24 +638,16 @@ uct_rc_gdaki_iface_mem_element_pack(const uct_iface_h tl_iface, uct_mem_h memh,
                                     uct_rkey_t rkey,
                                     uct_device_mem_element_t *mem_elem_p)
 {
-    int invalid = 1;
     uct_rc_gdaki_device_mem_element_t mem_elem;
 
     mem_elem.lkey = UCT_IB_INVALID_MKEY;
     mem_elem.rkey = UCT_IB_INVALID_MKEY;
     if (memh != NULL) {
         mem_elem.lkey = htonl(((uct_ib_mem_t*)memh)->lkey);
-        invalid = 0;
     }
 
     if (rkey != UCT_INVALID_RKEY) {
         mem_elem.rkey = htonl(uct_ib_md_direct_rkey(rkey));
-        invalid = 0;
-    }
-
-    if (invalid) {
-        ucs_error("Invalid parameters: memh=%p, rkey=%lu\n", memh, rkey);
-        return UCS_ERR_INVALID_PARAM;
     }
 
     return UCT_CUDADRV_FUNC_LOG_ERR(

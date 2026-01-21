@@ -7,6 +7,10 @@
 #ifndef UCP_DEVICE_IMPL_H
 #define UCP_DEVICE_IMPL_H
 
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
 #include "ucp_device_types.h"
 
 #include <ucp/api/ucp_def.h>
@@ -15,6 +19,13 @@
 #include <ucs/sys/device_code.h>
 #include <ucs/type/status.h>
 #include <stdint.h>
+
+#define UCP_DEVICE_MEM_LIST_PARAMS_CHECK(_mem_list_h, _mem_list_index) \
+    if (ENABLE_PARAMS_CHECK && \
+        (((_mem_list_h)->version != UCP_DEVICE_MEM_LIST_VERSION_V1) || \
+         ((_mem_list_index) >= (_mem_list_h)->mem_list_length))) { \
+        return UCS_ERR_INVALID_PARAM; \
+    }
 
 /**
  * @ingroup UCP_DEVICE
@@ -89,10 +100,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_prepare_send(
     const unsigned lane = 0;
     size_t elem_offset;
 
-    if ((mem_list_h->version != UCP_DEVICE_MEM_LIST_VERSION_V1) ||
-        (first_mem_elem_index >= mem_list_h->mem_list_length)) {
-        return UCS_ERR_INVALID_PARAM;
-    }
+    UCP_DEVICE_MEM_LIST_PARAMS_CHECK(mem_list_h, first_mem_elem_index);
 
     device_ep   = mem_list_h->uct_device_eps[lane];
     elem_offset = first_mem_elem_index * mem_list_h->uct_mem_element_size[lane];
@@ -115,10 +123,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_prepare_send_remote(
                                           uct_mem_element) +
                              sizeof(uct_tl_device_mem_element_t);
 
-    if ((dst_mem_list_h->version != UCP_DEVICE_MEM_LIST_VERSION_V1) ||
-        (dst_mem_list_index >= dst_mem_list_h->mem_list_length)) {
-        return UCS_ERR_INVALID_PARAM;
-    }
+    UCP_DEVICE_MEM_LIST_PARAMS_CHECK(dst_mem_list_h, dst_mem_list_index);
 
     const uct_device_remote_mem_list_elem_t *dst_mem_element =
             (uct_device_remote_mem_list_elem_t*)
@@ -149,10 +154,7 @@ ucp_device_prepare_send(ucp_device_local_mem_list_handle_h src_mem_list_h,
                              sizeof(uct_tl_device_mem_element_t);
     ucs_status_t status;
 
-    if ((src_mem_list_h->version != UCP_DEVICE_MEM_LIST_VERSION_V1) ||
-        (src_mem_list_index >= src_mem_list_h->mem_list_length)) {
-        return UCS_ERR_INVALID_PARAM;
-    }
+    UCP_DEVICE_MEM_LIST_PARAMS_CHECK(src_mem_list_h, src_mem_list_index);
 
     status = ucp_device_prepare_send_remote(dst_mem_list_h, dst_mem_list_index,
                                             remote_address, req, device_ep,
@@ -236,7 +238,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_single(
  * @brief Posts one memory put operation.
  *
  * This device routine posts one put operation using descriptor list handles.
- * The @a src_mem_list_index and dst_mem_list_index is used to point at the
+ * The @a src_mem_list_index and @a dst_mem_list_index is used to point at the
  * respected mem_list entry to be used for the memory transfer.
  * The @a local_offset and @a remote_offset parameters specify byte offsets
  * within the selected memory list entry. The @a length, @a local_offset
@@ -421,29 +423,30 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
  *
  * This device routine returns a local pointer to the remote memory if it is available.
  *
- * @param [in]  dst_mem_list_h     Remote memory descriptor list handle to use.
- * @param [in]  dst_mem_list_index Index in descriptor list pointing to the memory
- * @param [out] addr_p             Local pointer to the remote memory.
+ * @param [in]  mem_list_h     Remote memory descriptor list handle to use.
+ * @param [in]  mem_list_index Index in descriptor list pointing to the memory
+ * @param [out] addr_p         Local pointer to the remote memory.
  *
  * @return UCS_OK              - Operation completed successfully.
  * @return Error code as defined by @ref ucs_status_t
  */
 UCS_F_DEVICE ucs_status_t
-ucp_device_get_ptr(ucp_device_remote_mem_list_handle_h dst_mem_list_h,
-                   unsigned dst_mem_list_index, void **addr_p)
+ucp_device_get_ptr(ucp_device_remote_mem_list_handle_h mem_list_h,
+                   unsigned mem_list_index, void **addr_p)
 {
     const size_t elem_size = ucs_offsetof(uct_device_remote_mem_list_elem_t,
                                           uct_mem_element) +
                              sizeof(uct_tl_device_mem_element_t);
 
-    const uct_device_remote_mem_list_elem_t *dst_mem_element =
-            (uct_device_remote_mem_list_elem_t*)
-                    UCS_PTR_BYTE_OFFSET(dst_mem_list_h->mem_elements,
-                                        dst_mem_list_index * elem_size);
+    UCP_DEVICE_MEM_LIST_PARAMS_CHECK(mem_list_h, mem_list_index);
 
-    return uct_device_ep_get_ptr(dst_mem_element->device_ep,
-                                 &dst_mem_element->uct_mem_element,
-                                 dst_mem_element->remote_addr, addr_p);
+    const uct_device_remote_mem_list_elem_t *mem_element =
+            (uct_device_remote_mem_list_elem_t*)UCS_PTR_BYTE_OFFSET(
+                    mem_list_h->mem_elements, mem_list_index * elem_size);
+
+    return uct_device_ep_get_ptr(mem_element->device_ep,
+                                 &mem_element->uct_mem_element,
+                                 mem_element->remote_addr, addr_p);
 }
 
 

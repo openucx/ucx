@@ -107,12 +107,12 @@ typedef struct ucp_device_mem_list_elem {
     /**
      * Local memory address for the device transfer operations.
      */
-    void*     local_addr;
+    void       *local_addr;
 
     /**
      * Length of the local buffer in bytes.
      */
-    size_t    length;
+    size_t     length;
 
     /**
      * Remote memory address for the device transfer operations.
@@ -131,8 +131,8 @@ typedef struct ucp_device_mem_list_elem {
  * @ingroup UCP_DEVICE
  * @brief Local memory descriptor list entry.
  *
- * This describes a local memory descriptor for which a memory operation
- * can later be performed multiple times, possibly with varying memory offsets.
+ * Local memory descriptor that can be reused for multiple operations with 
+ * different offsets.
  */
 typedef struct ucp_device_local_mem_list_elem {
     /**
@@ -159,8 +159,8 @@ typedef struct ucp_device_local_mem_list_elem {
  * @ingroup UCP_DEVICE
  * @brief Remote memory descriptor list entry.
  *
- * This describes a remote memory descriptor for which a memory operation
- * can later be performed multiple times, possibly with varying memory offsets.
+ * Remote memory descriptor that can be reused for multiple operations with 
+ * different offsets.
  */
 typedef struct ucp_device_remote_mem_list_elem {
     /**
@@ -189,7 +189,7 @@ typedef struct ucp_device_remote_mem_list_elem {
     /**
      * Flag to indicate if the element is a gap element.
      */
-    int is_gap;
+    int        is_gap;
 } ucp_device_remote_mem_list_elem_t;
 
 
@@ -363,8 +363,7 @@ void ucp_device_mem_list_release(void *handle);
  */
 enum ucp_device_counter_params_field {
     UCP_DEVICE_COUNTER_PARAMS_FIELD_MEM_TYPE = UCS_BIT(0), /**< Source memory handle */
-    UCP_DEVICE_COUNTER_PARAMS_FIELD_MEMH     = UCS_BIT(1), /**< Unpacked remote memory key */
-    UCP_DEVICE_COUNTER_PARAMS_FIELD_OFFSET   = UCS_BIT(2)  /**< Offset for the counter memory area */
+    UCP_DEVICE_COUNTER_PARAMS_FIELD_MEMH     = UCS_BIT(1) /**< Unpacked remote memory key */
 };
 
 
@@ -391,12 +390,6 @@ typedef struct ucp_device_counter_params {
      * Optional memory registration handle for the given @a counter memory area.
      */
     ucp_mem_h         memh;
-
-    /**
-     * Optional remote offset for the given @a counter memory area.
-     * This field is used for reading the counter value with offset.
-     */
-    size_t          offset;
 } ucp_device_counter_params_t;
 
 
