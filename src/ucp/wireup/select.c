@@ -24,6 +24,11 @@
 #define UCP_WIREUP_RMA_BW_TEST_MSG_SIZE    262144
 #define UCP_WIREUP_MAX_FLAGS_STRING_SIZE   50
 #define UCP_WIREUP_PATH_INDEX_UNDEFINED    UINT_MAX
+#define UCP_WIREUP_UCT_INFO_SIZE           256
+
+/* 6 for the string format constant length */
+#define UCP_WIREUP_TLS_INFO_SIZE       (UCP_WIREUP_UCT_INFO_SIZE + \
+                                        UCT_TL_NAME_MAX + UCT_DEVICE_NAME_MAX + 6)
 
 #define UCP_WIREUP_CHECK_AMO_FLAGS(_ae, _criteria, _context, _addr_index, _op, _size)      \
     if (!ucs_test_all_flags((_ae)->iface_attr.atomic.atomic##_size._op##_flags,            \
@@ -410,8 +415,8 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
     ucp_rsc_index_t rsc_index;
     ucp_rsc_index_t dev_index;
     ucp_lane_index_t lane;
-    char tls_info[256];
-    char uct_info[256];
+    char tls_info[UCP_WIREUP_TLS_INFO_SIZE];
+    char uct_info[UCP_WIREUP_UCT_INFO_SIZE];
     char *p, *endp;
     uct_iface_attr_t *iface_attr;
     uct_md_attr_v2_t *md_attr;
