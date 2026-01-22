@@ -113,6 +113,9 @@ typedef void*                        uct_conn_request_h;
 typedef struct uct_device_ep         *uct_device_ep_h;
 typedef struct uct_device_mem_element uct_device_mem_element_t;
 
+typedef struct uct_iface_stream_op_handle *uct_iface_stream_op_handle_h;
+typedef struct uct_iface_stream           *uct_iface_stream_h;
+
 /**
  * @}
  */
