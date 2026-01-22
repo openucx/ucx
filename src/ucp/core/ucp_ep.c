@@ -267,7 +267,7 @@ static int ucp_ep_shall_use_indirect_id(ucp_context_h context,
     return !(ep_init_flags & UCP_EP_INIT_FLAG_INTERNAL) &&
            ((context->config.ext.proto_indirect_id == UCS_CONFIG_ON) ||
             ((context->config.ext.proto_indirect_id == UCS_CONFIG_AUTO) &&
-             (ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE)));
+             (ep_init_flags & UCP_EP_INIT_ERR_MODE_FAILOVER_MASK)));
 }
 
 void ucp_ep_peer_mem_destroy(ucp_context_h context,
@@ -573,10 +573,10 @@ void ucp_ep_release_id(ucp_ep_h ep)
 void ucp_ep_config_key_set_err_mode(ucp_ep_config_key_t *key,
                                     unsigned ep_init_flags)
 {
-    if (ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE) {
-        key->err_mode = UCP_ERR_HANDLING_MODE_PEER;
-    } else if (ep_init_flags & UCP_EP_INIT_ERR_MODE_FAILOVER) {
+    if (ep_init_flags & UCP_EP_INIT_ERR_MODE_FAILOVER) {
         key->err_mode = UCP_ERR_HANDLING_MODE_FAILOVER;
+    } else if (ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE) {
+        key->err_mode = UCP_ERR_HANDLING_MODE_PEER;
     } else {
         key->err_mode = UCP_ERR_HANDLING_MODE_NONE;
     }
@@ -795,8 +795,7 @@ static ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep,
     if (ucp_ep_init_flags_has_cm(ep_init_flags)) {
         key.cm_lane = 0;
         /* Send keepalive on wireup_ep (which will send on aux_ep) */
-        if (ep_init_flags & (UCP_EP_INIT_ERR_MODE_PEER_FAILURE |
-                             UCP_EP_INIT_ERR_MODE_FAILOVER)) {
+        if (ep_init_flags & UCP_EP_INIT_ERR_MODE_FAILOVER_MASK) {
             key.keepalive_lane = 0;
         }
     } else {
@@ -947,10 +946,15 @@ ucp_sa_data_v2_unpack(const ucp_wireup_sockaddr_data_base_t *sa_data,
                       unsigned *ep_init_flags_p,
                       const void** worker_addr_p)
 {
-    *ep_init_flags_p = (sa_data->header & UCP_SA_DATA_FLAG_ERR_MODE_PEER) ?
-                       UCP_EP_INIT_ERR_MODE_PEER_FAILURE : 
-                       (sa_data->header & UCP_SA_DATA_FLAG_ERR_MODE_FAILOVER) ?
-                       UCP_EP_INIT_ERR_MODE_FAILOVER : 0;
+    if (sa_data->header & UCP_SA_DATA_FLAG_ERR_MODE_FAILOVER) {
+        ucs_assert(sa_data->header & UCP_SA_DATA_FLAG_ERR_MODE_PEER);
+        *ep_init_flags_p = UCP_EP_INIT_ERR_MODE_FAILOVER_MASK;
+    } else if (sa_data->header & UCP_SA_DATA_FLAG_ERR_MODE_PEER) {
+        *ep_init_flags_p = UCP_EP_INIT_ERR_MODE_PEER_FAILURE;
+    } else {
+        *ep_init_flags_p = 0;
+    }
+
     *worker_addr_p   = sa_data + 1;
     return UCS_OK;
 }
@@ -1149,8 +1153,7 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
 out_resolve_remote_id:
     if ((context->config.ext.resolve_remote_ep_id == UCS_CONFIG_ON) ||
         ((context->config.ext.resolve_remote_ep_id == UCS_CONFIG_AUTO) &&
-         (ep_init_flags & (UCP_EP_INIT_ERR_MODE_PEER_FAILURE |
-                           UCP_EP_INIT_ERR_MODE_FAILOVER)) &&
+         (ep_init_flags & UCP_EP_INIT_ERR_MODE_FAILOVER_MASK) &&
          ucp_worker_keepalive_is_enabled(worker))) {
         /* If resolving remote ID forced by configuration or PEER_FAILURE
          * and keepalive were requested, resolve remote endpoint ID prior to
@@ -1511,10 +1514,8 @@ ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
         } else if (ep_ext->err_cb == NULL) {
             /* Print error if user requested error handling support but did not
                install a valid error handling callback */
-            log_level =
-                    (ucp_ep_config_err_mode_eq(ucp_ep,
-                                               UCP_ERR_HANDLING_MODE_NONE)) ?
-                    UCS_LOG_LEVEL_DIAG : UCS_LOG_LEVEL_ERROR;
+            log_level = ucp_ep_config_err_handling_enabled(ucp_ep) ?
+                    UCS_LOG_LEVEL_ERROR : UCS_LOG_LEVEL_DIAG;
 
             ucp_ep_get_lane_info_str(ucp_ep, lane, &lane_info_strb);
             ucs_log(log_level,
@@ -3974,7 +3975,7 @@ unsigned ucp_ep_err_mode_init_flags(ucp_err_handling_mode_t err_mode)
     case UCP_ERR_HANDLING_MODE_PEER:
         return UCP_EP_INIT_ERR_MODE_PEER_FAILURE;
     case UCP_ERR_HANDLING_MODE_FAILOVER:
-        return UCP_EP_INIT_ERR_MODE_FAILOVER;
+        return UCP_EP_INIT_ERR_MODE_FAILOVER_MASK;
     default:
         ucs_fatal("invalid error handling mode: %d", err_mode);
     }

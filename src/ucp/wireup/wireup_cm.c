@@ -266,7 +266,7 @@ ucp_cm_ep_sa_data_pack(ucp_ep_h ep, ucp_wireup_sockaddr_data_base_t *sa_data,
         if (ucp_ep_config_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_PEER)) {
             sa_data->header |= UCP_SA_DATA_FLAG_ERR_MODE_PEER;
         } else if (ucp_ep_config_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_FAILOVER)) {
-            sa_data->header |= UCP_SA_DATA_FLAG_ERR_MODE_FAILOVER;
+            sa_data->header |= UCP_SA_DATA_MASK_ERR_MODE_FAILOVER;
         }
 
         return sa_data + 1;

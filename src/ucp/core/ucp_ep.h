@@ -167,8 +167,14 @@ enum {
                                                            keepalive lane */
     UCP_EP_INIT_ALLOW_AM_AUX_TL        = UCS_BIT(10), /**< Endpoint allows selecting of auxiliary
                                                            transports for AM lane */
-    UCP_EP_INIT_ERR_MODE_FAILOVER      = UCS_BIT(11)  /**< Endpoint requires an
+    UCP_EP_INIT_ERR_MODE_FAILOVER      = UCS_BIT(11), /**< Endpoint requires an
                                                            @ref UCP_ERR_HANDLING_MODE_FAILOVER */
+
+    /**
+     * For consistency with @ref UCP_SA_DATA_MASK_ERR_MODE_FAILOVER
+     */
+    UCP_EP_INIT_ERR_MODE_FAILOVER_MASK = UCP_EP_INIT_ERR_MODE_PEER_FAILURE |
+                                         UCP_EP_INIT_ERR_MODE_FAILOVER
 };
 
 
@@ -621,8 +627,17 @@ enum {
 enum {
     /* Indicates support of @ref UCP_ERR_HANDLING_MODE_PEER error mode. */
     UCP_SA_DATA_FLAG_ERR_MODE_PEER     = UCS_BIT(0),
-    /* Indicates support of @ref UCP_ERR_HANDLING_MODE_FAILOVER error mode. */
-    UCP_SA_DATA_FLAG_ERR_MODE_FAILOVER = UCS_BIT(1)
+    /* Indicates support of @ref UCP_ERR_HANDLING_MODE_FAILOVER error mode.
+     * NOTE: use @ref UCP_SA_DATA_MASK_ERR_MODE_FAILOVER for backward
+     *       compatibility to fallback peer failure mode to
+     *       @ref UCP_ERR_HANDLING_MODE_PEER */
+    UCP_SA_DATA_FLAG_ERR_MODE_FAILOVER = UCS_BIT(1),
+
+    /**
+     * Backward compatibility mask
+     */
+    UCP_SA_DATA_MASK_ERR_MODE_FAILOVER = UCP_SA_DATA_FLAG_ERR_MODE_PEER |
+                                         UCP_SA_DATA_FLAG_ERR_MODE_FAILOVER
 };
 
 
