@@ -478,6 +478,7 @@ uct_rc_gdaki_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     uct_rc_gdaki_iface_t *iface = ucs_derived_of(tl_iface,
                                                  uct_rc_gdaki_iface_t);
     ucs_status_t status;
+    ucs_sys_device_t cuda_sys_dev;
 
     status = uct_ib_iface_query(&iface->super.super.super, iface_attr);
     if (status != UCS_OK) {
@@ -503,6 +504,8 @@ uct_rc_gdaki_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     iface_attr->cap.put.min_zcopy = 0;
     iface_attr->cap.put.max_zcopy =
             uct_ib_iface_port_attr(&iface->super.super.super)->max_msg_sz;
+    uct_cuda_base_get_sys_dev(iface->cuda_dev, &cuda_sys_dev);
+
     return UCS_OK;
 }
 
@@ -631,6 +634,30 @@ out_unlock:
 }
 
 ucs_status_t
+uct_rc_gdaki_iface_mem_element_pack_v2(const uct_iface_h tl_iface,
+                                          uct_mem_h memh,
+                                          uct_rkey_t rkey,
+                                          uct_device_mem_element_t *mem_elem_p)
+{
+    uct_rc_gdaki_device_mem_element_t mem_elem;
+
+    mem_elem.lkey = UCT_IB_INVALID_MKEY;
+    mem_elem.rkey = UCT_IB_INVALID_MKEY;
+
+    if (memh != NULL) {
+        mem_elem.lkey = htonl(((uct_ib_mem_t*)memh)->lkey);
+    } else if (rkey != UCT_INVALID_RKEY) {
+        mem_elem.rkey = htonl(uct_ib_md_direct_rkey(rkey));
+    } else {
+        ucs_error("Invalid parameters: memh=%p, rkey=%lu\n", memh, rkey);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return UCT_CUDADRV_FUNC_LOG_ERR(
+        cuMemcpyHtoD((CUdeviceptr)mem_elem_p, &mem_elem, sizeof(mem_elem)));
+}
+
+ucs_status_t
 uct_rc_gdaki_iface_mem_element_pack(const uct_iface_h tl_iface, uct_mem_h memh,
                                     uct_rkey_t rkey,
                                     uct_device_mem_element_t *mem_elem_p)
@@ -661,6 +688,7 @@ static uct_rc_iface_ops_t uct_rc_gdaki_internal_ops = {
             .iface_estimate_perf    = uct_ib_iface_estimate_perf,
             .iface_vfs_refresh      = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
             .iface_mem_element_pack = uct_rc_gdaki_iface_mem_element_pack,
+            .iface_mem_element_pack_v2 = uct_rc_gdaki_iface_mem_element_pack_v2,
             .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
             .ep_invalidate          = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
             .ep_connect_to_ep_v2    = uct_rc_gdaki_ep_connect_to_ep_v2,
