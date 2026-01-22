@@ -9,7 +9,6 @@
 
 #include <ucs/type/status.h>
 #include <uct/api/uct_def.h>
-#include <uct/cuda/cuda_ipc/cuda_ipc_device.h>
 #include <stdint.h>
 
 
@@ -20,6 +19,21 @@
  * @{
  * @}
  */
+
+
+/**
+ * @brief Device memory element for CUDA IPC.
+ */
+typedef struct {
+    ptrdiff_t mapped_offset;
+} uct_cuda_ipc_device_mem_element_t;
+
+
+/**
+ * @brief Completion object for device CUDA IPC operations.
+ */
+typedef struct {
+} uct_cuda_ipc_completion_t;
 
 
 /**

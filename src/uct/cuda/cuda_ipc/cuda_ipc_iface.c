@@ -15,7 +15,7 @@
 #include <uct/cuda/base/cuda_iface.h>
 #include <uct/cuda/base/cuda_md.h>
 #include <uct/cuda/base/cuda_nvml.h>
-#include <uct/cuda/cuda_ipc/cuda_ipc_device.h>
+#include <uct/api/device/uct_device_types.h>
 #include <ucs/type/class.h>
 #include <ucs/sys/string.h>
 #include <ucs/debug/assert.h>

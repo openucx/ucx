@@ -784,7 +784,7 @@ static ucs_status_t ucp_device_remote_mem_list_element_pack(
         return status;
     }
 
-    return UCS_OK;
+    return status;
 }
 
 #define UCP_DEVICE_MEM_LIST_GET_ELEMENT(_params, _i) \
