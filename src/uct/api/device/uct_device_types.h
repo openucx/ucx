@@ -81,15 +81,15 @@ union uct_tl_device_mem_element {
 struct uct_device_mem_element {
 };
 
-typedef struct uct_device_local_mem_list_elem {
+struct uct_device_local_mem_list_elem {
     void                     *addr;
     uct_device_mem_element_t uct_mem_element;
-} uct_device_local_mem_list_elem_t;
+};
 
-typedef struct uct_device_remote_mem_list_elem {
+struct uct_device_remote_mem_list_elem {
     uct_device_ep_h          device_ep;
     uint64_t                 addr;
     uct_device_mem_element_t uct_mem_element;
-} uct_device_remote_mem_list_elem_t;
+};
 
 #endif
