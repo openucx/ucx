@@ -87,6 +87,7 @@ AC_FUNC_STRERROR_R
 
 AC_PATH_TOOL([PKG_CONFIG], [pkg-config], [pkg-config])
 
+PKG_PROG_PKG_CONFIG
 
 #
 # Define SHARED_LIB preprocessor macro when building a shared library
@@ -235,6 +236,7 @@ AS_IF([test "x$with_docs_only" = xyes],
     [
      AM_CONDITIONAL([DOCS_ONLY], [false])
      m4_include([config/m4/compiler.m4])
+     m4_include([config/m4/module.m4])
      m4_include([config/m4/sysdep.m4])
      m4_include([config/m4/ucm.m4])
      m4_include([config/m4/mpi.m4])
