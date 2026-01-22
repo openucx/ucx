@@ -31,6 +31,7 @@
 #include <ucs/type/cpu_set.h>
 #include <ucs/type/serialize.h>
 #include <ucs/sys/string.h>
+#include <ucs/sys/topo.h>
 #include <ucs/arch/atomic.h>
 #include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
@@ -2508,6 +2509,9 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     unsigned name_length;
     ucp_worker_h worker;
     ucs_status_t status;
+    int num_sys_devices;
+    int xx;
+    ucs_sys_device_t *sys_devices;
 
     worker = ucs_calloc(1, sizeof(*worker), "ucp worker");
     if (worker == NULL) {
@@ -2608,6 +2612,12 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     /* Reserve 32 elements for ep configs, which should be enough for most
      * of the use-cases. Will be extended automatically otherwise. */
     ucs_array_reserve(&worker->ep_config, 32);
+
+    ucs_topo_get_sys_devices(&sys_devices, &num_sys_devices);
+    for (xx = 0; xx < num_sys_devices; xx++) {
+        ucs_debug("sys_unit = %d", sys_devices[xx].bus_id);
+    }
+    ucs_topo_free_sys_devices(sys_devices);
 
     /* Create statistics */
     status = UCS_STATS_NODE_ALLOC(&worker->stats, &ucp_worker_stats_class,
