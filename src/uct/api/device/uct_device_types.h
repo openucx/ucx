@@ -9,7 +9,6 @@
 
 #include <ucs/type/status.h>
 #include <uct/api/uct_def.h>
-#include <uct/ib/mlx5/gdaki/gdaki_device_types.h>
 #include <uct/cuda/cuda_ipc/cuda_ipc_device.h>
 #include <stdint.h>
 
@@ -21,6 +20,16 @@
  * @{
  * @}
  */
+
+
+/**
+ * @brief Device memory element for GDAKI.
+ */
+typedef struct uct_rc_gdaki_device_mem_element {
+    uint32_t lkey;
+    uint32_t rkey;
+} uct_rc_gdaki_device_mem_element_t;
+
 
 /**
  * @brief Specify modifier flags for device sending functions.

@@ -39,4 +39,10 @@ typedef struct {
     uct_rc_gdaki_dev_qp_t        qps[0];
 } uct_rc_gdaki_dev_ep_t;
 
+
+typedef struct {
+    uint64_t wqe_idx;
+    unsigned channel_id;
+} uct_rc_gda_completion_t;
+
 #endif /* UCT_GDAKI_DEV_H */

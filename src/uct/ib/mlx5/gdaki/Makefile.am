@@ -25,8 +25,7 @@ libuct_ib_mlx5_gda_la_SOURCES = \
 
 nobase_dist_libuct_ib_mlx5_gda_la_HEADERS = \
 	gdaki.cuh \
-	gdaki_dev.h \
-    gdaki_device_types.h
+	gdaki_dev.h
 
 noinst_HEADERS = \
 	gdaki.h
