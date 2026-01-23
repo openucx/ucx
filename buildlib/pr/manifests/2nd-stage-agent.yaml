@@ -1,0 +1,60 @@
+# The goal is to deploy 2nd stage AZP Agent in K8s
+# in the same Pod as "worker" container, sharing `/work` volume
+# NFS share of AZP Agent 2.192.0: 10.224.37.4:/tank1/k8s/azp/2.192.0
+# ---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: azp-2nd-stage
+spec:
+  serviceAccountName: build-robot
+  restartPolicy: Never
+  nodeSelector:
+    beta.kubernetes.io/os: linux
+    kubernetes.io/arch: amd64
+  volumes:
+  - name: work-volume
+    emptyDir: {}
+  - name: azp-agent-2-192-0
+    nfs:
+      server: 10.224.37.4
+      path: /tank1/k8s/azp/2.192.0
+  containers:
+  - name: agent
+    image: swx-rdmz-cstor01-vip.rdmz.labs.mlnx:18181/azp/azp-agent:2.192.0
+    env:
+      - name: AZP_URL
+        valueFrom:
+          secretKeyRef:
+            name: azdevops
+            key: AZP_URL
+      - name: AZP_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: azdevops
+            key: AZP_TOKEN
+      - name: AZP_POOL
+        valueFrom:
+          secretKeyRef:
+            name: azdevops
+            key: AZP_POOL
+      - name: AZP_WORK
+        value: /work
+      - name: my_second_stage
+        value: "yes"
+    volumeMounts:
+      - mountPath: /work
+        name: work-volume
+  - name: ubuntu
+    image: rdmz-harbor.rdmz.labs.mlnx/swx-storage/spdk/x86_64/ubuntu2004ofed54:5.4-1.0.3.0
+    command:
+    - sleep
+    args:
+    - infinity
+    tty: true
+    volumeMounts:
+      - mountPath: /work
+        name: work-volume
+      - mountPath: /azp
+        name: azp-agent-2-192-0
+        readOnly: true 
