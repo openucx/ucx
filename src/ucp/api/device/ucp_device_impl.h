@@ -20,6 +20,11 @@
 #include <ucs/type/status.h>
 #include <stdint.h>
 
+/** TODO: Remove after properly fixed.*/
+#ifndef ENABLE_PARAMS_CHECK
+#define ENABLE_PARAMS_CHECK 0
+#endif
+
 #define UCP_DEVICE_MEM_LIST_PARAMS_CHECK(_mem_list_h, _mem_list_index) \
     if (ENABLE_PARAMS_CHECK && \
         (((_mem_list_h)->version != UCP_DEVICE_MEM_LIST_VERSION_V1) || \
@@ -376,10 +381,10 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
  * routine.
  *
  * @tparam      level              Level of cooperation of the transfer.
+ * @param [in]  inc_value          Value used to increment the remote address.
  * @param [in]  dst_mem_list_h     Remote memory descriptor list handle to use.
  * @param [in]  dst_mem_list_index Index in descriptor list pointing to the memory
  *                                 remote key to use for the increment operation.
- * @param [in]  inc_value          Value used to increment the remote address.
  * @param [in]  remote_offset      Remote offset to perform the increment to.
  * @param [in]  channel_id         Channel ID to use for the transfer.
  * @param [in]  flags              Flags usable to modify the function behavior.
@@ -393,9 +398,9 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
  */
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_THREAD>
 UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
-        ucp_device_remote_mem_list_handle_h dst_mem_list_h,
-        unsigned dst_mem_list_index, uint64_t inc_value, size_t remote_offset,
-        unsigned channel_id, uint64_t flags, ucp_device_request_t *req)
+        uint64_t inc_value, ucp_device_remote_mem_list_handle_h dst_mem_list_h,
+        unsigned dst_mem_list_index, size_t remote_offset, unsigned channel_id,
+        uint64_t flags, ucp_device_request_t *req)
 {
     uint64_t remote_address;
     const uct_device_mem_element_t *uct_elem;
