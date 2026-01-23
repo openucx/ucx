@@ -1000,6 +1000,51 @@ static uint64_t ucp_str_array_search(const char **array, unsigned array_len,
     return result;
 }
 
+/* Search str in the ranges that are specified in the array. 
+ * Ranges are a prefix followed by a [range_start-range_end] suffix. (ex: mlx5_[0-2])
+ * @return bitmap of indexes in which the string appears in the array.
+ */
+static uint64_t ucp_str_array_search_in_ranges(const char **array,
+                                               unsigned array_len,
+                                               const char *str)
+{
+    unsigned long range_start, range_end, str_id;
+    size_t prefix_len;
+    uint64_t result;
+    const char *p;
+    char *endptr;
+    unsigned i;
+
+    result = 0;
+    for (i = 0; i < array_len; ++i) {
+        p = strchr(array[i], '[');
+        if (p == NULL) {
+            continue; /* Not a range */
+        }
+
+        prefix_len = (size_t)(p - array[i]);
+        if (strncmp(array[i], str, prefix_len)) {
+            continue; /* Prefix does not match */
+        }
+
+        if (sscanf(p, "[%lu-%lu]", &range_start, &range_end) != 2 ||
+            range_start > range_end) {
+            ucs_warn("invalid device range: %s", array[i]);
+            continue;
+        }
+
+        str_id = strtoul(str + prefix_len, &endptr, 10);
+        if ((endptr == str + prefix_len) || (*endptr != '\0') ||
+            (str_id < range_start) || (str_id > range_end)) {
+            continue; /* Mismatch */
+        }
+
+        result |= UCS_BIT(i);
+    }
+
+    return result;
+}
+
 static unsigned ucp_tl_alias_count(ucp_tl_alias_t *alias)
 {
     unsigned count;
@@ -1052,17 +1097,22 @@ static int ucp_is_resource_in_device_list(const uct_tl_resource_desc_t *resource
                                 devices[dev_type].count, resource->dev_name,
                                 NULL);
 
-    /* For mlx devices, if the current resource is the default port
-     * (ex: mlx5_0:1), try matching the basename with the device list */
-    if (!mask && (dev_type == UCT_DEVICE_TYPE_NET) &&
+    /* mlx device with the default port */
+    if ((dev_type == UCT_DEVICE_TYPE_NET) &&
         UCP_IS_RESOURCE_MLX_DEFAULT_PORT(resource)) {
-        mask = ucp_str_array_search((const char**)devices[dev_type].names,
-                                    devices[dev_type].count,
-                                    resource->dev_name_base, NULL);
+        /* search for the base name (ex: mlx5_0) */
+        mask |= ucp_str_array_search((const char**)devices[dev_type].names,
+                                     devices[dev_type].count,
+                                     resource->dev_name_base, NULL);
+
+        /* search in ranges (ex: mlx5_[0-2]) */
+        mask |= ucp_str_array_search_in_ranges(
+                (const char**)devices[dev_type].names, devices[dev_type].count,
+                resource->dev_name_base);
     }
 
+    /* if the user's list is 'all', use all the available resources */
     if (!mask) {
-        /* if the user's list is 'all', use all the available resources */
         mask = ucp_str_array_search((const char**)devices[dev_type].names,
                                     devices[dev_type].count, UCP_RSC_CONFIG_ALL,
                                     NULL);
@@ -1229,7 +1279,6 @@ static int ucp_is_resource_enabled(const uct_tl_resource_desc_t *resource,
     device_enabled = ucp_is_resource_in_device_list(
             resource, config->devices, &dev_cfg_masks[resource->dev_type],
             resource->dev_type);
-
 
     /* Find the enabled UCTs */
     *rsc_flags = 0;
