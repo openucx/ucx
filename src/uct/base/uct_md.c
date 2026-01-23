@@ -76,16 +76,26 @@ void uct_md_close(uct_md_h md)
     md->ops->close(md);
 }
 
+static char *uct_md_get_dev_name_suffix(char *dev_name)
+{
+    char *colon = strchr(dev_name, ':');
+    if (colon == NULL) {
+        return dev_name + strlen(dev_name);
+    }
+    return colon + 1;
+}
+
 ucs_status_t uct_md_query_tl_resources(uct_md_h md,
                                        uct_tl_resource_desc_t **resources_p,
                                        unsigned *num_resources_p)
 {
     uct_component_t *component = md->component;
-    uct_tl_resource_desc_t *resources, *tmp;
+    uct_tl_resource_desc_t *resources, *tmp, *tmp_resource_i;
     uct_tl_device_resource_t *tl_devices;
     unsigned i, num_resources, num_tl_devices;
     ucs_status_t status;
     uct_tl_t *tl;
+    char *suffix;
 
     resources     = NULL;
     num_resources = 0;
@@ -114,12 +124,24 @@ ucs_status_t uct_md_query_tl_resources(uct_md_h md,
 
         /* add tl devices to overall list of resources */
         for (i = 0; i < num_tl_devices; ++i) {
-            ucs_strncpy_zero(tmp[num_resources + i].tl_name, tl->name,
-                             sizeof(tmp[num_resources + i].tl_name));
-            ucs_strncpy_zero(tmp[num_resources + i].dev_name, tl_devices[i].name,
-                             sizeof(tmp[num_resources + i].dev_name));
-            tmp[num_resources + i].dev_type   = tl_devices[i].type;
-            tmp[num_resources + i].sys_device = tl_devices[i].sys_device;
+            tmp_resource_i = &tmp[num_resources + i];
+
+            ucs_strncpy_zero(tmp_resource_i->tl_name, tl->name,
+                             sizeof(tmp_resource_i->tl_name));
+            ucs_strncpy_zero(tmp_resource_i->dev_name, tl_devices[i].name,
+                             sizeof(tmp_resource_i->dev_name));
+
+            suffix = uct_md_get_dev_name_suffix(tmp_resource_i->dev_name);
+            ucs_assert(suffix > tmp_resource_i->dev_name &&
+                       suffix <= tmp_resource_i->dev_name + strlen(tmp_resource_i->dev_name));
+
+            ucs_strncpy_zero(tmp_resource_i->dev_name_base,
+                             tmp_resource_i->dev_name,
+                             (size_t)(suffix - tmp_resource_i->dev_name));
+            tmp_resource_i->dev_name_suffix = suffix;
+
+            tmp_resource_i->dev_type   = tl_devices[i].type;
+            tmp_resource_i->sys_device = tl_devices[i].sys_device;
         }
 
         resources      = tmp;

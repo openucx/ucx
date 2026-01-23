@@ -72,6 +72,13 @@
 /* Factor to multiply with in order to get infinite latency */
 #define UCP_CONTEXT_INFINITE_LAT_FACTOR 100
 
+#define UCP_MLX_PREFIX       "mlx"
+#define UCP_MLX_DEFAULT_PORT "1"
+
+#define UCP_IS_RESOURCE_MLX_DEFAULT_PORT(_resource) \
+    ((!strncmp(_resource->dev_name_base, UCP_MLX_PREFIX, strlen(UCP_MLX_PREFIX))) && \
+     (!strcmp(_resource->dev_name_suffix, UCP_MLX_DEFAULT_PORT)))
+
 typedef enum ucp_transports_list_search_result {
     UCP_TRANSPORTS_LIST_SEARCH_RESULT_PRIMARY             = UCS_BIT(0),
     UCP_TRANSPORTS_LIST_SEARCH_RESULT_AUX_IN_MAIN         = UCS_BIT(1),
@@ -1044,6 +1051,16 @@ static int ucp_is_resource_in_device_list(const uct_tl_resource_desc_t *resource
     mask = ucp_str_array_search((const char**)devices[dev_type].names,
                                 devices[dev_type].count, resource->dev_name,
                                 NULL);
+
+    /* For mlx devices, if the current resource is the default port
+     * (ex: mlx5_0:1), try matching the basename with the device list */
+    if (!mask && (dev_type == UCT_DEVICE_TYPE_NET) &&
+        UCP_IS_RESOURCE_MLX_DEFAULT_PORT(resource)) {
+        mask = ucp_str_array_search((const char**)devices[dev_type].names,
+                                    devices[dev_type].count,
+                                    resource->dev_name_base, NULL);
+    }
+
     if (!mask) {
         /* if the user's list is 'all', use all the available resources */
         mask = ucp_str_array_search((const char**)devices[dev_type].names,

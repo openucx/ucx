@@ -328,6 +328,8 @@ typedef enum {
 typedef struct uct_tl_resource_desc {
     char                     tl_name[UCT_TL_NAME_MAX];   /**< Transport name */
     char                     dev_name[UCT_DEVICE_NAME_MAX]; /**< Hardware device name */
+    char                     dev_name_base[UCT_DEVICE_NAME_MAX]; /**< Hardware device basename */
+    char                    *dev_name_suffix; /**< Pointer to the suffix of the device name */
     uct_device_type_t        dev_type;     /**< The device represented by this resource
                                                 (e.g. UCT_DEVICE_TYPE_NET for a network interface) */
     ucs_sys_device_t         sys_device;   /**< The identifier associated with the device
