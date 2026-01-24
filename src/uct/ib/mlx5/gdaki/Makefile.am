@@ -45,7 +45,7 @@ noinst_HEADERS = \
 
 gpunetio-links:
 	$(AM_V_at)for l in $(gpunetio_links); do \
-		$(LN_RS) -nf $(srcdir)/gpunetio/include/$$l $(srcdir)/$$l; \
+		$(LN_RS) -nf $(srcdir)/gpunetio/include/$$l $(builddir)/$$l; \
 	done
 	@for l in $(gpunetio_links); do \
 		$(AM_V_LN) $$l; \
@@ -53,7 +53,7 @@ gpunetio-links:
 
 gpunetio-links-clean:
 	for l in $(gpunetio_links); do \
-		rm -f $(srcdir)/$$l; \
+		rm -f $(builddir)/$$l; \
 	done
 
 all-local: gpunetio-links
