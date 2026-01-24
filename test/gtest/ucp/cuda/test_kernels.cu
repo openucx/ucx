@@ -64,8 +64,9 @@ ucp_test_kernel_do_operation(const test_ucp_device_kernel_params_t &params,
         break;
     case TEST_UCP_DEVICE_KERNEL_COUNTER_INC_V2:
         status = ucp_device_counter_inc<level>(
+                params.counter_inc.inc_value, 
                 params.remote_mem_list, params.counter_inc.mem_list_index,
-                params.counter_inc.inc_value, params.counter_inc.remote_offset,
+                params.counter_inc.remote_offset,
                 0, flags, req_ptr);
         break;
     case TEST_UCP_DEVICE_KERNEL_COUNTER_WRITE:
