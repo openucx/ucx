@@ -1871,3 +1871,57 @@ UCS_TEST_SKIP_COND_P(test_ucp_address_v2, diff_seg_sizes,
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_address_v2)
+
+
+class test_ucp_wireup_msg_lane : public test_ucp_wireup {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant>& variants)
+    {
+        test_ucp_wireup::get_test_variants(variants, UNIFIED_MODE, true);
+    }
+};
+
+/* Test that wireup msg lane selects the highest seg_size among eligible lanes */
+UCS_TEST_P(test_ucp_wireup_msg_lane, select_highest_seg_size_lane) {
+    entity *e = create_entity(true);
+    e->connect(&receiver(), get_ep_params());
+
+    const ucp_ep_config_t *config = ucp_ep_config(e->ep());
+    if (config->key.wireup_msg_lane == UCP_NULL_LANE) {
+        UCS_TEST_SKIP_R("No wireup_msg_lane selected");
+    }
+
+    ucp_lane_index_t wireup_lane = config->key.wireup_msg_lane;
+    size_t wireup_seg_size = config->key.lanes[wireup_lane].seg_size;
+    const char *wireup_tl = ucp_ep_get_tl_rsc(e->ep(), wireup_lane)->tl_name;
+
+    /* Find the lane with maximum seg_size that could be used for wireup. */
+    size_t max_eligible_seg_size = 0;
+    ucp_lane_index_t max_eligible_lane = UCP_NULL_LANE;
+    
+    for (ucp_lane_index_t lane = 0; lane < config->key.num_lanes; ++lane) {
+        ucp_rsc_index_t rsc_index = config->key.lanes[lane].rsc_index;
+
+        size_t seg_size = config->key.lanes[lane].seg_size;
+        const ucp_tl_resource_desc_t *tl_rsc = &e->worker()->context->tl_rscs[rsc_index];
+
+        /* Check if transport can be used as auxiliary (for wireup) */
+        bool is_aux = !!(tl_rsc->flags & UCP_TL_RSC_FLAG_AUX);
+
+        if (is_aux && (seg_size > max_eligible_seg_size)) {
+            max_eligible_seg_size = seg_size;
+            max_eligible_lane = lane;
+        }
+    }
+
+    const char *max_eligible_tl = (max_eligible_lane != UCP_NULL_LANE) ?
+                                  ucp_ep_get_tl_rsc(e->ep(), max_eligible_lane)->tl_name : "none";
+    
+    /* The selected wireup lane should have seg_size >= highest eligible lane */
+    EXPECT_GE(wireup_seg_size, max_eligible_seg_size)
+        << "Wireup lane " << wireup_tl << " (seg_size=" << wireup_seg_size
+        << ") has lower seg_size than " << max_eligible_tl
+        << " (seg_size=" << max_eligible_seg_size << ") which meets all wireup criteria";
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_msg_lane)
