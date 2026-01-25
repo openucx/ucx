@@ -112,6 +112,9 @@ typedef int                          uct_worker_cb_id_t;
 typedef void*                        uct_conn_request_h;
 typedef struct uct_device_ep         *uct_device_ep_h;
 typedef struct uct_device_mem_element uct_device_mem_element_t;
+typedef union uct_tl_device_mem_element uct_tl_device_mem_element_t;
+typedef struct uct_device_local_mem_list_elem uct_device_local_mem_list_elem_t;
+typedef struct uct_device_remote_mem_list_elem uct_device_remote_mem_list_elem_t;
 
 /**
  * @}

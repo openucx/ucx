@@ -303,6 +303,7 @@ UCS_TEST_SKIP_COND_P(test_md, rkey_ptr, !check_caps(UCT_MD_FLAG_RKEY_PTR)) {
     }
 
     ucs_for_each_bit(mt, md_attr().reg_mem_types | md_attr().alloc_mem_types) {
+        ucs_assert(mt < UCS_MEMORY_TYPE_LAST); /* for coverity */
         UCS_TEST_MESSAGE << "rkey_ptr test for memory type "
                          << ucs_memory_type_names[mt];
         mem_type = static_cast<ucs_memory_type_t>(mt);

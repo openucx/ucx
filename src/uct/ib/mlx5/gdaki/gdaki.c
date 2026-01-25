@@ -478,6 +478,7 @@ uct_rc_gdaki_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     uct_rc_gdaki_iface_t *iface = ucs_derived_of(tl_iface,
                                                  uct_rc_gdaki_iface_t);
     ucs_status_t status;
+    ucs_sys_device_t cuda_sys_dev;
 
     status = uct_ib_iface_query(&iface->super.super.super, iface_attr);
     if (status != UCS_OK) {
@@ -503,6 +504,8 @@ uct_rc_gdaki_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     iface_attr->cap.put.min_zcopy = 0;
     iface_attr->cap.put.max_zcopy =
             uct_ib_iface_port_attr(&iface->super.super.super)->max_msg_sz;
+    uct_cuda_base_get_sys_dev(iface->cuda_dev, &cuda_sys_dev);
+
     return UCS_OK;
 }
 
@@ -637,11 +640,14 @@ uct_rc_gdaki_iface_mem_element_pack(const uct_iface_h tl_iface, uct_mem_h memh,
 {
     uct_rc_gdaki_device_mem_element_t mem_elem;
 
-    mem_elem.rkey = htonl(uct_ib_md_direct_rkey(rkey));
-    if (memh == NULL) {
-        mem_elem.lkey = UCT_IB_INVALID_MKEY;
-    } else {
+    mem_elem.lkey = UCT_IB_INVALID_MKEY;
+    mem_elem.rkey = UCT_IB_INVALID_MKEY;
+    if (memh != NULL) {
         mem_elem.lkey = htonl(((uct_ib_mem_t*)memh)->lkey);
+    }
+
+    if (rkey != UCT_INVALID_RKEY) {
+        mem_elem.rkey = htonl(uct_ib_md_direct_rkey(rkey));
     }
 
     return UCT_CUDADRV_FUNC_LOG_ERR(

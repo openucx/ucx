@@ -40,11 +40,6 @@ typedef struct {
 } uct_rc_gdaki_dev_ep_t;
 
 
-typedef struct uct_rc_gdaki_device_mem_element {
-    uint32_t lkey;
-    uint32_t rkey;
-} uct_rc_gdaki_device_mem_element_t;
-
 typedef struct {
     uint64_t wqe_idx;
     unsigned channel_id;

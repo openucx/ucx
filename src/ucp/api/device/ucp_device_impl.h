@@ -7,13 +7,30 @@
 #ifndef UCP_DEVICE_IMPL_H
 #define UCP_DEVICE_IMPL_H
 
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
 #include "ucp_device_types.h"
 
 #include <ucp/api/ucp_def.h>
 #include <uct/api/device/uct_device_impl.h>
+#include <ucs/sys/compiler_def.h>
 #include <ucs/sys/device_code.h>
 #include <ucs/type/status.h>
 #include <stdint.h>
+
+/** TODO: Remove after properly fixed.*/
+#ifndef ENABLE_PARAMS_CHECK
+#define ENABLE_PARAMS_CHECK 0
+#endif
+
+#define UCP_DEVICE_MEM_LIST_PARAMS_CHECK(_mem_list_h, _mem_list_index) \
+    if (ENABLE_PARAMS_CHECK && \
+        (((_mem_list_h)->version != UCP_DEVICE_MEM_LIST_VERSION_V1) || \
+         ((_mem_list_index) >= (_mem_list_h)->mem_list_length))) { \
+        return UCS_ERR_INVALID_PARAM; \
+    }
 
 /**
  * @ingroup UCP_DEVICE
@@ -88,16 +105,72 @@ UCS_F_DEVICE ucs_status_t ucp_device_prepare_send(
     const unsigned lane = 0;
     size_t elem_offset;
 
-    if ((mem_list_h->version != UCP_DEVICE_MEM_LIST_VERSION_V1) ||
-        (first_mem_elem_index >= mem_list_h->mem_list_length)) {
-        return UCS_ERR_INVALID_PARAM;
-    }
+    UCP_DEVICE_MEM_LIST_PARAMS_CHECK(mem_list_h, first_mem_elem_index);
 
     device_ep   = mem_list_h->uct_device_eps[lane];
     elem_offset = first_mem_elem_index * mem_list_h->uct_mem_element_size[lane];
     uct_elem    = (uct_device_mem_element_t*)
             UCS_PTR_BYTE_OFFSET(mem_list_h->uct_mem_elements, elem_offset);
     ucp_device_request_init(device_ep, req, comp);
+
+    return UCS_OK;
+}
+
+
+UCS_F_DEVICE ucs_status_t ucp_device_prepare_send_remote(
+        ucp_device_remote_mem_list_handle_h dst_mem_list_h,
+        unsigned dst_mem_list_index, uint64_t &remote_address,
+        ucp_device_request_t *req, uct_device_ep_t *&device_ep,
+        const uct_device_mem_element_t *&uct_elem,
+        uct_device_completion_t *&comp)
+{
+    const size_t elem_size = ucs_offsetof(uct_device_remote_mem_list_elem_t,
+                                          uct_mem_element) +
+                             sizeof(uct_tl_device_mem_element_t);
+
+    UCP_DEVICE_MEM_LIST_PARAMS_CHECK(dst_mem_list_h, dst_mem_list_index);
+
+    const uct_device_remote_mem_list_elem_t *dst_mem_element =
+            (uct_device_remote_mem_list_elem_t*)
+                    UCS_PTR_BYTE_OFFSET(dst_mem_list_h->mem_elements,
+                                        dst_mem_list_index * elem_size);
+    remote_address = dst_mem_element->addr;
+    device_ep      = dst_mem_element->device_ep;
+    uct_elem       = &dst_mem_element->uct_mem_element;
+    ucp_device_request_init(device_ep, req, comp);
+
+    return UCS_OK;
+}
+
+
+UCS_F_DEVICE ucs_status_t
+ucp_device_prepare_send(ucp_device_local_mem_list_handle_h src_mem_list_h,
+                        unsigned src_mem_list_index,
+                        ucp_device_remote_mem_list_handle_h dst_mem_list_h,
+                        unsigned dst_mem_list_index, const void *&address,
+                        uint64_t &remote_address, ucp_device_request_t *req,
+                        uct_device_ep_t *&device_ep,
+                        const uct_device_local_mem_list_elem_t *&src_uct_elem,
+                        const uct_device_mem_element_t *&uct_elem,
+                        uct_device_completion_t *&comp)
+{
+    const size_t elem_size = ucs_offsetof(uct_device_local_mem_list_elem_t,
+                                          uct_mem_element) +
+                             sizeof(uct_tl_device_mem_element_t);
+    ucs_status_t status;
+
+    UCP_DEVICE_MEM_LIST_PARAMS_CHECK(src_mem_list_h, src_mem_list_index);
+
+    status = ucp_device_prepare_send_remote(dst_mem_list_h, dst_mem_list_index,
+                                            remote_address, req, device_ep,
+                                            uct_elem, comp);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    src_uct_elem = (uct_device_local_mem_list_elem_t*)UCS_PTR_BYTE_OFFSET(
+            src_mem_list_h->mem_elements, src_mem_list_index * elem_size);
+    address      = src_uct_elem->addr;
 
     return UCS_OK;
 }
@@ -167,6 +240,75 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_single(
 
 /**
  * @ingroup UCP_DEVICE
+ * @brief Posts one memory put operation.
+ *
+ * This device routine posts one put operation using descriptor list handles.
+ * The @a src_mem_list_index and @a dst_mem_list_index is used to point at the
+ * respected mem_list entry to be used for the memory transfer.
+ * The @a local_offset and @a remote_offset parameters specify byte offsets
+ * within the selected memory list entry. The @a length, @a local_offset
+ * and @a remote_offset parameters must be valid for the used @a mem_list entry.
+ *
+ * The routine returns a request that can be progressed and checked for
+ * completion with @ref ucp_device_progress_req.
+ * The routine returns only after the message has been posted or an error has occurred.
+ *
+ * This routine can be called repeatedly with the same handles and different
+ * offsets and length. The flags parameter can be used to modify the behavior
+ * of the routine with bit from @ref ucp_device_flags_t.
+ *
+ * @tparam      level              Level of cooperation of the transfer.
+ * @param [in]  src_mem_list_h     Local memory descriptor list handle to use.
+ * @param [in]  src_mem_list_index Index in descriptor list pointing to the memory
+ * @param [in]  src_offset         Local offset to send data from.
+ * @param [in]  dst_mem_list_h     Remote memory descriptor list handle to use.
+ * @param [in]  dst_mem_list_index Index in descriptor list pointing to the memory
+ * @param [in]  dst_offset         Remote offset to send data to.
+ * @param [in]  length             Length in bytes of the data to send.
+ * @param [in]  channel_id         Channel ID to use for the transfer.
+ * @param [in]  flags              Flags usable to modify the function behavior.
+ * @param [out] req                Request populated by the call.
+ *
+ * @return UCS_INPROGRESS     - Operation successfully posted. If @a req is not
+ *                              NULL, use @ref ucp_device_progress_req to check
+ *                              for completion.
+ * @return UCS_OK             - Operation completed successfully.
+ * @return Error code as defined by @ref ucs_status_t
+ */
+template<ucs_device_level_t level = UCS_DEVICE_LEVEL_THREAD>
+UCS_F_DEVICE ucs_status_t ucp_device_put(
+        ucp_device_local_mem_list_handle_h src_mem_list_h,
+        unsigned src_mem_list_index, size_t src_offset,
+        ucp_device_remote_mem_list_handle_h dst_mem_list_h,
+        unsigned dst_mem_list_index, size_t dst_offset, size_t length,
+        unsigned channel_id, uint64_t flags, ucp_device_request_t *req)
+{
+    const void *address;
+    const uct_device_mem_element_t *uct_elem;
+    const uct_device_local_mem_list_elem_t *src_uct_elem;
+    uint64_t remote_address;
+    uct_device_completion_t *comp;
+    uct_device_ep_t *device_ep;
+    ucs_status_t status;
+
+    status = ucp_device_prepare_send(src_mem_list_h, src_mem_list_index,
+                                     dst_mem_list_h, dst_mem_list_index,
+                                     address, remote_address, req, device_ep,
+                                     src_uct_elem, uct_elem, comp);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return UCP_DEVICE_SEND_BLOCKING(level, uct_device_ep_put, device_ep, req,
+                                    src_uct_elem, uct_elem,
+                                    UCS_PTR_BYTE_OFFSET(address, src_offset),
+                                    remote_address + dst_offset, length,
+                                    channel_id, flags, comp);
+}
+
+
+/**
+ * @ingroup UCP_DEVICE
  * @brief Posts one memory increment operation.
  *
  * This device routine posts one increment operation using memory descriptor
@@ -219,6 +361,97 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
     return UCP_DEVICE_SEND_BLOCKING(level, uct_device_ep_atomic_add, device_ep,
                                     req, uct_elem, inc_value, remote_address,
                                     channel_id, flags, comp);
+}
+
+
+/**
+ * @ingroup UCP_DEVICE
+ * @brief Posts one memory increment operation.
+ *
+ * This device routine posts one increment operation using memory descriptor
+ * list handle. The @a dst_mem_list_index is used to point at the @a dst_mem_list
+ * entry to be used for the increment operation. The remote offset must be
+ * valid for the used @a mem_list entry.
+ *
+ * The routine returns a request that can be progressed and checked for
+ * completion with @ref ucp_device_progress_req.
+ *
+ * This routine can be called repeatedly with the same handle and different
+ * counter offset. The flags parameter can be used to modify the behavior of the
+ * routine.
+ *
+ * @tparam      level              Level of cooperation of the transfer.
+ * @param [in]  inc_value          Value used to increment the remote address.
+ * @param [in]  dst_mem_list_h     Remote memory descriptor list handle to use.
+ * @param [in]  dst_mem_list_index Index in descriptor list pointing to the memory
+ *                                 remote key to use for the increment operation.
+ * @param [in]  remote_offset      Remote offset to perform the increment to.
+ * @param [in]  channel_id         Channel ID to use for the transfer.
+ * @param [in]  flags              Flags usable to modify the function behavior.
+ * @param [out] req                Request populated by the call.
+ *
+ * @return UCS_INPROGRESS     - Operation successfully posted. If @a req is not
+ *                              NULL, use @ref ucp_device_progress_req to check
+ *                              for completion.
+ * @return UCS_OK             - Operation completed successfully.
+ * @return Error code as defined by @ref ucs_status_t
+ */
+template<ucs_device_level_t level = UCS_DEVICE_LEVEL_THREAD>
+UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
+        uint64_t inc_value, ucp_device_remote_mem_list_handle_h dst_mem_list_h,
+        unsigned dst_mem_list_index, size_t remote_offset, unsigned channel_id,
+        uint64_t flags, ucp_device_request_t *req)
+{
+    uint64_t remote_address;
+    const uct_device_mem_element_t *uct_elem;
+    uct_device_completion_t *comp;
+    uct_device_ep_t *device_ep;
+    ucs_status_t status;
+
+    status = ucp_device_prepare_send_remote(dst_mem_list_h, dst_mem_list_index,
+                                            remote_address, req, device_ep,
+                                            uct_elem, comp);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return UCP_DEVICE_SEND_BLOCKING(level, uct_device_ep_atomic_add, device_ep,
+                                    req, uct_elem, inc_value,
+                                    remote_address + remote_offset, channel_id,
+                                    flags, comp);
+}
+
+
+/**
+ * @ingroup UCP_DEVICE
+ * @brief Gets a local pointer to remote memory.
+ *
+ * This device routine returns a local pointer to the remote memory if it is available.
+ *
+ * @param [in]  mem_list_h     Remote memory descriptor list handle to use.
+ * @param [in]  mem_list_index Index in descriptor list pointing to the memory
+ * @param [out] addr_p         Local pointer to the remote memory.
+ *
+ * @return UCS_OK              - Operation completed successfully.
+ * @return Error code as defined by @ref ucs_status_t
+ */
+UCS_F_DEVICE ucs_status_t
+ucp_device_get_ptr(ucp_device_remote_mem_list_handle_h mem_list_h,
+                   unsigned mem_list_index, void **addr_p)
+{
+    const size_t elem_size = ucs_offsetof(uct_device_remote_mem_list_elem_t,
+                                          uct_mem_element) +
+                             sizeof(uct_tl_device_mem_element_t);
+
+    UCP_DEVICE_MEM_LIST_PARAMS_CHECK(mem_list_h, mem_list_index);
+
+    const uct_device_remote_mem_list_elem_t *mem_element =
+            (uct_device_remote_mem_list_elem_t*)UCS_PTR_BYTE_OFFSET(
+                    mem_list_h->mem_elements, mem_list_index * elem_size);
+
+    return uct_device_ep_get_ptr(mem_element->device_ep,
+                                 &mem_element->uct_mem_element,
+                                 mem_element->addr, addr_p);
 }
 
 

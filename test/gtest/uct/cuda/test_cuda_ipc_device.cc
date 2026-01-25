@@ -5,7 +5,7 @@
  */
 
 #include <uct/uct_test.h>
-#include <uct/cuda/cuda_ipc/cuda_ipc_device.h>
+#include <uct/api/device/uct_device_types.h>
 #include <uct/api/v2/uct_v2.h>
 #include "test_kernels_uct.h"
 #include <cuda.h>

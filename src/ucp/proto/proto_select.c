@@ -298,7 +298,9 @@ static ucs_status_t ucp_proto_select_elem_add_envelope(
             proto_config->rkey_cfg_index = rkey_cfg_index;
             proto_config->select_param   = *select_param;
             proto_config->init_elem      = proto;
+            proto_config->selections     = 0;
             *last_proto_idx              = proto_idx;
+            ucp_request_progress_wrapper_init(worker, proto_config);
         }
 
         /* Print detailed protocol selection data to a user-configured path */
@@ -492,8 +494,7 @@ ucp_proto_select_elem_init(ucp_worker_h worker, int internal,
     ucp_proto_select_wiface_activate(worker, select_elem, ep_cfg_index);
 
     if (!internal) {
-        ucp_proto_select_elem_trace(worker, ep_cfg_index, rkey_cfg_index,
-                                    &select_param_copy, select_elem);
+        ucp_proto_select_elem_trace(worker, &select_param_copy, select_elem, 0);
     }
 
     status = UCS_OK;
@@ -580,9 +581,20 @@ void ucp_proto_select_cleanup(ucp_proto_select_t *proto_select)
     ucp_proto_select_elem_t select_elem;
 
     kh_foreach_value(proto_select->hash, select_elem,
-         ucp_proto_select_elem_cleanup(&select_elem)
+        ucp_proto_select_elem_cleanup(&select_elem)
     )
     kh_destroy(ucp_proto_select_hash, proto_select->hash);
+}
+
+void ucp_proto_select_trace(ucp_worker_h worker,
+                            const ucp_proto_select_t *proto_select)
+{
+    ucp_proto_select_elem_t select_elem;
+    ucp_proto_select_key_t key;
+
+    kh_foreach(proto_select->hash, key.u64, select_elem,
+        ucp_proto_select_elem_trace(worker, &key.param, &select_elem, 1);
+    )
 }
 
 void ucp_proto_select_add_proto(const ucp_proto_init_params_t *init_params,
@@ -864,6 +876,7 @@ int ucp_proto_select_elem_query(ucp_worker_h worker,
 
     proto_attr->max_msg_length = ucs_min(proto_attr->max_msg_length,
                                          thresh_elem->max_msg_length);
+    proto_attr->selections     = proto_config->selections;
 
     return !(thresh_elem->proto_config.proto->flags & UCP_PROTO_FLAG_INVALID);
 }

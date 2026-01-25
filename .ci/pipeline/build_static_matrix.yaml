@@ -1,0 +1,37 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+---
+job: ucx-build-static
+
+failFast: false
+timeout_minutes: 90
+
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  limits: "{memory: 8Gi, cpu: 8000m}"
+  requests: "{memory: 8Gi, cpu: 8000m}"
+
+volumes:
+  - {mountPath: /hpc/local, hostPath: /hpc/local}
+
+runs_on_dockers:
+  - { name: "ubuntu2004-mofed5.0", url: "harbor.mellanox.com/ucx/x86_64/ubuntu20.04/builder:mofed-5.0-1.0.0.0", arch: x86_64 }
+  - { name: "centos7-ib", url: "harbor.mellanox.com/ucx/centos7:5", arch: x86_64 }
+
+taskName: '${arch}/${name}'
+
+env:
+  BUILD_ID: "${BUILD_NUMBER}"
+  EXTRA_MODULES: ""
+  EXTRA_TLS: ""
+  RUN_TLS: ""
+
+steps:
+  - name: Build Static
+    parallel: false
+    timeout: 30
+    run: |
+      set -euo pipefail
+      ./buildlib/tools/build_static.sh
