@@ -281,27 +281,44 @@ UCS_F_DEVICE ucs_status_t ucp_device_put(
         unsigned dst_mem_list_index, size_t dst_offset, size_t length,
         unsigned channel_id, uint64_t flags, ucp_device_request_t *req)
 {
-    const void *address;
-    const uct_device_mem_element_t *uct_elem;
-    const uct_device_local_mem_list_elem_t *src_uct_elem;
-    uint64_t remote_address;
-    uct_device_completion_t *comp;
-    uct_device_ep_t *device_ep;
-    ucs_status_t status;
-
-    status = ucp_device_prepare_send(src_mem_list_h, src_mem_list_index,
-                                     dst_mem_list_h, dst_mem_list_index,
-                                     address, remote_address, req, device_ep,
-                                     src_uct_elem, uct_elem, comp);
-    if (status != UCS_OK) {
-        return status;
+    if ((__ldg(&src_mem_list_h->version) != UCP_DEVICE_MEM_LIST_VERSION_V1) ||
+        (src_mem_list_index >= __ldg(&src_mem_list_h->mem_list_length)) ||
+        (__ldg(&dst_mem_list_h->version) != UCP_DEVICE_MEM_LIST_VERSION_V1) ||
+        (dst_mem_list_index >= __ldg(&dst_mem_list_h->mem_list_length))) {
+        return UCS_ERR_INVALID_PARAM;
     }
 
-    return UCP_DEVICE_SEND_BLOCKING(level, uct_device_ep_put, device_ep, req,
-                                    src_uct_elem, uct_elem,
-                                    UCS_PTR_BYTE_OFFSET(address, src_offset),
-                                    remote_address + dst_offset, length,
-                                    channel_id, flags, comp);
+    const size_t dst_elem_size = ucs_offsetof(uct_device_remote_mem_list_elem_t,
+                                              uct_mem_element) +
+                                 sizeof(uct_tl_device_mem_element_t);
+
+    const auto *dst_elem       = (const uct_device_remote_mem_list_elem_t*)
+                        UCS_PTR_BYTE_OFFSET(dst_mem_list_h->mem_elements,
+                                            dst_mem_list_index * dst_elem_size);
+    uct_device_ep_t *device_ep = (uct_device_ep_t *)
+                                     __ldg((uintptr_t *)&dst_elem->device_ep);
+    uint64_t dst_address       = (uint64_t)__ldg((uintptr_t *)&dst_elem->addr);
+
+    const size_t src_elem_size = ucs_offsetof(uct_device_local_mem_list_elem_t,
+                                              uct_mem_element) +
+                                 sizeof(uct_tl_device_mem_element_t);
+    const auto *src_uct_elem   = (const uct_device_local_mem_list_elem_t*)
+                        UCS_PTR_BYTE_OFFSET(src_mem_list_h->mem_elements,
+                                            src_mem_list_index * src_elem_size);
+
+    uct_device_completion_t *comp = nullptr;
+    if (req != nullptr) {
+        comp           = &req->comp;
+        req->device_ep = device_ep;
+    }
+
+    return UCP_DEVICE_SEND_BLOCKING(
+                level, uct_device_ep_put, device_ep, req,
+                src_uct_elem, &dst_elem->uct_mem_element,
+                UCS_PTR_BYTE_OFFSET(
+                    (const void*)__ldg((const uintptr_t*)&src_uct_elem->addr),
+                    src_offset),
+                dst_address + dst_offset, length, channel_id, flags, comp);
 }
 
 
