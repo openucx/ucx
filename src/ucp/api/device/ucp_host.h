@@ -189,14 +189,14 @@ ucp_device_mem_list_create(ucp_ep_h ep,
  * It can be used repeatedly, until finally released by calling @ref
  * ucp_device_mem_list_release.
  *
- * @param [in]  params    Parameters used to create the handle.
- * @param [out] handle    Created descriptor list handle.
+ * @param [in]  params     Parameters used to create the handle.
+ * @param [out] mem_list_h Created descriptor list handle.
  *
  * @return Error code as defined by @ref ucs_status_t.
  */
 ucs_status_t
 ucp_device_local_mem_list_create(const ucp_device_mem_list_params_t *params,
-                                 ucp_device_local_mem_list_handle_h *handle);
+                                 ucp_device_local_mem_list_h *mem_list_h);
 
 
 /**
@@ -211,26 +211,25 @@ ucp_device_local_mem_list_create(const ucp_device_mem_list_params_t *params,
  * It can be used repeatedly, until finally released by calling @ref
  * ucp_device_mem_list_release.
  *
- * @param [in]  params    Parameters used to create the handle.
- * @param [out] handle    Created descriptor list handle.
+ * @param [in]  params     Parameters used to create the handle.
+ * @param [out] mem_list_h Created descriptor list handle.
  *
  * @return Error code as defined by @ref ucs_status_t.
  */
 ucs_status_t
 ucp_device_remote_mem_list_create(const ucp_device_mem_list_params_t *params,
-                                  ucp_device_remote_mem_list_handle_h *handle);
+                                  ucp_device_remote_mem_list_h *mem_list_h);
 
 
 /**
  * @ingroup UCP_DEVICE
  * @brief Return the number of elements in the descriptors mem list handle.
  *
- * @param [in] handle     Descriptors list handle.
+ * @param [in] mem_list_h Descriptors list handle.
  *
  * @return Descriptors mem list length.
  */
-uint32_t
-ucp_device_get_mem_list_length(const void* handle);
+uint32_t ucp_device_get_mem_list_length(const void *mem_list_h);
 
 
 /**
@@ -240,9 +239,9 @@ ucp_device_get_mem_list_length(const void* handle);
  * This function releases the handle that was created using @ref
  * ucp_device_mem_list_create.
  *
- * @param [in] handle     Created handle to release.
+ * @param [in] mem_list_h Created handle to release.
  */
-void ucp_device_mem_list_release(void *handle);
+void ucp_device_mem_list_release(void *mem_list_h);
 
 
 /**

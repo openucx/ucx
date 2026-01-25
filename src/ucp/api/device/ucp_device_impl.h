@@ -118,7 +118,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_prepare_send(
 
 
 UCS_F_DEVICE ucs_status_t ucp_device_prepare_send_remote(
-        ucp_device_remote_mem_list_handle_h dst_mem_list_h,
+        ucp_device_remote_mem_list_h dst_mem_list_h,
         unsigned dst_mem_list_index, uint64_t &remote_address,
         ucp_device_request_t *req, uct_device_ep_t *&device_ep,
         const uct_device_mem_element_t *&uct_elem,
@@ -143,16 +143,15 @@ UCS_F_DEVICE ucs_status_t ucp_device_prepare_send_remote(
 }
 
 
-UCS_F_DEVICE ucs_status_t
-ucp_device_prepare_send(ucp_device_local_mem_list_handle_h src_mem_list_h,
-                        unsigned src_mem_list_index,
-                        ucp_device_remote_mem_list_handle_h dst_mem_list_h,
-                        unsigned dst_mem_list_index, const void *&address,
-                        uint64_t &remote_address, ucp_device_request_t *req,
-                        uct_device_ep_t *&device_ep,
-                        const uct_device_local_mem_list_elem_t *&src_uct_elem,
-                        const uct_device_mem_element_t *&uct_elem,
-                        uct_device_completion_t *&comp)
+UCS_F_DEVICE ucs_status_t ucp_device_prepare_send(
+        ucp_device_local_mem_list_h src_mem_list_h, unsigned src_mem_list_index,
+        ucp_device_remote_mem_list_h dst_mem_list_h,
+        unsigned dst_mem_list_index, const void *&address,
+        uint64_t &remote_address, ucp_device_request_t *req,
+        uct_device_ep_t *&device_ep,
+        const uct_device_local_mem_list_elem_t *&src_uct_elem,
+        const uct_device_mem_element_t *&uct_elem,
+        uct_device_completion_t *&comp)
 {
     const size_t elem_size = ucs_offsetof(uct_device_local_mem_list_elem_t,
                                           uct_mem_element) +
@@ -277,9 +276,8 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_single(
  */
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_THREAD>
 UCS_F_DEVICE ucs_status_t ucp_device_put(
-        ucp_device_local_mem_list_handle_h src_mem_list_h,
-        unsigned src_mem_list_index, size_t src_offset,
-        ucp_device_remote_mem_list_handle_h dst_mem_list_h,
+        ucp_device_local_mem_list_h src_mem_list_h, unsigned src_mem_list_index,
+        size_t src_offset, ucp_device_remote_mem_list_h dst_mem_list_h,
         unsigned dst_mem_list_index, size_t dst_offset, size_t length,
         unsigned channel_id, uint64_t flags, ucp_device_request_t *req)
 {
@@ -398,7 +396,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
  */
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_THREAD>
 UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
-        uint64_t inc_value, ucp_device_remote_mem_list_handle_h dst_mem_list_h,
+        uint64_t inc_value, ucp_device_remote_mem_list_h dst_mem_list_h,
         unsigned dst_mem_list_index, size_t remote_offset, unsigned channel_id,
         uint64_t flags, ucp_device_request_t *req)
 {
@@ -436,7 +434,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
  * @return Error code as defined by @ref ucs_status_t
  */
 UCS_F_DEVICE ucs_status_t
-ucp_device_get_ptr(ucp_device_remote_mem_list_handle_h mem_list_h,
+ucp_device_get_ptr(ucp_device_remote_mem_list_h mem_list_h,
                    unsigned mem_list_index, void **addr_p)
 {
     const size_t elem_size = ucs_offsetof(uct_device_remote_mem_list_elem_t,
