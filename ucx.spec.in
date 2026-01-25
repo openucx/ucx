@@ -2,6 +2,7 @@
 %bcond_without cma
 %bcond_with    cuda
 %bcond_with    gdrcopy
+%bcond_with    gda
 %bcond_without ib
 %bcond_with    knem
 %bcond_without rdmacm
@@ -74,6 +75,9 @@ BuildRequires: valgrind-devel
 %if %{with mad}
 BuildRequires: libibmad-devel libibumad-devel
 %endif
+%if %{with gda}
+BuildRequires: doca-sdk-gpunetio-devel
+%endif
 
 %description
 UCX is an optimized communication framework for high-performance distributed
@@ -87,7 +91,7 @@ The acronym UCX stands for "Unified Communication X".
 
 This package was built from '@SCM_BRANCH@' branch, commit @SCM_VERSION@.
 
-%if "%{_vendor}" == "suse"
+%if "%{_vendor}" == "suse" && 0%{?suse_version} < 1600
 %debug_package
 %endif
 
@@ -132,6 +136,7 @@ Provides header files and examples for developing with UCX.
            %_with_arg ugni ugni \
            %_with_arg mad mad \
            %_with_arg ze ze \
+           %_with_arg gda gda \
            %{?configure_options}
 make %{?_smp_mflags} V=1
 
@@ -161,6 +166,7 @@ rm -f %{buildroot}%{_libdir}/ucx/lib*.so
 
 %files devel
 %{_includedir}/uc*
+%{_includedir}/stubs
 %{_libdir}/lib*.so
 %{_libdir}/pkgconfig/ucx.pc
 %{_libdir}/pkgconfig/ucx-uct.pc
@@ -207,6 +213,9 @@ Provides static libraries required for developing with UCX.
 %endif
 %if %{with vfs}
 %{_libdir}/pkgconfig/ucx-fuse.pc
+%endif
+%if %{with gda}
+%{_libdir}/pkgconfig/ucx-ib-mlx5-gda.pc
 %endif
 
 %if %{with cma}
@@ -425,7 +434,26 @@ Provides oneAPI Level Zero (ZE) Runtime support for UCX.
 %{_libdir}/ucx/libucm_ze.so.*
 %endif
 
+%if %{with gda}
+%package ib-mlx5-gda
+Requires: %{name}-cuda%{?_isa} = %{version}-%{release}
+Requires: %{name}-ib%{?_isa} = %{version}-%{release}
+Requires: doca-sdk-gpunetio-devel
+Summary: UCX GPU Direct Async support
+Group: System Environment/Libraries
+
+%description ib-mlx5-gda
+Provide GPU Direct Async support for UCX. GPU Direct Async allows GPU kernels
+to initiate network communications directly without explicit synchronization
+with the host CPU.
+
+%files ib-mlx5-gda
+%{_libdir}/ucx/libuct_ib_mlx5_gda.so.*
+%endif
+
 %changelog
+* Mon Oct 20 2025 Leonid Genkin <lgenkin@nvidia.com> 1.21.0-1
+- Bump version to 1.21.0
 * Fri Apr 11 2025 Yossi Itigin <yosefe@nvidia.com> 1.20.0-1
 - Bump version to 1.20.0
 * Sat Oct 12 2024 Yossi Itigin <yosefe@nvidia.com> 1.19.0-1

@@ -410,8 +410,9 @@ typedef struct uct_rc_mlx5_iface_common {
         uint8_t                        put_fence_flag;
         uct_rc_mlx5_srq_topo_t         srq_topo;
         uint8_t                        log_ack_req_freq;
-        uint8_t                        dp_ordering;
+        uint8_t                        dp_ordering_devx;
         uint8_t                        dp_ordering_force;
+        uint8_t                        ddp_enabled_dv;
     } config;
     UCS_STATS_NODE_DECLARE(stats)
 } uct_rc_mlx5_iface_common_t;
@@ -485,6 +486,7 @@ ucs_status_t
 uct_rc_mlx5_dp_ordering_ooo_init(uct_ib_mlx5_md_t *md,
                                  uct_rc_mlx5_iface_common_t *iface,
                                  uct_ib_mlx5_dp_ordering_t dp_ordering_cap,
+                                 int ddp_supported_dv,
                                  uct_rc_mlx5_iface_common_config_t *config,
                                  const char *tl_name);
 

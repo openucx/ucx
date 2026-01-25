@@ -13,32 +13,9 @@
 #include <ucs/datastruct/khash.h>
 
 #include <cuda.h>
-#include <nvml.h>
 
 
 const char *uct_cuda_base_cu_get_error_string(CUresult result);
-
-
-#define UCT_NVML_FUNC(_func, _log_level) \
-    ({ \
-        ucs_status_t _status = UCS_OK; \
-        do { \
-            nvmlReturn_t _err = (_func); \
-            if (NVML_SUCCESS != _err) { \
-                ucs_log((_log_level), "%s failed: %s", \
-                        UCS_PP_MAKE_STRING(_func), \
-                        (NVML_ERROR_DRIVER_NOT_LOADED != _err) ? \
-                                nvmlErrorString(_err) : \
-                                "nvml is a stub library"); \
-                _status = UCS_ERR_IO_ERROR; \
-            } \
-        } while (0); \
-        _status; \
-    })
-
-
-#define UCT_NVML_FUNC_LOG_ERR(_func) \
-    UCT_NVML_FUNC(_func, UCS_LOG_LEVEL_ERROR)
 
 
 #define UCT_CUDADRV_LOG(_func, _log_level, _result) \
@@ -48,16 +25,14 @@ const char *uct_cuda_base_cu_get_error_string(CUresult result);
 
 #define UCT_CUDADRV_FUNC(_func, _log_level) \
     ({ \
-        ucs_status_t _status = UCS_OK; \
-        do { \
-            CUresult _result = (_func); \
-            if (CUDA_ERROR_NOT_READY == _result) { \
-                _status = UCS_INPROGRESS; \
-            } else if (CUDA_SUCCESS != _result) { \
-                UCT_CUDADRV_LOG(_func, _log_level, _result); \
-                _status = UCS_ERR_IO_ERROR; \
-            } \
-        } while (0); \
+        CUresult _result = (_func); \
+        ucs_status_t _status; \
+        if (ucs_likely(_result == CUDA_SUCCESS)) { \
+            _status = UCS_OK; \
+        } else { \
+            UCT_CUDADRV_LOG(_func, _log_level, _result); \
+            _status = UCS_ERR_IO_ERROR; \
+        } \
         _status; \
     })
 
@@ -82,39 +57,15 @@ static UCS_F_ALWAYS_INLINE int uct_cuda_base_is_context_active()
 }
 
 
-static UCS_F_ALWAYS_INLINE int uct_cuda_base_is_context_valid(CUcontext ctx)
-{
-    unsigned version;
-    ucs_status_t status;
-
-    /* Check if CUDA context is valid by running a dummy operation on it */
-    status = UCT_CUDADRV_FUNC_LOG_DEBUG(cuCtxGetApiVersion(ctx, &version));
-    return (status == UCS_OK);
-}
-
-
-static UCS_F_ALWAYS_INLINE int uct_cuda_base_context_match(CUcontext ctx1,
-                                                           CUcontext ctx2)
-{
-    return ((ctx1 != NULL) && (ctx1 == ctx2) &&
-            uct_cuda_base_is_context_valid(ctx1));
-}
-
-
 static UCS_F_ALWAYS_INLINE CUresult
 uct_cuda_base_ctx_get_id(CUcontext ctx, unsigned long long *ctx_id_p)
 {
-    unsigned long long ctx_id = 0;
-
 #if CUDA_VERSION >= 12000
-    CUresult result = cuCtxGetId(ctx, &ctx_id);
-    if (ucs_unlikely(result != CUDA_SUCCESS)) {
-        return result;
-    }
-#endif
-
-    *ctx_id_p = ctx_id;
+    return cuCtxGetId(ctx, ctx_id_p);
+#else
+    *ctx_id_p = 0;
     return CUDA_SUCCESS;
+#endif
 }
 
 
@@ -217,8 +168,7 @@ void uct_cuda_base_queue_desc_init(uct_cuda_queue_desc_t *qdesc);
 void uct_cuda_base_queue_desc_destroy(const uct_cuda_ctx_rsc_t *ctx_rsc,
                                       uct_cuda_queue_desc_t *qdesc);
 
-void uct_cuda_base_stream_destroy(const uct_cuda_ctx_rsc_t *ctx_rsc,
-                                  CUstream *stream);
+void uct_cuda_base_stream_destroy(CUstream *stream);
 
 #if (__CUDACC_VER_MAJOR__ >= 100000)
 void CUDA_CB uct_cuda_base_iface_stream_cb_fxn(void *arg);

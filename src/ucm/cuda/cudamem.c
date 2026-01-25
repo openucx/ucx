@@ -27,17 +27,17 @@
 #define UCM_CUDA_ALLOC_FUNC(_name, _retval, _success, _size, _ptr_type, _ref, \
                             _args_fmt, ...) \
     _retval ucm_##_name(_ptr_type _ref ptr_arg, \
-                        UCM_FUNC_DEFINE_ARGS(__VA_ARGS__)) \
+                        UCS_FUNC_DEFINE_ARGS(__VA_ARGS__)) \
     { \
         _ptr_type ptr; \
         _retval ret; \
         \
         ucm_event_enter(); \
-        ret = ucm_orig_##_name(ptr_arg, UCM_FUNC_PASS_ARGS(__VA_ARGS__)); \
+        ret = ucm_orig_##_name(ptr_arg, UCS_FUNC_PASS_ARGS(__VA_ARGS__)); \
         if (ret == (_success)) { \
             ptr = _ref ptr_arg; \
             ucm_trace("%s(" _args_fmt ") allocated %p", __func__, \
-                      UCM_FUNC_PASS_ARGS(__VA_ARGS__), (void*)ptr); \
+                      UCS_FUNC_PASS_ARGS(__VA_ARGS__), (void*)ptr); \
             ucm_cuda_dispatch_mem_alloc((CUdeviceptr)ptr, (_size)); \
         } \
         ucm_event_leave(); \
@@ -47,16 +47,39 @@
 /* Create a body of CUDA memory release replacement function */
 #define UCM_CUDA_FREE_FUNC(_name, _mem_type, _retval, _ptr_arg, _size, \
                            _args_fmt, ...) \
-    _retval ucm_##_name(UCM_FUNC_DEFINE_ARGS(__VA_ARGS__)) \
+    _retval ucm_##_name(UCS_FUNC_DEFINE_ARGS(__VA_ARGS__)) \
     { \
         _retval ret; \
         \
         ucm_event_enter(); \
         ucm_trace("%s(" _args_fmt ")", __func__, \
-                  UCM_FUNC_PASS_ARGS(__VA_ARGS__)); \
+                  UCS_FUNC_PASS_ARGS(__VA_ARGS__)); \
         ucm_cuda_dispatch_mem_free((CUdeviceptr)(_ptr_arg), _size, _mem_type, \
                                    #_name); \
-        ret = ucm_orig_##_name(UCM_FUNC_PASS_ARGS(__VA_ARGS__)); \
+        ret = ucm_orig_##_name(UCS_FUNC_PASS_ARGS(__VA_ARGS__)); \
+        ucm_event_leave(); \
+        return ret; \
+    }
+
+#define UCM_CUDA_GET_GLOBAL_FUNC(_name, _obj_type) \
+    CUresult ucm_##_name(CUdeviceptr *dptr, size_t *bytes, _obj_type obj, \
+                         const char *name) \
+    { \
+        CUresult ret; \
+        size_t size; \
+        size_t *size_ptr; \
+        if (dptr == NULL) { \
+            /* Device pointer is not returned */ \
+            return ucm_orig_##_name(dptr, bytes, obj, name); \
+        } \
+        size_ptr = (bytes == NULL) ? &size : bytes; \
+        ucm_event_enter(); \
+        ret = ucm_orig_##_name(dptr, size_ptr, obj, name); \
+        if (ret == CUDA_SUCCESS) { \
+            ucm_trace("%s(size_ptr=%p, obj=%p, name=%s) returned dptr=%p", \
+                      __func__, bytes, obj, name, (void*)(*dptr)); \
+            ucm_cuda_dispatch_mem_alloc(*dptr, *size_ptr); \
+        } \
         ucm_event_leave(); \
         return ret; \
     }
@@ -94,6 +117,10 @@ UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cuMemAllocAsync, CUresult, -1, CUdeviceptr*,
                                   size_t, CUstream)
 UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cuMemAllocFromPoolAsync, CUresult, -1,
                                   CUdeviceptr*, size_t, CUmemoryPool, CUstream)
+#endif
+#if CUDART_VERSION >= 12000
+UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cuLibraryGetGlobal, CUresult, -1,
+                                  CUdeviceptr*, size_t*, CUlibrary, const char*)
 #endif
 UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cuMemFree, CUresult, -1, CUdeviceptr)
 UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cuMemFree_v2, CUresult, -1, CUdeviceptr)
@@ -210,29 +237,10 @@ UCM_CUDA_FREE_FUNC(cuMemFreeAsync, UCS_MEMORY_TYPE_CUDA, CUresult, arg0, 0,
                    "ptr=0x%llx, stream=%p", CUdeviceptr, CUstream)
 #endif
 
-CUresult ucm_cuModuleGetGlobal_v2(CUdeviceptr *dptr, size_t *bytes,
-                                  CUmodule hmod, const char *name)
-{
-    CUresult ret;
-    size_t size;
-    size_t *size_ptr;
-
-    if (dptr == NULL) {
-        /* Device pointer is not returned */
-        return ucm_orig_cuModuleGetGlobal_v2(dptr, bytes, hmod, name);
-    }
-
-    size_ptr = (bytes == NULL) ? &size : bytes;
-    ucm_event_enter();
-    ret = ucm_orig_cuModuleGetGlobal_v2(dptr, size_ptr, hmod, name);
-    if (ret == CUDA_SUCCESS) {
-        ucm_trace("%s(size_ptr=%p, hmod=%p, name=%s) returned dptr=%p",
-                  __func__, bytes, hmod, name, (void*)(*dptr));
-        ucm_cuda_dispatch_mem_alloc(*dptr, *size_ptr);
-    }
-    ucm_event_leave();
-    return ret;
-}
+UCM_CUDA_GET_GLOBAL_FUNC(cuModuleGetGlobal_v2, CUmodule)
+#if CUDART_VERSION >= 12000
+UCM_CUDA_GET_GLOBAL_FUNC(cuLibraryGetGlobal, CUlibrary)
+#endif
 
 static ucm_cuda_func_t ucm_cuda_driver_funcs[] = {
     UCM_CUDA_FUNC_ENTRY(cuMemAlloc),
@@ -245,6 +253,9 @@ static ucm_cuda_func_t ucm_cuda_driver_funcs[] = {
 #if CUDA_VERSION >= 11020
     UCM_CUDA_FUNC_ENTRY(cuMemAllocAsync),
     UCM_CUDA_FUNC_ENTRY(cuMemAllocFromPoolAsync),
+#endif
+#if CUDART_VERSION >= 12000
+    UCM_CUDA_FUNC_ENTRY(cuLibraryGetGlobal),
 #endif
     UCM_CUDA_FUNC_ENTRY(cuMemFree),
     UCM_CUDA_FUNC_ENTRY(cuMemFree_v2),

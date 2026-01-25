@@ -194,13 +194,16 @@ static uct_iface_ops_t uct_tcp_sockcm_iface_ops = {
 };
 
 static uct_iface_internal_ops_t uct_tcp_sockcm_iface_internal_ops = {
-    .iface_estimate_perf   = (uct_iface_estimate_perf_func_t)ucs_empty_function_return_unsupported,
-    .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
-    .ep_query              = uct_tcp_sockcm_ep_query,
-    .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
-    .ep_connect_to_ep_v2   = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
-    .iface_is_reachable_v2 = (uct_iface_is_reachable_v2_func_t)ucs_empty_function_return_zero,
-    .ep_is_connected       = (uct_ep_is_connected_func_t)ucs_empty_function_return_zero_int
+    .iface_query_v2         = (uct_iface_query_v2_func_t)ucs_empty_function_return_unsupported,
+    .iface_estimate_perf    = (uct_iface_estimate_perf_func_t)ucs_empty_function_return_unsupported,
+    .iface_vfs_refresh      = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+    .iface_mem_element_pack = (uct_iface_mem_element_pack_func_t)ucs_empty_function_return_unsupported,
+    .ep_query               = uct_tcp_sockcm_ep_query,
+    .ep_invalidate          = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
+    .ep_connect_to_ep_v2    = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
+    .iface_is_reachable_v2  = (uct_iface_is_reachable_v2_func_t)ucs_empty_function_return_zero,
+    .ep_is_connected        = (uct_ep_is_connected_func_t)ucs_empty_function_return_zero_int,
+    .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported
 };
 
 UCS_CLASS_INIT_FUNC(uct_tcp_sockcm_t, uct_component_h component,

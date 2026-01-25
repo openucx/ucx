@@ -212,7 +212,7 @@ uct_rocm_copy_get_default_bandwidth(const uct_perf_attr_t *perf_attr)
 }
 
 static UCS_F_ALWAYS_INLINE double
-uct_rocm_copy_get_mi300a_bandwidth(const uct_perf_attr_t *perf_attr)
+uct_rocm_copy_get_mi300_bandwidth(const uct_perf_attr_t *perf_attr)
 {
     switch (perf_attr->operation) {
     case UCT_EP_OP_GET_SHORT:
@@ -250,9 +250,8 @@ uct_rocm_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
         if (!(perf_attr->field_mask & UCT_PERF_ATTR_FIELD_OPERATION)) {
             bandwidth.shared = 0;
         } else {
-            if (gpu_product == UCT_ROCM_AMD_GPU_MI300A ||
-                gpu_product == UCT_ROCM_AMD_GPU_MI300X) {
-                bandwidth.shared = uct_rocm_copy_get_mi300a_bandwidth(perf_attr);
+            if (gpu_product == UCT_ROCM_AMD_GPU_MI300) {
+                bandwidth.shared = uct_rocm_copy_get_mi300_bandwidth(perf_attr);
             } else {
                 bandwidth.shared = uct_rocm_copy_get_default_bandwidth(perf_attr);
             }
@@ -296,13 +295,16 @@ uct_rocm_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
 
 
 static uct_iface_internal_ops_t uct_rocm_copy_iface_internal_ops = {
-    .iface_estimate_perf   = uct_rocm_copy_estimate_perf,
-    .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
-    .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
-    .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
-    .ep_connect_to_ep_v2   = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
-    .iface_is_reachable_v2 = uct_rocm_copy_iface_is_reachable_v2,
-    .ep_is_connected       = uct_base_ep_is_connected
+    .iface_query_v2         = uct_iface_base_query_v2,
+    .iface_estimate_perf    = uct_rocm_copy_estimate_perf,
+    .iface_vfs_refresh      = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+    .iface_mem_element_pack = (uct_iface_mem_element_pack_func_t)ucs_empty_function_return_unsupported,
+    .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+    .ep_invalidate          = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
+    .ep_connect_to_ep_v2    = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
+    .iface_is_reachable_v2  = uct_rocm_copy_iface_is_reachable_v2,
+    .ep_is_connected        = uct_base_ep_is_connected,
+    .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported
 };
 
 static UCS_CLASS_INIT_FUNC(uct_rocm_copy_iface_t, uct_md_h md, uct_worker_h worker,

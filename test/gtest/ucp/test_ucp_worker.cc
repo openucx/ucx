@@ -861,6 +861,7 @@ UCS_TEST_P(test_ucp_modify_uct_cfg, verify_seg_size)
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_modify_uct_cfg, dcx, "dc_x")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_modify_uct_cfg, rc,  "rc_v")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_modify_uct_cfg, rcx, "rc_x")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_modify_uct_cfg, srd, "srd")
 
 class test_pci_bw : public ucp_test {
 public:

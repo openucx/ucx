@@ -20,7 +20,8 @@ ucp_rkey_config_hash_func(ucp_rkey_config_key_t rkey_config_key)
             (rkey_config_key.unreachable_md_map << 32)) ^
            (rkey_config_key.ep_cfg_index << 8) ^
            (rkey_config_key.sys_dev << 16) ^
-           (rkey_config_key.mem_type << 24);
+           (rkey_config_key.mem_type << 24) ^
+           rkey_config_key.flags;
 }
 
 static UCS_F_ALWAYS_INLINE int
@@ -31,6 +32,7 @@ ucp_rkey_config_is_equal(ucp_rkey_config_key_t rkey_config_key1,
            (rkey_config_key1.ep_cfg_index == rkey_config_key2.ep_cfg_index) &&
            (rkey_config_key1.sys_dev == rkey_config_key2.sys_dev) &&
            (rkey_config_key1.mem_type == rkey_config_key2.mem_type) &&
+           (rkey_config_key1.flags == rkey_config_key2.flags) &&
            (rkey_config_key1.unreachable_md_map ==
             rkey_config_key2.unreachable_md_map);
 }
@@ -62,6 +64,12 @@ ucp_ep_rkey_unpack_reachable(ucp_ep_h ep, const void *buffer, size_t length,
     return ucp_ep_rkey_unpack_internal(ep, buffer, length,
                                        config->key.reachable_md_map, 0,
                                        UCS_SYS_DEVICE_ID_UNKNOWN, rkey_p);
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_rkey_need_remote_flush(const ucp_rkey_config_key_t *key)
+{
+    return key->flags & UCP_RKEY_CONFIG_FLAG_FLUSH;
 }
 
 #endif

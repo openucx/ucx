@@ -628,7 +628,8 @@ ucs_status_t uct_rc_mlx5_base_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                       &ep->super.txqp, comp, ep->tx.wq.sig_pi);
 }
 
-ucs_status_t uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep, unsigned flags)
+ucs_status_t uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
+                                            const uct_ep_invalidate_params_t *params)
 {
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
 
@@ -793,9 +794,13 @@ uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
     uint32_t flush_rkey_hi;
     ucs_status_t status;
 
-    uct_ib_iface_fill_ah_attr_from_addr(&iface->super.super, ib_addr,
-                                        ep->super.super.path_index, &ah_attr,
-                                        &path_mtu);
+    status = uct_ib_iface_fill_ah_attr_from_addr(&iface->super.super, ib_addr,
+                                                 ep->super.super.path_index,
+                                                 &ah_attr, &path_mtu);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     ucs_assert(path_mtu != UCT_IB_ADDRESS_INVALID_PATH_MTU);
 
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {

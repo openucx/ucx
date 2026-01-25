@@ -122,6 +122,24 @@ enum {
 
 
 /**
+ * Memory flush related structure
+ */
+typedef struct {
+    /* Number of 0-read flush to complete overall */
+    int              count;
+
+    /* Number of 0-read flush started */
+    int              started;
+
+    /* Shared completion to track remaining */
+    uct_completion_t uct_comp;
+
+    /* List of memory areas to track 0-read flush operations */
+    ucp_mem_area_t   *entries;
+} ucp_mem_flush_t;
+
+
+/**
  * Request in progress.
  */
 struct ucp_request {
@@ -335,6 +353,7 @@ struct ucp_request {
                     uint8_t            sw_done;
                     uint8_t            num_lanes; /* How many lanes are being flushed */
                     ucp_lane_map_t     started_lanes; /* Which lanes need were flushed */
+                    ucp_mem_flush_t    mem; /* Memory specific flushes */
                 } flush;
 
                 struct {
@@ -567,5 +586,8 @@ ucs_status_t ucp_request_recv_msg_truncated(ucp_request_t *req, size_t length,
 void ucp_request_purge_enqueue_cb(uct_pending_req_t *self, void *arg);
 
 ucs_status_t ucp_request_progress_wrapper(uct_pending_req_t *self);
+
+void ucp_request_progress_wrapper_init(ucp_worker_h worker,
+                                       ucp_proto_config_t *proto_config);
 
 #endif

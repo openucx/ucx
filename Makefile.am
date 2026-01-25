@@ -34,17 +34,15 @@ dist_perftest__DATA = \
 	contrib/ucx_perftest_config/test_types_ucp_rma \
 	contrib/ucx_perftest_config/test_types_ucp_amo \
 	contrib/ucx_perftest_config/test_types_ucp_daemon \
+	contrib/ucx_perftest_config/test_types_ucp_device_cuda \
 	contrib/ucx_perftest_config/transports
 
 SUBDIRS = \
 	src/ucm \
 	src/ucs \
 	src/uct \
-	src/ucp
-
-if HAVE_UCG
-SUBDIRS += $(UCG_SUBDIR)
-endif
+	src/ucp \
+	stubs
 
 SUBDIRS += \
 	src/tools/vfs \
@@ -86,6 +84,7 @@ EXTRA_DIST += debian/ucx-cuda.install
 EXTRA_DIST += debian/rules
 EXTRA_DIST += debian/source/format
 EXTRA_DIST += ucx.pc.in
+EXTRA_DIST += ucx.spec
 EXTRA_DIST += LICENSE
 
 endif #!DOCS_ONLY

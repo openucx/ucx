@@ -125,7 +125,8 @@ enum ucp_params_field {
     UCP_PARAM_FIELD_MT_WORKERS_SHARED = UCS_BIT(5), /**< mt_workers_shared */
     UCP_PARAM_FIELD_ESTIMATED_NUM_EPS = UCS_BIT(6), /**< estimated_num_eps */
     UCP_PARAM_FIELD_ESTIMATED_NUM_PPN = UCS_BIT(7), /**< estimated_num_ppn */
-    UCP_PARAM_FIELD_NAME              = UCS_BIT(8)  /**< name */
+    UCP_PARAM_FIELD_NAME              = UCS_BIT(8), /**< name */
+    UCP_PARAM_FIELD_NODE_LOCAL_ID     = UCS_BIT(9)
 };
 
 
@@ -164,7 +165,10 @@ enum ucp_feature {
      * @ref ucp_mem_map and packed by @ref ucp_memh_pack with the flag
      * @ref UCP_MEMH_PACK_FLAG_EXPORT and use it for local operations
      */
-    UCP_FEATURE_EXPORTED_MEMH = UCS_BIT(7)
+    UCP_FEATURE_EXPORTED_MEMH = UCS_BIT(7),
+
+    /** Request device-based communication features */
+    UCP_FEATURE_DEVICE        = UCS_BIT(8)
 };
 
 
@@ -430,10 +434,11 @@ enum ucp_lib_attr_field {
  * present. It is used to enable backward compatibility support.
  */
 enum ucp_context_attr_field {
-    UCP_ATTR_FIELD_REQUEST_SIZE = UCS_BIT(0), /**< UCP request size */
-    UCP_ATTR_FIELD_THREAD_MODE  = UCS_BIT(1), /**< UCP context thread flag */
-    UCP_ATTR_FIELD_MEMORY_TYPES = UCS_BIT(2), /**< UCP supported memory types */
-    UCP_ATTR_FIELD_NAME         = UCS_BIT(3)  /**< UCP context name */
+    UCP_ATTR_FIELD_REQUEST_SIZE        = UCS_BIT(0), /**< UCP request size */
+    UCP_ATTR_FIELD_THREAD_MODE         = UCS_BIT(1), /**< UCP context thread flag */
+    UCP_ATTR_FIELD_MEMORY_TYPES        = UCS_BIT(2), /**< UCP supported memory types */
+    UCP_ATTR_FIELD_NAME                = UCS_BIT(3), /**< UCP context name */
+    UCP_ATTR_FIELD_DEVICE_COUNTER_SIZE = UCS_BIT(4)  /**< UCP Device API counter size */
 };
 
 
@@ -1140,6 +1145,16 @@ typedef struct ucp_params {
      * unique name will be created for you.
      */
     const char                         *name;
+
+    /**
+     * An optimization hint for a single node. For example, when used from MPI or
+     * OpenSHMEM libraries, this number will specify the local identificator on
+     * a single node in the job. Does not affect semantics, only transport
+     * selection criteria and the resulting performance.
+     * The value can be also set by the UCX_LOCAL_NODE_ID environment variable,
+     * which will override the id set by @e node_local_id
+     */
+    size_t                             node_local_id;
 } ucp_params_t;
 
 
@@ -1208,6 +1223,11 @@ typedef struct ucp_context_attr {
      * Tracing and analysis tools can use name to identify this UCX context.
      */
     char                  name[UCP_ENTITY_NAME_MAX];
+
+    /**
+     * Size usable to allocate a counter memory for UCP Device API usage.
+     */
+    size_t                device_counter_size;
 } ucp_context_attr_t;
 
 
@@ -3929,22 +3949,6 @@ void ucp_stream_data_release(ucp_ep_h ep, void *data);
  * will be invoked for this request.
  */
 void ucp_request_free(void *request);
-
-
-/**
- * @ingroup UCP_COMM
- * @brief Create an empty communications request.
- *
- * @param [in]  worker       UCP worker.
- *
- * @return Error code as defined by @ref ucs_status_t
- *
- * This routine creates request which may be used in functions
- * @ref ucp_tag_send_nbx, @ref ucp_tag_recv_nbx, etc. The application
- * is responsible for releasing the handle using the @ref ucp_request_free
- * routine
- */
-void *ucp_request_alloc(ucp_worker_h worker);
 
 
 /**

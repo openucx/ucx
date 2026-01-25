@@ -11,6 +11,7 @@
 #include "proto_init.h"
 #include "proto_debug.h"
 #include "proto_select.inl"
+#include "proto_common.inl"
 
 #include <ucp/core/ucp_ep.inl>
 #include <ucs/datastruct/array.h>
@@ -129,7 +130,6 @@ ucp_proto_init_skip_recv_overhead(const ucp_proto_common_init_params_t *params,
 static ucs_status_t
 ucp_proto_init_add_tl_perf(const ucp_proto_common_init_params_t *params,
                            const ucp_proto_common_tl_perf_t *tl_perf,
-                           ucp_proto_perf_node_t *const tl_perf_node,
                            size_t range_start, size_t range_end,
                            ucp_proto_perf_t *perf)
 {
@@ -170,7 +170,8 @@ ucp_proto_init_add_tl_perf(const ucp_proto_common_init_params_t *params,
 
     /* Send time is representing request completion, which in case of zcopy
        waits for ACK from remote side. */
-    if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) {
+    if ((op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) &&
+        (params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY)) {
         perf_factors[UCP_PROTO_PERF_FACTOR_LATENCY].c += tl_perf->latency;
     }
 
@@ -184,7 +185,7 @@ ucp_proto_init_add_tl_perf(const ucp_proto_common_init_params_t *params,
     return ucp_proto_perf_add_funcs(perf, range_start, range_end, perf_factors,
                                     ucp_proto_perf_node_new_data("transport",
                                                                  ""),
-                                    tl_perf_node);
+                                    tl_perf->node);
 }
 
 /**
@@ -386,7 +387,7 @@ ucp_proto_init_add_buffer_copy_time(ucp_worker_h worker, const char *title,
     perf_factors[buffer_copy_factor_id].c +=
             ucp_tl_iface_latency(context, &perf_attr.latency);
     perf_factors[buffer_copy_factor_id].m +=
-            1.0 / ucp_tl_iface_bandwidth(context, &perf_attr.bandwidth);
+            1.0 / ucp_proto_common_iface_bandwidth(context, &perf_attr.bandwidth);
 
     if ((memtype_op == UCT_EP_OP_GET_SHORT) ||
         (memtype_op == UCT_EP_OP_GET_ZCOPY)) {
@@ -502,7 +503,6 @@ ucp_proto_common_check_mem_access(const ucp_proto_common_init_params_t *params)
 
 ucs_status_t ucp_proto_init_perf(const ucp_proto_common_init_params_t *params,
                                  const ucp_proto_common_tl_perf_t *tl_perf,
-                                 ucp_proto_perf_node_t *const tl_perf_node,
                                  ucp_md_map_t reg_md_map, const char *perf_name,
                                  ucp_proto_perf_t **perf_p)
 {
@@ -531,8 +531,8 @@ ucs_status_t ucp_proto_init_perf(const ucp_proto_common_init_params_t *params,
         return status;
     }
 
-    status = ucp_proto_init_add_tl_perf(params, tl_perf, tl_perf_node,
-                                        range_start, range_end, perf);
+    status = ucp_proto_init_add_tl_perf(params, tl_perf, range_start, range_end,
+                                        perf);
     if (status != UCS_OK) {
         goto err_cleanup_perf;
     }

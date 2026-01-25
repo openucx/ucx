@@ -11,6 +11,7 @@
 #define UCX_LIBPERF_H
 
 #include <ucs/sys/compiler.h>
+#include <ucs/sys/device_code.h>
 
 BEGIN_C_DECLS
 
@@ -30,6 +31,9 @@ typedef enum {
 typedef enum {
     UCX_PERF_CMD_AM,
     UCX_PERF_CMD_PUT,
+    UCX_PERF_CMD_PUT_SINGLE,
+    UCX_PERF_CMD_PUT_MULTI,
+    UCX_PERF_CMD_PUT_PARTIAL,
     UCX_PERF_CMD_GET,
     UCX_PERF_CMD_ADD,
     UCX_PERF_CMD_FADD,
@@ -73,6 +77,14 @@ typedef enum {
     UCX_PERF_WAIT_MODE_SPIN,         /* Spin without calling progress */
     UCX_PERF_WAIT_MODE_LAST
 } ucx_perf_wait_mode_t;
+
+
+typedef enum {
+    UCX_PERF_CHANNEL_MODE_SINGLE,    /* Use a single fixed channel ID (0) */
+    UCX_PERF_CHANNEL_MODE_RANDOM,    /* Use random channel ID per operation */
+    UCX_PERF_CHANNEL_MODE_PER_THREAD,/* Use thread ID */
+    UCX_PERF_CHANNEL_MODE_LAST
+} ucx_perf_channel_mode_t;
 
 
 enum ucx_perf_test_flags {
@@ -160,6 +172,10 @@ typedef enum {
                                              (_params)->uct.dev_name
 
 
+#define UCX_PERF_MEM_DEV_DEFAULT -1
+
+#define UCP_PERF_FC_WINDOW_DEFAULT 4
+
 /**
  * Performance counter type.
  */
@@ -183,6 +199,12 @@ typedef struct ucx_perf_result {
     }
     latency, bandwidth, msgrate;
 } ucx_perf_result_t;
+
+
+typedef struct {
+    ucs_memory_type_t mem_type;
+    int               device_id;
+} ucx_perf_accel_dev_t;
 
 
 typedef void (*ucx_perf_rte_progress_cb_t)(void *arg);
@@ -244,39 +266,47 @@ typedef void (*ucx_perf_report_func_t)(void *rte_group,
  * Describes a performance test.
  */
 typedef struct ucx_perf_params {
-    ucx_perf_api_t         api;             /* Which API to test */
-    ucx_perf_cmd_t         command;         /* Command to perform */
-    ucx_perf_test_type_t   test_type;       /* Test communication type */
-    ucs_thread_mode_t      thread_mode;     /* Thread mode for communication objects */
-    unsigned               thread_count;    /* Number of threads in the test program */
-    ucs_async_mode_t       async_mode;      /* how async progress and locking is done */
-    ucx_perf_wait_mode_t   wait_mode;       /* How to wait */
-    ucs_memory_type_t      send_mem_type;   /* Send memory type */
-    ucs_memory_type_t      recv_mem_type;   /* Recv memory type */
-    unsigned               flags;           /* See ucx_perf_test_flags. */
+    ucx_perf_api_t          api;             /* Which API to test */
+    ucx_perf_cmd_t          command;         /* Command to perform */
+    ucx_perf_test_type_t    test_type;       /* Test communication type */
+    ucs_thread_mode_t       thread_mode;     /* Thread mode for communication objects */
+    unsigned                thread_count;    /* Number of threads in the test program */
+    ucs_async_mode_t        async_mode;      /* how async progress and locking is done */
+    ucx_perf_wait_mode_t    wait_mode;       /* How to wait */
+    ucs_memory_type_t       send_mem_type;   /* Send memory type */
+    ucs_memory_type_t       recv_mem_type;   /* Recv memory type */
+    ucx_perf_accel_dev_t    send_device;     /* Send memory device */
+    ucx_perf_accel_dev_t    recv_device;     /* Recv memory device */
+    ucs_device_level_t      device_level;    /* Device level */
+    unsigned                flags;           /* See ucx_perf_test_flags. */
 
-    size_t                 *msg_size_list;  /* Test message sizes list. The size
-                                               of the array is in msg_size_cnt */
-    size_t                 msg_size_cnt;    /* Number of message sizes in
-                                               message sizes list */
-    size_t                 iov_stride;      /* Distance between starting address
-                                               of consecutive IOV entries. It is
-                                               similar to UCT uct_iov_t type stride */
-    size_t                 alignment;       /* Message buffer alignment */
-    unsigned               max_outstanding; /* Maximal number of outstanding sends */
-    ucx_perf_counter_t     warmup_iter;     /* Number of warm-up iterations */
-    double                 warmup_time;     /* Approximately how long to warm-up */
-    ucx_perf_counter_t     max_iter;        /* Iterations limit, 0 - unlimited */
-    double                 max_time;        /* Time limit (seconds), 0 - unlimited */
-    double                 report_interval; /* Interval at which to call the report callback */
-    double                 percentile_rank; /* The percentile rank of the percentile reported
-                                               in latency tests */
+    size_t                  *msg_size_list;  /* Test message sizes list. The size
+                                                of the array is in msg_size_cnt */
+    size_t                  msg_size_cnt;    /* Number of message sizes in
+                                                message sizes list */
+    size_t                  iov_stride;      /* Distance between starting address
+                                                of consecutive IOV entries. It is
+                                                similar to UCT uct_iov_t type stride */
+    size_t                  alignment;       /* Message buffer alignment */
+    unsigned                max_outstanding; /* Maximal number of outstanding sends */
+    ucx_perf_counter_t      warmup_iter;     /* Number of warm-up iterations */
+    double                  warmup_time;     /* Approximately how long to warm-up */
+    ucx_perf_counter_t      max_iter;        /* Iterations limit, 0 - unlimited */
+    double                  max_time;        /* Time limit (seconds), 0 - unlimited */
+    double                  report_interval; /* Interval at which to call the report callback */
+    double                  percentile_rank; /* The percentile rank of the percentile reported
+                                                in latency tests */
+    ucx_perf_channel_mode_t device_channel_mode; /* Channel selection mode */
+    unsigned long long      channel_rand_seed; /* Seed for random generation */
+    unsigned                device_thread_count; /* Number of device threads */
+    unsigned                device_block_count; /* Number of device blocks */
+    unsigned                device_fc_window; /* Flow control window size for device tests */
 
-    void                   *rte_group;      /* Opaque RTE group handle */
-    ucx_perf_rte_t         *rte;            /* RTE functions used to exchange data */
+    void                    *rte_group;      /* Opaque RTE group handle */
+    ucx_perf_rte_t          *rte;            /* RTE functions used to exchange data */
 
-    ucx_perf_report_func_t report_func;     /* Report function callback */
-    void                   *report_arg;     /* Custom argument for report function */
+    ucx_perf_report_func_t  report_func;     /* Report function callback */
+    void                    *report_arg;     /* Custom argument for report function */
 
     struct {
         char                   dev_name[UCT_DEVICE_NAME_MAX]; /* Device name to use */
@@ -313,6 +343,10 @@ typedef struct {
 /* Allocators for each memory type */
 typedef struct ucx_perf_allocator ucx_perf_allocator_t;
 extern const ucx_perf_allocator_t* ucx_perf_mem_type_allocators[];
+
+/* Device test dispatchers for each memory type */
+typedef struct ucx_perf_device_dispatcher ucx_perf_device_dispatcher_t;
+extern const ucx_perf_device_dispatcher_t* ucx_perf_mem_type_device_dispatchers[];
 
 
 const char *ucp_perf_daemon_am_id_name(ucp_perf_daemon_am_id_t id);

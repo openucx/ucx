@@ -23,7 +23,8 @@ for tag in \
     ucp_tag_send_nbx \
     ucs_error \
     ucp_request_free \
-    test_ucp_am;
+    test_ucp_am \
+    uct_iface_mp_chunk_alloc;
 do
     echo checking tag=$tag
     vim -u NONE -c "set tags=./tags" -c "tag $tag" -c 'if v:errmsg != "" | cquit | else | quit | endif'

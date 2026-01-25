@@ -27,7 +27,7 @@
 /* Format string to display a protocol performance function bandwidth */
 #define UCP_PROTO_PERF_FUNC_BW_FMT "%.2f"
 #define UCP_PROTO_PERF_FUNC_BW_ARG(_perf_func) \
-    ((_perf_func)->m != 0.0) ? (1.0 / ((_perf_func)->m * UCS_MBYTE)) : INFINITY
+    ((_perf_func)->m != 0.0) ? (1.0 / ((_perf_func)->m * UCS_MBYTE)) : UCS_INFINITY
 
 /* Format string to display a protocol performance function */
 #define UCP_PROTO_PERF_FUNC_FMT \
@@ -157,14 +157,14 @@ void ucp_proto_select_elem_info(ucp_worker_h worker,
                                 ucp_worker_cfg_index_t rkey_cfg_index,
                                 const ucp_proto_select_param_t *select_param,
                                 const ucp_proto_select_elem_t *select_elem,
-                                int show_all, ucs_string_buffer_t *strb);
+                                int show_all, int show_used,
+                                ucs_string_buffer_t *strb);
 
 
 void ucp_proto_select_elem_trace(ucp_worker_h worker,
-                                 ucp_worker_cfg_index_t ep_cfg_index,
-                                 ucp_worker_cfg_index_t rkey_cfg_index,
                                  const ucp_proto_select_param_t *select_param,
-                                 ucp_proto_select_elem_t *select_elem);
+                                 const ucp_proto_select_elem_t *select_elem,
+                                 int show_used);
 
 
 void ucp_proto_select_write_info(

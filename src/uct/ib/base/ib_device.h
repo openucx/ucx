@@ -16,6 +16,7 @@
 #include <ucs/debug/assert.h>
 #include <ucs/datastruct/callbackq.h>
 #include <ucs/datastruct/khash.h>
+#include <ucs/datastruct/hlist.h>
 #include <ucs/type/spinlock.h>
 #include <ucs/sys/sock.h>
 
@@ -67,6 +68,7 @@
 #define UCT_IB_DEVICE_SYSFS_GID_ATTR_PFX  UCT_IB_DEVICE_SYSFS_PFX "/ports/%d/gid_attrs"
 #define UCT_IB_DEVICE_SYSFS_GID_TYPE_FMT  UCT_IB_DEVICE_SYSFS_GID_ATTR_PFX "/types/%d"
 #define UCT_IB_DEVICE_SYSFS_GID_NDEV_FMT  UCT_IB_DEVICE_SYSFS_GID_ATTR_PFX "/ndevs/%d"
+#define UCT_IB_DEVICE_SYSFS_ROCE_TC_FMT   UCT_IB_DEVICE_SYSFS_PFX "/tc/%d/traffic_class"
 #define UCT_IB_DEVICE_ECE_DEFAULT         0x0         /* default ECE */
 #define UCT_IB_DEVICE_ECE_MAX             0xffffffffU /* max ECE */
 #define UCT_IB_DEVICE_DEFAULT_GID_INDEX 0   /* The gid index used by default for an IB/RoCE port */
@@ -181,7 +183,7 @@ KHASH_TYPE(uct_ib_ah, struct ibv_ah_attr, struct ibv_ah*);
 typedef struct uct_ib_async_event {
     enum ibv_event_type event_type;             /* Event type */
     union {
-        uint8_t         port_num;               /* Port number */
+        uint32_t        port_num;               /* Port number */
         uint32_t        qp_num;                 /* QP number */
         uint32_t        dct_num;                /* DCT number */
         void            *cookie;                /* Pointer to resource */
@@ -197,6 +199,7 @@ typedef struct uct_ib_async_event_wait {
     ucs_callback_t      cb;                     /* Callback */
     ucs_callbackq_t     *cbq;                   /* Async queue for callback */
     int                 cb_id;                  /* Scheduled callback ID */
+    ucs_hlist_link_t    link;                   /* Link in list */
 } uct_ib_async_event_wait_t;
 
 
@@ -205,7 +208,7 @@ typedef struct uct_ib_async_event_wait {
  */
 typedef struct {
     unsigned                  fired;            /* Event happened */
-    uct_ib_async_event_wait_t *wait_ctx;        /* Waiting context */
+    ucs_hlist_head_t          list;             /* List of waiting contexts */
 } uct_ib_async_event_val_t;
 
 
@@ -409,9 +412,11 @@ ucs_status_t uct_ib_device_get_roce_ndev_name(uct_ib_device_t *dev,
                                               uint8_t gid_index,
                                               char *ndev_name, size_t max);
 
+ucs_status_t uct_ib_iface_get_loopback_ndev_index(unsigned *ndev_index_p);
+
 ucs_status_t
 uct_ib_device_get_roce_ndev_index(uct_ib_device_t *dev, uint8_t port_num,
-                                  uint8_t gid_index, int *ndev_index_p);
+                                  uint8_t gid_index, unsigned *ndev_index_p);
 
 unsigned uct_ib_device_get_roce_lag_level(uct_ib_device_t *dev,
                                           uint8_t port_num,
@@ -446,6 +451,9 @@ int uct_ib_device_test_roce_gid_index(uct_ib_device_t *dev, uint8_t port_num,
                                       const union ibv_gid *gid,
                                       uint8_t gid_index);
 
+unsigned long
+uct_ib_device_query_roce_tclass(uct_ib_device_t *dev, uint8_t port_num);
+
 ucs_status_t
 uct_ib_device_async_event_register(uct_ib_device_t *dev,
                                    enum ibv_event_type event_type,
@@ -462,6 +470,11 @@ uct_ib_device_async_event_wait(uct_ib_device_t *dev,
                                enum ibv_event_type event_type,
                                uint32_t resource_id,
                                uct_ib_async_event_wait_t *wait_ctx);
+
+void uct_ib_device_async_event_cancel(uct_ib_device_t *dev,
+                                      enum ibv_event_type event_type,
+                                      uint32_t resource_id,
+                                      uct_ib_async_event_wait_t *wait_ctx);
 
 void uct_ib_device_async_event_unregister(uct_ib_device_t *dev,
                                           enum ibv_event_type event_type,

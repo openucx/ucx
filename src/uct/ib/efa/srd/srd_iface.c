@@ -223,9 +223,12 @@ static void uct_srd_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
 
 static uct_ib_iface_ops_t uct_srd_iface_ops = {
     .super = {
+        .iface_query_v2        = uct_iface_base_query_v2,
         .iface_estimate_perf   = uct_ib_iface_estimate_perf,
         .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)
             ucs_empty_function,
+        .iface_mem_element_pack = (uct_iface_mem_element_pack_func_t)
+            ucs_empty_function_return_unsupported,
         .ep_query              = (uct_ep_query_func_t)
             ucs_empty_function_return_unsupported,
         .ep_invalidate         = (uct_ep_invalidate_func_t)
@@ -233,7 +236,9 @@ static uct_ib_iface_ops_t uct_srd_iface_ops = {
         .ep_connect_to_ep_v2   = (uct_ep_connect_to_ep_v2_func_t)
             ucs_empty_function_return_unsupported,
         .iface_is_reachable_v2 = uct_ib_iface_is_reachable_v2,
-        .ep_is_connected       = uct_srd_ep_is_connected
+        .ep_is_connected       = uct_srd_ep_is_connected,
+        .ep_get_device_ep      = (uct_ep_get_device_ep_func_t)
+            ucs_empty_function_return_unsupported
     },
     .create_cq      = uct_ib_verbs_create_cq,
     .destroy_cq     = uct_ib_verbs_destroy_cq,
@@ -471,7 +476,9 @@ static UCS_CLASS_INIT_FUNC(uct_srd_iface_t, uct_md_h md, uct_worker_h worker,
                                       sizeof(uct_ib_iface_recv_desc_t);
     init_attr.rx_hdr_len            = sizeof(uct_srd_hdr_t);
     init_attr.seg_size              = ucs_min(mtu, config->super.seg_size);
+    init_attr.xport_hdr_len         = UCT_IB_DETH_LEN + sizeof(uct_srd_hdr_t);
     init_attr.qp_type               = IBV_QPT_DRIVER;
+    init_attr.dev_name              = params->mode.device.dev_name;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &uct_srd_iface_tl_ops,
                               &uct_srd_iface_ops, md, worker, params,
@@ -789,8 +796,12 @@ static void uct_srd_iface_process_ctl(uct_srd_iface_t *iface,
                 sizeof(*ctl) + iface->super.addr_size, length);
 
     /* TODO do we need an actual non-zero path index ? */
-    uct_ib_iface_fill_ah_attr_from_addr(&iface->super, ib_addr, 0, &ah_attr,
-                                        &path_mtu);
+    status = uct_ib_iface_fill_ah_attr_from_addr(&iface->super, ib_addr, 0,
+                                                 &ah_attr, &path_mtu);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
     status = uct_ib_iface_create_ah(&iface->super, &ah_attr, "SRD AH", &ah);
     if (status != UCS_OK) {
         ucs_error("iface=%p id=%u ep_uuid=%"PRIx64" qpn=%u failed to create ah"
@@ -877,9 +888,7 @@ uct_srd_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     int ret;
 
     /* Common parameters */
-    status = uct_ib_iface_query(&iface->super,
-                                UCT_IB_DETH_LEN + sizeof(uct_srd_hdr_t),
-                                iface_attr);
+    status = uct_ib_iface_query(&iface->super, iface_attr);
     if (status != UCS_OK) {
         return status;
     }

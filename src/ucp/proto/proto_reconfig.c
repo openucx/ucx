@@ -15,6 +15,7 @@
 
 #include <ucp/am/ucp_am.inl>
 #include <ucp/core/ucp_worker.inl>
+#include <ucs/sys/math.h>
 
 
 /* Select a new protocol and start progressing it */
@@ -29,6 +30,7 @@ static ucs_status_t ucp_proto_reconfig_select_progress(uct_pending_req_t *self)
         return UCS_ERR_NO_RESOURCE;
     }
 
+    /* coverity[address_free] */
     return req->send.uct.func(&req->send.uct);
 }
 
@@ -102,7 +104,7 @@ static void ucp_proto_reconfig_probe(const ucp_proto_init_params_t *init_params)
     }
 
     perf_factors[UCP_PROTO_PERF_FACTOR_LOCAL_TL] =
-            ucs_linear_func_make(INFINITY, 0);
+            ucs_linear_func_make(UCS_INFINITY, 0);
     ucp_proto_perf_add_funcs(perf, 0, SIZE_MAX, perf_factors,
                              ucp_proto_perf_node_new_data("dummy", ""), NULL);
     ucp_proto_select_add_proto(init_params, UCS_MEMUNITS_INF, 0, perf, NULL, 0);

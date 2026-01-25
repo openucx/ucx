@@ -26,6 +26,17 @@
 
 
 enum {
+    UCT_RC_MLX5_IFACE_ADDR_TYPE_BASIC,
+
+    /* Tag Matching address. It additionally contains QP number which
+     * is used for hardware offloads. */
+    UCT_RC_MLX5_IFACE_ADDR_TYPE_TM
+    /* NOTE: DO NOT extend this enum because it will break wire
+     * compatibility */
+};
+
+
+enum {
     /* EP address includes flush_rkey value */
     UCT_RC_MLX5_EP_ADDR_FLAG_FLUSH_RKEY       = UCS_BIT(0),
     /* atomic key has no offset */
@@ -181,7 +192,9 @@ void uct_rc_mlx5_base_ep_vfs_populate(uct_rc_ep_t *rc_ep);
 ucs_status_t uct_rc_mlx5_base_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                        uct_completion_t *comp);
 
-ucs_status_t uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep, unsigned flags);
+ucs_status_t
+uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
+                               const uct_ep_invalidate_params_t *params);
 
 ucs_status_t uct_rc_mlx5_base_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
                                          uct_rc_pending_req_t *req);

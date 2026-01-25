@@ -994,3 +994,69 @@ UCS_TEST_F(test_config, test_config_file_parse_files) {
     EXPECT_EQ(100, opts.price);
     ucs_config_parser_release_opts(&opts, car_opts_table);
 }
+
+UCS_TEST_F(test_config, global_opts) {
+    EXPECT_TRUE(ucs_global_opts_is_read_only("LOG_FILE"));
+    EXPECT_TRUE(ucs_global_opts_is_read_only("LOG_FILE_SIZE"));
+    EXPECT_TRUE(ucs_global_opts_is_read_only("LOG_FILE_ROTATE"));
+    EXPECT_TRUE(ucs_global_opts_is_read_only("ERROR_SIGNALS"));
+    EXPECT_TRUE(ucs_global_opts_is_read_only("VFS_ENABLE"));
+    EXPECT_TRUE(ucs_global_opts_is_read_only("VFS_SOCK_PATH"));
+    EXPECT_TRUE(ucs_global_opts_is_read_only("VFS_THREAD_AFFINITY"));
+#ifdef ENABLE_STATS
+    EXPECT_TRUE(ucs_global_opts_is_read_only("STATS_DEST"));
+    EXPECT_TRUE(ucs_global_opts_is_read_only("STATS_TRIGGER"));
+    EXPECT_TRUE(ucs_global_opts_is_read_only("STATS_FILTER"));
+    EXPECT_TRUE(ucs_global_opts_is_read_only("STATS_FORMAT"));
+#endif
+    EXPECT_TRUE(ucs_global_opts_is_read_only("MEMTRACK_DEST"));
+    EXPECT_TRUE(ucs_global_opts_is_read_only("PROFILE_MODE"));
+    EXPECT_TRUE(ucs_global_opts_is_read_only("PROFILE_FILE"));
+    EXPECT_TRUE(ucs_global_opts_is_read_only("PROFILE_LOG_SIZE"));
+    EXPECT_TRUE(ucs_global_opts_is_read_only("RCACHE_STAT_MIN"));
+
+    for (auto field = ucs_arch_global_opts_table; field->name != nullptr;
+         ++field) {
+        EXPECT_TRUE(ucs_global_opts_is_read_only(field->name));
+    }
+
+    EXPECT_FALSE(ucs_global_opts_is_read_only("LOG_LEVEL"));
+    EXPECT_FALSE(ucs_global_opts_is_read_only(""));
+    EXPECT_FALSE(ucs_global_opts_is_read_only(nullptr));
+}
+
+UCS_TEST_F(test_config, has_field) {
+    std::pair<const char*, const char*> dummy_names[] = {{nullptr, nullptr},
+                                                         {"PREFIX_", nullptr},
+                                                         {nullptr, "NAME"},
+                                                         {"PREFIX_", "NAME"}};
+
+    for (const auto &name : dummy_names) {
+        EXPECT_FALSE(
+                ucs_config_parser_has_field(nullptr, name.first, name.second));
+        EXPECT_FALSE(ucs_config_parser_has_field(seat_opts_table, name.first,
+                                                 name.second));
+    }
+
+    for (auto field = seat_opts_table; field->name != nullptr; ++field) {
+        EXPECT_TRUE(
+                ucs_config_parser_has_field(seat_opts_table, "", field->name));
+        EXPECT_TRUE(ucs_config_parser_has_field(seat_opts_table, nullptr,
+                                                field->name));
+        EXPECT_FALSE(ucs_config_parser_has_field(seat_opts_table, "PREFIX_",
+                                                 field->name));
+    }
+
+    for (auto field = coach_opts_table; field->name != nullptr; ++field) {
+        const std::string prefix{field->name};
+        for (auto sub_field = seat_opts_table; sub_field->name != nullptr;
+             ++sub_field) {
+            const std::string name{prefix + std::string(sub_field->name)};
+            EXPECT_TRUE(ucs_config_parser_has_field(coach_opts_table, "",
+                                                    name.c_str()));
+        }
+    }
+
+    EXPECT_FALSE(
+            ucs_config_parser_has_field(engine_opts_table, "", "FUEL_LEVEL"));
+}

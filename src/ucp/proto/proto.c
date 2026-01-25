@@ -46,10 +46,10 @@
     _macro(ucp_rndv_get_mtype_proto) \
     _macro(ucp_rndv_ats_proto) \
     _macro(ucp_rndv_rtr_proto) \
+    _macro(ucp_rndv_put_zcopy_proto) \
     _macro(ucp_rndv_rtr_mtype_proto) \
     _macro(ucp_rndv_send_ppln_proto) \
     _macro(ucp_rndv_recv_ppln_proto) \
-    _macro(ucp_rndv_put_zcopy_proto) \
     _macro(ucp_rndv_put_mtype_proto) \
     _macro(ucp_rndv_rkey_ptr_proto) \
     _macro(ucp_rndv_rkey_ptr_mtype_proto) \

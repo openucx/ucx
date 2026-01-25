@@ -169,6 +169,7 @@ AS_IF([test "x$with_ib" = "xyes"],
                            MLX5DV_CQ_INIT_ATTR_MASK_COMPRESSED_CQE,
                            MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE,
                            MLX5DV_QP_CREATE_ALLOW_SCATTER_TO_CQE,
+                           MLX5DV_UMEM_MASK_DMABUF,
                            MLX5DV_UAR_ALLOC_TYPE_BF,
                            MLX5DV_UAR_ALLOC_TYPE_NC_DEDICATED],
                                   [], [], [[#include <infiniband/mlx5dv.h>]])
@@ -207,13 +208,15 @@ AS_IF([test "x$with_ib" = "xyes"],
        AC_CHECK_DECLS([IBV_LINK_LAYER_INFINIBAND,
                        IBV_LINK_LAYER_ETHERNET,
                        IBV_EVENT_GID_CHANGE,
+                       IBV_EVENT_PORT_SPEED_CHANGE,
                        IBV_TRANSPORT_USNIC,
                        IBV_TRANSPORT_USNIC_UDP,
                        IBV_TRANSPORT_UNSPECIFIED,
                        ibv_create_qp_ex,
                        ibv_create_cq_ex,
                        ibv_create_srq_ex,
-                       ibv_reg_dmabuf_mr],
+                       ibv_reg_dmabuf_mr,
+                       ibv_query_port_speed],
                       [], [], [[#include <infiniband/verbs.h>]])
 
        # Check ECE operation APIs are supported by rdma-core package
@@ -231,6 +234,9 @@ AS_IF([test "x$with_ib" = "xyes"],
 
        AC_CHECK_MEMBERS([struct ibv_device_attr_ex.pci_atomic_caps,
                          struct ibv_device_attr_ex.odp_caps],
+                        [], [], [[#include <infiniband/verbs.h>]])
+
+       AC_CHECK_MEMBERS([struct ibv_port_attr.active_speed_ex],
                         [], [], [[#include <infiniband/verbs.h>]])
 
        AC_CHECK_DECLS([IBV_ACCESS_RELAXED_ORDERING,
@@ -282,11 +288,17 @@ AS_IF([test "x$with_ib" = "xyes"],
                [AC_DEFINE([HAVE_IBV_DM], 1, [Device Memory support])],
                [], [[#include <infiniband/verbs.h>]])])
 
-        # DDP support
         AS_IF([test "x$have_mlx5" = xyes], [
+           # DDP support
            AC_CHECK_DECLS([MLX5DV_CONTEXT_MASK_OOO_RECV_WRS],
                [AC_DEFINE([HAVE_OOO_RECV_WRS], 1, [Have DDP support])],
-               [], [[#include <infiniband/mlx5dv.h>]])])
+               [], [[#include <infiniband/mlx5dv.h>]])
+
+           # Direct NIC support, from IB side
+           AC_CHECK_DECLS([mlx5dv_get_data_direct_sysfs_path,
+                           mlx5dv_reg_dmabuf_mr], [], [],
+                          [[#include <infiniband/mlx5dv.h>]])
+              ])
 
        # RDMA netlink support requires defines from rdma_netlink.h and the
        # ability to get netlink index from ibv_device struct.

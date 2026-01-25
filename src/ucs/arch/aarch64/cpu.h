@@ -3,6 +3,7 @@
 * Copyright (C) ARM Ltd. 2016-2020.  ALL RIGHTS RESERVED.
 * Copyright (C) Stony Brook University. 2016-2020.  ALL RIGHTS RESERVED.
 * Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
+* Copyright (C) Fujitsu Limited. 2025. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -18,8 +19,10 @@
 #include <ucs/arch/generic/cpu.h>
 #include <ucs/sys/math.h>
 #include <ucs/type/status.h>
+#ifndef __NVCC__
 #ifdef __ARM_NEON
 #include <arm_neon.h>
+#endif
 #endif
 #ifdef __ARM_FEATURE_SVE
 #include <arm_sve.h>
@@ -145,6 +148,15 @@ static inline ucs_cpu_model_t ucs_arch_get_cpu_model()
     if ((ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_NVIDIA) &&
         (cpuid.part == 0xd4f)) {
         return UCS_CPU_MODEL_NVIDIA_GRACE;
+    }
+
+    if (ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_FUJITSU_ARM) {
+        if (cpuid.part == 0x001) {
+            return UCS_CPU_MODEL_FUJITSU_A64FX;
+        }
+        if (cpuid.part == 0x003) {
+            return UCS_CPU_MODEL_FUJITSU_MONAKA;
+        }
     }
 
     return UCS_CPU_MODEL_ARM_AARCH64;
@@ -299,6 +311,11 @@ ucs_memcpy_nontemporal(void *dst, const void *src, size_t len)
 static inline ucs_status_t ucs_arch_get_cache_size(size_t *cache_sizes)
 {
     return UCS_ERR_UNSUPPORTED;
+}
+
+static UCS_F_ALWAYS_INLINE void ucs_cpu_relax()
+{
+    asm volatile ("yield" ::: "memory");
 }
 
 END_C_DECLS

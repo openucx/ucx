@@ -135,7 +135,7 @@ protected:
         uct_ib_address_pack_params_t params;
 
         uct_ib_iface_address_pack(iface, ib_addr);
-        uct_ib_address_unpack(ib_addr, &params);
+        ASSERT_UCS_OK(uct_ib_address_unpack(ib_addr, &params));
         EXPECT_TRUE(params.flags & UCT_IB_ADDRESS_PACK_FLAG_PKEY);
         EXPECT_EQ(m_pkey[0], params.pkey);
 

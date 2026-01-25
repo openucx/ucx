@@ -21,17 +21,6 @@
 #include "rc_mlx5.inl"
 
 
-enum {
-    UCT_RC_MLX5_IFACE_ADDR_TYPE_BASIC,
-
-    /* Tag Matching address. It additionally contains QP number which
-     * is used for hardware offloads. */
-    UCT_RC_MLX5_IFACE_ADDR_TYPE_TM
-    /* NOTE: DO NOT extend this enum because it will break wire
-     * compatibility */
-};
-
-
 /**
  * RC mlx5 interface configuration
  */
@@ -645,6 +634,17 @@ static uint8_t uct_rc_mlx5_iface_get_address_type(uct_iface_h tl_iface)
                                             UCT_RC_MLX5_IFACE_ADDR_TYPE_BASIC;
 }
 
+static const char *uct_rc_mlx5_iface_tm_type_str(uint8_t tm_type)
+{
+    if (tm_type == UCT_RC_MLX5_IFACE_ADDR_TYPE_BASIC) {
+        return "basic";
+    } else if (tm_type == UCT_RC_MLX5_IFACE_ADDR_TYPE_TM) {
+        return "hw offload";
+    } else {
+        return "unknown";
+    }
+}
+
 static ucs_status_t uct_rc_mlx5_iface_get_address(uct_iface_h tl_iface,
                                                   uct_iface_addr_t *addr)
 {
@@ -657,7 +657,6 @@ static int
 uct_rc_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                   const uct_iface_is_reachable_params_t *params)
 {
-    static const char *tm_type_to_str[] = {"basic", "tag matching"};
     uint8_t my_type = uct_rc_mlx5_iface_get_address_type(tl_iface);
     uint8_t remote_type;
     const uct_iface_addr_t *iface_addr;
@@ -668,10 +667,11 @@ uct_rc_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
     /* Check hardware tag matching compatibility */
     if ((iface_addr != NULL) &&
         ((remote_type = *(uint8_t*)iface_addr) != my_type)) {
-        uct_iface_fill_info_str_buf(
-                    params, "incompatible hardware tag matching. "
-                    "%s (local) vs %s (remote)",
-                    tm_type_to_str[my_type], tm_type_to_str[remote_type]);
+        uct_iface_fill_info_str_buf(params,
+                                    "incompatible hardware tag matching. "
+                                    "%s (local) vs %s (remote)",
+                                    uct_rc_mlx5_iface_tm_type_str(my_type),
+                                    uct_rc_mlx5_iface_tm_type_str(remote_type));
         return 0;
     }
 
@@ -771,6 +771,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
     self->tm.cmd_wq.super.super.type = UCT_IB_MLX5_OBJ_TYPE_LAST;
     init_attr->rx_hdr_len            = UCT_RC_MLX5_MP_ENABLED(self) ?
                                        0 : sizeof(uct_rc_mlx5_hdr_t);
+    init_attr->xport_hdr_len         = ucs_max(sizeof(uct_rc_hdr_t),
+                                               UCT_IB_RETH_LEN);
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, tl_ops, ops, tl_md, worker,
                               params, rc_config, init_attr);
@@ -931,13 +933,16 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
     init_attr.max_rd_atomic         = IBV_DEV_ATTR(&md->super.dev,
                                                    max_qp_rd_atom);
     init_attr.tx_moderation         = config->super.tx_cq_moderation;
+    init_attr.dev_name              = params->mode.device.dev_name;
 
-    if (md->dp_ordering_cap.rc == UCT_IB_MLX5_DP_ORDERING_OOO_ALL) {
+    if ((md->dp_ordering_cap_devx.rc == UCT_IB_MLX5_DP_ORDERING_OOO_ALL) ||
+        md->ddp_support_dv.rc) {
         init_attr.flags |= UCT_IB_DDP_SUPPORTED;
     }
 
     status = uct_rc_mlx5_dp_ordering_ooo_init(md, &self->super,
-                                              md->dp_ordering_cap.rc,
+                                              md->dp_ordering_cap_devx.rc,
+                                              md->ddp_support_dv.rc,
                                               &config->rc_mlx5_common,
                                               "rc_mlx5");
     if (status != UCS_OK) {
@@ -974,13 +979,16 @@ static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_mlx5_iface_t, uct_iface_t);
 static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .super = {
         .super = {
-            .iface_estimate_perf   = uct_rc_iface_estimate_perf,
-            .iface_vfs_refresh     = uct_rc_iface_vfs_refresh,
-            .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
-            .ep_invalidate         = uct_rc_mlx5_base_ep_invalidate,
-            .ep_connect_to_ep_v2   = uct_rc_mlx5_ep_connect_to_ep_v2,
-            .iface_is_reachable_v2 = uct_rc_mlx5_iface_is_reachable_v2,
-            .ep_is_connected       = uct_rc_mlx5_base_ep_is_connected
+            .iface_query_v2         = uct_iface_base_query_v2,
+            .iface_estimate_perf    = uct_rc_iface_estimate_perf,
+            .iface_vfs_refresh      = uct_rc_iface_vfs_refresh,
+            .iface_mem_element_pack = (uct_iface_mem_element_pack_func_t)ucs_empty_function_return_unsupported,
+            .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+            .ep_invalidate          = uct_rc_mlx5_base_ep_invalidate,
+            .ep_connect_to_ep_v2    = uct_rc_mlx5_ep_connect_to_ep_v2,
+            .iface_is_reachable_v2  = uct_rc_mlx5_iface_is_reachable_v2,
+            .ep_is_connected        = uct_rc_mlx5_base_ep_is_connected,
+            .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported
         },
         .create_cq      = uct_rc_mlx5_iface_common_create_cq,
         .destroy_cq     = uct_rc_mlx5_iface_common_destroy_cq,

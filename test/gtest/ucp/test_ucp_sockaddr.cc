@@ -2837,6 +2837,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_protocols, am_rndv_reset,
     UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, udx, "ud_x") \
     UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, rc, "rc_v") \
     UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, rcx, "rc_x") \
+    UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, srd, "srd") \
     UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, ib, "ib") \
     UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, tcp, "tcp") \
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, all, "all")

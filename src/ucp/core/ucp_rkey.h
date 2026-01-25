@@ -45,6 +45,15 @@ enum {
 
 
 /**
+ * Rkey config flags
+ */
+enum {
+    UCP_RKEY_CONFIG_FLAG_FLUSH    = UCS_BIT(0)  /* Put and atomic operations on this rkey
+                                                   require remote flush */
+};
+
+
+/**
  * Rkey configuration key
  */
 struct ucp_rkey_config_key {
@@ -54,8 +63,11 @@ struct ucp_rkey_config_key {
     /* Endpoint configuration index */
     ucp_worker_cfg_index_t ep_cfg_index;
 
-    /* Remove system device id */
+    /* Remote system device id */
     ucs_sys_device_t       sys_dev;
+
+    /* Rkey specific flags, like @a UCP_RKEY_CONFIG_FLAG_FLUSH */
+    uint8_t                flags;
 
     /* Remote memory type */
     ucs_memory_type_t      mem_type;
@@ -63,6 +75,10 @@ struct ucp_rkey_config_key {
     /* MDs for which rkey is not reachable */
     ucp_md_map_t           unreachable_md_map;
 };
+
+
+#define UCP_SYS_DEVICE_FLUSH_BIT  UCS_BIT(7)
+#define UCP_SYS_DEVICE_MAX_PACKED (UCP_SYS_DEVICE_FLUSH_BIT - 1)
 
 
 /**
@@ -194,7 +210,7 @@ ucp_lane_index_t ucp_rkey_find_rma_lane(ucp_context_h context,
 
 size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map,
                             ucs_sys_device_t sys_dev,
-                            ucp_sys_dev_map_t sys_dev_map);
+                            ucp_sys_dev_map_t sys_dev_map, int pack_terminator);
 
 
 void ucp_rkey_packed_copy(ucp_context_h context, ucp_md_map_t md_map,
@@ -207,8 +223,9 @@ ssize_t ucp_rkey_pack_memh(ucp_context_h context, ucp_md_map_t md_map,
                            const ucp_memory_info_t *mem_info,
                            ucp_sys_dev_map_t sys_dev_map,
                            const ucs_sys_dev_distance_t *sys_distance,
-                           unsigned uct_flags, void *buffer);
+                           unsigned uct_flags, int pack_terminator, void *buffer);
 
+ucp_sys_dev_map_t ucp_memh_sys_dev_map(ucp_mem_h memh);
 
 ucs_status_t
 ucp_memh_exported_unpack(ucp_context_h context, const void *export_mkey_buffer,
@@ -218,12 +235,12 @@ ucp_memh_exported_unpack(ucp_context_h context, const void *export_mkey_buffer,
 int ucp_memh_buffer_is_dummy(const void *exported_memh_buffer);
 
 
-ucs_status_t
-ucp_ep_rkey_unpack_internal(ucp_ep_h ep, const void *buffer, size_t length,
-                            ucp_md_map_t unpack_md_map,
-                            ucp_md_map_t skip_md_map,
-                            ucs_sys_device_t sys_device,
-                            ucp_rkey_h *rkey_p);
+ucs_status_t ucp_ep_rkey_unpack_internal(ucp_ep_h ep, const void *buffer,
+                                         size_t length,
+                                         ucp_md_map_t unpack_md_map,
+                                         ucp_md_map_t skip_md_map,
+                                         ucs_sys_device_t sys_device,
+                                         ucp_rkey_h *rkey_p);
 
 
 void ucp_rkey_dump_packed(const void *buffer, size_t length,

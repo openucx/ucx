@@ -13,6 +13,7 @@
 #include "ib_md.h"
 #include "ib_device.h"
 #include "ib_log.h"
+#include "ib_log.inl"
 
 #include <ucs/arch/atomic.h>
 #include <ucs/profile/profile.h>
@@ -44,6 +45,7 @@ static const char *uct_ib_devx_objs[] = {
     [UCT_IB_DEVX_OBJ_DCSRQ] = "dcsrq",
     [UCT_IB_DEVX_OBJ_DCI]   = "dci",
     [UCT_IB_DEVX_OBJ_CQ]    = "cq",
+    [UCT_IB_DEVX_OBJ_AUTO]  = "auto",
     NULL
 };
 
@@ -118,6 +120,15 @@ ucs_config_field_t uct_ib_md_config_table[] = {
      "Use GPU Direct RDMA for HCA to access GPU pages directly\n",
      ucs_offsetof(uct_ib_md_config_t, enable_gpudirect_rdma), UCS_CONFIG_TYPE_TERNARY},
 
+    {"GDA_MAX_HCA_PER_GPU", "1",
+     "Max number of HCA devices to use for GDA per one GPU device.",
+     ucs_offsetof(uct_ib_md_config_t, ext.gda_max_hca_per_gpu),
+     UCS_CONFIG_TYPE_UINT},
+
+    {"GDA_DMABUF_ENABLE", "try",
+     "Enable DMA-BUF in GDA.",
+     ucs_offsetof(uct_ib_md_config_t, ext.gda_dmabuf_enable), UCS_CONFIG_TYPE_TERNARY},
+
     {"PCI_BW", "",
      "Maximum effective data transfer rate of PCI bus connected to HCA\n",
      ucs_offsetof(uct_ib_md_config_t, pci_bw), UCS_CONFIG_TYPE_ARRAY(pci_bw)},
@@ -175,6 +186,9 @@ ucs_config_field_t uct_ib_md_config_table[] = {
      "enabled.\n",
      ucs_offsetof(uct_ib_md_config_t, ext.odp.mem_types),
      UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
+
+    {"DIRECT_NIC", "y", "Use Direct NIC functionality for GPU memory access",
+     ucs_offsetof(uct_ib_md_config_t, ext.direct_nic), UCS_CONFIG_TYPE_BOOL},
 
     {NULL}
 };
@@ -457,7 +471,7 @@ uct_ib_md_handle_mr_list_mt(uct_ib_md_t *md, void *address, size_t length,
     return status;
 }
 
-ucs_status_t uct_ib_reg_mr(uct_ib_md_t *md, void *address, size_t length,
+ucs_status_t uct_ib_reg_mr(const uct_ib_md_t *md, void *address, size_t length,
                            const uct_md_mem_reg_params_t *params,
                            uint64_t access_flags, struct ibv_dm *dm,
                            struct ibv_mr **mr_p)
@@ -511,12 +525,8 @@ ucs_status_t uct_ib_reg_mr(uct_ib_md_t *md, void *address, size_t length,
         return UCS_ERR_IO_ERROR;
     }
 
-    ucs_trace("%s(pd=%p addr=%p len=%zu fd=%d offset=%zu access=0x%" PRIx64 "):"
-              " mr=%p lkey=0x%x retry=%lu took %.3f ms",
-              title, md->pd, address, length, dmabuf_fd, dmabuf_offset,
-              access_flags, mr, mr->lkey, retry,
-              ucs_time_to_msec(ucs_get_time() - start_time));
-    UCS_STATS_UPDATE_COUNTER(md->stats, UCT_IB_MD_STAT_MEM_REG, +1);
+    uct_ib_reg_mr_trace(title, md, address, length, dmabuf_fd, dmabuf_offset,
+                        access_flags, mr, retry, start_time);
 
     *mr_p = mr;
     return UCS_OK;
@@ -1203,8 +1213,8 @@ void uct_ib_md_parse_relaxed_order(uct_ib_md_t *md,
               uct_ib_device_name(&md->dev), md->relaxed_order ? "en" : "dis");
 }
 
-static void uct_ib_check_gpudirect_driver(uct_ib_md_t *md, const char *file,
-                                          ucs_memory_type_t mem_type)
+void uct_ib_check_gpudirect_driver(uct_ib_md_t *md, const char *file,
+                                   ucs_memory_type_t mem_type)
 {
     if (md->reg_mem_types & UCS_BIT(mem_type)) {
         return;
@@ -1246,7 +1256,7 @@ static void uct_ib_md_check_dmabuf(uct_ib_md_t *md)
 #endif
 }
 
-int uct_ib_md_check_odp_common(uct_ib_md_t *md, const char **reason_ptr)
+int uct_ib_md_check_odp_common(const uct_ib_md_t *md, const char **reason_ptr)
 {
     if (IBV_ACCESS_ON_DEMAND == 0) {
         *reason_ptr = "IBV_ACCESS_ON_DEMAND is not supported";
@@ -1261,8 +1271,7 @@ int uct_ib_md_check_odp_common(uct_ib_md_t *md, const char **reason_ptr)
     return 1;
 }
 
-static void
-uct_ib_md_check_odp(uct_ib_md_t *md, const uct_ib_md_config_t *md_config)
+void uct_ib_md_check_odp(uct_ib_md_t *md, const uct_ib_md_config_t *md_config)
 {
     const char *device_name = uct_ib_device_name(&md->dev);
     const char *reason;
@@ -1316,8 +1325,8 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
         md->check_subnet_filter = 1;
     }
 
-    md->reg_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
-                        md->reg_nonblock_mem_types;
+    md->reg_mem_types |= UCS_BIT(UCS_MEMORY_TYPE_HOST) |
+                         md->reg_nonblock_mem_types;
 
     /* Check for GPU-direct support */
     if (md_config->enable_gpudirect_rdma != UCS_NO) {
@@ -1333,9 +1342,13 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
                 md, "/sys/module/nv_peer_mem/version",
                 UCS_MEMORY_TYPE_CUDA);
 
-
         /* check if ROCM KFD driver is loaded */
         uct_ib_check_gpudirect_driver(md, "/dev/kfd", UCS_MEMORY_TYPE_ROCM);
+
+        /* Check for HabanaLabs Gaudi DMABuf support */
+        uct_ib_check_gpudirect_driver(md, "/dev/accel/accel0",
+                                      UCS_MEMORY_TYPE_GAUDI);
+        uct_ib_check_gpudirect_driver(md, "/dev/hl0", UCS_MEMORY_TYPE_GAUDI);
 
         /* Check for dma-buf support */
         uct_ib_md_check_dmabuf(md);

@@ -437,6 +437,7 @@ typedef enum uct_atomic_op {
 
         /* Interface capability */
 #define UCT_IFACE_FLAG_INTER_NODE      UCS_BIT(54) /**< Interface is inter-node capable */
+#define UCT_IFACE_FLAG_DEVICE_EP       UCS_BIT(55) /**< Interface supports device endpoint */
 /**
  * @}
  */
@@ -499,8 +500,9 @@ typedef enum {
 enum uct_iface_event_types {
     UCT_EVENT_SEND_COMP     = UCS_BIT(0), /**< Send completion event */
     UCT_EVENT_RECV          = UCS_BIT(1), /**< Tag or active message received */
-    UCT_EVENT_RECV_SIG      = UCS_BIT(2)  /**< Signaled tag or active message
+    UCT_EVENT_RECV_SIG      = UCS_BIT(2), /**< Signaled tag or active message
                                                received */
+    UCT_EVENT_SPEED_CHANGE  = UCS_BIT(3)  /**< Speed change event */
 };
 
 

@@ -28,6 +28,7 @@ std::string resource::name() const {
 }
 
 resource::resource() : component(NULL), dev_type(UCT_DEVICE_TYPE_LAST),
+                       sys_device(UCS_SYS_DEVICE_ID_UNKNOWN),
                        variant(DEFAULT_VARIANT)
 {
     CPU_ZERO(&local_cpus);
@@ -36,10 +37,11 @@ resource::resource() : component(NULL), dev_type(UCT_DEVICE_TYPE_LAST),
 resource::resource(uct_component_h component, const std::string& component_name,
                    const std::string& md_name, const ucs_cpu_set_t& local_cpus,
                    const std::string& tl_name, const std::string& dev_name,
-                   uct_device_type_t dev_type) :
+                   uct_device_type_t dev_type, ucs_sys_device_t sys_dev) :
                    component(component), component_name(component_name),
                    md_name(md_name), local_cpus(local_cpus), tl_name(tl_name),
                    dev_name(dev_name), dev_type(dev_type),
+                   sys_device(sys_dev),
                    variant(DEFAULT_VARIANT)
 {
 }
@@ -56,6 +58,7 @@ resource::resource(uct_component_h component,
                    tl_name(tl_resource.tl_name),
                    dev_name(tl_resource.dev_name),
                    dev_type(tl_resource.dev_type),
+                   sys_device(tl_resource.sys_device),
                    variant(DEFAULT_VARIANT)
 {
 }
@@ -258,7 +261,7 @@ void uct_test::set_interface_rscs(uct_component_h cmpt, const char *cmpt_name,
     for (i = 0; i < 3; i++) {
         resource rsc(cmpt, std::string(cmpt_name), std::string(md_name),
                      local_cpus, "", std::string(ifa->ifa_name),
-                     UCT_DEVICE_TYPE_NET);
+                     UCT_DEVICE_TYPE_NET, UCS_SYS_DEVICE_ID_UNKNOWN);
         bool init_src_addr = (i == 1);
 
         if (i < 2) {
@@ -1044,7 +1047,14 @@ void uct_test::entity::rkey_unpack(const uct_allocated_memory_t *mem,
             UCS_TEST_ABORT("Failed to allocate rkey buffer");
         }
 
-        ucs_status_t status = uct_md_mkey_pack(m_md, mem->memh, rkey_buffer);
+        uct_md_mkey_pack_params_t params = {
+            .field_mask = 0
+        };
+
+        ucs_status_t status = uct_md_mkey_pack_v2(m_md, mem->memh,
+                                                  mem->address,
+                                                  mem->length,
+                                                  &params, rkey_buffer);
         ASSERT_UCS_OK(status);
 
         status = uct_rkey_unpack(m_resource.component, rkey_buffer,

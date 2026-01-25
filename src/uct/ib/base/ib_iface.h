@@ -59,6 +59,7 @@ enum {
     UCT_IB_SPEED_EDR     = 32,
     UCT_IB_SPEED_HDR     = 64,
     UCT_IB_SPEED_NDR     = 128,
+    UCT_IB_SPEED_XDR     = 256,
     UCT_IB_SPEED_LAST
 };
 
@@ -265,6 +266,8 @@ typedef struct uct_ib_iface_init_attr {
     unsigned    rx_hdr_len;              /* Length of transport network header */
     unsigned    cq_len[UCT_IB_DIR_LAST]; /* CQ length */
     size_t      seg_size;                /* Transport segment size */
+    size_t      xport_hdr_len;           /* How many bytes this transport adds on top
+                                          * of IB header (LRH+BTH+iCRC+vCRC) */
     unsigned    fc_req_size;             /* Flow control request size */
     int         qp_type;                 /* IB QP type */
     int         flags;                   /* Various flags (see enum) */
@@ -272,6 +275,7 @@ typedef struct uct_ib_iface_init_attr {
     unsigned    max_rd_atomic;
     uint8_t     cqe_zip_sizes[UCT_IB_DIR_LAST];
     uint16_t    tx_moderation;           /* TX CQ moderation */
+    const char  *dev_name;               /* Device Name */
 } uct_ib_iface_init_attr_t;
 
 
@@ -322,6 +326,13 @@ struct uct_ib_iface_ops {
 };
 
 
+typedef struct {
+    uct_ib_async_event_wait_t super;
+    void                      *arg;
+    uct_async_event_cb_t      cb;
+} uct_ib_async_event_ctx_t;
+
+
 struct uct_ib_iface {
     uct_base_iface_t          super;
 
@@ -350,6 +361,7 @@ struct uct_ib_iface {
         unsigned                         tx_max_poll;
         unsigned                         seg_size;
         unsigned                         roce_path_factor;
+        size_t                           xport_hdr_len;
         uint8_t                          max_inl_cqe[UCT_IB_DIR_LAST];
         uint8_t                          port_num;
         uint8_t                          sl;
@@ -364,6 +376,8 @@ struct uct_ib_iface {
         uct_ib_iface_send_overhead_t     send_overhead;
         uct_ib_iface_reachability_mode_t reachability_mode;
     } config;
+
+    uct_ib_async_event_ctx_t  async_ctx;
 
     uct_ib_iface_ops_t        *ops;
     UCS_STATS_NODE_DECLARE(stats)
@@ -530,9 +544,12 @@ void uct_ib_iface_address_pack(uct_ib_iface_t *iface, uct_ib_address_t *ib_addr)
  * @param [in]  ib_addr    IB address to unpack.
  * @param [out] params_p   Filled with address attributes as in
  *                         @ref uct_ib_address_pack_params_t.
+
+ * @return UCS_OK if the address was unpacked successfully, UCS_ERR_INVALID_PARAM
+ *         if the address is invalid.
  */
-void uct_ib_address_unpack(const uct_ib_address_t *ib_addr,
-                           uct_ib_address_pack_params_t *params_p);
+ucs_status_t uct_ib_address_unpack(const uct_ib_address_t *ib_addr,
+                                   uct_ib_address_pack_params_t *params_p);
 
 
 /**
@@ -550,10 +567,7 @@ int uct_ib_iface_is_same_device(const uct_ib_address_t *ib_addr, uint16_t dlid,
 int uct_ib_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                  const uct_iface_is_reachable_params_t *params);
 
-/*
- * @param xport_hdr_len       How many bytes this transport adds on top of IB header (LRH+BTH+iCRC+vCRC)
- */
-ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
+ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface,
                                 uct_iface_attr_t *iface_attr);
 
 
@@ -622,11 +636,12 @@ void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
                                             unsigned path_index,
                                             struct ibv_ah_attr *ah_attr);
 
-void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
-                                         const uct_ib_address_t *ib_addr,
-                                         unsigned path_index,
-                                         struct ibv_ah_attr *ah_attr,
-                                         enum ibv_mtu *path_mtu);
+ucs_status_t
+uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
+                                    const uct_ib_address_t *ib_addr,
+                                    unsigned path_index,
+                                    struct ibv_ah_attr *ah_attr,
+                                    enum ibv_mtu *path_mtu);
 
 ucs_status_t uct_ib_iface_pre_arm(uct_ib_iface_t *iface);
 
@@ -797,6 +812,29 @@ uct_ib_wc_to_ucs_status(enum ibv_wc_status status)
     default:
         return UCS_ERR_IO_ERROR;
     }
+}
+
+static UCS_F_ALWAYS_INLINE uint32_t
+uct_ib_iface_port_active_speed(uct_ib_iface_t *iface)
+{
+#if HAVE_STRUCT_IBV_PORT_ATTR_ACTIVE_SPEED_EX
+    if (uct_ib_iface_port_attr(iface)->active_speed_ex != 0) {
+        return uct_ib_iface_port_attr(iface)->active_speed_ex;
+    }
+#endif
+    return uct_ib_iface_port_attr(iface)->active_speed;
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_ib_iface_port_is_ndr(uct_ib_iface_t *iface)
+{
+    return uct_ib_iface_port_active_speed(iface) == UCT_IB_SPEED_NDR;
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_ib_iface_port_is_xdr(uct_ib_iface_t *iface)
+{
+    return uct_ib_iface_port_active_speed(iface) == UCT_IB_SPEED_XDR;
 }
 
 #endif

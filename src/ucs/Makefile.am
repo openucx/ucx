@@ -63,6 +63,7 @@ nobase_dist_libucs_la_HEADERS = \
 	stats/libstats.h \
 	sys/event_set.h \
 	sys/compiler_def.h\
+	sys/device_code.h \
 	sys/math.h \
 	sys/preprocessor.h \
 	sys/string.h \
@@ -136,6 +137,7 @@ noinst_HEADERS = \
 	time/timerq.h \
 	time/timer_wheel.h \
 	type/serialize.h \
+	type/rwlock.h \
 	type/float8.h \
 	async/async.h \
 	async/pipe.h \
@@ -220,7 +222,7 @@ libucs_la_SOURCES = \
 
 if HAVE_AARCH64_THUNDERX2
 libucs_la_SOURCES += \
-        arch/aarch64/memcpy_thunderx2.S
+    arch/aarch64/memcpy_thunderx2.S
 endif
 
 if HAVE_STATS

@@ -924,4 +924,10 @@ void skip_on_address_sanitizer()
 #endif
 }
 
+bool skip_hw_tm_offload()
+{
+    // Skip HW TM offload tests due to issue RM4602065
+    return true;
+}
+
 } // ucs

@@ -839,7 +839,8 @@ ucs_status_t uct_dc_mlx5_ep_qp_to_err(uct_dc_mlx5_ep_t *ep)
     return UCS_OK;
 }
 
-ucs_status_t uct_dc_mlx5_ep_invalidate(uct_ep_h tl_ep, unsigned flags)
+ucs_status_t uct_dc_mlx5_ep_invalidate(uct_ep_h tl_ep,
+                                       const uct_ep_invalidate_params_t *params)
 {
     uct_dc_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
 

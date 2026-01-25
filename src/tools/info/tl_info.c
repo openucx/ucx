@@ -138,6 +138,7 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
     };
     uct_iface_config_t *iface_config;
     uct_iface_attr_t iface_attr;
+    uct_iface_attr_v2_t iface_attr_v2;
     char max_eps_str[32];
     ucs_status_t status;
     uct_iface_h iface;
@@ -341,6 +342,15 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
             strncat(buf, " none", sizeof(buf) - strlen(buf) - 1);
         }
         printf("#       error handling:%s\n", buf);
+    }
+
+    iface_attr_v2.field_mask = UCT_IFACE_ATTR_FIELD_DEVICE_MEM_ELEMENT_SIZE;
+    status                   = uct_iface_query_v2(iface, &iface_attr_v2);
+    if (status != UCS_OK) {
+        printf("#   < failed to query interface >\n");
+    } else {
+        printf("#   device mem_element: %zu bytes\n",
+               iface_attr_v2.device_mem_element_size);
     }
 
     uct_iface_close(iface);

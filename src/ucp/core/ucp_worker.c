@@ -15,6 +15,7 @@
 #include "ucp_rkey.h"
 #include "ucp_request.inl"
 
+#include <ucp/core/ucp_context.h>
 #include <ucp/proto/proto_common.inl>
 #include <ucp/wireup/address.h>
 #include <ucp/wireup/wireup_cm.h>
@@ -337,8 +338,7 @@ static ucs_status_t ucp_worker_wakeup_init(ucp_worker_h worker,
      */
     if ((events & UCP_WAKEUP_TAG_SEND) ||
         ((events & UCP_WAKEUP_TAG_RECV) &&
-         ((context->config.ext.rndv_intra_thresh != UCS_MEMUNITS_INF) ||
-          (context->config.ext.rndv_inter_thresh != UCS_MEMUNITS_INF))))
+         ucp_context_rndv_is_enabled(context)))
     {
         worker->uct_events |= UCT_EVENT_SEND_COMP;
     }
@@ -804,7 +804,12 @@ static void ucp_worker_iface_async_cb_event(void *arg, unsigned flags)
     ucp_worker_iface_t *wiface = arg;
 
     ucs_assert(wiface->attr.cap.event_flags & UCT_IFACE_FLAG_EVENT_ASYNC_CB);
-    ucs_trace_func("async_cb for iface=%p", wiface->iface);
+    ucs_trace_func("async_cb for iface=%p flags=%u", wiface->iface, flags);
+
+    if (flags & UCT_EVENT_SPEED_CHANGE) {
+        /* TODO: handle speed changed event */
+        ucs_assert_always(0);
+    }
 
     ucp_worker_iface_event_common(wiface);
 }
@@ -1219,6 +1224,7 @@ static void ucp_worker_iface_set_sys_device_distance(ucp_worker_iface_t *wiface)
     ucp_rsc_index_t i;
     ucp_tl_resource_desc_t *cmp_rsc;
     char buf[128];
+    ucs_status_t status;
 
     *distance = ucs_topo_default_distance;
 
@@ -1232,7 +1238,9 @@ static void ucp_worker_iface_set_sys_device_distance(ucp_worker_iface_t *wiface)
         device     = ucp_worker_iface_get_sys_device(wiface);
         cmp_device = cmp_rsc->tl_rsc.sys_device;
 
-        ucs_topo_get_distance(device, cmp_device, distance);
+        status = ucs_topo_get_distance(device, cmp_device, distance);
+        ucs_assertv_always(status == UCS_OK, "device=%u cmp_device=%u", device,
+                           cmp_device);
 
         ucs_trace("distance between %s/%s and %s/%s is %s",
                   context->tl_rscs[wiface->rsc_index].tl_rsc.tl_name,
@@ -1818,6 +1826,7 @@ ucp_worker_print_used_tls(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index)
     ucp_lane_map_t tag_lanes_map    = 0;
     ucp_lane_map_t rma_lanes_map    = 0;
     ucp_lane_map_t amo_lanes_map    = 0;
+    ucp_lane_map_t device_lanes_map = 0;
     ucp_lane_map_t stream_lanes_map = 0;
     ucp_lane_map_t am_lanes_map     = 0;
     ucp_lane_map_t ka_lanes_map     = 0;
@@ -1864,6 +1873,10 @@ ucp_worker_print_used_tls(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index)
             ka_lanes_map |= UCS_BIT(lane);
         }
 
+        if (key->lanes[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_DEVICE)) {
+            device_lanes_map |= UCS_BIT(lane);
+        }
+
         if ((ucp_ep_config_get_multi_lane_prio(key->rma_lanes, lane) >= 0)) {
             rma_lanes_map |= UCS_BIT(lane);
         }
@@ -1894,6 +1907,7 @@ ucp_worker_print_used_tls(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index)
                                !rma_emul ? "rma" : "rma_am", &strb);
     ucp_worker_add_feature_rsc(context, key, amo_lanes_map,
                                !amo_emul ? "amo" : "amo_am", &strb);
+    ucp_worker_add_feature_rsc(context, key, device_lanes_map, "device", &strb);
     ucp_worker_add_feature_rsc(context, key, am_lanes_map, "am", &strb);
     ucp_worker_add_feature_rsc(context, key, stream_lanes_map, "stream", &strb);
     ucp_worker_add_feature_rsc(context, key, ka_lanes_map, "ka", &strb);
@@ -2258,6 +2272,21 @@ static void ucp_worker_keepalive_reset(ucp_worker_h worker)
     worker->keepalive.round_count = 0;
 }
 
+static void ucp_worker_trace_configs(ucp_worker_h worker)
+{
+    ucp_ep_config_t *ep_config;
+    ucp_rkey_config_t *rkey_config;
+
+    ucs_array_for_each(ep_config, &worker->ep_config) {
+        ucp_proto_select_trace(worker, &ep_config->proto_select);
+    }
+
+    ucs_carray_for_each(rkey_config, worker->rkey_config,
+                        worker->rkey_config_count) {
+        ucp_proto_select_trace(worker, &rkey_config->proto_select);
+    }
+}
+
 static void ucp_worker_destroy_configs(ucp_worker_h worker)
 {
     ucp_ep_config_t *ep_config;
@@ -2303,9 +2332,9 @@ static void ucp_warn_unused_uct_config(ucp_context_h context)
 
     if (num_unused_cached_kv > 0) {
         ucs_string_buffer_rtrim(&unused_cached_uct_cfg , ",");
-        ucs_warn("invalid configuration%s: %s",
-                 (num_unused_cached_kv > 1) ? "s" : "",
-                 ucs_string_buffer_cstr(&unused_cached_uct_cfg));
+        ucs_debug("configuration%s not applied due to missing resource: %s",
+                  (num_unused_cached_kv > 1) ? "s" : "",
+                  ucs_string_buffer_cstr(&unused_cached_uct_cfg));
     }
 
     ucs_string_buffer_cleanup(&unused_cached_uct_cfg);
@@ -2377,7 +2406,7 @@ static void ucp_worker_set_max_am_header(ucp_worker_h worker)
     max_am_header  = SIZE_MAX;
     max_rts_size   = sizeof(ucp_rndv_rts_hdr_t) +
                      ucp_rkey_packed_size(context, UCS_MASK(context->num_mds),
-                                          UCS_SYS_DEVICE_ID_UNKNOWN, 0);
+                                          UCS_SYS_DEVICE_ID_UNKNOWN, 0, 0);
     max_ucp_header = ucs_max(max_rts_size, UCP_AM_FIRST_FRAG_META_LEN);
 
     /* Make sure maximal AM header can fit into one bcopy fragment
@@ -2504,6 +2533,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     ucs_list_head_init(&worker->internal_eps);
     kh_init_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
     kh_init_inplace(ucp_worker_discard_uct_ep_hash, &worker->discard_uct_ep_hash);
+    kh_init_inplace(ucp_worker_remote_flush, &worker->remote_flush_hash);
     worker->counters.ep_creations         = 0;
     worker->counters.ep_creation_failures = 0;
     worker->counters.ep_closures          = 0;
@@ -2714,6 +2744,7 @@ err_free:
     kh_destroy_inplace(ucp_worker_discard_uct_ep_hash,
                        &worker->discard_uct_ep_hash);
     kh_destroy_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
+    kh_destroy_inplace(ucp_worker_remote_flush, &worker->remote_flush_hash);
     ucp_worker_destroy_configs(worker);
     ucs_free(worker);
     return status;
@@ -2910,6 +2941,9 @@ static void ucp_worker_destroy_eps(ucp_worker_h worker,
 void ucp_worker_destroy(ucp_worker_h worker)
 {
     ucs_debug("destroy worker %p", worker);
+    if (worker->context->config.trace_used_proto_selections) {
+        ucp_worker_trace_configs(worker);
+    }
 
     UCS_ASYNC_BLOCK(&worker->async);
     uct_worker_progress_unregister_safe(worker->uct, &worker->keepalive.cb_id);
@@ -2963,6 +2997,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_strided_alloc_cleanup(&worker->ep_alloc);
     kh_destroy_inplace(ucp_worker_discard_uct_ep_hash,
                        &worker->discard_uct_ep_hash);
+    kh_destroy_inplace(ucp_worker_remote_flush, &worker->remote_flush_hash);
     kh_destroy_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
     ucp_worker_destroy_configs(worker);
     ucs_free(worker);

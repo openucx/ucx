@@ -36,14 +36,21 @@ enum {
     /*
      * Memory handle was imported and points to some peer's memory buffer.
      */
-    UCP_MEMH_FLAG_IMPORTED     = UCS_BIT(0),
-    UCP_MEMH_FLAG_MLOCKED      = UCS_BIT(1),
-    UCP_MEMH_FLAG_HAS_AUTO_GVA = UCS_BIT(2),
+    UCP_MEMH_FLAG_IMPORTED           = UCS_BIT(0),
+    UCP_MEMH_FLAG_MLOCKED            = UCS_BIT(1),
+    UCP_MEMH_FLAG_HAS_AUTO_GVA       = UCS_BIT(2),
 
     /**
      * Avoid using registration cache for the particular memory region.
      */
-    UCP_MEMH_FLAG_NO_RCACHE    = UCS_BIT(3)
+    UCP_MEMH_FLAG_NO_RCACHE          = UCS_BIT(3),
+
+    /**
+     * Track if sender-side flush is needed, check is only done when needed
+     * and cached.
+     */
+    UCP_MEMH_FLAG_SEND_FLUSH_CHECKED = UCS_BIT(4),
+    UCP_MEMH_FLAG_SEND_FLUSH_NEEDED  = UCS_BIT(5)
 };
 
 
@@ -228,6 +235,12 @@ ucs_status_t ucp_mm_get_alloc_md_index(ucp_context_h context,
                                        ucp_md_index_t *md_idx_p,
                                        ucp_memory_info_t *mem_info_p);
 
+ucs_status_t ucp_mem_do_alloc(ucp_context_h context, void *address,
+                              size_t length, unsigned uct_flags,
+                              ucs_memory_type_t mem_type,
+                              ucs_sys_device_t sys_dev, const char *name,
+                              uct_allocated_memory_t *mem);
+
 static UCS_F_ALWAYS_INLINE ucp_md_map_t
 ucp_rkey_packed_md_map(const void *rkey_buffer)
 {
@@ -238,16 +251,6 @@ static UCS_F_ALWAYS_INLINE ucs_memory_type_t
 ucp_rkey_packed_mem_type(const void *rkey_buffer)
 {
     return (ucs_memory_type_t)(*(uint8_t *)((const ucp_md_map_t*)rkey_buffer + 1));
-}
-
-static UCS_F_ALWAYS_INLINE uct_mem_h
-ucp_memh_map2uct(const uct_mem_h *uct, ucp_md_map_t md_map, ucp_md_index_t md_idx)
-{
-    if (!(md_map & UCS_BIT(md_idx))) {
-        return UCT_MEM_HANDLE_NULL;
-    }
-
-    return uct[ucs_bitmap2idx(md_map, md_idx)];
 }
 
 static UCS_F_ALWAYS_INLINE void *ucp_memh_address(const ucp_mem_h memh)

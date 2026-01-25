@@ -18,7 +18,10 @@ nobase_dist_libucp_la_HEADERS = \
 	api/ucp_compat.h \
 	api/ucp_def.h \
 	api/ucp_version.h \
-	api/ucp.h
+	api/ucp.h \
+	api/device/ucp_device_impl.h \
+	api/device/ucp_device_types.h \
+	api/device/ucp_host.h
 
 noinst_HEADERS = \
 	am/eager.inl \
@@ -114,6 +117,7 @@ libucp_la_SOURCES = \
 	core/ucp_version.c \
 	core/ucp_vfs.c \
 	core/ucp_worker.c \
+	core/ucp_device.c \
 	dt/datatype_iter.c \
 	dt/dt_iov.c \
 	dt/dt_generic.c \

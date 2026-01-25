@@ -741,8 +741,18 @@ protected:
                     UCP_PROTO_RNDV_PUT_STAGE_FENCED_ATP);
         });
 
-        restart(sender().ep());
+
+       /*
+        * Restore the pending_add callbacks, as some transport need to be able
+        * to add ep flush request to the pending queue. For instance RDNV put
+        * and fence scheme will block ep_flush on SRD transport.
+        *
+        * Purge must be done with test callbacks first.
+        */
+        ucp_ep_purge_lanes(sender().ep(), purge_enqueue_cb, this);
         restore_uct_cbs();
+
+        restart(sender().ep());
     }
 
     static unsigned m_atp_count;

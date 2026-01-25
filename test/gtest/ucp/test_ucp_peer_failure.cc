@@ -491,6 +491,102 @@ ucs_memory_type_t test_ucp_peer_failure::memtype() const
     return UCS_MEMORY_TYPE_HOST;
 }
 
+class test_ucp_peer_failure_inval : public ucp_test {
+protected:
+    ucp_ep_params_t get_ep_params()
+    {
+        ucp_ep_params_t params;
+
+        memset(&params, 0, sizeof(params));
+        params.field_mask = UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
+        params.err_mode   = UCP_ERR_HANDLING_MODE_PEER;
+        return params;
+    }
+
+public:
+    void test_invalidate_rma_bw_lane(bool force_invalidate_rma);
+
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_with_value(variants, UCP_FEATURE_RMA, 0, "rma");
+    }
+
+    void init()
+    {
+        create_entity();
+        sender().connect(&receiver(), get_ep_params(), 0);
+    }
+};
+
+void test_ucp_peer_failure_inval::test_invalidate_rma_bw_lane(
+        bool force_invalidate_rma)
+{
+    const auto config = ucp_ep_config(sender().ep());
+
+    bool has_no_invalidate_rma = false;
+    bool has_invalidate_rma    = false;
+    for (auto i = 0; i < config->key.num_lanes; ++i) {
+        const auto lane = config->key.rma_bw_lanes[i];
+        if (lane == UCP_NULL_LANE) {
+            continue;
+        }
+
+        const auto md_attr = ucp_ep_md_attr(sender().ep(), lane);
+        if (!(md_attr->flags & UCT_MD_FLAG_INVALIDATE_RMA)) {
+            has_no_invalidate_rma = true;
+        } else {
+            has_invalidate_rma = true;
+        }
+    }
+
+    if (force_invalidate_rma) {
+        ASSERT_FALSE(has_no_invalidate_rma);
+    } else {
+        ASSERT_TRUE(!has_transport("tcp") || has_no_invalidate_rma);
+        ASSERT_TRUE(!has_transport("rc_x") || has_invalidate_rma);
+    }
+}
+
+UCS_TEST_P(test_ucp_peer_failure_inval, rma_bw_no_invalidate_rma_inf,
+           "RNDV_THRESH=inf")
+{
+    test_invalidate_rma_bw_lane(false);
+}
+
+UCS_TEST_P(test_ucp_peer_failure_inval, rma_bw_invalidate_rma_inf_inf,
+           "RNDV_THRESH=intra:inf,inter:inf")
+{
+    test_invalidate_rma_bw_lane(false);
+}
+
+UCS_TEST_P(test_ucp_peer_failure_inval, rma_bw_invalidate_rma,
+           "RNDV_THRESH=1024")
+{
+    test_invalidate_rma_bw_lane(true);
+}
+
+UCS_TEST_P(test_ucp_peer_failure_inval, rma_bw_invalidate_rma_auto_inf,
+           "RNDV_THRESH=intra:auto,inter:inf")
+{
+    test_invalidate_rma_bw_lane(true);
+}
+
+UCS_TEST_P(test_ucp_peer_failure_inval, rma_bw_invalidate_rma_inf_auto,
+           "RNDV_THRESH=intra:inf,inter:auto")
+{
+    test_invalidate_rma_bw_lane(true);
+}
+
+UCS_TEST_P(test_ucp_peer_failure_inval, rma_bw_invalidate_rma_value_inf,
+           "RNDV_THRESH=intra:1024,inter:inf")
+{
+    test_invalidate_rma_bw_lane(true);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_peer_failure_inval, tcp, "tcp")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_peer_failure_inval, rc_x, "rc_x")
+
+
 UCS_TEST_P(test_ucp_peer_failure, basic) {
     do_test(UCS_KBYTE, /* msg_size */
             0, /* pre_msg_cnt */
@@ -668,14 +764,34 @@ protected:
         set_am_handler(receiver());
     }
 
-    static void setup_progress_mock(ucs::mock &mock)
+    static void setup_progress_mock(ucp_proto_select_t &proto_select,
+                                    ucs::mock &mock)
     {
-        for (int proto_id = 0; proto_id < ucp_protocols_count(); ++proto_id) {
-            auto proto = const_cast<ucp_proto_t*>(ucp_protocols[proto_id]);
-            int stage = UCP_PROTO_STAGE_START;
-            for (; stage < UCP_PROTO_STAGE_LAST; ++stage) {
-                mock.setup(&proto->progress[stage], progress_wrapper);
-            }
+        ucp_proto_select_elem_t select;
+
+        kh_foreach_value(proto_select.hash, select,
+            auto thresh =
+                    const_cast<ucp_proto_threshold_elem_t *>(select.thresholds);
+            do {
+                for (uint8_t i = 0; i < UCP_PROTO_STAGE_LAST; ++i) {
+                    mock.setup(&thresh->proto_config.progress_wrapper[i],
+                               progress_wrapper);
+                }
+            } while ((thresh++)->max_msg_length < SIZE_MAX);
+        );
+    }
+
+    static void setup_progress_mock(ucp_worker_h worker, ucs::mock &mock)
+    {
+        ucp_ep_config_t *ep_config;
+        ucs_array_for_each(ep_config, &worker->ep_config) {
+            setup_progress_mock(ep_config->proto_select, mock);
+        }
+
+        ucp_rkey_config_t *rkey_config;
+        ucs_carray_for_each(rkey_config, worker->rkey_config,
+                            worker->rkey_config_count) {
+            setup_progress_mock(rkey_config->proto_select, mock);
         }
     }
 
@@ -786,7 +902,8 @@ protected:
 
         /* Replace progress functions for all protocols and do another
          * send-receive loop to fail the certain proto progress call. */
-        setup_progress_mock(m_progress_mock);
+        setup_progress_mock(sender().worker(), m_progress_mock);
+        setup_progress_mock(receiver().worker(), m_progress_mock);
 
         {
             scoped_log_handler err_wrapper(wrap_errors_logger);

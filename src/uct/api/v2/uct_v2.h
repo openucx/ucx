@@ -184,7 +184,8 @@ typedef struct {
     double              recv_overhead;
 
     /**
-     * Bandwidth model. This field is set by the UCT layer.
+     * Represent actual bandwidth of the interface.
+     * This field is set by the UCT layer.
      */
     uct_ppn_bandwidth_t bandwidth;
 
@@ -359,7 +360,7 @@ typedef enum {
 /**
  * @ingroup UCT_RESOURCE
  * @brief uct_ep_connect_to_ep_v2 operation fields and flags
- * 
+ *
  * The enumeration allows specifying which fields in @ref
  * uct_ep_connect_to_ep_params_t are present and operation flags are used. It is
  * used to enable backward compatibility support.
@@ -713,6 +714,20 @@ typedef struct uct_ep_connect_to_ep_params {
 
 
 /**
+ * @ingroup UCT_RESOURCE
+ * @brief Parameters for invalidating a UCT endpoint by @ref uct_ep_invalidate.
+ */
+ typedef struct {
+    /**
+     * Mask of valid fields in this structure. Must currently be equal to zero.
+     * Fields not specified in this mask will be ignored. Provides ABI
+     * compatibility with respect to adding new fields.
+     */
+    uint64_t                      field_mask;
+} uct_ep_invalidate_params_t;
+
+
+/**
  * @ingroup UCT_MD
  * @brief Parameters for comparing remote keys using @ref uct_rkey_compare.
  */
@@ -1019,6 +1034,36 @@ typedef enum {
 
 
 /**
+ * @ingroup UCT_RESOURCE
+ * @brief Interface attribute fields.
+ */
+enum uct_iface_attr_field {
+    /**
+     * Enables @ref uct_iface_attr_v2_t::device_mem_element_size.
+     */
+    UCT_IFACE_ATTR_FIELD_DEVICE_MEM_ELEMENT_SIZE = UCS_BIT(0)
+};
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Interface attributes.
+ */
+typedef struct {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_iface_attr_field_t.
+     */
+    uint64_t field_mask;
+
+    /**
+     * Size of a packed device memory element.
+     */
+    size_t   device_mem_element_size;
+} uct_iface_attr_v2_t;
+
+
+/**
  * @ingroup UCT_MD
  * @brief Query for memory domain attributes.
  *
@@ -1098,6 +1143,39 @@ ucs_status_t uct_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr);
 
 /**
  * @ingroup UCT_RESOURCE
+ * @brief Invalidate the endpoint.
+ *
+ * This routine invalidates the endpoint and moves it to the error state.
+ * All the incomplete and subsequent operations on the endpoint will be
+ * completed with error.
+ *
+ * @param [in]  ep         Endpoint to invalidate.
+ * @param [in]  params     Operation parameters, see @ref
+ *                         uct_ep_invalidate_params_t.
+ *
+ * @return Error code.
+*/
+ucs_status_t uct_ep_invalidate(uct_ep_h ep,
+                               const uct_ep_invalidate_params_t *params);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Query interface attributes.
+ *
+ * This routine fetches information about the interface.
+ *
+ * @param [in]  iface       Interface to query.
+ * @param [out] iface_attr  Filled with interface attributes.
+ *
+ * @return Error code.
+ */
+ucs_status_t
+uct_iface_query_v2(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr);
+
+
+/**
+ * @ingroup UCT_RESOURCE
  * @brief Check if remote iface address is reachable.
  *
  * This function checks if a remote address can be reached from a local
@@ -1151,6 +1229,20 @@ ucs_status_t uct_ep_connect_to_ep_v2(uct_ep_h ep,
 int uct_ep_is_connected(uct_ep_h ep,
                         const uct_ep_is_connected_params_t *params);
 
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Return the device endpoint associated with the given endpoint.
+ *
+ * @param [in]  ep          Endpoint to create a device endpoint from.
+ * @param [out] device_ep_p Filled with the handle to the device endpoint.
+ *
+ * @return UCS_OK           Device endpoint obtained successfully.
+ *         Other            Error codes as defined by @ref ucs_status_t.
+ */
+ucs_status_t uct_ep_get_device_ep(uct_ep_h ep, uct_device_ep_h *device_ep_p);
+
+
 /**
  * @ingroup UCT_MD
  *
@@ -1200,6 +1292,21 @@ ucs_status_t uct_rkey_unpack_v2(uct_component_h component,
                                 const uct_rkey_unpack_params_t *params,
                                 uct_rkey_bundle_t *rkey_ob);
 
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Pack a memh and rkey into a single memory element structure.
+ *
+ * @param [in] iface         Interface to pack the memh and rkey into.
+ * @param [in] memh          Memory handle to pack.
+ * @param [in] rkey          Remote key to pack.
+ * @param [out] mem_element   Filled with the packed memh and rkey.
+ *
+ * @return UCS_OK on success or error code in case of failure.
+ */
+ucs_status_t uct_iface_mem_element_pack(uct_iface_h iface, uct_mem_h memh,
+                                        uct_rkey_t rkey,
+                                        uct_device_mem_element_t *mem_element);
 
 END_C_DECLS
 

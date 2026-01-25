@@ -149,9 +149,9 @@
 
 /**
  * Get the type of a structure or variable.
- * 
+ *
  * @param _type  Return the type of this argument.
- * 
+ *
  * @return The type of the given argument.
  */
 #define ucs_typeof(_type) \
@@ -194,6 +194,16 @@
  */
 #define ucs_is_unsigned_type(_type) \
     ((_type)(-1) > (_type)(0))
+
+
+/**
+ * @param _type Type of the non-const pointer.
+ * @param _ptr  Pointer to cast.
+ *
+ * @return Cast non-const pointer.
+ */
+#define ucs_const_cast(_type, _ptr) (_type)(uintptr_t)(const void*)(_ptr)
+
 
 /**
  * Prevent compiler from reordering instructions

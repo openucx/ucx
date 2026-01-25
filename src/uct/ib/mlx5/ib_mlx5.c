@@ -16,6 +16,7 @@
 #include <ucs/arch/bitops.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/compiler.h>
+#include <ucs/sys/module.h>
 #include <ucs/sys/sys.h>
 #include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
@@ -104,6 +105,15 @@ void uct_ib_mlx5_parse_cqe_zipping(uct_ib_mlx5_md_t *md,
     }
 }
 
+void uct_ib_mlx5_cq_calc_sizes(uct_ib_iface_t *iface, uct_ib_dir_t dir,
+                               const uct_ib_iface_init_attr_t *init_attr,
+                               size_t inl, uct_ib_mlx5_cq_attr_t *attr)
+{
+    attr->cq_size  = ucs_roundup_pow2(uct_ib_cq_size(iface, init_attr, dir));
+    attr->cqe_size = uct_ib_get_cqe_size((inl > 32) ? 128 : 64);
+    attr->umem_len = attr->cqe_size * attr->cq_size;
+}
+
 ucs_status_t
 uct_ib_mlx5_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
                       const uct_ib_iface_init_attr_t *init_attr,
@@ -182,18 +192,16 @@ ucs_status_t uct_ib_mlx5_fill_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
     uar = uct_dv_get_info_uar0(dcq.dv.uar);
 #endif
 
-    uct_ib_mlx5_fill_cq_common(mlx5_cq, dcq.dv.cqe_cnt, dcq.dv.cqe_size,
+    uct_ib_mlx5_init_cq_common(mlx5_cq, dcq.dv.cqe_cnt, dcq.dv.cqe_size,
                                dcq.dv.cqn, dcq.dv.buf, uar, dcq.dv.dbrec, 0);
+    uct_ib_mlx5_fill_cq_buf(mlx5_cq, dcq.dv.cqe_cnt);
     return UCS_OK;
 }
 
-void uct_ib_mlx5_fill_cq_common(uct_ib_mlx5_cq_t *cq,  unsigned cq_size,
+void uct_ib_mlx5_init_cq_common(uct_ib_mlx5_cq_t *cq,  unsigned cq_size,
                                 unsigned cqe_size, uint32_t cqn, void *cq_buf,
                                 void *uar, volatile void *dbrec, int zip)
 {
-    struct mlx5_cqe64 *cqe;
-    int i;
-
     cq->cq_buf    = cq_buf;
     cq->cq_ci     = 0;
     cq->cq_sn     = 0;
@@ -226,6 +234,12 @@ void uct_ib_mlx5_fill_cq_common(uct_ib_mlx5_cq_t *cq,  unsigned cq_size,
         cq->own_field_offset = ucs_offsetof(struct mlx5_cqe64, op_own);
         cq->own_mask         = MLX5_CQE_OWNER_MASK;
     }
+}
+
+void uct_ib_mlx5_fill_cq_buf(uct_ib_mlx5_cq_t *cq,  unsigned cq_size)
+{
+    struct mlx5_cqe64 *cqe;
+    int i;
 
     /* Set owner bit for all CQEs, so that CQE would look like it is in HW
      * ownership. In this case CQ polling functions will return immediately if
@@ -325,6 +339,12 @@ void uct_ib_mlx5_iface_put_res_domain(uct_ib_mlx5_qp_t *qp)
     }
 }
 
+void uct_ib_mlx5_wq_calc_sizes(uct_ib_mlx5_qp_attr_t *attr)
+{
+    attr->max_tx = uct_ib_mlx5_devx_sq_length(attr->super.cap.max_send_wr);
+    attr->len    = attr->max_tx * MLX5_SEND_WQE_BB;
+}
+
 ucs_status_t uct_ib_mlx5_iface_create_qp(uct_ib_iface_t *iface,
                                          uct_ib_mlx5_qp_t *qp,
                                          uct_ib_mlx5_qp_attr_t *attr)
@@ -371,7 +391,12 @@ ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
         return status;
     }
 
-    uct_ib_iface_fill_ah_attr_from_addr(iface, ib_addr, 0, &ah_attr, &path_mtu);
+    status = uct_ib_iface_fill_ah_attr_from_addr(iface, ib_addr, 0, &ah_attr,
+                                                 &path_mtu);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     ah_attr.is_global = iface->config.force_global_addr;
     status = uct_ib_iface_create_ah(iface, &ah_attr, "compact AV check", &ah);
     if (status != UCS_OK) {
@@ -544,9 +569,8 @@ int uct_ib_mlx5_devx_uar_cmp(uct_ib_mlx5_devx_uar_t *uar,
 }
 
 #if HAVE_DEVX
-static ucs_status_t uct_ib_mlx5_devx_alloc_uar(uct_ib_mlx5_md_t *md,
-                                               uint32_t flags,
-                                               struct mlx5dv_devx_uar **uar_p)
+ucs_status_t uct_ib_mlx5_devx_alloc_uar(uct_ib_mlx5_md_t *md, uint32_t flags,
+                                        struct mlx5dv_devx_uar **uar_p)
 {
     const char *uar_type_str      = (flags == UCT_IB_MLX5_UAR_ALLOC_TYPE_WC) ?
                                     "WC" : "NC_DEDICATED";
@@ -677,6 +701,10 @@ void uct_ib_mlx5_txwq_reset(uct_ib_mlx5_txwq_t *txwq)
     txwq->flags      = 0;
 #endif
     uct_ib_fence_info_init(&txwq->fi);
+}
+
+void uct_ib_mlx5_init_wq_buf(uct_ib_mlx5_txwq_t *txwq)
+{
     memset(txwq->qstart, 0, UCS_PTR_BYTE_DIFF(txwq->qstart, txwq->qend));
 
     /* Make uct_ib_mlx5_txwq_num_posted_wqes() work if no wqe has completed by
@@ -801,6 +829,7 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
     ucs_assert_always(txwq->bb_max > 0);
 
     uct_ib_mlx5_txwq_reset(txwq);
+    uct_ib_mlx5_init_wq_buf(txwq);
     return UCS_OK;
 }
 
@@ -1260,4 +1289,11 @@ void UCS_F_DTOR uct_mlx5_cleanup(void)
 #if defined (HAVE_DEVX)
     ucs_list_del(&UCT_IB_MD_OPS_NAME(devx).list);
 #endif
+}
+
+UCS_MODULE_INIT()
+{
+    UCS_MODULE_FRAMEWORK_DECLARE(uct_ib_mlx5);
+    UCS_MODULE_FRAMEWORK_LOAD(uct_ib_mlx5, 0);
+    return UCS_OK;
 }

@@ -11,6 +11,12 @@
 
 #include <tools/perf/api/libperf.h>
 
+
+#if _OPENMP
+#include <omp.h>
+#endif
+
+
 BEGIN_C_DECLS
 
 /** @file libperf_int.h */
@@ -20,15 +26,11 @@ BEGIN_C_DECLS
 #include <ucs/sys/math.h>
 
 
-#if _OPENMP
-#include <omp.h>
-#endif
-
-
 #define TIMING_QUEUE_SIZE    2048
 #define UCT_PERF_TEST_AM_ID  5
 #define ADDR_BUF_SIZE        4096
 #define EXTRA_INFO_SIZE      256
+#define ONESIDED_SIGNAL_SIZE sizeof(uint64_t)
 
 #define UCX_PERF_TEST_FOREACH(perf) \
     while (!ucx_perf_context_done(perf))
@@ -67,6 +69,13 @@ struct ucx_perf_allocator {
     ucx_perf_uct_free_func_t  uct_free;
     ucx_perf_memcpy_func_t    memcpy;
     ucx_perf_memset_func_t    memset;
+};
+
+
+typedef ucs_status_t (*ucp_perf_dispatch_func_t)(ucx_perf_context_t *perf);
+
+struct ucx_perf_device_dispatcher {
+    ucp_perf_dispatch_func_t ucp_dispatch;
 };
 
 typedef struct {
@@ -220,24 +229,28 @@ static inline void ucx_perf_omp_barrier(ucx_perf_context_t *perf)
 
 static UCS_F_ALWAYS_INLINE void ucx_perf_update(ucx_perf_context_t *perf,
                                                 ucx_perf_counter_t iters,
-                                                size_t bytes)
+                                                ucx_perf_counter_t msgs,
+                                                size_t bytes_per_iter)
 {
     perf->current.time   = ucs_get_time();
     perf->current.iters += iters;
-    perf->current.bytes += bytes;
-    perf->current.msgs  += 1;
+    perf->current.bytes += msgs * bytes_per_iter;
+    perf->current.msgs  += msgs;
 
-    perf->timing_queue[perf->timing_queue_head] =
-                    perf->current.time - perf->prev_time;
-    ++perf->timing_queue_head;
-    if (perf->timing_queue_head == TIMING_QUEUE_SIZE) {
-        perf->timing_queue_head = 0;
+    if (iters == 1) {
+        perf->timing_queue[perf->timing_queue_head] = perf->current.time -
+                                                      perf->prev_time;
+        ++perf->timing_queue_head;
+        if (perf->timing_queue_head == TIMING_QUEUE_SIZE) {
+            perf->timing_queue_head = 0;
+        }
     }
 
     perf->prev_time = perf->current.time;
 
     if (ucs_unlikely((perf->current.time - perf->prev.time) >=
-                     perf->report_interval)) {
+                     perf->report_interval) &&
+        (perf->current.iters < perf->max_iter)) {
         ucx_perf_report(perf);
     }
 }

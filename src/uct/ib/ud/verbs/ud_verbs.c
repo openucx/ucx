@@ -597,8 +597,12 @@ uct_ud_verbs_iface_unpack_peer_address(uct_ud_iface_t *iface,
 
     memset(peer_address, 0, sizeof(*peer_address));
 
-    uct_ib_iface_fill_ah_attr_from_addr(ib_iface, ib_addr, path_index,
-                                        &ah_attr, &path_mtu);
+    status = uct_ib_iface_fill_ah_attr_from_addr(ib_iface, ib_addr, path_index,
+                                                 &ah_attr, &path_mtu);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     status = uct_ib_iface_create_ah(ib_iface, &ah_attr, "UD verbs connect",
                                     &peer_address->ah);
     if (status != UCS_OK) {
@@ -660,13 +664,16 @@ static void UCS_CLASS_DELETE_FUNC_NAME(uct_ud_verbs_iface_t)(uct_iface_t*);
 static uct_ud_iface_ops_t uct_ud_verbs_iface_ops = {
     .super = {
         .super = {
-            .iface_estimate_perf   = uct_ib_iface_estimate_perf,
-            .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)uct_ud_iface_vfs_refresh,
-            .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
-            .ep_invalidate         = uct_ud_ep_invalidate,
-            .ep_connect_to_ep_v2   = uct_ud_ep_connect_to_ep_v2,
-            .iface_is_reachable_v2 = uct_ib_iface_is_reachable_v2,
-            .ep_is_connected       = uct_ud_verbs_ep_is_connected
+            .iface_query_v2         = uct_iface_base_query_v2,
+            .iface_estimate_perf    = uct_ib_iface_estimate_perf,
+            .iface_vfs_refresh      = (uct_iface_vfs_refresh_func_t)uct_ud_iface_vfs_refresh,
+            .iface_mem_element_pack = (uct_iface_mem_element_pack_func_t)ucs_empty_function_return_unsupported,
+            .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+            .ep_invalidate          = uct_ud_ep_invalidate,
+            .ep_connect_to_ep_v2    = uct_ud_ep_connect_to_ep_v2,
+            .iface_is_reachable_v2  = uct_ib_iface_is_reachable_v2,
+            .ep_is_connected        = uct_ud_verbs_ep_is_connected,
+            .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported
         },
         .create_cq      = uct_ib_verbs_create_cq,
         .destroy_cq     = uct_ib_verbs_destroy_cq,

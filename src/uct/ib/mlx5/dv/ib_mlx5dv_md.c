@@ -8,6 +8,7 @@
 #  include "config.h"
 #endif
 
+#include <uct/ib/base/ib_log.inl>
 #include <uct/ib/mlx5/ib_mlx5.h>
 
 #include <ucs/arch/bitops.h>
@@ -28,22 +29,59 @@ static uint32_t uct_ib_mlx5_flush_rkey_make()
     return ((getpid() & 0xff) << 8) | UCT_IB_MD_INVALID_FLUSH_RKEY;
 }
 
-/* Should be called after DDP is initialized */
-static int
-uct_ib_mlx5_md_check_odp_common(uct_ib_mlx5_md_t *md, const char **reason_ptr)
+static void uct_ib_mlx5dv_check_direct_nic(struct ibv_context *ctx,
+                                           uct_ib_device_t *dev,
+                                           uct_ib_mlx5_md_t *md,
+                                           const uct_ib_md_config_t *md_config)
 {
-    if (!uct_ib_md_check_odp_common(&md->super, reason_ptr)) {
-        return 0;
+#if HAVE_DECL_MLX5DV_GET_DATA_DIRECT_SYSFS_PATH
+    char sys_path[PATH_MAX];
+    char dev_name[64];
+    int ret;
+    ucs_sys_device_t sys_dev_dnic;
+    ucs_status_t status;
+
+    if (!md_config->ext.direct_nic) {
+        ucs_debug("%s: direct NIC is disabled by configuration",
+                  uct_ib_device_name(&md->super.dev));
+        goto out;
     }
 
-    /* Issue 4238670 */
-    if ((md->dp_ordering_cap.rc == UCT_IB_MLX5_DP_ORDERING_OOO_ALL) ||
-        (md->dp_ordering_cap.dc == UCT_IB_MLX5_DP_ORDERING_OOO_ALL)) {
-        *reason_ptr = "ODP does not work with DDP";
-        return 0;
+    ret = mlx5dv_get_data_direct_sysfs_path(ctx, sys_path, sizeof(sys_path));
+    if (ret != 0) {
+        ucs_debug("%s: mlx5dv_get_data_direct_sysfs_path() failed: ret=%d",
+                  uct_ib_device_name(&md->super.dev), ret);
+        goto out_not_supported;
     }
 
-    return 1;
+    /* Create a DMA specific device from topology perspective */
+    snprintf(dev_name, sizeof(dev_name), "%s_direct",
+             uct_ib_device_name(&md->super.dev));
+    sys_dev_dnic = ucs_topo_get_sysfs_dev(dev_name, sys_path, 0);
+
+    status = ucs_topo_sys_device_set_sys_dev_aux(dev->sys_dev, sys_dev_dnic);
+    if (status != UCS_OK) {
+        goto out_not_supported;
+    }
+
+    ucs_debug("%s: Direct NIC is supported sys_path='%s%s' "
+              "sys_dev=%u sys_dev_aux=%u",
+              uct_ib_device_name(&md->super.dev),
+              (sys_path[0] != 0) ? "/sys" : "", sys_path, dev->sys_dev,
+              sys_dev_dnic);
+    md->direct_nic_sys_dev = sys_dev_dnic;
+    return;
+
+out_not_supported:
+    ucs_debug("%s: direct NIC is requested but not supported",
+              uct_ib_device_name(&md->super.dev));
+out:
+#else
+    ucs_debug("%s: direct NIC is disabled because declaration of "
+              "mlx5dv_get_data_direct_sysfs_path was not found",
+              uct_ib_device_name(&md->super.dev));
+#endif
+    md->direct_nic_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
 }
 
 #if HAVE_DEVX
@@ -53,6 +91,24 @@ typedef struct uct_ib_mlx5_dbrec_page {
     uct_ib_mlx5_devx_umem_t    mem;
 } uct_ib_mlx5_dbrec_page_t;
 
+
+/* Should be called after DDP is initialized */
+static int
+uct_ib_mlx5_md_check_odp_common(const uct_ib_mlx5_md_t *md, const char **reason_ptr,
+                                const uct_ib_md_config_t *md_config)
+{
+    int is_odp_supported = uct_ib_md_check_odp_common(&md->super, reason_ptr);
+
+    /* Issue 4238670 */
+    if ((md->dp_ordering_cap_devx.rc == UCT_IB_MLX5_DP_ORDERING_OOO_ALL) ||
+        (md->dp_ordering_cap_devx.dc == UCT_IB_MLX5_DP_ORDERING_OOO_ALL) ||
+        md->ddp_support_dv.rc || md->ddp_support_dv.dc) {
+        *reason_ptr         = "ODP does not work with DDP";
+        return 0;
+    }
+
+    return is_odp_supported;
+}
 
 static size_t uct_ib_mlx5_calc_mkey_inlen(int list_size)
 {
@@ -374,7 +430,7 @@ uct_ib_md_mlx5_devx_mr_lru_push(uct_ib_mlx5_md_t *md, uint32_t rkey, void *mr)
 {
     uct_ib_mlx5_mem_lru_entry_t *entry;
     khint_t iter;
-    ucs_kh_put_t res;
+    int res;
 
     ucs_assert(rkey != UCT_IB_INVALID_MKEY);
 
@@ -714,6 +770,51 @@ uct_ib_mlx5_devx_symmetric_rkey(const uct_ib_mlx5_md_t *md, unsigned flags)
            (md->flags & UCT_IB_MLX5_MD_FLAG_MKEY_BY_NAME_RESERVE);
 }
 
+static UCS_F_ALWAYS_INLINE struct ibv_mr *
+uct_ib_mlx5_direct_nic_reg_mr(uct_ib_mlx5_md_t *md, void *address,
+                              size_t length,
+                              const uct_md_mem_reg_params_t *params,
+                              uint64_t access_flags)
+{
+#if HAVE_DECL_MLX5DV_REG_DMABUF_MR
+    int dmabuf_fd;
+    size_t dmabuf_offset;
+    struct ibv_mr *mr;
+    ucs_time_t UCS_V_UNUSED start_time;
+
+    if (md->direct_nic_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        return NULL;
+    }
+
+    dmabuf_fd = UCS_PARAM_VALUE(UCT_MD_MEM_REG_FIELD, params, dmabuf_fd,
+                                DMABUF_FD, UCT_DMABUF_FD_INVALID);
+    if (dmabuf_fd == UCT_DMABUF_FD_INVALID) {
+        return NULL;
+    }
+
+    dmabuf_offset = UCS_PARAM_VALUE(UCT_MD_MEM_REG_FIELD, params, dmabuf_offset,
+                                    DMABUF_OFFSET, 0);
+    start_time    = ucs_get_time();
+
+    mr = UCS_PROFILE_CALL_ALWAYS(mlx5dv_reg_dmabuf_mr, md->super.pd, 0,
+                                 length + dmabuf_offset,
+                                 (uintptr_t)address - dmabuf_offset, dmabuf_fd,
+                                 access_flags,
+                                 MLX5DV_REG_DMABUF_ACCESS_DATA_DIRECT);
+    if (mr == NULL) {
+        ucs_debug("mlx5dv_reg_dmabuf_mr() failed: %m");
+        return NULL;
+    }
+
+    uct_ib_reg_mr_trace("mlx5dv_reg_dmabuf_mr", &md->super, address, length,
+                        dmabuf_fd, dmabuf_offset, access_flags, mr, 0,
+                        start_time);
+    return mr;
+#else
+    return NULL;
+#endif
+}
+
 static ucs_status_t
 uct_ib_mlx5_devx_reg_mr(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mem_t *memh,
                         void *address, size_t length,
@@ -750,12 +851,21 @@ uct_ib_mlx5_devx_reg_mr(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mem_t *memh,
         /* Fallback if multi-thread registration is unsupported */
     }
 
+    memh->mrs[mr_type].super.ib = uct_ib_mlx5_direct_nic_reg_mr(md, address,
+                                                                length, params,
+                                                                access_flags);
+    if (memh->mrs[mr_type].super.ib != NULL) {
+        memh->super.flags |= UCT_IB_MEM_DIRECT_NIC;
+        goto out;
+    }
+
     status = uct_ib_reg_mr(&md->super, address, length, params, access_flags,
                            NULL, &memh->mrs[mr_type].super.ib);
     if (status != UCS_OK) {
         return status;
     }
 
+out:
     *lkey_p = memh->mrs[mr_type].super.ib->lkey;
     *rkey_p = memh->mrs[mr_type].super.ib->rkey;
     return UCS_OK;
@@ -1623,9 +1733,9 @@ static ucs_mpool_ops_t uct_ib_mlx5_dbrec_ops = {
     .obj_str       = NULL
 };
 
-static void uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
-                                       const uct_ib_md_config_t *md_config,
-                                       void *cap)
+static int 
+uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
+                           const uct_ib_md_config_t *md_config, void *cap)
 {
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_out)] = {};
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_in)]   = {};
@@ -1635,8 +1745,13 @@ static void uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
     const char *reason;
     struct ibv_mr *mr;
     uint8_t version;
+    int is_odp_supported;
 
-    if (!uct_ib_mlx5_md_check_odp_common(md, &reason)) {
+    is_odp_supported = uct_ib_mlx5_md_check_odp_common(md, &reason, md_config);
+
+    if (!is_odp_supported) {
+        ucs_debug("%s: ODP is disabled because %s",
+                  uct_ib_device_name(&md->super.dev), reason);
         goto no_odp;
     }
 
@@ -1668,8 +1783,9 @@ static void uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
                 capability.odp_cap.memory_page_fault_scheme_cap);
         version = 2;
     } else {
-        if (md_config->devx_objs &
-            (UCS_BIT(UCT_IB_DEVX_OBJ_RCQP) | UCS_BIT(UCT_IB_DEVX_OBJ_DCI))) {
+        if ((md_config->devx_objs &
+             (UCS_BIT(UCT_IB_DEVX_OBJ_RCQP) | UCS_BIT(UCT_IB_DEVX_OBJ_DCI)))
+            && !(md_config->devx_objs & UCS_BIT(UCT_IB_DEVX_OBJ_AUTO))) {
             reason = "version 1 is not supported for DevX QP";
             goto no_odp;
         }
@@ -1709,23 +1825,24 @@ static void uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
     }
 
     if (!md->super.relaxed_order) {
-        return;
+        return version;
     }
 
     mr = ibv_reg_mr(md->super.pd, NULL, SIZE_MAX,
                     UCT_IB_MEM_ACCESS_FLAGS | IBV_ACCESS_RELAXED_ORDERING |
                     IBV_ACCESS_ON_DEMAND);
     if (mr == NULL) {
-        return;
+        return version;
     }
 
     ibv_dereg_mr(mr);
     md->flags |= UCT_IB_MLX5_MD_FLAG_GVA_RO;
-    return;
+    return version;
 
 no_odp:
     ucs_debug("%s: ODP is disabled because %s",
               uct_ib_device_name(&md->super.dev), reason);
+    return 0;
 }
 
 static uct_ib_port_select_mode_t
@@ -1913,19 +2030,19 @@ static void uct_ib_mlx5_devx_check_dp_ordering(uct_ib_mlx5_md_t *md, void *cap,
                                                uct_ib_device_t *dev)
 {
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dp_ordering_ooo_all_rc)) {
-        md->dp_ordering_cap.rc = UCT_IB_MLX5_DP_ORDERING_OOO_ALL;
+        md->dp_ordering_cap_devx.rc = UCT_IB_MLX5_DP_ORDERING_OOO_ALL;
     } else if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dp_ordering_ooo_rw_rc)) {
-        md->dp_ordering_cap.rc = UCT_IB_MLX5_DP_ORDERING_OOO_RW;
+        md->dp_ordering_cap_devx.rc = UCT_IB_MLX5_DP_ORDERING_OOO_RW;
     } else {
-        md->dp_ordering_cap.rc = UCT_IB_MLX5_DP_ORDERING_IBTA;
+        md->dp_ordering_cap_devx.rc = UCT_IB_MLX5_DP_ORDERING_IBTA;
     }
 
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dp_ordering_ooo_all_dc)) {
-        md->dp_ordering_cap.dc = UCT_IB_MLX5_DP_ORDERING_OOO_ALL;
+        md->dp_ordering_cap_devx.dc = UCT_IB_MLX5_DP_ORDERING_OOO_ALL;
     } else if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dp_ordering_ooo_rw_dc)) {
-        md->dp_ordering_cap.dc = UCT_IB_MLX5_DP_ORDERING_OOO_RW;
+        md->dp_ordering_cap_devx.dc = UCT_IB_MLX5_DP_ORDERING_OOO_RW;
     } else {
-        md->dp_ordering_cap.dc = UCT_IB_MLX5_DP_ORDERING_IBTA;
+        md->dp_ordering_cap_devx.dc = UCT_IB_MLX5_DP_ORDERING_IBTA;
     }
 
     if ((cap_2 != NULL) &&
@@ -1936,7 +2053,7 @@ static void uct_ib_mlx5_devx_check_dp_ordering(uct_ib_mlx5_md_t *md, void *cap,
     ucs_debug("%s: dp_ordering support: force=%d ooo_rw_rc=%d ooo_rw_dc=%d",
               uct_ib_device_name(dev),
               !!(md->flags & UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE),
-              md->dp_ordering_cap.rc, md->dp_ordering_cap.dc);
+              md->dp_ordering_cap_devx.rc, md->dp_ordering_cap_devx.dc);
 }
 
 static void uct_ib_mlx5_devx_check_mkey_by_name(uct_ib_mlx5_md_t *md,
@@ -2171,6 +2288,9 @@ static void uct_ib_mlx5dv_check_dm_ksm_reg(uct_ib_mlx5_md_t *md)
 #endif
 }
 
+static ucs_status_t
+uct_ib_mlx5dv_check_ddp(struct ibv_context *ctx, uct_ib_mlx5_md_t *md);
+
 ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
                                              struct ibv_device *ibv_device,
                                              const uct_ib_md_config_t *md_config,
@@ -2190,6 +2310,8 @@ ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
     unsigned max_rd_atomic_dc;
     ucs_mpool_params_t mp_params;
     int ksm_atomic;
+    int odp_version;
+    uint64_t devx_objs;
 
     buf = ucs_calloc(1, total_len, "mlx5_devx_buffers");
     if (buf == NULL) {
@@ -2368,7 +2490,14 @@ ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
 
     uct_ib_mlx5_devx_check_dp_ordering(md, cap, cap_2, dev);
 
-    uct_ib_mlx5_devx_check_odp(md, md_config, cap);
+    status = uct_ib_mlx5dv_check_ddp(ctx, md);
+    if (status != UCS_OK) {
+        goto err_lru_cleanup;
+    }
+
+    odp_version = uct_ib_mlx5_devx_check_odp(md, md_config, cap);
+
+    uct_ib_mlx5dv_check_direct_nic(ctx, dev, md, md_config);
 
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, atomic)) {
         int ops = UCT_IB_MLX5_ATOMIC_OPS_CMP_SWAP |
@@ -2446,7 +2575,13 @@ ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
 
     dev->flags          |= UCT_IB_DEVICE_FLAG_MLX5_PRM;
     md->flags           |= UCT_IB_MLX5_MD_FLAG_DEVX;
-    md->flags           |= UCT_IB_MLX5_MD_FLAGS_DEVX_OBJS(md_config->devx_objs);
+
+    devx_objs = md_config->devx_objs;
+    if (md_config->devx_objs & UCS_BIT(UCT_IB_DEVX_OBJ_AUTO)) {
+        devx_objs = (odp_version == 1) ? 0 : UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_MASK;
+    }
+
+    md->flags           |= UCT_IB_MLX5_MD_FLAGS_DEVX_OBJS(devx_objs);
     md->super.name       = UCT_IB_MD_NAME(mlx5);
     md->super.vhca_id    = vhca_id;
     md->super.uuid       = ucs_generate_uuid((uintptr_t)md);
@@ -2826,6 +2961,7 @@ uct_ib_mlx5_devx_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
         ((memh->super.flags & UCT_IB_MEM_ACCESS_REMOTE_ATOMIC) ||
          uct_ib_mlx5_devx_memh_has_ro(md, memh)) &&
         !(memh->super.flags & UCT_IB_MEM_IMPORTED) &&
+        !(memh->super.flags & UCT_IB_MEM_DIRECT_NIC) &&
         md->super.config.enable_indirect_atomic &&
         ucs_test_all_flags(md->flags,
                            UCT_IB_MLX5_MD_FLAG_KSM |
@@ -3142,32 +3278,17 @@ uct_ib_mlx5dv_check_ddp(struct ibv_context *ctx, uct_ib_mlx5_md_t *md)
     }
 
     if (ctx_dv.ooo_recv_wrs_caps.max_rc > 0) {
-        md->dp_ordering_cap.rc = UCT_IB_MLX5_DP_ORDERING_OOO_ALL;
+        md->ddp_support_dv.rc = 1;
     }
 
     if (ctx_dv.ooo_recv_wrs_caps.max_dct > 0) {
-        md->dp_ordering_cap.dc = UCT_IB_MLX5_DP_ORDERING_OOO_ALL;
+        md->ddp_support_dv.dc = 1;
     }
 #else
-    md->dp_ordering_cap.rc = UCT_IB_MLX5_DP_ORDERING_IBTA;
-    md->dp_ordering_cap.dc = UCT_IB_MLX5_DP_ORDERING_IBTA;
+    md->ddp_support_dv.rc = 0;
+    md->ddp_support_dv.dc = 0;
 #endif
     return UCS_OK;
-}
-
-static void uct_ib_mlx5dv_md_check_odp(uct_ib_mlx5_md_t *md,
-                                       const uct_ib_md_config_t *md_config)
-{
-    const char *device_name = uct_ib_device_name(&md->super.dev);
-    const char *reason;
-
-    if (!uct_ib_mlx5_md_check_odp_common(md, &reason)) {
-        ucs_debug("%s: ODP is disabled because %s", device_name, reason);
-        return;
-    }
-
-    md->super.reg_nonblock_mem_types = md_config->ext.odp.mem_types;
-    ucs_debug("%s: ODP is supported", device_name);
 }
 
 static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
@@ -3238,7 +3359,8 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
 
     uct_ib_md_parse_relaxed_order(&md->super, md_config, 0);
     uct_ib_md_ece_check(&md->super);
-    uct_ib_mlx5dv_md_check_odp(md, md_config);
+    uct_ib_md_check_odp(&md->super, md_config);
+    uct_ib_mlx5dv_check_direct_nic(ctx, dev, md, md_config);
 
     md->super.flush_rkey = uct_ib_mlx5_flush_rkey_make();
 

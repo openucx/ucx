@@ -176,6 +176,9 @@ typedef struct {
 
     /* Maximum single message length */
     size_t max_frag;
+
+    /* Performance selection tree node */
+    ucp_proto_perf_node_t *node;
 } ucp_proto_common_tl_perf_t;
 
 
@@ -279,24 +282,25 @@ void ucp_proto_common_lane_perf_node(ucp_context_h context,
 ucs_status_t
 ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
                                ucp_lane_index_t lane,
-                               ucp_proto_common_tl_perf_t *perf,
-                               ucp_proto_perf_node_t **perf_node_p);
+                               ucp_proto_common_tl_perf_t *perf);
 
 
-/* @return number of lanes found */
-ucp_lane_index_t ucp_proto_common_find_lanes_with_min_frag(
-        const ucp_proto_common_init_params_t *params, ucp_lane_type_t lane_type,
-        uint64_t tl_cap_flags, ucp_lane_index_t max_lanes,
-        ucp_lane_map_t exclude_map, ucp_lane_index_t *lanes);
+typedef int (*ucp_proto_common_filter_lane_cb_t)(
+                                const ucp_proto_init_params_t *params,
+                                ucp_lane_index_t lane, const char *lane_desc);
+
+
+int
+ucp_proto_common_filter_min_frag(const ucp_proto_init_params_t *params,
+                                 ucp_lane_index_t lane, const char *lane_desc);
 
 
 ucp_lane_index_t
 ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
-                            unsigned flags, ptrdiff_t max_iov_offs,
-                            size_t min_iov, ucp_lane_type_t lane_type,
-                            ucs_memory_type_t reg_mem_type,
+                            unsigned flags, ucp_lane_type_t lane_type,
                             uint64_t tl_cap_flags, ucp_lane_index_t max_lanes,
                             ucp_lane_map_t exclude_map,
+                            ucp_proto_common_filter_lane_cb_t filter,
                             ucp_lane_index_t *lanes);
 
 

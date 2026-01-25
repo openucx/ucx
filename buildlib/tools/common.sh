@@ -4,8 +4,8 @@ WORKSPACE=${WORKSPACE:=$PWD}
 # build in local directory which goes away when docker exits
 ucx_build_dir=$HOME/${BUILD_ID}/build
 ucx_inst=$ucx_build_dir/install
-CUDA_MODULE="dev/cuda12.8"
-GDRCOPY_MODULE="dev/gdrcopy2.4.4_cuda12.8.0"
+CUDA_MODULE="dev/cuda13.0.2"
+GDRCOPY_MODULE="dev/gdrcopy2.5.1_cuda13.0.2"
 JDK_MODULE="dev/jdk"
 MVN_MODULE="dev/mvn"
 XPMEM_MODULE="dev/xpmem-90a95a4"
@@ -70,6 +70,10 @@ make_clean() {
 	$MAKEP ${1:-clean}
 }
 
+has_gpunetio_devel() {
+    [ -d "/opt/mellanox/doca" ]
+}
+
 #
 # Configure and build
 #   $1 - mode (devel|release)
@@ -79,9 +83,14 @@ build() {
 	shift
 
 	config_args="--prefix=$ucx_inst --without-java"
-	if [ "X$have_cuda" == "Xyes" ]
+	if [ -n "$have_cuda" ] && [ "X$have_cuda" != "Xno" ]
 	then
-		config_args+=" --with-iodemo-cuda"
+		config_args+=" --with-cuda=$have_cuda --with-iodemo-cuda"
+
+		if has_gpunetio_devel
+		then
+			config_args+=" --with-doca-gpunetio=/opt/mellanox/doca"
+		fi
 	fi
 
 	../contrib/configure-${mode} ${config_args} "$@"

@@ -65,6 +65,8 @@ enum {
                                                         threads */
     UCT_IB_MEM_IMPORTED              = UCS_BIT(3), /**< The memory handle was
                                                         created by mem_attach */
+    UCT_IB_MEM_DIRECT_NIC            = UCS_BIT(6), /**< The memory handle was
+                                                        registered using Direct NIC */
 #if ENABLE_PARAMS_CHECK
     UCT_IB_MEM_ACCESS_REMOTE_RMA     = UCS_BIT(4), /**< RMA access was requested
                                                         for the memory region */
@@ -81,7 +83,8 @@ enum {
     UCT_IB_DEVX_OBJ_DCT,
     UCT_IB_DEVX_OBJ_DCSRQ,
     UCT_IB_DEVX_OBJ_DCI,
-    UCT_IB_DEVX_OBJ_CQ
+    UCT_IB_DEVX_OBJ_CQ,
+    UCT_IB_DEVX_OBJ_AUTO
 };
 
 typedef struct uct_ib_md_ext_config {
@@ -108,6 +111,9 @@ typedef struct uct_ib_md_ext_config {
                                                        reuse*/
     unsigned long            reg_retry_cnt; /**< Memory registration retry count */
     unsigned                 smkey_block_size; /**< Mkey indexes in a symmetric block */
+    int                      direct_nic; /**< Direct NIC with GPU functionality */
+    unsigned                 gda_max_hca_per_gpu; /**< Threshold of IB per GPU */
+    int                      gda_dmabuf_enable; /**< Enable DMA-BUF in GDA */
 } uct_ib_md_ext_config_t;
 
 
@@ -371,7 +377,7 @@ void uct_ib_md_free(uct_ib_md_t *md);
 
 void uct_ib_md_close(uct_md_h tl_md);
 
-ucs_status_t uct_ib_reg_mr(uct_ib_md_t *md, void *address, size_t length,
+ucs_status_t uct_ib_reg_mr(const uct_ib_md_t *md, void *address, size_t length,
                            const uct_md_mem_reg_params_t *params,
                            uint64_t access_flags, struct ibv_dm *dm,
                            struct ibv_mr **mr_p);
@@ -387,7 +393,10 @@ ucs_status_t uct_ib_mem_prefetch(uct_ib_md_t *md, uct_ib_mem_t *ib_memh,
 void uct_ib_md_ece_check(uct_ib_md_t *md);
 
 /* Check if IB MD supports nonblocking registration */
-int uct_ib_md_check_odp_common(uct_ib_md_t *md, const char **reason_ptr);
+int uct_ib_md_check_odp_common(const uct_ib_md_t *md, const char **reason_ptr);
+
+void
+uct_ib_md_check_odp(uct_ib_md_t *md, const uct_ib_md_config_t *md_config);
 
 ucs_status_t
 uct_ib_md_handle_mr_list_mt(uct_ib_md_t *md, void *address, size_t length,
@@ -430,5 +439,9 @@ ucs_status_t uct_ib_fork_init(const uct_ib_md_config_t *md_config,
 ucs_status_t uct_ib_memh_alloc(uct_ib_md_t *md, size_t length,
                                unsigned mem_flags, size_t memh_base_size,
                                size_t mr_size, uct_ib_mem_t **memh_p);
+
+void uct_ib_check_gpudirect_driver(uct_ib_md_t *md,
+                                   const char *file,
+                                   ucs_memory_type_t mem_type);
 
 #endif

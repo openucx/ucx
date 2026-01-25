@@ -8,6 +8,7 @@
 
 extern "C" {
 #include <ucp/core/ucp_ep.inl>
+#include <ucp/core/ucp_types.h>
 #include <uct/base/uct_iface.h>
 #include <ucp/proto/proto_debug.h>
 #include <ucp/proto/proto_select.inl>
@@ -184,7 +185,6 @@ class test_ucp_proto_mock : public ucp_test, public mock_iface {
 public:
     const static size_t INF                               = UCS_MEMUNITS_INF;
     const static uint16_t AM_ID                           = 123;
-    const static ucp_worker_cfg_index_t RKEY_CONFIG_INDEX = 0;
 
     struct proto_select_data {
         size_t      range_start{0};
@@ -237,7 +237,8 @@ public:
 
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
-        add_variant(variants, UCP_FEATURE_TAG | UCP_FEATURE_AM);
+        add_variant(variants,
+                    UCP_FEATURE_TAG | UCP_FEATURE_AM | UCP_FEATURE_RMA);
     }
 
     virtual void init() override
@@ -280,10 +281,12 @@ public:
 
     static void check_rkey_config(const entity &e,
                                   const proto_select_data_vec_t &data_vec,
-                                  ucp_proto_select_key_t key)
+                                  ucp_proto_select_key_t key,
+                                  ucp_worker_cfg_index_t rkey_cfg_index)
     {
-        ucp_rkey_config_t *config = &e.worker()->rkey_config[RKEY_CONFIG_INDEX];
-        check_proto_select(e, config->proto_select, data_vec, key);
+        ucp_rkey_config_t *config = &e.worker()->rkey_config[rkey_cfg_index];
+        check_proto_select(e, config->proto_select, data_vec, key,
+                           rkey_cfg_index);
     }
 
     /*
@@ -336,12 +339,13 @@ protected:
 
     static void dump_select_info(const entity &e,
                                  const ucp_proto_select_param_t &select_param,
-                                 const ucp_proto_select_elem_t &select_elem)
+                                 const ucp_proto_select_elem_t &select_elem,
+                                 ucp_worker_cfg_index_t rkey_cfg_index)
     {
         ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
         ucp_proto_select_elem_info(e.worker(), ep_config_index(e),
-                                   RKEY_CONFIG_INDEX, &select_param,
-                                   &select_elem, 1, &strb);
+                                   rkey_cfg_index, &select_param,
+                                   &select_elem, 1, 0, &strb);
 
         char *line;
         ucs_string_buffer_for_each_token(line, &strb, "\n") {
@@ -354,7 +358,8 @@ protected:
     check_proto_select_elem(const entity &e,
                             const ucp_proto_select_param_t &select_param,
                             const ucp_proto_select_elem_t &select_elem,
-                            const proto_select_data_vec_t &data_vec)
+                            const proto_select_data_vec_t &data_vec,
+                            ucp_worker_cfg_index_t rkey_cfg_index)
     {
         bool failed        = false;
         unsigned range_idx = 0;
@@ -379,14 +384,15 @@ protected:
             ++range_idx;
         }
         if (failed) {
-            dump_select_info(e, select_param, select_elem);
+            dump_select_info(e, select_param, select_elem, rkey_cfg_index);
         }
     }
 
-    static void check_proto_select(const entity &e,
-                                   const ucp_proto_select_t &proto_select,
-                                   const proto_select_data_vec_t &data_vec,
-                                   const ucp_proto_select_key_t &key)
+    static void check_proto_select(
+            const entity &e, const ucp_proto_select_t &proto_select,
+            const proto_select_data_vec_t &data_vec,
+            const ucp_proto_select_key_t &key,
+            ucp_worker_cfg_index_t rkey_cfg_index = UCP_WORKER_CFG_INDEX_NULL)
     {
         ucp_proto_select_elem_t select_elem;
         ucp_proto_select_key_t select_key;
@@ -395,7 +401,7 @@ protected:
         kh_foreach(proto_select.hash, select_key.u64, select_elem, {
             if (key_match(key, select_key)) {
                 check_proto_select_elem(e, select_key.param, select_elem,
-                                        data_vec);
+                                        data_vec, rkey_cfg_index);
                 found = true;
             }
         })
@@ -503,6 +509,69 @@ protected:
     {
         return e.ep()->cfg_index;
     }
+
+    static ucs::handle<ucp_mem_h, ucp_context_h>
+    mem_map(entity &e, void *address, size_t length,
+            ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST)
+    {
+        ucp_mem_map_params_t mem_map_params;
+        mem_map_params.field_mask  = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                                     UCP_MEM_MAP_PARAM_FIELD_LENGTH;
+        mem_map_params.address     = address;
+        mem_map_params.length      = length;
+        mem_map_params.memory_type = mem_type;
+        ucp_mem_h mem;
+        ASSERT_UCS_OK(ucp_mem_map(e.ucph(), &mem_map_params, &mem));
+        return {
+            mem,
+            [](ucp_mem_h mem, ucp_context_h context) {
+                 static_cast<void>(ucp_mem_unmap(context, mem));
+            },
+            e.ucph()
+        };
+    }
+
+    static ucs::handle<ucp_mem_h, ucp_context_h>
+    mem_map(entity &e, mem_buffer &buf)
+    {
+        return mem_map(e, buf.ptr(), buf.size(), buf.mem_type());
+    }
+
+    static ucs::handle<void*> rkey_pack(entity &e, ucp_mem_h memh)
+    {
+        void *rkey_buffer;
+        size_t rkey_buffer_size;
+        ASSERT_UCS_OK(ucp_rkey_pack(e.ucph(), memh, &rkey_buffer,
+                                    &rkey_buffer_size));
+        return {rkey_buffer, ucp_rkey_buffer_release};
+    }
+
+    static ucs::handle<ucp_rkey_h> rkey_unpack(ucp_ep_h ep, void *rkey_buffer)
+    {
+        ucp_rkey_h rkey;
+        ASSERT_UCS_OK(ucp_ep_rkey_unpack(ep, rkey_buffer, &rkey));
+        return {rkey, ucp_rkey_destroy};
+    }
+
+    void send_recv_rma_put(size_t size,
+                           ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST)
+    {
+        mem_buffer recv_buf(size, mem_type);
+        recv_buf.pattern_fill(1);
+        auto memh        = mem_map(receiver(), recv_buf);
+        auto rkey_packed = rkey_pack(receiver(), memh);
+        auto rkey        = rkey_unpack(sender().ep(), rkey_packed);
+
+        mem_buffer send_buf(size, mem_type);
+        send_buf.pattern_fill(2);
+
+        ucp_request_param_t req_param;
+        req_param.op_attr_mask = 0;
+        auto sptr = ucp_put_nbx(sender().ep(), send_buf.ptr(), size,
+                                (uint64_t)recv_buf.ptr(), rkey, &req_param);
+        EXPECT_EQ(UCS_OK, request_wait(sptr));
+        recv_buf.pattern_check(2);
+    }
 };
 
 class test_ucp_proto_mock_rcx : public test_ucp_proto_mock {
@@ -560,10 +629,10 @@ UCS_TEST_P(test_ucp_proto_mock_rcx, rndv_1_lane, "IB_NUM_PATHS?=1",
     /* Prefer mock_0:1 iface for RNDV because it has larger BW */
     check_ep_config(sender(), {
         {0,     200,   "short",                "rc_mlx5/mock_1:1"},
-        {201,   6650,  "copy-in",              "rc_mlx5/mock_1:1"},
-        {6651,  8246,  "zero-copy",            "rc_mlx5/mock_1:1"},
-        {8247,  21991, "multi-frag zero-copy", "rc_mlx5/mock_1:1"},
-        {21992, INF,   "rendezvous zero-copy read from remote",
+        {201,   404,   "copy-in",              "rc_mlx5/mock_1:1"},
+        {405,   8246,  "zero-copy",            "rc_mlx5/mock_1:1"},
+        {8247,  21145, "multi-frag zero-copy", "rc_mlx5/mock_1:1"},
+        {21146, INF,   "rendezvous zero-copy read from remote",
                        "rc_mlx5/mock_0:1"},
     }, key);
 }
@@ -577,10 +646,10 @@ UCS_TEST_P(test_ucp_proto_mock_rcx, zero_rndv_perf_diff, "IB_NUM_PATHS?=1",
 
     check_ep_config(sender(), {
         {0,     200,   "short",                "rc_mlx5/mock_1:1"},
-        {201,   6650,  "copy-in",              "rc_mlx5/mock_1:1"},
-        {6651,  8246,  "zero-copy",            "rc_mlx5/mock_1:1"},
-        {8247,  22502, "multi-frag zero-copy", "rc_mlx5/mock_1:1"},
-        {22503, INF,   "rendezvous zero-copy read from remote",
+        {201,   404,   "copy-in",              "rc_mlx5/mock_1:1"},
+        {405,   8246,  "zero-copy",            "rc_mlx5/mock_1:1"},
+        {8247,  21563, "multi-frag zero-copy", "rc_mlx5/mock_1:1"},
+        {21564, INF,   "rendezvous zero-copy read from remote",
                        "rc_mlx5/mock_0:1"},
     }, key);
 }
@@ -595,10 +664,10 @@ UCS_TEST_P(test_ucp_proto_mock_rcx, rndv_2_lanes, "IB_NUM_PATHS?=2",
     /* The optimal RNDV config must use mock_0:1 and mock_1:1 proportionally. */
     check_ep_config(sender(), {
         {0,     200,   "short",                "rc_mlx5/mock_1:1/path0"},
-        {201,   6650,  "copy-in",              "rc_mlx5/mock_1:1/path0"},
-        {6651,  8246,  "zero-copy",            "rc_mlx5/mock_1:1/path0"},
-        {8247,  19883, "multi-frag zero-copy", "rc_mlx5/mock_1:1/path0"},
-        {19884, INF,   "rendezvous zero-copy read from remote",
+        {201,   404,   "copy-in",              "rc_mlx5/mock_1:1/path0"},
+        {405,   8246,  "zero-copy",            "rc_mlx5/mock_1:1/path0"},
+        {8247,  19149, "multi-frag zero-copy", "rc_mlx5/mock_1:1/path0"},
+        {19150, INF,   "rendezvous zero-copy read from remote",
          "47% on rc_mlx5/mock_1:1/path0 and 53% on rc_mlx5/mock_0:1/path0"},
     }, key);
 }
@@ -618,15 +687,31 @@ UCS_TEST_P(test_ucp_proto_mock_rcx, rndv_4_paths,
 
     /* All existing IB paths should be selected. */
     check_ep_config(sender(), {
-        {1,       5418,   "rendezvous fragmented copy-in copy-out",
+        {1,       477,    "rendezvous fragmented copy-in copy-out",
          "rc_mlx5/mock_1:1/path0"},
-        {5419,    283699, "rendezvous zero-copy read from remote",
+        {478,     3813,   "rendezvous zero-copy", "rc_mlx5/mock_1:1/path0"},
+        {3814,    283699, "rendezvous zero-copy read from remote",
          "12% on rc_mlx5/mock_1:1/path0, 14% on rc_mlx5/mock_0:1/path0, "
          "14% on rc_mlx5/mock_0:1/path1, 12% on rc_mlx5/mock_1:1/path1, 14%"},
-         {283700, INF,    "rendezvous zero-copy fenced write to remote",
+        {283700,  INF,    "rendezvous zero-copy fenced write to remote",
          "12% on rc_mlx5/mock_1:1/path0, 14% on rc_mlx5/mock_0:1/path0, "
          "14% on rc_mlx5/mock_0:1/path1, 12% on rc_mlx5/mock_1:1/path1, 14%"},
     }, key);
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx, rma_put_2_lanes,
+           "IB_NUM_PATHS?=1", "MAX_RMA_RAILS=2")
+{
+    send_recv_rma_put(64 * UCS_KBYTE);
+
+    ucp_proto_select_key_t key = any_key();
+    key.param.op_id_flags      = UCP_OP_ID_PUT;
+    key.param.op_attr          = 0;
+
+    check_rkey_config(sender(), {
+        {0,    2048, "short",     "rc_mlx5/mock_1:1"},
+        {2049, INF,  "zero-copy", "47% on rc_mlx5/mock_1:1 and 53% on rc_mlx5/mock_0:1"},
+    }, key, 0);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx, rcx, "rc_x")
@@ -667,9 +752,9 @@ UCS_TEST_P(test_ucp_proto_mock_rcx2, rndv_send_recv_small_frag,
     key.param.op_attr          = 0;
 
     check_ep_config(sender(), {
-        {1,    3724, "rendezvous fragmented copy-in copy-out",
+        {1,   433, "rendezvous fragmented copy-in copy-out",
          "rc_mlx5/mock_0:1/path0"},
-        {3725, INF,  "rendezvous zero-copy read from remote",
+        {434, INF, "rendezvous zero-copy read from remote",
          "54% on rc_mlx5/mock_0:1/path0 and 46% on rc_mlx5/mock_1:1/path0"},
     }, key);
 
@@ -716,8 +801,8 @@ UCS_TEST_P(test_ucp_proto_mock_rcx3, single_lane_no_zcopy,
 
     /* Check that get_zcopy is selected on slower device */
     check_ep_config(sender(), {
-        {1,    3662,  "rendezvous fragmented copy-in copy-out", "rc_mlx5/mock_0:1"},
-        {3663, 53753, "rendezvous zero-copy read from remote",  "rc_mlx5/mock_1:1"},
+        {1,    94,    "rendezvous fragmented copy-in copy-out", "rc_mlx5/mock_0:1"},
+        {95,   53753, "rendezvous zero-copy read from remote",  "rc_mlx5/mock_1:1"},
         {53754, INF,  "rendezvous zero-copy fenced write to remote",
          "54% on rc_mlx5/mock_0:1 and 46% on rc_mlx5/mock_1:1"},
     }, key);
@@ -747,8 +832,8 @@ UCS_TEST_P(test_ucp_proto_mock_cma, am_send_1_lane)
 
     check_ep_config(sender(), {
         {0,      92, "short",                                 "posix/memory"},
-        {93,   5345, "copy-in",                               "posix/memory"},
-        {5346, INF,  "rendezvous zero-copy read from remote", "cma/mock"},
+        {93,   5028, "copy-in",                               "posix/memory"},
+        {5029, INF,  "rendezvous zero-copy read from remote", "cma/mock"},
     }, key);
 }
 
@@ -781,10 +866,10 @@ UCS_TEST_P(test_ucp_proto_mock_tcp, am_send_1_lane)
     key.param.op_attr          = 0;
 
     check_ep_config(sender(), {
-        {0,      8184,   "short",                                       "tcp/mock"},
-        {8185,   65528,  "zero-copy",                                   "tcp/mock"},
-        {65529,  366864, "multi-frag zero-copy",                        "tcp/mock"},
-        {366865, INF,    "rendezvous zero-copy fenced write to remote", "tcp/mock"},
+        {0,      0,      "short",                                       "tcp/mock"},
+        {1,      65528,  "zero-copy",                                   "tcp/mock"},
+        {65529,  367108, "multi-frag zero-copy",                        "tcp/mock"},
+        {367109, INF,    "rendezvous zero-copy fenced write to remote", "tcp/mock"},
     }, key);
 }
 
@@ -861,3 +946,198 @@ UCS_TEST_P(test_ucp_proto_mock_gpu, cuda_managed_ppln_host_frag,
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_gpu, rcx_gpu,
                               "rc_x,cuda,rocm")
+
+class test_ucp_proto_mock_rcx_twins : public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_rcx_twins()
+    {
+        mock_transport("rc_mlx5");
+    }
+
+    virtual void init() override
+    {
+        auto iface_attr_func = [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short = 208;
+            iface_attr.bandwidth.shared = 28e9;
+            iface_attr.latency.c        = 500e-9;
+            iface_attr.latency.m        = 1e-9;
+        };
+
+        add_mock_iface("mock_0:1", iface_attr_func);
+        add_mock_iface("mock_1:1", [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short = 2000;
+            iface_attr.bandwidth.shared = 24e9;
+            iface_attr.latency.c        = 600e-9;
+            iface_attr.latency.m        = 1e-9;
+        });
+        add_mock_iface("mock_2:1", iface_attr_func);
+        test_ucp_proto_mock::init();
+    }
+};
+
+class test_ucp_proto_mock_rcx_twins_tag : public test_ucp_proto_mock_rcx_twins {
+protected:
+    void check_config(const proto_select_data_vec_t &data_vec);
+};
+
+void test_ucp_proto_mock_rcx_twins_tag::check_config(
+        const proto_select_data_vec_t &data_vec)
+{
+    ucp_proto_select_key_t key = any_key();
+    key.param.op_id_flags      = UCP_OP_ID_TAG_SEND;
+    key.param.op_attr          = 0;
+
+    check_ep_config(sender(), data_vec, key);
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_twins_tag, use_all_net_devices,
+           "IB_NUM_PATHS?=2")
+{
+    check_config(
+            {{0, 200, "eager short", "rc_mlx5/mock_0:1/path0"},
+             {201, 404, "eager copy-in copy-out", "rc_mlx5/mock_0:1/path0"},
+             {405, 8246, "eager zero-copy copy-out", "rc_mlx5/mock_0:1/path0"},
+             {8247, 18542, "multi-frag eager zero-copy copy-out",
+              "rc_mlx5/mock_0:1/path0"},
+             // SINGLE_NET_DEVICE=n [default]
+             // Use two network devices with the same bandwidth in 50/50 ratio
+             {18543, INF, "rendezvous zero-copy read from remote",
+              "50% on rc_mlx5/mock_0:1/path0 and 50% on "
+              "rc_mlx5/mock_2:1/path0"}});
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_twins_tag, use_single_net_device_0,
+           "IB_NUM_PATHS?=2", "SINGLE_NET_DEVICE=y", "NODE_LOCAL_ID=0")
+{
+    check_config(
+            {{0, 200, "eager short", "rc_mlx5/mock_0:1/path0"},
+             {201, 404, "eager copy-in copy-out", "rc_mlx5/mock_0:1/path0"},
+             {405, 8246, "eager zero-copy copy-out", "rc_mlx5/mock_0:1/path0"},
+             {8247, 18542, "multi-frag eager zero-copy copy-out",
+              "rc_mlx5/mock_0:1/path0"},
+             // SINGLE_NET_DEVICE=y, NODE_LOCAL_ID=0
+             // Use two paths of the zero network device in 50/50 ratio
+             {18543, INF, "rendezvous zero-copy read from remote",
+              "rc_mlx5/mock_0:1 50% on path0 and 50% on path1"}});
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_twins_tag, use_single_net_device_1,
+           "IB_NUM_PATHS?=2", "SINGLE_NET_DEVICE=y", "NODE_LOCAL_ID=1")
+{
+    check_config(
+            {{0, 200, "eager short", "rc_mlx5/mock_0:1/path0"},
+             {201, 404, "eager copy-in copy-out", "rc_mlx5/mock_0:1/path0"},
+             {405, 8246, "eager zero-copy copy-out", "rc_mlx5/mock_0:1/path0"},
+             {8247, 18542, "multi-frag eager zero-copy copy-out",
+              "rc_mlx5/mock_0:1/path0"},
+             // SINGLE_NET_DEVICE=y, NODE_LOCAL_ID=1
+             // Use two paths of the second network device in 50/50
+             {18543, INF, "rendezvous zero-copy read from remote",
+              "rc_mlx5/mock_2:1 50% on path0 and 50% on path1"}});
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_twins_tag, use_single_net_device_2,
+           "IB_NUM_PATHS?=2", "SINGLE_NET_DEVICE=y", "NODE_LOCAL_ID=2")
+{
+    check_config(
+            {{0, 200, "eager short", "rc_mlx5/mock_0:1/path0"},
+             {201, 404, "eager copy-in copy-out", "rc_mlx5/mock_0:1/path0"},
+             {405, 8246, "eager zero-copy copy-out", "rc_mlx5/mock_0:1/path0"},
+             {8247, 18542, "multi-frag eager zero-copy copy-out",
+              "rc_mlx5/mock_0:1/path0"},
+             // SINGLE_NET_DEVICE=y, NODE_LOCAL_ID=2
+             // Use two paths of the zero network device in 50/50 ratio
+             {18543, INF, "rendezvous zero-copy read from remote",
+              "rc_mlx5/mock_0:1 50% on path0 and 50% on path1"}});
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_twins_tag, rcx, "rc_x")
+
+class test_ucp_proto_mock_rcx_twins_put : public test_ucp_proto_mock_rcx_twins {
+protected:
+    void check_config(const proto_select_data_vec_t &data_vec);
+};
+
+void test_ucp_proto_mock_rcx_twins_put::check_config(
+        const proto_select_data_vec_t &data_vec)
+{
+    ucp_proto_select_key_t key = any_key();
+    key.param.op_id_flags      = UCP_OP_ID_PUT;
+    key.param.op_attr          = 0;
+
+    check_rkey_config(sender(), data_vec, key, 0);
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_twins_put, use_single_net_device_rank_0,
+           "IB_NUM_PATHS?=2", "SINGLE_NET_DEVICE=y", "NODE_LOCAL_ID=0")
+{
+    check_config({{0, 2048, "short", "rc_mlx5/mock_0:1/path0"},
+                  {2049, INF, "zero-copy", "rc_mlx5/mock_0:1/path0"}});
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_twins_put, use_single_net_device_rank_1,
+           "IB_NUM_PATHS?=2", "SINGLE_NET_DEVICE=y", "NODE_LOCAL_ID=1")
+{
+    check_config({{0, 2048, "short", "rc_mlx5/mock_0:1/path0"},
+                  {2049, INF, "zero-copy", "rc_mlx5/mock_2:1/path0"}});
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_twins_put, use_single_net_device_rank_2,
+           "IB_NUM_PATHS?=2", "SINGLE_NET_DEVICE=y", "NODE_LOCAL_ID=2")
+{
+    check_config({{0, 2048, "short", "rc_mlx5/mock_0:1/path0"},
+                  {2049, INF, "zero-copy", "rc_mlx5/mock_0:1/path0"}});
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_twins_put, rcx, "rc_x")
+
+class test_ucp_proto_mock_rcx_twins_get : public test_ucp_proto_mock_rcx_twins {
+protected:
+    void check_config(const proto_select_data_vec_t &data_vec);
+};
+
+void test_ucp_proto_mock_rcx_twins_get::check_config(
+        const proto_select_data_vec_t &data_vec)
+{
+    uint8_t remote   = 42;
+    auto memh        = mem_map(receiver(), &remote, sizeof(remote));
+    auto rkey_packed = rkey_pack(receiver(), memh);
+    auto rkey        = rkey_unpack(sender().ep(), rkey_packed);
+
+    uint8_t local = 0;
+    ucp_request_param_t req_param;
+    req_param.op_attr_mask = 0;
+    auto status            = ucp_get_nbx(sender().ep(), &local, sizeof(local),
+                                         (uint64_t)&remote, rkey, &req_param);
+    request_wait(status);
+    ASSERT_EQ(local, 42);
+
+    ucp_proto_select_key_t key = any_key();
+    key.param.op_id_flags      = UCP_OP_ID_GET;
+    key.param.op_attr          = 0;
+
+    check_rkey_config(sender(), data_vec, key, rkey->cfg_index);
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_twins_get, use_single_net_device_rank_0,
+           "IB_NUM_PATHS?=2", "SINGLE_NET_DEVICE=y", "NODE_LOCAL_ID=0")
+{
+    check_config({{0, 624, "copy-out", "rc_mlx5/mock_0:1/path0"},
+                  {625, INF, "zero-copy", "rc_mlx5/mock_0:1/path0"}});
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_twins_get, use_single_net_device_rank_1,
+           "IB_NUM_PATHS?=2", "SINGLE_NET_DEVICE=y", "NODE_LOCAL_ID=1")
+{
+    check_config({{0, 624, "copy-out", "rc_mlx5/mock_2:1/path0"},
+                  {625, INF, "zero-copy", "rc_mlx5/mock_2:1/path0"}});
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_twins_get, use_single_net_device_rank_2,
+           "IB_NUM_PATHS?=2", "SINGLE_NET_DEVICE=y", "NODE_LOCAL_ID=2")
+{
+    check_config({{0, 624, "copy-out", "rc_mlx5/mock_0:1/path0"},
+                  {625, INF, "zero-copy", "rc_mlx5/mock_0:1/path0"}});
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_twins_get, rcx, "rc_x")

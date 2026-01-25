@@ -7,18 +7,20 @@
 #  include "config.h"
 #endif
 
+#include "cuda_ipc.inl"
 #include "cuda_ipc_iface.h"
 #include "cuda_ipc_md.h"
 #include "cuda_ipc_ep.h"
 
 #include <uct/cuda/base/cuda_iface.h>
 #include <uct/cuda/base/cuda_md.h>
+#include <uct/cuda/base/cuda_nvml.h>
+#include <uct/api/device/uct_device_types.h>
 #include <ucs/type/class.h>
 #include <ucs/sys/string.h>
 #include <ucs/debug/assert.h>
 #include <ucs/async/eventfd.h>
 #include <pthread.h>
-#include <nvml.h>
 
 
 typedef enum {
@@ -71,6 +73,11 @@ static ucs_config_field_t uct_cuda_ipc_iface_config_table[] = {
     {"OVERHEAD", "4.0us",
      "Estimated CPU overhead for transferring GPU memory",
      ucs_offsetof(uct_cuda_ipc_iface_config_t, params.overhead), UCS_CONFIG_TYPE_TIME},
+
+    {"ENABLE_SAME_PROCESS", "n",
+     "Enable same process same device communication for cuda_ipc",
+     ucs_offsetof(uct_cuda_ipc_iface_config_t, params.enable_same_process), UCS_CONFIG_TYPE_BOOL},
+
     {NULL}
 };
 
@@ -139,7 +146,8 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
     dev_addr     = (const uct_cuda_ipc_device_addr_t *)params->device_addr;
     same_uuid    = (ucs_get_system_id() == dev_addr->system_uuid);
 
-    if ((getpid() == *(pid_t*)params->iface_addr) && same_uuid) {
+    if ((getpid() == *(pid_t*)params->iface_addr) && same_uuid &&
+        !iface->config.enable_same_process) {
         uct_iface_fill_info_str_buf(params, "same process");
         return 0;
     }
@@ -191,8 +199,6 @@ static double uct_cuda_ipc_iface_get_bw()
     }
 }
 
-/* calls nvmlInit_v2 and nvmlShutdown which are expensive but
- * get_device_nvlinks should be outside critical path */
 static int uct_cuda_ipc_get_device_nvlinks(int ordinal)
 {
     static int num_nvlinks = -1;
@@ -206,19 +212,14 @@ static int uct_cuda_ipc_get_device_nvlinks(int ordinal)
         return num_nvlinks;
     }
 
-    status = UCT_NVML_FUNC(nvmlInit_v2(), UCS_LOG_LEVEL_DIAG);
+    status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetHandleByIndex, 0, &device);
     if (status != UCS_OK) {
         goto err;
     }
 
-    status = UCT_NVML_FUNC_LOG_ERR(nvmlDeviceGetHandleByIndex(ordinal, &device));
-    if (status != UCS_OK) {
-        goto err_sd;
-    }
-
     value.fieldId = NVML_FI_DEV_NVLINK_LINK_COUNT;
 
-    UCT_NVML_FUNC_LOG_ERR(nvmlDeviceGetFieldValues(device, 1, &value));
+    UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetFieldValues, device, 1, &value);
 
     num_nvlinks = ((value.nvmlReturn == NVML_SUCCESS) &&
                    (value.valueType == NVML_VALUE_TYPE_UNSIGNED_INT)) ?
@@ -227,20 +228,16 @@ static int uct_cuda_ipc_get_device_nvlinks(int ordinal)
     /* not enough to check number of nvlinks; need to check if links are active
      * by seeing if remote info can be obtained */
     for (link = 0; link < num_nvlinks; ++link) {
-        status = UCT_NVML_FUNC(nvmlDeviceGetNvLinkRemotePciInfo(device, link,
-                                                                &pci),
-                               UCS_LOG_LEVEL_DEBUG);
+        status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetNvLinkRemotePciInfo,
+                                         device, link, &pci);
         if (status != UCS_OK) {
             ucs_debug("could not find remote end info for link %u", link);
-            goto err_sd;
+            goto err;
         }
     }
 
-    UCT_NVML_FUNC_LOG_ERR(nvmlShutdown());
     return num_nvlinks;
 
-err_sd:
-    UCT_NVML_FUNC_LOG_ERR(nvmlShutdown());
 err:
     return 0;
 }
@@ -279,7 +276,8 @@ static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
                                           UCT_IFACE_FLAG_CONNECT_TO_IFACE |
                                           UCT_IFACE_FLAG_PENDING          |
                                           UCT_IFACE_FLAG_GET_ZCOPY        |
-                                          UCT_IFACE_FLAG_PUT_ZCOPY;
+                                          UCT_IFACE_FLAG_PUT_ZCOPY        |
+                                          UCT_IFACE_FLAG_DEVICE_EP;
     if (md->enable_mnnvl) {
         iface_attr->cap.flags |= UCT_IFACE_FLAG_INTER_NODE;
     }
@@ -415,14 +413,63 @@ uct_cuda_ipc_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
     return UCS_OK;
 }
 
+static ucs_status_t
+uct_cuda_ipc_iface_mem_element_pack(uct_iface_h tl_iface,
+                                    uct_mem_h memh,
+                                    uct_rkey_t rkey,
+                                    uct_device_mem_element_t *mem_element)
+{
+    uct_cuda_ipc_unpacked_rkey_t *key = (uct_cuda_ipc_unpacked_rkey_t *)rkey;
+    ucs_status_t status;
+    int is_ctx_pushed;
+    uct_cuda_ipc_device_mem_element_t cuda_ipc_mem_element;
+    CUdevice cuda_device;
+    void *mapped_addr;
+
+    /* TODO: Use device of current ctx and move to md API. */
+    status = uct_cuda_ipc_check_and_push_ctx((CUdeviceptr)mem_element,
+                                             &cuda_device, &is_ctx_pushed);
+    if (ucs_unlikely(status != UCS_OK)) {
+        return status;
+    }
+
+    status = uct_cuda_ipc_map_memhandle(&key->super, cuda_device,
+                                        &mapped_addr, UCS_LOG_LEVEL_ERROR);
+    if (ucs_unlikely(status != UCS_OK)) {
+        goto out;
+    }
+    cuda_ipc_mem_element.mapped_offset = UCS_PTR_BYTE_DIFF(key->super.d_bptr, mapped_addr);
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuMemcpyHtoD((CUdeviceptr)mem_element, &cuda_ipc_mem_element,
+                          sizeof(uct_cuda_ipc_device_mem_element_t)));
+
+out:
+    uct_cuda_ipc_check_and_pop_ctx(is_ctx_pushed);
+    return status;
+}
+
+static ucs_status_t uct_cuda_ipc_iface_query_v2(uct_iface_h iface,
+                                                uct_iface_attr_v2_t *iface_attr)
+{
+    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_DEVICE_MEM_ELEMENT_SIZE) {
+        iface_attr->device_mem_element_size = sizeof(uct_cuda_ipc_device_mem_element_t);
+    }
+
+    return UCS_OK;
+}
+
 static uct_iface_internal_ops_t uct_cuda_ipc_iface_internal_ops = {
-    .iface_estimate_perf   = uct_cuda_ipc_estimate_perf,
-    .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
-    .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
-    .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
-    .ep_connect_to_ep_v2   = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
-    .iface_is_reachable_v2 = uct_cuda_ipc_iface_is_reachable_v2,
-    .ep_is_connected       = uct_cuda_ipc_ep_is_connected
+    .iface_query_v2         = uct_cuda_ipc_iface_query_v2,
+    .iface_estimate_perf    = uct_cuda_ipc_estimate_perf,
+    .iface_vfs_refresh      = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+    .iface_mem_element_pack = uct_cuda_ipc_iface_mem_element_pack,
+    .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+    .ep_invalidate          = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
+    .ep_connect_to_ep_v2    = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
+    .iface_is_reachable_v2  = uct_cuda_ipc_iface_is_reachable_v2,
+    .ep_is_connected        = uct_cuda_ipc_ep_is_connected,
+    .ep_get_device_ep       = uct_cuda_ipc_ep_get_device_ep
 };
 
 static uct_cuda_ctx_rsc_t * uct_cuda_ipc_ctx_rsc_create(uct_iface_h tl_iface)
@@ -479,6 +526,12 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worke
     status = uct_cuda_base_check_device_name(params);
     if (status != UCS_OK) {
         return status;
+    }
+
+    if (config->params.max_streams > UCT_CUDA_IPC_MAX_PEERS) {
+        ucs_error("invalid max streams value (%u > %u)",
+                  config->params.max_streams, UCT_CUDA_IPC_MAX_PEERS);
+        return UCS_ERR_INVALID_PARAM;
     }
 
     self->config = config->params;

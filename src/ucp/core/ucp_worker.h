@@ -230,6 +230,27 @@ KHASH_TYPE(ucp_worker_mpool_hash, ucp_worker_mpool_key_t, ucs_mpool_t);
 typedef khash_t(ucp_worker_mpool_hash) ucp_worker_mpool_hash_t;
 
 
+typedef struct {
+    ucp_ep_h         ep;
+    ucs_sys_device_t sys_dev;
+} ucp_worker_remote_flush_key_t;
+
+
+/**
+ * Remote memory to be used for device targeted remote flushing.
+ */
+typedef struct {
+    uct_rkey_t uct_rkey;
+    uct_ep_t   *uct_ep;
+    uint64_t   address;
+} ucp_mem_area_t;
+
+
+/* Hash map to find what remote devices ep needs to flush */
+KHASH_TYPE(ucp_worker_remote_flush, ucp_worker_remote_flush_key_t,
+           ucp_mem_area_t);
+
+
 /* EP configurations storage */
 UCS_ARRAY_DECLARE_TYPE(ucp_ep_config_arr_t, unsigned, ucp_ep_config_t);
 
@@ -342,6 +363,7 @@ typedef struct ucp_worker {
                                                              mapping */
     UCS_PTR_MAP_T(request)           request_map;         /* UCP requests key to
                                                              ptr mapping */
+    kh_ucp_worker_remote_flush_t     remote_flush_hash;
 
     ucp_ep_config_arr_t              ep_config; /* EP configurations storage */
 

@@ -728,6 +728,15 @@ uct_ud_ep_process_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
         return;
     }
 
+    /* Ignore stale ACKs for unsent packets (e.g., after endpoint reset).
+     * Valid ACK PSN must be in (acked_psn, psn). */
+    if (ucs_unlikely(UCT_UD_PSN_COMPARE(ep->tx.psn, <=, ack_psn))) {
+        ucs_debug("ep %p: ignoring invalid ack_psn=%u (tx.psn=%u acked_psn=%u)"
+                  " - possibly stale from previous connection",
+                  ep, ack_psn, ep->tx.psn, ep->tx.acked_psn);
+        return;
+    }
+
     ep->tx.acked_psn = ack_psn;
     ucs_assertv(UCT_UD_PSN_COMPARE(ep->tx.acked_psn, <, ep->tx.psn),
                 "ep %p: flags=0x%x acked_psn=%u must be smaller than"
@@ -829,21 +838,30 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
         ep->rx.ooo_pkts.head_sn = neth->psn;
         uct_ud_peer_copy(&ep->peer, ucs_unaligned_ptr(&ctl->peer));
         uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_CREP);
-    } else if (ep->dest_ep_id == UCT_UD_EP_NULL_ID) {
-        /* simultaneous CREQ */
+    } else if (uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id) != ep->dest_ep_id) {
+        if (ep->dest_ep_id == UCT_UD_EP_NULL_ID) {
+            /* simultaneous CREQ */
+            ucs_debug("simultaneous CREQ ep=%p"
+                      "(iface=%p conn_sn=%d ep_id=%d, dest_ep_id=%d rx_psn=%u)",
+                      ep, iface, ep->conn_sn, ep->ep_id,
+                      ep->dest_ep_id, ep->rx.ooo_pkts.head_sn);
+            if (UCT_UD_PSN_COMPARE(ep->tx.psn, >, UCT_UD_INITIAL_PSN)) {
+                /* our own creq was sent, treat incoming creq as ack and remove our
+                 * own from tx window
+                 */
+                uct_ud_ep_process_ack(iface, ep, UCT_UD_INITIAL_PSN, 0);
+            }
+        } else {
+            /* stale EP reuse */
+            ucs_debug("iface=%p: detected stale EP reuse (ep=%p conn_sn=%d "
+                      "old_dest_ep_id=%d new_ep_id=%d), updating dest_ep_id",
+                      iface, ep, ep->conn_sn, ep->dest_ep_id,
+                      uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id));
+        }
+        /* Update dest_ep_id */
         uct_ud_ep_set_dest_ep_id(ep, uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id));
         ep->rx.ooo_pkts.head_sn = neth->psn;
         uct_ud_peer_copy(&ep->peer, ucs_unaligned_ptr(&ctl->peer));
-        ucs_debug("simultaneous CREQ ep=%p"
-                  "(iface=%p conn_sn=%d ep_id=%d, dest_ep_id=%d rx_psn=%u)",
-                  ep, iface, ep->conn_sn, ep->ep_id,
-                  ep->dest_ep_id, ep->rx.ooo_pkts.head_sn);
-        if (UCT_UD_PSN_COMPARE(ep->tx.psn, >, UCT_UD_INITIAL_PSN)) {
-            /* our own creq was sent, treat incoming creq as ack and remove our
-             * own from tx window
-             */
-            uct_ud_ep_process_ack(iface, ep, UCT_UD_INITIAL_PSN, 0);
-        }
         uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_CREP);
     }
 
@@ -1823,7 +1841,8 @@ void uct_ud_ep_disconnect(uct_ep_h tl_ep)
     uct_ud_leave(iface);
 }
 
-ucs_status_t uct_ud_ep_invalidate(uct_ep_h tl_ep, unsigned flags)
+ucs_status_t uct_ud_ep_invalidate(uct_ep_h tl_ep,
+                                  const uct_ep_invalidate_params_t *params)
 {
     uct_ud_ep_t *ep       = ucs_derived_of(tl_ep, uct_ud_ep_t);
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface,

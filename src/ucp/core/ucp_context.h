@@ -127,6 +127,9 @@ typedef struct ucp_context_config {
     /** Minimum allowed chunk size when splitting rndv message over multiple
      *  lanes */
     size_t                                 min_rndv_chunk_size;
+    /** Minimum allowed chunk size when splitting rma message over multiple
+     *  lanes */
+    size_t                                 min_rma_chunk_size;
     /** Estimated number of endpoints */
     size_t                                 estimated_num_eps;
     /** Estimated number of processes per node */
@@ -183,6 +186,8 @@ typedef struct ucp_context_config {
     char                                   *proto_info_dir;
     /** Memory types that perform non-blocking registration by default */
     uint64_t                               reg_nb_mem_types;
+    /** Enable fallback to blocking registration if no MDs support nonblocking */
+    int                                    reg_nb_fallback;
     /** Prefer native RMA transports for RMA/AMO protocols */
     int                                    prefer_offload;
     /** RMA zcopy segment size */
@@ -212,6 +217,10 @@ typedef struct ucp_context_config {
     /** Extend endpoint lanes connections of each local device to all remote
      *  devices */
     int                                    connect_all_to_all;
+    /** Use only one network device for all protocols */
+    int                                    proto_use_single_net_device;
+    /** Local identificator on a single node */
+    unsigned long                          node_local_id;
 } ucp_context_config_t;
 
 
@@ -323,6 +332,11 @@ typedef struct ucp_tl_md {
      * Global VA memory handle
      */
     uct_mem_h              gva_mr;
+
+    /**
+     * Set of known system devices associated to the MD
+     */
+    ucp_sys_dev_map_t      sys_dev_map;
 } ucp_tl_md_t;
 
 
@@ -407,6 +421,9 @@ typedef struct ucp_context {
         /* How many endpoints are expected to be created on single node */
         int                       est_num_ppn;
 
+        /* Local identificator on a single node */
+        unsigned long             node_local_id;
+
         struct {
             size_t                         size;    /* Request size for user */
             ucp_request_init_callback_t    init;    /* Initialization user callback */
@@ -442,6 +459,9 @@ typedef struct ucp_context {
 
         /* Progress wrapper enabled */
         int                       progress_wrapper_enabled;
+
+        /* Indicate whether tracing for used protocol selections is enabled */
+        int                       trace_used_proto_selections;
 
         struct {
            unsigned               count;
@@ -606,36 +626,12 @@ double ucp_tl_iface_latency_with_priority(ucp_context_h context,
                                           int is_prioritized_ep);
 
 /**
- * Calculate a small value to overcome float imprecision
- * between two float values
- */
-static UCS_F_ALWAYS_INLINE
-double ucp_calc_epsilon(double val1, double val2)
-{
-    return (val1 + val2) * (1e-6);
-}
-
-/**
- * Compare two scores and return:
- * - `-1` if score1 < score2
- * -  `0` if score1 == score2
- * -  `1` if score1 > score2
- */
-static UCS_F_ALWAYS_INLINE
-int ucp_score_cmp(double score1, double score2)
-{
-    double diff = score1 - score2;
-    return ((fabs(diff) < ucp_calc_epsilon(score1, score2)) ?
-            0 : ucs_signum(diff));
-}
-
-/**
  * Compare two scores taking into account priorities if scores are equal
  */
 static UCS_F_ALWAYS_INLINE
 int ucp_score_prio_cmp(double score1, int prio1, double score2, int prio2)
 {
-    int score_res = ucp_score_cmp(score1, score2);
+    int score_res = ucs_fp_compare(score1, score2);
 
     return score_res ? score_res : ucs_signum(prio1 - prio2);
 }
@@ -732,6 +728,13 @@ ucp_context_usage_tracker_enabled(ucp_context_h context)
     return context->config.ext.dynamic_tl_switch_interval != UCS_TIME_INFINITY;
 }
 
+static UCS_F_ALWAYS_INLINE int
+ucp_context_rndv_is_enabled(ucp_context_h context)
+{
+    return (context->config.ext.rndv_intra_thresh != UCS_MEMUNITS_INF) ||
+           (context->config.ext.rndv_inter_thresh != UCS_MEMUNITS_INF);
+}
+
 void ucp_context_memaccess_tl_bitmap(ucp_context_h context,
                                      ucs_memory_type_t mem_type,
                                      uint64_t md_reg_flags,
@@ -760,5 +763,11 @@ ucp_config_modify_internal(ucp_config_t *config, const char *name,
 
 
 void ucp_apply_uct_config_list(ucp_context_h context, void *config);
+
+
+void ucp_device_init(void);
+
+
+void ucp_device_cleanup(void);
 
 #endif

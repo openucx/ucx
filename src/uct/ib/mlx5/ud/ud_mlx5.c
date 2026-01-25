@@ -856,13 +856,16 @@ static void uct_ud_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg
 static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
     .super = {
         .super = {
-            .iface_estimate_perf   = uct_ib_iface_estimate_perf,
-            .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)uct_ud_iface_vfs_refresh,
-            .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
-            .ep_invalidate         = uct_ud_ep_invalidate,
-            .ep_connect_to_ep_v2   = uct_ud_ep_connect_to_ep_v2,
-            .iface_is_reachable_v2 = uct_ib_iface_is_reachable_v2,
-            .ep_is_connected       = uct_ud_mlx5_ep_is_connected
+            .iface_query_v2         = uct_iface_base_query_v2,
+            .iface_estimate_perf    = uct_ib_iface_estimate_perf,
+            .iface_vfs_refresh      = (uct_iface_vfs_refresh_func_t)uct_ud_iface_vfs_refresh,
+            .iface_mem_element_pack = (uct_iface_mem_element_pack_func_t)ucs_empty_function_return_unsupported,
+            .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+            .ep_invalidate          = uct_ud_ep_invalidate,
+            .ep_connect_to_ep_v2    = uct_ud_ep_connect_to_ep_v2,
+            .iface_is_reachable_v2  = uct_ib_iface_is_reachable_v2,
+            .ep_is_connected        = uct_ud_mlx5_ep_is_connected,
+            .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported
         },
         .create_cq      = uct_ud_mlx5_create_cq,
         .destroy_cq     = uct_ib_verbs_destroy_cq,

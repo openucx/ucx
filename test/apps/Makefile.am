@@ -10,6 +10,7 @@ SUBDIRS = profiling
 
 SUBDIRS += iodemo
 
+if HAVE_TEST_APPS
 noinst_PROGRAMS = \
 	test_ucp_dlopen \
 	test_ucp_config \
@@ -20,23 +21,23 @@ noinst_PROGRAMS = \
 	test_memtrack_limit \
 	test_hooks
 
-objdir = $(shell sed -n -e 's/^objdir=\(.*\)$$/\1/p' $(LIBTOOL))
+objdir_apps = $(shell sed -n -e 's/^objdir=\(.*\)$$/\1/p' $(LIBTOOL))
 
 test_hooks_SOURCES  = test_hooks.c
 test_hooks_CPPFLAGS = $(BASE_CPPFLAGS) \
-                      -DLIB_PATH=$(abs_top_builddir)/src/ucs/$(objdir)/libucs.so
+                      -DLIB_PATH=$(abs_top_builddir)/src/ucs/$(objdir_apps)/libucs.so
 test_hooks_CFLAGS   = $(BASE_CFLAGS)
 test_hooks_LDADD    = -ldl
 
 test_ucs_dlopen_SOURCES  = test_ucs_dlopen.c
 test_ucs_dlopen_CPPFLAGS = $(BASE_CPPFLAGS) \
-                           -DLIB_PATH=$(abs_top_builddir)/src/ucs/$(objdir)/libucs.so
+                           -DLIB_PATH=$(abs_top_builddir)/src/ucs/$(objdir_apps)/libucs.so
 test_ucs_dlopen_CFLAGS   = $(BASE_CFLAGS)
 test_ucs_dlopen_LDADD    = -ldl
 
 test_ucp_dlopen_SOURCES  = test_ucp_dlopen.c
 test_ucp_dlopen_CPPFLAGS = $(BASE_CPPFLAGS) \
-                           -DLIB_PATH=$(abs_top_builddir)/src/ucp/$(objdir)/libucp.so
+                           -DLIB_PATH=$(abs_top_builddir)/src/ucp/$(objdir_apps)/libucp.so
 test_ucp_dlopen_CFLAGS   = $(BASE_CFLAGS)
 test_ucp_dlopen_LDADD    = -ldl
 
@@ -57,8 +58,8 @@ test_link_map_LDADD    = -ldl $(top_builddir)/src/ucp/libucp.la
 
 test_dlopen_cfg_print_SOURCES  = test_dlopen_cfg_print.c
 test_dlopen_cfg_print_CPPFLAGS = $(BASE_CPPFLAGS) -g \
-	-DUCS_LIB_PATH=$(abs_top_builddir)/src/ucs/$(objdir)/libucs.so \
-	-DUCT_LIB_PATH=$(abs_top_builddir)/src/uct/$(objdir)/libuct.so
+	-DUCS_LIB_PATH=$(abs_top_builddir)/src/ucs/$(objdir_apps)/libucs.so \
+	-DUCT_LIB_PATH=$(abs_top_builddir)/src/uct/$(objdir_apps)/libuct.so
 test_dlopen_cfg_print_CFLAGS   = $(BASE_CFLAGS)
 test_dlopen_cfg_print_LDADD    = -ldl
 
@@ -98,17 +99,20 @@ test_cuda_hook_static_LDADD     = $(top_builddir)/src/ucp/libucp.la \
 endif
 
 if HAVE_NVCC
+
+include $(top_srcdir)/config/cuda.am
+
+# Could be simply added as .cu to _SOURCES if there was no specific CPPFLAGS
+$(eval $(call nvcc-source, custom-test_cuda_get_symbol_address.o, \
+	test_cuda_get_symbol_address.cu,CUDA_CPPFLAGS))
+
 noinst_PROGRAMS                      += test_cuda_get_symbol_address
-test_cuda_get_symbol_address_SOURCES  = test_cuda_get_symbol_address.cu
-test_cuda_get_symbol_address_CPPFLAGS = $(BASE_CPPFLAGS) $(CUDA_CPPFLAGS)
+test_cuda_get_symbol_address_SOURCES  =
 test_cuda_get_symbol_address_LDFLAGS  = $(CUDA_LDFLAGS)
-test_cuda_get_symbol_address_LDADD    = $(top_builddir)/src/ucp/libucp.la \
-                                        $(top_builddir)/src/ucm/libucm.la \
-                                        $(CUDART_LIBS)
-test_cuda_get_symbol_address_DEPBASE  = $(DEPDIR)/test_cuda_get_symbol_address
-test_cuda_get_symbol_address_COMPILE  = \
-    $(NVCC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
-    $(test_cuda_get_symbol_address_CPPFLAGS)
+test_cuda_get_symbol_address_LDADD    = $(CUDART_LIBS) custom-test_cuda_get_symbol_address.o \
+                                        $(top_builddir)/src/ucp/libucp.la \
+                                        $(top_builddir)/src/ucm/libucm.la
+
 endif
 
 endif
@@ -122,11 +126,4 @@ test_tcmalloc_LDADD    = -ldl $(TCMALLOC_LIB) \
                           $(top_builddir)/src/ucp/libucp.la
 endif
 
-.cu.o : ; $(NVCC) -c -o $@ $<
-
-test_cuda_get_symbol_address.o: test_cuda_get_symbol_address.cu
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(test_cuda_get_symbol_address_COMPILE) -MT $@ -MD -MF $(test_cuda_get_symbol_address_DEPBASE).Tpo -c -o $@ `test -f '$(<F)' || echo '$(srcdir)/'`$(<F)
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(test_cuda_get_symbol_address_DEPBASE).Tpo $(test_cuda_get_symbol_address_DEPBASE).Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$(<F)' object='$@' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(test_cuda_get_symbol_address_COMPILE) -Xcompiler "-fPIC" -c -o $@ `test -f '$(<F)' || echo '$(srcdir)/'`$(<F)
+endif
