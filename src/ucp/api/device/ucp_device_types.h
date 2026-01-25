@@ -47,7 +47,7 @@ typedef struct ucp_device_mem_list_handle {
     /**
      * Number of entries in the memory descriptors array @a elems.
      */
-    uint32_t        mem_list_length;
+    uint32_t        length;
 
     /**
      * Array of pointers to UCT device endpoints, used for multi-lane
@@ -108,7 +108,7 @@ typedef struct ucp_device_remote_mem_list_handle {
     /**
      * Number of entries in the memory descriptors array @a elems.
      */
-    uint32_t                          mem_list_length;
+    uint32_t                          length;
 
     /**
      * UCT memory element objects are allocated contiguously.
@@ -137,7 +137,7 @@ typedef struct ucp_device_local_mem_list_handle {
     /**
      * Number of entries in the memory descriptors array @a elems.
      */
-    uint32_t                         mem_list_length;
+    uint32_t                         length;
 
     uct_device_local_mem_list_elem_t mem_elements[0];
 } ucp_device_local_mem_list_handle_t;

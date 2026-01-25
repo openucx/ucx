@@ -77,14 +77,17 @@ union uct_tl_device_mem_element {
     uct_cuda_ipc_device_mem_element_t cuda_ipc_mem_element;
 };
 
+
 /* Base structure for all device memory elements */
 struct uct_device_mem_element {
 };
+
 
 struct uct_device_local_mem_list_elem {
     void                     *addr;
     uct_device_mem_element_t uct_mem_element;
 };
+
 
 struct uct_device_remote_mem_list_elem {
     uct_device_ep_h          device_ep;
