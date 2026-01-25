@@ -1097,7 +1097,6 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
         ucs_debug("%s: using dmabuf for gda transport",
                   uct_ib_device_name(&ib_md->dev));
     } else if ((ib_md->config.gda_dmabuf_enable != UCS_YES) &&
-               uct_cuda_copy_md_is_dmabuf_supported() &&
                uct_gdaki_is_peermem_loaded(ib_md)) {
         ucs_debug("%s: using peermem for gda transport",
                   uct_ib_device_name(&ib_md->dev));
