@@ -130,8 +130,8 @@ private:
 
 struct ucp_perf_cuda_params {
     ucp_device_mem_list_handle_h        mem_list;
-    ucp_device_local_mem_list_handle_h  local_mem_list;
-    ucp_device_remote_mem_list_handle_h remote_mem_list;
+    ucp_device_local_mem_list_h         local_mem_list;
+    ucp_device_remote_mem_list_h        remote_mem_list;
     size_t                              length;
     unsigned                            *indices;
     size_t                              *local_offsets;
@@ -176,34 +176,32 @@ private:
         size_t count      = data_count + (has_counter(perf) ? 1 : 0);
         size_t offset     = 0;
         ucp_device_mem_list_elem_t elems[count];
-        ucp_device_local_mem_list_elem_t local_elems[count];
-        ucp_device_remote_mem_list_elem_t remote_elems[count];
+        ucp_device_mem_list_elem_t local_elems[count];
+        ucp_device_mem_list_elem_t remote_elems[count];
 
         for (size_t i = 0; i < data_count; ++i) {
             elems[i].field_mask  = UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH |
                                    UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY |
                                    UCP_DEVICE_MEM_LIST_ELEM_FIELD_LOCAL_ADDR |
-                                   UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR |
-                                   UCP_DEVICE_MEM_LIST_ELEM_FIELD_LENGTH;
+                                   UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR;
             elems[i].memh        = perf.ucp.send_memh;
             elems[i].rkey        = perf.ucp.rkey;
             elems[i].local_addr  = UCS_PTR_BYTE_OFFSET(perf.send_buffer, offset);
             elems[i].remote_addr = perf.ucp.remote_addr + offset;
-            elems[i].length      = perf.params.msg_size_list[i];
 
             /* local elements - API v2 */
             local_elems[i].field_mask   =
-                              UCP_DEVICE_LOCAL_MEM_LIST_ELEM_FIELD_MEMH |
-                              UCP_DEVICE_LOCAL_MEM_LIST_ELEM_FIELD_LOCAL_ADDR;
+                              UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH |
+                              UCP_DEVICE_MEM_LIST_ELEM_FIELD_LOCAL_ADDR;
             local_elems[i].memh         = perf.ucp.send_memh;
             local_elems[i].local_addr   = UCS_PTR_BYTE_OFFSET(perf.send_buffer,
                                                               offset);
 
             /* remote elements - API v2 */
             remote_elems[i].field_mask  =
-                              UCP_DEVICE_REMOTE_MEM_LIST_ELEM_FIELD_EP |
-                              UCP_DEVICE_REMOTE_MEM_LIST_ELEM_FIELD_RKEY |
-                              UCP_DEVICE_REMOTE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR;
+                              UCP_DEVICE_MEM_LIST_ELEM_FIELD_EP |
+                              UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY |
+                              UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR;
             remote_elems[i].ep          = perf.ucp.ep;
             remote_elems[i].rkey        = perf.ucp.rkey;
             remote_elems[i].remote_addr = perf.ucp.remote_addr + offset;
@@ -213,11 +211,9 @@ private:
 
         if (has_counter(perf)) {
             elems[data_count].field_mask  = UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY |
-                                            UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR |
-                                            UCP_DEVICE_MEM_LIST_ELEM_FIELD_LENGTH;
+                                            UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR;
             elems[data_count].rkey        = perf.ucp.rkey;
             elems[data_count].remote_addr = perf.ucp.remote_addr + offset;
-            elems[data_count].length      = ONESIDED_SIGNAL_SIZE;
         }
 
         ucp_device_mem_list_params_t params;
@@ -247,13 +243,13 @@ private:
 
         ucp_device_mem_list_params_t local_params;
         local_params.field_mask     =
-                              UCP_DEVICE_MEM_LIST_PARAMS_FIELD_LOCAL_ELEMENTS |
+                              UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENTS |
                               UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENT_SIZE |
                               UCP_DEVICE_MEM_LIST_PARAMS_FIELD_NUM_ELEMENTS |
                               UCP_DEVICE_MEM_LIST_PARAMS_FIELD_WORKER;
-        local_params.element_size   = sizeof(ucp_device_local_mem_list_elem_t);
+        local_params.element_size   = sizeof(ucp_device_mem_list_elem_t);
         local_params.num_elements   = count;
-        local_params.local_elements = local_elems;
+        local_params.elements       = local_elems;
         local_params.worker         = perf.ucp.worker;
 
         status = ucp_device_local_mem_list_create(&local_params,
@@ -264,12 +260,12 @@ private:
 
         ucp_device_mem_list_params_t remote_params;
         remote_params.field_mask      =
-                              UCP_DEVICE_MEM_LIST_PARAMS_FIELD_REMOTE_ELEMENTS |
+                              UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENTS |
                               UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENT_SIZE |
                               UCP_DEVICE_MEM_LIST_PARAMS_FIELD_NUM_ELEMENTS;
-        remote_params.element_size    = sizeof(ucp_device_remote_mem_list_elem_t);
+        remote_params.element_size    = sizeof(ucp_device_mem_list_elem_t);
         remote_params.num_elements    = count;
-        remote_params.remote_elements = remote_elems;
+        remote_params.elements        = remote_elems;
 
         deadline = ucs_get_time() + ucs_time_from_sec(60.0);
         do {
@@ -352,12 +348,12 @@ ucp_perf_cuda_send_async(const ucp_perf_cuda_params &params,
                                             channel_id, flags, req);
     case UCX_PERF_CMD_PUT_SINGLE_V2:
         *params.counter_send = idx + 1;
-        return ucp_device_put_single<level>(params.local_mem_list,
-                                            params.indices[0], 0,
-                                            params.remote_mem_list,
-                                            params.indices[0], 0,
-                                            params.length + ONESIDED_SIGNAL_SIZE,
-                                            channel_id, flags, req);
+        return ucp_device_put<level>(params.local_mem_list,
+                                     params.indices[0], 0,
+                                     params.remote_mem_list,
+                                     params.indices[0], 0,
+                                     params.length + ONESIDED_SIGNAL_SIZE,
+                                     channel_id, flags, req);
     case UCX_PERF_CMD_PUT_MULTI:
         return ucp_device_put_multi<level>(params.mem_list, 1, channel_id,
                                            flags, req);
