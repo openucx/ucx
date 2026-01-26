@@ -3023,7 +3023,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
         }
     }
 
-    status = ucp_proto_select_init(&config->proto_select, worker->epoch_counter);
+    status = ucp_proto_select_init(&config->proto_select, worker->epoch);
     if (status != UCS_OK) {
         goto err_free_dst_mds;
     }
@@ -3988,7 +3988,7 @@ static ucs_status_t ucp_rkey_update_config(ucp_rkey_h rkey, ucp_ep_h ep)
 
     /* Now rkey config is up to date with worker epoch */
     rkey_cfg                                    = ucp_rkey_config(worker, rkey);
-    rkey_cfg->proto_select.worker_epoch_counter = worker->epoch_counter;
+    rkey_cfg->proto_select.worker_epoch = worker->epoch;
     return UCS_OK;
 }
 
@@ -4006,7 +4006,7 @@ ucs_status_t ucp_ep_update_config(ucp_ep_h ep)
     }
 
     if (ucp_ep_config_is_equal(&cfg_key, &ucp_ep_config(ep)->key)) {
-        ucp_ep_config(ep)->proto_select.worker_epoch_counter = worker->epoch_counter;
+        ucp_ep_config(ep)->proto_select.worker_epoch = worker->epoch;
         return UCS_OK;
     }
 
@@ -4019,7 +4019,7 @@ ucs_status_t ucp_ep_update_config(ucp_ep_h ep)
 
     ucp_ep_config_activate_worker_ifaces(worker, ep->cfg_index);
     /* Now EP config is up to date with worker epoch */
-    ucp_ep_config(ep)->proto_select.worker_epoch_counter = worker->epoch_counter;
+    ucp_ep_config(ep)->proto_select.worker_epoch = worker->epoch;
     return UCS_OK;
 }
 

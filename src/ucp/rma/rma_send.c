@@ -282,8 +282,7 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
         }
 
         proto_select = &ucp_rkey_config(worker, rkey)->proto_select;
-        if (ucs_unlikely(proto_select->worker_epoch_counter !=
-                         worker->epoch_counter)) {
+        if (ucs_unlikely(proto_select->worker_epoch != worker->epoch)) {
             status = ucp_ep_update_rkey_config(ep, rkey);
             if (status != UCS_OK) {
                 ret = UCS_STATUS_PTR(status);
@@ -415,8 +414,7 @@ ucs_status_ptr_t ucp_get_nbx(ucp_ep_h ep, void *buffer, size_t count,
         }
 
         proto_select = &ucp_rkey_config(worker, rkey)->proto_select;
-        if (ucs_unlikely(proto_select->worker_epoch_counter !=
-                         worker->epoch_counter)) {
+        if (ucs_unlikely(proto_select->worker_epoch != worker->epoch)) {
             status = ucp_ep_update_rkey_config(ep, rkey);
             if (status != UCS_OK) {
                 ret = UCS_STATUS_PTR(status);
