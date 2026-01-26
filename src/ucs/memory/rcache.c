@@ -1264,8 +1264,8 @@ static ucs_rcache_lru_mode_t
 ucs_rcache_lru_get_mode(const ucs_rcache_params_t *params)
 {
     /* Disable LRU in rcache if both values are "infinity" */
-    if((params->max_size != UCS_MEMUNITS_INF) ||
-       (params->max_regions != UCS_MEMUNITS_INF)) {
+    if((params->max_size == UCS_MEMUNITS_INF) &&
+       (params->max_regions == UCS_MEMUNITS_INF)) {
         return UCS_RCACHE_LRU_DISABLED;
     }
     return (params->flags & UCS_RCACHE_FLAG_NEED_LRU_LOCK) ?
