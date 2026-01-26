@@ -196,7 +196,7 @@ ucp_device_mem_list_create(ucp_ep_h ep,
  */
 ucs_status_t
 ucp_device_local_mem_list_create(const ucp_device_mem_list_params_t *params,
-                                 ucp_device_local_mem_list_handle_h *mem_list_h);
+                                 ucp_device_local_mem_list_h *mem_list_h);
 
 
 /**
@@ -216,9 +216,9 @@ ucp_device_local_mem_list_create(const ucp_device_mem_list_params_t *params,
  *
  * @return Error code as defined by @ref ucs_status_t.
  */
-ucs_status_t ucp_device_remote_mem_list_create(
-        const ucp_device_mem_list_params_t *params,
-        ucp_device_remote_mem_list_handle_h *mem_list_h);
+ucs_status_t
+ucp_device_remote_mem_list_create(const ucp_device_mem_list_params_t *params,
+                                  ucp_device_remote_mem_list_h *mem_list_h);
 
 
 /**

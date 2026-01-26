@@ -31,7 +31,7 @@ typedef struct {
 #define ucp_device_handle_hash_key(_handle) \
     kh_int64_hash_func((uintptr_t)(_handle))
 KHASH_INIT(ucp_device_handle_allocs, void*, ucp_device_handle_info_t, 1,
-    ucp_device_handle_hash_key, kh_int64_hash_equal);
+           ucp_device_handle_hash_key, kh_int64_hash_equal);
 
 /* Hash to track handle allocator, used at release time */
 static khash_t(ucp_device_handle_allocs) ucp_device_handle_hash;
@@ -580,15 +580,15 @@ static ucs_status_t ucp_device_local_mem_list_create_handle(
     size_t handle_size          = 0;
     const ucp_device_mem_list_elem_t *ucp_element;
     const ucp_worker_iface_t *wiface;
-    ucp_device_local_mem_list_handle_t *handle;
+    ucp_device_local_mem_list_t *handle;
     uct_device_local_mem_list_elem_t *uct_element;
     size_t i;
     ucs_status_t status;
 
     handle_size = (uct_elem_size * params->num_elements) + sizeof(handle);
-    handle = ucs_calloc(1, handle_size, "ucp_device_local_mem_list_handle_t");
+    handle      = ucs_calloc(1, handle_size, "ucp_device_local_mem_list_t");
     if (handle == NULL) {
-        ucs_error("failed to allocate ucp_device_local_mem_list_handle_t");
+        ucs_error("failed to allocate ucp_device_local_mem_list_t");
         return UCS_ERR_NO_MEMORY;
     }
 
@@ -688,7 +688,7 @@ static ucs_status_t ucp_device_local_mem_list_params_check(
 
 ucs_status_t
 ucp_device_local_mem_list_create(const ucp_device_mem_list_params_t *params,
-                                 ucp_device_local_mem_list_handle_h *mem_list_h)
+                                 ucp_device_local_mem_list_h *mem_list_h)
 {
     const ucs_memory_type_t export_mem_type = UCS_MEMORY_TYPE_CUDA;
     ucs_status_t status;
@@ -821,7 +821,7 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
     size_t handle_size         = 0;
     const ucp_device_mem_list_elem_t *ucp_element;
     ucp_context_h context;
-    ucp_device_remote_mem_list_handle_t *handle;
+    ucp_device_remote_mem_list_t *handle;
     uct_device_remote_mem_list_elem_t *uct_element;
     ucs_sys_device_t local_sys_dev;
     size_t i;
@@ -839,9 +839,9 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
     }
 
     handle_size = sizeof(handle) + (uct_elem_size * params->num_elements);
-    handle = ucs_calloc(1, handle_size, "ucp_device_remote_mem_list_handle_t");
+    handle      = ucs_calloc(1, handle_size, "ucp_device_remote_mem_list_t");
     if (handle == NULL) {
-        ucs_error("failed to allocate ucp_device_remote_mem_list_handle_t");
+        ucs_error("failed to allocate ucp_device_remote_mem_list_t");
         return UCS_ERR_NO_MEMORY;
     }
 
@@ -945,9 +945,9 @@ static ucs_status_t ucp_device_remote_mem_list_params_check(
 }
 
 
-ucs_status_t ucp_device_remote_mem_list_create(
-        const ucp_device_mem_list_params_t *params,
-        ucp_device_remote_mem_list_handle_h *mem_list_h)
+ucs_status_t
+ucp_device_remote_mem_list_create(const ucp_device_mem_list_params_t *params,
+                                  ucp_device_remote_mem_list_h *mem_list_h)
 {
     const ucs_memory_type_t export_mem_type = UCS_MEMORY_TYPE_CUDA;
     ucs_status_t status;

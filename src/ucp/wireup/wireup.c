@@ -579,13 +579,6 @@ void ucp_wireup_remote_connected(ucp_ep_h ep)
     ucs_assert(ep->flags & UCP_EP_FLAG_REMOTE_ID);
 }
 
-static UCS_F_ALWAYS_INLINE unsigned
-ucp_ep_err_mode_init_flags(ucp_err_handling_mode_t err_mode)
-{
-    return (err_mode == UCP_ERR_HANDLING_MODE_PEER) ?
-           UCP_EP_INIT_ERR_MODE_PEER_FAILURE : 0;
-}
-
 static UCS_F_NOINLINE void
 ucp_wireup_process_pre_request(ucp_worker_h worker, ucp_ep_h ep,
                                const ucp_wireup_msg_t *msg,
@@ -2228,13 +2221,6 @@ static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     ucs_free(unpacked_address.address_list);
 }
 
-static ucp_err_handling_mode_t
-ucp_ep_params_err_handling_mode(const ucp_ep_params_t *params)
-{
-    return (params->field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE) ?
-           params->err_mode : UCP_ERR_HANDLING_MODE_NONE;
-}
-
 static unsigned
 ucp_cm_ep_init_flags(const ucp_ep_params_t *params)
 {
@@ -2259,11 +2245,8 @@ unsigned ucp_ep_init_flags(const ucp_worker_h worker,
         flags |= UCP_EP_INIT_CREATE_AM_LANE;
     }
 
-    if (ucp_ep_params_err_handling_mode(params) == UCP_ERR_HANDLING_MODE_PEER) {
-        flags |= UCP_EP_INIT_ERR_MODE_PEER_FAILURE;
-    }
-
-    return flags;
+    return flags |
+           ucp_ep_err_mode_init_flags(ucp_ep_params_err_handling_mode(params));
 }
 
 double ucp_wireup_iface_lat_distance_v1(const ucp_worker_iface_t *wiface)
