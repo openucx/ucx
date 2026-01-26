@@ -787,22 +787,6 @@ void ucp_worker_iface_unprogress_ep(ucp_worker_iface_t *wiface)
     UCS_ASYNC_UNBLOCK(&wiface->worker->async);
 }
 
-static void
-ucp_proto_dflow_service_init(ucp_worker_h worker,
-                             ucp_proto_dflow_service_t *service)
-{
-    service->cb_id = UCS_CALLBACKQ_ID_NULL;
-}
-
-static void
-ucp_proto_dflow_service_cleanup(ucp_worker_h worker,
-                                ucp_proto_dflow_service_t *service)
-{
-    if (service->cb_id != UCS_CALLBACKQ_ID_NULL) {
-        uct_worker_progress_unregister_safe(worker->uct, &service->cb_id);
-    }
-}
-
 /*
  * Calculate port speed based on the actual bandwidth and the maximum bandwidth.
  * The resulting value is a quantized value of the ratio between the actual and
@@ -835,7 +819,7 @@ static unsigned ucp_worker_iface_handle_port_speed_progress(void *arg)
     uint8_t port_speed;
 
     UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(worker);
-    uct_worker_progress_unregister_safe(worker->uct, &worker->dflow_service.cb_id);
+    uct_worker_progress_unregister_safe(worker->uct, &worker->dflow_cb_id);
 
     for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
         wiface = worker->ifaces[iface_id];
@@ -869,10 +853,10 @@ static void ucp_worker_iface_handle_port_speed_event(ucp_worker_iface_t *wiface)
      * and defer the actual update
      */
     wiface->flags |= UCP_WORKER_IFACE_FLAG_PENDING_UPDATE;
-    if (worker->dflow_service.cb_id == UCS_CALLBACKQ_ID_NULL) {
+    if (worker->dflow_cb_id == UCS_CALLBACKQ_ID_NULL) {
         uct_worker_progress_register_safe(
             worker->uct, ucp_worker_iface_handle_port_speed_progress, worker, 0,
-            &worker->dflow_service.cb_id);
+            &worker->dflow_cb_id);
     }
 }
 
@@ -2781,8 +2765,8 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
 
     ucp_worker_create_vfs(context, worker);
 
-    ucp_proto_dflow_service_init(worker, &worker->dflow_service);
-    worker->epoch = 0;
+    worker->dflow_cb_id = UCS_CALLBACKQ_ID_NULL;
+    worker->epoch       = 0;
 
     status = ucp_worker_usage_tracker_create(worker);
     if (status != UCS_OK) {
@@ -3024,7 +3008,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
 
     UCS_ASYNC_BLOCK(&worker->async);
     uct_worker_progress_unregister_safe(worker->uct, &worker->keepalive.cb_id);
-    ucp_proto_dflow_service_cleanup(worker, &worker->dflow_service);
+    uct_worker_progress_unregister_safe(worker->uct, &worker->dflow_cb_id);
     ucp_worker_usage_tracker_destroy(worker);
     ucp_worker_discard_uct_ep_cleanup(worker);
     ucp_worker_destroy_eps(worker, &worker->all_eps, "all");

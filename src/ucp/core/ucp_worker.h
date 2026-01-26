@@ -291,14 +291,6 @@ struct ucp_worker_cm {
 };
 
 
-/**
- * Dynamic flow service
- */
-typedef struct {
-    uct_worker_cb_id_t     cb_id;
-} ucp_proto_dflow_service_t;
-
-
 UCS_PTR_MAP_TYPE(ep, 1);
 UCS_PTR_MAP_TYPE(request, 0);
 
@@ -416,7 +408,8 @@ typedef struct ucp_worker {
         ucs_time_t                   last_round;
     } usage_tracker;
 
-    ucp_proto_dflow_service_t        dflow_service;
+    /* Dynamic flow callback ID */
+    uct_worker_cb_id_t               dflow_cb_id;
 
     /* Configuration epoch (generation counter).
      * Incremented after major connectivity changes (e.g. lane failure, port
