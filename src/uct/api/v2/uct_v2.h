@@ -1034,36 +1034,6 @@ typedef enum {
 
 
 /**
- * @ingroup UCT_RESOURCE
- * @brief Interface attribute fields.
- */
-enum uct_iface_attr_field {
-    /**
-     * Enables @ref uct_iface_attr_v2_t::device_mem_element_size.
-     */
-    UCT_IFACE_ATTR_FIELD_DEVICE_MEM_ELEMENT_SIZE = UCS_BIT(0)
-};
-
-
-/**
- * @ingroup UCT_RESOURCE
- * @brief Interface attributes.
- */
-typedef struct {
-    /**
-     * Mask of valid fields in this structure, using bits from
-     * @ref uct_iface_attr_field_t.
-     */
-    uint64_t field_mask;
-
-    /**
-     * Size of a packed device memory element.
-     */
-    size_t   device_mem_element_size;
-} uct_iface_attr_v2_t;
-
-
-/**
  * @ingroup UCT_MD
  * @brief Query for memory domain attributes.
  *
@@ -1157,21 +1127,6 @@ ucs_status_t uct_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr);
 */
 ucs_status_t uct_ep_invalidate(uct_ep_h ep,
                                const uct_ep_invalidate_params_t *params);
-
-
-/**
- * @ingroup UCT_RESOURCE
- * @brief Query interface attributes.
- *
- * This routine fetches information about the interface.
- *
- * @param [in]  iface       Interface to query.
- * @param [out] iface_attr  Filled with interface attributes.
- *
- * @return Error code.
- */
-ucs_status_t
-uct_iface_query_v2(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr);
 
 
 /**

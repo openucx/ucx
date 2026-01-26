@@ -413,18 +413,7 @@ uct_cuda_ipc_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
     return UCS_OK;
 }
 
-static ucs_status_t uct_cuda_ipc_iface_query_v2(uct_iface_h iface,
-                                                uct_iface_attr_v2_t *iface_attr)
-{
-    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_DEVICE_MEM_ELEMENT_SIZE) {
-        iface_attr->device_mem_element_size = sizeof(uct_cuda_ipc_md_device_mem_element_t);
-    }
-
-    return UCS_OK;
-}
-
 static uct_iface_internal_ops_t uct_cuda_ipc_iface_internal_ops = {
-    .iface_query_v2         = uct_cuda_ipc_iface_query_v2,
     .iface_estimate_perf    = uct_cuda_ipc_estimate_perf,
     .iface_vfs_refresh      = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
     .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,

@@ -266,11 +266,6 @@ typedef struct uct_am_handler {
 } uct_am_handler_t;
 
 
-/* Query the attributes of the iface */
-typedef ucs_status_t (*uct_iface_query_v2_func_t)(
-        uct_iface_h iface, uct_iface_attr_v2_t *iface_attr);
-
-
 /* Performance estimation operation */
 typedef ucs_status_t (*uct_iface_estimate_perf_func_t)(
         uct_iface_h iface, uct_perf_attr_t *perf_attr);
@@ -314,7 +309,6 @@ typedef ucs_status_t (*uct_ep_get_device_ep_func_t)(
 
 /* Internal operations, not exposed by the external API */
 typedef struct uct_iface_internal_ops {
-    uct_iface_query_v2_func_t        iface_query_v2;
     uct_iface_estimate_perf_func_t   iface_estimate_perf;
     uct_iface_vfs_refresh_func_t     iface_vfs_refresh;
     uct_ep_query_func_t              ep_query;
@@ -899,9 +893,6 @@ void uct_base_iface_progress_enable_cb(uct_base_iface_t *iface,
                                        ucs_callback_t cb, unsigned flags);
 
 void uct_base_iface_progress_disable(uct_iface_h tl_iface, unsigned flags);
-
-ucs_status_t
-uct_iface_base_query_v2(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr);
 
 ucs_status_t
 uct_base_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr);

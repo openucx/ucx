@@ -602,7 +602,6 @@ uct_mm_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
 }
 
 static uct_iface_internal_ops_t uct_mm_iface_internal_ops = {
-    .iface_query_v2         = uct_iface_base_query_v2,
     .iface_estimate_perf    = uct_mm_estimate_perf,
     .iface_vfs_refresh      = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
     .ep_query               = (uct_ep_query_func_t)ucs_empty_function,

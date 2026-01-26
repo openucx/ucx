@@ -509,17 +509,6 @@ uct_rc_gdaki_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     return UCS_OK;
 }
 
-static ucs_status_t uct_rc_gdaki_iface_query_v2(uct_iface_h tl_iface,
-                                                uct_iface_attr_v2_t *iface_attr)
-{
-    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_DEVICE_MEM_ELEMENT_SIZE) {
-        iface_attr->device_mem_element_size = sizeof(
-                uct_ib_md_device_mem_element_t);
-    }
-
-    return UCS_OK;
-}
-
 ucs_status_t
 uct_rc_gdaki_create_cq(uct_ib_iface_t *ib_iface, uct_ib_dir_t dir,
                        const uct_ib_iface_init_attr_t *init_attr,
@@ -642,7 +631,6 @@ static UCS_CLASS_DECLARE_DELETE_FUNC(uct_rc_gdaki_iface_t, uct_iface_t);
 static uct_rc_iface_ops_t uct_rc_gdaki_internal_ops = {
     .super = {
         .super = {
-            .iface_query_v2         = uct_rc_gdaki_iface_query_v2,
             .iface_estimate_perf    = uct_ib_iface_estimate_perf,
             .iface_vfs_refresh      = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
             .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,

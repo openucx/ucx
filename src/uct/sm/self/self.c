@@ -380,7 +380,6 @@ ssize_t uct_self_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
 }
 
 static uct_iface_internal_ops_t uct_self_iface_internal_ops = {
-    .iface_query_v2         = uct_iface_base_query_v2,
     .iface_estimate_perf    = uct_base_iface_estimate_perf,
     .iface_vfs_refresh      = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
     .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
