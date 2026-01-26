@@ -121,9 +121,9 @@
         - git:
             url: "https://github.com/openucx/ucx.git"
             branches: [ '$sha1' ]
-            shallow-clone: false
-            do-not-fetch-tags: false
-            refspec: "+refs/heads/*:refs/remotes/origin/* +refs/pull/*:refs/remotes/origin/pr/* +refs/tags/*:refs/remotes/origin/tags/*"
+            shallow-clone: true
+            depth: 100
+            refspec: "+refs/heads/*:refs/remotes/origin/* +refs/pull/*:refs/remotes/origin/pr/*"
             browser: githubweb
             browser-url: "https://github.com/openucx/ucx"
       script-path: ".ci/jenkins/Jenkinsfile.github"
