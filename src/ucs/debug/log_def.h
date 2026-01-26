@@ -21,7 +21,6 @@ BEGIN_C_DECLS
 
 /** @file log_def.h */
 
-#define UCS_LOG_MULTILINE_PREFIX_SIZE 256
 #define UCS_LOG_MULTILINE_OUTPUT_SIZE 2048
 
 #define ucs_log_component_is_enabled(_level, _comp_log_config) \

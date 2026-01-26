@@ -23,18 +23,23 @@
 #include <fnmatch.h>
 
 
-#define UCS_MAX_LOG_HANDLERS    32
+#define UCS_MAX_LOG_HANDLERS          32
+#define UCS_LOG_MULTILINE_PREFIX_SIZE 256
 
 #define UCS_LOG_TIME_FMT        "[%lu.%06lu]"
-#define UCS_LOG_METADATA_FMT    "%17s:%-4u %-4s %-5s %*s"
+#define UCS_LOG_THREAD_NAME_FMT "[%s]"
 #define UCS_LOG_PROC_DATA_FMT   "[%s:%-5d:%s]"
+#define UCS_LOG_METADATA_FMT    "%17s:%-4u %-4s %-5s %*s"
 
 #define UCS_LOG_COMPACT_FMT UCS_LOG_TIME_FMT " " UCS_LOG_PROC_DATA_FMT "  "
-#define UCS_LOG_SHORT_FMT   UCS_LOG_TIME_FMT " [%s] " UCS_LOG_METADATA_FMT
-#define UCS_LOG_FMT \
+#define UCS_LOG_SHORT_FMT \
+    UCS_LOG_TIME_FMT " " UCS_LOG_THREAD_NAME_FMT " " UCS_LOG_METADATA_FMT
+#define UCS_LOG_LONG_FMT \
     UCS_LOG_TIME_FMT " " UCS_LOG_PROC_DATA_FMT " " UCS_LOG_METADATA_FMT
 
 #define UCS_LOG_TIME_ARG(_tv)  (_tv)->tv_sec, (_tv)->tv_usec
+
+#define UCS_LOG_THREAD_NAME_ARG() ucs_log_get_thread_name()
 
 #define UCS_LOG_METADATA_ARG(_short_file, _line, _level, _comp_conf) \
     (_short_file), (_line), (_comp_conf)->name, \
@@ -47,12 +52,33 @@
     UCS_LOG_TIME_ARG(_tv), UCS_LOG_PROC_DATA_ARG()
 
 #define UCS_LOG_SHORT_ARG(_short_file, _line, _level, _comp_conf, _tv) \
-    UCS_LOG_TIME_ARG(_tv), ucs_log_get_thread_name(), \
-    UCS_LOG_METADATA_ARG(_short_file, _line, _level, _comp_conf)
+    UCS_LOG_TIME_ARG(_tv), UCS_LOG_THREAD_NAME_ARG(), \
+            UCS_LOG_METADATA_ARG(_short_file, _line, _level, _comp_conf)
 
-#define UCS_LOG_ARG(_short_file, _line, _level, _comp_conf, _tv) \
+#define UCS_LOG_LONG_ARG(_short_file, _line, _level, _comp_conf, _tv) \
     UCS_LOG_TIME_ARG(_tv), UCS_LOG_PROC_DATA_ARG(), \
-    UCS_LOG_METADATA_ARG(_short_file, _line, _level, _comp_conf)
+            UCS_LOG_METADATA_ARG(_short_file, _line, _level, _comp_conf)
+
+#define UCS_LOG_PRINTF(_fmt, ...) \
+    do { \
+        if (RUNNING_ON_VALGRIND) { \
+            VALGRIND_PRINTF(_fmt, __VA_ARGS__); \
+        } else if (ucs_log_initialized) { \
+            if (ucs_log_file_close) { /* non-stdout/stderr */ \
+                int log_entry_len = snprintf(NULL, 0, _fmt, __VA_ARGS__); \
+                ucs_log_handle_file_max_size(log_entry_len); \
+            } \
+            fprintf(ucs_log_file, _fmt, __VA_ARGS__); \
+        } else { \
+            fprintf(stdout, _fmt, __VA_ARGS__); \
+        } \
+    } while (0)
+
+typedef enum {
+    UCS_LOG_FORMAT_LONG,
+    UCS_LOG_FORMAT_SHORT,
+    UCS_LOG_FORMAT_LAST,
+} ucs_log_format_t;
 
 KHASH_MAP_INIT_STR(ucs_log_filter, char);
 
@@ -247,85 +273,30 @@ void ucs_log_print_compact(const char *str)
 }
 
 static void
-ucs_log_print_single_line(const char *short_file, int line,
-                          ucs_log_level_t level,
-                          const ucs_log_component_config_t *comp_conf,
-                          const struct timeval *tv, const char *message)
-{
-    size_t buffer_size;
-    int log_entry_len;
-    char *log_buf;
-
-    if (RUNNING_ON_VALGRIND) {
-        buffer_size = ucs_log_get_buffer_size();
-        log_buf     = ucs_alloca(buffer_size + 1);
-        snprintf(log_buf, buffer_size, UCS_LOG_SHORT_FMT "%s\n",
-                 UCS_LOG_SHORT_ARG(short_file, line, level, comp_conf, tv),
-                 message);
-        VALGRIND_PRINTF("%s", log_buf);
-    } else if (ucs_log_initialized) {
-        if (ucs_log_file_close) { /* non-stdout/stderr */
-            /* get log entry size */
-            log_entry_len = snprintf(NULL, 0, UCS_LOG_FMT "%s\n",
-                                     UCS_LOG_ARG(short_file, line, level,
-                                                 comp_conf, tv),
-                                     message);
-            ucs_log_handle_file_max_size(log_entry_len);
-        }
-
-        fprintf(ucs_log_file, UCS_LOG_FMT "%s\n",
-                UCS_LOG_ARG(short_file, line, level, comp_conf, tv), message);
-    } else {
-        fprintf(stdout, UCS_LOG_SHORT_FMT "%s\n",
-                UCS_LOG_SHORT_ARG(short_file, line, level, comp_conf, tv),
-                message);
-    }
-}
-
-static void ucs_log_print_string(const char *str)
-{
-    if (RUNNING_ON_VALGRIND) {
-        VALGRIND_PRINTF("%s", str);
-    } else if (ucs_log_initialized) {
-        if (ucs_log_file_close) { /* non-stdout/stderr */
-            ucs_log_handle_file_max_size(strlen(str));
-        }
-        fputs(str, ucs_log_file);
-        fflush(ucs_log_file);
-    } else {
-        fputs(str, stdout);
-        fflush(stdout);
-    }
-}
-
-static void
-ucs_log_print_multi_line(const char *short_file, int line,
-                         ucs_log_level_t level,
+ucs_log_print_multi_line(ucs_log_format_t prefix_format, const char *short_file,
+                         int line, ucs_log_level_t level,
                          const ucs_log_component_config_t *comp_conf,
                          const struct timeval *tv, const char *message,
                          const char *first_line_end)
 {
-    size_t output_len      = 0;
-    const char *line_start = message;
     const char *line_end   = first_line_end;
+    const char *line_start = message;
+    size_t output_len      = 0;
     char prefix[UCS_LOG_MULTILINE_PREFIX_SIZE];
     char output[UCS_LOG_MULTILINE_OUTPUT_SIZE];
     size_t remaining_space;
     int ret;
 
     /* Format the log prefix once */
-    if (RUNNING_ON_VALGRIND || !ucs_log_initialized) {
-        ret = snprintf(prefix, sizeof(prefix), UCS_LOG_SHORT_FMT,
-                       UCS_LOG_SHORT_ARG(short_file, line, level, comp_conf,
-                                         tv));
+    if (prefix_format == UCS_LOG_FORMAT_LONG) {
+        ret = snprintf(prefix, sizeof(prefix), UCS_LOG_LONG_FMT,
+                       UCS_LOG_LONG_ARG(short_file, line, level, comp_conf, tv));
     } else {
-        ret = snprintf(prefix, sizeof(prefix), UCS_LOG_FMT,
-                       UCS_LOG_ARG(short_file, line, level, comp_conf, tv));
+        ret = snprintf(prefix, sizeof(prefix), UCS_LOG_SHORT_FMT,
+                       UCS_LOG_SHORT_ARG(short_file, line, level, comp_conf, tv));
     }
     ucs_assertv((ret >= 0) && ((size_t)ret < sizeof(prefix)), "ret=%d", ret);
 
-    /* Append line by line */
-    ucs_assert(line_end != NULL);
     do {
         remaining_space = sizeof(output) - output_len;
 
@@ -343,7 +314,7 @@ ucs_log_print_multi_line(const char *short_file, int line,
             output[output_len] = '\0';
 
             /* Print the string and reset the output buffer */
-            ucs_log_print_string(output);
+            UCS_LOG_PRINTF("%s", output);
             output_len = 0;
 
             continue;
@@ -364,8 +335,7 @@ ucs_log_print_multi_line(const char *short_file, int line,
     } while (1);
 
     ucs_assert(output_len > 0);
-
-    ucs_log_print_string(output);
+    UCS_LOG_PRINTF("%s", output);
 }
 
 static void ucs_log_print(const char *file, int line, ucs_log_level_t level,
@@ -374,13 +344,26 @@ static void ucs_log_print(const char *file, int line, ucs_log_level_t level,
 {
     const char *short_file     = ucs_basename(file);
     const char *first_line_end = strchr(message, '\n');
+    ucs_log_format_t prefix_format;
 
-    if (first_line_end != NULL) {
-        ucs_log_print_multi_line(short_file, line, level, comp_conf, tv,
-                                 message, first_line_end);
+    prefix_format = (RUNNING_ON_VALGRIND || !ucs_log_initialized) ?
+                            UCS_LOG_FORMAT_SHORT :
+                            UCS_LOG_FORMAT_LONG;
+
+    if (first_line_end == NULL) {
+        /* Single line message */
+        if (prefix_format == UCS_LOG_FORMAT_LONG) {
+            UCS_LOG_PRINTF(UCS_LOG_LONG_FMT "%s\n",
+                           UCS_LOG_LONG_ARG(short_file, line, level, comp_conf, tv),
+                           message);
+        } else {
+            UCS_LOG_PRINTF(UCS_LOG_SHORT_FMT "%s\n",
+                           UCS_LOG_SHORT_ARG(short_file, line, level, comp_conf, tv),
+                           message);
+        }
     } else {
-        ucs_log_print_single_line(short_file, line, level, comp_conf, tv,
-                                  message);
+        ucs_log_print_multi_line(prefix_format, short_file, line, level,
+                                 comp_conf, tv, message, first_line_end);
     }
 }
 
