@@ -1031,8 +1031,7 @@ static uint64_t ucp_str_array_search_in_ranges(const char **array,
         n = 0;
         if (sscanf(p, "[%lu-%lu]%n", &range_start, &range_end, &n) != 2 ||
             n == 0 || p[n] != '\0' || range_start > range_end) {
-            ucs_warn("invalid device range: %s", array[i]);
-            continue;
+            continue; /* Invalid range */
         }
 
         str_id = strtoul(str + prefix_len, &endptr, 10);
