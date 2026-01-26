@@ -15,7 +15,7 @@
 #include <uct/cuda/base/cuda_iface.h>
 #include <uct/cuda/base/cuda_md.h>
 #include <uct/cuda/base/cuda_nvml.h>
-#include <uct/cuda/cuda_ipc/cuda_ipc_device.h>
+#include <uct/api/device/uct_device_types.h>
 #include <ucs/type/class.h>
 #include <ucs/sys/string.h>
 #include <ucs/debug/assert.h>
@@ -426,6 +426,7 @@ uct_cuda_ipc_iface_mem_element_pack(uct_iface_h tl_iface,
     CUdevice cuda_device;
     void *mapped_addr;
 
+    /* TODO: Use device of current ctx and move to md API. */
     status = uct_cuda_ipc_check_and_push_ctx((CUdeviceptr)mem_element,
                                              &cuda_device, &is_ctx_pushed);
     if (ucs_unlikely(status != UCS_OK)) {

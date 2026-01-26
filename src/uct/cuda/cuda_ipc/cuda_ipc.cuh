@@ -9,7 +9,6 @@
 
 #include <uct/api/uct_def.h>
 #include <uct/api/device/uct_device_types.h>
-#include <uct/cuda/cuda_ipc/cuda_ipc_device.h>
 #include <ucs/sys/device_code.h>
 #include <ucs/type/status.h>
 #include <cuda/atomic>
@@ -405,6 +404,17 @@ uct_cuda_ipc_ep_atomic_add(uct_device_ep_h device_ep,
     }
 
     uct_cuda_ipc_level_sync<level>();
+    return UCS_OK;
+}
+
+UCS_F_DEVICE ucs_status_t uct_cuda_ipc_ep_get_ptr(
+        uct_device_ep_h device_ep, const uct_device_mem_element_t *mem_elem,
+        uint64_t remote_address, void **addr_p)
+{
+    auto cuda_ipc_mem_element =
+            reinterpret_cast<const uct_cuda_ipc_device_mem_element_t*>(
+                    mem_elem);
+    *addr_p = uct_cuda_ipc_map_remote(cuda_ipc_mem_element, remote_address);
     return UCS_OK;
 }
 

@@ -764,14 +764,34 @@ protected:
         set_am_handler(receiver());
     }
 
-    static void setup_progress_mock(ucs::mock &mock)
+    static void setup_progress_mock(ucp_proto_select_t &proto_select,
+                                    ucs::mock &mock)
     {
-        for (int proto_id = 0; proto_id < ucp_protocols_count(); ++proto_id) {
-            auto proto = const_cast<ucp_proto_t*>(ucp_protocols[proto_id]);
-            int stage = UCP_PROTO_STAGE_START;
-            for (; stage < UCP_PROTO_STAGE_LAST; ++stage) {
-                mock.setup(&proto->progress[stage], progress_wrapper);
-            }
+        ucp_proto_select_elem_t select;
+
+        kh_foreach_value(proto_select.hash, select,
+            auto thresh =
+                    const_cast<ucp_proto_threshold_elem_t *>(select.thresholds);
+            do {
+                for (uint8_t i = 0; i < UCP_PROTO_STAGE_LAST; ++i) {
+                    mock.setup(&thresh->proto_config.progress_wrapper[i],
+                               progress_wrapper);
+                }
+            } while ((thresh++)->max_msg_length < SIZE_MAX);
+        );
+    }
+
+    static void setup_progress_mock(ucp_worker_h worker, ucs::mock &mock)
+    {
+        ucp_ep_config_t *ep_config;
+        ucs_array_for_each(ep_config, &worker->ep_config) {
+            setup_progress_mock(ep_config->proto_select, mock);
+        }
+
+        ucp_rkey_config_t *rkey_config;
+        ucs_carray_for_each(rkey_config, worker->rkey_config,
+                            worker->rkey_config_count) {
+            setup_progress_mock(rkey_config->proto_select, mock);
         }
     }
 
@@ -882,7 +902,8 @@ protected:
 
         /* Replace progress functions for all protocols and do another
          * send-receive loop to fail the certain proto progress call. */
-        setup_progress_mock(m_progress_mock);
+        setup_progress_mock(sender().worker(), m_progress_mock);
+        setup_progress_mock(receiver().worker(), m_progress_mock);
 
         {
             scoped_log_handler err_wrapper(wrap_errors_logger);

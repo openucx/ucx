@@ -264,7 +264,7 @@ test_perf::test_result test_perf::run_multi_threaded(const test_spec &test, unsi
                                                      const std::vector<int> &cpus)
 {
     rte_comm c0to1, c1to0;
-    ucx_perf_params_t params;
+    ucx_perf_params_t params{};
 
     test_params_init(test, params, flags, tl_name, dev_name);
 
@@ -311,7 +311,7 @@ test_perf::run_single_threaded(const test_spec &test, unsigned flags,
                                const std::string &dev_name)
 {
     rte_comm c0to0;
-    ucx_perf_params_t params;
+    ucx_perf_params_t params{};
 
     test_params_init(test, params, flags, tl_name, dev_name);
 
