@@ -75,9 +75,9 @@
 #define UCP_MLX_PREFIX       "mlx"
 #define UCP_MLX_DEFAULT_PORT "1"
 
-#define UCP_IS_RESOURCE_MLX_DEFAULT_PORT(_resource) \
-    ((!strncmp(_resource->dev_name_base, UCP_MLX_PREFIX, strlen(UCP_MLX_PREFIX))) && \
-     (!strcmp(_resource->dev_name_suffix, UCP_MLX_DEFAULT_PORT)))
+#define UCP_IS_RESOURCE_MLX_DEFAULT_PORT(_dev_name, _dev_name_suffix) \
+    ((!strncmp(_dev_name, UCP_MLX_PREFIX, strlen(UCP_MLX_PREFIX))) && \
+     (!strcmp(_dev_name_suffix, UCP_MLX_DEFAULT_PORT)))
 
 typedef enum ucp_transports_list_search_result {
     UCP_TRANSPORTS_LIST_SEARCH_RESULT_PRIMARY             = UCS_BIT(0),
@@ -1083,12 +1083,25 @@ ucp_config_is_tl_name_present(const ucs_config_names_array_t *tl_array,
                                       tl_cfg_mask));
 }
 
+/* Return a pointer to the suffix of the device name, 
+ * or the end of the string if no suffix is found. */
+static const char *ucp_get_dev_name_suffix(const char *dev_name)
+{
+    const char *colon = strchr(dev_name, ':');
+    if (colon == NULL) {
+        return dev_name + strlen(dev_name);
+    }
+    return colon + 1;
+}
+
 static int ucp_is_resource_in_device_list(const uct_tl_resource_desc_t *resource,
                                           const ucs_config_names_array_t *devices,
                                           uint64_t *dev_cfg_mask,
                                           uct_device_type_t dev_type)
 {
+    char dev_name_base[UCT_DEVICE_NAME_MAX];
     uint64_t mask, exclusive_mask;
+    const char *dev_name_suffix;
 
     /* go over the device list from the user and check (against the available resources)
      * which can be satisfied */
@@ -1097,18 +1110,25 @@ static int ucp_is_resource_in_device_list(const uct_tl_resource_desc_t *resource
                                 devices[dev_type].count, resource->dev_name,
                                 NULL);
 
-    /* mlx device with the default port */
-    if ((dev_type == UCT_DEVICE_TYPE_NET) &&
-        UCP_IS_RESOURCE_MLX_DEFAULT_PORT(resource)) {
-        /* search for the base name (ex: mlx5_0) */
-        mask |= ucp_str_array_search((const char**)devices[dev_type].names,
-                                     devices[dev_type].count,
-                                     resource->dev_name_base, NULL);
+    if (dev_type == UCT_DEVICE_TYPE_NET) {
+        dev_name_suffix = ucp_get_dev_name_suffix(resource->dev_name);
+        ucs_assert(dev_name_suffix > resource->dev_name &&
+                   dev_name_suffix <= resource->dev_name + strlen(resource->dev_name));
 
-        /* search in ranges (ex: mlx5_[0-2]) */
-        mask |= ucp_str_array_search_in_ranges(
-                (const char**)devices[dev_type].names, devices[dev_type].count,
-                resource->dev_name_base);
+        if (UCP_IS_RESOURCE_MLX_DEFAULT_PORT(resource->dev_name, dev_name_suffix)) {
+            ucs_strncpy_zero(dev_name_base, resource->dev_name,
+                             (size_t)(dev_name_suffix - resource->dev_name));
+
+            /* search for the base name (ex: mlx5_0) */
+            mask |= ucp_str_array_search((const char**)devices[dev_type].names,
+                                         devices[dev_type].count, dev_name_base,
+                                         NULL);
+
+            /* search in ranges (ex: mlx5_[0-2]) */
+            mask |= ucp_str_array_search_in_ranges(
+                    (const char**)devices[dev_type].names,
+                    devices[dev_type].count, dev_name_base);
+        }
     }
 
     /* if the user's list is 'all', use all the available resources */
