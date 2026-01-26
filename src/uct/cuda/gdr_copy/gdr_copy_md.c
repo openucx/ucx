@@ -493,7 +493,7 @@ uct_gdr_copy_md_create(uct_component_t *component,
     rcache_params.ucm_events         = UCM_EVENT_MEM_TYPE_FREE;
     rcache_params.context            = md;
     rcache_params.ops                = &uct_gdr_copy_rcache_ops;
-    rcache_parsms.flags             |= UCS_RCACHE_FLAG_NEED_LRU_LOCK;
+    rcache_params.flags             |= UCS_RCACHE_FLAG_NEED_LRU_LOCK;
 
     status = ucs_rcache_create(&rcache_params, "gdr_copy", ucs_stats_get_root(),
                                &md->rcache);
