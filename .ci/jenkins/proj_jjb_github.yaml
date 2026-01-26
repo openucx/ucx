@@ -38,7 +38,7 @@
               value: $
     description: "UCX GitHub dispatcher (Blossom). Do NOT edit via Web GUI!"
     concurrent: true
-    sandbox: true
+    sandbox: false
     parameters:
       - string:
           name: "VARIABLE_FROM_POST"
@@ -54,7 +54,10 @@
       }}
 
       def sha = githubHelper.getMergedSHA()
+      def blueOceanJobPath = env.JOB_NAME.replace('/', '%2F')
+      def blueOceanUrl = "${{JENKINS_URL}}blue/organizations/jenkins/${{blueOceanJobPath}}/detail/${{env.JOB_BASE_NAME}}/${{env.BUILD_NUMBER}}/pipeline/"
 
+      githubHelper.updateCommitStatus(blueOceanUrl, "Blossom CI started", GitHubCommitState.PENDING)
       currentBuild.description = githubHelper.getBuildDescription()
 
       def jobs = [
@@ -65,17 +68,24 @@
         'ucx-build-static-github',
       ]
 
-      def fanout = [:]
-      for (def j in jobs) {{
-        def jobName = "UCX-GitHub/${{j}}"
-        fanout[jobName] = {{
-          build job: jobName, parameters: [
-            string(name: 'sha1', value: sha),
-            string(name: 'githubData', value: VARIABLE_FROM_POST),
-          ], propagate: false, wait: true
+      try {{
+        def fanout = [:]
+        for (def j in jobs) {{
+          def jobName = "UCX-GitHub/${{j}}"
+          fanout[jobName] = {{
+            build job: jobName, parameters: [
+              string(name: 'sha1', value: sha),
+              string(name: 'githubData', value: VARIABLE_FROM_POST),
+            ], propagate: false, wait: true
+          }}
         }}
+        parallel fanout
+        githubHelper.updateCommitStatus(blueOceanUrl, "Blossom CI passed", GitHubCommitState.SUCCESS)
+      }} catch(Exception ex) {{
+        println ex
+        githubHelper.updateCommitStatus(blueOceanUrl, "Blossom CI failed", GitHubCommitState.FAILURE)
+        throw ex
       }}
-      parallel fanout
 
 - job-template:
     name: "{jjb_proj}"
@@ -94,7 +104,7 @@
             jjb_proj={jjb_proj}
     description: "{jjb_description}"
     concurrent: true
-    sandbox: true
+    sandbox: false
     parameters:
       - string:
           name: "sha1"

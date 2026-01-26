@@ -35,7 +35,7 @@
             jjb_proj={jjb_proj}
     description: "{jjb_description}"
     concurrent: true
-    sandbox: true
+    sandbox: false
     triggers:
       - gitlab:
           trigger-push: false                     # Avoid duplicate builds
