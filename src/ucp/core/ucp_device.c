@@ -28,11 +28,10 @@ typedef struct {
     uint32_t               mem_list_length;
 } ucp_device_handle_info_t;
 
-KHASH_TYPE(ucp_device_handle_allocs, void*, ucp_device_handle_info_t);
 #define ucp_device_handle_hash_key(_handle) \
     kh_int64_hash_func((uintptr_t)(_handle))
-KHASH_IMPL(ucp_device_handle_allocs, void*, ucp_device_handle_info_t, 1,
-           ucp_device_handle_hash_key, kh_int64_hash_equal);
+KHASH_INIT(ucp_device_handle_allocs, void*, ucp_device_handle_info_t, 1,
+    ucp_device_handle_hash_key, kh_int64_hash_equal);
 
 /* Hash to track handle allocator, used at release time */
 static khash_t(ucp_device_handle_allocs) ucp_device_handle_hash;
