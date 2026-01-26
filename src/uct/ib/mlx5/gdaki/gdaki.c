@@ -514,7 +514,7 @@ static ucs_status_t uct_rc_gdaki_iface_query_v2(uct_iface_h tl_iface,
 {
     if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_DEVICE_MEM_ELEMENT_SIZE) {
         iface_attr->device_mem_element_size = sizeof(
-                uct_rc_gdaki_device_mem_element_t);
+                uct_ib_md_device_mem_element_t);
     }
 
     return UCS_OK;
@@ -633,27 +633,6 @@ out_unlock:
     return status;
 }
 
-ucs_status_t
-uct_rc_gdaki_iface_mem_element_pack(const uct_iface_h tl_iface, uct_mem_h memh,
-                                    uct_rkey_t rkey,
-                                    uct_device_mem_element_t *mem_elem_p)
-{
-    uct_rc_gdaki_device_mem_element_t mem_elem;
-
-    mem_elem.lkey = UCT_IB_INVALID_MKEY;
-    mem_elem.rkey = UCT_IB_INVALID_MKEY;
-    if (memh != NULL) {
-        mem_elem.lkey = htonl(((uct_ib_mem_t*)memh)->lkey);
-    }
-
-    if (rkey != UCT_INVALID_RKEY) {
-        mem_elem.rkey = htonl(uct_ib_md_direct_rkey(rkey));
-    }
-
-    return UCT_CUDADRV_FUNC_LOG_ERR(
-            cuMemcpyHtoD((CUdeviceptr)mem_elem_p, &mem_elem, sizeof(mem_elem)));
-}
-
 static UCS_CLASS_DECLARE_NEW_FUNC(uct_rc_gdaki_iface_t, uct_iface_t, uct_md_h,
                                   uct_worker_h, const uct_iface_params_t*,
                                   const uct_iface_config_t*);
@@ -666,7 +645,6 @@ static uct_rc_iface_ops_t uct_rc_gdaki_internal_ops = {
             .iface_query_v2         = uct_rc_gdaki_iface_query_v2,
             .iface_estimate_perf    = uct_ib_iface_estimate_perf,
             .iface_vfs_refresh      = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
-            .iface_mem_element_pack = uct_rc_gdaki_iface_mem_element_pack,
             .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
             .ep_invalidate          = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
             .ep_connect_to_ep_v2    = uct_rc_gdaki_ep_connect_to_ep_v2,

@@ -16,6 +16,7 @@
 #include <ucp/api/device/ucp_device_types.h>
 #include <ucs/type/param.h>
 #include <ucp/wireup/wireup_ep.h>
+#include <uct/api/v2/uct_v2.h>
 
 #include "ucp_worker.inl"
 #include "ucp_ep.inl"
@@ -347,13 +348,11 @@ static ucs_status_t ucp_device_mem_list_create_handle(
         ucp_ep_config_t *ep_config, ucs_memory_type_t mem_type,
         uct_allocated_memory_t *mem)
 {
-    size_t handle_size = 0;
-    size_t uct_elem_size[UCP_DEVICE_MEM_LIST_MAX_EPS];
+    const size_t uct_elem_size = sizeof(uct_device_mem_element_t);
+    size_t handle_size         = 0;
     unsigned i, j, num_uct_eps;
-    uct_iface_attr_v2_t attr;
     ucs_status_t status;
-    ucp_worker_iface_t *wiface;
-    ucp_device_mem_list_handle_t handle;
+    ucp_device_mem_list_handle_t *handle;
     uct_mem_h uct_memh;
     uct_rkey_t uct_rkey;
     uct_device_mem_element_t *uct_element;
@@ -368,8 +367,8 @@ static ucs_status_t ucp_device_mem_list_create_handle(
     uint64_t remote_addr;
     ucp_mem_h memh;
 
-    handle_size += sizeof(*handle.local_addrs) + sizeof(*handle.remote_addrs) +
-                   sizeof(*handle.lengths);
+    handle_size += sizeof(*handle->local_addrs) +
+                   sizeof(*handle->remote_addrs) + sizeof(*handle->lengths);
 
     /* For each available lane */
     for (i = 0;
@@ -380,21 +379,7 @@ static ucs_status_t ucp_device_mem_list_create_handle(
             return UCS_ERR_NOT_CONNECTED;
         }
 
-        /* Query per transport UCT memory list element size */
-        wiface          = ucp_worker_iface(ep->worker,
-                                           ucp_ep_get_rsc_index(ep, lanes[i]));
-        attr.field_mask = UCT_IFACE_ATTR_FIELD_DEVICE_MEM_ELEMENT_SIZE;
-        status          = uct_iface_query_v2(wiface->iface, &attr);
-        if (status != UCS_OK) {
-            ucs_error("failed to query element size lanes[%u]=%u", i, lanes[i]);
-            return status;
-        }
-
-        ucs_trace("query lane=%u device_mem_element_size=%zu", lanes[i],
-                  attr.device_mem_element_size);
-
-        handle_size     += attr.device_mem_element_size;
-        uct_elem_size[i] = attr.device_mem_element_size;
+        handle_size += uct_elem_size;
     }
 
     if (i == 0) {
@@ -403,45 +388,40 @@ static ucs_status_t ucp_device_mem_list_create_handle(
         return UCS_ERR_NO_DEVICE;
     }
 
+    handle_size *= params->num_elements;
+    handle_size += sizeof(*handle);
+    handle       = ucs_calloc(1, handle_size, "ucp_device_mem_list_handle_t");
+    if (handle == NULL) {
+        ucs_error("failed to allocate ucp_device_mem_list_handle_t");
+        return UCS_ERR_NO_MEMORY;
+    }
+
     /* Populate handle header */
-    num_uct_eps        = i;
-    handle.version     = UCP_DEVICE_MEM_LIST_VERSION_V1;
-    handle.proto_idx   = 0;
-    handle.num_uct_eps = num_uct_eps;
-    handle.length      = params->num_elements;
+    num_uct_eps         = i;
+    handle->version     = UCP_DEVICE_MEM_LIST_VERSION_V1;
+    handle->proto_idx   = 0;
+    handle->num_uct_eps = num_uct_eps;
+    handle->length      = params->num_elements;
     for (i = 0; i < num_uct_eps; i++) {
         status = uct_ep_get_device_ep(ucp_ep_get_lane(ep, lanes[i]),
-                                      &handle.uct_device_eps[i]);
+                                      &handle->uct_device_eps[i]);
         if (status != UCS_OK) {
             ucs_error("failed to get device_ep for lane=%u", lanes[i]);
             goto err;
-            ;
         }
 
-        handle.uct_mem_element_size[i] = uct_elem_size[i];
+        handle->uct_mem_element_size[i] = uct_elem_size;
     }
 
     /* Allocate handle on the same device memory */
-    handle_size *= params->num_elements;
-    handle_size += sizeof(handle);
-    status       = ucp_mem_do_alloc(ep->worker->context, NULL, handle_size,
-                                    UCT_MD_MEM_ACCESS_LOCAL_READ |
-                                            UCT_MD_MEM_ACCESS_LOCAL_WRITE,
-                                    mem_type, local_sys_dev,
-                                    "ucp_device_mem_list_handle_t", mem);
-    if (status != UCS_OK) {
-        ucs_error("failed to allocate ucp_device_mem_list_handle_t: %s",
-                  ucs_status_string(status));
-        return status;
-    }
 
     /* populate elements common parameters */
-    local_addresses = (void**)UCS_PTR_BYTE_OFFSET(mem->address, sizeof(handle));
+    local_addresses  = (void**)UCS_PTR_BYTE_OFFSET(handle, sizeof(*handle));
     remote_addresses = (uint64_t*)
-            UCS_PTR_BYTE_OFFSET(local_addresses, sizeof(*handle.local_addrs) *
+            UCS_PTR_BYTE_OFFSET(local_addresses, sizeof(*handle->local_addrs) *
                                                          params->num_elements);
     lengths          = (size_t*)UCS_PTR_BYTE_OFFSET(remote_addresses,
-                                                    sizeof(*handle.remote_addrs) *
+                                                    sizeof(*handle->remote_addrs) *
                                                             params->num_elements);
     for (i = 0; i < params->num_elements; i++) {
         ucp_element = &params->elements[i];
@@ -451,34 +431,25 @@ static ucs_status_t ucp_device_mem_list_create_handle(
                                       ucp_element, remote_addr, REMOTE_ADDR, 0);
         length = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, ucp_element,
                                  length, LENGTH, 0);
-        ucp_mem_type_unpack(ep->worker, &local_addresses[i], &local_addr,
-                            sizeof(local_addresses[i]), mem_type);
-        ucp_mem_type_unpack(ep->worker, &remote_addresses[i], &remote_addr,
-                            sizeof(remote_addresses[i]), mem_type);
-        ucp_mem_type_unpack(ep->worker, &lengths[i], &length,
-                            sizeof(lengths[i]), mem_type);
+        local_addresses[i]  = local_addr;
+        remote_addresses[i] = remote_addr;
+        lengths[i]          = length;
     }
 
-    handle.local_addrs  = local_addresses;
-    handle.remote_addrs = remote_addresses;
-    handle.lengths      = lengths;
 
-    handle.uct_mem_elements = uct_element = UCS_PTR_BYTE_OFFSET(
-            lengths, sizeof(*handle.lengths) * params->num_elements);
+    handle->uct_mem_elements = uct_element = UCS_PTR_BYTE_OFFSET(
+            lengths, sizeof(*handle->lengths) * params->num_elements);
     for (i = 0; i < num_uct_eps; i++) {
         local_md_index = ep_config->md_index[lanes[i]];
-        wiface         = ucp_worker_iface(ep->worker,
-                                          ucp_ep_get_rsc_index(ep, lanes[i]));
         ucp_element    = params->elements;
         for (j = 0; j < params->num_elements; j++) {
-            memh = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD,
-                                   ucp_element, memh, MEMH, NULL);
+            memh = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, ucp_element,
+                                   memh, MEMH, NULL);
             if (memh != NULL) {
                 uct_memh = memh->uct[local_md_index];
-                ucs_assertv(
-                    (memh->md_map & UCS_BIT(local_md_index)) != 0,
-                     "uct_memh=%p md_map=0x%lx local_md_index=%u", uct_memh,
-                     memh->md_map, local_md_index);
+                ucs_assertv((memh->md_map & UCS_BIT(local_md_index)) != 0,
+                            "uct_memh=%p md_map=0x%lx local_md_index=%u",
+                            uct_memh, memh->md_map, local_md_index);
                 ucs_assert(uct_memh != UCT_MEM_HANDLE_NULL);
             } else {
                 uct_memh = UCT_MEM_HANDLE_NULL;
@@ -489,9 +460,8 @@ static ucs_status_t ucp_device_mem_list_create_handle(
                                    ep_config->key.lanes[lanes[i]].dst_md_index);
             uct_rkey = ucp_rkey_get_tl_rkey(ucp_element->rkey, rkey_index);
             ucs_assert(uct_rkey != UCT_INVALID_RKEY);
-
-            status = uct_iface_mem_element_pack(wiface->iface, uct_memh,
-                                                uct_rkey, uct_element);
+            status = uct_md_mem_elem_pack(ucp_ep_md(ep, lanes[i]), uct_memh,
+                                          uct_rkey, uct_element);
             if (status != UCS_OK) {
                 ucs_error("failed to pack uct memory element for lane=%u",
                           lanes[i]);
@@ -500,19 +470,41 @@ static ucs_status_t ucp_device_mem_list_create_handle(
 
             ucp_element = UCS_PTR_BYTE_OFFSET(ucp_element,
                                               params->element_size);
-            uct_element = UCS_PTR_BYTE_OFFSET(uct_element, uct_elem_size[i]);
+            uct_element = UCS_PTR_BYTE_OFFSET(uct_element, uct_elem_size);
         }
     }
 
-    ucs_assert(UCS_PTR_BYTE_OFFSET(mem->address, handle_size) == uct_element);
+    ucs_assert(UCS_PTR_BYTE_OFFSET(handle, handle_size) == uct_element);
+
+    status = ucp_mem_do_alloc(ep->worker->context, NULL, handle_size,
+                              UCT_MD_MEM_ACCESS_LOCAL_READ |
+                                      UCT_MD_MEM_ACCESS_LOCAL_WRITE,
+                              mem_type, local_sys_dev,
+                              "ucp_device_mem_list_handle_t", mem);
+    if (status != UCS_OK) {
+        ucs_error("failed to allocate ucp_device_mem_list_handle_t: %s",
+                  ucs_status_string(status));
+        goto err;
+    }
+
+    /* Adjust pointers to point to GPU memory offsets before copying */
+    handle->local_addrs      = (void**)UCS_PTR_BYTE_OFFSET(
+            mem->address, UCS_PTR_BYTE_DIFF(handle, local_addresses));
+    handle->remote_addrs     = (uint64_t*)UCS_PTR_BYTE_OFFSET(
+            mem->address, UCS_PTR_BYTE_DIFF(handle, remote_addresses));
+    handle->lengths          = (size_t*)UCS_PTR_BYTE_OFFSET(mem->address,
+                                                            UCS_PTR_BYTE_DIFF(handle,
+                                                                              lengths));
+    handle->uct_mem_elements = UCS_PTR_BYTE_OFFSET(
+            mem->address, UCS_PTR_BYTE_DIFF(handle, handle->uct_mem_elements));
 
     /* Migrate the constructed handle header to device memory */
-    ucp_mem_type_unpack(ep->worker, mem->address, &handle, sizeof(handle),
+    ucp_mem_type_unpack(ep->worker, mem->address, handle, handle_size,
                         mem_type);
     return UCS_OK;
 
 err:
-    uct_mem_free(mem);
+    ucs_free(handle);
     return status;
 }
 
@@ -551,16 +543,18 @@ static ucs_status_t ucp_device_local_mem_list_element_pack(
     ucp_md_index_t md_index;
     ucp_mem_h memh;
     uct_mem_h uct_memh;
+    ucp_tl_md_t *ucp_md;
     ucs_status_t status;
 
-    ucp_mem_type_unpack(worker, &mem_element->addr, &local_addr,
-                        sizeof(local_addr), mem_type);
+    mem_element->addr = local_addr;
     if (wiface == NULL) {
         return UCS_OK;
     }
 
     resource = &worker->context->tl_rscs[wiface->rsc_index];
     md_index = resource->md_index;
+    ucp_md   = &worker->context->tl_mds[md_index];
+
     memh = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, element, memh, MEMH,
                            NULL);
     uct_memh = memh->uct[md_index];
@@ -568,9 +562,8 @@ static ucs_status_t ucp_device_local_mem_list_element_pack(
         ucs_error("invalid memh for md_index=%u", md_index);
         return UCS_ERR_INVALID_PARAM;
     }
-    status = uct_iface_mem_element_pack(wiface->iface, uct_memh,
-                                        UCT_INVALID_RKEY,
-                                        &mem_element->uct_mem_element);
+    status = uct_md_mem_elem_pack(ucp_md->md, uct_memh, UCT_INVALID_RKEY,
+                                  &mem_element->uct_mem_element);
     if (status != UCS_OK) {
         ucs_error("failed to pack local mem element for memh=%p", memh);
     }
@@ -584,27 +577,20 @@ static ucs_status_t ucp_device_local_mem_list_create_handle(
     const ucp_worker_h worker   = UCS_PARAM_VALUE(
             UCP_DEVICE_MEM_LIST_PARAMS_FIELD, params, worker, WORKER, NULL);
     const ucp_context_h context = worker->context;
-    const size_t uct_elem_size = ucs_offsetof(uct_device_local_mem_list_elem_t,
-                                              uct_mem_element) +
-                                 sizeof(uct_tl_device_mem_element_t);
-    size_t handle_size         = 0;
+    const size_t uct_elem_size  = sizeof(uct_device_local_mem_list_elem_t);
+    size_t handle_size          = 0;
     const ucp_device_mem_list_elem_t *ucp_element;
     const ucp_worker_iface_t *wiface;
-    ucp_device_local_mem_list_handle_t handle;
+    ucp_device_local_mem_list_handle_t *handle;
     uct_device_local_mem_list_elem_t *uct_element;
     size_t i;
     ucs_status_t status;
 
-    handle_size = uct_elem_size * params->num_elements + sizeof(handle);
-    status      = ucp_mem_do_alloc(context, NULL, handle_size,
-                                   UCT_MD_MEM_ACCESS_LOCAL_READ |
-                                           UCT_MD_MEM_ACCESS_LOCAL_WRITE,
-                                   mem_type, local_sys_dev,
-                                   "ucp_device_remote_mem_list_handle_t", mem);
-    if (status != UCS_OK) {
-        ucs_error("failed to allocate ucp_device_remote_mem_list_handle_t: %s",
-                  ucs_status_string(status));
-        return status;
+    handle_size = (uct_elem_size * params->num_elements) + sizeof(handle);
+    handle = ucs_calloc(1, handle_size, "ucp_device_local_mem_list_handle_t");
+    if (handle == NULL) {
+        ucs_error("failed to allocate ucp_device_local_mem_list_handle_t");
+        return UCS_ERR_NO_MEMORY;
     }
 
     /* TODO: To support multi lanes we need to pack all memhs of ifaces that require memhs */
@@ -615,7 +601,7 @@ static ucs_status_t ucp_device_local_mem_list_create_handle(
 
     /* Populate element specific parameters */
     ucp_element = params->elements;
-    uct_element = UCS_PTR_BYTE_OFFSET(mem->address, sizeof(handle));
+    uct_element = UCS_PTR_BYTE_OFFSET(handle, sizeof(*handle));
     for (i = 0; i < params->num_elements; i++) {
         status = ucp_device_local_mem_list_element_pack(worker, wiface,
                                                         ucp_element, mem_type,
@@ -623,20 +609,30 @@ static ucs_status_t ucp_device_local_mem_list_create_handle(
         if (status != UCS_OK) {
             ucs_error("failed to pack local mem list element for element=%zu",
                       i);
-            uct_mem_free(mem);
-            return status;
+            goto out;
         }
 
         ucp_element = UCS_PTR_BYTE_OFFSET(ucp_element, params->element_size);
         uct_element = UCS_PTR_BYTE_OFFSET(uct_element, uct_elem_size);
     }
 
-    handle.version = UCP_DEVICE_MEM_LIST_VERSION_V1;
-    handle.length  = params->num_elements;
-    ucp_mem_type_unpack(worker, mem->address, &handle, sizeof(handle),
-                        mem_type);
+    handle->version = UCP_DEVICE_MEM_LIST_VERSION_V1;
+    handle->length  = params->num_elements;
+    status          = ucp_mem_do_alloc(context, NULL, handle_size,
+                                       UCT_MD_MEM_ACCESS_LOCAL_READ |
+                                               UCT_MD_MEM_ACCESS_LOCAL_WRITE,
+                                       mem_type, local_sys_dev,
+                                       "ucp_device_remote_mem_list_handle_t", mem);
+    if (status != UCS_OK) {
+        ucs_error("failed to allocate ucp_device_remote_mem_list_handle_t: %s",
+                  ucs_status_string(status));
+        goto out;
+    }
 
-    return UCS_OK;
+    ucp_mem_type_unpack(worker, mem->address, handle, handle_size, mem_type);
+out:
+    ucs_free(handle);
+    return status;
 }
 
 static ucs_status_t ucp_device_local_mem_list_params_check(
@@ -746,7 +742,6 @@ static ucs_status_t ucp_device_remote_mem_list_element_pack(
     uint8_t rkey_index;
     uct_rkey_t uct_rkey;
     uct_ep_h uct_ep;
-    ucp_worker_iface_t *wiface;
     uct_device_ep_h device_ep;
     ucs_status_t status;
     ucp_lane_index_t lane;
@@ -772,13 +767,11 @@ static ucs_status_t ucp_device_remote_mem_list_element_pack(
     uct_rkey   = ucp_rkey_get_tl_rkey(rkey, rkey_index);
     ucs_assert(uct_rkey != UCT_INVALID_RKEY);
 
-    wiface = ucp_worker_iface(ep->worker, ucp_ep_get_rsc_index(ep, lane));
-    ucp_mem_type_unpack(ep->worker, &mem_element->device_ep, &device_ep,
-                        sizeof(device_ep), mem_type);
-    ucp_mem_type_unpack(ep->worker, &mem_element->addr, &element->remote_addr,
-                        sizeof(element->remote_addr), mem_type);
-    status = uct_iface_mem_element_pack(wiface->iface, NULL, uct_rkey,
-                                        &mem_element->uct_mem_element);
+
+    mem_element->device_ep = device_ep;
+    mem_element->addr      = element->remote_addr;
+    status = uct_md_mem_elem_pack(ucp_ep_md(ep, lane), NULL, uct_rkey,
+                                  &mem_element->uct_mem_element);
     if (status != UCS_OK) {
         ucs_error("failed to pack uct memory element for lane=%u", lane);
     }
@@ -825,13 +818,11 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
         uct_allocated_memory_t *mem)
 {
     const ucp_ep_h ep = ucp_device_remote_mem_list_get_first_ep(params);
-    const size_t uct_elem_size = ucs_offsetof(uct_device_remote_mem_list_elem_t,
-                                              uct_mem_element) +
-                                 sizeof(uct_tl_device_mem_element_t);
+    const size_t uct_elem_size = sizeof(uct_device_remote_mem_list_elem_t);
     size_t handle_size         = 0;
     const ucp_device_mem_list_elem_t *ucp_element;
     ucp_context_h context;
-    ucp_device_remote_mem_list_handle_t handle;
+    ucp_device_remote_mem_list_handle_t *handle;
     uct_device_remote_mem_list_elem_t *uct_element;
     ucs_sys_device_t local_sys_dev;
     size_t i;
@@ -849,19 +840,14 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
     }
 
     handle_size = sizeof(handle) + (uct_elem_size * params->num_elements);
-    status      = ucp_mem_do_alloc(context, NULL, handle_size,
-                                   UCT_MD_MEM_ACCESS_LOCAL_READ |
-                                           UCT_MD_MEM_ACCESS_LOCAL_WRITE,
-                                   mem_type, local_sys_dev,
-                                   "ucp_device_remote_mem_list_handle_t", mem);
-    if (status != UCS_OK) {
-        ucs_error("failed to allocate ucp_device_remote_mem_list_handle_t: %s",
-                  ucs_status_string(status));
-        return status;
+    handle = ucs_calloc(1, handle_size, "ucp_device_remote_mem_list_handle_t");
+    if (handle == NULL) {
+        ucs_error("failed to allocate ucp_device_remote_mem_list_handle_t");
+        return UCS_ERR_NO_MEMORY;
     }
 
     ucp_element = params->elements;
-    uct_element = UCS_PTR_BYTE_OFFSET(mem->address, sizeof(handle));
+    uct_element = UCS_PTR_BYTE_OFFSET(handle, sizeof(*handle));
     for (i = 0; i < params->num_elements; i++) {
         if (!UCP_DEVICE_MEM_ELEMENT_IS_GAP(ucp_element)) {
             status = ucp_device_remote_mem_list_element_pack(ucp_element,
@@ -871,8 +857,7 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
             if (status != UCS_OK) {
                 ucs_error("failed to pack uct memory element for element=%zu",
                           i);
-                uct_mem_free(mem);
-                return status;
+                goto out;
             }
         }
 
@@ -880,12 +865,24 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
         uct_element = UCS_PTR_BYTE_OFFSET(uct_element, uct_elem_size);
     }
 
-    handle.version = UCP_DEVICE_MEM_LIST_VERSION_V1;
-    handle.length  = params->num_elements;
-    ucp_mem_type_unpack(ep->worker, mem->address, &handle, sizeof(handle),
-                        mem_type);
+    handle->version = UCP_DEVICE_MEM_LIST_VERSION_V1;
+    handle->length  = params->num_elements;
+    status          = ucp_mem_do_alloc(context, NULL, handle_size,
+                                       UCT_MD_MEM_ACCESS_LOCAL_READ |
+                                               UCT_MD_MEM_ACCESS_LOCAL_WRITE,
+                                       mem_type, local_sys_dev,
+                                       "ucp_device_remote_mem_list_handle_t", mem);
+    if (status != UCS_OK) {
+        ucs_error("failed to allocate ucp_device_remote_mem_list_handle_t: %s",
+                  ucs_status_string(status));
+        goto out;
+    }
 
-    return UCS_OK;
+    ucp_mem_type_unpack(ep->worker, mem->address, handle, handle_size,
+                        mem_type);
+out:
+    ucs_free(handle);
+    return status;
 }
 
 static ucs_status_t ucp_device_remote_mem_list_params_check(

@@ -1094,13 +1094,3 @@ ucs_status_t uct_ep_get_device_ep(uct_ep_h ep, uct_device_ep_h *device_ep_p)
 
     return iface->internal_ops->ep_get_device_ep(ep, device_ep_p);
 }
-
-ucs_status_t uct_iface_mem_element_pack(uct_iface_h tl_iface, uct_mem_h memh,
-                                        uct_rkey_t rkey,
-                                        uct_device_mem_element_t *mem_element)
-{
-    const uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
-
-    return iface->internal_ops->iface_mem_element_pack(tl_iface, memh, rkey,
-                                                       mem_element);
-}

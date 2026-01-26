@@ -312,18 +312,11 @@ typedef ucs_status_t (*uct_ep_get_device_ep_func_t)(
         uct_ep_h ep, uct_device_ep_h *device_ep_p);
 
 
-/* Pack memh and rkey into a device mem element */
-typedef ucs_status_t (*uct_iface_mem_element_pack_func_t)(
-        const uct_iface_h iface, uct_mem_h memh, uct_rkey_t rkey,
-        uct_device_mem_element_t *mem_element);
-
-
 /* Internal operations, not exposed by the external API */
 typedef struct uct_iface_internal_ops {
     uct_iface_query_v2_func_t        iface_query_v2;
     uct_iface_estimate_perf_func_t   iface_estimate_perf;
     uct_iface_vfs_refresh_func_t     iface_vfs_refresh;
-    uct_iface_mem_element_pack_func_t iface_mem_element_pack;
     uct_ep_query_func_t              ep_query;
     uct_ep_invalidate_func_t         ep_invalidate;
     uct_ep_connect_to_ep_v2_func_t   ep_connect_to_ep_v2;

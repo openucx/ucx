@@ -751,7 +751,6 @@ static uct_rc_iface_ops_t uct_gga_mlx5_iface_ops = {
             .iface_query_v2         = uct_iface_base_query_v2,
             .iface_estimate_perf    = uct_rc_iface_estimate_perf,
             .iface_vfs_refresh      = uct_rc_iface_vfs_refresh,
-            .iface_mem_element_pack = (uct_iface_mem_element_pack_func_t)ucs_empty_function_return_unsupported,
             .ep_query               = (uct_ep_query_func_t)ucs_empty_function,
             .ep_invalidate          = uct_rc_mlx5_base_ep_invalidate,
             .ep_connect_to_ep_v2    = uct_gga_mlx5_ep_connect_to_ep_v2,
@@ -897,6 +896,7 @@ static uct_md_ops_t uct_mlx5_gga_md_ops = {
     .mkey_pack          = uct_ib_mlx5_gga_mkey_pack,
     .mem_attach         = uct_ib_mlx5_gga_mem_attach,
     .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported,
+    .mem_elem_pack      = (uct_md_mem_elem_pack_func_t)ucs_empty_function_return_unsupported
 };
 
 static ucs_status_t

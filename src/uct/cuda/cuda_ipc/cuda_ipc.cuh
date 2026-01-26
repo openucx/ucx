@@ -73,10 +73,12 @@ uct_cuda_ipc_get_lane(unsigned &lane_id, unsigned &num_lanes)
     }
 }
 
-UCS_F_DEVICE void* uct_cuda_ipc_map_remote(const uct_cuda_ipc_device_mem_element_t* elem,
-                                           uint64_t remote_address)
+UCS_F_DEVICE void *
+uct_cuda_ipc_map_remote(const uct_cuda_ipc_md_device_mem_element_t *elem,
+                        uint64_t remote_address)
 {
-    return reinterpret_cast<void*>((uintptr_t)remote_address + elem->mapped_offset);
+    return reinterpret_cast<void*>((uintptr_t)remote_address +
+                                   elem->mapped_offset);
 }
 
 UCS_F_DEVICE void uct_cuda_ipc_atomic_inc(uint64_t *dst, uint64_t inc_value)
@@ -289,15 +291,14 @@ void uct_cuda_ipc_copy_level<UCS_DEVICE_LEVEL_GRID>(void *dst, const void *src, 
 {/* not implemented */}
 
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_BLOCK>
-UCS_F_DEVICE ucs_status_t
-uct_cuda_ipc_ep_put_single(uct_device_ep_h device_ep,
-                           const uct_device_mem_element_t *mem_elem,
-                           const void *address, uint64_t remote_address,
-                           size_t length, uint64_t flags,
-                           uct_device_completion_t *comp)
+UCS_F_DEVICE ucs_status_t uct_cuda_ipc_ep_put_single(
+        uct_device_ep_h device_ep, const uct_device_mem_element_t *mem_elem,
+        const void *address, uint64_t remote_address, size_t length,
+        uint64_t flags, uct_device_completion_t *comp)
 {
     auto cuda_ipc_mem_element =
-        reinterpret_cast<const uct_cuda_ipc_device_mem_element_t *>(mem_elem);
+            reinterpret_cast<const uct_cuda_ipc_md_device_mem_element_t*>(
+                    mem_elem);
     void *mapped_rem_addr;
 
     mapped_rem_addr = uct_cuda_ipc_map_remote(cuda_ipc_mem_element, remote_address);
@@ -319,18 +320,28 @@ UCS_F_DEVICE ucs_status_t uct_cuda_ipc_ep_put_multi(
 
     uct_cuda_ipc_get_lane<level>(lane_id, num_lanes);
     for (int i = 0; i < num_put_ops; i++) {
-        auto cuda_ipc_mem_element = reinterpret_cast<const uct_cuda_ipc_device_mem_element_t *>(
-                UCS_PTR_BYTE_OFFSET(mem_list, sizeof(uct_cuda_ipc_device_mem_element_t) * i));
-        auto mapped_rem_addr = uct_cuda_ipc_map_remote(
-                cuda_ipc_mem_element, remote_addresses[i]);
-        uct_cuda_ipc_copy_level<level>(mapped_rem_addr, addresses[i], lengths[i]);
+        auto cuda_ipc_mem_element =
+                reinterpret_cast<const uct_cuda_ipc_md_device_mem_element_t*>(
+                        UCS_PTR_BYTE_OFFSET(
+                                mem_list,
+                                sizeof(uct_cuda_ipc_md_device_mem_element_t) *
+                                        i));
+        auto mapped_rem_addr = uct_cuda_ipc_map_remote(cuda_ipc_mem_element,
+                                                       remote_addresses[i]);
+        uct_cuda_ipc_copy_level<level>(mapped_rem_addr, addresses[i],
+                                       lengths[i]);
     }
 
     if ((counter_remote_address != 0) && (lane_id == 0)) {
-        auto cuda_ipc_mem_element = reinterpret_cast<const uct_cuda_ipc_device_mem_element_t *>(
-                UCS_PTR_BYTE_OFFSET(mem_list, sizeof(uct_cuda_ipc_device_mem_element_t) * num_put_ops));
-        auto mapped_counter_rem_addr = reinterpret_cast<uint64_t *>(uct_cuda_ipc_map_remote(cuda_ipc_mem_element,
-                                                                                            counter_remote_address));
+        auto cuda_ipc_mem_element =
+                reinterpret_cast<const uct_cuda_ipc_md_device_mem_element_t*>(
+                        UCS_PTR_BYTE_OFFSET(
+                                mem_list,
+                                sizeof(uct_cuda_ipc_md_device_mem_element_t) *
+                                        num_put_ops));
+        auto mapped_counter_rem_addr = reinterpret_cast<uint64_t*>(
+                uct_cuda_ipc_map_remote(cuda_ipc_mem_element,
+                                        counter_remote_address));
         uct_cuda_ipc_atomic_inc(mapped_counter_rem_addr, counter_inc_value);
     }
 
@@ -354,10 +365,10 @@ UCS_F_DEVICE ucs_status_t uct_cuda_ipc_ep_put_multi_partial(
     for (int i = 0; i < mem_list_count; i++) {
         unsigned idx = mem_list_indices[i];
         auto cuda_ipc_mem_element =
-                reinterpret_cast<const uct_cuda_ipc_device_mem_element_t*>(
+                reinterpret_cast<const uct_cuda_ipc_md_device_mem_element_t*>(
                         UCS_PTR_BYTE_OFFSET(
                                 mem_list,
-                                sizeof(uct_cuda_ipc_device_mem_element_t) *
+                                sizeof(uct_cuda_ipc_md_device_mem_element_t) *
                                         idx));
         auto src_addr = UCS_PTR_BYTE_OFFSET(addresses[idx], local_offsets[i]);
         auto mapped_rem_addr = uct_cuda_ipc_map_remote(
@@ -369,10 +380,10 @@ UCS_F_DEVICE ucs_status_t uct_cuda_ipc_ep_put_multi_partial(
 
     if ((counter_inc_value != 0) && (lane_id == 0)) {
         auto cuda_ipc_mem_element =
-                reinterpret_cast<const uct_cuda_ipc_device_mem_element_t*>(
+                reinterpret_cast<const uct_cuda_ipc_md_device_mem_element_t*>(
                         UCS_PTR_BYTE_OFFSET(
                                 mem_list,
-                                sizeof(uct_cuda_ipc_device_mem_element_t) *
+                                sizeof(uct_cuda_ipc_md_device_mem_element_t) *
                                         counter_index));
         auto mapped_counter_rem_addr = reinterpret_cast<uint64_t*>(
                 uct_cuda_ipc_map_remote(cuda_ipc_mem_element,
@@ -392,7 +403,8 @@ uct_cuda_ipc_ep_atomic_add(uct_device_ep_h device_ep,
                            uint64_t flags, uct_device_completion_t *comp)
 {
     auto cuda_ipc_mem_element =
-        reinterpret_cast<const uct_cuda_ipc_device_mem_element_t *>(mem_elem);
+            reinterpret_cast<const uct_cuda_ipc_md_device_mem_element_t*>(
+                    mem_elem);
     uint64_t *mapped_rem_addr;
     unsigned int lane_id, num_lanes;
 
@@ -412,7 +424,7 @@ UCS_F_DEVICE ucs_status_t uct_cuda_ipc_ep_get_ptr(
         uint64_t remote_address, void **addr_p)
 {
     auto cuda_ipc_mem_element =
-            reinterpret_cast<const uct_cuda_ipc_device_mem_element_t*>(
+            reinterpret_cast<const uct_cuda_ipc_md_device_mem_element_t*>(
                     mem_elem);
     *addr_p = uct_cuda_ipc_map_remote(cuda_ipc_mem_element, remote_address);
     return UCS_OK;

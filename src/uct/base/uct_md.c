@@ -656,3 +656,9 @@ ucs_status_t uct_md_dummy_mem_dereg(uct_md_h uct_md,
 
     return UCS_OK;
 }
+
+ucs_status_t uct_md_mem_elem_pack(uct_md_h md, uct_mem_h memh, uct_rkey_t rkey,
+                                  uct_device_mem_element_t *mem_elem)
+{
+    return md->ops->mem_elem_pack(md, memh, rkey, mem_elem);
+}

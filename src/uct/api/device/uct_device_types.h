@@ -26,7 +26,7 @@
  */
 typedef struct {
     ptrdiff_t mapped_offset;
-} uct_cuda_ipc_device_mem_element_t;
+} uct_cuda_ipc_md_device_mem_element_t;
 
 
 /**
@@ -39,10 +39,10 @@ typedef struct {
 /**
  * @brief Device memory element for GDAKI.
  */
-typedef struct uct_rc_gdaki_device_mem_element {
+typedef struct uct_ib_md_device_mem_element {
     uint32_t lkey;
     uint32_t rkey;
-} uct_rc_gdaki_device_mem_element_t;
+} uct_ib_md_device_mem_element_t;
 
 
 /**
@@ -71,15 +71,10 @@ typedef struct uct_device_ep {
 typedef union uct_device_completion uct_device_completion_t;
 
 
-/* Union of all uct device memory elements */
-union uct_tl_device_mem_element {
-    uct_rc_gdaki_device_mem_element_t gdaki_mem_element;
-    uct_cuda_ipc_device_mem_element_t cuda_ipc_mem_element;
-};
-
-
 /* Base structure for all device memory elements */
-struct uct_device_mem_element {
+union uct_device_mem_element {
+    uct_ib_md_device_mem_element_t       ib_md_mem_element;
+    uct_cuda_ipc_md_device_mem_element_t cuda_ipc_md_mem_element;
 };
 
 

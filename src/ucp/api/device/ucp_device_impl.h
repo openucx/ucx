@@ -124,9 +124,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_prepare_send_remote(
         const uct_device_mem_element_t *&uct_elem,
         uct_device_completion_t *&comp)
 {
-    const size_t elem_size = ucs_offsetof(uct_device_remote_mem_list_elem_t,
-                                          uct_mem_element) +
-                             sizeof(uct_tl_device_mem_element_t);
+    const size_t elem_size = sizeof(uct_device_remote_mem_list_elem_t);
 
     UCP_DEVICE_MEM_LIST_PARAMS_CHECK(dst_mem_list_h, dst_mem_list_index);
 
@@ -153,9 +151,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_prepare_send(
         const uct_device_mem_element_t *&uct_elem,
         uct_device_completion_t *&comp)
 {
-    const size_t elem_size = ucs_offsetof(uct_device_local_mem_list_elem_t,
-                                          uct_mem_element) +
-                             sizeof(uct_tl_device_mem_element_t);
+    const size_t elem_size = sizeof(uct_device_local_mem_list_elem_t);
     ucs_status_t status;
 
     UCP_DEVICE_MEM_LIST_PARAMS_CHECK(src_mem_list_h, src_mem_list_index);
@@ -440,9 +436,7 @@ UCS_F_DEVICE ucs_status_t
 ucp_device_get_ptr(const ucp_device_remote_mem_list_handle_h mem_list_h,
                    size_t mem_list_index, void **addr_p)
 {
-    const size_t elem_size = ucs_offsetof(uct_device_remote_mem_list_elem_t,
-                                          uct_mem_element) +
-                             sizeof(uct_tl_device_mem_element_t);
+    const size_t elem_size = sizeof(uct_device_remote_mem_list_elem_t);
 
     UCP_DEVICE_MEM_LIST_PARAMS_CHECK(mem_list_h, mem_list_index);
 

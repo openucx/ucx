@@ -1294,19 +1294,18 @@ ucs_status_t uct_rkey_unpack_v2(uct_component_h component,
 
 
 /**
- * @ingroup UCT_RESOURCE
- * @brief Pack a memh and rkey into a single memory element structure.
+ * @ingroup UCT_MD
+ * @brief Pack a memh and rkey into a device memory element structure.
  *
- * @param [in] iface         Interface to pack the memh and rkey into.
- * @param [in] memh          Memory handle to pack.
- * @param [in] rkey          Remote key to pack.
- * @param [out] mem_element   Filled with the packed memh and rkey.
+ * @param [in]  md           Memory domain.
+ * @param [in]  memh         Memory handle to pack (can be NULL).
+ * @param [in]  rkey         Remote key to pack (can be UCT_INVALID_RKEY).
+ * @param [out] mem_elem     Filled with the packed memh and rkey.
  *
  * @return UCS_OK on success or error code in case of failure.
  */
-ucs_status_t uct_iface_mem_element_pack(uct_iface_h iface, uct_mem_h memh,
-                                        uct_rkey_t rkey,
-                                        uct_device_mem_element_t *mem_element);
+ucs_status_t uct_md_mem_elem_pack(uct_md_h md, uct_mem_h memh, uct_rkey_t rkey,
+                                  uct_device_mem_element_t *mem_elem);
 
 END_C_DECLS
 
