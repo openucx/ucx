@@ -590,7 +590,7 @@ static ucs_status_t ucp_device_local_mem_list_create_handle(
     size_t handle_size         = 0;
     const ucp_device_mem_list_elem_t *ucp_element;
     const ucp_worker_iface_t *wiface;
-    ucp_device_local_mem_list_handle_t handle;
+    ucp_device_local_mem_list_t handle;
     uct_device_local_mem_list_elem_t *uct_element;
     size_t i;
     ucs_status_t status;
@@ -600,9 +600,9 @@ static ucs_status_t ucp_device_local_mem_list_create_handle(
                                    UCT_MD_MEM_ACCESS_LOCAL_READ |
                                            UCT_MD_MEM_ACCESS_LOCAL_WRITE,
                                    mem_type, local_sys_dev,
-                                   "ucp_device_remote_mem_list_handle_t", mem);
+                                   "ucp_device_remote_mem_list_t", mem);
     if (status != UCS_OK) {
-        ucs_error("failed to allocate ucp_device_remote_mem_list_handle_t: %s",
+        ucs_error("failed to allocate ucp_device_remote_mem_list_t: %s",
                   ucs_status_string(status));
         return status;
     }
@@ -693,7 +693,7 @@ static ucs_status_t ucp_device_local_mem_list_params_check(
 
 ucs_status_t
 ucp_device_local_mem_list_create(const ucp_device_mem_list_params_t *params,
-                                 ucp_device_local_mem_list_handle_h *handle_p)
+                                 ucp_device_local_mem_list_h *mem_list_h)
 {
     const ucs_memory_type_t export_mem_type = UCS_MEMORY_TYPE_CUDA;
     ucs_status_t status;
@@ -721,7 +721,7 @@ ucp_device_local_mem_list_create(const ucp_device_mem_list_params_t *params,
     if (status != UCS_OK) {
         uct_mem_free(&mem);
     } else {
-        *handle_p = mem.address;
+        *mem_list_h = mem.address;
     }
 
     return status;
@@ -832,7 +832,7 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
     size_t handle_size         = 0;
     const ucp_device_mem_list_elem_t *ucp_element;
     ucp_context_h context;
-    ucp_device_remote_mem_list_handle_t handle;
+    ucp_device_remote_mem_list_t handle;
     uct_device_remote_mem_list_elem_t *uct_element;
     ucs_sys_device_t local_sys_dev;
     size_t i;
@@ -854,9 +854,9 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
                                    UCT_MD_MEM_ACCESS_LOCAL_READ |
                                            UCT_MD_MEM_ACCESS_LOCAL_WRITE,
                                    mem_type, local_sys_dev,
-                                   "ucp_device_remote_mem_list_handle_t", mem);
+                                   "ucp_device_remote_mem_list_t", mem);
     if (status != UCS_OK) {
-        ucs_error("failed to allocate ucp_device_remote_mem_list_handle_t: %s",
+        ucs_error("failed to allocate ucp_device_remote_mem_list_t: %s",
                   ucs_status_string(status));
         return status;
     }
@@ -952,7 +952,7 @@ static ucs_status_t ucp_device_remote_mem_list_params_check(
 
 ucs_status_t
 ucp_device_remote_mem_list_create(const ucp_device_mem_list_params_t *params,
-                                  ucp_device_remote_mem_list_handle_h *handle_p)
+                                  ucp_device_remote_mem_list_h *mem_list_h)
 {
     const ucs_memory_type_t export_mem_type = UCS_MEMORY_TYPE_CUDA;
     ucs_status_t status;
@@ -982,7 +982,7 @@ ucp_device_remote_mem_list_create(const ucp_device_mem_list_params_t *params,
     if (status != UCS_OK) {
         uct_mem_free(&mem);
     } else {
-        *handle_p = mem.address;
+        *mem_list_h = mem.address;
     }
 
     return status;
@@ -1060,29 +1060,29 @@ ucp_device_mem_list_create(ucp_ep_h ep,
     return status;
 }
 
-uint32_t ucp_device_get_mem_list_length(const void *handle)
+uint32_t ucp_device_get_mem_list_length(const void *mem_list_h)
 {
     khiter_t iter;
     uint32_t length;
 
-    ucs_assert(handle != NULL);
+    ucs_assert(mem_list_h != NULL);
 
     ucs_spin_lock(&ucp_device_handle_hash_lock);
     iter = kh_get(ucp_device_handle_allocs, &ucp_device_handle_hash,
-                  (void*)handle);
+                  (void*)mem_list_h);
     ucs_assertv_always((iter != kh_end(&ucp_device_handle_hash)), "handle=%p",
-                       handle);
+                       mem_list_h);
     length = kh_value(&ucp_device_handle_hash, iter).mem_list_length;
     ucs_spin_unlock(&ucp_device_handle_hash_lock);
 
     return length;
 }
 
-void ucp_device_mem_list_release(void *handle)
+void ucp_device_mem_list_release(void *mem_list_h)
 {
     uct_allocated_memory_t mem;
 
-    mem = ucp_device_mem_handle_hash_remove(handle);
+    mem = ucp_device_mem_handle_hash_remove(mem_list_h);
     uct_mem_free(&mem);
 }
 

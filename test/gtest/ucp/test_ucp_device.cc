@@ -60,18 +60,18 @@ protected:
 
         ucp_device_mem_list_handle_h handle() const;
 
-        ucp_device_local_mem_list_handle_h local_handle() const;
+        ucp_device_local_mem_list_h local_handle() const;
 
-        ucp_device_remote_mem_list_handle_h remote_handle() const;
+        ucp_device_remote_mem_list_h remote_handle() const;
 
         void dst_pattern_check(unsigned index, uint64_t seed) const;
 
     private:
         std::vector<std::unique_ptr<mapped_buffer>> m_src, m_dst;
-        std::vector<ucs::handle<ucp_rkey_h>>        m_rkeys;
-        ucp_device_mem_list_handle_h                m_mem_list_h;
-        ucp_device_local_mem_list_handle_h          m_local_mem_list_h;
-        ucp_device_remote_mem_list_handle_h         m_remote_mem_list_h;
+        std::vector<ucs::handle<ucp_rkey_h>> m_rkeys;
+        ucp_device_mem_list_handle_h m_mem_list_h;
+        ucp_device_local_mem_list_h m_local_mem_list_h;
+        ucp_device_remote_mem_list_h m_remote_mem_list_h;
     };
 
     size_t counter_size();
@@ -339,14 +339,12 @@ ucp_device_mem_list_handle_h test_ucp_device::mem_list::handle() const
     return m_mem_list_h;
 }
 
-ucp_device_local_mem_list_handle_h
-test_ucp_device::mem_list::local_handle() const
+ucp_device_local_mem_list_h test_ucp_device::mem_list::local_handle() const
 {
     return m_local_mem_list_h;
 }
 
-ucp_device_remote_mem_list_handle_h
-test_ucp_device::mem_list::remote_handle() const
+ucp_device_remote_mem_list_h test_ucp_device::mem_list::remote_handle() const
 {
     return m_remote_mem_list_h;
 }
@@ -485,7 +483,7 @@ UCS_TEST_P(test_ucp_device, create_fail)
 
 UCS_TEST_P(test_ucp_device, create_local_fail)
 {
-    ucp_device_local_mem_list_handle_h handle = nullptr;
+    ucp_device_local_mem_list_h handle = nullptr;
 
     scoped_log_handler wrap_err(wrap_errors_logger);
 
@@ -552,7 +550,7 @@ UCS_TEST_P(test_ucp_device, create_local_fail)
 
 UCS_TEST_P(test_ucp_device, create_remote_fail)
 {
-    ucp_device_remote_mem_list_handle_h handle = nullptr;
+    ucp_device_remote_mem_list_h handle = nullptr;
 
     scoped_log_handler wrap_err(wrap_errors_logger);
 
