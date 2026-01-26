@@ -1014,6 +1014,7 @@ static uint64_t ucp_str_array_search_in_ranges(const char **array,
     const char *p;
     char *endptr;
     unsigned i;
+    int n;
 
     result = 0;
     for (i = 0; i < array_len; ++i) {
@@ -1027,8 +1028,9 @@ static uint64_t ucp_str_array_search_in_ranges(const char **array,
             continue; /* Prefix does not match */
         }
 
-        if (sscanf(p, "[%lu-%lu]", &range_start, &range_end) != 2 ||
-            range_start > range_end) {
+        n = 0;
+        if (sscanf(p, "[%lu-%lu]%n", &range_start, &range_end, &n) != 2 ||
+            n == 0 || p[n] != '\0' || range_start > range_end) {
             ucs_warn("invalid device range: %s", array[i]);
             continue;
         }
