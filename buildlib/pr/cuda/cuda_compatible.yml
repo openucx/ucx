@@ -6,6 +6,8 @@ jobs:
       demands:
         - ucx_gpu_test -equals yes
     container: centos7_cuda11
+    workspace:
+      clean: all
     steps:
       - checkout: self
         clean: true

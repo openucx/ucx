@@ -1,0 +1,42 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+---
+job: ucx-coverity
+
+failFast: false
+timeout_minutes: 90
+
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  limits: "{memory: 8Gi, cpu: 8000m}"
+  requests: "{memory: 8Gi, cpu: 8000m}"
+
+volumes:
+  - {mountPath: /hpc/local, hostPath: /hpc/local}
+  - {mountPath: /auto/sw_tools/Commercial, hostPath: /auto/sw_tools/Commercial}
+
+runs_on_dockers:
+  - { name: "cov", url: "harbor.mellanox.com/ucx/coverity:mofed-5.1-2.3.8.0", arch: x86_64 }
+
+matrix:
+  axes:
+    arch:
+      - x86_64
+    type:
+      - release
+      - devel
+
+taskName: '${arch}/${name}/${type}'
+
+env:
+  # Set Azure built-ins expected by the script
+  BUILD_ID: "${BUILD_NUMBER}"
+
+steps:
+  - name: Coverity
+    parallel: false
+    timeout: 30
+    run: |
+      ./buildlib/tools/coverity.sh ${type} --clean --with-cuda --with-gdrcopy --with-java

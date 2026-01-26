@@ -112,6 +112,13 @@ static ucs_config_field_t ucm_global_config_table[] = {
    ucs_offsetof(ucm_global_config_t, bistro_force_far_jump),
    UCS_CONFIG_TYPE_BOOL},
 
+  {"BISTRO_GRACE_DURATION", "50ms",
+   "Grace period duration to wait for existing code flows to complete when\n"
+   "applying bistro patches. This allows threads currently executing patched\n"
+   "code to finish before the patch is applied.",
+   ucs_offsetof(ucm_global_config_t, bistro_grace_duration),
+   UCS_CONFIG_TYPE_TIME},
+
   {NULL}
 };
 

@@ -1,0 +1,29 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+---
+job: ucx-static-checks
+
+failFast: false
+timeout_minutes: 90
+
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  limits: "{memory: 8Gi, cpu: 8000m}"
+  requests: "{memory: 8Gi, cpu: 8000m}"
+
+runs_on_dockers:
+  - { name: "fedora33", url: "harbor.mellanox.com/ucx/fedora33:2", arch: x86_64 }
+
+taskName: '${arch}/${name}'
+
+env:
+  BUILD_ID: "${BUILD_NUMBER}"
+
+steps:
+  - name: Static Checks
+    parallel: false
+    timeout: 30
+    run: |
+      ./buildlib/tools/static_checks.sh

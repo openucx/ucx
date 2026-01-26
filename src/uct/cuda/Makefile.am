@@ -17,8 +17,7 @@ libuct_cuda_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
 libuct_cuda_ladir       = $(includedir)/uct/cuda
 
 nobase_dist_libuct_cuda_la_HEADERS = \
-	cuda_ipc/cuda_ipc.cuh \
-	cuda_ipc/cuda_ipc_device.h
+	cuda_ipc/cuda_ipc.cuh
 
 noinst_HEADERS = \
 	base/cuda_md.h \
