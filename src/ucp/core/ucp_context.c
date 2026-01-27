@@ -1673,8 +1673,8 @@ ucp_add_component_resources(ucp_context_h context, ucp_rsc_index_t cmpt_index,
     ucp_rsc_index_t i;
     const uct_md_attr_v2_t *md_attr;
     unsigned md_index;
-    uint64_t mem_type_mask;
-    uint64_t mem_type_bitmap;
+    uint64_t detect_mem_type_mask;
+    uint64_t alloc_mem_type_mask;
 
     /* List memory domain resources */
     uct_component_attr.field_mask   = UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES |
@@ -1688,7 +1688,8 @@ ucp_add_component_resources(ucp_context_h context, ucp_rsc_index_t cmpt_index,
     }
 
     /* Open all memory domains */
-    mem_type_mask = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    detect_mem_type_mask = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    alloc_mem_type_mask  = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     for (i = 0; i < tl_cmpt->attr.md_resource_count; ++i) {
         if (avail_mds == 0) {
             ucs_debug("only first %zu domains kept for component %s with %u "
@@ -1728,18 +1729,20 @@ ucp_add_component_resources(ucp_context_h context, ucp_rsc_index_t cmpt_index,
 
         avail_mds--;
 
-        /* List of memory type MDs */
-        mem_type_bitmap = md_attr->detect_mem_types;
-        if (~mem_type_mask & mem_type_bitmap) {
+        /* List of detect memory type MDs */
+        if (~detect_mem_type_mask & md_attr->detect_mem_types) {
             context->mem_type_detect_mds[context->num_mem_type_detect_mds] = md_index;
             ++context->num_mem_type_detect_mds;
-            mem_type_mask |= mem_type_bitmap;
         }
+
+        detect_mem_type_mask |= md_attr->detect_mem_types;
+        alloc_mem_type_mask  |= md_attr->alloc_mem_types;
 
         ++context->num_mds;
     }
 
-    context->mem_type_mask |= mem_type_mask;
+    context->supported_mem_type_mask |= (detect_mem_type_mask |
+                                         alloc_mem_type_mask);
 
     status = UCS_OK;
 out:
@@ -1918,7 +1921,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     context->num_mds                  = 0;
     context->tl_rscs                  = NULL;
     context->num_tls                  = 0;
-    context->mem_type_mask            = 0;
+    context->supported_mem_type_mask  = 0;
     context->num_mem_type_detect_mds  = 0;
     context->export_md_map            = 0;
 
@@ -2645,7 +2648,7 @@ ucs_status_t ucp_context_query(ucp_context_h context, ucp_context_attr_t *attr)
     }
 
     if (attr->field_mask & UCP_ATTR_FIELD_MEMORY_TYPES) {
-        attr->memory_types = context->mem_type_mask;
+        attr->memory_types = context->supported_mem_type_mask;
     }
 
     if (attr->field_mask & UCP_ATTR_FIELD_NAME) {
