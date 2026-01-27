@@ -10,6 +10,7 @@ jobs:
       clean: all
     steps:
       - checkout: self
+        submodules: true
         clean: true
         fetchDepth: 100
         retryCountOnTaskFailure: 5
@@ -42,6 +43,7 @@ jobs:
       clean: all
     steps:
       - checkout: self
+        submodules: true
         clean: true
         fetchDepth: 100
         retryCountOnTaskFailure: 5
@@ -78,6 +80,7 @@ jobs:
       clean: all
     steps:
       - checkout: self
+        submodules: true
         clean: true
         fetchDepth: 100
         retryCountOnTaskFailure: 5
@@ -105,6 +108,7 @@ jobs:
       clean: all
     steps:
       - checkout: self
+        submodules: true
         clean: true
         fetchDepth: 100
         retryCountOnTaskFailure: 5
@@ -126,6 +130,7 @@ jobs:
       clean: all
     steps:
       - checkout: self
+        submodules: true
         clean: true
         fetchDepth: 100
         retryCountOnTaskFailure: 5
