@@ -8,6 +8,8 @@
 #define UCS_INTERVAL_TREE_H_
 
 #include <ucs/type/status.h>
+#include <ucs/debug/assert.h>
+#include <ucs/sys/math.h>
 #include <stdint.h>
 #include <stddef.h>
 
@@ -35,7 +37,7 @@ typedef void (*ucs_interval_tree_free_node_func_t)(void *node, void *arg);
 /**
  * Interval tree node allocation/deallocation operations
  */
-typedef struct ucs_interval_tree_ops {
+typedef struct {
     ucs_interval_tree_alloc_node_func_t alloc_node; /* Node allocation callback */
     ucs_interval_tree_free_node_func_t  free_node;  /* Node deallocation callback */
     void                               *arg;        /* User-defined argument for
@@ -43,10 +45,18 @@ typedef struct ucs_interval_tree_ops {
 } ucs_interval_tree_ops_t;
 
 
-typedef struct ucs_interval_node ucs_interval_node_t;
+/**
+ * Interval tree node structure
+ */
+typedef struct ucs_interval_node {
+    struct ucs_interval_node *left;  /**< Left child node */
+    struct ucs_interval_node *right; /**< Right child node */
+    uint64_t                  start; /**< Start of interval */
+    uint64_t                  end;   /**< End of interval */
+} ucs_interval_node_t;
 
 
-typedef struct ucs_interval_tree {
+typedef struct {
     ucs_interval_node_t     *root;  /**< Root node of the tree */
     ucs_interval_tree_ops_t  ops;   /**< Memory management callbacks */
 } ucs_interval_tree_t;
@@ -57,14 +67,9 @@ typedef struct ucs_interval_tree {
  *
  * @param [in]  tree        Interval tree to initialize
  * @param [in]  ops         Memory management operations (alloc, free, arg)
- * @param [in]  root_start  Start of initial root interval 
- * @param [in]  root_end    End of initial root interval 
- *
- * @return UCS_OK on success, or error code on failure
  */
-ucs_status_t ucs_interval_tree_init(ucs_interval_tree_t *tree,
-                                    const ucs_interval_tree_ops_t *ops,
-                                    uint64_t root_start, uint64_t root_end);
+void ucs_interval_tree_init(ucs_interval_tree_t *tree,
+                            const ucs_interval_tree_ops_t *ops);
 
 
 /**
@@ -76,6 +81,20 @@ void ucs_interval_tree_cleanup(ucs_interval_tree_t *tree);
 
 
 /**
+ * Check if tree has only a root node (no children)
+ */
+static inline int
+ucs_interval_tree_is_single_node(const ucs_interval_tree_t *tree)
+{
+    return (tree->root != NULL) && (tree->root->left == NULL) &&
+           (tree->root->right == NULL);
+}
+
+
+ucs_status_t ucs_interval_tree_insert_slow(ucs_interval_tree_t *tree,
+                                           uint64_t start, uint64_t end);
+
+/**
  * Insert a new interval into the tree
  *
  * @param [in]  tree   Interval tree
@@ -84,20 +103,41 @@ void ucs_interval_tree_cleanup(ucs_interval_tree_t *tree);
  *
  * @return UCS_OK on success, or error code on failure
  */
-ucs_status_t ucs_interval_tree_insert(ucs_interval_tree_t *tree, uint64_t start,
-                                      uint64_t end);
+static inline ucs_status_t ucs_interval_tree_insert(ucs_interval_tree_t *tree,
+                                                    uint64_t start,
+                                                    uint64_t end)
+{
+    ucs_assert(start <= end);
 
+    /* Fast path: if tree has only root and new interval overlaps/touches it, extend it */
+    if (ucs_interval_tree_is_single_node(tree) && (start <= tree->root->end) &&
+        (tree->root->start <= end)) {
+        tree->root->start = ucs_min(tree->root->start, start);
+        tree->root->end   = ucs_max(tree->root->end, end);
+        return UCS_OK;
+    }
+
+    /* Slow path: handle complex merging or empty tree */
+    return ucs_interval_tree_insert_slow(tree, start, end);
+}
 
 /**
- * Check if a range is fully covered by intervals in the tree
+ * Check if tree contains exactly one interval with the given range
  *
  * @param [in]  tree   Interval tree
  * @param [in]  start  Start of range to check
  * @param [in]  end    End of range to check
  *
- * @return Non-zero if the range [start, end] is fully covered, 0 otherwise
+ * @return Non-zero if tree has exactly one interval [start, end], 0 otherwise
  */
-int ucs_interval_tree_range_covered(const ucs_interval_tree_t *tree,
-                                    uint64_t start, uint64_t end);
+static inline int
+ucs_interval_tree_is_single_range(const ucs_interval_tree_t *tree,
+                                  uint64_t start, uint64_t end)
+{
+    ucs_assert(start <= end);
+
+    return ucs_interval_tree_is_single_node(tree) &&
+           (tree->root->start == start) && (tree->root->end == end);
+}
 
 #endif
