@@ -73,6 +73,8 @@ enum {
 #endif
     UCT_IB_MEM_FLAG_GVA              = UCS_BIT(5), /**< The memory handle is a
                                                         GVA region */
+    UCT_IB_MEM_DIRECT_NIC            = UCS_BIT(6), /**< The memory handle was
+                                                        registered using Direct NIC */
 };
 
 enum {
