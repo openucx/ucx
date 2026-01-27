@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -1041,6 +1041,10 @@ UCS_TEST_SKIP_COND_P(test_ud, stale_dest_ep_id_update,
 
     /* Wait for m_e2's dest_ep_id to be updated from the stale value */
     wait_for_value(&ep(m_e2)->dest_ep_id, REMOTE_EP_ID, true,
+                   TEST_UD_LINGER_TIMEOUT_IN_SEC);
+
+    /* Wait for m_e1 to set dest_ep_id */
+    wait_for_value(&ep(m_e1, REMOTE_EP_ID)->dest_ep_id, ep(m_e2)->ep_id, true,
                    TEST_UD_LINGER_TIMEOUT_IN_SEC);
 
     EXPECT_EQ(REMOTE_EP_ID, ep(m_e1, REMOTE_EP_ID)->ep_id);
