@@ -57,10 +57,10 @@ protected:
     }
 
 private:
-    ucs_interval_tree_t     m_tree;
-    ucs_interval_tree_ops_t m_ops = {(ucs_interval_tree_alloc_node_func_t)malloc,
-                                     (ucs_interval_tree_free_node_func_t)free,
-                                     NULL};
+    ucs_interval_tree_t     m_tree = {NULL, {NULL}};
+    ucs_interval_tree_ops_t m_ops  = {(ucs_interval_tree_alloc_node_func_t)malloc,
+                                      (ucs_interval_tree_free_node_func_t)free,
+                                      NULL};
 };
 
 UCS_TEST_F(test_interval_tree, single_interval) {
