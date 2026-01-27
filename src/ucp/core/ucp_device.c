@@ -349,8 +349,8 @@ static ucs_status_t ucp_device_mem_list_create_handle(
 {
     const size_t uct_elem_size = sizeof(uct_device_mem_element_t);
     size_t handle_size         = 0;
+    ucs_status_t status        = UCS_OK;
     unsigned i, j, num_uct_eps;
-    ucs_status_t status;
     ucp_device_mem_list_handle_t *handle;
     uct_mem_h uct_memh;
     uct_rkey_t uct_rkey;
@@ -500,7 +500,6 @@ static ucs_status_t ucp_device_mem_list_create_handle(
     /* Migrate the constructed handle header to device memory */
     ucp_mem_type_unpack(ep->worker, mem->address, handle, handle_size,
                         mem_type);
-    return UCS_OK;
 
 err:
     ucs_free(handle);
@@ -766,7 +765,6 @@ static ucs_status_t ucp_device_remote_mem_list_element_pack(
                                 ep_config->key.lanes[lane].dst_md_index);
     uct_rkey   = ucp_rkey_get_tl_rkey(rkey, rkey_index);
     ucs_assert(uct_rkey != UCT_INVALID_RKEY);
-
 
     mem_element->device_ep = device_ep;
     mem_element->addr      = element->remote_addr;

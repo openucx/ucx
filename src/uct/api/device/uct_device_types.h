@@ -71,7 +71,7 @@ typedef struct uct_device_ep {
 typedef union uct_device_completion uct_device_completion_t;
 
 
-/* Base structure for all device memory elements */
+/* Union structure of all device memory elements types */
 union uct_device_mem_element {
     uct_ib_md_device_mem_element_t       ib_md_mem_element;
     uct_cuda_ipc_md_device_mem_element_t cuda_ipc_md_mem_element;
