@@ -29,7 +29,8 @@ if (params.githubData) {
         it.isBuilding() && it.number < currentBuild.number
       }.each { b ->
         def gd = b.getAction(hudson.model.ParametersAction)?.getParameters()?.find { it.name == 'githubData' }?.value
-        if (gd && slurper.parseText(gd)?.pr?.toString() == currentPrNumber) {
+        def otherPr = gd ? slurper.parseText(gd)?.issue?.number?.toString() : null
+        if (otherPr == currentPrNumber) {
           echo "Aborting build #${b.number} for same PR #${currentPrNumber}"
           b.doStop()
         }
