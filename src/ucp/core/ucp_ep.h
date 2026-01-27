@@ -974,4 +974,13 @@ void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index);
  */
 ucs_status_t ucp_ep_flush_mem_progress(uct_pending_req_t *self);
 
+/**
+ * @brief Get the failed lanes from the endpoint configuration.
+ *
+ * @param [in] key        Endpoint configuration key.
+ *
+ * @return Bitmask of failed lanes.
+ */
+ucp_lane_map_t ucp_ep_config_get_failed_lanes(const ucp_ep_config_key_t *key);
+
 #endif

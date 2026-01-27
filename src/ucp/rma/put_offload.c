@@ -330,6 +330,14 @@ ucp_proto_put_offload_zcopy_probe(const ucp_proto_init_params_t *init_params)
     ucp_proto_multi_probe(&params);
 }
 
+static ucs_status_t ucp_proto_put_offload_zcopy_reset(ucp_request_t *req)
+{
+    ucp_proto_request_zcopy_reset(req);
+    ucp_datatype_iter_rewind(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
+    req->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
+    return UCS_OK;
+}
+
 ucp_proto_t ucp_put_offload_zcopy_proto = {
     .name     = "put/offload/zcopy",
     .desc     = UCP_PROTO_ZCOPY_DESC,
@@ -338,5 +346,5 @@ ucp_proto_t ucp_put_offload_zcopy_proto = {
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_put_offload_zcopy_progress},
     .abort    = ucp_proto_request_zcopy_abort,
-    .reset    = ucp_proto_request_zcopy_reset
+    .reset    = ucp_proto_put_offload_zcopy_reset
 };

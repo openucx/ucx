@@ -5,6 +5,7 @@
 * See file LICENSE for terms.
 */
 
+#include <ucp/api/ucp_def.h>
 #ifdef HAVE_CONFIG_H
 #  include "config.h"
 #endif
@@ -594,7 +595,7 @@ ucs_status_t
 ucp_ep_config_err_mode_check_mismatch(ucp_ep_h ep,
                                       ucp_err_handling_mode_t err_mode)
 {
-    if (!ucp_ep_config_err_mode_eq(ep, err_mode)) {
+    if (!ucp_ep_err_mode_eq(ep, err_mode)) {
         ucs_error("ep %p: asymmetric endpoint configuration is not supported,"
                   " error handling level mismatch (expected: %d, got: %d)",
                   ep, ucp_ep_config(ep)->key.err_mode, err_mode);
@@ -1315,7 +1316,8 @@ static void ucp_ep_check_lanes(ucp_ep_h ep)
         }
     }
 
-    ucs_assert((num_failed_tl_ep == 0) ||
+    ucs_assert(ucp_ep_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_FAILOVER) ||
+               (num_failed_tl_ep == 0) ||
                (ucp_ep_num_lanes(ep) == num_failed_tl_ep));
     ucp_ep_refcount_field_assert(ep, refcount, ==, num_inprog);
 #endif
@@ -1325,10 +1327,11 @@ static void
 ucp_ep_extract_failed_lanes(ucp_ep_h ep, ucp_lane_map_t lanes, uct_ep_h stub_ep,
                             uct_ep_h *uct_eps)
 {
+    const ucp_lane_map_t all_failed_lanes = ucp_ep_get_failed_lanes(ep) | lanes;
     ucp_lane_index_t lane;
     uct_ep_h uct_ep;
 
-    if (lanes == UCS_MASK(ucp_ep_num_lanes(ep))) {
+    if (all_failed_lanes == UCS_MASK(ucp_ep_num_lanes(ep))) {
         ucp_ep_check_lanes(ep);
         ucp_ep_release_id(ep);
         ucp_ep_update_flags(ep, UCP_EP_FLAG_FAILED,
@@ -1414,9 +1417,9 @@ static void ucp_ep_failed_destroy(uct_ep_h ep)
     ucp_ep_release_discard_arg(arg);
 }
 
-static void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t discard_status)
+static void ucp_ep_discard_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
+                                 ucs_status_t discard_status)
 {
-    const ucp_lane_map_t lanes      = UCS_MASK(ucp_ep_num_lanes(ep));
     unsigned ep_flush_flags         = ucp_ep_config_err_handling_enabled(ep) ?
                                       UCT_FLUSH_FLAG_CANCEL :
                                       UCT_FLUSH_FLAG_LOCAL;
@@ -1502,7 +1505,7 @@ ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
     ++ucp_ep->worker->counters.ep_failures;
 
     /* The EP can be closed from last completion callback */
-    ucp_ep_discard_lanes(ucp_ep, status);
+    ucp_ep_discard_lanes(ucp_ep, UCS_MASK(ucp_ep_num_lanes(ucp_ep)), status);
     ucp_stream_ep_cleanup(ucp_ep, status);
 
     if (ucp_ep->flags & UCP_EP_FLAG_USED) {
@@ -1547,54 +1550,6 @@ ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
     }
 }
 
-ucs_status_t ucp_ep_set_lanes_failed(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
-                                     ucs_status_t status)
-{
-    ucs_status_t ret_status = UCS_OK;
-    ucs_status_t err_status;
-    ucp_lane_index_t lane;
-
-    if (lanes == 0) {
-        return ucp_ep_set_failed(ucp_ep, UCP_NULL_LANE, status);
-    }
-
-    ucs_for_each_bit(lane, lanes) {
-        err_status = ucp_ep_set_failed(ucp_ep, lane, status);
-        if ((err_status != UCS_OK) && (ret_status == UCS_OK)) {
-            ret_status = err_status;
-        }
-    }
-
-    return ret_status;
-}
-
-void ucp_ep_set_lanes_failed_schedule(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
-                                      ucs_status_t status)
-{
-    ucp_worker_h worker = ucp_ep->worker;
-    ucp_ep_set_lanes_failed_arg_t *set_ep_failed_arg;
-
-    UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(worker);
-
-    set_ep_failed_arg = ucs_malloc(sizeof(*set_ep_failed_arg),
-                                   "set_ep_failed_arg");
-    if (set_ep_failed_arg == NULL) {
-        ucs_error("failed to allocate set_ep_failed argument");
-        return;
-    }
-
-    set_ep_failed_arg->ucp_ep       = ucp_ep;
-    set_ep_failed_arg->lanes = lanes;
-    set_ep_failed_arg->status       = status;
-
-    ucs_callbackq_add_oneshot(&worker->uct->progress_q, ucp_ep,
-                              ucp_ep_set_lanes_failed_progress, set_ep_failed_arg);
-
-    /* If the worker supports the UCP_FEATURE_WAKEUP feature, signal the user so
-     * that he can wake-up on this event */
-    ucp_worker_signal_internal(worker);
-}
-
 static void
 ucp_ep_config_activate_worker_ifaces(ucp_worker_h worker,
                                      ucp_worker_cfg_index_t cfg_index)
@@ -1626,6 +1581,83 @@ ucp_ep_config_deactivate_worker_ifaces(ucp_worker_h worker,
                                          ep_config->proto_lane_map,
                                          ucp_worker_iface_unprogress_ep);
     }
+}
+
+static ucs_status_t
+ucp_ep_failover_reconfig(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes)
+{
+    /* new config is based on the original one + marked failed lanes */
+    ucp_ep_config_key_t cfg_key = ucp_ep_config(ucp_ep)->key;
+    unsigned ep_init_flags      = (ucp_ep->flags & UCP_EP_FLAG_INTERNAL) ?
+                                  UCP_EP_INIT_FLAG_INTERNAL : 0;
+    ucp_lane_index_t lane;
+    ucs_status_t status;
+
+    ucs_for_each_bit(lane, failed_lanes) {
+        cfg_key.lanes[lane].lane_types |= UCS_BIT(UCP_LANE_TYPE_FAILED);
+    }
+
+    ucp_ep_config_deactivate_worker_ifaces(ucp_ep->worker, ucp_ep->cfg_index);
+    status = ucp_worker_get_ep_config(ucp_ep->worker, &cfg_key, ep_init_flags,
+                                      &ucp_ep->cfg_index);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ucp_ep_config_activate_worker_ifaces(ucp_ep->worker, ucp_ep->cfg_index);
+    return UCS_OK;
+}
+
+ucs_status_t ucp_ep_set_lanes_failed(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
+                                     ucs_status_t status)
+{
+    UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(ucp_ep->worker);
+    ucs_assert(UCS_STATUS_IS_ERR(status));
+    ucs_assert(!ucs_async_is_from_async(&ucp_ep->worker->async));
+
+    if (!ucp_ep_err_mode_eq(ucp_ep, UCP_ERR_HANDLING_MODE_FAILOVER) ||
+        /* some unrecoverable error,
+        TODO refactor this to mark all lanes as failed */
+        (lanes == 0) ||
+         /* sockaddr is not supported for failover mode */
+        ucp_ep_has_cm_lane(ucp_ep)) {
+        return ucp_ep_set_failed(ucp_ep,
+            (lanes == UCS_BIT(ucp_ep_get_cm_lane(ucp_ep)) ?
+            ucp_ep_get_cm_lane(ucp_ep) : UCP_NULL_LANE), status);
+    }
+
+    ucs_debug("ep %p: set_lanes_failed status %s on lanes 0x%lx", ucp_ep,
+              ucs_status_string(status), lanes);
+
+    ucp_ep_discard_lanes(ucp_ep, lanes, status);
+    return ucp_ep_failover_reconfig(ucp_ep, lanes);
+}
+
+void ucp_ep_set_lanes_failed_schedule(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
+                                      ucs_status_t status)
+{
+    ucp_worker_h worker = ucp_ep->worker;
+    ucp_ep_set_lanes_failed_arg_t *set_ep_failed_arg;
+
+    UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(worker);
+
+    set_ep_failed_arg = ucs_malloc(sizeof(*set_ep_failed_arg),
+                                   "set_ep_failed_arg");
+    if (set_ep_failed_arg == NULL) {
+        ucs_error("failed to allocate set_ep_failed argument");
+        return;
+    }
+
+    set_ep_failed_arg->ucp_ep       = ucp_ep;
+    set_ep_failed_arg->lanes = lanes;
+    set_ep_failed_arg->status       = status;
+
+    ucs_callbackq_add_oneshot(&worker->uct->progress_q, ucp_ep,
+                              ucp_ep_set_lanes_failed_progress, set_ep_failed_arg);
+
+    /* If the worker supports the UCP_FEATURE_WAKEUP feature, signal the user so
+     * that he can wake-up on this event */
+    ucp_worker_signal_internal(worker);
 }
 
 void ucp_ep_cleanup_lanes(ucp_ep_h ep)
@@ -1795,7 +1827,8 @@ ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
     ucp_ep_update_flags(ep, UCP_EP_FLAG_CLOSED, 0);
 
     if (ucp_request_param_flags(param) & UCP_EP_CLOSE_FLAG_FORCE) {
-        ucp_ep_discard_lanes(ep, UCS_ERR_CANCELED);
+        ucp_ep_discard_lanes(ep, UCS_MASK(ucp_ep_num_lanes(ep)),
+                             UCS_ERR_CANCELED);
         ucp_ep_disconnected(ep, 1);
     } else {
         request = ucp_ep_flush_internal(ep, 0, param, NULL,
@@ -4005,4 +4038,18 @@ unsigned ucp_ep_err_mode_init_flags(ucp_err_handling_mode_t err_mode)
     default:
         ucs_fatal("invalid error handling mode: %d", err_mode);
     }
+}
+
+ucp_lane_map_t ucp_ep_config_get_failed_lanes(const ucp_ep_config_key_t *key)
+{
+    ucp_lane_map_t failed_lanes = 0;
+    ucp_lane_index_t lane;
+
+    for (lane = 0; lane < key->num_lanes; ++lane) {
+        if (key->lanes[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_FAILED)) {
+            failed_lanes |= UCS_BIT(lane);
+        }
+    }
+
+    return failed_lanes;
 }
