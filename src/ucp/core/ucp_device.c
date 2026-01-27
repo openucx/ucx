@@ -553,7 +553,6 @@ static ucs_status_t ucp_device_local_mem_list_element_pack(
     resource = &worker->context->tl_rscs[wiface->rsc_index];
     md_index = resource->md_index;
     ucp_md   = &worker->context->tl_mds[md_index];
-
     memh = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, element, memh, MEMH,
                            NULL);
     uct_memh = memh->uct[md_index];
@@ -561,11 +560,13 @@ static ucs_status_t ucp_device_local_mem_list_element_pack(
         ucs_error("invalid memh for md_index=%u", md_index);
         return UCS_ERR_INVALID_PARAM;
     }
+
     status = uct_md_mem_elem_pack(ucp_md->md, uct_memh, UCT_INVALID_RKEY,
                                   &mem_element->uct_mem_element);
     if (status != UCS_OK) {
         ucs_error("failed to pack local mem element for memh=%p", memh);
     }
+
     return status;
 }
 
