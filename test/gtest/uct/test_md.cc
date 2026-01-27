@@ -69,10 +69,9 @@ ucs_status_t test_md::reg_mem(unsigned flags, void *address, size_t length,
     /* Register memory respecting MD reg_alignment */
     ucs_align_ptr_range(&address, &length, md_attr().reg_alignment);
 
-    uct_md_mem_reg_params_t reg_params;
-
-    reg_params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS;
-    reg_params.flags      = flags;
+    uct_md_mem_reg_params_t reg_params = {0};
+    reg_params.field_mask              = UCT_MD_MEM_REG_FIELD_FLAGS;
+    reg_params.flags                   = flags;
 
     return uct_md_mem_reg_v2(md(), address, length, &reg_params, memh_p);
 }
@@ -134,13 +133,7 @@ void test_md::test_reg_mem(unsigned access_mask,
         status            = uct_md_mem_dereg_v2(md(), &params);
         ASSERT_UCS_STATUS_EQ(UCS_ERR_INVALID_PARAM, status);
 
-        std::vector<uint8_t> rkey(md_attr().rkey_packed_size);
-        uct_md_mkey_pack_params_t pack_params;
-        pack_params.field_mask = UCT_MD_MKEY_PACK_FIELD_FLAGS;
-        pack_params.flags      = invalidate_flag;
-        status = uct_md_mkey_pack_v2(md(), memh, ptr, size, &pack_params,
-                                     rkey.data());
-        EXPECT_UCS_OK(status);
+        mkey_pack(memh, invalidate_flag, ptr, size);
 
         status = uct_md_mem_dereg_v2(md(), &params);
     }
@@ -996,13 +989,7 @@ UCS_TEST_SKIP_COND_P(test_md, exported_mkey,
     status = reg_mem(UCT_MD_MEM_ACCESS_ALL, address, size, &export_memh);
     ASSERT_UCS_OK(status);
 
-    std::vector<uint8_t> mkey_buffer(md_attr().exported_mkey_packed_size);
-    uct_md_mkey_pack_params_t pack_params;
-    pack_params.field_mask = UCT_MD_MKEY_PACK_FIELD_FLAGS;
-    pack_params.flags      = UCT_MD_MKEY_PACK_FLAG_EXPORT;
-    status = uct_md_mkey_pack_v2(md(), export_memh, address, size, &pack_params,
-                                 mkey_buffer.data());
-    ASSERT_UCS_OK(status);
+    mkey_pack(export_memh, UCT_MD_MKEY_PACK_FLAG_EXPORT, address, size);
 
     uct_md_mem_dereg_params_t dereg_params;
     dereg_params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;

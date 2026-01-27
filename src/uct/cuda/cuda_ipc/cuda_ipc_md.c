@@ -416,6 +416,8 @@ uct_cuda_ipc_mem_reg(uct_md_h md, void *address, size_t length,
 {
     uct_cuda_ipc_memh_t *memh;
 
+    UCT_CHECK_NOT_DERIVED_MEMH(params, "cuda_ipc_md");
+
     memh = ucs_malloc(sizeof(*memh), "uct_cuda_ipc_memh_t");
     if (NULL == memh) {
         ucs_error("failed to allocate memory for uct_cuda_ipc_memh_t");
