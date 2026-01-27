@@ -376,15 +376,15 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
  * counter offset. The flags parameter can be used to modify the behavior of the
  * routine.
  *
- * @tparam      level              Level of cooperation of the transfer.
- * @param [in]  inc_value          Value used to increment the remote address.
- * @param [in]  dst_mem_list_h     Remote memory descriptor list handle to use.
- * @param [in]  dst_mem_list_index Index in descriptor list pointing to the memory
+ * @tparam      level          Level of cooperation of the transfer.
+ * @param [in]  inc_value      Value used to increment the remote address.
+ * @param [in]  mem_list_h     Remote memory descriptor list handle to use.
+ * @param [in]  mem_list_index Index in descriptor list pointing to the memory
  *                                 remote key to use for the increment operation.
- * @param [in]  remote_offset      Remote offset to perform the increment to.
- * @param [in]  channel_id         Channel ID to use for the transfer.
- * @param [in]  flags              Flags usable to modify the function behavior.
- * @param [out] req                Request populated by the call.
+ * @param [in]  offset         Remote offset to perform the increment to.
+ * @param [in]  channel_id     Channel ID to use for the transfer.
+ * @param [in]  flags          Flags usable to modify the function behavior.
+ * @param [out] req            Request populated by the call.
  *
  * @return UCS_INPROGRESS     - Operation successfully posted. If @a req is not
  *                              NULL, use @ref ucp_device_progress_req to check
@@ -394,9 +394,8 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
  */
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_THREAD>
 UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
-        const uint64_t inc_value,
-        const ucp_device_remote_mem_list_h dst_mem_list_h,
-        unsigned dst_mem_list_index, size_t remote_offset, unsigned channel_id,
+        const uint64_t inc_value, const ucp_device_remote_mem_list_h mem_list_h,
+        unsigned mem_list_index, size_t offset, unsigned channel_id,
         uint64_t flags, ucp_device_request_t *req)
 {
     uint64_t remote_address;
@@ -405,7 +404,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
     uct_device_ep_t *device_ep;
     ucs_status_t status;
 
-    status = ucp_device_prepare_send_remote(dst_mem_list_h, dst_mem_list_index,
+    status = ucp_device_prepare_send_remote(mem_list_h, mem_list_index,
                                             remote_address, req, device_ep,
                                             uct_elem, comp);
     if (status != UCS_OK) {
@@ -414,8 +413,8 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
 
     return UCP_DEVICE_SEND_BLOCKING(level, uct_device_ep_atomic_add, device_ep,
                                     req, uct_elem, inc_value,
-                                    remote_address + remote_offset, channel_id,
-                                    flags, comp);
+                                    remote_address + offset, channel_id, flags,
+                                    comp);
 }
 
 
