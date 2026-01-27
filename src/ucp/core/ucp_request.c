@@ -403,7 +403,7 @@ int ucp_request_memh_invalidate(ucp_request_t *req, ucs_status_t status)
     ucp_mem_h *memh_p;
     ucp_md_map_t invalidate_map;
 
-    if (ucp_ep_config_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_NONE) ||
+    if (ucp_ep_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_NONE) ||
         !(req->flags & UCP_REQUEST_FLAG_RKEY_INUSE)) {
         return 0;
     }
