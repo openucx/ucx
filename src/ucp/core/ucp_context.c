@@ -156,6 +156,13 @@ const char *ucp_extra_op_attr_flags_names[] = {
 static UCS_CONFIG_DEFINE_ARRAY(memunit_sizes, sizeof(size_t),
                                UCS_CONFIG_TYPE_MEMUNITS);
 
+static const char *ucp_round_robin_modes[] = {
+    [UCP_ROUND_ROBIN_MODE_DISABLED] = "disabled",
+    [UCP_ROUND_ROBIN_MODE_ALWAYS]   = "always",
+    [UCP_ROUND_ROBIN_MODE_FLUSH]    = "flush",
+    NULL
+};
+
 static ucs_config_field_t ucp_context_config_table[] = {
   {"SELECT_DISTANCE_MD", "cuda_cpy",
    "MD whose distance is queried when evaluating transport selection score",
@@ -282,6 +289,15 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "          the DEVICE atomic mode, the DEVICE mode is selected.\n"
    "          Otherwise the CPU mode is selected.",
    ucs_offsetof(ucp_context_config_t, atomic_mode), UCS_CONFIG_TYPE_ENUM(ucp_atomic_modes)},
+
+  {"LANE_ROUND_ROBIN", "always",
+   "Round-robin mode for multi-lane protocols.\n"
+   " disabled - No round-robin, always use first lane.\n"
+   " always   - Use round-robin without resetting on flush (default).\n"
+   " flush    - Use round-robin and reset to first lane on flush.\n"
+   "Resetting on flush ensures deterministic lane selection after flush operations.",
+   ucs_offsetof(ucp_context_config_t, round_robin_mode),
+   UCS_CONFIG_TYPE_ENUM(ucp_round_robin_modes)},
 
   {"ADDRESS_DEBUG_INFO",
 #if ENABLE_DEBUG_DATA
