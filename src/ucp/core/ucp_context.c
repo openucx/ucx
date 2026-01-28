@@ -72,6 +72,9 @@
 /* Factor to multiply with in order to get infinite latency */
 #define UCP_CONTEXT_INFINITE_LAT_FACTOR 100
 
+#define UCP_MLX_PREFIX       "mlx"
+#define UCP_MLX_DEFAULT_PORT "1"
+
 typedef enum ucp_transports_list_search_result {
     UCP_TRANSPORTS_LIST_SEARCH_RESULT_PRIMARY             = UCS_BIT(0),
     UCP_TRANSPORTS_LIST_SEARCH_RESULT_AUX_IN_MAIN         = UCS_BIT(1),
@@ -993,6 +996,52 @@ static uint64_t ucp_str_array_search(const char **array, unsigned array_len,
     return result;
 }
 
+/* Search str in the ranges that are specified in the array. 
+ * Ranges are a prefix followed by a [range_start-range_end] suffix. (ex: mlx5_[0-2])
+ * @return bitmap of indexes in which the string appears in the array.
+ */
+static uint64_t ucp_str_array_search_in_ranges(const char **array,
+                                               unsigned array_len,
+                                               const char *str)
+{
+    unsigned long range_start, range_end, str_id;
+    size_t prefix_len;
+    uint64_t result;
+    const char *p;
+    char *endptr;
+    unsigned i;
+    int n;
+
+    result = 0;
+    for (i = 0; i < array_len; ++i) {
+        p = strchr(array[i], '[');
+        if (p == NULL) {
+            continue; /* Not a range */
+        }
+
+        prefix_len = (size_t)(p - array[i]);
+        if (strncmp(array[i], str, prefix_len)) {
+            continue; /* Prefix does not match */
+        }
+
+        n = 0;
+        if ((sscanf(p, "[%lu-%lu]%n", &range_start, &range_end, &n) != 2) ||
+            (n == 0) || (p[n] != '\0') || (range_start > range_end)) {
+            continue; /* Invalid range */
+        }
+
+        str_id = strtoul(str + prefix_len, &endptr, 10);
+        if ((endptr == str + prefix_len) || (*endptr != '\0') ||
+            (str_id < range_start) || (str_id > range_end)) {
+            continue; /* Mismatch */
+        }
+
+        result |= UCS_BIT(i);
+    }
+
+    return result;
+}
+
 static unsigned ucp_tl_alias_count(ucp_tl_alias_t *alias)
 {
     unsigned count;
@@ -1031,12 +1080,32 @@ ucp_config_is_tl_name_present(const ucs_config_names_array_t *tl_array,
                                       tl_cfg_mask));
 }
 
+/* Return a pointer to the suffix of the device name, 
+ * or the end of the string if no suffix is found. */
+static const char *ucp_get_dev_name_suffix(const char *dev_name)
+{
+    const char *colon = strchr(dev_name, ':');
+    if (colon == NULL) {
+        return dev_name + strlen(dev_name);
+    }
+    return colon + 1;
+}
+
+static inline int
+ucp_is_dev_mlx_default_port(const char *dev_name, const char *dev_name_suffix)
+{
+    return (!strncmp(dev_name, UCP_MLX_PREFIX, strlen(UCP_MLX_PREFIX))) &&
+           (!strcmp(dev_name_suffix, UCP_MLX_DEFAULT_PORT));
+}
+
 static int ucp_is_resource_in_device_list(const uct_tl_resource_desc_t *resource,
                                           const ucs_config_names_array_t *devices,
                                           uint64_t *dev_cfg_mask,
                                           uct_device_type_t dev_type)
 {
+    char dev_name_base[UCT_DEVICE_NAME_MAX];
     uint64_t mask, exclusive_mask;
+    const char *dev_name_suffix;
 
     /* go over the device list from the user and check (against the available resources)
      * which can be satisfied */
@@ -1044,6 +1113,26 @@ static int ucp_is_resource_in_device_list(const uct_tl_resource_desc_t *resource
     mask = ucp_str_array_search((const char**)devices[dev_type].names,
                                 devices[dev_type].count, resource->dev_name,
                                 NULL);
+
+    if (dev_type == UCT_DEVICE_TYPE_NET) {
+        dev_name_suffix = ucp_get_dev_name_suffix(resource->dev_name);
+
+        if (ucp_is_dev_mlx_default_port(resource->dev_name, dev_name_suffix)) {
+            ucs_strncpy_zero(dev_name_base, resource->dev_name,
+                             (size_t)(dev_name_suffix - resource->dev_name));
+
+            /* search for the base name (ex: mlx5_0) */
+            mask |= ucp_str_array_search((const char**)devices[dev_type].names,
+                                         devices[dev_type].count, dev_name_base,
+                                         NULL);
+
+            /* search in ranges (ex: mlx5_[0-2]) */
+            mask |= ucp_str_array_search_in_ranges(
+                    (const char**)devices[dev_type].names,
+                    devices[dev_type].count, dev_name_base);
+        }
+    }
+
     if (!mask) {
         /* if the user's list is 'all', use all the available resources */
         mask = ucp_str_array_search((const char**)devices[dev_type].names,
@@ -1212,7 +1301,6 @@ static int ucp_is_resource_enabled(const uct_tl_resource_desc_t *resource,
     device_enabled = ucp_is_resource_in_device_list(
             resource, config->devices, &dev_cfg_masks[resource->dev_type],
             resource->dev_type);
-
 
     /* Find the enabled UCTs */
     *rsc_flags = 0;
