@@ -96,14 +96,11 @@ void ucs_fatal_error_format(const char *file, unsigned line,
  * @param [in] file        Source file name
  * @param [in] line        Source line number
  * @param [in] function    Calling function name
- * @param [in] message_buf Error message buffer. Multi-line message is
- *                         supported.
- *
- * IMPORTANT NOTE: message_buf could be overridden by this function
+ * @param [in] message     Error message. Multi-line message is supported.
  */
 void ucs_fatal_error_message(const char *file, unsigned line,
-                             const char *function, char *message_buf)
-    UCS_F_NORETURN;
+                             const char *function,
+                             const char *message) UCS_F_NORETURN;
 
 
 END_C_DECLS
