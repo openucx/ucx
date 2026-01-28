@@ -408,7 +408,6 @@ typedef struct ucp_worker {
         ucs_time_t                   last_round;
     } usage_tracker;
 
-    /* Dynamic flow callback ID */
     uct_worker_cb_id_t               dflow_cb_id;
 
     /* Configuration epoch (generation counter).
