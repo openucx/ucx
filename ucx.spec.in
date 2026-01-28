@@ -394,6 +394,9 @@ Provides Gemini/Aries transport for UCX.
 %if %{with xpmem}
 %package xpmem
 Requires: %{name}%{?_isa} = %{version}-%{release}
+Provides: ucx-knem = %{version}-%{release}
+Conflicts: ucx-knem < %{version}-%{release}
+Obsoletes: ucx-knem < %{version}-%{release}
 Summary: UCX XPMEM transport support.
 Group: System Environment/Libraries
 
