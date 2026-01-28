@@ -102,7 +102,8 @@ noinst_HEADERS = \
 	datastruct/bitmap.h \
 	datastruct/dynamic_bitmap.h \
 	datastruct/frag_list.h \
-        datastruct/lru.h \
+	datastruct/interval_tree.h \
+    datastruct/lru.h \
 	datastruct/mpmc.h \
 	datastruct/mpool.inl \
 	datastruct/mpool_set.inl \
@@ -173,6 +174,7 @@ libucs_la_SOURCES = \
 	datastruct/bitmap.c \
 	datastruct/callbackq.c \
 	datastruct/frag_list.c \
+	datastruct/interval_tree.c \
 	datastruct/lru.c \
 	datastruct/mpmc.c \
 	datastruct/mpool.c \
