@@ -206,9 +206,7 @@ UCS_TEST_P(test_ucp_net_devices_config, base_name_selects_default_port)
     }
 
     std::set<std::string> base_names = get_mlx5_base_names(mlx5_devices);
-    if (base_names.empty()) {
-        UCS_TEST_SKIP_R("No mlx5 devices with port suffix found");
-    }
+    ASSERT_FALSE(base_names.empty());
 
     /* Pick the first base name for testing */
     std::string test_base_name = *base_names.begin();
@@ -222,8 +220,9 @@ UCS_TEST_P(test_ucp_net_devices_config, base_name_selects_default_port)
     /* Verify that devices matching the base name were selected */
     std::set<std::string> selected_devices = get_mlx5_device_names(*e);
     size_t count = count_mlx5_resources_with_prefix(selected_devices, test_base_name);
-    EXPECT_GT(count, 0) << "Expected at least one device with base name '"
-                        << test_base_name << "' to be selected";
+    EXPECT_EQ(count, 1) << "Expected exactly one device with base name '"
+                        << test_base_name << "' to be selected, found: "
+                        << testing::PrintToString(selected_devices);
 
     std::string expected_dev = test_base_name + ":1";
     EXPECT_TRUE(has_device(selected_devices, expected_dev))
@@ -339,6 +338,42 @@ UCS_TEST_P(test_ucp_net_devices_config, duplicate_device_warning)
 
     EXPECT_TRUE(found_warning) << "Expected warning about duplicate device '"
                                << test_base_name << "'";
+}
+
+/*
+ * Test that a range not covering all devices only selects matching devices.
+ * E.g., "mlx5_[1-2]" should match mlx5_1 and mlx5_2, but not mlx5_0.
+ */
+UCS_TEST_P(test_ucp_net_devices_config, partial_range_selection)
+{
+    entity *e = create_entity();
+
+    std::set<std::string> mlx5_devices = get_mlx5_device_names(*e);
+    if (mlx5_devices.empty()) {
+        UCS_TEST_SKIP_R("No mlx5 network device available");
+    }
+
+    std::set<std::string> base_names = get_mlx5_base_names(mlx5_devices);
+
+    if (!has_device(base_names, "mlx5_0") ||
+        !has_device(base_names, "mlx5_1") ||
+        !has_device(base_names, "mlx5_2")) {
+        UCS_TEST_SKIP_R(
+                "Need mlx5_0, mlx5_1, and mlx5_2 devices for this test");
+    }
+
+    m_entities.clear();
+
+    modify_config("NET_DEVICES", "mlx5_[1-2]");
+    e = create_entity();
+
+    std::set<std::string> selected_devices = get_mlx5_device_names(*e);
+
+    std::set<std::string> selected_base_names = get_mlx5_base_names(
+            selected_devices);
+
+    std::set<std::string> expected_base_names = {"mlx5_1", "mlx5_2"};
+    EXPECT_EQ(selected_base_names, expected_base_names);
 }
 
 /*

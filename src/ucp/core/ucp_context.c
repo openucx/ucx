@@ -75,10 +75,6 @@
 #define UCP_MLX_PREFIX       "mlx"
 #define UCP_MLX_DEFAULT_PORT "1"
 
-#define UCP_IS_RESOURCE_MLX_DEFAULT_PORT(_dev_name, _dev_name_suffix) \
-    ((!strncmp(_dev_name, UCP_MLX_PREFIX, strlen(UCP_MLX_PREFIX))) && \
-     (!strcmp(_dev_name_suffix, UCP_MLX_DEFAULT_PORT)))
-
 typedef enum ucp_transports_list_search_result {
     UCP_TRANSPORTS_LIST_SEARCH_RESULT_PRIMARY             = UCS_BIT(0),
     UCP_TRANSPORTS_LIST_SEARCH_RESULT_AUX_IN_MAIN         = UCS_BIT(1),
@@ -1029,8 +1025,8 @@ static uint64_t ucp_str_array_search_in_ranges(const char **array,
         }
 
         n = 0;
-        if (sscanf(p, "[%lu-%lu]%n", &range_start, &range_end, &n) != 2 ||
-            n == 0 || p[n] != '\0' || range_start > range_end) {
+        if ((sscanf(p, "[%lu-%lu]%n", &range_start, &range_end, &n) != 2) ||
+            (n == 0) || (p[n] != '\0') || (range_start > range_end)) {
             continue; /* Invalid range */
         }
 
@@ -1095,6 +1091,13 @@ static const char *ucp_get_dev_name_suffix(const char *dev_name)
     return colon + 1;
 }
 
+static inline int
+ucp_is_dev_mlx_default_port(const char *dev_name, const char *dev_name_suffix)
+{
+    return (!strncmp(dev_name, UCP_MLX_PREFIX, strlen(UCP_MLX_PREFIX))) &&
+           (!strcmp(dev_name_suffix, UCP_MLX_DEFAULT_PORT));
+}
+
 static int ucp_is_resource_in_device_list(const uct_tl_resource_desc_t *resource,
                                           const ucs_config_names_array_t *devices,
                                           uint64_t *dev_cfg_mask,
@@ -1113,10 +1116,8 @@ static int ucp_is_resource_in_device_list(const uct_tl_resource_desc_t *resource
 
     if (dev_type == UCT_DEVICE_TYPE_NET) {
         dev_name_suffix = ucp_get_dev_name_suffix(resource->dev_name);
-        ucs_assert(dev_name_suffix > resource->dev_name &&
-                   dev_name_suffix <= resource->dev_name + strlen(resource->dev_name));
 
-        if (UCP_IS_RESOURCE_MLX_DEFAULT_PORT(resource->dev_name, dev_name_suffix)) {
+        if (ucp_is_dev_mlx_default_port(resource->dev_name, dev_name_suffix)) {
             ucs_strncpy_zero(dev_name_base, resource->dev_name,
                              (size_t)(dev_name_suffix - resource->dev_name));
 
@@ -1132,8 +1133,8 @@ static int ucp_is_resource_in_device_list(const uct_tl_resource_desc_t *resource
         }
     }
 
-    /* if the user's list is 'all', use all the available resources */
     if (!mask) {
+        /* if the user's list is 'all', use all the available resources */
         mask = ucp_str_array_search((const char**)devices[dev_type].names,
                                     devices[dev_type].count, UCP_RSC_CONFIG_ALL,
                                     NULL);
