@@ -56,9 +56,9 @@ typedef struct {
  * Argument for the setting failed lanes of UCP endpoint
  */
 typedef struct {
-    ucp_ep_h       ucp_ep;       /**< UCP endpoint which has failed lanes. */
-    ucp_lane_map_t failed_lanes; /**< Bitmask of failed lanes. */
-    ucs_status_t   status;       /**< Failure status for failed lanes. */
+    ucp_ep_h       ucp_ep; /**< UCP endpoint which has failed lanes. */
+    ucp_lane_map_t lanes;  /**< Bitmask of failed lanes. */
+    ucs_status_t   status; /**< Failure status for failed lanes. */
 } ucp_ep_set_lanes_failed_arg_t;
 
 
@@ -447,8 +447,7 @@ static unsigned ucp_ep_set_lanes_failed_progress(void *arg)
     ucp_worker_h worker                       = ucp_ep->worker;
 
     UCS_ASYNC_BLOCK(&worker->async);
-    ucp_ep_set_lanes_failed(ucp_ep, failed_arg->failed_lanes,
-                            failed_arg->status);
+    ucp_ep_set_lanes_failed(ucp_ep, failed_arg->lanes, failed_arg->status);
     UCS_ASYNC_UNBLOCK(&worker->async);
 
     ucs_free(failed_arg);
@@ -1323,21 +1322,21 @@ static void ucp_ep_check_lanes(ucp_ep_h ep)
 }
 
 static void
-ucp_ep_extract_failed_lanes(ucp_ep_h ep, ucp_lane_map_t failed_lanes,
-                            uct_ep_h stub_ep, uct_ep_h *uct_eps)
+ucp_ep_extract_failed_lanes(ucp_ep_h ep, ucp_lane_map_t lanes, uct_ep_h stub_ep,
+                            uct_ep_h *uct_eps)
 {
     ucp_lane_index_t lane;
     uct_ep_h uct_ep;
 
-    if (failed_lanes == UCS_MASK(ucp_ep_num_lanes(ep))) {
+    if (lanes == UCS_MASK(ucp_ep_num_lanes(ep))) {
         ucp_ep_check_lanes(ep);
         ucp_ep_release_id(ep);
         ucp_ep_update_flags(ep, UCP_EP_FLAG_FAILED,
                             UCP_EP_FLAG_LOCAL_CONNECTED);
     }
 
-    ucs_for_each_bit(lane, failed_lanes) {
-        uct_ep = ucp_ep_get_lane(ep, lane);
+    ucs_for_each_bit(lane, lanes) {
+        uct_ep        = ucp_ep_get_lane(ep, lane);
         uct_eps[lane] = uct_ep;
 
         /* Set UCT EP to failed UCT EP to make sure if UCP EP won't be destroyed
@@ -1417,7 +1416,7 @@ static void ucp_ep_failed_destroy(uct_ep_h ep)
 
 static void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t discard_status)
 {
-    ucp_lane_map_t failed_lanes     = UCS_MASK(ucp_ep_num_lanes(ep));
+    const ucp_lane_map_t lanes      = UCS_MASK(ucp_ep_num_lanes(ep));
     unsigned ep_flush_flags         = ucp_ep_config_err_handling_enabled(ep) ?
                                       UCT_FLUSH_FLAG_CANCEL :
                                       UCT_FLUSH_FLAG_LOCAL;
@@ -1448,12 +1447,11 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t discard_status)
     discard_arg->ucp_ep          = ep;
     discard_arg->status          = discard_status;
     discard_arg->discard_counter = 1;
-    discard_arg->destroy_counter = ucs_popcount(failed_lanes);
+    discard_arg->destroy_counter = ucs_popcount(lanes);
 
     ucs_debug("ep %p: discarding lanes", ep);
-    ucp_ep_extract_failed_lanes(ep, failed_lanes,
-                                &discard_arg->failed_ep, uct_eps);
-    ucs_for_each_bit(lane, failed_lanes) {
+    ucp_ep_extract_failed_lanes(ep, lanes, &discard_arg->failed_ep, uct_eps);
+    ucs_for_each_bit(lane, lanes) {
         uct_ep = uct_eps[lane];
         if (uct_ep == NULL) {
             continue;
@@ -1549,19 +1547,18 @@ ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
     }
 }
 
-ucs_status_t
-ucp_ep_set_lanes_failed(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,
-                        ucs_status_t status)
+ucs_status_t ucp_ep_set_lanes_failed(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
+                                     ucs_status_t status)
 {
     ucs_status_t ret_status = UCS_OK;
     ucs_status_t err_status;
     ucp_lane_index_t lane;
 
-    if (failed_lanes == 0) {
+    if (lanes == 0) {
         return ucp_ep_set_failed(ucp_ep, UCP_NULL_LANE, status);
     }
 
-    ucs_for_each_bit(lane, failed_lanes) {
+    ucs_for_each_bit(lane, lanes) {
         err_status = ucp_ep_set_failed(ucp_ep, lane, status);
         if ((err_status != UCS_OK) && (ret_status == UCS_OK)) {
             ret_status = err_status;
@@ -1571,9 +1568,8 @@ ucp_ep_set_lanes_failed(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,
     return ret_status;
 }
 
-void
-ucp_ep_set_lanes_failed_schedule(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,
-                                 ucs_status_t status)
+void ucp_ep_set_lanes_failed_schedule(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
+                                      ucs_status_t status)
 {
     ucp_worker_h worker = ucp_ep->worker;
     ucp_ep_set_lanes_failed_arg_t *set_ep_failed_arg;
@@ -1588,7 +1584,7 @@ ucp_ep_set_lanes_failed_schedule(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,
     }
 
     set_ep_failed_arg->ucp_ep       = ucp_ep;
-    set_ep_failed_arg->failed_lanes = failed_lanes;
+    set_ep_failed_arg->lanes = lanes;
     set_ep_failed_arg->status       = status;
 
     ucs_callbackq_add_oneshot(&worker->uct->progress_q, ucp_ep,

@@ -760,11 +760,10 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force);
 void ucp_ep_destroy_internal(ucp_ep_h ep);
 
 ucs_status_t
-ucp_ep_set_lanes_failed(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,
+ucp_ep_set_lanes_failed(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
                         ucs_status_t status);
 
-void ucp_ep_set_lanes_failed_schedule(ucp_ep_h ucp_ep,
-                                      ucp_lane_map_t failed_lanes,
+void ucp_ep_set_lanes_failed_schedule(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
                                       ucs_status_t status);
 
 void ucp_ep_unprogress_uct_ep(ucp_ep_h ep, uct_ep_h uct_ep,

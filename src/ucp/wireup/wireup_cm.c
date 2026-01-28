@@ -82,7 +82,8 @@ unsigned ucp_cm_client_try_next_cm_progress(void *arg)
         ucs_error("failed to create a uct sockaddr endpoint on %s cm %p",
                   ucp_context_cm_name(context, cm_idx), worker->cms[cm_idx].cm);
 
-        ucp_ep_set_lanes_failed(ucp_ep, ucp_ep_get_cm_lane(ucp_ep), status);
+        ucp_ep_set_lanes_failed(ucp_ep, UCS_BIT(ucp_ep_get_cm_lane(ucp_ep)),
+                                status);
     }
 
     UCS_ASYNC_UNBLOCK(&worker->async);
@@ -560,7 +561,7 @@ try_fallback:
     }
 
 err:
-    ucp_ep_set_lanes_failed(ep, UCS_MASK(ucp_ep_get_cm_lane(ep)), status);
+    ucp_ep_set_lanes_failed(ep, UCS_BIT(ucp_ep_get_cm_lane(ep)), status);
 out:
     UCS_ASYNC_UNBLOCK(&worker->async);
     return 1;
