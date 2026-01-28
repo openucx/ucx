@@ -1554,6 +1554,7 @@ ucp_ep_set_lanes_failed(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,
                         ucs_status_t status)
 {
     ucs_status_t ret_status = UCS_OK;
+    ucs_status_t err_status;
     ucp_lane_index_t lane;
 
     if (failed_lanes == 0) {
@@ -1561,10 +1562,9 @@ ucp_ep_set_lanes_failed(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,
     }
 
     ucs_for_each_bit(lane, failed_lanes) {
-        status = ucp_ep_set_failed(ucp_ep, lane, status);
-        if (status != UCS_OK) {
-            /* return first error */
-            ret_status = status;
+        err_status = ucp_ep_set_failed(ucp_ep, lane, status);
+        if ((err_status != UCS_OK) && (ret_status == UCS_OK)) {
+            ret_status = err_status;
         }
     }
 
