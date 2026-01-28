@@ -130,8 +130,9 @@ protected:
             UCS_TEST_SKIP_R("At least 2 RMA BW lanes are required, but only " + std::to_string(rma_bw_lanes.size()) + " available");
         }
 
-        {
-            std::unique_ptr<std::mt19937> rng(new std::mt19937(std::random_device()()));
+        { // allocate randomizer on heap to avoid exceeding stack frame size limits
+            std::unique_ptr<std::random_device> rnd_device(new std::random_device);
+            std::unique_ptr<std::mt19937> rng(new std::mt19937((*rnd_device)()));
             std::shuffle(rma_bw_lanes.begin(), rma_bw_lanes.end(), *rng);
         }
 
