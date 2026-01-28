@@ -124,9 +124,11 @@ enum {
                                                                of arm_ifaces list, so
                                                                it needs to be armed
                                                                in ucp_worker_arm(). */
-    UCP_WORKER_IFACE_FLAG_UNUSED            = UCS_BIT(2)  /**< There is another UCP iface
+    UCP_WORKER_IFACE_FLAG_UNUSED            = UCS_BIT(2), /**< There is another UCP iface
                                                                with the same caps, but
                                                                with better performance */
+    UCP_WORKER_IFACE_FLAG_PENDING_UPDATE    = UCS_BIT(3), /**< UCP iface is pending to
+                                                               be updated */
 };
 
 
@@ -274,6 +276,7 @@ struct ucp_worker_iface {
     unsigned                      post_count;    /* Counts uncompleted requests which are
                                                     offloaded to the transport */
     uint8_t                       flags;         /* Interface flags */
+    uint8_t                       port_speed;    /* Quantized port speed */
 };
 
 
@@ -404,6 +407,14 @@ typedef struct ucp_worker {
         /* Last round timestamp */
         ucs_time_t                   last_round;
     } usage_tracker;
+
+    uct_worker_cb_id_t               dflow_cb_id;
+
+    /* Configuration epoch (generation counter).
+     * Incremented after major connectivity changes (e.g. lane failure, port
+     * speed change). A matching epoch is stored in @ref ucp_proto_select_t.
+     * If epochs differ, the cached config is stale and must be updated. */
+    uint64_t                         epoch;
 } ucp_worker_t;
 
 
