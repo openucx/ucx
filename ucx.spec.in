@@ -324,6 +324,9 @@ Infiniband datagrams for out-of-band communications.
 %if %{with knem}
 %package knem
 Requires: %{name}%{?_isa} = %{version}-%{release}
+Provides: ucx-knem = %{version}-%{release}
+Conflicts: ucx-knem < %{version}-%{release}
+Obsoletes: ucx-knem < %{version}-%{release}
 Summary: UCX KNEM transport support
 Group: System Environment/Libraries
 
