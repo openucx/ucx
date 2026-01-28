@@ -80,6 +80,10 @@ void ucs_interval_tree_init(ucs_interval_tree_t *tree,
 void ucs_interval_tree_cleanup(ucs_interval_tree_t *tree);
 
 
+ucs_status_t ucs_interval_tree_insert_slow(ucs_interval_tree_t *tree,
+                                           uint64_t start, uint64_t end);
+
+
 /**
  * Check if tree has only a root node (no children)
  */
@@ -90,9 +94,6 @@ ucs_interval_tree_is_single_node(const ucs_interval_tree_t *tree)
            (tree->root->right == NULL);
 }
 
-
-ucs_status_t ucs_interval_tree_insert_slow(ucs_interval_tree_t *tree,
-                                           uint64_t start, uint64_t end);
 
 /**
  * Insert a new interval into the tree

@@ -59,53 +59,59 @@ void ucs_interval_tree_cleanup(ucs_interval_tree_t *tree)
     ucs_interval_tree_cleanup_recursive(tree, tree->root);
 }
 
-/**
+
+ /**
  * Helper function to remove a node from the tree
- * Returns the new root of the subtree
+ *
+ * @param [in]  tree   Interval tree
+ * @param [in]  root   Root of the subtree
+ * @param [in]  target Node to remove
+ *
+ * @return New root of the subtree
  */
 static ucs_interval_node_t *
 ucs_interval_tree_remove_node(ucs_interval_tree_t *tree,
-                              ucs_interval_node_t *node,
+                              ucs_interval_node_t *root,
                               ucs_interval_node_t *target)
 {
     ucs_interval_node_t *temp, *successor;
 
-    if (node == NULL) {
+    if (root == NULL) {
         return NULL;
     }
 
-    if (target->start < node->start) {
-        node->left = ucs_interval_tree_remove_node(tree, node->left, target);
-        return node;
-    } else if (target->start > node->start) {
-        node->right = ucs_interval_tree_remove_node(tree, node->right, target);
-        return node;
+    if (target->start < root->start) {
+        root->left = ucs_interval_tree_remove_node(tree, root->left, target);
+        return root;
+    } else if (target->start > root->start) {
+        root->right = ucs_interval_tree_remove_node(tree, root->right, target);
+        return root;
     }
 
     /* Found target - handle deletion based on number of children */
-    if (node->left == NULL) {
-        temp = node->right;
-        tree->ops.free_node(node, tree->ops.arg);
+    if (root->left == NULL) {
+        temp = root->right;
+        tree->ops.free_node(root, tree->ops.arg);
         return temp;
-    } else if (node->right == NULL) {
-        temp = node->left;
-        tree->ops.free_node(node, tree->ops.arg);
+    } else if (root->right == NULL) {
+        temp = root->left;
+        tree->ops.free_node(root, tree->ops.arg);
         return temp;
     }
 
     /* Node has two children: find in-order successor (leftmost in right subtree) */
-    successor = node->right;
+    successor = root->right;
     while (successor->left != NULL) {
         successor = successor->left;
     }
 
     /* Copy successor data to current node */
-    node->start = successor->start;
-    node->end   = successor->end;
+    root->start = successor->start;
+    root->end   = successor->end;
 
     /* Delete the successor recursively */
-    node->right = ucs_interval_tree_remove_node(tree, node->right, successor);
-    return node;
+    root->right = ucs_interval_tree_remove_node(tree, root->right, successor);
+    return root;
 }
 
 /**
