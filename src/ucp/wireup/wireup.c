@@ -183,7 +183,7 @@ ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
         }
 
         ucs_diag("failed to send wireup: %s", ucs_status_string(status));
-        ucp_ep_set_failed_schedule(ep, req->send.lane, status);
+        ucp_ep_set_lanes_failed_schedule(ep, UCS_BIT(req->send.lane), status);
 
         status = UCS_OK;
         goto out_free_req;
@@ -295,7 +295,7 @@ ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type, const ucp_tl_bitmap_t *tl_bitmap,
     return UCS_OK;
 
 err:
-    ucp_ep_set_failed_schedule(ep, UCP_NULL_LANE, status);
+    ucp_ep_set_lanes_failed_schedule(ep, 0, status);
     return status;
 }
 
@@ -622,7 +622,7 @@ ucp_wireup_process_pre_request(ucp_worker_h worker, ucp_ep_h ep,
     return;
 
 err_ep_set_failed:
-    ucp_ep_set_failed_schedule(ep, UCP_NULL_LANE, status);
+    ucp_ep_set_lanes_failed_schedule(ep, 0, status);
 }
 
 static UCS_F_NOINLINE void
@@ -763,7 +763,7 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
     return;
 
 err_set_ep_failed:
-    ucp_ep_set_failed_schedule(ep, UCP_NULL_LANE, status);
+    ucp_ep_set_lanes_failed_schedule(ep, 0, status);
 }
 
 static unsigned ucp_wireup_send_msg_ack(void *arg)
@@ -810,7 +810,7 @@ ucp_wireup_process_reply_common(ucp_worker_h worker, ucp_ep_h ep,
          */
         status = ucp_wireup_connect_local(ep, remote_address, NULL);
         if (status != UCS_OK) {
-            ucp_ep_set_failed_schedule(ep, UCP_NULL_LANE, status);
+            ucp_ep_set_lanes_failed_schedule(ep, 0, status);
             return;
         }
 
@@ -992,7 +992,7 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
         ucp_wireup_send_ep_removed(worker, msg, &remote_address);
     } else if (msg->type == UCP_WIREUP_MSG_EP_REMOVED) {
         ucs_assert(msg->dst_ep_id != UCS_PTR_MAP_KEY_INVALID);
-        ucp_ep_set_failed_schedule(ep, UCP_NULL_LANE, UCS_ERR_CONNECTION_RESET);
+        ucp_ep_set_lanes_failed_schedule(ep, 0, UCS_ERR_CONNECTION_RESET);
     } else {
         ucs_bug("invalid wireup message");
     }

@@ -760,10 +760,12 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force);
 void ucp_ep_destroy_internal(ucp_ep_h ep);
 
 ucs_status_t
-ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status);
+ucp_ep_set_lanes_failed(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,
+                        ucs_status_t status);
 
-void ucp_ep_set_failed_schedule(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
-                                ucs_status_t status);
+void ucp_ep_set_lanes_failed_schedule(ucp_ep_h ucp_ep,
+                                      ucp_lane_map_t failed_lanes,
+                                      ucs_status_t status);
 
 void ucp_ep_unprogress_uct_ep(ucp_ep_h ep, uct_ep_h uct_ep,
                               ucp_rsc_index_t rsc_index);
@@ -972,5 +974,14 @@ void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index);
  * @return Error code as defined by @ref ucs_status_t
  */
 ucs_status_t ucp_ep_flush_mem_progress(uct_pending_req_t *self);
+
+/**
+ * @brief Get the failed lanes from the endpoint configuration.
+ *
+ * @param [in] key        Endpoint configuration key.
+ *
+ * @return Bitmask of failed lanes.
+ */
+ucp_lane_map_t ucp_ep_config_get_failed_lanes(const ucp_ep_config_key_t *key);
 
 #endif
