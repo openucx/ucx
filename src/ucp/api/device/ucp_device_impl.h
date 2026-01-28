@@ -281,12 +281,8 @@ UCS_F_DEVICE ucs_status_t ucp_device_put(
         unsigned dst_mem_list_index, size_t dst_offset, size_t length,
         unsigned channel_id, uint64_t flags, ucp_device_request_t *req)
 {
-    if ((__ldg(&src_mem_list_h->version) != UCP_DEVICE_MEM_LIST_VERSION_V1) ||
-        (src_mem_list_index >= __ldg(&src_mem_list_h->mem_list_length)) ||
-        (__ldg(&dst_mem_list_h->version) != UCP_DEVICE_MEM_LIST_VERSION_V1) ||
-        (dst_mem_list_index >= __ldg(&dst_mem_list_h->mem_list_length))) {
-        return UCS_ERR_INVALID_PARAM;
-    }
+    UCP_DEVICE_MEM_LIST_PARAMS_CHECK(src_mem_list_h, src_mem_list_index);
+    UCP_DEVICE_MEM_LIST_PARAMS_CHECK(dst_mem_list_h, dst_mem_list_index);
 
     const size_t dst_elem_size = ucs_offsetof(uct_device_remote_mem_list_elem_t,
                                               uct_mem_element) +
