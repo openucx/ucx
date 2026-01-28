@@ -76,7 +76,10 @@ typedef enum {
 
     /* Supports starting the request when its datatype iterator offset is > 0 */
     UCP_PROTO_COMMON_INIT_FLAG_RESUME        = UCS_BIT(10),
-    UCP_PROTO_COMMON_KEEP_MD_MAP             = UCS_BIT(11)
+    UCP_PROTO_COMMON_KEEP_MD_MAP             = UCS_BIT(11),
+
+    /* Supports failover error handling mode with PSN tracking */
+    UCP_PROTO_COMMON_INIT_FLAG_FAILOVER      = UCS_BIT(12)
 } ucp_proto_common_init_flags_t;
 
 
