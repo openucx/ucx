@@ -257,6 +257,9 @@ AS_IF([test "x$with_ib" = "xyes"],
        AC_CHECK_MEMBERS([struct mlx5_cqe64.ib_stride_index],
                         [], [], [[#include <infiniband/$mlx5_include>]])
 
+       AC_CHECK_DECLS([mlx5dv_devx_umem_reg_ex],
+                      [have_mlx5dv_devx_umem=yes], [], [[#include <infiniband/$mlx5_include>]])
+
        AC_DEFINE([HAVE_IB], 1, [IB support])
 
        AS_IF([test "x$with_dc" != xno -a "x$have_dc_dv" = xyes -a "x$have_mlx5" = "xyes"], [
