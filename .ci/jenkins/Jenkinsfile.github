@@ -13,31 +13,10 @@ import ipp.blossom.*
 
 def githubHelper = null
 def blueOceanUrl = ""
-def currentPrNumber = null
 
 if (params.githubData) {
   withCredentials([usernamePassword(credentialsId: 'github-token', passwordVariable: 'GIT_PASSWORD', usernameVariable: 'GIT_USERNAME')]) {
     githubHelper = GithubHelper.getInstance("${GIT_PASSWORD}", params.githubData)
-  }
-  currentPrNumber = githubHelper.getPRNumber()?.toString()
-
-  // Abort previous running builds of the same PR
-  if (currentPrNumber) {
-    def slurper = new groovy.json.JsonSlurper()
-    try {
-      Jenkins.instance.getItemByFullName(env.JOB_NAME).builds.findAll {
-        it.isBuilding() && it.number < currentBuild.number
-      }.each { b ->
-        def gd = b.getAction(hudson.model.ParametersAction)?.getParameters()?.find { it.name == 'githubData' }?.value
-        def otherPr = gd ? slurper.parseText(gd)?.issue?.number?.toString() : null
-        if (otherPr == currentPrNumber) {
-          echo "Aborting build #${b.number} for same PR #${currentPrNumber}"
-          b.doStop()
-        }
-      }
-    } catch (Exception e) {
-      echo "Could not abort previous builds: ${e.message}"
-    }
   }
 
   def blueOceanJobPath = env.JOB_NAME.replace('/', '%2F')
