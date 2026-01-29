@@ -1248,6 +1248,13 @@ public:
         EXPECT_EQ(worker->rkey_config_count, 3);
         EXPECT_EQ(worker->ep_config.length, 2);
 
+        // Slightly change port_speed, so that quantized value remains the same
+        // This shouldn't affect EP or rkey config
+        set_port_speed("mock_0:1", 14.5e9);
+        send(2);
+        EXPECT_EQ(worker->rkey_config_count, 3);
+        EXPECT_EQ(worker->ep_config.length, 2);
+
         check_rkey_config(sender(), {
             {0, INF,  "zero-copy", "64% on rc_mlx5/mock_1:1 and 36% on rc_mlx5/mock_0:1"},
         }, key, 2);
