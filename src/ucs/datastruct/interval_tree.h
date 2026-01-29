@@ -41,6 +41,13 @@ static inline void ucs_interval_tree_init(ucs_interval_tree_t *tree,
     tree->received_first = 0;
 }
 
+typedef struct ucs_interval_node {
+    struct ucs_interval_node *left;  /**< Left child node */
+    struct ucs_interval_node *right; /**< Right child node */
+    uint64_t                  start; /**< Start of interval */
+    uint64_t                  end;   /**< End of interval */
+} ucs_interval_node_t;
+
 static inline void ucs_interval_tree_cleanup(ucs_interval_tree_t *tree) {}
 
 

@@ -111,7 +111,7 @@ void ucp_am_ep_cleanup(ucp_ep_h ep)
                            am_first.list) {
         ucs_list_del(&rdesc->am_first.list);
         /* Free from the start of frag_tree allocation, not rdesc */
-        ucs_free((char*)rdesc - sizeof(ucs_interval_tree_t));
+        ucs_free(UCS_PTR_BYTE_OFFSET(rdesc, -sizeof(ucs_interval_tree_t)));
         ++count;
     }
     ucs_trace_data("worker %p: %zu unhandled first AM fragments have been"
