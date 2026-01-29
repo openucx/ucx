@@ -146,7 +146,8 @@ protected:
     static std::set<std::string> get_mlx5_device_names(const entity &e) {
         std::set<std::string> device_names;
         for_each_net_device(e, [&](const uct_tl_resource_desc_t *rsc) {
-            if (strncmp(rsc->dev_name, "mlx5_", 5) == 0) {
+            std::string dev_name(rsc->dev_name);
+            if (dev_name.compare(0, 5, "mlx5_") == 0) {
                 device_names.insert(rsc->dev_name);
             }
         });
