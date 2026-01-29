@@ -72,9 +72,6 @@
 /* Factor to multiply with in order to get infinite latency */
 #define UCP_CONTEXT_INFINITE_LAT_FACTOR 100
 
-#define UCP_MLX_PREFIX       "mlx"
-#define UCP_MLX_DEFAULT_PORT "1"
-
 typedef enum ucp_transports_list_search_result {
     UCP_TRANSPORTS_LIST_SEARCH_RESULT_PRIMARY             = UCS_BIT(0),
     UCP_TRANSPORTS_LIST_SEARCH_RESULT_AUX_IN_MAIN         = UCS_BIT(1),
@@ -1080,56 +1077,51 @@ ucp_config_is_tl_name_present(const ucs_config_names_array_t *tl_array,
                                       tl_cfg_mask));
 }
 
-/* Return a pointer to the suffix of the device name, 
- * or the end of the string if no suffix is found. */
-static const char *ucp_get_dev_name_suffix(const char *dev_name)
+static UCS_F_ALWAYS_INLINE void
+ucp_get_dev_basename(const char *dev_name, char *dev_basename_p)
 {
     const char *colon = strchr(dev_name, ':');
-    if (colon == NULL) {
-        return dev_name + strlen(dev_name);
+    size_t basename_len;
+
+    if (colon != NULL) {
+        basename_len = colon - dev_name;
+        memcpy(dev_basename_p, dev_name, basename_len);
+        dev_basename_p[basename_len] = '\0';
+    } else {
+        dev_basename_p[0] = '\0';
     }
-    return colon + 1;
 }
 
-static inline int
-ucp_is_dev_mlx_default_port(const char *dev_name, const char *dev_name_suffix)
-{
-    return (!strncmp(dev_name, UCP_MLX_PREFIX, strlen(UCP_MLX_PREFIX))) &&
-           (!strcmp(dev_name_suffix, UCP_MLX_DEFAULT_PORT));
-}
-
+/* go over the device list from the user and check (against the available resources)
+ * which can be satisfied */
 static int ucp_is_resource_in_device_list(const uct_tl_resource_desc_t *resource,
                                           const ucs_config_names_array_t *devices,
                                           uint64_t *dev_cfg_mask,
                                           uct_device_type_t dev_type)
 {
-    char dev_name_base[UCT_DEVICE_NAME_MAX];
+    char dev_basename[UCT_DEVICE_NAME_MAX];
     uint64_t mask, exclusive_mask;
-    const char *dev_name_suffix;
 
-    /* go over the device list from the user and check (against the available resources)
-     * which can be satisfied */
     ucs_assert_always(devices[dev_type].count <= 64); /* Using uint64_t bitmap */
+
+    /* search for the full device name */
     mask = ucp_str_array_search((const char**)devices[dev_type].names,
                                 devices[dev_type].count, resource->dev_name,
                                 NULL);
+    mask |= ucp_str_array_search_in_ranges((const char**)devices[dev_type].names,
+                                           devices[dev_type].count,
+                                           resource->dev_name);
 
+    /* for network devices, also search for the base name (before the colon) */
     if (dev_type == UCT_DEVICE_TYPE_NET) {
-        dev_name_suffix = ucp_get_dev_name_suffix(resource->dev_name);
-
-        if (ucp_is_dev_mlx_default_port(resource->dev_name, dev_name_suffix)) {
-            ucs_strncpy_zero(dev_name_base, resource->dev_name,
-                             (size_t)(dev_name_suffix - resource->dev_name));
-
-            /* search for the base name (ex: mlx5_0) */
+        ucp_get_dev_basename(resource->dev_name, dev_basename);
+        if (*dev_basename != '\0') {
             mask |= ucp_str_array_search((const char**)devices[dev_type].names,
-                                         devices[dev_type].count, dev_name_base,
+                                         devices[dev_type].count, dev_basename,
                                          NULL);
-
-            /* search in ranges (ex: mlx5_[0-2]) */
             mask |= ucp_str_array_search_in_ranges(
                     (const char**)devices[dev_type].names,
-                    devices[dev_type].count, dev_name_base);
+                    devices[dev_type].count, dev_basename);
         }
     }
 
