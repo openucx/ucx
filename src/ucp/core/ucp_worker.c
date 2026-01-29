@@ -801,6 +801,9 @@ static uint8_t ucp_worker_iface_port_speed(const ucp_worker_iface_t *wiface)
     perf_attr.field_mask = UCT_PERF_ATTR_FIELD_BANDWIDTH;
     status = uct_iface_estimate_perf(wiface->iface, &perf_attr);
     if (status != UCS_OK) {
+        /* If iface fails to estimate a bandwidth, return 0 as a port speed,
+         * which should essentially exclude the lanes of this iface from the
+         * protocol selection even if lane is not marked as failed. */
         return 0;
     }
 
@@ -813,6 +816,7 @@ static uint8_t ucp_worker_iface_port_speed(const ucp_worker_iface_t *wiface)
 static void ucp_worker_iface_handle_port_speed_event(ucp_worker_iface_t *wiface)
 {
     ucp_worker_h worker     = wiface->worker;
+    ucp_context_h context   = worker->context;
     unsigned progress_count = 0;
     ucp_worker_iface_t *wiface_iter;
     ucp_rsc_index_t iface_id;
@@ -827,7 +831,8 @@ static void ucp_worker_iface_handle_port_speed_event(ucp_worker_iface_t *wiface)
      */
     for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
         wiface_iter = worker->ifaces[iface_id];
-        if (wiface_iter->rsc_index != wiface->rsc_index) {
+        if (context->tl_rscs[wiface_iter->rsc_index].dev_index !=
+            context->tl_rscs[wiface->rsc_index].dev_index) {
             continue;
         }
 
