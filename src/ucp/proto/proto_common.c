@@ -43,9 +43,21 @@ ucp_proto_common_init_params(const ucp_proto_init_params_t *init_params)
 int ucp_proto_common_init_check_err_handling(
         const ucp_proto_common_init_params_t *init_params)
 {
-    return (init_params->flags & UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING) ||
-           (init_params->super.ep_config_key->err_mode ==
-            UCP_ERR_HANDLING_MODE_NONE);
+    ucp_err_handling_mode_t err_mode =
+            init_params->super.ep_config_key->err_mode;
+
+    /* No error handling required - any protocol can be used */
+    if (err_mode == UCP_ERR_HANDLING_MODE_NONE) {
+        return 1;
+    }
+
+    /* Failover mode requires protocol with FAILOVER flag */
+    if (err_mode == UCP_ERR_HANDLING_MODE_FAILOVER) {
+        return !!(init_params->flags & UCP_PROTO_COMMON_INIT_FLAG_FAILOVER);
+    }
+
+    /* Other error handling modes (PEER) require ERR_HANDLING flag */
+    return !!(init_params->flags & UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING);
 }
 
 static size_t
