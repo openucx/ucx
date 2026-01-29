@@ -23,7 +23,7 @@ public:
     using iface_attr_func_t = std::function<void(uct_iface_attr&)>;
     using perf_attr_func_t  = std::function<void(uct_perf_attr_t&)>;
 
-    mock_iface() : m_tl(nullptr)
+    mock_iface() : m_tl(nullptr), m_real_md(nullptr)
     {
         ucs_assert(m_self == nullptr);
         m_self = this;
@@ -590,8 +590,8 @@ protected:
             sptr = ucp_get_nbx(sender().ep(), send_buf.ptr(), size,
                                (uint64_t)recv_buf.ptr(), rkey, &req_param);
         } else {
-            FAIL() << "Invalid operation ID: " << op_id;
             sptr = nullptr;
+            FAIL() << "Invalid operation ID: " << op_id;
         }
 
         EXPECT_EQ(UCS_OK, request_wait(sptr));
