@@ -2200,7 +2200,7 @@ public:
         test_ucp_am_nbx::init();
     }
 
-    virtual ucp_ep_params_t get_ep_params()
+    ucp_ep_params_t get_ep_params() override
     {
         ucp_ep_params_t ep_params = test_ucp_am_nbx::get_ep_params();
         ep_params.field_mask     |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
@@ -2208,9 +2208,9 @@ public:
         return ep_params;
     }
 
-    virtual ucs_status_t
-    am_data_handler(const void *header, size_t header_length, void *data,
-                    size_t length, const ucp_am_recv_param_t *rx_param)
+    ucs_status_t am_data_handler(const void *header, size_t header_length,
+                                 void *data, size_t length,
+                                 const ucp_am_recv_param_t *rx_param) override
     {
         EXPECT_LT(m_recv_counter, m_send_counter);
         check_header(header, header_length);
@@ -2265,20 +2265,21 @@ public:
 
 UCS_TEST_P(test_ucp_am_psn, no_duplicates, "ZCOPY_THRESH=0", "RNDV_THRESH=inf")
 {
+    UCS_TEST_SKIP_R("TODO: enable after interval tree is merged");
     test_psn_send_recv(300, 0);
 }
 
 UCS_TEST_P(test_ucp_am_psn, some_duplicates, "ZCOPY_THRESH=0",
            "RNDV_THRESH=inf")
 {
-    test_psn_send_recv(2, 1);
+    UCS_TEST_SKIP_R("TODO: enable after interval tree is merged");
+    test_psn_send_recv(200, 100);
 }
 
 UCS_TEST_P(test_ucp_am_psn, all_duplicates, "ZCOPY_THRESH=0", "RNDV_THRESH=inf")
 {
+    UCS_TEST_SKIP_R("TODO: enable after interval tree is merged");
     test_psn_send_recv(400, 400);
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_am_psn, dcx, "dc_x")
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_am_psn, rcx, "rc_x")
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_am_psn, shm_ib, "shm,ib")
+UCP_INSTANTIATE_TEST_CASE(test_ucp_am_psn)

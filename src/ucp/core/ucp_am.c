@@ -1520,7 +1520,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_first_handler,
     ucp_ep_ext_t *ep_ext;
     size_t total_length, padding;
     uint64_t recv_flags;
-    void *user_hdr;
+    void *user_hdr, *buffer;
     ucs_interval_tree_ops_t frag_tree_ops;
 
     first_payload_length = am_length - sizeof(*first_ftr);
@@ -1564,18 +1564,17 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_first_handler,
      * right after rdesc (unlike wire format) for easier access while processing
      * incoming fragments.
      */
-    first_rdesc = (ucp_recv_desc_t*)((char*)ucs_malloc(
-                                     total_length + sizeof(ucp_recv_desc_t) +
-                                     sizeof(ucs_interval_tree_t) +
-                                     worker->am.alignment,
-                                     "ucp recv desc for long AM") +
-                                     sizeof(ucs_interval_tree_t));
-    if (ucs_unlikely(first_rdesc == NULL)) {
+    buffer = ucs_malloc(total_length + sizeof(ucp_recv_desc_t) +
+                                sizeof(ucs_interval_tree_t) +
+                                worker->am.alignment,
+                        "ucp recv desc for long AM");
+    if (ucs_unlikely(buffer == NULL)) {
         ucs_error("failed to allocate buffer for assembling UCP AM (id %u)",
                   hdr->am_id);
         return UCS_OK; /* release UCT desc */
     }
 
+    first_rdesc = UCS_PTR_BYTE_OFFSET(buffer, sizeof(ucs_interval_tree_t));
     padding = ucs_padding((uintptr_t)UCS_PTR_BYTE_OFFSET(
                                   first_rdesc + 1, UCP_AM_FIRST_FRAG_META_LEN),
                           worker->am.alignment);
