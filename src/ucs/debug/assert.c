@@ -21,20 +21,29 @@
 
 
 void ucs_fatal_error_message(const char *file, unsigned line,
-                             const char *function, char *message_buf)
+                             const char *function, const char *message)
 {
-    char *message_line, *save_ptr = NULL;
+    const char *line_start;
+    const char *line_end;
 
     ucs_log_flush();
 
-    message_line = (message_buf == NULL) ? NULL :
-                   strtok_r(message_buf, "\n", &save_ptr);
-    while (message_line != NULL) {
-        ucs_log_fatal_error("%13s:%-4u %s", ucs_basename(file), line, message_line);
-        message_line = strtok_r(NULL, "\n", &save_ptr);
+    if (message != NULL) {
+        line_start = message;
+        while ((line_end = strchr(line_start, '\n')) != NULL) {
+            ucs_log_fatal_error("%13s:%-4u %.*s", ucs_basename(file), line,
+                                (int)(line_end - line_start), line_start);
+            line_start = line_end + 1;
+        }
+
+        /* Handle last line (or only line if no newlines) */
+        if (*line_start != '\0') {
+            ucs_log_fatal_error("%13s:%-4u %s", ucs_basename(file), line,
+                                line_start);
+        }
     }
 
-    ucs_handle_error(message_buf);
+    ucs_handle_error(message);
     abort();
 }
 
