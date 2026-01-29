@@ -4006,29 +4006,31 @@ static ucs_status_t ucp_rkey_update_config(ucp_rkey_h rkey, ucp_ep_h ep)
 ucs_status_t ucp_ep_update_config(ucp_ep_h ep)
 {
     ucp_worker_h worker         = ep->worker;
-    ucp_ep_config_key_t cfg_key = ucp_ep_config(ep)->key;
+    /* Duplicate the key to avoid modifying the original key */
+    ucp_ep_config_key_t dup_key = ucp_ep_config(ep)->key;
     ucp_lane_index_t lane;
     ucp_worker_iface_t *wiface;
     ucs_status_t status;
 
-    for (lane = 0; lane < cfg_key.num_lanes; lane++) {
-        wiface = ucp_worker_iface(worker, cfg_key.lanes[lane].rsc_index);
-        cfg_key.lanes[lane].port_speed = wiface->port_speed;
+    for (lane = 0; lane < dup_key.num_lanes; lane++) {
+        wiface = ucp_worker_iface(worker, dup_key.lanes[lane].rsc_index);
+        dup_key.lanes[lane].port_speed = wiface->port_speed;
     }
 
-    if (ucp_ep_config_is_equal(&cfg_key, &ucp_ep_config(ep)->key)) {
-        ucp_ep_config(ep)->proto_select.worker_epoch = worker->epoch;
-        return UCS_OK;
+    if (ucp_ep_config_is_equal(&dup_key, &ucp_ep_config(ep)->key)) {
+        goto out;
     }
 
     /* Config is not up to date, update it */
     ucp_ep_config_deactivate_worker_ifaces(worker, ep->cfg_index);
-    status = ucp_worker_get_ep_config(worker, &cfg_key, ep->flags, &ep->cfg_index);
+    status = ucp_worker_get_ep_config(worker, &dup_key, ep->flags, &ep->cfg_index);
     if (status != UCS_OK) {
         return status;
     }
 
     ucp_ep_config_activate_worker_ifaces(worker, ep->cfg_index);
+
+out:
     /* Now EP config is up to date with worker epoch */
     ucp_ep_config(ep)->proto_select.worker_epoch = worker->epoch;
     return UCS_OK;

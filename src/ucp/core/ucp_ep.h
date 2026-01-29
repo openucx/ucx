@@ -211,7 +211,7 @@ typedef struct ucp_ep_config_key_lane {
     uint8_t              path_index; /* Device path index */
     ucp_lane_type_mask_t lane_types; /* Which types of operations this lane
                                         was selected for */
-    uint8_t              port_speed; /* Quantified port speed */
+    uint8_t              port_speed; /* Quantized port speed */
     size_t               seg_size; /* Maximal fragment size which can be
                                       received by the peer */
 } ucp_ep_config_key_lane_t;

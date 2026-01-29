@@ -810,53 +810,39 @@ static uint8_t ucp_worker_iface_port_speed(const ucp_worker_iface_t *wiface)
     return (uint8_t)(ratio * 16.0);
 }
 
-static unsigned ucp_worker_iface_handle_port_speed_progress(void *arg)
+static void ucp_worker_iface_handle_port_speed_event(ucp_worker_iface_t *wiface)
 {
-    ucp_worker_h worker     = arg;
+    ucp_worker_h worker     = wiface->worker;
     unsigned progress_count = 0;
-    ucp_worker_iface_t *wiface;
+    ucp_worker_iface_t *wiface_iter;
     ucp_rsc_index_t iface_id;
     uint8_t port_speed;
 
     UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(worker);
-    uct_worker_progress_unregister_safe(worker->uct, &worker->dflow_cb_id);
 
+    /* PORT_SPEED change event is received on IB device that can span over
+     * multiple interfaces. We iterate all ifaces with the same resource id, and
+     * check for port speed changes. Subsequent PORT_SPEED change events from
+     * other interfaces on the same device are essentially no-ops.
+     */
     for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
-        wiface = worker->ifaces[iface_id];
-        if (wiface->flags & UCP_WORKER_IFACE_FLAG_PENDING_UPDATE) {
-            wiface->flags &= ~UCP_WORKER_IFACE_FLAG_PENDING_UPDATE;
-            port_speed     = ucp_worker_iface_port_speed(wiface);
-            if (port_speed != wiface->port_speed) {
-                ucs_debug(UCP_WIFACE_FMT " port speed changed from %u to %u",
-                          UCP_WIFACE_ARG(wiface), wiface->port_speed, port_speed);
-                wiface->port_speed = port_speed;
-                ++progress_count;
-            }
+        wiface_iter = worker->ifaces[iface_id];
+        if (wiface_iter->rsc_index != wiface->rsc_index) {
+            continue;
+        }
+
+        port_speed = ucp_worker_iface_port_speed(wiface_iter);
+        if (port_speed != wiface_iter->port_speed) {
+            ucs_debug(UCP_WIFACE_FMT " port speed changed from %u to %u",
+                      UCP_WIFACE_ARG(wiface_iter), wiface_iter->port_speed,
+                      port_speed);
+            wiface_iter->port_speed = port_speed;
+            ++progress_count;
         }
     }
 
     if (progress_count > 0) {
         ++worker->epoch;
-    }
-
-    return progress_count;
-}
-
-static void ucp_worker_iface_handle_port_speed_event(ucp_worker_iface_t *wiface)
-{
-    ucp_worker_h worker = wiface->worker;
-
-    UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(worker);
-
-    /* There could be several ifaces updates from the same device. In order to
-     * handle all of them at the same time, mark iface as pending to be updated
-     * and defer the actual update
-     */
-    wiface->flags |= UCP_WORKER_IFACE_FLAG_PENDING_UPDATE;
-    if (worker->dflow_cb_id == UCS_CALLBACKQ_ID_NULL) {
-        uct_worker_progress_register_safe(
-            worker->uct, ucp_worker_iface_handle_port_speed_progress, worker, 0,
-            &worker->dflow_cb_id);
     }
 }
 
@@ -2780,8 +2766,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
 
     ucp_worker_create_vfs(context, worker);
 
-    worker->dflow_cb_id = UCS_CALLBACKQ_ID_NULL;
-    worker->epoch       = 0;
+    worker->epoch = 0;
 
     status = ucp_worker_usage_tracker_create(worker);
     if (status != UCS_OK) {
@@ -3026,7 +3011,6 @@ void ucp_worker_destroy(ucp_worker_h worker)
 
     UCS_ASYNC_BLOCK(&worker->async);
     uct_worker_progress_unregister_safe(worker->uct, &worker->keepalive.cb_id);
-    uct_worker_progress_unregister_safe(worker->uct, &worker->dflow_cb_id);
     ucp_worker_usage_tracker_destroy(worker);
     ucp_worker_discard_uct_ep_cleanup(worker);
     ucp_worker_destroy_eps(worker, &worker->all_eps, "all");

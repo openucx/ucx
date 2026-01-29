@@ -124,11 +124,9 @@ enum {
                                                                of arm_ifaces list, so
                                                                it needs to be armed
                                                                in ucp_worker_arm(). */
-    UCP_WORKER_IFACE_FLAG_UNUSED            = UCS_BIT(2), /**< There is another UCP iface
+    UCP_WORKER_IFACE_FLAG_UNUSED            = UCS_BIT(2)  /**< There is another UCP iface
                                                                with the same caps, but
                                                                with better performance */
-    UCP_WORKER_IFACE_FLAG_PENDING_UPDATE    = UCS_BIT(3), /**< UCP iface is pending to
-                                                               be updated */
 };
 
 
@@ -407,8 +405,6 @@ typedef struct ucp_worker {
         /* Last round timestamp */
         ucs_time_t                   last_round;
     } usage_tracker;
-
-    uct_worker_cb_id_t               dflow_cb_id;
 
     /* Configuration epoch (generation counter).
      * Incremented after major connectivity changes (e.g. lane failure, port
