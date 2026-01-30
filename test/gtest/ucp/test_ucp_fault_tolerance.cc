@@ -38,6 +38,11 @@ protected:
         FAILURE_SIDE_TARGET     /* Inject failure on receiver (target) side */
     };
 
+    enum test_op_t {
+        TEST_OP_PUT,
+        TEST_OP_GET
+    };
+
     void init() override {
         ucp_test::init();
 
@@ -94,27 +99,11 @@ protected:
     }
 
     /**
-     * Perform a PUT operation and wait for completion
+     * Common helper function to test RMA operation with injected failure
      */
-    ucs_status_t do_put_and_wait(ucp_ep_h ep, mem_buffer &src_buf,
-                                 mapped_buffer &dst_buf, ucp_rkey_h rkey) {
-        ucp_request_param_t param;
-        param.op_attr_mask = 0;
-
-        /* Issue PUT operation */
-        ucs_status_ptr_t status_ptr = ucp_put_nbx(ep, src_buf.ptr(), src_buf.size(),
-                                                  (uintptr_t)dst_buf.ptr(),
-                                                  rkey, &param);
-        return request_wait(status_ptr);
-    }
-
-
-    /**
-     * Common helper function to test PUT operation with injected failure
-     */
-    void test_put_with_injected_failure(failure_side_t failure_side) {
-        const uint64_t seed   = 0x12345678;
-        const size_t size     = 1 * UCS_GBYTE;
+    void test_rma_with_injected_failure(failure_side_t failure_side, test_op_t op) {
+        const size_t size   = 1 * UCS_GBYTE;
+        const char *op_name = (op == TEST_OP_PUT) ? "PUT" : "GET";
 
         /* TODO: cover case when wireup is in progress, flush here is to complete wireup */
         flush_workers();
@@ -144,22 +133,26 @@ protected:
             UCS_TEST_MESSAGE << "RMA BW lane: " << size_t(lane) << "/" << rma_bw_lanes.size();
         }
 
-        /* Setup RMA buffers using mapped_buffer */
-        mem_buffer src_buf(size, UCS_MEMORY_TYPE_HOST);
-        mapped_buffer dst_buf(size, receiver());
-        ucs::handle<ucp_rkey_h> rkey = dst_buf.rkey(sender());
+        mem_buffer lbuf(size, UCS_MEMORY_TYPE_HOST);
+        mapped_buffer rbuf(size, receiver());
+        ucs::handle<ucp_rkey_h> rkey = rbuf.rkey(sender());
 
-        /* Fill source with pattern, clear destination */
-        src_buf.pattern_fill(seed);
-        dst_buf.memset(0);
+        if (op == TEST_OP_PUT) {
+            lbuf.pattern_fill(m_seed);
+        } else if (op == TEST_OP_GET) {
+            rbuf.pattern_fill(m_seed);
+        } else {
+            UCS_TEST_ABORT("Invalid operation type");
+        }
 
-        UCS_TEST_MESSAGE << "Attempting PUT operation before failure injection...";
-        ucs_status_t status = do_put_and_wait(sender().ep(0, INJECTED_EP_INDEX), src_buf, dst_buf, rkey.get());
-        EXPECT_EQ(UCS_OK, status) << "PUT operation returned status: "
+        UCS_TEST_MESSAGE << "Attempting " << op_name << " operation before failure injection...";
+        ucs_status_t status = do_rma_and_wait(sender().ep(0, INJECTED_EP_INDEX), op, lbuf, rbuf,
+                                              rkey.get(), size);
+        EXPECT_EQ(UCS_OK, status) << op_name << " operation returned status: "
                                   << ucs_status_string(status);
-        UCS_TEST_MESSAGE << "Success";
 
-        ucp_ep_h injected_ucp_ep = (failure_side == FAILURE_SIDE_INITIATOR) ? sender().ep(0, INJECTED_EP_INDEX) :
+        ucp_ep_h injected_ucp_ep = (failure_side == FAILURE_SIDE_INITIATOR) ?
+                                   sender().ep(0, INJECTED_EP_INDEX) :
                                    receiver().ep(0, INJECTED_EP_INDEX);
         for (size_t lane_idx = 0; lane_idx < rma_bw_lanes.size() - 1; ++lane_idx) {
             ucp_lane_index_t lane = rma_bw_lanes[lane_idx];
@@ -172,41 +165,88 @@ protected:
             EXPECT_EQ(UCS_OK, status) << "uct_ep_invalidate returned status: "
                                     << ucs_status_string(status);
 
-            dst_buf.memset(0);
-            UCS_TEST_MESSAGE << "Attempting PUT operation after failure injection on lane "
+            UCS_TEST_MESSAGE << "Attempting " << op_name << " operation after failure injection on lane "
                              << size_t(lane) << '/' << rma_bw_lanes.size() << "...";
-            status = do_put_and_wait(sender().ep(0, INJECTED_EP_INDEX), src_buf, dst_buf, rkey.get());
-            EXPECT_EQ(UCS_OK, status) << "PUT operation returned status: "
+            status = do_rma_and_wait(sender().ep(0, INJECTED_EP_INDEX),
+                                     op, lbuf, rbuf, rkey.get(), size);
+            EXPECT_EQ(UCS_OK, status) << op_name << " operation returned status: "
                                     << ucs_status_string(status);
-            UCS_TEST_MESSAGE << "Success";
-            dst_buf.pattern_check(seed, size);
-            UCS_TEST_MESSAGE << "Data integrity check passed";
         }
 
         short_progress_loop();
         ASSERT_EQ(0, m_err_count) << "Error callback invoked " << m_err_count << " times";
+        UCS_TEST_MESSAGE << "Success";
     }
 
-    size_t       m_err_count = 0;
-    ucs_status_t m_err_status = UCS_OK;
+private:
+    ucs_status_t do_put_and_wait(ucp_ep_h ep, mem_buffer &lbuf, mapped_buffer &rbuf,
+                                 ucp_rkey_h rkey, size_t size) {
+        ucp_request_param_t param;
+        param.op_attr_mask = 0;
+
+        rbuf.memset(0);
+        ucs_status_ptr_t status_ptr = ucp_put_nbx(ep, lbuf.ptr(), size, uintptr_t(rbuf.ptr()), rkey,
+                                                  &param);
+        ucs_status_t status         = request_wait(status_ptr);
+        if (status == UCS_OK) {
+            rbuf.pattern_check(m_seed, size);
+        }
+
+        return status;
+    }
+
+    ucs_status_t do_get_and_wait(ucp_ep_h ep, mem_buffer &lbuf, mapped_buffer &rbuf,
+                                 ucp_rkey_h rkey, size_t size) {
+        ucp_request_param_t param;
+        param.op_attr_mask = 0;
+
+        lbuf.memset(0);
+        ucs_status_ptr_t status_ptr = ucp_get_nbx(ep, lbuf.ptr(), size, uintptr_t(rbuf.ptr()), rkey,
+                                                  &param);
+        ucs_status_t status         = request_wait(status_ptr);
+        if (status == UCS_OK) {
+            lbuf.pattern_check(m_seed, size);
+        }
+
+        return status;
+    }
+
+    ucs_status_t do_rma_and_wait(ucp_ep_h ep, test_op_t op, mem_buffer &lbuf, mapped_buffer &rbuf,
+                                 ucp_rkey_h rkey, size_t size) {
+        switch (op) {
+            case TEST_OP_PUT:
+                return do_put_and_wait(ep, lbuf, rbuf, rkey, size);
+            case TEST_OP_GET:
+                return do_get_and_wait(ep, lbuf, rbuf, rkey, size);
+            default:
+                UCS_TEST_ABORT("Invalid operation type");
+                return UCS_ERR_INVALID_PARAM;
+        }
+    }
+
+    size_t       m_err_count       = 0;
+    ucs_status_t m_err_status      = UCS_OK;
+    static constexpr uint64_t m_seed = 0x12345678;
 };
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_fault_tolerance)
 
-/**
- * Test fault tolerance: PUT operation with initiator-side failure injection
- * The sender's endpoint fails, testing recovery when the initiator side fails
- */
 UCS_TEST_P(test_ucp_fault_tolerance, put_with_initiator_failure)
 {
-    test_put_with_injected_failure(FAILURE_SIDE_INITIATOR);
+    test_rma_with_injected_failure(FAILURE_SIDE_INITIATOR, TEST_OP_PUT);
 }
 
-/**
- * Test fault tolerance: PUT operation with target-side failure injection
- * The receiver's endpoint fails, testing recovery when the target side fails
- */
 UCS_TEST_P(test_ucp_fault_tolerance, put_with_target_failure)
 {
-    test_put_with_injected_failure(FAILURE_SIDE_TARGET);
+    test_rma_with_injected_failure(FAILURE_SIDE_TARGET, TEST_OP_PUT);
+}
+
+UCS_TEST_P(test_ucp_fault_tolerance, get_with_initiator_failure)
+{
+    test_rma_with_injected_failure(FAILURE_SIDE_INITIATOR, TEST_OP_GET);
+}
+
+UCS_TEST_P(test_ucp_fault_tolerance, get_with_target_failure)
+{
+    test_rma_with_injected_failure(FAILURE_SIDE_TARGET, TEST_OP_GET);
 }
