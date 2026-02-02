@@ -211,6 +211,66 @@ protected:
         return result;
     }
 
+    /* Count how many mlx5 devices exist */
+    static unsigned get_mlx5_device_count(const entity &e)
+    {
+        unsigned max_idx = 0;
+        unsigned count   = 0;
+
+        for (const std::string &dev_name : get_net_device_names(e)) {
+            unsigned idx, port;
+            if (sscanf(dev_name.c_str(), "mlx5_%u:%u", &idx, &port) == 2) {
+                EXPECT_EQ(port, 1)
+                        << "Expected port 1 for mlx5 device, found: " << port;
+                max_idx = std::max(max_idx, idx);
+                count++;
+            }
+        }
+
+        EXPECT_EQ(max_idx + 1, count) << "Expected " << (max_idx + 1)
+                                      << " mlx5 devices, found: " << count;
+
+        return count;
+    }
+
+    static std::string build_mlx5_device_name(unsigned index)
+    {
+        return "mlx5_" + std::to_string(index) + ":1";
+    }
+
+    /* Build set of device names for mlx5_[start-end] */
+    static std::set<std::string>
+    build_mlx5_range_set(unsigned start, unsigned end)
+    {
+        std::set<std::string> result;
+        for (unsigned i = start; i <= end; ++i) {
+            result.insert(build_mlx5_device_name(i));
+        }
+        return result;
+    }
+
+    /* Build range config string like "mlx5_[0-2]" */
+    static std::string build_mlx5_range_config(unsigned start, unsigned end)
+    {
+        return "mlx5_[" + std::to_string(start) + "-" + std::to_string(end) +
+               "]";
+    }
+
+    /* Verify that only the expected device is selected */
+    void verify_single_mlx5_device_selected(unsigned count,
+                                       const std::set<std::string> &selected,
+                                       unsigned expected_device_idx)
+    {
+        for (unsigned i = 0; i < count; ++i) {
+            std::string device_name      = build_mlx5_device_name(i);
+            bool should_be_selected = (i == expected_device_idx);
+
+            EXPECT_EQ(should_be_selected, has_device(selected, device_name))
+                    << device_name << " should be"
+                    << (should_be_selected ? "selected" : "excluded");
+        }
+    }
+
     /* Test that net device selection works correctly */
     void
     test_net_device_selection(const std::set<std::string> &test_net_devices,
@@ -231,17 +291,20 @@ protected:
     }
 
     /* Test that a device config triggers duplicate device warning */
-    void test_duplicate_device_warning(const std::string &required_dev_name,
-                                       const std::string &devices_config,
-                                       const std::string &duplicate_dev_name)
+    void
+    test_duplicate_device_warning(const std::set<std::string> &required_devices,
+                                  const std::string &devices_config,
+                                  const std::string &duplicate_dev_name)
     {
         entity *e = create_entity();
 
         std::set<std::string> net_devices = get_net_device_names(*e);
         ASSERT_FALSE(net_devices.empty());
 
-        if (!has_device(net_devices, required_dev_name)) {
-            UCS_TEST_SKIP_R(required_dev_name + " device not available");
+        for (const std::string &required_dev : required_devices) {
+            if (!has_device(net_devices, required_dev)) {
+                UCS_TEST_SKIP_R(required_dev + " device not available");
+            }
         }
 
         m_entities.clear();
@@ -307,19 +370,54 @@ UCS_TEST_P(test_ucp_net_devices_config, explicit_suffix)
 /*
  * Test that specifying a device multiple times produces a warning
  */
-UCS_TEST_P(test_ucp_net_devices_config, duplicate_device_warning_simple)
+UCS_TEST_P(test_ucp_net_devices_config, duplicate_device_warning_full_name)
 {
-    test_duplicate_device_warning("mlx5_0:1", "mlx5_0:1,mlx5_0:1", "mlx5_0:1");
+    test_duplicate_device_warning({"mlx5_0:1"}, "mlx5_0:1,mlx5_0:1",
+                                  "mlx5_0:1");
 }
 
 UCS_TEST_P(test_ucp_net_devices_config, duplicate_device_warning_base_name)
 {
-    test_duplicate_device_warning("mlx5_0:1", "mlx5_0:1,mlx5_0", "mlx5_0");
+    test_duplicate_device_warning({"mlx5_0:1"}, "mlx5_0:1,mlx5_0", "mlx5_0");
 }
 
 UCS_TEST_P(test_ucp_net_devices_config, duplicate_device_warning_two_base_name)
 {
-    test_duplicate_device_warning("mlx5_0:1", "mlx5_0,mlx5_0", "mlx5_0");
+    test_duplicate_device_warning({"mlx5_0:1"}, "mlx5_0,mlx5_0", "mlx5_0");
+}
+
+UCS_TEST_P(test_ucp_net_devices_config,
+           duplicate_device_warning_range_full_name_1)
+{
+    test_duplicate_device_warning({"mlx5_0:1", "mlx5_1:1"},
+                                  "mlx5_[0-1],mlx5_0:1", "mlx5_0:1");
+}
+
+UCS_TEST_P(test_ucp_net_devices_config,
+           duplicate_device_warning_range_full_name_2)
+{
+    test_duplicate_device_warning({"mlx5_0:1", "mlx5_1:1"},
+                                  "mlx5_0:1,mlx5_[0-1]", "mlx5_0");
+}
+
+UCS_TEST_P(test_ucp_net_devices_config,
+           duplicate_device_warning_range_base_name_1)
+{
+    test_duplicate_device_warning({"mlx5_0:1", "mlx5_1:1"}, "mlx5_[0-1],mlx5_0",
+                                  "mlx5_0");
+}
+
+UCS_TEST_P(test_ucp_net_devices_config,
+           duplicate_device_warning_range_base_name_2)
+{
+    test_duplicate_device_warning({"mlx5_0:1", "mlx5_1:1"}, "mlx5_0,mlx5_[0-1]",
+                                  "mlx5_0");
+}
+
+UCS_TEST_P(test_ucp_net_devices_config, duplicate_device_warning_two_ranges)
+{
+    test_duplicate_device_warning({"mlx5_0:1", "mlx5_1:1", "mlx5_2:1"},
+                                  "mlx5_[0-1],mlx5_[1-2]", "mlx5_1");
 }
 
 /*
@@ -420,6 +518,94 @@ UCS_TEST_P(test_ucp_net_devices_config, negate_base_name)
     /* Verify at least one other device is selected */
     EXPECT_FALSE(selected_devices.empty())
             << "At least one device should be selected";
+}
+
+/*
+ * Test that range syntax selects the correct devices.
+ */
+UCS_TEST_P(test_ucp_net_devices_config, range)
+{
+    entity *e = create_entity();
+
+    unsigned count = get_mlx5_device_count(*e);
+    if (count < 2) {
+        UCS_TEST_SKIP_R("Need at least 2 mlx5 devices");
+    }
+
+    m_entities.clear();
+
+    /* Exclude all but last device using negated range [0-(count-2)] */
+    std::string config = build_mlx5_range_config(0, count - 2);
+    modify_config("NET_DEVICES", config.c_str());
+    e = create_entity();
+
+    std::set<std::string> selected = get_net_device_names(*e);
+    std::set<std::string> expected = build_mlx5_range_set(0, count - 2);
+
+    EXPECT_EQ(expected, selected);
+}
+
+/*
+ * Test that negated range excludes the correct devices.
+ */
+UCS_TEST_P(test_ucp_net_devices_config, range_negate)
+{
+    entity *e = create_entity();
+
+    unsigned count = get_mlx5_device_count(*e);
+    if (count < 2) {
+        UCS_TEST_SKIP_R("Need at least 2 mlx5 devices");
+    }
+
+    m_entities.clear();
+
+    /* Exclude all but last device using negated range [0-(count-2)] */
+    std::string config = "^" + build_mlx5_range_config(0, count - 2);
+    modify_config("NET_DEVICES", config.c_str());
+    e = create_entity();
+
+    std::set<std::string> selected = get_net_device_names(*e);
+
+    verify_single_mlx5_device_selected(count, selected, count - 1);
+}
+
+/*
+ * Test that negated range excludes the correct devices (multiple ranges)
+ */
+UCS_TEST_P(test_ucp_net_devices_config, range_negate_multiple)
+{
+    entity *e = create_entity();
+
+    unsigned count = get_mlx5_device_count(*e);
+    if (count < 3) {
+        UCS_TEST_SKIP_R("Need at least 2 mlx5 devices");
+    }
+
+    m_entities.clear();
+
+    /* Exclude all mlx devices but mlx5_1 */
+    std::string config = "^" + build_mlx5_range_config(0, 0) + "," +
+                         build_mlx5_range_config(2, count - 1);
+    modify_config("NET_DEVICES", config.c_str());
+    e = create_entity();
+
+    std::set<std::string> selected = get_net_device_names(*e);
+
+    verify_single_mlx5_device_selected(count, selected, 1);
+}
+
+/*
+ * Test that an invalid range (end < start) produces a configuration error.
+ */
+UCS_TEST_P(test_ucp_net_devices_config, range_invalid_produces_error)
+{
+    ucs_status_t status;
+    {
+        scoped_log_handler slh(hide_errors_logger);
+        status = ucp_config_modify_internal(m_ucp_config, "NET_DEVICES",
+                                            "mlx5_[5-2]");
+    }
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_net_devices_config, all, "all")

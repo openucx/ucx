@@ -97,6 +97,7 @@ typedef struct {
     ucs_time_t      time_auto;
     ucs_time_t      time_inf;
     ucs_config_allow_list_t allow_list;
+    ucs_config_allow_list_t allow_list_with_ranges;
 
     int             temp_front;
     int             temp_rear;
@@ -234,6 +235,11 @@ ucs_config_field_t car_opts_table[] = {
 
   {"ALLOW_LIST", "all", "Allow-list: \"all\" OR \"val1,val2\" OR \"^val1,val2\"",
    ucs_offsetof(car_opts_t, allow_list), UCS_CONFIG_TYPE_ALLOW_LIST},
+
+  {"ALLOW_LIST_WITH_RANGES", "all",
+   "Allow-list with ranges: supports prefix[start-end] syntax",
+   ucs_offsetof(car_opts_t, allow_list_with_ranges),
+   UCS_CONFIG_TYPE_ALLOW_LIST_WITH_RANGES},
 
   {"TEMP", "20", "Temperature", 0,
     UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_UINT,
@@ -796,6 +802,136 @@ UCS_TEST_F(test_config, test_allow_list_negative)
 
     EXPECT_EQ(ucs_config_sscanf_allow_list("all,all", &field,
                                            &ucs_config_array_string), 0);
+}
+
+UCS_TEST_F(test_config, test_allow_list_with_ranges_basic) {
+    /* Test basic range expansion: prefix[2-4] -> prefix2, prefix3, prefix4 */
+    const std::string env_var = "UCX_ALLOW_LIST_WITH_RANGES";
+
+    {
+        /* coverity[tainted_string_argument] */
+        ucs::scoped_setenv env(env_var.c_str(), "prefix[2-4]");
+
+        car_opts opts(UCS_DEFAULT_ENV_PREFIX, NULL);
+        EXPECT_EQ(UCS_CONFIG_ALLOW_LIST_ALLOW,
+                  opts->allow_list_with_ranges.mode);
+        EXPECT_EQ(3u, opts->allow_list_with_ranges.array.count);
+        EXPECT_EQ(std::string("prefix2"),
+                  opts->allow_list_with_ranges.array.names[0]);
+        EXPECT_EQ(std::string("prefix3"),
+                  opts->allow_list_with_ranges.array.names[1]);
+        EXPECT_EQ(std::string("prefix4"),
+                  opts->allow_list_with_ranges.array.names[2]);
+    }
+}
+
+UCS_TEST_F(test_config, test_allow_list_with_ranges_mixed) {
+    /* Test mixed list: prefix0,prefix[2-4],prefix6 */
+    const std::string env_var = "UCX_ALLOW_LIST_WITH_RANGES";
+
+    {
+        /* coverity[tainted_string_argument] */
+        ucs::scoped_setenv env(env_var.c_str(), "prefix0,prefix[2-4],prefix6");
+
+        car_opts opts(UCS_DEFAULT_ENV_PREFIX, NULL);
+        EXPECT_EQ(UCS_CONFIG_ALLOW_LIST_ALLOW,
+                  opts->allow_list_with_ranges.mode);
+        EXPECT_EQ(5u, opts->allow_list_with_ranges.array.count);
+        EXPECT_EQ(std::string("prefix0"),
+                  opts->allow_list_with_ranges.array.names[0]);
+        EXPECT_EQ(std::string("prefix2"),
+                  opts->allow_list_with_ranges.array.names[1]);
+        EXPECT_EQ(std::string("prefix3"),
+                  opts->allow_list_with_ranges.array.names[2]);
+        EXPECT_EQ(std::string("prefix4"),
+                  opts->allow_list_with_ranges.array.names[3]);
+        EXPECT_EQ(std::string("prefix6"),
+                  opts->allow_list_with_ranges.array.names[4]);
+    }
+}
+
+UCS_TEST_F(test_config, test_allow_list_with_ranges_negation) {
+    /* Test negation with ranges: ^prefix[0-2] */
+    const std::string env_var = "UCX_ALLOW_LIST_WITH_RANGES";
+
+    {
+        /* coverity[tainted_string_argument] */
+        ucs::scoped_setenv env(env_var.c_str(), "^prefix[0-2]");
+
+        car_opts opts(UCS_DEFAULT_ENV_PREFIX, NULL);
+        EXPECT_EQ(UCS_CONFIG_ALLOW_LIST_NEGATE,
+                  opts->allow_list_with_ranges.mode);
+        EXPECT_EQ(3u, opts->allow_list_with_ranges.array.count);
+        EXPECT_EQ(std::string("prefix0"),
+                  opts->allow_list_with_ranges.array.names[0]);
+        EXPECT_EQ(std::string("prefix1"),
+                  opts->allow_list_with_ranges.array.names[1]);
+        EXPECT_EQ(std::string("prefix2"),
+                  opts->allow_list_with_ranges.array.names[2]);
+    }
+}
+
+UCS_TEST_F(test_config, test_allow_list_with_ranges_single_element) {
+    /* Test single-element range: prefix[5-5] -> prefix5 */
+    const std::string env_var = "UCX_ALLOW_LIST_WITH_RANGES";
+
+    {
+        /* coverity[tainted_string_argument] */
+        ucs::scoped_setenv env(env_var.c_str(), "prefix[5-5]");
+
+        car_opts opts(UCS_DEFAULT_ENV_PREFIX, NULL);
+        EXPECT_EQ(UCS_CONFIG_ALLOW_LIST_ALLOW,
+                  opts->allow_list_with_ranges.mode);
+        EXPECT_EQ(1u, opts->allow_list_with_ranges.array.count);
+        EXPECT_EQ(std::string("prefix5"),
+                  opts->allow_list_with_ranges.array.names[0]);
+    }
+}
+
+UCS_TEST_F(test_config, test_allow_list_with_ranges_invalid) {
+    /* Test invalid range (start > end): should fail parsing */
+    ucs_config_allow_list_t field;
+
+    EXPECT_EQ(0, ucs_config_sscanf_allow_list_with_ranges(
+                         "prefix[5-2]", &field, &ucs_config_array_string));
+}
+
+UCS_TEST_F(test_config, test_allow_list_with_ranges_malformed_as_literal) {
+    /* Malformed patterns should be treated as literal strings */
+    const std::string env_var = "UCX_ALLOW_LIST_WITH_RANGES";
+
+    {
+        /* coverity[tainted_string_argument] */
+        ucs::scoped_setenv env(env_var.c_str(),
+                               "prefix[2-],prefix[-4],prefix[2-4]extra");
+
+        car_opts opts(UCS_DEFAULT_ENV_PREFIX, NULL);
+        EXPECT_EQ(UCS_CONFIG_ALLOW_LIST_ALLOW,
+                  opts->allow_list_with_ranges.mode);
+        EXPECT_EQ(3u, opts->allow_list_with_ranges.array.count);
+        /* These are treated as literal strings since they don't match the range format */
+        EXPECT_EQ(std::string("prefix[2-]"),
+                  opts->allow_list_with_ranges.array.names[0]);
+        EXPECT_EQ(std::string("prefix[-4]"),
+                  opts->allow_list_with_ranges.array.names[1]);
+        EXPECT_EQ(std::string("prefix[2-4]extra"),
+                  opts->allow_list_with_ranges.array.names[2]);
+    }
+}
+
+UCS_TEST_F(test_config, test_allow_list_with_ranges_all) {
+    /* Test "all" keyword */
+    const std::string env_var = "UCX_ALLOW_LIST_WITH_RANGES";
+
+    {
+        /* coverity[tainted_string_argument] */
+        ucs::scoped_setenv env(env_var.c_str(), "all");
+
+        car_opts opts(UCS_DEFAULT_ENV_PREFIX, NULL);
+        EXPECT_EQ(UCS_CONFIG_ALLOW_LIST_ALLOW_ALL,
+                  opts->allow_list_with_ranges.mode);
+        EXPECT_EQ(0u, opts->allow_list_with_ranges.array.count);
+    }
 }
 
 UCS_TEST_F(test_config, test_key_value_generic_value) {
