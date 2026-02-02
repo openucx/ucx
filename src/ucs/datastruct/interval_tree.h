@@ -7,9 +7,9 @@
 #ifndef UCS_INTERVAL_TREE_H_
 #define UCS_INTERVAL_TREE_H_
 
-#include <ucs/type/status.h>
 #include <ucs/debug/assert.h>
 #include <ucs/sys/math.h>
+#include <ucs/type/status.h>
 #include <stdint.h>
 #include <stddef.h>
 
@@ -87,7 +87,7 @@ ucs_status_t ucs_interval_tree_insert_slow(ucs_interval_tree_t *tree,
 /**
  * Check if tree has only a root node (no children)
  */
-static inline int
+static UCS_F_ALWAYS_INLINE int
 ucs_interval_tree_is_single_node(const ucs_interval_tree_t *tree)
 {
     return (tree->root != NULL) && (tree->root->left == NULL) &&
@@ -104,7 +104,7 @@ ucs_interval_tree_is_single_node(const ucs_interval_tree_t *tree)
  *
  * @return UCS_OK on success, or error code on failure
  */
-static inline ucs_status_t ucs_interval_tree_insert(ucs_interval_tree_t *tree,
+static UCS_F_ALWAYS_INLINE ucs_status_t ucs_interval_tree_insert(ucs_interval_tree_t *tree,
                                                     uint64_t start,
                                                     uint64_t end)
 {
@@ -131,7 +131,7 @@ static inline ucs_status_t ucs_interval_tree_insert(ucs_interval_tree_t *tree,
  *
  * @return Non-zero if tree has exactly one interval [start, end], 0 otherwise
  */
-static inline int
+static UCS_F_ALWAYS_INLINE int
 ucs_interval_tree_is_single_range(const ucs_interval_tree_t *tree,
                                   uint64_t start, uint64_t end)
 {

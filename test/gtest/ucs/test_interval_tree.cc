@@ -5,6 +5,7 @@
  */
 
 #include <common/test.h>
+
 #include <algorithm>
 
 extern "C" {
@@ -13,7 +14,8 @@ extern "C" {
 
 class test_interval_tree : public ucs::test {
 protected:
-    using interval_vector_t = std::vector<std::pair<uint64_t, uint64_t>>;
+    using interval_t = std::pair<uint64_t, uint64_t>;
+    using interval_vector_t = std::vector<interval_t>;
 
     void init()
     {
@@ -27,20 +29,18 @@ protected:
         ucs::test::cleanup();
     }
 
-    bool is_fully_covered(const std::pair<uint64_t, uint64_t> &interval)
+    bool is_fully_covered(const interval_t &interval) const
     {
         return ucs_interval_tree_is_single_range(&m_tree, interval.first,
                                                  interval.second);
     }
 
-    bool is_any_covered(const interval_vector_t &intervals)
+    bool is_any_covered(const interval_vector_t &intervals) const
     {
         return std::any_of(
                 intervals.begin(), intervals.end(),
-                [this](const std::pair<uint64_t, uint64_t> &interval) {
-                    return ucs_interval_tree_is_single_range(&m_tree,
-                                                             interval.first,
-                                                             interval.second);
+                [this](const interval_t &interval) {
+                    return is_fully_covered(interval);
                 });
     }
 
@@ -57,7 +57,7 @@ protected:
     }
 
 private:
-    ucs_interval_tree_t     m_tree = {NULL, {NULL}};
+    ucs_interval_tree_t     m_tree;
     ucs_interval_tree_ops_t m_ops  = {(ucs_interval_tree_alloc_node_func_t)malloc,
                                       (ucs_interval_tree_free_node_func_t)free,
                                       NULL};

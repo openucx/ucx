@@ -64,7 +64,8 @@ void ucs_interval_tree_cleanup(ucs_interval_tree_t *tree)
  * Helper function to remove a node from the tree
  *
  * @param [in]  tree   Interval tree
- * @param [in]  root   Root of the subtree
+ * @param [in]  root   Root of the current subtree being searched (used for
+ *                     recursion - initially the tree's root)
  * @param [in]  target Node to remove
  *
  * @return New root of the subtree
