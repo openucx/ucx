@@ -975,7 +975,7 @@ uct_ib_device_query_gid_info(struct ibv_context *ctx, const char *dev_name,
                 return UCS_ERR_INVALID_PARAM;
             }
         } else {
-            info->roce_info.ver = UCT_IB_DEVICE_ROCE_V1;
+            return UCS_ERR_INVALID_PARAM;
         }
 
         info->roce_info.addr_family =
