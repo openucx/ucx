@@ -111,8 +111,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucs_interval_tree_insert(ucs_interval_tr
     ucs_assert(start <= end);
 
     /* Fast path: if tree has only root and new interval overlaps/touches it, extend it */
-    if (ucs_interval_tree_is_single_node(tree) && (start <= tree->root->end) &&
-        (tree->root->start <= end)) {
+    if (ucs_interval_tree_is_single_node(tree) &&
+        (start <= tree->root->end + 1) && (tree->root->start <= end + 1)) {
         tree->root->start = ucs_min(tree->root->start, start);
         tree->root->end   = ucs_max(tree->root->end, end);
         return UCS_OK;

@@ -57,7 +57,7 @@ protected:
     }
 
 private:
-    ucs_interval_tree_t     m_tree;
+    ucs_interval_tree_t     m_tree = {NULL, {NULL}};
     ucs_interval_tree_ops_t m_ops  = {(ucs_interval_tree_alloc_node_func_t)malloc,
                                       (ucs_interval_tree_free_node_func_t)free,
                                       NULL};
@@ -121,9 +121,9 @@ UCS_TEST_F(test_interval_tree, zero_length_insert) {
 }
 
 UCS_TEST_F(test_interval_tree, large_intervals) {
-    insert_intervals({{1000000, 2000000}, {2000001, 3000000}});
-    EXPECT_FALSE(is_any_covered({{1000000, 2000000}, {2000001, 3000000}, 
-                                 {1000000, 3000000}}));
+    insert_intervals({{1000000, 2000000}, {2000002, 3000000}});
+    EXPECT_FALSE(is_any_covered(
+            {{1000000, 2000000}, {2000002, 3000000}, {1000000, 3000000}}));
     insert_intervals({{1000000, 3000000}});
     EXPECT_TRUE(is_fully_covered({1000000, 3000000}));
 }
@@ -142,4 +142,17 @@ UCS_TEST_F(test_interval_tree, merge_multiple_overlaps) {
     EXPECT_TRUE(is_fully_covered({0, 50}));
 }
 
+UCS_TEST_F(test_interval_tree, adjacent_discrete_integers) {
+    insert_intervals({{1, 3}});
+    EXPECT_TRUE(is_fully_covered({1, 3}));
 
+    insert_intervals({{4, 6}});
+    EXPECT_TRUE(is_fully_covered({1, 6}));
+    EXPECT_FALSE(is_any_covered({{1, 3}, {4, 6}}));
+
+    insert_intervals({{10, 12}});
+    EXPECT_FALSE(is_fully_covered({10, 12}));
+
+    insert_intervals({{14, 16}});
+    EXPECT_FALSE(is_fully_covered({10, 16}));
+}

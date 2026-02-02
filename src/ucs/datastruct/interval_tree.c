@@ -130,19 +130,19 @@ ucs_interval_tree_remove_overlapping(ucs_interval_tree_t *tree,
     }
 
     /* Conditionally process left subtree: only if node's range might reach our start */
-    if (node->end >= *start) {
+    if (node->end + 1 >= *start) {
         node->left = ucs_interval_tree_remove_overlapping(tree, node->left,
                                                           start, end);
     }
 
     /* Conditionally process right subtree: only if node's range might reach our end */
-    if (node->start <= *end) {
+    if (node->start <= *end + 1) {
         node->right = ucs_interval_tree_remove_overlapping(tree, node->right,
                                                            start, end);
     }
 
     /* Check if current node overlaps or touches (continuous range) */
-    if ((*start <= node->end) && (node->start <= *end)) {
+    if ((*start <= node->end + 1) && (node->start <= *end + 1)) {
         /* Extend the range to cover this node */
         *start = ucs_min(*start, node->start);
         *end   = ucs_max(*end, node->end);
