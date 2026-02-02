@@ -79,7 +79,8 @@ void ucs_interval_tree_init(ucs_interval_tree_t *tree,
  */
 void ucs_interval_tree_cleanup(ucs_interval_tree_t *tree);
 
-
+/* TODO: remove this forward declaration when file is refactored to minimize 
+ * exposing private logic */
 ucs_status_t ucs_interval_tree_insert_slow(ucs_interval_tree_t *tree,
                                            uint64_t start, uint64_t end);
 
@@ -104,15 +105,14 @@ ucs_interval_tree_is_single_node(const ucs_interval_tree_t *tree)
  *
  * @return UCS_OK on success, or error code on failure
  */
-static UCS_F_ALWAYS_INLINE ucs_status_t ucs_interval_tree_insert(ucs_interval_tree_t *tree,
-                                                    uint64_t start,
-                                                    uint64_t end)
+static UCS_F_ALWAYS_INLINE ucs_status_t ucs_interval_tree_insert(
+        ucs_interval_tree_t *tree, uint64_t start, uint64_t end)
 {
     ucs_assert(start <= end);
 
     /* Fast path: if tree has only root and new interval overlaps/touches it, extend it */
     if (ucs_interval_tree_is_single_node(tree) &&
-        (start <= tree->root->end + 1) && (tree->root->start <= end + 1)) {
+        (start <= (tree->root->end + 1)) && (tree->root->start <= (end + 1))) {
         tree->root->start = ucs_min(tree->root->start, start);
         tree->root->end   = ucs_max(tree->root->end, end);
         return UCS_OK;
@@ -132,7 +132,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucs_interval_tree_insert(ucs_interval_tr
  * @return Non-zero if tree has exactly one interval [start, end], 0 otherwise
  */
 static UCS_F_ALWAYS_INLINE int
-ucs_interval_tree_is_single_range(const ucs_interval_tree_t *tree,
+ucs_interval_tree_is_equal_range(const ucs_interval_tree_t *tree,
                                   uint64_t start, uint64_t end)
 {
     ucs_assert(start <= end);

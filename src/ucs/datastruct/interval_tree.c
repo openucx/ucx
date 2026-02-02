@@ -60,7 +60,7 @@ void ucs_interval_tree_cleanup(ucs_interval_tree_t *tree)
 }
 
 
- /**
+/**
  * Helper function to remove a node from the tree
  *
  * @param [in]  tree   Interval tree
@@ -118,7 +118,9 @@ ucs_interval_tree_remove_node(ucs_interval_tree_t *tree,
 /**
  * Recursively find and remove all nodes that overlap with given interval.
  * The start/end parameters are updated to reflect the merged range.
- * Returns the new root of the subtree.
+ * Returns the new root of the subtree. Notice that we can safely remove 
+   partially overlapping nodes because we create a new node with the merged 
+   range.
  */
 static ucs_interval_node_t *
 ucs_interval_tree_remove_overlapping(ucs_interval_tree_t *tree,
@@ -130,19 +132,19 @@ ucs_interval_tree_remove_overlapping(ucs_interval_tree_t *tree,
     }
 
     /* Conditionally process left subtree: only if node's range might reach our start */
-    if (node->end + 1 >= *start) {
+    if ((node->end + 1) >= *start) {
         node->left = ucs_interval_tree_remove_overlapping(tree, node->left,
                                                           start, end);
     }
 
     /* Conditionally process right subtree: only if node's range might reach our end */
-    if (node->start <= *end + 1) {
+    if (node->start <= (*end + 1)) {
         node->right = ucs_interval_tree_remove_overlapping(tree, node->right,
                                                            start, end);
     }
 
     /* Check if current node overlaps or touches (continuous range) */
-    if ((*start <= node->end + 1) && (node->start <= *end + 1)) {
+    if ((*start <= (node->end + 1)) && (node->start <= (*end + 1))) {
         /* Extend the range to cover this node */
         *start = ucs_min(*start, node->start);
         *end   = ucs_max(*end, node->end);
@@ -154,6 +156,18 @@ ucs_interval_tree_remove_overlapping(ucs_interval_tree_t *tree,
     return node;
 }
 
+/**
+ * Insert a node into the tree using standard BST insertion
+ *
+ * The tree is organized by interval start values. This function assumes the
+ * new_node does not overlap with any existing nodes in the tree (overlapping
+ * nodes should be removed before calling this function).
+ *
+ * @param [in]  root      Root of the current subtree (NULL for empty tree)
+ * @param [in]  new_node  Node to insert
+ *
+ * @return New root of the subtree
+ */
 static ucs_interval_node_t *
 ucs_interval_tree_insert_node(ucs_interval_node_t *root,
                               ucs_interval_node_t *new_node)

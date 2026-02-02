@@ -14,7 +14,7 @@ extern "C" {
 
 class test_interval_tree : public ucs::test {
 protected:
-    using interval_t = std::pair<uint64_t, uint64_t>;
+    using interval_t        = std::pair<uint64_t, uint64_t>;
     using interval_vector_t = std::vector<interval_t>;
 
     void init()
@@ -31,17 +31,16 @@ protected:
 
     bool is_fully_covered(const interval_t &interval) const
     {
-        return ucs_interval_tree_is_single_range(&m_tree, interval.first,
+        return ucs_interval_tree_is_equal_range(&m_tree, interval.first,
                                                  interval.second);
     }
 
     bool is_any_covered(const interval_vector_t &intervals) const
     {
-        return std::any_of(
-                intervals.begin(), intervals.end(),
-                [this](const interval_t &interval) {
-                    return is_fully_covered(interval);
-                });
+        return std::any_of(intervals.begin(), intervals.end(),
+                           [this](const interval_t &interval) {
+                               return is_fully_covered(interval);
+                           });
     }
 
     void insert_intervals(const interval_vector_t &intervals)
