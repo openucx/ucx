@@ -1080,11 +1080,11 @@ ucp_config_is_tl_name_present(const ucs_config_names_array_t *tl_array,
 static UCS_F_ALWAYS_INLINE void
 ucp_get_dev_basename(const char *dev_name, char *dev_basename_p)
 {
-    const char *colon = strchr(dev_name, ':');
+    const char *delimiter = strchr(dev_name, ':');
     size_t basename_len;
 
-    if (colon != NULL) {
-        basename_len = colon - dev_name;
+    if (delimiter != NULL) {
+        basename_len = delimiter - dev_name;
         memcpy(dev_basename_p, dev_name, basename_len);
         dev_basename_p[basename_len] = '\0';
     } else {
@@ -1112,7 +1112,7 @@ static int ucp_is_resource_in_device_list(const uct_tl_resource_desc_t *resource
                                            devices[dev_type].count,
                                            resource->dev_name);
 
-    /* for network devices, also search for the base name (before the colon) */
+    /* for network devices, also search for the base name (before the delimiter) */
     if (dev_type == UCT_DEVICE_TYPE_NET) {
         ucp_get_dev_basename(resource->dev_name, dev_basename);
         if (*dev_basename != '\0') {

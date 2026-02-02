@@ -191,6 +191,57 @@ protected:
                            const std::string &dev_name) {
         return devices.find(dev_name) != devices.end();
     }
+
+    /* Test that a device config triggers duplicate device warning */
+    void test_duplicate_device_warning(const std::string &devices_config,
+                                       const std::string &duplicate_dev_name)
+    {
+        entity *e = create_entity();
+
+        std::set<std::string> mlx5_devices = get_mlx5_device_names(*e);
+        if (mlx5_devices.empty()) {
+            UCS_TEST_SKIP_R("No mlx5 network device available");
+        }
+
+        if (!has_device(mlx5_devices, duplicate_dev_name)) {
+            UCS_TEST_SKIP_R(duplicate_dev_name + " device not available");
+        }
+
+        m_entities.clear();
+
+        modify_config("NET_DEVICES", devices_config.c_str());
+
+        size_t warn_count;
+        {
+            scoped_log_handler slh(hide_warns_logger);
+            warn_count = m_warnings.size();
+            create_entity();
+        }
+
+        EXPECT_EQ(m_warnings.size() - warn_count, 1)
+                << "Expected exactly one warning";
+
+        // print all warnings
+        for (const std::string &warn : m_warnings) {
+            std::cout << warn << std::endl;
+        }
+
+        /* Check that a warning about duplicate device was printed */
+        std::string expected_warn = "device '" + duplicate_dev_name +
+                                    "' was selected multiple times";
+        bool found_warning        = false;
+        for (size_t i = warn_count; i < m_warnings.size(); ++i) {
+            if (m_warnings[i].find(expected_warn) != std::string::npos) {
+                found_warning = true;
+                break;
+            }
+        }
+
+        EXPECT_TRUE(found_warning)
+                << "Expected warning about duplicate device '"
+                << duplicate_dev_name << "' with config '" << devices_config
+                << "'";
+    }
 };
 
 /*
@@ -292,56 +343,6 @@ UCS_TEST_P(test_ucp_net_devices_config, range_with_base_names)
 }
 
 /*
- * Test that specifying a device multiple times (e.g., via range and explicit)
- * produces a warning about duplicate device specification.
- */
-UCS_TEST_P(test_ucp_net_devices_config, duplicate_device_warning)
-{
-    entity *e = create_entity();
-
-    std::set<std::string> mlx5_devices = get_mlx5_device_names(*e);
-    if (mlx5_devices.empty()) {
-        UCS_TEST_SKIP_R("No mlx5 network device available");
-    }
-
-    std::set<std::string> base_names = get_mlx5_base_names(mlx5_devices);
-    if (base_names.empty()) {
-        UCS_TEST_SKIP_R("No mlx5 devices with port suffix found");
-    }
-
-    /* Pick the first base name for testing */
-    std::string test_base_name = *base_names.begin();
-
-    m_entities.clear();
-
-    /* Set NET_DEVICES to include both a range and an explicit device that
-     * overlaps with the range, e.g., "mlx5_[0-99],mlx5_0" */
-    std::string devices_config = "mlx5_[0-99]," + test_base_name;
-    modify_config("NET_DEVICES", devices_config.c_str());
-
-    size_t warn_count;
-    {
-        scoped_log_handler slh(hide_warns_logger);
-        warn_count = m_warnings.size();
-        create_entity();
-    }
-
-    /* Check that a warning about duplicate device was printed */
-    std::string expected_warn = "device '" + test_base_name +
-                                "' is specified multiple times";
-    bool found_warning        = false;
-    for (size_t i = warn_count; i < m_warnings.size(); ++i) {
-        if (m_warnings[i].find(expected_warn) != std::string::npos) {
-            found_warning = true;
-            break;
-        }
-    }
-
-    EXPECT_TRUE(found_warning) << "Expected warning about duplicate device '"
-                               << test_base_name << "'";
-}
-
-/*
  * Test that a range not covering all devices only selects matching devices.
  * E.g., "mlx5_[1-2]" should match mlx5_1 and mlx5_2, but not mlx5_0.
  */
@@ -377,4 +378,33 @@ UCS_TEST_P(test_ucp_net_devices_config, partial_range_selection)
     EXPECT_EQ(selected_base_names, expected_base_names);
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_net_devices_config, all, "all")
+/*
+ * Test that specifying a device multiple times produces a warning
+ */
+UCS_TEST_P(test_ucp_net_devices_config, duplicate_device_warning_simple)
+{
+    test_duplicate_device_warning("mlx5_0:1,mlx5_0:1", "mlx5_0:1");
+}
+
+UCS_TEST_P(test_ucp_net_devices_config, duplicate_device_warning_base_name)
+{
+    test_duplicate_device_warning("mlx5_0:1,mlx5_0", "mlx5_0:1");
+}
+
+UCS_TEST_P(test_ucp_net_devices_config, duplicate_device_warning_two_base_name)
+{
+    test_duplicate_device_warning("mlx5_0,mlx5_0", "mlx5_0:1");
+}
+
+UCS_TEST_P(test_ucp_net_devices_config, duplicate_device_warning_range)
+{
+    test_duplicate_device_warning("mlx5_[0-99],mlx5_0", "mlx5_0:1");
+}
+
+UCS_TEST_P(test_ucp_net_devices_config, duplicate_device_warning_two_ranges)
+{
+    test_duplicate_device_warning("mlx5_[0-1],mlx5_[1-2]", "mlx5_1:1");
+}
+
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_net_devices_config, ib, "ib")
