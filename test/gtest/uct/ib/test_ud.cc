@@ -1017,6 +1017,7 @@ UCS_TEST_SKIP_COND_P(test_ud, stale_dest_ep_id_update,
     constexpr uint32_t STALE_DEST_EP_ID = 0xBEEF;
     constexpr uint32_t REMOTE_EP_ID = 1;
 
+    for (int i = 0; i < 100000; i++) {
     /* Create a dummy EP on m_e1 first, so the actual EP will have ep_id=1
      * (not 0, which could be confused with NULL/default values) */
     m_e1->create_ep(0);
@@ -1054,6 +1055,7 @@ UCS_TEST_SKIP_COND_P(test_ud, stale_dest_ep_id_update,
         << "dest_ep_id should match the remote EP's actual ep_id";
     EXPECT_EQ(REMOTE_EP_ID, ep(m_e2)->dest_ep_id)
         << "dest_ep_id should be 1 (not 0)";
+    }
 }
 #endif
 
