@@ -784,13 +784,21 @@ const uct_ib_device_spec_t* uct_ib_device_spec(uct_ib_device_t *dev)
                     default settings for unknown devices */
 }
 
-static unsigned long uct_ib_device_get_ib_gid_index(uct_ib_md_t *md)
+static ucs_status_t uct_ib_device_get_gid(uct_ib_device_t *dev, uint8_t port_num,
+                                          union ibv_gid *gid, int gid_tbl_len,
+                                          ucs_log_level_t error_level)
 {
-    if (md->config.gid_index == UCS_ULUNITS_AUTO) {
-        return UCT_IB_DEVICE_DEFAULT_GID_INDEX;
-    } else {
-        return md->config.gid_index;
+    int gid_index;
+    ucs_status_t status = UCS_ERR_INVALID_PARAM;
+
+    for (gid_index = 0; gid_index < gid_tbl_len; gid_index++) {
+        status = uct_ib_device_query_gid(dev, port_num, gid_index, gid,
+                                         error_level);
+        if (status == UCS_OK)
+            break;
     }
+
+    return status;
 }
 
 ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
@@ -800,14 +808,15 @@ ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
     const uct_ib_device_spec_t *dev_info;
     uint8_t required_dev_flags;
     ucs_status_t status;
-    unsigned gid_index;
     union ibv_gid gid;
+    int gid_tbl_len;
 
     if (port_num < dev->first_port || port_num >= dev->first_port + dev->num_ports) {
         return UCS_ERR_NO_DEVICE;
     }
 
-    if (uct_ib_device_port_attr(dev, port_num)->gid_tbl_len == 0) {
+    gid_tbl_len = uct_ib_device_port_attr(dev, port_num)->gid_tbl_len;
+    if (gid_tbl_len == 0) {
         ucs_debug("%s:%d has no gid", uct_ib_device_name(dev),
                   port_num);
         return UCS_ERR_UNSUPPORTED;
@@ -850,9 +859,8 @@ ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    gid_index = uct_ib_device_get_ib_gid_index(md);
-    status    = uct_ib_device_query_gid(dev, port_num, gid_index, &gid,
-                                        UCS_LOG_LEVEL_DIAG);
+    status = uct_ib_device_get_gid(dev, port_num, &gid, gid_tbl_len,
+                                   UCS_LOG_LEVEL_DIAG);
     if (status != UCS_OK) {
         return status;
     }
