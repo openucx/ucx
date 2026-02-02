@@ -993,52 +993,6 @@ static uint64_t ucp_str_array_search(const char **array, unsigned array_len,
     return result;
 }
 
-/* Search str in the ranges that are specified in the array. 
- * Ranges are a prefix followed by a [range_start-range_end] suffix. (ex: mlx5_[0-2])
- * @return bitmap of indexes in which the string appears in the array.
- */
-static uint64_t ucp_str_array_search_in_ranges(const char **array,
-                                               unsigned array_len,
-                                               const char *str)
-{
-    unsigned long range_start, range_end, str_id;
-    size_t prefix_len;
-    uint64_t result;
-    const char *p;
-    char *endptr;
-    unsigned i;
-    int n;
-
-    result = 0;
-    for (i = 0; i < array_len; ++i) {
-        p = strchr(array[i], '[');
-        if (p == NULL) {
-            continue; /* Not a range */
-        }
-
-        prefix_len = (size_t)(p - array[i]);
-        if (strncmp(array[i], str, prefix_len)) {
-            continue; /* Prefix does not match */
-        }
-
-        n = 0;
-        if ((sscanf(p, "[%lu-%lu]%n", &range_start, &range_end, &n) != 2) ||
-            (n == 0) || (p[n] != '\0') || (range_start > range_end)) {
-            continue; /* Invalid range */
-        }
-
-        str_id = strtoul(str + prefix_len, &endptr, 10);
-        if ((endptr == str + prefix_len) || (*endptr != '\0') ||
-            (str_id < range_start) || (str_id > range_end)) {
-            continue; /* Mismatch */
-        }
-
-        result |= UCS_BIT(i);
-    }
-
-    return result;
-}
-
 static unsigned ucp_tl_alias_count(ucp_tl_alias_t *alias)
 {
     unsigned count;
@@ -1108,9 +1062,6 @@ static int ucp_is_resource_in_device_list(const uct_tl_resource_desc_t *resource
     mask = ucp_str_array_search((const char**)devices[dev_type].names,
                                 devices[dev_type].count, resource->dev_name,
                                 NULL);
-    mask |= ucp_str_array_search_in_ranges((const char**)devices[dev_type].names,
-                                           devices[dev_type].count,
-                                           resource->dev_name);
 
     /* for network devices, also search for the base name (before the delimiter) */
     if (dev_type == UCT_DEVICE_TYPE_NET) {
@@ -1119,9 +1070,6 @@ static int ucp_is_resource_in_device_list(const uct_tl_resource_desc_t *resource
             mask |= ucp_str_array_search((const char**)devices[dev_type].names,
                                          devices[dev_type].count, dev_basename,
                                          NULL);
-            mask |= ucp_str_array_search_in_ranges(
-                    (const char**)devices[dev_type].names,
-                    devices[dev_type].count, dev_basename);
         }
     }
 
