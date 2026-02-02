@@ -177,20 +177,23 @@ protected:
         return device_names;
     }
 
+    static std::string get_device_base_name(const std::string &dev_name)
+    {
+        size_t delimiter_pos = dev_name.find(DELIMITER);
+        if (delimiter_pos != std::string::npos) {
+            return dev_name.substr(0, delimiter_pos);
+        } else {
+            return dev_name;
+        }
+    }
+
     static std::set<std::string>
     get_device_base_names(const std::set<std::string> &dev_names)
     {
         std::set<std::string> base_names;
-
         for (const std::string &dev_name : dev_names) {
-            size_t delimiter_pos = dev_name.find(DELIMITER);
-            if (delimiter_pos != std::string::npos) {
-                base_names.insert(dev_name.substr(0, delimiter_pos));
-            } else {
-                base_names.insert(dev_name);
-            }
+            base_names.insert(get_device_base_name(dev_name));
         }
-
         return base_names;
     }
 
@@ -317,6 +320,106 @@ UCS_TEST_P(test_ucp_net_devices_config, duplicate_device_warning_base_name)
 UCS_TEST_P(test_ucp_net_devices_config, duplicate_device_warning_two_base_name)
 {
     test_duplicate_device_warning("mlx5_0:1", "mlx5_0,mlx5_0", "mlx5_0");
+}
+
+/*
+ * Test that negate mode excludes a single device
+ */
+UCS_TEST_P(test_ucp_net_devices_config, negate_single_device)
+{
+    entity *e = create_entity();
+
+    std::set<std::string> net_devices = get_net_device_names(*e);
+    if (net_devices.size() < 2) {
+        UCS_TEST_SKIP_R("Need at least 2 network devices to test negate mode");
+    }
+
+    std::string excluded_device = *net_devices.begin();
+    m_entities.clear();
+
+    /* Set negate mode - exclude one device */
+    modify_config("NET_DEVICES", ("^" + excluded_device).c_str());
+    e = create_entity();
+
+    std::set<std::string> selected_devices = get_net_device_names(*e);
+
+    /* Verify excluded device is not selected */
+    EXPECT_FALSE(has_device(selected_devices, excluded_device))
+            << "Device '" << excluded_device << "' should be excluded";
+
+    /* Verify at least one other device is selected */
+    EXPECT_FALSE(selected_devices.empty())
+            << "At least one device should be selected";
+}
+
+/*
+ * Test that negate mode excludes multiple devices
+ */
+UCS_TEST_P(test_ucp_net_devices_config, negate_multiple_devices)
+{
+    entity *e = create_entity();
+
+    std::set<std::string> net_devices = get_net_device_names(*e);
+    if (net_devices.size() < 3) {
+        UCS_TEST_SKIP_R("Need at least 3 network devices to test negate "
+                        "multiple devices");
+    }
+
+    /* Get first two devices to exclude */
+    auto it                     = net_devices.begin();
+    std::string excluded_dev1   = *it++;
+    std::string excluded_dev2   = *it++;
+    std::string excluded_config = excluded_dev1 + "," + excluded_dev2;
+
+    m_entities.clear();
+
+    /* Set negate mode - exclude two devices */
+    modify_config("NET_DEVICES", ("^" + excluded_config).c_str());
+    e = create_entity();
+
+    std::set<std::string> selected_devices = get_net_device_names(*e);
+
+    /* Verify both excluded devices are not selected */
+    EXPECT_FALSE(has_device(selected_devices, excluded_dev1))
+            << "Device '" << excluded_dev1 << "' should be excluded";
+    EXPECT_FALSE(has_device(selected_devices, excluded_dev2))
+            << "Device '" << excluded_dev2 << "' should be excluded";
+
+    /* Verify at least one other device is selected */
+    EXPECT_FALSE(selected_devices.empty())
+            << "At least one device should be selected";
+}
+
+/*
+ * Test that negate mode with base name excludes the device
+ */
+UCS_TEST_P(test_ucp_net_devices_config, negate_base_name)
+{
+    entity *e = create_entity();
+
+    std::set<std::string> net_devices = get_net_device_names_with_delimiter(*e);
+    if (net_devices.empty()) {
+        UCS_TEST_SKIP_R("No network devices available with delimiter");
+    }
+
+    std::string dev_name     = *net_devices.begin();
+    std::string dev_basename = get_device_base_name(dev_name);
+
+    m_entities.clear();
+
+    /* Set negate mode - exclude by base name */
+    modify_config("NET_DEVICES", ("^" + dev_basename).c_str());
+    e = create_entity();
+
+    std::set<std::string> selected_devices = get_net_device_names(*e);
+
+    /* Verify device with that base name is excluded */
+    EXPECT_FALSE(has_device(selected_devices, dev_name))
+            << "Device '" << dev_name << "' should be excluded";
+
+    /* Verify at least one other device is selected */
+    EXPECT_FALSE(selected_devices.empty())
+            << "At least one device should be selected";
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_net_devices_config, all, "all")
