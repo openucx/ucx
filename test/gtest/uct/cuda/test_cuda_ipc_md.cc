@@ -11,7 +11,10 @@
 
 extern "C" {
 #include <uct/cuda/cuda_ipc/cuda_ipc_md.h>
+#include <uct/cuda/cuda_ipc/cuda_ipc_cache.h>
 #include <uct/cuda/base/cuda_iface.h>
+#include <ucs/sys/ptr_arith.h>
+#include <ucs/sys/uid.h>
 }
 
 class test_cuda_ipc_md : public test_md {
@@ -85,6 +88,68 @@ protected:
         EXPECT_EQ(CUDA_SUCCESS, cuMemFree(*ptr));
         EXPECT_EQ(CUDA_SUCCESS, cuMemPoolDestroy(*mpool));
         EXPECT_EQ(CUDA_SUCCESS, cuStreamDestroy(*cu_stream));
+    }
+
+    static ucs_status_t
+    alloc_vmm_posix_fd(CUdeviceptr *ptr, CUmemGenericAllocationHandle *handle,
+                       size_t *size)
+    {
+        CUmemAllocationProp prop = {};
+        CUmemAccessDesc access_desc = {};
+        CUdevice cu_device;
+        size_t granularity;
+
+        if (cuCtxGetDevice(&cu_device) != CUDA_SUCCESS) {
+            return UCS_ERR_NO_DEVICE;
+        }
+
+        prop.type                 = CU_MEM_ALLOCATION_TYPE_PINNED;
+        prop.requestedHandleTypes = CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR;
+        prop.location.type        = CU_MEM_LOCATION_TYPE_DEVICE;
+        prop.location.id          = cu_device;
+
+        if (cuMemGetAllocationGranularity(&granularity, &prop,
+                CU_MEM_ALLOC_GRANULARITY_MINIMUM) != CUDA_SUCCESS) {
+            return UCS_ERR_UNSUPPORTED;
+        }
+
+        *size = ucs_align_up(*size, granularity);
+
+        if (cuMemCreate(handle, *size, &prop, 0) != CUDA_SUCCESS) {
+            return UCS_ERR_UNSUPPORTED;
+        }
+
+        if (cuMemAddressReserve(ptr, *size, granularity, 0, 0) != CUDA_SUCCESS) {
+            cuMemRelease(*handle);
+            return UCS_ERR_NO_MEMORY;
+        }
+
+        if (cuMemMap(*ptr, *size, 0, *handle, 0) != CUDA_SUCCESS) {
+            cuMemAddressFree(*ptr, *size);
+            cuMemRelease(*handle);
+            return UCS_ERR_NO_MEMORY;
+        }
+
+        access_desc.flags         = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
+        access_desc.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
+        access_desc.location.id   = cu_device;
+
+        if (cuMemSetAccess(*ptr, *size, &access_desc, 1) != CUDA_SUCCESS) {
+            cuMemUnmap(*ptr, *size);
+            cuMemAddressFree(*ptr, *size);
+            cuMemRelease(*handle);
+            return UCS_ERR_NO_MEMORY;
+        }
+
+        return UCS_OK;
+    }
+
+    static void free_vmm(CUdeviceptr ptr, CUmemGenericAllocationHandle handle,
+                         size_t size)
+    {
+        cuMemUnmap(ptr, size);
+        cuMemAddressFree(ptr, size);
+        cuMemRelease(handle);
     }
 
     static uct_cuda_ipc_rkey_t unpack_masync(uct_md_h md, int64_t uuid)
@@ -218,6 +283,87 @@ UCS_TEST_P(test_cuda_ipc_md, mkey_pack_mempool)
 #endif
 }
 
+UCS_TEST_P(test_cuda_ipc_md, mkey_pack_posix_fd)
+{
+#if HAVE_CUDA_FABRIC
+    size_t size = 4096;
+    CUdeviceptr ptr;
+    CUmemGenericAllocationHandle handle;
+    uct_mem_h memh;
+    uct_cuda_ipc_rkey_t rkey = {};
+
+    ucs_status_t status = alloc_vmm_posix_fd(&ptr, &handle, &size);
+    if (status == UCS_ERR_UNSUPPORTED) {
+        UCS_TEST_SKIP_R("POSIX FD VMM allocation not supported");
+    }
+    ASSERT_UCS_OK(status);
+
+    EXPECT_UCS_OK(md()->ops->mem_reg(md(), (void *)ptr, size, NULL, &memh));
+    EXPECT_UCS_OK(md()->ops->mkey_pack(md(), memh, (void *)ptr, size, NULL,
+                                       &rkey));
+    EXPECT_EQ(UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD, rkey.ph.handle_type);
+
+    uct_md_mem_dereg_params_t params;
+    params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
+    params.memh       = memh;
+    EXPECT_UCS_OK(md()->ops->mem_dereg(md(), &params));
+    free_vmm(ptr, handle, size);
+#else
+    UCS_TEST_SKIP_R("built without fabric support");
+#endif
+}
+
+UCS_TEST_P(test_cuda_ipc_md, posix_fd_system_id_mismatch)
+{
+#if HAVE_CUDA_FABRIC
+    size_t size = 4096;
+    CUdeviceptr ptr;
+    CUmemGenericAllocationHandle handle;
+    uct_mem_h memh;
+    uct_cuda_ipc_rkey_t rkey = {};
+
+    ucs_status_t status = alloc_vmm_posix_fd(&ptr, &handle, &size);
+    if (status == UCS_ERR_UNSUPPORTED) {
+        UCS_TEST_SKIP_R("POSIX FD VMM allocation not supported");
+    }
+    ASSERT_UCS_OK(status);
+
+    EXPECT_UCS_OK(md()->ops->mem_reg(md(), (void *)ptr, size, NULL, &memh));
+    EXPECT_UCS_OK(md()->ops->mkey_pack(md(), memh, (void *)ptr, size, NULL,
+                                       &rkey));
+    EXPECT_EQ(UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD, rkey.ph.handle_type);
+
+    /* Verify system_id was packed correctly before we tamper with it */
+    EXPECT_EQ(ucs_get_system_id(), rkey.ph.handle.posix_fd.system_id);
+
+    /* Tamper system_id to simulate a key arriving from a different machine */
+    rkey.ph.handle.posix_fd.system_id ^= 0xDEADBEEFDEADBEEFULL;
+
+    /* Tamper UUID to bypass the same-process shortcut in
+     * uct_cuda_ipc_map_memhandle (PID match + UUID match -> early return).
+     * We need the code to reach uct_cuda_ipc_open_memhandle where the
+     * system_id check lives. */
+    int64_t *uuid64 = (int64_t *)rkey.uuid.bytes;
+    uuid64[0]       = 0xDEADll;
+    uuid64[1]       = 0xBEEFll;
+
+    /* Unpack must fail: the system_id mismatch causes UCS_ERR_UNREACHABLE
+     * before any FD duplication or CUDA import is attempted */
+    uct_rkey_unpack_params_t unpack_params = { 0 };
+    EXPECT_EQ(UCS_ERR_UNREACHABLE,
+              uct_rkey_unpack_v2(md()->component, &rkey, &unpack_params,
+                                 NULL));
+
+    uct_md_mem_dereg_params_t params;
+    params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
+    params.memh       = memh;
+    EXPECT_UCS_OK(md()->ops->mem_dereg(md(), &params));
+    free_vmm(ptr, handle, size);
+#else
+    UCS_TEST_SKIP_R("built without fabric support");
+#endif
+}
+
 UCS_TEST_P(test_cuda_ipc_md, mnnvl_disabled)
 {
     /* Currently MNNVL is always disabled in CI */
@@ -225,4 +371,237 @@ UCS_TEST_P(test_cuda_ipc_md, mnnvl_disabled)
     EXPECT_FALSE(cuda_ipc_md->enable_mnnvl);
 }
 
+UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
+{
+#if HAVE_CUDA_FABRIC
+    size_t size = 4096;
+    CUdeviceptr ptr;
+    CUmemGenericAllocationHandle handle;
+    uct_mem_h memh;
+    uct_cuda_ipc_rkey_t rkey = {};
+
+    ucs_status_t status = alloc_vmm_posix_fd(&ptr, &handle, &size);
+    if (status == UCS_ERR_UNSUPPORTED) {
+        UCS_TEST_SKIP_R("POSIX FD VMM allocation not supported");
+    }
+    ASSERT_UCS_OK(status);
+
+    /* Fill the buffer with a known pattern before packing */
+    ASSERT_EQ(CUDA_SUCCESS, cuMemsetD8(ptr, 0xAB, size));
+
+    EXPECT_UCS_OK(md()->ops->mem_reg(md(), (void *)ptr, size, NULL, &memh));
+    EXPECT_UCS_OK(md()->ops->mkey_pack(md(), memh, (void *)ptr, size, NULL,
+                                       &rkey));
+    EXPECT_EQ(UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD, rkey.ph.handle_type);
+    EXPECT_EQ(ucs_get_system_id(), rkey.ph.handle.posix_fd.system_id);
+
+    /* Tamper UUID to bypass the same-process shortcut in
+     * uct_cuda_ipc_map_memhandle (PID match + UUID match -> early return).
+     * This forces the code through uct_cuda_ipc_open_memhandle where the
+     * system_id check, pidfd_open/pidfd_getfd FD duplication, and
+     * cuMemImportFromShareableHandle are exercised. */
+    int64_t *uuid64 = (int64_t *)rkey.uuid.bytes;
+    uuid64[0]       = 0x1234ll;
+    uuid64[1]       = 0x5678ll;
+
+    uct_component_t *component = md()->component;
+
+    /* Run unpack on a separate thread with its own CUDA context.
+     * The same-process shortcut fails (UUID mismatch), so the full
+     * POSIX FD import path is entered:
+     *   1. system_id verified (same machine -> passes)
+     *   2. pidfd_open/pidfd_getfd duplicate our own FD
+     *   3. cuMemImportFromShareableHandle imports the allocation
+     * Then verify the imported mapping is usable by reading the data
+     * pattern back through it. */
+    std::exception_ptr thread_exception;
+    std::thread([&]() {
+        try {
+            CUdevice dev;
+            CUcontext ctx;
+            ASSERT_EQ(CUDA_SUCCESS, cuDeviceGet(&dev, 0));
+            ASSERT_EQ(CUDA_SUCCESS, cuCtxCreate(&ctx, 0, dev));
+
+            uct_rkey_unpack_params_t unpack_params = {};
+            uct_rkey_bundle_t rkey_bundle           = {};
+            ucs_status_t unpack_status = uct_rkey_unpack_v2(
+                    component, &rkey, &unpack_params, &rkey_bundle);
+            ASSERT_UCS_OK(unpack_status);
+
+            /* Retrieve the mapped address for data verification */
+            uct_cuda_ipc_unpacked_rkey_t *unpacked =
+                (uct_cuda_ipc_unpacked_rkey_t *)rkey_bundle.rkey;
+            void *mapped_addr;
+            ucs_status_t map_status = uct_cuda_ipc_map_memhandle(
+                    &unpacked->super, dev, &mapped_addr,
+                    UCS_LOG_LEVEL_ERROR);
+            ASSERT_UCS_OK(map_status);
+
+            /* Read data through the imported mapping and verify the
+             * 0xAB pattern written by the main thread is visible. */
+            std::vector<uint8_t> host_buf(size);
+            ASSERT_EQ(CUDA_SUCCESS, cuMemcpyDtoH(
+                    host_buf.data(), (CUdeviceptr)mapped_addr, size));
+            for (size_t i = 0; i < size; i++) {
+                ASSERT_EQ(0xAB, host_buf[i])
+                    << "Data mismatch at byte " << i;
+            }
+
+            uct_rkey_release(component, &rkey_bundle);
+            cuCtxDestroy(ctx);
+        } catch (...) {
+            thread_exception = std::current_exception();
+        }
+    }).join();
+
+    if (thread_exception) {
+        std::rethrow_exception(thread_exception);
+    }
+
+    uct_md_mem_dereg_params_t params;
+    params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
+    params.memh       = memh;
+    EXPECT_UCS_OK(md()->ops->mem_dereg(md(), &params));
+    free_vmm(ptr, handle, size);
+#else
+    UCS_TEST_SKIP_R("built without fabric support");
+#endif
+}
+
 _UCT_MD_INSTANTIATE_TEST_CASE(test_cuda_ipc_md, cuda_ipc);
+
+class test_cuda_ipc_posix_fd : public uct_test {
+protected:
+    void init() {
+        uct_test::init();
+
+        m_receiver = uct_test::create_entity(0);
+        m_entities.push_back(m_receiver);
+
+        m_sender = uct_test::create_entity(0);
+        m_entities.push_back(m_sender);
+
+        m_sender->connect(0, *m_receiver, 0);
+    }
+
+    entity *m_sender;
+    entity *m_receiver;
+
+    static const uint64_t SEED1 = 0xABClu;
+    static const uint64_t SEED2 = 0xDEFlu;
+};
+
+UCS_TEST_P(test_cuda_ipc_posix_fd, put_zcopy)
+{
+#if HAVE_CUDA_FABRIC
+    CUmemAllocationProp prop = {};
+    CUmemAccessDesc access_desc = {};
+    CUdevice cu_device;
+    size_t granularity;
+    size_t length = 4096;
+    CUdeviceptr send_ptr, recv_ptr;
+    CUmemGenericAllocationHandle send_handle, recv_handle;
+
+    if (cuCtxGetDevice(&cu_device) != CUDA_SUCCESS) {
+        UCS_TEST_SKIP_R("no CUDA device");
+    }
+
+    prop.type                 = CU_MEM_ALLOCATION_TYPE_PINNED;
+    prop.requestedHandleTypes = CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR;
+    prop.location.type        = CU_MEM_LOCATION_TYPE_DEVICE;
+    prop.location.id          = cu_device;
+
+    if (cuMemGetAllocationGranularity(&granularity, &prop,
+            CU_MEM_ALLOC_GRANULARITY_MINIMUM) != CUDA_SUCCESS) {
+        UCS_TEST_SKIP_R("POSIX FD VMM allocation not supported");
+    }
+
+    length = ucs_align_up(length, granularity);
+
+    /* Allocate send buffer */
+    ASSERT_EQ(CUDA_SUCCESS, cuMemCreate(&send_handle, length, &prop, 0));
+    ASSERT_EQ(CUDA_SUCCESS, cuMemAddressReserve(&send_ptr, length,
+                                                granularity, 0, 0));
+    ASSERT_EQ(CUDA_SUCCESS, cuMemMap(send_ptr, length, 0, send_handle, 0));
+    access_desc.flags         = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
+    access_desc.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
+    access_desc.location.id   = cu_device;
+    ASSERT_EQ(CUDA_SUCCESS, cuMemSetAccess(send_ptr, length, &access_desc, 1));
+
+    /* Allocate recv buffer */
+    ASSERT_EQ(CUDA_SUCCESS, cuMemCreate(&recv_handle, length, &prop, 0));
+    ASSERT_EQ(CUDA_SUCCESS, cuMemAddressReserve(&recv_ptr, length,
+                                                granularity, 0, 0));
+    ASSERT_EQ(CUDA_SUCCESS, cuMemMap(recv_ptr, length, 0, recv_handle, 0));
+    ASSERT_EQ(CUDA_SUCCESS, cuMemSetAccess(recv_ptr, length, &access_desc, 1));
+
+    /* Register send buffer with sender entity */
+    uct_allocated_memory_t send_mem = {};
+    send_mem.address    = (void *)send_ptr;
+    send_mem.length     = length;
+    send_mem.mem_type   = UCS_MEMORY_TYPE_CUDA;
+    send_mem.memh       = UCT_MEM_HANDLE_NULL;
+    send_mem.md         = NULL;
+    send_mem.method     = UCT_ALLOC_METHOD_LAST;
+    send_mem.sys_device = UCS_SYS_DEVICE_ID_UNKNOWN;
+    m_sender->mem_type_reg(&send_mem, UCT_MD_MEM_ACCESS_ALL);
+
+    /* Register recv buffer with receiver entity */
+    uct_allocated_memory_t recv_mem = {};
+    recv_mem.address    = (void *)recv_ptr;
+    recv_mem.length     = length;
+    recv_mem.mem_type   = UCS_MEMORY_TYPE_CUDA;
+    recv_mem.memh       = UCT_MEM_HANDLE_NULL;
+    recv_mem.md         = NULL;
+    recv_mem.method     = UCT_ALLOC_METHOD_LAST;
+    recv_mem.sys_device = UCS_SYS_DEVICE_ID_UNKNOWN;
+    m_receiver->mem_type_reg(&recv_mem, UCT_MD_MEM_ACCESS_ALL);
+
+    /* Unpack rkey for recv buffer. The same-process shortcut in
+     * uct_cuda_ipc_map_memhandle is used (PID + UUID match). The
+     * posix_fd_same_node_ipc test validates the full POSIX FD import
+     * path by tampering the UUID to bypass this shortcut. */
+    uct_rkey_bundle_t rkey_bundle = {};
+    m_receiver->rkey_unpack(&recv_mem, &rkey_bundle);
+
+    /* Fill send buffer with pattern, recv buffer with different pattern */
+    mem_buffer::pattern_fill((void *)send_ptr, length, SEED1,
+                             UCS_MEMORY_TYPE_CUDA);
+    mem_buffer::pattern_fill((void *)recv_ptr, length, SEED2,
+                             UCS_MEMORY_TYPE_CUDA);
+
+    /* Prepare iov for send */
+    uct_iov_t iov;
+    iov.buffer = (void *)send_ptr;
+    iov.length = length;
+    iov.count  = 1;
+    iov.stride = 0;
+    iov.memh   = send_mem.memh;
+
+    /* Do put_zcopy */
+    ASSERT_UCS_OK_OR_INPROGRESS(uct_ep_put_zcopy(m_sender->ep(0), &iov, 1,
+                                                  (uint64_t)recv_ptr,
+                                                  rkey_bundle.rkey, NULL));
+    m_sender->flush();
+
+    /* Verify data */
+    mem_buffer::pattern_check((void *)recv_ptr, length, SEED1,
+                              UCS_MEMORY_TYPE_CUDA);
+
+    /* Cleanup */
+    m_receiver->rkey_release(&rkey_bundle);
+    m_receiver->mem_type_dereg(&recv_mem);
+    m_sender->mem_type_dereg(&send_mem);
+
+    cuMemUnmap(recv_ptr, length);
+    cuMemAddressFree(recv_ptr, length);
+    cuMemRelease(recv_handle);
+    cuMemUnmap(send_ptr, length);
+    cuMemAddressFree(send_ptr, length);
+    cuMemRelease(send_handle);
+#else
+    UCS_TEST_SKIP_R("built without fabric support");
+#endif
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_cuda_ipc_posix_fd, cuda_ipc)
