@@ -1587,11 +1587,11 @@ ucp_ep_config_deactivate_worker_ifaces(ucp_worker_h worker,
 static ucs_status_t
 ucp_ep_reconfig_internal(ucp_ep_h ep, ucp_lane_map_t failed_lanes)
 {
-    ucp_worker_h worker         = ep->worker;
-    ucp_ep_config_key_t cfg_key = ucp_ep_config(ep)->key;
-    unsigned ep_init_flags      = (ep->flags & UCP_EP_FLAG_INTERNAL) ?
-                                  UCP_EP_INIT_FLAG_INTERNAL : 0;
-    int port_speed_changed      = 0;
+    ucp_worker_h worker          = ep->worker;
+    ucp_ep_config_key_t cfg_key  = ucp_ep_config(ep)->key;
+    const unsigned ep_init_flags = (ep->flags & UCP_EP_FLAG_INTERNAL) ?
+                                    UCP_EP_INIT_FLAG_INTERNAL : 0;
+    int port_speed_changed       = 0;
     ucp_lane_index_t lane;
     ucp_worker_iface_t *wiface;
     ucs_status_t status;
@@ -1674,9 +1674,9 @@ void ucp_ep_set_lanes_failed_schedule(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
         return;
     }
 
-    set_ep_failed_arg->ucp_ep       = ucp_ep;
-    set_ep_failed_arg->lanes = lanes;
-    set_ep_failed_arg->status       = status;
+    set_ep_failed_arg->ucp_ep = ucp_ep;
+    set_ep_failed_arg->lanes  = lanes;
+    set_ep_failed_arg->status = status;
 
     ucs_callbackq_add_oneshot(&worker->uct->progress_q, ucp_ep,
                               ucp_ep_set_lanes_failed_progress, set_ep_failed_arg);
