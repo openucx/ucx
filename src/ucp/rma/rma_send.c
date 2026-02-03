@@ -251,21 +251,6 @@ ucp_put_send_short(ucp_ep_h ep, const void *buffer, size_t length,
     return status;
 }
 
-static UCS_F_ALWAYS_INLINE ucp_proto_select_t*
-ucp_ep_rkey_proto_resolve(ucp_ep_h ep, ucp_rkey_h rkey,
-                          ucp_worker_cfg_index_t *rkey_cfg_index_p)
-{
-    ucp_rkey_config_t *rkey_config = ucp_rkey_config(ep->worker, rkey);
-
-    if (ucs_likely(rkey_config->key.ep_cfg_index == ep->cfg_index)) {
-        *rkey_cfg_index_p = rkey->cfg_index;
-        return &rkey_config->proto_select;
-    }
-
-    return ucp_proto_select_get(ep->worker, ep->cfg_index,
-                                rkey->cfg_index, rkey_cfg_index_p);
-}
-
 ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
                              uint64_t remote_addr, ucp_rkey_h rkey,
                              const ucp_request_param_t *param)
@@ -277,8 +262,6 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
     ucs_status_ptr_t ret;
     ucs_status_t status;
     ucp_request_t *req;
-    ucp_proto_select_t *proto_select;
-    ucp_worker_cfg_index_t rkey_cfg_index;
 
     UCP_REQUEST_CHECK_PARAM(param);
     UCP_RMA_CHECK_PTR(worker->context, buffer, count);
@@ -312,16 +295,9 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
             contig_length = count;
         }
 
-        proto_select = ucp_ep_rkey_proto_resolve(ep, rkey, &rkey_cfg_index);
-        if (ucs_unlikely(proto_select == NULL)) {
-            ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
-            goto out_unlock;
-        }
-
-        ret = ucp_proto_request_send_op(ep, proto_select,
-                rkey_cfg_index, req, ucp_ep_rma_get_fence_flag(ep),
-                UCP_OP_ID_PUT, buffer, count, datatype, contig_length, param, 0,
-                0);
+        ret = ucp_proto_request_send_op_rma(
+                ep, rkey, req, ucp_ep_rma_get_fence_flag(ep), UCP_OP_ID_PUT,
+                buffer, count, datatype, contig_length, param, 0, 0);
     } else {
         status = UCP_RKEY_RESOLVE(rkey, ep, rma);
         if (status != UCS_OK) {
@@ -424,11 +400,9 @@ ucs_status_ptr_t ucp_get_nbx(ucp_ep_h ep, void *buffer, size_t count,
             contig_length = ucp_contig_dt_length(datatype, count);
         }
 
-        ret = ucp_proto_request_send_op(
-                ep, &ucp_rkey_config(worker, rkey)->proto_select,
-                rkey->cfg_index, req, ucp_ep_rma_get_fence_flag(ep),
-                UCP_OP_ID_GET, buffer, count, datatype, contig_length, param, 0,
-                0);
+        ret = ucp_proto_request_send_op_rma(
+                ep, rkey, req, ucp_ep_rma_get_fence_flag(ep), UCP_OP_ID_GET,
+                buffer, count, datatype, contig_length, param, 0, 0);
     } else {
         status = UCP_RKEY_RESOLVE(rkey, ep, rma);
         if (status != UCS_OK) {

@@ -158,6 +158,7 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
         key->lanes[i].dst_sys_dev  = UCS_SYS_DEVICE_ID_UNKNOWN;
         key->lanes[i].path_index   = 0;
         key->lanes[i].lane_types   = 0;
+        key->lanes[i].port_speed   = 0;
         key->lanes[i].seg_size     = 0;
     }
     key->am_lane          = UCP_NULL_LANE;
@@ -1584,28 +1585,53 @@ ucp_ep_config_deactivate_worker_ifaces(ucp_worker_h worker,
 }
 
 static ucs_status_t
-ucp_ep_failover_reconfig(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes)
+ucp_ep_reconfig_internal(ucp_ep_h ep, ucp_lane_map_t failed_lanes)
 {
-    /* new config is based on the original one + marked failed lanes */
-    ucp_ep_config_key_t cfg_key = ucp_ep_config(ucp_ep)->key;
-    unsigned ep_init_flags      = (ucp_ep->flags & UCP_EP_FLAG_INTERNAL) ?
+    ucp_worker_h worker         = ep->worker;
+    ucp_ep_config_key_t cfg_key = ucp_ep_config(ep)->key;
+    unsigned ep_init_flags      = (ep->flags & UCP_EP_FLAG_INTERNAL) ?
                                   UCP_EP_INIT_FLAG_INTERNAL : 0;
+    int port_speed_changed      = 0;
     ucp_lane_index_t lane;
+    ucp_worker_iface_t *wiface;
     ucs_status_t status;
 
-    ucs_for_each_bit(lane, failed_lanes) {
-        cfg_key.lanes[lane].lane_types |= UCS_BIT(UCP_LANE_TYPE_FAILED);
+    for (lane = 0; lane < cfg_key.num_lanes; lane++) {
+        if (failed_lanes & UCS_BIT(lane)) {
+            cfg_key.lanes[lane].lane_types |= UCS_BIT(UCP_LANE_TYPE_FAILED);
+        }
+
+        wiface = ucp_worker_iface(worker, cfg_key.lanes[lane].rsc_index);
+        port_speed_changed |= (cfg_key.lanes[lane].port_speed !=
+                               wiface->port_speed);
+        cfg_key.lanes[lane].port_speed = wiface->port_speed;
     }
 
-    ucp_ep_config_deactivate_worker_ifaces(ucp_ep->worker, ucp_ep->cfg_index);
-    status = ucp_worker_get_ep_config(ucp_ep->worker, &cfg_key, ep_init_flags,
-                                      &ucp_ep->cfg_index);
+    if (port_speed_changed) {
+        ucs_assertv(!ucp_ep_config_is_equal(&cfg_key, &ucp_ep_config(ep)->key),
+                    "ep %p: config is not updated on port speed change", ep);
+        ucp_ep_config(ep)->proto_select.worker_epoch = worker->epoch;
+    } else if (ucp_ep_config_is_equal(&cfg_key, &ucp_ep_config(ep)->key)) {
+        goto out;
+    }
+
+    /* Apply new configuration */
+    ucp_ep_config_deactivate_worker_ifaces(worker, ep->cfg_index);
+    status = ucp_worker_get_ep_config(worker, &cfg_key, ep_init_flags,
+                                      &ep->cfg_index);
     if (status != UCS_OK) {
         return status;
     }
+    ucp_ep_config_activate_worker_ifaces(worker, ep->cfg_index);
 
-    ucp_ep_config_activate_worker_ifaces(ucp_ep->worker, ucp_ep->cfg_index);
+out:
     return UCS_OK;
+}
+
+static ucs_status_t
+ucp_ep_failover_reconfig(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes)
+{
+    return ucp_ep_reconfig_internal(ucp_ep, failed_lanes);
 }
 
 ucs_status_t ucp_ep_set_lanes_failed(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
@@ -2013,6 +2039,7 @@ int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,
            (config_lane1->dst_md_index == config_lane2->dst_md_index) &&
            (config_lane1->dst_sys_dev == config_lane2->dst_sys_dev) &&
            (config_lane1->lane_types == config_lane2->lane_types) &&
+           (config_lane1->port_speed == config_lane2->port_speed) &&
            (config_lane1->seg_size == config_lane2->seg_size);
 }
 
@@ -3077,7 +3104,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
         }
     }
 
-    status = ucp_proto_select_init(&config->proto_select);
+    status = ucp_proto_select_init(&config->proto_select, worker->epoch);
     if (status != UCS_OK) {
         goto err_free_dst_mds;
     }
@@ -4052,4 +4079,35 @@ ucp_lane_map_t ucp_ep_config_get_failed_lanes(const ucp_ep_config_key_t *key)
     }
 
     return failed_lanes;
+}
+
+static ucs_status_t ucp_rkey_update_config(ucp_rkey_h rkey, ucp_ep_h ep)
+{
+    ucp_worker_h worker                = ep->worker;
+    ucp_rkey_config_t *rkey_cfg        = ucp_rkey_config(worker, rkey);
+    ucp_rkey_config_key_t rkey_cfg_key = rkey_cfg->key;
+    ucs_status_t status;
+
+    rkey_cfg_key.ep_cfg_index = ep->cfg_index;
+    status = ucp_worker_rkey_config_get(worker, &rkey_cfg_key, NULL,
+                                        &rkey->cfg_index);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    rkey_cfg                            = ucp_rkey_config(worker, rkey);
+    rkey_cfg->proto_select.worker_epoch = worker->epoch;
+    return UCS_OK;
+}
+
+ucs_status_t ucp_ep_update_rkey_config(ucp_ep_h ep, ucp_rkey_h rkey)
+{
+    ucs_status_t status;
+
+    status = ucp_ep_reconfig_internal(ep, 0);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return ucp_rkey_update_config(rkey, ep);
 }

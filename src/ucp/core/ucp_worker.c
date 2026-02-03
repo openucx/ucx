@@ -787,6 +787,70 @@ void ucp_worker_iface_unprogress_ep(ucp_worker_iface_t *wiface)
     UCS_ASYNC_UNBLOCK(&wiface->worker->async);
 }
 
+/*
+ * Calculate port speed based on the actual bandwidth and the maximum bandwidth.
+ * The resulting value is a quantized value of the ratio between the actual and
+ * maximum bandwidth within 4 bits range [0, 15].
+ */
+static uint8_t ucp_worker_iface_port_speed(const ucp_worker_iface_t *wiface)
+{
+    uct_perf_attr_t perf_attr;
+    ucs_status_t status;
+    double ratio;
+
+    perf_attr.field_mask = UCT_PERF_ATTR_FIELD_BANDWIDTH;
+    status = uct_iface_estimate_perf(wiface->iface, &perf_attr);
+    if (status != UCS_OK) {
+        /* If iface fails to estimate a bandwidth, return 0 as a port speed,
+         * which should essentially exclude the lanes of this iface from the
+         * protocol selection even if lane is not marked as failed. */
+        return 0;
+    }
+
+    ratio = perf_attr.bandwidth.shared / wiface->attr.bandwidth.shared;
+    ratio = ucs_min(ucs_max(ratio, 0.0), 0.99);
+    /* 4 bits range [0, 15] */
+    return (uint8_t)(ratio * 16.0);
+}
+
+static void ucp_worker_iface_handle_port_speed_event(ucp_worker_iface_t *wiface)
+{
+    ucp_worker_h worker     = wiface->worker;
+    ucp_context_h context   = worker->context;
+    unsigned progress_count = 0;
+    ucp_worker_iface_t *wiface_iter;
+    ucp_rsc_index_t iface_id;
+    uint8_t port_speed;
+
+    UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(worker);
+
+    /* PORT_SPEED change event is received on IB device that can span over
+     * multiple interfaces. We iterate all ifaces with the same resource id, and
+     * check for port speed changes. Subsequent PORT_SPEED change events from
+     * other interfaces on the same device are essentially no-ops.
+     */
+    for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
+        wiface_iter = worker->ifaces[iface_id];
+        if (context->tl_rscs[wiface_iter->rsc_index].dev_index !=
+            context->tl_rscs[wiface->rsc_index].dev_index) {
+            continue;
+        }
+
+        port_speed = ucp_worker_iface_port_speed(wiface_iter);
+        if (port_speed != wiface_iter->port_speed) {
+            ucs_debug(UCP_WIFACE_FMT " port speed changed from %u to %u",
+                      UCP_WIFACE_ARG(wiface_iter), wiface_iter->port_speed,
+                      port_speed);
+            wiface_iter->port_speed = port_speed;
+            ++progress_count;
+        }
+    }
+
+    if (progress_count > 0) {
+        ++worker->epoch;
+    }
+}
+
 static UCS_F_ALWAYS_INLINE void
 ucp_worker_iface_event_common(ucp_worker_iface_t *wiface)
 {
@@ -803,13 +867,14 @@ static void ucp_worker_iface_async_cb_event(void *arg, unsigned flags)
 {
     ucp_worker_iface_t *wiface = arg;
 
-    ucs_assert(wiface->attr.cap.event_flags & UCT_IFACE_FLAG_EVENT_ASYNC_CB);
     ucs_trace_func("async_cb for iface=%p flags=%u", wiface->iface, flags);
 
     if (flags & UCT_EVENT_SPEED_CHANGE) {
-        /* TODO: handle speed changed event */
-        ucs_assert_always(0);
+        ucp_worker_iface_handle_port_speed_event(wiface);
+        return;
     }
+
+    ucs_assert(wiface->attr.cap.event_flags & UCT_IFACE_FLAG_EVENT_ASYNC_CB);
 
     ucp_worker_iface_event_common(wiface);
 }
@@ -1437,6 +1502,8 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
 
     ucp_worker_iface_get_memory_distance(wiface, &distance);
     ucp_worker_iface_add_distance(&wiface->attr, &distance);
+
+    wiface->port_speed = ucp_worker_iface_port_speed(wiface);
 
     ucs_debug("created interface[%d]=%p using "UCT_TL_RESOURCE_DESC_FMT" on worker %p",
               tl_id, wiface->iface, UCT_TL_RESOURCE_DESC_ARG(&resource->tl_rsc),
@@ -2235,7 +2302,7 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
     kh_value(&worker->rkey_config_hash, khiter) = rkey_cfg_index;
 
     /* Initialize protocol selection */
-    status = ucp_proto_select_init(&rkey_config->proto_select);
+    status = ucp_proto_select_init(&rkey_config->proto_select, worker->epoch);
     if (status != UCS_OK) {
         goto err_kh_del;
     }
@@ -2703,6 +2770,8 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     ucp_worker_set_max_am_header(worker);
 
     ucp_worker_create_vfs(context, worker);
+
+    worker->epoch = 0;
 
     status = ucp_worker_usage_tracker_create(worker);
     if (status != UCS_OK) {
