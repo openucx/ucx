@@ -21,6 +21,7 @@ extern "C" {
 #include <ucp/core/ucp_am.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_resource.h>
+#include <ucp/proto/proto.h>
 #include <ucs/datastruct/mpool.inl>
 }
 
@@ -2265,21 +2266,18 @@ public:
 
 UCS_TEST_P(test_ucp_am_psn, no_duplicates, "ZCOPY_THRESH=0", "RNDV_THRESH=inf")
 {
-    /* TODO: enable after interval tree is merged */
-    //test_psn_send_recv(300, 0);
+    test_psn_send_recv(300, 0);
 }
 
 UCS_TEST_P(test_ucp_am_psn, some_duplicates, "ZCOPY_THRESH=0",
            "RNDV_THRESH=inf")
 {
-    /* TODO: enable after interval tree is merged */
-    //test_psn_send_recv(200, 100);
+    test_psn_send_recv(200, 100);
 }
 
 UCS_TEST_P(test_ucp_am_psn, all_duplicates, "ZCOPY_THRESH=0", "RNDV_THRESH=inf")
 {
-    /* TODO: enable after interval tree is merged */
-    //test_psn_send_recv(400, 400);
+    test_psn_send_recv(400, 400);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am_psn)
