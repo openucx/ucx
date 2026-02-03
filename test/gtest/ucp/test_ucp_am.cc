@@ -21,7 +21,6 @@ extern "C" {
 #include <ucp/core/ucp_am.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_resource.h>
-#include <ucp/proto/proto.h>
 #include <ucs/datastruct/mpool.inl>
 }
 
