@@ -13,7 +13,6 @@
 #include "ucp_context.h"
 #include "ucp_request.h"
 
-#include <ucp/api/device/ucp_host.h>
 #include <ucs/config/parser.h>
 #include <ucs/algorithm/crc.h>
 #include <ucs/arch/atomic.h>
