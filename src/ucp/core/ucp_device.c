@@ -1133,3 +1133,19 @@ uint64_t ucp_device_counter_read(ucp_worker_h worker,
                        sizeof(counter_value), mem_type, sizeof(counter_value));
     return counter_value;
 }
+
+void ucp_device_name_get_base(const char *dev_name, char *dev_basename_p,
+                              size_t max)
+{
+    const char *delimiter = strchr(dev_name, ':');
+    size_t basename_len;
+
+    if (delimiter != NULL) {
+        basename_len = delimiter - dev_name;
+        ucs_assert(basename_len < max);
+
+        ucs_strncpy_zero(dev_basename_p, dev_name, basename_len + 1);
+    } else {
+        dev_basename_p[0] = '\0';
+    }
+}

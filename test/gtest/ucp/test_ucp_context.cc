@@ -130,6 +130,8 @@ public:
     }
 
 protected:
+    static const char DELIMITER = ':';
+
     /* Iterate over all network devices and apply action to each */
     template<typename Action>
     static void for_each_net_device(const entity &e, Action action) {
@@ -142,27 +144,48 @@ protected:
         }
     }
 
-    /* Get all mlx5 network device names from the context */
-    static std::set<std::string> get_mlx5_device_names(const entity &e) {
+    /* Check if a specific device name exists in the set */
+    static bool has_device(const std::set<std::string> &devices,
+                           const std::string &dev_name)
+    {
+        return devices.find(dev_name) != devices.end();
+    }
+
+
+    /* Get all network device names from the context */
+    static std::set<std::string> get_net_device_names(const entity &e)
+    {
+        std::set<std::string> device_names;
+        for_each_net_device(e, [&](const uct_tl_resource_desc_t *rsc) {
+            device_names.insert(rsc->dev_name);
+        });
+        return device_names;
+    }
+
+    /* Get all network device names from the context with delimiter */
+    static std::set<std::string>
+    get_net_device_names_with_delimiter(const entity &e)
+    {
         std::set<std::string> device_names;
         for_each_net_device(e, [&](const uct_tl_resource_desc_t *rsc) {
             std::string dev_name(rsc->dev_name);
-            if (dev_name.compare(0, 5, "mlx5_") == 0) {
-                device_names.insert(rsc->dev_name);
+            size_t delimiter_pos = dev_name.find(DELIMITER);
+            if (delimiter_pos != std::string::npos) {
+                device_names.insert(dev_name);
             }
         });
         return device_names;
     }
 
-    /* Get a list of all mlx5 device base names (without port suffix) */
     static std::set<std::string>
-    get_mlx5_base_names(const std::set<std::string> &mlx5_devices) {
+    get_device_base_names(const std::set<std::string> &dev_names)
+    {
         std::set<std::string> base_names;
 
-        for (const std::string &dev_name : mlx5_devices) {
-            size_t colon_pos = dev_name.find(':');
-            if (colon_pos != std::string::npos) {
-                base_names.insert(dev_name.substr(0, colon_pos));
+        for (const std::string &dev_name : dev_names) {
+            size_t delimiter_pos = dev_name.find(DELIMITER);
+            if (delimiter_pos != std::string::npos) {
+                base_names.insert(dev_name.substr(0, delimiter_pos));
             } else {
                 base_names.insert(dev_name);
             }
@@ -171,25 +194,37 @@ protected:
         return base_names;
     }
 
-    /* Count mlx5 resources matching a device name prefix */
-    static size_t
-    count_mlx5_resources_with_prefix(const std::set<std::string> &mlx5_devices,
-                                     const std::string &prefix) {
-        size_t count = 0;
-
-        for (const std::string &dev_name : mlx5_devices) {
-            if (dev_name.compare(0, prefix.length(), prefix) == 0) {
-                ++count;
+    /* Join strings with a delimiter */
+    static std::string
+    join(const std::set<std::string> &strings, const std::string &delimiter)
+    {
+        std::string result;
+        for (auto it = strings.begin(); it != strings.end(); ++it) {
+            if (it != strings.begin()) {
+                result += delimiter;
             }
+            result += *it;
         }
-
-        return count;
+        return result;
     }
 
-    /* Check if a specific device name exists in the set */
-    static bool has_device(const std::set<std::string> &devices,
-                           const std::string &dev_name) {
-        return devices.find(dev_name) != devices.end();
+    /* Test that net device selection works correctly */
+    void
+    test_net_device_selection(const std::set<std::string> &test_net_devices,
+                              const std::set<std::string> &expected_net_devices)
+    {
+        std::string net_devices_config = join(test_net_devices, ",");
+        modify_config("NET_DEVICES", net_devices_config.c_str());
+        entity *e = create_entity();
+
+        std::set<std::string> selected_devices = get_net_device_names(*e);
+        EXPECT_EQ(selected_devices.size(), expected_net_devices.size());
+
+        for (const std::string &net_device : expected_net_devices) {
+            EXPECT_TRUE(has_device(selected_devices, net_device))
+                    << "Device '" << net_device << "' should be selected when "
+                    << "UCX_NET_DEVICES=" << net_devices_config;
+        }
     }
 
     /* Test that a device config triggers duplicate device warning */
@@ -199,12 +234,10 @@ protected:
     {
         entity *e = create_entity();
 
-        std::set<std::string> mlx5_devices = get_mlx5_device_names(*e);
-        if (mlx5_devices.empty()) {
-            UCS_TEST_SKIP_R("No mlx5 network device available");
-        }
+        std::set<std::string> net_devices = get_net_device_names(*e);
+        ASSERT_FALSE(net_devices.empty());
 
-        if (!has_device(mlx5_devices, required_dev_name)) {
+        if (!has_device(net_devices, required_dev_name)) {
             UCS_TEST_SKIP_R(required_dev_name + " device not available");
         }
 
@@ -222,18 +255,10 @@ protected:
         EXPECT_EQ(m_warnings.size() - warn_count, 1)
                 << "Expected exactly one warning";
 
-        /* Check that a warning about duplicate device was printed */
+        /* Check that the warning about duplicate device was printed */
         std::string expected_warn = "device '" + duplicate_dev_name +
                                     "' is specified multiple times";
-        bool found_warning        = false;
-        for (size_t i = warn_count; i < m_warnings.size(); ++i) {
-            if (m_warnings[i].find(expected_warn) != std::string::npos) {
-                found_warning = true;
-                break;
-            }
-        }
-
-        EXPECT_TRUE(found_warning)
+        EXPECT_NE(m_warnings[warn_count].find(expected_warn), std::string::npos)
                 << "Expected warning about duplicate device '"
                 << duplicate_dev_name << "' with config '" << devices_config
                 << "'";
@@ -242,69 +267,38 @@ protected:
 
 /*
  * Test that when UCX_NET_DEVICES is set to a base name (e.g., "mlx5_0"),
- * devices with the default port suffix ":1" are selected.
+ * devices with the same base name are selected (e.g., "mlx5_0:1").
  */
-UCS_TEST_P(test_ucp_net_devices_config, base_name_selects_default_port)
+UCS_TEST_P(test_ucp_net_devices_config, base_name_selects_device)
 {
     entity *e = create_entity();
 
-    std::set<std::string> mlx5_devices = get_mlx5_device_names(*e);
-    if (mlx5_devices.empty()) {
-        UCS_TEST_SKIP_R("No mlx5 network device available");
+    std::set<std::string> net_devices = get_net_device_names_with_delimiter(*e);
+    if (net_devices.empty()) {
+        UCS_TEST_SKIP_R("No network devices available with delimiter");
     }
-
-    std::set<std::string> base_names = get_mlx5_base_names(mlx5_devices);
-    ASSERT_FALSE(base_names.empty());
-
-    /* Pick the first base name for testing */
-    std::string test_base_name = *base_names.begin();
 
     m_entities.clear();
 
-    /* Now create a new context with NET_DEVICES set to the base name */
-    modify_config("NET_DEVICES", test_base_name.c_str());
-    e = create_entity();
-
-    /* Verify that devices matching the base name were selected */
-    std::set<std::string> selected_devices = get_mlx5_device_names(*e);
-    size_t count = count_mlx5_resources_with_prefix(selected_devices, test_base_name);
-    EXPECT_EQ(count, 1) << "Expected exactly one device with base name '"
-                        << test_base_name << "' to be selected, found: "
-                        << testing::PrintToString(selected_devices);
-
-    std::string expected_dev = test_base_name + ":1";
-    EXPECT_TRUE(has_device(selected_devices, expected_dev))
-            << "Device '" << expected_dev << "' should be selected when "
-            << "UCX_NET_DEVICES=" << test_base_name;
+    std::set<std::string> base_names = get_device_base_names(net_devices);
+    test_net_device_selection(base_names, net_devices);
 }
 
 /*
- * Test that explicit port suffix specification works correctly.
+ * Test that explicit suffix specification works correctly.
  */
-UCS_TEST_P(test_ucp_net_devices_config, explicit_port_suffix)
+UCS_TEST_P(test_ucp_net_devices_config, explicit_suffix)
 {
     entity *e = create_entity();
 
-    std::set<std::string> mlx5_devices = get_mlx5_device_names(*e);
-    if (mlx5_devices.empty()) {
-        UCS_TEST_SKIP_R("No mlx5 network device available");
+    std::set<std::string> net_devices = get_net_device_names_with_delimiter(*e);
+    if (net_devices.empty()) {
+        UCS_TEST_SKIP_R("No network devices available with delimiter");
     }
-
-    /* Find a device with port suffix (contains ':') */
-    std::string test_dev_name = *mlx5_devices.begin();
-    ASSERT_NE(test_dev_name.find(':'), std::string::npos)
-            << "No port suffix found in device name";
 
     m_entities.clear();
 
-    /* Create context with explicit device:port specification */
-    modify_config("NET_DEVICES", test_dev_name.c_str());
-    e = create_entity();
-
-    /* Verify the specific device was selected */
-    std::set<std::string> selected_devices = get_mlx5_device_names(*e);
-    EXPECT_TRUE(has_device(selected_devices, test_dev_name))
-        << "Device '" << test_dev_name << "' should be selected";
+    test_net_device_selection(net_devices, net_devices);
 }
 
 /*
@@ -325,4 +319,4 @@ UCS_TEST_P(test_ucp_net_devices_config, duplicate_device_warning_two_base_name)
     test_duplicate_device_warning("mlx5_0:1", "mlx5_0,mlx5_0", "mlx5_0");
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_net_devices_config, ib, "ib")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_net_devices_config, all, "all")

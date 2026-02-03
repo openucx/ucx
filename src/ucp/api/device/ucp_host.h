@@ -326,6 +326,21 @@ uint64_t ucp_device_counter_read(ucp_worker_h worker,
                                  const ucp_device_counter_params_t *params,
                                  void *counter_ptr);
 
+
+/**
+ * @ingroup UCP_DEVICE
+ * @brief Extract the base name from a device name.
+ *
+ * This function extracts the base name of a device by removing the suffix
+ * after the ':' delimiter (if present).
+ *
+ * @param [in]  dev_name       The full device name.
+ * @param [out] dev_basename_p Buffer to store the extracted base name.
+ * @param [in]  max            Maximum size of the output buffer.
+ */
+void ucp_device_name_get_base(const char *dev_name, char *dev_basename_p,
+                              size_t max);
+
 END_C_DECLS
 
 #endif /* UCP_HOST_H */
