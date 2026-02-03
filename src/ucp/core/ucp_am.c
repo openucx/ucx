@@ -26,7 +26,7 @@
 
 /* Get pointer to frag_tree allocated before the rdesc */
 #define ucp_am_rdesc_frag_tree(_rdesc) \
-    ((ucs_interval_tree_t*)((char*)(_rdesc) - sizeof(ucs_interval_tree_t)))
+    (UCS_PTR_BYTE_OFFSET(_rdesc, -sizeof(ucs_interval_tree_t)))
 
 
 static void *ucp_am_frag_tree_alloc_node(size_t size, void *arg)
@@ -1414,7 +1414,7 @@ ucp_am_copy_data_fragment(ucp_recv_desc_t *first_rdesc, void *data,
                            UCS_PTR_BYTE_OFFSET(first_rdesc + 1, offset),
                            data, length, UCS_ARCH_MEMCPY_NT_SOURCE, length);
     ucs_interval_tree_insert(ucp_am_rdesc_frag_tree(first_rdesc), offset,
-                             offset + length);
+                             offset + length - 1);
 }
 
 static UCS_F_ALWAYS_INLINE uint64_t
@@ -1442,14 +1442,16 @@ ucp_am_handle_unfinished(ucp_worker_h worker, ucp_recv_desc_t *first_rdesc,
     ucs_status_t status;
     void *payload, *user_hdr;
     uint64_t recv_flags;
-    size_t desc_offset, user_hdr_length, total_size;
+    size_t desc_offset, user_hdr_length, total_size, seg_end;
     uint16_t am_id;
 
     ucp_am_copy_data_fragment(first_rdesc, data, length, offset);
 
     first_ftr = (ucp_am_first_ftr_t*)(first_rdesc + 1);
-    if (!ucs_interval_tree_range_covered(ucp_am_rdesc_frag_tree(first_rdesc), 0,
-                                         first_ftr->total_size)) {
+    seg_end   = first_rdesc->payload_offset + first_ftr->total_size - 1;
+    if (!ucs_interval_tree_is_equal_range(ucp_am_rdesc_frag_tree(first_rdesc), 
+                                          first_rdesc->payload_offset,
+                                          seg_end)) {
         /* not all fragments arrived yet */
         return;
     }
