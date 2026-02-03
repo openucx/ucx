@@ -565,7 +565,8 @@ out:
     return select_elem;
 }
 
-ucs_status_t ucp_proto_select_init(ucp_proto_select_t *proto_select)
+ucs_status_t ucp_proto_select_init(ucp_proto_select_t *proto_select,
+                                   uint64_t epoch)
 {
     proto_select->hash = kh_init(ucp_proto_select_hash);
     if (proto_select->hash == NULL) {
@@ -573,6 +574,7 @@ ucs_status_t ucp_proto_select_init(ucp_proto_select_t *proto_select)
     }
 
     ucp_proto_select_cache_reset(proto_select);
+    proto_select->worker_epoch = epoch;
     return UCS_OK;
 }
 

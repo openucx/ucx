@@ -157,6 +157,7 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
         key->lanes[i].dst_sys_dev  = UCS_SYS_DEVICE_ID_UNKNOWN;
         key->lanes[i].path_index   = 0;
         key->lanes[i].lane_types   = 0;
+        key->lanes[i].port_speed   = 0;
         key->lanes[i].seg_size     = 0;
     }
     key->am_lane          = UCP_NULL_LANE;
@@ -1980,6 +1981,7 @@ int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,
            (config_lane1->dst_md_index == config_lane2->dst_md_index) &&
            (config_lane1->dst_sys_dev == config_lane2->dst_sys_dev) &&
            (config_lane1->lane_types == config_lane2->lane_types) &&
+           (config_lane1->port_speed == config_lane2->port_speed) &&
            (config_lane1->seg_size == config_lane2->seg_size);
 }
 
@@ -3044,7 +3046,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
         }
     }
 
-    status = ucp_proto_select_init(&config->proto_select);
+    status = ucp_proto_select_init(&config->proto_select, worker->epoch);
     if (status != UCS_OK) {
         goto err_free_dst_mds;
     }
@@ -4005,4 +4007,74 @@ unsigned ucp_ep_err_mode_init_flags(ucp_err_handling_mode_t err_mode)
     default:
         ucs_fatal("invalid error handling mode: %d", err_mode);
     }
+}
+
+static ucs_status_t ucp_rkey_update_config(ucp_rkey_h rkey, ucp_ep_h ep)
+{
+    ucp_worker_h worker                = ep->worker;
+    ucp_rkey_config_t *rkey_cfg        = ucp_rkey_config(worker, rkey);
+    ucp_rkey_config_key_t rkey_cfg_key = rkey_cfg->key;
+    ucs_status_t status;
+
+    rkey_cfg_key.ep_cfg_index = ep->cfg_index;
+    status = ucp_worker_rkey_config_get(worker, &rkey_cfg_key, NULL,
+                                        &rkey->cfg_index);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    /* Now rkey config is up to date with worker epoch */
+    rkey_cfg                            = ucp_rkey_config(worker, rkey);
+    rkey_cfg->proto_select.worker_epoch = worker->epoch;
+    return UCS_OK;
+}
+
+ucs_status_t ucp_ep_update_config(ucp_ep_h ep)
+{
+    ucp_worker_h worker         = ep->worker;
+    /* Duplicate the key to avoid modifying the original key */
+    ucp_ep_config_key_t dup_key = ucp_ep_config(ep)->key;
+    ucp_lane_index_t lane;
+    ucp_worker_iface_t *wiface;
+    ucs_status_t status;
+
+    for (lane = 0; lane < dup_key.num_lanes; lane++) {
+        wiface = ucp_worker_iface(worker, dup_key.lanes[lane].rsc_index);
+        dup_key.lanes[lane].port_speed = wiface->port_speed;
+    }
+
+    if (ucp_ep_config_is_equal(&dup_key, &ucp_ep_config(ep)->key)) {
+        goto out;
+    }
+
+    /* Config is not up to date, update it */
+    ucp_ep_config_deactivate_worker_ifaces(worker, ep->cfg_index);
+    status = ucp_worker_get_ep_config(worker, &dup_key, ep->flags, &ep->cfg_index);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ucp_ep_config_activate_worker_ifaces(worker, ep->cfg_index);
+
+out:
+    /* Now EP config is up to date with worker epoch */
+    ucp_ep_config(ep)->proto_select.worker_epoch = worker->epoch;
+    return UCS_OK;
+}
+
+ucs_status_t ucp_ep_update_rkey_config(ucp_ep_h ep, ucp_rkey_h rkey)
+{
+    ucp_worker_cfg_index_t old_cfg_index = ep->cfg_index;
+    ucs_status_t status;
+
+    status = ucp_ep_update_config(ep);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (old_cfg_index != ep->cfg_index) {
+        return ucp_rkey_update_config(rkey, ep);
+    }
+
+    return UCS_OK;
 }
