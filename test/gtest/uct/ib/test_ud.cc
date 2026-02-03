@@ -1017,10 +1017,12 @@ UCS_TEST_SKIP_COND_P(test_ud, stale_dest_ep_id_update,
     constexpr uint32_t STALE_DEST_EP_ID = 0xBEEF;
     constexpr uint32_t REMOTE_EP_ID = 1;
 
-    for (int i = 0; i < 100000; i++) {
     /* Create a dummy EP on m_e1 first, so the actual EP will have ep_id=1
      * (not 0, which could be confused with NULL/default values) */
+
     m_e1->create_ep(0);
+
+    for (int i = 0; i < 100000; i++) {
 
     /* Start connection from m_e1 to m_e2 - block m_e2's TX to delay CREP */
     iface(m_e2)->tx.available = 0;
