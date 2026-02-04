@@ -35,7 +35,7 @@
             jjb_proj={jjb_proj}
     description: "{jjb_description}"
     concurrent: true
-    sandbox: true
+    sandbox: false
     triggers:
       - gitlab:
           trigger-push: false                     # Avoid duplicate builds
@@ -72,40 +72,40 @@
       script-path: "{jjb_jenkinsfile}"
 
 - project:
-    name: ucx-codestyle
-    jjb_proj: "ucx-codestyle"
+    name: ucx-codestyle-gitlab
+    jjb_proj: "ucx-codestyle-gitlab"
     jjb_conf_file: ".ci/pipeline/codestyle_matrix.yaml"
     jjb_description: "UCX Codestyle checks (commit titles, spelling). Do NOT edit via Web GUI!"
     jobs:
       - "{jjb_proj}"
 
 - project:
-    name: ucx-static-checks
-    jjb_proj: "ucx-static-checks"
+    name: ucx-static-checks-gitlab
+    jjb_proj: "ucx-static-checks-gitlab"
     jjb_conf_file: ".ci/pipeline/static_checks_matrix.yaml"
     jjb_description: "UCX Static checks (cppcheck, clang-analyzer). Do NOT edit via Web GUI!"
     jobs:
       - "{jjb_proj}"
 
 - project:
-    name: ucx-coverity
-    jjb_proj: "ucx-coverity"
+    name: ucx-coverity-gitlab
+    jjb_proj: "ucx-coverity-gitlab"
     jjb_conf_file: ".ci/pipeline/coverity_matrix.yaml"
     jjb_description: "UCX Coverity static analysis. Do NOT edit via Web GUI!"
     jobs:
       - "{jjb_proj}"
 
 - project:
-    name: ucx-build
-    jjb_proj: "ucx-build"
+    name: ucx-build-gitlab
+    jjb_proj: "ucx-build-gitlab"
     jjb_conf_file: ".ci/pipeline/build_matrix.yaml"
     jjb_description: "UCX Build job. Do NOT edit via Web GUI!"
     jobs:
       - "{jjb_proj}"
 
 - project:
-    name: ucx-build-static
-    jjb_proj: "ucx-build-static"
+    name: ucx-build-static-gitlab
+    jjb_proj: "ucx-build-static-gitlab"
     jjb_conf_file: ".ci/pipeline/build_static_matrix.yaml"
     jjb_description: "UCX Static library build and test. Do NOT edit via Web GUI!"
     jobs:

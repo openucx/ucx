@@ -56,6 +56,7 @@ typedef struct {
     ucp_md_index_t       dst_md_index;
     ucs_sys_device_t     dst_sys_dev;
     ucp_lane_type_mask_t lane_types;
+    uint8_t              port_speed;
     size_t               seg_size;
     double               score[UCP_LANE_TYPE_LAST];
 } ucp_wireup_lane_desc_t;
@@ -729,6 +730,8 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_add_lane_desc(
         ucp_lane_type_t lane_type, unsigned seg_size,
         ucp_wireup_select_context_t *select_ctx, int show_error)
 {
+    ucp_worker_h worker = select_params->ep->worker;
+    ucp_worker_iface_t *wiface;
     ucp_wireup_lane_desc_t *lane_desc;
     ucp_lane_type_t lane_type_iter;
     ucp_lane_index_t lane;
@@ -794,6 +797,8 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_add_lane_desc(
     lane_desc->dst_md_index = dst_md_index;
     lane_desc->dst_sys_dev  = dst_sys_dev;
     lane_desc->lane_types   = UCS_BIT(lane_type);
+    wiface                  = ucp_worker_iface(worker, select_info->rsc_index);
+    lane_desc->port_speed   = (wiface != NULL) ? wiface->port_speed : 0;
     lane_desc->seg_size     = seg_size;
     for (lane_type_iter = UCP_LANE_TYPE_FIRST;
          lane_type_iter < UCP_LANE_TYPE_LAST;
@@ -2694,6 +2699,7 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
         key->lanes[lane].dst_md_index = select_ctx->lane_descs[lane].dst_md_index;
         key->lanes[lane].dst_sys_dev  = select_ctx->lane_descs[lane].dst_sys_dev;
         key->lanes[lane].lane_types   = select_ctx->lane_descs[lane].lane_types;
+        key->lanes[lane].port_speed   = select_ctx->lane_descs[lane].port_speed;
         key->lanes[lane].seg_size     = select_ctx->lane_descs[lane].seg_size;
         key->lanes[lane].path_index   = ucp_wireup_default_path_index(
                                        select_ctx->lane_descs[lane].path_index);

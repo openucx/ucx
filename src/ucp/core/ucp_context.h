@@ -394,7 +394,8 @@ typedef struct ucp_context {
        exists. */
     ucp_md_index_t                dmabuf_mds[UCS_MEMORY_TYPE_LAST];
 
-    uint64_t                      mem_type_mask;            /* Supported mem type mask */
+    /* Mask of supported memory types */
+    uint64_t                      supported_mem_type_mask;
 
     ucp_tl_resource_desc_t        *tl_rscs;   /* Array of communication resources */
     ucp_tl_bitmap_t               tl_bitmap;  /* Cached map of tl resources used by workers.
