@@ -284,7 +284,7 @@ static UCS_F_ALWAYS_INLINE int ucp_ep_use_indirect_id(ucp_ep_h ep)
 }
 
 static UCS_F_ALWAYS_INLINE int
-ucp_ep_config_err_mode_eq(ucp_ep_h ep, ucp_err_handling_mode_t err_mode)
+ucp_ep_err_mode_eq(ucp_ep_h ep, ucp_err_handling_mode_t err_mode)
 {
     return ucp_ep_config(ep)->key.err_mode == err_mode;
 }
@@ -298,8 +298,13 @@ ucp_ep_params_err_handling_mode(const ucp_ep_params_t *params)
 
 static UCS_F_ALWAYS_INLINE int ucp_ep_config_err_handling_enabled(ucp_ep_h ep)
 {
-    return ucp_ep_config_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_PEER) ||
-           ucp_ep_config_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_FAILOVER);
+    return ucp_ep_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_PEER) ||
+           ucp_ep_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_FAILOVER);
+}
+
+static UCS_F_ALWAYS_INLINE ucp_lane_map_t ucp_ep_get_failed_lanes(ucp_ep_h ep)
+{
+    return ucp_ep_config_get_failed_lanes(&ucp_ep_config(ep)->key);
 }
 
 #endif
