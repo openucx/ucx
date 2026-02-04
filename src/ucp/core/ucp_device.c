@@ -406,7 +406,7 @@ static ucs_status_t ucp_device_mem_list_create_handle(
                                       &handle->uct_device_eps[i]);
         if (status != UCS_OK) {
             ucs_error("failed to get device_ep for lane=%u", lanes[i]);
-            goto err;
+            goto out;
         }
 
         handle->uct_mem_element_size[i] = uct_elem_size;
@@ -464,7 +464,7 @@ static ucs_status_t ucp_device_mem_list_create_handle(
             if (status != UCS_OK) {
                 ucs_error("failed to pack uct memory element for lane=%u",
                           lanes[i]);
-                goto err;
+                goto out;
             }
 
             ucp_element = UCS_PTR_BYTE_OFFSET(ucp_element,
@@ -483,7 +483,7 @@ static ucs_status_t ucp_device_mem_list_create_handle(
     if (status != UCS_OK) {
         ucs_error("failed to allocate ucp_device_mem_list_handle_t: %s",
                   ucs_status_string(status));
-        goto err;
+        goto out;
     }
 
     /* Adjust pointers to point to GPU memory offsets before copying */
@@ -501,7 +501,7 @@ static ucs_status_t ucp_device_mem_list_create_handle(
     ucp_mem_type_unpack(ep->worker, mem->address, handle, handle_size,
                         mem_type);
 
-err:
+out:
     ucs_free(handle);
     return status;
 }
@@ -585,7 +585,7 @@ static ucs_status_t ucp_device_local_mem_list_create_handle(
     size_t i;
     ucs_status_t status;
 
-    handle_size = (uct_elem_size * params->num_elements) + sizeof(handle);
+    handle_size = (uct_elem_size * params->num_elements) + sizeof(*handle);
     handle      = ucs_calloc(1, handle_size, "ucp_device_local_mem_list_t");
     if (handle == NULL) {
         ucs_error("failed to allocate ucp_device_local_mem_list_t");
@@ -837,7 +837,7 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
         return status;
     }
 
-    handle_size = sizeof(handle) + (uct_elem_size * params->num_elements);
+    handle_size = sizeof(*handle) + (uct_elem_size * params->num_elements);
     handle      = ucs_calloc(1, handle_size, "ucp_device_remote_mem_list_t");
     if (handle == NULL) {
         ucs_error("failed to allocate ucp_device_remote_mem_list_t");
