@@ -231,6 +231,9 @@ resources:
     - container: euleros2sp12
       image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/euleros2.0sp12/builder:doca-2.9.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: ctyunos2507
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/ctyunos25.07/builder:mofed-26.01-0.8.0.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: centos10stream
       image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/centos10stream/builder:inbox
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)

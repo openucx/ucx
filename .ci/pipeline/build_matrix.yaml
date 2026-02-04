@@ -31,6 +31,7 @@ runs_on_dockers:
   - { name: "sles15sp6-doca2.9", url: "harbor.mellanox.com/hpcx/x86_64/sles15sp6/builder:doca-2.9.0", arch: x86_64 }
   - { name: "kylin10sp3-doca2.9", url: "harbor.mellanox.com/hpcx/x86_64/kylin10sp3/builder:doca-2.9.0", arch: x86_64 }
   - { name: "euleros2sp12-doca2.9", url: "harbor.mellanox.com/hpcx/x86_64/euleros2.0sp12/builder:doca-2.9.0", arch: x86_64 }
+  - { name: "ctyunos2507-mofed26.01", url: "harbor.mellanox.com/hpcx/x86_64/ctyunos25.07/builder:mofed-26.01-0.8.0.0", arch: x86_64 }
   - { name: "ubuntu2004-rocm5.4", url: "harbor.mellanox.com/ucx/x86_64/ubuntu2004:rocm_5_4_0", arch: x86_64 }
   - { name: "ubuntu2204-rocm6.0", url: "harbor.mellanox.com/ucx/x86_64/ubuntu2204:rocm-6.0.0", arch: x86_64 }
   # aarch64
