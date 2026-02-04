@@ -177,14 +177,15 @@ protected:
         return device_names;
     }
 
-    static std::string get_device_base_name(const std::string &dev_name)
+    static bool
+    get_device_base_name(const std::string &dev_name, std::string &base_name)
     {
         size_t delimiter_pos = dev_name.find(DELIMITER);
         if (delimiter_pos != std::string::npos) {
-            return dev_name.substr(0, delimiter_pos);
-        } else {
-            return dev_name;
+            base_name = dev_name.substr(0, delimiter_pos);
+            return true;
         }
+        return false;
     }
 
     static std::set<std::string>
@@ -192,7 +193,10 @@ protected:
     {
         std::set<std::string> base_names;
         for (const std::string &dev_name : dev_names) {
-            base_names.insert(get_device_base_name(dev_name));
+            std::string base_name;
+            if (get_device_base_name(dev_name, base_name)) {
+                base_names.insert(base_name);
+            }
         }
         return base_names;
     }
@@ -284,6 +288,8 @@ UCS_TEST_P(test_ucp_net_devices_config, base_name_selects_device)
     m_entities.clear();
 
     std::set<std::string> base_names = get_device_base_names(net_devices);
+    ASSERT_EQ(base_names.size(), net_devices.size());
+
     test_net_device_selection(base_names, net_devices);
 }
 
@@ -402,8 +408,9 @@ UCS_TEST_P(test_ucp_net_devices_config, negate_base_name)
         UCS_TEST_SKIP_R("No network devices available with delimiter");
     }
 
-    std::string dev_name     = *net_devices.begin();
-    std::string dev_basename = get_device_base_name(dev_name);
+    std::string dev_name = *net_devices.begin();
+    std::string dev_basename;
+    ASSERT_TRUE(get_device_base_name(dev_name, dev_basename));
 
     m_entities.clear();
 

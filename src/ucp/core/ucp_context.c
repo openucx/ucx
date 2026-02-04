@@ -13,7 +13,6 @@
 #include "ucp_context.h"
 #include "ucp_request.h"
 
-#include <ucp/api/device/ucp_host.h>
 #include <ucs/config/parser.h>
 #include <ucs/algorithm/crc.h>
 #include <ucs/arch/atomic.h>
@@ -600,21 +599,21 @@ static ucs_config_field_t ucp_context_config_table[] = {
 };
 
 static ucs_config_field_t ucp_config_table[] = {
-    {"NET_DEVICES", UCP_RSC_CONFIG_ALL,
-     "Specifies which network device(s) to use. The order is not meaningful.\n",
-     ucs_offsetof(ucp_config_t, devices[UCT_DEVICE_TYPE_NET]), UCS_CONFIG_TYPE_ALLOW_LIST},
+  {"NET_DEVICES", UCP_RSC_CONFIG_ALL,
+   "Specifies which network device(s) to use. The order is not meaningful.\n",
+   ucs_offsetof(ucp_config_t, devices[UCT_DEVICE_TYPE_NET]), UCS_CONFIG_TYPE_ALLOW_LIST},
 
-    {"SHM_DEVICES", UCP_RSC_CONFIG_ALL,
-     "Specifies which intra-node device(s) to use. The order is not meaningful.\n",
-     ucs_offsetof(ucp_config_t, devices[UCT_DEVICE_TYPE_SHM]), UCS_CONFIG_TYPE_ALLOW_LIST},
+  {"SHM_DEVICES", UCP_RSC_CONFIG_ALL,
+   "Specifies which intra-node device(s) to use. The order is not meaningful.\n",
+   ucs_offsetof(ucp_config_t, devices[UCT_DEVICE_TYPE_SHM]), UCS_CONFIG_TYPE_ALLOW_LIST},
 
-    {"ACC_DEVICES", UCP_RSC_CONFIG_ALL,
-     "Specifies which accelerator device(s) to use. The order is not meaningful.\n",
-     ucs_offsetof(ucp_config_t, devices[UCT_DEVICE_TYPE_ACC]), UCS_CONFIG_TYPE_ALLOW_LIST},
+  {"ACC_DEVICES", UCP_RSC_CONFIG_ALL,
+   "Specifies which accelerator device(s) to use. The order is not meaningful.\n",
+   ucs_offsetof(ucp_config_t, devices[UCT_DEVICE_TYPE_ACC]), UCS_CONFIG_TYPE_ALLOW_LIST},
 
-    {"SELF_DEVICES", UCP_RSC_CONFIG_ALL,
-     "Specifies which loop-back device(s) to use. The order is not meaningful.\n",
-     ucs_offsetof(ucp_config_t, devices[UCT_DEVICE_TYPE_SELF]), UCS_CONFIG_TYPE_ALLOW_LIST},
+  {"SELF_DEVICES", UCP_RSC_CONFIG_ALL,
+   "Specifies which loop-back device(s) to use. The order is not meaningful.\n",
+   ucs_offsetof(ucp_config_t, devices[UCT_DEVICE_TYPE_SELF]), UCS_CONFIG_TYPE_ALLOW_LIST},
 
   {"TLS", UCP_RSC_CONFIG_ALL,
    "Comma-separated list of transports to use. The order is not meaningful.\n"
