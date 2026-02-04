@@ -3160,14 +3160,16 @@ uct_ib_md_mlx5_devx_mem_elem_pack(uct_md_h md, uct_mem_h memh, uct_rkey_t rkey,
     uct_ib_md_device_mem_element_t *mem_elem = (uct_ib_md_device_mem_element_t*)
             mem_elem_p;
 
-    mem_elem->lkey = UCT_IB_INVALID_MKEY;
-    mem_elem->rkey = UCT_IB_INVALID_MKEY;
     if (memh != NULL) {
         mem_elem->lkey = htonl(((uct_ib_mem_t*)memh)->lkey);
+    } else {
+        mem_elem->lkey = UCT_IB_INVALID_MKEY;
     }
 
     if (rkey != UCT_INVALID_RKEY) {
         mem_elem->rkey = htonl(uct_ib_md_direct_rkey(rkey));
+    } else {
+        mem_elem->rkey = UCT_IB_INVALID_MKEY;
     }
 
     return UCS_OK;
