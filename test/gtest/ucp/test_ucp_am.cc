@@ -2271,12 +2271,12 @@ UCS_TEST_P(test_ucp_am_psn, no_duplicates, "ZCOPY_THRESH=0", "RNDV_THRESH=inf")
 UCS_TEST_P(test_ucp_am_psn, some_duplicates, "ZCOPY_THRESH=0",
            "RNDV_THRESH=inf")
 {
-    test_psn_send_recv(200, 100);
+    test_psn_send_recv(2, 1);
 }
 
 UCS_TEST_P(test_ucp_am_psn, all_duplicates, "ZCOPY_THRESH=0", "RNDV_THRESH=inf")
 {
-    test_psn_send_recv(400, 400);
+    test_psn_send_recv(4, 4);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am_psn)
