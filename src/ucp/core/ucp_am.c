@@ -1719,7 +1719,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_handler_first_psn,
     ucp_am_first_ftr_t *ftr = UCS_PTR_BYTE_OFFSET(am_data,
                                                   am_length - sizeof(*ftr));
 
-    printf("first_psn: am_length=%zu, ftr->super.msg_id=%lu, ftr->ep_id=%u\n", am_length, ftr->super.msg_id, ftr->ep_id);
+    printf("first_psn: am_length=%zu, ftr->super.msg_id=%lu, ftr->ep_id=%lu\n", am_length, ftr->super.msg_id, ftr->super.ep_id);
 
     if (ucp_am_is_duplicate_psn(am_arg, &ftr->super)) {
         return UCS_OK;
@@ -1735,7 +1735,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_handler_middle_psn,
     ucp_am_mid_ftr_t *ftr = UCS_PTR_BYTE_OFFSET(am_data,
                                                 am_length - sizeof(*ftr));
 
-    printf("middle_psn: am_length=%zu, ftr->super.msg_id=%lu, ftr->ep_id=%u\n", am_length, ftr->super.msg_id, ftr->ep_id);
+    printf("middle_psn: am_length=%zu, ftr->msg_id=%lu, ftr->ep_id=%lu\n", am_length, ftr->msg_id, ftr->ep_id);
     if (ucp_am_is_duplicate_psn(am_arg, ftr)) {
         return UCS_OK;
     }
