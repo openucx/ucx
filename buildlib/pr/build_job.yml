@@ -78,6 +78,8 @@ jobs:
             CONTAINER: rocky89_aarch64
           rocky96_aarch64:
             CONTAINER: rocky96_aarch64
+          ctyunos2507_aarch64:
+            CONTAINER: ctyunos2507_aarch64
     timeoutInMinutes: 340
 
     steps:

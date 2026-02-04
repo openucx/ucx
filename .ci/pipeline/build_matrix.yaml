@@ -39,6 +39,7 @@ runs_on_dockers:
   - { name: "rocky89-mofed24.10", url: "harbor.mellanox.com/hpcx/aarch64/rocky8.9/builder:mofed-24.10-3.2.5.0", arch: aarch64 }
   - { name: "rocky96-mofed24.10", url: "harbor.mellanox.com/hpcx/aarch64/rocky9.6/builder:mofed-24.10-3.2.5.0", arch: aarch64 }
   - { name: "rhel100-mofed25.07", url: "harbor.mellanox.com/hpcx/aarch64/rhel10.0/builder:mofed-25.07-0.9.7.0", arch: aarch64 }
+  - { name: "ctyunos2507-mofed26.01", url: "harbor.mellanox.com/hpcx/aarch64/ctyunos25.07/builder:mofed-26.01-0.8.0.0", arch: aarch64 }
 
 taskName: '${arch}/${name}'
 
