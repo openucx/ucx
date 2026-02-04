@@ -1031,19 +1031,51 @@ ucp_config_is_tl_name_present(const ucs_config_names_array_t *tl_array,
                                       tl_cfg_mask));
 }
 
+static void
+ucp_get_dev_basename(const char *dev_name, char *dev_basename_p, size_t max)
+{
+    const char *delimiter = strchr(dev_name, ':');
+    size_t basename_len;
+
+    if (delimiter != NULL) {
+        basename_len = UCS_PTR_BYTE_DIFF(dev_name, delimiter);
+        ucs_assertv(basename_len < max, "basename_len=%zu max=%zu",
+                    basename_len, max);
+
+        ucs_strncpy_zero(dev_basename_p, dev_name, basename_len + 1);
+    } else {
+        dev_basename_p[0] = '\0';
+    }
+}
+
+/* go over the device list from the user and check (against the available resources)
+ * which can be satisfied */
 static int ucp_is_resource_in_device_list(const uct_tl_resource_desc_t *resource,
                                           const ucs_config_names_array_t *devices,
                                           uint64_t *dev_cfg_mask,
                                           uct_device_type_t dev_type)
 {
+    char dev_basename[UCT_DEVICE_NAME_MAX];
     uint64_t mask, exclusive_mask;
 
-    /* go over the device list from the user and check (against the available resources)
-     * which can be satisfied */
     ucs_assert_always(devices[dev_type].count <= 64); /* Using uint64_t bitmap */
+
+    /* search for the full device name */
     mask = ucp_str_array_search((const char**)devices[dev_type].names,
                                 devices[dev_type].count, resource->dev_name,
                                 NULL);
+
+    /* for network devices, also search for the base name (before the delimiter) */
+    if (dev_type == UCT_DEVICE_TYPE_NET) {
+        ucp_get_dev_basename(resource->dev_name, dev_basename,
+                             sizeof(dev_basename));
+        if (!ucs_string_is_empty(dev_basename)) {
+            mask |= ucp_str_array_search((const char**)devices[dev_type].names,
+                                         devices[dev_type].count, dev_basename,
+                                         NULL);
+        }
+    }
+
     if (!mask) {
         /* if the user's list is 'all', use all the available resources */
         mask = ucp_str_array_search((const char**)devices[dev_type].names,
@@ -1212,7 +1244,6 @@ static int ucp_is_resource_enabled(const uct_tl_resource_desc_t *resource,
     device_enabled = ucp_is_resource_in_device_list(
             resource, config->devices, &dev_cfg_masks[resource->dev_type],
             resource->dev_type);
-
 
     /* Find the enabled UCTs */
     *rsc_flags = 0;
