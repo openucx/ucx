@@ -201,13 +201,9 @@ uct_cuda_base_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
     ucs_queue_iter_t iter;
     unsigned stream_index;
 
-    if (ucs_queue_is_empty(&iface->active_queue)) {
+    if (ucs_queue_is_empty(&iface->active_queue) || (comp == NULL)) {
         UCT_TL_EP_STAT_FLUSH(ep);
         return UCS_OK;
-    }
-
-    if (comp == NULL) {
-        goto out;
     }
 
     /* Allocate base flush descriptor */
@@ -274,8 +270,8 @@ uct_cuda_base_progress_event_queue(uct_cuda_iface_t *iface,
 
     ucs_queue_for_each_extract(cuda_event, queue_head, queue,
                                (count < max_events) &&
-                               (ucs_unlikely(uct_cuda_base_event_is_flush(
-                                       cuda_event)) ||
+                               ucs_unlikely(uct_cuda_base_event_is_flush(
+                                       cuda_event) ||
                                (cuEventQuery(cuda_event->event) == CUDA_SUCCESS))) {
         ucs_trace_data("cuda event %p completed", cuda_event);
         if (cuda_event->comp != NULL) {
@@ -480,10 +476,10 @@ UCS_CLASS_INIT_FUNC(uct_cuda_iface_t, uct_iface_ops_t *tl_ops,
 
     status = ucs_mpool_init(&mp_params, &self->flush_mpool);
     if (status != UCS_OK) {
-        return status;
+        kh_destroy_inplace(cuda_ctx_rscs, &self->ctx_rscs);
     }
 
-    return UCS_OK;
+    return status;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_cuda_iface_t)
