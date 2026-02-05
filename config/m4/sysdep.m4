@@ -118,19 +118,53 @@ GTEST_LIB_CHECK([1.5.0], [true], [true])
 # Valgrind support
 #
 AC_ARG_WITH([valgrind],
-    AS_HELP_STRING([--with-valgrind],
-                   [Enable Valgrind annotations (small runtime overhead, default NO)]),
+    AS_HELP_STRING([--with-valgrind@<:@=DIR|guess@:>@],
+                   [Enable Valgrind annotations (small runtime overhead, default is NO). 
+                    Use 'guess' to enable only if available.]),
     [],
     [with_valgrind=no]
 )
+
+valgrind_happy=no
 AS_IF([test "x$with_valgrind" = xno],
-      [AC_DEFINE([NVALGRIND], 1, [Define to 1 to disable Valgrind annotations.])],
-      [AS_IF([test ! -d $with_valgrind], 
-              [AC_MSG_NOTICE([Valgrind path was not defined, guessing ...])
-               with_valgrind=/usr], [:])
-        AC_CHECK_HEADER([$with_valgrind/include/valgrind/memcheck.h], [],
-                       [AC_MSG_ERROR([Valgrind memcheck support requested, but <valgrind/memcheck.h> not found, install valgrind-devel rpm.])])
-        CPPFLAGS="$CPPFLAGS -I$with_valgrind/include"
+      [AC_MSG_NOTICE([Valgrind support disabled])
+       AC_DEFINE([NVALGRIND], 1, [Define to 1 to disable Valgrind annotations.])],
+      [
+       # Save original flags
+       save_CPPFLAGS="$CPPFLAGS"
+
+       # Determine valgrind path based on the argument
+       AS_CASE(["x$with_valgrind"],
+           [xyes|xguess],
+               [
+                   AC_MSG_NOTICE([Looking for Valgrind in default path /usr])
+                   valgrind_path=/usr
+               ],
+           [x/*],
+               [
+                   AC_MSG_NOTICE([Using Valgrind path: $with_valgrind])
+                   valgrind_path="$with_valgrind"
+               ],
+           [AC_MSG_ERROR([Invalid Valgrind argument: $with_valgrind. Use --with-valgrind, --with-valgrind=DIR, or --with-valgrind=guess])])
+
+       # Check for valgrind header
+       CPPFLAGS="$CPPFLAGS -I$valgrind_path/include"
+       AC_CHECK_HEADER([$valgrind_path/include/valgrind/memcheck.h],
+                       [valgrind_happy=yes],
+                       [valgrind_happy=no])
+
+       # Handle success or failure
+       AS_IF([test "x$valgrind_happy" = xyes],
+             [AC_MSG_NOTICE([Valgrind support enabled from $valgrind_path])
+              # NVALGRIND is not defined, so valgrind annotations are enabled
+              ],
+             [# Valgrind not found - restore original CPPFLAGS
+              CPPFLAGS="$save_CPPFLAGS"
+              AC_DEFINE([NVALGRIND], 1, [Define to 1 to disable Valgrind annotations.])
+              # Error if explicitly requested, warn if optional (guess mode)
+              AS_IF([test "x$with_valgrind" = "xguess"],
+                    [AC_MSG_WARN([Valgrind not found, disabling Valgrind support])],
+                    [AC_MSG_ERROR([Valgrind memcheck support requested, but <valgrind/memcheck.h> not found in $valgrind_path/include, install valgrind-devel rpm.])])])
       ]
 )
 
