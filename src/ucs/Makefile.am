@@ -38,7 +38,6 @@ nobase_dist_libucs_la_HEADERS = \
 	datastruct/callbackq.h \
 	datastruct/callbackq_compat.h \
 	datastruct/hlist.h \
-	datastruct/interval_tree.h \
 	datastruct/khash.h \
 	datastruct/linear_func.h \
 	datastruct/list.h \

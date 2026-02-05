@@ -13,6 +13,7 @@
 #include <ucp/proto/proto.h>
 #include <ucp/proto/proto_common.inl>
 #include <ucp/proto/proto_multi.inl>
+#include <ucp/wireup/wireup.h>
 
 
 static void
@@ -348,6 +349,12 @@ ucp_proto_t ucp_am_eager_multi_zcopy_proto = {
 static void ucp_am_eager_multi_zcopy_psn_proto_probe(
         const ucp_proto_init_params_t *init_params)
 {
+    /* PSN protocol requires both sides to support it - disable if peer
+     * version is too old */
+    if (init_params->ep_config_key->dst_version < 21) {
+        return;
+    }
+
     ucp_am_eager_multi_zcopy_proto_probe_common(
             init_params, UCP_PROTO_COMMON_INIT_FLAG_FAILOVER);
 }

@@ -61,8 +61,9 @@ ucs_status_t ucp_am_init(ucp_worker_h worker)
 
     /* Initialize memory pool for fragment tree nodes */
     ucs_mpool_params_reset(&mp_params);
-    mp_params.elem_size       = sizeof(ucs_interval_node_t);
-    mp_params.elems_per_chunk = 128;
+    mp_params.elem_size       = ucs_align_up_pow2(sizeof(ucs_interval_node_t),
+                                                  UCS_SYS_CACHE_LINE_SIZE);
+    mp_params.elems_per_chunk = ucs_get_page_size() / mp_params.elem_size;
     mp_params.ops             = &ucp_am_frag_tree_mpool_ops;
     mp_params.name            = "ucp_am_frag_tree_nodes";
     status = ucs_mpool_init(&mp_params, &worker->am.frag_tree_mpool);
@@ -1484,7 +1485,8 @@ ucp_am_handle_unfinished(ucp_worker_h worker, ucp_recv_desc_t *first_rdesc,
      *
      * Note: release_desc_offset includes frag_tree size to free from correct address
      */
-    desc_offset = sizeof(ucs_interval_tree_t) + first_rdesc->payload_offset;
+    desc_offset                      = sizeof(ucs_interval_tree_t) + 
+                                       first_rdesc->payload_offset;
     first_rdesc                      = (ucp_recv_desc_t*)payload - 1;
     first_rdesc->flags               = UCP_RECV_DESC_FLAG_MALLOC |
                                        UCP_RECV_DESC_FLAG_AM_CB_INPROGRESS;
@@ -1502,6 +1504,24 @@ ucp_am_handle_unfinished(ucp_worker_h worker, ucp_recv_desc_t *first_rdesc,
     }
 
     return;
+}
+
+static void ucp_am_release_mid_fragments_by_msg_id(ucp_ep_ext_t *ep_ext,
+                                                    uint64_t msg_id)
+{
+    ucp_recv_desc_t *mid_rdesc;
+    ucp_am_mid_ftr_t *mid_ftr;
+    ucs_queue_iter_t iter;
+
+    ucs_queue_for_each_safe(mid_rdesc, iter, &ep_ext->am.mid_rdesc_q,
+                            am_mid_queue) {
+        mid_ftr = UCS_PTR_BYTE_OFFSET(mid_rdesc + 1,
+                                      mid_rdesc->length - sizeof(*mid_ftr));
+        if (mid_ftr->msg_id == msg_id) {
+            ucs_queue_del_iter(&ep_ext->am.mid_rdesc_q, iter);
+            ucp_recv_desc_release(mid_rdesc);
+        }
+    }
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_first_handler,
@@ -1567,12 +1587,13 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_first_handler,
      * incoming fragments.
      */
     buffer = ucs_malloc(total_length + sizeof(ucp_recv_desc_t) +
-                                sizeof(ucs_interval_tree_t) +
-                                worker->am.alignment,
+                        sizeof(ucs_interval_tree_t) + worker->am.alignment,
                         "ucp recv desc for long AM");
     if (ucs_unlikely(buffer == NULL)) {
         ucs_error("failed to allocate buffer for assembling UCP AM (id %u)",
                   hdr->am_id);
+        /* Release any middle fragments that arrived earlier for this message */
+        ucp_am_release_mid_fragments_by_msg_id(ep_ext, first_ftr->super.msg_id);
         return UCS_OK; /* release UCT desc */
     }
 
