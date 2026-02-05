@@ -1433,77 +1433,85 @@ ucp_am_hdr_reply_ep(ucp_worker_h worker, uint16_t flags, ucp_ep_h ep,
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_am_handle_unfinished(ucp_worker_h worker, ucp_recv_desc_t *first_rdesc,
+ucp_am_handle_unfinished(ucp_worker_h worker, ucp_recv_desc_t *rdesc,
                          void *data, size_t length, size_t offset,
                          ucp_ep_h reply_ep)
 {
     ucp_ep_ext_t *ep_ext = reply_ep->ext;
     ucp_am_hdr_t *hdr;
     ucp_am_first_ftr_t *first_ftr;
+    ucp_recv_desc_t *tmp_rdesc, *first_rdesc;
     ucs_status_t status;
     void *payload, *user_hdr;
     uint64_t recv_flags;
     size_t desc_offset, user_hdr_length, total_size, seg_end;
     uint16_t am_id;
 
-    ucp_am_copy_data_fragment(first_rdesc, data, length, offset);
+    ucp_am_copy_data_fragment(rdesc, data, length, offset);
 
-    first_ftr = (ucp_am_first_ftr_t*)(first_rdesc + 1);
-    seg_end   = first_rdesc->payload_offset + first_ftr->total_size - 1;
-    if (!ucs_interval_tree_is_equal_range(ucp_am_rdesc_frag_tree(first_rdesc), 
-                                          first_rdesc->payload_offset,
-                                          seg_end)) {
-        /* not all fragments arrived yet */
-        return;
+    ucs_list_for_each_safe(first_rdesc, tmp_rdesc, &ep_ext->am.started_ams,
+                           am_first.list) {
+        if (first_rdesc == NULL) {
+            return;
+        }
+
+        first_ftr = (ucp_am_first_ftr_t*)(first_rdesc + 1);
+        seg_end   = first_rdesc->payload_offset + first_ftr->total_size - 1;
+
+        if (!ucs_interval_tree_is_equal_range(ucp_am_rdesc_frag_tree(
+                                                      first_rdesc),
+                                              first_rdesc->payload_offset,
+                                              seg_end)) {
+            /* not all fragments arrived yet */
+            return;
+        }
+
+        /* Message assembled, remove first fragment descriptor from the list in
+        * ep AM extension */
+        ucs_list_del(&first_rdesc->am_first.list);
+        ucs_interval_tree_cleanup(ucp_am_rdesc_frag_tree(first_rdesc));
+        ep_ext->am.psn  = first_ftr->super.msg_id;
+        hdr             = (ucp_am_hdr_t*)(first_ftr + 1);
+        recv_flags      = ucp_am_hdr_reply_ep(worker, hdr->flags, reply_ep,
+                                            &reply_ep) |
+                        UCP_AM_RECV_ATTR_FLAG_DATA;
+        payload         = UCS_PTR_BYTE_OFFSET(first_rdesc + 1,
+                                            first_rdesc->payload_offset);
+        am_id           = hdr->am_id;
+        user_hdr_length = hdr->header_length;
+        total_size      = first_ftr->total_size;
+        user_hdr        = UCS_PTR_BYTE_OFFSET(payload, total_size);
+
+        /* Need to reinit descriptor, because we have headers between rdesc and
+        * the data. In ucp_am_data_release() and ucp_am_recv_data_nbx() functions,
+        * we calculate desc as "data_pointer - sizeof(desc)", which would not
+        * point to the beginning of the original desc. The content of the first and
+        * base headers are not needed anymore, can safely overwrite them.
+        *
+        * original desc layout: |frag_tree|desc|first_ftr|base_hdr|padding|data|user_hdr|
+        *
+        * new desc layout:                                           |desc|data|
+        *
+        * Note: release_desc_offset includes frag_tree size to free from correct address
+        */
+        desc_offset                      = sizeof(ucs_interval_tree_t) + 
+                                           first_rdesc->payload_offset;
+        first_rdesc                      = (ucp_recv_desc_t*)payload - 1;
+        first_rdesc->flags               = UCP_RECV_DESC_FLAG_MALLOC |
+                                        UCP_RECV_DESC_FLAG_AM_CB_INPROGRESS;
+        first_rdesc->release_desc_offset = desc_offset;
+        first_rdesc->length              = total_size;
+        status                           = ucp_am_invoke_cb(worker, am_id, user_hdr,
+                                                            user_hdr_length,
+                                                            payload, total_size,
+                                                            reply_ep, recv_flags);
+        if (!ucp_am_rdesc_in_progress(first_rdesc, status)) {
+            /* user does not need to hold this data */
+            ucp_am_release_long_desc(first_rdesc);
+        } else {
+            first_rdesc->flags &= ~UCP_RECV_DESC_FLAG_AM_CB_INPROGRESS;
+        }
     }
-
-    /* Message assembled, remove first fragment descriptor from the list in
-     * ep AM extension */
-    ucs_list_del(&first_rdesc->am_first.list);
-    ucs_interval_tree_cleanup(ucp_am_rdesc_frag_tree(first_rdesc));
-    ep_ext->am.psn  = first_ftr->super.msg_id;
-    hdr             = (ucp_am_hdr_t*)(first_ftr + 1);
-    recv_flags      = ucp_am_hdr_reply_ep(worker, hdr->flags, reply_ep,
-                                          &reply_ep) |
-                      UCP_AM_RECV_ATTR_FLAG_DATA;
-    payload         = UCS_PTR_BYTE_OFFSET(first_rdesc + 1,
-                                          first_rdesc->payload_offset);
-    am_id           = hdr->am_id;
-    user_hdr_length = hdr->header_length;
-    total_size      = first_ftr->total_size;
-    user_hdr        = UCS_PTR_BYTE_OFFSET(payload, total_size);
-
-    /* Need to reinit descriptor, because we have headers between rdesc and
-     * the data. In ucp_am_data_release() and ucp_am_recv_data_nbx() functions,
-     * we calculate desc as "data_pointer - sizeof(desc)", which would not
-     * point to the beginning of the original desc. The content of the first and
-     * base headers are not needed anymore, can safely overwrite them.
-     *
-     * original desc layout: |frag_tree|desc|first_ftr|base_hdr|padding|data|user_hdr|
-     *
-     * new desc layout:                                           |desc|data|
-     *
-     * Note: release_desc_offset includes frag_tree size to free from correct address
-     */
-    desc_offset                      = sizeof(ucs_interval_tree_t) + 
-                                       first_rdesc->payload_offset;
-    first_rdesc                      = (ucp_recv_desc_t*)payload - 1;
-    first_rdesc->flags               = UCP_RECV_DESC_FLAG_MALLOC |
-                                       UCP_RECV_DESC_FLAG_AM_CB_INPROGRESS;
-    first_rdesc->release_desc_offset = desc_offset;
-    first_rdesc->length              = total_size;
-    status                           = ucp_am_invoke_cb(worker, am_id, user_hdr,
-                                                        user_hdr_length,
-                                                        payload, total_size,
-                                                        reply_ep, recv_flags);
-    if (!ucp_am_rdesc_in_progress(first_rdesc, status)) {
-        /* user does not need to hold this data */
-        ucp_am_release_long_desc(first_rdesc);
-    } else {
-        first_rdesc->flags &= ~UCP_RECV_DESC_FLAG_AM_CB_INPROGRESS;
-    }
-
-    return;
 }
 
 static void ucp_am_release_mid_fragments_by_msg_id(ucp_ep_ext_t *ep_ext,

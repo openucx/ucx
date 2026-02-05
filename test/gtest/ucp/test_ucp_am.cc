@@ -2221,7 +2221,7 @@ public:
 
     void test_psn_send_recv(size_t total_msgs, size_t num_duplicates)
     {
-        const size_t msg_size = 1024;
+        const size_t msg_size = 65536;
         std::vector<std::unique_ptr<mem_buffer>> sbufs;
         std::vector<ucs_status_ptr_t> requests;
 
