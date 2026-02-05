@@ -1019,7 +1019,10 @@ UCS_TEST_SKIP_COND_P(test_ud, stale_dest_ep_id_update,
 
     /* Create a dummy EP on m_e1 first, so the actual EP will have ep_id=1
      * (not 0, which could be confused with NULL/default values) */
+
     m_e1->create_ep(0);
+
+    for (int i = 0; i < 100000; i++) {
 
     /* Start connection from m_e1 to m_e2 - block m_e2's TX to delay CREP */
     iface(m_e2)->tx.available = 0;
@@ -1043,6 +1046,9 @@ UCS_TEST_SKIP_COND_P(test_ud, stale_dest_ep_id_update,
     wait_for_value(&ep(m_e2)->dest_ep_id, REMOTE_EP_ID, true,
                    TEST_UD_LINGER_TIMEOUT_IN_SEC);
 
+    /* Allow m_e1 to process CREP from m_e2 */
+    short_progress_loop();
+
     EXPECT_EQ(REMOTE_EP_ID, ep(m_e1, REMOTE_EP_ID)->ep_id);
     EXPECT_NE(UCT_UD_EP_NULL_ID, ep(m_e1, REMOTE_EP_ID)->dest_ep_id);
     EXPECT_NE(STALE_DEST_EP_ID, ep(m_e2)->dest_ep_id)
@@ -1051,6 +1057,7 @@ UCS_TEST_SKIP_COND_P(test_ud, stale_dest_ep_id_update,
         << "dest_ep_id should match the remote EP's actual ep_id";
     EXPECT_EQ(REMOTE_EP_ID, ep(m_e2)->dest_ep_id)
         << "dest_ep_id should be 1 (not 0)";
+    }
 }
 #endif
 

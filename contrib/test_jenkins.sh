@@ -40,9 +40,9 @@ else
 	echo "Running under azure"
 	WS_URL=$JOB_URL/ws
 	if [[ "$VALGRIND_CHECK" == "yes" ]]; then
-		TIMEOUT="timeout 300m"
+		TIMEOUT="timeout 3000m"
 	else
-		TIMEOUT="timeout 200m"
+		TIMEOUT="timeout 2000m"
 	fi
 fi
 
