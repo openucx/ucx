@@ -939,3 +939,11 @@ void ucp_proto_fatal_invalid_stage(ucp_request_t *req, const char *func_name)
               req->send.proto_config->proto->name, req->send.proto_stage,
               func_name);
 }
+
+ucs_status_t ucp_proto_offload_zcopy_reset(ucp_request_t *req)
+{
+    ucp_proto_request_zcopy_reset(req);
+    ucp_datatype_iter_rewind(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
+    req->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
+    return UCS_OK;
+}
