@@ -209,6 +209,7 @@ uct_cuda_base_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
     /* Allocate base flush descriptor */
     flush_desc = ucs_malloc(sizeof(*flush_desc), "cuda_flush_desc");
     if (flush_desc == NULL) {
+        ucs_error("failed to allocate cuda_flush_desc");
         return UCS_ERR_NO_MEMORY;
     }
 
@@ -231,7 +232,6 @@ uct_cuda_base_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
         flush_desc->stream_counter++;
     }
 
-out:
     UCT_TL_EP_STAT_FLUSH_WAIT(ep);
     return UCS_INPROGRESS;
 
@@ -246,7 +246,7 @@ error:
                                                     queue);
 
         ucs_queue_remove(event_queue, &event_desc->queue);
-        ucs_mpool_put((uct_cuda_flush_stream_desc_t*)event_desc);
+        ucs_mpool_put(event_desc);
     }
 
     ucs_free(flush_desc);
@@ -254,7 +254,7 @@ error:
 }
 
 static UCS_F_ALWAYS_INLINE int
-uct_cuda_base_event_is_flush(uct_cuda_event_desc_t *event)
+uct_cuda_base_event_is_flush(const uct_cuda_event_desc_t *event)
 {
     return (event->comp != NULL) &&
            (event->comp->func == uct_cuda_base_stream_flushed_cb);
