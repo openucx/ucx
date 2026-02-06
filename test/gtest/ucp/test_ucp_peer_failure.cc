@@ -789,8 +789,7 @@ protected:
         }
 
         ucp_rkey_config_t *rkey_config;
-        ucs_carray_for_each(rkey_config, worker->rkey_config,
-                            worker->rkey_config_count) {
+        ucs_array_for_each(rkey_config, &worker->rkey_config) {
             setup_progress_mock(rkey_config->proto_select, mock);
         }
     }
