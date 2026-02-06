@@ -100,8 +100,7 @@ uct_cuda_ipc_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
                                 UCT_MD_FLAG_INVALIDATE |
                                 UCT_MD_FLAG_INVALIDATE_RMA |
                                 UCT_MD_FLAG_INVALIDATE_AMO |
-                                UCT_MD_FLAG_MEMTYPE_COPY |
-                                UCT_MD_FLAG_RKEY_PTR;
+                                UCT_MD_FLAG_MEMTYPE_COPY;
     md_attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
     md_attr->cache_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
     md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
@@ -583,7 +582,7 @@ uct_cuda_ipc_component_t uct_cuda_ipc_component = {
         },
         .cm_config          = UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY,
         .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_cuda_ipc_component.super),
-        .flags              = 0,
+        .flags              = UCT_COMPONENT_FLAG_RKEY_PTR,
         .md_vfs_init        =
                 (uct_component_md_vfs_init_func_t)ucs_empty_function
     },

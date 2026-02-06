@@ -104,6 +104,8 @@ public:
 
     virtual void init() {
         ucs::skip_on_address_sanitizer();
+        m_env.push_back(new ucs::scoped_setenv("UCX_CUDA_IPC_ENABLE_SAME_PROCESS",
+                                               "y"));
         if (get_variant_value() == VARIANT_PROTO_DISABLE) {
             modify_config("PROTO_ENABLE", "n");
         }
@@ -408,7 +410,9 @@ void test_ucp_mmap::test_rkey_management(ucp_mem_h memh, bool is_dummy,
     void *ptr;
     status = ucp_rkey_ptr(rkey, (uint64_t)ucp_memh_address(memh), &ptr);
     if (status == UCS_OK) {
-        EXPECT_EQ(0, memcmp(ucp_memh_address(memh), ptr, ucp_memh_length(memh)));
+        EXPECT_TRUE(mem_buffer::compare(ucp_memh_address(memh), ptr,
+                                        ucp_memh_length(memh),
+                                        memh->mem_type, memh->mem_type));
     } else {
         EXPECT_EQ(UCS_ERR_UNREACHABLE, status);
     }
