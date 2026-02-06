@@ -366,4 +366,6 @@ void ucp_proto_reset_fatal_not_implemented(ucp_request_t *req);
 
 void ucp_proto_fatal_invalid_stage(ucp_request_t *req, const char *func_name);
 
+ucs_status_t ucp_proto_offload_zcopy_reset(ucp_request_t *req);
+
 #endif

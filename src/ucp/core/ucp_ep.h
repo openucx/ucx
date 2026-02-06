@@ -976,14 +976,16 @@ void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index);
  */
 ucs_status_t ucp_ep_flush_mem_progress(uct_pending_req_t *self);
 
+
 /**
- * @brief Update EP configuration according to the latest interfaces state.
+ * @brief Get the failed lanes from the endpoint configuration.
  *
- * @param [in] ep      Endpoint object.
+ * @param [in] key        Endpoint configuration key.
  *
- * @return Error code as defined by @ref ucs_status_t
+ * @return Bitmask of failed lanes.
  */
-ucs_status_t ucp_ep_update_config(ucp_ep_h ep);
+ucp_lane_map_t ucp_ep_config_get_failed_lanes(const ucp_ep_config_key_t *key);
+
 
 /**
  * @brief Update EP configuration and rkey configuration according to the latest
