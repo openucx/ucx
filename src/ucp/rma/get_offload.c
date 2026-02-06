@@ -214,8 +214,7 @@ ucp_proto_get_offload_zcopy_probe(const ucp_proto_init_params_t *init_params)
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
                                UCP_PROTO_COMMON_INIT_FLAG_RESPONSE |
                                UCP_PROTO_COMMON_INIT_FLAG_MIN_FRAG |
-                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING |
-                               UCP_PROTO_COMMON_INIT_FLAG_RESUME,
+                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
         .super.exclude_map   = 0,
         .super.reg_mem_info  = ucp_proto_common_select_param_mem_info(
                                                      init_params->select_param),
