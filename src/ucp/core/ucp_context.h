@@ -231,7 +231,7 @@ struct ucp_config {
     /** Array of device lists names to use.
      *  This array holds four lists - network devices, shared memory devices,
      *  acceleration devices and loop-back devices */
-    ucs_config_names_array_t               devices[UCT_DEVICE_TYPE_LAST];
+    ucs_config_allow_list_t                devices[UCT_DEVICE_TYPE_LAST];
     /** Array of transport names to use */
     ucs_config_allow_list_t                tls;
     /** Array of protocol names to use */
