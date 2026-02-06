@@ -183,7 +183,7 @@ ucp_proto_t ucp_am_eager_multi_bcopy_proto = {
 };
 
 static void ucp_am_eager_multi_zcopy_proto_probe_common(
-        const ucp_proto_init_params_t *init_params, unsigned extra_flags)
+        const ucp_proto_init_params_t *init_params, int failover_supported)
 {
     ucp_context_t *context               = init_params->worker->context;
     ucp_proto_multi_init_params_t params = {
@@ -203,7 +203,7 @@ static void ucp_am_eager_multi_zcopy_proto_probe_common(
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE |
-                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING | extra_flags,
+                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
         .super.exclude_map   = 0,
         .super.reg_mem_info  = ucp_proto_common_select_param_mem_info(
                                                      init_params->select_param),
@@ -216,6 +216,11 @@ static void ucp_am_eager_multi_zcopy_proto_probe_common(
         .middle.lane_type    = UCP_LANE_TYPE_AM_BW,
         .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_ZCOPY
     };
+
+    if (!failover_supported && (init_params->ep_config_key->err_mode ==
+        UCP_ERR_HANDLING_MODE_FAILOVER)) {
+        return;
+    }
 
     if (!ucp_am_check_init_params(init_params, UCP_PROTO_AM_OP_ID_MASK,
                                   UCP_PROTO_SELECT_OP_FLAG_AM_RNDV)) {
@@ -355,8 +360,7 @@ static void ucp_am_eager_multi_zcopy_psn_proto_probe(
         return;
     }
 
-    ucp_am_eager_multi_zcopy_proto_probe_common(
-            init_params, UCP_PROTO_COMMON_INIT_FLAG_FAILOVER);
+    ucp_am_eager_multi_zcopy_proto_probe_common(init_params, 1);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t ucp_am_eager_multi_zcopy_psn_send_func(
@@ -385,6 +389,7 @@ ucp_am_eager_multi_zcopy_psn_proto_progress(uct_pending_req_t *self)
     if (status == UCS_INPROGRESS) {
         ucp_proto_am_set_middle_fragment(req);
     }
+    
     return status;
 }
 

@@ -63,7 +63,8 @@ ucs_status_t ucp_am_init(ucp_worker_h worker)
     ucs_mpool_params_reset(&mp_params);
     mp_params.elem_size       = ucs_align_up_pow2(sizeof(ucs_interval_node_t),
                                                   UCS_SYS_CACHE_LINE_SIZE);
-    mp_params.elems_per_chunk = ucs_get_page_size() / mp_params.elem_size;
+    mp_params.elems_per_chunk = ucs_get_page_size() / (mp_params.elem_size +
+                                sizeof(ucs_mpool_elem_t));
     mp_params.ops             = &ucp_am_frag_tree_mpool_ops;
     mp_params.name            = "ucp_am_frag_tree_nodes";
     status = ucs_mpool_init(&mp_params, &worker->am.frag_tree_mpool);
@@ -1476,7 +1477,7 @@ ucp_am_handle_unfinished(ucp_worker_h worker, ucp_recv_desc_t *rdesc,
                                             &reply_ep) |
                         UCP_AM_RECV_ATTR_FLAG_DATA;
         payload         = UCS_PTR_BYTE_OFFSET(first_rdesc + 1,
-                                            first_rdesc->payload_offset);
+                                              first_rdesc->payload_offset);
         am_id           = hdr->am_id;
         user_hdr_length = hdr->header_length;
         total_size      = first_ftr->total_size;
@@ -1498,7 +1499,7 @@ ucp_am_handle_unfinished(ucp_worker_h worker, ucp_recv_desc_t *rdesc,
                                            first_rdesc->payload_offset;
         first_rdesc                      = (ucp_recv_desc_t*)payload - 1;
         first_rdesc->flags               = UCP_RECV_DESC_FLAG_MALLOC |
-                                        UCP_RECV_DESC_FLAG_AM_CB_INPROGRESS;
+                                           UCP_RECV_DESC_FLAG_AM_CB_INPROGRESS;
         first_rdesc->release_desc_offset = desc_offset;
         first_rdesc->length              = total_size;
         status                           = ucp_am_invoke_cb(worker, am_id, user_hdr,
@@ -1606,9 +1607,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_first_handler,
     }
 
     first_rdesc = UCS_PTR_BYTE_OFFSET(buffer, sizeof(ucs_interval_tree_t));
-    padding = ucs_padding((uintptr_t)UCS_PTR_BYTE_OFFSET(
-                                  first_rdesc + 1, UCP_AM_FIRST_FRAG_META_LEN),
-                          worker->am.alignment);
+    padding     = ucs_padding((uintptr_t)UCS_PTR_BYTE_OFFSET(
+                              first_rdesc + 1, UCP_AM_FIRST_FRAG_META_LEN),
+                              worker->am.alignment);
 
     first_rdesc->payload_offset = UCP_AM_FIRST_FRAG_META_LEN + padding;
     frag_tree_ops.alloc_node    = ucp_am_frag_tree_alloc_node;

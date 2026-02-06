@@ -2257,7 +2257,7 @@ public:
         wait_for_value(&m_recv_counter, total_msgs);
 
         /* Validate total messages sent but only expected were received (all
-            * duplicates dropped) */
+         * duplicates dropped) */
         EXPECT_EQ(total_msgs + num_duplicates, m_send_counter);
         EXPECT_EQ(total_msgs, m_recv_counter);
     }
