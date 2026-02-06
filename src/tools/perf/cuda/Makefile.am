@@ -16,7 +16,7 @@ libucx_perftest_cuda_la_SOURCES  = cuda_alloc.c
 if HAVE_NVCC
 if HAVE_GPUNETIO # temporarily all device code depends on doca
 
-NVCC_EXTRA_FLAGS = $(CUDA_CPPFLAGS) $(GPUNETIO_CFLAGS)
+NVCC_EXTRA_FLAGS = $(CUDA_CPPFLAGS)
 
 libucx_perftest_cuda_la_LIBADD  += \
     $(abs_top_builddir)/src/tools/perf/lib/libucxperf.la \

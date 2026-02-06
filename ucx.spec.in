@@ -79,9 +79,6 @@ BuildRequires: valgrind-devel
 %if %{with mad}
 BuildRequires: libibmad-devel libibumad-devel
 %endif
-%if %{with gda}
-BuildRequires: doca-sdk-gpunetio-devel
-%endif
 
 %description
 UCX is an optimized communication framework for high-performance distributed
@@ -442,7 +439,6 @@ Provides oneAPI Level Zero (ZE) Runtime support for UCX.
 %package ib-mlx5-gda
 Requires: %{name}-cuda%{?_isa} = %{version}-%{release}
 Requires: %{name}-ib%{?_isa} = %{version}-%{release}
-Requires: doca-sdk-gpunetio-devel
 Summary: UCX GPU Direct Async support
 Group: System Environment/Libraries
 
