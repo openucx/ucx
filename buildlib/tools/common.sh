@@ -16,6 +16,30 @@ INTEL_MODULE="intel/ics-19.1.1"
 FUSE3_MODULE="dev/fuse-3.10.5"
 
 #
+# Set default parallelism for CI (can be overridden by NPROC env var)
+#
+if [ -z "${NPROC:-}" ]; then
+	# In containers, calculate based on memory limits to avoid OOM
+	if [ -f /.dockerenv ] || [ -f /run/.containerenv ] || [ -n "${KUBERNETES_SERVICE_HOST:-}" ]; then
+		if [ -f /sys/fs/cgroup/memory/memory.limit_in_bytes ]; then
+			limit=$(cat /sys/fs/cgroup/memory/memory.limit_in_bytes)
+		elif [ -f /sys/fs/cgroup/memory.max ]; then
+			limit=$(cat /sys/fs/cgroup/memory.max)
+			[ "$limit" = "max" ] && limit=$((4 * 1024 * 1024 * 1024))
+		else
+			limit=$((4 * 1024 * 1024 * 1024))
+		fi
+		# Use 1 process per GB of memory, max 16
+		nproc=$((limit / (1024 * 1024 * 1024)))
+		nproc=$((nproc > 16 ? 16 : nproc))
+		nproc=$((nproc < 1 ? 1 : nproc))
+	else
+		nproc=$(nproc --all)
+	fi
+	export NPROC=$nproc
+fi
+
+#
 # Parallel build command runs with 4 tasks, or number of cores on the system,
 # whichever is lowest
 #
@@ -23,7 +47,7 @@ num_cpus=$(lscpu -p | grep -v '^#' | wc -l)
 [ -z $num_cpus ] && num_cpus=1
 parallel_jobs=${parallel_jobs:-4}
 [ $parallel_jobs -gt $num_cpus ] && parallel_jobs=$num_cpus
-num_pinned_threads=$(nproc)
+num_pinned_threads=${NPROC}
 [ $parallel_jobs -gt $num_pinned_threads ] && parallel_jobs=$num_pinned_threads
 
 MAKE="make V=1"
