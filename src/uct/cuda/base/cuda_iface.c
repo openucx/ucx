@@ -193,6 +193,9 @@ uct_cuda_base_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
     uct_base_ep_t UCS_V_UNUSED *ep = ucs_derived_of(tl_ep, uct_base_ep_t);
     uct_cuda_iface_t *iface        = ucs_derived_of(tl_ep->iface,
                                                     uct_cuda_iface_t);
+    uct_base_ep_t UCS_V_UNUSED *ep = ucs_derived_of(tl_ep, uct_base_ep_t);
+    uct_cuda_iface_t *iface        = ucs_derived_of(tl_ep->iface,
+                                                    uct_cuda_iface_t);
     uct_cuda_flush_desc_t *flush_desc;
     uct_cuda_flush_stream_desc_t *flush_stream_desc;
     uct_cuda_queue_desc_t *q_desc;
