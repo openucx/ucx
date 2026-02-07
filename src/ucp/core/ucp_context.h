@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
  * Copyright (C) Advanced Micro Devices, Inc. 2019. ALL RIGHTS RESERVED.
  *
@@ -286,7 +286,7 @@ typedef struct ucp_tl_resource_desc {
  */
 typedef struct ucp_tl_alias {
     const char                    *alias;   /* Alias name */
-    const char*                   tls[10];   /* Transports which are selected by the alias */
+    const char*                   tls[11];  /* Transports which are selected by the alias */
 } ucp_tl_alias_t;
 
 
