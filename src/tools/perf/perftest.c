@@ -86,12 +86,6 @@ test_type_t tests[] = {
     {"ucp_put_single_lat", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT_SINGLE, UCX_PERF_TEST_TYPE_PINGPONG,
      "put single latency", "latency", 1},
 
-    {"ucp_put_single_v2_bw", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT_SINGLE_V2, UCX_PERF_TEST_TYPE_STREAM_UNI,
-     "put single v2 bandwidth", "overhead", 32},
-
-    {"ucp_put_single_v2_lat", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT_SINGLE_V2, UCX_PERF_TEST_TYPE_PINGPONG,
-     "put single v2 latency", "latency", 1},
-
     {"ucp_put_multi_bw", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT_MULTI, UCX_PERF_TEST_TYPE_STREAM_UNI,
      "put multi bandwidth", "overhead", 32},
 

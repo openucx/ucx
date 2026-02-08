@@ -112,8 +112,8 @@ __host__ UCS_F_DEVICE unsigned ucx_perf_cuda_thread_index(size_t tid)
     case UCX_PERF_CMD_PUT_SINGLE: \
         _func(UCX_PERF_CMD_PUT_SINGLE, __VA_ARGS__); \
         break; \
-    case UCX_PERF_CMD_PUT_SINGLE_V2: \
-        _func(UCX_PERF_CMD_PUT_SINGLE_V2, __VA_ARGS__); \
+    case UCX_PERF_CMD_PUT: \
+        _func(UCX_PERF_CMD_PUT, __VA_ARGS__); \
         break; \
     case UCX_PERF_CMD_PUT_MULTI: \
         _func(UCX_PERF_CMD_PUT_MULTI, __VA_ARGS__); \
@@ -233,7 +233,7 @@ ucx_perf_cuda_dispatch(ucx_perf_context_t *perf)
     Runner runner(*perf);
     if ((perf->params.command == UCX_PERF_CMD_PUT_MULTI) ||
         (perf->params.command == UCX_PERF_CMD_PUT_SINGLE) ||
-        (perf->params.command == UCX_PERF_CMD_PUT_SINGLE_V2) ||
+        (perf->params.command == UCX_PERF_CMD_PUT) ||
         (perf->params.command == UCX_PERF_CMD_PUT_PARTIAL)) {
         if (perf->params.test_type == UCX_PERF_TEST_TYPE_PINGPONG) {
             return runner.run_pingpong();

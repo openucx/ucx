@@ -167,7 +167,7 @@ private:
     static bool has_counter(const ucx_perf_context_t &perf)
     {
         return ((perf.params.command != UCX_PERF_CMD_PUT_SINGLE) &&
-                (perf.params.command != UCX_PERF_CMD_PUT_SINGLE_V2));
+                (perf.params.command != UCX_PERF_CMD_PUT));
     }
 
     void init_mem_list(const ucx_perf_context_t &perf)
@@ -346,7 +346,7 @@ ucp_perf_cuda_send_async(const ucp_perf_cuda_params &params,
                                             0, 0,
                                             params.length + ONESIDED_SIGNAL_SIZE,
                                             channel_id, flags, req);
-    case UCX_PERF_CMD_PUT_SINGLE_V2:
+    case UCX_PERF_CMD_PUT:
         *params.counter_send = idx + 1;
         return ucp_device_put<level>(params.local_mem_list,
                                      params.indices[0], 0,

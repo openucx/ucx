@@ -270,7 +270,6 @@ ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf)
         flags |= UCT_MD_MEM_ACCESS_REMOTE_PUT;
         break;
     case UCX_PERF_CMD_PUT_SINGLE:
-    case UCX_PERF_CMD_PUT_SINGLE_V2:
     case UCX_PERF_CMD_PUT_MULTI:
     case UCX_PERF_CMD_PUT_PARTIAL:
         flags |= UCT_MD_MEM_ACCESS_REMOTE_PUT | UCT_MD_MEM_ACCESS_REMOTE_ATOMIC;
