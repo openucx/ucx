@@ -41,6 +41,8 @@ jobs:
             CONTAINER: debian130
           sles15sp6:
             CONTAINER: sles15sp6
+          sles15sp7:
+            CONTAINER: sles15sp7
           rhel82:
             CONTAINER: rhel82
           rhel90:
@@ -74,6 +76,8 @@ jobs:
             CONTAINER: ubuntu2404_aarch64
           rhel100_aarch64:
             CONTAINER: rhel100_aarch64
+          sles15sp7_aarch64:
+            CONTAINER: sles15sp7_aarch64
           rocky89_aarch64:
             CONTAINER: rocky89_aarch64
           rocky96_aarch64:
