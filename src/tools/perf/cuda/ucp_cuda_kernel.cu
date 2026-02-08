@@ -202,15 +202,17 @@ private:
         }
 
         if (has_counter(perf)) {
-            elems[data_count].field_mask  = UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY |
-                                            UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR;
+            elems[data_count].field_mask  =
+                                    UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY |
+                                    UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR;
             elems[data_count].rkey        = perf.ucp.rkey;
             elems[data_count].remote_addr = perf.ucp.remote_addr + offset;
         }
 
         if (perf.params.command == UCX_PERF_CMD_PUT) {
             create_local_mem_list(perf, elems, count, &m_params.local_mem_list);
-            create_remote_mem_list(perf, elems, count, &m_params.remote_mem_list);
+            create_remote_mem_list(perf, elems, count,
+                                   &m_params.remote_mem_list);
         } else {
             create_mem_list(perf, elems, count, &m_params.mem_list);
         }
