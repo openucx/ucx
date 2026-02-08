@@ -16,16 +16,16 @@ extern "C" {
 
 class test_cuda_ipc_md : public test_md {
 protected:
-    static uct_cuda_ipc_rkey_t
+    static uct_cuda_ipc_extended_rkey_t
     unpack_common(uct_md_h md, int64_t uuid, CUdeviceptr ptr, size_t size)
     {
-        uct_cuda_ipc_rkey_t rkey = {};
+        uct_cuda_ipc_extended_rkey_t rkey = {};
         uct_mem_h memh;
         EXPECT_UCS_OK(md->ops->mem_reg(md, (void *)ptr, size, NULL, &memh));
         EXPECT_UCS_OK(md->ops->mkey_pack(md, memh, (void *)ptr, size, NULL,
                                          &rkey));
 
-        int64_t *uuid64 = (int64_t *)rkey.uuid.bytes;
+        int64_t *uuid64 = (int64_t *)rkey.super.uuid.bytes;
         uuid64[0]       = uuid;
         uuid64[1]       = uuid;
 
@@ -43,11 +43,11 @@ protected:
         return rkey;
     }
 
-    static uct_cuda_ipc_rkey_t unpack(uct_md_h md, int64_t uuid)
+    static uct_cuda_ipc_extended_rkey_t unpack(uct_md_h md, int64_t uuid)
     {
         CUdeviceptr ptr;
         EXPECT_EQ(CUDA_SUCCESS, cuMemAlloc(&ptr, 64));
-        uct_cuda_ipc_rkey_t rkey = unpack_common(md, uuid, ptr, 64);
+        uct_cuda_ipc_extended_rkey_t rkey = unpack_common(md, uuid, ptr, 64);
         EXPECT_EQ(CUDA_SUCCESS, cuMemFree(ptr));
         return rkey;
     }
@@ -87,7 +87,7 @@ protected:
         EXPECT_EQ(CUDA_SUCCESS, cuStreamDestroy(*cu_stream));
     }
 
-    static uct_cuda_ipc_rkey_t unpack_masync(uct_md_h md, int64_t uuid)
+    static uct_cuda_ipc_extended_rkey_t unpack_masync(uct_md_h md, int64_t uuid)
     {
         size_t size = 4 * UCS_MBYTE;
         CUdeviceptr ptr;
@@ -95,7 +95,7 @@ protected:
         CUstream cu_stream;
 
         alloc_mempool(&ptr, &mpool, &cu_stream, size);
-        uct_cuda_ipc_rkey_t rkey = unpack_common(md, uuid, ptr, size);
+        uct_cuda_ipc_extended_rkey_t rkey = unpack_common(md, uuid, ptr, size);
         free_mempool(&ptr, &mpool, &cu_stream);
         return rkey;
     }
@@ -163,7 +163,7 @@ UCS_TEST_P(test_cuda_ipc_md, mpack_legacy)
     constexpr size_t size = 4096;
     ucs::handle<uct_md_h> md;
     uct_mem_h memh;
-    uct_cuda_ipc_rkey_t rkey;
+    uct_cuda_ipc_extended_rkey_t rkey;
     CUdeviceptr ptr;
 
     UCS_TEST_CREATE_HANDLE(uct_md_h, md, uct_md_close, uct_md_open,
@@ -174,7 +174,7 @@ UCS_TEST_P(test_cuda_ipc_md, mpack_legacy)
     EXPECT_UCS_OK(md->ops->mkey_pack(md, memh, (void *)ptr, size, NULL,
                                      &rkey));
 
-    EXPECT_EQ(UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY, rkey.ph.handle_type);
+    EXPECT_EQ(UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY, rkey.super.ph.handle_type);
 
     uct_md_mem_dereg_params_t params;
     params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
