@@ -21,16 +21,17 @@ FUSE3_MODULE="dev/fuse-3.10.5"
 if [ -z "${NPROC:-}" ]; then
 	# In containers, calculate based on memory limits to avoid OOM
 	if [ -f /.dockerenv ] || [ -f /run/.containerenv ] || [ -n "${KUBERNETES_SERVICE_HOST:-}" ]; then
+		one_gib=$((1024 * 1024 * 1024))
 		if [ -f /sys/fs/cgroup/memory/memory.limit_in_bytes ]; then
 			limit=$(cat /sys/fs/cgroup/memory/memory.limit_in_bytes)
 		elif [ -f /sys/fs/cgroup/memory.max ]; then
 			limit=$(cat /sys/fs/cgroup/memory.max)
-			[ "$limit" = "max" ] && limit=$((4 * 1024 * 1024 * 1024))
+			[ "$limit" = "max" ] && limit=$((4 * one_gib))
 		else
-			limit=$((4 * 1024 * 1024 * 1024))
+			limit=$((4 * one_gib))
 		fi
 		# Use 1 process per GB of memory, max 16
-		nproc=$((limit / (1024 * 1024 * 1024)))
+		nproc=$((limit / one_gib))
 		nproc=$((nproc > 16 ? 16 : nproc))
 		nproc=$((nproc < 1 ? 1 : nproc))
 	else
