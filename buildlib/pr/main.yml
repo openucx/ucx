@@ -90,9 +90,6 @@ resources:
     - container: debian130
       image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/debian13.0/builder:doca-3.2.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: sles15sp6
-      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/sles15sp6/builder:doca-2.9.0
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: sles15sp7
       image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/sles15sp7/builder:mofed-26.01-0.8.8.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
