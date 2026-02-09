@@ -129,26 +129,22 @@ private:
 };
 
 struct ucp_perf_cuda_params {
-    ucp_device_mem_list_handle_h        mem_list;
-    ucp_device_local_mem_list_h         local_mem_list;
-    ucp_device_remote_mem_list_h        remote_mem_list;
-    size_t                              length;
-    unsigned                            *indices;
-    size_t                              *local_offsets;
-    size_t                              *remote_offsets;
-    size_t                              *lengths;
-    uint64_t                            *counter_send;
-    uint64_t                            *counter_recv;
+    ucp_device_mem_list_handle_h mem_list;
+    ucp_device_local_mem_list_h  local_mem_list;
+    ucp_device_remote_mem_list_h remote_mem_list;
+    size_t                       length;
+    unsigned                     *indices;
+    size_t                       *local_offsets;
+    size_t                       *remote_offsets;
+    size_t                       *lengths;
+    uint64_t                     *counter_send;
+    uint64_t                     *counter_recv;
 };
 
 class ucp_perf_cuda_params_handler {
 public:
     ucp_perf_cuda_params_handler(const ucx_perf_context_t &perf)
     {
-        m_params.mem_list        = NULL;
-        m_params.local_mem_list  = NULL;
-        m_params.remote_mem_list = NULL;
-
         init_mem_list(perf);
         init_elements(perf);
         init_counters(perf);
@@ -156,15 +152,13 @@ public:
 
     ~ucp_perf_cuda_params_handler()
     {
-        if (m_params.mem_list != NULL) {
-            ucp_device_mem_list_release(m_params.mem_list);
-        }
         if (m_params.local_mem_list != NULL) {
             ucp_device_mem_list_release(m_params.local_mem_list);
-        }
-        if (m_params.remote_mem_list != NULL) {
             ucp_device_mem_list_release(m_params.remote_mem_list);
+        } else {
+            ucp_device_mem_list_release(m_params.mem_list);
         }
+
         CUDA_CALL_WARN(cudaFree, m_params.indices);
         CUDA_CALL_WARN(cudaFree, m_params.local_offsets);
         CUDA_CALL_WARN(cudaFree, m_params.remote_offsets);
@@ -191,7 +185,8 @@ private:
             elems[i].field_mask  = UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH |
                                    UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY |
                                    UCP_DEVICE_MEM_LIST_ELEM_FIELD_LOCAL_ADDR |
-                                   UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR;
+                                   UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR |
+                                   UCP_DEVICE_MEM_LIST_ELEM_FIELD_EP;
             elems[i].memh        = perf.ucp.send_memh;
             elems[i].rkey        = perf.ucp.rkey;
             elems[i].local_addr  = UCS_PTR_BYTE_OFFSET(perf.send_buffer, offset);
@@ -209,35 +204,38 @@ private:
             elems[data_count].remote_addr = perf.ucp.remote_addr + offset;
         }
 
-        if (perf.params.command == UCX_PERF_CMD_PUT) {
-            create_local_mem_list(perf, elems, count, &m_params.local_mem_list);
-            create_remote_mem_list(perf, elems, count,
-                                   &m_params.remote_mem_list);
-        } else {
-            create_mem_list(perf, elems, count, &m_params.mem_list);
-        }
-    }
-
-    void create_mem_list_common(const ucx_perf_context_t &perf,
-                                ucp_device_mem_list_elem_t *elems, size_t count,
-                                ucp_device_mem_list_params_t &params,
-                                ucp_device_flags_t field_mask)
-    {
-        for (size_t i = 0; i < count; ++i) {
-            elems[i].field_mask = field_mask;
-        }
-
+        ucp_device_mem_list_params_t params;
         params.field_mask   = UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENTS |
                               UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENT_SIZE |
                               UCP_DEVICE_MEM_LIST_PARAMS_FIELD_NUM_ELEMENTS;
         params.element_size = sizeof(ucp_device_mem_list_elem_t);
         params.num_elements = count;
         params.elements     = elems;
+
+        if (perf.params.command == UCX_PERF_CMD_PUT) {
+            params.field_mask |= UCP_DEVICE_MEM_LIST_PARAMS_FIELD_WORKER;
+            params.worker      = perf.ucp.worker;
+
+            if (ucp_device_local_mem_list_create(&params,
+                                                 &m_params.local_mem_list)
+                != UCS_OK) {
+                throw std::runtime_error("Failed to create local memory list");
+            }
+
+            create_mem_list(perf, [&]() {
+                return ucp_device_remote_mem_list_create(
+                                            &params, &m_params.remote_mem_list);
+            });
+        } else {
+            create_mem_list(perf, [&]() {
+                return ucp_device_mem_list_create(perf.ucp.ep, &params,
+                                                  &m_params.mem_list);
+            });
+        }
     }
 
-    void create_mem_list_with_retry(const ucx_perf_context_t &perf,
-                                    const ucp_device_mem_list_params_t &params,
-                                    void **handle)
+    template <typename F>
+    void create_mem_list(const ucx_perf_context_t &perf, F &&func)
     {
         ucs_status_t status;
         ucs_time_t deadline = ucs_get_time() + ucs_time_from_sec(60.0);
@@ -248,66 +246,12 @@ private:
             }
 
             ucp_worker_progress(perf.ucp.worker);
-            if (perf.params.command == UCX_PERF_CMD_PUT) {
-                status = ucp_device_remote_mem_list_create(&params,
-                                (ucp_device_remote_mem_list_h *)(handle));
-            } else {
-                status = ucp_device_mem_list_create(perf.ucp.ep, &params,
-                                (ucp_device_mem_list_handle_h *)(handle));
-            }
+            status = func();
         } while (status == UCS_ERR_NOT_CONNECTED);
 
         if (status != UCS_OK) {
             throw std::runtime_error("Failed to create memory list");
         }
-    }
-
-    void create_mem_list(const ucx_perf_context_t &perf,
-                         ucp_device_mem_list_elem_t *elems, size_t count,
-                         ucp_device_mem_list_handle_h *handle)
-    {
-        ucp_device_mem_list_params_t params;
-        create_mem_list_common(perf, elems, count, params,
-                               static_cast<ucp_device_flags_t>(
-                                   UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH |
-                                   UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY |
-                                   UCP_DEVICE_MEM_LIST_ELEM_FIELD_LOCAL_ADDR |
-                                   UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR |
-                                   UCP_DEVICE_MEM_LIST_ELEM_FIELD_EP));
-
-        create_mem_list_with_retry(perf, params, (void **)(handle));
-    }
-
-    void create_local_mem_list(const ucx_perf_context_t &perf,
-                               ucp_device_mem_list_elem_t *elems, size_t count,
-                               ucp_device_local_mem_list_h *handle)
-    {
-        ucp_device_mem_list_params_t params;
-        create_mem_list_common(perf, elems, count, params,
-                               static_cast<ucp_device_flags_t>(
-                                   UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH |
-                                   UCP_DEVICE_MEM_LIST_ELEM_FIELD_LOCAL_ADDR));
-        params.field_mask |= UCP_DEVICE_MEM_LIST_PARAMS_FIELD_WORKER;
-        params.worker      = perf.ucp.worker;
-
-        ucs_status_t status = ucp_device_local_mem_list_create(&params, handle);
-        if (status != UCS_OK) {
-            throw std::runtime_error("Failed to create local memory list");
-        }
-    }
-
-    void create_remote_mem_list(const ucx_perf_context_t &perf,
-                                ucp_device_mem_list_elem_t *elems, size_t count,
-                                ucp_device_remote_mem_list_h *handle)
-    {
-        ucp_device_mem_list_params_t params;
-        create_mem_list_common(perf, elems, count, params,
-                               static_cast<ucp_device_flags_t>(
-                                   UCP_DEVICE_MEM_LIST_ELEM_FIELD_EP |
-                                   UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY |
-                                   UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR));
-
-        create_mem_list_with_retry(perf, params, (void **)(handle));
     }
 
     void init_elements(const ucx_perf_context_t &perf)
