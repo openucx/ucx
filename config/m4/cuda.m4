@@ -62,7 +62,7 @@ AC_DEFUN([UCX_CUDA_CHECK_NVCC], [
                NVCC=""])
 
         UCX_CHECK_CUDA_GE(13, 0)
-        AS_IF([test "x$ucx_cuda_ge" == xyes],
+        AS_IF([test "x$ucx_cuda_ge" = xyes],
               [NVCC_CXX_DIALECT=c++17
                cxx_dialect_ver=201703L],
               [NVCC_CXX_DIALECT=c++11
