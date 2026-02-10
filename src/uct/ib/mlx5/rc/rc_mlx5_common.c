@@ -619,7 +619,9 @@ uct_rc_mlx5_dp_ordering_ooo_init(uct_ib_mlx5_md_t *md,
     char ar_enable_str[16], ddp_enable_str[16];
     int force;
 
-    if (!(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX)) {
+    if (!(md->flags & (UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP |
+                       UCT_IB_MLX5_MD_FLAG_DEVX_DCT |
+                       UCT_IB_MLX5_MD_FLAG_DEVX_DCI))) {
         if ((config->ddp_enable == UCS_YES) && !ddp_supported_dv) {
             ucs_error("%s/%s: ddp is not supported for DV",
                       uct_ib_device_name(&md->super.dev), tl_name);
