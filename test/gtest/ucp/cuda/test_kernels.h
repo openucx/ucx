@@ -10,6 +10,11 @@
 #include <ucp/api/device/ucp_host.h>
 #include <ucs/sys/device_code.h>
 
+#if defined(__NVCC__) && !defined(__builtin_ia32_prefetch)
+  #define __builtin_ia32_prefetch(P, RW, LOC, CACHE) \
+    __builtin_prefetch((P), (RW), (LOC))
+#endif
+
 typedef enum {
     TEST_UCP_DEVICE_KERNEL_PUT_SINGLE,
     TEST_UCP_DEVICE_KERNEL_PUT_SINGLE_V2,

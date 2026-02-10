@@ -10,6 +10,11 @@
 #include <uct/api/uct_def.h>
 #include <uct/api/device/uct_device_types.h>
 
+#if defined(__NVCC__) && !defined(__builtin_ia32_prefetch)
+  #define __builtin_ia32_prefetch(P, RW, LOC, CACHE) \
+    __builtin_prefetch((P), (RW), (LOC))
+#endif
+
 namespace ucx_cuda {
 
 ucs_status_t launch_uct_put_single(uct_device_ep_h ep,
