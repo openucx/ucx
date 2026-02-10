@@ -5,7 +5,7 @@
 job: ucx-test
 
 failFast: false
-timeout_minutes: 90
+timeout_minutes: 240
 
 kubernetes:
   cloud: il-ipp-blossom-prod-nbu-swx-ucx
@@ -14,34 +14,46 @@ kubernetes:
   requests: "{memory: 16Gi, cpu: 10000m}"
 
 runs_on_dockers:
+  # HCA CX8
   - {
-      name: "ubuntu2404-doca2.9",
+      name: "hca-cx8",
       url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0",
       arch: x86_64,
       annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "ib-network" }],
-      limits: "{memory: 16Gi, cpu: 10000m, hugepages-2Mi: 8Gi, rdma/hca_cx8: 1}",
-      requests: "{memory: 16Gi, cpu: 10000m, hugepages-2Mi: 8Gi, rdma/hca_cx8: 1}",
+      limits: "{memory: 16Gi, cpu: 10000m, rdma/hca_cx8: 1}",
+      requests: "{memory: 16Gi, cpu: 10000m, rdma/hca_cx8: 1}",
+      caps_add: "[ IPC_LOCK, SYS_RESOURCE ]"
+    }
+  # BlueField
+  - {
+      name: "bf3",
+      url: "harbor.mellanox.com/hpcx/aarch64/ubuntu24.04/builder:doca-2.9.0",
+      arch: aarch64,
+      nodeSelector: "hardware.node.kubernetes.io=BF3,kubernetes.io/arch=arm64",
+      tolerations: "[{key: 'hardware.node.kubernetes.io', operator: 'Equal', value: 'BF3'}]",
+      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "ib-network" }],
+      limits: "{memory: 16Gi, cpu: 10000m}",
+      requests: "{memory: 16Gi, cpu: 10000m}",
       caps_add: "[ IPC_LOCK, SYS_RESOURCE ]"
     }
 
 matrix:
   axes:
-    arch: [x86_64]
-    worker: [0]
-    # worker: [0, 1, 2, 3]
+    arch: [x86_64, aarch64]
+    worker: [0, 1, 2, 3]
 
-taskName: '${arch}/${name}/w${axis_index}'
+taskName: '${name}/${arch}/w${worker}'
 
 env:
   RUN_TESTS: "yes"
   TEST_PERF: "0"
-  ASAN_CHECK: "no"
   VALGRIND_CHECK: "no"
   nworkers: "4"
+  STEP_TIMEOUT_MINUTES: "120"
 
 steps:
   - name: Test
     parallel: false
-    timeout: 360
+    timeout: "${STEP_TIMEOUT_MINUTES}"
     run: |
-      ./contrib/test_jenkins.sh
+      ASAN_CHECK="no" ./contrib/test_jenkins.sh
