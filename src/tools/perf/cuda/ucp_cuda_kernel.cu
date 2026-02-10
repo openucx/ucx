@@ -181,6 +181,10 @@ private:
         size_t offset     = 0;
         ucp_device_mem_list_elem_t elems[count];
 
+        m_params.mem_list        = NULL;
+        m_params.local_mem_list  = NULL;
+        m_params.remote_mem_list = NULL;
+
         for (size_t i = 0; i < data_count; ++i) {
             elems[i].field_mask  = UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH |
                                    UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY |
