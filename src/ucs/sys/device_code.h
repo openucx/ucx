@@ -19,6 +19,14 @@
 #define UCS_F_DEVICE static inline
 #endif /* __NVCC__ */
 
+#ifndef DEVICE_ENABLE_PARAMS_CHECK
+#ifdef _DEBUG
+#define DEVICE_ENABLE_PARAMS_CHECK 1
+#else
+#define DEVICE_ENABLE_PARAMS_CHECK 0
+#endif
+#endif
+
 
 /* Number of threads in a warp */
 #define UCS_DEVICE_NUM_THREADS_IN_WARP 32

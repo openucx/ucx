@@ -7,10 +7,6 @@
 #ifndef UCP_DEVICE_IMPL_H
 #define UCP_DEVICE_IMPL_H
 
-#ifdef HAVE_CONFIG_H
-#include "config.h"
-#endif
-
 #include "ucp_device_types.h"
 
 #include <ucp/api/ucp_def.h>
@@ -19,18 +15,6 @@
 #include <ucs/sys/device_code.h>
 #include <ucs/type/status.h>
 #include <stdint.h>
-
-/** TODO: Remove after properly fixed.*/
-#ifndef ENABLE_PARAMS_CHECK
-#define ENABLE_PARAMS_CHECK 0
-#endif
-
-#define UCP_DEVICE_MEM_LIST_PARAMS_CHECK(_mem_list_h, _mem_list_index) \
-    if (ENABLE_PARAMS_CHECK && \
-        (((_mem_list_h)->version != UCP_DEVICE_MEM_LIST_VERSION_V1) || \
-         ((_mem_list_index) >= (_mem_list_h)->length))) { \
-        return UCS_ERR_INVALID_PARAM; \
-    }
 
 /**
  * @ingroup UCP_DEVICE
@@ -54,6 +38,31 @@ typedef enum {
     UCP_DEVICE_FLAG_NODELAY =
             UCT_DEVICE_FLAG_NODELAY /**< Complete before return. */
 } ucp_device_flags_t;
+
+
+/**
+ * @ingroup UCP_DEVICE
+ * @brief Check the parameters of the memory list handle.
+ *
+ * @param [in] mem_list_h  Memory list handle to check.
+ * @param [in] index       Index in the memory list to check.
+ *
+ * @return UCS_OK if the parameters are valid.
+ */
+template<typename T>
+UCS_F_DEVICE ucs_status_t ucp_device_check_params(const T mem_list_h,
+                                                  unsigned index)
+{
+    if (DEVICE_ENABLE_PARAMS_CHECK) {
+        if (((mem_list_h)->version != UCP_DEVICE_MEM_LIST_VERSION_V1) ||
+            ((index) >= (mem_list_h)->length)) {
+            printf("Invalid parameters for %p\n", mem_list_h);
+            return UCS_ERR_INVALID_PARAM;
+        }
+    }
+
+    return UCS_OK;
+}       
 
 
 /**
@@ -104,8 +113,12 @@ UCS_F_DEVICE ucs_status_t ucp_device_prepare_send(
 {
     const unsigned lane = 0;
     size_t elem_offset;
+    ucs_status_t status;
 
-    UCP_DEVICE_MEM_LIST_PARAMS_CHECK(mem_list_h, first_mem_elem_index);
+    status = ucp_device_check_params(mem_list_h, first_mem_elem_index);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     device_ep   = mem_list_h->uct_device_eps[lane];
     elem_offset = first_mem_elem_index * mem_list_h->uct_mem_element_size[lane];
@@ -125,8 +138,12 @@ UCS_F_DEVICE ucs_status_t ucp_device_prepare_send_remote(
         uct_device_completion_t *&comp)
 {
     const size_t elem_size = sizeof(uct_device_remote_mem_list_elem_t);
+    ucs_status_t status;
 
-    UCP_DEVICE_MEM_LIST_PARAMS_CHECK(dst_mem_list_h, dst_mem_list_index);
+    status = ucp_device_check_params(dst_mem_list_h, dst_mem_list_index);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     const auto dst_mem_element = static_cast<uct_device_remote_mem_list_elem_t*>(
             UCS_PTR_BYTE_OFFSET(dst_mem_list_h->mem_elements,
@@ -154,7 +171,10 @@ ucp_device_prepare_send(const ucp_device_local_mem_list_h src_mem_list_h,
     const size_t elem_size = sizeof(uct_device_local_mem_list_elem_t);
     ucs_status_t status;
 
-    UCP_DEVICE_MEM_LIST_PARAMS_CHECK(src_mem_list_h, src_mem_list_index);
+    status = ucp_device_check_params(src_mem_list_h, src_mem_list_index);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     status = ucp_device_prepare_send_remote(dst_mem_list_h, dst_mem_list_index,
                                             remote_address, req, device_ep,
@@ -436,8 +456,12 @@ ucp_device_get_ptr(const ucp_device_remote_mem_list_h mem_list_h,
                    unsigned mem_list_index, void **addr_p)
 {
     const size_t elem_size = sizeof(uct_device_remote_mem_list_elem_t);
+    ucs_status_t status;
 
-    UCP_DEVICE_MEM_LIST_PARAMS_CHECK(mem_list_h, mem_list_index);
+    status = ucp_device_check_params(mem_list_h, mem_list_index);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     const auto mem_element = static_cast<uct_device_remote_mem_list_elem_t*>(
             UCS_PTR_BYTE_OFFSET(mem_list_h->mem_elements,
