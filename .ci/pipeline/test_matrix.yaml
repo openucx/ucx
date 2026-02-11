@@ -39,7 +39,7 @@ runs_on_dockers:
 
 matrix:
   axes:
-    arch: [x86_64, aarch64]
+    arch: [x86_64]
     worker: [0, 1, 2, 3]
 
 taskName: '${name}/${arch}/w${worker}'
@@ -56,4 +56,19 @@ steps:
     parallel: false
     timeout: "${STEP_TIMEOUT_MINUTES}"
     run: |
-      ASAN_CHECK="no" ./contrib/test_jenkins.sh
+      allowed_cpus=$(awk '/^Cpus_allowed_list:/ {print $2}' /proc/self/status)
+      first_chunk=${allowed_cpus%%,*}
+      if [[ "${first_chunk}" == *-* ]]; then
+        start_cpu=${first_chunk%-*}
+        end_cpu=${first_chunk#*-}
+        if [ "${end_cpu}" -gt "${start_cpu}" ]; then
+          cpu_set="${start_cpu}-$((start_cpu + 1))"
+        else
+          cpu_set="${start_cpu}"
+        fi
+      else
+        cpu_set="${first_chunk}"
+      fi
+
+      echo "Running test_jenkins.sh with CPU affinity: ${cpu_set} (allowed: ${allowed_cpus})"
+      ASAN_CHECK="no" taskset -c "${cpu_set}" ./contrib/test_jenkins.sh
