@@ -552,6 +552,7 @@ typedef struct ucp_ep_ext {
         ucs_list_link_t           started_ams;
         ucs_queue_head_t          mid_rdesc_q;    /* Queue of middle fragments, which
                                                      arrived before the first one */
+        uint64_t                  psn;
     } am;
 
     ucp_lane_map_t                unflushed_lanes; /* Bitmap of lanes which have

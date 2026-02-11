@@ -842,7 +842,7 @@ test_ucm_hooks() {
     total=30
     echo "==== Running UCM Bistro hook test ===="
     for i in $(seq 1 $total); do
-        threads=$(((RANDOM % (2 * `nproc`)) + 1))
+        threads=$(((RANDOM % (2 * ${NPROC})) + 1))
 
         echo "iteration $i/$total: $threads threads"
         timeout 10 ./test/apps/test_hooks -n $threads >test_hooks.log 2>&1 || \

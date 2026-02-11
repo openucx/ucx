@@ -24,13 +24,55 @@
 #include <ucp/dt/dt.inl>
 
 
+/* Get pointer to frag_tree allocated before the rdesc */
+#define ucp_am_rdesc_frag_tree(_rdesc) \
+    (UCS_PTR_BYTE_OFFSET(_rdesc, -sizeof(ucs_interval_tree_t)))
+
+
+static void *ucp_am_frag_tree_alloc_node(size_t size, void *arg)
+{
+    ucs_mpool_t *mp = (ucs_mpool_t*)arg;
+    return ucs_mpool_get(mp);
+}
+
+static void ucp_am_frag_tree_free_node(void *node, void *arg)
+{
+    ucs_mpool_put(node);
+}
+
+static ucs_mpool_ops_t ucp_am_frag_tree_mpool_ops = {
+    .chunk_alloc   = ucs_mpool_chunk_malloc,
+    .chunk_release = ucs_mpool_chunk_free,
+    .obj_init      = NULL,
+    .obj_cleanup   = NULL,
+    .obj_str       = NULL
+};
+
 ucs_status_t ucp_am_init(ucp_worker_h worker)
 {
+    ucs_mpool_params_t mp_params;
+    ucs_status_t status;
+
     if (!(worker->context->config.features & UCP_FEATURE_AM)) {
         return UCS_OK;
     }
 
     ucs_array_init_dynamic(&worker->am.cbs);
+
+    /* Initialize memory pool for fragment tree nodes */
+    ucs_mpool_params_reset(&mp_params);
+    mp_params.elem_size       = ucs_align_up_pow2(sizeof(ucs_interval_node_t),
+                                                  UCS_SYS_CACHE_LINE_SIZE);
+    mp_params.elems_per_chunk = ucs_get_page_size() / (mp_params.elem_size +
+                                sizeof(ucs_mpool_elem_t));
+    mp_params.ops             = &ucp_am_frag_tree_mpool_ops;
+    mp_params.name            = "ucp_am_frag_tree_nodes";
+    status = ucs_mpool_init(&mp_params, &worker->am.frag_tree_mpool);
+    if (status != UCS_OK) {
+        ucs_array_cleanup_dynamic(&worker->am.cbs);
+        return status;
+    }
+
     return UCS_OK;
 }
 
@@ -40,6 +82,7 @@ void ucp_am_cleanup(ucp_worker_h worker)
         return;
     }
 
+    ucs_mpool_cleanup(&worker->am.frag_tree_mpool, 0);
     ucs_array_cleanup_dynamic(&worker->am.cbs);
 }
 
@@ -50,6 +93,7 @@ void ucp_am_ep_init(ucp_ep_h ep)
     if (ep->worker->context->config.features & UCP_FEATURE_AM) {
         ucs_list_head_init(&ep_ext->am.started_ams);
         ucs_queue_head_init(&ep_ext->am.mid_rdesc_q);
+        ep_ext->am.psn = 0;
     }
 }
 
@@ -68,7 +112,8 @@ void ucp_am_ep_cleanup(ucp_ep_h ep)
     ucs_list_for_each_safe(rdesc, tmp_rdesc, &ep_ext->am.started_ams,
                            am_first.list) {
         ucs_list_del(&rdesc->am_first.list);
-        ucs_free(rdesc);
+        /* Free from the start of frag_tree allocation, not rdesc */
+        ucs_free(UCS_PTR_BYTE_OFFSET(rdesc, -sizeof(ucs_interval_tree_t)));
         ++count;
     }
     ucs_trace_data("worker %p: %zu unhandled first AM fragments have been"
@@ -1370,7 +1415,8 @@ ucp_am_copy_data_fragment(ucp_recv_desc_t *first_rdesc, void *data,
     UCS_PROFILE_NAMED_CALL("am_memcpy_recv", ucs_memcpy_relaxed,
                            UCS_PTR_BYTE_OFFSET(first_rdesc + 1, offset),
                            data, length, UCS_ARCH_MEMCPY_NT_SOURCE, length);
-    first_rdesc->am_first.remaining -= length;
+    ucs_interval_tree_insert(ucp_am_rdesc_frag_tree(first_rdesc), offset,
+                             offset + length - 1);
 }
 
 static UCS_F_ALWAYS_INLINE uint64_t
@@ -1388,69 +1434,103 @@ ucp_am_hdr_reply_ep(ucp_worker_h worker, uint16_t flags, ucp_ep_h ep,
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_am_handle_unfinished(ucp_worker_h worker, ucp_recv_desc_t *first_rdesc,
+ucp_am_handle_unfinished(ucp_worker_h worker, ucp_recv_desc_t *rdesc,
                          void *data, size_t length, size_t offset,
                          ucp_ep_h reply_ep)
 {
+    ucp_ep_ext_t *ep_ext = reply_ep->ext;
     ucp_am_hdr_t *hdr;
     ucp_am_first_ftr_t *first_ftr;
+    ucp_recv_desc_t *tmp_rdesc, *first_rdesc;
     ucs_status_t status;
     void *payload, *user_hdr;
     uint64_t recv_flags;
-    size_t desc_offset, user_hdr_length, total_size;
+    size_t desc_offset, user_hdr_length, total_size, seg_end;
     uint16_t am_id;
 
-    ucp_am_copy_data_fragment(first_rdesc, data, length, offset);
+    ucp_am_copy_data_fragment(rdesc, data, length, offset);
 
-    if (first_rdesc->am_first.remaining > 0) {
-        /* not all fragments arrived yet */
-        return;
+    ucs_list_for_each_safe(first_rdesc, tmp_rdesc, &ep_ext->am.started_ams,
+                           am_first.list) {
+        if (first_rdesc == NULL) {
+            return;
+        }
+
+        first_ftr = (ucp_am_first_ftr_t*)(first_rdesc + 1);
+        seg_end   = first_rdesc->payload_offset + first_ftr->total_size - 1;
+
+        if (!ucs_interval_tree_is_equal_range(ucp_am_rdesc_frag_tree(
+                                                      first_rdesc),
+                                              first_rdesc->payload_offset,
+                                              seg_end)) {
+            /* not all fragments arrived yet */
+            return;
+        }
+
+        /* Message assembled, remove first fragment descriptor from the list in
+        * ep AM extension */
+        ucs_list_del(&first_rdesc->am_first.list);
+        ucs_interval_tree_cleanup(ucp_am_rdesc_frag_tree(first_rdesc));
+        ep_ext->am.psn  = first_ftr->super.msg_id;
+        hdr             = (ucp_am_hdr_t*)(first_ftr + 1);
+        recv_flags      = ucp_am_hdr_reply_ep(worker, hdr->flags, reply_ep,
+                                            &reply_ep) |
+                        UCP_AM_RECV_ATTR_FLAG_DATA;
+        payload         = UCS_PTR_BYTE_OFFSET(first_rdesc + 1,
+                                              first_rdesc->payload_offset);
+        am_id           = hdr->am_id;
+        user_hdr_length = hdr->header_length;
+        total_size      = first_ftr->total_size;
+        user_hdr        = UCS_PTR_BYTE_OFFSET(payload, total_size);
+
+        /* Need to reinit descriptor, because we have headers between rdesc and
+        * the data. In ucp_am_data_release() and ucp_am_recv_data_nbx() functions,
+        * we calculate desc as "data_pointer - sizeof(desc)", which would not
+        * point to the beginning of the original desc. The content of the first and
+        * base headers are not needed anymore, can safely overwrite them.
+        *
+        * original desc layout: |frag_tree|desc|first_ftr|base_hdr|padding|data|user_hdr|
+        *
+        * new desc layout:                                           |desc|data|
+        *
+        * Note: release_desc_offset includes frag_tree size to free from correct address
+        */
+        desc_offset                      = sizeof(ucs_interval_tree_t) + 
+                                           first_rdesc->payload_offset;
+        first_rdesc                      = (ucp_recv_desc_t*)payload - 1;
+        first_rdesc->flags               = UCP_RECV_DESC_FLAG_MALLOC |
+                                           UCP_RECV_DESC_FLAG_AM_CB_INPROGRESS;
+        first_rdesc->release_desc_offset = desc_offset;
+        first_rdesc->length              = total_size;
+        status                           = ucp_am_invoke_cb(worker, am_id, user_hdr,
+                                                            user_hdr_length,
+                                                            payload, total_size,
+                                                            reply_ep, recv_flags);
+        if (!ucp_am_rdesc_in_progress(first_rdesc, status)) {
+            /* user does not need to hold this data */
+            ucp_am_release_long_desc(first_rdesc);
+        } else {
+            first_rdesc->flags &= ~UCP_RECV_DESC_FLAG_AM_CB_INPROGRESS;
+        }
     }
+}
 
-    /* Message assembled, remove first fragment descriptor from the list in
-     * ep AM extension */
-    ucs_list_del(&first_rdesc->am_first.list);
+static void ucp_am_release_mid_fragments_by_msg_id(ucp_ep_ext_t *ep_ext,
+                                                    uint64_t msg_id)
+{
+    ucp_recv_desc_t *mid_rdesc;
+    ucp_am_mid_ftr_t *mid_ftr;
+    ucs_queue_iter_t iter;
 
-    first_ftr       = (ucp_am_first_ftr_t*)(first_rdesc + 1);
-    hdr             = (ucp_am_hdr_t*)(first_ftr + 1);
-    recv_flags      = ucp_am_hdr_reply_ep(worker, hdr->flags, reply_ep,
-                                          &reply_ep) |
-                      UCP_AM_RECV_ATTR_FLAG_DATA;
-    payload         = UCS_PTR_BYTE_OFFSET(first_rdesc + 1,
-                                          first_rdesc->payload_offset);
-    am_id           = hdr->am_id;
-    user_hdr_length = hdr->header_length;
-    total_size      = first_ftr->total_size;
-    user_hdr        = UCS_PTR_BYTE_OFFSET(payload, total_size);
-
-    /* Need to reinit descriptor, because we have two headers between rdesc and
-     * the data. In ucp_am_data_release() and ucp_am_recv_data_nbx() functions,
-     * we calculate desc as "data_pointer - sizeof(desc)", which would not
-     * point to the beginning of the original desc. The content of the first and
-     * base headers are not needed anymore, can safely overwrite them.
-     *
-     * original desc layout: |desc|first_ftr|base_hdr|padding|data|user_hdr|
-     *
-     * new desc layout:                                 |desc|data|
-     */
-    desc_offset                      = first_rdesc->payload_offset;
-    first_rdesc                      = (ucp_recv_desc_t*)payload - 1;
-    first_rdesc->flags               = UCP_RECV_DESC_FLAG_MALLOC |
-                                       UCP_RECV_DESC_FLAG_AM_CB_INPROGRESS;
-    first_rdesc->release_desc_offset = desc_offset;
-    first_rdesc->length              = total_size;
-    status                           = ucp_am_invoke_cb(worker, am_id, user_hdr,
-                                                        user_hdr_length,
-                                                        payload, total_size,
-                                                        reply_ep, recv_flags);
-    if (!ucp_am_rdesc_in_progress(first_rdesc, status)) {
-        /* user does not need to hold this data */
-        ucp_am_release_long_desc(first_rdesc);
-    } else {
-        first_rdesc->flags &= ~UCP_RECV_DESC_FLAG_AM_CB_INPROGRESS;
+    ucs_queue_for_each_safe(mid_rdesc, iter, &ep_ext->am.mid_rdesc_q,
+                            am_mid_queue) {
+        mid_ftr = UCS_PTR_BYTE_OFFSET(mid_rdesc + 1,
+                                      mid_rdesc->length - sizeof(*mid_ftr));
+        if (mid_ftr->msg_id == msg_id) {
+            ucs_queue_del_iter(&ep_ext->am.mid_rdesc_q, iter);
+            ucp_recv_desc_release(mid_rdesc);
+        }
     }
-
-    return;
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_first_handler,
@@ -1471,7 +1551,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_first_handler,
     ucp_ep_ext_t *ep_ext;
     size_t total_length, padding;
     uint64_t recv_flags;
-    void *user_hdr;
+    void *user_hdr, *buffer;
+    ucs_interval_tree_ops_t frag_tree_ops;
 
     first_payload_length = am_length - sizeof(*first_ftr);
     first_ftr = UCS_PTR_BYTE_OFFSET(am_data, first_payload_length);
@@ -1485,7 +1566,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_first_handler,
 
     if (ucs_unlikely(am_length == total_length)) {
         /* Can be a single fragment if send was issued on stub ep */
-        recv_flags = ucp_am_hdr_reply_ep(worker, hdr->flags, ep, &ep);
+        recv_flags     = ucp_am_hdr_reply_ep(worker, hdr->flags, ep, &ep);
+        ep_ext->am.psn = first_ftr->super.msg_id;
 
         return ucp_am_handler_common(worker, hdr, first_payload_length, ep,
                                      am_flags, recv_flags,
@@ -1494,35 +1576,47 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_first_handler,
 
     /* This is the first fragment, other fragments (if arrived) should be on
      * ep_ext->am.mid_rdesc_q queue */
-    ucs_assert(NULL == ucp_am_find_first_rdesc(worker, ep_ext,
-                                               first_ftr->super.msg_id));
+    first_rdesc = ucp_am_find_first_rdesc(worker, ep_ext,
+                                          first_ftr->super.msg_id);
+
+    if (first_rdesc != NULL) {
+        goto out;
+    }
 
     /* Alloc buffer for the data and its desc, as we know total_size.
      * Need to allocate a separate rdesc which would be in one contiguous chunk
      * with data buffer. The layout of assembled message is below:
      *
-     * +-------+-----------+--------+---------+---------+----------+
-     * | rdesc | first_ftr | am_hdr | padding | payload | user hdr |
-     * +-------+-----------+--------+---------+---------+----------+
+     * +-----------+-------+-----------+--------+---------+---------+----------+
+     * | frag_tree | rdesc | first_ftr | am_hdr | padding | payload | user hdr |
+     * +-----------+-------+-----------+--------+---------+---------+----------+
      *
-     * Note: footer is added right after rdesc (unlike wire format) for easier
-     * access to it while processing incoming fragments.
+     * Note: frag_tree storage is allocated before rdesc, and footer is added
+     * right after rdesc (unlike wire format) for easier access while processing
+     * incoming fragments.
      */
-    first_rdesc = ucs_malloc(total_length + sizeof(ucp_recv_desc_t) +
-                                     worker->am.alignment,
-                             "ucp recv desc for long AM");
-    if (ucs_unlikely(first_rdesc == NULL)) {
+    buffer = ucs_malloc(total_length + sizeof(ucp_recv_desc_t) +
+                        sizeof(ucs_interval_tree_t) + worker->am.alignment,
+                        "ucp recv desc for long AM");
+    if (ucs_unlikely(buffer == NULL)) {
         ucs_error("failed to allocate buffer for assembling UCP AM (id %u)",
                   hdr->am_id);
+        /* Release any middle fragments that arrived earlier for this message */
+        ucp_am_release_mid_fragments_by_msg_id(ep_ext, first_ftr->super.msg_id);
         return UCS_OK; /* release UCT desc */
     }
 
-    padding = ucs_padding((uintptr_t)UCS_PTR_BYTE_OFFSET(
-                                  first_rdesc + 1, UCP_AM_FIRST_FRAG_META_LEN),
-                          worker->am.alignment);
+    first_rdesc = UCS_PTR_BYTE_OFFSET(buffer, sizeof(ucs_interval_tree_t));
+    padding     = ucs_padding((uintptr_t)UCS_PTR_BYTE_OFFSET(
+                              first_rdesc + 1, UCP_AM_FIRST_FRAG_META_LEN),
+                              worker->am.alignment);
 
-    first_rdesc->payload_offset     = UCP_AM_FIRST_FRAG_META_LEN + padding;
-    first_rdesc->am_first.remaining = first_ftr->total_size;
+    first_rdesc->payload_offset = UCP_AM_FIRST_FRAG_META_LEN + padding;
+    frag_tree_ops.alloc_node    = ucp_am_frag_tree_alloc_node;
+    frag_tree_ops.free_node     = ucp_am_frag_tree_free_node;
+    frag_tree_ops.arg           = &worker->am.frag_tree_mpool;
+    /* Initialize frag_tree in the allocated storage before rdesc */
+    ucs_interval_tree_init(ucp_am_rdesc_frag_tree(first_rdesc), &frag_tree_ops);
 
     /* Copy first fragment and base headers before the data, it will be needed
      * for middle fragments processing. */
@@ -1564,6 +1658,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_first_handler,
 
     ucs_list_add_tail(&ep_ext->am.started_ams, &first_rdesc->am_first.list);
 
+out:
     /* Note: copy first chunk of data together with AM header, which contains
      * data needed to process other fragments. */
     ucp_am_handle_unfinished(worker, first_rdesc, hdr + 1,
@@ -1622,6 +1717,57 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_middle_handler,
     ucs_queue_push(&ep_ext->am.mid_rdesc_q, &mid_rdesc->am_mid_queue);
 
     return status;
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_am_is_duplicate_psn(ucp_worker_h worker, ucp_am_mid_ftr_t *ftr)
+{
+    ucp_ep_h ep;
+
+    UCP_WORKER_GET_VALID_EP_BY_ID(&ep, worker, ftr->ep_id, return UCS_OK,
+                                  "AM (psn proto)");
+
+    ucs_assertv(ftr->msg_id != 0, "msg_id=%lu", ftr->msg_id);
+
+    /* Drop packet if:
+     * 1. This is not the first message for this EP and
+     * 2. message id is less or equal to the last one seen */
+    if (ucs_unlikely(ftr->msg_id <= ep->ext->am.psn) &&
+        (ep->ext->am.psn != 0)) {
+        ucs_debug("dropped duplicate message ep_id=%lu msg_id=%lu, psn=%lu",
+                  ftr->ep_id, ftr->msg_id, ep->ext->am.psn);
+        return 1;
+    }
+
+    return 0;
+}
+
+UCS_PROFILE_FUNC(ucs_status_t, ucp_am_handler_first_psn,
+                 (am_arg, am_data, am_length, am_flags), void *am_arg,
+                 void *am_data, size_t am_length, unsigned am_flags)
+{
+    ucp_am_first_ftr_t *ftr = UCS_PTR_BYTE_OFFSET(am_data,
+                                                  am_length - sizeof(*ftr));
+
+    if (ucp_am_is_duplicate_psn(am_arg, &ftr->super)) {
+        return UCS_OK;
+    }
+
+    return ucp_am_long_first_handler(am_arg, am_data, am_length, am_flags);
+}
+
+UCS_PROFILE_FUNC(ucs_status_t, ucp_am_handler_middle_psn,
+                 (am_arg, am_data, am_length, am_flags), void *am_arg,
+                 void *am_data, size_t am_length, unsigned am_flags)
+{
+    ucp_am_mid_ftr_t *ftr = UCS_PTR_BYTE_OFFSET(am_data,
+                                                am_length - sizeof(*ftr));
+
+    if (ucp_am_is_duplicate_psn(am_arg, ftr)) {
+        return UCS_OK;
+    }
+
+    return ucp_am_long_middle_handler(am_arg, am_data, am_length, am_flags);
 }
 
 ucs_status_t ucp_am_rndv_process_rts(void *arg, void *data, size_t length,
@@ -1731,6 +1877,10 @@ UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_AM, UCP_AM_ID_AM_MIDDLE,
                          ucp_am_long_middle_handler, NULL, 0);
 UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_AM, UCP_AM_ID_AM_SINGLE_REPLY,
                          ucp_am_handler_reply, NULL, 0);
+UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_AM, UCP_AM_ID_AM_FIRST_PSN,
+                         ucp_am_handler_first_psn, NULL, 0);
+UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_AM, UCP_AM_ID_AM_MIDDLE_PSN,
+                         ucp_am_handler_middle_psn, NULL, 0);
 
 const ucp_request_send_proto_t ucp_am_proto = {
     .contig_short           = ucp_am_contig_short,
