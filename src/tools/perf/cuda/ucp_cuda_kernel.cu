@@ -226,12 +226,12 @@ private:
                 throw std::runtime_error("Failed to create local memory list");
             }
 
-            create_mem_list(perf, [&]() {
+            create_mem_list_with_retry(perf, [&]() {
                 return ucp_device_remote_mem_list_create(
                                             &params, &m_params.remote_mem_list);
             });
         } else {
-            create_mem_list(perf, [&]() {
+            create_mem_list_with_retry(perf, [&]() {
                 return ucp_device_mem_list_create(perf.ucp.ep, &params,
                                                   &m_params.mem_list);
             });
@@ -239,7 +239,8 @@ private:
     }
 
     template <typename F>
-    void create_mem_list(const ucx_perf_context_t &perf, F &&func)
+    void create_mem_list_with_retry(const ucx_perf_context_t &perf,
+                                    F &&create_func)
     {
         ucs_status_t status;
         ucs_time_t deadline = ucs_get_time() + ucs_time_from_sec(60.0);
@@ -250,7 +251,7 @@ private:
             }
 
             ucp_worker_progress(perf.ucp.worker);
-            status = func();
+            status = create_func();
         } while (status == UCS_ERR_NOT_CONNECTED);
 
         if (status != UCS_OK) {
