@@ -1079,8 +1079,6 @@ ucp_is_resource_in_device_list(const uct_tl_resource_desc_t *resource,
         }
     }
 
-    found = !!mask;
-
     /* warn if we got new device which appears more than once */
     exclusive_mask = mask & ~(*dev_cfg_mask);
     if (exclusive_mask && !ucs_is_pow2(exclusive_mask)) {
@@ -1090,6 +1088,7 @@ ucp_is_resource_in_device_list(const uct_tl_resource_desc_t *resource,
 
     *dev_cfg_mask |= mask;
 
+    found = !!mask;
     return (mode == UCS_CONFIG_ALLOW_LIST_NEGATE) ? !found : found;
 }
 
@@ -2079,12 +2078,14 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     if (config->warn_invalid_config) {
         UCS_STATIC_ASSERT(UCT_DEVICE_TYPE_NET == 0);
         for (dev_type = UCT_DEVICE_TYPE_NET; dev_type < UCT_DEVICE_TYPE_LAST; ++dev_type) {
-            if (config->devices[dev_type].mode == UCS_CONFIG_ALLOW_LIST_ALLOW) {
-                ucp_report_unavailable(&config->devices[dev_type].array,
-                                       dev_cfg_masks[dev_type],
-                                       uct_device_type_names[dev_type],
-                                       " device", &avail_devices[dev_type]);
+            if (config->devices[dev_type].mode == UCS_CONFIG_ALLOW_LIST_ALLOW_ALL) {
+                continue;
             }
+
+            ucp_report_unavailable(&config->devices[dev_type].array,
+                                   dev_cfg_masks[dev_type],
+                                   uct_device_type_names[dev_type], " device",
+                                   &avail_devices[dev_type]);
         }
 
         ucp_get_aliases_set(&avail_tls);
