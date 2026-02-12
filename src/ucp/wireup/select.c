@@ -2297,6 +2297,7 @@ ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
     uct_iface_attr_t *attrs;
     ucp_lane_index_t lane;
     unsigned addr_index;
+    size_t seg_size;
 
     if (context->config.ext.wireup_via_am_lane) {
         ucs_assert(am_lane != UCP_NULL_LANE);
@@ -2314,6 +2315,7 @@ ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
         addr_index = lane_descs[lane].addr_index;
         resource   = &context->tl_rscs[rsc_index].tl_rsc;
         attrs      = ucp_worker_iface_get_attr(worker, rsc_index);
+        seg_size   = ucp_address_iface_seg_size(attrs);
 
         /* if the current lane satisfies the wireup criteria, choose it for wireup.
          * if it doesn't take a lane with a p2p transport */
@@ -2331,13 +2333,17 @@ ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
             ucp_wireup_check_flags(resource,
                                    address_list[addr_index].iface_attr.flags,
                                    criteria.remote_event_flags, criteria.title,
-                                   ucp_wireup_peer_flags, NULL, 0) &&
-                                (lane_descs[lane].seg_size > max_seg_size)) {
-            max_seg_size = lane_descs[lane].seg_size;
-            selected_lane = lane;
+                                   ucp_wireup_peer_flags, NULL, 0)) {
+            if (seg_size > max_seg_size) {
+                max_seg_size  = seg_size;
+                selected_lane = lane;
+            }
         } else if (ucp_worker_is_tl_p2p(worker, rsc_index) &&
                    !ucp_worker_is_tl_device(worker, rsc_index)) {
-            p2p_lane = lane;
+            if (seg_size > max_seg_size) {
+                max_seg_size  = seg_size;
+                p2p_lane = lane;
+            }
         }
     }
 

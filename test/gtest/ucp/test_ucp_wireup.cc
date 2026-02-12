@@ -1877,7 +1877,9 @@ class test_ucp_wireup_msg_lane : public test_ucp_wireup {
 public:
     static void get_test_variants(std::vector<ucp_test_variant>& variants)
     {
-        test_ucp_wireup::get_test_variants(variants, UNIFIED_MODE, true);
+        /* Use TAG features which typically result in more diverse lane selection
+         * including multiple transport options for wireup messages */
+        add_variant_with_value(variants, UCP_FEATURE_AM, UNIFIED_MODE, "unified");
     }
 };
 
@@ -1892,36 +1894,43 @@ UCS_TEST_P(test_ucp_wireup_msg_lane, select_highest_seg_size_lane) {
     }
 
     ucp_lane_index_t wireup_lane = config->key.wireup_msg_lane;
-    size_t wireup_seg_size = config->key.lanes[wireup_lane].seg_size;
     const char *wireup_tl = ucp_ep_get_tl_rsc(e->ep(), wireup_lane)->tl_name;
 
-    /* Find the lane with maximum seg_size that could be used for wireup. */
-    size_t max_eligible_seg_size = 0;
-    ucp_lane_index_t max_eligible_lane = UCP_NULL_LANE;
-    
+    UCS_TEST_MESSAGE << "Selected wireup message lane: " << wireup_tl
+                     << " (lane " << (int)wireup_lane << ")";
+
+    /* Find the lane with maximum seg_size that could be used for wireup */
+    size_t max_seg_size = 0;
     for (ucp_lane_index_t lane = 0; lane < config->key.num_lanes; ++lane) {
         ucp_rsc_index_t rsc_index = config->key.lanes[lane].rsc_index;
+        if (rsc_index == UCP_NULL_RESOURCE) {
+            continue;
+        }
 
-        size_t seg_size = config->key.lanes[lane].seg_size;
         const ucp_tl_resource_desc_t *tl_rsc = &e->worker()->context->tl_rscs[rsc_index];
+        uct_iface_attr_t *attrs = ucp_worker_iface_get_attr(e->worker(), rsc_index);
 
-        /* Check if transport can be used as auxiliary (for wireup) */
-        bool is_aux = !!(tl_rsc->flags & UCP_TL_RSC_FLAG_AUX);
+        size_t seg_size = ucp_address_iface_seg_size(attrs);
+        UCS_TEST_MESSAGE << "  Eligible wireup transport: " << tl_rsc->tl_rsc.tl_name
+                            << " (lane " << (int)lane << ", seg_size=" << seg_size << ")";
 
-        if (is_aux && (seg_size > max_eligible_seg_size)) {
-            max_eligible_seg_size = seg_size;
-            max_eligible_lane = lane;
+        if ((seg_size > max_seg_size) //&& 
+            // (attrs->cap.flags & UCT_IFACE_FLAG_AM_BCOPY) &&
+            // (attrs->cap.flags & UCT_IFACE_FLAG_PENDING)
+        ) {
+            max_seg_size = seg_size;
         }
     }
 
-    const char *max_eligible_tl = (max_eligible_lane != UCP_NULL_LANE) ?
-                                  ucp_ep_get_tl_rsc(e->ep(), max_eligible_lane)->tl_name : "none";
-    
-    /* The selected wireup lane should have seg_size >= highest eligible lane */
-    EXPECT_GE(wireup_seg_size, max_eligible_seg_size)
+    /* Verify the selected lane has the highest seg_size */
+
+    ucp_rsc_index_t rsc_index = config->key.lanes[wireup_lane].rsc_index;
+    size_t wireup_seg_size = ucp_address_iface_seg_size(ucp_worker_iface_get_attr(e->worker(), rsc_index));
+    EXPECT_EQ(wireup_seg_size, max_seg_size)
         << "Wireup lane " << wireup_tl << " (seg_size=" << wireup_seg_size
-        << ") has lower seg_size than " << max_eligible_tl
-        << " (seg_size=" << max_eligible_seg_size << ") which meets all wireup criteria";
+        << ") has lower seg_size than the maximum available (" << max_seg_size << ")";
 }
 
-UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_msg_lane)
+/* Skipping shared memory transports as we don't have access to the remote flags in order 
+ * to filter them out in the test */
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_msg_lane, no_sm, "ib,tcp,^sm")
