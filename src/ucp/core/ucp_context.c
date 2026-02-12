@@ -13,7 +13,6 @@
 #include "ucp_context.h"
 #include "ucp_request.h"
 
-#include <ucp/api/device/ucp_host.h>
 #include <ucs/config/parser.h>
 #include <ucs/algorithm/crc.h>
 #include <ucs/arch/atomic.h>
@@ -1056,8 +1055,7 @@ ucp_is_resource_in_device_list(const uct_tl_resource_desc_t *resource,
     const ucs_config_names_array_t *dev_array = &devices[dev_type].array;
     ucs_config_allow_list_mode_t mode         = devices[dev_type].mode;
     char dev_basename[UCT_DEVICE_NAME_MAX];
-    uint64_t mask, exclusive_mask;
-    int found;
+    uint64_t found_dev_mask, exclusive_mask;
 
     /* In ALLOW_ALL mode, all devices are enabled */
     if (mode == UCS_CONFIG_ALLOW_LIST_ALLOW_ALL) {
@@ -1067,31 +1065,32 @@ ucp_is_resource_in_device_list(const uct_tl_resource_desc_t *resource,
     ucs_assert_always(dev_array->count <= 64); /* Using uint64_t bitmap */
 
     /* search for the full device name */
-    mask = ucp_str_array_search((const char**)dev_array->names,
-                                dev_array->count, resource->dev_name, NULL);
+    found_dev_mask = ucp_str_array_search((const char**)dev_array->names,
+                                          dev_array->count, resource->dev_name,
+                                          NULL);
 
     /* for network devices, also search for the base name (before the delimiter) */
     if (dev_type == UCT_DEVICE_TYPE_NET) {
         ucp_get_dev_basename(resource->dev_name, dev_basename,
                              sizeof(dev_basename));
         if (!ucs_string_is_empty(dev_basename)) {
-            mask |= ucp_str_array_search((const char**)dev_array->names,
+            found_dev_mask |=
+                    ucp_str_array_search((const char**)dev_array->names,
                                          dev_array->count, dev_basename, NULL);
         }
     }
 
-    found = !!mask;
-
     /* warn if we got new device which appears more than once */
-    exclusive_mask = mask & ~(*dev_cfg_mask);
+    exclusive_mask = found_dev_mask & ~(*dev_cfg_mask);
     if (exclusive_mask && !ucs_is_pow2(exclusive_mask)) {
         ucs_warn("device '%s' is specified multiple times",
                  dev_array->names[ucs_ilog2(exclusive_mask)]);
     }
 
-    *dev_cfg_mask |= mask;
+    *dev_cfg_mask |= found_dev_mask;
 
-    return (mode == UCS_CONFIG_ALLOW_LIST_NEGATE) ? !found : found;
+    return (mode == UCS_CONFIG_ALLOW_LIST_NEGATE) ? (!found_dev_mask) :
+                                                    (!!found_dev_mask);
 }
 
 static int ucp_tls_alias_is_present(ucp_tl_alias_t *alias, const char *tl_name,
@@ -2080,12 +2079,14 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     if (config->warn_invalid_config) {
         UCS_STATIC_ASSERT(UCT_DEVICE_TYPE_NET == 0);
         for (dev_type = UCT_DEVICE_TYPE_NET; dev_type < UCT_DEVICE_TYPE_LAST; ++dev_type) {
-            if (config->devices[dev_type].mode == UCS_CONFIG_ALLOW_LIST_ALLOW) {
-                ucp_report_unavailable(&config->devices[dev_type].array,
-                                       dev_cfg_masks[dev_type],
-                                       uct_device_type_names[dev_type],
-                                       " device", &avail_devices[dev_type]);
+            if (config->devices[dev_type].mode == UCS_CONFIG_ALLOW_LIST_ALLOW_ALL) {
+                continue;
             }
+
+            ucp_report_unavailable(&config->devices[dev_type].array,
+                                   dev_cfg_masks[dev_type],
+                                   uct_device_type_names[dev_type], " device",
+                                   &avail_devices[dev_type]);
         }
 
         ucp_get_aliases_set(&avail_tls);

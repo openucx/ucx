@@ -91,7 +91,7 @@ UCS_TEST_P(test_ucp_version, wrong_api_version) {
     ucs_status_t status;
     size_t warn_count;
     {
-        scoped_log_handler slh(hide_warns_logger);
+        const scoped_log_handler slh(hide_warns_logger);
         warn_count = m_warnings.size();
         status = ucp_init_version(99, 99, &get_variant_ctx_params(),
                                   config.get(), &ucph);
@@ -115,7 +115,7 @@ UCS_TEST_P(test_ucp_version, version_string) {
     std::string string_version     = std::to_string(major_version) + '.' +
                                      std::to_string(minor_version) + '.' +
                                      std::to_string(release_number);
-    std::string ucp_string_version = ucp_get_version_string();
+    const std::string ucp_string_version = ucp_get_version_string();
 
     EXPECT_EQ(string_version,
               ucp_string_version.substr(0, string_version.length()));
@@ -123,22 +123,62 @@ UCS_TEST_P(test_ucp_version, version_string) {
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_version, all, "all")
 
-class test_ucp_net_devices_config : public ucp_test {
+class test_ucp_devices_config : public ucp_test {
 public:
     static void get_test_variants(std::vector<ucp_test_variant> &variants) {
-        add_variant(variants, UCP_FEATURE_TAG);
+        for (int dev_type = 0; dev_type < UCT_DEVICE_TYPE_LAST; ++dev_type) {
+            add_variant_with_value(
+                    variants, UCP_FEATURE_TAG, dev_type,
+                    device_type_name(static_cast<uct_device_type_t>(dev_type)));
+        }
     }
 
 protected:
     static const char DELIMITER = ':';
 
-    /* Iterate over all network devices and apply action to each */
+    /* Get the device type for the current test variant */
+    uct_device_type_t device_type() const
+    {
+        return static_cast<uct_device_type_t>(get_variant_value());
+    }
+
+    /* Get the config variable name for a device type */
+    static std::string device_type_config_name(uct_device_type_t dev_type)
+    {
+        switch (dev_type) {
+        case UCT_DEVICE_TYPE_NET:
+            return "NET_DEVICES";
+        case UCT_DEVICE_TYPE_SHM:
+            return "SHM_DEVICES";
+        case UCT_DEVICE_TYPE_ACC:
+            return "ACC_DEVICES";
+        case UCT_DEVICE_TYPE_SELF:
+            return "SELF_DEVICES";
+        case UCT_DEVICE_TYPE_LAST:
+            break;
+        }
+
+        UCS_TEST_ABORT("Invalid device type: " << dev_type);
+    }
+
+    /* Get device type name for messages */
+    static std::string device_type_name(uct_device_type_t dev_type)
+    {
+        if (dev_type >= UCT_DEVICE_TYPE_LAST) {
+            UCS_TEST_ABORT("Invalid device type: " << dev_type);
+        }
+        return uct_device_type_names[dev_type];
+    }
+
+    /* Iterate over all devices of a given type and apply action to each */
     template<typename Action>
-    static void for_each_net_device(const entity &e, Action action) {
+    static void
+    for_each_device(const entity &e, uct_device_type_t dev_type, Action action)
+    {
         ucp_context_h ctx = e.ucph();
         for (ucp_rsc_index_t i = 0; i < ctx->num_tls; ++i) {
             const uct_tl_resource_desc_t *rsc = &ctx->tl_rscs[i].tl_rsc;
-            if (rsc->dev_type == UCT_DEVICE_TYPE_NET) {
+            if (rsc->dev_type == dev_type) {
                 action(rsc);
             }
         }
@@ -152,24 +192,25 @@ protected:
     }
 
 
-    /* Get all network device names from the context */
-    static std::set<std::string> get_net_device_names(const entity &e)
+    /* Get all device names of a given type from the context */
+    static std::set<std::string>
+    get_device_names(const entity &e, uct_device_type_t dev_type)
     {
         std::set<std::string> device_names;
-        for_each_net_device(e, [&](const uct_tl_resource_desc_t *rsc) {
+        for_each_device(e, dev_type, [&](const uct_tl_resource_desc_t *rsc) {
             device_names.insert(rsc->dev_name);
         });
         return device_names;
     }
 
-    /* Get all network device names from the context with delimiter */
+    /* Get all device names of a given type from the context with delimiter */
     static std::set<std::string>
-    get_net_device_names_with_delimiter(const entity &e)
+    get_device_names_with_delimiter(const entity &e, uct_device_type_t dev_type)
     {
         std::set<std::string> device_names;
-        for_each_net_device(e, [&](const uct_tl_resource_desc_t *rsc) {
-            std::string dev_name(rsc->dev_name);
-            size_t delimiter_pos = dev_name.find(DELIMITER);
+        for_each_device(e, dev_type, [&](const uct_tl_resource_desc_t *rsc) {
+            const std::string dev_name(rsc->dev_name);
+            const size_t delimiter_pos = dev_name.find(DELIMITER);
             if (delimiter_pos != std::string::npos) {
                 device_names.insert(dev_name);
             }
@@ -180,7 +221,7 @@ protected:
     static bool
     get_device_base_name(const std::string &dev_name, std::string &base_name)
     {
-        size_t delimiter_pos = dev_name.find(DELIMITER);
+        const size_t delimiter_pos = dev_name.find(DELIMITER);
         if (delimiter_pos != std::string::npos) {
             base_name = dev_name.substr(0, delimiter_pos);
             return true;
@@ -275,22 +316,24 @@ protected:
         }
     }
 
-    /* Test that net device selection works correctly */
-    void
-    test_net_device_selection(const std::set<std::string> &test_net_devices,
-                              const std::set<std::string> &expected_net_devices)
+    /* Test that device selection works correctly */
+    void test_device_selection(const std::set<std::string> &test_devices,
+                               const std::set<std::string> &expected_devices)
     {
-        std::string net_devices_config = join(test_net_devices, ",");
-        modify_config("NET_DEVICES", net_devices_config.c_str());
+        const uct_device_type_t dev_type = device_type();
+        const std::string config_name    = device_type_config_name(dev_type);
+        const std::string devices_config = join(test_devices, ",");
+
+        modify_config(config_name.c_str(), devices_config.c_str());
         entity *e = create_entity();
 
-        std::set<std::string> selected_devices = get_net_device_names(*e);
-        EXPECT_EQ(selected_devices.size(), expected_net_devices.size());
+        const std::set<std::string> selected_devices = get_device_names(*e, dev_type);
+        EXPECT_EQ(selected_devices.size(), expected_devices.size());
 
-        for (const std::string &net_device : expected_net_devices) {
-            EXPECT_TRUE(has_device(selected_devices, net_device))
-                    << "Device '" << net_device << "' should be selected when "
-                    << "UCX_NET_DEVICES=" << net_devices_config;
+        for (const std::string &device : expected_devices) {
+            EXPECT_TRUE(has_device(selected_devices, device))
+                    << "Device '" << device << "' should be selected when "
+                    << "UCX_" << config_name << "=" << devices_config;
         }
     }
 
@@ -300,24 +343,28 @@ protected:
                                   const std::string &devices_config,
                                   const std::string &duplicate_dev_name)
     {
+        const uct_device_type_t dev_type = device_type();
+        const std::string config_name    = device_type_config_name(dev_type);
+
         entity *e = create_entity();
 
-        std::set<std::string> net_devices = get_net_device_names(*e);
-        ASSERT_FALSE(net_devices.empty());
+        const std::set<std::string> devices = get_device_names(*e, dev_type);
+        if (devices.empty()) {
+            UCS_TEST_SKIP_R("No " + device_type_name(dev_type) +
+                            " devices available");
+        }
 
-        for (const std::string &required_dev : required_devices) {
-            if (!has_device(net_devices, required_dev)) {
-                UCS_TEST_SKIP_R(required_dev + " device not available");
-            }
+        if (!has_device(net_devices, required_dev_name)) {
+            UCS_TEST_SKIP_R(required_dev_name + " device not available");
         }
 
         m_entities.clear();
 
-        modify_config("NET_DEVICES", devices_config.c_str());
+        modify_config(config_name.c_str(), devices_config.c_str());
 
         size_t warn_count;
         {
-            scoped_log_handler slh(hide_warns_logger);
+            const scoped_log_handler slh(hide_warns_logger);
             warn_count = m_warnings.size();
             create_entity();
         }
@@ -326,7 +373,7 @@ protected:
                 << "Expected exactly one warning";
 
         /* Check that the warning about duplicate device was printed */
-        std::string expected_warn = "device '" + duplicate_dev_name +
+        const std::string expected_warn = "device '" + duplicate_dev_name +
                                     "' is specified multiple times";
         EXPECT_NE(m_warnings[warn_count].find(expected_warn), std::string::npos)
                 << "Expected warning about duplicate device '"
@@ -336,58 +383,62 @@ protected:
 };
 
 /*
- * Test that when UCX_NET_DEVICES is set to a base name (e.g., "mlx5_0"),
+ * Test that when UCX_*_DEVICES is set to a base name (e.g., "mlx5_0"),
  * devices with the same base name are selected (e.g., "mlx5_0:1").
  */
-UCS_TEST_P(test_ucp_net_devices_config, base_name_selects_device)
+UCS_TEST_P(test_ucp_devices_config, base_name_selects_device)
 {
-    entity *e = create_entity();
+    const uct_device_type_t dev_type = device_type();
+    entity *e                        = create_entity();
 
-    std::set<std::string> net_devices = get_net_device_names_with_delimiter(*e);
-    if (net_devices.empty()) {
-        UCS_TEST_SKIP_R("No network devices available with delimiter");
+    const std::set<std::string> devices = get_device_names_with_delimiter(*e,
+                                                                          dev_type);
+    if (devices.empty()) {
+        UCS_TEST_SKIP_R("No " + device_type_name(dev_type) +
+                        " devices available with delimiter");
     }
 
     m_entities.clear();
 
     std::set<std::string> base_names = get_device_base_names(net_devices);
-    ASSERT_EQ(base_names.size(), net_devices.size());
-
     test_net_device_selection(base_names, net_devices);
 }
 
 /*
  * Test that explicit suffix specification works correctly.
  */
-UCS_TEST_P(test_ucp_net_devices_config, explicit_suffix)
+UCS_TEST_P(test_ucp_devices_config, explicit_suffix)
 {
-    entity *e = create_entity();
+    const uct_device_type_t dev_type = device_type();
+    entity *e                        = create_entity();
 
-    std::set<std::string> net_devices = get_net_device_names_with_delimiter(*e);
-    if (net_devices.empty()) {
-        UCS_TEST_SKIP_R("No network devices available with delimiter");
+    const std::set<std::string> devices = get_device_names_with_delimiter(*e,
+                                                                          dev_type);
+    if (devices.empty()) {
+        UCS_TEST_SKIP_R("No " + device_type_name(dev_type) +
+                        " devices available with delimiter");
     }
 
     m_entities.clear();
 
-    test_net_device_selection(net_devices, net_devices);
+    test_device_selection(devices, devices);
 }
 
 /*
  * Test that specifying a device multiple times produces a warning
  */
-UCS_TEST_P(test_ucp_net_devices_config, duplicate_device_warning_full_name)
+UCS_TEST_P(test_ucp_net_devices_config, duplicate_device_warning_simple)
 {
     test_duplicate_device_warning({"mlx5_0:1"}, "mlx5_0:1,mlx5_0:1",
                                   "mlx5_0:1");
 }
 
-UCS_TEST_P(test_ucp_net_devices_config, duplicate_device_warning_base_name)
+UCS_TEST_P(test_ucp_devices_config, duplicate_device_warning_base_name)
 {
     test_duplicate_device_warning({"mlx5_0:1"}, "mlx5_0:1,mlx5_0", "mlx5_0");
 }
 
-UCS_TEST_P(test_ucp_net_devices_config, duplicate_device_warning_two_base_name)
+UCS_TEST_P(test_ucp_devices_config, duplicate_device_warning_two_base_name)
 {
     test_duplicate_device_warning({"mlx5_0:1"}, "mlx5_0,mlx5_0", "mlx5_0");
 }
@@ -429,23 +480,27 @@ UCS_TEST_P(test_ucp_net_devices_config, duplicate_device_warning_two_ranges)
 /*
  * Test that negate mode excludes a single device
  */
-UCS_TEST_P(test_ucp_net_devices_config, negate_single_device)
+UCS_TEST_P(test_ucp_devices_config, negate_single_device)
 {
-    entity *e = create_entity();
+    const uct_device_type_t dev_type = device_type();
+    const std::string config_name    = device_type_config_name(dev_type);
+    entity *e                        = create_entity();
 
-    std::set<std::string> net_devices = get_net_device_names(*e);
-    if (net_devices.size() < 2) {
-        UCS_TEST_SKIP_R("Need at least 2 network devices to test negate mode");
+    const std::set<std::string> devices = get_device_names(*e, dev_type);
+    if (devices.size() < 2) {
+        UCS_TEST_SKIP_R(std::string("Need at least 2 ") +
+                        device_type_name(dev_type) +
+                        " devices to test negate mode");
     }
 
-    std::string excluded_device = *net_devices.begin();
+    const std::string excluded_device = *devices.begin();
     m_entities.clear();
 
     /* Set negate mode - exclude one device */
-    modify_config("NET_DEVICES", ("^" + excluded_device).c_str());
+    modify_config(config_name.c_str(), ("^" + excluded_device).c_str());
     e = create_entity();
 
-    std::set<std::string> selected_devices = get_net_device_names(*e);
+    const std::set<std::string> selected_devices = get_device_names(*e, dev_type);
 
     /* Verify excluded device is not selected */
     EXPECT_FALSE(has_device(selected_devices, excluded_device))
@@ -459,29 +514,32 @@ UCS_TEST_P(test_ucp_net_devices_config, negate_single_device)
 /*
  * Test that negate mode excludes multiple devices
  */
-UCS_TEST_P(test_ucp_net_devices_config, negate_multiple_devices)
+UCS_TEST_P(test_ucp_devices_config, negate_multiple_devices)
 {
-    entity *e = create_entity();
+    const uct_device_type_t dev_type = device_type();
+    const std::string config_name    = device_type_config_name(dev_type);
+    entity *e                        = create_entity();
 
-    std::set<std::string> net_devices = get_net_device_names(*e);
-    if (net_devices.size() < 3) {
-        UCS_TEST_SKIP_R("Need at least 3 network devices to test negate "
-                        "multiple devices");
+    const std::set<std::string> devices = get_device_names(*e, dev_type);
+    if (devices.size() < 3) {
+        UCS_TEST_SKIP_R(std::string("Need at least 3 ") +
+                        device_type_name(dev_type) +
+                        " devices to test negate multiple devices");
     }
 
     /* Get first two devices to exclude */
-    auto it                     = net_devices.begin();
-    std::string excluded_dev1   = *it++;
-    std::string excluded_dev2   = *it++;
-    std::string excluded_config = excluded_dev1 + "," + excluded_dev2;
+    auto it                           = devices.begin();
+    const std::string excluded_dev1   = *it++;
+    const std::string excluded_dev2   = *it++;
+    const std::string excluded_config = excluded_dev1 + "," + excluded_dev2;
 
     m_entities.clear();
 
     /* Set negate mode - exclude two devices */
-    modify_config("NET_DEVICES", ("^" + excluded_config).c_str());
+    modify_config(config_name.c_str(), ("^" + excluded_config).c_str());
     e = create_entity();
 
-    std::set<std::string> selected_devices = get_net_device_names(*e);
+    const std::set<std::string> selected_devices = get_device_names(*e, dev_type);
 
     /* Verify both excluded devices are not selected */
     EXPECT_FALSE(has_device(selected_devices, excluded_dev1))
@@ -497,26 +555,29 @@ UCS_TEST_P(test_ucp_net_devices_config, negate_multiple_devices)
 /*
  * Test that negate mode with base name excludes the device
  */
-UCS_TEST_P(test_ucp_net_devices_config, negate_base_name)
+UCS_TEST_P(test_ucp_devices_config, negate_base_name)
 {
-    entity *e = create_entity();
+    const uct_device_type_t dev_type = device_type();
+    const std::string config_name    = device_type_config_name(dev_type);
+    entity *e                        = create_entity();
 
-    std::set<std::string> net_devices = get_net_device_names_with_delimiter(*e);
-    if (net_devices.empty()) {
-        UCS_TEST_SKIP_R("No network devices available with delimiter");
+    const std::set<std::string> devices = get_device_names_with_delimiter(*e,
+                                                                          dev_type);
+    if (devices.empty()) {
+        UCS_TEST_SKIP_R("No " + device_type_name(dev_type) +
+                        " devices available with delimiter");
     }
 
-    std::string dev_name = *net_devices.begin();
-    std::string dev_basename;
-    ASSERT_TRUE(get_device_base_name(dev_name, dev_basename));
+    std::string dev_name     = *net_devices.begin();
+    std::string dev_basename = get_device_base_name(dev_name);
 
     m_entities.clear();
 
     /* Set negate mode - exclude by base name */
-    modify_config("NET_DEVICES", ("^" + dev_basename).c_str());
+    modify_config(config_name.c_str(), ("^" + dev_basename).c_str());
     e = create_entity();
 
-    std::set<std::string> selected_devices = get_net_device_names(*e);
+    const std::set<std::string> selected_devices = get_device_names(*e, dev_type);
 
     /* Verify device with that base name is excluded */
     EXPECT_FALSE(has_device(selected_devices, dev_name))
@@ -615,4 +676,4 @@ UCS_TEST_P(test_ucp_net_devices_config, range_invalid_produces_error)
     EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_net_devices_config, all, "all")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_devices_config, all, "all")
