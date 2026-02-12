@@ -1415,8 +1415,12 @@ ucp_am_copy_data_fragment(ucp_recv_desc_t *first_rdesc, void *data,
     UCS_PROFILE_NAMED_CALL("am_memcpy_recv", ucs_memcpy_relaxed,
                            UCS_PTR_BYTE_OFFSET(first_rdesc + 1, offset),
                            data, length, UCS_ARCH_MEMCPY_NT_SOURCE, length);
-    ucs_interval_tree_insert(ucp_am_rdesc_frag_tree(first_rdesc), offset,
-                             offset + length - 1);
+    
+    /* Message length can be 0 if only header was sent */  
+    if (ucs_likely(length > 0)) {
+        ucs_interval_tree_insert(ucp_am_rdesc_frag_tree(first_rdesc), offset,
+                                 offset + length - 1);
+    }
 }
 
 static UCS_F_ALWAYS_INLINE uint64_t
