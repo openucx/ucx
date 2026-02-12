@@ -23,6 +23,8 @@
 #define UCT_IB_MLX5_MD_UMEM_ACCESS \
     (IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE)
 
+#define UCT_IB_MLX5_MD_DM_ALIGNMENT 64
+
 
 static uint32_t uct_ib_mlx5_flush_rkey_make()
 {
@@ -2119,14 +2121,16 @@ uct_ib_mlx5_devx_device_mem_alloc(uct_md_h uct_md, size_t *length_p,
     void *address;
     ucs_status_t status;
     uint32_t mkey;
+    uint8_t alignment;
 
     if (mem_type != UCS_MEMORY_TYPE_RDMA) {
         return UCS_ERR_UNSUPPORTED;
     }
 
     /* Align the allocation to a potential use of registration cache */
-    dm_attr.length        = ucs_align_up_pow2(*length_p, md->dev.atomic_align);
-    dm_attr.log_align_req = ucs_ilog2(md->dev.atomic_align);
+    alignment             = ucs_max(md->dev.atomic_align, UCT_IB_MLX5_MD_DM_ALIGNMENT);
+    dm_attr.length        = ucs_align_up_pow2(*length_p, alignment);
+    dm_attr.log_align_req = ucs_ilog2(alignment);
     dm_attr.comp_mask     = 0;
 
     if (dm_attr.length > md->dev.dev_attr.max_dm_size) {
