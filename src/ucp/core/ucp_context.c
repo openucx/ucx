@@ -1484,20 +1484,13 @@ static void ucp_free_resources(ucp_context_t *context)
 }
 
 static int
-ucp_config_is_allow_list_empty(const ucs_config_allow_list_t *allow_list)
-{
-    return (allow_list->array.count == 0) &&
-           (allow_list->mode != UCS_CONFIG_ALLOW_LIST_ALLOW_ALL);
-}
-
-static int
 ucp_config_is_all_allow_list_empty(const ucs_config_allow_list_t *allow_list,
                                    size_t count)
 {
     size_t i;
 
     for (i = 0; i < count; ++i) {
-        if (!ucp_config_is_allow_list_empty(&allow_list[i])) {
+        if (!ucs_config_is_allow_list_empty(&allow_list[i])) {
             return 0;
         }
     }
@@ -1516,7 +1509,7 @@ static ucs_status_t ucp_check_resource_config(const ucp_config_t *config)
         return UCS_ERR_NO_ELEM;
     }
 
-    if (ucp_config_is_allow_list_empty(&config->tls)) {
+    if (ucs_config_is_allow_list_empty(&config->tls)) {
         ucs_error("The TLs list is empty. Please specify the transports you "
                   "would like to allow/forbid "
                   "or omit the UCX_TLS so that the default will be used.");

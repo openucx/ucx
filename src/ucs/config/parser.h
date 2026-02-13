@@ -659,6 +659,15 @@ int ucs_config_parser_has_field(const ucs_config_field_t *fields,
  */
 int ucs_config_global_list_has_field(const char *name);
 
+
+/**
+ * Check if an allow list is empty.
+ *
+ * @param allow_list Allow list to check.
+ * @return           1 if the allow list is empty, 0 otherwise.
+ */
+int ucs_config_is_allow_list_empty(const ucs_config_allow_list_t *allow_list);
+
 END_C_DECLS
 
 #endif
