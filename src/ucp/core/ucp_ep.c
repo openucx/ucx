@@ -690,17 +690,17 @@ ucs_status_t ucp_worker_mem_type_eps_create(ucp_worker_h worker)
     ucs_status_t status;
     void *address_buffer;
     size_t address_length;
-    ucp_tl_bitmap_t mem_access_tls, host_mem_access_tls;
+    ucp_tl_bitmap_t mem_access_tls;
     char ep_name[UCP_WORKER_ADDRESS_NAME_MAX];
     unsigned addr_indices[UCP_MAX_LANES];
     ucp_lane_index_t num_lanes;
 
     ucs_memory_type_for_each(mem_type) {
-        ucp_context_memaccess_tl_bitmap(context, mem_type, 0, &mem_access_tls);
         /* Mem type EP requires host memory support */
-        ucp_context_memaccess_tl_bitmap(context, UCS_MEMORY_TYPE_HOST, 0,
-                                        &host_mem_access_tls);
-        UCS_STATIC_BITMAP_AND_INPLACE(&mem_access_tls, host_mem_access_tls);
+        ucp_context_memaccess_tl_bitmap(context,
+                                        UCS_BIT(mem_type) |
+                                        UCS_BIT(UCS_MEMORY_TYPE_HOST),
+                                        0, &mem_access_tls);
 
         if (UCP_MEM_IS_HOST(mem_type) ||
             UCS_STATIC_BITMAP_IS_ZERO(mem_access_tls)) {
