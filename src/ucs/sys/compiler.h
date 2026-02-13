@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -32,7 +32,11 @@
 
 /* A function which should not be optimized */
 #if defined(HAVE_ATTRIBUTE_NOOPTIMIZE) && (HAVE_ATTRIBUTE_NOOPTIMIZE == 1)
+#if defined(__clang__)
+#define UCS_F_NOOPTIMIZE __attribute__((nooptimize))
+#else
 #define UCS_F_NOOPTIMIZE __attribute__((optimize("O0")))
+#endif
 #else
 #define UCS_F_NOOPTIMIZE
 #endif
