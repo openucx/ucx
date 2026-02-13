@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -62,6 +62,8 @@ public:
         MULTI_THREAD_CONTEXT, /* workers are single-threaded, context is mt-shared */
         MULTI_THREAD_WORKER   /* workers are multi-threaded, context is mt-single */
     };
+
+    bool m_warn_invalid_config = false;
 
     class entity {
         typedef std::vector<ucs::handle<ucp_ep_h, entity*> > ep_vec_t;
@@ -228,7 +230,8 @@ public:
     void disable_keepalive();
 
 private:
-    static void set_ucp_config(ucp_config_t *config, const std::string& tls);
+    static void set_ucp_config(ucp_config_t *config, const std::string& tls,
+                               bool warn_invalid_config = false);
     static bool check_tls(const std::string& tls);
     ucs_status_t request_process(void *req, int worker_index, bool wait,
                                  bool wakeup = false,
