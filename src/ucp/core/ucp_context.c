@@ -2072,10 +2072,6 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     if (config->warn_invalid_config) {
         UCS_STATIC_ASSERT(UCT_DEVICE_TYPE_NET == 0);
         for (dev_type = UCT_DEVICE_TYPE_NET; dev_type < UCT_DEVICE_TYPE_LAST; ++dev_type) {
-            if (config->devices[dev_type].mode == UCS_CONFIG_ALLOW_LIST_ALLOW_ALL) {
-                continue;
-            }
-
             ucp_report_unavailable(&config->devices[dev_type].array,
                                    dev_cfg_masks[dev_type],
                                    uct_device_type_names[dev_type], " device",
