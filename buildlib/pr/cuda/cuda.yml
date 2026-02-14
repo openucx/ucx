@@ -11,6 +11,7 @@ jobs:
 
     steps:
       - checkout: self
+        submodules: true
         clean: true
         fetchDepth: 100
         retryCountOnTaskFailure: 5
