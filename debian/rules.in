@@ -9,7 +9,7 @@
 # Uncomment this to turn on verbose mode.
 #export DH_VERBOSE=1
 
-CUDA_OPT = $(shell echo ${DEB_BUILD_PROFILES} | grep -qw cuda \
+CUDA_OPT = $(shell echo ${DEB_BUILD_PROFILES} | grep -qw cuda\\\|gda \
 	&& echo --with-cuda=/usr/local/cuda || echo --without-cuda)
 
 XPMEM_OPT = $(shell echo ${DEB_BUILD_PROFILES} | grep -qw xpmem \
