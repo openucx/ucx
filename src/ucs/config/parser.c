@@ -2514,3 +2514,9 @@ int ucs_config_global_list_has_field(const char *name)
 
     return 0;
 }
+
+int ucs_config_is_allow_list_empty(const ucs_config_allow_list_t *allow_list)
+{
+    return (allow_list->array.count == 0) &&
+           (allow_list->mode != UCS_CONFIG_ALLOW_LIST_ALLOW_ALL);
+}
