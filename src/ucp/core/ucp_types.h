@@ -55,10 +55,10 @@ UCP_UINT_TYPE(UCP_MAX_SYS_DEVICES)   ucp_sys_dev_map_t;
 
 
 /* Worker configuration index for endpoint and rkey */
-typedef uint8_t                      ucp_worker_cfg_index_t;
+typedef uint16_t                     ucp_worker_cfg_index_t;
 #define UCP_WORKER_MAX_EP_CONFIG     UINT8_MAX
-#define UCP_WORKER_MAX_RKEY_CONFIG   128
-#define UCP_WORKER_CFG_INDEX_NULL    UINT8_MAX
+#define UCP_WORKER_MAX_RKEY_CONFIG   1024
+#define UCP_WORKER_CFG_INDEX_NULL    UINT16_MAX
 
 
 /* Forward declarations */
