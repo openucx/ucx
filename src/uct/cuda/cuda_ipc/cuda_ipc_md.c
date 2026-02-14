@@ -19,6 +19,7 @@
 #include <ucs/type/class.h>
 #include <uct/api/v2/uct_v2.h>
 #include <uct/cuda/base/cuda_nvml.h>
+#include <uct/api/device/uct_device_types.h>
 
 #include <limits.h>
 #include <string.h>
@@ -516,6 +517,33 @@ static void uct_cuda_ipc_md_close(uct_md_h md)
 }
 
 static ucs_status_t
+uct_cuda_ipc_md_mem_elem_pack(uct_md_h md, uct_mem_h memh, uct_rkey_t rkey,
+                              uct_device_mem_element_t *mem_elem_p)
+{
+    uct_cuda_ipc_unpacked_rkey_t *key = (uct_cuda_ipc_unpacked_rkey_t*)rkey;
+    uct_cuda_ipc_md_device_mem_element_t *cuda_ipc_md_mem_element =
+            (uct_cuda_ipc_md_device_mem_element_t*)mem_elem_p;
+    ucs_status_t status;
+    CUdevice cuda_device;
+    void *mapped_addr;
+
+    if (UCT_CUDADRV_FUNC_LOG_DEBUG(cuCtxGetDevice(&cuda_device)) != UCS_OK) {
+        return UCS_ERR_UNREACHABLE;
+    }
+
+    status = uct_cuda_ipc_map_memhandle(&key->super, cuda_device, &mapped_addr,
+                                        UCS_LOG_LEVEL_ERROR);
+    if (ucs_unlikely(status != UCS_OK)) {
+        return status;
+    }
+
+    cuda_ipc_md_mem_element->mapped_offset =
+            UCS_PTR_BYTE_DIFF(key->super.d_bptr, mapped_addr);
+
+    return UCS_OK;
+}
+
+static ucs_status_t
 uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
                      const uct_md_config_t *config, uct_md_h *md_p)
 {
@@ -529,6 +557,7 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
         .mem_dereg          = uct_cuda_ipc_mem_dereg,
         .mem_query          = (uct_md_mem_query_func_t)ucs_empty_function_return_unsupported,
         .mkey_pack          = uct_cuda_ipc_mkey_pack,
+        .mem_elem_pack      = uct_cuda_ipc_md_mem_elem_pack,
         .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
         .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported
     };
