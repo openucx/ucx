@@ -731,6 +731,7 @@ static ucp_tl_alias_t ucp_tl_aliases[] = {
   { "cuda",  { "cuda_copy", "cuda_ipc", "gdr_copy", NULL } },
   { "rocm",  { "rocm_copy", "rocm_ipc", "rocm_gdr", NULL } },
   { "ze",    { "ze_copy", "ze_ipc", "ze_gdr", NULL } },
+  { "gaudi", { "gaudi_gdr", NULL } },
   { "gga",   { "gga_mlx5", NULL } },
   { NULL }
 };
