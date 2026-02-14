@@ -569,13 +569,33 @@ static ucs_status_t ucp_device_local_mem_list_element_pack(
     return status;
 }
 
+static ucs_status_t ucp_device_mem_list_export_handle(
+        ucp_worker_h worker, const void *handle, size_t handle_size,
+        ucs_memory_type_t mem_type, ucs_sys_device_t local_sys_dev,
+        uct_allocated_memory_t *mem, const char *alloc_name)
+{
+    ucs_status_t status;
+
+    status = ucp_mem_do_alloc(worker->context, NULL, handle_size,
+                              UCT_MD_MEM_ACCESS_LOCAL_READ |
+                                      UCT_MD_MEM_ACCESS_LOCAL_WRITE,
+                              mem_type, local_sys_dev, alloc_name, mem);
+    if (status != UCS_OK) {
+        ucs_error("failed to allocate %s: %s", alloc_name,
+                  ucs_status_string(status));
+        return status;
+    }
+
+    ucp_mem_type_unpack(worker, mem->address, handle, handle_size, mem_type);
+    return UCS_OK;
+}
+
 static ucs_status_t ucp_device_local_mem_list_create_handle(
         const ucp_device_mem_list_params_t *params, ucs_memory_type_t mem_type,
         uct_allocated_memory_t *mem, ucs_sys_device_t local_sys_dev)
 {
     const ucp_worker_h worker   = UCS_PARAM_VALUE(
             UCP_DEVICE_MEM_LIST_PARAMS_FIELD, params, worker, WORKER, NULL);
-    const ucp_context_h context = worker->context;
     const size_t uct_elem_size  = sizeof(uct_device_local_mem_list_elem_t);
     size_t handle_size          = 0;
     const ucp_device_mem_list_elem_t *ucp_element;
@@ -617,18 +637,10 @@ static ucs_status_t ucp_device_local_mem_list_create_handle(
 
     handle->version = UCP_DEVICE_MEM_LIST_VERSION_V1;
     handle->length  = params->num_elements;
-    status          = ucp_mem_do_alloc(context, NULL, handle_size,
-                                       UCT_MD_MEM_ACCESS_LOCAL_READ |
-                                               UCT_MD_MEM_ACCESS_LOCAL_WRITE,
-                                       mem_type, local_sys_dev,
-                                       "ucp_device_remote_mem_list_handle_t", mem);
-    if (status != UCS_OK) {
-        ucs_error("failed to allocate ucp_device_remote_mem_list_handle_t: %s",
-                  ucs_status_string(status));
-        goto out;
-    }
+    status          = ucp_device_mem_list_export_handle(
+            worker, handle, handle_size, mem_type, local_sys_dev, mem,
+            "ucp_device_local_mem_list_handle_t");
 
-    ucp_mem_type_unpack(worker, mem->address, handle, handle_size, mem_type);
 out:
     ucs_free(handle);
     return status;
@@ -819,7 +831,6 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
     const size_t uct_elem_size = sizeof(uct_device_remote_mem_list_elem_t);
     size_t handle_size         = 0;
     const ucp_device_mem_list_elem_t *ucp_element;
-    ucp_context_h context;
     ucp_device_remote_mem_list_t *handle;
     uct_device_remote_mem_list_elem_t *uct_element;
     ucs_sys_device_t local_sys_dev;
@@ -831,8 +842,8 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
         return UCS_ERR_INVALID_PARAM;
     }
 
-    context = ep->worker->context;
-    status = ucp_device_detect_local_sys_dev(context, mem_type, &local_sys_dev);
+    status = ucp_device_detect_local_sys_dev(ep->worker->context, mem_type,
+                                             &local_sys_dev);
     if (status != UCS_OK) {
         return status;
     }
@@ -865,19 +876,10 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
 
     handle->version = UCP_DEVICE_MEM_LIST_VERSION_V1;
     handle->length  = params->num_elements;
-    status          = ucp_mem_do_alloc(context, NULL, handle_size,
-                                       UCT_MD_MEM_ACCESS_LOCAL_READ |
-                                               UCT_MD_MEM_ACCESS_LOCAL_WRITE,
-                                       mem_type, local_sys_dev,
-                                       "ucp_device_remote_mem_list_handle_t", mem);
-    if (status != UCS_OK) {
-        ucs_error("failed to allocate ucp_device_remote_mem_list_handle_t: %s",
-                  ucs_status_string(status));
-        goto out;
-    }
+    status          = ucp_device_mem_list_export_handle(
+            ep->worker, handle, handle_size, mem_type, local_sys_dev, mem,
+            "ucp_device_remote_mem_list_handle_t");
 
-    ucp_mem_type_unpack(ep->worker, mem->address, handle, handle_size,
-                        mem_type);
 out:
     ucs_free(handle);
     return status;

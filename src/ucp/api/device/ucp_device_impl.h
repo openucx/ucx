@@ -53,16 +53,16 @@ template<typename T>
 UCS_F_DEVICE ucs_status_t ucp_device_check_params(const T mem_list_h,
                                                   unsigned index)
 {
-    if (DEVICE_ENABLE_PARAMS_CHECK) {
-        if (((mem_list_h)->version != UCP_DEVICE_MEM_LIST_VERSION_V1) ||
-            ((index) >= (mem_list_h)->length)) {
-            printf("Invalid parameters for %p\n", mem_list_h);
+    if (UCP_DEVICE_ENABLE_PARAMS_CHECK) {
+        if ((mem_list_h->version != UCP_DEVICE_MEM_LIST_VERSION_V1) ||
+            (index >= mem_list_h->length)) {
+            ucs_device_error("Invalid parameters for %p\n", mem_list_h);
             return UCS_ERR_INVALID_PARAM;
         }
     }
 
     return UCS_OK;
-}       
+}
 
 
 /**

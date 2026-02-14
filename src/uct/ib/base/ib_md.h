@@ -248,6 +248,15 @@ typedef struct uct_ib_md_ops_entry {
 } uct_ib_md_ops_entry_t;
 
 
+/**
+ * @brief Device memory element for IB MD.
+ */
+typedef struct uct_ib_md_device_mem_element {
+    uint32_t lkey;
+    uint32_t rkey;
+} uct_ib_md_device_mem_element_t;
+
+
 #define UCT_IB_MD_OPS_NAME(_name) uct_ib_md_ops_##_name##_entry
 
 #define UCT_IB_MD_DEFINE_ENTRY(_name, _md_ops) \
