@@ -906,7 +906,8 @@ static void ucp_wireup_memaccess_bitmap(ucp_context_h context,
 
     /* If a local or a remote key is needed, the memory domain has to be able
        to register. Otherwise, it must be able to access. */
-    ucp_context_memaccess_tl_bitmap(context, mem_type, md_reg_flags, tl_bitmap);
+    ucp_context_memaccess_tl_bitmap(context, UCS_BIT(mem_type), md_reg_flags,
+                                    tl_bitmap);
 }
 
 static UCS_F_NOINLINE ucs_status_t ucp_wireup_add_memaccess_lanes(
@@ -2118,8 +2119,8 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
         rkey_ptr_info.max_lanes                  = 1;
         rkey_ptr_info.criteria.local_md_flags    = UCT_MD_FLAG_REG;
 
-        ucp_context_memaccess_tl_bitmap(context, UCS_MEMORY_TYPE_HOST, 0,
-                                        &tl_bitmap);
+        ucp_context_memaccess_tl_bitmap(context, UCS_BIT(UCS_MEMORY_TYPE_HOST),
+                                        0, &tl_bitmap);
         ucp_wireup_add_bw_lanes_pairwise(select_params, &rkey_ptr_info,
                                          tl_bitmap, UCP_NULL_LANE, select_ctx,
                                          0);
