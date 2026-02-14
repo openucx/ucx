@@ -2582,7 +2582,7 @@ ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
 
     devx_objs = md_config->devx_objs;
     if (md_config->devx_objs & UCS_BIT(UCT_IB_DEVX_OBJ_AUTO)) {
-        devx_objs = (odp_version == 1) ? 0 : UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_MASK;
+        devx_objs = (odp_version == 1) ? 0 : UCT_IB_DEVX_OBJ_MASK;
     }
 
     md->flags           |= UCT_IB_MLX5_MD_FLAGS_DEVX_OBJS(devx_objs);
