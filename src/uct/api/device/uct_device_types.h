@@ -8,8 +8,6 @@
 #define UCT_DEVICE_TYPES_H
 
 #include <ucs/type/status.h>
-#include <uct/cuda/cuda_ipc/cuda_ipc_md.h>
-#include <uct/ib/base/ib_md.h>
 #include <uct/api/uct_def.h>
 #include <stdint.h>
 
@@ -21,6 +19,30 @@
  * @{
  * @}
  */
+
+
+/**
+ * @brief Device memory element for CUDA IPC.
+ */
+typedef struct {
+    ptrdiff_t mapped_offset;
+} uct_cuda_ipc_md_device_mem_element_t;
+
+
+/**
+ * @brief Completion object for device CUDA IPC operations.
+ */
+typedef struct {
+} uct_cuda_ipc_completion_t;
+
+
+/**
+ * @brief Device memory element for GDAKI.
+ */
+typedef struct uct_ib_md_device_mem_element {
+    uint32_t lkey;
+    uint32_t rkey;
+} uct_ib_md_device_mem_element_t;
 
 
 /**

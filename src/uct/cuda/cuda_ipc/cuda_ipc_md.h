@@ -144,18 +144,4 @@ typedef struct {
     int                       stream_id;
 } uct_cuda_ipc_unpacked_rkey_t;
 
-/**
- * @brief Device memory element for CUDA IPC.
- */
-typedef struct {
-    ptrdiff_t mapped_offset;
-} uct_cuda_ipc_md_device_mem_element_t;
-
-
-/**
- * @brief Completion object for device CUDA IPC operations.
- */
-typedef struct {
-} uct_cuda_ipc_completion_t;
-
 #endif
