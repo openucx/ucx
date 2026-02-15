@@ -2800,7 +2800,7 @@ void ucp_context_memaccess_tl_bitmap(ucp_context_h context,
         } else {
             mem_types = md_attr->access_mem_types;
         }
-        if (mem_types & mem_type_bitmap) {
+        if (ucs_test_all_flags(mem_types, mem_type_bitmap)) {
             UCS_STATIC_BITMAP_SET(tl_bitmap, rsc_index);
         }
     }
