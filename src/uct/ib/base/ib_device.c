@@ -1396,7 +1396,7 @@ ucs_status_t uct_ib_device_find_port(uct_ib_device_t *dev,
     const char *ibdev_name;
     unsigned port_num;
     size_t devname_len;
-    char *p;
+    const char *p;
 
     p = strrchr(resource_dev_name, ':');
     if (p == NULL) {
@@ -1411,7 +1411,7 @@ ucs_status_t uct_ib_device_find_port(uct_ib_device_t *dev,
         goto err; /* Device name is wrong */
     }
 
-    port_num = strtod(p + 1, &p);
+    port_num = strtod(p + 1, (char **) &p);
     if (*p != '\0') {
         goto err; /* Failed to parse port number */
     }

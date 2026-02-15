@@ -584,7 +584,7 @@ static ucs_status_t init_daemon_params(ucx_perf_params_t *params)
 ucs_status_t parse_test_params(perftest_params_t *params, char opt,
                                const char *opt_arg)
 {
-    char *optarg2 = NULL;
+    const char *optarg2 = NULL;
     test_type_t *test;
     unsigned i;
 
