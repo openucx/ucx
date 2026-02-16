@@ -1877,9 +1877,17 @@ class test_ucp_wireup_msg_lane : public test_ucp_wireup {
 public:
     static void get_test_variants(std::vector<ucp_test_variant>& variants)
     {
-        /* Use TAG features which typically result in more diverse lane selection
-         * including multiple transport options for wireup messages */
-        add_variant_with_value(variants, UCP_FEATURE_AM, UNIFIED_MODE, "unified");
+        add_variant_with_value(variants, 
+            // UCP_FEATURE_TAG | 
+            // UCP_FEATURE_RMA | 
+            // UCP_FEATURE_AMO32 | 
+            // UCP_FEATURE_AMO64 | 
+            UCP_FEATURE_STREAM //| 
+            // UCP_FEATURE_AM | 
+            // UCP_FEATURE_EXPORTED_MEMH | 
+            // UCP_FEATURE_DEVICE
+            , 
+            TEST_RMA | TEST_TAG | TEST_STREAM | TEST_AMO | NO_EP_MATCH | WORKER_ADDR_V2, "rma,tag,stream,amo,no_ep_match,worker_addr_v2");
     }
 };
 
@@ -1933,4 +1941,4 @@ UCS_TEST_P(test_ucp_wireup_msg_lane, select_highest_seg_size_lane) {
 
 /* Skipping shared memory transports as we don't have access to the remote flags in order 
  * to filter them out in the test */
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_msg_lane, no_sm, "ib,tcp,^sm")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_msg_lane, all, "all")
