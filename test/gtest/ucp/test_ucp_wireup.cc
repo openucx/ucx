@@ -1877,17 +1877,14 @@ class test_ucp_wireup_msg_lane : public test_ucp_wireup {
 public:
     static void get_test_variants(std::vector<ucp_test_variant>& variants)
     {
-        add_variant_with_value(variants, 
-            // UCP_FEATURE_TAG | 
-            // UCP_FEATURE_RMA | 
-            // UCP_FEATURE_AMO32 | 
-            // UCP_FEATURE_AMO64 | 
-            UCP_FEATURE_STREAM //| 
-            // UCP_FEATURE_AM | 
-            // UCP_FEATURE_EXPORTED_MEMH | 
-            // UCP_FEATURE_DEVICE
-            , 
-            TEST_RMA | TEST_TAG | TEST_STREAM | TEST_AMO | NO_EP_MATCH | WORKER_ADDR_V2, "rma,tag,stream,amo,no_ep_match,worker_addr_v2");
+        test_ucp_wireup::get_test_variants(variants,
+                                           UCP_FEATURE_TAG    |
+                                           UCP_FEATURE_RMA    |
+                                           UCP_FEATURE_STREAM |
+                                           UCP_FEATURE_AM     |
+                                           UCP_FEATURE_AMO32  |
+                                           UCP_FEATURE_AMO64,
+                                           true);
     }
 };
 
@@ -1922,9 +1919,9 @@ UCS_TEST_P(test_ucp_wireup_msg_lane, select_highest_seg_size_lane) {
         UCS_TEST_MESSAGE << "  Eligible wireup transport: " << tl_rsc->tl_rsc.tl_name
                             << " (lane " << (int)lane << ", seg_size=" << seg_size << ")";
 
-        if ((seg_size > max_seg_size) //&& 
-            // (attrs->cap.flags & UCT_IFACE_FLAG_AM_BCOPY) &&
-            // (attrs->cap.flags & UCT_IFACE_FLAG_PENDING)
+        if ((seg_size > max_seg_size) &&
+            (attrs->cap.flags & UCT_IFACE_FLAG_AM_BCOPY) &&
+            (attrs->cap.flags & UCT_IFACE_FLAG_PENDING)
         ) {
             max_seg_size = seg_size;
         }
@@ -1941,4 +1938,5 @@ UCS_TEST_P(test_ucp_wireup_msg_lane, select_highest_seg_size_lane) {
 
 /* Skipping shared memory transports as we don't have access to the remote flags in order 
  * to filter them out in the test */
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_msg_lane, all, "all")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_msg_lane, all, "^sm")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_msg_lane, tcp_ud, "tcp,ud,^sm")
