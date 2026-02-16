@@ -19,6 +19,17 @@
 #include <ucs/sys/uid.h>
 #include <ucs/datastruct/khash.h>
 
+/* Fallback syscall numbers for kernels older than 5.3 / 5.6 whose headers
+ * do not define these.  The numbers are identical across all 64-bit
+ * architectures (x86_64, aarch64, ppc64, rv64). */
+#ifndef SYS_pidfd_open
+#define SYS_pidfd_open 434
+#endif
+
+#ifndef SYS_pidfd_getfd
+#define SYS_pidfd_getfd 438
+#endif
+
 
 typedef struct uct_cuda_ipc_cache_hash_key {
     pid_t    pid;
@@ -415,13 +426,14 @@ uct_cuda_ipc_open_memhandle_posix_fd(uct_cuda_ipc_rkey_t *key, CUdevice cu_dev,
                        key->ph.handle.posix_fd.fd, 0);
     close(pidfd);
     if (local_fd < 0) {
-        ucs_log(log_level, "pidfd_getfd(pid=%d, fd=%d) failed: %m",
-                (int)key->pid, key->ph.handle.posix_fd.fd);
+        ucs_log(log_level, "pidfd_getfd(pidfd=%d, pid=%d, fd=%d) failed: %m",
+                pidfd, (int)key->pid, key->ph.handle.posix_fd.fd);
         return UCS_ERR_IO_ERROR;
     }
 
     ucs_trace("posix_fd import: duplicated remote fd=%d -> "
-              "local_fd=%d", key->ph.handle.posix_fd.fd, local_fd);
+              "local_fd=%d (cu_dev=%d)",
+              key->ph.handle.posix_fd.fd, local_fd, cu_dev);
 
     status = uct_cuda_ipc_open_memhandle_vmm(
                     key, cu_dev, mapped_addr,
@@ -431,9 +443,9 @@ uct_cuda_ipc_open_memhandle_posix_fd(uct_cuda_ipc_rkey_t *key, CUdevice cu_dev,
     close(local_fd);
 
     ucs_trace("posix_fd import: "
-              "cuMemImportFromShareableHandle %s (mapped_addr=%p)",
+              "cuMemImportFromShareableHandle %s (mapped_addr=%p, cu_dev=%d)",
               (status == UCS_OK) ? "succeeded" : "FAILED",
-              (status == UCS_OK) ? (void*)*mapped_addr : NULL);
+              (status == UCS_OK) ? (void*)*mapped_addr : NULL, cu_dev);
     return status;
 }
 #endif

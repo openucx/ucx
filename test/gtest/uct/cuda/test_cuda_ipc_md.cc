@@ -152,6 +152,35 @@ protected:
         cuMemRelease(handle);
     }
 
+    void posix_fd_alloc_reg_pack(CUdeviceptr *ptr,
+                                 CUmemGenericAllocationHandle *handle,
+                                 size_t *size, uct_mem_h *memh,
+                                 uct_cuda_ipc_rkey_t *rkey)
+    {
+        ucs_status_t status = alloc_vmm_posix_fd(ptr, handle, size);
+        if (status == UCS_ERR_UNSUPPORTED) {
+            UCS_TEST_SKIP_R("POSIX FD VMM allocation not supported");
+        }
+        ASSERT_UCS_OK(status);
+
+        EXPECT_UCS_OK(md()->ops->mem_reg(md(), (void *)*ptr, *size, NULL,
+                                         memh));
+        EXPECT_UCS_OK(md()->ops->mkey_pack(md(), *memh, (void *)*ptr, *size,
+                                           NULL, rkey));
+        EXPECT_EQ(UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD,
+                  rkey->ph.handle_type);
+    }
+
+    void posix_fd_dereg_free(uct_mem_h memh, CUdeviceptr ptr,
+                             CUmemGenericAllocationHandle handle, size_t size)
+    {
+        uct_md_mem_dereg_params_t params;
+        params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
+        params.memh       = memh;
+        EXPECT_UCS_OK(md()->ops->mem_dereg(md(), &params));
+        free_vmm(ptr, handle, size);
+    }
+
     static uct_cuda_ipc_rkey_t unpack_masync(uct_md_h md, int64_t uuid)
     {
         size_t size = 4 * UCS_MBYTE;
@@ -292,22 +321,8 @@ UCS_TEST_P(test_cuda_ipc_md, mkey_pack_posix_fd)
     uct_mem_h memh;
     uct_cuda_ipc_rkey_t rkey = {};
 
-    ucs_status_t status = alloc_vmm_posix_fd(&ptr, &handle, &size);
-    if (status == UCS_ERR_UNSUPPORTED) {
-        UCS_TEST_SKIP_R("POSIX FD VMM allocation not supported");
-    }
-    ASSERT_UCS_OK(status);
-
-    EXPECT_UCS_OK(md()->ops->mem_reg(md(), (void *)ptr, size, NULL, &memh));
-    EXPECT_UCS_OK(md()->ops->mkey_pack(md(), memh, (void *)ptr, size, NULL,
-                                       &rkey));
-    EXPECT_EQ(UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD, rkey.ph.handle_type);
-
-    uct_md_mem_dereg_params_t params;
-    params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
-    params.memh       = memh;
-    EXPECT_UCS_OK(md()->ops->mem_dereg(md(), &params));
-    free_vmm(ptr, handle, size);
+    posix_fd_alloc_reg_pack(&ptr, &handle, &size, &memh, &rkey);
+    posix_fd_dereg_free(memh, ptr, handle, size);
 #else
     UCS_TEST_SKIP_R("built without fabric support");
 #endif
@@ -322,16 +337,7 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_system_id_mismatch)
     uct_mem_h memh;
     uct_cuda_ipc_rkey_t rkey = {};
 
-    ucs_status_t status = alloc_vmm_posix_fd(&ptr, &handle, &size);
-    if (status == UCS_ERR_UNSUPPORTED) {
-        UCS_TEST_SKIP_R("POSIX FD VMM allocation not supported");
-    }
-    ASSERT_UCS_OK(status);
-
-    EXPECT_UCS_OK(md()->ops->mem_reg(md(), (void *)ptr, size, NULL, &memh));
-    EXPECT_UCS_OK(md()->ops->mkey_pack(md(), memh, (void *)ptr, size, NULL,
-                                       &rkey));
-    EXPECT_EQ(UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD, rkey.ph.handle_type);
+    posix_fd_alloc_reg_pack(&ptr, &handle, &size, &memh, &rkey);
 
     /* Verify system_id was packed correctly before we tamper with it */
     EXPECT_EQ(ucs_get_system_id(), rkey.ph.handle.posix_fd.system_id);
@@ -354,11 +360,7 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_system_id_mismatch)
               uct_rkey_unpack_v2(md()->component, &rkey, &unpack_params,
                                  NULL));
 
-    uct_md_mem_dereg_params_t params;
-    params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
-    params.memh       = memh;
-    EXPECT_UCS_OK(md()->ops->mem_dereg(md(), &params));
-    free_vmm(ptr, handle, size);
+    posix_fd_dereg_free(memh, ptr, handle, size);
 #else
     UCS_TEST_SKIP_R("built without fabric support");
 #endif
@@ -374,6 +376,9 @@ UCS_TEST_P(test_cuda_ipc_md, mnnvl_disabled)
 UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
 {
 #if HAVE_CUDA_FABRIC
+#if !HAVE_DECL_SYS_PIDFD_GETFD
+    UCS_TEST_SKIP_R("SYS_pidfd_getfd not supported");
+#endif
     size_t size = 4096;
     CUdeviceptr ptr;
     CUmemGenericAllocationHandle handle;
@@ -458,11 +463,7 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
         std::rethrow_exception(thread_exception);
     }
 
-    uct_md_mem_dereg_params_t params;
-    params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
-    params.memh       = memh;
-    EXPECT_UCS_OK(md()->ops->mem_dereg(md(), &params));
-    free_vmm(ptr, handle, size);
+    posix_fd_dereg_free(memh, ptr, handle, size);
 #else
     UCS_TEST_SKIP_R("built without fabric support");
 #endif
@@ -482,6 +483,32 @@ protected:
         m_entities.push_back(m_sender);
 
         m_sender->connect(0, *m_receiver, 0);
+    }
+
+    static void alloc_vmm_buffer(CUdeviceptr *ptr,
+                                 CUmemGenericAllocationHandle *handle,
+                                 size_t length, size_t granularity,
+                                 const CUmemAllocationProp &prop,
+                                 const CUmemAccessDesc &access_desc)
+    {
+        ASSERT_EQ(CUDA_SUCCESS, cuMemCreate(handle, length, &prop, 0));
+        ASSERT_EQ(CUDA_SUCCESS, cuMemAddressReserve(ptr, length,
+                                                    granularity, 0, 0));
+        ASSERT_EQ(CUDA_SUCCESS, cuMemMap(*ptr, length, 0, *handle, 0));
+        ASSERT_EQ(CUDA_SUCCESS, cuMemSetAccess(*ptr, length, &access_desc, 1));
+    }
+
+    static void init_cuda_mem(uct_allocated_memory_t *mem, void *address,
+                              size_t length)
+    {
+        memset(mem, 0, sizeof(*mem));
+        mem->address    = address;
+        mem->length     = length;
+        mem->mem_type   = UCS_MEMORY_TYPE_CUDA;
+        mem->memh       = UCT_MEM_HANDLE_NULL;
+        mem->md         = NULL;
+        mem->method     = UCT_ALLOC_METHOD_LAST;
+        mem->sys_device = UCS_SYS_DEVICE_ID_UNKNOWN;
     }
 
     entity *m_sender;
@@ -518,43 +545,23 @@ UCS_TEST_P(test_cuda_ipc_posix_fd, put_zcopy)
 
     length = ucs_align_up(length, granularity);
 
-    /* Allocate send buffer */
-    ASSERT_EQ(CUDA_SUCCESS, cuMemCreate(&send_handle, length, &prop, 0));
-    ASSERT_EQ(CUDA_SUCCESS, cuMemAddressReserve(&send_ptr, length,
-                                                granularity, 0, 0));
-    ASSERT_EQ(CUDA_SUCCESS, cuMemMap(send_ptr, length, 0, send_handle, 0));
     access_desc.flags         = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
     access_desc.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
     access_desc.location.id   = cu_device;
-    ASSERT_EQ(CUDA_SUCCESS, cuMemSetAccess(send_ptr, length, &access_desc, 1));
 
-    /* Allocate recv buffer */
-    ASSERT_EQ(CUDA_SUCCESS, cuMemCreate(&recv_handle, length, &prop, 0));
-    ASSERT_EQ(CUDA_SUCCESS, cuMemAddressReserve(&recv_ptr, length,
-                                                granularity, 0, 0));
-    ASSERT_EQ(CUDA_SUCCESS, cuMemMap(recv_ptr, length, 0, recv_handle, 0));
-    ASSERT_EQ(CUDA_SUCCESS, cuMemSetAccess(recv_ptr, length, &access_desc, 1));
+    alloc_vmm_buffer(&send_ptr, &send_handle, length, granularity, prop,
+                     access_desc);
+    alloc_vmm_buffer(&recv_ptr, &recv_handle, length, granularity, prop,
+                     access_desc);
 
     /* Register send buffer with sender entity */
-    uct_allocated_memory_t send_mem = {};
-    send_mem.address    = (void *)send_ptr;
-    send_mem.length     = length;
-    send_mem.mem_type   = UCS_MEMORY_TYPE_CUDA;
-    send_mem.memh       = UCT_MEM_HANDLE_NULL;
-    send_mem.md         = NULL;
-    send_mem.method     = UCT_ALLOC_METHOD_LAST;
-    send_mem.sys_device = UCS_SYS_DEVICE_ID_UNKNOWN;
+    uct_allocated_memory_t send_mem;
+    init_cuda_mem(&send_mem, (void *)send_ptr, length);
     m_sender->mem_type_reg(&send_mem, UCT_MD_MEM_ACCESS_ALL);
 
     /* Register recv buffer with receiver entity */
-    uct_allocated_memory_t recv_mem = {};
-    recv_mem.address    = (void *)recv_ptr;
-    recv_mem.length     = length;
-    recv_mem.mem_type   = UCS_MEMORY_TYPE_CUDA;
-    recv_mem.memh       = UCT_MEM_HANDLE_NULL;
-    recv_mem.md         = NULL;
-    recv_mem.method     = UCT_ALLOC_METHOD_LAST;
-    recv_mem.sys_device = UCS_SYS_DEVICE_ID_UNKNOWN;
+    uct_allocated_memory_t recv_mem;
+    init_cuda_mem(&recv_mem, (void *)recv_ptr, length);
     m_receiver->mem_type_reg(&recv_mem, UCT_MD_MEM_ACCESS_ALL);
 
     /* Unpack rkey for recv buffer. The same-process shortcut in
