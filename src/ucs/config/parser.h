@@ -1,5 +1,5 @@
 /*
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -667,6 +667,17 @@ int ucs_config_global_list_has_field(const char *name);
  * @return           1 if the allow list is empty, 0 otherwise.
  */
 int ucs_config_is_allow_list_empty(const ucs_config_allow_list_t *allow_list);
+
+
+/**
+ * Check if all allow lists in an array are empty.
+ *
+ * @param allow_lists Array of allow lists to check.
+ * @param count       Number of elements in the array.
+ * @return            1 if all allow lists are empty, 0 otherwise.
+ */
+int ucs_config_are_all_allow_lists_empty(
+        const ucs_config_allow_list_t *allow_lists, size_t count);
 
 END_C_DECLS
 

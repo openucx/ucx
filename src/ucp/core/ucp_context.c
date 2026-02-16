@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
  * Copyright (C) Intel Corporation, 2023.  ALL RIGHTS RESERVED.
  *
@@ -1053,7 +1053,7 @@ ucp_is_resource_in_device_list(const uct_tl_resource_desc_t *resource,
                                uct_device_type_t dev_type)
 {
     const ucs_config_names_array_t *dev_array = &devices[dev_type].array;
-    ucs_config_allow_list_mode_t mode         = devices[dev_type].mode;
+    const ucs_config_allow_list_mode_t mode   = devices[dev_type].mode;
     char dev_basename[UCT_DEVICE_NAME_MAX];
     uint64_t found_dev_mask, exclusive_mask;
 
@@ -1483,25 +1483,10 @@ static void ucp_free_resources(ucp_context_t *context)
     ucs_free(context->tl_cmpts);
 }
 
-static int
-ucp_config_is_all_allow_list_empty(const ucs_config_allow_list_t *allow_list,
-                                   size_t count)
-{
-    size_t i;
-
-    for (i = 0; i < count; ++i) {
-        if (!ucs_config_is_allow_list_empty(&allow_list[i])) {
-            return 0;
-        }
-    }
-
-    return 1;
-}
-
 static ucs_status_t ucp_check_resource_config(const ucp_config_t *config)
 {
-    if (ucp_config_is_all_allow_list_empty(config->devices,
-                                           UCT_DEVICE_TYPE_LAST)) {
+    if (ucs_config_are_all_allow_lists_empty(config->devices,
+                                             UCT_DEVICE_TYPE_LAST)) {
         ucs_error(
                 "The device lists are empty. Please specify the devices you "
                 "would like to use "
