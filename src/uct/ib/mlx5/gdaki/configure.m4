@@ -5,8 +5,8 @@
 
 UCX_CHECK_CUDA
 
-UCX_CHECK_CUDA_GE(12, 2)
 AS_IF([test "x$cuda_happy" = "xyes"] && [test "x$have_mlx5" = "xyes"] &&
+      [UCX_CHECK_CUDA_GE([12], [2])] &&
       [test "x$ucx_cuda_ge" = "xyes" ] &&
       [test "x$have_mlx5dv_devx_umem" = "xyes"] &&
       [test "x$have_cuda_atomic_support" = "xyes"],
@@ -16,8 +16,7 @@ AS_IF([test "x$cuda_happy" = "xyes"] && [test "x$have_mlx5" = "xyes"] &&
               NVCCFLAGS="$NVCCFLAGS -DCCCL_IGNORE_DEPRECATED_CPP_DIALECT"
              ])
 
-       UCX_CHECK_CUDA_GE(12, 9)
-       AS_IF([test "x$ucx_cuda_ge" = "xyes" ],
+       AS_IF([UCX_CHECK_CUDA_GE([12], [9])],
              [
               NVCCFLAGS="$NVCCFLAGS -D_LIBCUDACXX_ATOMIC_UNSAFE_AUTOMATIC_STORAGE"
              ])

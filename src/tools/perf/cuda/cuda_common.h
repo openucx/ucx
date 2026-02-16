@@ -11,11 +11,6 @@
 
 BEGIN_C_DECLS
 
-#if defined(__NVCC__) && !defined(__builtin_ia32_prefetch)
-  #define __builtin_ia32_prefetch(P, RW, LOC, CACHE) \
-    __builtin_prefetch((P), (RW), (LOC))
-#endif
-
 /* TODO: move it to some common place */
 #define CUDA_CALL(_handler, _log_level, _func, ...) \
     do { \

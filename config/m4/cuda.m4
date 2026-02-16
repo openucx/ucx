@@ -45,24 +45,26 @@ AC_DEFUN([AC_LANG_COMPILER(CUDA)], [
     AC_SUBST([NVCC], [$NVCC])
 ])
 
-AC_DEFUN([UCX_CHECK_CUDA_GE],[
-   AS_IF([test "$CUDA_MAJOR_VERSION" -eq $1 -a "$CUDA_MINOR_VERSION" -ge $2] ||
-         [test "$CUDA_MAJOR_VERSION" -gt $1],
-         [ucx_cuda_ge=yes], [ucx_cuda_ge=no])])
+AC_DEFUN([UCX_CHECK_CUDA_GE], [{ [test "$CUDA_MAJOR_VERSION" -gt "$1"] ||
+    [test "$CUDA_MAJOR_VERSION" -eq "$1" &&
+     test "$CUDA_MINOR_VERSION" -ge "$2"];}])
+
+AC_DEFUN([UCX_CHECK_CUDA_LT], [{ [test "$CUDA_MAJOR_VERSION" -lt "$1"] ||
+    [test "$CUDA_MAJOR_VERSION" -eq "$1" &&
+     test "$CUDA_MINOR_VERSION" -lt "$2"];}])
 
 # Check for nvcc compiler support
 AC_DEFUN([UCX_CUDA_CHECK_NVCC], [
     AS_IF([test "x$NVCC" != "x"], [
-        CUDA_MAJOR_VERSION=`$NVCC --version | grep release | sed 's/.*release //' | sed 's/\,.*//' |  cut -d "." -f 1`
-        CUDA_MINOR_VERSION=`$NVCC --version | grep release | sed 's/.*release //' | sed 's/\,.*//' |  cut -d "." -f 2`
+        CUDA_MAJOR_VERSION=$($NVCC --version | grep release | sed 's/.*release //' | sed 's/\,.*//' |  cut -d "." -f 1)
+        CUDA_MINOR_VERSION=$($NVCC --version | grep release | sed 's/.*release //' | sed 's/\,.*//' |  cut -d "." -f 2)
         AC_MSG_RESULT([Detected CUDA version: $CUDA_MAJOR_VERSION.$CUDA_MINOR_VERSION])
-        UCX_CHECK_CUDA_GE($NVCC_CUDA_MIN_REQUIRED_MAJOR, $NVCC_CUDA_MIN_REQUIRED_MINOR)
-        AS_IF([test "x$ucx_cuda_ge" != xyes],
+        AS_IF([UCX_CHECK_CUDA_LT([$NVCC_CUDA_MIN_REQUIRED_MAJOR],
+                                 [$NVCC_CUDA_MIN_REQUIRED_MINOR])],
               [AC_MSG_WARN([Minimum required CUDA version for device code: $NVCC_CUDA_MIN_REQUIRED_MAJOR.$NVCC_CUDA_MIN_REQUIRED_MINOR])
                NVCC=""])
 
-        UCX_CHECK_CUDA_GE(13, 0)
-        AS_IF([test "x$ucx_cuda_ge" = xyes],
+        AS_IF([UCX_CHECK_CUDA_GE([13], [0])],
               [NVCC_CXX_DIALECT=c++17
                cxx_dialect_ver=201703L],
               [NVCC_CXX_DIALECT=c++11
