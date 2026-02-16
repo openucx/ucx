@@ -425,7 +425,13 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
             CUdevice dev;
             CUcontext ctx;
             ASSERT_EQ(CUDA_SUCCESS, cuDeviceGet(&dev, 0));
+#if CUDA_VERSION >= 13000
+            CUctxCreateParams ctx_create_params = {};
+            ASSERT_EQ(CUDA_SUCCESS,
+                      cuCtxCreate(&ctx, &ctx_create_params, 0, dev));
+#else
             ASSERT_EQ(CUDA_SUCCESS, cuCtxCreate(&ctx, 0, dev));
+#endif
 
             uct_rkey_unpack_params_t unpack_params = {};
             uct_rkey_bundle_t rkey_bundle           = {};
