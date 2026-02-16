@@ -2126,21 +2126,37 @@ static void ucp_worker_destroy_mpools(ucp_worker_h worker)
                       !(worker->flags & UCP_WORKER_FLAG_IGNORE_REQUEST_LEAK));
 }
 
-static unsigned ucp_worker_ep_config_free_cb(void *arg)
+static unsigned ucp_worker_config_free_cb(void *arg)
 {
     ucs_free(arg);
     return 1;
 }
 
 static int
-ucp_worker_ep_config_filter(const ucs_callbackq_elem_t *elem, void *arg)
+ucp_worker_config_filter(const ucs_callbackq_elem_t *elem, void *arg)
 {
-    if (elem->cb == ucp_worker_ep_config_free_cb) {
-        ucp_worker_ep_config_free_cb(elem->arg);
+    if (elem->cb == ucp_worker_config_free_cb) {
+        ucp_worker_config_free_cb(elem->arg);
         return 1;
     }
 
     return 0;
+}
+
+static void
+ucp_worker_config_array_release_old(ucp_worker_h worker, void *old_buffer,
+                                    void *new_buffer, size_t copy_size)
+{
+    if (old_buffer != NULL) {
+        memcpy(new_buffer, old_buffer, copy_size);
+        /* Schedule release of old configs array backing buffer on the main
+         * thread (this func can be called by async thread).
+         * So the main thread can still access the old configuration buffer
+         * if it's modified by async thread.
+         */
+        ucs_callbackq_add_oneshot(&worker->uct->progress_q, worker,
+                                  ucp_worker_config_free_cb, old_buffer);
+    }
 }
 
 /* All the ucp endpoints will share the configurations. No need for every ep to
@@ -2181,17 +2197,10 @@ ucs_status_t ucp_worker_get_ep_config(ucp_worker_h worker,
     old_ep_cfg_buf = NULL;
     ep_config      = ucs_array_append_safe(&worker->ep_config, &old_ep_cfg_buf,
                                            return UCS_ERR_NO_MEMORY);
-    if (old_ep_cfg_buf != NULL) {
-        memcpy(worker->ep_config.buffer, old_ep_cfg_buf,
-               sizeof(ucp_ep_config_t) * ucs_array_length(&worker->ep_config));
-        /* Schedule release of old ep configs array backing buffer on the main
-         * thread (this func can be called by async thread).
-         * So the main thread can still access the old configuration buffer
-         * if it's modified by async thread.
-         */
-        ucs_callbackq_add_oneshot(&worker->uct->progress_q, worker,
-                                  ucp_worker_ep_config_free_cb, old_ep_cfg_buf);
-    }
+    ucp_worker_config_array_release_old(
+            worker, old_ep_cfg_buf, worker->ep_config.buffer,
+            sizeof(ucp_ep_config_t) *
+                    (ucs_array_length(&worker->ep_config) - 1));
 
     status = ucp_ep_config_init(worker, ep_config, key);
     if (status != UCS_OK) {
@@ -2224,23 +2233,6 @@ ucp_worker_dump_rkey_config_key(ucs_string_buffer_t *log_strb,
             " cfg_index %d sys_dev %d mem_type %s unrch_md_map %" PRIx64 "\n",
             key->md_map, key->ep_cfg_index, key->sys_dev,
             ucs_memory_type_names[key->mem_type], key->unreachable_md_map);
-}
-
-static unsigned ucp_worker_rkey_config_free_cb(void *arg)
-{
-    ucs_free(arg);
-    return 1;
-}
-
-static int
-ucp_worker_rkey_config_filter(const ucs_callbackq_elem_t *elem, void *arg)
-{
-    if (elem->cb == ucp_worker_rkey_config_free_cb) {
-        ucp_worker_rkey_config_free_cb(elem->arg);
-        return 1;
-    }
-
-    return 0;
 }
 
 ucs_status_t
@@ -2298,19 +2290,10 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
                                                 &old_rkey_config_buf,
                                                 status = UCS_ERR_NO_MEMORY;
                                                 goto err;);
-    if (old_rkey_config_buf != NULL) {
-        memcpy(worker->rkey_config.buffer, old_rkey_config_buf,
-               sizeof(ucp_rkey_config_t) *
-                       (ucs_array_length(&worker->rkey_config) - 1));
-        /* Schedule release of old rkey configs array backing buffer on the main
-         * thread (this func can be called by async thread).
-         * So the main thread can still access the old configuration buffer
-         * if it's modified by async thread.
-         */
-        ucs_callbackq_add_oneshot(&worker->uct->progress_q, worker,
-                                  ucp_worker_rkey_config_free_cb,
-                                  old_rkey_config_buf);
-    }
+    ucp_worker_config_array_release_old(
+            worker, old_rkey_config_buf, worker->rkey_config.buffer,
+            sizeof(ucp_rkey_config_t) *
+                    (ucs_array_length(&worker->rkey_config) - 1));
 
     rkey_config->key = *key;
 
@@ -3089,9 +3072,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     }
 
     ucs_callbackq_remove_oneshot(&worker->uct->progress_q, worker,
-                                 ucp_worker_ep_config_filter, NULL);
-    ucs_callbackq_remove_oneshot(&worker->uct->progress_q, worker,
-                                 ucp_worker_rkey_config_filter, NULL);
+                                 ucp_worker_config_filter, NULL);
 
     ucs_vfs_obj_remove(worker);
     ucp_tag_match_cleanup(&worker->tm);
