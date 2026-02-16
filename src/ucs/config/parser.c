@@ -644,7 +644,7 @@ int ucs_config_sprintf_bw(char *buf, size_t max, const void *src,
 int ucs_config_sscanf_bw_spec(const char *buf, void *dest, const void *arg)
 {
     ucs_config_bw_spec_t *dst = (ucs_config_bw_spec_t*)dest;
-    char                 *delim;
+    const char *delim;
 
     delim = strchr(buf, ':');
     if (!delim) {
