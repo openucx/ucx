@@ -2132,8 +2132,7 @@ static unsigned ucp_worker_config_free_cb(void *arg)
     return 1;
 }
 
-static int
-ucp_worker_config_filter(const ucs_callbackq_elem_t *elem, void *arg)
+static int ucp_worker_config_filter(const ucs_callbackq_elem_t *elem, void *arg)
 {
     if (elem->cb == ucp_worker_config_free_cb) {
         ucp_worker_config_free_cb(elem->arg);
