@@ -87,11 +87,6 @@ enum {
     UCT_IB_DEVX_OBJ_AUTO
 };
 
-#define UCT_IB_DEVX_OBJ_MASK \
-    (UCS_BIT(UCT_IB_DEVX_OBJ_RCQP) | UCS_BIT(UCT_IB_DEVX_OBJ_RCSRQ) | \
-     UCS_BIT(UCT_IB_DEVX_OBJ_DCT) | UCS_BIT(UCT_IB_DEVX_OBJ_DCSRQ) | \
-     UCS_BIT(UCT_IB_DEVX_OBJ_DCI) | UCS_BIT(UCT_IB_DEVX_OBJ_CQ))
-
 typedef struct uct_ib_md_ext_config {
     int                      eth_pause;    /**< Whether or not Pause Frame is
                                                 enabled on the Ethernet network */

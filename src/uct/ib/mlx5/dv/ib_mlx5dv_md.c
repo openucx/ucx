@@ -25,6 +25,11 @@
 
 #define UCT_IB_MLX5_MD_DM_ALIGNMENT 64
 
+#define UCT_IB_MLX5_DEVX_ALL_OBJS_MASK \
+    (UCS_BIT(UCT_IB_DEVX_OBJ_RCQP) | UCS_BIT(UCT_IB_DEVX_OBJ_RCSRQ) | \
+     UCS_BIT(UCT_IB_DEVX_OBJ_DCT) | UCS_BIT(UCT_IB_DEVX_OBJ_DCSRQ) | \
+     UCS_BIT(UCT_IB_DEVX_OBJ_DCI) | UCS_BIT(UCT_IB_DEVX_OBJ_CQ))
+
 
 static uint32_t uct_ib_mlx5_flush_rkey_make()
 {
@@ -2582,7 +2587,7 @@ ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
 
     devx_objs = md_config->devx_objs;
     if (md_config->devx_objs & UCS_BIT(UCT_IB_DEVX_OBJ_AUTO)) {
-        devx_objs = (odp_version == 1) ? 0 : UCT_IB_DEVX_OBJ_MASK;
+        devx_objs = (odp_version == 1) ? 0 : UCT_IB_MLX5_DEVX_ALL_OBJS_MASK;
     }
 
     md->flags           |= UCT_IB_MLX5_MD_FLAGS_DEVX_OBJS(devx_objs);
