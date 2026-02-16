@@ -2318,7 +2318,7 @@ ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
 
         /* if the current lane satisfies the wireup criteria, choose it for wireup.
          * if it doesn't take a lane with a p2p transport */
-        if (ucp_wireup_check_select_flags(resource, attrs->cap.flags,
+        if ((ucp_wireup_check_select_flags(resource, attrs->cap.flags,
                                           &criteria.local_iface_flags,
                                           criteria.title,
                                           ucp_wireup_iface_flags, NULL, 0) &&
@@ -2332,13 +2332,9 @@ ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
             ucp_wireup_check_flags(resource,
                                    address_list[addr_index].iface_attr.flags,
                                    criteria.remote_event_flags, criteria.title,
-                                   ucp_wireup_peer_flags, NULL, 0)) {
-            if (seg_size > max_seg_size) {
-                max_seg_size  = seg_size;
-                aux_lane = lane;
-            }
-        } else if (ucp_worker_is_tl_p2p(worker, rsc_index) &&
-                   !ucp_worker_is_tl_device(worker, rsc_index)) {
+                                   ucp_wireup_peer_flags, NULL, 0)) ||
+            (ucp_worker_is_tl_p2p(worker, rsc_index) &&
+            !ucp_worker_is_tl_device(worker, rsc_index))) {
             if (seg_size > max_seg_size) {
                 max_seg_size  = seg_size;
                 aux_lane = lane;
