@@ -430,6 +430,11 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
 
     /* For remote memory access, consider remote system topology distance */
     if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS) {
+        ucs_assertv(params->super.rkey_cfg_index <
+                            ucs_array_length(&worker->rkey_config),
+                    "rkey_cfg_index=%d rkey_config array length=%u",
+                    params->super.rkey_cfg_index,
+                    ucs_array_length(&worker->rkey_config));
         rkey_config = &ucs_array_elem(&worker->rkey_config,
                                       params->super.rkey_cfg_index);
         distance    = rkey_config->lanes_distance[lane];
