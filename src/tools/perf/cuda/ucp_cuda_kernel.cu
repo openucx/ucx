@@ -190,12 +190,14 @@ private:
                                    UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY |
                                    UCP_DEVICE_MEM_LIST_ELEM_FIELD_LOCAL_ADDR |
                                    UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR |
-                                   UCP_DEVICE_MEM_LIST_ELEM_FIELD_EP;
+                                   UCP_DEVICE_MEM_LIST_ELEM_FIELD_EP |
+                                   UCP_DEVICE_MEM_LIST_ELEM_FIELD_LENGTH;
             elems[i].memh        = perf.ucp.send_memh;
             elems[i].rkey        = perf.ucp.rkey;
             elems[i].local_addr  = UCS_PTR_BYTE_OFFSET(perf.send_buffer, offset);
             elems[i].remote_addr = perf.ucp.remote_addr + offset;
             elems[i].ep          = perf.ucp.ep;
+            elems[i].length      = perf.params.msg_size_list[i];
 
             offset += perf.params.msg_size_list[i];
         }
