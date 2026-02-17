@@ -373,6 +373,8 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_rkey_unpack,
     uct_cuda_ipc_rkey_t *packed   = (uct_cuda_ipc_rkey_t *)rkey_buffer;
     uct_cuda_ipc_unpacked_rkey_t *unpacked;
     ucs_sys_device_t sys_dev;
+    CUdevice cu_device;
+    CUdevice alloc_cu_device;
     ucs_status_t status;
 
     sys_dev = UCS_PARAM_VALUE(UCT_RKEY_UNPACK_FIELD, params, sys_device,
@@ -387,7 +389,14 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_rkey_unpack,
 
     unpacked->super = *packed;
 
+    status = uct_cuda_base_push_alloc_ctx(0, sys_dev, &cu_device,
+                                          &alloc_cu_device, UCS_LOG_LEVEL_DEBUG);
+    if (status != UCS_OK) {
+        goto err_free_key;
+    }
+
     status = uct_cuda_ipc_is_peer_accessible(com, unpacked, sys_dev);
+    uct_cuda_base_pop_alloc_ctx(alloc_cu_device);
     if (status != UCS_OK) {
         goto err_free_key;
     }

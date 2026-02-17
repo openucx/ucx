@@ -12,7 +12,6 @@
 
 #include <ucs/sys/module.h>
 #include <ucs/sys/string.h>
-#include <cuda.h>
 
 
 void uct_cuda_base_get_sys_dev(CUdevice cuda_device,
@@ -159,6 +158,113 @@ ucs_status_t uct_cuda_primary_ctx_retain(CUdevice cuda_device, int force,
 
     *cuda_ctx_p = cuda_ctx;
     return UCS_OK;
+}
+
+ucs_status_t uct_cuda_base_push_ctx(CUdevice device, int retain_inactive,
+                                    ucs_log_level_t log_level)
+{
+    ucs_status_t status;
+    CUcontext primary_ctx;
+
+    status = uct_cuda_primary_ctx_retain(device, retain_inactive, &primary_ctx);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = UCT_CUDADRV_FUNC(cuCtxPushCurrent(primary_ctx), log_level);
+    if (status != UCS_OK) {
+        (void)UCT_CUDADRV_FUNC(cuDevicePrimaryCtxRelease(device), log_level);
+    }
+
+    return status;
+}
+
+/*
+ * With a valid sys_dev, the function pushes on the current thread the
+ * corresponding CUDA context.
+ * When sys_dev was specified as unknown, the function leaves the current CUDA
+ * context untouched. If no context is set, it tries to push the first
+ * available context among all CUDA GPUs found.
+ */
+ucs_status_t uct_cuda_base_push_alloc_ctx(int retain_inactive,
+                                          const ucs_sys_device_t sys_dev,
+                                          CUdevice *cu_device_p,
+                                          CUdevice *alloc_cu_device_p,
+                                          ucs_log_level_t log_level)
+{
+    ucs_status_t status;
+    int dev_ordinal, num_devices;
+
+    status = UCT_CUDADRV_FUNC_LOG_DEBUG(cuCtxGetDevice(cu_device_p));
+    if (status != UCS_OK) {
+        *cu_device_p = CU_DEVICE_INVALID;
+    }
+
+    if (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
+        status = uct_cuda_base_get_cuda_device(sys_dev, alloc_cu_device_p);
+        if (status != UCS_OK) {
+            ucs_log(log_level,
+                    "failed to get cuda device for system device %u",
+                    sys_dev);
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        /* sys_dev is the active cuda device */
+        if (*cu_device_p == *alloc_cu_device_p) {
+            return UCS_OK;
+        }
+
+        /* Make sys_dev the active cuda device */
+        status = uct_cuda_base_push_ctx(*alloc_cu_device_p, retain_inactive,
+                                        log_level);
+        if (status != UCS_OK) {
+            ucs_log(log_level, "failed to set cuda context for system device %u "
+                    "(cu_device=%d)",
+                    sys_dev, *alloc_cu_device_p);
+        }
+
+        return status;
+    }
+
+    /* Use the active cuda device */
+    if (*cu_device_p != CU_DEVICE_INVALID) {
+        *alloc_cu_device_p = *cu_device_p;
+        return UCS_OK;
+    }
+
+    status = UCT_CUDADRV_FUNC(cuDeviceGetCount(&num_devices),
+                              UCS_LOG_LEVEL_DIAG);
+    if (status != UCS_OK) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    /* Use the first active cuda device for allocation */
+    for (dev_ordinal = 0; dev_ordinal < num_devices; dev_ordinal++) {
+        if (UCT_CUDADRV_FUNC_LOG_DEBUG(cuDeviceGet(alloc_cu_device_p, dev_ordinal)) !=
+            UCS_OK) {
+            continue;
+        }
+
+        status = uct_cuda_base_push_ctx(*alloc_cu_device_p, retain_inactive,
+                                        log_level);
+        if (status == UCS_OK) {
+            break;
+        }
+    }
+
+    if (status != UCS_OK) {
+        ucs_log(log_level,
+                "no active cuda primary context for memory allocation");
+    }
+
+    return status;
+}
+
+void uct_cuda_base_pop_alloc_ctx(CUdevice cu_device)
+{
+    (void)UCT_CUDADRV_FUNC(cuCtxPopCurrent(NULL), UCS_LOG_LEVEL_WARN);
+    (void)UCT_CUDADRV_FUNC(cuDevicePrimaryCtxRelease(cu_device),
+                           UCS_LOG_LEVEL_WARN);
 }
 
 UCS_STATIC_INIT

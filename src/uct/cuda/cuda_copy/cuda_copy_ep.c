@@ -239,7 +239,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_ctx_rsc_get(
             goto err;
         }
 
-        status = uct_cuda_copy_push_ctx(cuda_device, 0, UCS_LOG_LEVEL_ERROR);
+        status = uct_cuda_base_push_ctx(cuda_device, 0, UCS_LOG_LEVEL_ERROR);
         if (ucs_unlikely(status == UCS_ERR_NO_DEVICE)) {
             /* Device primary context of `cuda_device` is inactive. The memory
              * was probably allocated on the context created with cuCtxCreate.
