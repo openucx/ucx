@@ -347,7 +347,12 @@ ucs_array_old_buffer_set_null(void **old_buffer_p)
  * @return L-value of a specified element in the array
  */
 #define ucs_array_elem(_array, _index) \
-    ((_array)->buffer[_index])
+    (*({ \
+        ucs_assertv((_index) < ucs_array_length(_array), \
+                    "index=%zu length=%zu", \
+                    (size_t)(_index), (size_t)ucs_array_length(_array)); \
+        &(_array)->buffer[_index]; \
+    }))
 
 
 /**

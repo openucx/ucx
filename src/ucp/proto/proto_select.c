@@ -38,6 +38,9 @@ static const void *ucp_proto_select_init_priv_buf(
 {
     size_t priv_offset =
             ucs_array_elem(&proto_init->protocols, proto_idx).priv_offset;
+    if (priv_offset >= ucs_array_length(&proto_init->priv_buf)) {
+        return NULL;
+    }
     return &ucs_array_elem(&proto_init->priv_buf, priv_offset);
 }
 
@@ -645,8 +648,10 @@ void ucp_proto_select_add_proto(const ucp_proto_init_params_t *init_params,
                      ucs_error("failed to allocate proto priv of size %zu",
                                priv_size);
                      goto err_destroy_perf);
-    memcpy(&ucs_array_elem(&proto_init->priv_buf, priv_offset), priv,
-           priv_size);
+    if (priv_size > 0) {
+        memcpy(&ucs_array_elem(&proto_init->priv_buf, priv_offset), priv,
+               priv_size);
+    }
 
     /* Add capabilities to the array of protocols */
     init_elem = ucs_array_append(

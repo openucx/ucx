@@ -31,10 +31,10 @@ void ucs_string_buffer_init(ucs_string_buffer_t *strb)
 void ucs_string_buffer_init_fixed(ucs_string_buffer_t *strb, char *buffer,
                                   size_t capacity)
 {
-    ucs_array_init_fixed(strb, buffer, capacity);
     if (capacity > 0) {
-        ucs_array_elem(strb, 0) = '\0';
+        buffer[0] = '\0';
     }
+    ucs_array_init_fixed(strb, buffer, capacity);
 }
 
 void ucs_string_buffer_cleanup(ucs_string_buffer_t *strb)
