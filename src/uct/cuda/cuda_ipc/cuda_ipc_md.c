@@ -110,6 +110,7 @@ uct_cuda_ipc_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
     return UCS_OK;
 }
 
+#if HAVE_CUDA_FABRIC
 static ucs_status_t
 uct_cuda_ipc_retain_and_export(void *addr, void *shareable_handle,
                                CUmemAllocationHandleType handle_type)
@@ -149,6 +150,7 @@ uct_cuda_ipc_mem_export_posix_fd(void *addr, uct_cuda_ipc_lkey_t *key)
               key->ph.handle.posix_fd.system_id);
     return UCS_OK;
 }
+#endif
 
 static ucs_status_t
 uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
