@@ -19,17 +19,6 @@
 #include <ucs/sys/uid.h>
 #include <ucs/datastruct/khash.h>
 
-/* Fallback syscall numbers for kernels older than 5.3 / 5.6 whose headers
- * do not define these.  The numbers are identical across all 64-bit
- * architectures (x86_64, aarch64, ppc64, rv64). */
-#ifndef SYS_pidfd_open
-#define SYS_pidfd_open 434
-#endif
-
-#ifndef SYS_pidfd_getfd
-#define SYS_pidfd_getfd 438
-#endif
-
 
 typedef struct uct_cuda_ipc_cache_hash_key {
     pid_t    pid;

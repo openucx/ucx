@@ -375,10 +375,7 @@ UCS_TEST_P(test_cuda_ipc_md, mnnvl_disabled)
 
 UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
 {
-#if HAVE_CUDA_FABRIC
-#if !HAVE_DECL_SYS_PIDFD_GETFD
-    UCS_TEST_SKIP_R("SYS_pidfd_getfd not supported");
-#endif
+#if HAVE_DECL_SYS_PIDFD_GETFD && HAVE_CUDA_FABRIC
     size_t size = 4096;
     CUdeviceptr ptr;
     CUmemGenericAllocationHandle handle;
@@ -471,7 +468,7 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
 
     posix_fd_dereg_free(memh, ptr, handle, size);
 #else
-    UCS_TEST_SKIP_R("built without fabric support");
+    UCS_TEST_SKIP_R("SYS_pidfd_getfd not supported");
 #endif
 }
 
