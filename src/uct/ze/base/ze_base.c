@@ -18,6 +18,7 @@
 #define UCT_ZE_LOG_LEVEL   UCS_LOG_LEVEL_DEBUG
 #define UCT_ZE_MAX_DEVICES 32 /* Max root devices (GPUs) */
 
+
 /* Global state */
 typedef struct {
     ze_driver_handle_t driver;
@@ -27,6 +28,7 @@ typedef struct {
     ucs_init_once_t    init_once;
     ze_result_t        init_status;  /* Store init result for later calls */
 } uct_ze_base_state_t;
+
 
 static uct_ze_base_state_t uct_ze_base = {
     .init_once   = UCS_INIT_ONCE_INITIALIZER,
@@ -43,6 +45,7 @@ ze_driver_handle_t uct_ze_base_get_driver(void)
     if (uct_ze_base_init() != ZE_RESULT_SUCCESS) {
         return NULL;
     }
+
     return uct_ze_base.driver;
 }
 
@@ -77,16 +80,16 @@ uct_ze_get_pci_properties(ze_device_handle_t device, ucs_sys_bus_id_t *bus_id)
  */
 ze_result_t uct_ze_base_init(void)
 {
-    ze_result_t ret = ZE_RESULT_SUCCESS;
+    ze_result_t ret         = ZE_RESULT_SUCCESS;
+    uint32_t driver_count   = 1;
+    uint32_t root_dev_count = 0;
+    uint32_t subdev_count   = 0;
+    int global_subdevice_id = 0;
     ze_device_handle_t root_devices[UCT_ZE_MAX_DEVICES];
     ucs_status_t status;
     ucs_sys_bus_id_t bus_id;
     uct_ze_device_t *device;
     uct_ze_subdevice_t *subdevice;
-    uint32_t driver_count   = 1;
-    uint32_t root_dev_count = 0;
-    uint32_t subdev_count   = 0;
-    int global_subdevice_id = 0;
     int device_idx;
     int t;
     char name[16];
@@ -102,7 +105,7 @@ ze_result_t uct_ze_base_init(void)
 
         /* Get driver */
         ret = zeDriverGet(&driver_count, &uct_ze_base.driver);
-        if (ret != ZE_RESULT_SUCCESS || driver_count == 0) {
+        if ((ret != ZE_RESULT_SUCCESS) || (driver_count == 0)) {
             ucs_debug("failure to get ze driver: 0x%x, count=%u", ret,
                       driver_count);
             uct_ze_base.init_status = (ret != ZE_RESULT_SUCCESS) ?
@@ -121,7 +124,7 @@ ze_result_t uct_ze_base_init(void)
         }
 
         uct_ze_base.num_devices = (int)root_dev_count;
-        ucs_debug("Found %d ZE devices", uct_ze_base.num_devices);
+        ucs_debug("found %d ze devices", uct_ze_base.num_devices);
 
         /* Process each device */
         for (device_idx = 0; device_idx < uct_ze_base.num_devices;
@@ -145,7 +148,7 @@ ze_result_t uct_ze_base_init(void)
             /* Get PCI properties via separate API call */
             ret = uct_ze_get_pci_properties(device->root_device, &bus_id);
             if (ret != ZE_RESULT_SUCCESS) {
-                ucs_debug("failure to get PCI properties for device %d: 0x%x",
+                ucs_debug("failure to get pci properties for device %d: 0x%x",
                           device_idx, ret);
                 continue;
             }
@@ -190,11 +193,11 @@ ze_result_t uct_ze_base_init(void)
                 /* Single sub-device device: root device IS the sub-device */
                 device->num_subdevices = 1;
                 device->subdevices[0]  = device->root_device;
-                ucs_debug("Device %d is single sub-device", device_idx);
+                ucs_debug("device %d is single sub-device", device_idx);
             } else {
                 /* Multi sub-device device: get actual sub-devices */
                 if (subdev_count > UCT_ZE_MAX_SUBDEVICES) {
-                    ucs_warn("Device %d has %u sub-devices, limiting to %d",
+                    ucs_warn("device %d has %u sub-devices, limiting to %d",
                              device_idx, subdev_count, UCT_ZE_MAX_SUBDEVICES);
                     subdev_count = UCT_ZE_MAX_SUBDEVICES;
                 }
@@ -210,7 +213,7 @@ ze_result_t uct_ze_base_init(void)
                     device->num_subdevices = 1;
                     device->subdevices[0]  = device->root_device;
                 } else {
-                    ucs_debug("Device %d has %d sub-devices", device_idx,
+                    ucs_debug("device %d has %d sub-devices", device_idx,
                               device->num_subdevices);
                 }
             }
@@ -219,7 +222,7 @@ ze_result_t uct_ze_base_init(void)
             for (t = 0; t < device->num_subdevices; t++) {
                 if (global_subdevice_id >=
                     ucs_static_array_size(ze_subdevices)) {
-                    ucs_error("Too many sub-devices! Max %zu",
+                    ucs_error("too many sub-devices! max %zu",
                               ucs_static_array_size(ze_subdevices));
                     break;
                 }
@@ -238,7 +241,7 @@ ze_result_t uct_ze_base_init(void)
         ze_num_subdevices       = global_subdevice_id;
         uct_ze_base.init_status = ZE_RESULT_SUCCESS;
 
-        ucs_debug("ZE init complete: %d devices, %d total sub-devices",
+        ucs_debug("ze init complete: %d devices, %d total sub-devices",
                   uct_ze_base.num_devices, ze_num_subdevices);
     }
 
@@ -250,22 +253,26 @@ const uct_ze_subdevice_t *uct_ze_base_get_subdevice_by_global_id(int global_id)
     if (uct_ze_base_init() != ZE_RESULT_SUCCESS) {
         return NULL;
     }
-    if (global_id < 0 || global_id >= ze_num_subdevices) {
+
+    if ((global_id < 0) || (global_id >= ze_num_subdevices)) {
         return NULL;
     }
+
     return &ze_subdevices[global_id];
 }
 
 ze_device_handle_t
 uct_ze_base_get_device_handle_from_subdevice(const uct_ze_subdevice_t *subdevice)
 {
-    if (subdevice == NULL || subdevice->device == NULL) {
+    if ((subdevice == NULL) || (subdevice->device == NULL)) {
         return NULL;
     }
-    if (subdevice->subdevice_idx < 0 ||
-        subdevice->subdevice_idx >= subdevice->device->num_subdevices) {
+
+    if ((subdevice->subdevice_idx < 0) ||
+        (subdevice->subdevice_idx >= subdevice->device->num_subdevices)) {
         return NULL;
     }
+
     return subdevice->device->subdevices[subdevice->subdevice_idx];
 }
 
@@ -278,10 +285,8 @@ uct_ze_base_query_md_resources(uct_component_h component,
                                uct_md_resource_desc_t **resources_p,
                                unsigned *num_resources_p)
 {
-    ze_result_t ret = uct_ze_base_init();
-
-    if (ret != ZE_RESULT_SUCCESS || ze_num_subdevices == 0) {
-        ucs_debug("ZE initialization failed or no sub-devices, returning empty "
+    if ((uct_ze_base_init() != ZE_RESULT_SUCCESS) || (ze_num_subdevices == 0)) {
+        ucs_debug("ze initialization failed or no sub-devices, returning empty "
                   "resources");
         return uct_md_query_empty_md_resource(resources_p, num_resources_p);
     }
@@ -304,7 +309,7 @@ ucs_status_t uct_ze_base_query_devices(uct_md_h md,
     const uct_ze_device_t *device;
     int i;
 
-    if (uct_ze_base_init() != ZE_RESULT_SUCCESS || ze_num_subdevices == 0) {
+    if ((uct_ze_base_init() != ZE_RESULT_SUCCESS) || (ze_num_subdevices == 0)) {
         *tl_devices_p     = NULL;
         *num_tl_devices_p = 0;
         return UCS_OK;
@@ -337,7 +342,7 @@ ucs_status_t uct_ze_base_query_devices(uct_md_h md,
         /* This enables correct IB affinity for all sub-devices */
         resources[i].sys_device = device->sys_dev;
 
-        ucs_debug("Sub-device %d: name=%s sys_dev=%u (device %d, sub-device "
+        ucs_debug("sub-device %d: name=%s sys_dev=%u (device %d, sub-device "
                   "%d/%d)",
                   i, resources[i].name, resources[i].sys_device,
                   device->device_index, subdevice->subdevice_idx,
