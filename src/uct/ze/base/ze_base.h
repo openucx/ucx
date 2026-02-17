@@ -45,12 +45,14 @@ typedef struct {
     int                    device_index;
 } uct_ze_device_t;
 
+
 /* Level Zero sub-device descriptor */
 typedef struct {
     const uct_ze_device_t *device;
     int                   subdevice_idx;
     int                   global_id;
 } uct_ze_subdevice_t;
+
 
 ze_result_t uct_ze_base_init(void);
 
