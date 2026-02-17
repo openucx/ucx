@@ -307,4 +307,15 @@ static UCS_F_ALWAYS_INLINE ucp_lane_map_t ucp_ep_get_failed_lanes(ucp_ep_h ep)
     return ucp_ep_config_get_failed_lanes(&ucp_ep_config(ep)->key);
 }
 
+static UCS_F_ALWAYS_INLINE ucp_lane_map_t ucp_ep_get_alive_lanes(ucp_ep_h ep)
+{
+    ucp_lane_map_t lane_map = UCS_MASK(ucp_ep_num_lanes(ep));
+
+    if (ucp_ep_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_FAILOVER)) {
+        return lane_map & ~ucp_ep_get_failed_lanes(ep);
+    }
+
+    return lane_map;
+}
+
 #endif
