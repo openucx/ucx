@@ -351,8 +351,8 @@ struct ucp_request {
                                                      this request is waiting for */
                     uint8_t            sw_started;
                     uint8_t            sw_done;
-                    uint8_t            num_lanes; /* How many lanes are being flushed */
-                    ucp_lane_map_t     started_lanes; /* Which lanes need were flushed */
+                    ucp_lane_map_t     all_lanes;     /* All lanes that are being flushed */
+                    ucp_lane_map_t     started_lanes; /* Which lanes flush has been started on */
                     ucp_mem_flush_t    mem; /* Memory specific flushes */
                 } flush;
 
