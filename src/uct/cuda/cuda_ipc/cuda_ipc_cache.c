@@ -378,16 +378,12 @@ err:
 #endif
 
 #if HAVE_CUDA_FABRIC
-/* Verify the sender is on the same machine (via system_id), then duplicate
- * the sender's POSIX file descriptor into our process via pidfd_getfd
- * (Linux 5.6+) and import the VMM allocation through CUDA. */
 static ucs_status_t
 uct_cuda_ipc_open_memhandle_posix_fd(uct_cuda_ipc_rkey_t *key, CUdevice cu_dev,
                                      CUdeviceptr *mapped_addr,
                                      ucs_log_level_t log_level)
 {
-    int pidfd;
-    int local_fd;
+    int pidfd, local_fd;
     ucs_status_t status;
 
     if (key->ph.handle.posix_fd.system_id != ucs_get_system_id()) {
@@ -407,11 +403,11 @@ uct_cuda_ipc_open_memhandle_posix_fd(uct_cuda_ipc_rkey_t *key, CUdevice cu_dev,
 
     local_fd = syscall(SYS_pidfd_getfd, pidfd,
                        key->ph.handle.posix_fd.fd, 0);
-    close(pidfd);
     if (local_fd < 0) {
         ucs_log(log_level, "pidfd_getfd(pidfd=%d, pid=%d, fd=%d) failed: %m",
                 pidfd, (int)key->pid, key->ph.handle.posix_fd.fd);
-        return UCS_ERR_IO_ERROR;
+        status = UCS_ERR_IO_ERROR;
+        goto close_pidfd;
     }
 
     status = uct_cuda_ipc_open_memhandle_vmm(
@@ -420,11 +416,10 @@ uct_cuda_ipc_open_memhandle_posix_fd(uct_cuda_ipc_rkey_t *key, CUdevice cu_dev,
                     CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR,
                     log_level);
     close(local_fd);
-
-    ucs_trace("posix_fd import: "
-              "cuMemImportFromShareableHandle %s (mapped_addr=%p, cu_dev=%d)",
-              (status == UCS_OK) ? "succeeded" : "FAILED",
-              (status == UCS_OK) ? (void*)*mapped_addr : NULL, cu_dev);
+close_pidfd:
+    close(pidfd);
+    ucs_trace("posix_fd import from pid=%d: %s",
+              (int)key->pid, ucs_status_string(status));
     return status;
 }
 #endif
