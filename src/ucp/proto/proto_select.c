@@ -201,7 +201,8 @@ ucp_proto_select_init_protocols(ucp_worker_h worker,
     if (rkey_cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
         init_params.rkey_config_key = NULL;
     } else {
-        init_params.rkey_config_key = &worker->rkey_config[rkey_cfg_index].key;
+        init_params.rkey_config_key =
+                &ucs_array_elem(&worker->rkey_config, rkey_cfg_index).key;
 
         /* rkey configuration must be for the same ep */
         ucs_assertv_always(
@@ -831,7 +832,8 @@ ucp_proto_select_get(ucp_worker_h worker, ucp_worker_cfg_index_t ep_cfg_index,
         *new_rkey_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
         return &ucs_array_elem(&worker->ep_config, ep_cfg_index).proto_select;
     } else {
-        rkey_config_key = worker->rkey_config[rkey_cfg_index].key;
+        rkey_config_key =
+                ucs_array_elem(&worker->rkey_config, rkey_cfg_index).key;
 
         rkey_config_key.ep_cfg_index = ep_cfg_index;
         status = ucp_worker_rkey_config_get(worker, &rkey_config_key, NULL,
@@ -841,7 +843,8 @@ ucp_proto_select_get(ucp_worker_h worker, ucp_worker_cfg_index_t ep_cfg_index,
             return NULL;
         }
 
-        return &worker->rkey_config[*new_rkey_cfg_index].proto_select;
+        return &ucs_array_elem(&worker->rkey_config, *new_rkey_cfg_index)
+                        .proto_select;
     }
 }
 
