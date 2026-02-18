@@ -2158,6 +2158,20 @@ ucp_worker_config_array_release_old(ucp_worker_h worker, void *old_buffer,
     }
 }
 
+#define ucp_worker_config_array_append(_worker, _config_array, _failed_actions) \
+    ({ \
+        void *_old_buffer_p = NULL; \
+        ucs_typeof(ucs_array_begin(_config_array)) _config; \
+        \
+        _config = ucs_array_append_safe(_config_array, &_old_buffer_p, \
+                                        _failed_actions); \
+        ucp_worker_config_array_release_old( \
+                _worker, _old_buffer_p, ucs_array_begin(_config_array), \
+                sizeof(*ucs_array_begin(_config_array)) * \
+                        (ucs_array_length(_config_array) - 1)); \
+        _config; \
+    })
+
 /* All the ucp endpoints will share the configurations. No need for every ep to
  * have its own configuration (to save memory footprint). Same config can be used
  * by different eps.
@@ -2171,7 +2185,6 @@ ucs_status_t ucp_worker_get_ep_config(ucp_worker_h worker,
 {
     ucp_worker_cfg_index_t ep_cfg_index;
     ucp_ep_config_t *ep_config;
-    void *old_ep_cfg_buf;
     ucs_status_t status;
 
     ucs_assertv_always(key->num_lanes > 0,
@@ -2193,13 +2206,8 @@ ucs_status_t ucp_worker_get_ep_config(ucp_worker_h worker,
         return UCS_ERR_EXCEEDS_LIMIT;
     }
 
-    old_ep_cfg_buf = NULL;
-    ep_config      = ucs_array_append_safe(&worker->ep_config, &old_ep_cfg_buf,
-                                           return UCS_ERR_NO_MEMORY);
-    ucp_worker_config_array_release_old(
-            worker, old_ep_cfg_buf, worker->ep_config.buffer,
-            sizeof(ucp_ep_config_t) *
-                    (ucs_array_length(&worker->ep_config) - 1));
+    ep_config = ucp_worker_config_array_append(worker, &worker->ep_config,
+                                               return UCS_ERR_NO_MEMORY);
 
     status = ucp_ep_config_init(worker, ep_config, key);
     if (status != UCS_OK) {
@@ -2244,7 +2252,6 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
                                                        key->ep_cfg_index);
     ucp_worker_cfg_index_t rkey_cfg_index;
     ucp_rkey_config_t *rkey_config;
-    void *old_rkey_config_buf;
     ucp_lane_index_t lane;
     ucs_status_t status;
     khiter_t khiter;
@@ -2284,15 +2291,10 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
 
     /* Initialize rkey configuration */
     rkey_cfg_index      = ucs_array_length(&worker->rkey_config);
-    old_rkey_config_buf = NULL;
-    rkey_config         = ucs_array_append_safe(&worker->rkey_config,
-                                                &old_rkey_config_buf,
-                                                status = UCS_ERR_NO_MEMORY;
-                                                goto err;);
-    ucp_worker_config_array_release_old(
-            worker, old_rkey_config_buf, worker->rkey_config.buffer,
-            sizeof(ucp_rkey_config_t) *
-                    (ucs_array_length(&worker->rkey_config) - 1));
+    rkey_config         = ucp_worker_config_array_append(
+                                  worker, &worker->rkey_config,
+                                  status = UCS_ERR_NO_MEMORY;
+                                  goto err;);
 
     rkey_config->key = *key;
 
@@ -2695,9 +2697,9 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
 
     ucs_array_init_dynamic(&worker->rkey_config);
 
-    /* Reserve 128 elements for rkey configs.
+    /* Reserve 32 elements for rkey configs.
      * Will be extended automatically if needed in rkey_config addition. */
-    ucs_array_reserve(&worker->rkey_config, 128);
+    ucs_array_reserve(&worker->rkey_config, 32);
 
     /* Create statistics */
     status = UCS_STATS_NODE_ALLOC(&worker->stats, &ucp_worker_stats_class,
