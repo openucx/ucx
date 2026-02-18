@@ -1308,7 +1308,8 @@ void ucp_rkey_proto_select_dump(ucp_worker_h worker,
                                 ucp_worker_cfg_index_t rkey_cfg_index,
                                 ucs_string_buffer_t *strb)
 {
-    const ucp_rkey_config_t *rkey_config = &worker->rkey_config[rkey_cfg_index];
+    const ucp_rkey_config_t *rkey_config = &ucs_array_elem(&worker->rkey_config,
+                                                           rkey_cfg_index);
 
     ucp_proto_select_dump_short(&rkey_config->put_short, "put_short", strb);
     ucp_proto_select_info(worker, rkey_config->key.ep_cfg_index, rkey_cfg_index,
