@@ -15,7 +15,6 @@
 #include <uct/base/uct_iov.inl>
 #include <uct/cuda/base/cuda_md.h>
 #include <uct/cuda/base/cuda_ctx.inl>
-#include <uct/cuda/base/cuda_util.h>
 #include <ucs/profile/profile.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/sys/math.h>

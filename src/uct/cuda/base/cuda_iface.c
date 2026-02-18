@@ -10,7 +10,6 @@
 
 #include "cuda_iface.h"
 #include "cuda_ctx.inl"
-#include "cuda_util.h"
 #include "cuda_md.h"
 
 #include <ucs/sys/string.h>
