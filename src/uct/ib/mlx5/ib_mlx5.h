@@ -219,7 +219,6 @@ enum {
     UCT_IB_MLX5_MD_FLAG_DEVX_CQ          = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(CQ),
 };
 
-
 enum {
     UCT_IB_MLX5_SRQ_TOPO_LIST         = 0x0,
     UCT_IB_MLX5_SRQ_TOPO_CYCLIC       = 0x1,
