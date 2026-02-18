@@ -112,8 +112,7 @@ uct_cuda_ipc_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
 
 #if HAVE_CUDA_FABRIC
 static ucs_status_t
-uct_cuda_ipc_retain_and_export(void *addr, void *shareable_handle,
-                               CUmemAllocationHandleType handle_type)
+uct_cuda_ipc_mem_export_posix_fd(void *addr, uct_cuda_ipc_lkey_t *key)
 {
     CUmemGenericAllocationHandle alloc_handle;
     ucs_status_t status;
@@ -121,23 +120,14 @@ uct_cuda_ipc_retain_and_export(void *addr, void *shareable_handle,
     status = UCT_CUDADRV_FUNC(cuMemRetainAllocationHandle(&alloc_handle, addr),
                               UCS_LOG_LEVEL_DIAG);
     if (status != UCS_OK) {
+        ucs_debug("unable to export POSIX FD handle for ptr: %p", addr);
         return status;
     }
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemExportToShareableHandle(
-                    shareable_handle, alloc_handle, handle_type, 0));
+                    &key->ph.handle.posix_fd.fd, alloc_handle,
+                    CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR, 0));
     UCT_CUDADRV_FUNC_LOG_WARN(cuMemRelease(alloc_handle));
-    return status;
-}
-
-static ucs_status_t
-uct_cuda_ipc_mem_export_posix_fd(void *addr, uct_cuda_ipc_lkey_t *key)
-{
-    ucs_status_t status;
-
-    status = uct_cuda_ipc_retain_and_export(
-                    addr, &key->ph.handle.posix_fd.fd,
-                    CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR);
     if (status != UCS_OK) {
         ucs_debug("unable to export POSIX FD handle for ptr: %p", addr);
         return status;
@@ -162,6 +152,7 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
     CUdevice cuda_device;
 #if HAVE_CUDA_FABRIC
 #define UCT_CUDA_IPC_QUERY_NUM_ATTRS 3
+    CUmemGenericAllocationHandle handle;
     CUmemoryPool mempool;
     CUpointer_attribute attr_type[UCT_CUDA_IPC_QUERY_NUM_ATTRS];
     void *attr_data[UCT_CUDA_IPC_QUERY_NUM_ATTRS];
@@ -227,10 +218,18 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
         goto non_ipc;
     }
 
-    status = uct_cuda_ipc_retain_and_export(
-                    addr, &key->ph.handle.fabric_handle,
-                    CU_MEM_HANDLE_TYPE_FABRIC);
+    status = UCT_CUDADRV_FUNC(cuMemRetainAllocationHandle(&handle, addr),
+                              UCS_LOG_LEVEL_DIAG);
     if (status == UCS_OK) {
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemExportToShareableHandle(
+                    &key->ph.handle.fabric_handle, handle,
+                    CU_MEM_HANDLE_TYPE_FABRIC, 0));
+        UCT_CUDADRV_FUNC_LOG_WARN(cuMemRelease(handle));
+        if (status != UCS_OK) {
+            ucs_debug("unable to export handle for VMM ptr: %p", addr);
+            goto non_ipc;
+        }
+
         key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM;
         ucs_trace("packed vmm fabric handle for %p", addr);
         goto common_path;
