@@ -208,7 +208,7 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
 
     if (!(allowed_handle_types & CU_MEM_HANDLE_TYPE_FABRIC)) {
         if (allowed_handle_types &
-                    CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR) {
+            CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR) {
             status = uct_cuda_ipc_mem_export_posix_fd(addr, key);
             if (status != UCS_OK) {
                 goto out_pop_ctx;

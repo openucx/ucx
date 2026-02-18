@@ -399,12 +399,6 @@ uct_cuda_ipc_open_memhandle_posix_fd(uct_cuda_ipc_rkey_t *key, CUdevice cu_dev,
         return UCS_ERR_UNREACHABLE;
     }
 
-    ucs_trace("posix_fd import: same machine verified "
-              "(system_id=0x%" PRIx64 "), duplicating fd=%d "
-              "from pid=%d via pidfd_getfd",
-              key->ph.handle.posix_fd.system_id,
-              key->ph.handle.posix_fd.fd, (int)key->pid);
-
     pidfd = syscall(SYS_pidfd_open, (int)key->pid, 0);
     if (pidfd < 0) {
         ucs_log(log_level, "pidfd_open(%d) failed: %m", (int)key->pid);
@@ -419,10 +413,6 @@ uct_cuda_ipc_open_memhandle_posix_fd(uct_cuda_ipc_rkey_t *key, CUdevice cu_dev,
                 pidfd, (int)key->pid, key->ph.handle.posix_fd.fd);
         return UCS_ERR_IO_ERROR;
     }
-
-    ucs_trace("posix_fd import: duplicated remote fd=%d -> "
-              "local_fd=%d (cu_dev=%d)",
-              key->ph.handle.posix_fd.fd, local_fd, cu_dev);
 
     status = uct_cuda_ipc_open_memhandle_vmm(
                     key, cu_dev, mapped_addr,

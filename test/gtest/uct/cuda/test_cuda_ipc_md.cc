@@ -339,22 +339,16 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_system_id_mismatch)
 
     posix_fd_alloc_reg_pack(&ptr, &handle, &size, &memh, &rkey);
 
-    /* Verify system_id was packed correctly before we tamper with it */
     EXPECT_EQ(ucs_get_system_id(), rkey.ph.handle.posix_fd.system_id);
 
-    /* Tamper system_id to simulate a key arriving from a different machine */
+    /* Tamper system_id to simulate a different machine */
     rkey.ph.handle.posix_fd.system_id ^= 0xDEADBEEFDEADBEEFULL;
 
-    /* Tamper UUID to bypass the same-process shortcut in
-     * uct_cuda_ipc_map_memhandle (PID match + UUID match -> early return).
-     * We need the code to reach uct_cuda_ipc_open_memhandle where the
-     * system_id check lives. */
+    /* Tamper UUID to bypass same-process shortcut */
     int64_t *uuid64 = (int64_t *)rkey.uuid.bytes;
     uuid64[0]       = 0xDEADll;
     uuid64[1]       = 0xBEEFll;
 
-    /* Unpack must fail: the system_id mismatch causes UCS_ERR_UNREACHABLE
-     * before any FD duplication or CUDA import is attempted */
     uct_rkey_unpack_params_t unpack_params = { 0 };
     EXPECT_EQ(UCS_ERR_UNREACHABLE,
               uct_rkey_unpack_v2(md()->component, &rkey, &unpack_params,
@@ -388,7 +382,6 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
     }
     ASSERT_UCS_OK(status);
 
-    /* Fill the buffer with a known pattern before packing */
     ASSERT_EQ(CUDA_SUCCESS, cuMemsetD8(ptr, 0xAB, size));
 
     EXPECT_UCS_OK(md()->ops->mem_reg(md(), (void *)ptr, size, NULL, &memh));
@@ -397,25 +390,15 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
     EXPECT_EQ(UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD, rkey.ph.handle_type);
     EXPECT_EQ(ucs_get_system_id(), rkey.ph.handle.posix_fd.system_id);
 
-    /* Tamper UUID to bypass the same-process shortcut in
-     * uct_cuda_ipc_map_memhandle (PID match + UUID match -> early return).
-     * This forces the code through uct_cuda_ipc_open_memhandle where the
-     * system_id check, pidfd_open/pidfd_getfd FD duplication, and
-     * cuMemImportFromShareableHandle are exercised. */
+    /* Tamper UUID to bypass same-process shortcut and exercise the full
+     * POSIX FD import path (pidfd_open/pidfd_getfd + cuMemImport) */
     int64_t *uuid64 = (int64_t *)rkey.uuid.bytes;
     uuid64[0]       = 0x1234ll;
     uuid64[1]       = 0x5678ll;
 
     uct_component_t *component = md()->component;
 
-    /* Run unpack on a separate thread with its own CUDA context.
-     * The same-process shortcut fails (UUID mismatch), so the full
-     * POSIX FD import path is entered:
-     *   1. system_id verified (same machine -> passes)
-     *   2. pidfd_open/pidfd_getfd duplicate our own FD
-     *   3. cuMemImportFromShareableHandle imports the allocation
-     * Then verify the imported mapping is usable by reading the data
-     * pattern back through it. */
+    /* Unpack on a separate thread with its own CUDA context */
     std::exception_ptr thread_exception;
     std::thread([&]() {
         try {
@@ -436,7 +419,6 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
                     component, &rkey, &unpack_params, &rkey_bundle);
             ASSERT_UCS_OK(unpack_status);
 
-            /* Retrieve the mapped address for data verification */
             uct_cuda_ipc_unpacked_rkey_t *unpacked =
                 (uct_cuda_ipc_unpacked_rkey_t *)rkey_bundle.rkey;
             void *mapped_addr;
@@ -445,8 +427,7 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
                     UCS_LOG_LEVEL_ERROR);
             ASSERT_UCS_OK(map_status);
 
-            /* Read data through the imported mapping and verify the
-             * 0xAB pattern written by the main thread is visible. */
+            /* Verify the 0xAB pattern is visible through imported mapping */
             std::vector<uint8_t> host_buf(size);
             ASSERT_EQ(CUDA_SUCCESS, cuMemcpyDtoH(
                     host_buf.data(), (CUdeviceptr)mapped_addr, size));
@@ -476,7 +457,8 @@ _UCT_MD_INSTANTIATE_TEST_CASE(test_cuda_ipc_md, cuda_ipc);
 
 class test_cuda_ipc_posix_fd : public uct_test {
 protected:
-    void init() {
+    void init()
+    {
         uct_test::init();
 
         m_receiver = uct_test::create_entity(0);
@@ -557,30 +539,22 @@ UCS_TEST_P(test_cuda_ipc_posix_fd, put_zcopy)
     alloc_vmm_buffer(&recv_ptr, &recv_handle, length, granularity, prop,
                      access_desc);
 
-    /* Register send buffer with sender entity */
     uct_allocated_memory_t send_mem;
     init_cuda_mem(&send_mem, (void *)send_ptr, length);
     m_sender->mem_type_reg(&send_mem, UCT_MD_MEM_ACCESS_ALL);
 
-    /* Register recv buffer with receiver entity */
     uct_allocated_memory_t recv_mem;
     init_cuda_mem(&recv_mem, (void *)recv_ptr, length);
     m_receiver->mem_type_reg(&recv_mem, UCT_MD_MEM_ACCESS_ALL);
 
-    /* Unpack rkey for recv buffer. The same-process shortcut in
-     * uct_cuda_ipc_map_memhandle is used (PID + UUID match). The
-     * posix_fd_same_node_ipc test validates the full POSIX FD import
-     * path by tampering the UUID to bypass this shortcut. */
     uct_rkey_bundle_t rkey_bundle = {};
     m_receiver->rkey_unpack(&recv_mem, &rkey_bundle);
 
-    /* Fill send buffer with pattern, recv buffer with different pattern */
     mem_buffer::pattern_fill((void *)send_ptr, length, SEED1,
                              UCS_MEMORY_TYPE_CUDA);
     mem_buffer::pattern_fill((void *)recv_ptr, length, SEED2,
                              UCS_MEMORY_TYPE_CUDA);
 
-    /* Prepare iov for send */
     uct_iov_t iov;
     iov.buffer = (void *)send_ptr;
     iov.length = length;
@@ -588,17 +562,14 @@ UCS_TEST_P(test_cuda_ipc_posix_fd, put_zcopy)
     iov.stride = 0;
     iov.memh   = send_mem.memh;
 
-    /* Do put_zcopy */
     ASSERT_UCS_OK_OR_INPROGRESS(uct_ep_put_zcopy(m_sender->ep(0), &iov, 1,
                                                   (uint64_t)recv_ptr,
                                                   rkey_bundle.rkey, NULL));
     m_sender->flush();
 
-    /* Verify data */
     mem_buffer::pattern_check((void *)recv_ptr, length, SEED1,
                               UCS_MEMORY_TYPE_CUDA);
 
-    /* Cleanup */
     m_receiver->rkey_release(&rkey_bundle);
     m_receiver->mem_type_dereg(&recv_mem);
     m_sender->mem_type_dereg(&send_mem);
