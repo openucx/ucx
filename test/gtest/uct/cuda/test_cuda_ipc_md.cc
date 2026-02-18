@@ -132,7 +132,7 @@ protected:
 
                // No context and some valid sys_dev is provided
                ucs_sys_device_t sys_dev;
-               uct_cuda_base_get_sys_dev(0, &sys_dev);
+               uct_cuda_get_sys_dev(0, &sys_dev);
 
                unpack_params.sys_device = sys_dev;
                status = uct_rkey_unpack_v2(md()->component, rkey.data(),

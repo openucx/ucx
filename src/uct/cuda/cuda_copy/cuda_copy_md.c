@@ -147,7 +147,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_reg,
     CUresult result;
     ucs_status_t status;
 
-    if (!uct_cuda_base_is_context_active()) {
+    if (!uct_cuda_is_context_active()) {
         ucs_debug("attempt to register memory without active context");
         *memh_p = &uct_cuda_dummy_memh;
         return UCS_OK;
@@ -375,8 +375,8 @@ uct_cuda_copy_mem_alloc(uct_md_h uct_md, size_t *length_p, void **address_p,
     alloc_handle->length = *length_p;
     alloc_handle->is_vmm = 0;
 
-    status = uct_cuda_base_push_alloc_ctx(md->config.retain_primary_ctx, sys_dev,
-                                          &cu_device, &alloc_cu_device, log_level);
+    status = uct_cuda_push_alloc_ctx(md->config.retain_primary_ctx, sys_dev,
+                                     &cu_device, &alloc_cu_device, log_level);
     if (status != UCS_OK) {
         return UCS_ERR_NO_DEVICE;
     }
@@ -430,7 +430,7 @@ allocated:
 
 out:
     if (cu_device != alloc_cu_device) {
-        uct_cuda_base_pop_alloc_ctx(alloc_cu_device);
+        uct_cuda_pop_alloc_ctx(alloc_cu_device);
     }
 
     return status;
@@ -582,7 +582,7 @@ static void uct_cuda_copy_md_sync_memops_get_address_range(
     mem_info->alloc_length = length;
 
     if (cuda_ctx == NULL) {
-        status = uct_cuda_base_push_ctx(cuda_device, 0, UCS_LOG_LEVEL_ERROR);
+        status = uct_cuda_push_ctx(cuda_device, 0, UCS_LOG_LEVEL_ERROR);
     } else {
         status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(cuda_ctx));
     }
@@ -692,7 +692,7 @@ uct_cuda_copy_md_query_attributes(const uct_cuda_copy_md_t *md,
             if (pref_loc == CU_DEVICE_CPU) {
                 mem_info->sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
             } else {
-                uct_cuda_base_get_sys_dev(pref_loc, &mem_info->sys_dev);
+                uct_cuda_get_sys_dev(pref_loc, &mem_info->sys_dev);
                 if (mem_info->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
                     ucs_diag("cu_device %d (for address %p...%p) unrecognized",
                              pref_loc, address,
@@ -721,7 +721,7 @@ uct_cuda_copy_md_query_attributes(const uct_cuda_copy_md_t *md,
         goto out_default_range;
     }
 
-    uct_cuda_base_get_sys_dev(cuda_device, &mem_info->sys_dev);
+    uct_cuda_get_sys_dev(cuda_device, &mem_info->sys_dev);
     if (mem_info->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
         return UCS_ERR_NO_DEVICE;
     }
@@ -795,7 +795,7 @@ static int uct_cuda_copy_md_get_dmabuf_fd(uintptr_t address, size_t length,
     ucs_debug("cuMemGetHandleForAddressRange(address=0x%lx length=%zu "
               "flags=%llx DMA_BUF_FD) failed: %s",
               address, length, flags,
-              uct_cuda_base_cu_get_error_string(cu_err));
+              uct_cuda_cu_get_error_string(cu_err));
 #endif
     return UCT_DMABUF_FD_INVALID;
 }

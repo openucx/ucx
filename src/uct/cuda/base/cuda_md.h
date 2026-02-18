@@ -9,8 +9,6 @@
 #include <uct/base/uct_iface.h>
 #include <uct/base/uct_md.h>
 
-#include <cuda.h>
-
 
 ucs_status_t
 uct_cuda_base_query_md_resources(uct_component_t *component,
@@ -43,19 +41,5 @@ uct_cuda_base_query_devices(uct_md_h md,
  *         invalid.
  */
 ucs_status_t uct_cuda_base_check_device_name(const uct_iface_params_t *params);
-
-
-ucs_status_t uct_cuda_base_push_ctx(CUdevice device, int retain_inactive,
-                                    ucs_log_level_t log_level);
-
-
-ucs_status_t uct_cuda_base_push_alloc_ctx(int retain_inactive,
-                                          const ucs_sys_device_t sys_dev,
-                                          CUdevice *cu_device_p,
-                                          CUdevice *alloc_cu_device_p,
-                                          ucs_log_level_t log_level);
-
-
-void uct_cuda_base_pop_alloc_ctx(CUdevice cu_device);
 
 #endif

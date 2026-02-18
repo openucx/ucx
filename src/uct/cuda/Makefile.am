@@ -23,6 +23,7 @@ noinst_HEADERS = \
 	base/cuda_md.h \
 	base/cuda_iface.h \
 	base/cuda_nvml.h \
+	base/cuda_util.h \
 	cuda_copy/cuda_copy_md.h \
 	cuda_copy/cuda_copy_iface.h \
 	cuda_copy/cuda_copy_ep.h \
@@ -36,6 +37,7 @@ libuct_cuda_la_SOURCES = \
 	base/cuda_iface.c \
 	base/cuda_md.c \
 	base/cuda_nvml.c \
+	base/cuda_util.c \
 	cuda_copy/cuda_copy_md.c \
 	cuda_copy/cuda_copy_iface.c \
 	cuda_copy/cuda_copy_ep.c \

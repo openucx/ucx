@@ -309,7 +309,7 @@ uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *component,
             return UCS_ERR_UNREACHABLE;
         }
     } else {
-        status = uct_cuda_base_get_cuda_device(sys_dev, &cu_dev);
+        status = uct_cuda_get_cuda_device(sys_dev, &cu_dev);
         if (status != UCS_OK) {
             ucs_warn("failed to map sys device [%d] to cuda device: %s",
                      sys_dev, ucs_status_string(status));
@@ -389,14 +389,14 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_rkey_unpack,
 
     unpacked->super = *packed;
 
-    status = uct_cuda_base_push_alloc_ctx(0, sys_dev, &cu_device,
-                                          &alloc_cu_device, UCS_LOG_LEVEL_DEBUG);
+    status = uct_cuda_push_alloc_ctx(0, sys_dev, &cu_device, &alloc_cu_device,
+                                     UCS_LOG_LEVEL_DEBUG);
     if (status != UCS_OK) {
         goto err_free_key;
     }
 
     status = uct_cuda_ipc_is_peer_accessible(com, unpacked, sys_dev);
-    uct_cuda_base_pop_alloc_ctx(alloc_cu_device);
+    uct_cuda_pop_alloc_ctx(alloc_cu_device);
     if (status != UCS_OK) {
         goto err_free_key;
     }

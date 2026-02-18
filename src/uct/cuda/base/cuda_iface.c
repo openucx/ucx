@@ -17,20 +17,6 @@
 #define UCT_CUDA_DEV_NAME "cuda"
 
 
-const char *uct_cuda_base_cu_get_error_string(CUresult result)
-{
-    static __thread char buf[64];
-    const char *error_str;
-
-    if (cuGetErrorString(result, &error_str) != CUDA_SUCCESS) {
-        ucs_snprintf_safe(buf, sizeof(buf), "unrecognized error code %d",
-                          result);
-        error_str = buf;
-    }
-
-    return error_str;
-}
-
 ucs_status_t
 uct_cuda_base_query_devices_common(
         uct_md_h md, uct_device_type_t dev_type,
@@ -40,13 +26,13 @@ uct_cuda_base_query_devices_common(
     CUdevice cuda_device;
     ucs_status_t status;
 
-    if (uct_cuda_base_is_context_active()) {
+    if (uct_cuda_is_context_active()) {
         status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetDevice(&cuda_device));
         if (status != UCS_OK) {
             return status;
         }
 
-        uct_cuda_base_get_sys_dev(cuda_device, &sys_device);
+        uct_cuda_get_sys_dev(cuda_device, &sys_device);
     } else {
         ucs_debug("set cuda sys_device to `unknown` as no context is"
                   " currently active");
