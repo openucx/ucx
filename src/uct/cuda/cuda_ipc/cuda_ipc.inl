@@ -9,8 +9,8 @@
 #include <uct/cuda/base/cuda_iface.h>
 #include <uct/cuda/cuda_ipc/cuda_ipc_md.h>
 #include <uct/cuda/cuda_ipc/cuda_ipc_cache.h>
+#include <uct/cuda/base/cuda_ctx.inl>
 
-#include <cuda.h>
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_cuda_ipc_check_and_push_ctx(CUdeviceptr address, CUdevice *cuda_device_p,
@@ -46,7 +46,7 @@ uct_cuda_ipc_check_and_push_ctx(CUdeviceptr address, CUdevice *cuda_device_p,
     }
 
     if (cuda_ctx == NULL) {
-        status = uct_cuda_primary_ctx_retain(cuda_device, 0, &cuda_ctx);
+        status = uct_cuda_ctx_primary_retain(cuda_device, 0, &cuda_ctx);
         if (ucs_unlikely(status != UCS_OK)) {
            return status;
         }

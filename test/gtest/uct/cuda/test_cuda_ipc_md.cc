@@ -12,6 +12,7 @@
 extern "C" {
 #include <uct/cuda/cuda_ipc/cuda_ipc_md.h>
 #include <uct/cuda/base/cuda_iface.h>
+#include <uct/cuda/base/cuda_util.h>
 }
 
 class test_cuda_ipc_md : public test_md {

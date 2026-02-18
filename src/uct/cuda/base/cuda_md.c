@@ -9,6 +9,7 @@
 
 #include "cuda_md.h"
 #include "cuda_iface.h"
+#include "cuda_util.h"
 
 #include <ucs/sys/module.h>
 #include <ucs/sys/string.h>

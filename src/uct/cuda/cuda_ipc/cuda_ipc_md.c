@@ -19,6 +19,7 @@
 #include <ucs/type/class.h>
 #include <uct/api/v2/uct_v2.h>
 #include <uct/cuda/base/cuda_nvml.h>
+#include <uct/cuda/base/cuda_util.h>
 
 #include <limits.h>
 #include <string.h>
@@ -389,14 +390,14 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_rkey_unpack,
 
     unpacked->super = *packed;
 
-    status = uct_cuda_push_alloc_ctx(0, sys_dev, &cu_device, &alloc_cu_device,
+    status = uct_cuda_ctx_push_alloc(0, sys_dev, &cu_device, &alloc_cu_device,
                                      UCS_LOG_LEVEL_DEBUG);
     if (status != UCS_OK) {
         goto err_free_key;
     }
 
     status = uct_cuda_ipc_is_peer_accessible(com, unpacked, sys_dev);
-    uct_cuda_pop_alloc_ctx(alloc_cu_device);
+    uct_cuda_ctx_pop_alloc(alloc_cu_device);
     if (status != UCS_OK) {
         goto err_free_key;
     }

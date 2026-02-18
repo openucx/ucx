@@ -18,7 +18,8 @@
 #include <ucs/profile/profile.h>
 #include <ucs/type/class.h>
 #include <ucs/sys/ptr_arith.h>
-#include <uct/cuda/base/cuda_iface.h>
+#include <uct/cuda/base/cuda_ctx.inl>
+#include <uct/cuda/base/cuda_util.h>
 #include <uct/api/v2/uct_v2.h>
 #include <cuda.h>
 #if CUDA_VERSION >= 11070
@@ -147,7 +148,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_reg,
     CUresult result;
     ucs_status_t status;
 
-    if (!uct_cuda_is_context_active()) {
+    if (!uct_cuda_ctx_is_active()) {
         ucs_debug("attempt to register memory without active context");
         *memh_p = &uct_cuda_dummy_memh;
         return UCS_OK;
@@ -375,7 +376,7 @@ uct_cuda_copy_mem_alloc(uct_md_h uct_md, size_t *length_p, void **address_p,
     alloc_handle->length = *length_p;
     alloc_handle->is_vmm = 0;
 
-    status = uct_cuda_push_alloc_ctx(md->config.retain_primary_ctx, sys_dev,
+    status = uct_cuda_ctx_push_alloc(md->config.retain_primary_ctx, sys_dev,
                                      &cu_device, &alloc_cu_device, log_level);
     if (status != UCS_OK) {
         return UCS_ERR_NO_DEVICE;
@@ -430,7 +431,7 @@ allocated:
 
 out:
     if (cu_device != alloc_cu_device) {
-        uct_cuda_pop_alloc_ctx(alloc_cu_device);
+        uct_cuda_ctx_pop_alloc(alloc_cu_device);
     }
 
     return status;
@@ -582,7 +583,7 @@ static void uct_cuda_copy_md_sync_memops_get_address_range(
     mem_info->alloc_length = length;
 
     if (cuda_ctx == NULL) {
-        status = uct_cuda_push_ctx(cuda_device, 0, UCS_LOG_LEVEL_ERROR);
+        status = uct_cuda_ctx_push(cuda_device, 0, UCS_LOG_LEVEL_ERROR);
     } else {
         status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(cuda_ctx));
     }

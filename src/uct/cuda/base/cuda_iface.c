@@ -9,6 +9,8 @@
 #endif
 
 #include "cuda_iface.h"
+#include "cuda_ctx.inl"
+#include "cuda_util.h"
 #include "cuda_md.h"
 
 #include <ucs/sys/string.h>
@@ -26,7 +28,7 @@ uct_cuda_base_query_devices_common(
     CUdevice cuda_device;
     ucs_status_t status;
 
-    if (uct_cuda_is_context_active()) {
+    if (uct_cuda_ctx_is_active()) {
         status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetDevice(&cuda_device));
         if (status != UCS_OK) {
             return status;

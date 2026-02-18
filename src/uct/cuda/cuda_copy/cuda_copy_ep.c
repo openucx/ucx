@@ -14,6 +14,8 @@
 #include <uct/base/uct_log.h>
 #include <uct/base/uct_iov.inl>
 #include <uct/cuda/base/cuda_md.h>
+#include <uct/cuda/base/cuda_ctx.inl>
+#include <uct/cuda/base/cuda_util.h>
 #include <ucs/profile/profile.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/sys/math.h>
@@ -184,7 +186,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_ctx_rsc_get(
             goto err;
         }
 
-        status = uct_cuda_push_ctx(cuda_device, 0, UCS_LOG_LEVEL_ERROR);
+        status = uct_cuda_ctx_push(cuda_device, 0, UCS_LOG_LEVEL_ERROR);
         if (ucs_unlikely(status == UCS_ERR_NO_DEVICE)) {
             /* Device primary context of `cuda_device` is inactive. The memory
              * was probably allocated on the context created with cuCtxCreate.
@@ -221,7 +223,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_ctx_rsc_get(
         /* Specific GPU device was not requested, push the first active primary
          * context as current context. The caller must pop, and release the
          * primary context on the device returned in cuda_device_p. */
-        status = uct_cuda_primary_ctx_push_first_active(&cuda_device);
+        status = uct_cuda_ctx_primary_push_first_active(&cuda_device);
         if (status != UCS_OK) {
             goto err;
         }
@@ -245,7 +247,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_ctx_rsc_get(
     return UCS_OK;
 
 err_pop_and_release:
-    uct_cuda_copy_ctx_pop_and_release(cuda_device, cuda_context);
+    uct_cuda_ctx_pop_and_release(cuda_device, cuda_context);
 err:
     return status;
 }
@@ -350,7 +352,7 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
     status = UCS_INPROGRESS;
 
 out_pop_and_release:
-    uct_cuda_copy_ctx_pop_and_release(ctx.cuda_device, ctx.cuda_context);
+    uct_cuda_ctx_pop_and_release(ctx.cuda_device, ctx.cuda_context);
 out:
     return status;
 err_mpool_put:
@@ -428,7 +430,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_ep_rma_short(
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuStreamSynchronize(*stream));
 
 out_pop_and_release:
-    uct_cuda_copy_ctx_pop_and_release(ctx.cuda_device, ctx.cuda_context);
+    uct_cuda_ctx_pop_and_release(ctx.cuda_device, ctx.cuda_context);
 out:
     return status;
 }
