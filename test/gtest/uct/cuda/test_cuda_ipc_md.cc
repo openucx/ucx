@@ -15,6 +15,8 @@ extern "C" {
 #include <uct/cuda/base/cuda_iface.h>
 #include <ucs/sys/ptr_arith.h>
 #include <ucs/sys/uid.h>
+#include <sys/syscall.h>
+#include <unistd.h>
 }
 
 class test_cuda_ipc_md : public test_md {
@@ -422,26 +424,36 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
             uct_cuda_ipc_unpacked_rkey_t *unpacked =
                 (uct_cuda_ipc_unpacked_rkey_t *)rkey_bundle.rkey;
             void *mapped_addr;
-            ucs_log_level_t log_level = HAVE_DECL_SYS_PIDFD_GETFD ?
+            bool pidfd_supported = false;
+            int probe_pidfd = syscall(SYS_pidfd_open, getpid(), 0);
+            if (probe_pidfd >= 0) {
+                int dup_fd = syscall(SYS_pidfd_getfd, probe_pidfd,
+                                     STDOUT_FILENO, 0);
+                pidfd_supported = (dup_fd >= 0);
+                if (dup_fd >= 0) {
+                    close(dup_fd);
+                }
+                close(probe_pidfd);
+            }
+
+            ucs_log_level_t log_level = pidfd_supported ?
                     UCS_LOG_LEVEL_ERROR : UCS_LOG_LEVEL_DIAG;
             ucs_status_t map_status = uct_cuda_ipc_map_memhandle(
                     &unpacked->super, dev, &mapped_addr, log_level);
 
-#if HAVE_DECL_SYS_PIDFD_GETFD
-            ASSERT_UCS_OK(map_status);
+            if (pidfd_supported) {
+                ASSERT_UCS_OK(map_status);
 
-            std::vector<uint8_t> host_buf(size);
-            ASSERT_EQ(CUDA_SUCCESS, cuMemcpyDtoH(
-                    host_buf.data(), (CUdeviceptr)mapped_addr, size));
-            for (size_t i = 0; i < size; i++) {
-                ASSERT_EQ(0xAB, host_buf[i])
-                    << "Data mismatch at byte " << i;
+                std::vector<uint8_t> host_buf(size);
+                ASSERT_EQ(CUDA_SUCCESS, cuMemcpyDtoH(
+                        host_buf.data(), (CUdeviceptr)mapped_addr, size));
+                for (size_t i = 0; i < size; i++) {
+                    ASSERT_EQ(0xAB, host_buf[i])
+                        << "Data mismatch at byte " << i;
+                }
+            } else {
+                EXPECT_EQ(UCS_ERR_IO_ERROR, map_status);
             }
-#else
-            /* Assuming running on the same system as compiled on.
-             * The call should fail to import the handle */
-            EXPECT_EQ(UCS_ERR_IO_ERROR, map_status);
-#endif
 
             uct_rkey_release(component, &rkey_bundle);
             cuCtxDestroy(ctx);
