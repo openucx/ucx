@@ -7,11 +7,11 @@
 #define UCT_CUDA_IFACE_H
 
 #include <uct/base/uct_iface.h>
-#include <uct/cuda/base/cuda_util.h>
 #include <ucs/sys/preprocessor.h>
 #include <ucs/profile/profile.h>
 #include <ucs/async/eventfd.h>
 #include <ucs/datastruct/khash.h>
+#include <uct/cuda/base/cuda_util.h>
 
 
 
