@@ -369,7 +369,7 @@ UCS_TEST_P(test_cuda_ipc_md, mnnvl_disabled)
 
 UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
 {
-#if HAVE_DECL_SYS_PIDFD_GETFD && HAVE_CUDA_FABRIC
+#if HAVE_CUDA_FABRIC
     size_t size = 4096;
     CUdeviceptr ptr;
     CUmemGenericAllocationHandle handle;
@@ -422,12 +422,14 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
             uct_cuda_ipc_unpacked_rkey_t *unpacked =
                 (uct_cuda_ipc_unpacked_rkey_t *)rkey_bundle.rkey;
             void *mapped_addr;
+            ucs_log_level_t log_level = HAVE_DECL_SYS_PIDFD_GETFD ?
+                    UCS_LOG_LEVEL_ERROR : UCS_LOG_LEVEL_DIAG;
             ucs_status_t map_status = uct_cuda_ipc_map_memhandle(
-                    &unpacked->super, dev, &mapped_addr,
-                    UCS_LOG_LEVEL_ERROR);
+                    &unpacked->super, dev, &mapped_addr, log_level);
+
+#if HAVE_DECL_SYS_PIDFD_GETFD
             ASSERT_UCS_OK(map_status);
 
-            /* Verify the 0xAB pattern is visible through imported mapping */
             std::vector<uint8_t> host_buf(size);
             ASSERT_EQ(CUDA_SUCCESS, cuMemcpyDtoH(
                     host_buf.data(), (CUdeviceptr)mapped_addr, size));
@@ -435,6 +437,11 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
                 ASSERT_EQ(0xAB, host_buf[i])
                     << "Data mismatch at byte " << i;
             }
+#else
+            /* Assuming running on the same system as compiled on.
+             * The call should fail to import the handle */
+            EXPECT_EQ(UCS_ERR_IO_ERROR, map_status);
+#endif
 
             uct_rkey_release(component, &rkey_bundle);
             cuCtxDestroy(ctx);
@@ -449,7 +456,7 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
 
     posix_fd_dereg_free(memh, ptr, handle, size);
 #else
-    UCS_TEST_SKIP_R("SYS_pidfd_getfd not supported");
+    UCS_TEST_SKIP_R("built without fabric support");
 #endif
 }
 
