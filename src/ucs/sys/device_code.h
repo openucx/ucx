@@ -27,8 +27,8 @@
 /* nvcc does not provide __builtin_ia32_prefetch used by GCC's x86 intrinsic headers.
    Redirect to the generic __builtin_prefetch so those headers compile. */
 #if defined(__NVCC__) && !defined(__builtin_ia32_prefetch)
-  #define __builtin_ia32_prefetch(P, RW, LOC, CACHE) \
-    __builtin_prefetch((P), (RW), (LOC))
+  #define __builtin_ia32_prefetch(_p, _rw, _loc, _cache) \
+    __builtin_prefetch((_p), (_rw), (_loc))
 #endif
 
 

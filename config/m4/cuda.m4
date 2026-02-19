@@ -3,8 +3,7 @@
 # See file LICENSE for terms.
 #
 
-NVCC_CUDA_MIN_REQUIRED_MAJOR=10
-NVCC_CUDA_MIN_REQUIRED_MINOR=2
+NVCC_CUDA_MIN_REQUIRED=10.2
 
 ARCH9_CODE="-gencode=arch=compute_70,code=sm_70"
 ARCH10_CODE="-gencode=arch=compute_75,code=sm_75"
@@ -45,28 +44,20 @@ AC_DEFUN([AC_LANG_COMPILER(CUDA)], [
     AC_SUBST([NVCC], [$NVCC])
 ])
 
-AC_DEFUN([UCX_CHECK_CUDA_GE], [{ [test "$CUDA_MAJOR_VERSION" -gt "$1"] ||
-    [test "$CUDA_MAJOR_VERSION" -eq "$1" &&
-     test "$CUDA_MINOR_VERSION" -ge "$2"];}])
-
-AC_DEFUN([UCX_CHECK_CUDA_LT], [{ [test "$CUDA_MAJOR_VERSION" -lt "$1"] ||
-    [test "$CUDA_MAJOR_VERSION" -eq "$1" &&
-     test "$CUDA_MINOR_VERSION" -lt "$2"];}])
-
 # Check for nvcc compiler support
 AC_DEFUN([UCX_CUDA_CHECK_NVCC], [
     AS_IF([test "x$NVCC" != "x"], [
-        CUDA_MAJOR_VERSION=$($NVCC --version | grep release | sed 's/.*release //' | sed 's/\,.*//' |  cut -d "." -f 1)
-        CUDA_MINOR_VERSION=$($NVCC --version | grep release | sed 's/.*release //' | sed 's/\,.*//' |  cut -d "." -f 2)
-        AC_MSG_RESULT([Detected CUDA version: $CUDA_MAJOR_VERSION.$CUDA_MINOR_VERSION])
-        AS_IF([UCX_CHECK_CUDA_LT([$NVCC_CUDA_MIN_REQUIRED_MAJOR],
-                                 [$NVCC_CUDA_MIN_REQUIRED_MINOR])],
-              [AC_MSG_WARN([Minimum required CUDA version for device code: $NVCC_CUDA_MIN_REQUIRED_MAJOR.$NVCC_CUDA_MIN_REQUIRED_MINOR])
+        CUDA_VERSION=$($NVCC --version | grep release | sed 's/.*release //' | sed 's/\,.*//')
+        CUDA_MAJOR_VERSION=$(echo $CUDA_VERSION | cut -d "." -f 1)
+        CUDA_MINOR_VERSION=$(echo $CUDA_VERSION | cut -d "." -f 2)
+        AC_MSG_RESULT([Detected CUDA version: $CUDA_VERSION])
+        AS_VERSION_COMPARE([$CUDA_VERSION], [$NVCC_CUDA_MIN_REQUIRED], [],
+              [AC_MSG_WARN([Minimum required CUDA version for device code: $NVCC_CUDA_MIN_REQUIRED])
                NVCC=""])
 
-        AS_IF([UCX_CHECK_CUDA_GE([13], [0])],
-              [NVCC_CXX_DIALECT=c++17
-               cxx_dialect_ver=201703L],
+        NVCC_CXX_DIALECT=c++17
+        cxx_dialect_ver=201703L
+        AS_VERSION_COMPARE([$CUDA_VERSION], [13.0], [],
               [NVCC_CXX_DIALECT=c++11
                cxx_dialect_ver=201103L])
 
