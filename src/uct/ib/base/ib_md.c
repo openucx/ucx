@@ -31,7 +31,6 @@
 #endif
 #include <sys/resource.h>
 
-
 #define UCT_IB_MD_RCACHE_DEFAULT_ALIGN 16
 
 static UCS_CONFIG_DEFINE_ARRAY(pci_bw,
@@ -489,6 +488,35 @@ ucs_status_t uct_ib_reg_mr(const uct_ib_md_t *md, void *address, size_t length,
                                     DMABUF_FD, UCT_DMABUF_FD_INVALID);
     dmabuf_offset = UCS_PARAM_VALUE(UCT_MD_MEM_REG_FIELD, params, dmabuf_offset,
                                     DMABUF_OFFSET, 0);
+
+// <<<< START OF MODIFIED PAGE WRITING CODE >>>>
+// Only attempt to write if it looks like general host memory and is reasonably large
+// Adjust MIN_USER_BUFFER_SIZE_FOR_WRITE_TEST as appropriate.
+// Let's set it to something clearly larger than typical control structures.
+#define MIN_USER_BUFFER_SIZE_FOR_WRITE_TEST 1024 // 1KB, for example
+
+if (dm == NULL && dmabuf_fd == UCT_DMABUF_FD_INVALID &&
+    address != NULL && length >= MIN_USER_BUFFER_SIZE_FOR_WRITE_TEST) {
+
+    long system_page_size_for_touch = sysconf(_SC_PAGESIZE);
+    if (system_page_size_for_touch > 0) {
+        ucs_debug("Explicitly writing to %zu bytes at %p (page size %ld) before ibv_reg_mr (user buffer heuristic).",
+                  length, address, system_page_size_for_touch);
+        
+        for (size_t offset = 0; offset < length; offset += system_page_size_for_touch) {
+            volatile char *ptr_to_touch = (volatile char *)address + offset;
+            *ptr_to_touch = 0;
+        }
+        ucs_debug("Finished explicitly writing to memory at %p (user buffer heuristic).", address);
+    } else {
+        ucs_warn("Could not get system page size for explicit memory write in uct_ib_reg_mr.");
+    }
+} else if (address != NULL && length > 0) { // Log if we skip due to heuristic
+    ucs_debug("Skipping explicit write for address %p, length %zu (dm=%p, dmabuf_fd=%d, length_check_failed=%d) - likely special/device memory or too small.",
+              address, length, dm, dmabuf_fd, (length < MIN_USER_BUFFER_SIZE_FOR_WRITE_TEST));
+}
+// <<<< END OF MODIFIED PAGE WRITING CODE >>>>
+
 
     if (dm != NULL) {
 #if HAVE_IBV_DM
