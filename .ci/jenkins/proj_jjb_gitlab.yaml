@@ -110,3 +110,11 @@
     jjb_description: "UCX Static library build and test. Do NOT edit via Web GUI!"
     jobs:
       - "{jjb_proj}"
+
+- project:
+    name: ucx-test-gitlab
+    jjb_proj: "ucx-test-gitlab"
+    jjb_conf_file: ".ci/pipeline/test_matrix.yaml"
+    jjb_description: "UCX GTest. Do NOT edit via Web GUI!"
+    jobs:
+      - "{jjb_proj}"

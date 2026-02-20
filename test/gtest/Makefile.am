@@ -145,6 +145,7 @@ gtest_SOURCES = \
 	ucp/test_ucp_ep.cc \
 	ucp/test_ucp_stream.cc \
 	ucp/test_ucp_peer_failure.cc \
+	ucp/test_ucp_fault_tolerance.cc \
 	ucp/test_ucp_atomic.cc \
 	ucp/test_ucp_dt.cc \
 	ucp/test_ucp_tls.cc \

@@ -6,7 +6,7 @@
  */
 
 @Library('blossom-github-lib@master')
-@Library('github.com/Mellanox/ci-demo@master')
+@Library('github.com/Mellanox/ci-demo@stable_ucx')
 def matrix = new com.mellanox.cicd.Matrix()
 
 import ipp.blossom.*

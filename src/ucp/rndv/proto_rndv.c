@@ -177,7 +177,7 @@ static ucs_status_t ucp_proto_rndv_ctrl_select_remote_proto(
     ucs_trace("rndv select remote protocols rkey_config->md_map=0x%" PRIx64,
               rkey_config_key.md_map);
 
-    rkey_config = &worker->rkey_config[rkey_cfg_index];
+    rkey_config   = &ucs_array_elem(&worker->rkey_config, rkey_cfg_index);
     *remote_proto = ucp_proto_select_lookup_slow(worker,
                                                  &rkey_config->proto_select, 1,
                                                  ep_cfg_index, rkey_cfg_index,

@@ -56,7 +56,9 @@
     _macro(UCP_AM_ID_AM_SINGLE) \
     _macro(UCP_AM_ID_AM_FIRST) \
     _macro(UCP_AM_ID_AM_MIDDLE) \
-    _macro(UCP_AM_ID_AM_SINGLE_REPLY)
+    _macro(UCP_AM_ID_AM_SINGLE_REPLY) \
+    _macro(UCP_AM_ID_AM_FIRST_PSN) \
+    _macro(UCP_AM_ID_AM_MIDDLE_PSN)
 
 #define UCP_AM_HANDLER_DECL(_id) extern ucp_am_handler_t ucp_am_handler_##_id;
 
@@ -725,6 +727,7 @@ static ucp_tl_alias_t ucp_tl_aliases[] = {
   { "cuda",  { "cuda_copy", "cuda_ipc", "gdr_copy", NULL } },
   { "rocm",  { "rocm_copy", "rocm_ipc", "rocm_gdr", NULL } },
   { "ze",    { "ze_copy", "ze_ipc", "ze_gdr", NULL } },
+  { "gaudi", { "gaudi_gdr", NULL } },
   { "gga",   { "gga_mlx5", NULL } },
   { NULL }
 };

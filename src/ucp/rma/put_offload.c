@@ -338,5 +338,5 @@ ucp_proto_t ucp_put_offload_zcopy_proto = {
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_put_offload_zcopy_progress},
     .abort    = ucp_proto_request_zcopy_abort,
-    .reset    = ucp_proto_request_zcopy_reset
+    .reset    = ucp_proto_offload_zcopy_reset
 };
