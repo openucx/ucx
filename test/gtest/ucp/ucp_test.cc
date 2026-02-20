@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -414,7 +414,8 @@ bool ucp_test::is_proto_enabled() const
     return m_ucp_config->ctx.proto_enable;
 }
 
-void ucp_test::set_ucp_config(ucp_config_t *config, const std::string& tls)
+void ucp_test::set_ucp_config(ucp_config_t *config, const std::string &tls,
+                              bool warn_invalid_config)
 {
     ucs_status_t status;
 
@@ -422,9 +423,12 @@ void ucp_test::set_ucp_config(ucp_config_t *config, const std::string& tls)
     if (status != UCS_OK) {
         UCS_TEST_ABORT("Failed to set UCX transports");
     }
-    status = ucp_config_modify(config, "WARN_INVALID_CONFIG", "n");
-    if (status != UCS_OK) {
-        UCS_TEST_ABORT("Failed to set UCX to ignore invalid configuration");
+
+    if (!warn_invalid_config) {
+        status = ucp_config_modify(config, "WARN_INVALID_CONFIG", "n");
+        if (status != UCS_OK) {
+            UCS_TEST_ABORT("Failed to set UCX to ignore invalid configuration");
+        }
     }
 }
 
@@ -665,7 +669,8 @@ ucp_test_base::entity::entity(const ucp_test_param& test_param,
     /* Set transports configuration */
     std::stringstream ss;
     ss << test_param.transports;
-    ucp_test::set_ucp_config(ucp_config, ss.str());
+    ucp_test::set_ucp_config(ucp_config, ss.str(),
+                             test_owner->m_warn_invalid_config);
 
     {
         scoped_log_handler slh(hide_errors_logger);
