@@ -211,7 +211,7 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
             CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR) {
             status = uct_cuda_ipc_mem_export_posix_fd(addr, key);
             if (status != UCS_OK) {
-                goto out_pop_ctx;
+                goto non_ipc;
             }
             goto common_path;
         }

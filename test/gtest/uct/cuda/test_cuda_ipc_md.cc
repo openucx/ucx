@@ -166,12 +166,10 @@ protected:
         }
         ASSERT_UCS_OK(status);
 
-        EXPECT_UCS_OK(md()->ops->mem_reg(md(), (void *)*ptr, *size, NULL,
-                                         memh));
-        EXPECT_UCS_OK(md()->ops->mkey_pack(md(), *memh, (void *)*ptr, *size,
+        EXPECT_UCS_OK(md()->ops->mem_reg(md(), (void*)*ptr, *size, NULL, memh));
+        EXPECT_UCS_OK(md()->ops->mkey_pack(md(), *memh, (void*)*ptr, *size,
                                            NULL, rkey));
-        EXPECT_EQ(UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD,
-                  rkey->ph.handle_type);
+        EXPECT_EQ(UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD, rkey->ph.handle_type);
     }
 
     void posix_fd_dereg_free(uct_mem_h memh, CUdeviceptr ptr,
@@ -349,8 +347,8 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_system_id_mismatch)
 
     /* Tamper UUID to bypass same-process shortcut */
     int64_t *uuid64 = (int64_t *)rkey.uuid.bytes;
-    uuid64[0]       = 0xDEADll;
-    uuid64[1]       = 0xBEEFll;
+    uuid64[0]       = 0xDEADLL;
+    uuid64[1]       = 0xBEEFLL;
 
     uct_rkey_unpack_params_t unpack_params = { 0 };
     EXPECT_EQ(UCS_ERR_UNREACHABLE,
@@ -396,8 +394,8 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
     /* Tamper UUID to bypass same-process shortcut and exercise the full
      * POSIX FD import path (pidfd_open/pidfd_getfd + cuMemImport) */
     int64_t *uuid64 = (int64_t *)rkey.uuid.bytes;
-    uuid64[0]       = 0x1234ll;
-    uuid64[1]       = 0x5678ll;
+    uuid64[0]       = 0x1234LL;
+    uuid64[1]       = 0x5678LL;
 
     uct_component_t *component = md()->component;
 
@@ -417,10 +415,10 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
 #endif
 
             bool pidfd_supported = false;
-            int probe_pidfd = syscall(SYS_pidfd_open, getpid(), 0);
+            int probe_pidfd      = syscall(SYS_pidfd_open, getpid(), 0);
             if (probe_pidfd >= 0) {
-                int dup_fd = syscall(SYS_pidfd_getfd, probe_pidfd,
-                                     STDOUT_FILENO, 0);
+                int dup_fd      = syscall(SYS_pidfd_getfd, probe_pidfd,
+                                          STDOUT_FILENO, 0);
                 pidfd_supported = (dup_fd >= 0 || errno != ENOSYS);
                 if (dup_fd >= 0) {
                     close(dup_fd);

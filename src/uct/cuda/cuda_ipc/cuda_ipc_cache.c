@@ -375,9 +375,7 @@ err:
     pthread_rwlock_unlock(&uct_cuda_ipc_rem_mpool_cache.lock);
     return status;
 }
-#endif
 
-#if HAVE_CUDA_FABRIC
 static ucs_status_t
 uct_cuda_ipc_open_memhandle_posix_fd(uct_cuda_ipc_rkey_t *key, CUdevice cu_dev,
                                      CUdeviceptr *mapped_addr,
@@ -418,8 +416,8 @@ uct_cuda_ipc_open_memhandle_posix_fd(uct_cuda_ipc_rkey_t *key, CUdevice cu_dev,
     close(local_fd);
 close_pidfd:
     close(pidfd);
-    ucs_trace("posix_fd import from pid=%d: %s",
-              (int)key->pid, ucs_status_string(status));
+    ucs_trace("posix_fd import from pid=%d: %s", (int)key->pid,
+              ucs_status_string(status));
     return status;
 }
 #endif
