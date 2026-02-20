@@ -55,8 +55,10 @@ UCM_DEFINE_REPLACE_FUNC(mremap, void*, MAP_FAILED, void*, size_t, size_t, int,
 #endif
 UCM_DEFINE_REPLACE_FUNC(shmat,   void*, MAP_FAILED, int, const void*, int)
 UCM_DEFINE_REPLACE_FUNC(shmdt,   int,   -1,         const void*)
-#ifdef HAVE_BRK_SBRK
+#ifdef HAVE_SBRK
 UCM_DEFINE_REPLACE_FUNC(sbrk,    void*, MAP_FAILED, intptr_t)
+#endif
+#ifdef HAVE_BRK
 UCM_DEFINE_REPLACE_FUNC(brk,     int,   -1,         void*)
 #endif
 UCM_DEFINE_REPLACE_FUNC(madvise, int,   -1,         void*, size_t, int)
@@ -124,7 +126,7 @@ int ucm_orig_shmdt(const void *shmaddr)
 
 #endif
 
-#ifdef HAVE_BRK_SBRK
+#ifdef HAVE_BRK
 _UCM_DEFINE_DLSYM_FUNC(brk, ucm_orig_dlsym_brk, ucm_override_brk, int, void*)
 
 int ucm_orig_brk(void *addr)
@@ -196,7 +198,7 @@ UCM_DEFINE_DLSYM_FUNC(shmdt, int, const void*)
 
 void *ucm_get_current_brk()
 {
-#ifdef HAVE_BRK_SBRK
+#ifdef HAVE_BRK
 #if HAVE___CURBRK
     return __curbrk;
 #else

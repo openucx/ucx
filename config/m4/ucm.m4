@@ -20,15 +20,13 @@ HAVE_UCM_PTMALLOC286=no
 case ${with_allocator} in
     ptmalloc286)
         AC_MSG_NOTICE(Memory allocator is ptmalloc-2.8.6 version)
-        AS_IF([test "x$have_brk_sbrk" = xyes],
-              [AC_DEFINE([HAVE_UCM_PTMALLOC286], 1, [Use ptmalloc-2.8.6 version])
-               HAVE_UCM_PTMALLOC286=yes],
-              [AC_MSG_WARN([brk()/sbrk() not available; disabling ptmalloc286 allocator])
-               HAVE_UCM_PTMALLOC286=no])
-        ;;
-    *)
-        AC_MSG_ERROR(Cannot continue. Unsupported memory allocator name
-                     in --with-allocator=[$with_allocator])
+        AC_DEFINE([HAVE_UCM_PTMALLOC286], [1], [Use ptmalloc-2.8.6 version])
+        HAVE_UCM_PTMALLOC286=yes
+
+        AS_IF([test "x$ac_cv_func_sbrk" != xyes], [
+            AC_DEFINE([HAVE_MORECORE], [0],
+                      [Disable MORECORE in ptmalloc (no sbrk available)])
+        ])
         ;;
 esac
 
@@ -63,14 +61,12 @@ AC_CHECK_DECLS([getauxval], [], [],
 # SYS_xxx macro
 #
 mmap_hooks_happy=yes
-AC_CHECK_DECLS([SYS_mmap,
-                SYS_munmap,
-                SYS_mremap,
-                SYS_brk,
-                SYS_madvise],
-               [],
-               [mmap_hooks_happy=no], dnl mmap syscalls are not defined
-               [#include <sys/syscall.h>])
+AC_CHECK_DECLS([SYS_mmap, SYS_munmap, SYS_mremap, SYS_madvise],
+               [], [mmap_hooks_happy=no], [#include <sys/syscall.h>])
+
+AS_IF([test "x$ac_cv_func_brk" = xyes],
+      [AC_CHECK_DECLS([SYS_brk], [], [mmap_hooks_happy=no],
+                      [#include <sys/syscall.h>])])
 
 shm_hooks_happy=yes
 AC_CHECK_DECLS([SYS_shmat,
@@ -89,7 +85,7 @@ AS_IF([test "x$mmap_hooks_happy" = "xyes"],
       AS_IF([test "x$ipc_hooks_happy" = "xyes" -o "x$shm_hooks_happy" = "xyes"],
             [bistro_hooks_happy=yes]))
 
-AS_IF([test "x$have_brk_sbrk" != xyes],
+AS_IF([test "x$ac_cv_func_brk" != xyes -o "x$ac_cv_func_sbrk" != xyes],
       [bistro_hooks_happy=no])
 
 AS_IF([test "x$bistro_hooks_happy" = "xyes"],

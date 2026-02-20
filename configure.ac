@@ -87,16 +87,6 @@ AC_FUNC_STRERROR_R
 
 AC_PATH_TOOL([PKG_CONFIG], [pkg-config], [pkg-config])
 
-AC_CHECK_FUNCS([brk sbrk])
-
-AS_IF([test "x$ac_cv_func_brk" = "xyes" && test "x$ac_cv_func_sbrk" = "xyes"],
-      [have_brk_sbrk=yes],
-      [have_brk_sbrk=no])
-
-AS_IF([test "x$have_brk_sbrk" = "xyes"],
-      [AC_DEFINE([HAVE_BRK_SBRK], [1],
-                 [Define if both brk() and sbrk() are available])])
-
 
 #
 # Define SHARED_LIB preprocessor macro when building a shared library
@@ -246,6 +236,7 @@ AS_IF([test "x$with_docs_only" = xyes],
      AM_CONDITIONAL([DOCS_ONLY], [false])
      m4_include([config/m4/compiler.m4])
      m4_include([config/m4/sysdep.m4])
+     UCX_CHECK_BRK_SBRK
      m4_include([config/m4/ucm.m4])
      m4_include([config/m4/mpi.m4])
      m4_include([config/m4/fuse3.m4])

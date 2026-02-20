@@ -558,15 +558,16 @@ out:
 
 static inline int ucm_malloc_sanitize_events(int events)
 {
-#ifdef HAVE_BRK_SBRK
-    return events;
-#else
-    /* If brk/sbrk are not available, don't wait for or install sbrk/brk hooks */
-    return events & ~(UCM_EVENT_SBRK | UCM_EVENT_BRK);
+#if !defined(HAVE_BRK)
+    events &= ~UCM_EVENT_BRK;
 #endif
+#if !defined(HAVE_SBRK)
+    events &= ~UCM_EVENT_SBRK;
+#endif
+    return events;
 }
 
-#ifdef HAVE_BRK_SBRK
+#ifdef HAVE_SBRK
 static void ucm_malloc_sbrk(ucm_event_type_t event_type,
                             ucm_event_t *event, void *arg)
 {
@@ -616,9 +617,6 @@ static void ucm_malloc_event_test_callback(ucm_event_type_t event_type,
 /* Has to be called with install_mutex held */
 static void ucm_malloc_test(int events)
 {
-#if !defined(HAVE_BRK_SBRK)
-    events = ucm_malloc_sanitize_events(events);
-#endif
     static const size_t small_alloc_count = 128;
     static const size_t small_alloc_size  = 4096;
     static const size_t large_alloc_size  = 4 * UCS_MBYTE;
@@ -626,6 +624,7 @@ static void ucm_malloc_test(int events)
     void *p[small_alloc_count];
     int out_events;
     int i;
+    events = ucm_malloc_sanitize_events(events);
 
     ucm_debug("testing malloc...");
 
@@ -824,11 +823,7 @@ static void ucm_malloc_init_orig_funcs()
 
 ucs_status_t ucm_malloc_install(int events)
 {
-#if !defined(HAVE_BRK_SBRK)
-    events = ucm_malloc_sanitize_events(events);
-#endif
-
-#ifdef HAVE_BRK_SBRK
+#ifdef HAVE_SBRK
     static ucm_event_handler_t sbrk_handler = {
         .events   = UCM_EVENT_SBRK,
         .priority = 1000,
@@ -836,6 +831,7 @@ ucs_status_t ucm_malloc_install(int events)
     };
 #endif
     ucs_status_t status;
+    events = ucm_malloc_sanitize_events(events);
 
     pthread_mutex_lock(&ucm_malloc_hook_state.install_mutex);
 
@@ -857,7 +853,7 @@ ucs_status_t ucm_malloc_install(int events)
 #endif
     }
 
-#ifdef HAVE_BRK_SBRK
+#ifdef HAVE_SBRK
     if (!(ucm_malloc_hook_state.install_state & UCM_MALLOC_INSTALLED_SBRK_EVH)) {
         ucm_debug("installing malloc-sbrk event handler");
         ucm_event_handler_add(&sbrk_handler);
