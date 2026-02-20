@@ -2771,7 +2771,13 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
         }
 
         cmpt_attr = ucp_cmpt_attr_by_md_index(context, config->md_index[lane]);
-        if (cmpt_attr->flags & UCT_COMPONENT_FLAG_RKEY_PTR) {
+        md_attr   = &context->tl_mds[config->md_index[lane]].attr;
+        if ((cmpt_attr->flags & UCT_COMPONENT_FLAG_RKEY_PTR) &&
+            (md_attr->access_mem_types & UCS_BIT(UCS_MEMORY_TYPE_HOST))) {
+            /* Only treat rkey_ptr backends as RNDV rkey_ptr candidates if their
+             * MD can provide a CPU-dereferenceable pointer. Otherwise (e.g. GPU
+             * backends), rkey_ptr would yield a device pointer and the CPU copy
+             * path is not applicable, so do not add them to rkey_ptr lane/skip. */
             dst_md_index = config->key.lanes[lane].dst_md_index;
             if (lane == key->rkey_ptr_lane) {
                 config->rndv.rkey_ptr_lane_dst_mds     = UCS_BIT(dst_md_index);
@@ -3825,8 +3831,8 @@ static ucs_status_t ucp_ep_query_transport(ucp_ep_h ep, ucp_ep_attr_t *attr)
                                     lane_index * attr->transports.entry_size);
 
         /* Each field updated in the following block must have its ending offset
-         * compared to attr->transports.entry_size before the field is 
-         * updated. If the field's ending offset is greater than the 
+         * compared to attr->transports.entry_size before the field is
+         * updated. If the field's ending offset is greater than the
          * attr->transports.entry_size value, the field cannot be updated because
          * that will cause a storage overlay.
          */
