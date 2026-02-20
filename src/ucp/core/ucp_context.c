@@ -1089,8 +1089,8 @@ ucp_is_resource_in_device_list(const uct_tl_resource_desc_t *resource,
 
     *dev_cfg_mask |= found_dev_mask;
 
-    return (mode == UCS_CONFIG_ALLOW_LIST_NEGATE) ? (!found_dev_mask) :
-                                                    (!!found_dev_mask);
+    return (mode == UCS_CONFIG_ALLOW_LIST_NEGATE) ? !found_dev_mask :
+                                                    !!found_dev_mask;
 }
 
 static int ucp_tls_alias_is_present(ucp_tl_alias_t *alias, const char *tl_name,
