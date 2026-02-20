@@ -1,5 +1,5 @@
 /*
- * Copyright (C) Intel Corporation, 2023-2024. ALL RIGHTS RESERVED.
+ * Copyright (C) Intel Corporation, 2023-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -226,8 +226,8 @@ static UCS_CLASS_INIT_FUNC(uct_ze_copy_iface_t, uct_md_h md,
                               tl_config UCS_STATS_ARG(params->stats_root)
                                       UCS_STATS_ARG(UCT_ZE_COPY_TL_NAME));
 
-    /* TODO: choose device based on params */
-    device = uct_ze_base_get_device(0);
+    /* Use the device configured in the MD */
+    device = ze_md->ze_device;
     if (device == NULL) {
         return UCS_ERR_NO_DEVICE;
     }
@@ -265,3 +265,4 @@ static UCS_CLASS_DEFINE_DELETE_FUNC(uct_ze_copy_iface_t, uct_iface_t);
 UCT_TL_DEFINE(&uct_ze_copy_component, ze_copy, uct_ze_base_query_devices,
               uct_ze_copy_iface_t, "ZE_COPY_", uct_iface_config_table,
               uct_iface_config_t);
+
