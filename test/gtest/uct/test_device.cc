@@ -13,7 +13,7 @@
 #include "uct_test.h"
 
 extern "C" {
-#include <uct/cuda/base/cuda_iface.h>
+#include <uct/cuda/base/cuda_util.h>
 }
 
 #include "cuda/test_kernels.h"
@@ -54,8 +54,7 @@ protected:
         ucs_status_t status;
 
         uct_test::init();
-        status = uct_cuda_base_get_cuda_device(GetParam()->sys_device,
-                                               &m_cuda_dev);
+        status = uct_cuda_get_cuda_device(GetParam()->sys_device, &m_cuda_dev);
         ASSERT_UCS_OK(status, << " sys_device "
             << static_cast<int>(GetParam()->sys_device));
 
