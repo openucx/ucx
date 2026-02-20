@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
  * Copyright (C) Intel Corporation, 2023.  ALL RIGHTS RESERVED.
  *
@@ -602,24 +602,20 @@ static ucs_config_field_t ucp_context_config_table[] = {
 
 static ucs_config_field_t ucp_config_table[] = {
   {"NET_DEVICES", UCP_RSC_CONFIG_ALL,
-   "Specifies which network device(s) to use. The order is not meaningful.\n"
-   "\"all\" would use all available devices.",
-   ucs_offsetof(ucp_config_t, devices[UCT_DEVICE_TYPE_NET]), UCS_CONFIG_TYPE_STRING_ARRAY},
+   "Specifies which network device(s) to use. The order is not meaningful.\n",
+   ucs_offsetof(ucp_config_t, devices[UCT_DEVICE_TYPE_NET]), UCS_CONFIG_TYPE_ALLOW_LIST},
 
   {"SHM_DEVICES", UCP_RSC_CONFIG_ALL,
-   "Specifies which intra-node device(s) to use. The order is not meaningful.\n"
-   "\"all\" would use all available devices.",
-   ucs_offsetof(ucp_config_t, devices[UCT_DEVICE_TYPE_SHM]), UCS_CONFIG_TYPE_STRING_ARRAY},
+   "Specifies which intra-node device(s) to use. The order is not meaningful.\n",
+   ucs_offsetof(ucp_config_t, devices[UCT_DEVICE_TYPE_SHM]), UCS_CONFIG_TYPE_ALLOW_LIST},
 
   {"ACC_DEVICES", UCP_RSC_CONFIG_ALL,
-   "Specifies which accelerator device(s) to use. The order is not meaningful.\n"
-   "\"all\" would use all available devices.",
-   ucs_offsetof(ucp_config_t, devices[UCT_DEVICE_TYPE_ACC]), UCS_CONFIG_TYPE_STRING_ARRAY},
+   "Specifies which accelerator device(s) to use. The order is not meaningful.\n",
+   ucs_offsetof(ucp_config_t, devices[UCT_DEVICE_TYPE_ACC]), UCS_CONFIG_TYPE_ALLOW_LIST},
 
   {"SELF_DEVICES", UCP_RSC_CONFIG_ALL,
-    "Specifies which loop-back device(s) to use. The order is not meaningful.\n"
-    "\"all\" would use all available devices.",
-    ucs_offsetof(ucp_config_t, devices[UCT_DEVICE_TYPE_SELF]), UCS_CONFIG_TYPE_STRING_ARRAY},
+   "Specifies which loop-back device(s) to use. The order is not meaningful.\n",
+   ucs_offsetof(ucp_config_t, devices[UCT_DEVICE_TYPE_SELF]), UCS_CONFIG_TYPE_ALLOW_LIST},
 
   {"TLS", UCP_RSC_CONFIG_ALL,
    "Comma-separated list of transports to use. The order is not meaningful.\n"
@@ -1053,48 +1049,51 @@ ucp_get_dev_basename(const char *dev_name, char *dev_basename_p, size_t max)
 
 /* go over the device list from the user and check (against the available resources)
  * which can be satisfied */
-static int ucp_is_resource_in_device_list(const uct_tl_resource_desc_t *resource,
-                                          const ucs_config_names_array_t *devices,
-                                          uint64_t *dev_cfg_mask,
-                                          uct_device_type_t dev_type)
+static int
+ucp_is_resource_in_device_list(const uct_tl_resource_desc_t *resource,
+                               const ucs_config_allow_list_t *devices,
+                               uint64_t *dev_cfg_mask,
+                               uct_device_type_t dev_type)
 {
+    const ucs_config_names_array_t *dev_array = &devices[dev_type].array;
+    const ucs_config_allow_list_mode_t mode   = devices[dev_type].mode;
     char dev_basename[UCT_DEVICE_NAME_MAX];
-    uint64_t mask, exclusive_mask;
+    uint64_t found_dev_mask, exclusive_mask;
 
-    ucs_assert_always(devices[dev_type].count <= 64); /* Using uint64_t bitmap */
+    /* In ALLOW_ALL mode, all devices are enabled */
+    if (mode == UCS_CONFIG_ALLOW_LIST_ALLOW_ALL) {
+        return 1;
+    }
+
+    ucs_assert_always(dev_array->count <= 64); /* Using uint64_t bitmap */
 
     /* search for the full device name */
-    mask = ucp_str_array_search((const char**)devices[dev_type].names,
-                                devices[dev_type].count, resource->dev_name,
-                                NULL);
+    found_dev_mask = ucp_str_array_search((const char**)dev_array->names,
+                                          dev_array->count, resource->dev_name,
+                                          NULL);
 
     /* for network devices, also search for the base name (before the delimiter) */
     if (dev_type == UCT_DEVICE_TYPE_NET) {
         ucp_get_dev_basename(resource->dev_name, dev_basename,
                              sizeof(dev_basename));
         if (!ucs_string_is_empty(dev_basename)) {
-            mask |= ucp_str_array_search((const char**)devices[dev_type].names,
-                                         devices[dev_type].count, dev_basename,
-                                         NULL);
+            found_dev_mask |=
+                    ucp_str_array_search((const char**)dev_array->names,
+                                         dev_array->count, dev_basename, NULL);
         }
     }
 
-    if (!mask) {
-        /* if the user's list is 'all', use all the available resources */
-        mask = ucp_str_array_search((const char**)devices[dev_type].names,
-                                    devices[dev_type].count, UCP_RSC_CONFIG_ALL,
-                                    NULL);
-    }
-
     /* warn if we got new device which appears more than once */
-    exclusive_mask = mask & ~(*dev_cfg_mask);
+    exclusive_mask = found_dev_mask & ~(*dev_cfg_mask);
     if (exclusive_mask && !ucs_is_pow2(exclusive_mask)) {
         ucs_warn("device '%s' is specified multiple times",
-                 devices[dev_type].names[ucs_ilog2(exclusive_mask)]);
+                 dev_array->names[ucs_ilog2(exclusive_mask)]);
     }
 
-    *dev_cfg_mask |= mask;
-    return !!mask;
+    *dev_cfg_mask |= found_dev_mask;
+
+    return (mode == UCS_CONFIG_ALLOW_LIST_NEGATE) ? !found_dev_mask :
+                                                    !!found_dev_mask;
 }
 
 static int ucp_tls_alias_is_present(ucp_tl_alias_t *alias, const char *tl_name,
@@ -1489,24 +1488,23 @@ static void ucp_free_resources(ucp_context_t *context)
 
 static ucs_status_t ucp_check_resource_config(const ucp_config_t *config)
 {
-     if ((0 == config->devices[UCT_DEVICE_TYPE_NET].count) &&
-         (0 == config->devices[UCT_DEVICE_TYPE_SHM].count) &&
-         (0 == config->devices[UCT_DEVICE_TYPE_ACC].count) &&
-         (0 == config->devices[UCT_DEVICE_TYPE_SELF].count)) {
-         ucs_error("The device lists are empty. Please specify the devices you would like to use "
-                   "or omit the UCX_*_DEVICES so that the default will be used.");
-         return UCS_ERR_NO_ELEM;
-     }
+    if (ucs_config_are_all_allow_lists_empty(config->devices,
+                                             UCT_DEVICE_TYPE_LAST)) {
+        ucs_error(
+                "The device lists are empty. Please specify the devices you "
+                "would like to use "
+                "or omit the UCX_*_DEVICES so that the default will be used.");
+        return UCS_ERR_NO_ELEM;
+    }
 
-     if ((0 == config->tls.array.count) &&
-         (config->tls.mode != UCS_CONFIG_ALLOW_LIST_ALLOW_ALL)) {
-         ucs_error("The TLs list is empty. Please specify the transports you "
-                   "would like to allow/forbid "
-                   "or omit the UCX_TLS so that the default will be used.");
-         return UCS_ERR_NO_ELEM;
-     }
+    if (ucs_config_is_allow_list_empty(&config->tls)) {
+        ucs_error("The TLs list is empty. Please specify the transports you "
+                  "would like to allow/forbid "
+                  "or omit the UCX_TLS so that the default will be used.");
+        return UCS_ERR_NO_ELEM;
+    }
 
-     return UCS_OK;
+    return UCS_OK;
 }
 
 static ucs_status_t ucp_fill_tl_md(ucp_context_h context,
@@ -1598,7 +1596,7 @@ static void ucp_resource_config_str(const ucp_config_t *config, char *buf,
 
     devs_p = p;
     for (dev_type_idx = 0; dev_type_idx < UCT_DEVICE_TYPE_LAST; ++dev_type_idx) {
-        ucp_resource_config_array_str(&config->devices[dev_type_idx],
+        ucp_resource_config_array_str(&config->devices[dev_type_idx].array,
                                       uct_device_type_names[dev_type_idx], p,
                                       endp - p);
         p += strlen(p);
@@ -2062,7 +2060,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     if (config->warn_invalid_config) {
         UCS_STATIC_ASSERT(UCT_DEVICE_TYPE_NET == 0);
         for (dev_type = UCT_DEVICE_TYPE_NET; dev_type < UCT_DEVICE_TYPE_LAST; ++dev_type) {
-            ucp_report_unavailable(&config->devices[dev_type],
+            ucp_report_unavailable(&config->devices[dev_type].array,
                                    dev_cfg_masks[dev_type],
                                    uct_device_type_names[dev_type], " device",
                                    &avail_devices[dev_type]);
