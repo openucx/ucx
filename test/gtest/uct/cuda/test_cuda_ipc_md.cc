@@ -5,6 +5,9 @@
  */
 
 #include <thread>
+#include <sys/syscall.h>
+#include <unistd.h>
+#include <errno.h>
 
 #include <uct/test_md.h>
 #include <cuda.h>
@@ -15,8 +18,6 @@ extern "C" {
 #include <uct/cuda/base/cuda_iface.h>
 #include <ucs/sys/ptr_arith.h>
 #include <ucs/sys/uid.h>
-#include <sys/syscall.h>
-#include <unistd.h>
 }
 
 class test_cuda_ipc_md : public test_md {
@@ -384,7 +385,7 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
     }
     ASSERT_UCS_OK(status);
 
-    ASSERT_EQ(CUDA_SUCCESS, cuMemsetD8(ptr, 0xAB, size));
+    EXPECT_EQ(CUDA_SUCCESS, cuMemsetD8(ptr, 0xAB, size));
 
     EXPECT_UCS_OK(md()->ops->mem_reg(md(), (void *)ptr, size, NULL, &memh));
     EXPECT_UCS_OK(md()->ops->mkey_pack(md(), memh, (void *)ptr, size, NULL,
@@ -433,7 +434,7 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
                     component, &rkey, &unpack_params, &rkey_bundle);
 
             if (!pidfd_supported) {
-                ASSERT_EQ(UCS_ERR_UNREACHABLE, unpack_status);
+                EXPECT_EQ(UCS_ERR_UNREACHABLE, unpack_status);
                 cuCtxDestroy(ctx);
                 return;
             }
@@ -456,6 +457,10 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
                     << "Data mismatch at byte " << i;
             }
 
+            status = uct_cuda_ipc_unmap_memhandle(unpacked->super.pid,
+                                                  unpacked->super.d_bptr,
+                                                  mapped_addr, dev, 0);
+            EXPECT_UCS_OK(status);
             uct_rkey_release(component, &rkey_bundle);
             cuCtxDestroy(ctx);
         } catch (...) {

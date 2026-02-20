@@ -10,14 +10,16 @@ AC_CHECK_DECLS([SYS_pidfd_open, SYS_pidfd_getfd],
                [#include <sys/syscall.h>])
 
 # Provide fallback syscall numbers for kernel headers older than 5.3 / 5.6.
-# The numbers are identical across all 64-bit architectures
-# (x86_64, aarch64, ppc64, rv64).
-AS_IF([test "x$ac_cv_have_decl_SYS_pidfd_open" != "xyes"],
-      [AC_DEFINE([SYS_pidfd_open], [434],
-                 [Fallback syscall number for pidfd_open])])
-AS_IF([test "x$ac_cv_have_decl_SYS_pidfd_getfd" != "xyes"],
-      [AC_DEFINE([SYS_pidfd_getfd], [438],
-                 [Fallback syscall number for pidfd_getfd])])
+# The numbers are identical across these 64-bit Linux architectures:
+# x86_64, aarch64, ppc64/ppc64le, riscv64.
+AS_CASE([$host_cpu],
+        [x86_64|aarch64|ppc64|ppc64le|riscv64],
+            [AS_IF([test "x$ac_cv_have_decl_SYS_pidfd_open" != "xyes"],
+                   [AC_DEFINE([SYS_pidfd_open], [434],
+                              [Fallback syscall number for pidfd_open])])
+             AS_IF([test "x$ac_cv_have_decl_SYS_pidfd_getfd" != "xyes"],
+                   [AC_DEFINE([SYS_pidfd_getfd], [438],
+                              [Fallback syscall number for pidfd_getfd])])])
 
 AS_IF([test "x$cuda_happy" = "xyes"], [uct_modules="${uct_modules}:cuda"])
 uct_cuda_modules=""
