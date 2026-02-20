@@ -236,6 +236,7 @@ AS_IF([test "x$with_docs_only" = xyes],
      AM_CONDITIONAL([DOCS_ONLY], [false])
      m4_include([config/m4/compiler.m4])
      m4_include([config/m4/sysdep.m4])
+     UCX_CHECK_BRK_SBRK
      m4_include([config/m4/ucm.m4])
      m4_include([config/m4/mpi.m4])
      m4_include([config/m4/fuse3.m4])

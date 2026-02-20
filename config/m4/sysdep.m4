@@ -201,6 +201,21 @@ CFLAGS=$SAVE_CFLAGS
 
 
 #
+# Check for program break interfaces
+#
+AC_DEFUN([UCX_CHECK_BRK_SBRK], [
+    AC_CHECK_FUNCS([brk sbrk])
+
+    AS_IF([test "x$ac_cv_func_brk" = xyes], [
+        AC_DEFINE([HAVE_BRK], [1], [Define if brk() is available])
+    ])
+    AS_IF([test "x$ac_cv_func_sbrk" = xyes], [
+        AC_DEFINE([HAVE_SBRK], [1], [Define if sbrk() is available])
+    ])
+])
+
+
+#
 # Check for capability.h header (usually comes from libcap-devel package) and
 # make sure it defines the types we need
 #
