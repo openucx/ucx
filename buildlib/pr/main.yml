@@ -90,8 +90,17 @@ resources:
     - container: debian130
       image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/debian13.0/builder:doca-3.2.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: sles15sp6
-      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/sles15sp6/builder:doca-2.9.0
+    - container: sles15sp7
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/sles15sp7/builder:mofed-26.01-0.8.8.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: sles15sp7_aarch64
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/aarch64/sles15sp7/builder:mofed-26.01-0.8.8.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: sles16sp0
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/sles16sp0/builder:mofed-26.01-0.8.0.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: sles16sp0_aarch64
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/aarch64/sles16sp0/builder:mofed-26.01-0.8.0.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: rhel90_doca31
       image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/rhel9.0/builder:doca-3.1.0
@@ -230,6 +239,12 @@ resources:
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: euleros2sp12
       image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/euleros2.0sp12/builder:doca-2.9.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: ctyunos2507
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/ctyunos25.07/builder:mofed-26.01-0.8.0.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: ctyunos2507_aarch64
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/aarch64/ctyunos25.07/builder:mofed-26.01-0.8.0.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: centos10stream
       image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/centos10stream/builder:inbox

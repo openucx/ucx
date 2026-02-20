@@ -23,6 +23,13 @@
 #define UCT_IB_MLX5_MD_UMEM_ACCESS \
     (IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE)
 
+#define UCT_IB_MLX5_MD_DM_ALIGNMENT 64
+
+#define UCT_IB_MLX5_DEVX_ALL_OBJS_MASK \
+    (UCS_BIT(UCT_IB_DEVX_OBJ_RCQP) | UCS_BIT(UCT_IB_DEVX_OBJ_RCSRQ) | \
+     UCS_BIT(UCT_IB_DEVX_OBJ_DCT) | UCS_BIT(UCT_IB_DEVX_OBJ_DCSRQ) | \
+     UCS_BIT(UCT_IB_DEVX_OBJ_DCI) | UCS_BIT(UCT_IB_DEVX_OBJ_CQ))
+
 
 static uint32_t uct_ib_mlx5_flush_rkey_make()
 {
@@ -2119,14 +2126,16 @@ uct_ib_mlx5_devx_device_mem_alloc(uct_md_h uct_md, size_t *length_p,
     void *address;
     ucs_status_t status;
     uint32_t mkey;
+    uint8_t alignment;
 
     if (mem_type != UCS_MEMORY_TYPE_RDMA) {
         return UCS_ERR_UNSUPPORTED;
     }
 
     /* Align the allocation to a potential use of registration cache */
-    dm_attr.length        = ucs_align_up_pow2(*length_p, md->dev.atomic_align);
-    dm_attr.log_align_req = ucs_ilog2(md->dev.atomic_align);
+    alignment             = ucs_max(md->dev.atomic_align, UCT_IB_MLX5_MD_DM_ALIGNMENT);
+    dm_attr.length        = ucs_align_up_pow2(*length_p, alignment);
+    dm_attr.log_align_req = ucs_ilog2(alignment);
     dm_attr.comp_mask     = 0;
 
     if (dm_attr.length > md->dev.dev_attr.max_dm_size) {
@@ -2578,7 +2587,7 @@ ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
 
     devx_objs = md_config->devx_objs;
     if (md_config->devx_objs & UCS_BIT(UCT_IB_DEVX_OBJ_AUTO)) {
-        devx_objs = (odp_version == 1) ? 0 : UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_MASK;
+        devx_objs = (odp_version == 1) ? 0 : UCT_IB_MLX5_DEVX_ALL_OBJS_MASK;
     }
 
     md->flags           |= UCT_IB_MLX5_MD_FLAGS_DEVX_OBJS(devx_objs);

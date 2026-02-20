@@ -430,10 +430,13 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
 
     /* For remote memory access, consider remote system topology distance */
     if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS) {
-        ucs_assertv(params->super.rkey_cfg_index < worker->rkey_config_count,
-                    "rkey_cfg_index=%d rkey_config_count=%d",
-                    params->super.rkey_cfg_index, worker->rkey_config_count);
-        rkey_config = &worker->rkey_config[params->super.rkey_cfg_index];
+        ucs_assertv(params->super.rkey_cfg_index <
+                            ucs_array_length(&worker->rkey_config),
+                    "rkey_cfg_index=%d rkey_config array length=%u",
+                    params->super.rkey_cfg_index,
+                    ucs_array_length(&worker->rkey_config));
+        rkey_config = &ucs_array_elem(&worker->rkey_config,
+                                      params->super.rkey_cfg_index);
         distance    = rkey_config->lanes_distance[lane];
         ucp_proto_common_update_lane_perf_by_distance(
                 tl_perf, &distance, "remote system", "sys-dev %d %s",
@@ -938,4 +941,12 @@ void ucp_proto_fatal_invalid_stage(ucp_request_t *req, const char *func_name)
     ucs_fatal("req %p: proto %s is in invalid stage %d on %s", req,
               req->send.proto_config->proto->name, req->send.proto_stage,
               func_name);
+}
+
+ucs_status_t ucp_proto_offload_zcopy_reset(ucp_request_t *req)
+{
+    ucp_proto_request_zcopy_reset(req);
+    ucp_datatype_iter_rewind(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
+    req->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
+    return UCS_OK;
 }

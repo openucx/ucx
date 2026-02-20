@@ -50,11 +50,11 @@ UCS_TEST_F(test_obj_size, size) {
     UCS_TEST_SKIP_R("Assert enabled");
 #else
     EXPECTED_SIZE(ucp_ep_t, 64);
-    EXPECTED_SIZE(ucp_ep_ext_t, 208);
+    EXPECTED_SIZE(ucp_ep_ext_t, 216);
 #if ENABLE_PARAMS_CHECK
-    EXPECTED_SIZE(ucp_rkey_t, 32 + sizeof(ucp_ep_h));
+    EXPECTED_SIZE(ucp_rkey_t, 40 + sizeof(ucp_ep_h));
 #else
-    EXPECTED_SIZE(ucp_rkey_t, 32);
+    EXPECTED_SIZE(ucp_rkey_t, 40);
 #endif
     /* TODO reduce request size to 240 or less after removing old protocols state */
     EXPECTED_SIZE(ucp_request_t, 272);

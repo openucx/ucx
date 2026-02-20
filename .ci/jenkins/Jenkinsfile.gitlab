@@ -5,7 +5,7 @@
  * See file LICENSE for terms.
  */
 
-@Library('github.com/Mellanox/ci-demo@master')
+@Library('github.com/Mellanox/ci-demo@stable_ucx')
 def matrix = new com.mellanox.cicd.Matrix()
 
 // Reports per-job status to GitLab. JOB_BASE_NAME is set by Jenkins.

@@ -39,8 +39,10 @@ jobs:
             CONTAINER: debian125
           debian130:
             CONTAINER: debian130
-          sles15sp6:
-            CONTAINER: sles15sp6
+          sles15sp7:
+            CONTAINER: sles15sp7
+          sles16sp0:
+            CONTAINER: sles16sp0
           rhel82:
             CONTAINER: rhel82
           rhel90:
@@ -65,6 +67,8 @@ jobs:
             CONTAINER: kylin10sp3
           euleros2sp12:
             CONTAINER: euleros2sp12
+          ctyunos2507:
+            CONTAINER: ctyunos2507
       # ARM matrix
       ${{ if contains(parameters.name, 'aarch64') }}:
         matrix:
@@ -72,10 +76,16 @@ jobs:
             CONTAINER: ubuntu2404_aarch64
           rhel100_aarch64:
             CONTAINER: rhel100_aarch64
+          sles15sp7_aarch64:
+            CONTAINER: sles15sp7_aarch64
           rocky89_aarch64:
             CONTAINER: rocky89_aarch64
           rocky96_aarch64:
             CONTAINER: rocky96_aarch64
+          ctyunos2507_aarch64:
+            CONTAINER: ctyunos2507_aarch64
+          sles16sp0_aarch64:
+            CONTAINER: sles16sp0_aarch64
     timeoutInMinutes: 340
 
     steps:
