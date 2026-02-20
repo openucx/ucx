@@ -420,7 +420,7 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
             if (probe_pidfd >= 0) {
                 int dup_fd = syscall(SYS_pidfd_getfd, probe_pidfd,
                                      STDOUT_FILENO, 0);
-                pidfd_supported = (dup_fd >= 0);
+                pidfd_supported = (dup_fd >= 0 || errno != ENOSYS);
                 if (dup_fd >= 0) {
                     close(dup_fd);
                 }
