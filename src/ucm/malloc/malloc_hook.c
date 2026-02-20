@@ -556,17 +556,6 @@ out:
     return ret;
 }
 
-static inline int ucm_malloc_sanitize_events(int events)
-{
-#ifdef HAVE_BRK_SBRK
-    return events;
-#else
-    /* If brk/sbrk are not available, don't wait for or install sbrk/brk hooks */
-    return events & ~(UCM_EVENT_SBRK | UCM_EVENT_BRK);
-#endif
-}
-
-#ifdef HAVE_BRK_SBRK
 static void ucm_malloc_sbrk(ucm_event_type_t event_type,
                             ucm_event_t *event, void *arg)
 {
@@ -584,7 +573,6 @@ static void ucm_malloc_sbrk(ucm_event_type_t event_type,
 
     ucs_recursive_spin_unlock(&ucm_malloc_hook_state.lock);
 }
-#endif
 
 static int ucs_malloc_is_ready(int events, const char *title)
 {
@@ -616,9 +604,6 @@ static void ucm_malloc_event_test_callback(ucm_event_type_t event_type,
 /* Has to be called with install_mutex held */
 static void ucm_malloc_test(int events)
 {
-#if !defined(HAVE_BRK_SBRK)
-    events = ucm_malloc_sanitize_events(events);
-#endif
     static const size_t small_alloc_count = 128;
     static const size_t small_alloc_size  = 4096;
     static const size_t large_alloc_size  = 4 * UCS_MBYTE;
@@ -824,17 +809,11 @@ static void ucm_malloc_init_orig_funcs()
 
 ucs_status_t ucm_malloc_install(int events)
 {
-#if !defined(HAVE_BRK_SBRK)
-    events = ucm_malloc_sanitize_events(events);
-#endif
-
-#ifdef HAVE_BRK_SBRK
     static ucm_event_handler_t sbrk_handler = {
         .events   = UCM_EVENT_SBRK,
         .priority = 1000,
         .cb       = ucm_malloc_sbrk
     };
-#endif
     ucs_status_t status;
 
     pthread_mutex_lock(&ucm_malloc_hook_state.install_mutex);
@@ -857,12 +836,28 @@ ucs_status_t ucm_malloc_install(int events)
 #endif
     }
 
-#ifdef HAVE_BRK_SBRK
+#if !HAVE_BRK
+    if (events & UCM_EVENT_BRK) {
+        ucm_debug("brk event requested, but brk() is not available");
+        events &= ~UCM_EVENT_BRK;
+    }
+#endif
+
+#if !HAVE_SBRK
+    if (events & UCM_EVENT_SBRK) {
+        ucm_debug("sbrk event requested, but sbrk() is not available");
+        events &= ~UCM_EVENT_SBRK;
+    }
+#endif
+
+#if HAVE_SBRK
     if (!(ucm_malloc_hook_state.install_state & UCM_MALLOC_INSTALLED_SBRK_EVH)) {
         ucm_debug("installing malloc-sbrk event handler");
         ucm_event_handler_add(&sbrk_handler);
         ucm_malloc_hook_state.install_state |= UCM_MALLOC_INSTALLED_SBRK_EVH;
     }
+#else
+    (void)sbrk_handler;
 #endif
 
     /* When running on valgrind, don't even try malloc hooks.

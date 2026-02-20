@@ -8,6 +8,8 @@
 #
 # Memory allocator selection
 #
+AC_CHECK_FUNCS([brk sbrk])
+
 AC_ARG_WITH([allocator],
     [AS_HELP_STRING([--with-allocator=NAME],
         [Build UCX with predefined memory allocator. The supported values are:
@@ -15,21 +17,21 @@ AC_ARG_WITH([allocator],
         [],
         [with_allocator=ptmalloc286])
 
-HAVE_UCM_PTMALLOC286=no
-
 case ${with_allocator} in
     ptmalloc286)
         AC_MSG_NOTICE(Memory allocator is ptmalloc-2.8.6 version)
-        AS_IF([test "x$have_brk_sbrk" = xyes],
-              [AC_DEFINE([HAVE_UCM_PTMALLOC286], 1, [Use ptmalloc-2.8.6 version])
-               HAVE_UCM_PTMALLOC286=yes],
-              [AC_MSG_WARN([brk()/sbrk() not available; disabling ptmalloc286 allocator])
-               HAVE_UCM_PTMALLOC286=no])
+        AC_DEFINE([HAVE_UCM_PTMALLOC286], [1], [Use ptmalloc-2.8.6 version])
+        HAVE_UCM_PTMALLOC286=yes
+        AS_IF([test "x$ac_cv_func_sbrk" != xyes], [
+            AC_DEFINE([HAVE_MORECORE], [0],
+                      [Disable MORECORE in ptmalloc (no sbrk available)])
+        ])
         ;;
     *)
         AC_MSG_ERROR(Cannot continue. Unsupported memory allocator name
                      in --with-allocator=[$with_allocator])
         ;;
+
 esac
 
 AM_CONDITIONAL([HAVE_UCM_PTMALLOC286],[test "x$HAVE_UCM_PTMALLOC286" = "xyes"])
@@ -88,9 +90,6 @@ AC_CHECK_DECLS([SYS_ipc],
 AS_IF([test "x$mmap_hooks_happy" = "xyes"],
       AS_IF([test "x$ipc_hooks_happy" = "xyes" -o "x$shm_hooks_happy" = "xyes"],
             [bistro_hooks_happy=yes]))
-
-AS_IF([test "x$have_brk_sbrk" != xyes],
-      [bistro_hooks_happy=no])
 
 AS_IF([test "x$bistro_hooks_happy" = "xyes"],
       [AC_DEFINE([UCM_BISTRO_HOOKS], [1], [Enable BISTRO hooks])],
