@@ -67,7 +67,9 @@ steps:
       git-clang-format --diff "${BASE}" "${PR_HEAD}" > format.patch
       cat format.patch
 
-      if [ "$(cat format.patch)" = "no modified files to format" ]; then
+      if [ "$(cat format.patch)" = "no modified files to format" ] || \
+         [ "$(cat format.patch)" = "clang-format did not modify any files" ] || \
+         [ ! -s format.patch ]; then
         echo "No files to format."
         exit 0
       fi
