@@ -93,8 +93,6 @@ AS_IF([test "x$ac_cv_func_brk" = "xyes" && test "x$ac_cv_func_sbrk" = "xyes"],
       [have_brk_sbrk=yes],
       [have_brk_sbrk=no])
 
-AM_CONDITIONAL([HAVE_BRK_SBRK], [test "x$have_brk_sbrk" = "xyes"])
-
 AS_IF([test "x$have_brk_sbrk" = "xyes"],
       [AC_DEFINE([HAVE_BRK_SBRK], [1],
                  [Define if both brk() and sbrk() are available])])
