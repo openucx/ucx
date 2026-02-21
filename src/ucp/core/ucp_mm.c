@@ -523,28 +523,6 @@ static ucs_status_t ucp_memh_register_gva(ucp_context_h context, ucp_mem_h memh,
     return UCS_OK;
 }
 
-static int ucp_memh_sys_dev_reachable(ucs_sys_device_t mem_sys_dev,
-                                      ucp_sys_dev_map_t sys_dev_map)
-{
-    ucs_sys_device_t sys_dev;
-
-    if (mem_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
-        return 1;
-    }
-
-    /*
-     * If at least one sys_dev is not reachable, do not register on it
-     * as we cannot know in advance which device is going to be used.
-     */
-    ucs_for_each_bit(sys_dev, sys_dev_map) {
-        if (!ucs_topo_is_reachable(sys_dev, mem_sys_dev)) {
-            return 0;
-        }
-    }
-
-    return 1;
-}
-
 static ucs_status_t
 ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
                            ucp_md_map_t md_map, unsigned uct_flags,
@@ -565,7 +543,6 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
     void *reg_address;
     size_t reg_length;
     size_t reg_align;
-    ucp_sys_dev_map_t sys_dev_map;
 
     if (gva_enable) {
         status = ucp_memh_register_gva(context, memh, md_map);
@@ -613,9 +590,8 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
 
             /* Exclude any unreachable MD from registration */
             ucs_for_each_bit(md_index, dmabuf_md_map) {
-                sys_dev_map = context->tl_mds[md_index].sys_dev_map;
-                if (!ucp_memh_sys_dev_reachable(mem_attr.sys_dev,
-                                                sys_dev_map)) {
+                if (!(context->tl_mds[md_index].reachable_sys_devs &
+                      UCS_BIT(mem_attr.sys_dev))) {
                     ucs_trace("md[%d] skipped: cannot reach mem_sys_dev=%u",
                               md_index, mem_attr.sys_dev);
                     reg_md_map &= ~UCS_BIT(md_index);
