@@ -590,6 +590,11 @@ typedef struct ucp_ep {
     uct_ep_h                      uct_eps[UCP_MAX_FAST_PATH_LANES];
     ucp_ep_ext_t                  *ext;                   /* Endpoint extension */
 
+    /* Flush generation counter - incremented on each flush operation.
+     * Used by multi-lane protocols to detect when round-robin state should
+     * be reset. Provides lazy reset without tracking protocol configs. */
+    uint32_t                      flush_generation;
+
 #if ENABLE_DEBUG_DATA
     char                          peer_name[UCP_WORKER_ADDRESS_NAME_MAX];
     /* Endpoint name for tracing and analysis */
