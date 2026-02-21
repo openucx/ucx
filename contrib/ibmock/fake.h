@@ -46,11 +46,16 @@ struct fake_qp {
 
     /* Posted receives */
     struct list        recv_reqs;
+
+    unsigned           rx_drop;   /* drop count per million */
 };
 
 struct fake_cq {
-    struct ibv_cq cq;
-    struct list   wcs;
+    struct ibv_cq  cq;
+    struct list    wcs;
+    unsigned       wcs_count;  /* inserted count of cqe */
+    unsigned       poll_count; /* cq poll without returned cqe */
+    int            is_ooo;     /* read it out of order */
 };
 
 struct fake_cqe {

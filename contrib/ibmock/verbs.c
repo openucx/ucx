@@ -15,9 +15,11 @@
 #include <stdbool.h>
 #include <unistd.h>
 
-#define NUM_DEVS   2
-#define SYS_PATH   "/tmp/ibmock"
-#define DUMMY_PKEY 65535 /* Dummy pkey with full membership for now */
+#define NUM_DEVS      2
+#define SYS_PATH      "/tmp/ibmock"
+#define DUMMY_PKEY    65535 /* Dummy pkey with full membership for now */
+#define DROP_RATE_MAX 1000000
+
 
 static pthread_mutex_t global_lock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -37,6 +39,24 @@ enum be_mode {
     BE_NOTSET,
     BE_LOOPBACK
 };
+
+/* Packet drop per million */
+static unsigned ibmock_drop_rate(void)
+{
+    static int rate = -1;
+    const char *str;
+
+    if (rate < 0) {
+        rate = 0;
+        str  = getenv("IBMOCK_DROP_RATE");
+        if (str) {
+            rate = atoi(str);
+            printf("ibmock drop_rate=%u\n", rate);
+        }
+    }
+
+    return rate;
+}
 
 static enum be_mode be_mode_get(void)
 {
@@ -201,7 +221,11 @@ rx_send(struct fake_qp *fqp, struct fake_hdr *hdr, struct iovec *iov, int count)
     size_t src_off, dst_off, total = 0;
 
     if (list_is_empty(&fqp->recv_reqs)) {
-        return 1;
+        return (fqp->qp_ex.qp_base.qp_type == IBV_QPT_UD) ? 0 : -ENOENT;
+    }
+
+    if (fqp->rx_drop && (((unsigned)rand() % DROP_RATE_MAX) < fqp->rx_drop)) {
+        return 0; /* Operation is dropped, TX CQE will be called */
     }
 
     src_off = sizeof(*hdr);
@@ -222,7 +246,7 @@ rx_send(struct fake_qp *fqp, struct fake_hdr *hdr, struct iovec *iov, int count)
                 dst_off = 0;
                 if (j >= wr->num_sge) {
                     fprintf(stderr, "ibmock: error: posted RX too short\n");
-                    return -1;
+                    return -ENOSPC;
                 }
             }
 
@@ -244,7 +268,8 @@ rx_send(struct fake_qp *fqp, struct fake_hdr *hdr, struct iovec *iov, int count)
 
     fcq = (struct fake_cq*)fqp->qp_ex.qp_base.recv_cq;
     list_add_tail(&fcq->wcs, &recv->fcqe.list);
-    return 1;
+    fcq->wcs_count++;
+    return 0;
 }
 
 static int
@@ -270,7 +295,7 @@ rx_rdma(struct fake_qp *fqp, struct fake_hdr *hdr, struct iovec *iov, int count)
     if (!found) {
         fprintf(stderr, "ibmock: rx rdma rkey not found PD of QP#%d\n",
                fqp->qp_ex.qp_base.qp_num);
-        return 0;
+        return EINVAL;
     }
 
     i       = 0;
@@ -284,7 +309,7 @@ rx_rdma(struct fake_qp *fqp, struct fake_hdr *hdr, struct iovec *iov, int count)
 
         if (i >= count) {
             fprintf(stderr, "ibmock: IO error\n");
-            return 0;
+            return ENOSPC;
         }
 
         len = min(sizeof(data) - dst_off, iov[i].iov_len - src_off);
@@ -309,10 +334,12 @@ rx_rdma(struct fake_qp *fqp, struct fake_hdr *hdr, struct iovec *iov, int count)
     }
 
     assert(total == hdr->rdma.len);
-    return 1;
+    return 0;
 }
 
-static int dev_rx_cb(struct iovec *iov, int count)
+/* returning >=0 triggers CQE, <0 ibv_post_send() error */
+static int dev_rx_cb(struct fake_qp *local_fqp,
+                     struct iovec *iov, int count)
 {
     struct fake_hdr *hdr = iov[0].iov_base;
     uint8_t *gid         = hdr->gid.raw;
@@ -321,7 +348,7 @@ static int dev_rx_cb(struct iovec *iov, int count)
     int ret;
 
     if (gid[13] != be_mode_get()) {
-        return 0; /* not ours */
+        return -EINVAL; /* not ours */
     }
 
     /* Lookup QP */
@@ -333,7 +360,7 @@ static int dev_rx_cb(struct iovec *iov, int count)
     }
 
     if (fqp == NULL) {
-        return 1;
+        return (local_fqp->qp_ex.qp_base.qp_type == IBV_QPT_UD) ? 0 : -ENOENT;
     }
 
     if (hdr->opcode == IBV_WR_SEND) {
@@ -352,14 +379,15 @@ static void dev_send_comp(void *arg, int ret)
 {
     struct fake_cqe *fcqe = arg;
 
-    if (ret < 0) {
+    if (ret != 0) {
         fcqe->wc.status = IBV_WC_GENERAL_ERR;
     }
 
     list_add_tail(&fcqe->fcq->wcs, &fcqe->list);
+    fcqe->fcq->wcs_count++;
 }
 
-static int dev_wr_send_serialize(struct ibv_qp *qp, struct ibv_send_wr *wr,
+static int dev_wr_send_serialize(struct fake_qp *fqp, struct ibv_send_wr *wr,
                                  struct ibv_ah *ah, uint32_t remote_qpn)
 {
     union {
@@ -368,6 +396,7 @@ static int dev_wr_send_serialize(struct ibv_qp *qp, struct ibv_send_wr *wr,
     } u;
     struct fake_hdr *hdr = &u.hdr;
     size_t total         = 0;
+    struct ibv_qp *qp    = &fqp->qp_ex.qp_base;
     struct iovec iov[2 * MAX_SGE + 1];
     struct fake_ah *fah;
     struct fake_cqe *fcqe;
@@ -438,8 +467,8 @@ static int dev_wr_send_serialize(struct ibv_qp *qp, struct ibv_send_wr *wr,
     wc->byte_len = total;
 
     /* TODO: Use actual backend for multi process/nodes */
-    ret = dev_rx_cb(iov, count);
-    if (ret == 0) {
+    ret = dev_rx_cb(fqp, iov, count);
+    if (ret < 0) {
         free(fcqe);
         return -1;
     }
@@ -492,7 +521,7 @@ static int dev_post_send(struct ibv_qp *qp, struct ibv_send_wr *wr,
         }
 
 
-        if (dev_wr_send_serialize(qp, wr, wr->wr.ud.ah, wr->wr.ud.remote_qpn)) {
+        if (dev_wr_send_serialize(fqp, wr, wr->wr.ud.ah, wr->wr.ud.remote_qpn)) {
             ret = -ENOMEM;
             goto fail;
         }
@@ -506,24 +535,48 @@ fail:
     return ret;
 }
 
+/* Add some reordering (linear for now) */
+static struct fake_cqe *fake_cq_get_cqe(struct fake_cq *fcq)
+{
+    struct list *entry = list_first(&fcq->wcs);
+    int index;
+
+    if (fcq->is_ooo) {
+        index = rand() % fcq->wcs_count;
+        while (--index >= 0) {
+            entry = entry->next;
+        }
+    }
+
+    return (struct fake_cqe *)entry;
+}
+
 static int dev_poll_cq(struct ibv_cq *cq, int num_entries, struct ibv_wc *wc)
 {
+    int i               = 0;
     struct fake_cq *fcq = (struct fake_cq*)cq;
     struct fake_cqe *fcqe;
-    int i;
 
     lock();
+
+    fcq->poll_count = (fcq->poll_count + 1) & 0x3;
+    if (fcq->poll_count != 0) {
+        goto out; /* Simulate some polling traffic */
+    }
+
     for (i = 0; i < num_entries; i++) {
         if (list_is_empty(&fcq->wcs)) {
             break;
         }
 
-        fcqe = (struct fake_cqe*)list_first(&fcq->wcs);
+        fcqe = fake_cq_get_cqe(fcq);
         list_del(&fcqe->list);
+        fcq->wcs_count--;
         wc[i] = fcqe->wc;
         fcqe->free(fcqe);
     }
 
+out:
     unlock();
     return i;
 }
@@ -620,6 +673,8 @@ struct ibv_cq *ibv_create_cq(struct ibv_context *context, int cqe,
     cq->cq_context = cq_context;
 
     list_init(&fcq->wcs);
+    fcq->wcs_count  = 0;
+    fcq->poll_count = 0;
     return cq;
 }
 
@@ -631,9 +686,11 @@ int ibv_destroy_cq(struct ibv_cq *cq)
     while (!list_is_empty(&fcq->wcs)) {
         fcqe = (struct fake_cqe*)list_first(&fcq->wcs);
         list_del(&fcqe->list);
+        fcq->wcs_count--;
         fcqe->free(fcqe);
     }
 
+    assert(fcq->wcs_count == 0);
     free(fcq);
     return 0;
 }
@@ -641,11 +698,50 @@ int ibv_destroy_cq(struct ibv_cq *cq)
 int fake_qpn = 0;
 array_t fake_qps;
 
-struct ibv_qp *ibv_create_qp(struct ibv_pd *pd, struct ibv_qp_init_attr *attr)
+struct fake_qp *create_fqp(struct ibv_pd *pd,
+                           struct ibv_qp_init_attr *attr)
 {
     struct fake_qp *fqp;
     struct ibv_qp *qp;
+    struct fake_cq *fcq;
 
+    fqp = calloc(1, sizeof(*fqp));
+    if (fqp == NULL) {
+        return NULL;
+    }
+
+    lock();
+
+    qp             = &fqp->qp_ex.qp_base;
+    qp->qp_context = pd->context;
+    qp->context    = pd->context;
+    qp->qp_type    = attr->qp_type;
+    qp->send_cq    = attr->send_cq;
+    qp->recv_cq    = attr->recv_cq;
+    qp->pd         = pd;
+    qp->srq        = attr->srq;
+    qp->state      = IBV_QPS_RESET;
+    qp->qp_num     = ++fake_qpn;
+
+    fqp->fpd       = (struct fake_pd*)pd;
+    fqp->rx_drop   = (qp->qp_type == IBV_QPT_UD)? ibmock_drop_rate() : 0;
+    list_init(&fqp->recv_reqs);
+
+    /* SRD */
+    fcq         = (struct fake_cq *)qp->recv_cq;
+    fcq->is_ooo = (qp->qp_type == IBV_QPT_DRIVER);
+    fcq         = (struct fake_cq *)qp->send_cq;
+    fcq->is_ooo = (qp->qp_type == IBV_QPT_DRIVER);
+
+    array_append(&fake_qps, &fqp, sizeof(fqp));
+
+    unlock();
+
+    return fqp;
+}
+
+struct ibv_qp *ibv_create_qp(struct ibv_pd *pd, struct ibv_qp_init_attr *attr)
+{
     if ((attr->qp_type != IBV_QPT_DRIVER) && (attr->qp_type != IBV_QPT_UD)) {
         return NULL; /* RC is not supported */
     }
@@ -655,28 +751,7 @@ struct ibv_qp *ibv_create_qp(struct ibv_pd *pd, struct ibv_qp_init_attr *attr)
         return NULL;
     }
 
-    fqp = calloc(1, sizeof(*fqp));
-    if (fqp == NULL) {
-        return NULL;
-    }
-
-    lock();
-    fqp->fpd = (struct fake_pd*)pd;
-    list_init(&fqp->recv_reqs);
-
-    qp          = &fqp->qp_ex.qp_base;
-    qp->context = pd->context;
-    qp->qp_type = attr->qp_type;
-    qp->send_cq = attr->send_cq;
-    qp->recv_cq = attr->recv_cq;
-    qp->pd      = pd;
-    qp->srq     = attr->srq;
-    qp->state   = IBV_QPS_RESET;
-    qp->qp_num  = ++fake_qpn;
-
-    array_append(&fake_qps, &fqp, sizeof(fqp));
-    unlock();
-    return qp;
+    return &create_fqp(pd, attr)->qp_ex.qp_base;
 }
 
 
@@ -960,7 +1035,7 @@ int dev_qp_wr_complete(struct ibv_qp_ex *qp_ex)
     lock();
     fqp->sr.wr_id = qp_ex->wr_id;
 
-    ret = dev_wr_send_serialize(&qp_ex->qp_base, &fqp->sr, fqp->ah,
+    ret = dev_wr_send_serialize(fqp, &fqp->sr, fqp->ah,
                                 fqp->remote_qpn);
     unlock();
     return ret;
