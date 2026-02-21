@@ -58,6 +58,29 @@ typedef struct {
 } uct_cuda_copy_ctx_rsc_t;
 
 
+typedef struct uct_cuda_copy_stream_op_handle {
+    /* User stream as passed by App */
+    CUstream                          user_stream;
+
+    /* Either in free list or in progress list */
+    union {
+        struct uct_cuda_copy_stream_op_handle *next;
+        ucs_list_link_t                       list;
+    };
+
+    /* Host-mapped memory with device accessible pointer */
+    uint32_t                          *host_ptr;
+    CUdeviceptr                       dev_ptr;
+
+    /* Notification when user stream is first done */
+    CUevent                           event;
+
+    /* Callback called when @a user_stream is unblocked */
+    void                              (*ready_cb)(void *);
+    void                              *ready_arg;
+} uct_cuda_copy_stream_op_handle_t;
+
+
 typedef struct uct_cuda_copy_iface {
     uct_cuda_iface_t            super;
     /* used to store uuid and check iface reachability */
@@ -75,6 +98,13 @@ typedef struct uct_cuda_copy_iface {
     /* 2D bitmap representing which streams in queue_desc matrix 
        should sync during flush */
     uct_cu_stream_bitmap_t streams_to_sync;
+
+    /* Free-list of user stream op handle */
+    uct_cuda_copy_stream_op_handle_t *stream_op_handle;
+    int                              stream_op_handle_count;
+
+    /* List of stream op handle being waited upon */
+    ucs_list_link_t                  stream_op_handle_waiting;
 } uct_cuda_copy_iface_t;
 
 
