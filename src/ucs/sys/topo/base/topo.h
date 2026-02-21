@@ -358,6 +358,11 @@ void ucs_topo_init(void);
  */
 void ucs_topo_cleanup(void);
 
+/**
+ * Check if two system devices share a PCI bridge.
+ */
+int ucs_topo_is_pci_bridge(ucs_sys_device_t sys_dev1, ucs_sys_device_t sys_dev2);
+
 END_C_DECLS
 
 #endif
