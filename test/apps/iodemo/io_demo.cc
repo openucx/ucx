@@ -19,6 +19,7 @@
 #include <csignal>
 #include <cerrno>
 #include <vector>
+#include <random>
 #include <map>
 #include <queue>
 #include <algorithm>
@@ -2999,8 +3000,9 @@ static int do_client(options_t& test_opts)
     LOG << "random seed: " << test_opts.random_seed;
 
     // randomize servers to optimize startup
-    std::random_shuffle(test_opts.servers.begin(), test_opts.servers.end(),
-                        IoDemoRandom::urand<size_t>);
+    std::random_device rd;
+    std::mt19937 rng(rd());
+    std::shuffle(test_opts.servers.begin(), test_opts.servers.end(), rng);
 
     UcxLog vlog(LOG_PREFIX, test_opts.verbose);
     vlog << "List of servers:";
