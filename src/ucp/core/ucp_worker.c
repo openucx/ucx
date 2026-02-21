@@ -87,18 +87,20 @@ static ucs_stats_class_t ucp_worker_stats_class = {
     .num_counters   = UCP_WORKER_STAT_LAST,
     .class_id       = UCS_STATS_CLASS_ID_INVALID,
     .counter_names  = {
-        [UCP_WORKER_STAT_TAG_RX_EAGER_MSG]         = "tag_rx_eager_msg",
-        [UCP_WORKER_STAT_TAG_RX_EAGER_SYNC_MSG]    = "tag_rx_sync_msg",
-        [UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_EXP]   = "tag_rx_eager_chunk_exp",
-        [UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_UNEXP] = "tag_rx_eager_chunk_unexp",
-        [UCP_WORKER_STAT_RNDV_RX_EXP]              = "rndv_rx_exp",
-        [UCP_WORKER_STAT_RNDV_RX_UNEXP]            = "rndv_rx_unexp",
-        [UCP_WORKER_STAT_RNDV_PUT_ZCOPY]           = "rndv_put_zcopy",
-        [UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY]     = "rndv_put_mtype_zcopy",
-        [UCP_WORKER_STAT_RNDV_GET_ZCOPY]           = "rndv_get_zcopy",
-        [UCP_WORKER_STAT_RNDV_RTR]                 = "rndv_rtr",
-        [UCP_WORKER_STAT_RNDV_RTR_MTYPE]           = "rndv_rtr_mtype",
-        [UCP_WORKER_STAT_RNDV_RKEY_PTR]            = "rndv_rkey_ptr"
+        [UCP_WORKER_STAT_TAG_RX_EAGER_MSG]          = "tag_rx_eager_msg",
+        [UCP_WORKER_STAT_TAG_RX_EAGER_SYNC_MSG]     = "tag_rx_sync_msg",
+        [UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_EXP]    = "tag_rx_eager_chunk_exp",
+        [UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_UNEXP]  = "tag_rx_eager_chunk_unexp",
+        [UCP_WORKER_STAT_RNDV_RX_EXP]               = "rndv_rx_exp",
+        [UCP_WORKER_STAT_RNDV_RX_UNEXP]             = "rndv_rx_unexp",
+        [UCP_WORKER_STAT_RNDV_PUT_ZCOPY]            = "rndv_put_zcopy",
+        [UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY]      = "rndv_put_mtype_zcopy",
+        [UCP_WORKER_STAT_RNDV_GET_ZCOPY]            = "rndv_get_zcopy",
+        [UCP_WORKER_STAT_RNDV_RTR]                  = "rndv_rtr",
+        [UCP_WORKER_STAT_RNDV_RTR_MTYPE]            = "rndv_rtr_mtype",
+        [UCP_WORKER_STAT_RNDV_RKEY_PTR]             = "rndv_rkey_ptr",
+        [UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED]   = "rndv_mtype_fc_throttled",
+        [UCP_WORKER_STAT_RNDV_MTYPE_FC_INCREMENTED] = "rndv_mtype_fc_incremented"
     }
 };
 #endif
@@ -2624,6 +2626,12 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     worker->counters.ep_creation_failures = 0;
     worker->counters.ep_closures          = 0;
     worker->counters.ep_failures          = 0;
+
+    /* Initialize RNDV mtype flow control */
+    worker->rndv_mtype_fc.active_frags = 0;
+    ucs_queue_head_init(&worker->rndv_mtype_fc.put_pending_q);
+    ucs_queue_head_init(&worker->rndv_mtype_fc.get_pending_q);
+    ucs_queue_head_init(&worker->rndv_mtype_fc.rtr_pending_q);
 
     /* Copy user flags, and mask-out unsupported flags for compatibility */
     worker->flags = UCP_PARAM_VALUE(WORKER, params, flags, FLAGS, 0) &
