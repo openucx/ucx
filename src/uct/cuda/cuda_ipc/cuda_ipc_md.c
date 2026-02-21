@@ -25,6 +25,11 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+/* Indicates whether PID NS is contained in rkey.
+ * Wire compatibility isn't broken because PID is used only for caching
+ * purposes. */
+#define UCT_CUDA_IPC_RKEY_FLAG_PID_NS UCS_BIT(31)
+
 static ucs_config_field_t uct_cuda_ipc_md_config_table[] = {
     {"", "", NULL,
      ucs_offsetof(uct_cuda_ipc_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
@@ -105,7 +110,9 @@ uct_cuda_ipc_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
     md_attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
     md_attr->cache_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
     md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
-    md_attr->rkey_packed_size = sizeof(uct_cuda_ipc_rkey_t);
+    md_attr->rkey_packed_size = ucs_sys_ns_is_default(UCS_SYS_NS_TYPE_PID) ?
+                                        sizeof(uct_cuda_ipc_rkey_t) :
+                                        sizeof(uct_cuda_ipc_extended_rkey_t);
     return UCS_OK;
 }
 
@@ -262,6 +269,7 @@ uct_cuda_ipc_mkey_pack(uct_md_h md, uct_mem_h tl_memh, void *address,
 {
     uct_cuda_ipc_rkey_t *packed = mkey_buffer;
     uct_cuda_ipc_memh_t *memh   = tl_memh;
+    uct_cuda_ipc_extended_rkey_t *ext_rkey;
     uct_cuda_ipc_lkey_t *key;
     ucs_status_t status;
 
@@ -287,6 +295,15 @@ found:
     packed->ph     = key->ph;
     packed->d_bptr = key->d_bptr;
     packed->b_len  = key->b_len;
+
+    if (!ucs_sys_ns_is_default(UCS_SYS_NS_TYPE_PID)) {
+        ext_rkey         = (uct_cuda_ipc_extended_rkey_t*)packed;
+        ext_rkey->pid_ns = memh->pid_ns;
+
+        ucs_assertv_always(!(packed->pid & UCT_CUDA_IPC_RKEY_FLAG_PID_NS),
+                           "pid=%d", packed->pid);
+        packed->pid |= UCT_CUDA_IPC_RKEY_FLAG_PID_NS;
+    }
 
     return UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetUuid(&packed->uuid,
                                                     memh->dev_num));
@@ -319,7 +336,7 @@ uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *component,
 
     pthread_mutex_lock(&component->lock);
 
-    cache = uct_cuda_ipc_get_dev_cache(component, &rkey->super);
+    cache = uct_cuda_ipc_get_dev_cache(component, &rkey->super.super);
     if (ucs_unlikely(NULL == cache)) {
         status = UCS_ERR_NO_RESOURCE;
         goto err;
@@ -368,12 +385,13 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_rkey_unpack,
                  const uct_rkey_unpack_params_t *params, uct_rkey_t *rkey_p,
                  void **handle_p)
 {
-    uct_cuda_ipc_component_t *com = ucs_derived_of(component,
-                                                   uct_cuda_ipc_component_t);
-    uct_cuda_ipc_rkey_t *packed   = (uct_cuda_ipc_rkey_t *)rkey_buffer;
+    uct_cuda_ipc_component_t *com     = ucs_derived_of(component,
+                                                       uct_cuda_ipc_component_t);
+    const uct_cuda_ipc_rkey_t *packed = rkey_buffer;
     uct_cuda_ipc_unpacked_rkey_t *unpacked;
     ucs_sys_device_t sys_dev;
     ucs_status_t status;
+    const uct_cuda_ipc_extended_rkey_t *ext_rkey;
 
     sys_dev = UCS_PARAM_VALUE(UCT_RKEY_UNPACK_FIELD, params, sys_device,
                               SYS_DEVICE, UCS_SYS_DEVICE_ID_UNKNOWN);
@@ -385,7 +403,16 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_rkey_unpack,
         goto err;
     }
 
-    unpacked->super = *packed;
+    unpacked->super.super      = *packed;
+    unpacked->super.super.pid &= ~UCT_CUDA_IPC_RKEY_FLAG_PID_NS;
+
+    /* Check if PID NS exists before using it (for wire compatibility) */
+    if (packed->pid & UCT_CUDA_IPC_RKEY_FLAG_PID_NS) {
+        ext_rkey               = (uct_cuda_ipc_extended_rkey_t*)packed;
+        unpacked->super.pid_ns = ext_rkey->pid_ns;
+    } else {
+        unpacked->super.pid_ns = ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID);
+    }
 
     status = uct_cuda_ipc_is_peer_accessible(com, unpacked, sys_dev);
     if (status != UCS_OK) {
@@ -425,6 +452,7 @@ uct_cuda_ipc_mem_reg(uct_md_h md, void *address, size_t length,
     /* dev_num is initialized during pack in uct_cuda_ipc_mem_add_reg */
     memh->dev_num = CU_DEVICE_INVALID;
     memh->pid     = getpid();
+    memh->pid_ns  = ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID);
     ucs_list_head_init(&memh->list);
 
     *memh_p = memh;
@@ -561,7 +589,7 @@ ucs_status_t uct_cuda_ipc_rkey_ptr(uct_component_t *component, uct_rkey_t rkey,
         return status;
     }
 
-    return uct_cuda_ipc_get_remote_address((uct_cuda_ipc_rkey_t*)rkey,
+    return uct_cuda_ipc_get_remote_address((uct_cuda_ipc_extended_rkey_t*)rkey,
                                            raddr, cu_dev, laddr_p, NULL);
 }
 
