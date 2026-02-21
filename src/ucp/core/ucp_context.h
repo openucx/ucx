@@ -98,6 +98,10 @@ typedef struct ucp_context_config {
     int                                    rndv_shm_ppln_enable;
     /** Enable error handling for rndv pipeline protocol */
     int                                    rndv_errh_ppln_enable;
+    /** Enable fragment throttling for rndv pipeline protocol */
+    int                                    rndv_ppln_frag_fc_enable;
+    /** Maximum outstanding fragments in rndv pipeline (window size) */
+    size_t                                 rndv_ppln_frag_wnd_size;
     /** Threshold for using tag matching offload capabilities. Smaller buffers
      *  will not be posted to the transport. */
     size_t                                 tm_thresh;
