@@ -50,7 +50,7 @@ steps:
     parallel: false
     timeout: 10
     run: |
-      set -euo pipefail
+      set -euox pipefail
 
       # Determine PR/MR diff range (GitHub: merge commit parents, GitLab: target branch)
       if git rev-parse --verify -q HEAD^2 >/dev/null; then
