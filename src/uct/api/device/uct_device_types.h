@@ -72,10 +72,10 @@ typedef union uct_device_completion uct_device_completion_t;
 
 
 /* Union structure of all device memory elements types */
-typedef union uct_device_mem_element {
+union uct_device_mem_element {
     uct_ib_md_device_mem_element_t       ib_md_mem_element;
     uct_cuda_ipc_md_device_mem_element_t cuda_ipc_md_mem_element;
-} uct_device_mem_element_t;
+};
 
 
 struct uct_device_local_mem_list_elem {
