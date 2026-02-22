@@ -29,25 +29,27 @@ static size_t ucp_amo_sw_pack(void *dest, ucp_request_t *req, int fetch,
     ucp_worker_h worker           = ep->worker;
     size_t length;
 
-    atomich->address    = req->send.amo.remote_addr;
+    atomich->address    = req->send.fenced_req.amo.remote_addr;
     atomich->req.ep_id  = ucp_ep_remote_id(ep);
     atomich->req.req_id = fetch ? ucp_send_request_get_id(req) :
                                   UCS_PTR_MAP_KEY_INVALID;
     atomich->length     = size;
-    atomich->opcode     = req->send.amo.uct_op;
+    atomich->opcode     = req->send.fenced_req.amo.uct_op;
     length              = sizeof(*atomich) + size;
 
     if (worker->context->config.ext.proto_enable) {
-        ucp_dt_contig_pack(worker, atomich + 1, &req->send.amo.value, size,
+        ucp_dt_contig_pack(worker, atomich + 1, &req->send.fenced_req.amo.value,
+                           size,
                            UCS_MEMORY_TYPE_HOST, size);
-        if (req->send.amo.uct_op == UCT_ATOMIC_OP_CSWAP) {
-            ucp_dt_contig_pack(worker, cswaph, req->send.amo.reply_buffer, size,
+        if (req->send.fenced_req.amo.uct_op == UCT_ATOMIC_OP_CSWAP) {
+            ucp_dt_contig_pack(worker, cswaph,
+                               req->send.fenced_req.amo.reply_buffer, size,
                                ucp_amo_request_reply_mem_type(req), size);
             length += size;
         }
     } else {
-        memcpy(atomich + 1, &req->send.amo.value, size);
-        if (req->send.amo.uct_op == UCT_ATOMIC_OP_CSWAP) {
+        memcpy(atomich + 1, &req->send.fenced_req.amo.value, size);
+        if (req->send.fenced_req.amo.uct_op == UCT_ATOMIC_OP_CSWAP) {
             memcpy(cswaph, req->send.buffer, size);
             length += size;
         }
@@ -303,9 +305,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_rep_handler, (arg, data, length, am_fl
                                "ATOMIC_REP %p", hdr);
 
     if (worker->context->config.ext.proto_enable) {
-        ucp_dt_contig_unpack(worker, req->send.amo.reply_buffer, hdr + 1,
-                             frag_length, ucp_amo_request_reply_mem_type(req),
-                             frag_length);
+        ucp_dt_contig_unpack(worker, req->send.fenced_req.amo.reply_buffer,
+                             hdr + 1, frag_length,
+                             ucp_amo_request_reply_mem_type(req), frag_length);
     } else {
         memcpy(req->send.buffer, hdr + 1, frag_length);
     }
@@ -385,7 +387,8 @@ ucp_proto_amo_sw_progress(uct_pending_req_t *self, uct_pack_callback_t pack_cb,
         if (!(req->flags & UCP_REQUEST_FLAG_PROTO_AMO_PACKED)) {
             ucp_datatype_iter_next_pack(&req->send.state.dt_iter,
                                         ep->worker, SIZE_MAX,
-                                        &next_iter, &req->send.amo.value);
+                                        &next_iter,
+                                        &req->send.fenced_req.amo.value);
             req->flags |= UCP_REQUEST_FLAG_PROTO_AMO_PACKED;
         }
 
@@ -394,8 +397,19 @@ ucp_proto_amo_sw_progress(uct_pending_req_t *self, uct_pack_callback_t pack_cb,
             return status;
         }
 
+        req->send.fenced_req.fence_seq = 0;
         status = ucp_ep_rma_handle_fence(ep, req, UCS_BIT(spriv->super.lane));
-        if (status != UCS_OK) {
+        if (status == UCP_STATUS_FENCE_DEFER) {
+            if (req->send.pending_lane != UCP_NULL_LANE) {
+                ucp_ep_fence_pending_add(ep, &req->send.uct);
+                req->send.pending_lane = UCP_NULL_LANE;
+                return UCS_OK;
+            }
+
+            return status;
+        } else if (status == UCS_ERR_NO_RESOURCE) {
+            return status;
+        } else if (status != UCS_OK) {
             ucp_proto_request_abort(req, status);
             return UCS_OK;
         }

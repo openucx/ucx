@@ -22,11 +22,11 @@ static size_t ucp_proto_get_am_bcopy_pack(void *dest, void *arg)
     ucp_request_t *req         = arg;
     ucp_get_req_hdr_t *getreqh = dest;
 
-    getreqh->address    = req->send.rma.remote_addr;
+    getreqh->address    = req->send.fenced_req.rma.remote_addr;
     getreqh->length     = req->send.state.dt_iter.length;
     getreqh->req.ep_id  = ucp_send_request_get_ep_remote_id(req);
     getreqh->req.req_id = ucp_send_request_get_id(req);
-    getreqh->mem_type   = req->send.rma.rkey->mem_type;
+    getreqh->mem_type   = req->send.fenced_req.rma.rkey->mem_type;
 
     return sizeof(*getreqh);
 }
@@ -60,8 +60,20 @@ static ucs_status_t ucp_proto_get_am_bcopy_progress(uct_pending_req_t *self)
         req->flags      |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
         ucp_send_request_id_alloc(req);
 
+        req->send.fenced_req.fence_seq = 0;
+
         status = ucp_ep_rma_handle_fence(ep, req, UCS_BIT(spriv->super.lane));
-        if (status != UCS_OK) {
+        if (status == UCP_STATUS_FENCE_DEFER) {
+            if (req->send.pending_lane != UCP_NULL_LANE) {
+                ucp_ep_fence_pending_add(ep, &req->send.uct);
+                req->send.pending_lane = UCP_NULL_LANE;
+                return UCS_OK;
+            }
+
+            return status;
+        } else if (status == UCS_ERR_NO_RESOURCE) {
+            return status;
+        } else if (status != UCS_OK) {
             ucp_proto_request_abort(req, status);
             return UCS_OK;
         }

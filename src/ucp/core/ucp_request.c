@@ -44,6 +44,8 @@ static const char *ucp_request_flag_names[] = {
     [ucs_ilog2(UCP_REQUEST_FLAG_RECV_TAG)]              = "rcv_tag",
     [ucs_ilog2(UCP_REQUEST_FLAG_RKEY_INUSE)]            = "rk_use",
     [ucs_ilog2(UCP_REQUEST_FLAG_USER_HEADER_COPIED)]    = "hdr_copy",
+    [ucs_ilog2(UCP_REQUEST_FLAG_FENCE_REQUIRED)]        = "fence",
+    [ucs_ilog2(UCP_REQUEST_FLAG_FENCE_BLOCKED)]         = "fence_blk",
     [ucs_ilog2(UCP_REQUEST_FLAG_RNDV_RECV_INTERNAL)]    = "rndv_rcv_int",
 
 #if UCS_ENABLE_ASSERT

@@ -26,6 +26,34 @@
  */
 #define UCP_PROTO_RMA_MAX_BCOPY_LANES 1
 
+#define UCP_EP_FENCE_SPIN_TIMEOUT_US  20   /* max microseconds to spin */
+
+/**
+ * Update an in-progress flush after the endpoint's live lanes changed.
+ *
+ * Lanes that disappeared before their flush started no longer need a
+ * completion. Lanes already started remain accounted for by their completion
+ * or discard flow. Newly created lanes need a completion and are added to the
+ * requested lane mask, since they may replace a lane that carried pre-fence
+ * operations.
+ *
+ * @return Change to apply to the flush completion count.
+ */
+static UCS_F_ALWAYS_INLINE int
+ucp_ep_flush_lane_state_update(ucp_lane_map_t live_lanes,
+                               ucp_lane_map_t started_lanes,
+                               ucp_lane_map_t *all_lanes_p,
+                               ucp_lane_map_t *lane_mask_p)
+{
+    ucp_lane_map_t destroyed_lanes = *all_lanes_p & ~live_lanes &
+                                     ~started_lanes;
+    ucp_lane_map_t new_lanes       = live_lanes & ~*all_lanes_p;
+
+    *all_lanes_p = live_lanes;
+    *lane_mask_p |= new_lanes;
+
+    return ucs_popcount(new_lanes) - ucs_popcount(destroyed_lanes);
+}
 
 /**
  * Defines functions for AMO protocol
@@ -93,5 +121,7 @@ void ucp_rma_sw_send_cmpl(ucp_ep_h ep);
 ucs_status_t ucp_ep_fence_weak(ucp_ep_h ep);
 
 ucs_status_t ucp_ep_fence_strong(ucp_ep_h ep);
+
+ucs_status_t ucp_ep_fence_strong_nb(ucp_ep_h ep, uint64_t fence_seq);
 
 #endif

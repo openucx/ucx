@@ -12,6 +12,7 @@
 #include <ucp/api/ucp.h>
 #include <ucp/core/ucp_request.inl>
 #include <ucs/debug/log.h>
+#include <ucs/time/time.h>
 
 
 /* TODO: remove it after AMO API is implemented via NBX  */
@@ -160,30 +161,113 @@ ucp_ep_rma_get_fence_flag(ucp_ep_h ep)
     return 0;
 }
 
+/**
+ * Clear the fence-required flag on @a req and mark @a lane_map as unflushed.
+ * Called after an epoch transition succeeds to let the request proceed.
+ */
+static UCS_F_ALWAYS_INLINE void
+ucp_ep_fence_admit_request(ucp_ep_h ep, ucp_request_t *req,
+                           ucp_lane_map_t lane_map)
+{
+    req->flags &= ~UCP_REQUEST_FLAG_FENCE_REQUIRED;
+    ep->ext->unflushed_lanes |= lane_map;
+}
+
+/**
+ * Poll CQEs on unflushed lanes for up to UCP_EP_FENCE_SPIN_TIMEOUT_US,
+ * waiting for the in-flight fence flush to complete (fence_inflight_req
+ * cleared by flushed_cb).
+ *
+ * @return 1 if the fence resolved within the budget, 0 on timeout.
+ */
+static UCS_F_ALWAYS_INLINE int
+ucp_ep_fence_try_spin(ucp_ep_h ep)
+{
+    ucp_lane_map_t      remaining;
+    ucp_lane_index_t    lane;
+    ucp_worker_iface_t *wiface;
+    ucs_time_t          deadline;
+
+    deadline = ucs_get_time() +
+               ucs_time_from_usec(UCP_EP_FENCE_SPIN_TIMEOUT_US);
+
+    do {
+        remaining = ep->ext->unflushed_lanes;
+        while (remaining) {
+            lane   = ucs_ffs64(remaining);
+            wiface = ucp_worker_iface(ep->worker,
+                                      ucp_ep_get_rsc_index(ep, lane));
+            if (wiface != NULL) {
+                uct_iface_progress(wiface->iface);
+            }
+            remaining &= remaining - 1;
+        }
+
+        if (ep->ext->fence_inflight_req == NULL) {
+            return 1;
+        }
+    } while (ucs_get_time() < deadline);
+
+    return 0;
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_ep_rma_handle_fence(ucp_ep_h ep, ucp_request_t *req,
                         ucp_lane_map_t lane_map)
 {
     ucs_status_t status;
+    uint64_t fence_seq;
 
-    /* Apply a fence if EP's sequence is behind worker's */
-    if (ucs_unlikely(req->flags & UCP_REQUEST_FLAG_FENCE_REQUIRED)) {
-        if (ucs_unlikely(ep->ext->unflushed_lanes == 0)) {
-            status = UCS_OK;
-        } else if (ucs_likely(
-            ucs_is_pow2_or_zero(ep->ext->unflushed_lanes | lane_map))) {
-            status = ucp_ep_fence_weak(ep);
-        } else {
-            status = ucp_ep_fence_strong(ep);
-        }
-    } else {
-        status = UCS_OK;
+    if (ucs_likely(!(req->flags & UCP_REQUEST_FLAG_FENCE_REQUIRED))) {
+        ep->ext->unflushed_lanes |= lane_map;
+        return UCS_OK;
     }
 
-    /* Re-set the lanes of the current operation for future fences */
-    ep->ext->unflushed_lanes |= lane_map;
+    if (req->send.fenced_req.fence_seq == 0) {
+        req->send.fenced_req.fence_seq = ep->worker->fence_seq;
+    }
 
-    return status;
+    fence_seq = req->send.fenced_req.fence_seq;
+
+    /* Fence already satisfied by a previous epoch transition */
+    if (ep->ext->fence_seq >= fence_seq) {
+        ucp_ep_fence_admit_request(ep, req, lane_map);
+        return UCS_OK;
+    }
+
+    /* No pre-fence operations on this EP — fast-forward the epoch */
+    if (ucs_unlikely(ep->ext->unflushed_lanes == 0)) {
+        ep->ext->fence_seq = fence_seq;
+        ucp_ep_fence_admit_request(ep, req, lane_map);
+        return UCS_OK;
+    }
+
+    /* Single-lane: use cheap weak fence */
+    if (ucs_likely(ucs_is_pow2(ep->ext->unflushed_lanes) &&
+                   ((lane_map & ep->ext->unflushed_lanes) == lane_map))) {
+        status = ucp_ep_fence_weak(ep);
+        if (ucs_likely(status == UCS_OK)) {
+            ep->ext->unflushed_lanes = 0;
+            ep->ext->fence_seq       = fence_seq;
+            ucp_ep_fence_admit_request(ep, req, lane_map);
+        }
+        return status;
+    }
+
+    /* Multi-lane: try to resolve the strong fence inline */
+    if (ep->ext->fence_inflight_req == NULL) {
+        status = ucp_ep_fence_strong_nb(ep, fence_seq);
+        if (ucs_likely(status == UCS_OK)) {
+            if ((ep->ext->fence_inflight_req == NULL) ||
+                ucp_ep_fence_try_spin(ep)) {
+                ucp_ep_fence_admit_request(ep, req, lane_map);
+                return UCS_OK;
+            }
+        }
+    }
+
+    req->flags |= UCP_REQUEST_FLAG_FENCE_BLOCKED;
+    return UCP_STATUS_FENCE_DEFER;
 }
 
 #endif

@@ -89,13 +89,14 @@ static size_t ucp_proto_put_rndv_rts_pack(void *dest, void *arg)
     ucp_rma_rndv_rts_hdr_t *rts = dest;
     ucp_rkey_config_t *rkey_config;
 
-    rkey_config = ucp_rkey_config(req->send.ep->worker, req->send.rma.rkey);
+    rkey_config = ucp_rkey_config(req->send.ep->worker,
+                                  req->send.fenced_req.rma.rkey);
 
     rts->super.hdr    = 0;
     rts->super.opcode = UCP_RNDV_RTS_RMA;
-    rts->address      = req->send.rma.remote_addr;
+    rts->address      = req->send.fenced_req.rma.remote_addr;
     rts->sys_dev      = rkey_config->key.sys_dev;
-    rts->mem_type     = req->send.rma.rkey->mem_type;
+    rts->mem_type     = req->send.fenced_req.rma.rkey->mem_type;
 
     return ucp_proto_rndv_rts_pack(req, &rts->super, sizeof(*rts));
 }
@@ -491,7 +492,7 @@ static ucs_status_t ucp_proto_get_rndv_init(ucp_request_t *get_req,
         return status;
     }
 
-    address              = get_req->send.rma.remote_addr;
+    address              = get_req->send.fenced_req.rma.remote_addr;
     length               = get_req->send.state.dt_iter.length;
     get_req->send.buffer =
             get_req->send.state.dt_iter.type.contig.buffer;
@@ -526,7 +527,7 @@ static ucs_status_t ucp_proto_get_rndv_init(ucp_request_t *get_req,
     ucp_request_set_super(rndv_req, recv_req);
     rndv_req->send.rndv.remote_req_id      = UCS_PTR_MAP_KEY_INVALID;
     rndv_req->send.rndv.remote_address     = address;
-    rndv_req->send.rndv.rkey               = get_req->send.rma.rkey;
+    rndv_req->send.rndv.rkey               = get_req->send.fenced_req.rma.rkey;
     rndv_req->send.rndv.offset             = 0;
 
     UCS_PROFILE_CALL_VOID(ucp_datatype_iter_move,

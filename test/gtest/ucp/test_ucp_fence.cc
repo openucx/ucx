@@ -5,6 +5,39 @@
 */
 
 #include "ucp_test.h"
+#include <ucp/rma/rma.h>
+
+
+class test_ucp_fence_lane_state : public ucs::test {
+};
+
+UCS_TEST_F(test_ucp_fence_lane_state, replace_unstarted_lane)
+{
+    ucp_lane_map_t all_lanes = UCS_BIT(0) | UCS_BIT(1);
+    ucp_lane_map_t lane_mask = UCS_BIT(1);
+    int count_diff;
+
+    count_diff = ucp_ep_flush_lane_state_update(
+            UCS_BIT(0) | UCS_BIT(2), 0, &all_lanes, &lane_mask);
+
+    EXPECT_EQ(0, count_diff);
+    EXPECT_EQ(UCS_BIT(0) | UCS_BIT(2), all_lanes);
+    EXPECT_EQ(UCS_BIT(1) | UCS_BIT(2), lane_mask);
+}
+
+UCS_TEST_F(test_ucp_fence_lane_state, replace_started_lane)
+{
+    ucp_lane_map_t all_lanes = UCS_BIT(0) | UCS_BIT(1);
+    ucp_lane_map_t lane_mask = UCS_BIT(1);
+    int count_diff;
+
+    count_diff = ucp_ep_flush_lane_state_update(
+            UCS_BIT(0) | UCS_BIT(2), UCS_BIT(1), &all_lanes, &lane_mask);
+
+    EXPECT_EQ(1, count_diff);
+    EXPECT_EQ(UCS_BIT(0) | UCS_BIT(2), all_lanes);
+    EXPECT_EQ(UCS_BIT(1) | UCS_BIT(2), lane_mask);
+}
 
 
 class test_ucp_fence : public ucp_test {
