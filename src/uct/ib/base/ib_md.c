@@ -1151,8 +1151,6 @@ static ucs_init_once_t uct_ib_plugin_load_once = UCS_INIT_ONCE_INITIALIZER;
  * 3. UCX installation directory ($prefix/lib/ucx/)
  * 4. Relative to component library (same directory as libuct_ib.so)
  * 
- * Supports both new naming (libucx_plugin_ib.so) and backward-compatible
- * naming (libuct_ib_plugin.so).
  */
 static void uct_ib_try_load_plugin(void)
 {
