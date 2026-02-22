@@ -5,7 +5,8 @@
 
 if HAVE_IB
 
-SUBDIRS = . mlx5 efa rdmacm
+# Build plugin first so libuct_ib.la can link against it
+SUBDIRS = plugin . mlx5 efa rdmacm
 
 module_LTLIBRARIES    = libuct_ib.la
 libuct_ib_la_CPPFLAGS = $(BASE_CPPFLAGS) $(IBVERBS_CPPFLAGS)
@@ -61,6 +62,22 @@ libuct_ib_la_SOURCES += \
 	ud/verbs/ud_verbs.c
 
 endif # HAVE_TL_UD
+
+# Plugin stub implementation - always included in libuct_ib.so
+# so that plugin functions are always available. The plugin library
+# can override these when loaded.
+libuct_ib_la_SOURCES += \
+	plugin/base/uct_ib_plugin_stub.c
+
+# Link against plugin library if available so it loads automatically
+# and overrides weak symbols
+# Plugin is built in subdirectory before this directory
+# Use -Wl,--no-as-needed to force linking even though symbols are weak
+if HAVE_IB_PLUGIN
+libuct_ib_la_LDFLAGS += -Wl,--no-as-needed
+libuct_ib_la_LIBADD += $(top_builddir)/src/uct/ib/plugin/libuct_ib_plugin.la
+libuct_ib_la_LDFLAGS += -Wl,--as-needed
+endif # HAVE_IB_PLUGIN
 
 PKG_CONFIG_NAME=ib
 

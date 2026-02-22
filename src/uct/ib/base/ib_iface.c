@@ -31,6 +31,9 @@
 #include <float.h>
 
 
+#include "../plugin/uct_ib_plugin.h"
+
+
 /**
  * Maximum bandwidth of NDR single path with PCIe Gen5 and RDMA_READ operation.
  */
@@ -1681,6 +1684,14 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
     int preferred_cpu;
     ucs_status_t status;
     uint8_t port_num;
+
+    status = ucx_plugin_init();
+    if (status != UCS_OK) {
+        ucs_warn("failed to initialize UCX IB plugin: %s", ucs_status_string(status));
+    }
+    else {
+        ucs_info("UCX IB plugin initialized successfully");
+    }
 
     if (!(params->open_mode & UCT_IFACE_OPEN_MODE_DEVICE)) {
         return UCS_ERR_UNSUPPORTED;
