@@ -828,8 +828,8 @@ static void ucs_stats_clean_node_recurs(ucs_stats_node_t *node)
     ucs_stats_node_t *child, *tmp;
 
     if (!ucs_list_is_empty(&node->children[UCS_STATS_ACTIVE_CHILDREN])) {
-        ucs_warn("stats node "UCS_STATS_NODE_FMT" still has active children",
-                 UCS_STATS_NODE_ARG(node));
+        ucs_debug("stats node " UCS_STATS_NODE_FMT " still has active children",
+                  UCS_STATS_NODE_ARG(node));
     }
 
     ucs_list_for_each_safe(child, tmp, &node->children[UCS_STATS_INACTIVE_CHILDREN], list) {

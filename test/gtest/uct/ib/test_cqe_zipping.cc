@@ -18,6 +18,16 @@ extern "C" {
 
 class test_cqe_zipping : public test_uct_ib_with_specific_port {
 public:
+    test_cqe_zipping()
+    {
+        stats_activate();
+    }
+
+    ~test_cqe_zipping()
+    {
+        stats_restore();
+    }
+
     bool is_cqe_zipping_expected()
     {
 #ifdef ENABLE_STATS
@@ -67,7 +77,6 @@ public:
 
     virtual void init()
     {
-        stats_activate();
         modify_config("IB_TX_CQE_ZIP_ENABLE", "yes");
         modify_config("IB_RX_CQE_ZIP_ENABLE", "yes");
 
@@ -121,8 +130,6 @@ private:
 
         test_uct_ib::cleanup();
         test_uct_ib_with_specific_port::cleanup();
-
-        stats_restore();
     }
 
     ucs_status_t am_zcopy()

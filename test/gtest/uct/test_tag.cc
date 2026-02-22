@@ -770,13 +770,13 @@ extern "C" {
 
 class test_tag_stats : public test_tag {
 public:
-    void init() {
+    test_tag_stats()
+    {
         stats_activate();
-        test_tag::init();
     }
 
-    void cleanup() {
-        test_tag::cleanup();
+    ~test_tag_stats()
+    {
         stats_restore();
     }
 
