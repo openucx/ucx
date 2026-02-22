@@ -30,12 +30,7 @@
 #include <pthread_np.h>
 #endif
 #include <sys/resource.h>
-#ifdef UCX_SHARED_LIB
-#include <dlfcn.h>
-#include <limits.h>
-#endif
-
-
+#include <ucs/sys/plugin.h>
 #include "../plugin/uct_ib_plugin.h"
 
 
@@ -1143,102 +1138,40 @@ uct_ib_query_md_resources(uct_component_t *component,
         (uct_ib_check_device_cb_t)ucs_empty_function_return_one_int);
 }
 
-#ifdef UCX_SHARED_LIB
-/* Static variables for plugin loading */
-static int uct_ib_plugin_load_attempted = 0;
-static void *uct_ib_plugin_handle = NULL;
+/* Static variable to ensure plugin loading is attempted only once */
+static ucs_init_once_t uct_ib_plugin_load_once = UCS_INIT_ONCE_INITIALIZER;
 
 /**
- * Try to load the UCX IB plugin library dynamically.
- * This function attempts to load the plugin from various locations:
- * 1. Standard library paths (LD_LIBRARY_PATH, system paths)
- * 2. UCX installation directory (relative to libuct_ib.so)
+ * Try to load the UCX IB plugin library dynamically using the generalized
+ * plugin infrastructure.
  * 
- * The plugin is loaded with RTLD_GLOBAL | RTLD_LAZY flags so that:
- * - Its symbols become globally visible (allowing override of weak stubs)
- * - Symbol resolution is deferred until first use
+ * This function uses ucs_plugin_load_component() which searches for plugins in:
+ * 1. Environment variable UCX_PLUGINS or UCX_IB_PLUGINS
+ * 2. Standard library paths (LD_LIBRARY_PATH, system paths)
+ * 3. UCX installation directory ($prefix/lib/ucx/)
+ * 4. Relative to component library (same directory as libuct_ib.so)
  * 
- * This function is safe to call multiple times - it only attempts loading once.
+ * Supports both new naming (libucx_plugin_ib.so) and backward-compatible
+ * naming (libuct_ib_plugin.so).
  */
 static void uct_ib_try_load_plugin(void)
 {
-    const char *plugin_names[] = {
-        "libuct_ib_plugin.so",
-        "libuct_ib_plugin.so.0",
-        "libuct_ib_plugin.so.0.0.0",
-        NULL
-    };
-    const char **name;
-    void *handle;
-    Dl_info info;
-    /* Use smaller buffer - library paths are typically < 512 bytes */
-    char plugin_path[1024];
-    
-    if (uct_ib_plugin_load_attempted) {
-        return; /* Already attempted */
-    }
-    
-    uct_ib_plugin_load_attempted = 1;
-    
-    /* Clear any previous dlopen errors */
-    (void)dlerror();
-    
-    /* Try loading from standard library paths first */
-    for (name = plugin_names; *name != NULL; name++) {
-        handle = dlopen(*name, RTLD_GLOBAL | RTLD_LAZY);
-        if (handle != NULL) {
-            uct_ib_plugin_handle = handle;
-            ucs_debug("Loaded UCX IB plugin: %s", *name);
-            return;
+    ucs_plugin_loader_config_t config;
+    ucs_plugin_array_t *plugins;
+
+    UCS_INIT_ONCE(&uct_ib_plugin_load_once) {
+        config.component = "ib";
+        config.plugin_prefix = "libucx_plugin";
+
+        plugins = ucs_plugin_load_component(&config);
+        if (plugins != NULL && ucs_array_length(plugins) > 0) {
+            ucs_debug("Loaded %u UCX IB plugin(s)", ucs_array_length(plugins));
+            /* Plugins are stored in registry, no need to keep local reference */
+        } else {
+            ucs_debug("UCX IB plugin not found, using stub implementation");
         }
     }
-    
-    /* Try loading from UCX installation directory */
-    /* Get path to libuct_ib.so using dladdr() on a function in this file */
-    if (dladdr((void*)uct_ib_try_load_plugin, &info) != 0) {
-        /* Use smaller buffer - library paths are typically < 512 bytes */
-        char lib_dir[1024];
-        char *last_slash;
-        size_t lib_dir_len;
-        
-        /* Extract directory from libuct_ib.so path */
-        strncpy(lib_dir, info.dli_fname, sizeof(lib_dir) - 1);
-        lib_dir[sizeof(lib_dir) - 1] = '\0';
-        last_slash = strrchr(lib_dir, '/');
-        if (last_slash != NULL) {
-            *last_slash = '\0';
-            lib_dir_len = strlen(lib_dir);
-            
-            /* Try each plugin name in the lib directory */
-            for (name = plugin_names; *name != NULL; name++) {
-                size_t name_len = strlen(*name);
-                
-                /* Check if path would fit */
-                if (lib_dir_len + 1 + name_len >= sizeof(plugin_path)) {
-                    continue; /* Path too long, skip this name */
-                }
-                
-                snprintf(plugin_path, sizeof(plugin_path), "%s/%s", 
-                        lib_dir, *name);
-                handle = dlopen(plugin_path, RTLD_GLOBAL | RTLD_LAZY);
-                if (handle != NULL) {
-                    uct_ib_plugin_handle = handle;
-                    ucs_debug("Loaded UCX IB plugin: %s", plugin_path);
-                    return;
-                }
-            }
-        }
-    }
-    
-    /* Plugin not found - this is OK, will use weak stubs */
-    ucs_debug("UCX IB plugin not found, using stub implementation");
 }
-#else
-static void uct_ib_try_load_plugin(void)
-{
-    /* No-op for static builds */
-}
-#endif /* UCX_SHARED_LIB */
 
 static ucs_status_t
 uct_ib_md_open(uct_component_t *component, const char *md_name,

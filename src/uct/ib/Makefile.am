@@ -69,15 +69,9 @@ endif # HAVE_TL_UD
 libuct_ib_la_SOURCES += \
 	plugin/base/uct_ib_plugin_stub.c
 
-# Link against plugin library if available so it loads automatically
-# and overrides weak symbols
+# Plugin is now loaded dynamically via ucs_plugin_load_component()
+# No need to link against it at build time - it will be loaded at runtime
 # Plugin is built in subdirectory before this directory
-# Use -Wl,--no-as-needed to force linking even though symbols are weak
-if HAVE_IB_PLUGIN
-libuct_ib_la_LDFLAGS += -Wl,--no-as-needed
-libuct_ib_la_LIBADD += $(top_builddir)/src/uct/ib/plugin/libuct_ib_plugin.la
-libuct_ib_la_LDFLAGS += -Wl,--as-needed
-endif # HAVE_IB_PLUGIN
 
 PKG_CONFIG_NAME=ib
 
