@@ -16,12 +16,16 @@ extern "C" {
 #endif
 
 /**
- * Plugin descriptor - metadata about a loaded plugin
+ * Plugin descriptor - metadata about a dynamically loaded plugin
+ * 
+ * Plugins are separate shared libraries that are built independently from UCX
+ * and loaded at runtime. This structure holds metadata about a successfully
+ * loaded plugin.
  */
 typedef struct ucs_plugin_desc {
     const char *name;           /* Plugin name */
     const char *component;      /* Component name (e.g., "ib", "cuda") */
-    void *handle;               /* dlopen() handle */
+    void *handle;               /* dlopen() handle for the plugin library */
     void *data;                 /* Component-specific plugin data */
 } ucs_plugin_desc_t;
 
@@ -32,6 +36,10 @@ UCS_ARRAY_DECLARE_TYPE(ucs_plugin_array_t, unsigned, ucs_plugin_desc_t);
 
 /**
  * Plugin loader configuration
+ * 
+ * Used to configure how plugins are discovered and loaded for a specific component.
+ * Plugins are built separately and installed to standard library paths, then discovered
+ * and loaded dynamically at runtime by UCX.
  * 
  * Note: We don't include flags or max_plugins because:
  * - flags: Always use RTLD_GLOBAL | RTLD_LAZY (needed for weak symbol override)
@@ -45,7 +53,9 @@ typedef struct ucs_plugin_loader_config {
 /**
  * Load plugins for a component
  * 
- * This function searches for and loads plugins matching the specified pattern.
+ * This function searches for and dynamically loads plugins matching the specified pattern.
+ * Plugins are built separately from UCX and must be installed to standard library paths.
+ * 
  * Plugins are always loaded with RTLD_GLOBAL | RTLD_LAZY to ensure:
  * - Plugin symbols override weak stubs (RTLD_GLOBAL)
  * - Symbol resolution is deferred for better startup performance (RTLD_LAZY)
@@ -53,14 +63,12 @@ typedef struct ucs_plugin_loader_config {
  * There is no limit on the number of plugins - all discovered plugins are loaded.
  * 
  * Search order:
- * 1. Environment variable UCX_PLUGINS or UCX_<COMPONENT>_PLUGINS
- * 2. Standard library paths (LD_LIBRARY_PATH, system paths)
- * 3. UCX installation directory ($prefix/lib/ucx/)
- * 4. Relative to component library (same directory as component .so)
+ * 1. Standard library paths (LD_LIBRARY_PATH, system paths like /usr/lib, /usr/local/lib)
+ * 2. UCX installation directory ($prefix/lib/ucx/)
+ * 3. Relative to component library (same directory as component .so)
  * 
  * Naming conventions:
  * - Standard: libucx_plugin_<name>.so (e.g., libucx_plugin_ib.so)
- * - Backward compatible: libuct_<component>_plugin.so (e.g., libuct_ib_plugin.so)
  * 
  * @param [in]  config      Plugin loader configuration
  * 
@@ -79,6 +87,20 @@ ucs_plugin_array_t* ucs_plugin_load_component(const ucs_plugin_loader_config_t *
  */
 ucs_plugin_desc_t* ucs_plugin_find(const char *component, const char *name);
 
+/**
+ * Free plugin descriptors and unload plugin libraries
+ * 
+ * This function cleans up the entire plugin registry, including:
+ * - Closing all dlopen() handles for loaded plugins
+ * - Freeing all allocated plugin name strings
+ * - Freeing all component strings
+ * - Freeing all plugin arrays
+ * - Freeing all registry entries
+ * 
+ * @note This function should only be called when plugins are no longer needed.
+ *       In most cases, plugins remain loaded for the lifetime of the process.
+ */
+void ucs_plugin_free_descriptors(void);
 
 #ifdef __cplusplus
 }

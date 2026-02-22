@@ -227,6 +227,42 @@ ucs_plugin_desc_t* ucs_plugin_find(const char *component, const char *name)
     return NULL;
 }
 
+void ucs_plugin_free_descriptors(void)
+{
+    ucs_plugin_registry_entry_t *entry, *tmp;
+    ucs_plugin_desc_t *plugin;
+
+    /* Initialize registry if needed (to ensure it exists) */
+    UCS_INIT_ONCE(&ucs_plugin_registry_init_once) {
+        /* Registry not initialized yet, nothing to clean up */
+        return;
+    }
+
+    /* Clean up entire registry */
+    ucs_list_for_each_safe(entry, tmp, &ucs_plugin_registry, list) {
+        /* Free all plugins in this entry */
+        ucs_array_for_each(plugin, &entry->plugins) {
+            if (plugin->handle != NULL) {
+                dlclose(plugin->handle);
+            }
+            if (plugin->name != NULL) {
+                ucs_free((void*)plugin->name);
+            }
+        }
+
+        /* Clean up the plugin array */
+        ucs_array_cleanup_dynamic(&entry->plugins);
+
+        /* Free component string */
+        if (entry->component != NULL) {
+            ucs_free(entry->component);
+        }
+
+        /* Remove from list and free entry */
+        ucs_list_del(&entry->list);
+        ucs_free(entry);
+    }
+}
 
 #else /* UCX_SHARED_LIB */
 
@@ -241,7 +277,7 @@ ucs_plugin_desc_t* ucs_plugin_find(const char *component, const char *name)
     return NULL;
 }
 
-void ucs_plugin_free_descriptors(ucs_plugin_desc_t *plugins, unsigned num_plugins)
+void ucs_plugin_free_descriptors(void)
 {
 }
 

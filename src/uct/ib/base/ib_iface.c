@@ -31,8 +31,6 @@
 #include <float.h>
 
 
-
-
 /**
  * Maximum bandwidth of NDR single path with PCIe Gen5 and RDMA_READ operation.
  */

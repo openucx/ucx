@@ -1141,17 +1141,6 @@ uct_ib_query_md_resources(uct_component_t *component,
 /* Static variable to ensure plugin loading is attempted only once */
 static ucs_init_once_t uct_ib_plugin_load_once = UCS_INIT_ONCE_INITIALIZER;
 
-/**
- * Try to load the UCX IB plugin library dynamically using the generalized
- * plugin infrastructure.
- * 
- * This function uses ucs_plugin_load_component() which searches for plugins in:
- * 1. Environment variable UCX_PLUGINS or UCX_IB_PLUGINS
- * 2. Standard library paths (LD_LIBRARY_PATH, system paths)
- * 3. UCX installation directory ($prefix/lib/ucx/)
- * 4. Relative to component library (same directory as libuct_ib.so)
- * 
- */
 static void uct_ib_try_load_plugin(void)
 {
     ucs_plugin_loader_config_t config;
