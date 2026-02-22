@@ -15,6 +15,7 @@
 #include "rma.inl"
 
 static unsigned ucp_ep_flush_resume_slow_path_callback(void *arg);
+static void ucp_ep_flush_request_resched(ucp_ep_h ep, ucp_request_t *req);
 
 static void
 ucp_ep_flush_request_update_uct_comp(ucp_request_t *req, int diff,
@@ -63,6 +64,61 @@ static int ucp_ep_flush_is_completed(ucp_request_t *req)
     return (req->send.state.uct_comp.count == 0) && req->send.flush.sw_done;
 }
 
+/**
+ * Check whether fence-pending work relevant to @a fence_seq_th is clear on
+ * this endpoint.
+ *
+ * @return 1 when there is no inflight fence request and no queued request
+ *         with fence_seq <= fence_seq_th, 0 otherwise.
+ */
+static UCS_F_ALWAYS_INLINE int
+ucp_ep_fence_pending_is_clear(ucp_ep_h ep, uint64_t fence_seq_th)
+{
+    ucp_ep_ext_t *ep_ext = ep->ext;
+    ucp_request_t *head_req;
+
+    if ((ep_ext->fence_inflight_req != NULL) &&
+        (ep_ext->fence_inflight_req->send.flush.fence_seq <= fence_seq_th)) {
+        return 0;
+    }
+
+    if (!ucs_queue_is_empty(&ep_ext->fence_pending_q)) {
+        head_req = ucs_queue_head_elem_non_empty(&ep_ext->fence_pending_q,
+                                                 ucp_request_t,
+                                                 send.fenced_req.fence_pending_elem);
+        if (head_req->send.fenced_req.fence_seq <= fence_seq_th) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+/**
+ * Probe whether any lane in @a lane_mask still has outstanding UCT operations.
+ *
+ * @return 1 if any lane has pending work, 0 if all probed lanes are clean.
+ */
+static UCS_F_ALWAYS_INLINE int
+ucp_ep_flush_has_pending_work(ucp_ep_h ep, ucp_lane_map_t lane_mask)
+{
+    ucp_lane_map_t remaining = UCS_MASK(ucp_ep_num_lanes(ep)) & lane_mask;
+    ucp_lane_index_t lane;
+    uct_ep_h uct_ep;
+
+    while (remaining) {
+        lane   = ucs_ffs64(remaining);
+        uct_ep = ucp_ep_get_lane(ep, lane);
+        if ((uct_ep != NULL) &&
+            (uct_ep_flush(uct_ep, UCT_FLUSH_FLAG_LOCAL, NULL) != UCS_OK)) {
+            return 1;
+        }
+        remaining &= remaining - 1;
+    }
+
+    return 0;
+}
+
 static void ucp_ep_flush_progress(ucp_request_t *req)
 {
     ucp_ep_h ep              = req->send.ep;
@@ -108,6 +164,14 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
 
         /* Search for next lane to start flush */
         lane   = ucs_ffs64(all_lanes & ~req->send.flush.started_lanes);
+
+        /* Skip lanes not targeted by this flush (e.g. fence flush only
+         * targets unflushed_lanes). */
+        if (!(req->send.flush.lane_mask & UCS_BIT(lane))) {
+            ucp_ep_flush_request_update_uct_comp(req, -1, UCS_BIT(lane));
+            continue;
+        }
+
         uct_ep = ucp_ep_get_lane(ep, lane);
         if (uct_ep == NULL) {
             ucp_ep_flush_request_update_uct_comp(req, -1, UCS_BIT(lane));
@@ -152,6 +216,26 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
     }
 
     if (!req->send.flush.sw_started && (req->send.state.uct_comp.count == 0)) {
+        /* For full EP flushes, ensure fence-pending requests have been
+         * dispatched to UCT and their resulting operations completed before
+         * transitioning to sw phase. */
+        if (req->send.flush.lane_mask == (ucp_lane_map_t)-1) {
+            if (!ucp_ep_fence_pending_is_clear(ep,
+                                               req->send.flush.fence_seq)) {
+                ucp_ep_flush_request_resched(ep, req);
+                return;
+            }
+
+            if (ucp_ep_flush_has_pending_work(ep, req->send.flush.lane_mask)) {
+                req->send.flush.started_lanes  = 0;
+                req->send.flush.num_lanes      = ucp_ep_num_lanes(ep);
+                req->send.state.uct_comp.count = ucp_ep_num_lanes(ep);
+                req->send.lane                 = UCP_NULL_LANE;
+                ucp_ep_flush_request_resched(ep, req);
+                return;
+            }
+        }
+
         /* Start waiting for remote completions only after all lanes are flushed
          * on the transport level, so we are sure all pending requests were sent.
          * We don't need to wait for remote completions in these cases:
@@ -441,12 +525,13 @@ void ucp_ep_flush_remote_completed(ucp_request_t *req)
     }
 }
 
-ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
-                                       const ucp_request_param_t *param,
-                                       ucp_request_t *worker_req,
-                                       ucp_request_callback_t flushed_cb,
-                                       const char *debug_name,
-                                       unsigned uct_flags)
+ucs_status_ptr_t
+ucp_ep_flush_lanes_internal(ucp_ep_h ep, unsigned req_flags,
+                            const ucp_request_param_t *param,
+                            ucp_request_t *worker_req,
+                            ucp_request_callback_t flushed_cb,
+                            const char *debug_name, unsigned uct_flags,
+                            ucp_lane_map_t lane_mask)
 {
     ucs_status_t status;
     ucp_request_t *req;
@@ -473,6 +558,8 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
     req->send.flush.sw_done         = 0;
     req->send.flush.num_lanes       = ucp_ep_num_lanes(ep);
     req->send.flush.started_lanes   = 0;
+    req->send.flush.lane_mask       = lane_mask;
+    req->send.flush.fence_seq       = ep->worker->fence_seq;
     req->send.lane                  = UCP_NULL_LANE;
     req->send.uct.func              = ucp_ep_flush_progress_pending;
     req->send.state.uct_comp.func   = ucp_ep_flush_completion;
@@ -496,6 +583,18 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
 
     ucp_trace_req(req, "return inprogress flush ep %p request %p", ep, req + 1);
     return req + 1;
+}
+
+ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
+                                       const ucp_request_param_t *param,
+                                       ucp_request_t *worker_req,
+                                       ucp_request_callback_t flushed_cb,
+                                       const char *debug_name,
+                                       unsigned uct_flags)
+{
+    return ucp_ep_flush_lanes_internal(ep, req_flags, param, worker_req,
+                                       flushed_cb, debug_name, uct_flags,
+                                       (ucp_lane_map_t)-1);
 }
 
 static void ucp_ep_flushed_callback(ucp_request_t *req)
@@ -619,6 +718,35 @@ static void ucp_worker_flush_ep_flushed_cb(ucp_request_t *req)
     ucp_request_put(req);
 }
 
+static int ucp_worker_fence_pending_check(ucp_worker_h worker,
+                                          uint64_t fence_seq_th)
+{
+    ucp_ep_ext_t *ep_ext;
+    ucp_request_t *head_req;
+
+    /* Check if any endpoint has fence-pending operations or inflight fence
+     * requests which belong to an epoch that existed when this worker flush
+     * started (fence_seq <= fence_seq_th). Fence-pending work from later epochs
+     * must not delay an already-started flush.
+     */
+    ucs_list_for_each(ep_ext, &worker->all_eps, ep_list) {
+        if (ep_ext->fence_inflight_req != NULL &&
+            (ep_ext->fence_inflight_req->send.flush.fence_seq <= fence_seq_th)) {
+            return 0; /* Not ready - strong fence in flight for <= threshold */
+        }
+
+        if (!ucs_queue_is_empty(&ep_ext->fence_pending_q)) {
+            head_req = ucs_queue_head_elem_non_empty(&ep_ext->fence_pending_q,
+                                                     ucp_request_t,
+                                                     send.fenced_req.fence_pending_elem);
+            if (head_req->send.fenced_req.fence_seq <= fence_seq_th) {
+                return 0; /* Not ready - pending queue head belongs to <= threshold */
+            }
+        }
+    }
+    return 1;  /* Ready - all EPs have clean fence state */
+}
+
 static unsigned ucp_worker_flush_progress(void *arg)
 {
     ucp_request_t *req        = arg;
@@ -633,14 +761,14 @@ static unsigned ucp_worker_flush_progress(void *arg)
         status = ucp_worker_flush_check(worker);
         if ((status == UCS_OK) || (&next_ep_ext->ep_list == &worker->all_eps)) {
             /* If all ifaces are flushed, or we finished going over all
-             * endpoints, no need to progress this request actively anymore
-             * and we complete the flush operation with UCS_OK status. */
+             * endpoints, check fence state before completing. */
+            if (!ucp_worker_fence_pending_check(worker,
+                                                req->flush_worker.fence_seq_th)) {
+                goto out;
+            }
             ucp_worker_flush_complete_one(req, UCS_OK, 1);
             goto out;
         } else if (status != UCS_INPROGRESS) {
-            /* Error returned from uct iface flush, no need to progress
-             * this request actively anymore and we complete the flush
-             * operation with an error status. */
             ucp_worker_flush_complete_one(req, status, 1);
             goto out;
         }
@@ -695,13 +823,14 @@ ucp_worker_flush_nbx_internal(ucp_worker_h worker,
     req = ucp_request_get_param(worker, param,
                                 {return UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);});
 
-    req->flags                   = 0;
-    req->status                  = UCS_OK;
-    req->flush_worker.worker     = worker;
-    req->flush_worker.comp_count = 1; /* counting starts from 1, and decremented
+    req->flags                      = 0;
+    req->status                     = UCS_OK;
+    req->flush_worker.worker        = worker;
+    req->flush_worker.fence_seq_th  = worker->fence_seq;
+    req->flush_worker.comp_count    = 1; /* counting starts from 1, and decremented
                                          when finished going over all endpoints */
-    req->flush_worker.uct_flags  = uct_flags;
-    req->flush_worker.prog_id    = UCS_CALLBACKQ_ID_NULL;
+    req->flush_worker.uct_flags     = uct_flags;
+    req->flush_worker.prog_id       = UCS_CALLBACKQ_ID_NULL;
 
     ucp_worker_flush_req_set_next_ep(req, 0, worker->all_eps.next);
     ucp_request_set_send_callback_param(param, req, flush_worker);
@@ -849,9 +978,11 @@ ucs_status_t ucp_ep_fence_strong(ucp_ep_h ep)
                 "ep=%p unflushed_lanes=0x%" PRIx64, ep,
                 ep->ext->unflushed_lanes);
 
-    request = ucp_ep_flush_internal(ep, 0, &ucp_request_null_param, NULL,
-                                    ucp_ep_flushed_callback, "ep_fence_strong",
-                                    UCT_FLUSH_FLAG_REMOTE);
+    request = ucp_ep_flush_lanes_internal(ep, 0, &ucp_request_null_param, NULL,
+                                          ucp_ep_flushed_callback,
+                                          "ep_fence_strong",
+                                          UCT_FLUSH_FLAG_REMOTE,
+                                          ep->ext->unflushed_lanes);
     status  = ucp_flush_wait(ep->worker, request);
     if (status != UCS_OK) {
         return status;
@@ -859,6 +990,65 @@ ucs_status_t ucp_ep_fence_strong(ucp_ep_h ep)
 
     ep->ext->unflushed_lanes = 0;
     ep->ext->fence_seq       = ep->worker->fence_seq;
+    return UCS_OK;
+}
+
+static void ucp_ep_fence_strong_nb_flushed_cb(ucp_request_t *req)
+{
+    ucp_ep_h ep           = req->send.ep;
+    ucs_status_t status   = req->status;
+
+    ucs_assert(ep->ext->fence_inflight_req == req);
+
+    ep->ext->fence_inflight_req = NULL;
+
+    if (ucs_likely(status == UCS_OK)) {
+        ep->ext->unflushed_lanes = 0;
+        ep->ext->fence_seq       = req->send.flush.fence_seq;
+    } else {
+        ucp_ep_fence_pending_purge(ep, status);
+    }
+
+    ucp_ep_refcount_remove(ep, flush);
+    ucp_ep_fence_pending_resume(ep);
+    ucp_request_put(req);
+}
+
+ucs_status_t ucp_ep_fence_strong_nb(ucp_ep_h ep, uint64_t fence_seq)
+{
+    ucs_status_ptr_t request;
+    ucp_request_t *flush_req;
+    ucs_status_t status;
+
+    if (ucs_unlikely(ep->ext->fence_inflight_req != NULL)) {
+        return UCS_OK;
+    }
+
+    ucp_ep_refcount_add(ep, flush);
+
+    request = ucp_ep_flush_lanes_internal(ep, UCP_REQUEST_FLAG_RELEASED,
+                                         &ucp_request_null_param, NULL,
+                                         ucp_ep_fence_strong_nb_flushed_cb,
+                                         "ep_fence_strong_nb",
+                                         UCT_FLUSH_FLAG_REMOTE,
+                                         ep->ext->unflushed_lanes);
+    if (ucs_unlikely(UCS_PTR_IS_ERR(request))) {
+        status = UCS_PTR_STATUS(request);
+        ucp_ep_refcount_remove(ep, flush);
+        return status;
+    }
+
+    if (ucs_unlikely(request == NULL)) {
+        ep->ext->unflushed_lanes = 0;
+        ep->ext->fence_seq       = fence_seq;
+        ucp_ep_refcount_remove(ep, flush);
+        ucp_ep_fence_pending_resume(ep);
+        return UCS_OK;
+    }
+
+    flush_req                       = (ucp_request_t*)request - 1;
+    flush_req->send.flush.fence_seq = fence_seq;
+    ep->ext->fence_inflight_req     = flush_req;
     return UCS_OK;
 }
 

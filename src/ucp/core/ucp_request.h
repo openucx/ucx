@@ -29,6 +29,8 @@
 #define ucp_trace_req(_sreq, _message, ...) \
     ucs_trace_req("req %p: " _message, (_sreq), ## __VA_ARGS__)
 
+#define UCP_STATUS_FENCE_DEFER ((ucs_status_t)(UCS_ERR_LAST - 2))
+
 
 /**
  * Request flags
@@ -55,6 +57,7 @@ enum {
     UCP_REQUEST_FLAG_USER_HEADER_COPIED    = UCS_BIT(19),
     UCP_REQUEST_FLAG_USAGE_TRACKED         = UCS_BIT(20),
     UCP_REQUEST_FLAG_FENCE_REQUIRED        = UCS_BIT(21),
+    UCP_REQUEST_FLAG_FENCE_BLOCKED         = UCS_BIT(28),
 #if UCS_ENABLE_ASSERT
     UCP_REQUEST_FLAG_STREAM_RECV           = UCS_BIT(22),
     UCP_REQUEST_DEBUG_FLAG_EXTERNAL        = UCS_BIT(23),
@@ -233,10 +236,26 @@ struct ucp_request {
                     };
                 } msg_proto;
 
-                struct {
-                    uint64_t   remote_addr; /* Remote address */
-                    ucp_rkey_h rkey; /* Remote memory key */
-                } rma;
+                struct{
+                    uint64_t           fence_seq;          /* Fence epoch snapshot */
+                    ucs_queue_elem_t   fence_pending_elem; /* Element in per-EP fence pending FIFO */
+                    union{
+                        struct {
+                            uint64_t   remote_addr; /* Remote address */
+                            ucp_rkey_h rkey; /* Remote memory key */
+                        } rma;
+
+                        struct {
+                            uint64_t              remote_addr; /* Remote address */
+                            ucp_rkey_h            rkey;        /* Remote memory key */
+                            uint64_t              value;       /* Atomic argument */
+                            uint64_t              result;      /* Atomic result */
+                            void                  *reply_buffer;
+                            uct_atomic_op_t       uct_op;      /* Requested UCT AMO */
+                        } amo;
+                    };
+
+                } fenced_req;
 
                 struct {
                     /* Remote request ID received from a peer */
@@ -347,12 +366,19 @@ struct ucp_request {
 
                 struct {
                     unsigned           uct_flags; /* Flags to pass to @ref uct_ep_flush */
+                    uint64_t           fence_seq; /* For fence strong_nb: target epoch to advance to on
+                                                     completion.  For regular EP flush: worker->fence_seq
+                                                     captured at creation, used as threshold to wait for
+                                                     fence-pending work. */
                     uint32_t           cmpl_sn;   /* Sequence number of the remote completion
                                                      this request is waiting for */
                     uint8_t            sw_started;
                     uint8_t            sw_done;
                     uint8_t            num_lanes; /* How many lanes are being flushed */
                     ucp_lane_map_t     started_lanes; /* Which lanes need were flushed */
+                    ucp_lane_map_t     lane_mask;     /* Bitmask of lanes targeted for
+                                                         this flush; lanes not in the
+                                                         mask are skipped */
                     ucp_mem_flush_t    mem; /* Memory specific flushes */
                 } flush;
 
@@ -368,15 +394,6 @@ struct ucp_request {
                     /* Index of UCT EP to be flushed and destroyed */
                     ucp_rsc_index_t    rsc_index;
                 } discard_uct_ep;
-
-                struct {
-                    uint64_t              remote_addr; /* Remote address */
-                    ucp_rkey_h            rkey;        /* Remote memory key */
-                    uint64_t              value;       /* Atomic argument */
-                    uint64_t              result;      /* Atomic result */
-                    void                  *reply_buffer;
-                    uct_atomic_op_t       uct_op;      /* Requested UCT AMO */
-                } amo;
 
                 struct {
                     ucs_queue_elem_t  queue;     /* Elem in outgoing ssend reqs queue */
@@ -478,6 +495,9 @@ struct ucp_request {
 
         struct {
             ucp_worker_h            worker;       /* Worker to flush */
+            uint64_t                fence_seq_th; /* Fence sequence threshold: worker flush
+                                                     waits only for EP-based fence work with
+                                                     fence_seq <= this value */
             ucp_send_nbx_callback_t cb;           /* Completion callback */
             uct_worker_cb_id_t      prog_id;      /* Progress callback ID */
             ucp_ep_ext_t            *next_ep_ext; /* Extension of the next endpoint to flush */

@@ -26,7 +26,7 @@ static size_t ucp_rma_sw_put_pack_cb(void *dest, void *arg)
     ucp_put_hdr_t *puth = dest;
     size_t length;
 
-    puth->address  = req->send.rma.remote_addr;
+    puth->address  = req->send.fenced_req.rma.remote_addr;
     puth->ep_id    = ucp_ep_remote_id(ep);
     puth->mem_type = UCS_MEMORY_TYPE_HOST;
 
@@ -58,10 +58,10 @@ static size_t ucp_rma_sw_get_req_pack_cb(void *dest, void *arg)
     ucp_request_t *req         = arg;
     ucp_get_req_hdr_t *getreqh = dest;
 
-    getreqh->address    = req->send.rma.remote_addr;
+    getreqh->address    = req->send.fenced_req.rma.remote_addr;
     getreqh->length     = req->send.length;
     getreqh->req.ep_id  = ucp_send_request_get_ep_remote_id(req);
-    getreqh->mem_type   = req->send.rma.rkey->mem_type;
+    getreqh->mem_type   = req->send.fenced_req.rma.rkey->mem_type;
     getreqh->req.req_id = ucp_send_request_get_id(req);
     ucs_assert(getreqh->req.ep_id != UCS_PTR_MAP_KEY_INVALID);
 

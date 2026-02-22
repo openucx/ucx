@@ -274,12 +274,12 @@ void print_type_info(const char * tl_name)
     PRINT_FIELD_SIZE(ucp_request_t, send.state.dt_iter);
     PRINT_FIELD_SIZE(ucp_request_t, send.state.dt);
     PRINT_FIELD_SIZE(ucp_request_t, send.msg_proto);
-    PRINT_FIELD_SIZE(ucp_request_t, send.rma);
+    PRINT_FIELD_SIZE(ucp_request_t, send.fenced_req.rma);
     PRINT_FIELD_SIZE(ucp_request_t, send.proto);
     PRINT_FIELD_SIZE(ucp_request_t, send.rndv);
     PRINT_FIELD_SIZE(ucp_request_t, send.rkey_ptr);
     PRINT_FIELD_SIZE(ucp_request_t, send.flush);
-    PRINT_FIELD_SIZE(ucp_request_t, send.amo);
+    PRINT_FIELD_SIZE(ucp_request_t, send.fenced_req.amo);
     PRINT_FIELD_SIZE(ucp_request_t, recv);
     PRINT_FIELD_SIZE(ucp_request_t, recv.dt_iter);
     PRINT_FIELD_SIZE(ucp_request_t, recv.uct_ctx);

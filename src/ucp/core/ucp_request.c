@@ -9,6 +9,7 @@
 #endif
 
 #include "ucp_context.h"
+#include "ucp_ep.h"
 #include "ucp_worker.h"
 #include "ucp_request.inl"
 #include "ucp_mm.inl"
@@ -20,6 +21,7 @@
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/debug/debug_int.h>
 #include <ucs/debug/log.h>
+#include <stdio.h>
 
 
 const ucp_request_param_t ucp_request_null_param = { .op_attr_mask = 0 };
@@ -44,6 +46,8 @@ static const char *ucp_request_flag_names[] = {
     [ucs_ilog2(UCP_REQUEST_FLAG_RECV_TAG)]              = "rcv_tag",
     [ucs_ilog2(UCP_REQUEST_FLAG_RKEY_INUSE)]            = "rk_use",
     [ucs_ilog2(UCP_REQUEST_FLAG_USER_HEADER_COPIED)]    = "hdr_copy",
+    [ucs_ilog2(UCP_REQUEST_FLAG_FENCE_REQUIRED)]        = "fence",
+    [ucs_ilog2(UCP_REQUEST_FLAG_FENCE_BLOCKED)]         = "fence_blk",
 
 #if UCS_ENABLE_ASSERT
     [ucs_ilog2(UCP_REQUEST_FLAG_STREAM_RECV)]           = "strm_rcv",
@@ -278,6 +282,9 @@ ucp_worker_request_init_proxy(ucs_mpool_t *mp, void *obj, void *chunk)
 
     ucp_request_id_reset(req);
 
+    /* Reset fence_seq field */
+    req->send.fenced_req.fence_seq = 0;
+
     if (context->config.request.init != NULL) {
         context->config.request.init(req + 1);
     }
@@ -325,6 +332,12 @@ int ucp_request_pending_add(ucp_request_t *req)
 {
     ucs_status_t status;
     uct_ep_h uct_ep;
+
+    if (ucs_unlikely(req->flags & UCP_REQUEST_FLAG_FENCE_BLOCKED)) {
+        ucp_ep_fence_pending_add(req->send.ep, &req->send.uct);
+        req->send.pending_lane = UCP_NULL_LANE;
+        return 1;
+    }
 
     uct_ep = ucp_ep_get_lane(req->send.ep, req->send.lane);
     status = uct_ep_pending_add(uct_ep, &req->send.uct, 0);

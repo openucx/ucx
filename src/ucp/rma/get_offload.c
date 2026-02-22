@@ -30,7 +30,7 @@ ucp_proto_get_offload_bcopy_send_func(ucp_request_t *req,
                                       ucp_datatype_iter_t *next_iter,
                                       ucp_lane_index_t *lane_shift)
 {
-    uct_rkey_t tl_rkey = ucp_rkey_get_tl_rkey(req->send.rma.rkey,
+    uct_rkey_t tl_rkey = ucp_rkey_get_tl_rkey(req->send.fenced_req.rma.rkey,
                                               lpriv->super.rkey_index);
     size_t max_length, length;
     void *dest;
@@ -40,7 +40,7 @@ ucp_proto_get_offload_bcopy_send_func(ucp_request_t *req,
                                             max_length, next_iter, &dest);
     return uct_ep_get_bcopy(ucp_ep_get_lane(req->send.ep, lpriv->super.lane),
                             ucp_proto_get_offload_bcopy_unpack, dest, length,
-                            req->send.rma.remote_addr +
+                            req->send.fenced_req.rma.remote_addr +
                                     req->send.state.dt_iter.offset,
                             tl_rkey, &req->send.state.uct_comp);
 }
@@ -64,8 +64,29 @@ static ucs_status_t ucp_proto_get_offload_bcopy_progress(uct_pending_req_t *self
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
         ucp_proto_multi_request_init(req);
 
+        /* Reset fence_seq for fresh requests (stale mpool value) but not for
+         * requests retried from the fence pending queue, whose fence_seq is
+         * already valid and must be preserved to maintain queue invariants.
+         */
+        if (!(req->flags & UCP_REQUEST_FLAG_FENCE_BLOCKED)) {
+            req->send.fenced_req.fence_seq = 0;
+        }
         status = ucp_ep_rma_handle_fence(req->send.ep, req, mpriv->lane_map);
-        if (status != UCS_OK) {
+        if (status == UCP_STATUS_FENCE_DEFER) {
+            /* if pending lane is not UCP_NULL_LANE, it was previously in uct pending queue. 
+            *  We move it from uct pending queue to up fence queue. We return OK to indicate
+            *  that this request is handled and to not put in back in uct pending queue
+            */
+            if (req->send.pending_lane != UCP_NULL_LANE) {
+                ucp_ep_fence_pending_add(req->send.ep, &req->send.uct);
+                req->send.pending_lane = UCP_NULL_LANE;
+                return UCS_OK;
+            }
+
+            return status;
+        } else if (status == UCS_ERR_NO_RESOURCE) {
+            return status;
+        } else if (status != UCS_OK) {
             ucp_proto_request_abort(req, status);
             return UCS_OK;
         }
@@ -156,7 +177,7 @@ ucp_proto_get_offload_zcopy_send_func(ucp_request_t *req,
                                       ucp_datatype_iter_t *next_iter,
                                       ucp_lane_index_t *lane_shift)
 {
-    uct_rkey_t tl_rkey = ucp_rkey_get_tl_rkey(req->send.rma.rkey,
+    uct_rkey_t tl_rkey = ucp_rkey_get_tl_rkey(req->send.fenced_req.rma.rkey,
                                               lpriv->super.rkey_index);
     size_t offset      = req->send.state.dt_iter.offset;
     const ucp_proto_multi_priv_t *mpriv;
@@ -171,7 +192,8 @@ ucp_proto_get_offload_zcopy_send_func(ucp_request_t *req,
     ucp_proto_common_zcopy_adjust_min_frag(req, mpriv->min_frag, iov.length,
                                            &iov, 1, &offset);
     return uct_ep_get_zcopy(ucp_ep_get_lane(req->send.ep, lpriv->super.lane),
-                            &iov, 1, req->send.rma.remote_addr + offset,
+                            &iov, 1,
+                            req->send.fenced_req.rma.remote_addr + offset,
                             tl_rkey, &req->send.state.uct_comp);
 }
 

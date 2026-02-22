@@ -21,8 +21,10 @@
 static UCS_F_ALWAYS_INLINE void
 ucp_amo_memtype_unpack_reply_buffer(ucp_request_t *req)
 {
-    ucp_dt_contig_unpack(req->send.ep->worker, req->send.amo.reply_buffer,
-                         &req->send.amo.result, req->send.state.dt_iter.length,
+    ucp_dt_contig_unpack(req->send.ep->worker,
+                         req->send.fenced_req.amo.reply_buffer,
+                         &req->send.fenced_req.amo.result,
+                         req->send.state.dt_iter.length,
                          ucp_amo_request_reply_mem_type(req),
                          req->send.state.dt_iter.length);
 }
@@ -52,8 +54,8 @@ ucp_proto_amo_progress(uct_pending_req_t *self, ucp_operation_id_t op_id,
                                                             send.uct);
     ucp_ep_t *ep                         = req->send.ep;
     const ucp_proto_single_priv_t *spriv = req->send.proto_config->priv;
-    uint64_t remote_addr                 = req->send.amo.remote_addr;
-    uct_atomic_op_t op                   = req->send.amo.uct_op;
+    uint64_t remote_addr                 = req->send.fenced_req.amo.remote_addr;
+    uct_atomic_op_t op                   = req->send.fenced_req.amo.uct_op;
     uct_completion_callback_t comp_cb;
     ucs_memory_type_t mem_type;
     uct_ep_h uct_ep;
@@ -64,14 +66,14 @@ ucp_proto_amo_progress(uct_pending_req_t *self, ucp_operation_id_t op_id,
 
     req->send.lane = spriv->super.lane;
     uct_ep         = ucp_ep_get_fast_lane(ep, req->send.lane);
-    tl_rkey        = ucp_rkey_get_tl_rkey(req->send.amo.rkey,
+    tl_rkey        = ucp_rkey_get_tl_rkey(req->send.fenced_req.amo.rkey,
                                           spriv->super.rkey_index);
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
         if (!(req->flags & UCP_REQUEST_FLAG_PROTO_AMO_PACKED)) {
             mem_type = is_memtype ? req->send.state.dt_iter.mem_info.type :
                                     UCS_MEMORY_TYPE_HOST;
-            ucp_dt_contig_pack(ep->worker, &req->send.amo.value,
+            ucp_dt_contig_pack(ep->worker, &req->send.fenced_req.amo.value,
                                req->send.state.dt_iter.type.contig.buffer,
                                op_size, mem_type, op_size);
             req->flags |= UCP_REQUEST_FLAG_PROTO_AMO_PACKED;
@@ -84,13 +86,24 @@ ucp_proto_amo_progress(uct_pending_req_t *self, ucp_operation_id_t op_id,
         }
 
         if (op_id == UCP_OP_ID_AMO_CSWAP) {
-            ucp_dt_contig_pack(ep->worker, &req->send.amo.result,
-                               req->send.amo.reply_buffer, op_size,
+            ucp_dt_contig_pack(ep->worker, &req->send.fenced_req.amo.result,
+                               req->send.fenced_req.amo.reply_buffer, op_size,
                                ucp_amo_request_reply_mem_type(req), op_size);
         }
 
+        req->send.fenced_req.fence_seq = 0;
         status = ucp_ep_rma_handle_fence(ep, req, UCS_BIT(spriv->super.lane));
-        if (status != UCS_OK) {
+        if (status == UCP_STATUS_FENCE_DEFER) {
+            if (req->send.pending_lane != UCP_NULL_LANE) {
+                ucp_ep_fence_pending_add(ep, &req->send.uct);
+                req->send.pending_lane = UCP_NULL_LANE;
+                return UCS_OK;
+            }
+
+            return status;
+        } else if (status == UCS_ERR_NO_RESOURCE) {
+            return status;
+        } else if (status != UCS_OK) {
             ucp_proto_request_abort(req, status);
             return UCS_OK;
         }
@@ -98,8 +111,9 @@ ucp_proto_amo_progress(uct_pending_req_t *self, ucp_operation_id_t op_id,
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     }
 
-    value  = req->send.amo.value;
-    result = is_memtype ? &req->send.amo.result : req->send.amo.reply_buffer;
+    value  = req->send.fenced_req.amo.value;
+    result = is_memtype ? &req->send.fenced_req.amo.result :
+                          req->send.fenced_req.amo.reply_buffer;
 
     if (op_size == sizeof(uint64_t)) {
         if (op_id == UCP_OP_ID_AMO_POST) {
