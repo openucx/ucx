@@ -34,7 +34,6 @@
 
 #include <utility>
 #include <cstdint>
-#include <cstddef>
 
 #include "internal/gtest-port.h"
 #include "internal/custom/gtest.h"
