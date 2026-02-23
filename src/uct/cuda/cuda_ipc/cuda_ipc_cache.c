@@ -376,6 +376,7 @@ err:
     return status;
 }
 
+#if HAVE_DECL_SYS_PIDFD_GETFD
 static ucs_status_t
 uct_cuda_ipc_open_memhandle_posix_fd(uct_cuda_ipc_rkey_t *key, CUdevice cu_dev,
                                      CUdeviceptr *mapped_addr,
@@ -420,6 +421,7 @@ close_pidfd:
               ucs_status_string(status));
     return status;
 }
+#endif /* HAVE_DECL_SYS_PIDFD_GETFD */
 #endif
 
 static ucs_status_t
@@ -439,9 +441,11 @@ uct_cuda_ipc_open_memhandle(uct_cuda_ipc_rkey_t *key, CUdevice cu_dev,
         return uct_cuda_ipc_open_memhandle_vmm(key, cu_dev, mapped_addr,
                 (void*)&key->ph.handle.fabric_handle,
                 CU_MEM_HANDLE_TYPE_FABRIC, log_level);
+#if HAVE_DECL_SYS_PIDFD_GETFD
     case UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD:
         return uct_cuda_ipc_open_memhandle_posix_fd(key, cu_dev, mapped_addr,
                                                     log_level);
+#endif
     case UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL:
         return uct_cuda_ipc_open_memhandle_mempool(key, cu_dev, mapped_addr,
                                                    log_level);

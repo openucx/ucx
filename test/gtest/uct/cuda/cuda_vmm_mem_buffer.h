@@ -56,8 +56,7 @@ protected:
         prop.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
         prop.location.id   = device;
         if (handle_type != 0) {
-            prop.requestedHandleTypes =
-                    (CUmemAllocationHandleType)handle_type;
+            prop.requestedHandleTypes = (CUmemAllocationHandleType)handle_type;
         }
         if (cuMemGetAllocationGranularity(&granularity, &prop,
                                           CU_MEM_ALLOC_GRANULARITY_MINIMUM) !=
