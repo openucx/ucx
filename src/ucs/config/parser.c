@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -644,7 +644,7 @@ int ucs_config_sprintf_bw(char *buf, size_t max, const void *src,
 int ucs_config_sscanf_bw_spec(const char *buf, void *dest, const void *arg)
 {
     ucs_config_bw_spec_t *dst = (ucs_config_bw_spec_t*)dest;
-    char                 *delim;
+    const char *delim;
 
     delim = strchr(buf, ':');
     if (!delim) {
@@ -2626,4 +2626,24 @@ int ucs_config_global_list_has_field(const char *name)
     }
 
     return 0;
+}
+
+int ucs_config_is_allow_list_empty(const ucs_config_allow_list_t *allow_list)
+{
+    return (allow_list->array.count == 0) &&
+           (allow_list->mode != UCS_CONFIG_ALLOW_LIST_ALLOW_ALL);
+}
+
+int ucs_config_are_all_allow_lists_empty(
+        const ucs_config_allow_list_t *allow_lists, size_t count)
+{
+    size_t i;
+
+    for (i = 0; i < count; ++i) {
+        if (!ucs_config_is_allow_list_empty(&allow_lists[i])) {
+            return 0;
+        }
+    }
+
+    return 1;
 }

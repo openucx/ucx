@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -334,7 +334,6 @@ UCS_TEST_P(test_ucp_devices_config, base_name_selects_device)
     m_entities.clear();
 
     const std::set<std::string> base_names = get_device_base_names(devices);
-    ASSERT_EQ(base_names.size(), devices.size());
 
     test_device_selection(base_names, devices);
 }
@@ -438,9 +437,9 @@ UCS_TEST_P(test_ucp_devices_config, negate_single_device)
     EXPECT_FALSE(has_device(selected_devices, excluded_device))
             << "Device '" << excluded_device << "' should be excluded";
 
-    /* Verify at least one other device is selected */
-    EXPECT_FALSE(selected_devices.empty())
-            << "At least one device should be selected";
+    /* Verify that other devices were selected */
+    EXPECT_EQ(selected_devices.size(), devices.size() - 1)
+            << "Expected 1 device to be excluded";
 }
 
 /*
@@ -480,9 +479,9 @@ UCS_TEST_P(test_ucp_devices_config, negate_multiple_devices)
     EXPECT_FALSE(has_device(selected_devices, excluded_dev2))
             << "Device '" << excluded_dev2 << "' should be excluded";
 
-    /* Verify at least one other device is selected */
-    EXPECT_FALSE(selected_devices.empty())
-            << "At least one device should be selected";
+    /* Verify that other devices were selected */
+    EXPECT_EQ(selected_devices.size(), devices.size() - 2)
+            << "Expected 2 devices to be excluded";
 }
 
 /*
@@ -499,6 +498,11 @@ UCS_TEST_P(test_ucp_devices_config, negate_base_name)
     if (devices.empty()) {
         UCS_TEST_SKIP_R("No " + device_type_name(dev_type) +
                         " devices available with delimiter");
+    }
+
+    const std::set<std::string> base_names = get_device_base_names(devices);
+    if (base_names.size() < 2) {
+        UCS_TEST_SKIP_R(std::string("Need at least 2 base names to test negate mode"));
     }
 
     const std::string dev_name = *devices.begin();
@@ -518,9 +522,14 @@ UCS_TEST_P(test_ucp_devices_config, negate_base_name)
     EXPECT_FALSE(has_device(selected_devices, dev_name))
             << "Device '" << dev_name << "' should be excluded";
 
-    /* Verify at least one other device is selected */
-    EXPECT_FALSE(selected_devices.empty())
-            << "At least one device should be selected";
+    /* Verify that other devices were selected */
+    EXPECT_GE(selected_devices.size(), base_names.size() - 1)
+            << "At least one device should be excluded";
+
+    const std::set<std::string> selected_base_names = get_device_base_names(
+            selected_devices);
+    EXPECT_EQ(selected_base_names.size(), base_names.size() - 1)
+            << "Expected 1 base name to be excluded";
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_devices_config, all, "all")

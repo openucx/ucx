@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
  * Copyright (C) Intel Corporation, 2023.  ALL RIGHTS RESERVED.
  *
@@ -56,7 +56,9 @@
     _macro(UCP_AM_ID_AM_SINGLE) \
     _macro(UCP_AM_ID_AM_FIRST) \
     _macro(UCP_AM_ID_AM_MIDDLE) \
-    _macro(UCP_AM_ID_AM_SINGLE_REPLY)
+    _macro(UCP_AM_ID_AM_SINGLE_REPLY) \
+    _macro(UCP_AM_ID_AM_FIRST_PSN) \
+    _macro(UCP_AM_ID_AM_MIDDLE_PSN)
 
 #define UCP_AM_HANDLER_DECL(_id) extern ucp_am_handler_t ucp_am_handler_##_id;
 
@@ -725,6 +727,7 @@ static ucp_tl_alias_t ucp_tl_aliases[] = {
   { "cuda",  { "cuda_copy", "cuda_ipc", "gdr_copy", NULL } },
   { "rocm",  { "rocm_copy", "rocm_ipc", "rocm_gdr", NULL } },
   { "ze",    { "ze_copy", "ze_ipc", "ze_gdr", NULL } },
+  { "gaudi", { "gaudi_gdr", NULL } },
   { "gga",   { "gga_mlx5", NULL } },
   { NULL }
 };
@@ -1053,7 +1056,7 @@ ucp_is_resource_in_device_list(const uct_tl_resource_desc_t *resource,
                                uct_device_type_t dev_type)
 {
     const ucs_config_names_array_t *dev_array = &devices[dev_type].array;
-    ucs_config_allow_list_mode_t mode         = devices[dev_type].mode;
+    const ucs_config_allow_list_mode_t mode   = devices[dev_type].mode;
     char dev_basename[UCT_DEVICE_NAME_MAX];
     uint64_t found_dev_mask, exclusive_mask;
 
@@ -1089,8 +1092,8 @@ ucp_is_resource_in_device_list(const uct_tl_resource_desc_t *resource,
 
     *dev_cfg_mask |= found_dev_mask;
 
-    return (mode == UCS_CONFIG_ALLOW_LIST_NEGATE) ? (!found_dev_mask) :
-                                                    (!!found_dev_mask);
+    return (mode == UCS_CONFIG_ALLOW_LIST_NEGATE) ? !found_dev_mask :
+                                                    !!found_dev_mask;
 }
 
 static int ucp_tls_alias_is_present(ucp_tl_alias_t *alias, const char *tl_name,
@@ -1483,32 +1486,10 @@ static void ucp_free_resources(ucp_context_t *context)
     ucs_free(context->tl_cmpts);
 }
 
-static int
-ucp_config_is_allow_list_empty(const ucs_config_allow_list_t *allow_list)
-{
-    return (allow_list->array.count == 0) &&
-           (allow_list->mode != UCS_CONFIG_ALLOW_LIST_ALLOW_ALL);
-}
-
-static int
-ucp_config_is_all_allow_list_empty(const ucs_config_allow_list_t *allow_list,
-                                   size_t count)
-{
-    size_t i;
-
-    for (i = 0; i < count; ++i) {
-        if (!ucp_config_is_allow_list_empty(&allow_list[i])) {
-            return 0;
-        }
-    }
-
-    return 1;
-}
-
 static ucs_status_t ucp_check_resource_config(const ucp_config_t *config)
 {
-    if (ucp_config_is_all_allow_list_empty(config->devices,
-                                           UCT_DEVICE_TYPE_LAST)) {
+    if (ucs_config_are_all_allow_lists_empty(config->devices,
+                                             UCT_DEVICE_TYPE_LAST)) {
         ucs_error(
                 "The device lists are empty. Please specify the devices you "
                 "would like to use "
@@ -1516,7 +1497,7 @@ static ucs_status_t ucp_check_resource_config(const ucp_config_t *config)
         return UCS_ERR_NO_ELEM;
     }
 
-    if (ucp_config_is_allow_list_empty(&config->tls)) {
+    if (ucs_config_is_allow_list_empty(&config->tls)) {
         ucs_error("The TLs list is empty. Please specify the transports you "
                   "would like to allow/forbid "
                   "or omit the UCX_TLS so that the default will be used.");
@@ -2079,10 +2060,6 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     if (config->warn_invalid_config) {
         UCS_STATIC_ASSERT(UCT_DEVICE_TYPE_NET == 0);
         for (dev_type = UCT_DEVICE_TYPE_NET; dev_type < UCT_DEVICE_TYPE_LAST; ++dev_type) {
-            if (config->devices[dev_type].mode == UCS_CONFIG_ALLOW_LIST_ALLOW_ALL) {
-                continue;
-            }
-
             ucp_report_unavailable(&config->devices[dev_type].array,
                                    dev_cfg_masks[dev_type],
                                    uct_device_type_names[dev_type], " device",
