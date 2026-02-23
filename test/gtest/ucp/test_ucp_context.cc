@@ -267,52 +267,6 @@ protected:
                     << "UCX_" << config_name << "=" << devices_config;
         }
     }
-
-    /* Test that a device config triggers duplicate device warning */
-    void
-    test_duplicate_device_warning(const std::set<std::string> &required_devices,
-                                  const std::string &devices_config,
-                                  const std::string &duplicate_dev_name)
-    {
-        const uct_device_type_t dev_type = device_type();
-        const std::string config_name    = device_type_config_name(dev_type);
-
-        entity *e = create_entity();
-
-        const std::set<std::string> devices = get_device_names(*e, dev_type);
-        if (devices.empty()) {
-            UCS_TEST_SKIP_R("No " + device_type_name(dev_type) +
-                            " devices available");
-        }
-
-        for (const std::string &required_device : required_devices) {
-            if (!has_device(devices, required_device)) {
-                UCS_TEST_SKIP_R(required_device + " device not available");
-            }
-        }
-
-        m_entities.clear();
-
-        modify_config(config_name.c_str(), devices_config.c_str());
-
-        size_t warn_count;
-        {
-            const scoped_log_handler slh(hide_warns_logger);
-            warn_count = m_warnings.size();
-            create_entity();
-        }
-
-        ASSERT_EQ(m_warnings.size() - warn_count, 1)
-                << "Expected exactly one warning";
-
-        /* Check that the warning about duplicate device was printed */
-        const std::string expected_warn = "device '" + duplicate_dev_name +
-                                    "' is specified multiple times";
-        EXPECT_NE(m_warnings[warn_count].find(expected_warn), std::string::npos)
-                << "Expected warning about duplicate device '"
-                << duplicate_dev_name << "' with config '" << devices_config
-                << "'";
-    }
 };
 
 /*
@@ -356,55 +310,6 @@ UCS_TEST_P(test_ucp_devices_config, explicit_suffix)
     m_entities.clear();
 
     test_device_selection(devices, devices);
-}
-
-/*
- * Test that specifying a device multiple times produces a warning
- */
-UCS_TEST_P(test_ucp_devices_config, duplicate_device_warning_simple)
-{
-    test_duplicate_device_warning({"mlx5_0:1"}, "mlx5_0:1,mlx5_0:1",
-                                  "mlx5_0:1");
-}
-
-UCS_TEST_P(test_ucp_devices_config, duplicate_device_warning_base_name)
-{
-    test_duplicate_device_warning({"mlx5_0:1"}, "mlx5_0:1,mlx5_0", "mlx5_0");
-}
-
-UCS_TEST_P(test_ucp_devices_config, duplicate_device_warning_two_base_name)
-{
-    test_duplicate_device_warning({"mlx5_0:1"}, "mlx5_0,mlx5_0", "mlx5_0");
-}
-
-UCS_TEST_P(test_ucp_devices_config, duplicate_device_warning_range_full_name_1)
-{
-    test_duplicate_device_warning({"mlx5_0:1", "mlx5_1:1"},
-                                  "mlx5_[0-1],mlx5_0:1", "mlx5_0:1");
-}
-
-UCS_TEST_P(test_ucp_devices_config, duplicate_device_warning_range_full_name_2)
-{
-    test_duplicate_device_warning({"mlx5_0:1", "mlx5_1:1"},
-                                  "mlx5_0:1,mlx5_[0-1]", "mlx5_0");
-}
-
-UCS_TEST_P(test_ucp_devices_config, duplicate_device_warning_range_base_name_1)
-{
-    test_duplicate_device_warning({"mlx5_0:1", "mlx5_1:1"}, "mlx5_[0-1],mlx5_0",
-                                  "mlx5_0");
-}
-
-UCS_TEST_P(test_ucp_devices_config, duplicate_device_warning_range_base_name_2)
-{
-    test_duplicate_device_warning({"mlx5_0:1", "mlx5_1:1"}, "mlx5_0,mlx5_[0-1]",
-                                  "mlx5_0");
-}
-
-UCS_TEST_P(test_ucp_devices_config, duplicate_device_warning_two_ranges)
-{
-    test_duplicate_device_warning({"mlx5_0:1", "mlx5_1:1", "mlx5_2:1"},
-                                  "mlx5_[0-1],mlx5_[1-2]", "mlx5_1");
 }
 
 /*
@@ -534,7 +439,7 @@ UCS_TEST_P(test_ucp_devices_config, negate_base_name)
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_devices_config, all, "all")
 
-class test_ucp_devices_config_mlx5_range : public ucp_test {
+class test_ucp_devices_config_mlx5 : public ucp_test {
 public:
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
@@ -603,12 +508,106 @@ protected:
                     << (should_be_selected ? "selected" : "excluded");
         }
     }
+
+    /* Test that a device config triggers duplicate device warning */
+    void
+    test_duplicate_device_warning(const std::set<std::string> &required_devices,
+                                  const std::string &devices_config,
+                                  const std::string &duplicate_dev_name)
+    {
+        entity *e = create_entity();
+
+        const std::set<std::string> devices =
+                get_device_names(*e, UCT_DEVICE_TYPE_NET);
+
+        for (const std::string &required_device : required_devices) {
+            if (!has_device(devices, required_device)) {
+                UCS_TEST_SKIP_R(required_device + " device not available");
+            }
+        }
+
+        m_entities.clear();
+
+        modify_config("NET_DEVICES", devices_config.c_str());
+
+        size_t warn_count;
+        {
+            const scoped_log_handler slh(hide_warns_logger);
+            warn_count = m_warnings.size();
+            create_entity();
+        }
+
+        ASSERT_EQ(m_warnings.size() - warn_count, 1)
+                << "Expected exactly one warning";
+
+        /* Check that the warning about duplicate device was printed */
+        const std::string expected_warn = "device '" + duplicate_dev_name +
+                                          "' is specified multiple times";
+        EXPECT_NE(m_warnings[warn_count].find(expected_warn), std::string::npos)
+                << "Expected warning about duplicate device '"
+                << duplicate_dev_name << "' with config '" << devices_config
+                << "'";
+    }
 };
+
+
+/*
+ * Test that specifying a device multiple times produces a warning
+ */
+UCS_TEST_P(test_ucp_devices_config_mlx5, duplicate_device_warning_simple)
+{
+    test_duplicate_device_warning({"mlx5_0:1"}, "mlx5_0:1,mlx5_0:1",
+                                  "mlx5_0:1");
+}
+
+UCS_TEST_P(test_ucp_devices_config_mlx5, duplicate_device_warning_base_name)
+{
+    test_duplicate_device_warning({"mlx5_0:1"}, "mlx5_0:1,mlx5_0", "mlx5_0");
+}
+
+UCS_TEST_P(test_ucp_devices_config_mlx5, duplicate_device_warning_two_base_name)
+{
+    test_duplicate_device_warning({"mlx5_0:1"}, "mlx5_0,mlx5_0", "mlx5_0");
+}
+
+UCS_TEST_P(test_ucp_devices_config_mlx5,
+           duplicate_device_warning_range_full_name_1)
+{
+    test_duplicate_device_warning({"mlx5_0:1", "mlx5_1:1"},
+                                  "mlx5_[0-1],mlx5_0:1", "mlx5_0:1");
+}
+
+UCS_TEST_P(test_ucp_devices_config_mlx5,
+           duplicate_device_warning_range_full_name_2)
+{
+    test_duplicate_device_warning({"mlx5_0:1", "mlx5_1:1"},
+                                  "mlx5_0:1,mlx5_[0-1]", "mlx5_0");
+}
+
+UCS_TEST_P(test_ucp_devices_config_mlx5,
+           duplicate_device_warning_range_base_name_1)
+{
+    test_duplicate_device_warning({"mlx5_0:1", "mlx5_1:1"}, "mlx5_[0-1],mlx5_0",
+                                  "mlx5_0");
+}
+
+UCS_TEST_P(test_ucp_devices_config_mlx5,
+           duplicate_device_warning_range_base_name_2)
+{
+    test_duplicate_device_warning({"mlx5_0:1", "mlx5_1:1"}, "mlx5_0,mlx5_[0-1]",
+                                  "mlx5_0");
+}
+
+UCS_TEST_P(test_ucp_devices_config_mlx5, duplicate_device_warning_two_ranges)
+{
+    test_duplicate_device_warning({"mlx5_0:1", "mlx5_1:1", "mlx5_2:1"},
+                                  "mlx5_[0-1],mlx5_[1-2]", "mlx5_1");
+}
 
 /*
  * Test that range syntax selects the correct devices.
  */
-UCS_TEST_P(test_ucp_devices_config_mlx5_range, range)
+UCS_TEST_P(test_ucp_devices_config_mlx5, range)
 {
     entity *e = create_entity();
 
@@ -634,7 +633,7 @@ UCS_TEST_P(test_ucp_devices_config_mlx5_range, range)
 /*
  * Test that negated range excludes the correct devices.
  */
-UCS_TEST_P(test_ucp_devices_config_mlx5_range, range_negate)
+UCS_TEST_P(test_ucp_devices_config_mlx5, range_negate)
 {
     entity *e = create_entity();
 
@@ -659,7 +658,7 @@ UCS_TEST_P(test_ucp_devices_config_mlx5_range, range_negate)
 /*
  * Test that negated range excludes the correct devices (multiple ranges)
  */
-UCS_TEST_P(test_ucp_devices_config_mlx5_range, range_negate_multiple)
+UCS_TEST_P(test_ucp_devices_config_mlx5, range_negate_multiple)
 {
     entity *e = create_entity();
 
@@ -685,7 +684,7 @@ UCS_TEST_P(test_ucp_devices_config_mlx5_range, range_negate_multiple)
 /*
  * Test that an invalid range (end < start) produces a configuration error.
  */
-UCS_TEST_P(test_ucp_devices_config_mlx5_range, range_invalid_produces_error)
+UCS_TEST_P(test_ucp_devices_config_mlx5, range_invalid_produces_error)
 {
     ucs_status_t status;
     {
@@ -696,4 +695,4 @@ UCS_TEST_P(test_ucp_devices_config_mlx5_range, range_invalid_produces_error)
     EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_devices_config_mlx5_range, ib, "ib")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_devices_config_mlx5, ib, "ib")
