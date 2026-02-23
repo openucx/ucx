@@ -14,9 +14,9 @@ kubernetes:
   requests: "{memory: 16Gi, cpu: 10000m}"
 
 runs_on_dockers:
-  # HCA CX8
+  # HCA IB
   - {
-      name: "hca-cx8",
+      name: "hca-ib",
       url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0",
       arch: x86_64,
       nodeSelector: "kubernetes.io/hostname=yok-t-ipp-blossom-prod-gpu-rdm-01",
