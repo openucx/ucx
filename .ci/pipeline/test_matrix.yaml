@@ -19,10 +19,12 @@ runs_on_dockers:
       name: "hca-cx8",
       url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0",
       arch: x86_64,
-      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "ib-network" }],
-      limits: "{memory: 16Gi, cpu: 10000m, rdma/hca_cx8: 1}",
-      requests: "{memory: 16Gi, cpu: 10000m, rdma/hca_cx8: 1}",
-      caps_add: "[ IPC_LOCK, SYS_RESOURCE ]"
+      nodeSelector: "kubernetes.io/hostname=yok-t-ipp-blossom-prod-gpu-rdm-01",
+      tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
+      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "cx8-ib-network" }],
+      limits: "{memory: 16Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1}",
+      requests: "{memory: 16Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1}",
+      caps_add: "[ IPC_LOCK, NET_RAW ]"
     }
   # BlueField
   - {
