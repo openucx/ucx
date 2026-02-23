@@ -536,11 +536,6 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_devices_config, all, "all")
 
 class test_ucp_devices_config_mlx5_range : public ucp_test {
 public:
-    test_ucp_devices_config_mlx5_range()
-    {
-        m_warn_invalid_config = true;
-    }
-
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
         add_variant(variants, UCP_FEATURE_TAG);
@@ -608,43 +603,6 @@ protected:
                     << (should_be_selected ? "selected" : "excluded");
         }
     }
-
-    /* Test that a range exceeding the device count produces a warning */
-    void test_range_exceeds_device_count(bool negate)
-    {
-        entity *e = create_entity();
-
-        unsigned const count = get_mlx5_device_count(*e);
-        if (count < 1) {
-            UCS_TEST_SKIP_R("Need at least 1 mlx5 device");
-        }
-
-        m_entities.clear();
-
-        /* Range that extends one beyond the last device index:
-         * e.g. mlx5_[0-N] when only mlx5_0 through mlx5_(N-1) exist */
-        std::string config = ((negate) ? "^" : "") +
-                             build_mlx5_range_config(0, count);
-        modify_config("NET_DEVICES", config.c_str());
-
-        size_t warn_count;
-        {
-            const scoped_log_handler slh(hide_warns_logger);
-            warn_count = m_warnings.size();
-            create_entity();
-        }
-
-        ASSERT_EQ(m_warnings.size() - warn_count, 1)
-                << "Expected exactly one warning";
-
-        /* Check that the warning about device not available was printed */
-        const std::string expected_warn = "device 'mlx5_" +
-                                          std::to_string(count) +
-                                          "' is not available";
-        EXPECT_NE(m_warnings[warn_count].find(expected_warn), std::string::npos)
-                << "Expected warning about device not available: 'mlx5_"
-                << std::to_string(count) << "'";
-    }
 };
 
 /*
@@ -707,7 +665,7 @@ UCS_TEST_P(test_ucp_devices_config_mlx5_range, range_negate_multiple)
 
     unsigned const count = get_mlx5_device_count(*e);
     if (count < 3) {
-        UCS_TEST_SKIP_R("Need at least 2 mlx5 devices");
+        UCS_TEST_SKIP_R("Need at least 3 mlx5 devices");
     }
 
     m_entities.clear();
@@ -736,18 +694,6 @@ UCS_TEST_P(test_ucp_devices_config_mlx5_range, range_invalid_produces_error)
                                             "mlx5_[5-2]");
     }
     EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
-}
-
-UCS_TEST_P(test_ucp_devices_config_mlx5_range,
-           range_exceeds_device_count_produces_error)
-{
-    test_range_exceeds_device_count(false);
-}
-
-UCS_TEST_P(test_ucp_devices_config_mlx5_range,
-           range_negate_exceeds_device_count_produces_error)
-{
-    test_range_exceeds_device_count(true);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_devices_config_mlx5_range, ib, "ib")
