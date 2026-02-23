@@ -3,7 +3,7 @@
 # See file LICENSE for terms.
 #
 
-NVCC_CUDA_MIN_REQUIRED=10.2
+NVCC_CUDA_MIN_REQUIRED=12.2
 
 ARCH9_CODE="-gencode=arch=compute_70,code=sm_70"
 ARCH10_CODE="-gencode=arch=compute_75,code=sm_75"
@@ -59,7 +59,13 @@ AC_DEFUN([UCX_CUDA_CHECK_NVCC], [
         cxx_dialect_ver=201703L
         AS_VERSION_COMPARE([$CUDA_VERSION], [13.0], [],
               [NVCC_CXX_DIALECT=c++11
-               cxx_dialect_ver=201103L])
+               cxx_dialect_ver=201103L
+               NVCCFLAGS="$NVCCFLAGS -DCCCL_IGNORE_DEPRECATED_CPP_DIALECT"])
+
+        have_cuda_12_9=yes
+        AS_VERSION_COMPARE([$CUDA_VERSION], [12.9], [], [have_cuda_12_9=no])
+        AS_IF([test "x$have_cuda_12_9" = "xyes"],
+              [NVCCFLAGS="$NVCCFLAGS -D_LIBCUDACXX_ATOMIC_UNSAFE_AUTOMATIC_STORAGE"])
 
         AS_IF([test "x$NVCC" != "x"], [
                 AC_ARG_WITH([nvcc-gencode],
@@ -116,8 +122,6 @@ AC_DEFUN([UCX_CUDA_CHECK_NVCC], [
                 NVCC=""])
                 AC_LANG_POP
 
-                save_NVCCFLAGS="$NVCCFLAGS"
-                NVCCFLAGS="$NVCCFLAGS -DCCCL_IGNORE_DEPRECATED_CPP_DIALECT"
                 AC_MSG_CHECKING([checking cuda/atomic support])
                 AC_LANG_PUSH([CUDA])
                 AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
@@ -125,11 +129,10 @@ AC_DEFUN([UCX_CUDA_CHECK_NVCC], [
                       int v;
                       cuda::atomic_ref<int> ref{v};
                    ]])],
-                   [AC_MSG_RESULT([yes])
-                      have_cuda_atomic_support=yes],
-                   [AC_MSG_RESULT([no])])
+                   [AC_MSG_RESULT([yes])],
+                   [AC_MSG_RESULT([no])
+                    NVCC=""])
                 AC_LANG_POP
-                NVCCFLAGS="$save_NVCCFLAGS"
             ])
         ])
 

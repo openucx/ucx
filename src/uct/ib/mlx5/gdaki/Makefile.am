@@ -24,15 +24,9 @@ libuct_ib_mlx5_gda_la_SOURCES = \
 
 nobase_dist_libuct_ib_mlx5_gda_la_HEADERS = \
 	gdaki.cuh \
-	gdaki_dev.h
-
-gpunetio_commondir = $(includedir)/uct/ib/mlx5/gdaki/common
-dist_gpunetio_common_HEADERS = \
+	gdaki_dev.h \
 	common/doca_gpunetio_verbs_def.h \
-	common/doca_gpunetio_verbs_dev.h
-
-gpunetio_devicedir = $(includedir)/uct/ib/mlx5/gdaki/device
-dist_gpunetio_device_HEADERS = \
+	common/doca_gpunetio_verbs_dev.h \
 	device/doca_gpunetio_dev_verbs_common.cuh \
 	device/doca_gpunetio_dev_verbs_qp.cuh \
 	device/doca_gpunetio_dev_verbs_cq.cuh
