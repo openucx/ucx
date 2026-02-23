@@ -2052,18 +2052,18 @@ class test_ucp_am_nbx_rndv_ppln : public test_ucp_am_nbx_rndv {
 public:
     test_ucp_am_nbx_rndv_ppln() : m_mem_type(UCS_MEMORY_TYPE_HOST)
     {
-        stats_activate();
-    }
-
-    ~test_ucp_am_nbx_rndv_ppln()
-    {
-        stats_restore();
         modify_config("RNDV_THRESH", "128");
         modify_config("RNDV_SCHEME", "put_ppln");
         modify_config("RNDV_PIPELINE_SHM_ENABLE", "n");
         /* FIXME: Advertise error handling support for RNDV PPLN protocol.
          * Remove this once invalidation workflow is implemented. */
         modify_config("RNDV_PIPELINE_ERROR_HANDLING", "y");
+        stats_activate();
+    }
+
+    ~test_ucp_am_nbx_rndv_ppln()
+    {
+        stats_restore();
     }
 
     void init() override
