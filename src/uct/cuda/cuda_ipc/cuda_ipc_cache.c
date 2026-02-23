@@ -155,7 +155,6 @@ uct_cuda_ipc_close_memhandle_legacy(uct_cuda_ipc_cache_region_t *region)
 
 static ucs_status_t uct_cuda_ipc_close_memhandle(uct_cuda_ipc_cache_region_t *region)
 {
-#if HAVE_CUDA_FABRIC
     ucs_status_t status;
 
     if ((region->key.ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM) ||
@@ -168,7 +167,9 @@ static ucs_status_t uct_cuda_ipc_close_memhandle(uct_cuda_ipc_cache_region_t *re
 
         return UCT_CUDADRV_FUNC_LOG_WARN(cuMemAddressFree(
                 (CUdeviceptr)region->mapped_addr, region->key.b_len));
-    } else if (region->key.ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL) {
+    }
+#if HAVE_CUDA_FABRIC
+    if (region->key.ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL) {
         return UCT_CUDADRV_FUNC_LOG_WARN(
                 cuMemFree((CUdeviceptr)region->mapped_addr));
     }
@@ -220,7 +221,7 @@ uct_cuda_ipc_open_memhandle_legacy(CUipcMemHandle memh, CUdevice cu_dev,
     return status;
 }
 
-#if HAVE_CUDA_FABRIC
+#if HAVE_CUDA_FABRIC || HAVE_DECL_SYS_PIDFD_GETFD
 static void
 uct_cuda_ipc_init_access_desc(CUmemAccessDesc *access_desc, CUdevice cu_dev)
 {
@@ -280,6 +281,8 @@ out:
     return status;
 }
 
+#endif /* HAVE_CUDA_FABRIC || HAVE_DECL_SYS_PIDFD_GETFD */
+#if HAVE_CUDA_FABRIC
 static ucs_status_t cuda_ipc_rem_mpool_cache_create(uct_cuda_ipc_rkey_t *key,
                                                     CUdevice cu_dev,
                                                     CUmemoryPool *mpool,
@@ -375,6 +378,7 @@ err:
     pthread_rwlock_unlock(&uct_cuda_ipc_rem_mpool_cache.lock);
     return status;
 }
+#endif /* HAVE_CUDA_FABRIC */
 
 #if HAVE_DECL_SYS_PIDFD_GETFD
 static ucs_status_t
@@ -422,7 +426,6 @@ close_pidfd:
     return status;
 }
 #endif /* HAVE_DECL_SYS_PIDFD_GETFD */
-#endif
 
 static ucs_status_t
 uct_cuda_ipc_open_memhandle(uct_cuda_ipc_rkey_t *key, CUdevice cu_dev,
@@ -441,14 +444,14 @@ uct_cuda_ipc_open_memhandle(uct_cuda_ipc_rkey_t *key, CUdevice cu_dev,
         return uct_cuda_ipc_open_memhandle_vmm(key, cu_dev, mapped_addr,
                 (void*)&key->ph.handle.fabric_handle,
                 CU_MEM_HANDLE_TYPE_FABRIC, log_level);
+    case UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL:
+        return uct_cuda_ipc_open_memhandle_mempool(key, cu_dev, mapped_addr,
+                                                   log_level);
+#endif
 #if HAVE_DECL_SYS_PIDFD_GETFD
     case UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD:
         return uct_cuda_ipc_open_memhandle_posix_fd(key, cu_dev, mapped_addr,
                                                     log_level);
-#endif
-    case UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL:
-        return uct_cuda_ipc_open_memhandle_mempool(key, cu_dev, mapped_addr,
-                                                   log_level);
 #endif
     case UCT_CUDA_IPC_KEY_HANDLE_TYPE_NO_IPC:
         level = UCS_LOG_LEVEL_DEBUG;
@@ -468,7 +471,6 @@ static void uct_cuda_ipc_cache_invalidate_regions(uct_cuda_ipc_cache_t *cache,
     ucs_list_link_t region_list;
     ucs_status_t status;
     uct_cuda_ipc_cache_region_t *region, *tmp;
-    int handle_type;
 
     ucs_list_head_init(&region_list);
     ucs_pgtable_search_range(&cache->pgtable, (ucs_pgt_addr_t)from,
@@ -484,13 +486,9 @@ static void uct_cuda_ipc_cache_invalidate_regions(uct_cuda_ipc_cache_t *cache,
 
         status = uct_cuda_ipc_close_memhandle(region);
         if (status != UCS_OK) {
-#if HAVE_CUDA_FABRIC
-            handle_type = region->key.ph.handle_type;
-#else
-            handle_type = 1; /* legacy memory type is the only valid type */
-#endif
             ucs_error("failed to close memhandle for base addr:%p type:%d (%s)",
-                      (void *)region->key.d_bptr, handle_type,
+                      (void *)region->key.d_bptr,
+                      region->key.ph.handle_type,
                       ucs_status_string(status));
         }
 

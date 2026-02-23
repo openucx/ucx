@@ -223,7 +223,7 @@ UCS_TEST_P(test_cuda_ipc_md, mkey_pack_mempool)
 
 UCS_TEST_P(test_cuda_ipc_md, mkey_pack_posix_fd)
 {
-#if HAVE_CUDA_FABRIC && HAVE_DECL_SYS_PIDFD_GETFD
+#if HAVE_DECL_SYS_PIDFD_GETFD
     cuda_posix_fd_mem_buffer buf(4096, UCS_MEMORY_TYPE_CUDA);
     uct_md_mem_reg_params_t reg_params    = {};
     uct_md_mkey_pack_params_t pack_params = {};
@@ -241,13 +241,13 @@ UCS_TEST_P(test_cuda_ipc_md, mkey_pack_posix_fd)
     dereg_params.memh       = memh;
     EXPECT_UCS_OK(uct_md_mem_dereg_v2(md(), &dereg_params));
 #else
-    UCS_TEST_SKIP_R("built without fabric or pidfd support");
+    UCS_TEST_SKIP_R("built without pidfd support");
 #endif
 }
 
 UCS_TEST_P(test_cuda_ipc_md, posix_fd_system_id_mismatch)
 {
-#if HAVE_CUDA_FABRIC && HAVE_DECL_SYS_PIDFD_GETFD
+#if HAVE_DECL_SYS_PIDFD_GETFD
     cuda_posix_fd_mem_buffer buf(4096, UCS_MEMORY_TYPE_CUDA);
     uct_md_mem_reg_params_t reg_params    = {};
     uct_md_mkey_pack_params_t pack_params = {};
@@ -280,7 +280,7 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_system_id_mismatch)
     dereg_params.memh       = memh;
     EXPECT_UCS_OK(uct_md_mem_dereg_v2(md(), &dereg_params));
 #else
-    UCS_TEST_SKIP_R("built without fabric or pidfd support");
+    UCS_TEST_SKIP_R("built without pidfd support");
 #endif
 }
 
@@ -293,7 +293,7 @@ UCS_TEST_P(test_cuda_ipc_md, mnnvl_disabled)
 
 UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
 {
-#if HAVE_CUDA_FABRIC && HAVE_DECL_SYS_PIDFD_GETFD
+#if HAVE_DECL_SYS_PIDFD_GETFD
     cuda_posix_fd_mem_buffer buf(4096, UCS_MEMORY_TYPE_CUDA);
     size_t size                           = buf.size();
     uct_md_mem_reg_params_t reg_params    = {};
@@ -373,7 +373,7 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
     dereg_params.memh       = memh;
     EXPECT_UCS_OK(uct_md_mem_dereg_v2(md(), &dereg_params));
 #else
-    UCS_TEST_SKIP_R("built without fabric or pidfd support");
+    UCS_TEST_SKIP_R("built without pidfd support");
 #endif
 }
 

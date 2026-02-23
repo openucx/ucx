@@ -110,6 +110,7 @@ public:
         init(size, CU_MEM_HANDLE_TYPE_FABRIC);
     }
 };
+#endif
 
 class cuda_posix_fd_mem_buffer : public cuda_vmm_mem_buffer {
 public:
@@ -118,6 +119,5 @@ public:
         init(size, CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR);
     }
 };
-#endif
 
 #endif
