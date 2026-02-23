@@ -1596,6 +1596,7 @@ static uct_ib_md_ops_t uct_ib_verbs_md_ops = {
         .mkey_pack          = uct_ib_verbs_mkey_pack,
         .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
         .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported,
+        .mem_elem_pack      = (uct_md_mem_elem_pack_func_t)ucs_empty_function_return_unsupported
     },
     .open = uct_ib_verbs_md_open,
 };

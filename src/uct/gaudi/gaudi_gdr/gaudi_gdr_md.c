@@ -144,6 +144,7 @@ static uct_md_ops_t md_ops = {
     .mkey_pack = (uct_md_mkey_pack_func_t)ucs_empty_function_return_unsupported,
     .mem_attach         = (uct_md_mem_attach_func_t)
             ucs_empty_function_return_unsupported,
+    .mem_elem_pack      = (uct_md_mem_elem_pack_func_t)ucs_empty_function_return_unsupported,
     .detect_memory_type = uct_gaudi_md_detect_memory_type,
 };
 

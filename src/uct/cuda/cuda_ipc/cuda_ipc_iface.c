@@ -413,57 +413,9 @@ uct_cuda_ipc_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
     return UCS_OK;
 }
 
-static ucs_status_t
-uct_cuda_ipc_iface_mem_element_pack(uct_iface_h tl_iface,
-                                    uct_mem_h memh,
-                                    uct_rkey_t rkey,
-                                    uct_device_mem_element_t *mem_element)
-{
-    uct_cuda_ipc_unpacked_rkey_t *key = (uct_cuda_ipc_unpacked_rkey_t *)rkey;
-    ucs_status_t status;
-    int is_ctx_pushed;
-    uct_cuda_ipc_device_mem_element_t cuda_ipc_mem_element;
-    CUdevice cuda_device;
-    void *mapped_addr;
-
-    /* TODO: Use device of current ctx and move to md API. */
-    status = uct_cuda_ipc_check_and_push_ctx((CUdeviceptr)mem_element,
-                                             &cuda_device, &is_ctx_pushed);
-    if (ucs_unlikely(status != UCS_OK)) {
-        return status;
-    }
-
-    status = uct_cuda_ipc_map_memhandle(&key->super, cuda_device,
-                                        &mapped_addr, UCS_LOG_LEVEL_ERROR);
-    if (ucs_unlikely(status != UCS_OK)) {
-        goto out;
-    }
-    cuda_ipc_mem_element.mapped_offset = UCS_PTR_BYTE_DIFF(key->super.d_bptr, mapped_addr);
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuMemcpyHtoD((CUdeviceptr)mem_element, &cuda_ipc_mem_element,
-                          sizeof(uct_cuda_ipc_device_mem_element_t)));
-
-out:
-    uct_cuda_ipc_check_and_pop_ctx(is_ctx_pushed);
-    return status;
-}
-
-static ucs_status_t uct_cuda_ipc_iface_query_v2(uct_iface_h iface,
-                                                uct_iface_attr_v2_t *iface_attr)
-{
-    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_DEVICE_MEM_ELEMENT_SIZE) {
-        iface_attr->device_mem_element_size = sizeof(uct_cuda_ipc_device_mem_element_t);
-    }
-
-    return UCS_OK;
-}
-
 static uct_iface_internal_ops_t uct_cuda_ipc_iface_internal_ops = {
-    .iface_query_v2         = uct_cuda_ipc_iface_query_v2,
     .iface_estimate_perf    = uct_cuda_ipc_estimate_perf,
     .iface_vfs_refresh      = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
-    .iface_mem_element_pack = uct_cuda_ipc_iface_mem_element_pack,
     .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
     .ep_invalidate          = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
     .ep_connect_to_ep_v2    = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,

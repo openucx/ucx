@@ -286,17 +286,12 @@ ucp_perf_cuda_send_async(const ucp_perf_cuda_params &params,
     case UCX_PERF_CMD_PUT_MULTI:
         return ucp_device_put_multi<level>(params.mem_list, 1, channel_id,
                                            flags, req);
-    case UCX_PERF_CMD_PUT_PARTIAL: {
-        unsigned counter_index = params.mem_list->mem_list_length - 1;
-        return ucp_device_put_multi_partial<level>(params.mem_list,
-                                                   params.indices,
-                                                   counter_index,
-                                                   params.local_offsets,
-                                                   params.remote_offsets,
-                                                   params.lengths,
-                                                   counter_index, 1, 0,
-                                                   channel_id, flags, req);
-        }
+    case UCX_PERF_CMD_PUT_PARTIAL:
+        unsigned counter_index = params.mem_list->length - 1;
+        return ucp_device_put_multi_partial<level>(
+                params.mem_list, params.indices, counter_index,
+                params.local_offsets, params.remote_offsets, params.lengths,
+                counter_index, 1, 0, channel_id, flags, req);
     }
 
     return UCS_ERR_INVALID_PARAM;

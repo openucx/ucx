@@ -225,7 +225,10 @@ ucp_device_remote_mem_list_create(const ucp_device_mem_list_params_t *params,
  * @ingroup UCP_DEVICE
  * @brief Return the number of elements in the descriptors mem list handle.
  *
- * @param [in] mem_list_h Descriptors list handle.
+ * @param [in] mem_list_h Descriptors list handle. Can be
+ *                        @ref ucp_device_mem_list_handle_h,
+ *                        @ref ucp_device_local_mem_list_h, or
+ *                        @ref ucp_device_remote_mem_list_h.
  *
  * @return Descriptors mem list length.
  */
@@ -237,9 +240,13 @@ uint32_t ucp_device_get_mem_list_length(const void *mem_list_h);
  * @brief Release function for a descriptor list handle.
  *
  * This function releases the handle that was created using @ref
- * ucp_device_mem_list_create.
+ * ucp_device_mem_list_create, @ref ucp_device_local_mem_list_create, or
+ * @ref ucp_device_remote_mem_list_create.
  *
- * @param [in] mem_list_h Created handle to release.
+ * @param [in] mem_list_h Created handle to release. Can be
+ *                        @ref ucp_device_mem_list_handle_h,
+ *                        @ref ucp_device_local_mem_list_h, or
+ *                        @ref ucp_device_remote_mem_list_h.
  */
 void ucp_device_mem_list_release(void *mem_list_h);
 

@@ -380,10 +380,8 @@ ssize_t uct_self_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
 }
 
 static uct_iface_internal_ops_t uct_self_iface_internal_ops = {
-    .iface_query_v2         = uct_iface_base_query_v2,
     .iface_estimate_perf    = uct_base_iface_estimate_perf,
     .iface_vfs_refresh      = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
-    .iface_mem_element_pack = (uct_iface_mem_element_pack_func_t)ucs_empty_function_return_unsupported,
     .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
     .ep_invalidate          = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
     .ep_connect_to_ep_v2    = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
@@ -453,7 +451,8 @@ static ucs_status_t uct_self_md_open(uct_component_t *component, const char *md_
         .mem_query          = (uct_md_mem_query_func_t)ucs_empty_function_return_unsupported,
         .mkey_pack          = (uct_md_mkey_pack_func_t)ucs_empty_function_return_success,
         .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
-        .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported
+        .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported,
+        .mem_elem_pack      = (uct_md_mem_elem_pack_func_t)ucs_empty_function_return_unsupported
     };
 
     static uct_self_md_t md;

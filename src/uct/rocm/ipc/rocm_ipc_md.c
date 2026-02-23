@@ -133,6 +133,7 @@ uct_rocm_ipc_md_open(uct_component_h component, const char *md_name,
         .mkey_pack          = uct_rocm_ipc_mkey_pack,
         .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
         .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported,
+        .mem_elem_pack      = (uct_md_mem_elem_pack_func_t)ucs_empty_function_return_unsupported
     };
     static uct_md_t md = {
         .ops       = &md_ops,
