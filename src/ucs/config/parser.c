@@ -852,38 +852,39 @@ static int ucs_config_array_try_expand_range(const char *token,
                                              void *temp_field, unsigned *index,
                                              const ucs_config_array_t *array)
 {
-    unsigned long range_start, range_end, j;
+    int n = 0;
+    int ret;
+    char expanded[256];
+    unsigned long start, end, j;
     const char *bracket_pos;
     size_t prefix_len;
-    char expanded[256];
-    int n = 0;
 
     bracket_pos = strchr(token, '[');
     if (bracket_pos == NULL) {
         return 0; /* No bracket found */
     }
 
-    if ((sscanf(bracket_pos, "[%lu-%lu]%n", &range_start, &range_end, &n) !=
-         2) ||
+    if ((sscanf(bracket_pos, "[%lu-%lu]%n", &start, &end, &n) != 2) ||
         (n <= 0) || (bracket_pos[n] != '\0')) {
-        return 0; /* Not a valid range pattern */
+        return 0; /* Not a valid range pattern, but not an error */
     }
 
-    if (range_start > range_end) {
-        return -1; /* Invalid range: start > end */
+    if (start > end) {
+        return -1; /* Invalid range */
     }
 
     prefix_len = (size_t)(bracket_pos - token);
-    for (j = range_start; j <= range_end; ++j) {
-        if (*index >= UCS_CONFIG_ARRAY_MAX) {
-            break;
+    for (j = start; j <= end; ++j) {
+        ret = snprintf(expanded, sizeof(expanded), "%.*s%lu", (int)prefix_len,
+                       token, j);
+
+        if ((ret < 0) || ((size_t)ret >= sizeof(expanded))) {
+            return -1; /* Formatting error */
         }
 
-        snprintf(expanded, sizeof(expanded), "%.*s%lu", (int)prefix_len, token,
-                 j);
         if (!ucs_config_array_parse_element(expanded, temp_field, index,
                                             array)) {
-            return -1;
+            return -1; /* Parsing error */
         }
     }
 
