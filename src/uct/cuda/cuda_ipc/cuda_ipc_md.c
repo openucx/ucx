@@ -110,7 +110,7 @@ uct_cuda_ipc_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
     return UCS_OK;
 }
 
-#if HAVE_CUDA_FABRIC
+#if HAVE_CUDA_FABRIC && HAVE_DECL_SYS_PIDFD_GETFD
 static ucs_status_t
 uct_cuda_ipc_mem_export_posix_fd(void *addr, uct_cuda_ipc_lkey_t *key)
 {
