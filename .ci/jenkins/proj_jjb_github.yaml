@@ -87,6 +87,7 @@
         'ucx-build-github',
         'ucx-build-static-github',
         'ucx-test-github',
+        'ucx-test-gpu-github',
       ]
 
       try {{
@@ -210,5 +211,13 @@
     jjb_proj: "ucx-test-github"
     jjb_conf_file: ".ci/pipeline/test_matrix.yaml"
     jjb_description: "UCX GTest (GitHub Blossom). Do NOT edit via Web GUI!"
+    jobs:
+      - "{jjb_proj}"
+
+- project:
+    name: ucx-test-gpu-github
+    jjb_proj: "ucx-test-gpu-github"
+    jjb_conf_file: ".ci/pipeline/test_gpu_matrix.yaml"
+    jjb_description: "UCX GTest GPU (GitHub Blossom). Do NOT edit via Web GUI!"
     jobs:
       - "{jjb_proj}"

@@ -1,0 +1,136 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+---
+job: ucx-test-gpu
+
+failFast: false
+timeout_minutes: 160
+
+registry_host: harbor.mellanox.com
+registry_auth: ucx_harbor_credentials
+registry_path: /ucx/ci
+
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  limits: "{memory: 16Gi, cpu: 16000m}"
+  requests: "{memory: 8Gi, cpu: 8000m}"
+  privileged: true
+
+credentials:
+  - {credentialsId: 'svcnbu-swx-hpcx-scctl', usernameVariable: 'SERVICE_USER_USERNAME', passwordVariable: 'SERVICE_USER_PASSWORD'}
+  - {credentialsId: 'ucx_harbor_credentials', usernameVariable: 'REPO_USER', passwordVariable: 'REPO_PASS'}
+
+
+env:
+  UCX_REPO: "https://github.com/openucx/ucx.git"
+  RUN_TESTS: "yes"
+  TEST_PERF: "1"
+  ASAN_CHECK: "no"
+  VALGRIND_CHECK: "no"
+  EXECUTOR_NUMBER: "0"
+  RUNNING_IN_AZURE: "no"
+  GTEST_MAX_IB_SL: "4"
+  nworkers: "4"
+  SLURM_NODES: 1
+  SLURM_PARTITION: funk
+  SLURM_HEAD_NODE: scctl
+  SLURM_GRES: gpu:1
+  SLURM_MEM: 32G
+  SLURM_MINCPUS: 16
+  NPROC: 16
+  SLURM_JOB_TIMEOUT: '02:45:00'
+  TEST_TIMEOUT: 140
+  STORAGE_DRIVER: overlay
+  CI_IMAGE_TAG: "20260223-1"
+
+empty_volumes:
+  - {mountPath: /var/lib/containers/storage, memory: false}
+
+pvc_volumes:
+  - {claimName: nbu-swx-ucx-pvc, mountPath: /mnt/pvc, readOnly: false}
+
+runs_on_dockers:
+  - {
+     file: '.ci/dockerfiles/Dockerfile.build_helper',
+     name: 'build_helper_ucx',
+     tag: "${CI_IMAGE_TAG}",
+     build_args: '--build-arg BASE_IMAGE=dockerhub.nvidia.com/ubuntu:24.04'
+    }
+
+matrix:
+  axes:
+    arch:
+      - x86_64
+    worker: [0, 1, 2, 3]
+
+taskName: '${arch}/${name}/w${worker}'
+
+steps:
+  - name: Allocate Environment
+    containerSelector: "{name: 'build_helper_ucx'}"
+    credentialsId: "svcnbu-swx-hpcx-scctl"
+    parallel: false
+    run: |
+      .ci/scripts/run_slurm_allocation.sh \
+        --slurm_partition=${SLURM_PARTITION} \
+        --slurm_nodes=${SLURM_NODES} \
+        --slurm_head_node=${SLURM_HEAD_NODE} \
+        --slurm_job_timeout=${SLURM_JOB_TIMEOUT} \
+        --slurm_gres=${SLURM_GRES} \
+        --slurm_mem=${SLURM_MEM} \
+        --slurm_mincpus=${SLURM_MINCPUS} \
+        --slurm_job_name=ucx-w${worker}-${BUILD_NUMBER} \
+        --slurm_job_id_file=/mnt/pvc/job_id_w${worker}_${BUILD_NUMBER}.txt
+
+  - name: Checkout
+    containerSelector: "{name: 'build_helper_ucx'}"
+    timeout: "${TEST_TIMEOUT}"
+    parallel: false
+    run: |
+      set -x
+      .ci/scripts/run_tests_slurm.sh \
+        --test_script_path="git clone "${UCX_REPO}" . && git fetch --no-tags origin "${sha1}" && git checkout ${sha1}" \
+        --container_name=ucx-w${worker}-${BUILD_NUMBER} \
+        --slurm_job_id=$(cat /mnt/pvc/job_id_w${worker}_${BUILD_NUMBER}.txt) \
+        --docker_image="harbor.mellanox.com#hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0"
+
+  - name: Test
+    containerSelector: "{name: 'build_helper_ucx'}"
+    timeout: "${TEST_TIMEOUT}"
+    parallel: false
+    run: |
+      set -x
+      .ci/scripts/run_tests_slurm.sh \
+        --test_script_path="./contrib/test_jenkins.sh" \
+        --container_name=ucx-w${worker}-${BUILD_NUMBER} \
+        --slurm_job_id=$(cat /mnt/pvc/job_id_w${worker}_${BUILD_NUMBER}.txt) \
+        --slurm_env="GTEST_MAX_IB_SL=${GTEST_MAX_IB_SL},EXECUTOR_NUMBER=${EXECUTOR_NUMBER},RUNNING_IN_AZURE=${RUNNING_IN_AZURE},NPROC=${NPROC},sha1=${sha1},worker=${worker},nworkers=${nworkers},RUN_TESTS=${RUN_TESTS},TEST_PERF=${TEST_PERF},ASAN_CHECK=${ASAN_CHECK},VALGRIND_CHECK=${VALGRIND_CHECK}" \
+        --docker_image="harbor.mellanox.com#hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0"
+
+
+pipeline_stop:
+  containerSelector:
+    - "{name: 'build_helper_ucx'}"
+  credentialsId: "svcnbu-swx-hpcx-scctl"
+  parallel: false
+  run: |
+    set -x
+    shopt -s nullglob
+    job_files=(/mnt/pvc/job_id_*_${BUILD_NUMBER}.txt)
+    shopt -u nullglob
+
+    if [ ${#job_files[@]} -eq 0 ]; then
+      echo "WARNING: No job ID files found in /mnt/pvc/"
+      exit 0
+    fi
+
+    echo "INFO: Found ${#job_files[@]} job ID file(s) to stop"
+    for job_file in "${job_files[@]}"; do
+      if [ -f "${job_file}" ]; then
+        echo "INFO: Stopping allocation from ${job_file}"
+        .ci/scripts/stop_slurm_allocation.sh --slurm_job_id_file="${job_file}"
+        rm -f "${job_file}"
+      fi
+    done
