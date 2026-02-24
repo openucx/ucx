@@ -19,24 +19,11 @@ runs_on_dockers:
       name: "hca-ib",
       url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0",
       arch: x86_64,
-      nodeSelector: "kubernetes.io/hostname=yok-t-ipp-blossom-prod-gpu-rdm-01",
       tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
       annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "cx8-ib-network" }],
       limits: "{memory: 16Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1}",
       requests: "{memory: 16Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1}",
       caps_add: "[ IPC_LOCK, NET_RAW ]"
-    }
-  # BlueField
-  - {
-      name: "bf3",
-      url: "harbor.mellanox.com/hpcx/aarch64/ubuntu24.04/builder:doca-2.9.0",
-      arch: aarch64,
-      nodeSelector: "hardware.node.kubernetes.io=BF3,kubernetes.io/arch=arm64",
-      tolerations: "[{key: 'hardware.node.kubernetes.io', operator: 'Equal', value: 'BF3'}]",
-      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "ib-network" }],
-      limits: "{memory: 16Gi, cpu: 10000m}",
-      requests: "{memory: 16Gi, cpu: 10000m}",
-      caps_add: "[ IPC_LOCK, SYS_RESOURCE ]"
     }
 
 matrix:
