@@ -74,10 +74,10 @@ static ucs_status_t ucp_proto_get_offload_bcopy_progress(uct_pending_req_t *self
         }
         status = ucp_ep_rma_handle_fence(req->send.ep, req, mpriv->lane_map);
         if (status == UCP_STATUS_FENCE_DEFER) {
-            /* if pending lane is not UCP_NULL_LANE, it was previously in uct pending queue. 
-            *  We move it from uct pending queue to up fence queue. We return OK to indicate
-            *  that this request is handled and to not put in back in uct pending queue
-            */
+            /* If pending lane is not UCP_NULL_LANE, it was previously in the
+             * UCT pending queue. Move it to the UCP fence queue and return OK
+             * so it is not put back on the UCT pending queue.
+             */
             if (req->send.pending_lane != UCP_NULL_LANE) {
                 ucp_ep_fence_pending_add(req->send.ep, &req->send.uct);
                 req->send.pending_lane = UCP_NULL_LANE;
