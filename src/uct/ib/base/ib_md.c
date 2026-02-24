@@ -1158,9 +1158,7 @@ uct_ib_md_open(uct_component_t *component, const char *md_name,
     int num_devices, fork_init = 0;
     uint64_t plugin_capabilities = 0;
 
-    /* Try to load plugin library dynamically (one-time, early in MD open) */
     uct_ib_try_load_plugin();
-
 
     status = ucx_plugin_init();
     if (status != UCS_OK) {
