@@ -68,7 +68,7 @@ Package: ucx-ib-mlx5-gda
 Section: libs
 Depends: ${misc:Depends}, ${shlibs:Depends}
 Architecture: any
-Build-Profiles: <gda>
+Build-Profiles: <cuda>
 Description: Unified Communication X - GPU Direct Async support
  UCX is a communication library implementing high-performance messaging.
  .
