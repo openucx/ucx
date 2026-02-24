@@ -1143,17 +1143,12 @@ static ucs_init_once_t uct_ib_plugin_load_once = UCS_INIT_ONCE_INITIALIZER;
 
 static void uct_ib_try_load_plugin(void)
 {
-    ucs_plugin_loader_config_t config;
-    ucs_plugin_array_t *plugins;
+    ucs_plugin_desc_t *plugin;
 
     UCS_INIT_ONCE(&uct_ib_plugin_load_once) {
-        config.component = "ib";
-        config.plugin_prefix = "libucx_plugin";
-
-        plugins = ucs_plugin_load_component(&config);
-        if (plugins != NULL && ucs_array_length(plugins) > 0) {
-            ucs_debug("Loaded %u UCX IB plugin(s)", ucs_array_length(plugins));
-            /* Plugins are stored in registry, no need to keep local reference */
+        plugin = ucs_plugin_load_component("ib");
+        if (plugin != NULL) {
+            ucs_debug("Loaded UCX IB plugin '%s'", plugin->component);
         } else {
             ucs_debug("UCX IB plugin not found, using stub implementation");
         }

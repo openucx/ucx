@@ -19,7 +19,6 @@
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
 #include <ucs/type/init_once.h>
-#include <ucs/datastruct/array.h>
 #include <ucs/datastruct/list.h>
 #include <string.h>
 #include <limits.h>
@@ -28,77 +27,36 @@
 
 #ifdef UCX_SHARED_LIB
 
-/* Plugin registry - stores loaded plugins per component */
+/* Plugin registry - stores loaded plugin per component */
 typedef struct ucs_plugin_registry_entry {
     ucs_list_link_t list;
     char *component;
-    ucs_plugin_array_t plugins;  /* Array of plugins for this component */
+    ucs_plugin_desc_t plugin;
 } ucs_plugin_registry_entry_t;
 
 static ucs_init_once_t ucs_plugin_registry_init_once = UCS_INIT_ONCE_INITIALIZER;
 static UCS_LIST_HEAD(ucs_plugin_registry);
 
-/**
- * Find or create registry entry for component
- * Note: This is called from within UCS_INIT_ONCE, so it's thread-safe
- */
-static ucs_plugin_registry_entry_t* ucs_plugin_registry_get(const char *component)
+static ucs_plugin_registry_entry_t*
+ucs_plugin_registry_find(const char *component)
 {
     ucs_plugin_registry_entry_t *entry;
 
-    /* Find existing entry */
     ucs_list_for_each(entry, &ucs_plugin_registry, list) {
         if (strcmp(entry->component, component) == 0) {
             return entry;
         }
     }
 
-    /* Create new entry */
-    entry = ucs_malloc(sizeof(*entry), "plugin_registry_entry");
-    if (entry == NULL) {
-        return NULL;
-    }
-
-    entry->component = ucs_strdup(component, "plugin_component");
-    if (entry->component == NULL) {
-        ucs_free(entry);
-        return NULL;
-    }
-
-    ucs_array_init_dynamic(&entry->plugins);
-    ucs_list_add_tail(&ucs_plugin_registry, &entry->list);
-
-    return entry;
+    return NULL;
 }
 
-/**
- * Try to load a plugin library by name
- * 
- * @param [in]  plugin_name Plugin library name (e.g., "libucx_plugin_ib.so")
- * @param [out] handle      dlopen() handle if successful
- * 
- * @return UCS_OK if loaded, UCS_ERR_NO_DEVICE if not found, other on error
- */
-/**
- * Try to load a plugin library
- * 
- * Can load by name (searches standard library paths) or by full path.
- * dlopen() handles both cases automatically.
- * 
- * @param [in]  plugin_name_or_path Plugin library name (e.g., "libucx_plugin_ib.so")
- *                                  or full path to plugin library
- * @param [out] handle              dlopen() handle if successful
- * 
- * @return UCS_OK if loaded, UCS_ERR_NO_DEVICE if not found, other on error
- */
-static ucs_status_t ucs_plugin_try_load(const char *plugin_name_or_path, void **handle)
+static ucs_status_t ucs_plugin_try_load(const char *plugin_name_or_path,
+                                        void **handle)
 {
     void *dl_handle;
 
-    /* Clear any previous dlopen errors */
     (void)dlerror();
-
-    /* dlopen() can handle both library names (searches standard paths) and full paths */
     dl_handle = dlopen(plugin_name_or_path, RTLD_GLOBAL | RTLD_LAZY);
     if (dl_handle != NULL) {
         *handle = dl_handle;
@@ -109,156 +67,71 @@ static ucs_status_t ucs_plugin_try_load(const char *plugin_name_or_path, void **
     return UCS_ERR_NO_DEVICE;
 }
 
-/**
- * Load plugin by searching standard locations
- * Loads the first matching plugin found (standard naming or backward-compatible)
- * Adds to the end of the plugin array
- */
-static ucs_status_t ucs_plugin_load_by_search(const char *component,
-                                               const char *plugin_prefix,
-                                               ucs_plugin_array_t *plugins_array)
+ucs_plugin_desc_t* ucs_plugin_load_component(const char *component)
 {
-    char plugin_name[128] = {0};  /* Plugin names are expected to be < 128 bytes */
-    void *handle;
+    char plugin_name[128] = {0};
+    ucs_plugin_registry_entry_t *entry;
     ucs_status_t status;
-    ucs_plugin_desc_t *plugin;
+    void *handle;
 
-    /* Try standard naming: libucx_plugin_<component>.so */
-    snprintf(plugin_name, sizeof(plugin_name), "%s_%s.so", plugin_prefix, component);
+    if (component == NULL) {
+        return NULL;
+    }
 
-    /* Try loading from standard library paths */
+    UCS_INIT_ONCE(&ucs_plugin_registry_init_once) {
+        /* first use - list already initialized statically */
+    }
+
+    entry = ucs_plugin_registry_find(component);
+    if (entry != NULL) {
+        return &entry->plugin;
+    }
+
+    snprintf(plugin_name, sizeof(plugin_name), "libucx_plugin_%s.so", component);
     status = ucs_plugin_try_load(plugin_name, &handle);
     if (status != UCS_OK) {
-        return UCS_ERR_NO_DEVICE;
-    }
-
-    /* Append new element to array */
-    plugin = ucs_array_append(plugins_array, {
-        return UCS_ERR_NO_MEMORY;
-    });
-    if (plugin == NULL) {
-        return UCS_ERR_NO_MEMORY;
-    }
-
-    plugin->name = ucs_strdup(component, "plugin_name");
-    plugin->component = component;
-    plugin->handle = handle;
-    plugin->data = NULL;
-
-    if (plugin->name == NULL) {
-        ucs_array_pop_back(plugins_array);
-        return UCS_ERR_NO_MEMORY;
-    }
-
-    return UCS_OK;
-}
-
-ucs_plugin_array_t* ucs_plugin_load_component(const ucs_plugin_loader_config_t *config)
-{
-    ucs_status_t status;
-    ucs_plugin_registry_entry_t *entry;
-
-    if (config == NULL) {
+        ucs_debug("No plugin found for component '%s'", component);
         return NULL;
     }
 
-    if (config->component == NULL || config->plugin_prefix == NULL) {
-        return NULL;
-    }
-
-    /* Initialize registry once */
-    UCS_INIT_ONCE(&ucs_plugin_registry_init_once) {
-        /* Registry initialized on first use */
-    }
-
-    /* Check if already loaded - get or create registry entry */
-    entry = ucs_plugin_registry_get(config->component);
+    entry = ucs_malloc(sizeof(*entry), "plugin_registry_entry");
     if (entry == NULL) {
-        return NULL;
+        goto err_close;
     }
 
-    /* Check if plugins already loaded */
-    if (!ucs_array_is_empty(&entry->plugins)) {
-        return &entry->plugins;
+    entry->component = ucs_strdup(component, "plugin_component");
+    if (entry->component == NULL) {
+        goto err_free_entry;
     }
 
-    /* Try loading by searching standard locations */
-    status = ucs_plugin_load_by_search(config->component, config->plugin_prefix,
-                                       &entry->plugins);
-    if (status == UCS_OK) {
-        /* Update component pointers to point to registry entry's component string */
-        ucs_plugin_desc_t *plugin;
-        ucs_array_for_each(plugin, &entry->plugins) {
-            plugin->component = entry->component;
-        }
-        return &entry->plugins;
-    }
+    entry->plugin.component = entry->component;
+    entry->plugin.handle    = handle;
 
-    /* No plugins found - this is OK, will use weak stubs */
-    ucs_debug("No plugins found for component '%s'", config->component);
-    return &entry->plugins;  /* Return empty array */
-}
+    ucs_list_add_tail(&ucs_plugin_registry, &entry->list);
 
-ucs_plugin_desc_t* ucs_plugin_find(const char *component, const char *name)
-{
-    ucs_plugin_registry_entry_t *entry;
-    ucs_plugin_desc_t *plugin;
+    return &entry->plugin;
 
-    if (component == NULL || name == NULL) {
-        return NULL;
-    }
-
-    /* Initialize registry if needed */
-    UCS_INIT_ONCE(&ucs_plugin_registry_init_once) {
-        /* Registry initialized on first use */
-    }
-
-    entry = ucs_plugin_registry_get(component);
-    if (entry == NULL || ucs_array_is_empty(&entry->plugins)) {
-        return NULL;
-    }
-
-    ucs_array_for_each(plugin, &entry->plugins) {
-        if (strcmp(plugin->name, name) == 0) {
-            return plugin;
-        }
-    }
-
+err_free_entry:
+    ucs_free(entry);
+err_close:
+    dlclose(handle);
     return NULL;
 }
 
 void ucs_plugin_free_descriptors(void)
 {
     ucs_plugin_registry_entry_t *entry, *tmp;
-    ucs_plugin_desc_t *plugin;
 
-    /* Initialize registry if needed (to ensure it exists) */
     UCS_INIT_ONCE(&ucs_plugin_registry_init_once) {
-        /* Registry not initialized yet, nothing to clean up */
-        return;
+        return; /* registry never initialized, nothing to clean */
     }
 
-    /* Clean up entire registry */
     ucs_list_for_each_safe(entry, tmp, &ucs_plugin_registry, list) {
-        /* Free all plugins in this entry */
-        ucs_array_for_each(plugin, &entry->plugins) {
-            if (plugin->handle != NULL) {
-                dlclose(plugin->handle);
-            }
-            if (plugin->name != NULL) {
-                ucs_free((void*)plugin->name);
-            }
+        if (entry->plugin.handle != NULL) {
+            dlclose(entry->plugin.handle);
         }
 
-        /* Clean up the plugin array */
-        ucs_array_cleanup_dynamic(&entry->plugins);
-
-        /* Free component string */
-        if (entry->component != NULL) {
-            ucs_free(entry->component);
-        }
-
-        /* Remove from list and free entry */
+        ucs_free(entry->component);
         ucs_list_del(&entry->list);
         ucs_free(entry);
     }
@@ -267,12 +140,7 @@ void ucs_plugin_free_descriptors(void)
 #else /* UCX_SHARED_LIB */
 
 /* Stub implementations for static builds */
-ucs_plugin_array_t* ucs_plugin_load_component(const ucs_plugin_loader_config_t *config)
-{
-    return NULL;
-}
-
-ucs_plugin_desc_t* ucs_plugin_find(const char *component, const char *name)
+ucs_plugin_desc_t* ucs_plugin_load_component(const char *component)
 {
     return NULL;
 }
