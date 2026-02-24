@@ -214,9 +214,9 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
                                   UCS_LOG_LEVEL_DIAG);
         if (status == UCS_OK) {
             status = UCT_CUDADRV_FUNC_LOG_ERR(
-                    cuMemExportToShareableHandle(
-                            &key->ph.handle.fabric_handle, handle,
-                            CU_MEM_HANDLE_TYPE_FABRIC, 0));
+                    cuMemExportToShareableHandle(&key->ph.handle.fabric_handle,
+                                                 handle,
+                                                 CU_MEM_HANDLE_TYPE_FABRIC, 0));
             UCT_CUDADRV_FUNC_LOG_WARN(cuMemRelease(handle));
             if (status != UCS_OK) {
                 ucs_debug("unable to export handle for VMM ptr: %p", addr);
@@ -237,15 +237,15 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
         }
 
         status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemPoolExportToShareableHandle(
-                    (void *)&key->ph.handle.fabric_handle, mempool,
-                    CU_MEM_HANDLE_TYPE_FABRIC, 0));
+                (void*)&key->ph.handle.fabric_handle, mempool,
+                CU_MEM_HANDLE_TYPE_FABRIC, 0));
         if (status != UCS_OK) {
             ucs_debug("unable to export handle for mempool ptr: %p", addr);
             goto non_ipc;
         }
 
-        status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemPoolExportPointer(&key->ph.ptr,
-                    (CUdeviceptr)key->d_bptr));
+        status = UCT_CUDADRV_FUNC_LOG_ERR(
+                cuMemPoolExportPointer(&key->ph.ptr, (CUdeviceptr)key->d_bptr));
         if (status != UCS_OK) {
             goto out_pop_ctx;
         }

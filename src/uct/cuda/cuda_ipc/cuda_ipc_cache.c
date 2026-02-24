@@ -487,8 +487,7 @@ static void uct_cuda_ipc_cache_invalidate_regions(uct_cuda_ipc_cache_t *cache,
         status = uct_cuda_ipc_close_memhandle(region);
         if (status != UCS_OK) {
             ucs_error("failed to close memhandle for base addr:%p type:%d (%s)",
-                      (void *)region->key.d_bptr,
-                      region->key.ph.handle_type,
+                      (void*)region->key.d_bptr, region->key.ph.handle_type,
                       ucs_status_string(status));
         }
 
