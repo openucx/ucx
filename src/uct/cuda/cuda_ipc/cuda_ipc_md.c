@@ -143,9 +143,9 @@ uct_cuda_ipc_mem_export_posix_fd(void *addr, uct_cuda_ipc_lkey_t *key)
 #endif
 
 #if HAVE_CUDA_FABRIC
-static ucs_status_t
-uct_cuda_ipc_mem_export_fabric(void *addr, uct_cuda_ipc_lkey_t *key,
-                               CUmemoryPool mempool)
+static ucs_status_t uct_cuda_ipc_mem_export_fabric(void *addr,
+                                                   uct_cuda_ipc_lkey_t *key,
+                                                   CUmemoryPool mempool)
 {
     CUmemGenericAllocationHandle handle;
     ucs_status_t status;
@@ -173,8 +173,8 @@ uct_cuda_ipc_mem_export_fabric(void *addr, uct_cuda_ipc_lkey_t *key,
     }
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemPoolExportToShareableHandle(
-                (void *)&key->ph.handle.fabric_handle, mempool,
-                CU_MEM_HANDLE_TYPE_FABRIC, 0));
+            (void*)&key->ph.handle.fabric_handle, mempool,
+            CU_MEM_HANDLE_TYPE_FABRIC, 0));
     if (status != UCS_OK) {
         ucs_debug("unable to export handle for mempool ptr: %p", addr);
         return UCS_ERR_UNSUPPORTED;
