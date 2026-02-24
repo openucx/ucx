@@ -51,8 +51,3 @@ ucs_status_t __attribute__((weak)) ucx_plugin_hello(void)
 {
     return UCS_ERR_UNSUPPORTED;
 }
-
-ucs_status_t __attribute__((weak)) ucx_plugin_hw_psn_print_ep_details(uct_ep_h ep)
-{
-    return UCS_ERR_UNSUPPORTED;
-}

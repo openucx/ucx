@@ -66,14 +66,6 @@ const uct_ib_plugin_info_t* ucx_plugin_get_info(void);
  */
 ucs_status_t ucx_plugin_hello(void);
 
-/**
- * Print endpoint details
- *
- * @param [in] ep  UCT endpoint handle
- * @return UCS_OK on success, UCS_ERR_UNSUPPORTED if plugin is not available
- */
-ucs_status_t ucx_plugin_hw_psn_print_ep_details(uct_ep_h ep);
-
 #ifdef __cplusplus
 }
 #endif
