@@ -627,21 +627,19 @@ ucp_ep_fence_try_advance_epoch(ucp_ep_h ep, uint64_t target_fence_seq)
 static int
 ucp_ep_fence_dispatch_request(ucp_ep_h ep)
 {
-    ucp_ep_ext_t      *ep_ext  = ep->ext;
-    ucp_request_t     *req;
-    uct_pending_req_t *uct_req;
-    ucs_status_t       status;
-    int                batch;
+    ucp_ep_ext_t   *ep_ext = ep->ext;
+    ucp_request_t  *req;
+    ucs_status_t   status;
+    int            batch;
 
-    req     = ucs_queue_pull_elem_non_empty(&ep_ext->fence_pending_q,
-                                            ucp_request_t,
-                                            send.fenced_req.fence_pending_elem);
-    uct_req = &req->send.uct;
+    req = ucs_queue_pull_elem_non_empty(&ep_ext->fence_pending_q,
+                                        ucp_request_t,
+                                        send.fenced_req.fence_pending_elem);
 
     for (batch = 0; batch < UCP_EP_FENCE_PROGRESS_BATCH; ++batch) {
         /* protect from coverity as in ucp_request.inl - function ucp_request_try_send */
         /* coverity[address_free] */
-        status = uct_req->func(uct_req);
+        status = req->send.uct.func(&req->send.uct);
         if (status != UCS_INPROGRESS) {
             break;
         }

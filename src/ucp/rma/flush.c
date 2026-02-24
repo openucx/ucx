@@ -94,31 +94,6 @@ ucp_ep_fence_pending_is_clear(ucp_ep_h ep, uint64_t fence_seq_th)
     return 1;
 }
 
-/**
- * Probe whether any lane in @a lane_mask still has outstanding UCT operations.
- *
- * @return 1 if any lane has pending work, 0 if all probed lanes are clean.
- */
-static UCS_F_ALWAYS_INLINE int
-ucp_ep_flush_has_pending_work(ucp_ep_h ep, ucp_lane_map_t lane_mask)
-{
-    ucp_lane_map_t remaining = UCS_MASK(ucp_ep_num_lanes(ep)) & lane_mask;
-    ucp_lane_index_t lane;
-    uct_ep_h uct_ep;
-
-    while (remaining) {
-        lane   = ucs_ffs64(remaining);
-        uct_ep = ucp_ep_get_lane(ep, lane);
-        if ((uct_ep != NULL) &&
-            (uct_ep_flush(uct_ep, UCT_FLUSH_FLAG_LOCAL, NULL) != UCS_OK)) {
-            return 1;
-        }
-        remaining &= remaining - 1;
-    }
-
-    return 0;
-}
-
 static void ucp_ep_flush_progress(ucp_request_t *req)
 {
     ucp_ep_h ep              = req->send.ep;
@@ -159,6 +134,20 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
                   " count=%d",
                   ep, ep->flags, req->send.flush.started_lanes,
                   req->send.state.uct_comp.count);
+
+
+    /* Flush fence pending queues before flushing uct lanes.
+     * Make sure the current flush is not fence inflight flush,
+     * not to block itself 
+     */
+    if (ucs_unlikely((req->send.flush.fence_seq > 0) &&
+                     !(req->send.flush.uct_flags & UCT_FLUSH_FLAG_CANCEL) &&
+                     (req != ep->ext->fence_inflight_req) &&
+                     !ucp_ep_fence_pending_is_clear(
+                             ep, req->send.flush.fence_seq))) {
+        ucp_ep_flush_request_resched(ep, req);
+        return;
+    }
 
     while (req->send.flush.started_lanes < all_lanes) {
 
@@ -216,26 +205,6 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
     }
 
     if (!req->send.flush.sw_started && (req->send.state.uct_comp.count == 0)) {
-        /* For full EP flushes, ensure fence-pending requests have been
-         * dispatched to UCT and their resulting operations completed before
-         * transitioning to sw phase. */
-        if (req->send.flush.lane_mask == (ucp_lane_map_t)-1) {
-            if (!ucp_ep_fence_pending_is_clear(ep,
-                                               req->send.flush.fence_seq)) {
-                ucp_ep_flush_request_resched(ep, req);
-                return;
-            }
-
-            if (ucp_ep_flush_has_pending_work(ep, req->send.flush.lane_mask)) {
-                req->send.flush.started_lanes  = 0;
-                req->send.flush.num_lanes      = ucp_ep_num_lanes(ep);
-                req->send.state.uct_comp.count = ucp_ep_num_lanes(ep);
-                req->send.lane                 = UCP_NULL_LANE;
-                ucp_ep_flush_request_resched(ep, req);
-                return;
-            }
-        }
-
         /* Start waiting for remote completions only after all lanes are flushed
          * on the transport level, so we are sure all pending requests were sent.
          * We don't need to wait for remote completions in these cases:
@@ -366,9 +335,6 @@ static unsigned ucp_ep_flush_resume_slow_path_callback(void *arg)
 {
     ucp_request_t *req = arg;
 
-    ucp_trace_req(req, "resume slow path callback comp %d",
-                  req->send.state.uct_comp.count);
-
     ucp_ep_flush_progress(req);
     ucp_flush_check_completion(req);
     return 0;
@@ -378,18 +344,14 @@ static void ucp_ep_flush_request_resched(ucp_ep_h ep, ucp_request_t *req)
 {
     if (ep->flags & UCP_EP_FLAG_BLOCK_FLUSH) {
         /* Request was detached from pending and should be scheduled again */
-        if (ucp_ep_has_cm_lane(ep) ||
-            (ucp_ep_config(ep)->p2p_lanes &&
-             ep->worker->context->config.ext.proto_request_reset)) {
-            ucs_assertv(!req->send.flush.started_lanes,
-                        "req=%p flush started_lanes=0x%" PRIx64, req,
-                        req->send.flush.started_lanes);
-        } else {
-            ucs_assertv(!(UCS_BIT(req->send.lane) &
-                          req->send.flush.started_lanes),
-                        "req=%p lane=%d started_lanes=0x%" PRIx64, req,
-                        req->send.lane, req->send.flush.started_lanes);
+        ucs_assertv(!(UCS_BIT(req->send.lane) &
+                      req->send.flush.started_lanes),
+                    "req=%p lane=%d started_lanes=0x%" PRIx64, req,
+                    req->send.lane, req->send.flush.started_lanes);
 
+        if (!ucp_ep_has_cm_lane(ep) &&
+            !(ucp_ep_config(ep)->p2p_lanes &&
+              ep->worker->context->config.ext.proto_request_reset)) {
             /* Only lanes connected to iface can be started/flushed before
              * wireup is done because connect2iface does not create wireup_ep
              * without cm mode */
