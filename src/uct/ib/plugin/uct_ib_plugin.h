@@ -17,10 +17,10 @@ extern "C" {
  * Plugin capability flags (bitmap)
  */
 typedef enum {
-    UCT_IB_PLUGIN_CAP_NONE      = 0,
-    UCT_IB_PLUGIN_CAP_HW_PSN    = (1UL << 0),  /**< Hardware PSN support */
-    UCT_IB_PLUGIN_CAP_BATCH_SEND = (1UL << 1), /**< Batch send support */
-    UCT_IB_PLUGIN_CAP_HELLO_WORLD = (1UL << 2) /**< Hello World feature */
+    UCT_IB_PLUGIN_CAP_NONE          = 0,
+    UCT_IB_PLUGIN_CAP_HW_PSN        = UCS_BIT(0),  /**< Hardware PSN support */
+    UCT_IB_PLUGIN_CAP_BATCH_SEND    = UCS_BIT(1), /**< Batch send support */
+    UCT_IB_PLUGIN_CAP_HELLO_WORLD   = UCS_BIT(2), /**< Hello World feature */
 } uct_ib_plugin_cap_flags_t;
 
 /**
