@@ -693,9 +693,15 @@ ucs_status_t ucp_worker_mem_type_eps_create(ucp_worker_h worker)
     ucp_tl_bitmap_t mem_access_tls;
     char ep_name[UCP_WORKER_ADDRESS_NAME_MAX];
     unsigned addr_indices[UCP_MAX_LANES];
+    ucp_lane_index_t num_lanes;
 
     ucs_memory_type_for_each(mem_type) {
-        ucp_context_memaccess_tl_bitmap(context, mem_type, 0, &mem_access_tls);
+        /* Mem type EP requires host memory support */
+        ucp_context_memaccess_tl_bitmap(context,
+                                        UCS_BIT(mem_type) |
+                                        UCS_BIT(UCS_MEMORY_TYPE_HOST),
+                                        0, &mem_access_tls);
+
         if (UCP_MEM_IS_HOST(mem_type) ||
             UCS_STATIC_BITMAP_IS_ZERO(mem_access_tls)) {
             continue;
@@ -731,6 +737,9 @@ ucs_status_t ucp_worker_mem_type_eps_create(ucp_worker_h worker)
             goto err_free_address_list;
         }
 
+        /* Mem type EP cannot have more than one lane */
+        num_lanes = ucp_ep_num_lanes(worker->mem_type_ep[mem_type]);
+        ucs_assertv_always(num_lanes == 1, "num_lanes=%u", num_lanes);
         UCS_ASYNC_UNBLOCK(&worker->async);
 
         ucs_free(local_address.address_list);

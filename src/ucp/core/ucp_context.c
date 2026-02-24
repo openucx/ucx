@@ -2781,7 +2781,7 @@ void ucp_memory_detect_slowpath(ucp_context_h context, const void *address,
 }
 
 void ucp_context_memaccess_tl_bitmap(ucp_context_h context,
-                                     ucs_memory_type_t mem_type,
+                                     uint64_t mem_type_bitmap,
                                      uint64_t md_reg_flags,
                                      ucp_tl_bitmap_t *tl_bitmap)
 {
@@ -2799,7 +2799,7 @@ void ucp_context_memaccess_tl_bitmap(ucp_context_h context,
         } else {
             mem_types = md_attr->access_mem_types;
         }
-        if (mem_types & UCS_BIT(mem_type)) {
+        if (ucs_test_all_flags(mem_types, mem_type_bitmap)) {
             UCS_STATIC_BITMAP_SET(tl_bitmap, rsc_index);
         }
     }

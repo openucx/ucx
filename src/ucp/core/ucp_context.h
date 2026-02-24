@@ -737,7 +737,7 @@ ucp_context_rndv_is_enabled(ucp_context_h context)
 }
 
 void ucp_context_memaccess_tl_bitmap(ucp_context_h context,
-                                     ucs_memory_type_t mem_type,
+                                     uint64_t mem_type_bitmap,
                                      uint64_t md_reg_flags,
                                      ucp_tl_bitmap_t *tl_bitmap);
 
