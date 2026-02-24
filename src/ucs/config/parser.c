@@ -822,44 +822,134 @@ ucs_status_t ucs_config_clone_range_spec(const void *src, void *dest, const void
     return UCS_OK;
 }
 
-int ucs_config_sscanf_array(const char *buf, void *dest, const void *arg)
+/* Parse a single element and add it to the array.
+ * Returns 1 on success, 0 on failure.
+ */
+static int ucs_config_array_parse_element(const char *value, void *temp_field,
+                                          unsigned *index,
+                                          const ucs_config_array_t *array)
+{
+    if (*index >= UCS_CONFIG_ARRAY_MAX) {
+        return 1; /* Array full, but not an error */
+    }
+
+    if (!array->parser.read(value,
+                            (char*)temp_field + (*index) * array->elem_size,
+                            array->parser.arg)) {
+        return 0;
+    }
+
+    ++(*index);
+    return 1;
+}
+
+/* Try to parse a range pattern like "prefix[start-end]" and expand it.
+ * Returns:  1 if parsed and expanded successfully
+ *           0 if not a valid range pattern (caller should treat as literal)
+ *          -1 on parse error
+ */
+static int ucs_config_array_try_expand_range(const char *token,
+                                             void *temp_field, unsigned *index,
+                                             const ucs_config_array_t *array)
+{
+    int n = 0;
+    int ret;
+    char expanded[256];
+    unsigned long start, end, j;
+    const char *bracket_pos;
+    size_t prefix_len;
+
+    bracket_pos = strchr(token, '[');
+    if (bracket_pos == NULL) {
+        return 0; /* No bracket found */
+    }
+
+    if ((sscanf(bracket_pos, "[%lu-%lu]%n", &start, &end, &n) != 2) ||
+        (n <= 0) || (bracket_pos[n] != '\0')) {
+        return 0; /* Not a valid range pattern, but not an error */
+    }
+
+    if (start > end) {
+        return -1; /* Invalid range */
+    }
+
+    prefix_len = (size_t)(bracket_pos - token);
+    for (j = start; j <= end; ++j) {
+        ret = snprintf(expanded, sizeof(expanded), "%.*s%lu", (int)prefix_len,
+                       token, j);
+
+        if ((ret < 0) || ((size_t)ret >= sizeof(expanded))) {
+            return -1; /* Formatting error */
+        }
+
+        if (!ucs_config_array_parse_element(expanded, temp_field, index,
+                                            array)) {
+            return -1; /* Parsing error */
+        }
+    }
+
+    return 1;
+}
+
+static int ucs_config_sscanf_array_impl(const char *buf, void *dest,
+                                        const void *arg, int expand_ranges)
 {
     ucs_config_array_field_t *field = dest;
-    void *temp_field;
     const ucs_config_array_t *array = arg;
     char *str_dup, *token, *saveptr;
-    int ret;
+    void *temp_field;
     unsigned i;
+    int ret;
 
     str_dup = ucs_strdup(buf, "config_scanf_array");
     if (str_dup == NULL) {
         return 0;
     }
 
-    saveptr = NULL;
-    token = strtok_r(str_dup, ",", &saveptr);
-    temp_field = ucs_calloc(UCS_CONFIG_ARRAY_MAX, array->elem_size, "config array");
-    i = 0;
-    while (token != NULL) {
-        ret = array->parser.read(token, (char*)temp_field + i * array->elem_size,
-                                 array->parser.arg);
-        if (!ret) {
-            ucs_free(temp_field);
-            ucs_free(str_dup);
-            return 0;
-        }
-
-        ++i;
-        if (i >= UCS_CONFIG_ARRAY_MAX) {
-            break;
-        }
-        token = strtok_r(NULL, ",", &saveptr);
+    temp_field = ucs_calloc(UCS_CONFIG_ARRAY_MAX, array->elem_size,
+                            "config array");
+    if (temp_field == NULL) {
+        ucs_free(str_dup);
+        return 0;
     }
 
-    field->data = temp_field;
+    i = 0;
+    for (token = strtok_r(str_dup, ",", &saveptr);
+         (token != NULL) && (i < UCS_CONFIG_ARRAY_MAX);
+         token = strtok_r(NULL, ",", &saveptr)) {
+        if (expand_ranges) {
+            ret = ucs_config_array_try_expand_range(token, temp_field, &i,
+                                                    array);
+            if (ret == 1) {
+                continue; /* Range expanded successfully */
+            }
+
+            if (ret < 0) {
+                goto err_free; /* Parse error in range */
+            }
+
+            /* ret == 0: Not a valid range pattern, fall through to literal */
+        }
+
+        if (!ucs_config_array_parse_element(token, temp_field, &i, array)) {
+            goto err_free;
+        }
+    }
+
+    field->data  = temp_field;
     field->count = i;
     ucs_free(str_dup);
     return 1;
+
+err_free:
+    ucs_free(temp_field);
+    ucs_free(str_dup);
+    return 0;
+}
+
+int ucs_config_sscanf_array(const char *buf, void *dest, const void *arg)
+{
+    return ucs_config_sscanf_array_impl(buf, dest, arg, 0);
 }
 
 int ucs_config_sprintf_array(char *buf, size_t max,
@@ -941,7 +1031,8 @@ void ucs_config_help_array(char *buf, size_t max, const void *arg)
     array->parser.help(buf + strlen(buf), max - strlen(buf), array->parser.arg);
 }
 
-int ucs_config_sscanf_allow_list(const char *buf, void *dest, const void *arg)
+static int ucs_config_sscanf_allow_list_impl(const char *buf, void *dest,
+                                             const void *arg, int expand_ranges)
 {
     ucs_config_allow_list_t *field  = dest;
     unsigned offset                 = 0;
@@ -953,7 +1044,8 @@ int ucs_config_sscanf_allow_list(const char *buf, void *dest, const void *arg)
         field->mode = UCS_CONFIG_ALLOW_LIST_ALLOW;
     }
 
-    if (!ucs_config_sscanf_array(&buf[offset], &field->array, arg)) {
+    if (!ucs_config_sscanf_array_impl(&buf[offset], &field->array, arg,
+                                      expand_ranges)) {
         return 0;
     }
 
@@ -969,6 +1061,17 @@ int ucs_config_sscanf_allow_list(const char *buf, void *dest, const void *arg)
     }
 
     return 1;
+}
+
+int ucs_config_sscanf_allow_list(const char *buf, void *dest, const void *arg)
+{
+    return ucs_config_sscanf_allow_list_impl(buf, dest, arg, 0);
+}
+
+int ucs_config_sscanf_allow_list_with_ranges(const char *buf, void *dest,
+                                             const void *arg)
+{
+    return ucs_config_sscanf_allow_list_impl(buf, dest, arg, 1);
 }
 
 int ucs_config_sprintf_allow_list(char *buf, size_t max, const void *src,
@@ -1018,6 +1121,17 @@ void ucs_config_help_allow_list(char *buf, size_t max, const void *arg)
         buf,
         max, "comma-separated list (use \"all\" for including "
              "all items or \'^\' for negation) of: ");
+    array->parser.help(buf + strlen(buf), max - strlen(buf), array->parser.arg);
+}
+
+void ucs_config_help_allow_list_with_ranges(char *buf, size_t max,
+                                            const void *arg)
+{
+    const ucs_config_array_t *array = arg;
+
+    snprintf(buf, max,
+             "comma-separated list (use \"all\" for including all items, "
+             "\'^\' for negation, or \'prefix[start-end]\' for ranges) of: ");
     array->parser.help(buf + strlen(buf), max - strlen(buf), array->parser.arg);
 }
 

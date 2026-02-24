@@ -275,6 +275,11 @@ ucs_status_t ucs_config_clone_allow_list(const void *src, void *dest, const void
 void ucs_config_release_allow_list(void *ptr, const void *arg);
 void ucs_config_help_allow_list(char *buf, size_t max, const void *arg);
 
+int ucs_config_sscanf_allow_list_with_ranges(const char *buf, void *dest,
+                                             const void *arg);
+void ucs_config_help_allow_list_with_ranges(char *buf, size_t max,
+                                            const void *arg);
+
 int ucs_config_sscanf_table(const char *buf, void *dest, const void *arg);
 ucs_status_t ucs_config_clone_table(const void *src, void *dest, const void *arg);
 void ucs_config_release_table(void *ptr, const void *arg);
@@ -432,6 +437,12 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
 #define UCS_CONFIG_TYPE_ALLOW_LIST {ucs_config_sscanf_allow_list,     ucs_config_sprintf_allow_list, \
                                     ucs_config_clone_allow_list,      ucs_config_release_allow_list, \
                                     ucs_config_help_allow_list,       ucs_config_doc_nop, \
+                                    &ucs_config_array_string}
+
+#define UCS_CONFIG_TYPE_ALLOW_LIST_WITH_RANGES \
+                                   {ucs_config_sscanf_allow_list_with_ranges,  ucs_config_sprintf_allow_list, \
+                                    ucs_config_clone_allow_list,               ucs_config_release_allow_list, \
+                                    ucs_config_help_allow_list_with_ranges,    ucs_config_doc_nop, \
                                     &ucs_config_array_string}
 
 #define UCS_CONFIG_TYPE_TABLE(t)   {ucs_config_sscanf_table,     NULL, \
