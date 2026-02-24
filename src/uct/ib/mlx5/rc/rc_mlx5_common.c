@@ -619,21 +619,8 @@ uct_rc_mlx5_dp_ordering_ooo_init(uct_ib_mlx5_md_t *md,
     char ar_enable_str[16], ddp_enable_str[16];
     int force;
 
-    if (!(md->flags & (UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP |
-                       UCT_IB_MLX5_MD_FLAG_DEVX_DCT |
-                       UCT_IB_MLX5_MD_FLAG_DEVX_DCI))) {
-        if ((config->ddp_enable == UCS_YES) && !ddp_supported_dv) {
-            ucs_error("%s/%s: ddp is not supported for DV",
-                      uct_ib_device_name(&md->super.dev), tl_name);
-            return UCS_ERR_INVALID_PARAM;
-        }
-
-        iface->config.ddp_enabled_dv    = (config->ddp_enable != UCS_NO) &&
-                                          ddp_supported_dv;
-        iface->config.dp_ordering_devx  = UCT_IB_MLX5_DP_ORDERING_IBTA;
-        iface->config.dp_ordering_force = 0;
-        return UCS_OK;
-    }
+    iface->config.ddp_enabled_dv = (config->ddp_enable != UCS_NO) &&
+                                   ddp_supported_dv;
 
     /*
      * HCA has an mlxreg admin configuration to force enable adaptive routing
@@ -693,7 +680,6 @@ uct_rc_mlx5_dp_ordering_ooo_init(uct_ib_mlx5_md_t *md,
 
     iface->config.dp_ordering_devx  = max_dp_ordering;
     iface->config.dp_ordering_force = force;
-    iface->config.ddp_enabled_dv    = 0;
     return UCS_OK;
 }
 
