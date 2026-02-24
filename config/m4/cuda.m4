@@ -51,20 +51,19 @@ AC_DEFUN([UCX_CUDA_CHECK_NVCC], [
         CUDA_MAJOR_VERSION=$(echo $CUDA_VERSION | cut -d "." -f 1)
         CUDA_MINOR_VERSION=$(echo $CUDA_VERSION | cut -d "." -f 2)
         AC_MSG_RESULT([Detected CUDA version: $CUDA_VERSION])
-        AS_VERSION_COMPARE([$CUDA_VERSION], [$NVCC_CUDA_MIN_REQUIRED], [],
+        AS_VERSION_COMPARE([$CUDA_VERSION], [$NVCC_CUDA_MIN_REQUIRED],
               [AC_MSG_WARN([Minimum required CUDA version for device code: $NVCC_CUDA_MIN_REQUIRED])
                NVCC=""])
 
         NVCC_CXX_DIALECT=c++17
         cxx_dialect_ver=201703L
-        AS_VERSION_COMPARE([$CUDA_VERSION], [13.0], [],
+        AS_VERSION_COMPARE([$CUDA_VERSION], [13.0],
               [NVCC_CXX_DIALECT=c++11
                cxx_dialect_ver=201103L
                NVCCFLAGS="$NVCCFLAGS -DCCCL_IGNORE_DEPRECATED_CPP_DIALECT"])
 
-        have_cuda_12_9=yes
-        AS_VERSION_COMPARE([$CUDA_VERSION], [12.9], [], [have_cuda_12_9=no])
-        AS_IF([test "x$have_cuda_12_9" = "xyes"],
+        AS_VERSION_COMPARE([$CUDA_VERSION], [12.9], [],
+              [NVCCFLAGS="$NVCCFLAGS -D_LIBCUDACXX_ATOMIC_UNSAFE_AUTOMATIC_STORAGE"],
               [NVCCFLAGS="$NVCCFLAGS -D_LIBCUDACXX_ATOMIC_UNSAFE_AUTOMATIC_STORAGE"])
 
         AS_IF([test "x$NVCC" != "x"], [

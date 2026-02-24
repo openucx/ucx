@@ -14,4 +14,3 @@ AS_IF([test "x$NVCC" != "x"] &&
 AM_CONDITIONAL([HAVE_GDA], [test x$gda_happy = xyes])
 AC_CONFIG_FILES([src/uct/ib/mlx5/gdaki/Makefile
                  src/uct/ib/mlx5/gdaki/ucx-ib-mlx5-gda.pc])
-
