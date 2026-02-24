@@ -20,31 +20,78 @@ extern "C" {
 
 /* Ensure a CUDA context is active before UCX enumerates resources so that
  * cuda_ipc sys_device is set properly. */
-static struct test_device_cuda_ctx_guard {
-    CUdevice  dev;
-    CUcontext ctx;
-    int       active;
+class test_device_cuda_ctx_guard {
+public:
+    static test_device_cuda_ctx_guard &instance()
+    {
+        static test_device_cuda_ctx_guard guard;
+        return guard;
+    }
 
-    test_device_cuda_ctx_guard() : dev(0), ctx(NULL), active(0) {
+    test_device_cuda_ctx_guard(const test_device_cuda_ctx_guard&) = delete;
+
+    test_device_cuda_ctx_guard &
+    operator=(const test_device_cuda_ctx_guard&) = delete;
+
+private:
+    CUdevice  m_dev;
+    CUcontext m_ctx;
+    bool      m_is_active;
+
+    test_device_cuda_ctx_guard() : m_dev(0), m_ctx(NULL), m_is_active(false)
+    {
         (void)UCT_CUDADRV_FUNC_LOG_DEBUG(cuInit(0));
-        if (UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&dev, 0)) == UCS_OK) {
-            if (UCT_CUDADRV_FUNC_LOG_ERR(cuDevicePrimaryCtxRetain(&ctx, dev)) == UCS_OK) {
-                if (UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(ctx)) == UCS_OK) {
-                    active = 1;
-                } else {
-                    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(dev));
-                }
-            }
+
+        if (UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&m_dev, 0)) != UCS_OK) {
+            return;
         }
+
+        init();
+
+        // In case of fork, cleanup the current context and re-initialize it
+        // only in the parent process.
+        pthread_atfork([]() { instance().cleanup(); },
+                       []() { instance().init(); }, NULL);
     }
 
-    ~test_device_cuda_ctx_guard() {
-        if (active) {
-            (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
-            (void)UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(dev));
-        }
+    ~test_device_cuda_ctx_guard()
+    {
+        cleanup();
     }
-} g_test_device_cuda_ctx_guard;
+
+    void init()
+    {
+        if (m_is_active) {
+            return;
+        }
+
+        if (UCT_CUDADRV_FUNC_LOG_ERR(cuDevicePrimaryCtxRetain(&m_ctx, m_dev)) !=
+            UCS_OK) {
+            return;
+        }
+
+        if (UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(m_ctx)) != UCS_OK) {
+            (void)UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(m_dev));
+            return;
+        }
+
+        m_is_active = true;
+    }
+
+    void cleanup()
+    {
+        if (!m_is_active) {
+            return;
+        }
+
+        (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
+        (void)UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(m_dev));
+        m_is_active = false;
+    }
+};
+
+static auto &g_test_device_cuda_ctx_guard =
+        test_device_cuda_ctx_guard::instance();
 
 class test_device : public uct_test {
 protected:
