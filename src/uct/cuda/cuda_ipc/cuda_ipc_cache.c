@@ -447,27 +447,22 @@ static void uct_cuda_ipc_cache_invalidate_regions(uct_cuda_ipc_cache_t *cache,
 }
 
 static ucs_status_t
-uct_cuda_ipc_get_remote_cache(pid_t pid, ucs_sys_ns_t pid_ns, CUdevice cu_dev,
+uct_cuda_ipc_get_remote_cache(const uct_cuda_ipc_cache_hash_key_t *key,
                               uct_cuda_ipc_cache_t **cache)
 {
     ucs_status_t status = UCS_OK;
     char target_name[64];
-    uct_cuda_ipc_cache_hash_key_t key;
     khiter_t khiter;
     int khret;
 
     ucs_recursive_spin_lock(&uct_cuda_ipc_remote_cache.lock);
 
-    key.cu_device = cu_dev;
-    key.pid       = pid;
-    key.pid_ns    = pid_ns;
-
-    khiter = kh_put(cuda_ipc_rem_cache, &uct_cuda_ipc_remote_cache.hash, key,
+    khiter = kh_put(cuda_ipc_rem_cache, &uct_cuda_ipc_remote_cache.hash, *key,
                     &khret);
     if ((khret == UCS_KH_PUT_BUCKET_EMPTY) ||
         (khret == UCS_KH_PUT_BUCKET_CLEAR)) {
         ucs_snprintf_safe(target_name, sizeof(target_name), "dest:%d:%ld:%d",
-                          key.pid, key.pid_ns, key.cu_device);
+                          key->pid, key->pid_ns, key->cu_device);
         status = uct_cuda_ipc_create_cache(cache, target_name);
         if (status != UCS_OK) {
             kh_del(cuda_ipc_rem_cache, &uct_cuda_ipc_remote_cache.hash, khiter);
@@ -496,6 +491,7 @@ ucs_status_t uct_cuda_ipc_unmap_memhandle(pid_t pid, ucs_sys_ns_t pid_ns,
     uct_cuda_ipc_cache_t *cache;
     ucs_pgt_region_t *pgt_region;
     uct_cuda_ipc_cache_region_t *region;
+    uct_cuda_ipc_cache_hash_key_t key;
 
     /* checking if the mapped address is the same as the d_bptr
      * this is true for the case of single process memory mapping
@@ -504,7 +500,11 @@ ucs_status_t uct_cuda_ipc_unmap_memhandle(pid_t pid, ucs_sys_ns_t pid_ns,
         return UCS_OK;
     }
 
-    status = uct_cuda_ipc_get_remote_cache(pid, pid_ns, cu_dev, &cache);
+    key.pid       = pid;
+    key.pid_ns    = pid_ns;
+    key.cu_device = cu_dev;
+
+    status = uct_cuda_ipc_get_remote_cache(&key, &cache);
     if (status != UCS_OK) {
         return status;
     }
@@ -546,6 +546,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
     ucs_status_t status;
     ucs_pgt_region_t *pgt_region;
     uct_cuda_ipc_cache_region_t *region;
+    uct_cuda_ipc_cache_hash_key_t hash_key;
     CUuuid uuid;
     int ret;
 
@@ -566,8 +567,11 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
         return UCS_OK;
     }
 
-    status = uct_cuda_ipc_get_remote_cache(key->pid, ext_key->pid_ns, cu_dev,
-                                           &cache);
+    hash_key.pid       = key->pid;
+    hash_key.pid_ns    = ext_key->pid_ns;
+    hash_key.cu_device = cu_dev;
+
+    status = uct_cuda_ipc_get_remote_cache(&hash_key, &cache);
     if (status != UCS_OK) {
         return status;
     }
