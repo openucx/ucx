@@ -33,7 +33,7 @@ uct_cuda_base_query_devices_common(
             return status;
         }
 
-        uct_cuda_get_sys_dev(cuda_device, &sys_device);
+        sys_device = uct_cuda_get_sys_dev(cuda_device);
     } else {
         ucs_debug("set cuda sys_device to `unknown` as no context is"
                   " currently active");

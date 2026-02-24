@@ -180,12 +180,12 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_ctx_rsc_get(
          * of the device. This is because of some limitation when using VMM and
          * cuMemcpyAsync - the current context should match the device VMM has
          * access to. */
-        status = uct_cuda_get_cuda_device(sys_dev, &cuda_device);
-        if (ucs_unlikely(status != UCS_OK)) {
+        cuda_device = uct_cuda_get_cuda_device(sys_dev);
+        if (ucs_unlikely(cuda_device == CU_DEVICE_INVALID)) {
             goto err;
         }
 
-        status = uct_cuda_ctx_push(cuda_device, 0, UCS_LOG_LEVEL_ERROR);
+        status = uct_cuda_ctx_primary_push(cuda_device, 0, UCS_LOG_LEVEL_ERROR);
         if (ucs_unlikely(status == UCS_ERR_NO_DEVICE)) {
             /* Device primary context of `cuda_device` is inactive. The memory
              * was probably allocated on the context created with cuCtxCreate.

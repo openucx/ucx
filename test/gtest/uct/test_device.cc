@@ -54,9 +54,9 @@ protected:
         ucs_status_t status;
 
         uct_test::init();
-        status = uct_cuda_get_cuda_device(GetParam()->sys_device, &m_cuda_dev);
-        ASSERT_UCS_OK(status, << " sys_device "
-            << static_cast<int>(GetParam()->sys_device));
+        m_cuda_dev = uct_cuda_get_cuda_device(GetParam()->sys_device);
+        ASSERT_NE(m_cuda_dev, CU_DEVICE_INVALID) << " sys_device "
+                  << static_cast<int>(GetParam()->sys_device);
 
         status = UCT_CUDADRV_FUNC_LOG_ERR(
                 cuDevicePrimaryCtxRetain(&ctx, m_cuda_dev));

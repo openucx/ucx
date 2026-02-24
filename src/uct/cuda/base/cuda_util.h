@@ -51,21 +51,19 @@ const char *uct_cuda_cu_get_error_string(CUresult result);
  * Get the system device from the CUDA device.
  *
  * @param [in]  cuda_device CUDA device.
- * @param [out] sys_dev_p   Returned system device.
  *
- * @return UCS_OK if completes successfully, error code otherwise.
+ * @return System device corresponding to the CUDA device.
  */
-void uct_cuda_get_sys_dev(CUdevice cuda_device, ucs_sys_device_t *sys_dev_p);
+ucs_sys_device_t uct_cuda_get_sys_dev(CUdevice cuda_device);
 
 
 /**
  * Get the CUDA device from the system device.
  *
  * @param [in]  sys_dev     System device.
- * @param [out] device_p    Returned CUDA device.
  *
- * @return UCS_OK if completes successfully, error code otherwise.
+ * @return CUDA device corresponding to the system device.
  */
-ucs_status_t uct_cuda_get_cuda_device(ucs_sys_device_t sys_dev, CUdevice *device);
+CUdevice uct_cuda_get_cuda_device(ucs_sys_device_t sys_dev);
 
 #endif

@@ -39,7 +39,7 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
             continue;
         }
 
-        uct_cuda_get_sys_dev(cuda_device, &sys_dev);
+        sys_dev = uct_cuda_get_sys_dev(cuda_device);
         if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
             continue;
         }

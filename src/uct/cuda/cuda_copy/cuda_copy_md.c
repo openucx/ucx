@@ -354,7 +354,7 @@ uct_cuda_copy_mem_alloc(uct_md_h uct_md, size_t *length_p, void **address_p,
     ucs_status_t status;
     uct_cuda_copy_alloc_handle_t *alloc_handle;
     ucs_log_level_t log_level;
-    CUdevice alloc_cu_device, cu_device;
+    CUdevice avail_cuda_device, cuda_device;
 
     if ((mem_type != UCS_MEMORY_TYPE_CUDA_MANAGED) &&
         (mem_type != UCS_MEMORY_TYPE_CUDA)) {
@@ -375,8 +375,9 @@ uct_cuda_copy_mem_alloc(uct_md_h uct_md, size_t *length_p, void **address_p,
     alloc_handle->length = *length_p;
     alloc_handle->is_vmm = 0;
 
-    status = uct_cuda_ctx_push_alloc(md->config.retain_primary_ctx, sys_dev,
-                                     &cu_device, &alloc_cu_device, log_level);
+    status = uct_cuda_ctx_primary_push_avail(md->config.retain_primary_ctx,
+                                             sys_dev, &cuda_device,
+                                             &avail_cuda_device, log_level);
     if (status != UCS_OK) {
         return UCS_ERR_NO_DEVICE;
     }
@@ -384,7 +385,7 @@ uct_cuda_copy_mem_alloc(uct_md_h uct_md, size_t *length_p, void **address_p,
     if (mem_type == UCS_MEMORY_TYPE_CUDA) {
         if (md->config.enable_fabric != UCS_NO) {
             status = uct_cuda_copy_mem_alloc_fabric(md, alloc_handle,
-                                                    alloc_cu_device, flags);
+                                                    avail_cuda_device, flags);
             if (status == UCS_OK) {
                 goto allocated;
             } else {
@@ -429,8 +430,8 @@ allocated:
     *length_p  = alloc_handle->length;
 
 out:
-    if (cu_device != alloc_cu_device) {
-        uct_cuda_ctx_pop_alloc(alloc_cu_device);
+    if (cuda_device != avail_cuda_device) {
+        uct_cuda_ctx_primary_pop_and_release(avail_cuda_device);
     }
 
     return status;
@@ -582,7 +583,7 @@ static void uct_cuda_copy_md_sync_memops_get_address_range(
     mem_info->alloc_length = length;
 
     if (cuda_ctx == NULL) {
-        status = uct_cuda_ctx_push(cuda_device, 0, UCS_LOG_LEVEL_ERROR);
+        status = uct_cuda_ctx_primary_push(cuda_device, 0, UCS_LOG_LEVEL_ERROR);
     } else {
         status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(cuda_ctx));
     }
@@ -692,7 +693,7 @@ uct_cuda_copy_md_query_attributes(const uct_cuda_copy_md_t *md,
             if (pref_loc == CU_DEVICE_CPU) {
                 mem_info->sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
             } else {
-                uct_cuda_get_sys_dev(pref_loc, &mem_info->sys_dev);
+                mem_info->sys_dev = uct_cuda_get_sys_dev(pref_loc);
                 if (mem_info->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
                     ucs_diag("cu_device %d (for address %p...%p) unrecognized",
                              pref_loc, address,
@@ -721,7 +722,7 @@ uct_cuda_copy_md_query_attributes(const uct_cuda_copy_md_t *md,
         goto out_default_range;
     }
 
-    uct_cuda_get_sys_dev(cuda_device, &mem_info->sys_dev);
+    mem_info->sys_dev = uct_cuda_get_sys_dev(cuda_device);
     if (mem_info->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
         return UCS_ERR_NO_DEVICE;
     }
