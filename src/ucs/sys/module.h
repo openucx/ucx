@@ -87,6 +87,26 @@ typedef enum {
 
 
 /**
+ * Load a single external module by name at runtime.
+ *
+ * Unlike @ref UCS_MODULE_FRAMEWORK_LOAD which uses a compile-time module list,
+ * this function loads a specific module that may have been built and installed
+ * separately. The module .so does not need to be known at UCX compile time.
+ *
+ * Library name: lib<framework>_<module_name><ext>
+ * Search paths are the same as @ref UCS_MODULE_FRAMEWORK_LOAD.
+ * UCS_MODULE_INIT() in the module is called if present (optional).
+ *
+ * @param [in] framework    Framework name (e.g., "uct_ib")
+ * @param [in] module_name  Module name (e.g., "plugin")
+ * @param [in] init_once    Init-once guard to ensure single loading
+ * @param [in] flags        Load flags, see @ref ucs_module_load_flags_t
+ */
+void ucs_load_module_external(const char *framework, const char *module_name,
+                              ucs_init_once_t *init_once, unsigned flags);
+
+
+/**
  * Internal function. Please use @ref UCS_MODULE_FRAMEWORK_LOAD macro instead.
  */
 void ucs_load_modules(const char *framework, const char *modules,

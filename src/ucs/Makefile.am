@@ -129,7 +129,6 @@ noinst_HEADERS = \
 	sys/compiler.h \
 	sys/lib.h \
 	sys/module.h \
-	sys/plugin.h \
 	sys/sys.h \
 	sys/iovec.h \
 	sys/iovec.inl \
@@ -204,7 +203,6 @@ libucs_la_SOURCES = \
 	sys/init.c \
 	sys/math.c \
 	sys/module.c \
-	sys/plugin.c \
 	sys/string.c \
 	sys/sys.c \
 	sys/iovec.c \

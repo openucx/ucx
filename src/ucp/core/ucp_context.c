@@ -21,7 +21,6 @@
 #include <ucs/datastruct/string_set.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/debug_int.h>
-#include <ucs/sys/plugin.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/string.h>
 #include <ucs/type/init_once.h>
@@ -1486,7 +1485,6 @@ static void ucp_free_resources(ucp_context_t *context)
     }
     ucs_free(context->tl_mds);
     ucs_free(context->tl_cmpts);
-    ucs_plugin_free_descriptors();
 }
 
 static ucs_status_t ucp_check_resource_config(const ucp_config_t *config)

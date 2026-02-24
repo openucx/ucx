@@ -30,7 +30,6 @@
 #include <pthread_np.h>
 #endif
 #include <sys/resource.h>
-#include <ucs/sys/plugin.h>
 #include "../plugin/uct_ib_plugin.h"
 
 
@@ -1138,21 +1137,13 @@ uct_ib_query_md_resources(uct_component_t *component,
         (uct_ib_check_device_cb_t)ucs_empty_function_return_one_int);
 }
 
-/* Static variable to ensure plugin loading is attempted only once */
 static ucs_init_once_t uct_ib_plugin_load_once = UCS_INIT_ONCE_INITIALIZER;
 
 static void uct_ib_try_load_plugin(void)
 {
-    ucs_plugin_desc_t *plugin;
-
-    UCS_INIT_ONCE(&uct_ib_plugin_load_once) {
-        plugin = ucs_plugin_load_component("ib");
-        if (plugin != NULL) {
-            ucs_debug("Loaded UCX IB plugin '%s'", plugin->component);
-        } else {
-            ucs_debug("UCX IB plugin not found, using stub implementation");
-        }
-    }
+    ucs_load_module_external("uct_ib", "plugin",
+                             &uct_ib_plugin_load_once,
+                             UCS_MODULE_LOAD_FLAG_GLOBAL);
 }
 
 static ucs_status_t

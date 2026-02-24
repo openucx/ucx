@@ -288,6 +288,20 @@ out:
 }
 #endif /* UCX_SHARED_LIB */
 
+void ucs_load_module_external(const char *framework, const char *module_name,
+                              ucs_init_once_t *init_once, unsigned flags)
+{
+#ifdef UCX_SHARED_LIB
+    ucs_module_loader_init_paths();
+
+    UCS_INIT_ONCE(init_once) {
+        ucs_module_debug("loading external module '%s' for %s", module_name,
+                         framework);
+        ucs_module_load_one(framework, module_name, flags);
+    }
+#endif /* UCX_SHARED_LIB */
+}
+
 void ucs_load_modules(const char *framework, const char *modules,
                       ucs_init_once_t *init_once, unsigned flags)
 {
