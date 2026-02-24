@@ -208,63 +208,64 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
         goto legacy_path;
     }
 
-    if (!(allowed_handle_types & CU_MEM_HANDLE_TYPE_FABRIC)) {
-#if HAVE_DECL_SYS_PIDFD_GETFD
-        if (allowed_handle_types & CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR) {
-            status = uct_cuda_ipc_mem_export_posix_fd(addr, key);
-            if (status == UCS_OK) {
-                goto common_path;
-            }
-        }
-#endif /* HAVE_DECL_SYS_PIDFD_GETFD */
-        goto non_ipc;
-    }
-
 #if HAVE_CUDA_FABRIC
-    status = UCT_CUDADRV_FUNC(cuMemRetainAllocationHandle(&handle, addr),
-                              UCS_LOG_LEVEL_DIAG);
-    if (status == UCS_OK) {
-        status = UCT_CUDADRV_FUNC_LOG_ERR(
-                cuMemExportToShareableHandle(&key->ph.handle.fabric_handle,
-                                             handle, CU_MEM_HANDLE_TYPE_FABRIC,
-                                             0));
-        UCT_CUDADRV_FUNC_LOG_WARN(cuMemRelease(handle));
+    if (allowed_handle_types & CU_MEM_HANDLE_TYPE_FABRIC) {
+        status = UCT_CUDADRV_FUNC(cuMemRetainAllocationHandle(&handle, addr),
+                                  UCS_LOG_LEVEL_DIAG);
+        if (status == UCS_OK) {
+            status = UCT_CUDADRV_FUNC_LOG_ERR(
+                    cuMemExportToShareableHandle(
+                            &key->ph.handle.fabric_handle, handle,
+                            CU_MEM_HANDLE_TYPE_FABRIC, 0));
+            UCT_CUDADRV_FUNC_LOG_WARN(cuMemRelease(handle));
+            if (status != UCS_OK) {
+                ucs_debug("unable to export handle for VMM ptr: %p", addr);
+                goto non_ipc;
+            }
+
+            key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM;
+            ucs_trace("packed vmm fabric handle for %p", addr);
+            goto common_path;
+        }
+
+        if (mempool == 0) {
+            /* cuda_ipc can only handle UCS_MEMORY_TYPE_CUDA, which has to be
+             * either legacy type, or VMM type, or mempool type. Return error
+             * if memory does not belong to any of the three types */
+            status = UCS_ERR_INVALID_ADDR;
+            goto out_pop_ctx;
+        }
+
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemPoolExportToShareableHandle(
+                    (void *)&key->ph.handle.fabric_handle, mempool,
+                    CU_MEM_HANDLE_TYPE_FABRIC, 0));
         if (status != UCS_OK) {
-            ucs_debug("unable to export handle for VMM ptr: %p", addr);
+            ucs_debug("unable to export handle for mempool ptr: %p", addr);
             goto non_ipc;
         }
 
-        key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM;
-        ucs_trace("packed vmm fabric handle for %p", addr);
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemPoolExportPointer(&key->ph.ptr,
+                    (CUdeviceptr)key->d_bptr));
+        if (status != UCS_OK) {
+            goto out_pop_ctx;
+        }
+
+        key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL;
+        ucs_trace("packed mempool handle and export pointer for %p", addr);
         goto common_path;
     }
-
-    if (mempool == 0) {
-        /* cuda_ipc can only handle UCS_MEMORY_TYPE_CUDA, which has to be either
-         * legacy type, or VMM type, or mempool type. Return error if memory
-         * does not belong to any of the three types */
-        status = UCS_ERR_INVALID_ADDR;
-        goto out_pop_ctx;
-    }
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemPoolExportToShareableHandle(
-                (void *)&key->ph.handle.fabric_handle, mempool,
-                CU_MEM_HANDLE_TYPE_FABRIC, 0));
-    if (status != UCS_OK) {
-        ucs_debug("unable to export handle for mempool ptr: %p", addr);
-        goto non_ipc;
-    }
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemPoolExportPointer(&key->ph.ptr,
-                (CUdeviceptr)key->d_bptr));
-    if (status != UCS_OK) {
-        goto out_pop_ctx;
-    }
-
-    key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL;
-    ucs_trace("packed mempool handle and export pointer for %p", addr);
-    goto common_path;
 #endif /* HAVE_CUDA_FABRIC */
+
+#if HAVE_DECL_SYS_PIDFD_GETFD
+    if (allowed_handle_types & CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR) {
+        status = uct_cuda_ipc_mem_export_posix_fd(addr, key);
+        if (status == UCS_OK) {
+            goto common_path;
+        }
+    }
+#endif /* HAVE_DECL_SYS_PIDFD_GETFD */
+
+    goto non_ipc;
 
 non_ipc:
     key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_NO_IPC;
