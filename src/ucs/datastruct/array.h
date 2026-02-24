@@ -348,10 +348,12 @@ ucs_array_old_buffer_set_null(void **old_buffer_p)
  */
 #define ucs_array_elem(_array, _index) \
     (*({ \
-        ucs_assertv((_index) < ucs_array_length(_array), \
-                    "index=%zu length=%zu", \
-                    (size_t)(_index), (size_t)ucs_array_length(_array)); \
-        &(_array)->buffer[_index]; \
+        ucs_typeof(_array) _array_p = (_array); \
+        size_t _index_v             = (_index); \
+        ucs_assertv(_index_v < ucs_array_length(_array_p), \
+                    "index=%zu length=%zu", _index_v, \
+                    (size_t)ucs_array_length(_array_p)); \
+        &_array_p->buffer[_index_v]; \
     }))
 
 
