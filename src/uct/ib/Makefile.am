@@ -69,10 +69,6 @@ endif # HAVE_TL_UD
 libuct_ib_la_SOURCES += \
 	plugin/base/uct_ib_plugin_stub.c
 
-# Plugin is now loaded dynamically via ucs_plugin_load_component()
-# No need to link against it at build time - it will be loaded at runtime
-# Plugin is built in subdirectory before this directory
-
 PKG_CONFIG_NAME=ib
 
 include $(top_srcdir)/config/module.am
