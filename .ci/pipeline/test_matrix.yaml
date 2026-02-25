@@ -60,4 +60,4 @@ steps:
       fi
 
       echo "Running test_jenkins.sh with CPU affinity: ${cpu_set} (allowed: ${allowed_cpus})"
-      ASAN_CHECK="no" taskset -c "${cpu_set}" ./contrib/test_jenkins.sh
+      taskset -c "${cpu_set}" ./contrib/test_jenkins.sh
