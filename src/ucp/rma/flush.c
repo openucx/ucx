@@ -451,18 +451,20 @@ void ucp_ep_flush_request_ff(ucp_request_t *req, ucs_status_t status)
 {
     ucp_lane_map_t not_started = req->send.flush.all_lanes &
                                  ~req->send.flush.started_lanes;
-    int num_comps = ucs_popcount(not_started);
+    int num_comps              = ucs_popcount(not_started);
 
     ucp_trace_req(
-            req, "fast-forward flush, comp-=%d alive_lanes=0x%" PRIx64 " started_lanes=0x%" PRIx64,
-            num_comps, ucp_ep_get_alive_lanes(req->send.ep), req->send.flush.started_lanes);
+            req, "fast-forward flush, comp-=%d alive_lanes=0x%" PRIx64
+            " started_lanes=0x%" PRIx64, num_comps,
+            ucp_ep_get_alive_lanes(req->send.ep),
+            req->send.flush.started_lanes);
 
     if (!(req->send.flush.uct_flags & UCT_FLUSH_FLAG_CANCEL)) {
         ucp_trace_req(req, "fast-forward flush, setting cancel flag");
         req->send.flush.uct_flags |= UCT_FLUSH_FLAG_CANCEL;
     }
 
-    ucp_ep_flush_request_update_uct_comp(req, -ucs_popcount(not_started), not_started);
+    ucp_ep_flush_request_update_uct_comp(req, -num_comps, not_started);
     uct_completion_update_status(&req->send.state.uct_comp, status);
     ucp_send_request_invoke_uct_completion(req);
 }
