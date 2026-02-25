@@ -11,6 +11,7 @@
 #include <ucs/stats/stats.h>
 #include <ucs/sys/sys.h>
 
+#include <dirent.h>
 #include <memory>
 
 namespace ucs {
@@ -22,6 +23,24 @@ std::vector<std::string> test_base::m_errors;
 std::vector<std::string> test_base::m_warnings;
 std::vector<std::string> test_base::m_first_warns_and_errors;
 
+long test_base::count_open_fds()
+{
+    DIR *dir = opendir("/proc/self/fd");
+    if (dir == NULL) {
+        return 0;
+    }
+
+    struct dirent *entry;
+    long count = 0;
+    while ((entry = readdir(dir)) != NULL) {
+        if (entry->d_name[0] != '.') {
+            ++count;
+        }
+    }
+    closedir(dir);
+    return count;
+}
+
 test_base::test_base() :
                 m_state(NEW),
                 m_initialized(false),
@@ -29,12 +48,23 @@ test_base::test_base() :
                 m_num_valgrind_errors_before(0),
                 m_num_errors_before(0),
                 m_num_warnings_before(0),
-                m_num_log_handlers_before(0)
+                m_num_log_handlers_before(0),
+                m_num_open_fds_before(count_open_fds())
 {
+    UCS_TEST_MESSAGE << "open fds at construction: " << m_num_open_fds_before;
     push_config();
 }
 
 test_base::~test_base() {
+    long open_fds = count_open_fds();
+    UCS_TEST_MESSAGE << "open fds at destruction: " << open_fds;
+
+    long diff = open_fds - m_num_open_fds_before;
+    if (diff != 0) {
+        UCS_TEST_MESSAGE << "open fds diff: " << std::showpos << diff
+                         << std::noshowpos;
+    }
+
     while (!m_config_stack.empty()) {
         pop_config();
     }
