@@ -61,8 +61,8 @@ test_base::~test_base() {
 
     long diff = open_fds - m_num_open_fds_before;
     if (diff != 0) {
-        UCS_TEST_MESSAGE << "open fds diff: " << std::showpos << diff
-                         << std::noshowpos;
+        ADD_FAILURE() << "open fds diff: " << std::showpos << diff
+                      << std::noshowpos;
     }
 
     while (!m_config_stack.empty()) {
