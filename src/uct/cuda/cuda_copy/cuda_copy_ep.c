@@ -182,6 +182,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_ctx_rsc_get(
          * access to. */
         cuda_device = uct_cuda_get_cuda_device(sys_dev);
         if (ucs_unlikely(cuda_device == CU_DEVICE_INVALID)) {
+            status = UCS_ERR_IO_ERROR;
             goto err;
         }
 
