@@ -88,9 +88,10 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
     if (ucs_unlikely(all_lanes != req->send.flush.all_lanes)) {
         destroyed_lanes = req->send.flush.all_lanes & ~all_lanes;
         new_lanes       = all_lanes & ~req->send.flush.all_lanes;
-        ucp_ep_flush_request_update_uct_comp(
-                req, ucs_popcount(new_lanes) - ucs_popcount(destroyed_lanes),
-                new_lanes);
+        ucp_ep_flush_request_update_uct_comp(req,
+                                             ucs_popcount(new_lanes) -
+                                             ucs_popcount(destroyed_lanes), 0);
+        req->send.flush.all_lanes |= new_lanes;
     }
 
     ucp_trace_req(req,
