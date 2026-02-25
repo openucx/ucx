@@ -51,6 +51,7 @@
 typedef struct {
     ucp_proto_id_t        proto_id;
     size_t                priv_offset;
+    size_t                priv_size;
     size_t                cfg_thresh; /* Configured protocol threshold */
     unsigned              cfg_priority; /* Priority of configuration */
     ucp_proto_perf_t      *perf;

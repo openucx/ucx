@@ -36,12 +36,14 @@ ucp_proto_thresholds_search_slow(const ucp_proto_threshold_elem_t *thresholds,
 static const void *ucp_proto_select_init_priv_buf(
         const ucp_proto_select_init_protocols_t *proto_init, unsigned proto_idx)
 {
-    size_t priv_offset =
-            ucs_array_elem(&proto_init->protocols, proto_idx).priv_offset;
-    if (priv_offset >= ucs_array_length(&proto_init->priv_buf)) {
+    const ucp_proto_init_elem_t *proto = &ucs_array_elem(&proto_init->protocols,
+                                                         proto_idx);
+
+    if (proto->priv_size == 0) {
         return NULL;
     }
-    return &ucs_array_elem(&proto_init->priv_buf, priv_offset);
+
+    return &ucs_array_elem(&proto_init->priv_buf, proto->priv_offset);
 }
 
 /*
@@ -663,6 +665,7 @@ void ucp_proto_select_add_proto(const ucp_proto_init_params_t *init_params,
     memset(init_elem, 0, sizeof(*init_elem));
     init_elem->proto_id     = proto_id;
     init_elem->priv_offset  = priv_offset;
+    init_elem->priv_size    = priv_size;
     init_elem->cfg_thresh   = cfg_thresh;
     init_elem->cfg_priority = cfg_priority;
     init_elem->perf         = perf;
