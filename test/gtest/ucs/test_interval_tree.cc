@@ -10,6 +10,7 @@
 
 extern "C" {
 #include <ucs/datastruct/interval_tree.h>
+#include <ucs/datastruct/mpool.h>
 }
 
 class test_interval_tree : public ucs::test {
@@ -20,12 +21,25 @@ protected:
     void init()
     {
         ucs::test::init();
-        ucs_interval_tree_init(&m_tree, &m_ops);
+
+        /* Initialize memory pool for interval tree nodes */
+        ucs_mpool_params_t mp_params;
+        ucs_mpool_params_reset(&mp_params);
+        mp_params.elem_size       = sizeof(ucs_interval_node_t);
+        mp_params.elems_per_chunk = 256;
+        mp_params.ops             = &m_mpool_ops;
+        mp_params.name            = "test_interval_tree_nodes";
+
+        ucs_status_t status = ucs_mpool_init(&mp_params, &m_mpool);
+        ASSERT_UCS_OK(status);
+
+        ucs_interval_tree_init(&m_tree, &m_mpool);
     }
 
     void cleanup()
     {
         ucs_interval_tree_cleanup(&m_tree);
+        ucs_mpool_cleanup(&m_mpool, 0);
         ucs::test::cleanup();
     }
 
@@ -56,10 +70,18 @@ protected:
     }
 
 private:
-    ucs_interval_tree_t     m_tree = {NULL, {NULL}};
-    ucs_interval_tree_ops_t m_ops  = {(ucs_interval_tree_alloc_node_func_t)malloc,
-                                      (ucs_interval_tree_free_node_func_t)free,
-                                      NULL};
+    static ucs_mpool_ops_t m_mpool_ops;
+
+    ucs_interval_tree_t m_tree;
+    ucs_mpool_t         m_mpool;
+};
+
+ucs_mpool_ops_t test_interval_tree::m_mpool_ops = {
+    .chunk_alloc   = ucs_mpool_chunk_malloc,
+    .chunk_release = ucs_mpool_chunk_free,
+    .obj_init      = NULL,
+    .obj_cleanup   = NULL,
+    .obj_str       = NULL
 };
 
 UCS_TEST_F(test_interval_tree, single_interval) {
@@ -111,11 +133,19 @@ UCS_TEST_F(test_interval_tree, out_of_order_insertion) {
     EXPECT_TRUE(is_fully_covered({0, 60}));
 }
 
-UCS_TEST_F(test_interval_tree, zero_length_insert) {
+UCS_TEST_F(test_interval_tree, length_one_insert) {
     insert_intervals({{10, 10}});
     EXPECT_TRUE(is_fully_covered({10, 10}));
 
     insert_intervals({{10, 20}, {15, 15}});
+    EXPECT_TRUE(is_fully_covered({10, 20}));
+}
+
+UCS_TEST_F(test_interval_tree, length_zero_insert) {
+    insert_intervals({{10, 9}});
+    EXPECT_TRUE(is_fully_covered({10, 9}));
+
+    insert_intervals({{10, 20}, {20, 19}});
     EXPECT_TRUE(is_fully_covered({10, 20}));
 }
 
