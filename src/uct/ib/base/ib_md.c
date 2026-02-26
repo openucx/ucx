@@ -221,6 +221,8 @@ static uct_tl_t *uct_ib_tls[] = {
 
 static uct_ib_md_ops_entry_t UCT_IB_MD_OPS_NAME(verbs);
 
+static ucs_init_once_t uct_ib_plugin_load_once = UCS_INIT_ONCE_INITIALIZER;
+
 UCS_LIST_HEAD(uct_ib_ops);
 
 typedef struct {
@@ -1137,15 +1139,6 @@ uct_ib_query_md_resources(uct_component_t *component,
         (uct_ib_check_device_cb_t)ucs_empty_function_return_one_int);
 }
 
-static ucs_init_once_t uct_ib_plugin_load_once = UCS_INIT_ONCE_INITIALIZER;
-
-static void uct_ib_try_load_plugin(void)
-{
-    ucs_load_module_external("uct_ib", "plugin",
-                             &uct_ib_plugin_load_once,
-                             UCS_MODULE_LOAD_FLAG_GLOBAL);
-}
-
 static ucs_status_t
 uct_ib_md_open(uct_component_t *component, const char *md_name,
                const uct_md_config_t *uct_md_config, uct_md_h *md_p)
@@ -1156,32 +1149,23 @@ uct_ib_md_open(uct_component_t *component, const char *md_name,
     uct_ib_md_t *md = NULL;
     struct ibv_device **ib_device_list, *ib_device;
     int num_devices, fork_init = 0;
-    uint64_t plugin_capabilities = 0;
+    const uct_ib_plugin_info_t *plugin_info;
 
-    uct_ib_try_load_plugin();
+    ucs_load_module_external("uct_ib", "plugin",
+                             &uct_ib_plugin_load_once,
+                             UCS_MODULE_LOAD_FLAG_GLOBAL);
 
     status = ucx_plugin_init();
     if (status != UCS_OK) {
         ucs_warn("failed to initialize UCX IB plugin: %s", ucs_status_string(status));
     }
     else {
-        ucs_info("UCX IB plugin initialized successfully");
-    }
-
-    ucx_plugin_query(&plugin_capabilities);
-    if (plugin_capabilities == UCT_IB_PLUGIN_CAP_NONE) {
-        ucs_warn("UCX IB plugin does not support any features");
-        goto out;
-    }
-
-    if (plugin_capabilities & UCT_IB_PLUGIN_CAP_HELLO_WORLD) {
-        status = ucx_plugin_hello();
-        if (status != UCS_OK) {
-            ucs_warn("failed to call UCX IB plugin hello: %s", ucs_status_string(status));
-        }
-        else {
-            ucs_info("UCX IB plugin hello called successfully");
-        }
+        plugin_info = ucx_plugin_get_info();
+        ucs_assert(plugin_info != NULL);
+        ucs_info("UCX IB plugin loaded: %s v%ld.%ld.%ld - %s",
+                 plugin_info->name, plugin_info->version_major,
+                 plugin_info->version_minor, plugin_info->version_patch,
+                 plugin_info->description);
     }
 
     ucs_trace("opening IB device %s", md_name);
