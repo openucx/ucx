@@ -17,6 +17,7 @@
 #include <ucs/sys/string.h>
 #include <ucs/sys/ptr_arith.h>
 #include <ucs/datastruct/khash.h>
+#include <string.h>
 
 
 typedef struct uct_cuda_ipc_cache_hash_key {
@@ -111,6 +112,57 @@ uct_cuda_ipc_cache_region_collect_callback(const ucs_pgtable_t *pgtable,
     ucs_list_add_tail(list, &region->list);
 }
 
+typedef struct {
+    const uct_cuda_ipc_rkey_t   *key;
+    uct_cuda_ipc_cache_region_t *found;
+} uct_cuda_ipc_cache_find_legacy_arg_t;
+
+static void
+uct_cuda_ipc_cache_find_legacy_callback(const ucs_pgtable_t *pgtable,
+                                        ucs_pgt_region_t *pgt_region,
+                                        void *arg)
+{
+    uct_cuda_ipc_cache_find_legacy_arg_t *find_arg = arg;
+    uct_cuda_ipc_cache_region_t *region;
+
+    if (find_arg->found != NULL) {
+        return;
+    }
+
+    region = ucs_derived_of(pgt_region, uct_cuda_ipc_cache_region_t);
+    if (region->alias_of != NULL ||
+        region->key.ph.handle_type != UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY ||
+        find_arg->key->ph.handle_type != UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY) {
+        return;
+    }
+
+    if (memcmp(&region->key.ph.handle.legacy, &find_arg->key->ph.handle.legacy,
+               sizeof(CUipcMemHandle)) == 0) {
+        find_arg->found = region;
+    }
+}
+
+static uct_cuda_ipc_cache_region_t *
+uct_cuda_ipc_cache_find_region_by_legacy_handle(uct_cuda_ipc_cache_t *cache,
+                                                const uct_cuda_ipc_rkey_t *key)
+{
+    uct_cuda_ipc_cache_find_legacy_arg_t find_arg = {
+        .key  = key,
+        .found = NULL
+    };
+    ucs_pgt_addr_t from, to;
+
+    if (cache->pgtable.num_regions == 0) {
+        return NULL;
+    }
+
+    from = cache->pgtable.base;
+    to   = cache->pgtable.base + ((1ul << cache->pgtable.shift) & cache->pgtable.mask) - 1;
+    ucs_pgtable_search_range(&cache->pgtable, from, to,
+                             uct_cuda_ipc_cache_find_legacy_callback, &find_arg);
+    return find_arg.found;
+}
+
 static ucs_status_t
 uct_cuda_ipc_primary_ctx_retain_and_push(CUdevice cuda_device)
 {
@@ -156,7 +208,13 @@ static ucs_status_t uct_cuda_ipc_close_memhandle(uct_cuda_ipc_cache_region_t *re
 {
 #if HAVE_CUDA_FABRIC
     ucs_status_t status;
+#endif
 
+    if (region->alias_of != NULL) {
+        return UCS_OK;
+    }
+
+#if HAVE_CUDA_FABRIC
     if (region->key.ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM) {
         status = UCT_CUDADRV_FUNC_LOG_WARN(cuMemUnmap(
                     (CUdeviceptr)region->mapped_addr, region->key.b_len));
@@ -184,7 +242,7 @@ static void uct_cuda_ipc_cache_purge(uct_cuda_ipc_cache_t *cache)
     ucs_pgtable_purge(&cache->pgtable, uct_cuda_ipc_cache_region_collect_callback,
                       &region_list);
     ucs_list_for_each_safe(region, tmp, &region_list, list) {
-        if (active) {
+        if (active && region->alias_of == NULL) {
             uct_cuda_ipc_close_memhandle(region);
         }
         ucs_free(region);
@@ -208,7 +266,9 @@ uct_cuda_ipc_open_memhandle_legacy(CUipcMemHandle memh, CUdevice cu_dev,
     cuerr = cuIpcOpenMemHandle(mapped_addr, memh,
                                CU_IPC_MEM_LAZY_ENABLE_PEER_ACCESS);
     if (cuerr != CUDA_SUCCESS) {
-        ucs_log(log_level, "cuIpcOpenMemHandle() failed: %s",
+        /* ALREADY_MAPPED -> caller will reuse existing mapping */
+        ucs_log((cuerr == CUDA_ERROR_ALREADY_MAPPED) ? UCS_LOG_LEVEL_DEBUG :
+                log_level, "cuIpcOpenMemHandle() failed: %s",
                 uct_cuda_base_cu_get_error_string(cuerr));
         status = (cuerr == CUDA_ERROR_ALREADY_MAPPED) ?
             UCS_ERR_ALREADY_EXISTS : UCS_ERR_INVALID_PARAM;
@@ -426,7 +486,11 @@ static void uct_cuda_ipc_cache_invalidate_regions(uct_cuda_ipc_cache_t *cache,
                       (void *)region->key.d_bptr, ucs_status_string(status));
         }
 
-        status = uct_cuda_ipc_close_memhandle(region);
+        if (region->alias_of == NULL) {
+            status = uct_cuda_ipc_close_memhandle(region);
+        } else {
+            status = UCS_OK;
+        }
         if (status != UCS_OK) {
 #if HAVE_CUDA_FABRIC
             handle_type = region->key.ph.handle_type;
@@ -519,13 +583,19 @@ ucs_status_t uct_cuda_ipc_unmap_memhandle(pid_t pid, uintptr_t d_bptr,
      * check refcount to see if an in-flight transfer is using the same mapping
      */
     if (!region->refcount && !cache_enabled) {
+        uct_cuda_ipc_cache_region_t *primary = region->alias_of;
+
         status = ucs_pgtable_remove(&cache->pgtable, &region->super);
         if (status != UCS_OK) {
             ucs_error("failed to remove address:%p from cache (%s)",
                       (void *)region->key.d_bptr, ucs_status_string(status));
         }
         ucs_assert(region->mapped_addr == mapped_addr);
-        status = uct_cuda_ipc_close_memhandle(region);
+        if (primary != NULL) {
+            primary->refcount--;
+        } else {
+            status = uct_cuda_ipc_close_memhandle(region);
+        }
         ucs_free(region);
     }
 
@@ -573,7 +643,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
         region = ucs_derived_of(pgt_region, uct_cuda_ipc_cache_region_t);
 
         if (key->ph.buffer_id == region->key.ph.buffer_id) {
-            /*cache hit */
+            /* cache hit - same buffer */
             ucs_trace("%s: cuda_ipc cache hit addr:%p size:%lu region:"
                       UCS_PGT_REGION_FMT, cache->name, (void *)key->d_bptr,
                       key->b_len, UCS_PGT_REGION_ARG(&region->super));
@@ -583,7 +653,23 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
             region->refcount++;
             pthread_rwlock_unlock(&cache->lock);
             return UCS_OK;
-        } else {
+        }
+        if (key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY &&
+            region->key.ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY &&
+            memcmp(&key->ph.handle.legacy, &region->key.ph.handle.legacy,
+                   sizeof(CUipcMemHandle)) == 0) {
+            uintptr_t offset = key->d_bptr - region->key.d_bptr;
+
+            ucs_trace("%s: cuda_ipc cache hit (same handle) addr:%p size:%lu",
+                      cache->name, (void *)key->d_bptr, key->b_len);
+
+            *mapped_addr = (void *)((uintptr_t)region->mapped_addr + offset);
+            ucs_assert(region->refcount < UINT64_MAX);
+            region->refcount++;
+            pthread_rwlock_unlock(&cache->lock);
+            return UCS_OK;
+        }
+        {
             ucs_trace("%s: cuda_ipc cache remove stale region:"
                       UCS_PGT_REGION_FMT " new_addr:%p new_size:%lu",
                       cache->name, UCS_PGT_REGION_ARG(&region->super),
@@ -602,10 +688,120 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
         }
     }
 
+    /*
+     * Before opening, check if this handle is already mapped.
+     */
+    if (key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY) {
+        uct_cuda_ipc_cache_region_t *primary;
+
+        primary = uct_cuda_ipc_cache_find_region_by_legacy_handle(cache, key);
+        if (primary != NULL) {
+            uintptr_t offset = key->d_bptr - primary->key.d_bptr;
+
+            *mapped_addr = (void *)((uintptr_t)primary->mapped_addr + offset);
+            primary->refcount++;
+
+            if (key->d_bptr >= primary->super.start && key->d_bptr < primary->super.end) {
+                ucs_trace("%s: cuda_ipc reuse existing mapping for addr:%p "
+                          "(primary addr:%p)", cache->name, (void *)key->d_bptr,
+                          (void *)primary->key.d_bptr);
+                pthread_rwlock_unlock(&cache->lock);
+                return UCS_OK;
+            }
+
+            ret = ucs_posix_memalign((void **)&region,
+                         ucs_max(sizeof(void *), UCS_PGT_ENTRY_MIN_ALIGN),
+                         sizeof(uct_cuda_ipc_cache_region_t),
+                         "uct_cuda_ipc_cache_region");
+            if (ret != 0) {
+                primary->refcount--;
+                ucs_warn("failed to allocate uct_cuda_ipc_cache region");
+                status = UCS_ERR_NO_MEMORY;
+                goto err;
+            }
+            region->super.start = ucs_align_down_pow2((uintptr_t)key->d_bptr,
+                                                     UCS_PGT_ADDR_ALIGN);
+            region->super.end   = ucs_align_up_pow2((uintptr_t)key->d_bptr +
+                                                   key->b_len,
+                                                   UCS_PGT_ADDR_ALIGN);
+            region->key         = *key;
+            region->mapped_addr = *mapped_addr;
+            region->refcount    = 1;
+            region->cu_dev      = cu_dev;
+            region->alias_of    = primary;
+
+            status = ucs_pgtable_insert(&cache->pgtable, &region->super);
+            if (status != UCS_OK) {
+                primary->refcount--;
+                ucs_free(region);
+                goto err;
+            }
+            ucs_trace("%s: cuda_ipc reuse existing mapping (alias) for addr:%p "
+                      "(primary addr:%p)", cache->name, (void *)key->d_bptr,
+                      (void *)primary->key.d_bptr);
+            pthread_rwlock_unlock(&cache->lock);
+            return UCS_OK;
+        }
+    }
+
     status = uct_cuda_ipc_open_memhandle(key, cu_dev, (CUdeviceptr*)mapped_addr,
                                          log_level);
     if (ucs_unlikely(status != UCS_OK)) {
         if (ucs_likely(status == UCS_ERR_ALREADY_EXISTS)) {
+            uct_cuda_ipc_cache_region_t *primary;
+
+            /*
+             * Find the existing mapping and reuse it.
+             */
+            primary = uct_cuda_ipc_cache_find_region_by_legacy_handle(cache, key);
+            if (primary != NULL &&
+                key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY) {
+                uintptr_t offset = key->d_bptr - primary->key.d_bptr;
+
+                *mapped_addr = (void *)((uintptr_t)primary->mapped_addr + offset);
+                primary->refcount++;
+
+                if (key->d_bptr >= primary->super.start && key->d_bptr < primary->super.end) {
+                    ucs_trace("%s: cuda_ipc reuse after ALREADY_MAPPED addr:%p "
+                              "(primary addr:%p)", cache->name,
+                              (void *)key->d_bptr, (void *)primary->key.d_bptr);
+                    pthread_rwlock_unlock(&cache->lock);
+                    return UCS_OK;
+                }
+
+                /* Insert alias for unmap */
+                ret = ucs_posix_memalign((void **)&region,
+                             ucs_max(sizeof(void *), UCS_PGT_ENTRY_MIN_ALIGN),
+                             sizeof(uct_cuda_ipc_cache_region_t),
+                             "uct_cuda_ipc_cache_region");
+                if (ret != 0) {
+                    primary->refcount--;
+                    status = UCS_ERR_NO_MEMORY;
+                    goto err;
+                }
+                region->super.start = ucs_align_down_pow2((uintptr_t)key->d_bptr,
+                                                         UCS_PGT_ADDR_ALIGN);
+                region->super.end   = ucs_align_up_pow2((uintptr_t)key->d_bptr +
+                                                       key->b_len,
+                                                       UCS_PGT_ADDR_ALIGN);
+                region->key         = *key;
+                region->mapped_addr = *mapped_addr;
+                region->refcount    = 1;
+                region->cu_dev      = cu_dev;
+                region->alias_of    = primary;
+
+                status = ucs_pgtable_insert(&cache->pgtable, &region->super);
+                if (status != UCS_OK) {
+                    primary->refcount--;
+                    ucs_free(region);
+                    goto err;
+                }
+                ucs_trace("%s: cuda_ipc reuse after ALREADY_MAPPED (alias) addr:%p",
+                          cache->name, (void *)key->d_bptr);
+                pthread_rwlock_unlock(&cache->lock);
+                return UCS_OK;
+            }
+
             /* unmap all overlapping regions and retry*/
             uct_cuda_ipc_cache_invalidate_regions(cache, (void *)key->d_bptr,
                                                   UCS_PTR_BYTE_OFFSET(key->d_bptr,
@@ -656,6 +852,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
     region->mapped_addr = *mapped_addr;
     region->refcount    = 1;
     region->cu_dev      = cu_dev;
+    region->alias_of    = NULL;
 
     status = UCS_PROFILE_CALL(ucs_pgtable_insert,
                               &cache->pgtable, &region->super);
