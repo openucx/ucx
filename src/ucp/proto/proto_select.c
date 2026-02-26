@@ -652,7 +652,7 @@ void ucp_proto_select_add_proto(const ucp_proto_init_params_t *init_params,
         memcpy(&ucs_array_elem(&proto_init->priv_buf, priv_offset), priv,
                priv_size);
     } else {
-        priv_offset = SIZE_MAX;
+        priv_offset = UCP_PROTO_INIT_ELEM_PRIV_OFFSET_INVALID;
     }
 
     /* Add capabilities to the array of protocols */
