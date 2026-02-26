@@ -302,6 +302,19 @@ static UCS_F_ALWAYS_INLINE int ucp_ep_config_err_handling_enabled(ucp_ep_h ep)
            ucp_ep_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_FAILOVER);
 }
 
+static UCS_F_ALWAYS_INLINE int
+ucp_ep_config_is_lane_failed(const ucp_ep_config_key_t *key,
+                             ucp_lane_index_t lane)
+{
+    return !!(key->lanes[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_FAILED));
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_ep_is_lane_failed(ucp_ep_h ep, ucp_lane_index_t lane)
+{
+    return ucp_ep_config_is_lane_failed(&ucp_ep_config(ep)->key, lane);
+}
+
 static UCS_F_ALWAYS_INLINE ucp_lane_map_t ucp_ep_get_failed_lanes(ucp_ep_h ep)
 {
     return ucp_ep_config_get_failed_lanes(&ucp_ep_config(ep)->key);

@@ -4083,7 +4083,7 @@ ucp_lane_map_t ucp_ep_config_get_failed_lanes(const ucp_ep_config_key_t *key)
     ucp_lane_index_t lane;
 
     for (lane = 0; lane < key->num_lanes; ++lane) {
-        if (key->lanes[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_FAILED)) {
+        if (ucp_ep_config_is_lane_failed(key, lane)) {
             failed_lanes |= UCS_BIT(lane);
         }
     }
