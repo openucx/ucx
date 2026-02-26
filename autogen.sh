@@ -27,5 +27,6 @@ mkdir -p config/m4 config/aux
 
 git submodule update --init src/uct/ib/mlx5/gdaki/gpunetio
 
-autoreconf -v --install || exit 1
+sudo apt install -y autoconf automake libtool pkg-config || exit 1
+#autoreconf -v --install || exit 1
 rm -rf autom4te.cache
