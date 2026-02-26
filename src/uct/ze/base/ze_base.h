@@ -43,6 +43,13 @@ ze_driver_handle_t uct_ze_base_get_driver(void);
 ze_device_handle_t uct_ze_base_get_device(int dev_num);
 
 
+/* Get device ordinal from device handle, returns -1 if not found */
+int uct_ze_base_get_device_ordinal(ze_device_handle_t device);
+
+
+int uct_ze_base_get_num_devices(void);
+
+
 ucs_status_t
 uct_ze_base_query_md_resources(uct_component_h component,
                                uct_md_resource_desc_t **resources_p,
@@ -52,6 +59,12 @@ uct_ze_base_query_md_resources(uct_component_h component,
 ucs_status_t uct_ze_base_query_devices(uct_md_h md,
                                        uct_tl_device_resource_t **tl_devices_p,
                                        unsigned *num_tl_devices_p);
+
+
+ucs_status_t
+uct_ze_base_query_devices_common(uct_md_h md, uct_device_type_t dev_type,
+                                 uct_tl_device_resource_t **tl_devices_p,
+                                 unsigned *num_tl_devices_p);
 
 
 #endif
