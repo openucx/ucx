@@ -102,7 +102,7 @@ jobs:
           CONTAINER: rocky9_cuda_13_0
 
     container: $[ variables['CONTAINER'] ]
-    timeoutInMinutes: 35
+    timeoutInMinutes: 60
     variables:
       workspace: $(System.DefaultWorkingDirectory)/ucx_src_$(Build.BuildId)
     steps:
