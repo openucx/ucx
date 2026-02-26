@@ -167,7 +167,7 @@ protected:
     unsigned num_warnings();
 
     state_t                         m_state;
-    bool                            m_initialized;
+    bool                            m_cleanup_required;
     unsigned                        m_num_threads;
     config_stack_t                  m_config_stack;
     ptr_vector<scoped_setenv>       m_env_stack;

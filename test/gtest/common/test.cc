@@ -64,15 +64,15 @@ std::string test_base::fd_target(int fd)
 }
 
 test_base::test_base() :
-                m_state(NEW),
-                m_initialized(false),
-                m_num_threads(1),
-                m_num_valgrind_errors_before(0),
-                m_num_errors_before(0),
-                m_num_warnings_before(0),
-                m_num_log_handlers_before(0),
-                m_num_open_fds_before(0),
-                m_open_fds_before(collect_open_fds())
+    m_state(NEW),
+    m_cleanup_required(false),
+    m_num_threads(1),
+    m_num_valgrind_errors_before(0),
+    m_num_errors_before(0),
+    m_num_warnings_before(0),
+    m_num_log_handlers_before(0),
+    m_num_open_fds_before(0),
+    m_open_fds_before(collect_open_fds())
 {
     m_num_open_fds_before = m_open_fds_before.size();
     UCS_TEST_MESSAGE << "open fds at construction: " << m_num_open_fds_before;
@@ -393,10 +393,14 @@ void test_base::SetUpProxy() {
     ucs_assert(m_state == NEW);
     try {
         check_skip_test();
+
+        /* Must be set before init() to ensure cleanup runs even if init()
+         * throws an exception (e.g. skip or abort) */
+        m_cleanup_required = true;
+
         m_state = INITIALIZING;
         init();
-        m_initialized = true;
-        m_state       = RUNNING;
+        m_state = RUNNING;
     } catch (test_skip_exception& e) {
         skipped(e);
     } catch (test_abort_exception&) {
@@ -412,7 +416,7 @@ void test_base::TearDownProxy() {
 
     watchdog_signal();
 
-    if (m_initialized) {
+    if (m_cleanup_required) {
         cleanup();
     }
 
