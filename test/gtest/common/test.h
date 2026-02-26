@@ -27,6 +27,7 @@
 #include <ucs/config/parser.h>
 
 #include <map>
+#include <set>
 #include <vector>
 #include <string>
 
@@ -87,6 +88,8 @@ protected:
     void TestBodyProxy();
     static std::string format_message(const char *message, va_list ap);
     static long count_open_fds();
+    static std::set<int> collect_open_fds();
+    static std::string fd_target(int fd);
 
     virtual void cleanup();
     virtual void init();
@@ -173,6 +176,7 @@ protected:
     unsigned                        m_num_warnings_before;
     unsigned                        m_num_log_handlers_before;
     long                            m_num_open_fds_before;
+    std::set<int>                   m_open_fds_before;
 
     static pthread_mutex_t          m_logger_mutex;
     static unsigned                 m_total_errors;

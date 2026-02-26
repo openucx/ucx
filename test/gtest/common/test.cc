@@ -13,6 +13,7 @@
 
 #include <dirent.h>
 #include <memory>
+#include <unistd.h>
 
 namespace ucs {
 
@@ -25,20 +26,41 @@ std::vector<std::string> test_base::m_first_warns_and_errors;
 
 long test_base::count_open_fds()
 {
+    return collect_open_fds().size();
+}
+
+std::set<int> test_base::collect_open_fds()
+{
+    std::set<int> fds;
     DIR *dir = opendir("/proc/self/fd");
     if (dir == NULL) {
-        return 0;
+        return fds;
     }
 
+    int dir_fd = dirfd(dir);
     struct dirent *entry;
-    long count = 0;
     while ((entry = readdir(dir)) != NULL) {
         if (entry->d_name[0] != '.') {
-            ++count;
+            int fd = atoi(entry->d_name);
+            if (fd != dir_fd) {
+                fds.insert(fd);
+            }
         }
     }
     closedir(dir);
-    return count;
+    return fds;
+}
+
+std::string test_base::fd_target(int fd)
+{
+    char path[64], link[256];
+    snprintf(path, sizeof(path), "/proc/self/fd/%d", fd);
+    ssize_t len = readlink(path, link, sizeof(link) - 1);
+    if (len < 0) {
+        return "<readlink failed>";
+    }
+    link[len] = '\0';
+    return std::string(link);
 }
 
 test_base::test_base() :
@@ -49,20 +71,28 @@ test_base::test_base() :
                 m_num_errors_before(0),
                 m_num_warnings_before(0),
                 m_num_log_handlers_before(0),
-                m_num_open_fds_before(count_open_fds())
+                m_num_open_fds_before(0),
+                m_open_fds_before(collect_open_fds())
 {
+    m_num_open_fds_before = m_open_fds_before.size();
     UCS_TEST_MESSAGE << "open fds at construction: " << m_num_open_fds_before;
     push_config();
 }
 
 test_base::~test_base() {
-    long open_fds = count_open_fds();
-    UCS_TEST_MESSAGE << "open fds at destruction: " << open_fds;
+    std::set<int> open_fds_now = collect_open_fds();
+    UCS_TEST_MESSAGE << "open fds at destruction: " << open_fds_now.size();
 
-    long diff = open_fds - m_num_open_fds_before;
-    if (diff != 0) {
-        ADD_FAILURE() << "open fds diff: " << std::showpos << diff
-                      << std::noshowpos;
+    long diff = (long)open_fds_now.size() - m_num_open_fds_before;
+    if (diff > 0) {
+        std::stringstream ss;
+        ss << "open fds diff: " << std::showpos << diff << std::noshowpos;
+        for (int fd : open_fds_now) {
+            if (m_open_fds_before.find(fd) == m_open_fds_before.end()) {
+                ss << "\n  leaked fd " << fd << " -> " << fd_target(fd);
+            }
+        }
+        ADD_FAILURE() << ss.str();
     }
 
     while (!m_config_stack.empty()) {
