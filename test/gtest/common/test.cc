@@ -409,12 +409,15 @@ void test_base::SetUpProxy() {
 
         /* Must be set before init() to ensure cleanup runs even if init()
          * throws an exception (e.g. skip or abort) */
-        m_cleanup_required = true;
+        // m_cleanup_required = true;
 
         m_state = INITIALIZING;
         init();
+        m_cleanup_required = true;
         m_state = RUNNING;
     } catch (test_skip_exception& e) {
+        UCS_TEST_MESSAGE << "Skipping test due to exception (m_state="
+                         << m_state << ")";
         skipped(e);
     } catch (test_abort_exception&) {
         m_state = ABORTED;
