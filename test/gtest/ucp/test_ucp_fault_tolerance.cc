@@ -6,7 +6,6 @@
 
 #include "test_ucp_memheap.h"
 #include <algorithm>
-#include <memory>
 #include <random>
 
 extern "C" {
@@ -39,8 +38,9 @@ protected:
     };
 
     enum test_op_t {
-        TEST_OP_PUT,
-        TEST_OP_GET
+        TEST_OP_PUT   = UCS_BIT(0),
+        TEST_OP_GET   = UCS_BIT(1),
+        TEST_OP_FLUSH = UCS_BIT(2)
     };
 
     void init() override {
@@ -101,9 +101,9 @@ protected:
     /**
      * Common helper function to test RMA operation with injected failure
      */
-    void test_rma_with_injected_failure(failure_side_t failure_side, test_op_t op) {
-        const size_t size   = 1 * UCS_GBYTE;
-        const char *op_name = (op == TEST_OP_PUT) ? "PUT" : "GET";
+    void test_rma_with_injected_failure(failure_side_t failure_side, unsigned op_mask) {
+        const size_t size        = 1 * UCS_GBYTE;
+        const std::string op_str = op_name(op_mask);
 
         /* TODO: cover case when wireup is in progress, flush here is to complete wireup */
         flush_workers();
@@ -137,18 +137,16 @@ protected:
         mapped_buffer rbuf(size, receiver());
         ucs::handle<ucp_rkey_h> rkey = rbuf.rkey(sender());
 
-        if (op == TEST_OP_PUT) {
+        if (op_mask & TEST_OP_PUT) {
             lbuf.pattern_fill(m_seed);
-        } else if (op == TEST_OP_GET) {
+        } else if (op_mask & TEST_OP_GET) {
             rbuf.pattern_fill(m_seed);
-        } else {
-            UCS_TEST_ABORT("Invalid operation type");
         }
 
-        UCS_TEST_MESSAGE << "Attempting " << op_name << " operation before failure injection...";
-        ucs_status_t status = do_rma_and_wait(sender().ep(0, INJECTED_EP_INDEX), op, lbuf, rbuf,
-                                              rkey.get(), size);
-        EXPECT_EQ(UCS_OK, status) << op_name << " operation returned status: "
+        UCS_TEST_MESSAGE << "Attempting " << op_str << " operation before failure injection...";
+        ucs_status_t status = do_rma_and_wait(sender().ep(0, INJECTED_EP_INDEX), op_mask,
+                                              lbuf, rbuf, rkey.get(), size);
+        EXPECT_EQ(UCS_OK, status) << op_str << " operation returned status: "
                                   << ucs_status_string(status);
 
         ucp_ep_h injected_ucp_ep = (failure_side == FAILURE_SIDE_INITIATOR) ?
@@ -165,11 +163,11 @@ protected:
             EXPECT_EQ(UCS_OK, status) << "uct_ep_invalidate returned status: "
                                     << ucs_status_string(status);
 
-            UCS_TEST_MESSAGE << "Attempting " << op_name << " operation after failure injection on lane "
+            UCS_TEST_MESSAGE << "Attempting " << op_str << " operation after failure injection on lane "
                              << size_t(lane) << '/' << rma_bw_lanes.size() << "...";
-            status = do_rma_and_wait(sender().ep(0, INJECTED_EP_INDEX),
-                                     op, lbuf, rbuf, rkey.get(), size);
-            EXPECT_EQ(UCS_OK, status) << op_name << " operation returned status: "
+            status = do_rma_and_wait(sender().ep(0, INJECTED_EP_INDEX), op_mask, lbuf, rbuf,
+                                     rkey.get(), size);
+            EXPECT_EQ(UCS_OK, status) << op_str << " operation returned status: "
                                     << ucs_status_string(status);
         }
 
@@ -179,49 +177,86 @@ protected:
     }
 
 private:
+    static std::string op_name(unsigned op_mask)
+    {
+        std::string name;
+
+        if (op_mask & TEST_OP_PUT) {
+            name += "PUT|";
+        }
+
+        if (op_mask & TEST_OP_GET) {
+            name += "GET|";
+        }
+
+        if (op_mask & TEST_OP_FLUSH) {
+            name += "FLUSH|";
+        }
+
+        if (!name.empty()) {
+            name.pop_back();
+        }
+
+        return name;
+    }
+
     ucs_status_t do_put_and_wait(ucp_ep_h ep, mem_buffer &lbuf, mapped_buffer &rbuf,
-                                 ucp_rkey_h rkey, size_t size) {
+                                 ucp_rkey_h rkey, size_t size, bool flush) {
         ucp_request_param_t param;
         param.op_attr_mask = 0;
 
         rbuf.memset(0);
-        ucs_status_ptr_t status_ptr = ucp_put_nbx(ep, lbuf.ptr(), size, uintptr_t(rbuf.ptr()), rkey,
-                                                  &param);
-        ucs_status_t status         = request_wait(status_ptr);
+        ucs_status_ptr_t put_status_ptr   = ucp_put_nbx(ep, lbuf.ptr(), size, uintptr_t(rbuf.ptr()),
+                                                        rkey, &param);
+        ucs_status_ptr_t flush_status_ptr = flush ?
+                ucp_ep_flush_nbx(ep, &param) : NULL;
+        ucs_status_t status               = request_wait(put_status_ptr);
         if (status == UCS_OK) {
             rbuf.pattern_check(m_seed, size);
         }
+
+        EXPECT_EQ(UCS_OK, status) << "put operation returned status: "
+                                  << ucs_status_string(status);
+        status = request_wait(flush_status_ptr);
+        EXPECT_EQ(UCS_OK, status) << "flush operation returned status: "
+                                  << ucs_status_string(status);
 
         return status;
     }
 
     ucs_status_t do_get_and_wait(ucp_ep_h ep, mem_buffer &lbuf, mapped_buffer &rbuf,
-                                 ucp_rkey_h rkey, size_t size) {
+                                 ucp_rkey_h rkey, size_t size, bool flush) {
         ucp_request_param_t param;
         param.op_attr_mask = 0;
 
         lbuf.memset(0);
         ucs_status_ptr_t status_ptr = ucp_get_nbx(ep, lbuf.ptr(), size, uintptr_t(rbuf.ptr()), rkey,
                                                   &param);
+        ucs_status_ptr_t flush_status_ptr = flush ?
+                ucp_ep_flush_nbx(ep, &param) : NULL;
         ucs_status_t status         = request_wait(status_ptr);
         if (status == UCS_OK) {
             lbuf.pattern_check(m_seed, size);
         }
 
+        status = request_wait(flush_status_ptr);
+        EXPECT_EQ(UCS_OK, status) << "flush operation returned status: "
+                                  << ucs_status_string(status);
+
         return status;
     }
 
-    ucs_status_t do_rma_and_wait(ucp_ep_h ep, test_op_t op, mem_buffer &lbuf, mapped_buffer &rbuf,
+    ucs_status_t do_rma_and_wait(ucp_ep_h ep, unsigned op_mask, mem_buffer &lbuf, mapped_buffer &rbuf,
                                  ucp_rkey_h rkey, size_t size) {
-        switch (op) {
-            case TEST_OP_PUT:
-                return do_put_and_wait(ep, lbuf, rbuf, rkey, size);
-            case TEST_OP_GET:
-                return do_get_and_wait(ep, lbuf, rbuf, rkey, size);
-            default:
-                UCS_TEST_ABORT("Invalid operation type");
-                return UCS_ERR_INVALID_PARAM;
+        if (op_mask & TEST_OP_PUT) {
+            return do_put_and_wait(ep, lbuf, rbuf, rkey, size, op_mask & TEST_OP_FLUSH);
         }
+
+        if (op_mask & TEST_OP_GET) {
+            return do_get_and_wait(ep, lbuf, rbuf, rkey, size, op_mask & TEST_OP_FLUSH);
+        }
+
+        return UCS_ERR_INVALID_PARAM;
     }
 
     size_t       m_err_count       = 0;
@@ -241,9 +276,19 @@ UCS_TEST_P(test_ucp_fault_tolerance, put_with_target_failure)
     test_rma_with_injected_failure(FAILURE_SIDE_TARGET, TEST_OP_PUT);
 }
 
+UCS_TEST_P(test_ucp_fault_tolerance, put_flush_with_target_failure)
+{
+    test_rma_with_injected_failure(FAILURE_SIDE_TARGET, TEST_OP_PUT | TEST_OP_FLUSH);
+}
+
 UCS_TEST_P(test_ucp_fault_tolerance, get_with_initiator_failure)
 {
     test_rma_with_injected_failure(FAILURE_SIDE_INITIATOR, TEST_OP_GET);
+}
+
+UCS_TEST_P(test_ucp_fault_tolerance, get_flush_with_initiator_failure)
+{
+    test_rma_with_injected_failure(FAILURE_SIDE_INITIATOR, TEST_OP_GET | TEST_OP_FLUSH);
 }
 
 UCS_TEST_P(test_ucp_fault_tolerance, get_with_target_failure)

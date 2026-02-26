@@ -1594,7 +1594,7 @@ ucp_ep_config_deactivate_worker_ifaces(ucp_worker_h worker,
 }
 
 static ucs_status_t
-ucp_ep_reconfig_internal(ucp_ep_h ep, ucp_lane_map_t failed_lanes)
+ucp_ep_reconfig_common(ucp_ep_h ep, ucp_lane_map_t failed_lanes)
 {
     ucp_worker_h worker          = ep->worker;
     ucp_ep_config_key_t cfg_key  = ucp_ep_config(ep)->key;
@@ -1632,7 +1632,6 @@ ucp_ep_reconfig_internal(ucp_ep_h ep, ucp_lane_map_t failed_lanes)
         return status;
     }
     ucp_ep_config_activate_worker_ifaces(worker, ep->cfg_index);
-
 out:
     return UCS_OK;
 }
@@ -1640,7 +1639,9 @@ out:
 static ucs_status_t
 ucp_ep_failover_reconfig(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes)
 {
-    return ucp_ep_reconfig_internal(ucp_ep, failed_lanes);
+    ucs_diag("ep %p: failover reconfig, failed_lanes 0x%lx", ucp_ep,
+             failed_lanes);
+    return ucp_ep_reconfig_common(ucp_ep, failed_lanes);
 }
 
 ucs_status_t ucp_ep_set_lanes_failed(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
@@ -4082,7 +4083,7 @@ ucp_lane_map_t ucp_ep_config_get_failed_lanes(const ucp_ep_config_key_t *key)
     ucp_lane_index_t lane;
 
     for (lane = 0; lane < key->num_lanes; ++lane) {
-        if (key->lanes[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_FAILED)) {
+        if (ucp_ep_config_is_lane_failed(key, lane)) {
             failed_lanes |= UCS_BIT(lane);
         }
     }
@@ -4113,7 +4114,7 @@ ucs_status_t ucp_ep_update_rkey_config(ucp_ep_h ep, ucp_rkey_h rkey)
 {
     ucs_status_t status;
 
-    status = ucp_ep_reconfig_internal(ep, 0);
+    status = ucp_ep_reconfig_common(ep, 0);
     if (status != UCS_OK) {
         return status;
     }
