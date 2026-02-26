@@ -45,8 +45,10 @@ steps:
     parallel: false
     timeout: "${STEP_TIMEOUT_MINUTES}"
     run: |
+      # Limit tests to 2 CPUs to prevent max_threads exhaustion in k8s (similar to Azure CPU affinity)
       allowed_cpus=$(awk '/^Cpus_allowed_list:/ {print $2}' /proc/self/status)
       first_chunk=${allowed_cpus%%,*}
+      # In k8s, pin to up to 2 CPUs so max_threads stays bounded and avoids resource exhaustion.
       if [[ "${first_chunk}" == *-* ]]; then
         start_cpu=${first_chunk%-*}
         end_cpu=${first_chunk#*-}
