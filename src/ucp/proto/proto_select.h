@@ -47,11 +47,12 @@
 #define ucp_proto_select_op_attr_pack(_op_attr, _mask) \
     (((_op_attr) & (_mask)) / UCP_PROTO_SELECT_OP_ATTR_BASE)
 
+/* Invalid private offset */
+#define UCP_PROTO_INIT_ELEM_PRIV_OFFSET_INVALID SIZE_MAX
 
 typedef struct {
     ucp_proto_id_t        proto_id;
     size_t                priv_offset;
-    size_t                priv_size;
     size_t                cfg_thresh; /* Configured protocol threshold */
     unsigned              cfg_priority; /* Priority of configuration */
     ucp_proto_perf_t      *perf;

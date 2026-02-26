@@ -1196,9 +1196,9 @@ UCS_TEST_F(test_array, dynamic_array_grow_of_list_link_elements) {
 }
 
 UCS_TEST_F(test_array, dynamic_array_2int_grow) {
+    test_value_type_t zero_val = {};
     test_2num_t test_array;
     test_value_type_t value;
-    test_value_type_t zero_val = {};
     ucs_status_t status;
 
     ucs_array_init_dynamic(&test_array);
