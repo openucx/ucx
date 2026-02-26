@@ -80,6 +80,10 @@ test_base::test_base() :
 }
 
 test_base::~test_base() {
+    while (!m_config_stack.empty()) {
+        pop_config();
+    }
+
     std::set<int> open_fds_now = collect_open_fds();
     UCS_TEST_MESSAGE << "open fds at destruction: " << open_fds_now.size();
 
@@ -95,9 +99,6 @@ test_base::~test_base() {
         ADD_FAILURE() << ss.str();
     }
 
-    while (!m_config_stack.empty()) {
-        pop_config();
-    }
     ucs_assertv_always(m_state == FINISHED ||
                        m_state == SKIPPED ||
                        m_state == NEW ||
