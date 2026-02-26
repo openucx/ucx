@@ -201,22 +201,25 @@ static struct mlx5dv_devx_umem *
 uct_rc_gdaki_umem_reg(const uct_ib_md_t *md, struct ibv_context *ibv_context,
                       void *address, size_t length, uint64_t pgsz_bitmap)
 {
+#if HAVE_DECL_MLX5DV_UMEM_MASK_DMABUF
     struct mlx5dv_devx_umem_in umem_in = {};
-    uct_cuda_copy_md_dmabuf_t dmabuf UCS_V_UNUSED;
+    uct_cuda_copy_md_dmabuf_t dmabuf;
 
     umem_in.addr        = address;
     umem_in.size        = length;
     umem_in.access      = IBV_ACCESS_LOCAL_WRITE;
     umem_in.pgsz_bitmap = pgsz_bitmap;
-#if HAVE_DECL_MLX5DV_UMEM_MASK_DMABUF
     dmabuf              = uct_rc_gdaki_get_dmabuf(md, address, length);
     if (dmabuf.fd != UCT_DMABUF_FD_INVALID) {
         umem_in.comp_mask = MLX5DV_UMEM_MASK_DMABUF;
         umem_in.dmabuf_fd = dmabuf.fd;
     }
-#endif
 
     return mlx5dv_devx_umem_reg_ex(ibv_context, &umem_in);
+#else
+    return mlx5dv_devx_umem_reg(ibv_context, address, length,
+                                IBV_ACCESS_LOCAL_WRITE);
+#endif
 }
 
 static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)

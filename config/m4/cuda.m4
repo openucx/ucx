@@ -87,7 +87,7 @@ AC_DEFUN([UCX_CUDA_CHECK_NVCC], [
                                                   [NVCC_ARCH="${ARCH9_CODE} ${ARCH10_CODE} ${ARCH110_CODE} ${ARCH111_CODE} ${ARCH120_CODE} ${ARCH124_CODE} ${ARCH128_CODE} ${ARCH128_PTX}"])],
 
                                  [11],
-                                    [AS_CASE([$CUDA_MINOR_VERSION],
+                                     [AS_CASE([$CUDA_MINOR_VERSION],
                                               [0],
                                                   [NVCC_ARCH="${ARCH9_CODE} ${ARCH10_CODE} ${ARCH110_CODE} ${ARCH110_PTX}"],
                                               [*],

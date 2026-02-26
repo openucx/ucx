@@ -3,7 +3,7 @@
 # See file LICENSE for terms.
 #
 
-if HAVE_GDA
+if HAVE_CUDA
 
 module_LTLIBRARIES             = libuct_ib_mlx5_gda.la
 libuct_ib_mlx5_gda_la_CPPFLAGS = $(BASE_CPPFLAGS) $(IBVERBS_CPPFLAGS) \
@@ -25,11 +25,11 @@ libuct_ib_mlx5_gda_la_SOURCES = \
 nobase_dist_libuct_ib_mlx5_gda_la_HEADERS = \
 	gdaki.cuh \
 	gdaki_dev.h \
-	common/doca_gpunetio_verbs_def.h \
-	common/doca_gpunetio_verbs_dev.h \
-	device/doca_gpunetio_dev_verbs_common.cuh \
-	device/doca_gpunetio_dev_verbs_qp.cuh \
-	device/doca_gpunetio_dev_verbs_cq.cuh
+	gpunetio/common/doca_gpunetio_verbs_def.h \
+	gpunetio/common/doca_gpunetio_verbs_dev.h \
+	gpunetio/device/doca_gpunetio_dev_verbs_common.cuh \
+	gpunetio/device/doca_gpunetio_dev_verbs_qp.cuh \
+	gpunetio/device/doca_gpunetio_dev_verbs_cq.cuh
 
 noinst_HEADERS = \
 	gdaki.h

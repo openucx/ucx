@@ -270,7 +270,6 @@ gtest_SOURCES += \
 	uct/cuda/test_cuda_nvml.cc
 
 if HAVE_NVCC
-if HAVE_GDA # temporarily all device code depends on GDA
 NVCC_EXTRA_FLAGS = \
 	$(CUDA_CPPFLAGS) \
 	-I$(top_srcdir)/test \
@@ -285,7 +284,6 @@ gtest_SOURCES += \
 	uct/cuda/test_kernels.cu \
 	ucp/cuda/test_kernels.cu
 
-endif
 endif
 
 gtest_CPPFLAGS += \

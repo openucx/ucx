@@ -14,7 +14,6 @@ libucx_perftest_cuda_la_LIBADD   = $(CUDART_LIBS)
 libucx_perftest_cuda_la_SOURCES  = cuda_alloc.c
 
 if HAVE_NVCC
-if HAVE_GDA # temporarily all device code depends on GDA
 
 NVCC_EXTRA_FLAGS = $(CUDA_CPPFLAGS)
 
@@ -30,7 +29,6 @@ noinst_HEADERS = \
     cuda_kernel.cuh
 
 include $(top_srcdir)/config/cuda.am
-endif # HAVE_GPUNETIO
 endif # HAVE_NVCC
 
 include $(top_srcdir)/config/module.am
