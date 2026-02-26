@@ -116,6 +116,9 @@ typedef union uct_tl_device_mem_element uct_tl_device_mem_element_t;
 typedef struct uct_device_local_mem_list_elem uct_device_local_mem_list_elem_t;
 typedef struct uct_device_remote_mem_list_elem uct_device_remote_mem_list_elem_t;
 
+typedef struct uct_iface_stream_op_handle *uct_iface_stream_op_handle_h;
+typedef struct uct_iface_stream           *uct_iface_stream_h;
+
 /**
  * @}
  */

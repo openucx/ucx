@@ -1104,3 +1104,31 @@ ucs_status_t uct_iface_mem_element_pack(uct_iface_h tl_iface, uct_mem_h memh,
     return iface->internal_ops->iface_mem_element_pack(tl_iface, memh, rkey,
                                                        mem_element);
 }
+
+ucs_status_t
+uct_iface_stream_op_block(const uct_iface_h tl_iface, uct_iface_stream_h stream,
+                          void (*ready_cb)(void *arg), void *ready_arg,
+                          uct_iface_stream_op_handle_h *op_handle)
+{
+    const uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
+
+    if (iface->internal_ops->iface_stream_op_block == NULL) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    return iface->internal_ops->iface_stream_op_block(tl_iface, stream,
+                                                      ready_cb, ready_arg,
+                                                      op_handle);
+}
+
+ucs_status_t uct_iface_stream_op_unblock(const uct_iface_h tl_iface,
+                                         uct_iface_stream_op_handle_h op_handle)
+{
+    const uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
+
+    if (iface->internal_ops->iface_stream_op_unblock == NULL) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    return iface->internal_ops->iface_stream_op_unblock(tl_iface, op_handle);
+}
