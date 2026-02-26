@@ -101,6 +101,12 @@ typedef struct {
     ucp_lane_index_t            num_lanes;    /* Number of lanes to use */
     size_t                      align_thresh; /* Cached value of threshold for
                                                  enabling data split alignment */
+    /* Round-robin state with generation tracking.
+     * NOTE: These fields are mutable even though accessed via const pointer,
+     * as they represent cached per-endpoint runtime state. The generation
+     * number allows lazy reset on flush without tracking protocol configs. */
+    ucp_lane_index_t            rr_lane_idx;  /* Round-robin lane index counter */
+    uint32_t                    rr_generation; /* Generation when last used */
     ucp_proto_multi_lane_priv_t lanes[UCP_MAX_LANES]; /* Array of lanes */
 } ucp_proto_multi_priv_t;
 

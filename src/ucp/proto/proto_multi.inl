@@ -35,6 +35,39 @@ ucp_proto_multi_set_send_lane(ucp_request_t *req)
 }
 
 static UCS_F_ALWAYS_INLINE void
+ucp_proto_multi_request_init_internal(ucp_request_t *req,
+                                      const ucp_proto_multi_priv_t *mpriv)
+{
+    ucp_proto_multi_priv_t *mpriv_rw = (ucp_proto_multi_priv_t*)mpriv;
+    ucp_ep_h ep                      = req->send.ep;
+    ucp_context_h ctx                = ep->worker->context;
+    ucp_round_robin_mode_t mode      = ctx->config.ext.round_robin_mode;
+    uint32_t current_generation;
+
+    /* Check if round-robin is disabled - always use first lane */
+    if (ucs_unlikely(mode == UCP_ROUND_ROBIN_MODE_DISABLED)) {
+        req->send.multi_lane_idx = 0;
+        ucp_proto_multi_set_send_lane(req);
+        return;
+    }
+
+    /* Get current endpoint flush generation */
+    current_generation = ep->flush_generation;
+
+    /* Check if endpoint has been flushed since we last used this proto config.
+     * If generation changed, reset round-robin state (lazy reset on flush). */
+    if ((mpriv_rw->rr_generation != current_generation) ||
+        (mpriv_rw->rr_lane_idx >= mpriv->num_lanes)) {
+        mpriv_rw->rr_lane_idx   = 0;
+        mpriv_rw->rr_generation = current_generation;
+    }
+
+    /* Select next lane in round-robin fashion */
+    req->send.multi_lane_idx = mpriv_rw->rr_lane_idx++;
+    ucp_proto_multi_set_send_lane(req);
+}
+
+static UCS_F_ALWAYS_INLINE void
 ucp_proto_multi_request_init(ucp_request_t *req)
 {
     req->send.multi_lane_idx = 0;
@@ -247,7 +280,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_multi_zcopy_progress(
             goto out_abort;
         }
 
-        ucp_proto_multi_request_init(req);
+        ucp_proto_multi_request_init_internal(req, mpriv);
         if (init_func != NULL) {
             status = init_func(req);
             if (status != UCS_OK) {
