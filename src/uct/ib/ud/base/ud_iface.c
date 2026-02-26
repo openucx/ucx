@@ -379,7 +379,7 @@ static ucs_status_t uct_ud_iface_gid_hash_init(uct_ud_iface_t *iface,
                                               uct_ib_device_name(dev),
                                               port, gid_idx, &gid_info);
         if (status != UCS_OK) {
-            goto err;
+            continue;
         }
 
         if (!memcmp(&gid_info.gid, &zero_gid, sizeof(zero_gid))) {
