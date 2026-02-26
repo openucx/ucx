@@ -92,8 +92,8 @@ ucs_status_t ucp_rma_request_advance(ucp_request_t *req, ssize_t frag_length,
         ucp_send_request_invoke_uct_completion(req);
         return UCS_OK;
     }
-    req->send.buffer           = UCS_PTR_BYTE_OFFSET(req->send.buffer, frag_length);
-    req->send.rma.remote_addr += frag_length;
+    req->send.buffer                      = UCS_PTR_BYTE_OFFSET(req->send.buffer, frag_length);
+    req->send.fenced_req.rma.remote_addr += frag_length;
     return UCS_INPROGRESS;
 }
 
@@ -129,18 +129,18 @@ ucp_rma_request_init(ucp_request_t *req, ucp_ep_h ep, const void *buffer,
     ucp_context_h context = ep->worker->context;
     ucs_status_t status;
 
-    req->flags                = 0;
-    req->send.ep              = ep;
-    req->send.buffer          = (void*)buffer;
-    req->send.datatype        = ucp_dt_make_contig(1);
-    req->send.mem_type        = ucp_request_get_memory_type(
-                                    context, buffer, length,
-                                    ucp_dt_make_contig(1), length, param);
-    req->send.length          = length;
-    req->send.rma.remote_addr = remote_addr;
-    req->send.rma.rkey        = rkey;
-    req->send.uct.func        = cb;
-    req->send.lane            = rkey->cache.rma_lane;
+    req->flags                              = 0;
+    req->send.ep                            = ep;
+    req->send.buffer                        = (void*)buffer;
+    req->send.datatype                      = ucp_dt_make_contig(1);
+    req->send.mem_type                      = ucp_request_get_memory_type(
+                                                context, buffer, length,
+                                                ucp_dt_make_contig(1), length, param);
+    req->send.length                        = length;
+    req->send.fenced_req.rma.remote_addr    = remote_addr;
+    req->send.fenced_req.rma.rkey           = rkey;
+    req->send.uct.func                      = cb;
+    req->send.lane                          = rkey->cache.rma_lane;
     ucp_request_send_state_init(req, ucp_dt_make_contig(1), length);
     ucp_request_send_state_reset(req,
                                  (length < zcopy_thresh) ?
@@ -283,8 +283,8 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
         req = ucp_request_get_param(worker, param,
                                     {ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
                                     goto out_unlock;});
-        req->send.rma.rkey        = rkey;
-        req->send.rma.remote_addr = remote_addr;
+        req->send.fenced_req.rma.rkey        = rkey;
+        req->send.fenced_req.rma.remote_addr = remote_addr;
 
         if (ucs_unlikely(param->op_attr_mask & UCP_OP_ATTR_FIELD_DATATYPE)) {
             datatype = param->datatype;
@@ -393,8 +393,8 @@ ucs_status_ptr_t ucp_get_nbx(ucp_ep_h ep, void *buffer, size_t count,
                                     {ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
                                     goto out_unlock;});
 
-        req->send.rma.rkey             = rkey;
-        req->send.rma.remote_addr      = remote_addr;
+        req->send.fenced_req.rma.rkey        = rkey;
+        req->send.fenced_req.rma.remote_addr = remote_addr;
         req->send.state.completed_size = 0;
         if (UCP_DT_IS_CONTIG(datatype)) {
             contig_length = ucp_contig_dt_length(datatype, count);

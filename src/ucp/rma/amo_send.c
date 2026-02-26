@@ -95,9 +95,9 @@ static UCS_F_ALWAYS_INLINE void
 ucp_amo_init_proto(ucp_request_t *req, uct_atomic_op_t op,
                    uint64_t remote_addr, ucp_rkey_h rkey)
 {
-    req->send.amo.uct_op      = op;
-    req->send.amo.remote_addr = remote_addr;
-    req->send.amo.rkey        = rkey;
+    req->send.fenced_req.amo.uct_op      = op;
+    req->send.fenced_req.amo.remote_addr = remote_addr;
+    req->send.fenced_req.amo.rkey        = rkey;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -105,10 +105,10 @@ ucp_amo_init_common(ucp_request_t *req, ucp_ep_h ep, uct_atomic_op_t op,
                     uint64_t remote_addr, ucp_rkey_h rkey, uint64_t value,
                     size_t size)
 {
-    req->flags                = 0;
-    req->send.ep              = ep;
-    req->send.length          = size;
-    req->send.amo.value       = value;
+    req->flags                      = 0;
+    req->send.ep                    = ep;
+    req->send.length                = size;
+    req->send.fenced_req.amo.value  = value;
 #if UCS_ENABLE_ASSERT
     req->send.lane            = UCP_NULL_LANE;
 #endif
@@ -216,7 +216,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_atomic_op_nbx,
         ucp_amo_init_proto(req, ucp_uct_atomic_op_table[opcode], remote_addr,
                            rkey);
         if (param->op_attr_mask & UCP_OP_ATTR_FIELD_REPLY_BUFFER) {
-            req->send.amo.reply_buffer = param->reply_buffer;
+            req->send.fenced_req.amo.reply_buffer = param->reply_buffer;
             op_id    = (opcode == UCP_ATOMIC_OP_CSWAP) ? UCP_OP_ID_AMO_CSWAP :
                                                          UCP_OP_ID_AMO_FETCH;
             status_p = ucp_proto_request_send_op_reply(
