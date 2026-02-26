@@ -177,6 +177,7 @@ protected:
     unsigned                        m_num_log_handlers_before;
     long                            m_num_open_fds_before;
     std::set<int>                   m_open_fds_before;
+    static long                     s_prev_test_fds;
 
     static pthread_mutex_t          m_logger_mutex;
     static unsigned                 m_total_errors;

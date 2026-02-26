@@ -23,6 +23,7 @@ unsigned test_base::m_total_errors   = 0;
 std::vector<std::string> test_base::m_errors;
 std::vector<std::string> test_base::m_warnings;
 std::vector<std::string> test_base::m_first_warns_and_errors;
+long test_base::s_prev_test_fds = -1;
 
 long test_base::count_open_fds()
 {
@@ -85,19 +86,31 @@ test_base::~test_base() {
     }
 
     std::set<int> open_fds_now = collect_open_fds();
-    UCS_TEST_MESSAGE << "open fds at destruction: " << open_fds_now.size();
+    long fds_now_count         = open_fds_now.size();
+    UCS_TEST_MESSAGE << "open fds at destruction: " << fds_now_count;
 
-    long diff = (long)open_fds_now.size() - m_num_open_fds_before;
-    if (diff > 0) {
-        std::stringstream ss;
-        ss << "open fds diff: " << std::showpos << diff << std::noshowpos;
-        for (int fd : open_fds_now) {
-            if (m_open_fds_before.find(fd) == m_open_fds_before.end()) {
-                ss << "\n  leaked fd " << fd << " -> " << fd_target(fd);
+    /* Compare against the previous test's post-cleanup FD count rather than
+     * this test's constructor count. One-time external library initialization
+     * (rdma-core, CUDA driver) opens FDs that persist for the process lifetime;
+     * by using the cross-test baseline those are absorbed automatically.
+     * Skip the check for the very first test since there is no prior baseline. */
+    if (s_prev_test_fds >= 0) {
+        long diff = fds_now_count - s_prev_test_fds;
+        if (diff > 0) {
+            std::stringstream ss;
+            ss << "open fds diff: " << std::showpos << diff << std::noshowpos;
+            for (int fd : open_fds_now) {
+                if (m_open_fds_before.find(fd) == m_open_fds_before.end()) {
+                    ss << "\n  leaked fd " << fd << " -> " << fd_target(fd);
+                }
             }
+            ADD_FAILURE() << ss.str();
         }
-        ADD_FAILURE() << ss.str();
+    } else {
+        UCS_TEST_MESSAGE << "Skipping FD leak check since there is no previous test to compare against";
     }
+
+    s_prev_test_fds = fds_now_count;
 
     ucs_assertv_always(m_state == FINISHED ||
                        m_state == SKIPPED ||
