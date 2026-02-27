@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2012. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -526,11 +526,11 @@ std::set<int> collect_open_fds()
         return fds;
     }
 
-    int dir_fd = dirfd(dir);
+    const int dir_fd = dirfd(dir);
     struct dirent *entry;
     while ((entry = readdir(dir)) != NULL) {
         if (entry->d_name[0] != '.') {
-            int fd = atoi(entry->d_name);
+            const int fd = atoi(entry->d_name);
             if (fd != dir_fd) {
                 fds.insert(fd);
             }
@@ -544,7 +544,7 @@ std::string fd_target(int fd)
 {
     char path[64], link[256];
     snprintf(path, sizeof(path), "/proc/self/fd/%d", fd);
-    ssize_t len = readlink(path, link, sizeof(link) - 1);
+    const ssize_t len = readlink(path, link, sizeof(link) - 1);
     if (len < 0) {
         return "<readlink failed>";
     }

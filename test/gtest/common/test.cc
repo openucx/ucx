@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2013. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -41,8 +41,6 @@ test_base::~test_base() {
         pop_config();
     }
 
-    check_fd_leaks();
-
     ucs_assertv_always(m_state == FINISHED ||
                        m_state == SKIPPED ||
                        m_state == NEW ||
@@ -54,36 +52,40 @@ test_base::~test_base() {
 void test_base::check_fd_leaks()
 {
     /* Compare open file descriptors of the current test against the previous
-     * test's post-cleanup open file descriptors to detect leaks while
-     * tolerating one-time external library initialization (like rdma-core or
-     * CUDA driver) that opens persistent file descriptors on first use of a
-     * transport. Increases in the number of open file descriptors are absorbed
-     * up to the threshold and only logged; consecutive increases beyond the
-     * threshold trigger a failure. */
+     * test's post-cleanup state to detect leaks. Uses set-difference to catch
+     * new fds even when the total count doesn't change (e.g. one fd leaked
+     * while another was closed). Tolerates one-time external library
+     * initialization (rdma-core, CUDA driver) via a consecutive-increase
+     * threshold. */
     std::set<int> open_fds = collect_open_fds();
 
     if (!m_prev_open_fds.empty()) {
-        const long diff = static_cast<long>(open_fds.size()) -
-                          static_cast<long>(m_prev_open_fds.size());
-        if (diff > 0) {
+        std::vector<int> leaked_fds;
+        for (const int fd : open_fds) {
+            if (m_prev_open_fds.find(fd) == m_prev_open_fds.end()) {
+                leaked_fds.push_back(fd);
+            }
+        }
+
+        if (!leaked_fds.empty()) {
             ++m_consecutive_fd_increases;
 
             std::stringstream ss;
-            ss << "open fds diff: " << std::showpos << diff << std::noshowpos;
-            for (int fd : open_fds) {
-                if (m_prev_open_fds.find(fd) == m_prev_open_fds.end()) {
-                    ss << "\n  leaked fd " << fd << " -> " << fd_target(fd);
-                }
+            ss << "new fds detected: " << leaked_fds.size();
+            for (const int fd : leaked_fds) {
+                ss << "\n  fd " << fd << " -> " << fd_target(fd);
             }
-            ss << "\n  number of consecutive fd increases: "
+            ss << "\n  consecutive fd increases: "
                << m_consecutive_fd_increases;
 
-            if (m_consecutive_fd_increases >= CONSECUTIVE_FD_INCREASE_THRESHOLD) {
+            if (m_consecutive_fd_increases >=
+                CONSECUTIVE_FD_INCREASE_THRESHOLD) {
                 ADD_FAILURE() << ss.str();
             } else {
                 UCS_TEST_MESSAGE << ss.str()
-                                 << "(not failing while under the threshold (="
-                                 << CONSECUTIVE_FD_INCREASE_THRESHOLD;
+                                 << " (not failing while under the "
+                                    "threshold (="
+                                 << CONSECUTIVE_FD_INCREASE_THRESHOLD << "))";
             }
         } else {
             m_consecutive_fd_increases = 0;
@@ -426,6 +428,8 @@ void test_base::TearDownProxy() {
             UCS_TEST_MESSAGE << "< " << m_first_warns_and_errors[i] << " >";
         }
     }
+
+    check_fd_leaks();
 }
 
 void test_base::run()

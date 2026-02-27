@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 # Copyright (C) NextSilicon Ltd. 2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -81,7 +81,7 @@ protected:
 
     typedef std::vector<ucs_global_opts_t> config_stack_t;
 
-    static constexpr double DEFAULT_TIMEOUT_SEC            = 10.0;
+    static constexpr double DEFAULT_TIMEOUT_SEC = 10.0;
 
     void SetUpProxy();
     void TearDownProxy();
