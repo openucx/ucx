@@ -23,7 +23,8 @@ unsigned test_base::m_total_errors   = 0;
 std::vector<std::string> test_base::m_errors;
 std::vector<std::string> test_base::m_warnings;
 std::vector<std::string> test_base::m_first_warns_and_errors;
-long test_base::s_prev_test_fds = -1;
+long test_base::s_prev_test_fds          = -1;
+int  test_base::s_consecutive_fd_increases = 0;
 
 long test_base::count_open_fds()
 {
@@ -89,11 +90,12 @@ test_base::~test_base() {
     long fds_now_count         = open_fds_now.size();
     UCS_TEST_MESSAGE << "open fds at destruction: " << fds_now_count;
 
-    /* Compare against the previous test's post-cleanup FD count rather than
-     * this test's constructor count. One-time external library initialization
-     * (rdma-core, CUDA driver) opens FDs that persist for the process lifetime;
-     * by using the cross-test baseline those are absorbed automatically.
-     * Skip the check for the very first test since there is no prior baseline. */
+    /* Compare against the previous test's post-cleanup FD count to detect
+     * leaks while tolerating one-time external library initialization
+     * (rdma-core, CUDA driver) that opens persistent FDs on first use of a
+     * transport.  A single increase is absorbed as a potential one-time init
+     * and only logged; two consecutive increases indicate a real per-test
+     * leak and trigger a failure. */
     if (s_prev_test_fds >= 0) {
         long diff = fds_now_count - s_prev_test_fds;
         if (diff > 0) {
@@ -104,10 +106,17 @@ test_base::~test_base() {
                     ss << "\n  leaked fd " << fd << " -> " << fd_target(fd);
                 }
             }
-            ADD_FAILURE() << ss.str();
+            if (s_consecutive_fd_increases > 0) {
+                ADD_FAILURE() << ss.str();
+            } else {
+                UCS_TEST_MESSAGE << ss.str()
+                                 << "\n  (not failing yet, could be one-time "
+                                    "library init)";
+            }
+            ++s_consecutive_fd_increases;
+        } else {
+            s_consecutive_fd_increases = 0;
         }
-    } else {
-        UCS_TEST_MESSAGE << "Skipping FD leak check since there is no previous test to compare against";
     }
 
     s_prev_test_fds = fds_now_count;

@@ -178,6 +178,7 @@ protected:
     long                            m_num_open_fds_before;
     std::set<int>                   m_open_fds_before;
     static long                     s_prev_test_fds;
+    static int                      s_consecutive_fd_increases;
 
     static pthread_mutex_t          m_logger_mutex;
     static unsigned                 m_total_errors;
