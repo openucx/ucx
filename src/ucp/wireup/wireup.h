@@ -36,6 +36,8 @@ typedef struct {
 #define UCP_WIREUP_UCT_EVENT_CAP_FLAGS \
     (UCT_IFACE_FLAG_EVENT_SEND_COMP | UCT_IFACE_FLAG_EVENT_RECV)
 
+#define UCP_WIREUP_UCT_INFO_SIZE 256
+
 
 /**
  * Wireup message types

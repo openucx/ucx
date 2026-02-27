@@ -1336,14 +1336,24 @@ ucp_wireup_get_reachable_mds(ucp_ep_h ep, unsigned ep_init_flags,
     ucp_md_map_t ae_dst_md_map, dst_md_map;
     ucp_md_map_t prev_dst_md_map;
     unsigned num_dst_mds;
+    char info_str[UCP_WIREUP_UCT_INFO_SIZE];
 
     ae_dst_md_map = 0;
     UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
         ucp_unpacked_address_for_each(ae, remote_address) {
-            if (ucp_wireup_is_reachable(ep, ep_init_flags, rsc_index, ae, NULL, 0)) {
+            *info_str = '\0';
+            if (ucp_wireup_is_reachable(ep, ep_init_flags, rsc_index, ae,
+                                        info_str, sizeof(info_str))) {
                 ae_dst_md_map         |= UCS_BIT(ae->md_index);
                 dst_md_index           = context->tl_rscs[rsc_index].md_index;
                 ae_cmpts[ae->md_index] = context->tl_mds[dst_md_index].cmpt_index;
+            } else if (context->tl_rscs[rsc_index].tl_name_csum == ae->tl_name_csum) {
+                ucs_trace("ep %p "UCT_TL_RESOURCE_DESC_FMT
+                          " cannot reach dst_sys_dev=%u dst_md_index=%d: %s",
+                          ep,
+                          UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[rsc_index].tl_rsc),
+                          ae->sys_dev, ae->md_index,
+                          (strlen(info_str) > 0? info_str : "n/a"));
             }
         }
     }

@@ -973,9 +973,6 @@ int ucs_sockaddr_is_same_subnet(const struct sockaddr *sa1,
     size_t addr_size, addr_size_bits;
 
     if (sa1->sa_family != sa2->sa_family) {
-        ucs_debug("different addr_family: s1 %s s2 %s",
-                  ucs_sockaddr_address_family_str(sa1->sa_family),
-                  ucs_sockaddr_address_family_str(sa2->sa_family));
         return 0;
     }
 
