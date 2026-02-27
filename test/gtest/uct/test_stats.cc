@@ -38,6 +38,9 @@ public:
         try {
             uct_p2p_test::init();
         } catch (...) {
+            /* Clean up stats before rethrowing, cleanup() will not be called
+             * because the m_initialized flag is not set. */
+            uct_p2p_test::cleanup();
             stats_restore();
             throw;
         }
