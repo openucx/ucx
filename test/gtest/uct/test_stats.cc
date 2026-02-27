@@ -35,7 +35,12 @@ public:
 
     virtual void init() {
         stats_activate();
-        uct_p2p_test::init();
+        try {
+            uct_p2p_test::init();
+        } catch (...) {
+            stats_restore();
+            throw;
+        }
 
         // Sender EP
         collect_cntr_init("sender", uct_ep(sender())->stats,
