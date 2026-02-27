@@ -1347,13 +1347,15 @@ ucp_wireup_get_reachable_mds(ucp_ep_h ep, unsigned ep_init_flags,
                 ae_dst_md_map         |= UCS_BIT(ae->md_index);
                 dst_md_index           = context->tl_rscs[rsc_index].md_index;
                 ae_cmpts[ae->md_index] = context->tl_mds[dst_md_index].cmpt_index;
-            } else if (context->tl_rscs[rsc_index].tl_name_csum == ae->tl_name_csum) {
-                ucs_trace("ep %p "UCT_TL_RESOURCE_DESC_FMT
+            } else if (context->tl_rscs[rsc_index].tl_name_csum ==
+                       ae->tl_name_csum) {
+                ucs_trace("ep %p " UCT_TL_RESOURCE_DESC_FMT
                           " cannot reach dst_sys_dev=%u dst_md_index=%d: %s",
                           ep,
-                          UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[rsc_index].tl_rsc),
+                          UCT_TL_RESOURCE_DESC_ARG(
+                                  &context->tl_rscs[rsc_index].tl_rsc),
                           ae->sys_dev, ae->md_index,
-                          (strlen(info_str) > 0? info_str : "n/a"));
+                          (strlen(info_str) > 0 ? info_str : "n/a"));
             }
         }
     }
