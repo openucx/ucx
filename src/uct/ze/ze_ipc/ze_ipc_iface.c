@@ -88,21 +88,6 @@ uct_ze_ipc_iface_event_arm(uct_iface_h tl_iface, unsigned events)
     uct_ze_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_ze_ipc_iface_t);
     ucs_status_t status;
 
-    /* Check if there are outstanding events that are already ready */
-    if (!ucs_queue_is_empty(&iface->outstanding)) {
-        uct_ze_ipc_event_desc_t *event_desc;
-        ucs_queue_iter_t iter;
-        ze_result_t ret;
-
-        ucs_queue_for_each_safe(event_desc, iter, &iface->outstanding, queue) {
-            ret = zeEventQueryStatus(event_desc->event);
-            if (ret != ZE_RESULT_NOT_READY) {
-                /* Event is ready, return BUSY to force progress */
-                return UCS_ERR_BUSY;
-            }
-        }
-    }
-
     /* Poll the eventfd to clear any pending signals */
     if (iface->eventfd != UCS_ASYNC_EVENTFD_INVALID_FD) {
         status = ucs_async_eventfd_poll(iface->eventfd);
@@ -140,37 +125,28 @@ uct_ze_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                  const uct_iface_is_reachable_params_t *params)
 {
     uint64_t *dev_addr;
-    int same_uuid;
-    int result;
+    pid_t remote_pid;
 
     if (!uct_iface_is_reachable_params_addrs_valid(params)) {
-        ucs_debug("ze_ipc: is_reachable_v2 - addrs not valid");
         return 0;
     }
 
-    dev_addr  = (uint64_t *)params->device_addr;
-    same_uuid = (ucs_get_system_id() == *dev_addr);
+    dev_addr   = (uint64_t *)params->device_addr;
+    remote_pid = *(pid_t*)params->iface_addr;
 
-    ucs_info("ze_ipc: is_reachable_v2 - local_system_id=0x%lx remote_dev_addr=0x%lx "
-             "same_uuid=%d local_pid=%d remote_pid=%d",
-             (unsigned long)ucs_get_system_id(), (unsigned long)*dev_addr,
-             same_uuid, getpid(), *(pid_t*)params->iface_addr);
-
-    if ((getpid() == *(pid_t*)params->iface_addr) && same_uuid) {
+    /* Reject same process */
+    if (remote_pid == getpid()) {
         uct_iface_fill_info_str_buf(params, "same process");
-        ucs_info("ze_ipc: is_reachable_v2 - rejected: same process");
         return 0;
     }
 
-    if (same_uuid) {
-        result = uct_iface_scope_is_reachable(tl_iface, params);
-        ucs_info("ze_ipc: is_reachable_v2 - same system, scope_is_reachable=%d", result);
-        return result;
+    /* Check same system */
+    if (ucs_get_system_id() != *dev_addr) {
+        uct_iface_fill_info_str_buf(params, "different system");
+        return 0;
     }
 
-    uct_iface_fill_info_str_buf(params, "different system");
-    ucs_info("ze_ipc: is_reachable_v2 - rejected: different system");
-    return 0;
+    return uct_iface_scope_is_reachable(tl_iface, params);
 }
 
 static ucs_status_t
@@ -305,6 +281,11 @@ uct_ze_ipc_iface_progress(uct_iface_h tl_iface)
     unsigned max_poll = iface->config.max_poll;
     ze_result_t ret;
 
+    /* Early exit if no active queues */
+    if (ucs_queue_is_empty(&iface->active_queue)) {
+        return 0;
+    }
+
     /*
      * Progress all active command list queues
      * Similar to CUDA IPC's uct_cuda_base_progress_event_queue
@@ -313,7 +294,9 @@ uct_ze_ipc_iface_progress(uct_iface_h tl_iface)
         ucs_queue_for_each_safe(event_desc, iter, &q_desc->event_queue, queue) {
             /* Check if we've reached max_poll limit */
             if (count >= max_poll) {
-                goto out;
+                /* Put queue back and exit */
+                ucs_queue_push(&iface->active_queue, &q_desc->queue);
+                return count;
             }
 
             ret = zeEventQueryStatus(event_desc->event);
@@ -367,7 +350,6 @@ uct_ze_ipc_iface_progress(uct_iface_h tl_iface)
         }
     }
 
-out:
     return count;
 }
 
@@ -550,18 +532,9 @@ static UCS_CLASS_INIT_FUNC(uct_ze_ipc_iface_t, uct_md_h md, uct_worker_h worker,
 
     self->ze_context     = ze_md->ze_context;
     self->ze_device      = ze_md->ze_device;
-    self->cmd_queue      = NULL;
-    self->cmd_list       = NULL;  /* deprecated, kept for compatibility */
     self->config         = *config;
     self->eventfd        = UCS_ASYNC_EVENTFD_INVALID_FD;
     self->next_cmd_list  = 0;
-
-    /* Initialize pidfd cache for reducing pidfd_open system calls */
-    self->pidfd_cache = kh_init(ze_ipc_pidfd_cache);
-    if (self->pidfd_cache == NULL) {
-        ucs_error("ze_ipc_iface: failed to initialize pidfd cache");
-        return UCS_ERR_NO_MEMORY;
-    }
 
     /* Find copy engine queue group ordinal and available queue count */
     status = uct_ze_ipc_find_copy_ordinal(self->ze_device, &copy_ordinal, &num_queues);
@@ -610,7 +583,6 @@ static UCS_CLASS_INIT_FUNC(uct_ze_ipc_iface_t, uct_md_h md, uct_worker_h worker,
 
     /* Initialize active queue for command lists with pending operations */
     ucs_queue_head_init(&self->active_queue);
-    ucs_queue_head_init(&self->outstanding);  /* deprecated, kept for compatibility */
 
     /*
      * Create multiple immediate command lists for parallel progress.
@@ -653,9 +625,6 @@ static UCS_CLASS_INIT_FUNC(uct_ze_ipc_iface_t, uct_md_h md, uct_worker_h worker,
         ucs_debug("ze_ipc_iface: created immediate command list %u/%u: %p",
                   i + 1, self->num_cmd_lists, self->queue_desc[i].cmd_list);
     }
-
-    /* For backward compatibility, set first command list as default */
-    self->cmd_list = self->queue_desc[0].cmd_list;
 
     /*
      * Create a shared event pool for all copy operations to avoid
@@ -722,23 +691,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ze_ipc_iface_t)
 {
     uct_ze_ipc_event_desc_t *event_desc;
     unsigned i;
-    khiter_t iter;
-
-    /* Clean up pidfd cache */
-    if (self->pidfd_cache != NULL) {
-        for (iter = kh_begin(self->pidfd_cache);
-             iter != kh_end(self->pidfd_cache); ++iter) {
-            if (kh_exist(self->pidfd_cache, iter)) {
-                int pidfd = kh_value(self->pidfd_cache, iter);
-                pid_t pid = kh_key(self->pidfd_cache, iter);
-                close(pidfd);
-                ucs_debug("ze_ipc_iface: closed cached pidfd=%d for pid %d",
-                          pidfd, pid);
-            }
-        }
-        kh_destroy(ze_ipc_pidfd_cache, self->pidfd_cache);
-        ucs_debug("ze_ipc_iface: destroyed pidfd cache");
-    }
 
     /* Clean up outstanding events from all command list queues */
     for (i = 0; i < self->num_cmd_lists; i++) {
@@ -762,26 +714,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ze_ipc_iface_t)
         }
     }
 
-    /* Clean up deprecated outstanding queue for backward compatibility */
-    while (!ucs_queue_is_empty(&self->outstanding)) { // todo: wha
-        event_desc = ucs_queue_pull_elem_non_empty(&self->outstanding,
-                                                   uct_ze_ipc_event_desc_t,
-                                                   queue);
-        if (event_desc->mapped_addr != NULL) {
-            zeMemCloseIpcHandle(self->ze_context, event_desc->mapped_addr);
-        }
-        if (event_desc->dup_fd >= 0) {
-            close(event_desc->dup_fd);
-        }
-        if (event_desc->event != NULL) {
-            zeEventDestroy(event_desc->event);
-        }
-        if (event_desc->event_pool != NULL) {
-            zeEventPoolDestroy(event_desc->event_pool);
-        }
-        ucs_free(event_desc);
-    }
-
     /* Destroy all command lists */
     for (i = 0; i < self->num_cmd_lists; i++) {
         if (self->queue_desc[i].cmd_list != NULL) {
@@ -796,9 +728,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ze_ipc_iface_t)
     }
 
     /* Free event bitmap */
-    if (self->event_bitmap != NULL) {
-        ucs_free(self->event_bitmap);
-    }
+    ucs_free(self->event_bitmap);
 
     /* Destroy spinlock */
     ucs_spinlock_destroy(&self->event_lock);

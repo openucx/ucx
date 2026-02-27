@@ -83,8 +83,8 @@ static UCS_CLASS_INIT_FUNC(uct_ze_ipc_ep_t, const uct_ep_params_t *params)
 
     self->remote_pid = *(const pid_t*)params->iface_addr;
 
-    ucs_info("ze_ipc_ep: created endpoint to remote pid %d (local pid %d)",
-             self->remote_pid, getpid());
+    ucs_debug("ze_ipc_ep: created endpoint to remote pid %d (local pid %d)",
+              self->remote_pid, getpid());
     return UCS_OK;
 }
 
@@ -101,6 +101,57 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_ze_ipc_ep_t, uct_ep_t);
 
 #define uct_ze_ipc_trace_data(_addr, _rkey, _fmt, ...)     \
     ucs_trace_data(_fmt " to %"PRIx64"(%+ld)", ## __VA_ARGS__, (_addr), (_rkey))
+
+
+/* Timeline profiling for performance analysis */
+typedef struct uct_ze_ipc_timeline {
+    struct timespec start;
+    struct timespec get_ipc_handle;
+    struct timespec event_alloc;
+    struct timespec async_copy;
+    struct timespec end;
+} uct_ze_ipc_timeline_t;
+
+static UCS_F_ALWAYS_INLINE void
+uct_ze_ipc_timeline_record(struct timespec *ts)
+{
+    clock_gettime(CLOCK_MONOTONIC, ts);
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_ze_ipc_timeline_report(const uct_ze_ipc_timeline_t *timeline,
+                            size_t length, unsigned cmd_list_idx)
+{
+    double ipc_time, event_time, copy_time, other_time, total_time;
+
+    ipc_time   = (timeline->get_ipc_handle.tv_sec - timeline->start.tv_sec) * 1000.0 +
+                 (timeline->get_ipc_handle.tv_nsec - timeline->start.tv_nsec) / 1000000.0;
+    event_time = (timeline->event_alloc.tv_sec - timeline->get_ipc_handle.tv_sec) * 1000.0 +
+                 (timeline->event_alloc.tv_nsec - timeline->get_ipc_handle.tv_nsec) / 1000000.0;
+    copy_time  = (timeline->async_copy.tv_sec - timeline->event_alloc.tv_sec) * 1000.0 +
+                 (timeline->async_copy.tv_nsec - timeline->event_alloc.tv_nsec) / 1000000.0;
+    other_time = (timeline->end.tv_sec - timeline->async_copy.tv_sec) * 1000.0 +
+                 (timeline->end.tv_nsec - timeline->async_copy.tv_nsec) / 1000000.0;
+    total_time = (timeline->end.tv_sec - timeline->start.tv_sec) * 1000.0 +
+                 (timeline->end.tv_nsec - timeline->start.tv_nsec) / 1000000.0;
+
+    ucs_trace("ze_ipc timeline: total=%.3fms (ipc=%.3fms event=%.3fms copy=%.3fms other=%.3fms) "
+              "size=%zu cmd_list=%u",
+              total_time, ipc_time, event_time, copy_time, other_time, length, cmd_list_idx);
+}
+
+#define UCT_ZE_IPC_TIMELINE_INIT(_tl) \
+    uct_ze_ipc_timeline_t _tl = {{0}}
+
+#define UCT_ZE_IPC_TIMELINE_RECORD(_tl, _field) \
+    if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE)) { \
+        uct_ze_ipc_timeline_record(&(_tl)._field); \
+    }
+
+#define UCT_ZE_IPC_TIMELINE_REPORT(_tl, _len, _idx) \
+    if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE)) { \
+        uct_ze_ipc_timeline_report(&(_tl), (_len), (_idx)); \
+    }
 
 
 int uct_ze_ipc_ep_is_connected(const uct_ep_h tl_ep,
@@ -136,24 +187,23 @@ uct_ze_ipc_post_copy(uct_ep_h tl_ep, uint64_t remote_addr,
     int local_fd;
     int event_index = -1;
     unsigned cmd_list_idx;
-    struct timespec start1, start2, start3, start4, end;
-    double elapsed_ms1, elapsed_ms2, elapsed_ms3, elapsed_ms4, elapsed_ms5;
+    UCT_ZE_IPC_TIMELINE_INIT(timeline);
 
-    clock_gettime(CLOCK_MONOTONIC, &start1);
+    UCT_ZE_IPC_TIMELINE_RECORD(timeline, start);
 
     if (ucs_unlikely(iov[0].length == 0)) {
         ucs_trace_data("Zero length request: skip it");
         return UCS_OK;
     }
 
-    /* Use cache to map IPC handle (with pidfd caching) */
-    status = uct_ze_ipc_map_memhandle(iface, key, iface->ze_context, iface->ze_device,
+    /* Use cache to map IPC handle */
+    status = uct_ze_ipc_map_memhandle(key, iface->ze_context, iface->ze_device,
                                       &mapped_addr, &local_fd);
     if (status != UCS_OK) {
         ucs_error("ze_ipc_ep: uct_ze_ipc_map_memhandle failed");
         return status;
     }
-    clock_gettime(CLOCK_MONOTONIC, &start2);
+    UCT_ZE_IPC_TIMELINE_RECORD(timeline, get_ipc_handle);
 
     ucs_debug("ze_ipc_ep: IPC handle mapped (cached), mapped_addr=%p", mapped_addr);
 
@@ -199,7 +249,7 @@ uct_ze_ipc_post_copy(uct_ep_h tl_ep, uint64_t remote_addr,
         src = mapped_rem_addr;
     }
 
-    clock_gettime(CLOCK_MONOTONIC, &start3);
+    UCT_ZE_IPC_TIMELINE_RECORD(timeline, event_alloc);
 
     /*
      * Select command list using round-robin scheduling
@@ -228,7 +278,7 @@ uct_ze_ipc_post_copy(uct_ep_h tl_ep, uint64_t remote_addr,
         goto err_cleanup;
     }
 
-    clock_gettime(CLOCK_MONOTONIC, &start4);
+    UCT_ZE_IPC_TIMELINE_RECORD(timeline, async_copy);
 
     /* Store event info for progress tracking */
     event_desc->mapped_addr = mapped_addr;
@@ -242,27 +292,11 @@ uct_ze_ipc_post_copy(uct_ep_h tl_ep, uint64_t remote_addr,
     /* Push event to this command list's event queue */
     ucs_queue_push(&q_desc->event_queue, &event_desc->queue);
 
-    clock_gettime(CLOCK_MONOTONIC, &end);
-
-    elapsed_ms1 = (start2.tv_sec - start1.tv_sec) * 1000.0 +
-    (start2.tv_nsec - start1.tv_nsec) / 1000000.0;
-
-    elapsed_ms2 = (start3.tv_sec - start2.tv_sec) * 1000.0 +
-    (start3.tv_nsec - start2.tv_nsec) / 1000000.0;
-
-    elapsed_ms3 = (start4.tv_sec - start3.tv_sec) * 1000.0 +
-    (start4.tv_nsec - start3.tv_nsec) / 1000000.0;
-
-    elapsed_ms4 = (end.tv_sec - start4.tv_sec) * 1000.0 +
-    (end.tv_nsec - start4.tv_nsec) / 1000000.0;
-
-    elapsed_ms5 = (end.tv_sec - start1.tv_sec) * 1000.0 +
-    (end.tv_nsec - start1.tv_nsec) / 1000000.0;
+    UCT_ZE_IPC_TIMELINE_RECORD(timeline, end);
 
     ucs_trace("zeCommandListAppendMemoryCopy issued (async): cmd_list[%u/%u]=%p dst=%p src=%p len=%zu",
               cmd_list_idx, iface->num_cmd_lists, q_desc->cmd_list, dst, src, iov[0].length);
-    ucs_info("uct_ze_ipc_post_copy projection: whole time cost is %.3f ms, open ipc time is %.3f, create event time is %.3f, copy time(host) is %.3f, other time is %.3f, total transfer size is %zu, cmd_list_idx=%u\n",
-             elapsed_ms5, elapsed_ms1, elapsed_ms2, elapsed_ms3, elapsed_ms4, iov[0].length, cmd_list_idx);
+    UCT_ZE_IPC_TIMELINE_REPORT(timeline, iov[0].length, cmd_list_idx);
 
     return UCS_INPROGRESS;
 
@@ -282,9 +316,6 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_ze_ipc_ep_get_zcopy,
                  uct_completion_t *comp)
 {
     ucs_status_t status;
-
-    ucs_info("ze_ipc_ep: GET_ZCOPY called remote_addr=0x%lx iovcnt=%zu total_len=%zu",
-             (unsigned long)remote_addr, iovcnt, uct_iov_total_length(iov, iovcnt));
 
     status = uct_ze_ipc_post_copy(tl_ep, remote_addr, iov, rkey, comp,
                                   UCT_ZE_IPC_GET);
@@ -308,9 +339,6 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_ze_ipc_ep_put_zcopy,
                  uct_completion_t *comp)
 {
     ucs_status_t status;
-
-    ucs_info("ze_ipc_ep: PUT_ZCOPY called remote_addr=0x%lx iovcnt=%zu total_len=%zu",
-             (unsigned long)remote_addr, iovcnt, uct_iov_total_length(iov, iovcnt));
 
     status = uct_ze_ipc_post_copy(tl_ep, remote_addr, iov, rkey, comp,
                                   UCT_ZE_IPC_PUT);

@@ -64,7 +64,6 @@ void uct_ze_ipc_destroy_cache(uct_ze_ipc_cache_t *cache);
 /**
  * Map an IPC memory handle to a local address (with caching)
  *
- * @param iface        ze_ipc interface (for pidfd cache)
  * @param key          Remote memory key containing IPC handle
  * @param ze_context   Level Zero context
  * @param ze_device    Level Zero device
@@ -72,8 +71,7 @@ void uct_ze_ipc_destroy_cache(uct_ze_ipc_cache_t *cache);
  * @param dup_fd       Pointer to store the duplicated file descriptor
  * @return UCS_OK on success, error code otherwise
  */
-ucs_status_t uct_ze_ipc_map_memhandle(uct_ze_ipc_iface_t *iface,
-                                      uct_ze_ipc_key_t *key,
+ucs_status_t uct_ze_ipc_map_memhandle(uct_ze_ipc_key_t *key,
                                       ze_context_handle_t ze_context,
                                       ze_device_handle_t ze_device,
                                       void **mapped_addr,

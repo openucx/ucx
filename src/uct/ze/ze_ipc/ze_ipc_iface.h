@@ -10,7 +10,6 @@
 #include <ucs/arch/cpu.h>
 #include <ucs/async/eventfd.h>
 #include <ucs/type/spinlock.h>
-#include <ucs/datastruct/khash.h>
 #include <level_zero/ze_api.h>
 
 #include "ze_ipc_md.h"
@@ -42,23 +41,11 @@ typedef struct uct_ze_ipc_queue_desc {
 } uct_ze_ipc_queue_desc_t;
 
 
-/**
- * pidfd cache entry for reducing pidfd_open system calls
- * Key: remote process PID
- * Value: cached pidfd file descriptor
- */
-KHASH_MAP_INIT_INT(ze_ipc_pidfd_cache, int)
-
-
 typedef struct uct_ze_ipc_iface {
     uct_base_iface_t             super;
     ze_context_handle_t          ze_context;
     ze_device_handle_t           ze_device;
-    ze_command_queue_handle_t    cmd_queue;      /* deprecated, kept for compatibility */
-    ze_command_list_handle_t     cmd_list;       /* deprecated, kept for compatibility */
     uct_ze_ipc_iface_config_t    config;
-    ucs_mpool_t                  event_pool;
-    ucs_queue_head_t             outstanding;    /* deprecated, kept for compatibility */
     int                          eventfd;        /* event fd for async notifications */
 
     /* Multi-command-list support for parallel progress */
@@ -72,15 +59,12 @@ typedef struct uct_ze_ipc_iface {
     unsigned                     event_pool_size; /* number of events in the pool */
     ucs_spinlock_t               event_lock;      /* lock for event allocation */
     uint64_t                     *event_bitmap;   /* bitmap to track free events */
-
-    /* pidfd cache for reducing pidfd_open system calls */
-    khash_t(ze_ipc_pidfd_cache)  *pidfd_cache;   /* hash table: pid -> pidfd */
 } uct_ze_ipc_iface_t;
 
 
 typedef struct uct_ze_ipc_event_desc {
     ze_event_handle_t   event;
-    ze_event_pool_handle_t event_pool;  /* deprecated when using shared pool */
+    ze_event_pool_handle_t event_pool;  /* NULL when using shared pool */
     void               *mapped_addr;
     uct_completion_t   *comp;
     ucs_queue_elem_t    queue;

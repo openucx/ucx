@@ -22,8 +22,9 @@
 
 typedef struct uct_ze_ipc_cache_hash_key {
     pid_t               pid;
+    uint32_t            _pad;  /* Ensure 8-byte alignment for ze_context */
     ze_context_handle_t ze_context;
-} uct_ze_ipc_cache_hash_key_t;
+} UCS_S_PACKED uct_ze_ipc_cache_hash_key_t;
 
 
 static UCS_F_ALWAYS_INLINE int
@@ -123,7 +124,7 @@ static void uct_ze_ipc_cache_purge(uct_ze_ipc_cache_t *cache)
 
 
 static ucs_status_t
-uct_ze_ipc_open_memhandle(uct_ze_ipc_iface_t *iface, uct_ze_ipc_key_t *key,
+uct_ze_ipc_open_memhandle(uct_ze_ipc_key_t *key,
                           ze_context_handle_t ze_context,
                           ze_device_handle_t ze_device,
                           void **mapped_addr, int *dup_fd)
@@ -210,6 +211,7 @@ uct_ze_ipc_get_remote_cache(pid_t pid, ze_context_handle_t ze_context,
 
     key.ze_context = ze_context;
     key.pid        = pid;
+    key._pad       = 0;
 
     khiter = kh_put(ze_ipc_rem_cache, &uct_ze_ipc_remote_cache.hash, key,
                     &khret);
@@ -282,8 +284,8 @@ ucs_status_t uct_ze_ipc_unmap_memhandle(pid_t pid, uintptr_t address,
 
 
 UCS_PROFILE_FUNC(ucs_status_t, uct_ze_ipc_map_memhandle,
-                 (iface, key, ze_context, ze_device, mapped_addr, dup_fd),
-                 uct_ze_ipc_iface_t *iface, uct_ze_ipc_key_t *key,
+                 (key, ze_context, ze_device, mapped_addr, dup_fd),
+                 uct_ze_ipc_key_t *key,
                  ze_context_handle_t ze_context,
                  ze_device_handle_t ze_device,
                  void **mapped_addr, int *dup_fd)
@@ -318,7 +320,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_ze_ipc_map_memhandle,
         return UCS_OK;
     }
 
-    status = uct_ze_ipc_open_memhandle(iface, key, ze_context, ze_device, mapped_addr, dup_fd);
+    status = uct_ze_ipc_open_memhandle(key, ze_context, ze_device, mapped_addr, dup_fd);
     if (ucs_unlikely(status != UCS_OK)) {
         goto err;
     }
