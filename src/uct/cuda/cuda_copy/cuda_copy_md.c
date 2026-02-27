@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2017-2019. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2017-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -12,6 +12,7 @@
 #include <string.h>
 #include <limits.h>
 #include <ucs/debug/log.h>
+#include <ucs/sys/sock.h>
 #include <ucs/sys/sys.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/memory/memtype_cache.h>
@@ -988,6 +989,8 @@ uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address, size_t length,
                                              addr_mem_info.sys_dev);
         if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD) {
             mem_attr->dmabuf_fd = dmabuf.fd;
+        } else {
+            ucs_close_fd(&dmabuf.fd);
         }
         if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET) {
             mem_attr->dmabuf_offset = dmabuf.offset;
