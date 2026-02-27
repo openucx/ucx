@@ -231,7 +231,7 @@ struct ucp_config {
     /** Array of device lists names to use.
      *  This array holds four lists - network devices, shared memory devices,
      *  acceleration devices and loop-back devices */
-    ucs_config_names_array_t               devices[UCT_DEVICE_TYPE_LAST];
+    ucs_config_allow_list_t                devices[UCT_DEVICE_TYPE_LAST];
     /** Array of transport names to use */
     ucs_config_allow_list_t                tls;
     /** Array of protocol names to use */
@@ -737,7 +737,7 @@ ucp_context_rndv_is_enabled(ucp_context_h context)
 }
 
 void ucp_context_memaccess_tl_bitmap(ucp_context_h context,
-                                     ucs_memory_type_t mem_type,
+                                     uint64_t mem_type_bitmap,
                                      uint64_t md_reg_flags,
                                      ucp_tl_bitmap_t *tl_bitmap);
 
