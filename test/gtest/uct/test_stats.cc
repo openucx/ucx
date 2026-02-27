@@ -35,15 +35,8 @@ public:
 
     virtual void init() {
         stats_activate();
-        try {
-            uct_p2p_test::init();
-        } catch (...) {
-            /* Clean up stats before rethrowing, cleanup() will not be called
-             * because the m_initialized flag is not set. */
-            uct_p2p_test::cleanup();
-            stats_restore();
-            throw;
-        }
+        uct_p2p_test::init();
+
 
         // Sender EP
         collect_cntr_init("sender", uct_ep(sender())->stats,
