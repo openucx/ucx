@@ -322,47 +322,46 @@ void ucs_string_buffer_translate(ucs_string_buffer_t *strb,
 /**
  * Expand a range pattern "prefix[first-last]suffix" into individual values
  * appended to a string buffer, separated by @a delim. Both prefix and suffix
- * may be empty. Tokens without a range pattern are appended as-is, and invalid 
+ * may be empty. Tokens without a range pattern are appended as-is, and invalid
  * range patterns return an error.
  *
- * @param [in]  token         Input token, e.g. "mlx5_[7-12]" or "a[0-5]b".
- * @param [in]  delim         Delimiter character between expanded values
- *                            (e.g. ',').
- * @param [in]  max_elements  Maximum number of elements to append.
- * @param [out] output_p      String buffer to append expanded values to.
- * @param [out] count_p       If not NULL, set to the number of elements
- *                            appended.
+ * @param [inout] strb          String buffer to append expanded values to.
+ * @param [in]    token         Input token, e.g. "mlx5_[7-12]" or "a[0-5]b".
+ * @param [in]    delim         Delimiter character between expanded values
+ *                              (e.g. ',').
+ * @param [in]    max_elements  Maximum number of elements to append.
+ * @param [out]   count_p       If not NULL, set to the number of elements
+ *                              appended.
  *
  * @return UCS_OK on success,
  *         UCS_ERR_INVALID_PARAM on error.
  */
-ucs_status_t ucs_string_buffer_expand_range(const char *token,
+ucs_status_t ucs_string_buffer_expand_range(ucs_string_buffer_t *strb,
+                                            const char *token,
                                             char delim,
                                             size_t max_elements,
-                                            ucs_string_buffer_t *output_p,
                                             size_t *count_p);
 
 
 /**
- * Expand all range patterns in a delimited string. Non-range tokens are 
+ * Expand all range patterns in a delimited string. Non-range tokens are
  * appended as-is, and invalid range patterns return an error.
  *
- * @param [in]  input         Delimited input, e.g. "mlx5_[7-12],eth0,ib[0-5]".
- * @param [in]  delim         Delimiter character (e.g. ',').
- * @param [in]  max_elements  Maximum total number of elements to append.
- * @param [out] output_p      String buffer receiving the expanded result,
- *                            delimited by @a delim.
- * @param [out] count_p       If not NULL, set to the total number of elements
- *                            appended.
+ * @param [inout] strb          String buffer receiving the expanded result,
+ *                              delimited by @a delim.
+ * @param [in]    input         Delimited input, e.g. "mlx5_[7-12],eth0,ib[0-5]".
+ * @param [in]    delim         Delimiter character (e.g. ',').
+ * @param [in]    max_elements  Maximum total number of elements to append.
+ * @param [out]   count_p       If not NULL, set to the total number of elements
+ *                              appended.
  *
  * @return UCS_OK on success,
  *         UCS_ERR_INVALID_PARAM on range errors,
  *         UCS_ERR_NO_MEMORY on memory allocation error.
  */
-ucs_status_t ucs_string_buffer_expand_ranges(const char *input,
-                                             const char delim,
+ucs_status_t ucs_string_buffer_expand_ranges(ucs_string_buffer_t *strb,
+                                             const char *input, char delim,
                                              size_t max_elements,
-                                             ucs_string_buffer_t *output_p,
                                              size_t *count_p);
 
 
