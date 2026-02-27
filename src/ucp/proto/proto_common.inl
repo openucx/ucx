@@ -50,7 +50,12 @@ ucp_proto_msg_multi_request_init(ucp_request_t *req)
         return UCS_OK;
     }
 
+    if (req->flags & UCP_REQUEST_FLAG_MSG_ID_SET) {
+        return UCS_OK;
+    }
+
     req->send.msg_proto.message_id = req->send.ep->worker->am_message_id++;
+    req->flags |= UCP_REQUEST_FLAG_MSG_ID_SET;
     return UCS_OK;
 }
 

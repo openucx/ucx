@@ -203,7 +203,8 @@ static void ucp_am_eager_multi_zcopy_proto_probe_common(
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE |
-                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
+                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING |
+                               UCP_PROTO_COMMON_INIT_FLAG_FAILOVER,
         .super.exclude_map   = 0,
         .super.reg_mem_info  = ucp_proto_common_select_param_mem_info(
                                                      init_params->select_param),
@@ -320,10 +321,14 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_am_eager_multi_zcopy_send_func(
 
 static ucs_status_t ucp_am_eager_multi_zcopy_init(ucp_request_t *req)
 {
-    ucp_am_eager_zcopy_pack_user_header(req);
-    ucp_proto_msg_multi_request_init(req);
+    ucs_status_t status;
 
-    return UCS_OK;
+    status = ucp_am_eager_zcopy_pack_user_header(req);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return ucp_proto_msg_multi_request_init(req);
 }
 
 static ucs_status_t
@@ -373,6 +378,17 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_am_eager_multi_zcopy_psn_send_func(
                                                      UCP_AM_ID_AM_MIDDLE_PSN);
 }
 
+static void ucp_am_eager_multi_zcopy_psn_completion(uct_completion_t *self)
+{
+    if (ucs_likely(self->status == UCS_OK)) {
+        ucp_am_eager_zcopy_completion(self);
+    } else {
+        /* NOTE: do not release the user header to allow the request to be
+         *       restarted after */
+        ucp_proto_request_zcopy_completion(self);
+    }
+}
+
 static ucs_status_t
 ucp_am_eager_multi_zcopy_psn_proto_progress(uct_pending_req_t *self)
 {
@@ -385,12 +401,19 @@ ucp_am_eager_multi_zcopy_psn_proto_progress(uct_pending_req_t *self)
             UCT_MD_MEM_ACCESS_LOCAL_READ, UCP_DT_MASK_CONTIG_IOV,
             ucp_am_eager_multi_zcopy_psn_send_func,
             ucp_request_invoke_uct_completion_success,
-            ucp_am_eager_zcopy_completion);
+            ucp_am_eager_multi_zcopy_psn_completion);
     if (status == UCS_INPROGRESS) {
         ucp_proto_am_set_middle_fragment(req);
     }
     
     return status;
+}
+
+static ucs_status_t ucp_am_eager_multi_zcopy_psn_reset(ucp_request_t *req)
+{
+    ucp_datatype_iter_rewind(&req->send.state.dt_iter, UCP_DT_MASK_CONTIG_IOV);
+    req->send.msg_proto.am.internal_flags &= UCP_REQUEST_AM_FLAG_HEADER_PACKED;
+    return ucp_proto_request_zcopy_reset(req);
 }
 
 ucp_proto_t ucp_am_eager_multi_zcopy_psn_proto = {
@@ -401,5 +424,5 @@ ucp_proto_t ucp_am_eager_multi_zcopy_psn_proto = {
     .query    = ucp_proto_multi_query,
     .progress = {ucp_am_eager_multi_zcopy_psn_proto_progress},
     .abort    = ucp_proto_am_request_zcopy_abort,
-    .reset    = ucp_am_proto_request_zcopy_reset
+    .reset    = ucp_am_eager_multi_zcopy_psn_reset
 };
