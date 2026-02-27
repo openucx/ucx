@@ -323,17 +323,17 @@ void ucs_string_buffer_translate(ucs_string_buffer_t *strb,
     ucs_array_set_length(strb, dst_ptr - ucs_array_begin(strb));
 }
 
-ucs_status_t
-ucs_string_buffer_expand_range(const char *token, const char delim,
-                               size_t max_elements,
-                               ucs_string_buffer_t *output_p, size_t *count_p)
+ucs_status_t ucs_string_buffer_expand_range(const char *token, const char delim,
+                                            const size_t max_elements,
+                                            ucs_string_buffer_t *output_p,
+                                            size_t *count_p)
 {
     const char delim_str[2] = {delim, '\0'};
     ucs_status_t status     = UCS_OK;
     int n                   = 0;
     size_t count            = 0;
     const char *open_bracket_pos, *close_bracket_pos, *suffix, *p;
-    size_t start, end, j, prefix_len, hyphen_count;
+    size_t first, last, j, prefix_len, hyphen_count;
 
     if (ucs_string_is_empty(token) || max_elements == 0) {
         goto out;
@@ -375,26 +375,26 @@ ucs_string_buffer_expand_range(const char *token, const char delim,
     /* Make sure there is exactly one hyphen to reject negative numbers in the
      * range (sscanf %zu wraps negative values) */
     if ((hyphen_count != 1) ||
-        (sscanf(open_bracket_pos, "[%zu-%zu]%n", &start, &end, &n) != 2) ||
+        (sscanf(open_bracket_pos, "[%zu-%zu]%n", &first, &last, &n) != 2) ||
         (n <= 0)) {
         ucs_error("invalid range pattern '%s': parsing error", token);
         status = UCS_ERR_INVALID_PARAM;
         goto out;
     }
 
-    if (start > end) {
-        ucs_error("invalid range pattern '%s': start (%zu) > end (%zu)", token,
-                  start, end);
+    if (first > last) {
+        ucs_error("invalid range pattern '%s': first (%zu) > last (%zu)", token,
+                  first, last);
         status = UCS_ERR_INVALID_PARAM;
         goto out;
     }
 
-    count      = ucs_min(end - start + 1, max_elements);
+    count      = ucs_min(last - first + 1, max_elements);
     prefix_len = (size_t)(open_bracket_pos - token);
     suffix     = &open_bracket_pos[n];
 
     /* Append the range of values with the prefix, suffix, and delimiter */
-    for (j = start; j < start + count; ++j) {
+    for (j = first; j < first + count; ++j) {
         ucs_string_buffer_appendf(output_p, "%.*s%zu%s%c", (int)prefix_len,
                                   token, j, suffix, delim);
     }
