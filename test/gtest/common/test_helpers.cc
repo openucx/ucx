@@ -14,6 +14,7 @@
 #include <ucs/config/parser.h>
 
 #include <set>
+#include <unistd.h>
 
 extern "C" {
 // On some platforms users have to declare environ explicitly
@@ -515,6 +516,40 @@ std::vector<std::string> read_dir(const std::string &path)
 out_close:
     closedir(dir);
     return result;
+}
+
+std::set<int> collect_open_fds()
+{
+    std::set<int> fds;
+    DIR *dir = opendir("/proc/self/fd");
+    if (dir == NULL) {
+        return fds;
+    }
+
+    int dir_fd = dirfd(dir);
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (entry->d_name[0] != '.') {
+            int fd = atoi(entry->d_name);
+            if (fd != dir_fd) {
+                fds.insert(fd);
+            }
+        }
+    }
+    closedir(dir);
+    return fds;
+}
+
+std::string fd_target(int fd)
+{
+    char path[64], link[256];
+    snprintf(path, sizeof(path), "/proc/self/fd/%d", fd);
+    ssize_t len = readlink(path, link, sizeof(link) - 1);
+    if (len < 0) {
+        return "<readlink failed>";
+    }
+    link[len] = '\0';
+    return std::string(link);
 }
 
 static std::map<std::string, std::string> get_all_rdmacm_net_devices()

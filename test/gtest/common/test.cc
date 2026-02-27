@@ -11,9 +11,9 @@
 #include <ucs/stats/stats.h>
 #include <ucs/sys/sys.h>
 
-#include <memory>
-
 namespace ucs {
+
+constexpr int CONSECUTIVE_FD_INCREASE_THRESHOLD = 2;
 
 pthread_mutex_t test_base::m_logger_mutex = PTHREAD_MUTEX_INITIALIZER;
 unsigned test_base::m_total_warnings = 0;
@@ -21,6 +21,8 @@ unsigned test_base::m_total_errors   = 0;
 std::vector<std::string> test_base::m_errors;
 std::vector<std::string> test_base::m_warnings;
 std::vector<std::string> test_base::m_first_warns_and_errors;
+std::set<int> test_base::m_prev_open_fds;
+int test_base::m_consecutive_fd_increases = 0;
 
 test_base::test_base() :
                 m_state(NEW),
@@ -38,12 +40,57 @@ test_base::~test_base() {
     while (!m_config_stack.empty()) {
         pop_config();
     }
+
+    check_fd_leaks();
+
     ucs_assertv_always(m_state == FINISHED ||
                        m_state == SKIPPED ||
                        m_state == NEW ||
                        m_state == INITIALIZING ||
                        m_state == ABORTED,
                        "state=%d", m_state);
+}
+
+void test_base::check_fd_leaks()
+{
+    /* Compare open file descriptors of the current test against the previous
+     * test's post-cleanup open file descriptors to detect leaks while
+     * tolerating one-time external library initialization (like rdma-core or
+     * CUDA driver) that opens persistent file descriptors on first use of a
+     * transport. Increases in the number of open file descriptors are absorbed
+     * up to the threshold and only logged; consecutive increases beyond the
+     * threshold trigger a failure. */
+    std::set<int> open_fds = collect_open_fds();
+
+    if (!m_prev_open_fds.empty()) {
+        const long diff = static_cast<long>(open_fds.size()) -
+                          static_cast<long>(m_prev_open_fds.size());
+        if (diff > 0) {
+            ++m_consecutive_fd_increases;
+
+            std::stringstream ss;
+            ss << "open fds diff: " << std::showpos << diff << std::noshowpos;
+            for (int fd : open_fds) {
+                if (m_prev_open_fds.find(fd) == m_prev_open_fds.end()) {
+                    ss << "\n  leaked fd " << fd << " -> " << fd_target(fd);
+                }
+            }
+            ss << "\n  number of consecutive fd increases: "
+               << m_consecutive_fd_increases;
+
+            if (m_consecutive_fd_increases >= CONSECUTIVE_FD_INCREASE_THRESHOLD) {
+                ADD_FAILURE() << ss.str();
+            } else {
+                UCS_TEST_MESSAGE << ss.str()
+                                 << "(not failing while under the threshold (="
+                                 << CONSECUTIVE_FD_INCREASE_THRESHOLD;
+            }
+        } else {
+            m_consecutive_fd_increases = 0;
+        }
+    }
+
+    m_prev_open_fds = std::move(open_fds);
 }
 
 void test_base::set_num_threads(unsigned num_threads) {
