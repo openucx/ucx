@@ -1396,13 +1396,14 @@ ucs_status_t uct_ib_device_find_port(uct_ib_device_t *dev,
     const char *ibdev_name;
     unsigned port_num;
     size_t devname_len;
-    char *p;
+    const char *devname_str;
+    char *port_num_str;
 
-    p = strrchr(resource_dev_name, ':');
-    if (p == NULL) {
+    devname_str = strrchr(resource_dev_name, ':');
+    if (devname_str == NULL) {
         goto err; /* Wrong device name format */
     }
-    devname_len = p - resource_dev_name;
+    devname_len = devname_str - resource_dev_name;
 
     ibdev_name = uct_ib_device_name(dev);
     if ((strlen(ibdev_name) != devname_len) ||
@@ -1411,8 +1412,8 @@ ucs_status_t uct_ib_device_find_port(uct_ib_device_t *dev,
         goto err; /* Device name is wrong */
     }
 
-    port_num = strtod(p + 1, &p);
-    if (*p != '\0') {
+    port_num = strtod(devname_str + 1, &port_num_str);
+    if (*port_num_str != '\0') {
         goto err; /* Failed to parse port number */
     }
     if ((port_num < dev->first_port) || (port_num >= dev->first_port + dev->num_ports)) {
