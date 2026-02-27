@@ -2748,6 +2748,18 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
         }
     }
 
+    /* Failover mode: add AM type to all am_bw lanes so any can serve as
+     * fallback AM lane on lane failure (protocol selection requires
+     * UCP_LANE_TYPE_AM).
+     */
+     if (key->err_mode == UCP_ERR_HANDLING_MODE_FAILOVER) {
+        for (lane = 0; lane < key->num_lanes; ++lane) {
+            if (key->lanes[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_AM_BW)) {
+                key->lanes[lane].lane_types |= UCS_BIT(UCP_LANE_TYPE_AM);
+            }
+        }
+    }
+
     /* Sort AM, RMA and AMO lanes according to score */
     ucs_qsort_r(key->am_bw_lanes + first_am_bw_lane,
                 UCP_MAX_LANES - first_am_bw_lane, sizeof(ucp_lane_index_t),

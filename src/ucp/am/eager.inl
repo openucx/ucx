@@ -51,6 +51,7 @@ static void ucp_am_eager_zcopy_completion(uct_completion_t *self)
 
     ucs_assert(req->send.msg_proto.am.header.reg_desc != NULL);
     ucs_mpool_put_inline(req->send.msg_proto.am.header.reg_desc);
+    req->send.msg_proto.am.header.reg_desc = NULL;
     ucp_proto_request_zcopy_completion(self);
 }
 

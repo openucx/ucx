@@ -26,7 +26,8 @@
  * AM specific internal request flags
  */
 enum ucp_request_am_internal_flags {
-    UCP_REQUEST_AM_FLAG_HEADER_SENT = UCS_BIT(0)
+    UCP_REQUEST_AM_FLAG_HEADER_SENT = UCS_BIT(0),
+    UCP_REQUEST_AM_FLAG_RESET_DONE  = UCS_BIT(1)
 };
 
 
