@@ -678,6 +678,27 @@ std::string compact_string(const std::string &str, size_t length)
     return str.substr(0, length) + "..." + str.substr(str.length() - length);
 }
 
+template<typename Container>
+std::string join(const Container &strings, const std::string &delimiter)
+{
+    std::string result;
+    for (auto it = strings.begin(); it != strings.end(); ++it) {
+        if (it != strings.begin()) {
+            result += delimiter;
+        }
+        result += *it;
+    }
+    return result;
+}
+
+template std::string join(const std::set<std::string>&, const std::string&);
+
+std::string
+join(std::initializer_list<std::string> strings, const std::string &delimiter)
+{
+    return join<std::initializer_list<std::string>>(strings, delimiter);
+}
+
 std::string exit_status_info(int exit_status)
 {
     std::stringstream ss;

@@ -6,6 +6,7 @@
 
 #include "ucp_test.h"
 
+#include <cstddef>
 #include <set>
 
 extern "C" {
@@ -122,6 +123,13 @@ UCS_TEST_P(test_ucp_version, version_string) {
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_version, all, "all")
+
+namespace {
+
+const std::string NONEXISTENT_DEV1 = "nonexistent_dev1";
+const std::string NONEXISTENT_DEV2 = "nonexistent_dev2";
+
+} // namespace
 
 class test_ucp_devices_config : public ucp_test {
 public:
@@ -242,27 +250,13 @@ protected:
         return base_names;
     }
 
-    /* Join strings with a delimiter */
-    static std::string
-    join(const std::set<std::string> &strings, const std::string &delimiter)
-    {
-        std::string result;
-        for (auto it = strings.begin(); it != strings.end(); ++it) {
-            if (it != strings.begin()) {
-                result += delimiter;
-            }
-            result += *it;
-        }
-        return result;
-    }
-
     /* Test that device selection works correctly */
     void test_device_selection(const std::set<std::string> &test_devices,
                                const std::set<std::string> &expected_devices)
     {
         const uct_device_type_t dev_type = device_type();
         const std::string config_name    = device_type_config_name(dev_type);
-        const std::string devices_config = join(test_devices, ",");
+        const std::string devices_config = ucs::join(test_devices, ",");
 
         modify_config(config_name.c_str(), devices_config.c_str());
         entity *e = create_entity();
@@ -308,8 +302,12 @@ protected:
             create_entity();
         }
 
-        EXPECT_EQ(m_warnings.size() - warn_count, 1)
-                << "Expected exactly one warning";
+        const size_t num_warnings = m_warnings.size() - warn_count;
+        if (num_warnings != 1) {
+            ADD_FAILURE() << "Expected exactly one warning, got "
+                          << num_warnings << " warnings";
+            return;
+        }
 
         /* Check that the warning about duplicate device was printed */
         const std::string expected_warn = "device '" + duplicate_dev_name +
@@ -318,6 +316,39 @@ protected:
                 << "Expected warning about duplicate device '"
                 << duplicate_dev_name << "' with config '" << devices_config
                 << "'";
+    }
+
+    /* Test that a device config triggers nonexistent device warning */
+    void test_nonexistent_device_warning(const std::string &devices_config)
+    {
+        const uct_device_type_t dev_type = device_type();
+        const std::string config_name    = device_type_config_name(dev_type);
+
+        modify_config("WARN_INVALID_CONFIG", "y");
+        modify_config(config_name.c_str(), devices_config.c_str());
+
+        size_t warn_count;
+        {
+            const scoped_log_handler slh(hide_warns_logger);
+            warn_count = m_warnings.size();
+            create_entity();
+        }
+
+        const size_t num_warnings = m_warnings.size() - warn_count;
+        if (num_warnings != 1) {
+            ADD_FAILURE() << "Expected exactly one warning, got "
+                          << num_warnings << " warnings";
+            return;
+        }
+
+        const std::string expected_warn =
+                device_type_name(dev_type) + " devices '" + NONEXISTENT_DEV1 +
+                "','" + NONEXISTENT_DEV2 +
+                "' are not available, please use one or more of:";
+
+        EXPECT_NE(m_warnings[warn_count].find(expected_warn), std::string::npos)
+                << "Expected warning about nonexistent devices '"
+                << NONEXISTENT_DEV1 << "','" << NONEXISTENT_DEV2 << "'";
     }
 };
 
@@ -502,6 +533,52 @@ UCS_TEST_P(test_ucp_devices_config, negate_base_name)
             selected_devices);
     EXPECT_EQ(selected_base_names.size(), base_names.size() - 1)
             << "Expected 1 base name to be excluded";
+}
+
+/*
+ * Test that specifying nonexistent devices produces a warning
+ */
+UCS_TEST_P(test_ucp_devices_config, nonexistent_device_warning)
+{
+    const uct_device_type_t dev_type = device_type();
+    entity *e                        = create_entity();
+
+    const std::set<std::string> devices = get_device_names(*e, dev_type);
+    if (devices.empty()) {
+        UCS_TEST_SKIP_R("No " + device_type_name(dev_type) +
+                        " devices available");
+    }
+
+    const std::string existing_device = *devices.begin();
+    m_entities.clear();
+
+    const std::string devices_config = ucs::join(
+            {NONEXISTENT_DEV1, existing_device, NONEXISTENT_DEV2}, ",");
+    test_nonexistent_device_warning(devices_config);
+}
+
+/*
+ * Test that specifying nonexistent negate devices produces a warning
+ */
+UCS_TEST_P(test_ucp_devices_config, negate_nonexistent_device_warning)
+{
+    const uct_device_type_t dev_type = device_type();
+    entity *e                        = create_entity();
+
+    const std::set<std::string> devices = get_device_names(*e, dev_type);
+    if (devices.empty()) {
+        UCS_TEST_SKIP_R("No " + device_type_name(dev_type) +
+                        " devices available");
+    }
+
+    const std::string existing_device = *devices.begin();
+    m_entities.clear();
+
+    const std::string devices_config = "^" + ucs::join({NONEXISTENT_DEV1,
+                                                        existing_device,
+                                                        NONEXISTENT_DEV2},
+                                                       ",");
+    test_nonexistent_device_warning(devices_config);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_devices_config, all, "all")

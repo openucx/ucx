@@ -27,6 +27,7 @@
 #include <sstream>
 #include <vector>
 #include <string>
+#include <initializer_list>
 #include <algorithm>
 #include <unordered_map>
 #include <sys/socket.h>
@@ -367,6 +368,14 @@ private:
  * Returns a compacted string with just head and tail, e.g "xxx...yyy"
  */
 std::string compact_string(const std::string &str, size_t length);
+
+
+/* Join container elements into a single string with a delimiter */
+template<typename Container>
+std::string join(const Container &strings, const std::string &delimiter);
+
+std::string join(std::initializer_list<std::string> strings,
+                 const std::string &delimiter);
 
 
 /*
