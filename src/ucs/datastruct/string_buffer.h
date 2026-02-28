@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -317,6 +317,52 @@ void ucs_string_buffer_translate(ucs_string_buffer_t *strb,
     for (_tok = ucs_string_buffer_next_token(_strb, NULL, _delim); \
          _tok != NULL; \
          _tok = ucs_string_buffer_next_token(_strb, _tok, _delim))
+
+
+/**
+ * Expand a range pattern "prefix[first-last]suffix" into individual values
+ * appended to a string buffer, separated by @a delim. Both prefix and suffix
+ * may be empty. Tokens without a range pattern are appended as-is, and invalid
+ * range patterns return an error.
+ *
+ * @param [inout] strb          String buffer to append expanded values to.
+ * @param [in]    token         Input token, e.g. "mlx5_[7-12]" or "a[0-5]b".
+ * @param [in]    delim         Delimiter character between expanded values
+ *                              (e.g. ',').
+ * @param [in]    max_elements  Maximum number of elements to append.
+ * @param [out]   count_p       If not NULL, set to the number of elements
+ *                              appended.
+ *
+ * @return UCS_OK on success,
+ *         UCS_ERR_INVALID_PARAM on error.
+ */
+ucs_status_t ucs_string_buffer_expand_range(ucs_string_buffer_t *strb,
+                                            const char *token,
+                                            char delim,
+                                            size_t max_elements,
+                                            size_t *count_p);
+
+
+/**
+ * Expand all range patterns in a delimited string. Non-range tokens are
+ * appended as-is, and invalid range patterns return an error.
+ *
+ * @param [inout] strb          String buffer receiving the expanded result,
+ *                              delimited by @a delim.
+ * @param [in]    input         Delimited input, e.g. "mlx5_[7-12],eth0,ib[0-5]".
+ * @param [in]    delim         Delimiter character (e.g. ',').
+ * @param [in]    max_elements  Maximum total number of elements to append.
+ * @param [out]   count_p       If not NULL, set to the total number of elements
+ *                              appended.
+ *
+ * @return UCS_OK on success,
+ *         UCS_ERR_INVALID_PARAM on range errors,
+ *         UCS_ERR_NO_MEMORY on memory allocation error.
+ */
+ucs_status_t ucs_string_buffer_expand_ranges(ucs_string_buffer_t *strb,
+                                             const char *input, char delim,
+                                             size_t max_elements,
+                                             size_t *count_p);
 
 
 /**

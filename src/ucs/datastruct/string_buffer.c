@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -321,4 +321,151 @@ void ucs_string_buffer_translate(ucs_string_buffer_t *strb,
 
     *dst_ptr = '\0';
     ucs_array_set_length(strb, dst_ptr - ucs_array_begin(strb));
+}
+
+static UCS_F_MAYBE_UNUSED int
+ucs_string_buffer_is_valid_delimiter(char delim)
+{
+    return !isdigit(delim) && (delim != '-') && (delim != '[') &&
+           (delim != ']') && (delim != '\0');
+}
+
+ucs_status_t ucs_string_buffer_expand_range(ucs_string_buffer_t *strb,
+                                            const char *token,
+                                            const char delim,
+                                            const size_t max_elements,
+                                            size_t *count_p)
+{
+    const char delim_str[2] = {delim, '\0'};
+    ucs_status_t status     = UCS_OK;
+    int n                   = 0;
+    size_t count            = 0;
+    const char *open_bracket_pos, *close_bracket_pos, *suffix, *p;
+    size_t first, last, j, prefix_len, hyphen_count;
+
+    ucs_assertv(ucs_string_buffer_is_valid_delimiter(delim),
+                "invalid delimiter: '%c'", delim);
+
+    if (ucs_string_is_empty(token) || (max_elements == 0)) {
+        goto out;
+    }
+
+    open_bracket_pos = strchr(token, '[');
+    if (open_bracket_pos == NULL) {
+        /* Not a range pattern, append as-is */
+        ucs_string_buffer_appendf(strb, "%s", token);
+        count = 1;
+        goto out;
+    }
+
+    close_bracket_pos = strchr(open_bracket_pos + 1, ']');
+    if (close_bracket_pos == NULL) {
+        ucs_error("invalid range pattern '%s': missing closing bracket", token);
+        status = UCS_ERR_INVALID_PARAM;
+        goto out;
+    }
+
+    if ((memchr(token, ']', open_bracket_pos - token) != NULL) ||
+        (strchr(open_bracket_pos + 1, '[') != NULL) ||
+        (strchr(close_bracket_pos + 1, ']') != NULL)) {
+        ucs_error("invalid range pattern '%s': more brackets than expected",
+                  token);
+        status = UCS_ERR_INVALID_PARAM;
+        goto out;
+    }
+
+    hyphen_count = 0;
+    p            = open_bracket_pos + 1;
+    while (p < close_bracket_pos) {
+        if (*p == '-') {
+            ++hyphen_count;
+        }
+        ++p;
+    }
+
+    /* Make sure there is exactly one hyphen to reject negative numbers in the
+     * range (sscanf %zu wraps negative values) */
+    if ((hyphen_count != 1) ||
+        (sscanf(open_bracket_pos, "[%zu-%zu]%n", &first, &last, &n) != 2) ||
+        (n <= 0)) {
+        ucs_error("invalid range pattern '%s': parsing error", token);
+        status = UCS_ERR_INVALID_PARAM;
+        goto out;
+    }
+
+    if (first > last) {
+        ucs_error("invalid range pattern '%s': first (%zu) > last (%zu)", token,
+                  first, last);
+        status = UCS_ERR_INVALID_PARAM;
+        goto out;
+    }
+
+    count      = ucs_min(last - first + 1, max_elements);
+    prefix_len = (size_t)(open_bracket_pos - token);
+    suffix     = &open_bracket_pos[n];
+
+    /* Append the range of values with the prefix, suffix, and delimiter */
+    for (j = first; j < first + count; ++j) {
+        ucs_string_buffer_appendf(strb, "%.*s%zu%s%c", (int)prefix_len,
+                                  token, j, suffix, delim);
+    }
+
+    /* Remove the trailing delimiter */
+    ucs_string_buffer_rtrim(strb, delim_str);
+
+out:
+    if (count_p != NULL) {
+        *count_p = count;
+    }
+
+    return status;
+}
+
+ucs_status_t
+ucs_string_buffer_expand_ranges(ucs_string_buffer_t *strb, const char *input,
+                                const char delim, const size_t max_elements,
+                                size_t *count_p)
+{
+    const char delim_str[2] = {delim, '\0'};
+    ucs_status_t status     = UCS_OK;
+    size_t count_inner, count_total = 0;
+    char *str_dup, *token, *saveptr;
+
+    ucs_assertv(ucs_string_buffer_is_valid_delimiter(delim),
+                "invalid delimiter: '%c'", delim);
+
+    str_dup = ucs_strdup(input, "string_buffer_expand_ranges");
+    if (str_dup == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto out;
+    }
+
+    for (token = strtok_r(str_dup, delim_str, &saveptr);
+         token != NULL;
+         token = strtok_r(NULL, delim_str, &saveptr)) {
+        status = ucs_string_buffer_expand_range(strb, token, delim,
+                                                max_elements - count_total,
+                                                &count_inner);
+        if (status != UCS_OK) {
+            goto out;
+        }
+
+        count_total += count_inner;
+        ucs_string_buffer_appendc(strb, delim, 1);
+
+        if (count_total >= max_elements) {
+            break;
+        }
+    }
+
+    ucs_string_buffer_rtrim(strb, delim_str);
+
+out:
+    ucs_free(str_dup);
+
+    if (count_p != NULL) {
+        *count_p = count_total;
+    }
+
+    return status;
 }
