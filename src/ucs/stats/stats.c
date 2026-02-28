@@ -107,6 +107,8 @@ static ucs_stats_class_t ucs_stats_root_node_class = {
     }
 };
 
+static void ucs_stats_clean_node_recurs(ucs_stats_node_t *node);
+
 #ifdef HAVE_LINUX_FUTEX_H
 static inline int
 ucs_sys_futex(volatile void *addr1, int op, int val1, struct timespec *timeout,
@@ -455,7 +457,7 @@ ucs_status_t ucs_stats_node_alloc(ucs_stats_node_t** p_node, ucs_stats_class_t *
 
 void ucs_stats_node_free(ucs_stats_node_t *node)
 {
-    if (node == NULL) {
+    if (!ucs_stats_is_active() || (node == NULL)) {
         return;
     }
 
@@ -823,19 +825,26 @@ static void ucs_stats_unset_trigger()
     }
 }
 
-static void ucs_stats_clean_node_recurs(ucs_stats_node_t *node)
+static void
+ucs_stats_node_clean_children(ucs_stats_node_t *node, int children_sel)
 {
     ucs_stats_node_t *child, *tmp;
 
-    if (!ucs_list_is_empty(&node->children[UCS_STATS_ACTIVE_CHILDREN])) {
-        ucs_warn("stats node "UCS_STATS_NODE_FMT" still has active children",
-                 UCS_STATS_NODE_ARG(node));
-    }
-
-    ucs_list_for_each_safe(child, tmp, &node->children[UCS_STATS_INACTIVE_CHILDREN], list) {
+    ucs_list_for_each_safe(child, tmp, &node->children[children_sel], list) {
         ucs_stats_clean_node_recurs(child);
         ucs_stats_node_remove(child, 0);
     }
+}
+
+static void ucs_stats_clean_node_recurs(ucs_stats_node_t *node)
+{
+    if (!ucs_list_is_empty(&node->children[UCS_STATS_ACTIVE_CHILDREN])) {
+        ucs_debug("stats node " UCS_STATS_NODE_FMT " still has active children",
+                  UCS_STATS_NODE_ARG(node));
+        ucs_stats_node_clean_children(node, UCS_STATS_ACTIVE_CHILDREN);
+    }
+
+    ucs_stats_node_clean_children(node, UCS_STATS_INACTIVE_CHILDREN);
 }
 
 void ucs_stats_init()

@@ -2050,27 +2050,28 @@ UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_rndv_memtype_disable_zcopy);
 #ifdef ENABLE_STATS
 class test_ucp_am_nbx_rndv_ppln : public test_ucp_am_nbx_rndv {
 public:
-    test_ucp_am_nbx_rndv_ppln() : m_mem_type(UCS_MEMORY_TYPE_HOST) {}
-
-    void init() override
+    test_ucp_am_nbx_rndv_ppln() : m_mem_type(UCS_MEMORY_TYPE_HOST)
     {
-        if (!is_proto_enabled()) {
-            UCS_TEST_SKIP_R("proto v1");
-        }
-        stats_activate();
         modify_config("RNDV_THRESH", "128");
         modify_config("RNDV_SCHEME", "put_ppln");
         modify_config("RNDV_PIPELINE_SHM_ENABLE", "n");
         /* FIXME: Advertise error handling support for RNDV PPLN protocol.
          * Remove this once invalidation workflow is implemented. */
         modify_config("RNDV_PIPELINE_ERROR_HANDLING", "y");
-        test_ucp_am_nbx::init();
+        stats_activate();
     }
 
-    void cleanup() override
+    ~test_ucp_am_nbx_rndv_ppln()
     {
-        test_ucp_am_nbx::cleanup();
         stats_restore();
+    }
+
+    void init() override
+    {
+        if (!is_proto_enabled()) {
+            UCS_TEST_SKIP_R("proto v1");
+        }
+        test_ucp_am_nbx::init();
     }
 
     static void get_test_variants(variant_vec_t &variants)

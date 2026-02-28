@@ -1057,17 +1057,17 @@ UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_xfer)
 
 class test_ucp_tag_stats : public test_ucp_tag_xfer {
 public:
-    void init() {
+    using test_ucp_tag::get_test_variants;
+
+    test_ucp_tag_stats()
+    {
         stats_activate();
-        test_ucp_tag_xfer::init();
     }
 
-    void cleanup() {
-        test_ucp_tag_xfer::cleanup();
+    ~test_ucp_tag_stats()
+    {
         stats_restore();
     }
-
-    using test_ucp_tag::get_test_variants;
 
     ucs_stats_node_t* ep_stats(entity &e) {
         return e.ep()->stats;
@@ -1210,20 +1210,13 @@ UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_stats)
 
 class multi_rail_max : public test_ucp_tag_xfer {
 public:
-    void init() override
+    multi_rail_max()
     {
         stats_activate();
-        test_ucp_tag_xfer::init();
     }
 
-    size_t get_msg_size() override
+    ~multi_rail_max()
     {
-        return ucs_align_up(10 * UCS_MBYTE, ucs_get_page_size() * num_lanes());
-    }
-
-    void cleanup() override
-    {
-        test_ucp_tag_xfer::cleanup();
         stats_restore();
     }
 
@@ -1241,7 +1234,6 @@ public:
     {
         return UCP_MAX_LANES;
     }
-
 };
 
 UCS_TEST_P(multi_rail_max, max_lanes, "IB_NUM_PATHS?=64", "TM_SW_RNDV=y",
