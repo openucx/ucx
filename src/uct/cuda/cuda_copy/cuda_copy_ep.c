@@ -14,6 +14,7 @@
 #include <uct/base/uct_log.h>
 #include <uct/base/uct_iov.inl>
 #include <uct/cuda/base/cuda_md.h>
+#include <uct/cuda/base/cuda_ctx.inl>
 #include <ucs/profile/profile.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/sys/math.h>
@@ -135,61 +136,6 @@ uct_cuda_copy_get_mem_types(uct_md_h md, const void *src, const void *dst,
                 ucs_topo_sys_device_get_name(dst_sys_dev));
 }
 
-static ucs_status_t
-uct_cuda_primary_ctx_push_first_active(CUdevice *cuda_device_p)
-{
-    int num_devices, device_index;
-    ucs_status_t status;
-    CUdevice cuda_device;
-    CUcontext cuda_ctx;
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetCount(&num_devices));
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    for (device_index = 0; device_index < num_devices; ++device_index) {
-        status = UCT_CUDADRV_FUNC_LOG_ERR(
-                cuDeviceGet(&cuda_device, device_index));
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        status = uct_cuda_primary_ctx_retain(cuda_device, 0, &cuda_ctx);
-        if (status == UCS_OK) {
-            /* Found active primary context */
-            status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(cuda_ctx));
-            if (status != UCS_OK) {
-                UCT_CUDADRV_FUNC_LOG_WARN(
-                        cuDevicePrimaryCtxRelease(cuda_device));
-                return status;
-            }
-
-            *cuda_device_p = cuda_device;
-            return UCS_OK;
-        } else if (status != UCS_ERR_NO_DEVICE) {
-            return status;
-        }
-    }
-
-    return UCS_ERR_NO_DEVICE;
-}
-
-static UCS_F_ALWAYS_INLINE void
-uct_cuda_copy_ctx_pop_and_release(CUdevice cuda_device, CUcontext cuda_context)
-{
-    if ((cuda_device == CU_DEVICE_INVALID) && (cuda_context == NULL)) {
-        return;
-    }
-
-    UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
-    if (cuda_device == CU_DEVICE_INVALID) {
-        return;
-    }
-
-    UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(cuda_device));
-}
-
 static ucs_status_t uct_cuda_copy_ep_push_memory_ctx(CUdeviceptr cuda_deviceptr,
                                                      CUcontext *cuda_context_p)
 {
@@ -234,12 +180,13 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_ctx_rsc_get(
          * of the device. This is because of some limitation when using VMM and
          * cuMemcpyAsync - the current context should match the device VMM has
          * access to. */
-        status = uct_cuda_base_get_cuda_device(sys_dev, &cuda_device);
-        if (ucs_unlikely(status != UCS_OK)) {
+        cuda_device = uct_cuda_get_cuda_device(sys_dev);
+        if (ucs_unlikely(cuda_device == CU_DEVICE_INVALID)) {
+            status = UCS_ERR_IO_ERROR;
             goto err;
         }
 
-        status = uct_cuda_copy_push_ctx(cuda_device, 0, UCS_LOG_LEVEL_ERROR);
+        status = uct_cuda_ctx_primary_push(cuda_device, 0, UCS_LOG_LEVEL_ERROR);
         if (ucs_unlikely(status == UCS_ERR_NO_DEVICE)) {
             /* Device primary context of `cuda_device` is inactive. The memory
              * was probably allocated on the context created with cuCtxCreate.
@@ -262,7 +209,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_ctx_rsc_get(
         cuda_device = CU_DEVICE_INVALID;
     }
 
-    result = uct_cuda_base_ctx_get_id(NULL, &ctx_id);
+    result = uct_cuda_ctx_get_id(NULL, &ctx_id);
     if (ucs_unlikely(result != CUDA_SUCCESS)) {
         if (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
             /* Context is pushed, but ctx_get_id failed, which means that some
@@ -276,12 +223,12 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_ctx_rsc_get(
         /* Specific GPU device was not requested, push the first active primary
          * context as current context. The caller must pop, and release the
          * primary context on the device returned in cuda_device_p. */
-        status = uct_cuda_primary_ctx_push_first_active(&cuda_device);
+        status = uct_cuda_ctx_primary_push_first_active(&cuda_device);
         if (status != UCS_OK) {
             goto err;
         }
 
-        result = uct_cuda_base_ctx_get_id(NULL, &ctx_id);
+        result = uct_cuda_ctx_get_id(NULL, &ctx_id);
         if (result != CUDA_SUCCESS) {
             UCT_CUDADRV_LOG(cuCtxGetId, UCS_LOG_LEVEL_ERROR, result);
             status = UCS_ERR_IO_ERROR;
@@ -300,7 +247,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_ctx_rsc_get(
     return UCS_OK;
 
 err_pop_and_release:
-    uct_cuda_copy_ctx_pop_and_release(cuda_device, cuda_context);
+    uct_cuda_ctx_pop_and_release(cuda_device, cuda_context);
 err:
     return status;
 }
@@ -405,7 +352,7 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
     status = UCS_INPROGRESS;
 
 out_pop_and_release:
-    uct_cuda_copy_ctx_pop_and_release(ctx.cuda_device, ctx.cuda_context);
+    uct_cuda_ctx_pop_and_release(ctx.cuda_device, ctx.cuda_context);
 out:
     return status;
 err_mpool_put:
@@ -483,7 +430,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_ep_rma_short(
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuStreamSynchronize(*stream));
 
 out_pop_and_release:
-    uct_cuda_copy_ctx_pop_and_release(ctx.cuda_device, ctx.cuda_context);
+    uct_cuda_ctx_pop_and_release(ctx.cuda_device, ctx.cuda_context);
 out:
     return status;
 }

@@ -20,9 +20,12 @@ nobase_dist_libuct_cuda_la_HEADERS = \
 	cuda_ipc/cuda_ipc.cuh
 
 noinst_HEADERS = \
+	base/cuda_ctx.h \
+	base/cuda_ctx.inl \
 	base/cuda_md.h \
 	base/cuda_iface.h \
 	base/cuda_nvml.h \
+	base/cuda_util.h \
 	cuda_copy/cuda_copy_md.h \
 	cuda_copy/cuda_copy_iface.h \
 	cuda_copy/cuda_copy_ep.h \
@@ -33,9 +36,11 @@ noinst_HEADERS = \
 	cuda_ipc/cuda_ipc.inl
 
 libuct_cuda_la_SOURCES = \
+	base/cuda_ctx.c \
 	base/cuda_iface.c \
 	base/cuda_md.c \
 	base/cuda_nvml.c \
+	base/cuda_util.c \
 	cuda_copy/cuda_copy_md.c \
 	cuda_copy/cuda_copy_iface.c \
 	cuda_copy/cuda_copy_ep.c \

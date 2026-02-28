@@ -74,7 +74,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_ipc_ctx_rsc_get(
     CUresult result;
     uct_cuda_ctx_rsc_t *ctx_rsc;
 
-    result = uct_cuda_base_ctx_get_id(NULL, &ctx_id);
+    result = uct_cuda_ctx_get_id(NULL, &ctx_id);
     if (ucs_unlikely(result != CUDA_SUCCESS)) {
         UCT_CUDADRV_LOG(cuCtxGetId, UCS_LOG_LEVEL_ERROR, result);
         return UCS_ERR_IO_ERROR;

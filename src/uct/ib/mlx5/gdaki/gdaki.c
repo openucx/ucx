@@ -17,10 +17,9 @@
 #include <ucs/type/serialize.h>
 #include <uct/ib/base/ib_verbs.h>
 #include <uct/ib/mlx5/rc/rc_mlx5.h>
-#include <uct/cuda/base/cuda_iface.h>
 #include <uct/cuda/cuda_copy/cuda_copy_md.h>
+#include <uct/cuda/base/cuda_util.h>
 
-#include <cuda.h>
 
 #define UCT_GDAKI_MAX_CUDA_PER_IB 64
 
@@ -478,7 +477,6 @@ uct_rc_gdaki_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     uct_rc_gdaki_iface_t *iface = ucs_derived_of(tl_iface,
                                                  uct_rc_gdaki_iface_t);
     ucs_status_t status;
-    ucs_sys_device_t cuda_sys_dev;
 
     status = uct_ib_iface_query(&iface->super.super.super, iface_attr);
     if (status != UCS_OK) {
@@ -504,7 +502,6 @@ uct_rc_gdaki_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     iface_attr->cap.put.min_zcopy = 0;
     iface_attr->cap.put.max_zcopy =
             uct_ib_iface_port_attr(&iface->super.super.super)->max_msg_sz;
-    uct_cuda_base_get_sys_dev(iface->cuda_dev, &cuda_sys_dev);
 
     return UCS_OK;
 }
@@ -1024,7 +1021,7 @@ uct_gdaki_dev_matrix_init(unsigned ib_per_cuda, size_t *dmat_length_p)
         }
 
         /* Update PCI distance in IB device scores */
-        uct_cuda_base_get_sys_dev(cuda_dev, &cuda_sys_dev);
+        cuda_sys_dev = uct_cuda_get_sys_dev(cuda_dev);
         for (ibdev_index = 0; ibdev_index < ibdev_count; ibdev_index++) {
             ibdesc = &dmat[scores[ibdev_index].index];
             status = ucs_topo_get_distance(cuda_sys_dev, ibdesc->sys_dev,
@@ -1143,7 +1140,7 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
             goto err;
         }
 
-        uct_cuda_base_get_sys_dev(device, &dev);
+        dev = uct_cuda_get_sys_dev(device);
 
         snprintf(tl_devices[num_tl_devices].name,
                  sizeof(tl_devices[num_tl_devices].name), "%s%d-%s:%d",
