@@ -604,6 +604,11 @@ void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags)
 
     ++worker->num_active_ifaces;
 
+    if (!(uct_flags & UCT_PROGRESS_IFACE_READY) &&
+        !(wiface->flags & UCP_WORKER_IFACE_FLAG_AM_LANE)) {
+        uct_flags |= UCT_PROGRESS_DISCARD;
+    }
+
     uct_iface_progress_enable(wiface->iface,
                               UCT_PROGRESS_SEND | UCT_PROGRESS_RECV | uct_flags);
 }
@@ -637,7 +642,7 @@ static ucs_status_t ucp_worker_iface_check_events_do(ucp_worker_iface_t *wiface,
     *progress_count = uct_iface_progress(wiface->iface);
     if (prev_recv_count != wiface->proxy_recv_count) {
         /* Received relevant active messages, activate the interface */
-        ucp_worker_iface_activate(wiface, 0);
+        ucp_worker_iface_activate(wiface, UCT_PROGRESS_IFACE_READY);
         return UCS_OK;
     } else if (*progress_count == 0) {
         /* Arm the interface to wait for next event */

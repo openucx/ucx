@@ -1462,6 +1462,7 @@ ucp_wireup_add_am_lane(const ucp_wireup_select_params_t *select_params,
                        ucp_wireup_select_info_t *am_info,
                        ucp_wireup_select_context_t *select_ctx)
 {
+    ucp_worker_iface_t *wiface;
     ucp_worker_h worker            = select_params->ep->worker;
     ucp_tl_bitmap_t tl_bitmap      = select_params->tl_bitmap;
     unsigned ep_init_flags         = ucp_wireup_ep_init_flags(select_params,
@@ -1514,6 +1515,10 @@ ucp_wireup_add_am_lane(const ucp_wireup_select_params_t *select_params,
             UCS_STATIC_BITMAP_RESET(&tl_bitmap, am_info->rsc_index);
             continue;
         }
+
+        /* Mark this interface for AM lane */
+        wiface = ucp_worker_iface(worker, am_info->rsc_index);
+        wiface->flags |= UCP_WORKER_IFACE_FLAG_AM_LANE;
 
         return ucp_wireup_add_lane(select_params, am_info, UCP_LANE_TYPE_AM,
                                    /* show error */ 1, select_ctx);
