@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 # Copyright (C) NextSilicon Ltd. 2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -27,6 +27,7 @@
 #include <ucs/config/parser.h>
 
 #include <map>
+#include <set>
 #include <vector>
 #include <string>
 
@@ -171,6 +172,8 @@ protected:
     unsigned                        m_num_errors_before;
     unsigned                        m_num_warnings_before;
     unsigned                        m_num_log_handlers_before;
+    static std::set<int> m_prev_open_fds;
+    static int m_consecutive_fd_increases;
 
     static pthread_mutex_t          m_logger_mutex;
     static unsigned                 m_total_errors;
@@ -180,6 +183,7 @@ protected:
     static std::vector<std::string> m_first_warns_and_errors;
 
 private:
+    void check_fd_leaks();
     void skipped(const std::string &reason);
     void skipped(const test_skip_exception& e);
     void run();
