@@ -1,0 +1,6 @@
+exclude function **/test/**:*
+exclude folder ../../../tmp/
+exclude folder ../../../hpc/
+exclude folder ../s/build-test/
+exclude folder ../s/examples/
+exclude folder ../s/test/
