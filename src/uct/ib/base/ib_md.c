@@ -636,9 +636,35 @@ ucs_status_t uct_ib_memh_alloc(uct_ib_md_t *md, size_t length,
     return UCS_OK;
 }
 
-uint64_t uct_ib_memh_access_flags(uct_ib_mem_t *memh, int relaxed_order,
-                                  uint64_t access_flags)
+static uint64_t uct_ib_flags_to_ibv_mem_access_flags(uint64_t uct_flags)
 {
+    uint64_t ibv_flags = 0;
+
+    if (uct_flags & UCT_MD_MEM_ACCESS_LOCAL_WRITE) {
+        ibv_flags |= IBV_ACCESS_LOCAL_WRITE;
+    }
+
+    if (uct_flags & UCT_MD_MEM_ACCESS_REMOTE_GET) {
+        ibv_flags |= IBV_ACCESS_REMOTE_READ;
+    }
+
+    /* If remote put or remote atomic is set, local write must be set too */
+    if (uct_flags & UCT_MD_MEM_ACCESS_REMOTE_PUT) {
+        ibv_flags |= IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE;
+    }
+
+    if (uct_flags & UCT_MD_MEM_ACCESS_REMOTE_ATOMIC) {
+        ibv_flags |= IBV_ACCESS_REMOTE_ATOMIC | IBV_ACCESS_LOCAL_WRITE;
+    }
+
+    return ibv_flags;
+}
+
+uint64_t uct_ib_memh_access_flags(uct_ib_mem_t *memh, int relaxed_order,
+                                  uint64_t access_flags, uint64_t uct_flags)
+{
+    access_flags &= uct_ib_flags_to_ibv_mem_access_flags(uct_flags);
+
     if (memh->flags & UCT_IB_MEM_FLAG_ODP) {
         access_flags |= IBV_ACCESS_ON_DEMAND;
     }
@@ -654,16 +680,16 @@ ucs_status_t uct_ib_verbs_mem_reg(uct_md_h uct_md, void *address, size_t length,
                                   const uct_md_mem_reg_params_t *params,
                                   uct_mem_h *memh_p)
 {
-    uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
+    uct_ib_md_t *md    = ucs_derived_of(uct_md, uct_ib_md_t);
+    uint64_t uct_flags = UCT_MD_MEM_REG_FIELD_VALUE(params, flags,
+                                                    FIELD_FLAGS, 0);
     struct ibv_mr *mr_default;
     uct_ib_verbs_mem_t *memh;
     uct_ib_mem_t *ib_memh;
     uint64_t access_flags;
     ucs_status_t status;
 
-    status = uct_ib_memh_alloc(md, length,
-                               UCT_MD_MEM_REG_FIELD_VALUE(params, flags,
-                                                          FIELD_FLAGS, 0),
+    status = uct_ib_memh_alloc(md, length, uct_flags,
                                sizeof(*memh), sizeof(memh->mrs[0]), &ib_memh);
     if (status != UCS_OK) {
         goto err;
@@ -671,10 +697,10 @@ ucs_status_t uct_ib_verbs_mem_reg(uct_md_h uct_md, void *address, size_t length,
 
     memh         = ucs_derived_of(ib_memh, uct_ib_verbs_mem_t);
     access_flags = uct_ib_memh_access_flags(&memh->super, md->relaxed_order,
-                                            md->dev.mr_access_flags);
+                                            md->dev.mr_access_flags, uct_flags);
 
-    status = uct_ib_reg_mr(md, address, length, params, access_flags, NULL,
-                           &mr_default);
+    status       = uct_ib_reg_mr(md, address, length, params, access_flags,
+                                 NULL, &mr_default);
     if (status != UCS_OK) {
         goto err_free;
     }

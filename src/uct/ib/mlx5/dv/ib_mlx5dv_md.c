@@ -829,12 +829,12 @@ uct_ib_mlx5_devx_reg_mr(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mem_t *memh,
                         uct_ib_mr_type_t mr_type, uint64_t access_mask,
                         uint32_t *lkey_p, uint32_t *rkey_p)
 {
-    uint64_t access_flags =
-            uct_ib_memh_access_flags(&memh->super, md->super.relaxed_order,
-                                     md->super.dev.mr_access_flags) &
-            access_mask;
     unsigned flags        = UCT_MD_MEM_REG_FIELD_VALUE(params, flags,
                                                        FIELD_FLAGS, 0);
+    uint64_t access_flags = 
+            uct_ib_memh_access_flags(&memh->super, md->super.relaxed_order,
+                                     md->super.dev.mr_access_flags, flags) &
+            access_mask;
     ucs_status_t status;
     uint32_t mkey;
 
@@ -942,7 +942,8 @@ uct_ib_mlx5_devx_mem_reg_gva(uct_md_h uct_md, unsigned flags, uct_mem_h *memh_p)
 
     relaxed_order = md->flags & UCT_IB_MLX5_MD_FLAG_GVA_RO;
     access_flags  = uct_ib_memh_access_flags(&memh->super, relaxed_order,
-                                             md->super.dev.mr_access_flags);
+                                             md->super.dev.mr_access_flags,
+                                             flags);
     status = uct_ib_reg_mr(&md->super, NULL, SIZE_MAX, &params, access_flags,
                            NULL, &memh->mrs[UCT_IB_MR_DEFAULT].super.ib);
     if (status != UCS_OK) {
