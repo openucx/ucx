@@ -5,6 +5,8 @@
 
 UCX_CHECK_CUDA
 
-uct_ib_mlx5_modules="${uct_ib_mlx5_modules}:gda"
+AS_IF([test "x$cuda_happy" = "xyes"], [
+    uct_ib_mlx5_modules="${uct_ib_mlx5_modules}:gda"])
+
 AC_CONFIG_FILES([src/uct/ib/mlx5/gdaki/Makefile
                  src/uct/ib/mlx5/gdaki/ucx-ib-mlx5-gda.pc])

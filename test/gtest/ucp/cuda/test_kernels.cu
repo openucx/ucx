@@ -4,7 +4,17 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "test_kernels.h"
+#include <cuda.h>
+
+/* Enable GDA by including mlx5dv.h before device impl */
+#ifdef HAVE_MLX5_DV
+#  include <infiniband/mlx5dv.h>
+#endif
 
 #include <ucp/api/device/ucp_device_impl.h>
 #include <ucs/debug/log.h>
@@ -153,6 +163,7 @@ ucp_test_kernel_get_state(const test_ucp_device_kernel_params_t &params,
                                          uct_elem, comp);
         result.producer_index = 0;
         result.ready_index    = 0;
+#if HAVE_MLX5_DV
         if ((status == UCS_OK) &&
             (device_ep->uct_tl_id == UCT_DEVICE_TL_RC_MLX5_GDA)) {
             uint16_t wqe_cnt;
@@ -166,6 +177,7 @@ ucp_test_kernel_get_state(const test_ucp_device_kernel_params_t &params,
                 result.ready_index += ep->qps[i].sq_ready_index;
             }
         }
+#endif
     }
 
     __syncthreads();
