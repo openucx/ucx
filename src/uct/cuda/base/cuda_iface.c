@@ -36,24 +36,8 @@ uct_cuda_base_query_devices_common(
         uct_md_h md, uct_device_type_t dev_type,
         uct_tl_device_resource_t **tl_devices_p, unsigned *num_tl_devices_p)
 {
-    ucs_sys_device_t sys_device = UCS_SYS_DEVICE_ID_UNKNOWN;
-    CUdevice cuda_device;
-    ucs_status_t status;
-
-    if (uct_cuda_base_is_context_active()) {
-        status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetDevice(&cuda_device));
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        uct_cuda_base_get_sys_dev(cuda_device, &sys_device);
-    } else {
-        ucs_debug("set cuda sys_device to `unknown` as no context is"
-                  " currently active");
-    }
-
     return uct_single_device_resource(md, UCT_CUDA_DEV_NAME, dev_type,
-                                      sys_device, tl_devices_p,
+                                      UCS_SYS_DEVICE_ID_UNKNOWN, tl_devices_p,
                                       num_tl_devices_p);
 }
 
