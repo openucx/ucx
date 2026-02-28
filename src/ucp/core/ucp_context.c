@@ -713,7 +713,7 @@ static ucp_tl_alias_t ucp_tl_aliases[] = {
   { "shm",   { "posix", "sysv", "xpmem", "knem", "cma", NULL } },
   { "ib",    { "rc_verbs", "ud_verbs", "rc_mlx5", "ud_mlx5", "dc_mlx5",
                "gga_mlx5", UCP_TL_AUX("ud_mlx5"), UCP_TL_AUX("ud_verbs"),
-               "srd", NULL } },
+               "srd", "rc_gda", NULL } },
   { "ud_v",  { "ud_verbs", NULL } },
   { "ud_x",  { "ud_mlx5", NULL } },
   { "ud",    { "ud_mlx5", "ud_verbs", NULL } },
