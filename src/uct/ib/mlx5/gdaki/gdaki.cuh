@@ -20,17 +20,23 @@
 UCS_F_DEVICE uct_rc_gdaki_dev_qp_t *
 uct_rc_mlx5_gda_get_qp(uct_rc_gdaki_dev_ep_t *ep, unsigned cid)
 {
-    return ep->qps + cid;
+    return ep->qps[cid];
 }
 
 UCS_F_DEVICE void *uct_rc_mlx5_gda_get_wqe_ptr(uct_rc_gdaki_dev_ep_t *ep,
                                                unsigned cid, uint16_t wqe_idx)
 {
-    const uint16_t wqe_num    = __ldg(&ep->sq_wqe_num);
-    const uintptr_t wqe_addr  = __ldg((uintptr_t*)&ep->sq_wqe_daddr);
+    uct_rc_gdaki_dev_qp_t *qp = uct_rc_mlx5_gda_get_qp(ep, cid);
+    const uint16_t wqe_num   = __ldg(&ep->sq_wqe_num);
     const uint32_t idx        = wqe_idx & (wqe_num - 1);
-    const uint32_t full_idx   = idx + cid * wqe_num;
-    return (void*)(wqe_addr + (full_idx << DOCA_GPUNETIO_MLX5_WQE_SQ_SHIFT));
+    uintptr_t wqe_addr;
+
+    if (__ldg((const unsigned long long*)&qp->wqe_base_addr) != 0) {
+        wqe_addr = __ldg((const uintptr_t*)&qp->wqe_base_addr);
+        return (void*)(wqe_addr + (idx << DOCA_GPUNETIO_MLX5_WQE_SQ_SHIFT));
+    }
+    wqe_addr = __ldg((uintptr_t*)&ep->sq_wqe_daddr);
+    return (void*)(wqe_addr + ((idx + cid * wqe_num) << DOCA_GPUNETIO_MLX5_WQE_SQ_SHIFT));
 }
 
 UCS_F_DEVICE void uct_rc_mlx5_gda_ring_db(uct_rc_gdaki_dev_ep_t *ep,
@@ -52,8 +58,9 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_ring_db(uct_rc_gdaki_dev_ep_t *ep,
 UCS_F_DEVICE void uct_rc_mlx5_gda_update_dbr(uct_rc_gdaki_dev_ep_t *ep,
                                              unsigned cid, uint32_t prod_index)
 {
-    __be32 dbrec_val  = doca_gpu_dev_verbs_prepare_dbr(prod_index);
-    __be32 *dbrec_ptr = &ep->qps[cid].qp_dbrec[MLX5_SND_DBR];
+    uct_rc_gdaki_dev_qp_t *qp = uct_rc_mlx5_gda_get_qp(ep, cid);
+    __be32 dbrec_val          = doca_gpu_dev_verbs_prepare_dbr(prod_index);
+    __be32 *dbrec_ptr         = &qp->qp_dbrec[MLX5_SND_DBR];
 
     cuda::atomic_ref<__be32, cuda::thread_scope_system> dbrec_ptr_aref(
             *dbrec_ptr);
@@ -636,7 +643,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_check_completion(
         uint16_t wqe_idx = wqe_cnt & (ep->sq_wqe_num - 1);
         auto wqe_ptr     = uct_rc_mlx5_gda_get_wqe_ptr(ep, cid, wqe_idx);
         uct_rc_mlx5_gda_qedump("WQE", wqe_ptr, 64);
-        uct_rc_mlx5_gda_qedump("CQE", ep->qps[cid].cq_buff, 64);
+        uct_rc_mlx5_gda_qedump("CQE", ep->qps[cid]->cq_buff, 64);
         return UCS_ERR_IO_ERROR;
     }
 

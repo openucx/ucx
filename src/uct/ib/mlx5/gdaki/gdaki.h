@@ -17,6 +17,10 @@
 #define UCT_DEVICE_CUDA_NAME     "cuda"
 #define UCT_DEVICE_CUDA_NAME_LEN 4
 
+typedef struct {
+    uct_ib_mlx5_cq_t             cq;
+    uct_ib_mlx5_txwq_t           qp;
+} uct_rc_gdaki_channel_t;
 
 typedef struct uct_rc_gdaki_iface {
     uct_rc_mlx5_iface_common_t super;
@@ -27,13 +31,16 @@ typedef struct uct_rc_gdaki_iface {
     CUcontext                  cuda_ctx;
     unsigned                   num_channels;
     pthread_mutex_t            ep_init_lock;
+    /* QP pool: m*n matrix, EPs get columns of n*m (transpose) for non-contiguous QPNs */
+    uct_rc_gdaki_channel_t     *qp_pool;
+    struct mlx5dv_devx_umem    *pool_umem;
+    void                       *pool_ep_gpu;
+    CUdeviceptr                pool_raw;
+    size_t                     pool_size;      /* total slots = num_channels * num_eps_max */
+    size_t                     pool_slot_size;
+    unsigned                   num_eps_max;
+    unsigned                   next_ep_index;
 } uct_rc_gdaki_iface_t;
-
-
-typedef struct {
-    uct_ib_mlx5_cq_t             cq;
-    uct_ib_mlx5_txwq_t           qp;
-} uct_rc_gdaki_channel_t;
 
 
 typedef struct uct_rc_gdaki_ep {
@@ -43,6 +50,7 @@ typedef struct uct_rc_gdaki_ep {
     uct_rc_gdaki_dev_ep_t        *ep_gpu;
     uint8_t                      dev_ep_init;
     uct_rc_gdaki_channel_t       *channels;
+    unsigned                     ep_index; /* index for pool transpose (if using pool) */
 } uct_rc_gdaki_ep_t;
 
 #endif /* UCT_GDAKI_IFACE_H */
