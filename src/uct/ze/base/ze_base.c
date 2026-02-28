@@ -77,6 +77,35 @@ ze_device_handle_t uct_ze_base_get_device(int dev_num)
     return uct_ze_base_info.devices[dev_num];
 }
 
+
+int uct_ze_base_get_device_ordinal(ze_device_handle_t device)
+{
+    int i;
+
+    if (uct_ze_base_init() != ZE_RESULT_SUCCESS) {
+        return -1;
+    }
+
+    for (i = 0; i < uct_ze_base_info.num_devices; i++) {
+        if (uct_ze_base_info.devices[i] == device) {
+            return i;
+        }
+    }
+
+    return -1;  /* not found */
+}
+
+
+int uct_ze_base_get_num_devices(void)
+{
+    if (uct_ze_base_init() != ZE_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    return uct_ze_base_info.num_devices;
+}
+
+
 ucs_status_t
 uct_ze_base_query_md_resources(uct_component_h component,
                                uct_md_resource_desc_t **resources_p,
@@ -100,6 +129,21 @@ ucs_status_t uct_ze_base_query_devices(uct_md_h md,
                                       UCS_SYS_DEVICE_ID_UNKNOWN, tl_devices_p,
                                       num_tl_devices_p);
 }
+
+
+ucs_status_t
+uct_ze_base_query_devices_common(uct_md_h md, uct_device_type_t dev_type,
+                                 uct_tl_device_resource_t **tl_devices_p,
+                                 unsigned *num_tl_devices_p)
+{
+    ucs_info("ze_base: query_devices_common for md component=%s type=%d",
+             md->component->name, dev_type);
+
+    return uct_single_device_resource(md, md->component->name, dev_type,
+                                      UCS_SYS_DEVICE_ID_UNKNOWN, tl_devices_p,
+                                      num_tl_devices_p);
+}
+
 
 UCS_MODULE_INIT()
 {
