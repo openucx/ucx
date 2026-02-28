@@ -2294,13 +2294,15 @@ ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
                                   ucp_lane_index_t am_lane)
 {
     ucp_context_h context          = worker->context;
-    ucp_lane_index_t p2p_lane      = UCP_NULL_LANE;
+    ucp_lane_index_t aux_lane      = UCP_NULL_LANE;
     ucp_wireup_criteria_t criteria = {0};
+    size_t max_seg_size            = 0;
     uct_tl_resource_desc_t *resource;
     ucp_rsc_index_t rsc_index;
     uct_iface_attr_t *attrs;
     ucp_lane_index_t lane;
     unsigned addr_index;
+    size_t seg_size;
 
     if (context->config.ext.wireup_via_am_lane) {
         ucs_assert(am_lane != UCP_NULL_LANE);
@@ -2318,10 +2320,11 @@ ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
         addr_index = lane_descs[lane].addr_index;
         resource   = &context->tl_rscs[rsc_index].tl_rsc;
         attrs      = ucp_worker_iface_get_attr(worker, rsc_index);
+        seg_size   = ucp_address_iface_seg_size(attrs);
 
         /* if the current lane satisfies the wireup criteria, choose it for wireup.
          * if it doesn't take a lane with a p2p transport */
-        if (ucp_wireup_check_select_flags(resource, attrs->cap.flags,
+        if ((ucp_wireup_check_select_flags(resource, attrs->cap.flags,
                                           &criteria.local_iface_flags,
                                           criteria.title,
                                           ucp_wireup_iface_flags, NULL, 0) &&
@@ -2335,15 +2338,17 @@ ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
             ucp_wireup_check_flags(resource,
                                    address_list[addr_index].iface_attr.flags,
                                    criteria.remote_event_flags, criteria.title,
-                                   ucp_wireup_peer_flags, NULL, 0)) {
-            return lane;
-        } else if (ucp_worker_is_tl_p2p(worker, rsc_index) &&
-                   !ucp_worker_is_tl_device(worker, rsc_index)) {
-            p2p_lane = lane;
+                                   ucp_wireup_peer_flags, NULL, 0)) ||
+            (ucp_worker_is_tl_p2p(worker, rsc_index) &&
+            !ucp_worker_is_tl_device(worker, rsc_index))) {
+            if (seg_size > max_seg_size) {
+                max_seg_size  = seg_size;
+                aux_lane = lane;
+            }
         }
     }
 
-    return p2p_lane;
+    return aux_lane;
 }
 
 static UCS_F_NOINLINE void
