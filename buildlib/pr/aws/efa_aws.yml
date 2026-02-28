@@ -1,0 +1,61 @@
+parameters:
+  container: aws_tools
+
+jobs:
+  - job: tests_${{ parameters.name }}
+    pool:
+      name: MLNX
+      demands: ${{ parameters.demands }}
+    displayName: AWS EFA Test
+    container: aws_tools
+    timeoutInMinutes: 360
+    workspace:
+      clean: outputs
+    steps:
+      - checkout: self
+        clean: true
+        fetchDepth: 100
+        retryCountOnTaskFailure: 5
+      - bash: ./buildlib/pr/aws/efa_aws_test.sh
+        displayName: EFA test in AWS
+        name: testStep
+        env:
+          AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+          AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+          BUILD_NUMBER: $(Build.BuildId)
+          EXECUTOR_NUMBER: $(AZP_AGENT_ID)
+          PR_ID: $(System.PullRequest.PullRequestNumber)
+          PIPE_NAME: $(Build.DefinitionName)
+          PIPE_STAGE: $(System.StageDisplayName)
+          JOB_URL: $(System.TeamFoundationCollectionUri)$(System.TeamProject)/_build/results?buildId=$(Build.BuildId)
+          nworkers: 4
+          worker: $(worker_id)
+          ASAN_CHECK: no
+          PROTO_ENABLE: yes
+          RUN_TESTS: yes
+          TEST_PERF: 0
+          VALGRIND_CHECK: no
+
+  - job: Cleanup
+    dependsOn: tests_${{ parameters.name }}
+    condition: always()
+    pool:
+      name: MLNX
+      demands: ${{ parameters.demands }}
+    displayName: AWS resources cleanup
+    container: aws_tools
+    timeoutInMinutes: 15
+    variables:
+      JOB_ID: $[ dependencies.tests_${{ parameters.name }}.outputs['testStep.JOB_ID'] ]
+    steps:
+      - checkout: none
+        clean: true
+      - bash: |
+          set -x
+          aws eks update-kubeconfig --name ucx-ci
+          aws batch terminate-job --job-id $(JOB_ID) --reason 'Terminated by Azure'
+        continueOnError: true
+        displayName: AWS resources cleanup
+        env:
+          AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+          AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
