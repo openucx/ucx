@@ -386,6 +386,17 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "even if invalidation workflow isn't supported",
    ucs_offsetof(ucp_context_config_t, rndv_errh_ppln_enable), UCS_CONFIG_TYPE_BOOL},
 
+  {"RNDV_MTYPE_WORKER_FC_ENABLE", "n",
+   "Enable worker-level flow control to limit total concurrent mtype fragments\n"
+   "across all requests, preventing memory exhaustion",
+   ucs_offsetof(ucp_context_config_t, rndv_mtype_worker_fc_enable), UCS_CONFIG_TYPE_BOOL},
+
+  {"RNDV_MTYPE_WORKER_MAX_MEM", "4g",
+   "Maximum memory for concurrent mtype fragments per worker.\n"
+   "This value is translated to a fragment count based on RNDV_FRAG_SIZE\n"
+   "for each memory type (only applies when RNDV_MTYPE_WORKER_FC_ENABLE=y)",
+   ucs_offsetof(ucp_context_config_t, rndv_mtype_worker_max_mem), UCS_CONFIG_TYPE_MEMUNITS},
+
   {"FLUSH_WORKER_EPS", "y",
    "Enable flushing the worker by flushing its endpoints. Allows completing\n"
    "the flush operation in a bounded time even if there are new requests on\n"

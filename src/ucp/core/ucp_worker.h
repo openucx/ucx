@@ -154,6 +154,8 @@ enum {
     UCP_WORKER_STAT_RNDV_RTR,
     UCP_WORKER_STAT_RNDV_RTR_MTYPE,
     UCP_WORKER_STAT_RNDV_RKEY_PTR,
+    UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED,
+    UCP_WORKER_STAT_RNDV_MTYPE_FC_INCREMENTED,
 
     UCP_WORKER_STAT_LAST
 };
@@ -395,6 +397,15 @@ typedef struct ucp_worker {
         /* Number of failed endpoints */
         uint64_t                     ep_failures;
     } counters;
+
+    struct {
+        /* Worker-level mtype fragment flow control */
+        size_t                       active_frags;       /* Current active fragments */
+        /* Separate pending queues by priority (PUT > GET > RTR) */
+        ucs_queue_head_t             put_pending_q;      /* Throttled PUT (RNDV_SEND) requests */
+        ucs_queue_head_t             get_pending_q;      /* Throttled GET requests */
+        ucs_queue_head_t             rtr_pending_q;      /* Throttled RTR requests */
+    } rndv_mtype_fc;
 
     struct {
         /* Usage tracker handle */

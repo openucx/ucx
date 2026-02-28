@@ -9,6 +9,7 @@
 #endif
 
 #include "proto_rndv.inl"
+#include "rndv_mtype.inl"
 
 #include <ucp/proto/proto_init.h>
 #include <ucp/proto/proto_debug.h>
@@ -652,6 +653,8 @@ ucp_proto_rndv_bulk_init(const ucp_proto_multi_init_params_t *init_params,
 
     rpriv->frag_mem_type = init_params->super.reg_mem_info.type;
     rpriv->frag_sys_dev  = init_params->super.reg_mem_info.sys_dev;
+    rpriv->fc_max_frags  = ucp_proto_rndv_mtype_fc_max_frags(
+                                            context, rpriv->frag_mem_type);
 
     if (rpriv->super.lane == UCP_NULL_LANE) {
         /* Add perf without ACK in case of pipeline */
