@@ -10,6 +10,7 @@
 
 #include "gdaki.h"
 
+#include <ucs/sys/sock.h>
 #include <ucs/time/time.h>
 #include <ucs/datastruct/string_buffer.h>
 #include <ucs/algorithm/qsort_r.h>
@@ -142,6 +143,7 @@ static int uct_gdaki_check_umem_dmabuf(const uct_ib_md_t *md)
 
     mlx5dv_devx_umem_dereg(umem);
 out_free:
+    ucs_close_fd(&dmabuf.fd);
     cuMemFree(buff);
 out_ctx_pop:
     UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
@@ -202,6 +204,7 @@ uct_rc_gdaki_umem_reg(const uct_ib_md_t *md, struct ibv_context *ibv_context,
                       void *address, size_t length, uint64_t pgsz_bitmap)
 {
     struct mlx5dv_devx_umem_in umem_in = {};
+    struct mlx5dv_devx_umem *umem;
     uct_cuda_copy_md_dmabuf_t dmabuf UCS_V_UNUSED;
 
     umem_in.addr        = address;
@@ -216,7 +219,11 @@ uct_rc_gdaki_umem_reg(const uct_ib_md_t *md, struct ibv_context *ibv_context,
     }
 #endif
 
-    return mlx5dv_devx_umem_reg_ex(ibv_context, &umem_in);
+    umem = mlx5dv_devx_umem_reg_ex(ibv_context, &umem_in);
+#if HAVE_DECL_MLX5DV_UMEM_MASK_DMABUF
+    ucs_close_fd(&dmabuf.fd);
+#endif
+    return umem;
 }
 
 static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
@@ -712,6 +719,7 @@ static ucs_status_t uct_rc_gdaki_reg_mr(const uct_ib_md_t *md, void *address,
 {
     uct_md_mem_reg_params_t params;
     uct_cuda_copy_md_dmabuf_t dmabuf;
+    ucs_status_t status;
 
     params.field_mask    = UCT_MD_MEM_REG_FIELD_FLAGS |
                            UCT_MD_MEM_REG_FIELD_DMABUF_FD |
@@ -721,8 +729,10 @@ static ucs_status_t uct_rc_gdaki_reg_mr(const uct_ib_md_t *md, void *address,
     params.dmabuf_fd     = dmabuf.fd;
     params.dmabuf_offset = dmabuf.offset;
 
-    return uct_ib_reg_mr(md, address, length, &params, UCT_IB_MEM_ACCESS_FLAGS,
-                         NULL, mr_p);
+    status = uct_ib_reg_mr(md, address, length, &params, UCT_IB_MEM_ACCESS_FLAGS,
+                           NULL, mr_p);
+    ucs_close_fd(&dmabuf.fd);
+    return status;
 }
 
 static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,

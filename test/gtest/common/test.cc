@@ -11,7 +11,9 @@
 #include <ucs/stats/stats.h>
 #include <ucs/sys/sys.h>
 
+#include <dirent.h>
 #include <memory>
+#include <unistd.h>
 
 namespace ucs {
 
@@ -21,16 +23,61 @@ unsigned test_base::m_total_errors   = 0;
 std::vector<std::string> test_base::m_errors;
 std::vector<std::string> test_base::m_warnings;
 std::vector<std::string> test_base::m_first_warns_and_errors;
+long test_base::s_prev_test_fds          = -1;
+int  test_base::s_consecutive_fd_increases = 0;
+
+long test_base::count_open_fds()
+{
+    return collect_open_fds().size();
+}
+
+std::set<int> test_base::collect_open_fds()
+{
+    std::set<int> fds;
+    DIR *dir = opendir("/proc/self/fd");
+    if (dir == NULL) {
+        return fds;
+    }
+
+    int dir_fd = dirfd(dir);
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (entry->d_name[0] != '.') {
+            int fd = atoi(entry->d_name);
+            if (fd != dir_fd) {
+                fds.insert(fd);
+            }
+        }
+    }
+    closedir(dir);
+    return fds;
+}
+
+std::string test_base::fd_target(int fd)
+{
+    char path[64], link[256];
+    snprintf(path, sizeof(path), "/proc/self/fd/%d", fd);
+    ssize_t len = readlink(path, link, sizeof(link) - 1);
+    if (len < 0) {
+        return "<readlink failed>";
+    }
+    link[len] = '\0';
+    return std::string(link);
+}
 
 test_base::test_base() :
-                m_state(NEW),
-                m_initialized(false),
-                m_num_threads(1),
-                m_num_valgrind_errors_before(0),
-                m_num_errors_before(0),
-                m_num_warnings_before(0),
-                m_num_log_handlers_before(0)
+    m_state(NEW),
+    m_initialized(false),
+    m_num_threads(1),
+    m_num_valgrind_errors_before(0),
+    m_num_errors_before(0),
+    m_num_warnings_before(0),
+    m_num_log_handlers_before(0),
+    m_num_open_fds_before(0),
+    m_open_fds_before(collect_open_fds())
 {
+    m_num_open_fds_before = m_open_fds_before.size();
+    UCS_TEST_MESSAGE << "open fds at construction: " << m_num_open_fds_before;
     push_config();
 }
 
@@ -38,6 +85,42 @@ test_base::~test_base() {
     while (!m_config_stack.empty()) {
         pop_config();
     }
+
+    std::set<int> open_fds_now = collect_open_fds();
+    long fds_now_count         = open_fds_now.size();
+    UCS_TEST_MESSAGE << "open fds at destruction: " << fds_now_count;
+
+    /* Compare against the previous test's post-cleanup FD count to detect
+     * leaks while tolerating one-time external library initialization
+     * (rdma-core, CUDA driver) that opens persistent FDs on first use of a
+     * transport.  A single increase is absorbed as a potential one-time init
+     * and only logged; two consecutive increases indicate a real per-test
+     * leak and trigger a failure. */
+    if (s_prev_test_fds >= 0) {
+        long diff = fds_now_count - s_prev_test_fds;
+        if (diff > 0) {
+            std::stringstream ss;
+            ss << "open fds diff: " << std::showpos << diff << std::noshowpos;
+            for (int fd : open_fds_now) {
+                if (m_open_fds_before.find(fd) == m_open_fds_before.end()) {
+                    ss << "\n  leaked fd " << fd << " -> " << fd_target(fd);
+                }
+            }
+            if (s_consecutive_fd_increases > 0) {
+                ADD_FAILURE() << ss.str();
+            } else {
+                UCS_TEST_MESSAGE << ss.str()
+                                 << "\n  (not failing yet, could be one-time "
+                                    "library init)";
+            }
+            ++s_consecutive_fd_increases;
+        } else {
+            s_consecutive_fd_increases = 0;
+        }
+    }
+
+    s_prev_test_fds = fds_now_count;
+
     ucs_assertv_always(m_state == FINISHED ||
                        m_state == SKIPPED ||
                        m_state == NEW ||
@@ -332,13 +415,21 @@ void test_base::SetUpProxy() {
     ucs_assert(m_state == NEW);
     try {
         check_skip_test();
-        m_state = INITIALIZING;
-        init();
-        m_initialized = true;
-        m_state       = RUNNING;
     } catch (test_skip_exception& e) {
         skipped(e);
+        return;
+    }
+
+    m_state = INITIALIZING;
+    try {
+        init();
+        m_initialized = true;
+        m_state = RUNNING;
+    } catch (test_skip_exception &e) {
+        cleanup();
+        skipped(e);
     } catch (test_abort_exception&) {
+        cleanup();
         m_state = ABORTED;
     }
 }
