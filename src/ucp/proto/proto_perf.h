@@ -377,4 +377,33 @@ ucp_proto_buffer_copy_cpu_factor_id(int is_local)
                       UCP_PROTO_PERF_FACTOR_REMOTE_CPU;
 }
 
+
+/**
+ * @brief Estimate the time for a UCP operation.
+ *
+ * This function selects the best protocol for the given operation parameters
+ * and message length, then estimates the time it would take.
+ *
+ * Memory information (type and system device) is determined based on available
+ * parameters with the following fallback logic:
+ * 1. If @a memh (memory handle) is provided, its properties are used.
+ * 2. Else, if @a rkey (remote key) is provided, its properties are used.
+ * 3. Else (both @a memh and @a rkey are NULL), host memory and an unknown
+ *    system device (@ref UCS_SYS_DEVICE_ID_UNKNOWN) are assumed.
+ *
+ * @param [in]  ep           Endpoint to perform the operation on.
+ * @param [in]  op_id        Operation ID (e.g., put, get, amo).
+ * @param [in]  memh         Optional UCP memory handle for the local data buffer.
+ *                           Can be NULL.
+ * @param [in]  rkey         Optional UCP remote key for the remote data buffer.
+ *                           Can be NULL.
+ * @param [in]  msg_length   Message length for the operation.
+ * @param [out] time_est     Filled with the estimated time in seconds.
+ *
+ * @return UCS_OK if successful, or an error code otherwise.
+ */
+ucs_status_t
+ucp_proto_estimate_perf(ucp_ep_h ep, ucp_operation_id_t op_id, ucp_mem_h memh,
+                        ucp_rkey_h rkey, size_t msg_length, double *time_est);
+
 #endif
