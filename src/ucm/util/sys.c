@@ -377,10 +377,16 @@ char *ucm_concat_path(char *buffer, size_t max, const char *dir, const char *fil
 
 void *ucm_brk_syscall(void *addr)
 {
+#ifdef HAVE_BRK
     /* Return type is equivalent to full pointer size */
     UCS_STATIC_ASSERT(sizeof(syscall(0)) == sizeof(void*));
 
     return (void*)syscall(SYS_brk, addr);
+#else
+    (void)addr;
+    errno = ENOSYS;
+    return NULL;
+#endif
 }
 
 pid_t ucm_get_tid()
