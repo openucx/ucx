@@ -45,6 +45,10 @@ jobs:
             CONTAINER: sles16sp0
           rhel82:
             CONTAINER: rhel82
+          rhel82_gcc_15_2_0:
+            CONTAINER: rhel82
+            long_test: yes
+            GCC_MODULE: dev/gcc-15.2.0
           rhel90:
             CONTAINER: rhel90
           rhel100:
@@ -100,4 +104,5 @@ jobs:
         env:
           BUILD_ID: "$(Build.BuildId)-$(Build.BuildNumber)"
           long_test: $(long_test)
+          GCC_MODULE: $(GCC_MODULE)
           test_static: $(test_static)
