@@ -355,6 +355,11 @@ stages:
         demands: ucx_bf -equals yes
         run_tests: yes
         test_perf: 0
+    - template: tests.yml
+      parameters:
+        name: L40G
+        demands: ucx_l40g
+        test_perf: 0
 
   - stage: EFA_Tests
     dependsOn: [Static_check]
