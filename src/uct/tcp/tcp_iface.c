@@ -23,6 +23,12 @@
 
 #define UCT_TCP_IFACE_NETDEV_DIR "/sys/class/net"
 
+const char *uct_tcp_reachability_modes[] = {
+    [UCT_TCP_REACHABILITY_MODE_ROUTE] = "route",
+    [UCT_TCP_REACHABILITY_MODE_ALL]   = "all",
+    [UCT_TCP_REACHABILITY_MODE_LAST]  = NULL
+};
+
 extern ucs_class_t UCS_CLASS_DECL_NAME(uct_tcp_iface_t);
 
 static ucs_config_field_t uct_tcp_iface_config_table[] = {
@@ -118,6 +124,13 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
    "remote peer",
    ucs_offsetof(uct_tcp_iface_config_t, ep_bind_src_addr),
                 UCS_CONFIG_TYPE_TERNARY},
+
+  {"REACHABILITY_MODE", "route",
+   "The mode used for performing the reachability check\n"
+   " - route - all routable addresses are assumed as reachable\n"
+   " - all   - all addresses are assumed as reachable, without any check",
+   ucs_offsetof(uct_tcp_iface_config_t, reachability_mode),
+   UCS_CONFIG_TYPE_ENUM(uct_tcp_reachability_modes)},
 
   {NULL}
 };
@@ -241,12 +254,15 @@ uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                             params);
     }
 
-    if ((params->field_mask & UCT_IFACE_IS_REACHABLE_FIELD_SCOPE) &&
-        (params->scope == UCT_IFACE_REACHABILITY_SCOPE_DEVICE)) {
+    if (((params->field_mask & UCT_IFACE_IS_REACHABLE_FIELD_SCOPE) &&
+         (params->scope == UCT_IFACE_REACHABILITY_SCOPE_DEVICE)) ||
+        (iface->config.reachability_mode == UCT_TCP_REACHABILITY_MODE_ALL)) {
         return uct_iface_scope_is_reachable(tl_iface, params);
     }
 
     /* Check if the remote address is routable */
+    ucs_assert(iface->config.reachability_mode ==
+               UCT_TCP_REACHABILITY_MODE_ROUTE);
     status = ucs_ifname_to_index(iface->if_name, &ndev_index);
     if (status != UCS_OK) {
         uct_iface_fill_info_str_buf(
@@ -768,6 +784,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     self->config.keepalive.cnt     = config->keepalive.cnt;
     self->config.keepalive.intvl   = config->keepalive.intvl;
     self->config.ep_bind_src_addr  = config->ep_bind_src_addr;
+    self->config.reachability_mode = config->reachability_mode;
     self->port_range.first         = config->port_range.first;
     self->port_range.last          = config->port_range.last;
 
