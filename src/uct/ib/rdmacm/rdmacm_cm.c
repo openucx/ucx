@@ -169,6 +169,11 @@ uct_rdmacm_cm_device_context_init(uct_rdmacm_cm_device_context_t *ctx,
               log_max_num_reserved_qpn, ctx->log_reserved_qpn_granularity);
 
     ctx->use_reserved_qpn = 1;
+    ctx->reuse_qpn        = cm->config.reuse_qpn;
+
+    if (ctx->reuse_qpn) {
+        kh_init_inplace(uct_rdmacm_cm_peer_dev_ctxs, &ctx->peer_dev_ctxs);
+    }
 
     ucs_spinlock_init(&ctx->lock, 0);
     ucs_list_head_init(&ctx->blk_list);
@@ -177,12 +182,14 @@ uct_rdmacm_cm_device_context_init(uct_rdmacm_cm_device_context_t *ctx,
 dummy_qp_ctx_init:
 #endif
 
-    if (cm->config.reserved_qpn == UCS_YES) {
+    if ((cm->config.reserved_qpn == UCS_YES) ||
+        (cm->config.reuse_qpn == UCS_CONFIG_ON)) {
         ucs_error("%s: reserved qpn is not supported, failed to use it", dev_name);
         return UCS_ERR_UNSUPPORTED;
     }
 
     ctx->use_reserved_qpn = 0;
+    ctx->reuse_qpn        = 0;
 
     /* Create a dummy completion queue */
     ctx->cq = ibv_create_cq(verbs, 1, NULL, NULL, 0);
@@ -199,9 +206,19 @@ static void
 uct_rdmacm_cm_device_context_cleanup(uct_rdmacm_cm_device_context_t *ctx)
 {
     uct_rdmacm_cm_reserved_qpn_blk_t *blk, *tmp;
+    uct_rdmacm_cm_peer_dev_ctx_t *peer_dev_ctx;
     int ret;
 
     if (ctx->use_reserved_qpn) {
+        if (ctx->reuse_qpn) {
+            kh_foreach_value(&ctx->peer_dev_ctxs, peer_dev_ctx, {
+                ucs_free(peer_dev_ctx);
+            });
+
+            kh_destroy_inplace(uct_rdmacm_cm_peer_dev_ctxs,
+                               &ctx->peer_dev_ctxs);
+        }
+
         /* There can be some blks are not fully used, then they won't be
            destroyed in RDMACM CM EP, so need to be destroyed here. */
         ucs_list_for_each_safe(blk, tmp, &ctx->blk_list, entry) {
@@ -279,6 +296,55 @@ err_free_ctx:
     ucs_free(ctx);
 err_kh_del:
     kh_del(uct_rdmacm_cm_device_contexts, &cm->ctxs, iter);
+out:
+    return status;
+}
+
+static uint64_t
+uct_rdmacm_cm_route_get_peer_interface_id(const struct rdma_route *route)
+{
+    return be64toh(route->addr.addr.ibaddr.dgid.global.interface_id);
+}
+
+ucs_status_t
+uct_rdmacm_cm_get_peer_dev_ctx(uct_rdmacm_cm_device_context_t *ctx,
+                               const struct rdma_route *route,
+                               uct_rdmacm_cm_peer_dev_ctx_t **peer_dev_ctx_p)
+{
+    uct_rdmacm_cm_peer_dev_ctx_t *peer_dev_ctx;
+    ucs_status_t status;
+    khiter_t iter;
+    ucs_kh_put_t ret;
+
+    iter = kh_put(uct_rdmacm_cm_peer_dev_ctxs, &ctx->peer_dev_ctxs,
+                  uct_rdmacm_cm_route_get_peer_interface_id(route), &ret);
+    if (ret == UCS_KH_PUT_FAILED) {
+        ucs_error("ctx %p: cannot allocate hash entry for peer device context",
+                  ctx);
+        status = UCS_ERR_NO_MEMORY;
+        goto out;
+    }
+
+    if (ret == UCS_KH_PUT_KEY_PRESENT) {
+        /* already exists so use it */
+        peer_dev_ctx = kh_value(&ctx->peer_dev_ctxs, iter);
+    } else {
+        /* Create peer device context */
+        peer_dev_ctx = ucs_calloc(1, sizeof(*ctx), "rdmacm_peer_dev_ctx");
+        if (peer_dev_ctx == NULL) {
+            ucs_error("ctx %p: failed to allocate peer device context", ctx);
+            status = UCS_ERR_NO_MEMORY;
+            goto err_kh_del;
+        }
+
+        kh_value(&ctx->peer_dev_ctxs, iter) = peer_dev_ctx;
+    }
+
+    *peer_dev_ctx_p = peer_dev_ctx;
+    return UCS_OK;
+
+err_kh_del:
+    kh_del(uct_rdmacm_cm_peer_dev_ctxs, &ctx->peer_dev_ctxs, iter);
 out:
     return status;
 }
@@ -980,6 +1046,7 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_t, uct_component_h component,
 
     self->config.timeout      = rdmacm_config->timeout;
     self->config.reserved_qpn = rdmacm_config->reserved_qpn;
+    self->config.reuse_qpn    = rdmacm_config->reuse_qpn;
 
     ucs_debug("created rdmacm_cm %p with event_channel %p (fd=%d)",
               self, self->ev_ch, self->ev_ch->fd);
