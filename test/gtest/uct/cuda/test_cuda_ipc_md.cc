@@ -4,14 +4,17 @@
  * See file LICENSE for terms.
  */
 
+#include "cuda_vmm_mem_buffer.h"
+
 #include <thread>
 
 #include <uct/test_md.h>
-#include <cuda.h>
 
 extern "C" {
 #include <uct/cuda/cuda_ipc/cuda_ipc_md.h>
+#include <uct/cuda/cuda_ipc/cuda_ipc_cache.h>
 #include <uct/cuda/base/cuda_iface.h>
+#include <ucs/sys/uid.h>
 }
 
 class test_cuda_ipc_md : public test_md {
@@ -218,11 +221,160 @@ UCS_TEST_P(test_cuda_ipc_md, mkey_pack_mempool)
 #endif
 }
 
+UCS_TEST_P(test_cuda_ipc_md, mkey_pack_posix_fd)
+{
+#if HAVE_DECL_SYS_PIDFD_GETFD
+    cuda_posix_fd_mem_buffer buf(4096, UCS_MEMORY_TYPE_CUDA);
+    uct_md_mem_reg_params_t reg_params    = {};
+    uct_md_mkey_pack_params_t pack_params = {};
+    uct_mem_h memh;
+    uct_cuda_ipc_rkey_t rkey = {};
+
+    EXPECT_UCS_OK(
+            uct_md_mem_reg_v2(md(), buf.ptr(), buf.size(), &reg_params, &memh));
+    EXPECT_UCS_OK(uct_md_mkey_pack_v2(md(), memh, buf.ptr(), buf.size(),
+                                      &pack_params, &rkey));
+    EXPECT_EQ(UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD, rkey.ph.handle_type);
+
+    uct_md_mem_dereg_params_t dereg_params;
+    dereg_params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
+    dereg_params.memh       = memh;
+    EXPECT_UCS_OK(uct_md_mem_dereg_v2(md(), &dereg_params));
+#else
+    UCS_TEST_SKIP_R("built without pidfd support");
+#endif
+}
+
+UCS_TEST_P(test_cuda_ipc_md, posix_fd_system_id_mismatch)
+{
+#if HAVE_DECL_SYS_PIDFD_GETFD
+    cuda_posix_fd_mem_buffer buf(4096, UCS_MEMORY_TYPE_CUDA);
+    uct_md_mem_reg_params_t reg_params    = {};
+    uct_md_mkey_pack_params_t pack_params = {};
+    uct_mem_h memh;
+    uct_cuda_ipc_rkey_t rkey = {};
+
+    EXPECT_UCS_OK(
+            uct_md_mem_reg_v2(md(), buf.ptr(), buf.size(), &reg_params, &memh));
+    EXPECT_UCS_OK(uct_md_mkey_pack_v2(md(), memh, buf.ptr(), buf.size(),
+                                      &pack_params, &rkey));
+    EXPECT_EQ(UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD, rkey.ph.handle_type);
+
+    EXPECT_EQ(ucs_get_system_id(), rkey.ph.handle.posix_fd.system_id);
+
+    /* Tamper system_id to simulate a different machine */
+    rkey.ph.handle.posix_fd.system_id ^= 0xDEADBEEFDEADBEEFULL;
+
+    /* Tamper UUID to bypass same-process shortcut */
+    int64_t *uuid64 = (int64_t *)rkey.uuid.bytes;
+    uuid64[0]       = 0xDEADLL;
+    uuid64[1]       = 0xBEEFLL;
+
+    uct_rkey_unpack_params_t unpack_params = { 0 };
+    EXPECT_EQ(UCS_ERR_UNREACHABLE,
+              uct_rkey_unpack_v2(md()->component, &rkey, &unpack_params,
+                                 NULL));
+
+    uct_md_mem_dereg_params_t dereg_params;
+    dereg_params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
+    dereg_params.memh       = memh;
+    EXPECT_UCS_OK(uct_md_mem_dereg_v2(md(), &dereg_params));
+#else
+    UCS_TEST_SKIP_R("built without pidfd support");
+#endif
+}
+
 UCS_TEST_P(test_cuda_ipc_md, mnnvl_disabled)
 {
     /* Currently MNNVL is always disabled in CI */
     uct_cuda_ipc_md_t *cuda_ipc_md = ucs_derived_of(md(), uct_cuda_ipc_md_t);
     EXPECT_FALSE(cuda_ipc_md->enable_mnnvl);
+}
+
+UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
+{
+#if HAVE_DECL_SYS_PIDFD_GETFD
+    cuda_posix_fd_mem_buffer buf(4096, UCS_MEMORY_TYPE_CUDA);
+    size_t size                           = buf.size();
+    uct_md_mem_reg_params_t reg_params    = {};
+    uct_md_mkey_pack_params_t pack_params = {};
+    uct_mem_h memh;
+    uct_cuda_ipc_rkey_t rkey = {};
+
+    EXPECT_EQ(CUDA_SUCCESS, cuMemsetD8((CUdeviceptr)buf.ptr(), 0xAB, size));
+
+    EXPECT_UCS_OK(uct_md_mem_reg_v2(md(), buf.ptr(), size, &reg_params, &memh));
+    EXPECT_UCS_OK(uct_md_mkey_pack_v2(md(), memh, buf.ptr(), size, &pack_params,
+                                      &rkey));
+    EXPECT_EQ(UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD, rkey.ph.handle_type);
+    EXPECT_EQ(ucs_get_system_id(), rkey.ph.handle.posix_fd.system_id);
+
+    /* Tamper UUID to bypass same-process shortcut and exercise the full
+     * POSIX FD import path (pidfd_open/pidfd_getfd + cuMemImport) */
+    int64_t *uuid64 = (int64_t *)rkey.uuid.bytes;
+    uuid64[0]       = 0x1234LL;
+    uuid64[1]       = 0x5678LL;
+
+    uct_component_t *component = md()->component;
+
+    /* Unpack on a separate thread with its own CUDA context */
+    std::exception_ptr thread_exception;
+    std::thread([&]() {
+        try {
+            CUdevice dev;
+            CUcontext ctx;
+            ASSERT_EQ(CUDA_SUCCESS, cuDeviceGet(&dev, 0));
+#if CUDA_VERSION >= 13000
+            CUctxCreateParams ctx_create_params = {};
+            ASSERT_EQ(CUDA_SUCCESS,
+                      cuCtxCreate(&ctx, &ctx_create_params, 0, dev));
+#else
+            ASSERT_EQ(CUDA_SUCCESS, cuCtxCreate(&ctx, 0, dev));
+#endif
+
+            uct_rkey_unpack_params_t unpack_params = {};
+            uct_rkey_bundle_t rkey_bundle           = {};
+            ASSERT_UCS_OK(uct_rkey_unpack_v2(component, &rkey, &unpack_params,
+                                             &rkey_bundle));
+
+            uct_cuda_ipc_unpacked_rkey_t *unpacked =
+                (uct_cuda_ipc_unpacked_rkey_t *)rkey_bundle.rkey;
+            void *mapped_addr;
+            ucs_status_t map_status = uct_cuda_ipc_map_memhandle(
+                    &unpacked->super, dev, &mapped_addr,
+                    UCS_LOG_LEVEL_ERROR);
+            ASSERT_UCS_OK(map_status);
+
+            std::vector<uint8_t> host_buf(size);
+            ASSERT_EQ(CUDA_SUCCESS, cuMemcpyDtoH(
+                    host_buf.data(), (CUdeviceptr)mapped_addr, size));
+            for (size_t i = 0; i < size; i++) {
+                ASSERT_EQ(0xAB, host_buf[i])
+                    << "Data mismatch at byte " << i;
+            }
+
+            ucs_status_t unmap_status = uct_cuda_ipc_unmap_memhandle(
+                    unpacked->super.pid, unpacked->super.d_bptr, mapped_addr,
+                    dev, 0);
+            EXPECT_UCS_OK(unmap_status);
+            uct_rkey_release(component, &rkey_bundle);
+            cuCtxDestroy(ctx);
+        } catch (...) {
+            thread_exception = std::current_exception();
+        }
+    }).join();
+
+    if (thread_exception) {
+        std::rethrow_exception(thread_exception);
+    }
+
+    uct_md_mem_dereg_params_t dereg_params;
+    dereg_params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
+    dereg_params.memh       = memh;
+    EXPECT_UCS_OK(uct_md_mem_dereg_v2(md(), &dereg_params));
+#else
+    UCS_TEST_SKIP_R("built without pidfd support");
+#endif
 }
 
 _UCT_MD_INSTANTIATE_TEST_CASE(test_cuda_ipc_md, cuda_ipc);
