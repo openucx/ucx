@@ -689,6 +689,12 @@ uct_rc_mlx5_dp_ordering_ooo_init(uct_ib_mlx5_md_t *md,
         return UCS_ERR_INVALID_PARAM;
     }
 
+    if (max_dp_ordering > UCT_IB_MLX5_DP_ORDERING_IBTA) {
+        iface->config.put_fence_flag = UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER;
+    } else {
+        iface->config.put_fence_flag = 0;
+    }
+
     iface->config.dp_ordering_devx  = max_dp_ordering;
     iface->config.dp_ordering_force = force;
     iface->config.ddp_enabled_dv    = 0;
