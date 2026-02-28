@@ -9,8 +9,8 @@
 #endif
 
 #include "interval_tree.h"
-#include <ucs/debug/assert.h>
 #include <ucs/sys/math.h>
+#include <ucs/datastruct/mpool.h>
 
 
 /**
@@ -23,7 +23,7 @@ ucs_interval_tree_node_create(ucs_interval_tree_t *tree, uint64_t start,
 {
     ucs_interval_node_t *node;
 
-    node = tree->ops.alloc_node(sizeof(*node), tree->ops.arg);
+    node = ucs_mpool_get(tree->mpool);
     if (node == NULL) {
         return NULL;
     }
@@ -35,11 +35,11 @@ ucs_interval_tree_node_create(ucs_interval_tree_t *tree, uint64_t start,
     return node;
 }
 
-void ucs_interval_tree_init(ucs_interval_tree_t *tree,
-                            const ucs_interval_tree_ops_t *ops)
+void ucs_interval_tree_init(ucs_interval_tree_t *tree, ucs_mpool_t *mpool)
 {
-    tree->ops  = *ops;
-    tree->root = NULL;
+    tree->mpool       = mpool;
+    tree->root        = NULL;
+    tree->single_node = 0;
 }
 
 static void ucs_interval_tree_cleanup_recursive(ucs_interval_tree_t *tree,
@@ -51,7 +51,7 @@ static void ucs_interval_tree_cleanup_recursive(ucs_interval_tree_t *tree,
 
     ucs_interval_tree_cleanup_recursive(tree, node->left);
     ucs_interval_tree_cleanup_recursive(tree, node->right);
-    tree->ops.free_node(node, tree->ops.arg);
+    ucs_mpool_put(node);
 }
 
 void ucs_interval_tree_cleanup(ucs_interval_tree_t *tree)
@@ -92,11 +92,11 @@ ucs_interval_tree_remove_node(ucs_interval_tree_t *tree,
     /* Found target - handle deletion based on number of children */
     if (root->left == NULL) {
         temp = root->right;
-        tree->ops.free_node(root, tree->ops.arg);
+        ucs_mpool_put(root);
         return temp;
     } else if (root->right == NULL) {
         temp = root->left;
-        tree->ops.free_node(root, tree->ops.arg);
+        ucs_mpool_put(root);
         return temp;
     }
 
@@ -205,5 +205,9 @@ ucs_status_t ucs_interval_tree_insert_slow(ucs_interval_tree_t *tree,
 
     /* Insert the merged node into the tree */
     tree->root = ucs_interval_tree_insert_node(tree->root, new_node);
+
+    /* Update single_node flag: tree is single node if root has no children */
+    tree->single_node = (tree->root->left == NULL) &&
+                        (tree->root->right == NULL);
     return UCS_OK;
 }
