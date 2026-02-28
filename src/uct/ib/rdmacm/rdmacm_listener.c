@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019-2021. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -54,6 +54,8 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_listener_t, uct_cm_h cm,
         status = UCS_ERR_IO_ERROR;
         goto err;
     }
+
+    ucs_info("rdmacm listener: created cm_id=%p", self->id);
 
     if (rdmacm_cm->super.config.reuse_addr) {
         if (rdma_set_option(self->id, RDMA_OPTION_ID, RDMA_OPTION_ID_REUSEADDR,

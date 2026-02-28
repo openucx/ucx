@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2013. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -332,13 +332,21 @@ void test_base::SetUpProxy() {
     ucs_assert(m_state == NEW);
     try {
         check_skip_test();
-        m_state = INITIALIZING;
+    } catch (test_skip_exception &e) {
+        skipped(e);
+        return;
+    }
+
+    m_state = INITIALIZING;
+    try {
         init();
         m_initialized = true;
         m_state       = RUNNING;
-    } catch (test_skip_exception& e) {
+    } catch (test_skip_exception &e) {
+        cleanup();
         skipped(e);
     } catch (test_abort_exception&) {
+        cleanup();
         m_state = ABORTED;
     }
 }
