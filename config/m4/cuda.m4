@@ -3,8 +3,7 @@
 # See file LICENSE for terms.
 #
 
-NVCC_CUDA_MIN_REQUIRED_MAJOR=10
-NVCC_CUDA_MIN_REQUIRED_MINOR=2
+NVCC_CUDA_MIN_REQUIRED=12.2
 
 ARCH9_CODE="-gencode=arch=compute_70,code=sm_70"
 ARCH10_CODE="-gencode=arch=compute_75,code=sm_75"
@@ -48,13 +47,24 @@ AC_DEFUN([AC_LANG_COMPILER(CUDA)], [
 # Check for nvcc compiler support
 AC_DEFUN([UCX_CUDA_CHECK_NVCC], [
     AS_IF([test "x$NVCC" != "x"], [
-        CUDA_MAJOR_VERSION=`$NVCC --version | grep release | sed 's/.*release //' | sed 's/\,.*//' |  cut -d "." -f 1`
-        CUDA_MINOR_VERSION=`$NVCC --version | grep release | sed 's/.*release //' | sed 's/\,.*//' |  cut -d "." -f 2`
-        AC_MSG_RESULT([Detected CUDA version: $CUDA_MAJOR_VERSION.$CUDA_MINOR_VERSION])
-        AS_IF([test $CUDA_MAJOR_VERSION -lt $NVCC_CUDA_MIN_REQUIRED_MAJOR -o \( $CUDA_MAJOR_VERSION -eq $NVCC_CUDA_MIN_REQUIRED_MAJOR -a $CUDA_MINOR_VERSION -lt $NVCC_CUDA_MIN_REQUIRED_MINOR \)],
-            [AC_MSG_WARN([Minimum required CUDA version for device code: $NVCC_CUDA_MIN_REQUIRED_MAJOR.$NVCC_CUDA_MIN_REQUIRED_MINOR])
-             NVCC=""
-            ])
+        CUDA_VERSION=$($NVCC --version | grep release | sed 's/.*release //' | sed 's/\,.*//')
+        CUDA_MAJOR_VERSION=$(echo $CUDA_VERSION | cut -d "." -f 1)
+        CUDA_MINOR_VERSION=$(echo $CUDA_VERSION | cut -d "." -f 2)
+        AC_MSG_RESULT([Detected CUDA version: $CUDA_VERSION])
+        AS_VERSION_COMPARE([$CUDA_VERSION], [$NVCC_CUDA_MIN_REQUIRED],
+              [AC_MSG_WARN([Minimum required CUDA version for device code: $NVCC_CUDA_MIN_REQUIRED])
+               NVCC=""])
+
+        NVCC_CXX_DIALECT=c++17
+        cxx_dialect_ver=201703L
+        AS_VERSION_COMPARE([$CUDA_VERSION], [13.0],
+              [NVCC_CXX_DIALECT=c++11
+               cxx_dialect_ver=201103L
+               NVCCFLAGS="$NVCCFLAGS -DCCCL_IGNORE_DEPRECATED_CPP_DIALECT"])
+
+        AS_VERSION_COMPARE([$CUDA_VERSION], [12.9], [],
+              [NVCCFLAGS="$NVCCFLAGS -D_LIBCUDACXX_ATOMIC_UNSAFE_AUTOMATIC_STORAGE"],
+              [NVCCFLAGS="$NVCCFLAGS -D_LIBCUDACXX_ATOMIC_UNSAFE_AUTOMATIC_STORAGE"])
 
         AS_IF([test "x$NVCC" != "x"], [
                 AC_ARG_WITH([nvcc-gencode],
@@ -85,17 +95,18 @@ AC_DEFUN([UCX_CUDA_CHECK_NVCC], [
                                  [*],
                                      [NVCC_ARCH="${ARCH9_CODE} ${ARCH9_PTX}"])],
                         [NVCC_ARCH="$with_nvcc_gencode"])
+
                 BASE_NVCCFLAGS="$BASE_NVCCFLAGS $NVCC_ARCH"
-                AC_MSG_CHECKING([$NVCC needs explicit c++11 option])
+                AC_MSG_CHECKING([$NVCC needs explicit $NVCC_CXX_DIALECT option])
                 AC_LANG_PUSH([CUDA])
                 AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
-                    #if __cplusplus < 201103L
-                    #error missing C++11
+                    #if __cplusplus < $cxx_dialect_ver
+                    #error missing $NVCC_CXX_DIALECT
                     #endif
                 ]])],
                 [AC_MSG_RESULT([no])],
                 [AC_MSG_RESULT([yes])
-                BASE_NVCCFLAGS="$BASE_NVCCFLAGS -std=c++11"])
+                BASE_NVCCFLAGS="$BASE_NVCCFLAGS -std=$NVCC_CXX_DIALECT"])
                 AC_LANG_POP
 
                 AC_MSG_CHECKING([$NVCC can compile])
@@ -108,6 +119,18 @@ AC_DEFUN([UCX_CUDA_CHECK_NVCC], [
                 [AC_MSG_RESULT([yes])],
                 [AC_MSG_RESULT([no])
                 NVCC=""])
+                AC_LANG_POP
+
+                AC_MSG_CHECKING([checking cuda/atomic support])
+                AC_LANG_PUSH([CUDA])
+                AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
+                      #include <cuda/atomic>
+                      int v;
+                      cuda::atomic_ref<int> ref{v};
+                   ]])],
+                   [AC_MSG_RESULT([yes])],
+                   [AC_MSG_RESULT([no])
+                    NVCC=""])
                 AC_LANG_POP
             ])
         ])

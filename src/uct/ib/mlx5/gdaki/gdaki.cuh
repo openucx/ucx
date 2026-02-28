@@ -9,13 +9,21 @@
 
 #include "gdaki_dev.h"
 
-#include <doca_gpunetio_dev_verbs_qp.cuh>
+#include <infiniband/mlx5dv.h> /* TODO add to gpunetio */
+#include <cuda.h>              /* TODO add to gpunetio */
+#include "gpunetio/device/doca_gpunetio_dev_verbs_qp.cuh"
 #include <cooperative_groups.h>
 
 #define UCT_RC_GDA_RESV_WQE_NO_RESOURCE -1ULL
 #define UCT_RC_GDA_WQE_ERR              UCS_BIT(63)
 #define UCT_RC_GDA_WQE_MASK             UCS_MASK(63)
 
+
+UCS_F_DEVICE uint32_t uct_rc_mlx5_gda_wqe_idx_inc_mask(uint32_t wqe_idx,
+                                                       uint32_t increment)
+{
+    return (wqe_idx + increment) & DOCA_GPUNETIO_VERBS_WQE_PI_MASK;
+}
 
 UCS_F_DEVICE uct_rc_gdaki_dev_qp_t *
 uct_rc_mlx5_gda_get_qp(uct_rc_gdaki_dev_ep_t *ep, unsigned cid)
@@ -30,7 +38,7 @@ UCS_F_DEVICE void *uct_rc_mlx5_gda_get_wqe_ptr(uct_rc_gdaki_dev_ep_t *ep,
     const uintptr_t wqe_addr  = __ldg((uintptr_t*)&ep->sq_wqe_daddr);
     const uint32_t idx        = wqe_idx & (wqe_num - 1);
     const uint32_t full_idx   = idx + cid * wqe_num;
-    return (void*)(wqe_addr + (full_idx << DOCA_GPUNETIO_MLX5_WQE_SQ_SHIFT));
+    return (void*)(wqe_addr + (full_idx << DOCA_GPUNETIO_IB_MLX5_WQE_SQ_SHIFT));
 }
 
 UCS_F_DEVICE void uct_rc_mlx5_gda_ring_db(uct_rc_gdaki_dev_ep_t *ep,
@@ -320,7 +328,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_single(
     if (lane_id == 0) {
         uint16_t wqe_idx = (uint16_t)wqe_base;
         if ((comp != nullptr) || uct_rc_mlx5_gda_fc(ep, wqe_idx)) {
-            cflag = DOCA_GPUNETIO_MLX5_WQE_CTRL_CQ_UPDATE;
+            cflag = DOCA_GPUNETIO_IB_MLX5_WQE_CTRL_CQ_UPDATE;
             if (comp != nullptr) {
                 comp->wqe_idx = wqe_base;
                 comp->channel_id = cid;
@@ -446,7 +454,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi(
         return UCS_ERR_NO_RESOURCE;
     }
 
-    wqe_idx = doca_gpu_dev_verbs_wqe_idx_inc_mask(wqe_base, lane_id);
+    wqe_idx = uct_rc_mlx5_gda_wqe_idx_inc_mask(wqe_base, lane_id);
     for (uint32_t i = lane_id; i < count; i += num_lanes) {
         if (i == counter_index) {
             atomic         = true;
@@ -468,7 +476,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi(
         cflag = 0;
         if (((comp != nullptr) && (i == count - 1)) ||
             ((comp == nullptr) && uct_rc_mlx5_gda_fc(ep, wqe_idx))) {
-            cflag = DOCA_GPUNETIO_MLX5_WQE_CTRL_CQ_UPDATE;
+            cflag = DOCA_GPUNETIO_IB_MLX5_WQE_CTRL_CQ_UPDATE;
             if (comp != nullptr) {
                 comp->wqe_idx = wqe_base;
                 comp->channel_id = cid;
@@ -482,7 +490,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi(
                 ep, wqe_ptr, wqe_idx, opcode, cflag, remote_address, rkey,
                 reinterpret_cast<uint64_t>(address), lkey, length, atomic,
                 counter_inc_value, cid);
-        wqe_idx = doca_gpu_dev_verbs_wqe_idx_inc_mask(wqe_idx, num_lanes);
+        wqe_idx = uct_rc_mlx5_gda_wqe_idx_inc_mask(wqe_idx, num_lanes);
     }
 
     uct_rc_mlx5_gda_sync<level>();
@@ -540,7 +548,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi_partial(
         return UCS_ERR_NO_RESOURCE;
     }
 
-    wqe_idx = doca_gpu_dev_verbs_wqe_idx_inc_mask(wqe_base, lane_id);
+    wqe_idx = uct_rc_mlx5_gda_wqe_idx_inc_mask(wqe_base, lane_id);
     for (uint32_t i = lane_id; i < count; i += num_lanes) {
         if (i == mem_list_count) {
             idx            = counter_index;
@@ -564,7 +572,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi_partial(
         cflag = 0;
         if (((comp != nullptr) && (i == count - 1)) ||
             ((comp == nullptr) && uct_rc_mlx5_gda_fc(ep, wqe_idx))) {
-            cflag = DOCA_GPUNETIO_MLX5_WQE_CTRL_CQ_UPDATE;
+            cflag = DOCA_GPUNETIO_IB_MLX5_WQE_CTRL_CQ_UPDATE;
             if (comp != nullptr) {
                 comp->wqe_idx = wqe_base;
                 comp->channel_id = cid;
@@ -578,7 +586,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi_partial(
                 ep, wqe_ptr, wqe_idx, opcode, cflag, remote_address, rkey,
                 reinterpret_cast<uint64_t>(address), lkey, length, atomic,
                 counter_inc_value, cid);
-        wqe_idx = doca_gpu_dev_verbs_wqe_idx_inc_mask(wqe_idx, num_lanes);
+        wqe_idx = uct_rc_mlx5_gda_wqe_idx_inc_mask(wqe_idx, num_lanes);
     }
 
     uct_rc_mlx5_gda_sync<level>();

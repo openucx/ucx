@@ -25,7 +25,7 @@ done
 rm -rf autom4te.cache
 mkdir -p config/m4 config/aux
 
-git submodule update --init src/uct/ib/mlx5/gdaki/gpunetio
+git submodule update --init external/gpunetio
 
 autoreconf -v --install || exit 1
 rm -rf autom4te.cache
