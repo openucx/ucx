@@ -19,13 +19,13 @@ protected:
     static uct_cuda_ipc_extended_rkey_t
     unpack_common(uct_md_h md, int64_t uuid, CUdeviceptr ptr, size_t size)
     {
-        uct_cuda_ipc_extended_rkey_t rkey = {};
+        uct_cuda_ipc_extended_rkey_t rkey;
         uct_mem_h memh;
         EXPECT_UCS_OK(md->ops->mem_reg(md, (void *)ptr, size, NULL, &memh));
         EXPECT_UCS_OK(md->ops->mkey_pack(md, memh, (void *)ptr, size, NULL,
                                          &rkey));
 
-        int64_t *uuid64 = (int64_t *)rkey.super.uuid.bytes;
+        auto uuid64     = reinterpret_cast<int64_t*>(rkey.super.uuid.bytes);
         uuid64[0]       = uuid;
         uuid64[1]       = uuid;
 
@@ -47,7 +47,8 @@ protected:
     {
         CUdeviceptr ptr;
         EXPECT_EQ(CUDA_SUCCESS, cuMemAlloc(&ptr, 64));
-        uct_cuda_ipc_extended_rkey_t rkey = unpack_common(md, uuid, ptr, 64);
+        const uct_cuda_ipc_extended_rkey_t rkey = unpack_common(md, uuid, ptr,
+                                                                64);
         EXPECT_EQ(CUDA_SUCCESS, cuMemFree(ptr));
         return rkey;
     }
@@ -95,7 +96,8 @@ protected:
         CUstream cu_stream;
 
         alloc_mempool(&ptr, &mpool, &cu_stream, size);
-        uct_cuda_ipc_extended_rkey_t rkey = unpack_common(md, uuid, ptr, size);
+        const uct_cuda_ipc_extended_rkey_t rkey = unpack_common(md, uuid, ptr,
+                                                                size);
         free_mempool(&ptr, &mpool, &cu_stream);
         return rkey;
     }
