@@ -21,15 +21,15 @@
 typedef struct ucs_interval_node {
     struct ucs_interval_node *left;  /**< Left child node */
     struct ucs_interval_node *right; /**< Right child node */
-    uint64_t                  start; /**< Start of interval */
-    uint64_t                  end;   /**< End of interval */
+    uint64_t                 start;  /**< Start of interval */
+    uint64_t                 end;    /**< End of interval */
 } ucs_interval_node_t;
 
 
 typedef struct {
-    ucs_interval_node_t *root;        /**< Root node of the tree */
-    ucs_mpool_t         *mpool;       /**< Memory pool for node allocation */
-    int                  single_node; /**< Cached flag: 1 if tree has only root node */
+    ucs_interval_node_t *root;      /**< Root node of the tree */
+    ucs_mpool_t         *mpool;     /**< Memory pool for node allocation */
+    size_t              num_nodes;  /**< Number of nodes in the tree */
 } ucs_interval_tree_t;
 
 
@@ -56,17 +56,6 @@ ucs_status_t ucs_interval_tree_insert_slow(ucs_interval_tree_t *tree,
 
 
 /**
- * Check if tree has only a root node (no children)
- */
-static UCS_F_ALWAYS_INLINE int
-ucs_interval_tree_is_single_node(const ucs_interval_tree_t *tree)
-{
-    return (tree->root != NULL) && (tree->root->left == NULL) &&
-           (tree->root->right == NULL);
-}
-
-
-/**
  * Insert a new interval into the tree
  *
  * @param [in]  tree   Interval tree
@@ -83,7 +72,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucs_interval_tree_insert(
     ucs_assertv(start <= end + 1, "start=%lu, end=%lu", start, end);
 
     /* Fast path: if tree has only root and new interval overlaps/touches it, extend it */
-    if (ucs_likely(tree->single_node) && ucs_likely(start <= (root->end + 1)) &&
+    if (ucs_likely(tree->num_nodes == 1) &&
+        ucs_likely(start <= (root->end + 1)) &&
         ucs_likely(root->start <= (end + 1))) {
         root->start = ucs_min(root->start, start);
         root->end   = ucs_max(root->end, end);
@@ -107,10 +97,12 @@ static UCS_F_ALWAYS_INLINE int
 ucs_interval_tree_is_equal_range(const ucs_interval_tree_t *tree,
                                   uint64_t start, uint64_t end)
 {
+    ucs_interval_node_t *root = tree->root;
+
     ucs_assertv(start <= end + 1, "start=%lu, end=%lu", start, end);
 
-    return ucs_interval_tree_is_single_node(tree) &&
-           (tree->root->start == start) && (tree->root->end == end);
+    return (tree->num_nodes == 1) && (root->start == start) &&
+           (root->end == end);
 }
 
 #endif
