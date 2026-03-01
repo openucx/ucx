@@ -822,7 +822,8 @@ ucs_status_t ucs_config_clone_range_spec(const void *src, void *dest, const void
     return UCS_OK;
 }
 
-int ucs_config_sscanf_array(const char *buf, void *dest, const void *arg)
+static int ucs_config_sscanf_array_delim(const char *buf, void *dest,
+                                         const void *arg, const char *delim)
 {
     ucs_config_array_field_t *field = dest;
     void *temp_field;
@@ -837,7 +838,7 @@ int ucs_config_sscanf_array(const char *buf, void *dest, const void *arg)
     }
 
     saveptr = NULL;
-    token = strtok_r(str_dup, ",", &saveptr);
+    token = strtok_r(str_dup, delim, &saveptr);
     temp_field = ucs_calloc(UCS_CONFIG_ARRAY_MAX, array->elem_size, "config array");
     i = 0;
     while (token != NULL) {
@@ -853,7 +854,7 @@ int ucs_config_sscanf_array(const char *buf, void *dest, const void *arg)
         if (i >= UCS_CONFIG_ARRAY_MAX) {
             break;
         }
-        token = strtok_r(NULL, ",", &saveptr);
+        token = strtok_r(NULL, delim, &saveptr);
     }
 
     field->data = temp_field;
@@ -862,8 +863,19 @@ int ucs_config_sscanf_array(const char *buf, void *dest, const void *arg)
     return 1;
 }
 
-int ucs_config_sprintf_array(char *buf, size_t max,
-                             const void *src, const void *arg)
+int ucs_config_sscanf_array(const char *buf, void *dest, const void *arg)
+{
+    return ucs_config_sscanf_array_delim(buf, dest, arg, ",");
+}
+
+int ucs_config_sscanf_path_array(const char *buf, void *dest, const void *arg)
+{
+    return ucs_config_sscanf_array_delim(buf, dest, arg, ":");
+}
+
+static int ucs_config_sprintf_array_delim(char *buf, size_t max,
+                                          const void *src, const void *arg,
+                                          char delim)
 {
     const ucs_config_array_field_t *field = src;
     const ucs_config_array_t *array       = arg;
@@ -874,7 +886,7 @@ int ucs_config_sprintf_array(char *buf, size_t max,
     offset = 0;
     for (i = 0; i < field->count; ++i) {
         if (i > 0 && offset < max) {
-            buf[offset++] = ',';
+            buf[offset++] = delim;
         }
         ret = array->parser.write(buf + offset, max - offset,
                                   (char*)field->data + i * array->elem_size,
@@ -886,6 +898,18 @@ int ucs_config_sprintf_array(char *buf, size_t max,
         offset += strlen(buf + offset);
     }
     return 1;
+}
+
+int ucs_config_sprintf_array(char *buf, size_t max,
+                             const void *src, const void *arg)
+{
+    return ucs_config_sprintf_array_delim(buf, max, src, arg, ',');
+}
+
+int ucs_config_sprintf_path_array(char *buf, size_t max,
+                                  const void *src, const void *arg)
+{
+    return ucs_config_sprintf_array_delim(buf, max, src, arg, ':');
 }
 
 ucs_status_t ucs_config_clone_array(const void *src, void *dest, const void *arg)
@@ -933,12 +957,23 @@ void ucs_config_release_array(void *ptr, const void *arg)
     ucs_free(array_field->data);
 }
 
-void ucs_config_help_array(char *buf, size_t max, const void *arg)
+static void ucs_config_help_array_delim(char *buf, size_t max, const void *arg,
+                                        const char *delim_name)
 {
     const ucs_config_array_t *array = arg;
 
-    snprintf(buf, max, "comma-separated list of: ");
+    snprintf(buf, max, "%s-separated list of: ", delim_name);
     array->parser.help(buf + strlen(buf), max - strlen(buf), array->parser.arg);
+}
+
+void ucs_config_help_array(char *buf, size_t max, const void *arg)
+{
+    ucs_config_help_array_delim(buf, max, arg, "comma");
+}
+
+void ucs_config_help_path_array(char *buf, size_t max, const void *arg)
+{
+    ucs_config_help_array_delim(buf, max, arg, "colon");
 }
 
 int ucs_config_sscanf_allow_list(const char *buf, void *dest, const void *arg)

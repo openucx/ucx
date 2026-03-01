@@ -30,6 +30,7 @@
 #include <pthread_np.h>
 #endif
 #include <sys/resource.h>
+#include "../plugin/uct_ib_plugin.h"
 
 
 #define UCT_IB_MD_RCACHE_DEFAULT_ALIGN 16
@@ -219,6 +220,8 @@ static uct_tl_t *uct_ib_tls[] = {
 };
 
 static uct_ib_md_ops_entry_t UCT_IB_MD_OPS_NAME(verbs);
+
+static ucs_init_once_t uct_ib_plugin_load_once = UCS_INIT_ONCE_INITIALIZER;
 
 UCS_LIST_HEAD(uct_ib_ops);
 
@@ -1146,6 +1149,24 @@ uct_ib_md_open(uct_component_t *component, const char *md_name,
     uct_ib_md_t *md = NULL;
     struct ibv_device **ib_device_list, *ib_device;
     int num_devices, fork_init = 0;
+    const uct_ib_plugin_info_t *plugin_info;
+
+    ucs_load_module_external("uct_ib", "plugin",
+                             &uct_ib_plugin_load_once,
+                             UCS_MODULE_LOAD_FLAG_GLOBAL);
+
+    status = ucx_plugin_init();
+    if (status != UCS_OK) {
+        ucs_warn("failed to initialize UCX IB plugin: %s", ucs_status_string(status));
+    }
+    else {
+        plugin_info = ucx_plugin_get_info();
+        ucs_assert(plugin_info != NULL);
+        ucs_info("UCX IB plugin loaded: %s v%ld.%ld.%ld - %s",
+                 plugin_info->name, plugin_info->version_major,
+                 plugin_info->version_minor, plugin_info->version_patch,
+                 plugin_info->description);
+    }
 
     ucs_trace("opening IB device %s", md_name);
 
