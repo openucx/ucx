@@ -957,12 +957,23 @@ void ucs_config_release_array(void *ptr, const void *arg)
     ucs_free(array_field->data);
 }
 
-void ucs_config_help_array(char *buf, size_t max, const void *arg)
+static void ucs_config_help_array_delim(char *buf, size_t max, const void *arg,
+                                        const char *delim_name)
 {
     const ucs_config_array_t *array = arg;
 
-    snprintf(buf, max, "comma-separated list of: ");
+    snprintf(buf, max, "%s-separated list of: ", delim_name);
     array->parser.help(buf + strlen(buf), max - strlen(buf), array->parser.arg);
+}
+
+void ucs_config_help_array(char *buf, size_t max, const void *arg)
+{
+    ucs_config_help_array_delim(buf, max, arg, "comma");
+}
+
+void ucs_config_help_path_array(char *buf, size_t max, const void *arg)
+{
+    ucs_config_help_array_delim(buf, max, arg, "colon");
 }
 
 int ucs_config_sscanf_allow_list(const char *buf, void *dest, const void *arg)
