@@ -38,17 +38,6 @@ const char *ucs_stats_formats_names[] = {
 #ifdef ENABLE_STATS
 
 enum {
-    UCS_STATS_FLAG_ON_EXIT        = UCS_BIT(0),
-    UCS_STATS_FLAG_ON_TIMER       = UCS_BIT(1),
-    UCS_STATS_FLAG_ON_SIGNAL      = UCS_BIT(2),
-
-    UCS_STATS_FLAG_SOCKET         = UCS_BIT(8),
-    UCS_STATS_FLAG_STREAM         = UCS_BIT(9),
-    UCS_STATS_FLAG_STREAM_CLOSE   = UCS_BIT(10),
-    UCS_STATS_FLAG_STREAM_BINARY  = UCS_BIT(11),
-};
-
-enum {
     UCS_ROOT_STATS_RUNTIME,
     UCS_ROOT_STATS_LAST
 };
@@ -56,8 +45,6 @@ enum {
 KHASH_MAP_INIT_STR(ucs_stats_cls, ucs_stats_class_t*)
 
 typedef struct {
-    volatile unsigned                flags;
-
     ucs_time_t                       start_time;
     ucs_stats_filter_node_t          root_filter_node;
     ucs_stats_node_t                 root_node;
@@ -88,8 +75,9 @@ typedef struct {
     pthread_t                        thread;
 } ucs_stats_context_t;
 
+volatile unsigned ucs_stats_context_flags = 0;
+
 static ucs_stats_context_t ucs_stats_context = {
-    .flags            = 0,
     .root_node        = {},
     .root_filter_node = {},
     .lock             = PTHREAD_MUTEX_INITIALIZER,
@@ -457,14 +445,14 @@ ucs_status_t ucs_stats_node_alloc(ucs_stats_node_t** p_node, ucs_stats_class_t *
 
 void ucs_stats_node_free(ucs_stats_node_t *node)
 {
-    if (!ucs_stats_is_active() || (node == NULL)) {
+    if (!UCS_STATS_NODE_VALID(node)) {
         return;
     }
 
     ucs_trace("releasing stats node '"UCS_STATS_NODE_FMT"'", UCS_STATS_NODE_ARG(node));
 
     /* If we would dump stats in exit, keep this data instead of releasing it */
-    if (ucs_stats_context.flags & UCS_STATS_FLAG_ON_EXIT) {
+    if (ucs_stats_context_flags & UCS_STATS_FLAG_ON_EXIT) {
         ucs_stats_node_remove(node, 1);
     } else {
         ucs_stats_node_remove(node, 0);
@@ -606,15 +594,15 @@ static void __ucs_stats_dump(int inactive)
     UCS_STATS_SET_TIME(&ucs_stats_context.root_node, UCS_ROOT_STATS_RUNTIME,
                        ucs_stats_context.start_time);
 
-    if (ucs_stats_context.flags & UCS_STATS_FLAG_SOCKET) {
+    if (ucs_stats_context_flags & UCS_STATS_FLAG_SOCKET) {
         status = ucs_stats_client_send(ucs_stats_context.client,
                                       &ucs_stats_context.root_node,
                                       ucs_get_time());
     }
 
-    if (ucs_stats_context.flags & UCS_STATS_FLAG_STREAM) {
+    if (ucs_stats_context_flags & UCS_STATS_FLAG_STREAM) {
         options = 0;
-        if (ucs_stats_context.flags & UCS_STATS_FLAG_STREAM_BINARY) {
+        if (ucs_stats_context_flags & UCS_STATS_FLAG_STREAM_BINARY) {
             options |= UCS_STATS_SERIALIZE_BINARY;
         }
         if (inactive) {
@@ -655,22 +643,23 @@ static void* ucs_stats_thread_func(void *arg)
      * change, runtime-untested on FreeBSD, to working Linux codebase.
      */
 #ifdef HAVE_LINUX_FUTEX_H
-    flags = ucs_stats_context.flags;
+    flags = ucs_stats_context_flags;
     while (flags & UCS_STATS_FLAG_ON_TIMER) {
         /* Wait for timeout/wakeup */
-        ucs_sys_futex(&ucs_stats_context.flags, FUTEX_WAIT, flags, ptime, NULL, 0);
+        ucs_sys_futex(&ucs_stats_context_flags, FUTEX_WAIT, flags, ptime, NULL,
+                      0);
         ucs_stats_dump();
-        flags = ucs_stats_context.flags;
+        flags = ucs_stats_context_flags;
     }
 #else
     pthread_mutex_lock(&ucs_stats_context.lock);
-    flags = ucs_stats_context.flags;
+    flags = ucs_stats_context_flags;
     while (flags & UCS_STATS_FLAG_ON_TIMER) {
         /* Wait for timeout/wakeup */
         pthread_cond_timedwait(&ucs_stats_context.cv, &ucs_stats_context.lock,
                                ptime);
         __ucs_stats_dump(0);
-        flags = ucs_stats_context.flags;
+        flags = ucs_stats_context_flags;
     }
     pthread_mutex_unlock(&ucs_stats_context.lock);
 #endif
@@ -711,7 +700,7 @@ static void ucs_stats_open_dest()
             goto out_free;
         }
 
-        ucs_stats_context.flags |= UCS_STATS_FLAG_SOCKET;
+        ucs_stats_context_flags |= UCS_STATS_FLAG_SOCKET;
     } else if (strcmp(ucs_global_opts.stats_dest, "") != 0) {
         status = ucs_open_output_stream(ucs_global_opts.stats_dest,
                                         UCS_LOG_LEVEL_ERROR,
@@ -722,14 +711,14 @@ static void ucs_stats_open_dest()
         }
 
         /* File flags */
-        ucs_stats_context.flags |= UCS_STATS_FLAG_STREAM;
+        ucs_stats_context_flags |= UCS_STATS_FLAG_STREAM;
         if (need_close) {
-            ucs_stats_context.flags |= UCS_STATS_FLAG_STREAM_CLOSE;
+            ucs_stats_context_flags |= UCS_STATS_FLAG_STREAM_CLOSE;
         }
 
         /* Optional: Binary mode */
         if (!strcmp(next_token, ":bin")) {
-            ucs_stats_context.flags |= UCS_STATS_FLAG_STREAM_BINARY;
+            ucs_stats_context_flags |= UCS_STATS_FLAG_STREAM_BINARY;
         }
     }
 
@@ -739,17 +728,17 @@ out_free:
 
 static void ucs_stats_close_dest()
 {
-    if (ucs_stats_context.flags & UCS_STATS_FLAG_SOCKET) {
-        ucs_stats_context.flags &= ~UCS_STATS_FLAG_SOCKET;
+    if (ucs_stats_context_flags & UCS_STATS_FLAG_SOCKET) {
+        ucs_stats_context_flags &= ~UCS_STATS_FLAG_SOCKET;
         ucs_stats_client_cleanup(ucs_stats_context.client);
     }
-    if (ucs_stats_context.flags & UCS_STATS_FLAG_STREAM) {
+    if (ucs_stats_context_flags & UCS_STATS_FLAG_STREAM) {
         fflush(ucs_stats_context.stream);
-        if (ucs_stats_context.flags & UCS_STATS_FLAG_STREAM_CLOSE) {
+        if (ucs_stats_context_flags & UCS_STATS_FLAG_STREAM_CLOSE) {
             fclose(ucs_stats_context.stream);
         }
-        ucs_stats_context.flags &= ~(UCS_STATS_FLAG_STREAM|
-                                     UCS_STATS_FLAG_STREAM_BINARY|
+        ucs_stats_context_flags &= ~(UCS_STATS_FLAG_STREAM |
+                                     UCS_STATS_FLAG_STREAM_BINARY |
                                      UCS_STATS_FLAG_STREAM_CLOSE);
     }
 }
@@ -764,7 +753,7 @@ static void ucs_stats_set_trigger()
     char *p;
 
     if (!strcmp(ucs_global_opts.stats_trigger, "exit")) {
-        ucs_stats_context.flags |= UCS_STATS_FLAG_ON_EXIT;
+        ucs_stats_context_flags |= UCS_STATS_FLAG_ON_EXIT;
     } else if (!strncmp(ucs_global_opts.stats_trigger, "timer:", 6)) {
         p = ucs_global_opts.stats_trigger + 6;
         if (!ucs_config_sscanf_time(p, &ucs_stats_context.interval, NULL)) {
@@ -772,7 +761,7 @@ static void ucs_stats_set_trigger()
             return;
         }
 
-        ucs_stats_context.flags |= UCS_STATS_FLAG_ON_TIMER;
+        ucs_stats_context_flags |= UCS_STATS_FLAG_ON_TIMER;
         ucs_pthread_create(&ucs_stats_context.thread, ucs_stats_thread_func,
                            NULL, "stats");
    } else if (!strncmp(ucs_global_opts.stats_trigger, "signal:", 7)) {
@@ -783,7 +772,7 @@ static void ucs_stats_set_trigger()
         }
 
         signal(ucs_stats_context.signo, ucs_stats_dump_sighandler);
-        ucs_stats_context.flags |= UCS_STATS_FLAG_ON_SIGNAL;
+        ucs_stats_context_flags |= UCS_STATS_FLAG_ON_SIGNAL;
     } else if (!strcmp(ucs_global_opts.stats_trigger, "")) {
         /* No external trigger */
     } else {
@@ -796,15 +785,15 @@ static void ucs_stats_unset_trigger()
     void *result;
 
 #ifdef HAVE_LINUX_FUTEX_H
-    if (ucs_stats_context.flags & UCS_STATS_FLAG_ON_TIMER) {
-        ucs_stats_context.flags &= ~UCS_STATS_FLAG_ON_TIMER;
-        ucs_sys_futex(&ucs_stats_context.flags, FUTEX_WAKE, 1, NULL, NULL, 0);
+    if (ucs_stats_context_flags & UCS_STATS_FLAG_ON_TIMER) {
+        ucs_stats_context_flags &= ~UCS_STATS_FLAG_ON_TIMER;
+        ucs_sys_futex(&ucs_stats_context_flags, FUTEX_WAKE, 1, NULL, NULL, 0);
         pthread_join(ucs_stats_context.thread, &result);
     }
 #else
     pthread_mutex_lock(&ucs_stats_context.lock);
-    if (ucs_stats_context.flags & UCS_STATS_FLAG_ON_TIMER) {
-        ucs_stats_context.flags &= ~UCS_STATS_FLAG_ON_TIMER;
+    if (ucs_stats_context_flags & UCS_STATS_FLAG_ON_TIMER) {
+        ucs_stats_context_flags &= ~UCS_STATS_FLAG_ON_TIMER;
         pthread_cond_broadcast(&ucs_stats_context.cv);
         pthread_mutex_unlock(&ucs_stats_context.lock);
         pthread_join(ucs_stats_context.thread, &result);
@@ -813,14 +802,14 @@ static void ucs_stats_unset_trigger()
     }
 #endif
 
-    if (ucs_stats_context.flags & UCS_STATS_FLAG_ON_EXIT) {
+    if (ucs_stats_context_flags & UCS_STATS_FLAG_ON_EXIT) {
         ucs_debug("dumping stats");
         __ucs_stats_dump(1);
-        ucs_stats_context.flags &= ~UCS_STATS_FLAG_ON_EXIT;
+        ucs_stats_context_flags &= ~UCS_STATS_FLAG_ON_EXIT;
     }
 
-    if (ucs_stats_context.flags & UCS_STATS_FLAG_ON_SIGNAL) {
-        ucs_stats_context.flags &= ~UCS_STATS_FLAG_ON_SIGNAL;
+    if (ucs_stats_context_flags & UCS_STATS_FLAG_ON_SIGNAL) {
+        ucs_stats_context_flags &= ~UCS_STATS_FLAG_ON_SIGNAL;
         signal(ucs_stats_context.signo, SIG_DFL);
     }
 }
@@ -849,7 +838,7 @@ static void ucs_stats_clean_node_recurs(ucs_stats_node_t *node)
 
 void ucs_stats_init()
 {
-    ucs_assert(ucs_stats_context.flags == 0);
+    ucs_assert(ucs_stats_context_flags == 0);
     ucs_stats_open_dest();
 
     if (!ucs_stats_is_active()) {
@@ -869,13 +858,13 @@ void ucs_stats_init()
     ucs_array_init_dynamic(&ucs_stats_context.aggrgt_counter_names);
 
     ucs_debug("statistics enabled, flags: %c%c%c%c%c%c%c",
-              (ucs_stats_context.flags & UCS_STATS_FLAG_ON_TIMER)      ? 't' : '-',
-              (ucs_stats_context.flags & UCS_STATS_FLAG_ON_EXIT)       ? 'e' : '-',
-              (ucs_stats_context.flags & UCS_STATS_FLAG_ON_SIGNAL)     ? 's' : '-',
-              (ucs_stats_context.flags & UCS_STATS_FLAG_SOCKET)        ? 'u' : '-',
-              (ucs_stats_context.flags & UCS_STATS_FLAG_STREAM)        ? 'f' : '-',
-              (ucs_stats_context.flags & UCS_STATS_FLAG_STREAM_BINARY) ? 'b' : '-',
-              (ucs_stats_context.flags & UCS_STATS_FLAG_STREAM_CLOSE)  ? 'c' : '-');
+              (ucs_stats_context_flags & UCS_STATS_FLAG_ON_TIMER)      ? 't' : '-',
+              (ucs_stats_context_flags & UCS_STATS_FLAG_ON_EXIT)       ? 'e' : '-',
+              (ucs_stats_context_flags & UCS_STATS_FLAG_ON_SIGNAL)     ? 's' : '-',
+              (ucs_stats_context_flags & UCS_STATS_FLAG_SOCKET)        ? 'u' : '-',
+              (ucs_stats_context_flags & UCS_STATS_FLAG_STREAM)        ? 'f' : '-',
+              (ucs_stats_context_flags & UCS_STATS_FLAG_STREAM_BINARY) ? 'b' : '-',
+              (ucs_stats_context_flags & UCS_STATS_FLAG_STREAM_CLOSE)  ? 'c' : '-');
 }
 
 void ucs_stats_cleanup()
@@ -889,7 +878,7 @@ void ucs_stats_cleanup()
     ucs_stats_unset_trigger();
     ucs_stats_clean_node_recurs(&ucs_stats_context.root_node);
     ucs_stats_close_dest();
-    ucs_assert(ucs_stats_context.flags == 0);
+    ucs_assert(ucs_stats_context_flags == 0);
 
     kh_foreach_value(&ucs_stats_context.cls, cls, {
         ucs_stats_free_class(cls);
@@ -911,11 +900,6 @@ void ucs_stats_dump()
     pthread_mutex_unlock(&ucs_stats_context.lock);
 }
 
-int ucs_stats_is_active()
-{
-    return ucs_stats_context.flags & (UCS_STATS_FLAG_SOCKET|UCS_STATS_FLAG_STREAM);
-}
-
 ucs_stats_node_t * ucs_stats_get_root() {
     return &ucs_stats_context.root_node;
 }
@@ -932,11 +916,6 @@ void ucs_stats_cleanup()
 
 void ucs_stats_dump()
 {
-}
-
-int ucs_stats_is_active()
-{
-    return 0;
 }
 
 ucs_stats_node_t *ucs_stats_get_root()
