@@ -56,7 +56,7 @@ ucs_global_opts_t ucs_global_opts = {
     .module_dir            = UCX_MODULE_DIR, /* defined in Makefile.am */
     .module_log_level      = UCS_LOG_LEVEL_TRACE,
     .modules               = { {NULL, 0}, UCS_CONFIG_ALLOW_LIST_ALLOW_ALL },
-    .plugin_paths          = { NULL, 0 },
+    .plugin_path           = { NULL, 0 },
     .arch                  = UCS_ARCH_GLOBAL_OPTS_INITALIZER,
     .rcache_stat_min       = 0,
     .rcache_stat_max       = 0
@@ -205,9 +205,9 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   ucs_offsetof(ucs_global_opts_t, modules), UCS_CONFIG_TYPE_ALLOW_LIST},
 
  {"PLUGIN_PATH", "",
-  "Comma-separated list of additional directories to search for loadable\n"
+  "Colon-separated list of additional directories to search for loadable\n"
   "plugin modules",
-  ucs_offsetof(ucs_global_opts_t, plugin_paths), UCS_CONFIG_TYPE_STRING_ARRAY},
+  ucs_offsetof(ucs_global_opts_t, plugin_path), UCS_CONFIG_TYPE_PATH_ARRAY},
 
  {"TOPO_PRIO", "sysfs,default",
   "Comma-separated list of providers for detecting system topology.\n"

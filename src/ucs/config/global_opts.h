@@ -141,7 +141,7 @@ typedef struct {
     ucs_config_allow_list_t    modules;
 
     /* additional directories to search for loadable plugin modules */
-    ucs_config_names_array_t   plugin_paths;
+    ucs_config_names_array_t   plugin_path;
 
     /* arch-specific global options */
     ucs_arch_global_opts_t     arch;
