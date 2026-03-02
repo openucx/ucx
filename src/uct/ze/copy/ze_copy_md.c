@@ -141,10 +141,11 @@ static ucs_status_t
 uct_ze_copy_md_query_attributes(uct_md_h md, const void *addr, size_t length,
                                 ucs_memory_info_t *mem_info, int *dmabuf_fd)
 {
-    uct_ze_copy_md_t *ze_md = ucs_derived_of(md, uct_ze_copy_md_t);
+    uct_ze_copy_md_t *ze_md                  = ucs_derived_of(md, uct_ze_copy_md_t);
     ze_external_memory_export_fd_t export_fd = {
         .stype = ZE_STRUCTURE_TYPE_EXTERNAL_MEMORY_EXPORT_FD,
-        .flags = ZE_EXTERNAL_MEMORY_TYPE_FLAG_DMA_BUF
+        .flags = ZE_EXTERNAL_MEMORY_TYPE_FLAG_DMA_BUF,
+        .fd    = UCT_DMABUF_FD_INVALID
     };
     ze_memory_allocation_properties_t props  = {
         .stype = ZE_STRUCTURE_TYPE_MEMORY_ALLOCATION_PROPERTIES,
@@ -186,11 +187,15 @@ static ucs_status_t uct_ze_copy_md_mem_query(uct_md_h md, const void *addr,
                                              uct_md_mem_attr_t *mem_attr_p)
 {
     int dmabuf_fd = UCT_DMABUF_FD_INVALID;
-    ucs_status_t status;
     ucs_memory_info_t mem_info;
+    ucs_status_t status;
+    int *dmabuf_fd_p;
+
+    dmabuf_fd_p = (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD) ?
+                  &dmabuf_fd : NULL;
 
     status = uct_ze_copy_md_query_attributes(md, addr, length, &mem_info,
-                                             &dmabuf_fd);
+                                             dmabuf_fd_p);
     if (status != UCS_OK) {
         return status;
     }
@@ -216,13 +221,25 @@ static ucs_status_t uct_ze_copy_md_mem_query(uct_md_h md, const void *addr,
 
     if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD) {
         mem_attr_p->dmabuf_fd = dup(dmabuf_fd);
+        if (mem_attr_p->dmabuf_fd < 0) {
+            status = UCS_ERR_IO_ERROR;
+            goto out_close_dmabuf;
+        }
     }
 
     if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET) {
         mem_attr_p->dmabuf_offset = UCS_PTR_BYTE_DIFF(mem_info.base_address,
                                                       addr);
     }
-    return UCS_OK;
+
+    status = UCS_OK;
+
+out_close_dmabuf:
+    if (dmabuf_fd != UCT_DMABUF_FD_INVALID) {
+        close(dmabuf_fd);
+    }
+
+    return status;
 }
 
 static ucs_status_t
