@@ -160,11 +160,11 @@ uct_ze_base_set_device_sys_dev(uct_ze_device_t *device, int device_idx,
     char name[16];
 
     for (i = 0; i < device_idx; i++) {
-        if (pci_info[i].valid &&
-            pci_info[i].bus_id.domain == bus_id->domain &&
-            pci_info[i].bus_id.bus == bus_id->bus &&
-            pci_info[i].bus_id.slot == bus_id->slot &&
-            pci_info[i].bus_id.function == bus_id->function) {
+        if ((pci_info[i].valid != 0) &&
+            (pci_info[i].bus_id.domain == bus_id->domain) &&
+            (pci_info[i].bus_id.bus == bus_id->bus) &&
+            (pci_info[i].bus_id.slot == bus_id->slot) &&
+            (pci_info[i].bus_id.function == bus_id->function)) {
             found_idx = i;
             break;
         }
@@ -237,7 +237,7 @@ uct_ze_base_init_device_subdevices(uct_ze_device_t *device, int device_idx)
 }
 
 static void
-uct_ze_base_add_global_subdevices(uct_ze_device_t *device, 
+uct_ze_base_add_global_subdevices(uct_ze_device_t *device,
                                   int *global_subdevice_id_p)
 {
     uct_ze_subdevice_t *subdevice;
@@ -390,7 +390,7 @@ ucs_status_t uct_ze_base_query_devices(uct_md_h md,
     const uct_ze_device_t *device;
     int i;
 
-    if ((uct_ze_base_init() != ZE_RESULT_SUCCESS) || 
+    if ((uct_ze_base_init() != ZE_RESULT_SUCCESS) ||
         (ze_num_subdevices == 0)) {
         *tl_devices_p     = NULL;
         *num_tl_devices_p = 0;
