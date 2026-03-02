@@ -80,6 +80,17 @@ typedef enum {
 
 
 /**
+ * Define a function to be called when a module is cleaned up.
+ *
+ * Usage:
+ *    UCS_MODULE_CLEANUP() { ... code ... }
+ */
+#define UCS_MODULE_CLEANUP() \
+    void __attribute__((visibility("protected"))) \
+    UCS_MODULE_DESTRUCTOR_NAME(void)
+
+
+/**
  * Define the name of a loadable module global constructor
  */
 #define UCS_MODULE_CONSTRUCTOR_NAME \
@@ -87,23 +98,36 @@ typedef enum {
 
 
 /**
- * Load a single external module by name at runtime.
+ * Define the name of a loadable module global destructor
+ */
+#define UCS_MODULE_DESTRUCTOR_NAME \
+    ucs_module_global_cleanup
+
+
+/**
+ * Discover and load all external modules matching a framework name.
  *
- * Unlike @ref UCS_MODULE_FRAMEWORK_LOAD which uses a compile-time module list,
- * this function loads a specific module that may have been built and installed
- * separately. The module .so does not need to be known at UCX compile time.
- *
- * Library name: lib<framework>_<module_name><ext>
- * Search paths are the same as @ref UCS_MODULE_FRAMEWORK_LOAD.
- * UCS_MODULE_INIT() in the module is called if present (optional).
+ * Scans both built-in module directories and UCX_PLUGIN_PATH for shared
+ * libraries matching the pattern lib<framework>_*<ext>. Each matching library
+ * is loaded via dlopen() and its UCS_MODULE_INIT() is called if present.
  *
  * @param [in] framework    Framework name (e.g., "uct_ib")
- * @param [in] module_name  Module name (e.g., "plugin")
  * @param [in] init_once    Init-once guard to ensure single loading
  * @param [in] flags        Load flags, see @ref ucs_module_load_flags_t
  */
-void ucs_load_module_external(const char *framework, const char *module_name,
-                              ucs_init_once_t *init_once, unsigned flags);
+void ucs_load_modules_external(const char *framework,
+                               ucs_init_once_t *init_once, unsigned flags);
+
+
+/**
+ * Unload external modules for a given framework.
+ *
+ * Calls UCS_MODULE_CLEANUP() for each loaded module matching the given
+ * framework name.
+ *
+ * @param [in] framework    Framework name (e.g., "uct_ib")
+ */
+void ucs_unload_modules_external(const char *framework);
 
 
 /**

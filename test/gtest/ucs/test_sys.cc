@@ -6,6 +6,7 @@
 
 #include <common/test.h>
 extern "C" {
+#include <dlfcn.h>
 #include <ucs/sys/module.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/sock.h>
@@ -142,6 +143,24 @@ UCS_TEST_F(test_sys, module) {
     EXPECT_EQ(0, test_module_loaded);
     UCS_MODULE_FRAMEWORK_LOAD(test, 0);
     EXPECT_EQ(1, test_module_loaded);
+}
+
+UCS_TEST_F(test_sys, load_external_modules) {
+    const char *FRAMEWORK = "uct_ib";
+    ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
+    int *init_flag;
+
+    ucs_load_modules_external(FRAMEWORK, &init_once,
+                              UCS_MODULE_LOAD_FLAG_GLOBAL);
+
+    init_flag = (int *)dlsym(RTLD_DEFAULT, "uct_ib_plugin_initialized");
+    if (init_flag != NULL) {
+        EXPECT_EQ(1, *init_flag);
+        EXPECT_EQ(0, *init_flag);
+    } else {
+        UCS_TEST_MESSAGE << "no external uct_ib plugin found, skipping";
+    }
+    ucs_unload_modules_external(FRAMEWORK);
 }
 
 UCS_TEST_F(test_sys, dirname) {
