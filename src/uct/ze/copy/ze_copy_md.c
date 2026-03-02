@@ -66,9 +66,13 @@ uct_ze_copy_mem_alloc(uct_md_h tl_md, size_t *length_p, void **address_p,
                       ucs_memory_type_t mem_type, ucs_sys_device_t sys_dev,
                       unsigned flags, const char *alloc_name, uct_mem_h *memh_p)
 {
-    uct_ze_copy_md_t *md = ucs_derived_of(tl_md, uct_ze_copy_md_t);
-    ze_host_mem_alloc_desc_t host_desc  = {};
-    ze_device_mem_alloc_desc_t dev_desc = {};
+    uct_ze_copy_md_t *md                = ucs_derived_of(tl_md, uct_ze_copy_md_t);
+    ze_host_mem_alloc_desc_t host_desc  = {
+        .stype = ZE_STRUCTURE_TYPE_HOST_MEM_ALLOC_DESC
+    };
+    ze_device_mem_alloc_desc_t dev_desc = {
+        .stype = ZE_STRUCTURE_TYPE_DEVICE_MEM_ALLOC_DESC
+    };
     size_t alignment                    = ucs_get_page_size();
     ucs_status_t status;
 
@@ -346,4 +350,3 @@ uct_component_t uct_ze_copy_component = {
     .md_vfs_init    = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
 UCT_COMPONENT_REGISTER(&uct_ze_copy_component);
-
