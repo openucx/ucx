@@ -550,9 +550,14 @@ UCS_TEST_F(test_string_buffer, expand_range_multi_digit) {
 }
 
 UCS_TEST_F(test_string_buffer, expand_range_malformed) {
-    /* Tokens without an opening bracket are treated as literals */
-    const std::string malformed[] = {"no_bracket", "prefix2-]", "prefix]abc",
-                                     "hello]]",    "]]-",       "]--"};
+    const std::string malformed[] = {
+            "no_bracket", "prefix2-]",  "prefix]abc", "hello]]",
+            "]]-",        "]--",        "a[-1-2]b",   "a[-2-]b",
+            "a[2-3-]b",   "a[4]b",      "a[[]b",      "a[[2-4]b",
+            "a[2-]b",     "a[2-3-4]b",  "a[b-c]d",    "a[0-A]b",
+            "a[-]b",      "[]",         "[-1-2-]",    "[--]",
+            "[1-2][3-4]", "[4-8][",     "[5-6]]",     "][4-5]",
+            "[[0-4]]",    "a[0-4]b[6-8]c"};
 
     for (const std::string &token : malformed) {
         ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
@@ -581,13 +586,7 @@ UCS_TEST_F(test_string_buffer, expand_range_empty) {
 }
 
 UCS_TEST_F(test_string_buffer, expand_range_invalid) {
-    const std::string invalid[] = {"a[5-2]b",    "a[-1-2]b", "a[-2-]b",
-                                   "a[2-3-]b",   "a[4]b",    "a[[]b",
-                                   "a[[2-4]b",   "a[2-]b",   "a[2-3-4]b",
-                                   "a[b-c]d",    "a[0-A]b",  "a[-]b",
-                                   "[]",         "[-1-2-]",  "[--]",
-                                   "[1-2][3-4]", "[4-8][",   "[5-6]]",
-                                   "][4-5]",     "[[0-4]]",  "a[0-4]b[6-8]c"};
+    const std::string invalid[] = {"a[5-2]b", "[10-0]", "dev[100-1]suffix"};
 
     for (const std::string &token : invalid) {
         ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
