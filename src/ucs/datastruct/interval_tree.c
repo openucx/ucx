@@ -9,8 +9,8 @@
 #endif
 
 #include "interval_tree.h"
+#include <ucs/datastruct/mpool.inl>
 #include <ucs/sys/math.h>
-#include <ucs/datastruct/mpool.h>
 
 
 /**
@@ -23,7 +23,7 @@ ucs_interval_tree_node_create(ucs_interval_tree_t *tree, uint64_t start,
 {
     ucs_interval_node_t *node;
 
-    node = ucs_mpool_get(tree->mpool);
+    node = ucs_mpool_get_inline(tree->mpool);
     if (node == NULL) {
         return NULL;
     }
@@ -47,8 +47,8 @@ void ucs_interval_tree_init(ucs_interval_tree_t *tree, ucs_mpool_t *mpool)
 static void ucs_interval_tree_delete_node(ucs_interval_tree_t *tree,
                                           ucs_interval_node_t *node)
 {
-    ucs_assert(tree->num_nodes > 0);
-    ucs_mpool_put(node);
+    ucs_assertv(tree->num_nodes > 0, "tree=%p, node=%p", tree, node);
+    ucs_mpool_put_inline(node);
     tree->num_nodes--;
 }
 

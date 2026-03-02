@@ -69,7 +69,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucs_interval_tree_insert(
 {
     ucs_interval_node_t *root = tree->root;
 
-    ucs_assertv(start <= end + 1, "start=%lu, end=%lu", start, end);
+    ucs_assertv(start <= (end + 1), "tree=%p, start=%lu, end=%lu", tree, start,
+                end);
 
     /* Fast path: if tree has only root and new interval overlaps/touches it, extend it */
     if (ucs_likely(tree->num_nodes == 1) &&
@@ -99,7 +100,8 @@ ucs_interval_tree_is_equal_range(const ucs_interval_tree_t *tree,
 {
     ucs_interval_node_t *root = tree->root;
 
-    ucs_assertv(start <= end + 1, "start=%lu, end=%lu", start, end);
+    ucs_assertv(start <= (end + 1), "tree=%p, start=%lu, end=%lu", tree, start,
+                end);
 
     return (tree->num_nodes == 1) && (root->start == start) &&
            (root->end == end);
