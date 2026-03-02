@@ -7,6 +7,7 @@
 #include "test.h"
 
 #include <ucs/config/parser.h>
+#include <regex>
 #include <ucs/config/global_opts.h>
 #include <ucs/stats/stats.h>
 #include <ucs/sys/sys.h>
@@ -23,6 +24,13 @@ std::vector<std::string> test_base::m_warnings;
 std::vector<std::string> test_base::m_first_warns_and_errors;
 std::set<int> test_base::m_prev_open_fds;
 int test_base::m_consecutive_fd_increases = 0;
+
+/* File descriptors related to external libraries (rdma-core, CUDA driver, etc.) */
+static const char *fd_leak_whitelist[] = {
+    R"(\/dev\/infiniband\/uverbs\d+)",
+    R"(anon_inode:\[infinibandevent\])",
+    R"(\/dev\/nvidia\d+)",
+};
 
 test_base::test_base() :
                 m_state(NEW),
@@ -49,46 +57,61 @@ test_base::~test_base() {
                        "state=%d", m_state);
 }
 
+bool test_base::is_fd_whitelisted(const std::string &target) const
+{
+    for (const char *pattern : fd_leak_whitelist) {
+        if (std::regex_search(target, std::regex(pattern))) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void test_base::check_fd_leaks()
 {
-    /* Compare open file descriptors of the current test against the previous
-     * test's post-cleanup state to detect leaks. Uses set-difference to catch
-     * new fds even when the total count doesn't change (e.g. one fd leaked
-     * while another was closed). Tolerates one-time external library
-     * initialization (rdma-core, CUDA driver) via a consecutive-increase
-     * threshold. */
+    /* Compare open file descriptors against the previous test's post-cleanup
+     * state via set-difference. New fds whose targets match fd_leak_whitelist
+     * (e.g. rdma-core, CUDA driver) are logged but not counted as leaks.
+     * Non-whitelisted new fds increment a consecutive-increase counter and
+     * trigger a failure once CONSECUTIVE_FD_INCREASE_THRESHOLD is reached. */
     std::set<int> open_fds = collect_open_fds();
 
     if (!m_prev_open_fds.empty()) {
-        std::vector<int> leaked_fds;
+        std::stringstream ss;
+        int num_leaked      = 0;
+        int num_whitelisted = 0;
+
         for (const int fd : open_fds) {
             if (m_prev_open_fds.find(fd) == m_prev_open_fds.end()) {
-                leaked_fds.push_back(fd);
+                std::string target = fd_target(fd);
+                ss << "\n  fd " << fd << " -> " << target;
+                if (is_fd_whitelisted(target)) {
+                    ss << " (whitelisted)";
+                    ++num_whitelisted;
+                } else {
+                    ++num_leaked;
+                }
             }
         }
 
-        if (!leaked_fds.empty()) {
-            ++m_consecutive_fd_increases;
-
-            std::stringstream ss;
-            ss << "new fds detected: " << leaked_fds.size();
-            for (const int fd : leaked_fds) {
-                ss << "\n  fd " << fd << " -> " << fd_target(fd);
+        if (num_leaked > 0 || num_whitelisted > 0) {
+            UCS_TEST_MESSAGE << "new fds detected (" << num_leaked
+                             << " non-whitelisted, " << num_whitelisted
+                             << " whitelisted):" << ss.str();
+            if (num_leaked > 0) {
+                ++m_consecutive_fd_increases;
+                ss << "\n  consecutive fd increases: "
+                   << m_consecutive_fd_increases;
             }
-            ss << "\n  consecutive fd increases: "
-               << m_consecutive_fd_increases;
+        }
 
-            if (m_consecutive_fd_increases >=
-                CONSECUTIVE_FD_INCREASE_THRESHOLD) {
-                ADD_FAILURE() << ss.str();
-            } else {
-                UCS_TEST_MESSAGE << ss.str()
-                                 << " (not failing while under the "
-                                    "threshold (="
-                                 << CONSECUTIVE_FD_INCREASE_THRESHOLD << "))";
-            }
-        } else {
+        if (num_leaked == 0) {
             m_consecutive_fd_increases = 0;
+        } else if (m_consecutive_fd_increases >=
+                   CONSECUTIVE_FD_INCREASE_THRESHOLD) {
+            ADD_FAILURE() << "new fds detected for more than "
+                          << CONSECUTIVE_FD_INCREASE_THRESHOLD
+                          << " consecutive tests!";
         }
     }
 
