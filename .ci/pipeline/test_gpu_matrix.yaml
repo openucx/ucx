@@ -25,6 +25,7 @@ credentials:
 
 env:
   UCX_REPO: "https://github.com/openucx/ucx.git"
+  DOCKER_IMAGE: "harbor.mellanox.com#hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0"
   RUN_TESTS: "yes"
   TEST_PERF: "1"
   ASAN_CHECK: "no"
@@ -36,10 +37,6 @@ env:
   SLURM_NODES: 1
   SLURM_PARTITION: funk
   SLURM_HEAD_NODE: scctl
-  SLURM_GRES: gpu:1
-  SLURM_MEM: 32G
-  SLURM_MINCPUS: 16
-  NPROC: 16
   SLURM_JOB_TIMEOUT: '02:45:00'
   TEST_TIMEOUT: 140
   STORAGE_DRIVER: overlay
@@ -81,7 +78,7 @@ steps:
         --slurm_gres=${SLURM_GRES} \
         --slurm_mem=${SLURM_MEM} \
         --slurm_mincpus=${SLURM_MINCPUS} \
-        --slurm_job_name=ucx-w${worker}-${BUILD_NUMBER} \
+        --slurm_job_name=ucx-ci-w${worker}-${BUILD_NUMBER} \
         --slurm_job_id_file=/mnt/pvc/job_id_w${worker}_${BUILD_NUMBER}.txt
 
   - name: Checkout
@@ -92,9 +89,9 @@ steps:
       set -x
       .ci/scripts/run_tests_slurm.sh \
         --test_script_path="git clone "${UCX_REPO}" . && git fetch --no-tags origin "${sha1}" && git checkout ${sha1}" \
-        --container_name=ucx-w${worker}-${BUILD_NUMBER} \
+        --container_name=ucx-ci-w${worker}-${BUILD_NUMBER} \
         --slurm_job_id=$(cat /mnt/pvc/job_id_w${worker}_${BUILD_NUMBER}.txt) \
-        --docker_image="harbor.mellanox.com#hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0"
+        --docker_image=${DOCKER_IMAGE}
 
   - name: Test
     containerSelector: "{name: 'build_helper_ucx'}"
@@ -104,10 +101,10 @@ steps:
       set -x
       .ci/scripts/run_tests_slurm.sh \
         --test_script_path="./contrib/test_jenkins.sh" \
-        --container_name=ucx-w${worker}-${BUILD_NUMBER} \
+        --container_name=ucx-ci-w${worker}-${BUILD_NUMBER} \
         --slurm_job_id=$(cat /mnt/pvc/job_id_w${worker}_${BUILD_NUMBER}.txt) \
         --slurm_env="GTEST_MAX_IB_SL=${GTEST_MAX_IB_SL},EXECUTOR_NUMBER=${EXECUTOR_NUMBER},RUNNING_IN_AZURE=${RUNNING_IN_AZURE},NPROC=${NPROC},sha1=${sha1},worker=${worker},nworkers=${nworkers},RUN_TESTS=${RUN_TESTS},TEST_PERF=${TEST_PERF},ASAN_CHECK=${ASAN_CHECK},VALGRIND_CHECK=${VALGRIND_CHECK}" \
-        --docker_image="harbor.mellanox.com#hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0"
+        --docker_image=${DOCKER_IMAGE}
 
 
 pipeline_stop:

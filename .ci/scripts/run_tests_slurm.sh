@@ -63,12 +63,12 @@ while getopts ":h-:" optchar; do
 done
 
 # Use environment variables as fallback
-docker_image=${docker_image:-${DOCKER_IMAGE_NAME}}
+docker_image=${docker_image:-${DOCKER_IMAGE}}
 slurm_job_id=${slurm_job_id:-${SLURM_JOB_ID}}
 slurm_nodes=${slurm_nodes:-${SLURM_NODES}}
 slurm_head_node=${slurm_head_node:-${SLURM_HEAD_NODE}}
 slurm_head_user=${slurm_head_user:-${SLURM_HEAD_USER}}
-container_name=${container_name:-"ucx-${BUILD_NUMBER}"}
+container_name=${container_name:-"ucx-ci-${BUILD_NUMBER}"}
 
 # Validate required parameters
 : ${docker_image:?Missing --docker_image}
