@@ -26,12 +26,20 @@ libuct_ze_la_SOURCES = \
 noinst_HEADERS += \
     copy/ze_copy_md.h \
     copy/ze_copy_iface.h \
-    copy/ze_copy_ep.h
+    copy/ze_copy_ep.h  \
+    ze_ipc/ze_ipc_md.h \
+	ze_ipc/ze_ipc_iface.h \
+	ze_ipc/ze_ipc_ep.h \
+	ze_ipc/ze_ipc_cache.h
 
 libuct_ze_la_SOURCES += \
     copy/ze_copy_md.c \
     copy/ze_copy_iface.c \
-    copy/ze_copy_ep.c
+    copy/ze_copy_ep.c  \
+    ze_ipc/ze_ipc_md.c \
+	ze_ipc/ze_ipc_iface.c \
+	ze_ipc/ze_ipc_ep.c \
+	ze_ipc/ze_ipc_cache.c
 
 PKG_CONFIG_NAME=ze
 
