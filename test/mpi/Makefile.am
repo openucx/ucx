@@ -1,5 +1,5 @@
 #
-# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 #
 # Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
@@ -15,8 +15,16 @@ noinst_PROGRAMS       =
 
 if HAVE_MPICC
 noinst_PROGRAMS      += test_memhooks
+
+# A library we use for testing that memory hooks work in libraries loaded
+# after the hooks were installed
+noinst_LTLIBRARIES    = libtest_memhooks.la
+
 if HAVE_CUDA
-noinst_PROGRAMS      += test_mpi_cuda
+noinst_PROGRAMS      += test_mpi_cuda \
+                        test_rma_cuda
+
+noinst_LTLIBRARIES   += libtest_cuda_common.la
 endif
 endif
 
@@ -36,16 +44,28 @@ test_memhooks_SOURCES = test_memhooks.c
 test_memhooks_LDFLAGS = -ldl
 
 if HAVE_CUDA
+libtest_cuda_common_la_SOURCES  = test_cuda_common.c
+libtest_cuda_common_la_CPPFLAGS = $(BASE_CPPFLAGS) $(CUDA_CPPFLAGS)
+libtest_cuda_common_la_CFLAGS   = $(BASE_CFLAGS)
+libtest_cuda_common_la_LDFLAGS  = $(CUDA_LDFLAGS)
+libtest_cuda_common_la_LIBADD   = $(CUDA_LIBS)
+
 test_mpi_cuda_SOURCES  = test_mpi_cuda.c
 test_mpi_cuda_CPPFLAGS = $(BASE_CPPFLAGS) $(CUDA_CPPFLAGS)
 test_mpi_cuda_CFLAGS   = $(BASE_CFLAGS)
 test_mpi_cuda_LDFLAGS  = $(CUDA_LDFLAGS)
-test_mpi_cuda_LDADD    = $(CUDA_LIBS) $(top_builddir)/src/ucs/libucs.la
+test_mpi_cuda_LDADD    = $(CUDA_LIBS) $(top_builddir)/src/ucs/libucs.la \
+                         libtest_cuda_common.la
+
+test_rma_cuda_SOURCES  = test_rma_cuda.c
+test_rma_cuda_CPPFLAGS = $(BASE_CPPFLAGS) $(CUDA_CPPFLAGS)
+test_rma_cuda_CFLAGS   = $(BASE_CFLAGS)
+test_rma_cuda_LDFLAGS  = $(CUDA_LDFLAGS)
+test_rma_cuda_LDADD    = $(CUDA_LIBS) $(top_builddir)/src/ucs/libucs.la \
+                         $(top_builddir)/src/ucp/libucp.la \
+                         libtest_cuda_common.la
 endif
 
-# A library we use for testing that memory hooks work in libraries loaded
-# after the hooks were installed
-noinst_LTLIBRARIES = libtest_memhooks.la
 libtest_memhooks_la_SOURCES = test_memhooks_lib.c
 libtest_memhooks_la_LDFLAGS = -rpath /nowhere  # Force shared library
 endif

@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (c) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -28,6 +28,7 @@
 #include <vector>
 #include <string>
 #include <algorithm>
+#include <set>
 #include <unordered_map>
 #include <sys/socket.h>
 #include <dirent.h>
@@ -327,6 +328,16 @@ ssize_t get_proc_self_status_field(const std::string &parameter);
  * Read directory contents and return a vector of file names.
  */
 std::vector<std::string> read_dir(const std::string &path);
+
+/**
+ * Collect the set of currently open file descriptors.
+ */
+std::set<int> collect_open_fds();
+
+/**
+ * Return the symlink target of the given file descriptor.
+ */
+std::string fd_target(int fd);
 
 /**
  * Return the name of the given network device if it is supported by rdmacm.

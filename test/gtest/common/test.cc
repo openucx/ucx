@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2013. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -11,11 +11,9 @@
 #include <ucs/stats/stats.h>
 #include <ucs/sys/sys.h>
 
-#include <dirent.h>
-#include <memory>
-#include <unistd.h>
-
 namespace ucs {
+
+constexpr int CONSECUTIVE_FD_INCREASE_THRESHOLD = 2;
 
 pthread_mutex_t test_base::m_logger_mutex = PTHREAD_MUTEX_INITIALIZER;
 unsigned test_base::m_total_warnings = 0;
@@ -23,61 +21,18 @@ unsigned test_base::m_total_errors   = 0;
 std::vector<std::string> test_base::m_errors;
 std::vector<std::string> test_base::m_warnings;
 std::vector<std::string> test_base::m_first_warns_and_errors;
-long test_base::s_prev_test_fds          = -1;
-int  test_base::s_consecutive_fd_increases = 0;
-
-long test_base::count_open_fds()
-{
-    return collect_open_fds().size();
-}
-
-std::set<int> test_base::collect_open_fds()
-{
-    std::set<int> fds;
-    DIR *dir = opendir("/proc/self/fd");
-    if (dir == NULL) {
-        return fds;
-    }
-
-    int dir_fd = dirfd(dir);
-    struct dirent *entry;
-    while ((entry = readdir(dir)) != NULL) {
-        if (entry->d_name[0] != '.') {
-            int fd = atoi(entry->d_name);
-            if (fd != dir_fd) {
-                fds.insert(fd);
-            }
-        }
-    }
-    closedir(dir);
-    return fds;
-}
-
-std::string test_base::fd_target(int fd)
-{
-    char path[64], link[256];
-    snprintf(path, sizeof(path), "/proc/self/fd/%d", fd);
-    ssize_t len = readlink(path, link, sizeof(link) - 1);
-    if (len < 0) {
-        return "<readlink failed>";
-    }
-    link[len] = '\0';
-    return std::string(link);
-}
+std::set<int> test_base::m_prev_open_fds;
+int test_base::m_consecutive_fd_increases = 0;
 
 test_base::test_base() :
-    m_state(NEW),
-    m_initialized(false),
-    m_num_threads(1),
-    m_num_valgrind_errors_before(0),
-    m_num_errors_before(0),
-    m_num_warnings_before(0),
-    m_num_log_handlers_before(0),
-    m_num_open_fds_before(0),
-    m_open_fds_before(collect_open_fds())
+                m_state(NEW),
+                m_initialized(false),
+                m_num_threads(1),
+                m_num_valgrind_errors_before(0),
+                m_num_errors_before(0),
+                m_num_warnings_before(0),
+                m_num_log_handlers_before(0)
 {
-    m_num_open_fds_before = m_open_fds_before.size();
-    UCS_TEST_MESSAGE << "open fds at construction: " << m_num_open_fds_before;
     push_config();
 }
 
@@ -86,47 +41,58 @@ test_base::~test_base() {
         pop_config();
     }
 
-    std::set<int> open_fds_now = collect_open_fds();
-    long fds_now_count         = open_fds_now.size();
-    UCS_TEST_MESSAGE << "open fds at destruction: " << fds_now_count;
-
-    /* Compare against the previous test's post-cleanup FD count to detect
-     * leaks while tolerating one-time external library initialization
-     * (rdma-core, CUDA driver) that opens persistent FDs on first use of a
-     * transport.  A single increase is absorbed as a potential one-time init
-     * and only logged; two consecutive increases indicate a real per-test
-     * leak and trigger a failure. */
-    if (s_prev_test_fds >= 0) {
-        long diff = fds_now_count - s_prev_test_fds;
-        if (diff > 0) {
-            std::stringstream ss;
-            ss << "open fds diff: " << std::showpos << diff << std::noshowpos;
-            for (int fd : open_fds_now) {
-                if (m_open_fds_before.find(fd) == m_open_fds_before.end()) {
-                    ss << "\n  leaked fd " << fd << " -> " << fd_target(fd);
-                }
-            }
-            if (s_consecutive_fd_increases > 0) {
-                ADD_FAILURE() << ss.str();
-            } else {
-                UCS_TEST_MESSAGE << ss.str()
-                                 << "\n  (not failing yet, could be one-time "
-                                    "library init)";
-            }
-            ++s_consecutive_fd_increases;
-        } else {
-            s_consecutive_fd_increases = 0;
-        }
-    }
-
-    s_prev_test_fds = fds_now_count;
-
     ucs_assertv_always(m_state == FINISHED ||
                        m_state == SKIPPED ||
                        m_state == NEW ||
                        m_state == INITIALIZING ||
                        m_state == ABORTED,
                        "state=%d", m_state);
+}
+
+void test_base::check_fd_leaks()
+{
+    /* Compare open file descriptors of the current test against the previous
+     * test's post-cleanup state to detect leaks. Uses set-difference to catch
+     * new fds even when the total count doesn't change (e.g. one fd leaked
+     * while another was closed). Tolerates one-time external library
+     * initialization (rdma-core, CUDA driver) via a consecutive-increase
+     * threshold. */
+    std::set<int> open_fds = collect_open_fds();
+
+    if (!m_prev_open_fds.empty()) {
+        std::vector<int> leaked_fds;
+        for (const int fd : open_fds) {
+            if (m_prev_open_fds.find(fd) == m_prev_open_fds.end()) {
+                leaked_fds.push_back(fd);
+            }
+        }
+
+        if (!leaked_fds.empty()) {
+            ++m_consecutive_fd_increases;
+
+            std::stringstream ss;
+            ss << "new fds detected: " << leaked_fds.size();
+            for (const int fd : leaked_fds) {
+                ss << "\n  fd " << fd << " -> " << fd_target(fd);
+            }
+            ss << "\n  consecutive fd increases: "
+               << m_consecutive_fd_increases;
+
+            if (m_consecutive_fd_increases >=
+                CONSECUTIVE_FD_INCREASE_THRESHOLD) {
+                ADD_FAILURE() << ss.str();
+            } else {
+                UCS_TEST_MESSAGE << ss.str()
+                                 << " (not failing while under the "
+                                    "threshold (="
+                                 << CONSECUTIVE_FD_INCREASE_THRESHOLD << "))";
+            }
+        } else {
+            m_consecutive_fd_increases = 0;
+        }
+    }
+
+    m_prev_open_fds = std::move(open_fds);
 }
 
 void test_base::set_num_threads(unsigned num_threads) {
@@ -470,6 +436,8 @@ void test_base::TearDownProxy() {
             UCS_TEST_MESSAGE << "< " << m_first_warns_and_errors[i] << " >";
         }
     }
+
+    check_fd_leaks();
 }
 
 void test_base::run()
