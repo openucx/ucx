@@ -58,6 +58,11 @@ typedef enum {
  * will be different, in which case we prefer the 'local' library rather than the
  * 'installed' one.
  *
+ * After loading expected modules, external plugins matching the framework are
+ * discovered and loaded from:
+ *  1. Directories listed in UCX_PLUGIN_PATH (colon-separated)
+ *  2. The built-in module search directories listed above
+ *
  * @param [in] _name  Framework name (as a token)
  */
 #define UCS_MODULE_FRAMEWORK_LOAD(_name, _flags) \
@@ -105,35 +110,18 @@ typedef enum {
 
 
 /**
- * Discover and load all external modules matching a framework name.
+ * Cleanup all loaded external modules.
  *
- * Scans both built-in module directories and UCX_PLUGIN_PATH for shared
- * libraries matching the pattern lib<framework>_*<ext>. Each matching library
- * is loaded via dlopen() and its UCS_MODULE_INIT() is called if present.
- *
- * @param [in] framework    Framework name (e.g., "uct_ib")
- * @param [in] init_once    Init-once guard to ensure single loading
- * @param [in] flags        Load flags, see @ref ucs_module_load_flags_t
+ * Calls UCS_MODULE_CLEANUP() for each loaded external module and releases
+ * the loaded modules tracking array.
  */
-void ucs_load_modules_external(const char *framework,
-                               ucs_init_once_t *init_once, unsigned flags);
-
-
-/**
- * Unload external modules for a given framework.
- *
- * Calls UCS_MODULE_CLEANUP() for each loaded module matching the given
- * framework name.
- *
- * @param [in] framework    Framework name (e.g., "uct_ib")
- */
-void ucs_unload_modules_external(const char *framework);
+void ucs_cleanup_modules();
 
 
 /**
  * Internal function. Please use @ref UCS_MODULE_FRAMEWORK_LOAD macro instead.
  */
-void ucs_load_modules(const char *framework, const char *modules,
+void ucs_load_modules(const char *framework, const char *expected_modules,
                       ucs_init_once_t *init_once, unsigned flags);
 
 

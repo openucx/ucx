@@ -125,6 +125,7 @@ void UCS_F_CTOR ucs_init()
 
 static void UCS_F_DTOR ucs_cleanup(void)
 {
+    ucs_cleanup_modules();
     ucs_topo_cleanup();
     ucs_numa_cleanup();
     ucs_async_global_cleanup();

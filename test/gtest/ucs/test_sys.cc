@@ -148,10 +148,8 @@ UCS_TEST_F(test_sys, load_external_modules) {
     const char *FRAMEWORK = "uct_ib";
     ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
 
-    ucs_load_modules_external(FRAMEWORK, &init_once,
-                              UCS_MODULE_LOAD_FLAG_GLOBAL);
-
-    ucs_unload_modules_external(FRAMEWORK);
+    ucs_load_modules(FRAMEWORK, "", &init_once,
+                     UCS_MODULE_LOAD_FLAG_GLOBAL);
 }
 
 UCS_TEST_F(test_sys, dirname) {
