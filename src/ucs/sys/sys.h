@@ -189,7 +189,14 @@ uint32_t ucs_file_checksum(const char *filename);
 /**
  * Get interface index for a given interface name.
  */
-ucs_status_t ucs_ifname_to_index(const char *ndev_name, unsigned *ndev_index_p);
+ucs_status_t
+ucs_ifname_to_ndev_index(const char *ndev_name, unsigned *ndev_index_p);
+
+
+/**
+ * Get interface index for a the loopback interface.
+ */
+ucs_status_t ucs_get_loopback_ndev_index(unsigned *ndev_index_p);
 
 
 /**
@@ -582,6 +589,16 @@ void ucs_sys_cpuset_copy(ucs_cpu_set_t *dst, const ucs_sys_cpuset_t *src);
  * @return namespace value or 0 if namespaces are not supported
  */
 ucs_sys_ns_t ucs_sys_get_ns(ucs_sys_namespace_type_t name);
+
+
+/**
+ * Get default namespace id for a given namespace type.
+ *
+ * @param [in]  name        Namespace to get default value
+ *
+ * @return default namespace value or 0 if namespaces are not supported
+ */
+ucs_sys_ns_t ucs_sys_ns_get_default(ucs_sys_namespace_type_t ns);
 
 
 /**

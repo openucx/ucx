@@ -160,9 +160,7 @@ uct_self_iface_is_reachable_v2(const uct_iface_h tl_iface,
     }
 
     if (iface->id != *addr) {
-        uct_iface_fill_info_str_buf(
-                params, "iface id and iface address differ (%lu vs %lu)",
-                iface->id, *addr);
+        uct_iface_fill_info_str_buf(params, "iface mismatch");
         return 0;
     }
 

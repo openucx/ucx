@@ -90,8 +90,7 @@ uct_rocm_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
     }
 
     if (ucs_get_system_id() != *((const uint64_t*)params->device_addr)) {
-        uct_iface_fill_info_str_buf(params,
-                                    "the device addr is from another machine");
+        uct_iface_fill_info_str_buf(params, "different machine");
         return 0;
     }
 

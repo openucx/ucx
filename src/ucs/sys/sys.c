@@ -166,7 +166,8 @@ uint32_t ucs_file_checksum(const char *filename)
     return crc;
 }
 
-ucs_status_t ucs_ifname_to_index(const char *ndev_name, unsigned *ndev_index_p)
+ucs_status_t
+ucs_ifname_to_ndev_index(const char *ndev_name, unsigned *ndev_index_p)
 {
     unsigned ndev_index = if_nametoindex(ndev_name);
     if (ndev_index == 0) {
@@ -175,6 +176,22 @@ ucs_status_t ucs_ifname_to_index(const char *ndev_name, unsigned *ndev_index_p)
     }
 
     *ndev_index_p = ndev_index;
+    return UCS_OK;
+}
+
+ucs_status_t ucs_get_loopback_ndev_index(unsigned *ndev_index_p)
+{
+    static int lo_ndev_index = -1;
+    ucs_status_t status;
+
+    if (lo_ndev_index == -1) {
+        status = ucs_ifname_to_ndev_index("lo", &lo_ndev_index);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    *ndev_index_p = lo_ndev_index;
     return UCS_OK;
 }
 
@@ -1436,9 +1453,14 @@ ucs_sys_ns_t ucs_sys_get_ns(ucs_sys_namespace_type_t ns)
     return ucs_sys_namespace_info[ns].value;
 }
 
+ucs_sys_ns_t ucs_sys_ns_get_default(ucs_sys_namespace_type_t ns)
+{
+    return ucs_sys_namespace_info[ns].dflt;
+}
+
 int ucs_sys_ns_is_default(ucs_sys_namespace_type_t ns)
 {
-    return ucs_sys_get_ns(ns) == ucs_sys_namespace_info[ns].dflt;
+    return ucs_sys_get_ns(ns) == ucs_sys_ns_get_default(ns);
 }
 
 ucs_status_t ucs_sys_get_boot_id(uint64_t *high, uint64_t *low)
