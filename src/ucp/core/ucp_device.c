@@ -348,9 +348,9 @@ static ucs_status_t ucp_device_mem_list_create_handle(
         uct_allocated_memory_t *mem)
 {
     const size_t uct_elem_size = sizeof(uct_device_mem_element_t);
-    size_t handle_size         = 0;
     ucs_status_t status        = UCS_OK;
-    unsigned i, j, num_uct_eps;
+    size_t handle_size;
+    unsigned i, j, num_uct_eps, num_lanes;
     ucp_device_mem_list_handle_t *handle;
     uct_mem_h uct_memh;
     uct_rkey_t uct_rkey;
@@ -366,9 +366,6 @@ static ucs_status_t ucp_device_mem_list_create_handle(
     uint64_t remote_addr;
     ucp_mem_h memh;
 
-    handle_size += sizeof(*handle->local_addrs) +
-                   sizeof(*handle->remote_addrs) + sizeof(*handle->lengths);
-
     /* For each available lane */
     for (i = 0;
          (i < UCP_DEVICE_MEM_LIST_MAX_EPS) && (lanes[i] != UCP_NULL_LANE);
@@ -377,8 +374,6 @@ static ucs_status_t ucp_device_mem_list_create_handle(
             /* TODO support proxy mem_element_pack() on wireup_ep */
             return UCS_ERR_NOT_CONNECTED;
         }
-
-        handle_size += uct_elem_size;
     }
 
     if (i == 0) {
@@ -387,8 +382,13 @@ static ucs_status_t ucp_device_mem_list_create_handle(
         return UCS_ERR_NO_DEVICE;
     }
 
-    handle_size *= params->num_elements;
-    handle_size += sizeof(*handle);
+    num_lanes   = i;
+    handle_size = sizeof(*handle) +
+                  params->num_elements *
+                          (sizeof(*handle->local_addrs) +
+                           sizeof(*handle->remote_addrs) +
+                           sizeof(*handle->lengths) +
+                           num_lanes * uct_elem_size);
     handle       = ucs_calloc(1, handle_size, "ucp_device_mem_list_handle_t");
     if (handle == NULL) {
         ucs_error("failed to allocate ucp_device_mem_list_handle_t");
@@ -581,7 +581,9 @@ static ucs_status_t ucp_device_mem_list_export_handle(
                                       UCT_MD_MEM_ACCESS_LOCAL_WRITE,
                               mem_type, local_sys_dev, alloc_name, mem);
     if (status != UCS_OK) {
-        ucs_error("failed to allocate %s: %s", alloc_name,
+        ucs_error("failed to allocate %s mem_type=%s sys_dev=%s: %s",
+                  alloc_name, ucs_memory_type_names[mem_type],
+                  ucs_topo_sys_device_get_name(local_sys_dev),
                   ucs_status_string(status));
         return status;
     }
