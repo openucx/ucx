@@ -20,6 +20,7 @@
 
 #include <level_zero/ze_api.h>
 
+
 static UCS_CLASS_INIT_FUNC(uct_ze_copy_ep_t, const uct_ep_params_t *params)
 {
     uct_ze_copy_iface_t *iface = ucs_derived_of(params->iface,
@@ -45,6 +46,7 @@ ucs_status_t uct_ze_copy_ep_zcopy(uct_ep_h tl_ep, uint64_t remote_addr,
     size_t size                = uct_iov_get_length(iov);
     uct_ze_copy_iface_t *iface = ucs_derived_of(tl_ep->iface,
                                                 uct_ze_copy_iface_t);
+    ucs_status_t status        = UCS_OK;
     ze_result_t ret;
     void *src, *dst;
 
@@ -59,36 +61,43 @@ ucs_status_t uct_ze_copy_ep_zcopy(uct_ep_h tl_ep, uint64_t remote_addr,
         dst = iov->buffer;
     }
 
-    ret = zeCommandListAppendMemoryCopy(iface->ze_cmdl, dst, src, size, NULL, 0,
-                                        NULL);
+    ret = zeCommandListAppendMemoryCopy(iface->ze_cmdl, dst, src, size,
+                                        NULL, 0, NULL);
     if (ret != ZE_RESULT_SUCCESS) {
-        return UCS_ERR_IO_ERROR;
+        status = UCS_ERR_IO_ERROR;
+        goto out_reset;
     }
 
     ret = zeCommandListClose(iface->ze_cmdl);
     if (ret != ZE_RESULT_SUCCESS) {
-        return UCS_ERR_IO_ERROR;
+        status = UCS_ERR_IO_ERROR;
+        goto out_reset;
     }
 
     ret = zeCommandQueueExecuteCommandLists(iface->ze_cmdq, 1, &iface->ze_cmdl,
                                             NULL);
     if (ret != ZE_RESULT_SUCCESS) {
-        return UCS_ERR_IO_ERROR;
+        status = UCS_ERR_IO_ERROR;
+        goto out_reset;
     }
 
     ret = zeCommandQueueSynchronize(iface->ze_cmdq, UINT64_MAX);
     if (ret != ZE_RESULT_SUCCESS) {
-        return UCS_ERR_IO_ERROR;
+        status = UCS_ERR_IO_ERROR;
     }
 
+out_reset:
     ret = zeCommandListReset(iface->ze_cmdl);
     if (ret != ZE_RESULT_SUCCESS) {
-        return UCS_ERR_IO_ERROR;
+        ucs_error("zeCommandListReset failed: 0x%x", ret);
+        if (status == UCS_OK) {
+            status = UCS_ERR_IO_ERROR;
+        }
     }
 
     ucs_trace("ze memory copy from src %p to dst %p, len %ld", src, dst, size);
 
-    return UCS_OK;
+    return status;
 }
 
 ucs_status_t uct_ze_copy_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
