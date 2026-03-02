@@ -35,6 +35,10 @@ ExclusiveArch: aarch64 ppc64le x86_64
 Requires: %{?extra_deps}
 %endif
 
+# Legacy package cleanup
+Conflicts: ucx-knem < %{version}-%{release}
+Obsoletes: ucx-knem < %{version}-%{release}
+
 BuildRequires: automake autoconf libtool gcc-c++
 %if %{with cma}
 BuildRequires: glibc-devel >= 2.15

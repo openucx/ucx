@@ -274,6 +274,7 @@ struct ucp_worker_iface {
     unsigned                      post_count;    /* Counts uncompleted requests which are
                                                     offloaded to the transport */
     uint8_t                       flags;         /* Interface flags */
+    uint8_t                       port_speed;    /* Quantized port speed */
 };
 
 
@@ -290,6 +291,9 @@ struct ucp_worker_cm {
 
 UCS_PTR_MAP_TYPE(ep, 1);
 UCS_PTR_MAP_TYPE(request, 0);
+
+/* rkey configuration storage */
+UCS_ARRAY_DECLARE_TYPE(ucp_rkey_config_arr_t, unsigned, ucp_rkey_config_t);
 
 
 /**
@@ -367,8 +371,7 @@ typedef struct ucp_worker {
 
     ucp_ep_config_arr_t              ep_config; /* EP configurations storage */
 
-    unsigned                         rkey_config_count;   /* Current number of rkey configurations */
-    ucp_rkey_config_t                rkey_config[UCP_WORKER_MAX_RKEY_CONFIG];
+    ucp_rkey_config_arr_t            rkey_config; /* Rkey configurations storage */
 
     struct {
         int                          timerfd;             /* Timer needed to signal to user's fd when
@@ -404,6 +407,12 @@ typedef struct ucp_worker {
         /* Last round timestamp */
         ucs_time_t                   last_round;
     } usage_tracker;
+
+    /* Configuration epoch (generation counter).
+     * Incremented after major connectivity changes (e.g. lane failure, port
+     * speed change). A matching epoch is stored in @ref ucp_proto_select_t.
+     * If epochs differ, the cached config is stale and must be updated. */
+    uint64_t                         epoch;
 } ucp_worker_t;
 
 

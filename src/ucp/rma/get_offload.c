@@ -238,7 +238,7 @@ ucp_proto_get_offload_zcopy_probe(const ucp_proto_init_params_t *init_params)
 static ucs_status_t ucp_proto_get_offload_zcopy_reset(ucp_request_t *req)
 {
     ucp_proto_get_offload_reset(req);
-    return ucp_proto_request_zcopy_reset(req);
+    return ucp_proto_offload_zcopy_reset(req);
 }
 
 ucp_proto_t ucp_get_offload_zcopy_proto = {

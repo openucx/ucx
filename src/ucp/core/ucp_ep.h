@@ -211,6 +211,7 @@ typedef struct ucp_ep_config_key_lane {
     uint8_t              path_index; /* Device path index */
     ucp_lane_type_mask_t lane_types; /* Which types of operations this lane
                                         was selected for */
+    uint8_t              port_speed; /* Quantized port speed */
     size_t               seg_size; /* Maximal fragment size which can be
                                       received by the peer */
 } ucp_ep_config_key_lane_t;
@@ -551,6 +552,7 @@ typedef struct ucp_ep_ext {
         ucs_list_link_t           started_ams;
         ucs_queue_head_t          mid_rdesc_q;    /* Queue of middle fragments, which
                                                      arrived before the first one */
+        uint64_t                  psn;
     } am;
 
     ucp_lane_map_t                unflushed_lanes; /* Bitmap of lanes which have
@@ -578,12 +580,12 @@ typedef struct ucp_ep_ext {
 typedef struct ucp_ep {
     ucp_worker_h                  worker;        /* Worker this endpoint belongs to */
 
-    uint8_t                       refcount;      /* Reference counter: 0 - it is
-                                                    allowed to destroy EP */
     ucp_worker_cfg_index_t        cfg_index;     /* Configuration index */
     ucp_ep_match_conn_sn_t        conn_sn;       /* Sequence number for remote connection */
-    ucp_lane_index_t              am_lane;       /* Cached value */
     ucp_ep_flags_t                flags;         /* Endpoint flags */
+    uint8_t                       refcount;      /* Reference counter: 0 - it is
+                                                    allowed to destroy EP */
+    ucp_lane_index_t              am_lane;       /* Cached value */
     /* Transports for every lane */
     uct_ep_h                      uct_eps[UCP_MAX_FAST_PATH_LANES];
     ucp_ep_ext_t                  *ext;                   /* Endpoint extension */
@@ -760,10 +762,11 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force);
 void ucp_ep_destroy_internal(ucp_ep_h ep);
 
 ucs_status_t
-ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status);
+ucp_ep_set_lanes_failed(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
+                        ucs_status_t status);
 
-void ucp_ep_set_failed_schedule(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
-                                ucs_status_t status);
+void ucp_ep_set_lanes_failed_schedule(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
+                                      ucs_status_t status);
 
 void ucp_ep_unprogress_uct_ep(ucp_ep_h ep, uct_ep_h uct_ep,
                               ucp_rsc_index_t rsc_index);
@@ -972,5 +975,27 @@ void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index);
  * @return Error code as defined by @ref ucs_status_t
  */
 ucs_status_t ucp_ep_flush_mem_progress(uct_pending_req_t *self);
+
+
+/**
+ * @brief Get the failed lanes from the endpoint configuration.
+ *
+ * @param [in] key        Endpoint configuration key.
+ *
+ * @return Bitmask of failed lanes.
+ */
+ucp_lane_map_t ucp_ep_config_get_failed_lanes(const ucp_ep_config_key_t *key);
+
+
+/**
+ * @brief Update EP configuration and rkey configuration according to the latest
+ * interfaces state.
+ *
+ * @param [in] ep      Endpoint object.
+ * @param [in] rkey    Rkey object.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_ep_update_rkey_config(ucp_ep_h ep, ucp_rkey_h rkey);
 
 #endif

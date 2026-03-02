@@ -28,9 +28,11 @@ runs_on_dockers:
   - { name: "rhel82-mofed5.0", url: "harbor.mellanox.com/ucx/x86_64/rhel8.2/builder:mofed-5.0-1.0.0.0", arch: x86_64 }
   - { name: "rhel90-mofed5.6", url: "harbor.mellanox.com/ucx/x86_64/rhel9.0/builder:mofed-5.6-0.5.0.0", arch: x86_64 }
   - { name: "rhel100-mofed25.07", url: "harbor.mellanox.com/hpcx/x86_64/rhel10.0/builder:mofed-25.07-0.9.7.0", arch: x86_64 }
-  - { name: "sles15sp6-doca2.9", url: "harbor.mellanox.com/hpcx/x86_64/sles15sp6/builder:doca-2.9.0", arch: x86_64 }
+  - { name: "sles15sp7-mofed26.01", url: "harbor.mellanox.com/hpcx/x86_64/sles15sp7/builder:mofed-26.01-0.8.8.0", arch: x86_64 }
+  - { name: "sles16sp0-mofed26.01", url: "harbor.mellanox.com/hpcx/x86_64/sles16sp0/builder:mofed-26.01-0.8.0.0", arch: x86_64 }
   - { name: "kylin10sp3-doca2.9", url: "harbor.mellanox.com/hpcx/x86_64/kylin10sp3/builder:doca-2.9.0", arch: x86_64 }
   - { name: "euleros2sp12-doca2.9", url: "harbor.mellanox.com/hpcx/x86_64/euleros2.0sp12/builder:doca-2.9.0", arch: x86_64 }
+  - { name: "ctyunos2507-mofed26.01", url: "harbor.mellanox.com/hpcx/x86_64/ctyunos25.07/builder:mofed-26.01-0.8.0.0", arch: x86_64 }
   - { name: "ubuntu2004-rocm5.4", url: "harbor.mellanox.com/ucx/x86_64/ubuntu2004:rocm_5_4_0", arch: x86_64 }
   - { name: "ubuntu2204-rocm6.0", url: "harbor.mellanox.com/ucx/x86_64/ubuntu2204:rocm-6.0.0", arch: x86_64 }
   # aarch64
@@ -38,6 +40,9 @@ runs_on_dockers:
   - { name: "rocky89-mofed24.10", url: "harbor.mellanox.com/hpcx/aarch64/rocky8.9/builder:mofed-24.10-3.2.5.0", arch: aarch64 }
   - { name: "rocky96-mofed24.10", url: "harbor.mellanox.com/hpcx/aarch64/rocky9.6/builder:mofed-24.10-3.2.5.0", arch: aarch64 }
   - { name: "rhel100-mofed25.07", url: "harbor.mellanox.com/hpcx/aarch64/rhel10.0/builder:mofed-25.07-0.9.7.0", arch: aarch64 }
+  - { name: "sles15sp7-mofed26.01", url: "harbor.mellanox.com/hpcx/aarch64/sles15sp7/builder:mofed-26.01-0.8.8.0", arch: aarch64 }
+  - { name: "ctyunos2507-mofed26.01", url: "harbor.mellanox.com/hpcx/aarch64/ctyunos25.07/builder:mofed-26.01-0.8.0.0", arch: aarch64 }
+  - { name: "sles16sp0-mofed26.01", url: "harbor.mellanox.com/hpcx/aarch64/sles16sp0/builder:mofed-26.01-0.8.0.0", arch: aarch64 }
 
 taskName: '${arch}/${name}'
 

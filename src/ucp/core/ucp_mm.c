@@ -1553,11 +1553,11 @@ void ucp_mem_print_info(const char *mem_spec, ucp_context_h context,
         mem_type_value = ucs_string_find_in_list(mem_type_str,
                                                  ucs_memory_type_names, 0);
         if ((mem_type_value < 0) ||
-            !(UCS_BIT(mem_type_value) & context->mem_type_mask)) {
+            !UCS_BIT_GET(context->supported_mem_type_mask, mem_type_value)) {
             printf("<Invalid memory type '%s', supported types: %s>\n",
                    mem_type_str,
                    ucs_flags_str(mem_types_buf, sizeof(mem_types_buf),
-                                 context->mem_type_mask,
+                                 context->supported_mem_type_mask,
                                  ucs_memory_type_names));
             return;
         }

@@ -284,7 +284,8 @@ public:
                                   ucp_proto_select_key_t key,
                                   ucp_worker_cfg_index_t rkey_cfg_index)
     {
-        ucp_rkey_config_t *config = &e.worker()->rkey_config[rkey_cfg_index];
+        ucp_rkey_config_t *config = &ucs_array_elem(&e.worker()->rkey_config,
+                                                    rkey_cfg_index);
         check_proto_select(e, config->proto_select, data_vec, key,
                            rkey_cfg_index);
     }
