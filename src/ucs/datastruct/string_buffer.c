@@ -421,8 +421,7 @@ ucs_status_t ucs_string_buffer_expand_ranges(ucs_string_buffer_t *strb,
 {
     ucs_status_t status     = UCS_OK;
     size_t count_inner, count_total = 0;
-    const char *token = input;
-    const char *token_end;
+    const char *token, *saveptr;
     size_t token_len;
 
     ucs_assertv(ucs_string_buffer_is_valid_delimiter(delim),
@@ -432,11 +431,8 @@ ucs_status_t ucs_string_buffer_expand_ranges(ucs_string_buffer_t *strb,
         goto out;
     }
 
-    do {
-        token_end = strchr(token, delim);
-        token_len = (token_end != NULL) ? (size_t)(token_end - token) :
-                                          strlen(token);
-
+    ucs_string_for_each_token(input, delim, saveptr, token, token_len)
+    {
         if (count_total > 0) {
             ucs_string_buffer_appendc(strb, delim, 1);
         }
@@ -450,12 +446,10 @@ ucs_status_t ucs_string_buffer_expand_ranges(ucs_string_buffer_t *strb,
 
         count_total += count_inner;
 
-        if (token_end == NULL) {
+        if (count_total >= max_elements) {
             break;
         }
-
-        token = token_end + 1;
-    } while (count_total < max_elements);
+    }
 
 out:
     if (count_p != NULL) {

@@ -484,6 +484,28 @@ ucs_status_t ucs_string_alloc_formatted_path(char **buffer_p, const char *name,
     return UCS_OK;
 }
 
+const char *ucs_string_next_token(const char *str, char delim,
+                                  const char **saveptr, size_t *len_p)
+{
+    const char *p   = (str != NULL) ? str : *saveptr;
+    const char *end;
+
+    if (p == NULL) {
+        return NULL;
+    }
+
+    end = strchr(p, delim);
+    if (end != NULL) {
+        *len_p   = (size_t)(end - p);
+        *saveptr = end + 1;
+    } else {
+        *len_p   = strlen(p);
+        *saveptr = NULL;
+    }
+
+    return p;
+}
+
 ucs_status_t ucs_string_alloc_path_buffer_and_get_dirname(char **buffer_p,
                                                           const char *name,
                                                           const char *path,
