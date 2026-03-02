@@ -327,6 +327,8 @@ void ucs_string_buffer_translate(ucs_string_buffer_t *strb,
  *
  * @param [inout] strb          String buffer to append expanded values to.
  * @param [in]    token         Input token, e.g. "mlx5_[7-12]" or "a[0-5]b".
+ *                              Does not need to be null-terminated.
+ * @param [in]    token_len     Length of @a token in bytes.
  * @param [in]    delim         Delimiter character between expanded values
  *                              (e.g. ',').
  * @param [in]    max_elements  Maximum number of elements to append.
@@ -338,6 +340,7 @@ void ucs_string_buffer_translate(ucs_string_buffer_t *strb,
  */
 ucs_status_t ucs_string_buffer_expand_range(ucs_string_buffer_t *strb,
                                             const char *token,
+                                            size_t token_len,
                                             char delim,
                                             size_t max_elements,
                                             size_t *count_p);
@@ -356,8 +359,7 @@ ucs_status_t ucs_string_buffer_expand_range(ucs_string_buffer_t *strb,
  *                              appended.
  *
  * @return UCS_OK on success,
- *         UCS_ERR_INVALID_PARAM on range errors,
- *         UCS_ERR_NO_MEMORY on memory allocation error.
+ *         UCS_ERR_INVALID_PARAM on range errors.
  */
 ucs_status_t ucs_string_buffer_expand_ranges(ucs_string_buffer_t *strb,
                                              const char *input, char delim,
