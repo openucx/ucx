@@ -7,7 +7,6 @@
 * See file LICENSE for terms.
 */
 
-#include <net/if.h>
 #ifdef HAVE_CONFIG_H
 #  include "config.h"
 #endif
@@ -26,6 +25,7 @@
 #include <ucs/time/time.h>
 #include <ucs/sys/netlink.h>
 #include <ucs/sys/sock.h>
+#include <net/if.h>
 #include <string.h>
 #include <stdlib.h>
 #include <poll.h>
@@ -759,7 +759,7 @@ uct_ib_iface_roce_is_local_subnet(int prefix_bits,
 
     if (!matched) {
         uct_iface_fill_info_str_buf(
-                params, "subnet mismatch %s/%u != %s/%u",
+                params, "subnet local %s/%u remote %s/%u",
                 ucs_sockaddr_str(sa_local, local_str, 128), prefix_bits,
                 ucs_sockaddr_str(sa_remote, remote_str, 128), prefix_bits);
     }
@@ -910,7 +910,7 @@ static int uct_ib_iface_dev_addr_is_reachable(
     /* PKEY values have to be equal */
     if ((params.pkey ^ iface->pkey) & UCT_IB_PKEY_PARTITION_MASK) {
         uct_iface_fill_info_str_buf(is_reachable_params,
-                                    "pkey mismatch 0x%x != 0x%x", iface->pkey,
+                                    "pkey local 0x%x remote 0x%x", iface->pkey,
                                     params.pkey);
         return 0;
     }
@@ -940,7 +940,7 @@ static int uct_ib_iface_dev_addr_is_reachable(
 
         uct_iface_fill_info_str_buf(
                 is_reachable_params,
-                "IB subnet mismatch 0x%" PRIx64 " != 0x%" PRIx64 " FLID %s",
+                "IB subnet local %" PRIx64 " remote %" PRIx64 " FLID %s",
                 be64toh(iface->gid_info.gid.global.subnet_prefix),
                 be64toh(params.gid.global.subnet_prefix), flid_info_str);
         return 0;

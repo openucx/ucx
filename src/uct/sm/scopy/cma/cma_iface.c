@@ -106,9 +106,9 @@ uct_cma_iface_is_reachable_v2(const uct_iface_h tl_iface,
     }
 
     if (ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID) != remote_pid_ns) {
-        uct_iface_fill_info_str_buf(params, "pid_ns mismatch %lu != %lu",
+        uct_iface_fill_info_str_buf(params, "pid_ns local %lu remote %lu",
                                     ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID),
-                                    iface_addr->pid_ns);
+                                    remote_pid_ns);
         return 0;
     }
 

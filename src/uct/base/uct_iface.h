@@ -936,7 +936,7 @@ int uct_iface_local_is_reachable(uct_iface_local_addr_ns_t *addr_ns,
                                  const uct_iface_is_reachable_params_t *params);
 
 void uct_iface_fill_info_str_buf(const uct_iface_is_reachable_params_t *params,
-                                 const char *fmt, ...);
+                                 const char *fmt, ...) UCS_F_PRINTF(2, 3);
 
 int uct_iface_is_reachable_params_valid(
         const uct_iface_is_reachable_params_t *params, uint64_t flags);

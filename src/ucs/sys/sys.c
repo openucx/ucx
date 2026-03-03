@@ -181,18 +181,15 @@ ucs_ifname_to_ndev_index(const char *ndev_name, unsigned *ndev_index_p)
 
 ucs_status_t ucs_get_loopback_ndev_index(unsigned *ndev_index_p)
 {
-    static int lo_ndev_index = -1;
-    ucs_status_t status;
+    static unsigned lo_ndev_index   = UINT_MAX;
+    static ucs_status_t init_status = UCS_ERR_LAST;
 
-    if (lo_ndev_index == -1) {
-        status = ucs_ifname_to_ndev_index("lo", &lo_ndev_index);
-        if (status != UCS_OK) {
-            return status;
-        }
+    if ((init_status == UCS_ERR_LAST) && (lo_ndev_index == UINT_MAX)) {
+        init_status = ucs_ifname_to_ndev_index("lo", &lo_ndev_index);
     }
 
     *ndev_index_p = lo_ndev_index;
-    return UCS_OK;
+    return init_status;
 }
 
 static uint64_t ucs_get_mac_address()
