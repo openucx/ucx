@@ -419,10 +419,10 @@ ucs_status_t ucs_string_buffer_expand_ranges(ucs_string_buffer_t *strb,
                                              size_t max_elements,
                                              size_t *count_p)
 {
-    ucs_status_t status     = UCS_OK;
-    size_t count_inner, count_total = 0;
+    ucs_status_t status = UCS_OK;
+    size_t count_total  = 0;
+    size_t count_inner, token_len;
     const char *token, *saveptr;
-    size_t token_len;
 
     ucs_assertv(ucs_string_buffer_is_valid_delimiter(delim),
                 "invalid delimiter: '%c'", delim);
