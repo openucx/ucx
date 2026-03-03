@@ -372,7 +372,18 @@ std::string compact_string(const std::string &str, size_t length);
 
 /* Join container elements into a single string with a delimiter */
 template<typename Container>
-std::string join(const Container &strings, const std::string &delimiter);
+std::string join(const Container &strings, const std::string &delimiter)
+{
+    std::ostringstream oss;
+    for (auto it = strings.begin(); it != strings.end(); ++it) {
+        if (it != strings.begin()) {
+            oss << delimiter;
+        }
+        oss << *it;
+    }
+    return oss.str();
+}
+
 
 std::string join(std::initializer_list<std::string> strings,
                  const std::string &delimiter);
