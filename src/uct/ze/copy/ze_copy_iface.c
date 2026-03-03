@@ -106,6 +106,34 @@ uct_ze_copy_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     return UCS_OK;
 }
 
+static ucs_status_t
+uct_ze_copy_query_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
+                          unsigned *num_tl_devices_p)
+{
+    ucs_status_t status;
+    unsigned full_count;
+
+    status = uct_ze_base_query_devices(md, tl_devices_p, &full_count);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    /* FIXME: UCX memtype EP asserts num_lanes == 1.
+     * Remove this cap when UCX supports multi-lane memtype endpoints
+     * or selects a single device deterministically.
+     */
+    if (full_count > 1) {
+        ucs_warn("ze_copy: %u devices found, limiting to 1 "
+                 "for memtype ep compatibility",
+                 full_count);
+        *num_tl_devices_p = 1;
+        return UCS_OK;
+    }
+
+    *num_tl_devices_p = full_count;
+    return UCS_OK;
+}
+
 static uct_iface_ops_t uct_ze_copy_iface_ops = {
     .ep_get_short             = uct_ze_copy_ep_get_short,
     .ep_put_short             = uct_ze_copy_ep_put_short,
@@ -266,6 +294,6 @@ UCS_CLASS_DEFINE_NEW_FUNC(uct_ze_copy_iface_t, uct_iface_t, uct_md_h,
                           const uct_iface_config_t*);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_ze_copy_iface_t, uct_iface_t);
 
-UCT_TL_DEFINE(&uct_ze_copy_component, ze_copy, uct_ze_base_query_devices,
+UCT_TL_DEFINE(&uct_ze_copy_component, ze_copy, uct_ze_copy_query_devices,
               uct_ze_copy_iface_t, "ZE_COPY_", uct_iface_config_table,
               uct_iface_config_t);
