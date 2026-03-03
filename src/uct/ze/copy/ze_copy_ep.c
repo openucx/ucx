@@ -61,8 +61,8 @@ ucs_status_t uct_ze_copy_ep_zcopy(uct_ep_h tl_ep, uint64_t remote_addr,
         dst = iov->buffer;
     }
 
-    ret = zeCommandListAppendMemoryCopy(iface->ze_cmdl, dst, src, size,
-                                        NULL, 0, NULL);
+    ret = zeCommandListAppendMemoryCopy(iface->ze_cmdl, dst, src, size, NULL, 0,
+                                        NULL);
     if (ret != ZE_RESULT_SUCCESS) {
         status = UCS_ERR_IO_ERROR;
         goto out_reset;

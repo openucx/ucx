@@ -200,7 +200,8 @@ static ucs_status_t uct_ze_copy_md_mem_query(uct_md_h md, const void *addr,
     }
 
     dmabuf_fd_p = (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD) ?
-                  &dmabuf_fd : NULL;
+                          &dmabuf_fd :
+                          NULL;
 
     status = uct_ze_copy_md_query_attributes(md, addr, length, &mem_info,
                                              dmabuf_fd_p);
