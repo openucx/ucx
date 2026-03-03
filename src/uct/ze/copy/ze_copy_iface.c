@@ -1,5 +1,5 @@
 /*
- * Copyright (C) Intel Corporation, 2023-2024. ALL RIGHTS RESERVED.
+ * Copyright (C) Intel Corporation, 2023-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -103,6 +103,34 @@ uct_ze_copy_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     iface_attr->overhead            = 0;
     iface_attr->priority            = 0;
 
+    return UCS_OK;
+}
+
+static ucs_status_t
+uct_ze_copy_query_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
+                          unsigned *num_tl_devices_p)
+{
+    ucs_status_t status;
+    unsigned full_count;
+
+    status = uct_ze_base_query_devices(md, tl_devices_p, &full_count);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    /* FIXME: UCX memtype EP asserts num_lanes == 1.
+     * Remove this cap when UCX supports multi-lane memtype endpoints
+     * or selects a single device deterministically.
+     */
+    if (full_count > 1) {
+        ucs_warn("ze_copy: %u devices found, limiting to 1 "
+                 "for memtype ep compatibility",
+                 full_count);
+        *num_tl_devices_p = 1;
+        return UCS_OK;
+    }
+
+    *num_tl_devices_p = full_count;
     return UCS_OK;
 }
 
@@ -226,8 +254,8 @@ static UCS_CLASS_INIT_FUNC(uct_ze_copy_iface_t, uct_md_h md,
                               tl_config UCS_STATS_ARG(params->stats_root)
                                       UCS_STATS_ARG(UCT_ZE_COPY_TL_NAME));
 
-    /* TODO: choose device based on params */
-    device = uct_ze_base_get_device(0);
+    /* Use the device configured in the MD */
+    device = ze_md->ze_device;
     if (device == NULL) {
         return UCS_ERR_NO_DEVICE;
     }
@@ -262,6 +290,6 @@ UCS_CLASS_DEFINE_NEW_FUNC(uct_ze_copy_iface_t, uct_iface_t, uct_md_h,
                           const uct_iface_config_t*);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_ze_copy_iface_t, uct_iface_t);
 
-UCT_TL_DEFINE(&uct_ze_copy_component, ze_copy, uct_ze_base_query_devices,
+UCT_TL_DEFINE(&uct_ze_copy_component, ze_copy, uct_ze_copy_query_devices,
               uct_ze_copy_iface_t, "ZE_COPY_", uct_iface_config_table,
               uct_iface_config_t);
