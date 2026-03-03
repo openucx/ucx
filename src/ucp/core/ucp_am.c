@@ -1252,13 +1252,15 @@ ucp_am_invoke_cb(ucp_worker_h worker, uint16_t am_id, void *user_hdr,
                  uint32_t user_hdr_length, void *data, size_t data_length,
                  ucp_ep_h reply_ep, uint64_t recv_flags)
 {
-    ucp_am_entry_t *am_cb = &ucs_array_elem(&worker->am.cbs, am_id);
+    ucp_am_entry_t *am_cb;
     ucp_am_recv_param_t param;
     unsigned flags;
 
     if (ucs_unlikely(!ucp_am_recv_check_id(worker, am_id))) {
         return UCS_OK;
     }
+
+    am_cb = &ucs_array_elem(&worker->am.cbs, am_id);
 
     if (ucs_likely(am_cb->flags & UCP_AM_CB_PRIV_FLAG_NBX)) {
         param.recv_attr = recv_flags;
@@ -1289,15 +1291,21 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_am_handler_common(
     ucp_recv_desc_t *desc    = NULL;
     uint16_t am_id           = am_hdr->am_id;
     uint32_t user_hdr_size   = am_hdr->header_length;
-    ucp_am_entry_t *am_cb    = &ucs_array_elem(&worker->am.cbs, am_id);
     void *data               = am_hdr + 1;
     size_t data_length       = total_length -
                                (sizeof(*am_hdr) + am_hdr->header_length);
     void *user_hdr           = UCS_PTR_BYTE_OFFSET(data, data_length);
     ucs_status_t desc_status = UCS_OK;
+    ucp_am_entry_t *am_cb;
     ucs_status_t status;
 
     ucs_assert(total_length >= am_hdr->header_length + sizeof(*am_hdr));
+
+    if (ucs_unlikely(!ucp_am_recv_check_id(worker, am_id))) {
+        return UCS_OK;
+    }
+
+    am_cb = &ucs_array_elem(&worker->am.cbs, am_id);
 
     /* Initialize desc in advance, so the user could invoke ucp_am_recv_data_nbx
      * from the AM callback directly. The only exception is inline data when
@@ -1783,11 +1791,18 @@ ucs_status_t ucp_am_rndv_process_rts(void *arg, void *data, size_t length,
     ucp_am_hdr_t *am        = ucp_am_hdr_from_rts(rts);
     uint16_t am_id          = am->am_id;
     ucp_recv_desc_t *desc   = NULL;
-    ucp_am_entry_t *am_cb   = &ucs_array_elem(&worker->am.cbs, am_id);
+    ucp_am_entry_t *am_cb;
     ucp_ep_h ep;
     ucp_am_recv_param_t param;
     ucs_status_t status, desc_status;
     void *hdr;
+
+    if (ucs_unlikely(!ucp_am_recv_check_id(worker, am_id))) {
+        status = UCS_ERR_INVALID_PARAM;
+        goto out_send_ats;
+    }
+
+    am_cb = &ucs_array_elem(&worker->am.cbs, am_id);
 
     if (ENABLE_PARAMS_CHECK && !(am_cb->flags & UCP_AM_CB_PRIV_FLAG_NBX)) {
         ucs_error("active message callback registered with "
@@ -1801,11 +1816,6 @@ ucs_status_t ucp_am_rndv_process_rts(void *arg, void *data, size_t length,
                                   { status = UCS_ERR_CANCELED;
                                      goto out_send_ats; },
                                   "AM RTS");
-
-    if (ucs_unlikely(!ucp_am_recv_check_id(worker, am_id))) {
-        status = UCS_ERR_INVALID_PARAM;
-        goto out_send_ats;
-    }
 
     if (am->header_length != 0) {
         ucs_assert(length >= am->header_length + sizeof(*rts));

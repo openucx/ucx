@@ -1,5 +1,5 @@
 /*
- * Copyright (C) Intel Corporation, 2023-2024. ALL RIGHTS RESERVED.
+ * Copyright (C) Intel Corporation, 2023-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -48,7 +48,8 @@ static ucs_status_t uct_ze_copy_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
     md_attr->alloc_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_ZE_HOST) |
                                 UCS_BIT(UCS_MEMORY_TYPE_ZE_DEVICE) |
                                 UCS_BIT(UCS_MEMORY_TYPE_ZE_MANAGED);
-    md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_ZE_HOST) |
+    md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
+                                UCS_BIT(UCS_MEMORY_TYPE_ZE_HOST) |
                                 UCS_BIT(UCS_MEMORY_TYPE_ZE_DEVICE) |
                                 UCS_BIT(UCS_MEMORY_TYPE_ZE_MANAGED);
     md_attr->detect_mem_types = UCS_BIT(UCS_MEMORY_TYPE_ZE_HOST) |

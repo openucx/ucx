@@ -738,7 +738,7 @@ static ucs_status_t ucp_device_remote_mem_list_element_pack(
             ucp_device_detect_local_md_map(ep->worker->context, local_sys_dev);
     const ucp_worker_cfg_index_t rkey_cfg_index = element->rkey->cfg_index;
     const ucp_rkey_config_t rkey_config =
-            ep->worker->rkey_config[rkey_cfg_index];
+            ucs_array_elem(&ep->worker->rkey_config, rkey_cfg_index);
     const ucs_sys_device_t remote_sys_dev = rkey_config.key.sys_dev;
     const ucp_md_map_t remote_md_map      = rkey_config.key.md_map;
     ucp_ep_config_t *ep_config            = ucp_ep_config(ep);
@@ -1012,7 +1012,7 @@ ucp_device_mem_list_create(ucp_ep_h ep,
     }
 
     /* Perform pseudo lane selection without size */
-    rkey_config = &ep->worker->rkey_config[rkey_cfg_index];
+    rkey_config = &ucs_array_elem(&ep->worker->rkey_config, rkey_cfg_index);
     ep_config = ucp_worker_ep_config(ep->worker, rkey_config->key.ep_cfg_index);
     remote_sys_dev = rkey_config->key.sys_dev;
     remote_md_map  = rkey_config->key.md_map;

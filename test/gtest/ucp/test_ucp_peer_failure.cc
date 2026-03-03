@@ -789,8 +789,7 @@ protected:
         }
 
         ucp_rkey_config_t *rkey_config;
-        ucs_carray_for_each(rkey_config, worker->rkey_config,
-                            worker->rkey_config_count) {
+        ucs_array_for_each(rkey_config, &worker->rkey_config) {
             setup_progress_mock(rkey_config->proto_select, mock);
         }
     }
@@ -1008,7 +1007,7 @@ UCS_TEST_P(test_ucp_peer_failure_rndv_put_ppln_abort, rtr_mtype)
 }
 
 UCS_TEST_P(test_ucp_peer_failure_rndv_put_ppln_abort, pipeline,
-           "RNDV_FRAG_SIZE=host:8K")
+           "RNDV_FRAG_SIZE=host:8K,cuda:8K")
 {
     rndv_progress_failure_test(rndv_mode::put_ppln, true);
 }
