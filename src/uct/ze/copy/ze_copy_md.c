@@ -195,6 +195,10 @@ static ucs_status_t uct_ze_copy_md_mem_query(uct_md_h md, const void *addr,
     ucs_status_t status;
     int *dmabuf_fd_p;
 
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD) {
+        mem_attr_p->dmabuf_fd = UCT_DMABUF_FD_INVALID;
+    }
+
     dmabuf_fd_p = (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD) ?
                   &dmabuf_fd : NULL;
 
@@ -224,11 +228,19 @@ static ucs_status_t uct_ze_copy_md_mem_query(uct_md_h md, const void *addr,
     }
 
     if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD) {
+        if (dmabuf_fd == UCT_DMABUF_FD_INVALID) {
+            return UCS_ERR_UNSUPPORTED;
+        }
+
         mem_attr_p->dmabuf_fd = dup(dmabuf_fd);
         if (mem_attr_p->dmabuf_fd < 0) {
-            status = UCS_ERR_IO_ERROR;
-            goto out_close_dmabuf;
+            return UCS_ERR_IO_ERROR;
         }
+
+        /* NOTE: Do not close(dmabuf_fd) here. Level Zero caches this fd
+         * internally per allocation. Closing it can invalidate the cache and
+         * lead to fd reuse conflicts with other transports.
+         */
     }
 
     if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET) {
@@ -236,14 +248,7 @@ static ucs_status_t uct_ze_copy_md_mem_query(uct_md_h md, const void *addr,
                                                       addr);
     }
 
-    status = UCS_OK;
-
-out_close_dmabuf:
-    if (dmabuf_fd != UCT_DMABUF_FD_INVALID) {
-        close(dmabuf_fd);
-    }
-
-    return status;
+    return UCS_OK;
 }
 
 static ucs_status_t
@@ -350,4 +355,3 @@ uct_component_t uct_ze_copy_component = {
     .md_vfs_init    = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
 UCT_COMPONENT_REGISTER(&uct_ze_copy_component);
-
