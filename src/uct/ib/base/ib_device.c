@@ -90,17 +90,17 @@ UCS_ARRAY_DECLARE_TYPE(uct_ib_device_subnet_array_t, unsigned,
                        uct_ib_device_subnet_t);
 
 typedef struct {
-    uint64_t    guid;
-    uint8_t     port_num;
-    uint8_t     gid_index;
+    ucs_sys_device_t sys_dev;
+    uint8_t          port_num;
+    uint8_t          gid_index;
 } uct_ib_device_to_ndev_key_t;
 
 static UCS_F_ALWAYS_INLINE khint32_t
 uct_ib_device_to_ndev_cache_hash_func(uct_ib_device_to_ndev_key_t key)
 {
-    return kh_int_hash_func(((uint64_t)key.port_num << 24) ^
-                            ((uint64_t)key.gid_index << 16) ^
-                            key.guid);
+    return kh_int_hash_func(((uint32_t)key.sys_dev) ^
+                            ((uint32_t)key.port_num << 8) ^
+                            ((uint32_t)key.gid_index << 16));
 }
 
 static UCS_F_ALWAYS_INLINE int
@@ -109,7 +109,7 @@ uct_ib_device_to_ndev_cache_hash_equal(uct_ib_device_to_ndev_key_t key1,
 {
     return (key1.port_num == key2.port_num) &&
            (key1.gid_index == key2.gid_index) &&
-           (key1.guid == key2.guid);
+           (key1.sys_dev == key2.sys_dev);
 }
 
 KHASH_INIT(uct_ib_device_to_ndev, uct_ib_device_to_ndev_key_t, unsigned, 1,
@@ -1639,7 +1639,7 @@ ucs_status_t
 uct_ib_device_get_roce_ndev_index(uct_ib_device_t *dev, uint8_t port_num,
                                   uint8_t gid_index, unsigned *ndev_index_p)
 {
-    uct_ib_device_to_ndev_key_t ib_dev = {.guid = IBV_DEV_ATTR(dev, node_guid),
+    uct_ib_device_to_ndev_key_t ib_dev = {.sys_dev = dev->sys_dev,
                                           .port_num = port_num,
                                           .gid_index = gid_index};
     static pthread_mutex_t uct_ib_device_to_ndev_cache_lock =
