@@ -64,13 +64,18 @@ public:
     }
 
     virtual void cleanup() {
-        ucs_log_cleanup();
-        pop_config();
-        check_log_file();
-        unsigned files_count = log_files_foreach(&log_test::remove_file);
-        EXPECT_LE(files_count, ucs_global_opts.log_file_rotate + 1);
-        EXPECT_NE(0, files_count);
-        ucs_log_init();
+        ASSERT_NE(m_state, NEW);
+
+        if (m_state != INITIALIZING) {
+            ucs_log_cleanup();
+            pop_config();
+            check_log_file();
+            unsigned files_count = log_files_foreach(&log_test::remove_file);
+            EXPECT_LE(files_count, ucs_global_opts.log_file_rotate + 1);
+            EXPECT_NE(0, files_count);
+            ucs_log_init();
+        }
+
         ucs::test::cleanup();
     }
 
@@ -83,6 +88,10 @@ public:
 
     unsigned log_files_foreach(log_file_foreach_cb cb, void *arg = NULL) {
         DIR *dir = opendir(tmp_dir_path.c_str());
+        if (dir == NULL) {
+            return 0;
+        }
+
         struct dirent *entry;
         unsigned files_count = 0;
 
