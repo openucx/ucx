@@ -13,6 +13,7 @@
 #include <cuda.h>              /* TODO add to gpunetio */
 #include "gpunetio/device/doca_gpunetio_dev_verbs_qp.cuh"
 #include <cooperative_groups.h>
+#include <cuda/atomic>
 
 #define UCT_RC_GDA_RESV_WQE_NO_RESOURCE -1ULL
 #define UCT_RC_GDA_WQE_ERR              UCS_BIT(63)
