@@ -20,6 +20,15 @@
 #endif /* __NVCC__ */
 
 
+#ifndef UCP_DEVICE_ENABLE_PARAMS_CHECK
+#ifdef _DEBUG
+#define UCP_DEVICE_ENABLE_PARAMS_CHECK 1
+#else
+#define UCP_DEVICE_ENABLE_PARAMS_CHECK 0
+#endif
+#endif
+
+
 /* Number of threads in a warp */
 #define UCS_DEVICE_NUM_THREADS_IN_WARP 32
 

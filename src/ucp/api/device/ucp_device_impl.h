@@ -7,10 +7,6 @@
 #ifndef UCP_DEVICE_IMPL_H
 #define UCP_DEVICE_IMPL_H
 
-#ifdef HAVE_CONFIG_H
-#include "config.h"
-#endif
-
 #include "ucp_device_types.h"
 
 #include <ucp/api/ucp_def.h>
@@ -19,18 +15,6 @@
 #include <ucs/sys/device_code.h>
 #include <ucs/type/status.h>
 #include <stdint.h>
-
-/** TODO: Remove after properly fixed.*/
-#ifndef ENABLE_PARAMS_CHECK
-#define ENABLE_PARAMS_CHECK 0
-#endif
-
-#define UCP_DEVICE_MEM_LIST_PARAMS_CHECK(_mem_list_h, _mem_list_index) \
-    if (ENABLE_PARAMS_CHECK && \
-        (((_mem_list_h)->version != UCP_DEVICE_MEM_LIST_VERSION_V1) || \
-         ((_mem_list_index) >= (_mem_list_h)->mem_list_length))) { \
-        return UCS_ERR_INVALID_PARAM; \
-    }
 
 /**
  * @ingroup UCP_DEVICE
@@ -54,6 +38,31 @@ typedef enum {
     UCP_DEVICE_FLAG_NODELAY =
             UCT_DEVICE_FLAG_NODELAY /**< Complete before return. */
 } ucp_device_flags_t;
+
+
+/**
+ * @ingroup UCP_DEVICE
+ * @brief Check the parameters of the memory list handle.
+ *
+ * @param [in] mem_list_h  Memory list handle to check.
+ * @param [in] index       Index in the memory list to check.
+ *
+ * @return UCS_OK if the parameters are valid.
+ */
+template<typename T>
+UCS_F_DEVICE ucs_status_t ucp_device_check_params(const T mem_list_h,
+                                                  unsigned index)
+{
+    if (UCP_DEVICE_ENABLE_PARAMS_CHECK) {
+        if ((mem_list_h->version != UCP_DEVICE_MEM_LIST_VERSION_V1) ||
+            (index >= mem_list_h->length)) {
+            ucs_device_error("Invalid parameters for %p\n", mem_list_h);
+            return UCS_ERR_INVALID_PARAM;
+        }
+    }
+
+    return UCS_OK;
+}
 
 
 /**
@@ -97,20 +106,24 @@ UCS_F_DEVICE void ucp_device_request_init(uct_device_ep_t *device_ep,
 
 
 UCS_F_DEVICE ucs_status_t ucp_device_prepare_send(
-        ucp_device_mem_list_handle_h mem_list_h, unsigned first_mem_elem_index,
-        ucp_device_request_t *req, uct_device_ep_t *&device_ep,
-        const uct_device_mem_element_t *&uct_elem,
+        const ucp_device_mem_list_handle_h mem_list_h,
+        unsigned first_mem_elem_index, ucp_device_request_t *req,
+        uct_device_ep_t *&device_ep, const uct_device_mem_element_t *&uct_elem,
         uct_device_completion_t *&comp)
 {
     const unsigned lane = 0;
     size_t elem_offset;
+    ucs_status_t status;
 
-    UCP_DEVICE_MEM_LIST_PARAMS_CHECK(mem_list_h, first_mem_elem_index);
+    status = ucp_device_check_params(mem_list_h, first_mem_elem_index);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     device_ep   = mem_list_h->uct_device_eps[lane];
     elem_offset = first_mem_elem_index * mem_list_h->uct_mem_element_size[lane];
-    uct_elem    = (uct_device_mem_element_t*)
-            UCS_PTR_BYTE_OFFSET(mem_list_h->uct_mem_elements, elem_offset);
+    uct_elem    = static_cast<uct_device_mem_element_t*>(
+            UCS_PTR_BYTE_OFFSET(mem_list_h->uct_mem_elements, elem_offset));
     ucp_device_request_init(device_ep, req, comp);
 
     return UCS_OK;
@@ -118,47 +131,50 @@ UCS_F_DEVICE ucs_status_t ucp_device_prepare_send(
 
 
 UCS_F_DEVICE ucs_status_t ucp_device_prepare_send_remote(
-        ucp_device_remote_mem_list_h dst_mem_list_h,
+        const ucp_device_remote_mem_list_h dst_mem_list_h,
         unsigned dst_mem_list_index, uint64_t &remote_address,
         ucp_device_request_t *req, uct_device_ep_t *&device_ep,
         const uct_device_mem_element_t *&uct_elem,
         uct_device_completion_t *&comp)
 {
-    const size_t elem_size = ucs_offsetof(uct_device_remote_mem_list_elem_t,
-                                          uct_mem_element) +
-                             sizeof(uct_tl_device_mem_element_t);
+    const size_t elem_size = sizeof(uct_device_remote_mem_list_elem_t);
+    ucs_status_t status;
 
-    UCP_DEVICE_MEM_LIST_PARAMS_CHECK(dst_mem_list_h, dst_mem_list_index);
+    status = ucp_device_check_params(dst_mem_list_h, dst_mem_list_index);
+    if (status != UCS_OK) {
+        return status;
+    }
 
-    const uct_device_remote_mem_list_elem_t *dst_mem_element =
-            (uct_device_remote_mem_list_elem_t*)
-                    UCS_PTR_BYTE_OFFSET(dst_mem_list_h->mem_elements,
-                                        dst_mem_list_index * elem_size);
-    remote_address = dst_mem_element->addr;
-    device_ep      = dst_mem_element->device_ep;
-    uct_elem       = &dst_mem_element->uct_mem_element;
+    const auto dst_mem_element = static_cast<uct_device_remote_mem_list_elem_t*>(
+            UCS_PTR_BYTE_OFFSET(dst_mem_list_h->mem_elements,
+                                dst_mem_list_index * elem_size));
+    remote_address             = dst_mem_element->addr;
+    device_ep                  = dst_mem_element->device_ep;
+    uct_elem                   = &dst_mem_element->uct_mem_element;
     ucp_device_request_init(device_ep, req, comp);
 
     return UCS_OK;
 }
 
 
-UCS_F_DEVICE ucs_status_t ucp_device_prepare_send(
-        ucp_device_local_mem_list_h src_mem_list_h, unsigned src_mem_list_index,
-        ucp_device_remote_mem_list_h dst_mem_list_h,
-        unsigned dst_mem_list_index, const void *&address,
-        uint64_t &remote_address, ucp_device_request_t *req,
-        uct_device_ep_t *&device_ep,
-        const uct_device_local_mem_list_elem_t *&src_uct_elem,
-        const uct_device_mem_element_t *&uct_elem,
-        uct_device_completion_t *&comp)
+UCS_F_DEVICE ucs_status_t
+ucp_device_prepare_send(const ucp_device_local_mem_list_h src_mem_list_h,
+                        unsigned src_mem_list_index,
+                        const ucp_device_remote_mem_list_h dst_mem_list_h,
+                        unsigned dst_mem_list_index, const void *&address,
+                        uint64_t &remote_address, ucp_device_request_t *req,
+                        uct_device_ep_t *&device_ep,
+                        const uct_device_local_mem_list_elem_t *&src_uct_elem,
+                        const uct_device_mem_element_t *&uct_elem,
+                        uct_device_completion_t *&comp)
 {
-    const size_t elem_size = ucs_offsetof(uct_device_local_mem_list_elem_t,
-                                          uct_mem_element) +
-                             sizeof(uct_tl_device_mem_element_t);
+    const size_t elem_size = sizeof(uct_device_local_mem_list_elem_t);
     ucs_status_t status;
 
-    UCP_DEVICE_MEM_LIST_PARAMS_CHECK(src_mem_list_h, src_mem_list_index);
+    status = ucp_device_check_params(src_mem_list_h, src_mem_list_index);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     status = ucp_device_prepare_send_remote(dst_mem_list_h, dst_mem_list_index,
                                             remote_address, req, device_ep,
@@ -167,8 +183,9 @@ UCS_F_DEVICE ucs_status_t ucp_device_prepare_send(
         return status;
     }
 
-    src_uct_elem = (uct_device_local_mem_list_elem_t*)UCS_PTR_BYTE_OFFSET(
-            src_mem_list_h->mem_elements, src_mem_list_index * elem_size);
+    src_uct_elem = static_cast<uct_device_local_mem_list_elem_t*>(
+            UCS_PTR_BYTE_OFFSET(src_mem_list_h->mem_elements,
+                                src_mem_list_index * elem_size));
     address      = src_uct_elem->addr;
 
     return UCS_OK;
@@ -212,7 +229,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_prepare_send(
  */
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_THREAD>
 UCS_F_DEVICE ucs_status_t ucp_device_put_single(
-        ucp_device_mem_list_handle_h mem_list_h, unsigned mem_list_index,
+        const ucp_device_mem_list_handle_h mem_list_h, unsigned mem_list_index,
         size_t local_offset, size_t remote_offset, size_t length,
         unsigned channel_id, uint64_t flags, ucp_device_request_t *req)
 {
@@ -275,11 +292,12 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_single(
  * @return Error code as defined by @ref ucs_status_t
  */
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_THREAD>
-UCS_F_DEVICE ucs_status_t ucp_device_put(
-        ucp_device_local_mem_list_h src_mem_list_h, unsigned src_mem_list_index,
-        size_t src_offset, ucp_device_remote_mem_list_h dst_mem_list_h,
-        unsigned dst_mem_list_index, size_t dst_offset, size_t length,
-        unsigned channel_id, uint64_t flags, ucp_device_request_t *req)
+UCS_F_DEVICE ucs_status_t
+ucp_device_put(const ucp_device_local_mem_list_h src_mem_list_h,
+               unsigned src_mem_list_index, const size_t src_offset,
+               const ucp_device_remote_mem_list_h dst_mem_list_h,
+               unsigned dst_mem_list_index, size_t dst_offset, size_t length,
+               unsigned channel_id, uint64_t flags, ucp_device_request_t *req)
 {
     const void *address;
     const uct_device_mem_element_t *uct_elem;
@@ -339,7 +357,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_put(
  */
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_THREAD>
 UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
-        ucp_device_mem_list_handle_h mem_list_h, unsigned mem_list_index,
+        const ucp_device_mem_list_handle_h mem_list_h, unsigned mem_list_index,
         uint64_t inc_value, size_t remote_offset, unsigned channel_id,
         uint64_t flags, ucp_device_request_t *req)
 {
@@ -378,15 +396,15 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
  * counter offset. The flags parameter can be used to modify the behavior of the
  * routine.
  *
- * @tparam      level              Level of cooperation of the transfer.
- * @param [in]  inc_value          Value used to increment the remote address.
- * @param [in]  dst_mem_list_h     Remote memory descriptor list handle to use.
- * @param [in]  dst_mem_list_index Index in descriptor list pointing to the memory
+ * @tparam      level          Level of cooperation of the transfer.
+ * @param [in]  inc_value      Value used to increment the remote address.
+ * @param [in]  mem_list_h     Remote memory descriptor list handle to use.
+ * @param [in]  mem_list_index Index in descriptor list pointing to the memory
  *                                 remote key to use for the increment operation.
- * @param [in]  remote_offset      Remote offset to perform the increment to.
- * @param [in]  channel_id         Channel ID to use for the transfer.
- * @param [in]  flags              Flags usable to modify the function behavior.
- * @param [out] req                Request populated by the call.
+ * @param [in]  offset         Remote offset to perform the increment to.
+ * @param [in]  channel_id     Channel ID to use for the transfer.
+ * @param [in]  flags          Flags usable to modify the function behavior.
+ * @param [out] req            Request populated by the call.
  *
  * @return UCS_INPROGRESS     - Operation successfully posted. If @a req is not
  *                              NULL, use @ref ucp_device_progress_req to check
@@ -396,8 +414,8 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
  */
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_THREAD>
 UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
-        uint64_t inc_value, ucp_device_remote_mem_list_h dst_mem_list_h,
-        unsigned dst_mem_list_index, size_t remote_offset, unsigned channel_id,
+        const uint64_t inc_value, const ucp_device_remote_mem_list_h mem_list_h,
+        unsigned mem_list_index, size_t offset, unsigned channel_id,
         uint64_t flags, ucp_device_request_t *req)
 {
     uint64_t remote_address;
@@ -406,7 +424,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
     uct_device_ep_t *device_ep;
     ucs_status_t status;
 
-    status = ucp_device_prepare_send_remote(dst_mem_list_h, dst_mem_list_index,
+    status = ucp_device_prepare_send_remote(mem_list_h, mem_list_index,
                                             remote_address, req, device_ep,
                                             uct_elem, comp);
     if (status != UCS_OK) {
@@ -415,8 +433,8 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
 
     return UCP_DEVICE_SEND_BLOCKING(level, uct_device_ep_atomic_add, device_ep,
                                     req, uct_elem, inc_value,
-                                    remote_address + remote_offset, channel_id,
-                                    flags, comp);
+                                    remote_address + offset, channel_id, flags,
+                                    comp);
 }
 
 
@@ -434,18 +452,20 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
  * @return Error code as defined by @ref ucs_status_t
  */
 UCS_F_DEVICE ucs_status_t
-ucp_device_get_ptr(ucp_device_remote_mem_list_h mem_list_h,
+ucp_device_get_ptr(const ucp_device_remote_mem_list_h mem_list_h,
                    unsigned mem_list_index, void **addr_p)
 {
-    const size_t elem_size = ucs_offsetof(uct_device_remote_mem_list_elem_t,
-                                          uct_mem_element) +
-                             sizeof(uct_tl_device_mem_element_t);
+    const size_t elem_size = sizeof(uct_device_remote_mem_list_elem_t);
+    ucs_status_t status;
 
-    UCP_DEVICE_MEM_LIST_PARAMS_CHECK(mem_list_h, mem_list_index);
+    status = ucp_device_check_params(mem_list_h, mem_list_index);
+    if (status != UCS_OK) {
+        return status;
+    }
 
-    const uct_device_remote_mem_list_elem_t *mem_element =
-            (uct_device_remote_mem_list_elem_t*)UCS_PTR_BYTE_OFFSET(
-                    mem_list_h->mem_elements, mem_list_index * elem_size);
+    const auto mem_element = static_cast<uct_device_remote_mem_list_elem_t*>(
+            UCS_PTR_BYTE_OFFSET(mem_list_h->mem_elements,
+                                mem_list_index * elem_size));
 
     return uct_device_ep_get_ptr(mem_element->device_ep,
                                  &mem_element->uct_mem_element,
@@ -491,15 +511,16 @@ ucp_device_get_ptr(ucp_device_remote_mem_list_h mem_list_h,
  * @return Error code as defined by @ref ucs_status_t
  */
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_THREAD>
-UCS_F_DEVICE ucs_status_t ucp_device_put_multi(
-        ucp_device_mem_list_handle_h mem_list_h, uint64_t counter_inc_value,
-        unsigned channel_id, uint64_t flags, ucp_device_request_t *req)
+UCS_F_DEVICE ucs_status_t
+ucp_device_put_multi(const ucp_device_mem_list_handle_h mem_list_h,
+                     uint64_t counter_inc_value, unsigned channel_id,
+                     uint64_t flags, ucp_device_request_t *req)
 {
     void *const *addresses           = mem_list_h->local_addrs;
     const uint64_t *remote_addresses = mem_list_h->remote_addrs;
     const size_t *lengths            = mem_list_h->lengths;
     uint64_t counter_remote_address =
-            mem_list_h->remote_addrs[mem_list_h->mem_list_length - 1];
+            mem_list_h->remote_addrs[mem_list_h->length - 1];
     const uct_device_mem_element_t *uct_mem_list;
     uct_device_completion_t *comp;
     uct_device_ep_t *device_ep;
@@ -512,9 +533,8 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_multi(
     }
 
     return UCP_DEVICE_SEND_BLOCKING(level, uct_device_ep_put_multi, device_ep,
-                                    req, uct_mem_list,
-                                    mem_list_h->mem_list_length, addresses,
-                                    remote_addresses, lengths,
+                                    req, uct_mem_list, mem_list_h->length,
+                                    addresses, remote_addresses, lengths,
                                     counter_inc_value, counter_remote_address,
                                     channel_id, flags, comp);
 }
@@ -575,7 +595,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_put_multi(
  */
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_THREAD>
 UCS_F_DEVICE ucs_status_t ucp_device_put_multi_partial(
-        ucp_device_mem_list_handle_h mem_list_h,
+        const ucp_device_mem_list_handle_h mem_list_h,
         const unsigned *mem_list_indices, unsigned mem_list_count,
         const size_t *local_offsets, const size_t *remote_offsets,
         const size_t *lengths, unsigned counter_index,
