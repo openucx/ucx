@@ -28,18 +28,6 @@
 #define ucp_am_rdesc_frag_tree(_rdesc) \
     (UCS_PTR_BYTE_OFFSET(_rdesc, -sizeof(ucs_interval_tree_t)))
 
-
-static void *ucp_am_frag_tree_alloc_node(size_t size, void *arg)
-{
-    ucs_mpool_t *mp = (ucs_mpool_t*)arg;
-    return ucs_mpool_get(mp);
-}
-
-static void ucp_am_frag_tree_free_node(void *node, void *arg)
-{
-    ucs_mpool_put(node);
-}
-
 static ucs_mpool_ops_t ucp_am_frag_tree_mpool_ops = {
     .chunk_alloc   = ucs_mpool_chunk_malloc,
     .chunk_release = ucs_mpool_chunk_free,
@@ -1252,13 +1240,15 @@ ucp_am_invoke_cb(ucp_worker_h worker, uint16_t am_id, void *user_hdr,
                  uint32_t user_hdr_length, void *data, size_t data_length,
                  ucp_ep_h reply_ep, uint64_t recv_flags)
 {
-    ucp_am_entry_t *am_cb = &ucs_array_elem(&worker->am.cbs, am_id);
+    ucp_am_entry_t *am_cb;
     ucp_am_recv_param_t param;
     unsigned flags;
 
     if (ucs_unlikely(!ucp_am_recv_check_id(worker, am_id))) {
         return UCS_OK;
     }
+
+    am_cb = &ucs_array_elem(&worker->am.cbs, am_id);
 
     if (ucs_likely(am_cb->flags & UCP_AM_CB_PRIV_FLAG_NBX)) {
         param.recv_attr = recv_flags;
@@ -1289,15 +1279,21 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_am_handler_common(
     ucp_recv_desc_t *desc    = NULL;
     uint16_t am_id           = am_hdr->am_id;
     uint32_t user_hdr_size   = am_hdr->header_length;
-    ucp_am_entry_t *am_cb    = &ucs_array_elem(&worker->am.cbs, am_id);
     void *data               = am_hdr + 1;
     size_t data_length       = total_length -
                                (sizeof(*am_hdr) + am_hdr->header_length);
     void *user_hdr           = UCS_PTR_BYTE_OFFSET(data, data_length);
     ucs_status_t desc_status = UCS_OK;
+    ucp_am_entry_t *am_cb;
     ucs_status_t status;
 
     ucs_assert(total_length >= am_hdr->header_length + sizeof(*am_hdr));
+
+    if (ucs_unlikely(!ucp_am_recv_check_id(worker, am_id))) {
+        return UCS_OK;
+    }
+
+    am_cb = &ucs_array_elem(&worker->am.cbs, am_id);
 
     /* Initialize desc in advance, so the user could invoke ucp_am_recv_data_nbx
      * from the AM callback directly. The only exception is inline data when
@@ -1415,12 +1411,9 @@ ucp_am_copy_data_fragment(ucp_recv_desc_t *first_rdesc, void *data,
     UCS_PROFILE_NAMED_CALL("am_memcpy_recv", ucs_memcpy_relaxed,
                            UCS_PTR_BYTE_OFFSET(first_rdesc + 1, offset),
                            data, length, UCS_ARCH_MEMCPY_NT_SOURCE, length);
-    
-    /* Message length can be 0 if only header was sent */  
-    if (ucs_likely(length > 0)) {
-        ucs_interval_tree_insert(ucp_am_rdesc_frag_tree(first_rdesc), offset,
-                                 offset + length - 1);
-    }
+
+    ucs_interval_tree_insert(ucp_am_rdesc_frag_tree(first_rdesc), offset,
+                             offset + length - 1);
 }
 
 static UCS_F_ALWAYS_INLINE uint64_t
@@ -1463,8 +1456,7 @@ ucp_am_handle_unfinished(ucp_worker_h worker, ucp_recv_desc_t *rdesc,
         first_ftr = (ucp_am_first_ftr_t*)(first_rdesc + 1);
         seg_end   = first_rdesc->payload_offset + first_ftr->total_size - 1;
 
-        if ((first_ftr->total_size > 0) &&
-            !ucs_interval_tree_is_equal_range(ucp_am_rdesc_frag_tree(
+        if (!ucs_interval_tree_is_equal_range(ucp_am_rdesc_frag_tree(
                                                       first_rdesc),
                                               first_rdesc->payload_offset,
                                               seg_end)) {
@@ -1557,7 +1549,6 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_first_handler,
     size_t total_length, padding;
     uint64_t recv_flags;
     void *user_hdr, *buffer;
-    ucs_interval_tree_ops_t frag_tree_ops;
 
     first_payload_length = am_length - sizeof(*first_ftr);
     first_ftr = UCS_PTR_BYTE_OFFSET(am_data, first_payload_length);
@@ -1617,11 +1608,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_first_handler,
                               worker->am.alignment);
 
     first_rdesc->payload_offset = UCP_AM_FIRST_FRAG_META_LEN + padding;
-    frag_tree_ops.alloc_node    = ucp_am_frag_tree_alloc_node;
-    frag_tree_ops.free_node     = ucp_am_frag_tree_free_node;
-    frag_tree_ops.arg           = &worker->am.frag_tree_mpool;
     /* Initialize frag_tree in the allocated storage before rdesc */
-    ucs_interval_tree_init(ucp_am_rdesc_frag_tree(first_rdesc), &frag_tree_ops);
+    ucs_interval_tree_init(ucp_am_rdesc_frag_tree(first_rdesc),
+                           &worker->am.frag_tree_mpool);
 
     /* Copy first fragment and base headers before the data, it will be needed
      * for middle fragments processing. */
@@ -1783,11 +1772,18 @@ ucs_status_t ucp_am_rndv_process_rts(void *arg, void *data, size_t length,
     ucp_am_hdr_t *am        = ucp_am_hdr_from_rts(rts);
     uint16_t am_id          = am->am_id;
     ucp_recv_desc_t *desc   = NULL;
-    ucp_am_entry_t *am_cb   = &ucs_array_elem(&worker->am.cbs, am_id);
+    ucp_am_entry_t *am_cb;
     ucp_ep_h ep;
     ucp_am_recv_param_t param;
     ucs_status_t status, desc_status;
     void *hdr;
+
+    if (ucs_unlikely(!ucp_am_recv_check_id(worker, am_id))) {
+        status = UCS_ERR_INVALID_PARAM;
+        goto out_send_ats;
+    }
+
+    am_cb = &ucs_array_elem(&worker->am.cbs, am_id);
 
     if (ENABLE_PARAMS_CHECK && !(am_cb->flags & UCP_AM_CB_PRIV_FLAG_NBX)) {
         ucs_error("active message callback registered with "
@@ -1801,11 +1797,6 @@ ucs_status_t ucp_am_rndv_process_rts(void *arg, void *data, size_t length,
                                   { status = UCS_ERR_CANCELED;
                                      goto out_send_ats; },
                                   "AM RTS");
-
-    if (ucs_unlikely(!ucp_am_recv_check_id(worker, am_id))) {
-        status = UCS_ERR_INVALID_PARAM;
-        goto out_send_ats;
-    }
 
     if (am->header_length != 0) {
         ucs_assert(length >= am->header_length + sizeof(*rts));

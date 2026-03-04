@@ -1196,6 +1196,7 @@ UCS_TEST_F(test_array, dynamic_array_grow_of_list_link_elements) {
 }
 
 UCS_TEST_F(test_array, dynamic_array_2int_grow) {
+    test_value_type_t zero_val = {};
     test_2num_t test_array;
     test_value_type_t value;
     ucs_status_t status;
@@ -1205,8 +1206,7 @@ UCS_TEST_F(test_array, dynamic_array_2int_grow) {
 
     /* grow the array enough to contain 'value_index' */
     unsigned value_index = 9;
-    status               = ucs_array_reserve(&test_array, value_index + 1);
-    ASSERT_UCS_OK(status);
+    ucs_array_resize(&test_array, value_index + 1, zero_val, FAIL());
 
     value.num1 = ucs::rand();
     value.num2 = ucs::rand();
@@ -1299,7 +1299,7 @@ void test_array::test_fixed(test_1int_t *array, size_t capacity)
 
     /* check end capacity */
     EXPECT_EQ(initial_capacity - 1, ucs_array_available_length(array));
-    EXPECT_EQ(&ucs_array_elem(array, 1), ucs_array_end(array));
+    EXPECT_EQ(&ucs_array_elem(array, idx) + 1, ucs_array_end(array));
 }
 
 UCS_TEST_F(test_array, fixed_static) {
