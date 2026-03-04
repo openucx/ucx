@@ -10,6 +10,7 @@
 
 #include <uct/ib/base/ib_log.inl>
 #include <uct/ib/mlx5/ib_mlx5.h>
+#include <uct/api/device/uct_device_types.h>
 
 #include <ucs/arch/bitops.h>
 #include <ucs/profile/profile.h>
@@ -3161,6 +3162,29 @@ uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
                                            ibv_device, md_config, p_md);
 }
 
+static ucs_status_t
+uct_ib_md_mlx5_devx_md_mem_elem_pack(uct_md_h md, uct_mem_h memh,
+                                     uct_rkey_t rkey,
+                                     uct_device_mem_element_t *mem_elem_p)
+{
+    uct_ib_md_device_mem_element_t *mem_elem = (uct_ib_md_device_mem_element_t*)
+            mem_elem_p;
+
+    if (memh != NULL) {
+        mem_elem->lkey = htonl(((uct_ib_mem_t*)memh)->lkey);
+    } else {
+        mem_elem->lkey = UCT_IB_INVALID_MKEY;
+    }
+
+    if (rkey != UCT_INVALID_RKEY) {
+        mem_elem->rkey = htonl(uct_ib_md_direct_rkey(rkey));
+    } else {
+        mem_elem->rkey = UCT_IB_INVALID_MKEY;
+    }
+
+    return UCS_OK;
+}
+
 static uct_ib_md_ops_t uct_ib_mlx5_devx_md_ops = {
     .super = {
         .close              = uct_ib_mlx5_devx_md_close,
@@ -3174,6 +3198,7 @@ static uct_ib_md_ops_t uct_ib_mlx5_devx_md_ops = {
         .mkey_pack          = uct_ib_mlx5_devx_mkey_pack,
         .mem_attach         = uct_ib_mlx5_devx_mem_attach,
         .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported,
+        .mem_elem_pack      = uct_ib_md_mlx5_devx_md_mem_elem_pack
     },
     .open = uct_ib_mlx5_devx_md_open,
 };
@@ -3398,6 +3423,7 @@ static uct_ib_md_ops_t uct_ib_mlx5_md_ops = {
         .mkey_pack          = uct_ib_verbs_mkey_pack,
         .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
         .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported,
+        .mem_elem_pack      = (uct_md_mem_elem_pack_func_t)ucs_empty_function_return_unsupported
     },
     .open = uct_ib_mlx5dv_md_open,
 };
