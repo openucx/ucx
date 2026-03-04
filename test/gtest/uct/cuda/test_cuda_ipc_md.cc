@@ -356,8 +356,8 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
             }
 
             ucs_status_t unmap_status = uct_cuda_ipc_unmap_memhandle(
-                    unpacked->super.pid, unpacked->super.d_bptr, mapped_addr,
-                    dev, 0);
+                    unpacked->super.super.pid, unpacked->super.pid_ns,
+                    unpacked->super.super.d_bptr, mapped_addr, dev, 0);
             EXPECT_UCS_OK(unmap_status);
             uct_rkey_release(component, &rkey_bundle);
             cuCtxDestroy(ctx);
