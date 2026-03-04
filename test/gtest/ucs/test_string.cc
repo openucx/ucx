@@ -227,6 +227,89 @@ UCS_TEST_F(test_string, to_memunits) {
     }
 }
 
+UCS_TEST_F(test_string, next_token) {
+    auto check = [](const char *input, char delim,
+                     const std::vector<std::string> &expected) {
+        const std::string orig(input);
+        std::vector<char> buf(input, input + orig.size() + 1);
+        const char *saveptr;
+        size_t len;
+
+        for (size_t i = 0; i < expected.size(); ++i) {
+            const char *tok = ucs_string_next_token(
+                    (i == 0) ? buf.data() : NULL, delim, &saveptr, &len);
+            ASSERT_NE(nullptr, tok) << "input: \"" << input
+                                    << "\" token index: " << i;
+            EXPECT_EQ(expected[i], std::string(tok, len));
+        }
+
+        const char *tok = ucs_string_next_token(NULL, delim, &saveptr, &len);
+        EXPECT_EQ(nullptr, tok);
+        EXPECT_EQ(orig, std::string(buf.data()));
+    };
+
+    for (char delim : {',', ':', ';', '|', '&', '+', '-', ' ', '\n'}) {
+        std::string d(1, delim);
+
+        /* multiple tokens */
+        check(("foo" + d + "bar" + d + "baz").c_str(), delim, {"foo", "bar", "baz"});
+        /* single token, no delimiter */
+        check("single", delim, {"single"});
+        /* empty string */
+        check("", delim, {""});
+        /* single delimiter */
+        check(d.c_str(), delim, {"", ""});
+        /* consecutive delimiters */
+        check((d + d).c_str(), delim, {"", "", ""});
+        /* trailing delimiter */
+        check(("foo" + d).c_str(), delim, {"foo", ""});
+        /* leading delimiter */
+        check((d + "foo").c_str(), delim, {"", "foo"});
+        /* delimiters surrounding a token */
+        check((d + "a" + d).c_str(), delim, {"", "a", ""});
+    }
+}
+
+UCS_TEST_F(test_string, for_each_token) {
+    auto check = [](const char *input, char delim,
+                     const std::vector<std::string> &expected) {
+        const std::string orig(input);
+        std::vector<char> buf(input, input + orig.size() + 1);
+        const char *saveptr;
+        const char *tok;
+        size_t tok_len;
+        std::vector<std::string> result;
+
+        ucs_string_for_each_token(buf.data(), delim, saveptr, tok, tok_len) {
+            result.push_back(std::string(tok, tok_len));
+        }
+
+        EXPECT_EQ(expected, result);
+        EXPECT_EQ(orig, std::string(buf.data()));
+    };
+
+    for (char delim : {',', ':', ';', '|', '&', '+', '-', ' ', '\n'}) {
+        std::string d(1, delim);
+
+        /* multiple tokens */
+        check(("one" + d + "two" + d + "three").c_str(), delim, {"one", "two", "three"});
+        /* single token, no delimiter */
+        check("only", delim, {"only"});
+        /* empty string */
+        check("", delim, {""});
+        /* single delimiter */
+        check(d.c_str(), delim, {"", ""});
+        /* consecutive delimiters */
+        check((d + d).c_str(), delim, {"", "", ""});
+        /* trailing delimiter */
+        check(("one" + d).c_str(), delim, {"one", ""});
+        /* leading delimiter */
+        check((d + "one").c_str(), delim, {"", "one"});
+        /* delimiters surrounding a token */
+        check((d + "a" + d).c_str(), delim, {"", "a", ""});
+    }
+}
+
 class test_string_buffer : public ucs::test {
 protected:
     void test_fixed(ucs_string_buffer_t *strb, size_t capacity);
