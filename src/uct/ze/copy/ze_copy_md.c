@@ -190,18 +190,15 @@ static ucs_status_t uct_ze_copy_md_mem_query(uct_md_h md, const void *addr,
                                              const size_t length,
                                              uct_md_mem_attr_t *mem_attr_p)
 {
-    int dmabuf_fd = UCT_DMABUF_FD_INVALID;
+    int dmabuf_fd    = UCT_DMABUF_FD_INVALID;
+    int *dmabuf_fd_p = NULL;
     ucs_memory_info_t mem_info;
     ucs_status_t status;
-    int *dmabuf_fd_p;
 
     if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD) {
         mem_attr_p->dmabuf_fd = UCT_DMABUF_FD_INVALID;
+        dmabuf_fd_p           = &dmabuf_fd;
     }
-
-    dmabuf_fd_p = (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD) ?
-                          &dmabuf_fd :
-                          NULL;
 
     status = uct_ze_copy_md_query_attributes(md, addr, length, &mem_info,
                                              dmabuf_fd_p);
