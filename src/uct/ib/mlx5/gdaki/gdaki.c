@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -10,6 +10,7 @@
 
 #include "gdaki.h"
 
+#include <ucs/sys/sock.h>
 #include <ucs/time/time.h>
 #include <ucs/datastruct/string_buffer.h>
 #include <ucs/algorithm/qsort_r.h>
@@ -142,6 +143,7 @@ static int uct_gdaki_check_umem_dmabuf(const uct_ib_md_t *md)
 
     mlx5dv_devx_umem_dereg(umem);
 out_free:
+    ucs_close_fd(&dmabuf.fd);
     cuMemFree(buff);
 out_ctx_pop:
     UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
@@ -201,8 +203,12 @@ static struct mlx5dv_devx_umem *
 uct_rc_gdaki_umem_reg(const uct_ib_md_t *md, struct ibv_context *ibv_context,
                       void *address, size_t length, uint64_t pgsz_bitmap)
 {
+    uct_cuda_copy_md_dmabuf_t dmabuf   = {
+        .fd     = UCT_DMABUF_FD_INVALID,
+        .offset = 0
+    };
     struct mlx5dv_devx_umem_in umem_in = {};
-    uct_cuda_copy_md_dmabuf_t dmabuf UCS_V_UNUSED;
+    struct mlx5dv_devx_umem *umem;
 
     umem_in.addr        = address;
     umem_in.size        = length;
@@ -216,7 +222,9 @@ uct_rc_gdaki_umem_reg(const uct_ib_md_t *md, struct ibv_context *ibv_context,
     }
 #endif
 
-    return mlx5dv_devx_umem_reg_ex(ibv_context, &umem_in);
+    umem = mlx5dv_devx_umem_reg_ex(ibv_context, &umem_in);
+    ucs_close_fd(&dmabuf.fd);
+    return umem;
 }
 
 static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
@@ -509,17 +517,6 @@ uct_rc_gdaki_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     return UCS_OK;
 }
 
-static ucs_status_t uct_rc_gdaki_iface_query_v2(uct_iface_h tl_iface,
-                                                uct_iface_attr_v2_t *iface_attr)
-{
-    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_DEVICE_MEM_ELEMENT_SIZE) {
-        iface_attr->device_mem_element_size = sizeof(
-                uct_rc_gdaki_device_mem_element_t);
-    }
-
-    return UCS_OK;
-}
-
 ucs_status_t
 uct_rc_gdaki_create_cq(uct_ib_iface_t *ib_iface, uct_ib_dir_t dir,
                        const uct_ib_iface_init_attr_t *init_attr,
@@ -633,27 +630,6 @@ out_unlock:
     return status;
 }
 
-ucs_status_t
-uct_rc_gdaki_iface_mem_element_pack(const uct_iface_h tl_iface, uct_mem_h memh,
-                                    uct_rkey_t rkey,
-                                    uct_device_mem_element_t *mem_elem_p)
-{
-    uct_rc_gdaki_device_mem_element_t mem_elem;
-
-    mem_elem.lkey = UCT_IB_INVALID_MKEY;
-    mem_elem.rkey = UCT_IB_INVALID_MKEY;
-    if (memh != NULL) {
-        mem_elem.lkey = htonl(((uct_ib_mem_t*)memh)->lkey);
-    }
-
-    if (rkey != UCT_INVALID_RKEY) {
-        mem_elem.rkey = htonl(uct_ib_md_direct_rkey(rkey));
-    }
-
-    return UCT_CUDADRV_FUNC_LOG_ERR(
-            cuMemcpyHtoD((CUdeviceptr)mem_elem_p, &mem_elem, sizeof(mem_elem)));
-}
-
 static UCS_CLASS_DECLARE_NEW_FUNC(uct_rc_gdaki_iface_t, uct_iface_t, uct_md_h,
                                   uct_worker_h, const uct_iface_params_t*,
                                   const uct_iface_config_t*);
@@ -663,10 +639,8 @@ static UCS_CLASS_DECLARE_DELETE_FUNC(uct_rc_gdaki_iface_t, uct_iface_t);
 static uct_rc_iface_ops_t uct_rc_gdaki_internal_ops = {
     .super = {
         .super = {
-            .iface_query_v2         = uct_rc_gdaki_iface_query_v2,
             .iface_estimate_perf    = uct_ib_iface_estimate_perf,
             .iface_vfs_refresh      = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
-            .iface_mem_element_pack = uct_rc_gdaki_iface_mem_element_pack,
             .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
             .ep_invalidate          = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
             .ep_connect_to_ep_v2    = uct_rc_gdaki_ep_connect_to_ep_v2,
@@ -712,6 +686,7 @@ static ucs_status_t uct_rc_gdaki_reg_mr(const uct_ib_md_t *md, void *address,
 {
     uct_md_mem_reg_params_t params;
     uct_cuda_copy_md_dmabuf_t dmabuf;
+    ucs_status_t status;
 
     params.field_mask    = UCT_MD_MEM_REG_FIELD_FLAGS |
                            UCT_MD_MEM_REG_FIELD_DMABUF_FD |
@@ -721,8 +696,10 @@ static ucs_status_t uct_rc_gdaki_reg_mr(const uct_ib_md_t *md, void *address,
     params.dmabuf_fd     = dmabuf.fd;
     params.dmabuf_offset = dmabuf.offset;
 
-    return uct_ib_reg_mr(md, address, length, &params, UCT_IB_MEM_ACCESS_FLAGS,
-                         NULL, mr_p);
+    status = uct_ib_reg_mr(md, address, length, &params,
+                           UCT_IB_MEM_ACCESS_FLAGS, NULL, mr_p);
+    ucs_close_fd(&dmabuf.fd);
+    return status;
 }
 
 static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,

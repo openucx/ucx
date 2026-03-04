@@ -353,10 +353,10 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_single(
         uint64_t flags, uct_device_completion_t *comp)
 {
     auto ep       = reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(tl_ep);
-    auto mem_elem = reinterpret_cast<const uct_rc_gdaki_device_mem_element_t*>(
+    auto mem_elem = reinterpret_cast<const uct_ib_md_device_mem_element_t*>(
             tl_mem_elem);
     auto local_mem_elem =
-            reinterpret_cast<const uct_rc_gdaki_device_mem_element_t*>(
+            reinterpret_cast<const uct_ib_md_device_mem_element_t*>(
                     &src_uct_elem->uct_mem_element);
     auto cid = channel_id & ep->channel_mask;
 
@@ -374,7 +374,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_single(
         unsigned channel_id, uint64_t flags, uct_device_completion_t *comp)
 {
     auto ep       = reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(tl_ep);
-    auto mem_elem = reinterpret_cast<const uct_rc_gdaki_device_mem_element_t*>(
+    auto mem_elem = reinterpret_cast<const uct_ib_md_device_mem_element_t*>(
             tl_mem_elem);
     auto cid      = channel_id & ep->channel_mask;
 
@@ -392,7 +392,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_atomic_add(
         uint64_t flags, uct_device_completion_t *comp)
 {
     auto ep       = reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(tl_ep);
-    auto mem_elem = reinterpret_cast<const uct_rc_gdaki_device_mem_element_t*>(
+    auto mem_elem = reinterpret_cast<const uct_ib_md_device_mem_element_t*>(
             tl_mem_elem);
     auto cid      = channel_id & ep->channel_mask;
 
@@ -412,7 +412,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi(
         unsigned channel_id, uint64_t flags, uct_device_completion_t *tl_comp)
 {
     auto ep       = reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(tl_ep);
-    auto mem_list = reinterpret_cast<const uct_rc_gdaki_device_mem_element_t*>(
+    auto mem_list = reinterpret_cast<const uct_ib_md_device_mem_element_t*>(
             tl_mem_list);
     auto cid      = channel_id & ep->channel_mask;
     uct_rc_gda_completion_t *comp = &tl_comp->rc_gda;
@@ -506,7 +506,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi_partial(
         unsigned channel_id, uint64_t flags, uct_device_completion_t *tl_comp)
 {
     auto ep       = reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(tl_ep);
-    auto mem_list = reinterpret_cast<const uct_rc_gdaki_device_mem_element_t*>(
+    auto mem_list = reinterpret_cast<const uct_ib_md_device_mem_element_t*>(
             tl_mem_list);
     auto cid      = channel_id & ep->channel_mask;
     uct_rc_gda_completion_t *comp = &tl_comp->rc_gda;

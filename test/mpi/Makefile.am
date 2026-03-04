@@ -48,7 +48,7 @@ libtest_cuda_common_la_SOURCES  = test_cuda_common.c
 libtest_cuda_common_la_CPPFLAGS = $(BASE_CPPFLAGS) $(CUDA_CPPFLAGS)
 libtest_cuda_common_la_CFLAGS   = $(BASE_CFLAGS)
 libtest_cuda_common_la_LDFLAGS  = $(CUDA_LDFLAGS)
-libtest_cuda_common_la_LIBADD   = $(CUDA_LIBS)
+libtest_cuda_common_la_LIBADD   = $(CUDA_LIBS) $(top_builddir)/src/ucs/libucs.la
 
 test_mpi_cuda_SOURCES  = test_mpi_cuda.c
 test_mpi_cuda_CPPFLAGS = $(BASE_CPPFLAGS) $(CUDA_CPPFLAGS)
