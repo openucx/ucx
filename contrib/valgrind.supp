@@ -4,7 +4,8 @@
    match-leak-kinds: possible
    ...
    fun:_dl_allocate_tls
-   fun:pthread_create@@GLIBC_2.2.5
+   ...
+   fun:pthread_create*
 }
 
 {
@@ -344,4 +345,10 @@
    Memcheck:Leak
    ...
    fun:bfd_map_over_sections
+}
+{
+   getlogin_leak
+   Memcheck:Leak
+   ...
+   fun:getlogin
 }

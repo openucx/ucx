@@ -9,7 +9,7 @@
 #endif
 
 #include "interval_tree.h"
-#include <ucs/debug/assert.h>
+#include <ucs/datastruct/mpool.inl>
 #include <ucs/sys/math.h>
 
 
@@ -23,7 +23,7 @@ ucs_interval_tree_node_create(ucs_interval_tree_t *tree, uint64_t start,
 {
     ucs_interval_node_t *node;
 
-    node = tree->ops.alloc_node(sizeof(*node), tree->ops.arg);
+    node = ucs_mpool_get_inline(tree->mpool);
     if (node == NULL) {
         return NULL;
     }
@@ -32,14 +32,24 @@ ucs_interval_tree_node_create(ucs_interval_tree_t *tree, uint64_t start,
     node->right = NULL;
     node->start = start;
     node->end   = end;
+
+    tree->num_nodes++;
     return node;
 }
 
-void ucs_interval_tree_init(ucs_interval_tree_t *tree,
-                            const ucs_interval_tree_ops_t *ops)
+void ucs_interval_tree_init(ucs_interval_tree_t *tree, ucs_mpool_t *mpool)
 {
-    tree->ops  = *ops;
-    tree->root = NULL;
+    tree->mpool     = mpool;
+    tree->root      = NULL;
+    tree->num_nodes = 0;
+}
+
+static void ucs_interval_tree_delete_node(ucs_interval_tree_t *tree,
+                                          ucs_interval_node_t *node)
+{
+    ucs_assertv(tree->num_nodes > 0, "tree=%p, node=%p", tree, node);
+    ucs_mpool_put_inline(node);
+    tree->num_nodes--;
 }
 
 static void ucs_interval_tree_cleanup_recursive(ucs_interval_tree_t *tree,
@@ -51,7 +61,7 @@ static void ucs_interval_tree_cleanup_recursive(ucs_interval_tree_t *tree,
 
     ucs_interval_tree_cleanup_recursive(tree, node->left);
     ucs_interval_tree_cleanup_recursive(tree, node->right);
-    tree->ops.free_node(node, tree->ops.arg);
+    ucs_interval_tree_delete_node(tree, node);
 }
 
 void ucs_interval_tree_cleanup(ucs_interval_tree_t *tree)
@@ -92,11 +102,11 @@ ucs_interval_tree_remove_node(ucs_interval_tree_t *tree,
     /* Found target - handle deletion based on number of children */
     if (root->left == NULL) {
         temp = root->right;
-        tree->ops.free_node(root, tree->ops.arg);
+        ucs_interval_tree_delete_node(tree, root);
         return temp;
     } else if (root->right == NULL) {
         temp = root->left;
-        tree->ops.free_node(root, tree->ops.arg);
+        ucs_interval_tree_delete_node(tree, root);
         return temp;
     }
 
@@ -188,9 +198,9 @@ ucs_interval_tree_insert_node(ucs_interval_node_t *root,
 ucs_status_t ucs_interval_tree_insert_slow(ucs_interval_tree_t *tree,
                                            uint64_t start, uint64_t end)
 {
-    ucs_interval_node_t *new_node;
     uint64_t merged_start = start;
     uint64_t merged_end   = end;
+    ucs_interval_node_t *new_node;
 
     /* Remove all overlapping nodes and compute the merged range */
     tree->root = ucs_interval_tree_remove_overlapping(tree, tree->root,

@@ -58,6 +58,11 @@ ucp_test::ucp_test() {
     ucs_status_t status;
     status = ucp_config_read(NULL, NULL, &m_ucp_config);
     ASSERT_UCS_OK(status);
+
+    status = ucp_config_modify(m_ucp_config, "WARN_INVALID_CONFIG", "n");
+    if (status != UCS_OK) {
+        UCS_TEST_ABORT("Failed to set UCX to ignore invalid configuration");
+    }
 }
 
 ucp_test::~ucp_test() {
@@ -414,17 +419,11 @@ bool ucp_test::is_proto_enabled() const
     return m_ucp_config->ctx.proto_enable;
 }
 
-void ucp_test::set_ucp_config(ucp_config_t *config, const std::string& tls)
+void ucp_test::set_tls(ucp_config_t *config, const std::string &tls)
 {
-    ucs_status_t status;
-
-    status = ucp_config_modify(config, "TLS", tls.c_str());
+    ucs_status_t status = ucp_config_modify(config, "TLS", tls.c_str());
     if (status != UCS_OK) {
         UCS_TEST_ABORT("Failed to set UCX transports");
-    }
-    status = ucp_config_modify(config, "WARN_INVALID_CONFIG", "n");
-    if (status != UCS_OK) {
-        UCS_TEST_ABORT("Failed to set UCX to ignore invalid configuration");
     }
 }
 
@@ -586,12 +585,13 @@ bool ucp_test::check_tls(const std::string& tls)
     ucs::handle<ucp_config_t*> config;
     UCS_TEST_CREATE_HANDLE(ucp_config_t*, config, ucp_config_release,
                            ucp_config_read, NULL, NULL);
-    set_ucp_config(config, tls);
+    set_tls(config, tls);
 
     ucp_context_h ucph;
     ucs_status_t status;
     {
-        scoped_log_handler slh(hide_errors_logger);
+        scoped_log_handler slh_err(hide_errors_logger);
+        scoped_log_handler slh_warn(hide_warns_logger);
         ucp_params_t ctx_params = {};
         ctx_params.field_mask   = UCP_PARAM_FIELD_FEATURES;
         ctx_params.features     = UCP_FEATURE_TAG |
@@ -665,7 +665,7 @@ ucp_test_base::entity::entity(const ucp_test_param& test_param,
     /* Set transports configuration */
     std::stringstream ss;
     ss << test_param.transports;
-    ucp_test::set_ucp_config(ucp_config, ss.str());
+    ucp_test::set_tls(ucp_config, ss.str());
 
     {
         scoped_log_handler slh(hide_errors_logger);
