@@ -580,12 +580,12 @@ typedef struct ucp_ep_ext {
 typedef struct ucp_ep {
     ucp_worker_h                  worker;        /* Worker this endpoint belongs to */
 
-    uint8_t                       refcount;      /* Reference counter: 0 - it is
-                                                    allowed to destroy EP */
     ucp_worker_cfg_index_t        cfg_index;     /* Configuration index */
     ucp_ep_match_conn_sn_t        conn_sn;       /* Sequence number for remote connection */
-    ucp_lane_index_t              am_lane;       /* Cached value */
     ucp_ep_flags_t                flags;         /* Endpoint flags */
+    uint8_t                       refcount;      /* Reference counter: 0 - it is
+                                                    allowed to destroy EP */
+    ucp_lane_index_t              am_lane;       /* Cached value */
     /* Transports for every lane */
     uct_ep_h                      uct_eps[UCP_MAX_FAST_PATH_LANES];
     ucp_ep_ext_t                  *ext;                   /* Endpoint extension */

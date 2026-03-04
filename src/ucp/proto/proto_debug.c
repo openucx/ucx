@@ -523,8 +523,9 @@ void ucp_proto_select_info_str(ucp_worker_h worker,
             ucs_string_buffer_appendf(strb, " to ");
         }
 
-        ucp_rkey_config_dump_brief(&worker->rkey_config[rkey_cfg_index].key,
-                                   strb);
+        ucp_rkey_config_dump_brief(
+                &ucs_array_elem(&worker->rkey_config, rkey_cfg_index).key,
+                strb);
     }
 
     if (ucp_proto_select_is_atomic_op(select_param)) {

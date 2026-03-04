@@ -1,5 +1,5 @@
 /*
- * Copyright (C) Intel Corporation, 2023-2024. ALL RIGHTS RESERVED.
+ * Copyright (C) Intel Corporation, 2023-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -48,7 +48,8 @@ static ucs_status_t uct_ze_copy_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
     md_attr->alloc_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_ZE_HOST) |
                                 UCS_BIT(UCS_MEMORY_TYPE_ZE_DEVICE) |
                                 UCS_BIT(UCS_MEMORY_TYPE_ZE_MANAGED);
-    md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_ZE_HOST) |
+    md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
+                                UCS_BIT(UCS_MEMORY_TYPE_ZE_HOST) |
                                 UCS_BIT(UCS_MEMORY_TYPE_ZE_DEVICE) |
                                 UCS_BIT(UCS_MEMORY_TYPE_ZE_MANAGED);
     md_attr->detect_mem_types = UCS_BIT(UCS_MEMORY_TYPE_ZE_HOST) |
@@ -253,6 +254,7 @@ static uct_md_ops_t md_ops = {
     .mkey_pack          = (uct_md_mkey_pack_func_t)ucs_empty_function_return_success,
     .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
     .detect_memory_type = uct_ze_copy_md_detect_memory_type,
+    .mem_elem_pack      = (uct_md_mem_elem_pack_func_t)ucs_empty_function_return_unsupported
 };
 
 static ucs_status_t
@@ -265,6 +267,7 @@ uct_ze_copy_md_open(uct_component_h component, const char *md_name,
     ze_driver_handle_t ze_driver;
     ze_context_desc_t context_desc = {};
     ze_result_t ret;
+    const uct_ze_subdevice_t *subdevice;
 
     ze_driver = uct_ze_base_get_driver();
     if (ze_driver == NULL) {
@@ -277,9 +280,18 @@ uct_ze_copy_md_open(uct_component_h component, const char *md_name,
         return UCS_ERR_NO_MEMORY;
     }
 
-    md->ze_device = uct_ze_base_get_device(config->device_ordinal);
+    /* Get sub-device by device_ordinal (global sub-device ID) */
+    subdevice = uct_ze_base_get_subdevice_by_global_id(config->device_ordinal);
+    if (subdevice == NULL) {
+        ucs_error("Failed to get sub-device at ordinal %d", config->device_ordinal);
+        ucs_free(md);
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    /* Get the actual device handle from the sub-device */
+    md->ze_device = uct_ze_base_get_device_handle_from_subdevice(subdevice);
     if (md->ze_device == NULL) {
-        ucs_error("Failed to get device at ordial %d", config->device_ordinal);
+        ucs_error("Failed to get device handle for sub-device %d", config->device_ordinal);
         ucs_free(md);
         return UCS_ERR_NO_DEVICE;
     }
@@ -318,3 +330,4 @@ uct_component_t uct_ze_copy_component = {
     .md_vfs_init    = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
 UCT_COMPONENT_REGISTER(&uct_ze_copy_component);
+

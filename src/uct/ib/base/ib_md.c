@@ -1345,6 +1345,10 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
         /* check if ROCM KFD driver is loaded */
         uct_ib_check_gpudirect_driver(md, "/dev/kfd", UCS_MEMORY_TYPE_ROCM);
 
+        /* Check if Intel Xe driver is loaded */
+        uct_ib_check_gpudirect_driver(md, "/sys/module/xe/srcversion",
+                                      UCS_MEMORY_TYPE_ZE_DEVICE);
+
         /* Check for HabanaLabs Gaudi DMABuf support */
         uct_ib_check_gpudirect_driver(md, "/dev/accel/accel0",
                                       UCS_MEMORY_TYPE_GAUDI);
@@ -1358,8 +1362,8 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
         !(md->cap_flags & UCT_MD_FLAG_REG_DMABUF) &&
         (md_config->enable_gpudirect_rdma == UCS_YES)) {
         ucs_error("%s: Couldn't enable GPUDirect RDMA. Please make sure "
-                  "nv_peer_mem or amdgpu plugin installed correctly, or dmabuf "
-                  "is supported.",
+                  "nv_peer_mem, amdgpu plugin, or Intel Xe driver is "
+                  "installed correctly, or dmabuf is supported.",
                   uct_ib_device_name(&md->dev));
         status = UCS_ERR_UNSUPPORTED;
         goto err_cleanup_device;
@@ -1592,6 +1596,7 @@ static uct_ib_md_ops_t uct_ib_verbs_md_ops = {
         .mkey_pack          = uct_ib_verbs_mkey_pack,
         .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
         .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported,
+        .mem_elem_pack      = (uct_md_mem_elem_pack_func_t)ucs_empty_function_return_unsupported
     },
     .open = uct_ib_verbs_md_open,
 };

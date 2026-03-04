@@ -101,7 +101,6 @@ void test_ucp_device::get_test_variants(std::vector<ucp_test_variant> &variants)
 
 void test_ucp_device::init()
 {
-    m_env.push_back(new ucs::scoped_setenv("UCX_CUDA_IPC_ENABLE_SAME_PROCESS", "y"));
     m_env.push_back(new ucs::scoped_setenv("UCX_IB_GDA_MAX_SYS_LATENCY", "1us"));
     ucp_test::init();
     sender().connect(&receiver(), get_ep_params());
@@ -210,11 +209,7 @@ test_ucp_device::mem_list::mem_list(test_ucp_device &test, size_t size,
         params.elements     = local_elems.data();
         params.worker       = test.sender().worker();
         // Create memory list (with retry on connection)
-        {
-            scoped_log_handler wrap_err(wrap_errors_logger);
-            status = ucp_device_local_mem_list_create(&params,
-                                                      &m_local_mem_list_h);
-        }
+        status = ucp_device_local_mem_list_create(&params, &m_local_mem_list_h);
 
         ASSERT_UCS_OK(status);
     }
@@ -257,14 +252,11 @@ test_ucp_device::mem_list::mem_list(test_ucp_device &test, size_t size,
     params.elements     = remote_elems.data();
 
     // Create memory list (with retry on connection)
-    {
-        scoped_log_handler wrap_err(wrap_errors_logger);
-        do {
-            test.progress();
-            status = ucp_device_remote_mem_list_create(&params,
-                                                       &m_remote_mem_list_h);
-        } while (status == UCS_ERR_NOT_CONNECTED);
-    }
+    do {
+        test.progress();
+        status = ucp_device_remote_mem_list_create(&params,
+                                                   &m_remote_mem_list_h);
+    } while (status == UCS_ERR_NOT_CONNECTED);
 
     if (status == UCS_ERR_NO_DEVICE) {
         UCS_TEST_SKIP_R("Skipping test if no device lanes exists.");

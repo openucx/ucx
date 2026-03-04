@@ -292,6 +292,9 @@ struct ucp_worker_cm {
 UCS_PTR_MAP_TYPE(ep, 1);
 UCS_PTR_MAP_TYPE(request, 0);
 
+/* rkey configuration storage */
+UCS_ARRAY_DECLARE_TYPE(ucp_rkey_config_arr_t, unsigned, ucp_rkey_config_t);
+
 
 /**
  * UCP worker (thread context).
@@ -368,8 +371,7 @@ typedef struct ucp_worker {
 
     ucp_ep_config_arr_t              ep_config; /* EP configurations storage */
 
-    unsigned                         rkey_config_count;   /* Current number of rkey configurations */
-    ucp_rkey_config_t                rkey_config[UCP_WORKER_MAX_RKEY_CONFIG];
+    ucp_rkey_config_arr_t            rkey_config; /* Rkey configurations storage */
 
     struct {
         int                          timerfd;             /* Timer needed to signal to user's fd when

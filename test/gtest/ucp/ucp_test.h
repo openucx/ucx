@@ -228,7 +228,7 @@ public:
     void disable_keepalive();
 
 private:
-    static void set_ucp_config(ucp_config_t *config, const std::string& tls);
+    static void set_tls(ucp_config_t *config, const std::string &tls);
     static bool check_tls(const std::string& tls);
     ucs_status_t request_process(void *req, int worker_index, bool wait,
                                  bool wakeup = false,
