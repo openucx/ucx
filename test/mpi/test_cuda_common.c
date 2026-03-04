@@ -36,12 +36,18 @@
 #define CUDA_CHECK(_func) \
     LIB_CHECK(CUresult, _func, CUDA_SUCCESS, _CUDA_ERROR_STRING)
 
-typedef struct init_params {
+typedef struct {
+    CUcontext primary;
+    CUcontext user;
+    CUcontext other_primary;
+} cu_ctx_t;
+
+struct init_params {
     int      rank;
     int      provided;
     int      dev_count;
-    CUdevice cu_dev;
-} init_params_t;
+    cu_ctx_t cu_ctx;
+};
 
 typedef struct {
     CUdeviceptr ptr;
@@ -60,8 +66,7 @@ typedef struct test_params {
     const allocator_t *allocator_send;
     const allocator_t *allocator_recv;
     size_t            size;
-    int               dev_count;
-    CUdevice          cu_dev;
+    cu_ctx_t          cu_ctx;
     xfer_t            xfer;
     const void        *xfer_args;
 } test_params_t;
@@ -133,6 +138,46 @@ static unsigned total_ucx_errors_and_warnings = 0;
 
 void *gold_data;
 
+static CUdevice device_get(int rank, int dev_count)
+{
+    CUdevice cu_dev;
+    CUDA_CHECK(cuDeviceGet(&cu_dev, rank % dev_count));
+    return cu_dev;
+}
+
+static CUdevice other_device_get(int rank, int dev_count)
+{
+    return device_get(rank + 1, dev_count);
+}
+
+static CUresult cuCtxCreate_v(CUcontext *cu_ctx, CUdevice cu_dev)
+{
+#if CUDA_VERSION >= 13000
+    CUctxCreateParams ctx_create_params = {};
+    return cuCtxCreate(cu_ctx, &ctx_create_params, 0, cu_dev);
+#else
+    return cuCtxCreate(cu_ctx, 0, cu_dev);
+#endif
+}
+
+static cu_ctx_t init_cu_ctx(int rank, int dev_count)
+{
+    CUdevice cu_dev = device_get(rank, dev_count);
+    cu_ctx_t cu_ctx;
+
+    CUDA_CHECK(cuDevicePrimaryCtxRetain(&cu_ctx.primary, cu_dev));
+    CUDA_CHECK(cuCtxCreate_v(&cu_ctx.user, cu_dev));
+    CUDA_CHECK(cuCtxPopCurrent(NULL));
+    if (dev_count > MIN_DEV_COUNT) {
+        cu_dev = other_device_get(rank, dev_count);
+        CUDA_CHECK(cuDevicePrimaryCtxRetain(&cu_ctx.other_primary, cu_dev));
+    } else {
+        cu_ctx.other_primary = NULL;
+    }
+
+    return cu_ctx;
+}
+
 static void create_gold_data(size_t size)
 {
     int i;
@@ -159,20 +204,6 @@ ucx_errors_and_warnings_counter(const char *file, unsigned line,
     }
 
     return UCS_LOG_FUNC_RC_CONTINUE;
-}
-
-static void retain_and_push_primary_context(CUdevice cu_dev)
-{
-    CUcontext cu_ctx;
-
-    CUDA_CHECK(cuDevicePrimaryCtxRetain(&cu_ctx, cu_dev));
-    CUDA_CHECK(cuCtxPushCurrent(cu_ctx));
-}
-
-static void pop_and_release_primary_context(CUdevice cu_dev)
-{
-    CUDA_CHECK(cuCtxPopCurrent(NULL));
-    CUDA_CHECK(cuDevicePrimaryCtxRelease(cu_dev));
 }
 
 static alloc_mem_t alloc_mem_alloc(size_t size)
@@ -386,32 +417,18 @@ static void *xfer_thread(void *arg)
     pthread_exit(NULL);
 }
 
-static CUresult cuCtxCreate_versioned(CUcontext *cu_ctx_p, CUdevice cu_dev)
-{
-#if CUDA_VERSION >= 13000
-    CUctxCreateParams ctx_create_params = {};
-    return cuCtxCreate(cu_ctx_p, &ctx_create_params, 0, cu_dev);
-#else
-    return cuCtxCreate(cu_ctx_p, 0, cu_dev);
-#endif
-}
-
 static int test_alloc_prim_send_prim(const test_params_t *params)
 {
     alloc_mem_t alloc_mem_send, alloc_mem_recv;
     xfer_params_t xfer_params;
     int res;
 
-    retain_and_push_primary_context(params->cu_dev);
-
+    CUDA_CHECK(cuCtxPushCurrent(params->cu_ctx.primary));
     alloc_mem(params, &alloc_mem_send, &alloc_mem_recv);
-
     xfer_params = init_xfer_params(params, &alloc_mem_send, &alloc_mem_recv);
     params->xfer(&xfer_params);
-
     res = check_and_free_mem(params, &alloc_mem_send, &alloc_mem_recv);
-
-    pop_and_release_primary_context(params->cu_dev);
+    CUDA_CHECK(cuCtxPopCurrent(NULL));
 
     return res;
 }
@@ -419,25 +436,18 @@ static int test_alloc_prim_send_prim(const test_params_t *params)
 static int test_alloc_prim_send_no(const test_params_t *params)
 {
     alloc_mem_t alloc_mem_send, alloc_mem_recv;
-    CUcontext primary_ctx;
     xfer_params_t xfer_params;
     int res;
 
-    retain_and_push_primary_context(params->cu_dev);
-
+    CUDA_CHECK(cuCtxPushCurrent(params->cu_ctx.primary));
     alloc_mem(params, &alloc_mem_send, &alloc_mem_recv);
-
-    CUDA_CHECK(cuCtxPopCurrent(&primary_ctx));
+    CUDA_CHECK(cuCtxPopCurrent(NULL));
     check_no_current_context();
-
     xfer_params = init_xfer_params(params, &alloc_mem_send, &alloc_mem_recv);
     params->xfer(&xfer_params);
-
-    CUDA_CHECK(cuCtxPushCurrent(primary_ctx));
-
+    CUDA_CHECK(cuCtxPushCurrent(params->cu_ctx.primary));
     res = check_and_free_mem(params, &alloc_mem_send, &alloc_mem_recv);
-
-    pop_and_release_primary_context(params->cu_dev);
+    CUDA_CHECK(cuCtxPopCurrent(NULL));
 
     return res;
 }
@@ -449,19 +459,15 @@ static int test_alloc_prim_send_thread(const test_params_t *params)
     pthread_t thread;
     int res;
 
-    retain_and_push_primary_context(params->cu_dev);
-
+    CUDA_CHECK(cuCtxPushCurrent(params->cu_ctx.primary));
     alloc_mem(params, &alloc_mem_send, &alloc_mem_recv);
-
     thread_arg.xfer_params = init_xfer_params(params, &alloc_mem_send,
                                               &alloc_mem_recv);
     thread_arg.xfer        = params->xfer;
     pthread_create(&thread, NULL, xfer_thread, &thread_arg);
     pthread_join(thread, NULL);
-
     res = check_and_free_mem(params, &alloc_mem_send, &alloc_mem_recv);
-
-    pop_and_release_primary_context(params->cu_dev);
+    CUDA_CHECK(cuCtxPopCurrent(NULL));
 
     return res;
 }
@@ -469,51 +475,35 @@ static int test_alloc_prim_send_thread(const test_params_t *params)
 static int test_alloc_prim_send_user(const test_params_t *params)
 {
     alloc_mem_t alloc_mem_send, alloc_mem_recv;
-    CUcontext primary_ctx, user_ctx;
     xfer_params_t xfer_params;
     int res;
 
-    retain_and_push_primary_context(params->cu_dev);
-
+    CUDA_CHECK(cuCtxPushCurrent(params->cu_ctx.primary));
     alloc_mem(params, &alloc_mem_send, &alloc_mem_recv);
-
-    CUDA_CHECK(cuCtxPopCurrent(&primary_ctx));
-    CUDA_CHECK(cuCtxCreate_versioned(&user_ctx, params->cu_dev));
-
+    CUDA_CHECK(cuCtxPushCurrent(params->cu_ctx.user));
     xfer_params = init_xfer_params(params, &alloc_mem_send, &alloc_mem_recv);
     params->xfer(&xfer_params);
-
-    CUDA_CHECK(cuCtxDestroy(user_ctx));
-    CUDA_CHECK(cuCtxPushCurrent(primary_ctx));
-
+    CUDA_CHECK(cuCtxPopCurrent(NULL));
     res = check_and_free_mem(params, &alloc_mem_send, &alloc_mem_recv);
-
-    pop_and_release_primary_context(params->cu_dev);
+    CUDA_CHECK(cuCtxPopCurrent(NULL));
 
     return res;
 }
 
 static int test_alloc_user_send_prim(const test_params_t *params)
 {
-    CUcontext user_ctx;
     alloc_mem_t alloc_mem_send, alloc_mem_recv;
     xfer_params_t xfer_params;
     int res;
 
-    CUDA_CHECK(cuCtxCreate_versioned(&user_ctx, params->cu_dev));
-
+    CUDA_CHECK(cuCtxPushCurrent(params->cu_ctx.user));
     alloc_mem(params, &alloc_mem_send, &alloc_mem_recv);
-
-    retain_and_push_primary_context(params->cu_dev);
-
+    CUDA_CHECK(cuCtxPushCurrent(params->cu_ctx.primary));
     xfer_params = init_xfer_params(params, &alloc_mem_send, &alloc_mem_recv);
     params->xfer(&xfer_params);
-
-    pop_and_release_primary_context(params->cu_dev);
-
+    CUDA_CHECK(cuCtxPopCurrent(NULL));
     res = check_and_free_mem(params, &alloc_mem_send, &alloc_mem_recv);
-
-    CUDA_CHECK(cuCtxDestroy(user_ctx));
+    CUDA_CHECK(cuCtxPopCurrent(NULL));
 
     return res;
 }
@@ -521,47 +511,38 @@ static int test_alloc_user_send_prim(const test_params_t *params)
 static int test_alloc_prim_send_other_prim(const test_params_t *params)
 {
     alloc_mem_t alloc_mem_send, alloc_mem_recv;
-    CUdevice cu_dev_other;
     xfer_params_t xfer_params;
     int res;
 
-    retain_and_push_primary_context(params->cu_dev);
-
+    CUDA_CHECK(cuCtxPushCurrent(params->cu_ctx.primary));
     alloc_mem(params, &alloc_mem_send, &alloc_mem_recv);
-
-    CUDA_CHECK(
-            cuDeviceGet(&cu_dev_other, (params->rank + 1) % params->dev_count));
-    retain_and_push_primary_context(cu_dev_other);
-
+    CUDA_CHECK(cuCtxPushCurrent(params->cu_ctx.other_primary));
     xfer_params = init_xfer_params(params, &alloc_mem_send, &alloc_mem_recv);
     params->xfer(&xfer_params);
-
-    pop_and_release_primary_context(cu_dev_other);
-
+    CUDA_CHECK(cuCtxPopCurrent(NULL));
     res = check_and_free_mem(params, &alloc_mem_send, &alloc_mem_recv);
-
-    pop_and_release_primary_context(params->cu_dev);
+    CUDA_CHECK(cuCtxPopCurrent(NULL));
 
     return res;
 }
 
-static int check_allocator(const allocator_t *allocator, CUdevice cu_dev)
+static int check_allocator(const allocator_t *allocator, CUcontext cu_ctx)
 {
     alloc_mem_t alloc_mem;
     int ret;
 
-    retain_and_push_primary_context(cu_dev);
+    CUDA_CHECK(cuCtxPushCurrent(cu_ctx));
     alloc_mem = allocator->alloc(1);
     if (alloc_mem.ptr == 0) {
         ret = 0;
-        goto pop_and_release;
+        goto pop;
     }
 
     allocator->free(&alloc_mem);
     ret = 1;
 
-pop_and_release:
-    pop_and_release_primary_context(cu_dev);
+pop:
+    CUDA_CHECK(cuCtxPopCurrent(NULL));
     return ret;
 }
 
@@ -591,6 +572,17 @@ static void run_test_for_all_sizes(test_params_t *params, size_t test_idx)
     }
 }
 
+static void destroy_cu_ctx(const init_params_h params)
+{
+    CUDA_CHECK(cuDevicePrimaryCtxRelease(
+            device_get(params->rank, params->dev_count)));
+    CUDA_CHECK(cuCtxDestroy(params->cu_ctx.user));
+    if (params->dev_count > MIN_DEV_COUNT) {
+        CUDA_CHECK(cuDevicePrimaryCtxRelease(
+                other_device_get(params->rank, params->dev_count)));
+    }
+}
+
 int test_cuda_init(int argc, char **argv, init_params_h *init_params_p)
 {
 #if ENABLE_MT
@@ -600,10 +592,8 @@ int test_cuda_init(int argc, char **argv, init_params_h *init_params_p)
 #endif
     int provided;
     int comm_size, rank;
-    int dev_count, dev_idx;
-    CUdevice cu_dev;
-    CUcontext cu_ctx;
-    init_params_t *init_params;
+    int dev_count;
+    init_params_h init_params;
 
     MPI_Init_thread(&argc, &argv, required, &provided);
     MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
@@ -622,20 +612,11 @@ int test_cuda_init(int argc, char **argv, init_params_h *init_params_p)
         goto err;
     }
 
-    for (dev_idx = dev_count - 1; dev_idx > -1; --dev_idx) {
-        CUDA_CHECK(cuDeviceGet(&cu_dev, dev_idx));
-        CUDA_CHECK(cuDevicePrimaryCtxRetain(&cu_ctx, cu_dev));
-    }
-
-    if ((rank == 1) && (dev_count > 1)) {
-        CUDA_CHECK(cuDeviceGet(&cu_dev, 1));
-    }
-
-    init_params            = malloc(sizeof(init_params));
+    init_params            = malloc(sizeof(*init_params));
     init_params->rank      = rank;
     init_params->provided  = provided;
     init_params->dev_count = dev_count;
-    init_params->cu_dev    = cu_dev;
+    init_params->cu_ctx    = init_cu_ctx(rank, dev_count);
     *init_params_p         = init_params;
 
     create_gold_data(SIZE_L);
@@ -657,8 +638,7 @@ void test_cuda(const init_params_h init_params, const xfer_t xfer,
     const test_t *test;
 
     test_params.rank      = init_params->rank;
-    test_params.dev_count = init_params->dev_count;
-    test_params.cu_dev    = init_params->cu_dev;
+    test_params.cu_ctx    = init_params->cu_ctx;
     test_params.xfer      = xfer;
     test_params.xfer_args = xfer_args;
 
@@ -684,7 +664,7 @@ void test_cuda(const init_params_h init_params, const xfer_t xfer,
              ++allocator_send_idx) {
             test_params.allocator_send = allocators + allocator_send_idx;
             if (!check_allocator(test_params.allocator_send,
-                                 test_params.cu_dev)) {
+                                 test_params.cu_ctx.primary)) {
                 PRINT_ROOT(TEST_NAME_FMT ": SKIP (not supported)\n", test_idx,
                            test_params.allocator_send->name, "*");
                 continue;
@@ -695,7 +675,7 @@ void test_cuda(const init_params_h init_params, const xfer_t xfer,
                  ++allocator_recv_idx) {
                 test_params.allocator_recv = allocators + allocator_recv_idx;
                 if (!check_allocator(test_params.allocator_recv,
-                                     test_params.cu_dev)) {
+                                     test_params.cu_ctx.primary)) {
                     PRINT_ROOT(TEST_NAME_FMT ": SKIP (not supported)\n",
                                test_idx, test_params.allocator_send->name,
                                test_params.allocator_recv->name);
@@ -708,21 +688,15 @@ void test_cuda(const init_params_h init_params, const xfer_t xfer,
     }
 }
 
-void test_cuda_cleanup(init_params_h init_params)
+void test_cuda_cleanup(const init_params_h init_params)
 {
-    int dev_idx;
-    CUdevice cu_dev;
-
     ucs_log_pop_handler();
 
     free(gold_data);
 
-    for (dev_idx = 0; dev_idx < init_params->dev_count; ++dev_idx) {
-        CUDA_CHECK(cuDeviceGet(&cu_dev, dev_idx));
-        CUDA_CHECK(cuDevicePrimaryCtxRelease(cu_dev));
-    }
+    MPI_Finalize();
+
+    destroy_cu_ctx(init_params);
 
     free(init_params);
-
-    MPI_Finalize();
 }

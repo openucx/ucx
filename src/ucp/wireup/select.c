@@ -24,7 +24,6 @@
 #define UCP_WIREUP_RMA_BW_TEST_MSG_SIZE    262144
 #define UCP_WIREUP_MAX_FLAGS_STRING_SIZE   50
 #define UCP_WIREUP_PATH_INDEX_UNDEFINED    UINT_MAX
-#define UCP_WIREUP_UCT_INFO_SIZE           256
 
 /* 6 for the string format constant length */
 #define UCP_WIREUP_TLS_INFO_SIZE       (UCP_WIREUP_UCT_INFO_SIZE + \

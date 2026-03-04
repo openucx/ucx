@@ -120,9 +120,9 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
         return status;
     }
 
-    status = uct_cuda_ipc_get_remote_address((uct_cuda_ipc_rkey_t*)rkey,
-                                             remote_addr, cuda_device,
-                                             &mapped_rem_addr, &mapped_addr);
+    status = uct_cuda_ipc_get_remote_address(&key->super, remote_addr,
+                                             cuda_device, &mapped_rem_addr,
+                                             &mapped_addr);
     if (ucs_unlikely(status != UCS_OK)) {
         goto out;
     }
@@ -180,8 +180,9 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
     ucs_queue_push(&q_desc->event_queue, &cuda_ipc_event->super.queue);
     cuda_ipc_event->super.comp  = comp;
     cuda_ipc_event->mapped_addr = mapped_addr;
-    cuda_ipc_event->d_bptr      = (uintptr_t)key->super.d_bptr;
-    cuda_ipc_event->pid         = key->super.pid;
+    cuda_ipc_event->d_bptr      = (uintptr_t)key->super.super.d_bptr;
+    cuda_ipc_event->pid         = key->super.super.pid;
+    cuda_ipc_event->pid_ns      = key->super.pid_ns;
     cuda_ipc_event->cuda_device = cuda_device;
     ucs_trace("cuMemcpyDtoDAsync issued :%p dst:%p, src:%p  len:%ld",
              cuda_ipc_event, (void *) dst, (void *) src, iov[0].length);
