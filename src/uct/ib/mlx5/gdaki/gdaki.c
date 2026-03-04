@@ -203,9 +203,12 @@ static struct mlx5dv_devx_umem *
 uct_rc_gdaki_umem_reg(const uct_ib_md_t *md, struct ibv_context *ibv_context,
                       void *address, size_t length, uint64_t pgsz_bitmap)
 {
+    uct_cuda_copy_md_dmabuf_t dmabuf   = {
+        .fd     = UCT_DMABUF_FD_INVALID,
+        .offset = 0
+    };
     struct mlx5dv_devx_umem_in umem_in = {};
     struct mlx5dv_devx_umem *umem;
-    uct_cuda_copy_md_dmabuf_t dmabuf UCS_V_UNUSED;
 
     umem_in.addr        = address;
     umem_in.size        = length;
@@ -220,9 +223,7 @@ uct_rc_gdaki_umem_reg(const uct_ib_md_t *md, struct ibv_context *ibv_context,
 #endif
 
     umem = mlx5dv_devx_umem_reg_ex(ibv_context, &umem_in);
-#if HAVE_DECL_MLX5DV_UMEM_MASK_DMABUF
     ucs_close_fd(&dmabuf.fd);
-#endif
     return umem;
 }
 
