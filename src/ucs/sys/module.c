@@ -423,6 +423,7 @@ void ucs_load_modules(const char *framework, const char *expected_modules,
                       ucs_init_once_t *init_once, unsigned flags)
 {
 #ifdef UCX_SHARED_LIB
+    char ext_dir[PATH_MAX];
     char *modules_str;
     char *saveptr;
     char *module_name;
@@ -455,9 +456,7 @@ void ucs_load_modules(const char *framework, const char *expected_modules,
                     ucs_global_opts.plugin_path.names[i], framework, mode);
         }
 
-        for (i = 0; i < ucs_array_length(&ucs_module_loader_state.srch_path);
-             ++i) {
-            char ext_dir[PATH_MAX];
+        for (i = 0; i < ucs_array_length(&ucs_module_loader_state.srch_path); ++i) {
             snprintf(ext_dir, sizeof(ext_dir), "%s/%s",
                      ucs_array_elem(&ucs_module_loader_state.srch_path, i),
                      UCS_MODULE_EXT_SUBDIR);
