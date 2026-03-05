@@ -7,7 +7,6 @@
 #include "test.h"
 
 #include <ucs/config/parser.h>
-#include <regex>
 #include <ucs/config/global_opts.h>
 #include <ucs/stats/stats.h>
 #include <ucs/sys/sys.h>
@@ -24,13 +23,6 @@ std::vector<std::string> test_base::m_warnings;
 std::vector<std::string> test_base::m_first_warns_and_errors;
 std::set<int> test_base::m_prev_open_fds;
 int test_base::m_consecutive_fd_increases = 0;
-
-/* File descriptors related to external libraries (rdma-core, CUDA driver, etc.) */
-static const char *fd_leak_whitelist[] = {
-    R"(\/dev\/infiniband\/uverbs\d+)",
-    R"(anon_inode:\[infinibandevent\])",
-    R"(\/dev\/nvidia\d+)",
-};
 
 test_base::test_base() :
                 m_state(NEW),
@@ -59,8 +51,15 @@ test_base::~test_base() {
 
 bool test_base::is_fd_whitelisted(const std::string &target) const
 {
-    for (const char *pattern : fd_leak_whitelist) {
-        if (std::regex_search(target, std::regex(pattern))) {
+    /* fd targets for external libraries (rdma-core, CUDA driver, etc.) */
+    static const char *fd_leak_whitelist[] = {
+        "/dev/infiniband/uverbs",
+        "anon_inode:[infinibandevent]",
+        "/dev/nvidia",
+    };
+
+    for (const char *str : fd_leak_whitelist) {
+        if (target.find(str) != std::string::npos) {
             return true;
         }
     }
@@ -70,8 +69,8 @@ bool test_base::is_fd_whitelisted(const std::string &target) const
 void test_base::check_fd_leaks()
 {
     /* Compare open file descriptors against the previous test's post-cleanup
-     * state via set-difference. New fds whose targets match fd_leak_whitelist
-     * (e.g. rdma-core, CUDA driver) are logged but not counted as leaks.
+     * state via set-difference. New fds whose targets match the whitelist
+     * (e.g. from external libraries) are logged but not counted as leaks.
      * Non-whitelisted new fds increment a consecutive-increase counter and
      * trigger a failure once CONSECUTIVE_FD_INCREASE_THRESHOLD is reached. */
     std::set<int> open_fds = collect_open_fds();
