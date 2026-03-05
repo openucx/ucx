@@ -61,7 +61,7 @@ typedef enum {
  * After loading expected modules, external plugins matching the framework are
  * discovered and loaded from:
  *  1. Directories listed in UCX_PLUGIN_PATH (colon-separated)
- *  2. The built-in module search directories listed above
+ *  2. 'ext' sub-directory under each built-in module search directory above
  *
  * @param [in] _name  Framework name (as a token)
  */

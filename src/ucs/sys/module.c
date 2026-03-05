@@ -33,6 +33,7 @@
 
 #define UCS_MODULE_PATH_MEMTRACK_NAME   "module_path"
 #define UCS_MODULE_SRCH_PATH_MAX        2
+#define UCS_MODULE_EXT_SUBDIR           "ext"
 
 #define ucs_module_debug(_fmt, ...) \
     ucs_log(ucs_min(UCS_LOG_LEVEL_DEBUG, ucs_global_opts.module_log_level), \
@@ -456,9 +457,11 @@ void ucs_load_modules(const char *framework, const char *expected_modules,
 
         for (i = 0; i < ucs_array_length(&ucs_module_loader_state.srch_path);
              ++i) {
-            ucs_module_load_from_dir(
-                    ucs_array_elem(&ucs_module_loader_state.srch_path, i),
-                    framework, mode);
+            char ext_dir[PATH_MAX];
+            snprintf(ext_dir, sizeof(ext_dir), "%s/%s",
+                     ucs_array_elem(&ucs_module_loader_state.srch_path, i),
+                     UCS_MODULE_EXT_SUBDIR);
+            ucs_module_load_from_dir(ext_dir, framework, mode);
         }
     }
 #endif /* UCX_SHARED_LIB */
