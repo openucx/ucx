@@ -2,7 +2,7 @@
 #
 # Testing script for OpenUCX, to run from Jenkins CI
 #
-# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2023. ALL RIGHTS RESERVED.
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 # Copyright (C) ARM Ltd. 2016-2018.  ALL RIGHTS RESERVED.
 #
 # See file LICENSE for terms.
@@ -746,6 +746,12 @@ run_mpi_tests() {
 						./test/mpi/test_mpi_cuda
 			fi
 
+			if [ "X$have_cuda" != "Xno" ] && [ -x ./test/mpi/test_rma_cuda ]
+			then
+				echo "==== Running RMA CUDA tests ===="
+				${MPIRUN_COMMON} -np 2 ./test/mpi/test_rma_cuda
+			fi
+
 			# Restore LD_LIBRARY_PATH so subsequent tests will not take UCX libs
 			# from installation directory
 			export LD_LIBRARY_PATH=${save_LD_LIBRARY_PATH}
@@ -842,7 +848,7 @@ test_ucm_hooks() {
     total=30
     echo "==== Running UCM Bistro hook test ===="
     for i in $(seq 1 $total); do
-        threads=$(((RANDOM % (2 * `nproc`)) + 1))
+        threads=$(((RANDOM % (2 * ${NPROC})) + 1))
 
         echo "iteration $i/$total: $threads threads"
         timeout 10 ./test/apps/test_hooks -n $threads >test_hooks.log 2>&1 || \
@@ -980,6 +986,14 @@ run_gtest_watchdog_test() {
 	fi
 }
 
+run_cuda_usr_ctx_gtest() {
+	echo "==== Running cuda user context test ===="
+	$TIMEOUT env \
+		GTEST_CLEAR_CUDA_CTX_=y \
+		GTEST_FILTER='*test_p2p_create_destroy_ctx*' \
+		make -C test/gtest test
+}
+
 run_malloc_hook_gtest() {
 	# GTEST_SHARD_INDEX/GTEST_TOTAL_SHARDS should NOT be set
 
@@ -1051,6 +1065,7 @@ run_specific_tests() {
 	set_gtest_common_test_flags
 
 	# Run specific tests
+	do_distributed_task 0 4 run_cuda_usr_ctx_gtest
 	do_distributed_task 1 4 run_malloc_hook_gtest
 	do_distributed_task 2 4 run_gtest_watchdog_test 5 60 300
 	do_distributed_task 3 4 test_memtrack

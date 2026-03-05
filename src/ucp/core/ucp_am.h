@@ -10,8 +10,9 @@
 
 
 #include <ucs/datastruct/array.h>
+#include <ucs/datastruct/interval_tree.h>
+#include <ucs/datastruct/mpool.h>
 #include <ucp/rndv/rndv.h>
-
 
 #define ucp_am_hdr_from_rts(_rts) \
     ({ \
@@ -50,6 +51,7 @@ typedef struct ucp_am_entry {
 typedef struct ucp_am_info {
     size_t                                alignment;
     ucs_array_s(unsigned, ucp_am_entry_t) cbs;
+    ucs_mpool_t                           frag_tree_mpool;
 } ucp_am_info_t;
 
 
@@ -117,7 +119,6 @@ typedef struct {
 
 typedef struct {
     ucs_list_link_t          list;        /* entry into list of unfinished AM's */
-    size_t                   remaining;   /* how many bytes left to receive */
 } ucp_am_first_desc_t;
 
 

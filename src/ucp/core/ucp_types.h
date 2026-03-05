@@ -55,10 +55,10 @@ UCP_UINT_TYPE(UCP_MAX_SYS_DEVICES)   ucp_sys_dev_map_t;
 
 
 /* Worker configuration index for endpoint and rkey */
-typedef uint8_t                      ucp_worker_cfg_index_t;
+typedef uint16_t                     ucp_worker_cfg_index_t;
 #define UCP_WORKER_MAX_EP_CONFIG     UINT8_MAX
-#define UCP_WORKER_MAX_RKEY_CONFIG   128
-#define UCP_WORKER_CFG_INDEX_NULL    UINT8_MAX
+#define UCP_WORKER_MAX_RKEY_CONFIG   UINT16_MAX
+#define UCP_WORKER_CFG_INDEX_NULL    UINT16_MAX
 
 
 /* Forward declarations */
@@ -201,6 +201,10 @@ typedef enum {
                                           defined AM */
     UCP_AM_ID_AM_SINGLE_REPLY   =  26, /* Single fragment user defined AM
                                           carrying remote ep for reply */
+    UCP_AM_ID_AM_FIRST_PSN      =  27, /* First fragment user defined AM
+                                          carrying remote ep and PSN for
+                                          tracking */
+    UCP_AM_ID_AM_MIDDLE_PSN     =  28,
     UCP_AM_ID_LAST
 } ucp_am_id_t;
 

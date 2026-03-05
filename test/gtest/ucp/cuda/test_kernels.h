@@ -22,17 +22,17 @@ typedef enum {
 } test_ucp_device_operation_t;
 
 typedef struct {
-    unsigned                            num_channels;
-    unsigned                            num_threads;
-    unsigned                            num_blocks;
-    test_ucp_device_operation_t         operation;
-    ucs_device_level_t                  level;
-    bool                                with_no_delay;
-    bool                                with_request;
-    size_t                              num_iters;
-    ucp_device_mem_list_handle_h        mem_list;
-    ucp_device_local_mem_list_handle_h  local_mem_list;
-    ucp_device_remote_mem_list_handle_h remote_mem_list;
+    unsigned                     num_channels;
+    unsigned                     num_threads;
+    unsigned                     num_blocks;
+    test_ucp_device_operation_t  operation;
+    ucs_device_level_t           level;
+    bool                         with_no_delay;
+    bool                         with_request;
+    size_t                       num_iters;
+    ucp_device_mem_list_handle_h mem_list;
+    ucp_device_local_mem_list_h  local_mem_list;
+    ucp_device_remote_mem_list_h remote_mem_list;
     union {
         struct {
             unsigned   mem_list_index;

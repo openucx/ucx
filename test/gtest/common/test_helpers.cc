@@ -14,6 +14,7 @@
 #include <ucs/config/parser.h>
 
 #include <set>
+#include <sstream>
 
 extern "C" {
 // On some platforms users have to declare environ explicitly
@@ -676,6 +677,13 @@ std::string compact_string(const std::string &str, size_t length)
     }
 
     return str.substr(0, length) + "..." + str.substr(str.length() - length);
+}
+
+
+std::string
+join(std::initializer_list<std::string> strings, const std::string &delimiter)
+{
+    return join<std::initializer_list<std::string>>(strings, delimiter);
 }
 
 std::string exit_status_info(int exit_status)

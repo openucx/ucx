@@ -98,7 +98,12 @@ ucp_proto_request_zcopy_complete(ucp_request_t *req, ucs_status_t status)
         UCP_EP_STAT_TAG_OP(req->send.ep, EAGER)
     }
 
-    ucp_request_complete_send(req, status);
+    if (ucs_unlikely(status != UCS_OK) &&
+        ucp_ep_err_mode_eq(req->send.ep, UCP_ERR_HANDLING_MODE_FAILOVER)) {
+        ucp_proto_request_restart(req);
+    } else {
+        ucp_request_complete_send(req, status);
+    }
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -300,6 +305,40 @@ ucp_proto_request_send_op(ucp_ep_h ep, ucp_proto_select_t *proto_select,
                                             &sel_param, msg_length);
 }
 
+
+static UCS_F_ALWAYS_INLINE ucs_status_ptr_t
+ucp_proto_request_send_op_rma(ucp_ep_h ep, ucp_rkey_h rkey, ucp_request_t *req,
+                              uint32_t req_flags, ucp_operation_id_t op_id,
+                              const void *buffer, size_t count,
+                              ucp_datatype_t datatype, size_t contig_length,
+                              const ucp_request_param_t *param,
+                              size_t header_length, uint8_t op_flags)
+{
+    ucp_worker_h worker = ep->worker;
+    ucp_rkey_config_t *rkey_config;
+    ucp_proto_select_t *proto_select;
+    ucs_status_t status;
+
+    rkey_config  = ucp_rkey_config(worker, rkey);
+    proto_select = &rkey_config->proto_select;
+    
+    if (ucs_unlikely((proto_select->worker_epoch != worker->epoch) ||
+                     (rkey_config->key.ep_cfg_index != ep->cfg_index))) {
+        status = ucp_ep_update_rkey_config(ep, rkey);
+        if (status != UCS_OK) {
+            ucp_request_put_param(param, req);
+            return UCS_STATUS_PTR(status);
+        }
+
+        proto_select = &ucp_rkey_config(worker, rkey)->proto_select;
+    }
+
+    return ucp_proto_request_send_op(ep, proto_select, rkey->cfg_index, req,
+                                     req_flags, op_id, buffer, count, datatype,
+                                     contig_length, param, header_length,
+                                     op_flags);
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_ptr_t ucp_proto_request_send_op_reply(
         ucp_ep_h ep, ucp_proto_select_t *proto_select,
         ucp_worker_cfg_index_t rkey_cfg_index, ucp_request_t *req,
@@ -359,8 +398,7 @@ ucp_proto_request_pack_rkey(ucp_request_t *req, ucp_md_map_t md_map,
     /* Since global VA registration doesn't support invalidation yet, and error
      * handling is enabled on this EP, we replace GVA registrations with
      * regular ones */
-    if (ucp_ep_config_err_mode_eq(req->send.ep,
-                                  UCP_ERR_HANDLING_MODE_PEER) &&
+    if (ucp_ep_config_err_handling_enabled(req->send.ep) &&
         ucs_unlikely(memh->flags & UCP_MEMH_FLAG_HAS_AUTO_GVA)) {
         ucp_memh_disable_gva(memh, md_map);
     }

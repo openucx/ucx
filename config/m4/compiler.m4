@@ -47,7 +47,7 @@ AC_ARG_ENABLE(debug,
 AS_IF([test "x$enable_debug" = xyes],
         [BASE_CFLAGS="-D_DEBUG $BASE_CFLAGS"
          BASE_CXXFLAGS="-D_DEBUG" $BASE_CXXFLAGS
-         BASE_NVCCFLAGS="$BASE_NVCCFLAGS -G"],
+         BASE_NVCCFLAGS="-D_DEBUG $BASE_NVCCFLAGS -G"],
         [])
 
 

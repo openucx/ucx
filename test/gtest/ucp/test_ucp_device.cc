@@ -60,18 +60,18 @@ protected:
 
         ucp_device_mem_list_handle_h handle() const;
 
-        ucp_device_local_mem_list_handle_h local_handle() const;
+        ucp_device_local_mem_list_h local_handle() const;
 
-        ucp_device_remote_mem_list_handle_h remote_handle() const;
+        ucp_device_remote_mem_list_h remote_handle() const;
 
         void dst_pattern_check(unsigned index, uint64_t seed) const;
 
     private:
         std::vector<std::unique_ptr<mapped_buffer>> m_src, m_dst;
-        std::vector<ucs::handle<ucp_rkey_h>>        m_rkeys;
-        ucp_device_mem_list_handle_h                m_mem_list_h;
-        ucp_device_local_mem_list_handle_h          m_local_mem_list_h;
-        ucp_device_remote_mem_list_handle_h         m_remote_mem_list_h;
+        std::vector<ucs::handle<ucp_rkey_h>> m_rkeys;
+        ucp_device_mem_list_handle_h m_mem_list_h;
+        ucp_device_local_mem_list_h m_local_mem_list_h;
+        ucp_device_remote_mem_list_h m_remote_mem_list_h;
     };
 
     size_t counter_size();
@@ -101,7 +101,6 @@ void test_ucp_device::get_test_variants(std::vector<ucp_test_variant> &variants)
 
 void test_ucp_device::init()
 {
-    m_env.push_back(new ucs::scoped_setenv("UCX_CUDA_IPC_ENABLE_SAME_PROCESS", "y"));
     m_env.push_back(new ucs::scoped_setenv("UCX_IB_GDA_MAX_SYS_LATENCY", "1us"));
     ucp_test::init();
     sender().connect(&receiver(), get_ep_params());
@@ -210,11 +209,7 @@ test_ucp_device::mem_list::mem_list(test_ucp_device &test, size_t size,
         params.elements     = local_elems.data();
         params.worker       = test.sender().worker();
         // Create memory list (with retry on connection)
-        {
-            scoped_log_handler wrap_err(wrap_errors_logger);
-            status = ucp_device_local_mem_list_create(&params,
-                                                      &m_local_mem_list_h);
-        }
+        status = ucp_device_local_mem_list_create(&params, &m_local_mem_list_h);
 
         ASSERT_UCS_OK(status);
     }
@@ -257,14 +252,11 @@ test_ucp_device::mem_list::mem_list(test_ucp_device &test, size_t size,
     params.elements     = remote_elems.data();
 
     // Create memory list (with retry on connection)
-    {
-        scoped_log_handler wrap_err(wrap_errors_logger);
-        do {
-            test.progress();
-            status = ucp_device_remote_mem_list_create(&params,
-                                                       &m_remote_mem_list_h);
-        } while (status == UCS_ERR_NOT_CONNECTED);
-    }
+    do {
+        test.progress();
+        status = ucp_device_remote_mem_list_create(&params,
+                                                   &m_remote_mem_list_h);
+    } while (status == UCS_ERR_NOT_CONNECTED);
 
     if (status == UCS_ERR_NO_DEVICE) {
         UCS_TEST_SKIP_R("Skipping test if no device lanes exists.");
@@ -339,14 +331,12 @@ ucp_device_mem_list_handle_h test_ucp_device::mem_list::handle() const
     return m_mem_list_h;
 }
 
-ucp_device_local_mem_list_handle_h
-test_ucp_device::mem_list::local_handle() const
+ucp_device_local_mem_list_h test_ucp_device::mem_list::local_handle() const
 {
     return m_local_mem_list_h;
 }
 
-ucp_device_remote_mem_list_handle_h
-test_ucp_device::mem_list::remote_handle() const
+ucp_device_remote_mem_list_h test_ucp_device::mem_list::remote_handle() const
 {
     return m_remote_mem_list_h;
 }
@@ -485,7 +475,7 @@ UCS_TEST_P(test_ucp_device, create_fail)
 
 UCS_TEST_P(test_ucp_device, create_local_fail)
 {
-    ucp_device_local_mem_list_handle_h handle = nullptr;
+    ucp_device_local_mem_list_h handle = nullptr;
 
     scoped_log_handler wrap_err(wrap_errors_logger);
 
@@ -552,7 +542,7 @@ UCS_TEST_P(test_ucp_device, create_local_fail)
 
 UCS_TEST_P(test_ucp_device, create_remote_fail)
 {
-    ucp_device_remote_mem_list_handle_h handle = nullptr;
+    ucp_device_remote_mem_list_h handle = nullptr;
 
     scoped_log_handler wrap_err(wrap_errors_logger);
 

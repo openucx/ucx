@@ -145,6 +145,7 @@ gtest_SOURCES = \
 	ucp/test_ucp_ep.cc \
 	ucp/test_ucp_stream.cc \
 	ucp/test_ucp_peer_failure.cc \
+	ucp/test_ucp_fault_tolerance.cc \
 	ucp/test_ucp_atomic.cc \
 	ucp/test_ucp_dt.cc \
 	ucp/test_ucp_tls.cc \
@@ -187,7 +188,8 @@ gtest_SOURCES = \
 	ucs/test_datatype.cc \
 	ucs/test_bitops.cc \
 	ucs/test_debug.cc \
-        ucs/test_lru.cc \
+	ucs/test_interval_tree.cc \
+    ucs/test_lru.cc \
 	ucs/test_memtrack.cc \
 	ucs/test_math.cc \
 	ucs/test_mpmc.cc \

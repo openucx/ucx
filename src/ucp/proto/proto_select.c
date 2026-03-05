@@ -36,9 +36,12 @@ ucp_proto_thresholds_search_slow(const ucp_proto_threshold_elem_t *thresholds,
 static const void *ucp_proto_select_init_priv_buf(
         const ucp_proto_select_init_protocols_t *proto_init, unsigned proto_idx)
 {
-    size_t priv_offset =
-            ucs_array_elem(&proto_init->protocols, proto_idx).priv_offset;
-    return &ucs_array_elem(&proto_init->priv_buf, priv_offset);
+    const ucp_proto_init_elem_t *proto = &ucs_array_elem(&proto_init->protocols,
+                                                         proto_idx);
+    if (proto->priv_offset == UCP_PROTO_INIT_ELEM_PRIV_OFFSET_INVALID) {
+        return NULL;
+    }
+    return &ucs_array_elem(&proto_init->priv_buf, proto->priv_offset);
 }
 
 /*
@@ -201,7 +204,8 @@ ucp_proto_select_init_protocols(ucp_worker_h worker,
     if (rkey_cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
         init_params.rkey_config_key = NULL;
     } else {
-        init_params.rkey_config_key = &worker->rkey_config[rkey_cfg_index].key;
+        init_params.rkey_config_key =
+                &ucs_array_elem(&worker->rkey_config, rkey_cfg_index).key;
 
         /* rkey configuration must be for the same ep */
         ucs_assertv_always(
@@ -565,7 +569,8 @@ out:
     return select_elem;
 }
 
-ucs_status_t ucp_proto_select_init(ucp_proto_select_t *proto_select)
+ucs_status_t ucp_proto_select_init(ucp_proto_select_t *proto_select,
+                                   uint64_t epoch)
 {
     proto_select->hash = kh_init(ucp_proto_select_hash);
     if (proto_select->hash == NULL) {
@@ -573,6 +578,7 @@ ucs_status_t ucp_proto_select_init(ucp_proto_select_t *proto_select)
     }
 
     ucp_proto_select_cache_reset(proto_select);
+    proto_select->worker_epoch = epoch;
     return UCS_OK;
 }
 
@@ -636,14 +642,18 @@ void ucp_proto_select_add_proto(const ucp_proto_init_params_t *init_params,
     ucp_proto_select_init_trace_perf(init_params, perf, priv);
     ucs_log_indent(-1);
 
-    /* Copy private data */
-    priv_offset = ucs_array_length(&proto_init->priv_buf);
-    ucs_array_resize(&proto_init->priv_buf, priv_offset + priv_size, 0,
-                     ucs_error("failed to allocate proto priv of size %zu",
-                               priv_size);
-                     goto err_destroy_perf);
-    memcpy(&ucs_array_elem(&proto_init->priv_buf, priv_offset), priv,
-           priv_size);
+    if (priv_size > 0) {
+        /* Copy private data */
+        priv_offset = ucs_array_length(&proto_init->priv_buf);
+        ucs_array_resize(&proto_init->priv_buf, priv_offset + priv_size, 0,
+                         ucs_error("failed to allocate proto priv of size %zu",
+                                   priv_size);
+                         goto err_destroy_perf);
+        memcpy(&ucs_array_elem(&proto_init->priv_buf, priv_offset), priv,
+               priv_size);
+    } else {
+        priv_offset = UCP_PROTO_INIT_ELEM_PRIV_OFFSET_INVALID;
+    }
 
     /* Add capabilities to the array of protocols */
     init_elem = ucs_array_append(
@@ -675,7 +685,9 @@ err_revert_proto:
     ucs_array_set_length(&proto_init->protocols,
                          ucs_array_length(&proto_init->protocols) - 1);
 err_revert_priv:
-    ucs_array_set_length(&proto_init->priv_buf, priv_offset);
+    if (priv_offset != UCP_PROTO_INIT_ELEM_PRIV_OFFSET_INVALID) {
+        ucs_array_set_length(&proto_init->priv_buf, priv_offset);
+    }
 err_destroy_perf:
     ucp_proto_perf_destroy(perf);
 }
@@ -829,7 +841,8 @@ ucp_proto_select_get(ucp_worker_h worker, ucp_worker_cfg_index_t ep_cfg_index,
         *new_rkey_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
         return &ucs_array_elem(&worker->ep_config, ep_cfg_index).proto_select;
     } else {
-        rkey_config_key = worker->rkey_config[rkey_cfg_index].key;
+        rkey_config_key =
+                ucs_array_elem(&worker->rkey_config, rkey_cfg_index).key;
 
         rkey_config_key.ep_cfg_index = ep_cfg_index;
         status = ucp_worker_rkey_config_get(worker, &rkey_config_key, NULL,
@@ -839,7 +852,8 @@ ucp_proto_select_get(ucp_worker_h worker, ucp_worker_cfg_index_t ep_cfg_index,
             return NULL;
         }
 
-        return &worker->rkey_config[*new_rkey_cfg_index].proto_select;
+        return &ucs_array_elem(&worker->rkey_config, *new_rkey_cfg_index)
+                        .proto_select;
     }
 }
 

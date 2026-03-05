@@ -47,7 +47,7 @@ typedef struct ucp_device_mem_list_handle {
     /**
      * Number of entries in the memory descriptors array @a elems.
      */
-    uint32_t        mem_list_length;
+    uint32_t        length;
 
     /**
      * Array of pointers to UCT device endpoints, used for multi-lane
@@ -98,7 +98,7 @@ typedef struct ucp_device_mem_list_handle {
  * The handle and most of its content is stored on GPU memory, with the intent
  * to be as memory-local as possible.
  */
-typedef struct ucp_device_remote_mem_list_handle {
+typedef struct ucp_device_remote_mem_list {
     /**
      * Structure version. Allow runtime ABI compatibility checks between host
      * and device code.
@@ -108,13 +108,13 @@ typedef struct ucp_device_remote_mem_list_handle {
     /**
      * Number of entries in the memory descriptors array @a elems.
      */
-    uint32_t                          mem_list_length;
+    uint32_t                          length;
 
     /**
      * UCT memory element objects are allocated contiguously.
      */
     uct_device_remote_mem_list_elem_t mem_elements[0];
-} ucp_device_remote_mem_list_handle_t;
+} ucp_device_remote_mem_list_t;
 
 
 /**
@@ -127,7 +127,7 @@ typedef struct ucp_device_remote_mem_list_handle {
  * The handle and most of its content is stored on GPU memory, with the intent
  * to be as memory-local as possible.
  */
-typedef struct ucp_device_local_mem_list_handle {
+typedef struct ucp_device_local_mem_list {
     /**
      * Structure version. Allow runtime ABI compatibility checks between host
      * and device code.
@@ -137,9 +137,9 @@ typedef struct ucp_device_local_mem_list_handle {
     /**
      * Number of entries in the memory descriptors array @a elems.
      */
-    uint32_t                         mem_list_length;
+    uint32_t                         length;
 
     uct_device_local_mem_list_elem_t mem_elements[0];
-} ucp_device_local_mem_list_handle_t;
+} ucp_device_local_mem_list_t;
 
 #endif /* UCP_DEVICE_TYPES_H */

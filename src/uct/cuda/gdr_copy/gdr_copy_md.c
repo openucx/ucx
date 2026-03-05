@@ -336,6 +336,7 @@ static uct_md_ops_t uct_gdr_copy_md_ops = {
     .mem_query          = (uct_md_mem_query_func_t)ucs_empty_function_return_unsupported,
     .mkey_pack          = uct_gdr_copy_mkey_pack,
     .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
+    .mem_elem_pack      = (uct_md_mem_elem_pack_func_t)ucs_empty_function_return_unsupported,
     .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported
 };
 
@@ -404,6 +405,7 @@ static uct_md_ops_t uct_gdr_copy_md_rcache_ops = {
     .mkey_pack          = uct_gdr_copy_mkey_pack,
     .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
     .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported,
+    .mem_elem_pack      = (uct_md_mem_elem_pack_func_t)ucs_empty_function_return_unsupported
 };
 
 static ucs_status_t
@@ -493,6 +495,7 @@ uct_gdr_copy_md_create(uct_component_t *component,
     rcache_params.ucm_events         = UCM_EVENT_MEM_TYPE_FREE;
     rcache_params.context            = md;
     rcache_params.ops                = &uct_gdr_copy_rcache_ops;
+    rcache_params.flags             |= UCS_RCACHE_FLAG_NEED_LRU_LOCK;
 
     status = ucs_rcache_create(&rcache_params, "gdr_copy", ucs_stats_get_root(),
                                &md->rcache);

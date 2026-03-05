@@ -104,6 +104,8 @@ run_coverity() {
 	fi
 	cov-analyze --jobs $parallel_jobs $COV_OPT --disable PARSE_ERROR --security --concurrency --dir $cov_build
 	nerrors=$(cov-format-errors --dir $cov_build | awk '/Processing [0-9]+ errors?/ { print $2 }')
+	# Fail on empty output (e.g. license expiration)
+	[ -n "$nerrors" ] || { echo "ERROR: cov-format-errors failed"; exit 1; }
 
 	if [ $nerrors -gt 0 ]; then
 		error_log_file="$WORKSPACE/cov_error_log.txt"

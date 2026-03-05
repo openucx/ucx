@@ -1,0 +1,38 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+---
+job: ucx-test
+
+failFast: false
+timeout_minutes: 90
+
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  limits: "{memory: 16Gi, cpu: 16000m}"
+  requests: "{memory: 16Gi, cpu: 16000m}"
+
+runs_on_dockers:
+  - { name: "ubuntu2404-doca2.9", url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0", arch: x86_64 }
+
+matrix:
+  axes:
+    arch: [x86_64]
+    worker: [0, 1, 2, 3]
+
+taskName: '${arch}/${name}/w${axis_index}'
+
+env:
+  RUN_TESTS: "yes"
+  TEST_PERF: "0"
+  ASAN_CHECK: "no"
+  VALGRIND_CHECK: "no"
+  nworkers: "4"
+
+steps:
+  - name: Test
+    parallel: false
+    timeout: 360
+    run: |
+      ./contrib/test_jenkins.sh

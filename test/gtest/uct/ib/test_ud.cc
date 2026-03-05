@@ -1043,6 +1043,9 @@ UCS_TEST_SKIP_COND_P(test_ud, stale_dest_ep_id_update,
     wait_for_value(&ep(m_e2)->dest_ep_id, REMOTE_EP_ID, true,
                    TEST_UD_LINGER_TIMEOUT_IN_SEC);
 
+    /* Allow m_e1 to process CREP from m_e2 */
+    short_progress_loop();
+
     EXPECT_EQ(REMOTE_EP_ID, ep(m_e1, REMOTE_EP_ID)->ep_id);
     EXPECT_NE(UCT_UD_EP_NULL_ID, ep(m_e1, REMOTE_EP_ID)->dest_ep_id);
     EXPECT_NE(STALE_DEST_EP_ID, ep(m_e2)->dest_ep_id)
