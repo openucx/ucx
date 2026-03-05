@@ -4,21 +4,12 @@
  * See file LICENSE for terms.
  */
 
-#ifdef HAVE_CONFIG_H
-#  include "config.h"
-#endif
-
 #include "test_kernels.h"
-#include <cuda.h>
-
-/* Enable GDA by including mlx5dv.h before device impl */
-#ifdef HAVE_MLX5_DV
-#  include <infiniband/mlx5dv.h>
-#endif
 
 #include <ucp/api/device/ucp_device_impl.h>
 #include <ucs/debug/log.h>
 #include <common/cuda.h>
+#include <cuda.h>
 
 
 template<ucs_device_level_t level>

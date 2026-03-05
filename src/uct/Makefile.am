@@ -22,8 +22,7 @@ nobase_dist_libuct_la_HEADERS = \
 	api/uct.h \
 	api/version.h \
 	api/device/uct_device_impl.h \
-	api/device/uct_device_types.h \
-	ib/mlx5/gdaki/gdaki_stub.cuh
+	api/device/uct_device_types.h
 
 noinst_HEADERS = \
 	base/uct_md.h \

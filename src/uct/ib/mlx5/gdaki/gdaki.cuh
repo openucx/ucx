@@ -7,19 +7,10 @@
 #ifndef UCT_GDAKI_CUH_H
 #define UCT_GDAKI_CUH_H
 
-#ifndef _MLX5DV_H_
-
-#ifndef UCX_NO_GDA_MLX5DV_WARN
-#warning "GDA disabled. Include mlx5dv.h before ucp_device_impl.h to enable; use -DUCX_NO_GDA_MLX5DV_WARN to silence."
-#endif
-
-#include "gdaki_stub.cuh"
-
-#else /* _MLX5DV_H_ */
-
 #include "gdaki_dev.h"
 
-#include <cuda.h> /* TODO add to gpunetio */
+#include <infiniband/mlx5dv.h> /* TODO add to gpunetio */
+#include <cuda.h>              /* TODO add to gpunetio */
 #include "gpunetio/device/doca_gpunetio_dev_verbs_qp.cuh"
 #include <cooperative_groups.h>
 
@@ -660,5 +651,4 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_check_completion(
     return UCS_OK;
 }
 
-#endif /* _MLX5DV_H_ */
 #endif /* UCT_GDAKI_CUH_H */

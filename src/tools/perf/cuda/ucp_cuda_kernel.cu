@@ -11,11 +11,6 @@
 #include "cuda_kernel.cuh"
 #include "curand_kernel.h"
 
-/* Enable GDA by including mlx5dv.h before device impl */
-#ifdef HAVE_MLX5_DV
-#  include <infiniband/mlx5dv.h>
-#endif
-
 #include <ucp/api/device/ucp_host.h>
 #include <ucp/api/device/ucp_device_impl.h>
 #include <tools/perf/lib/ucp_tests.h>

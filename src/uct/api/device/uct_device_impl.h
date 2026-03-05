@@ -13,10 +13,17 @@
 #include <uct/cuda/cuda_ipc/cuda_ipc.cuh>
 #include <ucs/sys/device_code.h>
 
-#include <uct/ib/mlx5/gdaki/gdaki.cuh>
+#if __has_include(<uct/ib/mlx5/gdaki/gdaki.cuh>) && __has_include(<infiniband/mlx5dv.h>)
+#  include <uct/ib/mlx5/gdaki/gdaki.cuh>
+#  define UCT_RC_MLX5_GDA_SUPPORTED 1
+#else
+#  define UCT_RC_MLX5_GDA_SUPPORTED 0
+#endif
 
 union uct_device_completion {
+#if UCT_RC_MLX5_GDA_SUPPORTED
     uct_rc_gda_completion_t   rc_gda;
+#endif
     uct_cuda_ipc_completion_t cuda_ipc;
 };
 
@@ -56,12 +63,15 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put_single(
         const void *address, uint64_t remote_address, size_t length,
         unsigned channel_id, uint64_t flags, uct_device_completion_t *comp)
 {
+#if UCT_RC_MLX5_GDA_SUPPORTED
     if (device_ep->uct_tl_id == UCT_DEVICE_TL_RC_MLX5_GDA) {
         return uct_rc_mlx5_gda_ep_put_single<level>(device_ep, mem_elem,
                                                     address, remote_address,
                                                     length, channel_id, flags,
                                                     comp);
-    } else if (device_ep->uct_tl_id == UCT_DEVICE_TL_CUDA_IPC) {
+    } else
+#endif
+    if (device_ep->uct_tl_id == UCT_DEVICE_TL_CUDA_IPC) {
         return uct_cuda_ipc_ep_put_single<level>(device_ep, mem_elem, address,
                                                  remote_address, length, flags,
                                                  comp);
@@ -109,12 +119,15 @@ uct_device_ep_put(uct_device_ep_h device_ep,
                   uint64_t remote_address, size_t length, unsigned channel_id,
                   uint64_t flags, uct_device_completion_t *comp)
 {
+#if UCT_RC_MLX5_GDA_SUPPORTED
     if (device_ep->uct_tl_id == UCT_DEVICE_TL_RC_MLX5_GDA) {
         return uct_rc_mlx5_gda_ep_put_single<level>(device_ep, src_uct_elem,
                                                     mem_elem, address,
                                                     remote_address, length,
                                                     channel_id, flags, comp);
-    } else if (device_ep->uct_tl_id == UCT_DEVICE_TL_CUDA_IPC) {
+    } else
+#endif
+    if (device_ep->uct_tl_id == UCT_DEVICE_TL_CUDA_IPC) {
         return uct_cuda_ipc_ep_put_single<level>(device_ep, mem_elem, address,
                                                  remote_address, length, flags,
                                                  comp);
@@ -157,11 +170,14 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_atomic_add(
         uint64_t inc_value, uint64_t remote_address, unsigned channel_id,
         uint64_t flags, uct_device_completion_t *comp)
 {
+#if UCT_RC_MLX5_GDA_SUPPORTED
     if (device_ep->uct_tl_id == UCT_DEVICE_TL_RC_MLX5_GDA) {
         return uct_rc_mlx5_gda_ep_atomic_add<level>(device_ep, mem_elem,
                                                     inc_value, remote_address,
                                                     channel_id, flags, comp);
-    } else if (device_ep->uct_tl_id == UCT_DEVICE_TL_CUDA_IPC) {
+    } else
+#endif
+    if (device_ep->uct_tl_id == UCT_DEVICE_TL_CUDA_IPC) {
         return uct_cuda_ipc_ep_atomic_add<level>(device_ep, mem_elem, inc_value,
                                                  remote_address, flags, comp);
     }
@@ -247,6 +263,7 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put_multi(
         uint64_t counter_inc_value, uint64_t counter_remote_address,
         unsigned channel_id, uint64_t flags, uct_device_completion_t *comp)
 {
+#if UCT_RC_MLX5_GDA_SUPPORTED
     if (device_ep->uct_tl_id == UCT_DEVICE_TL_RC_MLX5_GDA) {
         return uct_rc_mlx5_gda_ep_put_multi<level>(device_ep, mem_list,
                                                    mem_list_count, addresses,
@@ -254,7 +271,9 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put_multi(
                                                    counter_inc_value,
                                                    counter_remote_address,
                                                    channel_id, flags, comp);
-    } else if (device_ep->uct_tl_id == UCT_DEVICE_TL_CUDA_IPC) {
+    } else
+#endif
+    if (device_ep->uct_tl_id == UCT_DEVICE_TL_CUDA_IPC) {
         return uct_cuda_ipc_ep_put_multi<level>(device_ep, mem_list,
                                                 mem_list_count, addresses,
                                                 remote_addresses, lengths,
@@ -331,13 +350,16 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put_multi_partial(
         uint64_t counter_inc_value, uint64_t counter_remote_address,
         unsigned channel_id, uint64_t flags, uct_device_completion_t *comp)
 {
+#if UCT_RC_MLX5_GDA_SUPPORTED
     if (device_ep->uct_tl_id == UCT_DEVICE_TL_RC_MLX5_GDA) {
         return uct_rc_mlx5_gda_ep_put_multi_partial<level>(
                 device_ep, mem_list, mem_list_indices, mem_list_count,
                 addresses, remote_addresses, local_offsets, remote_offsets,
                 lengths, counter_index, counter_inc_value,
                 counter_remote_address, channel_id, flags, comp);
-    } else if (device_ep->uct_tl_id == UCT_DEVICE_TL_CUDA_IPC) {
+    } else
+#endif
+    if (device_ep->uct_tl_id == UCT_DEVICE_TL_CUDA_IPC) {
         return uct_cuda_ipc_ep_put_multi_partial<level>(
                 device_ep, mem_list, mem_list_indices, mem_list_count,
                 addresses, remote_addresses, local_offsets, remote_offsets,
@@ -357,9 +379,11 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put_multi_partial(
 template<ucs_device_level_t level>
 UCS_F_DEVICE void uct_device_ep_progress(uct_device_ep_h device_ep)
 {
+#if UCT_RC_MLX5_GDA_SUPPORTED
     if (device_ep->uct_tl_id == UCT_DEVICE_TL_RC_MLX5_GDA) {
         uct_rc_mlx5_gda_ep_progress<level>(device_ep);
     }
+#endif
 }
 
 
@@ -379,9 +403,11 @@ template<ucs_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_device_ep_check_completion(
         uct_device_ep_h device_ep, uct_device_completion_t *comp)
 {
+#if UCT_RC_MLX5_GDA_SUPPORTED
     if (device_ep->uct_tl_id == UCT_DEVICE_TL_RC_MLX5_GDA) {
         return uct_rc_mlx5_gda_ep_check_completion<level>(device_ep, comp);
     }
+#endif
 
     return UCS_ERR_UNSUPPORTED;
 }
