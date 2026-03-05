@@ -148,6 +148,7 @@ public:
         if (m_params.local_mem_list != NULL) {
             ucp_device_mem_list_release(m_params.local_mem_list);
         }
+
         if (m_params.remote_mem_list != NULL) {
             ucp_device_mem_list_release(m_params.remote_mem_list);
         }

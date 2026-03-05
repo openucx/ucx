@@ -36,7 +36,6 @@ protected:
         enum mem_list_mode_t {
             MODE_DATA_ONLY,
             MODE_COUNTER_ONLY,
-            MODE_LAST_ELEM_COUNTER,
             MODE_WITH_GAP_ELEMENT
         };
 
@@ -112,8 +111,7 @@ test_ucp_device::mem_list::mem_list(test_ucp_device &test, size_t size,
     m_local_mem_list_h(nullptr),
     m_remote_mem_list_h(nullptr)
 {
-    bool has_counter  = (mode == MODE_COUNTER_ONLY) ||
-                        (mode == MODE_LAST_ELEM_COUNTER);
+    bool has_counter  = (mode == MODE_COUNTER_ONLY);
     size_t gap_count  = (mode == MODE_WITH_GAP_ELEMENT) ? 1 : 0;
     size_t data_count = (has_counter) ? count - 1 : count;
     ucs_status_t status;

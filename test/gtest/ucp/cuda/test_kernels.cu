@@ -124,7 +124,6 @@ ucp_test_kernel_get_state(const test_ucp_device_kernel_params_t &params,
 
     __syncthreads();
     if (threadIdx.x == 0) {
-        /* Find first valid element (skip gaps where device_ep is null) */
         for (unsigned i = 0; i < params.remote_mem_list->length; ++i) {
             status = ucp_device_prepare_send_remote(params.remote_mem_list, i,
                                                     remote_address, req_ptr,
