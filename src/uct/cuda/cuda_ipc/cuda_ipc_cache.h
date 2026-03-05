@@ -21,12 +21,13 @@ typedef struct uct_cuda_ipc_rem_memh     uct_cuda_ipc_rem_memh_t;
 
 
 struct uct_cuda_ipc_cache_region {
-    ucs_pgt_region_t        super;        /**< Base class - page table region */
-    ucs_list_link_t         list;         /**< List element */
-    uct_cuda_ipc_rkey_t     key;          /**< Remote memory key */
-    void                    *mapped_addr; /**< Local mapped address */
-    uint64_t                refcount;     /**< Track in-flight ops before unmapping*/
-    CUdevice                cu_dev;       /**< CUDA device */
+    ucs_pgt_region_t            super;        /**< Base class - page table region */
+    ucs_list_link_t             list;         /**< List element */
+    uct_cuda_ipc_rkey_t         key;          /**< Remote memory key */
+    void                        *mapped_addr; /**< Local mapped address */
+    uint64_t                    refcount;     /**< Track in-flight ops before unmapping*/
+    CUdevice                    cu_dev;       /**< CUDA device */
+    uct_cuda_ipc_cache_region_t *alias_of;    /**< If set, alias; primary owns the mapping */
 };
 
 
