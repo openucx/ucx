@@ -118,3 +118,11 @@
     jjb_description: "UCX GTest. Do NOT edit via Web GUI!"
     jobs:
       - "{jjb_proj}"
+
+- project:
+    name: ucx-test-gpu-gitlab
+    jjb_proj: "ucx-test-gpu-gitlab"
+    jjb_conf_file: ".ci/pipeline/test_gpu_matrix.yaml"
+    jjb_description: "UCX GTest GPU (GitLab Blossom). Do NOT edit via Web GUI!"
+    jobs:
+      - "{jjb_proj}"
