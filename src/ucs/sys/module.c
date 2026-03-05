@@ -363,6 +363,13 @@ static void ucs_module_load_from_dir(const char *dir, const char *framework,
         }
 
         snprintf(module_path, PATH_MAX, "%s/%s", dir, entry->d_name);
+
+        dl = dlopen(module_path, RTLD_LAZY | RTLD_NOLOAD);
+        if (dl != NULL) {
+            dlclose(dl);
+            continue;
+        }
+
         dl = ucs_module_try_load(module_path, mode);
         if (dl == NULL) {
             continue;
