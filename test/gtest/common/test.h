@@ -184,7 +184,7 @@ protected:
 
 private:
     void check_fd_leaks();
-    bool is_fd_whitelisted(const std::string &target) const;
+    bool is_target_whitelisted(const std::string &target) const;
     void skipped(const std::string &reason);
     void skipped(const test_skip_exception& e);
     void run();

@@ -49,16 +49,16 @@ test_base::~test_base() {
                        "state=%d", m_state);
 }
 
-bool test_base::is_fd_whitelisted(const std::string &target) const
+bool test_base::is_target_whitelisted(const std::string &target) const
 {
     /* fd targets for external libraries (rdma-core, CUDA driver, etc.) */
-    static const char *fd_leak_whitelist[] = {
+    static const char *targets_whitelist[] = {
         "/dev/infiniband/uverbs",
         "anon_inode:[infinibandevent]",
         "/dev/nvidia",
     };
 
-    for (const char *str : fd_leak_whitelist) {
+    for (const char *str : targets_whitelist) {
         if (target.find(str) != std::string::npos) {
             return true;
         }
@@ -73,7 +73,7 @@ void test_base::check_fd_leaks()
      * (e.g. from external libraries) are logged but not counted as leaks.
      * Non-whitelisted new fds increment a consecutive-increase counter and
      * trigger a failure once CONSECUTIVE_FD_INCREASE_THRESHOLD is reached. */
-    std::set<int> open_fds = collect_open_fds();
+    std::set<int> open_fds = get_open_fds();
 
     if (!m_prev_open_fds.empty()) {
         std::stringstream ss;
@@ -82,9 +82,9 @@ void test_base::check_fd_leaks()
 
         for (const int fd : open_fds) {
             if (m_prev_open_fds.find(fd) == m_prev_open_fds.end()) {
-                std::string target = fd_target(fd);
+                std::string target = readlink_proc_fd(fd);
                 ss << "\n  fd " << fd << " -> " << target;
-                if (is_fd_whitelisted(target)) {
+                if (is_target_whitelisted(target)) {
                     ss << " (whitelisted)";
                     ++num_whitelisted;
                 } else {

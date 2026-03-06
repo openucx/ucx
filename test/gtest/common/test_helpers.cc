@@ -519,7 +519,7 @@ out_close:
     return result;
 }
 
-std::set<int> collect_open_fds()
+std::set<int> get_open_fds()
 {
     std::set<int> fds;
     DIR *dir = opendir("/proc/self/fd");
@@ -541,7 +541,7 @@ std::set<int> collect_open_fds()
     return fds;
 }
 
-std::string fd_target(int fd)
+std::string readlink_proc_fd(int fd)
 {
     char path[64], link[256];
     snprintf(path, sizeof(path), "/proc/self/fd/%d", fd);

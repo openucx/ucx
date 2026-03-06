@@ -331,14 +331,14 @@ ssize_t get_proc_self_status_field(const std::string &parameter);
 std::vector<std::string> read_dir(const std::string &path);
 
 /**
- * Collect the set of currently open file descriptors.
+ * Return the set of currently open file descriptors.
  */
-std::set<int> collect_open_fds();
+std::set<int> get_open_fds();
 
 /**
- * Return the symlink target of the given file descriptor.
+ * Return the symlink target of the given file descriptor via readlink(2).
  */
-std::string fd_target(int fd);
+std::string readlink_proc_fd(int fd);
 
 /**
  * Return the name of the given network device if it is supported by rdmacm.
