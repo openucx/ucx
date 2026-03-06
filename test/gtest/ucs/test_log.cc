@@ -64,8 +64,6 @@ public:
     }
 
     virtual void cleanup() {
-        ASSERT_NE(m_state, NEW);
-
         if (m_state != INITIALIZING) {
             ucs_log_cleanup();
             pop_config();

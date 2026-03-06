@@ -462,6 +462,7 @@ void test_base::init() {
 }
 
 void test_base::cleanup() {
+    ASSERT_NE(m_state, NEW);
 }
 
 bool test_base::barrier() {
