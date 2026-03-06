@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2013. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
 * Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
@@ -11,7 +11,10 @@ extern "C" {
 }
 
 #include <sys/socket.h>
+#include <sys/uio.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
 
 #ifdef ENABLE_STATS
 #define NUM_DATA_NODES 20
@@ -378,6 +381,126 @@ UCS_TEST_F(stats_aggregate_sum_test, report) {
     prepare_nodes(&cat_node, data_nodes);
     read_and_check_aggrgt_sum_stats(data_nodes);
     free_nodes(cat_node, data_nodes);
+}
+
+class stats_entity_cmp_test : public stats_udp_test {
+public:
+    virtual void init() {
+        stats_udp_test::init();
+
+        static ucs_stats_class_t test_cls = {"test_entity", 0};
+        ucs_stats_node_t *node;
+        ucs_status_t status = UCS_STATS_NODE_ALLOC(&node, &test_cls,
+                                                   ucs_stats_get_root(), "");
+        ASSERT_UCS_OK(status);
+
+        FILE *stream = open_memstream(&m_buffer, &m_buf_size);
+        ASSERT_NE(nullptr, stream);
+        status = ucs_stats_serialize(stream, node, UCS_STATS_SERIALIZE_BINARY);
+        fclose(stream);
+        ASSERT_UCS_OK(status);
+        UCS_STATS_NODE_FREE(node);
+    }
+
+    virtual void cleanup() {
+        free(m_buffer);
+        stats_udp_test::cleanup();
+    }
+
+    virtual std::string stats_trigger_config() {
+        return "";
+    }
+
+    int create_bound_udp(uint16_t src_port) {
+        int fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+        EXPECT_GE(fd, 0);
+
+        struct sockaddr_in addr = {};
+        addr.sin_family      = AF_INET;
+        addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+
+        addr.sin_port = htons(src_port);
+        if (bind(fd, (struct sockaddr*)&addr, sizeof(addr)) != 0) {
+            close(fd);
+            return -1;
+        }
+
+        addr.sin_port = htons(ucs_stats_server_get_port(m_server));
+        if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) != 0) {
+            close(fd);
+            return -1;
+        }
+        return fd;
+    }
+
+    void send_raw_stats(int fd, uint64_t timestamp) {
+        struct {
+            char     magic[8];
+            uint64_t timestamp;
+            uint32_t total_size;
+            uint32_t frag_offset;
+            uint32_t frag_size;
+        } UCS_S_PACKED hdr;
+
+        const size_t max_frag = 1400 - sizeof(hdr);
+        size_t offset = 0;
+
+        memcpy(hdr.magic, "UCSSTAT1", 8);
+        hdr.timestamp  = timestamp;
+        hdr.total_size = m_buf_size;
+
+        while (offset < m_buf_size) {
+            size_t frag_size = std::min(max_frag, m_buf_size - offset);
+            hdr.frag_offset  = offset;
+            hdr.frag_size    = frag_size;
+
+            struct iovec iov[2];
+            iov[0].iov_base = &hdr;
+            iov[0].iov_len  = sizeof(hdr);
+            iov[1].iov_base = m_buffer + offset;
+            iov[1].iov_len  = frag_size;
+
+            ssize_t nsent = writev(fd, iov, 2);
+            ASSERT_EQ((ssize_t)(sizeof(hdr) + frag_size), nsent);
+            offset += frag_size;
+        }
+    }
+
+protected:
+    char   *m_buffer;
+    size_t  m_buf_size;
+};
+
+/*
+ * Verify that the stats server distinguishes two clients on the same IP but
+ * different ports, even when both ports hash to the same bucket (difference
+ * equals ENTITY_HASH_SIZE = 997).
+ */
+UCS_TEST_F(stats_entity_cmp_test, multi_client_same_hash_bucket) {
+    const uint16_t port1 = 10000;
+    const uint16_t port2 = port1 + 997;
+
+    int fd1 = create_bound_udp(port1);
+    int fd2 = create_bound_udp(port2);
+    if (fd1 < 0 || fd2 < 0) {
+        if (fd1 >= 0) close(fd1);
+        if (fd2 >= 0) close(fd2);
+        UCS_TEST_SKIP_R("cannot bind to test ports");
+    }
+
+    send_raw_stats(fd1, 1);
+    send_raw_stats(fd2, 2);
+
+    do {
+        usleep(1000 * ucs::test_time_multiplier());
+    } while (ucs_stats_server_rcvd_packets(m_server) < 2);
+
+    ucs_list_link_t *stats_list = ucs_stats_server_get_stats(m_server);
+    EXPECT_EQ(2ul, ucs_list_length(stats_list));
+    ucs_stats_server_purge_stats(m_server);
+
+    close(fd1);
+    close(fd2);
 }
 
 #endif

@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -662,12 +662,16 @@ unsigned long ucs_stats_server_rcvd_packets(ucs_stats_server_h server)
 
 static inline int stats_entity_cmp(stats_entity_t *e1, stats_entity_t *e2)
 {
-    int addr_diff = e1->in_addr.sin_addr.s_addr < e2->in_addr.sin_addr.s_addr;
-    if (addr_diff != 0) {
-        return addr_diff;
-    } else {
-        return ntohs(e1->in_addr.sin_port) - ntohs(e1->in_addr.sin_port);
+    uint32_t a1 = ntohl(e1->in_addr.sin_addr.s_addr);
+    uint32_t a2 = ntohl(e2->in_addr.sin_addr.s_addr);
+
+    if (a1 != a2) {
+        /* Cannot use subtraction: uint32_t difference may overflow int,
+         * using direct comparison instead. */
+        return (a1 > a2) ? 1 : -1;
     }
+
+    return (int)ntohs(e1->in_addr.sin_port) - (int)ntohs(e2->in_addr.sin_port);
 }
 
 static inline int stats_entity_hash(stats_entity_t *e)
