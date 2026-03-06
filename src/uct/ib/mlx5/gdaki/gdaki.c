@@ -13,9 +13,8 @@
 #include <ucs/time/time.h>
 #include <ucs/datastruct/string_buffer.h>
 #include <uct/ib/mlx5/rc/rc_mlx5.h>
-#include <uct/cuda/base/cuda_iface.h>
-
-#include <cuda.h>
+#include <uct/cuda/cuda_copy/cuda_copy_md.h>
+#include <uct/cuda/base/cuda_util.h>
 
 
 typedef struct {
@@ -669,7 +668,7 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
             goto err;
         }
 
-        uct_cuda_base_get_sys_dev(device, &dev);
+        uct_cuda_get_sys_dev(device, &dev);
         status = ucs_topo_get_distance(dev, md->super.dev.sys_dev, &dist);
         if (status != UCS_OK) {
             goto err;

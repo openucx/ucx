@@ -17,6 +17,7 @@
 #include <ucs/sys/string.h>
 #include <ucs/sys/ptr_arith.h>
 #include <ucs/datastruct/khash.h>
+#include <uct/cuda/base/cuda_ctx.inl>
 
 
 typedef struct uct_cuda_ipc_cache_hash_key {
@@ -117,7 +118,7 @@ uct_cuda_ipc_primary_ctx_retain_and_push(CUdevice cuda_device)
     CUcontext cuda_ctx;
     ucs_status_t status;
 
-    status = uct_cuda_primary_ctx_retain(cuda_device, 0, &cuda_ctx);
+    status = uct_cuda_ctx_primary_retain(cuda_device, 0, &cuda_ctx);
     if (status != UCS_OK) {
         return status;
     }
@@ -176,7 +177,7 @@ static ucs_status_t uct_cuda_ipc_close_memhandle(uct_cuda_ipc_cache_region_t *re
 
 static void uct_cuda_ipc_cache_purge(uct_cuda_ipc_cache_t *cache)
 {
-    int active = uct_cuda_base_is_context_active();
+    int active = uct_cuda_ctx_is_active();
     uct_cuda_ipc_cache_region_t *region, *tmp;
     ucs_list_link_t region_list;
 
@@ -209,7 +210,7 @@ uct_cuda_ipc_open_memhandle_legacy(CUipcMemHandle memh, CUdevice cu_dev,
                                CU_IPC_MEM_LAZY_ENABLE_PEER_ACCESS);
     if (cuerr != CUDA_SUCCESS) {
         ucs_log(log_level, "cuIpcOpenMemHandle() failed: %s",
-                uct_cuda_base_cu_get_error_string(cuerr));
+                uct_cuda_cu_get_error_string(cuerr));
         status = (cuerr == CUDA_ERROR_ALREADY_MAPPED) ?
             UCS_ERR_ALREADY_EXISTS : UCS_ERR_INVALID_PARAM;
     }
