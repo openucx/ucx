@@ -931,14 +931,16 @@ uct_ib_device_query_gid_info(struct ibv_context *ctx, const char *dev_name,
                              uint8_t port_num, unsigned gid_index,
                              uct_ib_device_gid_info_t *info)
 {
+    const union ibv_gid zero_gid = {};
     char buf[16];
     int ret;
 
     ret = ibv_query_gid(ctx, port_num, gid_index, &info->gid);
     if (ret == 0) {
-        ret = ucs_read_file(buf, sizeof(buf) - 1, 1,
+        ret = (memcmp(&info->gid, &zero_gid, sizeof(zero_gid)) ?
+               ucs_read_file(buf, sizeof(buf) - 1, 1,
                             UCT_IB_DEVICE_SYSFS_GID_TYPE_FMT,
-                            dev_name, port_num, gid_index);
+                            dev_name, port_num, gid_index) : -1);
         if (ret > 0) {
             if (!strncmp(buf, "IB/RoCE v1", 10)) {
                 info->roce_info.ver = UCT_IB_DEVICE_ROCE_V1;
