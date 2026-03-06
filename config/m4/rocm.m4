@@ -106,10 +106,10 @@ AS_IF([test "x$with_rocm" != "xno"],
         AC_COMPUTE_INT([hip_version], [HIP_VERSION],
                         [#include <hip_version.h>],
                         [hip_version=0])
-        AC_MSG_RESULT([$hip_version])
+        AC_MSG_RESULT(["$hip_version"])
         CPPFLAGS="$SAVE_CPPFLAGS"])
 
-    AS_IF([test $hip_version -ge 70000000],
+    AS_IF([test "$hip_version" -ge 70000000],
         [AC_DEFINE([HAVE_ROCM_RESERVED_ADDR_TYPE], [1],
                     [ROCm 7.0+ has HSA_EXT_POINTER_TYPE_RESERVED_ADDR])])
 
