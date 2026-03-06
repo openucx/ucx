@@ -95,7 +95,7 @@ void test_base::check_fd_leaks()
 
         if (num_leaked > 0 || num_whitelisted > 0) {
             UCS_TEST_MESSAGE << "new fds detected (" << num_leaked
-                             << " non-whitelisted, " << num_whitelisted
+                             << " leaked, " << num_whitelisted
                              << " whitelisted):" << ss.str();
             if (num_leaked > 0) {
                 ++m_consecutive_fd_increases;

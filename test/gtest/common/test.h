@@ -172,9 +172,9 @@ protected:
     unsigned                        m_num_errors_before;
     unsigned                        m_num_warnings_before;
     unsigned                        m_num_log_handlers_before;
-    static std::set<int> m_prev_open_fds;
-    static int m_consecutive_fd_increases;
 
+    static std::set<int>            m_prev_open_fds;
+    static int                      m_consecutive_fd_increases;
     static pthread_mutex_t          m_logger_mutex;
     static unsigned                 m_total_errors;
     static unsigned                 m_total_warnings;
