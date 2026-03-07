@@ -10,6 +10,7 @@
 
 #include "cuda_kernel.cuh"
 #include "curand_kernel.h"
+
 #include <ucp/api/device/ucp_host.h>
 #include <ucp/api/device/ucp_device_impl.h>
 #include <tools/perf/lib/ucp_tests.h>
