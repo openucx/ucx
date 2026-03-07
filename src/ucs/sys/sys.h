@@ -194,6 +194,20 @@ ucs_ifname_to_ndev_index(const char *ndev_name, unsigned *ndev_index_p);
 
 
 /**
+ * Get interface name for a given interface index.
+ * Wrapper around if_indextoname.
+ *
+ * @param [in]  ndev_index  Interface index.
+ * @param [out] ndev_name   Interface name.
+ * @param [in]  max         Maximum length of the interface name.
+ *
+ * @return Interface name.
+ */
+const char *
+ucs_ndev_index_to_name(unsigned ndev_index, char *ndev_name, size_t max);
+
+
+/**
  * Get interface index for a the loopback interface.
  */
 ucs_status_t ucs_get_loopback_ndev_index(unsigned *ndev_index_p);

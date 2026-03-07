@@ -729,11 +729,14 @@ uct_ib_iface_roce_is_routable(uct_ib_iface_t *iface, uint8_t gid_index,
         return 1;
     }
 
-    uct_iface_fill_info_str_buf(params, "%s unreachable by %s or %s",
-                                ucs_sockaddr_str(sa_remote, remote_str,
-                                                 sizeof(remote_str)),
-                                if_indextoname(ndev_index, ndev_ifname),
-                                if_indextoname(lo_ndev_index, lo_ifname));
+    uct_iface_fill_info_str_buf(
+            params, "no route to %s from %s (idx %u) or %s (idx %u)",
+            ucs_sockaddr_str(sa_remote, remote_str, sizeof(remote_str)),
+            ucs_ndev_index_to_name(ndev_index, ndev_ifname,
+                                   sizeof(ndev_ifname)),
+            ndev_index,
+            ucs_ndev_index_to_name(lo_ndev_index, lo_ifname, sizeof(lo_ifname)),
+            lo_ndev_index);
     return 0;
 }
 

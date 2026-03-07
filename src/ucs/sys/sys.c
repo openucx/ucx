@@ -179,6 +179,20 @@ ucs_ifname_to_ndev_index(const char *ndev_name, unsigned *ndev_index_p)
     return UCS_OK;
 }
 
+const char *
+ucs_ndev_index_to_name(unsigned ndev_index, char *ndev_name, size_t max)
+{
+    char tmp_ndev_name[IFNAMSIZ];
+
+    if (if_indextoname(ndev_index, tmp_ndev_name) == NULL) {
+        snprintf(ndev_name, max, "ndev[%u]", ndev_index);
+    } else {
+        ucs_strncpy_safe(ndev_name, tmp_ndev_name, max);
+    }
+
+    return ndev_name;
+}
+
 ucs_status_t ucs_get_loopback_ndev_index(unsigned *ndev_index_p)
 {
     static unsigned lo_ndev_index   = UINT_MAX;
