@@ -88,32 +88,7 @@ typedef struct uct_ib_device_subnet {
 UCS_ARRAY_DECLARE_TYPE(uct_ib_device_subnet_array_t, unsigned,
                        uct_ib_device_subnet_t);
 
-typedef struct {
-    uint64_t    guid;
-    uint8_t     port_num;
-    uint8_t     gid_index;
-} uct_ib_device_to_ndev_key_t;
-
-static UCS_F_ALWAYS_INLINE khint32_t
-uct_ib_device_to_ndev_cache_hash_func(uct_ib_device_to_ndev_key_t key)
-{
-    return kh_int_hash_func(((uint64_t)key.port_num << 24) ^
-                            ((uint64_t)key.gid_index << 16) ^
-                            key.guid);
-}
-
-static UCS_F_ALWAYS_INLINE int
-uct_ib_device_to_ndev_cache_hash_equal(uct_ib_device_to_ndev_key_t key1,
-                                       uct_ib_device_to_ndev_key_t key2)
-{
-    return (key1.port_num == key2.port_num) &&
-           (key1.gid_index == key2.gid_index) &&
-           (key1.guid == key2.guid);
-}
-
-KHASH_INIT(uct_ib_device_to_ndev, uct_ib_device_to_ndev_key_t, unsigned, 1,
-           uct_ib_device_to_ndev_cache_hash_func,
-           uct_ib_device_to_ndev_cache_hash_equal);
+KHASH_MAP_INIT_INT(uct_ib_device_to_ndev, unsigned);
 
 static khash_t(uct_ib_device_to_ndev) ib_dev_to_ndev_map;
 
@@ -1535,19 +1510,20 @@ ucs_status_t
 uct_ib_device_get_roce_ndev_index(uct_ib_device_t *dev, uint8_t port_num,
                                   uint8_t gid_index, unsigned *ndev_index_p)
 {
-    uct_ib_device_to_ndev_key_t ib_dev = {.guid = IBV_DEV_ATTR(dev, node_guid),
-                                          .port_num = port_num,
-                                          .gid_index = gid_index};
     static pthread_mutex_t uct_ib_device_to_ndev_cache_lock =
                                           PTHREAD_MUTEX_INITIALIZER;
     ucs_status_t status;
+    khint32_t ib_key;
     char ndev_name[IFNAMSIZ];
     unsigned ndev_index;
     khiter_t iter;
     unsigned khret;
 
+    ib_key = ((khint32_t)dev->sys_dev << 16) | ((khint32_t)port_num << 8) |
+             (khint32_t)gid_index;
+
     pthread_mutex_lock(&uct_ib_device_to_ndev_cache_lock);
-    iter = kh_put(uct_ib_device_to_ndev, &ib_dev_to_ndev_map, ib_dev, &khret);
+    iter = kh_put(uct_ib_device_to_ndev, &ib_dev_to_ndev_map, ib_key, &khret);
     if (khret == UCS_KH_PUT_FAILED) {
         status = UCS_ERR_IO_ERROR;
         goto out_unlock;
