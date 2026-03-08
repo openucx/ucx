@@ -12,7 +12,7 @@
 #include <uct/api/uct.h>
 
 
-#define UCP_DEVICE_MEM_LIST_VERSION_V1 1
+#define UCP_DEVICE_MEM_LIST_VERSION_V1 2
 
 
 /**
