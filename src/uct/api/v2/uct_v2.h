@@ -273,7 +273,11 @@ enum uct_ep_attr_field {
     /** Enables @ref uct_ep_attr::local_address */
     UCT_EP_ATTR_FIELD_LOCAL_SOCKADDR  = UCS_BIT(0),
     /** Enables @ref uct_ep_attr::remote_address */
-    UCT_EP_ATTR_FIELD_REMOTE_SOCKADDR = UCS_BIT(1)
+    UCT_EP_ATTR_FIELD_REMOTE_SOCKADDR = UCS_BIT(1),
+    /** Enables @ref uct_ep_attr::tx_token */
+    UCT_EP_ATTR_FIELD_TX_TOKEN        = UCS_BIT(2),
+    /** Enables @ref uct_ep_attr::rx_token */
+    UCT_EP_ATTR_FIELD_RX_TOKEN        = UCS_BIT(3)
 };
 
 
@@ -414,6 +418,19 @@ struct uct_ep_attr {
      * Remote sockaddr the endpoint is connected to.
      */
     struct sockaddr_storage remote_address;
+
+    /**
+     * Opaque completion token for the transmit path (transport-defined).
+     * Set if @ref UCT_EP_ATTR_FIELD_TX_TOKEN is present in @ref field_mask.
+     * Used by receiver to identify submitted operations; semantics are HW-agnostic.
+     */
+    uint32_t                tx_token;
+
+    /**
+     * Opaque completion token for the receive path (transport-defined).
+     * Set if @ref UCT_EP_ATTR_FIELD_RX_TOKEN is present in @ref field_mask.
+     */
+    uint32_t                rx_token;
 };
 
 

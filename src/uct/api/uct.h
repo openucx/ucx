@@ -428,6 +428,10 @@ typedef enum uct_atomic_op {
                                                        interface will be called if the communication
                                                        channel with remote peer is broken, even if there
                                                        are no outstanding send operations */
+        /* Query opaque completion token */
+#define UCT_IFACE_FLAG_EP_TOKEN_QUERY UCS_BIT(47) /**< Endpoint supports opaque completion token
+                                                       query via @ref uct_ep_query with TX/RX
+                                                       token fields (for duplicate detection) */
 
         /* Tag matching operations */
 #define UCT_IFACE_FLAG_TAG_EAGER_SHORT UCS_BIT(50) /**< Hardware tag matching short eager support */

@@ -13,6 +13,7 @@
 #include <uct/ib/mlx5/ib_mlx5_log.h>
 #include <uct/ib/mlx5/dv/ib_mlx5_dv.h>
 #include <uct/ib/base/ib_device.h>
+#include <uct/ib/plugin/uct_ib_plugin.h>
 #include <uct/base/uct_md.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/debug/log.h>
@@ -176,7 +177,8 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
 
     uct_rc_mlx5_iface_common_query(&rc_iface->super, iface_attr, max_am_inline,
                                    UCT_RC_MLX5_TM_EAGER_ZCOPY_MAX_IOV(0));
-    iface_attr->cap.flags     |= UCT_IFACE_FLAG_EP_CHECK;
+    iface_attr->cap.flags     |= UCT_IFACE_FLAG_EP_CHECK |
+                                 uct_ib_plugin_iface_flags();
     iface_attr->latency.m     += 1e-9; /* 1 ns per each extra QP */
     iface_attr->ep_addr_len    = ep_addr_len;
     iface_attr->iface_addr_len = sizeof(uint8_t);
