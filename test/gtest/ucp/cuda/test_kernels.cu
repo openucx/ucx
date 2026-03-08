@@ -128,7 +128,7 @@ ucp_test_kernel_get_state(const test_ucp_device_kernel_params_t &params,
             status = ucp_device_prepare_send_remote(params.remote_mem_list, i,
                                                     remote_address, req_ptr,
                                                     device_ep, uct_elem, comp);
-            if (status == UCS_OK && device_ep != nullptr) {
+            if ((status == UCS_OK) && (device_ep != nullptr)) {
                 break;
             }
         }
