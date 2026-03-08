@@ -21,6 +21,7 @@
 #include <uct/cuda/cuda_copy/cuda_copy_md.h>
 #include <uct/cuda/base/cuda_util.h>
 
+#include "gpunetio/common/doca_gpunetio_verbs_def.h"
 
 #define UCT_GDAKI_MAX_CUDA_PER_IB 64
 
@@ -594,6 +595,8 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
 
             dev_ep->qps[i].sq_db  = (uint64_t *)sq_db;
             dev_ep->qps[i].sq_num = channel->qp.super.qp_num;
+            dev_ep->qps[i].qpn_ds = htonl(channel->qp.super.qp_num <<
+                                          DOCA_GPUNETIO_VERBS_WQE_IDX_SHIFT);
             memset(&dev_ep->qps[i].cq_buff, 0xff, 64);
         }
 
