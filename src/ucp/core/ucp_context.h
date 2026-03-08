@@ -132,8 +132,6 @@ typedef struct ucp_context_config {
     int                                    rndv_errh_ppln_enable;
     /** Force-enable the RMA rendezvous put/get protocols */
     int                                    rma_ppln_enable;
-    /** Enable flow control for rndv mtype fragments at worker level */
-    int                                    rndv_mtype_worker_fc_enable;
     /** Maximum memory for concurrent rndv mtype fragments per worker (bytes) */
     size_t                                 rndv_mtype_worker_max_mem;
     /** Threshold for using tag matching offload capabilities. Smaller buffers
@@ -805,6 +803,13 @@ ucp_context_print_transport_tables_enabled(ucp_context_h context)
     }
 
     return value == UCS_CONFIG_ON;
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_context_rndv_mtype_fc_enabled(ucp_context_h context)
+{
+    size_t max_mem = context->config.ext.rndv_mtype_worker_max_mem;
+    return (max_mem != UCS_MEMUNITS_INF) && (max_mem != UCS_MEMUNITS_AUTO);
 }
 
 void ucp_context_memaccess_tl_bitmap(ucp_context_h context,
