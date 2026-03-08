@@ -15,6 +15,7 @@
 #include "module.h"
 
 #include <ucs/sys/preprocessor.h>
+#include <ucs/datastruct/string_set.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
@@ -33,7 +34,6 @@
 
 #define UCS_MODULE_PATH_MEMTRACK_NAME   "module_path"
 #define UCS_MODULE_SRCH_PATH_MAX        2
-#define UCS_MODULE_EXT_SUBDIR           "ext"
 
 #define ucs_module_debug(_fmt, ...) \
     ucs_log(ucs_min(UCS_LOG_LEVEL_DEBUG, ucs_global_opts.module_log_level), \
@@ -42,27 +42,17 @@
     ucs_log(ucs_min(UCS_LOG_LEVEL_TRACE, ucs_global_opts.module_log_level), \
             _fmt, ##  __VA_ARGS__)
 
-typedef struct {
-    const char *framework;
-    void       *dl;
-} ucs_loaded_module_t;
-
-UCS_ARRAY_DECLARE_TYPE(ucs_module_srch_paths_t, unsigned, char *);
-UCS_ARRAY_DECLARE_TYPE(ucs_loaded_modules_t, unsigned, ucs_loaded_module_t);
-
 static char *ucs_module_srch_paths_buf[UCS_MODULE_SRCH_PATH_MAX];
 
 static struct {
-    ucs_init_once_t          init;
-    char                     module_ext[NAME_MAX];
-    ucs_module_srch_paths_t  srch_path;
-    ucs_loaded_modules_t     loaded;
+    ucs_init_once_t               init;
+    char                          module_ext[NAME_MAX];
+    ucs_array_s(unsigned, char *) srch_path;
 } ucs_module_loader_state = {
     .init       = UCS_INIT_ONCE_INITIALIZER,
     .module_ext = ".so", /* default extension */
     .srch_path  = UCS_ARRAY_FIXED_INITIALIZER(ucs_module_srch_paths_buf,
-                                              UCS_MODULE_SRCH_PATH_MAX),
-    .loaded     = UCS_ARRAY_DYNAMIC_INITIALIZER
+                                              UCS_MODULE_SRCH_PATH_MAX)
 };
 
 /* Should be called with lock held */
@@ -274,52 +264,6 @@ static void *ucs_module_try_load(const char *module_path, int mode)
     return dl;
 }
 
-static void ucs_module_load_one(const char *framework, const char *module_name,
-                                unsigned flags)
-{
-    char *module_path;
-    unsigned i;
-    void *dl;
-    int mode;
-    ucs_status_t status;
-
-    if (!ucs_module_is_enabled(module_name)) {
-        ucs_module_trace("module '%s' is disabled by configuration",
-                         module_name);
-        goto out;
-    }
-
-    mode = ucs_module_flags_to_dlopen_mode(flags);
-
-    ucs_module_trace("loading module '%s' with mode 0x%x", module_name, mode);
-
-    status = ucs_string_alloc_path_buffer(&module_path, "module_path");
-    if (status != UCS_OK) {
-        goto out;
-    }
-
-    for (i = 0; i < ucs_array_length(&ucs_module_loader_state.srch_path); ++i) {
-        snprintf(module_path, PATH_MAX, "%s/lib%s_%s%s",
-                 ucs_array_elem(&ucs_module_loader_state.srch_path, i),
-                 framework, module_name,
-                 ucs_module_loader_state.module_ext);
-        dl = ucs_module_try_load(module_path, mode);
-        if (dl != NULL) {
-            ucs_module_init(module_path, dl);
-            goto out_free_module_path;
-        }
-    }
-
-    ucs_module_debug("module '%s' for '%s' not found in any search path",
-                     module_name, framework);
-
-out_free_module_path:
-    ucs_free(module_path);
-out:
-    return;
-    /* coverity[leaked_storage] : a loaded module is never unloaded */
-}
-
 static int ucs_module_filename_match(const char *filename,
                                      const char *prefix, size_t prefix_len)
 {
@@ -332,11 +276,27 @@ static int ucs_module_filename_match(const char *filename,
                    ucs_module_loader_state.module_ext) == 0);
 }
 
-static void ucs_module_load_from_dir(const char *dir, const char *framework,
-                                     int mode)
+/* e.g. "libuct_ib_mlx5.so" -> "libuct_ib_mlx5" (strip suffix for set key) */
+static void ucs_module_filename_to_base(const char *filename, char *base,
+                                        size_t base_max)
 {
-    ucs_loaded_module_t *loaded;
+    size_t suffix_len = strlen(ucs_module_loader_state.module_ext);
+    size_t name_len   = strlen(filename);
+    size_t base_len   = name_len - suffix_len;
+
+    if (base_len >= base_max) {
+        base_len = base_max - 1;
+    }
+    memcpy(base, filename, base_len);
+    base[base_len] = '\0';
+}
+
+static void ucs_module_load_from_dir(const char *dir, const char *framework,
+                                     int mode, int check_enabled,
+                                     ucs_string_set_t *loaded_set)
+{
     char prefix[NAME_MAX];
+    char base[NAME_MAX];
     char *module_path;
     size_t prefix_len;
     struct dirent *entry;
@@ -346,7 +306,7 @@ static void ucs_module_load_from_dir(const char *dir, const char *framework,
 
     dp = opendir(dir);
     if (dp == NULL) {
-        ucs_module_trace("cannot open plugin directory '%s'", dir);
+        ucs_module_trace("cannot open module directory '%s'", dir);
         return;
     }
 
@@ -363,10 +323,19 @@ static void ucs_module_load_from_dir(const char *dir, const char *framework,
             continue;
         }
 
+        ucs_module_filename_to_base(entry->d_name, base, sizeof(base));
         snprintf(module_path, PATH_MAX, "%s/%s", dir, entry->d_name);
+        if (check_enabled && !ucs_module_is_enabled(base + prefix_len)) {
+            continue;
+        }
+
+        if (ucs_string_set_contains(loaded_set, base)) {
+            continue;
+        }
 
         dl = dlopen(module_path, RTLD_LAZY | RTLD_NOLOAD);
         if (dl != NULL) {
+            (void)ucs_string_set_add(loaded_set, base);
             dlclose(dl);
             continue;
         }
@@ -377,10 +346,7 @@ static void ucs_module_load_from_dir(const char *dir, const char *framework,
         }
 
         ucs_module_init(module_path, dl);
-
-        loaded = ucs_array_append(&ucs_module_loader_state.loaded, break);
-        loaded->framework = framework;
-        loaded->dl        = dl;
+        (void)ucs_string_set_add(loaded_set, base);
     }
 
     ucs_free(module_path);
@@ -388,80 +354,74 @@ out_closedir:
     closedir(dp);
 }
 
-#endif /* UCX_SHARED_LIB */
-
-void ucs_cleanup_modules()
+static void ucs_module_check_expected_loaded(const char *framework,
+                                             const char *expected_modules,
+                                             const ucs_string_set_t *loaded_set)
 {
-#ifdef UCX_SHARED_LIB
-    typedef void (*cleanup_func_t)();
+    char *modules_str;
+    char *saveptr;
+    char *module_name;
+    char base[NAME_MAX];
 
-    const char *module_cleanup_name =
-                    UCS_PP_MAKE_STRING(UCS_MODULE_DESTRUCTOR_NAME);
-    ucs_loaded_module_t *entry;
-    cleanup_func_t cleanup_func;
-    unsigned i;
-
-    for (i = 0; i < ucs_array_length(&ucs_module_loader_state.loaded); ++i) {
-        entry = &ucs_array_elem(&ucs_module_loader_state.loaded, i);
-        if (entry->dl == NULL) {
-            continue;
-        }
-
-        cleanup_func = (cleanup_func_t)ucs_module_dlsym_shallow(
-                entry->framework, entry->dl, module_cleanup_name);
-        if (cleanup_func != NULL) {
-            ucs_module_debug("calling cleanup for '%s'", entry->framework);
-            cleanup_func();
-        }
+    if (expected_modules == NULL || expected_modules[0] == '\0') {
+        return;
     }
 
-    ucs_array_cleanup_dynamic(&ucs_module_loader_state.loaded);
-#endif /* UCX_SHARED_LIB */
+    modules_str = ucs_strdup(expected_modules, "modules_list");
+    if (modules_str == NULL) {
+        ucs_error("failed to allocate modules_list");
+        return;
+    }
+
+    for (module_name = strtok_r(modules_str, ":", &saveptr);
+         module_name != NULL;
+         module_name = strtok_r(NULL, ":", &saveptr)) {
+        if (ucs_module_is_enabled(module_name)) {
+            snprintf(base, sizeof(base), "lib%s_%s", framework, module_name);
+            if (!ucs_string_set_contains(loaded_set, base)) {
+                ucs_module_debug("required module '%s' for framework '%s' "
+                                 "was not loaded", module_name, framework);
+            }
+        }
+    }
+    ucs_free(modules_str);
 }
+
+#endif /* UCX_SHARED_LIB */
 
 void ucs_load_modules(const char *framework, const char *expected_modules,
                       ucs_init_once_t *init_once, unsigned flags)
 {
 #ifdef UCX_SHARED_LIB
-    char ext_dir[PATH_MAX];
-    char *modules_str;
-    char *saveptr;
-    char *module_name;
     unsigned i;
     int mode;
+    ucs_string_set_t loaded_set;
 
     ucs_module_loader_init_paths();
 
     UCS_INIT_ONCE(init_once) {
         ucs_assert(ucs_sys_is_dynamic_lib());
 
-        ucs_module_debug("loading modules for %s", framework);
-        modules_str = ucs_strdup(expected_modules, "modules_list");
-        if (modules_str != NULL) {
-            saveptr     = NULL;
-            module_name = strtok_r(modules_str, ":", &saveptr);
-            while (module_name != NULL) {
-                ucs_module_load_one(framework, module_name, flags);
-                module_name = strtok_r(NULL, ":", &saveptr);
-            }
-            ucs_free(modules_str);
-        } else {
-            ucs_error("failed to allocate module names list");
-        }
-
+        ucs_string_set_init(&loaded_set);
         mode = ucs_module_flags_to_dlopen_mode(flags);
 
+        /* Load modules from directories */
         for (i = 0; i < ucs_global_opts.plugin_path.count; ++i) {
             ucs_module_load_from_dir(
-                    ucs_global_opts.plugin_path.names[i], framework, mode);
+                    ucs_global_opts.plugin_path.names[i], framework, mode, 0,
+                    &loaded_set);
         }
 
-        for (i = 0; i < ucs_array_length(&ucs_module_loader_state.srch_path); ++i) {
-            snprintf(ext_dir, sizeof(ext_dir), "%s/%s",
-                     ucs_array_elem(&ucs_module_loader_state.srch_path, i),
-                     UCS_MODULE_EXT_SUBDIR);
-            ucs_module_load_from_dir(ext_dir, framework, mode);
+        for (i = 0; i < ucs_array_length(&ucs_module_loader_state.srch_path);
+             ++i) {
+            ucs_module_load_from_dir(
+                    ucs_array_elem(&ucs_module_loader_state.srch_path, i),
+                    framework, mode, 1, &loaded_set);
         }
+
+        ucs_module_check_expected_loaded(framework, expected_modules, &loaded_set);
+
+        ucs_string_set_cleanup(&loaded_set);
     }
 #endif /* UCX_SHARED_LIB */
 }

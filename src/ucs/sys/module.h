@@ -61,7 +61,7 @@ typedef enum {
  * After loading expected modules, external plugins matching the framework are
  * discovered and loaded from:
  *  1. Directories listed in UCX_PLUGIN_PATH (colon-separated)
- *  2. 'ext' sub-directory under each built-in module search directory above
+ *  2. The same built-in module search directories listed above
  *
  * @param [in] _name  Framework name (as a token)
  */
@@ -85,37 +85,10 @@ typedef enum {
 
 
 /**
- * Define a function to be called when a module is cleaned up.
- *
- * Usage:
- *    UCS_MODULE_CLEANUP() { ... code ... }
- */
-#define UCS_MODULE_CLEANUP() \
-    void __attribute__((visibility("protected"))) \
-    UCS_MODULE_DESTRUCTOR_NAME(void)
-
-
-/**
  * Define the name of a loadable module global constructor
  */
 #define UCS_MODULE_CONSTRUCTOR_NAME \
     ucs_module_global_init
-
-
-/**
- * Define the name of a loadable module global destructor
- */
-#define UCS_MODULE_DESTRUCTOR_NAME \
-    ucs_module_global_cleanup
-
-
-/**
- * Cleanup all loaded external modules.
- *
- * Calls UCS_MODULE_CLEANUP() for each loaded external module and releases
- * the loaded modules tracking array.
- */
-void ucs_cleanup_modules();
 
 
 /**
