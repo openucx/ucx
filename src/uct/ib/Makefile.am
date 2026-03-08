@@ -14,6 +14,9 @@ libuct_ib_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
                         $(top_builddir)/src/uct/libuct.la
 libuct_ib_la_LDFLAGS  = $(IBVERBS_LDFLAGS) -version-info $(SOVERSION)
 
+pluginincludedir = $(includedir)/uct/ib/plugin
+plugininclude_HEADERS = plugin/uct_ib_plugin.h
+
 noinst_HEADERS = \
 	base/ib_device.h \
 	base/ib_iface.h \
@@ -26,7 +29,8 @@ libuct_ib_la_SOURCES = \
 	base/ib_device.c \
 	base/ib_iface.c \
 	base/ib_log.c \
-	base/ib_md.c
+	base/ib_md.c \
+	plugin/uct_ib_plugin_stubs.c
 
 if HAVE_TL_RC
 noinst_HEADERS += \
