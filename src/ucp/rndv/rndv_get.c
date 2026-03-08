@@ -296,13 +296,12 @@ ucp_proto_rndv_get_mtype_fetch_progress(uct_pending_req_t *uct_req)
     rpriv = req->send.proto_config->priv;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
-        /* GET priority: 80% of total fragments */
-        max_frags = rpriv->fc_max_frags / 5 * 4;
+        max_frags = UCP_PROTO_RNDV_MTYPE_FC_GET_LIMIT(rpriv->fc_max_frags);
 
         /* Check throttling limit. If no resource at the moment, queue the
          * request in GET pending queue and return UCS_OK. */
         pending_q = &req->send.ep->worker->rndv_mtype_fc.get_pending_q;
-        if (ucp_proto_rndv_mtype_fc_check(req, max_frags, pending_q) ==
+        if (ucp_proto_rndv_mtype_fc_throttle(req, max_frags, pending_q) ==
             UCS_ERR_NO_RESOURCE) {
             return UCS_OK;
         }

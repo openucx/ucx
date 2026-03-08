@@ -56,9 +56,7 @@ struct ucs_stats_class {
     const char           *name;
     unsigned             num_counters;
     unsigned             class_id;
-    const char*          counter_names[14]; /* Need to maintain the number of
-                                               counters once it gets bigger
-                                               than 14 in one of the classes */
+    const char*          counter_names[];
 };
 
 /*

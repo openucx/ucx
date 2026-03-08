@@ -170,48 +170,12 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_mtype_copy(
 }
 
 /* Reschedule callback for throttled mtype requests */
-static unsigned ucp_proto_rndv_mtype_fc_reschedule_cb(void *arg)
+static UCS_F_ALWAYS_INLINE
+unsigned ucp_proto_rndv_mtype_fc_reschedule_cb(void *arg)
 {
     ucp_request_t *req = arg;
     ucp_request_send(req);
     return 1;
-}
-
-/**
- * Compute maximum number of fragments allowed based on configured max memory
- * and fragment size for the given memory type. The result is rounded down to
- * the allocation chunk granularity (rndv_num_frags).
- *
- * @param context       The UCP context.
- * @param frag_mem_type Memory type used for fragments.
- *
- * @return Maximum number of fragments that fit within the configured memory
- *         limit, aligned to allocation chunk size.
- */
-static UCS_F_ALWAYS_INLINE size_t
-ucp_proto_rndv_mtype_fc_max_frags(ucp_context_h context,
-                                  ucs_memory_type_t frag_mem_type)
-{
-    size_t max_mem        = context->config.ext.rndv_mtype_worker_max_mem;
-    size_t frag_size      = context->config.ext.rndv_frag_size[frag_mem_type];
-    size_t frags_in_chunk = context->config.ext.rndv_num_frags[frag_mem_type];
-    size_t max_frags;
-
-    ucs_assert(frag_size > 0);
-
-    /* Compute max fragments and round down to allocation chunk granularity */
-    max_frags = max_mem / frag_size;
-    max_frags = (max_frags / frags_in_chunk) * frags_in_chunk;
-
-    if (max_frags == 0) {
-        ucs_warn("RNDV_MTYPE_WORKER_MAX_MEM (%zu) is too low for %s "
-                 "(frag_size=%zu, frags_per_alloc=%zu), using minimum %zu "
-                 "frags", max_mem, ucs_memory_type_names[frag_mem_type],
-                 frag_size, frags_in_chunk, frags_in_chunk);
-        return frags_in_chunk;
-    }
-
-    return max_frags;
 }
 
 /**
@@ -225,13 +189,12 @@ ucp_proto_rndv_mtype_fc_max_frags(ucp_context_h context,
  * @return UCS_OK if not throttled, UCS_ERR_NO_RESOURCE if throttled and queued.
  */
 static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_proto_rndv_mtype_fc_check(ucp_request_t *req, size_t max_frags,
-                              ucs_queue_head_t *pending_q)
+ucp_proto_rndv_mtype_fc_throttle(ucp_request_t *req, const size_t max_frags,
+                                 ucs_queue_head_t *pending_q)
 {
-    ucp_worker_h worker   = req->send.ep->worker;
-    ucp_context_h context = worker->context;
+    ucp_worker_h worker = req->send.ep->worker;
 
-    if (!context->config.ext.rndv_mtype_worker_fc_enable) {
+    if (!worker->rndv_mtype_fc.enabled) {
         return UCS_OK;
     }
 
@@ -255,16 +218,15 @@ ucp_proto_rndv_mtype_fc_increment(ucp_request_t *req)
 {
     ucp_worker_h worker = req->send.ep->worker;
 
-    if (worker->context->config.ext.rndv_mtype_worker_fc_enable) {
-        worker->rndv_mtype_fc.active_frags++;
-        UCS_STATS_UPDATE_COUNTER(worker->stats,
-                                 UCP_WORKER_STAT_RNDV_MTYPE_FC_INCREMENTED, 1);
-    }
+    worker->rndv_mtype_fc.active_frags++;
+    UCS_STATS_UPDATE_COUNTER(worker->stats,
+                             UCP_WORKER_STAT_RNDV_MTYPE_FC_INCREMENTED, 1);
 }
 
 /**
  * Decrement active_frags counter and reschedule pending request.
- * Dequeue priority: PUT > GET > RTR
+ * Dequeue priority: PUT > GET > RTR (same ordering as the throttle limits
+ * defined by UCP_PROTO_RNDV_MTYPE_FC_LIMIT).
  *
  * Priority rationale:
  * PUT - Remote is blocked waiting for our data. Scheduling PUT unblocks remote
@@ -278,16 +240,15 @@ static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_mtype_fc_decrement(ucp_request_t *req)
 {
     ucp_worker_h worker    = req->send.ep->worker;
-    ucp_context_h context  = worker->context;
     ucs_queue_elem_t *elem = NULL;
     ucp_request_t *pending_req;
 
-    if (!context->config.ext.rndv_mtype_worker_fc_enable) {
-        return;
-    }
-
     ucs_assert(worker->rndv_mtype_fc.active_frags > 0);
     worker->rndv_mtype_fc.active_frags--;
+
+    if (!worker->rndv_mtype_fc.enabled) {
+        return;
+    }
 
     /* Dequeue with priority: PUT > GET > RTR */
     if (!ucs_queue_is_empty(&worker->rndv_mtype_fc.put_pending_q)) {
@@ -298,13 +259,15 @@ ucp_proto_rndv_mtype_fc_decrement(ucp_request_t *req)
         elem = ucs_queue_pull(&worker->rndv_mtype_fc.rtr_pending_q);
     }
 
-    if (elem != NULL) {
-        pending_req = ucs_container_of(elem, ucp_request_t,
-                                       send.rndv.ppln.queue_elem);
-        ucs_callbackq_add_oneshot(&worker->uct->progress_q, pending_req,
-                                  ucp_proto_rndv_mtype_fc_reschedule_cb,
-                                  pending_req);
+    if (elem == NULL) {
+        return;
     }
+
+    pending_req = ucs_container_of(elem, ucp_request_t,
+                                   send.rndv.ppln.queue_elem);
+    ucs_callbackq_add_oneshot(&worker->uct->progress_q, pending_req,
+                              ucp_proto_rndv_mtype_fc_reschedule_cb,
+                              pending_req);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t

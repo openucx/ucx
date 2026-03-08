@@ -600,6 +600,49 @@ ucs_status_t ucp_proto_rndv_rts_reset(ucp_request_t *req)
     return ucp_proto_request_zcopy_id_reset(req);
 }
 
+/**
+ * Compute maximum number of fragments allowed based on configured max memory
+ * and fragment size for the given memory type. The result is rounded down to
+ * the allocation chunk granularity (rndv_num_frags).
+ *
+ * @param context       The UCP context.
+ * @param frag_mem_type Memory type used for fragments.
+ *
+ * @return Maximum number of fragments that fit within the configured memory
+ *         limit, aligned to allocation chunk size.
+ */
+size_t ucp_proto_rndv_mtype_fc_max_frags(ucp_context_h context,
+                                         ucs_memory_type_t frag_mem_type)
+{
+    size_t max_mem;
+    size_t frag_size;
+    size_t frags_in_chunk;
+    size_t max_frags;
+
+    if (!ucp_context_rndv_mtype_fc_enabled(context)) {
+        return SIZE_MAX;
+    }
+
+    max_mem        = context->config.ext.rndv_mtype_worker_max_mem;
+    frag_size      = context->config.ext.rndv_frag_size[frag_mem_type];
+    frags_in_chunk = context->config.ext.rndv_num_frags[frag_mem_type];
+    ucs_assert(frag_size > 0);
+
+    /* Compute max fragments and round down to allocation chunk granularity */
+    max_frags = max_mem / frag_size;
+    max_frags = (max_frags / frags_in_chunk) * frags_in_chunk;
+
+    if (max_frags == 0) {
+        ucs_warn("RNDV_MTYPE_WORKER_MAX_MEM (%zu) is too low for %s "
+                 "(frag_size=%zu, frags_per_alloc=%zu), using minimum %zu "
+                 "frags", max_mem, ucs_memory_type_names[frag_mem_type],
+                 frag_size, frags_in_chunk, frags_in_chunk);
+        return frags_in_chunk;
+    }
+
+    return max_frags;
+}
+
 ucs_status_t
 ucp_proto_rndv_ack_init(const ucp_proto_common_init_params_t *init_params,
                         const char *name, double overhead,

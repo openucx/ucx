@@ -362,13 +362,12 @@ static ucs_status_t ucp_proto_rndv_rtr_mtype_progress(uct_pending_req_t *self)
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
         rpriv = req->send.proto_config->priv;
 
-        /* RTR priority: 60% of total fragments */
-        max_frags = rpriv->fc_max_frags / 5 * 3;
+        max_frags = UCP_PROTO_RNDV_MTYPE_FC_RTR_LIMIT(rpriv->fc_max_frags);
 
         /* Check throttling limit. If no resource at the moment, queue the
          * request in RTR pending queue and return UCS_OK. */
         pending_q = &req->send.ep->worker->rndv_mtype_fc.rtr_pending_q;
-        if (ucp_proto_rndv_mtype_fc_check(req, max_frags, pending_q) ==
+        if (ucp_proto_rndv_mtype_fc_throttle(req, max_frags, pending_q) ==
             UCS_ERR_NO_RESOURCE) {
             return UCS_OK;
         }

@@ -527,11 +527,9 @@ ucp_proto_rndv_put_mtype_copy_progress(uct_pending_req_t *uct_req)
 
     rpriv = req->send.proto_config->priv;
 
-    /* Check throttling limit. If no resource at the moment, queue the request
-     * in PUT pending queue and return UCS_OK. */
-    max_frags = rpriv->bulk.fc_max_frags;
+    max_frags = UCP_PROTO_RNDV_MTYPE_FC_PUT_LIMIT(rpriv->bulk.fc_max_frags);
     pending_q = &req->send.ep->worker->rndv_mtype_fc.put_pending_q;
-    if (ucp_proto_rndv_mtype_fc_check(req, max_frags, pending_q) ==
+    if (ucp_proto_rndv_mtype_fc_throttle(req, max_frags, pending_q) ==
         UCS_ERR_NO_RESOURCE) {
         return UCS_OK;
     }
