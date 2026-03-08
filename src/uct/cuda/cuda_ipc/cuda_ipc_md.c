@@ -414,7 +414,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_rkey_unpack,
         ext_rkey               = (uct_cuda_ipc_extended_rkey_t*)packed;
         unpacked->super.pid_ns = ext_rkey->pid_ns;
     } else {
-        unpacked->super.pid_ns = ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID);
+        unpacked->super.pid_ns = ucs_sys_get_default_ns(UCS_SYS_NS_TYPE_PID);
     }
 
     status = uct_cuda_ctx_primary_push_avail(0, sys_dev, &cuda_device,

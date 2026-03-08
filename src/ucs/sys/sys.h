@@ -585,6 +585,16 @@ ucs_sys_ns_t ucs_sys_get_ns(ucs_sys_namespace_type_t name);
 
 
 /**
+ * Get default namespace value for a given namespace type.
+ *
+ * @param [in]  type        Namespace type to get default value for
+ *
+ * @return default namespace value or 0 if type is not supported
+ */
+ucs_sys_ns_t ucs_sys_get_default_ns(ucs_sys_namespace_type_t type);
+
+
+/**
  * Check if namespace is namespace of host system.
  *
  * @param [in]  name        Namespace to evaluate
