@@ -205,6 +205,11 @@ typedef enum {
                                           carrying remote ep and PSN for
                                           tracking */
     UCP_AM_ID_AM_MIDDLE_PSN     =  28,
+    UCP_AM_ID_AM_FIRST_HW_TOKEN  =  29, /* First fragment user defined AM
+                                          carrying opaque token for duplicate
+                                          detection */
+    UCP_AM_ID_AM_MIDDLE_HW_TOKEN =  30, /* Middle/last fragment with opaque
+                                          token */
     UCP_AM_ID_LAST
 } ucp_am_id_t;
 
