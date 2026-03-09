@@ -279,13 +279,6 @@ extern const double uct_ib_qp_rnr_time_ms[];
 
 
 /**
- * Check if a port on a device is active and supports the given flags.
- */
-ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
-                                      unsigned flags);
-
-
-/**
  * Helper function to set ECE to qp.
  *
  * @param dev              IB device use to create qp.

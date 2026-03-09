@@ -378,12 +378,12 @@ static ucs_status_t uct_ud_iface_gid_hash_init(uct_ud_iface_t *iface,
         status = uct_ib_device_query_gid_info(dev->ibv_context,
                                               uct_ib_device_name(dev),
                                               port, gid_idx, &gid_info);
-        if (status != UCS_OK) {
-            goto err;
+        if (status == UCS_ERR_INVALID_ADDR) {
+            continue;
         }
 
-        if (!memcmp(&gid_info.gid, &zero_gid, sizeof(zero_gid))) {
-            continue;
+        if (status != UCS_OK) {
+            goto err;
         }
 
         ucs_debug("iface %p: adding gid %s to hash on device %s port %d index "
