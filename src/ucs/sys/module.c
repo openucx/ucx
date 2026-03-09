@@ -46,9 +46,9 @@
 static char *ucs_module_srch_paths_buf[UCS_MODULE_SRCH_PATH_MAX];
 
 static struct {
-    ucs_init_once_t               init;
-    char                          module_ext[NAME_MAX];
-    ucs_array_s(unsigned, char *) srch_path;
+    ucs_init_once_t              init;
+    char                         module_ext[NAME_MAX];
+    ucs_array_s(unsigned, char*) srch_path;
 } ucs_module_loader_state = {
     .init       = UCS_INIT_ONCE_INITIALIZER,
     .module_ext = ".so", /* default extension */
@@ -117,8 +117,8 @@ out:
 /* Should be called with lock held */
 static void ucs_module_loader_add_install_dir()
 {
-    *ucs_array_append(&ucs_module_loader_state.srch_path, return) =
-            ucs_global_opts.module_dir;
+    *ucs_array_append(&ucs_module_loader_state.srch_path,
+                      return ) = ucs_global_opts.module_dir;
 }
 
 static void ucs_module_loader_init_paths()
@@ -227,9 +227,11 @@ static int ucs_module_is_enabled(const char *module_name)
     }
 
     return ((mode == UCS_CONFIG_ALLOW_LIST_ALLOW) &&
-            (ucs_config_names_search(&ucs_global_opts.modules.array, module_name) >= 0)) ||
+            (ucs_config_names_search(&ucs_global_opts.modules.array,
+                                     module_name) >= 0)) ||
            ((mode == UCS_CONFIG_ALLOW_LIST_NEGATE) &&
-            (ucs_config_prefix_search(&ucs_global_opts.modules.array, module_name) < 0));
+            (ucs_config_prefix_search(&ucs_global_opts.modules.array,
+                                      module_name) < 0));
 }
 
 static int ucs_module_flags_to_dlopen_mode(unsigned flags)
@@ -264,8 +266,8 @@ static void *ucs_module_try_load(const char *module_path, int mode)
     return dl;
 }
 
-static int ucs_module_filename_match(const char *filename,
-                                     const char *prefix, size_t prefix_len)
+static int ucs_module_filename_match(const char *filename, const char *prefix,
+                                     size_t prefix_len)
 {
     size_t suffix_len = strlen(ucs_module_loader_state.module_ext);
     size_t name_len   = strlen(filename);
@@ -277,8 +279,8 @@ static int ucs_module_filename_match(const char *filename,
 }
 
 /* e.g. "libuct_ib_mlx5.so" -> "libuct_ib_mlx5" (strip suffix for set key) */
-static void ucs_module_filename_to_base(const char *filename, char *base,
-                                        size_t base_max)
+static void
+ucs_module_filename_to_base(const char *filename, char *base, size_t base_max)
 {
     size_t suffix_len = strlen(ucs_module_loader_state.module_ext);
     size_t name_len   = strlen(filename);
@@ -374,7 +376,8 @@ static void ucs_module_check_expected_loaded(const char *framework,
             snprintf(base, sizeof(base), "lib%s_%s", framework, module_name);
             if (!ucs_string_set_contains(loaded_set, base)) {
                 ucs_module_debug("required module '%s' for framework '%s' "
-                                 "was not loaded", module_name, framework);
+                                 "was not loaded",
+                                 module_name, framework);
             }
         }
     }
@@ -402,9 +405,8 @@ void ucs_load_modules(const char *framework, const char *expected_modules,
 
         /* Load modules from directories */
         for (i = 0; i < ucs_global_opts.plugin_path.count; ++i) {
-            ucs_module_load_from_dir(
-                    ucs_global_opts.plugin_path.names[i], framework, mode, 0,
-                    &loaded_set);
+            ucs_module_load_from_dir(ucs_global_opts.plugin_path.names[i],
+                                     framework, mode, 0, &loaded_set);
         }
 
         for (i = 0; i < ucs_array_length(&ucs_module_loader_state.srch_path);
@@ -414,7 +416,8 @@ void ucs_load_modules(const char *framework, const char *expected_modules,
                     framework, mode, 1, &loaded_set);
         }
 
-        ucs_module_check_expected_loaded(framework, expected_modules, &loaded_set);
+        ucs_module_check_expected_loaded(framework, expected_modules,
+                                         &loaded_set);
 
         ucs_string_set_cleanup(&loaded_set);
     }
