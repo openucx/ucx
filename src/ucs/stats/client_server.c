@@ -32,6 +32,8 @@
 
 #define UCS_STATS_MAGIC            "UCSSTAT1"
 #define UCS_STATS_MSG_FRAG_SIZE    1400
+#define ENTITY_HASH_SIZE           997
+
 
 /* UDP packet header */
 typedef struct ucs_stats_packet_hdr {
@@ -65,14 +67,12 @@ typedef struct ucs_stats_server {
     volatile int            stop;
     ucs_list_link_t         curr_stats;
     pthread_mutex_t         entities_lock;
-    stats_entity_t          *entities_hash[UCS_STATS_ENTITY_HASH_SIZE];
+    stats_entity_t*         entities_hash[ENTITY_HASH_SIZE];
 } ucs_stats_server_t;
 
 
 SGLIB_DEFINE_LIST_PROTOTYPES(stats_entity_t, stats_entity_cmp, next)
-SGLIB_DEFINE_HASHED_CONTAINER_PROTOTYPES(stats_entity_t,
-                                         UCS_STATS_ENTITY_HASH_SIZE,
-                                         stats_entity_hash)
+SGLIB_DEFINE_HASHED_CONTAINER_PROTOTYPES(stats_entity_t, ENTITY_HASH_SIZE, stats_entity_hash)
 
 
 ucs_status_t ucs_stats_client_init(const char *server_addr, int port, ucs_stats_client_h *p_client)
@@ -644,7 +644,10 @@ unsigned long ucs_stats_server_rcvd_packets(ucs_stats_server_h server)
    return server->rcvd_packets;
 }
 
+static inline int stats_entity_hash(stats_entity_t *e)
+{
+    return (((uint64_t)e->in_addr.sin_addr.s_addr << 16) + (uint64_t)ntohs(e->in_addr.sin_port)) % ENTITY_HASH_SIZE;
+}
+
 SGLIB_DEFINE_LIST_FUNCTIONS(stats_entity_t, stats_entity_cmp, next)
-SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(stats_entity_t,
-                                        UCS_STATS_ENTITY_HASH_SIZE,
-                                        stats_entity_hash)
+SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(stats_entity_t, ENTITY_HASH_SIZE, stats_entity_hash)

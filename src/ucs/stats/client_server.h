@@ -16,9 +16,6 @@
 
 BEGIN_C_DECLS
 
-#define UCS_STATS_ENTITY_HASH_SIZE 997
-
-
 /* An entity which reports statistics */
 typedef struct stats_entity stats_entity_t;
 struct stats_entity {
@@ -52,13 +49,6 @@ stats_entity_cmp(stats_entity_t *e1, stats_entity_t *e2)
         return (int)ntohs(e1->in_addr.sin_port) -
                (int)ntohs(e2->in_addr.sin_port);
     }
-}
-
-static UCS_F_ALWAYS_INLINE int stats_entity_hash(stats_entity_t *e)
-{
-    return (((uint64_t)e->in_addr.sin_addr.s_addr << 16) +
-            (uint64_t)ntohs(e->in_addr.sin_port)) %
-           UCS_STATS_ENTITY_HASH_SIZE;
 }
 
 END_C_DECLS
