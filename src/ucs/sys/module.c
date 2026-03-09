@@ -221,7 +221,6 @@ out:
 static int ucs_module_is_enabled(const char *module_name)
 {
     ucs_config_allow_list_mode_t mode = ucs_global_opts.modules.mode;
-    int found;
 
     if (mode == UCS_CONFIG_ALLOW_LIST_ALLOW_ALL) {
         return 1;
