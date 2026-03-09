@@ -23,6 +23,9 @@ extern "C" {
 /* The maximum number of UCX aggregate-sum counters */
 #define UCS_STATS_NUM_AGGREGATE_SUM_COUNTERS_MAX 128
 
+#define IP_ADDR_1 0x0A000001 /* 10.0.0.1 */
+#define IP_ADDR_2 0x0A000002 /* 10.0.0.2 */
+
 class stats_test : public ucs::test {
 public:
 
@@ -161,6 +164,7 @@ public:
         ASSERT_EQ(1ul, ucs_list_length(list));
         check_tree(ucs_list_head(list, ucs_stats_node_t, list), data_nodes);
         ucs_stats_server_purge_stats(m_server);
+        EXPECT_EQ(0ul, ucs_list_length(list));
     }
 
 protected:
@@ -386,7 +390,8 @@ UCS_TEST_F(stats_aggregate_sum_test, report) {
 
 class stats_entity_cmp_test : public stats_udp_test {
 public:
-    virtual void init() {
+    virtual void init()
+    {
         stats_udp_test::init();
 
         static ucs_stats_class_t test_cls = {"test_entity", 0};
@@ -403,24 +408,27 @@ public:
         UCS_STATS_NODE_FREE(node);
     }
 
-    virtual void cleanup() {
+    virtual void cleanup()
+    {
         free(m_buffer);
         stats_udp_test::cleanup();
     }
 
-    virtual std::string stats_trigger_config() {
+    virtual std::string stats_trigger_config()
+    {
         return "";
     }
 
-    int create_bound_udp(uint16_t src_port) {
+    int create_bound_udp(uint16_t src_port)
+    {
         int fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
         if (fd < 0) {
             return -1;
         }
 
         struct sockaddr_in addr = {};
-        addr.sin_family      = AF_INET;
-        addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        addr.sin_family         = AF_INET;
+        addr.sin_addr.s_addr    = htonl(INADDR_LOOPBACK);
 
         addr.sin_port = htons(src_port);
         if (bind(fd, (struct sockaddr*)&addr, sizeof(addr)) != 0) {
@@ -438,7 +446,8 @@ public:
         return fd;
     }
 
-    void send_raw_stats(int fd, uint64_t timestamp) {
+    void send_raw_stats(int fd, uint64_t timestamp)
+    {
         struct {
             char     magic[8];
             uint64_t timestamp;
@@ -448,7 +457,7 @@ public:
         } UCS_S_PACKED hdr;
 
         const size_t max_frag = 1400 - sizeof(hdr);
-        size_t offset = 0;
+        size_t offset         = 0;
 
         memcpy(hdr.magic, "UCSSTAT1", 8);
         hdr.timestamp  = timestamp;
@@ -474,26 +483,35 @@ public:
         }
     }
 
-    void get_stats_entity(int fd, stats_entity_t *entity) {
+    void create_stats_entity_from_fd(int fd, stats_entity_t *entity)
+    {
         socklen_t slen = sizeof(entity->in_addr);
-        ASSERT_EQ(0, getsockname(fd, (struct sockaddr*)&entity->in_addr,
-                                 &slen));
+        ASSERT_EQ(0,
+                  getsockname(fd, (struct sockaddr*)&entity->in_addr, &slen));
+    }
+
+    static stats_entity_t
+    create_stats_entity_from_ip_port(uint32_t ip, uint16_t port)
+    {
+        stats_entity_t e          = {};
+        e.in_addr.sin_addr.s_addr = htonl(ip);
+        e.in_addr.sin_port        = htons(port);
+        return e;
     }
 
 protected:
-    char   *m_buffer;
-    size_t  m_buf_size;
+    char *m_buffer;
+    size_t m_buf_size;
 };
 
 /*
  * Verify that the stats server distinguishes two clients on the same IP but
  * different ports, even when both ports hash to the same bucket (difference
- * equals ENTITY_HASH_SIZE = 997).
+ * equals the hash size).
  */
 UCS_TEST_F(stats_entity_cmp_test, multi_client_same_hash_bucket) {
     const uint16_t port_base  = 10000;
     const uint16_t port_limit = 10100;
-    const uint16_t hash_size  = 997;
 
     int fd1 = -1, fd2 = -1;
     for (uint16_t p = port_base; p <= port_limit; ++p) {
@@ -501,7 +519,7 @@ UCS_TEST_F(stats_entity_cmp_test, multi_client_same_hash_bucket) {
         if (fd1 < 0) {
             continue;
         }
-        fd2 = create_bound_udp(p + hash_size);
+        fd2 = create_bound_udp(p + UCS_STATS_ENTITY_HASH_SIZE);
         if (fd2 >= 0) {
             break;
         }
@@ -515,13 +533,12 @@ UCS_TEST_F(stats_entity_cmp_test, multi_client_same_hash_bucket) {
     }
 
     stats_entity_t e1 = {}, e2 = {};
-    get_stats_entity(fd1, &e1);
-    get_stats_entity(fd2, &e2);
+    create_stats_entity_from_fd(fd1, &e1);
+    create_stats_entity_from_fd(fd2, &e2);
 
     ASSERT_EQ(stats_entity_hash(&e1), stats_entity_hash(&e2))
-            << "ports " << ntohs(e1.in_addr.sin_port)
-            << " and " << ntohs(e2.in_addr.sin_port)
-            << " must hash to the same bucket";
+            << "ports " << ntohs(e1.in_addr.sin_port) << " and "
+            << ntohs(e2.in_addr.sin_port) << " must hash to the same bucket";
 
     send_raw_stats(fd1, 1);
     send_raw_stats(fd2, 2);
@@ -539,43 +556,31 @@ UCS_TEST_F(stats_entity_cmp_test, multi_client_same_hash_bucket) {
 }
 
 UCS_TEST_F(stats_entity_cmp_test, same_addr_different_ports) {
-    stats_entity_t e1 = {}, e2 = {};
-    e1.in_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    e2.in_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    e1.in_addr.sin_port        = htons(5000);
-    e2.in_addr.sin_port        = htons(6000);
+    stats_entity_t e1 = create_stats_entity_from_ip_port(INADDR_LOOPBACK, 5000);
+    stats_entity_t e2 = create_stats_entity_from_ip_port(INADDR_LOOPBACK, 6000);
 
     EXPECT_LT(stats_entity_cmp(&e1, &e2), 0);
     EXPECT_GT(stats_entity_cmp(&e2, &e1), 0);
 }
 
 UCS_TEST_F(stats_entity_cmp_test, same_addr_same_port) {
-    stats_entity_t e1 = {}, e2 = {};
-    e1.in_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    e2.in_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    e1.in_addr.sin_port        = htons(5000);
-    e2.in_addr.sin_port        = htons(5000);
+    stats_entity_t e1 = create_stats_entity_from_ip_port(INADDR_LOOPBACK, 5000);
+    stats_entity_t e2 = create_stats_entity_from_ip_port(INADDR_LOOPBACK, 5000);
 
     EXPECT_EQ(0, stats_entity_cmp(&e1, &e2));
 }
 
 UCS_TEST_F(stats_entity_cmp_test, different_addr) {
-    stats_entity_t e1 = {}, e2 = {};
-    e1.in_addr.sin_addr.s_addr = htonl(0x0A000001); /* 10.0.0.1 */
-    e2.in_addr.sin_addr.s_addr = htonl(0x0A000002); /* 10.0.0.2 */
-    e1.in_addr.sin_port        = htons(5000);
-    e2.in_addr.sin_port        = htons(5000);
+    stats_entity_t e1 = create_stats_entity_from_ip_port(IP_ADDR_1, 5000);
+    stats_entity_t e2 = create_stats_entity_from_ip_port(IP_ADDR_2, 5000);
 
     EXPECT_LT(stats_entity_cmp(&e1, &e2), 0);
     EXPECT_GT(stats_entity_cmp(&e2, &e1), 0);
 }
 
 UCS_TEST_F(stats_entity_cmp_test, different_addr_ignores_port) {
-    stats_entity_t e1 = {}, e2 = {};
-    e1.in_addr.sin_addr.s_addr = htonl(0x0A000001);
-    e2.in_addr.sin_addr.s_addr = htonl(0x0A000002);
-    e1.in_addr.sin_port        = htons(9000);
-    e2.in_addr.sin_port        = htons(1000);
+    stats_entity_t e1 = create_stats_entity_from_ip_port(IP_ADDR_1, 9000);
+    stats_entity_t e2 = create_stats_entity_from_ip_port(IP_ADDR_2, 1000);
 
     EXPECT_LT(stats_entity_cmp(&e1, &e2), 0)
             << "address comparison takes precedence over port";
