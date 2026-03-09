@@ -536,9 +536,14 @@ UCS_TEST_F(stats_entity_cmp_test, multi_client_same_hash_bucket) {
     create_stats_entity_from_fd(fd1, &e1);
     create_stats_entity_from_fd(fd2, &e2);
 
-    ASSERT_EQ(stats_entity_hash(&e1), stats_entity_hash(&e2))
-            << "ports " << ntohs(e1.in_addr.sin_port) << " and "
-            << ntohs(e2.in_addr.sin_port) << " must hash to the same bucket";
+    if (stats_entity_hash(&e1) != stats_entity_hash(&e2)) {
+        close(fd1);
+        close(fd2);
+        ADD_FAILURE() << "ports " << ntohs(e1.in_addr.sin_port) << " and "
+                      << ntohs(e2.in_addr.sin_port)
+                      << " must hash to the same bucket";
+        return;
+    }
 
     send_raw_stats(fd1, 1);
     send_raw_stats(fd2, 2);
