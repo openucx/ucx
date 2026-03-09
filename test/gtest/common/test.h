@@ -87,8 +87,12 @@ protected:
     void TestBodyProxy();
     static std::string format_message(const char *message, va_list ap);
 
-    virtual void cleanup();
+    /* Overrides may throw `test_skip_exception` or `test_abort_exception` to 
+     * skip or abort the test */
     virtual void init();
+    /* Overrides must handle partially initialized state, since cleanup()
+     * is invoked even when init() throws an exception. */
+    virtual void cleanup();
     bool barrier();
     void test_skip(const std::string &reason = "");
 

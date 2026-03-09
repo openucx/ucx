@@ -151,6 +151,7 @@ void test_base::push_config()
 void test_base::pop_config()
 {
     ucs_global_opts_release();
+    ASSERT_FALSE(m_config_stack.empty());
     ucs_global_opts = m_config_stack.back();
     m_config_stack.pop_back();
 }
