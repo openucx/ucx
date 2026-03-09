@@ -15,6 +15,7 @@
 #include "module.h"
 
 #include <ucs/sys/preprocessor.h>
+#include <ucs/datastruct/string_buffer.h>
 #include <ucs/datastruct/string_set.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/debug/assert.h>
@@ -226,10 +227,10 @@ static int ucs_module_is_enabled(const char *module_name)
         return 1;
     }
 
-    found = ucs_config_names_search(&ucs_global_opts.modules.array,
-                                    module_name) >= 0;
-    return ((mode == UCS_CONFIG_ALLOW_LIST_ALLOW) && found) ||
-           ((mode == UCS_CONFIG_ALLOW_LIST_NEGATE) && !found);
+    return ((mode == UCS_CONFIG_ALLOW_LIST_ALLOW) &&
+            (ucs_config_names_search(&ucs_global_opts.modules.array, module_name) >= 0)) ||
+           ((mode == UCS_CONFIG_ALLOW_LIST_NEGATE) &&
+            (ucs_config_prefix_search(&ucs_global_opts.modules.array, module_name) < 0));
 }
 
 static int ucs_module_flags_to_dlopen_mode(unsigned flags)
@@ -358,8 +359,7 @@ static void ucs_module_check_expected_loaded(const char *framework,
                                              const char *expected_modules,
                                              const ucs_string_set_t *loaded_set)
 {
-    char *modules_str;
-    char *saveptr;
+    ucs_string_buffer_t strb;
     char *module_name;
     char base[NAME_MAX];
 
@@ -367,15 +367,10 @@ static void ucs_module_check_expected_loaded(const char *framework,
         return;
     }
 
-    modules_str = ucs_strdup(expected_modules, "modules_list");
-    if (modules_str == NULL) {
-        ucs_error("failed to allocate modules_list");
-        return;
-    }
+    ucs_string_buffer_init(&strb);
+    ucs_string_buffer_appendf(&strb, "%s", expected_modules);
 
-    for (module_name = strtok_r(modules_str, ":", &saveptr);
-         module_name != NULL;
-         module_name = strtok_r(NULL, ":", &saveptr)) {
+    ucs_string_buffer_for_each_token(module_name, &strb, ":") {
         if (ucs_module_is_enabled(module_name)) {
             snprintf(base, sizeof(base), "lib%s_%s", framework, module_name);
             if (!ucs_string_set_contains(loaded_set, base)) {
@@ -384,7 +379,8 @@ static void ucs_module_check_expected_loaded(const char *framework,
             }
         }
     }
-    ucs_free(modules_str);
+
+    ucs_string_buffer_cleanup(&strb);
 }
 
 #endif /* UCX_SHARED_LIB */
