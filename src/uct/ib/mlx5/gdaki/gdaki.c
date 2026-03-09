@@ -511,6 +511,7 @@ uct_rc_gdaki_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     iface_attr->cap.put.min_zcopy = 0;
     iface_attr->cap.put.max_zcopy =
             uct_ib_iface_port_attr(&iface->super.super.super)->max_msg_sz;
+    iface_attr->ctl_device = uct_cuda_get_cuda_device(iface->cuda_dev);
 
     return UCS_OK;
 }
@@ -1053,7 +1054,6 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
     uct_tl_device_resource_t *tl_devices;
     ucs_status_t status;
     CUdevice device;
-    ucs_sys_device_t dev;
     int i;
     uct_gdaki_dev_matrix_elem_t *ibdesc;
     char dmabuf_str[8];
@@ -1120,14 +1120,12 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
             goto err;
         }
 
-        dev = uct_cuda_get_sys_dev(device);
-
         snprintf(tl_devices[num_tl_devices].name,
                  sizeof(tl_devices[num_tl_devices].name), "%s%d-%s:%d",
                  UCT_DEVICE_CUDA_NAME, device, uct_ib_device_name(&ib_md->dev),
                  ib_md->dev.first_port);
         tl_devices[num_tl_devices].type       = UCT_DEVICE_TYPE_NET;
-        tl_devices[num_tl_devices].sys_device = dev;
+        tl_devices[num_tl_devices].sys_device = ib_md->dev.sys_dev;
         num_tl_devices++;
     }
 

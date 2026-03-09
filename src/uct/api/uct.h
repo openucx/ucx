@@ -1183,6 +1183,9 @@ struct uct_iface_attr {
                                                 achieve higher total bandwidth
                                                 compared to using only a single
                                                 endpoint. */
+
+    ucs_sys_device_t ctl_device;           /**< System device controlling this iface,
+                                                if it's not CPU. */
 };
 
 
