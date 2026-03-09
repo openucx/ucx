@@ -668,7 +668,7 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
             goto err;
         }
 
-        uct_cuda_get_sys_dev(device, &dev);
+        dev = uct_cuda_get_sys_dev(device);
         status = ucs_topo_get_distance(dev, md->super.dev.sys_dev, &dist);
         if (status != UCS_OK) {
             goto err;
