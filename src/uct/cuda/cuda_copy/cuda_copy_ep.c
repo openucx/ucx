@@ -192,7 +192,7 @@ uct_cuda_copy_ctx_rsc_get(uct_cuda_copy_iface_t *iface,
     return UCS_OK;
 
 err_pop_and_release:
-    uct_cuda_ctx_primary_pop_and_release(cuda_device);
+    uct_cuda_ctx_pop_and_release(cuda_device, NULL);
 err:
     return status;
 }
@@ -272,7 +272,7 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
     status = UCS_INPROGRESS;
 
 out_pop_and_release:
-    uct_cuda_ctx_primary_pop_and_release(cuda_device);
+    uct_cuda_ctx_pop_and_release(cuda_device, NULL);
 out:
     return status;
 err_mpool_put:
@@ -357,7 +357,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_ep_rma_short(
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuStreamSynchronize(*stream));
 
 out_pop_and_release:
-    uct_cuda_ctx_primary_pop_and_release(cuda_device);
+    uct_cuda_ctx_pop_and_release(cuda_device, NULL);
 out:
     return status;
 }
