@@ -414,10 +414,8 @@ void test_base::SetUpProxy() {
         m_initialized = true;
         m_state = RUNNING;
     } catch (test_skip_exception &e) {
-        cleanup();
         skipped(e);
     } catch (test_abort_exception&) {
-        cleanup();
         m_state = ABORTED;
     }
 }
