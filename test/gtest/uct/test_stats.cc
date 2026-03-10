@@ -27,14 +27,20 @@ extern "C" {
 
 class test_uct_stats : public uct_p2p_test {
 public:
-    test_uct_stats() : uct_p2p_test(0), lbuf(NULL), rbuf(NULL) {
+    test_uct_stats() : uct_p2p_test(0), lbuf(NULL), rbuf(NULL)
+    {
         m_comp.func   = NULL;
         m_comp.count  = 0;
         m_comp.status = UCS_OK;
+        stats_activate();
+    }
+
+    ~test_uct_stats()
+    {
+        stats_restore();
     }
 
     virtual void init() {
-        stats_activate();
         uct_p2p_test::init();
 
 
@@ -107,7 +113,6 @@ public:
         delete lbuf;
         delete rbuf;
         uct_p2p_test::cleanup();
-        stats_restore();
     }
 
     uct_base_ep_t *uct_ep(const entity &e)

@@ -875,7 +875,6 @@ typedef struct {
 } ucp_transports_t;
 
 
-typedef struct ucp_device_mem_list_handle *ucp_device_mem_list_handle_h;
 typedef struct ucp_device_local_mem_list *ucp_device_local_mem_list_h;
 typedef struct ucp_device_remote_mem_list *ucp_device_remote_mem_list_h;
 
