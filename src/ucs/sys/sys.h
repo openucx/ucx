@@ -204,7 +204,7 @@ ucs_ifname_to_ndev_index(const char *ndev_name, unsigned *ndev_index_p);
  * @return Interface name.
  */
 const char *
-ucs_ndev_index_to_name(unsigned ndev_index, char *ndev_name, size_t max);
+ucs_ndev_index_to_ifname(unsigned ndev_index, char *ndev_name, size_t max);
 
 
 /**
