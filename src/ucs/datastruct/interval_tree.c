@@ -32,6 +32,7 @@ ucs_interval_tree_node_create(ucs_interval_tree_t *tree, uint64_t start,
     node->color  = UCS_INTERVAL_NODE_RED;
 
     tree->num_nodes++;
+    tree->total_size += (end - start);
     return node;
 }
 
@@ -40,6 +41,10 @@ static void ucs_interval_tree_rotate_left(ucs_interval_tree_t *tree,
                                            ucs_interval_node_t *node)
 {
     ucs_interval_node_t *right = node->right;
+
+    if (right == NULL) {
+        return;
+    }
 
     node->right = right->left;
     if (right->left != NULL) {
@@ -63,6 +68,10 @@ static void ucs_interval_tree_rotate_right(ucs_interval_tree_t *tree,
 {
     ucs_interval_node_t *left = node->left;
 
+    if (left == NULL) {
+        return;
+    }
+
     node->left = left->right;
     if (left->right != NULL) {
         left->right->parent = node;
@@ -85,6 +94,7 @@ static void ucs_interval_tree_insert_fixup(ucs_interval_tree_t *tree,
     ucs_interval_node_t *uncle;
 
     while (node->parent != NULL &&
+           node->parent->parent != NULL &&
            node->parent->color == UCS_INTERVAL_NODE_RED) {
         if (node->parent == node->parent->parent->left) {
             uncle = node->parent->parent->right;
@@ -97,6 +107,9 @@ static void ucs_interval_tree_insert_fixup(ucs_interval_tree_t *tree,
                 if (node == node->parent->right) {
                     node = node->parent;
                     ucs_interval_tree_rotate_left(tree, node);
+                }
+                if (node->parent == NULL || node->parent->parent == NULL) {
+                    break;
                 }
                 node->parent->color         = UCS_INTERVAL_NODE_BLACK;
                 node->parent->parent->color = UCS_INTERVAL_NODE_RED;
@@ -114,6 +127,9 @@ static void ucs_interval_tree_insert_fixup(ucs_interval_tree_t *tree,
                     node = node->parent;
                     ucs_interval_tree_rotate_right(tree, node);
                 }
+                if (node->parent == NULL || node->parent->parent == NULL) {
+                    break;
+                }
                 node->parent->color         = UCS_INTERVAL_NODE_BLACK;
                 node->parent->parent->color = UCS_INTERVAL_NODE_RED;
                 ucs_interval_tree_rotate_left(tree, node->parent->parent);
@@ -125,15 +141,17 @@ static void ucs_interval_tree_insert_fixup(ucs_interval_tree_t *tree,
 
 void ucs_interval_tree_init(ucs_interval_tree_t *tree, ucs_mpool_t *mpool)
 {
-    tree->mpool     = mpool;
-    tree->root      = NULL;
-    tree->num_nodes = 0;
+    tree->mpool      = mpool;
+    tree->root       = NULL;
+    tree->num_nodes  = 0;
+    tree->total_size = 0;
 }
 
 static void ucs_interval_tree_delete_node(ucs_interval_tree_t *tree,
                                           ucs_interval_node_t *node)
 {
     ucs_assertv(tree->num_nodes > 0, "tree=%p, node=%p", tree, node);
+    tree->total_size -= (node->end - node->start);
     ucs_mpool_put_inline(node);
     tree->num_nodes--;
 }
@@ -227,8 +245,10 @@ static void ucs_interval_tree_remove_node(ucs_interval_tree_t *tree,
         while (successor->left != NULL) {
             successor = successor->left;
         }
-        root->start = successor->start;
-        root->end   = successor->end;
+        tree->total_size -= (root->end - root->start);
+        root->start       = successor->start;
+        root->end         = successor->end;
+        tree->total_size += (root->end - root->start);
         ucs_interval_tree_remove_node(tree, &root->right, successor);
         if (root->right != NULL) {
             root->right->parent = root;
@@ -278,6 +298,9 @@ static void ucs_interval_tree_delete_fixup(ucs_interval_tree_t *tree,
                 ucs_interval_tree_rotate_right(tree, sibling);
                 sibling = parent->right;
             }
+            if (sibling == NULL) {
+                break;
+            }
             sibling->color = parent->color;
             parent->color  = UCS_INTERVAL_NODE_BLACK;
             if (sibling->right != NULL) {
@@ -320,6 +343,9 @@ static void ucs_interval_tree_delete_fixup(ucs_interval_tree_t *tree,
                 ucs_interval_tree_rotate_left(tree, sibling);
                 sibling = parent->left;
             }
+            if (sibling == NULL) {
+                break;
+            }
             sibling->color = parent->color;
             parent->color  = UCS_INTERVAL_NODE_BLACK;
             if (sibling->left != NULL) {
@@ -339,38 +365,52 @@ static void ucs_interval_tree_delete_fixup(ucs_interval_tree_t *tree,
 }
 
 /**
- * Recursively find and remove all nodes that overlap with given interval.
- * start/end are updated to the merged range. Uses root_ptr so remove_node
- * can update the slot and run delete fixup.
+ * Find any single node that overlaps or is adjacent to [start, end].
+ * Returns NULL if none found. Does not modify the tree.
  */
-static void ucs_interval_tree_remove_overlapping(ucs_interval_tree_t *tree,
-                                                 ucs_interval_node_t **root_ptr,
-                                                 uint64_t *start, uint64_t *end)
+static ucs_interval_node_t *
+ucs_interval_tree_find_overlap(ucs_interval_node_t *node,
+                               uint64_t start, uint64_t end)
 {
-    ucs_interval_node_t *node = *root_ptr;
+    ucs_interval_node_t *found;
 
     if (node == NULL) {
-        return;
+        return NULL;
     }
 
-    if ((node->end + 1) >= *start) {
-        ucs_interval_tree_remove_overlapping(tree, &node->left, start, end);
-        if (node->left != NULL) {
-            node->left->parent = node;
-        }
+    if ((start <= (node->end + 1)) && (node->start <= (end + 1))) {
+        return node;
     }
 
-    if (node->start <= (*end + 1)) {
-        ucs_interval_tree_remove_overlapping(tree, &node->right, start, end);
-        if (node->right != NULL) {
-            node->right->parent = node;
-        }
+    found = ucs_interval_tree_find_overlap(node->left, start, end);
+    if (found != NULL) {
+        return found;
     }
 
-    if ((*start <= (node->end + 1)) && (node->start <= (*end + 1))) {
-        *start = ucs_min(*start, node->start);
-        *end   = ucs_max(*end, node->end);
-        ucs_interval_tree_remove_node(tree, root_ptr, node);
+    /* Right subtree: all nodes have start >= node->start, so if
+     * node->start > end + 1, no right descendant can overlap. */
+    if (node->start <= (end + 1)) {
+        return ucs_interval_tree_find_overlap(node->right, start, end);
+    }
+
+    return NULL;
+}
+
+/**
+ * Iteratively find and remove all overlapping/adjacent nodes, expanding the
+ * merged range. Each removal properly rebalances the RB tree before the next
+ * search restarts from the root.
+ */
+static void ucs_interval_tree_remove_overlapping(ucs_interval_tree_t *tree,
+                                                 uint64_t *start, uint64_t *end)
+{
+    ucs_interval_node_t *overlap;
+
+    while ((overlap = ucs_interval_tree_find_overlap(tree->root, *start,
+                                                     *end)) != NULL) {
+        *start = ucs_min(*start, overlap->start);
+        *end   = ucs_max(*end, overlap->end);
+        ucs_interval_tree_remove_node(tree, &tree->root, overlap);
     }
 }
 
@@ -407,8 +447,7 @@ ucs_status_t ucs_interval_tree_insert_slow(ucs_interval_tree_t *tree,
     uint64_t merged_end   = end;
     ucs_interval_node_t *new_node;
 
-    ucs_interval_tree_remove_overlapping(tree, &tree->root, &merged_start,
-                                        &merged_end);
+    ucs_interval_tree_remove_overlapping(tree, &merged_start, &merged_end);
 
     new_node = ucs_interval_tree_node_create(tree, merged_start, merged_end);
     if (new_node == NULL) {
@@ -421,4 +460,23 @@ ucs_status_t ucs_interval_tree_insert_slow(ucs_interval_tree_t *tree,
     }
     ucs_interval_tree_insert_fixup(tree, new_node);
     return UCS_OK;
+}
+
+int ucs_interval_tree_pop_any(ucs_interval_tree_t *tree, uint64_t *start,
+                              uint64_t *end)
+{
+    ucs_interval_node_t *node = tree->root;
+
+    if (node == NULL) {
+        return 0;
+    }
+
+    while (node->left != NULL) {
+        node = node->left;
+    }
+
+    *start = node->start;
+    *end   = node->end;
+    ucs_interval_tree_remove_node(tree, &tree->root, node);
+    return 1;
 }

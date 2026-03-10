@@ -305,3 +305,246 @@ UCS_TEST_F(test_interval_tree, degenerate_ascending_then_invariant) {
     size_t max_h = 2 * (size_t)std::ceil(std::log2((double)(n + 1)));
     EXPECT_LE(h, max_h) << "height " << h << " > 2*ceil(log2(" << n << "+1)) = " << max_h;
 }
+
+UCS_TEST_F(test_interval_tree, is_empty) {
+    EXPECT_TRUE(ucs_interval_tree_is_empty(&m_tree));
+
+    insert_intervals({{10, 20}});
+    EXPECT_FALSE(ucs_interval_tree_is_empty(&m_tree));
+
+    ucs_interval_tree_cleanup(&m_tree);
+    ucs_interval_tree_init(&m_tree, &m_mpool);
+    EXPECT_TRUE(ucs_interval_tree_is_empty(&m_tree));
+}
+
+UCS_TEST_F(test_interval_tree, count_tracking) {
+    EXPECT_EQ(0u, ucs_interval_tree_count(&m_tree));
+
+    insert_intervals({{10, 20}});
+    EXPECT_EQ(1u, ucs_interval_tree_count(&m_tree));
+
+    /* Non-overlapping: each is a separate node */
+    insert_intervals({{30, 40}, {50, 60}});
+    EXPECT_EQ(3u, ucs_interval_tree_count(&m_tree));
+
+    /* Add two more disjoint */
+    insert_intervals({{80, 90}, {100, 110}});
+    EXPECT_EQ(5u, ucs_interval_tree_count(&m_tree));
+
+    /* Partial merge: bridge [40,50] merges [30,40]+[50,60] -> [30,60] */
+    insert_intervals({{40, 50}});
+    EXPECT_EQ(4u, ucs_interval_tree_count(&m_tree));
+
+    /* Merge everything: [10, 110] */
+    insert_intervals({{10, 110}});
+    EXPECT_EQ(1u, ucs_interval_tree_count(&m_tree));
+
+    /* Insert disjoint after full merge */
+    insert_intervals({{200, 300}});
+    EXPECT_EQ(2u, ucs_interval_tree_count(&m_tree));
+}
+
+UCS_TEST_F(test_interval_tree, total_size_tracking) {
+    EXPECT_EQ(0u, m_tree.total_size);
+
+    /* Single insert */
+    insert_intervals({{10, 20}});
+    EXPECT_EQ(10u, m_tree.total_size);
+    EXPECT_EQ(1u, ucs_interval_tree_count(&m_tree));
+
+    /* Non-overlapping: sizes add up */
+    insert_intervals({{30, 50}});
+    EXPECT_EQ(30u, m_tree.total_size);
+    EXPECT_EQ(2u, ucs_interval_tree_count(&m_tree));
+
+    /* Third non-overlapping region */
+    insert_intervals({{70, 100}});
+    EXPECT_EQ(60u, m_tree.total_size);
+    EXPECT_EQ(3u, ucs_interval_tree_count(&m_tree));
+
+    /* Merge two neighbors: [10,20] + [30,50] merged by [15,35] -> [10,50] */
+    insert_intervals({{15, 35}});
+    EXPECT_EQ(70u, m_tree.total_size); /* [10,50]=40 + [70,100]=30 */
+    EXPECT_EQ(2u, ucs_interval_tree_count(&m_tree));
+
+    /* Fast-path extend: single-node check fails (2 nodes), goes slow path.
+     * [10,50] + [70,100] + [50,70] -> [10,100], size=90 */
+    insert_intervals({{50, 70}});
+    EXPECT_EQ(90u, m_tree.total_size);
+    EXPECT_EQ(1u, ucs_interval_tree_count(&m_tree));
+
+    /* Now single node: fast-path extend left [5,10] -> [5,100], size=95 */
+    insert_intervals({{5, 10}});
+    EXPECT_EQ(95u, m_tree.total_size);
+    EXPECT_EQ(1u, ucs_interval_tree_count(&m_tree));
+
+    /* Fast-path extend right [100,120] -> [5,120], size=115 */
+    insert_intervals({{100, 120}});
+    EXPECT_EQ(115u, m_tree.total_size);
+    EXPECT_EQ(1u, ucs_interval_tree_count(&m_tree));
+
+    /* Fully contained insert: [20,30] inside [5,120], no size change */
+    insert_intervals({{20, 30}});
+    EXPECT_EQ(115u, m_tree.total_size);
+    EXPECT_EQ(1u, ucs_interval_tree_count(&m_tree));
+}
+
+UCS_TEST_F(test_interval_tree, total_size_many_disjoint_then_merge) {
+    /* Insert 20 disjoint intervals: [0,5], [10,15], [20,25], ... */
+    const size_t n = 20;
+    for (size_t i = 0; i < n; i++) {
+        uint64_t s = i * 10;
+        insert_intervals({{s, s + 5}});
+        EXPECT_EQ((i + 1) * 5, m_tree.total_size);
+        EXPECT_EQ(i + 1, ucs_interval_tree_count(&m_tree));
+    }
+    /* total_size = 20 * 5 = 100, count = 20 */
+    EXPECT_EQ(100u, m_tree.total_size);
+    EXPECT_EQ(n, ucs_interval_tree_count(&m_tree));
+
+    /* Bridge pairs: [5,10] merges [0,5]+[10,15] -> [0,15], etc. */
+    for (size_t i = 0; i < n - 1; i += 2) {
+        uint64_t bridge_start = i * 10 + 5;
+        uint64_t bridge_end   = (i + 1) * 10;
+        insert_intervals({{bridge_start, bridge_end}});
+    }
+    /* 10 pairs merged into 10 nodes of size 15 each, plus sizes of bridges */
+    /* Each bridge adds 5 to total_size (fills the gap). 10 bridges * 5 = 50 added */
+    EXPECT_EQ(150u, m_tree.total_size);
+    EXPECT_EQ(10u, ucs_interval_tree_count(&m_tree));
+
+    /* One giant merge: covers everything [0, 195] */
+    insert_intervals({{0, (n - 1) * 10 + 5}});
+    EXPECT_EQ(1u, ucs_interval_tree_count(&m_tree));
+    EXPECT_EQ((n - 1) * 10 + 5, m_tree.total_size);
+}
+
+UCS_TEST_F(test_interval_tree, total_size_interleaved_insert_pop) {
+    /* Insert, pop, insert more, pop all -- verify total_size throughout */
+    insert_intervals({{0, 10}, {20, 30}, {40, 50}});
+    EXPECT_EQ(30u, m_tree.total_size);
+    EXPECT_EQ(3u, ucs_interval_tree_count(&m_tree));
+
+    /* Pop one (leftmost = [0,10]) */
+    uint64_t start, end;
+    ASSERT_TRUE(ucs_interval_tree_pop_any(&m_tree, &start, &end));
+    EXPECT_EQ(0u, start);
+    EXPECT_EQ(10u, end);
+    EXPECT_EQ(20u, m_tree.total_size);
+    EXPECT_EQ(2u, ucs_interval_tree_count(&m_tree));
+
+    /* Insert overlapping with remaining: merges [20,30]+[40,50] via [25,45] -> [20,50] */
+    insert_intervals({{25, 45}});
+    EXPECT_EQ(30u, m_tree.total_size);
+    EXPECT_EQ(1u, ucs_interval_tree_count(&m_tree));
+
+    /* Insert disjoint again */
+    insert_intervals({{100, 200}, {300, 400}});
+    EXPECT_EQ(230u, m_tree.total_size);
+    EXPECT_EQ(3u, ucs_interval_tree_count(&m_tree));
+
+    /* Pop all and verify total_size decreases correctly */
+    size_t remaining = 230;
+    while (ucs_interval_tree_pop_any(&m_tree, &start, &end)) {
+        remaining -= (end - start);
+        EXPECT_EQ(remaining, m_tree.total_size);
+    }
+    EXPECT_EQ(0u, m_tree.total_size);
+    EXPECT_EQ(0u, ucs_interval_tree_count(&m_tree));
+}
+
+UCS_TEST_F(test_interval_tree, pop_any_basic) {
+    uint64_t start, end;
+
+    EXPECT_EQ(0, ucs_interval_tree_pop_any(&m_tree, &start, &end));
+
+    insert_intervals({{10, 20}});
+    EXPECT_EQ(1, ucs_interval_tree_pop_any(&m_tree, &start, &end));
+    EXPECT_EQ(10u, start);
+    EXPECT_EQ(20u, end);
+    EXPECT_TRUE(ucs_interval_tree_is_empty(&m_tree));
+    EXPECT_EQ(0u, m_tree.total_size);
+
+    /* Pop after merge: insert overlapping, pop the single merged node */
+    insert_intervals({{100, 200}, {150, 250}, {200, 300}});
+    EXPECT_EQ(1u, ucs_interval_tree_count(&m_tree));
+    EXPECT_EQ(1, ucs_interval_tree_pop_any(&m_tree, &start, &end));
+    EXPECT_EQ(100u, start);
+    EXPECT_EQ(300u, end);
+    EXPECT_TRUE(ucs_interval_tree_is_empty(&m_tree));
+}
+
+UCS_TEST_F(test_interval_tree, pop_returns_leftmost) {
+    /* Pop should return the leftmost (smallest start) node */
+    insert_intervals({{50, 60}, {10, 20}, {30, 40}, {70, 80}});
+
+    uint64_t start, end;
+    ASSERT_TRUE(ucs_interval_tree_pop_any(&m_tree, &start, &end));
+    EXPECT_EQ(10u, start);
+    EXPECT_EQ(20u, end);
+
+    ASSERT_TRUE(ucs_interval_tree_pop_any(&m_tree, &start, &end));
+    EXPECT_EQ(30u, start);
+    EXPECT_EQ(40u, end);
+
+    ASSERT_TRUE(ucs_interval_tree_pop_any(&m_tree, &start, &end));
+    EXPECT_EQ(50u, start);
+    EXPECT_EQ(60u, end);
+
+    ASSERT_TRUE(ucs_interval_tree_pop_any(&m_tree, &start, &end));
+    EXPECT_EQ(70u, start);
+    EXPECT_EQ(80u, end);
+
+    EXPECT_TRUE(ucs_interval_tree_is_empty(&m_tree));
+}
+
+UCS_TEST_F(test_interval_tree, pop_drains_all) {
+    /* Many disjoint nodes */
+    const size_t n = 50;
+    for (size_t i = 0; i < n; i++) {
+        insert_intervals({{i * 100, i * 100 + 40}});
+    }
+    EXPECT_EQ(n, ucs_interval_tree_count(&m_tree));
+    EXPECT_EQ(n * 40, m_tree.total_size);
+
+    size_t popped = 0;
+    uint64_t prev_start = 0;
+    uint64_t start, end;
+    while (ucs_interval_tree_pop_any(&m_tree, &start, &end)) {
+        EXPECT_LE(start, end);
+        if (popped > 0) {
+            EXPECT_GT(start, prev_start) << "pop order not ascending at pop #" << popped;
+        }
+        prev_start = start;
+        ++popped;
+        EXPECT_TRUE(check_rb_invariant()) << "RB violated after pop #" << popped;
+    }
+    EXPECT_EQ(n, popped);
+    EXPECT_TRUE(ucs_interval_tree_is_empty(&m_tree));
+    EXPECT_EQ(0u, m_tree.total_size);
+}
+
+UCS_TEST_F(test_interval_tree, total_size_after_pop) {
+    insert_intervals({{10, 20}, {30, 50}, {70, 100}});
+    EXPECT_EQ(60u, m_tree.total_size);
+    EXPECT_EQ(3u, ucs_interval_tree_count(&m_tree));
+
+    /* Pop leftmost [10,20], size=10 */
+    uint64_t start, end;
+    ASSERT_TRUE(ucs_interval_tree_pop_any(&m_tree, &start, &end));
+    EXPECT_EQ(10u, start);
+    EXPECT_EQ(50u, m_tree.total_size);
+    EXPECT_EQ(2u, ucs_interval_tree_count(&m_tree));
+
+    /* Pop leftmost [30,50], size=20 */
+    ASSERT_TRUE(ucs_interval_tree_pop_any(&m_tree, &start, &end));
+    EXPECT_EQ(30u, start);
+    EXPECT_EQ(30u, m_tree.total_size);
+    EXPECT_EQ(1u, ucs_interval_tree_count(&m_tree));
+
+    /* Pop last [70,100], size=30 */
+    ASSERT_TRUE(ucs_interval_tree_pop_any(&m_tree, &start, &end));
+    EXPECT_EQ(70u, start);
+    EXPECT_EQ(0u, m_tree.total_size);
+    EXPECT_EQ(0u, ucs_interval_tree_count(&m_tree));
+}
