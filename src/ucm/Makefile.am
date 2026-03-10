@@ -25,6 +25,7 @@ noinst_HEADERS = \
 	malloc/allocator.h \
 	mmap/mmap.h \
 	util/khash_safe.h \
+	util/elf_notes_int.h \
 	util/replace.h \
 	util/log.h \
 	util/reloc.h \
@@ -41,6 +42,7 @@ libucm_la_SOURCES = \
 	malloc/malloc_hook.c \
 	mmap/install.c \
 	util/replace.c \
+	util/elf_notes.c \
 	util/log.c \
 	util/reloc.c \
 	util/sys.c \
