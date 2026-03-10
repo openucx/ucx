@@ -31,8 +31,6 @@
 #include <rdma/rdma_netlink.h>
 #endif
 
-#define UCT_IB_DEVICE_LOOPBACK_NDEV_INDEX_INVALID 0
-
 
 /* This table is according to "Encoding for RNR NAK Timer Field"
  * in IBTA specification */
@@ -1594,22 +1592,6 @@ uct_ib_device_get_roce_ndev_name(uct_ib_device_t *dev, uint8_t port_num,
     return UCS_OK;
 }
 
-ucs_status_t uct_ib_iface_get_loopback_ndev_index(unsigned *ndev_index_p)
-{
-    static unsigned loopback_ndev_index = UCT_IB_DEVICE_LOOPBACK_NDEV_INDEX_INVALID;
-    ucs_status_t status;
-
-    if (loopback_ndev_index == UCT_IB_DEVICE_LOOPBACK_NDEV_INDEX_INVALID) {
-        status = ucs_ifname_to_index("lo", &loopback_ndev_index);
-        if (status != UCS_OK) {
-            return status;
-        }
-    }
-
-    *ndev_index_p = loopback_ndev_index;
-    return UCS_OK;
-}
-
 ucs_status_t
 uct_ib_device_get_roce_ndev_index(uct_ib_device_t *dev, uint8_t port_num,
                                   uint8_t gid_index, unsigned *ndev_index_p)
@@ -1640,7 +1622,7 @@ uct_ib_device_get_roce_ndev_index(uct_ib_device_t *dev, uint8_t port_num,
             goto out_unlock;
         }
 
-        status = ucs_ifname_to_index(ndev_name, &ndev_index);
+        status = ucs_ifname_to_ndev_index(ndev_name, &ndev_index);
         if (status != UCS_OK) {
             goto out_unlock;
         }

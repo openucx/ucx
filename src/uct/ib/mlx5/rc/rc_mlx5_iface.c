@@ -667,9 +667,7 @@ uct_rc_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
     /* Check hardware tag matching compatibility */
     if ((iface_addr != NULL) &&
         ((remote_type = *(uint8_t*)iface_addr) != my_type)) {
-        uct_iface_fill_info_str_buf(params,
-                                    "incompatible hardware tag matching. "
-                                    "%s (local) vs %s (remote)",
+        uct_iface_fill_info_str_buf(params, "local %s remote %s",
                                     uct_rc_mlx5_iface_tm_type_str(my_type),
                                     uct_rc_mlx5_iface_tm_type_str(remote_type));
         return 0;
