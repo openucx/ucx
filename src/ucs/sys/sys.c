@@ -1439,9 +1439,10 @@ void ucs_sys_cpuset_copy(ucs_cpu_set_t *dst, const ucs_sys_cpuset_t *src)
     }
 }
 
-ucs_sys_ns_t ucs_sys_get_default_ns(ucs_sys_namespace_type_t ns)
+ucs_sys_ns_t ucs_sys_get_default_ns(ucs_sys_namespace_type_t name)
 {
-    return (ns < UCS_SYS_NS_TYPE_LAST) ? ucs_sys_namespace_info[ns].dflt : 0;
+    return (name < UCS_SYS_NS_TYPE_LAST) ? ucs_sys_namespace_info[name].dflt :
+                                           0;
 }
 
 ucs_sys_ns_t ucs_sys_get_ns(ucs_sys_namespace_type_t ns)
