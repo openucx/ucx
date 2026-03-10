@@ -16,6 +16,7 @@
 #include <ucs/sys/string.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/sock.h>
+#include <ucs/type/init_once.h>
 #include <string.h>
 #include <ctype.h>
 #include <regex.h>
@@ -262,23 +263,13 @@ char *ucs_string_buffer_extract_mem(ucs_string_buffer_t *strb)
     return c_str;
 }
 
-char *ucs_string_buffer_next_token(ucs_string_buffer_t *strb, char *token,
-                                   const char *delimiters)
+char *ucs_string_buffer_next_token(ucs_string_buffer_t *strb,
+                                   const char *delimiters, const char **saveptr,
+                                   size_t *len_p)
 {
-    char *next_token;
+    const char *str = (strb != NULL) ? ucs_string_buffer_cstr(strb) : NULL;
 
-    /* The token must be either NULL or inside the string buffer array */
-    ucs_assert((token == NULL) || ((token >= ucs_array_begin(strb)) &&
-                                   (token < ucs_array_end(strb))));
-
-    next_token = (token == NULL) ? ucs_array_begin(strb) :
-                                   (token + strlen(token) + 1);
-    if (next_token >= ucs_array_end(strb)) {
-        /* No more tokens */
-        return NULL;
-    }
-
-    return strsep(&next_token, delimiters);
+    return (char*)ucs_string_next_token(str, delimiters, saveptr, len_p);
 }
 
 void ucs_string_buffer_appendc(ucs_string_buffer_t *strb, int c, size_t count)
@@ -324,8 +315,7 @@ void ucs_string_buffer_translate(ucs_string_buffer_t *strb,
     ucs_array_set_length(strb, dst_ptr - ucs_array_begin(strb));
 }
 
-static UCS_F_MAYBE_UNUSED int
-ucs_string_buffer_is_valid_delimiter(char delim)
+static UCS_F_MAYBE_UNUSED int ucs_string_buffer_is_valid_delimiter(char delim)
 {
     return !isdigit(delim) && (delim != '-') && (delim != '[') &&
            (delim != ']') && (delim != '\0');
@@ -336,10 +326,11 @@ ucs_status_t ucs_string_buffer_expand_range(ucs_string_buffer_t *strb,
                                             char delim, size_t max_elements,
                                             size_t *count_p)
 {
+    static ucs_init_once_t regex_init = UCS_INIT_ONCE_INITIALIZER;
+    static regex_t range_regex;
     ucs_status_t status = UCS_OK;
     size_t count        = 0;
     size_t first, last, j, prefix_len, suffix_len;
-    regex_t regex;
     regmatch_t pmatch[5];
     const char *suffix;
     int ret;
@@ -351,29 +342,29 @@ ucs_status_t ucs_string_buffer_expand_range(ucs_string_buffer_t *strb,
         goto out;
     }
 
-    ret = regcomp(&regex,
-                  "^([^][]*)" /* prefix */
-                  "\\[([0-9]+)-([0-9]+)\\]" /* range */
-                  "([^][]*)$" /* suffix */,
-                  REG_EXTENDED);
-    ucs_assertv(ret == 0, "failed to compile range regex: %d", ret);
+    UCS_INIT_ONCE(&regex_init) {
+        ret = regcomp(&range_regex,
+                      "^([^][]*)" /* prefix */
+                      "\\[([0-9]+)-([0-9]+)\\]" /* range */
+                      "([^][]*)$" /* suffix */,
+                      REG_EXTENDED);
+        ucs_assertv(ret == 0, "failed to compile range regex: %d", ret);
+    }
 
 #ifdef REG_STARTEND
     pmatch[0].rm_so = 0;
     pmatch[0].rm_eo = (regoff_t)token_len;
 
-    ret = regexec(&regex, token, 5, pmatch, REG_STARTEND);
+    ret = regexec(&range_regex, token, 5, pmatch, REG_STARTEND);
 #else
     {
         char token_buf[token_len + 1];
         memcpy(token_buf, token, token_len);
         token_buf[token_len] = '\0';
 
-        ret = regexec(&regex, token_buf, 5, pmatch, 0);
+        ret = regexec(&range_regex, token_buf, 5, pmatch, 0);
     }
 #endif
-
-    regfree(&regex);
 
     if (ret != 0) {
         /* No match, append the token as-is */
@@ -386,7 +377,7 @@ ucs_status_t ucs_string_buffer_expand_range(ucs_string_buffer_t *strb,
     last  = strtoul(token + pmatch[3].rm_so, NULL, 10);
 
     if (first > last) {
-        ucs_error("invalid range pattern '%.*s': first > last (%zu >%zu)",
+        ucs_error("invalid range pattern '%.*s': first > last (%zu > %zu)",
                   (int)token_len, token, first, last);
         status = UCS_ERR_INVALID_PARAM;
         goto out;
@@ -419,8 +410,9 @@ ucs_status_t ucs_string_buffer_expand_ranges(ucs_string_buffer_t *strb,
                                              size_t max_elements,
                                              size_t *count_p)
 {
-    ucs_status_t status = UCS_OK;
-    size_t count_total  = 0;
+    const char delim_str[] = {delim, '\0'};
+    ucs_status_t status    = UCS_OK;
+    size_t count_total     = 0;
     size_t count_inner, token_len;
     const char *token, *saveptr;
 
@@ -431,7 +423,7 @@ ucs_status_t ucs_string_buffer_expand_ranges(ucs_string_buffer_t *strb,
         goto out;
     }
 
-    ucs_string_for_each_token(input, delim, saveptr, token, token_len)
+    ucs_string_for_each_token(input, delim_str, saveptr, token, token_len)
     {
         if (count_total > 0) {
             ucs_string_buffer_appendc(strb, delim, 1);

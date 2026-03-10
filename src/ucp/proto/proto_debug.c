@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022, NVIDIA CORPORATION & AFFILIATES. ALL RIGHTS RESERVED.
+ * Copyright (C) 2022-2026, NVIDIA CORPORATION & AFFILIATES. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -1104,12 +1104,15 @@ void ucp_proto_select_elem_trace(ucp_worker_h worker,
     ucp_worker_cfg_index_t ep_cfg_index    = proto_config->ep_cfg_index;
     ucp_worker_cfg_index_t rkey_cfg_index  = proto_config->rkey_cfg_index;
     ucs_string_buffer_t strb               = UCS_STRING_BUFFER_INITIALIZER;
+    const char *saveptr;
+    size_t line_len;
     char *line;
 
     /* Print human-readable protocol selection table to the log */
     ucp_proto_select_elem_info(worker, ep_cfg_index, rkey_cfg_index,
                                select_param, select_elem, 0, show_used, &strb);
-    ucs_string_buffer_for_each_token(line, &strb, "\n") {
+    ucs_string_buffer_for_each_token(&strb, "\n", saveptr, line, line_len) {
+        line[line_len] = '\0';
         ucs_log_print_compact(line);
     }
 

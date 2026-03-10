@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2017. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -421,15 +421,15 @@ ucs_status_t ucs_string_alloc_path_buffer_and_get_dirname(char **buffer_p,
  * NULL to continue tokenizing the same string. @a saveptr tracks position
  * between calls (like strtok_r). Returns NULL when no more tokens remain.
  *
- * @param [in]     str      Input string on the first call, NULL on subsequent
- *                          calls.
- * @param [in]     delim    Delimiter character.
- * @param [in,out] saveptr  Opaque position tracker (set by the function).
- * @param [out]    len_p    Set to the length of the returned token.
+ * @param [in]     str         Input string on the first call, NULL on
+ *                             subsequent calls.
+ * @param [in]     delimiters  Set of delimiter characters.
+ * @param [in,out] saveptr     Opaque position tracker (set by the function).
+ * @param [out]    len_p       Set to the length of the returned token.
  *
  * @return Pointer to the current token, or NULL when exhausted.
  */
-const char *ucs_string_next_token(const char *str, char delim,
+const char *ucs_string_next_token(const char *str, const char *delimiters,
                                   const char **saveptr, size_t *len_p);
 
 /**
@@ -437,17 +437,18 @@ const char *ucs_string_next_token(const char *str, char delim,
  * Each iteration sets @a _tok to the token start and @a _tok_len to its length.
  * The token is NOT null-terminated.
  *
- * @param _input    Input string to tokenize (must not be NULL).
- * @param _delim    Single delimiter character.
- * @param _saveptr  Variable of type 'const char *', used internally.
- * @param _tok      Variable of type 'const char *', set to the current token.
- * @param _tok_len  Variable of type 'size_t', set to the current token length.
+ * @param _input      Input string to tokenize (must not be NULL).
+ * @param _delimiters Set of delimiter characters (const char *).
+ * @param _saveptr    Variable of type 'const char *', used internally.
+ * @param _tok        Variable of type 'const char *', set to the current token.
+ * @param _tok_len    Variable of type 'size_t', set to the current token length.
  */
-#define ucs_string_for_each_token(_input, _delim, _saveptr, _tok, _tok_len) \
-    for ((_tok) = ucs_string_next_token((_input), (_delim), &(_saveptr), \
+#define ucs_string_for_each_token(_input, _delimiters, _saveptr, _tok, \
+                                  _tok_len) \
+    for ((_tok) = ucs_string_next_token((_input), (_delimiters), &(_saveptr), \
                                         &(_tok_len)); \
          (_tok) != NULL; \
-         (_tok) = ucs_string_next_token(NULL, (_delim), &(_saveptr), \
+         (_tok) = ucs_string_next_token(NULL, (_delimiters), &(_saveptr), \
                                         &(_tok_len)))
 
 

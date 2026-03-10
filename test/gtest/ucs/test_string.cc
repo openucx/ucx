@@ -228,86 +228,77 @@ UCS_TEST_F(test_string, to_memunits) {
 }
 
 UCS_TEST_F(test_string, next_token) {
-    auto check = [](const char *input, char delim,
-                     const std::vector<std::string> &expected) {
+    auto check = [](const char *input, const std::string &delimiters,
+                    const std::vector<std::string> &expected) {
         const std::string orig(input);
-        std::vector<char> buf(input, input + orig.size() + 1);
-        const char *saveptr;
-        size_t len;
 
-        for (size_t i = 0; i < expected.size(); ++i) {
-            const char *tok = ucs_string_next_token(
-                    (i == 0) ? buf.data() : NULL, delim, &saveptr, &len);
-            ASSERT_NE(nullptr, tok) << "input: \"" << input
-                                    << "\" token index: " << i;
-            EXPECT_EQ(expected[i], std::string(tok, len));
+        /* Verify ucs_string_next_token() */
+        {
+            std::vector<char> buf(input, input + orig.size() + 1);
+            const char *saveptr;
+            size_t len;
+
+            for (size_t i = 0; i < expected.size(); ++i) {
+                const char *tok = ucs_string_next_token((i == 0) ? buf.data() :
+                                                                   NULL,
+                                                        delimiters.c_str(),
+                                                        &saveptr, &len);
+                ASSERT_NE(nullptr, tok)
+                        << "input: \"" << input << "\" token index: " << i;
+                EXPECT_EQ(expected[i], std::string(tok, len));
+            }
+
+            const char *tok = ucs_string_next_token(NULL, delimiters.c_str(),
+                                                    &saveptr, &len);
+            EXPECT_EQ(nullptr, tok);
+            EXPECT_EQ(orig, std::string(buf.data()));
         }
 
-        const char *tok = ucs_string_next_token(NULL, delim, &saveptr, &len);
-        EXPECT_EQ(nullptr, tok);
-        EXPECT_EQ(orig, std::string(buf.data()));
+        /* Verify ucs_string_for_each_token() */
+        {
+            std::vector<char> buf(input, input + orig.size() + 1);
+            const char *saveptr;
+            const char *tok;
+            size_t tok_len;
+            std::vector<std::string> result;
+
+            ucs_string_for_each_token(buf.data(), delimiters.c_str(), saveptr,
+                                      tok, tok_len)
+            {
+                result.push_back(std::string(tok, tok_len));
+            }
+
+            EXPECT_EQ(expected, result);
+            EXPECT_EQ(orig, std::string(buf.data()));
+        }
     };
 
     for (char delim : {',', ':', ';', '|', '&', '+', '-', ' ', '\n'}) {
         std::string d(1, delim);
 
         /* multiple tokens */
-        check(("foo" + d + "bar" + d + "baz").c_str(), delim, {"foo", "bar", "baz"});
+        check(("foo" + d + "bar" + d + "baz").c_str(), d,
+              {"foo", "bar", "baz"});
         /* single token, no delimiter */
-        check("single", delim, {"single"});
+        check("single", d, {"single"});
         /* empty string */
-        check("", delim, {""});
+        check("", d, {""});
         /* single delimiter */
-        check(d.c_str(), delim, {"", ""});
+        check(d.c_str(), d, {"", ""});
         /* consecutive delimiters */
-        check((d + d).c_str(), delim, {"", "", ""});
+        check((d + d).c_str(), d, {"", "", ""});
         /* trailing delimiter */
-        check(("foo" + d).c_str(), delim, {"foo", ""});
+        check(("foo" + d).c_str(), d, {"foo", ""});
         /* leading delimiter */
-        check((d + "foo").c_str(), delim, {"", "foo"});
+        check((d + "foo").c_str(), d, {"", "foo"});
         /* delimiters surrounding a token */
-        check((d + "a" + d).c_str(), delim, {"", "a", ""});
+        check((d + "a" + d).c_str(), d, {"", "a", ""});
     }
-}
 
-UCS_TEST_F(test_string, for_each_token) {
-    auto check = [](const char *input, char delim,
-                     const std::vector<std::string> &expected) {
-        const std::string orig(input);
-        std::vector<char> buf(input, input + orig.size() + 1);
-        const char *saveptr;
-        const char *tok;
-        size_t tok_len;
-        std::vector<std::string> result;
-
-        ucs_string_for_each_token(buf.data(), delim, saveptr, tok, tok_len) {
-            result.push_back(std::string(tok, tok_len));
-        }
-
-        EXPECT_EQ(expected, result);
-        EXPECT_EQ(orig, std::string(buf.data()));
-    };
-
-    for (char delim : {',', ':', ';', '|', '&', '+', '-', ' ', '\n'}) {
-        std::string d(1, delim);
-
-        /* multiple tokens */
-        check(("one" + d + "two" + d + "three").c_str(), delim, {"one", "two", "three"});
-        /* single token, no delimiter */
-        check("only", delim, {"only"});
-        /* empty string */
-        check("", delim, {""});
-        /* single delimiter */
-        check(d.c_str(), delim, {"", ""});
-        /* consecutive delimiters */
-        check((d + d).c_str(), delim, {"", "", ""});
-        /* trailing delimiter */
-        check(("one" + d).c_str(), delim, {"one", ""});
-        /* leading delimiter */
-        check((d + "one").c_str(), delim, {"", "one"});
-        /* delimiters surrounding a token */
-        check((d + "a" + d).c_str(), delim, {"", "a", ""});
-    }
+    /* multiple delimiters */
+    const char *delimiters = "&|+";
+    check("nova&noob|crocubot+ants&&rails", delimiters,
+          {"nova", "noob", "crocubot", "ants", "", "rails"});
 }
 
 class test_string_buffer : public ucs::test {
@@ -491,8 +482,11 @@ UCS_TEST_F(test_string_buffer, tokenize) {
     ucs_string_buffer_appendf(&strb, "nova&noob|crocubot+ants&&rails");
 
     std::vector<std::string> names;
+    const char *saveptr;
+    size_t name_len;
     char *name;
-    ucs_string_buffer_for_each_token(name, &strb, "&|+") {
+    ucs_string_buffer_for_each_token(&strb, "&|+", saveptr, name, name_len) {
+        name[name_len] = '\0';
         names.push_back(name);
     }
 
@@ -561,9 +555,10 @@ UCS_TEST_F(test_string_buffer, ucs_string_buffer_translate) {
 UCS_TEST_F(test_string_buffer, expand_range_prefix_suffix) {
     ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
 
-    ASSERT_EQ(UCS_OK, ucs_string_buffer_expand_range(&strb, "prefix[0-2]suffix",
-                                                     strlen("prefix[0-2]suffix"),
-                                                     ',', SIZE_MAX, NULL));
+    ASSERT_EQ(UCS_OK,
+              ucs_string_buffer_expand_range(&strb, "prefix[0-2]suffix",
+                                             strlen("prefix[0-2]suffix"), ',',
+                                             SIZE_MAX, NULL));
     EXPECT_EQ(std::string("prefix0suffix,prefix1suffix,prefix2suffix"),
               ucs_string_buffer_cstr(&strb));
 
@@ -574,8 +569,8 @@ UCS_TEST_F(test_string_buffer, expand_range_prefix) {
     ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
 
     ASSERT_EQ(UCS_OK, ucs_string_buffer_expand_range(&strb, "prefix[0-2]",
-                                                     strlen("prefix[0-2]"),
-                                                     ',', SIZE_MAX, NULL));
+                                                     strlen("prefix[0-2]"), ',',
+                                                     SIZE_MAX, NULL));
     EXPECT_EQ(std::string("prefix0,prefix1,prefix2"),
               ucs_string_buffer_cstr(&strb));
 
@@ -586,8 +581,8 @@ UCS_TEST_F(test_string_buffer, expand_range_suffix) {
     ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
 
     ASSERT_EQ(UCS_OK, ucs_string_buffer_expand_range(&strb, "[3-5]suffix",
-                                                     strlen("[3-5]suffix"),
-                                                     ',', SIZE_MAX, NULL));
+                                                     strlen("[3-5]suffix"), ',',
+                                                     SIZE_MAX, NULL));
     EXPECT_EQ(std::string("3suffix,4suffix,5suffix"),
               ucs_string_buffer_cstr(&strb));
 
@@ -597,9 +592,9 @@ UCS_TEST_F(test_string_buffer, expand_range_suffix) {
 UCS_TEST_F(test_string_buffer, expand_range_no_prefix_suffix) {
     ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
 
-    ASSERT_EQ(UCS_OK, ucs_string_buffer_expand_range(&strb, "[0-2]",
-                                                     strlen("[0-2]"),
-                                                     ',', SIZE_MAX, NULL));
+    ASSERT_EQ(UCS_OK,
+              ucs_string_buffer_expand_range(&strb, "[0-2]", strlen("[0-2]"),
+                                             ',', SIZE_MAX, NULL));
     EXPECT_EQ(std::string("0,1,2"), ucs_string_buffer_cstr(&strb));
 
     ucs_string_buffer_cleanup(&strb);
@@ -609,8 +604,8 @@ UCS_TEST_F(test_string_buffer, expand_range_no_bracket) {
     ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
 
     ASSERT_EQ(UCS_OK, ucs_string_buffer_expand_range(&strb, "no_bracket",
-                                                     strlen("no_bracket"),
-                                                     ',', SIZE_MAX, NULL));
+                                                     strlen("no_bracket"), ',',
+                                                     SIZE_MAX, NULL));
     EXPECT_EQ(std::string("no_bracket"), ucs_string_buffer_cstr(&strb));
 
     ucs_string_buffer_cleanup(&strb);
@@ -620,8 +615,8 @@ UCS_TEST_F(test_string_buffer, expand_range_single) {
     ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
 
     ASSERT_EQ(UCS_OK, ucs_string_buffer_expand_range(&strb, "dev[99-99]",
-                                                     strlen("dev[99-99]"),
-                                                     ',', SIZE_MAX, NULL));
+                                                     strlen("dev[99-99]"), ',',
+                                                     SIZE_MAX, NULL));
     EXPECT_EQ(std::string("dev99"), ucs_string_buffer_cstr(&strb));
 
     ucs_string_buffer_cleanup(&strb);
@@ -631,8 +626,8 @@ UCS_TEST_F(test_string_buffer, expand_range_multi_digit) {
     ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
 
     ASSERT_EQ(UCS_OK, ucs_string_buffer_expand_range(&strb, "dev[98-101]",
-                                                     strlen("dev[98-101]"),
-                                                     ',', SIZE_MAX, NULL));
+                                                     strlen("dev[98-101]"), ',',
+                                                     SIZE_MAX, NULL));
     EXPECT_EQ(std::string("dev98,dev99,dev100,dev101"),
               ucs_string_buffer_cstr(&strb));
 
@@ -640,25 +635,24 @@ UCS_TEST_F(test_string_buffer, expand_range_multi_digit) {
 }
 
 UCS_TEST_F(test_string_buffer, expand_range_malformed) {
-    const std::string malformed[] = {
-            "no_bracket", "prefix2-]",  "prefix]abc", "hello]]",
-            "]]-",        "]--",        "a[-1-2]b",   "a[-2-]b",
-            "a[2-3-]b",   "a[4]b",      "a[[]b",      "a[[2-4]b",
-            "a[2-]b",     "a[2-3-4]b",  "a[b-c]d",    "a[0-A]b",
-            "a[-]b",      "[]",         "[-1-2-]",    "[--]",
-            "[1-2][3-4]", "[4-8][",     "[5-6]]",     "][4-5]",
-            "[[0-4]]",    "a[0-4]b[6-8]c"};
+    const std::string malformed[] = {"no_bracket", "prefix2-]",    "prefix]abc",
+                                     "hello]]",    "]]-",          "]--",
+                                     "a[-1-2]b",   "a[-2-]b",      "a[2-3-]b",
+                                     "a[4]b",      "a[[]b",        "a[[2-4]b",
+                                     "a[2-]b",     "a[2-3-4]b",    "a[b-c]d",
+                                     "a[0-A]b",    "a[-]b",        "[]",
+                                     "[-1-2-]",    "[--]",         "[1-2][3-4]",
+                                     "[4-8][",     "[5-6]]",       "][4-5]",
+                                     "[[0-4]]",    "a[0-4]b[6-8]c"};
 
     for (const std::string &token : malformed) {
         ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
 
-        ASSERT_EQ(UCS_OK,
-                  ucs_string_buffer_expand_range(&strb, token.c_str(),
-                                                 token.size(), ',',
-                                                 SIZE_MAX, NULL))
+        ASSERT_EQ(UCS_OK, ucs_string_buffer_expand_range(&strb, token.c_str(),
+                                                         token.size(), ',',
+                                                         SIZE_MAX, NULL))
                 << "token: " << token;
-        EXPECT_EQ(token, ucs_string_buffer_cstr(&strb))
-                << "token: " << token;
+        EXPECT_EQ(token, ucs_string_buffer_cstr(&strb)) << "token: " << token;
 
         ucs_string_buffer_cleanup(&strb);
     }
@@ -668,9 +662,8 @@ UCS_TEST_F(test_string_buffer, expand_range_empty) {
     ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
     size_t count;
 
-    ASSERT_EQ(UCS_OK,
-              ucs_string_buffer_expand_range(&strb, "", 0, ',', SIZE_MAX,
-                                              &count));
+    ASSERT_EQ(UCS_OK, ucs_string_buffer_expand_range(&strb, "", 0, ',',
+                                                     SIZE_MAX, &count));
     EXPECT_EQ(std::string(""), ucs_string_buffer_cstr(&strb));
     EXPECT_EQ(1ul, count);
 
@@ -701,8 +694,8 @@ UCS_TEST_F(test_string_buffer, expand_range_append) {
 
     ucs_string_buffer_appendf(&strb, "previous_data,");
     ASSERT_EQ(UCS_OK, ucs_string_buffer_expand_range(&strb, "data[0-1]",
-                                                     strlen("data[0-1]"),
-                                                     ',', SIZE_MAX, NULL));
+                                                     strlen("data[0-1]"), ',',
+                                                     SIZE_MAX, NULL));
     EXPECT_EQ(std::string("previous_data,data0,data1"),
               ucs_string_buffer_cstr(&strb));
 
@@ -713,10 +706,9 @@ UCS_TEST_F(test_string_buffer, expand_range_max_elements) {
     ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
     size_t count;
 
-    ASSERT_EQ(UCS_OK,
-              ucs_string_buffer_expand_range(&strb, "dev[0-9]",
-                                              strlen("dev[0-9]"), ',', 3,
-                                              &count));
+    ASSERT_EQ(UCS_OK, ucs_string_buffer_expand_range(&strb, "dev[0-9]",
+                                                     strlen("dev[0-9]"), ',', 3,
+                                                     &count));
     EXPECT_EQ(std::string("dev0,dev1,dev2"), ucs_string_buffer_cstr(&strb));
     EXPECT_EQ(3ul, count);
 
@@ -727,10 +719,9 @@ UCS_TEST_F(test_string_buffer, expand_range_max_elements_one) {
     ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
     size_t count;
 
-    ASSERT_EQ(UCS_OK,
-              ucs_string_buffer_expand_range(&strb, "dev[0-9]",
-                                              strlen("dev[0-9]"), ',', 1,
-                                              &count));
+    ASSERT_EQ(UCS_OK, ucs_string_buffer_expand_range(&strb, "dev[0-9]",
+                                                     strlen("dev[0-9]"), ',', 1,
+                                                     &count));
     EXPECT_EQ(std::string("dev0"), ucs_string_buffer_cstr(&strb));
     EXPECT_EQ(1ul, count);
 
@@ -741,10 +732,9 @@ UCS_TEST_F(test_string_buffer, expand_range_max_elements_zero) {
     ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
     size_t count;
 
-    ASSERT_EQ(UCS_OK,
-              ucs_string_buffer_expand_range(&strb, "dev[0-9]",
-                                              strlen("dev[0-9]"), ',', 0,
-                                              &count));
+    ASSERT_EQ(UCS_OK, ucs_string_buffer_expand_range(&strb, "dev[0-9]",
+                                                     strlen("dev[0-9]"), ',', 0,
+                                                     &count));
     EXPECT_EQ(std::string(""), ucs_string_buffer_cstr(&strb));
     EXPECT_EQ(0ul, count);
 
@@ -755,10 +745,9 @@ UCS_TEST_F(test_string_buffer, expand_range_max_elements_exceeds_range) {
     ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
     size_t count;
 
-    ASSERT_EQ(UCS_OK,
-              ucs_string_buffer_expand_range(&strb, "dev[0-2]",
-                                              strlen("dev[0-2]"), ',', 100,
-                                              &count));
+    ASSERT_EQ(UCS_OK, ucs_string_buffer_expand_range(&strb, "dev[0-2]",
+                                                     strlen("dev[0-2]"), ',',
+                                                     100, &count));
     EXPECT_EQ(std::string("dev0,dev1,dev2"), ucs_string_buffer_cstr(&strb));
     EXPECT_EQ(3ul, count);
 
@@ -770,8 +759,8 @@ UCS_TEST_F(test_string_buffer, expand_range_leading_zeros) {
     size_t count;
 
     ASSERT_EQ(UCS_OK, ucs_string_buffer_expand_range(&strb, "dev[01-03]",
-                                                     strlen("dev[01-03]"),
-                                                     ',', SIZE_MAX, &count));
+                                                     strlen("dev[01-03]"), ',',
+                                                     SIZE_MAX, &count));
 
     /* Leading zeros are not preserved in the output */
     EXPECT_EQ(std::string("dev1,dev2,dev3"), ucs_string_buffer_cstr(&strb));
@@ -787,9 +776,9 @@ UCS_TEST_F(test_string_buffer, expand_range_long_prefix_suffix) {
     const std::string token = long_prefix + "[0-2]" + long_suffix;
     size_t count;
 
-    ASSERT_EQ(UCS_OK, ucs_string_buffer_expand_range(&strb, token.c_str(),
-                                                     token.size(), ',',
-                                                     SIZE_MAX, &count));
+    ASSERT_EQ(UCS_OK,
+              ucs_string_buffer_expand_range(&strb, token.c_str(), token.size(),
+                                             ',', SIZE_MAX, &count));
     const std::string expected = long_prefix + "0" + long_suffix + "," +
                                  long_prefix + "1" + long_suffix + "," +
                                  long_prefix + "2" + long_suffix;
@@ -865,9 +854,8 @@ UCS_TEST_F(test_string_buffer, expand_ranges_empty_tokens) {
 UCS_TEST_F(test_string_buffer, expand_ranges_no_ranges) {
     ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
 
-    ASSERT_EQ(UCS_OK,
-              ucs_string_buffer_expand_ranges(&strb, "eth0,lo,ib0", ',', SIZE_MAX,
-                                              NULL));
+    ASSERT_EQ(UCS_OK, ucs_string_buffer_expand_ranges(&strb, "eth0,lo,ib0", ',',
+                                                      SIZE_MAX, NULL));
     EXPECT_EQ(std::string("eth0,lo,ib0"), ucs_string_buffer_cstr(&strb));
 
     ucs_string_buffer_cleanup(&strb);
@@ -876,9 +864,8 @@ UCS_TEST_F(test_string_buffer, expand_ranges_no_ranges) {
 UCS_TEST_F(test_string_buffer, expand_ranges_single_token) {
     ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
 
-    ASSERT_EQ(UCS_OK,
-              ucs_string_buffer_expand_ranges(&strb, "dev[0-3]", ',', SIZE_MAX,
-                                              NULL));
+    ASSERT_EQ(UCS_OK, ucs_string_buffer_expand_ranges(&strb, "dev[0-3]", ',',
+                                                      SIZE_MAX, NULL));
     EXPECT_EQ(std::string("dev0,dev1,dev2,dev3"),
               ucs_string_buffer_cstr(&strb));
 
@@ -902,9 +889,8 @@ UCS_TEST_F(test_string_buffer, expand_ranges_max_elements_zero) {
     ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
     size_t count;
 
-    ASSERT_EQ(UCS_OK,
-              ucs_string_buffer_expand_ranges(&strb, "dev[0-4],eth0", ',', 0,
-                                              &count));
+    ASSERT_EQ(UCS_OK, ucs_string_buffer_expand_ranges(&strb, "dev[0-4],eth0",
+                                                      ',', 0, &count));
     EXPECT_EQ(std::string(""), ucs_string_buffer_cstr(&strb));
     EXPECT_EQ(0ul, count);
 
@@ -930,7 +916,8 @@ UCS_TEST_F(test_string_buffer, expand_ranges_max_elements_across_tokens) {
     ASSERT_EQ(UCS_OK,
               ucs_string_buffer_expand_ranges(&strb, "dev[0-2],eth[0-2]", ',',
                                               4, &count));
-    EXPECT_EQ(std::string("dev0,dev1,dev2,eth0"), ucs_string_buffer_cstr(&strb));
+    EXPECT_EQ(std::string("dev0,dev1,dev2,eth0"),
+              ucs_string_buffer_cstr(&strb));
     EXPECT_EQ(4ul, count);
 
     ucs_string_buffer_cleanup(&strb);
@@ -940,9 +927,8 @@ UCS_TEST_F(test_string_buffer, expand_ranges_max_elements_exact) {
     ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
     size_t count;
 
-    ASSERT_EQ(UCS_OK,
-              ucs_string_buffer_expand_ranges(&strb, "a[0-1],b[0-1]", ',', 4,
-                                              &count));
+    ASSERT_EQ(UCS_OK, ucs_string_buffer_expand_ranges(&strb, "a[0-1],b[0-1]",
+                                                      ',', 4, &count));
     EXPECT_EQ(std::string("a0,a1,b0,b1"), ucs_string_buffer_cstr(&strb));
     EXPECT_EQ(4ul, count);
 

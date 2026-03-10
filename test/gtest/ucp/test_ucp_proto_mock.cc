@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2024. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2024-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -348,8 +348,11 @@ protected:
                                    rkey_cfg_index, &select_param,
                                    &select_elem, 1, 0, &strb);
 
+        const char *saveptr;
+        size_t line_len;
         char *line;
-        ucs_string_buffer_for_each_token(line, &strb, "\n") {
+        ucs_string_buffer_for_each_token(&strb, "\n", saveptr, line, line_len) {
+            line[line_len] = '\0';
             UCS_TEST_MESSAGE << line;
         }
         ucs_string_buffer_cleanup(&strb);
