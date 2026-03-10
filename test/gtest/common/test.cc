@@ -52,13 +52,13 @@ test_base::~test_base() {
 bool test_base::is_target_whitelisted(const std::string &target) const
 {
     /* fd targets for external libraries (rdma-core, CUDA driver, etc.) */
-    static const char *targets_whitelist[] = {
+    static const std::string targets_whitelist[] = {
         "/dev/infiniband/uverbs",
         "anon_inode:[infinibandevent]",
         "/dev/nvidia",
     };
 
-    for (const char *str : targets_whitelist) {
+    for (const auto &str : targets_whitelist) {
         if (target.find(str) != std::string::npos) {
             return true;
         }
