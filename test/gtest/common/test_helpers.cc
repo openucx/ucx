@@ -519,18 +519,23 @@ out_close:
     return result;
 }
 
-std::set<int> collect_open_fds()
+std::set<int> get_open_fds()
 {
     std::set<int> fds;
     DIR *dir = opendir("/proc/self/fd");
     if (dir == NULL) {
-        return fds;
+        UCS_TEST_ABORT("failed to open /proc/self/fd");
     }
 
     const int dir_fd = dirfd(dir);
+    if (dir_fd < 0) {
+        closedir(dir);
+        UCS_TEST_ABORT("dirfd() failed: " << strerror(errno));
+    }
+
     struct dirent *entry;
     while ((entry = readdir(dir)) != NULL) {
-        if (entry->d_name[0] != '.') {
+        if (entry->d_type == DT_LNK) {
             const int fd = atoi(entry->d_name);
             if (fd != dir_fd) {
                 fds.insert(fd);
@@ -541,16 +546,20 @@ std::set<int> collect_open_fds()
     return fds;
 }
 
-std::string fd_target(int fd)
+std::string readlink_proc_fd(int fd)
 {
-    char path[64], link[256];
+    char path[PATH_MAX], link[PATH_MAX];
+    const size_t max_len = sizeof(link) - 1;
+
     snprintf(path, sizeof(path), "/proc/self/fd/%d", fd);
-    const ssize_t len = readlink(path, link, sizeof(link) - 1);
+    const ssize_t len = readlink(path, link, max_len);
+
     if (len < 0) {
         return "<readlink failed>";
     }
+
     link[len] = '\0';
-    return std::string(link);
+    return std::string(link) + (len == max_len ? " (truncated)" : "");
 }
 
 static std::map<std::string, std::string> get_all_rdmacm_net_devices()

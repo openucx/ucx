@@ -23,6 +23,7 @@ std::vector<std::string> test_base::m_warnings;
 std::vector<std::string> test_base::m_first_warns_and_errors;
 std::set<int> test_base::m_prev_open_fds;
 int test_base::m_consecutive_fd_increases = 0;
+int test_base::m_total_fd_increases       = 0;
 
 test_base::test_base() :
                 m_state(NEW),
@@ -49,16 +50,16 @@ test_base::~test_base() {
                        "state=%d", m_state);
 }
 
-bool test_base::is_fd_whitelisted(const std::string &target) const
+bool test_base::is_target_whitelisted(const std::string &target) const
 {
     /* fd targets for external libraries (rdma-core, CUDA driver, etc.) */
-    static const char *fd_leak_whitelist[] = {
+    static const std::string targets_whitelist[] = {
         "/dev/infiniband/uverbs",
         "anon_inode:[infinibandevent]",
         "/dev/nvidia",
     };
 
-    for (const char *str : fd_leak_whitelist) {
+    for (const auto &str : targets_whitelist) {
         if (target.find(str) != std::string::npos) {
             return true;
         }
@@ -73,42 +74,43 @@ void test_base::check_fd_leaks()
      * (e.g. from external libraries) are logged but not counted as leaks.
      * Non-whitelisted new fds increment a consecutive-increase counter and
      * trigger a failure once CONSECUTIVE_FD_INCREASE_THRESHOLD is reached. */
-    std::set<int> open_fds = collect_open_fds();
+    std::set<int> open_fds = get_open_fds();
 
     if (!m_prev_open_fds.empty()) {
         std::stringstream ss;
-        int num_leaked      = 0;
+        int num_unexpected  = 0;
         int num_whitelisted = 0;
 
         for (const int fd : open_fds) {
             if (m_prev_open_fds.find(fd) == m_prev_open_fds.end()) {
-                std::string target = fd_target(fd);
+                const std::string target = readlink_proc_fd(fd);
                 ss << "\n  fd " << fd << " -> " << target;
-                if (is_fd_whitelisted(target)) {
+                if (is_target_whitelisted(target)) {
                     ss << " (whitelisted)";
                     ++num_whitelisted;
                 } else {
-                    ++num_leaked;
+                    ++num_unexpected;
                 }
             }
         }
 
-        if (num_leaked > 0 || num_whitelisted > 0) {
-            UCS_TEST_MESSAGE << "new fds detected (" << num_leaked
-                             << " non-whitelisted, " << num_whitelisted
-                             << " whitelisted):" << ss.str();
-            if (num_leaked > 0) {
+        if (num_unexpected > 0 || num_whitelisted > 0) {
+            if (num_unexpected > 0) {
                 ++m_consecutive_fd_increases;
-                ss << "\n  consecutive fd increases: "
-                   << m_consecutive_fd_increases;
+                ++m_total_fd_increases;
+                ss << "\n  total fd increases: " << m_total_fd_increases
+                   << " (consecutive: " << m_consecutive_fd_increases << ")";
             }
+            UCS_TEST_MESSAGE << "new leaked fds (" << num_unexpected
+                             << " unexpected, " << num_whitelisted
+                             << " whitelisted):" << ss.str();
         }
 
-        if (num_leaked == 0) {
+        if (num_unexpected == 0) {
             m_consecutive_fd_increases = 0;
         } else if (m_consecutive_fd_increases >=
                    CONSECUTIVE_FD_INCREASE_THRESHOLD) {
-            ADD_FAILURE() << "new fds detected for more than "
+            ADD_FAILURE() << "fd leaks detected for more than "
                           << CONSECUTIVE_FD_INCREASE_THRESHOLD
                           << " consecutive tests!";
         }

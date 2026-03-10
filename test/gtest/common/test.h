@@ -172,9 +172,10 @@ protected:
     unsigned                        m_num_errors_before;
     unsigned                        m_num_warnings_before;
     unsigned                        m_num_log_handlers_before;
-    static std::set<int> m_prev_open_fds;
-    static int m_consecutive_fd_increases;
 
+    static std::set<int>            m_prev_open_fds;
+    static int                      m_consecutive_fd_increases;
+    static int                      m_total_fd_increases;
     static pthread_mutex_t          m_logger_mutex;
     static unsigned                 m_total_errors;
     static unsigned                 m_total_warnings;
@@ -184,7 +185,7 @@ protected:
 
 private:
     void check_fd_leaks();
-    bool is_fd_whitelisted(const std::string &target) const;
+    bool is_target_whitelisted(const std::string &target) const;
     void skipped(const std::string &reason);
     void skipped(const test_skip_exception& e);
     void run();
