@@ -15,14 +15,22 @@
 #include <stddef.h>
 
 
+/** Red-Black tree node color */
+enum {
+    UCS_INTERVAL_NODE_BLACK = 0,
+    UCS_INTERVAL_NODE_RED   = 1
+};
+
 /**
- * Interval tree node structure
+ * Interval tree node structure (Red-Black tree)
  */
 typedef struct ucs_interval_node {
-    struct ucs_interval_node *left;  /**< Left child node */
-    struct ucs_interval_node *right; /**< Right child node */
+    struct ucs_interval_node *left;   /**< Left child node */
+    struct ucs_interval_node *right;  /**< Right child node */
+    struct ucs_interval_node *parent; /**< Parent node (NULL for root) */
     uint64_t                 start;  /**< Start of interval */
     uint64_t                 end;    /**< End of interval */
+    uint8_t                  color;  /**< UCS_INTERVAL_NODE_BLACK or UCS_INTERVAL_NODE_RED */
 } ucs_interval_node_t;
 
 
