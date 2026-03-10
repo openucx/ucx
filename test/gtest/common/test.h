@@ -78,7 +78,12 @@ protected:
         FINISHED
     } state_t;
 
-    typedef std::vector<ucs_global_opts_t> config_stack_t;
+    struct config_stack_entry_t {
+        std::string       owner;
+        ucs_global_opts_t opts;
+    };
+
+    typedef std::vector<config_stack_entry_t> config_stack_t;
 
     static constexpr double DEFAULT_TIMEOUT_SEC = 10.0;
 

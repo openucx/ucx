@@ -143,16 +143,26 @@ void test_base::push_config()
      * it is important to keep the first original global options at the first
      * vector element to release it at the end. Otherwise, memtrack will not work
      */
-    m_config_stack.push_back(ucs_global_opts);
+    m_config_stack.push_back({
+            .owner = typeid(*this).name(),
+            .opts = ucs_global_opts,
+    });
     ucs_global_opts_clone(&new_opts);
     ucs_global_opts = new_opts;
 }
 
 void test_base::pop_config()
 {
-    ucs_global_opts_release();
     ASSERT_FALSE(m_config_stack.empty());
-    ucs_global_opts = m_config_stack.back();
+
+    config_stack_entry_t &entry = m_config_stack.back();
+
+    ASSERT_EQ(typeid(*this).name(), entry.owner)
+            << "Config stack mismatch: top entry was pushed by " << entry.owner
+            << ", but pop was called by " << typeid(*this).name();
+
+    ucs_global_opts_release();
+    ucs_global_opts = entry.opts;
     m_config_stack.pop_back();
 }
 
