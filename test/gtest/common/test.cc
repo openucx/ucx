@@ -23,6 +23,7 @@ std::vector<std::string> test_base::m_warnings;
 std::vector<std::string> test_base::m_first_warns_and_errors;
 std::set<int> test_base::m_prev_open_fds;
 int test_base::m_consecutive_fd_increases = 0;
+int test_base::m_total_fd_increases       = 0;
 
 test_base::test_base() :
                 m_state(NEW),
@@ -96,8 +97,9 @@ void test_base::check_fd_leaks()
         if (num_unexpected > 0 || num_whitelisted > 0) {
             if (num_unexpected > 0) {
                 ++m_consecutive_fd_increases;
-                ss << "\n  consecutive fd increases: "
-                   << m_consecutive_fd_increases;
+                ++m_total_fd_increases;
+                ss << "\n  total fd increases: " << m_total_fd_increases
+                   << " (consecutive: " << m_consecutive_fd_increases << ")";
             }
             UCS_TEST_MESSAGE << "new leaked fds (" << num_unexpected
                              << " unexpected, " << num_whitelisted
