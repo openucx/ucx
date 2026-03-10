@@ -1439,6 +1439,11 @@ void ucs_sys_cpuset_copy(ucs_cpu_set_t *dst, const ucs_sys_cpuset_t *src)
     }
 }
 
+ucs_sys_ns_t ucs_sys_get_default_ns(ucs_sys_namespace_type_t ns)
+{
+    return (ns < UCS_SYS_NS_TYPE_LAST) ? ucs_sys_namespace_info[ns].dflt : 0;
+}
+
 ucs_sys_ns_t ucs_sys_get_ns(ucs_sys_namespace_type_t ns)
 {
     char filename[MAXPATHLEN];
@@ -1464,14 +1469,9 @@ ucs_sys_ns_t ucs_sys_get_ns(ucs_sys_namespace_type_t ns)
     return ucs_sys_namespace_info[ns].value;
 }
 
-ucs_sys_ns_t ucs_sys_ns_get_default(ucs_sys_namespace_type_t ns)
-{
-    return ucs_sys_namespace_info[ns].dflt;
-}
-
 int ucs_sys_ns_is_default(ucs_sys_namespace_type_t ns)
 {
-    return ucs_sys_get_ns(ns) == ucs_sys_ns_get_default(ns);
+    return ucs_sys_get_ns(ns) == ucs_sys_get_default_ns(ns);
 }
 
 ucs_status_t ucs_sys_get_boot_id(uint64_t *high, uint64_t *low)

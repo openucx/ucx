@@ -9,85 +9,11 @@
 
 #include "cuda_md.h"
 #include "cuda_iface.h"
+#include "cuda_util.h"
 
 #include <ucs/sys/module.h>
 #include <ucs/sys/string.h>
-#include <cuda.h>
 
-
-void uct_cuda_base_get_sys_dev(CUdevice cuda_device,
-                               ucs_sys_device_t *sys_dev_p)
-{
-    ucs_sys_bus_id_t bus_id;
-    CUresult cu_err;
-    int attrib;
-    ucs_status_t status;
-
-    /* PCI domain id */
-    cu_err = cuDeviceGetAttribute(&attrib, CU_DEVICE_ATTRIBUTE_PCI_DOMAIN_ID,
-                                  cuda_device);
-    if (cu_err != CUDA_SUCCESS) {
-        goto err;
-    }
-    bus_id.domain = (uint16_t)attrib;
-
-    /* PCI bus id */
-    cu_err = cuDeviceGetAttribute(&attrib, CU_DEVICE_ATTRIBUTE_PCI_BUS_ID,
-                                  cuda_device);
-    if (cu_err != CUDA_SUCCESS) {
-        goto err;
-    }
-    bus_id.bus = (uint8_t)attrib;
-
-    /* PCI slot id */
-    cu_err = cuDeviceGetAttribute(&attrib, CU_DEVICE_ATTRIBUTE_PCI_DEVICE_ID,
-                                  cuda_device);
-    if (cu_err != CUDA_SUCCESS) {
-        goto err;
-    }
-    bus_id.slot = (uint8_t)attrib;
-
-    /* Function - always 0 */
-    bus_id.function = 0;
-
-    status = ucs_topo_find_device_by_bus_id(&bus_id, sys_dev_p);
-    if (status != UCS_OK) {
-        goto err;
-    }
-
-    status = ucs_topo_sys_device_set_user_value(*sys_dev_p, cuda_device);
-    if (status != UCS_OK) {
-        goto err;
-    }
-
-    status = ucs_topo_sys_device_enable_aux_path(*sys_dev_p);
-    if (status != UCS_OK) {
-        goto err;
-    }
-
-    return;
-
-err:
-    *sys_dev_p = UCS_SYS_DEVICE_ID_UNKNOWN;
-}
-
-ucs_status_t
-uct_cuda_base_get_cuda_device(ucs_sys_device_t sys_dev, CUdevice *device)
-{
-    uintptr_t user_value;
-
-    user_value = ucs_topo_sys_device_get_user_value(sys_dev);
-    if (user_value == UINTPTR_MAX) {
-        return UCS_ERR_NO_DEVICE;
-    }
-
-    *device = user_value;
-    if (*device == CU_DEVICE_INVALID) {
-        return UCS_ERR_NO_DEVICE;
-    }
-
-    return UCS_OK;
-}
 
 ucs_status_t
 uct_cuda_base_query_md_resources(uct_component_t *component,
@@ -113,7 +39,7 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
             continue;
         }
 
-        uct_cuda_base_get_sys_dev(cuda_device, &sys_dev);
+        sys_dev = uct_cuda_get_sys_dev(cuda_device);
         if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
             continue;
         }
@@ -127,38 +53,6 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
 
     return uct_md_query_single_md_resource(component, resources_p,
                                            num_resources_p);
-}
-
-ucs_status_t uct_cuda_primary_ctx_retain(CUdevice cuda_device, int force,
-                                         CUcontext *cuda_ctx_p)
-{
-    unsigned int flags;
-    int active;
-    ucs_status_t status;
-    CUcontext cuda_ctx;
-
-    if (!force) {
-        status = UCT_CUDADRV_FUNC_LOG_ERR(
-                cuDevicePrimaryCtxGetState(cuda_device, &flags, &active));
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        if (!active) {
-            ucs_debug("cuda primary context is inactive on device %d",
-                      cuda_device);
-            return UCS_ERR_NO_DEVICE;
-        }
-    }
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuDevicePrimaryCtxRetain(&cuda_ctx, cuda_device));
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    *cuda_ctx_p = cuda_ctx;
-    return UCS_OK;
 }
 
 UCS_STATIC_INIT

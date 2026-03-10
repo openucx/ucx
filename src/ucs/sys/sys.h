@@ -606,13 +606,13 @@ ucs_sys_ns_t ucs_sys_get_ns(ucs_sys_namespace_type_t name);
 
 
 /**
- * Get default namespace id for a given namespace type.
+ * Get default namespace value for a given namespace type.
  *
- * @param [in]  name        Namespace to get default value
+ * @param [in]  type        Namespace type to get default value for
  *
- * @return default namespace value or 0 if namespaces are not supported
+ * @return default namespace value or 0 if type is not supported
  */
-ucs_sys_ns_t ucs_sys_ns_get_default(ucs_sys_namespace_type_t ns);
+ucs_sys_ns_t ucs_sys_get_default_ns(ucs_sys_namespace_type_t type);
 
 
 /**

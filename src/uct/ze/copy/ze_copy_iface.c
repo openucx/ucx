@@ -1,5 +1,5 @@
 /*
- * Copyright (C) Intel Corporation, 2023-2024. ALL RIGHTS RESERVED.
+ * Copyright (C) Intel Corporation, 2023-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -104,27 +104,59 @@ uct_ze_copy_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     return UCS_OK;
 }
 
+static ucs_status_t
+uct_ze_copy_query_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
+                          unsigned *num_tl_devices_p)
+{
+    ucs_status_t status;
+    unsigned full_count;
+
+    status = uct_ze_base_query_devices(md, tl_devices_p, &full_count);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    /* FIXME: UCX memtype EP asserts num_lanes == 1.
+     * Remove this cap when UCX supports multi-lane memtype endpoints
+     * or selects a single device deterministically.
+     */
+    if (full_count > 1) {
+        ucs_warn("ze_copy: %u devices found, limiting to 1 "
+                 "for memtype ep compatibility",
+                 full_count);
+        *num_tl_devices_p = 1;
+        return UCS_OK;
+    }
+
+    *num_tl_devices_p = full_count;
+    return UCS_OK;
+}
+
 static uct_iface_ops_t uct_ze_copy_iface_ops = {
     .ep_get_short             = uct_ze_copy_ep_get_short,
     .ep_put_short             = uct_ze_copy_ep_put_short,
     .ep_get_zcopy             = uct_ze_copy_ep_get_zcopy,
     .ep_put_zcopy             = uct_ze_copy_ep_put_zcopy,
-    .ep_pending_add           = (uct_ep_pending_add_func_t)ucs_empty_function_return_busy,
-    .ep_pending_purge         = (uct_ep_pending_purge_func_t)ucs_empty_function,
+    .ep_pending_add           = (uct_ep_pending_add_func_t)
+            ucs_empty_function_return_busy,
+    .ep_pending_purge         = (uct_ep_pending_purge_func_t)
+            ucs_empty_function,
     .ep_flush                 = uct_base_ep_flush,
     .ep_fence                 = uct_base_ep_fence,
-    .ep_create                = uct_ep_create,
-    .ep_destroy               = uct_ep_destroy,
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_ze_copy_ep_t),
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_ze_copy_ep_t),
     .iface_flush              = uct_base_iface_flush,
     .iface_fence              = uct_base_iface_fence,
-    .iface_progress_enable    = (uct_iface_progress_enable_func_t)ucs_empty_function,
-    .iface_progress_disable   = (uct_iface_progress_disable_func_t)ucs_empty_function,
-    .iface_progress           = (uct_iface_progress_func_t)ucs_empty_function_return_zero,
+    .iface_progress_enable    = (uct_iface_progress_enable_func_t)
+            ucs_empty_function,
+    .iface_progress_disable   = (uct_iface_progress_disable_func_t)
+            ucs_empty_function,
+    .iface_progress           = (uct_iface_progress_func_t)
+            ucs_empty_function_return_zero,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_ze_copy_iface_t),
     .iface_query              = uct_ze_copy_iface_query,
-    .iface_get_device_address = (uct_iface_get_device_address_func_t)ucs_empty_function_return_success,
+    .iface_get_device_address = (uct_iface_get_device_address_func_t)
+            ucs_empty_function_return_success,
     .iface_get_address        = uct_ze_copy_iface_get_address,
     .iface_is_reachable       = uct_base_iface_is_reachable,
 };
@@ -193,10 +225,8 @@ uct_ze_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
 
 
 static uct_iface_internal_ops_t uct_ze_copy_iface_internal_ops = {
-    .iface_query_v2         = uct_iface_base_query_v2,
     .iface_estimate_perf    = uct_ze_copy_estimate_perf,
     .iface_vfs_refresh      = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
-    .iface_mem_element_pack = (uct_iface_mem_element_pack_func_t)ucs_empty_function_return_unsupported,
     .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
     .ep_invalidate          = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
     .ep_connect_to_ep_v2    = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
@@ -224,8 +254,8 @@ static UCS_CLASS_INIT_FUNC(uct_ze_copy_iface_t, uct_md_h md,
                               tl_config UCS_STATS_ARG(params->stats_root)
                                       UCS_STATS_ARG(UCT_ZE_COPY_TL_NAME));
 
-    /* TODO: choose device based on params */
-    device = uct_ze_base_get_device(0);
+    /* Use the device configured in the MD */
+    device = ze_md->ze_device;
     if (device == NULL) {
         return UCS_ERR_NO_DEVICE;
     }
@@ -260,6 +290,6 @@ UCS_CLASS_DEFINE_NEW_FUNC(uct_ze_copy_iface_t, uct_iface_t, uct_md_h,
                           const uct_iface_config_t*);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_ze_copy_iface_t, uct_iface_t);
 
-UCT_TL_DEFINE(&uct_ze_copy_component, ze_copy, uct_ze_base_query_devices,
+UCT_TL_DEFINE(&uct_ze_copy_component, ze_copy, uct_ze_copy_query_devices,
               uct_ze_copy_iface_t, "ZE_COPY_", uct_iface_config_table,
               uct_iface_config_t);

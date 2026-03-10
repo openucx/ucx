@@ -1,5 +1,5 @@
 /*
- * Copyright (C) Advanced Micro Devices, Inc. 2019-2023. ALL RIGHTS RESERVED.
+ * Copyright (C) Advanced Micro Devices, Inc. 2019-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -251,7 +251,14 @@ hsa_status_t uct_rocm_base_get_ptr_info(void *ptr, size_t size, void **base_ptr,
         *base_size = info.sizeInBytes;
     }
     if (dev_type != NULL) {
-        if (info.type == HSA_EXT_POINTER_TYPE_UNKNOWN) {
+        /* HSA_EXT_POINTER_TYPE_RESERVED_ADDR check is required
+         * for rocm7+ for hip managed memory
+         */
+        if ((info.type == HSA_EXT_POINTER_TYPE_UNKNOWN)
+#ifdef HAVE_ROCM_RESERVED_ADDR_TYPE
+            || (info.type == HSA_EXT_POINTER_TYPE_RESERVED_ADDR)
+#endif
+        ) {
             *dev_type = HSA_DEVICE_TYPE_CPU;
         } else {
             status = hsa_agent_get_info(info.agentOwner, HSA_AGENT_INFO_DEVICE,

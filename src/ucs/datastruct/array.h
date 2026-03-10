@@ -192,7 +192,7 @@ ucs_array_old_buffer_set_null(void **old_buffer_p)
         size_t _capacity; \
         UCS_STATIC_ASSERT(ucs_is_unsigned_type(ucs_typeof((_array)->length))); \
         \
-        if (ucs_likely((_min_capacity)) <= ucs_array_capacity(_array)) { \
+        if (ucs_likely((_min_capacity) <= ucs_array_capacity(_array))) { \
             ucs_array_old_buffer_set_null((void**)(_old_buffer_p)); \
             _reserve_status = UCS_OK; \
         } else if (ucs_array_is_fixed(_array)) { \
