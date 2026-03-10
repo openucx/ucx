@@ -77,38 +77,38 @@ void test_base::check_fd_leaks()
 
     if (!m_prev_open_fds.empty()) {
         std::stringstream ss;
-        int num_leaked      = 0;
+        int num_unexpected  = 0;
         int num_whitelisted = 0;
 
         for (const int fd : open_fds) {
             if (m_prev_open_fds.find(fd) == m_prev_open_fds.end()) {
-                std::string target = readlink_proc_fd(fd);
+                const std::string target = readlink_proc_fd(fd);
                 ss << "\n  fd " << fd << " -> " << target;
                 if (is_target_whitelisted(target)) {
                     ss << " (whitelisted)";
                     ++num_whitelisted;
                 } else {
-                    ++num_leaked;
+                    ++num_unexpected;
                 }
             }
         }
 
-        if (num_leaked > 0 || num_whitelisted > 0) {
-            UCS_TEST_MESSAGE << "new fds detected (" << num_leaked
-                             << " leaked, " << num_whitelisted
-                             << " whitelisted):" << ss.str();
-            if (num_leaked > 0) {
+        if (num_unexpected > 0 || num_whitelisted > 0) {
+            if (num_unexpected > 0) {
                 ++m_consecutive_fd_increases;
                 ss << "\n  consecutive fd increases: "
                    << m_consecutive_fd_increases;
             }
+            UCS_TEST_MESSAGE << "new leaked fds (" << num_unexpected
+                             << " unexpected, " << num_whitelisted
+                             << " whitelisted):" << ss.str();
         }
 
-        if (num_leaked == 0) {
+        if (num_unexpected == 0) {
             m_consecutive_fd_increases = 0;
         } else if (m_consecutive_fd_increases >=
                    CONSECUTIVE_FD_INCREASE_THRESHOLD) {
-            ADD_FAILURE() << "new fds detected for more than "
+            ADD_FAILURE() << "fd leaks detected for more than "
                           << CONSECUTIVE_FD_INCREASE_THRESHOLD
                           << " consecutive tests!";
         }
