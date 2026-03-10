@@ -2462,23 +2462,6 @@ int ucs_config_names_search(const ucs_config_names_array_t *config_names,
     return -1;
 }
 
-
-int ucs_config_prefix_search(const ucs_config_names_array_t *config_names,
-                             const char *str)
-{
-    unsigned i;
-
-    for (i = 0; i < config_names->count; ++i) {
-        if (!strncmp(config_names->names[i], str,
-                     strlen(config_names->names[i])) ||
-            !fnmatch(config_names->names[i], str, 0)) {
-            return i;
-        }
-    }
-    return -1;
-}
-
-
 void ucs_config_parser_get_env_vars(ucs_string_buffer_t *env_strb,
                                     const char *delimiter)
 {

@@ -221,17 +221,16 @@ out:
 static int ucs_module_is_enabled(const char *module_name)
 {
     ucs_config_allow_list_mode_t mode = ucs_global_opts.modules.mode;
+    int found;
 
     if (mode == UCS_CONFIG_ALLOW_LIST_ALLOW_ALL) {
         return 1;
     }
 
-    return ((mode == UCS_CONFIG_ALLOW_LIST_ALLOW) &&
-            (ucs_config_names_search(&ucs_global_opts.modules.array,
-                                     module_name) >= 0)) ||
-           ((mode == UCS_CONFIG_ALLOW_LIST_NEGATE) &&
-            (ucs_config_prefix_search(&ucs_global_opts.modules.array,
-                                      module_name) < 0));
+    found = ucs_config_names_search(&ucs_global_opts.modules.array,
+        module_name) >= 0;
+    return ((mode == UCS_CONFIG_ALLOW_LIST_ALLOW) && found) ||
+           ((mode == UCS_CONFIG_ALLOW_LIST_NEGATE) && !found);
 }
 
 static int ucs_module_flags_to_dlopen_mode(unsigned flags)
@@ -326,8 +325,14 @@ static void ucs_module_load_from_dir(const char *dir, const char *framework,
         }
 
         ucs_module_filename_to_base(entry->d_name, base, sizeof(base));
+        if (strchr(base + prefix_len, '_') != NULL) {
+            ucs_module_debug("module name contains '_': %s, skipping", base + prefix_len);
+            continue;
+        }
+
         snprintf(module_path, PATH_MAX, "%s/%s", dir, entry->d_name);
         if (check_enabled && !ucs_module_is_enabled(base + prefix_len)) {
+            ucs_module_debug("module is disabled: %s, skipping", base + prefix_len);
             continue;
         }
 

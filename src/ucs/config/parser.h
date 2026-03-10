@@ -640,16 +640,6 @@ int ucs_config_names_search(const ucs_config_names_array_t *config_names,
                             const char *str);
 
 /**
- * Look for a config name that is a prefix of @a str or that fnmatches @a str.
- *
- * @param config_names  Lookup array of patterns.
- * @param str           String to search.
- * @return Index of first match, or -1 if none.
- */
-int ucs_config_prefix_search(const ucs_config_names_array_t *config_names,
-                             const char *str);
-
-/**
  * @param   strb      An initiated ucs_string_buffer_t which will contain the env variables
  * @param   delimiter String that will separate between each 2 env variables
 */
