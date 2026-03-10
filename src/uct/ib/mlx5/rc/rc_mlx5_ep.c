@@ -14,6 +14,7 @@
 #endif
 
 #include <uct/ib/mlx5/ib_mlx5_log.h>
+#include <uct/ib/plugin/uct_ib_plugin.h>
 #include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <ucs/arch/cpu.h>
@@ -23,6 +24,36 @@
 
 #include "rc_mlx5.inl"
 
+
+ucs_status_t uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep, uct_ep_attr_t *ep_attr)
+{
+    UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
+    uct_ib_mlx5_qp_t *qp = &ep->tx.wq.super;
+    uct_ib_plugin_qp_ctx_t qp_ctx;
+
+    (void)iface;
+
+    if (ep_attr->field_mask & (UCT_EP_ATTR_FIELD_LOCAL_SOCKADDR |
+                               UCT_EP_ATTR_FIELD_REMOTE_SOCKADDR)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    qp_ctx.qp_num = qp->qp_num;
+    switch (qp->type) {
+    case UCT_IB_MLX5_OBJ_TYPE_VERBS:
+        qp_ctx.type     = UCT_IB_PLUGIN_QP_VERBS;
+        qp_ctx.verbs_qp = qp->verbs.qp;
+        break;
+    case UCT_IB_MLX5_OBJ_TYPE_DEVX:
+        qp_ctx.type     = UCT_IB_PLUGIN_QP_DEVX;
+        qp_ctx.devx_obj = qp->devx.obj;
+        break;
+    default:
+        break;
+    }
+
+    return uct_ib_plugin_query_token(&qp_ctx, ep_attr);
+}
 
 static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_base_ep_put_short_inline(
         uct_ep_h tl_ep, const void *buffer, unsigned length,
