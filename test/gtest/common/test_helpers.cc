@@ -13,7 +13,6 @@
 #include <ucs/config/global_opts.h>
 #include <ucs/config/parser.h>
 
-#include <set>
 #include <unistd.h>
 #include <sstream>
 
@@ -548,7 +547,7 @@ std::set<int> get_open_fds()
 
 std::string readlink_proc_fd(int fd)
 {
-    char path[PATH_MAX], link[PATH_MAX];
+    char path[64], link[PATH_MAX];
     const size_t max_len = sizeof(link) - 1;
 
     snprintf(path, sizeof(path), "/proc/self/fd/%d", fd);
