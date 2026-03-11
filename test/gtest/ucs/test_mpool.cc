@@ -83,7 +83,7 @@ protected:
     {
         static ucs_mpool_ops_t mpool_ops = {ucs_mpool_chunk_malloc,
                                             ucs_mpool_chunk_free, NULL, NULL,
-                                            NULL};
+                                            NULL, NULL};
         if (max_elems == 0) {
             max_elems = elems_per_chunk;
         }
@@ -113,6 +113,7 @@ UCS_TEST_F(test_mpool, no_allocs) {
     ucs_mpool_ops_t ops = {
        ucs_mpool_chunk_malloc,
        ucs_mpool_chunk_free,
+       NULL,
        NULL,
        NULL,
        NULL
@@ -177,6 +178,7 @@ UCS_TEST_F(test_mpool, basic) {
        ucs_mpool_chunk_free,
        NULL,
        NULL,
+       NULL,
        NULL
     };
     ucs_mpool_params_t mp_params;
@@ -234,6 +236,7 @@ UCS_TEST_F(test_mpool, custom_alloc) {
        test_free,
        NULL,
        NULL,
+       NULL,
        NULL
     };
     ucs_mpool_params_t mp_params;
@@ -264,6 +267,7 @@ UCS_TEST_F(test_mpool, grow) {
     ucs_mpool_ops_t ops = {
        ucs_mpool_chunk_malloc,
        ucs_mpool_chunk_free,
+       NULL,
        NULL,
        NULL,
        NULL
@@ -299,6 +303,7 @@ UCS_TEST_F(test_mpool, infinite) {
     ucs_mpool_ops_t ops = {
        ucs_mpool_chunk_malloc,
        ucs_mpool_chunk_free,
+       NULL,
        NULL,
        NULL,
        NULL
@@ -339,6 +344,7 @@ UCS_TEST_F(test_mpool, leak_check) {
         ucs_mpool_chunk_free,
         NULL,
         NULL,
+        NULL,
         obj_str
     };
     ucs_mpool_params_t mp_params;
@@ -374,7 +380,7 @@ public:
     {
         ucs_mpool_ops_t ops = {ucs_mpool_chunk_malloc,
                                ucs_mpool_chunk_free,
-                               NULL, NULL, NULL};
+                               NULL, NULL, NULL, NULL};
         unsigned chunk_num  = num_elems_per_chunk.size();
         ucs_mpool_chunk_t *chunk;
         ucs_mpool_params_t mp_params;

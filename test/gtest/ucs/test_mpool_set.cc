@@ -22,6 +22,7 @@ protected:
            ucs_mpool_chunk_free,
            NULL,
            NULL,
+           NULL,
            NULL
         };
 
