@@ -523,13 +523,13 @@ std::set<int> get_open_fds()
     std::set<int> fds;
     DIR *dir = opendir("/proc/self/fd");
     if (dir == NULL) {
-        UCS_TEST_ABORT("failed to open /proc/self/fd");
+        ucs_fatal("failed to open /proc/self/fd");
     }
 
     const int dir_fd = dirfd(dir);
     if (dir_fd < 0) {
         closedir(dir);
-        UCS_TEST_ABORT("dirfd() failed: " << strerror(errno));
+        ucs_fatal("dirfd() failed: %s", strerror(errno));
     }
 
     struct dirent *entry;

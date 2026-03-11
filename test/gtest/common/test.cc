@@ -42,6 +42,8 @@ test_base::~test_base() {
         pop_config();
     }
 
+    check_fd_leaks();
+
     ucs_assertv_always(m_state == FINISHED ||
                        m_state == SKIPPED ||
                        m_state == NEW ||
@@ -67,13 +69,14 @@ bool test_base::is_target_whitelisted(const std::string &target) const
     return false;
 }
 
+/* Compare open file descriptors against the previous test's post-cleanup
+ * state via set-difference. New fds whose targets match the whitelist
+ * (e.g. from external libraries) are logged but not counted as leaks.
+ * Non-whitelisted new fds increment a consecutive-increase counter and
+ * trigger a failure once CONSECUTIVE_FD_INCREASE_THRESHOLD is reached. */
 void test_base::check_fd_leaks()
 {
-    /* Compare open file descriptors against the previous test's post-cleanup
-     * state via set-difference. New fds whose targets match the whitelist
-     * (e.g. from external libraries) are logged but not counted as leaks.
-     * Non-whitelisted new fds increment a consecutive-increase counter and
-     * trigger a failure once CONSECUTIVE_FD_INCREASE_THRESHOLD is reached. */
+    const std::string padding(13, ' ');
     std::set<int> open_fds = get_open_fds();
 
     if (!m_prev_open_fds.empty()) {
@@ -84,7 +87,7 @@ void test_base::check_fd_leaks()
         for (const int fd : open_fds) {
             if (m_prev_open_fds.find(fd) == m_prev_open_fds.end()) {
                 const std::string target = readlink_proc_fd(fd);
-                ss << "\n  fd " << fd << " -> " << target;
+                ss << "\n" << padding << "  fd " << fd << " -> " << target;
                 if (is_target_whitelisted(target)) {
                     ss << " (whitelisted)";
                     ++num_whitelisted;
@@ -95,12 +98,16 @@ void test_base::check_fd_leaks()
         }
 
         if (num_unexpected > 0 || num_whitelisted > 0) {
+            ss << "\n" << padding << "total open fds: " << open_fds.size();
+
             if (num_unexpected > 0) {
                 ++m_consecutive_fd_increases;
                 ++m_total_fd_increases;
-                ss << "\n  total fd increases: " << m_total_fd_increases
+                ss << "\n"
+                   << padding << "total fd increases: " << m_total_fd_increases
                    << " (consecutive: " << m_consecutive_fd_increases << ")";
             }
+
             UCS_TEST_MESSAGE << "new leaked fds (" << num_unexpected
                              << " unexpected, " << num_whitelisted
                              << " whitelisted):" << ss.str();
@@ -452,8 +459,6 @@ void test_base::TearDownProxy() {
             UCS_TEST_MESSAGE << "< " << m_first_warns_and_errors[i] << " >";
         }
     }
-
-    check_fd_leaks();
 }
 
 void test_base::run()
