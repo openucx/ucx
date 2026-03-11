@@ -42,8 +42,8 @@ typedef struct uct_rc_gdaki_iface {
 
 
 typedef struct uct_rc_gdaki_ep {
-    uct_base_ep_t                  super;
-    uint8_t                        dev_ep_init;
+    uct_base_ep_t                   super;
+    uint8_t                         dev_ep_init;
     uct_rc_gdaki_ep_channel_block_t *channel_block;
 } uct_rc_gdaki_ep_t;
 

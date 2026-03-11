@@ -295,7 +295,7 @@ void ucs_mpool_grow(ucs_mpool_t *mp, unsigned num_elems)
     }
 
     for (i = 0; i < chunk->num_elems; ++i) {
-        elem         = ucs_mpool_chunk_elem_internal(data, chunk, i);
+        elem = ucs_mpool_chunk_elem_internal(data, chunk, i);
         if (data->ops->obj_init != NULL) {
             data->ops->obj_init(mp, elem + 1, chunk);
         }
