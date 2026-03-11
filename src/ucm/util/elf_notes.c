@@ -8,7 +8,7 @@
 #  include "config.h"
 #endif
 
-#include "elf_notes_int.h"
+#include "elf_notes.h"
 #include "log.h"
 
 #include <ucs/datastruct/array.h>

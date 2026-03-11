@@ -9,8 +9,8 @@
  * Not installed; not part of the public UCM API.
  */
 
-#ifndef UCM_ELF_NOTES_INT_H_
-#define UCM_ELF_NOTES_INT_H_
+#ifndef UCM_ELF_NOTES_H_
+#define UCM_ELF_NOTES_H_
 
 #ifdef HAVE_CONFIG_H
 #  include "config.h"
@@ -86,4 +86,4 @@ ucs_status_t ucm_elf_read_note_as_int(const ucm_elf_note_t *note,
 
 END_C_DECLS
 
-#endif /* UCM_ELF_NOTES_INT_H_ */
+#endif /* UCM_ELF_NOTES_H_ */

@@ -6,54 +6,44 @@
 
 #include <common/test.h>
 
+#include <string>
 #include <unistd.h>
 #include <cstring>
 
 extern "C" {
-#include <ucm/util/elf_notes_int.h>
+#include <ucm/util/elf_notes.h>
 #include <ucs/debug/log.h>
 }
 
 class test_elf_notes : public ucs::test {
 };
 
-const char *const NOTE_PREFIX = ".note.nvidia";
-const char *const VALID_ELF_PATH = "/labhome/rdanino/share/ucx/install/lib/ucx/libuct_ib_plugin.so.0.0.0";
+const char *const NOTE_PREFIX = ".note.gnu";
 
-// UCS_TEST_F(test_elf_notes, invalid_path) {
-//     ucm_elf_notes_array_t notes_array = UCS_ARRAY_STATIC_INITIALIZER;
-//     ucs_status_t status;
-
-//     status = ucm_elf_read_notes_by_prefix("/nonexistent/path/lib.so",
-//                                           NOTE_PREFIX, &notes_array);
-//     EXPECT_EQ(UCS_ERR_IO_ERROR, status);
-//     EXPECT_TRUE(ucs_array_is_empty(&notes_array));
-//     ucm_elf_free_notes(&notes_array);
-// }
-
-UCS_TEST_F(test_elf_notes, valid_elf_zero_notes) {
+UCS_TEST_F(test_elf_notes, read_notes_by_prefix) {
+#ifdef GTEST_UCM_HOOK_LIB_DIR
+    std::string elf_path = std::string(GTEST_UCM_HOOK_LIB_DIR) + "/libdlopen_test_do_load.so";
     ucm_elf_notes_array_t notes_array;
     ucm_elf_note_t *note;
     ucs_status_t status;
 
+    status = ucm_elf_read_notes_by_prefix(elf_path.c_str(), NOTE_PREFIX, &notes_array);
+    ASSERT_EQ(UCS_OK, status);
 
-    status = ucm_elf_read_notes_by_prefix(VALID_ELF_PATH, ".note.nvidia", &notes_array);
-    EXPECT_EQ(UCS_OK, status);
+    /** We expect at least 2 notes: .note.gnu.build-id and .note.gnu.property */
+    ASSERT_GE(ucs_array_length(&notes_array), 2);
+
     ucs_array_for_each(note, &notes_array) {
-        ucs_info("note: %s - owner=%s size=%zu", note->field_name, note->owner, note->value_size);
-        if (note->value_size == 4 || note->value_size == 8) {
-            int64_t value = 0;
-            status = ucm_elf_read_note_as_int(note, &value);
-            EXPECT_EQ(UCS_OK, status);
-            ucs_info("value: 0x%lx", value);
-        } else {
-            char buf[256];
-            status = ucm_elf_read_note_as_string(note, buf, sizeof(buf));
-            EXPECT_EQ(UCS_OK, status);
-            ucs_info("value: %s", buf);
-        }
+        ASSERT_EQ(strncmp(note->field_name, NOTE_PREFIX, strlen(NOTE_PREFIX)), 0);
+        ASSERT_EQ(strcmp(note->owner, "GNU"), 0);
+        ASSERT_TRUE(note->value != NULL);
+        EXPECT_GT(note->value_size, 0);
+        GTEST_LOG_(INFO) << "note: " << note->field_name << " - owner=" << note->owner << " size=" << note->value_size;
     }
     ucm_elf_free_notes(&notes_array);
+#else
+    UCS_TEST_SKIP_R("GTEST_UCM_HOOK_LIB_DIR not defined");
+#endif
 }
 
 UCS_TEST_F(test_elf_notes, free_notes_array_empty) {
