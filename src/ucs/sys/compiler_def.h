@@ -59,7 +59,7 @@
 #define UCS_F_NON_NULL __attribute__((nonnull))
 
 /* Always inline the function */
-#ifdef __GNUC__
+#if defined(__GNUC__) && !defined(HAVE_OG_OPTIMIZATION)
 #define UCS_F_ALWAYS_INLINE      inline __attribute__ ((always_inline))
 #else
 #define UCS_F_ALWAYS_INLINE      inline
