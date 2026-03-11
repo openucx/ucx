@@ -346,14 +346,20 @@ struct ucp_request {
                 } rkey_ptr;
 
                 struct {
-                    unsigned           uct_flags; /* Flags to pass to @ref uct_ep_flush */
-                    uint32_t           cmpl_sn;   /* Sequence number of the remote completion
-                                                     this request is waiting for */
+                    /* All lanes that are being flushed */
+                    ucp_lane_map_t     all_lanes;
+                    /* Which lanes flush has been started on */
+                    ucp_lane_map_t     started_lanes;
+                    /* Sequence number of the remote completion this request is
+                     * waiting for */
+                    uint32_t           cmpl_sn;
+                    /* Flags to pass to @ref uct_ep_flush */
+                    uint8_t            uct_flags;
                     uint8_t            sw_started;
                     uint8_t            sw_done;
-                    ucp_lane_map_t     all_lanes;     /* All lanes that are being flushed */
-                    ucp_lane_map_t     started_lanes; /* Which lanes flush has been started on */
-                    ucp_mem_flush_t    mem; /* Memory specific flushes */
+                    uint8_t            padding;
+                    /* Memory specific flushes */
+                    ucp_mem_flush_t    mem;
                 } flush;
 
                 struct {
