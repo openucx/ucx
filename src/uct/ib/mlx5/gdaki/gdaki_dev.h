@@ -20,8 +20,7 @@ typedef struct {
     uint32_t                     sq_num;
 
     uint64_t                     *sq_db;
-    uint64_t                     wqe_base_addr; /* WQ base for this channel (pool mode) */
-    uint8_t                      pad[8];
+    uint8_t                      pad[16];
 } uct_rc_gdaki_dev_qp_t;
 
 
@@ -37,7 +36,7 @@ typedef struct {
 
     uint8_t                      pad[23];
 
-    uct_rc_gdaki_dev_qp_t        *qps[0]; /* pointers to pool slots (pool mode) or inline */
+    uct_rc_gdaki_dev_qp_t        qps[0];
 } uct_rc_gdaki_dev_ep_t;
 
 
