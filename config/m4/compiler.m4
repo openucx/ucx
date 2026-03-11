@@ -82,6 +82,14 @@ AS_IF([test "x$enable_compiler_opt" = "xyes"], [BASE_CFLAGS="-O3 $BASE_CFLAGS"],
 
 
 #
+# Check if -Og flag was supplied
+#
+AS_IF([echo " $BASE_CFLAGS $CFLAGS " | grep -q -- ' -Og '], 
+      [AC_DEFINE([HAVE_OG_OPTIMIZATION], 1, [Compiled with -Og])],
+      [AC_MSG_NOTICE([Detected -Og optimization flag])])
+
+
+#
 # CHECK_CROSS_COMP (program, true-action, false-action)
 #
 # The macro checks if it can run the program; it executes
