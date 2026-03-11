@@ -10,6 +10,7 @@
 #include "rcache.h"
 
 #include <ucs/datastruct/list.h>
+#include <ucs/datastruct/queue.h>
 #include <ucs/stats/stats.h>
 #include <ucs/sys/ptr_arith.h>
 #include <ucs/type/spinlock.h>

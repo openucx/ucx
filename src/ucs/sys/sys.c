@@ -166,7 +166,8 @@ uint32_t ucs_file_checksum(const char *filename)
     return crc;
 }
 
-ucs_status_t ucs_ifname_to_index(const char *ndev_name, unsigned *ndev_index_p)
+ucs_status_t
+ucs_ifname_to_ndev_index(const char *ndev_name, unsigned *ndev_index_p)
 {
     unsigned ndev_index = if_nametoindex(ndev_name);
     if (ndev_index == 0) {
@@ -176,6 +177,33 @@ ucs_status_t ucs_ifname_to_index(const char *ndev_name, unsigned *ndev_index_p)
 
     *ndev_index_p = ndev_index;
     return UCS_OK;
+}
+
+const char *
+ucs_ndev_index_to_ifname(unsigned ndev_index, char *ndev_name, size_t max)
+{
+    char tmp_ndev_name[IFNAMSIZ];
+
+    if (if_indextoname(ndev_index, tmp_ndev_name) == NULL) {
+        snprintf(ndev_name, max, "ndev[%u]", ndev_index);
+    } else {
+        ucs_strncpy_safe(ndev_name, tmp_ndev_name, max);
+    }
+
+    return ndev_name;
+}
+
+ucs_status_t ucs_get_loopback_ndev_index(unsigned *ndev_index_p)
+{
+    static unsigned lo_ndev_index   = UINT_MAX;
+    static ucs_status_t init_status = UCS_ERR_LAST;
+
+    if ((init_status == UCS_ERR_LAST) && (lo_ndev_index == UINT_MAX)) {
+        init_status = ucs_ifname_to_ndev_index("lo", &lo_ndev_index);
+    }
+
+    *ndev_index_p = lo_ndev_index;
+    return init_status;
 }
 
 static uint64_t ucs_get_mac_address()
@@ -1411,6 +1439,12 @@ void ucs_sys_cpuset_copy(ucs_cpu_set_t *dst, const ucs_sys_cpuset_t *src)
     }
 }
 
+ucs_sys_ns_t ucs_sys_get_default_ns(ucs_sys_namespace_type_t name)
+{
+    return (name < UCS_SYS_NS_TYPE_LAST) ? ucs_sys_namespace_info[name].dflt :
+                                           0;
+}
+
 ucs_sys_ns_t ucs_sys_get_ns(ucs_sys_namespace_type_t ns)
 {
     char filename[MAXPATHLEN];
@@ -1438,7 +1472,7 @@ ucs_sys_ns_t ucs_sys_get_ns(ucs_sys_namespace_type_t ns)
 
 int ucs_sys_ns_is_default(ucs_sys_namespace_type_t ns)
 {
-    return ucs_sys_get_ns(ns) == ucs_sys_namespace_info[ns].dflt;
+    return ucs_sys_get_ns(ns) == ucs_sys_get_default_ns(ns);
 }
 
 ucs_status_t ucs_sys_get_boot_id(uint64_t *high, uint64_t *low)

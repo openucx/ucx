@@ -9,6 +9,7 @@
 #include <ucp/api/device/ucp_device_impl.h>
 #include <ucs/debug/log.h>
 #include <common/cuda.h>
+#include <cuda.h>
 
 
 template<ucs_device_level_t level>
@@ -27,44 +28,17 @@ ucp_test_kernel_do_operation(const test_ucp_device_kernel_params_t &params,
     }
 
     switch (params.operation) {
-    case TEST_UCP_DEVICE_KERNEL_PUT_SINGLE:
-        status = ucp_device_put_single<level>(params.mem_list,
-                                              params.single.mem_list_index, 0,
-                                              0, params.single.length,
-                                              channel_id, flags, req_ptr);
-        break;
-    case TEST_UCP_DEVICE_KERNEL_PUT_SINGLE_V2:
+    case TEST_UCP_DEVICE_KERNEL_PUT:
         status = ucp_device_put<level>(params.local_mem_list,
-                                       params.single.mem_list_index, 0,
+                                       params.put.mem_list_index, 0,
                                        params.remote_mem_list,
-                                       params.single.remote_mem_list_index, 0,
-                                       params.single.length, channel_id, flags,
+                                       params.put.remote_mem_list_index, 0,
+                                       params.put.length, channel_id, flags,
                                        req_ptr);
-        break;
-    case TEST_UCP_DEVICE_KERNEL_PUT_MULTI:
-        status = ucp_device_put_multi<level>(params.mem_list,
-                                             params.multi.counter_inc_value,
-                                             channel_id, flags, req_ptr);
-        break;
-    case TEST_UCP_DEVICE_KERNEL_PUT_MULTI_PARTIAL:
-        status = ucp_device_put_multi_partial<level>(
-                params.mem_list, params.partial.mem_list_indices,
-                params.partial.mem_list_count,
-                (size_t*)params.partial.local_offsets,
-                (size_t*)params.partial.remote_offsets, params.partial.lengths,
-                params.partial.counter_index, params.partial.counter_inc_value,
-                params.partial.counter_remote_offset, channel_id, flags,
-                req_ptr);
         break;
     case TEST_UCP_DEVICE_KERNEL_COUNTER_INC:
         status = ucp_device_counter_inc<level>(
-                params.mem_list, params.counter_inc.mem_list_index,
-                params.counter_inc.inc_value, params.counter_inc.remote_offset,
-                0, flags, req_ptr);
-        break;
-    case TEST_UCP_DEVICE_KERNEL_COUNTER_INC_V2:
-        status = ucp_device_counter_inc<level>(
-                params.counter_inc.inc_value, 
+                params.counter_inc.inc_value,
                 params.remote_mem_list, params.counter_inc.mem_list_index,
                 params.counter_inc.remote_offset,
                 0, flags, req_ptr);
@@ -138,22 +112,33 @@ UCS_F_DEVICE ucs_status_t
 ucp_test_kernel_get_state(const test_ucp_device_kernel_params_t &params,
                           test_ucp_device_kernel_result_t &result)
 {
-    uct_device_ep_t *device_ep;
+    ucp_device_request_t *req_ptr = nullptr;
     const uct_device_mem_element_t *uct_elem;
+    uct_device_ep_t *device_ep;
+    uint64_t remote_address;
     uct_device_completion_t *comp;
     ucs_status_t status = UCS_OK;
 
-    if (nullptr == params.mem_list) {
+    if (nullptr == params.remote_mem_list) {
         return UCS_OK;
     }
 
     __syncthreads();
     if (threadIdx.x == 0) {
-        status = ucp_device_prepare_send(params.mem_list, 0, nullptr, device_ep,
-                                         uct_elem, comp);
+        for (unsigned i = 0; i < params.remote_mem_list->length; ++i) {
+            status = ucp_device_prepare_send_remote(params.remote_mem_list, i,
+                                                    remote_address, req_ptr,
+                                                    device_ep, uct_elem, comp);
+            if ((status == UCS_OK) && (device_ep != nullptr)) {
+                break;
+            }
+        }
+
         result.producer_index = 0;
         result.ready_index    = 0;
+#if HAVE_MLX5_DV
         if ((status == UCS_OK) &&
+            (device_ep != nullptr) &&
             (device_ep->uct_tl_id == UCT_DEVICE_TL_RC_MLX5_GDA)) {
             uint16_t wqe_cnt;
             uct_rc_gdaki_dev_ep_t *ep =
@@ -166,6 +151,7 @@ ucp_test_kernel_get_state(const test_ucp_device_kernel_params_t &params,
                 result.ready_index += ep->qps[i].sq_ready_index;
             }
         }
+#endif
     }
 
     __syncthreads();
