@@ -1,2 +1,4 @@
 usr/lib/ucx/libucx_perftest_cuda.*
 usr/lib/ucx/libuc?_cuda.*
+usr/lib/ucx/libuct_ib_mlx5_gda.*
+usr/include/uct/ib/mlx5/gdaki/*

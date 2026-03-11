@@ -154,32 +154,6 @@ typedef struct ucp_device_mem_list_params {
 
 /**
  * @ingroup UCP_DEVICE
- * @brief Memory descriptor list create function for batched RMA operations.
- *
- * This function creates and populates a descriptor list handle using parameters
- * inputs from @ref ucp_device_mem_list_params_t. This descriptor is created for
- * the given remote endpoint. It can be used on a GPU using the corresponding
- * device functions.
- *
- * It can be used repeatedly, until finally released by calling @ref
- * ucp_device_mem_list_release.
- *
- * @param [in]  ep        Remote endpoint handle.
- * @param [in]  params    Parameters used to create the handle.
- * @param [out] handle    Created descriptors list handle.
- *
- * @return Error code as defined by @ref ucs_status_t.
- * @retval UCS_ERR_NOT_CONNECTED if the endpoint is not connected yet.
- *         The caller should retry after calling @ref ucp_worker_progress.
- */
-ucs_status_t
-ucp_device_mem_list_create(ucp_ep_h ep,
-                           const ucp_device_mem_list_params_t *params,
-                           ucp_device_mem_list_handle_h *handle);
-
-
-/**
- * @ingroup UCP_DEVICE
  * @brief Memory descriptor list gpu handle create function for local memory descriptors.
  *
  * This function creates and populates a local descriptor list handle using parameters
@@ -226,8 +200,7 @@ ucp_device_remote_mem_list_create(const ucp_device_mem_list_params_t *params,
  * @brief Return the number of elements in the descriptors mem list handle.
  *
  * @param [in] mem_list_h Descriptors list handle. Can be
- *                        @ref ucp_device_mem_list_handle_h,
- *                        @ref ucp_device_local_mem_list_h, or
+ *                        @ref ucp_device_local_mem_list_h or
  *                        @ref ucp_device_remote_mem_list_h.
  *
  * @return Descriptors mem list length.
@@ -240,12 +213,10 @@ uint32_t ucp_device_get_mem_list_length(const void *mem_list_h);
  * @brief Release function for a descriptor list handle.
  *
  * This function releases the handle that was created using @ref
- * ucp_device_mem_list_create, @ref ucp_device_local_mem_list_create, or
- * @ref ucp_device_remote_mem_list_create.
+ * ucp_device_local_mem_list_create or @ref ucp_device_remote_mem_list_create.
  *
  * @param [in] mem_list_h Created handle to release. Can be
- *                        @ref ucp_device_mem_list_handle_h,
- *                        @ref ucp_device_local_mem_list_h, or
+ *                        @ref ucp_device_local_mem_list_h or
  *                        @ref ucp_device_remote_mem_list_h.
  */
 void ucp_device_mem_list_release(void *mem_list_h);

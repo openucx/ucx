@@ -875,14 +875,13 @@ UCS_TEST_F(test_rcache_with_limit, by_size_inuse) {
 #ifdef ENABLE_STATS
 class test_rcache_stats : public test_rcache {
 protected:
-
-    virtual void init() {
+    test_rcache_stats()
+    {
         stats_activate();
-        test_rcache::init();
     }
 
-    virtual void cleanup() {
-        test_rcache::cleanup();
+    ~test_rcache_stats()
+    {
         stats_restore();
     }
 

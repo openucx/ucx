@@ -31,8 +31,6 @@
 #include <rdma/rdma_netlink.h>
 #endif
 
-#define UCT_IB_DEVICE_LOOPBACK_NDEV_INDEX_INVALID 0
-
 
 /* This table is according to "Encoding for RNR NAK Timer Field"
  * in IBTA specification */
@@ -768,8 +766,8 @@ static unsigned long uct_ib_device_get_ib_gid_index(uct_ib_md_t *md)
     }
 }
 
-ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
-                                      unsigned flags)
+static ucs_status_t
+uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num, unsigned flags)
 {
     uct_ib_md_t *md = ucs_container_of(dev, uct_ib_md_t, dev);
     const uct_ib_device_spec_t *dev_info;
@@ -829,6 +827,11 @@ ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
     status    = uct_ib_device_query_gid(dev, port_num, gid_index, &gid,
                                         UCS_LOG_LEVEL_DIAG);
     if (status != UCS_OK) {
+        if (status == UCS_ERR_INVALID_ADDR) {
+            ucs_trace("%s:%d (%s) has invalid address", uct_ib_device_name(dev),
+                      port_num, dev_info->name);
+        }
+
         return status;
     }
 
@@ -936,6 +939,10 @@ uct_ib_device_query_gid_info(struct ibv_context *ctx, const char *dev_name,
 
     ret = ibv_query_gid(ctx, port_num, gid_index, &info->gid);
     if (ret == 0) {
+        if (!uct_ib_device_is_gid_valid(&info->gid)) {
+            return UCS_ERR_INVALID_ADDR;
+        }
+
         ret = ucs_read_file(buf, sizeof(buf) - 1, 1,
                             UCT_IB_DEVICE_SYSFS_GID_TYPE_FMT,
                             dev_name, port_num, gid_index);
@@ -1180,6 +1187,10 @@ uct_ib_device_select_gid(uct_ib_device_t *dev, uint8_t port_num,
             status = uct_ib_device_query_gid_info(dev->ibv_context,
                                                   uct_ib_device_name(dev),
                                                   port_num, i, &gid_info_tmp);
+            if (status == UCS_ERR_INVALID_ADDR) {
+                continue;
+            }
+
             if (status != UCS_OK) {
                 goto out;
             }
@@ -1432,18 +1443,14 @@ ucs_status_t uct_ib_device_query_gid(uct_ib_device_t *dev, uint8_t port_num,
 
     status = uct_ib_device_query_gid_info(dev->ibv_context, uct_ib_device_name(dev),
                                           port_num, gid_index, &gid_info);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    if (!uct_ib_device_is_gid_valid(&gid_info.gid)) {
+    if (status == UCS_OK) {
+        *gid = gid_info.gid;
+    } else if (status == UCS_ERR_INVALID_ADDR) {
         ucs_log(error_level, "invalid gid[%d] on %s:%d", gid_index,
                 uct_ib_device_name(dev), port_num);
-        return UCS_ERR_INVALID_ADDR;
     }
 
-    *gid = gid_info.gid;
-    return UCS_OK;
+    return status;
 }
 
 const char *uct_ib_wc_status_str(enum ibv_wc_status wc_status)
@@ -1594,22 +1601,6 @@ uct_ib_device_get_roce_ndev_name(uct_ib_device_t *dev, uint8_t port_num,
     return UCS_OK;
 }
 
-ucs_status_t uct_ib_iface_get_loopback_ndev_index(unsigned *ndev_index_p)
-{
-    static unsigned loopback_ndev_index = UCT_IB_DEVICE_LOOPBACK_NDEV_INDEX_INVALID;
-    ucs_status_t status;
-
-    if (loopback_ndev_index == UCT_IB_DEVICE_LOOPBACK_NDEV_INDEX_INVALID) {
-        status = ucs_ifname_to_index("lo", &loopback_ndev_index);
-        if (status != UCS_OK) {
-            return status;
-        }
-    }
-
-    *ndev_index_p = loopback_ndev_index;
-    return UCS_OK;
-}
-
 ucs_status_t
 uct_ib_device_get_roce_ndev_index(uct_ib_device_t *dev, uint8_t port_num,
                                   uint8_t gid_index, unsigned *ndev_index_p)
@@ -1640,7 +1631,7 @@ uct_ib_device_get_roce_ndev_index(uct_ib_device_t *dev, uint8_t port_num,
             goto out_unlock;
         }
 
-        status = ucs_ifname_to_index(ndev_name, &ndev_index);
+        status = ucs_ifname_to_ndev_index(ndev_name, &ndev_index);
         if (status != UCS_OK) {
             goto out_unlock;
         }

@@ -77,6 +77,7 @@ uct_cma_iface_is_reachable_v2(const uct_iface_h tl_iface,
         .iov_len  = sizeof(iov),
     };
     ucs_cma_iface_ext_device_addr_t *iface_addr;
+    ucs_sys_ns_t remote_pid_ns;
     pid_t peer_pid;
 
     if (!uct_iface_is_reachable_params_addrs_valid(params)) {
@@ -99,17 +100,15 @@ uct_cma_iface_is_reachable_v2(const uct_iface_h tl_iface,
 
     iface_addr = (ucs_cma_iface_ext_device_addr_t*)params->iface_addr;
     if (iface_addr->super.id & UCT_CMA_IFACE_ADDR_FLAG_PID_NS) {
-        if (ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID) != iface_addr->pid_ns) {
-            uct_iface_fill_info_str_buf(params,
-                                        "pid namespaces differ (%lu vs %lu)",
-                                        ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID),
-                                        iface_addr->pid_ns);
-            return 0;
-        }
-    } else if (!ucs_sys_ns_is_default(UCS_SYS_NS_TYPE_PID)) {
-        uct_iface_fill_info_str_buf(
-                params, "namespace %lu is not the host's default namespace",
-                ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID));
+        remote_pid_ns = iface_addr->pid_ns;
+    } else {
+        remote_pid_ns = ucs_sys_get_default_ns(UCS_SYS_NS_TYPE_PID);
+    }
+
+    if (ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID) != remote_pid_ns) {
+        uct_iface_fill_info_str_buf(params, "pid_ns local %lu remote %lu",
+                                    ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID),
+                                    remote_pid_ns);
         return 0;
     }
 
@@ -119,8 +118,7 @@ uct_cma_iface_is_reachable_v2(const uct_iface_h tl_iface,
     peer_pid = iface_addr->super.id & ~UCT_CMA_IFACE_ADDR_FLAG_PID_NS;
     if ((process_vm_readv(peer_pid, &iov, 1, &iov, 1, 0) == -1) &&
         (errno == EPERM)) {
-        uct_iface_fill_info_str_buf(params,
-                                    "no permissions to read from remote peer");
+        uct_iface_fill_info_str_buf(params, "cannot access remote memory");
         return 0;
     }
 

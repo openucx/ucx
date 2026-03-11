@@ -87,9 +87,7 @@ static int uct_cuda_copy_iface_is_reachable_v2(
     }
 
     if (iface->id != *addr) {
-        uct_iface_fill_info_str_buf(
-                params, "different iface id %"PRIx64" vs %"PRIx64"",
-                iface->id, *addr);
+        uct_iface_fill_info_str_buf(params, "iface mismatch");
         return 0;
     }
 

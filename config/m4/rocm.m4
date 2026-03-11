@@ -1,5 +1,5 @@
 #
-# Copyright (C) Advanced Micro Devices, Inc. 2016 - 2023. ALL RIGHTS RESERVED.
+# Copyright (C) Advanced Micro Devices, Inc. 2016 - 2026. ALL RIGHTS RESERVED.
 # Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2018. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
@@ -97,6 +97,22 @@ AS_IF([test "x$with_rocm" != "xno"],
            AC_SUBST([ROCM_LIBS])
            AC_SUBST([ROCM_ROOT])],
           [AC_MSG_WARN([ROCm not found])])
+
+    AS_IF([test "x$rocm_happy" = "xyes"],
+        [HIP_BUILD_FLAGS([$with_rocm], [HIP_LIBS], [HIP_LDFLAGS], [HIP_CPPFLAGS])
+        CPPFLAGS="$HIP_CPPFLAGS $CPPFLAGS"
+
+        AC_MSG_CHECKING([for HIP version])
+        AC_COMPUTE_INT([hip_version], [HIP_VERSION],
+                        [#include <hip_version.h>],
+                        [hip_version=0])
+        AC_MSG_RESULT(["$hip_version"])
+        CPPFLAGS="$SAVE_CPPFLAGS"])
+
+    AS_IF([test "$hip_version" -ge 70000000],
+        [AC_DEFINE([HAVE_ROCM_RESERVED_ADDR_TYPE], [1],
+                    [ROCm 7.0+ has HSA_EXT_POINTER_TYPE_RESERVED_ADDR])])
+
    AC_CHECK_FUNCS([hsa_amd_portable_export_dmabuf])
 
     CPPFLAGS="$SAVE_CPPFLAGS"

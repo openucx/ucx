@@ -147,7 +147,7 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
         return uct_iface_scope_is_reachable(tl_iface, params);
     }
 
-    uct_iface_fill_info_str_buf(params, "MNNVL is not supported");
+    uct_iface_fill_info_str_buf(params, "different machine and no MNNVL");
     return 0;
 }
 
