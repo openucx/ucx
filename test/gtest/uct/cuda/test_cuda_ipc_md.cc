@@ -12,6 +12,7 @@
 extern "C" {
 #include <uct/cuda/cuda_ipc/cuda_ipc_md.h>
 #include <uct/cuda/base/cuda_iface.h>
+#include <uct/cuda/base/cuda_util.h>
 }
 
 class test_cuda_ipc_md : public test_md {
@@ -116,32 +117,32 @@ protected:
                ASSERT_UCS_OK(uct_md_mkey_pack_v2(md(), memh, ptr, size,
                                                  &pack_params, rkey.data()));
 
+               auto unpack_rkey = [&](const uct_rkey_unpack_params_t &unpack_params) {
+                    ucs_status_t status = uct_rkey_unpack_v2(
+                                             md()->component, rkey.data(),
+                                             &unpack_params, &rkey_bundle);
+                    ASSERT_TRUE((status == UCS_OK) ||
+                                (status == UCS_ERR_UNREACHABLE));
+                    if (status == UCS_OK) {
+                        uct_rkey_release(md()->component, &rkey_bundle);
+                    }
+               };
+
                // No context and sys_dev is not provided
+               // Reachable, because active CUDA context exists in main thread
                uct_rkey_unpack_params_t unpack_params = {};
-               ucs_status_t status = uct_rkey_unpack_v2(
-                                         md()->component, rkey.data(),
-                                         &unpack_params, &rkey_bundle);
-               ASSERT_EQ(status, UCS_ERR_UNREACHABLE);
+               unpack_rkey(unpack_params);
 
                // No context and unknown sys_dev is provided
+               // Reachable, because active CUDA context exists for some valid GPU
                unpack_params.field_mask = UCT_RKEY_UNPACK_FIELD_SYS_DEVICE;
                unpack_params.sys_device = UCS_SYS_DEVICE_ID_UNKNOWN;
-               status = uct_rkey_unpack_v2(md()->component, rkey.data(),
-                                           &unpack_params, &rkey_bundle);
-               ASSERT_EQ(status, UCS_ERR_UNREACHABLE);
+               unpack_rkey(unpack_params);
 
                // No context and some valid sys_dev is provided
-               ucs_sys_device_t sys_dev;
-               uct_cuda_base_get_sys_dev(0, &sys_dev);
-
+               ucs_sys_device_t sys_dev = uct_cuda_get_sys_dev(0);
                unpack_params.sys_device = sys_dev;
-               status = uct_rkey_unpack_v2(md()->component, rkey.data(),
-                                           &unpack_params, &rkey_bundle);
-               ASSERT_TRUE((status == UCS_OK) ||
-                           (status == UCS_ERR_UNREACHABLE));
-               if (status == UCS_OK) {
-                   uct_rkey_release(md()->component, &rkey_bundle);
-               }
+               unpack_rkey(unpack_params);
            } catch (...) {
                thread_exception = std::current_exception();
            }
