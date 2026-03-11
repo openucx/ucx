@@ -266,11 +266,6 @@ typedef struct uct_am_handler {
 } uct_am_handler_t;
 
 
-/* Query the attributes of the iface */
-typedef ucs_status_t (*uct_iface_query_v2_func_t)(
-        uct_iface_h iface, uct_iface_attr_v2_t *iface_attr);
-
-
 /* Performance estimation operation */
 typedef ucs_status_t (*uct_iface_estimate_perf_func_t)(
         uct_iface_h iface, uct_perf_attr_t *perf_attr);
@@ -312,18 +307,10 @@ typedef ucs_status_t (*uct_ep_get_device_ep_func_t)(
         uct_ep_h ep, uct_device_ep_h *device_ep_p);
 
 
-/* Pack memh and rkey into a device mem element */
-typedef ucs_status_t (*uct_iface_mem_element_pack_func_t)(
-        const uct_iface_h iface, uct_mem_h memh, uct_rkey_t rkey,
-        uct_device_mem_element_t *mem_element);
-
-
 /* Internal operations, not exposed by the external API */
 typedef struct uct_iface_internal_ops {
-    uct_iface_query_v2_func_t        iface_query_v2;
     uct_iface_estimate_perf_func_t   iface_estimate_perf;
     uct_iface_vfs_refresh_func_t     iface_vfs_refresh;
-    uct_iface_mem_element_pack_func_t iface_mem_element_pack;
     uct_ep_query_func_t              ep_query;
     uct_ep_invalidate_func_t         ep_invalidate;
     uct_ep_connect_to_ep_v2_func_t   ep_connect_to_ep_v2;
@@ -908,9 +895,6 @@ void uct_base_iface_progress_enable_cb(uct_base_iface_t *iface,
 void uct_base_iface_progress_disable(uct_iface_h tl_iface, unsigned flags);
 
 ucs_status_t
-uct_iface_base_query_v2(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr);
-
-ucs_status_t
 uct_base_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr);
 
 int uct_base_ep_is_connected(const uct_ep_h tl_ep,
@@ -936,7 +920,7 @@ int uct_iface_local_is_reachable(uct_iface_local_addr_ns_t *addr_ns,
                                  const uct_iface_is_reachable_params_t *params);
 
 void uct_iface_fill_info_str_buf(const uct_iface_is_reachable_params_t *params,
-                                 const char *fmt, ...);
+                                 const char *fmt, ...) UCS_F_PRINTF(2, 3);
 
 int uct_iface_is_reachable_params_valid(
         const uct_iface_is_reachable_params_t *params, uint64_t flags);

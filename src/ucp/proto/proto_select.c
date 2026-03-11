@@ -36,9 +36,12 @@ ucp_proto_thresholds_search_slow(const ucp_proto_threshold_elem_t *thresholds,
 static const void *ucp_proto_select_init_priv_buf(
         const ucp_proto_select_init_protocols_t *proto_init, unsigned proto_idx)
 {
-    size_t priv_offset =
-            ucs_array_elem(&proto_init->protocols, proto_idx).priv_offset;
-    return &ucs_array_elem(&proto_init->priv_buf, priv_offset);
+    const ucp_proto_init_elem_t *proto = &ucs_array_elem(&proto_init->protocols,
+                                                         proto_idx);
+    if (proto->priv_offset == UCP_PROTO_INIT_ELEM_PRIV_OFFSET_INVALID) {
+        return NULL;
+    }
+    return &ucs_array_elem(&proto_init->priv_buf, proto->priv_offset);
 }
 
 /*
@@ -639,14 +642,18 @@ void ucp_proto_select_add_proto(const ucp_proto_init_params_t *init_params,
     ucp_proto_select_init_trace_perf(init_params, perf, priv);
     ucs_log_indent(-1);
 
-    /* Copy private data */
-    priv_offset = ucs_array_length(&proto_init->priv_buf);
-    ucs_array_resize(&proto_init->priv_buf, priv_offset + priv_size, 0,
-                     ucs_error("failed to allocate proto priv of size %zu",
-                               priv_size);
-                     goto err_destroy_perf);
-    memcpy(&ucs_array_elem(&proto_init->priv_buf, priv_offset), priv,
-           priv_size);
+    if (priv_size > 0) {
+        /* Copy private data */
+        priv_offset = ucs_array_length(&proto_init->priv_buf);
+        ucs_array_resize(&proto_init->priv_buf, priv_offset + priv_size, 0,
+                         ucs_error("failed to allocate proto priv of size %zu",
+                                   priv_size);
+                         goto err_destroy_perf);
+        memcpy(&ucs_array_elem(&proto_init->priv_buf, priv_offset), priv,
+               priv_size);
+    } else {
+        priv_offset = UCP_PROTO_INIT_ELEM_PRIV_OFFSET_INVALID;
+    }
 
     /* Add capabilities to the array of protocols */
     init_elem = ucs_array_append(
@@ -678,7 +685,9 @@ err_revert_proto:
     ucs_array_set_length(&proto_init->protocols,
                          ucs_array_length(&proto_init->protocols) - 1);
 err_revert_priv:
-    ucs_array_set_length(&proto_init->priv_buf, priv_offset);
+    if (priv_offset != UCP_PROTO_INIT_ELEM_PRIV_OFFSET_INVALID) {
+        ucs_array_set_length(&proto_init->priv_buf, priv_offset);
+    }
 err_destroy_perf:
     ucp_proto_perf_destroy(perf);
 }

@@ -587,6 +587,7 @@ public:
         /* Device with higher BW and latency */
         add_mock_iface("mock_0:1", [](uct_iface_attr_t &iface_attr) {
             iface_attr.cap.am.max_short  = 2000;
+            iface_attr.cap.put.max_short = 2048;
             iface_attr.bandwidth.shared  = 28e9;
             iface_attr.latency.c         = 600e-9;
             iface_attr.latency.m         = 1e-9;
@@ -594,10 +595,11 @@ public:
         });
         /* Device with smaller BW but lower latency */
         add_mock_iface("mock_1:1", [](uct_iface_attr_t &iface_attr) {
-            iface_attr.cap.am.max_short = 208;
-            iface_attr.bandwidth.shared = 24e9;
-            iface_attr.latency.c        = 500e-9;
-            iface_attr.latency.m        = 1e-9;
+            iface_attr.cap.am.max_short  = 208;
+            iface_attr.cap.put.max_short = 2048;
+            iface_attr.bandwidth.shared  = 24e9;
+            iface_attr.latency.c         = 500e-9;
+            iface_attr.latency.m         = 1e-9;
         });
         test_ucp_proto_mock::init();
     }
@@ -958,10 +960,11 @@ public:
     virtual void init() override
     {
         auto iface_attr_func = [](uct_iface_attr_t &iface_attr) {
-            iface_attr.cap.am.max_short = 208;
-            iface_attr.bandwidth.shared = 28e9;
-            iface_attr.latency.c        = 500e-9;
-            iface_attr.latency.m        = 1e-9;
+            iface_attr.cap.am.max_short  = 208;
+            iface_attr.cap.put.max_short = 2048;
+            iface_attr.bandwidth.shared  = 28e9;
+            iface_attr.latency.c         = 500e-9;
+            iface_attr.latency.m         = 1e-9;
         };
 
         add_mock_iface("mock_0:1", iface_attr_func);

@@ -1008,20 +1008,19 @@ uct_dc_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
         same_version = ((addr->flags & UCT_DC_MLX5_IFACE_ADDR_DC_VERS) ==
                         iface->version_flag);
         if (!same_version) {
-            uct_iface_fill_info_str_buf(
-                        params,
-                        "incompatible dc version, %u (local) vs. %u (remote)",
-                        iface->version_flag,
-                        addr->flags & UCT_DC_MLX5_IFACE_ADDR_DC_VERS);
+            uct_iface_fill_info_str_buf(params, "local DCv%u remote DCv%u",
+                                        iface->version_flag,
+                                        addr->flags &
+                                                UCT_DC_MLX5_IFACE_ADDR_DC_VERS);
             return 0;
         }
 
         if (!same_tm) {
             uct_iface_fill_info_str_buf(
-                params,
-                "different support for HW tag matching, local: %s, remote: %s",
-                UCT_RC_MLX5_TM_ENABLED(&iface->super)? "enabled" : "disabled",
-                UCT_DC_MLX5_IFACE_ADDR_TM_ENABLED(addr) ? "enabled" : "disabled");
+                    params, "local %s remote %s",
+                    UCT_RC_MLX5_TM_ENABLED(&iface->super) ? "hw_tm" : "sw_tm",
+                    UCT_DC_MLX5_IFACE_ADDR_TM_ENABLED(addr) ? "hw_tm" :
+                                                              "sw_tm");
             return 0;
         }
     }
@@ -1388,10 +1387,8 @@ static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
 static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
     .super = {
         .super = {
-            .iface_query_v2         = uct_iface_base_query_v2,
             .iface_estimate_perf    = uct_dc_mlx5_iface_estimate_perf,
             .iface_vfs_refresh      = uct_dc_mlx5_iface_vfs_refresh,
-            .iface_mem_element_pack = (uct_iface_mem_element_pack_func_t)ucs_empty_function_return_unsupported,
             .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
             .ep_invalidate          = uct_dc_mlx5_ep_invalidate,
             .ep_connect_to_ep_v2    = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,

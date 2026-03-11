@@ -31,8 +31,6 @@
 #include <rdma/rdma_netlink.h>
 #endif
 
-#define UCT_IB_DEVICE_LOOPBACK_NDEV_INDEX_INVALID 0
-
 
 /* This table is according to "Encoding for RNR NAK Timer Field"
  * in IBTA specification */
@@ -89,32 +87,7 @@ typedef struct uct_ib_device_subnet {
 UCS_ARRAY_DECLARE_TYPE(uct_ib_device_subnet_array_t, unsigned,
                        uct_ib_device_subnet_t);
 
-typedef struct {
-    uint64_t    guid;
-    uint8_t     port_num;
-    uint8_t     gid_index;
-} uct_ib_device_to_ndev_key_t;
-
-static UCS_F_ALWAYS_INLINE khint32_t
-uct_ib_device_to_ndev_cache_hash_func(uct_ib_device_to_ndev_key_t key)
-{
-    return kh_int_hash_func(((uint64_t)key.port_num << 24) ^
-                            ((uint64_t)key.gid_index << 16) ^
-                            key.guid);
-}
-
-static UCS_F_ALWAYS_INLINE int
-uct_ib_device_to_ndev_cache_hash_equal(uct_ib_device_to_ndev_key_t key1,
-                                       uct_ib_device_to_ndev_key_t key2)
-{
-    return (key1.port_num == key2.port_num) &&
-           (key1.gid_index == key2.gid_index) &&
-           (key1.guid == key2.guid);
-}
-
-KHASH_INIT(uct_ib_device_to_ndev, uct_ib_device_to_ndev_key_t, unsigned, 1,
-           uct_ib_device_to_ndev_cache_hash_func,
-           uct_ib_device_to_ndev_cache_hash_equal);
+KHASH_MAP_INIT_INT(uct_ib_device_to_ndev, unsigned);
 
 static khash_t(uct_ib_device_to_ndev) ib_dev_to_ndev_map;
 
@@ -793,8 +766,8 @@ static unsigned long uct_ib_device_get_ib_gid_index(uct_ib_md_t *md)
     }
 }
 
-ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
-                                      unsigned flags)
+static ucs_status_t
+uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num, unsigned flags)
 {
     uct_ib_md_t *md = ucs_container_of(dev, uct_ib_md_t, dev);
     const uct_ib_device_spec_t *dev_info;
@@ -854,6 +827,11 @@ ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
     status    = uct_ib_device_query_gid(dev, port_num, gid_index, &gid,
                                         UCS_LOG_LEVEL_DIAG);
     if (status != UCS_OK) {
+        if (status == UCS_ERR_INVALID_ADDR) {
+            ucs_trace("%s:%d (%s) has invalid address", uct_ib_device_name(dev),
+                      port_num, dev_info->name);
+        }
+
         return status;
     }
 
@@ -961,6 +939,10 @@ uct_ib_device_query_gid_info(struct ibv_context *ctx, const char *dev_name,
 
     ret = ibv_query_gid(ctx, port_num, gid_index, &info->gid);
     if (ret == 0) {
+        if (!uct_ib_device_is_gid_valid(&info->gid)) {
+            return UCS_ERR_INVALID_ADDR;
+        }
+
         ret = ucs_read_file(buf, sizeof(buf) - 1, 1,
                             UCT_IB_DEVICE_SYSFS_GID_TYPE_FMT,
                             dev_name, port_num, gid_index);
@@ -1205,6 +1187,10 @@ uct_ib_device_select_gid(uct_ib_device_t *dev, uint8_t port_num,
             status = uct_ib_device_query_gid_info(dev->ibv_context,
                                                   uct_ib_device_name(dev),
                                                   port_num, i, &gid_info_tmp);
+            if (status == UCS_ERR_INVALID_ADDR) {
+                continue;
+            }
+
             if (status != UCS_OK) {
                 goto out;
             }
@@ -1457,18 +1443,14 @@ ucs_status_t uct_ib_device_query_gid(uct_ib_device_t *dev, uint8_t port_num,
 
     status = uct_ib_device_query_gid_info(dev->ibv_context, uct_ib_device_name(dev),
                                           port_num, gid_index, &gid_info);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    if (!uct_ib_device_is_gid_valid(&gid_info.gid)) {
+    if (status == UCS_OK) {
+        *gid = gid_info.gid;
+    } else if (status == UCS_ERR_INVALID_ADDR) {
         ucs_log(error_level, "invalid gid[%d] on %s:%d", gid_index,
                 uct_ib_device_name(dev), port_num);
-        return UCS_ERR_INVALID_ADDR;
     }
 
-    *gid = gid_info.gid;
-    return UCS_OK;
+    return status;
 }
 
 const char *uct_ib_wc_status_str(enum ibv_wc_status wc_status)
@@ -1619,39 +1601,24 @@ uct_ib_device_get_roce_ndev_name(uct_ib_device_t *dev, uint8_t port_num,
     return UCS_OK;
 }
 
-ucs_status_t uct_ib_iface_get_loopback_ndev_index(unsigned *ndev_index_p)
-{
-    static unsigned loopback_ndev_index = UCT_IB_DEVICE_LOOPBACK_NDEV_INDEX_INVALID;
-    ucs_status_t status;
-
-    if (loopback_ndev_index == UCT_IB_DEVICE_LOOPBACK_NDEV_INDEX_INVALID) {
-        status = ucs_ifname_to_index("lo", &loopback_ndev_index);
-        if (status != UCS_OK) {
-            return status;
-        }
-    }
-
-    *ndev_index_p = loopback_ndev_index;
-    return UCS_OK;
-}
-
 ucs_status_t
 uct_ib_device_get_roce_ndev_index(uct_ib_device_t *dev, uint8_t port_num,
                                   uint8_t gid_index, unsigned *ndev_index_p)
 {
-    uct_ib_device_to_ndev_key_t ib_dev = {.guid = IBV_DEV_ATTR(dev, node_guid),
-                                          .port_num = port_num,
-                                          .gid_index = gid_index};
     static pthread_mutex_t uct_ib_device_to_ndev_cache_lock =
                                           PTHREAD_MUTEX_INITIALIZER;
     ucs_status_t status;
+    khint32_t ib_key;
     char ndev_name[IFNAMSIZ];
     unsigned ndev_index;
     khiter_t iter;
     unsigned khret;
 
+    ib_key = ((khint32_t)dev->sys_dev << 16) | ((khint32_t)port_num << 8) |
+             (khint32_t)gid_index;
+
     pthread_mutex_lock(&uct_ib_device_to_ndev_cache_lock);
-    iter = kh_put(uct_ib_device_to_ndev, &ib_dev_to_ndev_map, ib_dev, &khret);
+    iter = kh_put(uct_ib_device_to_ndev, &ib_dev_to_ndev_map, ib_key, &khret);
     if (khret == UCS_KH_PUT_FAILED) {
         status = UCS_ERR_IO_ERROR;
         goto out_unlock;
@@ -1664,7 +1631,7 @@ uct_ib_device_get_roce_ndev_index(uct_ib_device_t *dev, uint8_t port_num,
             goto out_unlock;
         }
 
-        status = ucs_ifname_to_index(ndev_name, &ndev_index);
+        status = ucs_ifname_to_ndev_index(ndev_name, &ndev_index);
         if (status != UCS_OK) {
             goto out_unlock;
         }

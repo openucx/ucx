@@ -296,15 +296,12 @@ public:
         m_comp.func   = NULL;
         m_comp.count  = 300000; // some big value to avoid func invocation
         m_comp.status = UCS_OK;
-    }
 
-    void init() {
         stats_activate();
-        test_rc::init();
     }
 
-    void cleanup() {
-        uct_test::cleanup();
+    ~test_rc_get_limit()
+    {
         stats_restore();
     }
 
