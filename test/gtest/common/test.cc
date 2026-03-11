@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2013. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -11,9 +11,9 @@
 #include <ucs/stats/stats.h>
 #include <ucs/sys/sys.h>
 
-#include <memory>
-
 namespace ucs {
+
+constexpr int CONSECUTIVE_FD_INCREASE_THRESHOLD = 2;
 
 pthread_mutex_t test_base::m_logger_mutex = PTHREAD_MUTEX_INITIALIZER;
 unsigned test_base::m_total_warnings = 0;
@@ -21,6 +21,9 @@ unsigned test_base::m_total_errors   = 0;
 std::vector<std::string> test_base::m_errors;
 std::vector<std::string> test_base::m_warnings;
 std::vector<std::string> test_base::m_first_warns_and_errors;
+std::set<int> test_base::m_prev_open_fds;
+int test_base::m_consecutive_fd_increases = 0;
+int test_base::m_total_fd_increases       = 0;
 
 test_base::test_base() :
                 m_state(NEW),
@@ -38,12 +41,89 @@ test_base::~test_base() {
     while (!m_config_stack.empty()) {
         pop_config();
     }
+
+    check_fd_leaks();
+
     ucs_assertv_always(m_state == FINISHED ||
                        m_state == SKIPPED ||
                        m_state == NEW ||
                        m_state == INITIALIZING ||
                        m_state == ABORTED,
                        "state=%d", m_state);
+}
+
+bool test_base::is_target_whitelisted(const std::string &target) const
+{
+    /* fd targets for external libraries (rdma-core, CUDA driver, etc.) */
+    static const std::string targets_whitelist[] = {
+        "/dev/infiniband/uverbs",
+        "anon_inode:[infinibandevent]",
+        "/dev/nvidia",
+    };
+
+    for (const auto &str : targets_whitelist) {
+        if (target.find(str) != std::string::npos) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Compare open file descriptors against the previous test's post-cleanup
+ * state via set-difference. New fds whose targets match the whitelist
+ * (e.g. from external libraries) are logged but not counted as leaks.
+ * Non-whitelisted new fds increment a consecutive-increase counter and
+ * trigger a failure once CONSECUTIVE_FD_INCREASE_THRESHOLD is reached. */
+void test_base::check_fd_leaks()
+{
+    const std::string padding(13, ' ');
+    std::set<int> open_fds = get_open_fds();
+
+    if (!m_prev_open_fds.empty()) {
+        std::stringstream ss;
+        int num_unexpected  = 0;
+        int num_whitelisted = 0;
+
+        for (const int fd : open_fds) {
+            if (m_prev_open_fds.find(fd) == m_prev_open_fds.end()) {
+                const std::string target = readlink_proc_fd(fd);
+                ss << "\n" << padding << "  fd " << fd << " -> " << target;
+                if (is_target_whitelisted(target)) {
+                    ss << " (whitelisted)";
+                    ++num_whitelisted;
+                } else {
+                    ++num_unexpected;
+                }
+            }
+        }
+
+        if (num_unexpected > 0 || num_whitelisted > 0) {
+            ss << "\n" << padding << "total open fds: " << open_fds.size();
+
+            if (num_unexpected > 0) {
+                ++m_consecutive_fd_increases;
+                ++m_total_fd_increases;
+                ss << "\n"
+                   << padding << "total fd increases: " << m_total_fd_increases
+                   << " (consecutive: " << m_consecutive_fd_increases << ")";
+            }
+
+            UCS_TEST_MESSAGE << "new leaked fds (" << num_unexpected
+                             << " unexpected, " << num_whitelisted
+                             << " whitelisted):" << ss.str();
+        }
+
+        if (num_unexpected == 0) {
+            m_consecutive_fd_increases = 0;
+        } else if (m_consecutive_fd_increases >=
+                   CONSECUTIVE_FD_INCREASE_THRESHOLD) {
+            ADD_FAILURE() << "fd leaks detected for more than "
+                          << CONSECUTIVE_FD_INCREASE_THRESHOLD
+                          << " consecutive tests!";
+        }
+    }
+
+    m_prev_open_fds = std::move(open_fds);
 }
 
 void test_base::set_num_threads(unsigned num_threads) {
@@ -332,11 +412,17 @@ void test_base::SetUpProxy() {
     ucs_assert(m_state == NEW);
     try {
         check_skip_test();
-        m_state = INITIALIZING;
+    } catch (test_skip_exception& e) {
+        skipped(e);
+        return;
+    }
+
+    m_state = INITIALIZING;
+    try {
         init();
         m_initialized = true;
-        m_state       = RUNNING;
-    } catch (test_skip_exception& e) {
+        m_state = RUNNING;
+    } catch (test_skip_exception &e) {
         skipped(e);
     } catch (test_abort_exception&) {
         m_state = ABORTED;

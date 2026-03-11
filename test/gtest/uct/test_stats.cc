@@ -43,6 +43,7 @@ public:
     virtual void init() {
         uct_p2p_test::init();
 
+
         // Sender EP
         collect_cntr_init("sender", uct_ep(sender())->stats,
                           UCS_PP_MAKE_STRING(UCT_EP_STAT_FLUSH),

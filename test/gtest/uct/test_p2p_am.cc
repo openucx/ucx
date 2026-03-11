@@ -53,8 +53,9 @@ public:
     }
 
     virtual void cleanup() {
-        uct_iface_set_am_tracer(receiver().iface(), NULL, NULL);
-        uct_iface_set_am_tracer(sender().iface(), NULL, NULL);
+        for (const auto &entity : m_entities) {
+            uct_iface_set_am_tracer(entity->iface(), NULL, NULL);
+        }
         uct_p2p_test::cleanup();
     }
 
