@@ -199,6 +199,12 @@ hsa_agent_t uct_rocm_base_get_dev_agent(int dev_num)
     return uct_rocm_base_agents.agents[dev_num];
 }
 
+hsa_agent_t uct_rocm_base_get_gpu_agent(int gpu_num)
+{
+    ucs_assert(gpu_num < uct_rocm_base_agents.num_gpu);
+    return uct_rocm_base_agents.gpu_agents[gpu_num];
+}
+
 int uct_rocm_base_get_dev_num(hsa_agent_t agent)
 {
     int i;
@@ -207,7 +213,17 @@ int uct_rocm_base_get_dev_num(hsa_agent_t agent)
         if (uct_rocm_base_agents.agents[i].handle == agent.handle)
             return i;
     }
-    ucs_assert(0);
+    return -1;
+}
+
+int uct_rocm_base_get_gpu_num(hsa_agent_t agent)
+{
+    int i;
+
+    for (i = 0; i < uct_rocm_base_agents.num_gpu; i++) {
+        if (uct_rocm_base_agents.gpu_agents[i].handle == agent.handle)
+            return i;
+    }
     return -1;
 }
 
@@ -221,6 +237,7 @@ int uct_rocm_base_is_gpu_agent(hsa_agent_t agent)
     }
     return 0;
 }
+
 
 hsa_status_t uct_rocm_base_get_ptr_info(void *ptr, size_t size, void **base_ptr,
                                         size_t *base_size,
@@ -288,7 +305,7 @@ ucs_status_t uct_rocm_base_detect_memory_type(uct_md_h md, const void *addr,
     if ((status == HSA_STATUS_SUCCESS) &&
         (hsa_mem_type == HSA_EXT_POINTER_TYPE_HSA) &&
         (dev_type == HSA_DEVICE_TYPE_GPU)) {
-        uct_rocm_base_last_device_agent_used = uct_rocm_base_get_dev_num(agent);
+        uct_rocm_base_last_device_agent_used = uct_rocm_base_get_gpu_num(agent);
         *mem_type_p = UCS_MEMORY_TYPE_ROCM;
     }
 
@@ -394,7 +411,7 @@ ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
     if ((hsa_mem_type == HSA_EXT_POINTER_TYPE_HSA) &&
         (dev_type == HSA_DEVICE_TYPE_GPU)) {
         mem_type = UCS_MEMORY_TYPE_ROCM;
-
+        uct_rocm_base_last_device_agent_used = uct_rocm_base_get_gpu_num(agent);
         ucs_status = uct_rocm_base_get_sys_dev(agent, &sys_dev);
         if (ucs_status != UCS_OK) {
             sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
@@ -467,7 +484,7 @@ ucs_status_t uct_rocm_base_get_last_device_pool(hsa_amd_memory_pool_t *pool)
     hsa_status_t hsa_status;
 
     if (uct_rocm_base_last_device_agent_used != -1) {
-        agent = uct_rocm_base_get_dev_agent(uct_rocm_base_last_device_agent_used);
+        agent = uct_rocm_base_get_gpu_agent(uct_rocm_base_last_device_agent_used);
     }
     hsa_status = hsa_amd_agent_iterate_memory_pools(agent,
                                                     uct_rocm_hsa_pool_callback,
