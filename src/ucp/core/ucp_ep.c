@@ -213,6 +213,7 @@ static ucp_ep_h ucp_ep_allocate(ucp_worker_h worker, const char *peer_name)
     ep->am_lane                           = UCP_NULL_LANE;
     ep->flags                             = 0;
     ep->conn_sn                           = UCP_EP_MATCH_CONN_SN_MAX;
+    ep->flush_generation                  = 0;
 #if UCS_ENABLE_ASSERT
     ep->refcounts.create                  =
     ep->refcounts.flush                   =
