@@ -386,6 +386,18 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "even if invalidation workflow isn't supported",
    ucs_offsetof(ucp_context_config_t, rndv_errh_ppln_enable), UCS_CONFIG_TYPE_BOOL},
 
+  {"RNDV_PIPELINE_FRAG_FC_ENABLE", "y",
+   "Enable fragment-level flow control in rendezvous pipeline protocol.\n"
+   "When enabled, limits the number of outstanding fragments to prevent\n"
+   "staging buffer resource exhaustion",
+   ucs_offsetof(ucp_context_config_t, rndv_ppln_frag_fc_enable), UCS_CONFIG_TYPE_BOOL},
+
+  {"RNDV_PIPELINE_FRAG_WND_SIZE", "1000",
+   "Maximum number of outstanding fragments allowed in rendezvous pipeline\n"
+   "protocol when fragment flow control is enabled. This limits the number\n"
+   "of staging buffers allocated at any given time",
+   ucs_offsetof(ucp_context_config_t, rndv_ppln_frag_wnd_size), UCS_CONFIG_TYPE_UINT},
+
   {"FLUSH_WORKER_EPS", "y",
    "Enable flushing the worker by flushing its endpoints. Allows completing\n"
    "the flush operation in a bounded time even if there are new requests on\n"
