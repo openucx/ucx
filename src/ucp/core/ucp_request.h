@@ -355,9 +355,11 @@ struct ucp_request {
                     uint32_t           cmpl_sn;
                     /* Flags to pass to @ref uct_ep_flush */
                     uint8_t            uct_flags;
+                    /* Originally requested UCT flush flags, used to restore
+                     * uct_flags on rewind after fast-forwarding */
+                    uint8_t            uct_flags_orig;
                     uint8_t            sw_started;
                     uint8_t            sw_done;
-                    uint8_t            padding;
                     /* Memory specific flushes */
                     ucp_mem_flush_t    mem;
                 } flush;
