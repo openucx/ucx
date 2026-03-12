@@ -502,7 +502,8 @@ protected:
 
 #define UCT_TEST_CUDA_MEM_TYPE_TLS \
     cuda_copy,              \
-    gdr_copy
+    gdr_copy,               \
+    cuda_ipc
 
 #define UCT_TEST_ROCM_MEM_TYPE_TLS \
     rocm_copy
@@ -616,16 +617,6 @@ protected:
 #define UCT_INSTANTIATE_RC_DC_GGA_TEST_CASE(_test_case) \
     UCT_INSTANTIATE_RC_DC_TEST_CASE(_test_case) \
     _UCT_INSTANTIATE_TEST_CASE(_test_case, gga_mlx5)
-
-
-/**
- * Instantiate the parametrized test case for CUDA_IPC.
- * TODO: add cuda_ipc to UCT_INSTANTIATE_TEST_CASE.
- *
- * @param _test_case  Test case class, derived from uct_test.
- */
-#define UCT_INSTANTIATE_CUDA_IPC_TEST_CASE(_test_case) \
-    _UCT_INSTANTIATE_TEST_CASE(_test_case, cuda_ipc)
 
 
 /**

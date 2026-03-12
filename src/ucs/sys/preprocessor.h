@@ -39,11 +39,11 @@
  * Count number of macro arguments
  * e.g UCS_PP_NUM_ARGS(a,b) will expand to: 2
  */
-#define UCS_PP_MAX_ARGS 20
-#define _UCS_PP_NUM_ARGS(_0,_1,_2,_3,_4,_5,_6,_7,_8,_9,_10,_11,_12,_13,_14,_15,_16,_17,_18,_19,_20,N,...) \
+#define UCS_PP_MAX_ARGS 21
+#define _UCS_PP_NUM_ARGS(_0,_1,_2,_3,_4,_5,_6,_7,_8,_9,_10,_11,_12,_13,_14,_15,_16,_17,_18,_19,_20,_21,N,...) \
     N
 #define UCS_PP_NUM_ARGS(...) \
-    _UCS_PP_NUM_ARGS(, ## __VA_ARGS__,20,19,18,17,16,15,14,13,12,11,10,9,8,7,6,5,4,3,2,1,0)
+    _UCS_PP_NUM_ARGS(, ## __VA_ARGS__,21,20,19,18,17,16,15,14,13,12,11,10,9,8,7,6,5,4,3,2,1,0)
 
 
 /* Expand macro for each argument in the list
@@ -80,6 +80,7 @@
 #define _UCS_PP_FOREACH_18(_macro, _arg, _arg1, ...)  _macro(_arg, _arg1) _UCS_PP_FOREACH_17(_macro, _arg, __VA_ARGS__)
 #define _UCS_PP_FOREACH_19(_macro, _arg, _arg1, ...)  _macro(_arg, _arg1) _UCS_PP_FOREACH_18(_macro, _arg, __VA_ARGS__)
 #define _UCS_PP_FOREACH_20(_macro, _arg, _arg1, ...)  _macro(_arg, _arg1) _UCS_PP_FOREACH_19(_macro, _arg, __VA_ARGS__)
+#define _UCS_PP_FOREACH_21(_macro, _arg, _arg1, ...)  _macro(_arg, _arg1) _UCS_PP_FOREACH_20(_macro, _arg, __VA_ARGS__)
 
 #define _UCS_PP_FOREACH_SEP_0(_macro , _arg, _arg1, ...)
 #define _UCS_PP_FOREACH_SEP_1(_macro , _arg, _arg1, ...)  _macro(_arg, _arg1)
@@ -102,6 +103,7 @@
 #define _UCS_PP_FOREACH_SEP_18(_macro, _arg, _arg1, ...)  _macro(_arg, _arg1), _UCS_PP_FOREACH_SEP_17(_macro, _arg, __VA_ARGS__)
 #define _UCS_PP_FOREACH_SEP_19(_macro, _arg, _arg1, ...)  _macro(_arg, _arg1), _UCS_PP_FOREACH_SEP_18(_macro, _arg, __VA_ARGS__)
 #define _UCS_PP_FOREACH_SEP_20(_macro, _arg, _arg1, ...)  _macro(_arg, _arg1), _UCS_PP_FOREACH_SEP_19(_macro, _arg, __VA_ARGS__)
+#define _UCS_PP_FOREACH_SEP_21(_macro, _arg, _arg1, ...)  _macro(_arg, _arg1), _UCS_PP_FOREACH_SEP_20(_macro, _arg, __VA_ARGS__)
 
 #define _UCS_PP_ZIP_0(_l1, _l2)
 #define _UCS_PP_ZIP_1(_l1, _l2)       _UCS_PP_ZIP_0(_l1, _l2)  (UCS_PP_TUPLE_0 _l1, UCS_PP_TUPLE_0 _l2)

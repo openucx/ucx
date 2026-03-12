@@ -11,6 +11,7 @@
 extern "C" {
 #include <ucp/core/ucp_worker.inl>
 #include <ucp/core/ucp_ep.inl>
+#include <ucp/proto/proto_select.inl>
 #if HAVE_IB
 #include <uct/ib/ud/base/ud_iface.h>
 #endif
@@ -83,6 +84,8 @@ ucp_test::~ucp_test() {
 }
 
 void ucp_test::cleanup() {
+    EXPECT_TRUE(is_tl_selected(sender(), "cuda_ipc"));
+
     /* disconnect before destroying the entities */
     for (ucs::ptr_vector<entity>::const_iterator iter = entities().begin();
          iter != entities().end(); ++iter)
@@ -1337,4 +1340,41 @@ bool ucp_test::has_resource(const ucp_test_base::entity &e,
                             const std::string &tl_name) const
 {
     return count_resources(e, tl_name) != 0;
+}
+
+bool ucp_test::is_tl_selected(const ucp_test_base::entity &e,
+                               const std::string &tl_name) const
+{
+    if (!has_transport(tl_name)) {
+        return true;
+    }
+
+    ucp_ep_h ep = e.ep();
+    if (ep == NULL) {
+        return false;
+    }
+
+    const ucp_ep_config_t *config = ucp_ep_config(ep);
+
+    ucp_proto_select_key_t key;
+    ucp_proto_select_elem_t select_elem;
+    bool has_cuda_mem_type = false;
+
+    kh_foreach(config->proto_select.hash, key.u64, select_elem,
+        if (key.param.mem_type == UCS_MEMORY_TYPE_CUDA) {
+            has_cuda_mem_type = true;
+        }
+    )
+
+    if (!has_cuda_mem_type) {
+        return false;
+    }
+
+    for (ucp_lane_index_t lane = 0; lane < config->key.num_lanes; ++lane) {
+        if (tl_name == ucp_ep_get_tl_rsc(ep, lane)->tl_name) {
+            return true;
+        }
+    }
+
+    return false;
 }

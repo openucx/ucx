@@ -248,6 +248,8 @@ protected:
                            const std::string &tl_name) const;
     bool has_resource(const ucp_test_base::entity &e,
                       const std::string &tl_name) const;
+    bool is_tl_selected(const ucp_test_base::entity &e,
+                        const std::string &tl_name) const;
     entity* create_entity(bool add_in_front = false);
     entity* create_entity(bool add_in_front, const ucp_test_param& test_param);
     unsigned progress(const std::vector<entity*> &entities,
