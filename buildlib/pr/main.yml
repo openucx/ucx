@@ -249,6 +249,9 @@ resources:
     - container: centos10stream
       image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/centos10stream/builder:inbox
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: aws_tools
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/aws_tools:1
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
 
 stages:
   - stage: Codestyle
@@ -363,6 +366,11 @@ stages:
       parameters:
         name: EFA
         demands: ucx_new -equals yes
+
+    - template: aws/efa_aws.yml
+      parameters:
+        name: EFA_AWS
+        demands: ucx_docker
 
   - stage: Namespace_Tests
     dependsOn: [Static_check]
