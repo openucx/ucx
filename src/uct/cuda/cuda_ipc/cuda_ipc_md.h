@@ -17,10 +17,9 @@
 typedef enum uct_cuda_ipc_key_handle {
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_NO_IPC = 0,
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY, /* cudaMalloc memory */
-#if HAVE_CUDA_FABRIC
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM, /* cuMemCreate memory */
-    UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL /* cudaMallocAsync memory */
-#endif
+    UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL, /* cudaMallocAsync memory */
+    UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD, /* POSIX file descriptor */
 } uct_cuda_ipc_key_handle_t;
 
 
@@ -31,6 +30,11 @@ typedef struct uct_cuda_ipc_md_handle {
 #if HAVE_CUDA_FABRIC
         CUmemFabricHandle     fabric_handle; /* VMM/Mallocasync export handle */
 #endif
+        struct {
+            int               fd;            /* POSIX file descriptor */
+            uint64_t          system_id;     /* Machine identifier for
+                                                same-machine verification */
+        }                     posix_fd;      /* POSIX FD + machine ID */
     } handle;
 #if HAVE_CUDA_FABRIC
     CUmemPoolPtrExportData    ptr;

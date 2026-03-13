@@ -4,15 +4,15 @@
  * See file LICENSE for terms.
  */
 
+#include "cuda_vmm_mem_buffer.h"
+
 #include <uct/test_md.h>
 #include <uct/test_p2p_rma.h>
 
 extern "C" {
-#include <ucs/sys/ptr_arith.h>
 #include <uct/base/uct_md.h>
 }
 
-#include <cuda.h>
 #include <cuda_runtime.h>
 #include <thread>
 
@@ -51,108 +51,6 @@ void test_switch_cuda_device::detect_mem_type(ucs_memory_type_t mem_type) const
               UCS_OK);
     EXPECT_EQ(detected_mem_type, mem_type);
 }
-
-class cuda_vmm_mem_buffer {
-public:
-    cuda_vmm_mem_buffer() = default;
-    cuda_vmm_mem_buffer(size_t size, ucs_memory_type_t mem_type);
-    virtual ~cuda_vmm_mem_buffer();
-    void *ptr() const;
-
-protected:
-    void init(size_t size, unsigned handle_type);
-
-private:
-    size_t m_size                               = 0;
-    CUmemGenericAllocationHandle m_alloc_handle = 0;
-    CUdeviceptr m_ptr                           = 0;
-};
-
-cuda_vmm_mem_buffer::cuda_vmm_mem_buffer(size_t size,
-                                         ucs_memory_type_t mem_type)
-{
-    init(size, 0);
-}
-
-cuda_vmm_mem_buffer::~cuda_vmm_mem_buffer()
-{
-    cuMemUnmap(m_ptr, m_size);
-    cuMemAddressFree(m_ptr, m_size);
-    cuMemRelease(m_alloc_handle);
-}
-
-void *cuda_vmm_mem_buffer::ptr() const
-{
-    return (void*)m_ptr;
-}
-
-void cuda_vmm_mem_buffer::init(size_t size, unsigned handle_type)
-{
-    size_t granularity          = 0;
-    CUmemAllocationProp prop    = {};
-    CUmemAccessDesc access_desc = {};
-    CUdevice device;
-    if (cuCtxGetDevice(&device) != CUDA_SUCCESS) {
-        UCS_TEST_ABORT("failed to get the device handle for the current "
-                       "context");
-    }
-
-    prop.type                 = CU_MEM_ALLOCATION_TYPE_PINNED;
-    prop.location.type        = CU_MEM_LOCATION_TYPE_DEVICE;
-    prop.location.id          = device;
-    if (handle_type != 0) {
-        prop.requestedHandleTypes = (CUmemAllocationHandleType)handle_type;
-    }
-    if (cuMemGetAllocationGranularity(&granularity, &prop,
-                                      CU_MEM_ALLOC_GRANULARITY_MINIMUM) !=
-        CUDA_SUCCESS) {
-        goto err;
-    }
-
-    m_size = ucs_align_up(size, granularity);
-    if (cuMemCreate(&m_alloc_handle, m_size, &prop, 0) != CUDA_SUCCESS) {
-        goto err;
-    }
-
-    if (cuMemAddressReserve(&m_ptr, m_size, 0, 0, 0) != CUDA_SUCCESS) {
-        goto err_mem_release;
-    }
-
-    if (cuMemMap(m_ptr, m_size, 0, m_alloc_handle, 0) != CUDA_SUCCESS) {
-        goto err_address_free;
-    }
-
-    access_desc.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
-    access_desc.location.id   = device;
-    access_desc.flags         = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
-    if (cuMemSetAccess(m_ptr, m_size, &access_desc, 1) != CUDA_SUCCESS) {
-        goto err_mem_unmap;
-    }
-
-    return;
-
-err_mem_unmap:
-    cuMemUnmap(m_ptr, m_size);
-err_address_free:
-    cuMemAddressFree(m_ptr, m_size);
-err_mem_release:
-    cuMemRelease(m_alloc_handle);
-err:
-    UCS_TEST_SKIP_R("failed to allocate CUDA fabric memory");
-}
-
-#if HAVE_CUDA_FABRIC
-class cuda_fabric_mem_buffer : public cuda_vmm_mem_buffer {
-public:
-    cuda_fabric_mem_buffer(size_t size, ucs_memory_type_t mem_type);
-};
-
-cuda_fabric_mem_buffer::cuda_fabric_mem_buffer(size_t size,
-                                               ucs_memory_type_t mem_type)
-{
-    init(size, CU_MEM_HANDLE_TYPE_FABRIC);
-}
-#endif
 
 UCS_TEST_P(test_switch_cuda_device, detect_mem_type_cuda)
 {
