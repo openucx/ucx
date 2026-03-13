@@ -311,6 +311,9 @@ static int UCS_F_ALWAYS_INLINE ucp_request_try_send(ucp_request_t *req)
     } else if (status == UCS_INPROGRESS) {
         /* Not completed, but made progress */
         return 0;
+    } else if (status == UCP_STATUS_FENCE_DEFER) {
+        /* Deferred due to strong fence, treat as retry-later */
+        return ucp_request_pending_add(req);
     } else if (status == UCS_ERR_NO_RESOURCE) {
         /* No send resources, try to add to pending queue */
         return ucp_request_pending_add(req);

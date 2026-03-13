@@ -28,6 +28,7 @@
  */
 #define UCP_PROTO_RMA_MAX_BCOPY_LANES 1
 
+#define UCP_EP_FENCE_SPIN_TIMEOUT_US  20   /* max microseconds to spin */
 
 /**
  * Defines functions for RMA protocol
@@ -112,5 +113,7 @@ void ucp_rma_sw_send_cmpl(ucp_ep_h ep);
 ucs_status_t ucp_ep_fence_weak(ucp_ep_h ep);
 
 ucs_status_t ucp_ep_fence_strong(ucp_ep_h ep);
+
+ucs_status_t ucp_ep_fence_strong_nb(ucp_ep_h ep, uint64_t fence_seq);
 
 #endif
