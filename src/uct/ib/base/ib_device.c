@@ -851,23 +851,24 @@ uct_ib_device_set_ece(uct_ib_device_t *dev, struct ibv_qp *qp, uint32_t ece_val)
     uct_ib_md_t *md = ucs_container_of(dev, uct_ib_md_t, dev);
 #if HAVE_DECL_IBV_SET_ECE
     struct ibv_ece ece;
-#endif
 
-    if (ece_val == UCT_IB_DEVICE_ECE_DEFAULT) {
+    if ((ece_val == UCT_IB_DEVICE_ECE_DEFAULT) && !md->ece_enable) {
         return UCS_OK;
     }
 
     ucs_assertv_always(md->ece_enable, "device=%s, ece=0x%x",
                        uct_ib_device_name(dev), ece_val);
 
-#if HAVE_DECL_IBV_SET_ECE
     if (ibv_query_ece(qp, &ece)) {
         ucs_error("ibv_query_ece(device=%s qpn=0x%x) failed: %m",
                   uct_ib_device_name(dev), qp->qp_num);
         return UCS_ERR_IO_ERROR;
     }
 
-    ece.options = ece_val;
+    if (ece_val != UCT_IB_DEVICE_ECE_DEFAULT) {
+        ece.options = ece_val;
+    }
+
     if (ibv_set_ece(qp, &ece)) {
         ucs_error("ibv_set_ece(device=%s qpn=0x%x) failed: %m",
                   uct_ib_device_name(dev), qp->qp_num);
@@ -875,8 +876,10 @@ uct_ib_device_set_ece(uct_ib_device_t *dev, struct ibv_qp *qp, uint32_t ece_val)
     }
 
     return UCS_OK;
+#else
+    return (ece_val == UCT_IB_DEVICE_ECE_DEFAULT) ? UCS_OK :
+                                                    UCS_ERR_UNSUPPORTED;
 #endif
-    return UCS_ERR_UNSUPPORTED;
 }
 
 const char *uct_ib_roce_version_str(uct_ib_roce_version_t roce_ver)
