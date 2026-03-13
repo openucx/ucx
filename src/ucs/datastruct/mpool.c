@@ -25,8 +25,8 @@ static size_t ucs_mpool_elem_total_size(ucs_mpool_data_t *data)
 }
 
 static UCS_F_ALWAYS_INLINE ucs_mpool_elem_t *
-ucs_mpool_chunk_elem(ucs_mpool_data_t *data, ucs_mpool_chunk_t *chunk,
-                     unsigned elem_index)
+ucs_mpool_chunk_elem_internal(ucs_mpool_data_t *data, ucs_mpool_chunk_t *chunk,
+                              unsigned elem_index)
 {
     return UCS_PTR_BYTE_OFFSET(chunk->elems,
                                elem_index * ucs_mpool_elem_total_size(data));
@@ -41,7 +41,7 @@ static void ucs_mpool_chunk_leak_check(ucs_mpool_t *mp, ucs_mpool_chunk_t *chunk
     void *obj;
 
     for (i = 0; i < chunk->num_elems; ++i) {
-        elem = ucs_mpool_chunk_elem(mp->data, chunk, i);
+        elem = ucs_mpool_chunk_elem_internal(mp->data, chunk, i);
         VALGRIND_MAKE_MEM_DEFINED(elem, sizeof *elem);
         if (elem->mpool != NULL) {
             obj = elem + 1;
@@ -222,6 +222,14 @@ void ucs_mpool_put(void *obj)
     ucs_mpool_put_inline(obj);
 }
 
+void *ucs_mpool_chunk_elem(ucs_mpool_t *mp, ucs_mpool_chunk_t *chunk,
+                           unsigned elem_index)
+{
+    ucs_mpool_elem_t *elem = ucs_mpool_chunk_elem_internal(mp->data, chunk,
+                                                           elem_index);
+    return elem + 1;
+}
+
 static void *ucs_mpool_chunk_elems(ucs_mpool_t *mp, ucs_mpool_chunk_t *chunk)
 {
     ucs_mpool_data_t *data = mp->data;
@@ -282,8 +290,12 @@ void ucs_mpool_grow(ucs_mpool_t *mp, unsigned num_elems)
                   ucs_mpool_name(mp), chunk, chunk_size, chunk->num_elems);
     }
 
+    if (data->ops->chunk_objs_init != NULL) {
+        data->ops->chunk_objs_init(mp, chunk);
+    }
+
     for (i = 0; i < chunk->num_elems; ++i) {
-        elem         = ucs_mpool_chunk_elem(data, chunk, i);
+        elem = ucs_mpool_chunk_elem_internal(data, chunk, i);
         if (data->ops->obj_init != NULL) {
             data->ops->obj_init(mp, elem + 1, chunk);
         }

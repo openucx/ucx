@@ -10,6 +10,7 @@
 
 #include "gdaki.h"
 
+#include <ucs/datastruct/mpool.h>
 #include <ucs/sys/sock.h>
 #include <ucs/time/time.h>
 #include <ucs/datastruct/string_buffer.h>
@@ -33,6 +34,7 @@ typedef struct {
     uct_rc_iface_common_config_t      super;
     uct_rc_mlx5_iface_common_config_t mlx5;
     unsigned                          num_channels;
+    unsigned                          num_eps;
 } uct_rc_gdaki_iface_config_t;
 
 ucs_config_field_t uct_rc_gdaki_iface_config_table[] = {
@@ -49,6 +51,11 @@ ucs_config_field_t uct_rc_gdaki_iface_config_table[] = {
      "Maximum value is 256.",
      ucs_offsetof(uct_rc_gdaki_iface_config_t, num_channels),
      UCS_CONFIG_TYPE_UINT},
+
+    {"NUM_PRE_ALLOC_EPS", "256",
+     "Expected number of pre-allocated endpoints. The channel pool grows if\n"
+     "more are needed.",
+     ucs_offsetof(uct_rc_gdaki_iface_config_t, num_eps), UCS_CONFIG_TYPE_UINT},
 
     {NULL}
 };
@@ -227,132 +234,290 @@ uct_rc_gdaki_umem_reg(const uct_ib_md_t *md, struct ibv_context *ibv_context,
 #endif
 }
 
-static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
+typedef struct {
+    void                    *gpu_mem;
+    CUdeviceptr             gpu_raw;
+    struct mlx5dv_devx_umem *umem;
+} uct_rc_gdaki_pool_chunk_hdr_t;
+
+typedef struct {
+    uct_rc_gdaki_iface_t  *iface;
+    uct_ib_mlx5_cq_attr_t cq_attr;
+    uct_ib_mlx5_qp_attr_t qp_attr;
+    uint64_t              pgsz_bitmap;
+    size_t                dev_ep_size;
+} uct_rc_gdaki_pool_priv_t;
+
+static ucs_status_t
+uct_rc_gdaki_pool_chunk_alloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
 {
-    uct_rc_gdaki_iface_t *iface = ucs_derived_of(params->iface,
-                                                 uct_rc_gdaki_iface_t);
+    uct_rc_gdaki_pool_priv_t *priv = ucs_mpool_priv(mp);
+    uct_rc_gdaki_iface_t *iface    = priv->iface;
     const uct_ib_md_t *md = ucs_derived_of(iface->super.super.super.super.md,
                                            uct_ib_md_t);
-    uct_ib_iface_init_attr_t init_attr = {};
-    uct_ib_mlx5_cq_attr_t cq_attr      = {};
-    uct_ib_mlx5_qp_attr_t qp_attr      = {};
-    uint64_t pgsz_bitmap;
+    uct_rc_gdaki_pool_chunk_hdr_t *hdr;
+    size_t host_alloc_size, gpu_alloc_size;
+    unsigned num_elems;
     ucs_status_t status;
-    size_t dev_ep_size;
-    uct_ib_mlx5_dbrec_t dbrec;
-    unsigned i;
-    uct_rc_gdaki_channel_t *channel;
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super.super.super);
+    host_alloc_size = sizeof(*hdr) + *size_p;
+    hdr             = ucs_malloc(host_alloc_size, "gdaki pool chunk");
+    if (hdr == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
 
-    self->dev_ep_init = 0;
+    *chunk_p  = hdr + 1;
+    num_elems = ucs_mpool_num_elems_per_chunk(mp, *chunk_p, *size_p);
+    if (num_elems == 0) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err_free_hdr;
+    }
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(iface->cuda_ctx));
     if (status != UCS_OK) {
-        return status;
+        goto err_free_hdr;
     }
 
-    init_attr.cq_len[UCT_IB_DIR_TX] = 1;
-    uct_ib_mlx5_cq_calc_sizes(&iface->super.super.super, UCT_IB_DIR_TX,
-                              &init_attr, 0, &cq_attr);
-    uct_rc_iface_fill_attr(&iface->super.super, &qp_attr.super,
-                           iface->super.super.config.tx_qp_len, NULL);
-    uct_ib_mlx5_wq_calc_sizes(&qp_attr);
-
-    cq_attr.flags      |= UCT_IB_MLX5_CQ_IGNORE_OVERRUN;
-
-    qp_attr.mmio_mode     = UCT_IB_MLX5_MMIO_MODE_DB;
-    qp_attr.super.srq_num = 0;
-
-    /* Disable inline scatter to TX CQE */
-    qp_attr.super.max_inl_cqe[UCT_IB_DIR_TX] = 0;
-
-    /*
-     * dev_ep layout:
-     * +-------------------+----------+---------+
-     * | common data       | channels | wq buff |
-     * +-------------------+----------+---------+
-     *                    /            \
-     *            +----------+- -----+---------+----+-----
-     *            | cq entry | dbrec | indices | db |...
-     *            +----------+- -----+---------+----+-----
-     */
-    uct_rc_gdaki_calc_dev_ep_layout(iface->num_channels, &qp_attr,
-                                    &cq_attr.umem_offset, &dev_ep_size,
-                                    &pgsz_bitmap);
-
-    status      = uct_rc_gdaki_alloc(dev_ep_size, ucs_get_page_size(),
-                                     (void**)&self->ep_gpu, &self->ep_raw);
+    gpu_alloc_size = num_elems * priv->dev_ep_size;
+    status         = uct_rc_gdaki_alloc(gpu_alloc_size, ucs_get_page_size(),
+                                        &hdr->gpu_mem, &hdr->gpu_raw);
     if (status != UCS_OK) {
         goto err_ctx;
     }
 
-    self->umem = uct_rc_gdaki_umem_reg(md, md->dev.ibv_context, self->ep_gpu,
-                                       dev_ep_size, pgsz_bitmap);
-    if (self->umem == NULL) {
+    hdr->umem = uct_rc_gdaki_umem_reg(md, md->dev.ibv_context, hdr->gpu_mem,
+                                      gpu_alloc_size, priv->pgsz_bitmap);
+    if (hdr->umem == NULL) {
         uct_ib_check_memlock_limit_msg(md->dev.ibv_context, UCS_LOG_LEVEL_ERROR,
                                        "mlx5dv_devx_umem_reg(ptr=%p size=%zu)",
-                                       self->ep_gpu, dev_ep_size);
+                                       hdr->gpu_mem, gpu_alloc_size);
         status = UCS_ERR_NO_MEMORY;
         goto err_mem;
-    }
-
-    dbrec.mem_id = self->umem->umem_id;
-
-    self->channels = ucs_calloc(iface->num_channels, sizeof(*self->channels),
-                                "channels");
-    if (self->channels == NULL) {
-        status = UCS_ERR_NO_MEMORY;
-        goto err_umem;
-    }
-
-    for (i = 0; i < iface->num_channels; i++) {
-        channel = &self->channels[i];
-
-        channel->cq.devx.mem.mem       = self->umem;
-        channel->qp.super.devx.mem.mem = self->umem;
-
-        dbrec.offset = ucs_offsetof(uct_rc_gdaki_dev_ep_t, qps[i].cq_dbrec);
-        channel->cq.devx.dbrec = &dbrec;
-        status = uct_ib_mlx5_devx_create_cq_common(&iface->super.super.super,
-                                                   UCT_IB_DIR_TX, &cq_attr,
-                                                   &channel->cq, 0, 0);
-        if (status != UCS_OK) {
-            goto err_qp;
-        }
-
-        dbrec.offset = ucs_offsetof(uct_rc_gdaki_dev_ep_t, qps[i].qp_dbrec);
-        channel->qp.super.devx.dbrec = &dbrec;
-        status = uct_ib_mlx5_devx_create_qp_common(&iface->super.super.super,
-                                                   &channel->cq, &channel->cq,
-                                                   &channel->qp.super,
-                                                   &channel->qp, &qp_attr);
-        if (status != UCS_OK) {
-            goto err_cq;
-        }
-
-        cq_attr.umem_offset += sizeof(uct_rc_gdaki_dev_qp_t);
-        qp_attr.umem_offset += qp_attr.len;
     }
 
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
     return UCS_OK;
 
-err_cq:
-    uct_ib_mlx5_devx_destroy_cq_common(&self->channels[i].cq);
-err_qp:
-    while (i-- > 0) {
-        uct_ib_mlx5_devx_destroy_qp_common(&self->channels[i].qp.super);
-        uct_ib_mlx5_devx_destroy_cq_common(&self->channels[i].cq);
-    }
-    ucs_free(self->channels);
-err_umem:
-    mlx5dv_devx_umem_dereg(self->umem);
 err_mem:
-    cuMemFree(self->ep_raw);
+    cuMemFree(hdr->gpu_raw);
 err_ctx:
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
+err_free_hdr:
+    ucs_free(hdr);
     return status;
+}
+
+static void uct_rc_gdaki_pool_chunk_objs_init(ucs_mpool_t *mp, void *chunk)
+{
+    uct_rc_gdaki_pool_priv_t *priv     = ucs_mpool_priv(mp);
+    uct_rc_gdaki_iface_t *iface        = priv->iface;
+    uct_ib_mlx5_cq_attr_t *cq_attr     = &priv->cq_attr;
+    uct_ib_mlx5_qp_attr_t *qp_attr     = &priv->qp_attr;
+    uct_rc_gdaki_pool_chunk_hdr_t *hdr = (uct_rc_gdaki_pool_chunk_hdr_t*)chunk -
+                                         1;
+    unsigned num_elems, num_channels;
+    uct_ib_mlx5_dbrec_t dbrec;
+    size_t ep_offset, ep_qp_offset, ep_wq_offset;
+    unsigned ep_idx, ch_idx;
+    uct_rc_gdaki_ep_channel_block_t *block;
+    uct_rc_gdaki_channel_t *channel;
+    ucs_status_t status;
+
+    num_elems    = ((ucs_mpool_chunk_t*)chunk)->num_elems;
+    num_channels = iface->num_channels;
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(iface->cuda_ctx));
+    if (status != UCS_OK) {
+        ucs_fatal("gdaki pool chunk_objs_init: cuCtxPushCurrent failed");
+        return;
+    }
+
+    ep_qp_offset = UCT_GDAKI_DEV_EP_SIZE;
+    ep_wq_offset = ep_qp_offset + num_channels * UCT_GDAKI_DEV_QP_SIZE;
+    dbrec.mem_id = hdr->umem->umem_id;
+
+    for (ch_idx = 0; ch_idx < num_channels; ++ch_idx) {
+        size_t ch_cq_offset = ch_idx * UCT_GDAKI_DEV_QP_SIZE;
+        size_t ch_wq_offset = ch_idx * priv->qp_attr.len;
+        for (ep_idx = 0; ep_idx < num_elems; ++ep_idx) {
+            ep_offset = ep_idx * priv->dev_ep_size;
+            block     = ucs_mpool_chunk_elem(mp, chunk, ep_idx);
+            channel   = &block->channels[ch_idx];
+            if (ch_idx == 0) {
+                block->gpu_ptr = (uintptr_t)hdr->gpu_mem + ep_offset;
+            }
+
+            channel->cq.devx.mem.mem       = hdr->umem;
+            channel->qp.super.devx.mem.mem = hdr->umem;
+
+            cq_attr->umem_offset   = ep_offset + ep_qp_offset + ch_cq_offset;
+            dbrec.offset           = cq_attr->umem_offset +
+                                     ucs_offsetof(uct_rc_gdaki_dev_qp_t, cq_dbrec);
+            channel->cq.devx.dbrec = &dbrec;
+            status = uct_ib_mlx5_devx_create_cq_common(&iface->super.super.super,
+                                                       UCT_IB_DIR_TX, cq_attr,
+                                                       &channel->cq, 0, 0);
+            if (status != UCS_OK) {
+                goto err_cleanup;
+            }
+
+            qp_attr->umem_offset = ep_offset + ep_wq_offset + ch_wq_offset;
+            dbrec.offset         = cq_attr->umem_offset +
+                                   ucs_offsetof(uct_rc_gdaki_dev_qp_t, qp_dbrec);
+            channel->qp.super.devx.dbrec = &dbrec;
+            status                       = uct_ib_mlx5_devx_create_qp_common(
+                    &iface->super.super.super, &channel->cq, &channel->cq,
+                    &channel->qp.super, &channel->qp, qp_attr);
+            if (status != UCS_OK) {
+                uct_ib_mlx5_devx_destroy_cq_common(&channel->cq);
+                goto err_cleanup;
+            }
+        }
+    }
+
+    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
+    return;
+
+err_cleanup:
+    {
+        unsigned c, e;
+        for (e = 0; e < num_elems; ++e) {
+            unsigned first_uncreated_ch_idx;
+            if (e < ep_idx) {
+                first_uncreated_ch_idx = ch_idx + 1;
+            } else {
+                first_uncreated_ch_idx = ch_idx;
+            }
+            block = ucs_mpool_chunk_elem(mp, chunk, e);
+            for (c = 0; c < first_uncreated_ch_idx; ++c) {
+                channel = &block->channels[c];
+                uct_ib_mlx5_devx_destroy_qp_common(&channel->qp.super);
+                uct_ib_mlx5_devx_destroy_cq_common(&channel->cq);
+            }
+        }
+
+        (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
+        ucs_fatal("gdaki chunk_objs_init: create_cq/qp failed (ch=%u ep=%u)",
+                  ch_idx, ep_idx);
+    }
+}
+
+
+static void uct_rc_gdaki_pool_chunk_release(ucs_mpool_t *mp, void *chunk)
+{
+    uct_rc_gdaki_pool_priv_t *priv     = ucs_mpool_priv(mp);
+    uct_rc_gdaki_pool_chunk_hdr_t *hdr = (uct_rc_gdaki_pool_chunk_hdr_t*)chunk -
+                                         1;
+    ucs_mpool_chunk_t *mp_chunk        = chunk;
+    unsigned num_elems                 = mp_chunk->num_elems;
+    unsigned num_channels              = priv->iface->num_channels;
+    unsigned ep_idx, ch_idx;
+    uct_rc_gdaki_ep_channel_block_t *block;
+    uct_rc_gdaki_channel_t *channels;
+
+    for (ep_idx = 0; ep_idx < num_elems; ++ep_idx) {
+        block    = ucs_mpool_chunk_elem(mp, chunk, ep_idx);
+        channels = &block->channels[0];
+        for (ch_idx = 0; ch_idx < num_channels; ++ch_idx) {
+            uct_ib_mlx5_devx_destroy_qp_common(&channels[ch_idx].qp.super);
+            uct_ib_mlx5_devx_destroy_cq_common(&channels[ch_idx].cq);
+        }
+    }
+    mlx5dv_devx_umem_dereg(hdr->umem);
+    cuMemFree(hdr->gpu_raw);
+    ucs_free(hdr);
+}
+
+static ucs_mpool_ops_t uct_rc_gdaki_pool_mpool_ops = {
+    .chunk_alloc     = uct_rc_gdaki_pool_chunk_alloc,
+    .chunk_release   = uct_rc_gdaki_pool_chunk_release,
+    .chunk_objs_init = uct_rc_gdaki_pool_chunk_objs_init,
+    .obj_init        = NULL,
+    .obj_cleanup     = NULL,
+    .obj_str         = NULL,
+};
+
+static ucs_status_t
+uct_rc_gdaki_iface_init_channel_pool(uct_rc_gdaki_iface_t *iface,
+                                     const uct_ib_md_t *md,
+                                     const uct_rc_gdaki_iface_config_t *config)
+{
+    uct_ib_iface_init_attr_t init_attr = {};
+    uct_ib_mlx5_cq_attr_t *cq_attr;
+    uct_ib_mlx5_qp_attr_t *qp_attr;
+    size_t cq_umem_offset, dev_ep_size;
+    uint64_t pgsz_bitmap;
+    ucs_mpool_params_t mp_params;
+    uct_rc_gdaki_pool_priv_t *priv;
+    ucs_status_t status;
+
+    ucs_mpool_params_reset(&mp_params);
+    mp_params.priv_size       = sizeof(uct_rc_gdaki_pool_priv_t);
+    mp_params.elem_size       = sizeof(uct_rc_gdaki_ep_channel_block_t) +
+                                sizeof(uct_rc_gdaki_channel_t) * iface->num_channels;
+    mp_params.alignment       = UCS_SYS_CACHE_LINE_SIZE;
+    mp_params.elems_per_chunk = config->num_eps;
+    mp_params.max_elems       = UINT_MAX;
+    mp_params.ops             = &uct_rc_gdaki_pool_mpool_ops;
+    mp_params.name            = "gdaki_channel_pool";
+
+    status = ucs_mpool_init(&mp_params, &iface->channel_pool);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    priv    = ucs_mpool_priv(&iface->channel_pool);
+    cq_attr = &priv->cq_attr;
+    qp_attr = &priv->qp_attr;
+
+    init_attr.cq_len[UCT_IB_DIR_TX] = 1;
+    uct_ib_mlx5_cq_calc_sizes(&iface->super.super.super, UCT_IB_DIR_TX,
+                              &init_attr, 0, cq_attr);
+    uct_rc_iface_fill_attr(&iface->super.super, &qp_attr->super,
+                           iface->super.super.config.tx_qp_len, NULL);
+    uct_ib_mlx5_wq_calc_sizes(qp_attr);
+
+    cq_attr->flags                           |= UCT_IB_MLX5_CQ_IGNORE_OVERRUN;
+    qp_attr->mmio_mode                        = UCT_IB_MLX5_MMIO_MODE_DB;
+    qp_attr->super.srq_num                    = 0;
+    qp_attr->super.max_inl_cqe[UCT_IB_DIR_TX] = 0;
+
+    uct_rc_gdaki_calc_dev_ep_layout(iface->num_channels, qp_attr,
+                                    &cq_umem_offset, &dev_ep_size,
+                                    &pgsz_bitmap);
+
+    priv->iface       = iface;
+    priv->pgsz_bitmap = pgsz_bitmap;
+    priv->dev_ep_size = dev_ep_size;
+
+    ucs_mpool_grow(&iface->channel_pool, config->num_eps);
+    return UCS_OK;
+}
+
+static void uct_rc_gdaki_iface_cleanup_channel_pool(uct_rc_gdaki_iface_t *iface)
+{
+    ucs_mpool_t *mp = &iface->channel_pool;
+
+    if (mp->data == NULL) {
+        return;
+    }
+    ucs_mpool_cleanup(mp, 0);
+}
+
+static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
+{
+    uct_rc_gdaki_iface_t *iface = ucs_derived_of(params->iface,
+                                                 uct_rc_gdaki_iface_t);
+
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super.super.super);
+
+    self->dev_ep_init   = 0;
+    self->channel_block = ucs_mpool_get(&iface->channel_pool);
+    if (self->channel_block == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    return UCS_OK;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_gdaki_ep_t)
@@ -361,20 +526,16 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_gdaki_ep_t)
                                                  uct_rc_gdaki_iface_t);
     unsigned i;
 
-    for (i = 0; i < iface->num_channels; i++) {
-        if (self->dev_ep_init) {
-            /* page with UAR might be or might be not registered already
-             * so currently we just ignore errors. this may cause
-             * use-after-free if we release page which is used by another EP
-             * TODO and reference counted tracking for UAR pages */
-            (void)cuMemHostUnregister(self->channels[i].qp.reg->addr.ptr);
+    if (self->dev_ep_init && self->channel_block != NULL) {
+        uct_rc_gdaki_channel_t *channels = &self->channel_block->channels[0];
+        for (i = 0; i < iface->num_channels; i++) {
+            (void)cuMemHostUnregister(channels[i].qp.reg->addr.ptr);
         }
-        uct_ib_mlx5_devx_destroy_qp_common(&self->channels[i].qp.super);
-        uct_ib_mlx5_devx_destroy_cq_common(&self->channels[i].cq);
     }
-    ucs_free(self->channels);
-    mlx5dv_devx_umem_dereg(self->umem);
-    cuMemFree(self->ep_raw);
+    if (self->channel_block != NULL) {
+        ucs_mpool_put(self->channel_block);
+        self->channel_block = NULL;
+    }
 }
 
 UCS_CLASS_DEFINE(uct_rc_gdaki_ep_t, uct_base_ep_t);
@@ -392,7 +553,7 @@ uct_rc_gdaki_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
 
     for (i = 0; i < iface->num_channels; i++) {
         uct_ib_pack_uint24(*ucs_serialize_next(&rc_addr, uct_ib_uint24_t),
-                           ep->channels[i].qp.super.qp_num);
+                           ep->channel_block->channels[i].qp.super.qp_num);
     }
     return UCS_OK;
 }
@@ -410,11 +571,12 @@ uct_rc_gdaki_ep_connect_to_ep_v2(uct_ep_h tl_ep,
                                  const uct_ep_addr_t *ep_addr,
                                  const uct_ep_connect_to_ep_params_t *params)
 {
-    uct_rc_gdaki_ep_t *ep           = ucs_derived_of(tl_ep, uct_rc_gdaki_ep_t);
-    uct_rc_gdaki_iface_t *iface     = ucs_derived_of(tl_ep->iface,
-                                                     uct_rc_gdaki_iface_t);
-    const uct_ib_address_t *ib_addr = (void*)device_addr;
-    uint8_t path_index                           = 0;
+    uct_rc_gdaki_ep_t *ep            = ucs_derived_of(tl_ep, uct_rc_gdaki_ep_t);
+    uct_rc_gdaki_iface_t *iface      = ucs_derived_of(tl_ep->iface,
+                                                      uct_rc_gdaki_iface_t);
+    uct_rc_gdaki_channel_t *channels = &ep->channel_block->channels[0];
+    const uct_ib_address_t *ib_addr  = (void*)device_addr;
+    uint8_t path_index               = 0;
     struct ibv_ah_attr ah_attr;
     enum ibv_mtu path_mtu;
     uint32_t dest_qp_num;
@@ -434,7 +596,7 @@ uct_rc_gdaki_ep_connect_to_ep_v2(uct_ep_h tl_ep,
         dest_qp_num = uct_ib_unpack_uint24(
                 *ucs_serialize_next(&ep_addr, uct_ib_uint24_t));
         status      = uct_rc_mlx5_iface_common_devx_connect_qp(
-                &iface->super, &ep->channels[i].qp.super, dest_qp_num, &ah_attr,
+                &iface->super, &channels[i].qp.super, dest_qp_num, &ah_attr,
                 path_mtu, path_index, iface->super.super.config.max_rd_atomic);
         if (status != UCS_OK) {
             return status;
@@ -458,9 +620,9 @@ int uct_rc_gdaki_ep_is_connected(uct_ep_h tl_ep,
     union ibv_gid *rgid;
     const uct_ib_address_t *ib_addr;
 
-    status = uct_ib_mlx5_query_qp_peer_info(&iface->super.super.super,
-                                            &ep->channels[0].qp.super, &ah_attr,
-                                            &qp_num);
+    status = uct_ib_mlx5_query_qp_peer_info(
+            &iface->super.super.super, &ep->channel_block->channels[0].qp.super,
+            &ah_attr, &qp_num);
     if (status != UCS_OK) {
         return 0;
     }
@@ -533,14 +695,13 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
     uct_rc_gdaki_ep_t *ep        = ucs_derived_of(tl_ep, uct_rc_gdaki_ep_t);
     uct_rc_gdaki_iface_t *iface  = ucs_derived_of(ep->super.super.iface,
                                                   uct_rc_gdaki_iface_t);
-    uct_ib_mlx5_qp_attr_t qp_attr = {};
+    uct_rc_gdaki_pool_priv_t *mpool_priv = ucs_mpool_priv(&iface->channel_pool);
     uct_rc_gdaki_dev_ep_t *dev_ep;
-    size_t cq_umem_offset, dev_ep_size;
     uct_rc_gdaki_channel_t *channel;
-    uint64_t pgsz_bitmap;
     ucs_status_t status;
     CUdeviceptr sq_db;
     unsigned i;
+    size_t dev_ep_host_size;
 
     pthread_mutex_lock(&iface->ep_init_lock);
 
@@ -550,36 +711,33 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
             goto out_unlock;
         }
 
-        uct_rc_iface_fill_attr(&iface->super.super, &qp_attr.super,
-                               iface->super.super.config.tx_qp_len, NULL);
-        uct_ib_mlx5_wq_calc_sizes(&qp_attr);
-        uct_rc_gdaki_calc_dev_ep_layout(iface->num_channels, &qp_attr,
-                                        &cq_umem_offset, &dev_ep_size,
-                                        &pgsz_bitmap);
-
-        dev_ep = ucs_calloc(1, qp_attr.umem_offset, "dev_ep");
+        dev_ep_host_size = UCT_GDAKI_DEV_EP_SIZE +
+                           iface->num_channels * UCT_GDAKI_DEV_QP_SIZE;
+        dev_ep           = ucs_calloc(1, dev_ep_host_size, "dev_ep");
         if (dev_ep == NULL) {
             status = UCS_ERR_NO_MEMORY;
             goto out_ctx;
         }
 
         status = UCT_CUDADRV_FUNC_LOG_ERR(
-                cuMemsetD8((CUdeviceptr)ep->ep_gpu, 0, dev_ep_size));
+                cuMemsetD8((CUdeviceptr)ep->channel_block->gpu_ptr, 0,
+                           dev_ep_host_size));
         if (status != UCS_OK) {
             goto out_free;
         }
 
         dev_ep->atomic_va    = iface->atomic_buff;
         dev_ep->atomic_lkey  = htonl(iface->atomic_mr->lkey);
-        dev_ep->sq_wqe_num   = qp_attr.max_tx;
-        dev_ep->sq_fc_mask   = (qp_attr.max_tx >> 1) - 1;
+        dev_ep->sq_wqe_num   = mpool_priv->qp_attr.max_tx;
+        dev_ep->sq_fc_mask   = (mpool_priv->qp_attr.max_tx >> 1) - 1;
         dev_ep->channel_mask = iface->num_channels - 1;
-        dev_ep->sq_wqe_daddr = UCS_PTR_BYTE_OFFSET(ep->ep_gpu,
-                                                   qp_attr.umem_offset);
+        dev_ep->sq_wqe_daddr = (uint8_t*)(ep->channel_block->gpu_ptr +
+                                          UCT_GDAKI_DEV_EP_SIZE +
+                                          iface->num_channels *
+                                                  UCT_GDAKI_DEV_QP_SIZE);
 
-        for (i = 0; i < iface->num_channels; i++) {
-            channel = ep->channels + i;
-
+        for (i = 0; i < iface->num_channels; ++i) {
+            channel = &ep->channel_block->channels[i];
             (void)cuMemHostRegister(channel->qp.reg->addr.ptr,
                                     UCT_IB_MLX5_BF_REG_SIZE * 2,
                                     CU_MEMHOSTREGISTER_PORTABLE |
@@ -587,8 +745,8 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
                                     CU_MEMHOSTREGISTER_IOMEMORY);
 
             status = UCT_CUDADRV_FUNC_LOG_ERR(
-                    cuMemHostGetDevicePointer(&sq_db,
-                                              channel->qp.reg->addr.ptr, 0));
+                    cuMemHostGetDevicePointer(&sq_db, channel->qp.reg->addr.ptr,
+                                              0));
             if (status != UCS_OK) {
                 goto out_unreg;
             }
@@ -600,9 +758,9 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
             memset(&dev_ep->qps[i].cq_buff, 0xff, 64);
         }
 
-        status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemcpyHtoD((CUdeviceptr)ep->ep_gpu,
-                                                       dev_ep,
-                                                       qp_attr.umem_offset));
+        status = UCT_CUDADRV_FUNC_LOG_ERR(
+                cuMemcpyHtoD((CUdeviceptr)ep->channel_block->gpu_ptr, dev_ep,
+                             dev_ep_host_size));
         if (status != UCS_OK) {
             goto out_free;
         }
@@ -613,13 +771,14 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
         ep->dev_ep_init = 1;
     }
 
-    *device_ep_p = &ep->ep_gpu->super;
+    *device_ep_p = &((uct_rc_gdaki_dev_ep_t*)ep->channel_block->gpu_ptr)->super;
     pthread_mutex_unlock(&iface->ep_init_lock);
     return UCS_OK;
 
 out_unreg:
     do {
-        (void)cuMemHostUnregister(ep->channels[i].qp.reg->addr.ptr);
+        (void)cuMemHostUnregister(
+                ep->channel_block->channels[i].qp.reg->addr.ptr);
     } while (i-- > 0);
 out_free:
     ucs_free(dev_ep);
@@ -791,9 +950,16 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
         goto err_lock;
     }
 
+    status = uct_rc_gdaki_iface_init_channel_pool(self, &md->super, config);
+    if (status != UCS_OK) {
+        goto err_pool;
+    }
+
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
     return UCS_OK;
 
+err_pool:
+    pthread_mutex_destroy(&self->ep_init_lock);
 err_lock:
     ibv_dereg_mr(self->atomic_mr);
 err_atomic:
@@ -807,6 +973,7 @@ err_ctx_release:
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_gdaki_iface_t)
 {
+    uct_rc_gdaki_iface_cleanup_channel_pool(self);
     pthread_mutex_destroy(&self->ep_init_lock);
     ibv_dereg_mr(self->atomic_mr);
     cuMemFree(self->atomic_raw);
