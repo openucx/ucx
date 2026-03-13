@@ -872,11 +872,14 @@ enum ucp_am_handler_param_field {
  *
  * This macro creates a datatype identifier for vector operations. The same
  * identifier is used for both local and remote vector descriptors:
- * - When passed via @a param->datatype, the @a buffer parameter should point
- *   to a @ref ucp_dt_local_vector_t descriptor.
- * - When passed via @a param->remote_datatype, the @a param->remote should
- *   point to a @ref ucp_dt_remote_vector_t descriptor.
- * The @a count parameter specifies the number of elements.
+ * - When passed via @ref ucp_request_param_t::datatype, the @a buffer
+ *   parameter should point to a @ref ucp_dt_local_vector_t descriptor.
+ * - When passed via @ref ucp_request_param_t::remote_datatype, the
+ *   @ref ucp_request_param_t::remote field should point to a
+ *   @ref ucp_dt_remote_vector_t descriptor.
+ * The @a count parameter of @ref ucp_put_nbx specifies the number of
+ * local elements, and @ref ucp_request_param_t::remote_count specifies
+ * the number of remote elements.
  *
  * @return Data-type identifier.
  */
@@ -930,12 +933,13 @@ enum ucp_dt_remote_vector_field {
  * handles. Element @a i describes a local buffer at @a buffers[i] of
  * @a lengths[i] bytes with memory handle @a memhs[i].
  *
- * Pass as the @a buffer parameter to @ref ucp_put_nbx with
- * @a param->datatype set to @ref ucp_dt_make_vector().
+ * The descriptor structure itself is copied by the library, so the caller may
+ * release it after the call returns. However, the arrays it points to
+ * (@a buffers, @a lengths, @a memhs) are not copied and must remain valid
+ * until the data transfer request is completed.
  *
- * @note The arrays pointed to by this struct are NOT copied and must
- *       remain valid until the operation completes. This is the same
- *       contract as @ref ucp_dt_iov_t.
+ * Pass as the @a buffer parameter to @ref ucp_put_nbx with
+ * @ref ucp_request_param_t::datatype set to @ref ucp_dt_make_vector().
  */
 typedef struct {
     uint64_t          field_mask; /**< Valid fields, using bits from
@@ -954,12 +958,13 @@ typedef struct {
  * Element @a i targets remote address @a remote_addrs[i] using key
  * @a rkeys[i].
  *
- * Pass via @a param->remote with @a param->remote_datatype set to
- * @ref ucp_dt_make_vector().
+ * The descriptor structure itself is copied by the library, so the caller may
+ * release it after the call returns. However, the arrays it points to
+ * (@a remote_addrs, @a lengths, @a rkeys) are not copied and must remain
+ * valid until the data transfer request is completed.
  *
- * @note The arrays pointed to by this struct are NOT copied and must
- *       remain valid until the operation completes. This is the same
- *       contract as @ref ucp_dt_iov_t.
+ * Pass via @ref ucp_request_param_t::remote with
+ * @ref ucp_request_param_t::remote_datatype set to @ref ucp_dt_make_vector().
  */
 typedef struct {
     uint64_t          field_mask;   /**< Valid fields, using bits from
@@ -3779,20 +3784,20 @@ ucs_status_ptr_t ucp_tag_msg_recv_nbx(ucp_worker_h worker, void *buffer,
  * @ingroup UCP_COMM
  * @brief Unused remote address sentinel.
  *
- * This value should be passed as the @a remote_addr parameter when
- * per-element remote addresses are provided through a vector descriptor
- * (@ref ucp_dt_remote_vector_t) instead.
+ * This value should be passed as the @a remote_addr parameter of
+ * @ref ucp_put_nbx when per-element remote addresses are provided through
+ * a vector descriptor (@ref ucp_dt_remote_vector_t) instead.
  */
-#define UCP_REMOTE_ADDR_UNUSED   0
+#define UCP_REMOTE_ADDR_UNUSED   UINT64_MAX
 
 
 /**
  * @ingroup UCP_COMM
  * @brief Unused remote key sentinel.
  *
- * This value should be passed as the @a rkey parameter when per-element
- * remote keys are provided through a vector descriptor
- * (@ref ucp_dt_remote_vector_t) instead.
+ * This value should be passed as the @a rkey parameter of
+ * @ref ucp_put_nbx when per-element remote keys are provided through
+ * a vector descriptor (@ref ucp_dt_remote_vector_t) instead.
  */
 #define UCP_RKEY_UNUSED          NULL
 
@@ -3833,15 +3838,18 @@ ucs_status_ptr_t ucp_tag_msg_recv_nbx(ucp_worker_h worker, void *buffer,
  *                           the type defaults to ucp_dt_make_contig(1), which
  *                           corresponds to byte elements.
  * @param [in]  remote_addr  Pointer to the destination remote memory address
- *                           to write to. When @a param->remote_datatype is
+ *                           to write to. When
+ *                           @ref ucp_request_param_t::remote_datatype is
  *                           @ref ucp_dt_make_vector(), this should be set to
  *                           @ref UCP_REMOTE_ADDR_UNUSED (remote addresses are
- *                           specified in @a param->remote instead).
+ *                           specified in @ref ucp_request_param_t::remote
+ *                           instead).
  * @param [in]  rkey         Remote memory key associated with the
- *                           remote memory address. When @a param->remote_datatype
- *                           is @ref ucp_dt_make_vector(), this should be set to
+ *                           remote memory address. When
+ *                           @ref ucp_request_param_t::remote_datatype is
+ *                           @ref ucp_dt_make_vector(), this should be set to
  *                           @ref UCP_RKEY_UNUSED (remote keys are specified in
- *                           @a param->remote instead).
+ *                           @ref ucp_request_param_t::remote instead).
  * @param [in]  param       Operation parameters, see @ref ucp_request_param_t
  *
  * @return UCS_OK               - The operation was completed immediately.
