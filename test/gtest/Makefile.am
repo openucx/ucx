@@ -103,6 +103,7 @@ gtest_SOURCES = \
 	common/test.cc \
 	\
 	ucm/malloc_hook.cc \
+	ucm/test_elf_notes.cc \
 	\
 	uct/test_amo.cc \
 	uct/test_atomic_key_reg_rdma_mem_type.cc \
