@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -16,8 +16,10 @@
 #include <ucs/sys/string.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/sock.h>
+#include <ucs/type/init_once.h>
 #include <string.h>
 #include <ctype.h>
+#include <regex.h>
 
 
 /* Minimal reserve size when appending new data */
@@ -261,23 +263,13 @@ char *ucs_string_buffer_extract_mem(ucs_string_buffer_t *strb)
     return c_str;
 }
 
-char *ucs_string_buffer_next_token(ucs_string_buffer_t *strb, char *token,
-                                   const char *delimiters)
+char *ucs_string_buffer_next_token(ucs_string_buffer_t *strb,
+                                   const char *delimiters, const char **saveptr,
+                                   size_t *len_p)
 {
-    char *next_token;
+    const char *str = (strb != NULL) ? ucs_string_buffer_cstr(strb) : NULL;
 
-    /* The token must be either NULL or inside the string buffer array */
-    ucs_assert((token == NULL) || ((token >= ucs_array_begin(strb)) &&
-                                   (token < ucs_array_end(strb))));
-
-    next_token = (token == NULL) ? ucs_array_begin(strb) :
-                                   (token + strlen(token) + 1);
-    if (next_token >= ucs_array_end(strb)) {
-        /* No more tokens */
-        return NULL;
-    }
-
-    return strsep(&next_token, delimiters);
+    return (char*)ucs_string_next_token(str, delimiters, saveptr, len_p);
 }
 
 void ucs_string_buffer_appendc(ucs_string_buffer_t *strb, int c, size_t count)
@@ -321,4 +313,140 @@ void ucs_string_buffer_translate(ucs_string_buffer_t *strb,
 
     *dst_ptr = '\0';
     ucs_array_set_length(strb, dst_ptr - ucs_array_begin(strb));
+}
+
+static UCS_F_MAYBE_UNUSED int ucs_string_buffer_is_valid_delimiter(char delim)
+{
+    return !isdigit(delim) && (delim != '-') && (delim != '[') &&
+           (delim != ']') && (delim != '\0');
+}
+
+ucs_status_t ucs_string_buffer_expand_range(ucs_string_buffer_t *strb,
+                                            const char *token, size_t token_len,
+                                            char delim, size_t max_elements,
+                                            size_t *count_p)
+{
+    static ucs_init_once_t regex_init = UCS_INIT_ONCE_INITIALIZER;
+    static regex_t range_regex;
+    ucs_status_t status = UCS_OK;
+    size_t count        = 0;
+    size_t first, last, j, prefix_len, suffix_len;
+    regmatch_t pmatch[5];
+    const char *suffix;
+    int ret;
+
+    ucs_assertv(ucs_string_buffer_is_valid_delimiter(delim),
+                "invalid delimiter: '%c'", delim);
+
+    if (max_elements == 0) {
+        goto out;
+    }
+
+    UCS_INIT_ONCE(&regex_init) {
+        ret = regcomp(&range_regex,
+                      "^([^][]*)" /* prefix */
+                      "\\[([0-9]+)-([0-9]+)\\]" /* range */
+                      "([^][]*)$" /* suffix */,
+                      REG_EXTENDED);
+        ucs_assertv(ret == 0, "failed to compile range regex: %d", ret);
+    }
+
+#ifdef REG_STARTEND
+    pmatch[0].rm_so = 0;
+    pmatch[0].rm_eo = (regoff_t)token_len;
+
+    ret = regexec(&range_regex, token, 5, pmatch, REG_STARTEND);
+#else
+    {
+        char token_buf[token_len + 1];
+        memcpy(token_buf, token, token_len);
+        token_buf[token_len] = '\0';
+
+        ret = regexec(&range_regex, token_buf, 5, pmatch, 0);
+    }
+#endif
+
+    if (ret != 0) {
+        /* No match, append the token as-is */
+        ucs_string_buffer_appendf(strb, "%.*s", (int)token_len, token);
+        count = 1;
+        goto out;
+    }
+
+    first = strtoul(token + pmatch[2].rm_so, NULL, 10);
+    last  = strtoul(token + pmatch[3].rm_so, NULL, 10);
+
+    if (first > last) {
+        ucs_error("invalid range pattern '%.*s': first > last (%zu > %zu)",
+                  (int)token_len, token, first, last);
+        status = UCS_ERR_INVALID_PARAM;
+        goto out;
+    }
+
+    count      = ucs_min(last - first + 1, max_elements);
+    prefix_len = (size_t)(pmatch[1].rm_eo - pmatch[1].rm_so);
+    suffix     = token + pmatch[4].rm_so;
+    suffix_len = (size_t)(pmatch[4].rm_eo - pmatch[4].rm_so);
+
+    for (j = first; j < first + count; ++j) {
+        if (j > first) {
+            ucs_string_buffer_appendc(strb, delim, 1);
+        }
+
+        ucs_string_buffer_appendf(strb, "%.*s%zu%.*s", (int)prefix_len, token,
+                                  j, (int)suffix_len, suffix);
+    }
+
+out:
+    if (count_p != NULL) {
+        *count_p = count;
+    }
+
+    return status;
+}
+
+ucs_status_t ucs_string_buffer_expand_ranges(ucs_string_buffer_t *strb,
+                                             const char *input, char delim,
+                                             size_t max_elements,
+                                             size_t *count_p)
+{
+    const char delim_str[] = {delim, '\0'};
+    ucs_status_t status    = UCS_OK;
+    size_t count_total     = 0;
+    size_t count_inner, token_len;
+    const char *token, *saveptr;
+
+    ucs_assertv(ucs_string_buffer_is_valid_delimiter(delim),
+                "invalid delimiter: '%c'", delim);
+
+    if (ucs_string_is_empty(input)) {
+        goto out;
+    }
+
+    ucs_string_for_each_token(input, delim_str, saveptr, token, token_len)
+    {
+        if (count_total > 0) {
+            ucs_string_buffer_appendc(strb, delim, 1);
+        }
+
+        status = ucs_string_buffer_expand_range(strb, token, token_len, delim,
+                                                max_elements - count_total,
+                                                &count_inner);
+        if (status != UCS_OK) {
+            goto out;
+        }
+
+        count_total += count_inner;
+
+        if (count_total >= max_elements) {
+            break;
+        }
+    }
+
+out:
+    if (count_p != NULL) {
+        *count_p = count_total;
+    }
+
+    return status;
 }

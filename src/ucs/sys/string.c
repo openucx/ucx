@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2017. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -482,6 +482,29 @@ ucs_status_t ucs_string_alloc_formatted_path(char **buffer_p, const char *name,
 
     *buffer_p = temp_buffer;
     return UCS_OK;
+}
+
+const char *ucs_string_next_token(const char *str, const char *delimiters,
+                                  const char **saveptr, size_t *len_p)
+{
+    const char *p = (str != NULL) ? str : *saveptr;
+    const char *end;
+
+    if (p == NULL) {
+        *len_p = 0;
+        return NULL;
+    }
+
+    end = strpbrk(p, delimiters);
+    if (end != NULL) {
+        *len_p   = (size_t)(end - p);
+        *saveptr = end + 1;
+    } else {
+        *len_p   = strlen(p);
+        *saveptr = NULL;
+    }
+
+    return p;
 }
 
 ucs_status_t ucs_string_alloc_path_buffer_and_get_dirname(char **buffer_p,

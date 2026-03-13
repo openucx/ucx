@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -268,19 +268,25 @@ char *ucs_string_buffer_extract_mem(ucs_string_buffer_t *strb);
 
 
 /**
- * Get the next token from the string. This operation can overwrite some of the
- * string with '\0' characters, to separate the tokens.
+ * Get the next token from a string buffer. 
+ * The token is NOT null-terminated, the caller is responsible for writing '\0' 
+ * at tok[*len_p] when needed.
  *
- * @param [in]  strb        String buffer to get next token from.
- * @param [in]  token       Pointer to the current token, or NULL to start
- *                          from the beginning.
- * @param [in]  delimiters  Set of characters that separate between tokens.
+ * On the first call pass the string buffer as @a strb. On subsequent calls
+ * pass NULL to continue tokenizing the same string. @a saveptr tracks position
+ * between calls (like strtok_r). Returns NULL when no more tokens remain.
  *
- * @return Pointer to the next token, after the given @a token, or NULL if no
- *         more tokens are found.
+ * @param [in]     strb        String buffer on the first call, NULL on
+ *                             subsequent calls.
+ * @param [in]     delimiters  Set of characters that separate between tokens.
+ * @param [in,out] saveptr     Opaque position tracker (set by the function).
+ * @param [out]    len_p       Set to the length of the returned token.
+ *
+ * @return Pointer to the next token, or NULL when exhausted.
  */
-char *ucs_string_buffer_next_token(ucs_string_buffer_t *strb, char *token,
-                                   const char *delimiters);
+char *ucs_string_buffer_next_token(ucs_string_buffer_t *strb,
+                                   const char *delimiters, const char **saveptr,
+                                   size_t *len_p);
 
 
 /**
@@ -305,18 +311,71 @@ void ucs_string_buffer_translate(ucs_string_buffer_t *strb,
 
 
 /**
- * Split the string to tokens and iterate over them. This operation can
- * overwrite some of the string with '\0' characters.
+ * Iterate over delimiter-separated tokens of a string buffer without modifying
+ * it. Each iteration sets @a _tok to the token start and @a _tok_len to its
+ * length. The token is NOT null-terminated, the caller is responsible for 
+ * writing '\0' at _tok[*_tok_len] when needed.
  *
- * @param _tok    A variable of type 'char *' which will be assigned to the
- *                current token.
- * @param _strb   String to iterate over.
- * @param _delim  Set of characters that separate between tokens.
+ * @param _strb        String buffer to iterate over (must not be NULL).
+ * @param _delimiters  Set of delimiter characters (const char *).
+ * @param _saveptr     Variable of type 'const char *', used internally.
+ * @param _tok         Variable of type 'char *', set to the current token.
+ * @param _tok_len     Variable of type 'size_t', set to the current token
+ *                     length.
  */
-#define ucs_string_buffer_for_each_token(_tok, _strb, _delim) \
-    for (_tok = ucs_string_buffer_next_token(_strb, NULL, _delim); \
-         _tok != NULL; \
-         _tok = ucs_string_buffer_next_token(_strb, _tok, _delim))
+#define ucs_string_buffer_for_each_token(_strb, _delimiters, _saveptr, _tok, \
+                                         _tok_len) \
+    for ((_tok) = ucs_string_buffer_next_token((_strb), (_delimiters), \
+                                               &(_saveptr), &(_tok_len)); \
+         (_tok) != NULL; \
+         (_tok) = ucs_string_buffer_next_token(NULL, (_delimiters), \
+                                               &(_saveptr), &(_tok_len)))
+
+
+/**
+ * Expand a range pattern "prefix[first-last]suffix" into individual values
+ * appended to a string buffer, separated by @a delim. Both prefix and suffix
+ * may be empty. Tokens without a range pattern are appended as-is, and invalid
+ * range patterns return an error.
+ *
+ * @param [inout] strb          String buffer to append expanded values to.
+ * @param [in]    token         Input token, e.g. "mlx5_[7-12]" or "a[0-5]b".
+ *                              Does not need to be null-terminated.
+ * @param [in]    token_len     Length of @a token in bytes.
+ * @param [in]    delim         Delimiter character between expanded values
+ *                              (e.g. ',').
+ * @param [in]    max_elements  Maximum number of elements to append.
+ * @param [out]   count_p       If not NULL, set to the number of elements
+ *                              appended.
+ *
+ * @return UCS_OK on success,
+ *         UCS_ERR_INVALID_PARAM on error.
+ */
+ucs_status_t ucs_string_buffer_expand_range(ucs_string_buffer_t *strb,
+                                            const char *token, size_t token_len,
+                                            char delim, size_t max_elements,
+                                            size_t *count_p);
+
+
+/**
+ * Expand all range patterns in a delimited string. Non-range tokens are
+ * appended as-is, and invalid range patterns return an error.
+ *
+ * @param [inout] strb          String buffer receiving the expanded result,
+ *                              delimited by @a delim.
+ * @param [in]    input         Delimited input, e.g. "mlx5_[7-12],eth0,ib[0-5]".
+ * @param [in]    delim         Delimiter character (e.g. ',').
+ * @param [in]    max_elements  Maximum total number of elements to append.
+ * @param [out]   count_p       If not NULL, set to the total number of elements
+ *                              appended.
+ *
+ * @return UCS_OK on success,
+ *         UCS_ERR_INVALID_PARAM on range errors.
+ */
+ucs_status_t ucs_string_buffer_expand_ranges(ucs_string_buffer_t *strb,
+                                             const char *input, char delim,
+                                             size_t max_elements,
+                                             size_t *count_p);
 
 
 /**
