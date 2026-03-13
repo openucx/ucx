@@ -944,11 +944,11 @@ enum ucp_dt_remote_vector_field {
  * @ref ucp_request_param_t::datatype set to @ref ucp_dt_make_vector().
  */
 typedef struct {
-    uint64_t        field_mask;  /**< Valid fields, using bits from
-                                      @ref ucp_dt_local_vector_field */
-    void * const    *buffers;    /**< Array of local buffer pointers */
-    const size_t    *lengths;    /**< Array of transfer lengths in bytes */
-    ucp_mem_h const *memhs;      /**< Array of local memory handles */
+    uint64_t        field_mask; /**< Valid fields, using bits from
+                                     @ref ucp_dt_local_vector_field */
+    void * const    *buffers;   /**< Array of local buffer pointers */
+    const size_t    *lengths;   /**< Array of transfer lengths in bytes */
+    ucp_mem_h const *memhs;     /**< Array of local memory handles */
 } ucp_dt_local_vector_t;
 
 
