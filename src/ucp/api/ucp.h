@@ -935,9 +935,9 @@ enum ucp_dt_remote_vector_field {
  * handles. Element @a i describes a local buffer at @a buffers[i] of
  * @a lengths[i] bytes with memory handle @a memhs[i].
  *
- * The descriptor structure itself is copied by the library, so the caller may
- * release it after the call returns. However, the arrays it points to
- * (@a buffers, @a lengths, @a memhs) are not copied and must remain valid
+ * The descriptor @ref ucp_dt_local_vector_t itself is copied by the library,
+ * so the caller may release it after the call returns. However, the arrays
+ * @a buffers, @a lengths, and @a memhs are not copied and must remain valid
  * until the data transfer request is completed.
  *
  * Pass as the @a buffer parameter to @ref ucp_put_nbx with
@@ -960,9 +960,9 @@ typedef struct {
  * Element @a i targets remote address @a remote_addrs[i] using key
  * @a rkeys[i].
  *
- * The descriptor structure itself is copied by the library, so the caller may
- * release it after the call returns. However, the arrays it points to
- * (@a remote_addrs, @a lengths, @a rkeys) are not copied and must remain
+ * The descriptor @ref ucp_dt_remote_vector_t itself is copied by the library,
+ * so the caller may release it after the call returns. However, the arrays
+ * @a remote_addrs, @a lengths, and @a rkeys are not copied and must remain
  * valid until the data transfer request is completed.
  *
  * Pass via @ref ucp_request_param_t::remote with
@@ -3787,8 +3787,8 @@ ucs_status_ptr_t ucp_tag_msg_recv_nbx(ucp_worker_h worker, void *buffer,
  * @brief Invalid remote address sentinel.
  *
  * This value should be passed as the @a remote_addr parameter of
- * @ref ucp_put_nbx when per-element remote addresses are provided through
- * a vector descriptor (@ref ucp_dt_remote_vector_t) instead.
+ * @ref ucp_put_nbx when remote addresses are provided through a vector
+ * descriptor (@ref ucp_dt_remote_vector_t) instead.
  */
 #define UCP_REMOTE_ADDR_INVALID  UINT64_MAX
 
@@ -3798,8 +3798,8 @@ ucs_status_ptr_t ucp_tag_msg_recv_nbx(ucp_worker_h worker, void *buffer,
  * @brief Invalid remote key sentinel.
  *
  * This value should be passed as the @a rkey parameter of
- * @ref ucp_put_nbx when per-element remote keys are provided through
- * a vector descriptor (@ref ucp_dt_remote_vector_t) instead.
+ * @ref ucp_put_nbx when remote keys are provided through a vector
+ * descriptor (@ref ucp_dt_remote_vector_t) instead.
  */
 #define UCP_RKEY_INVALID         NULL
 
@@ -3843,15 +3843,15 @@ ucs_status_ptr_t ucp_tag_msg_recv_nbx(ucp_worker_h worker, void *buffer,
  *                           to write to. When
  *                           @ref ucp_request_param_t::remote_datatype is
  *                           @ref ucp_dt_make_vector(), this should be set to
- *                           @ref UCP_REMOTE_ADDR_INVALID (remote addresses are
- *                           specified in @ref ucp_request_param_t::remote
- *                           instead).
+ *                           @ref UCP_REMOTE_ADDR_INVALID, as remote addresses
+ *                           are specified in @ref ucp_request_param_t::remote
+ *                           instead.
  * @param [in]  rkey         Remote memory key associated with the
  *                           remote memory address. When
  *                           @ref ucp_request_param_t::remote_datatype is
  *                           @ref ucp_dt_make_vector(), this should be set to
- *                           @ref UCP_RKEY_INVALID (remote keys are specified in
- *                           @ref ucp_request_param_t::remote instead).
+ *                           @ref UCP_RKEY_INVALID, as remote keys are specified
+ *                           in @ref ucp_request_param_t::remote instead.
  * @param [in]  param       Operation parameters, see @ref ucp_request_param_t
  *
  * @return UCS_OK               - The operation was completed immediately.
