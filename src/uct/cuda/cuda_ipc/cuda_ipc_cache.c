@@ -47,6 +47,8 @@ KHASH_INIT(cuda_ipc_rem_cache, uct_cuda_ipc_cache_hash_key_t,
 typedef struct uct_cuda_ipc_remote_cache {
     khash_t(cuda_ipc_rem_cache) hash;
     ucs_recursive_spinlock_t    lock;
+    unsigned long               max_regions; /**< Limit propagated to new caches */
+    size_t                      max_size;    /**< Limit propagated to new caches */
 } uct_cuda_ipc_remote_cache_t;
 
 uct_cuda_ipc_remote_cache_t uct_cuda_ipc_remote_cache;
@@ -177,6 +179,50 @@ static ucs_status_t uct_cuda_ipc_close_memhandle(uct_cuda_ipc_cache_region_t *re
     return uct_cuda_ipc_close_memhandle_legacy(region);
 }
 
+static void
+uct_cuda_ipc_cache_region_remove(uct_cuda_ipc_cache_t *cache,
+                                 uct_cuda_ipc_cache_region_t *region)
+{
+    ucs_status_t status;
+
+    status = ucs_pgtable_remove(&cache->pgtable, &region->super);
+    if (status != UCS_OK) {
+        ucs_error("failed to remove address:%p from cache (%s)",
+                  (void *)region->key.d_bptr, ucs_status_string(status));
+    }
+
+    if (region->in_lru) {
+        ucs_list_del(&region->lru_list);
+        region->in_lru = 0;
+    }
+
+    ucs_assert(cache->num_regions > 0);
+    cache->num_regions--;
+    cache->total_size -= region->key.b_len;
+}
+
+static void uct_cuda_ipc_cache_evict_lru(uct_cuda_ipc_cache_t *cache)
+{
+    uct_cuda_ipc_cache_region_t *region, *tmp;
+
+    ucs_list_for_each_safe(region, tmp, &cache->lru_list, lru_list) {
+        if ((cache->num_regions <= cache->max_regions) &&
+            (cache->total_size <= cache->max_size)) {
+            break;
+        }
+
+        ucs_assert(region->refcount == 0);
+        uct_cuda_ipc_cache_region_remove(cache, region);
+
+        ucs_trace("%s: lru evict region " UCS_PGT_REGION_FMT " size:%lu",
+                  cache->name, UCS_PGT_REGION_ARG(&region->super),
+                  region->key.b_len);
+
+        uct_cuda_ipc_close_memhandle(region);
+        ucs_free(region);
+    }
+}
+
 static void uct_cuda_ipc_cache_purge(uct_cuda_ipc_cache_t *cache)
 {
     int active = uct_cuda_ctx_is_active();
@@ -192,6 +238,10 @@ static void uct_cuda_ipc_cache_purge(uct_cuda_ipc_cache_t *cache)
         }
         ucs_free(region);
     }
+
+    ucs_list_head_init(&cache->lru_list);
+    cache->num_regions = 0;
+    cache->total_size  = 0;
     ucs_trace("%s: cuda ipc cache purged", cache->name);
 }
 
@@ -423,11 +473,7 @@ static void uct_cuda_ipc_cache_invalidate_regions(uct_cuda_ipc_cache_t *cache,
                              uct_cuda_ipc_cache_region_collect_callback,
                              &region_list);
     ucs_list_for_each_safe(region, tmp, &region_list, list) {
-        status = ucs_pgtable_remove(&cache->pgtable, &region->super);
-        if (status != UCS_OK) {
-            ucs_error("failed to remove address:%p from cache (%s)",
-                      (void *)region->key.d_bptr, ucs_status_string(status));
-        }
+        uct_cuda_ipc_cache_region_remove(cache, region);
 
         status = uct_cuda_ipc_close_memhandle(region);
         if (status != UCS_OK) {
@@ -464,7 +510,9 @@ uct_cuda_ipc_get_remote_cache(const uct_cuda_ipc_cache_hash_key_t *key,
         (khret == UCS_KH_PUT_BUCKET_CLEAR)) {
         ucs_snprintf_safe(target_name, sizeof(target_name), "dest:%d:%ld:%d",
                           key->pid, key->pid_ns, key->cu_device);
-        status = uct_cuda_ipc_create_cache(cache, target_name);
+        status = uct_cuda_ipc_create_cache(cache, target_name,
+                                           uct_cuda_ipc_remote_cache.max_regions,
+                                           uct_cuda_ipc_remote_cache.max_size);
         if (status != UCS_OK) {
             kh_del(cuda_ipc_rem_cache, &uct_cuda_ipc_remote_cache.hash, khiter);
             ucs_error("could not create create cuda ipc cache: %s",
@@ -520,14 +568,13 @@ ucs_status_t uct_cuda_ipc_unmap_memhandle(pid_t pid, ucs_sys_ns_t pid_ns,
      * check refcount to see if an in-flight transfer is using the same mapping
      */
     if (!region->refcount && !cache_enabled) {
-        status = ucs_pgtable_remove(&cache->pgtable, &region->super);
-        if (status != UCS_OK) {
-            ucs_error("failed to remove address:%p from cache (%s)",
-                      (void *)region->key.d_bptr, ucs_status_string(status));
-        }
+        uct_cuda_ipc_cache_region_remove(cache, region);
         ucs_assert(region->mapped_addr == mapped_addr);
         status = uct_cuda_ipc_close_memhandle(region);
         ucs_free(region);
+    } else if (!region->refcount && !region->in_lru) {
+        ucs_list_add_tail(&cache->lru_list, &region->lru_list);
+        region->in_lru = 1;
     }
 
     pthread_rwlock_unlock(&cache->lock);
@@ -583,6 +630,11 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
                       UCS_PGT_REGION_FMT, cache->name, (void *)key->d_bptr,
                       key->b_len, UCS_PGT_REGION_ARG(&region->super));
 
+            if (region->in_lru) {
+                ucs_list_del(&region->lru_list);
+                region->in_lru = 0;
+            }
+
             *mapped_addr = region->mapped_addr;
             ucs_assert(region->refcount < UINT64_MAX);
             region->refcount++;
@@ -594,14 +646,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
                       cache->name, UCS_PGT_REGION_ARG(&region->super),
                       (void *)key->d_bptr, key->b_len);
 
-            status = ucs_pgtable_remove(&cache->pgtable, &region->super);
-            if (status != UCS_OK) {
-                ucs_error("%s: failed to remove address:%p from cache",
-                          cache->name, (void *)key->d_bptr);
-                goto err;
-            }
-
-            /* close memhandle */
+            uct_cuda_ipc_cache_region_remove(cache, region);
             uct_cuda_ipc_close_memhandle(region);
             ucs_free(region);
         }
@@ -661,6 +706,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
     region->mapped_addr = *mapped_addr;
     region->refcount    = 1;
     region->cu_dev      = cu_dev;
+    region->in_lru      = 0;
 
     status = UCS_PROFILE_CALL(ucs_pgtable_insert,
                               &cache->pgtable, &region->super);
@@ -681,8 +727,16 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
         goto err;
     }
 
-    ucs_trace("%s: cuda_ipc cache new region:"UCS_PGT_REGION_FMT" size:%lu",
-              cache->name, UCS_PGT_REGION_ARG(&region->super), key->b_len);
+    cache->num_regions++;
+    cache->total_size += key->b_len;
+
+    uct_cuda_ipc_cache_evict_lru(cache);
+
+    ucs_trace("%s: cuda_ipc cache new region:"UCS_PGT_REGION_FMT" size:%lu"
+              " (regions:%lu/%lu size:%zu/%zu)",
+              cache->name, UCS_PGT_REGION_ARG(&region->super), key->b_len,
+              cache->num_regions, cache->max_regions,
+              cache->total_size, cache->max_size);
 
     status = UCS_OK;
 
@@ -692,7 +746,9 @@ err:
 }
 
 ucs_status_t uct_cuda_ipc_create_cache(uct_cuda_ipc_cache_t **cache,
-                                       const char *name)
+                                       const char *name,
+                                       unsigned long max_regions,
+                                       size_t max_size)
 {
     ucs_status_t status;
     uct_cuda_ipc_cache_t *cache_desc;
@@ -724,6 +780,12 @@ ucs_status_t uct_cuda_ipc_create_cache(uct_cuda_ipc_cache_t **cache,
         goto err_destroy_rwlock;
     }
 
+    ucs_list_head_init(&cache_desc->lru_list);
+    cache_desc->num_regions = 0;
+    cache_desc->total_size  = 0;
+    cache_desc->max_regions = max_regions;
+    cache_desc->max_size    = max_size;
+
     *cache = cache_desc;
     return UCS_OK;
 
@@ -743,9 +805,18 @@ void uct_cuda_ipc_destroy_cache(uct_cuda_ipc_cache_t *cache)
     ucs_free(cache);
 }
 
+void uct_cuda_ipc_cache_set_global_limits(unsigned long max_regions,
+                                          size_t max_size)
+{
+    uct_cuda_ipc_remote_cache.max_regions = max_regions;
+    uct_cuda_ipc_remote_cache.max_size    = max_size;
+}
+
 UCS_STATIC_INIT {
     ucs_recursive_spinlock_init(&uct_cuda_ipc_remote_cache.lock, 0);
     kh_init_inplace(cuda_ipc_rem_cache, &uct_cuda_ipc_remote_cache.hash);
+    uct_cuda_ipc_remote_cache.max_regions = ULONG_MAX;
+    uct_cuda_ipc_remote_cache.max_size    = SIZE_MAX;
 
 #if HAVE_CUDA_FABRIC
     pthread_rwlock_init(&uct_cuda_ipc_rem_mpool_cache.lock, NULL);

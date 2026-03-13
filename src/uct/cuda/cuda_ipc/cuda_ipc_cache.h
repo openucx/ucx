@@ -23,22 +23,31 @@ typedef struct uct_cuda_ipc_rem_memh     uct_cuda_ipc_rem_memh_t;
 struct uct_cuda_ipc_cache_region {
     ucs_pgt_region_t        super;        /**< Base class - page table region */
     ucs_list_link_t         list;         /**< List element */
+    ucs_list_link_t         lru_list;     /**< LRU list element */
     uct_cuda_ipc_rkey_t     key;          /**< Remote memory key */
     void                    *mapped_addr; /**< Local mapped address */
     uint64_t                refcount;     /**< Track in-flight ops before unmapping*/
     CUdevice                cu_dev;       /**< CUDA device */
+    uint8_t                 in_lru;       /**< Whether region is on the LRU list */
 };
 
 
 struct uct_cuda_ipc_cache {
-    pthread_rwlock_t      lock;       /**< protests the page table */
-    ucs_pgtable_t         pgtable;    /**< Page table to hold the regions */
-    char                  *name;      /**< Name */
+    pthread_rwlock_t      lock;         /**< Protects the page table */
+    ucs_pgtable_t         pgtable;      /**< Page table to hold the regions */
+    char                  *name;        /**< Name */
+    ucs_list_link_t       lru_list;     /**< LRU list of idle regions (refcount==0) */
+    unsigned long         num_regions;  /**< Current number of cached regions */
+    size_t                total_size;   /**< Current total size of cached regions */
+    unsigned long         max_regions;  /**< Max allowed regions (ULONG_MAX=unlimited) */
+    size_t                max_size;     /**< Max allowed total size (SIZE_MAX=unlimited) */
 };
 
 
 ucs_status_t uct_cuda_ipc_create_cache(uct_cuda_ipc_cache_t **cache,
-                                       const char *name);
+                                       const char *name,
+                                       unsigned long max_regions,
+                                       size_t max_size);
 
 
 void uct_cuda_ipc_destroy_cache(uct_cuda_ipc_cache_t *cache);
@@ -68,6 +77,16 @@ ucs_status_t uct_cuda_ipc_unmap_memhandle(pid_t pid, ucs_sys_ns_t pid_ns,
                                           uintptr_t d_bptr,
                                           const void *mapped_addr,
                                           CUdevice cu_dev, int cache_enabled);
+
+
+/**
+ * @brief Set global cache limits for newly created CUDA IPC remote caches
+ *
+ * @param max_regions  Max regions per cache (ULONG_MAX = unlimited)
+ * @param max_size     Max total size per cache (SIZE_MAX = unlimited)
+ */
+void uct_cuda_ipc_cache_set_global_limits(unsigned long max_regions,
+                                          size_t max_size);
 
 
 #endif
