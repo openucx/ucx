@@ -843,14 +843,8 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
             /* simultaneous CREQ */
             ucs_debug("simultaneous CREQ ep=%p"
                       "(iface=%p conn_sn=%d ep_id=%d, dest_ep_id=%d rx_psn=%u)",
-                      ep, iface, ep->conn_sn, ep->ep_id,
-                      ep->dest_ep_id, ep->rx.ooo_pkts.head_sn);
-            if (UCT_UD_PSN_COMPARE(ep->tx.psn, >, UCT_UD_INITIAL_PSN)) {
-                /* our own creq was sent, treat incoming creq as ack and remove our
-                 * own from tx window
-                 */
-                uct_ud_ep_process_ack(iface, ep, UCT_UD_INITIAL_PSN, 0);
-            }
+                      ep, iface, ep->conn_sn, ep->ep_id, ep->dest_ep_id,
+                      ep->rx.ooo_pkts.head_sn);
         } else {
             /* stale EP reuse */
             ucs_debug("iface=%p: detected stale EP reuse (ep=%p conn_sn=%d "
@@ -902,6 +896,13 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
                                      UCT_UD_EP_FLAG_CREQ_RCVD |
                                      UCT_UD_EP_FLAG_CREP_RCVD,
                                      "CREQ");
+        /*
+         * In case of simultaneous connection establishment, if our CREP is
+         * dropped by the network, the peer will resend its CREQ. We must
+         * acknowledge this duplicate CREQ so the peer can release it from
+         * its tx.window. Otherwise, the peer will deadlock, leading to OOM.
+         */
+        uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_ACK_REQ);
         return;
     }
 
@@ -943,6 +944,8 @@ static void uct_ud_ep_rx_ctl(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
     if (UCT_UD_PSN_COMPARE(neth->psn, <, ep->rx.ooo_pkts.head_sn)) {
         uct_ud_ep_rx_ctl_drop_packet(ep, neth, UCT_UD_EP_FLAG_CREP_RCVD,
                                      "CREP");
+        /* Acknowledge duplicate CREP to prevent sender deadlock if our ACK is lost */
+        uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_ACK_REQ);
         return;
     }
 
@@ -1394,12 +1397,6 @@ static void uct_ud_ep_resend(uct_ud_ep_t *ep)
         !(sent_skb->neth->packet_type & UCT_UD_PACKET_FLAG_CTL)) {
         return;
     }
-
-    /* creq/crep must remove creq packet from window */
-    ucs_assertv_always(!(uct_ud_ep_is_connected(ep) &&
-                         (uct_ud_neth_get_dest_id(sent_skb->neth) == UCT_UD_EP_NULL_ID) &&
-                         !(sent_skb->neth->packet_type & UCT_UD_PACKET_FLAG_AM)),
-                       "ep(%p): CREQ resend on endpoint which is already connected", ep);
 
     /* Allocate a control skb which would refer to the original skb.
      *
