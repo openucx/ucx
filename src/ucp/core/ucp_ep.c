@@ -691,8 +691,10 @@ ucs_status_t ucp_worker_mem_type_eps_create(ucp_worker_h worker)
     void *address_buffer;
     size_t address_length;
     ucp_tl_bitmap_t mem_access_tls;
+    ucp_tl_bitmap_t mem_type_tl_bitmap;
     char ep_name[UCP_WORKER_ADDRESS_NAME_MAX];
     unsigned addr_indices[UCP_MAX_LANES];
+    ucp_rsc_index_t rsc_index;
     ucp_lane_index_t num_lanes;
 
     ucs_memory_type_for_each(mem_type) {
@@ -707,7 +709,21 @@ ucs_status_t ucp_worker_mem_type_eps_create(ucp_worker_h worker)
             continue;
         }
 
-        status = ucp_address_pack(worker, NULL, &mem_access_tls, pack_flags,
+        /* Memtype EP supports a single lane. Select one deterministic TL
+         * resource when multiple mem-access TLs are available.
+         */
+        mem_type_tl_bitmap = mem_access_tls;
+        if (UCS_STATIC_BITMAP_POPCOUNT(mem_type_tl_bitmap) > 1) {
+            rsc_index = UCS_STATIC_BITMAP_FFS(mem_type_tl_bitmap);
+            UCS_STATIC_BITMAP_RESET_ALL(&mem_type_tl_bitmap);
+            UCS_STATIC_BITMAP_SET(&mem_type_tl_bitmap, rsc_index);
+
+            ucs_debug("memtype ep for %s selects single rsc_index %u",
+                      ucs_memory_type_names[mem_type], rsc_index);
+        }
+
+        status = ucp_address_pack(worker, NULL, &mem_type_tl_bitmap,
+                                  pack_flags,
                                   context->config.ext.worker_addr_version, NULL,
                                   UINT_MAX, &address_length, &address_buffer);
         if (status != UCS_OK) {
@@ -726,7 +742,7 @@ ucs_status_t ucp_worker_mem_type_eps_create(ucp_worker_h worker)
         /* create memtype UCP EPs after blocking async context, because they set
          * INTERNAL flag (setting EP flags is expected to be guarded) */
         UCS_ASYNC_BLOCK(&worker->async);
-        status = ucp_ep_create_to_worker_addr(worker, &ucp_tl_bitmap_max,
+        status = ucp_ep_create_to_worker_addr(worker, &mem_type_tl_bitmap,
                                               &local_address,
                                               UCP_EP_INIT_FLAG_MEM_TYPE |
                                               UCP_EP_INIT_FLAG_INTERNAL,
