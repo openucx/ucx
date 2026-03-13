@@ -727,7 +727,9 @@ typedef enum {
     UCP_OP_ATTR_FIELD_MEMH            = UCS_BIT(8),  /**< memory handle field */
     UCP_OP_ATTR_FIELD_REMOTE_DATATYPE = UCS_BIT(9),  /**< remote datatype for
                                                           vector operations */
-    UCP_OP_ATTR_FIELD_REMOTE_COUNT    = UCS_BIT(10), /**< remote element count for
+    UCP_OP_ATTR_FIELD_REMOTE          = UCS_BIT(10), /**< remote descriptor for
+                                                          vector operations */
+    UCP_OP_ATTR_FIELD_REMOTE_COUNT    = UCS_BIT(11), /**< remote element count for
                                                           vector operations */
 
     UCP_OP_ATTR_FLAG_NO_IMM_CMPL      = UCS_BIT(16), /**< Deny immediate completion,
@@ -942,11 +944,11 @@ enum ucp_dt_remote_vector_field {
  * @ref ucp_request_param_t::datatype set to @ref ucp_dt_make_vector().
  */
 typedef struct {
-    uint64_t          field_mask; /**< Valid fields, using bits from
-                                       @ref ucp_dt_local_vector_field */
-    void * const     *buffers;    /**< Array of local buffer pointers */
-    const size_t     *lengths;    /**< Array of transfer lengths in bytes */
-    ucp_mem_h const  *memhs;      /**< Array of local memory handles */
+    uint64_t        field_mask;  /**< Valid fields, using bits from
+                                      @ref ucp_dt_local_vector_field */
+    void * const    *buffers;    /**< Array of local buffer pointers */
+    const size_t    *lengths;    /**< Array of transfer lengths in bytes */
+    ucp_mem_h const *memhs;      /**< Array of local memory handles */
 } ucp_dt_local_vector_t;
 
 
@@ -967,7 +969,7 @@ typedef struct {
  * @ref ucp_request_param_t::remote_datatype set to @ref ucp_dt_make_vector().
  */
 typedef struct {
-    uint64_t          field_mask;   /**< Valid fields, using bits from
+    uint64_t         field_mask;    /**< Valid fields, using bits from
                                          @ref ucp_dt_remote_vector_field */
     const uint64_t   *remote_addrs; /**< Array of remote memory addresses */
     const size_t     *lengths;      /**< Array of transfer lengths in bytes */
@@ -1955,7 +1957,7 @@ typedef struct {
      * Remote data descriptor. The type is determined by @a remote_datatype.
      * Used together with @a remote_datatype and @a remote_count to specify
      * the remote side of vector operations. This field is used when
-     * @ref UCP_OP_ATTR_FIELD_REMOTE_DATATYPE is set in @a op_attr_mask.
+     * @ref UCP_OP_ATTR_FIELD_REMOTE is set in @a op_attr_mask.
      */
     const void *remote;
 
@@ -3782,24 +3784,24 @@ ucs_status_ptr_t ucp_tag_msg_recv_nbx(ucp_worker_h worker, void *buffer,
 
 /**
  * @ingroup UCP_COMM
- * @brief Unused remote address sentinel.
+ * @brief Invalid remote address sentinel.
  *
  * This value should be passed as the @a remote_addr parameter of
  * @ref ucp_put_nbx when per-element remote addresses are provided through
  * a vector descriptor (@ref ucp_dt_remote_vector_t) instead.
  */
-#define UCP_REMOTE_ADDR_UNUSED   UINT64_MAX
+#define UCP_REMOTE_ADDR_INVALID  UINT64_MAX
 
 
 /**
  * @ingroup UCP_COMM
- * @brief Unused remote key sentinel.
+ * @brief Invalid remote key sentinel.
  *
  * This value should be passed as the @a rkey parameter of
  * @ref ucp_put_nbx when per-element remote keys are provided through
  * a vector descriptor (@ref ucp_dt_remote_vector_t) instead.
  */
-#define UCP_RKEY_UNUSED          NULL
+#define UCP_RKEY_INVALID         NULL
 
 
 /**
@@ -3841,14 +3843,14 @@ ucs_status_ptr_t ucp_tag_msg_recv_nbx(ucp_worker_h worker, void *buffer,
  *                           to write to. When
  *                           @ref ucp_request_param_t::remote_datatype is
  *                           @ref ucp_dt_make_vector(), this should be set to
- *                           @ref UCP_REMOTE_ADDR_UNUSED (remote addresses are
+ *                           @ref UCP_REMOTE_ADDR_INVALID (remote addresses are
  *                           specified in @ref ucp_request_param_t::remote
  *                           instead).
  * @param [in]  rkey         Remote memory key associated with the
  *                           remote memory address. When
  *                           @ref ucp_request_param_t::remote_datatype is
  *                           @ref ucp_dt_make_vector(), this should be set to
- *                           @ref UCP_RKEY_UNUSED (remote keys are specified in
+ *                           @ref UCP_RKEY_INVALID (remote keys are specified in
  *                           @ref ucp_request_param_t::remote instead).
  * @param [in]  param       Operation parameters, see @ref ucp_request_param_t
  *
