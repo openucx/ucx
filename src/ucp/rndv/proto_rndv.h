@@ -24,6 +24,36 @@
     (UCS_BIT(UCP_OP_ID_RNDV_SEND) | UCS_BIT(UCP_OP_ID_RNDV_RECV))
 
 
+/*
+ * Staging-buffer flow-control throttle limit per operation type.
+ *
+ * To prevent deadlock under memory pressure, each operation type is capped at a
+ * different share of the total fragment budget (fc_max_frags).  Operations that
+ * free more resources on completion receive a larger cap, so they can always
+ * make progress and unblock others:
+ *
+ *   PUT (level 0, 100%) – frees local staging buffer AND remote RTR buffer.
+ *   GET (level 1, ~90%) – frees local staging buffer only.
+ *   RTR (level 2, ~80%) – triggers a remote PUT allocation, adding pressure.
+ *
+ * The step between tiers is 10% of the budget (1/10).  The exact fractions are
+ * not performance-sensitive; only the strict ordering PUT > GET > RTR matters.
+ * The same ordering is used when dequeueing pending requests, see
+ * ucp_proto_rndv_mtype_fc_decrement().
+ */
+#define UCP_PROTO_RNDV_MTYPE_FC_LIMIT(_fc_max, _level) \
+    ((_fc_max) - (_level) * ((_fc_max) / 10))
+
+#define UCP_PROTO_RNDV_MTYPE_FC_PUT_LIMIT(_fc_max) \
+    UCP_PROTO_RNDV_MTYPE_FC_LIMIT(_fc_max, 0)
+
+#define UCP_PROTO_RNDV_MTYPE_FC_GET_LIMIT(_fc_max) \
+    UCP_PROTO_RNDV_MTYPE_FC_LIMIT(_fc_max, 1)
+
+#define UCP_PROTO_RNDV_MTYPE_FC_RTR_LIMIT(_fc_max) \
+    UCP_PROTO_RNDV_MTYPE_FC_LIMIT(_fc_max, 2)
+
+
 /**
  * Rendezvous protocol which sends a control message to the remote peer, and not
  * actually transferring bulk data. The remote peer is expected to perform the
@@ -74,6 +104,9 @@ typedef struct {
      * TODO: Create a separate struct for mtype protocols and move it there. */
     ucs_memory_type_t         frag_mem_type;
     ucs_sys_device_t          frag_sys_dev;
+
+    /* max fragments for flow control */
+    size_t                    fc_max_frags;
 
     /* Multi-lane common part. Must be the last field, see
        @ref ucp_proto_multi_priv_t */
@@ -166,6 +199,21 @@ void ucp_proto_rndv_rts_query(const ucp_proto_query_params_t *params,
 void ucp_proto_rndv_rts_abort(ucp_request_t *req, ucs_status_t status);
 
 ucs_status_t ucp_proto_rndv_rts_reset(ucp_request_t *req);
+
+
+/**
+ * Compute maximum number of fragments allowed based on configured max memory
+ * and fragment size for the given memory type. The result is rounded down to
+ * the allocation chunk granularity (rndv_num_frags).
+ *
+ * @param context       The UCP context.
+ * @param frag_mem_type Memory type used for fragments.
+ *
+ * @return Maximum number of fragments that fit within the configured memory
+ *         limit, aligned to allocation chunk size.
+ */
+size_t ucp_proto_rndv_mtype_fc_max_frags(ucp_context_h context,
+                                         ucs_memory_type_t frag_mem_type);
 
 
 ucs_status_t

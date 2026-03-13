@@ -2188,6 +2188,128 @@ UCS_TEST_P(test_ucp_am_nbx_rndv_ppln, cuda_managed_buff,
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_rndv_ppln);
 
+
+class test_ucp_am_nbx_rndv_mtype_fc : public test_ucp_am_nbx_rndv_ppln {
+protected:
+    struct fc_counters {
+        uint64_t sender_throttled;
+        uint64_t receiver_throttled;
+        uint64_t sender_incremented;
+        uint64_t receiver_incremented;
+    };
+
+    void check_stats_ge(const entity &e, uint64_t cntr, uint64_t min_value)
+    {
+        auto stats_node = e.worker()->stats;
+        auto value      = UCS_STATS_GET_COUNTER(stats_node, cntr);
+
+        EXPECT_GE(value, min_value) << "counter "
+                                    << stats_node->cls->counter_names[cntr]
+                                    << " expected >= " << min_value
+                                    << " but got " << value;
+    }
+
+    void check_active_frags_zero(const entity &e)
+    {
+        EXPECT_EQ(0u, e.worker()->rndv_mtype_fc.active_frags)
+            << "active_frags should be 0 after completion";
+    }
+
+    void check_pending_queues_empty(const entity &e)
+    {
+        ucp_worker_h worker = e.worker();
+        EXPECT_TRUE(ucs_queue_is_empty(&worker->rndv_mtype_fc.put_pending_q))
+            << "put_pending_q should be empty";
+        EXPECT_TRUE(ucs_queue_is_empty(&worker->rndv_mtype_fc.get_pending_q))
+            << "get_pending_q should be empty";
+        EXPECT_TRUE(ucs_queue_is_empty(&worker->rndv_mtype_fc.rtr_pending_q))
+            << "rtr_pending_q should be empty";
+    }
+
+    void send_message(size_t num_frags)
+    {
+        set_mem_type(UCS_MEMORY_TYPE_CUDA_MANAGED);
+        test_am_send_recv(get_rndv_frag_size(UCS_MEMORY_TYPE_CUDA) * num_frags);
+    }
+
+    void verify_clean_fc_state()
+    {
+        for (auto *ep : { &sender(), &receiver() })
+        {
+            check_active_frags_zero(*ep);
+            check_pending_queues_empty(*ep);
+        }
+    }
+
+    void run_fc_test(size_t num_frags, fc_counters &fc)
+    {
+        if (!sender().is_rndv_put_ppln_supported()) {
+            UCS_TEST_SKIP_R("RNDV is not supported");
+        }
+
+        send_message(num_frags);
+
+        check_stats_ge(sender(), UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY, 1);
+        check_stats_ge(receiver(), UCP_WORKER_STAT_RNDV_RTR_MTYPE, 1);
+
+        fc.sender_throttled   = UCS_STATS_GET_COUNTER(sender().worker()->stats,
+                                    UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED);
+        fc.receiver_throttled = UCS_STATS_GET_COUNTER(
+                                    receiver().worker()->stats,
+                                    UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED);
+        fc.sender_incremented   = UCS_STATS_GET_COUNTER(
+                                    sender().worker()->stats,
+                                    UCP_WORKER_STAT_RNDV_MTYPE_FC_INCREMENTED);
+        fc.receiver_incremented = UCS_STATS_GET_COUNTER(
+                                    receiver().worker()->stats,
+                                    UCP_WORKER_STAT_RNDV_MTYPE_FC_INCREMENTED);
+    }
+};
+
+UCS_TEST_P(test_ucp_am_nbx_rndv_mtype_fc, fc_enabled_under_cap,
+           "RNDV_MTYPE_WORKER_MAX_MEM=1g", "RNDV_FRAG_MEM_TYPE=cuda")
+{
+    fc_counters fc;
+
+    run_fc_test(8, fc);
+
+    EXPECT_EQ(0u, fc.sender_throttled) << "sender should not be throttled";
+    EXPECT_EQ(0u, fc.receiver_throttled) << "receiver should not be throttled";
+    EXPECT_GT(fc.sender_incremented + fc.receiver_incremented, 0u)
+                                << "FC should be active and tracking fragments";
+
+    verify_clean_fc_state();
+}
+
+UCS_TEST_P(test_ucp_am_nbx_rndv_mtype_fc, fc_enabled_cap_reached,
+           "RNDV_MTYPE_WORKER_MAX_MEM=600mb", "RNDV_FRAG_MEM_TYPE=cuda")
+{
+    fc_counters fc;
+
+    run_fc_test(200, fc);
+
+    EXPECT_GT(fc.sender_throttled + fc.receiver_throttled, 0u)
+        << "throttling should have occurred with MAX_MEM=600mb";
+
+    verify_clean_fc_state();
+}
+
+UCS_TEST_P(test_ucp_am_nbx_rndv_mtype_fc, fc_disabled,
+           "RNDV_FRAG_MEM_TYPE=cuda")
+{
+    fc_counters fc;
+
+    run_fc_test(8, fc);
+
+    EXPECT_EQ(0u, fc.sender_throttled) << "FC disabled - no throttling expected";
+    EXPECT_EQ(0u, fc.receiver_throttled) << "FC disabled - no throttling expected";
+    EXPECT_EQ(0u, fc.sender_incremented) << "FC disabled - no increment expected";
+    EXPECT_EQ(0u, fc.receiver_incremented) << "FC disabled - no increment expected";
+}
+
+
+UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_rndv_mtype_fc);
+
 #endif
 
 /* Test class for AM PSN protocol */
