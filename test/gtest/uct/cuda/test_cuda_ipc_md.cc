@@ -107,6 +107,96 @@ protected:
         free_mempool(&ptr, &mpool, &cu_stream);
         return rkey;
     }
+
+    struct vmm_multi_alloc_t {
+        CUdeviceptr                  va_base;
+        size_t                       total_size;
+        size_t                       granularity;
+        CUmemGenericAllocationHandle handles[8];
+        unsigned                     num_chunks;
+    };
+
+    static CUresult
+    alloc_vmm_multi(vmm_multi_alloc_t *alloc, unsigned num_chunks)
+    {
+        CUmemAllocationProp prop = {};
+        CUmemAccessDesc access;
+        CUdevice cu_dev;
+        CUresult result;
+        unsigned created_chunks;
+
+        result = cuCtxGetDevice(&cu_dev);
+        if (result != CUDA_SUCCESS) {
+            return result;
+        }
+
+        prop.type                 = CU_MEM_ALLOCATION_TYPE_PINNED;
+        prop.location.type        = CU_MEM_LOCATION_TYPE_DEVICE;
+        prop.location.id          = cu_dev;
+        prop.requestedHandleTypes = CU_MEM_HANDLE_TYPE_FABRIC;
+
+        result = cuMemGetAllocationGranularity(
+                &alloc->granularity, &prop, CU_MEM_ALLOC_GRANULARITY_MINIMUM);
+        if (result != CUDA_SUCCESS) {
+            return result;
+        }
+
+        alloc->num_chunks = num_chunks;
+        alloc->total_size = num_chunks * alloc->granularity;
+
+        result = cuMemAddressReserve(&alloc->va_base, alloc->total_size, 0, 0,
+                                     0);
+        if (result != CUDA_SUCCESS) {
+            return result;
+        }
+
+        for (created_chunks = 0; created_chunks < num_chunks;
+             created_chunks++) {
+            result = cuMemCreate(&alloc->handles[created_chunks],
+                                 alloc->granularity, &prop, 0);
+            if (result != CUDA_SUCCESS) {
+                goto err_cleanup;
+            }
+
+            result = cuMemMap(alloc->va_base +
+                                      created_chunks * alloc->granularity,
+                              alloc->granularity, 0,
+                              alloc->handles[created_chunks], 0);
+            if (result != CUDA_SUCCESS) {
+                cuMemRelease(alloc->handles[created_chunks]);
+                goto err_cleanup;
+            }
+        }
+
+        access.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
+        access.location.id   = cu_dev;
+        access.flags         = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
+        result = cuMemSetAccess(alloc->va_base, alloc->total_size, &access, 1);
+        if (result == CUDA_SUCCESS) {
+            return CUDA_SUCCESS;
+        }
+
+    err_cleanup:
+        for (unsigned i = 0; i < created_chunks; i++) {
+            cuMemUnmap(alloc->va_base + i * alloc->granularity,
+                       alloc->granularity);
+            cuMemRelease(alloc->handles[i]);
+        }
+        cuMemAddressFree(alloc->va_base, alloc->total_size);
+        return result;
+    }
+
+    static void free_vmm_multi(vmm_multi_alloc_t *alloc)
+    {
+        for (unsigned i = 0; i < alloc->num_chunks; i++) {
+            EXPECT_EQ(CUDA_SUCCESS,
+                      cuMemUnmap(alloc->va_base + i * alloc->granularity,
+                                 alloc->granularity));
+            EXPECT_EQ(CUDA_SUCCESS, cuMemRelease(alloc->handles[i]));
+        }
+        EXPECT_EQ(CUDA_SUCCESS,
+                  cuMemAddressFree(alloc->va_base, alloc->total_size));
+    }
 #endif
 
     void test_mkey_pack_on_thread(void *ptr, size_t size)
@@ -231,6 +321,52 @@ UCS_TEST_P(test_cuda_ipc_md, mnnvl_disabled)
     /* Currently MNNVL is always disabled in CI */
     uct_cuda_ipc_md_t *cuda_ipc_md = ucs_derived_of(md(), uct_cuda_ipc_md_t);
     EXPECT_FALSE(cuda_ipc_md->enable_mnnvl);
+}
+
+UCS_TEST_P(test_cuda_ipc_md, mpack_vmm_multi)
+{
+#if HAVE_CUDA_FABRIC
+    vmm_multi_alloc_t alloc = {};
+    if (alloc_vmm_multi(&alloc, 4) != CUDA_SUCCESS) {
+        UCS_TEST_SKIP_R("VMM allocation with fabric handle not supported");
+    }
+
+    uct_mem_h memh;
+    uct_cuda_ipc_extended_rkey_t rkey;
+    EXPECT_UCS_OK(md()->ops->mem_reg(md(), (void*)alloc.va_base,
+                                     alloc.total_size, NULL, &memh));
+    EXPECT_UCS_OK(md()->ops->mkey_pack(md(), memh, (void*)alloc.va_base,
+                                       alloc.total_size, NULL, &rkey));
+
+    EXPECT_EQ(UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM_MULTI,
+              rkey.super.ph.handle_type);
+    EXPECT_EQ(4u, (unsigned)rkey.super.ph.vmm_multi.num_chunks);
+
+    uct_md_mem_dereg_params_t params;
+    params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
+    params.memh       = memh;
+    EXPECT_UCS_OK(md()->ops->mem_dereg(md(), &params));
+
+    free_vmm_multi(&alloc);
+#else
+    UCS_TEST_SKIP_R("built without fabric support");
+#endif
+}
+
+UCS_TEST_P(test_cuda_ipc_md, mkey_pack_vmm_multi)
+{
+#if HAVE_CUDA_FABRIC
+    vmm_multi_alloc_t alloc = {};
+    if (alloc_vmm_multi(&alloc, 4) != CUDA_SUCCESS) {
+        UCS_TEST_SKIP_R("VMM allocation with fabric handle not supported");
+    }
+
+    test_mkey_pack_on_thread((void*)alloc.va_base, alloc.total_size);
+
+    free_vmm_multi(&alloc);
+#else
+    UCS_TEST_SKIP_R("built without fabric support");
+#endif
 }
 
 _UCT_MD_INSTANTIATE_TEST_CASE(test_cuda_ipc_md, cuda_ipc);
