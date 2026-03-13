@@ -22,8 +22,8 @@ std::vector<std::string> test_base::m_errors;
 std::vector<std::string> test_base::m_warnings;
 std::vector<std::string> test_base::m_first_warns_and_errors;
 std::set<int> test_base::m_prev_open_fds;
-int test_base::m_consecutive_fd_increases = 0;
-int test_base::m_total_fd_increases       = 0;
+size_t test_base::m_consecutive_fd_increases = 0;
+size_t test_base::m_total_fd_increases       = 0;
 
 test_base::test_base() :
                 m_state(NEW),
@@ -81,8 +81,8 @@ void test_base::check_fd_leaks()
 
     if (!m_prev_open_fds.empty()) {
         std::stringstream ss;
-        int num_unexpected  = 0;
-        int num_whitelisted = 0;
+        size_t num_unexpected  = 0;
+        size_t num_whitelisted = 0;
 
         for (const int fd : open_fds) {
             if (m_prev_open_fds.find(fd) == m_prev_open_fds.end()) {
