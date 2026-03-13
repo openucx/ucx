@@ -124,6 +124,7 @@ noinst_HEADERS = \
 	memory/rcache_int.h \
 	memory/rcache.inl \
 	profile/profile.h \
+	stats/client_server.h \
 	stats/stats.h \
 	sys/checker.h \
 	sys/compiler.h \
