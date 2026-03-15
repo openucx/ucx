@@ -293,8 +293,7 @@ ucs_module_filename_to_base(const char *filename, char *base, size_t base_max)
 }
 
 static void ucs_module_load_from_dir(const char *dir, const char *framework,
-                                     int mode, int check_enabled,
-                                     ucs_string_set_t *loaded_set)
+                                     int mode, ucs_string_set_t *loaded_set)
 {
     char prefix[NAME_MAX];
     char base[NAME_MAX];
@@ -331,7 +330,7 @@ static void ucs_module_load_from_dir(const char *dir, const char *framework,
         }
 
         snprintf(module_path, PATH_MAX, "%s/%s", dir, entry->d_name);
-        if (check_enabled && !ucs_module_is_enabled(base + prefix_len)) {
+        if (!ucs_module_is_enabled(base + prefix_len)) {
             ucs_module_debug("module is disabled: %s, skipping", base + prefix_len);
             continue;
         }
@@ -371,7 +370,7 @@ static void ucs_module_check_expected_loaded(const char *framework,
     char *module_name;
     char base[NAME_MAX];
 
-    if (expected_modules == NULL || expected_modules[0] == '\0') {
+    if ((expected_modules == NULL) || (expected_modules[0] == '\0')) {
         return;
     }
 
@@ -413,14 +412,14 @@ void ucs_load_modules(const char *framework, const char *expected_modules,
         /* Load modules from directories */
         for (i = 0; i < ucs_global_opts.plugin_path.count; ++i) {
             ucs_module_load_from_dir(ucs_global_opts.plugin_path.names[i],
-                                     framework, mode, 0, &loaded_set);
+                                     framework, mode, &loaded_set);
         }
 
         for (i = 0; i < ucs_array_length(&ucs_module_loader_state.srch_path);
              ++i) {
             ucs_module_load_from_dir(
                     ucs_array_elem(&ucs_module_loader_state.srch_path, i),
-                    framework, mode, 1, &loaded_set);
+                    framework, mode, &loaded_set);
         }
 
         ucs_module_check_expected_loaded(framework, expected_modules,
