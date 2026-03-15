@@ -537,14 +537,14 @@ static void ucs_rcache_remove_from_unreleased(ucs_rcache_t *rcache,
 /* Lock must be held in write mode */
 static void ucs_rcache_check_inv_queue(ucs_rcache_t *rcache, unsigned flags)
 {
-    uint64_t start, end;
+    ucs_interval_tree_range_t range;
 
     ucs_trace_func("rcache=%s", rcache->name);
 
     ucs_spin_lock(&rcache->lock);
-    while (ucs_interval_tree_pop_any(&rcache->inv_tree, &start, &end)) {
-        ucs_rcache_remove_from_unreleased(rcache, (ucs_pgt_addr_t)start,
-                                          (ucs_pgt_addr_t)end);
+    while (ucs_interval_tree_pop_any(&rcache->inv_tree, &range)) {
+        ucs_rcache_remove_from_unreleased(rcache, (ucs_pgt_addr_t)range.start,
+                                          (ucs_pgt_addr_t)range.end);
 
         /* We need to drop the lock since the following code may trigger memory
          * operations, which could trigger vm_unmapped event which also takes
@@ -552,8 +552,8 @@ static void ucs_rcache_check_inv_queue(ucs_rcache_t *rcache, unsigned flags)
          */
         ucs_spin_unlock(&rcache->lock);
 
-        ucs_rcache_invalidate_range(rcache, (ucs_pgt_addr_t)start,
-                                    (ucs_pgt_addr_t)end, flags);
+        ucs_rcache_invalidate_range(rcache, (ucs_pgt_addr_t)range.start,
+                                    (ucs_pgt_addr_t)range.end, flags);
 
         ucs_spin_lock(&rcache->lock);
     }
@@ -635,13 +635,17 @@ static void ucs_rcache_unmapped_callback(ucm_event_type_t event_type,
     /* Could not lock - add range to pending invalidation tree (overlaps merged) */
     ucs_spin_lock(&rcache->lock);
     old_tree_size = rcache->inv_tree.total_size;
-    status        = ucs_interval_tree_insert(&rcache->inv_tree, start, end);
+    status        = ucs_interval_tree_insert(&rcache->inv_tree,
+                                             (ucs_interval_tree_range_t)
+                                             {start, end});
     if (status == UCS_OK) {
-        rcache->unreleased_size += (rcache->inv_tree.total_size - old_tree_size);
+        rcache->unreleased_size += (rcache->inv_tree.total_size - 
+                                    old_tree_size);
         UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_UNMAPS, 1);
     } else {
         ucs_error("Failed to add invalidation range 0x%lx..0x%lx, "
-                  "data corruption may occur", start, end);
+                  "data corruption may occur", 
+                  start, end);
     }
     ucs_spin_unlock(&rcache->lock);
 }

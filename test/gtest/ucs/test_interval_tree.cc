@@ -46,8 +46,8 @@ protected:
 
     bool is_fully_covered(const interval_t &interval) const
     {
-        return ucs_interval_tree_is_equal_range(&m_tree, interval.first,
-                                                 interval.second);
+        return ucs_interval_tree_is_equal_range(
+                &m_tree, {interval.first, interval.second});
     }
 
     bool is_any_covered(const interval_vector_t &intervals) const
@@ -61,9 +61,8 @@ protected:
     void insert_intervals(const interval_vector_t &intervals)
     {
         for (const auto &interval : intervals) {
-            ucs_status_t status = ucs_interval_tree_insert(&m_tree,
-                                                           interval.first,
-                                                           interval.second);
+            ucs_status_t status = ucs_interval_tree_insert(
+                    &m_tree, {interval.first, interval.second});
             ASSERT_UCS_OK(status, << "\nFailed to insert interval ["
                                   << interval.first << ", " << interval.second
                                   << "]");
@@ -111,7 +110,7 @@ protected:
             *out_black_height = 1;
             return 1;
         }
-        if (parent_red && node->color == UCS_INTERVAL_NODE_RED) {
+        if (parent_red && (node->color == UCS_INTERVAL_NODE_RED)) {
             return (size_t)-1; /* double red */
         }
         size_t left_bh, right_bh;
@@ -264,9 +263,8 @@ UCS_TEST_F(test_interval_tree, adjacent_discrete_integers) {
 UCS_TEST_F(test_interval_tree, height_ascending_insert) {
     const size_t n = 1000;
     for (size_t i = 0; i < n; i++) {
-        uint64_t start = i * 100;
-        uint64_t end   = start + 50;
-        ucs_status_t status = ucs_interval_tree_insert(&m_tree, start, end);
+        ucs_status_t status = ucs_interval_tree_insert(
+                &m_tree, {i * 100, i * 100 + 50});
         ASSERT_UCS_OK(status);
     }
     size_t h = tree_height();
@@ -295,9 +293,8 @@ UCS_TEST_F(test_interval_tree, red_black_invariant) {
 UCS_TEST_F(test_interval_tree, degenerate_ascending_then_invariant) {
     const size_t n = 500;
     for (size_t i = 0; i < n; i++) {
-        uint64_t start = i * 2;
-        uint64_t end   = start + 1;
-        ucs_status_t status = ucs_interval_tree_insert(&m_tree, start, end);
+        ucs_status_t status = ucs_interval_tree_insert(
+                &m_tree, {i * 2, i * 2 + 1});
         ASSERT_UCS_OK(status);
     }
     EXPECT_TRUE(check_rb_invariant()) << "RB invariant violated after ascending inserts";
@@ -426,10 +423,10 @@ UCS_TEST_F(test_interval_tree, total_size_interleaved_insert_pop) {
     EXPECT_EQ(3u, ucs_interval_tree_count(&m_tree));
 
     /* Pop one (leftmost = [0,10]) */
-    uint64_t start, end;
-    ASSERT_TRUE(ucs_interval_tree_pop_any(&m_tree, &start, &end));
-    EXPECT_EQ(0u, start);
-    EXPECT_EQ(10u, end);
+    ucs_interval_tree_range_t range;
+    ASSERT_TRUE(ucs_interval_tree_pop_any(&m_tree, &range));
+    EXPECT_EQ(0u, range.start);
+    EXPECT_EQ(10u, range.end);
     EXPECT_EQ(20u, m_tree.total_size);
     EXPECT_EQ(2u, ucs_interval_tree_count(&m_tree));
 
@@ -445,8 +442,8 @@ UCS_TEST_F(test_interval_tree, total_size_interleaved_insert_pop) {
 
     /* Pop all and verify total_size decreases correctly */
     size_t remaining = 230;
-    while (ucs_interval_tree_pop_any(&m_tree, &start, &end)) {
-        remaining -= (end - start);
+    while (ucs_interval_tree_pop_any(&m_tree, &range)) {
+        remaining -= (range.end - range.start);
         EXPECT_EQ(remaining, m_tree.total_size);
     }
     EXPECT_EQ(0u, m_tree.total_size);
@@ -454,23 +451,23 @@ UCS_TEST_F(test_interval_tree, total_size_interleaved_insert_pop) {
 }
 
 UCS_TEST_F(test_interval_tree, pop_any_basic) {
-    uint64_t start, end;
+    ucs_interval_tree_range_t range;
 
-    EXPECT_EQ(0, ucs_interval_tree_pop_any(&m_tree, &start, &end));
+    EXPECT_EQ(0, ucs_interval_tree_pop_any(&m_tree, &range));
 
     insert_intervals({{10, 20}});
-    EXPECT_EQ(1, ucs_interval_tree_pop_any(&m_tree, &start, &end));
-    EXPECT_EQ(10u, start);
-    EXPECT_EQ(20u, end);
+    EXPECT_EQ(1, ucs_interval_tree_pop_any(&m_tree, &range));
+    EXPECT_EQ(10u, range.start);
+    EXPECT_EQ(20u, range.end);
     EXPECT_TRUE(ucs_interval_tree_is_empty(&m_tree));
     EXPECT_EQ(0u, m_tree.total_size);
 
     /* Pop after merge: insert overlapping, pop the single merged node */
     insert_intervals({{100, 200}, {150, 250}, {200, 300}});
     EXPECT_EQ(1u, ucs_interval_tree_count(&m_tree));
-    EXPECT_EQ(1, ucs_interval_tree_pop_any(&m_tree, &start, &end));
-    EXPECT_EQ(100u, start);
-    EXPECT_EQ(300u, end);
+    EXPECT_EQ(1, ucs_interval_tree_pop_any(&m_tree, &range));
+    EXPECT_EQ(100u, range.start);
+    EXPECT_EQ(300u, range.end);
     EXPECT_TRUE(ucs_interval_tree_is_empty(&m_tree));
 }
 
@@ -478,22 +475,22 @@ UCS_TEST_F(test_interval_tree, pop_returns_leftmost) {
     /* Pop should return the leftmost (smallest start) node */
     insert_intervals({{50, 60}, {10, 20}, {30, 40}, {70, 80}});
 
-    uint64_t start, end;
-    ASSERT_TRUE(ucs_interval_tree_pop_any(&m_tree, &start, &end));
-    EXPECT_EQ(10u, start);
-    EXPECT_EQ(20u, end);
+    ucs_interval_tree_range_t range;
+    ASSERT_TRUE(ucs_interval_tree_pop_any(&m_tree, &range));
+    EXPECT_EQ(10u, range.start);
+    EXPECT_EQ(20u, range.end);
 
-    ASSERT_TRUE(ucs_interval_tree_pop_any(&m_tree, &start, &end));
-    EXPECT_EQ(30u, start);
-    EXPECT_EQ(40u, end);
+    ASSERT_TRUE(ucs_interval_tree_pop_any(&m_tree, &range));
+    EXPECT_EQ(30u, range.start);
+    EXPECT_EQ(40u, range.end);
 
-    ASSERT_TRUE(ucs_interval_tree_pop_any(&m_tree, &start, &end));
-    EXPECT_EQ(50u, start);
-    EXPECT_EQ(60u, end);
+    ASSERT_TRUE(ucs_interval_tree_pop_any(&m_tree, &range));
+    EXPECT_EQ(50u, range.start);
+    EXPECT_EQ(60u, range.end);
 
-    ASSERT_TRUE(ucs_interval_tree_pop_any(&m_tree, &start, &end));
-    EXPECT_EQ(70u, start);
-    EXPECT_EQ(80u, end);
+    ASSERT_TRUE(ucs_interval_tree_pop_any(&m_tree, &range));
+    EXPECT_EQ(70u, range.start);
+    EXPECT_EQ(80u, range.end);
 
     EXPECT_TRUE(ucs_interval_tree_is_empty(&m_tree));
 }
@@ -509,13 +506,13 @@ UCS_TEST_F(test_interval_tree, pop_drains_all) {
 
     size_t popped = 0;
     uint64_t prev_start = 0;
-    uint64_t start, end;
-    while (ucs_interval_tree_pop_any(&m_tree, &start, &end)) {
-        EXPECT_LE(start, end);
+    ucs_interval_tree_range_t range;
+    while (ucs_interval_tree_pop_any(&m_tree, &range)) {
+        EXPECT_LE(range.start, range.end);
         if (popped > 0) {
-            EXPECT_GT(start, prev_start) << "pop order not ascending at pop #" << popped;
+            EXPECT_GT(range.start, prev_start) << "pop order not ascending at pop #" << popped;
         }
-        prev_start = start;
+        prev_start = range.start;
         ++popped;
         EXPECT_TRUE(check_rb_invariant()) << "RB violated after pop #" << popped;
     }
@@ -530,21 +527,21 @@ UCS_TEST_F(test_interval_tree, total_size_after_pop) {
     EXPECT_EQ(3u, ucs_interval_tree_count(&m_tree));
 
     /* Pop leftmost [10,20], size=10 */
-    uint64_t start, end;
-    ASSERT_TRUE(ucs_interval_tree_pop_any(&m_tree, &start, &end));
-    EXPECT_EQ(10u, start);
+    ucs_interval_tree_range_t range;
+    ASSERT_TRUE(ucs_interval_tree_pop_any(&m_tree, &range));
+    EXPECT_EQ(10u, range.start);
     EXPECT_EQ(50u, m_tree.total_size);
     EXPECT_EQ(2u, ucs_interval_tree_count(&m_tree));
 
     /* Pop leftmost [30,50], size=20 */
-    ASSERT_TRUE(ucs_interval_tree_pop_any(&m_tree, &start, &end));
-    EXPECT_EQ(30u, start);
+    ASSERT_TRUE(ucs_interval_tree_pop_any(&m_tree, &range));
+    EXPECT_EQ(30u, range.start);
     EXPECT_EQ(30u, m_tree.total_size);
     EXPECT_EQ(1u, ucs_interval_tree_count(&m_tree));
 
     /* Pop last [70,100], size=30 */
-    ASSERT_TRUE(ucs_interval_tree_pop_any(&m_tree, &start, &end));
-    EXPECT_EQ(70u, start);
+    ASSERT_TRUE(ucs_interval_tree_pop_any(&m_tree, &range));
+    EXPECT_EQ(70u, range.start);
     EXPECT_EQ(0u, m_tree.total_size);
     EXPECT_EQ(0u, ucs_interval_tree_count(&m_tree));
 }
