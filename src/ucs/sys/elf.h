@@ -5,12 +5,12 @@
  */
 
 /**
- * Internal UCM API only. Do not include or use outside UCM.
- * Not installed; not part of the public UCM API.
+ * Internal UCS API only. Do not include or use outside UCS.
+ * Not installed; not part of the public UCS API.
  */
 
-#ifndef UCM_ELF_NOTES_H_
-#define UCM_ELF_NOTES_H_
+#ifndef UCS_SYS_ELF_H_
+#define UCS_SYS_ELF_H_
 
 #ifdef HAVE_CONFIG_H
 #  include "config.h"
@@ -26,21 +26,21 @@ BEGIN_C_DECLS
 
 /**
  * Single ELF note: section name, owner, and descriptor bytes.
- * All pointers are valid until ucm_elf_free_notes().
+ * All pointers are valid until ucs_elf_free_notes().
  */
-typedef struct ucm_elf_note {
+typedef struct ucs_elf_note {
     char   *field_name;   /**< Full section name (e.g. ".note.nvidia.magic") */
     char   *owner;        /**< Owner name from the note (e.g. "Nvidia") */
     void   *value;        /**< Descriptor bytes (not null-terminated) */
     size_t value_size;    /**< Number of bytes in value */
-} ucm_elf_note_t;
+} ucs_elf_note_t;
 
 /** Dynamic array of ELF notes (UCS array type) */
-UCS_ARRAY_DECLARE_TYPE(ucm_elf_notes_array_t, size_t, ucm_elf_note_t);
+UCS_ARRAY_DECLARE_TYPE(ucs_elf_notes_array_t, size_t, ucs_elf_note_t);
 
 /**
  * Read all ELF note sections whose name starts with name_prefix into a UCS array.
- * Initializes @a notes_array and fills it; caller must call ucm_elf_free_notes().
+ * Initializes @a notes_array and fills it; caller must call ucs_elf_free_notes().
  * 64-bit ELF only; 32-bit ELF is not supported.
  *
  * @param [in]  path         Path to the .so file.
@@ -50,15 +50,15 @@ UCS_ARRAY_DECLARE_TYPE(ucm_elf_notes_array_t, size_t, ucm_elf_note_t);
  * @return UCS_OK if the file was parsed; zero matches is success.
  *         Error only for open/read/mmap or invalid ELF.
  */
-ucs_status_t ucm_elf_read_notes_by_prefix(const char *path,
+ucs_status_t ucs_elf_read_notes_by_prefix(const char *path,
                                           const char *name_prefix,
-                                          ucm_elf_notes_array_t *notes_array);
+                                          ucs_elf_notes_array_t *notes_array);
 
 /**
- * Free a notes array from ucm_elf_read_notes_by_prefix() (frees elements and array).
+ * Free a notes array from ucs_elf_read_notes_by_prefix() (frees elements and array).
  * Safe to call with NULL (no-op).
  */
-void ucm_elf_free_notes(ucm_elf_notes_array_t *notes_array);
+void ucs_elf_free_notes(ucs_elf_notes_array_t *notes_array);
 
 /**
  * Interpret a note's value as a null-terminated string.
@@ -69,7 +69,7 @@ void ucm_elf_free_notes(ucm_elf_notes_array_t *notes_array);
  *
  * @return UCS_OK on success; UCS_ERR_BUFFER_TOO_SMALL or UCS_ERR_INVALID_PARAM.
  */
-ucs_status_t ucm_elf_read_note_as_string(const ucm_elf_note_t *note,
+ucs_status_t ucs_elf_read_note_as_string(const ucs_elf_note_t *note,
                                          char *buf, size_t size);
 
 /**
@@ -81,9 +81,9 @@ ucs_status_t ucm_elf_read_note_as_string(const ucm_elf_note_t *note,
  *
  * @return UCS_OK on success; UCS_ERR_INVALID_PARAM if size not 4 or 8.
  */
-ucs_status_t ucm_elf_read_note_as_int(const ucm_elf_note_t *note,
+ucs_status_t ucs_elf_read_note_as_int(const ucs_elf_note_t *note,
                                      int64_t *value_p);
 
 END_C_DECLS
 
-#endif /* UCM_ELF_NOTES_H_ */
+#endif /* UCS_SYS_ELF_H_ */

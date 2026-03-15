@@ -8,10 +8,10 @@
 #  include "config.h"
 #endif
 
-#include "elf_notes.h"
-#include "log.h"
+#include "elf.h"
 
 #include <ucs/datastruct/array.h>
+#include <ucs/debug/log.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/ptr_arith.h>
@@ -25,7 +25,7 @@
 #include <unistd.h>
 
 
-static ucs_status_t ucm_elf_validate_ehdr_64(const void *base, size_t file_size)
+static ucs_status_t ucs_elf_validate_ehdr_64(const void *base, size_t file_size)
 {
     const Elf64_Ehdr *ehdr = base;
     size_t shdr_end;
@@ -36,19 +36,19 @@ static ucs_status_t ucm_elf_validate_ehdr_64(const void *base, size_t file_size)
 
     shdr_end = ehdr->e_shoff + ehdr->e_shnum * sizeof(Elf64_Shdr);
     if (shdr_end > file_size) {
-        ucm_warn("invalid ELF: section header table out of bounds");
+        ucs_warn("invalid ELF: section header table out of bounds");
         return UCS_ERR_IO_ERROR;
     }
 
     if (ehdr->e_shstrndx >= ehdr->e_shnum) {
-        ucm_warn("invalid ELF: bad e_shstrndx");
+        ucs_warn("invalid ELF: bad e_shstrndx");
         return UCS_ERR_IO_ERROR;
     }
 
     return UCS_OK;
 }
 
-static ucs_status_t ucm_elf_get_shstrtab_64(const void *base, size_t file_size,
+static ucs_status_t ucs_elf_get_shstrtab_64(const void *base, size_t file_size,
                                             const Elf64_Ehdr *ehdr,
                                             const char **shstrtab_p,
                                             const Elf64_Shdr **shdr_p)
@@ -60,7 +60,7 @@ static ucs_status_t ucm_elf_get_shstrtab_64(const void *base, size_t file_size,
                              shdr[ehdr->e_shstrndx].sh_size;
 
     if (shstrtab_end > file_size) {
-        ucm_warn("invalid ELF: .shstrtab out of bounds");
+        ucs_warn("invalid ELF: .shstrtab out of bounds");
         return UCS_ERR_IO_ERROR;
     }
 
@@ -70,7 +70,7 @@ static ucs_status_t ucm_elf_get_shstrtab_64(const void *base, size_t file_size,
     return UCS_OK;
 }
 
-static int ucm_elf_section_matches_prefix(const char *shstrtab,
+static int ucs_elf_section_matches_prefix(const char *shstrtab,
                                           Elf64_Word shstrndx_size,
                                           Elf64_Word sh_name,
                                           const char *name_prefix)
@@ -84,17 +84,17 @@ static int ucm_elf_section_matches_prefix(const char *shstrtab,
                    name_prefix, prefix_len) == 0;
 }
 
-static void ucm_elf_free_note(ucm_elf_note_t *note)
+static void ucs_elf_free_note(ucs_elf_note_t *note)
 {
     ucs_free(note->value);
     ucs_free(note->owner);
     ucs_free(note->field_name);
 }
 
-static ucs_status_t ucm_elf_parse_note(const void *base, size_t file_size,
+static ucs_status_t ucs_elf_parse_note(const void *base, size_t file_size,
                                       const Elf64_Shdr *shdr,
                                       const char *sec_name,
-                                      ucm_elf_note_t *note_out)
+                                      ucs_elf_note_t *note_out)
 {
     const Elf32_Nhdr *note_header;
     size_t name_align;
@@ -124,18 +124,18 @@ static ucs_status_t ucm_elf_parse_note(const void *base, size_t file_size,
     name = UCS_PTR_BYTE_OFFSET(note_header, sizeof(Elf32_Nhdr));
     desc = UCS_PTR_BYTE_OFFSET(name, name_align);
 
-    note_out->field_name = ucs_strdup(sec_name, "ucm_elf_note field_name");
+    note_out->field_name = ucs_strdup(sec_name, "ucs_elf_note field_name");
     if (note_out->field_name == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err;
     }
-    note_out->owner = ucs_strndup(name, note_header->n_namesz - 1, "ucm_elf_note owner");
+    note_out->owner = ucs_strndup(name, note_header->n_namesz - 1, "ucs_elf_note owner");
     if (note_out->owner == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err_free_field_name;
     }
     note_out->value_size = note_header->n_descsz;
-    note_out->value = ucs_malloc(note_header->n_descsz, "ucm_elf_note value");
+    note_out->value = ucs_malloc(note_header->n_descsz, "ucs_elf_note value");
     if (note_out->value == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err_free_owner;
@@ -151,23 +151,23 @@ err:
     return status;
 }
 
-static ucs_status_t ucm_elf_parse_notes(const void *base, size_t file_size,
+static ucs_status_t ucs_elf_parse_notes(const void *base, size_t file_size,
                                         const char *name_prefix,
-                                        ucm_elf_notes_array_t *notes_array)
+                                        ucs_elf_notes_array_t *notes_array)
 {
     const Elf64_Ehdr *ehdr = base;
     const Elf64_Shdr *shdr;
     const char *shstrtab;
     size_t i;
-    ucm_elf_note_t *note;
+    ucs_elf_note_t *note;
     const char *sec_name;
     ucs_status_t status;
 
-    status = ucm_elf_validate_ehdr_64(base, file_size);
+    status = ucs_elf_validate_ehdr_64(base, file_size);
     if (status != UCS_OK) {
         goto err;
     }
-    status = ucm_elf_get_shstrtab_64(base, file_size, ehdr, &shstrtab, &shdr);
+    status = ucs_elf_get_shstrtab_64(base, file_size, ehdr, &shstrtab, &shdr);
     if (status != UCS_OK) {
         goto err;
     }
@@ -175,7 +175,7 @@ static ucs_status_t ucm_elf_parse_notes(const void *base, size_t file_size,
     ucs_array_init_dynamic(notes_array);
 
     for (i = 0; i < ehdr->e_shnum; i++) {
-        if (!ucm_elf_section_matches_prefix(shstrtab,
+        if (!ucs_elf_section_matches_prefix(shstrtab,
                                             shdr[ehdr->e_shstrndx].sh_size,
                                             shdr[i].sh_name,
                                             name_prefix)) {
@@ -185,7 +185,7 @@ static ucs_status_t ucm_elf_parse_notes(const void *base, size_t file_size,
         note     = ucs_array_append(notes_array, 
                                     status = UCS_ERR_NO_MEMORY; goto err);
         sec_name = UCS_PTR_BYTE_OFFSET(shstrtab, shdr[i].sh_name);
-        status   = ucm_elf_parse_note(base, file_size, &shdr[i], sec_name, note);
+        status   = ucs_elf_parse_note(base, file_size, &shdr[i], sec_name, note);
         if (status != UCS_OK) {
             goto err_free_notes;
         }
@@ -194,15 +194,15 @@ static ucs_status_t ucm_elf_parse_notes(const void *base, size_t file_size,
     return UCS_OK;
 
 err_free_notes:
-    ucm_elf_free_notes(notes_array);
+    ucs_elf_free_notes(notes_array);
 
 err:
     return status;
 }
 
-ucs_status_t ucm_elf_read_notes_by_prefix(const char *path,
+ucs_status_t ucs_elf_read_notes_by_prefix(const char *path,
                                           const char *name_prefix,
-                                          ucm_elf_notes_array_t *notes_array)
+                                          ucs_elf_notes_array_t *notes_array)
 {
     int fd;
     struct stat st;
@@ -215,36 +215,36 @@ ucs_status_t ucm_elf_read_notes_by_prefix(const char *path,
 
     fd  = open(path, O_RDONLY);
     if (fd < 0) {
-        ucm_warn("failed to open %s: %m", path);
+        ucs_warn("failed to open %s: %m", path);
         return UCS_ERR_IO_ERROR;
     }
 
     if (fstat(fd, &st) < 0 || (st.st_size < (off_t)sizeof(Elf64_Ehdr))) {
-        ucm_warn("failed to stat %s or file too small", path);
+        ucs_warn("failed to stat %s or file too small", path);
         status = UCS_ERR_IO_ERROR;
         goto out;
     }
 
     map = mmap(NULL, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
     if (map == MAP_FAILED) {
-        ucm_warn("mmap(%s) failed: %m", path);
+        ucs_warn("mmap(%s) failed: %m", path);
         status = UCS_ERR_IO_ERROR;
         goto out;
     }
 
     if (memcmp(map, ELFMAG, SELFMAG) != 0) {
-        ucm_warn("%s is not an ELF file", path);
+        ucs_warn("%s is not an ELF file", path);
         status = UCS_ERR_IO_ERROR;
         goto err_munmap;
     }
 
     if (map[EI_CLASS] != ELFCLASS64) {
-        ucm_warn("ELF class 32-bit not supported for note parsing");
+        ucs_warn("ELF class 32-bit not supported for note parsing");
         status = UCS_ERR_UNSUPPORTED;
         goto err_munmap;
     }
 
-    status = ucm_elf_parse_notes(map, st.st_size, name_prefix,
+    status = ucs_elf_parse_notes(map, st.st_size, name_prefix,
                                  notes_array);
 
 err_munmap:
@@ -255,7 +255,7 @@ out:
     return status;
 }
 
-void ucm_elf_free_notes(ucm_elf_notes_array_t *notes_array)
+void ucs_elf_free_notes(ucs_elf_notes_array_t *notes_array)
 {
     size_t i;
 
@@ -263,12 +263,12 @@ void ucm_elf_free_notes(ucm_elf_notes_array_t *notes_array)
         return;
     }
     for (i = 0; i < ucs_array_length(notes_array); i++) {
-        ucm_elf_free_note(&ucs_array_elem(notes_array, i));
+        ucs_elf_free_note(&ucs_array_elem(notes_array, i));
     }
     ucs_array_cleanup_dynamic(notes_array);
 }
 
-ucs_status_t ucm_elf_read_note_as_string(const ucm_elf_note_t *note,
+ucs_status_t ucs_elf_read_note_as_string(const ucs_elf_note_t *note,
                                          char *buf, size_t size)
 {
     if (note == NULL || buf == NULL || size == 0) {
@@ -286,7 +286,7 @@ ucs_status_t ucm_elf_read_note_as_string(const ucm_elf_note_t *note,
     return UCS_OK;
 }
 
-ucs_status_t ucm_elf_read_note_as_int(const ucm_elf_note_t *note,
+ucs_status_t ucs_elf_read_note_as_int(const ucs_elf_note_t *note,
                                      int64_t *value_p)
 {
     uint32_t v32;
