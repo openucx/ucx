@@ -339,15 +339,6 @@ static void ucs_module_load_from_dir(const char *dir, const char *framework,
             continue;
         }
 
-        dl = dlopen(module_path, RTLD_LAZY | RTLD_NOLOAD);
-        if (dl != NULL) {
-            /* Already loaded (e.g. linked into the executable). Still run
-             * init so sub-framework modules (e.g. uct_ib_mlx5 -> gda) load. */
-            ucs_module_init(module_path, dl);
-            (void)ucs_string_set_add(loaded_set, base);
-            continue;
-        }
-
         dl = ucs_module_try_load(module_path, mode);
         if (dl == NULL) {
             continue;
