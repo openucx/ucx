@@ -45,8 +45,6 @@ typedef struct uct_cuda_ipc_md_handle {
 typedef struct uct_cuda_ipc_md {
     uct_md_t                 super;             /**< Domain info */
     int                      enable_mnnvl;      /**< Multi-node NVLINK support status */
-    unsigned long            cache_max_regions;  /**< Max cached IPC regions per peer */
-    size_t                   cache_max_size;     /**< Max total cached IPC mapping size per peer */
 } uct_cuda_ipc_md_t;
 
 

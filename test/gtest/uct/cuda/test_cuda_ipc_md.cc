@@ -244,6 +244,8 @@ protected:
     virtual void init() {
         ucs::test::init();
         m_cache = NULL;
+        /* Reset global limits to unlimited before each test */
+        uct_cuda_ipc_cache_set_global_limits(ULONG_MAX, SIZE_MAX);
     }
 
     virtual void cleanup() {
@@ -251,12 +253,15 @@ protected:
             drain_cache();
             uct_cuda_ipc_destroy_cache(m_cache);
         }
+        uct_cuda_ipc_cache_set_global_limits(ULONG_MAX, SIZE_MAX);
         ucs::test::cleanup();
     }
 
     void create_cache(unsigned long max_regions, size_t max_size) {
-        ASSERT_EQ(UCS_OK, uct_cuda_ipc_create_cache(&m_cache, "test_lru",
-                                                     max_regions, max_size));
+        uct_cuda_ipc_cache_set_global_limits(max_regions, max_size);
+        m_max_regions = max_regions;
+        m_max_size    = max_size;
+        ASSERT_EQ(UCS_OK, uct_cuda_ipc_create_cache(&m_cache, "test_lru"));
     }
 
     uct_cuda_ipc_cache_region_t *insert_region(size_t index) {
@@ -288,6 +293,8 @@ protected:
 
         m_cache->num_regions++;
         m_cache->total_size += REGION_SIZE;
+        ucs_list_add_tail(&m_cache->lru_list, &region->lru_list);
+        region->in_lru = 1;
 
         return region;
     }
@@ -295,17 +302,19 @@ protected:
     void release_region(uct_cuda_ipc_cache_region_t *region) {
         ASSERT_GE(region->refcount, 1UL);
         region->refcount--;
-        if ((region->refcount == 0) && !region->in_lru) {
+        if (!region->in_lru) {
             ucs_list_add_tail(&m_cache->lru_list, &region->lru_list);
             region->in_lru = 1;
         }
     }
 
     void reacquire_region(uct_cuda_ipc_cache_region_t *region) {
+        /* Move to LRU tail (most recently used) */
         if (region->in_lru) {
             ucs_list_del(&region->lru_list);
-            region->in_lru = 0;
         }
+        ucs_list_add_tail(&m_cache->lru_list, &region->lru_list);
+        region->in_lru = 1;
         region->refcount++;
     }
 
@@ -313,12 +322,17 @@ protected:
         uct_cuda_ipc_cache_region_t *region, *tmp;
 
         ucs_list_for_each_safe(region, tmp, &m_cache->lru_list, lru_list) {
-            if ((m_cache->num_regions <= m_cache->max_regions) &&
-                (m_cache->total_size <= m_cache->max_size)) {
+            if ((m_cache->num_regions <= m_max_regions) &&
+                (m_cache->total_size <= m_max_size)) {
                 break;
             }
 
-            ASSERT_EQ(0UL, region->refcount);
+            if (region->refcount > 0) {
+                /* In-use -- pull off LRU, will be re-added on release */
+                ucs_list_del(&region->lru_list);
+                region->in_lru = 0;
+                continue;
+            }
 
             ASSERT_EQ(UCS_OK, ucs_pgtable_remove(&m_cache->pgtable,
                                                   &region->super));
@@ -360,6 +374,8 @@ protected:
     }
 
     uct_cuda_ipc_cache_t *m_cache;
+    unsigned long         m_max_regions;
+    size_t                m_max_size;
 };
 
 const size_t    test_cuda_ipc_cache_lru::REGION_SIZE;

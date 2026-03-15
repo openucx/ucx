@@ -44,11 +44,22 @@ KHASH_INIT(cuda_ipc_rem_cache, uct_cuda_ipc_cache_hash_key_t,
            uct_cuda_ipc_cache_t*, 1, uct_cuda_ipc_cache_hash_func,
            uct_cuda_ipc_cache_hash_equal);
 
+/*
+ * Cache limit propagation:
+ *
+ * The cache limits (max_regions, max_size) are configured via MD config
+ * (uct_cuda_ipc_md_config_t), which is transient and not accessible after
+ * md_open returns. Per-peer caches are created on-demand in
+ * uct_cuda_ipc_get_remote_cache(), which has no access to the MD. Therefore
+ * the limits are stored here as globals and read directly by the eviction loop.
+ * Each md_open tightens the limits to min(current, configured), so the most
+ * restrictive value across all MDs is always in effect.
+ */
 typedef struct uct_cuda_ipc_remote_cache {
     khash_t(cuda_ipc_rem_cache) hash;
     ucs_recursive_spinlock_t    lock;
-    unsigned long               max_regions; /**< Limit propagated to new caches */
-    size_t                      max_size;    /**< Limit propagated to new caches */
+    unsigned long               max_regions; /**< Global max regions limit */
+    size_t                      max_size;    /**< Global max total size limit */
 } uct_cuda_ipc_remote_cache_t;
 
 uct_cuda_ipc_remote_cache_t uct_cuda_ipc_remote_cache;
@@ -187,39 +198,53 @@ uct_cuda_ipc_cache_region_remove(uct_cuda_ipc_cache_t *cache,
 
     status = ucs_pgtable_remove(&cache->pgtable, &region->super);
     if (status != UCS_OK) {
-        ucs_error("failed to remove address:%p from cache (%s)",
+        ucs_warn("failed to remove address:%p from cache (%s)",
                   (void *)region->key.d_bptr, ucs_status_string(status));
     }
 
-    if (region->in_lru) {
-        ucs_list_del(&region->lru_list);
-        region->in_lru = 0;
-    }
+    ucs_assertv(region->in_lru, "region=%p, refcount=%lu", region, region->refcount);
+    ucs_list_del(&region->lru_list);
+    region->in_lru = 0;
 
     ucs_assert(cache->num_regions > 0);
     cache->num_regions--;
     cache->total_size -= region->key.b_len;
 }
 
+static void
+uct_cuda_ipc_cache_region_destroy(uct_cuda_ipc_cache_t *cache,
+                                  uct_cuda_ipc_cache_region_t *region)
+{
+    uct_cuda_ipc_cache_region_remove(cache, region);
+
+    ucs_trace("%s: destroy region " UCS_PGT_REGION_FMT " size:%lu",
+              cache->name, UCS_PGT_REGION_ARG(&region->super),
+              region->key.b_len);
+
+    uct_cuda_ipc_close_memhandle(region);
+    ucs_free(region);
+}
+
 static void uct_cuda_ipc_cache_evict_lru(uct_cuda_ipc_cache_t *cache)
 {
+    unsigned long max_regions = uct_cuda_ipc_remote_cache.max_regions;
+    size_t max_size           = uct_cuda_ipc_remote_cache.max_size;
     uct_cuda_ipc_cache_region_t *region, *tmp;
 
     ucs_list_for_each_safe(region, tmp, &cache->lru_list, lru_list) {
-        if ((cache->num_regions <= cache->max_regions) &&
-            (cache->total_size <= cache->max_size)) {
+        if ((cache->num_regions <= max_regions) &&
+            (cache->total_size  <= max_size)) {
             break;
         }
 
-        ucs_assert(region->refcount == 0);
-        uct_cuda_ipc_cache_region_remove(cache, region);
+        if (region->refcount > 0) {
+            /* In-use region -- pull off LRU, it will be re-added on release */
+            ucs_list_del(&region->lru_list);
+            region->in_lru = 0;
+            continue;
+        }
 
-        ucs_trace("%s: lru evict region " UCS_PGT_REGION_FMT " size:%lu",
-                  cache->name, UCS_PGT_REGION_ARG(&region->super),
-                  region->key.b_len);
-
-        uct_cuda_ipc_close_memhandle(region);
-        ucs_free(region);
+        uct_cuda_ipc_cache_region_destroy(cache, region);
     }
 }
 
@@ -510,9 +535,7 @@ uct_cuda_ipc_get_remote_cache(const uct_cuda_ipc_cache_hash_key_t *key,
         (khret == UCS_KH_PUT_BUCKET_CLEAR)) {
         ucs_snprintf_safe(target_name, sizeof(target_name), "dest:%d:%ld:%d",
                           key->pid, key->pid_ns, key->cu_device);
-        status = uct_cuda_ipc_create_cache(cache, target_name,
-                                           uct_cuda_ipc_remote_cache.max_regions,
-                                           uct_cuda_ipc_remote_cache.max_size);
+        status = uct_cuda_ipc_create_cache(cache, target_name);
         if (status != UCS_OK) {
             kh_del(cuda_ipc_rem_cache, &uct_cuda_ipc_remote_cache.hash, khiter);
             ucs_error("could not create create cuda ipc cache: %s",
@@ -564,15 +587,11 @@ ucs_status_t uct_cuda_ipc_unmap_memhandle(pid_t pid, ucs_sys_ns_t pid_ns,
     ucs_assert(region->refcount >= 1);
     region->refcount--;
 
-    /*
-     * check refcount to see if an in-flight transfer is using the same mapping
-     */
     if (!region->refcount && !cache_enabled) {
-        uct_cuda_ipc_cache_region_remove(cache, region);
         ucs_assert(region->mapped_addr == mapped_addr);
-        status = uct_cuda_ipc_close_memhandle(region);
-        ucs_free(region);
-    } else if (!region->refcount && !region->in_lru) {
+        uct_cuda_ipc_cache_region_destroy(cache, region);
+    } else if (!region->in_lru) {
+        /* Region becomes an eviction candidate -- add to LRU tail */
         ucs_list_add_tail(&cache->lru_list, &region->lru_list);
         region->in_lru = 1;
     }
@@ -630,10 +649,12 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
                       UCS_PGT_REGION_FMT, cache->name, (void *)key->d_bptr,
                       key->b_len, UCS_PGT_REGION_ARG(&region->super));
 
+            /* Move to LRU tail (most recently used) */
             if (region->in_lru) {
                 ucs_list_del(&region->lru_list);
-                region->in_lru = 0;
             }
+            ucs_list_add_tail(&cache->lru_list, &region->lru_list);
+            region->in_lru = 1;
 
             *mapped_addr = region->mapped_addr;
             ucs_assert(region->refcount < UINT64_MAX);
@@ -646,9 +667,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
                       cache->name, UCS_PGT_REGION_ARG(&region->super),
                       (void *)key->d_bptr, key->b_len);
 
-            uct_cuda_ipc_cache_region_remove(cache, region);
-            uct_cuda_ipc_close_memhandle(region);
-            ucs_free(region);
+            uct_cuda_ipc_cache_region_destroy(cache, region);
         }
     }
 
@@ -706,7 +725,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
     region->mapped_addr = *mapped_addr;
     region->refcount    = 1;
     region->cu_dev      = cu_dev;
-    region->in_lru      = 0;
+    region->in_lru      = 0; /* will be set after pgtable insert */
 
     status = UCS_PROFILE_CALL(ucs_pgtable_insert,
                               &cache->pgtable, &region->super);
@@ -729,14 +748,16 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
 
     cache->num_regions++;
     cache->total_size += key->b_len;
+    ucs_list_add_tail(&cache->lru_list, &region->lru_list);
+    region->in_lru = 1;
 
     uct_cuda_ipc_cache_evict_lru(cache);
 
     ucs_trace("%s: cuda_ipc cache new region:"UCS_PGT_REGION_FMT" size:%lu"
               " (regions:%lu/%lu size:%zu/%zu)",
               cache->name, UCS_PGT_REGION_ARG(&region->super), key->b_len,
-              cache->num_regions, cache->max_regions,
-              cache->total_size, cache->max_size);
+              cache->num_regions, uct_cuda_ipc_remote_cache.max_regions,
+              cache->total_size, uct_cuda_ipc_remote_cache.max_size);
 
     status = UCS_OK;
 
@@ -746,9 +767,7 @@ err:
 }
 
 ucs_status_t uct_cuda_ipc_create_cache(uct_cuda_ipc_cache_t **cache,
-                                       const char *name,
-                                       unsigned long max_regions,
-                                       size_t max_size)
+                                       const char *name)
 {
     ucs_status_t status;
     uct_cuda_ipc_cache_t *cache_desc;
@@ -783,8 +802,6 @@ ucs_status_t uct_cuda_ipc_create_cache(uct_cuda_ipc_cache_t **cache,
     ucs_list_head_init(&cache_desc->lru_list);
     cache_desc->num_regions = 0;
     cache_desc->total_size  = 0;
-    cache_desc->max_regions = max_regions;
-    cache_desc->max_size    = max_size;
 
     *cache = cache_desc;
     return UCS_OK;
@@ -808,8 +825,10 @@ void uct_cuda_ipc_destroy_cache(uct_cuda_ipc_cache_t *cache)
 void uct_cuda_ipc_cache_set_global_limits(unsigned long max_regions,
                                           size_t max_size)
 {
-    uct_cuda_ipc_remote_cache.max_regions = max_regions;
-    uct_cuda_ipc_remote_cache.max_size    = max_size;
+    uct_cuda_ipc_remote_cache.max_regions = ucs_min(uct_cuda_ipc_remote_cache.max_regions, 
+                                                    max_regions);
+    uct_cuda_ipc_remote_cache.max_size    = ucs_min(uct_cuda_ipc_remote_cache.max_size,
+                                                    max_size);
 }
 
 UCS_STATIC_INIT {
