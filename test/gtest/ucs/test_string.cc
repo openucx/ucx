@@ -641,7 +641,9 @@ UCS_TEST_F(test_string_buffer, expand_range_malformed) {
                                      "a[0-A]b",    "a[-]b",        "[]",
                                      "[-1-2-]",    "[--]",         "[1-2][3-4]",
                                      "[4-8][",     "[5-6]]",       "][4-5]",
-                                     "[[0-4]]",    "a[0-4]b[6-8]c"};
+                                     "[[0-4]]",    "a[0-4]b[6-8]c",
+                                     "a[5-2]b",    "[10-0]",
+                                     "dev[100-1]suffix"};
 
     for (const std::string &token : malformed) {
         ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
@@ -668,24 +670,6 @@ UCS_TEST_F(test_string_buffer, expand_range_empty) {
     ucs_string_buffer_cleanup(&strb);
 }
 
-UCS_TEST_F(test_string_buffer, expand_range_invalid) {
-    const std::string invalid[] = {"a[5-2]b", "[10-0]", "dev[100-1]suffix"};
-
-    for (const std::string &token : invalid) {
-        ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
-
-        {
-            const scoped_log_handler slh(hide_errors_logger);
-            EXPECT_EQ(UCS_ERR_INVALID_PARAM,
-                      ucs_string_buffer_expand_range(&strb, token.c_str(),
-                                                     token.size(), ',',
-                                                     SIZE_MAX, NULL))
-                    << "token: " << token;
-        }
-
-        ucs_string_buffer_cleanup(&strb);
-    }
-}
 
 UCS_TEST_F(test_string_buffer, expand_range_append) {
     ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
@@ -870,18 +854,6 @@ UCS_TEST_F(test_string_buffer, expand_ranges_single_token) {
     ucs_string_buffer_cleanup(&strb);
 }
 
-UCS_TEST_F(test_string_buffer, expand_ranges_invalid) {
-    ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
-
-    {
-        const scoped_log_handler slh(hide_errors_logger);
-        EXPECT_EQ(UCS_ERR_INVALID_PARAM,
-                  ucs_string_buffer_expand_ranges(&strb, "a[0-1],b[5-2]", ',',
-                                                  SIZE_MAX, NULL));
-    }
-
-    ucs_string_buffer_cleanup(&strb);
-}
 
 UCS_TEST_F(test_string_buffer, expand_ranges_max_elements_zero) {
     ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;

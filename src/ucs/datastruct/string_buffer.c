@@ -368,20 +368,14 @@ ucs_status_t ucs_string_buffer_expand_range(ucs_string_buffer_t *strb,
 #endif
 
     if (ret != 0) {
-        /* No match, append the token as-is */
-        ucs_string_buffer_appendf(strb, "%.*s", (int)token_len, token);
-        count = 1;
-        goto out;
+        goto out_append_token;
     }
 
     first = strtoul(token + pmatch[2].rm_so, NULL, 10);
     last  = strtoul(token + pmatch[3].rm_so, NULL, 10);
 
     if (first > last) {
-        ucs_error("invalid range pattern '%.*s': first > last (%zu > %zu)",
-                  (int)token_len, token, first, last);
-        status = UCS_ERR_INVALID_PARAM;
-        goto out;
+        goto out_append_token;
     }
 
     count      = ucs_min(last - first + 1, max_elements);
@@ -398,6 +392,11 @@ ucs_status_t ucs_string_buffer_expand_range(ucs_string_buffer_t *strb,
                                   j, (int)suffix_len, suffix);
     }
 
+    goto out;
+
+out_append_token:
+    ucs_string_buffer_appendf(strb, "%.*s", (int)token_len, token);
+    count = 1;
 out:
     if (count_p != NULL) {
         *count_p = count;
