@@ -386,7 +386,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "even if invalidation workflow isn't supported",
    ucs_offsetof(ucp_context_config_t, rndv_errh_ppln_enable), UCS_CONFIG_TYPE_BOOL},
 
-  {"RNDV_MTYPE_WORKER_MAX_MEM", "inf",
+  {"RNDV_MTYPE_WORKER_MAX_MEM", "8g",
    "Maximum memory for concurrent mtype fragments per worker.\n"
    "This value is translated to a fragment count based on RNDV_FRAG_SIZE\n"
    "for each memory type. Set to \"inf\" to disable flow control.",

@@ -255,10 +255,6 @@ ucp_proto_rndv_mtype_fc_decrement(ucp_request_t *req)
     ucs_assert(worker->rndv_mtype_fc.active_frags > 0);
     worker->rndv_mtype_fc.active_frags--;
 
-    if (!worker->rndv_mtype_fc.enabled) {
-        return;
-    }
-
     /* Dequeue with priority: PUT > GET > RTR */
     if (!ucs_queue_is_empty(&worker->rndv_mtype_fc.put_pending_q)) {
         elem = ucs_queue_pull(&worker->rndv_mtype_fc.put_pending_q);
