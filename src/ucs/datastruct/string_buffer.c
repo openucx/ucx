@@ -327,8 +327,7 @@ size_t ucs_string_buffer_expand_range(ucs_string_buffer_t *strb,
 {
     static ucs_init_once_t regex_init = UCS_INIT_ONCE_INITIALIZER;
     static regex_t range_regex;
-    size_t count = 0;
-    size_t first, last, j;
+    size_t first, last, j, count;
     regoff_t prefix_len, suffix_len;
     regmatch_t pmatch[5];
     const char *suffix;
@@ -338,7 +337,7 @@ size_t ucs_string_buffer_expand_range(ucs_string_buffer_t *strb,
                 "invalid delimiter: '%c'", delim);
 
     if (max_elements == 0) {
-        goto out;
+        return 0;
     }
 
     UCS_INIT_ONCE(&regex_init) {
@@ -390,13 +389,12 @@ size_t ucs_string_buffer_expand_range(ucs_string_buffer_t *strb,
                                   j, (int)suffix_len, suffix);
     }
 
-    goto out;
+    return count;
 
 out_append_token:
+    /* Append the token as-is */
     ucs_string_buffer_appendf(strb, "%.*s", (int)token_len, token);
-    count = 1;
-out:
-    return count;
+    return 1;
 }
 
 size_t ucs_string_buffer_expand_ranges(ucs_string_buffer_t *strb,
