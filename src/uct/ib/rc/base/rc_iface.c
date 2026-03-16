@@ -872,6 +872,7 @@ uct_rc_iface_set_ece(uct_rc_iface_t *iface, struct ibv_qp *qp)
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
     uct_ib_md_t *md      = ucs_container_of(dev, uct_ib_md_t, dev);
     struct ibv_ece ece;
+    ucs_log_level_t log_level;
 
     if ((ece_val == UCT_IB_DEVICE_ECE_DEFAULT) && !md->ece_enable) {
         return UCS_OK;
@@ -891,8 +892,9 @@ uct_rc_iface_set_ece(uct_rc_iface_t *iface, struct ibv_qp *qp)
     }
 
     if (ibv_set_ece(qp, &ece)) {
-        ucs_log((ece_val == UCT_IB_DEVICE_ECE_DEFAULT?
-                 UCS_LOG_LEVEL_WARN : UCS_LOG_LEVEL_ERROR),
+        log_level = (ece_val == UCT_IB_DEVICE_ECE_DEFAULT?
+                     UCS_LOG_LEVEL_WARN : UCS_LOG_LEVEL_ERROR);
+        ucs_log(log_level,
                 "ibv_set_ece(device=%s qpn=0x%x vendor_id=0x%x "
                 "options=0x%x comp_mask=0x%x) failed: %m",
                 uct_ib_device_name(dev), qp->qp_num, ece.vendor_id, ece.options,

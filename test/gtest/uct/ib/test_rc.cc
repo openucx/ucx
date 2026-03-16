@@ -6,7 +6,6 @@
 */
 
 #include "test_rc.h"
-#include <uct/ib/base/ib_device.h>
 #include <uct/ib/rc/verbs/rc_verbs.h>
 #include <uct/test_peer_failure.h>
 
