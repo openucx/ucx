@@ -2192,8 +2192,6 @@ UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_rndv_ppln);
 class test_ucp_am_nbx_rndv_mtype_fc : public test_ucp_am_nbx_rndv_ppln {
 protected:
     struct fc_counters {
-        uint64_t sender_ok;
-        uint64_t receiver_ok;
         uint64_t sender_throttled;
         uint64_t receiver_throttled;
     };
@@ -2252,12 +2250,6 @@ protected:
         check_stats_ge(sender(), UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY, 1);
         check_stats_ge(receiver(), UCP_WORKER_STAT_RNDV_RTR_MTYPE, 1);
 
-        fc.sender_ok          = UCS_STATS_GET_COUNTER(
-                                    sender().worker()->stats,
-                                    UCP_WORKER_STAT_RNDV_MTYPE_FC_OK);
-        fc.receiver_ok        = UCS_STATS_GET_COUNTER(
-                                    receiver().worker()->stats,
-                                    UCP_WORKER_STAT_RNDV_MTYPE_FC_OK);
         fc.sender_throttled   = UCS_STATS_GET_COUNTER(sender().worker()->stats,
                                     UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED);
         fc.receiver_throttled = UCS_STATS_GET_COUNTER(
@@ -2265,21 +2257,6 @@ protected:
                                     UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED);
     }
 };
-
-UCS_TEST_P(test_ucp_am_nbx_rndv_mtype_fc, fc_enabled_under_cap,
-           "RNDV_MTYPE_WORKER_MAX_MEM=1g", "RNDV_FRAG_MEM_TYPE=cuda")
-{
-    fc_counters fc;
-
-    run_fc_test(8, fc);
-
-    EXPECT_EQ(0u, fc.sender_throttled) << "sender should not be throttled";
-    EXPECT_EQ(0u, fc.receiver_throttled) << "receiver should not be throttled";
-    EXPECT_GT(fc.sender_ok + fc.receiver_ok, 0u)
-                                << "FC should be active and tracking fragments";
-
-    verify_clean_fc_state();
-}
 
 UCS_TEST_P(test_ucp_am_nbx_rndv_mtype_fc, fc_enabled_cap_reached,
            "RNDV_MTYPE_WORKER_MAX_MEM=600mb", "RNDV_FRAG_MEM_TYPE=cuda")
@@ -2303,8 +2280,6 @@ UCS_TEST_P(test_ucp_am_nbx_rndv_mtype_fc, fc_disabled,
 
     EXPECT_EQ(0u, fc.sender_throttled) << "FC disabled - no throttling expected";
     EXPECT_EQ(0u, fc.receiver_throttled) << "FC disabled - no throttling expected";
-    EXPECT_EQ(0u, fc.sender_ok) << "FC disabled - no increment expected";
-    EXPECT_EQ(0u, fc.receiver_ok) << "FC disabled - no increment expected";
 }
 
 

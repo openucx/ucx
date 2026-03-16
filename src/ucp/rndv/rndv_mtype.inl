@@ -207,19 +207,6 @@ ucp_proto_rndv_mtype_fc_throttle(ucp_request_t *req, const size_t max_frags,
 }
 
 /**
- * Increment active_frags counter after successful mtype allocation.
- */
-static UCS_F_ALWAYS_INLINE void
-ucp_proto_rndv_mtype_fc_increment(ucp_request_t *req)
-{
-    ucp_worker_h worker = req->send.ep->worker;
-
-    worker->rndv_mtype_fc.active_frags++;
-    UCS_STATS_UPDATE_COUNTER(worker->stats,
-                             UCP_WORKER_STAT_RNDV_MTYPE_FC_OK, 1);
-}
-
-/**
  * Decrement active_frags counter and reschedule pending request.
  * Dequeue priority: PUT > GET > RTR (same ordering as the throttle limits
  * defined by UCP_PROTO_RNDV_MTYPE_FC_LIMIT).

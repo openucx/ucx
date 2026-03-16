@@ -353,7 +353,8 @@ ucp_proto_rndv_rtr_mtype_data_received(ucp_request_t *req, int in_buffer)
 
 static ucs_status_t ucp_proto_rndv_rtr_mtype_progress(uct_pending_req_t *self)
 {
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_request_t *req  = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_worker_h worker = req->send.ep->worker;
     const ucp_proto_rndv_rtr_mtype_priv_t *rpriv;
     size_t max_frags;
     ucs_queue_head_t *pending_q;
@@ -366,7 +367,7 @@ static ucs_status_t ucp_proto_rndv_rtr_mtype_progress(uct_pending_req_t *self)
 
         /* Check throttling limit. If no resource at the moment, queue the
          * request in RTR pending queue and return UCS_OK. */
-        pending_q = &req->send.ep->worker->rndv_mtype_fc.rtr_pending_q;
+        pending_q = &worker->rndv_mtype_fc.rtr_pending_q;
         if (ucp_proto_rndv_mtype_fc_throttle(req, max_frags, pending_q) ==
             UCS_ERR_NO_RESOURCE) {
             return UCS_OK;
@@ -379,7 +380,7 @@ static ucs_status_t ucp_proto_rndv_rtr_mtype_progress(uct_pending_req_t *self)
             return UCS_OK;
         }
 
-        ucp_proto_rndv_mtype_fc_increment(req);
+        worker->rndv_mtype_fc.active_frags++;
         ucp_proto_rtr_common_request_init(req);
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     }

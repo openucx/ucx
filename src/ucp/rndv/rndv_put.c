@@ -517,7 +517,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_put_mtype_send_func(
 static ucs_status_t
 ucp_proto_rndv_put_mtype_copy_progress(uct_pending_req_t *uct_req)
 {
-    ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);
+    ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);\
+    ucp_worker_h worker = req->send.ep->worker;
     const ucp_proto_rndv_put_priv_t *rpriv;
     ucs_status_t status;
     size_t max_frags;
@@ -528,7 +529,7 @@ ucp_proto_rndv_put_mtype_copy_progress(uct_pending_req_t *uct_req)
     rpriv = req->send.proto_config->priv;
 
     max_frags = UCP_PROTO_RNDV_MTYPE_FC_PUT_LIMIT(rpriv->bulk.fc_max_frags);
-    pending_q = &req->send.ep->worker->rndv_mtype_fc.put_pending_q;
+    pending_q = &worker->rndv_mtype_fc.put_pending_q;
     if (ucp_proto_rndv_mtype_fc_throttle(req, max_frags, pending_q) ==
         UCS_ERR_NO_RESOURCE) {
         return UCS_OK;
@@ -540,7 +541,7 @@ ucp_proto_rndv_put_mtype_copy_progress(uct_pending_req_t *uct_req)
         return UCS_OK;
     }
 
-    ucp_proto_rndv_mtype_fc_increment(req);
+    worker->rndv_mtype_fc.active_frags++;
     ucp_proto_rndv_put_common_request_init(req);
     req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     ucp_proto_rndv_mdesc_mtype_copy(req, uct_ep_get_zcopy,
