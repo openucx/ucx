@@ -6,6 +6,7 @@
 */
 
 #include "test_rc.h"
+#include <uct/ib/base/ib_device.h>
 #include <uct/ib/rc/verbs/rc_verbs.h>
 #include <uct/test_peer_failure.h>
 
@@ -677,12 +678,11 @@ UCS_TEST_SKIP_COND_P(test_rc_get_limit, ordering_comp_cb,
 
 UCT_INSTANTIATE_RC_DC_GGA_TEST_CASE(test_rc_get_limit)
 
-class test_rc_ece_auto : public test_rc {
+class test_rc_ece : public test_rc {
 public:
     void init()
     {
         m_recv_count = 0;
-        modify_config("RC_ECE", "auto");
         test_rc::init();
     }
 
@@ -701,15 +701,13 @@ public:
         return UCS_OK;
     }
 
-    void send_recv(uct_ep_h ep, entity *ent, size_t length)
+    void send_recv(uct_ep_h ep, entity *ent, size_t length, uint64_t ece)
     {
-        /* set a callback for the uct to invoke for receiving the data */
-        uct_iface_set_am_handler(ent->iface(), 0, recv_handler, &length, 0);
+        EXPECT_EQ(ece, rc_iface(m_e1)->config.ece);
 
-        /* send the data */
+        uct_iface_set_am_handler(ent->iface(), 0, recv_handler, &length, 0);
         ssize_t packed_size = uct_ep_am_bcopy(ep, 0, send_pack_cb, &length, 0);
         ASSERT_EQ(length, packed_size);
-
         wait_for_value(&m_recv_count, (size_t)1, true);
     }
 
@@ -717,15 +715,35 @@ protected:
     static size_t m_recv_count;
 };
 
-size_t test_rc_ece_auto::m_recv_count = 0;
+size_t test_rc_ece::m_recv_count = 0;
 
-UCS_TEST_SKIP_COND_P(test_rc_ece_auto, send_recv,
-                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY))
+UCS_TEST_SKIP_COND_P(test_rc_ece, ece_0,
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY), "RC_ECE=0")
 {
-    send_recv(m_e1->ep(0), m_e2, m_e1->iface_attr().cap.am.max_bcopy);
+    send_recv(m_e1->ep(0), m_e2, m_e1->iface_attr().cap.am.max_bcopy, 0);
 }
 
-UCT_INSTANTIATE_RC_DC_TEST_CASE(test_rc_ece_auto)
+UCS_TEST_SKIP_COND_P(test_rc_ece, ece_custom,
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY), "RC_ECE=43223")
+{
+    send_recv(m_e1->ep(0), m_e2, m_e1->iface_attr().cap.am.max_bcopy, 43223);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_ece, ece_auto,
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY), "RC_ECE=auto")
+{
+    send_recv(m_e1->ep(0), m_e2, m_e1->iface_attr().cap.am.max_bcopy,
+              UCT_IB_DEVICE_ECE_DEFAULT);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_ece, ece_inf,
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY), "RC_ECE=inf")
+{
+    send_recv(m_e1->ep(0), m_e2, m_e1->iface_attr().cap.am.max_bcopy,
+              UCT_IB_DEVICE_ECE_MAX);
+}
+
+UCT_INSTANTIATE_RC_DC_TEST_CASE(test_rc_ece)
 
 uint32_t test_rc_flow_control::m_am_rx_count = 0;
 
