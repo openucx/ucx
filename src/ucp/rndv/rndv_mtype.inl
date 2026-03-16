@@ -199,37 +199,39 @@ unsigned ucp_proto_rndv_mtype_fc_reschedule_cb(void *arg)
  * free more resources on completion receive a larger cap, so they can always
  * make progress and unblock others:
  *
- *   PUT (level 0, 100%) – frees local staging buffer AND remote RTR buffer.
- *   GET (level 1, ~90%) – frees local staging buffer only.
- *   RTR (level 2, ~80%) – triggers a remote PUT allocation, adding pressure.
+ *   PUT (level 0, 100%)            – frees local staging buffer AND remote RTR buffer.
+ *   GET (level 1, 100%-tier_step)  – frees local staging buffer only.
+ *   RTR (level 2, 100%-2*tier_step) – triggers a remote PUT allocation, adding pressure.
  *
- * The step between tiers is 10% of the budget (1/10).  The exact fractions are
- * not performance-sensitive; only the strict ordering PUT > GET > RTR matters.
+ * The step between tiers is configurable via UCX_RNDV_MTYPE_FC_TIER_STEP
+ * (default 10%).  The exact fractions are not performance-sensitive; only the
+ * strict ordering PUT > GET > RTR matters.
  * The same ordering is used when dequeueing pending requests, see
  * ucp_proto_rndv_mtype_fc_decrement().
  */
 static UCS_F_ALWAYS_INLINE size_t
-ucp_proto_rndv_mtype_fc_limit(size_t fc_max, unsigned level)
+ucp_proto_rndv_mtype_fc_limit(size_t fc_max, unsigned level,
+                              unsigned tier_step)
 {
-    return fc_max - level * (fc_max / 10);
+    return fc_max - level * (fc_max * tier_step / 100);
 }
 
 static UCS_F_ALWAYS_INLINE size_t
-ucp_proto_rndv_mtype_fc_put_limit(size_t fc_max)
+ucp_proto_rndv_mtype_fc_put_limit(size_t fc_max, unsigned tier_step)
 {
-    return ucp_proto_rndv_mtype_fc_limit(fc_max, 0);
+    return ucp_proto_rndv_mtype_fc_limit(fc_max, 0, tier_step);
 }
 
 static UCS_F_ALWAYS_INLINE size_t
-ucp_proto_rndv_mtype_fc_get_limit(size_t fc_max)
+ucp_proto_rndv_mtype_fc_get_limit(size_t fc_max, unsigned tier_step)
 {
-    return ucp_proto_rndv_mtype_fc_limit(fc_max, 1);
+    return ucp_proto_rndv_mtype_fc_limit(fc_max, 1, tier_step);
 }
 
 static UCS_F_ALWAYS_INLINE size_t
-ucp_proto_rndv_mtype_fc_rtr_limit(size_t fc_max)
+ucp_proto_rndv_mtype_fc_rtr_limit(size_t fc_max, unsigned tier_step)
 {
-    return ucp_proto_rndv_mtype_fc_limit(fc_max, 2);
+    return ucp_proto_rndv_mtype_fc_limit(fc_max, 2, tier_step);
 }
 
 /**

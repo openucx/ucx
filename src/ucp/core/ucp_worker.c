@@ -2627,6 +2627,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     worker->counters.ep_failures          = 0;
 
     /* Initialize RNDV mtype flow control if configured */
+    worker->rndv_mtype_fc.tier_step = context->config.ext.rndv_mtype_fc_tier_step;
     ucs_queue_head_init(&worker->rndv_mtype_fc.put_pending_q);
     ucs_queue_head_init(&worker->rndv_mtype_fc.get_pending_q);
     ucs_queue_head_init(&worker->rndv_mtype_fc.rtr_pending_q);

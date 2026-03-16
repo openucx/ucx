@@ -400,6 +400,7 @@ typedef struct ucp_worker {
     struct {
         /* Worker-level mtype fragment flow control */
         int                          enabled;            /* Whether FC is enabled (cached) */
+        unsigned                     tier_step;          /* Pct step between throttle tiers (cached) */
         size_t                       active_frags;       /* Current active fragments */
         /* Separate pending queues by priority (PUT > GET > RTR) */
         ucs_queue_head_t             put_pending_q;      /* Throttled PUT (RNDV_SEND) requests */

@@ -392,6 +392,14 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "for each memory type. Set to \"inf\" to disable flow control.",
    ucs_offsetof(ucp_context_config_t, rndv_mtype_worker_max_mem), UCS_CONFIG_TYPE_MEMUNITS},
 
+  {"RNDV_MTYPE_FC_TIER_STEP", "10",
+   "Percentage step between flow-control throttle tiers for mtype fragments.\n"
+   "Each operation type (PUT, GET, RTR) is capped at a different share of the\n"
+   "total fragment budget. This value controls the gap between tiers.\n"
+   "For example, 10 means PUT=100%, GET=90%, RTR=80% of the budget.\n"
+   "Valid values are 1-49.",
+   ucs_offsetof(ucp_context_config_t, rndv_mtype_fc_tier_step), UCS_CONFIG_TYPE_UINT},
+
   {"FLUSH_WORKER_EPS", "y",
    "Enable flushing the worker by flushing its endpoints. Allows completing\n"
    "the flush operation in a bounded time even if there are new requests on\n"
