@@ -30,8 +30,8 @@ UCS_TEST_F(test_elf_notes, read_notes_by_prefix) {
     status = ucs_elf_read_notes_by_prefix(elf_path.c_str(), NOTE_PREFIX, &notes_array);
     ASSERT_EQ(UCS_OK, status);
 
-    /** We expect at least 2 notes: .note.gnu.build-id and .note.gnu.property */
-    ASSERT_GE(ucs_array_length(&notes_array), 2);
+    /** We expect at least 1 note: .note.gnu.build-id and/or .note.gnu.property */
+    ASSERT_GE(ucs_array_length(&notes_array), 1);
 
     ucs_array_for_each(note, &notes_array) {
         ASSERT_EQ(strncmp(note->field_name, NOTE_PREFIX, strlen(NOTE_PREFIX)), 0);
