@@ -13,7 +13,7 @@
 
 namespace ucs {
 
-constexpr int CONSECUTIVE_FD_INCREASE_THRESHOLD = 2;
+constexpr size_t TOTAL_FD_INCREASE_THRESHOLD = 2;
 
 pthread_mutex_t test_base::m_logger_mutex = PTHREAD_MUTEX_INITIALIZER;
 unsigned test_base::m_total_warnings = 0;
@@ -22,8 +22,7 @@ std::vector<std::string> test_base::m_errors;
 std::vector<std::string> test_base::m_warnings;
 std::vector<std::string> test_base::m_first_warns_and_errors;
 std::set<int> test_base::m_prev_open_fds;
-size_t test_base::m_consecutive_fd_increases = 0;
-size_t test_base::m_total_fd_increases       = 0;
+size_t test_base::m_total_fd_increases = 0;
 
 test_base::test_base() :
                 m_state(NEW),
@@ -32,7 +31,8 @@ test_base::test_base() :
                 m_num_valgrind_errors_before(0),
                 m_num_errors_before(0),
                 m_num_warnings_before(0),
-                m_num_log_handlers_before(0)
+                m_num_log_handlers_before(0),
+                m_skip_fd_leak_check(false)
 {
     push_config();
 }
@@ -72,17 +72,17 @@ bool test_base::is_target_whitelisted(const std::string &target) const
 /* Compare open file descriptors against the previous test's post-cleanup
  * state via set-difference. New fds whose targets match the whitelist
  * (e.g. from external libraries) are logged but not counted as leaks.
- * Non-whitelisted new fds increment a consecutive-increase counter and
- * trigger a failure once CONSECUTIVE_FD_INCREASE_THRESHOLD is reached. */
+ * Non-whitelisted new fds increment a total-increase counter and
+ * trigger a failure once TOTAL_FD_INCREASE_THRESHOLD is reached. */
 void test_base::check_fd_leaks()
 {
-    const std::string padding(13, ' ');
     std::set<int> open_fds = get_open_fds();
 
-    if (!m_prev_open_fds.empty()) {
+    if (!m_prev_open_fds.empty() || m_skip_fd_leak_check) {
         std::stringstream ss;
         size_t num_unexpected  = 0;
         size_t num_whitelisted = 0;
+        const std::string padding(13, ' ');
 
         for (const int fd : open_fds) {
             if (m_prev_open_fds.find(fd) == m_prev_open_fds.end()) {
@@ -97,29 +97,22 @@ void test_base::check_fd_leaks()
             }
         }
 
-        if (num_unexpected > 0 || num_whitelisted > 0) {
-            ss << "\n" << padding << "total open fds: " << open_fds.size();
+        if (num_unexpected > 0) {
+            ++m_total_fd_increases;
 
-            if (num_unexpected > 0) {
-                ++m_consecutive_fd_increases;
-                ++m_total_fd_increases;
-                ss << "\n"
-                   << padding << "total fd increases: " << m_total_fd_increases
-                   << " (consecutive: " << m_consecutive_fd_increases << ")";
-            }
+            ss << "\n" << padding << "total open fds: " << open_fds.size()
+               << "\n" << padding << "total fd increases: "
+               << m_total_fd_increases;
 
-            UCS_TEST_MESSAGE << "new leaked fds (" << num_unexpected
+            UCS_TEST_MESSAGE << "new open fds (" << num_unexpected
                              << " unexpected, " << num_whitelisted
                              << " whitelisted):" << ss.str();
-        }
 
-        if (num_unexpected == 0) {
-            m_consecutive_fd_increases = 0;
-        } else if (m_consecutive_fd_increases >=
-                   CONSECUTIVE_FD_INCREASE_THRESHOLD) {
-            ADD_FAILURE() << "fd leaks detected for more than "
-                          << CONSECUTIVE_FD_INCREASE_THRESHOLD
-                          << " consecutive tests!";
+            if (m_total_fd_increases >= TOTAL_FD_INCREASE_THRESHOLD) {
+                    ADD_FAILURE() << "fd leaks detected in "
+                                << m_total_fd_increases << " tests (threshold: "
+                                << TOTAL_FD_INCREASE_THRESHOLD << ")";
+            }
         }
     }
 

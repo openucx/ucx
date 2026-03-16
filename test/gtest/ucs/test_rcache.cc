@@ -1059,6 +1059,11 @@ UCS_TEST_F(test_rcache_stats, hits_slow) {
 
 class test_rcache_pfn : public ucs::test {
 public:
+    test_rcache_pfn() {
+        /* calling `ucs_sys_get_pfn` creates a static file pagemap fd that is not closed */
+        m_skip_fd_leak_check = true;
+    }
+
     void test_pfn(void *address, unsigned page_num)
     {
         pfn_enum_t ctx;

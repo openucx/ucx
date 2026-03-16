@@ -558,7 +558,7 @@ std::string readlink_proc_fd(int fd)
     }
 
     link[len] = '\0';
-    return std::string(link) + (len == max_len ? " (truncated)" : "");
+    return std::string(link);
 }
 
 static std::map<std::string, std::string> get_all_rdmacm_net_devices()
