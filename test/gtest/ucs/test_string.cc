@@ -551,58 +551,28 @@ UCS_TEST_F(test_string_buffer, ucs_string_buffer_translate) {
 }
 
 UCS_TEST_F(test_string_buffer, expand_range_prefix_suffix) {
-    ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
+    const struct {
+        const char *token;
+        const char *expected;
+    } test_cases[] = {
+        {"prefix[0-2]suffix", "prefix0suffix,prefix1suffix,prefix2suffix"},
+        {"prefix[0-2]", "prefix0,prefix1,prefix2"},
+        {"[3-5]suffix", "3suffix,4suffix,5suffix"},
+        {"[0-2]", "0,1,2"},
+    };
 
-    ucs_string_buffer_expand_range(&strb, "prefix[0-2]suffix",
-                                   strlen("prefix[0-2]suffix"), ',',
-                                   SIZE_MAX);
-    EXPECT_EQ(std::string("prefix0suffix,prefix1suffix,prefix2suffix"),
-              ucs_string_buffer_cstr(&strb));
+    for (const auto &tc : test_cases) {
+        ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
 
-    ucs_string_buffer_cleanup(&strb);
+        ucs_string_buffer_expand_range(&strb, tc.token, strlen(tc.token),
+                                       ',', SIZE_MAX);
+        EXPECT_EQ(std::string(tc.expected), ucs_string_buffer_cstr(&strb))
+                << "token: " << tc.token;
+
+        ucs_string_buffer_cleanup(&strb);
+    }
 }
 
-UCS_TEST_F(test_string_buffer, expand_range_prefix) {
-    ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
-
-    ucs_string_buffer_expand_range(&strb, "prefix[0-2]",
-                                   strlen("prefix[0-2]"), ',', SIZE_MAX);
-    EXPECT_EQ(std::string("prefix0,prefix1,prefix2"),
-              ucs_string_buffer_cstr(&strb));
-
-    ucs_string_buffer_cleanup(&strb);
-}
-
-UCS_TEST_F(test_string_buffer, expand_range_suffix) {
-    ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
-
-    ucs_string_buffer_expand_range(&strb, "[3-5]suffix",
-                                   strlen("[3-5]suffix"), ',', SIZE_MAX);
-    EXPECT_EQ(std::string("3suffix,4suffix,5suffix"),
-              ucs_string_buffer_cstr(&strb));
-
-    ucs_string_buffer_cleanup(&strb);
-}
-
-UCS_TEST_F(test_string_buffer, expand_range_no_prefix_suffix) {
-    ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
-
-    ucs_string_buffer_expand_range(&strb, "[0-2]", strlen("[0-2]"), ',',
-                                   SIZE_MAX);
-    EXPECT_EQ(std::string("0,1,2"), ucs_string_buffer_cstr(&strb));
-
-    ucs_string_buffer_cleanup(&strb);
-}
-
-UCS_TEST_F(test_string_buffer, expand_range_no_bracket) {
-    ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
-
-    ucs_string_buffer_expand_range(&strb, "no_bracket",
-                                   strlen("no_bracket"), ',', SIZE_MAX);
-    EXPECT_EQ(std::string("no_bracket"), ucs_string_buffer_cstr(&strb));
-
-    ucs_string_buffer_cleanup(&strb);
-}
 
 UCS_TEST_F(test_string_buffer, expand_range_single) {
     ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
@@ -673,25 +643,32 @@ UCS_TEST_F(test_string_buffer, expand_range_append) {
 }
 
 UCS_TEST_F(test_string_buffer, expand_range_max_elements) {
-    ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
+    const struct {
+        const char *token;
+        size_t      max_elements;
+        size_t      expected_count;
+        const char *expected;
+    } test_cases[] = {
+        {"dev[0-9]", 3, 3, "dev0,dev1,dev2"},
+        {"dev[0-9]", 1, 1, "dev0"},
+        {"dev[0-2]", 100, 3, "dev0,dev1,dev2"},
+    };
 
-    EXPECT_EQ(3ul, ucs_string_buffer_expand_range(&strb, "dev[0-9]",
-                                                   strlen("dev[0-9]"), ',',
-                                                   3));
-    EXPECT_EQ(std::string("dev0,dev1,dev2"), ucs_string_buffer_cstr(&strb));
+    for (const auto &tc : test_cases) {
+        ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
 
-    ucs_string_buffer_cleanup(&strb);
-}
+        EXPECT_EQ(tc.expected_count,
+                  ucs_string_buffer_expand_range(&strb, tc.token,
+                                                 strlen(tc.token), ',',
+                                                 tc.max_elements))
+                << "token: " << tc.token
+                << " max_elements: " << tc.max_elements;
+        EXPECT_EQ(std::string(tc.expected), ucs_string_buffer_cstr(&strb))
+                << "token: " << tc.token
+                << " max_elements: " << tc.max_elements;
 
-UCS_TEST_F(test_string_buffer, expand_range_max_elements_one) {
-    ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
-
-    EXPECT_EQ(1ul, ucs_string_buffer_expand_range(&strb, "dev[0-9]",
-                                                   strlen("dev[0-9]"), ',',
-                                                   1));
-    EXPECT_EQ(std::string("dev0"), ucs_string_buffer_cstr(&strb));
-
-    ucs_string_buffer_cleanup(&strb);
+        ucs_string_buffer_cleanup(&strb);
+    }
 }
 
 UCS_TEST_F(test_string_buffer, expand_range_max_elements_zero) {
@@ -705,16 +682,6 @@ UCS_TEST_F(test_string_buffer, expand_range_max_elements_zero) {
     ucs_string_buffer_cleanup(&strb);
 }
 
-UCS_TEST_F(test_string_buffer, expand_range_max_elements_exceeds_range) {
-    ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
-
-    EXPECT_EQ(3ul, ucs_string_buffer_expand_range(&strb, "dev[0-2]",
-                                                   strlen("dev[0-2]"), ',',
-                                                   100));
-    EXPECT_EQ(std::string("dev0,dev1,dev2"), ucs_string_buffer_cstr(&strb));
-
-    ucs_string_buffer_cleanup(&strb);
-}
 
 UCS_TEST_F(test_string_buffer, expand_range_leading_zeros) {
     ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
@@ -776,8 +743,14 @@ UCS_TEST_F(test_string_buffer, expand_ranges_mixed) {
                                     SIZE_MAX);
     EXPECT_EQ(std::string("mlx5_0,mlx5_1,mlx5_2,eth0,ib3,ib4,ib5"),
               ucs_string_buffer_cstr(&strb));
-
     ucs_string_buffer_cleanup(&strb);
+
+    ucs_string_buffer_t strb2 = UCS_STRING_BUFFER_INITIALIZER;
+
+    ucs_string_buffer_expand_ranges(&strb2, "dev[0-3]", ',', SIZE_MAX);
+    EXPECT_EQ(std::string("dev0,dev1,dev2,dev3"),
+              ucs_string_buffer_cstr(&strb2));
+    ucs_string_buffer_cleanup(&strb2);
 }
 
 UCS_TEST_F(test_string_buffer, expand_ranges_empty) {
@@ -809,16 +782,6 @@ UCS_TEST_F(test_string_buffer, expand_ranges_no_ranges) {
     ucs_string_buffer_cleanup(&strb);
 }
 
-UCS_TEST_F(test_string_buffer, expand_ranges_single_token) {
-    ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
-
-    ucs_string_buffer_expand_ranges(&strb, "dev[0-3]", ',', SIZE_MAX);
-    EXPECT_EQ(std::string("dev0,dev1,dev2,dev3"),
-              ucs_string_buffer_cstr(&strb));
-
-    ucs_string_buffer_cleanup(&strb);
-}
-
 
 UCS_TEST_F(test_string_buffer, expand_ranges_max_elements_zero) {
     ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
@@ -831,34 +794,31 @@ UCS_TEST_F(test_string_buffer, expand_ranges_max_elements_zero) {
 }
 
 UCS_TEST_F(test_string_buffer, expand_ranges_max_elements_cuts_range) {
-    ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
+    const struct {
+        const char *input;
+        size_t      max_elements;
+        size_t      expected_count;
+        const char *expected;
+    } test_cases[] = {
+        {"lo,dev[0-4],eth0", 3, 3, "lo,dev0,dev1"},
+        {"dev[0-2],eth[0-2]", 4, 4, "dev0,dev1,dev2,eth0"},
+        {"a[0-1],b[0-1]", 4, 4, "a0,a1,b0,b1"},
+    };
 
-    EXPECT_EQ(3ul, ucs_string_buffer_expand_ranges(&strb, "lo,dev[0-4],eth0",
-                                                    ',', 3));
-    EXPECT_EQ(std::string("lo,dev0,dev1"), ucs_string_buffer_cstr(&strb));
+    for (const auto &tc : test_cases) {
+        ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
 
-    ucs_string_buffer_cleanup(&strb);
-}
+        EXPECT_EQ(tc.expected_count,
+                  ucs_string_buffer_expand_ranges(&strb, tc.input, ',',
+                                                  tc.max_elements))
+                << "input: " << tc.input
+                << " max_elements: " << tc.max_elements;
+        EXPECT_EQ(std::string(tc.expected), ucs_string_buffer_cstr(&strb))
+                << "input: " << tc.input
+                << " max_elements: " << tc.max_elements;
 
-UCS_TEST_F(test_string_buffer, expand_ranges_max_elements_across_tokens) {
-    ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
-
-    EXPECT_EQ(4ul, ucs_string_buffer_expand_ranges(&strb, "dev[0-2],eth[0-2]",
-                                                    ',', 4));
-    EXPECT_EQ(std::string("dev0,dev1,dev2,eth0"),
-              ucs_string_buffer_cstr(&strb));
-
-    ucs_string_buffer_cleanup(&strb);
-}
-
-UCS_TEST_F(test_string_buffer, expand_ranges_max_elements_exact) {
-    ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
-
-    EXPECT_EQ(4ul, ucs_string_buffer_expand_ranges(&strb, "a[0-1],b[0-1]",
-                                                    ',', 4));
-    EXPECT_EQ(std::string("a0,a1,b0,b1"), ucs_string_buffer_cstr(&strb));
-
-    ucs_string_buffer_cleanup(&strb);
+        ucs_string_buffer_cleanup(&strb);
+    }
 }
 
 UCS_TEST_F(test_string_buffer, expand_ranges_different_delimiters) {
