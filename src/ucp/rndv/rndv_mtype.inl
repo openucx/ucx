@@ -194,10 +194,6 @@ ucp_proto_rndv_mtype_fc_throttle(ucp_request_t *req, const size_t max_frags,
 {
     ucp_worker_h worker = req->send.ep->worker;
 
-    if (!worker->rndv_mtype_fc.enabled) {
-        return UCS_OK;
-    }
-
     if (worker->rndv_mtype_fc.active_frags >= max_frags) {
         ucs_trace_req("mtype_fc: fragments throttle limit reached (%zu/%zu)",
                       worker->rndv_mtype_fc.active_frags, max_frags);
