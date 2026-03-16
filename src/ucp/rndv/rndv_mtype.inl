@@ -216,7 +216,7 @@ ucp_proto_rndv_mtype_fc_increment(ucp_request_t *req)
 
     worker->rndv_mtype_fc.active_frags++;
     UCS_STATS_UPDATE_COUNTER(worker->stats,
-                             UCP_WORKER_STAT_RNDV_MTYPE_FC_INCREMENTED, 1);
+                             UCP_WORKER_STAT_RNDV_MTYPE_FC_OK, 1);
 }
 
 /**

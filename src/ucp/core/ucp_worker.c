@@ -99,8 +99,8 @@ static ucs_stats_class_t ucp_worker_stats_class = {
         [UCP_WORKER_STAT_RNDV_RTR]                  = "rndv_rtr",
         [UCP_WORKER_STAT_RNDV_RTR_MTYPE]            = "rndv_rtr_mtype",
         [UCP_WORKER_STAT_RNDV_RKEY_PTR]             = "rndv_rkey_ptr",
-        [UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED]   = "rndv_mtype_fc_throttled",
-        [UCP_WORKER_STAT_RNDV_MTYPE_FC_INCREMENTED] = "rndv_mtype_fc_incremented"
+        [UCP_WORKER_STAT_RNDV_MTYPE_FC_OK]          = "rndv_mtype_fc_ok",
+        [UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED]   = "rndv_mtype_fc_throttled"
     }
 };
 #endif
