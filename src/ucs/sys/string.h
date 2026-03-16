@@ -416,6 +416,8 @@ ucs_status_t ucs_string_alloc_path_buffer_and_get_dirname(char **buffer_p,
 /**
  * Non-destructive strtok_r variant: finds the next delimiter-separated token
  * and reports its length via @a len_p instead of writing a '\0' terminator.
+ * Consecutive delimiters are treated as a single delimiter, and leading/trailing
+ * delimiters are skipped (no empty tokens are produced).
  *
  * On the first call pass the input string as @a str. On subsequent calls pass
  * NULL to continue tokenizing the same string. @a saveptr tracks position

@@ -330,7 +330,8 @@ ucs_status_t ucs_string_buffer_expand_range(ucs_string_buffer_t *strb,
     static regex_t range_regex;
     ucs_status_t status = UCS_OK;
     size_t count        = 0;
-    size_t first, last, j, prefix_len, suffix_len;
+    size_t first, last, j;
+    regoff_t prefix_len, suffix_len;
     regmatch_t pmatch[5];
     const char *suffix;
     int ret;
@@ -384,9 +385,9 @@ ucs_status_t ucs_string_buffer_expand_range(ucs_string_buffer_t *strb,
     }
 
     count      = ucs_min(last - first + 1, max_elements);
-    prefix_len = (size_t)(pmatch[1].rm_eo - pmatch[1].rm_so);
+    prefix_len = pmatch[1].rm_eo - pmatch[1].rm_so;
     suffix     = token + pmatch[4].rm_so;
-    suffix_len = (size_t)(pmatch[4].rm_eo - pmatch[4].rm_so);
+    suffix_len = pmatch[4].rm_eo - pmatch[4].rm_so;
 
     for (j = first; j < first + count; ++j) {
         if (j > first) {
@@ -423,8 +424,7 @@ ucs_status_t ucs_string_buffer_expand_ranges(ucs_string_buffer_t *strb,
         goto out;
     }
 
-    ucs_string_for_each_token(input, delim_str, saveptr, token, token_len)
-    {
+    ucs_string_for_each_token(input, delim_str, saveptr, token, token_len) {
         if (count_total > 0) {
             ucs_string_buffer_appendc(strb, delim, 1);
         }
@@ -437,7 +437,6 @@ ucs_status_t ucs_string_buffer_expand_ranges(ucs_string_buffer_t *strb,
         }
 
         count_total += count_inner;
-
         if (count_total >= max_elements) {
             break;
         }

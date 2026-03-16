@@ -235,21 +235,20 @@ UCS_TEST_F(test_string, next_token) {
         /* Verify ucs_string_next_token() */
         {
             std::vector<char> buf(input, input + orig.size() + 1);
-            const char *saveptr;
+            const char *saveptr = NULL;
+            const char *tok;
             size_t len;
 
+            tok = ucs_string_next_token(buf.data(), delimiters.c_str(),
+                                        &saveptr, &len);
             for (size_t i = 0; i < expected.size(); ++i) {
-                const char *tok = ucs_string_next_token((i == 0) ? buf.data() :
-                                                                   NULL,
-                                                        delimiters.c_str(),
-                                                        &saveptr, &len);
                 ASSERT_NE(nullptr, tok)
                         << "input: \"" << input << "\" token index: " << i;
                 EXPECT_EQ(expected[i], std::string(tok, len));
+                tok = ucs_string_next_token(NULL, delimiters.c_str(),
+                                            &saveptr, &len);
             }
 
-            const char *tok = ucs_string_next_token(NULL, delimiters.c_str(),
-                                                    &saveptr, &len);
             EXPECT_EQ(nullptr, tok);
             EXPECT_EQ(orig, std::string(buf.data()));
         }
@@ -263,8 +262,7 @@ UCS_TEST_F(test_string, next_token) {
             std::vector<std::string> result;
 
             ucs_string_for_each_token(buf.data(), delimiters.c_str(), saveptr,
-                                      tok, tok_len)
-            {
+                                      tok, tok_len) {
                 result.push_back(std::string(tok, tok_len));
             }
 
@@ -282,23 +280,23 @@ UCS_TEST_F(test_string, next_token) {
         /* single token, no delimiter */
         check("single", d, {"single"});
         /* empty string */
-        check("", d, {""});
+        check("", d, {});
         /* single delimiter */
-        check(d.c_str(), d, {"", ""});
+        check(d.c_str(), d, {});
         /* consecutive delimiters */
-        check((d + d).c_str(), d, {"", "", ""});
+        check((d + d).c_str(), d, {});
         /* trailing delimiter */
-        check(("foo" + d).c_str(), d, {"foo", ""});
+        check(("foo" + d).c_str(), d, {"foo"});
         /* leading delimiter */
-        check((d + "foo").c_str(), d, {"", "foo"});
+        check((d + "foo").c_str(), d, {"foo"});
         /* delimiters surrounding a token */
-        check((d + "a" + d).c_str(), d, {"", "a", ""});
+        check((d + "a" + d).c_str(), d, {"a"});
     }
 
     /* multiple delimiters */
     const char *delimiters = "&|+";
     check("nova&noob|crocubot+ants&&rails", delimiters,
-          {"nova", "noob", "crocubot", "ants", "", "rails"});
+          {"nova", "noob", "crocubot", "ants", "rails"});
 }
 
 class test_string_buffer : public ucs::test {

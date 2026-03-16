@@ -495,6 +495,14 @@ const char *ucs_string_next_token(const char *str, const char *delimiters,
         return NULL;
     }
 
+    /* Skip leading delimiters */
+    p += strspn(p, delimiters);
+    if (*p == '\0') {
+        *len_p   = 0;
+        *saveptr = NULL;
+        return NULL;
+    }
+
     end = strpbrk(p, delimiters);
     if (end != NULL) {
         *len_p   = (size_t)(end - p);
