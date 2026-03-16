@@ -145,10 +145,10 @@ UCS_TEST_P(test_ucp_proto, dump_protocols) {
 
     auto proto_select = &ucs_array_elem(&worker->ep_config,
                                         ep_cfg_index).proto_select;
-    auto select_elem  = ucp_proto_select_lookup(worker, proto_select,
+    auto thresh_elem  = ucp_proto_select_lookup(worker, proto_select,
                                                 ep_cfg_index, rkey_cfg_index,
-                                                &select_param, 0);
-    EXPECT_NE(nullptr, select_elem);
+                                                &select_param, 0, NULL);
+    EXPECT_NE(nullptr, thresh_elem);
 
     ucp_ep_print_info(sender().ep(), stdout);
 }
