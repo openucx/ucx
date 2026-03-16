@@ -321,15 +321,13 @@ static UCS_F_MAYBE_UNUSED int ucs_string_buffer_is_valid_delimiter(char delim)
            (delim != ']') && (delim != '\0');
 }
 
-ucs_status_t ucs_string_buffer_expand_range(ucs_string_buffer_t *strb,
-                                            const char *token, size_t token_len,
-                                            char delim, size_t max_elements,
-                                            size_t *count_p)
+size_t ucs_string_buffer_expand_range(ucs_string_buffer_t *strb,
+                                      const char *token, size_t token_len,
+                                      char delim, size_t max_elements)
 {
     static ucs_init_once_t regex_init = UCS_INIT_ONCE_INITIALIZER;
     static regex_t range_regex;
-    ucs_status_t status = UCS_OK;
-    size_t count        = 0;
+    size_t count = 0;
     size_t first, last, j;
     regoff_t prefix_len, suffix_len;
     regmatch_t pmatch[5];
@@ -398,29 +396,23 @@ out_append_token:
     ucs_string_buffer_appendf(strb, "%.*s", (int)token_len, token);
     count = 1;
 out:
-    if (count_p != NULL) {
-        *count_p = count;
-    }
-
-    return status;
+    return count;
 }
 
-ucs_status_t ucs_string_buffer_expand_ranges(ucs_string_buffer_t *strb,
-                                             const char *input, char delim,
-                                             size_t max_elements,
-                                             size_t *count_p)
+size_t ucs_string_buffer_expand_ranges(ucs_string_buffer_t *strb,
+                                       const char *input, char delim,
+                                       size_t max_elements)
 {
     const char delim_str[] = {delim, '\0'};
-    ucs_status_t status    = UCS_OK;
     size_t count_total     = 0;
-    size_t count_inner, token_len;
+    size_t token_len;
     const char *token, *saveptr;
 
     ucs_assertv(ucs_string_buffer_is_valid_delimiter(delim),
                 "invalid delimiter: '%c'", delim);
 
     if (ucs_string_is_empty(input)) {
-        goto out;
+        return 0;
     }
 
     ucs_string_for_each_token(input, delim_str, saveptr, token, token_len) {
@@ -428,23 +420,14 @@ ucs_status_t ucs_string_buffer_expand_ranges(ucs_string_buffer_t *strb,
             ucs_string_buffer_appendc(strb, delim, 1);
         }
 
-        status = ucs_string_buffer_expand_range(strb, token, token_len, delim,
-                                                max_elements - count_total,
-                                                &count_inner);
-        if (status != UCS_OK) {
-            goto out;
-        }
-
-        count_total += count_inner;
+        count_total += ucs_string_buffer_expand_range(strb, token, token_len,
+                                                      delim,
+                                                      max_elements -
+                                                              count_total);
         if (count_total >= max_elements) {
             break;
         }
     }
 
-out:
-    if (count_p != NULL) {
-        *count_p = count_total;
-    }
-
-    return status;
+    return count_total;
 }
