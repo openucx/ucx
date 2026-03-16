@@ -261,8 +261,7 @@ ucp_proto_rndv_get_mtype_unpack_completion(uct_completion_t *uct_comp)
     ucp_request_t *req = ucs_container_of(uct_comp, ucp_request_t,
                                           send.state.uct_comp);
 
-    ucs_mpool_put_inline(req->send.rndv.mdesc);
-    ucp_proto_rndv_mtype_fc_decrement(req);
+    ucp_proto_rndv_mtype_mdesc_release(req);
 
     if (ucp_proto_rndv_request_is_ppln_frag(req)) {
         ucp_proto_rndv_ppln_recv_frag_complete(req, 1, 0);
@@ -376,11 +375,9 @@ static ucs_status_t ucp_proto_rndv_get_mtype_reset(ucp_request_t *req)
         return UCS_OK;
     }
 
-    ucs_mpool_put_inline(req->send.rndv.mdesc);
+    ucp_proto_rndv_mtype_mdesc_release(req);
     req->send.rndv.mdesc = NULL;
     req->flags          &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
-
-    ucp_proto_rndv_mtype_fc_decrement(req);
 
     if ((req->send.proto_stage != UCP_PROTO_RNDV_GET_STAGE_FETCH) &&
         (req->send.proto_stage != UCP_PROTO_RNDV_GET_STAGE_ATS)) {

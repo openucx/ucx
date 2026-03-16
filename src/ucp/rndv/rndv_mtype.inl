@@ -279,6 +279,18 @@ ucp_proto_rndv_mtype_fc_decrement(ucp_request_t *req)
                               pending_req);
 }
 
+/**
+ * Release the staging buffer and decrement the FC active fragments counter.
+ * This pairs with ucp_proto_rndv_mtype_request_init() which allocates the
+ * mdesc and increments the counter.
+ */
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_rndv_mtype_mdesc_release(ucp_request_t *req)
+{
+    ucs_mpool_put_inline(req->send.rndv.mdesc);
+    ucp_proto_rndv_mtype_fc_decrement(req);
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_rndv_mdesc_mtype_copy(ucp_request_t *req,
                                 uct_ep_put_zcopy_func_t copy_func,

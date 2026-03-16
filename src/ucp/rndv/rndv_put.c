@@ -573,8 +573,7 @@ static void ucp_proto_rndv_put_mtype_completion(uct_completion_t *uct_comp)
                                           send.state.uct_comp);
 
     ucp_trace_req(req, "rndv_put_mtype_completion");
-    ucs_mpool_put(req->send.rndv.mdesc);
-    ucp_proto_rndv_mtype_fc_decrement(req);
+    ucp_proto_rndv_mtype_mdesc_release(req);
     ucp_proto_rndv_put_common_complete(req);
 }
 
@@ -584,8 +583,7 @@ static void ucp_proto_rndv_put_mtype_frag_completion(uct_completion_t *uct_comp)
                                           send.state.uct_comp);
 
     ucp_trace_req(req, "rndv_put_mtype_frag_completion");
-    ucs_mpool_put(req->send.rndv.mdesc);
-    ucp_proto_rndv_mtype_fc_decrement(req);
+    ucp_proto_rndv_mtype_mdesc_release(req);
     ucp_proto_rndv_ppln_send_frag_complete(req, 1);
 }
 

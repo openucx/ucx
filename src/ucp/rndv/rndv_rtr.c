@@ -286,8 +286,7 @@ static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_rtr_mtype_complete(ucp_request_t *req, int abort)
 {
     if (!abort || (req->send.rndv.mdesc != NULL)) {
-        ucs_mpool_put_inline(req->send.rndv.mdesc);
-        ucp_proto_rndv_mtype_fc_decrement(req);
+        ucp_proto_rndv_mtype_mdesc_release(req);
     }
 
     if (ucp_proto_rndv_request_is_ppln_frag(req)) {
@@ -318,9 +317,8 @@ ucp_proto_rndv_rtr_mtype_abort(ucp_request_t *req, ucs_status_t status)
 static ucs_status_t ucp_proto_rndv_rtr_mtype_reset(ucp_request_t *req)
 {
     if (req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) {
-        ucs_mpool_put_inline(req->send.rndv.mdesc);
+        ucp_proto_rndv_mtype_mdesc_release(req);
         req->send.rndv.mdesc = NULL;
-        ucp_proto_rndv_mtype_fc_decrement(req);
     }
 
     return ucp_proto_request_zcopy_id_reset(req);
