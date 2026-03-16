@@ -36,7 +36,7 @@ uct_put_kernel(uct_device_ep_h ep,
 }
 
 /**
- * Basic single element put operation (V2 API).
+ * Basic single element put operation.
  */
 ucs_status_t launch_uct_put(uct_device_ep_h ep,
                             const uct_device_local_mem_list_elem_t *src_elem,

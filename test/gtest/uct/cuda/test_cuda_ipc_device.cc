@@ -221,13 +221,11 @@ UCS_TEST_P(test_cuda_ipc_rma_device, put_device)
     mapped_buffer sendbuf(length, SEED1, *m_sender, 0, UCS_MEMORY_TYPE_CUDA);
     mapped_buffer recvbuf(length, SEED2, *m_receiver, 0, UCS_MEMORY_TYPE_CUDA);
 
-    uct_device_mem_element_t mem_elem_host;
-    ASSERT_UCS_OK(uct_md_mem_elem_pack(m_sender->md(), sendbuf.memh(),
-                                       recvbuf.rkey(), &mem_elem_host));
-
     uct_device_local_mem_list_elem_t src_elem_host;
-    src_elem_host.addr            = nullptr;
-    src_elem_host.uct_mem_element = mem_elem_host;
+    ASSERT_UCS_OK(uct_md_mem_elem_pack(m_sender->md(), sendbuf.memh(),
+                                       recvbuf.rkey(),
+                                       &src_elem_host.uct_mem_element));
+
 
     uct_device_local_mem_list_elem_t *src_elem;
     ASSERT_EQ(CUDA_SUCCESS,
@@ -240,7 +238,8 @@ UCS_TEST_P(test_cuda_ipc_rma_device, put_device)
     uct_device_mem_element_t *mem_elem;
     ASSERT_EQ(CUDA_SUCCESS, cuMemAlloc((CUdeviceptr*)&mem_elem,
                                        sizeof(uct_device_mem_element_t)));
-    ASSERT_EQ(CUDA_SUCCESS, cuMemcpyHtoD((CUdeviceptr)mem_elem, &mem_elem_host,
+    ASSERT_EQ(CUDA_SUCCESS, cuMemcpyHtoD((CUdeviceptr)mem_elem,
+                                         &src_elem_host.uct_mem_element,
                                          sizeof(uct_device_mem_element_t)));
 
     uct_device_ep_h device_ep;
