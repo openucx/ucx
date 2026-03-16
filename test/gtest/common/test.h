@@ -172,7 +172,6 @@ protected:
     unsigned                        m_num_errors_before;
     unsigned                        m_num_warnings_before;
     unsigned                        m_num_log_handlers_before;
-    bool                            m_skip_fd_leak_check;
 
     static std::set<int>            m_prev_open_fds;
     static size_t                   m_total_fd_increases;
@@ -185,7 +184,7 @@ protected:
 
 private:
     void check_fd_leaks();
-    bool is_target_whitelisted(const std::string &target) const;
+    bool is_open_file_whitelisted(const std::string &path) const;
     void skipped(const std::string &reason);
     void skipped(const test_skip_exception& e);
     void run();

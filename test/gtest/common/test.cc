@@ -11,6 +11,8 @@
 #include <ucs/stats/stats.h>
 #include <ucs/sys/sys.h>
 
+#include <fnmatch.h>
+
 namespace ucs {
 
 constexpr size_t TOTAL_FD_INCREASE_THRESHOLD = 2;
@@ -25,14 +27,13 @@ std::set<int> test_base::m_prev_open_fds;
 size_t test_base::m_total_fd_increases = 0;
 
 test_base::test_base() :
-                m_state(NEW),
-                m_initialized(false),
-                m_num_threads(1),
-                m_num_valgrind_errors_before(0),
-                m_num_errors_before(0),
-                m_num_warnings_before(0),
-                m_num_log_handlers_before(0),
-                m_skip_fd_leak_check(false)
+    m_state(NEW),
+    m_initialized(false),
+    m_num_threads(1),
+    m_num_valgrind_errors_before(0),
+    m_num_errors_before(0),
+    m_num_warnings_before(0),
+    m_num_log_handlers_before(0)
 {
     push_config();
 }
@@ -52,17 +53,18 @@ test_base::~test_base() {
                        "state=%d", m_state);
 }
 
-bool test_base::is_target_whitelisted(const std::string &target) const
+bool test_base::is_open_file_whitelisted(const std::string &path) const
 {
     /* fd targets for external libraries (rdma-core, CUDA driver, etc.) */
     static const std::string targets_whitelist[] = {
-        "/dev/infiniband/uverbs",
-        "anon_inode:[infinibandevent]",
-        "/dev/nvidia",
+        "/dev/infiniband/uverbs*",
+        "*anon_inode:\\[infinibandevent\\]",
+        "/dev/nvidia*",
+        "/proc/*/pagemap",
     };
 
     for (const auto &str : targets_whitelist) {
-        if (target.find(str) != std::string::npos) {
+        if (fnmatch(str.c_str(), path.c_str(), 0) == 0) {
             return true;
         }
     }
@@ -78,9 +80,9 @@ void test_base::check_fd_leaks()
 {
     std::set<int> open_fds = get_open_fds();
 
-    if (!m_prev_open_fds.empty() || m_skip_fd_leak_check) {
+    if (!m_prev_open_fds.empty()) {
         std::stringstream ss;
-        size_t num_unexpected  = 0;
+        size_t num_leaked      = 0;
         size_t num_whitelisted = 0;
         const std::string padding(13, ' ');
 
@@ -88,30 +90,31 @@ void test_base::check_fd_leaks()
             if (m_prev_open_fds.find(fd) == m_prev_open_fds.end()) {
                 const std::string target = readlink_proc_fd(fd);
                 ss << "\n" << padding << "  fd " << fd << " -> " << target;
-                if (is_target_whitelisted(target)) {
+                if (is_open_file_whitelisted(target)) {
                     ss << " (whitelisted)";
                     ++num_whitelisted;
                 } else {
-                    ++num_unexpected;
+                    ++num_leaked;
                 }
             }
         }
 
-        if (num_unexpected > 0) {
+        if (num_leaked > 0) {
             ++m_total_fd_increases;
 
-            ss << "\n" << padding << "total open fds: " << open_fds.size()
-               << "\n" << padding << "total fd increases: "
-               << m_total_fd_increases;
+            ss << "\n"
+               << padding << "total open fds: " << open_fds.size() << "\n"
+               << padding << "total fd increases: " << m_total_fd_increases
+               << "\n";
 
-            UCS_TEST_MESSAGE << "new open fds (" << num_unexpected
-                             << " unexpected, " << num_whitelisted
-                             << " whitelisted):" << ss.str();
+            UCS_TEST_MESSAGE << "new open fds (" << num_leaked << " leaked, "
+                             << num_whitelisted << " whitelisted):" << ss.str();
 
             if (m_total_fd_increases >= TOTAL_FD_INCREASE_THRESHOLD) {
-                    ADD_FAILURE() << "fd leaks detected in "
-                                << m_total_fd_increases << " tests (threshold: "
-                                << TOTAL_FD_INCREASE_THRESHOLD << ")";
+                ADD_FAILURE()
+                        << "fd leaks detected in " << m_total_fd_increases
+                        << " tests (threshold: " << TOTAL_FD_INCREASE_THRESHOLD
+                        << ")";
             }
         }
     }
