@@ -13,7 +13,6 @@
 #include <ucp/proto/proto_debug.h>
 #include <ucp/proto/proto_multi.inl>
 #include <ucp/proto/proto_init.h>
-#include <ucs/datastruct/callbackq.h>
 
 
 enum {

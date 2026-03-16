@@ -24,36 +24,6 @@
     (UCS_BIT(UCP_OP_ID_RNDV_SEND) | UCS_BIT(UCP_OP_ID_RNDV_RECV))
 
 
-/*
- * Staging-buffer flow-control throttle limit per operation type.
- *
- * To prevent deadlock under memory pressure, each operation type is capped at a
- * different share of the total fragment budget (fc_max_frags).  Operations that
- * free more resources on completion receive a larger cap, so they can always
- * make progress and unblock others:
- *
- *   PUT (level 0, 100%) – frees local staging buffer AND remote RTR buffer.
- *   GET (level 1, ~90%) – frees local staging buffer only.
- *   RTR (level 2, ~80%) – triggers a remote PUT allocation, adding pressure.
- *
- * The step between tiers is 10% of the budget (1/10).  The exact fractions are
- * not performance-sensitive; only the strict ordering PUT > GET > RTR matters.
- * The same ordering is used when dequeueing pending requests, see
- * ucp_proto_rndv_mtype_fc_decrement().
- */
-#define UCP_PROTO_RNDV_MTYPE_FC_LIMIT(_fc_max, _level) \
-    ((_fc_max) - (_level) * ((_fc_max) / 10))
-
-#define UCP_PROTO_RNDV_MTYPE_FC_PUT_LIMIT(_fc_max) \
-    UCP_PROTO_RNDV_MTYPE_FC_LIMIT(_fc_max, 0)
-
-#define UCP_PROTO_RNDV_MTYPE_FC_GET_LIMIT(_fc_max) \
-    UCP_PROTO_RNDV_MTYPE_FC_LIMIT(_fc_max, 1)
-
-#define UCP_PROTO_RNDV_MTYPE_FC_RTR_LIMIT(_fc_max) \
-    UCP_PROTO_RNDV_MTYPE_FC_LIMIT(_fc_max, 2)
-
-
 /**
  * Rendezvous protocol which sends a control message to the remote peer, and not
  * actually transferring bulk data. The remote peer is expected to perform the

@@ -178,6 +178,47 @@ unsigned ucp_proto_rndv_mtype_fc_reschedule_cb(void *arg)
     return 1;
 }
 
+/*
+ * Staging-buffer flow-control throttle limit per operation type.
+ *
+ * To prevent deadlock under memory pressure, each operation type is capped at a
+ * different share of the total fragment budget (fc_max_frags).  Operations that
+ * free more resources on completion receive a larger cap, so they can always
+ * make progress and unblock others:
+ *
+ *   PUT (level 0, 100%) – frees local staging buffer AND remote RTR buffer.
+ *   GET (level 1, ~90%) – frees local staging buffer only.
+ *   RTR (level 2, ~80%) – triggers a remote PUT allocation, adding pressure.
+ *
+ * The step between tiers is 10% of the budget (1/10).  The exact fractions are
+ * not performance-sensitive; only the strict ordering PUT > GET > RTR matters.
+ * The same ordering is used when dequeueing pending requests, see
+ * ucp_proto_rndv_mtype_fc_decrement().
+ */
+static UCS_F_ALWAYS_INLINE size_t
+ucp_proto_rndv_mtype_fc_limit(size_t fc_max, unsigned level)
+{
+    return fc_max - level * (fc_max / 10);
+}
+
+static UCS_F_ALWAYS_INLINE size_t
+ucp_proto_rndv_mtype_fc_put_limit(size_t fc_max)
+{
+    return ucp_proto_rndv_mtype_fc_limit(fc_max, 0);
+}
+
+static UCS_F_ALWAYS_INLINE size_t
+ucp_proto_rndv_mtype_fc_get_limit(size_t fc_max)
+{
+    return ucp_proto_rndv_mtype_fc_limit(fc_max, 1);
+}
+
+static UCS_F_ALWAYS_INLINE size_t
+ucp_proto_rndv_mtype_fc_rtr_limit(size_t fc_max)
+{
+    return ucp_proto_rndv_mtype_fc_limit(fc_max, 2);
+}
+
 /**
  * Check if request should be throttled due to flow control limit.
  * If throttled, the request is queued to the appropriate priority queue.
@@ -209,7 +250,7 @@ ucp_proto_rndv_mtype_fc_throttle(ucp_request_t *req, const size_t max_frags,
 /**
  * Decrement active_frags counter and reschedule pending request.
  * Dequeue priority: PUT > GET > RTR (same ordering as the throttle limits
- * defined by UCP_PROTO_RNDV_MTYPE_FC_LIMIT).
+ * defined by ucp_proto_rndv_mtype_fc_limit()).
  *
  * Priority rationale:
  * PUT - Remote is blocked waiting for our data. Scheduling PUT unblocks remote

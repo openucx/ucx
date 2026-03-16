@@ -297,7 +297,7 @@ ucp_proto_rndv_get_mtype_fetch_progress(uct_pending_req_t *uct_req)
     rpriv = req->send.proto_config->priv;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
-        max_frags = UCP_PROTO_RNDV_MTYPE_FC_GET_LIMIT(rpriv->fc_max_frags);
+        max_frags = ucp_proto_rndv_mtype_fc_get_limit(rpriv->fc_max_frags);
 
         /* Check throttling limit. If no resource at the moment, queue the
          * request in GET pending queue and return UCS_OK. */

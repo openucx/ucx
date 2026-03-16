@@ -528,7 +528,7 @@ ucp_proto_rndv_put_mtype_copy_progress(uct_pending_req_t *uct_req)
 
     rpriv = req->send.proto_config->priv;
 
-    max_frags = UCP_PROTO_RNDV_MTYPE_FC_PUT_LIMIT(rpriv->bulk.fc_max_frags);
+    max_frags = ucp_proto_rndv_mtype_fc_put_limit(rpriv->bulk.fc_max_frags);
     pending_q = &worker->rndv_mtype_fc.put_pending_q;
     if (ucp_proto_rndv_mtype_fc_throttle(req, max_frags, pending_q) ==
         UCS_ERR_NO_RESOURCE) {
