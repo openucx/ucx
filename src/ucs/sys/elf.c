@@ -25,10 +25,20 @@
 #include <unistd.h>
 
 
-static ucs_status_t ucs_elf_validate_ehdr_64(const void *base, size_t file_size)
+/**
+ * Validate ELF64 header and section header table, then resolve .shstrtab.
+ * On success, sets *shdr_p, *shstrtab_p, *shstrtab_size_p for use by the caller.
+ */
+static ucs_status_t ucs_elf_get_section_table(const void *base, size_t file_size,
+                                              const Elf64_Shdr **shdr_p,
+                                              const char **shstrtab_p,
+                                              Elf64_Word *shstrtab_size_p)
 {
     const Elf64_Ehdr *ehdr = base;
+    const Elf64_Shdr *shdr;
+    const char *shstrtab;
     size_t shdr_end;
+    size_t shstrtab_end;
 
     if (file_size < sizeof(Elf64_Ehdr)) {
         return UCS_ERR_IO_ERROR;
@@ -45,27 +55,18 @@ static ucs_status_t ucs_elf_validate_ehdr_64(const void *base, size_t file_size)
         return UCS_ERR_IO_ERROR;
     }
 
-    return UCS_OK;
-}
-
-static ucs_status_t ucs_elf_get_shstrtab_64(const void *base, size_t file_size,
-                                            const Elf64_Ehdr *ehdr,
-                                            const char **shstrtab_p,
-                                            const Elf64_Shdr **shdr_p)
-{
-    const Elf64_Shdr *shdr = UCS_PTR_BYTE_OFFSET(base, ehdr->e_shoff);
-    const char *shstrtab   = UCS_PTR_BYTE_OFFSET(base, 
-                                                 shdr[ehdr->e_shstrndx].sh_offset);
-    size_t shstrtab_end    = shdr[ehdr->e_shstrndx].sh_offset + 
-                             shdr[ehdr->e_shstrndx].sh_size;
+    shdr     = UCS_PTR_BYTE_OFFSET(base, ehdr->e_shoff);
+    shstrtab = UCS_PTR_BYTE_OFFSET(base, shdr[ehdr->e_shstrndx].sh_offset);
+    shstrtab_end = shdr[ehdr->e_shstrndx].sh_offset + shdr[ehdr->e_shstrndx].sh_size;
 
     if (shstrtab_end > file_size) {
         ucs_warn("invalid ELF: .shstrtab out of bounds");
         return UCS_ERR_IO_ERROR;
     }
 
-    *shstrtab_p = shstrtab;
-    *shdr_p     = shdr;
+    *shdr_p          = shdr;
+    *shstrtab_p      = shstrtab;
+    *shstrtab_size_p = shdr[ehdr->e_shstrndx].sh_size;
 
     return UCS_OK;
 }
@@ -82,13 +83,6 @@ static int ucs_elf_section_matches_prefix(const char *shstrtab,
     }
     return strncmp(UCS_PTR_BYTE_OFFSET(shstrtab, sh_name),
                    name_prefix, prefix_len) == 0;
-}
-
-static void ucs_elf_free_note(ucs_elf_note_t *note)
-{
-    ucs_free(note->value);
-    ucs_free(note->owner);
-    ucs_free(note->field_name);
 }
 
 static ucs_status_t ucs_elf_parse_note(const void *base, size_t file_size,
@@ -158,16 +152,14 @@ static ucs_status_t ucs_elf_parse_notes(const void *base, size_t file_size,
     const Elf64_Ehdr *ehdr = base;
     const Elf64_Shdr *shdr;
     const char *shstrtab;
+    Elf64_Word shstrtab_size;
     size_t i;
     ucs_elf_note_t *note;
     const char *sec_name;
     ucs_status_t status;
 
-    status = ucs_elf_validate_ehdr_64(base, file_size);
-    if (status != UCS_OK) {
-        goto err;
-    }
-    status = ucs_elf_get_shstrtab_64(base, file_size, ehdr, &shstrtab, &shdr);
+    status = ucs_elf_get_section_table(base, file_size, &shdr, &shstrtab,
+                                       &shstrtab_size);
     if (status != UCS_OK) {
         goto err;
     }
@@ -176,7 +168,7 @@ static ucs_status_t ucs_elf_parse_notes(const void *base, size_t file_size,
 
     for (i = 0; i < ehdr->e_shnum; i++) {
         if (!ucs_elf_section_matches_prefix(shstrtab,
-                                            shdr[ehdr->e_shstrndx].sh_size,
+                                            shstrtab_size,
                                             shdr[i].sh_name,
                                             name_prefix)) {
             continue;
@@ -258,13 +250,19 @@ out:
 void ucs_elf_free_notes(ucs_elf_notes_array_t *notes_array)
 {
     size_t i;
+    ucs_elf_note_t *note;
 
     if (notes_array == NULL) {
         return;
     }
+
     for (i = 0; i < ucs_array_length(notes_array); i++) {
-        ucs_elf_free_note(&ucs_array_elem(notes_array, i));
+        note = &ucs_array_elem(notes_array, i);
+        ucs_free(note->value);
+        ucs_free(note->owner);
+        ucs_free(note->field_name);
     }
+
     ucs_array_cleanup_dynamic(notes_array);
 }
 
