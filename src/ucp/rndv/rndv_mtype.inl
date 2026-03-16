@@ -48,9 +48,22 @@ ucp_proto_rndv_mtype_init(const ucp_proto_init_params_t *init_params,
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_rndv_mtype_request_init(ucp_request_t *req,
                                   ucs_memory_type_t frag_mem_type,
-                                  ucs_sys_device_t frag_sys_dev)
+                                  ucs_sys_device_t frag_sys_dev,
+                                  const size_t max_frags,
+                                  ucs_queue_head_t *pending_q)
 {
     ucp_worker_h worker = req->send.ep->worker;
+
+    /* Check throttling limit. If no resource at the moment, queue the
+     * request in RTR pending queue and return NO_RESOURCE. */
+    if (worker->rndv_mtype_fc.active_frags >= max_frags) {
+        ucs_trace_req("mtype_fc: fragments throttle limit reached (%zu/%zu)",
+                      worker->rndv_mtype_fc.active_frags, max_frags);
+        UCS_STATS_UPDATE_COUNTER(worker->stats,
+                                 UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED, 1);
+        ucs_queue_push(pending_q, &req->send.rndv.ppln.queue_elem);
+        return UCS_ERR_NO_RESOURCE;
+    }
 
     req->send.rndv.mdesc = ucp_rndv_mpool_get(worker, frag_mem_type,
                                               frag_sys_dev);
@@ -217,34 +230,6 @@ static UCS_F_ALWAYS_INLINE size_t
 ucp_proto_rndv_mtype_fc_rtr_limit(size_t fc_max)
 {
     return ucp_proto_rndv_mtype_fc_limit(fc_max, 2);
-}
-
-/**
- * Check if request should be throttled due to flow control limit.
- * If throttled, the request is queued to the appropriate priority queue.
- *
- * @param req       The request to check.
- * @param max_frags The maximum number of fragments allowed.
- * @param pending_q The queue to add the request to if it is throttled.
- *
- * @return UCS_OK if not throttled, UCS_ERR_NO_RESOURCE if throttled and queued.
- */
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_proto_rndv_mtype_fc_throttle(ucp_request_t *req, const size_t max_frags,
-                                 ucs_queue_head_t *pending_q)
-{
-    ucp_worker_h worker = req->send.ep->worker;
-
-    if (worker->rndv_mtype_fc.active_frags >= max_frags) {
-        ucs_trace_req("mtype_fc: fragments throttle limit reached (%zu/%zu)",
-                      worker->rndv_mtype_fc.active_frags, max_frags);
-        UCS_STATS_UPDATE_COUNTER(worker->stats,
-                                 UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED, 1);
-        ucs_queue_push(pending_q, &req->send.rndv.ppln.queue_elem);
-        return UCS_ERR_NO_RESOURCE;
-    }
-
-    return UCS_OK;
 }
 
 /**

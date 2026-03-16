@@ -287,9 +287,8 @@ ucp_proto_rndv_rtr_mtype_complete(ucp_request_t *req, int abort)
 {
     if (!abort || (req->send.rndv.mdesc != NULL)) {
         ucs_mpool_put_inline(req->send.rndv.mdesc);
+        ucp_proto_rndv_mtype_fc_decrement(req);
     }
-
-    ucp_proto_rndv_mtype_fc_decrement(req);
 
     if (ucp_proto_rndv_request_is_ppln_frag(req)) {
         ucp_proto_rndv_ppln_recv_frag_complete(req, 0, abort);
@@ -364,17 +363,14 @@ static ucs_status_t ucp_proto_rndv_rtr_mtype_progress(uct_pending_req_t *self)
         rpriv = req->send.proto_config->priv;
 
         max_frags = ucp_proto_rndv_mtype_fc_rtr_limit(rpriv->fc_max_frags);
-
-        /* Check throttling limit. If no resource at the moment, queue the
-         * request in RTR pending queue and return UCS_OK. */
         pending_q = &worker->rndv_mtype_fc.rtr_pending_q;
-        if (ucp_proto_rndv_mtype_fc_throttle(req, max_frags, pending_q) ==
-            UCS_ERR_NO_RESOURCE) {
+        status    = ucp_proto_rndv_mtype_request_init(req, rpriv->frag_mem_type,
+                                                      rpriv->frag_sys_dev,
+                                                      max_frags, pending_q);
+        if (status == UCS_ERR_NO_RESOURCE) {
             return UCS_OK;
         }
 
-        status = ucp_proto_rndv_mtype_request_init(req, rpriv->frag_mem_type,
-                                                   rpriv->frag_sys_dev);
         if (status != UCS_OK) {
             ucp_proto_request_abort(req, status);
             return UCS_OK;

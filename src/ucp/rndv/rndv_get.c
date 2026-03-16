@@ -302,13 +302,13 @@ ucp_proto_rndv_get_mtype_fetch_progress(uct_pending_req_t *uct_req)
         /* Check throttling limit. If no resource at the moment, queue the
          * request in GET pending queue and return UCS_OK. */
         pending_q = &worker->rndv_mtype_fc.get_pending_q;
-        if (ucp_proto_rndv_mtype_fc_throttle(req, max_frags, pending_q) ==
-            UCS_ERR_NO_RESOURCE) {
+        status    = ucp_proto_rndv_mtype_request_init(req, rpriv->frag_mem_type,
+                                                      rpriv->frag_sys_dev,
+                                                      max_frags, pending_q);
+        if (status == UCS_ERR_NO_RESOURCE) {
             return UCS_OK;
         }
 
-        status = ucp_proto_rndv_mtype_request_init(req, rpriv->frag_mem_type,
-                                                   rpriv->frag_sys_dev);
         if (status != UCS_OK) {
             ucp_proto_request_abort(req, status);
             return UCS_OK;
