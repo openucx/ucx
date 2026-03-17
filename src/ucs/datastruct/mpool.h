@@ -155,30 +155,30 @@ struct ucs_mpool_ops {
     /**
      * Allocate a chunk of memory to be used by the mpool.
      */
-    ucs_mpool_chunk_alloc_func_t     chunk_alloc;
+    ucs_mpool_chunk_alloc_func_t   chunk_alloc;
 
     /**
      * Release previously allocated chunk of memory.
      */
-    ucs_mpool_chunk_release_func_t   chunk_release;
+    ucs_mpool_chunk_release_func_t chunk_release;
 
     /**
      * Initialize an object in the memory pool on the first time it's allocated.
      * May be NULL.
      */
-    ucs_mpool_obj_init_func_t        obj_init;
+    ucs_mpool_obj_init_func_t      obj_init;
 
     /**
      * Cleanup an object in the memory pool just before its memory is released.
      * May be NULL.
      */
-    ucs_mpool_obj_cleanup_func_t     obj_cleanup;
+    ucs_mpool_obj_cleanup_func_t   obj_cleanup;
 
     /**
      * Return a string representing the object, used for debug.
      * May be NULL.
      */
-    ucs_mpool_obj_str_func_t         obj_str;
+    ucs_mpool_obj_str_func_t       obj_str;
 };
 
 
@@ -380,6 +380,7 @@ void ucs_mpool_chunk_free(ucs_mpool_t *mp, void *chunk);
  */
 ucs_status_t ucs_mpool_chunk_mmap(ucs_mpool_t *mp, size_t *size_p, void **chunk_p);
 void ucs_mpool_chunk_munmap(ucs_mpool_t *mp, void *chunk);
+
 
 /**
  * hugetlb chunk allocator.

@@ -369,8 +369,7 @@ uct_rc_gdaki_pool_chunk_alloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
     }
 
     ((ucs_mpool_chunk_t*)*chunk_p)->num_elems = num_elems;
-    ((ucs_mpool_chunk_t*)*chunk_p)->elems     = ucs_mpool_chunk_elems(mp,
-                                                                      *chunk_p);
+    ((ucs_mpool_chunk_t*)*chunk_p)->elems = ucs_mpool_chunk_elems(mp, *chunk_p);
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(iface->cuda_ctx));
     if (status != UCS_OK) {
@@ -441,11 +440,11 @@ static void uct_rc_gdaki_pool_chunk_release(ucs_mpool_t *mp, void *chunk)
 }
 
 static ucs_mpool_ops_t uct_rc_gdaki_pool_mpool_ops = {
-    .chunk_alloc     = uct_rc_gdaki_pool_chunk_alloc,
-    .chunk_release   = uct_rc_gdaki_pool_chunk_release,
-    .obj_init        = NULL,
-    .obj_cleanup     = NULL,
-    .obj_str         = NULL,
+    .chunk_alloc   = uct_rc_gdaki_pool_chunk_alloc,
+    .chunk_release = uct_rc_gdaki_pool_chunk_release,
+    .obj_init      = NULL,
+    .obj_cleanup   = NULL,
+    .obj_str       = NULL,
 };
 
 static ucs_status_t
@@ -582,9 +581,9 @@ uct_rc_gdaki_ep_connect_to_ep_v2(uct_ep_h tl_ep,
                                  const uct_ep_addr_t *ep_addr,
                                  const uct_ep_connect_to_ep_params_t *params)
 {
-    uct_rc_gdaki_ep_t *ep            = ucs_derived_of(tl_ep, uct_rc_gdaki_ep_t);
-    uct_rc_gdaki_iface_t *iface      = ucs_derived_of(tl_ep->iface,
-                                                      uct_rc_gdaki_iface_t);
+    uct_rc_gdaki_ep_t *ep       = ucs_derived_of(tl_ep, uct_rc_gdaki_ep_t);
+    uct_rc_gdaki_iface_t *iface = ucs_derived_of(tl_ep->iface,
+                                                 uct_rc_gdaki_iface_t);
     uct_rc_gdaki_channel_t *channels = &ep->channel_block->channels[0];
     const uct_ib_address_t *ib_addr  = (void*)device_addr;
     uint8_t path_index               = 0;
