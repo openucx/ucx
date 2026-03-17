@@ -118,9 +118,10 @@ UCS_CLASS_INIT_FUNC(ucp_proxy_ep_t, const uct_iface_ops_t *ops, ucp_ep_h ucp_ep,
                     uct_ep_h uct_ep, int is_owner)
 {
     #define UCP_PROXY_EP_SET_OP(_name) \
-        self->iface.ops._name = (ops->_name != NULL) ? ops->_name : ucp_proxy_##_name
+        self->iface.super.ops._name = (ops->_name != NULL) ? ops->_name : ucp_proxy_##_name
 
-    self->super.iface = &self->iface;
+    uct_stub_iface_init(&self->iface, ops);
+    self->super.iface = &self->iface.super;
     self->ucp_ep      = ucp_ep;
     self->uct_ep      = uct_ep;
     self->is_owner    = is_owner;
@@ -156,21 +157,21 @@ UCS_CLASS_INIT_FUNC(ucp_proxy_ep_t, const uct_iface_ops_t *ops, ucp_ep_h ucp_ep,
     UCP_PROXY_EP_SET_OP(ep_get_address);
     UCP_PROXY_EP_SET_OP(ep_connect_to_ep);
 
-    self->iface.ops.iface_tag_recv_zcopy     = (uct_iface_tag_recv_zcopy_func_t)ucp_proxy_ep_fatal;
-    self->iface.ops.iface_tag_recv_cancel    = (uct_iface_tag_recv_cancel_func_t)ucp_proxy_ep_fatal;
-    self->iface.ops.ep_create                = (uct_ep_create_func_t)ucp_proxy_ep_fatal;
-    self->iface.ops.iface_flush              = (uct_iface_flush_func_t)ucp_proxy_ep_fatal;
-    self->iface.ops.iface_fence              = (uct_iface_fence_func_t)ucp_proxy_ep_fatal;
-    self->iface.ops.iface_progress_enable    = (uct_iface_progress_enable_func_t)ucp_proxy_ep_fatal;
-    self->iface.ops.iface_progress_disable   = (uct_iface_progress_disable_func_t)ucp_proxy_ep_fatal;
-    self->iface.ops.iface_progress           = (uct_iface_progress_func_t)ucp_proxy_ep_fatal;
-    self->iface.ops.iface_event_fd_get       = (uct_iface_event_fd_get_func_t)ucp_proxy_ep_fatal;
-    self->iface.ops.iface_event_arm          = (uct_iface_event_arm_func_t)ucp_proxy_ep_fatal;
-    self->iface.ops.iface_close              = (uct_iface_close_func_t)ucp_proxy_ep_fatal;
-    self->iface.ops.iface_query              = (uct_iface_query_func_t)ucp_proxy_ep_fatal;
-    self->iface.ops.iface_get_device_address = (uct_iface_get_device_address_func_t)ucp_proxy_ep_fatal;
-    self->iface.ops.iface_get_address        = (uct_iface_get_address_func_t)ucp_proxy_ep_fatal;
-    self->iface.ops.iface_is_reachable       = (uct_iface_is_reachable_func_t)ucp_proxy_ep_fatal;
+    self->iface.super.ops.iface_tag_recv_zcopy     = (uct_iface_tag_recv_zcopy_func_t)ucp_proxy_ep_fatal;
+    self->iface.super.ops.iface_tag_recv_cancel    = (uct_iface_tag_recv_cancel_func_t)ucp_proxy_ep_fatal;
+    self->iface.super.ops.ep_create                = (uct_ep_create_func_t)ucp_proxy_ep_fatal;
+    self->iface.super.ops.iface_flush              = (uct_iface_flush_func_t)ucp_proxy_ep_fatal;
+    self->iface.super.ops.iface_fence              = (uct_iface_fence_func_t)ucp_proxy_ep_fatal;
+    self->iface.super.ops.iface_progress_enable    = (uct_iface_progress_enable_func_t)ucp_proxy_ep_fatal;
+    self->iface.super.ops.iface_progress_disable   = (uct_iface_progress_disable_func_t)ucp_proxy_ep_fatal;
+    self->iface.super.ops.iface_progress           = (uct_iface_progress_func_t)ucp_proxy_ep_fatal;
+    self->iface.super.ops.iface_event_fd_get       = (uct_iface_event_fd_get_func_t)ucp_proxy_ep_fatal;
+    self->iface.super.ops.iface_event_arm          = (uct_iface_event_arm_func_t)ucp_proxy_ep_fatal;
+    self->iface.super.ops.iface_close              = (uct_iface_close_func_t)ucp_proxy_ep_fatal;
+    self->iface.super.ops.iface_query              = (uct_iface_query_func_t)ucp_proxy_ep_fatal;
+    self->iface.super.ops.iface_get_device_address = (uct_iface_get_device_address_func_t)ucp_proxy_ep_fatal;
+    self->iface.super.ops.iface_get_address        = (uct_iface_get_address_func_t)ucp_proxy_ep_fatal;
+    self->iface.super.ops.iface_is_reachable       = (uct_iface_is_reachable_func_t)ucp_proxy_ep_fatal;
 
     return UCS_OK;
 }
