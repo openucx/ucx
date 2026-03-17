@@ -560,6 +560,13 @@ typedef struct ucp_ep_ext {
     uint64_t                      fence_seq;       /* Sequence number for fence
                                                       detection */
 
+    /* Requests blocked by EP-based strong fence enforcement. This queue is
+     * per-UCP-EP (not per lane) to preserve EP-wide ordering.
+     */
+    ucs_queue_head_t              fence_pending_q;
+    uint8_t                       fence_pending_scheduled;
+    ucp_request_t                 *fence_inflight_req;
+
     /**
      * UCT endpoints for every slow-path lane that has no room in the base endpoint
      * structure. TODO allocate this array dynamically.
@@ -747,6 +754,21 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
                                        const char *debug_name,
                                        unsigned uct_flags);
 
+/**
+ * @brief Flush a subset of endpoint lanes specified by @a lane_mask.
+ *
+ * Same as @ref ucp_ep_flush_internal, but only lanes whose bit is set in
+ * @a lane_mask are flushed; the remaining lanes are skipped immediately.
+ * Used by the EP-based strong fence to flush only unflushed_lanes.
+ */
+ucs_status_ptr_t
+ucp_ep_flush_lanes_internal(ucp_ep_h ep, unsigned req_flags,
+                            const ucp_request_param_t *param,
+                            ucp_request_t *worker_req,
+                            ucp_request_callback_t flushed_cb,
+                            const char *debug_name, unsigned uct_flags,
+                            ucp_lane_map_t lane_mask);
+
 void ucp_ep_config_key_set_err_mode(ucp_ep_config_key_t *key,
                                     unsigned ep_init_flags);
 
@@ -915,6 +937,12 @@ ucs_status_t ucp_ep_do_uct_ep_am_keepalive(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
  */
 void ucp_ep_req_purge(ucp_ep_h ucp_ep, ucp_request_t *req,
                       ucs_status_t status, int recursive);
+
+void ucp_ep_fence_pending_add(ucp_ep_h ep, uct_pending_req_t *req);
+
+void ucp_ep_fence_pending_purge(ucp_ep_h ep, ucs_status_t status);
+
+void ucp_ep_fence_pending_resume(ucp_ep_h ep);
 
 
 /**
