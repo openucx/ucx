@@ -192,15 +192,13 @@ unsigned ucp_proto_rndv_mtype_fc_reschedule_cb(void *arg)
 
 /**
  * Reschedule a pending throttled request after a fragment is released back to
- * the mpool.  Dequeue priority: PUT > GET > RTR.
+ * the mpool.  Dequeue priority: PUT/GET > RTR.
  *
  * Priority rationale:
- * PUT - Remote is blocked waiting for our data. Scheduling PUT unblocks remote
- *       as well.
- * GET - Self-contained fetch operation. Completes without causing remote
- *       allocations, but scheduling it doesn't unblock another buffer.
- * RTR - Scheduling RTR triggers a remote PUT allocation, increasing total
- *       memory pressure.
+ * PUT/GET - Completing a PUT or GET frees a staging buffer, reducing memory
+ *           pressure. PUT also unblocks the remote side.
+ * RTR     - Scheduling RTR triggers a remote PUT allocation, increasing total
+ *           memory pressure.
  */
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_mtype_fc_reschedule_pending(ucp_request_t *req)
@@ -219,8 +217,8 @@ ucp_proto_rndv_mtype_fc_reschedule_pending(ucp_request_t *req)
 
     /* Advance best_q past empty queues */
     while ((worker->rndv_mtype_fc.best_q < UCP_WORKER_RNDV_FC_OP_LAST) &&
-           ucs_queue_is_empty(
-                   &worker->rndv_mtype_fc.pending_q[worker->rndv_mtype_fc.best_q])) {
+        ucs_queue_is_empty(
+              &worker->rndv_mtype_fc.pending_q[worker->rndv_mtype_fc.best_q])) {
         worker->rndv_mtype_fc.best_q++;
     }
 
