@@ -455,8 +455,7 @@ ucp_address_gather_devices(ucp_worker_h worker, const ucp_ep_config_key_t *key,
 
         dev->rsc_index  = rsc_index;
         UCS_STATIC_BITMAP_SET(&dev->tl_bitmap, rsc_index);
-
-        dev->num_paths = ucs_min(max_num_paths, iface_attr->dev_num_paths);
+        dev->num_paths  = ucs_min(max_num_paths, iface_attr->dev_num_paths);
     }
 
     *devices_p     = devices;

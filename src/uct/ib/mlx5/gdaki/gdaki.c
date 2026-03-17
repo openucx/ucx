@@ -502,6 +502,7 @@ uct_rc_gdaki_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     iface_attr->cap.flags = UCT_IFACE_FLAG_CONNECT_TO_EP |
                             UCT_IFACE_FLAG_INTER_NODE |
                             UCT_IFACE_FLAG_DEVICE_EP |
+                            UCT_IFACE_FLAG_DEVICE_LKEY |
                             UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
 
     iface_attr->ep_addr_len    = sizeof(uct_ib_uint24_t) * iface->num_channels;

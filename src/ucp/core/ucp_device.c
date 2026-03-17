@@ -140,6 +140,7 @@ ucp_device_detect_local_sys_dev(ucp_context_h context,
 
 static void ucp_device_get_tl_bitmap(const ucp_worker_h worker,
                                      ucp_tl_bitmap_t *tl_bitmap,
+                                     ucp_tl_bitmap_t *tl_bitmap_nolkey,
                                      ucs_sys_device_t local_sys_dev)
 {
     const ucp_worker_iface_t *wiface;
@@ -147,16 +148,23 @@ static void ucp_device_get_tl_bitmap(const ucp_worker_h worker,
 
     /** TODO: Maybe cache results */
     UCS_STATIC_BITMAP_RESET_ALL(tl_bitmap);
+    UCS_STATIC_BITMAP_RESET_ALL(tl_bitmap_nolkey);
     UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &worker->context->tl_bitmap) {
         wiface = ucp_worker_iface(worker, tl_id);
+
         if (!(wiface->attr.cap.flags & UCT_IFACE_FLAG_DEVICE_EP)) {
             continue;
         }
+
         if (wiface->attr.ctl_device != local_sys_dev) {
             continue;
         }
 
-        UCS_STATIC_BITMAP_SET(tl_bitmap, tl_id);
+        if (wiface->attr.cap.flags & UCT_IFACE_FLAG_DEVICE_LKEY) {
+            UCS_STATIC_BITMAP_SET(tl_bitmap, tl_id);
+        } else {
+            UCS_STATIC_BITMAP_SET(tl_bitmap_nolkey, tl_id);
+        }
     }
 }
 
@@ -238,9 +246,11 @@ static ucs_status_t ucp_device_local_mem_list_create_handle(
     size_t i, num_lanes;
     ucs_status_t status;
     ucp_tl_bitmap_t tl_bitmap;
+    ucp_tl_bitmap_t tl_bitmap_nolkey;
     ucp_rsc_index_t tl_id;
 
-    ucp_device_get_tl_bitmap(worker, &tl_bitmap, local_sys_dev);
+    ucp_device_get_tl_bitmap(worker, &tl_bitmap, &tl_bitmap_nolkey,
+                             local_sys_dev);
     num_lanes   = UCS_STATIC_BITMAP_POPCOUNT(tl_bitmap);
     handle_size = (uct_elem_size * params->num_elements * num_lanes) +
                   sizeof(*handle);
@@ -372,6 +382,28 @@ ucp_device_local_mem_list_create(const ucp_device_mem_list_params_t *params,
     return status;
 }
 
+static int ucp_device_remote_mem_list_check_lanes(const ucp_ep_h ep,
+                                                  ucp_tl_bitmap_t *tl_bitmap)
+
+{
+    ucp_ep_config_t *ep_config = ucp_ep_config(ep);
+    ucp_lane_index_t lane;
+    ucp_rsc_index_t tl_id;
+
+    UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, tl_bitmap) {
+        for (lane = 0; lane < ep_config->key.num_lanes; ++lane) {
+            if (ucp_ep_get_rsc_index(ep, lane) == tl_id) {
+                break;
+            }
+        }
+        if (lane == ep_config->key.num_lanes) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
 static ucs_status_t ucp_device_remote_mem_list_element_pack(
         const ucp_device_mem_list_elem_t *element, ucp_rsc_index_t tl_id,
         uct_device_remote_mem_list_elem_t *mem_element)
@@ -454,6 +486,29 @@ static ucp_ep_h ucp_device_remote_mem_list_get_first_ep(
     return NULL;
 }
 
+static ucs_status_t ucp_device_remote_mem_list_fill(
+        const ucp_device_mem_list_elem_t *ucp_element,
+        ucp_tl_bitmap_t *tl_bitmap,
+        uct_device_remote_mem_list_elem_t **uct_element_p)
+{
+    const size_t uct_elem_size = sizeof(uct_device_remote_mem_list_elem_t);
+    ucp_rsc_index_t tl_id;
+    ucs_status_t status;
+
+    UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, tl_bitmap) {
+        status = ucp_device_remote_mem_list_element_pack(ucp_element, tl_id,
+                                                         *uct_element_p);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        *uct_element_p = UCS_PTR_BYTE_OFFSET(*uct_element_p, uct_elem_size);
+    }
+
+    return UCS_OK;
+}
+
+
 static ucs_status_t ucp_device_remote_mem_list_create_handle(
         const ucp_device_mem_list_params_t *params, ucs_memory_type_t mem_type,
         uct_allocated_memory_t *mem)
@@ -466,9 +521,10 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
     uct_device_remote_mem_list_elem_t *uct_element;
     ucs_sys_device_t local_sys_dev;
     ucp_tl_bitmap_t tl_bitmap;
-    ucp_rsc_index_t tl_id;
+    ucp_tl_bitmap_t tl_bitmap_nolkey;
     size_t i, num_lanes;
     ucs_status_t status;
+    int has_lkey, has_nolkey;
 
     if (ep == NULL) {
         ucs_error("no ep found in remote mem list");
@@ -481,8 +537,20 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
         return status;
     }
 
-    ucp_device_get_tl_bitmap(ep->worker, &tl_bitmap, local_sys_dev);
-    num_lanes   = UCS_STATIC_BITMAP_POPCOUNT(tl_bitmap);
+    ucp_device_get_tl_bitmap(ep->worker, &tl_bitmap, &tl_bitmap_nolkey,
+                             local_sys_dev);
+    ucp_element = params->elements;
+
+    has_lkey   = ucp_device_remote_mem_list_check_lanes(ep, &tl_bitmap);
+    has_nolkey = ucp_device_remote_mem_list_check_lanes(ep, &tl_bitmap_nolkey);
+
+    num_lanes = UCS_STATIC_BITMAP_POPCOUNT(tl_bitmap) * has_lkey +
+                UCS_STATIC_BITMAP_POPCOUNT(tl_bitmap_nolkey) * has_nolkey;
+
+    if (!num_lanes) {
+        ucs_error("failed to pack uct memory element for first element");
+    }
+
     handle_size = sizeof(*handle) +
                   (uct_elem_size * params->num_elements * num_lanes);
     handle      = ucs_calloc(1, handle_size, "ucp_device_remote_mem_list_t");
@@ -491,27 +559,38 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
         return UCS_ERR_NO_MEMORY;
     }
 
-    ucp_element = params->elements;
     uct_element = UCS_PTR_BYTE_OFFSET(handle, sizeof(*handle));
     for (i = 0; i < params->num_elements; i++) {
         if (UCP_DEVICE_MEM_ELEMENT_IS_GAP(ucp_element)) {
             uct_element = UCS_PTR_BYTE_OFFSET(uct_element,
                                               uct_elem_size * num_lanes);
         } else {
-            UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &tl_bitmap) {
-                status = ucp_device_remote_mem_list_element_pack(ucp_element,
-                                                                 tl_id,
-                                                                 uct_element);
+            ucs_assert(has_lkey ==
+                       ucp_device_remote_mem_list_check_lanes(ucp_element->ep,
+                                                              &tl_bitmap));
+            ucs_assert(
+                    has_nolkey ==
+                    ucp_device_remote_mem_list_check_lanes(ucp_element->ep,
+                                                           &tl_bitmap_nolkey));
+
+            if (has_lkey) {
+                status = ucp_device_remote_mem_list_fill(ucp_element,
+                                                         &tl_bitmap,
+                                                         &uct_element);
                 if (status != UCS_OK) {
-                    ucs_error(
-                            "failed to pack uct memory element for element=%zu",
-                            i);
                     goto out;
                 }
-                uct_element = UCS_PTR_BYTE_OFFSET(uct_element, uct_elem_size);
+            }
+
+            if (has_nolkey) {
+                status = ucp_device_remote_mem_list_fill(ucp_element,
+                                                         &tl_bitmap_nolkey,
+                                                         &uct_element);
+                if (status != UCS_OK) {
+                    goto out;
+                }
             }
         }
-
         ucp_element = UCS_PTR_BYTE_OFFSET(ucp_element, params->element_size);
     }
 
