@@ -115,17 +115,6 @@ typedef void (*ucs_mpool_chunk_release_func_t)(ucs_mpool_t *mp, void *chunk);
 
 
 /**
- * Initialize all objects in a chunk. Called once per chunk after the mpool
- * has set chunk->elems and chunk->num_elems, and before obj_init is called
- * for each element. Use ucs_mpool_chunk_elem() to get each object. May be NULL.
- *
- * @param mp           Memory pool structure.
- * @param chunk        The chunk (mpool chunk header at this address).
- */
-typedef void (*ucs_mpool_chunk_objs_init_func_t)(ucs_mpool_t *mp, void *chunk);
-
-
-/**
  * Initialize an object in the memory pool on the first time it's allocated.
  * May be NULL.
  *
@@ -172,11 +161,6 @@ struct ucs_mpool_ops {
      * Release previously allocated chunk of memory.
      */
     ucs_mpool_chunk_release_func_t   chunk_release;
-
-    /**
-     * Initialize all objects in a chunk (before any obj_init). May be NULL.
-     */
-    ucs_mpool_chunk_objs_init_func_t chunk_objs_init;
 
     /**
      * Initialize an object in the memory pool on the first time it's allocated.
@@ -365,7 +349,6 @@ unsigned ucs_mpool_num_elems_per_chunk(ucs_mpool_t *mp,
 
 /**
  * Return pointer to the elem_index-th object (user payload) in a chunk.
- * For use in chunk_objs_init and similar.
  *
  * @param mp               Memory pool structure.
  * @param chunk            Pointer to memory pool chunk.
@@ -374,6 +357,15 @@ unsigned ucs_mpool_num_elems_per_chunk(ucs_mpool_t *mp,
  */
 void *ucs_mpool_chunk_elem(ucs_mpool_t *mp, ucs_mpool_chunk_t *chunk,
                            unsigned elem_index);
+
+/**
+ * Return pointer to the elements in a chunk.
+ *
+ * @param mp               Memory pool structure.
+ * @param chunk            Pointer to memory pool chunk.
+ * @return Pointer to the elements in the chunk.
+ */
+void *ucs_mpool_chunk_elems(ucs_mpool_t *mp, ucs_mpool_chunk_t *chunk);
 
 
 /**

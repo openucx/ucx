@@ -248,66 +248,7 @@ typedef struct {
     size_t                dev_ep_size;
 } uct_rc_gdaki_pool_priv_t;
 
-static ucs_status_t
-uct_rc_gdaki_pool_chunk_alloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
-{
-    uct_rc_gdaki_pool_priv_t *priv = ucs_mpool_priv(mp);
-    uct_rc_gdaki_iface_t *iface    = priv->iface;
-    const uct_ib_md_t *md = ucs_derived_of(iface->super.super.super.super.md,
-                                           uct_ib_md_t);
-    uct_rc_gdaki_pool_chunk_hdr_t *hdr;
-    size_t host_alloc_size, gpu_alloc_size;
-    unsigned num_elems;
-    ucs_status_t status;
-
-    host_alloc_size = sizeof(*hdr) + *size_p;
-    hdr             = ucs_malloc(host_alloc_size, "gdaki pool chunk");
-    if (hdr == NULL) {
-        return UCS_ERR_NO_MEMORY;
-    }
-
-    *chunk_p  = hdr + 1;
-    num_elems = ucs_mpool_num_elems_per_chunk(mp, *chunk_p, *size_p);
-    if (num_elems == 0) {
-        status = UCS_ERR_NO_MEMORY;
-        goto err_free_hdr;
-    }
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(iface->cuda_ctx));
-    if (status != UCS_OK) {
-        goto err_free_hdr;
-    }
-
-    gpu_alloc_size = num_elems * priv->dev_ep_size;
-    status         = uct_rc_gdaki_alloc(gpu_alloc_size, ucs_get_page_size(),
-                                        &hdr->gpu_mem, &hdr->gpu_raw);
-    if (status != UCS_OK) {
-        goto err_ctx;
-    }
-
-    hdr->umem = uct_rc_gdaki_umem_reg(md, md->dev.ibv_context, hdr->gpu_mem,
-                                      gpu_alloc_size, priv->pgsz_bitmap);
-    if (hdr->umem == NULL) {
-        uct_ib_check_memlock_limit_msg(md->dev.ibv_context, UCS_LOG_LEVEL_ERROR,
-                                       "mlx5dv_devx_umem_reg(ptr=%p size=%zu)",
-                                       hdr->gpu_mem, gpu_alloc_size);
-        status = UCS_ERR_NO_MEMORY;
-        goto err_mem;
-    }
-
-    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
-    return UCS_OK;
-
-err_mem:
-    cuMemFree(hdr->gpu_raw);
-err_ctx:
-    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
-err_free_hdr:
-    ucs_free(hdr);
-    return status;
-}
-
-static void uct_rc_gdaki_pool_chunk_objs_init(ucs_mpool_t *mp, void *chunk)
+static ucs_status_t uct_rc_gdaki_pool_chunk_init(ucs_mpool_t *mp, void *chunk)
 {
     uct_rc_gdaki_pool_priv_t *priv     = ucs_mpool_priv(mp);
     uct_rc_gdaki_iface_t *iface        = priv->iface;
@@ -328,8 +269,7 @@ static void uct_rc_gdaki_pool_chunk_objs_init(ucs_mpool_t *mp, void *chunk)
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(iface->cuda_ctx));
     if (status != UCS_OK) {
-        ucs_fatal("gdaki pool chunk_objs_init: cuCtxPushCurrent failed");
-        return;
+        return status;
     }
 
     ep_qp_offset = UCT_GDAKI_DEV_EP_SIZE;
@@ -376,7 +316,7 @@ static void uct_rc_gdaki_pool_chunk_objs_init(ucs_mpool_t *mp, void *chunk)
     }
 
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
-    return;
+    return UCS_OK;
 
 err_cleanup:
     {
@@ -397,9 +337,81 @@ err_cleanup:
         }
 
         (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
-        ucs_fatal("gdaki chunk_objs_init: create_cq/qp failed (ch=%u ep=%u)",
+        ucs_error("gdaki channel chunk init: create_cq/qp failed (ch=%u ep=%u)",
                   ch_idx, ep_idx);
+        return status;
     }
+}
+
+static ucs_status_t
+uct_rc_gdaki_pool_chunk_alloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
+{
+    uct_rc_gdaki_pool_priv_t *priv = ucs_mpool_priv(mp);
+    uct_rc_gdaki_iface_t *iface    = priv->iface;
+    const uct_ib_md_t *md = ucs_derived_of(iface->super.super.super.super.md,
+                                           uct_ib_md_t);
+    uct_rc_gdaki_pool_chunk_hdr_t *hdr;
+    size_t host_alloc_size, gpu_alloc_size;
+    unsigned num_elems;
+    ucs_status_t status;
+
+    host_alloc_size = sizeof(*hdr) + *size_p;
+    hdr             = ucs_malloc(host_alloc_size, "gdaki pool chunk");
+    if (hdr == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    *chunk_p  = hdr + 1;
+    num_elems = ucs_mpool_num_elems_per_chunk(mp, *chunk_p, *size_p);
+    if (num_elems == 0) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err_free_hdr;
+    }
+
+    ((ucs_mpool_chunk_t*)*chunk_p)->num_elems = num_elems;
+    ((ucs_mpool_chunk_t*)*chunk_p)->elems     = ucs_mpool_chunk_elems(mp,
+                                                                      *chunk_p);
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(iface->cuda_ctx));
+    if (status != UCS_OK) {
+        goto err_free_hdr;
+    }
+
+    gpu_alloc_size = num_elems * priv->dev_ep_size;
+    status         = uct_rc_gdaki_alloc(gpu_alloc_size, ucs_get_page_size(),
+                                        &hdr->gpu_mem, &hdr->gpu_raw);
+    if (status != UCS_OK) {
+        goto err_ctx;
+    }
+
+    hdr->umem = uct_rc_gdaki_umem_reg(md, md->dev.ibv_context, hdr->gpu_mem,
+                                      gpu_alloc_size, priv->pgsz_bitmap);
+    if (hdr->umem == NULL) {
+        uct_ib_check_memlock_limit_msg(md->dev.ibv_context, UCS_LOG_LEVEL_ERROR,
+                                       "mlx5dv_devx_umem_reg(ptr=%p size=%zu)",
+                                       hdr->gpu_mem, gpu_alloc_size);
+        status = UCS_ERR_NO_MEMORY;
+        goto err_mem;
+    }
+
+    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
+
+    status = uct_rc_gdaki_pool_chunk_init(mp, *chunk_p);
+    if (status != UCS_OK) {
+        goto err_umem;
+    }
+
+    return UCS_OK;
+
+err_umem:
+    mlx5dv_devx_umem_dereg(hdr->umem);
+err_mem:
+    cuMemFree(hdr->gpu_raw);
+err_ctx:
+    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
+err_free_hdr:
+    ucs_free(hdr);
+    return status;
 }
 
 
@@ -431,7 +443,6 @@ static void uct_rc_gdaki_pool_chunk_release(ucs_mpool_t *mp, void *chunk)
 static ucs_mpool_ops_t uct_rc_gdaki_pool_mpool_ops = {
     .chunk_alloc     = uct_rc_gdaki_pool_chunk_alloc,
     .chunk_release   = uct_rc_gdaki_pool_chunk_release,
-    .chunk_objs_init = uct_rc_gdaki_pool_chunk_objs_init,
     .obj_init        = NULL,
     .obj_cleanup     = NULL,
     .obj_str         = NULL,

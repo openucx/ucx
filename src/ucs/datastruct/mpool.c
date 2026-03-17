@@ -230,7 +230,7 @@ void *ucs_mpool_chunk_elem(ucs_mpool_t *mp, ucs_mpool_chunk_t *chunk,
     return elem + 1;
 }
 
-static void *ucs_mpool_chunk_elems(ucs_mpool_t *mp, ucs_mpool_chunk_t *chunk)
+void *ucs_mpool_chunk_elems(ucs_mpool_t *mp, ucs_mpool_chunk_t *chunk)
 {
     ucs_mpool_data_t *data = mp->data;
     size_t chunk_padding;
@@ -288,10 +288,6 @@ void ucs_mpool_grow(ucs_mpool_t *mp, unsigned num_elems)
     if (!data->malloc_safe) {
         ucs_debug("mpool %s: allocated chunk %p of %lu bytes with %u elements",
                   ucs_mpool_name(mp), chunk, chunk_size, chunk->num_elems);
-    }
-
-    if (data->ops->chunk_objs_init != NULL) {
-        data->ops->chunk_objs_init(mp, chunk);
     }
 
     for (i = 0; i < chunk->num_elems; ++i) {
