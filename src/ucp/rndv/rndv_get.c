@@ -301,7 +301,7 @@ ucp_proto_rndv_get_mtype_fetch_progress(uct_pending_req_t *uct_req)
 
         /* Check throttling limit. If no resource at the moment, queue the
          * request in GET pending queue and return UCS_OK. */
-        pending_q = &worker->rndv_mtype_fc.get_pending_q;
+        pending_q = &worker->rndv_mtype_fc.hi_pending_q;
         status    = ucp_proto_rndv_mtype_request_init(req, rpriv->frag_mem_type,
                                                       rpriv->frag_sys_dev,
                                                       max_frags, pending_q);

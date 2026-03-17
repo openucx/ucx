@@ -2216,12 +2216,10 @@ protected:
     void check_pending_queues_empty(const entity &e)
     {
         ucp_worker_h worker = e.worker();
-        EXPECT_TRUE(ucs_queue_is_empty(&worker->rndv_mtype_fc.put_pending_q))
-            << "put_pending_q should be empty";
-        EXPECT_TRUE(ucs_queue_is_empty(&worker->rndv_mtype_fc.get_pending_q))
-            << "get_pending_q should be empty";
-        EXPECT_TRUE(ucs_queue_is_empty(&worker->rndv_mtype_fc.rtr_pending_q))
-            << "rtr_pending_q should be empty";
+        EXPECT_TRUE(ucs_queue_is_empty(&worker->rndv_mtype_fc.hi_pending_q))
+            << "hi_pending_q should be empty";
+        EXPECT_TRUE(ucs_queue_is_empty(&worker->rndv_mtype_fc.lo_pending_q))
+            << "lo_pending_q should be empty";
     }
 
     void send_message(size_t num_frags)

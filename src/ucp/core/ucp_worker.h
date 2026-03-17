@@ -402,10 +402,9 @@ typedef struct ucp_worker {
         int                          enabled;            /* Whether FC is enabled (cached) */
         unsigned                     tier_step;          /* Pct step between throttle tiers (cached) */
         size_t                       active_frags;       /* Current active fragments */
-        /* Separate pending queues by priority (PUT > GET > RTR) */
-        ucs_queue_head_t             put_pending_q;      /* Throttled PUT (RNDV_SEND) requests */
-        ucs_queue_head_t             get_pending_q;      /* Throttled GET requests */
-        ucs_queue_head_t             rtr_pending_q;      /* Throttled RTR requests */
+        /* Separate pending queues by priority (GET/PUT > RTR) */
+        ucs_queue_head_t             hi_pending_q;       /* Throttled GET/PUT requests (high prio) */
+        ucs_queue_head_t             lo_pending_q;       /* Throttled RTR requests (low prio) */
     } rndv_mtype_fc;
 
     struct {

@@ -257,13 +257,11 @@ ucp_proto_rndv_mtype_fc_decrement(ucp_request_t *req)
     ucs_assert(worker->rndv_mtype_fc.active_frags > 0);
     worker->rndv_mtype_fc.active_frags--;
 
-    /* Dequeue with priority: PUT > GET > RTR */
-    if (!ucs_queue_is_empty(&worker->rndv_mtype_fc.put_pending_q)) {
-        elem = ucs_queue_pull(&worker->rndv_mtype_fc.put_pending_q);
-    } else if (!ucs_queue_is_empty(&worker->rndv_mtype_fc.get_pending_q)) {
-        elem = ucs_queue_pull(&worker->rndv_mtype_fc.get_pending_q);
-    } else if (!ucs_queue_is_empty(&worker->rndv_mtype_fc.rtr_pending_q)) {
-        elem = ucs_queue_pull(&worker->rndv_mtype_fc.rtr_pending_q);
+    /* Dequeue with priority: GET/PUT (hi) > RTR (lo) */
+    if (!ucs_queue_is_empty(&worker->rndv_mtype_fc.hi_pending_q)) {
+        elem = ucs_queue_pull(&worker->rndv_mtype_fc.hi_pending_q);
+    } else if (!ucs_queue_is_empty(&worker->rndv_mtype_fc.lo_pending_q)) {
+        elem = ucs_queue_pull(&worker->rndv_mtype_fc.lo_pending_q);
     }
 
     if (elem == NULL) {

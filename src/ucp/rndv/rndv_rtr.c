@@ -362,7 +362,7 @@ static ucs_status_t ucp_proto_rndv_rtr_mtype_progress(uct_pending_req_t *self)
 
         max_frags = ucp_proto_rndv_mtype_fc_rtr_limit(rpriv->fc_max_frags,
                                                          worker->rndv_mtype_fc.tier_step);
-        pending_q = &worker->rndv_mtype_fc.rtr_pending_q;
+        pending_q = &worker->rndv_mtype_fc.lo_pending_q;
         status    = ucp_proto_rndv_mtype_request_init(req, rpriv->frag_mem_type,
                                                       rpriv->frag_sys_dev,
                                                       max_frags, pending_q);
