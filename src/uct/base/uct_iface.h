@@ -320,10 +320,7 @@ typedef struct uct_iface_internal_ops {
 } uct_iface_internal_ops_t;
 
 
-/**
- * Stub interface for proxy/wireup endpoints.
- * Layout-compatible with uct_base_iface_t for internal_ops dispatch.
- */
+/* Stub interface with internal_ops support */
 typedef struct uct_stub_iface {
     uct_iface_t              super;
     uct_iface_internal_ops_t *internal_ops;
