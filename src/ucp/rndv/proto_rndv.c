@@ -601,18 +601,22 @@ ucs_status_t ucp_proto_rndv_rts_reset(ucp_request_t *req)
 }
 
 /**
- * Compute maximum number of fragments allowed based on configured max memory
- * and fragment size for the given memory type. The result is rounded down to
- * the allocation chunk granularity (rndv_num_frags).
+ * Compute maximum number of elements allowed for the rndv fragment mpool
+ * based on configured max memory and fragment size for the given memory type.
+ * The result is rounded down to the allocation chunk granularity
+ * (rndv_num_frags) and returned as an unsigned value suitable for
+ * ucs_mpool_params_t::max_elems.
+ *
+ * When flow control is disabled (UCX_RNDV_MTYPE_WORKER_MAX_MEM="inf"),
+ * returns UINT_MAX so that the mpool is effectively unlimited.
  *
  * @param context       The UCP context.
  * @param frag_mem_type Memory type used for fragments.
  *
- * @return Maximum number of fragments that fit within the configured memory
- *         limit, aligned to allocation chunk size.
+ * @return Maximum number of mpool elements, aligned to allocation chunk size.
  */
-size_t ucp_proto_rndv_mtype_fc_max_frags(ucp_context_h context,
-                                         ucs_memory_type_t frag_mem_type)
+unsigned ucp_proto_rndv_mtype_fc_max_elems(ucp_context_h context,
+                                           ucs_memory_type_t frag_mem_type)
 {
     size_t max_mem;
     size_t frag_size;
@@ -620,7 +624,7 @@ size_t ucp_proto_rndv_mtype_fc_max_frags(ucp_context_h context,
     size_t max_frags;
 
     if (!ucp_context_rndv_mtype_fc_enabled(context)) {
-        return SIZE_MAX;
+        return UINT_MAX;
     }
 
     max_mem        = context->config.ext.rndv_mtype_worker_max_mem;
@@ -640,7 +644,7 @@ size_t ucp_proto_rndv_mtype_fc_max_frags(ucp_context_h context,
         return frags_in_chunk;
     }
 
-    return max_frags;
+    return ucs_min(max_frags, UINT_MAX);
 }
 
 ucs_status_t
@@ -696,8 +700,6 @@ ucp_proto_rndv_bulk_init(const ucp_proto_multi_init_params_t *init_params,
 
     rpriv->frag_mem_type = init_params->super.reg_mem_info.type;
     rpriv->frag_sys_dev  = init_params->super.reg_mem_info.sys_dev;
-    rpriv->fc_max_frags  = ucp_proto_rndv_mtype_fc_max_frags(
-                                            context, rpriv->frag_mem_type);
 
     if (rpriv->super.lane == UCP_NULL_LANE) {
         /* Add perf without ACK in case of pipeline */

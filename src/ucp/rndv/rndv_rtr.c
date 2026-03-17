@@ -36,8 +36,6 @@ typedef struct {
     ucp_proto_rndv_rtr_priv_t super;
     ucs_memory_type_t         frag_mem_type;
     ucs_sys_device_t          frag_sys_dev;
-    /* max fragments for flow control */
-    size_t                    fc_max_frags;
 } ucp_proto_rndv_rtr_mtype_priv_t;
 
 static UCS_F_ALWAYS_INLINE void
@@ -351,20 +349,17 @@ ucp_proto_rndv_rtr_mtype_data_received(ucp_request_t *req, int in_buffer)
 static ucs_status_t ucp_proto_rndv_rtr_mtype_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req  = ucs_container_of(self, ucp_request_t, send.uct);
-    ucp_worker_h worker = req->send.ep->worker;
     const ucp_proto_rndv_rtr_mtype_priv_t *rpriv;
-    size_t max_frags;
     ucs_status_t status;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
         rpriv = req->send.proto_config->priv;
 
-        max_frags = ucp_proto_rndv_mtype_fc_rtr_limit(rpriv->fc_max_frags,
-                                                         worker->rndv_mtype_fc.tier_step);
-        status    = ucp_proto_rndv_mtype_request_init(req, rpriv->frag_mem_type,
-                                                      rpriv->frag_sys_dev,
-                                                      max_frags,
-                                                      UCP_WORKER_RNDV_FC_OP_RTR);
+        /* Try to allocate a staging buffer. If the mpool quota is exhausted
+         * the request is queued and will be rescheduled later. */
+        status = ucp_proto_rndv_mtype_request_init(req, rpriv->frag_mem_type,
+                                                   rpriv->frag_sys_dev,
+                                                   UCP_WORKER_RNDV_FC_OP_RTR);
         if (status == UCS_ERR_NO_RESOURCE) {
             return UCS_OK;
         }
@@ -374,7 +369,6 @@ static ucs_status_t ucp_proto_rndv_rtr_mtype_progress(uct_pending_req_t *self)
             return UCS_OK;
         }
 
-        worker->rndv_mtype_fc.active_frags++;
         ucp_proto_rtr_common_request_init(req);
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     }
@@ -464,8 +458,6 @@ ucp_proto_rndv_rtr_mtype_probe(const ucp_proto_init_params_t *init_params)
         rpriv.super.data_received = ucp_proto_rndv_rtr_mtype_data_received;
         rpriv.frag_mem_type       = frag_mem_type;
         rpriv.frag_sys_dev        = params.super.reg_mem_info.sys_dev;
-        rpriv.fc_max_frags        = ucp_proto_rndv_mtype_fc_max_frags(
-                                                      context, frag_mem_type);
 
         ucp_proto_rndv_ctrl_probe(&params, &rpriv, sizeof(rpriv));
 out_unpack_perf_destroy:

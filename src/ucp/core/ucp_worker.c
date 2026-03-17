@@ -2627,9 +2627,8 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     worker->counters.ep_closures          = 0;
     worker->counters.ep_failures          = 0;
 
-    /* Initialize RNDV mtype flow control if configured */
-    worker->rndv_mtype_fc.tier_step = context->config.ext.rndv_mtype_fc_tier_step;
-    worker->rndv_mtype_fc.best_q    = UCP_WORKER_RNDV_FC_OP_LAST;
+    /* Initialize RNDV mtype flow control pending queues */
+    worker->rndv_mtype_fc.best_q = UCP_WORKER_RNDV_FC_OP_LAST;
     for (q_index = 0; q_index < UCP_WORKER_RNDV_FC_OP_LAST; q_index++) {
         ucs_queue_head_init(&worker->rndv_mtype_fc.pending_q[q_index]);
     }

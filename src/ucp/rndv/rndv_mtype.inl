@@ -49,16 +49,16 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_rndv_mtype_request_init(ucp_request_t *req,
                                   ucs_memory_type_t frag_mem_type,
                                   ucs_sys_device_t frag_sys_dev,
-                                  const size_t max_frags,
                                   int fc_op)
 {
     ucp_worker_h worker = req->send.ep->worker;
 
-    /* Check throttling limit. If no resource at the moment, queue the
-     * request in the appropriate pending queue and return NO_RESOURCE. */
-    if (worker->rndv_mtype_fc.active_frags >= max_frags) {
-        ucs_trace_req("mtype_fc: fragments throttle limit reached (%zu/%zu)",
-                      worker->rndv_mtype_fc.active_frags, max_frags);
+    req->send.rndv.mdesc = ucp_rndv_mpool_get(worker, frag_mem_type,
+                                              frag_sys_dev);
+    if (req->send.rndv.mdesc == NULL) {
+        /* Mpool quota exhausted - throttle by queuing the request in the
+         * appropriate pending queue ordered by priority. */
+        ucs_trace_req("mtype_fc: frag mpool exhausted, throttling request");
         UCS_STATS_UPDATE_COUNTER(worker->stats,
                                  UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED, 1);
         ucs_queue_push(&worker->rndv_mtype_fc.pending_q[fc_op],
@@ -68,12 +68,6 @@ ucp_proto_rndv_mtype_request_init(ucp_request_t *req,
         }
 
         return UCS_ERR_NO_RESOURCE;
-    }
-
-    req->send.rndv.mdesc = ucp_rndv_mpool_get(worker, frag_mem_type,
-                                              frag_sys_dev);
-    if (req->send.rndv.mdesc == NULL) {
-        return UCS_ERR_NO_MEMORY;
     }
 
     return UCS_OK;
@@ -196,53 +190,9 @@ unsigned ucp_proto_rndv_mtype_fc_reschedule_cb(void *arg)
     return 1;
 }
 
-/*
- * Staging-buffer flow-control throttle limit per operation type.
- *
- * To prevent deadlock under memory pressure, each operation type is capped at a
- * different share of the total fragment budget (fc_max_frags).  Operations that
- * free more resources on completion receive a larger cap, so they can always
- * make progress and unblock others:
- *
- *   PUT (level 0, 100%)            – frees local staging buffer AND remote RTR buffer.
- *   GET (level 1, 100%-tier_step)  – frees local staging buffer only.
- *   RTR (level 2, 100%-2*tier_step) – triggers a remote PUT allocation, adding pressure.
- *
- * The step between tiers is configurable via UCX_RNDV_MTYPE_FC_TIER_STEP
- * (default 10%).  The exact fractions are not performance-sensitive; only the
- * strict ordering PUT > GET > RTR matters.
- * The same ordering is used when dequeueing pending requests, see
- * ucp_proto_rndv_mtype_fc_decrement().
- */
-static UCS_F_ALWAYS_INLINE size_t
-ucp_proto_rndv_mtype_fc_limit(size_t fc_max, unsigned level,
-                              unsigned tier_step)
-{
-    return fc_max - level * (fc_max * tier_step / 100);
-}
-
-static UCS_F_ALWAYS_INLINE size_t
-ucp_proto_rndv_mtype_fc_put_limit(size_t fc_max, unsigned tier_step)
-{
-    return ucp_proto_rndv_mtype_fc_limit(fc_max, 0, tier_step);
-}
-
-static UCS_F_ALWAYS_INLINE size_t
-ucp_proto_rndv_mtype_fc_get_limit(size_t fc_max, unsigned tier_step)
-{
-    return ucp_proto_rndv_mtype_fc_limit(fc_max, 1, tier_step);
-}
-
-static UCS_F_ALWAYS_INLINE size_t
-ucp_proto_rndv_mtype_fc_rtr_limit(size_t fc_max, unsigned tier_step)
-{
-    return ucp_proto_rndv_mtype_fc_limit(fc_max, 2, tier_step);
-}
-
 /**
- * Decrement active_frags counter and reschedule pending request.
- * Dequeue priority: PUT > GET > RTR (same ordering as the throttle limits
- * defined by ucp_proto_rndv_mtype_fc_limit()).
+ * Reschedule a pending throttled request after a fragment is released back to
+ * the mpool.  Dequeue priority: PUT > GET > RTR.
  *
  * Priority rationale:
  * PUT - Remote is blocked waiting for our data. Scheduling PUT unblocks remote
@@ -253,14 +203,11 @@ ucp_proto_rndv_mtype_fc_rtr_limit(size_t fc_max, unsigned tier_step)
  *       memory pressure.
  */
 static UCS_F_ALWAYS_INLINE void
-ucp_proto_rndv_mtype_fc_decrement(ucp_request_t *req)
+ucp_proto_rndv_mtype_fc_reschedule_pending(ucp_request_t *req)
 {
     ucp_worker_h worker    = req->send.ep->worker;
     ucs_queue_elem_t *elem;
     ucp_request_t *pending_req;
-
-    ucs_assert(worker->rndv_mtype_fc.active_frags > 0);
-    worker->rndv_mtype_fc.active_frags--;
 
     /* Dequeue from highest-priority non-empty queue */
     if (worker->rndv_mtype_fc.best_q >= UCP_WORKER_RNDV_FC_OP_LAST) {
@@ -285,15 +232,15 @@ ucp_proto_rndv_mtype_fc_decrement(ucp_request_t *req)
 }
 
 /**
- * Release the staging buffer and decrement the FC active fragments counter.
- * This pairs with ucp_proto_rndv_mtype_request_init() which allocates the
- * mdesc and increments the counter.
+ * Release the staging buffer back to the mpool and reschedule any pending
+ * throttled request.  This pairs with ucp_proto_rndv_mtype_request_init()
+ * which allocates the mdesc from the mpool.
  */
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_mtype_mdesc_release(ucp_request_t *req)
 {
     ucs_mpool_put_inline(req->send.rndv.mdesc);
-    ucp_proto_rndv_mtype_fc_decrement(req);
+    ucp_proto_rndv_mtype_fc_reschedule_pending(req);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t

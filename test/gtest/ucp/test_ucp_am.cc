@@ -2207,12 +2207,6 @@ protected:
                                     << " but got " << value;
     }
 
-    void check_active_frags_zero(const entity &e)
-    {
-        EXPECT_EQ(0u, e.worker()->rndv_mtype_fc.active_frags)
-            << "active_frags should be 0 after completion";
-    }
-
     void check_pending_queues_empty(const entity &e)
     {
         ucp_worker_h worker = e.worker();
@@ -2232,7 +2226,6 @@ protected:
     {
         for (auto *ep : { &sender(), &receiver() })
         {
-            check_active_frags_zero(*ep);
             check_pending_queues_empty(*ep);
         }
     }

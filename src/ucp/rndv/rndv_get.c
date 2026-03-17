@@ -286,24 +286,18 @@ static ucs_status_t
 ucp_proto_rndv_get_mtype_fetch_progress(uct_pending_req_t *uct_req)
 {
     ucp_request_t *req  = ucs_container_of(uct_req, ucp_request_t, send.uct);
-    ucp_worker_h worker = req->send.ep->worker;
     const ucp_proto_rndv_bulk_priv_t *rpriv;
     ucs_status_t status;
-    size_t max_frags;
 
     /* coverity[tainted_data_downcast] */
     rpriv = req->send.proto_config->priv;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
-        max_frags = ucp_proto_rndv_mtype_fc_get_limit(rpriv->fc_max_frags,
-                                                         worker->rndv_mtype_fc.tier_step);
-
-        /* Check throttling limit. If no resource at the moment, queue the
-         * request in GET/PUT pending queue and return UCS_OK. */
-        status    = ucp_proto_rndv_mtype_request_init(req, rpriv->frag_mem_type,
-                                                      rpriv->frag_sys_dev,
-                                                      max_frags,
-                                                      UCP_WORKER_RNDV_FC_OP_GET);
+        /* Try to allocate a staging buffer. If the mpool quota is exhausted
+         * the request is queued and will be rescheduled later. */
+        status = ucp_proto_rndv_mtype_request_init(req, rpriv->frag_mem_type,
+                                                   rpriv->frag_sys_dev,
+                                                   UCP_WORKER_RNDV_FC_OP_GET);
         if (status == UCS_ERR_NO_RESOURCE) {
             return UCS_OK;
         }
@@ -313,7 +307,6 @@ ucp_proto_rndv_get_mtype_fetch_progress(uct_pending_req_t *uct_req)
             return UCS_OK;
         }
 
-        worker->rndv_mtype_fc.active_frags++;
         ucp_proto_rndv_get_common_request_init(req);
         ucp_proto_completion_init(&req->send.state.uct_comp,
                                   ucp_proto_rndv_get_mtype_fetch_completion);
