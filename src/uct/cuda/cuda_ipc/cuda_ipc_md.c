@@ -152,6 +152,31 @@ uct_cuda_ipc_mem_export_posix_fd(void *addr, uct_cuda_ipc_lkey_t *key)
 #endif
 
 #if HAVE_CUDA_FABRIC
+static ucs_status_t
+uct_cuda_ipc_mem_export_fabric_mempool(void *addr, uct_cuda_ipc_lkey_t *key,
+                                       CUmemoryPool mempool)
+{
+    ucs_status_t status;
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemPoolExportToShareableHandle(
+            (void*)&key->ph.handle.fabric_handle, mempool,
+            CU_MEM_HANDLE_TYPE_FABRIC, 0));
+    if (status != UCS_OK) {
+        ucs_debug("unable to export handle for mempool ptr: %p", addr);
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuMemPoolExportPointer(&key->ph.ptr, (CUdeviceptr)key->d_bptr));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL;
+    ucs_trace("packed mempool handle and export pointer for %p", addr);
+    return UCS_OK;
+}
+
 static ucs_status_t uct_cuda_ipc_mem_export_fabric(void *addr,
                                                    uct_cuda_ipc_lkey_t *key,
                                                    CUmemoryPool mempool)
@@ -177,27 +202,11 @@ static ucs_status_t uct_cuda_ipc_mem_export_fabric(void *addr,
         return UCS_OK;
     }
 
-    if (mempool == 0) {
+    if (mempool == NULL) {
         return UCS_ERR_INVALID_ADDR;
     }
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemPoolExportToShareableHandle(
-            (void*)&key->ph.handle.fabric_handle, mempool,
-            CU_MEM_HANDLE_TYPE_FABRIC, 0));
-    if (status != UCS_OK) {
-        ucs_debug("unable to export handle for mempool ptr: %p", addr);
-        return UCS_ERR_UNSUPPORTED;
-    }
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuMemPoolExportPointer(&key->ph.ptr, (CUdeviceptr)key->d_bptr));
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL;
-    ucs_trace("packed mempool handle and export pointer for %p", addr);
-    return UCS_OK;
+    return uct_cuda_ipc_mem_export_fabric_mempool(addr, key, mempool);
 }
 #endif /* HAVE_CUDA_FABRIC */
 
@@ -273,8 +282,6 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
         if (status != UCS_ERR_UNSUPPORTED) {
             goto out_pop_ctx;
         }
-        key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_NO_IPC;
-        goto common_path;
     }
 #endif /* HAVE_CUDA_FABRIC */
 
