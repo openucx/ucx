@@ -153,7 +153,8 @@ uct_cuda_ipc_mem_export_posix_fd(void *addr, uct_cuda_ipc_lkey_t *key)
 
 #if HAVE_CUDA_FABRIC
 static ucs_status_t
-uct_cuda_ipc_mem_export_fabric_mempool(void *addr, uct_cuda_ipc_lkey_t *key,
+uct_cuda_ipc_mem_export_fabric_mempool(const void *addr,
+                                       uct_cuda_ipc_lkey_t *key,
                                        CUmemoryPool mempool)
 {
     ucs_status_t status;

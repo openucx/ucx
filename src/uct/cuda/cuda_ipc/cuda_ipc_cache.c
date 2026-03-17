@@ -422,10 +422,10 @@ uct_cuda_ipc_open_memhandle_posix_fd(uct_cuda_ipc_rkey_t *key, CUdevice cu_dev,
                     CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR,
                     log_level);
     close(local_fd);
-close_pidfd:
-    close(pidfd);
     ucs_trace("posix_fd import from pid=%d: %s", (int)key->pid,
               ucs_status_string(status));
+close_pidfd:
+    close(pidfd);
     return status;
 }
 #endif /* HAVE_DECL_SYS_PIDFD_GETFD */
