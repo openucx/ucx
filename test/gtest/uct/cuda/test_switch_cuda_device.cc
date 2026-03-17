@@ -123,13 +123,8 @@ void test_p2p_create_destroy_ctx::test_xfer(send_func_t send, size_t length,
         }
     }
 
-#if CUDA_VERSION >= 13000
-    CUctxCreateParams ctx_create_params = {};
-    ASSERT_EQ(cuCtxCreate(&m_cuda_context, &ctx_create_params, 0, device),
+    ASSERT_EQ(uct_test_cuda_ctx_create_compat(&m_cuda_context, 0, device),
               CUDA_SUCCESS);
-#else
-    ASSERT_EQ(cuCtxCreate(&m_cuda_context, 0, device), CUDA_SUCCESS);
-#endif
     uct_p2p_rma_test::test_xfer(send, length, flags, mem_type);
 }
 

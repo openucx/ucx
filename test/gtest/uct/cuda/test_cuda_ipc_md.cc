@@ -162,6 +162,33 @@ protected:
        dereg_params.memh       = memh;
        EXPECT_UCS_OK(uct_md_mem_dereg_v2(md(), &dereg_params));
     }
+
+#if HAVE_DECL_SYS_PIDFD_GETFD
+    ucs_status_t pack_posix_fd_key(cuda_posix_fd_mem_buffer &buf, size_t size,
+                                   uct_mem_h *memh, uct_cuda_ipc_rkey_t *rkey)
+    {
+        uct_md_mem_reg_params_t reg_params    = {};
+        uct_md_mkey_pack_params_t pack_params = {};
+        ucs_status_t status;
+
+        status = uct_md_mem_reg_v2(md(), buf.ptr(), size, &reg_params, memh);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        return uct_md_mkey_pack_v2(md(), *memh, buf.ptr(), size, &pack_params,
+                                   rkey);
+    }
+
+    static void tamper_rkey_uuid(uct_cuda_ipc_rkey_t *rkey, int64_t value0,
+                                 int64_t value1)
+    {
+        int64_t *uuid64 = reinterpret_cast<int64_t*>(rkey->uuid.bytes);
+        uuid64[0]       = value0;
+        uuid64[1]       = value1;
+    }
+
+#endif
 };
 
 UCS_TEST_P(test_cuda_ipc_md, mpack_legacy)
@@ -228,16 +255,12 @@ UCS_TEST_P(test_cuda_ipc_md, mkey_pack_posix_fd)
 {
 #if HAVE_DECL_SYS_PIDFD_GETFD
     cuda_posix_fd_mem_buffer buf(4096, UCS_MEMORY_TYPE_CUDA);
-    uct_md_mem_reg_params_t reg_params    = {};
-    uct_md_mkey_pack_params_t pack_params = {};
     uct_mem_h memh;
     uct_cuda_ipc_rkey_t rkey = {};
 
-    EXPECT_UCS_OK(
-            uct_md_mem_reg_v2(md(), buf.ptr(), buf.size(), &reg_params, &memh));
-    EXPECT_UCS_OK(uct_md_mkey_pack_v2(md(), memh, buf.ptr(), buf.size(),
-                                      &pack_params, &rkey));
+    ASSERT_UCS_OK(pack_posix_fd_key(buf, buf.size(), &memh, &rkey));
     EXPECT_EQ(UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD, rkey.ph.handle_type);
+    EXPECT_EQ(ucs_get_system_id(), rkey.ph.handle.posix_fd.system_id);
 
     uct_md_mem_dereg_params_t dereg_params;
     dereg_params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
@@ -252,26 +275,18 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_system_id_mismatch)
 {
 #if HAVE_DECL_SYS_PIDFD_GETFD
     cuda_posix_fd_mem_buffer buf(4096, UCS_MEMORY_TYPE_CUDA);
-    uct_md_mem_reg_params_t reg_params    = {};
-    uct_md_mkey_pack_params_t pack_params = {};
     uct_mem_h memh;
     uct_cuda_ipc_rkey_t rkey = {};
 
-    EXPECT_UCS_OK(
-            uct_md_mem_reg_v2(md(), buf.ptr(), buf.size(), &reg_params, &memh));
-    EXPECT_UCS_OK(uct_md_mkey_pack_v2(md(), memh, buf.ptr(), buf.size(),
-                                      &pack_params, &rkey));
+    ASSERT_UCS_OK(pack_posix_fd_key(buf, buf.size(), &memh, &rkey));
     EXPECT_EQ(UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD, rkey.ph.handle_type);
-
     EXPECT_EQ(ucs_get_system_id(), rkey.ph.handle.posix_fd.system_id);
 
     /* Tamper system_id to simulate a different machine */
     rkey.ph.handle.posix_fd.system_id ^= 0xDEADBEEFDEADBEEFULL;
 
     /* Tamper UUID to bypass same-process shortcut */
-    int64_t *uuid64 = (int64_t *)rkey.uuid.bytes;
-    uuid64[0]       = 0xDEADLL;
-    uuid64[1]       = 0xBEEFLL;
+    tamper_rkey_uuid(&rkey, 0xDEADLL, 0xBEEFLL);
 
     uct_rkey_unpack_params_t unpack_params = { 0 };
     EXPECT_EQ(UCS_ERR_UNREACHABLE,
@@ -299,24 +314,18 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
 #if HAVE_DECL_SYS_PIDFD_GETFD
     cuda_posix_fd_mem_buffer buf(4096, UCS_MEMORY_TYPE_CUDA);
     size_t size                           = buf.size();
-    uct_md_mem_reg_params_t reg_params    = {};
-    uct_md_mkey_pack_params_t pack_params = {};
     uct_mem_h memh;
     uct_cuda_ipc_rkey_t rkey = {};
 
-    EXPECT_EQ(CUDA_SUCCESS, cuMemsetD8((CUdeviceptr)buf.ptr(), 0xAB, size));
+    ASSERT_EQ(CUDA_SUCCESS, cuMemsetD8((CUdeviceptr)buf.ptr(), 0xAB, size));
 
-    EXPECT_UCS_OK(uct_md_mem_reg_v2(md(), buf.ptr(), size, &reg_params, &memh));
-    EXPECT_UCS_OK(uct_md_mkey_pack_v2(md(), memh, buf.ptr(), size, &pack_params,
-                                      &rkey));
-    EXPECT_EQ(UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD, rkey.ph.handle_type);
-    EXPECT_EQ(ucs_get_system_id(), rkey.ph.handle.posix_fd.system_id);
+    ASSERT_UCS_OK(pack_posix_fd_key(buf, size, &memh, &rkey));
+    ASSERT_EQ(UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD, rkey.ph.handle_type);
+    ASSERT_EQ(ucs_get_system_id(), rkey.ph.handle.posix_fd.system_id);
 
     /* Tamper UUID to bypass same-process shortcut and exercise the full
      * POSIX FD import path (pidfd_open/pidfd_getfd + cuMemImport) */
-    int64_t *uuid64 = (int64_t *)rkey.uuid.bytes;
-    uuid64[0]       = 0x1234LL;
-    uuid64[1]       = 0x5678LL;
+    tamper_rkey_uuid(&rkey, 0x1234LL, 0x5678LL);
 
     uct_component_t *component = md()->component;
 
@@ -327,13 +336,8 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
             CUdevice dev;
             CUcontext ctx;
             ASSERT_EQ(CUDA_SUCCESS, cuDeviceGet(&dev, 0));
-#if CUDA_VERSION >= 13000
-            CUctxCreateParams ctx_create_params = {};
             ASSERT_EQ(CUDA_SUCCESS,
-                      cuCtxCreate(&ctx, &ctx_create_params, 0, dev));
-#else
-            ASSERT_EQ(CUDA_SUCCESS, cuCtxCreate(&ctx, 0, dev));
-#endif
+                      uct_test_cuda_ctx_create_compat(&ctx, 0, dev));
 
             uct_rkey_unpack_params_t unpack_params = {};
             uct_rkey_bundle_t rkey_bundle           = {};
@@ -360,8 +364,8 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
                     unpacked->super.super.pid, unpacked->super.pid_ns,
                     unpacked->super.super.d_bptr, mapped_addr, dev, 0);
             EXPECT_UCS_OK(unmap_status);
-            uct_rkey_release(component, &rkey_bundle);
-            cuCtxDestroy(ctx);
+            EXPECT_UCS_OK(uct_rkey_release(component, &rkey_bundle));
+            EXPECT_EQ(cuCtxDestroy(ctx), CUDA_SUCCESS);
         } catch (...) {
             thread_exception = std::current_exception();
         }

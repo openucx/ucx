@@ -14,6 +14,18 @@ extern "C" {
 #include <ucs/sys/ptr_arith.h>
 }
 
+static inline CUresult uct_test_cuda_ctx_create_compat(CUcontext *ctx,
+                                                       unsigned int flags,
+                                                       CUdevice dev)
+{
+#if CUDA_VERSION >= 13000
+    CUctxCreateParams ctx_create_params = {};
+    return cuCtxCreate(ctx, &ctx_create_params, flags, dev);
+#else
+    return cuCtxCreate(ctx, flags, dev);
+#endif
+}
+
 class cuda_vmm_mem_buffer {
 public:
     cuda_vmm_mem_buffer() = default;
