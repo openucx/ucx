@@ -2596,6 +2596,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     unsigned name_length;
     ucp_worker_h worker;
     ucs_status_t status;
+    int q_index;
 
     worker = ucs_calloc(1, sizeof(*worker), "ucp worker");
     if (worker == NULL) {
@@ -2628,8 +2629,10 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
 
     /* Initialize RNDV mtype flow control if configured */
     worker->rndv_mtype_fc.tier_step = context->config.ext.rndv_mtype_fc_tier_step;
-    ucs_queue_head_init(&worker->rndv_mtype_fc.hi_pending_q);
-    ucs_queue_head_init(&worker->rndv_mtype_fc.lo_pending_q);
+    worker->rndv_mtype_fc.best_q    = UCP_WORKER_RNDV_FC_OP_LAST;
+    for (q_index = 0; q_index < UCP_WORKER_RNDV_FC_OP_LAST; q_index++) {
+        ucs_queue_head_init(&worker->rndv_mtype_fc.pending_q[q_index]);
+    }
 
     /* Copy user flags, and mask-out unsupported flags for compatibility */
     worker->flags = UCP_PARAM_VALUE(WORKER, params, flags, FLAGS, 0) &

@@ -290,7 +290,6 @@ ucp_proto_rndv_get_mtype_fetch_progress(uct_pending_req_t *uct_req)
     const ucp_proto_rndv_bulk_priv_t *rpriv;
     ucs_status_t status;
     size_t max_frags;
-    ucs_queue_head_t *pending_q;
 
     /* coverity[tainted_data_downcast] */
     rpriv = req->send.proto_config->priv;
@@ -300,11 +299,11 @@ ucp_proto_rndv_get_mtype_fetch_progress(uct_pending_req_t *uct_req)
                                                          worker->rndv_mtype_fc.tier_step);
 
         /* Check throttling limit. If no resource at the moment, queue the
-         * request in GET pending queue and return UCS_OK. */
-        pending_q = &worker->rndv_mtype_fc.hi_pending_q;
+         * request in GET/PUT pending queue and return UCS_OK. */
         status    = ucp_proto_rndv_mtype_request_init(req, rpriv->frag_mem_type,
                                                       rpriv->frag_sys_dev,
-                                                      max_frags, pending_q);
+                                                      max_frags,
+                                                      UCP_WORKER_RNDV_FC_OP_GET);
         if (status == UCS_ERR_NO_RESOURCE) {
             return UCS_OK;
         }

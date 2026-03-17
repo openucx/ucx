@@ -354,7 +354,6 @@ static ucs_status_t ucp_proto_rndv_rtr_mtype_progress(uct_pending_req_t *self)
     ucp_worker_h worker = req->send.ep->worker;
     const ucp_proto_rndv_rtr_mtype_priv_t *rpriv;
     size_t max_frags;
-    ucs_queue_head_t *pending_q;
     ucs_status_t status;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
@@ -362,10 +361,10 @@ static ucs_status_t ucp_proto_rndv_rtr_mtype_progress(uct_pending_req_t *self)
 
         max_frags = ucp_proto_rndv_mtype_fc_rtr_limit(rpriv->fc_max_frags,
                                                          worker->rndv_mtype_fc.tier_step);
-        pending_q = &worker->rndv_mtype_fc.lo_pending_q;
         status    = ucp_proto_rndv_mtype_request_init(req, rpriv->frag_mem_type,
                                                       rpriv->frag_sys_dev,
-                                                      max_frags, pending_q);
+                                                      max_frags,
+                                                      UCP_WORKER_RNDV_FC_OP_RTR);
         if (status == UCS_ERR_NO_RESOURCE) {
             return UCS_OK;
         }

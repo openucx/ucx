@@ -50,18 +50,23 @@ ucp_proto_rndv_mtype_request_init(ucp_request_t *req,
                                   ucs_memory_type_t frag_mem_type,
                                   ucs_sys_device_t frag_sys_dev,
                                   const size_t max_frags,
-                                  ucs_queue_head_t *pending_q)
+                                  int fc_op)
 {
     ucp_worker_h worker = req->send.ep->worker;
 
     /* Check throttling limit. If no resource at the moment, queue the
-     * request in RTR pending queue and return NO_RESOURCE. */
+     * request in the appropriate pending queue and return NO_RESOURCE. */
     if (worker->rndv_mtype_fc.active_frags >= max_frags) {
         ucs_trace_req("mtype_fc: fragments throttle limit reached (%zu/%zu)",
                       worker->rndv_mtype_fc.active_frags, max_frags);
         UCS_STATS_UPDATE_COUNTER(worker->stats,
                                  UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED, 1);
-        ucs_queue_push(pending_q, &req->send.rndv.ppln.queue_elem);
+        ucs_queue_push(&worker->rndv_mtype_fc.pending_q[fc_op],
+                       &req->send.rndv.ppln.queue_elem);
+        if (fc_op < worker->rndv_mtype_fc.best_q) {
+            worker->rndv_mtype_fc.best_q = fc_op;
+        }
+
         return UCS_ERR_NO_RESOURCE;
     }
 
@@ -251,21 +256,25 @@ static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_mtype_fc_decrement(ucp_request_t *req)
 {
     ucp_worker_h worker    = req->send.ep->worker;
-    ucs_queue_elem_t *elem = NULL;
+    ucs_queue_elem_t *elem;
     ucp_request_t *pending_req;
 
     ucs_assert(worker->rndv_mtype_fc.active_frags > 0);
     worker->rndv_mtype_fc.active_frags--;
 
-    /* Dequeue with priority: GET/PUT (hi) > RTR (lo) */
-    if (!ucs_queue_is_empty(&worker->rndv_mtype_fc.hi_pending_q)) {
-        elem = ucs_queue_pull(&worker->rndv_mtype_fc.hi_pending_q);
-    } else if (!ucs_queue_is_empty(&worker->rndv_mtype_fc.lo_pending_q)) {
-        elem = ucs_queue_pull(&worker->rndv_mtype_fc.lo_pending_q);
+    /* Dequeue from highest-priority non-empty queue */
+    if (worker->rndv_mtype_fc.best_q >= UCP_WORKER_RNDV_FC_OP_LAST) {
+        return;
     }
 
-    if (elem == NULL) {
-        return;
+    elem = ucs_queue_pull(
+            &worker->rndv_mtype_fc.pending_q[worker->rndv_mtype_fc.best_q]);
+
+    /* Advance best_q past empty queues */
+    while ((worker->rndv_mtype_fc.best_q < UCP_WORKER_RNDV_FC_OP_LAST) &&
+           ucs_queue_is_empty(
+                   &worker->rndv_mtype_fc.pending_q[worker->rndv_mtype_fc.best_q])) {
+        worker->rndv_mtype_fc.best_q++;
     }
 
     pending_req = ucs_container_of(elem, ucp_request_t,
