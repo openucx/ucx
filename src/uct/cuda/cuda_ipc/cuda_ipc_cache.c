@@ -234,8 +234,8 @@ uct_cuda_ipc_init_access_desc(CUmemAccessDesc *access_desc, CUdevice cu_dev)
 }
 
 static ucs_status_t
-uct_cuda_ipc_open_memhandle_vmm(const uct_cuda_ipc_rkey_t *key,
-                                CUdevice cu_dev, CUdeviceptr *mapped_addr,
+uct_cuda_ipc_open_memhandle_vmm(const uct_cuda_ipc_rkey_t *key, CUdevice cu_dev,
+                                CUdeviceptr *mapped_addr,
                                 void *shareable_handle,
                                 CUmemAllocationHandleType handle_type,
                                 ucs_log_level_t log_level)
@@ -246,7 +246,9 @@ uct_cuda_ipc_open_memhandle_vmm(const uct_cuda_ipc_rkey_t *key,
     CUmemGenericAllocationHandle handle;
 
     status = UCT_CUDADRV_FUNC(cuMemImportFromShareableHandle(&handle,
-                shareable_handle, handle_type), log_level);
+                                                             shareable_handle,
+                                                             handle_type),
+                              log_level);
     if (status != UCS_OK) {
         goto out;
     }
@@ -407,8 +409,7 @@ uct_cuda_ipc_open_memhandle_posix_fd(uct_cuda_ipc_rkey_t *key, CUdevice cu_dev,
         return UCS_ERR_IO_ERROR;
     }
 
-    local_fd = syscall(SYS_pidfd_getfd, pidfd,
-                       key->ph.handle.posix_fd.fd, 0);
+    local_fd = syscall(SYS_pidfd_getfd, pidfd, key->ph.handle.posix_fd.fd, 0);
     if (local_fd < 0) {
         ucs_log(log_level, "pidfd_getfd(pidfd=%d, pid=%d, fd=%d) failed: %m",
                 pidfd, (int)key->pid, key->ph.handle.posix_fd.fd);
@@ -417,10 +418,8 @@ uct_cuda_ipc_open_memhandle_posix_fd(uct_cuda_ipc_rkey_t *key, CUdevice cu_dev,
     }
 
     status = uct_cuda_ipc_open_memhandle_vmm(
-                    key, cu_dev, mapped_addr,
-                    (void*)(uintptr_t)local_fd,
-                    CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR,
-                    log_level);
+            key, cu_dev, mapped_addr, (void*)(uintptr_t)local_fd,
+            CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR, log_level);
     close(local_fd);
     ucs_trace("posix_fd import from pid=%d: %s", (int)key->pid,
               ucs_status_string(status));
@@ -444,8 +443,8 @@ uct_cuda_ipc_open_memhandle(uct_cuda_ipc_rkey_t *key, CUdevice cu_dev,
                                                   mapped_addr, log_level);
 #if HAVE_CUDA_FABRIC
     case UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM:
-        return uct_cuda_ipc_open_memhandle_vmm(key, cu_dev, mapped_addr,
-                (void*)&key->ph.handle.fabric_handle,
+        return uct_cuda_ipc_open_memhandle_vmm(
+                key, cu_dev, mapped_addr, (void*)&key->ph.handle.fabric_handle,
                 CU_MEM_HANDLE_TYPE_FABRIC, log_level);
     case UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL:
         return uct_cuda_ipc_open_memhandle_mempool(key, cu_dev, mapped_addr,

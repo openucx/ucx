@@ -34,7 +34,7 @@ typedef struct uct_cuda_ipc_md_handle {
             int               fd;            /* POSIX file descriptor */
             uint64_t          system_id;     /* Machine identifier for
                                                 same-machine verification */
-        }                     posix_fd;      /* POSIX FD + machine ID */
+        } posix_fd;
     } handle;
 #if HAVE_CUDA_FABRIC
     CUmemPoolPtrExportData    ptr;

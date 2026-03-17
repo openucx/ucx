@@ -180,8 +180,8 @@ protected:
                                    rkey);
     }
 
-    static void tamper_rkey_uuid(uct_cuda_ipc_rkey_t *rkey, int64_t value0,
-                                 int64_t value1)
+    static void
+    tamper_rkey_uuid(uct_cuda_ipc_rkey_t *rkey, int64_t value0, int64_t value1)
     {
         int64_t *uuid64 = reinterpret_cast<int64_t*>(rkey->uuid.bytes);
         uuid64[0]       = value0;
@@ -288,10 +288,9 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_system_id_mismatch)
     /* Tamper UUID to bypass same-process shortcut */
     tamper_rkey_uuid(&rkey, 0xDEADLL, 0xBEEFLL);
 
-    uct_rkey_unpack_params_t unpack_params = { 0 };
+    uct_rkey_unpack_params_t unpack_params = {0};
     EXPECT_EQ(UCS_ERR_UNREACHABLE,
-              uct_rkey_unpack_v2(md()->component, &rkey, &unpack_params,
-                                 NULL));
+              uct_rkey_unpack_v2(md()->component, &rkey, &unpack_params, NULL));
 
     uct_md_mem_dereg_params_t dereg_params;
     dereg_params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
@@ -313,7 +312,7 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
 {
 #if HAVE_DECL_SYS_PIDFD_GETFD
     cuda_posix_fd_mem_buffer buf(4096, UCS_MEMORY_TYPE_CUDA);
-    size_t size                           = buf.size();
+    size_t size = buf.size();
     uct_mem_h memh;
     uct_cuda_ipc_rkey_t rkey = {};
 
@@ -340,24 +339,23 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
                       uct_test_cuda_ctx_create_compat(&ctx, 0, dev));
 
             uct_rkey_unpack_params_t unpack_params = {};
-            uct_rkey_bundle_t rkey_bundle           = {};
+            uct_rkey_bundle_t rkey_bundle = {};
             ASSERT_UCS_OK(uct_rkey_unpack_v2(component, &rkey, &unpack_params,
                                              &rkey_bundle));
 
             uct_cuda_ipc_unpacked_rkey_t *unpacked =
-                (uct_cuda_ipc_unpacked_rkey_t *)rkey_bundle.rkey;
+                    (uct_cuda_ipc_unpacked_rkey_t*)rkey_bundle.rkey;
             void *mapped_addr;
             ucs_status_t map_status = uct_cuda_ipc_map_memhandle(
-                    &unpacked->super, dev, &mapped_addr,
-                    UCS_LOG_LEVEL_ERROR);
+                    &unpacked->super, dev, &mapped_addr, UCS_LOG_LEVEL_ERROR);
             ASSERT_UCS_OK(map_status);
 
             std::vector<uint8_t> host_buf(size);
-            ASSERT_EQ(CUDA_SUCCESS, cuMemcpyDtoH(
-                    host_buf.data(), (CUdeviceptr)mapped_addr, size));
+            ASSERT_EQ(CUDA_SUCCESS,
+                      cuMemcpyDtoH(host_buf.data(), (CUdeviceptr)mapped_addr,
+                                   size));
             for (size_t i = 0; i < size; i++) {
-                ASSERT_EQ(0xAB, host_buf[i])
-                    << "Data mismatch at byte " << i;
+                ASSERT_EQ(0xAB, host_buf[i]) << "Data mismatch at byte " << i;
             }
 
             ucs_status_t unmap_status = uct_cuda_ipc_unmap_memhandle(
