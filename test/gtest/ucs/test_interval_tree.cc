@@ -77,12 +77,11 @@ private:
 };
 
 ucs_mpool_ops_t test_interval_tree::m_mpool_ops = {
-    .chunk_alloc     = ucs_mpool_chunk_malloc,
-    .chunk_release   = ucs_mpool_chunk_free,
-    .chunk_objs_init = NULL,
-    .obj_init        = NULL,
-    .obj_cleanup     = NULL,
-    .obj_str         = NULL
+    .chunk_alloc   = ucs_mpool_chunk_malloc,
+    .chunk_release = ucs_mpool_chunk_free,
+    .obj_init      = NULL,
+    .obj_cleanup   = NULL,
+    .obj_str       = NULL
 };
 
 UCS_TEST_F(test_interval_tree, single_interval) {
