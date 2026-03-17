@@ -28,11 +28,6 @@
 #define ucp_am_rdesc_frag_tree(_rdesc) \
     (UCS_PTR_BYTE_OFFSET(_rdesc, -sizeof(ucs_interval_tree_t)))
 
-#define UCP_AM_HW_TOKEN_BITS 24
-#define UCP_AM_HW_TOKEN_MASK ((1u << UCP_AM_HW_TOKEN_BITS) - 1)
-#define UCP_AM_HW_TOKEN_HALF (1u << (UCP_AM_HW_TOKEN_BITS - 1))
-
-
 static ucs_mpool_ops_t ucp_am_frag_tree_mpool_ops = {
     .chunk_alloc   = ucs_mpool_chunk_malloc,
     .chunk_release = ucs_mpool_chunk_free,
@@ -1770,65 +1765,6 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_handler_middle_psn,
     return ucp_am_long_middle_handler(am_arg, am_data, am_length, am_flags);
 }
 
-static UCS_F_ALWAYS_INLINE int
-ucp_am_is_duplicate_hw_token(ucp_worker_h worker, ucp_am_mid_ftr_t *ftr)
-{
-    ucp_ep_h ep;
-    uint32_t msg_token, last_token;
-    int32_t diff;
-
-    UCP_WORKER_GET_VALID_EP_BY_ID(&ep, worker, ftr->ep_id, return UCS_OK,
-                                  "AM (opaque token proto)");
-
-    msg_token  = (uint32_t)ftr->msg_id;
-    last_token = (uint32_t)ep->ext->am.psn;
-
-    if (ep->ext->am.psn == 0) {
-        return 0;
-    }
-
-    diff = (int32_t)((msg_token - last_token) & UCP_AM_HW_TOKEN_MASK);
-    if (diff >= (int32_t)UCP_AM_HW_TOKEN_HALF) {
-        diff -= (1 << UCP_AM_HW_TOKEN_BITS);
-    }
-
-    if (ucs_unlikely(diff <= 0)) {
-        ucs_debug("dropped duplicate token message ep_id=%lu msg_token=%u "
-                  "last_token=%u", ftr->ep_id, msg_token, last_token);
-        return 1;
-    }
-
-    return 0;
-}
-
-UCS_PROFILE_FUNC(ucs_status_t, ucp_am_handler_first_hw_token,
-                 (am_arg, am_data, am_length, am_flags), void *am_arg,
-                 void *am_data, size_t am_length, unsigned am_flags)
-{
-    ucp_am_first_ftr_t *ftr = UCS_PTR_BYTE_OFFSET(am_data,
-                                                  am_length - sizeof(*ftr));
-
-    if (ucp_am_is_duplicate_hw_token(am_arg, &ftr->super)) {
-        return UCS_OK;
-    }
-
-    return ucp_am_long_first_handler(am_arg, am_data, am_length, am_flags);
-}
-
-UCS_PROFILE_FUNC(ucs_status_t, ucp_am_handler_middle_hw_token,
-                 (am_arg, am_data, am_length, am_flags), void *am_arg,
-                 void *am_data, size_t am_length, unsigned am_flags)
-{
-    ucp_am_mid_ftr_t *ftr = UCS_PTR_BYTE_OFFSET(am_data,
-                                                am_length - sizeof(*ftr));
-
-    if (ucp_am_is_duplicate_hw_token(am_arg, ftr)) {
-        return UCS_OK;
-    }
-
-    return ucp_am_long_middle_handler(am_arg, am_data, am_length, am_flags);
-}
-
 ucs_status_t ucp_am_rndv_process_rts(void *arg, void *data, size_t length,
                                      unsigned tl_flags)
 {
@@ -1942,10 +1878,6 @@ UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_AM, UCP_AM_ID_AM_FIRST_PSN,
                          ucp_am_handler_first_psn, NULL, 0);
 UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_AM, UCP_AM_ID_AM_MIDDLE_PSN,
                          ucp_am_handler_middle_psn, NULL, 0);
-UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_AM, UCP_AM_ID_AM_FIRST_HW_TOKEN,
-                         ucp_am_handler_first_hw_token, NULL, 0);
-UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_AM, UCP_AM_ID_AM_MIDDLE_HW_TOKEN,
-                         ucp_am_handler_middle_hw_token, NULL, 0);
 
 const ucp_request_send_proto_t ucp_am_proto = {
     .contig_short           = ucp_am_contig_short,

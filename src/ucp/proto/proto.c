@@ -62,7 +62,6 @@
     _macro(ucp_am_eager_multi_bcopy_proto) \
     _macro(ucp_am_eager_multi_zcopy_proto) \
     _macro(ucp_am_eager_multi_zcopy_psn_proto) \
-    _macro(ucp_am_eager_multi_zcopy_hw_token_proto) \
     _macro(ucp_am_eager_short_reply_proto) \
     _macro(ucp_am_eager_single_bcopy_reply_proto) \
     _macro(ucp_am_eager_single_zcopy_reply_proto) \
