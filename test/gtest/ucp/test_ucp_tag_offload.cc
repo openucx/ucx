@@ -739,16 +739,13 @@ UCP_INSTANTIATE_TAG_OFFLOAD_TEST_CASE(test_ucp_tag_offload_status)
 
 class test_ucp_tag_offload_stats : public test_ucp_tag_offload_multi {
 public:
-
-    void init()
+    test_ucp_tag_offload_stats()
     {
         stats_activate();
-        test_ucp_tag_offload::init(); // No need for multi::init()
     }
 
-    void cleanup()
+    ~test_ucp_tag_offload_stats()
     {
-        test_ucp_tag_offload::cleanup();
         stats_restore();
     }
 

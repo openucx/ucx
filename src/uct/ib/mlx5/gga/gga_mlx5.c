@@ -721,8 +721,7 @@ uct_gga_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
 
     if (!uct_gga_mlx5_iface_is_same_device(tl_iface, iface_addr)) {
         uct_iface_fill_info_str_buf(
-                params,
-                "different GUID 0x%"PRIx64" (local) vs 0x%"PRIx64" (remote)",
+                params, "GUID local 0x%" PRIx64 " remote 0x%" PRIx64,
                 be64toh(device->dev_attr.orig_attr.sys_image_guid),
                 be64toh(iface_addr->be_sys_image_guid));
         return 0;

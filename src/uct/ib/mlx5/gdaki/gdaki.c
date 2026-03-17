@@ -18,10 +18,10 @@
 #include <ucs/type/serialize.h>
 #include <uct/ib/base/ib_verbs.h>
 #include <uct/ib/mlx5/rc/rc_mlx5.h>
-#include <uct/cuda/base/cuda_iface.h>
 #include <uct/cuda/cuda_copy/cuda_copy_md.h>
+#include <uct/cuda/base/cuda_util.h>
 
-#include <cuda.h>
+#include "gpunetio/common/doca_gpunetio_verbs_def.h"
 
 #define UCT_GDAKI_MAX_CUDA_PER_IB 64
 
@@ -203,28 +203,28 @@ static struct mlx5dv_devx_umem *
 uct_rc_gdaki_umem_reg(const uct_ib_md_t *md, struct ibv_context *ibv_context,
                       void *address, size_t length, uint64_t pgsz_bitmap)
 {
-    uct_cuda_copy_md_dmabuf_t dmabuf   = {
-        .fd     = UCT_DMABUF_FD_INVALID,
-        .offset = 0
-    };
+#if HAVE_DECL_MLX5DV_UMEM_MASK_DMABUF
     struct mlx5dv_devx_umem_in umem_in = {};
+    uct_cuda_copy_md_dmabuf_t dmabuf;
     struct mlx5dv_devx_umem *umem;
 
     umem_in.addr        = address;
     umem_in.size        = length;
     umem_in.access      = IBV_ACCESS_LOCAL_WRITE;
     umem_in.pgsz_bitmap = pgsz_bitmap;
-#if HAVE_DECL_MLX5DV_UMEM_MASK_DMABUF
     dmabuf              = uct_rc_gdaki_get_dmabuf(md, address, length);
     if (dmabuf.fd != UCT_DMABUF_FD_INVALID) {
         umem_in.comp_mask = MLX5DV_UMEM_MASK_DMABUF;
         umem_in.dmabuf_fd = dmabuf.fd;
     }
-#endif
 
     umem = mlx5dv_devx_umem_reg_ex(ibv_context, &umem_in);
     ucs_close_fd(&dmabuf.fd);
     return umem;
+#else
+    return mlx5dv_devx_umem_reg(ibv_context, address, length,
+                                IBV_ACCESS_LOCAL_WRITE);
+#endif
 }
 
 static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
@@ -486,7 +486,6 @@ uct_rc_gdaki_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     uct_rc_gdaki_iface_t *iface = ucs_derived_of(tl_iface,
                                                  uct_rc_gdaki_iface_t);
     ucs_status_t status;
-    ucs_sys_device_t cuda_sys_dev;
 
     status = uct_ib_iface_query(&iface->super.super.super, iface_attr);
     if (status != UCS_OK) {
@@ -512,7 +511,6 @@ uct_rc_gdaki_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     iface_attr->cap.put.min_zcopy = 0;
     iface_attr->cap.put.max_zcopy =
             uct_ib_iface_port_attr(&iface->super.super.super)->max_msg_sz;
-    uct_cuda_base_get_sys_dev(iface->cuda_dev, &cuda_sys_dev);
 
     return UCS_OK;
 }
@@ -597,6 +595,8 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
 
             dev_ep->qps[i].sq_db  = (uint64_t *)sq_db;
             dev_ep->qps[i].sq_num = channel->qp.super.qp_num;
+            dev_ep->qps[i].qpn_ds = htonl(channel->qp.super.qp_num <<
+                                          DOCA_GPUNETIO_VERBS_WQE_IDX_SHIFT);
             memset(&dev_ep->qps[i].cq_buff, 0xff, 64);
         }
 
@@ -1001,7 +1001,7 @@ uct_gdaki_dev_matrix_init(unsigned ib_per_cuda, size_t *dmat_length_p)
         }
 
         /* Update PCI distance in IB device scores */
-        uct_cuda_base_get_sys_dev(cuda_dev, &cuda_sys_dev);
+        cuda_sys_dev = uct_cuda_get_sys_dev(cuda_dev);
         for (ibdev_index = 0; ibdev_index < ibdev_count; ibdev_index++) {
             ibdesc = &dmat[scores[ibdev_index].index];
             status = ucs_topo_get_distance(cuda_sys_dev, ibdesc->sys_dev,
@@ -1120,7 +1120,7 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
             goto err;
         }
 
-        uct_cuda_base_get_sys_dev(device, &dev);
+        dev = uct_cuda_get_sys_dev(device);
 
         snprintf(tl_devices[num_tl_devices].name,
                  sizeof(tl_devices[num_tl_devices].name), "%s%d-%s:%d",
