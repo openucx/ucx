@@ -806,7 +806,7 @@ ucp_context_print_transport_tables_enabled(ucp_context_h context)
 }
 
 static UCS_F_ALWAYS_INLINE int
-ucp_context_rndv_mtype_fc_enabled(ucp_context_h context)
+ucp_context_rndv_mtype_mem_limit_enabled(ucp_context_h context)
 {
     size_t max_mem = context->config.ext.rndv_mtype_worker_max_mem;
     return (max_mem != UCS_MEMUNITS_INF) && (max_mem != UCS_MEMUNITS_AUTO);

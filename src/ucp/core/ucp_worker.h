@@ -411,19 +411,6 @@ typedef struct ucp_worker {
     } counters;
 
     struct {
-        /* Worker-level mtype fragment flow control.
-         *
-         * Two levels of limiting cooperate:
-         * 1. Soft (tiered) limit – the active_frags counter tracks how many
-         *    fragments are in-flight.  Each operation type (PUT/GET/RTR) is
-         *    capped at a different fraction of the budget so that higher-
-         *    priority operations always have headroom, preventing deadlock.
-         * 2. Hard limit – the per-mpool quota (ucs_mpool_data::quota, set via
-         *    max_elems when the mpool is created) caps total memory.  If the
-         *    mpool is exhausted the request is throttled the same way.
-         */
-        unsigned                     tier_step;          /* Pct step between throttle tiers (cached) */
-        size_t                       active_frags;       /* Current active fragments */
         /* Pending queues indexed by ucp_worker_rndv_fc_op_t, ordered by
          * descending priority (GET/PUT = 0, RTR = 1) */
         ucs_queue_head_t             pending_q[UCP_WORKER_RNDV_FC_OP_LAST];
