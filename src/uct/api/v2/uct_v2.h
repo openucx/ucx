@@ -1291,7 +1291,7 @@ ucs_status_t uct_md_mem_elem_pack(uct_md_h md, uct_mem_h memh, uct_rkey_t rkey,
  * The enumeration allows specifying which fields in @ref uct_iface_attr_v2_t
  * are present, for backward compatibility support.
  */
-enum uct_iface_attr_field {
+ enum uct_iface_attr_field {
     /** Enables @ref uct_iface_attr_v2_t::flags (output).
      *  Returns plugin-contributed capability flags
      */
@@ -1324,30 +1324,28 @@ typedef struct {
      * Mask of valid fields in this structure, using bits from
      * @ref uct_iface_attr_field.
      */
-    uint64_t field_mask;
+    uint64_t   field_mask;
 
     /**
      * Plugin-contributed capability flags (bitmask of UCT_IFACE_FLAG_*).
      * Valid when @ref UCT_IFACE_ATTR_FIELD_FLAGS is set.
      */
-    uint64_t flags;
+    uint64_t   flags;
 
     /**
-     * Length in bytes of the opaque TX token returned by
-     * @ref uct_ep_query with @ref UCT_EP_ATTR_FIELD_TX_TOKEN.
+     * Length in bytes of the opaque TX token.
      * Valid when @ref UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH is set.
      */
-    size_t   tx_token_length;
+    size_t     tx_token_length;
 
     /**
-     * Length in bytes of the opaque RX token produced by the
-     * RX token derivation path.
+     * Length in bytes of the opaque RX token.
      * Valid when @ref UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH is set.
      */
-    size_t   rx_token_length;
+    size_t     rx_token_length;
 
     /**
-     * TX token input buffer (for RX token derivation on the receiver side).
+     * TX token input buffer.
      * Valid when @ref UCT_IFACE_ATTR_FIELD_RX_TOKEN is set.
      * Caller sets this to a buffer of @ref tx_token_length bytes containing
      * the TX token received from the sender.
@@ -1355,12 +1353,12 @@ typedef struct {
     const void *tx_token;
 
     /**
-     * RX token output buffer (for RX token derivation on the receiver side).
+     * RX token output buffer.
      * Valid when @ref UCT_IFACE_ATTR_FIELD_RX_TOKEN is set.
      * Caller sets this to a pre-allocated buffer of @ref rx_token_length
-     * bytes; callee fills it with the derived RX token.
+     * bytes; callee fills it with RX token.
      */
-    void *rx_token;
+    void       *rx_token;
 } uct_iface_attr_v2_t;
 
 
@@ -1389,7 +1387,7 @@ enum uct_ep_op_info_field {
     UCT_EP_OP_INFO_FIELD_RMA    = UCS_BIT(3), /**< remote_addr, rkey */
     UCT_EP_OP_INFO_FIELD_ATOMIC = UCS_BIT(4), /**< atomic_op, value, compare */
     UCT_EP_OP_INFO_FIELD_COMP   = UCS_BIT(5), /**< Original uct_completion_t */
-    UCT_EP_OP_INFO_FIELD_FLAGS  = UCS_BIT(6)  /**< Original flags */
+    UCT_EP_OP_INFO_FIELD_FLAGS  = UCS_BIT(6) /**< Original flags */
 };
 
 
@@ -1408,29 +1406,29 @@ typedef struct uct_ep_op_info {
      * Mask of valid field groups in this structure, using bits from
      * @ref uct_ep_op_info_field.
      */
-    uint64_t              field_mask;
+    uint64_t           field_mask;
 
     /**
      * Operation type from @ref uct_ep_operation_t (e.g. UCT_EP_OP_AM_SHORT,
      * UCT_EP_OP_PUT_ZCOPY, UCT_EP_OP_FLUSH, etc.).
      */
-    uct_ep_operation_t    operation;
+    uct_ep_operation_t operation;
 
     /** Original completion (UCT_EP_OP_INFO_FIELD_COMP). */
-    uct_completion_t     *comp;
+    uct_completion_t   *comp;
 
     /** Original flags (UCT_EP_OP_INFO_FIELD_FLAGS). */
-    unsigned              flags;
+    unsigned           flags;
 
     /* Operation-class specific parameters (UCT_EP_OP_INFO_FIELD_AM /
      * UCT_EP_OP_INFO_FIELD_RMA / UCT_EP_OP_INFO_FIELD_ATOMIC) */
     union {
         /* AM operations (UCT_EP_OP_INFO_FIELD_AM) */
         struct {
-            uint8_t     am_id;         /**< AM handler ID */
-            uint64_t    am_hdr;        /**< am_short 64-bit header word */
-            const void *am_hdr_data;   /**< am_zcopy header buffer */
-            size_t      am_hdr_length; /**< am_zcopy header length */
+            uint8_t    am_id; /**< AM handler ID */
+            uint64_t   am_hdr; /**< am_short 64-bit header word */
+            const void *am_hdr_data; /**< am_zcopy header buffer */
+            size_t     am_hdr_length; /**< am_zcopy header length */
         } am;
 
         /* PUT / GET / ATOMIC (UCT_EP_OP_INFO_FIELD_RMA,
@@ -1438,9 +1436,9 @@ typedef struct uct_ep_op_info {
         struct {
             uint64_t        remote_addr;
             uct_rkey_t      rkey;
-            uct_atomic_op_t atomic_op;     /**< Atomic operation type */
-            uint64_t        atomic_value;  /**< value / swap operand */
-            uint64_t        atomic_compare;/**< compare operand (cswap) */
+            uct_atomic_op_t atomic_op; /**< Atomic operation type */
+            uint64_t        atomic_value; /**< value / swap operand */
+            uint64_t        atomic_compare; /**< compare operand (cswap) */
         } rma;
     };
 
@@ -1449,13 +1447,13 @@ typedef struct uct_ep_op_info {
         /* short/bcopy inline data -- valid ONLY inside the callback */
         struct {
             const void *buffer;
-            size_t      length;
+            size_t     length;
         } inline_data;
 
         /* zcopy IOV -- points to user's original registered buffers */
         struct {
             const uct_iov_t *iov;
-            size_t           iovcnt;
+            size_t          iovcnt;
         } zcopy;
     };
 } uct_ep_op_info_t;
@@ -1514,7 +1512,7 @@ typedef struct {
      * Points to a buffer of @ref uct_iface_attr_v2_t::rx_token_length bytes.
      * Identifies the boundary between delivered and undelivered operations.
      */
-    const void *rx_token;
+    const void              *rx_token;
 
     /**
      * Callback invoked once per undelivered outstanding operation.
@@ -1523,7 +1521,7 @@ typedef struct {
     uct_ep_outstanding_cb_t cb;
 
     /** Opaque argument passed to @ref cb. */
-    void                   *arg;
+    void                    *arg;
 
     /** Flags from @ref uct_ep_outstanding_extract_flags_t. */
     unsigned                flags;

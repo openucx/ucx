@@ -17,10 +17,6 @@ extern "C" {
 /**
  * @brief Plugin implementation of @ref uct_iface_query_v2.
  *
- * Same signature pattern as the public API.  The transport forwards the
- * call directly; the plugin fills fields selected by @c iface_attr->field_mask
- * (bits from @ref uct_iface_attr_field).
- *
  * @param [in]     iface       Interface handle.
  * @param [in,out] iface_attr  Iface v2 attributes.
  *
@@ -33,34 +29,24 @@ uct_ib_plugin_iface_query(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr);
 /**
  * @brief Plugin implementation of @ref uct_ep_query.
  *
- * Same signature pattern as the public API.  The transport forwards the
- * call directly; the plugin fills fields selected by @c ep_attr->field_mask
- * (bits from @ref uct_ep_attr_field).
- *
  * @param [in]     ep       Endpoint handle.
  * @param [in,out] ep_attr  Endpoint attributes.
  *
  * @return UCS_OK on success, error code otherwise.
  */
-ucs_status_t
-uct_ib_plugin_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr);
+ucs_status_t uct_ib_plugin_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr);
 
 
 /**
  * @brief Plugin implementation of @ref uct_ep_outstanding_extract.
- *
- * Same signature pattern as the public API.  The plugin reads the
- * QP number from @c params->rx_token.
  *
  * @param [in] ep      Endpoint handle.
  * @param [in] params  Extraction parameters.
  *
  * @return UCS_OK on success, error code otherwise.
  */
-ucs_status_t
-uct_ib_plugin_outstanding_extract(
-        uct_ep_h ep,
-        const uct_ep_outstanding_extract_params_t *params);
+ucs_status_t uct_ib_plugin_outstanding_extract(
+        uct_ep_h ep, const uct_ep_outstanding_extract_params_t *params);
 
 
 #ifdef __cplusplus

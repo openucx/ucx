@@ -17,10 +17,8 @@ uct_ib_plugin_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr)
     return UCS_ERR_UNSUPPORTED;
 }
 
-ucs_status_t __attribute__((weak))
-uct_ib_plugin_outstanding_extract(
-        uct_ep_h ep,
-        const uct_ep_outstanding_extract_params_t *params)
+ucs_status_t __attribute__((weak)) uct_ib_plugin_outstanding_extract(
+        uct_ep_h ep, const uct_ep_outstanding_extract_params_t *params)
 {
     return UCS_ERR_UNSUPPORTED;
 }
