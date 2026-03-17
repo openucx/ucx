@@ -210,6 +210,18 @@ uct_rc_mlx5_ep_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                           struct ibv_ah_attr *ah_attr, enum ibv_mtu path_mtu,
                           uint8_t path_index);
 
+ucs_status_t uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep,
+                                       uct_ep_attr_t *ep_attr);
+
+ucs_status_t
+uct_rc_mlx5_iface_query_v2(uct_iface_h tl_iface,
+                            uct_iface_attr_v2_t *iface_attr);
+
+ucs_status_t
+uct_rc_mlx5_ep_outstanding_extract(
+        uct_ep_h ep,
+        const uct_ep_outstanding_extract_params_t *params);
+
 int uct_rc_mlx5_base_ep_is_connected(
         const uct_ep_h tl_ep, const uct_ep_is_connected_params_t *params);
 

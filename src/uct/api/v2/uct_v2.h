@@ -50,6 +50,7 @@ typedef enum uct_ep_operation {
     UCT_EP_OP_RNDV_ZCOPY,   /**< Tag matching rendezvous */
     UCT_EP_OP_ATOMIC_POST,  /**< Atomic post */
     UCT_EP_OP_ATOMIC_FETCH, /**< Atomic fetch */
+    UCT_EP_OP_FLUSH,        /**< Flush */
     UCT_EP_OP_LAST
 } uct_ep_operation_t;
 
@@ -420,17 +421,20 @@ struct uct_ep_attr {
     struct sockaddr_storage remote_address;
 
     /**
-     * Opaque completion token for the transmit path (transport-defined).
-     * Set if @ref UCT_EP_ATTR_FIELD_TX_TOKEN is present in @ref field_mask.
-     * Used by receiver to identify submitted operations; semantics are HW-agnostic.
+     * Opaque TX token buffer.
+     * Valid when @ref UCT_EP_ATTR_FIELD_TX_TOKEN is set in @ref field_mask.
+     * Caller allocates a buffer of @ref uct_iface_attr_v2_t::tx_token_length
+     * bytes and sets this pointer; callee fills the buffer with the token.
      */
-    uint32_t                tx_token;
+    void *tx_token;
 
     /**
-     * Opaque completion token for the receive path (transport-defined).
-     * Set if @ref UCT_EP_ATTR_FIELD_RX_TOKEN is present in @ref field_mask.
+     * Opaque RX token buffer.
+     * Valid when @ref UCT_EP_ATTR_FIELD_RX_TOKEN is set in @ref field_mask.
+     * Caller allocates a buffer of @ref uct_iface_attr_v2_t::rx_token_length
+     * bytes and sets this pointer; callee fills the buffer with the token.
      */
-    uint32_t                rx_token;
+    void *rx_token;
 };
 
 
@@ -1278,6 +1282,274 @@ ucs_status_t uct_rkey_unpack_v2(uct_component_h component,
  */
 ucs_status_t uct_md_mem_elem_pack(uct_md_h md, uct_mem_h memh, uct_rkey_t rkey,
                                   uct_device_mem_element_t *mem_elem);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief UCT interface v2 attributes field mask.
+ *
+ * The enumeration allows specifying which fields in @ref uct_iface_attr_v2_t
+ * are present, for backward compatibility support.
+ */
+enum uct_iface_attr_field {
+    /** Enables @ref uct_iface_attr_v2_t::flags (output).
+     *  Returns plugin-contributed capability flags
+     */
+    UCT_IFACE_ATTR_FIELD_FLAGS           = UCS_BIT(0),
+
+    /** Enables @ref uct_iface_attr_v2_t::tx_token_length (output). */
+    UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH = UCS_BIT(1),
+
+    /** Enables @ref uct_iface_attr_v2_t::rx_token_length (output). */
+    UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH = UCS_BIT(2),
+
+    /**
+     * Enables the RX token derivation path.
+     * When set, @ref uct_iface_attr_v2_t::tx_token is input (from sender),
+     * and @ref uct_iface_attr_v2_t::rx_token is output (derived by receiver).
+     */
+    UCT_IFACE_ATTR_FIELD_RX_TOKEN        = UCS_BIT(3)
+};
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief UCT interface v2 attributes.
+ *
+ * Queried by @ref uct_iface_query_v2. The @c field_mask selects which
+ * fields are requested.
+ */
+typedef struct {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_iface_attr_field.
+     */
+    uint64_t field_mask;
+
+    /**
+     * Plugin-contributed capability flags (bitmask of UCT_IFACE_FLAG_*).
+     * Valid when @ref UCT_IFACE_ATTR_FIELD_FLAGS is set.
+     */
+    uint64_t flags;
+
+    /**
+     * Length in bytes of the opaque TX token returned by
+     * @ref uct_ep_query with @ref UCT_EP_ATTR_FIELD_TX_TOKEN.
+     * Valid when @ref UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH is set.
+     */
+    size_t   tx_token_length;
+
+    /**
+     * Length in bytes of the opaque RX token produced by the
+     * RX token derivation path.
+     * Valid when @ref UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH is set.
+     */
+    size_t   rx_token_length;
+
+    /**
+     * TX token input buffer (for RX token derivation on the receiver side).
+     * Valid when @ref UCT_IFACE_ATTR_FIELD_RX_TOKEN is set.
+     * Caller sets this to a buffer of @ref tx_token_length bytes containing
+     * the TX token received from the sender.
+     */
+    const void *tx_token;
+
+    /**
+     * RX token output buffer (for RX token derivation on the receiver side).
+     * Valid when @ref UCT_IFACE_ATTR_FIELD_RX_TOKEN is set.
+     * Caller sets this to a pre-allocated buffer of @ref rx_token_length
+     * bytes; callee fills it with the derived RX token.
+     */
+    void *rx_token;
+} uct_iface_attr_v2_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Query interface v2 attributes.
+ *
+ * @param [in]    iface       Interface to query.
+ * @param [inout] iface_attr  Attributes structure with field_mask set by
+ *                            the caller.
+ *
+ * @return UCS_OK on success, error code otherwise.
+ */
+ucs_status_t
+uct_iface_query_v2(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief UCT outstanding operation info field mask.
+ */
+enum uct_ep_op_info_field {
+    UCT_EP_OP_INFO_FIELD_AM     = UCS_BIT(0), /**< am_id, am_hdr* fields */
+    UCT_EP_OP_INFO_FIELD_DATA   = UCS_BIT(1), /**< data/length (short/bcopy) */
+    UCT_EP_OP_INFO_FIELD_IOV    = UCS_BIT(2), /**< iov/iovcnt (zcopy) */
+    UCT_EP_OP_INFO_FIELD_RMA    = UCS_BIT(3), /**< remote_addr, rkey */
+    UCT_EP_OP_INFO_FIELD_ATOMIC = UCS_BIT(4), /**< atomic_op, value, compare */
+    UCT_EP_OP_INFO_FIELD_COMP   = UCS_BIT(5), /**< Original uct_completion_t */
+    UCT_EP_OP_INFO_FIELD_FLAGS  = UCS_BIT(6)  /**< Original flags */
+};
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Descriptor for a single outstanding (undelivered) operation.
+ *
+ * Passed to the callback registered with @ref uct_ep_outstanding_extract.
+ * For SHORT and BCOPY operations, the @c inline_data pointer is only valid
+ * for the duration of the callback invocation -- the caller must copy it.
+ * For ZCOPY operations, the @c iov array points to the user's original
+ * registered buffers, which remain valid.
+ */
+typedef struct uct_ep_op_info {
+    /**
+     * Mask of valid field groups in this structure, using bits from
+     * @ref uct_ep_op_info_field.
+     */
+    uint64_t              field_mask;
+
+    /**
+     * Operation type from @ref uct_ep_operation_t (e.g. UCT_EP_OP_AM_SHORT,
+     * UCT_EP_OP_PUT_ZCOPY, UCT_EP_OP_FLUSH, etc.).
+     */
+    uct_ep_operation_t    operation;
+
+    /** Original completion (UCT_EP_OP_INFO_FIELD_COMP). */
+    uct_completion_t     *comp;
+
+    /** Original flags (UCT_EP_OP_INFO_FIELD_FLAGS). */
+    unsigned              flags;
+
+    /* Operation-class specific parameters (UCT_EP_OP_INFO_FIELD_AM /
+     * UCT_EP_OP_INFO_FIELD_RMA / UCT_EP_OP_INFO_FIELD_ATOMIC) */
+    union {
+        /* AM operations (UCT_EP_OP_INFO_FIELD_AM) */
+        struct {
+            uint8_t     am_id;         /**< AM handler ID */
+            uint64_t    am_hdr;        /**< am_short 64-bit header word */
+            const void *am_hdr_data;   /**< am_zcopy header buffer */
+            size_t      am_hdr_length; /**< am_zcopy header length */
+        } am;
+
+        /* PUT / GET / ATOMIC (UCT_EP_OP_INFO_FIELD_RMA,
+         * UCT_EP_OP_INFO_FIELD_ATOMIC) */
+        struct {
+            uint64_t        remote_addr;
+            uct_rkey_t      rkey;
+            uct_atomic_op_t atomic_op;     /**< Atomic operation type */
+            uint64_t        atomic_value;  /**< value / swap operand */
+            uint64_t        atomic_compare;/**< compare operand (cswap) */
+        } rma;
+    };
+
+    /* Data payload (UCT_EP_OP_INFO_FIELD_DATA / UCT_EP_OP_INFO_FIELD_IOV) */
+    union {
+        /* short/bcopy inline data -- valid ONLY inside the callback */
+        struct {
+            const void *buffer;
+            size_t      length;
+        } inline_data;
+
+        /* zcopy IOV -- points to user's original registered buffers */
+        struct {
+            const uct_iov_t *iov;
+            size_t           iovcnt;
+        } zcopy;
+    };
+} uct_ep_op_info_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Callback invoked for each undelivered outstanding operation.
+ *
+ * @param [in] op_info  Operation descriptor. For SHORT/BCOPY, the @c data
+ *                      pointer is valid only for the duration of this call.
+ * @param [in] arg      User-defined context.
+ */
+typedef void (*uct_ep_outstanding_cb_t)(const uct_ep_op_info_t *op_info,
+                                        void *arg);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Field mask for @ref uct_ep_outstanding_extract_params_t.
+ */
+typedef enum {
+    UCT_EP_OUTSTANDING_FIELD_RX_TOKEN = UCS_BIT(0),
+    UCT_EP_OUTSTANDING_FIELD_CB       = UCS_BIT(1),
+    UCT_EP_OUTSTANDING_FIELD_FLAGS    = UCS_BIT(2)
+} uct_ep_outstanding_extract_field_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Flags for @ref uct_ep_outstanding_extract.
+ */
+typedef enum {
+    /**
+     * For operations confirmed as delivered by the RX token, invoke
+     * their @ref uct_completion_t callback with @ref UCS_OK before
+     * extracting the remaining undelivered operations.
+     * If not set, ALL outstanding operations are extracted to the callback.
+     */
+    UCT_EP_OUTSTANDING_FLAG_COMPLETE_DELIVERED = UCS_BIT(0)
+} uct_ep_outstanding_extract_flags_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Parameters for @ref uct_ep_outstanding_extract.
+ */
+typedef struct {
+    /** Mask of valid fields, using bits from
+     *  @ref uct_ep_outstanding_extract_field_t. */
+    uint64_t                field_mask;
+
+    /**
+     * Opaque RX token received from the remote peer (derived via
+     * @ref uct_iface_query_v2 with @ref UCT_IFACE_ATTR_FIELD_RX_TOKEN).
+     * Points to a buffer of @ref uct_iface_attr_v2_t::rx_token_length bytes.
+     * Identifies the boundary between delivered and undelivered operations.
+     */
+    const void *rx_token;
+
+    /**
+     * Callback invoked once per undelivered outstanding operation.
+     * The callback MUST NOT call UCT operations on the same endpoint.
+     */
+    uct_ep_outstanding_cb_t cb;
+
+    /** Opaque argument passed to @ref cb. */
+    void                   *arg;
+
+    /** Flags from @ref uct_ep_outstanding_extract_flags_t. */
+    unsigned                flags;
+} uct_ep_outstanding_extract_params_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Extract outstanding (undelivered) operations from an endpoint.
+ *
+ * After an endpoint error, this function enumerates operations that were
+ * not confirmed as delivered by the remote peer. After this call returns,
+ * no further error completions will be generated for the extracted operations.
+ *
+ * @note The caller MUST drain all CQ completions for this endpoint
+ *       (via @ref uct_worker_progress) before calling this function.
+ *
+ * @param [in] ep      Endpoint whose outstanding operations to extract.
+ * @param [in] params  Extraction parameters.
+ *
+ * @return UCS_OK on success, error code otherwise.
+ */
+ucs_status_t
+uct_ep_outstanding_extract(uct_ep_h ep,
+                           const uct_ep_outstanding_extract_params_t *params);
+
 
 END_C_DECLS
 

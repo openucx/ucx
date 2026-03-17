@@ -27,32 +27,20 @@
 
 ucs_status_t uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep, uct_ep_attr_t *ep_attr)
 {
-    UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
-    uct_ib_mlx5_qp_t *qp = &ep->tx.wq.super;
-    uct_ib_plugin_qp_ctx_t qp_ctx;
-
-    (void)iface;
-
     if (ep_attr->field_mask & (UCT_EP_ATTR_FIELD_LOCAL_SOCKADDR |
                                UCT_EP_ATTR_FIELD_REMOTE_SOCKADDR)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
-    qp_ctx.qp_num = qp->qp_num;
-    switch (qp->type) {
-    case UCT_IB_MLX5_OBJ_TYPE_VERBS:
-        qp_ctx.type     = UCT_IB_PLUGIN_QP_VERBS;
-        qp_ctx.verbs_qp = qp->verbs.qp;
-        break;
-    case UCT_IB_MLX5_OBJ_TYPE_DEVX:
-        qp_ctx.type     = UCT_IB_PLUGIN_QP_DEVX;
-        qp_ctx.devx_obj = qp->devx.obj;
-        break;
-    default:
-        break;
-    }
+    return uct_ib_plugin_ep_query(tl_ep, ep_attr);
+}
 
-    return uct_ib_plugin_query_token(&qp_ctx, ep_attr);
+ucs_status_t
+uct_rc_mlx5_ep_outstanding_extract(
+        uct_ep_h ep,
+        const uct_ep_outstanding_extract_params_t *params)
+{
+    return uct_ib_plugin_outstanding_extract(ep, params);
 }
 
 static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_base_ep_put_short_inline(

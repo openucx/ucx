@@ -6,7 +6,6 @@
 #ifndef UCT_IB_PLUGIN_H_
 #define UCT_IB_PLUGIN_H_
 
-#include <stdint.h>
 #include <ucs/type/status.h>
 #include <ucs/sys/compiler_def.h>
 #include <uct/api/v2/uct_v2.h>
@@ -15,36 +14,53 @@
 extern "C" {
 #endif
 
-typedef enum {
-    UCT_IB_PLUGIN_QP_VERBS,
-    UCT_IB_PLUGIN_QP_DEVX
-} uct_ib_plugin_qp_type_t;
-
-typedef struct {
-    uct_ib_plugin_qp_type_t type;
-    uint32_t                qp_num;
-    struct ibv_qp           *verbs_qp;
-    struct mlx5dv_devx_obj  *devx_obj;
-} uct_ib_plugin_qp_ctx_t;
-
 /**
- * Return UCT iface capability flags contributed by the plugin.
+ * @brief Plugin implementation of @ref uct_iface_query_v2.
  *
- * @return Bitmask of UCT_IFACE_FLAG_* to OR into iface_attr->cap.flags.
- */
-uint64_t uct_ib_plugin_iface_flags(void);
-
-/**
- * Opaque completion token query function.
+ * Same signature pattern as the public API.  The transport forwards the
+ * call directly; the plugin fills fields selected by @c iface_attr->field_mask
+ * (bits from @ref uct_iface_attr_field).
  *
- * @param [in]     qp_ctx   Light-weight QP context.
- * @param [in,out] ep_attr  Endpoint attributes; field_mask selects which
- *                          token fields to fill (tx_token / rx_token).
+ * @param [in]     iface       Interface handle.
+ * @param [in,out] iface_attr  Iface v2 attributes.
  *
  * @return UCS_OK on success, error code otherwise.
  */
-ucs_status_t uct_ib_plugin_query_token(const uct_ib_plugin_qp_ctx_t *qp_ctx,
-                                       uct_ep_attr_t *ep_attr);
+ucs_status_t
+uct_ib_plugin_iface_query(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr);
+
+
+/**
+ * @brief Plugin implementation of @ref uct_ep_query.
+ *
+ * Same signature pattern as the public API.  The transport forwards the
+ * call directly; the plugin fills fields selected by @c ep_attr->field_mask
+ * (bits from @ref uct_ep_attr_field).
+ *
+ * @param [in]     ep       Endpoint handle.
+ * @param [in,out] ep_attr  Endpoint attributes.
+ *
+ * @return UCS_OK on success, error code otherwise.
+ */
+ucs_status_t
+uct_ib_plugin_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr);
+
+
+/**
+ * @brief Plugin implementation of @ref uct_ep_outstanding_extract.
+ *
+ * Same signature pattern as the public API.  The plugin reads the
+ * QP number from @c params->rx_token.
+ *
+ * @param [in] ep      Endpoint handle.
+ * @param [in] params  Extraction parameters.
+ *
+ * @return UCS_OK on success, error code otherwise.
+ */
+ucs_status_t
+uct_ib_plugin_outstanding_extract(
+        uct_ep_h ep,
+        const uct_ep_outstanding_extract_params_t *params);
 
 
 #ifdef __cplusplus
