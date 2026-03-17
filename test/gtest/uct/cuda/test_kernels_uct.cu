@@ -111,12 +111,9 @@ uct_put_kernel(uct_device_ep_h ep,
                                                        va, rva, length, 0,
                                                        UCT_DEVICE_FLAG_NODELAY,
                                                        &comp);
-        if (status == UCS_INPROGRESS) {
-            while ((status = uct_device_ep_check_completion<level>(ep,
-                                                                   &comp)) ==
-                   UCS_INPROGRESS) {
-                uct_device_ep_progress<level>(ep);
-            }
+        while (status == UCS_INPROGRESS) {
+            uct_device_ep_progress<level>(ep);
+            status = uct_device_ep_check_completion<level>(ep, &comp);
         }
         *status_p = status;
     }
