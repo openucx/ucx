@@ -639,8 +639,9 @@ unsigned ucp_proto_rndv_mtype_fc_max_elems(ucp_context_h context,
     if (max_frags == 0) {
         ucs_warn("RNDV_MTYPE_WORKER_MAX_MEM (%zu) is too low for %s "
                  "(frag_size=%zu, frags_per_alloc=%zu), using minimum %zu "
-                 "frags", max_mem, ucs_memory_type_names[frag_mem_type],
-                 frag_size, frags_in_chunk, frags_in_chunk);
+                 "frags",
+                 max_mem, ucs_memory_type_names[frag_mem_type], frag_size,
+                 frags_in_chunk, frags_in_chunk);
         return frags_in_chunk;
     }
 

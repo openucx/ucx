@@ -285,7 +285,7 @@ ucp_proto_rndv_get_mtype_fetch_completion(uct_completion_t *uct_comp)
 static ucs_status_t
 ucp_proto_rndv_get_mtype_fetch_progress(uct_pending_req_t *uct_req)
 {
-    ucp_request_t *req  = ucs_container_of(uct_req, ucp_request_t, send.uct);
+    ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);
     const ucp_proto_rndv_bulk_priv_t *rpriv;
     ucs_status_t status;
 

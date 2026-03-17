@@ -1170,7 +1170,7 @@ ucp_rndv_mpool_get(ucp_worker_h worker, ucs_memory_type_t mem_type,
     mp_params.alignment       = 1;
     mp_params.elems_per_chunk = num_frags;
     mp_params.max_elems       = ucp_proto_rndv_mtype_fc_max_elems(
-                                        worker->context, key.mem_type);
+                                                worker->context, key.mem_type);
     mp_params.ops             = &ucp_frag_mpool_ops;
     mp_params.name            = "ucp_rndv_frags";
     status = ucs_mpool_init(&mp_params, mpool);

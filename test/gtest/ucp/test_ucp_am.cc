@@ -2201,10 +2201,9 @@ protected:
         auto stats_node = e.worker()->stats;
         auto value      = UCS_STATS_GET_COUNTER(stats_node, cntr);
 
-        EXPECT_GE(value, min_value) << "counter "
-                                    << stats_node->cls->counter_names[cntr]
-                                    << " expected >= " << min_value
-                                    << " but got " << value;
+        EXPECT_GE(value, min_value)
+                << "counter " << stats_node->cls->counter_names[cntr]
+                << " expected >= " << min_value << " but got " << value;
     }
 
     void check_pending_queues_empty(const entity &e)
@@ -2212,7 +2211,7 @@ protected:
         ucp_worker_h worker = e.worker();
         for (int i = 0; i < UCP_WORKER_RNDV_FC_OP_LAST; i++) {
             EXPECT_TRUE(ucs_queue_is_empty(&worker->rndv_mtype_fc.pending_q[i]))
-                << "pending_q[" << i << "] should be empty";
+                    << "pending_q[" << i << "] should be empty";
         }
     }
 
@@ -2224,8 +2223,7 @@ protected:
 
     void verify_clean_fc_state()
     {
-        for (auto *ep : { &sender(), &receiver() })
-        {
+        for (auto *ep : {&sender(), &receiver()}) {
             check_pending_queues_empty(*ep);
         }
     }
@@ -2241,11 +2239,12 @@ protected:
         check_stats_ge(sender(), UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY, 1);
         check_stats_ge(receiver(), UCP_WORKER_STAT_RNDV_RTR_MTYPE, 1);
 
-        fc.sender_throttled   = UCS_STATS_GET_COUNTER(sender().worker()->stats,
-                                    UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED);
-        fc.receiver_throttled = UCS_STATS_GET_COUNTER(
-                                    receiver().worker()->stats,
-                                    UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED);
+        fc.sender_throttled =
+                UCS_STATS_GET_COUNTER(sender().worker()->stats,
+                                      UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED);
+        fc.receiver_throttled =
+                UCS_STATS_GET_COUNTER(receiver().worker()->stats,
+                                      UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED);
     }
 };
 
@@ -2257,7 +2256,7 @@ UCS_TEST_P(test_ucp_am_nbx_rndv_mtype_fc, fc_enabled_cap_reached,
     run_fc_test(200, fc);
 
     EXPECT_GT(fc.sender_throttled + fc.receiver_throttled, 0u)
-        << "throttling should have occurred with MAX_MEM=600mb";
+            << "throttling should have occurred with MAX_MEM=600mb";
 
     verify_clean_fc_state();
 }
@@ -2269,8 +2268,10 @@ UCS_TEST_P(test_ucp_am_nbx_rndv_mtype_fc, fc_disabled,
 
     run_fc_test(8, fc);
 
-    EXPECT_EQ(0u, fc.sender_throttled) << "FC disabled - no throttling expected";
-    EXPECT_EQ(0u, fc.receiver_throttled) << "FC disabled - no throttling expected";
+    EXPECT_EQ(0u, fc.sender_throttled)
+            << "FC disabled - no throttling expected";
+    EXPECT_EQ(0u, fc.receiver_throttled)
+            << "FC disabled - no throttling expected";
 }
 
 

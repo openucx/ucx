@@ -348,7 +348,7 @@ ucp_proto_rndv_rtr_mtype_data_received(ucp_request_t *req, int in_buffer)
 
 static ucs_status_t ucp_proto_rndv_rtr_mtype_progress(uct_pending_req_t *self)
 {
-    ucp_request_t *req  = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     const ucp_proto_rndv_rtr_mtype_priv_t *rpriv;
     ucs_status_t status;
 

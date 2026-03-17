@@ -517,7 +517,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_put_mtype_send_func(
 static ucs_status_t
 ucp_proto_rndv_put_mtype_copy_progress(uct_pending_req_t *uct_req)
 {
-    ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);\
+    ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);
     const ucp_proto_rndv_put_priv_t *rpriv;
     ucs_status_t status;
 
