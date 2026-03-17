@@ -35,10 +35,8 @@ ucs_status_t uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep, uct_ep_attr_t *ep_attr)
     return uct_ib_plugin_ep_query(tl_ep, ep_attr);
 }
 
-ucs_status_t
-uct_rc_mlx5_ep_outstanding_extract(
-        uct_ep_h ep,
-        const uct_ep_outstanding_extract_params_t *params)
+ucs_status_t uct_rc_mlx5_ep_outstanding_extract(
+        uct_ep_h ep, const uct_ep_outstanding_extract_params_t *params)
 {
     return uct_ib_plugin_outstanding_extract(ep, params);
 }

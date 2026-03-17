@@ -426,7 +426,7 @@ struct uct_ep_attr {
      * Caller allocates a buffer of @ref uct_iface_attr_v2_t::tx_token_length
      * bytes and sets this pointer; callee fills the buffer with the token.
      */
-    void *tx_token;
+    void                    *tx_token;
 
     /**
      * Opaque RX token buffer.
@@ -434,7 +434,7 @@ struct uct_ep_attr {
      * Caller allocates a buffer of @ref uct_iface_attr_v2_t::rx_token_length
      * bytes and sets this pointer; callee fills the buffer with the token.
      */
-    void *rx_token;
+    void                    *rx_token;
 };
 
 

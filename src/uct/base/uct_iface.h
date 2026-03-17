@@ -309,12 +309,12 @@ typedef ucs_status_t (*uct_ep_get_device_ep_func_t)(
 
 /* Query the v2 attributes of the iface */
 typedef ucs_status_t (*uct_iface_query_v2_func_t)(
-    uct_iface_h iface, uct_iface_attr_v2_t *iface_attr);
+        uct_iface_h iface, uct_iface_attr_v2_t *iface_attr);
 
 
 /* Extract outstanding operations from an endpoint */
 typedef ucs_status_t (*uct_ep_outstanding_extract_func_t)(
-    uct_ep_h ep, const uct_ep_outstanding_extract_params_t *params);
+        uct_ep_h ep, const uct_ep_outstanding_extract_params_t *params);
 
 
 /* Internal operations, not exposed by the external API */

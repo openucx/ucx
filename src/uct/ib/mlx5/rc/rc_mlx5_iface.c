@@ -191,9 +191,8 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
     return UCS_OK;
 }
 
-ucs_status_t
-uct_rc_mlx5_iface_query_v2(uct_iface_h tl_iface,
-                            uct_iface_attr_v2_t *iface_attr)
+ucs_status_t uct_rc_mlx5_iface_query_v2(uct_iface_h tl_iface,
+                                        uct_iface_attr_v2_t *iface_attr)
 {
     return uct_ib_plugin_iface_query(tl_iface, iface_attr);
 }
