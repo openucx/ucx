@@ -59,10 +59,17 @@
 #define UCS_F_NON_NULL __attribute__((nonnull))
 
 /* Always inline the function */
-#if defined(__GNUC__) && !defined(HAVE_OG_OPTIMIZATION)
+#ifdef __GNUC__
 #define UCS_F_ALWAYS_INLINE      inline __attribute__ ((always_inline))
 #else
 #define UCS_F_ALWAYS_INLINE      inline
+#endif
+
+/* Inline the function only when optimization level is high enough */
+#ifdef OPTIMIZE_HIGH
+#define UCS_F_INLINE_OPTIMIZED   UCS_F_ALWAYS_INLINE
+#else
+#define UCS_F_INLINE_OPTIMIZED   inline
 #endif
 
 /* Silence "uninitialized variable" for stupid compilers (gcc 4.1)
