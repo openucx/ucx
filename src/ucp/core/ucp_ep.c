@@ -1429,6 +1429,23 @@ ucp_ep_config_deactivate_worker_ifaces(ucp_worker_h worker,
     }
 }
 
+static void
+ucp_ep_config_reactivate_worker_ifaces(ucp_worker_h worker,
+                                       ucp_worker_cfg_index_t old_cfg_index,
+                                       ucp_worker_cfg_index_t new_cfg_index)
+{
+    if (old_cfg_index == new_cfg_index) {
+        return;
+    }
+
+    if (old_cfg_index != UCP_WORKER_CFG_INDEX_NULL) {
+        ucp_ep_config_deactivate_worker_ifaces(worker, old_cfg_index);
+    }
+
+    ucs_assert(new_cfg_index != UCP_WORKER_CFG_INDEX_NULL);
+    ucp_ep_config_activate_worker_ifaces(worker, new_cfg_index);
+}
+
 static void ucp_ep_discard_lanes_callback(void *request, ucs_status_t status,
                                           void *user_data)
 {
@@ -1442,13 +1459,9 @@ static void ucp_ep_discard_lanes_callback(void *request, ucs_status_t status,
     }
 
     ucp_ep_reqs_purge(arg->ucp_ep, arg->status);
-    if (arg->deactivate_cfg_index != arg->activate_cfg_index) {
-        ucp_ep_config_deactivate_worker_ifaces(arg->ucp_ep->worker,
-                                               arg->deactivate_cfg_index);
-        ucp_ep_config_activate_worker_ifaces(arg->ucp_ep->worker,
-                                             arg->activate_cfg_index);
-    }
-
+    ucp_ep_config_reactivate_worker_ifaces(arg->ucp_ep->worker,
+                                           arg->deactivate_cfg_index,
+                                           arg->activate_cfg_index);
     ucp_ep_release_discard_arg(arg);
 }
 
@@ -4082,12 +4095,8 @@ static void ucp_ep_config_proto_init(ucp_worker_h worker,
 
 void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index)
 {
-    if (ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL) {
-        ucp_ep_config_deactivate_worker_ifaces(ep->worker, ep->cfg_index);
-    }
-
+    ucp_ep_config_reactivate_worker_ifaces(ep->worker, ep->cfg_index, cfg_index);
     ep->cfg_index = cfg_index;
-    ucp_ep_config_activate_worker_ifaces(ep->worker, cfg_index);
     ucp_ep_config_proto_init(ep->worker, cfg_index);
 }
 
@@ -4148,10 +4157,7 @@ ucs_status_t ucp_ep_update_rkey_config(ucp_ep_h ep, ucp_rkey_h rkey)
         return status;
     }
 
-    if (old_cfg_index != ep->cfg_index) {
-        ucp_ep_config_deactivate_worker_ifaces(ep->worker, old_cfg_index);
-        ucp_ep_config_activate_worker_ifaces(ep->worker, ep->cfg_index);
-    }
-
+    ucp_ep_config_reactivate_worker_ifaces(ep->worker, old_cfg_index,
+                                           ep->cfg_index);
     return ucp_rkey_update_config(rkey, ep);
 }
