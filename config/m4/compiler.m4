@@ -82,10 +82,10 @@ AS_IF([test "x$enable_compiler_opt" = "xyes"], [BASE_CFLAGS="-O3 $BASE_CFLAGS"],
 
 
 #
-# Check if -Og flag was supplied
+# Define OPTIMIZE_HIGH for optimization levels -O2 or -O3
 #
-AS_IF([echo " $BASE_CFLAGS $CFLAGS " | grep -q -- ' -Og '], 
-      [AC_DEFINE([HAVE_OG_OPTIMIZATION], 1, [Compiled with -Og])])
+AS_IF([echo " $BASE_CFLAGS $CFLAGS " | grep -qE -- ' -O(2|3) '],
+      [AC_DEFINE([OPTIMIZE_HIGH], 1, [Compiled with high optimization level])])
 
 
 #
