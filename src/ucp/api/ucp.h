@@ -942,6 +942,9 @@ enum ucp_dt_remote_vector_field {
  *
  * Pass as the @a buffer parameter to @ref ucp_put_nbx with
  * @ref ucp_request_param_t::datatype set to @ref ucp_dt_make_vector().
+ *
+ * @note Currently only N->N mapping is supported: both sides must use
+ *       the vector datatype with equal counts and matching lengths.
  */
 typedef struct {
     uint64_t        field_mask; /**< Valid fields, using bits from
@@ -1966,6 +1969,9 @@ typedef struct {
      * @ref UCP_OP_ATTR_FIELD_REMOTE_COUNT), specifies how many elements the
      * remote side has, independent of the local @a count parameter. Used
      * together with @a remote_datatype and @a remote.
+     *
+     * @note Currently must equal the local @a count (only N->N mapping is
+     *       supported).
      */
     size_t remote_count;
 } ucp_request_param_t;
