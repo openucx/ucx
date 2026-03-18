@@ -317,6 +317,7 @@ typedef struct uct_iface_internal_ops {
     uct_iface_is_reachable_v2_func_t iface_is_reachable_v2;
     uct_ep_is_connected_func_t       ep_is_connected;
     uct_ep_get_device_ep_func_t      ep_get_device_ep;
+    uct_ep_put_vector_zcopy_func_t   ep_put_vector_zcopy;
 } uct_iface_internal_ops_t;
 
 

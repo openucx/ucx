@@ -1076,3 +1076,20 @@ ucs_status_t uct_ep_get_device_ep(uct_ep_h ep, uct_device_ep_h *device_ep_p)
 
     return iface->internal_ops->ep_get_device_ep(ep, device_ep_p);
 }
+
+ucs_status_t
+uct_ep_put_vector_zcopy(uct_ep_h ep,
+                        void * const *buffers,
+                        const uint64_t *remote_addrs,
+                        const size_t *lengths,
+                        uct_mem_h const *memhs,
+                        uct_rkey_t const *rkeys,
+                        size_t count,
+                        uct_completion_t *comp)
+{
+    const uct_base_iface_t *iface = ucs_derived_of(ep->iface, uct_base_iface_t);
+
+    return iface->internal_ops->ep_put_vector_zcopy(ep, buffers, remote_addrs,
+                                                    lengths, memhs, rkeys,
+                                                    count, comp);
+}

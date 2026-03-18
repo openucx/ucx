@@ -307,7 +307,6 @@ typedef struct uct_iface_ops {
     uct_ep_put_short_func_t             ep_put_short;
     uct_ep_put_bcopy_func_t             ep_put_bcopy;
     uct_ep_put_zcopy_func_t             ep_put_zcopy;
-    uct_ep_put_vector_zcopy_func_t      ep_put_vector_zcopy;
 
     /* endpoint - get */
     uct_ep_get_short_func_t             ep_get_short;
