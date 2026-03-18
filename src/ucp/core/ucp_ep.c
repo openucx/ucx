@@ -1433,20 +1433,20 @@ static void ucp_ep_discard_lanes_callback(void *request, ucs_status_t status,
                                           void *user_data)
 {
     ucp_ep_discard_lanes_arg_t *arg = (ucp_ep_discard_lanes_arg_t*)user_data;
-    ucp_ep_h ep;
 
     ucs_assert(arg != NULL);
     ucs_assert(arg->discard_counter > 0);
 
-    if (--arg->discard_counter == 0) {
-        ep = arg->ucp_ep;
-        ucp_ep_reqs_purge(ep, arg->status);
-        if (arg->deactivate_cfg_index != arg->activate_cfg_index) {
-            ucp_ep_config_deactivate_worker_ifaces(ep->worker,
-                                                    arg->deactivate_cfg_index);
-            ucp_ep_config_activate_worker_ifaces(ep->worker,
-                                                    arg->activate_cfg_index);
-        }
+    if (--arg->discard_counter > 0) {
+        return;
+    }
+
+    ucp_ep_reqs_purge(arg->ucp_ep, arg->status);
+    if (arg->deactivate_cfg_index != arg->activate_cfg_index) {
+        ucp_ep_config_deactivate_worker_ifaces(arg->ucp_ep->worker,
+                                               arg->deactivate_cfg_index);
+        ucp_ep_config_activate_worker_ifaces(arg->ucp_ep->worker,
+                                             arg->activate_cfg_index);
     }
 
     ucp_ep_release_discard_arg(arg);
