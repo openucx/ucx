@@ -1291,9 +1291,9 @@ ucs_status_t uct_md_mem_elem_pack(uct_md_h md, uct_mem_h memh, uct_rkey_t rkey,
  * The enumeration allows specifying which fields in @ref uct_iface_attr_v2_t
  * are present, for backward compatibility support.
  */
- enum uct_iface_attr_field {
+enum uct_iface_attr_field {
     /** Enables @ref uct_iface_attr_v2_t::flags (output).
-     *  Returns plugin-contributed capability flags
+     *  Returns plugin-contributed capability flags.
      */
     UCT_IFACE_ATTR_FIELD_FLAGS           = UCS_BIT(0),
 
