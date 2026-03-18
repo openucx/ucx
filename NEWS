@@ -16,7 +16,6 @@
 #### RDMA CORE (IB, ROCE, etc.)
  * Added 'auto' option for UCX_IB_MLX5_DEVX_OBJECTS which disables DevX when ODP is available (for Grace)
  * Prioritize routes with longer subnet masks for improved reachability check accuracy
- * Cache RoCE network interface index per sys_dev to avoid repeated lookups
 #### Documentation
  * Clarified that user buffer can be modified after calling ucp_atomic_op_nbx
 ### Bugfixes:
@@ -30,13 +29,14 @@
  * Fixed IB memory handle flags enum order
  * Disabled indirect atomic registration for Direct NIC
  * Fixed stale destination endpoint ID and acks from before connection reset in UD transport
+ * Fix RoCE reachable route check when node_guuid is not unique among HCAs
 #### CUDA
  * Fixed CUDA context handling for system device during rkey unpack
  * Fixed HSA memory type check for newer ROCm releases
 #### UCS
  * Fixed rcache locking for GDR copy
 #### Packaging
- * Fixed Debian package dependency cleanup
+ * Fix libnvidia-compute removal from ucx-cuda debian package dependencies, breaking existing installation
  * Obsoleted KNEM sub-package
 
 ## 1.20.0 (December 2, 2025)
