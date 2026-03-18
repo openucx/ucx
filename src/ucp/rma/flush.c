@@ -380,7 +380,7 @@ ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
     return UCS_OK;
 }
 
-static void ucp_ep_flush_request_rewind(ucp_request_t *req)
+static void ucp_ep_flush_request_reset(ucp_request_t *req)
 {
     ucp_lane_map_t lanes = ucp_ep_get_alive_lanes(req->send.ep);
 
@@ -395,18 +395,14 @@ static void ucp_ep_flush_request_rewind(ucp_request_t *req)
     req->send.flush.sw_done         = 0;
 }
 
-static void ucp_ep_flush_restart(ucp_request_t *req)
-{
-    ucp_trace_req(req, "flush restart");
-
-    ucp_ep_flush_request_rewind(req);
-    ucp_ep_flush_progress(req);
-    ucp_flush_check_completion(req);
-}
-
 static unsigned ucp_ep_flush_failover_oneshot_cb(void *arg)
 {
-    ucp_ep_flush_restart(arg);
+    ucp_request_t *req = arg;
+
+    ucp_trace_req(req, "flush restart");
+    ucp_ep_flush_request_reset(req);
+    ucp_ep_flush_progress(req);
+    ucp_flush_check_completion(req);
     return 1;
 }
 
@@ -505,7 +501,7 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
      * to start flush on.
      */
     req->send.ep = ep;
-    ucp_ep_flush_request_rewind(req);
+    ucp_ep_flush_request_reset(req);
 
     req->flags                     = req_flags;
     req->send.flushed_cb           = flushed_cb;
