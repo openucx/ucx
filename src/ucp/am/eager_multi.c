@@ -203,7 +203,8 @@ static void ucp_am_eager_multi_zcopy_proto_probe_common(
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE |
-                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
+                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING |
+                               UCP_PROTO_COMMON_INIT_FLAG_FAILOVER,
         .super.exclude_map   = 0,
         .super.reg_mem_info  = ucp_proto_common_select_param_mem_info(
                                                      init_params->select_param),
@@ -321,9 +322,11 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_am_eager_multi_zcopy_send_func(
 static ucs_status_t ucp_am_eager_multi_zcopy_init(ucp_request_t *req)
 {
     ucp_am_eager_zcopy_pack_user_header(req);
-    ucp_proto_msg_multi_request_init(req);
+    if (req->send.msg_proto.am.internal_flags & UCP_REQUEST_AM_FLAG_RESET_DONE) {
+        return UCS_OK;
+    }
 
-    return UCS_OK;
+    return ucp_proto_msg_multi_request_init(req);
 }
 
 static ucs_status_t

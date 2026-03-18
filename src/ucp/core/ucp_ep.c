@@ -1608,12 +1608,23 @@ ucp_ep_reconfig_internal(ucp_ep_h ep, ucp_lane_map_t failed_lanes)
     for (lane = 0; lane < cfg_key.num_lanes; lane++) {
         if (failed_lanes & UCS_BIT(lane)) {
             cfg_key.lanes[lane].lane_types |= UCS_BIT(UCP_LANE_TYPE_FAILED);
+            if (cfg_key.am_lane == lane) {
+                cfg_key.am_lane = UCP_NULL_LANE;
+            }
         }
 
         wiface = ucp_worker_iface(worker, cfg_key.lanes[lane].rsc_index);
         port_speed_changed |= (cfg_key.lanes[lane].port_speed !=
                                wiface->port_speed);
         cfg_key.lanes[lane].port_speed = wiface->port_speed;
+    }
+
+    for (lane = 0; lane < cfg_key.num_lanes; lane++) {
+        if ((cfg_key.lanes[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_AM_BW)) &&
+            !(cfg_key.lanes[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_FAILED))) {
+            cfg_key.am_lane = lane;
+            break;
+        }
     }
 
     if (port_speed_changed) {
@@ -1631,6 +1642,8 @@ ucp_ep_reconfig_internal(ucp_ep_h ep, ucp_lane_map_t failed_lanes)
     if (status != UCS_OK) {
         return status;
     }
+
+    ep->am_lane = cfg_key.am_lane;
     ucp_ep_config_activate_worker_ifaces(worker, ep->cfg_index);
 
 out:

@@ -1901,31 +1901,21 @@ const ucp_request_send_proto_t ucp_am_reply_proto = {
 
 ucs_status_t ucp_am_proto_request_zcopy_reset(ucp_request_t *request)
 {
-    ucs_assert(request->send.msg_proto.am.header.reg_desc != NULL);
     /* Zcopy pack function releases header if it's stored in mpool buffer
      * and set copied flag to zero. Zcopy pack function is always called
      * before reset function.
+     * TODO: check the statement above, in case of failover request should
+     *       be restarted after its (error) completion but the completion
+     *       releases header buffer.
      */
     ucs_assert(!(request->flags & UCP_REQUEST_FLAG_USER_HEADER_COPIED));
+    ucs_assert(request->send.msg_proto.am.header.reg_desc == NULL);
 
-    /* If user header is not guaranteed to be valid,
-     * use mpool buffer for storing the user header.
-     */
-    if ((request->send.msg_proto.am.flags & UCP_AM_SEND_FLAG_COPY_HEADER) &&
-        (request->send.msg_proto.am.header.length != 0)) {
-        request->send.msg_proto.am.header.ptr = ucs_mpool_set_get_inline(
-                &request->send.ep->worker->am_mps,
-                request->send.msg_proto.am.header.length);
-        memcpy(request->send.msg_proto.am.header.ptr,
-               request->send.msg_proto.am.header.reg_desc + 1,
-               request->send.msg_proto.am.header.length);
-        request->flags |= UCP_REQUEST_FLAG_USER_HEADER_COPIED;
-    }
+    request->send.msg_proto.am.internal_flags &=
+            ~UCP_REQUEST_AM_FLAG_HEADER_SENT;
 
-    ucs_mpool_put_inline(request->send.msg_proto.am.header.reg_desc);
-    request->send.msg_proto.am.header.reg_desc = NULL;
-
-    return ucp_proto_request_zcopy_reset(request);
+    request->send.msg_proto.am.internal_flags |= UCP_REQUEST_AM_FLAG_RESET_DONE;
+    return ucp_proto_offload_zcopy_reset(request);
 }
 
 void ucp_proto_am_request_bcopy_abort(ucp_request_t *req, ucs_status_t status)

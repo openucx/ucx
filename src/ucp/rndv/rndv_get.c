@@ -126,8 +126,9 @@ ucp_proto_rndv_get_zcopy_probe(const ucp_proto_init_params_t *init_params)
     ucp_proto_rndv_get_common_probe(
             init_params, UCS_BIT(UCP_RNDV_MODE_GET_ZCOPY), SIZE_MAX,
             UCT_EP_OP_LAST,
-            UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
-            UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
+            UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY   |
+            UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING |
+            UCP_PROTO_COMMON_INIT_FLAG_FAILOVER,
             0, 0, &reg_mem_info);
 }
 
