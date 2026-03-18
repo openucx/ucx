@@ -11,7 +11,35 @@
 ### Features:
 ### Bugfixes:
 
-## 1.20.0
+## 1.20.1-rc1 (March 18, 2026)
+### Features:
+#### RDMA CORE (IB, ROCE, etc.)
+ * Added 'auto' option for UCX_IB_MLX5_DEVX_OBJECTS which disables DevX when ODP is available (for Grace)
+ * Prioritize routes with longer subnet masks for improved reachability check accuracy
+ * Cache RoCE network interface index per sys_dev to avoid repeated lookups
+#### Documentation
+ * Clarified that user buffer can be modified after calling ucp_atomic_op_nbx
+### Bugfixes:
+#### UCP
+ * Increased TLS info buffer size in transport selection to prevent potential truncation
+ * Fixed incorrect warning about valid environment variable names
+ * Return an error when there is no modifiable configuration
+#### RDMA CORE (IB, ROCE, etc.)
+ * Fixed DevX objects flag handling
+ * Fixed device memory allocation alignment in MLX5 DevX
+ * Fixed IB memory handle flags enum order
+ * Disabled indirect atomic registration for Direct NIC
+ * Fixed stale destination endpoint ID and acks from before connection reset in UD transport
+#### CUDA
+ * Fixed CUDA context handling for system device during rkey unpack
+ * Fixed HSA memory type check for newer ROCm releases
+#### UCS
+ * Fixed rcache locking for GDR copy
+#### Packaging
+ * Fixed Debian package dependency cleanup
+ * Obsoleted KNEM sub-package
+
+## 1.20.0 (December 2, 2025)
 ### Features:
 #### UCP
  * Added new GPU device API for direct GPU-to-GPU communication
