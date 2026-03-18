@@ -269,10 +269,10 @@ static UCS_F_ALWAYS_INLINE ssize_t uct_mm_ep_am_common_send(
         uct_pack_callback_t pack_cb, void *arg, const uct_iov_t *iov,
         size_t iovcnt, unsigned flags)
 {
-    uint8_t elem_flags;
     uct_mm_fifo_element_t *elem;
     ucs_status_t status;
     void *base_address;
+    uint8_t elem_flags;
     uint64_t head;
     ucs_iov_iter_t iov_iter;
     void *desc_data;
