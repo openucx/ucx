@@ -16,12 +16,11 @@
 /* Stub iface with internal_ops */
 struct uct_iface_internal_ops;
 
+
 typedef struct ucp_stub_iface {
     uct_iface_t                    super;
     struct uct_iface_internal_ops *internal_ops;
 } ucp_stub_iface_t;
-
-extern struct uct_iface_internal_ops ucp_stub_internal_ops;
 
 
 /**
