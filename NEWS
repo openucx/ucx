@@ -22,7 +22,7 @@
 #### UCP
  * Increased TLS info buffer size in transport selection to prevent potential truncation
  * Fixed incorrect warning about valid environment variable names
- * Return an error when there is no modifiable configuration
+ * Fixed ucp_config_modify not reporting an error when no matching modifiable configuration exists.
 #### RDMA CORE (IB, ROCE, etc.)
  * Fixed DevX objects flag handling
  * Fixed device memory allocation alignment in MLX5 DevX
@@ -32,6 +32,7 @@
  * Fix RoCE reachable route check when node_guuid is not unique among HCAs
 #### CUDA
  * Fixed CUDA context handling for system device during rkey unpack
+#### ROCM
  * Fixed HSA memory type check for newer ROCm releases
 #### UCS
  * Fixed rcache locking for GDR copy
