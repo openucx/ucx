@@ -320,13 +320,6 @@ typedef struct uct_iface_internal_ops {
 } uct_iface_internal_ops_t;
 
 
-/* Stub interface with internal_ops support */
-typedef struct uct_stub_iface {
-    uct_iface_t              super;
-    uct_iface_internal_ops_t *internal_ops;
-} uct_stub_iface_t;
-
-
 /**
  * Base structure of all interfaces.
  * Includes the AM table which we don't want to expose.
@@ -1029,9 +1022,6 @@ ucs_log_level_t uct_base_iface_failure_log_level(uct_base_iface_t *iface,
         return UCS_LOG_LEVEL_ERROR;
     }
 }
-
-
-void uct_stub_iface_init(uct_stub_iface_t *iface, const uct_iface_ops_t *ops);
 
 
 ucs_status_t uct_base_ep_am_short_iov(uct_ep_h ep, uint8_t id, const uct_iov_t *iov,

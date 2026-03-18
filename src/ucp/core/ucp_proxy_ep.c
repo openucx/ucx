@@ -11,6 +11,7 @@
 #include "ucp_proxy_ep.h"
 #include "ucp_ep.inl"
 
+#include <uct/base/uct_iface.h>
 #include <ucs/debug/log.h>
 
 
@@ -108,6 +109,26 @@ UCP_PROXY_EP_DEFINE_OP(ucs_status_t, get_address, uct_ep_addr_t*)
 UCP_PROXY_EP_DEFINE_OP(ucs_status_t, connect_to_ep, const uct_device_addr_t*,
                        const uct_ep_addr_t*)
 
+uct_iface_internal_ops_t ucp_stub_internal_ops = {
+    .iface_estimate_perf   = (uct_iface_estimate_perf_func_t)ucs_empty_function_return_unsupported,
+    .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+    .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+    .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
+    .ep_connect_to_ep_v2   = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
+    .iface_is_reachable_v2 = (uct_iface_is_reachable_v2_func_t)ucs_empty_function_return_zero,
+    .ep_is_connected       = (uct_ep_is_connected_func_t)ucs_empty_function_return_zero,
+    .ep_get_device_ep      = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported,
+};
+
+static void ucp_stub_iface_init(ucp_stub_iface_t *iface, const uct_iface_ops_t *ops)
+{
+    UCS_STATIC_ASSERT(ucs_offsetof(ucp_stub_iface_t, internal_ops) ==
+                      ucs_offsetof(uct_base_iface_t, internal_ops));
+
+    iface->super.ops    = *ops;
+    iface->internal_ops = &ucp_stub_internal_ops;
+}
+
 static ucs_status_t ucp_proxy_ep_fatal(uct_iface_h iface, ...)
 {
     ucs_bug("unsupported function on proxy endpoint");
@@ -120,7 +141,7 @@ UCS_CLASS_INIT_FUNC(ucp_proxy_ep_t, const uct_iface_ops_t *ops, ucp_ep_h ucp_ep,
     #define UCP_PROXY_EP_SET_OP(_name) \
         self->iface.super.ops._name = (ops->_name != NULL) ? ops->_name : ucp_proxy_##_name
 
-    uct_stub_iface_init(&self->iface, ops);
+    ucp_stub_iface_init(&self->iface, ops);
     self->super.iface = &self->iface.super;
     self->ucp_ep      = ucp_ep;
     self->uct_ep      = uct_ep;
