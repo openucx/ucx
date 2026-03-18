@@ -347,25 +347,6 @@ unsigned ucs_mpool_num_elems_per_chunk(ucs_mpool_t *mp,
                                        size_t chunk_size);
 
 
-/**
- * Return pointer to the elem_index-th object (user payload) in a chunk.
- *
- * @param mp               Memory pool structure.
- * @param chunk            Pointer to memory pool chunk.
- * @param elem_index       Element index (0 .. chunk->num_elems - 1).
- * @return Pointer to the object (user payload) for that element.
- */
-void *ucs_mpool_chunk_elem(ucs_mpool_t *mp, ucs_mpool_chunk_t *chunk,
-                           unsigned elem_index);
-
-/**
- * Return pointer to the elements in a chunk.
- *
- * @param mp               Memory pool structure.
- * @param chunk            Pointer to memory pool chunk.
- * @return Pointer to the elements in the chunk.
- */
-void *ucs_mpool_chunk_elems(ucs_mpool_t *mp, ucs_mpool_chunk_t *chunk);
 
 
 /**

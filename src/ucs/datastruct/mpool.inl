@@ -12,7 +12,38 @@
 #include <ucs/config/global_opts.h>
 #include <ucs/sys/checker.h>
 #include <ucs/sys/sys.h>
+#include <ucs/sys/ptr_arith.h>
 
+
+static inline size_t ucs_mpool_elem_total_size(ucs_mpool_data_t *data)
+{
+    return ucs_align_up_pow2(data->elem_size, data->alignment);
+}
+
+static inline void *ucs_mpool_elem_obj(ucs_mpool_elem_t *elem)
+{
+    return elem + 1;
+}
+
+static inline ucs_mpool_elem_t *ucs_mpool_chunk_elem(ucs_mpool_t *mp,
+                                                     ucs_mpool_chunk_t *chunk,
+                                                     unsigned elem_index)
+{
+    return UCS_PTR_BYTE_OFFSET(chunk->elems,
+                               elem_index *
+                                       ucs_mpool_elem_total_size(mp->data));
+}
+
+static inline void *
+ucs_mpool_chunk_elems(ucs_mpool_t *mp, ucs_mpool_chunk_t *chunk)
+{
+    ucs_mpool_data_t *data = mp->data;
+    size_t chunk_padding;
+
+    chunk_padding = ucs_padding((uintptr_t)(chunk + 1) + data->align_offset,
+                                data->alignment);
+    return UCS_PTR_BYTE_OFFSET(chunk + 1, chunk_padding);
+}
 
 static inline void *ucs_mpool_get_inline(ucs_mpool_t *mp)
 {
@@ -30,7 +61,7 @@ static inline void *ucs_mpool_get_inline(ucs_mpool_t *mp)
     elem->mpool = mp;
     VALGRIND_MAKE_MEM_NOACCESS(elem, sizeof *elem);
 
-    obj = elem + 1;
+    obj = ucs_mpool_elem_obj(elem);
     VALGRIND_MEMPOOL_ALLOC(mp, obj, mp->data->elem_size - sizeof(ucs_mpool_elem_t));
     return obj;
 }
