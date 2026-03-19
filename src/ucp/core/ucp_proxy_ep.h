@@ -13,6 +13,16 @@
 #include <ucs/type/class.h>
 
 
+/* Stub iface with internal_ops */
+struct uct_iface_internal_ops;
+
+
+typedef struct ucp_stub_iface {
+    uct_iface_t                    super;
+    struct uct_iface_internal_ops *internal_ops;
+} ucp_stub_iface_t;
+
+
 /**
  * Generic proxy endpoint, used to change behavior of a specific transport lane
  * without adding data-path checks when not needed.
@@ -24,12 +34,12 @@
  * TODO make sure it works with err handling and print_ucp_info
  */
 typedef struct ucp_proxy_ep {
-    uct_ep_t        super;     /**< Derived from uct_ep */
-    uct_iface_t     iface;     /**< Embedded stub interface */
-    ucp_ep_h        ucp_ep;    /**< Pointer to UCP endpoint */
-    uct_ep_h        uct_ep;    /**< Underlying transport endpoint */
-    int             is_owner;  /**< Is uct_ep owned by this proxy ep */
-    ucp_rsc_index_t rsc_index; /**< Resource index of underlying transport endpoint */
+    uct_ep_t         super;     /**< Derived from uct_ep */
+    ucp_stub_iface_t iface;     /**< Stub iface for ops dispatch */
+    ucp_ep_h         ucp_ep;    /**< Pointer to UCP endpoint */
+    uct_ep_h         uct_ep;    /**< Underlying transport endpoint */
+    int              is_owner;  /**< Is uct_ep owned by this proxy ep */
+    ucp_rsc_index_t  rsc_index; /**< Resource index of underlying transport endpoint */
 } ucp_proxy_ep_t;
 
 
