@@ -8,9 +8,9 @@
 #  include "config.h"
 #endif
 
-#include <ucs/sys/compiler_def.h>
 #include <ucs/time/time.h>
 #include <ucs/debug/log.h>
+#include <ucs/sys/compiler_def.h>
 
 
 double ucs_get_cpu_clocks_per_sec()
