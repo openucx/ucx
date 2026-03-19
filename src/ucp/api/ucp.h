@@ -349,7 +349,10 @@ typedef enum {
  */
 typedef enum ucp_ep_perf_param_field {
     /** Enables @ref ucp_ep_evaluate_perf_param_t::message_size */
-    UCP_EP_PERF_PARAM_FIELD_MESSAGE_SIZE       = UCS_BIT(0)
+    UCP_EP_PERF_PARAM_FIELD_MESSAGE_SIZE       = UCS_BIT(0),
+    UCP_EP_PERF_PARAM_FIELD_RKEY               = UCS_BIT(1),
+    UCP_EP_PERF_PARAM_FIELD_MEM_H              = UCS_BIT(2),
+    UCP_EP_PERF_PARAM_FIELD_OP_TYPE            = UCS_BIT(3)
 } ucp_ep_perf_param_field_t;
 
 
@@ -1437,6 +1440,21 @@ typedef struct ucp_worker_address_attr {
     uint64_t              worker_uid;
 } ucp_worker_address_attr_t;
 
+/**
+ * @ingroup UCP_ENDPOINT
+ * @enum ucp_op_type_t
+ * @brief UCP operation types.
+ *
+ * This enum defines the types of operations for which cost estimation
+ * is available.
+ */
+typedef enum ucp_op_type {
+    /** Operation corresponds to @ref ucp_put_nbx */
+    UCP_OP_PUT = 0,
+
+    /** Operation corresponds to @ref ucp_get_nbx */
+    UCP_OP_GET = 1
+} ucp_op_type_t;
 
 /**
  * @ingroup UCP_ENDPOINT
@@ -1444,6 +1462,8 @@ typedef struct ucp_worker_address_attr {
  *
  * The structure defines the attributes which characterize
  * the request for performance estimation of a particular endpoint.
+ *
+ * Fields must be initialized by the caller.
  */
 typedef struct {
     /**
@@ -1456,9 +1476,24 @@ typedef struct {
 
     /**
      * Message size to use for determining performance.
-     * This field must be initialized by the caller.
+     * This field is mandatory.
      */
     size_t            message_size;
+
+    /**
+     * Rkey of the remote memory region to be used for the operation.
+     */
+    ucp_rkey_h        rkey;
+
+    /**
+     * Memory handle of the local memory region to be used for the operation.
+     */
+    ucp_mem_h         mem_h;
+
+    /**
+     * Type of the operation to be performed.
+     */
+    ucp_op_type_t op_type;
 } ucp_ep_evaluate_perf_param_t;
 
 
