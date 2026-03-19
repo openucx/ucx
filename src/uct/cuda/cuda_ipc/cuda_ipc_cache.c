@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -19,6 +19,7 @@
 #include <ucs/datastruct/khash.h>
 #include <uct/cuda/base/cuda_ctx.inl>
 
+#include <stdlib.h>
 
 typedef struct uct_cuda_ipc_cache_hash_key {
     pid_t        pid;
@@ -250,7 +251,6 @@ static void uct_cuda_ipc_cache_evict_lru(uct_cuda_ipc_cache_t *cache)
 
 static void uct_cuda_ipc_cache_purge(uct_cuda_ipc_cache_t *cache)
 {
-    int active = uct_cuda_ctx_is_active();
     uct_cuda_ipc_cache_region_t *region, *tmp;
     ucs_list_link_t region_list;
 
@@ -258,9 +258,7 @@ static void uct_cuda_ipc_cache_purge(uct_cuda_ipc_cache_t *cache)
     ucs_pgtable_purge(&cache->pgtable, uct_cuda_ipc_cache_region_collect_callback,
                       &region_list);
     ucs_list_for_each_safe(region, tmp, &region_list, list) {
-        if (active) {
-            uct_cuda_ipc_close_memhandle(region);
-        }
+        uct_cuda_ipc_close_memhandle(region);
         ucs_free(region);
     }
 
@@ -831,23 +829,8 @@ void uct_cuda_ipc_cache_set_global_limits(unsigned long max_regions,
                                                     max_size);
 }
 
-UCS_STATIC_INIT {
-    ucs_recursive_spinlock_init(&uct_cuda_ipc_remote_cache.lock, 0);
-    kh_init_inplace(cuda_ipc_rem_cache, &uct_cuda_ipc_remote_cache.hash);
-    uct_cuda_ipc_remote_cache.max_regions = ULONG_MAX;
-    uct_cuda_ipc_remote_cache.max_size    = SIZE_MAX;
-
-#if HAVE_CUDA_FABRIC
-    pthread_rwlock_init(&uct_cuda_ipc_rem_mpool_cache.lock, NULL);
-    /* Assumption: If import process succeeds, then the two nodes are in the
-     * same domain. Within a domain, fabric handles are expected to be unique.
-     * For this reason, there is no need to maintain a hashmap per peer OS as
-     * key collisions are not expected to occur. */
-    kh_init_inplace(cuda_ipc_rem_mpool_cache, &uct_cuda_ipc_rem_mpool_cache.hash);
-#endif
-}
-
-UCS_STATIC_CLEANUP {
+static void uct_cuda_ipc_cleanup_atexit(void)
+{
     uct_cuda_ipc_cache_t *rem_cache;
 
 #if HAVE_CUDA_FABRIC
@@ -866,4 +849,26 @@ UCS_STATIC_CLEANUP {
     })
     kh_destroy_inplace(cuda_ipc_rem_cache, &uct_cuda_ipc_remote_cache.hash);
     ucs_recursive_spinlock_destroy(&uct_cuda_ipc_remote_cache.lock);
+}
+
+UCS_STATIC_INIT
+{
+    ucs_recursive_spinlock_init(&uct_cuda_ipc_remote_cache.lock, 0);
+    kh_init_inplace(cuda_ipc_rem_cache, &uct_cuda_ipc_remote_cache.hash);
+    uct_cuda_ipc_remote_cache.max_regions = ULONG_MAX;
+    uct_cuda_ipc_remote_cache.max_size    = SIZE_MAX;
+
+#if HAVE_CUDA_FABRIC
+    pthread_rwlock_init(&uct_cuda_ipc_rem_mpool_cache.lock, NULL);
+    /* Assumption: If import process succeeds, then the two nodes are in the
+     * same domain. Within a domain, fabric handles are expected to be unique.
+     * For this reason, there is no need to maintain a hashmap per peer OS as
+     * key collisions are not expected to occur. */
+    kh_init_inplace(cuda_ipc_rem_mpool_cache,
+                    &uct_cuda_ipc_rem_mpool_cache.hash);
+#endif
+
+    /* Cleanup at process exit while CUDA driver is still alive;
+     * UCS_STATIC_CLEANUP may run after CUDA is deinitialized. */
+    atexit(uct_cuda_ipc_cleanup_atexit);
 }
