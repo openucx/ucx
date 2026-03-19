@@ -29,9 +29,8 @@ static inline ucs_mpool_elem_t *ucs_mpool_chunk_elem(ucs_mpool_t *mp,
                                                      ucs_mpool_chunk_t *chunk,
                                                      unsigned elem_index)
 {
-    return UCS_PTR_BYTE_OFFSET(chunk->elems,
-                               elem_index *
-                                       ucs_mpool_elem_total_size(mp->data));
+    return (ucs_mpool_elem_t*)UCS_PTR_BYTE_OFFSET(
+            chunk->elems, elem_index * ucs_mpool_elem_total_size(mp->data));
 }
 
 static inline void *
