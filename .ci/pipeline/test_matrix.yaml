@@ -5,34 +5,61 @@
 job: ucx-test
 
 failFast: false
-timeout_minutes: 90
+timeout_minutes: 240
 
 kubernetes:
   cloud: il-ipp-blossom-prod-nbu-swx-ucx
   namespace: nbu-swx-ucx
-  limits: "{memory: 16Gi, cpu: 16000m}"
-  requests: "{memory: 16Gi, cpu: 16000m}"
+  limits: "{memory: 16Gi, cpu: 10000m}"
+  requests: "{memory: 16Gi, cpu: 10000m}"
 
 runs_on_dockers:
-  - { name: "ubuntu2404-doca2.9", url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0", arch: x86_64 }
+  # HCA IB
+  - {
+      name: "hca-ib",
+      url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0",
+      arch: x86_64,
+      tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
+      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "cx8-ib-network" }],
+      limits: "{memory: 16Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1}",
+      requests: "{memory: 16Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1}",
+      caps_add: "[ IPC_LOCK, NET_RAW ]"
+    }
 
 matrix:
   axes:
     arch: [x86_64]
     worker: [0, 1, 2, 3]
 
-taskName: '${arch}/${name}/w${axis_index}'
+taskName: '${name}/${arch}/w${worker}'
 
 env:
   RUN_TESTS: "yes"
   TEST_PERF: "0"
-  ASAN_CHECK: "no"
   VALGRIND_CHECK: "no"
   nworkers: "4"
+  STEP_TIMEOUT_MINUTES: "120"
 
 steps:
   - name: Test
     parallel: false
-    timeout: 360
+    timeout: "${STEP_TIMEOUT_MINUTES}"
     run: |
-      ./contrib/test_jenkins.sh
+      # Limit tests to 2 CPUs to prevent max_threads exhaustion in k8s (similar to Azure CPU affinity)
+      allowed_cpus=$(awk '/^Cpus_allowed_list:/ {print $2}' /proc/self/status)
+      first_chunk=${allowed_cpus%%,*}
+      # In k8s, pin to up to 2 CPUs so max_threads stays bounded and avoids resource exhaustion.
+      if [[ "${first_chunk}" == *-* ]]; then
+        start_cpu=${first_chunk%-*}
+        end_cpu=${first_chunk#*-}
+        if [ "${end_cpu}" -gt "${start_cpu}" ]; then
+          cpu_set="${start_cpu}-$((start_cpu + 1))"
+        else
+          cpu_set="${start_cpu}"
+        fi
+      else
+        cpu_set="${first_chunk}"
+      fi
+
+      echo "Running test_jenkins.sh with CPU affinity: ${cpu_set} (allowed: ${allowed_cpus})"
+      taskset -c "${cpu_set}" ./contrib/test_jenkins.sh
