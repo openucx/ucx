@@ -1611,6 +1611,10 @@ static void ucp_worker_close_cms(ucp_worker_h worker)
     const ucp_rsc_index_t num_cms = ucp_worker_num_cm_cmpts(worker);
     ucp_rsc_index_t i;
 
+    if (worker->cms == NULL) {
+        return;
+    }
+
     for (i = 0; (i < num_cms) && (worker->cms[i].cm != NULL); ++i) {
         uct_cm_close(worker->cms[i].cm);
     }
@@ -1619,7 +1623,7 @@ static void ucp_worker_close_cms(ucp_worker_h worker)
     worker->cms = NULL;
 }
 
-static ucs_status_t ucp_worker_add_resource_cms(ucp_worker_h worker)
+ucs_status_t ucp_worker_add_resource_cms(ucp_worker_h worker)
 {
     ucp_context_h   context = worker->context;
     uct_cm_config_t *cm_config;
@@ -1628,18 +1632,23 @@ static ucs_status_t ucp_worker_add_resource_cms(ucp_worker_h worker)
     ucs_status_t    status;
 
     if (ucp_worker_num_cm_cmpts(worker) == 0) {
-        worker->cms = NULL;
-        return UCS_OK;
+        status = UCS_OK;
+        goto out;
     }
 
     UCS_ASYNC_BLOCK(&worker->async);
+
+    if (worker->cms != NULL) {
+        status = UCS_OK;
+        goto out_unlock;
+    }
 
     worker->cms = ucs_calloc(ucp_worker_num_cm_cmpts(worker),
                              sizeof(*worker->cms), "ucp cms");
     if (worker->cms == NULL) {
         ucs_error("can't allocate CMs array");
         status = UCS_ERR_NO_MEMORY;
-        goto out;
+        goto out_unlock;
     }
 
     for (i = 0, cm_cmpt_index = 0; cm_cmpt_index < context->config.num_cm_cmpts;
@@ -1649,9 +1658,9 @@ static ucs_status_t ucp_worker_add_resource_cms(ucp_worker_h worker)
 
         status = uct_cm_config_read(cmpt, NULL, NULL, &cm_config);
         if (status != UCS_OK) {
-            ucs_error("failed to read cm configuration on component %s",
-                      context->tl_cmpts[cmpt_index].attr.name);
-            goto err_free_cms;
+            ucs_warn("failed to read cm configuration on component %s",
+                     context->tl_cmpts[cmpt_index].attr.name);
+            continue;
         }
 
         ucp_apply_uct_config_list(context, cm_config);
@@ -1659,9 +1668,9 @@ static ucs_status_t ucp_worker_add_resource_cms(ucp_worker_h worker)
         status = uct_cm_open(cmpt, worker->uct, cm_config, &worker->cms[i].cm);
         uct_config_release(cm_config);
         if (status != UCS_OK) {
-            ucs_diag("failed to open CM on component %s with status %s",
-                     context->tl_cmpts[cmpt_index].attr.name,
-                     ucs_status_string(status));
+            ucs_debug("failed to open CM on component %s with status %s",
+                      context->tl_cmpts[cmpt_index].attr.name,
+                      ucs_status_string(status));
             continue;
         }
 
@@ -1669,22 +1678,23 @@ static ucs_status_t ucp_worker_add_resource_cms(ucp_worker_h worker)
         status                         = uct_cm_query(worker->cms[i].cm,
                                                       &worker->cms[i].attr);
         if (status != UCS_OK) {
-            ucs_error("failed to query CM on component %s with status %s",
-                      context->tl_cmpts[cmpt_index].attr.name,
-                      ucs_status_string(status));
-            goto err_free_cms;
+            ucs_warn("failed to query CM on component %s with status %s",
+                     context->tl_cmpts[cmpt_index].attr.name,
+                     ucs_status_string(status));
+            continue;
         }
 
         worker->cms[i++].cmpt_idx = cmpt_index;
     }
 
     status = UCS_OK;
-    goto out;
+    goto out_unlock;
 
 err_free_cms:
     ucp_worker_close_cms(worker);
-out:
+out_unlock:
     UCS_ASYNC_UNBLOCK(&worker->async);
+out:
     return status;
 }
 
@@ -2608,6 +2618,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     worker->inprogress           = 0;
     worker->num_active_ifaces    = 0;
     worker->num_ifaces           = 0;
+    worker->cms                  = NULL;
     worker->am_message_id        = ucs_generate_uuid(0);
     worker->rkey_ptr_cb_id       = UCS_CALLBACKQ_ID_NULL;
     worker->num_all_eps          = 0;
@@ -2751,16 +2762,10 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         goto err_conn_match_cleanup;
     }
 
-    /* Open all resources as connection managers on this worker */
-    status = ucp_worker_add_resource_cms(worker);
-    if (status != UCS_OK) {
-        goto err_close_ifaces;
-    }
-
     /* Create loopback endpoints to copy across memory types */
     status = ucp_worker_mem_type_eps_create(worker);
     if (status != UCS_OK) {
-        goto err_close_cms;
+        goto err_close_ifaces;
     }
 
     /* Initialize memory pools, should be done after resources are added */
@@ -2814,8 +2819,6 @@ err_destroy_mpools:
     ucp_worker_destroy_mpools(worker);
 err_destroy_memtype_eps:
     ucp_worker_mem_type_eps_destroy(worker);
-err_close_cms:
-    ucp_worker_close_cms(worker);
 err_close_ifaces:
     ucp_worker_close_ifaces(worker);
 err_conn_match_cleanup:
