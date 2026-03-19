@@ -160,7 +160,9 @@ static uct_scopy_iface_ops_t uct_cma_iface_ops = {
         .ep_connect_to_ep_v2    = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
         .iface_is_reachable_v2  = uct_cma_iface_is_reachable_v2,
         .ep_is_connected        = uct_cma_ep_is_connected,
-        .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported
+        .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported,
+        .iface_query_v2         = (uct_iface_query_v2_func_t)ucs_empty_function_return_unsupported,
+        .ep_outstanding_extract = (uct_ep_outstanding_extract_func_t)ucs_empty_function_return_unsupported
     },
     .ep_tx = uct_cma_ep_tx,
 };

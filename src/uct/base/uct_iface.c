@@ -798,6 +798,23 @@ ucs_status_t uct_ep_invalidate(uct_ep_h ep,
     return iface->internal_ops->ep_invalidate(ep, params);
 }
 
+ucs_status_t
+uct_iface_query_v2(uct_iface_h tl_iface, uct_iface_attr_v2_t *iface_attr)
+{
+    uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
+
+    return iface->internal_ops->iface_query_v2(tl_iface, iface_attr);
+}
+
+ucs_status_t
+uct_ep_outstanding_extract(uct_ep_h ep,
+                           const uct_ep_outstanding_extract_params_t *params)
+{
+    const uct_base_iface_t *iface = ucs_derived_of(ep->iface, uct_base_iface_t);
+
+    return iface->internal_ops->ep_outstanding_extract(ep, params);
+}
+
 void uct_ep_set_iface(uct_ep_h ep, uct_iface_t *iface)
 {
     ep->iface = iface;

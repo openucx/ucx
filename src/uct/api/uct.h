@@ -428,6 +428,10 @@ typedef enum uct_atomic_op {
                                                        interface will be called if the communication
                                                        channel with remote peer is broken, even if there
                                                        are no outstanding send operations */
+        /* IB plugin extensions */
+#define UCT_IFACE_FLAG_IB_PLUGIN      UCS_BIT(47) /**< IB plugin is available; additional capabilities
+                                                       (e.g. token query, outstanding extraction) are
+                                                       supported */
 
         /* Tag matching operations */
 #define UCT_IFACE_FLAG_TAG_EAGER_SHORT UCS_BIT(50) /**< Hardware tag matching short eager support */

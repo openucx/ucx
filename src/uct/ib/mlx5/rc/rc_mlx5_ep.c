@@ -14,6 +14,7 @@
 #endif
 
 #include <uct/ib/mlx5/ib_mlx5_log.h>
+#include <uct/ib/plugin/uct_ib_plugin.h>
 #include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <ucs/arch/cpu.h>
@@ -23,6 +24,22 @@
 
 #include "rc_mlx5.inl"
 
+
+ucs_status_t uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep, uct_ep_attr_t *ep_attr)
+{
+    if (ep_attr->field_mask & (UCT_EP_ATTR_FIELD_LOCAL_SOCKADDR |
+                               UCT_EP_ATTR_FIELD_REMOTE_SOCKADDR)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    return uct_ib_plugin_ep_query(tl_ep, ep_attr);
+}
+
+ucs_status_t uct_rc_mlx5_ep_outstanding_extract(
+        uct_ep_h ep, const uct_ep_outstanding_extract_params_t *params)
+{
+    return uct_ib_plugin_outstanding_extract(ep, params);
+}
 
 static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_base_ep_put_short_inline(
         uct_ep_h tl_ep, const void *buffer, unsigned length,

@@ -19,7 +19,8 @@ libuct_ib_mlx5_la_SOURCES = \
 	ib_mlx5_log.c \
 	ib_mlx5.c \
 	dv/ib_mlx5_dv.c \
-	dv/ib_mlx5dv_md.c
+	dv/ib_mlx5dv_md.c \
+	../plugin/uct_ib_plugin_stubs.c
 
 noinst_HEADERS = \
 	ib_mlx5_log.h \
