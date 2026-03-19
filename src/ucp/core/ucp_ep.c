@@ -1626,7 +1626,7 @@ ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
 }
 
 static ucs_status_t
-ucp_ep_reconfig_internal(ucp_ep_h ep, ucp_lane_map_t failed_lanes)
+ucp_ep_reconfig_common(ucp_ep_h ep, ucp_lane_map_t failed_lanes)
 {
     ucp_worker_h worker          = ep->worker;
     ucp_ep_config_key_t cfg_key  = ucp_ep_config(ep)->key;
@@ -1677,7 +1677,7 @@ ucp_ep_failover_reconfig(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,
     ucs_diag("ep %p: failover reconfig, failed_lanes 0x%lx", ucp_ep,
              failed_lanes);
 
-    status = ucp_ep_reconfig_internal(ucp_ep, failed_lanes);
+    status = ucp_ep_reconfig_common(ucp_ep, failed_lanes);
     if (status != UCS_OK) {
         return status;
     }
@@ -4152,7 +4152,7 @@ ucs_status_t ucp_ep_update_rkey_config(ucp_ep_h ep, ucp_rkey_h rkey)
     ucp_worker_cfg_index_t old_cfg_index = ep->cfg_index;
     ucs_status_t status;
 
-    status = ucp_ep_reconfig_internal(ep, 0);
+    status = ucp_ep_reconfig_common(ep, 0);
     if (status != UCS_OK) {
         return status;
     }
