@@ -10,18 +10,17 @@
 
 #include <ucs/time/time.h>
 #include <ucs/debug/log.h>
-#include <ucs/sys/compiler_def.h>
 
+
+static double clocks_per_sec = -42.0;
+
+void ucs_init_cpu_clocks_per_sec()
+{
+    clocks_per_sec = ucs_arch_get_clocks_per_sec();
+    ucs_debug("arch clock frequency: %.2f Hz", clocks_per_sec);
+}
 
 double ucs_get_cpu_clocks_per_sec()
 {
-    static double clocks_per_sec = -42.0;
-
-    ucs_compiler_fence();
-
-    if (ucs_unlikely(clocks_per_sec <= 0.0)) {
-        clocks_per_sec = ucs_arch_get_clocks_per_sec();
-        ucs_debug("arch clock frequency: %.2f Hz", clocks_per_sec);
-    }
     return clocks_per_sec;
 }

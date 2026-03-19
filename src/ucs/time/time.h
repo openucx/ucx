@@ -43,6 +43,7 @@ typedef uint32_t             ucs_short_time_t;
 #define UCS_NSEC_PER_USEC  (UCS_NSEC_PER_SEC / UCS_USEC_PER_SEC)
 
 
+void ucs_init_cpu_clocks_per_sec();
 double ucs_get_cpu_clocks_per_sec();
 
 

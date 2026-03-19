@@ -25,6 +25,7 @@
 #include <ucs/sys/sys.h>
 #include <ucs/sys/topo/base/topo.h>
 #include <ucs/sys/math.h>
+#include <ucs/time/time.h>
 
 
 /* run-time CPU detection */
@@ -100,6 +101,7 @@ void UCS_F_CTOR ucs_init()
     ucs_memtype_cache_global_init();
     ucs_cpu_init();
     ucs_log_init();
+    ucs_init_cpu_clocks_per_sec();
 #ifdef ENABLE_STATS
     ucs_stats_init();
 #endif
