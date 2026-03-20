@@ -1,5 +1,5 @@
 /*
- * Copyright (C) Advanced Micro Devices, Inc. 2019-2023. ALL RIGHTS RESERVED.
+ * Copyright (C) Advanced Micro Devices, Inc. 2019-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -57,7 +57,8 @@ uct_rocm_copy_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
     md_attr->cache_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
                                 UCS_BIT(UCS_MEMORY_TYPE_ROCM);
     md_attr->alloc_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
-    md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
+    md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
+                                UCS_BIT(UCS_MEMORY_TYPE_ROCM);
     md_attr->detect_mem_types = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
     if (md->have_dmabuf) {
         md_attr->dmabuf_mem_types |= UCS_BIT(UCS_MEMORY_TYPE_ROCM);
