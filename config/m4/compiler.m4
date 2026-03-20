@@ -82,14 +82,18 @@ AS_IF([test "x$enable_compiler_opt" = "xyes"], [BASE_CFLAGS="-O3 $BASE_CFLAGS"],
 
 
 #
-# Define OPTIMIZE_HIGH if the last -O flag is -O2 or -O3
+# Define OPTIMIZATION_LEVEL to the numeric value of the last -O flag.
+# Non-numeric levels (e.g. -Og, -Oz, -Ofast) leave OPTIMIZATION_LEVEL undefined.
 #
 opt_level=""
 for flag in $BASE_CFLAGS $CFLAGS; do
-    case $flag in -O*) opt_level=$flag;; esac
+    case $flag in -O*) opt_level=${flag#-O};; esac
 done
-AS_IF([test "x$opt_level" = "x-O2" || test "x$opt_level" = "x-O3"],
-      [AC_DEFINE([OPTIMIZE_HIGH], 1, [Compiled with high optimization level])])
+case $opt_level in
+    [[0-9]])
+        AC_DEFINE_UNQUOTED([OPTIMIZATION_LEVEL], [$opt_level],
+                           [Numeric compiler optimization level]) ;;
+esac
 
 
 #
