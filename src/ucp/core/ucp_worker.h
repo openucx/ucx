@@ -413,6 +413,11 @@ typedef struct ucp_worker {
      * speed change). A matching epoch is stored in @ref ucp_proto_select_t.
      * If epochs differ, the cached config is stale and must be updated. */
     uint64_t                         epoch;
+
+    /* Memory types that require RMA zcopy (intra-node). Applies to RMA put/get. */
+    uint64_t                         mem_type_zcopy_required_intra;
+    /* Memory types that require RMA zcopy (inter-node). Applies to RMA put/get. */
+    uint64_t                         mem_type_zcopy_required_inter;
 } ucp_worker_t;
 
 

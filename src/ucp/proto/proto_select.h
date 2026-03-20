@@ -150,6 +150,9 @@ typedef struct {
 
     /* All the initialized protocols that can be chosen */
     ucp_proto_select_init_protocols_t proto_init;
+
+    /* For put/get: 1 if large sizes use RMA zcopy when available */
+    unsigned                          rma_zcopy_compliant : 1;
 } ucp_proto_select_elem_t;
 
 

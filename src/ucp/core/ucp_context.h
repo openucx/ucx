@@ -221,6 +221,8 @@ typedef struct ucp_context_config {
     int                                    proto_use_single_net_device;
     /** Local identificator on a single node */
     unsigned long                          node_local_id;
+    /** Transports mandatory for RMA when present (comma-separated, empty = none) */
+    ucs_config_names_array_t               tl_rma;
 } ucp_context_config_t;
 
 
@@ -764,6 +766,8 @@ ucp_config_modify_internal(ucp_config_t *config, const char *name,
 
 
 void ucp_apply_uct_config_list(ucp_context_h context, void *config);
+
+int ucp_context_is_tl_in_rma_list(ucp_context_h context, const char *tl_name);
 
 
 void ucp_device_init(void);

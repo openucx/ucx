@@ -333,7 +333,7 @@ ucp_proto_put_offload_zcopy_probe(const ucp_proto_init_params_t *init_params)
 ucp_proto_t ucp_put_offload_zcopy_proto = {
     .name     = "put/offload/zcopy",
     .desc     = UCP_PROTO_ZCOPY_DESC,
-    .flags    = 0,
+    .flags    = UCP_PROTO_FLAG_RMA_ZCOPY,
     .probe    = ucp_proto_put_offload_zcopy_probe,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_put_offload_zcopy_progress},

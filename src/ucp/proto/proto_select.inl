@@ -12,6 +12,7 @@
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_worker.h>
+#include <ucp/core/ucp_worker.inl>
 #include <ucp/dt/dt_contig.h>
 #include <ucp/dt/datatype_iter.h>
 #include <ucp/proto/proto_select.h>
@@ -73,12 +74,13 @@ ucp_proto_select_op_flags(const ucp_proto_select_param_t *select_param)
     return select_param->op_id_flags & ~(UCP_PROTO_SELECT_OP_FLAGS_BASE - 1);
 }
 
-static UCS_F_ALWAYS_INLINE const ucp_proto_threshold_elem_t*
+static UCS_F_ALWAYS_INLINE const ucp_proto_threshold_elem_t *
 ucp_proto_select_lookup(ucp_worker_h worker, ucp_proto_select_t *proto_select,
                         ucp_worker_cfg_index_t ep_cfg_index,
                         ucp_worker_cfg_index_t rkey_cfg_index,
                         const ucp_proto_select_param_t *select_param,
-                        size_t msg_length)
+                        size_t msg_length,
+                        const ucp_proto_select_elem_t **select_elem_p)
 {
     const ucp_proto_select_elem_t *select_elem;
     ucp_proto_select_key_t key;
@@ -108,7 +110,66 @@ ucp_proto_select_lookup(ucp_worker_h worker, ucp_proto_select_t *proto_select,
         proto_select->cache.value = select_elem;
     }
 
+    if (select_elem_p != NULL) {
+        *select_elem_p = select_elem;
+    }
+
     return ucp_proto_select_thresholds_search(select_elem, msg_length);
+}
+
+/* Fail RMA put/get if source or destination mem_type requires zcopy but selected
+ * protocol is not compliant. Uses intra/inter-node masks. */
+static UCS_F_ALWAYS_INLINE ucs_status_t ucp_rma_zcopy_required_check(
+        ucp_worker_h worker, const ucp_proto_select_param_t *select_param,
+        const ucp_proto_select_elem_t *select_elem,
+        ucp_worker_cfg_index_t rkey_cfg_index,
+        ucp_worker_cfg_index_t ep_cfg_index)
+{
+    ucp_ep_config_t *ep_config = ucp_worker_ep_config(worker, ep_cfg_index);
+    ucs_memory_type_t local_mem_type, remote_mem_type;
+    uint64_t required_mask;
+
+    /* Do not restrict for already compliant, self or non RMA */
+    if (select_elem->rma_zcopy_compliant ||
+        (ep_config->key.flags & UCP_EP_CONFIG_KEY_FLAG_SELF) ||
+        !ucp_proto_select_check_op(select_param,
+                                   UCS_BIT(UCP_OP_ID_PUT) |
+                                   UCS_BIT(UCP_OP_ID_GET))) {
+        return UCS_OK;
+    }
+
+    /* Identify the use-case for requirement */
+    if (ep_config->key.flags & UCP_EP_CONFIG_KEY_FLAG_INTRA_NODE) {
+        required_mask = worker->mem_type_zcopy_required_intra;
+    } else {
+        required_mask = worker->mem_type_zcopy_required_inter;
+    }
+
+    if (required_mask == 0) {
+        return UCS_OK;
+    }
+
+    /* Check if we mandate RMA ZCOPY for the two memory types? */
+    local_mem_type  = (ucs_memory_type_t)select_param->mem_type;
+    remote_mem_type = (rkey_cfg_index != UCP_WORKER_CFG_INDEX_NULL) ?
+                      ucs_array_elem(&worker->rkey_config,
+                                     rkey_cfg_index).key.mem_type :
+                      UCS_MEMORY_TYPE_LAST;
+
+    if ((UCS_BIT(local_mem_type) & required_mask) ||
+        (remote_mem_type != UCS_MEMORY_TYPE_LAST &&
+         (UCS_BIT(remote_mem_type) & required_mask))) {
+        ucs_error("RMA %s with local memory %s and remote memory %s requires "
+                  "zcopy "
+                  "but selected protocol is not compliant",
+                  ucp_proto_select_op_id(select_param) == UCP_OP_ID_PUT ?
+                  "PUT" : "GET",
+                  ucs_memory_type_names[local_mem_type],
+                  ucs_memory_type_names[remote_mem_type]);
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    return UCS_OK;
 }
 
 /*
