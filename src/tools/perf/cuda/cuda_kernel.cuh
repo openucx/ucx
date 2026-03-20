@@ -8,24 +8,11 @@
 #define CUDA_KERNEL_CUH_
 
 #include "cuda_common.h"
+#include "cuda_context.h"
 
 #include <tools/perf/lib/libperf_int.h>
 #include <ucs/sys/device_code.h>
 #include <cuda_runtime.h>
-
-
-typedef unsigned long long ucx_perf_cuda_time_t;
-
-struct ucx_perf_cuda_context {
-    ucx_perf_channel_mode_t channel_mode;
-    unsigned long long      channel_rand_seed;
-    unsigned                max_outstanding;
-    unsigned                device_fc_window;
-    ucx_perf_counter_t      max_iters;
-    ucx_perf_cuda_time_t    report_interval_ns;
-    ucx_perf_counter_t      completed_iters;
-    ucs_status_t            status;
-};
 
 UCS_F_DEVICE ucx_perf_cuda_time_t ucx_perf_cuda_get_time_ns()
 {
@@ -41,7 +28,7 @@ public:
     static const unsigned UPDATES_PER_INTERVAL = 5;
 
     __device__
-    ucx_perf_cuda_reporter(ucx_perf_cuda_context &ctx) :
+    ucx_perf_cuda_reporter(ucx_perf_cuda_context_t &ctx) :
         m_ctx(ctx),
         m_max_iters(ctx.max_iters),
         m_next_report_iter(1),
@@ -71,7 +58,7 @@ public:
     }
 
 private:
-    ucx_perf_cuda_context &m_ctx;
+    ucx_perf_cuda_context_t &m_ctx;
     ucx_perf_counter_t    m_max_iters;
     ucx_perf_counter_t    m_next_report_iter;
     ucx_perf_counter_t    m_last_completed;
@@ -204,14 +191,14 @@ public:
 
 protected:
     ucx_perf_context_t &m_perf;
-    ucx_perf_cuda_context *m_cpu_ctx;
-    ucx_perf_cuda_context *m_gpu_ctx;
+    ucx_perf_cuda_context_t *m_cpu_ctx;
+    ucx_perf_cuda_context_t *m_gpu_ctx;
 
 private:
     void init_ctx()
     {
         CUDA_CALL(, UCS_LOG_LEVEL_FATAL, cudaHostAlloc, &m_cpu_ctx,
-                  sizeof(ucx_perf_cuda_context), cudaHostAllocMapped);
+                  sizeof(ucx_perf_cuda_context_t), cudaHostAllocMapped);
         CUDA_CALL(, UCS_LOG_LEVEL_FATAL, cudaHostGetDevicePointer,
                   &m_gpu_ctx, m_cpu_ctx, 0);
     }
