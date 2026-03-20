@@ -70,6 +70,7 @@ ucs_status_t ucp_perf_cuda_params_init(const ucx_perf_context_t *perf,
 {
     size_t data_count = perf->params.msg_size_cnt;
     size_t offset     = 0;
+    size_t i;
     ucp_device_mem_list_elem_t *elems;
     ucp_device_mem_list_params_t list_params;
     ucs_status_t status;
@@ -80,7 +81,7 @@ ucs_status_t ucp_perf_cuda_params_init(const ucx_perf_context_t *perf,
 
     elems = ucs_alloca(data_count * sizeof(ucp_device_mem_list_elem_t));
 
-    for (size_t i = 0; i < data_count; ++i) {
+    for (i = 0; i < data_count; ++i) {
         elems[i].field_mask  = UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH |
                               UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY |
                               UCP_DEVICE_MEM_LIST_ELEM_FIELD_LOCAL_ADDR |

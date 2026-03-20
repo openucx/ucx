@@ -10,6 +10,7 @@
 #define UCP_CUDA_KERNEL_BW_IMPL_CUH_
 
 #include "ucp_cuda_kernel_common.cuh"
+#include <tools/perf/api/libperf.h>
 #include <ucs/sys/math.h>
 
 template<ucs_device_level_t level, ucx_perf_cmd_t cmd, bool fc>
