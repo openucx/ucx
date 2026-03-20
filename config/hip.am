@@ -1,0 +1,39 @@
+#
+# Copyright (c) Advanced Micro Devices, Inc. 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+
+SUFFIXES = .hip
+
+HIPCC ?= hipcc
+
+HIPCC_CMD = $(HIPCC) -DHAVE_CONFIG_H -DUCT_DEVICE_CODE_HIP -fPIE -I$(top_srcdir)/src -I$(top_builddir)/src $(BASE_CXXFLAGS) $(CXXFLAGS) $(HIP_CPPFLAGS) $(HIP_CXXFLAGS) $(HIPCC_EXTRA_FLAGS) -Wno-c++20-extensions -c $< -MT $@ -MF $(DEPDIR)/hip/$@.d -MMD -o $@
+HIPCC_LT_CMD = $(LIBTOOL) --tag=CXX --mode=compile $(HIPCC_CMD)
+
+define hipcc-build
+	@$(MKDIR_P) $(shell dirname $(DEPDIR)/hip/$@)
+	@$(if $(filter false,$(AM_V_P)),echo "  HIPCC    $@")
+	@$(if $(filter .o,$(suffix $@)),$(HIPCC_CMD),$(HIPCC_LT_CMD)) $($(1)) $(if $(filter false,$(AM_V_P)), >/dev/null)
+endef
+
+define hipcc-source
+	EXTRA_DIST += $(2)
+$(1): $(2)
+	$$(call hipcc-build,$(3))
+endef
+
+# Default rules when no target-specific compile flags are required
+.hip.o:
+	$(call hipcc-build)
+
+.hip.lo:
+	$(call hipcc-build)
+
+HIP_DEP_FILES := $(shell find $(DEPDIR)/hip/ -type f -name *.d 2>/dev/null)
+-include $(HIP_DEP_FILES)
+
+clean-local:
+	-rm -rf $(DEPDIR)/hip
+
+distclean-local:
+	-rm -rf $(DEPDIR)/hip
