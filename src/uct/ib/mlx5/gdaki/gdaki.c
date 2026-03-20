@@ -244,16 +244,17 @@ typedef struct {
 } uct_rc_gdaki_pool_priv_t;
 
 static ucs_status_t
-uct_rc_gdaki_pool_chunk_init(ucs_mpool_t *mp, void *chunk, unsigned num_elems)
+uct_rc_gdaki_pool_chunk_init(ucs_mpool_t *mp,
+                             uct_rc_gdaki_pool_chunk_hdr_t *hdr,
+                             unsigned num_elems)
 {
+    void *chunk                    = hdr + 1;
     uct_rc_gdaki_pool_priv_t *priv = ucs_mpool_priv(mp);
     uct_rc_gdaki_iface_t *iface    = ucs_container_of(mp, uct_rc_gdaki_iface_t,
                                                       channel_pool);
     void *elems                    = ucs_mpool_chunk_elems(mp, chunk);
     unsigned num_channels          = iface->num_channels;
     uct_ib_iface_init_attr_t init_attr = {};
-    uct_rc_gdaki_pool_chunk_hdr_t *hdr = (uct_rc_gdaki_pool_chunk_hdr_t*)chunk -
-                                         1;
     uct_ib_mlx5_cq_attr_t cq_attr;
     uct_ib_mlx5_qp_attr_t qp_attr;
     uct_ib_mlx5_dbrec_t dbrec;
@@ -401,7 +402,7 @@ uct_rc_gdaki_pool_chunk_alloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
 
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
 
-    status = uct_rc_gdaki_pool_chunk_init(mp, *chunk_p, num_elems);
+    status = uct_rc_gdaki_pool_chunk_init(mp, hdr, num_elems);
     if (status != UCS_OK) {
         goto err_umem;
     }
