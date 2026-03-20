@@ -243,6 +243,25 @@ typedef struct {
     size_t   dev_ep_size;
 } uct_rc_gdaki_pool_priv_t;
 
+static void uct_rc_gdaki_chunk_channels_destroy(ucs_mpool_t *mp, void *elems,
+                                                unsigned num_elems,
+                                                unsigned end_ep,
+                                                unsigned end_ch)
+{
+    uct_rc_gdaki_ep_channel_block_t *block;
+    unsigned ep_idx, ch_idx, n;
+
+    for (ep_idx = 0; ep_idx < num_elems; ++ep_idx) {
+        block = ucs_mpool_chunk_obj(mp, elems, ep_idx);
+        n     = (ep_idx < end_ep) ? end_ch + 1 : end_ch;
+        for (ch_idx = 0; ch_idx < n; ++ch_idx) {
+            uct_ib_mlx5_devx_destroy_qp_common(
+                    &block->channels[ch_idx].qp.super);
+            uct_ib_mlx5_devx_destroy_cq_common(&block->channels[ch_idx].cq);
+        }
+    }
+}
+
 static ucs_status_t
 uct_rc_gdaki_pool_chunk_init(ucs_mpool_t *mp,
                              uct_rc_gdaki_pool_chunk_hdr_t *hdr,
@@ -328,28 +347,12 @@ uct_rc_gdaki_pool_chunk_init(ucs_mpool_t *mp,
     return UCS_OK;
 
 err_cleanup:
-    {
-        unsigned c, e;
-        for (e = 0; e < num_elems; ++e) {
-            unsigned first_uncreated_ch_idx;
-            if (e < ep_idx) {
-                first_uncreated_ch_idx = ch_idx + 1;
-            } else {
-                first_uncreated_ch_idx = ch_idx;
-            }
-            block = ucs_mpool_chunk_obj(mp, elems, e);
-            for (c = 0; c < first_uncreated_ch_idx; ++c) {
-                channel = &block->channels[c];
-                uct_ib_mlx5_devx_destroy_qp_common(&channel->qp.super);
-                uct_ib_mlx5_devx_destroy_cq_common(&channel->cq);
-            }
-        }
+    uct_rc_gdaki_chunk_channels_destroy(mp, elems, num_elems, ep_idx, ch_idx);
 
-        (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
-        ucs_error("gdaki channel chunk init: create_cq/qp failed (ch=%u ep=%u)",
-                  ch_idx, ep_idx);
-        return status;
-    }
+    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
+    ucs_error("gdaki channel chunk init: create_cq/qp failed (ch=%u ep=%u)",
+              ch_idx, ep_idx);
+    return status;
 }
 
 static ucs_status_t
@@ -428,20 +431,10 @@ static void uct_rc_gdaki_pool_chunk_release(ucs_mpool_t *mp, void *chunk)
     uct_rc_gdaki_pool_chunk_hdr_t *hdr = (uct_rc_gdaki_pool_chunk_hdr_t*)chunk -
                                          1;
     ucs_mpool_chunk_t *mp_chunk        = chunk;
-    unsigned num_elems                 = mp_chunk->num_elems;
-    unsigned num_channels              = iface->num_channels;
-    unsigned ep_idx, ch_idx;
-    uct_rc_gdaki_ep_channel_block_t *block;
-    uct_rc_gdaki_channel_t *channels;
-
-    for (ep_idx = 0; ep_idx < num_elems; ++ep_idx) {
-        block    = ucs_mpool_chunk_obj(mp, mp_chunk->elems, ep_idx);
-        channels = block->channels;
-        for (ch_idx = 0; ch_idx < num_channels; ++ch_idx) {
-            uct_ib_mlx5_devx_destroy_qp_common(&channels[ch_idx].qp.super);
-            uct_ib_mlx5_devx_destroy_cq_common(&channels[ch_idx].cq);
-        }
-    }
+    uct_rc_gdaki_chunk_channels_destroy(mp, mp_chunk->elems,
+                                        mp_chunk->num_elems,
+                                        mp_chunk->num_elems,
+                                        iface->num_channels - 1);
     mlx5dv_devx_umem_dereg(hdr->umem);
     cuMemFree(hdr->gpu_raw);
     ucs_free(hdr);
