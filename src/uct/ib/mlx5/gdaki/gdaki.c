@@ -274,8 +274,8 @@ uct_rc_gdaki_pool_chunk_init(ucs_mpool_t *mp,
     void *elems                    = ucs_mpool_chunk_elems(mp, chunk);
     unsigned num_channels          = iface->num_channels;
     uct_ib_iface_init_attr_t init_attr = {};
-    uct_ib_mlx5_cq_attr_t cq_attr;
-    uct_ib_mlx5_qp_attr_t qp_attr;
+    uct_ib_mlx5_cq_attr_t cq_attr      = {};
+    uct_ib_mlx5_qp_attr_t qp_attr      = {};
     uct_ib_mlx5_dbrec_t dbrec;
     size_t ep_offset, ep_qp_offset, ep_wq_offset;
     unsigned ep_idx, ch_idx;
