@@ -10,6 +10,7 @@
 
 #include <ucs/time/time.h>
 #include <ucs/debug/log.h>
+#include <ucs/debug/assert.h>
 
 
 static double clocks_per_sec = -42.0;
@@ -22,5 +23,6 @@ void ucs_init_cpu_clocks_per_sec()
 
 double ucs_get_cpu_clocks_per_sec()
 {
+    ucs_assert(clocks_per_sec > 0.0);
     return clocks_per_sec;
 }
