@@ -1076,3 +1076,10 @@ ucs_status_t uct_ep_get_device_ep(uct_ep_h ep, uct_device_ep_h *device_ep_p)
 
     return iface->internal_ops->ep_get_device_ep(ep, device_ep_p);
 }
+
+ucs_status_t uct_iface_query_v2(uct_iface_h tl_iface, uct_iface_attr_v2_t *iface_attr)
+{
+    const uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
+
+    return iface->internal_ops->iface_query_v2(tl_iface, iface_attr);
+}

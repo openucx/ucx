@@ -13,6 +13,7 @@
 #include <uct/ib/mlx5/ib_mlx5_log.h>
 #include <uct/ib/mlx5/dv/ib_mlx5_dv.h>
 #include <uct/ib/base/ib_device.h>
+#include <uct/ib/plugin/uct_ib_plugin.h>
 #include <uct/base/uct_md.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/debug/log.h>
@@ -147,6 +148,7 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
     uct_rc_iface_t *rc_iface   = &iface->super;
     size_t max_am_inline       = UCT_IB_MLX5_AM_MAX_SHORT(0);
     size_t max_put_inline      = UCT_IB_MLX5_PUT_MAX_SHORT(0);
+    uct_iface_attr_v2_t plugin_attr;
     ucs_status_t status;
     size_t ep_addr_len;
 
@@ -176,11 +178,22 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
 
     uct_rc_mlx5_iface_common_query(&rc_iface->super, iface_attr, max_am_inline,
                                    UCT_RC_MLX5_TM_EAGER_ZCOPY_MAX_IOV(0));
+
+    plugin_attr.field_mask = UCT_IFACE_ATTR_FIELD_FLAGS;
+    if (uct_ib_plugin_iface_query(tl_iface, &plugin_attr) == UCS_OK) {
+        iface_attr->cap.flags |= plugin_attr.flags;
+    }
+
     iface_attr->cap.flags     |= UCT_IFACE_FLAG_EP_CHECK;
     iface_attr->latency.m     += 1e-9; /* 1 ns per each extra QP */
     iface_attr->ep_addr_len    = ep_addr_len;
     iface_attr->iface_addr_len = sizeof(uint8_t);
     return UCS_OK;
+}
+
+ucs_status_t uct_rc_mlx5_iface_query_v2(uct_iface_h tl_iface, uct_iface_attr_v2_t *iface_attr)
+{
+    return uct_ib_plugin_iface_query(tl_iface, iface_attr);
 }
 
 void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
@@ -979,12 +992,13 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
         .super = {
             .iface_estimate_perf    = uct_rc_iface_estimate_perf,
             .iface_vfs_refresh      = uct_rc_iface_vfs_refresh,
-            .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+            .ep_query               = uct_rc_mlx5_base_ep_query,
             .ep_invalidate          = uct_rc_mlx5_base_ep_invalidate,
             .ep_connect_to_ep_v2    = uct_rc_mlx5_ep_connect_to_ep_v2,
             .iface_is_reachable_v2  = uct_rc_mlx5_iface_is_reachable_v2,
             .ep_is_connected        = uct_rc_mlx5_base_ep_is_connected,
-            .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported
+            .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported,
+            .iface_query_v2         = uct_rc_mlx5_iface_query_v2
         },
         .create_cq      = uct_rc_mlx5_iface_common_create_cq,
         .destroy_cq     = uct_rc_mlx5_iface_common_destroy_cq,

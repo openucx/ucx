@@ -647,6 +647,7 @@ static uct_rc_iface_ops_t uct_rc_gdaki_internal_ops = {
             .iface_is_reachable_v2  = (uct_iface_is_reachable_v2_func_t)ucs_empty_function_return_one_int,
             .ep_is_connected        = uct_rc_gdaki_ep_is_connected,
             .ep_get_device_ep       = uct_rc_gdaki_ep_get_device_ep,
+            .iface_query_v2         = (uct_iface_query_v2_func_t)ucs_empty_function_return_unsupported
         },
         .create_cq  = uct_rc_gdaki_create_cq,
         .destroy_cq = (uct_ib_iface_destroy_cq_func_t)ucs_empty_function_return_success,
