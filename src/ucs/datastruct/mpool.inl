@@ -20,17 +20,12 @@ static inline size_t ucs_mpool_elem_total_size(ucs_mpool_data_t *data)
     return ucs_align_up_pow2(data->elem_size, data->alignment);
 }
 
-static inline void *ucs_mpool_elem_obj(ucs_mpool_elem_t *elem)
+static inline void *
+ucs_mpool_chunk_obj(ucs_mpool_t *mp, void *elems, unsigned elem_index)
 {
+    ucs_mpool_elem_t *elem = (ucs_mpool_elem_t*)UCS_PTR_BYTE_OFFSET(
+            elems, elem_index * ucs_mpool_elem_total_size(mp->data));
     return elem + 1;
-}
-
-static inline ucs_mpool_elem_t *ucs_mpool_chunk_elem(ucs_mpool_t *mp,
-                                                     ucs_mpool_chunk_t *chunk,
-                                                     unsigned elem_index)
-{
-    return (ucs_mpool_elem_t*)UCS_PTR_BYTE_OFFSET(
-            chunk->elems, elem_index * ucs_mpool_elem_total_size(mp->data));
 }
 
 static inline void *
@@ -60,7 +55,7 @@ static inline void *ucs_mpool_get_inline(ucs_mpool_t *mp)
     elem->mpool = mp;
     VALGRIND_MAKE_MEM_NOACCESS(elem, sizeof *elem);
 
-    obj = ucs_mpool_elem_obj(elem);
+    obj = elem + 1;
     VALGRIND_MEMPOOL_ALLOC(mp, obj, mp->data->elem_size - sizeof(ucs_mpool_elem_t));
     return obj;
 }

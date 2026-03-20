@@ -28,10 +28,9 @@ static void ucs_mpool_chunk_leak_check(ucs_mpool_t *mp, ucs_mpool_chunk_t *chunk
     void *obj;
 
     for (i = 0; i < chunk->num_elems; ++i) {
-        elem = ucs_mpool_chunk_elem(mp, chunk, i);
-        VALGRIND_MAKE_MEM_DEFINED(elem, sizeof *elem);
+        obj  = ucs_mpool_chunk_obj(mp, chunk->elems, i);
+        elem = ucs_mpool_obj_to_elem(obj);
         if (elem->mpool != NULL) {
-            obj = ucs_mpool_elem_obj(elem);
             ucs_string_buffer_reset(&strb);
             if (data->ops->obj_str != NULL) {
                 ucs_string_buffer_appendf(&strb, " {");
@@ -149,7 +148,7 @@ void ucs_mpool_cleanup(ucs_mpool_t *mp, int leak_check)
         VALGRIND_MAKE_MEM_DEFINED(elem, sizeof *elem);
         next_elem = elem->next;
         if (data->ops->obj_cleanup != NULL) {
-            obj = ucs_mpool_elem_obj(elem);
+            obj = elem + 1;
             VALGRIND_MEMPOOL_ALLOC(mp, obj, mp->data->elem_size - sizeof(ucs_mpool_elem_t));
             VALGRIND_MAKE_MEM_DEFINED(obj, mp->data->elem_size - sizeof(ucs_mpool_elem_t));
             data->ops->obj_cleanup(mp, obj);
@@ -228,11 +227,11 @@ void ucs_mpool_grow(ucs_mpool_t *mp, unsigned num_elems)
     ucs_mpool_data_t *data = mp->data;
     size_t chunk_size;
     ucs_mpool_chunk_t *chunk;
-    ucs_mpool_elem_t *elem;
     ucs_status_t status;
     unsigned i;
     unsigned allocated_num_elems;
     void *ptr;
+    void *obj;
 
     if (data->quota == 0) {
         return;
@@ -261,11 +260,11 @@ void ucs_mpool_grow(ucs_mpool_t *mp, unsigned num_elems)
     }
 
     for (i = 0; i < chunk->num_elems; ++i) {
-        elem = ucs_mpool_chunk_elem(mp, chunk, i);
+        obj = ucs_mpool_chunk_obj(mp, chunk->elems, i);
         if (data->ops->obj_init != NULL) {
-            data->ops->obj_init(mp, ucs_mpool_elem_obj(elem), chunk);
+            data->ops->obj_init(mp, obj, chunk);
         }
-        ucs_mpool_add_to_freelist(mp, elem);
+        ucs_mpool_add_to_freelist(mp, ucs_mpool_obj_to_elem(obj));
     }
 
     chunk->next  = data->chunks;

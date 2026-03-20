@@ -346,9 +346,6 @@ unsigned ucs_mpool_num_elems_per_chunk(ucs_mpool_t *mp,
                                        ucs_mpool_chunk_t *chunk,
                                        size_t chunk_size);
 
-
-
-
 /**
  * heap-based chunk allocator.
  */
