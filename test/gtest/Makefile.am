@@ -299,8 +299,19 @@ endif
 
 if HAVE_HIP
 if HAVE_GNUXX11
+HIPCC_EXTRA_FLAGS = \
+	$(HIP_CPPFLAGS) \
+	-DHAVE_ROCM=1 \
+	-I$(top_builddir) \
+	-I$(top_srcdir)/test \
+	-I$(top_srcdir)/test/gtest
+include $(top_srcdir)/config/hip.am
+
 gtest_SOURCES += \
-	ucm/rocm_hooks.cc
+	ucm/rocm_hooks.cc \
+	uct/rocm/test_kernels_uct.hip \
+	uct/rocm/test_rocm_ipc_device.hip
+
 gtest_CPPFLAGS += \
 	$(HIP_CPPFLAGS)
 gtest_CXXFLAGS += \
@@ -309,8 +320,8 @@ gtest_LDADD += \
 	$(HIP_LDFLAGS) \
 	$(HIP_LIBS) \
 	$(top_builddir)/src/uct/rocm/libuct_rocm.la
-endif
-endif
+endif # HAVE_GNUXX11
+endif # HAVE_HIP
 
 noinst_HEADERS = \
 	common/mem_buffer.h \

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) Advanced Micro Devices, Inc. 2019. ALL RIGHTS RESERVED.
+ * Copyright (C) Advanced Micro Devices, Inc. 2019-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -9,6 +9,7 @@
 #include <uct/api/uct.h>
 #include <uct/base/uct_iface.h>
 #include <ucs/type/class.h>
+#include <uct/api/device/uct_device_types.h>
 
 #include "rocm_ipc_cache.h"
 
@@ -16,6 +17,7 @@ typedef struct uct_rocm_ipc_ep {
     uct_base_ep_t   super;
     pid_t           remote_pid;
     uct_rocm_ipc_cache_t *remote_memh_cache;
+    uct_device_ep_h      device_ep;
 } uct_rocm_ipc_ep_t;
 
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rocm_ipc_ep_t, uct_ep_t, const uct_ep_params_t *);
@@ -27,5 +29,7 @@ ucs_status_t uct_rocm_ipc_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, siz
 ucs_status_t uct_rocm_ipc_ep_get_zcopy(uct_ep_h tl_ep,  const uct_iov_t *iov, size_t iovcnt,
                                        uint64_t remote_addr, uct_rkey_t rkey,
                                        uct_completion_t *comp);
+ucs_status_t
+uct_rocm_ipc_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p);
 
 #endif

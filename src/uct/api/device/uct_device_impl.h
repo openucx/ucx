@@ -1,5 +1,6 @@
 /**
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025. ALL RIGHTS RESERVED.
+ * Copyright (C) Advanced Micro Devices, Inc. 2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -10,10 +11,14 @@
 #include "uct_device_types.h"
 
 #include <uct/api/uct_def.h>
+#if HAVE_ROCM
+#include <uct/rocm/ipc/rocm_ipc.h>
+#else
 #include <uct/cuda/cuda_ipc/cuda_ipc.cuh>
+#endif
 #include <ucs/sys/device_code.h>
 
-#if __has_include(<uct/ib/mlx5/gdaki/gdaki.cuh>) && __has_include(<infiniband/mlx5dv.h>)
+#if defined(__NVCC__) && __has_include(<uct/ib/mlx5/gdaki/gdaki.cuh>) && __has_include(<infiniband/mlx5dv.h>)
 #  include <uct/ib/mlx5/gdaki/gdaki.cuh>
 #  define UCT_RC_MLX5_GDA_SUPPORTED 1
 #else
@@ -24,7 +29,11 @@ union uct_device_completion {
 #if UCT_RC_MLX5_GDA_SUPPORTED
     uct_rc_gda_completion_t   rc_gda;
 #endif
+#if HAVE_ROCM
+    uct_rocm_ipc_completion_t rocm_ipc;
+#else
     uct_cuda_ipc_completion_t cuda_ipc;
+#endif
 };
 
 
@@ -73,12 +82,20 @@ uct_device_ep_put(uct_device_ep_h device_ep,
                                              channel_id, flags, comp);
     } else
 #endif
+#if HAVE_ROCM
+            if (device_ep->uct_tl_id == UCT_DEVICE_TL_ROCM_IPC) {
+        return uct_rocm_ipc_ep_put<level>(device_ep, mem_elem, address,
+                                          remote_address, length, flags, comp);
+    } else
+#else
     if (device_ep->uct_tl_id == UCT_DEVICE_TL_CUDA_IPC) {
         return uct_cuda_ipc_ep_put<level>(device_ep, mem_elem, address,
                                           remote_address, length, flags, comp);
+    } else
+#endif
+    {
+        return UCS_ERR_UNSUPPORTED;
     }
-
-    return UCS_ERR_UNSUPPORTED;
 }
 
 
@@ -122,12 +139,20 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_atomic_add(
                                                     channel_id, flags, comp);
     } else
 #endif
+#if HAVE_ROCM
+            if (device_ep->uct_tl_id == UCT_DEVICE_TL_ROCM_IPC) {
+        return uct_rocm_ipc_ep_atomic_add<level>(device_ep, mem_elem, inc_value,
+                                                 remote_address, flags, comp);
+    } else
+#else
     if (device_ep->uct_tl_id == UCT_DEVICE_TL_CUDA_IPC) {
         return uct_cuda_ipc_ep_atomic_add<level>(device_ep, mem_elem, inc_value,
                                                  remote_address, flags, comp);
+    } else
+#endif
+    {
+        return UCS_ERR_UNSUPPORTED;
     }
-
-    return UCS_ERR_UNSUPPORTED;
 }
 
 
@@ -149,13 +174,19 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_get_ptr(
         uct_device_ep_h device_ep, const uct_device_mem_element_t *mem_elem,
         uint64_t address, void **addr_p)
 {
-    if (device_ep->uct_tl_id != UCT_DEVICE_TL_CUDA_IPC) {
+#if HAVE_ROCM
+    if (device_ep->uct_tl_id == UCT_DEVICE_TL_ROCM_IPC) {
+        return uct_rocm_ipc_ep_get_ptr(device_ep, mem_elem, address, addr_p);
+    } else
+#else
+    if (device_ep->uct_tl_id == UCT_DEVICE_TL_CUDA_IPC) {
+        return uct_cuda_ipc_ep_get_ptr(device_ep, mem_elem, address, addr_p);
+    } else
+#endif
+    {
         return UCS_ERR_UNSUPPORTED;
     }
-
-    return uct_cuda_ipc_ep_get_ptr(device_ep, mem_elem, address, addr_p);
 }
-
 
 /**
  * @ingroup UCT_DEVICE
