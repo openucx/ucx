@@ -289,8 +289,8 @@ uct_rc_gdaki_pool_chunk_init(ucs_mpool_t *mp,
         size_t ch_wq_offset = ch_idx * qp_attr.len;
         for (ep_idx = 0; ep_idx < num_elems; ++ep_idx) {
             ep_offset = ep_idx * priv->dev_ep_size;
-            block = ucs_mpool_chunk_obj(mp, elems, ep_idx);
-            channel = &block->channels[ch_idx];
+            block     = ucs_mpool_chunk_obj(mp, elems, ep_idx);
+            channel   = &block->channels[ch_idx];
             if (ch_idx == 0) {
                 block->gpu_ptr = (uintptr_t)UCS_PTR_BYTE_OFFSET(hdr->gpu_mem,
                                                                 ep_offset);
