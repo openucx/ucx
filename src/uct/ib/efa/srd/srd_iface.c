@@ -235,6 +235,8 @@ static uct_ib_iface_ops_t uct_srd_iface_ops = {
         .iface_is_reachable_v2 = uct_ib_iface_is_reachable_v2,
         .ep_is_connected       = uct_srd_ep_is_connected,
         .ep_get_device_ep      = (uct_ep_get_device_ep_func_t)
+            ucs_empty_function_return_unsupported,
+        .iface_query_v2        = (uct_iface_query_v2_func_t)
             ucs_empty_function_return_unsupported
     },
     .create_cq      = uct_ib_verbs_create_cq,

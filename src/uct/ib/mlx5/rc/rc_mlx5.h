@@ -219,7 +219,11 @@ uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
                                 const uct_ep_addr_t *ep_addr,
                                 const uct_ep_connect_to_ep_params_t *params);
 
+ucs_status_t uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep, uct_ep_attr_t *ep_attr);
 
+ucs_status_t uct_rc_mlx5_iface_query_v2(uct_iface_h tl_iface,
+                                        uct_iface_attr_v2_t *iface_attr);
+                                        
 ucs_status_t uct_rc_mlx5_ep_tag_eager_short(uct_ep_h tl_ep, uct_tag_t tag,
                                             const void *data, size_t length);
 

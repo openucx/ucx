@@ -412,7 +412,8 @@ static uct_iface_internal_ops_t uct_cuda_ipc_iface_internal_ops = {
     .ep_connect_to_ep_v2    = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
     .iface_is_reachable_v2  = uct_cuda_ipc_iface_is_reachable_v2,
     .ep_is_connected        = uct_cuda_ipc_ep_is_connected,
-    .ep_get_device_ep       = uct_cuda_ipc_ep_get_device_ep
+    .ep_get_device_ep       = uct_cuda_ipc_ep_get_device_ep,
+    .iface_query_v2         = (uct_iface_query_v2_func_t)ucs_empty_function_return_unsupported
 };
 
 static uct_cuda_ctx_rsc_t * uct_cuda_ipc_ctx_rsc_create(uct_iface_h tl_iface)

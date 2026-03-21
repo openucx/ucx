@@ -96,7 +96,9 @@ static uct_iface_internal_ops_t uct_gaudi_gdr_iface_internal_ops = {
     .iface_is_reachable_v2 = (uct_iface_is_reachable_v2_func_t)
             ucs_empty_function_return_zero,
     .ep_is_connected       = (uct_ep_is_connected_func_t)
-            ucs_empty_function_return_zero_int
+            ucs_empty_function_return_zero_int,
+    .iface_query_v2        = (uct_iface_query_v2_func_t)
+            ucs_empty_function_return_unsupported
 };
 
 static UCS_CLASS_INIT_FUNC(uct_gaudi_gdr_iface_t, uct_md_h md,
