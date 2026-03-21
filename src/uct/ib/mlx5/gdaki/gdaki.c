@@ -248,16 +248,17 @@ static void uct_rc_gdaki_chunk_channels_destroy(ucs_mpool_t *mp, void *elems,
                                                 unsigned end_ep,
                                                 unsigned end_ch)
 {
-    uct_rc_gdaki_ep_channel_block_t *block;
-    unsigned ep_idx, ch_idx, n;
+    uct_rc_gdaki_ep_channel_block_t *channel_block;
+    unsigned ep_index, channel_index, num_channels;
 
-    for (ep_idx = 0; ep_idx < num_elems; ++ep_idx) {
-        block = ucs_mpool_chunk_obj(mp, elems, ep_idx);
-        n     = (ep_idx < end_ep) ? end_ch + 1 : end_ch;
-        for (ch_idx = 0; ch_idx < n; ++ch_idx) {
+    for (ep_index = 0; ep_index < num_elems; ++ep_index) {
+        channel_block = ucs_mpool_chunk_obj(mp, elems, ep_index);
+        num_channels  = (ep_index < end_ep) ? end_ch + 1 : end_ch;
+        for (channel_index = 0; channel_index < num_channels; ++channel_index) {
             uct_ib_mlx5_devx_destroy_qp_common(
-                    &block->channels[ch_idx].qp.super);
-            uct_ib_mlx5_devx_destroy_cq_common(&block->channels[ch_idx].cq);
+                    &channel_block->channels[channel_index].qp.super);
+            uct_ib_mlx5_devx_destroy_cq_common(
+                    &channel_block->channels[channel_index].cq);
         }
     }
 }
@@ -267,19 +268,17 @@ uct_rc_gdaki_pool_chunk_init(ucs_mpool_t *mp,
                              uct_rc_gdaki_pool_chunk_hdr_t *hdr,
                              unsigned num_elems)
 {
-    void *chunk                    = hdr + 1;
     uct_rc_gdaki_pool_priv_t *priv = ucs_mpool_priv(mp);
     uct_rc_gdaki_iface_t *iface    = ucs_container_of(mp, uct_rc_gdaki_iface_t,
                                                       channel_pool);
-    void *elems                    = ucs_mpool_chunk_elems(mp, chunk);
-    unsigned num_channels          = iface->num_channels;
+    void *elems = ucs_mpool_chunk_elems(mp, (void*)(hdr + 1));
     uct_ib_iface_init_attr_t init_attr = {};
     uct_ib_mlx5_cq_attr_t cq_attr      = {};
     uct_ib_mlx5_qp_attr_t qp_attr      = {};
     uct_ib_mlx5_dbrec_t dbrec;
     size_t ep_offset, ep_qp_offset, ep_wq_offset;
-    unsigned ep_idx, ch_idx;
-    uct_rc_gdaki_ep_channel_block_t *block;
+    unsigned ep_index, channel_index;
+    uct_rc_gdaki_ep_channel_block_t *channel_block;
     uct_rc_gdaki_channel_t *channel;
     ucs_status_t status;
 
@@ -288,11 +287,12 @@ uct_rc_gdaki_pool_chunk_init(ucs_mpool_t *mp,
                               &init_attr, 0, &cq_attr);
     uct_rc_iface_fill_attr(&iface->super.super, &qp_attr.super,
                            iface->super.super.config.tx_qp_len, NULL);
-    uct_ib_mlx5_wq_calc_sizes(&qp_attr);
+
     cq_attr.flags                           |= UCT_IB_MLX5_CQ_IGNORE_OVERRUN;
     qp_attr.mmio_mode                        = UCT_IB_MLX5_MMIO_MODE_DB;
     qp_attr.super.srq_num                    = 0;
     qp_attr.super.max_inl_cqe[UCT_IB_DIR_TX] = 0;
+    uct_ib_mlx5_wq_calc_sizes(&qp_attr);
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(iface->cuda_ctx));
     if (status != UCS_OK) {
@@ -300,19 +300,20 @@ uct_rc_gdaki_pool_chunk_init(ucs_mpool_t *mp,
     }
 
     ep_qp_offset = UCT_GDAKI_DEV_EP_SIZE;
-    ep_wq_offset = ep_qp_offset + num_channels * UCT_GDAKI_DEV_QP_SIZE;
+    ep_wq_offset = ep_qp_offset + iface->num_channels * UCT_GDAKI_DEV_QP_SIZE;
     dbrec.mem_id = hdr->umem->umem_id;
 
-    for (ch_idx = 0; ch_idx < num_channels; ++ch_idx) {
-        size_t ch_cq_offset = ch_idx * UCT_GDAKI_DEV_QP_SIZE;
-        size_t ch_wq_offset = ch_idx * qp_attr.len;
-        for (ep_idx = 0; ep_idx < num_elems; ++ep_idx) {
-            ep_offset = ep_idx * priv->dev_ep_size;
-            block     = ucs_mpool_chunk_obj(mp, elems, ep_idx);
-            channel   = &block->channels[ch_idx];
-            if (ch_idx == 0) {
-                block->gpu_ptr = (uintptr_t)UCS_PTR_BYTE_OFFSET(hdr->gpu_mem,
-                                                                ep_offset);
+    for (channel_index = 0; channel_index < iface->num_channels;
+         ++channel_index) {
+        size_t ch_cq_offset = channel_index * UCT_GDAKI_DEV_QP_SIZE;
+        size_t ch_wq_offset = channel_index * qp_attr.len;
+        for (ep_index = 0; ep_index < num_elems; ++ep_index) {
+            ep_offset     = ep_index * priv->dev_ep_size;
+            channel_block = ucs_mpool_chunk_obj(mp, elems, ep_index);
+            channel       = &channel_block->channels[channel_index];
+            if (channel_index == 0) {
+                channel_block->gpu_ptr = (uintptr_t)
+                        UCS_PTR_BYTE_OFFSET(hdr->gpu_mem, ep_offset);
             }
 
             channel->cq.devx.mem.mem       = hdr->umem;
@@ -347,11 +348,12 @@ uct_rc_gdaki_pool_chunk_init(ucs_mpool_t *mp,
     return UCS_OK;
 
 err_cleanup:
-    uct_rc_gdaki_chunk_channels_destroy(mp, elems, num_elems, ep_idx, ch_idx);
+    uct_rc_gdaki_chunk_channels_destroy(mp, elems, num_elems, ep_index,
+                                        channel_index);
 
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
     ucs_error("gdaki channel chunk init: create_cq/qp failed (ch=%u ep=%u)",
-              ch_idx, ep_idx);
+              channel_index, ep_index);
     return status;
 }
 
@@ -431,6 +433,7 @@ static void uct_rc_gdaki_pool_chunk_release(ucs_mpool_t *mp, void *chunk)
     uct_rc_gdaki_pool_chunk_hdr_t *hdr = (uct_rc_gdaki_pool_chunk_hdr_t*)chunk -
                                          1;
     ucs_mpool_chunk_t *mp_chunk        = chunk;
+
     uct_rc_gdaki_chunk_channels_destroy(mp, mp_chunk->elems,
                                         mp_chunk->num_elems,
                                         mp_chunk->num_elems,
