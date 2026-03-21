@@ -52,7 +52,7 @@ ucs_config_field_t uct_rc_gdaki_iface_config_table[] = {
      ucs_offsetof(uct_rc_gdaki_iface_config_t, num_channels),
      UCS_CONFIG_TYPE_UINT},
 
-    {"NUM_PRE_ALLOC_EPS", "256",
+    {"NUM_PRE_ALLOC_EPS", "32",
      "Expected number of pre-allocated endpoints. The channel pool grows if\n"
      "more are needed.",
      ucs_offsetof(uct_rc_gdaki_iface_config_t, num_eps), UCS_CONFIG_TYPE_UINT},
