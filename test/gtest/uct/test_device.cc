@@ -101,17 +101,6 @@ protected:
         ucs_status_t status;
 
         uct_test::init();
-        m_cuda_dev = uct_cuda_get_cuda_device(GetParam()->sys_device);
-        ASSERT_NE(m_cuda_dev, CU_DEVICE_INVALID) << " sys_device "
-                  << static_cast<int>(GetParam()->sys_device);
-
-        status = UCT_CUDADRV_FUNC_LOG_ERR(
-                cuDevicePrimaryCtxRetain(&ctx, m_cuda_dev));
-        ASSERT_UCS_OK(status);
-
-        status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(ctx));
-        ASSERT_UCS_OK(status);
-
         m_receiver = uct_test::create_entity(0);
         m_entities.push_back(m_receiver);
 
@@ -119,6 +108,19 @@ protected:
         m_entities.push_back(m_sender);
 
         m_sender->connect(0, *m_receiver, 0);
+
+        m_cuda_dev = uct_cuda_get_cuda_device(
+                m_sender->iface_attr().ctl_device);
+        ASSERT_NE(m_cuda_dev, CU_DEVICE_INVALID)
+                << " sys_device "
+                << static_cast<int>(m_sender->iface_attr().ctl_device);
+
+        status = UCT_CUDADRV_FUNC_LOG_ERR(
+                cuDevicePrimaryCtxRetain(&ctx, m_cuda_dev));
+        ASSERT_UCS_OK(status);
+
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(ctx));
+        ASSERT_UCS_OK(status);
     }
 
     void cleanup()
