@@ -69,7 +69,7 @@
 #define UCT_IB_DEVICE_SYSFS_GID_TYPE_FMT  UCT_IB_DEVICE_SYSFS_GID_ATTR_PFX "/types/%d"
 #define UCT_IB_DEVICE_SYSFS_GID_NDEV_FMT  UCT_IB_DEVICE_SYSFS_GID_ATTR_PFX "/ndevs/%d"
 #define UCT_IB_DEVICE_SYSFS_ROCE_TC_FMT   UCT_IB_DEVICE_SYSFS_PFX "/tc/%d/traffic_class"
-#define UCT_IB_DEVICE_ECE_DEFAULT         0x0         /* default ECE */
+#define UCT_IB_DEVICE_ECE_DEFAULT         UINT64_MAX  /* default ECE */
 #define UCT_IB_DEVICE_ECE_MAX             0xffffffffU /* max ECE */
 #define UCT_IB_DEVICE_DEFAULT_GID_INDEX 0   /* The gid index used by default for an IB/RoCE port */
 #define UCT_IB_DEVICE_ROUTABLE_FLID_GID_INDEX 1 /* The gid index used by default
@@ -276,18 +276,6 @@ typedef struct {
 
 
 extern const double uct_ib_qp_rnr_time_ms[];
-
-
-/**
- * Helper function to set ECE to qp.
- *
- * @param dev              IB device use to create qp.
- * @param qp               The qp to be set with ECE.
- * @param ece_val          The ece value to be set to qp.
- */
-ucs_status_t
-uct_ib_device_set_ece(uct_ib_device_t *dev, struct ibv_qp *qp,
-                      uint32_t ece_val);
 
 
 /*
