@@ -273,11 +273,7 @@ enum uct_ep_attr_field {
     /** Enables @ref uct_ep_attr::local_address */
     UCT_EP_ATTR_FIELD_LOCAL_SOCKADDR  = UCS_BIT(0),
     /** Enables @ref uct_ep_attr::remote_address */
-    UCT_EP_ATTR_FIELD_REMOTE_SOCKADDR = UCS_BIT(1),
-    /** Enables @ref uct_ep_attr::tx_token */
-    UCT_EP_ATTR_FIELD_TX_TOKEN        = UCS_BIT(2),
-    /** Enables @ref uct_ep_attr::rx_token */
-    UCT_EP_ATTR_FIELD_RX_TOKEN        = UCS_BIT(3)
+    UCT_EP_ATTR_FIELD_REMOTE_SOCKADDR = UCS_BIT(1)
 };
 
 
@@ -418,22 +414,6 @@ struct uct_ep_attr {
      * Remote sockaddr the endpoint is connected to.
      */
     struct sockaddr_storage remote_address;
-
-    /**
-     * Opaque TX token buffer.
-     * Valid when @ref UCT_EP_ATTR_FIELD_TX_TOKEN is set in @ref field_mask.
-     * Caller allocates a buffer of @ref uct_iface_attr_v2_t::tx_token_length
-     * bytes and sets this pointer; callee fills the buffer with the token.
-     */
-    void                    *tx_token;
-
-    /**
-     * Opaque RX token buffer.
-     * Valid when @ref UCT_EP_ATTR_FIELD_RX_TOKEN is set in @ref field_mask.
-     * Caller allocates a buffer of @ref uct_iface_attr_v2_t::rx_token_length
-     * bytes and sets this pointer; callee fills the buffer with the token.
-     */
-    void                    *rx_token;
 };
 
 
@@ -1281,85 +1261,6 @@ ucs_status_t uct_rkey_unpack_v2(uct_component_h component,
  */
 ucs_status_t uct_md_mem_elem_pack(uct_md_h md, uct_mem_h memh, uct_rkey_t rkey,
                                   uct_device_mem_element_t *mem_elem);
-
-
-/**
- * @ingroup UCT_RESOURCE
- * @brief UCT interface v2 attributes field mask.
- *
- * The enumeration allows specifying which fields in @ref uct_iface_attr_v2_t
- * are present, for backward compatibility support.
- */
-enum uct_iface_attr_field {
-    /** Enables @ref uct_iface_attr_v2_t::flags (output).
-     *  Returns plugin-contributed capability flags.
-     */
-    UCT_IFACE_ATTR_FIELD_FLAGS           = UCS_BIT(0),
-
-    /** Enables @ref uct_iface_attr_v2_t::tx_token_length (output). */
-    UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH = UCS_BIT(1),
-
-    /** Enables @ref uct_iface_attr_v2_t::rx_token_length (output). */
-    UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH = UCS_BIT(2),
-
-    /**
-     * Enables the RX token derivation path.
-     * When set, @ref uct_iface_attr_v2_t::tx_token is input (from sender),
-     * and @ref uct_iface_attr_v2_t::rx_token is output (derived by receiver).
-     */
-    UCT_IFACE_ATTR_FIELD_RX_TOKEN        = UCS_BIT(3)
-};
-
-
-/**
- * @ingroup UCT_RESOURCE
- * @brief UCT interface v2 attributes.
- *
- * Queried by @ref uct_ib_plugin_iface_query. The @c field_mask selects which
- * fields are requested.
- */
-typedef struct {
-    /**
-     * Mask of valid fields in this structure, using bits from
-     * @ref uct_iface_attr_field.
-     */
-    uint64_t   field_mask;
-
-    /**
-     * Plugin-contributed capability flags (bitmask of UCT_IFACE_FLAG_*).
-     * Valid when @ref UCT_IFACE_ATTR_FIELD_FLAGS is set.
-     */
-    uint64_t   flags;
-
-    /**
-     * Length in bytes of the opaque TX token.
-     * Valid when @ref UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH is set.
-     */
-    size_t     tx_token_length;
-
-    /**
-     * Length in bytes of the opaque RX token.
-     * Valid when @ref UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH is set.
-     */
-    size_t     rx_token_length;
-
-    /**
-     * TX token input buffer.
-     * Valid when @ref UCT_IFACE_ATTR_FIELD_RX_TOKEN is set.
-     * Caller sets this to a buffer of @ref tx_token_length bytes containing
-     * the TX token received from the sender.
-     */
-    const void *tx_token;
-
-    /**
-     * RX token output buffer.
-     * Valid when @ref UCT_IFACE_ATTR_FIELD_RX_TOKEN is set.
-     * Caller sets this to a pre-allocated buffer of @ref rx_token_length
-     * bytes; callee fills it with RX token.
-     */
-    void       *rx_token;
-} uct_iface_attr_v2_t;
-
 
 END_C_DECLS
 
