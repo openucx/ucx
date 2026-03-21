@@ -9,14 +9,14 @@
 
 #include "uct_ib_plugin.h"
 
-ucs_status_t __attribute__((weak))
-uct_ib_plugin_iface_query(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr)
+uint64_t __attribute__((weak)) uct_ib_plugin_iface_flags(void)
 {
-    return UCS_ERR_UNSUPPORTED;
+    return 0;
 }
 
 ucs_status_t __attribute__((weak))
-uct_ib_plugin_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr)
+uct_ib_plugin_qp_query(const uct_ib_plugin_qp_query_params_t *params,
+                       uct_ib_plugin_qp_query_attr_t *attr)
 {
     return UCS_ERR_UNSUPPORTED;
 }
