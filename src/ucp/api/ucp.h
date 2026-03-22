@@ -509,7 +509,7 @@ enum ucp_dt_type {
     UCP_DATATYPE_CONTIG  = 0,      /**< Contiguous datatype */
     UCP_DATATYPE_STRIDED = 1,      /**< Strided datatype */
     UCP_DATATYPE_IOV     = 2,      /**< Scatter-gather list with multiple pointers */
-    UCP_DATATYPE_VECTOR  = 4,      /**< Vector datatype */
+    UCP_DATATYPE_SGL     = 4,      /**< Scatter-gather list datatype */
     UCP_DATATYPE_GENERIC = 7,      /**< Generic datatype with
                                         user-defined pack/unpack routines */
     UCP_DATATYPE_SHIFT   = 3,      /**< Number of bits defining
@@ -725,13 +725,9 @@ typedef enum {
     UCP_OP_ATTR_FIELD_MEMORY_TYPE     = UCS_BIT(6),  /**< memory type field */
     UCP_OP_ATTR_FIELD_RECV_INFO       = UCS_BIT(7),  /**< recv_info field */
     UCP_OP_ATTR_FIELD_MEMH            = UCS_BIT(8),  /**< memory handle field */
-    UCP_OP_ATTR_FIELD_REMOTE_DATATYPE = UCS_BIT(9),  /**< remote datatype for
-                                                          vector operations */
-    UCP_OP_ATTR_FIELD_REMOTE          = UCS_BIT(10), /**< remote descriptor for
-                                                          vector operations */
-    UCP_OP_ATTR_FIELD_REMOTE_COUNT    = UCS_BIT(11), /**< remote element count for
-                                                          vector operations */
-
+    UCP_OP_ATTR_FIELD_REMOTE_DATATYPE = UCS_BIT(9),  /**< remote datatype field */
+    UCP_OP_ATTR_FIELD_REMOTE          = UCS_BIT(10), /**< remote descriptor field */
+    UCP_OP_ATTR_FIELD_REMOTE_COUNT    = UCS_BIT(11), /**< remote element count field */
     UCP_OP_ATTR_FLAG_NO_IMM_CMPL      = UCS_BIT(16), /**< Deny immediate completion,
                                                           i.e NULL cannot be returned.
                                                           If a completion callback is
@@ -870,22 +866,22 @@ enum ucp_am_handler_param_field {
 
 /**
  * @ingroup UCP_DATATYPE
- * @brief Generate an identifier for vector data type.
+ * @brief Generate an identifier for scatter-gather list (SGL) data type.
  *
- * This macro creates a datatype identifier for vector operations. The same
- * identifier is used for both local and remote vector descriptors:
+ * This macro creates a datatype identifier for SGL operations. The same
+ * identifier is used for both local and remote SGL descriptors:
  * - When passed via @ref ucp_request_param_t::datatype, the @a buffer
- *   parameter should point to a @ref ucp_dt_local_vector_t descriptor.
+ *   parameter should point to a @ref ucp_dt_local_sgl_t descriptor.
  * - When passed via @ref ucp_request_param_t::remote_datatype, the
  *   @ref ucp_request_param_t::remote field should point to a
- *   @ref ucp_dt_remote_vector_t descriptor.
+ *   @ref ucp_dt_remote_sgl_t descriptor.
  * The @a count parameter of @ref ucp_put_nbx specifies the number of
  * local elements, and @ref ucp_request_param_t::remote_count specifies
  * the number of remote elements.
  *
  * @return Data-type identifier.
  */
-#define ucp_dt_make_vector() ((ucp_datatype_t)UCP_DATATYPE_VECTOR)
+#define ucp_dt_make_sgl() ((ucp_datatype_t)UCP_DATATYPE_SGL)
 
 
 /**
@@ -907,77 +903,77 @@ typedef struct ucp_dt_iov {
 
 /**
  * @ingroup UCP_DATATYPE
- * @brief Flags for specifying valid fields in @ref ucp_dt_local_vector_t.
+ * @brief Flags for specifying valid fields in @ref ucp_dt_local_sgl_t.
  */
-enum ucp_dt_local_vector_field {
-    UCP_DT_LOCAL_VECTOR_FIELD_BUFFERS = UCS_BIT(0), /**< buffers array is valid */
-    UCP_DT_LOCAL_VECTOR_FIELD_LENGTHS = UCS_BIT(1), /**< lengths array is valid */
-    UCP_DT_LOCAL_VECTOR_FIELD_MEMHS   = UCS_BIT(2)  /**< memhs array is valid */
+enum ucp_dt_local_sgl_field {
+    UCP_DT_LOCAL_SGL_FIELD_BUFFERS = UCS_BIT(0), /**< buffers array is valid */
+    UCP_DT_LOCAL_SGL_FIELD_LENGTHS = UCS_BIT(1), /**< lengths array is valid */
+    UCP_DT_LOCAL_SGL_FIELD_MEMHS   = UCS_BIT(2)  /**< memhs array is valid */
 };
 
 
 /**
  * @ingroup UCP_DATATYPE
- * @brief Flags for specifying valid fields in @ref ucp_dt_remote_vector_t.
+ * @brief Flags for specifying valid fields in @ref ucp_dt_remote_sgl_t.
  */
-enum ucp_dt_remote_vector_field {
-    UCP_DT_REMOTE_VECTOR_FIELD_REMOTE_ADDRS = UCS_BIT(0), /**< remote_addrs array is valid */
-    UCP_DT_REMOTE_VECTOR_FIELD_LENGTHS      = UCS_BIT(1), /**< lengths array is valid */
-    UCP_DT_REMOTE_VECTOR_FIELD_RKEYS        = UCS_BIT(2)  /**< rkeys array is valid */
+enum ucp_dt_remote_sgl_field {
+    UCP_DT_REMOTE_SGL_FIELD_REMOTE_ADDRS = UCS_BIT(0), /**< remote_addrs array is valid */
+    UCP_DT_REMOTE_SGL_FIELD_LENGTHS      = UCS_BIT(1), /**< lengths array is valid */
+    UCP_DT_REMOTE_SGL_FIELD_RKEYS        = UCS_BIT(2)  /**< rkeys array is valid */
 };
 
 
 /**
  * @ingroup UCP_DATATYPE
- * @brief Local vector descriptor for multi-element operations.
+ * @brief Local SGL descriptor for multi-element operations.
  *
  * This structure describes per-element local buffers, lengths, and memory
  * handles. Element @a i describes a local buffer at @a buffers[i] of
  * @a lengths[i] bytes with memory handle @a memhs[i].
  *
- * The descriptor @ref ucp_dt_local_vector_t itself is copied by the library,
+ * The descriptor @ref ucp_dt_local_sgl_t itself is copied by the library,
  * so the caller may release it after the call returns. However, the arrays
  * @a buffers, @a lengths, and @a memhs are not copied and must remain valid
  * until the data transfer request is completed.
  *
  * Pass as the @a buffer parameter to @ref ucp_put_nbx with
- * @ref ucp_request_param_t::datatype set to @ref ucp_dt_make_vector().
+ * @ref ucp_request_param_t::datatype set to @ref ucp_dt_make_sgl().
  *
  * @note Currently only N->N mapping is supported: both sides must use
- *       the vector datatype with equal counts and matching lengths.
+ *       the SGL datatype with equal counts and matching lengths.
  */
 typedef struct {
     uint64_t        field_mask; /**< Valid fields, using bits from
-                                     @ref ucp_dt_local_vector_field */
+                                     @ref ucp_dt_local_sgl_field */
     void * const    *buffers;   /**< Array of local buffer pointers */
     const size_t    *lengths;   /**< Array of transfer lengths in bytes */
     ucp_mem_h const *memhs;     /**< Array of local memory handles */
-} ucp_dt_local_vector_t;
+} ucp_dt_local_sgl_t;
 
 
 /**
  * @ingroup UCP_DATATYPE
- * @brief Remote vector descriptor for multi-element operations.
+ * @brief Remote SGL descriptor for multi-element operations.
  *
  * This structure describes per-element remote addresses, lengths, and keys.
  * Element @a i targets remote address @a remote_addrs[i] using key
  * @a rkeys[i].
  *
- * The descriptor @ref ucp_dt_remote_vector_t itself is copied by the library,
+ * The descriptor @ref ucp_dt_remote_sgl_t itself is copied by the library,
  * so the caller may release it after the call returns. However, the arrays
  * @a remote_addrs, @a lengths, and @a rkeys are not copied and must remain
  * valid until the data transfer request is completed.
  *
  * Pass via @ref ucp_request_param_t::remote with
- * @ref ucp_request_param_t::remote_datatype set to @ref ucp_dt_make_vector().
+ * @ref ucp_request_param_t::remote_datatype set to @ref ucp_dt_make_sgl().
  */
 typedef struct {
     uint64_t         field_mask;    /**< Valid fields, using bits from
-                                         @ref ucp_dt_remote_vector_field */
+                                         @ref ucp_dt_remote_sgl_field */
     const uint64_t   *remote_addrs; /**< Array of remote memory addresses */
     const size_t     *lengths;      /**< Array of transfer lengths in bytes */
     ucp_rkey_h const *rkeys;        /**< Array of remote memory keys */
-} ucp_dt_remote_vector_t;
+} ucp_dt_remote_sgl_t;
 
 
 /**
@@ -1948,9 +1944,9 @@ typedef struct {
     ucp_mem_h memh;
 
     /**
-     * Remote datatype identifier for vector operations. When set (along
+     * Remote datatype identifier for SGL operations. When set (along
      * with @ref UCP_OP_ATTR_FIELD_REMOTE_DATATYPE), specifies the datatype
-     * of the remote side. Currently only @ref ucp_dt_make_vector() is
+     * of the remote side. Currently only @ref ucp_dt_make_sgl() is
      * supported. When this field is set, @a remote and @a remote_count
      * should also be set.
      */
@@ -1959,7 +1955,7 @@ typedef struct {
     /**
      * Remote data descriptor. The type is determined by @a remote_datatype.
      * Used together with @a remote_datatype and @a remote_count to specify
-     * the remote side of vector operations. This field is used when
+     * the remote side of SGL operations. This field is used when
      * @ref UCP_OP_ATTR_FIELD_REMOTE is set in @a op_attr_mask.
      */
     const void *remote;
@@ -3793,8 +3789,8 @@ ucs_status_ptr_t ucp_tag_msg_recv_nbx(ucp_worker_h worker, void *buffer,
  * @brief Invalid remote address sentinel.
  *
  * This value should be passed as the @a remote_addr parameter of
- * @ref ucp_put_nbx when remote addresses are provided through a vector
- * descriptor (@ref ucp_dt_remote_vector_t) instead.
+ * @ref ucp_put_nbx when remote addresses are provided through an SGL
+ * descriptor (@ref ucp_dt_remote_sgl_t) instead.
  */
 #define UCP_REMOTE_ADDR_INVALID  UINT64_MAX
 
@@ -3804,8 +3800,8 @@ ucs_status_ptr_t ucp_tag_msg_recv_nbx(ucp_worker_h worker, void *buffer,
  * @brief Invalid remote key sentinel.
  *
  * This value should be passed as the @a rkey parameter of
- * @ref ucp_put_nbx when remote keys are provided through a vector
- * descriptor (@ref ucp_dt_remote_vector_t) instead.
+ * @ref ucp_put_nbx when remote keys are provided through an SGL
+ * descriptor (@ref ucp_dt_remote_sgl_t) instead.
  */
 #define UCP_RKEY_INVALID         NULL
 
@@ -3848,14 +3844,14 @@ ucs_status_ptr_t ucp_tag_msg_recv_nbx(ucp_worker_h worker, void *buffer,
  * @param [in]  remote_addr  Pointer to the destination remote memory address
  *                           to write to. When
  *                           @ref ucp_request_param_t::remote_datatype is
- *                           @ref ucp_dt_make_vector(), this should be set to
+ *                           @ref ucp_dt_make_sgl(), this should be set to
  *                           @ref UCP_REMOTE_ADDR_INVALID, as remote addresses
  *                           are specified in @ref ucp_request_param_t::remote
  *                           instead.
  * @param [in]  rkey         Remote memory key associated with the
  *                           remote memory address. When
  *                           @ref ucp_request_param_t::remote_datatype is
- *                           @ref ucp_dt_make_vector(), this should be set to
+ *                           @ref ucp_dt_make_sgl(), this should be set to
  *                           @ref UCP_RKEY_INVALID, as remote keys are specified
  *                           in @ref ucp_request_param_t::remote instead.
  * @param [in]  param       Operation parameters, see @ref ucp_request_param_t
@@ -3870,7 +3866,7 @@ ucs_status_ptr_t ucp_tag_msg_recv_nbx(ucp_worker_h worker, void *buffer,
  *                                @ref ucp_request_free "ucp_request_free()" routine.
  *
  * @note Supported datatypes for @a param->datatype are
- * @ref ucp_dt_make_contig, @ref ucp_dt_make_iov, and @ref ucp_dt_make_vector.
+ * @ref ucp_dt_make_contig, @ref ucp_dt_make_iov, and @ref ucp_dt_make_sgl.
  */
 ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
                              uint64_t remote_addr, ucp_rkey_h rkey,
