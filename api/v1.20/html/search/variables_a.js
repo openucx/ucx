@@ -1,9 +1,21 @@
 var searchData=
 [
-  ['latency_0',['latency',['../group___u_c_t___r_e_s_o_u_r_c_e.html#ace9cf2c31674223b000dff0e72c5d533',1,'uct_iface_attr']]],
-  ['length_1',['length',['../group___u_c_p___d_a_t_a_t_y_p_e.html#a776d38e0b127efb673685644b6816663',1,'ucp_dt_iov::length'],['../group___u_c_p___m_e_m.html#a36d735fe974dd85677474c028edb2af8',1,'ucp_mem_map_params::length'],['../group___u_c_p___c_o_n_t_e_x_t.html#a6fd83122b93c677e702dc37b39e8351b',1,'ucp_tag_recv_info::length'],['../group___u_c_p___m_e_m.html#a33e763e90d0cc7aad526a69dee8ef900',1,'ucp_mem_advise_params::length'],['../group___u_c_p___m_e_m.html#ae807002e05a4a269a74c767e23f49fa8',1,'ucp_mem_attr::length'],['../group___u_c_t___m_d.html#ae867afdf079a09edbbb03134e9d32489',1,'uct_allocated_memory::length'],['../group___u_c_t___r_e_s_o_u_r_c_e.html#ad00b6e55c209c6abc87b091f4c776cd5',1,'uct_iov::length'],['../group___u_c_p___c_o_n_t_e_x_t.html#a2fa47f7c65fec19cc163b195725e3844',1,'ucp_request_param_t.recv_info::length']]],
-  ['listen_5fsockaddr_2',['listen_sockaddr',['../group___u_c_t___r_e_s_o_u_r_c_e.html#a3a5bb921af4157bc96d39aa580ff978f',1,'uct_iface_attr::listen_sockaddr'],['../group___u_c_t___r_e_s_o_u_r_c_e.html#a5bc951a80626f79c6da054b5a09990cd',1,'uct_iface_params.mode.sockaddr::listen_sockaddr']]],
-  ['local_5fcpus_3',['local_cpus',['../group___u_c_t___m_d.html#aade634758ea5ea9fc7f64b17d66507d7',1,'uct_md_attr']]],
-  ['local_5fsockaddr_4',['local_sockaddr',['../group___u_c_p___e_n_d_p_o_i_n_t.html#ae54665498f1f7c019e716e7bf9d56531',1,'ucp_ep_attr::local_sockaddr'],['../group___u_c_p___e_n_d_p_o_i_n_t.html#ac7e00eea58053f718b67d92236c7a4b9',1,'ucp_ep_params::local_sockaddr'],['../group___u_c_t___r_e_s_o_u_r_c_e.html#acd106a47629c2dffb844fbdb15a050f6',1,'uct_ep_params::local_sockaddr']]],
-  ['log_5flevel_5',['log_level',['../namespace_3global_scope_4.html#ae279af7e4a426fe21bde0e83a2c423ae',1,'ucs_log_component_config']]]
+  ['max_5fam_5fheader',['max_am_header',['../group___u_c_p___w_o_r_k_e_r.html#a7678aa8d4fb18b0d6e2a0276b03e2cb4',1,'ucp_worker_attr']]],
+  ['max_5fconn_5fpriv',['max_conn_priv',['../group___u_c_t___r_e_s_o_u_r_c_e.html#a5612c3ad1e7a46dd6add669e32364424',1,'uct_iface_attr::max_conn_priv()'],['../group___u_c_t___c_l_i_e_n_t___s_e_r_v_e_r.html#adb462d4f30c639f7fb5a8a7d9702ddcf',1,'uct_cm_attr::max_conn_priv()']]],
+  ['max_5fdebug_5fstring',['max_debug_string',['../group___u_c_p___w_o_r_k_e_r.html#a79406f6545efcaefffaa34ca99bfdc04',1,'ucp_worker_attr']]],
+  ['max_5fnum_5feps',['max_num_eps',['../group___u_c_t___r_e_s_o_u_r_c_e.html#af6baead12f87707af1b3e56024b2b2e5',1,'uct_iface_attr']]],
+  ['max_5fthread_5flevel',['max_thread_level',['../group___u_c_p___c_o_n_t_e_x_t.html#a3cfd1d293ca29602ae799f7c52607c86',1,'ucp_lib_attr']]],
+  ['md',['md',['../group___u_c_t___m_d.html#afdf7da800a504f0da8f59874d9b71823',1,'uct_allocated_memory']]],
+  ['md_5fname',['md_name',['../group___u_c_t___r_e_s_o_u_r_c_e.html#a44245b18bf7151a4bde8cb4c0112f8cb',1,'uct_md_resource_desc']]],
+  ['md_5fresource_5fcount',['md_resource_count',['../group___u_c_t___r_e_s_o_u_r_c_e.html#a4add45e93acd44e434624726caaf9efb',1,'uct_component_attr']]],
+  ['md_5fresources',['md_resources',['../group___u_c_t___r_e_s_o_u_r_c_e.html#a75c51f7e16d827cc4c848016f5365404',1,'uct_component_attr']]],
+  ['mds',['mds',['../group___u_c_t___m_d.html#a611c24b16eb6131e02ccffe37fbaaa97',1,'uct_mem_alloc_params_t']]],
+  ['mem_5ftype',['mem_type',['../group___u_c_p___c_o_m_m.html#a86e23d8d22c973be0f86ea56adfd5678',1,'ucp_request_attr_t::mem_type()'],['../group___u_c_p___m_e_m.html#ac88b3fb764dd2af1a77bbe90161b2896',1,'ucp_mem_attr::mem_type()'],['../group___u_c_t___m_d.html#a9b20dd26a01412d61bea8f5cc4ee02a2',1,'uct_md_mem_attr::mem_type()'],['../group___u_c_t___m_d.html#ae6002ec224af4efa796246bfce7180fd',1,'uct_allocated_memory::mem_type()'],['../group___u_c_t___m_d.html#ac6a68b6fb669135688c594a58a6e3955',1,'uct_mem_alloc_params_t::mem_type()']]],
+  ['memh',['memh',['../group___u_c_p___c_o_n_t_e_x_t.html#a815bd876629909195b15c6b246de2900',1,'ucp_request_param_t::memh()'],['../group___u_c_t___m_d.html#a4b9171caf237f0f2884d548c395e47ea',1,'uct_allocated_memory::memh()'],['../group___u_c_t___r_e_s_o_u_r_c_e.html#a9a24e4be8303ebd6906bcaff37ab31f7',1,'uct_iov::memh()']]],
+  ['memory_5ftype',['memory_type',['../group___u_c_p___m_e_m.html#a71916e12e0fa7706355965de2edd7fc9',1,'ucp_mem_map_params::memory_type()'],['../group___u_c_p___c_o_n_t_e_x_t.html#a52b53447384778b16b3b91d6abeb0f86',1,'ucp_request_param_t::memory_type()']]],
+  ['memory_5ftypes',['memory_types',['../group___u_c_p___c_o_n_t_e_x_t.html#a59917e3a7e709c62e77d0acabbb0a24d',1,'ucp_context_attr']]],
+  ['message_5fsize',['message_size',['../group___u_c_p___e_n_d_p_o_i_n_t.html#ac6bc2d095c3c631324646cd9ac6a5a0f',1,'ucp_ep_evaluate_perf_param_t']]],
+  ['method',['method',['../group___u_c_t___m_d.html#ac0c1c5a5cd287f176e81650816138a55',1,'uct_allocated_memory']]],
+  ['mode',['mode',['../group___u_c_t___r_e_s_o_u_r_c_e.html#a7fa862d179a7605eef34de73e11869fe',1,'uct_iface_params::mode()'],['../namespace_3global_scope_4.html#a080bacced54b2014f148e933d4dc3347',1,'ucs_config_allow_list_t::mode()']]],
+  ['mt_5fworkers_5fshared',['mt_workers_shared',['../group___u_c_p___c_o_n_f_i_g.html#ac81f2d8a179df5fd39786a4b08b26faf',1,'ucp_params']]]
 ];

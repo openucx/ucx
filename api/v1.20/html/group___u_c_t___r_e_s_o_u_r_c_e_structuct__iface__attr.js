@@ -1,6 +1,6 @@
 var group___u_c_t___r_e_s_o_u_r_c_e_structuct__iface__attr =
 [
-    [ "cap", "group___u_c_t___r_e_s_o_u_r_c_e.html#a6c55cf8697354f4ace91142100ed074e", null ],
+    [ "cap", "group___u_c_t___r_e_s_o_u_r_c_e.html#aff010f596f41cdceae41e6c46652e1ca", null ],
     [ "device_addr_len", "group___u_c_t___r_e_s_o_u_r_c_e.html#a150fb2fb81e47e2a97571147cdc1647e", null ],
     [ "iface_addr_len", "group___u_c_t___r_e_s_o_u_r_c_e.html#adaeded4e728f80628ff6d29eeae7a5b0", null ],
     [ "ep_addr_len", "group___u_c_t___r_e_s_o_u_r_c_e.html#a70955f4d39111b0a48c85e0ff65768a0", null ],

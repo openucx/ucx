@@ -3,7 +3,7 @@ var group___u_c_t___r_e_s_o_u_r_c_e_structuct__iface__params =
     [ "field_mask", "group___u_c_t___r_e_s_o_u_r_c_e.html#a9e1d45a55b7e9629eb548f27bea940a0", null ],
     [ "cpu_mask", "group___u_c_t___r_e_s_o_u_r_c_e.html#a7093f64ec5efe2f1c3833dbe90b9099a", null ],
     [ "open_mode", "group___u_c_t___r_e_s_o_u_r_c_e.html#a7db3b0fb2bbde6b4625ad5a6c5e1a043", null ],
-    [ "mode", "group___u_c_t___r_e_s_o_u_r_c_e.html#aabd3472dc469285e466132ea7e4a2ec2", null ],
+    [ "mode", "group___u_c_t___r_e_s_o_u_r_c_e.html#a7fa862d179a7605eef34de73e11869fe", null ],
     [ "stats_root", "group___u_c_t___r_e_s_o_u_r_c_e.html#a6d87dd22dc349557a706bb25d49975f0", null ],
     [ "rx_headroom", "group___u_c_t___r_e_s_o_u_r_c_e.html#aea4ca94171e8dfe3e80abb74a06fe333", null ],
     [ "err_handler_arg", "group___u_c_t___r_e_s_o_u_r_c_e.html#abd1425d7ce0507acc97361abc56ea66d", null ],

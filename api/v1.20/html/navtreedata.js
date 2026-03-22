@@ -1,47 +1,29 @@
-/*
- @licstart  The following is the entire license notice for the JavaScript code in this file.
-
- The MIT License (MIT)
-
- Copyright (C) 1997-2020 by Dimitri van Heesch
-
- Permission is hereby granted, free of charge, to any person obtaining a copy of this software
- and associated documentation files (the "Software"), to deal in the Software without restriction,
- including without limitation the rights to use, copy, modify, merge, publish, distribute,
- sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is
- furnished to do so, subject to the following conditions:
-
- The above copyright notice and this permission notice shall be included in all copies or
- substantial portions of the Software.
-
- THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING
- BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
- DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
- @licend  The above is the entire license notice for the JavaScript code in this file
-*/
 var NAVTREE =
 [
   [ "UCX", "index.html", [
-    [ "Preface", "index.html", "index" ],
-    [ "Introduction", "md_docs_2doxygen_2intro.html", [
-      [ "Motivation", "md_docs_2doxygen_2intro.html#Motivation", null ],
-      [ "UCX", "md_docs_2doxygen_2intro.html#UCX", null ]
+    [ "Preface", "index.html", [
+      [ "Scope of the Document", "index.html#Scope", null ],
+      [ "Audience", "index.html#Audience", null ],
+      [ "Document Status", "index.html#Status", null ],
+      [ "License", "index.html#License", null ]
     ] ],
-    [ "Design", "md_docs_2doxygen_2design.html", [
-      [ "UCS", "md_docs_2doxygen_2design.html#UCS", null ],
-      [ "UCT", "md_docs_2doxygen_2design.html#UCT", null ],
-      [ "UCP", "md_docs_2doxygen_2design.html#UCP", null ]
+    [ "Introduction", "md_docs_doxygen_intro.html", [
+      [ "Motivation", "md_docs_doxygen_intro.html#Motivation", null ],
+      [ "UCX", "md_docs_doxygen_intro.html#UCX", null ]
     ] ],
-    [ "Conventions and Notations", "md_docs_2doxygen_2conventions.html", [
-      [ "Blocking Behavior", "md_docs_2doxygen_2conventions.html#Blocking", null ],
-      [ "Non-blocking Behavior", "md_docs_2doxygen_2conventions.html#Non-blocking", null ],
-      [ "Fairness", "md_docs_2doxygen_2conventions.html#Fairness", null ],
-      [ "Interaction with Signal Handler Functions", "md_docs_2doxygen_2conventions.html#Interaction", null ]
+    [ "Design", "md_docs_doxygen_design.html", [
+      [ "UCS", "md_docs_doxygen_design.html#UCS", null ],
+      [ "UCT", "md_docs_doxygen_design.html#UCT", null ],
+      [ "UCP", "md_docs_doxygen_design.html#UCP", null ]
+    ] ],
+    [ "Conventions and Notations", "md_docs_doxygen_conventions.html", [
+      [ "Blocking Behavior", "md_docs_doxygen_conventions.html#Blocking", null ],
+      [ "Non-blocking Behavior", "md_docs_doxygen_conventions.html#Non-blocking", null ],
+      [ "Fairness", "md_docs_doxygen_conventions.html#Fairness", null ],
+      [ "Interaction with Signal Handler Functions", "md_docs_doxygen_conventions.html#Interaction", null ]
     ] ],
     [ "Deprecated List", "deprecated.html", null ],
+    [ "Programming Interface", "modules.html", "modules" ],
     [ "Data Structures", "annotated.html", [
       [ "Data Structures", "annotated.html", "annotated_dup" ],
       [ "Data Structure Index", "classes.html", null ],
@@ -56,7 +38,12 @@ var NAVTREE =
 
 var NAVTREEINDEX =
 [
-"annotated.html"
+"annotated.html",
+"group___u_c_p___c_o_n_t_e_x_t.html#ggaca5990bc015e7e9ac3e3be4e3611c5bea685931b9f438fa9a2faaf9eccf47b097",
+"group___u_c_p___w_o_r_k_e_r.html#a79406f6545efcaefffaa34ca99bfdc04",
+"group___u_c_t___c_l_i_e_n_t___s_e_r_v_e_r.html#ga31c30e35f43121d1715620931860dafe",
+"group___u_c_t___r_e_s_o_u_r_c_e.html#a6a9bab4b671c0d0da959c98a4b3ab7ac",
+"group___u_c_t___r_e_s_o_u_r_c_e.html#structuct__iface__params"
 ];
 
 var SYNCONMSG = 'click to disable panel synchronisation';

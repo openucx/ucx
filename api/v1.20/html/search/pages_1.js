@@ -1,4 +1,5 @@
 var searchData=
 [
-  ['conventions_20and_20notations_0',['Conventions and Notations',['../md_docs_2doxygen_2conventions.html',1,'']]]
+  ['deprecated_20list',['Deprecated List',['../deprecated.html',1,'']]],
+  ['design',['Design',['../md_docs_doxygen_design.html',1,'']]]
 ];
