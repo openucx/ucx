@@ -10,7 +10,6 @@
 
 #include "gdaki.h"
 
-#include <ucs/datastruct/mpool.h>
 #include <ucs/sys/sock.h>
 #include <ucs/time/time.h>
 #include <ucs/datastruct/string_buffer.h>
@@ -294,11 +293,6 @@ uct_rc_gdaki_pool_chunk_init(ucs_mpool_t *mp,
     qp_attr.super.max_inl_cqe[UCT_IB_DIR_TX] = 0;
     uct_ib_mlx5_wq_calc_sizes(&qp_attr);
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(iface->cuda_ctx));
-    if (status != UCS_OK) {
-        return status;
-    }
-
     ep_qp_offset = UCT_GDAKI_DEV_EP_SIZE;
     ep_wq_offset = ep_qp_offset + iface->num_channels * UCT_GDAKI_DEV_QP_SIZE;
     dbrec.mem_id = hdr->umem->umem_id;
@@ -344,14 +338,11 @@ uct_rc_gdaki_pool_chunk_init(ucs_mpool_t *mp,
         }
     }
 
-    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
     return UCS_OK;
 
 err_cleanup:
     uct_rc_gdaki_chunk_channels_destroy(mp, elems, num_elems, ep_index,
                                         channel_index);
-
-    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
     ucs_error("gdaki channel chunk init: create_cq/qp failed (ch=%u ep=%u)",
               channel_index, ep_index);
     return status;
@@ -967,10 +958,12 @@ err_ctx_release:
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_gdaki_iface_t)
 {
-    uct_rc_gdaki_iface_cleanup_channel_pool(self);
     pthread_mutex_destroy(&self->ep_init_lock);
     ibv_dereg_mr(self->atomic_mr);
+    (void)UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(self->cuda_ctx));
+    uct_rc_gdaki_iface_cleanup_channel_pool(self);
     cuMemFree(self->atomic_raw);
+    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(self->cuda_dev));
 }
 
