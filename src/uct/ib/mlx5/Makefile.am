@@ -13,14 +13,14 @@ libuct_ib_mlx5_la_CFLAGS   = $(BASE_CFLAGS) $(LT_CFLAGS)
 libuct_ib_mlx5_la_LDFLAGS  = $(LIB_MLX5) $(IBVERBS_LDFLAGS) -version-info $(SOVERSION)
 libuct_ib_mlx5_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
                              $(top_builddir)/src/uct/libuct.la \
-                             $(top_builddir)/src/uct/ib/libuct_ib.la
+                             $(top_builddir)/src/uct/ib/libuct_ib.la \
+                             $(top_builddir)/src/uct/ib/plugin/libuct_ib_plugin_stubs.la
 
 libuct_ib_mlx5_la_SOURCES = \
 	ib_mlx5_log.c \
 	ib_mlx5.c \
 	dv/ib_mlx5_dv.c \
-	dv/ib_mlx5dv_md.c \
-	../plugin/uct_ib_plugin_stubs.c
+	dv/ib_mlx5dv_md.c
 
 noinst_HEADERS = \
 	ib_mlx5_log.h \
