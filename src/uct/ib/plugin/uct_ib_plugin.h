@@ -21,13 +21,13 @@ extern "C" {
 
 
 /**
- * @brief Plugin QP query field mask bits.
+ * @brief Field mask bits for @ref uct_ib_plugin_qp_query_params_t.
+ * Indicates which input fields are valid.
  */
-enum uct_ib_plugin_qp_query_field {
-    UCT_IB_PLUGIN_QP_QUERY_FIELD_TX_TOKEN_LEN = UCS_BIT(0),
-    UCT_IB_PLUGIN_QP_QUERY_FIELD_RX_TOKEN_LEN = UCS_BIT(1),
-    UCT_IB_PLUGIN_QP_QUERY_FIELD_TX_TOKEN     = UCS_BIT(2),
-    UCT_IB_PLUGIN_QP_QUERY_FIELD_RX_TOKEN     = UCS_BIT(3)
+enum uct_ib_plugin_qp_query_param_field {
+    UCT_IB_PLUGIN_QP_QUERY_PARAM_FIELD_CTX      = UCS_BIT(0),
+    UCT_IB_PLUGIN_QP_QUERY_PARAM_FIELD_QP       = UCS_BIT(1),
+    UCT_IB_PLUGIN_QP_QUERY_PARAM_FIELD_DEVX_OBJ = UCS_BIT(2)
 };
 
 /**
@@ -41,13 +41,25 @@ typedef struct uct_ib_plugin_qp_query_params {
 } uct_ib_plugin_qp_query_params_t;
 
 /**
+ * @brief Field mask bits for @ref uct_ib_plugin_qp_query_attr_t.
+ * Selects which output fields to populate.
+ */
+enum uct_ib_plugin_qp_query_attr_field {
+    UCT_IB_PLUGIN_QP_QUERY_ATTR_FIELD_TX_TOKEN_LEN = UCS_BIT(0),
+    UCT_IB_PLUGIN_QP_QUERY_ATTR_FIELD_RX_TOKEN_LEN = UCS_BIT(1),
+    UCT_IB_PLUGIN_QP_QUERY_ATTR_FIELD_TX_TOKEN     = UCS_BIT(2),
+    UCT_IB_PLUGIN_QP_QUERY_ATTR_FIELD_RX_TOKEN     = UCS_BIT(3)
+};
+
+/**
  * @brief QP query output attributes.
  */
 typedef struct uct_ib_plugin_qp_query_attr {
-    size_t tx_token_len;
-    size_t rx_token_len;
-    void   *tx_token;
-    void   *rx_token;
+    uint64_t field_mask;
+    size_t   tx_token_len;
+    size_t   rx_token_len;
+    void     *tx_token;
+    void     *rx_token;
 } uct_ib_plugin_qp_query_attr_t;
 
 
@@ -61,14 +73,14 @@ uint64_t uct_ib_plugin_iface_flags(void);
 /**
  * @brief Query QP token information.
  *
- * Depending on @a params->field_mask, returns token lengths and/or fills
- * caller-provided token buffers.
- *
- * @param [in]     params  Query parameters (field mask, QP handle, etc.).
- * @param [in,out] attr    Query results.  When TX_TOKEN / RX_TOKEN is
- *                         requested, the corresponding attr->tx_token /
- *                         attr->rx_token must point to a buffer of the
- *                         appropriate length.
+ * @param [in]     params  Input parameters.  @a params->field_mask selects
+ *                         which fields (ctx, qp, devx_obj) are valid.
+ * @param [in,out] attr    Output attributes.  @a attr->field_mask selects
+ *                         which fields to populate.  When
+ *                         UCT_IB_PLUGIN_QP_QUERY_ATTR_FIELD_TX_TOKEN /
+ *                         UCT_IB_PLUGIN_QP_QUERY_ATTR_FIELD_RX_TOKEN is set,
+ *                         attr->tx_token / attr->rx_token must point to a
+ *                         caller-allocated buffer of the appropriate length.
  *
  * @return UCS_OK on success, error code otherwise.
  */
