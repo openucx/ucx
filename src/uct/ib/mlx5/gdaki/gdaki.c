@@ -941,6 +941,14 @@ uct_gdaki_dev_matrix_init(unsigned ib_per_cuda, size_t *dmat_length_p)
     const char *sysfs_path;
     uct_gdaki_dev_matrix_elem_t *ibdesc;
     CUdevice cuda_dev;
+#if HAVE_DECL_MLX5DV_GET_DATA_DIRECT_SYSFS_PATH
+    char sys_path[PATH_MAX];
+    char dev_name[64];
+    struct ibv_context *context;
+    ucs_sys_device_t sys_dev_dnic;
+    ucs_sys_device_t sys_dev_ib;
+    int ret;
+#endif
 
     status = ucs_string_alloc_path_buffer(&path_buffer, "path_buffer");
     if (status != UCS_OK) {
@@ -975,6 +983,28 @@ uct_gdaki_dev_matrix_init(unsigned ib_per_cuda, size_t *dmat_length_p)
         ibdev           = device_list[ibdev_index];
         sysfs_path      = ucs_topo_resolve_sysfs_path(ibdev->ibdev_path,
                                                       path_buffer);
+
+#if HAVE_DECL_MLX5DV_GET_DATA_DIRECT_SYSFS_PATH
+        context = ibv_open_device(ibdev);
+        ret     = mlx5dv_get_data_direct_sysfs_path(context, sys_path,
+                                                    sizeof(sys_path));
+        ibv_close_device(context);
+        if (ret == 0) {
+            snprintf(dev_name, sizeof(dev_name), "%s_direct",
+                     ibv_get_device_name(ibdev));
+            sys_dev_dnic = ucs_topo_get_sysfs_dev(dev_name, sys_path, 0);
+            sys_dev_ib   = ucs_topo_get_sysfs_dev(ibv_get_device_name(ibdev),
+                                                  sysfs_path, 0);
+            status       = ucs_topo_sys_device_set_sys_dev_aux(sys_dev_ib,
+                                                               sys_dev_dnic);
+            if (status != UCS_OK) {
+                ucx_debug(
+                        "%s: ucs_topo_sys_device_set_sys_dev_aux() failed: %s",
+                        ibv_get_device_name(ibdev), ucs_status_string(status));
+            }
+        }
+#endif
+
         ibdesc->sys_dev = ucs_topo_get_sysfs_dev(ibv_get_device_name(ibdev),
                                                  sysfs_path, 0);
         scores[ibdev_index].index = ibdev_index;
