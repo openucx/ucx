@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -398,7 +398,7 @@ ucp_proto_select_elem_init_thresh(ucp_worker_h worker,
     ucs_array_init_dynamic(&proto_init->priv_buf);
     ucs_array_init_dynamic(&proto_init->protocols);
 
-    /* Check if a RMA ZCOPY protocol is used for, a big enough size */
+    /* Check if a RMA ZCOPY protocol is used for a big enough size */
     select_elem->rma_zcopy_compliant = !!(
             ucp_proto_select_thresholds_search(select_elem, SIZE_MAX)
                     ->proto_config.proto->flags &

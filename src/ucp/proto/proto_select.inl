@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -145,7 +145,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_rma_zcopy_required_check(
         required_mask = worker->mem_type_zcopy_required_inter;
     }
 
-    if (required_mask == 0) {
+    if (ucs_likely(required_mask == 0)) {
         return UCS_OK;
     }
 

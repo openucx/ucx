@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2021. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -1149,7 +1149,7 @@ ucp_worker_select_best_ifaces(ucp_worker_h worker, ucp_tl_bitmap_t *tl_bitmap_p)
  * @return Error code as defined by @ref ucs_status_t
  */
 static ucs_status_t
-ucp_context_fill_mem_type_zcopy_required(ucp_worker_h worker)
+ucp_worker_fill_mem_type_zcopy_required(ucp_worker_h worker)
 {
     ucp_context_h context = worker->context;
     ucp_rsc_index_t tl_id;
@@ -1173,7 +1173,7 @@ ucp_context_fill_mem_type_zcopy_required(ucp_worker_h worker)
     ucs_flags_str(buf, sizeof(buf), supported_mem_types, ucs_memory_type_names);
     ucs_trace("RMA zcopy mandate: supported-mem:%s", buf[0] ? buf : "(none)");
 
-    /* Among TLs with GET/PUT ZCOPY found in TL_RMA, apply mandatory rule.
+    /* Among TLs with GET/PUT ZCOPY found in TLS_RMA, apply mandatory rule.
      * Memory types are taken from each transport's reg_mem_types.
      * - no-host + mem type:
      *   - intra-node GPU-to-GPU zcopy; inter-node when supported
@@ -1200,13 +1200,13 @@ ucp_context_fill_mem_type_zcopy_required(ucp_worker_h worker)
         }
 
         /* Error when network device with host support lacks GPU memory types
-         * required by no-host TLs in UCX_TL_RMA */
+         * required by no-host TLs in UCX_TLS_RMA */
         if ((md_attr->reg_mem_types & UCS_BIT(UCS_MEMORY_TYPE_HOST)) &&
             (context->tl_rscs[tl_id].tl_rsc.dev_type == UCT_DEVICE_TYPE_NET)) {
             missing = supported_mem_types & ~md_attr->reg_mem_types;
             if (missing) {
                 ucs_flags_str(buf, sizeof(buf), missing, ucs_memory_type_names);
-                ucs_error("Network transport %s is in UCX_TL_RMA but "
+                ucs_error("Network transport %s is in UCX_TLS_RMA but "
                           "does not support: %s",
                           tl_name, buf);
                 return UCS_ERR_INVALID_PARAM;
@@ -1343,7 +1343,7 @@ static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker)
         }
     }
 
-    status = ucp_context_fill_mem_type_zcopy_required(worker);
+    status = ucp_worker_fill_mem_type_zcopy_required(worker);
     if (status != UCS_OK) {
         goto err_cleanup_ifaces;
     }
