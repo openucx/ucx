@@ -299,7 +299,7 @@ struct uct_rc_iface {
         uint8_t              flush_remote;
         uct_rc_fence_mode_t  fence_mode;
         unsigned             exp_backoff;
-        uint64_t             ece;
+        unsigned long        ece;
         size_t               max_get_zcopy;
 
         /* Atomic callbacks */

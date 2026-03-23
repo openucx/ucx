@@ -69,7 +69,6 @@
 #define UCT_IB_DEVICE_SYSFS_GID_TYPE_FMT  UCT_IB_DEVICE_SYSFS_GID_ATTR_PFX "/types/%d"
 #define UCT_IB_DEVICE_SYSFS_GID_NDEV_FMT  UCT_IB_DEVICE_SYSFS_GID_ATTR_PFX "/ndevs/%d"
 #define UCT_IB_DEVICE_SYSFS_ROCE_TC_FMT   UCT_IB_DEVICE_SYSFS_PFX "/tc/%d/traffic_class"
-#define UCT_IB_DEVICE_ECE_DEFAULT         UINT64_MAX  /* default ECE */
 #define UCT_IB_DEVICE_ECE_MAX             0xffffffffU /* max ECE */
 #define UCT_IB_DEVICE_DEFAULT_GID_INDEX 0   /* The gid index used by default for an IB/RoCE port */
 #define UCT_IB_DEVICE_ROUTABLE_FLID_GID_INDEX 1 /* The gid index used by default

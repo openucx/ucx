@@ -716,8 +716,8 @@ protected:
 
 size_t test_rc_ece::m_recv_count = 0;
 
-UCS_TEST_SKIP_COND_P(test_rc_ece, ece_0,
-                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY), "RC_ECE=0")
+UCS_TEST_SKIP_COND_P(test_rc_ece, ece_0, !check_caps(UCT_IFACE_FLAG_AM_BCOPY),
+                     "RC_ECE=0")
 {
     send_recv(m_e1->ep(0), m_e2, m_e1->iface_attr().cap.am.max_bcopy, 0);
 }
@@ -732,14 +732,14 @@ UCS_TEST_SKIP_COND_P(test_rc_ece, ece_auto,
                      !check_caps(UCT_IFACE_FLAG_AM_BCOPY), "RC_ECE=auto")
 {
     send_recv(m_e1->ep(0), m_e2, m_e1->iface_attr().cap.am.max_bcopy,
-              UCT_IB_DEVICE_ECE_DEFAULT);
+              UCS_ULUNITS_AUTO);
 }
 
-UCS_TEST_SKIP_COND_P(test_rc_ece, ece_inf,
-                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY), "RC_ECE=inf")
+UCS_TEST_SKIP_COND_P(test_rc_ece, ece_inf, !check_caps(UCT_IFACE_FLAG_AM_BCOPY),
+                     "RC_ECE=inf")
 {
     send_recv(m_e1->ep(0), m_e2, m_e1->iface_attr().cap.am.max_bcopy,
-              UCT_IB_DEVICE_ECE_MAX);
+              UCS_ULUNITS_INF);
 }
 
 UCT_INSTANTIATE_RC_DC_TEST_CASE(test_rc_ece)
