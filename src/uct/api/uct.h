@@ -377,7 +377,7 @@ typedef enum uct_atomic_op {
 #define UCT_IFACE_FLAG_PUT_SHORT      UCS_BIT(4)  /**< Short put */
 #define UCT_IFACE_FLAG_PUT_BCOPY      UCS_BIT(5)  /**< Buffered put */
 #define UCT_IFACE_FLAG_PUT_ZCOPY      UCS_BIT(6)  /**< Zero-copy put */
-#define UCT_IFACE_FLAG_PUT_SGL        UCS_BIT(7)  /**< SGL put */
+#define UCT_IFACE_FLAG_PUT_SGL        UCS_BIT(7)  /**< Scatter-gather list put */
 
         /* GET capabilities */
 #define UCT_IFACE_FLAG_GET_SHORT      UCS_BIT(8)  /**< Short get */
@@ -1076,7 +1076,7 @@ struct uct_iface_attr {
                                               @ref ::uct_ep_put_zcopy
                                               @anchor uct_iface_attr_cap_put_max_iov */
             size_t           max_sgl_count; /**< Maximal @a count parameter in
-                                                 @ref ::uct_ep_put_sgl_zcopy
+                                                 uct_ep_put_sgl_zcopy
                                                  @anchor uct_iface_attr_cap_put_max_sgl_count */
         } put;                           /**< Attributes for PUT operations */
 

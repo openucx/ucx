@@ -1200,8 +1200,8 @@ ucs_status_t uct_ep_get_device_ep(uct_ep_h ep, uct_device_ep_h *device_ep_p);
 
 /**
  * @ingroup UCT_RMA
- * @brief Write multiple buffers to multiple remote addresses while avoiding
- *        local memory copy.
+ * @brief Scatter-gather list (SGL) zero-copy put: write multiple buffers to
+ *        multiple remote addresses while avoiding local memory copy.
  *
  * Each element @a i transfers @a lengths[i] bytes from local buffer
  * @a buffers[i] (with memory handle @a memhs[i]) to remote address
