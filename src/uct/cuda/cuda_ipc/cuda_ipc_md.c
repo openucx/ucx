@@ -40,6 +40,20 @@ static ucs_config_field_t uct_cuda_ipc_md_config_table[] = {
      "Enable multi-node NVLINK capabilities.",
      ucs_offsetof(uct_cuda_ipc_md_config_t, enable_mnnvl), UCS_CONFIG_TYPE_TERNARY},
 
+    {"CACHE_MAX_REGIONS", "inf",
+     "Maximum number of regions in each per-peer CUDA IPC remote handle cache.\n"
+     "Each remote peer has a separate cache; this limit applies independently\n"
+     "to each one. Regions are evicted in LRU order when this limit is exceeded.",
+     ucs_offsetof(uct_cuda_ipc_md_config_t, cache_max_regions),
+     UCS_CONFIG_TYPE_ULUNITS},
+
+    {"CACHE_MAX_SIZE", "inf",
+     "Maximum total size of regions in each per-peer CUDA IPC remote handle cache.\n"
+     "Each remote peer has a separate cache; this limit applies independently\n"
+     "to each one. Regions are evicted in LRU order when this limit is exceeded.",
+     ucs_offsetof(uct_cuda_ipc_md_config_t, cache_max_size),
+     UCS_CONFIG_TYPE_MEMUNITS},
+
     {NULL}
 };
 
@@ -615,7 +629,11 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
     md->super.component = &uct_cuda_ipc_component.super;
     md->enable_mnnvl    = uct_cuda_ipc_md_check_fabric_info(
                                                   md, ipc_config->enable_mnnvl);
-    *md_p               = &md->super;
+
+    uct_cuda_ipc_cache_set_global_limits(ipc_config->cache_max_regions,
+                                         ipc_config->cache_max_size);
+
+    *md_p                 = &md->super;
 
     return UCS_OK;
 }

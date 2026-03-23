@@ -451,6 +451,8 @@ with the host CPU.
 %endif
 
 %changelog
+* Wed Mar 18 2026 Yossi Itigin <yosefe@nvidia.com> 1.22.0-1
+- Bump version to 1.22.0
 * Mon Oct 20 2025 Leonid Genkin <lgenkin@nvidia.com> 1.21.0-1
 - Bump version to 1.21.0
 * Fri Apr 11 2025 Yossi Itigin <yosefe@nvidia.com> 1.20.0-1

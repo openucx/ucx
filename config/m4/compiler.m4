@@ -82,6 +82,21 @@ AS_IF([test "x$enable_compiler_opt" = "xyes"], [BASE_CFLAGS="-O3 $BASE_CFLAGS"],
 
 
 #
+# Define OPTIMIZATION_LEVEL to the numeric value of the last -O flag.
+# Non-numeric levels (e.g. -Og, -Oz, -Ofast) leave OPTIMIZATION_LEVEL undefined.
+#
+opt_level=""
+for flag in $BASE_CFLAGS $CFLAGS; do
+    case $flag in -O*) opt_level=${flag#-O};; esac
+done
+case $opt_level in
+    [[0-9]])
+        AC_DEFINE_UNQUOTED([OPTIMIZATION_LEVEL], [$opt_level],
+                           [Numeric compiler optimization level]) ;;
+esac
+
+
+#
 # CHECK_CROSS_COMP (program, true-action, false-action)
 #
 # The macro checks if it can run the program; it executes
