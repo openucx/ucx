@@ -3786,28 +3786,6 @@ ucs_status_ptr_t ucp_tag_msg_recv_nbx(ucp_worker_h worker, void *buffer,
 
 /**
  * @ingroup UCP_COMM
- * @brief Invalid remote address sentinel.
- *
- * This value should be passed as the @a remote_addr parameter of
- * @ref ucp_put_nbx when remote addresses are provided through an SGL
- * descriptor (@ref ucp_dt_remote_sgl_t) instead.
- */
-#define UCP_REMOTE_ADDR_INVALID  UINT64_MAX
-
-
-/**
- * @ingroup UCP_COMM
- * @brief Invalid remote key sentinel.
- *
- * This value should be passed as the @a rkey parameter of
- * @ref ucp_put_nbx when remote keys are provided through an SGL
- * descriptor (@ref ucp_dt_remote_sgl_t) instead.
- */
-#define UCP_RKEY_INVALID         NULL
-
-
-/**
- * @ingroup UCP_COMM
  * @brief Non-blocking remote memory put operation.
  *
  * This routine initiates a storage of contiguous block of data that is
