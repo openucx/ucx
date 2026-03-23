@@ -178,6 +178,18 @@ static UCS_F_ALWAYS_INLINE size_t ucs_double_to_sizet(double value, size_t max)
 
 
 /*
+ * Greatest common divisor of @a and @b.
+ */
+uint64_t ucs_gcd(uint64_t a, uint64_t b);
+
+
+/*
+ * Least common multiple of @a and @b.
+ */
+uint64_t ucs_lcm(uint64_t a, uint64_t b);
+
+
+/*
  * Generate a large prime number
  */
 uint64_t ucs_get_prime(unsigned index);
