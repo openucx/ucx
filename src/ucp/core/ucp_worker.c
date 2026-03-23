@@ -1148,8 +1148,7 @@ ucp_worker_select_best_ifaces(ucp_worker_h worker, ucp_tl_bitmap_t *tl_bitmap_p)
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-static ucs_status_t
-ucp_worker_fill_mem_type_zcopy_required(ucp_worker_h worker)
+static ucs_status_t ucp_worker_fill_mem_type_zcopy_required(ucp_worker_h worker)
 {
     ucp_context_h context = worker->context;
     ucp_rsc_index_t tl_id;

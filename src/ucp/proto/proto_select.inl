@@ -129,15 +129,6 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_rma_zcopy_required_check(
     ucs_memory_type_t local_mem_type, remote_mem_type;
     uint64_t required_mask;
 
-    /* Do not restrict for already compliant, self or non RMA */
-    if (select_elem->rma_zcopy_compliant ||
-        (ep_config->key.flags & UCP_EP_CONFIG_KEY_FLAG_SELF) ||
-        !ucp_proto_select_check_op(select_param,
-                                   UCS_BIT(UCP_OP_ID_PUT) |
-                                   UCS_BIT(UCP_OP_ID_GET))) {
-        return UCS_OK;
-    }
-
     /* Identify the use-case for requirement */
     if (ep_config->key.flags & UCP_EP_CONFIG_KEY_FLAG_INTRA_NODE) {
         required_mask = worker->mem_type_zcopy_required_intra;
@@ -145,7 +136,13 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_rma_zcopy_required_check(
         required_mask = worker->mem_type_zcopy_required_inter;
     }
 
-    if (ucs_likely(required_mask == 0)) {
+    /* Do not restrict for already compliant, self or non RMA */
+    if (ucs_likely(required_mask == 0) ||
+        !ucp_proto_select_check_op(select_param,
+                                   UCS_BIT(UCP_OP_ID_PUT) |
+                                   UCS_BIT(UCP_OP_ID_GET)) ||
+        select_elem->rma_zcopy_compliant ||
+        ep_config->key.flags & UCP_EP_CONFIG_KEY_FLAG_SELF) {
         return UCS_OK;
     }
 
