@@ -157,8 +157,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_rma_zcopy_required_check(
         (remote_mem_type != UCS_MEMORY_TYPE_LAST &&
          (UCS_BIT(remote_mem_type) & required_mask))) {
         ucs_error("RMA %s with local memory %s and remote memory %s requires "
-                  "zcopy "
-                  "but selected protocol is not compliant",
+                  "zcopy but selected protocol is not compliant",
                   ucp_proto_select_op_id(select_param) == UCP_OP_ID_PUT ?
                   "PUT" : "GET",
                   ucs_memory_type_names[local_mem_type],
