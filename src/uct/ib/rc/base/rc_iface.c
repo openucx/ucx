@@ -611,7 +611,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
 #endif
     max_ib_msg_size             = uct_ib_iface_port_attr(&self->super)->max_msg_sz;
 
-    if (!md->ece_enable && config->ece != UCS_ULUNITS_AUTO) {
+    if (!md->ece_enable && (config->ece != UCS_ULUNITS_AUTO)) {
         ucs_error("%s: cannot set ECE value to 0x%lx since the device does not "
                   "support ECE", uct_ib_device_name(dev), config->ece);
         status = UCS_ERR_INVALID_PARAM;
@@ -869,12 +869,9 @@ ucs_status_t uct_rc_iface_set_ece(uct_rc_iface_t *iface, struct ibv_qp *qp)
     struct ibv_ece ece;
     ucs_log_level_t log_level;
 
-    if ((ece_val == UCS_ULUNITS_AUTO) && !md->ece_enable) {
+    if (!md->ece_enable) {
         return UCS_OK;
     }
-
-    ucs_assertv_always(md->ece_enable, "device=%s, config_ece=0x%"PRIx64,
-                       uct_ib_device_name(dev), ece_val);
 
     if (ibv_query_ece(qp, &ece)) {
         ucs_error("ibv_query_ece(device=%s qpn=0x%x) failed: %m",
@@ -882,17 +879,15 @@ ucs_status_t uct_rc_iface_set_ece(uct_rc_iface_t *iface, struct ibv_qp *qp)
         return UCS_ERR_IO_ERROR;
     }
 
-    if (ece_val != UCS_ULUNITS_AUTO) {
-        if (ece_val == UCS_ULUNITS_INF) {
-            ece.options = UCT_IB_DEVICE_ECE_MAX;
-        } else {
-            ece.options = ece_val;
-        }
+    if (ece_val == UCS_ULUNITS_INF) {
+        ece.options = UCT_IB_DEVICE_ECE_MAX;
+    } else if (ece_val != UCS_ULUNITS_AUTO) {
+        ece.options = ece_val;
     }
 
     if (ibv_set_ece(qp, &ece)) {
-        log_level = ((ece_val == UCS_ULUNITS_AUTO) ? UCS_LOG_LEVEL_DIAG :
-                                                     UCS_LOG_LEVEL_ERROR);
+        log_level = (ece_val == UCS_ULUNITS_AUTO) ? UCS_LOG_LEVEL_DIAG :
+                                                    UCS_LOG_LEVEL_ERROR;
         ucs_log(log_level,
                 "ibv_set_ece(device=%s qpn=0x%x vendor_id=0x%x "
                 "options=0x%x comp_mask=0x%x) failed: %m",
