@@ -1216,8 +1216,8 @@ ucs_status_t uct_ep_get_device_ep(uct_ep_h ep, uct_device_ep_h *device_ep_p);
  * @param [in] rkeys        Array of remote keys, obtained from
  *                          @ref ::uct_rkey_unpack.
  * @param [in] count        Number of elements in the arrays. Must not exceed
- *                          @ref uct_iface_attr_cap_put_max_vector_count
- *                          "uct_iface_attr::cap::put::max_vector_count".
+ *                          @ref uct_iface_attr_cap_put_max_sgl_count
+ *                          "uct_iface_attr::cap::put::max_sgl_count".
  * @param [in] comp         Completion handle as defined by
  *                          @ref ::uct_completion_t.
  *
@@ -1226,14 +1226,14 @@ ucs_status_t uct_ep_get_device_ep(uct_ep_h ep, uct_device_ep_h *device_ep_p);
  *                          upon completion of these operations.
  */
 ucs_status_t
-uct_ep_put_vector_zcopy(uct_ep_h ep,
-                        void * const *buffers,
-                        const uint64_t *remote_addrs,
-                        const size_t *lengths,
-                        uct_mem_h const *memhs,
-                        uct_rkey_t const *rkeys,
-                        size_t count,
-                        uct_completion_t *comp);
+uct_ep_put_sgl_zcopy(uct_ep_h ep,
+                     void * const *buffers,
+                     const uint64_t *remote_addrs,
+                     const size_t *lengths,
+                     uct_mem_h const *memhs,
+                     uct_rkey_t const *rkeys,
+                     size_t count,
+                     uct_completion_t *comp);
 
 
 /**

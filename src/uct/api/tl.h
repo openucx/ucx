@@ -44,14 +44,14 @@ typedef ucs_status_t (*uct_ep_put_zcopy_func_t)(uct_ep_h ep,
                                                 uct_rkey_t rkey,
                                                 uct_completion_t *comp);
 
-typedef ucs_status_t (*uct_ep_put_vector_zcopy_func_t)(uct_ep_h ep,
-                                                       void * const *buffers,
-                                                       const uint64_t *remote_addrs,
-                                                       const size_t *lengths,
-                                                       uct_mem_h const *memhs,
-                                                       uct_rkey_t const *rkeys,
-                                                       size_t count,
-                                                       uct_completion_t *comp);
+typedef ucs_status_t (*uct_ep_put_sgl_zcopy_func_t)(uct_ep_h ep,
+                                                    void * const *buffers,
+                                                    const uint64_t *remote_addrs,
+                                                    const size_t *lengths,
+                                                    uct_mem_h const *memhs,
+                                                    uct_rkey_t const *rkeys,
+                                                    size_t count,
+                                                    uct_completion_t *comp);
 
 /* endpoint - get */
 
