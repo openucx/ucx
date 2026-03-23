@@ -1262,6 +1262,32 @@ ucs_status_t uct_rkey_unpack_v2(uct_component_h component,
 ucs_status_t uct_md_mem_elem_pack(uct_md_h md, uct_mem_h memh, uct_rkey_t rkey,
                                   uct_device_mem_element_t *mem_elem);
 
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Stub interface with internal_ops for proxy/wireup endpoints.
+ */
+typedef struct uct_stub_iface {
+    uct_iface_t                    super;
+    struct uct_iface_internal_ops *internal_ops;
+} uct_stub_iface_t;
+
+
+/**
+ * Default stub internal operations table.
+ */
+extern struct uct_iface_internal_ops uct_stub_internal_ops;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Initialize a stub interface with default internal operations.
+ *
+ * @param [in] iface  Stub interface to initialize.
+ * @param [in] ops    Operations table to copy into the interface.
+ */
+void uct_stub_iface_init(uct_stub_iface_t *iface, const uct_iface_ops_t *ops);
+
+
 END_C_DECLS
 
 #endif
