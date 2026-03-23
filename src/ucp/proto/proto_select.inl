@@ -156,7 +156,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_rma_zcopy_required_check(
                                      rkey_cfg_index).key.mem_type :
                       UCS_MEMORY_TYPE_LAST;
 
-    if ((UCS_BIT(local_mem_type) & required_mask) ||
+    if ((UCS_BIT(local_mem_type) & required_mask) &&
         (remote_mem_type != UCS_MEMORY_TYPE_LAST &&
          (UCS_BIT(remote_mem_type) & required_mask))) {
         ucs_error("RMA %s with local memory %s and remote memory %s requires "
