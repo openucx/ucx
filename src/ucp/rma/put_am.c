@@ -119,6 +119,10 @@ ucp_proto_put_am_bcopy_probe(const ucp_proto_init_params_t *init_params)
         return;
     }
 
+    if (init_params->worker->context->config.ext.rma_force_zcopy) {
+        return;
+    }
+
     ucp_proto_multi_probe(&params);
 }
 
