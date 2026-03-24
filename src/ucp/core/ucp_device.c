@@ -267,7 +267,7 @@ static ucs_status_t ucp_device_local_mem_list_create_handle(
     uct_device_local_mem_list_elem_t *uct_element;
     size_t i, j, num_lanes;
     ucs_status_t status;
-    ucp_tl_bitmap_t tl_bitmap[UCP_DEVICE_TL_TYPE_NUM];
+    ucp_tl_bitmap_t tl_bitmap[UCP_DEVICE_TL_TYPE_NUM] = {};
     ucp_rsc_index_t tl_id;
 
     num_lanes   = ucp_device_get_tl_bitmap(worker, tl_bitmap, local_sys_dev);
@@ -559,7 +559,7 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
     ucp_device_remote_mem_list_t *handle;
     uct_device_remote_mem_list_elem_t *uct_element;
     ucs_sys_device_t local_sys_dev;
-    ucp_tl_bitmap_t tl_bitmap[UCP_DEVICE_TL_TYPE_NUM];
+    ucp_tl_bitmap_t tl_bitmap[UCP_DEVICE_TL_TYPE_NUM] = {};
     size_t i, num_lanes;
     ucs_status_t status;
     int tl_type;
