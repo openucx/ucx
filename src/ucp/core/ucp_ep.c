@@ -138,10 +138,8 @@ static uct_stub_iface_t ucp_failed_tl_iface_stub = {
     .internal_ops = &uct_stub_internal_ops,
 };
 
-#define ucp_failed_tl_iface (ucp_failed_tl_iface_stub.super)
-
 static ucp_ep_discard_lanes_arg_t ucp_failed_tl_ep_discard_arg = {
-    .failed_ep = {.iface = &ucp_failed_tl_iface},
+    .failed_ep = {.iface = &ucp_failed_tl_iface_stub.super},
     .status    = UCS_ERR_CANCELED
 };
 
@@ -1461,7 +1459,7 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
         return;
     }
 
-    discard_arg->failed_ep.iface = &ucp_failed_tl_iface;
+    discard_arg->failed_ep.iface = &ucp_failed_tl_iface_stub.super;
     discard_arg->ucp_ep          = ep;
     discard_arg->status          = discard_status;
     discard_arg->discard_counter = 1;
