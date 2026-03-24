@@ -998,7 +998,7 @@ uct_gdaki_dev_matrix_init(unsigned ib_per_cuda, size_t *dmat_length_p)
             status       = ucs_topo_sys_device_set_sys_dev_aux(sys_dev_ib,
                                                                sys_dev_dnic);
             if (status != UCS_OK) {
-                ucx_debug(
+                ucs_debug(
                         "%s: ucs_topo_sys_device_set_sys_dev_aux() failed: %s",
                         ibv_get_device_name(ibdev), ucs_status_string(status));
             }
