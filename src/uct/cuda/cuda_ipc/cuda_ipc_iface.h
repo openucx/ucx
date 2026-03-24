@@ -49,7 +49,6 @@ typedef struct {
     uct_cuda_ipc_ep_t     *ep;
     uintptr_t             d_bptr;
     pid_t                 pid;
-    ucs_sys_ns_t          pid_ns;
     CUdevice              cuda_device;
 } uct_cuda_ipc_event_desc_t;
 
