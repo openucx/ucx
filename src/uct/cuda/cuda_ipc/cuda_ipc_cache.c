@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -569,7 +569,8 @@ ucs_status_t uct_cuda_ipc_unmap_memhandle(pid_t pid, ucs_sys_ns_t pid_ns,
     /* checking if the mapped address is the same as the d_bptr
      * this is true for the case of single process memory mapping
      * see uct_cuda_ipc_map_memhandle for more details */
-    if (d_bptr == (uintptr_t)mapped_addr) {
+    if ((d_bptr == (uintptr_t)mapped_addr) &&
+        uct_cuda_ipc_is_rkey_local(pid, pid_ns)) {
         return UCS_OK;
     }
 
@@ -620,7 +621,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
         return status;
     }
 
-    if (uct_cuda_ipc_is_rkey_local(ext_key) &&
+    if (uct_cuda_ipc_is_rkey_local(key->pid, ext_key->pid_ns) &&
         (memcmp(uuid.bytes, key->uuid.bytes, sizeof(uuid.bytes)) == 0)) {
         /* TODO: added for test purpose to enable cuda_ipc tests in gtest
          * mapped addrr is set to be same as d_bptr avoiding any calls to
