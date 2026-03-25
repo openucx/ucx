@@ -74,12 +74,12 @@ uct_ib_mlx5dv_check_direct_nic(struct ibv_context *ctx, const char *ib_dev_name,
               sys_dev_ib, sys_dev_dnic);
 
     return sys_dev_dnic;
+out:
 #else
     ucs_debug("%s: direct NIC is disabled because declaration of "
               "mlx5dv_get_data_direct_sysfs_path was not found",
               ib_dev_name);
 #endif
-out:
     return UCS_SYS_DEVICE_ID_UNKNOWN;
 }
 
