@@ -195,9 +195,8 @@ ucs_status_t uct_rocm_base_query_devices(uct_md_h md,
 
 hsa_agent_t uct_rocm_base_get_dev_agent(int gpu_num)
 {
-    ucs_assertv(gpu_num < uct_rocm_base_agents.num_gpu,
-                "gpu %d, num_gpus %d", gpu_num,
-                uct_rocm_base_agents.num_gpu);
+    ucs_assertv(gpu_num < uct_rocm_base_agents.num_gpu, "gpu %d, num_gpus %d",
+                gpu_num, uct_rocm_base_agents.num_gpu);
     return uct_rocm_base_agents.gpu_agents[gpu_num];
 }
 
