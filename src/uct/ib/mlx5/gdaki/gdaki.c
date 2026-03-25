@@ -983,9 +983,9 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
                                             sysfs_path, 0);
         context = ibv_open_device(ibdev);
         if (context == NULL) {
-            ucs_debug("ibv_open_device(%s) failed: %m, can't detect direct NIC "
-                      "device",
-                      ibv_get_device_name(ibdev));
+            ucs_diag("ibv_open_device(%s) failed: %m, can't detect direct NIC "
+                     "device",
+                     ibv_get_device_name(ibdev));
         } else {
             uct_ib_mlx5dv_check_direct_nic(context, sys_dev_ib,
                                            ib_md->config.direct_nic);
