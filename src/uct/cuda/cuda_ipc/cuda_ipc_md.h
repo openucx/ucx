@@ -48,8 +48,9 @@ typedef struct uct_cuda_ipc_md {
 } uct_cuda_ipc_md_t;
 
 
-typedef struct uct_cuda_ipc_uuid_hash_key {
-    int     type;
+typedef struct {
+    int32_t type: 31;
+    int32_t is_local: 1;
     CUuuid  uuid;
 } uct_cuda_ipc_uuid_hash_key_t;
 
@@ -69,7 +70,8 @@ uct_cuda_ipc_uuid_equals(uct_cuda_ipc_uuid_hash_key_t key1,
     int64_t *a64 = (int64_t *)key1.uuid.bytes;
     int64_t *b64 = (int64_t *)key2.uuid.bytes;
 
-    return (key1.type == key2.type) && (a64[0] == b64[0]) && (a64[1] == b64[1]);
+    return (key1.type == key2.type) && (key1.is_local == key2.is_local) &&
+           (a64[0] == b64[0]) && (a64[1] == b64[1]);
 }
 
 
@@ -77,7 +79,7 @@ static UCS_F_ALWAYS_INLINE khint32_t
 uct_cuda_ipc_uuid_hash_func(uct_cuda_ipc_uuid_hash_key_t key)
 {
     int64_t *i64 = (int64_t *)key.uuid.bytes;
-    return kh_int64_hash_func(i64[0] ^ i64[1] ^ key.type);
+    return kh_int64_hash_func(i64[0] ^ i64[1] ^ key.type ^ key.is_local);
 }
 
 

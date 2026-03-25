@@ -18,7 +18,7 @@
 #include <ucs/sys/ptr_arith.h>
 #include <ucs/datastruct/khash.h>
 #include <uct/cuda/base/cuda_ctx.inl>
-
+#include "cuda_ipc.inl"
 
 typedef struct uct_cuda_ipc_cache_hash_key {
     pid_t        pid;
@@ -620,8 +620,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
         return status;
     }
 
-    if ((getpid() == key->pid) &&
-        (ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID) == ext_key->pid_ns) &&
+    if (uct_cuda_ipc_is_rkey_local(ext_key) &&
         (memcmp(uuid.bytes, key->uuid.bytes, sizeof(uuid.bytes)) == 0)) {
         /* TODO: added for test purpose to enable cuda_ipc tests in gtest
          * mapped addrr is set to be same as d_bptr avoiding any calls to

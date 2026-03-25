@@ -82,6 +82,13 @@ uct_cuda_ipc_check_and_pop_ctx(int is_ctx_pushed)
     }
 }
 
+static UCS_F_ALWAYS_INLINE int
+uct_cuda_ipc_is_rkey_local(const uct_cuda_ipc_extended_rkey_t *rkey)
+{
+    return (getpid() == rkey->super.pid) &&
+           (ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID) == rkey->pid_ns);
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_ipc_get_remote_address(
         uct_cuda_ipc_extended_rkey_t *rkey, uint64_t raddr, CUdevice cu_dev,
         void **laddr_p, void **base_addr_p)
