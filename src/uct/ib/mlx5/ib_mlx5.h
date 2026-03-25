@@ -963,6 +963,15 @@ void uct_ib_mlx5_parse_cqe_zipping(uct_ib_mlx5_md_t *md,
 size_t uct_ib_mlx5_devx_sq_length(size_t tx_qp_length);
 
 /**
+ * Check if direct NIC is supported and set the sys_dev_dnic.
+ *
+ * @param direct_nic  Parsed UCX_IB_DIRECT_NIC flag (uct_ib_md_ext_config_t::direct_nic).
+ */
+void uct_ib_mlx5dv_check_direct_nic(struct ibv_context *ctx,
+                                    uct_ib_device_t *dev, uct_ib_mlx5_md_t *md,
+                                    int direct_nic);
+
+/**
  * DEVX QP API
  */
 
