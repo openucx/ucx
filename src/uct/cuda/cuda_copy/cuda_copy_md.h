@@ -74,7 +74,7 @@ typedef struct {
 
 
 typedef enum {
-    UCT_CUDA_COPY_MEMH_HOST_REG,
+    UCT_CUDA_COPY_MEMH_HOST,
     UCT_CUDA_COPY_MEMH_VMM
 } uct_cuda_copy_memh_type_t;
 

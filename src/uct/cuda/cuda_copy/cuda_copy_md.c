@@ -3,6 +3,7 @@
  * See file LICENSE for terms.
  */
 
+#include "base/cuda_util.h"
 #ifdef HAVE_CONFIG_H
 #  include "config.h"
 #endif
@@ -215,6 +216,8 @@ static ucs_status_t uct_cuda_copy_mem_reg_vmm(void *address, uct_mem_h *memh_p)
         cu_result       = cuDeviceCanAccessPeer(&can_access_peer, dev,
                                                 memh->vmm.alloc_device);
         if ((cu_result != CUDA_SUCCESS) || !can_access_peer) {
+            ucs_debug("device %d cannot access peer device %d", dev,
+                      memh->vmm.alloc_device);
             continue;
         }
 
@@ -223,6 +226,10 @@ static ucs_status_t uct_cuda_copy_mem_reg_vmm(void *address, uct_mem_h *memh_p)
 
         cu_result = cuMemGetAccess(&cur_flags, &location, base_ptr);
         if (cu_result != CUDA_SUCCESS) {
+            ucs_debug("cuMemGetAccess for device %d on VMM ptr 0x%llx "
+                      "failed: %s",
+                      dev, (unsigned long long)base_ptr,
+                      uct_cuda_cu_get_error_string(cu_result));
             continue;
         }
 
@@ -239,8 +246,10 @@ static ucs_status_t uct_cuda_copy_mem_reg_vmm(void *address, uct_mem_h *memh_p)
 
         cu_result = cuMemSetAccess(base_ptr, base_size, &access_desc, 1);
         if (cu_result != CUDA_SUCCESS) {
-            ucs_debug("cuMemSetAccess for device %d on VMM ptr 0x%llx failed",
-                      dev, (unsigned long long)base_ptr);
+            ucs_debug("cuMemSetAccess for device %d on VMM ptr 0x%llx "
+                      "failed: %s",
+                      dev, (unsigned long long)base_ptr,
+                      uct_cuda_cu_get_error_string(cu_result));
             continue;
         }
 
@@ -253,9 +262,10 @@ static ucs_status_t uct_cuda_copy_mem_reg_vmm(void *address, uct_mem_h *memh_p)
     }
 
     ucs_debug("granted VMM cross-device access for alloc device %d "
-              "ptr 0x%llx length %zu to %zu peer devices",
+              "ptr 0x%llx length %zu to %zu peer devices (mask 0x%lx)",
               memh->vmm.alloc_device, (unsigned long long)base_ptr, base_size,
-              ucs_dynamic_bitmap_popcount(&memh->vmm.granted));
+              ucs_dynamic_bitmap_popcount(&memh->vmm.granted),
+              *ucs_array_begin(&memh->vmm.granted));
 
     *memh_p = memh;
     return UCS_OK;
@@ -321,7 +331,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_reg,
         return UCS_ERR_NO_MEMORY;
     }
 
-    memh->type         = UCT_CUDA_COPY_MEMH_HOST_REG;
+    memh->type         = UCT_CUDA_COPY_MEMH_HOST;
     memh->host_address = address;
     *memh_p            = memh;
 
@@ -343,13 +353,13 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_dereg,
     memh = (uct_cuda_copy_memh_t*)params->memh;
 
     switch (memh->type) {
-    case UCT_CUDA_COPY_MEMH_HOST_REG:
+    case UCT_CUDA_COPY_MEMH_HOST:
         UCT_CUDADRV_FUNC(cuMemHostUnregister(memh->host_address),
                          UCS_LOG_LEVEL_DIAG);
         break;
 
-    case UCT_CUDA_COPY_MEMH_VMM: {
 #ifdef HAVE_CUMEMRETAINALLOCATIONHANDLE
+    case UCT_CUDA_COPY_MEMH_VMM: {
         CUmemAccessDesc access_desc;
         size_t dev;
 
@@ -365,9 +375,9 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_dereg,
 
         ucs_dynamic_bitmap_cleanup(&memh->vmm.granted);
         ucs_free(memh->vmm.saved_flags);
-#endif
         break;
     }
+#endif
     default:
         ucs_fatal("unknown cuda_copy memh type %d", memh->type);
         break;

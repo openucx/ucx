@@ -188,38 +188,44 @@ UCS_TEST_P(test_switch_cuda_device, vmm_mem_reg_access)
     cuda_vmm_mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
     ASSERT_EQ(CUDA_SUCCESS, cuCtxGetDevice(&current_device));
 
-    int peer_device = (current_device + 1) % m_num_devices;
-    int can_access  = 0;
-    ASSERT_EQ(CUDA_SUCCESS,
-              cuDeviceCanAccessPeer(&can_access, peer_device, current_device));
-    if (!can_access) {
-        UCS_TEST_SKIP_R("peer device cannot access current device memory");
+    for (int peer_device = (current_device + 1) % m_num_devices;
+         peer_device != current_device;
+         peer_device = (peer_device + 1) % m_num_devices) {
+        int can_access = 0;
+        ASSERT_EQ(CUDA_SUCCESS, cuDeviceCanAccessPeer(&can_access, peer_device,
+                                                      current_device));
+        if (!can_access) {
+            continue;
+        }
+
+        location.type               = CU_MEM_LOCATION_TYPE_DEVICE;
+        location.id                 = peer_device;
+        CUmemAccessDesc access_desc = {};
+        access_desc.location.type   = CU_MEM_LOCATION_TYPE_DEVICE;
+        access_desc.location.id     = peer_device;
+        access_desc.flags           = CU_MEM_ACCESS_FLAGS_PROT_NONE;
+        ASSERT_EQ(CUDA_SUCCESS, cuMemSetAccess((CUdeviceptr)buffer.ptr(), size,
+                                               &access_desc, 1));
+
+        ASSERT_EQ(CUDA_SUCCESS, cuMemGetAccess(&initial_flags, &location,
+                                               (CUdeviceptr)buffer.ptr()));
+
+        ASSERT_UCS_OK(uct_md_mem_reg_v2(md(), buffer.ptr(), size, &reg_params,
+                                        &memh));
+        ASSERT_EQ(CUDA_SUCCESS, cuMemGetAccess(&current_flags, &location,
+                                               (CUdeviceptr)buffer.ptr()));
+        EXPECT_EQ(static_cast<unsigned long long>(
+                          CU_MEM_ACCESS_FLAGS_PROT_READWRITE),
+                  current_flags);
+
+        dereg_params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
+        dereg_params.memh       = memh;
+        ASSERT_UCS_OK(uct_md_mem_dereg_v2(md(), &dereg_params));
+
+        ASSERT_EQ(CUDA_SUCCESS, cuMemGetAccess(&current_flags, &location,
+                                               (CUdeviceptr)buffer.ptr()));
+        EXPECT_EQ(initial_flags, current_flags);
     }
-
-    location.type = CU_MEM_LOCATION_TYPE_DEVICE;
-    location.id   = peer_device;
-    ASSERT_EQ(CUDA_SUCCESS, cuMemGetAccess(&initial_flags, &location,
-                                           (CUdeviceptr)buffer.ptr()));
-    if (initial_flags ==
-        static_cast<unsigned long long>(CU_MEM_ACCESS_FLAGS_PROT_READWRITE)) {
-        UCS_TEST_SKIP_R("peer device already has VMM read-write access");
-    }
-
-    ASSERT_UCS_OK(
-            uct_md_mem_reg_v2(md(), buffer.ptr(), size, &reg_params, &memh));
-    ASSERT_EQ(CUDA_SUCCESS, cuMemGetAccess(&current_flags, &location,
-                                           (CUdeviceptr)buffer.ptr()));
-    EXPECT_EQ(static_cast<unsigned long long>(
-                      CU_MEM_ACCESS_FLAGS_PROT_READWRITE),
-              current_flags);
-
-    dereg_params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
-    dereg_params.memh       = memh;
-    ASSERT_UCS_OK(uct_md_mem_dereg_v2(md(), &dereg_params));
-
-    ASSERT_EQ(CUDA_SUCCESS, cuMemGetAccess(&current_flags, &location,
-                                           (CUdeviceptr)buffer.ptr()));
-    EXPECT_EQ(initial_flags, current_flags);
 }
 #endif
 
