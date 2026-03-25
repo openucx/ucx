@@ -79,8 +79,7 @@ static UCS_F_ALWAYS_INLINE khint32_t
 uct_cuda_ipc_uuid_hash_func(uct_cuda_ipc_uuid_hash_key_t key)
 {
     int64_t *i64 = (int64_t *)key.uuid.bytes;
-    return kh_int64_hash_func(i64[0] ^ i64[1] ^
-                              ((key.type << 1) | key.is_local));
+    return kh_int64_hash_func(i64[0] ^ i64[1] ^ (key.type << 1) ^ key.is_local);
 }
 
 
