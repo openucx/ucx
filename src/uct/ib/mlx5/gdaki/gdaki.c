@@ -931,7 +931,6 @@ uct_gdaki_dev_matrix_elem_t *
 uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
 {
     unsigned ib_per_cuda              = ib_md->config.gda_max_hca_per_gpu;
-    int direct_nic                    = ib_md->config.direct_nic;
     uct_gdaki_dev_matrix_elem_t *dmat = NULL;
     ucs_status_t status;
     int ibdev_index, cudadev_index, ibdev_count, cudadev_count;
@@ -983,9 +982,15 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
         sys_dev_ib = ucs_topo_get_sysfs_dev(ibv_get_device_name(ibdev),
                                             sysfs_path, 0);
         context = ibv_open_device(ibdev);
-        uct_ib_mlx5dv_check_direct_nic(context, ibv_get_device_name(ibdev),
-                                       sys_dev_ib, direct_nic);
-        ibv_close_device(context);
+        if (context == NULL) {
+            ucs_debug("ibv_open_device(%s) failed: %m, can't detect direct NIC "
+                      "device",
+                      ibv_get_device_name(ibdev));
+        } else {
+            uct_ib_mlx5dv_check_direct_nic(context, sys_dev_ib,
+                                           ib_md->config.direct_nic);
+            ibv_close_device(context);
+        }
 
         ibdesc->sys_dev = ucs_topo_get_sysfs_dev(ibv_get_device_name(ibdev),
                                                  sysfs_path, 0);

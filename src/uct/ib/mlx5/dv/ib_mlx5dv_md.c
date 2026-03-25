@@ -37,9 +37,9 @@ static uint32_t uct_ib_mlx5_flush_rkey_make()
     return ((getpid() & 0xff) << 8) | UCT_IB_MD_INVALID_FLUSH_RKEY;
 }
 
-ucs_sys_device_t
-uct_ib_mlx5dv_check_direct_nic(struct ibv_context *ctx, const char *ib_dev_name,
-                               ucs_sys_device_t sys_dev_ib, int direct_nic)
+ucs_sys_device_t uct_ib_mlx5dv_check_direct_nic(struct ibv_context *ctx,
+                                                ucs_sys_device_t sys_dev_ib,
+                                                int enabled)
 {
 #if HAVE_DECL_MLX5DV_GET_DATA_DIRECT_SYSFS_PATH
     char sys_path[PATH_MAX];
@@ -48,49 +48,43 @@ uct_ib_mlx5dv_check_direct_nic(struct ibv_context *ctx, const char *ib_dev_name,
     ucs_sys_device_t sys_dev_dnic;
     ucs_status_t status;
 
-    if (!direct_nic) {
-        ucs_debug("%s: direct NIC is disabled by configuration", ib_dev_name);
+    if (!enabled) {
+        ucs_debug("%s: direct NIC is disabled by configuration",
+                  ibv_get_device_name(ctx->device));
         goto out;
     }
 
     ret = mlx5dv_get_data_direct_sysfs_path(ctx, sys_path, sizeof(sys_path));
     if (ret != 0) {
         ucs_debug("%s: mlx5dv_get_data_direct_sysfs_path() failed: ret=%d",
-                  ib_dev_name, ret);
+                  ibv_get_device_name(ctx->device), ret);
         goto out;
     }
 
-    snprintf(dev_name, sizeof(dev_name), "%s_direct", ib_dev_name);
+    snprintf(dev_name, sizeof(dev_name), "%s_direct",
+             ibv_get_device_name(ctx->device));
     sys_dev_dnic = ucs_topo_get_sysfs_dev(dev_name, sys_path, 0);
     status = ucs_topo_sys_device_set_sys_dev_aux(sys_dev_ib, sys_dev_dnic);
     if (status != UCS_OK) {
-        ucs_debug("%s: direct NIC is requested but not supported", ib_dev_name);
+        ucs_debug("%s: direct NIC is requested but not supported",
+                  ibv_get_device_name(ctx->device));
         goto out;
     }
 
     ucs_debug("%s: Direct NIC is supported sys_path='%s%s' "
               "sys_dev=%u sys_dev_aux=%u",
-              ib_dev_name, (sys_path[0] != 0) ? "/sys" : "", sys_path,
-              sys_dev_ib, sys_dev_dnic);
+              ibv_get_device_name(ctx->device),
+              (sys_path[0] != 0) ? "/sys" : "", sys_path, sys_dev_ib,
+              sys_dev_dnic);
 
     return sys_dev_dnic;
 out:
 #else
     ucs_debug("%s: direct NIC is disabled because declaration of "
               "mlx5dv_get_data_direct_sysfs_path was not found",
-              ib_dev_name);
+              ibv_get_device_name(ctx->device));
 #endif
     return UCS_SYS_DEVICE_ID_UNKNOWN;
-}
-
-static void
-uct_ib_mlx5dv_md_check_direct_nic(struct ibv_context *ctx, uct_ib_device_t *dev,
-                                  uct_ib_mlx5_md_t *md,
-                                  const uct_ib_md_config_t *md_config)
-{
-    md->direct_nic_sys_dev = uct_ib_mlx5dv_check_direct_nic(
-            ctx, uct_ib_device_name(&md->super.dev), dev->sys_dev,
-            md_config->ext.direct_nic);
 }
 
 #if HAVE_DEVX
@@ -2508,7 +2502,8 @@ ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
 
     odp_version = uct_ib_mlx5_devx_check_odp(md, md_config, cap);
 
-    uct_ib_mlx5dv_md_check_direct_nic(ctx, dev, md, md_config);
+    md->direct_nic_sys_dev = uct_ib_mlx5dv_check_direct_nic(
+            ctx, dev->sys_dev, md_config->ext.direct_nic);
 
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, atomic)) {
         int ops = UCT_IB_MLX5_ATOMIC_OPS_CMP_SWAP |
@@ -3395,7 +3390,8 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
     uct_ib_md_parse_relaxed_order(&md->super, md_config, 0);
     uct_ib_md_ece_check(&md->super);
     uct_ib_md_check_odp(&md->super, md_config);
-    uct_ib_mlx5dv_md_check_direct_nic(ctx, dev, md, md_config);
+    md->direct_nic_sys_dev = uct_ib_mlx5dv_check_direct_nic(
+            ctx, dev->sys_dev, md_config->ext.direct_nic);
 
     md->super.flush_rkey = uct_ib_mlx5_flush_rkey_make();
 
