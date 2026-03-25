@@ -83,10 +83,10 @@ out:
     return UCS_SYS_DEVICE_ID_UNKNOWN;
 }
 
-static void uct_ib_mlx5_md_check_direct_nic(struct ibv_context *ctx,
-                                            uct_ib_device_t *dev,
-                                            uct_ib_mlx5_md_t *md,
-                                            const uct_ib_md_config_t *md_config)
+static void
+uct_ib_mlx5dv_md_check_direct_nic(struct ibv_context *ctx, uct_ib_device_t *dev,
+                                  uct_ib_mlx5_md_t *md,
+                                  const uct_ib_md_config_t *md_config)
 {
     md->direct_nic_sys_dev = uct_ib_mlx5dv_check_direct_nic(
             ctx, uct_ib_device_name(&md->super.dev), dev->sys_dev,
@@ -2508,7 +2508,7 @@ ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
 
     odp_version = uct_ib_mlx5_devx_check_odp(md, md_config, cap);
 
-    uct_ib_mlx5_md_check_direct_nic(ctx, dev, md, md_config);
+    uct_ib_mlx5dv_md_check_direct_nic(ctx, dev, md, md_config);
 
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, atomic)) {
         int ops = UCT_IB_MLX5_ATOMIC_OPS_CMP_SWAP |
@@ -3395,7 +3395,7 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
     uct_ib_md_parse_relaxed_order(&md->super, md_config, 0);
     uct_ib_md_ece_check(&md->super);
     uct_ib_md_check_odp(&md->super, md_config);
-    uct_ib_mlx5_md_check_direct_nic(ctx, dev, md, md_config);
+    uct_ib_mlx5dv_md_check_direct_nic(ctx, dev, md, md_config);
 
     md->super.flush_rkey = uct_ib_mlx5_flush_rkey_make();
 
