@@ -703,13 +703,20 @@ ucs_status_t ucp_worker_mem_type_eps_create(ucp_worker_h worker)
     unsigned addr_indices[UCP_MAX_LANES];
     ucp_rsc_index_t rsc_index;
     ucp_lane_index_t num_lanes;
+    ucp_rsc_index_t rsc_index;
 
     ucs_memory_type_for_each(mem_type) {
-        /* Mem type EP requires host memory support */
-        ucp_context_memaccess_tl_bitmap(context,
-                                        UCS_BIT(mem_type) |
-                                        UCS_BIT(UCS_MEMORY_TYPE_HOST),
-                                        0, &mem_access_tls);
+        ucp_context_memaccess_tl_bitmap(context, UCS_BIT(mem_type), 0,
+                                        &mem_access_tls);
+
+        /* Exclude transports that map remote memory via rkey pointer
+         * since mem_type EP is for in-process communication */
+        UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &mem_access_tls) {
+            if (context->tl_mds[context->tl_rscs[rsc_index].md_index].attr.flags &
+                UCT_MD_FLAG_RKEY_PTR) {
+                UCS_STATIC_BITMAP_RESET(&mem_access_tls, rsc_index);
+            }
+        }
 
         if (UCP_MEM_IS_HOST(mem_type) ||
             UCS_STATIC_BITMAP_IS_ZERO(mem_access_tls)) {
@@ -760,9 +767,8 @@ ucs_status_t ucp_worker_mem_type_eps_create(ucp_worker_h worker)
             goto err_free_address_list;
         }
 
-        /* Mem type EP cannot have more than one lane */
         num_lanes = ucp_ep_num_lanes(worker->mem_type_ep[mem_type]);
-        ucs_assertv_always(num_lanes == 1, "num_lanes=%u", num_lanes);
+        ucs_assertv_always(num_lanes <= 2, "num_lanes=%u", num_lanes);
         UCS_ASYNC_UNBLOCK(&worker->async);
 
         ucs_free(local_address.address_list);
