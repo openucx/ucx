@@ -196,6 +196,14 @@ ucs_status_t uct_iface_query(uct_iface_h iface, uct_iface_attr_t *iface_attr)
 }
 
 ucs_status_t
+uct_iface_query_v2(uct_iface_h tl_iface, uct_iface_attr_v2_t *iface_attr)
+{
+    uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
+
+    return iface->internal_ops->iface_query_v2(tl_iface, iface_attr);
+}
+
+ucs_status_t
 uct_iface_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
 {
     uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
@@ -559,6 +567,12 @@ ucs_status_t uct_single_device_resource(uct_md_h md, const char *dev_name,
 
     *num_tl_devices_p = 1;
     *tl_devices_p     = device;
+    return UCS_OK;
+}
+
+ucs_status_t
+uct_iface_base_query_v2(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr)
+{
     return UCS_OK;
 }
 
