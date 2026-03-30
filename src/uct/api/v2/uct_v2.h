@@ -1038,7 +1038,7 @@ typedef enum {
  * @brief Interface attribute fields.
  */
 enum uct_iface_attr_field {
-    /** Enables @ref uct_iface_attr_v2_t::max_sgl_count */
+    /** Enables @ref uct_iface_attr_v2_t::max_put_sgl_zcopy_count */
     UCT_IFACE_ATTR_FIELD_MAX_SGL_COUNT = UCS_BIT(0)
 };
 
@@ -1056,9 +1056,9 @@ typedef struct {
 
     /**
      * Maximal number of elements in @ref uct_ep_put_sgl_zcopy.
-     * @anchor uct_iface_attr_v2_max_sgl_count
+     * @anchor uct_iface_attr_v2_max_put_sgl_zcopy_count
      */
-    size_t   max_sgl_count;
+    size_t   max_put_sgl_zcopy_count;
 } uct_iface_attr_v2_t;
 
 
@@ -1260,8 +1260,8 @@ ucs_status_t uct_ep_get_device_ep(uct_ep_h ep, uct_device_ep_h *device_ep_p);
  * @param [in] rkeys        Array of remote keys, obtained from
  *                          @ref ::uct_rkey_unpack.
  * @param [in] count        Number of elements in the arrays. Must not exceed
- *                          @ref uct_iface_attr_v2_max_sgl_count
- *                          "uct_iface_attr_v2_t::max_sgl_count".
+ *                          @ref uct_iface_attr_v2_max_put_sgl_zcopy_count
+ *                          "uct_iface_attr_v2_t::max_put_sgl_zcopy_count".
  * @param [in] comp         Completion handle as defined by
  *                          @ref ::uct_completion_t.
  *
