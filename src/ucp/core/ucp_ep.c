@@ -116,7 +116,7 @@ static uct_iface_internal_ops_t ucp_failed_ep_internal_ops = {
     .ep_get_device_ep      = (uct_ep_get_device_ep_func_t)ucp_ep_failed_op,
 };
 
-static uct_stub_iface_t ucp_failed_tl_iface_stub = {
+static ucp_stub_iface_t ucp_failed_tl_iface_stub = {
     .super = {
         .ops = {
             .ep_put_short        = (uct_ep_put_short_func_t)ucp_ep_failed_op,

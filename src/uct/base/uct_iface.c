@@ -659,8 +659,8 @@ UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops,
     ucs_assert(internal_ops->ep_query != NULL);
     ucs_assert(internal_ops->ep_invalidate != NULL);
 
-    UCS_STATIC_ASSERT(ucs_offsetof(uct_stub_iface_t, internal_ops) ==
-                      ucs_offsetof(uct_base_iface_t, internal_ops));
+    UCS_STATIC_ASSERT(ucs_offsetof(uct_base_iface_t, internal_ops) ==
+                      sizeof(uct_iface_t));
 
     self->md                = md;
     self->internal_ops      = internal_ops;

@@ -15,6 +15,16 @@
 
 
 /**
+ * Stub interface with internal_ops support for v2 operations on
+ * proxy, wireup, and failed endpoints.
+ */
+typedef struct ucp_stub_iface {
+    uct_iface_t              super;
+    uct_iface_internal_ops_t *internal_ops;
+} ucp_stub_iface_t;
+
+
+/**
  * Generic proxy endpoint, used to change behavior of a specific transport lane
  * without adding data-path checks when not needed.
  * By default, all transport endpoint operations are redirected to the underlying
@@ -26,7 +36,7 @@
  */
 typedef struct ucp_proxy_ep {
     uct_ep_t         super;     /**< Derived from uct_ep */
-    uct_stub_iface_t iface;     /**< Stub iface for ops dispatch */
+    ucp_stub_iface_t iface;     /**< Stub iface for ops dispatch */
     ucp_ep_h         ucp_ep;    /**< Pointer to UCP endpoint */
     uct_ep_h         uct_ep;    /**< Underlying transport endpoint */
     int              is_owner;  /**< Is uct_ep owned by this proxy ep */

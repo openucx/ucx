@@ -1306,16 +1306,6 @@ typedef struct uct_iface_internal_ops {
 } uct_iface_internal_ops_t;
 
 
-/**
- * @ingroup UCT_RESOURCE
- * @brief Stub interface with internal_ops for proxy/wireup endpoints.
- */
-typedef struct uct_stub_iface {
-    uct_iface_t              super;
-    uct_iface_internal_ops_t *internal_ops;
-} uct_stub_iface_t;
-
-
 END_C_DECLS
 
 #endif
