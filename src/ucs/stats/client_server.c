@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -9,6 +9,7 @@
 #endif
 
 #include "libstats.h"
+#include "client_server.h"
 
 #include <arpa/inet.h>
 #include <sys/socket.h>
@@ -49,23 +50,6 @@ typedef struct frag_hole {
     ucs_list_link_t     list;
     size_t              size; /* Including this struct */
 } frag_hole_t;
-
-
-/* An entity which reports statistics */
-typedef struct stats_entity stats_entity_t;
-struct stats_entity {
-    struct sockaddr_in  in_addr;        /* Entity address */
-    uint64_t            timestamp;      /* Current timestamp */
-    size_t              buffer_size;    /* Buffer size */
-    void                *inprogress_buffer;    /* Fragment assembly buffer */
-    ucs_list_link_t     holes;          /* List of holes in the buffer */
-    stats_entity_t      *next;          /* Hash link */
-
-    pthread_mutex_t     lock;
-    volatile unsigned   refcount;
-    void                *completed_buffer;  /* Completed buffer */
-    struct timeval      update_time;
-};
 
 
 /* Client context */
@@ -658,16 +642,6 @@ void ucs_stats_server_purge_stats(ucs_stats_server_h server)
 unsigned long ucs_stats_server_rcvd_packets(ucs_stats_server_h server)
 {
    return server->rcvd_packets;
-}
-
-static inline int stats_entity_cmp(stats_entity_t *e1, stats_entity_t *e2)
-{
-    int addr_diff = e1->in_addr.sin_addr.s_addr < e2->in_addr.sin_addr.s_addr;
-    if (addr_diff != 0) {
-        return addr_diff;
-    } else {
-        return ntohs(e1->in_addr.sin_port) - ntohs(e1->in_addr.sin_port);
-    }
 }
 
 static inline int stats_entity_hash(stats_entity_t *e)

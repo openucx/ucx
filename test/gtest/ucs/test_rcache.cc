@@ -1057,6 +1057,87 @@ UCS_TEST_F(test_rcache_stats, hits_slow) {
 #endif
 
 
+class test_rcache_inv_q_growth : public test_rcache {
+protected:
+    virtual ucs_rcache_params_t rcache_params()
+    {
+        ucs_rcache_params_t params = test_rcache::rcache_params();
+        /* Match UCP's real configuration: SYNC_EVENTS forces every munmap event
+         * to go through inv_q instead of attempting immediate invalidation.
+         * This is the configuration under which the vLLM memory leak was
+         * observed. */
+        params.flags          |= UCS_RCACHE_FLAG_SYNC_EVENTS;
+        /* Set max_unreleased to infinity so async cleanup is never triggered,
+         * matching the UCX default that caused the leak. */
+        params.max_unreleased  = SIZE_MAX;
+        return params;
+    }
+
+    size_t inv_q_length()
+    {
+        ucs_spin_lock(&m_rcache->lock);
+        size_t len = ucs_interval_tree_count(&m_rcache->inv_tree);
+        ucs_spin_unlock(&m_rcache->lock);
+        return len;
+    }
+};
+
+
+/*
+ * Regression test for the vLLM/NIXL memory leak (inv_q unbounded growth).
+ *
+ * With SYNC_EVENTS set (UCP's default), every munmap goes to inv_q.
+ * With max_unreleased=SIZE_MAX (UCX default), no async cleanup is triggered.
+ *
+ * Before the interval-tree fix, each munmap pushed a separate entry into
+ * inv_q (a plain linked list), causing unbounded mpool growth and RSS leak.
+ *
+ * With the interval-tree fix, overlapping/adjacent ranges are merged, so
+ * inv_q stays compact regardless of how many munmaps occur. Each iteration
+ * immediately re-mmaps a page after munmapping so that net user-mapped
+ * memory stays constant throughout the measurement window.
+ */
+UCS_TEST_F(test_rcache_inv_q_growth, inv_q_bounded_with_interval_tree) {
+    static const size_t region_size = ucs_get_page_size();
+    static const int    num_iters   = 40000;
+    /* The tree merges overlapping/adjacent ranges, so its size should stay
+     * far below the number of munmap operations. Allow a small margin for
+     * non-adjacent ranges that the kernel may hand out. */
+    static const size_t max_expected_nodes = 100;
+    static const ssize_t max_rss_growth_kb = 512;
+
+    void *ptr = alloc_pages(region_size, PROT_READ | PROT_WRITE);
+    region *r = get(ptr, region_size);
+    put(r);
+
+    size_t q_before = inv_q_length();
+    ssize_t rss_before = ucs::get_proc_self_status_field("VmRSS");
+    ASSERT_NE(-1, rss_before);
+
+    for (int i = 0; i < num_iters; i++) {
+        munmap(ptr, region_size);
+        ptr = alloc_pages(region_size, PROT_READ | PROT_WRITE);
+    }
+
+    size_t q_after = inv_q_length();
+    size_t q_delta = q_after - q_before;
+    EXPECT_LE(q_delta, max_expected_nodes);
+
+    ssize_t rss_after = ucs::get_proc_self_status_field("VmRSS");
+    ASSERT_NE(-1, rss_after);
+
+    ssize_t rss_delta = rss_after - rss_before;
+    EXPECT_LE(rss_delta, max_rss_growth_kb);
+
+    /* A single rcache_get drains the inv_q. */
+    r = get(ptr, region_size);
+    put(r);
+    EXPECT_EQ(0u, inv_q_length());
+
+    munmap(ptr, region_size);
+}
+
+
 class test_rcache_pfn : public ucs::test {
 public:
     void test_pfn(void *address, unsigned page_num)

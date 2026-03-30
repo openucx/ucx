@@ -1412,8 +1412,9 @@ ucp_am_copy_data_fragment(ucp_recv_desc_t *first_rdesc, void *data,
                            UCS_PTR_BYTE_OFFSET(first_rdesc + 1, offset),
                            data, length, UCS_ARCH_MEMCPY_NT_SOURCE, length);
 
-    ucs_interval_tree_insert(ucp_am_rdesc_frag_tree(first_rdesc), offset,
-                             offset + length - 1);
+    ucs_interval_tree_insert(ucp_am_rdesc_frag_tree(first_rdesc),
+                             (ucs_interval_tree_range_t){offset,
+                                                         offset + length - 1});
 }
 
 static UCS_F_ALWAYS_INLINE uint64_t
@@ -1456,10 +1457,10 @@ ucp_am_handle_unfinished(ucp_worker_h worker, ucp_recv_desc_t *rdesc,
         first_ftr = (ucp_am_first_ftr_t*)(first_rdesc + 1);
         seg_end   = first_rdesc->payload_offset + first_ftr->total_size - 1;
 
-        if (!ucs_interval_tree_is_equal_range(ucp_am_rdesc_frag_tree(
-                                                      first_rdesc),
-                                              first_rdesc->payload_offset,
-                                              seg_end)) {
+        if (!ucs_interval_tree_is_equal_range(
+                    ucp_am_rdesc_frag_tree(first_rdesc),
+                    (ucs_interval_tree_range_t){first_rdesc->payload_offset,
+                                                seg_end})) {
             /* not all fragments arrived yet */
             return;
         }
