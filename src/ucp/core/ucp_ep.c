@@ -155,8 +155,10 @@ static uct_stub_iface_t ucp_failed_tl_iface_stub = {
 };
 
 static ucp_ep_discard_lanes_arg_t ucp_failed_tl_ep_discard_arg = {
-    .failed_ep = {.iface = &ucp_failed_tl_iface_stub.super},
-    .status    = UCS_ERR_CANCELED
+    .failed_ep            = {.iface = &ucp_failed_tl_iface_stub.super},
+    .deactivate_cfg_index = UCP_WORKER_CFG_INDEX_NULL,
+    .activate_cfg_index   = UCP_WORKER_CFG_INDEX_NULL,
+    .status               = UCS_ERR_CANCELED
 };
 
 
@@ -3894,7 +3896,7 @@ static ucs_status_t ucp_ep_query_transport(ucp_ep_h ep, ucp_ep_attr_t *attr)
                                     lane_index * attr->transports.entry_size);
 
         /* Each field updated in the following block must have its ending offset
-         * compared to attr->transports.entry_size before the field is
+         * compared to attr->transports.entry_size before the field is 
          * updated. If the field's ending offset is greater than the
          * attr->transports.entry_size value, the field cannot be updated because
          * that will cause a storage overlay.
