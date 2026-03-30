@@ -105,6 +105,17 @@ static ucs_status_t ucp_ep_failed_op(uct_ep_h ep);
 static ssize_t ucp_ep_failed_bc_op(uct_ep_h ep);
 static void ucp_ep_failed_destroy(uct_ep_h ep);
 
+static uct_iface_internal_ops_t ucp_failed_ep_internal_ops = {
+    .iface_estimate_perf   = (uct_iface_estimate_perf_func_t)ucs_empty_function_return_unsupported,
+    .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+    .ep_query              = (uct_ep_query_func_t)ucp_ep_failed_op,
+    .ep_invalidate         = (uct_ep_invalidate_func_t)ucp_ep_failed_op,
+    .ep_connect_to_ep_v2   = (uct_ep_connect_to_ep_v2_func_t)ucp_ep_failed_op,
+    .iface_is_reachable_v2 = (uct_iface_is_reachable_v2_func_t)ucs_empty_function_return_zero,
+    .ep_is_connected       = (uct_ep_is_connected_func_t)ucs_empty_function_return_zero,
+    .ep_get_device_ep      = (uct_ep_get_device_ep_func_t)ucp_ep_failed_op,
+};
+
 static uct_stub_iface_t ucp_failed_tl_iface_stub = {
     .super = {
         .ops = {
@@ -140,7 +151,7 @@ static uct_stub_iface_t ucp_failed_tl_iface_stub = {
             .ep_get_address      = (uct_ep_get_address_func_t)ucp_ep_failed_op
         }
     },
-    .internal_ops = &uct_stub_internal_ops,
+    .internal_ops = &ucp_failed_ep_internal_ops,
 };
 
 static ucp_ep_discard_lanes_arg_t ucp_failed_tl_ep_discard_arg = {
