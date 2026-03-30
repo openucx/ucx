@@ -1075,9 +1075,6 @@ struct uct_iface_attr {
             size_t           max_iov;    /**< Maximal @a iovcnt parameter in
                                               @ref ::uct_ep_put_zcopy
                                               @anchor uct_iface_attr_cap_put_max_iov */
-            size_t           max_sgl_count; /**< Maximal @a count parameter in
-                                                 uct_ep_put_sgl_zcopy
-                                                 @anchor uct_iface_attr_cap_put_max_sgl_count */
         } put;                           /**< Attributes for PUT operations */
 
         struct {
