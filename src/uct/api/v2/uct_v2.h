@@ -1034,6 +1034,29 @@ typedef enum {
 
 
 /**
+ * @ingroup UCT_RESOURCE
+ * @brief Interface attribute fields.
+ */
+enum uct_iface_attr_field {
+    /* Reserved for future use */
+    UCT_IFACE_ATTR_FIELD_RESERVED = 0
+};
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Interface attributes, used by @ref uct_iface_query_v2.
+ */
+typedef struct {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_iface_attr_field_t.
+     */
+    uint64_t field_mask;
+} uct_iface_attr_v2_t;
+
+
+/**
  * @ingroup UCT_MD
  * @brief Query for memory domain attributes.
  *
@@ -1127,6 +1150,21 @@ ucs_status_t uct_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr);
 */
 ucs_status_t uct_ep_invalidate(uct_ep_h ep,
                                const uct_ep_invalidate_params_t *params);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Query interface attributes.
+ *
+ * This routine fetches information about the interface.
+ *
+ * @param [in]  iface       Interface to query.
+ * @param [out] iface_attr  Filled with interface attributes.
+ *
+ * @return Error code.
+ */
+ucs_status_t
+uct_iface_query_v2(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr);
 
 
 /**
@@ -1261,6 +1299,54 @@ ucs_status_t uct_rkey_unpack_v2(uct_component_h component,
  */
 ucs_status_t uct_md_mem_elem_pack(uct_md_h md, uct_mem_h memh, uct_rkey_t rkey,
                                   uct_device_mem_element_t *mem_elem);
+
+typedef ucs_status_t (*uct_iface_query_v2_func_t)(
+        uct_iface_h iface, uct_iface_attr_v2_t *iface_attr);
+
+typedef ucs_status_t (*uct_iface_estimate_perf_func_t)(
+        uct_iface_h iface, uct_perf_attr_t *perf_attr);
+
+typedef void (*uct_iface_vfs_refresh_func_t)(uct_iface_h iface);
+
+typedef ucs_status_t (*uct_ep_query_func_t)(uct_ep_h ep,
+                                            uct_ep_attr_t *ep_attr);
+
+typedef ucs_status_t (*uct_ep_invalidate_func_t)(
+        uct_ep_h ep, const uct_ep_invalidate_params_t *params);
+
+typedef ucs_status_t (*uct_ep_connect_to_ep_v2_func_t)(
+        uct_ep_h ep,
+        const uct_device_addr_t *device_addr,
+        const uct_ep_addr_t *ep_addr,
+        const uct_ep_connect_to_ep_params_t *params);
+
+typedef int (*uct_iface_is_reachable_v2_func_t)(
+        const uct_iface_h iface,
+        const uct_iface_is_reachable_params_t *params);
+
+typedef int (*uct_ep_is_connected_func_t)(
+        uct_ep_h ep, const uct_ep_is_connected_params_t *params);
+
+typedef ucs_status_t (*uct_ep_get_device_ep_func_t)(
+        uct_ep_h ep, uct_device_ep_h *device_ep_p);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Internal v2 operations table.
+ */
+typedef struct uct_iface_internal_ops {
+    uct_iface_query_v2_func_t        iface_query_v2;
+    uct_iface_estimate_perf_func_t   iface_estimate_perf;
+    uct_iface_vfs_refresh_func_t     iface_vfs_refresh;
+    uct_ep_query_func_t              ep_query;
+    uct_ep_invalidate_func_t         ep_invalidate;
+    uct_ep_connect_to_ep_v2_func_t   ep_connect_to_ep_v2;
+    uct_iface_is_reachable_v2_func_t iface_is_reachable_v2;
+    uct_ep_is_connected_func_t       ep_is_connected;
+    uct_ep_get_device_ep_func_t      ep_get_device_ep;
+} uct_iface_internal_ops_t;
+
 
 END_C_DECLS
 

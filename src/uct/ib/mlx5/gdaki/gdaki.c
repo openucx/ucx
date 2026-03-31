@@ -639,6 +639,7 @@ static UCS_CLASS_DECLARE_DELETE_FUNC(uct_rc_gdaki_iface_t, uct_iface_t);
 static uct_rc_iface_ops_t uct_rc_gdaki_internal_ops = {
     .super = {
         .super = {
+            .iface_query_v2         = uct_iface_base_query_v2,
             .iface_estimate_perf    = uct_ib_iface_estimate_perf,
             .iface_vfs_refresh      = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
             .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
@@ -928,8 +929,9 @@ static int uct_gdaki_dev_matrix_score(const void *pa, const void *pb, void *arg)
 }
 
 uct_gdaki_dev_matrix_elem_t *
-uct_gdaki_dev_matrix_init(unsigned ib_per_cuda, size_t *dmat_length_p)
+uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
 {
+    unsigned ib_per_cuda              = ib_md->config.gda_max_hca_per_gpu;
     uct_gdaki_dev_matrix_elem_t *dmat = NULL;
     ucs_status_t status;
     int ibdev_index, cudadev_index, ibdev_count, cudadev_count;
@@ -941,6 +943,8 @@ uct_gdaki_dev_matrix_init(unsigned ib_per_cuda, size_t *dmat_length_p)
     const char *sysfs_path;
     uct_gdaki_dev_matrix_elem_t *ibdesc;
     CUdevice cuda_dev;
+    struct ibv_context *context;
+    ucs_sys_device_t sys_dev_ib;
 
     status = ucs_string_alloc_path_buffer(&path_buffer, "path_buffer");
     if (status != UCS_OK) {
@@ -975,6 +979,20 @@ uct_gdaki_dev_matrix_init(unsigned ib_per_cuda, size_t *dmat_length_p)
         ibdev           = device_list[ibdev_index];
         sysfs_path      = ucs_topo_resolve_sysfs_path(ibdev->ibdev_path,
                                                       path_buffer);
+
+        sys_dev_ib = ucs_topo_get_sysfs_dev(ibv_get_device_name(ibdev),
+                                            sysfs_path, 0);
+        context = ibv_open_device(ibdev);
+        if (context == NULL) {
+            ucs_diag("ibv_open_device(%s) failed: %m, can't detect direct NIC "
+                     "device",
+                     ibv_get_device_name(ibdev));
+        } else {
+            uct_ib_mlx5dv_check_direct_nic(context, sys_dev_ib,
+                                           ib_md->config.direct_nic);
+            ibv_close_device(context);
+        }
+
         ibdesc->sys_dev = ucs_topo_get_sysfs_dev(ibv_get_device_name(ibdev),
                                                  sysfs_path, 0);
         scores[ibdev_index].index = ibdev_index;
@@ -1059,8 +1077,7 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
     char dmabuf_str[8];
 
     UCS_INIT_ONCE(&dmat_once) {
-        dmat = uct_gdaki_dev_matrix_init(ib_md->config.gda_max_hca_per_gpu,
-                                         &dmat_length);
+        dmat = uct_gdaki_dev_matrix_init(ib_md, &dmat_length);
     }
 
     if (dmat == NULL) {
