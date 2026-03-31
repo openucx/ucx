@@ -752,6 +752,16 @@ run_mpi_tests() {
 				${MPIRUN_COMMON} -np 2 ./test/mpi/test_rma_cuda
 			fi
 
+			if [ "X$have_cuda" != "Xno" ] && [ -x ./test/mpi/test_ucp_rkey_destroy ]
+			then
+				echo "==== Running UCP RKEY destroy tests ===="
+				${MPIRUN_COMMON} -np 2 \
+								-x UCX_CUDA_IPC_CACHE=n \
+								-x UCX_RCACHE_ENABLE=n \
+								-x UCX_GDR_COPY_RCACHE=n \
+								./test/mpi/test_ucp_rkey_destroy
+			fi
+
 			# Restore LD_LIBRARY_PATH so subsequent tests will not take UCX libs
 			# from installation directory
 			export LD_LIBRARY_PATH=${save_LD_LIBRARY_PATH}

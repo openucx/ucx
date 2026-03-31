@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2019. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -47,11 +47,6 @@ static ucs_config_field_t uct_cuda_ipc_iface_config_table[] = {
     {"MAX_STREAMS", UCS_PP_MAKE_STRING(UCT_CUDA_IPC_MAX_PEERS),
      "Max number of CUDA streams to make concurrent progress on",
       ucs_offsetof(uct_cuda_ipc_iface_config_t, params.max_streams), UCS_CONFIG_TYPE_UINT},
-
-    {"CACHE", "y",
-     "Enable remote endpoint IPC memhandle mapping cache",
-     ucs_offsetof(uct_cuda_ipc_iface_config_t, params.enable_cache),
-     UCS_CONFIG_TYPE_BOOL},
 
     {"ENABLE_GET_ZCOPY", "auto",
      "Enable get operations except for platforms known to have slower performance",
@@ -305,8 +300,6 @@ static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
 static void uct_cuda_ipc_complete_event(uct_iface_h tl_iface,
                                         uct_cuda_event_desc_t *cuda_event)
 {
-    uct_cuda_ipc_iface_t *iface               = ucs_derived_of(tl_iface,
-                                                               uct_cuda_ipc_iface_t);
     uct_cuda_ipc_event_desc_t *cuda_ipc_event = ucs_derived_of(cuda_event,
                                                                uct_cuda_ipc_event_desc_t);
     ucs_status_t status;
@@ -316,7 +309,7 @@ static void uct_cuda_ipc_complete_event(uct_iface_h tl_iface,
                                           cuda_ipc_event->d_bptr,
                                           cuda_ipc_event->mapped_addr,
                                           cuda_ipc_event->cuda_device,
-                                          iface->config.enable_cache);
+                                          uct_cuda_ipc_component.enable_cache);
     if (status != UCS_OK) {
         ucs_fatal("failed to unmap addr:%p", cuda_ipc_event->mapped_addr);
     }
