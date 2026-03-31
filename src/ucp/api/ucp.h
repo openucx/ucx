@@ -4272,9 +4272,9 @@ typedef struct ucp_ep_attr {
 
     /**
      * Estimated bandwidth (in bytes/second) for a given pair of local and
-     * remote memory types. The caller sets @ref local_mem_type and
-     * @ref remote_mem_type before calling @ref ucp_ep_query, and the
-     * implementation fills in @ref bandwidth with the aggregate estimated
+     * remote memory types. The caller sets @a local_mem_type and
+     * @a remote_mem_type before calling @ref ucp_ep_query, and the
+     * implementation fills in @a bandwidth with the aggregate estimated
      * bandwidth across the endpoint's data lanes that support the requested
      * memory types.
      */
