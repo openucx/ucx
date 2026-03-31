@@ -451,9 +451,9 @@ void ucp_ep_flush_completion(uct_completion_t *self)
 
 void ucp_ep_flush_request_ff(ucp_request_t *req, ucs_status_t status)
 {
-    ucp_lane_map_t ff_lanes = req->send.flush.all_lanes &
-                              ~req->send.flush.started_lanes;
-    int num_comps           = ucs_popcount(ff_lanes);
+    const ucp_lane_map_t ff_lanes = req->send.flush.all_lanes &
+                                    ~req->send.flush.started_lanes;
+    const int num_comps           = ucs_popcount(ff_lanes);
 
     ucp_trace_req(
             req, "fast-forward flush, comp-=%d live_lanes=0x%" PRIx64
