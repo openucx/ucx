@@ -141,11 +141,16 @@ ucs_status_t uct_ib_mlx5_devx_create_qp_common(uct_ib_iface_t *iface,
     uct_ib_mlx5_devx_uar_t *uar;
     ucs_status_t status;
     void *qpc;
+    uint64_t bf_size = 0;
 
     uct_ib_iface_fill_attr(iface, &attr->super);
 
+    if (md->flags & UCT_IB_MLX5_MD_FLAG_UAR_USE_WC) {
+        bf_size = UCT_IB_MLX5_BF_REG_SIZE;
+    }
+
     status = uct_ib_mlx5_get_mmio_mode(iface->super.worker, attr->mmio_mode, 0,
-                                       UCT_IB_MLX5_BF_REG_SIZE, &mmio_mode);
+                                       bf_size, &mmio_mode);
     if (status != UCS_OK) {
         goto err;
     }
