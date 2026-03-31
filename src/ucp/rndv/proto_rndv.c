@@ -498,7 +498,8 @@ size_t ucp_proto_rndv_thresh(const ucp_proto_init_params_t *init_params)
     if ((rndv_thresh == UCS_MEMUNITS_AUTO) &&
         (ucp_proto_select_op_attr_unpack(select_param->op_attr) &
          UCP_OP_ATTR_FLAG_FAST_CMPL) &&
-        ucs_likely(UCP_MEM_IS_HOST(select_param->mem_type))) {
+        ucs_likely(UCP_MEM_IS_HOST(select_param->mem_type)) &&
+        (cfg->rndv_send_nbr_thresh != UCS_MEMUNITS_AUTO)) {
         rndv_thresh = cfg->rndv_send_nbr_thresh;
     }
 

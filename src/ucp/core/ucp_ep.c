@@ -2450,7 +2450,11 @@ ucp_ep_config_set_am_rndv_thresh(ucp_worker_h worker,
             return status;
         }
 
-        rndv_local_thresh = context->config.ext.rndv_send_nbr_thresh;
+        if (context->config.ext.rndv_send_nbr_thresh == UCS_MEMUNITS_AUTO) {
+            rndv_local_thresh = rndv_thresh;
+        } else {
+            rndv_local_thresh = context->config.ext.rndv_send_nbr_thresh;
+        }
         ucs_trace("active message rendezvous threshold is %zu", rndv_thresh);
     } else {
         rndv_thresh       = context->config.ext.rndv_inter_thresh;
@@ -2499,7 +2503,11 @@ ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker, ucp_ep_config_t *config,
             goto out_not_supported;
         }
 
-        rndv_local_thresh = context->config.ext.rndv_send_nbr_thresh;
+        if (context->config.ext.rndv_send_nbr_thresh == UCS_MEMUNITS_AUTO) {
+            rndv_local_thresh = rndv_thresh;
+        } else {
+            rndv_local_thresh = context->config.ext.rndv_send_nbr_thresh;
+        }
     } else {
         rndv_thresh       = context->config.ext.rndv_inter_thresh;
         rndv_local_thresh = context->config.ext.rndv_inter_thresh;

@@ -188,8 +188,9 @@ static ucs_config_field_t ucp_context_config_table[] = {
         {NULL}
   )},
 
-  {"RNDV_SEND_NBR_THRESH", "256k",
+  {"RNDV_SEND_NBR_THRESH", "auto",
    "Threshold for switching from eager to rendezvous protocol in ucp_tag_send_nbr().\n"
+   "\"auto\" means to use the same dynamically calculated threshold as for regular sends.\n"
    "Relevant only if UCX_RNDV_THRESH is set to \"auto\".",
    ucs_offsetof(ucp_context_config_t, rndv_send_nbr_thresh), UCS_CONFIG_TYPE_MEMUNITS},
 
