@@ -408,6 +408,10 @@ size_t uct_ib_address_size(const uct_ib_address_pack_params_t *params)
         size += sizeof(uint16_t);
     }
 
+    if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_TRAFFIC_CLASS) {
+        size += sizeof(uint8_t);
+    }
+
     return size;
 }
 
@@ -486,6 +490,11 @@ void uct_ib_address_pack(const uct_ib_address_pack_params_t *params,
         ib_addr->flags |= UCT_IB_ADDRESS_FLAG_PKEY;
         *ucs_serialize_next(&ptr, uint16_t) = params->pkey;
     }
+
+    if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_TRAFFIC_CLASS) {
+        ib_addr->flags |= UCT_IB_ADDRESS_FLAG_TRAFFIC_CLASS;
+        *ucs_serialize_next(&ptr, uint8_t) = params->traffic_class;
+    }
 }
 
 unsigned uct_ib_iface_address_pack_flags(uct_ib_iface_t *iface)
@@ -512,6 +521,10 @@ unsigned uct_ib_iface_address_pack_flags(uct_ib_iface_t *iface)
         pack_flags |= UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU;
     }
 
+    if (iface->config.traffic_class != 0) {
+        pack_flags |= UCT_IB_ADDRESS_PACK_FLAG_TRAFFIC_CLASS;
+    }
+
     return pack_flags;
 }
 
@@ -529,14 +542,15 @@ void uct_ib_iface_address_pack(uct_ib_iface_t *iface, uct_ib_address_t *ib_addr)
 {
     uct_ib_address_pack_params_t params;
 
-    params.flags     = uct_ib_iface_address_pack_flags(iface);
-    params.gid       = iface->gid_info.gid;
-    params.lid       = uct_ib_iface_port_attr(iface)->lid;
-    params.roce_info = iface->gid_info.roce_info;
-    params.path_mtu  = iface->config.path_mtu;
+    params.flags         = uct_ib_iface_address_pack_flags(iface);
+    params.gid           = iface->gid_info.gid;
+    params.lid           = uct_ib_iface_port_attr(iface)->lid;
+    params.roce_info     = iface->gid_info.roce_info;
+    params.path_mtu      = iface->config.path_mtu;
     /* to suppress gcc 4.3.4 warning */
-    params.gid_index = UCT_IB_ADDRESS_INVALID_GID_INDEX;
-    params.pkey      = iface->pkey;
+    params.gid_index     = UCT_IB_ADDRESS_INVALID_GID_INDEX;
+    params.pkey          = iface->pkey;
+    params.traffic_class = iface->config.traffic_class;
     uct_ib_address_pack(&params, ib_addr);
 }
 
@@ -609,6 +623,11 @@ ucs_status_t uct_ib_address_unpack(const uct_ib_address_t *ib_addr,
     }
     /* PKEY is always in params */
     params.flags |= UCT_IB_ADDRESS_PACK_FLAG_PKEY;
+
+    if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_TRAFFIC_CLASS) {
+        params.traffic_class = *ucs_serialize_next(&ptr, const uint8_t);
+        params.flags        |= UCT_IB_ADDRESS_PACK_FLAG_TRAFFIC_CLASS;
+    }
 
     *params_p = params;
     return UCS_OK;
@@ -1125,6 +1144,15 @@ uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
     lid = (flid == 0) ? params.lid : flid;
     uct_ib_iface_fill_ah_attr_from_gid_lid(iface, lid, gid, params.gid_index,
                                            path_index, ah_attr);
+
+    /* If the remote address carries a traffic class and the local interface
+     * does not have one configured, apply the remote value so that both
+     * directions of the connection use the same traffic class. */
+    if ((params.flags & UCT_IB_ADDRESS_PACK_FLAG_TRAFFIC_CLASS) &&
+        (iface->config.traffic_class == 0)) {
+        ah_attr->grh.traffic_class = params.traffic_class;
+    }
+
     return UCS_OK;
 }
 
