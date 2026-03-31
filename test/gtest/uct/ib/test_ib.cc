@@ -102,8 +102,9 @@ public:
         pack_params.lid       = lid_in;
         pack_params.roce_info = iface->gid_info.roce_info;
         pack_params.path_mtu  = iface->config.path_mtu;
-        pack_params.gid_index = std::numeric_limits<uint8_t>::max();
-        pack_params.pkey      = iface->pkey;
+        pack_params.gid_index     = std::numeric_limits<uint8_t>::max();
+        pack_params.pkey          = iface->pkey;
+        pack_params.traffic_class = iface->config.traffic_class;
         address_size          = uct_ib_address_size(&pack_params);
         ib_addr               = (uct_ib_address_t*)malloc(address_size);
         uct_ib_address_pack(&pack_params, ib_addr);

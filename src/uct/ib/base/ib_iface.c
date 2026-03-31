@@ -353,7 +353,11 @@ static inline uct_ib_roce_version_t
 uct_ib_address_flags_get_roce_version(uint8_t flags)
 {
     ucs_assert(flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH);
-    return (uct_ib_roce_version_t)(flags >> ucs_ilog2(UCT_IB_ADDRESS_FLAG_ETH_LAST));
+    /* Mask out the traffic class flag (bit 7) which is above the RoCE version
+     * bits (5-6) to avoid corrupting the extracted version */
+    return (uct_ib_roce_version_t)((flags &
+                                    ~UCT_IB_ADDRESS_FLAG_TRAFFIC_CLASS) >>
+                                   ucs_ilog2(UCT_IB_ADDRESS_FLAG_ETH_LAST));
 }
 
 static inline sa_family_t
