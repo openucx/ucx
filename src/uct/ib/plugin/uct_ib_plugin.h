@@ -14,6 +14,7 @@
 
 struct ibv_context;
 struct ibv_qp;
+struct mlx5dv_devx_obj;
 
 #ifdef __cplusplus
 extern "C" {
@@ -27,17 +28,19 @@ extern "C" {
 enum uct_ib_plugin_qp_query_param_field {
     UCT_IB_PLUGIN_QP_QUERY_PARAM_FIELD_CTX      = UCS_BIT(0),
     UCT_IB_PLUGIN_QP_QUERY_PARAM_FIELD_QP       = UCS_BIT(1),
-    UCT_IB_PLUGIN_QP_QUERY_PARAM_FIELD_DEVX_OBJ = UCS_BIT(2)
+    UCT_IB_PLUGIN_QP_QUERY_PARAM_FIELD_DEVX_OBJ = UCS_BIT(2),
+    UCT_IB_PLUGIN_QP_QUERY_PARAM_FIELD_QP_NUM   = UCS_BIT(3)
 };
 
 /**
  * @brief QP query input parameters.
  */
 typedef struct uct_ib_plugin_qp_query_params {
-    uint64_t           field_mask;
-    struct ibv_context *ctx;
-    struct ibv_qp      *qp;
-    void               *devx_obj;
+    uint64_t               field_mask;
+    struct ibv_context     *ctx;
+    struct ibv_qp          *qp;
+    struct mlx5dv_devx_obj *devx_obj;
+    uint32_t               qp_num;
 } uct_ib_plugin_qp_query_params_t;
 
 /**
