@@ -139,7 +139,8 @@ protected:
 
         if (op_mask & TEST_OP_PUT) {
             lbuf.pattern_fill(m_seed);
-        } else if (op_mask & TEST_OP_GET) {
+        } else {
+            ASSERT_TRUE(op_mask & TEST_OP_GET);
             rbuf.pattern_fill(m_seed);
         }
 
@@ -206,20 +207,18 @@ private:
         param.op_attr_mask = 0;
 
         rbuf.memset(0);
-        ucs_status_ptr_t put_status_ptr   = ucp_put_nbx(ep, lbuf.ptr(), size, uintptr_t(rbuf.ptr()),
-                                                        rkey, &param);
-        ucs_status_ptr_t flush_status_ptr = flush ?
-                ucp_ep_flush_nbx(ep, &param) : NULL;
+        ucs_status_ptr_t put_status_ptr   = ucp_put_nbx(ep, lbuf.ptr(), size, uintptr_t(rbuf.ptr()), rkey, &param);
+        ucs_status_ptr_t flush_status_ptr = flush ? ucp_ep_flush_nbx(ep, &param) : NULL;
         ucs_status_t status               = request_wait(put_status_ptr);
         if (status == UCS_OK) {
             rbuf.pattern_check(m_seed, size);
         }
 
-        EXPECT_EQ(UCS_OK, status) << "put operation returned status: "
-                                  << ucs_status_string(status);
-        status = request_wait(flush_status_ptr);
-        EXPECT_EQ(UCS_OK, status) << "flush operation returned status: "
-                                  << ucs_status_string(status);
+        EXPECT_EQ(UCS_OK, status) << "put operation returned status: " << ucs_status_string(status);
+        if (flush) {
+            status = request_wait(flush_status_ptr);
+            EXPECT_EQ(UCS_OK, status) << "flush operation returned status: " << ucs_status_string(status);
+        }
 
         return status;
     }
@@ -230,18 +229,18 @@ private:
         param.op_attr_mask = 0;
 
         lbuf.memset(0);
-        ucs_status_ptr_t status_ptr = ucp_get_nbx(ep, lbuf.ptr(), size, uintptr_t(rbuf.ptr()), rkey,
-                                                  &param);
-        ucs_status_ptr_t flush_status_ptr = flush ?
-                ucp_ep_flush_nbx(ep, &param) : NULL;
-        ucs_status_t status         = request_wait(status_ptr);
+        ucs_status_ptr_t status_ptr       = ucp_get_nbx(ep, lbuf.ptr(), size, uintptr_t(rbuf.ptr()), rkey, &param);
+        ucs_status_ptr_t flush_status_ptr = flush ? ucp_ep_flush_nbx(ep, &param) : NULL;
+        ucs_status_t status               = request_wait(status_ptr);
+        EXPECT_EQ(UCS_OK, status) << "get operation returned status: " << ucs_status_string(status);
         if (status == UCS_OK) {
             lbuf.pattern_check(m_seed, size);
         }
 
-        status = request_wait(flush_status_ptr);
-        EXPECT_EQ(UCS_OK, status) << "flush operation returned status: "
-                                  << ucs_status_string(status);
+        if (flush) {
+            status = request_wait(flush_status_ptr);
+            EXPECT_EQ(UCS_OK, status) << "flush operation returned status: " << ucs_status_string(status);
+        }
 
         return status;
     }
