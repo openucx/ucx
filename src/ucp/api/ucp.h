@@ -4214,7 +4214,8 @@ enum ucp_ep_attr_field {
     UCP_EP_ATTR_FIELD_LOCAL_SOCKADDR  = UCS_BIT(1), /**< Sockaddr used by the endpoint */
     UCP_EP_ATTR_FIELD_REMOTE_SOCKADDR = UCS_BIT(2), /**< Sockaddr the endpoint is connected to */
     UCP_EP_ATTR_FIELD_TRANSPORTS      = UCS_BIT(3), /**< Transport and device used by endpoint */
-    UCP_EP_ATTR_FIELD_USER_DATA       = UCS_BIT(4)  /**< User data associated with the endpoint */
+    UCP_EP_ATTR_FIELD_USER_DATA       = UCS_BIT(4), /**< User data associated with the endpoint */
+    UCP_EP_ATTR_FIELD_ESTIMATED_BW    = UCS_BIT(5)  /**< Estimated bandwidth for a memory type pair */
 };
 
 
@@ -4268,6 +4269,21 @@ typedef struct ucp_ep_attr {
      * @ref ucp_ep_params_t::user_data.
      */
     void                   *user_data;
+
+    /**
+     * Estimated bandwidth (in bytes/second) for a given pair of local and
+     * remote memory types. The caller sets @ref local_mem_type and
+     * @ref remote_mem_type before calling @ref ucp_ep_query, and the
+     * implementation fills in @ref bandwidth with the aggregate estimated
+     * bandwidth across the endpoint's data lanes that support the requested
+     * memory types.
+     */
+    struct {
+        ucs_memory_type_t  local_mem_type;  /**< [in] Local memory type */
+        ucs_memory_type_t  remote_mem_type; /**< [in] Remote memory type */
+        double             bandwidth;       /**< [out] Estimated bandwidth
+                                                 (bytes/second) */
+    } estimated_bw;
 } ucp_ep_attr_t;
 
 
