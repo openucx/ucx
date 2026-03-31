@@ -1039,7 +1039,7 @@ typedef enum {
  */
 enum uct_iface_attr_field {
     /** Enables @ref uct_iface_attr_v2_t::max_put_sgl_zcopy_count */
-    UCT_IFACE_ATTR_FIELD_MAX_SGL_COUNT = UCS_BIT(0)
+    UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT = UCS_BIT(0)
 };
 
 
@@ -1369,6 +1369,15 @@ typedef int (*uct_ep_is_connected_func_t)(
 
 typedef ucs_status_t (*uct_ep_get_device_ep_func_t)(
         uct_ep_h ep, uct_device_ep_h *device_ep_p);
+
+typedef ucs_status_t (*uct_ep_put_sgl_zcopy_func_t)(uct_ep_h ep,
+                                                    void * const *buffers,
+                                                    const size_t *lengths,
+                                                    uct_mem_h const *memhs,
+                                                    const uint64_t *remote_addrs,
+                                                    uct_rkey_t const *rkeys,
+                                                    size_t count,
+                                                    uct_completion_t *comp);
 
 
 /**
