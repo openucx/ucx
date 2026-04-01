@@ -315,6 +315,7 @@ ucp_address_get_device(ucp_context_h context, ucp_rsc_index_t rsc_index,
 
     dev = &devices[(*num_devices_p)++];
     memset(dev, 0, sizeof(*dev));
+    dev->num_paths = 1;
 out:
     return dev;
 }
@@ -453,9 +454,11 @@ ucp_address_gather_devices(ucp_worker_h worker, const ucp_ep_config_key_t *key,
             return UCS_ERR_UNSUPPORTED;
         }
 
-        dev->rsc_index  = rsc_index;
+        dev->rsc_index = rsc_index;
         UCS_STATIC_BITMAP_SET(&dev->tl_bitmap, rsc_index);
-        dev->num_paths  = ucs_min(max_num_paths, iface_attr->dev_num_paths);
+        if (!(iface_attr->cap.flags & UCT_IFACE_FLAG_DEVICE_EP)) {
+            dev->num_paths = ucs_min(max_num_paths, iface_attr->dev_num_paths);
+        }
     }
 
     *devices_p     = devices;
