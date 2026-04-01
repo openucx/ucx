@@ -20,6 +20,7 @@
 #include <ucs/sys/ptr_arith.h>
 #include <uct/cuda/base/cuda_ctx.inl>
 #include <uct/api/v2/uct_v2.h>
+#include <uct/base/uct_iface.h>
 #include <cuda.h>
 #if CUDA_VERSION >= 11070
 #include <cudaTypedefs.h>
@@ -118,7 +119,14 @@ uct_cuda_copy_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
     uct_cuda_copy_md_t *md = ucs_derived_of(uct_md, uct_cuda_copy_md_t);
 
     uct_md_base_md_query(md_attr);
-    md_attr->flags            = UCT_MD_FLAG_REG | UCT_MD_FLAG_ALLOC;
+    /* Advertise RMA invalidation so RMA BW lanes qualify for UCP wireup when
+     * UCP_EP_INIT_ERR_MODE_PEER_FAILURE is set with RNDV (see
+     * ucp_wireup_add_rma_bw_lanes). cuda_copy has no remote RMA keys; local
+     * registration teardown is synchronous and satisfies the invalidate
+     * contract via uct_cuda_copy_mem_dereg(). */
+    md_attr->flags            = UCT_MD_FLAG_REG | UCT_MD_FLAG_ALLOC |
+                                UCT_MD_FLAG_INVALIDATE |
+                                UCT_MD_FLAG_INVALIDATE_RMA;
     md_attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
                                 UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
                                 UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
@@ -180,11 +188,19 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_dereg,
                  (md, params),
                  uct_md_h md, const uct_md_mem_dereg_params_t *params)
 {
-    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
+    unsigned flags;
+
+    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 1);
 
     if (params->memh != &uct_cuda_dummy_memh) {
         UCT_CUDADRV_FUNC(cuMemHostUnregister((void*)params->memh),
                          UCS_LOG_LEVEL_DIAG);
+    }
+
+    flags = UCT_MD_MEM_DEREG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0);
+    if (flags & UCT_MD_MEM_DEREG_FLAG_INVALIDATE) {
+        ucs_assert(params->comp != NULL); /* suppress coverity false-positive */
+        uct_invoke_completion(params->comp, UCS_OK);
     }
 
     return UCS_OK;
