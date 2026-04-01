@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2019. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -96,7 +96,7 @@ uct_cuda_ipc_get_dev_cache(uct_cuda_ipc_component_t *component,
 
     key.uuid     = rkey->uuid;
     key.type     = rkey->ph.handle_type;
-    key.is_local = uct_cuda_ipc_is_rkey_local(ext_rkey);
+    key.is_local = uct_cuda_ipc_is_rkey_local(rkey->pid, ext_rkey->pid_ns);
 
     iter = kh_put(cuda_ipc_uuid_hash, hash, key, &ret);
     if (ret == UCS_KH_PUT_KEY_PRESENT) {

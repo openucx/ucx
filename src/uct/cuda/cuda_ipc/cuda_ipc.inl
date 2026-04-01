@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -83,7 +83,7 @@ uct_cuda_ipc_check_and_pop_ctx(int is_ctx_pushed)
 }
 
 static UCS_F_ALWAYS_INLINE int
-uct_cuda_ipc_is_rkey_local(const uct_cuda_ipc_extended_rkey_t *rkey)
+uct_cuda_ipc_is_rkey_local(pid_t rkey_pid, ucs_sys_ns_t rkey_pid_ns)
 {
     static pid_t pid = 0;
 
@@ -91,8 +91,8 @@ uct_cuda_ipc_is_rkey_local(const uct_cuda_ipc_extended_rkey_t *rkey)
         pid = getpid();
     }
 
-    return (pid == rkey->super.pid) &&
-           (ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID) == rkey->pid_ns);
+    return (pid == rkey_pid) &&
+           (ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID) == rkey_pid_ns);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_ipc_get_remote_address(
