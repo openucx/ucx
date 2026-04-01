@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -227,6 +227,78 @@ UCS_TEST_F(test_string, to_memunits) {
     }
 }
 
+UCS_TEST_F(test_string, next_token) {
+    auto check = [](const char *input, const std::string &delimiters,
+                    const std::vector<std::string> &expected) {
+        const std::string orig(input);
+
+        /* Verify ucs_string_next_token() */
+        {
+            std::vector<char> buf(input, input + orig.size() + 1);
+            const char *saveptr = NULL;
+            const char *tok;
+            size_t len;
+
+            tok = ucs_string_next_token(buf.data(), delimiters.c_str(),
+                                        &saveptr, &len);
+            for (size_t i = 0; i < expected.size(); ++i) {
+                ASSERT_NE(nullptr, tok)
+                        << "input: \"" << input << "\" token index: " << i;
+                EXPECT_EQ(expected[i], std::string(tok, len));
+                tok = ucs_string_next_token(NULL, delimiters.c_str(),
+                                            &saveptr, &len);
+            }
+
+            EXPECT_EQ(nullptr, tok);
+            EXPECT_EQ(orig, std::string(buf.data()));
+        }
+
+        /* Verify ucs_string_for_each_token() */
+        {
+            std::vector<char> buf(input, input + orig.size() + 1);
+            const char *saveptr;
+            const char *tok;
+            size_t tok_len;
+            std::vector<std::string> result;
+
+            ucs_string_for_each_token(buf.data(), delimiters.c_str(), saveptr,
+                                      tok, tok_len) {
+                result.push_back(std::string(tok, tok_len));
+            }
+
+            EXPECT_EQ(expected, result);
+            EXPECT_EQ(orig, std::string(buf.data()));
+        }
+    };
+
+    for (char delim : {',', ':', ';', '|', '&', '+', '-', ' ', '\n'}) {
+        std::string d(1, delim);
+
+        /* multiple tokens */
+        check(("foo" + d + "bar" + d + "baz").c_str(), d,
+              {"foo", "bar", "baz"});
+        /* single token, no delimiter */
+        check("single", d, {"single"});
+        /* empty string */
+        check("", d, {});
+        /* single delimiter */
+        check(d.c_str(), d, {});
+        /* consecutive delimiters */
+        check((d + d).c_str(), d, {});
+        /* trailing delimiter */
+        check(("foo" + d).c_str(), d, {"foo"});
+        /* leading delimiter */
+        check((d + "foo").c_str(), d, {"foo"});
+        /* delimiters surrounding a token */
+        check((d + "a" + d).c_str(), d, {"a"});
+    }
+
+    /* multiple delimiters */
+    const char *delimiters = "&|+";
+    check("nova&noob|crocubot+ants&&rails", delimiters,
+          {"nova", "noob", "crocubot", "ants", "rails"});
+}
+
 class test_string_buffer : public ucs::test {
 protected:
     void test_fixed(ucs_string_buffer_t *strb, size_t capacity);
@@ -408,8 +480,11 @@ UCS_TEST_F(test_string_buffer, tokenize) {
     ucs_string_buffer_appendf(&strb, "nova&noob|crocubot+ants&&rails");
 
     std::vector<std::string> names;
+    const char *saveptr;
+    size_t name_len;
     char *name;
-    ucs_string_buffer_for_each_token(name, &strb, "&|+") {
+    ucs_string_buffer_for_each_token(&strb, "&|+", saveptr, name, name_len) {
+        name[name_len] = '\0';
         names.push_back(name);
     }
 
@@ -473,6 +548,299 @@ UCS_TEST_F(test_string_buffer, ucs_string_buffer_translate) {
               ucs_string_buffer_cstr(&strb));
 
     ucs_string_buffer_cleanup(&strb);
+}
+
+UCS_TEST_F(test_string_buffer, expand_range_prefix_suffix) {
+    const struct {
+        const char *token;
+        const char *expected;
+    } test_cases[] = {
+        {"prefix[0-2]suffix", "prefix0suffix,prefix1suffix,prefix2suffix"},
+        {"prefix[0-2]", "prefix0,prefix1,prefix2"},
+        {"[3-5]suffix", "3suffix,4suffix,5suffix"},
+        {"[0-2]", "0,1,2"},
+    };
+
+    for (const auto &tc : test_cases) {
+        ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
+
+        ucs_string_buffer_expand_range(&strb, tc.token, strlen(tc.token),
+                                       ',', SIZE_MAX);
+        EXPECT_EQ(std::string(tc.expected), ucs_string_buffer_cstr(&strb))
+                << "token: " << tc.token;
+
+        ucs_string_buffer_cleanup(&strb);
+    }
+}
+
+
+UCS_TEST_F(test_string_buffer, expand_range_single) {
+    ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
+
+    ucs_string_buffer_expand_range(&strb, "dev[99-99]",
+                                   strlen("dev[99-99]"), ',', SIZE_MAX);
+    EXPECT_EQ(std::string("dev99"), ucs_string_buffer_cstr(&strb));
+
+    ucs_string_buffer_cleanup(&strb);
+}
+
+UCS_TEST_F(test_string_buffer, expand_range_multi_digit) {
+    ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
+
+    ucs_string_buffer_expand_range(&strb, "dev[98-101]",
+                                   strlen("dev[98-101]"), ',', SIZE_MAX);
+    EXPECT_EQ(std::string("dev98,dev99,dev100,dev101"),
+              ucs_string_buffer_cstr(&strb));
+
+    ucs_string_buffer_cleanup(&strb);
+}
+
+UCS_TEST_F(test_string_buffer, expand_range_malformed) {
+    const std::string malformed[] = {"no_bracket", "prefix2-]",    "prefix]abc",
+                                     "hello]]",    "]]-",          "]--",
+                                     "a[-1-2]b",   "a[-2-]b",      "a[2-3-]b",
+                                     "a[4]b",      "a[[]b",        "a[[2-4]b",
+                                     "a[2-]b",     "a[2-3-4]b",    "a[b-c]d",
+                                     "a[0-A]b",    "a[-]b",        "[]",
+                                     "[-1-2-]",    "[--]",         "[1-2][3-4]",
+                                     "[4-8][",     "[5-6]]",       "][4-5]",
+                                     "[[0-4]]",    "a[0-4]b[6-8]c",
+                                     "a[5-2]b",    "[10-0]",
+                                     "dev[100-1]suffix"};
+
+    for (const std::string &token : malformed) {
+        ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
+
+        ucs_string_buffer_expand_range(&strb, token.c_str(), token.size(),
+                                       ',', SIZE_MAX);
+        EXPECT_EQ(token, ucs_string_buffer_cstr(&strb)) << "token: " << token;
+
+        ucs_string_buffer_cleanup(&strb);
+    }
+}
+
+UCS_TEST_F(test_string_buffer, expand_range_empty) {
+    ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
+
+    EXPECT_EQ(1ul,
+              ucs_string_buffer_expand_range(&strb, "", 0, ',', SIZE_MAX));
+    EXPECT_EQ(std::string(""), ucs_string_buffer_cstr(&strb));
+
+    ucs_string_buffer_cleanup(&strb);
+}
+
+
+UCS_TEST_F(test_string_buffer, expand_range_append) {
+    ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
+
+    ucs_string_buffer_appendf(&strb, "previous_data,");
+    ucs_string_buffer_expand_range(&strb, "data[0-1]", strlen("data[0-1]"),
+                                   ',', SIZE_MAX);
+    EXPECT_EQ(std::string("previous_data,data0,data1"),
+              ucs_string_buffer_cstr(&strb));
+
+    ucs_string_buffer_cleanup(&strb);
+}
+
+UCS_TEST_F(test_string_buffer, expand_range_max_elements) {
+    const struct {
+        const char *token;
+        size_t      max_elements;
+        size_t      expected_count;
+        const char *expected;
+    } test_cases[] = {
+        {"dev[0-9]", 3, 3, "dev0,dev1,dev2"},
+        {"dev[0-9]", 1, 1, "dev0"},
+        {"dev[0-2]", 100, 3, "dev0,dev1,dev2"},
+    };
+
+    for (const auto &tc : test_cases) {
+        ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
+
+        EXPECT_EQ(tc.expected_count,
+                  ucs_string_buffer_expand_range(&strb, tc.token,
+                                                 strlen(tc.token), ',',
+                                                 tc.max_elements))
+                << "token: " << tc.token
+                << " max_elements: " << tc.max_elements;
+        EXPECT_EQ(std::string(tc.expected), ucs_string_buffer_cstr(&strb))
+                << "token: " << tc.token
+                << " max_elements: " << tc.max_elements;
+
+        ucs_string_buffer_cleanup(&strb);
+    }
+}
+
+UCS_TEST_F(test_string_buffer, expand_range_max_elements_zero) {
+    ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
+
+    EXPECT_EQ(0ul, ucs_string_buffer_expand_range(&strb, "dev[0-9]",
+                                                   strlen("dev[0-9]"), ',',
+                                                   0));
+    EXPECT_EQ(std::string(""), ucs_string_buffer_cstr(&strb));
+
+    ucs_string_buffer_cleanup(&strb);
+}
+
+
+UCS_TEST_F(test_string_buffer, expand_range_leading_zeros) {
+    ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
+
+    EXPECT_EQ(3ul, ucs_string_buffer_expand_range(&strb, "dev[01-03]",
+                                                   strlen("dev[01-03]"), ',',
+                                                   SIZE_MAX));
+    /* Leading zeros are not preserved in the output */
+    EXPECT_EQ(std::string("dev1,dev2,dev3"), ucs_string_buffer_cstr(&strb));
+
+    ucs_string_buffer_cleanup(&strb);
+}
+
+UCS_TEST_F(test_string_buffer, expand_range_long_prefix_suffix) {
+    ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
+    const std::string long_prefix(200, 'p');
+    const std::string long_suffix(200, 's');
+    const std::string token = long_prefix + "[0-2]" + long_suffix;
+
+    EXPECT_EQ(3ul,
+              ucs_string_buffer_expand_range(&strb, token.c_str(),
+                                             token.size(), ',', SIZE_MAX));
+    const std::string expected = long_prefix + "0" + long_suffix + "," +
+                                 long_prefix + "1" + long_suffix + "," +
+                                 long_prefix + "2" + long_suffix;
+    EXPECT_EQ(expected, ucs_string_buffer_cstr(&strb));
+
+    ucs_string_buffer_cleanup(&strb);
+}
+
+UCS_TEST_F(test_string_buffer, expand_range_different_delimiters) {
+    const struct {
+        const char *token;
+        char       delim;
+        const char *expected;
+    } test_cases[] = {
+        {"dev[0-2]", ';', "dev0;dev1;dev2"},
+        {"a[3-5]b", '@', "a3b@a4b@a5b"},
+        {"[0-3]", ' ', "0 1 2 3"},
+        {"eth[10-12]", '|', "eth10|eth11|eth12"},
+    };
+
+    for (const auto &tc : test_cases) {
+        ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
+
+        ucs_string_buffer_expand_range(&strb, tc.token, strlen(tc.token),
+                                       tc.delim, SIZE_MAX);
+        EXPECT_EQ(std::string(tc.expected), ucs_string_buffer_cstr(&strb))
+                << "token: " << tc.token << " delim: '" << tc.delim << "'";
+
+        ucs_string_buffer_cleanup(&strb);
+    }
+}
+
+UCS_TEST_F(test_string_buffer, expand_ranges_mixed) {
+    ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
+
+    ucs_string_buffer_expand_ranges(&strb, "mlx5_[0-2],eth0,ib[3-5]", ',',
+                                    SIZE_MAX);
+    EXPECT_EQ(std::string("mlx5_0,mlx5_1,mlx5_2,eth0,ib3,ib4,ib5"),
+              ucs_string_buffer_cstr(&strb));
+    ucs_string_buffer_cleanup(&strb);
+
+    ucs_string_buffer_t strb2 = UCS_STRING_BUFFER_INITIALIZER;
+
+    ucs_string_buffer_expand_ranges(&strb2, "dev[0-3]", ',', SIZE_MAX);
+    EXPECT_EQ(std::string("dev0,dev1,dev2,dev3"),
+              ucs_string_buffer_cstr(&strb2));
+    ucs_string_buffer_cleanup(&strb2);
+}
+
+UCS_TEST_F(test_string_buffer, expand_ranges_empty) {
+    ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
+
+    EXPECT_EQ(0ul,
+              ucs_string_buffer_expand_ranges(&strb, "", ',', SIZE_MAX));
+    EXPECT_EQ(std::string(""), ucs_string_buffer_cstr(&strb));
+
+    ucs_string_buffer_cleanup(&strb);
+}
+
+UCS_TEST_F(test_string_buffer, expand_ranges_consecutive_tokens) {
+    ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
+
+    EXPECT_EQ(2ul, ucs_string_buffer_expand_ranges(&strb, ",,a,,b,,", ',',
+                                                    SIZE_MAX));
+    EXPECT_EQ(std::string("a,b"), ucs_string_buffer_cstr(&strb));
+
+    ucs_string_buffer_cleanup(&strb);
+}
+
+UCS_TEST_F(test_string_buffer, expand_ranges_no_ranges) {
+    ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
+
+    ucs_string_buffer_expand_ranges(&strb, "eth0,lo,ib0", ',', SIZE_MAX);
+    EXPECT_EQ(std::string("eth0,lo,ib0"), ucs_string_buffer_cstr(&strb));
+
+    ucs_string_buffer_cleanup(&strb);
+}
+
+
+UCS_TEST_F(test_string_buffer, expand_ranges_max_elements_zero) {
+    ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
+
+    EXPECT_EQ(0ul, ucs_string_buffer_expand_ranges(&strb, "dev[0-4],eth0",
+                                                    ',', 0));
+    EXPECT_EQ(std::string(""), ucs_string_buffer_cstr(&strb));
+
+    ucs_string_buffer_cleanup(&strb);
+}
+
+UCS_TEST_F(test_string_buffer, expand_ranges_max_elements_cuts_range) {
+    const struct {
+        const char *input;
+        size_t      max_elements;
+        size_t      expected_count;
+        const char *expected;
+    } test_cases[] = {
+        {"lo,dev[0-4],eth0", 3, 3, "lo,dev0,dev1"},
+        {"dev[0-2],eth[0-2]", 4, 4, "dev0,dev1,dev2,eth0"},
+        {"a[0-1],b[0-1]", 4, 4, "a0,a1,b0,b1"},
+    };
+
+    for (const auto &tc : test_cases) {
+        ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
+
+        EXPECT_EQ(tc.expected_count,
+                  ucs_string_buffer_expand_ranges(&strb, tc.input, ',',
+                                                  tc.max_elements))
+                << "input: " << tc.input
+                << " max_elements: " << tc.max_elements;
+        EXPECT_EQ(std::string(tc.expected), ucs_string_buffer_cstr(&strb))
+                << "input: " << tc.input
+                << " max_elements: " << tc.max_elements;
+
+        ucs_string_buffer_cleanup(&strb);
+    }
+}
+
+UCS_TEST_F(test_string_buffer, expand_ranges_different_delimiters) {
+    const struct {
+        const char *input;
+        char       delim;
+        const char *expected;
+    } test_cases[] = {
+        {"mlx5_[11-12];eth0;ib[2-4]", ';', "mlx5_11;mlx5_12;eth0;ib2;ib3;ib4"},
+        {"dev[0-1]@lo", '@', "dev0@dev1@lo"},
+        {"a[0-1] b[2-3]", ' ', "a0 a1 b2 b3"},
+    };
+
+    for (const auto &tc : test_cases) {
+        ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
+
+        ucs_string_buffer_expand_ranges(&strb, tc.input, tc.delim, SIZE_MAX);
+        EXPECT_EQ(std::string(tc.expected), ucs_string_buffer_cstr(&strb))
+                << "input: " << tc.input << " delim: '" << tc.delim << "'";
+
+        ucs_string_buffer_cleanup(&strb);
+    }
 }
 
 class test_string_set : public ucs::test {

@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -1525,17 +1525,20 @@ void ucp_mem_print_info(const char *mem_spec, ucp_context_h context,
     ssize_t mem_size_value;
     char memunits_str[32];
     ucs_status_t status;
+    const char *saveptr;
     char *mem_size_str;
     char *mem_type_str;
     unsigned md_index;
     void *rkey_buffer;
     size_t rkey_size;
+    size_t tok_len;
     ucp_mem_h memh;
 
     ucs_string_buffer_appendf(&strb, "%s", mem_spec);
 
     /* Parse memory size */
-    mem_size_str = ucs_string_buffer_next_token(&strb, NULL, ",");
+    mem_size_str = ucs_string_buffer_next_token(&strb, ",", &saveptr, &tok_len);
+    mem_size_str[tok_len] = '\0';
     status       = ucs_str_to_memunits(mem_size_str, &mem_size_value);
     if (status != UCS_OK) {
         printf("<Failed to convert a memunits string>\n");
@@ -1548,8 +1551,9 @@ void ucp_mem_print_info(const char *mem_spec, ucp_context_h context,
     }
 
     /* Parse memory type */
-    mem_type_str = ucs_string_buffer_next_token(&strb, mem_size_str, ",");
+    mem_type_str = ucs_string_buffer_next_token(NULL, ",", &saveptr, &tok_len);
     if (mem_type_str != NULL) {
+        mem_type_str[tok_len] = '\0';
         mem_type_value = ucs_string_find_in_list(mem_type_str,
                                                  ucs_memory_type_names, 0);
         if ((mem_type_value < 0) ||
