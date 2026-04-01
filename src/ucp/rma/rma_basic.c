@@ -33,7 +33,7 @@ static ucs_status_t ucp_rma_basic_progress_put(uct_pending_req_t *self)
 {
     ucp_request_t *req              = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_t *ep                    = req->send.ep;
-    ucp_rkey_h rkey                 = req->send.rma.rkey;
+    ucp_rkey_h rkey                 = req->send.fenced_req.rma.rkey;
     ucp_lane_index_t lane           = req->send.lane;
     ucp_ep_rma_config_t *rma_config = &ucp_ep_config(ep)->rma[lane];
     ucp_md_index_t md_index;
@@ -50,7 +50,7 @@ static ucs_status_t ucp_rma_basic_progress_put(uct_pending_req_t *self)
         status     = UCS_PROFILE_CALL(uct_ep_put_short,
                                       ucp_ep_get_fast_lane(ep, lane),
                                       req->send.buffer, packed_len,
-                                      req->send.rma.remote_addr,
+                                      req->send.fenced_req.rma.remote_addr,
                                       rkey->cache.rma_rkey);
     } else if (ucs_likely(req->send.length < rma_config->put_zcopy_thresh)) {
         ucp_memcpy_pack_context_t pack_ctx;
@@ -59,7 +59,7 @@ static ucs_status_t ucp_rma_basic_progress_put(uct_pending_req_t *self)
         packed_len      = UCS_PROFILE_CALL(uct_ep_put_bcopy,
                                            ucp_ep_get_fast_lane(ep, lane),
                                            ucp_rma_basic_memcpy_pack, &pack_ctx,
-                                           req->send.rma.remote_addr,
+                                           req->send.fenced_req.rma.remote_addr,
                                            rkey->cache.rma_rkey);
         status = (packed_len > 0) ? UCS_OK : (ucs_status_t)packed_len;
     } else {
@@ -76,7 +76,7 @@ static ucs_status_t ucp_rma_basic_progress_put(uct_pending_req_t *self)
 
         status = UCS_PROFILE_CALL(uct_ep_put_zcopy,
                                   ucp_ep_get_fast_lane(ep, lane), &iov, 1,
-                                  req->send.rma.remote_addr,
+                                  req->send.fenced_req.rma.remote_addr,
                                   rkey->cache.rma_rkey,
                                   &req->send.state.uct_comp);
     }
@@ -89,7 +89,7 @@ static ucs_status_t ucp_rma_basic_progress_get(uct_pending_req_t *self)
 {
     ucp_request_t *req              = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_t *ep                    = req->send.ep;
-    ucp_rkey_h rkey                 = req->send.rma.rkey;
+    ucp_rkey_h rkey                 = req->send.fenced_req.rma.rkey;
     ucp_lane_index_t lane           = req->send.lane;
     ucp_ep_rma_config_t *rma_config = &ucp_ep_config(ep)->rma[lane];
     ucp_md_index_t md_index;
@@ -105,7 +105,7 @@ static ucs_status_t ucp_rma_basic_progress_get(uct_pending_req_t *self)
                                        ucp_ep_get_fast_lane(ep, lane),
                                        (uct_unpack_callback_t)memcpy,
                                        (void*)req->send.buffer, frag_length,
-                                       req->send.rma.remote_addr,
+                                       req->send.fenced_req.rma.remote_addr,
                                        rkey->cache.rma_rkey,
                                        &req->send.state.uct_comp);
     } else {
@@ -120,7 +120,7 @@ static ucs_status_t ucp_rma_basic_progress_get(uct_pending_req_t *self)
 
         status = UCS_PROFILE_CALL(uct_ep_get_zcopy,
                                   ucp_ep_get_fast_lane(ep, lane), &iov, 1,
-                                  req->send.rma.remote_addr,
+                                  req->send.fenced_req.rma.remote_addr,
                                   rkey->cache.rma_rkey,
                                   &req->send.state.uct_comp);
     }

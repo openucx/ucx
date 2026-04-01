@@ -33,11 +33,11 @@ ucs_status_t ucp_amo_check_send_status(ucp_request_t *req, ucs_status_t status)
 static ucs_status_t ucp_amo_basic_progress_post(uct_pending_req_t *self)
 {
     ucp_request_t *req   = ucs_container_of(self, ucp_request_t, send.uct);
-    ucp_rkey_h rkey      = req->send.amo.rkey;
+    ucp_rkey_h rkey      = req->send.fenced_req.amo.rkey;
     ucp_ep_t *ep         = req->send.ep;
-    uint64_t value       = req->send.amo.value;
-    uint64_t remote_addr = req->send.amo.remote_addr;
-    uct_atomic_op_t op   = req->send.amo.uct_op;
+    uint64_t value       = req->send.fenced_req.amo.value;
+    uint64_t remote_addr = req->send.fenced_req.amo.remote_addr;
+    uct_atomic_op_t op   = req->send.fenced_req.amo.uct_op;
     ucs_status_t status;
 
     req->send.lane = rkey->cache.amo_lane;
@@ -58,12 +58,12 @@ static ucs_status_t ucp_amo_basic_progress_post(uct_pending_req_t *self)
 static ucs_status_t ucp_amo_basic_progress_fetch(uct_pending_req_t *self)
 {
     ucp_request_t *req    = ucs_container_of(self, ucp_request_t, send.uct);
-    ucp_rkey_h rkey       = req->send.amo.rkey;
+    ucp_rkey_h rkey       = req->send.fenced_req.amo.rkey;
     ucp_ep_t *ep          = req->send.ep;
-    uint64_t value        = req->send.amo.value;
+    uint64_t value        = req->send.fenced_req.amo.value;
     uint64_t *result      = req->send.buffer;
-    uint64_t remote_addr  = req->send.amo.remote_addr;
-    uct_atomic_op_t op    = req->send.amo.uct_op;
+    uint64_t remote_addr  = req->send.fenced_req.amo.remote_addr;
+    uct_atomic_op_t op    = req->send.fenced_req.amo.uct_op;
     uct_ep_h uct_ep;
     ucs_status_t status;
 

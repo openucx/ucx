@@ -217,7 +217,17 @@ ucp_proto_multi_bcopy_progress(ucp_request_t *req,
         ucp_proto_multi_request_init(req);
         if (init_func != NULL) {
             status = init_func(req);
-            if (status != UCS_OK) {
+            if (status == UCP_STATUS_FENCE_DEFER) {
+                if (req->send.pending_lane != UCP_NULL_LANE) {
+                    ucp_ep_fence_pending_add(req->send.ep, &req->send.uct);
+                    req->send.pending_lane = UCP_NULL_LANE;
+                    return UCS_OK;
+                }
+
+                return status;
+            } else if (status == UCS_ERR_NO_RESOURCE) {
+                return status;
+            } else if (status != UCS_OK) {
                 /* remove from pending after request is completed */
                 ucp_proto_request_abort(req, status);
                 return UCS_OK;
@@ -250,7 +260,17 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_multi_zcopy_progress(
         ucp_proto_multi_request_init(req);
         if (init_func != NULL) {
             status = init_func(req);
-            if (status != UCS_OK) {
+            if (status == UCP_STATUS_FENCE_DEFER) {
+                if (req->send.pending_lane != UCP_NULL_LANE) {
+                    ucp_ep_fence_pending_add(req->send.ep, &req->send.uct);
+                    req->send.pending_lane = UCP_NULL_LANE;
+                    return UCS_OK;
+                }
+
+                return status;
+            } else if (status == UCS_ERR_NO_RESOURCE) {
+                return status;
+            } else if (status != UCS_OK) {
                 goto out_abort;
             }
         }
@@ -373,6 +393,10 @@ ucp_proto_multi_rma_init_func(ucp_request_t *req)
 {
     const ucp_proto_multi_priv_t *mpriv = req->send.proto_config->priv;
 
+    /* reset fence_seq of new requests only */
+    if (!(req->flags & UCP_REQUEST_FLAG_FENCE_BLOCKED)) {
+        req->send.fenced_req.fence_seq = 0;
+    }
     return ucp_ep_rma_handle_fence(req->send.ep, req, mpriv->lane_map);
 }
 

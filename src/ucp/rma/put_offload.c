@@ -27,8 +27,19 @@ static ucs_status_t ucp_proto_put_offload_short_progress(uct_pending_req_t *self
     uct_rkey_t tl_rkey;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
+        req->send.fenced_req.fence_seq = 0;
         status = ucp_ep_rma_handle_fence(ep, req, UCS_BIT(spriv->super.lane));
-        if (status != UCS_OK) {
+        if (status == UCP_STATUS_FENCE_DEFER) {
+            if (req->send.pending_lane != UCP_NULL_LANE) {
+                ucp_ep_fence_pending_add(ep, &req->send.uct);
+                req->send.pending_lane = UCP_NULL_LANE;
+                return UCS_OK;
+            }
+
+            return status;
+        } else if (status == UCS_ERR_NO_RESOURCE) {
+            return status;
+        } else if (status != UCS_OK) {
             ucp_proto_request_abort(req, status);
             return UCS_OK;
         }
@@ -36,11 +47,12 @@ static ucs_status_t ucp_proto_put_offload_short_progress(uct_pending_req_t *self
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     }
 
-    tl_rkey = ucp_rkey_get_tl_rkey(req->send.rma.rkey, spriv->super.rkey_index);
+    tl_rkey = ucp_rkey_get_tl_rkey(req->send.fenced_req.rma.rkey,
+                                   spriv->super.rkey_index);
     status  = uct_ep_put_short(ucp_ep_get_fast_lane(ep, spriv->super.lane),
                                req->send.state.dt_iter.type.contig.buffer,
                                req->send.state.dt_iter.length,
-                               req->send.rma.remote_addr, tl_rkey);
+                               req->send.fenced_req.rma.remote_addr, tl_rkey);
     if (ucs_unlikely(status == UCS_ERR_NO_RESOURCE)) {
         req->send.lane = spriv->super.lane; /* for pending add */
         return status;
@@ -139,9 +151,9 @@ ucp_proto_put_offload_bcopy_send_func(ucp_request_t *req,
 {
     ucp_ep_h ep        = req->send.ep;
     uct_ep_h uct_ep    = ucp_ep_get_lane(ep, lpriv->super.lane);
-    uint64_t address   = req->send.rma.remote_addr +
+    uint64_t address   = req->send.fenced_req.rma.remote_addr +
                          req->send.state.dt_iter.offset;
-    uct_rkey_t tl_rkey = ucp_rkey_get_tl_rkey(req->send.rma.rkey,
+    uct_rkey_t tl_rkey = ucp_rkey_get_tl_rkey(req->send.fenced_req.rma.rkey,
                                               lpriv->super.rkey_index);
 
     ucp_proto_multi_pack_ctx_t pack_ctx = {
@@ -173,8 +185,25 @@ static ucs_status_t ucp_proto_put_offload_bcopy_progress(uct_pending_req_t *self
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
         ucp_proto_multi_request_init(req);
 
+        /* Reset fence_seq for fresh requests (stale mpool value) but not for
+         * requests retried from the fence pending queue, whose fence_seq is
+         * already valid and must be preserved to maintain queue invariants.
+         */
+        if (!(req->flags & UCP_REQUEST_FLAG_FENCE_BLOCKED)) {
+            req->send.fenced_req.fence_seq = 0;
+        }
         status = ucp_ep_rma_handle_fence(req->send.ep, req, mpriv->lane_map);
-        if (status != UCS_OK) {
+        if (status == UCP_STATUS_FENCE_DEFER) {
+            if (req->send.pending_lane != UCP_NULL_LANE) {
+                ucp_ep_fence_pending_add(req->send.ep, &req->send.uct);
+                req->send.pending_lane = UCP_NULL_LANE;
+                return UCS_OK;
+            }
+
+            return status;
+        } else if (status == UCS_ERR_NO_RESOURCE) {
+            return status;
+        } else if (status != UCS_OK) {
             ucp_proto_request_abort(req, status);
             return UCS_OK;
         }
@@ -250,9 +279,9 @@ ucp_proto_put_offload_zcopy_send_func(ucp_request_t *req,
 {
     ucp_ep_h ep        = req->send.ep;
     uct_ep_h uct_ep    = ucp_ep_get_lane(ep, lpriv->super.lane);
-    uint64_t address   = req->send.rma.remote_addr +
+    uint64_t address   = req->send.fenced_req.rma.remote_addr +
                          req->send.state.dt_iter.offset;
-    uct_rkey_t tl_rkey = ucp_rkey_get_tl_rkey(req->send.rma.rkey,
+    uct_rkey_t tl_rkey = ucp_rkey_get_tl_rkey(req->send.fenced_req.rma.rkey,
                                               lpriv->super.rkey_index);
     uct_iov_t iov;
     ucs_status_t status;
