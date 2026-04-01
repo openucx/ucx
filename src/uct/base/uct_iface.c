@@ -1093,3 +1093,24 @@ ucs_status_t uct_ep_get_device_ep(uct_ep_h ep, uct_device_ep_h *device_ep_p)
 
     return iface->internal_ops->ep_get_device_ep(ep, device_ep_p);
 }
+
+uct_iface_internal_ops_t uct_stub_internal_ops = {
+    .iface_query_v2        = uct_iface_base_query_v2,
+    .iface_estimate_perf   = (uct_iface_estimate_perf_func_t)ucs_empty_function_return_unsupported,
+    .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+    .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+    .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
+    .ep_connect_to_ep_v2   = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
+    .iface_is_reachable_v2 = (uct_iface_is_reachable_v2_func_t)ucs_empty_function_return_zero,
+    .ep_is_connected       = (uct_ep_is_connected_func_t)ucs_empty_function_return_zero,
+    .ep_get_device_ep      = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported,
+};
+
+void uct_stub_iface_init(uct_stub_iface_t *iface, const uct_iface_ops_t *ops)
+{
+    UCS_STATIC_ASSERT(ucs_offsetof(uct_stub_iface_t, internal_ops) ==
+                      ucs_offsetof(uct_base_iface_t, internal_ops));
+
+    iface->super.ops    = *ops;
+    iface->internal_ops = &uct_stub_internal_ops;
+}
