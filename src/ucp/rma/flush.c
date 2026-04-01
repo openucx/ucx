@@ -423,7 +423,7 @@ void ucp_ep_flush_completion(uct_completion_t *self)
     if (status == UCS_OK) {
         ucp_ep_flush_progress(req);
     } else {
-        /* In case of lane failure the flush operation shold be resubmitted
+        /* In case of lane failure the flush operation should be resubmitted
          * as well as any other outstanding requests on this EP since
          * the flush guarantees ordering. */
         if (ucp_ep_err_mode_eq(req->send.ep, UCP_ERR_HANDLING_MODE_FAILOVER) &&
