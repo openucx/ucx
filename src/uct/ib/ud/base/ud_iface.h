@@ -182,6 +182,8 @@ struct uct_ud_iface {
         } outstanding;
         ucs_arbiter_t          pending_q;
         ucs_queue_head_t       async_comp_q;
+        ucs_queue_head_t       skb_pending_free;
+        uint16_t               comp_sn;
         ucs_twheel_t           timer;
         ucs_time_t             tick;
         double                 timer_backoff;
