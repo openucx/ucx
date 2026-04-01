@@ -137,7 +137,7 @@ private:
     uint32_t                      m_pending_map;
     uint8_t                       m_pending[CAPACITY];
 #ifdef HAVE_CURAND
-    curandState                   m_rand_state;
+    mutable curandState           m_rand_state;
 #endif
 };
 
