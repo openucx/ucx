@@ -333,28 +333,83 @@ stages:
         name: althca
         demands: ucx_althca -equals yes
         test_perf: 0
+        run_bullseye: yes
     - template: tests.yml
       parameters:
         name: gpu
         demands: ucx_gpu -equals yes
-        test_perf: 1
+        test_perf: 0
         container: ubuntu2404_doca31_gpunetio
+        run_bullseye: yes
     - template: tests.yml
       parameters:
         name: new
         demands: ucx_new -equals yes
-        test_perf: 1
+        test_perf: 0
+        run_bullseye: yes
     - template: tests.yml
       parameters:
         name: roce
         demands: ucx_roce -equals yes
         test_perf: 0
+        run_bullseye: no
+    - template: tests.yml
+      parameters:
+        name: roce_proto_disable
+        demands: ucx_roce -equals yes
+        test_perf: 0
+        proto_enable: no
+        run_bullseye: no
     - template: tests.yml
       parameters:
         name: BlueField
         demands: ucx_bf -equals yes
         run_tests: yes
         test_perf: 0
+        run_bullseye: no
+
+    - job: bullseye_report
+      displayName: Merge Bullseye reports
+      dependsOn: 
+        - tests_althca
+        - tests_new
+        - tests_gpu
+      condition: succeededOrFailed()
+      pool:
+        name: MLNX
+        demands: ucx_docker
+      steps:
+      - checkout: none
+      - download: current
+        patterns: '*.cov'
+        displayName: Download partial reports
+      - bash: |
+          set -xe
+          source ./buildlib/az-helpers.sh
+          az_module_load tools/bullseyecov-9.14.2
+
+          # Merge all .cov files
+          REPORT_FILE="$BUILD_ARTIFACTSTAGINGDIRECTORY/bullseye_report.cov"
+          find "$PIPELINE_WORKSPACE" -name "*.cov" -print0 | xargs -0 covmerge -c -f "$REPORT_FILE"
+          covsrc -f "$REPORT_FILE"
+
+          # Generate HTML report
+          REPORT_DIR="$PIPELINE_WORKSPACE/coverage_html"
+          mkdir -p "$REPORT_DIR"
+          covhtml -n -f "$REPORT_FILE" "$REPORT_DIR"
+
+          # Strip out workdir path from HTML files
+          find "$REPORT_DIR" -type f -name '*.html' -exec \
+            sed -i 's|\.\./\.\./\.\./\.\./\.\./scrap/azure/agent-00/AZP_WORKSPACE/0/s/|./|g' {} +
+
+          # Compress for faster upload
+          tar -czf "$BUILD_ARTIFACTSTAGINGDIRECTORY/coverage_html.tar.gz" -C "$REPORT_DIR" .
+        displayName: Merge Bullseye files
+      - task: PublishBuildArtifacts@1
+        inputs:
+          pathToPublish: $(Build.ArtifactStagingDirectory)
+          artifactName: BullseyeCoverageReport
+        displayName: Publish Bullseye report
 
   - stage: EFA_Tests
     dependsOn: [Static_check]
