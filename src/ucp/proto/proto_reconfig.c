@@ -51,8 +51,7 @@ ucp_proto_reconfig_report_rma_force_zcopy_no_proto(ucp_request_t *req,
     ucp_operation_id_t op_id;
     ucs_memory_type_t local_mem_type, remote_mem_type;
 
-    if (!ep->worker->context->config.ext.rma_force_zcopy ||
-        (req->send.rma.rkey == NULL)) {
+    if (!ep->worker->context->config.ext.rma_force_zcopy) {
         return 0;
     }
 
@@ -72,7 +71,6 @@ ucp_proto_reconfig_report_rma_force_zcopy_no_proto(ucp_request_t *req,
               ucs_memory_type_names[local_mem_type],
               (op_id == UCP_OP_ID_PUT) ? "to" : "from",
               ucs_memory_type_names[remote_mem_type]);
-    ucp_proto_request_abort(req, UCS_ERR_CANCELED);
     return 1;
 }
 
@@ -86,6 +84,7 @@ static ucs_status_t ucp_proto_reconfig_progress(uct_pending_req_t *self)
     /* This protocol should not be selected for valid and connected endpoint */
     if (ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED) {
         if (ucp_proto_reconfig_report_rma_force_zcopy_no_proto(req, ep)) {
+            ucp_proto_request_abort(req, UCS_ERR_CANCELED);
             return UCS_OK;
         }
 
