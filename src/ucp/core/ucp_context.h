@@ -98,6 +98,8 @@ typedef struct ucp_context_config {
     int                                    rndv_shm_ppln_enable;
     /** Enable error handling for rndv pipeline protocol */
     int                                    rndv_errh_ppln_enable;
+    /** Maximum memory for concurrent rndv mtype fragments per worker (bytes) */
+    size_t                                 rndv_mtype_worker_max_mem;
     /** Threshold for using tag matching offload capabilities. Smaller buffers
      *  will not be posted to the transport. */
     size_t                                 tm_thresh;
@@ -734,6 +736,13 @@ ucp_context_rndv_is_enabled(ucp_context_h context)
 {
     return (context->config.ext.rndv_intra_thresh != UCS_MEMUNITS_INF) ||
            (context->config.ext.rndv_inter_thresh != UCS_MEMUNITS_INF);
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_context_rndv_mtype_mem_limit_enabled(ucp_context_h context)
+{
+    size_t max_mem = context->config.ext.rndv_mtype_worker_max_mem;
+    return (max_mem != UCS_MEMUNITS_INF) && (max_mem != UCS_MEMUNITS_AUTO);
 }
 
 void ucp_context_memaccess_tl_bitmap(ucp_context_h context,
