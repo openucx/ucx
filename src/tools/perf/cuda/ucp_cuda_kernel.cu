@@ -115,6 +115,8 @@ public:
         case UCX_PERF_CHANNEL_MODE_RANDOM:
 #ifdef HAVE_CURAND
             return curand(m_rand_state) % (gridDim.x * blockDim.x);
+#else
+            [[fallthrough]];
 #endif
         case UCX_PERF_CHANNEL_MODE_PER_THREAD:
         default:
