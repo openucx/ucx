@@ -104,52 +104,70 @@ static ucs_stats_class_t ucp_ep_stats_class = {
 static ucs_status_t ucp_ep_failed_op(uct_ep_h ep);
 static ssize_t ucp_ep_failed_bc_op(uct_ep_h ep);
 static void ucp_ep_failed_destroy(uct_ep_h ep);
+static uct_iface_h ucp_failed_tl_iface;
 
-static uct_stub_iface_t ucp_failed_tl_iface_stub = {
-    .super = {
-        .ops = {
-            .ep_put_short        = (uct_ep_put_short_func_t)ucp_ep_failed_op,
-            .ep_put_bcopy        = (uct_ep_put_bcopy_func_t)ucp_ep_failed_bc_op,
-            .ep_put_zcopy        = (uct_ep_put_zcopy_func_t)ucp_ep_failed_op,
-            .ep_get_short        = (uct_ep_get_short_func_t)ucp_ep_failed_op,
-            .ep_get_bcopy        = (uct_ep_get_bcopy_func_t)ucp_ep_failed_op,
-            .ep_get_zcopy        = (uct_ep_get_zcopy_func_t)ucp_ep_failed_op,
-            .ep_am_short         = (uct_ep_am_short_func_t)ucp_ep_failed_op,
-            .ep_am_short_iov     = (uct_ep_am_short_iov_func_t)ucp_ep_failed_op,
-            .ep_am_bcopy         = (uct_ep_am_bcopy_func_t)ucp_ep_failed_bc_op,
-            .ep_am_zcopy         = (uct_ep_am_zcopy_func_t)ucp_ep_failed_op,
-            .ep_atomic_cswap64   = (uct_ep_atomic_cswap64_func_t)ucp_ep_failed_op,
-            .ep_atomic_cswap32   = (uct_ep_atomic_cswap32_func_t)ucp_ep_failed_op,
-            .ep_atomic64_post    = (uct_ep_atomic64_post_func_t)ucp_ep_failed_op,
-            .ep_atomic32_post    = (uct_ep_atomic32_post_func_t)ucp_ep_failed_op,
-            .ep_atomic64_fetch   = (uct_ep_atomic64_fetch_func_t)ucp_ep_failed_op,
-            .ep_atomic32_fetch   = (uct_ep_atomic32_fetch_func_t)ucp_ep_failed_op,
-            .ep_tag_eager_short  = (uct_ep_tag_eager_short_func_t)ucp_ep_failed_op,
-            .ep_tag_eager_bcopy  = (uct_ep_tag_eager_bcopy_func_t)ucp_ep_failed_op,
-            .ep_tag_eager_zcopy  = (uct_ep_tag_eager_zcopy_func_t)ucp_ep_failed_op,
-            .ep_tag_rndv_zcopy   = (uct_ep_tag_rndv_zcopy_func_t)ucp_ep_failed_op,
-            .ep_tag_rndv_cancel  = (uct_ep_tag_rndv_cancel_func_t)ucp_ep_failed_op,
-            .ep_tag_rndv_request = (uct_ep_tag_rndv_request_func_t)ucp_ep_failed_op,
-            .ep_pending_add      = (uct_ep_pending_add_func_t)ucs_empty_function_return_busy,
-            .ep_pending_purge    = (uct_ep_pending_purge_func_t)ucs_empty_function_return_success,
-            .ep_flush            = (uct_ep_flush_func_t)ucp_ep_failed_op,
-            .ep_fence            = (uct_ep_fence_func_t)ucp_ep_failed_op,
-            .ep_check            = (uct_ep_check_func_t)ucs_empty_function_return_success,
-            .ep_connect_to_ep    = (uct_ep_connect_to_ep_func_t)ucp_ep_failed_op,
-            .ep_destroy          = ucp_ep_failed_destroy,
-            .ep_get_address      = (uct_ep_get_address_func_t)ucp_ep_failed_op
-        }
-    },
-    .internal_ops = &uct_stub_internal_ops,
+static const uct_iface_ops_t ucp_failed_tl_iface_ops = {
+    .ep_put_short        = (uct_ep_put_short_func_t)ucp_ep_failed_op,
+    .ep_put_bcopy        = (uct_ep_put_bcopy_func_t)ucp_ep_failed_bc_op,
+    .ep_put_zcopy        = (uct_ep_put_zcopy_func_t)ucp_ep_failed_op,
+    .ep_get_short        = (uct_ep_get_short_func_t)ucp_ep_failed_op,
+    .ep_get_bcopy        = (uct_ep_get_bcopy_func_t)ucp_ep_failed_op,
+    .ep_get_zcopy        = (uct_ep_get_zcopy_func_t)ucp_ep_failed_op,
+    .ep_am_short         = (uct_ep_am_short_func_t)ucp_ep_failed_op,
+    .ep_am_short_iov     = (uct_ep_am_short_iov_func_t)ucp_ep_failed_op,
+    .ep_am_bcopy         = (uct_ep_am_bcopy_func_t)ucp_ep_failed_bc_op,
+    .ep_am_zcopy         = (uct_ep_am_zcopy_func_t)ucp_ep_failed_op,
+    .ep_atomic_cswap64   = (uct_ep_atomic_cswap64_func_t)ucp_ep_failed_op,
+    .ep_atomic_cswap32   = (uct_ep_atomic_cswap32_func_t)ucp_ep_failed_op,
+    .ep_atomic64_post    = (uct_ep_atomic64_post_func_t)ucp_ep_failed_op,
+    .ep_atomic32_post    = (uct_ep_atomic32_post_func_t)ucp_ep_failed_op,
+    .ep_atomic64_fetch   = (uct_ep_atomic64_fetch_func_t)ucp_ep_failed_op,
+    .ep_atomic32_fetch   = (uct_ep_atomic32_fetch_func_t)ucp_ep_failed_op,
+    .ep_tag_eager_short  = (uct_ep_tag_eager_short_func_t)ucp_ep_failed_op,
+    .ep_tag_eager_bcopy  = (uct_ep_tag_eager_bcopy_func_t)ucp_ep_failed_op,
+    .ep_tag_eager_zcopy  = (uct_ep_tag_eager_zcopy_func_t)ucp_ep_failed_op,
+    .ep_tag_rndv_zcopy   = (uct_ep_tag_rndv_zcopy_func_t)ucp_ep_failed_op,
+    .ep_tag_rndv_cancel  = (uct_ep_tag_rndv_cancel_func_t)ucp_ep_failed_op,
+    .ep_tag_rndv_request = (uct_ep_tag_rndv_request_func_t)ucp_ep_failed_op,
+    .ep_pending_add      = (uct_ep_pending_add_func_t)ucs_empty_function_return_busy,
+    .ep_pending_purge    = (uct_ep_pending_purge_func_t)ucs_empty_function_return_success,
+    .ep_flush            = (uct_ep_flush_func_t)ucp_ep_failed_op,
+    .ep_fence            = (uct_ep_fence_func_t)ucp_ep_failed_op,
+    .ep_check            = (uct_ep_check_func_t)ucs_empty_function_return_success,
+    .ep_connect_to_ep    = (uct_ep_connect_to_ep_func_t)ucp_ep_failed_op,
+    .ep_destroy          = ucp_ep_failed_destroy,
+    .ep_get_address      = (uct_ep_get_address_func_t)ucp_ep_failed_op
 };
 
 static ucp_ep_discard_lanes_arg_t ucp_failed_tl_ep_discard_arg = {
-    .failed_ep            = {.iface = &ucp_failed_tl_iface_stub.super},
     .deactivate_cfg_index = UCP_WORKER_CFG_INDEX_NULL,
     .activate_cfg_index   = UCP_WORKER_CFG_INDEX_NULL,
     .status               = UCS_ERR_CANCELED
 };
 
+UCS_STATIC_INIT {
+    uct_iface_params_t params = {
+        .field_mask = UCT_IFACE_PARAM_FIELD_OPEN_MODE,
+        .open_mode  = UCT_IFACE_OPEN_MODE_STUB,
+        .mode       = {.stub = {.status = UCS_ERR_CANCELED}},
+    };
+    uct_iface_close_func_t stub_close;
+    ucs_status_t status;
+
+    status = uct_iface_open(NULL, NULL, &params, NULL, &ucp_failed_tl_iface);
+    if (status != UCS_OK) {
+        ucs_fatal("failed to create failed tl iface stub");
+    }
+
+    stub_close                                   = ucp_failed_tl_iface->ops.iface_close;
+    ucp_failed_tl_iface->ops                     = ucp_failed_tl_iface_ops;
+    ucp_failed_tl_iface->ops.iface_close         = stub_close;
+    ucp_failed_tl_ep_discard_arg.failed_ep.iface = ucp_failed_tl_iface;
+}
+
+UCS_STATIC_CLEANUP {
+    uct_iface_close(ucp_failed_tl_iface);
+}
 
 int ucp_is_uct_ep_failed(uct_ep_h uct_ep)
 {
@@ -1527,7 +1545,7 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
         return;
     }
 
-    discard_arg->failed_ep.iface      = &ucp_failed_tl_iface_stub.super;
+    discard_arg->failed_ep.iface      = ucp_failed_tl_iface;
     discard_arg->ucp_ep               = ep;
     discard_arg->discard_counter      = 1;
     discard_arg->destroy_counter      = ucs_popcount(lanes);

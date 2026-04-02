@@ -25,12 +25,12 @@
  * TODO make sure it works with err handling and print_ucp_info
  */
 typedef struct ucp_proxy_ep {
-    uct_ep_t         super;     /**< Derived from uct_ep */
-    uct_stub_iface_t iface;     /**< Stub iface for ops dispatch */
-    ucp_ep_h         ucp_ep;    /**< Pointer to UCP endpoint */
-    uct_ep_h         uct_ep;    /**< Underlying transport endpoint */
-    int              is_owner;  /**< Is uct_ep owned by this proxy ep */
-    ucp_rsc_index_t  rsc_index; /**< Resource index of underlying transport endpoint */
+    uct_ep_t        super;     /**< Derived from uct_ep */
+    uct_iface_h     iface;     /**< Stub iface for ops dispatch */
+    ucp_ep_h        ucp_ep;    /**< Pointer to UCP endpoint */
+    uct_ep_h        uct_ep;    /**< Underlying transport endpoint */
+    int             is_owner;  /**< Is uct_ep owned by this proxy ep */
+    ucp_rsc_index_t rsc_index; /**< Resource index of underlying transport endpoint */
 } ucp_proxy_ep_t;
 
 
