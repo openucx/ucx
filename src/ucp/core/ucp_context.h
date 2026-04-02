@@ -48,6 +48,16 @@ enum {
                                 UCP_OP_ATTR_FLAG_FAST_CMPL      | \
                                 UCP_OP_ATTR_FLAG_MULTI_SEND)
 
+
+/**
+ * Round-robin mode for multi-lane protocols
+ */
+typedef enum {
+    UCP_ROUND_ROBIN_MODE_DISABLED = 0,  /* No round-robin, always use first lane */
+    UCP_ROUND_ROBIN_MODE_ALWAYS   = 1,  /* Round-robin without reset on flush */
+    UCP_ROUND_ROBIN_MODE_FLUSH    = 2   /* Round-robin with reset on flush */
+} ucp_round_robin_mode_t;
+
 #define UCP_OP_ATTR_INDEX(_op_attr_flag) \
     (ucs_ilog2(ucp_proto_select_op_attr_pack((_op_attr_flag), \
                                              UCP_OP_ATTR_INDEX_MASK)))
@@ -114,6 +124,8 @@ typedef struct ucp_context_config {
     unsigned                               max_worker_address_name;
     /** Atomic mode */
     ucp_atomic_mode_t                      atomic_mode;
+    /** Round-robin mode for multi-lane protocols */
+    ucp_round_robin_mode_t                 round_robin_mode;
     /** If use mutex for MT support or not */
     int                                    use_mt_mutex;
     /** On-demand progress */
