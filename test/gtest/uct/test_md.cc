@@ -4,6 +4,10 @@
 * See file LICENSE for terms.
 */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "test_md.h"
 
 #include <common/mem_buffer.h>
@@ -1249,3 +1253,34 @@ UCS_TEST_P(test_cuda, sparse_regions)
 }
 
 UCT_MD_INSTANTIATE_TEST_CASE(test_cuda)
+
+#if HAVE_DECL_GDR_PIN_BUFFER_V2
+
+class test_gdr_copy : public test_md {
+};
+
+UCS_TEST_SKIP_COND_P(test_gdr_copy, gdr_copy_reg_cuda_pcie_pin,
+                     !check_caps(UCT_MD_FLAG_REG), "GDR_COPY_PIN_MODE?=pcie")
+{
+    constexpr size_t size = 65536;
+    void *address         = NULL;
+    uct_mem_h memh;
+    ucs_status_t status;
+
+    if (!mem_buffer::cuda_gpu_has_c2c()) {
+        UCS_TEST_SKIP_R("Cannot find C2C on the system");
+    }
+
+    alloc_memory(&address, size, NULL, UCS_MEMORY_TYPE_CUDA);
+
+    status = reg_mem(UCT_MD_MEM_ACCESS_ALL, address, size, &memh);
+    ASSERT_UCS_OK(status);
+
+    status = uct_md_mem_dereg(md(), memh);
+    ASSERT_UCS_OK(status);
+
+    free_memory(address, UCS_MEMORY_TYPE_CUDA);
+}
+
+_UCT_MD_INSTANTIATE_TEST_CASE(test_gdr_copy, gdr_copy)
+#endif /* HAVE_DECL_GDR_PIN_BUFFER_V2 */

@@ -97,6 +97,9 @@ public:
     /* Get from NVML BAR1 free size */
     static void get_bar1_free_size_nvml();
 
+    /* NVML NVLink-C2C link count > 0 for CUDA device */
+    static bool cuda_gpu_has_c2c(unsigned gpu_index = 0);
+
     /* Return free memory on the BAR1 / GPU. If GPU is not used
      * SIZE_MAX is returned */
     static size_t get_bar1_free_size()
