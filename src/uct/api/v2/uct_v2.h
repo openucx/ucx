@@ -1099,25 +1099,25 @@ typedef struct {
      * Mask of valid fields in this structure, using bits from
      * @ref uct_iface_attr_field.
      */
-    uint64_t    field_mask;
+    uint64_t   field_mask;
 
     /**
      * Plugin-contributed capability flags (bitmask of UCT_IFACE_FLAG_*).
      * Valid when @ref UCT_IFACE_ATTR_FIELD_FLAGS is set.
      */
-    uint64_t    flags;
+    uint64_t   flags;
 
     /**
      * Length in bytes of the opaque TX token.
      * Valid when @ref UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH is set.
      */
-    size_t      tx_token_length;
+    size_t     tx_token_length;
 
     /**
      * Length in bytes of the opaque RX token.
      * Valid when @ref UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH is set.
      */
-    size_t      rx_token_length;
+    size_t     rx_token_length;
 
     /**
      * TX token input buffer.
@@ -1126,7 +1126,7 @@ typedef struct {
      * the TX token received from the sender.
      * @ref UCT_IFACE_ATTR_FIELD_RX_TOKEN must be set together.
      */
-    const void  *tx_token;
+    const void *tx_token;
 
     /**
      * RX token output buffer.
@@ -1135,7 +1135,7 @@ typedef struct {
      * bytes; callee fills it with RX token.
      * @ref UCT_IFACE_ATTR_FIELD_TX_TOKEN must be set together.
      */
-    void        *rx_token;
+    void       *rx_token;
 } uct_iface_attr_v2_t;
 
 
