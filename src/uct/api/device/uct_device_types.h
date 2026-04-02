@@ -1,6 +1,7 @@
 /**
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025. ALL RIGHTS RESERVED.
- *
+ * Copyright (C) Advanced Micro Devices, Inc. 2026. ALL RIGHTS RESERVED.
+ * 
  * See file LICENSE for terms.
  */
 
@@ -37,6 +38,21 @@ typedef struct {
 
 
 /**
+ * @brief Device memory element for ROCm IPC.
+ */
+typedef struct {
+    ptrdiff_t mapped_offset;
+} uct_rocm_ipc_device_mem_element_t;
+
+
+/**
+ * @brief Completion object for device ROCm IPC operations.
+ */
+typedef struct {
+} uct_rocm_ipc_completion_t;
+
+
+/**
  * @brief Device memory element for GDAKI.
  */
 typedef struct uct_ib_md_device_mem_element {
@@ -57,6 +73,7 @@ typedef enum {
 typedef enum {
     UCT_DEVICE_TL_RC_MLX5_GDA,
     UCT_DEVICE_TL_CUDA_IPC,
+    UCT_DEVICE_TL_ROCM_IPC,
     UCT_DEVICE_TL_LAST
 } uct_device_tl_id_t;
 
@@ -75,6 +92,7 @@ typedef union uct_device_completion uct_device_completion_t;
 union uct_device_mem_element {
     uct_ib_md_device_mem_element_t       ib_md_mem_element;
     uct_cuda_ipc_md_device_mem_element_t cuda_ipc_md_mem_element;
+    uct_rocm_ipc_device_mem_element_t    rocm_ipc_mem_element;
 };
 
 
