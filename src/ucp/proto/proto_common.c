@@ -43,9 +43,16 @@ ucp_proto_common_init_params(const ucp_proto_init_params_t *init_params)
 int ucp_proto_common_init_check_err_handling(
         const ucp_proto_common_init_params_t *init_params)
 {
-    return (init_params->flags & UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING) ||
-           (init_params->super.ep_config_key->err_mode ==
-            UCP_ERR_HANDLING_MODE_NONE);
+    switch (init_params->super.ep_config_key->err_mode) {
+    case UCP_ERR_HANDLING_MODE_NONE:
+        return 1;
+    case UCP_ERR_HANDLING_MODE_PEER:
+        return !!(init_params->flags & UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING);
+    case UCP_ERR_HANDLING_MODE_FAILOVER:
+        return !!(init_params->flags & UCP_PROTO_COMMON_INIT_FLAG_FAILOVER);
+    default:
+        return 0;
+    }
 }
 
 static size_t
@@ -940,7 +947,13 @@ void ucp_proto_fatal_invalid_stage(ucp_request_t *req, const char *func_name)
 
 ucs_status_t ucp_proto_offload_zcopy_reset(ucp_request_t *req)
 {
-    ucp_proto_request_zcopy_reset(req);
+    ucs_status_t status;
+
+    status = ucp_proto_request_zcopy_reset(req);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     ucp_datatype_iter_rewind(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
     req->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     return UCS_OK;
