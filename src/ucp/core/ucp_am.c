@@ -1927,8 +1927,9 @@ ucs_status_t ucp_am_proto_request_zcopy_reset(ucp_request_t *request)
 
     ucs_mpool_put_inline(request->send.msg_proto.am.header.reg_desc);
     request->send.msg_proto.am.header.reg_desc = NULL;
-    request->send.msg_proto.am.internal_flags &= UCP_REQUEST_AM_FLAG_HEADER_PACKED;
-
+    /* reg_desc was released; next progress must repack user header */
+    request->send.msg_proto.am.internal_flags &=
+            ~UCP_REQUEST_AM_FLAG_HEADER_PACKED;
     return ucp_proto_request_zcopy_reset(request);
 }
 

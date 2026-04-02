@@ -405,15 +405,19 @@ ucp_am_eager_multi_zcopy_psn_proto_progress(uct_pending_req_t *self)
     if (status == UCS_INPROGRESS) {
         ucp_proto_am_set_middle_fragment(req);
     }
-    
+
     return status;
 }
 
 static ucs_status_t ucp_am_eager_multi_zcopy_psn_reset(ucp_request_t *req)
 {
+    ucs_status_t status;
+
+    status = ucp_am_proto_request_zcopy_reset(req);
     ucp_datatype_iter_rewind(&req->send.state.dt_iter, UCP_DT_MASK_CONTIG_IOV);
-    req->send.msg_proto.am.internal_flags &= UCP_REQUEST_AM_FLAG_HEADER_PACKED;
-    return ucp_proto_request_zcopy_reset(req);
+    /* Restart the request from the very first fragment */
+    req->send.msg_proto.am.internal_flags &= ~UCP_REQUEST_AM_FLAG_HEADER_SENT;
+    return status;
 }
 
 ucp_proto_t ucp_am_eager_multi_zcopy_psn_proto = {

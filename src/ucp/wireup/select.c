@@ -2752,7 +2752,7 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
      * fallback AM lane on lane failure (protocol selection requires
      * UCP_LANE_TYPE_AM).
      */
-     if (key->err_mode == UCP_ERR_HANDLING_MODE_FAILOVER) {
+    if (key->err_mode == UCP_ERR_HANDLING_MODE_FAILOVER) {
         for (lane = 0; lane < key->num_lanes; ++lane) {
             if (key->lanes[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_AM_BW)) {
                 key->lanes[lane].lane_types |= UCS_BIT(UCP_LANE_TYPE_AM);
