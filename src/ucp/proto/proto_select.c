@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -398,6 +398,12 @@ ucp_proto_select_elem_init_thresh(ucp_worker_h worker,
     ucs_array_init_dynamic(&proto_init->priv_buf);
     ucs_array_init_dynamic(&proto_init->protocols);
 
+    /* Check if a RMA ZCOPY protocol is used for a big enough size */
+    select_elem->rma_zcopy_compliant = !!(
+            ucp_proto_select_thresholds_search(select_elem, SIZE_MAX)
+                    ->proto_config.proto->flags &
+            UCP_PROTO_FLAG_RMA_ZCOPY);
+
     return UCS_OK;
 
 err_cleanup_envelope:
@@ -737,7 +743,8 @@ void ucp_proto_select_short_init(ucp_worker_h worker,
         ucp_proto_select_param_init(&select_param, op_id, *op_attribute, 0,
                                     UCP_DATATYPE_CONTIG, &mem_info, 1);
         thresh = ucp_proto_select_lookup(worker, proto_select, ep_cfg_index,
-                                         rkey_cfg_index, &select_param, 0);
+                                         rkey_cfg_index, &select_param, 0,
+                                         NULL);
         if (thresh == NULL) {
             /* no protocol for contig/host */
             goto out_disable;

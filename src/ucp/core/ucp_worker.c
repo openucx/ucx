@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2021. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -1141,6 +1141,118 @@ ucp_worker_select_best_ifaces(ucp_worker_h worker, ucp_tl_bitmap_t *tl_bitmap_p)
 }
 
 /**
+ * Build the list of memory types with mandatory zcopy for intra-node and
+ * inter-node protocols.
+ *
+ * @param [in]  worker     UCP worker.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+static ucs_status_t ucp_worker_fill_mem_type_zcopy_required(ucp_worker_h worker)
+{
+    ucp_context_h context = worker->context;
+    ucp_rsc_index_t tl_id;
+    ucp_worker_iface_t *wiface;
+    ucp_md_index_t md_index;
+    const uct_md_attr_v2_t *md_attr;
+    const char *tl_name;
+    char intra_buf[UCP_WORKER_MAX_DEBUG_STRING_SIZE];
+    char inter_buf[UCP_WORKER_MAX_DEBUG_STRING_SIZE];
+    char buf[UCP_WORKER_MAX_DEBUG_STRING_SIZE];
+    uint64_t supported_mem_types, missing;
+
+    if (!(context->config.features & UCP_FEATURE_RMA)) {
+        return UCS_OK;
+    }
+
+    supported_mem_types = context->supported_mem_type_mask &
+                          (UCS_BIT(UCS_MEMORY_TYPE_HOST) |
+                           UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
+                           UCS_BIT(UCS_MEMORY_TYPE_ROCM));
+    ucs_flags_str(buf, sizeof(buf), supported_mem_types, ucs_memory_type_names);
+    ucs_trace("RMA zcopy mandate: supported-mem:%s", buf[0] ? buf : "(none)");
+
+    /* Among TLs with GET/PUT ZCOPY found in TLS_RMA, apply mandatory rule.
+     * Memory types are taken from each transport's reg_mem_types.
+     * - no-host + mem type:
+     *   - intra-node GPU-to-GPU zcopy; inter-node when supported
+     * - host + network device:
+     *   - intra-node/inter-node Host-to-Host, GPU-to-Host, GPU-to-GPU
+     * - host + network device without GPU support:
+     *   - error, setup needs to be fixed
+     */
+    UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &context->tl_bitmap) {
+        wiface = ucp_worker_iface(worker, tl_id);
+        /* Transport must support full ZCOPY */
+        if (!(wiface->attr.cap.flags & UCT_IFACE_FLAG_PUT_ZCOPY) ||
+            !(wiface->attr.cap.flags & UCT_IFACE_FLAG_GET_ZCOPY)) {
+            continue;
+        }
+
+        tl_name  = context->tl_rscs[tl_id].tl_rsc.tl_name;
+        md_index = context->tl_rscs[tl_id].md_index;
+        md_attr  = &context->tl_mds[md_index].attr;
+
+        /* Transport was not specified among applicable list */
+        if (!ucp_context_is_tl_in_rma_list(context, tl_name)) {
+            continue;
+        }
+
+        /* Error when network device with host support lacks GPU memory types
+         * required by no-host TLs in UCX_TLS_RMA */
+        if ((md_attr->reg_mem_types & UCS_BIT(UCS_MEMORY_TYPE_HOST)) &&
+            (context->tl_rscs[tl_id].tl_rsc.dev_type == UCT_DEVICE_TYPE_NET)) {
+            missing = supported_mem_types & ~md_attr->reg_mem_types;
+            if (missing) {
+                ucs_flags_str(buf, sizeof(buf), missing, ucs_memory_type_names);
+                ucs_error("Network transport %s is in UCX_TLS_RMA but "
+                          "does not support: %s",
+                          tl_name, buf);
+                return UCS_ERR_INVALID_PARAM;
+            }
+        }
+
+        if (!(md_attr->reg_mem_types & UCS_BIT(UCS_MEMORY_TYPE_HOST))) {
+            /* no-host support (cuda_ipc, rocm_ipc): Device-to-Device zcopy */
+            if (md_attr->reg_mem_types) {
+                worker->mem_type_zcopy_required_intra |= md_attr->reg_mem_types;
+                if (wiface->attr.cap.flags & UCT_IFACE_FLAG_INTER_NODE) {
+                    worker->mem_type_zcopy_required_inter |=
+                            md_attr->reg_mem_types;
+                }
+
+                ucs_flags_str(buf, sizeof(buf), md_attr->reg_mem_types,
+                              ucs_memory_type_names);
+                ucs_trace("RMA zcopy mandate: %s memory %s %s", tl_name, buf,
+                          (wiface->attr.cap.flags & UCT_IFACE_FLAG_INTER_NODE) ?
+                                  "intra-node, inter-node" :
+                                  "intra-node");
+            }
+        } else if (context->tl_rscs[tl_id].tl_rsc.dev_type ==
+                   UCT_DEVICE_TYPE_NET) {
+            /* host support + network device: Host-to-Host, GPU-to-Host, GPU-to-GPU zcopy */
+            worker->mem_type_zcopy_required_intra |= md_attr->reg_mem_types;
+            worker->mem_type_zcopy_required_inter |= md_attr->reg_mem_types;
+            ucs_flags_str(buf, sizeof(buf), md_attr->reg_mem_types,
+                          ucs_memory_type_names);
+            ucs_trace("RMA zcopy mandate: %s memory %s intra-node+inter-node",
+                      tl_name, buf);
+        }
+    }
+
+    ucs_flags_str(buf, sizeof(buf), supported_mem_types, ucs_memory_type_names);
+    ucs_flags_str(intra_buf, sizeof(intra_buf),
+                  worker->mem_type_zcopy_required_intra, ucs_memory_type_names);
+    ucs_flags_str(inter_buf, sizeof(inter_buf),
+                  worker->mem_type_zcopy_required_inter, ucs_memory_type_names);
+    ucs_debug("RMA zcopy mandate: supported-mem:%s intra-node:%s inter-node:%s",
+              buf[0] ? buf : "(none)", intra_buf[0] ? intra_buf : "(none)",
+              inter_buf[0] ? inter_buf : "(none)");
+
+    return UCS_OK;
+}
+
+/**
  * @brief  Open all resources as interfaces on this worker
  *
  * This routine opens interfaces on the tl resources according to the
@@ -1228,6 +1340,11 @@ static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker)
         if (status != UCS_OK) {
             goto err_cleanup_ifaces;
         }
+    }
+
+    status = ucp_worker_fill_mem_type_zcopy_required(worker);
+    if (status != UCS_OK) {
+        goto err_cleanup_ifaces;
     }
 
     return UCS_OK;

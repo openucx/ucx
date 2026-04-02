@@ -206,15 +206,24 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_request_lookup_proto(
         const ucp_proto_select_param_t *sel_param, size_t msg_length)
 {
     const ucp_proto_threshold_elem_t *thresh_elem;
+    const ucp_proto_select_elem_t *select_elem;
+    ucs_status_t status;
 
     thresh_elem = ucp_proto_select_lookup(worker, proto_select, ep->cfg_index,
-                                          rkey_cfg_index, sel_param, msg_length);
+                                          rkey_cfg_index, sel_param, msg_length,
+                                          &select_elem);
     if (UCS_ENABLE_ASSERT && (thresh_elem == NULL)) {
         /* We expect that a protocol will always be found, or we will fallback
            to 'reconfig' placeholder */
         ucp_proto_request_select_error(req, proto_select, rkey_cfg_index,
                                        sel_param, msg_length);
         return UCS_ERR_UNREACHABLE;
+    }
+
+    status = ucp_rma_zcopy_required_check(worker, sel_param, select_elem,
+                                          rkey_cfg_index, ep->cfg_index);
+    if (status != UCS_OK) {
+        return status;
     }
 
     /* Set pointer to request's protocol configuration */
