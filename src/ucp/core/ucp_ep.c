@@ -1730,6 +1730,7 @@ ucp_ep_failover_reconfig(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,
 void ucp_ep_set_lanes_failed(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
                                      ucs_status_t status)
 {
+    const ucp_lane_index_t cm_lane = ucp_ep_get_cm_lane(ucp_ep);
     ucs_status_t reconfig_status;
 
     UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(ucp_ep->worker);
@@ -1740,7 +1741,7 @@ void ucp_ep_set_lanes_failed(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
         /* TODO refactor this to mark all lanes as failed */
         (lanes != 0) &&
          /* sockaddr is not supported for failover mode */
-        !ucp_ep_has_cm_lane(ucp_ep)) {
+        cm_lane == UCP_NULL_LANE) {
         reconfig_status = ucp_ep_failover_reconfig(ucp_ep, lanes, status);
         if (reconfig_status == UCS_OK) {
             return;
@@ -1749,9 +1750,9 @@ void ucp_ep_set_lanes_failed(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
 
     /* else: unrecoverable error, mark the endpoint as failed. */
     ucp_ep_set_failed(ucp_ep,
-                      (lanes == UCS_BIT(ucp_ep_get_cm_lane(ucp_ep)) ?
-                      ucp_ep_get_cm_lane(ucp_ep) : UCP_NULL_LANE), status);
-
+                      ((cm_lane != UCP_NULL_LANE) &&
+                       (lanes == UCS_BIT(cm_lane)) ?
+                      cm_lane : UCP_NULL_LANE), status);
 }
 
 void ucp_ep_set_lanes_failed_schedule(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
