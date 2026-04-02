@@ -222,39 +222,6 @@ ucs_status_t uct_md_iface_config_read(uct_md_h md, const char *tl_name,
     return UCS_OK;
 }
 
-typedef struct uct_stub_iface {
-    uct_iface_t              super;
-    uct_iface_internal_ops_t *internal_ops;
-    ucs_status_t             status;
-} uct_stub_iface_t;
-
-static ucs_status_t uct_stub_iface_return_status(uct_iface_h iface)
-{
-    return ((uct_stub_iface_t*)iface)->status;
-}
-
-static ucs_status_t uct_stub_ep_return_status(uct_ep_h ep)
-{
-    return ((uct_stub_iface_t*)ep->iface)->status;
-}
-
-static void uct_stub_iface_close(uct_iface_h iface)
-{
-    ucs_free(iface);
-}
-
-static const uct_iface_internal_ops_t uct_stub_internal_ops = {
-    .iface_query_v2        = uct_iface_base_query_v2,
-    .iface_estimate_perf   = (uct_iface_estimate_perf_func_t)uct_stub_iface_return_status,
-    .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
-    .ep_query              = (uct_ep_query_func_t)uct_stub_ep_return_status,
-    .ep_invalidate         = (uct_ep_invalidate_func_t)uct_stub_ep_return_status,
-    .ep_connect_to_ep_v2   = (uct_ep_connect_to_ep_v2_func_t)uct_stub_ep_return_status,
-    .iface_is_reachable_v2 = (uct_iface_is_reachable_v2_func_t)ucs_empty_function_return_zero,
-    .ep_is_connected       = (uct_ep_is_connected_func_t)ucs_empty_function_return_zero,
-    .ep_get_device_ep      = (uct_ep_get_device_ep_func_t)uct_stub_ep_return_status,
-};
-
 ucs_status_t uct_iface_open(uct_md_h md, uct_worker_h worker,
                             const uct_iface_params_t *params,
                             const uct_iface_config_t *config,
@@ -267,21 +234,7 @@ ucs_status_t uct_iface_open(uct_md_h md, uct_worker_h worker,
                     "UCT_IFACE_PARAM_FIELD_OPEN_MODE is not defined");
 
     if (params->open_mode & UCT_IFACE_OPEN_MODE_STUB) {
-        uct_stub_iface_t *stub;
-
-        UCS_STATIC_ASSERT(ucs_offsetof(uct_stub_iface_t, internal_ops) ==
-                          ucs_offsetof(uct_base_iface_t, internal_ops));
-
-        stub = ucs_calloc(1, sizeof(*stub), "uct_stub_iface");
-        if (stub == NULL) {
-            return UCS_ERR_NO_MEMORY;
-        }
-
-        stub->super.ops.iface_close = uct_stub_iface_close;
-        stub->internal_ops          = (uct_iface_internal_ops_t*)&uct_stub_internal_ops;
-        stub->status                = params->mode.stub.status;
-        *iface_p                    = &stub->super;
-        return UCS_OK;
+        return uct_stub_iface_create(params->mode.stub.status, iface_p);
     } else if (params->open_mode & UCT_IFACE_OPEN_MODE_DEVICE) {
         tl = uct_find_tl(md->component, params->mode.device.tl_name);
     } else if ((params->open_mode & UCT_IFACE_OPEN_MODE_SOCKADDR_CLIENT) ||

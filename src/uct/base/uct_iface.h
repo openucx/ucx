@@ -1058,6 +1058,8 @@ uct_base_ep_connect_to_ep(uct_ep_h tl_ep,
                           const uct_device_addr_t *device_addr,
                           const uct_ep_addr_t *ep_addr);
 
+ucs_status_t uct_stub_iface_create(ucs_status_t status, uct_iface_h *iface_p);
+
 static UCS_F_ALWAYS_INLINE int uct_ep_op_is_short(uct_ep_operation_t op)
 {
     return UCS_BIT(op) & (UCS_BIT(UCT_EP_OP_AM_SHORT) |
