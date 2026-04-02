@@ -1801,9 +1801,11 @@ public:
 };
 
 // On some systems TCP has very low BW and high latency, which would be
-// unpacked by min/max values of the corresponding fp8 types
+// unpacked by min/max values of the corresponding fp8 types.
+// TCP may also be loaded as an auxiliary transport for RC/DC aliases.
 UCS_TEST_SKIP_COND_P(test_ucp_address_v2, pack_iface_attrs,
-                     has_transport("tcp")) {
+                     has_transport("tcp") ||
+                     has_resource(sender(), "tcp")) {
     ucs_status_t status;
     size_t size;
     void *buffer;
