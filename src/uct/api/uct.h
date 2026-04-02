@@ -429,8 +429,8 @@ typedef enum uct_atomic_op {
                                                        channel with remote peer is broken, even if there
                                                        are no outstanding send operations */
 
-        /* IB plugin capability */
-#define UCT_IFACE_FLAG_IB_PLUGIN_QUERY_TOKEN UCS_BIT(47) /**< IB plugin for token query is available */
+        /* Token query capability */
+#define UCT_IFACE_FLAG_QUERY_TOKEN UCS_BIT(47) /**< Interface supports token query */
 
         /* Tag matching operations */
 #define UCT_IFACE_FLAG_TAG_EAGER_SHORT UCS_BIT(50) /**< Hardware tag matching short eager support */
