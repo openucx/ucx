@@ -63,14 +63,15 @@ ucp_proto_reconfig_report_rma_force_zcopy_no_proto(ucp_request_t *req,
     local_mem_type  = req->send.proto_config->select_param.mem_type;
     remote_mem_type = req->send.rma.rkey->mem_type;
 
-    ucs_error("No zero-copy protocol found for %s %s %s %s. "
+    ucs_error("No zero-copy protocol found for %s %s %s %s, %zu bytes. "
               "Please check for proper GPU and/or HCA support, or set "
               "UCX_RMA_FORCE_ZCOPY=n to proceed by allowing slower software "
               "emulation.",
               (op_id == UCP_OP_ID_PUT) ? "put from" : "get into",
               ucs_memory_type_names[local_mem_type],
               (op_id == UCP_OP_ID_PUT) ? "to" : "from",
-              ucs_memory_type_names[remote_mem_type]);
+              ucs_memory_type_names[remote_mem_type],
+              req->send.state.dt_iter.length);
     return 1;
 }
 

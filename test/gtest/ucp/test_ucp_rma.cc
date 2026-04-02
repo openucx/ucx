@@ -152,7 +152,6 @@ protected:
                 ucs::supported_mem_type_pairs();
 
         for (size_t i = 0; i < pairs.size(); ++i) {
-
             /* Memory type put/get is fully supported only with new protocols */
             if (!is_proto_enabled() && (!UCP_MEM_IS_HOST(pairs[i][0]) ||
                                         !UCP_MEM_IS_HOST(pairs[i][1]))) {
@@ -343,6 +342,7 @@ public:
     test_ucp_rma_force_zcopy()
     {
         modify_config("RMA_FORCE_ZCOPY", "y");
+        modify_config("IB_TX_INLINE_RESP", "0", SETENV_IF_NOT_EXIST);
     }
 
 protected:
@@ -384,6 +384,17 @@ protected:
         EXPECT_TRUE(found_rma_msg) << "Expected error message with "
                                       "UCX_RMA_FORCE_ZCOPY=n advice";
     }
+
+    void test_forced_message_sizes(send_func_t send_func)
+    {
+        for (const auto &pair : ucs::supported_mem_type_pairs()) {
+            if (check_reg_mem_types(sender(), pair[0]) &&
+                check_reg_mem_types(sender(), pair[1])) {
+                test_message_sizes(send_func, SMALL_SIZE, BIG_SIZE, pair[0],
+                                   pair[1], 0);
+            }
+        }
+    }
 };
 
 UCS_TEST_P(test_ucp_rma_force_zcopy, no_zcopy_proto_fails_put_small,
@@ -413,18 +424,16 @@ UCS_TEST_P(test_ucp_rma_force_zcopy, no_zcopy_proto_fails_get_big,
 UCS_TEST_P(test_ucp_rma_force_zcopy, get_zcopy_forced_success,
            "PROTOS=get/bcopy,get/zcopy,reconfig")
 {
-    test_mem_types(static_cast<send_func_t>(&test_ucp_rma::get_b), SMALL_SIZE,
-                   BIG_SIZE);
+    test_forced_message_sizes(static_cast<send_func_t>(&test_ucp_rma::get_b));
 }
 
 UCS_TEST_P(test_ucp_rma_force_zcopy, put_zcopy_forced_success,
            "PROTOS=put/offload/*,reconfig")
 {
-    test_mem_types(static_cast<send_func_t>(&test_ucp_rma::put_b), SMALL_SIZE,
-                   BIG_SIZE);
+    test_forced_message_sizes(static_cast<send_func_t>(&test_ucp_rma::put_b));
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_force_zcopy, ib, "ib")
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_rma_force_zcopy, ib, "ib")
 
 
 class test_ucp_rma_reg : public test_ucp_rma {
