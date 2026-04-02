@@ -125,15 +125,6 @@ uct_cuda_copy_get_mem_types(uct_md_h md, const void *src, const void *dst,
         *sys_dev_p        = dst_sys_dev;
         *cuda_deviceptr_p = (CUdeviceptr)dst;
     }
-
-    ucs_assertv((src_sys_dev == dst_sys_dev) ||
-                (src_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) ||
-                (dst_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN),
-                "src mtype %s, sys_dev %s; dst mtype %s, sys_dev %s",
-                ucs_memory_type_names[*src_mem_type_p],
-                ucs_topo_sys_device_get_name(src_sys_dev),
-                ucs_memory_type_names[*dst_mem_type_p],
-                ucs_topo_sys_device_get_name(dst_sys_dev));
 }
 
 static ucs_status_t uct_cuda_copy_ep_push_memory_ctx(CUdeviceptr cuda_deviceptr,

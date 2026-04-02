@@ -138,7 +138,7 @@ err_address_free:
 err_mem_release:
     cuMemRelease(m_alloc_handle);
 err:
-    UCS_TEST_SKIP_R("failed to allocate CUDA fabric memory");
+    UCS_TEST_SKIP_R("failed to allocate CUDA VMM memory");
 }
 
 #if HAVE_CUDA_FABRIC
@@ -168,6 +168,66 @@ UCS_TEST_P(test_switch_cuda_device, detect_mem_type_cuda_vmm)
 {
     detect_mem_type<cuda_vmm_mem_buffer>(UCS_MEMORY_TYPE_CUDA);
 }
+
+#ifdef HAVE_CUMEMRETAINALLOCATIONHANDLE
+UCS_TEST_P(test_switch_cuda_device, vmm_mem_reg_access)
+{
+    constexpr size_t size              = 4096;
+    CUmemLocation location             = {};
+    uct_md_mem_reg_params_t reg_params = {};
+    CUdevice current_device;
+    unsigned long long initial_flags;
+    unsigned long long current_flags;
+    uct_md_mem_dereg_params_t dereg_params;
+    uct_mem_h memh;
+
+    if (m_num_devices < 2) {
+        UCS_TEST_SKIP_R("less than two cuda devices available");
+    }
+
+    cuda_vmm_mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
+    ASSERT_EQ(CUDA_SUCCESS, cuCtxGetDevice(&current_device));
+
+    for (int peer_device = (current_device + 1) % m_num_devices;
+         peer_device != current_device;
+         peer_device = (peer_device + 1) % m_num_devices) {
+        int can_access = 0;
+        ASSERT_EQ(CUDA_SUCCESS, cuDeviceCanAccessPeer(&can_access, peer_device,
+                                                      current_device));
+        if (!can_access) {
+            continue;
+        }
+
+        location.type               = CU_MEM_LOCATION_TYPE_DEVICE;
+        location.id                 = peer_device;
+        CUmemAccessDesc access_desc = {};
+        access_desc.location.type   = CU_MEM_LOCATION_TYPE_DEVICE;
+        access_desc.location.id     = peer_device;
+        access_desc.flags           = CU_MEM_ACCESS_FLAGS_PROT_NONE;
+        ASSERT_EQ(CUDA_SUCCESS, cuMemSetAccess((CUdeviceptr)buffer.ptr(), size,
+                                               &access_desc, 1));
+
+        ASSERT_EQ(CUDA_SUCCESS, cuMemGetAccess(&initial_flags, &location,
+                                               (CUdeviceptr)buffer.ptr()));
+
+        ASSERT_UCS_OK(uct_md_mem_reg_v2(md(), buffer.ptr(), size, &reg_params,
+                                        &memh));
+        ASSERT_EQ(CUDA_SUCCESS, cuMemGetAccess(&current_flags, &location,
+                                               (CUdeviceptr)buffer.ptr()));
+        EXPECT_EQ(static_cast<unsigned long long>(
+                          CU_MEM_ACCESS_FLAGS_PROT_READWRITE),
+                  current_flags);
+
+        dereg_params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
+        dereg_params.memh       = memh;
+        ASSERT_UCS_OK(uct_md_mem_dereg_v2(md(), &dereg_params));
+
+        ASSERT_EQ(CUDA_SUCCESS, cuMemGetAccess(&current_flags, &location,
+                                               (CUdeviceptr)buffer.ptr()));
+        EXPECT_EQ(initial_flags, current_flags);
+    }
+}
+#endif
 
 #if HAVE_CUDA_FABRIC
 UCS_TEST_P(test_switch_cuda_device, detect_mem_type_cuda_fabric)
