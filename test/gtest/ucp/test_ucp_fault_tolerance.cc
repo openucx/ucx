@@ -20,7 +20,18 @@ extern "C" {
 class test_ucp_fault_tolerance : public test_ucp_memheap {
 public:
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
-        add_variant_with_value(variants, UCP_FEATURE_RMA|UCP_FEATURE_AM, 0, "rma|am");
+        add_variant_with_value(variants, UCP_FEATURE_RMA, TEST_OP_PUT,
+                               op_name(TEST_OP_PUT));
+        add_variant_with_value(variants, UCP_FEATURE_RMA, TEST_OP_PUT | TEST_OP_FLUSH,
+                               op_name(TEST_OP_PUT | TEST_OP_FLUSH));
+        add_variant_with_value(variants, UCP_FEATURE_RMA, TEST_OP_GET,
+                               op_name(TEST_OP_GET));
+        add_variant_with_value(variants, UCP_FEATURE_RMA, TEST_OP_GET | TEST_OP_FLUSH,
+                               op_name(TEST_OP_GET | TEST_OP_FLUSH));
+        add_variant_with_value(variants, UCP_FEATURE_AM,  TEST_OP_AM,
+                               op_name(TEST_OP_AM));
+        add_variant_with_value(variants, UCP_FEATURE_AM | UCP_FEATURE_RMA,  TEST_OP_AM | TEST_OP_FLUSH,
+                               op_name(TEST_OP_AM | TEST_OP_FLUSH));
     }
 
     test_ucp_fault_tolerance() {
@@ -43,7 +54,8 @@ protected:
     enum test_op_t {
         TEST_OP_PUT   = UCS_BIT(0),
         TEST_OP_GET   = UCS_BIT(1),
-        TEST_OP_FLUSH = UCS_BIT(2)
+        TEST_OP_AM    = UCS_BIT(2),
+        TEST_OP_FLUSH = UCS_BIT(3),
     };
 
     void init() override {
@@ -55,7 +67,9 @@ protected:
         receiver().connect(&sender(), ep_params, GOOD_EP_INDEX);
         receiver().connect(&sender(), ep_params, INJECTED_EP_INDEX);
 
-        set_am_handler();
+        if (get_variant_value() & TEST_OP_AM) {
+            set_am_handler();
+        }
     }
 
     void set_am_handler() {
@@ -67,8 +81,7 @@ protected:
         param.cb         = am_recv_cb;
         param.arg        = reinterpret_cast<void*>(this);
 
-        ucs_status_t status = ucp_worker_set_am_recv_handler(receiver().worker(),
-                                                            &param);
+        ucs_status_t status = ucp_worker_set_am_recv_handler(receiver().worker(), &param);
         ASSERT_UCS_OK(status);
     }
 
@@ -126,7 +139,7 @@ protected:
     static void shuffle_lanes(std::vector<ucp_lane_index_t> &lanes, const std::string &lane_type) {
         if (lanes.size() < 2) {
             UCS_TEST_SKIP_R("At least 2 " + lane_type + "s are required, but only " +
-                            std::to_string(lanes.size()) + " " + lane_type + "s available");
+                            std::to_string(lanes.size()) + " available");
         }
 
         /* Allocate randomizer on heap to avoid exceeding stack frame size limits. */
@@ -145,9 +158,11 @@ protected:
     }
 
     /**
-     * Common helper function to test AM send 1KB with injected failure
+     * Common helper function to test AM send with injected failure
      */
-    void test_am_with_injected_failure(failure_side_t failure_side, bool flush_after = false) {
+    void test_am_with_injected_failure(failure_side_t failure_side, unsigned op_mask) {
+        const std::string op_str = op_name(op_mask);
+
         /* TODO: cover case when wireup is in progress, flush here is to complete wireup */
         flush_workers();
 
@@ -164,10 +179,11 @@ protected:
 
         shuffle_lanes(am_bw_lanes, "AM BW lane");
 
-        UCS_TEST_MESSAGE << "Attempting AM send before failure injection...";
+        UCS_TEST_MESSAGE << "Attempting " << op_str << " operation before failure injection...";
         ucs_status_t status = do_am_send_and_wait(sender().ep(0, INJECTED_EP_INDEX), am_msg_size(),
-                                                  flush_after);
-        EXPECT_EQ(UCS_OK, status) << "AM send returned status: " << ucs_status_string(status);
+                                                  op_mask & TEST_OP_FLUSH);
+        EXPECT_EQ(UCS_OK, status) << op_str << " operation returned status: "
+                                  << ucs_status_string(status);
 
         ucp_ep_h ucp_ep_for_injection = get_ucp_ep_for_err_injection(failure_side);
         for (size_t lane_idx = 0; lane_idx < am_bw_lanes.size() - 1; ++lane_idx) {
@@ -181,10 +197,13 @@ protected:
             EXPECT_EQ(UCS_OK, status) << "uct_ep_invalidate returned status: "
                                       << ucs_status_string(status);
 
-            UCS_TEST_MESSAGE << "Attempting AM send after failure injection on lane "
+            UCS_TEST_MESSAGE << "Attempting " << op_str
+                             << " operation after failure injection on lane "
                              << size_t(lane) << '/' << am_bw_lanes.size() << "...";
-            status = do_am_send_and_wait(sender().ep(0, INJECTED_EP_INDEX), am_msg_size(), flush_after);
-            EXPECT_EQ(UCS_OK, status) << "AM send returned status: " << ucs_status_string(status);
+            status = do_am_send_and_wait(sender().ep(0, INJECTED_EP_INDEX), am_msg_size(),
+                                         op_mask & TEST_OP_FLUSH);
+            EXPECT_EQ(UCS_OK, status) << op_str << " operation returned status: "
+                                      << ucs_status_string(status);
         }
 
         short_progress_loop();
@@ -196,7 +215,7 @@ protected:
      * Common helper function to test RMA operation with injected failure
      */
     void test_rma_with_injected_failure(failure_side_t failure_side, unsigned op_mask) {
-        const size_t size        = 1 * UCS_GBYTE;
+        const size_t size        = rma_msg_size();
         const std::string op_str = op_name(op_mask);
 
         /* TODO: cover case when wireup is in progress, flush here is to complete wireup */
@@ -243,7 +262,8 @@ protected:
             EXPECT_EQ(UCS_OK, status) << "uct_ep_invalidate returned status: "
                                     << ucs_status_string(status);
 
-            UCS_TEST_MESSAGE << "Attempting " << op_str << " operation after failure injection on lane "
+            UCS_TEST_MESSAGE << "Attempting " << op_str
+                             << " operation after failure injection on lane "
                              << size_t(lane) << '/' << rma_bw_lanes.size() << "...";
             status = do_rma_and_wait(sender().ep(0, INJECTED_EP_INDEX), op_mask, lbuf, rbuf,
                                      rkey.get(), size);
@@ -256,6 +276,17 @@ protected:
         UCS_TEST_MESSAGE << "Success";
     }
 
+    void do_test(failure_side_t failure_side) {
+        const unsigned op_mask = get_variant_value();
+
+        if (op_mask & TEST_OP_AM) {
+            ASSERT_FALSE(op_mask & (TEST_OP_PUT|TEST_OP_GET));
+            test_am_with_injected_failure(failure_side, op_mask);
+        } else {
+            ASSERT_TRUE(op_mask & (TEST_OP_PUT|TEST_OP_GET));
+            test_rma_with_injected_failure(failure_side, op_mask);
+        }
+    }
 private:
     static size_t rma_msg_size() {
         return ucs::limit_buffer_size((100 * UCS_MBYTE) / ucs::test_time_multiplier());
@@ -275,6 +306,10 @@ private:
 
         if (op_mask & TEST_OP_GET) {
             name += "GET|";
+        }
+
+        if (op_mask & TEST_OP_AM) {
+            name += "AM|";
         }
 
         if (op_mask & TEST_OP_FLUSH) {
@@ -311,10 +346,7 @@ private:
             return status;
         }
 
-        while (!m_am_received) {
-            short_progress_loop();
-        }
-
+        wait_for_value(&m_am_received, true);
         mem_buffer::pattern_check(m_am_rbuf.data(), size, m_seed);
         return UCS_OK;
     }
@@ -389,47 +421,12 @@ private:
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_fault_tolerance)
 
-UCS_TEST_P(test_ucp_fault_tolerance, put_with_initiator_failure)
+UCS_TEST_P(test_ucp_fault_tolerance, initiator_failure, "MAX_EAGER_LANES=8")
 {
-    test_rma_with_injected_failure(FAILURE_SIDE_INITIATOR, TEST_OP_PUT);
+    do_test(FAILURE_SIDE_INITIATOR);
 }
 
-UCS_TEST_P(test_ucp_fault_tolerance, put_with_target_failure)
+UCS_TEST_P(test_ucp_fault_tolerance, target_failure, "MAX_EAGER_LANES=8")
 {
-    test_rma_with_injected_failure(FAILURE_SIDE_TARGET, TEST_OP_PUT);
-}
-
-UCS_TEST_P(test_ucp_fault_tolerance, put_flush_with_target_failure)
-{
-    test_rma_with_injected_failure(FAILURE_SIDE_TARGET, TEST_OP_PUT | TEST_OP_FLUSH);
-}
-
-UCS_TEST_P(test_ucp_fault_tolerance, get_with_initiator_failure)
-{
-    test_rma_with_injected_failure(FAILURE_SIDE_INITIATOR, TEST_OP_GET);
-}
-
-UCS_TEST_P(test_ucp_fault_tolerance, get_flush_with_initiator_failure)
-{
-    test_rma_with_injected_failure(FAILURE_SIDE_INITIATOR, TEST_OP_GET | TEST_OP_FLUSH);
-}
-
-UCS_TEST_P(test_ucp_fault_tolerance, get_with_target_failure)
-{
-    test_rma_with_injected_failure(FAILURE_SIDE_TARGET, TEST_OP_GET);
-}
-
-UCS_TEST_P(test_ucp_fault_tolerance, am_send_with_initiator_failure, "MAX_EAGER_LANES=8", "ZCOPY_THRESH=0")
-{
-    test_am_with_injected_failure(FAILURE_SIDE_INITIATOR);
-}
-
-UCS_TEST_P(test_ucp_fault_tolerance, am_send_with_target_failure, "MAX_EAGER_LANES=8", "ZCOPY_THRESH=0")
-{
-    test_am_with_injected_failure(FAILURE_SIDE_TARGET);
-}
-
-UCS_TEST_P(test_ucp_fault_tolerance, am_send_flush_with_target_failure, "MAX_EAGER_LANES=8", "ZCOPY_THRESH=0")
-{
-    test_am_with_injected_failure(FAILURE_SIDE_TARGET, true);
+    do_test(FAILURE_SIDE_TARGET);
 }
