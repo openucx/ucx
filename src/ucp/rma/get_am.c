@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -108,6 +108,10 @@ ucp_proto_get_am_bcopy_probe(const ucp_proto_init_params_t *init_params)
     };
 
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_GET))) {
+        return;
+    }
+
+    if (init_params->worker->context->config.ext.rma_force_zcopy) {
         return;
     }
 
