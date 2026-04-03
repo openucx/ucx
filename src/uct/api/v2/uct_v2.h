@@ -1102,7 +1102,7 @@ typedef struct {
     uint64_t   field_mask;
 
     /**
-     * Plugin-contributed capability flags (bitmask of UCT_IFACE_FLAG_*).
+     * UCT interface v2 flags (bitmask of UCT_IFACE_ATTR_FIELD_*).
      * Valid when @ref UCT_IFACE_ATTR_FIELD_FLAGS is set.
      */
     uint64_t   flags;
