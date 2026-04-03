@@ -24,6 +24,27 @@
 
 
 /* Create a body of CUDA memory allocation replacement function */
+#define UCM_CUDA_ALLOC_FUNC_DEBUG(_name, _retval, _success, _size, _ptr_type, _ref, \
+    _args_fmt, ...) \
+    _retval ucm_##_name(_ptr_type _ref ptr_arg, \
+                        UCS_FUNC_DEFINE_ARGS(__VA_ARGS__)) \
+    { \
+        _ptr_type ptr; \
+        _retval ret; \
+        \
+        ucm_event_enter(); \
+        ret = ucm_orig_##_name(ptr_arg, UCS_FUNC_PASS_ARGS(__VA_ARGS__)); \
+        if (ret == (_success)) { \
+            ptr = _ref ptr_arg; \
+            ucm_warn("%s(" _args_fmt ") allocated %p", __func__, \
+                      UCS_FUNC_PASS_ARGS(__VA_ARGS__), (void*)ptr); \
+            ucm_cuda_dispatch_mem_alloc((CUdeviceptr)ptr, (_size)); \
+        } \
+        ucm_event_leave(); \
+        return ret; \
+    }
+
+/* Create a body of CUDA memory allocation replacement function */
 #define UCM_CUDA_ALLOC_FUNC(_name, _retval, _success, _size, _ptr_type, _ref, \
                             _args_fmt, ...) \
     _retval ucm_##_name(_ptr_type _ref ptr_arg, \
@@ -60,6 +81,23 @@
         ucm_event_leave(); \
         return ret; \
     }
+
+    /* Create a body of CUDA memory release replacement function */
+    #define UCM_CUDA_FREE_FUNC_DEBUG(_name, _mem_type, _retval, _ptr_arg, _size, \
+                                     _args_fmt, ...) \
+        _retval ucm_##_name(UCS_FUNC_DEFINE_ARGS(__VA_ARGS__)) \
+        { \
+            _retval ret; \
+            \
+            ucm_event_enter(); \
+            ucm_warn("%s(" _args_fmt ")", __func__, \
+                     UCS_FUNC_PASS_ARGS(__VA_ARGS__)); \
+            ucm_cuda_dispatch_mem_free((CUdeviceptr)(_ptr_arg), _size, _mem_type, \
+                                       #_name); \
+            ret = ucm_orig_##_name(UCS_FUNC_PASS_ARGS(__VA_ARGS__)); \
+            ucm_event_leave(); \
+            return ret; \
+        }
 
 #define UCM_CUDA_GET_GLOBAL_FUNC(_name, _obj_type) \
     CUresult ucm_##_name(CUdeviceptr *dptr, size_t *bytes, _obj_type obj, \
@@ -200,8 +238,8 @@ static void ucm_cuda_dispatch_mem_free(CUdeviceptr ptr, size_t length,
 /* Driver API replacements */
 UCM_CUDA_ALLOC_FUNC(cuMemAlloc, CUresult, CUDA_SUCCESS, arg0, CUdeviceptr, *,
                     "size=%zu", size_t)
-UCM_CUDA_ALLOC_FUNC(cuMemAlloc_v2, CUresult, CUDA_SUCCESS, arg0, CUdeviceptr, *,
-                    "size=%zu", size_t)
+UCM_CUDA_ALLOC_FUNC_DEBUG(cuMemAlloc_v2, CUresult, CUDA_SUCCESS, arg0, CUdeviceptr, *,
+                          "size=%zu", size_t)
 UCM_CUDA_ALLOC_FUNC(cuMemAllocManaged, CUresult, CUDA_SUCCESS, arg0,
                     CUdeviceptr, *, "size=%zu flags=0x%x", size_t, unsigned)
 UCM_CUDA_ALLOC_FUNC(cuMemAllocPitch, CUresult, CUDA_SUCCESS,
@@ -222,10 +260,10 @@ UCM_CUDA_ALLOC_FUNC(cuMemAllocFromPoolAsync, CUresult, CUDA_SUCCESS, arg0,
                     CUdeviceptr, *, "size=%zu pool=%p stream=%p", size_t,
                     CUmemoryPool, CUstream)
 #endif
-UCM_CUDA_FREE_FUNC(cuMemFree, UCS_MEMORY_TYPE_CUDA, CUresult, arg0, 0,
-                   "ptr=0x%llx", CUdeviceptr)
-UCM_CUDA_FREE_FUNC(cuMemFree_v2, UCS_MEMORY_TYPE_CUDA, CUresult, arg0, 0,
-                   "ptr=0x%llx", CUdeviceptr)
+UCM_CUDA_FREE_FUNC_DEBUG(cuMemFree, UCS_MEMORY_TYPE_CUDA, CUresult, arg0, 0,
+                         "ptr=0x%llx", CUdeviceptr)
+UCM_CUDA_FREE_FUNC_DEBUG(cuMemFree_v2, UCS_MEMORY_TYPE_CUDA, CUresult, arg0, 0,
+                         "ptr=0x%llx", CUdeviceptr)
 UCM_CUDA_FREE_FUNC(cuMemFreeHost, UCS_MEMORY_TYPE_HOST, CUresult, arg0, 0,
                    "ptr=%p", void*)
 UCM_CUDA_FREE_FUNC(cuMemFreeHost_v2, UCS_MEMORY_TYPE_HOST, CUresult, arg0, 0,

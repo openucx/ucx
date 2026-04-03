@@ -2625,6 +2625,13 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     worker->counters.ep_closures          = 0;
     worker->counters.ep_failures          = 0;
 
+    /* Initialize RNDV pipeline flow control statistics */
+    worker->rndv_ppln_fc_stats.num_ppln_super_reqs = 0;
+    worker->rndv_ppln_fc_stats.total_frags          = 0;
+    worker->rndv_ppln_fc_stats.max_super_reqs       = 0;
+    worker->rndv_ppln_fc_stats.max_total_frags      = 0;
+    worker->rndv_ppln_fc_stats.progress_count       = 0;
+
     /* Copy user flags, and mask-out unsupported flags for compatibility */
     worker->flags = UCP_PARAM_VALUE(WORKER, params, flags, FLAGS, 0) &
                     UCS_MASK(UCP_WORKER_INTERNAL_FLAGS_SHIFT);
@@ -3039,6 +3046,15 @@ void ucp_worker_destroy(ucp_worker_h worker)
         ucp_worker_trace_configs(worker);
     }
 
+    /* Log final RNDV pipeline flow control statistics */
+    if (worker->context->config.ext.rndv_ppln_frag_fc_enable &&
+        (worker->rndv_ppln_fc_stats.max_super_reqs > 0)) {
+        ucs_info("RNDV_PPLN_FC final stats: "
+                 "peak super_reqs=%zu peak_frags=%zu",
+                 worker->rndv_ppln_fc_stats.max_super_reqs,
+                 worker->rndv_ppln_fc_stats.max_total_frags);
+    }
+
     UCS_ASYNC_BLOCK(&worker->async);
     uct_worker_progress_unregister_safe(worker->uct, &worker->keepalive.cb_id);
     ucp_worker_usage_tracker_destroy(worker);
@@ -3190,6 +3206,23 @@ unsigned ucp_worker_progress(ucp_worker_h worker)
 
     /* coverity[assert_side_effect] */
     ucs_assert(--worker->inprogress == 0);
+
+    /* Periodically log RNDV pipeline flow control statistics */
+    if (worker->context->config.ext.rndv_ppln_frag_fc_enable) {
+        /* Log every 10M progress calls (lightweight check - just a counter) */
+        if (++worker->rndv_ppln_fc_stats.progress_count >= 10000) {
+            if (worker->rndv_ppln_fc_stats.num_ppln_super_reqs > 0 ||
+                worker->rndv_ppln_fc_stats.max_super_reqs > 0) {
+                ucs_warn("RNDV_PPLN_FC: current super_reqs=%zu frags=%zu | "
+                         "peak super_reqs=%zu frags=%zu",
+                         worker->rndv_ppln_fc_stats.num_ppln_super_reqs,
+                         worker->rndv_ppln_fc_stats.total_frags,
+                         worker->rndv_ppln_fc_stats.max_super_reqs,
+                         worker->rndv_ppln_fc_stats.max_total_frags);
+            }
+            worker->rndv_ppln_fc_stats.progress_count = 0;
+        }
+    }
 
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
 
