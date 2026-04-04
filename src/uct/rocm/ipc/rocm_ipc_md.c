@@ -36,6 +36,22 @@ static ucs_status_t uct_rocm_ipc_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr
     return UCS_OK;
 }
 
+static hsa_status_t uct_rocm_ipc_create_ipc_handle(uct_rocm_ipc_key_t *key)
+{
+    void *base_ptr = (void *)key->address;
+    size_t size    = key->length;
+    hsa_status_t status;
+
+    status = hsa_amd_ipc_memory_create(base_ptr, size, &key->ipc);
+    if (status != HSA_STATUS_SUCCESS) {
+        ucs_error("Failed to create ipc for %p/%lx", base_ptr, size);
+        return status;
+    }
+
+    key->ipc_created = 1;
+    return HSA_STATUS_SUCCESS;
+}
+
 static ucs_status_t
 uct_rocm_ipc_mkey_pack(uct_md_h uct_md, uct_mem_h memh, void *address,
                        size_t length, const uct_md_mkey_pack_params_t *params,
@@ -44,40 +60,22 @@ uct_rocm_ipc_mkey_pack(uct_md_h uct_md, uct_mem_h memh, void *address,
     uct_rocm_ipc_key_t *packed = mkey_buffer;
     uct_rocm_ipc_key_t *key    = memh;
 
+    /* Lazily create the IPC handle on first pack.
+     * hsa_amd_ipc_memory_create() pins GPU memory at the HSA/driver level
+     * and there is no API to release it from the creating process.  By
+     * deferring the call until the key is actually serialized for a remote
+     * peer we avoid pinning memory that is only registered locally and
+     * never shared. */
+    if (!key->ipc_created) {
+        hsa_status_t status = uct_rocm_ipc_create_ipc_handle(key);
+        if (status != HSA_STATUS_SUCCESS) {
+            return UCS_ERR_IO_ERROR;
+        }
+    }
+
     *packed = *key;
 
     return UCS_OK;
-}
-
-static hsa_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
-                                          uct_rocm_ipc_key_t *key)
-{
-    void *base_ptr = NULL;
-    size_t size    = 0;
-    hsa_status_t status;
-    hsa_agent_t agent;
-    hsa_amd_pointer_type_t mem_type;
-
-    status = uct_rocm_base_get_ptr_info(address, length, &base_ptr, &size,
-                                        &mem_type, &agent, NULL);
-    if ((status != HSA_STATUS_SUCCESS) ||
-        (mem_type == HSA_EXT_POINTER_TYPE_UNKNOWN)) {
-        ucs_error("failed to get base ptr for %p/%lx, ROCm returned %p/%lx",
-                   address, length, base_ptr, size);
-        return status;
-    }
-
-    status = hsa_amd_ipc_memory_create(base_ptr, size, &key->ipc);
-    if (status != HSA_STATUS_SUCCESS) {
-        ucs_error("Failed to create ipc for %p/%lx", address, length);
-        return status;
-    }
-
-    key->address = (uintptr_t)base_ptr;
-    key->length  = size;
-    key->dev_num = uct_rocm_base_get_dev_num(agent);
-
-    return HSA_STATUS_SUCCESS;
 }
 
 static ucs_status_t
@@ -85,7 +83,11 @@ uct_rocm_ipc_mem_reg(uct_md_h md, void *address, size_t length,
                      const uct_md_mem_reg_params_t *params, uct_mem_h *memh_p)
 {
     uct_rocm_ipc_key_t *key;
+    void *base_ptr = NULL;
+    size_t size    = 0;
     hsa_status_t status;
+    hsa_agent_t agent;
+    hsa_amd_pointer_type_t mem_type;
 
     key = ucs_malloc(sizeof(*key), "uct_rocm_ipc_key_t");
     if (NULL == key) {
@@ -93,11 +95,26 @@ uct_rocm_ipc_mem_reg(uct_md_h md, void *address, size_t length,
         return UCS_ERR_NO_MEMORY;
     }
 
-    status = uct_rocm_ipc_pack_key(address, length, key);
-    if (status != HSA_STATUS_SUCCESS) {
+    /* Query the pointer info but do NOT create the IPC handle yet.
+     * The IPC handle will be created lazily in mkey_pack when the key
+     * is actually needed for remote access.  This avoids permanently
+     * pinning GPU memory via hsa_amd_ipc_memory_create() for
+     * registrations that are never shared with a remote peer. */
+    status = uct_rocm_base_get_ptr_info(address, length, &base_ptr, &size,
+                                        &mem_type, &agent, NULL);
+    if ((status != HSA_STATUS_SUCCESS) ||
+        (mem_type == HSA_EXT_POINTER_TYPE_UNKNOWN)) {
+        ucs_error("failed to get base ptr for %p/%lx, ROCm returned %p/%lx",
+                   address, length, base_ptr, size);
         ucs_free(key);
         return UCS_ERR_INVALID_ADDR;
     }
+
+    memset(&key->ipc, 0, sizeof(key->ipc));
+    key->address     = (uintptr_t)base_ptr;
+    key->length      = size;
+    key->dev_num     = uct_rocm_base_get_dev_num(agent);
+    key->ipc_created = 0;
 
     *memh_p = key;
 
@@ -193,4 +210,3 @@ uct_component_t uct_rocm_ipc_component = {
     .md_vfs_init        = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
 UCT_COMPONENT_REGISTER(&uct_rocm_ipc_component);
-

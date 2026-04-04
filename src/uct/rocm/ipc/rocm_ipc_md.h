@@ -25,6 +25,7 @@ typedef struct uct_rocm_ipc_key {
     uintptr_t address;
     size_t length;
     int dev_num;
+    int ipc_created;  /* 1 if hsa_amd_ipc_memory_create was called */
 } uct_rocm_ipc_key_t;
 
 #endif
