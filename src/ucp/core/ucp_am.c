@@ -915,7 +915,7 @@ ucp_am_try_send_short(ucp_ep_h ep, uint16_t id, uint32_t flags,
     }
 
     if (ucp_proto_is_inline(ep, max_eager_short,
-                            header_length + length, param)) {
+                            header_length + length, buffer, param)) {
         return ucp_am_send_short(ep, id, flags, header, header_length, buffer,
                                  length, flags & UCP_AM_SEND_FLAG_REPLY);
     }
