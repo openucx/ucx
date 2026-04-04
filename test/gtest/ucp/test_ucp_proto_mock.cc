@@ -948,6 +948,75 @@ UCS_TEST_P(test_ucp_proto_mock_gpu, cuda_managed_ppln_host_frag,
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_gpu, rcx_gpu,
                               "rc_x,cuda,rocm")
 
+class test_ucp_proto_mock_cuda_ipc : public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_cuda_ipc()
+    {
+        mock_transport("rc_mlx5");
+    }
+
+    virtual void init() override
+    {
+        if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
+            UCS_TEST_SKIP_R("CUDA memory is not supported");
+        }
+
+        add_mock_iface("mock", [](uct_iface_attr_t &iface_attr) {
+            iface_attr.bandwidth.shared = 40e9;
+            iface_attr.latency.c        = 400e-9;
+            iface_attr.latency.m        = 1e-9;
+        });
+
+        test_ucp_proto_mock::init();
+    }
+
+    ucp_worker_cfg_index_t find_rkey_cfg_index(ucs_memory_type_t mem_type)
+    {
+        ucp_worker_h worker = sender().worker();
+        ucp_proto_select_key_t sel_key;
+        ucp_rkey_config_t *rkey_config;
+
+        /* Find rkey config with required mem_type for local and remote 
+         * memory */
+        for (auto i = 0; i < ucs_array_length(&worker->rkey_config); ++i) {
+            rkey_config = &ucs_array_elem(&worker->rkey_config, i);
+
+            if (rkey_config->key.mem_type != mem_type) {
+                continue;
+            }
+
+            kh_foreach_key(rkey_config->proto_select.hash, sel_key.u64, {
+                if (sel_key.param.mem_type == mem_type) {
+                    return i;
+                }
+            })
+        }
+
+        return UCP_WORKER_CFG_INDEX_NULL;
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_cuda_ipc, put_cuda, "IB_NUM_PATHS?=1")
+{
+    send_recv_rma_put(UCS_MBYTE, UCS_MEMORY_TYPE_CUDA);
+
+    ucp_proto_select_key_t key = any_key();
+    key.param.op_id_flags      = UCP_OP_ID_PUT;
+    key.param.op_attr          = 0;
+    key.param.mem_type         = UCS_MEMORY_TYPE_CUDA;
+
+    auto rkey_cfg_index = find_rkey_cfg_index(UCS_MEMORY_TYPE_CUDA);
+    ASSERT_NE(rkey_cfg_index, UCP_WORKER_CFG_INDEX_NULL);
+
+    check_rkey_config(sender(), {
+        {0, 0,    "short",   "rc_mlx5/mock"},
+        {1, INF, "zero-copy", "cuda_ipc/cuda"},
+    }, key, rkey_cfg_index);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_proto_mock_cuda_ipc,
+                                        shm_ib_ipc, "shm,ib,cuda_ipc,rocm_ipc")
+
 class test_ucp_proto_mock_rcx_twins : public test_ucp_proto_mock {
 public:
     test_ucp_proto_mock_rcx_twins()
