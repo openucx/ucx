@@ -6,6 +6,7 @@
 # Copyright (C) Advanced Micro Devices, Inc. 2025. ALL RIGHTS RESERVED.
 # Copyright (C) ARM Ltd. 2020.  ALL RIGHTS RESERVED.
 # Copyright (C) NextSilicon Ltd. 2021.  ALL RIGHTS RESERVED.
+# Copyright (C) Intel Corporation, 2026. ALL RIGHTS RESERVED.
 #
 # See file LICENSE for terms.
 #
@@ -310,6 +311,17 @@ gtest_LDADD += \
 	$(HIP_LIBS) \
 	$(top_builddir)/src/uct/rocm/libuct_rocm.la
 endif
+endif
+
+if HAVE_ZE
+gtest_SOURCES += \
+	ucm/ze_hooks.cc
+gtest_CPPFLAGS += \
+	$(ZE_CPPFLAGS)
+gtest_LDFLAGS += \
+	$(ZE_LDFLAGS)
+gtest_LDADD += \
+	$(ZE_LIBS) -lze_loader
 endif
 
 noinst_HEADERS = \
