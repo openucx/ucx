@@ -502,7 +502,8 @@ protected:
 
 #define UCT_TEST_CUDA_MEM_TYPE_TLS \
     cuda_copy,              \
-    gdr_copy
+    gdr_copy,               \
+    cuda_ipc
 
 #define UCT_TEST_ROCM_MEM_TYPE_TLS \
     rocm_copy
@@ -511,10 +512,6 @@ protected:
     UCT_TEST_NO_SELF_TLS, \
     self
 
-#define UCT_TEST_TLS \
-    UCT_TEST_NO_GPU_MEM_TYPE_TLS, \
-    UCT_TEST_ROCM_MEM_TYPE_TLS, \
-    UCT_TEST_CUDA_MEM_TYPE_TLS
 
 /**
  * Instantiate the parametrized test case for all transports.
@@ -522,7 +519,9 @@ protected:
  * @param _test_case  Test case class, derived from uct_test.
  */
 #define UCT_INSTANTIATE_TEST_CASE(_test_case) \
-    UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, UCT_TEST_TLS)
+    UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, UCT_TEST_NO_GPU_MEM_TYPE_TLS) \
+    UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, UCT_TEST_ROCM_MEM_TYPE_TLS) \
+    UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, UCT_TEST_CUDA_MEM_TYPE_TLS)
 #define _UCT_INSTANTIATE_TEST_CASE(_test_case, _tl_name) \
     INSTANTIATE_TEST_SUITE_P(_tl_name, _test_case, \
                             testing::ValuesIn(_test_case::enum_resources(UCS_PP_QUOTE(_tl_name))));
@@ -616,16 +615,6 @@ protected:
 #define UCT_INSTANTIATE_RC_DC_GGA_TEST_CASE(_test_case) \
     UCT_INSTANTIATE_RC_DC_TEST_CASE(_test_case) \
     _UCT_INSTANTIATE_TEST_CASE(_test_case, gga_mlx5)
-
-
-/**
- * Instantiate the parametrized test case for CUDA_IPC.
- * TODO: add cuda_ipc to UCT_INSTANTIATE_TEST_CASE.
- *
- * @param _test_case  Test case class, derived from uct_test.
- */
-#define UCT_INSTANTIATE_CUDA_IPC_TEST_CASE(_test_case) \
-    _UCT_INSTANTIATE_TEST_CASE(_test_case, cuda_ipc)
 
 
 /**
