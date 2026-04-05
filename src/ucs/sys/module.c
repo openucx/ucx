@@ -403,7 +403,7 @@ void ucs_load_modules(const char *framework, const char *expected_modules,
         /* Load modules from directories */
         for (i = 0; i < ucs_global_opts.plugin_path.count; ++i) {
             ucs_module_load_from_dir(ucs_global_opts.plugin_path.names[i],
-                                     framework, mode, &loaded_set);
+                                     framework, mode | RTLD_GLOBAL, &loaded_set);
         }
 
         for (i = 0; i < ucs_array_length(&ucs_module_loader_state.srch_path);
