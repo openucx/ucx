@@ -228,7 +228,7 @@ check_release_build() {
     launch=False
 
     # DRP release scheduled testing
-    if [[ $build_reason = "Schedule" && $BUILD_DEFINITIONNAME = *"DRP" ]]
+    if [[ $build_reason = "Manual" && $BUILD_DEFINITIONNAME = *"DRP" ]]
     then
         launch=True
 
