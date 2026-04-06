@@ -39,6 +39,7 @@ extern "C" {
                    cuda_ipc, \
                    rocm_cpy, \
                    rocm_ipc, \
+                   ze_cpy, \
                    ib, \
                    ugni, \
                    gdr_copy, \

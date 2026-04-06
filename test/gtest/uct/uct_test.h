@@ -507,6 +507,9 @@ protected:
 #define UCT_TEST_ROCM_MEM_TYPE_TLS \
     rocm_copy
 
+#define UCT_TEST_ZE_MEM_TYPE_TLS \
+    ze_copy
+
 #define UCT_TEST_NO_GPU_MEM_TYPE_TLS \
     UCT_TEST_NO_SELF_TLS, \
     self
@@ -581,6 +584,15 @@ protected:
  */
 #define UCT_INSTANTIATE_CUDA_TEST_CASE(_test_case) \
     UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, UCT_TEST_CUDA_MEM_TYPE_TLS)
+
+
+/**
+ * Instantiate the parametrized test case for ZE copy transport.
+ *
+ * @param _test_case  Test case class, derived from uct_test.
+ */
+#define UCT_INSTANTIATE_ZE_TEST_CASE(_test_case) \
+    UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, UCT_TEST_ZE_MEM_TYPE_TLS)
 
 
 /**
