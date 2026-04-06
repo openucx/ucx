@@ -165,6 +165,7 @@ rm -f %{buildroot}%{_libdir}/ucx/lib*.so
 
 %files devel
 %{_includedir}/uc*
+%exclude %{_includedir}/uct/ib/mlx5/gdaki*
 %{_libdir}/lib*.so
 %{_libdir}/pkgconfig/ucx.pc
 %{_libdir}/pkgconfig/ucx-uct.pc
@@ -445,7 +446,8 @@ to initiate network communications directly without explicit synchronization
 with the host CPU.
 
 %files ib-mlx5-gda
-%{_libdir}/ucx/libuct_ib_mlx5_gda.so.*
+%{_libdir}/ucx/libuct_ib_mlx5_gda.*
+%{_includedir}/uct/ib/mlx5/gdaki/*
 %endif
 
 %changelog
