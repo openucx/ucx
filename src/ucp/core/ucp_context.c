@@ -624,14 +624,14 @@ static ucs_config_field_t ucp_config_table[] = {
    " - mm      : shared memory transports - only memory mappers.\n"
    " - ugni    : ugni_smsg and ugni_rdma (uses ugni_udt for bootstrap).\n"
    " - ib      : all infiniband transports (rc/rc_mlx5, ud/ud_mlx5, dc_mlx5, srd).\n"
-   " - rc_v    : rc verbs (uses ud for bootstrap).\n"
-   " - rc_x    : rc with accelerated verbs (uses ud_mlx5 for bootstrap).\n"
+   " - rc_v    : rc verbs (uses ud or tcp for bootstrap).\n"
+   " - rc_x    : rc with accelerated verbs (uses ud_mlx5 or tcp for bootstrap).\n"
    " - rc      : rc_v and rc_x (preferably if available).\n"
    " - ud_v    : ud verbs.\n"
    " - ud_x    : ud with accelerated verbs.\n"
    " - ud      : ud_v and ud_x (preferably if available).\n"
    " - srd     : EFA srd reliable transport.\n"
-   " - dc/dc_x : dc with accelerated verbs.\n"
+   " - dc/dc_x : dc with accelerated verbs (uses ud_mlx5 or tcp for bootstrap).\n"
    " - tcp     : sockets over TCP/IP.\n"
    " - cuda    : CUDA (NVIDIA GPU) memory support.\n"
    " - rocm    : ROCm (AMD GPU) memory support.\n"
@@ -717,12 +717,12 @@ static ucp_tl_alias_t ucp_tl_aliases[] = {
   { "ud_v",  { "ud_verbs", NULL } },
   { "ud_x",  { "ud_mlx5", NULL } },
   { "ud",    { "ud_mlx5", "ud_verbs", NULL } },
-  { "rc_v",  { "rc_verbs", UCP_TL_AUX("ud_verbs"), NULL } },
-  { "rc_x",  { "rc_mlx5", UCP_TL_AUX("ud_mlx5"), NULL } },
+  { "rc_v",  { "rc_verbs", UCP_TL_AUX("ud_verbs"), UCP_TL_AUX("tcp"), NULL } },
+  { "rc_x",  { "rc_mlx5", UCP_TL_AUX("ud_mlx5"), UCP_TL_AUX("tcp"), NULL } },
   { "rc",    { "rc_mlx5", UCP_TL_AUX("ud_mlx5"), "rc_verbs",
-               UCP_TL_AUX("ud_verbs"), NULL } },
-  { "dc",    { "dc_mlx5", UCP_TL_AUX("ud_mlx5"), NULL } },
-  { "dc_x",  { "dc_mlx5", UCP_TL_AUX("ud_mlx5"), NULL } },
+               UCP_TL_AUX("ud_verbs"), UCP_TL_AUX("tcp"), NULL } },
+  { "dc",    { "dc_mlx5", UCP_TL_AUX("ud_mlx5"), UCP_TL_AUX("tcp"), NULL } },
+  { "dc_x",  { "dc_mlx5", UCP_TL_AUX("ud_mlx5"), UCP_TL_AUX("tcp"), NULL } },
   { "ugni",  { "ugni_smsg", UCP_TL_AUX("ugni_udt"), "ugni_rdma", NULL } },
   { "cuda",  { "cuda_copy", "cuda_ipc", "gdr_copy", NULL } },
   { "rocm",  { "rocm_copy", "rocm_ipc", "rocm_gdr", NULL } },
