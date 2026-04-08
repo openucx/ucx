@@ -29,23 +29,9 @@ extern "C" {
 
 
 #define UCT_MD_INSTANTIATE_TEST_CASE(_test_case) \
-    UCS_PP_FOREACH(_UCT_MD_INSTANTIATE_TEST_CASE, _test_case, \
-                   knem, \
-                   cma, \
-                   posix, \
-                   sysv, \
-                   xpmem, \
-                   cuda_cpy, \
-                   cuda_ipc, \
-                   rocm_cpy, \
-                   rocm_ipc, \
-                   ze_cpy, \
-                   ib, \
-                   ugni, \
-                   gdr_copy, \
-                   sockcm, \
-                   rdmacm \
-                   )
+    UCS_PP_FOREACH(_UCT_MD_INSTANTIATE_TEST_CASE, _test_case, knem, cma, \
+                   posix, sysv, xpmem, cuda_cpy, cuda_ipc, rocm_cpy, rocm_ipc, \
+                   ze_cpy, ib, ugni, gdr_copy, sockcm, rdmacm)
 
 void* test_md::alloc_thread(void *arg)
 {
@@ -1205,15 +1191,13 @@ UCS_TEST_SKIP_COND_P(test_md_ze, mem_query_dmabuf,
 {
     const size_t size = 4096;
     size_t tested     = 0;
-    const std::vector<ucs_memory_type_t> ze_mem_types = {
-            UCS_MEMORY_TYPE_ZE_HOST,
-            UCS_MEMORY_TYPE_ZE_DEVICE,
-            UCS_MEMORY_TYPE_ZE_MANAGED
-    };
+    const std::vector<ucs_memory_type_t> ze_mem_types =
+            {UCS_MEMORY_TYPE_ZE_HOST, UCS_MEMORY_TYPE_ZE_DEVICE,
+             UCS_MEMORY_TYPE_ZE_MANAGED};
 
     for (auto mem_type : ze_mem_types) {
-        const bool dmabuf_expected =
-                !!(md_attr().dmabuf_mem_types & UCS_BIT(mem_type));
+        const bool dmabuf_expected = !!(md_attr().dmabuf_mem_types &
+                                        UCS_BIT(mem_type));
 
         if (!mem_buffer::is_mem_type_supported(mem_type) ||
             !(md_attr().access_mem_types & UCS_BIT(mem_type))) {
@@ -1229,8 +1213,8 @@ UCS_TEST_SKIP_COND_P(test_md_ze, mem_query_dmabuf,
                               UCT_MD_MEM_ATTR_FIELD_DMABUF_FD |
                               UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET;
 
-        ucs_status_t status = uct_md_mem_query(md(), mem_buf.ptr(), mem_buf.size(),
-                                               &mem_attr);
+        ucs_status_t status = uct_md_mem_query(md(), mem_buf.ptr(),
+                                               mem_buf.size(), &mem_attr);
 
         if (dmabuf_expected) {
             ASSERT_UCS_OK(status);
@@ -1255,26 +1239,25 @@ UCS_TEST_SKIP_COND_P(test_md_ze, mem_query_dmabuf_offset,
                      !check_caps(UCT_MD_FLAG_ALLOC | UCT_MD_FLAG_REG |
                                  UCT_MD_FLAG_REG_DMABUF))
 {
-    const size_t size = 4096;
+    const size_t size   = 4096;
     const size_t offset = 128;
     size_t tested       = 0;
-    const std::vector<ucs_memory_type_t> ze_mem_types = {
-            UCS_MEMORY_TYPE_ZE_HOST,
-            UCS_MEMORY_TYPE_ZE_DEVICE
-    };
+    const std::vector<ucs_memory_type_t> ze_mem_types =
+            {UCS_MEMORY_TYPE_ZE_HOST, UCS_MEMORY_TYPE_ZE_DEVICE};
 
     for (auto mem_type : ze_mem_types) {
         if (!mem_buffer::is_mem_type_supported(mem_type) ||
             !(md_attr().access_mem_types & UCS_BIT(mem_type)) ||
             !(md_attr().dmabuf_mem_types & UCS_BIT(mem_type))) {
-            UCS_TEST_MESSAGE << "skipping " << ucs_memory_type_names[mem_type]
-                             << " (unsupported on system/MD or no dmabuf export)";
+            UCS_TEST_MESSAGE
+                    << "skipping " << ucs_memory_type_names[mem_type]
+                    << " (unsupported on system/MD or no dmabuf export)";
             continue;
         }
 
         mem_buffer mem_buf(size, mem_type);
         uct_md_mem_attr_t mem_attr = {};
-        void *query_ptr            = UCS_PTR_BYTE_OFFSET(mem_buf.ptr(), offset);
+        void *query_ptr = UCS_PTR_BYTE_OFFSET(mem_buf.ptr(), offset);
 
         mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE |
                               UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS |

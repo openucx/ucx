@@ -19,8 +19,8 @@ public:
         std::vector<const resource*> result;
 
         for (const resource *rsc : resources) {
-            const p2p_resource *p2p_rsc = dynamic_cast<const p2p_resource*>(
-                    rsc);
+            const p2p_resource *p2p_rsc =
+                    dynamic_cast<const p2p_resource*>(rsc);
             if ((p2p_rsc != NULL) && p2p_rsc->loopback) {
                 result.push_back(rsc);
             }
@@ -35,7 +35,6 @@ protected:
         /* Keep a compact sweep window for CI stability while covering range logic. */
         return ucs_min(max_length, min_length + 1024);
     }
-
 
     void init() override
     {
@@ -93,7 +92,8 @@ UCS_TEST_P(test_ze_copy_rma, put_zcopy_ze_device_range)
     }
 
     size_t min_length =
-            ucs_max((size_t)1, (size_t)sender().iface_attr().cap.put.min_zcopy);
+            ucs_max((size_t)1,
+                    (size_t)sender().iface_attr().cap.put.min_zcopy);
     size_t max_length = bounded_max(
             min_length, (size_t)sender().iface_attr().cap.put.max_zcopy);
 
