@@ -1061,15 +1061,13 @@ typedef enum {
  * are present, for backward compatibility support.
  */
 enum uct_iface_attr_field {
-    /** Enables @ref uct_iface_attr_v2_t::flags (output).
-     *  Returns plugin-contributed capability flags.
-     */
+    /** Enables @ref uct_iface_attr_v2_t::flags. */
     UCT_IFACE_ATTR_FIELD_FLAGS           = UCS_BIT(0),
 
-    /** Enables @ref uct_iface_attr_v2_t::tx_token_length (output). */
+    /** Enables @ref uct_iface_attr_v2_t::tx_token_length. */
     UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH = UCS_BIT(1),
 
-    /** Enables @ref uct_iface_attr_v2_t::rx_token_length (output). */
+    /** Enables @ref uct_iface_attr_v2_t::rx_token_length. */
     UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH = UCS_BIT(2),
 
     /**
