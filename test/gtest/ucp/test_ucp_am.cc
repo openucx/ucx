@@ -2188,6 +2188,95 @@ UCS_TEST_P(test_ucp_am_nbx_rndv_ppln, cuda_managed_buff,
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_rndv_ppln);
 
+
+class test_ucp_am_nbx_rndv_mtype_fc : public test_ucp_am_nbx_rndv_ppln {
+protected:
+    struct fc_counters {
+        uint64_t sender_throttled;
+        uint64_t receiver_throttled;
+    };
+
+    void check_stats_ge(const entity &e, uint64_t cntr, uint64_t min_value)
+    {
+        auto stats_node = e.worker()->stats;
+        auto value      = UCS_STATS_GET_COUNTER(stats_node, cntr);
+
+        EXPECT_GE(value, min_value)
+                << "counter " << stats_node->cls->counter_names[cntr]
+                << " expected >= " << min_value << " but got " << value;
+    }
+
+    void check_pending_queues_empty(const entity &e)
+    {
+        ucp_worker_h worker = e.worker();
+        for (int i = 0; i < UCP_WORKER_RNDV_FC_OP_LAST; i++) {
+            EXPECT_TRUE(ucs_queue_is_empty(&worker->rndv_mtype_fc.pending_q[i]))
+                    << "pending_q[" << i << "] should be empty";
+        }
+    }
+
+    void send_message(size_t num_frags)
+    {
+        set_mem_type(UCS_MEMORY_TYPE_CUDA_MANAGED);
+        test_am_send_recv(get_rndv_frag_size(UCS_MEMORY_TYPE_CUDA) * num_frags);
+    }
+
+    void verify_clean_fc_state()
+    {
+        for (auto *ep : {&sender(), &receiver()}) {
+            check_pending_queues_empty(*ep);
+        }
+    }
+
+    void run_fc_test(size_t num_frags, fc_counters &fc)
+    {
+        if (!sender().is_rndv_put_ppln_supported()) {
+            UCS_TEST_SKIP_R("RNDV is not supported");
+        }
+
+        send_message(num_frags);
+
+        check_stats_ge(sender(), UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY, 1);
+        check_stats_ge(receiver(), UCP_WORKER_STAT_RNDV_RTR_MTYPE, 1);
+
+        fc.sender_throttled =
+                UCS_STATS_GET_COUNTER(sender().worker()->stats,
+                                      UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED);
+        fc.receiver_throttled =
+                UCS_STATS_GET_COUNTER(receiver().worker()->stats,
+                                      UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED);
+    }
+};
+
+UCS_TEST_P(test_ucp_am_nbx_rndv_mtype_fc, fc_enabled_cap_reached,
+           "RNDV_MTYPE_WORKER_MAX_MEM=600mb", "RNDV_FRAG_MEM_TYPE=cuda")
+{
+    fc_counters fc;
+
+    run_fc_test(200, fc);
+
+    EXPECT_GT(fc.sender_throttled + fc.receiver_throttled, 0u)
+            << "throttling should have occurred with MAX_MEM=600mb";
+
+    verify_clean_fc_state();
+}
+
+UCS_TEST_P(test_ucp_am_nbx_rndv_mtype_fc, fc_disabled,
+           "RNDV_FRAG_MEM_TYPE=cuda")
+{
+    fc_counters fc;
+
+    run_fc_test(8, fc);
+
+    EXPECT_EQ(0u, fc.sender_throttled)
+            << "FC disabled - no throttling expected";
+    EXPECT_EQ(0u, fc.receiver_throttled)
+            << "FC disabled - no throttling expected";
+}
+
+
+UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_rndv_mtype_fc);
+
 #endif
 
 /* Test class for AM PSN protocol */
