@@ -3,14 +3,14 @@
 #
 # Jenkins Job Builder (JJB) configuration for UCX GitHub (Blossom) jobs
 #
-# Entry point: ucx-dispatcher-github (generic-webhook-trigger token must match job name)
-# Leaf jobs: ucx-*-github (triggered by dispatcher, not directly from GitHub)
+# Entry point: ucx-dispatcher (generic-webhook-trigger token must match job name)
+# Leaf jobs: ucx-* (triggered by dispatcher, not directly from GitHub)
 #
 # NOTE: This file is applied by DevOps to Jenkins.
 
 - job-template:
-    name: "{jjb_proj}-dispatcher-github"
-    folder: "UCX-GitHub"
+    name: "{jjb_proj}-dispatcher"
+    folder: "UCX-Opensource"
     project-type: pipeline
     properties:
       - github:
@@ -21,10 +21,10 @@
       - inject:
           keep-system-variables: true
           properties-content: |
-            jjb_proj={jjb_proj}-dispatcher-github
+            jjb_proj={jjb_proj}-dispatcher
     triggers:
       - generic-webhook-trigger:
-          token: "{jjb_proj}-dispatcher-github"
+          token: "{jjb_proj}-dispatcher"
           print-contributors: true
           print-posted-content: true
           silent-response: false
@@ -81,19 +81,19 @@
       currentBuild.description = githubHelper.getBuildDescription()
 
       def jobs = [
-        'ucx-codestyle-github',
-        'ucx-static-checks-github',
-        'ucx-coverity-github',
-        'ucx-build-github',
-        'ucx-build-static-github',
-        'ucx-test-github',
-        'ucx-test-gpu-github',
+        'ucx-codestyle',
+        'ucx-static-checks',
+        'ucx-coverity',
+        'ucx-build',
+        'ucx-build-static',
+        'ucx-test',
+        'ucx-test-gpu',
       ]
 
       try {{
         def fanout = [:]
         for (def j in jobs) {{
-          def jobName = "UCX-GitHub/${{j}}"
+          def jobName = "UCX-Opensource/${{j}}"
           fanout[jobName] = {{
             build job: jobName, parameters: [
               string(name: 'sha1', value: sha),
@@ -111,7 +111,7 @@
 
 - job-template:
     name: "{jjb_proj}"
-    folder: "UCX-GitHub"
+    folder: "UCX-Opensource"
     project-type: pipeline
     disabled: false
     properties:
@@ -161,62 +161,62 @@
       script-path: ".ci/jenkins/Jenkinsfile.github"
 
 - project:
-    name: ucx-dispatcher-github
+    name: ucx-dispatcher
     jjb_proj: "ucx"
     jobs:
-      - "{jjb_proj}-dispatcher-github"
+      - "{jjb_proj}-dispatcher"
 
 - project:
-    name: ucx-codestyle-github
-    jjb_proj: "ucx-codestyle-github"
+    name: ucx-codestyle
+    jjb_proj: "ucx-codestyle"
     jjb_conf_file: ".ci/pipeline/codestyle_matrix.yaml"
     jjb_description: "UCX Codestyle checks (GitHub Blossom). Do NOT edit via Web GUI!"
     jobs:
       - "{jjb_proj}"
 
 - project:
-    name: ucx-static-checks-github
-    jjb_proj: "ucx-static-checks-github"
+    name: ucx-static-checks
+    jjb_proj: "ucx-static-checks"
     jjb_conf_file: ".ci/pipeline/static_checks_matrix.yaml"
     jjb_description: "UCX Static checks (GitHub Blossom). Do NOT edit via Web GUI!"
     jobs:
       - "{jjb_proj}"
 
 - project:
-    name: ucx-coverity-github
-    jjb_proj: "ucx-coverity-github"
+    name: ucx-coverity
+    jjb_proj: "ucx-coverity"
     jjb_conf_file: ".ci/pipeline/coverity_matrix.yaml"
     jjb_description: "UCX Coverity (GitHub Blossom). Do NOT edit via Web GUI!"
     jobs:
       - "{jjb_proj}"
 
 - project:
-    name: ucx-build-github
-    jjb_proj: "ucx-build-github"
+    name: ucx-build
+    jjb_proj: "ucx-build"
     jjb_conf_file: ".ci/pipeline/build_matrix.yaml"
     jjb_description: "UCX Build job (GitHub Blossom). Do NOT edit via Web GUI!"
     jobs:
       - "{jjb_proj}"
 
 - project:
-    name: ucx-build-static-github
-    jjb_proj: "ucx-build-static-github"
+    name: ucx-build-static
+    jjb_proj: "ucx-build-static"
     jjb_conf_file: ".ci/pipeline/build_static_matrix.yaml"
     jjb_description: "UCX Static build (GitHub Blossom). Do NOT edit via Web GUI!"
     jobs:
       - "{jjb_proj}"
 
 - project:
-    name: ucx-test-github
-    jjb_proj: "ucx-test-github"
+    name: ucx-test
+    jjb_proj: "ucx-test"
     jjb_conf_file: ".ci/pipeline/test_matrix.yaml"
     jjb_description: "UCX GTest (GitHub Blossom). Do NOT edit via Web GUI!"
     jobs:
       - "{jjb_proj}"
 
 - project:
-    name: ucx-test-gpu-github
-    jjb_proj: "ucx-test-gpu-github"
+    name: ucx-test-gpu
+    jjb_proj: "ucx-test-gpu"
     jjb_conf_file: ".ci/pipeline/test_gpu_matrix.yaml"
     jjb_description: "UCX GTest GPU (GitHub Blossom). Do NOT edit via Web GUI!"
     jobs:
