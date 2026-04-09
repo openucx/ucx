@@ -715,7 +715,9 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
     UCS_STRING_BUFFER_ONSTACK(strb, 64);
     char *gpu_name, *ib_name;
     char pci_addr[UCS_SYS_BDF_NAME_MAX];
+    const char *saveptr;
     ucs_status_t status;
+    size_t tok_len;
     int cuda_id;
 
     if (config->num_channels > UINT8_MAX + 1) {
@@ -734,8 +736,10 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
     }
 
     ucs_string_buffer_appendf(&strb, "%s", params->mode.device.dev_name);
-    gpu_name = ucs_string_buffer_next_token(&strb, NULL, "-");
-    ib_name  = ucs_string_buffer_next_token(&strb, gpu_name, "-");
+    gpu_name = ucs_string_buffer_next_token(&strb, "-", &saveptr, &tok_len);
+    gpu_name[tok_len] = '\0';
+    ib_name = ucs_string_buffer_next_token(NULL, "-", &saveptr, &tok_len);
+    ib_name[tok_len] = '\0';
 
     init_attr.seg_size      = config->super.super.seg_size;
     init_attr.qp_type       = IBV_QPT_RC;
