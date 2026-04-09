@@ -42,6 +42,7 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_ep_t, const uct_ep_params_t *params)
 
 static UCS_CLASS_CLEANUP_FUNC(uct_cuda_ipc_ep_t)
 {
+    uct_cuda_ipc_destroy_cache_by_pid(self->remote_pid);
     if (self->device_ep != NULL) {
         (void)UCT_CUDADRV_FUNC_LOG_WARN(cuMemFree((CUdeviceptr)self->device_ep));
     }
