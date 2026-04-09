@@ -51,6 +51,7 @@ static void ucp_am_eager_zcopy_completion(uct_completion_t *self)
 
     ucs_assert(req->send.msg_proto.am.header.reg_desc != NULL);
     ucs_mpool_put_inline(req->send.msg_proto.am.header.reg_desc);
+    req->send.msg_proto.am.header.reg_desc = NULL;
     ucp_proto_request_zcopy_completion(self);
 }
 
@@ -58,6 +59,11 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_am_eager_zcopy_pack_user_header(ucp_request_t *req)
 {
     ucp_mem_desc_t *reg_desc;
+
+    if (req->send.msg_proto.am.internal_flags &
+        UCP_REQUEST_AM_FLAG_HEADER_PACKED) {
+        return UCS_OK;
+    }
 
     /* Request must be in initial state or after @ref ucp_proto_t::reset */
     ucs_assertv(req->send.msg_proto.am.header.reg_desc == NULL,
@@ -76,6 +82,7 @@ ucp_am_eager_zcopy_pack_user_header(ucp_request_t *req)
     }
 
     req->send.msg_proto.am.header.reg_desc = reg_desc;
+    req->send.msg_proto.am.internal_flags |= UCP_REQUEST_AM_FLAG_HEADER_PACKED;
     return UCS_OK;
 }
 
