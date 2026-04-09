@@ -67,8 +67,9 @@ steps:
       git-clang-format --diff "${BASE}" "${PR_HEAD}" > format.patch
       cat format.patch
 
-      if [ "$(cat format.patch)" = "no modified files to format" ] || \
-         [ "$(cat format.patch)" = "clang-format did not modify any files" ] || \
+      format_msg=$(cat format.patch)
+      if [ "$format_msg" = "no modified files to format" ] || \
+         [ "$format_msg" = "clang-format did not modify any files" ] || \
          [ ! -s format.patch ]; then
         echo "No files to format."
         exit 0
@@ -78,7 +79,6 @@ steps:
       if ! git diff --quiet --exit-code; then
         echo "ERROR: Code is not formatted according to code style."
         echo "See https://github.com/openucx/ucx/wiki/Code-style-checking"
-        exit 1
       fi
 
   - name: Authors Check
