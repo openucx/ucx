@@ -104,11 +104,7 @@ static ucs_status_t uct_cuda_copy_iface_query(uct_iface_h tl_iface,
     iface_attr->iface_addr_len          = sizeof(uct_cuda_copy_iface_addr_t);
     iface_attr->device_addr_len         = 0;
     iface_attr->ep_addr_len             = 0;
-    /* UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE required for RMA BW wireup
-     * (ucp_wireup_fill_peer_err_criteria) when error handling is requested.
-     * Transfers are local copies; UCP handles invalidation when a peer fails. */
-    iface_attr->cap.flags               = UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE |
-                                          UCT_IFACE_FLAG_CONNECT_TO_IFACE |
+    iface_attr->cap.flags               = UCT_IFACE_FLAG_CONNECT_TO_IFACE |
                                           UCT_IFACE_FLAG_GET_SHORT |
                                           UCT_IFACE_FLAG_PUT_SHORT |
                                           UCT_IFACE_FLAG_GET_ZCOPY |
