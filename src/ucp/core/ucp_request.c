@@ -379,6 +379,11 @@ static ucp_md_map_t ucp_request_get_invalidation_map(ucp_ep_h ep)
     ucp_lane_index_t i;
     ucp_md_map_t inv_map;
 
+    /* Same-worker EPs (loopback, memtype): no cross-worker RMA to invalidate. */
+    if (key->flags & UCP_EP_CONFIG_KEY_FLAG_SELF) {
+        return 0;
+    }
+
     for (i = 0, inv_map = 0;
          (key->rma_bw_lanes[i] != UCP_NULL_LANE) && (i < UCP_MAX_LANES); i++) {
         lane = key->rma_bw_lanes[i];
