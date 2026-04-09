@@ -187,6 +187,7 @@ static uint16_t uct_ud_mlx5_ep_send_ctl(uct_ud_ep_t *ud_ep, uct_ud_send_skb_t *s
         ++dptr;
     }
 
+    skb->tx_sn = sn;
     uct_ud_mlx5_post_send(iface, ep, ce_se, ctrl, wqe_size, skb->neth,
                           max_log_sge);
     return sn;
@@ -325,6 +326,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_ud_mlx5_ep_inline_iov_post(
                                                  iov, iovcnt);
     }
 
+    skb->tx_sn = iface->tx.wq.sw_pi;
     uct_ud_mlx5_post_send(iface, ep, 0, ctrl, wqe_size, neth,
                           UCT_IB_MAX_ZCOPY_LOG_SGE(&iface->super.super));
 
@@ -435,6 +437,7 @@ static ssize_t uct_ud_mlx5_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     ctrl = uct_ud_mlx5_ep_get_next_wqe(iface, ep, &wqe_size, &next_seg);
     dptr = next_seg;
     uct_ib_mlx5_set_data_seg(dptr, skb->neth, skb->len, skb->lkey);
+    skb->tx_sn = iface->tx.wq.sw_pi;
     uct_ud_mlx5_post_send(iface, ep, 0, ctrl, wqe_size + sizeof(*dptr),
                           skb->neth, INT_MAX);
 
