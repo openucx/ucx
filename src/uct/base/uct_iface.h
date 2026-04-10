@@ -820,7 +820,8 @@ uct_iface_param_am_alignment(const uct_iface_params_t *params, size_t elem_size,
                              size_t base_offset, size_t payload_offset,
                              size_t *align, size_t *align_offset);
 
-void uct_base_iface_query(uct_base_iface_t *iface, uct_iface_attr_t *iface_attr);
+void uct_base_iface_query(uct_base_iface_t *iface,
+                          uct_iface_attr_v2_t *iface_attr);
 
 ucs_status_t uct_single_device_resource(uct_md_h md, const char *dev_name,
                                         uct_device_type_t dev_type,

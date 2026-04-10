@@ -23,6 +23,22 @@
 #include <ucs/vfs/base/vfs_obj.h>
 
 
+#define UCT_IFACE_ATTR_V2_FIELD_COPY(_dst, _src, _field, _flag) \
+    { \
+        if ((_dst)->field_mask & (_flag)) { \
+            ucs_assert((_src)->field_mask & (_flag)); \
+            memcpy(&((_dst)->_field), &((_src)->_field), \
+                   sizeof((_src)->_field)); \
+        } \
+    }
+
+#define UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(_v1, _v2, _field, _flag) \
+    do { \
+        ucs_assert((_v2)->field_mask & (_flag)); \
+        (_v1)->_field = (_v2)->_field; \
+    } while (0)
+
+
 const char *uct_ep_operation_names[] = {
     [UCT_EP_OP_AM_SHORT]     = "am_short",
     [UCT_EP_OP_AM_BCOPY]     = "am_bcopy",
@@ -190,17 +206,190 @@ void uct_iface_set_async_event_params(const uct_iface_params_t *params,
 }
 
 
-ucs_status_t uct_iface_query(uct_iface_h iface, uct_iface_attr_t *iface_attr)
+static void
+uct_iface_attr_from_v2(uct_iface_attr_t *dst, const uct_iface_attr_v2_t *src)
 {
-    return iface->ops.iface_query(iface, iface_attr);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, cap.put.max_short,
+                                        UCT_IFACE_ATTR_FIELD_CAP);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, cap.put.max_bcopy,
+                                        UCT_IFACE_ATTR_FIELD_CAP);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, cap.put.min_zcopy,
+                                        UCT_IFACE_ATTR_FIELD_CAP);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, cap.put.max_zcopy,
+                                        UCT_IFACE_ATTR_FIELD_CAP);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, cap.put.opt_zcopy_align,
+                                        UCT_IFACE_ATTR_FIELD_CAP);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, cap.put.align_mtu,
+                                        UCT_IFACE_ATTR_FIELD_CAP);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, cap.put.max_iov,
+                                        UCT_IFACE_ATTR_FIELD_CAP);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, cap.get.max_short,
+                                        UCT_IFACE_ATTR_FIELD_CAP);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, cap.get.max_bcopy,
+                                        UCT_IFACE_ATTR_FIELD_CAP);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, cap.get.min_zcopy,
+                                        UCT_IFACE_ATTR_FIELD_CAP);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, cap.get.max_zcopy,
+                                        UCT_IFACE_ATTR_FIELD_CAP);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, cap.get.opt_zcopy_align,
+                                        UCT_IFACE_ATTR_FIELD_CAP);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, cap.get.align_mtu,
+                                        UCT_IFACE_ATTR_FIELD_CAP);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, cap.get.max_iov,
+                                        UCT_IFACE_ATTR_FIELD_CAP);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, cap.am.max_short,
+                                        UCT_IFACE_ATTR_FIELD_CAP);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, cap.am.max_bcopy,
+                                        UCT_IFACE_ATTR_FIELD_CAP);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, cap.am.min_zcopy,
+                                        UCT_IFACE_ATTR_FIELD_CAP);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, cap.am.max_zcopy,
+                                        UCT_IFACE_ATTR_FIELD_CAP);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, cap.am.opt_zcopy_align,
+                                        UCT_IFACE_ATTR_FIELD_CAP);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, cap.am.align_mtu,
+                                        UCT_IFACE_ATTR_FIELD_CAP);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, cap.am.max_hdr,
+                                        UCT_IFACE_ATTR_FIELD_CAP);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, cap.am.max_iov,
+                                        UCT_IFACE_ATTR_FIELD_CAP);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, cap.tag.recv.min_recv,
+                                        UCT_IFACE_ATTR_FIELD_CAP);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, cap.tag.recv.max_zcopy,
+                                        UCT_IFACE_ATTR_FIELD_CAP);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, cap.tag.recv.max_iov,
+                                        UCT_IFACE_ATTR_FIELD_CAP);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src,
+                                        cap.tag.recv.max_outstanding,
+                                        UCT_IFACE_ATTR_FIELD_CAP);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, cap.tag.eager.max_short,
+                                        UCT_IFACE_ATTR_FIELD_CAP);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, cap.tag.eager.max_bcopy,
+                                        UCT_IFACE_ATTR_FIELD_CAP);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, cap.tag.eager.max_zcopy,
+                                        UCT_IFACE_ATTR_FIELD_CAP);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, cap.tag.eager.max_iov,
+                                        UCT_IFACE_ATTR_FIELD_CAP);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, cap.tag.rndv.max_zcopy,
+                                        UCT_IFACE_ATTR_FIELD_CAP);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, cap.tag.rndv.max_hdr,
+                                        UCT_IFACE_ATTR_FIELD_CAP);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, cap.tag.rndv.max_iov,
+                                        UCT_IFACE_ATTR_FIELD_CAP);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, cap.atomic32.op_flags,
+                                        UCT_IFACE_ATTR_FIELD_CAP);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, cap.atomic32.fop_flags,
+                                        UCT_IFACE_ATTR_FIELD_CAP);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, cap.atomic64.op_flags,
+                                        UCT_IFACE_ATTR_FIELD_CAP);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, cap.atomic64.fop_flags,
+                                        UCT_IFACE_ATTR_FIELD_CAP);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, cap.flags,
+                                        UCT_IFACE_ATTR_FIELD_CAP);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, cap.event_flags,
+                                        UCT_IFACE_ATTR_FIELD_CAP);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, device_addr_len,
+                                        UCT_IFACE_ATTR_FIELD_DEVICE_ADDR);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, iface_addr_len,
+                                        UCT_IFACE_ATTR_FIELD_IFACE_ADDR);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, ep_addr_len,
+                                        UCT_IFACE_ATTR_FIELD_EP_ADDR);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, max_conn_priv,
+                                        UCT_IFACE_ATTR_FIELD_MAX_CONN_PRIV);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, listen_sockaddr,
+                                        UCT_IFACE_ATTR_FIELD_SOCKADDR);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, overhead,
+                                        UCT_IFACE_ATTR_FIELD_OVERHEAD);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, bandwidth,
+                                        UCT_IFACE_ATTR_FIELD_BANDWIDTH);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, latency,
+                                        UCT_IFACE_ATTR_FIELD_LATENCY);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, priority,
+                                        UCT_IFACE_ATTR_FIELD_PRIORITY);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, max_num_eps,
+                                        UCT_IFACE_ATTR_FIELD_MAX_NUM_EPS);
+    UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(dst, src, dev_num_paths,
+                                        UCT_IFACE_ATTR_FIELD_DEV_NUM_PATHS);
+}
+
+static void
+uct_iface_attr_v2_copy(uct_iface_attr_v2_t *dst,
+                        const uct_iface_attr_v2_t *src)
+{
+    UCT_IFACE_ATTR_V2_FIELD_COPY(dst, src, cap,
+                                 UCT_IFACE_ATTR_FIELD_CAP);
+    UCT_IFACE_ATTR_V2_FIELD_COPY(dst, src, device_addr_len,
+                                 UCT_IFACE_ATTR_FIELD_DEVICE_ADDR);
+    UCT_IFACE_ATTR_V2_FIELD_COPY(dst, src, iface_addr_len,
+                                 UCT_IFACE_ATTR_FIELD_IFACE_ADDR);
+    UCT_IFACE_ATTR_V2_FIELD_COPY(dst, src, ep_addr_len,
+                                 UCT_IFACE_ATTR_FIELD_EP_ADDR);
+    UCT_IFACE_ATTR_V2_FIELD_COPY(dst, src, max_conn_priv,
+                                 UCT_IFACE_ATTR_FIELD_MAX_CONN_PRIV);
+    UCT_IFACE_ATTR_V2_FIELD_COPY(dst, src, listen_sockaddr,
+                                 UCT_IFACE_ATTR_FIELD_SOCKADDR);
+    UCT_IFACE_ATTR_V2_FIELD_COPY(dst, src, overhead,
+                                 UCT_IFACE_ATTR_FIELD_OVERHEAD);
+    UCT_IFACE_ATTR_V2_FIELD_COPY(dst, src, bandwidth,
+                                 UCT_IFACE_ATTR_FIELD_BANDWIDTH);
+    UCT_IFACE_ATTR_V2_FIELD_COPY(dst, src, latency,
+                                 UCT_IFACE_ATTR_FIELD_LATENCY);
+    UCT_IFACE_ATTR_V2_FIELD_COPY(dst, src, priority,
+                                 UCT_IFACE_ATTR_FIELD_PRIORITY);
+    UCT_IFACE_ATTR_V2_FIELD_COPY(dst, src, max_num_eps,
+                                 UCT_IFACE_ATTR_FIELD_MAX_NUM_EPS);
+    UCT_IFACE_ATTR_V2_FIELD_COPY(dst, src, dev_num_paths,
+                                 UCT_IFACE_ATTR_FIELD_DEV_NUM_PATHS);
+}
+
+static ucs_status_t
+uct_iface_attr_v2_init(uct_iface_h tl_iface, uct_iface_attr_v2_t *iface_attr)
+{
+    uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
+    ucs_status_t status;
+
+    memset(iface_attr, 0, sizeof(*iface_attr));
+
+    iface_attr->field_mask = UINT64_MAX;
+
+    status = iface->internal_ops->iface_query_v2(tl_iface, iface_attr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return UCS_OK;
+}
+
+ucs_status_t uct_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
+{
+    ucs_status_t status;
+    uct_iface_attr_v2_t iface_attr_v2;
+
+    status = uct_iface_attr_v2_init(tl_iface, &iface_attr_v2);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    uct_iface_attr_from_v2(iface_attr, &iface_attr_v2);
+
+    return UCS_OK;
 }
 
 ucs_status_t
 uct_iface_query_v2(uct_iface_h tl_iface, uct_iface_attr_v2_t *iface_attr)
 {
-    uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
+    ucs_status_t status;
+    uct_iface_attr_v2_t iface_attr_v2;
 
-    return iface->internal_ops->iface_query_v2(tl_iface, iface_attr);
+    status = uct_iface_attr_v2_init(tl_iface, &iface_attr_v2);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    /* Populate fields based on field mask set by user in iface_attr */
+    uct_iface_attr_v2_copy(iface_attr, &iface_attr_v2);
+
+    return UCS_OK;
 }
 
 ucs_status_t
@@ -506,7 +695,8 @@ ucs_status_t uct_iface_handle_ep_err(uct_iface_h iface, uct_ep_h ep,
     return status;
 }
 
-void uct_base_iface_query(uct_base_iface_t *iface, uct_iface_attr_t *iface_attr)
+void uct_base_iface_query(uct_base_iface_t *iface,
+                          uct_iface_attr_v2_t *iface_attr)
 {
     memset(iface_attr, 0, sizeof(*iface_attr));
 
@@ -571,8 +761,11 @@ ucs_status_t uct_single_device_resource(uct_md_h md, const char *dev_name,
 }
 
 ucs_status_t
-uct_iface_base_query_v2(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr)
+uct_iface_base_query_v2(uct_iface_h tl_iface, uct_iface_attr_v2_t *iface_attr)
 {
+    uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
+
+    uct_base_iface_query(iface, iface_attr);
     return UCS_OK;
 }
 
@@ -635,7 +828,6 @@ UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops)
     ucs_assert_always(ops->iface_progress_disable   != NULL);
     ucs_assert_always(ops->iface_progress           != NULL);
     ucs_assert_always(ops->iface_close              != NULL);
-    ucs_assert_always(ops->iface_query              != NULL);
     ucs_assert_always(ops->iface_get_device_address != NULL);
     ucs_assert_always(ops->iface_is_reachable       != NULL);
 

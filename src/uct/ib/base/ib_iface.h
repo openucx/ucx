@@ -568,7 +568,7 @@ int uct_ib_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                  const uct_iface_is_reachable_params_t *params);
 
 ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface,
-                                uct_iface_attr_t *iface_attr);
+                                uct_iface_attr_v2_t *iface_attr);
 
 
 ucs_status_t

@@ -313,7 +313,7 @@ out:
 }
 
 static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface,
-                                        uct_iface_attr_t *attr)
+                                        uct_iface_attr_v2_t *attr)
 {
     uct_tcp_iface_t *iface = ucs_derived_of(tl_iface, uct_tcp_iface_t);
     size_t am_buf_size     = iface->config.tx_seg_size -
@@ -559,7 +559,6 @@ static uct_iface_ops_t uct_tcp_iface_ops = {
     .iface_event_fd_get       = uct_tcp_iface_event_fd_get,
     .iface_event_arm          = (uct_iface_event_arm_func_t)ucs_empty_function_return_success,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_tcp_iface_t),
-    .iface_query              = uct_tcp_iface_query,
     .iface_get_address        = uct_tcp_iface_get_address,
     .iface_get_device_address = uct_tcp_iface_get_device_address,
     .iface_is_reachable       = uct_base_iface_is_reachable
@@ -672,7 +671,7 @@ static ucs_mpool_ops_t uct_tcp_mpool_ops = {
 };
 
 static uct_iface_internal_ops_t uct_tcp_iface_internal_ops = {
-    .iface_query_v2         = uct_iface_base_query_v2,
+    .iface_query_v2         = uct_tcp_iface_query,
     .iface_estimate_perf    = uct_base_iface_estimate_perf,
     .iface_vfs_refresh      = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
     .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,

@@ -481,7 +481,7 @@ int uct_rc_gdaki_ep_is_connected(uct_ep_h tl_ep,
 }
 
 static ucs_status_t
-uct_rc_gdaki_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
+uct_rc_gdaki_iface_query(uct_iface_h tl_iface, uct_iface_attr_v2_t *iface_attr)
 {
     uct_rc_gdaki_iface_t *iface = ucs_derived_of(tl_iface,
                                                  uct_rc_gdaki_iface_t);
@@ -639,7 +639,7 @@ static UCS_CLASS_DECLARE_DELETE_FUNC(uct_rc_gdaki_iface_t, uct_iface_t);
 static uct_rc_iface_ops_t uct_rc_gdaki_internal_ops = {
     .super = {
         .super = {
-            .iface_query_v2         = uct_iface_base_query_v2,
+            .iface_query_v2         = uct_rc_gdaki_iface_query,
             .iface_estimate_perf    = uct_ib_iface_estimate_perf,
             .iface_vfs_refresh      = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
             .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
@@ -666,7 +666,6 @@ static uct_iface_ops_t uct_rc_gdaki_iface_tl_ops = {
     .ep_connect_to_ep  = uct_base_ep_connect_to_ep,
     .ep_pending_purge  = (uct_ep_pending_purge_func_t)ucs_empty_function,
     .iface_close       = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_gdaki_iface_t),
-    .iface_query       = uct_rc_gdaki_iface_query,
     .iface_get_address = uct_rc_gdaki_iface_get_address,
     .iface_get_device_address = uct_ib_iface_get_device_address,
     .iface_is_reachable       = uct_base_iface_is_reachable,

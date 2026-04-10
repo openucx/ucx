@@ -221,9 +221,12 @@ static void uct_srd_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
     UCT_IB_IFACE_VERBS_COMPLETION_LOG(log_lvl, "send", &iface->super, 0, wc);
 }
 
+static ucs_status_t
+uct_srd_iface_query(uct_iface_h tl_iface, uct_iface_attr_v2_t *iface_attr);
+
 static uct_ib_iface_ops_t uct_srd_iface_ops = {
     .super = {
-        .iface_query_v2        = uct_iface_base_query_v2,
+        .iface_query_v2        = uct_srd_iface_query,
         .iface_estimate_perf   = uct_ib_iface_estimate_perf,
         .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)
             ucs_empty_function,
@@ -875,7 +878,7 @@ static unsigned uct_srd_iface_progress(uct_iface_h tl_iface)
 }
 
 ucs_status_t
-uct_srd_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
+uct_srd_iface_query(uct_iface_h tl_iface, uct_iface_attr_v2_t *iface_attr)
 {
     uct_srd_iface_t *iface = ucs_derived_of(tl_iface, uct_srd_iface_t);
     uct_ib_md_t *ib_md     = uct_ib_iface_md(&iface->super);
@@ -1045,7 +1048,6 @@ static uct_iface_ops_t uct_srd_iface_tl_ops = {
     .iface_progress_enable    = uct_base_iface_progress_enable,
     .iface_progress_disable   = uct_base_iface_progress_disable,
     .iface_progress           = uct_srd_iface_progress,
-    .iface_query              = uct_srd_iface_query,
     .iface_get_address        = uct_srd_iface_get_address,
     .iface_is_reachable       = uct_base_iface_is_reachable,
     .iface_event_fd_get       = (uct_iface_event_fd_get_func_t)

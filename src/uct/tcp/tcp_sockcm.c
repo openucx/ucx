@@ -187,7 +187,6 @@ static uct_iface_ops_t uct_tcp_sockcm_iface_ops = {
     .iface_event_fd_get       = (uct_iface_event_fd_get_func_t)ucs_empty_function_return_unsupported,
     .iface_event_arm          = (uct_iface_event_arm_func_t)ucs_empty_function_return_unsupported,
     .iface_close              = (uct_iface_close_func_t)ucs_empty_function,
-    .iface_query              = (uct_iface_query_func_t)ucs_empty_function_return_unsupported,
     .iface_get_device_address = (uct_iface_get_device_address_func_t)ucs_empty_function_return_unsupported,
     .iface_get_address        = (uct_iface_get_address_func_t)ucs_empty_function_return_unsupported,
     .iface_is_reachable       = uct_base_iface_is_reachable

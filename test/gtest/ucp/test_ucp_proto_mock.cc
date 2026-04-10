@@ -17,7 +17,7 @@ extern "C" {
 class mock_iface {
 public:
     /* Can't use std::function due to coverity errors */
-    using iface_attr_func_t = void (*)(uct_iface_attr&);
+    using iface_attr_func_t = void (*)(uct_iface_attr_v2_t&);
     using perf_attr_func_t = void (*)(uct_perf_attr_t&);
 
     mock_iface() : m_tl(nullptr)
@@ -39,7 +39,7 @@ public:
 
     void add_mock_iface(
             const std::string &dev_name = "mock",
-            iface_attr_func_t cb = [](uct_iface_attr_t &iface_attr) {},
+            iface_attr_func_t cb = [](uct_iface_attr_v2_t &iface_attr) {},
             perf_attr_func_t perf_cb = cx7_perf_mock)
     {
         m_iface_attrs_funcs[dev_name] = cb;
@@ -130,18 +130,22 @@ private:
 
         uct_base_iface_t *base      = ucs_derived_of(*iface_p, uct_base_iface_t);
         m_self->m_iface_names[base] = params->mode.device.dev_name;
-        m_self->m_mock.setup(&(*iface_p)->ops.iface_query, iface_query_mock);
-        m_self->m_mock.setup(&base->internal_ops->iface_estimate_perf, perf_mock);
+        m_self->m_mock.setup(&base->internal_ops->iface_query_v2,
+                             iface_query_mock);
+        m_self->m_mock.setup(&base->internal_ops->iface_estimate_perf,
+                             perf_mock);
         return UCS_OK;
     }
 
     static ucs_status_t
-    iface_query_mock(uct_iface_h iface, uct_iface_attr_t *iface_attr)
+    iface_query_mock(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr)
     {
-        UCS_MOCK_ORIG_FUNC(m_self->m_mock, &iface->ops.iface_query, iface,
+        uct_base_iface_t *base = ucs_derived_of(iface, uct_base_iface_t);
+
+        UCS_MOCK_ORIG_FUNC(m_self->m_mock,
+                           &base->internal_ops->iface_query_v2, iface,
                            iface_attr);
 
-        uct_base_iface_t *base  = ucs_derived_of(iface, uct_base_iface_t);
         std::string &iface_name = m_self->m_iface_names[base];
         auto it                 = m_self->m_iface_attrs_funcs.find(iface_name);
         (it->second)(*iface_attr);
@@ -585,7 +589,7 @@ public:
     virtual void init() override
     {
         /* Device with higher BW and latency */
-        add_mock_iface("mock_0:1", [](uct_iface_attr_t &iface_attr) {
+        add_mock_iface("mock_0:1", [](uct_iface_attr_v2_t &iface_attr) {
             iface_attr.cap.am.max_short  = 2000;
             iface_attr.cap.put.max_short = 2048;
             iface_attr.bandwidth.shared  = 28e9;
@@ -594,7 +598,7 @@ public:
             iface_attr.cap.get.max_zcopy = 16384;
         });
         /* Device with smaller BW but lower latency */
-        add_mock_iface("mock_1:1", [](uct_iface_attr_t &iface_attr) {
+        add_mock_iface("mock_1:1", [](uct_iface_attr_v2_t &iface_attr) {
             iface_attr.cap.am.max_short  = 208;
             iface_attr.cap.put.max_short = 2048;
             iface_attr.bandwidth.shared  = 24e9;
@@ -729,7 +733,7 @@ public:
     virtual void init() override
     {
         /* Device with high BW and lower latency */
-        add_mock_iface("mock_0:1", [](uct_iface_attr_t &iface_attr) {
+        add_mock_iface("mock_0:1", [](uct_iface_attr_v2_t &iface_attr) {
             iface_attr.cap.am.max_short  = 208;
             iface_attr.bandwidth.shared  = 28e9;
             iface_attr.latency.c         = 500e-9;
@@ -737,7 +741,7 @@ public:
             iface_attr.cap.get.max_zcopy = 16384;
         });
         /* Device with lower BW and higher latency */
-        add_mock_iface("mock_1:1", [](uct_iface_attr_t &iface_attr) {
+        add_mock_iface("mock_1:1", [](uct_iface_attr_v2_t &iface_attr) {
             iface_attr.cap.am.max_short = 2000;
             iface_attr.bandwidth.shared = 24e9;
             iface_attr.latency.c        = 600e-9;
@@ -777,7 +781,7 @@ public:
     {
         /* Device with high BW and lower latency, but 0 get_zcopy.
          * This use case is similar to cuda_ipc when NVLink is not available. */
-        add_mock_iface("mock_0:1", [](uct_iface_attr_t &iface_attr) {
+        add_mock_iface("mock_0:1", [](uct_iface_attr_v2_t &iface_attr) {
             iface_attr.cap.am.max_short  = 208;
             iface_attr.bandwidth.shared  = 28e9;
             iface_attr.latency.c         = 500e-9;
@@ -785,7 +789,7 @@ public:
             iface_attr.cap.get.max_zcopy = 0;
         });
         /* Device with lower BW and higher latency */
-        add_mock_iface("mock_1:1", [](uct_iface_attr_t &iface_attr) {
+        add_mock_iface("mock_1:1", [](uct_iface_attr_v2_t &iface_attr) {
             iface_attr.cap.am.max_short = 2000;
             iface_attr.bandwidth.shared = 24e9;
             iface_attr.latency.c        = 600e-9;
@@ -851,7 +855,7 @@ public:
 
     virtual void init() override
     {
-        add_mock_iface("mock", [](uct_iface_attr_t &iface_attr) {
+        add_mock_iface("mock", [](uct_iface_attr_v2_t &iface_attr) {
             iface_attr.bandwidth.dedicated = 0;
             iface_attr.bandwidth.shared    = 100e9 / 8; /* 100Gb/s */
             iface_attr.latency.c           = 20e-6;
@@ -915,7 +919,7 @@ public:
 
     virtual void init() override
     {
-        add_mock_iface("mock", [](uct_iface_attr_t &iface_attr) {
+        add_mock_iface("mock", [](uct_iface_attr_v2_t &iface_attr) {
             iface_attr.cap.am.max_short = 2000;
             iface_attr.bandwidth.shared = 28e9;
             iface_attr.latency.c        = 600e-9;
@@ -959,7 +963,7 @@ public:
 
     virtual void init() override
     {
-        auto iface_attr_func = [](uct_iface_attr_t &iface_attr) {
+        auto iface_attr_func = [](uct_iface_attr_v2_t &iface_attr) {
             iface_attr.cap.am.max_short  = 208;
             iface_attr.cap.put.max_short = 2048;
             iface_attr.bandwidth.shared  = 28e9;
@@ -968,7 +972,7 @@ public:
         };
 
         add_mock_iface("mock_0:1", iface_attr_func);
-        add_mock_iface("mock_1:1", [](uct_iface_attr_t &iface_attr) {
+        add_mock_iface("mock_1:1", [](uct_iface_attr_v2_t &iface_attr) {
             iface_attr.cap.am.max_short = 2000;
             iface_attr.bandwidth.shared = 24e9;
             iface_attr.latency.c        = 600e-9;

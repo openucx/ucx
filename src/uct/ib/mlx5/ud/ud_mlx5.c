@@ -618,7 +618,7 @@ static unsigned uct_ud_mlx5_iface_async_progress(uct_ud_iface_t *ud_iface)
 }
 
 static ucs_status_t
-uct_ud_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
+uct_ud_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_v2_t *iface_attr)
 {
     uct_ud_iface_t *iface = ucs_derived_of(tl_iface, uct_ud_iface_t);
     ucs_status_t status;
@@ -856,7 +856,7 @@ static void uct_ud_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg
 static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
     .super = {
         .super = {
-            .iface_query_v2         = uct_iface_base_query_v2,
+            .iface_query_v2         = uct_ud_mlx5_iface_query,
             .iface_estimate_perf    = uct_ib_iface_estimate_perf,
             .iface_vfs_refresh      = (uct_iface_vfs_refresh_func_t)uct_ud_iface_vfs_refresh,
             .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
@@ -907,7 +907,6 @@ static uct_iface_ops_t uct_ud_mlx5_iface_tl_ops = {
                                 ucs_empty_function_return_unsupported,
     .iface_event_arm          = uct_ud_mlx5_iface_event_arm,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_mlx5_iface_t),
-    .iface_query              = uct_ud_mlx5_iface_query,
     .iface_get_device_address = uct_ib_iface_get_device_address,
     .iface_get_address        = uct_ud_iface_get_address,
     .iface_is_reachable       = uct_base_iface_is_reachable

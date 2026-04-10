@@ -1937,7 +1937,7 @@ uct_ib_iface_get_bandwidth(uct_ib_iface_t *iface, double wire_speed)
 }
 
 ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface,
-                                uct_iface_attr_t *iface_attr)
+                                uct_iface_attr_v2_t *iface_attr)
 {
     static const uint8_t ib_port_widths[] =
             {[1] = 1, [2] = 4, [4] = 8, [8] = 12, [16] = 2};
