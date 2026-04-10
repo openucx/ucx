@@ -1083,7 +1083,7 @@ typedef enum uct_iface_attr_field {
  * @ingroup UCT_RESOURCE
  * @brief Interface attributes, used by @ref uct_iface_query_v2.
  *
- * This structure defines the attributes of a transport interface which include
+ * This structure defines the attributes of a transport interface including
  * its capabilities, performance characteristics, and addressing information.
  */
 typedef struct {

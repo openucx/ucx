@@ -26,15 +26,18 @@
 #define UCT_IFACE_ATTR_V2_FIELD_COPY(_dst, _src, _field, _flag) \
     { \
         if ((_dst)->field_mask & (_flag)) { \
-            ucs_assert((_src)->field_mask & (_flag)); \
+            ucs_assertv((_src)->field_mask & (_flag), \
+                        "%s not set in field_mask", #_field); \
             memcpy(&((_dst)->_field), &((_src)->_field), \
                    sizeof((_src)->_field)); \
         } \
     }
 
+
 #define UCT_IFACE_ATTR_SET_V1_FIELD_FROM_V2(_v1, _v2, _field, _flag) \
     do { \
-        ucs_assert((_v2)->field_mask & (_flag)); \
+        ucs_assertv((_v2)->field_mask & (_flag), \
+                    "%s not set in field_mask", #_field); \
         (_v1)->_field = (_v2)->_field; \
     } while (0)
 
@@ -346,18 +349,12 @@ static ucs_status_t
 uct_iface_attr_v2_init(uct_iface_h tl_iface, uct_iface_attr_v2_t *iface_attr)
 {
     uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
-    ucs_status_t status;
 
     memset(iface_attr, 0, sizeof(*iface_attr));
 
     iface_attr->field_mask = UINT64_MAX;
 
-    status = iface->internal_ops->iface_query_v2(tl_iface, iface_attr);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    return UCS_OK;
+    return iface->internal_ops->iface_query_v2(tl_iface, iface_attr);
 }
 
 ucs_status_t uct_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
