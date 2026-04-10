@@ -28,6 +28,31 @@ static uint64_t ucs_large_primes[] = {
     9929050207ull, 9929050217ull, 9929050249ull, 9929050253ull
 };
 
+uint64_t ucs_gcd(uint64_t a, uint64_t b)
+{
+    uint64_t t;
+
+    while (b != 0) {
+        t = a % b;
+        a = b;
+        b = t;
+    }
+
+    return a;
+}
+
+uint64_t ucs_lcm(uint64_t a, uint64_t b)
+{
+    uint64_t g;
+
+    if ((a == 0) || (b == 0)) {
+        return 0;
+    }
+
+    g = ucs_gcd(a, b);
+    return a / g * b;
+}
+
 uint64_t ucs_get_prime(unsigned index_val)
 {
     static const unsigned num_primes = sizeof(ucs_large_primes) / sizeof(ucs_large_primes[0]);

@@ -32,6 +32,8 @@ typedef struct ucp_device_remote_mem_list {
      */
     uint16_t                          version;
 
+    uint16_t                          num_lanes;
+
     /**
      * Number of entries in the memory descriptors array @a elems.
      */
@@ -61,6 +63,7 @@ typedef struct ucp_device_local_mem_list {
      */
     uint16_t                         version;
 
+    uint16_t                         num_lanes;
     /**
      * Number of entries in the memory descriptors array @a elems.
      */
