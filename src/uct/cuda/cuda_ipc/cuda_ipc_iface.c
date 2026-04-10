@@ -311,6 +311,10 @@ static void uct_cuda_ipc_complete_event(uct_iface_h tl_iface,
                                                                uct_cuda_ipc_event_desc_t);
     ucs_status_t status;
 
+    if (cuda_ipc_event->mapped_addr == NULL) {
+        return; /* VMM_MULTI persistent mapping: cleanup at rkey_release */
+    }
+
     status = uct_cuda_ipc_unmap_memhandle(cuda_ipc_event->pid,
                                           cuda_ipc_event->pid_ns,
                                           cuda_ipc_event->d_bptr,

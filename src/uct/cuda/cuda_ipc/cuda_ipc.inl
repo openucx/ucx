@@ -96,22 +96,36 @@ uct_cuda_ipc_is_rkey_local(pid_t rkey_pid, ucs_sys_ns_t rkey_pid_ns)
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_ipc_get_remote_address(
-        uct_cuda_ipc_extended_rkey_t *rkey, uint64_t raddr, CUdevice cu_dev,
+        uct_cuda_ipc_unpacked_rkey_t *rkey, uint64_t raddr, CUdevice cu_dev,
         void **laddr_p, void **base_addr_p)
 {
     ucs_status_t status;
     ptrdiff_t offset;
     void *mapped_addr;
 
-    status = uct_cuda_ipc_map_memhandle(rkey, cu_dev, &mapped_addr,
+#if HAVE_CUDA_FABRIC
+    if (rkey->super.super.ph.handle_type ==
+            UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM_MULTI) {
+        offset = raddr - rkey->super.super.d_bptr;
+        ucs_assertv(offset <= rkey->super.super.b_len,
+                    "offset:%ld b_len:%lu", offset, rkey->super.super.b_len);
+        *laddr_p = (void*)(rkey->contig_va + offset);
+        if (base_addr_p != NULL) {
+            *base_addr_p = NULL;
+        }
+        return UCS_OK;
+    }
+#endif
+
+    status = uct_cuda_ipc_map_memhandle(&rkey->super, cu_dev, &mapped_addr,
                                         UCS_LOG_LEVEL_ERROR);
     if (ucs_unlikely(status != UCS_OK)) {
         return status;
     }
 
-    offset = UCS_PTR_BYTE_DIFF(rkey->super.d_bptr, raddr);
-    ucs_assertv(offset <= rkey->super.b_len, "offset:%ld b_len:%lu", offset,
-                rkey->super.b_len);
+    offset = UCS_PTR_BYTE_DIFF(rkey->super.super.d_bptr, raddr);
+    ucs_assertv(offset <= rkey->super.super.b_len, "offset:%ld b_len:%lu",
+                offset, rkey->super.super.b_len);
     *laddr_p = UCS_PTR_BYTE_OFFSET(mapped_addr, offset);
     if (base_addr_p != NULL) {
         *base_addr_p = mapped_addr;
