@@ -738,8 +738,8 @@ ucs_status_t uct_cuda_ipc_rkey_ptr(uct_component_t *component, uct_rkey_t rkey,
     rkey_handle->mapped_addr = mapped_addr;
 
 out:
-    *laddr_p = uct_cuda_ipc_get_local_address(&extended_rkey->super, raddr,
-                                              rkey_handle->mapped_addr);
+    *laddr_p = uct_cuda_ipc_rkey_get_local_address(&extended_rkey->super, raddr,
+                                                   rkey_handle->mapped_addr);
     return UCS_OK;
 }
 

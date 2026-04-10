@@ -96,12 +96,12 @@ uct_cuda_ipc_is_rkey_local(pid_t rkey_pid, ucs_sys_ns_t rkey_pid_ns)
 }
 
 static UCS_F_ALWAYS_INLINE void *
-uct_cuda_ipc_get_local_address(const uct_cuda_ipc_rkey_t *rkey,
-                               uint64_t raddr,
-                               const void *mapped_addr)
+uct_cuda_ipc_rkey_get_local_address(const uct_cuda_ipc_rkey_t *rkey,
+                                    uint64_t raddr, const void *mapped_addr)
 {
     const ptrdiff_t offset = UCS_PTR_BYTE_DIFF(rkey->d_bptr, raddr);
-    ucs_assertv(offset <= rkey->b_len, "offset:%ld b_len:%lu", offset,
+
+    ucs_assertv(offset <= rkey->b_len, "offset=%ld b_len=%lu", offset,
                 rkey->b_len);
     return UCS_PTR_BYTE_OFFSET(mapped_addr, offset);
 }

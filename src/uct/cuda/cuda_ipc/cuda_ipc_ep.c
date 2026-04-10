@@ -131,8 +131,9 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
         goto out;
     }
 
-    mapped_rem_addr = uct_cuda_ipc_get_local_address(&key->super.super,
-                                                     remote_addr, mapped_addr);
+    mapped_rem_addr = uct_cuda_ipc_rkey_get_local_address(&key->super.super,
+                                                          remote_addr,
+                                                          mapped_addr);
 
     /* round-robin */
     q_desc = &ctx_rsc->queue_desc[key->stream_id % iface->config.max_streams];
