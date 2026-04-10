@@ -698,8 +698,6 @@ ucs_status_t uct_iface_handle_ep_err(uct_iface_h iface, uct_ep_h ep,
 void uct_base_iface_query(uct_base_iface_t *iface,
                           uct_iface_attr_v2_t *iface_attr)
 {
-    memset(iface_attr, 0, sizeof(*iface_attr));
-
     iface_attr->max_num_eps   = iface->config.max_num_eps;
     iface_attr->dev_num_paths = 1;
 }
