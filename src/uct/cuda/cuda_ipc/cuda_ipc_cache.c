@@ -250,7 +250,6 @@ static void uct_cuda_ipc_cache_evict_lru(uct_cuda_ipc_cache_t *cache)
 
 static void uct_cuda_ipc_cache_purge(uct_cuda_ipc_cache_t *cache)
 {
-    int active = uct_cuda_ctx_is_active();
     uct_cuda_ipc_cache_region_t *region, *tmp;
     ucs_list_link_t region_list;
 
@@ -258,9 +257,7 @@ static void uct_cuda_ipc_cache_purge(uct_cuda_ipc_cache_t *cache)
     ucs_pgtable_purge(&cache->pgtable, uct_cuda_ipc_cache_region_collect_callback,
                       &region_list);
     ucs_list_for_each_safe(region, tmp, &region_list, list) {
-        if (active) {
-            uct_cuda_ipc_close_memhandle(region);
-        }
+        uct_cuda_ipc_close_memhandle(region);
         ucs_free(region);
     }
 
@@ -829,6 +826,28 @@ void uct_cuda_ipc_cache_set_global_limits(unsigned long max_regions,
                                                     max_regions);
     uct_cuda_ipc_remote_cache.max_size    = ucs_min(uct_cuda_ipc_remote_cache.max_size,
                                                     max_size);
+}
+
+void uct_cuda_ipc_destroy_cache_by_pid(pid_t pid)
+{
+    uct_cuda_ipc_cache_hash_key_t cache_hash_key;
+    uct_cuda_ipc_cache_t *cache;
+    khint_t khiter;
+
+    ucs_recursive_spin_lock(&uct_cuda_ipc_remote_cache.lock);
+
+    kh_foreach(&uct_cuda_ipc_remote_cache.hash, cache_hash_key, cache, {
+        if (cache_hash_key.pid != pid) {
+            continue;
+        }
+
+        uct_cuda_ipc_destroy_cache(cache);
+        khiter = kh_get(cuda_ipc_rem_cache, &uct_cuda_ipc_remote_cache.hash,
+                        cache_hash_key);
+        kh_del(cuda_ipc_rem_cache, &uct_cuda_ipc_remote_cache.hash, khiter);
+    });
+
+    ucs_recursive_spin_unlock(&uct_cuda_ipc_remote_cache.lock);
 }
 
 UCS_STATIC_INIT {
