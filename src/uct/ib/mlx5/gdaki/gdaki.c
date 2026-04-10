@@ -30,21 +30,21 @@
 #define UCT_GDAKI_DEV_QP_SIZE          128
 
 typedef enum {
-    UCT_RC_GDAKI_EP_MGMT_MODE_POOL,
-    UCT_RC_GDAKI_EP_MGMT_MODE_DIRECT,
-    UCT_RC_GDAKI_EP_MGMT_MODE_LAST
-} uct_rc_gdaki_ep_mgmt_mode_t;
+    UCT_RC_GDAKI_EP_ALLOC_MODE_POOL,
+    UCT_RC_GDAKI_EP_ALLOC_MODE_DIRECT,
+    UCT_RC_GDAKI_EP_ALLOC_MODE_LAST
+} uct_rc_gdaki_ep_alloc_mode_t;
 
-static const char *uct_rc_gdaki_ep_mgmt_mode_names[] = {
-    [UCT_RC_GDAKI_EP_MGMT_MODE_POOL]   = "pool",
-    [UCT_RC_GDAKI_EP_MGMT_MODE_DIRECT] = "direct",
-    [UCT_RC_GDAKI_EP_MGMT_MODE_LAST]   = NULL
+static const char *uct_rc_gdaki_ep_alloc_mode_names[] = {
+    [UCT_RC_GDAKI_EP_ALLOC_MODE_POOL]   = "pool",
+    [UCT_RC_GDAKI_EP_ALLOC_MODE_DIRECT] = "direct",
+    [UCT_RC_GDAKI_EP_ALLOC_MODE_LAST]   = NULL
 };
 
 typedef struct {
     uct_rc_iface_common_config_t      super;
     uct_rc_mlx5_iface_common_config_t mlx5;
-    uct_rc_gdaki_ep_mgmt_mode_t       ep_mgmt_mode;
+    uct_rc_gdaki_ep_alloc_mode_t      ep_alloc_mode;
     unsigned                          num_channels;
     unsigned                          num_eps;
 } uct_rc_gdaki_iface_config_t;
@@ -64,12 +64,12 @@ ucs_config_field_t uct_rc_gdaki_iface_config_table[] = {
      ucs_offsetof(uct_rc_gdaki_iface_config_t, num_channels),
      UCS_CONFIG_TYPE_UINT},
 
-    {"EP_MGMT_MODE", "pool",
-     "Endpoint channel management mode.\n"
+    {"EP_ALLOC_MODE", "pool",
+     "Endpoint channel allocation mode.\n"
      " - pool   : allocate channels from pooled chunks\n"
      " - direct : allocate channels per endpoint directly",
-     ucs_offsetof(uct_rc_gdaki_iface_config_t, ep_mgmt_mode),
-     UCS_CONFIG_TYPE_ENUM(uct_rc_gdaki_ep_mgmt_mode_names)},
+     ucs_offsetof(uct_rc_gdaki_iface_config_t, ep_alloc_mode),
+     UCS_CONFIG_TYPE_ENUM(uct_rc_gdaki_ep_alloc_mode_names)},
 
     {"NUM_PRE_ALLOC_EPS", "32",
      "Expected number of pre-allocated endpoints. The channel pool grows if\n"
@@ -251,8 +251,6 @@ uct_rc_gdaki_umem_reg(const uct_ib_md_t *md, struct ibv_context *ibv_context,
 #endif
 }
 
-typedef uct_rc_gdaki_channel_block_mem_t uct_rc_gdaki_pool_chunk_hdr_t;
-
 typedef struct {
     uint64_t pgsz_bitmap;
     size_t   dev_ep_size;
@@ -379,7 +377,8 @@ err_cleanup:
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t uct_rc_gdaki_pool_chunk_init(
-        ucs_mpool_t *mp, uct_rc_gdaki_pool_chunk_hdr_t *hdr, unsigned num_elems)
+        ucs_mpool_t *mp, uct_rc_gdaki_channel_block_mem_t *hdr,
+        unsigned num_elems)
 {
     uct_rc_gdaki_pool_priv_t *priv = ucs_mpool_priv(mp);
     uct_rc_gdaki_iface_t *iface    = ucs_container_of(mp, uct_rc_gdaki_iface_t,
@@ -399,7 +398,7 @@ uct_rc_gdaki_pool_chunk_alloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
                                                       channel_pool);
     const uct_ib_md_t *md = ucs_derived_of(iface->super.super.super.super.md,
                                            uct_ib_md_t);
-    uct_rc_gdaki_pool_chunk_hdr_t *hdr;
+    uct_rc_gdaki_channel_block_mem_t *hdr;
     size_t host_alloc_size, gpu_alloc_size;
     unsigned num_elems;
     ucs_status_t status;
@@ -464,9 +463,9 @@ static void uct_rc_gdaki_pool_chunk_release(ucs_mpool_t *mp, void *chunk)
 {
     uct_rc_gdaki_iface_t *iface = ucs_container_of(mp, uct_rc_gdaki_iface_t,
                                                    channel_pool);
-    uct_rc_gdaki_pool_chunk_hdr_t *hdr = (uct_rc_gdaki_pool_chunk_hdr_t*)chunk -
-                                         1;
-    ucs_mpool_chunk_t *mp_chunk        = chunk;
+    uct_rc_gdaki_channel_block_mem_t *hdr =
+            (uct_rc_gdaki_channel_block_mem_t*)chunk - 1;
+    ucs_mpool_chunk_t *mp_chunk = chunk;
 
     uct_rc_gdaki_chunk_channels_destroy(mp, mp_chunk->elems,
                                         mp_chunk->num_elems,
@@ -648,7 +647,7 @@ static void uct_rc_gdaki_cleanup_channels_direct(uct_rc_gdaki_iface_t *iface,
 static ucs_status_t uct_rc_gdaki_ep_init_channels(uct_rc_gdaki_iface_t *iface,
                                                   uct_rc_gdaki_ep_t *ep)
 {
-    if (iface->ep_mgmt_mode == UCT_RC_GDAKI_EP_MGMT_MODE_POOL) {
+    if (iface->ep_alloc_mode == UCT_RC_GDAKI_EP_ALLOC_MODE_POOL) {
         return uct_rc_gdaki_ep_init_channels_pooled(iface, ep);
     }
 
@@ -658,7 +657,7 @@ static ucs_status_t uct_rc_gdaki_ep_init_channels(uct_rc_gdaki_iface_t *iface,
 static void uct_rc_gdaki_ep_cleanup_channels(uct_rc_gdaki_iface_t *iface,
                                              uct_rc_gdaki_ep_t *ep)
 {
-    if (iface->ep_mgmt_mode == UCT_RC_GDAKI_EP_MGMT_MODE_POOL) {
+    if (iface->ep_alloc_mode == UCT_RC_GDAKI_EP_ALLOC_MODE_POOL) {
         uct_rc_gdaki_cleanup_channels_pooled(ep);
         return;
     }
@@ -1041,7 +1040,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
     }
 
     self->num_channels = ucs_roundup_pow2(config->num_channels);
-    self->ep_mgmt_mode = config->ep_mgmt_mode;
+    self->ep_alloc_mode = config->ep_alloc_mode;
 
     status = uct_rc_mlx5_dp_ordering_ooo_init(md, &self->super,
                                               md->dp_ordering_cap_devx.rc,
@@ -1110,7 +1109,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
         goto err_lock;
     }
 
-    if (self->ep_mgmt_mode == UCT_RC_GDAKI_EP_MGMT_MODE_POOL) {
+    if (self->ep_alloc_mode == UCT_RC_GDAKI_EP_ALLOC_MODE_POOL) {
         status = uct_rc_gdaki_iface_init_channel_pool(self, config);
         if (status != UCS_OK) {
             goto err_pool;
@@ -1138,7 +1137,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_gdaki_iface_t)
     pthread_mutex_destroy(&self->ep_init_lock);
     ibv_dereg_mr(self->atomic_mr);
     (void)UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(self->cuda_ctx));
-    if (self->ep_mgmt_mode == UCT_RC_GDAKI_EP_MGMT_MODE_POOL) {
+    if (self->ep_alloc_mode == UCT_RC_GDAKI_EP_ALLOC_MODE_POOL) {
         uct_rc_gdaki_iface_cleanup_channel_pool(self);
     }
     cuMemFree(self->atomic_raw);

@@ -42,7 +42,7 @@ typedef struct uct_rc_gdaki_iface {
     uint64_t                   *atomic_buff;
     CUcontext                  cuda_ctx;
     unsigned                   num_channels;
-    unsigned                   ep_mgmt_mode;
+    unsigned                   ep_alloc_mode;
     pthread_mutex_t            ep_init_lock;
     ucs_mpool_t                channel_pool;
 } uct_rc_gdaki_iface_t;
