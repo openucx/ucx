@@ -1,11 +1,11 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2026. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2019. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
-#ifdef HAVE_CONFIG_H
-#include "config.h"
-#endif
+ #ifdef HAVE_CONFIG_H
+ #  include "config.h"
+ #endif
 
 #include <uct/cuda/base/cuda_iface.h>
 #include <uct/api/uct_def.h>
