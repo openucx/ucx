@@ -469,7 +469,9 @@ uct_rc_txqp_completion_inl_resp(uct_rc_txqp_t *txqp, const void *resp, uint16_t 
 static UCS_F_ALWAYS_INLINE uint8_t
 uct_rc_iface_tx_moderation(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp, uint8_t flag)
 {
-    return (txqp->unsignaled >= iface->config.tx_moderation) ? flag : 0;
+    return (txqp->unsignaled >= iface->config.tx_moderation) ||
+           (iface->tx.cq_available <= (signed)iface->config.tx_moderation)
+           ? flag : 0;
 }
 
 static UCS_F_ALWAYS_INLINE void
