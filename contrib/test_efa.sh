@@ -109,6 +109,7 @@ run_gtests() {
     IBMOCK_FILTER="$IBMOCK_FILTER:srd/test_ucp_peer_failure.*"
     IBMOCK_FILTER="$IBMOCK_FILTER:srd/test_ucp_perf.envelope/*"
     IBMOCK_FILTER="$IBMOCK_FILTER:*test_ucp_am_psn*:*test_ucp_fault_tolerance*"
+    IBMOCK_FILTER="$IBMOCK_FILTER:*test_ucp_proto_mock_cuda_ipc*"
 
     # Try the faster approach before valgrind
     make -C contrib/test/gtest test \
