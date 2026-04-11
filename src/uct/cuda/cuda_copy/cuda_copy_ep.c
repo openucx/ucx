@@ -289,7 +289,7 @@ static void uct_cuda_copy_vmm_try_set_access(CUdeviceptr ptr)
     if (cu_result != CUDA_SUCCESS) {
         return;
     }
-    cuMemRelease(alloc_handle);
+    UCT_CUDADRV_FUNC_LOG_WARN(cuMemRelease(alloc_handle));
 
     cu_result = cuCtxGetDevice(&current_device);
     if (cu_result != CUDA_SUCCESS) {
