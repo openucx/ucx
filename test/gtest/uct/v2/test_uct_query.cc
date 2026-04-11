@@ -30,6 +30,7 @@ class test_uct_query : public uct_test {
 public:
     void init() override;
     ucs_status_t iface_estimate_perf(uct_perf_attr_t *perf_attr) const;
+    ucs_status_t iface_query_v2(uct_iface_attr_v2_t *iface_attr) const;
     const uct_iface_attr &get_iface_attr() const;
     static uct_perf_attr_t init_perf_attr();
 
@@ -52,6 +53,12 @@ test_uct_query::iface_estimate_perf(uct_perf_attr_t *perf_attr) const
 const uct_iface_attr &test_uct_query::get_iface_attr() const
 {
     return m_e->iface_attr();
+}
+
+ucs_status_t
+test_uct_query::iface_query_v2(uct_iface_attr_v2_t *iface_attr) const
+{
+    return uct_iface_query_v2(m_e->iface(), iface_attr);
 }
 
 uct_perf_attr_t test_uct_query::init_perf_attr()
@@ -102,6 +109,47 @@ UCS_TEST_P(test_uct_query, query_perf)
            and gdr_copy transports */
         EXPECT_NE(perf_attr.bandwidth.shared, perf_attr_get.bandwidth.shared);
     }
+}
+
+UCS_TEST_P(test_uct_query, iface_query_v2_consistency)
+{
+    const uct_iface_attr_t &attr_v1 = get_iface_attr();
+    uct_iface_attr_v2_t attr_v2;
+
+    attr_v2.field_mask = UINT64_MAX;
+    ASSERT_UCS_OK(iface_query_v2(&attr_v2));
+
+    EXPECT_EQ(attr_v1.cap.put.max_short, attr_v2.cap.put.max_short);
+    EXPECT_EQ(attr_v1.cap.put.max_bcopy, attr_v2.cap.put.max_bcopy);
+    EXPECT_EQ(attr_v1.cap.put.max_zcopy, attr_v2.cap.put.max_zcopy);
+    EXPECT_EQ(attr_v1.cap.put.max_iov, attr_v2.cap.put.max_iov);
+    EXPECT_EQ(attr_v1.cap.get.max_short, attr_v2.cap.get.max_short);
+    EXPECT_EQ(attr_v1.cap.get.max_bcopy, attr_v2.cap.get.max_bcopy);
+    EXPECT_EQ(attr_v1.cap.get.max_zcopy, attr_v2.cap.get.max_zcopy);
+    EXPECT_EQ(attr_v1.cap.get.max_iov, attr_v2.cap.get.max_iov);
+    EXPECT_EQ(attr_v1.cap.am.max_short, attr_v2.cap.am.max_short);
+    EXPECT_EQ(attr_v1.cap.am.max_bcopy, attr_v2.cap.am.max_bcopy);
+    EXPECT_EQ(attr_v1.cap.am.max_zcopy, attr_v2.cap.am.max_zcopy);
+    EXPECT_EQ(attr_v1.cap.am.max_hdr, attr_v2.cap.am.max_hdr);
+    EXPECT_EQ(attr_v1.cap.am.max_iov, attr_v2.cap.am.max_iov);
+    EXPECT_EQ(attr_v1.cap.flags, attr_v2.cap.flags);
+    EXPECT_EQ(attr_v1.cap.event_flags, attr_v2.cap.event_flags);
+    EXPECT_EQ(attr_v1.cap.atomic32.op_flags, attr_v2.cap.atomic32.op_flags);
+    EXPECT_EQ(attr_v1.cap.atomic32.fop_flags, attr_v2.cap.atomic32.fop_flags);
+    EXPECT_EQ(attr_v1.cap.atomic64.op_flags, attr_v2.cap.atomic64.op_flags);
+    EXPECT_EQ(attr_v1.cap.atomic64.fop_flags, attr_v2.cap.atomic64.fop_flags);
+    EXPECT_EQ(attr_v1.device_addr_len, attr_v2.device_addr_len);
+    EXPECT_EQ(attr_v1.iface_addr_len, attr_v2.iface_addr_len);
+    EXPECT_EQ(attr_v1.ep_addr_len, attr_v2.ep_addr_len);
+    EXPECT_EQ(attr_v1.max_conn_priv, attr_v2.max_conn_priv);
+    EXPECT_EQ(attr_v1.overhead, attr_v2.overhead);
+    EXPECT_EQ(attr_v1.bandwidth.dedicated, attr_v2.bandwidth.dedicated);
+    EXPECT_EQ(attr_v1.bandwidth.shared, attr_v2.bandwidth.shared);
+    EXPECT_EQ(attr_v1.latency.c, attr_v2.latency.c);
+    EXPECT_EQ(attr_v1.latency.m, attr_v2.latency.m);
+    EXPECT_EQ(attr_v1.priority, attr_v2.priority);
+    EXPECT_EQ(attr_v1.max_num_eps, attr_v2.max_num_eps);
+    EXPECT_EQ(attr_v1.dev_num_paths, attr_v2.dev_num_paths);
 }
 
 UCT_INSTANTIATE_TEST_CASE(test_uct_query)
