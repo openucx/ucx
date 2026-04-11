@@ -256,34 +256,28 @@ typedef struct {
     size_t   dev_ep_size;
 } uct_rc_gdaki_pool_priv_t;
 
-typedef uct_rc_gdaki_channel_block_t *(*uct_rc_gdaki_channel_block_get_t)(
-        ucs_mpool_t *mp, void *elems, unsigned ep_index);
-
 static uct_rc_gdaki_channel_block_t *
-uct_rc_gdaki_channel_block_pooled(ucs_mpool_t *mp, void *elems,
-                                  unsigned ep_index)
+uct_rc_gdaki_channel_block(uct_rc_gdaki_iface_t *iface, ucs_mpool_t *mp,
+                           void *elems, unsigned ep_index)
 {
-    return ucs_mpool_chunk_obj(mp, elems, ep_index);
+    if (iface->ep_alloc_mode == UCT_RC_GDAKI_EP_ALLOC_MODE_POOL) {
+        return ucs_mpool_chunk_obj(mp, elems, ep_index);
+    } else {
+        return elems;
+    }
 }
 
-static uct_rc_gdaki_channel_block_t *
-uct_rc_gdaki_channel_block_direct(ucs_mpool_t *mp, void *elems,
-                                  unsigned ep_index)
-{
-    (void)mp;
-    ucs_assert(ep_index == 0);
-    return elems;
-}
-
-static void uct_rc_gdaki_chunk_channels_destroy(
-        ucs_mpool_t *mp, void *elems, unsigned num_elems, unsigned end_ep,
-        unsigned end_ch, uct_rc_gdaki_channel_block_get_t channel_block_get)
+static void uct_rc_gdaki_chunk_channels_destroy(uct_rc_gdaki_iface_t *iface,
+                                                ucs_mpool_t *mp, void *elems,
+                                                unsigned num_elems,
+                                                unsigned end_ep,
+                                                unsigned end_ch)
 {
     uct_rc_gdaki_channel_block_t *channel_block;
     unsigned ep_index, channel_index, num_channels;
 
     for (ep_index = 0; ep_index < num_elems; ++ep_index) {
-        channel_block = channel_block_get(mp, elems, ep_index);
+        channel_block = uct_rc_gdaki_channel_block(iface, mp, elems, ep_index);
         num_channels  = (ep_index < end_ep) ? end_ch + 1 : end_ch;
         for (channel_index = 0; channel_index < num_channels; ++channel_index) {
             uct_ib_mlx5_devx_destroy_qp_common(
@@ -294,10 +288,11 @@ static void uct_rc_gdaki_chunk_channels_destroy(
     }
 }
 
-static ucs_status_t uct_rc_gdaki_init_channel_chunk(
-        uct_rc_gdaki_iface_t *iface, uct_rc_gdaki_channel_block_mem_t *mem,
-        size_t dev_ep_size, ucs_mpool_t *mp, void *elems, unsigned num_elems,
-        uct_rc_gdaki_channel_block_get_t channel_block_get)
+static ucs_status_t
+uct_rc_gdaki_init_channel_chunk(uct_rc_gdaki_iface_t *iface,
+                                uct_rc_gdaki_channel_block_mem_t *mem,
+                                size_t dev_ep_size, ucs_mpool_t *mp,
+                                void *elems, unsigned num_elems)
 {
     uct_ib_iface_init_attr_t init_attr = {};
     uct_ib_mlx5_cq_attr_t cq_attr      = {};
@@ -331,7 +326,8 @@ static ucs_status_t uct_rc_gdaki_init_channel_chunk(
         size_t ch_wq_offset = channel_index * qp_attr.len;
         for (ep_index = 0; ep_index < num_elems; ++ep_index) {
             ep_offset     = ep_index * dev_ep_size;
-            channel_block = channel_block_get(mp, elems, ep_index);
+            channel_block = uct_rc_gdaki_channel_block(iface, mp, elems,
+                                                       ep_index);
             channel       = &channel_block->channels[channel_index];
             if (channel_index == 0) {
                 channel_block->gpu_ptr = (uintptr_t)
@@ -369,8 +365,8 @@ static ucs_status_t uct_rc_gdaki_init_channel_chunk(
     return UCS_OK;
 
 err_cleanup:
-    uct_rc_gdaki_chunk_channels_destroy(mp, elems, num_elems, ep_index,
-                                        channel_index, channel_block_get);
+    uct_rc_gdaki_chunk_channels_destroy(iface, mp, elems, num_elems, ep_index,
+                                        channel_index);
     ucs_error("gdaki channel chunk init: create_cq/qp failed (ch=%u ep=%u)",
               channel_index, ep_index);
     return status;
@@ -386,8 +382,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_rc_gdaki_pool_chunk_init(
     void *elems = ucs_mpool_chunk_elems(mp, (void*)(hdr + 1));
 
     return uct_rc_gdaki_init_channel_chunk(iface, hdr, priv->dev_ep_size, mp,
-                                           elems, num_elems,
-                                           uct_rc_gdaki_channel_block_pooled);
+                                           elems, num_elems);
 }
 
 static ucs_status_t
@@ -467,11 +462,10 @@ static void uct_rc_gdaki_pool_chunk_release(ucs_mpool_t *mp, void *chunk)
             (uct_rc_gdaki_channel_block_mem_t*)chunk - 1;
     ucs_mpool_chunk_t *mp_chunk = chunk;
 
-    uct_rc_gdaki_chunk_channels_destroy(mp, mp_chunk->elems,
+    uct_rc_gdaki_chunk_channels_destroy(iface, mp, mp_chunk->elems,
                                         mp_chunk->num_elems,
                                         mp_chunk->num_elems,
-                                        iface->num_channels - 1,
-                                        uct_rc_gdaki_channel_block_pooled);
+                                        iface->num_channels - 1);
     mlx5dv_devx_umem_dereg(hdr->umem);
     cuMemFree(hdr->gpu_raw);
     ucs_free(hdr);
@@ -601,8 +595,7 @@ uct_rc_gdaki_ep_init_channels_direct(uct_rc_gdaki_iface_t *iface,
     }
 
     status = uct_rc_gdaki_init_channel_chunk(iface, &ep->mem, dev_ep_size, NULL,
-                                             ep->channel_block, 1,
-                                             uct_rc_gdaki_channel_block_direct);
+                                             ep->channel_block, 1);
     if (status != UCS_OK) {
         goto err_umem;
     }
@@ -632,9 +625,8 @@ static void uct_rc_gdaki_cleanup_channels_direct(uct_rc_gdaki_iface_t *iface,
         return;
     }
 
-    uct_rc_gdaki_chunk_channels_destroy(NULL, ep->channel_block, 1, 1,
-                                        iface->num_channels - 1,
-                                        uct_rc_gdaki_channel_block_direct);
+    uct_rc_gdaki_chunk_channels_destroy(iface, NULL, ep->channel_block, 1, 1,
+                                        iface->num_channels - 1);
     mlx5dv_devx_umem_dereg(ep->mem.umem);
     cuMemFree(ep->mem.gpu_raw);
     ucs_free(ep->channel_block);
