@@ -74,7 +74,9 @@ typedef struct {
 
 
 typedef enum {
+    /* Host memory registered with cuMemHostRegister */
     UCT_CUDA_COPY_MEMH_HOST,
+    /* VMM memory needing cross-device access management */
     UCT_CUDA_COPY_MEMH_VMM
 } uct_cuda_copy_memh_type_t;
 

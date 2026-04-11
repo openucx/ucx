@@ -3,12 +3,13 @@
  * See file LICENSE for terms.
  */
 
-#include "base/cuda_util.h"
 #ifdef HAVE_CONFIG_H
 #  include "config.h"
 #endif
 
 #include "cuda_copy_md.h"
+
+#include <uct/cuda/base/cuda_util.h>
 
 #include <string.h>
 #include <limits.h>
@@ -137,7 +138,7 @@ uct_cuda_copy_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
     return UCS_OK;
 }
 
-/**
+/*
  * For VMM allocations, grant cross-device read-write access so that
  * cuMemcpyAsync can operate between any pair of devices. The original access
  * flags are saved per-device so they can be restored on deregistration.
@@ -145,6 +146,7 @@ uct_cuda_copy_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
 static ucs_status_t uct_cuda_copy_mem_reg_vmm(void *address, uct_mem_h *memh_p)
 {
 #ifdef HAVE_CUMEMRETAINALLOCATIONHANDLE
+    int ctx_pushed = 0;
     CUmemGenericAllocationHandle alloc_handle;
     CUmemAllocationProp prop;
     CUmemAccessDesc access_desc;
@@ -152,6 +154,7 @@ static ucs_status_t uct_cuda_copy_mem_reg_vmm(void *address, uct_mem_h *memh_p)
     ucs_status_t status;
     uct_cuda_copy_memh_t *memh;
     int num_devices, dev, can_access_peer;
+    CUdevice current_device;
     CUdeviceptr base_ptr;
     size_t base_size;
     unsigned long long cur_flags;
@@ -162,49 +165,60 @@ static ucs_status_t uct_cuda_copy_mem_reg_vmm(void *address, uct_mem_h *memh_p)
         return UCS_ERR_UNSUPPORTED;
     }
 
-    status = UCT_CUDADRV_FUNC_LOG_DEBUG(
+    status = UCT_CUDADRV_FUNC_LOG_WARN(
             cuMemGetAllocationPropertiesFromHandle(&prop, alloc_handle));
     UCT_CUDADRV_FUNC_LOG_WARN(cuMemRelease(alloc_handle));
     if (status != UCS_OK) {
-        return status;
+        return UCS_ERR_UNSUPPORTED;
     }
 
     if (prop.location.type != CU_MEM_LOCATION_TYPE_DEVICE) {
         return UCS_ERR_UNSUPPORTED;
     }
 
+    cu_result = cuCtxGetDevice(&current_device);
+    if (cu_result != CUDA_SUCCESS) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    if (current_device != (int)prop.location.id) {
+        status = uct_cuda_ctx_primary_push((int)prop.location.id, 0,
+                                           UCS_LOG_LEVEL_DEBUG);
+        if (status != UCS_OK) {
+            return status;
+        }
+        ctx_pushed = 1;
+    }
+
     status = UCT_CUDADRV_FUNC_LOG_DEBUG(
             cuMemGetAddressRange(&base_ptr, &base_size, (CUdeviceptr)address));
     if (status != UCS_OK) {
-        return status;
+        goto out_pop;
     }
 
     status = UCT_CUDADRV_FUNC_LOG_DEBUG(cuDeviceGetCount(&num_devices));
     if (status != UCS_OK) {
-        return status;
+        goto out_pop;
     }
 
     if (num_devices <= 1) {
-        return UCS_ERR_UNSUPPORTED;
+        status = UCS_ERR_UNSUPPORTED;
+        goto out_pop;
     }
 
-    memh = ucs_malloc(sizeof(*memh), "uct_cuda_copy_memh_vmm");
+    memh = ucs_calloc(1, sizeof(*memh) +
+                      num_devices * sizeof(*memh->vmm.saved_flags),
+                      "uct_cuda_copy_memh_vmm");
     if (memh == NULL) {
-        return UCS_ERR_NO_MEMORY;
-    }
-
-    memh->vmm.saved_flags = ucs_calloc(num_devices,
-                                       sizeof(*memh->vmm.saved_flags),
-                                       "uct_cuda_copy_vmm_flags");
-    if (memh->vmm.saved_flags == NULL) {
         status = UCS_ERR_NO_MEMORY;
-        goto err_free_memh;
+        goto out_pop;
     }
 
     memh->type             = UCT_CUDA_COPY_MEMH_VMM;
     memh->vmm.ptr          = base_ptr;
     memh->vmm.length       = base_size;
     memh->vmm.alloc_device = (int)prop.location.id;
+    memh->vmm.saved_flags  = (unsigned long long*)(memh + 1);
     ucs_dynamic_bitmap_init(&memh->vmm.granted);
 
     for (dev = 0; dev < num_devices; dev++) {
@@ -234,6 +248,9 @@ static ucs_status_t uct_cuda_copy_mem_reg_vmm(void *address, uct_mem_h *memh_p)
         }
 
         memh->vmm.saved_flags[dev] = cur_flags;
+        ucs_trace("VMM saved access flags 0x%llx for device %d on "
+                  "ptr 0x%llx",
+                  cur_flags, dev, (unsigned long long)base_ptr);
 
         if (cur_flags ==
             (unsigned long long)CU_MEM_ACCESS_FLAGS_PROT_READWRITE) {
@@ -258,7 +275,7 @@ static ucs_status_t uct_cuda_copy_mem_reg_vmm(void *address, uct_mem_h *memh_p)
 
     if (ucs_dynamic_bitmap_popcount(&memh->vmm.granted) == 0) {
         status = UCS_ERR_UNSUPPORTED;
-        goto err_free_flags;
+        goto err_free_bitmap;
     }
 
     ucs_debug("granted VMM cross-device access for alloc device %d "
@@ -268,13 +285,17 @@ static ucs_status_t uct_cuda_copy_mem_reg_vmm(void *address, uct_mem_h *memh_p)
               *ucs_array_begin(&memh->vmm.granted));
 
     *memh_p = memh;
-    return UCS_OK;
+    status  = UCS_OK;
+    goto out_pop;
 
-err_free_flags:
+err_free_bitmap:
     ucs_dynamic_bitmap_cleanup(&memh->vmm.granted);
-    ucs_free(memh->vmm.saved_flags);
-err_free_memh:
     ucs_free(memh);
+
+out_pop:
+    if (ctx_pushed) {
+        uct_cuda_ctx_primary_pop_and_release((int)prop.location.id);
+    }
     return status;
 #else
     return UCS_ERR_UNSUPPORTED;
@@ -374,7 +395,6 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_dereg,
         }
 
         ucs_dynamic_bitmap_cleanup(&memh->vmm.granted);
-        ucs_free(memh->vmm.saved_flags);
         break;
     }
 #endif
