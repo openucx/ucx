@@ -147,7 +147,7 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
         return uct_iface_scope_is_reachable(tl_iface, params);
     }
 
-    uct_iface_fill_info_str_buf(params, "MNNVL is not supported");
+    uct_iface_fill_info_str_buf(params, "different machine and no MNNVL");
     return 0;
 }
 
@@ -405,6 +405,7 @@ uct_cuda_ipc_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
 }
 
 static uct_iface_internal_ops_t uct_cuda_ipc_iface_internal_ops = {
+    .iface_query_v2         = uct_iface_base_query_v2,
     .iface_estimate_perf    = uct_cuda_ipc_estimate_perf,
     .iface_vfs_refresh      = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
     .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,

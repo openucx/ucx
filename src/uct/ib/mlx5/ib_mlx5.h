@@ -1325,4 +1325,8 @@ static inline const char *uct_ib_mlx5_dev_name(uct_ib_mlx5_md_t *md)
     return uct_ib_device_name(&md->super.dev);
 }
 
+ucs_sys_device_t uct_ib_mlx5dv_check_direct_nic(struct ibv_context *ctx,
+                                                ucs_sys_device_t sys_dev_ib,
+                                                int direct_nic);
+
 #endif

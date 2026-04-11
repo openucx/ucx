@@ -10,7 +10,7 @@
 AC_PREREQ([2.63])
 
 define([ucx_ver_major], 1)  # Major version. Usually does not change.
-define([ucx_ver_minor], 21) # Minor version. Increased for each release.
+define([ucx_ver_minor], 22) # Minor version. Increased for each release.
 define([ucx_ver_patch], 0)  # Patch version. Increased for a bugfix release.
 define([ucx_ver_extra], )   # Extra version string. Empty for a general release.
 
@@ -198,7 +198,6 @@ AS_IF([test "x$with_docs_only" = xyes],
      AM_CONDITIONAL([HAVE_CUDA_STATIC], [false])
      AM_CONDITIONAL([HAVE_NVCC], [false])
      AM_CONDITIONAL([HAVE_GDR_COPY], [false])
-     AM_CONDITIONAL([HAVE_GPUNETIO], [false])
      AM_CONDITIONAL([HAVE_ROCM], [false])
      AM_CONDITIONAL([HAVE_HIP], [false])
      AM_CONDITIONAL([HAVE_XPMEM], [false])
@@ -367,7 +366,6 @@ AC_SUBST([build_bindings], [${build_bindings}])
 # Final output
 #
 AC_CONFIG_FILES([Makefile
-                 stubs/Makefile
                  docs/doxygen/header.tex
                  src/uct/api/version.h
                  ])

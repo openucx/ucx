@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -750,7 +750,7 @@ ucs_status_t ucp_request_progress_counter(uct_pending_req_t *self)
 
     ++proto_config->selections;
 
-    return UCS_OK;
+    return status;
 }
 
 ucs_status_t ucp_request_progress_wrapper(uct_pending_req_t *self)

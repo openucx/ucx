@@ -266,60 +266,6 @@ typedef struct uct_am_handler {
 } uct_am_handler_t;
 
 
-/* Performance estimation operation */
-typedef ucs_status_t (*uct_iface_estimate_perf_func_t)(
-        uct_iface_h iface, uct_perf_attr_t *perf_attr);
-
-
-/* Refresh the VFS representation of the interface */
-typedef void (*uct_iface_vfs_refresh_func_t)(uct_iface_h iface);
-
-
-/* Query the attributes of the ep */
-typedef ucs_status_t (*uct_ep_query_func_t)(uct_ep_h ep, uct_ep_attr_t *ep_attr);
-
-
-/* Invalidate the ep to emulate transport level error */
-typedef ucs_status_t (*uct_ep_invalidate_func_t)(
-        uct_ep_h ep, const uct_ep_invalidate_params_t *params);
-
-/* Connect endpoint to remote endpoint */
-typedef ucs_status_t (*uct_ep_connect_to_ep_v2_func_t)(
-        uct_ep_h ep,
-        const uct_device_addr_t *device_addr,
-        const uct_ep_addr_t *ep_addr,
-        const uct_ep_connect_to_ep_params_t *params);
-
-
-/* Check if remote iface address is reachable */
-typedef int (*uct_iface_is_reachable_v2_func_t)(
-        const uct_iface_h iface,
-        const uct_iface_is_reachable_params_t *params);
-
-
-/* Check if a remote endpoint is connected */
-typedef int (*uct_ep_is_connected_func_t)(
-        uct_ep_h ep, const uct_ep_is_connected_params_t *params);
-
-
-/* Obtain a device endpoint */
-typedef ucs_status_t (*uct_ep_get_device_ep_func_t)(
-        uct_ep_h ep, uct_device_ep_h *device_ep_p);
-
-
-/* Internal operations, not exposed by the external API */
-typedef struct uct_iface_internal_ops {
-    uct_iface_estimate_perf_func_t   iface_estimate_perf;
-    uct_iface_vfs_refresh_func_t     iface_vfs_refresh;
-    uct_ep_query_func_t              ep_query;
-    uct_ep_invalidate_func_t         ep_invalidate;
-    uct_ep_connect_to_ep_v2_func_t   ep_connect_to_ep_v2;
-    uct_iface_is_reachable_v2_func_t iface_is_reachable_v2;
-    uct_ep_is_connected_func_t       ep_is_connected;
-    uct_ep_get_device_ep_func_t      ep_get_device_ep;
-} uct_iface_internal_ops_t;
-
-
 /**
  * Base structure of all interfaces.
  * Includes the AM table which we don't want to expose.
@@ -895,6 +841,9 @@ void uct_base_iface_progress_enable_cb(uct_base_iface_t *iface,
 void uct_base_iface_progress_disable(uct_iface_h tl_iface, unsigned flags);
 
 ucs_status_t
+uct_iface_base_query_v2(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr);
+
+ucs_status_t
 uct_base_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr);
 
 int uct_base_ep_is_connected(const uct_ep_h tl_ep,
@@ -920,7 +869,7 @@ int uct_iface_local_is_reachable(uct_iface_local_addr_ns_t *addr_ns,
                                  const uct_iface_is_reachable_params_t *params);
 
 void uct_iface_fill_info_str_buf(const uct_iface_is_reachable_params_t *params,
-                                 const char *fmt, ...);
+                                 const char *fmt, ...) UCS_F_PRINTF(2, 3);
 
 int uct_iface_is_reachable_params_valid(
         const uct_iface_is_reachable_params_t *params, uint64_t flags);

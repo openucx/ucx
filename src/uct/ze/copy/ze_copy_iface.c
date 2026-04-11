@@ -47,9 +47,7 @@ uct_ze_copy_iface_is_reachable_v2(const uct_iface_h tl_iface,
     }
 
     if (iface->id != *addr) {
-        uct_iface_fill_info_str_buf(params,
-                                    "different iface id %"PRIx64" vs %"PRIx64"",
-                                    iface->id, *addr);
+        uct_iface_fill_info_str_buf(params, "iface mismatch");
         return 0;
     }
 
@@ -139,22 +137,26 @@ static uct_iface_ops_t uct_ze_copy_iface_ops = {
     .ep_put_short             = uct_ze_copy_ep_put_short,
     .ep_get_zcopy             = uct_ze_copy_ep_get_zcopy,
     .ep_put_zcopy             = uct_ze_copy_ep_put_zcopy,
-    .ep_pending_add           = (uct_ep_pending_add_func_t)ucs_empty_function_return_busy,
-    .ep_pending_purge         = (uct_ep_pending_purge_func_t)ucs_empty_function,
+    .ep_pending_add           = (uct_ep_pending_add_func_t)
+            ucs_empty_function_return_busy,
+    .ep_pending_purge         = (uct_ep_pending_purge_func_t)
+            ucs_empty_function,
     .ep_flush                 = uct_base_ep_flush,
     .ep_fence                 = uct_base_ep_fence,
-    .ep_create                = uct_ep_create,
-    .ep_destroy               = uct_ep_destroy,
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_ze_copy_ep_t),
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_ze_copy_ep_t),
     .iface_flush              = uct_base_iface_flush,
     .iface_fence              = uct_base_iface_fence,
-    .iface_progress_enable    = (uct_iface_progress_enable_func_t)ucs_empty_function,
-    .iface_progress_disable   = (uct_iface_progress_disable_func_t)ucs_empty_function,
-    .iface_progress           = (uct_iface_progress_func_t)ucs_empty_function_return_zero,
+    .iface_progress_enable    = (uct_iface_progress_enable_func_t)
+            ucs_empty_function,
+    .iface_progress_disable   = (uct_iface_progress_disable_func_t)
+            ucs_empty_function,
+    .iface_progress           = (uct_iface_progress_func_t)
+            ucs_empty_function_return_zero,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_ze_copy_iface_t),
     .iface_query              = uct_ze_copy_iface_query,
-    .iface_get_device_address = (uct_iface_get_device_address_func_t)ucs_empty_function_return_success,
+    .iface_get_device_address = (uct_iface_get_device_address_func_t)
+            ucs_empty_function_return_success,
     .iface_get_address        = uct_ze_copy_iface_get_address,
     .iface_is_reachable       = uct_base_iface_is_reachable,
 };
@@ -223,6 +225,7 @@ uct_ze_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
 
 
 static uct_iface_internal_ops_t uct_ze_copy_iface_internal_ops = {
+    .iface_query_v2         = uct_iface_base_query_v2,
     .iface_estimate_perf    = uct_ze_copy_estimate_perf,
     .iface_vfs_refresh      = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
     .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,

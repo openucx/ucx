@@ -1,5 +1,5 @@
 /*
- * Copyright (C) Advanced Micro Devices, Inc. 2019-2023. ALL RIGHTS RESERVED.
+ * Copyright (C) Advanced Micro Devices, Inc. 2019-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -193,21 +193,22 @@ ucs_status_t uct_rocm_base_query_devices(uct_md_h md,
                                       num_tl_devices_p);
 }
 
-hsa_agent_t uct_rocm_base_get_dev_agent(int dev_num)
+hsa_agent_t uct_rocm_base_get_dev_agent(int gpu_num)
 {
-    ucs_assert(dev_num < uct_rocm_base_agents.num);
-    return uct_rocm_base_agents.agents[dev_num];
+    ucs_assertv(gpu_num < uct_rocm_base_agents.num_gpu, "gpu %d, num_gpus %d",
+                gpu_num, uct_rocm_base_agents.num_gpu);
+    return uct_rocm_base_agents.gpu_agents[gpu_num];
 }
 
 int uct_rocm_base_get_dev_num(hsa_agent_t agent)
 {
     int i;
 
-    for (i = 0; i < uct_rocm_base_agents.num; i++) {
-        if (uct_rocm_base_agents.agents[i].handle == agent.handle)
+    for (i = 0; i < uct_rocm_base_agents.num_gpu; i++) {
+        if (uct_rocm_base_agents.gpu_agents[i].handle == agent.handle) {
             return i;
+        }
     }
-    ucs_assert(0);
     return -1;
 }
 
@@ -251,7 +252,14 @@ hsa_status_t uct_rocm_base_get_ptr_info(void *ptr, size_t size, void **base_ptr,
         *base_size = info.sizeInBytes;
     }
     if (dev_type != NULL) {
-        if (info.type == HSA_EXT_POINTER_TYPE_UNKNOWN) {
+        /* HSA_EXT_POINTER_TYPE_RESERVED_ADDR check is required
+         * for rocm7+ for hip managed memory
+         */
+        if ((info.type == HSA_EXT_POINTER_TYPE_UNKNOWN)
+#ifdef HAVE_ROCM_RESERVED_ADDR_TYPE
+            || (info.type == HSA_EXT_POINTER_TYPE_RESERVED_ADDR)
+#endif
+        ) {
             *dev_type = HSA_DEVICE_TYPE_CPU;
         } else {
             status = hsa_agent_get_info(info.agentOwner, HSA_AGENT_INFO_DEVICE,
@@ -387,7 +395,7 @@ ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
     if ((hsa_mem_type == HSA_EXT_POINTER_TYPE_HSA) &&
         (dev_type == HSA_DEVICE_TYPE_GPU)) {
         mem_type = UCS_MEMORY_TYPE_ROCM;
-
+        uct_rocm_base_last_device_agent_used = uct_rocm_base_get_dev_num(agent);
         ucs_status = uct_rocm_base_get_sys_dev(agent, &sys_dev);
         if (ucs_status != UCS_OK) {
             sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
