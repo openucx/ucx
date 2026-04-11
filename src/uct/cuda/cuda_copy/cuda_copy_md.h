@@ -8,7 +8,6 @@
 
 #include <uct/base/uct_md.h>
 #include <uct/cuda/base/cuda_md.h>
-#include <ucs/datastruct/dynamic_bitmap.h>
 #include <cuda.h>
 
 
@@ -92,7 +91,7 @@ typedef struct uct_cuda_copy_memh {
             CUdeviceptr          ptr;
             size_t               length;
             int                  alloc_device;
-            ucs_dynamic_bitmap_t granted;
+            int                  num_devices;
             unsigned long long   *saved_flags;
         } vmm;
     };

@@ -139,22 +139,18 @@ uct_cuda_copy_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
 }
 
 /*
- * For VMM allocations, grant cross-device read-write access so that
- * cuMemcpyAsync can operate between any pair of devices. The original access
- * flags are saved per-device so they can be restored on deregistration.
+ * For VMM allocations, save the per-device access flags so they can be restored
+ * on deregistration. Cross-device access is granted at copy time.
  */
 static ucs_status_t uct_cuda_copy_mem_reg_vmm(void *address, uct_mem_h *memh_p)
 {
 #ifdef HAVE_CUMEMRETAINALLOCATIONHANDLE
-    int ctx_pushed = 0;
     CUmemGenericAllocationHandle alloc_handle;
     CUmemAllocationProp prop;
-    CUmemAccessDesc access_desc;
     CUresult cu_result;
     ucs_status_t status;
     uct_cuda_copy_memh_t *memh;
-    int num_devices, dev, can_access_peer;
-    CUdevice current_device;
+    int num_devices, dev;
     CUdeviceptr base_ptr;
     size_t base_size;
     unsigned long long cur_flags;
@@ -176,62 +172,37 @@ static ucs_status_t uct_cuda_copy_mem_reg_vmm(void *address, uct_mem_h *memh_p)
         return UCS_ERR_UNSUPPORTED;
     }
 
-    cu_result = cuCtxGetDevice(&current_device);
-    if (cu_result != CUDA_SUCCESS) {
-        return UCS_ERR_UNSUPPORTED;
-    }
-
-    if (current_device != (int)prop.location.id) {
-        status = uct_cuda_ctx_primary_push((int)prop.location.id, 0,
-                                           UCS_LOG_LEVEL_DEBUG);
-        if (status != UCS_OK) {
-            return status;
-        }
-        ctx_pushed = 1;
-    }
-
     status = UCT_CUDADRV_FUNC_LOG_DEBUG(
             cuMemGetAddressRange(&base_ptr, &base_size, (CUdeviceptr)address));
     if (status != UCS_OK) {
-        goto out_pop;
+        return status;
     }
 
     status = UCT_CUDADRV_FUNC_LOG_DEBUG(cuDeviceGetCount(&num_devices));
     if (status != UCS_OK) {
-        goto out_pop;
+        return status;
     }
 
     if (num_devices <= 1) {
-        status = UCS_ERR_UNSUPPORTED;
-        goto out_pop;
+        return UCS_ERR_UNSUPPORTED;
     }
 
     memh = ucs_calloc(1, sizeof(*memh) +
                       num_devices * sizeof(*memh->vmm.saved_flags),
                       "uct_cuda_copy_memh_vmm");
     if (memh == NULL) {
-        status = UCS_ERR_NO_MEMORY;
-        goto out_pop;
+        return UCS_ERR_NO_MEMORY;
     }
 
     memh->type             = UCT_CUDA_COPY_MEMH_VMM;
     memh->vmm.ptr          = base_ptr;
     memh->vmm.length       = base_size;
     memh->vmm.alloc_device = (int)prop.location.id;
+    memh->vmm.num_devices  = num_devices;
     memh->vmm.saved_flags  = (unsigned long long*)(memh + 1);
-    ucs_dynamic_bitmap_init(&memh->vmm.granted);
 
     for (dev = 0; dev < num_devices; dev++) {
         if (dev == memh->vmm.alloc_device) {
-            continue;
-        }
-
-        can_access_peer = 0;
-        cu_result       = cuDeviceCanAccessPeer(&can_access_peer, dev,
-                                                memh->vmm.alloc_device);
-        if ((cu_result != CUDA_SUCCESS) || !can_access_peer) {
-            ucs_debug("device %d cannot access peer device %d", dev,
-                      memh->vmm.alloc_device);
             continue;
         }
 
@@ -251,52 +222,15 @@ static ucs_status_t uct_cuda_copy_mem_reg_vmm(void *address, uct_mem_h *memh_p)
         ucs_trace("VMM saved access flags 0x%llx for device %d on "
                   "ptr 0x%llx",
                   cur_flags, dev, (unsigned long long)base_ptr);
-
-        if (cur_flags ==
-            (unsigned long long)CU_MEM_ACCESS_FLAGS_PROT_READWRITE) {
-            continue;
-        }
-
-        access_desc.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
-        access_desc.location.id   = dev;
-        access_desc.flags         = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
-
-        cu_result = cuMemSetAccess(base_ptr, base_size, &access_desc, 1);
-        if (cu_result != CUDA_SUCCESS) {
-            ucs_debug("cuMemSetAccess for device %d on VMM ptr 0x%llx "
-                      "failed: %s",
-                      dev, (unsigned long long)base_ptr,
-                      uct_cuda_cu_get_error_string(cu_result));
-            continue;
-        }
-
-        ucs_dynamic_bitmap_set(&memh->vmm.granted, dev);
     }
 
-    if (ucs_dynamic_bitmap_popcount(&memh->vmm.granted) == 0) {
-        status = UCS_ERR_UNSUPPORTED;
-        goto err_free_bitmap;
-    }
-
-    ucs_debug("granted VMM cross-device access for alloc device %d "
-              "ptr 0x%llx length %zu to %zu peer devices (mask 0x%lx)",
+    ucs_debug("saved VMM access flags for alloc device %d "
+              "ptr 0x%llx length %zu with %d peer devices",
               memh->vmm.alloc_device, (unsigned long long)base_ptr, base_size,
-              ucs_dynamic_bitmap_popcount(&memh->vmm.granted),
-              *ucs_array_begin(&memh->vmm.granted));
+              num_devices - 1);
 
     *memh_p = memh;
-    status  = UCS_OK;
-    goto out_pop;
-
-err_free_bitmap:
-    ucs_dynamic_bitmap_cleanup(&memh->vmm.granted);
-    ucs_free(memh);
-
-out_pop:
-    if (ctx_pushed) {
-        uct_cuda_ctx_primary_pop_and_release((int)prop.location.id);
-    }
-    return status;
+    return UCS_OK;
 #else
     return UCS_ERR_UNSUPPORTED;
 #endif
@@ -382,9 +316,13 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_dereg,
 #ifdef HAVE_CUMEMRETAINALLOCATIONHANDLE
     case UCT_CUDA_COPY_MEMH_VMM: {
         CUmemAccessDesc access_desc;
-        size_t dev;
+        int dev;
 
-        UCS_DYNAMIC_BITMAP_FOR_EACH_BIT(dev, &memh->vmm.granted) {
+        for (dev = 0; dev < memh->vmm.num_devices; dev++) {
+            if (dev == memh->vmm.alloc_device) {
+                continue;
+            }
+
             access_desc.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
             access_desc.location.id   = dev;
             access_desc.flags = (CUmemAccess_flags)memh->vmm.saved_flags[dev];
@@ -394,7 +332,6 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_dereg,
                              UCS_LOG_LEVEL_DIAG);
         }
 
-        ucs_dynamic_bitmap_cleanup(&memh->vmm.granted);
         break;
     }
 #endif
