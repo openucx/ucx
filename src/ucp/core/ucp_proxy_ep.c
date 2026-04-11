@@ -108,6 +108,17 @@ UCP_PROXY_EP_DEFINE_OP(ucs_status_t, get_address, uct_ep_addr_t*)
 UCP_PROXY_EP_DEFINE_OP(ucs_status_t, connect_to_ep, const uct_device_addr_t*,
                        const uct_ep_addr_t*)
 
+ucs_status_t ucp_stub_iface_open(ucs_status_t stub_status, uct_iface_h *iface_p)
+{
+    uct_iface_params_t params = {
+        .field_mask = UCT_IFACE_PARAM_FIELD_OPEN_MODE,
+        .open_mode  = UCT_IFACE_OPEN_MODE_STUB,
+        .mode       = {.stub = {.status = stub_status}},
+    };
+
+    return uct_iface_open(NULL, NULL, &params, NULL, iface_p);
+}
+
 static ucs_status_t ucp_proxy_ep_fatal(uct_iface_h iface, ...)
 {
     ucs_bug("unsupported function on proxy endpoint");
@@ -120,15 +131,10 @@ UCS_CLASS_INIT_FUNC(ucp_proxy_ep_t, const uct_iface_ops_t *ops, ucp_ep_h ucp_ep,
     #define UCP_PROXY_EP_SET_OP(_name) \
         self->iface->ops._name = (ops->_name != NULL) ? ops->_name : ucp_proxy_##_name
 
-    uct_iface_params_t params = {
-        .field_mask = UCT_IFACE_PARAM_FIELD_OPEN_MODE,
-        .open_mode  = UCT_IFACE_OPEN_MODE_STUB,
-        .mode       = {.stub = {.status = UCS_ERR_UNSUPPORTED}},
-    };
     uct_iface_close_func_t stub_close;
     ucs_status_t status;
 
-    status = uct_iface_open(NULL, NULL, &params, NULL, &self->iface);
+    status = ucp_stub_iface_open(UCS_ERR_UNSUPPORTED, &self->iface);
     if (status != UCS_OK) {
         return status;
     }

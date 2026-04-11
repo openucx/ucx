@@ -234,7 +234,7 @@ ucs_status_t uct_iface_open(uct_md_h md, uct_worker_h worker,
                     "UCT_IFACE_PARAM_FIELD_OPEN_MODE is not defined");
 
     if (params->open_mode & UCT_IFACE_OPEN_MODE_STUB) {
-        return uct_stub_iface_create(params->mode.stub.status, iface_p);
+        return uct_stub_iface_open(params->mode.stub.status, iface_p);
     } else if (params->open_mode & UCT_IFACE_OPEN_MODE_DEVICE) {
         tl = uct_find_tl(md->component, params->mode.device.tl_name);
     } else if ((params->open_mode & UCT_IFACE_OPEN_MODE_SOCKADDR_CLIENT) ||

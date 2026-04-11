@@ -1107,7 +1107,7 @@ static ucs_status_t uct_stub_iface_return_status(uct_iface_h iface)
 
 static ucs_status_t uct_stub_ep_return_status(uct_ep_h ep)
 {
-    return ((uct_stub_iface_t*)ep->iface)->status;
+    return uct_stub_iface_return_status(ep->iface);
 }
 
 static void uct_stub_iface_close(uct_iface_h iface)
@@ -1115,7 +1115,7 @@ static void uct_stub_iface_close(uct_iface_h iface)
     ucs_free(iface);
 }
 
-static const uct_iface_internal_ops_t uct_stub_internal_ops = {
+static uct_iface_internal_ops_t uct_stub_internal_ops = {
     .iface_query_v2        = uct_iface_base_query_v2,
     .iface_estimate_perf   = (uct_iface_estimate_perf_func_t)uct_stub_iface_return_status,
     .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
@@ -1127,7 +1127,7 @@ static const uct_iface_internal_ops_t uct_stub_internal_ops = {
     .ep_get_device_ep      = (uct_ep_get_device_ep_func_t)uct_stub_ep_return_status,
 };
 
-ucs_status_t uct_stub_iface_create(ucs_status_t status, uct_iface_h *iface_p)
+ucs_status_t uct_stub_iface_open(ucs_status_t status, uct_iface_h *iface_p)
 {
     uct_stub_iface_t *stub;
 
@@ -1140,7 +1140,7 @@ ucs_status_t uct_stub_iface_create(ucs_status_t status, uct_iface_h *iface_p)
     }
 
     stub->super.ops.iface_close = uct_stub_iface_close;
-    stub->internal_ops          = (uct_iface_internal_ops_t*)&uct_stub_internal_ops;
+    stub->internal_ops          = &uct_stub_internal_ops;
     stub->status                = status;
     *iface_p                    = &stub->super;
     return UCS_OK;

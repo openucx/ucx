@@ -146,15 +146,10 @@ static ucp_ep_discard_lanes_arg_t ucp_failed_tl_ep_discard_arg = {
 };
 
 UCS_STATIC_INIT {
-    uct_iface_params_t params = {
-        .field_mask = UCT_IFACE_PARAM_FIELD_OPEN_MODE,
-        .open_mode  = UCT_IFACE_OPEN_MODE_STUB,
-        .mode       = {.stub = {.status = UCS_ERR_CANCELED}},
-    };
     uct_iface_close_func_t stub_close;
     ucs_status_t status;
 
-    status = uct_iface_open(NULL, NULL, &params, NULL, &ucp_failed_tl_iface);
+    status = ucp_stub_iface_open(UCS_ERR_CANCELED, &ucp_failed_tl_iface);
     if (status != UCS_OK) {
         ucs_fatal("failed to create failed tl iface stub");
     }
