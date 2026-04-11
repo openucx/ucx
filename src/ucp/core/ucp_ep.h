@@ -997,4 +997,6 @@ ucp_lane_map_t ucp_ep_config_get_failed_lanes(const ucp_ep_config_key_t *key);
  */
 ucs_status_t ucp_ep_update_rkey_config(ucp_ep_h ep, ucp_rkey_h rkey);
 
+ucs_status_t ucp_stub_iface_open(ucs_status_t status, uct_iface_h *iface_p);
+
 #endif
