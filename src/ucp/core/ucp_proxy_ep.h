@@ -10,7 +10,6 @@
 #include "ucp_types.h"
 
 #include <uct/api/uct.h>
-#include <uct/api/v2/uct_v2.h>
 #include <ucs/type/class.h>
 
 
