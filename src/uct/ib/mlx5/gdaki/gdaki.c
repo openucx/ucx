@@ -372,9 +372,10 @@ err_cleanup:
     return status;
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t uct_rc_gdaki_pool_chunk_init(
-        ucs_mpool_t *mp, uct_rc_gdaki_channel_block_mem_t *hdr,
-        unsigned num_elems)
+static ucs_status_t
+uct_rc_gdaki_pool_chunk_init(ucs_mpool_t *mp,
+                             uct_rc_gdaki_channel_block_mem_t *hdr,
+                             unsigned num_elems)
 {
     uct_rc_gdaki_pool_priv_t *priv = ucs_mpool_priv(mp);
     uct_rc_gdaki_iface_t *iface    = ucs_container_of(mp, uct_rc_gdaki_iface_t,
@@ -538,6 +539,15 @@ uct_rc_gdaki_ep_init_channels_pooled(uct_rc_gdaki_iface_t *iface,
     return UCS_OK;
 }
 
+static UCS_F_ALWAYS_INLINE void
+uct_rc_gdaki_ep_reset_channels(uct_rc_gdaki_ep_t *ep)
+{
+    ep->mem.umem      = NULL;
+    ep->mem.gpu_mem   = NULL;
+    ep->mem.gpu_raw   = 0;
+    ep->channel_block = NULL;
+}
+
 static void uct_rc_gdaki_cleanup_channels_pooled(uct_rc_gdaki_ep_t *ep)
 {
     if (ep->channel_block == NULL) {
@@ -545,7 +555,7 @@ static void uct_rc_gdaki_cleanup_channels_pooled(uct_rc_gdaki_ep_t *ep)
     }
 
     ucs_mpool_put(ep->channel_block);
-    ep->channel_block = NULL;
+    uct_rc_gdaki_ep_reset_channels(ep);
 }
 
 static ucs_status_t
@@ -614,7 +624,7 @@ err_ctx:
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
 err_block:
     ucs_free(ep->channel_block);
-    ep->channel_block = NULL;
+    uct_rc_gdaki_ep_reset_channels(ep);
     return status;
 }
 
@@ -630,10 +640,7 @@ static void uct_rc_gdaki_cleanup_channels_direct(uct_rc_gdaki_iface_t *iface,
     mlx5dv_devx_umem_dereg(ep->mem.umem);
     cuMemFree(ep->mem.gpu_raw);
     ucs_free(ep->channel_block);
-    ep->mem.umem      = NULL;
-    ep->mem.gpu_mem   = NULL;
-    ep->mem.gpu_raw   = 0;
-    ep->channel_block = NULL;
+    uct_rc_gdaki_ep_reset_channels(ep);
 }
 
 static ucs_status_t uct_rc_gdaki_ep_init_channels(uct_rc_gdaki_iface_t *iface,
@@ -664,11 +671,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super.super.super);
 
-    self->dev_ep_init   = 0;
-    self->channel_block = NULL;
-    self->mem.gpu_mem   = NULL;
-    self->mem.gpu_raw   = 0;
-    self->mem.umem      = NULL;
+    self->dev_ep_init = 0;
+    uct_rc_gdaki_ep_reset_channels(self);
 
     return uct_rc_gdaki_ep_init_channels(iface, self);
 }
