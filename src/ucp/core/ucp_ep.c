@@ -32,6 +32,7 @@
 #include <ucp/rma/rma.h>
 
 #include <ucs/datastruct/queue.h>
+#include <ucs/type/init_once.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/debug_int.h>
@@ -105,6 +106,7 @@ static ucs_status_t ucp_ep_failed_op(uct_ep_h ep);
 static ssize_t ucp_ep_failed_bc_op(uct_ep_h ep);
 static void ucp_ep_failed_destroy(uct_ep_h ep);
 static uct_iface_h ucp_failed_tl_iface;
+static ucs_init_once_t ucp_failed_tl_iface_once = UCS_INIT_ONCE_INITIALIZER;
 
 static const uct_iface_ops_t ucp_failed_tl_iface_ops = {
     .ep_put_short        = (uct_ep_put_short_func_t)ucp_ep_failed_op,
@@ -145,23 +147,28 @@ static ucp_ep_discard_lanes_arg_t ucp_failed_tl_ep_discard_arg = {
     .status               = UCS_ERR_CANCELED
 };
 
-UCS_STATIC_INIT {
+static void ucp_ep_failed_tl_iface_init(void)
+{
     uct_iface_close_func_t stub_close;
     ucs_status_t status;
 
-    status = ucp_stub_iface_open(UCS_ERR_CANCELED, &ucp_failed_tl_iface);
-    if (status != UCS_OK) {
-        ucs_fatal("failed to create failed tl iface stub");
-    }
+    UCS_INIT_ONCE(&ucp_failed_tl_iface_once) {
+        status = ucp_stub_iface_open(UCS_ERR_CANCELED, &ucp_failed_tl_iface);
+        if (status != UCS_OK) {
+            ucs_fatal("failed to create failed tl iface stub");
+        }
 
-    stub_close                                   = ucp_failed_tl_iface->ops.iface_close;
-    ucp_failed_tl_iface->ops                     = ucp_failed_tl_iface_ops;
-    ucp_failed_tl_iface->ops.iface_close         = stub_close;
-    ucp_failed_tl_ep_discard_arg.failed_ep.iface = ucp_failed_tl_iface;
+        stub_close                                   = ucp_failed_tl_iface->ops.iface_close;
+        ucp_failed_tl_iface->ops                     = ucp_failed_tl_iface_ops;
+        ucp_failed_tl_iface->ops.iface_close         = stub_close;
+        ucp_failed_tl_ep_discard_arg.failed_ep.iface = ucp_failed_tl_iface;
+    }
 }
 
 UCS_STATIC_CLEANUP {
-    uct_iface_close(ucp_failed_tl_iface);
+    UCS_CLEANUP_ONCE(&ucp_failed_tl_iface_once) {
+        uct_iface_close(ucp_failed_tl_iface);
+    }
 }
 
 int ucp_is_uct_ep_failed(uct_ep_h uct_ep)
@@ -1531,6 +1538,8 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
         return;
     }
 
+    ucp_ep_failed_tl_iface_init();
+
     discard_arg = ucs_malloc(sizeof(*discard_arg), "discard_lanes_arg");
     if (discard_arg == NULL) {
         ucs_error("ep %p: failed to allocate memory for discarding lanes"
@@ -1766,6 +1775,8 @@ void ucp_ep_cleanup_lanes(ucp_ep_h ep)
     uct_ep_h uct_ep;
 
     ucs_debug("ep %p: cleanup lanes", ep);
+
+    ucp_ep_failed_tl_iface_init();
 
     ucp_ep_extract_failed_lanes(ep, UCS_MASK(ucp_ep_num_lanes(ep)),
                                 &ucp_failed_tl_ep_discard_arg.failed_ep,
