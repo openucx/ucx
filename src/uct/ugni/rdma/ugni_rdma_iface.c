@@ -28,7 +28,8 @@ static ucs_config_field_t uct_ugni_rdma_iface_config_table[] = {
     {NULL}
 };
 
-static ucs_status_t uct_ugni_rdma_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
+static ucs_status_t uct_ugni_rdma_iface_query(uct_iface_h tl_iface,
+                                              uct_iface_attr_v2_t *iface_attr)
 {
     uct_ugni_rdma_iface_t *iface = ucs_derived_of(tl_iface, uct_ugni_rdma_iface_t);
 
@@ -207,7 +208,6 @@ static uct_iface_ops_t uct_ugni_aries_rdma_iface_ops = {
     .iface_progress_disable   = (uct_iface_progress_disable_func_t)ucs_empty_function,
     .iface_progress           = (void*)uct_ugni_progress,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_rdma_iface_t),
-    .iface_query              = uct_ugni_rdma_iface_query,
     .iface_get_device_address = uct_ugni_iface_get_dev_address,
     .iface_get_address        = uct_ugni_iface_get_address,
     .iface_is_reachable       = uct_ugni_iface_is_reachable
@@ -234,7 +234,6 @@ static uct_iface_ops_t uct_ugni_gemini_rdma_iface_ops = {
     .iface_progress_disable   = (uct_iface_progress_disable_func_t)ucs_empty_function,
     .iface_progress           = (void*)uct_ugni_progress,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_rdma_iface_t),
-    .iface_query              = uct_ugni_rdma_iface_query,
     .iface_get_device_address = uct_ugni_iface_get_dev_address,
     .iface_get_address        = uct_ugni_iface_get_address,
     .iface_is_reachable       = uct_ugni_iface_is_reachable
@@ -262,6 +261,18 @@ static uct_iface_ops_t *uct_ugni_rdma_choose_ops_by_device(uct_ugni_device_t *de
     }
 }
 
+static uct_iface_internal_ops_t uct_ugni_rdma_iface_internal_ops = {
+    .iface_query_v2         = uct_ugni_rdma_iface_query,
+    .iface_estimate_perf    = uct_base_iface_estimate_perf,
+    .iface_vfs_refresh      = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+    .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+    .ep_invalidate          = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
+    .ep_connect_to_ep_v2    = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
+    .iface_is_reachable_v2  = uct_ugni_iface_is_reachable_v2,
+    .ep_is_connected        = (uct_ep_is_connected_func_t)ucs_empty_function_return_zero_int,
+    .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported
+};
+
 static UCS_CLASS_INIT_FUNC(uct_ugni_rdma_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
@@ -277,7 +288,8 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_rdma_iface_t, uct_md_h md, uct_worker_h work
         status = UCS_ERR_NO_DEVICE;
         goto exit;
     }
-    UCS_CLASS_CALL_SUPER_INIT(uct_ugni_iface_t, md, worker, params, ops, NULL,
+    UCS_CLASS_CALL_SUPER_INIT(uct_ugni_iface_t, md, worker, params, ops,
+                              &uct_ugni_rdma_iface_internal_ops,
                               &config->super UCS_STATS_ARG(NULL));
     /* Setting initial configuration */
     self->config.fma_seg_size  = UCT_UGNI_MAX_FMA;

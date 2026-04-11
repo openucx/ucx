@@ -1036,16 +1036,55 @@ typedef enum {
 /**
  * @ingroup UCT_RESOURCE
  * @brief Interface attribute fields.
+ *
+ * The enumeration allows specifying which fields in @ref uct_iface_attr_v2_t
+ * are present.
  */
-enum uct_iface_attr_field {
-    /* Reserved for future use */
-    UCT_IFACE_ATTR_FIELD_RESERVED = 0
-};
+typedef enum uct_iface_attr_field {
+    /** Enables @ref uct_iface_attr_v2_t::cap */
+    UCT_IFACE_ATTR_FIELD_CAP           = UCS_BIT(0),
+
+    /** Enables @ref uct_iface_attr_v2_t::device_addr_len */
+    UCT_IFACE_ATTR_FIELD_DEVICE_ADDR   = UCS_BIT(1),
+
+    /** Enables @ref uct_iface_attr_v2_t::iface_addr_len */
+    UCT_IFACE_ATTR_FIELD_IFACE_ADDR    = UCS_BIT(2),
+
+    /** Enables @ref uct_iface_attr_v2_t::ep_addr_len */
+    UCT_IFACE_ATTR_FIELD_EP_ADDR       = UCS_BIT(3),
+
+    /** Enables @ref uct_iface_attr_v2_t::max_conn_priv */
+    UCT_IFACE_ATTR_FIELD_MAX_CONN_PRIV = UCS_BIT(4),
+
+    /** Enables @ref uct_iface_attr_v2_t::listen_sockaddr */
+    UCT_IFACE_ATTR_FIELD_SOCKADDR      = UCS_BIT(5),
+
+    /** Enables @ref uct_iface_attr_v2_t::overhead */
+    UCT_IFACE_ATTR_FIELD_OVERHEAD      = UCS_BIT(6),
+
+    /** Enables @ref uct_iface_attr_v2_t::bandwidth */
+    UCT_IFACE_ATTR_FIELD_BANDWIDTH     = UCS_BIT(7),
+
+    /** Enables @ref uct_iface_attr_v2_t::latency */
+    UCT_IFACE_ATTR_FIELD_LATENCY       = UCS_BIT(8),
+
+    /** Enables @ref uct_iface_attr_v2_t::priority */
+    UCT_IFACE_ATTR_FIELD_PRIORITY      = UCS_BIT(9),
+
+    /** Enables @ref uct_iface_attr_v2_t::max_num_eps */
+    UCT_IFACE_ATTR_FIELD_MAX_NUM_EPS   = UCS_BIT(10),
+
+    /** Enables @ref uct_iface_attr_v2_t::dev_num_paths */
+    UCT_IFACE_ATTR_FIELD_DEV_NUM_PATHS = UCS_BIT(11)
+} uct_iface_attr_field_t;
 
 
 /**
  * @ingroup UCT_RESOURCE
  * @brief Interface attributes, used by @ref uct_iface_query_v2.
+ *
+ * This structure defines the attributes of a transport interface including
+ * its capabilities, performance characteristics, and addressing information.
  */
 typedef struct {
     /**
@@ -1053,6 +1092,81 @@ typedef struct {
      * @ref uct_iface_attr_field_t.
      */
     uint64_t field_mask;
+
+    struct {
+        struct {
+            size_t          max_short;
+            size_t          max_bcopy;
+            size_t          min_zcopy;
+            size_t          max_zcopy;
+            size_t          opt_zcopy_align;
+            size_t          align_mtu;
+            size_t          max_iov;
+        } put;
+
+        struct {
+            size_t          max_short;
+            size_t          max_bcopy;
+            size_t          min_zcopy;
+            size_t          max_zcopy;
+            size_t          opt_zcopy_align;
+            size_t          align_mtu;
+            size_t          max_iov;
+        } get;
+
+        struct {
+            size_t          max_short;
+            size_t          max_bcopy;
+            size_t          min_zcopy;
+            size_t          max_zcopy;
+            size_t          opt_zcopy_align;
+            size_t          align_mtu;
+            size_t          max_hdr;
+            size_t          max_iov;
+        } am;
+
+        struct {
+            struct {
+                size_t      min_recv;
+                size_t      max_zcopy;
+                size_t      max_iov;
+                size_t      max_outstanding;
+            } recv;
+
+            struct {
+                  size_t    max_short;
+                  size_t    max_bcopy;
+                  size_t    max_zcopy;
+                  size_t    max_iov;
+            } eager;
+
+            struct {
+                  size_t    max_zcopy;
+                  size_t    max_hdr;
+                  size_t    max_iov;
+            } rndv;
+        } tag;
+
+        struct {
+            uint64_t        op_flags;
+            uint64_t        fop_flags;
+        } atomic32, atomic64;
+
+        uint64_t            flags;
+        uint64_t            event_flags;
+    } cap;
+
+    size_t                  device_addr_len;
+    size_t                  iface_addr_len;
+    size_t                  ep_addr_len;
+    size_t                  max_conn_priv;
+    struct sockaddr_storage listen_sockaddr;
+    double                  overhead;
+    uct_ppn_bandwidth_t     bandwidth;
+    ucs_linear_func_t       latency;
+    uint8_t                 priority;
+    size_t                  max_num_eps;
+    unsigned                dev_num_paths;
 } uct_iface_attr_v2_t;
 
 

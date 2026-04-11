@@ -55,7 +55,7 @@ uct_ze_copy_iface_is_reachable_v2(const uct_iface_h tl_iface,
 }
 
 static ucs_status_t
-uct_ze_copy_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
+uct_ze_copy_iface_query(uct_iface_h tl_iface, uct_iface_attr_v2_t *iface_attr)
 {
     uct_ze_copy_iface_t *iface = ucs_derived_of(tl_iface, uct_ze_copy_iface_t);
 
@@ -154,7 +154,6 @@ static uct_iface_ops_t uct_ze_copy_iface_ops = {
     .iface_progress           = (uct_iface_progress_func_t)
             ucs_empty_function_return_zero,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_ze_copy_iface_t),
-    .iface_query              = uct_ze_copy_iface_query,
     .iface_get_device_address = (uct_iface_get_device_address_func_t)
             ucs_empty_function_return_success,
     .iface_get_address        = uct_ze_copy_iface_get_address,
@@ -225,7 +224,7 @@ uct_ze_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
 
 
 static uct_iface_internal_ops_t uct_ze_copy_iface_internal_ops = {
-    .iface_query_v2         = uct_iface_base_query_v2,
+    .iface_query_v2         = uct_ze_copy_iface_query,
     .iface_estimate_perf    = uct_ze_copy_estimate_perf,
     .iface_vfs_refresh      = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
     .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,

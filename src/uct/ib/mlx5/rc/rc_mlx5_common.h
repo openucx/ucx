@@ -594,7 +594,7 @@ ucs_status_t uct_rc_mlx5_iface_common_dm_init(uct_rc_mlx5_iface_common_t *iface,
 void uct_rc_mlx5_iface_common_dm_cleanup(uct_rc_mlx5_iface_common_t *iface);
 
 void uct_rc_mlx5_iface_common_query(uct_ib_iface_t *ib_iface,
-                                    uct_iface_attr_t *iface_attr,
+                                    uct_iface_attr_v2_t *iface_attr,
                                     size_t max_inline, size_t max_tag_eager_iov);
 
 ucs_status_t

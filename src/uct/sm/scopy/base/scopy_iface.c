@@ -62,7 +62,8 @@ static ucs_mpool_ops_t uct_scopy_mpool_ops = {
     .obj_str       = NULL
 };
 
-void uct_scopy_iface_query(uct_scopy_iface_t *iface, uct_iface_attr_t *iface_attr)
+void uct_scopy_iface_query(uct_scopy_iface_t *iface,
+                           uct_iface_attr_v2_t *iface_attr)
 {
     uct_base_iface_query(&iface->super.super, iface_attr);
 

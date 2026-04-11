@@ -271,9 +271,6 @@ typedef ucs_status_t (*uct_iface_event_arm_func_t)(uct_iface_h iface,
 
 typedef void         (*uct_iface_close_func_t)(uct_iface_h iface);
 
-typedef ucs_status_t (*uct_iface_query_func_t)(uct_iface_h iface,
-                                               uct_iface_attr_t *iface_attr);
-
 /* interface - connection establishment */
 
 typedef ucs_status_t (*uct_iface_get_device_address_func_t)(uct_iface_h iface,
@@ -365,7 +362,6 @@ typedef struct uct_iface_ops {
 
     /* interface - management */
     uct_iface_close_func_t              iface_close;
-    uct_iface_query_func_t              iface_query;
 
     /* interface - connection establishment */
     uct_iface_get_device_address_func_t iface_get_device_address;

@@ -221,9 +221,86 @@ static void uct_srd_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
     UCT_IB_IFACE_VERBS_COMPLETION_LOG(log_lvl, "send", &iface->super, 0, wc);
 }
 
+static ucs_status_t
+uct_srd_iface_query(uct_iface_h tl_iface, uct_iface_attr_v2_t *iface_attr)
+{
+    uct_srd_iface_t *iface = ucs_derived_of(tl_iface, uct_srd_iface_t);
+    uct_ib_md_t *ib_md     = uct_ib_iface_md(&iface->super);
+    size_t active_mtu      = uct_ib_mtu_value(
+            uct_ib_iface_port_attr(&iface->super)->active_mtu);
+    ucs_status_t status;
+    struct efadv_device_attr efa_attr;
+    int ret;
+
+    status = uct_ib_iface_query(&iface->super, iface_attr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    iface_attr->cap.am.align_mtu        = active_mtu;
+    iface_attr->cap.get.align_mtu       = active_mtu;
+    iface_attr->cap.put.align_mtu       = active_mtu;
+    iface_attr->cap.am.opt_zcopy_align  = UCS_SYS_PCI_MAX_PAYLOAD;
+    iface_attr->cap.get.opt_zcopy_align = UCS_SYS_PCI_MAX_PAYLOAD;
+    iface_attr->cap.put.opt_zcopy_align = UCS_SYS_PCI_MAX_PAYLOAD;
+
+    iface_attr->cap.flags      = UCT_IFACE_FLAG_CONNECT_TO_IFACE |
+                                 UCT_IFACE_FLAG_PENDING |
+                                 UCT_IFACE_FLAG_CB_SYNC |
+                                 UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE |
+                                 UCT_IFACE_FLAG_INTER_NODE |
+                                 UCT_IFACE_FLAG_AM_BCOPY |
+                                 UCT_IFACE_FLAG_AM_SHORT |
+                                 UCT_IFACE_FLAG_AM_ZCOPY;
+    iface_attr->iface_addr_len = sizeof(uct_srd_iface_addr_t);
+    iface_attr->ep_addr_len    = 0;
+    iface_attr->max_conn_priv  = 0;
+
+    iface_attr->latency.c += 20e-9;
+    iface_attr->overhead   = 75e-9;
+
+    iface_attr->cap.am.max_bcopy = iface->super.config.seg_size -
+                                   sizeof(uct_srd_hdr_t);
+    iface_attr->cap.am.min_zcopy = 0;
+    iface_attr->cap.am.max_zcopy = iface->super.config.seg_size -
+                                   sizeof(uct_srd_hdr_t);
+    iface_attr->cap.am.max_iov   = iface->config.max_send_sge - 1;
+    iface_attr->cap.am.max_hdr   = uct_ib_iface_hdr_size(
+            iface->super.config.seg_size, sizeof(uct_srd_hdr_t));
+    iface_attr->cap.am.max_short = uct_ib_iface_hdr_size(
+            iface->config.max_inline, sizeof(uct_srd_hdr_t));
+
+    ret = efadv_query_device(ib_md->pd->context, &efa_attr, sizeof(efa_attr));
+    if (ret != 0) {
+        return UCS_ERR_IO_ERROR;
+    }
+
+    if (uct_ib_efadv_has_rdma_read(&efa_attr)) {
+        iface_attr->cap.get.max_bcopy = iface->config.max_rdma_bcopy;
+        iface_attr->cap.get.max_zcopy = iface->config.max_rdma_zcopy;
+        iface_attr->cap.get.max_iov   = iface->config.max_rdma_sge;
+        iface_attr->cap.get.min_zcopy = 0;
+
+        iface_attr->cap.flags |= UCT_IFACE_FLAG_GET_BCOPY |
+                                 UCT_IFACE_FLAG_GET_ZCOPY;
+    }
+
+    if (uct_ib_efadv_has_rdma_write(&efa_attr)) {
+        iface_attr->cap.put.max_bcopy = iface->config.max_rdma_bcopy;
+        iface_attr->cap.put.max_zcopy = iface->config.max_rdma_zcopy;
+        iface_attr->cap.put.max_iov   = iface->config.max_rdma_sge;
+        iface_attr->cap.put.min_zcopy = 0;
+
+        iface_attr->cap.flags |= UCT_IFACE_FLAG_PUT_BCOPY |
+                                 UCT_IFACE_FLAG_PUT_ZCOPY;
+    }
+
+    return status;
+}
+
 static uct_ib_iface_ops_t uct_srd_iface_ops = {
     .super = {
-        .iface_query_v2        = uct_iface_base_query_v2,
+        .iface_query_v2        = uct_srd_iface_query,
         .iface_estimate_perf   = uct_ib_iface_estimate_perf,
         .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)
             ucs_empty_function,
@@ -874,86 +951,6 @@ static unsigned uct_srd_iface_progress(uct_iface_h tl_iface)
     return count;
 }
 
-ucs_status_t
-uct_srd_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
-{
-    uct_srd_iface_t *iface = ucs_derived_of(tl_iface, uct_srd_iface_t);
-    uct_ib_md_t *ib_md     = uct_ib_iface_md(&iface->super);
-    size_t active_mtu      = uct_ib_mtu_value(
-            uct_ib_iface_port_attr(&iface->super)->active_mtu);
-    ucs_status_t status;
-    struct efadv_device_attr efa_attr;
-    int ret;
-
-    /* Common parameters */
-    status = uct_ib_iface_query(&iface->super, iface_attr);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    /* General attributes */
-    iface_attr->cap.am.align_mtu        = active_mtu;
-    iface_attr->cap.get.align_mtu       = active_mtu;
-    iface_attr->cap.put.align_mtu       = active_mtu;
-    iface_attr->cap.am.opt_zcopy_align  = UCS_SYS_PCI_MAX_PAYLOAD;
-    iface_attr->cap.get.opt_zcopy_align = UCS_SYS_PCI_MAX_PAYLOAD;
-    iface_attr->cap.put.opt_zcopy_align = UCS_SYS_PCI_MAX_PAYLOAD;
-
-    iface_attr->cap.flags      = UCT_IFACE_FLAG_CONNECT_TO_IFACE |
-                                 UCT_IFACE_FLAG_PENDING |
-                                 UCT_IFACE_FLAG_CB_SYNC |
-                                 UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE |
-                                 UCT_IFACE_FLAG_INTER_NODE |
-                                 UCT_IFACE_FLAG_AM_BCOPY |
-                                 UCT_IFACE_FLAG_AM_SHORT |
-                                 UCT_IFACE_FLAG_AM_ZCOPY;
-    iface_attr->iface_addr_len = sizeof(uct_srd_iface_addr_t);
-    iface_attr->ep_addr_len    = 0;
-    iface_attr->max_conn_priv  = 0;
-
-    iface_attr->latency.c += 20e-9;
-    iface_attr->overhead   = 75e-9;
-
-    /* AM */
-    iface_attr->cap.am.max_bcopy = iface->super.config.seg_size -
-                                   sizeof(uct_srd_hdr_t);
-    iface_attr->cap.am.min_zcopy = 0;
-    iface_attr->cap.am.max_zcopy = iface->super.config.seg_size -
-                                   sizeof(uct_srd_hdr_t);
-    iface_attr->cap.am.max_iov   = iface->config.max_send_sge - 1;
-    iface_attr->cap.am.max_hdr   = uct_ib_iface_hdr_size(
-            iface->super.config.seg_size, sizeof(uct_srd_hdr_t));
-    iface_attr->cap.am.max_short = uct_ib_iface_hdr_size(
-            iface->config.max_inline, sizeof(uct_srd_hdr_t));
-
-    ret = efadv_query_device(ib_md->pd->context, &efa_attr, sizeof(efa_attr));
-    if (ret != 0) {
-        return UCS_ERR_IO_ERROR;
-    }
-
-    if (uct_ib_efadv_has_rdma_read(&efa_attr)) {
-        iface_attr->cap.get.max_bcopy = iface->config.max_rdma_bcopy;
-        iface_attr->cap.get.max_zcopy = iface->config.max_rdma_zcopy;
-        iface_attr->cap.get.max_iov   = iface->config.max_rdma_sge;
-        iface_attr->cap.get.min_zcopy = 0;
-
-        iface_attr->cap.flags |= UCT_IFACE_FLAG_GET_BCOPY |
-                                 UCT_IFACE_FLAG_GET_ZCOPY;
-    }
-
-    if (uct_ib_efadv_has_rdma_write(&efa_attr)) {
-        iface_attr->cap.put.max_bcopy = iface->config.max_rdma_bcopy;
-        iface_attr->cap.put.max_zcopy = iface->config.max_rdma_zcopy;
-        iface_attr->cap.put.max_iov   = iface->config.max_rdma_sge;
-        iface_attr->cap.put.min_zcopy = 0;
-
-        iface_attr->cap.flags |= UCT_IFACE_FLAG_PUT_BCOPY |
-                                 UCT_IFACE_FLAG_PUT_ZCOPY;
-    }
-
-    return status;
-}
-
 static ucs_status_t uct_srd_iface_flush(uct_iface_h tl_iface, unsigned flags,
                                         uct_completion_t *comp)
 {
@@ -1045,7 +1042,6 @@ static uct_iface_ops_t uct_srd_iface_tl_ops = {
     .iface_progress_enable    = uct_base_iface_progress_enable,
     .iface_progress_disable   = uct_base_iface_progress_disable,
     .iface_progress           = uct_srd_iface_progress,
-    .iface_query              = uct_srd_iface_query,
     .iface_get_address        = uct_srd_iface_get_address,
     .iface_is_reachable       = uct_base_iface_is_reachable,
     .iface_event_fd_get       = (uct_iface_event_fd_get_func_t)

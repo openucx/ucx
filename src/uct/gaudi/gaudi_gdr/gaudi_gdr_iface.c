@@ -14,7 +14,8 @@
 #include <uct/gaudi/base/gaudi_base.h>
 
 static ucs_status_t
-uct_gaudi_gdr_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
+uct_gaudi_gdr_iface_query(uct_iface_h tl_iface,
+                          uct_iface_attr_v2_t *iface_attr)
 {
     uct_gaudi_gdr_iface_t *iface = ucs_derived_of(tl_iface,
                                                   uct_gaudi_gdr_iface_t);
@@ -76,7 +77,6 @@ static uct_iface_ops_t uct_gaudi_gdr_iface_ops = {
     .iface_event_arm          = (uct_iface_event_arm_func_t)
             ucs_empty_function_return_unsupported,
     .iface_close              = (uct_iface_close_func_t)ucs_empty_function,
-    .iface_query              = uct_gaudi_gdr_iface_query,
     .iface_get_device_address = (uct_iface_get_device_address_func_t)
             ucs_empty_function_return_success,
     .iface_get_address        = (uct_iface_get_address_func_t)
@@ -85,7 +85,7 @@ static uct_iface_ops_t uct_gaudi_gdr_iface_ops = {
 };
 
 static uct_iface_internal_ops_t uct_gaudi_gdr_iface_internal_ops = {
-    .iface_query_v2      = uct_iface_base_query_v2,
+    .iface_query_v2      = uct_gaudi_gdr_iface_query,
     .iface_estimate_perf = (uct_iface_estimate_perf_func_t)
             ucs_empty_function_return_unsupported,
     .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
