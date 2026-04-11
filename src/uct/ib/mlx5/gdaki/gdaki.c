@@ -251,6 +251,47 @@ uct_rc_gdaki_umem_reg(const uct_ib_md_t *md, struct ibv_context *ibv_context,
 #endif
 }
 
+static ucs_status_t
+uct_rc_gdaki_init_umem(uct_rc_gdaki_iface_t *iface, uint64_t pgsz_bitmap,
+                       size_t mem_size, uct_rc_gdaki_channel_block_mem_t *mem)
+{
+    const uct_ib_md_t *md = ucs_derived_of(iface->super.super.super.super.md,
+                                           uct_ib_md_t);
+    ucs_status_t status;
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(iface->cuda_ctx));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = uct_rc_gdaki_alloc(mem_size, ucs_get_page_size(), &mem->gpu_mem,
+                                &mem->gpu_raw);
+    if (status != UCS_OK) {
+        goto out_ctx;
+    }
+
+    mem->umem = uct_rc_gdaki_umem_reg(md, md->dev.ibv_context, mem->gpu_mem,
+                                      mem_size, pgsz_bitmap);
+    if (mem->umem == NULL) {
+        uct_ib_check_memlock_limit_msg(md->dev.ibv_context, UCS_LOG_LEVEL_ERROR,
+                                       "mlx5dv_devx_umem_reg(ptr=%p size=%zu)",
+                                       mem->gpu_mem, mem_size);
+        status = UCS_ERR_NO_MEMORY;
+        goto err_umem;
+    }
+
+    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
+    return UCS_OK;
+
+err_umem:
+    cuMemFree(mem->gpu_raw);
+    mem->gpu_mem = NULL;
+    mem->gpu_raw = 0;
+out_ctx:
+    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
+    return status;
+}
+
 typedef struct {
     uint64_t pgsz_bitmap;
     size_t   dev_ep_size;
@@ -373,27 +414,11 @@ err_cleanup:
 }
 
 static ucs_status_t
-uct_rc_gdaki_pool_chunk_init(ucs_mpool_t *mp,
-                             uct_rc_gdaki_channel_block_mem_t *hdr,
-                             unsigned num_elems)
-{
-    uct_rc_gdaki_pool_priv_t *priv = ucs_mpool_priv(mp);
-    uct_rc_gdaki_iface_t *iface    = ucs_container_of(mp, uct_rc_gdaki_iface_t,
-                                                      channel_pool);
-    void *elems = ucs_mpool_chunk_elems(mp, (void*)(hdr + 1));
-
-    return uct_rc_gdaki_init_channel_chunk(iface, hdr, priv->dev_ep_size, mp,
-                                           elems, num_elems);
-}
-
-static ucs_status_t
 uct_rc_gdaki_pool_chunk_alloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
 {
     uct_rc_gdaki_pool_priv_t *priv = ucs_mpool_priv(mp);
     uct_rc_gdaki_iface_t *iface    = ucs_container_of(mp, uct_rc_gdaki_iface_t,
                                                       channel_pool);
-    const uct_ib_md_t *md = ucs_derived_of(iface->super.super.super.super.md,
-                                           uct_ib_md_t);
     uct_rc_gdaki_channel_block_mem_t *hdr;
     size_t host_alloc_size, gpu_alloc_size;
     unsigned num_elems;
@@ -412,31 +437,16 @@ uct_rc_gdaki_pool_chunk_alloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
         goto err_free_hdr;
     }
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(iface->cuda_ctx));
+    gpu_alloc_size = num_elems * priv->dev_ep_size;
+    status = uct_rc_gdaki_init_umem(iface, priv->pgsz_bitmap, gpu_alloc_size,
+                                    hdr);
     if (status != UCS_OK) {
         goto err_free_hdr;
     }
 
-    gpu_alloc_size = num_elems * priv->dev_ep_size;
-    status         = uct_rc_gdaki_alloc(gpu_alloc_size, ucs_get_page_size(),
-                                        &hdr->gpu_mem, &hdr->gpu_raw);
-    if (status != UCS_OK) {
-        goto err_ctx;
-    }
-
-    hdr->umem = uct_rc_gdaki_umem_reg(md, md->dev.ibv_context, hdr->gpu_mem,
-                                      gpu_alloc_size, priv->pgsz_bitmap);
-    if (hdr->umem == NULL) {
-        uct_ib_check_memlock_limit_msg(md->dev.ibv_context, UCS_LOG_LEVEL_ERROR,
-                                       "mlx5dv_devx_umem_reg(ptr=%p size=%zu)",
-                                       hdr->gpu_mem, gpu_alloc_size);
-        status = UCS_ERR_NO_MEMORY;
-        goto err_mem;
-    }
-
-    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
-
-    status = uct_rc_gdaki_pool_chunk_init(mp, hdr, num_elems);
+    status = uct_rc_gdaki_init_channel_chunk(
+            iface, hdr, priv->dev_ep_size, mp,
+            ucs_mpool_chunk_elems(mp, (void*)(hdr + 1)), num_elems);
     if (status != UCS_OK) {
         goto err_umem;
     }
@@ -445,10 +455,7 @@ uct_rc_gdaki_pool_chunk_alloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
 
 err_umem:
     mlx5dv_devx_umem_dereg(hdr->umem);
-err_mem:
     cuMemFree(hdr->gpu_raw);
-err_ctx:
-    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
 err_free_hdr:
     ucs_free(hdr);
     return status;
@@ -562,8 +569,6 @@ static ucs_status_t
 uct_rc_gdaki_ep_init_channels_direct(uct_rc_gdaki_iface_t *iface,
                                      uct_rc_gdaki_ep_t *ep)
 {
-    const uct_ib_md_t *md = ucs_derived_of(iface->super.super.super.super.md,
-                                           uct_ib_md_t);
     uct_ib_mlx5_qp_attr_t qp_attr = {};
     size_t channel_block_size     = sizeof(uct_rc_gdaki_channel_block_t) +
                                     (iface->num_channels *
@@ -583,26 +588,12 @@ uct_rc_gdaki_ep_init_channels_direct(uct_rc_gdaki_iface_t *iface,
         return UCS_ERR_NO_MEMORY;
     }
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(iface->cuda_ctx));
+    status = uct_rc_gdaki_init_umem(iface, pgsz_bitmap, dev_ep_size, &ep->mem);
     if (status != UCS_OK) {
         goto err_block;
     }
 
-    status = uct_rc_gdaki_alloc(dev_ep_size, ucs_get_page_size(),
-                                &ep->mem.gpu_mem, &ep->mem.gpu_raw);
-    if (status != UCS_OK) {
-        goto err_ctx;
-    }
-
     ep->channel_block->gpu_ptr = (uintptr_t)ep->mem.gpu_mem;
-
-    ep->mem.umem = uct_rc_gdaki_umem_reg(md, md->dev.ibv_context,
-                                         ep->mem.gpu_mem, dev_ep_size,
-                                         pgsz_bitmap);
-    if (ep->mem.umem == NULL) {
-        status = UCS_ERR_NO_MEMORY;
-        goto err_mem;
-    }
 
     status = uct_rc_gdaki_init_channel_chunk(iface, &ep->mem, dev_ep_size, NULL,
                                              ep->channel_block, 1);
@@ -610,18 +601,11 @@ uct_rc_gdaki_ep_init_channels_direct(uct_rc_gdaki_iface_t *iface,
         goto err_umem;
     }
 
-    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
     return UCS_OK;
 
 err_umem:
     mlx5dv_devx_umem_dereg(ep->mem.umem);
-    ep->mem.umem = NULL;
-err_mem:
     cuMemFree(ep->mem.gpu_raw);
-    ep->mem.gpu_mem = NULL;
-    ep->mem.gpu_raw = 0;
-err_ctx:
-    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
 err_block:
     ucs_free(ep->channel_block);
     uct_rc_gdaki_ep_reset_channels(ep);
