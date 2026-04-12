@@ -389,17 +389,21 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
         goto out_pop_and_release;
     }
 
+    status = UCT_CUDADRV_FUNC_LOG_DEBUG(
+            cuMemcpyAsync((CUdeviceptr)dst, (CUdeviceptr)src, length, *stream));
 #ifdef HAVE_CUMEMRETAINALLOCATIONHANDLE
-    if (ctx.src_type == UCS_MEMORY_TYPE_CUDA) {
-        uct_cuda_copy_vmm_try_set_access((CUdeviceptr)src);
-    }
-    if (ctx.dst_type == UCS_MEMORY_TYPE_CUDA) {
-        uct_cuda_copy_vmm_try_set_access((CUdeviceptr)dst);
+    if (ucs_unlikely(status != UCS_OK)) {
+        if (ctx.src_type == UCS_MEMORY_TYPE_CUDA) {
+            uct_cuda_copy_vmm_try_set_access((CUdeviceptr)src);
+        }
+        if (ctx.dst_type == UCS_MEMORY_TYPE_CUDA) {
+            uct_cuda_copy_vmm_try_set_access((CUdeviceptr)dst);
+        }
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemcpyAsync((CUdeviceptr)dst,
+                                                         (CUdeviceptr)src,
+                                                         length, *stream));
     }
 #endif
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuMemcpyAsync((CUdeviceptr)dst, (CUdeviceptr)src, length, *stream));
     if (ucs_unlikely(UCS_OK != status)) {
         goto err_mpool_put;
     }
@@ -497,16 +501,20 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_ep_rma_short(
         goto out_pop_and_release;
     }
 
+    status = UCT_CUDADRV_FUNC_LOG_DEBUG(
+            cuMemcpyAsync(dst, src, length, *stream));
 #ifdef HAVE_CUMEMRETAINALLOCATIONHANDLE
-    if (ctx.src_type == UCS_MEMORY_TYPE_CUDA) {
-        uct_cuda_copy_vmm_try_set_access(src);
-    }
-    if (ctx.dst_type == UCS_MEMORY_TYPE_CUDA) {
-        uct_cuda_copy_vmm_try_set_access(dst);
+    if (ucs_unlikely(status != UCS_OK)) {
+        if (ctx.src_type == UCS_MEMORY_TYPE_CUDA) {
+            uct_cuda_copy_vmm_try_set_access(src);
+        }
+        if (ctx.dst_type == UCS_MEMORY_TYPE_CUDA) {
+            uct_cuda_copy_vmm_try_set_access(dst);
+        }
+        status = UCT_CUDADRV_FUNC_LOG_ERR(
+                cuMemcpyAsync(dst, src, length, *stream));
     }
 #endif
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemcpyAsync(dst, src, length, *stream));
     if (ucs_unlikely(status != UCS_OK)) {
         goto out_pop_and_release;
     }
