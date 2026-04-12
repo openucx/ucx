@@ -1012,7 +1012,7 @@ public:
         ucp_worker_h worker = sender().worker();
         auto context        = worker->context;
         std::string cuda_ipc_str("cuda_ipc");
-        
+
         for (auto idx = 0; idx < context->num_tls; ++idx) {
             if (cuda_ipc_str != context->tl_rscs[idx].tl_rsc.tl_name) {
                 continue;

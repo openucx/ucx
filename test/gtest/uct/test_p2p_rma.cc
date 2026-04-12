@@ -153,7 +153,7 @@ UCS_TEST_SKIP_COND_P(test_p2p_rma_madvise, madvise,
                      "IB_ALLOC?=mmap")
 {
     ucs_memory_type_t mem_type = (ucs_memory_type_t)ucs_ffs64(
-        sender().md_attr().access_mem_types);
+            sender().md_attr().access_mem_types);
 
     mapped_buffer sendbuf(4096, 0, sender(), 0, mem_type);
     mapped_buffer recvbuf(4096, 0, receiver(), 0, mem_type);

@@ -252,7 +252,7 @@ public:
 
     void test_flush_put_zcopy(flush_func_t flush) {
         ucs_memory_type_t mem_type = (ucs_memory_type_t)ucs_ffs64(
-                                         sender().md_attr().access_mem_types);
+                sender().md_attr().access_mem_types);
 
         const size_t length = ucs_min(10 * UCS_MBYTE,
                                       sender().iface_attr().cap.put.max_zcopy);
