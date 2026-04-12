@@ -2,7 +2,6 @@
 %bcond_without cma
 %bcond_with    cuda
 %bcond_with    gdrcopy
-%bcond_with    gda
 %bcond_without ib
 %bcond_with    knem
 %bcond_without rdmacm
@@ -137,7 +136,6 @@ Provides header files and examples for developing with UCX.
            %_with_arg ugni ugni \
            %_with_arg mad mad \
            %_with_arg ze ze \
-           %_with_arg gda gda \
            %{?configure_options}
 make %{?_smp_mflags} V=1
 
@@ -214,7 +212,7 @@ Provides static libraries required for developing with UCX.
 %if %{with vfs}
 %{_libdir}/pkgconfig/ucx-fuse.pc
 %endif
-%if %{with gda}
+%if %{with cuda} && %{with mlx5}
 %{_libdir}/pkgconfig/ucx-ib-mlx5-gda.pc
 %endif
 
@@ -434,7 +432,7 @@ Provides oneAPI Level Zero (ZE) Runtime support for UCX.
 %{_libdir}/ucx/libucm_ze.so.*
 %endif
 
-%if %{with gda}
+%if %{with cuda} && %{with mlx5}
 %package ib-mlx5-gda
 Requires: %{name}-cuda%{?_isa} = %{version}-%{release}
 Requires: %{name}-ib%{?_isa} = %{version}-%{release}

@@ -32,6 +32,7 @@
 #include <ucp/rma/rma.h>
 
 #include <ucs/datastruct/queue.h>
+#include <ucs/type/init_once.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/debug_int.h>
@@ -104,64 +105,71 @@ static ucs_stats_class_t ucp_ep_stats_class = {
 static ucs_status_t ucp_ep_failed_op(uct_ep_h ep);
 static ssize_t ucp_ep_failed_bc_op(uct_ep_h ep);
 static void ucp_ep_failed_destroy(uct_ep_h ep);
+static uct_iface_h ucp_failed_tl_iface;
+static ucs_init_once_t ucp_failed_tl_iface_once = UCS_INIT_ONCE_INITIALIZER;
 
-static uct_iface_internal_ops_t ucp_failed_ep_internal_ops = {
-    .iface_estimate_perf   = (uct_iface_estimate_perf_func_t)ucs_empty_function_return_unsupported,
-    .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
-    .ep_query              = (uct_ep_query_func_t)ucp_ep_failed_op,
-    .ep_invalidate         = (uct_ep_invalidate_func_t)ucp_ep_failed_op,
-    .ep_connect_to_ep_v2   = (uct_ep_connect_to_ep_v2_func_t)ucp_ep_failed_op,
-    .iface_is_reachable_v2 = (uct_iface_is_reachable_v2_func_t)ucs_empty_function_return_zero,
-    .ep_is_connected       = (uct_ep_is_connected_func_t)ucs_empty_function_return_zero,
-    .ep_get_device_ep      = (uct_ep_get_device_ep_func_t)ucp_ep_failed_op,
-    .ep_put_sgl_zcopy      = (uct_ep_put_sgl_zcopy_func_t)ucp_ep_failed_op,
-};
-
-static ucp_stub_iface_t ucp_failed_tl_iface_stub = {
-    .super = {
-        .ops = {
-            .ep_put_short        = (uct_ep_put_short_func_t)ucp_ep_failed_op,
-            .ep_put_bcopy        = (uct_ep_put_bcopy_func_t)ucp_ep_failed_bc_op,
-            .ep_put_zcopy        = (uct_ep_put_zcopy_func_t)ucp_ep_failed_op,
-            .ep_get_short        = (uct_ep_get_short_func_t)ucp_ep_failed_op,
-            .ep_get_bcopy        = (uct_ep_get_bcopy_func_t)ucp_ep_failed_op,
-            .ep_get_zcopy        = (uct_ep_get_zcopy_func_t)ucp_ep_failed_op,
-            .ep_am_short         = (uct_ep_am_short_func_t)ucp_ep_failed_op,
-            .ep_am_short_iov     = (uct_ep_am_short_iov_func_t)ucp_ep_failed_op,
-            .ep_am_bcopy         = (uct_ep_am_bcopy_func_t)ucp_ep_failed_bc_op,
-            .ep_am_zcopy         = (uct_ep_am_zcopy_func_t)ucp_ep_failed_op,
-            .ep_atomic_cswap64   = (uct_ep_atomic_cswap64_func_t)ucp_ep_failed_op,
-            .ep_atomic_cswap32   = (uct_ep_atomic_cswap32_func_t)ucp_ep_failed_op,
-            .ep_atomic64_post    = (uct_ep_atomic64_post_func_t)ucp_ep_failed_op,
-            .ep_atomic32_post    = (uct_ep_atomic32_post_func_t)ucp_ep_failed_op,
-            .ep_atomic64_fetch   = (uct_ep_atomic64_fetch_func_t)ucp_ep_failed_op,
-            .ep_atomic32_fetch   = (uct_ep_atomic32_fetch_func_t)ucp_ep_failed_op,
-            .ep_tag_eager_short  = (uct_ep_tag_eager_short_func_t)ucp_ep_failed_op,
-            .ep_tag_eager_bcopy  = (uct_ep_tag_eager_bcopy_func_t)ucp_ep_failed_op,
-            .ep_tag_eager_zcopy  = (uct_ep_tag_eager_zcopy_func_t)ucp_ep_failed_op,
-            .ep_tag_rndv_zcopy   = (uct_ep_tag_rndv_zcopy_func_t)ucp_ep_failed_op,
-            .ep_tag_rndv_cancel  = (uct_ep_tag_rndv_cancel_func_t)ucp_ep_failed_op,
-            .ep_tag_rndv_request = (uct_ep_tag_rndv_request_func_t)ucp_ep_failed_op,
-            .ep_pending_add      = (uct_ep_pending_add_func_t)ucs_empty_function_return_busy,
-            .ep_pending_purge    = (uct_ep_pending_purge_func_t)ucs_empty_function_return_success,
-            .ep_flush            = (uct_ep_flush_func_t)ucp_ep_failed_op,
-            .ep_fence            = (uct_ep_fence_func_t)ucp_ep_failed_op,
-            .ep_check            = (uct_ep_check_func_t)ucs_empty_function_return_success,
-            .ep_connect_to_ep    = (uct_ep_connect_to_ep_func_t)ucp_ep_failed_op,
-            .ep_destroy          = ucp_ep_failed_destroy,
-            .ep_get_address      = (uct_ep_get_address_func_t)ucp_ep_failed_op
-        }
-    },
-    .internal_ops = &ucp_failed_ep_internal_ops,
+static const uct_iface_ops_t ucp_failed_tl_iface_ops = {
+    .ep_put_short        = (uct_ep_put_short_func_t)ucp_ep_failed_op,
+    .ep_put_bcopy        = (uct_ep_put_bcopy_func_t)ucp_ep_failed_bc_op,
+    .ep_put_zcopy        = (uct_ep_put_zcopy_func_t)ucp_ep_failed_op,
+    .ep_get_short        = (uct_ep_get_short_func_t)ucp_ep_failed_op,
+    .ep_get_bcopy        = (uct_ep_get_bcopy_func_t)ucp_ep_failed_op,
+    .ep_get_zcopy        = (uct_ep_get_zcopy_func_t)ucp_ep_failed_op,
+    .ep_am_short         = (uct_ep_am_short_func_t)ucp_ep_failed_op,
+    .ep_am_short_iov     = (uct_ep_am_short_iov_func_t)ucp_ep_failed_op,
+    .ep_am_bcopy         = (uct_ep_am_bcopy_func_t)ucp_ep_failed_bc_op,
+    .ep_am_zcopy         = (uct_ep_am_zcopy_func_t)ucp_ep_failed_op,
+    .ep_atomic_cswap64   = (uct_ep_atomic_cswap64_func_t)ucp_ep_failed_op,
+    .ep_atomic_cswap32   = (uct_ep_atomic_cswap32_func_t)ucp_ep_failed_op,
+    .ep_atomic64_post    = (uct_ep_atomic64_post_func_t)ucp_ep_failed_op,
+    .ep_atomic32_post    = (uct_ep_atomic32_post_func_t)ucp_ep_failed_op,
+    .ep_atomic64_fetch   = (uct_ep_atomic64_fetch_func_t)ucp_ep_failed_op,
+    .ep_atomic32_fetch   = (uct_ep_atomic32_fetch_func_t)ucp_ep_failed_op,
+    .ep_tag_eager_short  = (uct_ep_tag_eager_short_func_t)ucp_ep_failed_op,
+    .ep_tag_eager_bcopy  = (uct_ep_tag_eager_bcopy_func_t)ucp_ep_failed_op,
+    .ep_tag_eager_zcopy  = (uct_ep_tag_eager_zcopy_func_t)ucp_ep_failed_op,
+    .ep_tag_rndv_zcopy   = (uct_ep_tag_rndv_zcopy_func_t)ucp_ep_failed_op,
+    .ep_tag_rndv_cancel  = (uct_ep_tag_rndv_cancel_func_t)ucp_ep_failed_op,
+    .ep_tag_rndv_request = (uct_ep_tag_rndv_request_func_t)ucp_ep_failed_op,
+    .ep_pending_add      = (uct_ep_pending_add_func_t)ucs_empty_function_return_busy,
+    .ep_pending_purge    = (uct_ep_pending_purge_func_t)ucs_empty_function_return_success,
+    .ep_flush            = (uct_ep_flush_func_t)ucp_ep_failed_op,
+    .ep_fence            = (uct_ep_fence_func_t)ucp_ep_failed_op,
+    .ep_check            = (uct_ep_check_func_t)ucs_empty_function_return_success,
+    .ep_connect_to_ep    = (uct_ep_connect_to_ep_func_t)ucp_ep_failed_op,
+    .ep_destroy          = ucp_ep_failed_destroy,
+    .ep_get_address      = (uct_ep_get_address_func_t)ucp_ep_failed_op
 };
 
 static ucp_ep_discard_lanes_arg_t ucp_failed_tl_ep_discard_arg = {
-    .failed_ep            = {.iface = &ucp_failed_tl_iface_stub.super},
     .deactivate_cfg_index = UCP_WORKER_CFG_INDEX_NULL,
     .activate_cfg_index   = UCP_WORKER_CFG_INDEX_NULL,
     .status               = UCS_ERR_CANCELED
 };
 
+static void ucp_ep_failed_tl_iface_init(void)
+{
+    uct_iface_close_func_t stub_close;
+    ucs_status_t status;
+
+    UCS_INIT_ONCE(&ucp_failed_tl_iface_once) {
+        status = ucp_stub_iface_open(UCS_ERR_CANCELED, &ucp_failed_tl_iface);
+        if (status != UCS_OK) {
+            ucs_fatal("failed to create failed tl iface stub");
+        }
+
+        stub_close                                   = ucp_failed_tl_iface->ops.iface_close;
+        ucp_failed_tl_iface->ops                     = ucp_failed_tl_iface_ops;
+        ucp_failed_tl_iface->ops.iface_close         = stub_close;
+        ucp_failed_tl_ep_discard_arg.failed_ep.iface = ucp_failed_tl_iface;
+    }
+}
+
+UCS_STATIC_CLEANUP {
+    UCS_CLEANUP_ONCE(&ucp_failed_tl_iface_once) {
+        uct_iface_close(ucp_failed_tl_iface);
+    }
+}
 
 int ucp_is_uct_ep_failed(uct_ep_h uct_ep)
 {
@@ -1530,6 +1538,8 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
         return;
     }
 
+    ucp_ep_failed_tl_iface_init();
+
     discard_arg = ucs_malloc(sizeof(*discard_arg), "discard_lanes_arg");
     if (discard_arg == NULL) {
         ucs_error("ep %p: failed to allocate memory for discarding lanes"
@@ -1539,7 +1549,7 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
         return;
     }
 
-    discard_arg->failed_ep.iface      = &ucp_failed_tl_iface_stub.super;
+    discard_arg->failed_ep.iface      = ucp_failed_tl_iface;
     discard_arg->ucp_ep               = ep;
     discard_arg->discard_counter      = 1;
     discard_arg->destroy_counter      = ucs_popcount(lanes);
@@ -1660,13 +1670,34 @@ ucp_ep_reconfig_internal(ucp_ep_h ep, ucp_lane_map_t failed_lanes)
 
     for (lane = 0; lane < cfg_key.num_lanes; lane++) {
         if (failed_lanes & UCS_BIT(lane)) {
+            ucs_assert(lane != UCP_NULL_LANE);
             cfg_key.lanes[lane].lane_types |= UCS_BIT(UCP_LANE_TYPE_FAILED);
+            if (cfg_key.am_lane == lane) {
+                cfg_key.am_lane = UCP_NULL_LANE;
+            }
         }
 
         wiface = ucp_worker_iface(worker, cfg_key.lanes[lane].rsc_index);
         port_speed_changed |= (cfg_key.lanes[lane].port_speed !=
                                wiface->port_speed);
         cfg_key.lanes[lane].port_speed = wiface->port_speed;
+    }
+
+    if (cfg_key.am_lane == UCP_NULL_LANE) {
+        for (lane = 0; lane < cfg_key.num_lanes; lane++) {
+            if ((cfg_key.lanes[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_AM_BW)) &&
+                !(cfg_key.lanes[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_FAILED))) {
+                cfg_key.am_lane = lane;
+                break;
+            }
+        }
+    }
+
+    if ((cfg_key.am_lane == UCP_NULL_LANE) &&
+        (ep->worker->context->config.features & UCP_FEATURE_AM)) {
+        ucs_diag("ep %p: AM lane not found after reconfiguration with "
+                 "failed lanes 0x%lx", ep, failed_lanes);
+        return UCS_ERR_UNREACHABLE;
     }
 
     if (port_speed_changed) {
@@ -1707,28 +1738,32 @@ ucp_ep_failover_reconfig(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,
     return UCS_OK;
 }
 
-ucs_status_t ucp_ep_set_lanes_failed(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
+void ucp_ep_set_lanes_failed(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
                                      ucs_status_t status)
 {
+    const ucp_lane_index_t cm_lane = ucp_ep_get_cm_lane(ucp_ep);
+    ucs_status_t reconfig_status;
+
     UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(ucp_ep->worker);
     ucs_assert(UCS_STATUS_IS_ERR(status));
     ucs_assert(!ucs_async_is_from_async(&ucp_ep->worker->async));
 
-    if (!ucp_ep_err_mode_eq(ucp_ep, UCP_ERR_HANDLING_MODE_FAILOVER) ||
-        /* some unrecoverable error,
-        TODO refactor this to mark all lanes as failed */
-        (lanes == 0) ||
+    if (ucp_ep_err_mode_eq(ucp_ep, UCP_ERR_HANDLING_MODE_FAILOVER) &&
+        /* TODO refactor this to mark all lanes as failed */
+        (lanes != 0) &&
          /* sockaddr is not supported for failover mode */
-        ucp_ep_has_cm_lane(ucp_ep)) {
-        return ucp_ep_set_failed(ucp_ep,
-            (lanes == UCS_BIT(ucp_ep_get_cm_lane(ucp_ep)) ?
-            ucp_ep_get_cm_lane(ucp_ep) : UCP_NULL_LANE), status);
+        cm_lane == UCP_NULL_LANE) {
+        reconfig_status = ucp_ep_failover_reconfig(ucp_ep, lanes, status);
+        if (reconfig_status == UCS_OK) {
+            return;
+        }
     }
 
-    ucs_debug("ep %p: set_lanes_failed status %s on lanes 0x%lx", ucp_ep,
-              ucs_status_string(status), lanes);
-
-    return ucp_ep_failover_reconfig(ucp_ep, lanes, status);
+    /* else: unrecoverable error, mark the endpoint as failed. */
+    ucp_ep_set_failed(ucp_ep,
+                      ((cm_lane != UCP_NULL_LANE) &&
+                       (lanes == UCS_BIT(cm_lane)) ?
+                      cm_lane : UCP_NULL_LANE), status);
 }
 
 void ucp_ep_set_lanes_failed_schedule(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
@@ -1765,6 +1800,8 @@ void ucp_ep_cleanup_lanes(ucp_ep_h ep)
     uct_ep_h uct_ep;
 
     ucs_debug("ep %p: cleanup lanes", ep);
+
+    ucp_ep_failed_tl_iface_init();
 
     ucp_ep_extract_failed_lanes(ep, UCS_MASK(ucp_ep_num_lanes(ep)),
                                 &ucp_failed_tl_ep_discard_arg.failed_ep,
