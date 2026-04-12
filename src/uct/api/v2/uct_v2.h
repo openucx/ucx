@@ -1038,8 +1038,8 @@ typedef enum {
  * @brief Interface attribute fields.
  */
 enum uct_iface_attr_field {
-    /* Reserved for future use */
-    UCT_IFACE_ATTR_FIELD_RESERVED = 0
+    /** Enables @ref uct_iface_attr_v2_t::max_put_sgl_zcopy_count */
+    UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT = UCS_BIT(0)
 };
 
 
@@ -1053,6 +1053,12 @@ typedef struct {
      * @ref uct_iface_attr_field_t.
      */
     uint64_t field_mask;
+
+    /**
+     * Maximal number of elements in @ref uct_ep_put_sgl_zcopy.
+     * @anchor uct_iface_attr_v2_max_put_sgl_zcopy_count
+     */
+    size_t   max_put_sgl_zcopy_count;
 } uct_iface_attr_v2_t;
 
 
@@ -1234,6 +1240,40 @@ int uct_ep_is_connected(uct_ep_h ep,
  *         Other            Error codes as defined by @ref ucs_status_t.
  */
 ucs_status_t uct_ep_get_device_ep(uct_ep_h ep, uct_device_ep_h *device_ep_p);
+
+
+/**
+ * @ingroup UCT_RMA
+ * @brief Scatter-gather list (SGL) zero-copy put: write multiple buffers to
+ *        multiple remote addresses while avoiding local memory copy.
+ *
+ * Each element @a i transfers @a lengths[i] bytes from local buffer
+ * @a buffers[i] (with memory handle @a memhs[i]) to remote address
+ * @a remote_addrs[i] (with remote key @a rkeys[i]).
+ *
+ * @param [in] ep           Destination endpoint handle.
+ * @param [in] buffers      Array of local buffer pointers.
+ * @param [in] lengths      Array of transfer lengths in bytes.
+ * @param [in] memhs        Array of local memory handles, obtained from
+ *                          @ref ::uct_md_mem_reg.
+ * @param [in] remote_addrs Array of remote addresses.
+ * @param [in] rkeys        Array of remote keys, obtained from
+ *                          @ref ::uct_rkey_unpack.
+ * @param [in] count        Number of elements in the arrays. Must not exceed
+ *                          @ref uct_iface_attr_v2_max_put_sgl_zcopy_count
+ *                          "uct_iface_attr_v2_t::max_put_sgl_zcopy_count".
+ * @param [in] comp         Completion handle as defined by
+ *                          @ref ::uct_completion_t.
+ *
+ * @return UCS_INPROGRESS   Some communication operations are still in progress.
+ *                          If non-NULL @a comp is provided, it will be updated
+ *                          upon completion of these operations.
+ */
+ucs_status_t
+uct_ep_put_sgl_zcopy(uct_ep_h ep, void * const *buffers,
+                     const size_t *lengths, uct_mem_h const *memhs,
+                     const uint64_t *remote_addrs, uct_rkey_t const *rkeys,
+                     size_t count, uct_completion_t *comp);
 
 
 /**

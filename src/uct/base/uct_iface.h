@@ -312,6 +312,12 @@ typedef ucs_status_t (*uct_ep_get_device_ep_func_t)(
         uct_ep_h ep, uct_device_ep_h *device_ep_p);
 
 
+/* Scatter-gather list (SGL) zcopy put to multiple remote addr/rkey pairs. */
+typedef ucs_status_t (*uct_ep_put_sgl_zcopy_func_t)(
+        uct_ep_h ep, void * const *buffers, const size_t *lengths,
+        uct_mem_h const *memhs, const uint64_t *remote_addrs,
+        uct_rkey_t const *rkeys, size_t count, uct_completion_t *comp);
+
 /* Internal operations, not exposed by the external API */
 typedef struct uct_iface_internal_ops {
     uct_iface_query_v2_func_t        iface_query_v2;
@@ -323,6 +329,7 @@ typedef struct uct_iface_internal_ops {
     uct_iface_is_reachable_v2_func_t iface_is_reachable_v2;
     uct_ep_is_connected_func_t       ep_is_connected;
     uct_ep_get_device_ep_func_t      ep_get_device_ep;
+    uct_ep_put_sgl_zcopy_func_t      ep_put_sgl_zcopy;
 } uct_iface_internal_ops_t;
 
 
