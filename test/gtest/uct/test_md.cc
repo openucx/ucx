@@ -1277,7 +1277,7 @@ protected:
 };
 
 UCS_TEST_SKIP_COND_P(test_gdr_copy, gdr_copy_reg_cuda_default_pin,
-                     !check_caps(UCT_MD_FLAG_REG), "GDR_COPY_PIN_MODE?=default")
+                     !check_caps(UCT_MD_FLAG_REG), "GDR_COPY_USE_PCIE?=auto")
 {
     ASSERT_UCS_OK(register_mem());
 }
@@ -1285,7 +1285,7 @@ UCS_TEST_SKIP_COND_P(test_gdr_copy, gdr_copy_reg_cuda_default_pin,
 UCS_TEST_SKIP_COND_P(test_gdr_copy, gdr_copy_reg_cuda_pcie_pin,
                      !mem_buffer::cuda_gpu_has_c2c() ||
                              !check_caps(UCT_MD_FLAG_REG),
-                     "GDR_COPY_PIN_MODE?=pcie")
+                     "GDR_COPY_USE_PCIE?=yes")
 {
     ASSERT_UCS_OK(register_mem());
 }
@@ -1293,14 +1293,14 @@ UCS_TEST_SKIP_COND_P(test_gdr_copy, gdr_copy_reg_cuda_pcie_pin,
 UCS_TEST_SKIP_COND_P(test_gdr_copy, gdr_copy_reg_cuda_pcie_pin_fail,
                      mem_buffer::cuda_gpu_has_c2c() ||
                              !check_caps(UCT_MD_FLAG_REG),
-                     "GDR_COPY_PIN_MODE?=pcie")
+                     "GDR_COPY_USE_PCIE?=yes")
 {
     scoped_log_handler slh(wrap_errors_logger);
     ASSERT_UCS_STATUS_EQ(UCS_ERR_IO_ERROR, register_mem());
 }
 
 UCS_TEST_SKIP_COND_P(test_gdr_copy, gdr_copy_reg_cuda_try_pcie_pin,
-                     !check_caps(UCT_MD_FLAG_REG), "GDR_COPY_PIN_MODE=try_pcie")
+                     !check_caps(UCT_MD_FLAG_REG), "GDR_COPY_USE_PCIE=try")
 {
     ASSERT_UCS_OK(register_mem());
 }
