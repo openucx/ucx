@@ -569,7 +569,7 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
             goto out_free;
         }
 
-        dev_ep->atomic_va    = iface->atomic_buff;
+        dev_ep->atomic_va    = (void*)&iface->atomic_buff;
         dev_ep->atomic_lkey  = htonl(iface->atomic_mr->lkey);
         dev_ep->sq_wqe_num   = qp_attr.max_tx;
         dev_ep->sq_fc_mask   = (qp_attr.max_tx >> 1) - 1;
@@ -774,16 +774,10 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
         goto err_ctx_release;
     }
 
-    status = uct_rc_gdaki_alloc(sizeof(uint64_t), sizeof(uint64_t),
-                                (void**)&self->atomic_buff, &self->atomic_raw);
-    if (status != UCS_OK) {
-        goto err_ctx;
-    }
-
-    status = uct_rc_gdaki_reg_mr(&md->super, self->atomic_buff,
+    status = uct_rc_gdaki_reg_mr(&md->super, &self->atomic_buff,
                                  sizeof(uint64_t), &self->atomic_mr);
     if (status != UCS_OK) {
-        goto err_atomic;
+        goto err_ctx;
     }
 
     if (pthread_mutex_init(&self->ep_init_lock, NULL) != 0) {
@@ -796,8 +790,6 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
 
 err_lock:
     ibv_dereg_mr(self->atomic_mr);
-err_atomic:
-    cuMemFree(self->atomic_raw);
 err_ctx:
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
 err_ctx_release:
