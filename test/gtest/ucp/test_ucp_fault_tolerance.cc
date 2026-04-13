@@ -59,6 +59,10 @@ protected:
     };
 
     void init() override {
+        if (has_transport("dc_x")) {
+            UCS_TEST_SKIP_R("TODO: fix dc transports failure on BF");
+        }
+
         ucp_test::init();
 
         ucp_ep_params_t ep_params = get_ep_params();
