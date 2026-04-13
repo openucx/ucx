@@ -32,8 +32,6 @@ static ucs_status_t
 uct_gdr_copy_use_pcie_params_get(ucs_ternary_auto_value_t use_pcie,
                                  uint32_t *pin_gdr_flags_p, int *pin_pcie_fallback_p)
 {
-    char buf[64];
-
 #if HAVE_DECL_GDR_PIN_BUFFER_V2
     switch (use_pcie) {
     case UCS_YES:
@@ -57,6 +55,8 @@ uct_gdr_copy_use_pcie_params_get(ucs_ternary_auto_value_t use_pcie,
 
     return UCS_OK;
 #else
+    char buf[64];
+
     if ((use_pcie != UCS_AUTO) && (use_pcie != UCS_NO)) {
         ucs_config_sprintf_ternary_auto(buf, sizeof(buf), &use_pcie, NULL);
         ucs_error("USE_PCIE=%s requires GDRCopy with gdr_pin_buffer_v2", buf);
