@@ -979,27 +979,6 @@ static uct_iface_ops_t uct_rc_gdaki_iface_tl_ops = {
             ucs_empty_function_return_unsupported,
 };
 
-static ucs_status_t uct_rc_gdaki_reg_mr(const uct_ib_md_t *md, void *address,
-                                        size_t length, struct ibv_mr **mr_p)
-{
-    uct_md_mem_reg_params_t params;
-    uct_cuda_copy_md_dmabuf_t dmabuf;
-    ucs_status_t status;
-
-    params.field_mask    = UCT_MD_MEM_REG_FIELD_FLAGS |
-                           UCT_MD_MEM_REG_FIELD_DMABUF_FD |
-                           UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET;
-    params.flags         = 0;
-    dmabuf               = uct_rc_gdaki_get_dmabuf(md, address, length);
-    params.dmabuf_fd     = dmabuf.fd;
-    params.dmabuf_offset = dmabuf.offset;
-
-    status = uct_ib_reg_mr(md, address, length, &params,
-                           UCT_IB_MEM_ACCESS_FLAGS, NULL, mr_p);
-    ucs_close_fd(&dmabuf.fd);
-    return status;
-}
-
 static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
                            uct_worker_h worker,
                            const uct_iface_params_t *params,
@@ -1009,6 +988,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
             ucs_derived_of(tl_config, uct_rc_gdaki_iface_config_t);
     uct_ib_mlx5_md_t *md = ucs_derived_of(tl_md, uct_ib_mlx5_md_t);
     uct_ib_iface_init_attr_t init_attr = {};
+    uct_md_mem_reg_params_t reg_params = {};
     UCS_STRING_BUFFER_ONSTACK(strb, 64);
     char *gpu_name, *ib_name;
     char pci_addr[UCS_SYS_BDF_NAME_MAX];
@@ -1073,8 +1053,9 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
         goto err_ctx_release;
     }
 
-    status = uct_rc_gdaki_reg_mr(&md->super, &self->atomic_buff,
-                                 sizeof(uint64_t), &self->atomic_mr);
+    status = uct_ib_reg_mr(&md->super, &self->atomic_buff, sizeof(uint64_t),
+                           &reg_params, UCT_IB_MEM_ACCESS_FLAGS, NULL,
+                           &self->atomic_mr);
     if (status != UCS_OK) {
         goto err_ctx;
     }
