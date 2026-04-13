@@ -62,7 +62,7 @@ uct_gdr_copy_pin_params_get(uct_gdr_copy_pin_mode_t pin_mode,
 #else
     if (pin_mode != UCT_GDR_COPY_PIN_MODE_DEFAULT) {
         ucs_error(
-                "GDR_COPY PIN_MODE=%s requires GDRCopy with gdr_pin_buffer_v2",
+                "PIN_MODE=%s requires GDRCopy with gdr_pin_buffer_v2",
                 uct_gdr_copy_pin_mode_names[pin_mode]);
         return UCS_ERR_INVALID_PARAM;
     }
@@ -236,8 +236,8 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_gdr_copy_mem_reg_internal,
         goto unmap_buffer;
     }
 
-    ucs_trace("registered memory:%p..%p length:%lu info.va:0x%" PRIx64
-              " bar_ptr:%p pin_flags %u",
+    ucs_trace("registered memory %p..%p length %lu info.va 0x%" PRIx64
+              " bar_ptr %p pin_flags %u",
               address, UCS_PTR_BYTE_OFFSET(address, length), length,
               mem_hndl->info.va, mem_hndl->bar_ptr, pin_flags);
 
@@ -605,6 +605,8 @@ uct_gdr_copy_md_open(uct_component_t *component, const char *md_name,
             ucs_derived_of(config, uct_gdr_copy_md_config_t);
     uct_gdr_copy_md_t *md;
     ucs_status_t status;
+    uint32_t new_pin_flags;
+    int new_pin_fallback;
 
     if (!md_config->shared) {
         status = uct_gdr_copy_md_create(component, md_config, &md);
@@ -622,9 +624,6 @@ uct_gdr_copy_md_open(uct_component_t *component, const char *md_name,
             ucs_error("inconsistent gdr_copy rcache enable param");
             status = UCS_ERR_INVALID_PARAM;
         } else {
-            uint32_t new_pin_flags;
-            int new_pin_fallback;
-
             status = uct_gdr_copy_pin_params_get(md_config->pin_mode,
                                                  &new_pin_flags,
                                                  &new_pin_fallback);
@@ -632,8 +631,7 @@ uct_gdr_copy_md_open(uct_component_t *component, const char *md_name,
                 if ((uct_gdr_copy_context.md->pin_gdr_flags != new_pin_flags) ||
                     (uct_gdr_copy_context.md->pin_pcie_fallback !=
                      new_pin_fallback)) {
-                    ucs_error("inconsistent gdr_copy PIN_MODE: shared "
-                              "pin_flags=%u "
+                    ucs_error("inconsistent PIN_MODE: shared pin_flags=%u "
                               "fallback=%d, opening pin_flags=%u fallback=%d",
                               uct_gdr_copy_context.md->pin_gdr_flags,
                               uct_gdr_copy_context.md->pin_pcie_fallback,

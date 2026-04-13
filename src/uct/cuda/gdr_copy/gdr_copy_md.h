@@ -26,11 +26,11 @@ typedef enum uct_gdr_copy_pin_mode {
  * @brief gdr_copy MD descriptor
  */
 typedef struct {
-    uct_md_t          super;               /**< Domain info */
+    uct_md_t          super;             /**< Domain info */
     gdr_t             gdrcpy_ctx;        /**< gdr copy context */
     ucs_linear_func_t reg_cost;          /**< Memory registration cost */
     ucs_rcache_t      *rcache;           /**< Registration cache */
-    uint32_t          pin_gdr_flags;       /**< First gdr_pin_buffer_v2 flags (0 if v2 absent) */
+    uint32_t          pin_gdr_flags;     /**< First gdr_pin_buffer_v2 flags (0 if v2 absent) */
     int               pin_pcie_fallback; /**< If nonzero, retry pin with default flags on failure */
 } uct_gdr_copy_md_t;
 
