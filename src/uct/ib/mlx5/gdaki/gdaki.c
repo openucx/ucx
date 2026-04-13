@@ -228,33 +228,33 @@ uct_rc_gdaki_umem_reg(const uct_ib_md_t *md, struct ibv_context *ibv_context,
 }
 
 static ucs_status_t uct_rc_gdaki_reg_mr(const uct_ib_md_t *md, void *address,
-    size_t length, struct ibv_mr **mr_p)
+                                        size_t length, struct ibv_mr **mr_p)
 {
     uct_md_mem_reg_params_t params;
     uct_cuda_copy_md_dmabuf_t dmabuf;
     ucs_status_t status;
 
     params.field_mask    = UCT_MD_MEM_REG_FIELD_FLAGS |
-    UCT_MD_MEM_REG_FIELD_DMABUF_FD |
-    UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET;
+                           UCT_MD_MEM_REG_FIELD_DMABUF_FD |
+                           UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET;
     params.flags         = 0;
     dmabuf               = uct_rc_gdaki_get_dmabuf(md, address, length);
     params.dmabuf_fd     = dmabuf.fd;
     params.dmabuf_offset = dmabuf.offset;
 
     status = uct_ib_reg_mr(md, address, length, &params,
-    UCT_IB_MEM_ACCESS_FLAGS, NULL, mr_p);
+                           UCT_IB_MEM_ACCESS_FLAGS, NULL, mr_p);
     ucs_close_fd(&dmabuf.fd);
     return status;
 }
 
 static ucs_status_t uct_rc_gdaki_alloc_atomic(uct_rc_gdaki_iface_t *iface)
 {
-    const uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.super.md,
-        uct_ib_mlx5_md_t);
+    const uct_ib_mlx5_md_t *md =
+            ucs_derived_of(iface->super.super.super.super.md, uct_ib_mlx5_md_t);
     ucs_status_t status;
-    CUdeviceptr  atomic_raw;
-    uint64_t     *atomic_buff;
+    CUdeviceptr atomic_raw;
+    uint64_t *atomic_buff;
 
     pthread_mutex_lock(&iface->ep_init_lock);
     if (iface->atomic_buff != NULL) {
@@ -263,7 +263,7 @@ static ucs_status_t uct_rc_gdaki_alloc_atomic(uct_rc_gdaki_iface_t *iface)
     }
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(
-        cuDevicePrimaryCtxRetain(&iface->cuda_ctx, iface->cuda_dev));
+            cuDevicePrimaryCtxRetain(&iface->cuda_ctx, iface->cuda_dev));
     if (status != UCS_OK) {
         goto out;
     }
@@ -280,13 +280,13 @@ static ucs_status_t uct_rc_gdaki_alloc_atomic(uct_rc_gdaki_iface_t *iface)
     }
 
     status = uct_rc_gdaki_reg_mr(&md->super, iface->atomic_buff,
-                                sizeof(uint64_t), &iface->atomic_mr);
+                                 sizeof(uint64_t), &iface->atomic_mr);
     if (status != UCS_OK) {
         goto err_atomic_release;
     }
 
     iface->atomic_buff = atomic_buff;
-    iface->atomic_raw = atomic_raw;
+    iface->atomic_raw  = atomic_raw;
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
     goto out;
 
@@ -296,7 +296,7 @@ err_ctx_pop:
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
 err_ctx_release:
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(iface->cuda_dev));
-out:    
+out:
     pthread_mutex_unlock(&iface->ep_init_lock);
     return status;
 }
@@ -320,7 +320,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super.super.super);
 
     self->dev_ep_init = 0;
-    status = uct_rc_gdaki_alloc_atomic(iface);
+    status            = uct_rc_gdaki_alloc_atomic(iface);
     if (status != UCS_OK) {
         return status;
     }
@@ -835,7 +835,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_gdaki_iface_t)
     if (self->atomic_buff != NULL) {
         ibv_dereg_mr(self->atomic_mr);
         cuMemFree(self->atomic_raw);
-        (void)UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(self->cuda_dev));
+        (void)UCT_CUDADRV_FUNC_LOG_WARN(
+                cuDevicePrimaryCtxRelease(self->cuda_dev));
     }
 }
 
