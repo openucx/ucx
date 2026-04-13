@@ -30,13 +30,13 @@ typedef struct {
  * gdr copy domain configuration.
  */
 typedef struct uct_gdr_copy_md_config {
-    uct_md_config_t         super;
-    int                     shared;        /**< Shared MD instance */
-    int                     enable_rcache; /**< Enable registration cache */
-    ucs_linear_func_t       uc_reg_cost;   /**< Memory registration cost estimation
-                                                without using the cache */
-    ucs_rcache_config_t          rcache_config; /**< Registration cache configuration */
-    ucs_ternary_auto_value_t   use_pcie;        /**< UCS_CONFIG_TYPE_TERNARY_AUTO; see USE_PCIE */
+    uct_md_config_t          super;
+    int                      shared;        /**< Shared MD instance */
+    int                      enable_rcache; /**< Enable registration cache */
+    ucs_linear_func_t        uc_reg_cost;   /**< Memory registration cost estimation
+                                                 without using the cache */
+    ucs_rcache_config_t      rcache_config; /**< Registration cache configuration */
+    ucs_ternary_auto_value_t use_pcie;      /**< UCS_CONFIG_TYPE_TERNARY_AUTO; see USE_PCIE */
 } uct_gdr_copy_md_config_t;
 
 
