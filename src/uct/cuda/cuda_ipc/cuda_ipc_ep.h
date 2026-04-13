@@ -14,6 +14,7 @@
 typedef struct uct_cuda_ipc_ep {
     uct_base_ep_t        super;
     pid_t                remote_pid;
+    ucs_sys_ns_t         remote_pid_ns;
     uct_device_ep_h      device_ep;
 } uct_cuda_ipc_ep_t;
 

@@ -1,5 +1,5 @@
 #
-# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2021. ALL RIGHTS RESERVED.
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 # Copyright (c) UT-Battelle, LLC. 2014-2017. ALL RIGHTS RESERVED.
 # Copyright (c) The University of Tennesse and the University of Tennessee
 #               Research Foundation. 2016.  ALL RIGHTS RESERVED.
@@ -54,6 +54,7 @@ libuct_la_SOURCES = \
 	base/uct_md_vfs.c \
 	base/uct_mem.c \
 	base/uct_component.c \
+	base/uct_iface_address_pid_ns.c \
 	base/uct_iface.c \
 	base/uct_iface_vfs.c \
 	base/uct_worker.c \
