@@ -166,6 +166,7 @@ rm -f %{buildroot}%{_libdir}/ucx/lib*.so
 %files devel
 %{_includedir}/uc*
 %exclude %{_includedir}/uct/ib/mlx5/gdaki*
+%exclude %{_includedir}/uct/cuda*
 %{_libdir}/lib*.so
 %{_libdir}/pkgconfig/ucx.pc
 %{_libdir}/pkgconfig/ucx-uct.pc
@@ -247,6 +248,7 @@ technology for direct data transfer between GPU and RDMA devices.
 %{_libdir}/ucx/libucx_perftest_cuda.so.*
 %{_libdir}/ucx/libucm_cuda.so.*
 %{_libdir}/ucx/libuct_cuda.so.*
+%{_includedir}/uct/cuda/*
 %endif
 
 %if %{with gdrcopy}

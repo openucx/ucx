@@ -33,13 +33,6 @@ override_dh_auto_configure:
 override_dh_auto_install:
 	dh_auto_install --destdir=debian/tmp
 
-# GDAKI files are packaged in ucx-cuda; the main ucx install's would claim
-# them too. Install ucx first with those paths excluded, then install the
-# remaining packages.
-override_dh_install:
-	dh_install -pucx -Xgda
-	dh_install --remaining-packages
-
 override_dh_shlibdeps:
 	dh_shlibdeps --dpkg-shlibdeps-params=--ignore-missing-info
 	if [ -e $(CUDA_SUBSTVARS) ]; then \
