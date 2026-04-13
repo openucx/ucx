@@ -150,17 +150,17 @@ ucx_perf_ze_alloc(size_t length, ucs_memory_type_t mem_type, void **address_p)
         return UCS_ERR_NO_DEVICE;
     }
 
-    if (mem_type == UCS_MEMORY_TYPE_ZE_HOST)
+    if (mem_type == UCS_MEMORY_TYPE_ZE_HOST) {
         ret = zeMemAllocHost(gpu_context, &host_desc, length, alignment,
                              address_p);
-    else if (mem_type == UCS_MEMORY_TYPE_ZE_DEVICE)
+    } else if (mem_type == UCS_MEMORY_TYPE_ZE_DEVICE) {
         ret = zeMemAllocDevice(gpu_context, &dev_desc, length, alignment,
                                gpu_devices[tls_gpu_index], address_p);
-    else if (mem_type == UCS_MEMORY_TYPE_ZE_MANAGED)
+    } else if (mem_type == UCS_MEMORY_TYPE_ZE_MANAGED) {
         ret = zeMemAllocShared(gpu_context, &dev_desc, &host_desc, length,
                                alignment, gpu_devices[tls_gpu_index],
                                address_p);
-    else {
+    } else {
         ucs_error("invalid memory type %s (%d)",
                   ucs_memory_type_names[mem_type], mem_type);
         return UCS_ERR_INVALID_PARAM;
