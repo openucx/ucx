@@ -832,7 +832,7 @@ ucs_numa_node_t ucs_topo_sys_device_get_numa_node(ucs_sys_device_t sys_dev)
  * @return 1 if the devices share a PCI bridge, 0 otherwise. Returns 0 the
  *         devices are the same.
  */
-static int
+int
 ucs_topo_is_pci_bridge(ucs_sys_device_t sys_dev1, ucs_sys_device_t sys_dev2)
 {
     ucs_status_t status;
