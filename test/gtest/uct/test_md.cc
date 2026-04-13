@@ -1184,8 +1184,8 @@ class test_md_dmabuf : public test_md {
 
 UCS_TEST_P(test_md_dmabuf, mem_query_dmabuf)
 {
-    if (!check_caps(UCT_MD_FLAG_REG | UCT_MD_FLAG_REG_DMABUF)) {
-        UCS_TEST_SKIP_R("MD does not support dmabuf memory query");
+    if ((md_attr().dmabuf_mem_types & md_attr().access_mem_types) == 0) {
+        UCS_TEST_SKIP_R("MD does not expose dmabuf memory query");
     }
 
     const size_t size = 4096;
@@ -1234,8 +1234,8 @@ UCS_TEST_P(test_md_dmabuf, mem_query_dmabuf)
 
 UCS_TEST_P(test_md_dmabuf, mem_query_dmabuf_offset)
 {
-    if (!check_caps(UCT_MD_FLAG_REG | UCT_MD_FLAG_REG_DMABUF)) {
-        UCS_TEST_SKIP_R("MD does not support dmabuf memory query");
+    if ((md_attr().dmabuf_mem_types & md_attr().access_mem_types) == 0) {
+        UCS_TEST_SKIP_R("MD does not expose dmabuf memory query");
     }
 
     const size_t size   = 4096;
