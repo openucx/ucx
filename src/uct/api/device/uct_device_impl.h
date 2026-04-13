@@ -12,16 +12,16 @@
 #include <uct/api/uct_def.h>
 #include <ucs/sys/device_code.h>
 
-#if __has_include(<uct/cuda/cuda_ipc/cuda_ipc.cuh>) \
- && __has_include(<cuda/atomic>)
+#if __has_include(<uct/cuda/cuda_ipc/cuda_ipc.cuh>) && \
+    __has_include(<cuda/atomic>)
 #  include <uct/cuda/cuda_ipc/cuda_ipc.cuh>
 #  define UCT_CUDA_IPC_SUPPORTED 1
 #else
 #  define UCT_CUDA_IPC_SUPPORTED 0
 #endif
 
-#if __has_include(<uct/ib/mlx5/gdaki/gdaki.cuh>) \
- && __has_include(<infiniband/mlx5dv.h>)
+#if __has_include(<uct/ib/mlx5/gdaki/gdaki.cuh>) && \
+    __has_include(<infiniband/mlx5dv.h>)
 #  include <uct/ib/mlx5/gdaki/gdaki.cuh>
 #  define UCT_RC_MLX5_GDA_SUPPORTED 1
 #else

@@ -164,9 +164,10 @@ rm -f %{buildroot}%{_libdir}/ucx/lib*.so
 %{_sysconfdir}/ucx/ucx.conf
 
 %files devel
-%{_includedir}/uc*
-%exclude %{_includedir}/uct/ib/mlx5/gdaki*
-%exclude %{_includedir}/uct/cuda*
+%{_includedir}/ucs
+%{_includedir}/ucm/api
+%{_includedir}/ucp/api
+%{_includedir}/uct/api
 %{_libdir}/lib*.so
 %{_libdir}/pkgconfig/ucx.pc
 %{_libdir}/pkgconfig/ucx-uct.pc
