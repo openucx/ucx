@@ -181,6 +181,7 @@ static int uct_gdaki_is_dmabuf_supported(const uct_ib_md_t *md)
     return dmabuf_supported;
 }
 
+#if HAVE_DECL_MLX5DV_UMEM_MASK_DMABUF
 static uct_cuda_copy_md_dmabuf_t uct_rc_gdaki_get_dmabuf(const uct_ib_md_t *md,
                                                          const void *address,
                                                          size_t length)
@@ -198,6 +199,7 @@ static uct_cuda_copy_md_dmabuf_t uct_rc_gdaki_get_dmabuf(const uct_ib_md_t *md,
 
     return dmabuf;
 }
+#endif
 
 static struct mlx5dv_devx_umem *
 uct_rc_gdaki_umem_reg(const uct_ib_md_t *md, struct ibv_context *ibv_context,
