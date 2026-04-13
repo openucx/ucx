@@ -279,8 +279,8 @@ static ucs_status_t uct_rc_gdaki_alloc_atomic(uct_rc_gdaki_iface_t *iface)
         goto err_ctx_pop;
     }
 
-    status = uct_rc_gdaki_reg_mr(&md->super, iface->atomic_buff,
-                                 sizeof(uint64_t), &iface->atomic_mr);
+    status = uct_rc_gdaki_reg_mr(&md->super, atomic_buff, sizeof(uint64_t),
+                                 &iface->atomic_mr);
     if (status != UCS_OK) {
         goto err_atomic_release;
     }
