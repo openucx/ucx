@@ -13,11 +13,11 @@ typedef struct {
 
 typedef struct {
     uct_iface_address_pid_t super;
-    ucs_sys_ns_t ns;
+    ucs_sys_ns_t            ns;
 } uct_iface_address_pid_ns_t;
 
 ucs_status_t
-uct_iface_get_address_pid_ns(uct_iface_t *, uct_iface_addr_t *iface_addr)
+uct_iface_get_address_pid_ns(uct_iface_t*, uct_iface_addr_t *iface_addr)
 {
     uct_iface_address_pid_ns_t *iface_address_pid_ns =
             (uct_iface_address_pid_ns_t*)iface_addr;
@@ -36,8 +36,8 @@ uct_iface_get_address_pid_ns(uct_iface_t *, uct_iface_addr_t *iface_addr)
 size_t uct_iface_address_pid_ns_length(void)
 {
     return ucs_sys_ns_is_default(UCS_SYS_NS_TYPE_PID) ?
-            sizeof(uct_iface_address_pid_t) :
-            sizeof(uct_iface_address_pid_ns_t);
+                   sizeof(uct_iface_address_pid_t) :
+                   sizeof(uct_iface_address_pid_ns_t);
 }
 
 ucs_sys_ns_t uct_iface_address_pid_ns_get_ns(const uct_iface_addr_t *iface_addr)

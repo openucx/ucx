@@ -849,8 +849,8 @@ void uct_cuda_ipc_destroy_cache_by_pid_ns(pid_t pid, ucs_sys_ns_t pid_ns)
     ucs_recursive_spin_lock(&uct_cuda_ipc_remote_cache.lock);
 
     for (device_index = 0; device_index < num_devices; ++device_index) {
-        status = UCT_CUDADRV_FUNC_LOG_WARN(cuDeviceGet(&cuda_device,
-                                                       device_index));
+        status = UCT_CUDADRV_FUNC_LOG_WARN(
+                cuDeviceGet(&cuda_device, device_index));
         if (status != UCS_OK) {
             continue;
         }
