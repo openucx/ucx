@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2021. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2021-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -76,11 +76,12 @@ enum {
  * Protocol flags for internal usage, to allow searching for specific protocols
  */
 enum {
-    UCP_PROTO_FLAG_AM_SHORT  = UCS_BIT(0), /* The protocol uses only uct_ep_am_short() */
-    UCP_PROTO_FLAG_PUT_SHORT = UCS_BIT(1), /* The protocol uses only uct_ep_put_short() */
-    UCP_PROTO_FLAG_TAG_SHORT = UCS_BIT(2), /* The protocol uses only
-                                              uct_ep_tag_eager_short() */
-    UCP_PROTO_FLAG_INVALID   = UCS_BIT(3)  /* The protocol is a placeholder */
+    UCP_PROTO_FLAG_AM_SHORT   = UCS_BIT(0), /* The protocol uses only uct_ep_am_short() */
+    UCP_PROTO_FLAG_PUT_SHORT  = UCS_BIT(1), /* The protocol uses only uct_ep_put_short() */
+    UCP_PROTO_FLAG_TAG_SHORT  = UCS_BIT(2), /* The protocol uses only
+                                               uct_ep_tag_eager_short() */
+    UCP_PROTO_FLAG_RMA_ZCOPY  = UCS_BIT(3), /* The protocol is an RMA zcopy protocol */
+    UCP_PROTO_FLAG_INVALID    = UCS_BIT(4)  /* The protocol is a placeholder */
 };
 
 
