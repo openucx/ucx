@@ -131,7 +131,7 @@ UCS_F_DEVICE uint64_t uct_rc_mlx5_gda_reserv_wqe_thread(
     uct_rc_gdaki_dev_qp_t *qp = uct_rc_mlx5_gda_get_qp(ep, cid);
     uint64_t wqe_base;
 
-    if (code_opt & UCT_DEVICE_CODE_OPT_SKIP_ROLLBACK) {
+    if (code_opt & UCT_DEVICE_CODE_OPT_SQ_SKIP_CHECK) {
         return atomicAdd(reinterpret_cast<unsigned long long*>(
                                  &qp->sq_rsvd_index),
                          static_cast<unsigned long long>(count));

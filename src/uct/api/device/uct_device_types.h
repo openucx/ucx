@@ -57,7 +57,7 @@ typedef enum {
  */
 typedef enum {
     UCT_DEVICE_CODE_OPT_DEFAULT       = 0,
-    UCT_DEVICE_CODE_OPT_SKIP_ROLLBACK = UCS_BIT(0),
+    UCT_DEVICE_CODE_OPT_SQ_SKIP_CHECK = UCS_BIT(0),
     UCT_DEVICE_CODE_OPT_DB_ONCE       = UCS_BIT(1)
 } uct_device_code_opt_t;
 
