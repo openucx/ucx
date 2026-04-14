@@ -14,6 +14,7 @@
 #include <ucs/sys/sys.h>
 #include <ucs/sys/string.h>
 #include <ucs/datastruct/list.h>
+#include <ucs/datastruct/string_buffer.h>
 #include <ucs/datastruct/khash.h>
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
@@ -822,55 +823,84 @@ ucs_status_t ucs_config_clone_range_spec(const void *src, void *dest, const void
     return UCS_OK;
 }
 
-static int ucs_config_sscanf_array_delim(const char *buf, void *dest,
-                                         const void *arg, const char *delim)
+/* Parse a single element and add it to the array.
+ * Returns 1 on success, 0 on failure.
+ */
+static int ucs_config_array_parse_element(const char *value, void *temp_field,
+                                          unsigned *index,
+                                          const ucs_config_array_t *array)
 {
-    ucs_config_array_field_t *field = dest;
-    void *temp_field;
-    const ucs_config_array_t *array = arg;
-    char *str_dup, *token, *saveptr;
-    int ret;
-    unsigned i;
+    if (*index >= UCS_CONFIG_ARRAY_MAX) {
+        return 1; /* Array full, but not an error */
+    }
 
-    str_dup = ucs_strdup(buf, "config_scanf_array");
-    if (str_dup == NULL) {
+    if (!array->parser.read(value,
+                            (char*)temp_field + (*index) * array->elem_size,
+                            array->parser.arg)) {
         return 0;
     }
 
-    saveptr    = NULL;
-    token      = strtok_r(str_dup, delim, &saveptr);
-    temp_field = ucs_calloc(UCS_CONFIG_ARRAY_MAX, array->elem_size, "config array");
-    i          = 0;
-    while (token != NULL) {
-        ret = array->parser.read(token, (char*)temp_field + i * array->elem_size,
-                                 array->parser.arg);
-        if (!ret) {
-            ucs_free(temp_field);
-            ucs_free(str_dup);
-            return 0;
-        }
+    ++(*index);
+    return 1;
+}
 
-        ++i;
+static int ucs_config_sscanf_array_impl(const char *buf, void *dest,
+                                        const void *arg, const char *delim,
+                                        int expand_ranges)
+{
+    ucs_string_buffer_t strb        = UCS_STRING_BUFFER_INITIALIZER;
+    ucs_config_array_field_t *field = dest;
+    const ucs_config_array_t *array = arg;
+    unsigned i                      = 0;
+    char *token;
+    void *temp_field;
+
+    if (expand_ranges) {
+        if (ucs_string_buffer_expand_ranges(&strb, buf, delim[0],
+                                            UCS_CONFIG_ARRAY_MAX,
+                                            NULL) != UCS_OK) {
+            goto err_strb_cleanup;
+        }
+    } else {
+        ucs_string_buffer_appendf(&strb, "%s", buf);
+    }
+
+    temp_field = ucs_calloc(UCS_CONFIG_ARRAY_MAX, array->elem_size,
+                            "config array");
+    if (temp_field == NULL) {
+        goto err_strb_cleanup;
+    }
+
+    ucs_string_buffer_for_each_token(token, &strb, delim) {
+        if (!ucs_config_array_parse_element(token, temp_field, &i, array)) {
+            goto err_temp_field;
+        }
         if (i >= UCS_CONFIG_ARRAY_MAX) {
             break;
         }
-        token = strtok_r(NULL, delim, &saveptr);
     }
 
-    field->data = temp_field;
+    field->data  = temp_field;
     field->count = i;
-    ucs_free(str_dup);
+    ucs_string_buffer_cleanup(&strb);
     return 1;
+
+err_temp_field:
+    ucs_free(temp_field);
+
+err_strb_cleanup:
+    ucs_string_buffer_cleanup(&strb);
+    return 0;
 }
 
 int ucs_config_sscanf_array(const char *buf, void *dest, const void *arg)
 {
-    return ucs_config_sscanf_array_delim(buf, dest, arg, ",");
+    return ucs_config_sscanf_array_impl(buf, dest, arg, ",", 0);
 }
 
 int ucs_config_sscanf_path_array(const char *buf, void *dest, const void *arg)
 {
-    return ucs_config_sscanf_array_delim(buf, dest, arg, ":");
+    return ucs_config_sscanf_array_impl(buf, dest, arg, ":", 0);
 }
 
 static int ucs_config_sprintf_array_delim(char *buf, size_t max,
@@ -976,7 +1006,8 @@ void ucs_config_help_path_array(char *buf, size_t max, const void *arg)
     ucs_config_help_array_delim(buf, max, arg, "colon");
 }
 
-int ucs_config_sscanf_allow_list(const char *buf, void *dest, const void *arg)
+static int ucs_config_sscanf_allow_list_impl(const char *buf, void *dest,
+                                             const void *arg, int expand_ranges)
 {
     ucs_config_allow_list_t *field  = dest;
     unsigned offset                 = 0;
@@ -988,7 +1019,8 @@ int ucs_config_sscanf_allow_list(const char *buf, void *dest, const void *arg)
         field->mode = UCS_CONFIG_ALLOW_LIST_ALLOW;
     }
 
-    if (!ucs_config_sscanf_array(&buf[offset], &field->array, arg)) {
+    if (!ucs_config_sscanf_array_impl(&buf[offset], &field->array, arg, ",",
+                                      expand_ranges)) {
         return 0;
     }
 
@@ -1004,6 +1036,17 @@ int ucs_config_sscanf_allow_list(const char *buf, void *dest, const void *arg)
     }
 
     return 1;
+}
+
+int ucs_config_sscanf_allow_list(const char *buf, void *dest, const void *arg)
+{
+    return ucs_config_sscanf_allow_list_impl(buf, dest, arg, 0);
+}
+
+int ucs_config_sscanf_allow_list_with_ranges(const char *buf, void *dest,
+                                             const void *arg)
+{
+    return ucs_config_sscanf_allow_list_impl(buf, dest, arg, 1);
 }
 
 int ucs_config_sprintf_allow_list(char *buf, size_t max, const void *src,
@@ -1053,6 +1096,17 @@ void ucs_config_help_allow_list(char *buf, size_t max, const void *arg)
         buf,
         max, "comma-separated list (use \"all\" for including "
              "all items or \'^\' for negation) of: ");
+    array->parser.help(buf + strlen(buf), max - strlen(buf), array->parser.arg);
+}
+
+void ucs_config_help_allow_list_with_ranges(char *buf, size_t max,
+                                            const void *arg)
+{
+    const ucs_config_array_t *array = arg;
+
+    snprintf(buf, max,
+             "comma-separated list (use \"all\" for including all items, "
+             "\'^\' for negation, or \'prefix[start-end]\' for ranges) of: ");
     array->parser.help(buf + strlen(buf), max - strlen(buf), array->parser.arg);
 }
 
