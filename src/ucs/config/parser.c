@@ -26,6 +26,7 @@
 #include <fnmatch.h>
 #include <ctype.h>
 #include <libgen.h>
+#include <regex.h>
 
 
 /* width of titles in docstring */
@@ -844,6 +845,110 @@ static int ucs_config_array_parse_element(const char *value, void *temp_field,
     return 1;
 }
 
+static size_t ucs_config_array_expand_range(ucs_string_buffer_t *strb,
+                                            const char *token, size_t token_len,
+                                            const char *delim,
+                                            size_t max_elements)
+{
+    static ucs_init_once_t regex_init = UCS_INIT_ONCE_INITIALIZER;
+    static regex_t range_regex;
+    size_t first, last, j, count;
+    regoff_t prefix_len, suffix_len;
+    regmatch_t pmatch[5];
+    const char *suffix;
+    int ret;
+
+    if (max_elements == 0) {
+        return 0;
+    }
+
+    UCS_INIT_ONCE(&regex_init) {
+        ret = regcomp(&range_regex,
+                      "^([^][]*)" /* prefix */
+                      "\\[([0-9]+)-([0-9]+)\\]" /* range */
+                      "([^][]*)$" /* suffix */,
+                      REG_EXTENDED);
+        ucs_assertv(ret == 0, "failed to compile range regex: %d", ret);
+    }
+
+#ifdef REG_STARTEND
+    pmatch[0].rm_so = 0;
+    pmatch[0].rm_eo = (regoff_t)token_len;
+
+    ret = regexec(&range_regex, token, 5, pmatch, REG_STARTEND);
+#else
+    {
+        char *token_buf = ucs_alloca(token_len + 1);
+        memcpy(token_buf, token, token_len);
+        token_buf[token_len] = '\0';
+
+        ret = regexec(&range_regex, token_buf, 5, pmatch, 0);
+    }
+#endif
+
+    if (ret != 0) {
+        goto out_append_token;
+    }
+
+    first = strtoul(token + pmatch[2].rm_so, NULL, 10);
+    last  = strtoul(token + pmatch[3].rm_so, NULL, 10);
+
+    if (first > last) {
+        goto out_append_token;
+    }
+
+    count      = ucs_min(last - first + 1, max_elements);
+    prefix_len = pmatch[1].rm_eo - pmatch[1].rm_so;
+    suffix     = token + pmatch[4].rm_so;
+    suffix_len = pmatch[4].rm_eo - pmatch[4].rm_so;
+
+    for (j = first; j < first + count; ++j) {
+        if (j > first) {
+            ucs_string_buffer_appendc(strb, delim[0], 1);
+        }
+
+        ucs_string_buffer_appendf(strb, "%.*s%zu%.*s", (int)prefix_len, token,
+                                  j, (int)suffix_len, suffix);
+    }
+
+    return count;
+
+out_append_token:
+    ucs_string_buffer_appendf(strb, "%.*s", (int)token_len, token);
+    return 1;
+}
+
+static void ucs_config_array_expand_ranges(ucs_string_buffer_t *strb,
+                                           const char *input, const char *delim,
+                                           size_t max_elements)
+{
+    size_t count_total = 0;
+    const char *p, *next;
+
+    // skip leading delimiters
+    p = input + strspn(input, delim);
+
+    while ((*p != '\0') && (count_total < max_elements)) {
+        if (count_total > 0) {
+            ucs_string_buffer_appendc(strb, delim[0], 1);
+        }
+
+        next = strpbrk(p, delim);
+        if (next == NULL) {
+            count_total += ucs_config_array_expand_range(
+                    strb, p, strlen(p), delim, max_elements - count_total);
+            break;
+        }
+
+        count_total += ucs_config_array_expand_range(strb, p, next - p, delim,
+                                                     max_elements -
+                                                             count_total);
+
+        // skip consecutive delimiters
+        p = next + strspn(next, delim);
+    }
+}
+
 static int ucs_config_sscanf_array_impl(const char *buf, void *dest,
                                         const void *arg, const char *delim,
                                         int expand_ranges)
@@ -855,12 +960,11 @@ static int ucs_config_sscanf_array_impl(const char *buf, void *dest,
     char *token;
     void *temp_field;
 
+    ucs_assertv(delim[0] != '\0', "delimiter cannot be empty");
+    ucs_assertv(strlen(delim) == 1, "delimiter must be a single character");
+
     if (expand_ranges) {
-        if (ucs_string_buffer_expand_ranges(&strb, buf, delim[0],
-                                            UCS_CONFIG_ARRAY_MAX,
-                                            NULL) != UCS_OK) {
-            goto err_strb_cleanup;
-        }
+        ucs_config_array_expand_ranges(&strb, buf, delim, UCS_CONFIG_ARRAY_MAX);
     } else {
         ucs_string_buffer_appendf(&strb, "%s", buf);
     }

@@ -744,18 +744,4 @@ UCS_TEST_P(test_ucp_devices_config_mlx5, range_negate_multiple)
     verify_single_mlx5_device_selected(count, selected, 1);
 }
 
-/*
- * Test that an invalid range (end < start) produces a configuration error.
- */
-UCS_TEST_P(test_ucp_devices_config_mlx5, invalid_range_produces_error)
-{
-    ucs_status_t status;
-    {
-        scoped_log_handler const slh(hide_errors_logger);
-        status = ucp_config_modify_internal(m_ucp_config, "NET_DEVICES",
-                                            "mlx5_[5-2]");
-    }
-    EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
-}
-
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_devices_config_mlx5, ib, "ib")
