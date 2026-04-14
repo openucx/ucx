@@ -935,8 +935,9 @@ static void ucs_config_array_expand_ranges(ucs_string_buffer_t *strb,
 
         next = strpbrk(p, delim);
         if (next == NULL) {
-            count_total += ucs_config_array_expand_range(
-                    strb, p, strlen(p), delim, max_elements - count_total);
+            // last token
+            ucs_config_array_expand_range(strb, p, strlen(p), delim,
+                                          max_elements - count_total);
             break;
         }
 
