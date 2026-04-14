@@ -978,8 +978,13 @@ public:
             UCS_TEST_SKIP_R("CUDA memory is not supported");
         }
 
-        /* No need to override default IB values */
-        add_mock_iface("mock");
+        add_mock_iface("mock", [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short  = 208;
+            iface_attr.cap.put.max_short = 2048;
+            iface_attr.bandwidth.shared  = 28e9;
+            iface_attr.latency.c         = 500e-9;
+            iface_attr.latency.m         = 1e-9;
+        });
         test_ucp_proto_mock::init();
     }
 
