@@ -237,6 +237,7 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_wqe_prepare_put_or_atomic(
     doca_gpu_dev_verbs_store_wqe_seg(dseg_ptr, (uint64_t*)&(dseg));
 }
 
+template<uct_device_code_opt_t code_opt = UCT_DEVICE_CODE_OPT_DEFAULT>
 UCS_F_DEVICE void uct_rc_mlx5_gda_db(uct_rc_gdaki_dev_ep_t *ep, unsigned cid,
                                      uint64_t wqe_base, unsigned count,
                                      uint64_t flags)
@@ -258,7 +259,9 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_db(uct_rc_gdaki_dev_ep_t *ep, unsigned cid,
 
         while (READ_ONCE(qp->sq_ready_index) != wqe_base) {
         }
-        doca_gpu_dev_common_ring_db(db_ptr, qpn_ds, wqe_next);
+        if (!(code_opt & UCT_DEVICE_CODE_OPT_DB_ONCE)) {
+            doca_gpu_dev_common_ring_db(db_ptr, qpn_ds, wqe_next);
+        }
         doca_gpu_dev_common_update_dbr(dbrec_ptr, wqe_next);
         doca_gpu_dev_common_ring_db(db_ptr, qpn_ds, wqe_next);
         ref.store(wqe_next, cuda::std::memory_order_release);
@@ -312,7 +315,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_single(
     uct_rc_mlx5_gda_sync<level>();
 
     if (lane_id == 0) {
-        uct_rc_mlx5_gda_db(ep, cid, wqe_base, 1, flags);
+        uct_rc_mlx5_gda_db<code_opt>(ep, cid, wqe_base, 1, flags);
     }
 
     uct_rc_mlx5_gda_sync<level>();
