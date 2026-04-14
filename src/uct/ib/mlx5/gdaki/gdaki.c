@@ -110,7 +110,7 @@ static int uct_gdaki_check_umem_dmabuf(const uct_ib_md_t *md)
     CUdeviceptr buff;
     CUcontext cuda_ctx;
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDevicePrimaryCtxRetain(&cuda_ctx, 0));
+    status = UCT_CUDADRV_FUNC_LOG_DEBUG(cuDevicePrimaryCtxRetain(&cuda_ctx, 0));
     if (status != UCS_OK) {
         return 0;
     }
@@ -861,7 +861,7 @@ uct_gdaki_md_check_uar(uct_ib_mlx5_md_t *md, CUdevice cuda_dev)
         goto out;
     }
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(
+    status = UCT_CUDADRV_FUNC_LOG_DEBUG(
             cuDevicePrimaryCtxRetain(&cuda_ctx, cuda_dev));
     if (status != UCS_OK) {
         goto out_free_uar;
