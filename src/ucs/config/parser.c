@@ -1210,7 +1210,8 @@ void ucs_config_help_allow_list_with_ranges(char *buf, size_t max,
 
     snprintf(buf, max,
              "comma-separated list (use \"all\" for including all items, "
-             "\'^\' for negation, or \'prefix[start-end]\' for ranges) of: ");
+             "\'^\' for negation, or \'prefix[start-end]suffix\' for ranges) "
+             "of: ");
     array->parser.help(buf + strlen(buf), max - strlen(buf), array->parser.arg);
 }
 
