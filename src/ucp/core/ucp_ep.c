@@ -147,7 +147,7 @@ static ucp_ep_discard_lanes_arg_t ucp_failed_tl_ep_discard_arg = {
     .status               = UCS_ERR_CANCELED
 };
 
-static void ucp_ep_failed_tl_iface_init(void)
+static uct_iface_h ucp_ep_make_failed_tl_iface(void)
 {
     uct_iface_close_func_t stub_close;
     ucs_status_t status;
@@ -163,6 +163,8 @@ static void ucp_ep_failed_tl_iface_init(void)
         ucp_failed_tl_iface->ops.iface_close         = stub_close;
         ucp_failed_tl_ep_discard_arg.failed_ep.iface = ucp_failed_tl_iface;
     }
+
+    return ucp_failed_tl_iface;
 }
 
 UCS_STATIC_CLEANUP {
@@ -1538,8 +1540,6 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
         return;
     }
 
-    ucp_ep_failed_tl_iface_init();
-
     discard_arg = ucs_malloc(sizeof(*discard_arg), "discard_lanes_arg");
     if (discard_arg == NULL) {
         ucs_error("ep %p: failed to allocate memory for discarding lanes"
@@ -1549,7 +1549,7 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
         return;
     }
 
-    discard_arg->failed_ep.iface      = ucp_failed_tl_iface;
+    discard_arg->failed_ep.iface      = ucp_ep_make_failed_tl_iface();
     discard_arg->ucp_ep               = ep;
     discard_arg->discard_counter      = 1;
     discard_arg->destroy_counter      = ucs_popcount(lanes);
@@ -1801,7 +1801,7 @@ void ucp_ep_cleanup_lanes(ucp_ep_h ep)
 
     ucs_debug("ep %p: cleanup lanes", ep);
 
-    ucp_ep_failed_tl_iface_init();
+    ucp_ep_make_failed_tl_iface();
 
     ucp_ep_extract_failed_lanes(ep, UCS_MASK(ucp_ep_num_lanes(ep)),
                                 &ucp_failed_tl_ep_discard_arg.failed_ep,

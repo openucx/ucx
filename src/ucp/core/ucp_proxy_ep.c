@@ -134,7 +134,7 @@ UCS_CLASS_INIT_FUNC(ucp_proxy_ep_t, const uct_iface_ops_t *ops, ucp_ep_h ucp_ep,
     uct_iface_close_func_t stub_close;
     ucs_status_t status;
 
-    status = ucp_stub_iface_open(UCS_ERR_UNSUPPORTED, &self->iface);
+    status = ucp_stub_iface_open(UCS_ERR_NO_RESOURCE, &self->iface);
     if (status != UCS_OK) {
         return status;
     }
