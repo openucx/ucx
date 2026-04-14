@@ -969,17 +969,19 @@ class test_ucp_proto_mock_cuda_ipc : public test_ucp_proto_mock {
 public:
     test_ucp_proto_mock_cuda_ipc()
     {
-        if (!has_transport("rc_mlx5")) {
-            UCS_TEST_SKIP_R("rc_mlx5 transport is not supported");
+        if (has_transport("rc_mlx5")) {
+            mock_transport("rc_mlx5");
         }
-        
-        mock_transport("rc_mlx5");
     }
 
     virtual void init() override
     {
         if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
             UCS_TEST_SKIP_R("CUDA memory is not supported");
+        }
+
+        if (!has_transport("rc_mlx5")) {
+            UCS_TEST_SKIP_R("rc_mlx5 transport is not supported");
         }
 
         add_mock_iface("mock", [](uct_iface_attr_t &iface_attr) {
