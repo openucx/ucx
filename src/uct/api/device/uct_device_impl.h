@@ -51,6 +51,7 @@ union uct_device_completion {
  * The @a flags parameter can be used to modify the behavior
  * of the routine.
  *
+ * @tparam      code_opt        Code optimization hint.
  * @param [in]  device_ep       Device endpoint to be used for the operation.
  * @param [in]  src_mem_elem    Local memory element representing the memory to be transferred.
  * @param [in]  mem_elem        Remote memory element representing the memory to be transferred.
@@ -60,7 +61,6 @@ union uct_device_completion {
  * @param [in]  channel_id      Channel ID to use for the transfer.
  * @param [in]  flags           Flags to modify the function behavior.
  * @param [in]  comp            Completion object to track the progress of operation.
- * @param [in]  code_opt        Code optimization hint.
  *
  * @return UCS_INPROGRESS     - Operation successfully posted, use @ref
  *                              uct_device_ep_progress and @ref
@@ -69,20 +69,21 @@ union uct_device_completion {
  * @return UCS_OK             - Operation completed successfully.
  * @return Error code as defined by @ref ucs_status_t
  */
-template<ucs_device_level_t level>
+template<ucs_device_level_t level,
+         uct_device_code_opt_t code_opt = UCT_DEVICE_CODE_OPT_DEFAULT>
 UCS_F_DEVICE ucs_status_t
 uct_device_ep_put(uct_device_ep_h device_ep,
                   const uct_device_local_mem_list_elem_t *src_uct_elem,
                   const uct_device_mem_element_t *mem_elem, const void *address,
                   uint64_t remote_address, size_t length, unsigned channel_id,
-                  uint64_t flags, uct_device_completion_t *comp,
-                  uct_device_code_opt_t code_opt = UCT_DEVICE_CODE_OPT_DEFAULT)
+                  uint64_t flags, uct_device_completion_t *comp)
 {
 #if UCT_RC_MLX5_GDA_SUPPORTED
     if (device_ep->uct_tl_id == UCT_DEVICE_TL_RC_MLX5_GDA) {
-        return uct_rc_mlx5_gda_ep_put<level>(device_ep, src_uct_elem, mem_elem,
-                                             address, remote_address, length,
-                                             channel_id, flags, comp, code_opt);
+        return uct_rc_mlx5_gda_ep_put<level, code_opt>(device_ep, src_uct_elem,
+                                                       mem_elem, address,
+                                                       remote_address, length,
+                                                       channel_id, flags, comp);
     }
 #endif
 #if UCT_CUDA_IPC_SUPPORTED
@@ -108,6 +109,7 @@ uct_device_ep_put(uct_device_ep_h device_ep,
  * The @a flags parameter can be used to modify the behavior
  * of the routine.
  *
+ * @tparam      code_opt        Code optimization hint.
  * @param [in]  device_ep       Device endpoint to be used for the operation.
  * @param [in]  mem_elem        Memory element representing the memory to be modified.
  * @param [in]  inc_value       Value of the remote increment.
@@ -115,7 +117,6 @@ uct_device_ep_put(uct_device_ep_h device_ep,
  * @param [in]  channel_id      Channel ID to use for the transfer.
  * @param [in]  flags           Flags to modify the function behavior.
  * @param [in]  comp            Completion object to track the progress of operation.
- * @param [in]  code_opt        Code optimization hint.
  *
  * @return UCS_INPROGRESS      - Operation successfully posted, use @ref
  *                               uct_device_ep_progress and @ref
@@ -124,19 +125,18 @@ uct_device_ep_put(uct_device_ep_h device_ep,
  * @return UCS_OK              - Operation completed successfully.
  * @return Error code as defined by @ref ucs_status_t
  */
-template<ucs_device_level_t level>
+template<ucs_device_level_t level,
+         uct_device_code_opt_t code_opt = UCT_DEVICE_CODE_OPT_DEFAULT>
 UCS_F_DEVICE ucs_status_t uct_device_ep_atomic_add(
         uct_device_ep_h device_ep, const uct_device_mem_element_t *mem_elem,
         uint64_t inc_value, uint64_t remote_address, unsigned channel_id,
-        uint64_t flags, uct_device_completion_t *comp,
-        uct_device_code_opt_t code_opt = UCT_DEVICE_CODE_OPT_DEFAULT)
+        uint64_t flags, uct_device_completion_t *comp)
 {
 #if UCT_RC_MLX5_GDA_SUPPORTED
     if (device_ep->uct_tl_id == UCT_DEVICE_TL_RC_MLX5_GDA) {
-        return uct_rc_mlx5_gda_ep_atomic_add<level>(device_ep, mem_elem,
-                                                    inc_value, remote_address,
-                                                    channel_id, flags, comp,
-                                                    code_opt);
+        return uct_rc_mlx5_gda_ep_atomic_add<level, code_opt>(
+                device_ep, mem_elem, inc_value, remote_address, channel_id,
+                flags, comp);
     }
 #endif
 #if UCT_CUDA_IPC_SUPPORTED

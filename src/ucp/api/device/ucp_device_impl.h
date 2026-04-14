@@ -87,12 +87,13 @@ UCS_F_DEVICE void ucp_device_request_init(uct_device_ep_t *device_ep,
 /**
  * Macro for device put operations with retry logic
  */
-#define UCP_DEVICE_SEND_BLOCKING(_level, _uct_device_ep_send, _device_ep, \
-                                 _req, ...) \
+#define UCP_DEVICE_SEND_BLOCKING(_level, _code_opt, _uct_device_ep_send, \
+                                 _device_ep, _req, ...) \
     ({ \
         ucs_status_t _status; \
         do { \
-            _status = _uct_device_ep_send<_level>(_device_ep, __VA_ARGS__); \
+            _status = _uct_device_ep_send<_level, _code_opt>(_device_ep, \
+                                                             __VA_ARGS__); \
             if (_status != UCS_ERR_NO_RESOURCE) { \
                 break; \
             } \
@@ -187,6 +188,7 @@ ucp_device_prepare_send(const ucp_device_local_mem_list_h src_mem_list_h,
  * of the routine with bit from @ref ucp_device_flags_t.
  *
  * @tparam      level              Level of cooperation of the transfer.
+ * @tparam      code_opt           Code optimization hint.
  * @param [in]  src_mem_list_h     Local memory descriptor list handle to use.
  * @param [in]  src_mem_list_index Index in descriptor list pointing to the memory
  * @param [in]  src_offset         Local offset to send data from.
@@ -197,7 +199,6 @@ ucp_device_prepare_send(const ucp_device_local_mem_list_h src_mem_list_h,
  * @param [in]  channel_id         Channel ID to use for the transfer.
  * @param [in]  flags              Flags usable to modify the function behavior.
  * @param [out] req                Request populated by the call.
- * @param [in]  code_opt           Code optimization hint.
  *
  * @return UCS_INPROGRESS     - Operation successfully posted. If @a req is not
  *                              NULL, use @ref ucp_device_progress_req to check
@@ -205,14 +206,14 @@ ucp_device_prepare_send(const ucp_device_local_mem_list_h src_mem_list_h,
  * @return UCS_OK             - Operation completed successfully.
  * @return Error code as defined by @ref ucs_status_t
  */
-template<ucs_device_level_t level = UCS_DEVICE_LEVEL_THREAD>
+template<ucs_device_level_t level = UCS_DEVICE_LEVEL_THREAD,
+         uct_device_code_opt_t code_opt = UCT_DEVICE_CODE_OPT_DEFAULT>
 UCS_F_DEVICE ucs_status_t
 ucp_device_put(const ucp_device_local_mem_list_h src_mem_list_h,
                unsigned src_mem_list_index, const size_t src_offset,
                const ucp_device_remote_mem_list_h dst_mem_list_h,
                unsigned dst_mem_list_index, size_t dst_offset, size_t length,
-               unsigned channel_id, uint64_t flags, ucp_device_request_t *req,
-               uct_device_code_opt_t code_opt = UCT_DEVICE_CODE_OPT_DEFAULT)
+               unsigned channel_id, uint64_t flags, ucp_device_request_t *req)
 {
     const void *address;
     const uct_device_mem_element_t *uct_elem;
@@ -230,11 +231,11 @@ ucp_device_put(const ucp_device_local_mem_list_h src_mem_list_h,
         return status;
     }
 
-    return UCP_DEVICE_SEND_BLOCKING(level, uct_device_ep_put, device_ep, req,
-                                    src_uct_elem, uct_elem,
+    return UCP_DEVICE_SEND_BLOCKING(level, code_opt, uct_device_ep_put,
+                                    device_ep, req, src_uct_elem, uct_elem,
                                     UCS_PTR_BYTE_OFFSET(address, src_offset),
                                     remote_address + dst_offset, length,
-                                    channel_id, flags, comp, code_opt);
+                                    channel_id, flags, comp);
 }
 
 
@@ -255,6 +256,7 @@ ucp_device_put(const ucp_device_local_mem_list_h src_mem_list_h,
  * routine.
  *
  * @tparam      level          Level of cooperation of the transfer.
+ * @tparam      code_opt       Code optimization hint.
  * @param [in]  inc_value      Value used to increment the remote address.
  * @param [in]  mem_list_h     Remote memory descriptor list handle to use.
  * @param [in]  mem_list_index Index in descriptor list pointing to the memory
@@ -263,7 +265,6 @@ ucp_device_put(const ucp_device_local_mem_list_h src_mem_list_h,
  * @param [in]  channel_id     Channel ID to use for the transfer.
  * @param [in]  flags          Flags usable to modify the function behavior.
  * @param [out] req            Request populated by the call.
- * @param [in]  code_opt       Code optimization hint.
  *
  * @return UCS_INPROGRESS     - Operation successfully posted. If @a req is not
  *                              NULL, use @ref ucp_device_progress_req to check
@@ -271,12 +272,12 @@ ucp_device_put(const ucp_device_local_mem_list_h src_mem_list_h,
  * @return UCS_OK             - Operation completed successfully.
  * @return Error code as defined by @ref ucs_status_t
  */
-template<ucs_device_level_t level = UCS_DEVICE_LEVEL_THREAD>
+template<ucs_device_level_t level = UCS_DEVICE_LEVEL_THREAD,
+         uct_device_code_opt_t code_opt = UCT_DEVICE_CODE_OPT_DEFAULT>
 UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
         const uint64_t inc_value, const ucp_device_remote_mem_list_h mem_list_h,
         unsigned mem_list_index, size_t offset, unsigned channel_id,
-        uint64_t flags, ucp_device_request_t *req,
-        uct_device_code_opt_t code_opt = UCT_DEVICE_CODE_OPT_DEFAULT)
+        uint64_t flags, ucp_device_request_t *req)
 {
     uint64_t remote_address;
     const uct_device_mem_element_t *uct_elem;
@@ -291,10 +292,10 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
         return status;
     }
 
-    return UCP_DEVICE_SEND_BLOCKING(level, uct_device_ep_atomic_add, device_ep,
-                                    req, uct_elem, inc_value,
+    return UCP_DEVICE_SEND_BLOCKING(level, code_opt, uct_device_ep_atomic_add,
+                                    device_ep, req, uct_elem, inc_value,
                                     remote_address + offset, channel_id, flags,
-                                    comp, code_opt);
+                                    comp);
 }
 
 

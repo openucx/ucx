@@ -124,9 +124,9 @@ UCS_F_DEVICE uint64_t uct_rc_mlx5_gda_max_alloc_wqe_base(
     return pi + ep->sq_wqe_num + 1 - count;
 }
 
+template<uct_device_code_opt_t code_opt = UCT_DEVICE_CODE_OPT_DEFAULT>
 UCS_F_DEVICE uint64_t uct_rc_mlx5_gda_reserv_wqe_thread(
-        uct_rc_gdaki_dev_ep_t *ep, unsigned cid, unsigned count,
-        uct_device_code_opt_t code_opt = UCT_DEVICE_CODE_OPT_DEFAULT)
+        uct_rc_gdaki_dev_ep_t *ep, unsigned cid, unsigned count)
 {
     uct_rc_gdaki_dev_qp_t *qp = uct_rc_mlx5_gda_get_qp(ep, cid);
     uint64_t wqe_base;
@@ -181,14 +181,14 @@ UCS_F_DEVICE uint64_t uct_rc_mlx5_gda_reserv_wqe_thread(
     return wqe_base;
 }
 
-template<ucs_device_level_t level>
-UCS_F_DEVICE void uct_rc_mlx5_gda_reserv_wqe(
-        uct_rc_gdaki_dev_ep_t *ep, unsigned cid, unsigned count,
-        unsigned lane_id, uint64_t &wqe_base,
-        uct_device_code_opt_t code_opt = UCT_DEVICE_CODE_OPT_DEFAULT)
+template<ucs_device_level_t level,
+         uct_device_code_opt_t code_opt = UCT_DEVICE_CODE_OPT_DEFAULT>
+UCS_F_DEVICE void
+uct_rc_mlx5_gda_reserv_wqe(uct_rc_gdaki_dev_ep_t *ep, unsigned cid,
+                           unsigned count, unsigned lane_id, uint64_t &wqe_base)
 {
     if (lane_id == 0) {
-        wqe_base = uct_rc_mlx5_gda_reserv_wqe_thread(ep, cid, count, code_opt);
+        wqe_base = uct_rc_mlx5_gda_reserv_wqe_thread<code_opt>(ep, cid, count);
     }
 
     if (level == UCS_DEVICE_LEVEL_WARP) {
@@ -271,13 +271,14 @@ uct_rc_mlx5_gda_fc(const uct_rc_gdaki_dev_ep_t *ep, uint16_t wqe_idx)
     return !(wqe_idx & ep->sq_fc_mask);
 }
 
-template<ucs_device_level_t level>
+template<ucs_device_level_t level,
+         uct_device_code_opt_t code_opt = UCT_DEVICE_CODE_OPT_DEFAULT>
 UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_single(
         uct_rc_gdaki_dev_ep_t *ep, const uct_device_mem_element_t *tl_mem_elem,
         const void *address, uint32_t lkey, uint64_t remote_address,
         uint32_t rkey, size_t length, unsigned cid, uint64_t flags,
         uct_device_completion_t *tl_comp, uint32_t opcode, bool is_atomic,
-        uint64_t add, uct_device_code_opt_t code_opt)
+        uint64_t add)
 {
     uct_rc_gda_completion_t *comp = &tl_comp->rc_gda;
     unsigned cflag                = 0;
@@ -286,7 +287,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_single(
     unsigned num_lanes;
 
     uct_rc_mlx5_gda_exec_init<level>(lane_id, num_lanes);
-    uct_rc_mlx5_gda_reserv_wqe<level>(ep, cid, 1, lane_id, wqe_base, code_opt);
+    uct_rc_mlx5_gda_reserv_wqe<level, code_opt>(ep, cid, 1, lane_id, wqe_base);
     if (wqe_base == UCT_RC_GDA_RESV_WQE_NO_RESOURCE) {
         return UCS_ERR_NO_RESOURCE;
     }
@@ -318,14 +319,14 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_single(
     return UCS_INPROGRESS;
 }
 
-template<ucs_device_level_t level>
+template<ucs_device_level_t level,
+         uct_device_code_opt_t code_opt = UCT_DEVICE_CODE_OPT_DEFAULT>
 UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put(
         uct_device_ep_h tl_ep,
         const uct_device_local_mem_list_elem_t *src_uct_elem,
         const uct_device_mem_element_t *tl_mem_elem, const void *address,
         uint64_t remote_address, size_t length, unsigned channel_id,
-        uint64_t flags, uct_device_completion_t *comp,
-        uct_device_code_opt_t code_opt = UCT_DEVICE_CODE_OPT_DEFAULT)
+        uint64_t flags, uct_device_completion_t *comp)
 {
     auto ep       = reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(tl_ep);
     auto mem_elem = reinterpret_cast<const uct_ib_md_device_mem_element_t*>(
@@ -335,32 +336,28 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put(
                     &src_uct_elem->uct_mem_element);
     auto cid = channel_id & ep->channel_mask;
 
-    return uct_rc_mlx5_gda_ep_single<level>(ep, tl_mem_elem, address,
-                                            local_mem_elem->lkey,
-                                            remote_address, mem_elem->rkey,
-                                            length, cid, flags, comp,
-                                            MLX5_OPCODE_RDMA_WRITE, false, 0,
-                                            code_opt);
+    return uct_rc_mlx5_gda_ep_single<level, code_opt>(
+            ep, tl_mem_elem, address, local_mem_elem->lkey, remote_address,
+            mem_elem->rkey, length, cid, flags, comp, MLX5_OPCODE_RDMA_WRITE,
+            false, 0);
 }
 
-template<ucs_device_level_t level>
+template<ucs_device_level_t level,
+         uct_device_code_opt_t code_opt = UCT_DEVICE_CODE_OPT_DEFAULT>
 UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_atomic_add(
         uct_device_ep_h tl_ep, const uct_device_mem_element_t *tl_mem_elem,
         uint64_t value, uint64_t remote_address, unsigned channel_id,
-        uint64_t flags, uct_device_completion_t *comp,
-        uct_device_code_opt_t code_opt = UCT_DEVICE_CODE_OPT_DEFAULT)
+        uint64_t flags, uct_device_completion_t *comp)
 {
     auto ep       = reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(tl_ep);
     auto mem_elem = reinterpret_cast<const uct_ib_md_device_mem_element_t*>(
             tl_mem_elem);
     auto cid      = channel_id & ep->channel_mask;
 
-    return uct_rc_mlx5_gda_ep_single<level>(ep, tl_mem_elem, ep->atomic_va,
-                                            ep->atomic_lkey, remote_address,
-                                            mem_elem->rkey, sizeof(uint64_t),
-                                            cid, flags, comp,
-                                            MLX5_OPCODE_ATOMIC_FA, true, value,
-                                            code_opt);
+    return uct_rc_mlx5_gda_ep_single<level, code_opt>(
+            ep, tl_mem_elem, ep->atomic_va, ep->atomic_lkey, remote_address,
+            mem_elem->rkey, sizeof(uint64_t), cid, flags, comp,
+            MLX5_OPCODE_ATOMIC_FA, true, value);
 }
 
 UCS_F_DEVICE void
