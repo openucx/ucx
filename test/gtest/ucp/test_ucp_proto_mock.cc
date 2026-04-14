@@ -969,6 +969,10 @@ class test_ucp_proto_mock_cuda_ipc : public test_ucp_proto_mock {
 public:
     test_ucp_proto_mock_cuda_ipc()
     {
+        if (!has_transport("rc_mlx5")) {
+            UCS_TEST_SKIP_R("rc_mlx5 transport is not supported");
+        }
+        
         mock_transport("rc_mlx5");
     }
 
