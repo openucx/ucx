@@ -844,6 +844,9 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
                            iface->num_channels * UCT_GDAKI_DEV_QP_SIZE;
         dev_ep           = ucs_calloc(1, dev_ep_host_size, "dev_ep");
         if (dev_ep == NULL) {
+            ucs_error("failed to allocate dev_ep on host buffer size=%zu ep=%p "
+                      "iface=%p" dev_ep_host_size,
+                      ep, iface);
             status = UCS_ERR_NO_MEMORY;
             goto out_ctx;
         }
@@ -868,11 +871,13 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
 
         for (i = 0; i < iface->num_channels; ++i) {
             channel = &ep->channel_block->channels[i];
-            (void)cuMemHostRegister(channel->qp.reg->addr.ptr,
-                                    UCT_IB_MLX5_BF_REG_SIZE * 2,
-                                    CU_MEMHOSTREGISTER_PORTABLE |
-                                    CU_MEMHOSTREGISTER_DEVICEMAP |
-                                    CU_MEMHOSTREGISTER_IOMEMORY);
+            status  = UCT_CUDADRV_FUNC_LOG_ERR(cuMemHostRegister(
+                    channel->qp.reg->addr.ptr, UCT_IB_MLX5_BF_REG_SIZE * 2,
+                    CU_MEMHOSTREGISTER_PORTABLE | CU_MEMHOSTREGISTER_DEVICEMAP |
+                            CU_MEMHOSTREGISTER_IOMEMORY));
+            if ((status != UCS_OK) && (i-- > 0)) {
+                goto out_unreg;
+            }
 
             status = UCT_CUDADRV_FUNC_LOG_ERR(
                     cuMemHostGetDevicePointer(&sq_db, channel->qp.reg->addr.ptr,
@@ -892,7 +897,7 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
                 cuMemcpyHtoD((CUdeviceptr)ep->channel_block->gpu_ptr, dev_ep,
                              dev_ep_host_size));
         if (status != UCS_OK) {
-            goto out_free;
+            goto out_unreg;
         }
 
         ucs_free(dev_ep);
