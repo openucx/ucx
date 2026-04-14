@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2026. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2019. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -11,7 +11,6 @@
 #include "cuda_ipc_iface.h"
 #include "cuda_ipc_md.h"
 #include "cuda_ipc_ep.h"
-#include "uct/base/uct_iface_address_pid_ns.h"
 
 #include <uct/cuda/base/cuda_iface.h>
 #include <uct/cuda/base/cuda_md.h>
@@ -98,6 +97,13 @@ ucs_status_t uct_cuda_ipc_iface_get_device_address(uct_iface_t *tl_iface,
 
     dev_addr->system_uuid = ucs_get_system_id();
 
+    return UCS_OK;
+}
+
+static ucs_status_t uct_cuda_ipc_iface_get_address(uct_iface_h tl_iface,
+                                                   uct_iface_addr_t *iface_addr)
+{
+    *(pid_t*)iface_addr = getpid();
     return UCS_OK;
 }
 
@@ -250,7 +256,7 @@ static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
 
     uct_base_iface_query(&iface->super.super, iface_attr);
 
-    iface_attr->iface_addr_len          = uct_iface_address_pid_ns_length();
+    iface_attr->iface_addr_len          = sizeof(pid_t);
     iface_attr->device_addr_len         = md->enable_mnnvl ?
                                           sizeof(uct_cuda_ipc_device_addr_t) :
                                           sizeof(uint64_t);
@@ -336,7 +342,7 @@ static uct_iface_ops_t uct_cuda_ipc_iface_ops = {
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_ipc_iface_t),
     .iface_query              = uct_cuda_ipc_iface_query,
     .iface_get_device_address = uct_cuda_ipc_iface_get_device_address,
-    .iface_get_address        = uct_iface_get_address_pid_ns,
+    .iface_get_address        = uct_cuda_ipc_iface_get_address,
     .iface_is_reachable       = uct_base_iface_is_reachable,
 };
 

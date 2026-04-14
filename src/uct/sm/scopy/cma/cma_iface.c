@@ -1,6 +1,6 @@
 /**
  * Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -11,10 +11,19 @@
 #include "cma_md.h"
 #include "cma_iface.h"
 #include "cma_ep.h"
-#include "uct/base/uct_iface_address_pid_ns.h"
 
 #include <uct/base/uct_md.h>
 #include <ucs/sys/string.h>
+
+
+typedef struct {
+    pid_t                            id;
+} ucs_cma_iface_base_device_addr_t;
+
+typedef struct {
+    ucs_cma_iface_base_device_addr_t super;
+    ucs_sys_ns_t                     pid_ns;
+} ucs_cma_iface_ext_device_addr_t;
 
 
 static ucs_config_field_t uct_cma_iface_config_table[] = {
@@ -25,6 +34,21 @@ static ucs_config_field_t uct_cma_iface_config_table[] = {
     {NULL}
 };
 
+static ucs_status_t uct_cma_iface_get_address(uct_iface_t *tl_iface,
+                                              uct_iface_addr_t *addr)
+{
+    ucs_cma_iface_ext_device_addr_t *iface_addr = (void*)addr;
+
+    ucs_assert(!(getpid() & UCT_CMA_IFACE_ADDR_FLAG_PID_NS));
+
+    iface_addr->super.id = getpid();
+    if (!ucs_sys_ns_is_default(UCS_SYS_NS_TYPE_PID)) {
+        iface_addr->super.id |= UCT_CMA_IFACE_ADDR_FLAG_PID_NS;
+        iface_addr->pid_ns    = ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID);
+    }
+    return UCS_OK;
+}
+
 static ucs_status_t uct_cma_iface_query(uct_iface_h tl_iface,
                                         uct_iface_attr_t *iface_attr)
 {
@@ -32,7 +56,10 @@ static ucs_status_t uct_cma_iface_query(uct_iface_h tl_iface,
 
     uct_scopy_iface_query(&iface->super, iface_attr);
 
-    iface_attr->iface_addr_len      = uct_iface_address_pid_ns_length();
+    iface_attr->iface_addr_len      =
+            ucs_sys_ns_is_default(UCS_SYS_NS_TYPE_PID) ?
+            sizeof(ucs_cma_iface_base_device_addr_t) :
+            sizeof(ucs_cma_iface_ext_device_addr_t);
     iface_attr->bandwidth.dedicated = iface->super.super.config.bandwidth;
     iface_attr->bandwidth.shared    = 0;
     iface_attr->cap.flags          |= UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE |
@@ -49,6 +76,7 @@ uct_cma_iface_is_reachable_v2(const uct_iface_h tl_iface,
         .iov_base = &iov,
         .iov_len  = sizeof(iov),
     };
+    ucs_cma_iface_ext_device_addr_t *iface_addr;
     ucs_sys_ns_t remote_pid_ns;
     pid_t peer_pid;
 
@@ -70,7 +98,13 @@ uct_cma_iface_is_reachable_v2(const uct_iface_h tl_iface,
         return 0;
     }
 
-    remote_pid_ns = uct_iface_address_pid_ns_get_ns(params->iface_addr);
+    iface_addr = (ucs_cma_iface_ext_device_addr_t*)params->iface_addr;
+    if (iface_addr->super.id & UCT_CMA_IFACE_ADDR_FLAG_PID_NS) {
+        remote_pid_ns = iface_addr->pid_ns;
+    } else {
+        remote_pid_ns = ucs_sys_get_default_ns(UCS_SYS_NS_TYPE_PID);
+    }
+
     if (ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID) != remote_pid_ns) {
         uct_iface_fill_info_str_buf(params, "pid_ns local %lu remote %lu",
                                     ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID),
@@ -81,7 +115,7 @@ uct_cma_iface_is_reachable_v2(const uct_iface_h tl_iface,
     /* Confirm reachability by actually trying to read from the remote, as
      * permissions are enforced before the remote address sanity checks.
      */
-    peer_pid = uct_iface_address_pid_ns_get_pid(params->iface_addr);
+    peer_pid = iface_addr->super.id & ~UCT_CMA_IFACE_ADDR_FLAG_PID_NS;
     if ((process_vm_readv(peer_pid, &iov, 1, &iov, 1, 0) == -1) &&
         (errno == EPERM)) {
         uct_iface_fill_info_str_buf(params, "cannot access remote memory");
@@ -112,7 +146,7 @@ static uct_iface_ops_t uct_cma_iface_tl_ops = {
     .iface_event_arm          = uct_scopy_iface_event_arm,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_cma_iface_t),
     .iface_query              = uct_cma_iface_query,
-    .iface_get_address        = uct_iface_get_address_pid_ns,
+    .iface_get_address        = uct_cma_iface_get_address,
     .iface_get_device_address = uct_sm_iface_get_device_address,
     .iface_is_reachable       = uct_base_iface_is_reachable,
 };

@@ -1,11 +1,11 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2026. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2019. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
-#ifdef HAVE_CONFIG_H
-#include "config.h"
-#endif
+ #ifdef HAVE_CONFIG_H
+ #  include "config.h"
+ #endif
 
 #include <uct/cuda/base/cuda_iface.h>
 #include <uct/api/uct_def.h>
@@ -15,7 +15,6 @@
 #include "cuda_ipc_iface.h"
 #include "cuda_ipc_md.h"
 #include "cuda_ipc.inl"
-#include "uct/base/uct_iface_address_pid_ns.h"
 
 #include <uct/base/uct_log.h>
 #include <uct/base/uct_iov.inl>
@@ -36,15 +35,14 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_ep_t, const uct_ep_params_t *params)
     UCT_EP_PARAMS_CHECK_DEV_IFACE_ADDRS(params);
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
 
-    self->remote_pid    = uct_iface_address_pid_ns_get_pid(params->iface_addr);
-    self->remote_pid_ns = uct_iface_address_pid_ns_get_ns(params->iface_addr);
-    self->device_ep     = NULL;
+    self->remote_pid = *(const pid_t*)params->iface_addr;
+    self->device_ep  = NULL;
     return UCS_OK;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_cuda_ipc_ep_t)
 {
-    uct_cuda_ipc_destroy_cache_by_pid_ns(self->remote_pid, self->remote_pid_ns);
+    uct_cuda_ipc_destroy_cache_by_pid(self->remote_pid);
     if (self->device_ep != NULL) {
         (void)UCT_CUDADRV_FUNC_LOG_WARN(cuMemFree((CUdeviceptr)self->device_ep));
     }
@@ -66,8 +64,7 @@ int uct_cuda_ipc_ep_is_connected(const uct_ep_h tl_ep,
         return 0;
     }
 
-    return ep->remote_pid ==
-           uct_iface_address_pid_ns_get_pid(params->iface_addr);
+    return ep->remote_pid == *(pid_t*)params->iface_addr;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_ipc_ctx_rsc_get(
