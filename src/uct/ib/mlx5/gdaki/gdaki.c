@@ -181,47 +181,37 @@ static int uct_gdaki_is_dmabuf_supported(const uct_ib_md_t *md)
     return dmabuf_supported;
 }
 
-#if HAVE_DECL_MLX5DV_UMEM_MASK_DMABUF
-static uct_cuda_copy_md_dmabuf_t uct_rc_gdaki_get_dmabuf(const uct_ib_md_t *md,
-                                                         const void *address,
-                                                         size_t length)
-{
-    uct_ib_mlx5_md_t *ib_mlx5_md     = ucs_derived_of(md, uct_ib_mlx5_md_t);
-    uct_cuda_copy_md_dmabuf_t dmabuf = {
-        .fd     = UCT_DMABUF_FD_INVALID,
-        .offset = 0
-    };
-
-    if (ib_mlx5_md->flags & UCT_IB_MLX5_MD_FLAG_REG_DMABUF_UMEM) {
-        return uct_cuda_copy_md_get_dmabuf(address, length,
-                                           UCS_SYS_DEVICE_ID_UNKNOWN);
-    }
-
-    return dmabuf;
-}
-#endif
-
 static struct mlx5dv_devx_umem *
 uct_rc_gdaki_umem_reg(const uct_ib_md_t *md, struct ibv_context *ibv_context,
                       void *address, size_t length, uint64_t pgsz_bitmap)
 {
 #if HAVE_DECL_MLX5DV_UMEM_MASK_DMABUF
+    uct_ib_mlx5_md_t *ib_mlx5_md       = ucs_derived_of(md, uct_ib_mlx5_md_t);
     struct mlx5dv_devx_umem_in umem_in = {};
-    uct_cuda_copy_md_dmabuf_t dmabuf;
+    uct_cuda_copy_md_dmabuf_t dmabuf   = {
+        .fd     = UCT_DMABUF_FD_INVALID,
+        .offset = 0
+    };
     struct mlx5dv_devx_umem *umem;
 
     umem_in.addr        = address;
     umem_in.size        = length;
     umem_in.access      = IBV_ACCESS_LOCAL_WRITE;
     umem_in.pgsz_bitmap = pgsz_bitmap;
-    dmabuf              = uct_rc_gdaki_get_dmabuf(md, address, length);
-    if (dmabuf.fd != UCT_DMABUF_FD_INVALID) {
+
+    if (ib_mlx5_md->flags & UCT_IB_MLX5_MD_FLAG_REG_DMABUF_UMEM) {
+        dmabuf            = uct_cuda_copy_md_get_dmabuf(address, length,
+                                                        UCS_SYS_DEVICE_ID_UNKNOWN);
         umem_in.comp_mask = MLX5DV_UMEM_MASK_DMABUF;
         umem_in.dmabuf_fd = dmabuf.fd;
     }
 
     umem = mlx5dv_devx_umem_reg_ex(ibv_context, &umem_in);
-    ucs_close_fd(&dmabuf.fd);
+
+    if (dmabuf.fd != UCT_DMABUF_FD_INVALID) {
+        ucs_close_fd(&dmabuf.fd);
+    }
+
     return umem;
 #else
     return mlx5dv_devx_umem_reg(ibv_context, address, length,
