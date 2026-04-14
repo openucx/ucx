@@ -27,6 +27,7 @@ nobase_dist_libuct_la_HEADERS = \
 noinst_HEADERS = \
 	base/uct_md.h \
 	base/uct_component.h \
+	base/uct_iface_address_pid_ns.h \
 	base/uct_iface.h \
 	base/uct_log.h \
 	base/uct_worker.h \
