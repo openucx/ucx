@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -14,18 +14,18 @@
 
 #if __has_include(<uct/cuda/cuda_ipc/cuda_ipc.cuh>) && \
     __has_include(<cuda/atomic>)
-#  include <uct/cuda/cuda_ipc/cuda_ipc.cuh>
-#  define UCT_CUDA_IPC_SUPPORTED 1
+#include <uct/cuda/cuda_ipc/cuda_ipc.cuh>
+#define UCT_CUDA_IPC_SUPPORTED 1
 #else
-#  define UCT_CUDA_IPC_SUPPORTED 0
+#define UCT_CUDA_IPC_SUPPORTED 0
 #endif
 
 #if __has_include(<uct/ib/mlx5/gdaki/gdaki.cuh>) && \
     __has_include(<infiniband/mlx5dv.h>)
-#  include <uct/ib/mlx5/gdaki/gdaki.cuh>
-#  define UCT_RC_MLX5_GDA_SUPPORTED 1
+#include <uct/ib/mlx5/gdaki/gdaki.cuh>
+#define UCT_RC_MLX5_GDA_SUPPORTED 1
 #else
-#  define UCT_RC_MLX5_GDA_SUPPORTED 0
+#define UCT_RC_MLX5_GDA_SUPPORTED 0
 #endif
 
 union uct_device_completion {
