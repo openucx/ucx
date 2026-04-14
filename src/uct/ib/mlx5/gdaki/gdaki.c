@@ -561,7 +561,7 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
             goto out_free;
         }
 
-        dev_ep->atomic_va    = (void*)&iface->atomic_buff;
+        dev_ep->atomic_va    = iface->atomic_buff;
         dev_ep->atomic_lkey  = htonl(iface->atomic_mr->lkey);
         dev_ep->sq_wqe_num   = qp_attr.max_tx;
         dev_ep->sq_fc_mask   = (qp_attr.max_tx >> 1) - 1;
@@ -688,6 +688,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
     char pci_addr[UCS_SYS_BDF_NAME_MAX];
     ucs_status_t status;
     int cuda_id;
+    int ret;
 
     if (config->num_channels > UINT8_MAX + 1) {
          ucs_error("num_channels exceeds maximum value of 256");
@@ -746,11 +747,20 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
         goto err_ctx_release;
     }
 
-    status = uct_ib_reg_mr(&md->super, &self->atomic_buff, sizeof(uint64_t),
+    ret = ucs_posix_memalign((void**)&self->atomic_buff,
+                             UCS_SYS_CACHE_LINE_SIZE, sizeof(uint64_t),
+                             "gdaki_atomic_buf");
+    if (ret != 0) {
+        ucs_error("failed to allocate AMO buffer");
+        status = UCS_ERR_NO_MEMORY;
+        goto err_ctx;
+    }
+
+    status = uct_ib_reg_mr(&md->super, self->atomic_buff, sizeof(uint64_t),
                            &reg_params, UCT_IB_MEM_ACCESS_FLAGS, NULL,
                            &self->atomic_mr);
     if (status != UCS_OK) {
-        goto err_ctx;
+        goto err_atomic_buff;
     }
 
     if (pthread_mutex_init(&self->ep_init_lock, NULL) != 0) {
@@ -763,6 +773,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
 
 err_lock:
     ibv_dereg_mr(self->atomic_mr);
+err_atomic_buff:
+    ucs_free(self->atomic_buff);
 err_ctx:
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
 err_ctx_release:
@@ -774,7 +786,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_gdaki_iface_t)
 {
     pthread_mutex_destroy(&self->ep_init_lock);
     ibv_dereg_mr(self->atomic_mr);
-    cuMemFree(self->atomic_raw);
+    ucs_free(self->atomic_buff);
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(self->cuda_dev));
 }
 
