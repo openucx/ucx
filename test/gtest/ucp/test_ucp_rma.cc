@@ -12,7 +12,6 @@ extern "C" {
 #include <ucp/core/ucp_mm.h> /* for UCP_MEM_IS_ACCESSIBLE_FROM_CPU */
 #include <ucp/core/ucp_ep.inl>
 #include <ucs/sys/sys.h>
-#include <uct/api/v2/uct_v2.h>
 }
 
 
@@ -772,11 +771,9 @@ protected:
 
     void test_put_sgl(const std::vector<size_t> &elem_sizes,
                       bool use_memhs = true, bool use_callback = false,
-                      bool set_remote_count = true) {
-        if (!sender().has_lane_with_caps(0,
-                    UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY)) {
-            UCS_TEST_SKIP_R("put_sgl_zcopy is not supported");
-        }
+                      bool set_remote_count = true,
+                      bool expect_immediate_completion = false) {
+        ASSERT_FALSE(expect_immediate_completion && use_callback);
 
         sgl_ctx ctx;
         init_sgl_ctx(ctx, elem_sizes);
@@ -812,10 +809,46 @@ protected:
             param.user_data = &cb;
         }
 
+        /* TODO: Remove this once SGL put UCT implementation is merged. */
+        short_progress_loop();
+        scoped_log_handler slh_err(wrap_errors_logger);
+
         ucs_status_ptr_t sptr = ucp_put_nbx(sender().ep(), &local, num,
                                             UCP_REMOTE_ADDR_INVALID,
                                             UCP_RKEY_INVALID, &param);
-        ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
+        if (expect_immediate_completion) {
+            EXPECT_FALSE(UCS_PTR_IS_ERR(sptr));
+            EXPECT_FALSE(UCS_PTR_IS_PTR(sptr));
+            EXPECT_EQ(UCS_OK, UCS_PTR_STATUS(sptr));
+            return;
+        }
+
+        auto verify_sgl_put_buffers = [&]() {
+            ucs_memory_type_t mtype = mem_type();
+            for (size_t i = 0; i < num; i++) {
+                uint8_t expected = static_cast<uint8_t>(i + 1);
+                std::vector<uint8_t> host_buf(ctx.lengths[i]);
+                mem_buffer::copy_from(host_buf.data(), ctx.dst[i].ptr(),
+                                      ctx.lengths[i], mtype);
+                for (size_t j = 0; j < ctx.lengths[i]; j++) {
+                    ASSERT_EQ(expected, host_buf[j])
+                        << "Mismatch at element " << i << " byte " << j;
+                }
+            }
+        };
+
+        /* TODO: Remove this once SGL put UCT implementation is merged. */
+        if (UCS_PTR_IS_ERR(sptr)) {
+            UCS_TEST_SKIP_R("Remote SGL put protocol is not available");
+        }
+
+        if (!UCS_PTR_IS_PTR(sptr)) {
+            ASSERT_FALSE(use_callback);
+            ASSERT_EQ(UCS_OK, UCS_PTR_RAW_STATUS(sptr));
+            flush_ep(sender());
+            verify_sgl_put_buffers();
+            return;
+        }
 
         if (use_callback) {
             while (!cb.completed) {
@@ -832,25 +865,16 @@ protected:
 
         ucp_request_release(sptr);
         flush_ep(sender());
-
-        ucs_memory_type_t mtype = mem_type();
-        for (size_t i = 0; i < num; i++) {
-            uint8_t expected = static_cast<uint8_t>(i + 1);
-            std::vector<uint8_t> host_buf(ctx.lengths[i]);
-            mem_buffer::copy_from(host_buf.data(), ctx.dst[i].ptr(),
-                                  ctx.lengths[i], mtype);
-            for (size_t j = 0; j < ctx.lengths[i]; j++) {
-                ASSERT_EQ(expected, host_buf[j])
-                    << "Mismatch at element " << i << " byte " << j;
-            }
-        }
+        verify_sgl_put_buffers();
     }
 
     void test_put_sgl(size_t num_elems, size_t buf_size,
                       bool use_memhs = true, bool use_callback = false,
-                      bool set_remote_count = true) {
+                      bool set_remote_count = true,
+                      bool expect_immediate_completion = false) {
         test_put_sgl(std::vector<size_t>(num_elems, buf_size),
-                     use_memhs, use_callback, set_remote_count);
+                     use_memhs, use_callback, set_remote_count,
+                     expect_immediate_completion);
     }
 
     static constexpr uint64_t LOCAL_MASK_DEFAULT =
@@ -1037,6 +1061,10 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_count_mismatch,
     expect_sgl_put_invalid_param(LOCAL_MASK_DEFAULT, REMOTE_MASK_DEFAULT,
                                  UCP_REMOTE_ADDR_INVALID, UCP_RKEY_INVALID,
                                  0, false, 4, 3);
+}
+
+UCS_TEST_P(test_ucp_rma_sgl, put_zero_count) {
+    test_put_sgl(0, 64, true, false, true, true);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_sgl, all, "all")

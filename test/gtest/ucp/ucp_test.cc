@@ -1170,32 +1170,17 @@ void ucp_test_base::entity::ep_destructor(ucp_ep_h ep, entity *e)
     ucp_request_release(req);
 }
 
-bool ucp_test_base::entity::has_lane_with_caps(uint64_t caps,
-                                               uint64_t v2_caps) const
+bool ucp_test_base::entity::has_lane_with_caps(uint64_t caps) const
 {
     ucp_ep_h ep         = this->ep();
     ucp_worker_h worker = this->worker();
     ucp_lane_index_t lane;
     uct_iface_attr_t *iface_attr;
-    uct_iface_attr_v2_t iface_attr_v2;
 
     for (lane = 0; lane < ucp_ep_config(ep)->key.num_lanes; lane++) {
         iface_attr = ucp_worker_iface_get_attr(worker,
                                                ucp_ep_get_rsc_index(ep, lane));
-        if (!ucs_test_all_flags(iface_attr->cap.flags, caps)) {
-            continue;
-        }
-
-        if (v2_caps == 0) {
-            return true;
-        }
-
-        iface_attr_v2.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS;
-        ASSERT_UCS_OK(uct_iface_query_v2(
-                ucp_worker_iface(worker,
-                                 ucp_ep_get_rsc_index(ep, lane))->iface,
-                &iface_attr_v2));
-        if (ucs_test_all_flags(iface_attr_v2.cap.flags, v2_caps)) {
+        if (ucs_test_all_flags(iface_attr->cap.flags, caps)) {
             return true;
         }
     }

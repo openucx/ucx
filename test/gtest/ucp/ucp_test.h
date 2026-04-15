@@ -154,8 +154,7 @@ public:
 
         static void ep_destructor(ucp_ep_h ep, entity *e);
 
-        bool has_lane_with_caps(uint64_t caps,
-                                uint64_t v2_caps = 0) const;
+        bool has_lane_with_caps(uint64_t caps) const;
 
         bool is_rndv_put_ppln_supported() const;
 
