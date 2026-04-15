@@ -413,10 +413,14 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
     size_t i;
 
     iface_attr_v2.field_mask = UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT;
-    uct_iface_query_v2(
+    status                   = uct_iface_query_v2(
             ucp_worker_iface(ep->worker,
                              ucp_ep_get_rsc_index(ep, lane))->iface,
-                             &iface_attr_v2);
+            &iface_attr_v2);
+    if (ucs_unlikely(status != UCS_OK)) {
+        return status;
+    }
+
     max_sgl_count = iface_attr_v2.max_put_sgl_zcopy_count;
 
     elem_count = ucp_datatype_iter_next_sgl(dt_iter, max_sgl_count, next_iter);

@@ -583,6 +583,7 @@ ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
     ucp_lane_map_t lane_map;
     char lane_desc[64];
     ucs_sys_device_t lane_sys_dev;
+    ucs_status_t status;
 
     if (max_lanes == 0) {
         return 0;
@@ -642,9 +643,15 @@ ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
         /* Check v2 iface capabilities */
         if (tl_v2_cap_flags != 0) {
             iface_attr_v2.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS;
-            uct_iface_query_v2(
+            status                   = uct_iface_query_v2(
                     ucp_worker_iface(params->worker, rsc_index)->iface,
                     &iface_attr_v2);
+            if (status != UCS_OK) {
+                ucs_trace("%s: iface_query_v2 failed: %s", lane_desc,
+                          ucs_status_string(status));
+                continue;
+            }
+
             if (!ucs_test_all_flags(iface_attr_v2.cap.flags,
                                     tl_v2_cap_flags)) {
                 ucs_trace("%s: no v2 cap 0x%" PRIx64, lane_desc,

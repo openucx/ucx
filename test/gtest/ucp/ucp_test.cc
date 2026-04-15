@@ -1191,10 +1191,10 @@ bool ucp_test_base::entity::has_lane_with_caps(uint64_t caps,
         }
 
         iface_attr_v2.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS;
-        uct_iface_query_v2(
+        ASSERT_UCS_OK(uct_iface_query_v2(
                 ucp_worker_iface(worker,
                                  ucp_ep_get_rsc_index(ep, lane))->iface,
-                &iface_attr_v2);
+                &iface_attr_v2));
         if (ucs_test_all_flags(iface_attr_v2.cap.flags, v2_caps)) {
             return true;
         }
