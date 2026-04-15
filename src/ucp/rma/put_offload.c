@@ -412,6 +412,9 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
     ucs_status_t status;
     size_t i;
 
+    /* Silence -Wmaybe-uninitialized: query can return before next_sgl */
+    next_iter->offset = dt_iter->offset;
+
     iface_attr_v2.field_mask = UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT;
     status                   = uct_iface_query_v2(
             ucp_worker_iface(ep->worker,
