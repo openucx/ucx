@@ -1,3 +1,13 @@
+/**
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+ *
+ * See file LICENSE for terms.
+ */
+
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include <ucs/debug/log.h>
 #include <ucs/debug/assert.h>
 #include <ucs/sys/stubs.h>
