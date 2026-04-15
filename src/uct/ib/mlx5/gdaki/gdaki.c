@@ -20,6 +20,7 @@
 #include <uct/ib/mlx5/rc/rc_mlx5.h>
 #include <uct/cuda/cuda_copy/cuda_copy_md.h>
 #include <uct/cuda/base/cuda_util.h>
+#include <uct/cuda/base/cuda_ctx.h>
 
 #include "gpunetio/common/doca_gpunetio_verbs_def.h"
 
@@ -124,6 +125,33 @@ static void uct_rc_gdaki_calc_dev_ep_layout(size_t num_channels, size_t wq_len,
     *pgsz_bitmap_p = (max_page_size << 1) - 1;
 }
 
+static CUdevice uct_gdaki_push_primary_ctx(int retain_inactive_ctx)
+{
+    CUdevice cuda_dev;
+    ucs_status_t status;
+
+    status = uct_cuda_ctx_primary_push_first_active(&cuda_dev);
+    if (status == UCS_OK) {
+        return cuda_dev;
+    }
+
+    if ((status != UCS_ERR_NO_DEVICE) || !retain_inactive_ctx) {
+        return CU_DEVICE_INVALID;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&cuda_dev, 0));
+    if (status != UCS_OK) {
+        return CU_DEVICE_INVALID;
+    }
+
+    status = uct_cuda_ctx_primary_push(cuda_dev, 1, UCS_LOG_LEVEL_ERROR);
+    if (status != UCS_OK) {
+        return CU_DEVICE_INVALID;
+    }
+
+    return cuda_dev;
+}
+
 static int uct_gdaki_check_umem_dmabuf(const uct_ib_md_t *md)
 {
     ucs_status_t status = UCS_ERR_UNSUPPORTED;
@@ -132,21 +160,16 @@ static int uct_gdaki_check_umem_dmabuf(const uct_ib_md_t *md)
     struct mlx5dv_devx_umem *umem;
     uct_cuda_copy_md_dmabuf_t dmabuf;
     CUdeviceptr buff;
-    CUcontext cuda_ctx;
+    CUdevice cuda_dev;
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDevicePrimaryCtxRetain(&cuda_ctx, 0));
-    if (status != UCS_OK) {
+    cuda_dev = uct_gdaki_push_primary_ctx(md->config.gda_retain_inactive_ctx);
+    if (cuda_dev == CU_DEVICE_INVALID) {
         return 0;
-    }
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(cuda_ctx));
-    if (status != UCS_OK) {
-        goto out_ctx_release;
     }
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemAlloc(&buff, 1));
     if (status != UCS_OK) {
-        goto out_ctx_pop;
+        goto out_ctx_pop_and_release;
     }
 
     dmabuf = uct_cuda_copy_md_get_dmabuf((void*)buff, 1,
@@ -169,10 +192,8 @@ static int uct_gdaki_check_umem_dmabuf(const uct_ib_md_t *md)
 out_free:
     ucs_close_fd(&dmabuf.fd);
     cuMemFree(buff);
-out_ctx_pop:
-    UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
-out_ctx_release:
-    UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(0));
+out_ctx_pop_and_release:
+    uct_cuda_ctx_primary_pop_and_release(cuda_dev);
 #endif
 
     return status == UCS_OK;
@@ -1134,12 +1155,11 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_rc_gdaki_iface_t, uct_iface_t, uct_md_h,
 
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_gdaki_iface_t, uct_iface_t);
 
-static ucs_status_t
-uct_gdaki_md_check_uar(uct_ib_mlx5_md_t *md, CUdevice cuda_dev)
+static ucs_status_t uct_gdaki_md_check_uar(uct_ib_mlx5_md_t *md)
 {
     struct mlx5dv_devx_uar *uar;
     ucs_status_t status;
-    CUcontext cuda_ctx;
+    CUdevice cuda_dev;
     unsigned flags;
 
     status = uct_ib_mlx5_devx_alloc_uar(md, 0, &uar);
@@ -1147,15 +1167,10 @@ uct_gdaki_md_check_uar(uct_ib_mlx5_md_t *md, CUdevice cuda_dev)
         goto out;
     }
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuDevicePrimaryCtxRetain(&cuda_ctx, cuda_dev));
-    if (status != UCS_OK) {
+    cuda_dev = uct_gdaki_push_primary_ctx(
+            md->super.config.gda_retain_inactive_ctx);
+    if (cuda_dev == CU_DEVICE_INVALID) {
         goto out_free_uar;
-    }
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(cuda_ctx));
-    if (status != UCS_OK) {
-        goto out_ctx_release;
     }
 
     flags  = CU_MEMHOSTREGISTER_PORTABLE | CU_MEMHOSTREGISTER_DEVICEMAP |
@@ -1166,9 +1181,7 @@ uct_gdaki_md_check_uar(uct_ib_mlx5_md_t *md, CUdevice cuda_dev)
         UCT_CUDADRV_FUNC_LOG_DEBUG(cuMemHostUnregister(uar->reg_addr));
     }
 
-    UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
-out_ctx_release:
-    UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(cuda_dev));
+    uct_cuda_ctx_primary_pop_and_release(cuda_dev);
 out_free_uar:
     mlx5dv_devx_free_uar(uar);
 out:
@@ -1196,7 +1209,7 @@ static int uct_gdaki_is_peermem_loaded(const uct_ib_md_t *md)
     return peermem_loaded;
 }
 
-static int uct_gdaki_is_uar_supported(uct_ib_mlx5_md_t *md, CUdevice cu_device)
+static int uct_gdaki_is_uar_supported(uct_ib_mlx5_md_t *md)
 {
     /**
       * Save the result of UAR support in a global flag to avoid the overhead of
@@ -1209,7 +1222,7 @@ static int uct_gdaki_is_uar_supported(uct_ib_mlx5_md_t *md, CUdevice cu_device)
         return uar_supported;
     }
 
-    uar_supported = (uct_gdaki_md_check_uar(md, cu_device) == UCS_OK);
+    uar_supported = (uct_gdaki_md_check_uar(md) == UCS_OK);
     if (uar_supported == 0) {
         ucs_diag("GDAKI not supported, please add NVreg_RegistryDwords="
                  "\"PeerMappingOverride=1;\" option for nvidia kernel driver");
@@ -1437,15 +1450,15 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
         goto out;
     }
 
+    if (!uct_gdaki_is_uar_supported(ib_mlx5_md)) {
+        status = UCS_ERR_NO_DEVICE;
+        goto err;
+    }
+
     num_tl_devices = 0;
     ucs_for_each_bit(i, ibdesc->cuda_map) {
         status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&device, i));
         if (status != UCS_OK) {
-            goto err;
-        }
-
-        if (!uct_gdaki_is_uar_supported(ib_mlx5_md, device)) {
-            status = UCS_ERR_NO_DEVICE;
             goto err;
         }
 
