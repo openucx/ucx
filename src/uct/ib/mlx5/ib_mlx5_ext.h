@@ -1,3 +1,9 @@
+/**
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+ *
+ * See file LICENSE for terms.
+ */
+
 #ifndef UCT_IB_MLX5_EXT_H_
 #define UCT_IB_MLX5_EXT_H_
 
