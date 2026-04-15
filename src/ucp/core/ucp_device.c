@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -44,9 +44,10 @@ static ucs_spinlock_t ucp_device_handle_hash_lock;
 #define UCP_DEVICE_LOCAL_SYS_DEV_DETECT_SIZE 64
 
 enum {
-    UCP_DEVICE_TL_TYPE_LKEY,
+    UCP_DEVICE_TL_TYPE_FIRST,
+    UCP_DEVICE_TL_TYPE_LKEY = UCP_DEVICE_TL_TYPE_FIRST,
     UCP_DEVICE_TL_TYPE_NOLKEY,
-    UCP_DEVICE_TL_TYPE_NUM,
+    UCP_DEVICE_TL_TYPE_LAST,
 };
 
 
@@ -146,7 +147,7 @@ ucp_device_detect_local_sys_dev(ucp_context_h context,
 
 static size_t
 ucp_device_get_tl_bitmap(const ucp_worker_h worker,
-                         ucp_tl_bitmap_t tl_bitmap[UCP_DEVICE_TL_TYPE_NUM],
+                         ucp_tl_bitmap_t tl_bitmap[UCP_DEVICE_TL_TYPE_LAST],
                          ucs_sys_device_t local_sys_dev)
 {
     const ucp_worker_iface_t *wiface;
@@ -155,7 +156,8 @@ ucp_device_get_tl_bitmap(const ucp_worker_h worker,
     size_t num, num_lanes = 0;
 
     /** TODO: Maybe cache results */
-    for (tl_type = 0; tl_type < UCP_DEVICE_TL_TYPE_NUM; tl_type++) {
+    for (tl_type = UCP_DEVICE_TL_TYPE_FIRST;
+         tl_type < UCP_DEVICE_TL_TYPE_LAST; tl_type++) {
         UCS_STATIC_BITMAP_RESET_ALL(&tl_bitmap[tl_type]);
     }
 
@@ -178,7 +180,8 @@ ucp_device_get_tl_bitmap(const ucp_worker_h worker,
         UCS_STATIC_BITMAP_SET(&tl_bitmap[tl_type], tl_id);
     }
 
-    for (tl_type = 0; tl_type < UCP_DEVICE_TL_TYPE_NUM; tl_type++) {
+    for (tl_type = UCP_DEVICE_TL_TYPE_FIRST;
+         tl_type < UCP_DEVICE_TL_TYPE_LAST; tl_type++) {
         num = UCS_STATIC_BITMAP_POPCOUNT(tl_bitmap[tl_type]);
         if (num_lanes == 0) {
             num_lanes = num;
@@ -261,13 +264,13 @@ static ucs_status_t ucp_device_local_mem_list_create_handle(
             UCP_DEVICE_MEM_LIST_PARAMS_FIELD, params, worker, WORKER, NULL);
     const size_t uct_elem_size  = sizeof(uct_device_local_mem_list_elem_t);
     size_t handle_size          = 0;
+    ucp_tl_bitmap_t tl_bitmap[UCP_DEVICE_TL_TYPE_LAST] = {};
     const ucp_device_mem_list_elem_t *ucp_element;
     const ucp_worker_iface_t *wiface;
     ucp_device_local_mem_list_t *handle;
     uct_device_local_mem_list_elem_t *uct_element;
     size_t i, j, num_lanes;
     ucs_status_t status;
-    ucp_tl_bitmap_t tl_bitmap[UCP_DEVICE_TL_TYPE_NUM] = {};
     ucp_rsc_index_t tl_id;
 
     num_lanes   = ucp_device_get_tl_bitmap(worker, tl_bitmap, local_sys_dev);
@@ -407,24 +410,18 @@ ucp_device_local_mem_list_create(const ucp_device_mem_list_params_t *params,
     return status;
 }
 
-static int ucp_device_ep_find_lane(const ucp_ep_h ep, ucp_rsc_index_t tl_id,
-                                   ucp_lane_index_t *lane_p)
+static ucp_lane_index_t ucp_device_ep_find_lane(const ucp_ep_h ep, ucp_rsc_index_t tl_id)
 {
     ucp_ep_config_t *ep_config = ucp_ep_config(ep);
     ucp_lane_index_t lane;
 
     for (lane = 0; lane < ep_config->key.num_lanes; ++lane) {
         if (ucp_ep_get_rsc_index(ep, lane) == tl_id) {
-            break;
+            return lane;
         }
     }
 
-    if (lane == ep_config->key.num_lanes) {
-        return 0;
-    }
-
-    *lane_p = lane;
-    return 1;
+    return UCP_NULL_LANE;
 }
 
 static int
@@ -438,7 +435,8 @@ ucp_device_ep_check_lanes(const ucp_ep_h ep, ucp_tl_bitmap_t *tl_bitmap)
     }
 
     UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, tl_bitmap) {
-        if (!ucp_device_ep_find_lane(ep, tl_id, &lane)) {
+        lane = ucp_device_ep_find_lane(ep, tl_id);
+        if (lane == UCP_NULL_LANE) {
             return 0;
         }
     }
@@ -460,7 +458,8 @@ static ucs_status_t ucp_device_remote_mem_list_element_pack(
     ucs_status_t status;
     ucp_lane_index_t lane;
 
-    if (!ucp_device_ep_find_lane(ep, tl_id, &lane)) {
+    lane = ucp_device_ep_find_lane(ep, tl_id);
+    if (lane == UCP_NULL_LANE) {
         ucs_error("no lane found for ep=%p", ep);
         return UCS_ERR_NO_DEVICE;
     }
@@ -524,8 +523,8 @@ static ucp_ep_h ucp_device_remote_mem_list_get_first_ep(
 
 static ucs_status_t ucp_device_remote_mem_list_fill(
         const ucp_device_mem_list_elem_t *ucp_element,
-        ucp_tl_bitmap_t *tl_bitmap,
-        uct_device_remote_mem_list_elem_t **uct_element_p, size_t num_lanes)
+        ucp_tl_bitmap_t *tl_bitmap, size_t num_lanes,
+        uct_device_remote_mem_list_elem_t **uct_element_p)
 {
     const size_t uct_elem_size = sizeof(uct_device_remote_mem_list_elem_t);
     ucp_rsc_index_t tl_id;
@@ -555,11 +554,11 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
     const ucp_ep_h ep = ucp_device_remote_mem_list_get_first_ep(params);
     const size_t uct_elem_size = sizeof(uct_device_remote_mem_list_elem_t);
     size_t handle_size         = 0;
+    ucp_tl_bitmap_t tl_bitmap[UCP_DEVICE_TL_TYPE_LAST] = {};
     const ucp_device_mem_list_elem_t *ucp_element;
     ucp_device_remote_mem_list_t *handle;
     uct_device_remote_mem_list_elem_t *uct_element;
     ucs_sys_device_t local_sys_dev;
-    ucp_tl_bitmap_t tl_bitmap[UCP_DEVICE_TL_TYPE_NUM] = {};
     size_t i, num_lanes;
     ucs_status_t status;
     int tl_type;
@@ -597,17 +596,18 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
             uct_element = UCS_PTR_BYTE_OFFSET(uct_element,
                                               uct_elem_size * num_lanes);
         } else {
-            for (tl_type = 0; tl_type < UCP_DEVICE_TL_TYPE_NUM; tl_type++) {
+            for (tl_type = UCP_DEVICE_TL_TYPE_FIRST;
+                 tl_type < UCP_DEVICE_TL_TYPE_LAST; tl_type++) {
                 if (ucp_device_ep_check_lanes(ucp_element->ep,
                                               &tl_bitmap[tl_type])) {
                     break;
                 }
             }
 
-            ucs_assert(tl_type < UCP_DEVICE_TL_TYPE_NUM);
+            ucs_assert(tl_type < UCP_DEVICE_TL_TYPE_LAST);
             status = ucp_device_remote_mem_list_fill(ucp_element,
                                                      &tl_bitmap[tl_type],
-                                                     &uct_element, num_lanes);
+                                                     num_lanes, &uct_element);
             if (status != UCS_OK) {
                 goto out;
             }
