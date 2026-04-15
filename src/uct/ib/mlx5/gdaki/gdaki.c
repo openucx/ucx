@@ -224,10 +224,12 @@ uct_rc_gdaki_umem_reg(const uct_ib_md_t *md, struct ibv_context *ibv_context,
     umem_in.pgsz_bitmap = pgsz_bitmap;
 
     if (ib_mlx5_md->flags & UCT_IB_MLX5_MD_FLAG_REG_DMABUF_UMEM) {
-        dmabuf            = uct_cuda_copy_md_get_dmabuf(address, length,
-                                                        UCS_SYS_DEVICE_ID_UNKNOWN);
-        umem_in.comp_mask = MLX5DV_UMEM_MASK_DMABUF;
-        umem_in.dmabuf_fd = dmabuf.fd;
+        dmabuf = uct_cuda_copy_md_get_dmabuf(address, length,
+                                             UCS_SYS_DEVICE_ID_UNKNOWN);
+        if (dmabuf.fd != UCT_DMABUF_FD_INVALID) {
+            umem_in.comp_mask = MLX5DV_UMEM_MASK_DMABUF;
+            umem_in.dmabuf_fd = dmabuf.fd;
+        }
     }
 
     umem = mlx5dv_devx_umem_reg_ex(ibv_context, &umem_in);
@@ -871,13 +873,11 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
 
         for (i = 0; i < iface->num_channels; ++i) {
             channel = &ep->channel_block->channels[i];
-            status  = UCT_CUDADRV_FUNC_LOG_ERR(cuMemHostRegister(
-                    channel->qp.reg->addr.ptr, UCT_IB_MLX5_BF_REG_SIZE * 2,
-                    CU_MEMHOSTREGISTER_PORTABLE | CU_MEMHOSTREGISTER_DEVICEMAP |
-                            CU_MEMHOSTREGISTER_IOMEMORY));
-            if ((status != UCS_OK) && (i-- > 0)) {
-                goto out_unreg;
-            }
+            (void)cuMemHostRegister(channel->qp.reg->addr.ptr,
+                                    UCT_IB_MLX5_BF_REG_SIZE * 2,
+                                    CU_MEMHOSTREGISTER_PORTABLE |
+                                    CU_MEMHOSTREGISTER_DEVICEMAP |
+                                    CU_MEMHOSTREGISTER_IOMEMORY);
 
             status = UCT_CUDADRV_FUNC_LOG_ERR(
                     cuMemHostGetDevicePointer(&sq_db, channel->qp.reg->addr.ptr,
