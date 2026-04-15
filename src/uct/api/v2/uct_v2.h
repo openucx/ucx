@@ -1047,12 +1047,18 @@ enum uct_iface_attr_field {
 
 
 /**
- * @defgroup UCT_RESOURCE_IFACE_CAP_V2  UCT v2 interface capabilities
+ * @defgroup UCT_RESOURCE_IFACE_CAP_V2   UCT v2 interface operations and
+                                         capabilities
  * @ingroup UCT_RESOURCE
- * @brief Extended interface capability flags for @ref uct_iface_attr_v2_t
+ *
+ * @brief  List of capabilities supported by UCX API
+ *
+ * The definition list presents interface capabilities for
+ * @ref uct_iface_attr_v2_t, reported through @ref uct_iface_query_v2.
  * @{
  */
-#define UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY  UCS_BIT(0) /**< SGL zero-copy put */
+        /* PUT capabilities */
+#define UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY       UCS_BIT(0)  /**< Zero-copy SGL put */
 /**
  * @}
  */
@@ -1069,16 +1075,16 @@ typedef struct {
      */
     uint64_t field_mask;
 
-    /** Interface capabilities (v2 flags) */
-    struct {
-        uint64_t flags; /**< Flags from @ref UCT_RESOURCE_IFACE_CAP_V2 */
-    } cap;
-
     /**
      * Maximal number of elements in @ref uct_ep_put_sgl_zcopy.
      * @anchor uct_iface_attr_v2_max_put_sgl_zcopy_count
      */
     size_t   max_put_sgl_zcopy_count;
+
+    /** Interface capabilities (v2 flags) */
+    struct {
+        uint64_t flags; /**< Flags from @ref UCT_RESOURCE_IFACE_CAP_V2 */
+    } cap;
 } uct_iface_attr_v2_t;
 
 
