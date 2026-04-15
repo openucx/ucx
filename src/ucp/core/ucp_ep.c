@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2020. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) Los Alamos National Security, LLC. 2019 ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -105,7 +105,6 @@ static ucs_stats_class_t ucp_ep_stats_class = {
 static ucs_status_t ucp_ep_failed_op(uct_ep_h ep);
 static ssize_t ucp_ep_failed_bc_op(uct_ep_h ep);
 static void ucp_ep_failed_destroy(uct_ep_h ep);
-static uct_iface_h ucp_failed_tl_iface;
 static ucs_init_once_t ucp_failed_tl_iface_once = UCS_INIT_ONCE_INITIALIZER;
 
 static const uct_iface_ops_t ucp_failed_tl_iface_ops = {
@@ -147,29 +146,30 @@ static ucp_ep_discard_lanes_arg_t ucp_failed_tl_ep_discard_arg = {
     .status               = UCS_ERR_CANCELED
 };
 
-static uct_iface_h ucp_ep_make_failed_tl_iface(void)
+static uct_iface_h ucp_ep_get_failed_tl_iface(void)
 {
+    static uct_iface_h iface;
     uct_iface_close_func_t stub_close;
     ucs_status_t status;
 
     UCS_INIT_ONCE(&ucp_failed_tl_iface_once) {
-        status = ucp_stub_iface_open(UCS_ERR_CANCELED, &ucp_failed_tl_iface);
+        status = ucp_stub_iface_open(UCS_ERR_CANCELED, &iface);
         if (status != UCS_OK) {
             ucs_fatal("failed to create failed tl iface stub");
         }
 
-        stub_close                                   = ucp_failed_tl_iface->ops.iface_close;
-        ucp_failed_tl_iface->ops                     = ucp_failed_tl_iface_ops;
-        ucp_failed_tl_iface->ops.iface_close         = stub_close;
-        ucp_failed_tl_ep_discard_arg.failed_ep.iface = ucp_failed_tl_iface;
+        stub_close                                   = iface->ops.iface_close;
+        iface->ops                                   = ucp_failed_tl_iface_ops;
+        iface->ops.iface_close                       = stub_close;
+        ucp_failed_tl_ep_discard_arg.failed_ep.iface = iface;
     }
 
-    return ucp_failed_tl_iface;
+    return iface;
 }
 
 UCS_STATIC_CLEANUP {
     UCS_CLEANUP_ONCE(&ucp_failed_tl_iface_once) {
-        uct_iface_close(ucp_failed_tl_iface);
+        uct_iface_close(ucp_ep_get_failed_tl_iface());
     }
 }
 
@@ -1549,7 +1549,7 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
         return;
     }
 
-    discard_arg->failed_ep.iface      = ucp_ep_make_failed_tl_iface();
+    discard_arg->failed_ep.iface      = ucp_ep_get_failed_tl_iface();
     discard_arg->ucp_ep               = ep;
     discard_arg->discard_counter      = 1;
     discard_arg->destroy_counter      = ucs_popcount(lanes);
@@ -1801,7 +1801,7 @@ void ucp_ep_cleanup_lanes(ucp_ep_h ep)
 
     ucs_debug("ep %p: cleanup lanes", ep);
 
-    ucp_ep_make_failed_tl_iface();
+    ucp_ep_get_failed_tl_iface();
 
     ucp_ep_extract_failed_lanes(ep, UCS_MASK(ucp_ep_num_lanes(ep)),
                                 &ucp_failed_tl_ep_discard_arg.failed_ep,
