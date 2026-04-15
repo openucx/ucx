@@ -885,12 +885,19 @@ UCS_TEST_F(test_config, test_allow_list_with_ranges) {
 
 UCS_TEST_F(test_config, test_allow_list_with_ranges_malformed) {
     std::vector<std::string> malformed = {
-        "no_bracket",    "prefix2-]", "prefix]abc", "hello]]",        "]]-",
-        "]--",           "a[-1-2]b",  "a[-2-]b",    "a[2-3-]b",       "a[4]b",
-        "a[[]b",         "a[[2-4]b",  "a[2-]b",     "a[2-3-4]b",      "a[b-c]d",
-        "a[0-A]b",       "a[-]b",     "[]",         "[-1-2-]",        "[--]",
-        "[1-2][3-4]",    "[4-8][",    "[5-6]]",     "][4-5]",         "[[0-4]]",
-        "a[0-4]b[6-8]c", "a[5-2]b",   "[10-0]",     "ab[100-1]suffix"
+        "no_bracket", "prefix2-]", "prefix]abc",
+        "hello]]",    "]]-",       "]--",        
+        "a[-1-2]b",   "a[-2-]b",   "a[2-3-]b",
+        "a[-2-3-]b",  "a[4]b",     "a[[]b",
+        "a[[2-4]b",   "a[2-]b",    "a[2-3-4]b",
+        "a[b-c]d",    "a[0-A]b",   "a[-]b",
+        "[]",         "[-1-2-]",   "[--]",
+        "[1-2][3-4]", "[4-8][",    "[5-6]]",
+        "][4-5]",     "[[0-4]]",   "a[0-4]b[6-8]c",
+        "a[5-2]b",    "[10-0]",    "ab[100-1]suffix",
+        "a[-4]",      "[-4]",      "foo[]]",
+        "[]]",        "a-]",       "a[-",
+        "a[4-]",      "a[4-6"
     };
 
     std::string input;

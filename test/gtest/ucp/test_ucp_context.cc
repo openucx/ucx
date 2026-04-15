@@ -563,8 +563,8 @@ protected:
                                        unsigned expected_device_idx)
     {
         for (unsigned i = 0; i < count; ++i) {
-            std::string const device_name = build_mlx5_device_name(i);
-            bool const should_be_selected = (i == expected_device_idx);
+            const std::string device_name = build_mlx5_device_name(i);
+            const bool should_be_selected = (i == expected_device_idx);
 
             EXPECT_EQ(should_be_selected, has_device(selected, device_name))
                     << device_name << " should be "
