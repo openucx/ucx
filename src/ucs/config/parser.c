@@ -925,7 +925,7 @@ static void ucs_config_array_expand_ranges(ucs_string_buffer_t *strb,
     size_t count_total = 0;
     const char *p, *next;
 
-    // skip leading delimiters
+    /* skip leading delimiters */
     p = input + strspn(input, delim);
 
     while ((*p != '\0') && (count_total < max_elements)) {
@@ -935,7 +935,7 @@ static void ucs_config_array_expand_ranges(ucs_string_buffer_t *strb,
 
         next = strpbrk(p, delim);
         if (next == NULL) {
-            // last token
+            /* last token */
             ucs_config_array_expand_range(strb, p, strlen(p), delim,
                                           max_elements - count_total);
             break;
@@ -945,7 +945,7 @@ static void ucs_config_array_expand_ranges(ucs_string_buffer_t *strb,
                                                      max_elements -
                                                              count_total);
 
-        // skip consecutive delimiters
+        /* skip consecutive delimiters */
         p = next + strspn(next, delim);
     }
 }
