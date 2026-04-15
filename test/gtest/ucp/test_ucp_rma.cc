@@ -731,6 +731,39 @@ protected:
         init_sgl_ctx(ctx, std::vector<size_t>(num_elems, buf_size));
     }
 
+    void init_sgl_ctx_mixed_mem_types(sgl_ctx &ctx) {
+        static constexpr size_t buf_size = 64;
+        static constexpr size_t num      = 2;
+        const ucs_memory_type_t types[]  = {UCS_MEMORY_TYPE_HOST,
+                                            UCS_MEMORY_TYPE_CUDA};
+
+        ctx.rkey_handles.resize(num);
+        ctx.buffers.resize(num);
+        ctx.remote_addrs.resize(num);
+        ctx.lengths.resize(num);
+        ctx.memhs.resize(num);
+        ctx.rkeys.resize(num);
+        ctx.src.reserve(num);
+        ctx.dst.reserve(num);
+
+        for (size_t i = 0; i < num; i++) {
+            ctx.src.emplace_back(buf_size, sender(), 0, types[i]);
+            ctx.dst.emplace_back(buf_size, receiver(), 0, types[i]);
+        }
+
+        for (size_t i = 0; i < num; i++) {
+            ctx.src[i].memset(static_cast<uint8_t>(i + 1));
+            ctx.dst[i].memset(0);
+            ctx.dst[i].rkey(sender(), ctx.rkey_handles[i]);
+
+            ctx.buffers[i]      = ctx.src[i].ptr();
+            ctx.memhs[i]        = ctx.src[i].memh();
+            ctx.remote_addrs[i] = reinterpret_cast<uint64_t>(ctx.dst[i].ptr());
+            ctx.lengths[i]      = buf_size;
+            ctx.rkeys[i]        = ctx.rkey_handles[i];
+        }
+    }
+
     static ucp_dt_local_sgl_t
     make_local_sgl(sgl_ctx &ctx, uint64_t field_mask) {
         ucp_dt_local_sgl_t sgl = {};
@@ -885,17 +918,13 @@ protected:
             UCP_DT_REMOTE_SGL_FIELD_LENGTHS |
             UCP_DT_REMOTE_SGL_FIELD_RKEYS;
 
-    void expect_sgl_put_invalid_param(uint64_t local_mask,
-                                      uint64_t remote_mask,
-                                      uint64_t remote_addr = UCP_REMOTE_ADDR_INVALID,
-                                      ucp_rkey_h rkey = UCP_RKEY_INVALID,
-                                      uint32_t clear_param_mask = 0,
-                                      bool null_remote = false,
-                                      size_t count = 2,
-                                      size_t remote_count = 0) {
-        sgl_ctx ctx;
-        init_sgl_ctx(ctx, count, 64);
-
+    void expect_sgl_put_invalid_param_ctx(
+            sgl_ctx &ctx, uint64_t local_mask, uint64_t remote_mask,
+            size_t count, uint64_t remote_addr = UCP_REMOTE_ADDR_INVALID,
+            ucp_rkey_h rkey = UCP_RKEY_INVALID,
+            uint32_t clear_param_mask = 0, bool null_remote = false,
+            size_t remote_count = 0)
+    {
         size_t effective_remote_count = remote_count ? remote_count : count;
         ucp_dt_local_sgl_t local      = make_local_sgl(ctx, local_mask);
         ucp_dt_remote_sgl_t remote    = make_remote_sgl(ctx, remote_mask);
@@ -911,6 +940,22 @@ protected:
         ucs_status_ptr_t sptr = ucp_put_nbx(sender().ep(), &local, count,
                                             remote_addr, rkey, &param);
         EXPECT_EQ(UCS_ERR_INVALID_PARAM, UCS_PTR_STATUS(sptr));
+    }
+
+    void expect_sgl_put_invalid_param(uint64_t local_mask,
+                                      uint64_t remote_mask,
+                                      uint64_t remote_addr = UCP_REMOTE_ADDR_INVALID,
+                                      ucp_rkey_h rkey = UCP_RKEY_INVALID,
+                                      uint32_t clear_param_mask = 0,
+                                      bool null_remote = false,
+                                      size_t count = 2,
+                                      size_t remote_count = 0)
+    {
+        sgl_ctx ctx;
+        init_sgl_ctx(ctx, count, 64);
+        expect_sgl_put_invalid_param_ctx(ctx, local_mask, remote_mask, count,
+                                         remote_addr, rkey, clear_param_mask,
+                                         null_remote, remote_count);
     }
 };
 
@@ -1001,19 +1046,9 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_invalid_rkey,
                      !ENABLE_PARAMS_CHECK) {
     sgl_ctx ctx;
     init_sgl_ctx(ctx, 2, 64);
-
-    uint64_t local_mask  = LOCAL_MASK_DEFAULT;
-    uint64_t remote_mask = REMOTE_MASK_DEFAULT;
-
-    ucp_dt_local_sgl_t local   = make_local_sgl(ctx, local_mask);
-    ucp_dt_remote_sgl_t remote = make_remote_sgl(ctx, remote_mask);
-    ucp_request_param_t param  = make_sgl_param(&remote, 2);
-
-    scoped_log_handler wrap_err(wrap_errors_logger);
-    ucs_status_ptr_t sptr = ucp_put_nbx(sender().ep(), &local, 2,
-                                        UCP_REMOTE_ADDR_INVALID,
-                                        ctx.rkeys[0], &param);
-    EXPECT_EQ(UCS_ERR_INVALID_PARAM, UCS_PTR_STATUS(sptr));
+    expect_sgl_put_invalid_param_ctx(ctx, LOCAL_MASK_DEFAULT,
+                                     REMOTE_MASK_DEFAULT, 2,
+                                     UCP_REMOTE_ADDR_INVALID, ctx.rkeys[0]);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_missing_remote_field,
@@ -1061,6 +1096,16 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_count_mismatch,
     expect_sgl_put_invalid_param(LOCAL_MASK_DEFAULT, REMOTE_MASK_DEFAULT,
                                  UCP_REMOTE_ADDR_INVALID, UCP_RKEY_INVALID,
                                  0, false, 4, 3);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_mixed_mem_types,
+                     !ENABLE_PARAMS_CHECK ||
+                             !mem_buffer::is_mem_type_supported(
+                                     UCS_MEMORY_TYPE_CUDA)) {
+    sgl_ctx ctx;
+    init_sgl_ctx_mixed_mem_types(ctx);
+    expect_sgl_put_invalid_param_ctx(ctx, LOCAL_MASK_DEFAULT,
+                                     REMOTE_MASK_DEFAULT, 2);
 }
 
 UCS_TEST_P(test_ucp_rma_sgl, put_zero_count) {
