@@ -65,6 +65,15 @@ typedef struct {
              *   iov_offset = iter.length - iter.iov[iter.iov_index].start_offset
              */
         } iov;
+        struct {
+            void * const     *buffers;
+            const size_t     *lengths;
+            ucp_mem_h        *memhs;
+            const uint64_t   *remote_addrs;
+            ucp_rkey_h const *rkeys;
+            int              memhs_owned;
+            /* length = element count, offset = current element index */
+        } sgl;
     } type;
 } ucp_datatype_iter_t;
 
@@ -98,5 +107,21 @@ void ucp_datatype_iter_str(const ucp_datatype_iter_t *dt_iter,
 
 int ucp_datatype_iter_is_user_memh_valid(const ucp_datatype_iter_t *dt_iter,
                                          const ucp_mem_h memh);
+
+ucs_status_t ucp_datatype_sgl_iter_init(ucp_context_h context,
+                                        ucp_datatype_iter_t *dt_iter,
+                                        const ucp_dt_local_sgl_t *local,
+                                        const ucp_dt_remote_sgl_t *remote,
+                                        size_t count,
+                                        const ucp_request_param_t *param);
+
+ucs_status_t ucp_datatype_iter_sgl_mem_reg(ucp_context_h context,
+                                           ucp_datatype_iter_t *dt_iter,
+                                           ucp_md_map_t md_map,
+                                           unsigned uct_flags);
+
+void ucp_datatype_iter_sgl_mem_dereg(ucp_datatype_iter_t *dt_iter);
+
+void ucp_datatype_iter_sgl_cleanup(ucp_datatype_iter_t *dt_iter, int dereg);
 
 #endif

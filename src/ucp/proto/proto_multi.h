@@ -131,6 +131,9 @@ typedef struct {
         /* Required iface capabilities */
         uint64_t        tl_cap_flags;
 
+        /* Required v2 iface capabilities */
+        uint64_t        tl_v2_cap_flags;
+
         /* Required lane type */
         ucp_lane_type_t lane_type;
     } first, middle;

@@ -115,7 +115,8 @@ ucp_proto_put_am_bcopy_probe(const ucp_proto_init_params_t *init_params)
         .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID
     };
 
-    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT))) {
+    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT)) ||
+        (init_params->select_param->dt_class == UCP_DATATYPE_SGL)) {
         return;
     }
 

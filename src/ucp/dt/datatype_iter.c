@@ -9,6 +9,7 @@
 #endif
 
 #include "datatype_iter.inl"
+#include "dt_sgl.h"
 
 
 #define ucp_datatype_iter_iov_for_each(_iov_index, _length, _dt_iter) \
@@ -282,6 +283,126 @@ size_t ucp_datatype_iter_iov_next_iov(const ucp_datatype_iter_t *dt_iter,
     return dst_iov_index;
 }
 
+static UCS_F_ALWAYS_INLINE ucs_status_t ucp_datatype_iter_sgl_allocate_memh(
+        ucp_datatype_iter_t *dt_iter, size_t count)
+{
+    ucp_mem_h *sgl_memh;
+
+    sgl_memh = (ucp_mem_h*)ucs_calloc(count, sizeof(*sgl_memh), "dt_sgl_memh");
+    if (sgl_memh == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    dt_iter->type.sgl.memhs = sgl_memh;
+    return UCS_OK;
+}
+
+ucs_status_t ucp_datatype_sgl_iter_init(ucp_context_h context,
+                                        ucp_datatype_iter_t *dt_iter,
+                                        const ucp_dt_local_sgl_t *local,
+                                        const ucp_dt_remote_sgl_t *remote,
+                                        size_t count,
+                                        const ucp_request_param_t *param)
+{
+    ucs_status_t status;
+
+    dt_iter->dt_class              = UCP_DATATYPE_SGL;
+    dt_iter->length                = count;
+    dt_iter->offset                = 0;
+    dt_iter->type.sgl.buffers      = local->buffers;
+    dt_iter->type.sgl.lengths      = local->lengths;
+    dt_iter->type.sgl.remote_addrs = remote->remote_addrs;
+    dt_iter->type.sgl.rkeys        = remote->rkeys;
+    dt_iter->type.sgl.memhs_owned  = 0;
+
+    if (local->field_mask & UCP_DT_LOCAL_SGL_FIELD_MEMHS) {
+        status = ucp_datatype_iter_init_mem_info_from_user_memh(dt_iter,
+                                                                local->memhs[0]);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        dt_iter->type.sgl.memhs = (ucp_mem_h*)local->memhs;
+    } else {
+        dt_iter->type.sgl.memhs = NULL;
+        ucp_datatype_iter_detect_mem_info(context, local->buffers[0],
+                                          local->lengths[0], dt_iter, param);
+        if (ENABLE_PARAMS_CHECK && (count > 1)) {
+            status = ucp_dt_sgl_memtype_check(context, local, count,
+                                              &dt_iter->mem_info);
+            if (status != UCS_OK) {
+                return status;
+            }
+        }
+    }
+
+    return UCS_OK;
+}
+
+ucs_status_t ucp_datatype_iter_sgl_mem_reg(ucp_context_h context,
+                                           ucp_datatype_iter_t *dt_iter,
+                                           ucp_md_map_t md_map,
+                                           unsigned uct_flags)
+{
+    size_t count = dt_iter->length;
+    ucs_status_t status;
+    size_t i;
+
+    if ((md_map == 0) || (dt_iter->type.sgl.memhs != NULL)) {
+        return UCS_OK;
+    }
+
+    status = ucp_datatype_iter_sgl_allocate_memh(dt_iter, count);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    dt_iter->type.sgl.memhs_owned = 1;
+
+    for (i = 0; i < count; ++i) {
+        status = ucp_datatype_iter_mem_reg_single(
+                context, dt_iter->type.sgl.buffers[i],
+                dt_iter->type.sgl.lengths[i], dt_iter->mem_info.type,
+                md_map, uct_flags, &dt_iter->type.sgl.memhs[i]);
+        if (status != UCS_OK) {
+            ucp_datatype_iter_sgl_mem_dereg(dt_iter);
+            return status;
+        }
+    }
+
+    return UCS_OK;
+}
+
+void ucp_datatype_iter_sgl_mem_dereg(ucp_datatype_iter_t *dt_iter)
+{
+    size_t count = dt_iter->length;
+    size_t i;
+
+    ucs_assert(dt_iter->type.sgl.memhs != NULL);
+    for (i = 0; i < count; ++i) {
+        ucp_datatype_iter_mem_dereg_single(&dt_iter->type.sgl.memhs[i]);
+    }
+}
+
+void ucp_datatype_iter_sgl_cleanup(ucp_datatype_iter_t *dt_iter, int dereg)
+{
+    size_t i;
+
+    if (!dt_iter->type.sgl.memhs_owned) {
+        return;
+    }
+
+    if (dereg) {
+        ucp_datatype_iter_sgl_mem_dereg(dt_iter);
+    } else if (UCS_ENABLE_ASSERT) {
+        for (i = 0; i < dt_iter->length; ++i) {
+            ucp_datatatype_iter_memh_cleanup_check(dt_iter->type.sgl.memhs[i]);
+        }
+    }
+
+    ucs_free(dt_iter->type.sgl.memhs);
+}
+
 void ucp_datatype_iter_str(const ucp_datatype_iter_t *dt_iter,
                            ucs_string_buffer_t *strb)
 {
@@ -362,6 +483,15 @@ int ucp_datatype_iter_is_user_memh_valid(const ucp_datatype_iter_t *dt_iter,
         iov_count = ucp_datatype_iter_iov_count(dt_iter);
         if (!ucp_memh_is_iov_buffer_in_range(memh, dt_iter->type.iov.iov,
                                              iov_count, &err_msg)) {
+            goto err_memh_mismatch;
+        }
+        break;
+    case UCP_DATATYPE_SGL:
+        if (!ucp_memh_is_buffer_in_range(memh, dt_iter->type.sgl.buffers[0],
+                                         dt_iter->type.sgl.lengths[0])) {
+            ucs_string_buffer_appendf(&err_msg, "[buffer %p length %zu]",
+                                      dt_iter->type.sgl.buffers[0],
+                                      dt_iter->type.sgl.lengths[0]);
             goto err_memh_mismatch;
         }
         break;

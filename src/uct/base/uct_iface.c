@@ -573,6 +573,14 @@ ucs_status_t uct_single_device_resource(uct_md_h md, const char *dev_name,
 ucs_status_t
 uct_iface_base_query_v2(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr)
 {
+    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_CAP_FLAGS) {
+        iface_attr->cap.flags = 0;
+    }
+
+    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT) {
+        iface_attr->max_put_sgl_zcopy_count = 0;
+    }
+
     return UCS_OK;
 }
 

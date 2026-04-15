@@ -280,3 +280,122 @@ INSTANTIATE_TEST_SUITE_P(iov, test_ucp_dt_iter,
 
 INSTANTIATE_TEST_SUITE_P(generic, test_ucp_dt_iter,
                         testing::ValuesIn(test_ucp_dt_iter::enum_dt_generic_params()));
+
+class test_ucp_dt_sgl : public ucs::test {
+protected:
+    virtual void init() {
+        ucp_params_t ctx_params;
+        ctx_params.field_mask = UCP_PARAM_FIELD_FEATURES;
+        ctx_params.features   = UCP_FEATURE_RMA;
+        UCS_TEST_CREATE_HANDLE(ucp_context_h, m_ucph, ucp_cleanup, ucp_init,
+                               &ctx_params, NULL);
+    }
+
+    virtual void cleanup() {
+        m_ucph.reset();
+    }
+
+    void init_sgl_iter(size_t count) {
+        m_buffers.resize(count);
+        m_lengths.resize(count);
+        m_remote_addrs.resize(count);
+        m_rkeys.resize(count);
+
+        for (size_t i = 0; i < count; i++) {
+            m_buffers[i]      = &m_buffers[i];
+            m_lengths[i]      = (i + 1) * 64;
+            m_remote_addrs[i] = 0x1000 + i * 0x100;
+            m_rkeys[i]        = nullptr;
+        }
+
+        m_local = {};
+        m_local.field_mask = UCP_DT_LOCAL_SGL_FIELD_BUFFERS |
+                             UCP_DT_LOCAL_SGL_FIELD_LENGTHS;
+        m_local.buffers    = m_buffers.data();
+        m_local.lengths    = m_lengths.data();
+
+        m_remote = {};
+        m_remote.field_mask   = UCP_DT_REMOTE_SGL_FIELD_REMOTE_ADDRS |
+                                UCP_DT_REMOTE_SGL_FIELD_RKEYS;
+        m_remote.remote_addrs = m_remote_addrs.data();
+        m_remote.rkeys        = m_rkeys.data();
+
+        ucp_request_param_t param = {};
+        param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE |
+                             UCP_OP_ATTR_FIELD_REMOTE;
+        param.datatype     = ucp_dt_make_sgl();
+        param.remote       = &m_remote;
+
+        ucs_status_t status = ucp_datatype_sgl_iter_init(m_ucph.get(),
+                                                         &m_dt_iter, &m_local,
+                                                         &m_remote, count,
+                                                         &param);
+        ASSERT_UCS_OK(status);
+    }
+
+private:
+    ucs::handle<ucp_context_h> m_ucph;
+    std::vector<void*>         m_buffers;
+    std::vector<size_t>        m_lengths;
+    std::vector<uint64_t>      m_remote_addrs;
+    std::vector<ucp_rkey_h>    m_rkeys;
+    ucp_dt_local_sgl_t         m_local;
+    ucp_dt_remote_sgl_t        m_remote;
+
+protected:
+    ucp_datatype_iter_t        m_dt_iter;
+};
+
+UCS_TEST_F(test_ucp_dt_sgl, iter_next_chunked) {
+    static constexpr size_t NUM_ELEMS    = 10;
+    static constexpr size_t MAX_PER_STEP = 3;
+
+    init_sgl_iter(NUM_ELEMS);
+
+    size_t total_advanced = 0;
+    while (!ucp_datatype_iter_is_end(&m_dt_iter)) {
+        ucp_datatype_iter_t next_iter = {};
+        size_t advanced = ucp_datatype_iter_next_sgl(&m_dt_iter,
+                                                     MAX_PER_STEP,
+                                                     &next_iter);
+        EXPECT_LE(advanced, MAX_PER_STEP);
+        EXPECT_GT(advanced, 0u);
+        total_advanced += advanced;
+        ucp_datatype_iter_copy_position(&m_dt_iter, &next_iter, UINT_MAX);
+    }
+
+    EXPECT_EQ(NUM_ELEMS, total_advanced);
+    EXPECT_TRUE(ucp_datatype_iter_is_end(&m_dt_iter));
+}
+
+UCS_TEST_F(test_ucp_dt_sgl, iter_next_single_step) {
+    static constexpr size_t counts[] = {1, 5, 10};
+    for (size_t count : counts) {
+        init_sgl_iter(count);
+
+        ucp_datatype_iter_t next_iter = {};
+        size_t advanced = ucp_datatype_iter_next_sgl(&m_dt_iter, count,
+                                                     &next_iter);
+        EXPECT_EQ(count, advanced);
+        ucp_datatype_iter_copy_position(&m_dt_iter, &next_iter, UINT_MAX);
+        EXPECT_TRUE(ucp_datatype_iter_is_end(&m_dt_iter));
+    }
+}
+
+UCS_TEST_F(test_ucp_dt_sgl, iter_next_one_by_one) {
+    static constexpr size_t NUM_ELEMS = 5;
+
+    init_sgl_iter(NUM_ELEMS);
+
+    for (size_t i = 0; i < NUM_ELEMS; i++) {
+        EXPECT_FALSE(ucp_datatype_iter_is_end(&m_dt_iter));
+        ucp_datatype_iter_t next_iter = {};
+        size_t advanced = ucp_datatype_iter_next_sgl(&m_dt_iter, 1,
+                                                     &next_iter);
+        EXPECT_EQ(1u, advanced);
+        EXPECT_EQ(i + 1, next_iter.offset);
+        ucp_datatype_iter_copy_position(&m_dt_iter, &next_iter, UINT_MAX);
+    }
+
+    EXPECT_TRUE(ucp_datatype_iter_is_end(&m_dt_iter));
+}

@@ -513,8 +513,8 @@ ucp_proto_rndv_find_ctrl_lane(const ucp_proto_init_params_t *params)
     num_lanes = ucp_proto_common_find_lanes(params,
                                             UCP_PROTO_COMMON_INIT_FLAG_HDR_ONLY,
                                             UCP_LANE_TYPE_AM,
-                                            UCT_IFACE_FLAG_AM_BCOPY, 1, 0, NULL,
-                                            &lane);
+                                            UCT_IFACE_FLAG_AM_BCOPY, 0, 1, 0,
+                                            NULL, &lane);
     if (num_lanes == 0) {
         ucs_debug("no active message lane for %s",
                   ucp_proto_id_field(params->proto_id, name));

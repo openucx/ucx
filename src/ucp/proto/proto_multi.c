@@ -260,8 +260,8 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     /* Find first lane */
     num_lanes = ucp_proto_common_find_lanes(
             &params->super.super, params->super.flags, params->first.lane_type,
-            params->first.tl_cap_flags, 1, 0, ucp_proto_common_filter_min_frag,
-            lanes);
+            params->first.tl_cap_flags, params->first.tl_v2_cap_flags,
+            1, 0, ucp_proto_common_filter_min_frag, lanes);
     if (num_lanes == 0) {
         ucs_trace("no lanes for %s",
                   ucp_proto_id_field(params->super.super.proto_id, name));
@@ -271,8 +271,9 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     /* Find rest of the lanes */
     num_lanes += ucp_proto_common_find_lanes(
             &params->super.super, params->super.flags, params->middle.lane_type,
-            params->middle.tl_cap_flags, UCP_PROTO_MAX_LANES - 1,
-            UCS_BIT(lanes[0]), ucp_proto_common_filter_min_frag, lanes + 1);
+            params->middle.tl_cap_flags, params->middle.tl_v2_cap_flags,
+            UCP_PROTO_MAX_LANES - 1, UCS_BIT(lanes[0]),
+            ucp_proto_common_filter_min_frag, lanes + 1);
 
     /* Get bandwidth of all lanes and max_bandwidth */
     max_bandwidth = 0;

@@ -301,7 +301,8 @@ ucp_proto_common_filter_min_frag(const ucp_proto_init_params_t *params,
 ucp_lane_index_t
 ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
                             unsigned flags, ucp_lane_type_t lane_type,
-                            uint64_t tl_cap_flags, ucp_lane_index_t max_lanes,
+                            uint64_t tl_cap_flags, uint64_t tl_v2_cap_flags,
+                            ucp_lane_index_t max_lanes,
                             ucp_lane_map_t exclude_map,
                             ucp_proto_common_filter_lane_cb_t filter,
                             ucp_lane_index_t *lanes);

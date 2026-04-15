@@ -224,7 +224,8 @@ ucp_proto_put_offload_bcopy_probe(const ucp_proto_init_params_t *init_params)
         .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID
     };
 
-    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT))) {
+    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT)) ||
+        (init_params->select_param->dt_class == UCP_DATATYPE_SGL)) {
         return;
     }
 
@@ -324,7 +325,8 @@ ucp_proto_put_offload_zcopy_probe(const ucp_proto_init_params_t *init_params)
         .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID,
     };
 
-    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT))) {
+    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT)) ||
+        (init_params->select_param->dt_class == UCP_DATATYPE_SGL)) {
         return;
     }
 
@@ -338,6 +340,173 @@ ucp_proto_t ucp_put_offload_zcopy_proto = {
     .probe    = ucp_proto_put_offload_zcopy_probe,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_put_offload_zcopy_progress},
+    .abort    = ucp_proto_request_zcopy_abort,
+    .reset    = ucp_proto_offload_zcopy_reset
+};
+
+static void
+ucp_proto_put_sgl_offload_probe(const ucp_proto_init_params_t *init_params)
+{
+    ucp_context_t *context               = init_params->worker->context;
+    ucp_proto_multi_init_params_t params = {
+        .super.super             = *init_params,
+        .super.latency           = 0,
+        .super.overhead          = context->config.ext.proto_overhead_multi,
+        .super.cfg_thresh        = context->config.ext.zcopy_thresh,
+        .super.cfg_priority      = 30,
+        .super.min_length        = 0,
+        .super.max_length        = SIZE_MAX,
+        .super.min_iov           = 1,
+        .super.min_frag_offs     = ucs_offsetof(uct_iface_attr_t,
+                                               cap.put.min_zcopy),
+        .super.max_frag_offs     = ucs_offsetof(uct_iface_attr_t,
+                                                cap.put.max_zcopy),
+        .super.max_iov_offs      = ucs_offsetof(uct_iface_attr_t,
+                                                cap.put.max_iov),
+        .super.hdr_size          = 0,
+        .super.send_op           = UCT_EP_OP_PUT_ZCOPY,
+        .super.memtype_op        = UCT_EP_OP_LAST,
+        .super.flags             = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY    |
+                                   UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY    |
+                                   UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
+                                   UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
+        .super.exclude_map       = 0,
+        .super.reg_mem_info      = ucp_proto_common_select_param_mem_info(
+                                                     init_params->select_param),
+        .max_lanes               = context->config.ext.max_rma_lanes,
+        .min_chunk               = context->config.ext.min_rma_chunk_size,
+        .initial_reg_md_map      = 0,
+        .first.tl_cap_flags      = UCT_IFACE_FLAG_PUT_ZCOPY,
+        .first.tl_v2_cap_flags   = UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY,
+        .first.lane_type         = UCP_LANE_TYPE_RMA_BW,
+        .middle.tl_cap_flags     = UCT_IFACE_FLAG_PUT_ZCOPY,
+        .middle.tl_v2_cap_flags  = UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY,
+        .middle.lane_type        = UCP_LANE_TYPE_RMA_BW,
+        .opt_align_offs          = UCP_PROTO_COMMON_OFFSET_INVALID,
+    };
+
+    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT)) ||
+        (init_params->select_param->dt_class != UCP_DATATYPE_SGL)) {
+        return;
+    }
+
+    ucp_proto_multi_probe(&params);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
+                                    const ucp_proto_multi_lane_priv_t *lpriv,
+                                    ucp_datatype_iter_t *next_iter,
+                                    ucp_lane_index_t *lane_shift)
+{
+    ucp_ep_t *ep                 = req->send.ep;
+    ucp_datatype_iter_t *dt_iter = &req->send.state.dt_iter;
+    ucp_lane_index_t lane        = lpriv->super.lane;
+    uct_ep_h uct_ep              = ucp_ep_get_lane(ep, lane);
+    ucp_md_index_t md_index      = ucp_ep_md_index(ep, lane);
+    ucp_rsc_index_t rkey_index   = lpriv->super.rkey_index;
+    size_t start_index           = dt_iter->offset;
+    uct_iface_attr_v2_t iface_attr_v2;
+    size_t max_sgl_count, elem_count;
+    uct_rkey_t *uct_rkeys;
+    ucs_status_t status;
+    size_t i;
+
+    iface_attr_v2.field_mask = UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT;
+    uct_iface_query_v2(
+            ucp_worker_iface(ep->worker,
+                             ucp_ep_get_rsc_index(ep, lane))->iface,
+                             &iface_attr_v2);
+    max_sgl_count = iface_attr_v2.max_put_sgl_zcopy_count;
+
+    elem_count = ucp_datatype_iter_next_sgl(dt_iter, max_sgl_count, next_iter);
+
+    if (max_sgl_count < SIZE_MAX) {
+        /* Multiple progress calls, translate memh + rkey per-chunk on stack */
+        uct_mem_h *uct_memhs;
+        uct_rkeys = ucs_alloca(elem_count * sizeof(uct_rkey_t));
+
+        if (dt_iter->type.sgl.memhs != NULL) {
+            uct_memhs = ucs_alloca(elem_count * sizeof(uct_mem_h));
+            for (i = 0; i < elem_count; i++) {
+                uct_memhs[i] = dt_iter->type.sgl.memhs[start_index + i]->uct[md_index];
+                uct_rkeys[i] = ucp_rkey_get_tl_rkey(
+                                   dt_iter->type.sgl.rkeys[start_index + i], rkey_index);
+            }
+        } else {
+            uct_memhs = NULL;
+            for (i = 0; i < elem_count; i++) {
+                uct_rkeys[i] = ucp_rkey_get_tl_rkey(
+                                   dt_iter->type.sgl.rkeys[start_index + i], rkey_index);
+            }
+        }
+
+        status = uct_ep_put_sgl_zcopy(
+                     uct_ep,
+                     &dt_iter->type.sgl.buffers[start_index],
+                     &dt_iter->type.sgl.lengths[start_index],
+                     uct_memhs,
+                     &dt_iter->type.sgl.remote_addrs[start_index],
+                     uct_rkeys,
+                     elem_count, &req->send.state.uct_comp);
+    } else {
+        /* Single progress call, all elements, translate rkey only on heap */
+        uct_rkeys = ucs_malloc(elem_count * sizeof(uct_rkey_t),
+                               "uct_sgl_rkeys");
+        if (uct_rkeys == NULL) {
+            return UCS_ERR_NO_MEMORY;
+        }
+
+        for (i = 0; i < elem_count; i++) {
+            uct_rkeys[i] = ucp_rkey_get_tl_rkey(
+                               dt_iter->type.sgl.rkeys[start_index + i], rkey_index);
+        }
+
+        status = uct_ep_put_sgl_zcopy(
+                     uct_ep,
+                     &dt_iter->type.sgl.buffers[start_index],
+                     &dt_iter->type.sgl.lengths[start_index],
+                     NULL,
+                     &dt_iter->type.sgl.remote_addrs[start_index],
+                     uct_rkeys,
+                     elem_count, &req->send.state.uct_comp);
+
+        ucs_free(uct_rkeys);
+    }
+
+    if (!UCS_STATUS_IS_ERR(status)) {
+        ucp_proto_put_offload_update_remote_flush(
+                ep, lpriv->flush_sys_dev_mask,
+                ucp_rkey_get_tl_rkey(dt_iter->type.sgl.rkeys[start_index],
+                                     rkey_index),
+                uct_ep,
+                dt_iter->type.sgl.remote_addrs[start_index]);
+    }
+
+    return status;
+}
+
+static ucs_status_t
+ucp_proto_put_sgl_offload_progress(uct_pending_req_t *self)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+
+    /* coverity[tainted_data_downcast] */
+    return ucp_proto_multi_zcopy_progress(
+            req, req->send.proto_config->priv, ucp_proto_multi_rma_init_func,
+            UCT_MD_MEM_ACCESS_LOCAL_READ, UCS_BIT(UCP_DATATYPE_SGL),
+            ucp_proto_put_sgl_offload_send_func,
+            ucp_request_invoke_uct_completion_success,
+            ucp_proto_request_zcopy_completion);
+}
+
+ucp_proto_t ucp_put_sgl_offload_proto = {
+    .name     = "put/sgl/offload",
+    .desc     = "sgl",
+    .flags    = 0,
+    .probe    = ucp_proto_put_sgl_offload_probe,
+    .query    = ucp_proto_multi_query,
+    .progress = {ucp_proto_put_sgl_offload_progress},
     .abort    = ucp_proto_request_zcopy_abort,
     .reset    = ucp_proto_offload_zcopy_reset
 };
