@@ -283,20 +283,6 @@ size_t ucp_datatype_iter_iov_next_iov(const ucp_datatype_iter_t *dt_iter,
     return dst_iov_index;
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t ucp_datatype_iter_sgl_allocate_memh(
-        ucp_datatype_iter_t *dt_iter, size_t count)
-{
-    ucp_mem_h *sgl_memh;
-
-    sgl_memh = (ucp_mem_h*)ucs_calloc(count, sizeof(*sgl_memh), "dt_sgl_memh");
-    if (sgl_memh == NULL) {
-        return UCS_ERR_NO_MEMORY;
-    }
-
-    dt_iter->type.sgl.memhs = sgl_memh;
-    return UCS_OK;
-}
-
 ucs_status_t ucp_datatype_sgl_iter_init(ucp_context_h context,
                                         ucp_datatype_iter_t *dt_iter,
                                         const ucp_dt_local_sgl_t *local,
@@ -346,24 +332,26 @@ ucs_status_t ucp_datatype_iter_sgl_mem_reg(ucp_context_h context,
 {
     size_t count = dt_iter->length;
     ucs_status_t status;
+    ucp_mem_h *memhs;
     size_t i;
 
     if ((md_map == 0) || (dt_iter->type.sgl.memhs != NULL)) {
         return UCS_OK;
     }
 
-    status = ucp_datatype_iter_sgl_allocate_memh(dt_iter, count);
-    if (status != UCS_OK) {
-        return status;
+    memhs = ucs_calloc(count, sizeof(*memhs), "dt_sgl_memh");
+    if (memhs == NULL) {
+        return UCS_ERR_NO_MEMORY;
     }
 
+    dt_iter->type.sgl.memhs       = memhs;
     dt_iter->type.sgl.memhs_owned = 1;
 
     for (i = 0; i < count; ++i) {
         status = ucp_datatype_iter_mem_reg_single(
                 context, dt_iter->type.sgl.buffers[i],
                 dt_iter->type.sgl.lengths[i], dt_iter->mem_info.type,
-                md_map, uct_flags, &dt_iter->type.sgl.memhs[i]);
+                md_map, uct_flags, &memhs[i]);
         if (status != UCS_OK) {
             ucp_datatype_iter_sgl_mem_dereg(dt_iter);
             return status;
