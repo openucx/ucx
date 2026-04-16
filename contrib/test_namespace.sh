@@ -50,8 +50,11 @@ test_namespace() {
 
 	test_namespace_pid posix host ucp_get
 	test_namespace_pid cma host ucp_get 
-	output=$(test_namespace_pid cuda_ipc,cuda_copy cuda ucp_put_bw)
-	echo "$output" | grep -q "cuda_ipc"
+	if [ "X$have_cuda" != "Xno" ] 
+	then
+		output=$(test_namespace_pid cuda_ipc,cuda_copy cuda ucp_put_bw)
+		echo "$output" | grep -q "cuda_ipc"
+	fi
 
 	for tl in posix cma
 	do
