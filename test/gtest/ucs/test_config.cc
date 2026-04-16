@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
@@ -97,6 +97,7 @@ typedef struct {
     ucs_time_t      time_auto;
     ucs_time_t      time_inf;
     ucs_config_allow_list_t allow_list;
+    ucs_config_allow_list_t allow_list_with_ranges;
 
     int             temp_front;
     int             temp_rear;
@@ -234,6 +235,11 @@ ucs_config_field_t car_opts_table[] = {
 
   {"ALLOW_LIST", "all", "Allow-list: \"all\" OR \"val1,val2\" OR \"^val1,val2\"",
    ucs_offsetof(car_opts_t, allow_list), UCS_CONFIG_TYPE_ALLOW_LIST},
+
+  {"ALLOW_LIST_WITH_RANGES", "all",
+    "Allow-list with ranges: supports prefix[start-end]suffix syntax",
+    ucs_offsetof(car_opts_t, allow_list_with_ranges),
+    UCS_CONFIG_TYPE_ALLOW_LIST_WITH_RANGES},
 
   {"TEMP", "20", "Temperature", 0,
     UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_UINT,
@@ -476,6 +482,31 @@ protected:
         fclose(file);
         free(dump_data);
     }
+
+    void verify_allow_list_with_ranges_inner(
+            const char *input, const std::vector<std::string> &expected,
+            ucs_config_allow_list_mode_t expected_mode)
+    {
+        const ucs::scoped_setenv env("UCX_ALLOW_LIST_WITH_RANGES", input);
+        car_opts opts(UCS_DEFAULT_ENV_PREFIX, NULL);
+
+        EXPECT_EQ(expected_mode, opts->allow_list_with_ranges.mode);
+        ASSERT_EQ(expected.size(), opts->allow_list_with_ranges.array.count);
+        for (size_t i = 0; i < expected.size(); ++i) {
+            EXPECT_EQ(expected[i], opts->allow_list_with_ranges.array.names[i]);
+        }
+    }
+
+    void verify_allow_list_with_ranges(const char *input,
+                                       const std::vector<std::string> &expected)
+    {
+        verify_allow_list_with_ranges_inner(input, expected,
+                                            UCS_CONFIG_ALLOW_LIST_ALLOW);
+
+        const std::string negated = std::string("^") + input;
+        verify_allow_list_with_ranges_inner(negated.c_str(), expected,
+                                            UCS_CONFIG_ALLOW_LIST_NEGATE);
+    }
 };
 
 int test_config::m_num_errors;
@@ -713,23 +744,24 @@ UCS_TEST_F(test_config, unused) {
 
 UCS_TEST_F(test_config, dump) {
     /* aliases must not be counted here */
-    test_config_print_opts(UCS_CONFIG_PRINT_CONFIG, 35u);
+    test_config_print_opts(UCS_CONFIG_PRINT_CONFIG, 36u);
 }
 
 UCS_TEST_F(test_config, dump_hidden) {
     /* aliases must be counted here */
-    test_config_print_opts(UCS_CONFIG_PRINT_CONFIG | UCS_CONFIG_PRINT_HIDDEN, 42u);
+    test_config_print_opts(UCS_CONFIG_PRINT_CONFIG | UCS_CONFIG_PRINT_HIDDEN,
+                           43u);
 }
 
 UCS_TEST_F(test_config, dump_hidden_check_alias_name) {
     /* aliases must be counted here */
     test_config_print_opts(UCS_CONFIG_PRINT_CONFIG | UCS_CONFIG_PRINT_HIDDEN |
                                    UCS_CONFIG_PRINT_DOC,
-                           42u);
+                           43u);
 
     test_config_print_opts(UCS_CONFIG_PRINT_CONFIG | UCS_CONFIG_PRINT_HIDDEN |
                                    UCS_CONFIG_PRINT_DOC,
-                           42u, TEST_ENV_PREFIX);
+                           43u, TEST_ENV_PREFIX);
 }
 
 UCS_TEST_F(test_config, deprecated) {
@@ -796,6 +828,122 @@ UCS_TEST_F(test_config, test_allow_list_negative)
 
     EXPECT_EQ(ucs_config_sscanf_allow_list("all,all", &field,
                                            &ucs_config_array_string), 0);
+}
+
+UCS_TEST_F(test_config, test_allow_list_with_ranges) {
+    // empty range
+    verify_allow_list_with_ranges("", {});
+
+    // only prefix
+    verify_allow_list_with_ranges("prefix[2-4]",
+                                  {"prefix2", "prefix3", "prefix4"});
+
+    // prefix and suffix
+    verify_allow_list_with_ranges("prefix[0-2]suffix",
+                                  {"prefix0suffix", "prefix1suffix",
+                                   "prefix2suffix"});
+
+    // only suffix
+    verify_allow_list_with_ranges("[3-5]suffix",
+                                  {"3suffix", "4suffix", "5suffix"});
+
+    // only range
+    verify_allow_list_with_ranges("[0-2]", {"0", "1", "2"});
+
+    // range with a single value
+    verify_allow_list_with_ranges("dev[99-99]", {"dev99"});
+
+    // multi-digit range
+    verify_allow_list_with_ranges("dev[98-101]",
+                                  {"dev98", "dev99", "dev100", "dev101"});
+
+    // range with leading zeros
+    verify_allow_list_with_ranges("dev[01-03]", {"dev1", "dev2", "dev3"});
+
+    // single literal
+    verify_allow_list_with_ranges("a", {"a"});
+
+    // multiple literals
+    verify_allow_list_with_ranges("a,b,c", {"a", "b", "c"});
+
+    // mixed ranges and literals
+    verify_allow_list_with_ranges("a0b,a[2-4]b,a6b",
+                                  {"a0b", "a2b", "a3b", "a4b", "a6b"});
+
+    // long prefix and suffix
+    const std::string long_prefix(200, 'p');
+    const std::string long_suffix(200, 's');
+    verify_allow_list_with_ranges((long_prefix + "[0-2]" + long_suffix).c_str(),
+                                  {long_prefix + "0" + long_suffix,
+                                   long_prefix + "1" + long_suffix,
+                                   long_prefix + "2" + long_suffix});
+
+    // consecutive delimiters
+    verify_allow_list_with_ranges(",,a,,b[1-3],,,c,,,,",
+                                  {"a", "b1", "b2", "b3", "c"});
+}
+
+UCS_TEST_F(test_config, test_allow_list_with_ranges_malformed) {
+    std::vector<std::string> malformed = {
+        "no_bracket", "prefix2-]", "prefix]abc",
+        "hello]]",    "]]-",       "]--",        
+        "a[-1-2]b",   "a[-2-]b",   "a[2-3-]b",
+        "a[-2-3-]b",  "a[4]b",     "a[[]b",
+        "a[[2-4]b",   "a[2-]b",    "a[2-3-4]b",
+        "a[b-c]d",    "a[0-A]b",   "a[-]b",
+        "[]",         "[-1-2-]",   "[--]",
+        "[1-2][3-4]", "[4-8][",    "[5-6]]",
+        "][4-5]",     "[[0-4]]",   "a[0-4]b[6-8]c",
+        "a[5-2]b",    "[10-0]",    "ab[100-1]suffix",
+        "a[-4]",      "[-4]",      "foo[]]",
+        "[]]",        "a-]",       "a[-",
+        "a[4-]",      "a[4-6"
+    };
+
+    std::string input;
+    for (size_t i = 0; i < malformed.size(); ++i) {
+        if (i > 0) {
+            input += ",";
+        }
+        input += malformed[i];
+    }
+
+    verify_allow_list_with_ranges(input.c_str(), malformed);
+}
+
+UCS_TEST_F(test_config, test_allow_list_with_ranges_all) {
+    ucs::scoped_setenv env("UCX_ALLOW_LIST_WITH_RANGES", "all");
+    car_opts opts(UCS_DEFAULT_ENV_PREFIX, NULL);
+
+    EXPECT_EQ(UCS_CONFIG_ALLOW_LIST_ALLOW_ALL,
+              opts->allow_list_with_ranges.mode);
+    EXPECT_EQ(0u, opts->allow_list_with_ranges.array.count);
+}
+
+UCS_TEST_F(test_config, test_allow_list_with_ranges_max_elements_single_range) {
+    const char *input = "a[0-200]";
+
+    std::vector<std::string> expected;
+    for (unsigned i = 0; i < UCS_CONFIG_ARRAY_MAX; ++i) {
+        expected.push_back("a" + std::to_string(i));
+    }
+
+    verify_allow_list_with_ranges(input, expected);
+}
+
+UCS_TEST_F(test_config,
+           test_allow_list_with_ranges_max_elements_multiple_ranges) {
+    const char *input = "a[0-99],b[0-99]";
+
+    std::vector<std::string> expected;
+    for (unsigned i = 0; i < 100; ++i) {
+        expected.push_back("a" + std::to_string(i));
+    }
+    for (unsigned i = 0; i < UCS_CONFIG_ARRAY_MAX - 100; ++i) {
+        expected.push_back("b" + std::to_string(i));
+    }
+
+    verify_allow_list_with_ranges(input, expected);
 }
 
 UCS_TEST_F(test_config, test_key_value_generic_value) {
