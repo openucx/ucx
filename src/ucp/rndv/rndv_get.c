@@ -261,7 +261,8 @@ ucp_proto_rndv_get_mtype_unpack_completion(uct_completion_t *uct_comp)
     ucp_request_t *req = ucs_container_of(uct_comp, ucp_request_t,
                                           send.state.uct_comp);
 
-    ucs_mpool_put_inline(req->send.rndv.mdesc);
+    ucp_proto_rndv_mtype_mdesc_release(req);
+
     if (ucp_proto_rndv_request_is_ppln_frag(req)) {
         ucp_proto_rndv_ppln_recv_frag_complete(req, 1, 0);
     } else {
@@ -292,8 +293,15 @@ ucp_proto_rndv_get_mtype_fetch_progress(uct_pending_req_t *uct_req)
     rpriv = req->send.proto_config->priv;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
+        /* Try to allocate a staging buffer. If the mpool quota is exhausted
+         * the request is queued and will be rescheduled later. */
         status = ucp_proto_rndv_mtype_request_init(req, rpriv->frag_mem_type,
-                                                   rpriv->frag_sys_dev);
+                                                   rpriv->frag_sys_dev,
+                                                   UCP_WORKER_RNDV_FC_OP_GET);
+        if (status == UCS_ERR_NO_RESOURCE) {
+            return UCS_OK;
+        }
+
         if (status != UCS_OK) {
             ucp_proto_request_abort(req, status);
             return UCS_OK;
@@ -360,7 +368,7 @@ static ucs_status_t ucp_proto_rndv_get_mtype_reset(ucp_request_t *req)
         return UCS_OK;
     }
 
-    ucs_mpool_put_inline(req->send.rndv.mdesc);
+    ucp_proto_rndv_mtype_mdesc_release(req);
     req->send.rndv.mdesc = NULL;
     req->flags          &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
 

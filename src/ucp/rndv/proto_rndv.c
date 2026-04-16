@@ -9,6 +9,7 @@
 #endif
 
 #include "proto_rndv.inl"
+#include "rndv_mtype.inl"
 
 #include <ucp/proto/proto_init.h>
 #include <ucp/proto/proto_debug.h>
@@ -597,6 +598,39 @@ ucs_status_t ucp_proto_rndv_rts_reset(ucp_request_t *req)
     }
 
     return ucp_proto_request_zcopy_id_reset(req);
+}
+
+unsigned ucp_proto_rndv_mtype_fc_max_elems(ucp_context_h context,
+                                           ucs_memory_type_t frag_mem_type)
+{
+    size_t max_mem;
+    size_t frag_size;
+    size_t frags_in_chunk;
+    size_t max_frags;
+
+    if (!ucp_context_rndv_mtype_mem_limit_enabled(context)) {
+        return UINT_MAX;
+    }
+
+    max_mem        = context->config.ext.rndv_mtype_worker_max_mem;
+    frag_size      = context->config.ext.rndv_frag_size[frag_mem_type];
+    frags_in_chunk = context->config.ext.rndv_num_frags[frag_mem_type];
+    ucs_assert(frag_size > 0);
+
+    /* Compute max fragments and round down to allocation chunk granularity */
+    max_frags = max_mem / frag_size;
+    max_frags = (max_frags / frags_in_chunk) * frags_in_chunk;
+
+    if (max_frags == 0) {
+        ucs_warn("RNDV_MTYPE_WORKER_MAX_MEM (%zu) is too low for %s "
+                 "(frag_size=%zu, frags_per_alloc=%zu), using minimum %zu "
+                 "frags",
+                 max_mem, ucs_memory_type_names[frag_mem_type], frag_size,
+                 frags_in_chunk, frags_in_chunk);
+        return frags_in_chunk;
+    }
+
+    return ucs_min(max_frags, UINT_MAX);
 }
 
 ucs_status_t
