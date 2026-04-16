@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2017-2019. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2017-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -125,15 +125,6 @@ uct_cuda_copy_get_mem_types(uct_md_h md, const void *src, const void *dst,
         *sys_dev_p        = dst_sys_dev;
         *cuda_deviceptr_p = (CUdeviceptr)dst;
     }
-
-    ucs_assertv((src_sys_dev == dst_sys_dev) ||
-                (src_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) ||
-                (dst_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN),
-                "src mtype %s, sys_dev %s; dst mtype %s, sys_dev %s",
-                ucs_memory_type_names[*src_mem_type_p],
-                ucs_topo_sys_device_get_name(src_sys_dev),
-                ucs_memory_type_names[*dst_mem_type_p],
-                ucs_topo_sys_device_get_name(dst_sys_dev));
 }
 
 static ucs_status_t uct_cuda_copy_ep_push_memory_ctx(CUdeviceptr cuda_deviceptr,
@@ -283,6 +274,81 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_ep_get_ctx(
     return UCS_OK;
 }
 
+#ifdef HAVE_CUMEMRETAINALLOCATIONHANDLE
+static void uct_cuda_copy_vmm_try_set_access(CUdeviceptr ptr)
+{
+    int ctx_pushed = 0;
+    CUmemGenericAllocationHandle alloc_handle;
+    CUdeviceptr base_ptr;
+    size_t base_size;
+    CUdevice current_device, owning_device;
+    CUmemAccessDesc access_desc;
+    CUresult cu_result;
+
+    cu_result = cuMemRetainAllocationHandle(&alloc_handle, (void*)ptr);
+    if (cu_result != CUDA_SUCCESS) {
+        return;
+    }
+    UCT_CUDADRV_FUNC_LOG_WARN(cuMemRelease(alloc_handle));
+
+    cu_result = cuCtxGetDevice(&current_device);
+    if (cu_result != CUDA_SUCCESS) {
+        ucs_trace("cuCtxGetDevice failed: %s",
+                  uct_cuda_cu_get_error_string(cu_result));
+        return;
+    }
+
+    cu_result = cuPointerGetAttribute(&owning_device,
+                                      CU_POINTER_ATTRIBUTE_DEVICE_ORDINAL,
+                                      ptr);
+    if (cu_result != CUDA_SUCCESS) {
+        ucs_trace("cuPointerGetAttribute(DEVICE_ORDINAL, 0x%llx) "
+                  "failed: %s",
+                  (unsigned long long)ptr,
+                  uct_cuda_cu_get_error_string(cu_result));
+        return;
+    }
+
+    if (owning_device != current_device) {
+        if (uct_cuda_ctx_primary_push(owning_device, 0,
+                                      UCS_LOG_LEVEL_DEBUG) != UCS_OK) {
+            return;
+        }
+        ctx_pushed = 1;
+    }
+
+    cu_result = cuMemGetAddressRange(&base_ptr, &base_size, ptr);
+    if (cu_result != CUDA_SUCCESS) {
+        ucs_trace("cuMemGetAddressRange(0x%llx) failed: %s",
+                  (unsigned long long)ptr,
+                  uct_cuda_cu_get_error_string(cu_result));
+        goto out;
+    }
+
+    access_desc.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
+    access_desc.location.id   = current_device;
+    access_desc.flags         = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
+
+    cu_result = cuMemSetAccess(base_ptr, base_size, &access_desc, 1);
+    if (cu_result != CUDA_SUCCESS) {
+        ucs_debug("cuMemSetAccess(0x%llx, %zu, device %d) failed: %s",
+                  (unsigned long long)base_ptr, base_size, current_device,
+                  uct_cuda_cu_get_error_string(cu_result));
+        goto out;
+    }
+
+    ucs_trace("VMM set READWRITE access for device %d on ptr 0x%llx size %zu "
+              "(owner device %d)",
+              current_device, (unsigned long long)base_ptr, base_size,
+              owning_device);
+
+out:
+    if (ctx_pushed) {
+        uct_cuda_ctx_primary_pop_and_release(owning_device);
+    }
+}
+#endif
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
                                    size_t length, uct_completion_t *comp)
@@ -323,8 +389,21 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
         goto out_pop_and_release;
     }
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(
+    status = UCT_CUDADRV_FUNC_LOG_DEBUG(
             cuMemcpyAsync((CUdeviceptr)dst, (CUdeviceptr)src, length, *stream));
+#ifdef HAVE_CUMEMRETAINALLOCATIONHANDLE
+    if (ucs_unlikely(status != UCS_OK)) {
+        if (ctx.src_type == UCS_MEMORY_TYPE_CUDA) {
+            uct_cuda_copy_vmm_try_set_access((CUdeviceptr)src);
+        }
+        if (ctx.dst_type == UCS_MEMORY_TYPE_CUDA) {
+            uct_cuda_copy_vmm_try_set_access((CUdeviceptr)dst);
+        }
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemcpyAsync((CUdeviceptr)dst,
+                                                         (CUdeviceptr)src,
+                                                         length, *stream));
+    }
+#endif
     if (ucs_unlikely(UCS_OK != status)) {
         goto err_mpool_put;
     }
@@ -422,7 +501,20 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_ep_rma_short(
         goto out_pop_and_release;
     }
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemcpyAsync(dst, src, length, *stream));
+    status = UCT_CUDADRV_FUNC_LOG_DEBUG(
+            cuMemcpyAsync(dst, src, length, *stream));
+#ifdef HAVE_CUMEMRETAINALLOCATIONHANDLE
+    if (ucs_unlikely(status != UCS_OK)) {
+        if (ctx.src_type == UCS_MEMORY_TYPE_CUDA) {
+            uct_cuda_copy_vmm_try_set_access(src);
+        }
+        if (ctx.dst_type == UCS_MEMORY_TYPE_CUDA) {
+            uct_cuda_copy_vmm_try_set_access(dst);
+        }
+        status = UCT_CUDADRV_FUNC_LOG_ERR(
+                cuMemcpyAsync(dst, src, length, *stream));
+    }
+#endif
     if (ucs_unlikely(status != UCS_OK)) {
         goto out_pop_and_release;
     }
