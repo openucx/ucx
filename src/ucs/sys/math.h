@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -175,6 +175,18 @@ static UCS_F_ALWAYS_INLINE size_t ucs_double_to_sizet(double value, size_t max)
          (_submask)++, \
          ((_submask) <= (_mask)) ? \
                  ((_submask) = ((_submask )+ ~(_mask)) & (_mask)) : 0)
+
+
+/*
+ * Greatest common divisor of @a and @b.
+ */
+uint64_t ucs_gcd(uint64_t a, uint64_t b);
+
+
+/*
+ * Least common multiple of @a and @b.
+ */
+uint64_t ucs_lcm(uint64_t a, uint64_t b);
 
 
 /*

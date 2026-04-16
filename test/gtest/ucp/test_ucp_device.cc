@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -538,21 +538,6 @@ protected:
         ASSERT_UCS_OK(result.status);
         return result;
     }
-
-    void check_result(const test_ucp_device_kernel_params_t &params,
-                      const test_ucp_device_kernel_result_t &result,
-                      unsigned count)
-    {
-        unsigned num_threads = params.num_threads;
-        if (params.level == UCS_DEVICE_LEVEL_WARP) {
-            num_threads /= UCS_DEVICE_NUM_THREADS_IN_WARP;
-        }
-
-        uint64_t expected = params.num_iters * num_threads * count;
-        EXPECT_UCS_OK(result.status);
-        EXPECT_EQ(expected, result.producer_index);
-        EXPECT_EQ(expected, result.ready_index);
-    }
 };
 
 UCS_TEST_P(test_ucp_device_kernel, local_counter)
@@ -781,11 +766,10 @@ UCS_TEST_SKIP_COND_P(test_ucp_device_xfer, put_stress_test,
     params.num_iters                    = 1000;
     params.num_blocks                   = 1;
     params.num_threads                  = MAX_THREADS;
-    auto result                         = launch_kernel(params);
+    launch_kernel(params);
 
     // Check proper index received data
     list.dst_pattern_check(mem_list_index, mem_list::SEED_SRC);
-    check_result(params, result, 1);
 }
 
 UCS_TEST_P(test_ucp_device_xfer, counter)

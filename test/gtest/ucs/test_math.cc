@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2012. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
@@ -305,4 +305,19 @@ UCS_TEST_F(test_math, double_to_sizet) {
     EXPECT_EQ(SIZE_MAX, ucs_double_to_sizet((double)SIZE_MAX, SIZE_MAX));
     EXPECT_EQ(10, ucs_double_to_sizet(10.0, SIZE_MAX));
     EXPECT_EQ(UCS_MBYTE, ucs_double_to_sizet(UCS_MBYTE, SIZE_MAX));
+}
+
+UCS_TEST_F(test_math, gcd_lcm) {
+    EXPECT_EQ(0u, ucs_gcd(0, 0));
+    EXPECT_EQ(7u, ucs_gcd(0, 7));
+    EXPECT_EQ(7u, ucs_gcd(7, 0));
+    EXPECT_EQ(6u, ucs_gcd(54, 24));
+    EXPECT_EQ(6u, ucs_gcd(24, 54));
+    EXPECT_EQ(1u, ucs_gcd(17, 13));
+    EXPECT_EQ(17u, ucs_gcd(17, 17));
+
+    EXPECT_EQ(0u, ucs_lcm(0, 5));
+    EXPECT_EQ(0u, ucs_lcm(7, 0));
+    EXPECT_EQ(216u, ucs_lcm(54, 24));
+    EXPECT_EQ(221u, ucs_lcm(17, 13));
 }
