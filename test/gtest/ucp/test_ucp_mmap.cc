@@ -629,6 +629,36 @@ UCS_TEST_P(test_ucp_mmap, reg_mem_type) {
     }
 }
 
+UCS_TEST_P(test_ucp_mmap, reg_read_only) {
+    ucp_mem_map_params_t params = {0};
+    ucp_mem_h memh;
+    ucs_status_t status;
+
+    if (has_any_transport({"shm", "cuda_copy", "rocm_copy"})) {
+        UCS_TEST_SKIP_R("shm doesn't support read-only memory");
+    }
+
+    params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                        UCP_MEM_MAP_PARAM_FIELD_LENGTH  |
+                        UCP_MEM_MAP_PARAM_FIELD_PROT;
+    params.length     = 1024;
+    params.prot       = UCP_MEM_MAP_PROT_LOCAL_READ |
+                        UCP_MEM_MAP_PROT_REMOTE_READ;
+
+    params.address    = mmap(NULL, params.length, PROT_READ,
+                             MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    ASSERT_NE(params.address, MAP_FAILED);
+    ASSERT_EQ(0, mprotect(params.address, params.length, PROT_READ));
+
+    params.prot = UCP_MEM_MAP_PROT_LOCAL_READ | UCP_MEM_MAP_PROT_REMOTE_READ;
+    status = ucp_mem_map(sender().ucph(), &params, &memh);
+    ASSERT_UCS_OK(status);
+
+    status = ucp_mem_unmap(sender().ucph(), memh);
+    ASSERT_UCS_OK(status);
+    munmap(params.address, params.length);
+}
+
 void test_ucp_mmap::test_rereg_local_mem(ucp_mem_h memh, void *ptr,
                                          size_t size, unsigned map_flags)
 {
