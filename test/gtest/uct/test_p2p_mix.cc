@@ -189,6 +189,9 @@ void uct_p2p_mix_test::run(unsigned count, size_t offset, size_t size_cap,
     if (m_avail_send_funcs.size() == 0) {
         UCS_TEST_SKIP_R("unsupported");
     }
+    if (has_transport("gdr_copy")) {
+        UCS_TEST_SKIP_R("gdr_copy RMA targets CUDA-registered memory");
+    }
     if (!(sender().md_attr().access_mem_types & UCS_BIT(UCS_MEMORY_TYPE_HOST))) {
         UCS_TEST_SKIP_R("skipping on non-host memory");
     }
