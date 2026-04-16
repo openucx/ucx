@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2018. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2016.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -172,6 +172,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_atomic_op_nbx,
     int op_id;
 
     UCP_REQUEST_CHECK_PARAM(param);
+    UCP_REQUEST_CHECK_PARAM_UNSUPPORTED_REMOTE(param);
     if (ENABLE_PARAMS_CHECK &&
         ucs_unlikely(!(param->op_attr_mask & UCP_OP_ATTR_FIELD_DATATYPE))) {
         ucs_error("missing atomic operation datatype");

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -203,6 +203,20 @@ UCS_PTR_MAP_IMPL(request, 0);
             return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
         } \
     }
+
+
+#define UCP_REQUEST_CHECK_PARAM_UNSUPPORTED_REMOTE(_param) \
+    do { \
+        if (ENABLE_PARAMS_CHECK && \
+            ((_param)->op_attr_mask & \
+             (UCP_OP_ATTR_FIELD_REMOTE | \
+              UCP_OP_ATTR_FIELD_REMOTE_DATATYPE | \
+              UCP_OP_ATTR_FIELD_REMOTE_COUNT))) { \
+            ucs_error("remote descriptor parameters are only supported for " \
+                      "ucp_put_nbx with SGL datatype"); \
+            return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
+        } \
+    } while (0)
 
 
 #if UCS_ENABLE_ASSERT

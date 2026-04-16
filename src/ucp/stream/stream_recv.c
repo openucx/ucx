@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2017. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -421,6 +421,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_nbx,
                                     return UCS_STATUS_PTR(
                                             UCS_ERR_INVALID_PARAM));
     UCP_REQUEST_CHECK_PARAM(param);
+    UCP_REQUEST_CHECK_PARAM_UNSUPPORTED_REMOTE(param);
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
