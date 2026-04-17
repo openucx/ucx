@@ -14,16 +14,16 @@
 #include <ucp/core/ucp_mm.h>
 
 
-ucs_status_t ucp_dt_sgl_check_same_memtype(ucp_context_h context,
-                                      const ucp_dt_local_sgl_t *local,
-                                      size_t count,
-                                      const ucp_memory_info_t *mem_info)
+ucs_status_t ucp_dt_sgl_check_same_mem_info(ucp_context_h context,
+                                            const ucp_dt_local_sgl_t *local,
+                                            size_t count,
+                                            const ucp_memory_info_t *mem_info)
 {
     ucs_status_t status;
     size_t i;
 
     for (i = 1; i < count; ++i) {
-        status = ucp_dt_mem_type_check_elem(context, local->buffers[i],
+        status = ucp_dt_mem_info_check_elem(context, local->buffers[i],
                                             local->lengths[i], mem_info, "sgl",
                                             i, count);
         if (status != UCS_OK) {

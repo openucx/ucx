@@ -27,9 +27,9 @@
  * @return UCS_OK if all SGL entries match the given memory info, otherwise
  *         return UCS_ERR_INVALID_PARAM
  */
-ucs_status_t ucp_dt_sgl_check_same_memtype(ucp_context_h context,
-                                           const ucp_dt_local_sgl_t *local,
-                                           size_t count,
-                                           const ucp_memory_info_t *mem_info);
+ucs_status_t ucp_dt_sgl_check_same_mem_info(ucp_context_h context,
+                                            const ucp_dt_local_sgl_t *local,
+                                            size_t count,
+                                            const ucp_memory_info_t *mem_info);
 
 #endif

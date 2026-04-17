@@ -28,7 +28,7 @@ const char * ucp_datatype_class_names[] = {
 };
 
 
-ucs_status_t ucp_dt_mem_type_check_elem(ucp_context_h context,
+ucs_status_t ucp_dt_mem_info_check_elem(ucp_context_h context,
                                         const void *buffer, size_t length,
                                         const ucp_memory_info_t *ref,
                                         const char *dt_name, size_t index,

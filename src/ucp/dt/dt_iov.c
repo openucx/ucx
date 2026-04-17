@@ -131,7 +131,7 @@ ucs_status_t ucp_dt_iov_memtype_check(ucp_context_h context,
     size_t i;
 
     for (i = 0; i < iovcnt; ++i) {
-        status = ucp_dt_mem_type_check_elem(context, iov[i].buffer,
+        status = ucp_dt_mem_info_check_elem(context, iov[i].buffer,
                                             iov[i].length, mem_info, "iov", i,
                                             iovcnt);
         if (status != UCS_OK) {
