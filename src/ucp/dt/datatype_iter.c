@@ -283,7 +283,7 @@ size_t ucp_datatype_iter_iov_next_iov(const ucp_datatype_iter_t *dt_iter,
     return dst_iov_index;
 }
 
-ucs_status_t ucp_datatype_sgl_iter_init(ucp_context_h context,
+ucs_status_t ucp_datatype_iter_sgl_init(ucp_context_h context,
                                         ucp_datatype_iter_t *dt_iter,
                                         const ucp_dt_local_sgl_t *local,
                                         const ucp_dt_remote_sgl_t *remote,

@@ -144,7 +144,7 @@ ucp_datatype_iter_init(ucp_context_h context, void *buffer, size_t count,
                                           dt_iter, param);
     } else if (dt_iter->dt_class == UCP_DATATYPE_SGL) {
         *sg_count = 0;
-        return ucp_datatype_sgl_iter_init(context, dt_iter,
+        return ucp_datatype_iter_sgl_init(context, dt_iter,
                                           (const ucp_dt_local_sgl_t*)buffer,
                                           (const ucp_dt_remote_sgl_t*)param->remote,
                                           count, param);

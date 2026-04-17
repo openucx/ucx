@@ -326,7 +326,7 @@ protected:
         param.datatype     = ucp_dt_make_sgl();
         param.remote       = &m_remote;
 
-        ucs_status_t status = ucp_datatype_sgl_iter_init(m_ucph.get(),
+        ucs_status_t status = ucp_datatype_iter_sgl_init(m_ucph.get(),
                                                          &m_dt_iter, &m_local,
                                                          &m_remote, count,
                                                          &param);
