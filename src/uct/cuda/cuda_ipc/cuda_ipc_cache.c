@@ -297,14 +297,6 @@ uct_cuda_ipc_open_memhandle_legacy(CUipcMemHandle memh, CUdevice cu_dev,
 }
 
 #if HAVE_CUDA_FABRIC
-static void
-uct_cuda_ipc_init_access_desc(CUmemAccessDesc *access_desc, CUdevice cu_dev)
-{
-    access_desc->location.type = CU_MEM_LOCATION_TYPE_DEVICE;
-    access_desc->flags         = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
-    access_desc->location.id   = cu_dev;
-}
-
 static ucs_status_t
 uct_cuda_ipc_open_memhandle_vmm(const uct_cuda_ipc_rkey_t *key, CUdevice cu_dev,
                                 CUdeviceptr *mapped_addr,
