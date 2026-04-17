@@ -993,7 +993,6 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nbx,
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_AM,
                                     return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
     UCP_REQUEST_CHECK_PARAM(param);
-    UCP_REQUEST_CHECK_PARAM_UNSUPPORTED_REMOTE(param);
 
     status = ucp_am_check_id(id);
     if (status != UCS_OK) {
@@ -1133,7 +1132,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_recv_data_nbx,
 
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(context, UCP_FEATURE_AM,
                                     return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
-    UCP_REQUEST_CHECK_PARAM_UNSUPPORTED_REMOTE(param);
+    UCP_REQUEST_CHECK_PARAM(param);
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
 

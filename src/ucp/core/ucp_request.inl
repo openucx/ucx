@@ -186,27 +186,30 @@ UCS_PTR_MAP_IMPL(request, 0);
     }
 
 
-#define UCP_REQUEST_CHECK_PARAM(_param) \
-    if (ENABLE_PARAMS_CHECK) { \
-        if (((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_MEMORY_TYPE) && \
-            ((_param)->memory_type > UCS_MEMORY_TYPE_LAST)) { \
-            ucs_error("invalid memory type parameter: %d", \
-                      (_param)->memory_type); \
-            return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
-        } \
-        \
-        if (ucs_test_all_flags((_param)->op_attr_mask, \
-                               (UCP_OP_ATTR_FLAG_FAST_CMPL | \
-                                UCP_OP_ATTR_FLAG_MULTI_SEND))) { \
-            ucs_error("UCP_OP_ATTR_FLAG_FAST_CMPL and " \
-                      "UCP_OP_ATTR_FLAG_MULTI_SEND are mutually exclusive"); \
-            return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
-        } \
-    }
-
-
-#define UCP_REQUEST_CHECK_PARAM_UNSUPPORTED_REMOTE(_param) \
+#define UCP_REQUEST_CHECK_PARAM_ALLOW_REMOTE(_param) \
     do { \
+        if (ENABLE_PARAMS_CHECK) { \
+            if (((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_MEMORY_TYPE) && \
+                ((_param)->memory_type > UCS_MEMORY_TYPE_LAST)) { \
+                ucs_error("invalid memory type parameter: %d", \
+                          (_param)->memory_type); \
+                return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
+            } \
+            \
+            if (ucs_test_all_flags((_param)->op_attr_mask, \
+                                   (UCP_OP_ATTR_FLAG_FAST_CMPL | \
+                                    UCP_OP_ATTR_FLAG_MULTI_SEND))) { \
+                ucs_error("UCP_OP_ATTR_FLAG_FAST_CMPL and " \
+                          "UCP_OP_ATTR_FLAG_MULTI_SEND are mutually exclusive"); \
+                return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
+            } \
+        } \
+    } while (0)
+
+
+#define UCP_REQUEST_CHECK_PARAM(_param) \
+    do { \
+        UCP_REQUEST_CHECK_PARAM_ALLOW_REMOTE(_param); \
         if (ENABLE_PARAMS_CHECK && \
             ((_param)->op_attr_mask & \
              (UCP_OP_ATTR_FIELD_REMOTE | \

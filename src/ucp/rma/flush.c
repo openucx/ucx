@@ -554,7 +554,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_ep_flush_nbx, (ep, param),
 {
     void *request;
 
-    UCP_REQUEST_CHECK_PARAM_UNSUPPORTED_REMOTE(param);
+    UCP_REQUEST_CHECK_PARAM(param);
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
@@ -763,7 +763,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_worker_flush_nbx, (worker, param),
 {
     void *request;
 
-    UCP_REQUEST_CHECK_PARAM_UNSUPPORTED_REMOTE(param);
+    UCP_REQUEST_CHECK_PARAM(param);
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 

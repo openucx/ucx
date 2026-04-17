@@ -1943,7 +1943,7 @@ ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
     void          *request = NULL;
     ucp_request_t *close_req;
 
-    UCP_REQUEST_CHECK_PARAM_UNSUPPORTED_REMOTE(param);
+    UCP_REQUEST_CHECK_PARAM(param);
 
     if ((ucp_request_param_flags(param) & UCP_EP_CLOSE_FLAG_FORCE) &&
         !ucp_ep_config_err_handling_enabled(ep)) {
