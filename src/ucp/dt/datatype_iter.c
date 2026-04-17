@@ -301,7 +301,10 @@ ucs_status_t ucp_datatype_iter_sgl_init(ucp_context_h context,
     dt_iter->type.sgl.rkeys        = remote->rkeys;
     dt_iter->type.sgl.memhs_owned  = 0;
 
-    if (local->field_mask & UCP_DT_LOCAL_SGL_FIELD_MEMHS) {
+    if (ucs_unlikely(count == 0)) {
+        dt_iter->type.sgl.memhs = NULL;
+        ucp_memory_info_set_host(&dt_iter->mem_info);
+    } else if (local->field_mask & UCP_DT_LOCAL_SGL_FIELD_MEMHS) {
         dt_iter->type.sgl.memhs = (ucp_mem_h*)local->memhs;
 
         status = ucp_datatype_iter_init_mem_info_from_user_memh(dt_iter,

@@ -399,3 +399,11 @@ UCS_TEST_F(test_ucp_dt_sgl, iter_next_one_by_one) {
 
     EXPECT_TRUE(ucp_datatype_iter_is_end(&m_dt_iter));
 }
+
+UCS_TEST_F(test_ucp_dt_sgl, init_zero_count) {
+    init_sgl_iter(0);
+
+    EXPECT_TRUE(ucp_datatype_iter_is_end(&m_dt_iter));
+    EXPECT_EQ(UCS_MEMORY_TYPE_HOST, m_dt_iter.mem_info.type);
+    EXPECT_EQ(UCS_SYS_DEVICE_ID_UNKNOWN, m_dt_iter.mem_info.sys_dev);
+}
