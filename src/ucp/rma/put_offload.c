@@ -410,62 +410,44 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
     size_t elem_count            = ucp_datatype_iter_next_sgl(dt_iter,
                                                               max_sgl_count,
                                                               next_iter);
+    size_t rkeys_size            = elem_count * sizeof(uct_rkey_t);
+    size_t memhs_size            = elem_count * sizeof(uct_mem_h);
+    ucp_mem_h *sgl_memhs         = dt_iter->type.sgl.memhs;
+    uct_mem_h *uct_memhs;
     uct_rkey_t *uct_rkeys;
     ucs_status_t status;
     size_t i;
 
-    if (max_sgl_count < SIZE_MAX) {
-        /* Multiple progress calls, translate memh + rkey per-chunk on stack */
-        uct_mem_h *uct_memhs;
-        uct_rkeys = ucs_alloca(elem_count * sizeof(uct_rkey_t));
-
-        if (dt_iter->type.sgl.memhs != NULL) {
-            uct_memhs = ucs_alloca(elem_count * sizeof(uct_mem_h));
-            for (i = 0; i < elem_count; i++) {
-                uct_memhs[i] = dt_iter->type.sgl.memhs[start_index + i]->uct[md_index];
-                uct_rkeys[i] = ucp_rkey_get_tl_rkey(
-                                   dt_iter->type.sgl.rkeys[start_index + i], rkey_index);
-            }
-        } else {
-            uct_memhs = NULL;
-            for (i = 0; i < elem_count; i++) {
-                uct_rkeys[i] = ucp_rkey_get_tl_rkey(
-                                   dt_iter->type.sgl.rkeys[start_index + i], rkey_index);
-            }
-        }
-
-        status = uct_ep_put_sgl_zcopy(
-                     uct_ep,
-                     &dt_iter->type.sgl.buffers[start_index],
-                     &dt_iter->type.sgl.lengths[start_index],
-                     uct_memhs,
-                     &dt_iter->type.sgl.remote_addrs[start_index],
-                     uct_rkeys,
-                     elem_count, &req->send.state.uct_comp);
-    } else {
-        /* Single progress call, all elements, translate rkey only on heap */
-        uct_rkeys = ucs_malloc(elem_count * sizeof(uct_rkey_t),
-                               "uct_sgl_rkeys");
-        if (uct_rkeys == NULL) {
-            return UCS_ERR_NO_MEMORY;
-        }
-
-        for (i = 0; i < elem_count; i++) {
-            uct_rkeys[i] = ucp_rkey_get_tl_rkey(
-                               dt_iter->type.sgl.rkeys[start_index + i], rkey_index);
-        }
-
-        status = uct_ep_put_sgl_zcopy(
-                     uct_ep,
-                     &dt_iter->type.sgl.buffers[start_index],
-                     &dt_iter->type.sgl.lengths[start_index],
-                     NULL,
-                     &dt_iter->type.sgl.remote_addrs[start_index],
-                     uct_rkeys,
-                     elem_count, &req->send.state.uct_comp);
-
-        ucs_free(uct_rkeys);
+    uct_rkeys = ucs_alloc_on_stack(rkeys_size, "uct_sgl_rkeys");
+    if (uct_rkeys == NULL) {
+        return UCS_ERR_NO_MEMORY;
     }
+
+    uct_memhs = ucs_alloc_on_stack(memhs_size, "uct_sgl_memhs");
+    if (uct_memhs == NULL) {
+        ucs_free_on_stack(uct_rkeys, rkeys_size);
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    for (i = 0; i < elem_count; i++) {
+        uct_memhs[i] = (sgl_memhs != NULL) ?
+                       sgl_memhs[start_index + i]->uct[md_index] :
+                       UCT_MEM_HANDLE_NULL;
+        uct_rkeys[i] = ucp_rkey_get_tl_rkey(
+                           dt_iter->type.sgl.rkeys[start_index + i], rkey_index);
+    }
+
+    status = uct_ep_put_sgl_zcopy(
+                 uct_ep,
+                 &dt_iter->type.sgl.buffers[start_index],
+                 &dt_iter->type.sgl.lengths[start_index],
+                 uct_memhs,
+                 &dt_iter->type.sgl.remote_addrs[start_index],
+                 uct_rkeys,
+                 elem_count, &req->send.state.uct_comp);
+
+    ucs_free_on_stack(uct_memhs, memhs_size);
+    ucs_free_on_stack(uct_rkeys, rkeys_size);
 
     if (!UCS_STATUS_IS_ERR(status)) {
         ucp_proto_put_offload_update_remote_flush(
