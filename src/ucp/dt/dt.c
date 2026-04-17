@@ -37,15 +37,22 @@ ucs_status_t ucp_dt_mem_info_check_elem(ucp_context_h context,
     ucp_memory_info_t memory_info;
 
     ucp_memory_detect(context, buffer, length, &memory_info);
-    if ((memory_info.type == ref->type) &&
-        (memory_info.sys_dev == ref->sys_dev)) {
+    return ucp_dt_mem_info_verify(dt_name, index, &memory_info, ref, count);
+}
+
+ucs_status_t ucp_dt_mem_info_verify(const char *dt_name, size_t index,
+                                    const ucp_memory_info_t *cur,
+                                    const ucp_memory_info_t *ref,
+                                    size_t count)
+{
+    if (ucp_memory_info_equal(cur, ref)) {
         return UCS_OK;
     }
 
-    ucs_error("inconsistent %s memtypes: [%zu]=%s-%s [0]=%s-%s count=%zu",
+    ucs_error("inconsistent %s mem_info: [%zu]=%s-%s [0]=%s-%s count=%zu",
               dt_name, index,
-              ucs_memory_type_names[memory_info.type],
-              ucs_topo_sys_device_get_name(memory_info.sys_dev),
+              ucs_memory_type_names[cur->type],
+              ucs_topo_sys_device_get_name(cur->sys_dev),
               ucs_memory_type_names[ref->type],
               ucs_topo_sys_device_get_name(ref->sys_dev), count);
     return UCS_ERR_INVALID_PARAM;

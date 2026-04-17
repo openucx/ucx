@@ -302,13 +302,13 @@ ucs_status_t ucp_datatype_iter_sgl_init(ucp_context_h context,
     dt_iter->type.sgl.memhs_owned  = 0;
 
     if (local->field_mask & UCP_DT_LOCAL_SGL_FIELD_MEMHS) {
+        dt_iter->type.sgl.memhs = (ucp_mem_h*)local->memhs;
+
         status = ucp_datatype_iter_init_mem_info_from_user_memh(dt_iter,
                                                                 local->memhs[0]);
         if (status != UCS_OK) {
             return status;
         }
-
-        dt_iter->type.sgl.memhs = (ucp_mem_h*)local->memhs;
     } else {
         dt_iter->type.sgl.memhs = NULL;
         ucp_datatype_iter_detect_mem_info(context, local->buffers[0],
@@ -450,7 +450,11 @@ int ucp_datatype_iter_is_user_memh_valid(const ucp_datatype_iter_t *dt_iter,
                                          const ucp_mem_h memh)
 {
     UCS_STRING_BUFFER_ONSTACK(err_msg, 256);
+    ucp_mem_h err_memh = memh;
+    ucp_memory_info_t cur, ref;
+    ucp_mem_h sgl_memh;
     size_t iov_count;
+    size_t i;
 
     if (memh == NULL) {
         ucs_error("got NULL memory handle");
@@ -475,12 +479,30 @@ int ucp_datatype_iter_is_user_memh_valid(const ucp_datatype_iter_t *dt_iter,
         }
         break;
     case UCP_DATATYPE_SGL:
-        if (!ucp_memh_is_buffer_in_range(memh, dt_iter->type.sgl.buffers[0],
-                                         dt_iter->type.sgl.lengths[0])) {
-            ucs_string_buffer_appendf(&err_msg, "[buffer %p length %zu]",
-                                      dt_iter->type.sgl.buffers[0],
-                                      dt_iter->type.sgl.lengths[0]);
-            goto err_memh_mismatch;
+        ref = ucp_memory_info_from_memh(memh);
+        for (i = 0; i < dt_iter->length; ++i) {
+            sgl_memh = dt_iter->type.sgl.memhs[i];
+            if (sgl_memh == NULL) {
+                ucs_error("sgl[%zu]: got NULL memory handle", i);
+                return 0;
+            }
+
+            if (!ucp_memh_is_buffer_in_range(sgl_memh,
+                                             dt_iter->type.sgl.buffers[i],
+                                             dt_iter->type.sgl.lengths[i])) {
+                err_memh = sgl_memh;
+                ucs_string_buffer_appendf(&err_msg,
+                                          "sgl[%zu] [buffer %p length %zu]",
+                                          i, dt_iter->type.sgl.buffers[i],
+                                          dt_iter->type.sgl.lengths[i]);
+                goto err_memh_mismatch;
+            }
+
+            cur = ucp_memory_info_from_memh(sgl_memh);
+            if (ucp_dt_mem_info_verify("sgl", i, &cur, &ref,
+                                       dt_iter->length) != UCS_OK) {
+                return 0;
+            }
         }
         break;
     default:
@@ -493,7 +515,7 @@ int ucp_datatype_iter_is_user_memh_valid(const ucp_datatype_iter_t *dt_iter,
 
 err_memh_mismatch:
     ucs_error("mismatched memory handle %p [address %p length %zu] for %s",
-              memh, ucp_memh_address(memh), ucp_memh_length(memh),
+              err_memh, ucp_memh_address(err_memh), ucp_memh_length(err_memh),
               ucs_string_buffer_cstr(&err_msg));
     return 0;
 }

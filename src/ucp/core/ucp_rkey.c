@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -679,8 +679,7 @@ static ssize_t ucp_memh_do_pack(ucp_mem_h memh, uint64_t flags, int rkey_compat,
         ucs_fatal("packing rkey using ucp_memh_pack() is unsupported");
     }
 
-    mem_info.type    = memh->mem_type;
-    mem_info.sys_dev = memh->sys_dev;
+    mem_info         = ucp_memory_info_from_memh(memh);
     sys_distance     = sys_dev_distances;
 
     ucs_for_each_bit(ep_sys_dev, sys_dev_map) {

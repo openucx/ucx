@@ -44,8 +44,7 @@ ucp_datatype_iter_init_mem_info_from_user_memh(ucp_datatype_iter_t *dt_iter,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    dt_iter->mem_info.type    = memh->mem_type;
-    dt_iter->mem_info.sys_dev = memh->sys_dev;
+    dt_iter->mem_info = ucp_memory_info_from_memh(memh);
     return UCS_OK;
 }
 

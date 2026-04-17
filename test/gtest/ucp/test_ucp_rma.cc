@@ -1108,6 +1108,37 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_mixed_mem_types,
                                      REMOTE_MASK_DEFAULT, 2);
 }
 
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_memhs_null_memh,
+                     !ENABLE_PARAMS_CHECK) {
+    sgl_ctx ctx;
+    init_sgl_ctx(ctx, 2, 64);
+    ctx.memhs[1] = NULL;
+    expect_sgl_put_invalid_param_ctx(
+            ctx, LOCAL_MASK_DEFAULT | UCP_DT_LOCAL_SGL_FIELD_MEMHS,
+            REMOTE_MASK_DEFAULT, 2);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_memhs_buffer_out_of_range,
+                     !ENABLE_PARAMS_CHECK) {
+    sgl_ctx ctx;
+    init_sgl_ctx(ctx, 2, 64);
+    ctx.buffers[1] = reinterpret_cast<void*>(0xdeadbeefUL);
+    expect_sgl_put_invalid_param_ctx(
+            ctx, LOCAL_MASK_DEFAULT | UCP_DT_LOCAL_SGL_FIELD_MEMHS,
+            REMOTE_MASK_DEFAULT, 2);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_memhs_inconsistent_mem_info,
+                     !ENABLE_PARAMS_CHECK ||
+                             !mem_buffer::is_mem_type_supported(
+                                     UCS_MEMORY_TYPE_CUDA)) {
+    sgl_ctx ctx;
+    init_sgl_ctx_mixed_mem_types(ctx);
+    expect_sgl_put_invalid_param_ctx(
+            ctx, LOCAL_MASK_DEFAULT | UCP_DT_LOCAL_SGL_FIELD_MEMHS,
+            REMOTE_MASK_DEFAULT, 2);
+}
+
 UCS_TEST_P(test_ucp_rma_sgl, put_zero_count) {
     test_put_sgl(0, 64, true, false, true, true);
 }
