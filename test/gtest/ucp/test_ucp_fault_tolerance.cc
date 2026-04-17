@@ -12,6 +12,8 @@
 extern "C" {
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_context.h>
+#include <ucp/wireup/wireup.h>
+#include <ucp/wireup/wireup_ep.h>
 }
 
 /**
@@ -32,11 +34,13 @@ public:
                                op_name(TEST_OP_AM));
         add_variant_with_value(variants, UCP_FEATURE_AM,  TEST_OP_AM | TEST_OP_FLUSH,
                                op_name(TEST_OP_AM | TEST_OP_FLUSH));
-
         add_variant_with_value(variants, UCP_FEATURE_AM | UCP_FEATURE_RMA,
                                TEST_OP_PUT | TEST_OP_AM | TEST_OP_FLUSH,
                                op_name(TEST_OP_PUT |TEST_OP_AM | TEST_OP_FLUSH));
-    }
+        add_variant_with_value(variants, UCP_FEATURE_AM | UCP_FEATURE_RMA,
+                               TEST_OP_PUT | TEST_OP_AM | TEST_OP_FLUSH | TEST_OP_RECOVERY,
+                               op_name(TEST_OP_PUT |TEST_OP_AM | TEST_OP_FLUSH | TEST_OP_RECOVERY));
+     }
 
     test_ucp_fault_tolerance() {
         configure_peer_failure_settings();
@@ -56,10 +60,11 @@ protected:
     };
 
     enum test_op_t {
-        TEST_OP_PUT   = UCS_BIT(0),
-        TEST_OP_GET   = UCS_BIT(1),
-        TEST_OP_AM    = UCS_BIT(2),
-        TEST_OP_FLUSH = UCS_BIT(3),
+        TEST_OP_PUT      = UCS_BIT(0),
+        TEST_OP_GET      = UCS_BIT(1),
+        TEST_OP_AM       = UCS_BIT(2),
+        TEST_OP_FLUSH    = UCS_BIT(3),
+        TEST_OP_RECOVERY = UCS_BIT(4)
     };
 
     void init() override {
@@ -376,6 +381,34 @@ protected:
         UCS_TEST_MESSAGE << "Success";
     }
 
+    void test_recovery(unsigned op_mask) {
+        if (!(op_mask & TEST_OP_RECOVERY)) {
+            return;
+        }
+
+        UCS_TEST_MESSAGE << "Checking recovery status...";
+        do {
+            short_progress_loop();
+        } while (ucp_ep_get_failed_lanes(sender().ep(0, INJECTED_EP_INDEX)) != 0);
+
+        UCS_TEST_MESSAGE << "All lanes are operational";
+        for (ucp_lane_index_t lane_idx = 0;
+             lane_idx < ucp_ep_num_lanes(sender().ep(0, INJECTED_EP_INDEX));) {
+            if (ucp_wireup_ep_test(ucp_ep_get_lane(sender().ep(0, INJECTED_EP_INDEX), lane_idx))) {
+                short_progress_loop();
+                continue;
+            }
+
+            ++lane_idx;
+        }
+
+        ucs_status_t status = do_am_send_and_wait(sender().ep(0, INJECTED_EP_INDEX), am_msg_size(),
+                                                  true);
+        EXPECT_EQ(UCS_OK, status) << "AM operation returned status: " << ucs_status_string(status);
+        ASSERT_EQ(0, m_err_count) << "Error callback invoked " << m_err_count << " times";
+        UCS_TEST_MESSAGE << "Success";
+    }
+
     void do_test(failure_side_t failure_side) {
         const unsigned op_mask = get_variant_value();
 
@@ -388,6 +421,8 @@ protected:
             ASSERT_TRUE(op_mask & (TEST_OP_PUT|TEST_OP_GET));
             test_rma_with_injected_failure(failure_side, op_mask);
         }
+
+        test_recovery(op_mask);
     }
 private:
     static size_t rma_msg_size() {
@@ -416,6 +451,10 @@ private:
 
         if (op_mask & TEST_OP_FLUSH) {
             name += "FLUSH|";
+        }
+
+        if (op_mask & TEST_OP_RECOVERY) {
+            name += "RECOVERY|";
         }
 
         if (!name.empty()) {
@@ -529,6 +568,12 @@ UCS_TEST_P(test_ucp_fault_tolerance, initiator_failure, "MAX_EAGER_LANES=8")
 }
 
 UCS_TEST_P(test_ucp_fault_tolerance, target_failure, "MAX_EAGER_LANES=8")
+{
+    do_test(FAILURE_SIDE_TARGET);
+}
+
+UCS_TEST_P(test_ucp_fault_tolerance, target_failure_and_recovery,
+           "MAX_EAGER_LANES=8")
 {
     do_test(FAILURE_SIDE_TARGET);
 }
