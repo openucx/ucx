@@ -84,6 +84,11 @@ typedef struct {
 
     /* Map of system devices that require a flush operation */
     ucp_sys_dev_map_t            flush_sys_dev_mask;
+
+    /* Maximal number of local SGL buffers per uct_ep_put_sgl_zcopy on this
+     * lane, cached from uct_iface_attr_v2 at protocol init when PUT SGL zcopy
+     * is selected, otherwise zero */
+     size_t                      max_put_sgl_zcopy_count;
 } ucp_proto_multi_lane_priv_t;
 
 

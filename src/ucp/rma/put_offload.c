@@ -406,27 +406,13 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
     ucp_md_index_t md_index      = ucp_ep_md_index(ep, lane);
     ucp_rsc_index_t rkey_index   = lpriv->super.rkey_index;
     size_t start_index           = dt_iter->offset;
-    uct_iface_attr_v2_t iface_attr_v2;
-    size_t max_sgl_count, elem_count;
+    size_t max_sgl_count         = lpriv->max_put_sgl_zcopy_count;
+    size_t elem_count            = ucp_datatype_iter_next_sgl(dt_iter,
+                                                              max_sgl_count,
+                                                              next_iter);
     uct_rkey_t *uct_rkeys;
     ucs_status_t status;
     size_t i;
-
-    /* Silence -Wmaybe-uninitialized: query can return before next_sgl */
-    next_iter->offset = dt_iter->offset;
-
-    iface_attr_v2.field_mask = UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT;
-    status                   = uct_iface_query_v2(
-            ucp_worker_iface(ep->worker,
-                             ucp_ep_get_rsc_index(ep, lane))->iface,
-            &iface_attr_v2);
-    if (ucs_unlikely(status != UCS_OK)) {
-        return status;
-    }
-
-    max_sgl_count = iface_attr_v2.max_put_sgl_zcopy_count;
-
-    elem_count = ucp_datatype_iter_next_sgl(dt_iter, max_sgl_count, next_iter);
 
     if (max_sgl_count < SIZE_MAX) {
         /* Multiple progress calls, translate memh + rkey per-chunk on stack */
