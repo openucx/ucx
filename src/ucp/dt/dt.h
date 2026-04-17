@@ -59,6 +59,12 @@ size_t ucp_dt_pack(ucp_worker_h worker, ucp_datatype_t datatype,
                    ucs_memory_type_t mem_type, void *dest, const void *src,
                    ucp_dt_state_t *state, size_t length);
 
+ucs_status_t ucp_dt_mem_type_check_elem(ucp_context_h context,
+                                        const void *buffer, size_t length,
+                                        const ucp_memory_info_t *ref,
+                                        const char *dt_name, size_t index,
+                                        size_t count);
+
 void ucp_mem_type_pack(ucp_worker_h worker, void *dest, const void *src,
                        size_t length, ucs_memory_type_t mem_type);
 

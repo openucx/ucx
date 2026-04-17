@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  * Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
@@ -127,21 +127,15 @@ ucs_status_t ucp_dt_iov_memtype_check(ucp_context_h context,
                                       const ucp_dt_iov_t *iov, size_t iovcnt,
                                       const ucp_memory_info_t *mem_info)
 {
-    ucp_memory_info_t mem_info_iter;
+    ucs_status_t status;
     size_t i;
 
     for (i = 0; i < iovcnt; ++i) {
-        ucp_memory_detect(context, iov[i].buffer, iov[i].length,
-                          &mem_info_iter);
-        if ((mem_info_iter.type != mem_info->type) ||
-            (mem_info_iter.sys_dev != mem_info->sys_dev)) {
-            ucs_error("inconsistent iov memtypes: iov[%zu]=%s-%s iov[0]=%s-%s"
-                      " iovcnt=%zu",
-                      i, ucs_memory_type_names[mem_info_iter.type],
-                      ucs_topo_sys_device_get_name(mem_info_iter.sys_dev),
-                      ucs_memory_type_names[mem_info->type],
-                      ucs_topo_sys_device_get_name(mem_info->sys_dev), iovcnt);
-            return UCS_ERR_INVALID_PARAM;
+        status = ucp_dt_mem_type_check_elem(context, iov[i].buffer,
+                                            iov[i].length, mem_info, "iov", i,
+                                            iovcnt);
+        if (status != UCS_OK) {
+            return status;
         }
     }
 

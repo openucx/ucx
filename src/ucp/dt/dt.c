@@ -28,6 +28,30 @@ const char * ucp_datatype_class_names[] = {
 };
 
 
+ucs_status_t ucp_dt_mem_type_check_elem(ucp_context_h context,
+                                        const void *buffer, size_t length,
+                                        const ucp_memory_info_t *ref,
+                                        const char *dt_name, size_t index,
+                                        size_t count)
+{
+    ucp_memory_info_t memory_info;
+
+    ucp_memory_detect(context, buffer, length, &memory_info);
+    if ((memory_info.type == ref->type) &&
+        (memory_info.sys_dev == ref->sys_dev)) {
+        return UCS_OK;
+    }
+
+    ucs_error("inconsistent %s memtypes: [%zu]=%s-%s [0]=%s-%s count=%zu",
+              dt_name, index,
+              ucs_memory_type_names[memory_info.type],
+              ucs_topo_sys_device_get_name(memory_info.sys_dev),
+              ucs_memory_type_names[ref->type],
+              ucs_topo_sys_device_get_name(ref->sys_dev), count);
+    return UCS_ERR_INVALID_PARAM;
+}
+
+
 UCS_PROFILE_FUNC_VOID(ucp_mem_type_unpack,
                       (worker, buffer, recv_data, recv_length, mem_type),
                       ucp_worker_h worker, void *buffer, const void *recv_data,

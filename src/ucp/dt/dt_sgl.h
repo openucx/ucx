@@ -17,21 +17,19 @@
 
 
 /**
- * Check that all SGL entries match the given memory info.
- *
- * When memhs are provided, compares memhs[i]->mem_type and sys_dev.
- * When memhs are NULL, calls ucp_memory_detect on each buffer.
+ * Check that all SGL entries match the given memory info
  *
  * @param [in]     context        Context for memory detection
- * @param [in]     local          Local SGL descriptor
- * @param [in]     count          Number of SGL entries
+ * @param [in]     local          @ref ucp_dt_local_sgl_t descriptor to check
+ * @param [in]     count          Number of entries in the @a local descriptor
  * @param [in]     mem_info       Compare the SGL entries to this memory info
  *
- * @return UCS_OK if all entries match, otherwise UCS_ERR_INVALID_PARAM
+ * @return UCS_OK if all SGL entries match the given memory info, otherwise
+ *         return UCS_ERR_INVALID_PARAM
  */
-ucs_status_t ucp_dt_sgl_memtype_check(ucp_context_h context,
-                                      const ucp_dt_local_sgl_t *local,
-                                      size_t count,
-                                      const ucp_memory_info_t *mem_info);
+ucs_status_t ucp_dt_sgl_check_same_memtype(ucp_context_h context,
+                                           const ucp_dt_local_sgl_t *local,
+                                           size_t count,
+                                           const ucp_memory_info_t *mem_info);
 
 #endif

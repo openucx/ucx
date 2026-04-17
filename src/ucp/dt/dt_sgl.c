@@ -14,28 +14,20 @@
 #include <ucp/core/ucp_mm.h>
 
 
-ucs_status_t ucp_dt_sgl_memtype_check(ucp_context_h context,
+ucs_status_t ucp_dt_sgl_check_same_memtype(ucp_context_h context,
                                       const ucp_dt_local_sgl_t *local,
                                       size_t count,
                                       const ucp_memory_info_t *mem_info)
 {
-    ucp_memory_info_t mem_info_i;
+    ucs_status_t status;
     size_t i;
 
     for (i = 1; i < count; ++i) {
-        ucp_memory_detect(context, local->buffers[i], local->lengths[i],
-                          &mem_info_i);
-        if ((mem_info_i.type != mem_info->type) ||
-            (mem_info_i.sys_dev != mem_info->sys_dev)) {
-            ucs_error("inconsistent sgl memtypes: "
-                      "buffers[%zu]=%s-%s buffers[0]=%s-%s count=%zu",
-                      i,
-                      ucs_memory_type_names[mem_info_i.type],
-                      ucs_topo_sys_device_get_name(mem_info_i.sys_dev),
-                      ucs_memory_type_names[mem_info->type],
-                      ucs_topo_sys_device_get_name(mem_info->sys_dev),
-                      count);
-            return UCS_ERR_INVALID_PARAM;
+        status = ucp_dt_mem_type_check_elem(context, local->buffers[i],
+                                            local->lengths[i], mem_info, "sgl",
+                                            i, count);
+        if (status != UCS_OK) {
+            return status;
         }
     }
 
