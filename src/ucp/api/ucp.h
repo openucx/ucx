@@ -941,6 +941,10 @@ enum ucp_dt_remote_sgl_field {
  *
  * @note Currently only N->N mapping is supported: both sides must use
  *       the SGL datatype with equal counts and matching lengths.
+ *
+ * @note All buffers in the descriptor must share the same memory type
+ *       (see @ref ucs_memory_type_t), otherwise @ref UCS_ERR_INVALID_PARAM
+ *       is returned.
  */
 typedef struct {
     uint64_t        field_mask; /**< Valid fields, using bits from
