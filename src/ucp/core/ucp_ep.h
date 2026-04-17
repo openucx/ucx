@@ -960,8 +960,11 @@ ucs_status_t ucp_ep_realloc_lanes(ucp_ep_h ep, unsigned new_num_lanes);
  *
  * @param [in] ep         Endpoint object.
  * @param [in] cfg_index  Endpoint configuration index.
+ * @param [in] reactivate Flag indicating whether to reactivate worker
+ *                        interfaces.
  */
-void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index);
+void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index,
+                          int reactivate);
 
 
 /**
