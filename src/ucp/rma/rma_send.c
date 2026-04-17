@@ -384,6 +384,14 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
                 ep, rkey, req, ucp_ep_rma_get_fence_flag(ep), UCP_OP_ID_PUT,
                 buffer, count, datatype, contig_length, param, 0, 0);
     } else {
+        if (ucs_unlikely((param->op_attr_mask & UCP_OP_ATTR_FIELD_DATATYPE) &&
+                         UCP_DT_IS_SGL(param->datatype))) {
+            ucs_error("SGL datatype requires the proto path "
+                      "(UCX_PROTO_ENABLE=y)");
+            ret = UCS_STATUS_PTR(UCS_ERR_UNSUPPORTED);
+            goto out_unlock;
+        }
+
         status = UCP_RKEY_RESOLVE(rkey, ep, rma);
         if (status != UCS_OK) {
             ret = UCS_STATUS_PTR(status);

@@ -918,9 +918,11 @@ protected:
             UCP_DT_REMOTE_SGL_FIELD_LENGTHS |
             UCP_DT_REMOTE_SGL_FIELD_RKEYS;
 
-    void expect_sgl_put_invalid_param_ctx(
+    void expect_sgl_put_status_ctx(
             sgl_ctx &ctx, uint64_t local_mask, uint64_t remote_mask,
-            size_t count, uint64_t remote_addr = UCP_REMOTE_ADDR_INVALID,
+            size_t count, ucs_status_t expected_status,
+            uint32_t extra_param_mask = 0,
+            uint64_t remote_addr = UCP_REMOTE_ADDR_INVALID,
             ucp_rkey_h rkey = UCP_RKEY_INVALID,
             uint32_t clear_param_mask = 0, bool null_remote = false,
             size_t remote_count = 0)
@@ -929,7 +931,8 @@ protected:
         ucp_dt_local_sgl_t local      = make_local_sgl(ctx, local_mask);
         ucp_dt_remote_sgl_t remote    = make_remote_sgl(ctx, remote_mask);
         ucp_request_param_t param     = make_sgl_param(&remote,
-                                                       effective_remote_count);
+                                                       effective_remote_count,
+                                                       extra_param_mask);
         param.op_attr_mask &= ~clear_param_mask;
 
         if (null_remote) {
@@ -939,7 +942,19 @@ protected:
         scoped_log_handler wrap_err(wrap_errors_logger);
         ucs_status_ptr_t sptr = ucp_put_nbx(sender().ep(), &local, count,
                                             remote_addr, rkey, &param);
-        EXPECT_EQ(UCS_ERR_INVALID_PARAM, UCS_PTR_STATUS(sptr));
+        EXPECT_EQ(expected_status, UCS_PTR_STATUS(sptr));
+    }
+
+    void expect_sgl_put_invalid_param_ctx(
+            sgl_ctx &ctx, uint64_t local_mask, uint64_t remote_mask,
+            size_t count, uint64_t remote_addr = UCP_REMOTE_ADDR_INVALID,
+            ucp_rkey_h rkey = UCP_RKEY_INVALID,
+            uint32_t clear_param_mask = 0, bool null_remote = false,
+            size_t remote_count = 0)
+    {
+        expect_sgl_put_status_ctx(ctx, local_mask, remote_mask, count,
+                                  UCS_ERR_INVALID_PARAM, 0, remote_addr, rkey,
+                                  clear_param_mask, null_remote, remote_count);
     }
 
     void expect_sgl_put_invalid_param(uint64_t local_mask,
@@ -1021,19 +1036,10 @@ UCS_TEST_P(test_ucp_rma_sgl, put_force_imm_cmpl) {
 
     sgl_ctx ctx;
     init_sgl_ctx(ctx, NUM_ELEMS, UCS_KBYTE);
-
-    uint64_t local_mask        = LOCAL_MASK_DEFAULT |
-                                 UCP_DT_LOCAL_SGL_FIELD_MEMHS;
-    ucp_dt_local_sgl_t local   = make_local_sgl(ctx, local_mask);
-    ucp_dt_remote_sgl_t remote = make_remote_sgl(ctx, REMOTE_MASK_DEFAULT);
-    ucp_request_param_t param  = make_sgl_param(&remote, NUM_ELEMS,
-                                                UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL);
-
-    scoped_log_handler wrap_err(wrap_errors_logger);
-    ucs_status_ptr_t sptr = ucp_put_nbx(sender().ep(), &local, NUM_ELEMS,
-                                         UCP_REMOTE_ADDR_INVALID,
-                                         UCP_RKEY_INVALID, &param);
-    EXPECT_EQ(UCS_ERR_NO_RESOURCE, UCS_PTR_STATUS(sptr));
+    expect_sgl_put_status_ctx(
+            ctx, LOCAL_MASK_DEFAULT | UCP_DT_LOCAL_SGL_FIELD_MEMHS,
+            REMOTE_MASK_DEFAULT, NUM_ELEMS, UCS_ERR_NO_RESOURCE,
+            UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_invalid_remote_addr,
@@ -1141,6 +1147,16 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_memhs_inconsistent_mem_info,
 
 UCS_TEST_P(test_ucp_rma_sgl, put_zero_count) {
     test_put_sgl(0, 64, true, false, true, true);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_without_proto,
+                     !ENABLE_PARAMS_CHECK, "PROTO_ENABLE=n")
+{
+    sgl_ctx ctx;
+    init_sgl_ctx(ctx, 2, 64);
+    expect_sgl_put_status_ctx(
+            ctx, LOCAL_MASK_DEFAULT | UCP_DT_LOCAL_SGL_FIELD_MEMHS,
+            REMOTE_MASK_DEFAULT, 2, UCS_ERR_UNSUPPORTED);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_sgl, all, "all")
