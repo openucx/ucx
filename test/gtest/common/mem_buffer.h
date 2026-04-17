@@ -130,6 +130,8 @@ private:
 
     static bool is_rocm_supported();
 
+    static bool is_ze_supported();
+
     static inline uint64_t pat(uint64_t prev)
     {
         /* LFSR pattern */
