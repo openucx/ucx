@@ -650,13 +650,34 @@ ucp_proto_get_short_max(const ucp_request_t *req,
 
 static UCS_F_ALWAYS_INLINE int
 ucp_proto_is_inline(ucp_ep_h ep, const ucp_memtype_thresh_t *max_eager_short,
-                    ssize_t length, const ucp_request_param_t *param)
+                    ssize_t length, const void *buffer,
+                    const ucp_request_param_t *param)
 {
-    return (ucs_likely(length <= max_eager_short->memtype_off) ||
-            ((length <= max_eager_short->memtype_on) &&
-             (ucs_memtype_cache_is_empty() ||
-              ((param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMORY_TYPE) &&
-               (param->memory_type == UCS_MEMORY_TYPE_HOST)))));
+    ucs_memory_info_t mem_info;
+    ucs_status_t status;
+
+    if (ucs_likely(length <= max_eager_short->memtype_off)) {
+        return 1;
+    }
+
+    if (length > max_eager_short->memtype_on) {
+        return 0;
+    }
+
+    if (ucs_memtype_cache_is_empty()) {
+        return 1;
+    }
+
+    if ((param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMORY_TYPE) &&
+        (param->memory_type == UCS_MEMORY_TYPE_HOST)) {
+        return 1;
+    }
+
+    /* Look up the buffer in the memory type cache to determine if it is host
+     * memory. If the address is not found in the cache, it is host memory. */
+    status = ucs_memtype_cache_lookup(buffer, length, &mem_info);
+    return (status == UCS_ERR_NO_ELEM) ||
+           ((status == UCS_OK) && (mem_info.type == UCS_MEMORY_TYPE_HOST));
 }
 
 static UCS_F_ALWAYS_INLINE ucp_request_t*
