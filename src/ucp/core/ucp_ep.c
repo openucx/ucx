@@ -1616,7 +1616,7 @@ ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
     ++ucp_ep->worker->counters.ep_failures;
 
     /* The EP can be closed from last completion callback */
-    ucp_ep_discard_lanes(ucp_ep, UCS_MASK(ucp_ep_num_lanes(ucp_ep)), status,
+    ucp_ep_discard_lanes(ucp_ep, ucp_ep_get_live_lanes(ucp_ep), status,
                          ucp_ep->cfg_index);
     ucp_stream_ep_cleanup(ucp_ep, status);
 
