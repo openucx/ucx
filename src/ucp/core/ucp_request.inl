@@ -211,12 +211,15 @@ UCS_PTR_MAP_IMPL(request, 0);
     do { \
         UCP_REQUEST_CHECK_PARAM_ALLOW_REMOTE(_param); \
         if (ENABLE_PARAMS_CHECK && \
-            ((_param)->op_attr_mask & \
-             (UCP_OP_ATTR_FIELD_REMOTE | \
-              UCP_OP_ATTR_FIELD_REMOTE_DATATYPE | \
-              UCP_OP_ATTR_FIELD_REMOTE_COUNT))) { \
-            ucs_error("remote descriptor parameters are only supported for " \
-                      "ucp_put_nbx with SGL datatype"); \
+            (((_param)->op_attr_mask & \
+              (UCP_OP_ATTR_FIELD_REMOTE | \
+               UCP_OP_ATTR_FIELD_REMOTE_DATATYPE | \
+               UCP_OP_ATTR_FIELD_REMOTE_COUNT)) || \
+             (((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_DATATYPE) && \
+              (((_param)->datatype & UCP_DATATYPE_CLASS_MASK) == \
+               UCP_DATATYPE_SGL)))) { \
+            ucs_error("SGL datatype and remote descriptor parameters are " \
+                      "only supported for ucp_put_nbx"); \
             return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
         } \
     } while (0)
