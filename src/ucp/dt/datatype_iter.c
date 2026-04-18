@@ -292,6 +292,9 @@ ucs_status_t ucp_datatype_iter_sgl_init(ucp_context_h context,
 {
     ucs_status_t status;
 
+    /* For Coverity */
+    ucs_assert(remote != NULL);
+
     dt_iter->dt_class              = UCP_DATATYPE_SGL;
     dt_iter->length                = count;
     dt_iter->offset                = 0;

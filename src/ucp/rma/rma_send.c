@@ -31,6 +31,9 @@ ucp_put_sgl_check_params(const void *buffer, size_t count,
     const ucp_dt_remote_sgl_t *remote;
 
     if (!ENABLE_PARAMS_CHECK) {
+        /* For Coverity */
+        ucs_assert(param->remote != NULL);
+
         return UCS_OK;
     }
 
