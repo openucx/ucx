@@ -4014,6 +4014,47 @@ ucs_status_t ucp_ep_query_sockaddr(ucp_ep_h ep, ucp_ep_attr_t *attr)
     return UCS_OK;
 }
 
+static void ucp_ep_query_estimated_bw(ucp_ep_h ep, ucp_ep_attr_t *attr)
+{
+    ucp_worker_h worker        = ep->worker;
+    ucp_context_h context      = worker->context;
+    ucp_ep_config_t *config    = ucp_ep_config(ep);
+    ucs_memory_type_t local_mt = attr->estimated_bw.local_mem_type;
+    double total_bw            = 0.0;
+    ucp_lane_index_t lane;
+    ucp_rsc_index_t rsc_index;
+    ucp_md_index_t md_index;
+    const uct_md_attr_v2_t *md_attr;
+    ucp_worker_iface_t *wiface;
+
+    for (lane = 0; lane < config->key.num_lanes; ++lane) {
+        if (lane == config->key.cm_lane) {
+            continue;
+        }
+
+        rsc_index = config->key.lanes[lane].rsc_index;
+        if (rsc_index == UCP_NULL_RESOURCE) {
+            continue;
+        }
+
+        md_index = config->md_index[lane];
+        md_attr  = &context->tl_mds[md_index].attr;
+
+        /* Check if the lane's memory domain can register the requested local
+         * memory type. Host memory is always assumed to be supported. */
+        if ((local_mt != UCS_MEMORY_TYPE_HOST) &&
+            !(md_attr->reg_mem_types & UCS_BIT(local_mt)) &&
+            !(md_attr->access_mem_types & UCS_BIT(local_mt))) {
+            continue;
+        }
+
+        wiface    = ucp_worker_iface(worker, rsc_index);
+        total_bw += ucp_wireup_iface_bw_distance(wiface);
+    }
+
+    attr->estimated_bw.bandwidth = total_bw;
+}
+
 ucs_status_t ucp_ep_query(ucp_ep_h ep, ucp_ep_attr_t *attr)
 {
     ucs_status_t status;
@@ -4043,6 +4084,10 @@ ucs_status_t ucp_ep_query(ucp_ep_h ep, ucp_ep_attr_t *attr)
 
     if (attr->field_mask & UCP_EP_ATTR_FIELD_USER_DATA) {
         attr->user_data = ep->flags & UCP_EP_FLAG_USER_DATA_PARAM ? ep->ext->user_data : NULL;
+    }
+
+    if (attr->field_mask & UCP_EP_ATTR_FIELD_ESTIMATED_BW) {
+        ucp_ep_query_estimated_bw(ep, attr);
     }
 
     return UCS_OK;
