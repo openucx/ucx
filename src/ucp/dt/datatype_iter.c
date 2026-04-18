@@ -302,12 +302,13 @@ ucs_status_t ucp_datatype_iter_sgl_init(ucp_context_h context,
     dt_iter->type.sgl.lengths      = local->lengths;
     dt_iter->type.sgl.remote_addrs = remote->remote_addrs;
     dt_iter->type.sgl.rkeys        = remote->rkeys;
-    dt_iter->type.sgl.memhs_owned  = 0;
 
     if (ucs_unlikely(count == 0)) {
         dt_iter->type.sgl.memhs = NULL;
         ucp_memory_info_set_host(&dt_iter->mem_info);
     } else if (local->field_mask & UCP_DT_LOCAL_SGL_FIELD_MEMHS) {
+        ucs_assertv(ucp_memh_is_user_memh(local->memhs[0]), "memh=%p",
+                    local->memhs[0]);
         dt_iter->type.sgl.memhs = (ucp_mem_h*)local->memhs;
 
         status = ucp_datatype_iter_init_mem_info_from_user_memh(dt_iter,
@@ -350,20 +351,21 @@ ucs_status_t ucp_datatype_iter_sgl_mem_reg(ucp_context_h context,
         return UCS_ERR_NO_MEMORY;
     }
 
-    dt_iter->type.sgl.memhs       = memhs;
-    dt_iter->type.sgl.memhs_owned = 1;
-
     for (i = 0; i < count; ++i) {
         status = ucp_datatype_iter_mem_reg_single(
                 context, dt_iter->type.sgl.buffers[i],
                 dt_iter->type.sgl.lengths[i], dt_iter->mem_info.type,
                 md_map, uct_flags, &memhs[i]);
         if (status != UCS_OK) {
-            ucp_datatype_iter_sgl_mem_dereg(dt_iter);
+            while (i-- > 0) {
+                ucp_datatype_iter_mem_dereg_single(&memhs[i]);
+            }
+            ucs_free(memhs);
             return status;
         }
     }
 
+    dt_iter->type.sgl.memhs = memhs;
     return UCS_OK;
 }
 
@@ -378,11 +380,18 @@ void ucp_datatype_iter_sgl_mem_dereg(ucp_datatype_iter_t *dt_iter)
     }
 }
 
+static UCS_F_ALWAYS_INLINE int
+ucp_datatype_iter_sgl_owns_memhs(const ucp_datatype_iter_t *dt_iter)
+{
+    return (dt_iter->type.sgl.memhs != NULL) &&
+           !ucp_memh_is_user_memh(dt_iter->type.sgl.memhs[0]);
+}
+
 void ucp_datatype_iter_sgl_cleanup(ucp_datatype_iter_t *dt_iter, int dereg)
 {
     size_t i;
 
-    if (!dt_iter->type.sgl.memhs_owned) {
+    if (!ucp_datatype_iter_sgl_owns_memhs(dt_iter)) {
         return;
     }
 

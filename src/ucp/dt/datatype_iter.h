@@ -71,7 +71,6 @@ typedef struct {
             ucp_mem_h        *memhs;
             const uint64_t   *remote_addrs;
             ucp_rkey_h const *rkeys;
-            int              memhs_owned;
             /* length = element count, offset = current element index */
         } sgl;
     } type;
