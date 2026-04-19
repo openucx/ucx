@@ -1,6 +1,6 @@
 /**
  * @file        uct_v2.h
- * @date        2021
+ * @date        2021-2026
  * @copyright   NVIDIA CORPORATION & AFFILIATES. ALL RIGHTS RESERVED.
  * @brief       Unified Communication Transport
  */
@@ -1039,8 +1039,29 @@ typedef enum {
  */
 enum uct_iface_attr_field {
     /** Enables @ref uct_iface_attr_v2_t::max_put_sgl_zcopy_count */
-    UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT = UCS_BIT(0)
+    UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT = UCS_BIT(0),
+
+    /** Enables @ref uct_iface_attr_v2_t::cap */
+    UCT_IFACE_ATTR_FIELD_CAP_FLAGS           = UCS_BIT(1)
 };
+
+
+/**
+ * @defgroup UCT_RESOURCE_IFACE_CAP_V2   UCT v2 interface operations and
+                                         capabilities
+ * @ingroup UCT_RESOURCE
+ *
+ * @brief  List of capabilities supported by UCX API
+ *
+ * The definition list presents interface capabilities for
+ * @ref uct_iface_attr_v2_t, reported through @ref uct_iface_query_v2.
+ * @{
+ */
+        /* PUT capabilities */
+#define UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY       UCS_BIT(0)  /**< Zero-copy SGL put */
+/**
+ * @}
+ */
 
 
 /**
@@ -1059,6 +1080,11 @@ typedef struct {
      * @anchor uct_iface_attr_v2_max_put_sgl_zcopy_count
      */
     size_t   max_put_sgl_zcopy_count;
+
+    /** Interface capabilities (v2 flags) */
+    struct {
+        uint64_t flags; /**< Flags from @ref UCT_RESOURCE_IFACE_CAP_V2 */
+    } cap;
 } uct_iface_attr_v2_t;
 
 
