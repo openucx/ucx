@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2019. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -311,6 +311,18 @@ static void uct_cuda_ipc_complete_event(uct_iface_h tl_iface,
                                                                uct_cuda_ipc_event_desc_t);
     ucs_status_t status;
 
+#if CUDA_VERSION >= 13000
+    if (cuda_ipc_event->sgl_mapping != NULL) {
+        uct_cuda_ipc_sgl_mapping_t *mapping = cuda_ipc_event->sgl_mapping;
+
+        uct_cuda_ipc_sgl_unmap(mapping, mapping->count,
+                               cuda_ipc_event->cuda_device,
+                               iface->config.enable_cache);
+        ucs_free(mapping);
+        return;
+    }
+#endif
+
     status = uct_cuda_ipc_unmap_memhandle(cuda_ipc_event->pid,
                                           cuda_ipc_event->pid_ns,
                                           cuda_ipc_event->d_bptr,
@@ -404,8 +416,31 @@ uct_cuda_ipc_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
     return UCS_OK;
 }
 
+static ucs_status_t
+uct_cuda_ipc_iface_query_v2(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr)
+{
+    ucs_status_t status;
+
+    status = uct_iface_base_query_v2(iface, iface_attr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+#if CUDA_VERSION >= 13000
+    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_CAP_FLAGS) {
+        iface_attr->cap.flags |= UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY;
+    }
+
+    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT) {
+        iface_attr->max_put_sgl_zcopy_count = SIZE_MAX;
+    }
+#endif
+
+    return UCS_OK;
+}
+
 static uct_iface_internal_ops_t uct_cuda_ipc_iface_internal_ops = {
-    .iface_query_v2         = uct_iface_base_query_v2,
+    .iface_query_v2         = uct_cuda_ipc_iface_query_v2,
     .iface_estimate_perf    = uct_cuda_ipc_estimate_perf,
     .iface_vfs_refresh      = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
     .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
@@ -413,7 +448,12 @@ static uct_iface_internal_ops_t uct_cuda_ipc_iface_internal_ops = {
     .ep_connect_to_ep_v2    = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
     .iface_is_reachable_v2  = uct_cuda_ipc_iface_is_reachable_v2,
     .ep_is_connected        = uct_cuda_ipc_ep_is_connected,
-    .ep_get_device_ep       = uct_cuda_ipc_ep_get_device_ep
+    .ep_get_device_ep       = uct_cuda_ipc_ep_get_device_ep,
+#if CUDA_VERSION >= 13000
+    .ep_put_sgl_zcopy       = uct_cuda_ipc_ep_put_sgl_zcopy
+#else
+    .ep_put_sgl_zcopy       = (uct_ep_put_sgl_zcopy_func_t)ucs_empty_function_return_unsupported
+#endif
 };
 
 static uct_cuda_ctx_rsc_t * uct_cuda_ipc_ctx_rsc_create(uct_iface_h tl_iface)
