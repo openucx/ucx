@@ -75,5 +75,6 @@ test_namespace() {
 }
 
 prepare
+try_load_cuda_env
 build release
 test_namespace
