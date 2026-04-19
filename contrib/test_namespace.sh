@@ -11,6 +11,7 @@
 #  - WORKSPACE           : path to work dir
 #
 
+source $(dirname $0)/../buildlib/az-helpers.sh
 source $(dirname $0)/../buildlib/tools/common.sh
 
 ucx_inst=${WORKSPACE}/install
