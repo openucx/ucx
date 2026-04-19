@@ -302,20 +302,29 @@ protected:
     void release_region(uct_cuda_ipc_cache_region_t *region) {
         ASSERT_GE(region->refcount, 1UL);
         region->refcount--;
-        if (!region->in_lru) {
-            ucs_list_add_tail(&m_cache->lru_list, &region->lru_list);
-            region->in_lru = 1;
-        }
     }
 
     void reacquire_region(uct_cuda_ipc_cache_region_t *region) {
         /* Move to LRU tail (most recently used) */
-        if (region->in_lru) {
-            ucs_list_del(&region->lru_list);
-        }
+        ucs_list_del(&region->lru_list);
         ucs_list_add_tail(&m_cache->lru_list, &region->lru_list);
-        region->in_lru = 1;
         region->refcount++;
+    }
+
+    void destroy_region(uct_cuda_ipc_cache_region_t *region) {
+        ucs_status_t status = ucs_pgtable_remove(&m_cache->pgtable,
+                                                  &region->super);
+        ASSERT_EQ(UCS_OK, status);
+
+        ASSERT_TRUE(region->in_lru);
+        ucs_list_del(&region->lru_list);
+        region->in_lru = 0;
+
+        ASSERT_GT(m_cache->num_regions, 0UL);
+        m_cache->num_regions--;
+        m_cache->total_size -= region->key.b_len;
+
+        ucs_free(region);
     }
 
     void evict_lru() {
@@ -328,9 +337,6 @@ protected:
             }
 
             if (region->refcount > 0) {
-                /* In-use -- pull off LRU, will be re-added on release */
-                ucs_list_del(&region->lru_list);
-                region->in_lru = 0;
                 continue;
             }
 
@@ -529,4 +535,30 @@ UCS_TEST_F(test_cuda_ipc_cache_lru, unlimited) {
     for (size_t i = 0; i < num_insert; i++) {
         EXPECT_TRUE(pgtable_has(i));
     }
+}
+
+UCS_TEST_F(test_cuda_ipc_cache_lru, stale_destroy_while_in_use) {
+    /* Regression test for Bug A: evict_lru must not pull in-use regions off
+     * the LRU. Otherwise a subsequent destroy (e.g. stale-buffer_id branch
+     * in map_memhandle) hits an assertion / list corruption because the
+     * region is alive in the pgtable but not on the LRU. */
+    create_cache(0 /* force eviction on every insert */, SIZE_MAX);
+
+    uct_cuda_ipc_cache_region_t *r1 = insert_region(0);
+    ASSERT_EQ(1UL, r1->refcount);
+    ASSERT_EQ(1, r1->in_lru);
+
+    evict_lru();
+
+    /* Core assertion: in-use region must stay on LRU after eviction */
+    EXPECT_EQ(1, r1->in_lru);
+    EXPECT_EQ(1UL, m_cache->num_regions);
+    EXPECT_TRUE(pgtable_has(0));
+
+    /* Simulate the stale-buffer_id destroy path */
+    destroy_region(r1);
+
+    EXPECT_EQ(0UL, m_cache->num_regions);
+    EXPECT_EQ(0UL, m_cache->total_size);
+    EXPECT_TRUE(ucs_list_is_empty(&m_cache->lru_list));
 }
