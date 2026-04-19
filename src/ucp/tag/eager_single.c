@@ -85,6 +85,7 @@ ucp_proto_t ucp_eager_short_proto = {
     .name     = "egr/short",
     .desc     = "eager " UCP_PROTO_SHORT_DESC,
     .flags    = UCP_PROTO_FLAG_AM_SHORT,
+    .dt_mask  = UCS_BIT(UCP_DATATYPE_CONTIG),
     .probe    = ucp_proto_eager_short_probe,
     .query    = ucp_proto_single_query,
     .progress = {ucp_eager_short_progress},
@@ -158,6 +159,7 @@ ucp_proto_t ucp_eager_bcopy_single_proto = {
     .name     = "egr/single/bcopy",
     .desc     = UCP_PROTO_EAGER_BCOPY_DESC,
     .flags    = 0,
+    .dt_mask  = UCP_PROTO_DT_MASK_DEFAULT,
     .probe    = ucp_proto_eager_bcopy_single_probe,
     .query    = ucp_proto_single_query,
     .progress = {ucp_eager_bcopy_single_progress},
@@ -196,8 +198,7 @@ ucp_proto_eager_zcopy_single_probe(const ucp_proto_init_params_t *init_params)
     };
 
     /* AM based proto can not be used if tag offload lane configured */
-    if (!ucp_tag_eager_check_op_id(init_params, UCP_OP_ID_TAG_SEND, 0) ||
-        (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG)) {
+    if (!ucp_tag_eager_check_op_id(init_params, UCP_OP_ID_TAG_SEND, 0)) {
         return;
     }
 
@@ -234,6 +235,7 @@ ucp_proto_t ucp_eager_zcopy_single_proto = {
     .name     = "egr/single/zcopy",
     .desc     = UCP_PROTO_EAGER_ZCOPY_DESC,
     .flags    = 0,
+    .dt_mask  = UCS_BIT(UCP_DATATYPE_CONTIG),
     .probe    = ucp_proto_eager_zcopy_single_probe,
     .query    = ucp_proto_single_query,
     .progress = {ucp_proto_eager_zcopy_single_progress},

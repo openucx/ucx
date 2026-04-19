@@ -32,8 +32,7 @@ ucp_proto_rndv_mtype_init(const ucp_proto_init_params_t *init_params,
     ucp_context_h context      = worker->context;
     ucs_memory_type_t mem_type = init_params->select_param->mem_type;
 
-    if ((init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
-        (ucp_proto_rndv_mtype_ep(worker, frag_mem_type, mem_type) == NULL) ||
+    if ((ucp_proto_rndv_mtype_ep(worker, frag_mem_type, mem_type) == NULL) ||
         !init_params->worker->context->config.ext.memtype_copy_enable ||
         !ucp_proto_init_check_op(init_params, UCP_PROTO_RNDV_OP_ID_MASK)) {
         return UCS_ERR_UNSUPPORTED;

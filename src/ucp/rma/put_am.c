@@ -115,8 +115,7 @@ ucp_proto_put_am_bcopy_probe(const ucp_proto_init_params_t *init_params)
         .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID
     };
 
-    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT)) ||
-        (init_params->select_param->dt_class == UCP_DATATYPE_SGL)) {
+    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT))) {
         return;
     }
 
@@ -127,6 +126,7 @@ ucp_proto_t ucp_put_am_bcopy_proto = {
     .name     = "put/am/bcopy",
     .desc     = UCP_PROTO_RMA_EMULATION_DESC,
     .flags    = 0,
+    .dt_mask  = UCP_DT_MASK_CONTIG_IOV,
     .probe    = ucp_proto_put_am_bcopy_probe,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_put_am_bcopy_progress},

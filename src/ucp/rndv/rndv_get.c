@@ -60,8 +60,7 @@ ucp_proto_rndv_get_common_probe(const ucp_proto_init_params_t *init_params,
     ucp_proto_perf_t *perf;
     ucs_status_t status;
 
-    if ((init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
-        !ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_RECV,
+    if (!ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_RECV,
                                  support_ppln)) {
         return;
     }
@@ -227,6 +226,7 @@ ucp_proto_t ucp_rndv_get_zcopy_proto = {
     .name     = "rndv/get/zcopy",
     .desc     = UCP_PROTO_ZCOPY_DESC " " UCP_PROTO_RNDV_GET_DESC,
     .flags    = 0,
+    .dt_mask  = UCS_BIT(UCP_DATATYPE_CONTIG),
     .probe    = ucp_proto_rndv_get_zcopy_probe,
     .query    = ucp_proto_rndv_get_zcopy_query,
     .progress = {
@@ -376,6 +376,7 @@ ucp_proto_t ucp_rndv_get_mtype_proto = {
     .name     = "rndv/get/mtype",
     .desc     = NULL,
     .flags    = 0,
+    .dt_mask  = UCS_BIT(UCP_DATATYPE_CONTIG),
     .probe    = ucp_proto_rndv_get_mtype_probe,
     .query    = ucp_proto_rndv_get_mtype_query,
     .progress = {
