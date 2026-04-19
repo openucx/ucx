@@ -39,13 +39,12 @@
 
 /* A function which should not be optimized */
 #if defined(__clang__)
-#define UCS_F_NOOPTIMIZE __attribute__((optnone))
+#  define UCS_F_NOOPTIMIZE __attribute__((optnone))
 #elif defined(HAVE_ATTRIBUTE_NOOPTIMIZE) && (HAVE_ATTRIBUTE_NOOPTIMIZE == 1)
-#define UCS_F_NOOPTIMIZE __attribute__((optimize("O0")))
+#  define UCS_F_NOOPTIMIZE __attribute__((optimize("O0")))
 #else
-#define UCS_F_NOOPTIMIZE
+#  define UCS_F_NOOPTIMIZE
 #endif
-
 
 /**
  * Copy words from _src to _dst.
