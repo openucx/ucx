@@ -11,6 +11,7 @@ extern "C" {
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_mm.h> /* for UCP_MEM_IS_ACCESSIBLE_FROM_CPU */
 #include <ucp/core/ucp_ep.inl>
+#include <ucp/core/ucp_rkey.h>
 #include <ucs/sys/sys.h>
 }
 
@@ -1143,6 +1144,27 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_memhs_inconsistent_mem_info,
     expect_sgl_put_invalid_param_ctx(
             ctx, LOCAL_MASK_DEFAULT | UCP_DT_LOCAL_SGL_FIELD_MEMHS,
             REMOTE_MASK_DEFAULT, 2);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_rkeys_null,
+                     !ENABLE_PARAMS_CHECK) {
+    sgl_ctx ctx;
+    init_sgl_ctx(ctx, 2, 64);
+    ctx.rkeys[1] = NULL;
+    expect_sgl_put_invalid_param_ctx(ctx, LOCAL_MASK_DEFAULT,
+                                     REMOTE_MASK_DEFAULT, 2);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_rkeys_mismatched_cfg,
+                     !ENABLE_PARAMS_CHECK) {
+    sgl_ctx ctx;
+    init_sgl_ctx(ctx, 2, 64);
+
+    ucp_worker_cfg_index_t saved_cfg_index = ctx.rkeys[1]->cfg_index;
+    ctx.rkeys[1]->cfg_index = saved_cfg_index + 1;
+    expect_sgl_put_invalid_param_ctx(ctx, LOCAL_MASK_DEFAULT,
+                                     REMOTE_MASK_DEFAULT, 2);
+    ctx.rkeys[1]->cfg_index = saved_cfg_index;
 }
 
 UCS_TEST_P(test_ucp_rma_sgl, put_zero_count) {

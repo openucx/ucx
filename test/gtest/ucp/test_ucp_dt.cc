@@ -12,6 +12,7 @@
 extern "C" {
 #include <ucp/dt/dt.h>
 #include <ucp/dt/datatype_iter.inl>
+#include <ucp/core/ucp_rkey.h>
 }
 
 class test_ucp_dt_iov : public ucs::test {
@@ -301,11 +302,17 @@ protected:
         m_remote_addrs.resize(count);
         m_rkeys.resize(count);
 
+        m_dummy_rkey            = {};
+        m_dummy_rkey.cfg_index  = 0;
+#if ENABLE_PARAMS_CHECK
+        m_dummy_rkey.ep         = nullptr;
+#endif
+
         for (size_t i = 0; i < count; i++) {
             m_buffers[i]      = &m_buffers[i];
             m_lengths[i]      = (i + 1) * 64;
             m_remote_addrs[i] = 0x1000 + i * 0x100;
-            m_rkeys[i]        = nullptr;
+            m_rkeys[i]        = &m_dummy_rkey;
         }
 
         m_local = {};
@@ -339,6 +346,7 @@ private:
     std::vector<size_t>        m_lengths;
     std::vector<uint64_t>      m_remote_addrs;
     std::vector<ucp_rkey_h>    m_rkeys;
+    ucp_rkey_t                 m_dummy_rkey;
     ucp_dt_local_sgl_t         m_local;
     ucp_dt_remote_sgl_t        m_remote;
 

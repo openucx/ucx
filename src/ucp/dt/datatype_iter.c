@@ -329,6 +329,13 @@ ucs_status_t ucp_datatype_iter_sgl_init(ucp_context_h context,
         }
     }
 
+    if (ENABLE_PARAMS_CHECK && (count > 1)) {
+        status = ucp_dt_sgl_check_same_rkey_config(remote->rkeys, count);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
     return UCS_OK;
 }
 
