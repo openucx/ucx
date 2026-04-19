@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2020. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) Los Alamos National Security, LLC. 2019 ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -1942,6 +1942,8 @@ ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
     ucp_worker_h  worker = ep->worker;
     void          *request = NULL;
     ucp_request_t *close_req;
+
+    UCP_REQUEST_CHECK_PARAM(param);
 
     if ((ucp_request_param_flags(param) & UCP_EP_CLOSE_FLAG_FORCE) &&
         !ucp_ep_config_err_handling_enabled(ep)) {

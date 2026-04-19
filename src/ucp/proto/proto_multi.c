@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -239,6 +239,8 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     uint32_t weight_sum;
     ucs_status_t status;
     int fixed_first_lane;
+    uct_iface_attr_v2_t iface_attr_v2;
+    ucp_rsc_index_t rsc_index;
 
     ucs_assert(params->max_lanes <= UCP_PROTO_MAX_LANES);
 
@@ -260,8 +262,8 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     /* Find first lane */
     num_lanes = ucp_proto_common_find_lanes(
             &params->super.super, params->super.flags, params->first.lane_type,
-            params->first.tl_cap_flags, 1, 0, ucp_proto_common_filter_min_frag,
-            lanes);
+            params->first.tl_cap_flags, params->first.tl_v2_cap_flags,
+            1, 0, ucp_proto_common_filter_min_frag, lanes);
     if (num_lanes == 0) {
         ucs_trace("no lanes for %s",
                   ucp_proto_id_field(params->super.super.proto_id, name));
@@ -271,8 +273,9 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     /* Find rest of the lanes */
     num_lanes += ucp_proto_common_find_lanes(
             &params->super.super, params->super.flags, params->middle.lane_type,
-            params->middle.tl_cap_flags, UCP_PROTO_MAX_LANES - 1,
-            UCS_BIT(lanes[0]), ucp_proto_common_filter_min_frag, lanes + 1);
+            params->middle.tl_cap_flags, params->middle.tl_v2_cap_flags,
+            UCP_PROTO_MAX_LANES - 1, UCS_BIT(lanes[0]),
+            ucp_proto_common_filter_min_frag, lanes + 1);
 
     /* Get bandwidth of all lanes and max_bandwidth */
     max_bandwidth = 0;
@@ -461,6 +464,26 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
         mpriv->align_thresh   = ucs_max(mpriv->align_thresh, lpriv->opt_align);
         lpriv->flush_sys_dev_mask =
                 ucp_proto_multi_init_flush_sys_dev_mask(params, lane);
+
+        if ((params->first.tl_v2_cap_flags | params->middle.tl_v2_cap_flags) &
+            UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY) {
+            rsc_index = ucp_proto_common_get_rsc_index(&params->super.super,
+                                                       lane);
+            iface_attr_v2.field_mask =
+                    UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT;
+            status                   = uct_iface_query_v2(
+                    ucp_worker_iface(params->super.super.worker,
+                                     rsc_index)->iface,
+                    &iface_attr_v2);
+            if (status != UCS_OK) {
+                return status;
+            }
+
+            lpriv->max_put_sgl_zcopy_count =
+                    iface_attr_v2.max_put_sgl_zcopy_count;
+        } else {
+            lpriv->max_put_sgl_zcopy_count = 0;
+        }
     }
     ucs_assert(mpriv->num_lanes == ucs_popcount(selection.lane_map));
 

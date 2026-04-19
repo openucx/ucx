@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2021. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2021-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -9,6 +9,7 @@
 #endif
 
 #include "datatype_iter.inl"
+#include "dt_sgl.h"
 
 
 #define ucp_datatype_iter_iov_for_each(_iov_index, _length, _dt_iter) \
@@ -282,6 +283,136 @@ size_t ucp_datatype_iter_iov_next_iov(const ucp_datatype_iter_t *dt_iter,
     return dst_iov_index;
 }
 
+ucs_status_t ucp_datatype_iter_sgl_init(ucp_context_h context,
+                                        ucp_datatype_iter_t *dt_iter,
+                                        const ucp_dt_local_sgl_t *local,
+                                        const ucp_dt_remote_sgl_t *remote,
+                                        size_t count,
+                                        const ucp_request_param_t *param)
+{
+    ucs_status_t status;
+
+    /* For Coverity */
+    ucs_assert(remote != NULL);
+
+    dt_iter->dt_class              = UCP_DATATYPE_SGL;
+    dt_iter->length                = count;
+    dt_iter->offset                = 0;
+    dt_iter->type.sgl.buffers      = local->buffers;
+    dt_iter->type.sgl.lengths      = local->lengths;
+    dt_iter->type.sgl.remote_addrs = remote->remote_addrs;
+    dt_iter->type.sgl.rkeys        = remote->rkeys;
+
+    if (ucs_unlikely(count == 0)) {
+        dt_iter->type.sgl.memhs = NULL;
+        ucp_memory_info_set_host(&dt_iter->mem_info);
+    } else if (local->field_mask & UCP_DT_LOCAL_SGL_FIELD_MEMHS) {
+        ucs_assertv(ucp_memh_is_user_memh(local->memhs[0]), "memh=%p",
+                    local->memhs[0]);
+        dt_iter->type.sgl.memhs = (ucp_mem_h*)local->memhs;
+
+        status = ucp_datatype_iter_init_mem_info_from_user_memh(dt_iter,
+                                                                local->memhs[0]);
+        if (status != UCS_OK) {
+            return status;
+        }
+    } else {
+        dt_iter->type.sgl.memhs = NULL;
+        ucp_datatype_iter_detect_mem_info(context, local->buffers[0],
+                                          local->lengths[0], dt_iter, param);
+        if (ENABLE_PARAMS_CHECK && (count > 1)) {
+            status = ucp_dt_sgl_check_same_mem_info(context, local, count,
+                                                    &dt_iter->mem_info);
+            if (status != UCS_OK) {
+                return status;
+            }
+        }
+    }
+
+    if (ENABLE_PARAMS_CHECK && (count > 1)) {
+        status = ucp_dt_sgl_check_same_rkey_config(remote->rkeys, count);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    return UCS_OK;
+}
+
+ucs_status_t ucp_datatype_iter_sgl_mem_reg(ucp_context_h context,
+                                           ucp_datatype_iter_t *dt_iter,
+                                           ucp_md_map_t md_map,
+                                           unsigned uct_flags)
+{
+    size_t count = dt_iter->length;
+    ucs_status_t status;
+    ucp_mem_h *memhs;
+    size_t i;
+
+    if ((md_map == 0) || (dt_iter->type.sgl.memhs != NULL)) {
+        return UCS_OK;
+    }
+
+    memhs = ucs_calloc(count, sizeof(*memhs), "dt_sgl_memh");
+    if (memhs == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    for (i = 0; i < count; ++i) {
+        status = ucp_datatype_iter_mem_reg_single(
+                context, dt_iter->type.sgl.buffers[i],
+                dt_iter->type.sgl.lengths[i], dt_iter->mem_info.type,
+                md_map, uct_flags, &memhs[i]);
+        if (status != UCS_OK) {
+            while (i-- > 0) {
+                ucp_datatype_iter_mem_dereg_single(&memhs[i]);
+            }
+            ucs_free(memhs);
+            return status;
+        }
+    }
+
+    dt_iter->type.sgl.memhs = memhs;
+    return UCS_OK;
+}
+
+void ucp_datatype_iter_sgl_mem_dereg(ucp_datatype_iter_t *dt_iter)
+{
+    size_t count = dt_iter->length;
+    size_t i;
+
+    ucs_assert(dt_iter->type.sgl.memhs != NULL);
+    for (i = 0; i < count; ++i) {
+        ucp_datatype_iter_mem_dereg_single(&dt_iter->type.sgl.memhs[i]);
+    }
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_datatype_iter_sgl_owns_memhs(const ucp_datatype_iter_t *dt_iter)
+{
+    return (dt_iter->type.sgl.memhs != NULL) &&
+           !ucp_memh_is_user_memh(dt_iter->type.sgl.memhs[0]);
+}
+
+void ucp_datatype_iter_sgl_cleanup(ucp_datatype_iter_t *dt_iter, int dereg)
+{
+    size_t i;
+
+    if (!ucp_datatype_iter_sgl_owns_memhs(dt_iter)) {
+        return;
+    }
+
+    if (dereg) {
+        ucp_datatype_iter_sgl_mem_dereg(dt_iter);
+    } else if (UCS_ENABLE_ASSERT) {
+        for (i = 0; i < dt_iter->length; ++i) {
+            ucp_datatatype_iter_memh_cleanup_check(dt_iter->type.sgl.memhs[i]);
+        }
+    }
+
+    ucs_free(dt_iter->type.sgl.memhs);
+}
+
 void ucp_datatype_iter_str(const ucp_datatype_iter_t *dt_iter,
                            ucs_string_buffer_t *strb)
 {
@@ -341,7 +472,11 @@ int ucp_datatype_iter_is_user_memh_valid(const ucp_datatype_iter_t *dt_iter,
                                          const ucp_mem_h memh)
 {
     UCS_STRING_BUFFER_ONSTACK(err_msg, 256);
+    ucp_mem_h err_memh = memh;
+    ucp_memory_info_t cur, ref;
+    ucp_mem_h sgl_memh;
     size_t iov_count;
+    size_t i;
 
     if (memh == NULL) {
         ucs_error("got NULL memory handle");
@@ -365,6 +500,33 @@ int ucp_datatype_iter_is_user_memh_valid(const ucp_datatype_iter_t *dt_iter,
             goto err_memh_mismatch;
         }
         break;
+    case UCP_DATATYPE_SGL:
+        ref = ucp_memory_info_from_memh(memh);
+        for (i = 0; i < dt_iter->length; ++i) {
+            sgl_memh = dt_iter->type.sgl.memhs[i];
+            if (sgl_memh == NULL) {
+                ucs_error("sgl[%zu]: got NULL memory handle", i);
+                return 0;
+            }
+
+            if (!ucp_memh_is_buffer_in_range(sgl_memh,
+                                             dt_iter->type.sgl.buffers[i],
+                                             dt_iter->type.sgl.lengths[i])) {
+                err_memh = sgl_memh;
+                ucs_string_buffer_appendf(&err_msg,
+                                          "sgl[%zu] [buffer %p length %zu]",
+                                          i, dt_iter->type.sgl.buffers[i],
+                                          dt_iter->type.sgl.lengths[i]);
+                goto err_memh_mismatch;
+            }
+
+            cur = ucp_memory_info_from_memh(sgl_memh);
+            if (ucp_dt_mem_info_verify("sgl", i, &cur, &ref,
+                                       dt_iter->length) != UCS_OK) {
+                return 0;
+            }
+        }
+        break;
     default:
         ucs_error("unsupported memory handle datatype: [%s]",
                   ucp_datatype_class_names[dt_iter->dt_class]);
@@ -375,7 +537,7 @@ int ucp_datatype_iter_is_user_memh_valid(const ucp_datatype_iter_t *dt_iter,
 
 err_memh_mismatch:
     ucs_error("mismatched memory handle %p [address %p length %zu] for %s",
-              memh, ucp_memh_address(memh), ucp_memh_length(memh),
+              err_memh, ucp_memh_address(err_memh), ucp_memh_length(err_memh),
               ucs_string_buffer_cstr(&err_msg));
     return 0;
 }

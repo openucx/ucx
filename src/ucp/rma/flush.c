@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2017. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -554,6 +554,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_ep_flush_nbx, (ep, param),
 {
     void *request;
 
+    UCP_REQUEST_CHECK_PARAM(param);
+
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
     request = ucp_ep_flush_internal(ep, 0, param, NULL, ucp_ep_flushed_callback,
@@ -760,6 +762,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_worker_flush_nbx, (worker, param),
                  ucp_worker_h worker, const ucp_request_param_t *param)
 {
     void *request;
+
+    UCP_REQUEST_CHECK_PARAM(param);
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 

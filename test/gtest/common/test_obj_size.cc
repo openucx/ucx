@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -57,7 +57,7 @@ UCS_TEST_F(test_obj_size, size) {
     EXPECTED_SIZE(ucp_rkey_t, 40);
 #endif
     /* TODO reduce request size to 240 or less after removing old protocols state */
-    EXPECTED_SIZE(ucp_request_t, 272);
+    EXPECTED_SIZE(ucp_request_t, 280);
     EXPECTED_SIZE(ucp_recv_desc_t, 48);
     EXPECTED_SIZE(ucp_mem_t, 160);
     EXPECTED_SIZE(uct_ep_t, 8);

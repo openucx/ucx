@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -186,23 +186,43 @@ UCS_PTR_MAP_IMPL(request, 0);
     }
 
 
+#define UCP_REQUEST_CHECK_PARAM_ALLOW_REMOTE(_param) \
+    do { \
+        if (ENABLE_PARAMS_CHECK) { \
+            if (((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_MEMORY_TYPE) && \
+                ((_param)->memory_type > UCS_MEMORY_TYPE_LAST)) { \
+                ucs_error("invalid memory type parameter: %d", \
+                          (_param)->memory_type); \
+                return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
+            } \
+            \
+            if (ucs_test_all_flags((_param)->op_attr_mask, \
+                                   (UCP_OP_ATTR_FLAG_FAST_CMPL | \
+                                    UCP_OP_ATTR_FLAG_MULTI_SEND))) { \
+                ucs_error("UCP_OP_ATTR_FLAG_FAST_CMPL and " \
+                          "UCP_OP_ATTR_FLAG_MULTI_SEND are mutually exclusive"); \
+                return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
+            } \
+        } \
+    } while (0)
+
+
 #define UCP_REQUEST_CHECK_PARAM(_param) \
-    if (ENABLE_PARAMS_CHECK) { \
-        if (((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_MEMORY_TYPE) && \
-            ((_param)->memory_type > UCS_MEMORY_TYPE_LAST)) { \
-            ucs_error("invalid memory type parameter: %d", \
-                      (_param)->memory_type); \
+    do { \
+        UCP_REQUEST_CHECK_PARAM_ALLOW_REMOTE(_param); \
+        if (ENABLE_PARAMS_CHECK && \
+            (((_param)->op_attr_mask & \
+              (UCP_OP_ATTR_FIELD_REMOTE | \
+               UCP_OP_ATTR_FIELD_REMOTE_DATATYPE | \
+               UCP_OP_ATTR_FIELD_REMOTE_COUNT)) || \
+             (((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_DATATYPE) && \
+              (((_param)->datatype & UCP_DATATYPE_CLASS_MASK) == \
+               UCP_DATATYPE_SGL)))) { \
+            ucs_error("SGL datatype and remote descriptor parameters are " \
+                      "only supported for ucp_put_nbx"); \
             return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
         } \
-        \
-        if (ucs_test_all_flags((_param)->op_attr_mask, \
-                               (UCP_OP_ATTR_FLAG_FAST_CMPL | \
-                                UCP_OP_ATTR_FLAG_MULTI_SEND))) { \
-            ucs_error("UCP_OP_ATTR_FLAG_FAST_CMPL and " \
-                      "UCP_OP_ATTR_FLAG_MULTI_SEND are mutually exclusive"); \
-            return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
-        } \
-    }
+    } while (0)
 
 
 #if UCS_ENABLE_ASSERT
