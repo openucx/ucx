@@ -27,6 +27,14 @@
 #define UCP_DT_MASK_CONTIG_IOV \
     (UCS_BIT(UCP_DATATYPE_CONTIG) | UCS_BIT(UCP_DATATYPE_IOV))
 
+/*
+ * dt_mask argument which contains contiguous, iov and generic datatypes
+ */
+#define UCP_PROTO_DT_MASK_DEFAULT \
+    (UCS_BIT(UCP_DATATYPE_CONTIG) | \
+     UCS_BIT(UCP_DATATYPE_IOV)    | \
+     UCS_BIT(UCP_DATATYPE_GENERIC))
+
 
 /*
  * Iterator on a datatype, used to produce data from send buffer or consume data

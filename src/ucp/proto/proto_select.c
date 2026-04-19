@@ -218,10 +218,17 @@ ucp_proto_select_init_protocols(ucp_worker_h worker,
     ucs_array_init_dynamic(&proto_init->priv_buf);
 
     ucs_for_each_bit(init_params.proto_id, worker->context->proto_bitmap) {
+        const ucp_proto_t *proto = ucp_protocols[init_params.proto_id];
+
         ucs_assert(init_params.proto_id < ucp_protocols_count()); /* Coverity */
-        ucs_trace("probing %s", ucp_proto_id_field(init_params.proto_id, name));
+        ucs_assertv(proto->dt_mask != 0, "%s: dt_mask must be set", proto->name);
+        if (!(UCS_BIT(select_param->dt_class) & proto->dt_mask)) {
+            continue;
+        }
+
+        ucs_trace("probing %s", proto->name);
         ucs_log_indent(1);
-        ucp_proto_id_call(init_params.proto_id, probe, &init_params);
+        proto->probe(&init_params);
         ucs_log_indent(-1);
     }
 

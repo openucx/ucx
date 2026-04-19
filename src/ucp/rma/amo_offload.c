@@ -182,8 +182,7 @@ static void ucp_proto_amo_probe(const ucp_proto_init_params_t *init_params,
         .tl_cap_flags        = 0
     };
 
-    if ((init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
-        !ucp_proto_init_check_op(init_params, UCS_BIT(op_id))) {
+    if (!ucp_proto_init_check_op(init_params, UCS_BIT(op_id))) {
         return;
     }
 
@@ -268,6 +267,7 @@ static void ucp_proto_amo_query(const ucp_proto_query_params_t *params,
     ucp_proto_t ucp_amo##_bits##_##_id##_proto = { \
         .name     = "amo" #_bits "/" _name, \
         .desc     = NULL, \
+        .dt_mask  = UCS_BIT(UCP_DATATYPE_CONTIG), \
         .probe    = ucp_proto_amo##_bits##_##_id##_probe, \
         .query    = ucp_proto_amo##_bits##_##_id##_query, \
         .progress = {ucp_proto_amo##_bits##_id##_progress}, \

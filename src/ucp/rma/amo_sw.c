@@ -462,8 +462,7 @@ static ucs_status_t ucp_proto_amo_sw_progress_post(uct_pending_req_t *self)
 static void
 ucp_proto_amo_sw_post_probe(const ucp_proto_init_params_t *init_params)
 {
-    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_AMO_POST)) ||
-        (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG)) {
+    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_AMO_POST))) {
         return;
     }
 
@@ -474,6 +473,7 @@ ucp_proto_t ucp_get_amo_post_proto = {
     .name     = "amo/post/sw",
     .desc     = UCP_PROTO_RMA_EMULATION_DESC,
     .flags    = 0,
+    .dt_mask  = UCS_BIT(UCP_DATATYPE_CONTIG),
     .probe    = ucp_proto_amo_sw_post_probe,
     .query    = ucp_proto_single_query,
     .progress = {ucp_proto_amo_sw_progress_post},
@@ -491,8 +491,7 @@ ucp_proto_amo_sw_fetch_probe(const ucp_proto_init_params_t *init_params)
 {
     if (!ucp_proto_init_check_op(init_params,
                                  UCS_BIT(UCP_OP_ID_AMO_FETCH) |
-                                 UCS_BIT(UCP_OP_ID_AMO_CSWAP)) ||
-        (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG)) {
+                                 UCS_BIT(UCP_OP_ID_AMO_CSWAP))) {
         return;
     }
 
@@ -503,6 +502,7 @@ ucp_proto_t ucp_get_amo_fetch_proto = {
     .name     = "amo/fetch/sw",
     .desc     = UCP_PROTO_RMA_EMULATION_DESC,
     .flags    = 0,
+    .dt_mask  = UCS_BIT(UCP_DATATYPE_CONTIG),
     .probe    = ucp_proto_amo_sw_fetch_probe,
     .query    = ucp_proto_single_query,
     .progress = {ucp_proto_amo_sw_progress_fetch},

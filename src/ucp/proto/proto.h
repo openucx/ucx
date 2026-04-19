@@ -201,6 +201,11 @@ struct ucp_proto {
     const char               *desc; /* Protocol description */
     unsigned                 flags; /* Protocol flags for special handling */
 
+    /* Bitmap of UCS_BIT(UCP_DATATYPE_xxx) classes this protocol supports.
+     * Probe is skipped for any other dt_class. Must be non-zero.
+     */
+    unsigned                 dt_mask;
+
     /* Probe and add protocol instances */
     ucp_proto_probe_func_t   probe;
 

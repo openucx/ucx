@@ -118,8 +118,7 @@ ucp_proto_get_offload_bcopy_probe(const ucp_proto_init_params_t *init_params)
         .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID
     };
 
-    if ((init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
-        !ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_GET))) {
+    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_GET))) {
         return;
     }
 
@@ -143,6 +142,7 @@ ucp_proto_t ucp_get_offload_bcopy_proto = {
     .name     = "get/bcopy",
     .desc     = UCP_PROTO_COPY_OUT_DESC,
     .flags    = 0,
+    .dt_mask  = UCS_BIT(UCP_DATATYPE_CONTIG),
     .probe    = ucp_proto_get_offload_bcopy_probe,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_get_offload_bcopy_progress},
@@ -246,6 +246,7 @@ ucp_proto_t ucp_get_offload_zcopy_proto = {
     .name     = "get/zcopy",
     .desc     = UCP_PROTO_ZCOPY_DESC,
     .flags    = 0,
+    .dt_mask  = UCP_DT_MASK_CONTIG_IOV,
     .probe    = ucp_proto_get_offload_zcopy_probe,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_get_offload_zcopy_progress},

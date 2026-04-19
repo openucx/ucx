@@ -73,6 +73,7 @@ ucp_proto_t ucp_am_rndv_proto = {
     .name     = "am/rndv",
     .desc     = NULL,
     .flags    = 0,
+    .dt_mask  = UCP_PROTO_DT_MASK_DEFAULT,
     .probe    = ucp_am_rndv_rts_probe,
     .query    = ucp_proto_rndv_rts_query,
     .progress = {ucp_am_rndv_proto_progress},

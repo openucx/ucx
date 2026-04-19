@@ -64,6 +64,7 @@ ucp_proto_t ucp_rndv_ats_proto = {
     .name     = "rndv/ats",
     .desc     = "no data fetch",
     .flags    = 0,
+    .dt_mask  = UCP_PROTO_DT_MASK_DEFAULT,
     .probe    = ucp_proto_rndv_ats_probe,
     .query    = ucp_proto_rndv_ats_query,
     .progress = {ucp_proto_rndv_ats_progress},

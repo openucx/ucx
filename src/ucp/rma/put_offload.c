@@ -101,6 +101,7 @@ ucp_proto_t ucp_put_offload_short_proto = {
     .name     = "put/offload/short",
     .desc     = UCP_PROTO_SHORT_DESC,
     .flags    = UCP_PROTO_FLAG_PUT_SHORT,
+    .dt_mask  = UCS_BIT(UCP_DATATYPE_CONTIG),
     .probe    = ucp_proto_put_offload_short_probe,
     .query    = ucp_proto_single_query,
     .progress = {ucp_proto_put_offload_short_progress},
@@ -224,8 +225,7 @@ ucp_proto_put_offload_bcopy_probe(const ucp_proto_init_params_t *init_params)
         .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID
     };
 
-    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT)) ||
-        (init_params->select_param->dt_class == UCP_DATATYPE_SGL)) {
+    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT))) {
         return;
     }
 
@@ -236,6 +236,7 @@ ucp_proto_t ucp_put_offload_bcopy_proto = {
     .name     = "put/offload/bcopy",
     .desc     = UCP_PROTO_COPY_IN_DESC,
     .flags    = 0,
+    .dt_mask  = UCP_PROTO_DT_MASK_DEFAULT,
     .probe    = ucp_proto_put_offload_bcopy_probe,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_put_offload_bcopy_progress},
@@ -325,8 +326,7 @@ ucp_proto_put_offload_zcopy_probe(const ucp_proto_init_params_t *init_params)
         .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID,
     };
 
-    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT)) ||
-        (init_params->select_param->dt_class == UCP_DATATYPE_SGL)) {
+    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT))) {
         return;
     }
 
@@ -337,6 +337,7 @@ ucp_proto_t ucp_put_offload_zcopy_proto = {
     .name     = "put/offload/zcopy",
     .desc     = UCP_PROTO_ZCOPY_DESC,
     .flags    = 0,
+    .dt_mask  = UCP_DT_MASK_CONTIG_IOV,
     .probe    = ucp_proto_put_offload_zcopy_probe,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_put_offload_zcopy_progress},
@@ -385,8 +386,7 @@ ucp_proto_put_sgl_offload_probe(const ucp_proto_init_params_t *init_params)
         .opt_align_offs          = UCP_PROTO_COMMON_OFFSET_INVALID,
     };
 
-    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT)) ||
-        (init_params->select_param->dt_class != UCP_DATATYPE_SGL)) {
+    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT))) {
         return;
     }
 
@@ -479,6 +479,7 @@ ucp_proto_t ucp_put_sgl_offload_proto = {
     .name     = "put/sgl/offload",
     .desc     = "sgl",
     .flags    = 0,
+    .dt_mask  = UCS_BIT(UCP_DATATYPE_SGL),
     .probe    = ucp_proto_put_sgl_offload_probe,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_put_sgl_offload_progress},
