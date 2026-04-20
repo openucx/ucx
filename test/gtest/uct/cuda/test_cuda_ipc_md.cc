@@ -311,9 +311,10 @@ protected:
         region->refcount++;
     }
 
-    void destroy_region(uct_cuda_ipc_cache_region_t *region) {
+    void destroy_region(uct_cuda_ipc_cache_region_t *region)
+    {
         ucs_status_t status = ucs_pgtable_remove(&m_cache->pgtable,
-                                                  &region->super);
+                                                 &region->super);
         ASSERT_EQ(UCS_OK, status);
 
         ASSERT_TRUE(region->in_lru);
@@ -538,10 +539,9 @@ UCS_TEST_F(test_cuda_ipc_cache_lru, unlimited) {
 }
 
 UCS_TEST_F(test_cuda_ipc_cache_lru, stale_destroy_while_in_use) {
-    /* Regression test for Bug A: evict_lru must not pull in-use regions off
-     * the LRU. Otherwise a subsequent destroy (e.g. stale-buffer_id branch
-     * in map_memhandle) hits an assertion / list corruption because the
-     * region is alive in the pgtable but not on the LRU. */
+    /* Check that evict_lru does not pull in-use regions off
+     * the LRU. This could cause a failure if region is destroyed
+     * while not in LRU. */
     create_cache(0 /* force eviction on every insert */, SIZE_MAX);
 
     uct_cuda_ipc_cache_region_t *r1 = insert_region(0);
