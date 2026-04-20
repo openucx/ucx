@@ -1094,11 +1094,13 @@ ucp_wireup_connect_lane_to_iface(ucp_ep_h ep, ucp_lane_index_t lane,
     uct_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE      |
                                UCT_EP_PARAM_FIELD_DEV_ADDR   |
                                UCT_EP_PARAM_FIELD_IFACE_ADDR |
-                               UCT_EP_PARAM_FIELD_PATH_INDEX;
+                               UCT_EP_PARAM_FIELD_PATH_INDEX |
+                               UCT_EP_PARAM_FIELD_IFACE_ADDR_LENGTH;
     uct_ep_params.iface      = wiface->iface;
     uct_ep_params.dev_addr   = address->dev_addr;
     uct_ep_params.iface_addr = address->iface_addr;
     uct_ep_params.path_index = path_index;
+    uct_ep_params.iface_addr_length = address->iface_addr_len;
     status = uct_ep_create(&uct_ep_params, &uct_ep);
     if (status != UCS_OK) {
         /* coverity[leaked_storage] */

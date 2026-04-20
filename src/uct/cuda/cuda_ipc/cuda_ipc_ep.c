@@ -27,6 +27,16 @@
 #define UCT_CUDA_IPC_PUT 0
 #define UCT_CUDA_IPC_GET 1
 
+static ucs_sys_ns_t 
+uct_cuda_ipc_ep_get_remote_pid_ns(const uct_ep_params_t *params)
+{
+    if ((params->field_mask & UCT_EP_PARAM_FIELD_IFACE_ADDR_LENGTH) &&
+        (params->iface_addr_length == sizeof(uct_iface_address_pid_ns_t))) {
+        return ((const uct_iface_address_pid_ns_t*)params->iface_addr)->pid_ns;
+    }
+
+    return ucs_sys_get_default_ns(UCS_SYS_NS_TYPE_PID);
+}
 
 static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_ep_t, const uct_ep_params_t *params)
 {
@@ -36,8 +46,8 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_ep_t, const uct_ep_params_t *params)
     UCT_EP_PARAMS_CHECK_DEV_IFACE_ADDRS(params);
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
 
-    self->remote_pid    = uct_iface_address_pid_ns_get_pid(params->iface_addr);
-    self->remote_pid_ns = uct_iface_address_pid_ns_get_ns(params->iface_addr);
+    self->remote_pid    = *(const pid_t*)params->iface_addr;
+    self->remote_pid_ns = uct_cuda_ipc_ep_get_remote_pid_ns(params);
     self->device_ep     = NULL;
     return UCS_OK;
 }
@@ -66,8 +76,7 @@ int uct_cuda_ipc_ep_is_connected(const uct_ep_h tl_ep,
         return 0;
     }
 
-    return ep->remote_pid ==
-           uct_iface_address_pid_ns_get_pid(params->iface_addr);
+    return ep->remote_pid == *(pid_t*)params->iface_addr;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_ipc_ctx_rsc_get(

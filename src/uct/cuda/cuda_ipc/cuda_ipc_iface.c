@@ -101,6 +101,12 @@ ucs_status_t uct_cuda_ipc_iface_get_device_address(uct_iface_t *tl_iface,
     return UCS_OK;
 }
 
+static ucs_status_t uct_cuda_ipc_iface_get_address(uct_iface_h tl_iface,
+                                                   uct_iface_addr_t *iface_addr)
+{
+    return uct_iface_get_address_pid_ns(tl_iface, iface_addr, 0);
+}
+
 static int
 uct_cuda_ipc_iface_mnnvl_supported(uct_cuda_ipc_md_t *md,
                                    const uct_cuda_ipc_device_addr_t *dev_addr,
@@ -336,7 +342,7 @@ static uct_iface_ops_t uct_cuda_ipc_iface_ops = {
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_ipc_iface_t),
     .iface_query              = uct_cuda_ipc_iface_query,
     .iface_get_device_address = uct_cuda_ipc_iface_get_device_address,
-    .iface_get_address        = uct_iface_get_address_pid_ns,
+    .iface_get_address        = uct_cuda_ipc_iface_get_address,
     .iface_is_reachable       = uct_base_iface_is_reachable,
 };
 
