@@ -11,9 +11,9 @@
 
 #include <unistd.h>
 
-ucs_status_t
-uct_iface_get_address_pid_ns(uct_iface_t *iface, uct_iface_addr_t *iface_addr,
-                             unsigned long flags)
+ucs_status_t uct_iface_get_address_pid_ns(uct_iface_t *iface,
+                                          uct_iface_addr_t *iface_addr,
+                                          unsigned long flags)
 {
     uct_iface_address_pid_ns_t *iface_address_pid_ns;
 

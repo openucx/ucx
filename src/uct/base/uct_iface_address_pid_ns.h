@@ -26,9 +26,9 @@ typedef struct {
 /**
   * Pack PID and PID namespace into the interface address.
   */
- ucs_status_t
- uct_iface_get_address_pid_ns(uct_iface_t *iface, uct_iface_addr_t *iface_addr,
-                              unsigned long flags);
+ucs_status_t uct_iface_get_address_pid_ns(uct_iface_t *iface,
+                                          uct_iface_addr_t *iface_addr,
+                                          unsigned long flags);
 
 
 /**

@@ -27,7 +27,7 @@
 #define UCT_CUDA_IPC_PUT 0
 #define UCT_CUDA_IPC_GET 1
 
-static ucs_sys_ns_t 
+static ucs_sys_ns_t
 uct_cuda_ipc_ep_get_remote_pid_ns(const uct_ep_params_t *params)
 {
     if ((params->field_mask & UCT_EP_PARAM_FIELD_IFACE_ADDR_LENGTH) &&
