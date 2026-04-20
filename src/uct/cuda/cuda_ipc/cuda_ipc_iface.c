@@ -11,7 +11,6 @@
 #include "cuda_ipc_iface.h"
 #include "cuda_ipc_md.h"
 #include "cuda_ipc_ep.h"
-#include "uct/base/uct_iface_address_pid_ns.h"
 
 #include <uct/cuda/base/cuda_iface.h>
 #include <uct/cuda/base/cuda_md.h>
@@ -104,7 +103,16 @@ ucs_status_t uct_cuda_ipc_iface_get_device_address(uct_iface_t *tl_iface,
 static ucs_status_t uct_cuda_ipc_iface_get_address(uct_iface_h tl_iface,
                                                    uct_iface_addr_t *iface_addr)
 {
-    return uct_iface_get_address_pid_ns(tl_iface, iface_addr, 0);
+    uct_cuda_ipc_iface_address_pid_ns_t *iface_address_pid_ns;
+
+    iface_address_pid_ns = (uct_cuda_ipc_iface_address_pid_ns_t*)iface_addr;
+
+    iface_address_pid_ns->super.pid = getpid();
+    if (!ucs_sys_ns_is_default(UCS_SYS_NS_TYPE_PID)) {
+        iface_address_pid_ns->pid_ns = ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID);
+    }
+
+    return UCS_OK;
 }
 
 static int
@@ -256,7 +264,10 @@ static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
 
     uct_base_iface_query(&iface->super.super, iface_attr);
 
-    iface_attr->iface_addr_len          = uct_iface_address_pid_ns_length();
+    iface_attr->iface_addr_len =
+            ucs_sys_ns_is_default(UCS_SYS_NS_TYPE_PID) ?
+                    sizeof(uct_cuda_ipc_iface_address_pid_t) :
+                    sizeof(uct_cuda_ipc_iface_address_pid_ns_t);
     iface_attr->device_addr_len         = md->enable_mnnvl ?
                                           sizeof(uct_cuda_ipc_device_addr_t) :
                                           sizeof(uint64_t);

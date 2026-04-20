@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -58,5 +58,16 @@ typedef struct {
     uct_cuda_ctx_rsc_t    super;
     uct_cuda_queue_desc_t queue_desc[UCT_CUDA_IPC_MAX_PEERS];
 } uct_cuda_ipc_ctx_rsc_t;
+
+
+typedef struct {
+    pid_t pid;
+} uct_cuda_ipc_iface_address_pid_t;
+
+
+typedef struct {
+    uct_cuda_ipc_iface_address_pid_t super;
+    ucs_sys_ns_t                     pid_ns;
+} UCS_S_PACKED uct_cuda_ipc_iface_address_pid_ns_t;
 
 #endif

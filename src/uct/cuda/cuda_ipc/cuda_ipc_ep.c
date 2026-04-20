@@ -15,7 +15,6 @@
 #include "cuda_ipc_iface.h"
 #include "cuda_ipc_md.h"
 #include "cuda_ipc.inl"
-#include "uct/base/uct_iface_address_pid_ns.h"
 
 #include <uct/base/uct_log.h>
 #include <uct/base/uct_iov.inl>
@@ -30,9 +29,14 @@
 static ucs_sys_ns_t
 uct_cuda_ipc_ep_get_remote_pid_ns(const uct_ep_params_t *params)
 {
+    const uct_cuda_ipc_iface_address_pid_ns_t *iface_address_pid_ns;
+
     if ((params->field_mask & UCT_EP_PARAM_FIELD_IFACE_ADDR_LENGTH) &&
-        (params->iface_addr_length == sizeof(uct_iface_address_pid_ns_t))) {
-        return ((const uct_iface_address_pid_ns_t*)params->iface_addr)->pid_ns;
+        (params->iface_addr_length ==
+         sizeof(uct_cuda_ipc_iface_address_pid_ns_t))) {
+        iface_address_pid_ns = (const uct_cuda_ipc_iface_address_pid_ns_t*)
+                                       params->iface_addr;
+        return iface_address_pid_ns->pid_ns;
     }
 
     return ucs_sys_get_default_ns(UCS_SYS_NS_TYPE_PID);
