@@ -403,14 +403,8 @@ static ucs_status_t ucp_am_eager_multi_zcopy_psn_init(ucp_request_t *req)
         return status;
     }
 
-    /**
-     * At least 1 non-failed AM lane must be available.
-     */
-    if (ucp_ep_get_am_lane(req->send.ep) == UCP_NULL_LANE) {
-        ucs_trace_req("req %p: ep %p does not have any AM lanes",
-                      req, req->send.ep);
-        return UCS_ERR_UNREACHABLE;
-    }
+    ucs_assertv(ucp_ep_get_am_lane(req->send.ep) != UCP_NULL_LANE,
+                "req %p: ep %p does not have any AM lanes", req, req->send.ep);
 
     return ucp_am_eager_multi_zcopy_init(req);
 }
@@ -447,8 +441,8 @@ static ucs_status_t ucp_am_eager_multi_zcopy_psn_reset(ucp_request_t *req)
         return status;
     }
 
-    return (ucp_ep_get_am_lane(req->send.ep) == UCP_NULL_LANE) ?
-           UCS_ERR_UNREACHABLE : UCS_OK;
+    ucs_assert(ucp_ep_get_am_lane(req->send.ep) != UCP_NULL_LANE);
+    return UCS_OK;
 }
 
 ucp_proto_t ucp_am_eager_multi_zcopy_psn_proto = {

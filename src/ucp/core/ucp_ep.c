@@ -1740,8 +1740,9 @@ ucp_ep_failover_reconfig(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,
     status = ucp_ep_reconfig_internal(ucp_ep, failed_lanes);
     if (status != UCS_OK) {
         ucs_assertv(ucp_ep->cfg_index == old_cfg_index,
-                    "ep %p: cfg_index %u -> %u after reconfiguration error %s", ucp_ep, old_cfg_index,
-                    ucp_ep->cfg_index, ucs_status_string(status));
+                    "ep %p: cfg_index %u -> %u after reconfiguration error %s",
+                    ucp_ep, old_cfg_index, ucp_ep->cfg_index,
+                    ucs_status_string(status));
         return status;
     }
 

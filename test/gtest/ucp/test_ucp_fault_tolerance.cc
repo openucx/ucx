@@ -223,14 +223,15 @@ protected:
                                         << ucs_status_string(status);
                 ASSERT_EQ(0, m_err_count) << "Error callback invoked " << m_err_count << " times";
             } else {
+                // The last lane is expected to fail
                 short_progress_loop();
-                size_t min_expected_err_count = 1;
                 if ((failure_side == FAILURE_SIDE_TARGET) &&
                     has_transport("dc_x")) {
-                    min_expected_err_count = 0;
+                    // DC transport is not able to detect failure of remote DCI since DC is a connect2iface transport.
+                    // This is a test limitation.
+                } else {
+                    ASSERT_EQ(1, m_err_count) << "Error callback invoked " << m_err_count << " times";
                 }
-                ASSERT_LE(min_expected_err_count, m_err_count)
-                        << "Error callback invoked " << m_err_count << " times";
             }
         }
 
@@ -350,7 +351,6 @@ private:
     }
 
     ucs_status_t do_am_send_and_wait(ucp_ep_h ep, size_t size, bool flush_after) {
-
         m_am_received = false;
 
         mem_buffer sbuf(size, UCS_MEMORY_TYPE_HOST);

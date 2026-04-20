@@ -75,7 +75,7 @@ ucp_am_eager_zcopy_pack_user_header(ucp_request_t *req)
         return UCS_ERR_NO_MEMORY;
     }
 
-    ucp_trace_req(req, "allocating AM header descriptor 0x%p", reg_desc);
+    ucp_trace_req(req, "allocating AM header descriptor %p", reg_desc);
     if (req->send.msg_proto.am.header.length != 0) {
         ucs_assert(req->send.msg_proto.am.header.ptr != NULL);
         ucp_am_pack_user_header(reg_desc + 1, req);
