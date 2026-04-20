@@ -238,7 +238,7 @@ static void uct_cuda_ipc_cache_evict_lru(uct_cuda_ipc_cache_t *cache)
         }
 
         if (region->refcount > 0) {
-            /* In-use region -- keep on LRU, revisit on next eviction pass.*/
+            /* In-use region -- keep on LRU, revisit on next eviction pass */
             continue;
         }
 
