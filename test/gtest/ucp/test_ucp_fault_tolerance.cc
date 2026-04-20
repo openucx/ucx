@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <random>
 #include <string>
+#include <vector>
 
 extern "C" {
 #include <ucp/core/ucp_ep.inl>
@@ -391,7 +392,6 @@ protected:
             short_progress_loop();
         } while (ucp_ep_get_failed_lanes(sender().ep(0, INJECTED_EP_INDEX)) != 0);
 
-        UCS_TEST_MESSAGE << "All lanes are operational";
         for (ucp_lane_index_t lane_idx = 0;
              lane_idx < ucp_ep_num_lanes(sender().ep(0, INJECTED_EP_INDEX));) {
             if (ucp_wireup_ep_test(ucp_ep_get_lane(sender().ep(0, INJECTED_EP_INDEX), lane_idx))) {
@@ -406,7 +406,7 @@ protected:
                                                   true);
         EXPECT_EQ(UCS_OK, status) << "AM operation returned status: " << ucs_status_string(status);
         ASSERT_EQ(0, m_err_count) << "Error callback invoked " << m_err_count << " times";
-        UCS_TEST_MESSAGE << "Success";
+        UCS_TEST_MESSAGE << "All lanes are operational";
     }
 
     void do_test(failure_side_t failure_side) {
@@ -573,7 +573,8 @@ UCS_TEST_P(test_ucp_fault_tolerance, target_failure, "MAX_EAGER_LANES=8")
 }
 
 UCS_TEST_P(test_ucp_fault_tolerance, target_failure_and_recovery,
-           "MAX_EAGER_LANES=8")
+           "MAX_EAGER_LANES=8", "KEEPALIVE_INTERVAL=100ms",
+           "RECOVERY_INTERVAL=100ms", "RECOVERY_RETRIES=100")
 {
     do_test(FAILURE_SIDE_TARGET);
 }
