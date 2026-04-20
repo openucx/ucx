@@ -37,6 +37,7 @@ enum {
     UCP_REQUEST_FLAG_COMPLETED             = UCS_BIT(0),
     UCP_REQUEST_FLAG_RELEASED              = UCS_BIT(1),
     UCP_REQUEST_FLAG_PROTO_SEND            = UCS_BIT(2),
+    UCP_REQUEST_FLAG_MSG_ID_SET            = UCS_BIT(3),
     UCP_REQUEST_FLAG_SYNC_LOCAL_COMPLETED  = UCS_BIT(4),
     UCP_REQUEST_FLAG_SYNC_REMOTE_COMPLETED = UCS_BIT(5),
     UCP_REQUEST_FLAG_CALLBACK              = UCS_BIT(6),
@@ -346,14 +347,22 @@ struct ucp_request {
                 } rkey_ptr;
 
                 struct {
-                    unsigned           uct_flags; /* Flags to pass to @ref uct_ep_flush */
-                    uint32_t           cmpl_sn;   /* Sequence number of the remote completion
-                                                     this request is waiting for */
+                    /* All lanes that are being flushed */
+                    ucp_lane_map_t     all_lanes;
+                    /* Which lanes flush has been started on */
+                    ucp_lane_map_t     started_lanes;
+                    /* Sequence number of the remote completion this request is
+                     * waiting for */
+                    uint32_t           cmpl_sn;
+                    /* Flags to pass to @ref uct_ep_flush */
+                    uint8_t            uct_flags;
+                    /* Originally requested UCT flush flags, used to restore
+                     * uct_flags on rewind after fast-forwarding */
+                    uint8_t            uct_flags_orig;
                     uint8_t            sw_started;
                     uint8_t            sw_done;
-                    uint8_t            num_lanes; /* How many lanes are being flushed */
-                    ucp_lane_map_t     started_lanes; /* Which lanes need were flushed */
-                    ucp_mem_flush_t    mem; /* Memory specific flushes */
+                    /* Memory specific flushes */
+                    ucp_mem_flush_t    mem;
                 } flush;
 
                 struct {

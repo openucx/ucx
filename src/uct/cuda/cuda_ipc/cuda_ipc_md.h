@@ -14,7 +14,7 @@
 #include <ucs/config/types.h>
 
 
-typedef enum uct_cuda_ipc_key_handle {
+typedef enum {
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_NO_IPC = 0,
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY, /* cudaMalloc memory */
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM, /* cuMemCreate memory */
@@ -47,14 +47,15 @@ typedef struct uct_cuda_ipc_md_handle {
  * @brief cuda ipc MD descriptor
  */
 typedef struct uct_cuda_ipc_md {
-    uct_md_t                 super;   /**< Domain info */
-    int                      enable_mnnvl; /**< Multi-node NVLINK support status */
+    uct_md_t                 super;             /**< Domain info */
+    int                      enable_mnnvl;      /**< Multi-node NVLINK support status */
 } uct_cuda_ipc_md_t;
 
 
-typedef struct uct_cuda_ipc_uuid_hash_key {
-    int     type;
-    CUuuid  uuid;
+typedef struct {
+    uint8_t type;     /**< uct_cuda_ipc_key_handle_t */
+    uint8_t is_local; /**< 1 if the key is local (PID+PID_NS), 0 otherwise */
+    CUuuid  uuid;     /**< GPU Device UUID */
 } uct_cuda_ipc_uuid_hash_key_t;
 
 
@@ -73,7 +74,8 @@ uct_cuda_ipc_uuid_equals(uct_cuda_ipc_uuid_hash_key_t key1,
     int64_t *a64 = (int64_t *)key1.uuid.bytes;
     int64_t *b64 = (int64_t *)key2.uuid.bytes;
 
-    return (key1.type == key2.type) && (a64[0] == b64[0]) && (a64[1] == b64[1]);
+    return (key1.type == key2.type) && (key1.is_local == key2.is_local) &&
+           (a64[0] == b64[0]) && (a64[1] == b64[1]);
 }
 
 
@@ -81,7 +83,7 @@ static UCS_F_ALWAYS_INLINE khint32_t
 uct_cuda_ipc_uuid_hash_func(uct_cuda_ipc_uuid_hash_key_t key)
 {
     int64_t *i64 = (int64_t *)key.uuid.bytes;
-    return kh_int64_hash_func(i64[0] ^ i64[1] ^ key.type);
+    return kh_int64_hash_func(i64[0] ^ i64[1] ^ (key.type << 1) ^ key.is_local);
 }
 
 
@@ -107,6 +109,8 @@ extern uct_cuda_ipc_component_t uct_cuda_ipc_component;
 typedef struct uct_cuda_ipc_md_config {
     uct_md_config_t          super;
     ucs_ternary_auto_value_t enable_mnnvl;
+    unsigned long            cache_max_regions; /**< Max cached IPC regions per peer */
+    size_t                   cache_max_size;    /**< Max total cached IPC mapping size */
 } uct_cuda_ipc_md_config_t;
 
 

@@ -497,7 +497,6 @@ uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface, uct_dc_dci_t *dci)
 {
     uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.super.md,
                                           uct_ib_mlx5_md_t);
-    uct_ib_device_t *dev = uct_ib_iface_device(&iface->super.super.super);
     uct_dc_mlx5_dci_config_t *config =
             &iface->tx.dci_pool[dci->pool_index].config;
     struct ibv_qp_attr attr;
@@ -523,8 +522,8 @@ uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface, uct_dc_dci_t *dci)
         return UCS_ERR_IO_ERROR;
     }
 
-    status = uct_ib_device_set_ece(dev, dci->txwq.super.verbs.qp,
-                                   iface->super.super.config.ece);
+    status = uct_rc_iface_set_ece(&iface->super.super,
+                                  dci->txwq.super.verbs.qp);
     if (status != UCS_OK) {
         return status;
     }
@@ -621,8 +620,7 @@ uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface,
          goto err;
     }
 
-    status = uct_ib_device_set_ece(dev, iface->rx.dct.verbs.qp,
-                                   iface->super.super.config.ece);
+    status = uct_rc_iface_set_ece(&iface->super.super, iface->rx.dct.verbs.qp);
     if (status != UCS_OK) {
         goto err;
     }
@@ -1387,6 +1385,7 @@ static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
 static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
     .super = {
         .super = {
+            .iface_query_v2         = uct_iface_base_query_v2,
             .iface_estimate_perf    = uct_dc_mlx5_iface_estimate_perf,
             .iface_vfs_refresh      = uct_dc_mlx5_iface_vfs_refresh,
             .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,

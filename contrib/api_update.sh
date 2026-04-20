@@ -53,11 +53,11 @@ cd $subdir
 make docs
 
 git checkout "$remote"/gh-pages
-mkdir api/"$version"
+mkdir -p api/"$version"
 ln -snf "$version" api/latest
 
 cp docs/doxygen-doc/ucx.pdf "api/$version/ucx-$version.pdf"
-ln -s "ucx-$version.pdf" "api/$version/ucx.pdf"
+ln -sf "ucx-$version.pdf" "api/$version/ucx.pdf"
 cp -ar docs/doxygen-doc/html "api/$version/"
 
 git add api/latest "api/$version"
