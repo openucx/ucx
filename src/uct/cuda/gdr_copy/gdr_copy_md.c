@@ -49,17 +49,13 @@ uct_gdr_copy_use_pcie_params_get(ucs_ternary_auto_value_t use_pcie,
         *pin_pcie_fallback_p = 1;
         break;
     default:
-        ucs_error("invalid USE_PCIE %d", use_pcie);
         return UCS_ERR_INVALID_PARAM;
     }
 
     return UCS_OK;
 #else
-    char buf[64];
-
-    if ((use_pcie != UCS_AUTO) && (use_pcie != UCS_NO)) {
-        ucs_config_sprintf_ternary_auto(buf, sizeof(buf), &use_pcie, NULL);
-        ucs_error("USE_PCIE=%s requires GDRCopy with gdr_pin_buffer_v2", buf);
+    if (use_pcie == UCS_YES) {
+        ucs_error("USE_PCIE=yes requires GDRCopy with gdr_pin_buffer_v2", buf);
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -627,7 +623,7 @@ uct_gdr_copy_md_open(uct_component_t *component, const char *md_name,
                 if ((uct_gdr_copy_context.md->pin_gdr_flags != new_pin_flags) ||
                     (uct_gdr_copy_context.md->pin_pcie_fallback !=
                      new_pin_fallback)) {
-                    ucs_error("inconsistent USE_PCIE: shared pin_flags=%u "
+                    ucs_error("inconsistent pin mode: shared pin_flags=%u "
                               "fallback=%d, opening pin_flags=%u fallback=%d",
                               uct_gdr_copy_context.md->pin_gdr_flags,
                               uct_gdr_copy_context.md->pin_pcie_fallback,
