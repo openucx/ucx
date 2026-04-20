@@ -38,7 +38,7 @@ typedef struct uct_ib_mlx5_ext_qp_query_attr {
 typedef ucs_status_t (*uct_ib_mlx5_ext_iface_flags_func_t)(uint64_t *flags);
 typedef ucs_status_t (*uct_ib_mlx5_ext_qp_query_func_t)(
         struct ibv_qp *qp, struct mlx5dv_devx_obj *devx_obj,
-        uct_ib_plugin_qp_query_attr_t *attr);
+        uct_ib_mlx5_ext_qp_query_attr *attr);
 
 typedef struct uct_ib_mlx5_ext_ops {
     uct_ib_mlx5_ext_iface_flags_func_t iface_flags;
