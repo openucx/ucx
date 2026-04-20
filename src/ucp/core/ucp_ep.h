@@ -533,6 +533,14 @@ typedef struct ucp_ep_ext {
     ucs_time_t                    ka_last_round; /* Time of last KA round done */
 #endif
 
+    /* Failed-lane recovery state: populated by ucp_ep_failover_reconfig() and
+     * consumed by ucp_ep_recovery_tick() from the worker keepalive progress.
+     * Both zero when no recovery is in flight. */
+    ucs_time_t                    recovery_next_time;     /* Earliest time
+                                                             for next round */
+    unsigned                      recovery_retries_left;  /* Rounds left
+                                                             before giving up */
+
     /* Endpoint match context and remote completion status are mutually exclusive,
      * since remote completions are counted only after the endpoint is already
      * matched to a remote peer.
@@ -987,6 +995,65 @@ ucs_status_t ucp_ep_flush_mem_progress(uct_pending_req_t *self);
  * @return Bitmask of failed lanes.
  */
 ucp_lane_map_t ucp_ep_config_get_failed_lanes(const ucp_ep_config_key_t *key);
+
+
+/**
+ * @brief Clear UCP_LANE_TYPE_FAILED for a subset of previously failed lanes
+ *        that have just been recovered and reconfigure the endpoint.
+ *
+ * Accepts any subset: only the intersection with the currently failed set is
+ * cleared. A no-op when nothing changes. Re-runs the post-failover am_lane
+ * promotion so that if the operable AM lane was a fallback, we can switch
+ * back to an earlier candidate that just came back.
+ *
+ * @param [in] ep     Endpoint object.
+ * @param [in] lanes  Lanes to clear UCP_LANE_TYPE_FAILED for.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_ep_reconfig_clear_failed_lanes(ucp_ep_h ep,
+                                                ucp_lane_map_t lanes);
+
+
+/**
+ * @brief One recovery tick for an endpoint with failed lanes.
+ *
+ * Invoked from the worker keepalive progress. Gated per endpoint by
+ * ep->ext->recovery_next_time so actual rounds fire at most every
+ * context->config.ext.recovery_interval. Each round sends a
+ * WIREUP_MSG_LANES_ADDR_REQUEST to the peer asking for up-to-date
+ * addresses of the lanes marked UCP_LANE_TYPE_FAILED. When retries are
+ * exhausted the endpoint is scheduled for full failure.
+ *
+ * @param [in] ep     Endpoint object.
+ * @param [in] now    Current time, typically ucs_get_time() from the
+ *                    keepalive caller.
+ */
+void ucp_ep_recovery_tick(ucp_ep_h ep, ucs_time_t now);
+
+
+/**
+ * @brief Mark a subset of lanes as UCP_LANE_TYPE_FAILED and arm recovery.
+ *
+ * Same flow that ucp_ep_set_lanes_failed() invokes internally when a UCT
+ * error is observed locally: reconfigures the endpoint to set the FAILED
+ * bit on the given lanes, asynchronously discards their old UCT EPs, and
+ * arms the per-EP recovery retry state so the worker keepalive progress
+ * starts sending WIREUP_MSG_LANES_ADDR_REQUEST on the next tick.
+ *
+ * Exposed for the LANES_ADDR_REQUEST handler so an asymmetric failure
+ * reported by the peer can be converted into a local failover flow.
+ *
+ * @param [in] ucp_ep         Endpoint object.
+ * @param [in] failed_lanes   Lanes to mark failed.
+ * @param [in] discard_status Status for discarded requests on these lanes.
+ *
+ * @return UCS_OK on success, an error code if reconfiguration isn't
+ *         possible (e.g. no operable AM lane would remain).
+ */
+ucs_status_t ucp_ep_failover_reconfig(ucp_ep_h ucp_ep,
+                                      ucp_lane_map_t failed_lanes,
+                                      ucs_status_t discard_status);
 
 
 /**
