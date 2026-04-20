@@ -1,6 +1,6 @@
 /**
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
@@ -12,6 +12,7 @@
 
 #include "cma_ep.h"
 
+#include "uct/base/uct_iface_address_pid_ns.h"
 #include <uct/base/uct_iov.inl>
 #include <ucs/datastruct/string_buffer.h>
 #include <ucs/debug/log.h>
@@ -37,18 +38,12 @@ const struct {
     }
 };
 
-static UCS_F_ALWAYS_INLINE pid_t
-uct_cma_ep_get_remote_pid(const uct_iface_addr_t *iface_addr)
-{
-    return *(const pid_t*)iface_addr & ~UCT_CMA_IFACE_ADDR_FLAG_PID_NS;
-}
-
 static UCS_CLASS_INIT_FUNC(uct_cma_ep_t, const uct_ep_params_t *params)
 {
     UCT_EP_PARAMS_CHECK_DEV_IFACE_ADDRS(params);
     UCS_CLASS_CALL_SUPER_INIT(uct_scopy_ep_t, params);
 
-    self->remote_pid = uct_cma_ep_get_remote_pid(params->iface_addr);
+    self->remote_pid = uct_iface_address_pid_ns_get_pid(params->iface_addr);
     return uct_ep_keepalive_init(&self->keepalive, self->remote_pid);
 }
 
@@ -97,7 +92,8 @@ int uct_cma_ep_is_connected(const uct_ep_h tl_ep,
         return 0;
     }
 
-    return ep->remote_pid == uct_cma_ep_get_remote_pid(params->iface_addr);
+    return ep->remote_pid ==
+           uct_iface_address_pid_ns_get_pid(params->iface_addr);
 }
 
 ucs_status_t uct_cma_ep_tx(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iov_cnt,

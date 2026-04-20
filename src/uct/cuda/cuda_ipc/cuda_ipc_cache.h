@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -89,7 +89,8 @@ void uct_cuda_ipc_cache_set_global_limits(unsigned long max_regions,
  * @brief Tear down all CUDA IPC remote caches for a peer process ID
  *
  * @param pid  peer process ID
+ * @param pid_ns peer process ID namespace
  */
-void uct_cuda_ipc_destroy_cache_by_pid(pid_t pid);
+void uct_cuda_ipc_destroy_cache_by_pid_ns(pid_t pid, ucs_sys_ns_t pid_ns);
 
 #endif

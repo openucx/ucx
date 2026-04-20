@@ -828,24 +828,45 @@ void uct_cuda_ipc_cache_set_global_limits(unsigned long max_regions,
                                                     max_size);
 }
 
-void uct_cuda_ipc_destroy_cache_by_pid(pid_t pid)
+void uct_cuda_ipc_destroy_cache_by_pid_ns(pid_t pid, ucs_sys_ns_t pid_ns)
 {
     uct_cuda_ipc_cache_hash_key_t cache_hash_key;
-    uct_cuda_ipc_cache_t *cache;
+    int num_devices;
+    ucs_status_t status;
+    int device_index;
+    CUdevice cuda_device;
     khint_t khiter;
+    uct_cuda_ipc_cache_t *cache;
+
+    cache_hash_key.pid    = pid;
+    cache_hash_key.pid_ns = pid_ns;
+
+    status = UCT_CUDADRV_FUNC_LOG_WARN(cuDeviceGetCount(&num_devices));
+    if (status != UCS_OK) {
+        return;
+    }
 
     ucs_recursive_spin_lock(&uct_cuda_ipc_remote_cache.lock);
 
-    kh_foreach(&uct_cuda_ipc_remote_cache.hash, cache_hash_key, cache, {
-        if (cache_hash_key.pid != pid) {
+    for (device_index = 0; device_index < num_devices; ++device_index) {
+        status = UCT_CUDADRV_FUNC_LOG_WARN(
+                cuDeviceGet(&cuda_device, device_index));
+        if (status != UCS_OK) {
             continue;
         }
 
-        uct_cuda_ipc_destroy_cache(cache);
+        cache_hash_key.cu_device = cuda_device;
+
         khiter = kh_get(cuda_ipc_rem_cache, &uct_cuda_ipc_remote_cache.hash,
                         cache_hash_key);
+        if (khiter == kh_end(&uct_cuda_ipc_remote_cache.hash)) {
+            continue;
+        }
+
+        cache = kh_val(&uct_cuda_ipc_remote_cache.hash, khiter);
+        uct_cuda_ipc_destroy_cache(cache);
         kh_del(cuda_ipc_rem_cache, &uct_cuda_ipc_remote_cache.hash, khiter);
-    });
+    }
 
     ucs_recursive_spin_unlock(&uct_cuda_ipc_remote_cache.lock);
 }
