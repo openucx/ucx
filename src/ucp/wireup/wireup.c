@@ -71,6 +71,10 @@ const char* ucp_wireup_msg_str(uint8_t msg_type)
         return "EP_CHECK";
     case UCP_WIREUP_MSG_EP_REMOVED:
         return "EP_REMOVED";
+    case UCP_WIREUP_MSG_LANES_ADDR_REQUEST:
+        return "LANES_ADDR_REQ";
+    case UCP_WIREUP_MSG_LANES_ADDR_REPLY:
+        return "LANES_ADDR_REP";
     default:
         return "<unknown>";
     }
@@ -82,7 +86,11 @@ static ucp_lane_index_t ucp_wireup_get_msg_lane(ucp_ep_h ep, uint8_t msg_type)
     ucp_ep_config_t *ep_config = ucp_ep_config(ep);
     ucp_lane_index_t lane, fallback_lane;
 
-    if (msg_type == UCP_WIREUP_MSG_ACK) {
+    if ((msg_type == UCP_WIREUP_MSG_ACK) ||
+        (msg_type == UCP_WIREUP_MSG_LANES_ADDR_REQUEST) ||
+        (msg_type == UCP_WIREUP_MSG_LANES_ADDR_REPLY)) {
+        /* Post-failover, wireup_msg_lane may itself be failed - prefer the
+         * re-selected operable AM lane. */
         lane          = ep_config->key.am_lane;
         fallback_lane = ep_config->key.wireup_msg_lane;
     } else {
@@ -227,10 +235,12 @@ ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
                             UCP_ADDRESS_PACK_FLAG_TL_RSC_IDX;
     ucs_status_t status;
 
-    msg_hdr->type      = type;
-    msg_hdr->err_mode  = ucp_ep_config(ep)->key.err_mode;
-    msg_hdr->conn_sn   = ep->conn_sn;
-    msg_hdr->src_ep_id = ucp_ep_local_id(ep);
+    msg_hdr->type               = type;
+    msg_hdr->err_mode           = ucp_ep_config(ep)->key.err_mode;
+    msg_hdr->conn_sn            = ep->conn_sn;
+    msg_hdr->src_ep_id          = ucp_ep_local_id(ep);
+    msg_hdr->requested_lane_map = 0;
+    msg_hdr->provided_lane_map  = 0;
     if (ep->flags & UCP_EP_FLAG_REMOTE_ID) {
         msg_hdr->dst_ep_id = ucp_ep_remote_id(ep);
     } else {
@@ -252,8 +262,11 @@ ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
 }
 
 static ucs_status_t
-ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type, const ucp_tl_bitmap_t *tl_bitmap,
-                    const ucp_lane_index_t *lanes2remote)
+ucp_wireup_msg_send_full(ucp_ep_h ep, uint8_t type,
+                         const ucp_tl_bitmap_t *tl_bitmap,
+                         const ucp_lane_index_t *lanes2remote,
+                         ucp_lane_map_t requested_lane_map,
+                         ucp_lane_map_t provided_lane_map)
 {
     ucp_request_t *req;
     ucs_status_t status;
@@ -290,6 +303,11 @@ ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type, const ucp_tl_bitmap_t *tl_bitmap,
         goto err;
     }
 
+    /* ucp_wireup_msg_prepare() zeroed these; set them here for LANES_ADDR_*
+     * messages (ignored by other message types on the receive side). */
+    req->send.wireup.requested_lane_map = requested_lane_map;
+    req->send.wireup.provided_lane_map  = provided_lane_map;
+
     ucp_request_send(req);
     /* coverity[leaked_storage] */
     return UCS_OK;
@@ -297,6 +315,13 @@ ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type, const ucp_tl_bitmap_t *tl_bitmap,
 err:
     ucp_ep_set_lanes_failed_schedule(ep, 0, status);
     return status;
+}
+
+static ucs_status_t
+ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type, const ucp_tl_bitmap_t *tl_bitmap,
+                    const ucp_lane_index_t *lanes2remote)
+{
+    return ucp_wireup_msg_send_full(ep, type, tl_bitmap, lanes2remote, 0, 0);
 }
 
 static ucp_tl_bitmap_t
@@ -943,6 +968,575 @@ void ucp_wireup_process_ack(ucp_worker_h worker, ucp_ep_h ep,
     ucp_wireup_remote_connected(ep);
 }
 
+/*
+ * --- Failed-lane recovery -------------------------------------------------
+ *
+ * Driven off UCP_LANE_TYPE_FAILED in cfg_key (read via
+ * ucp_ep_get_failed_lanes(ep)). After ucp_ep_failover_reconfig() marks lanes
+ * FAILED, it arms per-EP retry state (recovery_next_time /
+ * recovery_retries_left) and lets the worker keepalive progress drive
+ * subsequent ticks. Each tick calls ucp_ep_recovery_tick() which is
+ * rate-limited by context->recovery_interval and bounded by
+ * context->recovery_retries. A tick that is due sends one
+ * UCP_WIREUP_MSG_LANES_ADDR_REQUEST on the operable AM lane after:
+ *   1) replacing every failed UCT stub on ep with a wireup proxy EP,
+ *   2) packing iface addresses (and p2p ep_addrs) of the failed-lane rscs.
+ *
+ * Peer receives the REQUEST, rebuilds its own side's UCT EPs for the lanes
+ * in msg->provided_lane_map (trusting the initiator - asymmetric failure is
+ * a first-class case; a still-live local UCT EP is discarded via
+ * ucp_worker_discard_uct_ep), replies with its own addresses for the
+ * subset it could satisfy, and clears UCP_LANE_TYPE_FAILED for just those
+ * lanes. Initiator handles the REPLY symmetrically. Partial recovery is a
+ * legal steady state; any remaining failed lanes are picked up by the next
+ * keepalive-driven recovery tick.
+ *
+ * Supports both CONNECT_TO_IFACE (one-sided iface address exchange) and p2p
+ * (CONNECT_TO_EP) transports. For p2p, the inner transport EP - e.g. the RC
+ * QP - is created eagerly during prepare so its ep_addr can travel in the
+ * LANES_ADDR_REQUEST, and the connect_to_ep handshake is finalized
+ * symmetrically on both sides from the received peer ep_addr.
+ *
+ * The timer/retry mechanism also inherently handles the ep_count discard
+ * race: the first recovery round only fires recovery_interval after
+ * failover, by which time the async ucp_ep_discard_lanes() callback has
+ * finalized the ep_count reactivate transition.
+ */
+
+/* Ensure the lane holds a wireup proxy ready to accept a new transport EP.
+ *
+ * By the time we reach this function the lane is either (a) already a
+ * wireup proxy (idempotent path from an earlier recovery step), or (b) a
+ * failed-stub UCT EP. Case (b) only happens after ucp_ep_failover_reconfig
+ * ran for the lane (either the local failover triggered by a UCT error, or
+ * the explicit call the LANES_ADDR_REQUEST handler makes for asymmetric
+ * failures). If a still-live transport EP shows up here it's a logic bug -
+ * we should have gone through failover first.
+ *
+ * For p2p (CONNECT_TO_EP) lanes, also eagerly create an inner transport UCT
+ * EP (e.g. RC QP) attached to the iface only. That gives us a stable local
+ * ep_addr (QP number) to pack into LANES_ADDR_REQUEST / REPLY before the
+ * peer's ep_addr is known. UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED is not set
+ * here - it is set when ucp_wireup_ep_connect_to_ep_v2() runs against the
+ * peer's ep_addr. */
+static ucs_status_t
+ucp_ep_recovery_install_wireup_ep(ucp_ep_h ep, ucp_lane_index_t lane)
+{
+    const ucp_ep_config_key_t *k = &ucp_ep_config(ep)->key;
+    uct_ep_h old_uct_ep          = ucp_ep_get_lane(ep, lane);
+    uct_ep_h wireup_ep_uct, inner_uct_ep;
+    ucp_wireup_ep_t *wireup_ep;
+    uct_ep_params_t inner_params;
+    ucp_rsc_index_t rsc_index;
+    ucp_worker_iface_t *wiface;
+    ucs_status_t status;
+
+    if ((old_uct_ep != NULL) && ucp_wireup_ep_test(old_uct_ep)) {
+        return UCS_OK;
+    }
+
+    /* The only transport EP we expect here is the failed-stub placed on the
+     * lane by ucp_ep_discard_lanes() inside ucp_ep_failover_reconfig(). */
+    ucs_assertv((old_uct_ep == NULL) || ucp_is_uct_ep_failed(old_uct_ep),
+                "ep %p lane %d: unexpected live uct_ep=%p - recovery path "
+                "must be preceded by ucp_ep_failover_reconfig()",
+                ep, lane, old_uct_ep);
+
+    status = ucp_wireup_ep_create(ep, &wireup_ep_uct);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ucs_trace("ep %p: recovery lane[%d] %p -> wireup_ep %p", ep, lane,
+              old_uct_ep, wireup_ep_uct);
+    ucp_ep_set_lane(ep, lane, wireup_ep_uct);
+
+    if (old_uct_ep != NULL) {
+        /* failed stub: decrement destroy_counter via ucp_ep_failed_destroy */
+        uct_ep_destroy(old_uct_ep);
+    }
+
+    /* For p2p transports, create the inner transport EP right away so its
+     * ep_addr (e.g. RC QP number) can be packed into LANES_ADDR_REQUEST. */
+    if (ucp_ep_is_lane_p2p(ep, lane)) {
+        rsc_index               = k->lanes[lane].rsc_index;
+        wiface                  = ucp_worker_iface(ep->worker, rsc_index);
+        inner_params.field_mask = UCT_EP_PARAM_FIELD_IFACE |
+                                  UCT_EP_PARAM_FIELD_PATH_INDEX;
+        inner_params.iface      = wiface->iface;
+        inner_params.path_index = k->lanes[lane].path_index;
+
+        status = uct_ep_create(&inner_params, &inner_uct_ep);
+        if (status != UCS_OK) {
+            ucs_diag("ep %p: failed to create inner p2p uct_ep for recovery "
+                     "lane %d: %s",
+                     ep, lane, ucs_status_string(status));
+            /* Leave the wireup proxy in place; recovery will skip this lane
+             * and retry on a future round. */
+            return status;
+        }
+
+        wireup_ep = ucp_wireup_ep(wireup_ep_uct);
+        ucs_assert(wireup_ep != NULL);
+        ucp_proxy_ep_set_uct_ep(&wireup_ep->super, inner_uct_ep, 1, rsc_index);
+
+        ucs_debug("ep %p: recovery created inner p2p uct_ep=%p for lane %d"
+                  " (rsc=%d path=%u)",
+                  ep, inner_uct_ep, lane, rsc_index,
+                  k->lanes[lane].path_index);
+    }
+
+    return UCS_OK;
+}
+
+/* Attach a freshly-created real UCT EP as next_ep of the lane's wireup proxy
+ * and mark it ready + remote-connected so that ucp_wireup_eps_progress swaps
+ * it out on the next scheduled run. */
+static void
+ucp_ep_recovery_attach_next_ep(ucp_ep_h ep, ucp_lane_index_t lane,
+                               uct_ep_h next_ep)
+{
+    uct_ep_h proxy             = ucp_ep_get_lane(ep, lane);
+    ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(proxy);
+
+    ucs_assert(wireup_ep != NULL);
+    ucs_assert(wireup_ep->super.uct_ep == NULL);
+
+    ucp_wireup_ep_set_next_ep(proxy, next_ep, ucp_ep_get_rsc_index(ep, lane));
+    wireup_ep->flags |= UCP_WIREUP_EP_FLAG_READY |
+                        UCP_WIREUP_EP_FLAG_REMOTE_CONNECTED;
+}
+
+/* Mark an already-attached p2p wireup proxy as ready+remote-connected, after
+ * ucp_wireup_ep_connect_to_ep_v2() has successfully connected its inner EP. */
+static void
+ucp_ep_recovery_mark_p2p_ready(ucp_ep_h ep, ucp_lane_index_t lane)
+{
+    uct_ep_h proxy             = ucp_ep_get_lane(ep, lane);
+    ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(proxy);
+
+    ucs_assert(wireup_ep != NULL);
+    ucs_assert(wireup_ep->super.uct_ep != NULL);
+
+    wireup_ep->flags |= UCP_WIREUP_EP_FLAG_READY |
+                        UCP_WIREUP_EP_FLAG_REMOTE_CONNECTED;
+}
+
+/* Find a CONNECT_TO_IFACE address entry whose TL matches the one used
+ * locally by `lane`. For p2p transports use ucp_wireup_find_remote_p2p_addr()
+ * which also drills into a matching ep_addr. */
+static const ucp_address_entry_t *
+ucp_ep_recovery_find_iface_addr(ucp_ep_h ep, ucp_lane_index_t lane,
+                                const ucp_unpacked_address_t *remote_address)
+{
+    ucp_context_h context     = ep->worker->context;
+    ucp_rsc_index_t rsc_index = ucp_ep_config(ep)->key.lanes[lane].rsc_index;
+    uint16_t tl_name_csum     = context->tl_rscs[rsc_index].tl_name_csum;
+    const ucp_address_entry_t *ae;
+
+    ucp_unpacked_address_for_each(ae, remote_address) {
+        if ((ae->tl_name_csum == tl_name_csum) && (ae->iface_addr != NULL)) {
+            return ae;
+        }
+    }
+
+    return NULL;
+}
+
+/* Rebuild one CONNECT_TO_IFACE lane: create a UCT EP to the remote iface and
+ * attach it as next_ep of the lane's wireup proxy. */
+static ucs_status_t
+ucp_ep_recovery_rebuild_iface_lane(
+        ucp_ep_h ep, ucp_lane_index_t lane,
+        const ucp_unpacked_address_t *remote_address)
+{
+    const ucp_ep_config_key_t *k = &ucp_ep_config(ep)->key;
+    ucp_worker_h worker          = ep->worker;
+    const ucp_address_entry_t *ae;
+    uct_ep_params_t uct_ep_params;
+    ucp_worker_iface_t *wiface;
+    ucp_rsc_index_t rsc_index;
+    uct_ep_h uct_ep;
+    ucs_status_t status;
+
+    ae = ucp_ep_recovery_find_iface_addr(ep, lane, remote_address);
+    if (ae == NULL) {
+        ucs_debug("ep %p: no remote iface address for lane %d", ep, lane);
+        return UCS_ERR_UNREACHABLE;
+    }
+
+    status = ucp_ep_recovery_install_wireup_ep(ep, lane);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    rsc_index                = k->lanes[lane].rsc_index;
+    wiface                   = ucp_worker_iface(worker, rsc_index);
+    uct_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE      |
+                               UCT_EP_PARAM_FIELD_DEV_ADDR   |
+                               UCT_EP_PARAM_FIELD_IFACE_ADDR |
+                               UCT_EP_PARAM_FIELD_PATH_INDEX;
+    uct_ep_params.iface      = wiface->iface;
+    uct_ep_params.dev_addr   = ae->dev_addr;
+    uct_ep_params.iface_addr = ae->iface_addr;
+    uct_ep_params.path_index = k->lanes[lane].path_index;
+
+    status = uct_ep_create(&uct_ep_params, &uct_ep);
+    if (status != UCS_OK) {
+        ucs_diag("ep %p: uct_ep_create failed for recovery lane %d: %s", ep,
+                 lane, ucs_status_string(status));
+        return status;
+    }
+
+    ucp_ep_recovery_attach_next_ep(ep, lane, uct_ep);
+    ucs_debug("ep %p: recovered iface-lane[%d]=%p via rsc[%d]", ep, lane,
+              uct_ep, rsc_index);
+    return UCS_OK;
+}
+
+/* Rebuild one p2p (CONNECT_TO_EP) lane: ensure the wireup proxy holds an
+ * inner transport EP (created in prepare), find the remote ep_addr for this
+ * lane, and connect via ucp_wireup_ep_connect_to_ep_v2(). */
+static ucs_status_t
+ucp_ep_recovery_rebuild_p2p_lane(
+        ucp_ep_h ep, ucp_lane_index_t lane,
+        const ucp_unpacked_address_t *remote_address)
+{
+    const ucp_address_entry_t *address_entry;
+    const ucp_address_entry_ep_addr_t *ep_entry;
+    ucp_lane_index_t remote_lane;
+    ucs_status_t status;
+
+    /* Idempotent: if lane already has a wireup proxy with an inner p2p EP,
+     * this is a no-op. Otherwise (peer side receiving REQUEST while its own
+     * lane still holds a failed stub), we create the inner EP here. */
+    status = ucp_ep_recovery_install_wireup_ep(ep, lane);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    /* Symmetric assumption for this POC: the peer's lane index mirrors ours.
+     * ucp_address_pack() with lanes2remote==NULL stamps the sender-side local
+     * lane as the remote_lane tag in the ep_addr, so we look up by our own
+     * lane index. */
+    remote_lane = lane;
+    status = ucp_wireup_find_remote_p2p_addr(ep, remote_lane, remote_address,
+                                             &address_entry, &ep_entry);
+    if (status != UCS_OK) {
+        ucs_debug("ep %p: no remote ep_addr for p2p lane %d", ep, lane);
+        return status;
+    }
+
+    status = ucp_wireup_ep_connect_to_ep_v2(ucp_ep_get_lane(ep, lane),
+                                            address_entry, ep_entry);
+    if (status != UCS_OK) {
+        ucs_diag("ep %p: connect_to_ep_v2 failed for recovery p2p lane %d: %s",
+                 ep, lane, ucs_status_string(status));
+        return status;
+    }
+
+    ucp_ep_recovery_mark_p2p_ready(ep, lane);
+    ucs_debug("ep %p: recovered p2p-lane[%d] via rsc[%d]", ep, lane,
+              ucp_ep_get_rsc_index(ep, lane));
+    return UCS_OK;
+}
+
+/* For each lane in `lanes_to_rebuild`, bring its UCT resources back online.
+ * Dispatches to the iface-connect or p2p helper based on lane type. Returns
+ * the bitmap of lanes successfully rebuilt; lanes not in the returned bitmap
+ * stay UCP_LANE_TYPE_FAILED and will be retried on a future recovery round. */
+static ucp_lane_map_t
+ucp_ep_recovery_rebuild_lanes(ucp_ep_h ep, ucp_lane_map_t lanes_to_rebuild,
+                              const ucp_unpacked_address_t *remote_address)
+{
+    const ucp_ep_config_key_t *k = &ucp_ep_config(ep)->key;
+    ucp_lane_map_t rebuilt       = 0;
+    ucp_lane_index_t lane;
+    ucs_status_t status;
+
+    ucs_for_each_bit(lane, lanes_to_rebuild) {
+        if (lane >= k->num_lanes) {
+            continue;
+        }
+
+        if (ucp_ep_is_lane_p2p(ep, lane)) {
+            status = ucp_ep_recovery_rebuild_p2p_lane(ep, lane,
+                                                      remote_address);
+        } else {
+            status = ucp_ep_recovery_rebuild_iface_lane(ep, lane,
+                                                        remote_address);
+        }
+
+        if (status == UCS_OK) {
+            rebuilt |= UCS_BIT(lane);
+        }
+    }
+
+    return rebuilt;
+}
+
+/* Replace failed UCT stubs with wireup proxies for the given lane set. For
+ * p2p lanes this also creates the inner transport EP so its ep_addr is
+ * available at packing time. Returns the bitmap of lanes that now hold a
+ * wireup proxy in the requested state. */
+static ucp_lane_map_t
+ucp_ep_recovery_prepare_lanes(ucp_ep_h ep, ucp_lane_map_t lanes)
+{
+    const ucp_ep_config_key_t *k = &ucp_ep_config(ep)->key;
+    ucp_lane_map_t prepared      = 0;
+    ucp_lane_index_t lane;
+
+    ucs_for_each_bit(lane, lanes) {
+        if (lane >= k->num_lanes) {
+            continue;
+        }
+        if (ucp_ep_recovery_install_wireup_ep(ep, lane) != UCS_OK) {
+            continue;
+        }
+        prepared |= UCS_BIT(lane);
+    }
+
+    return prepared;
+}
+
+static void
+ucp_ep_recovery_send_lanes_addr_msg(ucp_ep_h ep, uint8_t msg_type,
+                                    ucp_lane_map_t requested_lane_map,
+                                    ucp_lane_map_t provided_lane_map)
+{
+    ucp_tl_bitmap_t tl_bitmap;
+    ucs_status_t status;
+
+    tl_bitmap = ucp_wireup_get_ep_tl_bitmap(ep, provided_lane_map);
+
+    ucs_debug("ep %p: send %s requested=0x%" PRIx64 " provided=0x%" PRIx64, ep,
+              ucp_wireup_msg_str(msg_type), (uint64_t)requested_lane_map,
+              (uint64_t)provided_lane_map);
+
+    status = ucp_wireup_msg_send_full(ep, msg_type, &tl_bitmap, NULL,
+                                      requested_lane_map, provided_lane_map);
+    if (status != UCS_OK) {
+        ucs_diag("ep %p: failed to send %s: %s", ep,
+                 ucp_wireup_msg_str(msg_type), ucs_status_string(status));
+    }
+}
+
+/* Send one LANES_ADDR_REQUEST for the current set of failed lanes. Idempotent
+ * across retries: proxies already in place are left alone, only missing ones
+ * are installed. */
+static void ucp_ep_recovery_send_request(ucp_ep_h ep)
+{
+    ucp_lane_map_t failed_lanes = ucp_ep_get_failed_lanes(ep);
+    ucp_lane_map_t prepared;
+
+    if ((ep->flags & UCP_EP_FLAG_FAILED) ||
+        (ucp_ep_config(ep)->key.am_lane == UCP_NULL_LANE) ||
+        (failed_lanes == 0)) {
+        return;
+    }
+
+    prepared = ucp_ep_recovery_prepare_lanes(ep, failed_lanes);
+    if (prepared == 0) {
+        ucs_diag("ep %p: recovery - no lanes could be prepared", ep);
+        return;
+    }
+
+    ucs_debug("ep %p: recovery request, failed=0x%" PRIx64
+              " prepared=0x%" PRIx64,
+              ep, (uint64_t)failed_lanes, (uint64_t)prepared);
+
+    ucp_ep_recovery_send_lanes_addr_msg(ep, UCP_WIREUP_MSG_LANES_ADDR_REQUEST,
+                                        failed_lanes, prepared);
+}
+
+/* A lane whose UCT EP is either a READY wireup proxy (about to be swapped
+ * by ucp_wireup_eps_progress) or a real transport EP (already swapped) is
+ * effectively recovered - its FAILED bit can be cleared. A failed stub or
+ * a wireup proxy without READY still needs work. */
+static int ucp_ep_recovery_lane_is_ready(ucp_ep_h ep, ucp_lane_index_t lane)
+{
+    uct_ep_h uct_ep = ucp_ep_get_lane(ep, lane);
+    ucp_wireup_ep_t *wireup_ep;
+
+    if (uct_ep == NULL) {
+        return 0;
+    }
+
+    if (ucp_is_uct_ep_failed(uct_ep)) {
+        return 0;
+    }
+
+    wireup_ep = ucp_wireup_ep(uct_ep);
+    if (wireup_ep == NULL) {
+        /* ucp_wireup_eps_progress already replaced the proxy with the real
+         * transport EP - lane is fully operational. */
+        return 1;
+    }
+
+    return !!(wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY);
+}
+
+void ucp_ep_recovery_tick(ucp_ep_h ep, ucs_time_t now)
+{
+    ucp_context_h context = ep->worker->context;
+    ucp_lane_map_t failed, recovered;
+    ucp_lane_index_t lane;
+
+    UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(ep->worker);
+
+    failed = ucp_ep_get_failed_lanes(ep);
+    if (failed == 0) {
+        /* Stale tick (recovery completed between rounds); clear the
+         * retry state so a future failover starts with a fresh budget. */
+        ep->ext->recovery_next_time    = 0;
+        ep->ext->recovery_retries_left = 0;
+        return;
+    }
+
+    /* Clear FAILED for lanes that have reached READY state. This runs
+     * from the keepalive progress path - safe to reconfigure because by
+     * now the failover_reconfig's async discard has long since finalized
+     * the ep_count transition (recovery_interval has elapsed since the
+     * lanes were marked failed). */
+    recovered = 0;
+    ucs_for_each_bit(lane, failed) {
+        if (ucp_ep_recovery_lane_is_ready(ep, lane)) {
+            recovered |= UCS_BIT(lane);
+        }
+    }
+
+    if (recovered != 0) {
+        ucs_debug("ep %p: recovery tick clearing FAILED on lanes 0x%" PRIx64,
+                  ep, (uint64_t)recovered);
+        ucp_ep_reconfig_clear_failed_lanes(ep, recovered);
+        failed = ucp_ep_get_failed_lanes(ep);
+        if (failed == 0) {
+            ep->ext->recovery_next_time    = 0;
+            ep->ext->recovery_retries_left = 0;
+            return;
+        }
+    }
+
+    if (now < ep->ext->recovery_next_time) {
+        /* Rate-limited by context->recovery_interval; wait for the next
+         * keepalive tick. */
+        return;
+    }
+
+    if (ep->ext->recovery_retries_left == 0) {
+        ucs_diag("ep %p: recovery retries exhausted, marking endpoint failed",
+                 ep);
+        /* Fully fail the endpoint. Passing lanes=0 routes
+         * ucp_ep_set_lanes_failed() to ucp_ep_set_failed() (unrecoverable). */
+        ucp_ep_set_lanes_failed_schedule(ep, 0, UCS_ERR_ENDPOINT_TIMEOUT);
+        return;
+    }
+
+    ucs_debug("ep %p: recovery tick (retries_left=%u, failed=0x%" PRIx64 ")",
+              ep, ep->ext->recovery_retries_left, (uint64_t)failed);
+
+    ucp_ep_recovery_send_request(ep);
+
+    --ep->ext->recovery_retries_left;
+    ep->ext->recovery_next_time = now + context->config.ext.recovery_interval;
+}
+
+static UCS_F_NOINLINE void
+ucp_wireup_process_lanes_addr_request(
+        ucp_worker_h worker, ucp_ep_h ep, const ucp_wireup_msg_t *msg,
+        const ucp_unpacked_address_t *remote_address)
+{
+    ucp_lane_map_t peer_unaware, to_rebuild, peer_provided;
+    ucs_status_t status;
+
+    ucs_assert(ep != NULL);
+
+    ucp_ep_update_remote_id(ep, msg->src_ep_id);
+
+    /* Asymmetric-failure handling: any lane the initiator declared broken
+     * that we don't yet see as failed on our side has to go through the
+     * local failover flow first. ucp_ep_failover_reconfig() marks the
+     * lanes UCP_LANE_TYPE_FAILED, asynchronously discards their old UCT
+     * EPs (so install_wireup_ep below encounters proper failed stubs),
+     * promotes am_lane if the current one was in the set, and arms our
+     * own recovery retry state. The REPLY further down will ride the new
+     * am_lane, since ucp_wireup_get_msg_lane() reads cfg_key.am_lane at
+     * send time. */
+    peer_unaware = msg->provided_lane_map & ~ucp_ep_get_failed_lanes(ep);
+    if (peer_unaware != 0) {
+        ucs_debug("ep %p: LANES_ADDR_REQ triggering local failover for "
+                  "asymmetric failure on lanes 0x%" PRIx64,
+                  ep, (uint64_t)peer_unaware);
+        status = ucp_ep_failover_reconfig(ep, peer_unaware,
+                                          UCS_ERR_CONNECTION_RESET);
+        if (status != UCS_OK) {
+            ucs_diag("ep %p: local failover for LANES_ADDR_REQ failed: %s",
+                     ep, ucs_status_string(status));
+        }
+    }
+
+    to_rebuild    = msg->provided_lane_map & ucp_ep_get_failed_lanes(ep);
+    peer_provided = ucp_ep_recovery_rebuild_lanes(ep, to_rebuild,
+                                                  remote_address);
+
+    ucs_debug("ep %p: LANES_ADDR_REQ requested=0x%" PRIx64
+              " provided=0x%" PRIx64 " to_rebuild=0x%" PRIx64
+              " rebuilt=0x%" PRIx64,
+              ep, (uint64_t)msg->requested_lane_map,
+              (uint64_t)msg->provided_lane_map, (uint64_t)to_rebuild,
+              (uint64_t)peer_provided);
+
+    if (peer_provided != 0) {
+        ucp_wireup_eps_progress_sched(ep);
+    }
+
+    /* Always reply, even if peer_provided == 0, so the initiator knows the
+     * peer handled the request (empty provided_lane_map means "I couldn't
+     * satisfy any of the lanes you asked about"). */
+    ucp_ep_recovery_send_lanes_addr_msg(ep, UCP_WIREUP_MSG_LANES_ADDR_REPLY,
+                                        msg->requested_lane_map,
+                                        peer_provided);
+
+    /* The recovery tick clears UCP_LANE_TYPE_FAILED once the rebuilt lanes
+     * reach a READY state (either as READY wireup proxies or as real
+     * transport EPs after ucp_wireup_eps_progress has replaced them), and
+     * does so after the async discard from failover_reconfig above has
+     * finalized the ep_count transition - so we must NOT call
+     * ucp_ep_reconfig_clear_failed_lanes() inline here. */
+}
+
+static UCS_F_NOINLINE void
+ucp_wireup_process_lanes_addr_reply(
+        ucp_worker_h worker, ucp_ep_h ep, const ucp_wireup_msg_t *msg,
+        const ucp_unpacked_address_t *remote_address)
+{
+    ucp_lane_map_t rebuilt;
+
+    ucs_assert(ep != NULL);
+
+    ucp_ep_update_remote_id(ep, msg->src_ep_id);
+
+    rebuilt = ucp_ep_recovery_rebuild_lanes(
+            ep, msg->provided_lane_map & ucp_ep_get_failed_lanes(ep),
+            remote_address);
+
+    ucs_debug("ep %p: LANES_ADDR_REP requested=0x%" PRIx64
+              " provided=0x%" PRIx64 " rebuilt=0x%" PRIx64,
+              ep, (uint64_t)msg->requested_lane_map,
+              (uint64_t)msg->provided_lane_map, (uint64_t)rebuilt);
+
+    if (rebuilt != 0) {
+        ucp_wireup_eps_progress_sched(ep);
+    }
+
+    /* FAILED-bit clearing and retry re-sending are both owned by the
+     * worker keepalive tick (ucp_ep_recovery_tick). Clearing here would
+     * race with the failover_reconfig discard; re-sending here would
+     * double the retry cadence. */
+}
+
+/* -------------------------------------------------------------------------- */
+
 static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
                                            size_t length, unsigned flags)
 {
@@ -993,6 +1587,15 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
     } else if (msg->type == UCP_WIREUP_MSG_EP_REMOVED) {
         ucs_assert(msg->dst_ep_id != UCS_PTR_MAP_KEY_INVALID);
         ucp_ep_set_lanes_failed_schedule(ep, 0, UCS_ERR_CONNECTION_RESET);
+    } else if (msg->type == UCP_WIREUP_MSG_LANES_ADDR_REQUEST) {
+        ucs_assert(msg->dst_ep_id != UCS_PTR_MAP_KEY_INVALID);
+        ucs_assert(ep != NULL);
+        ucp_wireup_process_lanes_addr_request(worker, ep, msg,
+                                              &remote_address);
+    } else if (msg->type == UCP_WIREUP_MSG_LANES_ADDR_REPLY) {
+        ucs_assert(msg->dst_ep_id != UCS_PTR_MAP_KEY_INVALID);
+        ucs_assert(ep != NULL);
+        ucp_wireup_process_lanes_addr_reply(worker, ep, msg, &remote_address);
     } else {
         ucs_bug("invalid wireup message");
     }

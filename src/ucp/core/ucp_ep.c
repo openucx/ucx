@@ -257,6 +257,8 @@ static ucp_ep_h ucp_ep_allocate(ucp_worker_h worker, const char *peer_name)
 #if UCS_ENABLE_ASSERT
     ep->ext->ka_last_round                = 0;
 #endif
+    ep->ext->recovery_next_time           = 0;
+    ep->ext->recovery_retries_left        = 0;
     ep->ext->peer_mem                     = NULL;
     ep->ext->unflushed_lanes              = 0;
     ep->ext->fence_seq                    = 0;
@@ -1727,7 +1729,71 @@ out:
     return UCS_OK;
 }
 
-static ucs_status_t
+/* Reconfigure an endpoint to clear UCP_LANE_TYPE_FAILED for a subset of
+ * previously failed lanes that have just been recovered. Accepts any subset:
+ * only the intersection with the currently failed set is actually cleared.
+ * Re-runs the post-failover am_lane promotion so that if the operable AM lane
+ * was a fallback and one of its original candidates is now back, we switch to
+ * the earlier lane.
+ */
+ucs_status_t ucp_ep_reconfig_clear_failed_lanes(ucp_ep_h ep,
+                                                ucp_lane_map_t lanes)
+{
+    ucp_worker_h worker          = ep->worker;
+    ucp_ep_config_key_t cfg_key  = ucp_ep_config(ep)->key;
+    const unsigned ep_init_flags = (ep->flags & UCP_EP_FLAG_INTERNAL) ?
+                                           UCP_EP_INIT_FLAG_INTERNAL : 0;
+    ucp_lane_map_t to_clear      = lanes & ucp_ep_get_failed_lanes(ep);
+    ucp_worker_cfg_index_t old_cfg_index;
+    ucp_worker_cfg_index_t new_cfg_index;
+    ucp_lane_index_t lane;
+    ucs_status_t status;
+
+    if (to_clear == 0) {
+        return UCS_OK;
+    }
+
+    ucs_for_each_bit(lane, to_clear) {
+        ucs_assert(lane < cfg_key.num_lanes);
+        cfg_key.lanes[lane].lane_types &= ~UCS_BIT(UCP_LANE_TYPE_FAILED);
+    }
+
+    /* Re-promote am_lane to the earliest available AM_BW lane, in case the
+     * currently selected one was a post-failover fallback. */
+    for (lane = 0; lane < cfg_key.num_lanes; ++lane) {
+        if ((cfg_key.lanes[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_AM_BW)) &&
+            !(cfg_key.lanes[lane].lane_types &
+              UCS_BIT(UCP_LANE_TYPE_FAILED))) {
+            cfg_key.am_lane = lane;
+            break;
+        }
+    }
+
+    if (ucp_ep_config_is_equal(&cfg_key, &ucp_ep_config(ep)->key)) {
+        return UCS_OK;
+    }
+
+    old_cfg_index = ep->cfg_index;
+    status = ucp_worker_get_ep_config(worker, &cfg_key, ep_init_flags,
+                                      &new_cfg_index);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ucp_ep_set_cfg_index(ep, new_cfg_index, 0);
+    ep->am_lane = cfg_key.am_lane;
+
+    ucp_ep_config_reactivate_worker_ifaces(worker, old_cfg_index,
+                                           ep->cfg_index);
+
+    ucs_debug("ep %p: cleared FAILED on lanes 0x%" PRIx64
+              " (cfg_index %u -> %u, am_lane=%d)",
+              ep, (uint64_t)to_clear, old_cfg_index, ep->cfg_index,
+              cfg_key.am_lane);
+    return UCS_OK;
+}
+
+ucs_status_t
 ucp_ep_failover_reconfig(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,
                          ucs_status_t discard_status)
 {
@@ -1747,6 +1813,18 @@ ucp_ep_failover_reconfig(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,
     }
 
     ucp_ep_discard_lanes(ucp_ep, failed_lanes, discard_status, old_cfg_index);
+
+    /* Arm recovery: the first attempt fires on a worker keepalive tick at
+     * or after `now + recovery_interval`. That delay also lets the async
+     * discard above finalize its ep_count reactivate before we try to
+     * reconfigure the endpoint on LANES_ADDR_REPLY arrival. Each retry is
+     * gated by the same interval; retries_left counts down and when it
+     * reaches 0 the endpoint is declared fully failed. */
+    ucp_ep->ext->recovery_next_time = ucs_get_time() +
+            ucp_ep->worker->context->config.ext.recovery_interval;
+    ucp_ep->ext->recovery_retries_left =
+            ucp_ep->worker->context->config.ext.recovery_retries;
+    ucp_worker_keepalive_add_ep(ucp_ep);
     return UCS_OK;
 }
 

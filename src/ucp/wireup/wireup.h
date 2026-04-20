@@ -50,6 +50,14 @@ enum {
     UCP_WIREUP_MSG_EP_CHECK,
     UCP_WIREUP_MSG_EP_REMOVED,
     UCP_WIREUP_MSG_REPLY_RECONFIG,
+
+    /* Ask the peer for remote addresses of a specific set of local lanes, and
+     * carry local addresses for those lanes to let the peer rebuild its side
+     * as well. Used by the failed-lane recovery flow, and intentionally named
+     * generically so it can also back future on-demand lane connection. */
+    UCP_WIREUP_MSG_LANES_ADDR_REQUEST,
+    UCP_WIREUP_MSG_LANES_ADDR_REPLY,
+
     UCP_WIREUP_MSG_LAST
 };
 
@@ -129,6 +137,14 @@ typedef struct ucp_wireup_msg {
     uint64_t               src_ep_id; /* Endpoint ID of source */
     uint64_t               dst_ep_id; /* Endpoint ID of destination, can be
                                          UCS_PTR_MAP_KEY_INVALID */
+    /* The two fields below are only valid for UCP_WIREUP_MSG_LANES_ADDR_*
+     * messages and ignored otherwise. They describe which set of local lanes
+     * the sender asked about (requested) and which subset of those lanes it
+     * actually managed to prepare addresses for in this message (provided).
+     * The two masks decouple "what was asked" from "what is carried" so that
+     * partial recovery is a first-class case. */
+    ucp_lane_map_t         requested_lane_map;
+    ucp_lane_map_t         provided_lane_map;
     /* packed addresses follow */
 } UCS_S_PACKED ucp_wireup_msg_t;
 
