@@ -59,8 +59,8 @@ static ucs_config_field_t uct_cuda_ipc_md_config_table[] = {
      ucs_offsetof(uct_cuda_ipc_md_config_t, cache_max_size),
      UCS_CONFIG_TYPE_MEMUNITS},
 
-    {"CACHE", "y", "Enable remote endpoint IPC memhandle mapping cache",
-     ucs_offsetof(uct_cuda_ipc_md_config_t, enable_cache),
+    {"CACHE", "y", "Enable remote IPC memory handle mapping cache",
+     ucs_offsetof(uct_cuda_ipc_md_config_t, enable_remote_cache),
      UCS_CONFIG_TYPE_BOOL},
 
     {NULL}
@@ -521,11 +521,10 @@ static void uct_cuda_ipc_rkey_release_unmap_memhandle(uct_rkey_t uct_rkey,
     extended_rkey = &unpacked_rkey->super;
     rkey          = &extended_rkey->super;
 
-    status = uct_cuda_ipc_unmap_memhandle(rkey->pid, extended_rkey->pid_ns,
-                                          rkey->d_bptr,
-                                          rkey_handle->mapped_addr,
-                                          rkey_handle->cu_dev,
-                                          uct_cuda_ipc_component.enable_cache);
+    status = uct_cuda_ipc_unmap_memhandle(
+            rkey->pid, extended_rkey->pid_ns, rkey->d_bptr,
+            rkey_handle->mapped_addr, rkey_handle->cu_dev,
+            uct_cuda_ipc_component.enable_remote_cache);
     if (status != UCS_OK) {
         ucs_warn("failed to unmap memhandle: %s", ucs_status_string(status));
     }
@@ -693,7 +692,20 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
     };
     uct_cuda_ipc_md_config_t *ipc_config = ucs_derived_of(config,
                                                           uct_cuda_ipc_md_config_t);
+    static ucs_init_once_t init_enable_remote_cache = UCS_INIT_ONCE_INITIALIZER;
     uct_cuda_ipc_md_t* md;
+
+    UCS_INIT_ONCE(&init_enable_remote_cache) {
+        uct_cuda_ipc_component.enable_remote_cache =
+                ipc_config->enable_remote_cache;
+    }
+
+    if (uct_cuda_ipc_component.enable_remote_cache !=
+        ipc_config->enable_remote_cache) {
+        ucs_error("inconsistent CUDA IPC remote memory handle mapping cache "
+                  "enable parameter");
+        return UCS_ERR_INVALID_PARAM;
+    }
 
     md = ucs_calloc(1, sizeof(*md), "uct_cuda_ipc_md");
     if (md == NULL) {
@@ -707,8 +719,6 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
 
     uct_cuda_ipc_cache_set_global_limits(ipc_config->cache_max_regions,
                                          ipc_config->cache_max_size);
-
-    uct_cuda_ipc_component.enable_cache = ipc_config->enable_cache;
 
     *md_p                 = &md->super;
 
@@ -765,7 +775,7 @@ uct_cuda_ipc_component_t uct_cuda_ipc_component = {
     },
     .uuid_hash              = KHASH_STATIC_INITIALIZER,
     .lock                   = PTHREAD_MUTEX_INITIALIZER,
-    .enable_cache           = 1
+    .enable_remote_cache    = 0
 };
 UCT_COMPONENT_REGISTER(&uct_cuda_ipc_component.super);
 

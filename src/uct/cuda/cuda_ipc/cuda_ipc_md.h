@@ -95,8 +95,8 @@ typedef struct {
     uct_component_t             super;
     khash_t(cuda_ipc_uuid_hash) uuid_hash;
     pthread_mutex_t             lock;
-    /**< Enable remote endpoint IPC memhandle mapping cache */
-    int                         enable_cache;
+    /**< Enable remote IPC memory handle mapping cache */
+    int                         enable_remote_cache;
 } uct_cuda_ipc_component_t;
 
 extern uct_cuda_ipc_component_t uct_cuda_ipc_component;
@@ -109,8 +109,8 @@ typedef struct uct_cuda_ipc_md_config {
     ucs_ternary_auto_value_t enable_mnnvl;
     unsigned long            cache_max_regions; /**< Max cached IPC regions per peer */
     size_t                   cache_max_size;    /**< Max total cached IPC mapping size */
-    /**< Enable remote endpoint IPC memhandle mapping cache */
-    int                      enable_cache;
+    /**< Enable remote IPC memory handle mapping cache */
+    int                      enable_remote_cache;
 } uct_cuda_ipc_md_config_t;
 
 
