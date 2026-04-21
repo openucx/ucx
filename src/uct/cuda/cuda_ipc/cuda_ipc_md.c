@@ -741,8 +741,9 @@ ucs_status_t uct_cuda_ipc_rkey_ptr(uct_component_t *component, uct_rkey_t rkey,
         return UCS_OK;
     }
 
-    status = uct_cuda_ipc_get_remote_address(extended_rkey, rkey_handle->cu_dev,
-                                             raddr, laddr_p, &mapped_addr);
+    status = uct_cuda_ipc_get_remote_address(extended_rkey, raddr,
+                                             rkey_handle->cu_dev, laddr_p,
+                                             &mapped_addr);
     if (ucs_unlikely(status != UCS_OK)) {
         return status;
     }
