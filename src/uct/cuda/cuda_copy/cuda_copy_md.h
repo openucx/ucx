@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2017. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2017-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -70,6 +70,32 @@ typedef struct {
     int    fd;
     size_t offset;
 } uct_cuda_copy_md_dmabuf_t;
+
+
+typedef enum {
+    /* Host memory registered with cuMemHostRegister */
+    UCT_CUDA_COPY_MEMH_HOST,
+    /* VMM memory needing cross-device access management */
+    UCT_CUDA_COPY_MEMH_VMM
+} uct_cuda_copy_memh_type_t;
+
+/**
+ * Memory handle for cuda_copy registrations that require cleanup at dereg time.
+ * Used for host-registered memory and VMM memory with cross-device access.
+ */
+typedef struct uct_cuda_copy_memh {
+    uct_cuda_copy_memh_type_t type;
+    union {
+        void *host_address;
+        struct {
+            CUdeviceptr          ptr;
+            size_t               length;
+            int                  alloc_device;
+            int                  num_devices;
+            unsigned long long   *saved_flags;
+        } vmm;
+    };
+} uct_cuda_copy_memh_t;
 
 
 ucs_status_t uct_cuda_copy_md_detect_memory_type(uct_md_h md,
