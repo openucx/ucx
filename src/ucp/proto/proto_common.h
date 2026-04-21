@@ -71,12 +71,15 @@ typedef enum {
      * sending more than the remote side supports */
     UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE  = UCS_BIT(8),
 
-    /* Supports error handling */
+    /* Supports peer failure error handling mode */
     UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING  = UCS_BIT(9),
 
     /* Supports starting the request when its datatype iterator offset is > 0 */
     UCP_PROTO_COMMON_INIT_FLAG_RESUME        = UCS_BIT(10),
-    UCP_PROTO_COMMON_KEEP_MD_MAP             = UCS_BIT(11)
+    UCP_PROTO_COMMON_KEEP_MD_MAP             = UCS_BIT(11),
+
+    /* Supports failover error handling mode */
+    UCP_PROTO_COMMON_INIT_FLAG_FAILOVER      = UCS_BIT(12)
 } ucp_proto_common_init_flags_t;
 
 

@@ -1038,8 +1038,8 @@ typedef enum {
  * @brief Interface attribute fields.
  */
 enum uct_iface_attr_field {
-    /* Reserved for future use */
-    UCT_IFACE_ATTR_FIELD_RESERVED = 0
+    /** Enables @ref uct_iface_attr_v2_t::max_put_sgl_zcopy_count */
+    UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT = UCS_BIT(0)
 };
 
 
@@ -1053,6 +1053,12 @@ typedef struct {
      * @ref uct_iface_attr_field_t.
      */
     uint64_t field_mask;
+
+    /**
+     * Maximal number of elements in @ref uct_ep_put_sgl_zcopy.
+     * @anchor uct_iface_attr_v2_max_put_sgl_zcopy_count
+     */
+    size_t   max_put_sgl_zcopy_count;
 } uct_iface_attr_v2_t;
 
 
@@ -1237,6 +1243,40 @@ ucs_status_t uct_ep_get_device_ep(uct_ep_h ep, uct_device_ep_h *device_ep_p);
 
 
 /**
+ * @ingroup UCT_RMA
+ * @brief Scatter-gather list (SGL) zero-copy put: write multiple buffers to
+ *        multiple remote addresses while avoiding local memory copy.
+ *
+ * Each element @a i transfers @a lengths[i] bytes from local buffer
+ * @a buffers[i] (with memory handle @a memhs[i]) to remote address
+ * @a remote_addrs[i] (with remote key @a rkeys[i]).
+ *
+ * @param [in] ep           Destination endpoint handle.
+ * @param [in] buffers      Array of local buffer pointers.
+ * @param [in] lengths      Array of transfer lengths in bytes.
+ * @param [in] memhs        Array of local memory handles, obtained from
+ *                          @ref ::uct_md_mem_reg.
+ * @param [in] remote_addrs Array of remote addresses.
+ * @param [in] rkeys        Array of remote keys, obtained from
+ *                          @ref ::uct_rkey_unpack.
+ * @param [in] count        Number of elements in the arrays. Must not exceed
+ *                          @ref uct_iface_attr_v2_max_put_sgl_zcopy_count
+ *                          "uct_iface_attr_v2_t::max_put_sgl_zcopy_count".
+ * @param [in] comp         Completion handle as defined by
+ *                          @ref ::uct_completion_t.
+ *
+ * @return UCS_INPROGRESS   Some communication operations are still in progress.
+ *                          If non-NULL @a comp is provided, it will be updated
+ *                          upon completion of these operations.
+ */
+ucs_status_t
+uct_ep_put_sgl_zcopy(uct_ep_h ep, void * const *buffers,
+                     const size_t *lengths, uct_mem_h const *memhs,
+                     const uint64_t *remote_addrs, uct_rkey_t const *rkeys,
+                     size_t count, uct_completion_t *comp);
+
+
+/**
  * @ingroup UCT_MD
  *
  * @brief This routine compares two remote keys.
@@ -1299,54 +1339,6 @@ ucs_status_t uct_rkey_unpack_v2(uct_component_h component,
  */
 ucs_status_t uct_md_mem_elem_pack(uct_md_h md, uct_mem_h memh, uct_rkey_t rkey,
                                   uct_device_mem_element_t *mem_elem);
-
-typedef ucs_status_t (*uct_iface_query_v2_func_t)(
-        uct_iface_h iface, uct_iface_attr_v2_t *iface_attr);
-
-typedef ucs_status_t (*uct_iface_estimate_perf_func_t)(
-        uct_iface_h iface, uct_perf_attr_t *perf_attr);
-
-typedef void (*uct_iface_vfs_refresh_func_t)(uct_iface_h iface);
-
-typedef ucs_status_t (*uct_ep_query_func_t)(uct_ep_h ep,
-                                            uct_ep_attr_t *ep_attr);
-
-typedef ucs_status_t (*uct_ep_invalidate_func_t)(
-        uct_ep_h ep, const uct_ep_invalidate_params_t *params);
-
-typedef ucs_status_t (*uct_ep_connect_to_ep_v2_func_t)(
-        uct_ep_h ep,
-        const uct_device_addr_t *device_addr,
-        const uct_ep_addr_t *ep_addr,
-        const uct_ep_connect_to_ep_params_t *params);
-
-typedef int (*uct_iface_is_reachable_v2_func_t)(
-        const uct_iface_h iface,
-        const uct_iface_is_reachable_params_t *params);
-
-typedef int (*uct_ep_is_connected_func_t)(
-        uct_ep_h ep, const uct_ep_is_connected_params_t *params);
-
-typedef ucs_status_t (*uct_ep_get_device_ep_func_t)(
-        uct_ep_h ep, uct_device_ep_h *device_ep_p);
-
-
-/**
- * @ingroup UCT_RESOURCE
- * @brief Internal v2 operations table.
- */
-typedef struct uct_iface_internal_ops {
-    uct_iface_query_v2_func_t        iface_query_v2;
-    uct_iface_estimate_perf_func_t   iface_estimate_perf;
-    uct_iface_vfs_refresh_func_t     iface_vfs_refresh;
-    uct_ep_query_func_t              ep_query;
-    uct_ep_invalidate_func_t         ep_invalidate;
-    uct_ep_connect_to_ep_v2_func_t   ep_connect_to_ep_v2;
-    uct_iface_is_reachable_v2_func_t iface_is_reachable_v2;
-    uct_ep_is_connected_func_t       ep_is_connected;
-    uct_ep_get_device_ep_func_t      ep_get_device_ep;
-} uct_iface_internal_ops_t;
-
 
 END_C_DECLS
 

@@ -761,9 +761,8 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force);
 
 void ucp_ep_destroy_internal(ucp_ep_h ep);
 
-ucs_status_t
-ucp_ep_set_lanes_failed(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
-                        ucs_status_t status);
+void ucp_ep_set_lanes_failed(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
+                             ucs_status_t status);
 
 void ucp_ep_set_lanes_failed_schedule(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
                                       ucs_status_t status);
@@ -997,5 +996,7 @@ ucp_lane_map_t ucp_ep_config_get_failed_lanes(const ucp_ep_config_key_t *key);
  * @return Error code as defined by @ref ucs_status_t
  */
 ucs_status_t ucp_ep_update_rkey_config(ucp_ep_h ep, ucp_rkey_h rkey);
+
+ucs_status_t ucp_stub_iface_open(ucs_status_t status, uct_iface_h *iface_p);
 
 #endif
