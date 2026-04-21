@@ -12,6 +12,7 @@
 #include <uct/api/device/uct_device_types.h>
 
 #include "cuda_ipc_ep.h"
+#include "cuda_ipc_iface_address.h"
 #include "cuda_ipc_iface.h"
 #include "cuda_ipc_md.h"
 #include "cuda_ipc.inl"
@@ -26,32 +27,23 @@
 #define UCT_CUDA_IPC_PUT 0
 #define UCT_CUDA_IPC_GET 1
 
-static ucs_sys_ns_t
-uct_cuda_ipc_ep_get_remote_pid_ns(const uct_ep_params_t *params)
-{
-    const uct_cuda_ipc_iface_address_pid_ns_t *iface_address_pid_ns;
-
-    if ((params->field_mask & UCT_EP_PARAM_FIELD_IFACE_ADDR_LENGTH) &&
-        (params->iface_addr_length ==
-         sizeof(uct_cuda_ipc_iface_address_pid_ns_t))) {
-        iface_address_pid_ns = (const uct_cuda_ipc_iface_address_pid_ns_t*)
-                                       params->iface_addr;
-        return iface_address_pid_ns->pid_ns;
-    }
-
-    return ucs_sys_get_default_ns(UCS_SYS_NS_TYPE_PID);
-}
 
 static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_ep_t, const uct_ep_params_t *params)
 {
     uct_cuda_ipc_iface_t *iface = ucs_derived_of(params->iface,
                                                  uct_cuda_ipc_iface_t);
+    const uct_iface_addr_t *iface_addr;
+    size_t iface_addr_length;
 
     UCT_EP_PARAMS_CHECK_DEV_IFACE_ADDRS(params);
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
 
-    self->remote_pid    = *(const pid_t*)params->iface_addr;
-    self->remote_pid_ns = uct_cuda_ipc_ep_get_remote_pid_ns(params);
+    iface_addr          = params->iface_addr;
+    iface_addr_length   = UCT_EP_PARAM_VALUE(params, iface_addr_length,
+                                             IFACE_ADDR_LENGTH, 0);
+    self->remote_pid    = uct_cuda_ipc_iface_address_pid(iface_addr);
+    self->remote_pid_ns = uct_cuda_ipc_iface_address_pid_ns(iface_addr,
+                                                            iface_addr_length);
     self->device_ep     = NULL;
     return UCS_OK;
 }
@@ -80,7 +72,7 @@ int uct_cuda_ipc_ep_is_connected(const uct_ep_h tl_ep,
         return 0;
     }
 
-    return ep->remote_pid == *(pid_t*)params->iface_addr;
+    return ep->remote_pid == uct_cuda_ipc_iface_address_pid(params->iface_addr);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_ipc_ctx_rsc_get(

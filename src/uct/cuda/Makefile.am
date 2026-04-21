@@ -1,5 +1,5 @@
 #
-# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2018. ALL RIGHTS RESERVED.
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 
@@ -30,6 +30,7 @@ noinst_HEADERS = \
 	cuda_copy/cuda_copy_iface.h \
 	cuda_copy/cuda_copy_ep.h \
 	cuda_ipc/cuda_ipc_md.h \
+	cuda_ipc/cuda_ipc_iface_address.h \
 	cuda_ipc/cuda_ipc_iface.h \
 	cuda_ipc/cuda_ipc_ep.h \
 	cuda_ipc/cuda_ipc_cache.h \
@@ -45,6 +46,7 @@ libuct_cuda_la_SOURCES = \
 	cuda_copy/cuda_copy_iface.c \
 	cuda_copy/cuda_copy_ep.c \
 	cuda_ipc/cuda_ipc_md.c \
+	cuda_ipc/cuda_ipc_iface_address.c \
 	cuda_ipc/cuda_ipc_iface.c \
 	cuda_ipc/cuda_ipc_ep.c \
 	cuda_ipc/cuda_ipc_cache.c
