@@ -123,6 +123,7 @@ KHASH_MAP_INIT_INT64(bridge_acs, ucs_topo_acs_status_t);
 typedef struct {
     ucs_topo_acs_pair_cache_t pair_cache;
     khash_t(bridge_acs)       bridge_cache;
+    int                       is_missing_permissions;
 } ucs_topo_acs_t;
 
 typedef struct ucs_topo_global_ctx {
@@ -1364,6 +1365,12 @@ static int ucs_topo_is_bridge_acs_blocking(const char *bdf)
         }
     }
 
+    /* Once we know this process can't read the PCI extended config space,
+     * we can skip it for all bridges in this process */
+    if (ucs_topo_global_ctx.acs.is_missing_permissions) {
+        goto out;
+    }
+
     status = ucs_string_alloc_path_buffer(&path, "acs_config_path");
     if (status != UCS_OK) {
         goto out;
@@ -1395,6 +1402,17 @@ static int ucs_topo_is_bridge_acs_blocking(const char *bdf)
         if (result) {
             ucs_debug("bridge %s has ACS P2P blocking enabled", bdf);
         }
+    } else {
+        /*
+         * Linux PCI sysfs caps unprivileged readers to the 64-byte legacy
+         * config header, but the ACS Extended Capability lives at offset
+         * >= UCS_TOPO_PCI_EXT_CAP_START (0x100) and is therefore invisible.
+         * Warn once per process and let the early-exit at the top of this
+         * function skip the I/O on every subsequent bridge.
+         */
+        ucs_topo_global_ctx.acs.is_missing_permissions = 1;
+        ucs_warn("PCIe ACS detection requires CAP_SYS_ADMIN (run as root) "
+                 "and will be skipped for all bridges in this process");
     }
 
     ucs_free(cfg_buf);
