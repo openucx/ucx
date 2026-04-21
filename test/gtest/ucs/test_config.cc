@@ -12,9 +12,10 @@ extern "C" {
 #include <ucs/time/time.h>
 }
 
-#define TEST_CONFIG_DIR  TOP_SRCDIR "/test/gtest/ucs"
-#define TEST_CONFIG_FILE "ucx_test.conf"
-#define TEST_ENV_PREFIX  "UCXGTEST_"
+#define TEST_CONFIG_DIR                 TOP_SRCDIR "/test/gtest/ucs"
+#define TEST_CONFIG_FILE                "ucx_test.conf"
+#define TEST_ENV_PREFIX                 "UCXGTEST_"
+#define ALLOW_LIST_WITH_RANGES_OPT_NAME "ALLOW_LIST_WITH_RANGES"
 
 
 typedef enum {
@@ -152,111 +153,115 @@ ucs_config_field_t engine_opts_table[] = {
 };
 
 ucs_config_field_t car_opts_table[] = {
-  {"ENGINE_", "", "Engine options",
-   ucs_offsetof(car_opts_t, engine), UCS_CONFIG_TYPE_TABLE(engine_opts_table)},
+    {"ENGINE_", "", "Engine options", ucs_offsetof(car_opts_t, engine),
+     UCS_CONFIG_TYPE_TABLE(engine_opts_table)},
 
-  {"COACH_", "PASSENGER_COLOR=blue", "Seats options",
-   ucs_offsetof(car_opts_t, coach), UCS_CONFIG_TYPE_TABLE(coach_opts_table)},
+    {"COACH_", "PASSENGER_COLOR=blue", "Seats options",
+     ucs_offsetof(car_opts_t, coach), UCS_CONFIG_TYPE_TABLE(coach_opts_table)},
 
-  {"PRICE", "999", "Price",
-   ucs_offsetof(car_opts_t, price), UCS_CONFIG_TYPE_UINT},
+    {"PRICE", "999", "Price", ucs_offsetof(car_opts_t, price),
+     UCS_CONFIG_TYPE_UINT},
 
-  {"PRICE_ALIAS", NULL, "Price",
-   ucs_offsetof(car_opts_t, price), UCS_CONFIG_TYPE_UINT},
+    {"PRICE_ALIAS", NULL, "Price", ucs_offsetof(car_opts_t, price),
+     UCS_CONFIG_TYPE_UINT},
 
-  {"DRIVER", "", "AI drives a car",
-   UCS_CONFIG_DEPRECATED_FIELD_OFFSET, UCS_CONFIG_TYPE_DEPRECATED},
+    {"DRIVER", "", "AI drives a car", UCS_CONFIG_DEPRECATED_FIELD_OFFSET,
+     UCS_CONFIG_TYPE_DEPRECATED},
 
-  {"BRAND", "Chevy", "Car brand",
-   ucs_offsetof(car_opts_t, brand), UCS_CONFIG_TYPE_STRING},
+    {"BRAND", "Chevy", "Car brand", ucs_offsetof(car_opts_t, brand),
+     UCS_CONFIG_TYPE_STRING},
 
-  {"MODEL", "Corvette", "Car model",
-   ucs_offsetof(car_opts_t, model), UCS_CONFIG_TYPE_STRING},
+    {"MODEL", "Corvette", "Car model", ucs_offsetof(car_opts_t, model),
+     UCS_CONFIG_TYPE_STRING},
 
-  {"COLOR", "red", "Car color",
-   ucs_offsetof(car_opts_t, color), UCS_CONFIG_TYPE_ENUM(color_names)},
+    {"COLOR", "red", "Car color", ucs_offsetof(car_opts_t, color),
+     UCS_CONFIG_TYPE_ENUM(color_names)},
 
-  {"VIN", "auto", "Vehicle identification number",
-   ucs_offsetof(car_opts_t, vin), UCS_CONFIG_TYPE_ULUNITS},
+    {"VIN", "auto", "Vehicle identification number",
+     ucs_offsetof(car_opts_t, vin), UCS_CONFIG_TYPE_ULUNITS},
 
-  {"BW_BYTES", "1024Bs", "Bandwidth in bytes",
-   ucs_offsetof(car_opts_t, bw_bytes), UCS_CONFIG_TYPE_BW},
+    {"BW_BYTES", "1024Bs", "Bandwidth in bytes",
+     ucs_offsetof(car_opts_t, bw_bytes), UCS_CONFIG_TYPE_BW},
 
-  {"BW_KBYTES", "1024KB/s", "Bandwidth in kbytes",
-   ucs_offsetof(car_opts_t, bw_kbytes), UCS_CONFIG_TYPE_BW},
+    {"BW_KBYTES", "1024KB/s", "Bandwidth in kbytes",
+     ucs_offsetof(car_opts_t, bw_kbytes), UCS_CONFIG_TYPE_BW},
 
-  {"BW_MBYTES", "1024MBs", "Bandwidth in mbytes",
-   ucs_offsetof(car_opts_t, bw_mbytes), UCS_CONFIG_TYPE_BW},
+    {"BW_MBYTES", "1024MBs", "Bandwidth in mbytes",
+     ucs_offsetof(car_opts_t, bw_mbytes), UCS_CONFIG_TYPE_BW},
 
-  {"BW_GBYTES", "1024GBps", "Bandwidth in gbytes",
-   ucs_offsetof(car_opts_t, bw_gbytes), UCS_CONFIG_TYPE_BW},
+    {"BW_GBYTES", "1024GBps", "Bandwidth in gbytes",
+     ucs_offsetof(car_opts_t, bw_gbytes), UCS_CONFIG_TYPE_BW},
 
-  {"BW_TBYTES", "1024TB/s", "Bandwidth in tbytes",
-   ucs_offsetof(car_opts_t, bw_tbytes), UCS_CONFIG_TYPE_BW},
+    {"BW_TBYTES", "1024TB/s", "Bandwidth in tbytes",
+     ucs_offsetof(car_opts_t, bw_tbytes), UCS_CONFIG_TYPE_BW},
 
-  {"BW_BITS", "1024bps", "Bandwidth in bits",
-   ucs_offsetof(car_opts_t, bw_bits), UCS_CONFIG_TYPE_BW},
+    {"BW_BITS", "1024bps", "Bandwidth in bits",
+     ucs_offsetof(car_opts_t, bw_bits), UCS_CONFIG_TYPE_BW},
 
-  {"BW_KBITS", "1024Kb/s", "Bandwidth in kbits",
-   ucs_offsetof(car_opts_t, bw_kbits), UCS_CONFIG_TYPE_BW},
+    {"BW_KBITS", "1024Kb/s", "Bandwidth in kbits",
+     ucs_offsetof(car_opts_t, bw_kbits), UCS_CONFIG_TYPE_BW},
 
-  {"BW_MBITS", "1024Mbs", "Bandwidth in mbits",
-   ucs_offsetof(car_opts_t, bw_mbits), UCS_CONFIG_TYPE_BW},
+    {"BW_MBITS", "1024Mbs", "Bandwidth in mbits",
+     ucs_offsetof(car_opts_t, bw_mbits), UCS_CONFIG_TYPE_BW},
 
-  {"BW_GBITS", "1024Gbps", "Bandwidth in gbits",
-   ucs_offsetof(car_opts_t, bw_gbits), UCS_CONFIG_TYPE_BW},
+    {"BW_GBITS", "1024Gbps", "Bandwidth in gbits",
+     ucs_offsetof(car_opts_t, bw_gbits), UCS_CONFIG_TYPE_BW},
 
-  {"BW_TBITS", "1024Tbs", "Bandwidth in tbits",
-   ucs_offsetof(car_opts_t, bw_tbits), UCS_CONFIG_TYPE_BW},
+    {"BW_TBITS", "1024Tbs", "Bandwidth in tbits",
+     ucs_offsetof(car_opts_t, bw_tbits), UCS_CONFIG_TYPE_BW},
 
-  {"BW_AUTO", "auto", "Auto bandwidth value",
-   ucs_offsetof(car_opts_t, bw_auto), UCS_CONFIG_TYPE_BW},
+    {"BW_AUTO", "auto", "Auto bandwidth value",
+     ucs_offsetof(car_opts_t, bw_auto), UCS_CONFIG_TYPE_BW},
 
-  {"CAN_BUS_BW", "mlx5_0:1024Tbs", "Bandwidth in tbits of CAN-bus",
-   ucs_offsetof(car_opts_t, can_pci_bw), UCS_CONFIG_TYPE_BW_SPEC},
+    {"CAN_BUS_BW", "mlx5_0:1024Tbs", "Bandwidth in tbits of CAN-bus",
+     ucs_offsetof(car_opts_t, can_pci_bw), UCS_CONFIG_TYPE_BW_SPEC},
 
-  {"AIR_CONDITIONING", "on", "Air conditioning mode",
-   ucs_offsetof(car_opts_t, air_conditioning), UCS_CONFIG_TYPE_ON_OFF},
+    {"AIR_CONDITIONING", "on", "Air conditioning mode",
+     ucs_offsetof(car_opts_t, air_conditioning), UCS_CONFIG_TYPE_ON_OFF},
 
-  {"ABS", "off", "ABS mode",
-   ucs_offsetof(car_opts_t, abs), UCS_CONFIG_TYPE_ON_OFF},
+    {"ABS", "off", "ABS mode", ucs_offsetof(car_opts_t, abs),
+     UCS_CONFIG_TYPE_ON_OFF},
 
-  {"TRANSMISSION", "auto", "Transmission mode",
-   ucs_offsetof(car_opts_t, transmission), UCS_CONFIG_TYPE_ON_OFF_AUTO},
+    {"TRANSMISSION", "auto", "Transmission mode",
+     ucs_offsetof(car_opts_t, transmission), UCS_CONFIG_TYPE_ON_OFF_AUTO},
 
-  {"TIME_VAL", "1s", "Time value 1 sec",
-   ucs_offsetof(car_opts_t, time_value), UCS_CONFIG_TYPE_TIME_UNITS},
+    {"TIME_VAL", "1s", "Time value 1 sec", ucs_offsetof(car_opts_t, time_value),
+     UCS_CONFIG_TYPE_TIME_UNITS},
 
-  {"TIME_AUTO", "auto", "Time value \"auto\"",
-   ucs_offsetof(car_opts_t, time_auto), UCS_CONFIG_TYPE_TIME_UNITS},
+    {"TIME_AUTO", "auto", "Time value \"auto\"",
+     ucs_offsetof(car_opts_t, time_auto), UCS_CONFIG_TYPE_TIME_UNITS},
 
-  {"TIME_INF", "inf", "Time value \"inf\"",
-   ucs_offsetof(car_opts_t, time_inf), UCS_CONFIG_TYPE_TIME_UNITS},
+    {"TIME_INF", "inf", "Time value \"inf\"",
+     ucs_offsetof(car_opts_t, time_inf), UCS_CONFIG_TYPE_TIME_UNITS},
 
-  {"ALLOW_LIST", "all", "Allow-list: \"all\" OR \"val1,val2\" OR \"^val1,val2\"",
-   ucs_offsetof(car_opts_t, allow_list), UCS_CONFIG_TYPE_ALLOW_LIST},
+    {"ALLOW_LIST", "all",
+     "Allow-list: \"all\" OR \"val1,val2\" OR \"^val1,val2\"",
+     ucs_offsetof(car_opts_t, allow_list), UCS_CONFIG_TYPE_ALLOW_LIST},
 
-  {"ALLOW_LIST_WITH_RANGES", "all",
-    "Allow-list with ranges: supports prefix[start-end]suffix syntax",
-    ucs_offsetof(car_opts_t, allow_list_with_ranges),
-    UCS_CONFIG_TYPE_ALLOW_LIST_WITH_RANGES},
+    {ALLOW_LIST_WITH_RANGES_OPT_NAME, "all",
+     "Allow-list with ranges: supports prefix[start-end]suffix syntax",
+     ucs_offsetof(car_opts_t, allow_list_with_ranges),
+     UCS_CONFIG_TYPE_ALLOW_LIST_WITH_RANGES},
 
-  {"TEMP", "20", "Temperature", 0,
-    UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_UINT,
-        {"front", "front temperature", ucs_offsetof(car_opts_t, temp_front)},
-        {"rear",  "rear temperature",  ucs_offsetof(car_opts_t, temp_rear)},
-        {NULL}
-    )},
+    {"TEMP", "20", "Temperature", 0,
+     UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_UINT,
+                               {"front", "front temperature",
+                                ucs_offsetof(car_opts_t, temp_front)},
+                               {"rear", "rear temperature",
+                                ucs_offsetof(car_opts_t, temp_rear)},
+                               {NULL})},
 
-  {"PASSENGERS", "None", "Passengers", 0,
-    UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_STRING,
-        {"first",  "First passenger",  ucs_offsetof(car_opts_t, passengers[0])},
-        {"second", "Second passenger", ucs_offsetof(car_opts_t, passengers[1])},
-        {"third",  "Third passenger",  ucs_offsetof(car_opts_t, passengers[2])},
-        {NULL}
-    )},
+    {"PASSENGERS", "None", "Passengers", 0,
+     UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_STRING,
+                               {"first", "First passenger",
+                                ucs_offsetof(car_opts_t, passengers[0])},
+                               {"second", "Second passenger",
+                                ucs_offsetof(car_opts_t, passengers[1])},
+                               {"third", "Third passenger",
+                                ucs_offsetof(car_opts_t, passengers[2])},
+                               {NULL})},
 
-  {NULL}
+    {NULL}
 };
 
 static std::vector<std::string> config_err_exp_str;
@@ -506,6 +511,35 @@ protected:
         const std::string negated = std::string("^") + input;
         verify_allow_list_with_ranges_inner(negated.c_str(), expected,
                                             UCS_CONFIG_ALLOW_LIST_NEGATE);
+    }
+
+    void verify_allow_list_with_ranges_truncation(
+            const char *input, const std::vector<std::string> &expected)
+    {
+        size_t warn_count;
+        {
+            const scoped_log_handler slh(hide_warns_logger);
+            warn_count = m_warnings.size();
+            verify_allow_list_with_ranges(input, expected);
+        }
+
+        /* verify_allow_list_with_ranges parses both the un-prefixed and the
+         * '^'-prefixed forms, so the truncation warning must fire twice. */
+        ASSERT_EQ(m_warnings.size() - warn_count, 2u)
+                << "Unexpected truncation warning count for field '"
+                << ALLOW_LIST_WITH_RANGES_OPT_NAME << "' (input='" << input
+                << "')";
+
+        const std::string expected_msg = std::string("value of ") +
+                                         ALLOW_LIST_WITH_RANGES_OPT_NAME +
+                                         " was truncated to " +
+                                         std::to_string(UCS_CONFIG_ARRAY_MAX) +
+                                         " entries";
+        for (size_t i = warn_count; i < m_warnings.size(); ++i) {
+            const std::string &msg = m_warnings[i];
+            EXPECT_NE(msg.find(expected_msg), std::string::npos)
+                    << "Unexpected truncation warning: " << msg;
+        }
     }
 };
 
@@ -920,8 +954,8 @@ UCS_TEST_F(test_config, test_allow_list_with_ranges_all) {
     EXPECT_EQ(0u, opts->allow_list_with_ranges.array.count);
 }
 
-UCS_TEST_F(test_config, test_allow_list_with_ranges_max_elements_single_range) {
-    const char *input = "a[0-200]";
+UCS_TEST_F(test_config, test_allow_list_with_ranges_max_elements) {
+    const char *input = "a[0-127]";
 
     std::vector<std::string> expected;
     for (unsigned i = 0; i < UCS_CONFIG_ARRAY_MAX; ++i) {
@@ -931,19 +965,30 @@ UCS_TEST_F(test_config, test_allow_list_with_ranges_max_elements_single_range) {
     verify_allow_list_with_ranges(input, expected);
 }
 
-UCS_TEST_F(test_config,
-           test_allow_list_with_ranges_max_elements_multiple_ranges) {
-    const char *input = "a[0-99],b[0-99]";
+UCS_TEST_F(test_config, test_allow_list_with_ranges_truncated_single_range) {
+    const char *input = "a[0-200]";
+
+    std::vector<std::string> expected;
+    for (unsigned i = 0; i < UCS_CONFIG_ARRAY_MAX; ++i) {
+        expected.push_back("a" + std::to_string(i));
+    }
+
+    verify_allow_list_with_ranges_truncation(input, expected);
+}
+
+UCS_TEST_F(test_config, test_allow_list_with_ranges_truncated_multiple_ranges) {
+    const char *input = "a[0-99],b,c[0-99]";
 
     std::vector<std::string> expected;
     for (unsigned i = 0; i < 100; ++i) {
         expected.push_back("a" + std::to_string(i));
     }
-    for (unsigned i = 0; i < UCS_CONFIG_ARRAY_MAX - 100; ++i) {
-        expected.push_back("b" + std::to_string(i));
+    expected.push_back("b");
+    for (unsigned i = 0; i < UCS_CONFIG_ARRAY_MAX - 101; ++i) {
+        expected.push_back("c" + std::to_string(i));
     }
 
-    verify_allow_list_with_ranges(input, expected);
+    verify_allow_list_with_ranges_truncation(input, expected);
 }
 
 UCS_TEST_F(test_config, test_key_value_generic_value) {
