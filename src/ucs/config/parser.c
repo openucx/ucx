@@ -875,14 +875,16 @@ static size_t ucs_config_array_expand_range(ucs_string_buffer_t *strb,
     pmatch[0].rm_so = 0;
     pmatch[0].rm_eo = (regoff_t)token_len;
 
-    ret = regexec(&ucs_config_range_regex, token, 5, pmatch, REG_STARTEND);
+    ret = regexec(&ucs_config_range_regex, token, ucs_static_array_size(pmatch),
+                  pmatch, REG_STARTEND);
 #else
     {
         char *token_buf = ucs_alloca(token_len + 1);
         memcpy(token_buf, token, token_len);
         token_buf[token_len] = '\0';
 
-        ret = regexec(&ucs_config_range_regex, token_buf, 5, pmatch, 0);
+        ret = regexec(&ucs_config_range_regex, token_buf,
+                      ucs_static_array_size(pmatch), pmatch, 0);
     }
 #endif
 
