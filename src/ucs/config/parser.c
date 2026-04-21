@@ -58,6 +58,7 @@ static khash_t(ucs_config_env_vars) ucs_config_parser_env_vars = {0};
 static khash_t(ucs_config_map) ucs_config_file_vars            = {0};
 static pthread_mutex_t ucs_config_parser_env_vars_hash_lock    = PTHREAD_MUTEX_INITIALIZER;
 static char ucs_config_parser_negate                           = '^';
+static __thread const char *ucs_config_parser_field_name       = NULL;
 static ucs_init_once_t ucs_config_range_regex_init             = UCS_INIT_ONCE_INITIALIZER;
 static regex_t ucs_config_range_regex;
 
@@ -826,27 +827,6 @@ ucs_status_t ucs_config_clone_range_spec(const void *src, void *dest, const void
     return UCS_OK;
 }
 
-/* Parse a single element and add it to the array.
- * Returns 1 on success, 0 on failure.
- */
-static int ucs_config_array_parse_element(const char *value, void *temp_field,
-                                          unsigned *index,
-                                          const ucs_config_array_t *array)
-{
-    if (*index >= UCS_CONFIG_ARRAY_MAX) {
-        return 1; /* Array full, but not an error */
-    }
-
-    if (!array->parser.read(value,
-                            (char*)temp_field + (*index) * array->elem_size,
-                            array->parser.arg)) {
-        return 0;
-    }
-
-    ++(*index);
-    return 1;
-}
-
 static size_t ucs_config_array_expand_range(ucs_string_buffer_t *strb,
                                             const char *token, size_t token_len,
                                             const char *delim,
@@ -967,7 +947,8 @@ static int ucs_config_sscanf_array_impl(const char *buf, void *dest,
     ucs_assertv(strlen(delim) == 1, "delimiter must be a single character");
 
     if (expand_ranges) {
-        ucs_config_array_expand_ranges(&strb, buf, delim, UCS_CONFIG_ARRAY_MAX);
+        ucs_config_array_expand_ranges(&strb, buf, delim,
+                                       UCS_CONFIG_ARRAY_MAX + 1);
     } else {
         ucs_string_buffer_appendf(&strb, "%s", buf);
     }
@@ -979,10 +960,17 @@ static int ucs_config_sscanf_array_impl(const char *buf, void *dest,
     }
 
     ucs_string_buffer_for_each_token(token, &strb, delim) {
-        if (!ucs_config_array_parse_element(token, temp_field, &i, array)) {
+        if (!array->parser.read(token, (char*)temp_field + i * array->elem_size,
+                                array->parser.arg)) {
             goto err_temp_field;
         }
-        if (i >= UCS_CONFIG_ARRAY_MAX) {
+        if (++i == UCS_CONFIG_ARRAY_MAX) {
+            /* Warn only if there are still more tokens to process. */
+            if (ucs_string_buffer_next_token(&strb, token, delim) != NULL) {
+                ucs_warn("value of %s was truncated to %u entries "
+                         "(UCS_CONFIG_ARRAY_MAX)",
+                         ucs_config_parser_field_name, UCS_CONFIG_ARRAY_MAX);
+            }
             break;
         }
     }
@@ -1526,7 +1514,9 @@ ucs_config_parser_parse_field(const ucs_config_field_t *field,
     char syntax_buf[256];
     int ret;
 
+    ucs_config_parser_field_name = field->name;
     ret = field->parser.read(value, var, field->parser.arg);
+    ucs_config_parser_field_name = NULL;
     if (ret != 1) {
         if (ucs_config_is_table_field(field)) {
             ucs_error("Could not set table value for %s: '%s'", field->name, value);
