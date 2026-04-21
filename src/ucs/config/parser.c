@@ -1199,10 +1199,9 @@ void ucs_config_help_allow_list(char *buf, size_t max, const void *arg)
 {
     const ucs_config_array_t *array = arg;
 
-    snprintf(
-        buf,
-        max, "comma-separated list (use \"all\" for including "
-             "all items or \'^\' for negation) of: ");
+    snprintf(buf, max,
+             "comma-separated list (prepend \'^\' for negation, "
+             "or set to \"all\" for including all items) of: ");
     array->parser.help(buf + strlen(buf), max - strlen(buf), array->parser.arg);
 }
 
@@ -1212,9 +1211,9 @@ void ucs_config_help_allow_list_with_ranges(char *buf, size_t max,
     const ucs_config_array_t *array = arg;
 
     snprintf(buf, max,
-             "comma-separated list (use \"all\" for including all items, "
-             "\'^\' for negation, or \'prefix[start-end]suffix\' for ranges) "
-             "of: ");
+             "comma-separated list (prepend \'^\' for negation, "
+             "use format \"prefix[start-end]suffix\" for ranges, "
+             "or set to \"all\" for including all items) of: ");
     array->parser.help(buf + strlen(buf), max - strlen(buf), array->parser.arg);
 }
 
