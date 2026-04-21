@@ -847,7 +847,10 @@ static size_t ucs_config_array_expand_range(ucs_string_buffer_t *strb,
                       "\\[([0-9]+)-([0-9]+)\\]" /* range */
                       "([^][]*)$" /* suffix */,
                       REG_EXTENDED);
-        ucs_assertv(ret == 0, "failed to compile range regex: %d", ret);
+        if (ret != 0) {
+            ucs_fatal("failed to compile range regex: %d", ret);
+            return 0;
+        }
     }
 
 #ifdef REG_STARTEND
