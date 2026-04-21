@@ -126,8 +126,7 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_version, all, "all")
 
 namespace {
 
-const std::string NONEXISTENT_DEV1 = "nonexistent_dev1";
-const std::string NONEXISTENT_DEV2 = "nonexistent_dev2";
+const std::string NONEXISTENT_DEV = "nonexistent_dev";
 
 /* Iterate over all devices of a given type and apply action to each */
 template<typename Action>
@@ -289,8 +288,8 @@ protected:
         if (negate) {
             devices_config = "^";
         }
-        devices_config += ucs::join({NONEXISTENT_DEV1, existing_device,
-                                     NONEXISTENT_DEV2},
+        devices_config += ucs::join({NONEXISTENT_DEV + "1", existing_device,
+                                     NONEXISTENT_DEV + "[2-3]"},
                                     ",");
 
         const std::string config_name = device_type_config_name(dev_type);
@@ -312,13 +311,13 @@ protected:
         }
 
         const std::string expected_warn =
-                device_type_name(dev_type) + " devices '" + NONEXISTENT_DEV1 +
-                "','" + NONEXISTENT_DEV2 +
-                "' are not available, please use one or more of:";
+                device_type_name(dev_type) + " devices '" + NONEXISTENT_DEV +
+                "1" + "','" + NONEXISTENT_DEV + "2" + "','" + NONEXISTENT_DEV +
+                "3" + "' are not available, please use one or more of:";
 
         EXPECT_NE(m_warnings[warn_count].find(expected_warn), std::string::npos)
-                << "Expected warning about nonexistent devices '"
-                << NONEXISTENT_DEV1 << "','" << NONEXISTENT_DEV2 << "'";
+                << "Expected warning about 3 nonexistent devices '"
+                << NONEXISTENT_DEV + "[1-3]'";
     }
 };
 
