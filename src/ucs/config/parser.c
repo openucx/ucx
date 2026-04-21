@@ -58,7 +58,6 @@ static khash_t(ucs_config_env_vars) ucs_config_parser_env_vars = {0};
 static khash_t(ucs_config_map) ucs_config_file_vars            = {0};
 static pthread_mutex_t ucs_config_parser_env_vars_hash_lock    = PTHREAD_MUTEX_INITIALIZER;
 static char ucs_config_parser_negate                           = '^';
-static __thread const char *ucs_config_parser_field_name       = NULL;
 static ucs_init_once_t ucs_config_range_regex_init             = UCS_INIT_ONCE_INITIALIZER;
 static regex_t ucs_config_range_regex;
 
@@ -940,6 +939,7 @@ static int ucs_config_sscanf_array_impl(const char *buf, void *dest,
     ucs_config_array_field_t *field = dest;
     const ucs_config_array_t *array = arg;
     unsigned i                      = 0;
+    unsigned truncated              = 0;
     char *token;
     void *temp_field;
 
@@ -965,18 +965,17 @@ static int ucs_config_sscanf_array_impl(const char *buf, void *dest,
             goto err_temp_field;
         }
         if (++i == UCS_CONFIG_ARRAY_MAX) {
-            /* Warn only if there are still more tokens to process. */
+            /* Truncated only if there are still more tokens to process. */
             if (ucs_string_buffer_next_token(&strb, token, delim) != NULL) {
-                ucs_warn("value of %s was truncated to %u entries "
-                         "(UCS_CONFIG_ARRAY_MAX)",
-                         ucs_config_parser_field_name, UCS_CONFIG_ARRAY_MAX);
+                truncated = 1;
             }
             break;
         }
     }
 
-    field->data  = temp_field;
-    field->count = i;
+    field->data      = temp_field;
+    field->count     = i;
+    field->truncated = truncated;
     ucs_string_buffer_cleanup(&strb);
     return 1;
 
@@ -1471,6 +1470,14 @@ static inline int ucs_config_is_table_field(const ucs_config_field_t *field)
     return (field->parser.read == ucs_config_sscanf_table);
 }
 
+static inline int ucs_config_is_array_field(const ucs_config_field_t *field)
+{
+    return (field->parser.read == ucs_config_sscanf_array) ||
+           (field->parser.read == ucs_config_sscanf_path_array) ||
+           (field->parser.read == ucs_config_sscanf_allow_list) ||
+           (field->parser.read == ucs_config_sscanf_allow_list_with_ranges);
+}
+
 /**
  * Allocates multi-line documentation text string, caller is responsible for
  * freeing the memory.
@@ -1514,9 +1521,7 @@ ucs_config_parser_parse_field(const ucs_config_field_t *field,
     char syntax_buf[256];
     int ret;
 
-    ucs_config_parser_field_name = field->name;
     ret = field->parser.read(value, var, field->parser.arg);
-    ucs_config_parser_field_name = NULL;
     if (ret != 1) {
         if (ucs_config_is_table_field(field)) {
             ucs_error("Could not set table value for %s: '%s'", field->name, value);
@@ -1527,6 +1532,13 @@ ucs_config_parser_parse_field(const ucs_config_field_t *field,
                       value, syntax_buf);
         }
         return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (ucs_config_is_array_field(field) &&
+        ((ucs_config_array_field_t*)var)->truncated) {
+        ucs_warn("value of %s was truncated to %u entries "
+                 "(UCS_CONFIG_ARRAY_MAX)",
+                 field->name, UCS_CONFIG_ARRAY_MAX);
     }
 
     return UCS_OK;
