@@ -58,6 +58,8 @@ static khash_t(ucs_config_env_vars) ucs_config_parser_env_vars = {0};
 static khash_t(ucs_config_map) ucs_config_file_vars            = {0};
 static pthread_mutex_t ucs_config_parser_env_vars_hash_lock    = PTHREAD_MUTEX_INITIALIZER;
 static char ucs_config_parser_negate                           = '^';
+static ucs_init_once_t ucs_config_range_regex_init             = UCS_INIT_ONCE_INITIALIZER;
+static regex_t ucs_config_range_regex;
 
 
 const char *ucs_async_mode_names[] = {
@@ -850,8 +852,6 @@ static size_t ucs_config_array_expand_range(ucs_string_buffer_t *strb,
                                             const char *delim,
                                             size_t max_elements)
 {
-    static ucs_init_once_t regex_init = UCS_INIT_ONCE_INITIALIZER;
-    static regex_t range_regex;
     size_t first, last, j, count;
     regoff_t prefix_len, suffix_len;
     regmatch_t pmatch[5];
@@ -862,8 +862,8 @@ static size_t ucs_config_array_expand_range(ucs_string_buffer_t *strb,
         return 0;
     }
 
-    UCS_INIT_ONCE(&regex_init) {
-        ret = regcomp(&range_regex,
+    UCS_INIT_ONCE(&ucs_config_range_regex_init) {
+        ret = regcomp(&ucs_config_range_regex,
                       "^([^][]*)" /* prefix */
                       "\\[([0-9]+)-([0-9]+)\\]" /* range */
                       "([^][]*)$" /* suffix */,
@@ -875,14 +875,14 @@ static size_t ucs_config_array_expand_range(ucs_string_buffer_t *strb,
     pmatch[0].rm_so = 0;
     pmatch[0].rm_eo = (regoff_t)token_len;
 
-    ret = regexec(&range_regex, token, 5, pmatch, REG_STARTEND);
+    ret = regexec(&ucs_config_range_regex, token, 5, pmatch, REG_STARTEND);
 #else
     {
         char *token_buf = ucs_alloca(token_len + 1);
         memcpy(token_buf, token, token_len);
         token_buf[token_len] = '\0';
 
-        ret = regexec(&range_regex, token_buf, 5, pmatch, 0);
+        ret = regexec(&ucs_config_range_regex, token_buf, 5, pmatch, 0);
     }
 #endif
 
@@ -2651,6 +2651,10 @@ void ucs_config_parser_cleanup()
         ucs_free(value);
     })
     kh_destroy_inplace(ucs_config_map, &ucs_config_file_vars);
+
+    UCS_CLEANUP_ONCE(&ucs_config_range_regex_init) {
+        regfree(&ucs_config_range_regex);
+    }
 }
 
 static int
