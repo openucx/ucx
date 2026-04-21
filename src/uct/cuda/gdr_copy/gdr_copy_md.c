@@ -55,7 +55,7 @@ uct_gdr_copy_use_pcie_params_get(ucs_ternary_auto_value_t use_pcie,
     return UCS_OK;
 #else
     if (use_pcie == UCS_YES) {
-        ucs_error("USE_PCIE=yes requires GDRCopy with gdr_pin_buffer_v2", buf);
+        ucs_error("USE_PCIE=yes requires GDRCopy with gdr_pin_buffer_v2");
         return UCS_ERR_INVALID_PARAM;
     }
 
