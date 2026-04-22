@@ -37,15 +37,7 @@ typedef struct uct_cuda_ipc_md_handle {
     CUmemPoolPtrExportData    ptr;
     CUmemoryPool              pool;
 #endif
-    union {
-        unsigned long long buffer_id;
-#if HAVE_CUDA_FABRIC
-        struct {
-            uint32_t meta_alloc_size; /* Metadata buffer alloc size */
-            uint16_t num_chunks; /* Number of VMM chunks */
-        } vmm_multi;
-#endif
-    };
+    unsigned long long        buffer_id;
 } uct_cuda_ipc_md_handle_t;
 
 /**
@@ -137,10 +129,14 @@ typedef struct {
     size_t                    b_len;  /* Allocation size */
     ucs_list_link_t           link;
 #if HAVE_CUDA_FABRIC
-    CUdeviceptr vmm_meta_dev_ptr; /* GPU metadata buffer VA */
-    CUmemFabricHandle vmm_meta_fabric_handle; /* Fabric handle to metadata */
-    size_t vmm_meta_alloc_size; /* Rounded-up alloc size */
-    uint16_t vmm_meta_num_chunks; /* Chunk count */
+    CUdeviceptr vmm_header_dev_ptr;            /* GPU metadata header buffer VA */
+    CUdeviceptr vmm_chunks_dev_ptr;            /* GPU metadata chunks buffer VA */
+    CUmemFabricHandle vmm_header_fabric_handle;/* Fabric handle to header buffer */
+    size_t vmm_header_alloc_size;              /* Header buffer alloc size */
+    size_t vmm_chunks_alloc_size;              /* Chunks buffer alloc size */
+    CUdeviceptr vmm_d_bptr;                    /* Expanded base covering all chunks */
+    size_t vmm_b_len;                          /* Expanded length covering all chunks */
+    uint16_t vmm_meta_num_chunks;              /* Chunk count */
 #endif
 } uct_cuda_ipc_lkey_t;
 
@@ -169,11 +165,22 @@ typedef struct {
 #if HAVE_CUDA_FABRIC
 typedef struct {
     uct_cuda_ipc_key_handle_t handle_type;
-    CUmemFabricHandle         fabric_handle;
-    CUdeviceptr               d_bptr;
-    size_t                    b_len;
-    unsigned long long        buffer_id;
+    union {
+        CUmemFabricHandle     fabric;
+    } handle;
+} uct_cuda_ipc_vmm_handle_t;
+
+typedef struct {
+    uct_cuda_ipc_vmm_handle_t vmm_handle;
+    CUdeviceptr                d_bptr;
+    size_t                     b_len;
+    unsigned long long         buffer_id;
 } uct_cuda_ipc_vmm_chunk_desc_t;
+
+typedef struct {
+    uct_cuda_ipc_vmm_handle_t chunks_handle;
+    uint16_t                   num_chunks;
+} uct_cuda_ipc_vmm_meta_header_t;
 
 static UCS_F_ALWAYS_INLINE void
 uct_cuda_ipc_init_access_desc(CUmemAccessDesc *access_desc, CUdevice cu_dev)
@@ -190,10 +197,7 @@ typedef struct {
     int                          stream_id;
 #if HAVE_CUDA_FABRIC
     uct_cuda_ipc_vmm_chunk_desc_t *chunks;
-    size_t meta_alloc_size;
-    uint16_t num_chunks;
-    CUdeviceptr contig_va; /* Contiguous local VA mapping */
-    CUmemGenericAllocationHandle *imp_handles; /* Imported chunk handles */
+    uint16_t                      num_chunks;
 #endif
 } uct_cuda_ipc_unpacked_rkey_t;
 

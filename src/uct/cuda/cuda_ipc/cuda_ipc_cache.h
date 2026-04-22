@@ -29,6 +29,11 @@ struct uct_cuda_ipc_cache_region {
     uint64_t                refcount;     /**< Track in-flight ops before unmapping*/
     CUdevice                cu_dev;       /**< CUDA device */
     uint8_t                 in_lru;       /**< Whether region is on the LRU list */
+#if HAVE_CUDA_FABRIC
+    CUmemGenericAllocationHandle *imp_handles; /**< Per-chunk imported handles (VMM_MULTI) */
+    uct_cuda_ipc_vmm_chunk_desc_t *chunks;     /**< Chunk descriptors (VMM_MULTI) */
+    uint16_t                num_chunks;        /**< Number of VMM chunks (VMM_MULTI) */
+#endif
 };
 
 
@@ -64,7 +69,7 @@ void uct_cuda_ipc_destroy_cache(uct_cuda_ipc_cache_t *cache);
  * 
  * @return UCS_OK on success, or error status on failure
  */
-ucs_status_t uct_cuda_ipc_map_memhandle(uct_cuda_ipc_extended_rkey_t *key,
+ucs_status_t uct_cuda_ipc_map_memhandle(uct_cuda_ipc_unpacked_rkey_t *key,
                                         CUdevice cu_dev, void **mapped_addr,
                                         ucs_log_level_t log_level);
 

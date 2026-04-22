@@ -340,7 +340,6 @@ UCS_TEST_P(test_cuda_ipc_md, mpack_vmm_multi)
 
     EXPECT_EQ(UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM_MULTI,
               rkey.super.ph.handle_type);
-    EXPECT_EQ(4u, (unsigned)rkey.super.ph.vmm_multi.num_chunks);
 
     uct_md_mem_dereg_params_t params;
     params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;

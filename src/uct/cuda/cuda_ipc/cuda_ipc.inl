@@ -90,21 +90,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_ipc_get_remote_address(
     ptrdiff_t offset;
     void *mapped_addr;
 
-#if HAVE_CUDA_FABRIC
-    if (rkey->super.super.ph.handle_type ==
-            UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM_MULTI) {
-        offset = raddr - rkey->super.super.d_bptr;
-        ucs_assertv(offset <= rkey->super.super.b_len,
-                    "offset:%ld b_len:%lu", offset, rkey->super.super.b_len);
-        *laddr_p = (void*)(rkey->contig_va + offset);
-        if (base_addr_p != NULL) {
-            *base_addr_p = NULL;
-        }
-        return UCS_OK;
-    }
-#endif
-
-    status = uct_cuda_ipc_map_memhandle(&rkey->super, cu_dev, &mapped_addr,
+    status = uct_cuda_ipc_map_memhandle(rkey, cu_dev, &mapped_addr,
                                         UCS_LOG_LEVEL_ERROR);
     if (ucs_unlikely(status != UCS_OK)) {
         return status;
