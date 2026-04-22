@@ -828,7 +828,7 @@ void uct_cuda_ipc_cache_set_global_limits(unsigned long max_regions,
                                                     max_size);
 }
 
-void uct_cuda_ipc_destroy_cache_by_pid_ns(pid_t pid, ucs_sys_ns_t pid_ns)
+void uct_cuda_ipc_destroy_cache_by_pid_ns(uct_cuda_ipc_pid_ns_t pid_ns)
 {
     uct_cuda_ipc_cache_hash_key_t cache_hash_key;
     int num_devices;
@@ -838,8 +838,8 @@ void uct_cuda_ipc_destroy_cache_by_pid_ns(pid_t pid, ucs_sys_ns_t pid_ns)
     khint_t khiter;
     uct_cuda_ipc_cache_t *cache;
 
-    cache_hash_key.pid    = pid;
-    cache_hash_key.pid_ns = pid_ns;
+    cache_hash_key.pid    = pid_ns.pid;
+    cache_hash_key.pid_ns = pid_ns.ns;
 
     status = UCT_CUDADRV_FUNC_LOG_WARN(cuDeviceGetCount(&num_devices));
     if (status != UCS_OK) {

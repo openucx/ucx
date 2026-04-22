@@ -11,6 +11,7 @@
 #include <ucs/datastruct/list.h>
 #include <ucs/type/init_once.h>
 #include <ucs/type/spinlock.h>
+#include "cuda_ipc_ep.h"
 #include "cuda_ipc_md.h"
 #include <cuda.h>
 
@@ -87,10 +88,7 @@ void uct_cuda_ipc_cache_set_global_limits(unsigned long max_regions,
 
 /**
  * @brief Tear down all CUDA IPC remote caches for a peer process ID
- *
- * @param pid  peer process ID
- * @param pid_ns peer process ID namespace
  */
-void uct_cuda_ipc_destroy_cache_by_pid_ns(pid_t pid, ucs_sys_ns_t pid_ns);
+void uct_cuda_ipc_destroy_cache_by_pid_ns(uct_cuda_ipc_pid_ns_t pid_ns);
 
 #endif

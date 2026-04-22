@@ -38,19 +38,19 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_ep_t, const uct_ep_params_t *params)
     UCT_EP_PARAMS_CHECK_DEV_IFACE_ADDRS(params);
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
 
-    iface_addr          = params->iface_addr;
-    iface_addr_length   = UCT_EP_PARAM_VALUE(params, iface_addr_length,
-                                             IFACE_ADDR_LENGTH, 0);
-    self->remote_pid    = uct_cuda_ipc_iface_address_pid(iface_addr);
-    self->remote_pid_ns = uct_cuda_ipc_iface_address_pid_ns(iface_addr,
-                                                            iface_addr_length);
-    self->device_ep     = NULL;
+    iface_addr              = params->iface_addr;
+    iface_addr_length       = UCT_EP_PARAM_VALUE(params, iface_addr_length,
+                                                 IFACE_ADDR_LENGTH, 0);
+    self->remote_pid_ns.pid = uct_cuda_ipc_iface_address_pid(iface_addr);
+    self->remote_pid_ns.ns  = uct_cuda_ipc_iface_address_pid_ns(
+            iface_addr, iface_addr_length);
+    self->device_ep         = NULL;
     return UCS_OK;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_cuda_ipc_ep_t)
 {
-    uct_cuda_ipc_destroy_cache_by_pid_ns(self->remote_pid, self->remote_pid_ns);
+    uct_cuda_ipc_destroy_cache_by_pid_ns(self->remote_pid_ns);
     if (self->device_ep != NULL) {
         (void)UCT_CUDADRV_FUNC_LOG_WARN(cuMemFree((CUdeviceptr)self->device_ep));
     }
@@ -72,7 +72,8 @@ int uct_cuda_ipc_ep_is_connected(const uct_ep_h tl_ep,
         return 0;
     }
 
-    return ep->remote_pid == uct_cuda_ipc_iface_address_pid(params->iface_addr);
+    return ep->remote_pid_ns.pid ==
+           uct_cuda_ipc_iface_address_pid(params->iface_addr);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_ipc_ctx_rsc_get(
