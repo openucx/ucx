@@ -964,6 +964,9 @@ static int ucs_config_sscanf_array_impl(const char *buf, void *dest,
 
     ucs_string_buffer_for_each_token(token, &strb, delim) {
         if (i == UCS_CONFIG_ARRAY_MAX) {
+            ucs_debug("parsed array was truncated to %u entries (input=\"%s\", "
+                      "truncated before \"%s\")",
+                      UCS_CONFIG_ARRAY_MAX, buf, token);
             truncated = 1;
             break;
         }
@@ -1517,6 +1520,25 @@ static void ucs_config_print_doc_line_by_line(const ucs_config_field_t *field,
     ucs_free(doc);
 }
 
+static void ucs_config_warn_array_truncated(const ucs_config_field_t *field,
+                                            const void *var)
+{
+    const ucs_config_array_field_t *arr = var;
+
+#define WARN_FMT "value of %s was truncated to %u entries"
+
+    if (field->parser.arg == &ucs_config_array_string) {
+        /* array of strings, print the first and last string */
+        ucs_assertv(arr->count >= 2, "truncated array is too short");
+        ucs_warn(WARN_FMT ": %s...%s", field->name, arr->count,
+                 ((char**)arr->data)[0], ((char**)arr->data)[arr->count - 1]);
+    } else {
+        /* array of other type, print without values */
+        ucs_warn(WARN_FMT, field->name,
+                 ((ucs_config_array_field_t*)var)->count);
+    }
+}
+
 static ucs_status_t
 ucs_config_parser_parse_field(const ucs_config_field_t *field,
                               const char *value, void *var)
@@ -1539,9 +1561,7 @@ ucs_config_parser_parse_field(const ucs_config_field_t *field,
 
     if (ucs_config_is_array_field(field) &&
         ((ucs_config_array_field_t*)var)->truncated) {
-        ucs_warn("value of %s was truncated to %u entries "
-                 "(UCS_CONFIG_ARRAY_MAX)",
-                 field->name, UCS_CONFIG_ARRAY_MAX);
+        ucs_config_warn_array_truncated(field, var);
     }
 
     return UCS_OK;

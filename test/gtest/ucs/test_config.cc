@@ -516,6 +516,8 @@ protected:
     void verify_allow_list_with_ranges_truncation(
             const char *input, const std::vector<std::string> &expected)
     {
+        ASSERT_EQ(expected.size(), UCS_CONFIG_ARRAY_MAX);
+
         size_t warn_count;
         {
             const scoped_log_handler slh(hide_warns_logger);
@@ -534,11 +536,13 @@ protected:
                                          ALLOW_LIST_WITH_RANGES_OPT_NAME +
                                          " was truncated to " +
                                          std::to_string(UCS_CONFIG_ARRAY_MAX) +
-                                         " entries";
+                                         " entries: " + expected.front() +
+                                         "..." + expected.back();
         for (size_t i = warn_count; i < m_warnings.size(); ++i) {
             const std::string &msg = m_warnings[i];
             EXPECT_NE(msg.find(expected_msg), std::string::npos)
-                    << "Unexpected truncation warning: " << msg;
+                    << "Unexpected truncation warning: " << msg
+                    << " (expected to contain: " << expected_msg << ")";
         }
     }
 };
