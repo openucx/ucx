@@ -45,13 +45,13 @@ static void ucp_proto_reconfig_abort(ucp_request_t *req, ucs_status_t status)
 }
 
 static int
-ucp_proto_reconfig_report_rma_force_zcopy_no_proto(ucp_request_t *req,
-                                                   ucp_ep_h ep)
+ucp_proto_reconfig_report_no_rma_emulation_no_proto(ucp_request_t *req,
+                                                    ucp_ep_h ep)
 {
     ucp_operation_id_t op_id;
     ucs_memory_type_t local_mem_type, remote_mem_type;
 
-    if (!ep->worker->context->config.ext.rma_force_zcopy) {
+    if (ep->worker->context->config.ext.proto_emulation_enable) {
         return 0;
     }
 
@@ -65,8 +65,8 @@ ucp_proto_reconfig_report_rma_force_zcopy_no_proto(ucp_request_t *req,
 
     ucs_error("No zero-copy protocol found for %s %s %s %s, %zu bytes. "
               "Please check for proper GPU and/or HCA support, or set "
-              "UCX_RMA_FORCE_ZCOPY=n to proceed by allowing slower software "
-              "emulation.",
+              "UCX_PROTO_EMULATION_ENABLE=y to proceed by allowing slower "
+              "software emulation.",
               (op_id == UCP_OP_ID_PUT) ? "put from" : "get into",
               ucs_memory_type_names[local_mem_type],
               (op_id == UCP_OP_ID_PUT) ? "to" : "from",
@@ -84,7 +84,7 @@ static ucs_status_t ucp_proto_reconfig_progress(uct_pending_req_t *self)
 
     /* This protocol should not be selected for valid and connected endpoint */
     if (ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED) {
-        if (ucp_proto_reconfig_report_rma_force_zcopy_no_proto(req, ep)) {
+        if (ucp_proto_reconfig_report_no_rma_emulation_no_proto(req, ep)) {
             ucp_proto_request_abort(req, UCS_ERR_CANCELED);
             return UCS_OK;
         }

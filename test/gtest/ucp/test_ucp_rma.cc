@@ -329,7 +329,7 @@ UCS_TEST_P(test_ucp_rma, get_blocking_zcopy, "ZCOPY_THRESH=0") {
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_rma)
 
 
-class test_ucp_rma_force_zcopy : public test_ucp_rma {
+class test_ucp_proto_emulation_enable : public test_ucp_rma {
 public:
     static constexpr size_t SMALL_SIZE = 8;
     static constexpr size_t BIG_SIZE   = 512 * UCS_KBYTE;
@@ -339,9 +339,9 @@ public:
         add_variant_with_value(variants, UCP_FEATURE_RMA, 0, "");
     }
 
-    test_ucp_rma_force_zcopy()
+    test_ucp_proto_emulation_enable()
     {
-        modify_config("RMA_FORCE_ZCOPY", "y");
+        modify_config("PROTO_EMULATION_ENABLE", "n");
         modify_config("IB_TX_INLINE_RESP", "0", SETENV_IF_NOT_EXIST);
     }
 
@@ -372,17 +372,17 @@ protected:
         EXPECT_EQ(UCS_ERR_CANCELED, status)
                 << (op == RMA_OP_PUT ? "put" : "get") << " should be canceled";
 
-        /* Verify RMA_FORCE_ZCOPY error message was logged */
+        /* Verify PROTO_EMULATION_ENABLE error message was logged */
         bool found_rma_msg = false;
         for (const auto &err : m_errors) {
-            if (err.find("set UCX_RMA_FORCE_ZCOPY=n to proceed") !=
+            if (err.find("set UCX_PROTO_EMULATION_ENABLE=y to proceed") !=
                 std::string::npos) {
                 found_rma_msg = true;
                 break;
             }
         }
         EXPECT_TRUE(found_rma_msg) << "Expected error message with "
-                                      "UCX_RMA_FORCE_ZCOPY=n advice";
+                                      "UCX_PROTO_EMULATION_ENABLE=y advice";
     }
 
     void test_forced_message_sizes(send_func_t send_func)
@@ -397,43 +397,44 @@ protected:
     }
 };
 
-UCS_TEST_P(test_ucp_rma_force_zcopy, no_zcopy_proto_fails_put_small,
+UCS_TEST_P(test_ucp_proto_emulation_enable, no_zcopy_proto_fails_put_small,
            "PROTOS=put/am/*,get/am/*,reconfig")
 {
     run_expect_canceled(RMA_OP_PUT, SMALL_SIZE);
 }
 
-UCS_TEST_P(test_ucp_rma_force_zcopy, no_zcopy_proto_fails_put_big,
+UCS_TEST_P(test_ucp_proto_emulation_enable, no_zcopy_proto_fails_put_big,
            "PROTOS=put/am/*,get/am/*,reconfig")
 {
     run_expect_canceled(RMA_OP_PUT, BIG_SIZE);
 }
 
-UCS_TEST_P(test_ucp_rma_force_zcopy, no_zcopy_proto_fails_get_small,
+UCS_TEST_P(test_ucp_proto_emulation_enable, no_zcopy_proto_fails_get_small,
            "PROTOS=put/am/*,get/am/*,reconfig")
 {
     run_expect_canceled(RMA_OP_GET, SMALL_SIZE);
 }
 
-UCS_TEST_P(test_ucp_rma_force_zcopy, no_zcopy_proto_fails_get_big,
+UCS_TEST_P(test_ucp_proto_emulation_enable, no_zcopy_proto_fails_get_big,
            "PROTOS=put/am/*,get/am/*,reconfig")
 {
     run_expect_canceled(RMA_OP_GET, BIG_SIZE);
 }
 
-UCS_TEST_P(test_ucp_rma_force_zcopy, get_zcopy_forced_success,
+UCS_TEST_P(test_ucp_proto_emulation_enable, get_zcopy_forced_success,
            "PROTOS=get/bcopy,get/zcopy,reconfig")
 {
     test_forced_message_sizes(static_cast<send_func_t>(&test_ucp_rma::get_b));
 }
 
-UCS_TEST_P(test_ucp_rma_force_zcopy, put_zcopy_forced_success,
+UCS_TEST_P(test_ucp_proto_emulation_enable, put_zcopy_forced_success,
            "PROTOS=put/offload/*,reconfig")
 {
     test_forced_message_sizes(static_cast<send_func_t>(&test_ucp_rma::put_b));
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_rma_force_zcopy, ib, "ib")
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_proto_emulation_enable, ib,
+                                        "ib")
 
 
 class test_ucp_rma_reg : public test_ucp_rma {

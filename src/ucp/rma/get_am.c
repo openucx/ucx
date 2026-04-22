@@ -111,7 +111,7 @@ ucp_proto_get_am_bcopy_probe(const ucp_proto_init_params_t *init_params)
         return;
     }
 
-    if (init_params->worker->context->config.ext.rma_force_zcopy) {
+    if (!init_params->worker->context->config.ext.proto_emulation_enable) {
         return;
     }
 
