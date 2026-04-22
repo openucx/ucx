@@ -963,17 +963,17 @@ static int ucs_config_sscanf_array_impl(const char *buf, void *dest,
     }
 
     ucs_string_buffer_for_each_token(token, &strb, delim) {
+        if (i == UCS_CONFIG_ARRAY_MAX) {
+            truncated = 1;
+            break;
+        }
+
         if (!array->parser.read(token, (char*)temp_field + i * array->elem_size,
                                 array->parser.arg)) {
             goto err_temp_field;
         }
-        if (++i == UCS_CONFIG_ARRAY_MAX) {
-            /* Truncated only if there are still more tokens to process. */
-            if (ucs_string_buffer_next_token(&strb, token, delim) != NULL) {
-                truncated = 1;
-            }
-            break;
-        }
+
+        i++;
     }
 
     field->data      = temp_field;
