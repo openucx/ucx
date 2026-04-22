@@ -1329,11 +1329,7 @@ static void ucp_ep_recovery_send_request(ucp_ep_h ep)
     ucp_lane_map_t failed_lanes = ucp_ep_get_failed_lanes(ep);
     ucp_lane_map_t prepared;
 
-    if ((ep->flags & UCP_EP_FLAG_FAILED) ||
-        (ucp_ep_config(ep)->key.am_lane == UCP_NULL_LANE) ||
-        (failed_lanes == 0)) {
-        return;
-    }
+    ucs_assert(ucp_ep_config(ep)->key.am_lane != UCP_NULL_LANE);
 
     prepared = ucp_ep_recovery_prepare_lanes(ep, failed_lanes);
     if (prepared == 0) {
@@ -2555,7 +2551,6 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     }
 
     ucp_ep_set_cfg_index(ep, new_cfg_index, 1);
-    ep->am_lane = key.am_lane;
 
     snprintf(str, sizeof(str), "ep %p", ep);
     ucp_wireup_print_config(worker, &ucp_ep_config(ep)->key, str,

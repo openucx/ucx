@@ -857,7 +857,6 @@ static ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep,
     }
 
     ucp_ep_set_cfg_index(ep, cfg_index, 1);
-    ep->am_lane = key.am_lane;
     if (!ucp_ep_has_cm_lane(ep)) {
         ucp_ep_update_flags(ep, UCP_EP_FLAG_CONNECT_REQ_QUEUED, 0);
     }
@@ -1724,7 +1723,6 @@ ucp_ep_reconfig_internal(ucp_ep_h ep, ucp_lane_map_t failed_lanes)
     }
 
     ucp_ep_set_cfg_index(ep, new_cfg_index, 0);
-    ep->am_lane = cfg_key.am_lane;
 out:
     return UCS_OK;
 }
@@ -1739,15 +1737,17 @@ out:
 ucs_status_t ucp_ep_reconfig_clear_failed_lanes(ucp_ep_h ep,
                                                 ucp_lane_map_t lanes)
 {
-    ucp_worker_h worker          = ep->worker;
-    ucp_ep_config_key_t cfg_key  = ucp_ep_config(ep)->key;
-    const unsigned ep_init_flags = (ep->flags & UCP_EP_FLAG_INTERNAL) ?
-                                           UCP_EP_INIT_FLAG_INTERNAL : 0;
-    ucp_lane_map_t to_clear      = lanes & ucp_ep_get_failed_lanes(ep);
+    ucp_worker_h worker             = ep->worker;
+    ucp_ep_config_key_t cfg_key     = ucp_ep_config(ep)->key;
+    const unsigned ep_init_flags    = (ep->flags & UCP_EP_FLAG_INTERNAL) ?
+                                      UCP_EP_INIT_FLAG_INTERNAL : 0;
+    ucp_lane_map_t to_clear         = lanes & ucp_ep_get_failed_lanes(ep);
+    const ucs_log_level_t log_level = UCS_LOG_LEVEL_DIAG;
     ucp_worker_cfg_index_t old_cfg_index;
     ucp_worker_cfg_index_t new_cfg_index;
     ucp_lane_index_t lane;
     ucs_status_t status;
+    ucs_string_buffer_t strb;
 
     if (to_clear == 0) {
         return UCS_OK;
@@ -1780,16 +1780,18 @@ ucs_status_t ucp_ep_reconfig_clear_failed_lanes(ucp_ep_h ep,
         return status;
     }
 
-    ucp_ep_set_cfg_index(ep, new_cfg_index, 0);
-    ep->am_lane = cfg_key.am_lane;
-
-    ucp_ep_config_reactivate_worker_ifaces(worker, old_cfg_index,
-                                           ep->cfg_index);
-
+    ucp_ep_set_cfg_index(ep, new_cfg_index, 1);
     ucs_debug("ep %p: cleared FAILED on lanes 0x%" PRIx64
               " (cfg_index %u -> %u, am_lane=%d)",
-              ep, (uint64_t)to_clear, old_cfg_index, ep->cfg_index,
-              cfg_key.am_lane);
+              ep, to_clear, old_cfg_index, ep->cfg_index, ep->am_lane);
+    if (ucs_log_is_enabled(log_level)) {
+        ucs_string_buffer_init(&strb);
+        ucp_proto_select_info(ep->worker, ep->cfg_index, UCP_WORKER_CFG_INDEX_NULL,
+                              &ucp_ep_config(ep)->proto_select, 1, &strb);
+        ucs_log(log_level, "%s", ucs_string_buffer_cstr(&strb));
+        ucs_string_buffer_cleanup(&strb);
+    }
+
     return UCS_OK;
 }
 
@@ -4250,6 +4252,7 @@ void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index,
 
     ucs_trace("ep %p: set cfg_index %u -> %u", ep, ep->cfg_index, cfg_index);
     ep->cfg_index = cfg_index;
+    ep->am_lane   = ucp_ep_config(ep)->key.am_lane;
     ucp_ep_config_proto_init(ep->worker, cfg_index);
 }
 
