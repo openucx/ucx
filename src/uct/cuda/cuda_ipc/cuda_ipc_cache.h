@@ -89,6 +89,7 @@ void uct_cuda_ipc_cache_set_global_limits(unsigned long max_regions,
 /**
  * @brief Tear down all CUDA IPC remote caches for a peer process ID
  */
-void uct_cuda_ipc_destroy_cache_by_pid_ns(uct_cuda_ipc_pid_ns_t pid_ns);
+void uct_cuda_ipc_destroy_cache_by_iface_address(
+        const uct_cuda_ipc_iface_address_t *iface_address);
 
 #endif

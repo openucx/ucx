@@ -11,8 +11,14 @@
 
 #include <sys/types.h>
 
+typedef struct {
+    pid_t        pid;
+    ucs_sys_ns_t pid_ns;
+} UCS_S_PACKED uct_cuda_ipc_iface_address_t;
+
+
 /**
- * Pack CUDA IPC interface address to the given interface address buffer.
+ * Pack the CUDA IPC interface address into the given interface address.
  */
 void uct_cuda_ipc_iface_address_pack(uct_iface_addr_t *iface_addr);
 
@@ -24,16 +30,16 @@ size_t uct_cuda_ipc_iface_address_length(void);
 
 
 /**
- * Unpack the PID from the CUDA IPC interface address.
+ * Unpack the PID from the given interface address.
  */
-pid_t uct_cuda_ipc_iface_address_pid(const uct_iface_addr_t *iface_addr);
+pid_t uct_cuda_ipc_iface_address_unpack_pid(const uct_iface_addr_t *iface_addr);
 
 
 /**
- * Unpack the PID namespace from the CUDA IPC interface address.
+ * Unpack the CUDA IPC interface address from the given interface address.
  */
-ucs_sys_ns_t
-uct_cuda_ipc_iface_address_pid_ns(const uct_iface_addr_t *iface_addr,
+uct_cuda_ipc_iface_address_t
+uct_cuda_ipc_iface_address_unpack(const uct_iface_addr_t *iface_addr,
                                   size_t iface_addr_length);
 
 #endif

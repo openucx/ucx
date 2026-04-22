@@ -6,21 +6,17 @@
 #ifndef UCT_CUDA_IPC_EP_H
 #define UCT_CUDA_IPC_EP_H
 
+#include "cuda_ipc_iface_address.h"
+
 #include <uct/api/uct.h>
 #include <uct/base/uct_iface.h>
 #include <ucs/type/class.h>
 
 
-typedef struct {
-    pid_t        pid;
-    ucs_sys_ns_t ns;
-} uct_cuda_ipc_pid_ns_t;
-
-
 typedef struct uct_cuda_ipc_ep {
-    uct_base_ep_t         super;
-    uct_cuda_ipc_pid_ns_t remote_pid_ns;
-    uct_device_ep_h       device_ep;
+    uct_base_ep_t                super;
+    uct_cuda_ipc_iface_address_t remote_iface_address;
+    uct_device_ep_h              device_ep;
 } uct_cuda_ipc_ep_t;
 
 
