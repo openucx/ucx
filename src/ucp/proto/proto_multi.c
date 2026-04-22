@@ -464,6 +464,13 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     }
     ucs_assert(mpriv->num_lanes == ucs_popcount(selection.lane_map));
 
+    /* If all lanes support single-byte fragments, don’t scale the minimum
+     * message length by the number of lanes, since we can’t end up sending
+     * a fragment that’s too small for any lane. */
+    if (mpriv->min_frag <= 1) {
+        perf.min_length = mpriv->min_frag;
+    }
+
     if (mpriv->num_lanes == 1) {
         perf.node = lanes_perf[ucs_ffs64(selection.lane_map)].node;
         ucp_proto_perf_node_ref(perf.node);
