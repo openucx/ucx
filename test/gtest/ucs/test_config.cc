@@ -514,7 +514,7 @@ protected:
             const std::vector<std::string> &expected_names,
             bool expect_truncated)
     {
-        car_opts *opts_clone_ptr;
+        std::unique_ptr<car_opts> opts_clone_ptr;
 
         {
             /* Suppress the truncation warning. */
@@ -525,7 +525,7 @@ protected:
                                    input);
 
             car_opts opts(UCS_DEFAULT_ENV_PREFIX, NULL);
-            opts_clone_ptr = new car_opts(opts);
+            opts_clone_ptr.reset(new car_opts(opts));
         }
 
         const ucs_config_allow_list_t &cloned =
@@ -537,8 +537,6 @@ protected:
                     << "mismatch at index " << i;
         }
         EXPECT_EQ(expect_truncated ? 1u : 0u, cloned.array.truncated);
-
-        delete opts_clone_ptr;
     }
 
     void verify_allow_list_with_ranges_truncation(
