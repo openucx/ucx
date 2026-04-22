@@ -514,7 +514,6 @@ static unsigned ucp_cm_client_uct_connect_progress(void *arg)
         }
 
         ucp_ep_set_cfg_index(ep, cfg_index, 1);
-        ep->am_lane = key.am_lane;
 
         status = ucp_cm_ep_init_lanes(ep, &tl_bitmap);
         if (status != UCS_OK) {
