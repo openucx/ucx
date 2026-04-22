@@ -1071,6 +1071,8 @@ ucs_status_t ucs_config_clone_array(const void *src, void *dest, const void *arg
         }
     }
 
+    dest_array->truncated = src_array->truncated;
+
     return UCS_OK;
 }
 

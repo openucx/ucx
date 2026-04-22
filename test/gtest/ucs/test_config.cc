@@ -509,6 +509,38 @@ protected:
                                             UCS_CONFIG_ALLOW_LIST_NEGATE);
     }
 
+    void verify_clone_allow_list_with_ranges(
+            const char *input, ucs_config_allow_list_mode_t expected_mode,
+            const std::vector<std::string> &expected_names,
+            bool expect_truncated)
+    {
+        car_opts *opts_clone_ptr;
+
+        {
+            /* Suppress the truncation warning. */
+            const scoped_log_handler slh(hide_warns_logger);
+
+            /* coverity[tainted_string_argument] */
+            ucs::scoped_setenv env("UCX_" ALLOW_LIST_WITH_RANGES_OPT_NAME,
+                                   input);
+
+            car_opts opts(UCS_DEFAULT_ENV_PREFIX, NULL);
+            opts_clone_ptr = new car_opts(opts);
+        }
+
+        const ucs_config_allow_list_t &cloned =
+                (*opts_clone_ptr)->allow_list_with_ranges;
+        EXPECT_EQ(expected_mode, cloned.mode);
+        ASSERT_EQ(expected_names.size(), cloned.array.count);
+        for (size_t i = 0; i < expected_names.size(); ++i) {
+            EXPECT_EQ(expected_names[i], cloned.array.names[i])
+                    << "mismatch at index " << i;
+        }
+        EXPECT_EQ(expect_truncated ? 1u : 0u, cloned.array.truncated);
+
+        delete opts_clone_ptr;
+    }
+
     void verify_allow_list_with_ranges_truncation(
             const char *input, const std::vector<std::string> &expected)
     {
@@ -625,6 +657,33 @@ UCS_TEST_F(test_config, clone) {
     EXPECT_STREQ("Unknown", (*opts_clone_ptr)->passengers[1]);
     EXPECT_STREQ("3", (*opts_clone_ptr)->passengers[2]);
     delete opts_clone_ptr;
+}
+
+UCS_TEST_F(test_config, clone_array) {
+    /* without truncation */
+    verify_clone_allow_list_with_ranges("^dev[0-2],foo",
+                                        UCS_CONFIG_ALLOW_LIST_NEGATE,
+                                        {"dev0", "dev1", "dev2", "foo"}, false);
+
+    /* with truncation */
+    const std::string truncated_input =
+            "a[0-" + std::to_string(UCS_CONFIG_ARRAY_MAX + 1) + "]";
+    std::vector<std::string> expected_truncated_names;
+    expected_truncated_names.reserve(UCS_CONFIG_ARRAY_MAX);
+    for (unsigned i = 0; i < UCS_CONFIG_ARRAY_MAX; ++i) {
+        expected_truncated_names.push_back("a" + std::to_string(i));
+    }
+    verify_clone_allow_list_with_ranges(truncated_input.c_str(),
+                                        UCS_CONFIG_ALLOW_LIST_ALLOW,
+                                        expected_truncated_names, true);
+
+    /* all */
+    verify_clone_allow_list_with_ranges("all", UCS_CONFIG_ALLOW_LIST_ALLOW_ALL,
+                                        {}, false);
+
+    /* empty */
+    verify_clone_allow_list_with_ranges("", UCS_CONFIG_ALLOW_LIST_ALLOW, {},
+                                        false);
 }
 
 UCS_TEST_F(test_config, set_get) {
