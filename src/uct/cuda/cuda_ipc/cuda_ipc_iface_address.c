@@ -57,8 +57,8 @@ uct_cuda_ipc_iface_address_t
 uct_cuda_ipc_iface_address_unpack(const uct_iface_addr_t *iface_addr,
                                   size_t iface_addr_length)
 {
-    return (uct_cuda_ipc_iface_address_t) {
-        .pid    = uct_cuda_ipc_iface_address_unpack_pid(iface_addr),
+    return (uct_cuda_ipc_iface_address_t){
+        .pid = uct_cuda_ipc_iface_address_unpack_pid(iface_addr),
         .pid_ns = uct_cuda_ipc_iface_address_unpack_pid_ns(iface_addr,
                                                            iface_addr_length)
     };

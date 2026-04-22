@@ -1805,7 +1805,7 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
             ptr       = ucp_address_unpack_tl_length(
                                           worker, flags_ptr, ptr, addr_version,
                                           &iface_addr_len, 0, &last_tl);
-            address->iface_addr     = (iface_addr_len > 0) ? ptr : NULL;
+            address->iface_addr = (iface_addr_len > 0) ? ptr : NULL;
             address->iface_addr_len = iface_addr_len;
             address->num_ep_addrs   = 0;
             ptr                     = UCS_PTR_BYTE_OFFSET(ptr, iface_addr_len);
