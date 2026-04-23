@@ -389,6 +389,19 @@ static void ucp_am_eager_multi_zcopy_psn_completion(uct_completion_t *self)
     }
 }
 
+static ucs_status_t ucp_am_eager_multi_zcopy_psn_init(ucp_request_t *req)
+{
+    const ucp_proto_multi_priv_t *mpriv = req->send.proto_config->priv;
+    ucs_status_t status;
+
+    status = ucp_ep_resolve_remote_id(req->send.ep, mpriv->lanes[0].super.lane);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return ucp_am_eager_multi_zcopy_init(req);
+}
+
 static ucs_status_t
 ucp_am_eager_multi_zcopy_psn_proto_progress(uct_pending_req_t *self)
 {
@@ -397,9 +410,9 @@ ucp_am_eager_multi_zcopy_psn_proto_progress(uct_pending_req_t *self)
 
     /* coverity[tainted_data_downcast] */
     status = ucp_proto_multi_zcopy_progress(
-            req, req->send.proto_config->priv, ucp_am_eager_multi_zcopy_init,
-            UCT_MD_MEM_ACCESS_LOCAL_READ, UCP_DT_MASK_CONTIG_IOV,
-            ucp_am_eager_multi_zcopy_psn_send_func,
+            req, req->send.proto_config->priv,
+            ucp_am_eager_multi_zcopy_psn_init, UCT_MD_MEM_ACCESS_LOCAL_READ,
+            UCP_DT_MASK_CONTIG_IOV, ucp_am_eager_multi_zcopy_psn_send_func,
             ucp_request_invoke_uct_completion_success,
             ucp_am_eager_multi_zcopy_psn_completion);
     if (status == UCS_INPROGRESS) {
