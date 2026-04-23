@@ -16,6 +16,7 @@
 #include <ucp/api/ucp.h>
 #include <uct/api/uct.h>
 #include <uct/api/v2/uct_v2.h>
+#include <ucs/datastruct/callbackq.h>
 #include <ucs/datastruct/queue.h>
 #include <ucs/datastruct/ptr_map.h>
 #include <ucs/datastruct/strided_alloc.h>
@@ -533,14 +534,6 @@ typedef struct ucp_ep_ext {
     ucs_time_t                    ka_last_round; /* Time of last KA round done */
 #endif
 
-    /* Failed-lane recovery state: populated by ucp_ep_failover_reconfig() and
-     * consumed by ucp_ep_recovery_tick() from the worker keepalive progress.
-     * Both zero when no recovery is in flight. */
-    ucs_time_t                    recovery_next_time;     /* Earliest time
-                                                             for next round */
-    unsigned                      recovery_retries_left;  /* Rounds left
-                                                             before giving up */
-
     /* Endpoint match context and remote completion status are mutually exclusive,
      * since remote completions are counted only after the endpoint is already
      * matched to a remote peer.
@@ -1016,20 +1009,42 @@ ucs_status_t ucp_ep_reconfig_clear_failed_lanes(ucp_ep_h ep,
 
 
 /**
- * @brief One recovery tick for an endpoint with failed lanes.
+ * @brief Arm (or re-arm) failed-lane recovery for an endpoint.
  *
- * Invoked from the worker keepalive progress. Gated per endpoint by
- * ep->ext->recovery_next_time so actual rounds fire at most every
- * context->config.ext.recovery_interval. Each round sends a
- * WIREUP_MSG_LANES_ADDR_REQUEST to the peer asking for up-to-date
- * addresses of the lanes marked UCP_LANE_TYPE_FAILED. When retries are
- * exhausted the endpoint is scheduled for full failure.
+ * Allocates a heap-resident recovery argument, enqueues a one-shot
+ * progress callback (ucp_ep_recovery_progress()) with key=ep, and
+ * frees any previously-enqueued recovery one-shot for the same ep
+ * (including its heap argument) first. No recovery state is stored on
+ * the endpoint itself - the heap arg is the single source of truth and
+ * is reclaimed either by the one-shot itself on completion or by the
+ * cascade filter in ucp_ep_destroy_base() on endpoint teardown.
  *
- * @param [in] ep     Endpoint object.
- * @param [in] now    Current time, typically ucs_get_time() from the
- *                    keepalive caller.
+ * Called from ucp_ep_failover_reconfig() after lanes have been marked
+ * UCP_LANE_TYPE_FAILED.
+ *
+ * @param [in] ep   Endpoint object.
+ *
+ * @return UCS_OK on success, UCS_ERR_NO_MEMORY on allocation failure.
  */
-void ucp_ep_recovery_tick(ucp_ep_h ep, ucs_time_t now);
+ucs_status_t ucp_ep_recovery_arm(ucp_ep_h ep);
+
+
+/**
+ * @brief One-shot recovery progress callback.
+ *
+ * Exposed for ucp_ep_recovery_remove_filter() to match on. Not intended
+ * to be called directly.
+ */
+unsigned ucp_ep_recovery_progress(void *arg);
+
+
+/**
+ * @brief Cascade-filter entry that removes and frees any pending recovery
+ *        one-shot bound to @a arg (a ucp_ep_h).
+ *
+ * Called from ucp_ep_remove_filter() during ucp_ep_destroy_base().
+ */
+int ucp_ep_recovery_remove_filter(const ucs_callbackq_elem_t *elem, void *arg);
 
 
 /**
