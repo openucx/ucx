@@ -355,26 +355,12 @@ static ucs_status_t
 uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *component,
                                 uct_cuda_ipc_unpacked_rkey_t *rkey,
                                 uct_cuda_ipc_rkey_handle_t *rkey_handle,
-                                ucs_sys_device_t sys_dev)
+                                CUdevice cu_dev)
 {
-    CUdevice cu_dev;
     ucs_status_t status;
     void *d_mapped;
     uct_cuda_ipc_dev_cache_t *cache;
     uint8_t *accessible;
-
-    if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
-        /* Use device of the current context */
-        if (UCT_CUDADRV_FUNC_LOG_DEBUG(cuCtxGetDevice(&cu_dev)) != UCS_OK) {
-            return UCS_ERR_UNREACHABLE;
-        }
-    } else {
-        cu_dev = uct_cuda_get_cuda_device(sys_dev);
-        if (cu_dev == CU_DEVICE_INVALID) {
-            ucs_warn("failed to map sys device [%d] to cuda device", sys_dev);
-            return UCS_ERR_UNREACHABLE;
-        }
-    }
 
     rkey_handle->cu_dev = cu_dev;
 
@@ -479,7 +465,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_rkey_unpack,
     }
 
     status = uct_cuda_ipc_is_peer_accessible(com, unpacked, rkey_handle,
-                                             sys_dev);
+                                             avail_cuda_device);
     if (cuda_device != avail_cuda_device) {
         uct_cuda_ctx_primary_pop_and_release(avail_cuda_device);
     }
