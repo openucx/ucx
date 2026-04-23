@@ -1372,28 +1372,98 @@ static int ucp_ep_recovery_lane_is_ready(ucp_ep_h ep, ucp_lane_index_t lane)
     return !!(wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY);
 }
 
-void ucp_ep_recovery_tick(ucp_ep_h ep, ucs_time_t now)
+/* Heap-resident retry state for failed-lane recovery. Allocated by
+ * ucp_ep_recovery_arm() on failover, kept alive by the callbackq while the
+ * oneshot is pending, freed either by the oneshot itself on completion / on
+ * retry exhaustion, or by ucp_ep_recovery_remove_filter() during endpoint
+ * teardown. No per-EP state is kept on ucp_ep_t / ucp_ep_ext_t. */
+typedef struct ucp_ep_recovery_arg {
+    ucp_ep_h       ucp_ep;        /* Back-pointer used for callbackq key and
+                                     filter matching. */
+    ucs_time_t     next_time;     /* Earliest time at which the next round
+                                     may send LANES_ADDR_REQUEST. */
+    unsigned       retries_left;  /* Rounds remaining before the endpoint is
+                                     declared fully failed. */
+} ucp_ep_recovery_arg_t;
+
+/* Enqueue a recovery oneshot for @a arg. Caller keeps ownership of @a arg
+ * until the oneshot runs (it may free itself) or is purged via the filter. */
+static void ucp_ep_recovery_arg_enqueue(ucp_ep_recovery_arg_t *arg)
 {
-    ucp_context_h context = ep->worker->context;
+    ucp_worker_h worker = arg->ucp_ep->worker;
+
+    ucs_callbackq_add_oneshot(&worker->uct->progress_q, arg->ucp_ep,
+                              ucp_ep_recovery_progress, arg);
+    ucp_worker_signal_internal(worker);
+}
+
+int ucp_ep_recovery_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
+{
+    ucp_ep_recovery_arg_t *recovery_arg = elem->arg;
+
+    if ((elem->cb == ucp_ep_recovery_progress) &&
+        (recovery_arg->ucp_ep == arg)) {
+        ucs_free(recovery_arg);
+        return 1;
+    }
+
+    return 0;
+}
+
+ucs_status_t ucp_ep_recovery_arm(ucp_ep_h ep)
+{
+    ucp_worker_h worker   = ep->worker;
+    ucp_context_h context = worker->context;
+    ucp_ep_recovery_arg_t *arg;
+
+    /* Remove (and free) any previously-queued recovery oneshot for this
+     * endpoint. A second failover on an ep already under recovery resets
+     * the retry budget - that's the right policy: fresh damage deserves a
+     * fresh budget. */
+    ucs_callbackq_remove_oneshot(&worker->uct->progress_q, ep,
+                                 ucp_ep_recovery_remove_filter, ep);
+
+    arg = ucs_malloc(sizeof(*arg), "ucp_ep_recovery_arg");
+    if (arg == NULL) {
+        ucs_error("ep %p: failed to allocate recovery argument", ep);
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    arg->ucp_ep       = ep;
+    arg->next_time    = ucs_get_time() + context->config.ext.recovery_interval;
+    arg->retries_left = context->config.ext.recovery_retries;
+
+    ucp_ep_recovery_arg_enqueue(arg);
+    return UCS_OK;
+}
+
+unsigned ucp_ep_recovery_progress(void *arg)
+{
+    ucp_ep_recovery_arg_t *recovery_arg = arg;
+    ucp_ep_h ep                         = recovery_arg->ucp_ep;
+    ucp_worker_h worker                 = ep->worker;
+    ucp_context_h context               = worker->context;
     ucp_lane_map_t failed, recovered;
     ucp_lane_index_t lane;
+    ucs_time_t now;
 
-    UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(ep->worker);
+    UCS_ASYNC_BLOCK(&worker->async);
+
+    if (ep->flags & UCP_EP_FLAG_FAILED) {
+        /* Endpoint was declared fully failed elsewhere; nothing more to do. */
+        goto out_drop;
+    }
 
     failed = ucp_ep_get_failed_lanes(ep);
     if (failed == 0) {
-        /* Stale tick (recovery completed between rounds); clear the
-         * retry state so a future failover starts with a fresh budget. */
-        ep->ext->recovery_next_time    = 0;
-        ep->ext->recovery_retries_left = 0;
-        return;
+        /* Recovery completed between rounds. */
+        goto out_drop;
     }
 
-    /* Clear FAILED for lanes that have reached READY state. This runs
-     * from the keepalive progress path - safe to reconfigure because by
-     * now the failover_reconfig's async discard has long since finalized
-     * the ep_count transition (recovery_interval has elapsed since the
-     * lanes were marked failed). */
+    /* Clear FAILED for lanes that have reached READY state. Safe now -
+     * by the time this oneshot dispatches, the ucp_ep_discard_lanes()
+     * callback from failover_reconfig has long since finalized the
+     * ep_count reactivate transition (recovery_interval has elapsed). */
     recovered = 0;
     ucs_for_each_bit(lane, failed) {
         if (ucp_ep_recovery_lane_is_ready(ep, lane)) {
@@ -1402,39 +1472,47 @@ void ucp_ep_recovery_tick(ucp_ep_h ep, ucs_time_t now)
     }
 
     if (recovered != 0) {
-        ucs_debug("ep %p: recovery tick clearing FAILED on lanes 0x%" PRIx64,
-                  ep, (uint64_t)recovered);
+        ucs_debug("ep %p: recovery clearing FAILED on lanes 0x%" PRIx64, ep,
+                  (uint64_t)recovered);
         ucp_ep_reconfig_clear_failed_lanes(ep, recovered);
         failed = ucp_ep_get_failed_lanes(ep);
         if (failed == 0) {
-            ep->ext->recovery_next_time    = 0;
-            ep->ext->recovery_retries_left = 0;
-            return;
+            goto out_drop;
         }
     }
 
-    if (now < ep->ext->recovery_next_time) {
-        /* Rate-limited by context->recovery_interval; wait for the next
-         * keepalive tick. */
-        return;
+    now = ucs_get_time();
+    if (now < recovery_arg->next_time) {
+        /* Rate-limited by recovery_interval - re-enqueue and wait. */
+        goto out_requeue;
     }
 
-    if (ep->ext->recovery_retries_left == 0) {
+    if (recovery_arg->retries_left == 0) {
         ucs_diag("ep %p: recovery retries exhausted, marking endpoint failed",
                  ep);
         /* Fully fail the endpoint. Passing lanes=0 routes
          * ucp_ep_set_lanes_failed() to ucp_ep_set_failed() (unrecoverable). */
         ucp_ep_set_lanes_failed_schedule(ep, 0, UCS_ERR_ENDPOINT_TIMEOUT);
-        return;
+        goto out_drop;
     }
 
-    ucs_debug("ep %p: recovery tick (retries_left=%u, failed=0x%" PRIx64 ")",
-              ep, ep->ext->recovery_retries_left, (uint64_t)failed);
+    ucs_debug("ep %p: recovery round (retries_left=%u, failed=0x%" PRIx64 ")",
+              ep, recovery_arg->retries_left, (uint64_t)failed);
 
     ucp_ep_recovery_send_request(ep);
 
-    --ep->ext->recovery_retries_left;
-    ep->ext->recovery_next_time = now + context->config.ext.recovery_interval;
+    --recovery_arg->retries_left;
+    recovery_arg->next_time = now + context->config.ext.recovery_interval;
+
+out_requeue:
+    ucp_ep_recovery_arg_enqueue(recovery_arg);
+    UCS_ASYNC_UNBLOCK(&worker->async);
+    return 1;
+
+out_drop:
+    ucs_free(recovery_arg);
+    UCS_ASYNC_UNBLOCK(&worker->async);
+    return 1;
 }
 
 static UCS_F_NOINLINE void

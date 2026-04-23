@@ -257,8 +257,6 @@ static ucp_ep_h ucp_ep_allocate(ucp_worker_h worker, const char *peer_name)
 #if UCS_ENABLE_ASSERT
     ep->ext->ka_last_round                = 0;
 #endif
-    ep->ext->recovery_next_time           = 0;
-    ep->ext->recovery_retries_left        = 0;
     ep->ext->peer_mem                     = NULL;
     ep->ext->unflushed_lanes              = 0;
     ep->ext->fence_seq                    = 0;
@@ -514,7 +512,8 @@ static int ucp_ep_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
         ucp_listener_accept_cb_remove_filter(elem, arg) ||
         ucp_ep_local_disconnect_progress_remove_filter(elem, arg) ||
         ucp_ep_set_failed_remove_filter(elem, arg) ||
-        ucp_ep_wireup_eps_progress_filter(elem, arg)) {
+        ucp_ep_wireup_eps_progress_filter(elem, arg) ||
+        ucp_ep_recovery_remove_filter(elem, arg)) {
         return 1;
     }
 
@@ -1815,17 +1814,12 @@ ucp_ep_failover_reconfig(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,
 
     ucp_ep_discard_lanes(ucp_ep, failed_lanes, discard_status, old_cfg_index);
 
-    /* Arm recovery: the first attempt fires on a worker keepalive tick at
-     * or after `now + recovery_interval`. That delay also lets the async
-     * discard above finalize its ep_count reactivate before we try to
-     * reconfigure the endpoint on LANES_ADDR_REPLY arrival. Each retry is
-     * gated by the same interval; retries_left counts down and when it
-     * reaches 0 the endpoint is declared fully failed. */
-    ucp_ep->ext->recovery_next_time = ucs_get_time() +
-            ucp_ep->worker->context->config.ext.recovery_interval;
-    ucp_ep->ext->recovery_retries_left =
-            ucp_ep->worker->context->config.ext.recovery_retries;
-    ucp_worker_keepalive_add_ep(ucp_ep);
+    /* Arm recovery via an oneshot progress callback on the worker
+     * callbackq. All retry state lives on the heap; the endpoint itself
+     * carries no recovery state. The first round won't fire before
+     * recovery_interval elapses, which also lets the async discard above
+     * finalize its ep_count reactivate. */
+    (void)ucp_ep_recovery_arm(ucp_ep);
     return UCS_OK;
 }
 

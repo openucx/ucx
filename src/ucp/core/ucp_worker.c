@@ -3566,18 +3566,8 @@ static int ucp_worker_do_ep_keepalive(ucp_worker_h worker, ucs_time_t now)
 
     ep = ucs_container_of(worker->keepalive.iter, ucp_ep_ext_t, ep_list)->ep;
     if ((ep->cfg_index == UCP_WORKER_CFG_INDEX_NULL) ||
-        (ep->flags & UCP_EP_FLAG_FAILED)) {
-        goto out_done;
-    }
-
-    /* Failed-lane recovery piggy-backs on the keepalive progress. Each round
-     * is rate-limited by context->recovery_interval inside the tick. */
-    if (ucp_ep_get_failed_lanes(ep) != 0) {
-        ucp_ep_recovery_tick(ep, now);
-        goto out_done;
-    }
-
-    if (ucp_ep_config(ep)->key.keepalive_lane == UCP_NULL_LANE) {
+        (ep->flags & UCP_EP_FLAG_FAILED) ||
+        (ucp_ep_config(ep)->key.keepalive_lane == UCP_NULL_LANE)) {
         goto out_done;
     }
 
@@ -3701,11 +3691,7 @@ void ucp_worker_keepalive_add_ep(ucp_ep_h ep)
 {
     ucp_worker_h worker = ep->worker;
 
-    /* The per-EP pass also drives failed-lane recovery when the EP has any
-     * UCP_LANE_TYPE_FAILED lane, so we need the progress armed even if
-     * keepalive_lane itself is unset. */
-    if ((ucp_ep_config(ep)->key.keepalive_lane == UCP_NULL_LANE) &&
-        (ucp_ep_get_failed_lanes(ep) == 0)) {
+    if (ucp_ep_config(ep)->key.keepalive_lane == UCP_NULL_LANE) {
         ucs_trace("ep %p flags 0x%x cfg_index %d err_mode %d: keepalive lane"
                   " is not set", ep, ep->flags, ep->cfg_index,
                   ucp_ep_config(ep)->key.err_mode);
@@ -3713,10 +3699,8 @@ void ucp_worker_keepalive_add_ep(ucp_ep_h ep)
     }
 
     ucp_worker_keepalive_timerfd_init(worker);
-    ucs_trace("ep %p flags 0x%x: arm keepalive progress (ka_lane=%u,"
-              " failed_lanes=0x%" PRIx64 ")",
-              ep, ep->flags, ucp_ep_config(ep)->key.keepalive_lane,
-              (uint64_t)ucp_ep_get_failed_lanes(ep));
+    ucs_trace("ep %p flags 0x%x: set keepalive lane to %u", ep,
+              ep->flags, ucp_ep_config(ep)->key.keepalive_lane);
     uct_worker_progress_register_safe(worker->uct,
                                       ucp_worker_keepalive_progress, worker, 0,
                                       &worker->keepalive.cb_id);
