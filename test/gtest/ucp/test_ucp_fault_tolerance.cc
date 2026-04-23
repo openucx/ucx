@@ -23,24 +23,17 @@ extern "C" {
 class test_ucp_fault_tolerance : public test_ucp_memheap {
 public:
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
-        add_variant_with_value(variants, UCP_FEATURE_RMA, TEST_OP_PUT,
-                               op_name(TEST_OP_PUT));
-        add_variant_with_value(variants, UCP_FEATURE_RMA, TEST_OP_PUT | TEST_OP_FLUSH,
+        constexpr uint64_t features_rma_am = UCP_FEATURE_RMA | UCP_FEATURE_AM;
+        constexpr uint64_t features_am = UCP_FEATURE_AM;
+        add_variant_with_value(variants, features_rma_am, TEST_OP_PUT, op_name(TEST_OP_PUT));
+        add_variant_with_value(variants, features_rma_am, TEST_OP_PUT | TEST_OP_FLUSH,
                                op_name(TEST_OP_PUT | TEST_OP_FLUSH));
-        add_variant_with_value(variants, UCP_FEATURE_RMA, TEST_OP_GET,
-                               op_name(TEST_OP_GET));
-        add_variant_with_value(variants, UCP_FEATURE_RMA, TEST_OP_GET | TEST_OP_FLUSH,
+        add_variant_with_value(variants, features_rma_am, TEST_OP_GET, op_name(TEST_OP_GET));
+        add_variant_with_value(variants, features_rma_am, TEST_OP_GET | TEST_OP_FLUSH,
                                op_name(TEST_OP_GET | TEST_OP_FLUSH));
-        add_variant_with_value(variants, UCP_FEATURE_AM,  TEST_OP_AM,
-                               op_name(TEST_OP_AM));
-        add_variant_with_value(variants, UCP_FEATURE_AM,  TEST_OP_AM | TEST_OP_FLUSH,
+        add_variant_with_value(variants, features_am, TEST_OP_AM, op_name(TEST_OP_AM));
+        add_variant_with_value(variants, features_am, TEST_OP_AM | TEST_OP_FLUSH,
                                op_name(TEST_OP_AM | TEST_OP_FLUSH));
-        add_variant_with_value(variants, UCP_FEATURE_AM | UCP_FEATURE_RMA,
-                               TEST_OP_PUT | TEST_OP_AM | TEST_OP_FLUSH,
-                               op_name(TEST_OP_PUT |TEST_OP_AM | TEST_OP_FLUSH));
-        add_variant_with_value(variants, UCP_FEATURE_AM | UCP_FEATURE_RMA,
-                               TEST_OP_PUT | TEST_OP_AM | TEST_OP_FLUSH | TEST_OP_RECOVERY,
-                               op_name(TEST_OP_PUT |TEST_OP_AM | TEST_OP_FLUSH | TEST_OP_RECOVERY));
      }
 
     test_ucp_fault_tolerance() {
@@ -64,8 +57,7 @@ protected:
         TEST_OP_PUT      = UCS_BIT(0),
         TEST_OP_GET      = UCS_BIT(1),
         TEST_OP_AM       = UCS_BIT(2),
-        TEST_OP_FLUSH    = UCS_BIT(3),
-        TEST_OP_RECOVERY = UCS_BIT(4)
+        TEST_OP_FLUSH    = UCS_BIT(3)
     };
 
     void init() override {
@@ -383,14 +375,13 @@ protected:
     }
 
     void test_recovery(unsigned op_mask) {
-        if (!(op_mask & TEST_OP_RECOVERY)) {
-            return;
-        }
-
         UCS_TEST_MESSAGE << "Checking recovery status...";
-        do {
+
+        wait_for_cond([this]() {
+            return ucp_ep_get_failed_lanes(sender().ep(0, INJECTED_EP_INDEX)) == 0;
+        }, [this]() {
             short_progress_loop();
-        } while (ucp_ep_get_failed_lanes(sender().ep(0, INJECTED_EP_INDEX)) != 0);
+        });
 
         for (ucp_lane_index_t lane_idx = 0;
              lane_idx < ucp_ep_num_lanes(sender().ep(0, INJECTED_EP_INDEX));) {
@@ -451,10 +442,6 @@ private:
 
         if (op_mask & TEST_OP_FLUSH) {
             name += "FLUSH|";
-        }
-
-        if (op_mask & TEST_OP_RECOVERY) {
-            name += "RECOVERY|";
         }
 
         if (!name.empty()) {
@@ -562,18 +549,13 @@ private:
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_fault_tolerance)
 
-UCS_TEST_P(test_ucp_fault_tolerance, initiator_failure, "MAX_EAGER_LANES=8")
+UCS_TEST_P(test_ucp_fault_tolerance, initiator_failure, "MAX_EAGER_LANES=8",
+           "RECOVERY_INTERVAL=100ms", "RECOVERY_RETRIES=100")
 {
     do_test(FAILURE_SIDE_INITIATOR);
 }
 
-UCS_TEST_P(test_ucp_fault_tolerance, target_failure, "MAX_EAGER_LANES=8")
-{
-    do_test(FAILURE_SIDE_TARGET);
-}
-
-UCS_TEST_P(test_ucp_fault_tolerance, target_failure_and_recovery,
-           "MAX_EAGER_LANES=8", "KEEPALIVE_INTERVAL=100ms",
+UCS_TEST_P(test_ucp_fault_tolerance, target_failure, "MAX_EAGER_LANES=8",
            "RECOVERY_INTERVAL=100ms", "RECOVERY_RETRIES=100")
 {
     do_test(FAILURE_SIDE_TARGET);
