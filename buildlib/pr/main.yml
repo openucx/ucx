@@ -375,6 +375,7 @@ stages:
       parameters:
         name: gpu_namespace
         demands: ucx_gpu -equals yes
+        container: ubuntu2404_doca31_gpunetio
   - stage: io_demo
     dependsOn: [Static_check]
     condition: false
