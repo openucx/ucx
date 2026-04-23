@@ -597,6 +597,12 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "resulting performance.",
    ucs_offsetof(ucp_context_config_t, node_local_id), UCS_CONFIG_TYPE_ULUNITS},
 
+  {"TLS_RMA", "",
+   "Comma-separated list of transports. When a listed TL is present on the node,\n"
+   "it mandates zcopy for the memory types it supports. Empty = none. Aliases\n"
+   "expanded. Network TLs in the list must support GPU memory.",
+   ucs_offsetof(ucp_context_config_t, tls_rma), UCS_CONFIG_TYPE_STRING_ARRAY},
+
   {NULL}
 };
 
@@ -1167,6 +1173,21 @@ ucp_transports_list_search(const char *tl_name,
     }
 
     return search_result;
+}
+
+/* Returns 1 only when UCX_TLS_RMA is non-empty and tl_name is in the list. */
+int ucp_context_is_tl_in_rma_list(ucp_context_h context, const char *tl_name)
+{
+    const ucs_config_names_array_t *tls_rma = &context->config.ext.tls_rma;
+    uint64_t dummy_mask;
+
+    if (tls_rma->count == 0) {
+        return 0;
+    }
+
+    dummy_mask = 0;
+    return !!(ucp_transports_list_search(tl_name, tls_rma, &dummy_mask) &
+              UCP_TRANSPORTS_LIST_SEARCH_RESULT_PRIMARY);
 }
 
 static int

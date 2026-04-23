@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -150,6 +150,9 @@ typedef struct {
 
     /* All the initialized protocols that can be chosen */
     ucp_proto_select_init_protocols_t proto_init;
+
+    /* For put/get: 1 if large sizes use RMA zcopy when available */
+    int                               rma_zcopy_compliant;
 } ucp_proto_select_elem_t;
 
 
