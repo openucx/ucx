@@ -7,6 +7,8 @@ jobs:
     timeoutInMinutes: 30
     workspace:
       clean: all
+    ${{ if parameters.container }}:
+      container: ${{ parameters.container }}
     steps:
       - checkout: self
         clean: true
