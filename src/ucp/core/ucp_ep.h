@@ -1053,7 +1053,7 @@ int ucp_ep_recovery_remove_filter(const ucs_callbackq_elem_t *elem, void *arg);
  * wireup.c. Dispatches per lane to the CONNECT_TO_IFACE or the p2p rebuild
  * path, returning the bitmap of lanes successfully rebuilt. Lanes not in
  * the returned bitmap remain UCP_LANE_TYPE_FAILED and will be re-attempted
- * on a subsequent recovery tick.
+ * on a subsequent recovery round.
  */
 ucp_lane_map_t
 ucp_ep_recovery_rebuild_lanes(ucp_ep_h ep, ucp_lane_map_t lanes_to_rebuild,
@@ -1066,8 +1066,8 @@ ucp_ep_recovery_rebuild_lanes(ucp_ep_h ep, ucp_lane_map_t lanes_to_rebuild,
  * Same flow that ucp_ep_set_lanes_failed() invokes internally when a UCT
  * error is observed locally: reconfigures the endpoint to set the FAILED
  * bit on the given lanes, asynchronously discards their old UCT EPs, and
- * arms the per-EP recovery retry state so the worker keepalive progress
- * starts sending WIREUP_MSG_LANES_ADDR_REQUEST on the next tick.
+ * calls ucp_ep_recovery_arm() so the next recovery round sends
+ * WIREUP_MSG_LANES_ADDR_REQUEST.
  *
  * Exposed for the LANES_ADDR_REQUEST handler so an asymmetric failure
  * reported by the peer can be converted into a local failover flow.

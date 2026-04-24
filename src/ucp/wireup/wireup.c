@@ -1001,15 +1001,10 @@ ucp_wireup_process_lanes_addr_request(
 
     ucp_ep_update_remote_id(ep, msg->src_ep_id);
 
-    /* Asymmetric-failure handling: any lane the initiator declared broken
-     * that we don't yet see as failed on our side has to go through the
-     * local failover flow first. ucp_ep_failover_reconfig() marks the
-     * lanes UCP_LANE_TYPE_FAILED, asynchronously discards their old UCT
-     * EPs (so install_wireup_ep below encounters proper failed stubs),
-     * promotes am_lane if the current one was in the set, and arms our
-     * own recovery retry state. The REPLY further down will ride the new
-     * am_lane, since ucp_wireup_get_msg_lane() reads cfg_key.am_lane at
-     * send time. */
+    /* Asymmetric failure: lanes the peer declared broken but we don't yet
+     * see as failed go through local failover first, so subsequent rebuild
+     * steps encounter proper failed stubs and the reply rides the new
+     * am_lane. */
     peer_unaware = msg->provided_lane_map & ~ucp_ep_get_failed_lanes(ep);
     if (peer_unaware != 0) {
         ucs_debug("ep %p: LANES_ADDR_REQ triggering local failover for "
@@ -1044,12 +1039,9 @@ ucp_wireup_process_lanes_addr_request(
     ucp_wireup_send_lanes_addr_msg(ep, UCP_WIREUP_MSG_LANES_ADDR_REPLY,
                                    msg->requested_lane_map, peer_provided);
 
-    /* The recovery tick clears UCP_LANE_TYPE_FAILED once the rebuilt lanes
-     * reach a READY state (either as READY wireup proxies or as real
-     * transport EPs after ucp_wireup_eps_progress has replaced them), and
-     * does so after the async discard from failover_reconfig above has
-     * finalized the ep_count transition - so we must NOT call
-     * ucp_ep_reconfig_clear_failed_lanes() inline here. */
+    /* ucp_ep_recovery_progress owns FAILED-bit clearing once the rebuilt
+     * lanes reach READY; do not clear inline here to avoid racing with the
+     * failover_reconfig discard. */
 }
 
 static UCS_F_NOINLINE void
@@ -1076,10 +1068,8 @@ ucp_wireup_process_lanes_addr_reply(
         ucp_wireup_eps_progress_sched(ep);
     }
 
-    /* FAILED-bit clearing and retry re-sending are both owned by the
-     * worker keepalive tick (ucp_ep_recovery_tick). Clearing here would
-     * race with the failover_reconfig discard; re-sending here would
-     * double the retry cadence. */
+    /* ucp_ep_recovery_progress owns FAILED-bit clearing and the retry
+     * cadence; do not clear or re-send inline here. */
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1222,6 +1212,25 @@ static int ucp_wireup_should_activate_wiface(ucp_worker_iface_t *wiface,
            (ep->flags & UCP_EP_FLAG_INTERNAL);
 }
 
+ucs_status_t ucp_wireup_iface_ep_create(ucp_worker_iface_t *wiface,
+                                        const ucp_address_entry_t *address,
+                                        unsigned path_index,
+                                        uct_ep_h *uct_ep_p)
+{
+    uct_ep_params_t uct_ep_params;
+
+    uct_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE      |
+                               UCT_EP_PARAM_FIELD_DEV_ADDR   |
+                               UCT_EP_PARAM_FIELD_IFACE_ADDR |
+                               UCT_EP_PARAM_FIELD_PATH_INDEX;
+    uct_ep_params.iface      = wiface->iface;
+    uct_ep_params.dev_addr   = address->dev_addr;
+    uct_ep_params.iface_addr = address->iface_addr;
+    uct_ep_params.path_index = path_index;
+
+    return uct_ep_create(&uct_ep_params, uct_ep_p);
+}
+
 static ucs_status_t
 ucp_wireup_connect_lane_to_iface(ucp_ep_h ep, ucp_lane_index_t lane,
                                  unsigned path_index,
@@ -1229,7 +1238,6 @@ ucp_wireup_connect_lane_to_iface(ucp_ep_h ep, ucp_lane_index_t lane,
                                  const ucp_address_entry_t *address)
 {
     uct_ep_h uct_ep = ucp_ep_get_lane(ep, lane);
-    uct_ep_params_t uct_ep_params;
     ucs_status_t status;
     uct_ep_h wireup_ep;
 
@@ -1239,17 +1247,8 @@ ucp_wireup_connect_lane_to_iface(ucp_ep_h ep, ucp_lane_index_t lane,
                        lane, uct_ep, ucp_wireup_ep_test(uct_ep));
 
     /* create an endpoint connected to the remote interface */
-    ucs_trace("ep %p: connect uct_ep[%d] to addr %p", ep, lane,
-              address);
-    uct_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE      |
-                               UCT_EP_PARAM_FIELD_DEV_ADDR   |
-                               UCT_EP_PARAM_FIELD_IFACE_ADDR |
-                               UCT_EP_PARAM_FIELD_PATH_INDEX;
-    uct_ep_params.iface      = wiface->iface;
-    uct_ep_params.dev_addr   = address->dev_addr;
-    uct_ep_params.iface_addr = address->iface_addr;
-    uct_ep_params.path_index = path_index;
-    status = uct_ep_create(&uct_ep_params, &uct_ep);
+    ucs_trace("ep %p: connect uct_ep[%d] to addr %p", ep, lane, address);
+    status = ucp_wireup_iface_ep_create(wiface, address, path_index, &uct_ep);
     if (status != UCS_OK) {
         /* coverity[leaked_storage] */
         return status;

@@ -438,18 +438,18 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "(inf - check all endpoints on every round, must be greater than 0)",
    ucs_offsetof(ucp_context_config_t, keepalive_num_eps), UCS_CONFIG_TYPE_UINT},
 
-  {"RECOVERY_INTERVAL", "1s",
+  {"RECOVERY_INTERVAL", "5s",
    "Time interval between attempts to recover failed endpoint lanes.\n"
-   "A recovery round sends a WIREUP_MSG_LANES_ADDR_REQUEST over the\n"
-   "operable AM lane asking the peer for up-to-date addresses of the\n"
-   "failed lanes. Driven off the same worker keepalive progress.\n"
+   "Applies only to endpoints created with UCP_ERR_HANDLING_MODE_FAILOVER.\n"
    "Must be non-zero.",
    ucs_offsetof(ucp_context_config_t, recovery_interval),
    UCS_CONFIG_TYPE_TIME_UNITS},
 
-  {"RECOVERY_RETRIES", "3",
+  {"RECOVERY_RETRIES", "inf",
    "Maximum number of recovery rounds before a partially failed endpoint\n"
-   "is declared fully failed. Must be greater than 0.",
+   "is declared fully failed (inf - retry indefinitely, must be greater\n"
+   "than 0). Applies only to endpoints created with\n"
+   "UCP_ERR_HANDLING_MODE_FAILOVER.",
    ucs_offsetof(ucp_context_config_t, recovery_retries),
    UCS_CONFIG_TYPE_UINT},
 
