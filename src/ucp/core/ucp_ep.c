@@ -1799,6 +1799,537 @@ ucs_status_t ucp_ep_reconfig_clear_failed_lanes(ucp_ep_h ep,
     return UCS_OK;
 }
 
+/* Install an empty wireup proxy on the lane, replacing any failed-stub UCT
+ * EP that the preceding ucp_ep_failover_reconfig() left there. No inner
+ * transport EP is created here - the caller is responsible for allocating
+ * the inner UCT EP (the p2p path does it iface-only, the iface path does it
+ * fully connected) and attaching it via ucp_ep_recovery_attach_next_ep() or
+ * ucp_ep_recovery_attach_inner_p2p_ep(). */
+static ucs_status_t
+ucp_ep_recovery_install_wireup_ep(ucp_ep_h ep, ucp_lane_index_t lane)
+{
+    uct_ep_h old_uct_ep = ucp_ep_get_lane(ep, lane);
+    uct_ep_h wireup_ep_uct;
+    ucs_status_t status;
+
+    if ((old_uct_ep != NULL) && ucp_wireup_ep_test(old_uct_ep)) {
+        return UCS_OK;
+    }
+
+    ucs_assertv((old_uct_ep == NULL) || ucp_is_uct_ep_failed(old_uct_ep),
+                "ep %p lane %d: unexpected live uct_ep=%p - recovery path "
+                "must be preceded by ucp_ep_failover_reconfig()",
+                ep, lane, old_uct_ep);
+
+    status = ucp_wireup_ep_create(ep, &wireup_ep_uct);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ucs_trace("ep %p: recovery lane[%d] %p -> wireup_ep %p", ep, lane,
+              old_uct_ep, wireup_ep_uct);
+    ucp_ep_set_lane(ep, lane, wireup_ep_uct);
+
+    if (old_uct_ep != NULL) {
+        uct_ep_destroy(old_uct_ep);
+    }
+
+    return UCS_OK;
+}
+
+/* Attach a fully-connected iface UCT EP as next_ep of the lane's wireup
+ * proxy and mark it ready. ucp_wireup_ep_set_next_ep() sets
+ * UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED internally because @a next_ep was
+ * created already connected to the peer iface. */
+static void
+ucp_ep_recovery_attach_next_ep(ucp_ep_h ep, ucp_lane_index_t lane,
+                               uct_ep_h next_ep)
+{
+    uct_ep_h proxy             = ucp_ep_get_lane(ep, lane);
+    ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(proxy);
+
+    ucs_assert(wireup_ep != NULL);
+    ucs_assert(wireup_ep->super.uct_ep == NULL);
+
+    ucp_wireup_ep_set_next_ep(proxy, next_ep, ucp_ep_get_rsc_index(ep, lane));
+    wireup_ep->flags |= UCP_WIREUP_EP_FLAG_READY |
+                        UCP_WIREUP_EP_FLAG_REMOTE_CONNECTED;
+}
+
+/* Mark an already-attached p2p wireup proxy as ready+remote-connected, after
+ * ucp_wireup_ep_connect_to_ep_v2() has successfully connected its inner EP. */
+static void
+ucp_ep_recovery_mark_p2p_ready(ucp_ep_h ep, ucp_lane_index_t lane)
+{
+    uct_ep_h proxy             = ucp_ep_get_lane(ep, lane);
+    ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(proxy);
+
+    ucs_assert(wireup_ep != NULL);
+    ucs_assert(wireup_ep->super.uct_ep != NULL);
+
+    wireup_ep->flags |= UCP_WIREUP_EP_FLAG_READY |
+                        UCP_WIREUP_EP_FLAG_REMOTE_CONNECTED;
+}
+
+/* Ensure the lane's wireup proxy has an iface-only inner transport EP.
+ * No-op when one is already attached (retry path: either we ran prepare on
+ * a prior recovery tick, or rebuild_p2p_lane is re-entering after a
+ * transient connect failure). Delegates the create+attach to
+ * ucp_wireup_ep_connect() - the same helper normal wireup uses from
+ * ucp_wireup_connect_lane_to_ep() - with connect_aux=0 / remote_address=NULL.
+ * It uses ucp_proxy_ep_set_uct_ep() internally, so LOCAL_CONNECTED stays
+ * off until ucp_wireup_ep_connect_to_ep_v2() runs. */
+static ucs_status_t
+ucp_ep_recovery_p2p_set_next_ep(ucp_ep_h ep, ucp_lane_index_t lane)
+{
+    const ucp_ep_config_key_t *cfg_key = &ucp_ep_config(ep)->key;
+    uct_ep_h uct_ep                    = ucp_ep_get_lane(ep, lane);
+    ucp_wireup_ep_t *wireup_ep         = ucp_wireup_ep(uct_ep);
+
+    ucs_assertv(wireup_ep != NULL, "ep %p lane %d: expected wireup proxy",
+                ep, lane);
+
+    if (wireup_ep->super.uct_ep != NULL) {
+        return UCS_OK;
+    }
+
+    return ucp_wireup_ep_connect(uct_ep, 0,
+                                 cfg_key->lanes[lane].rsc_index,
+                                 cfg_key->lanes[lane].path_index,
+                                 0, NULL);
+}
+
+/* Find a CONNECT_TO_IFACE address entry whose TL matches the one used
+ * locally by `lane` and whose dev_addr/iface_addr the local iface can
+ * actually reach.
+ *
+ * TODO: even with is_reachable() this still picks the first matching
+ * remote address entry, which is not necessarily the one that was
+ * originally paired with `lane` during the initial wireup. When more
+ * than one peer rsc is reachable (e.g. peer has two HCAs in the same
+ * subnet, both running dc_mlx5), first-match can silently migrate the
+ * lane to a different peer device on recovery. Possible fixes, in
+ * increasing order of invasiveness:
+ *
+ *   (a) Use what's already recorded on the lane to disambiguate:
+ *       require ae->md_index == cfg_key->lanes[lane].dst_md_index and
+ *       (where meaningful) ae->sys_dev == cfg_key->lanes[lane].dst_sys_dev
+ *       before falling back to any-reachable. This is fully local - no
+ *       wire-format or cfg_key change - and resolves the common case;
+ *       the remaining pathology is two rscs sharing an MD.
+ *
+ *   (b) Persist the peer rsc_index (or an opaque peer-side lane-id)
+ *       in cfg_key->lanes[lane] at initial wireup time, and match
+ *       against it here. Pinpoint-accurate but touches the global ep
+ *       config hashing and every cfg_key caller.
+ *
+ *   (c) Carry the peer's rsc_index per-lane in the LANES_ADDR_REQUEST/
+ *       REPLY messages themselves (via an additional lanes2peer-rsc[]
+ *       array) so both sides pin the pairing on the wire. Wire-format
+ *       change + per-lane bookkeeping during the exchange.
+ */
+static const ucp_address_entry_t *
+ucp_ep_recovery_find_iface_addr(ucp_ep_h ep, ucp_lane_index_t lane,
+                                const ucp_unpacked_address_t *remote_address)
+{
+    ucp_rsc_index_t rsc_index = ucp_ep_config(ep)->key.lanes[lane].rsc_index;
+    const ucp_address_entry_t *ae;
+
+    ucp_unpacked_address_for_each(ae, remote_address) {
+        if ((ae->iface_addr != NULL) &&
+            ucp_wireup_is_reachable(ep, 0, rsc_index, ae, NULL, 0)) {
+            return ae;
+        }
+    }
+
+    return NULL;
+}
+
+/* Rebuild one CONNECT_TO_IFACE lane. Flow: find peer iface addr -> create a
+ * fully-connected UCT EP to that iface -> install empty wireup proxy ->
+ * attach the UCT EP as next_ep and mark it ready. Allocation order is
+ * "alloc outer resources first, install proxy last, attach on commit" so a
+ * failure at any step leaves the lane in its pre-call state. */
+static ucs_status_t
+ucp_ep_recovery_rebuild_iface_lane(
+        ucp_ep_h ep, ucp_lane_index_t lane,
+        const ucp_unpacked_address_t *remote_address)
+{
+    const ucp_ep_config_key_t *k = &ucp_ep_config(ep)->key;
+    const ucp_rsc_index_t rsc_index = k->lanes[lane].rsc_index;
+    const ucp_address_entry_t *ae;
+    uct_ep_params_t uct_ep_params;
+    ucp_worker_iface_t *wiface;
+    uct_ep_h uct_ep;
+    ucs_status_t status;
+
+    ae = ucp_ep_recovery_find_iface_addr(ep, lane, remote_address);
+    if (ae == NULL) {
+        ucs_debug("ep %p: no remote iface address for lane %d", ep, lane);
+        return UCS_ERR_UNREACHABLE;
+    }
+
+    wiface                   = ucp_worker_iface(ep->worker, rsc_index);
+    uct_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE      |
+                               UCT_EP_PARAM_FIELD_DEV_ADDR   |
+                               UCT_EP_PARAM_FIELD_IFACE_ADDR |
+                               UCT_EP_PARAM_FIELD_PATH_INDEX;
+    uct_ep_params.iface      = wiface->iface;
+    uct_ep_params.dev_addr   = ae->dev_addr;
+    uct_ep_params.iface_addr = ae->iface_addr;
+    uct_ep_params.path_index = k->lanes[lane].path_index;
+
+    status = uct_ep_create(&uct_ep_params, &uct_ep);
+    if (status != UCS_OK) {
+        ucs_diag("ep %p: uct_ep_create failed for recovery lane %d: %s", ep,
+                 lane, ucs_status_string(status));
+        return status;
+    }
+
+    status = ucp_ep_recovery_install_wireup_ep(ep, lane);
+    if (status != UCS_OK) {
+        uct_ep_destroy(uct_ep);
+        return status;
+    }
+
+    ucp_ep_recovery_attach_next_ep(ep, lane, uct_ep);
+    ucs_debug("ep %p: recovered iface-lane[%d]=%p via rsc[%d]", ep, lane,
+              uct_ep, rsc_index);
+    return UCS_OK;
+}
+
+/* Rebuild one p2p (CONNECT_TO_EP) lane. Flow:
+ *   find peer ep_addr -> install empty wireup proxy -> ensure an
+ *   iface-only inner UCT EP is attached -> connect_to_ep_v2 against peer
+ *   ep_addr (sets LOCAL_CONNECTED) -> mark ready.
+ * The extra connect/ready steps distinguish this from iface rebuild: the
+ * inner UCT EP can only transition to "connected" after the peer ep_addr
+ * has travelled through LANES_ADDR_REQUEST/REPLY. The "ensure" helper is
+ * idempotent, so this works whether the proxy is being built for the
+ * first time (fresh failed-stub) or was already prepared earlier (our own
+ * prepare_lanes had run on a prior recovery tick / we're both peer and
+ * initiator in a symmetric-failure case). */
+static ucs_status_t
+ucp_ep_recovery_rebuild_p2p_lane(
+        ucp_ep_h ep, ucp_lane_index_t lane,
+        const ucp_unpacked_address_t *remote_address)
+{
+    const ucp_address_entry_t *address_entry;
+    const ucp_address_entry_ep_addr_t *ep_entry;
+    ucp_lane_index_t remote_lane;
+    ucs_status_t status;
+
+    /* Symmetric assumption for this POC: the peer's lane index mirrors ours.
+     * ucp_address_pack() with lanes2remote==NULL stamps the sender-side local
+     * lane as the remote_lane tag in the ep_addr, so we look up by our own
+     * lane index. */
+    remote_lane = lane;
+    status = ucp_wireup_find_remote_p2p_addr(ep, remote_lane, remote_address,
+                                             &address_entry, &ep_entry);
+    if (status != UCS_OK) {
+        ucs_debug("ep %p: no remote ep_addr for p2p lane %d", ep, lane);
+        return status;
+    }
+
+    status = ucp_ep_recovery_install_wireup_ep(ep, lane);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = ucp_ep_recovery_p2p_set_next_ep(ep, lane);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = ucp_wireup_ep_connect_to_ep_v2(ucp_ep_get_lane(ep, lane),
+                                            address_entry, ep_entry);
+    if (status != UCS_OK) {
+        ucs_diag("ep %p: connect_to_ep_v2 failed for recovery p2p lane %d: %s",
+                 ep, lane, ucs_status_string(status));
+        /* Inner EP is owned by the proxy at this point (is_owner=1 in
+         * ucp_proxy_ep_set_uct_ep); leaving it in place lets a subsequent
+         * retry call connect_to_ep_v2 again on the same QP. */
+        return status;
+    }
+
+    ucp_ep_recovery_mark_p2p_ready(ep, lane);
+    ucs_debug("ep %p: recovered p2p-lane[%d] via rsc[%d]", ep, lane,
+              ucp_ep_get_rsc_index(ep, lane));
+    return UCS_OK;
+}
+
+/* For each lane in `lanes_to_rebuild`, bring its UCT resources back online.
+ * Dispatches to the iface-connect or p2p helper based on lane type. Returns
+ * the bitmap of lanes successfully rebuilt; lanes not in the returned bitmap
+ * stay UCP_LANE_TYPE_FAILED and will be retried on a future recovery round. */
+ucp_lane_map_t
+ucp_ep_recovery_rebuild_lanes(ucp_ep_h ep, ucp_lane_map_t lanes_to_rebuild,
+                              const ucp_unpacked_address_t *remote_address)
+{
+    const ucp_ep_config_key_t *k = &ucp_ep_config(ep)->key;
+    ucp_lane_map_t rebuilt       = 0;
+    ucp_lane_index_t lane;
+    ucs_status_t status;
+
+    ucs_for_each_bit(lane, lanes_to_rebuild) {
+        if (lane >= k->num_lanes) {
+            continue;
+        }
+
+        if (ucp_ep_is_lane_p2p(ep, lane)) {
+            status = ucp_ep_recovery_rebuild_p2p_lane(ep, lane,
+                                                      remote_address);
+        } else {
+            status = ucp_ep_recovery_rebuild_iface_lane(ep, lane,
+                                                        remote_address);
+        }
+
+        if (status == UCS_OK) {
+            rebuilt |= UCS_BIT(lane);
+        }
+    }
+
+    return rebuilt;
+}
+
+/* Replace failed UCT stubs with wireup proxies for the given lane set and,
+ * for p2p lanes, create their iface-only inner transport EP so that the
+ * local ep_addr is available to ucp_address_pack() at REQUEST-send time.
+ * Returns the bitmap of lanes that ended up with the full proxy state
+ * required to appear in LANES_ADDR_REQUEST. Lanes that failed to reach
+ * that state are excluded so they don't get packed (which would try to
+ * read addresses from a half-built proxy). */
+static ucp_lane_map_t
+ucp_ep_recovery_prepare_lanes(ucp_ep_h ep, ucp_lane_map_t lanes)
+{
+    const ucp_ep_config_key_t *cfg_key = &ucp_ep_config(ep)->key;
+    ucp_lane_map_t lane_map            = 0;
+    ucp_lane_index_t lane;
+
+    ucs_for_each_bit(lane, lanes) {
+        if (lane >= cfg_key->num_lanes) {
+            continue;
+        }
+
+        if (ucp_ep_recovery_install_wireup_ep(ep, lane) != UCS_OK) {
+            continue;
+        }
+
+        /* For p2p lanes the ep_addr has to exist before we pack the
+         * REQUEST (ucp_address_pack iterates p2p_lanes and calls
+         * uct_ep_get_address on each). If ensure_inner_p2p_ep fails the
+         * lane stays with an empty proxy and is skipped from this
+         * round; the next recovery tick will retry. */
+        if (ucp_ep_is_lane_p2p(ep, lane) &&
+            (ucp_ep_recovery_p2p_set_next_ep(ep, lane) != UCS_OK)) {
+            continue;
+        }
+
+        lane_map |= UCS_BIT(lane);
+    }
+
+    return lane_map;
+}
+
+/* Send one LANES_ADDR_REQUEST for the current set of failed lanes. Idempotent
+ * across retries: proxies already in place are left alone, only missing ones
+ * are installed. */
+static void ucp_ep_recovery_send_request(ucp_ep_h ep)
+{
+    ucp_lane_map_t failed_lanes = ucp_ep_get_failed_lanes(ep);
+    ucp_lane_map_t recovery_lanes;
+
+    ucs_assert(ucp_ep_config(ep)->key.am_lane != UCP_NULL_LANE);
+
+    recovery_lanes = ucp_ep_recovery_prepare_lanes(ep, failed_lanes);
+    if (recovery_lanes == 0) {
+        ucs_diag("ep %p: no lanes to recover", ep);
+        return;
+    }
+
+    ucs_debug("ep %p: sending recovery request, failed=0x%" PRIx64
+              " recovery=0x%" PRIx64, ep, failed_lanes, recovery_lanes);
+
+    ucp_wireup_send_lanes_addr_msg(ep, UCP_WIREUP_MSG_LANES_ADDR_REQUEST,
+                                   failed_lanes, recovery_lanes);
+}
+
+/* A lane whose UCT EP is either a READY wireup proxy (about to be swapped
+ * by ucp_wireup_eps_progress) or a real transport EP (already swapped) is
+ * effectively recovered - its FAILED bit can be cleared. A failed stub or
+ * a wireup proxy without READY still needs work. */
+static int ucp_ep_recovery_lane_is_ready(ucp_ep_h ep, ucp_lane_index_t lane)
+{
+    uct_ep_h uct_ep = ucp_ep_get_lane(ep, lane);
+    ucp_wireup_ep_t *wireup_ep;
+
+    if (uct_ep == NULL) {
+        return 0;
+    }
+
+    if (ucp_is_uct_ep_failed(uct_ep)) {
+        return 0;
+    }
+
+    wireup_ep = ucp_wireup_ep(uct_ep);
+    if (wireup_ep == NULL) {
+        /* ucp_wireup_eps_progress already replaced the proxy with the real
+         * transport EP - lane is fully operational. */
+        return 1;
+    }
+
+    return !!(wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY);
+}
+
+static ucp_lane_map_t
+ucp_ep_recovery_get_ready_lanes(ucp_ep_h ep, ucp_lane_map_t failed_lanes)
+{
+    ucp_lane_map_t ready_lanes = 0;
+    ucp_lane_index_t lane;
+
+    ucs_for_each_bit(lane, failed_lanes) {
+        if (ucp_ep_recovery_lane_is_ready(ep, lane)) {
+            ready_lanes |= UCS_BIT(lane);
+        }
+    }
+
+    return ready_lanes;
+}
+
+/* Heap-resident retry state for failed-lane recovery. Allocated by
+ * ucp_ep_recovery_arm() on failover, kept alive by the callbackq while the
+ * oneshot is pending, freed either by the oneshot itself on completion / on
+ * retry exhaustion, or by ucp_ep_recovery_remove_filter() during endpoint
+ * teardown. No per-EP state is kept on ucp_ep_t / ucp_ep_ext_t. */
+typedef struct ucp_ep_recovery_arg {
+    ucp_ep_h       ucp_ep;        /* Back-pointer used for callbackq key and
+                                     filter matching. */
+    ucs_time_t     next_time;     /* Earliest time at which the next round
+                                     may send LANES_ADDR_REQUEST. */
+    unsigned       retries_left;  /* Rounds remaining before the endpoint is
+                                     declared fully failed. */
+} ucp_ep_recovery_arg_t;
+
+/* Enqueue a recovery oneshot for @a arg. Caller keeps ownership of @a arg
+ * until the oneshot runs (it may free itself) or is purged via the filter. */
+static void ucp_ep_recovery_arg_enqueue(ucp_ep_recovery_arg_t *arg)
+{
+    ucp_worker_h worker = arg->ucp_ep->worker;
+
+    ucs_callbackq_add_oneshot(&worker->uct->progress_q, arg->ucp_ep,
+                              ucp_ep_recovery_progress, arg);
+    ucp_worker_signal_internal(worker);
+}
+
+int ucp_ep_recovery_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
+{
+    ucp_ep_recovery_arg_t *recovery_arg = elem->arg;
+
+    if ((elem->cb == ucp_ep_recovery_progress) &&
+        (recovery_arg->ucp_ep == arg)) {
+        ucs_free(recovery_arg);
+        return 1;
+    }
+
+    return 0;
+}
+
+ucs_status_t ucp_ep_recovery_arm(ucp_ep_h ep)
+{
+    ucp_worker_h worker   = ep->worker;
+    ucp_context_h context = worker->context;
+    ucp_ep_recovery_arg_t *arg;
+
+    /* Remove (and free) any previously-queued recovery oneshot for this EP. */
+    ucs_callbackq_remove_oneshot(&worker->uct->progress_q, ep,
+                                 ucp_ep_recovery_remove_filter, ep);
+
+    arg = ucs_malloc(sizeof(*arg), "ucp_ep_recovery_arg");
+    if (arg == NULL) {
+        ucs_error("ep %p: failed to allocate recovery argument", ep);
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    arg->ucp_ep       = ep;
+    arg->next_time    = ucs_get_time() + context->config.ext.recovery_interval;
+    arg->retries_left = context->config.ext.recovery_retries;
+
+    ucp_ep_recovery_arg_enqueue(arg);
+    return UCS_OK;
+}
+
+unsigned ucp_ep_recovery_progress(void *arg)
+{
+    ucp_ep_recovery_arg_t *recovery_arg = arg;
+    ucp_ep_h ep                         = recovery_arg->ucp_ep;
+    ucp_worker_h worker                 = ep->worker;
+    ucp_context_h context               = worker->context;
+    ucp_lane_map_t failed, recovered;
+    ucs_time_t now;
+    ucs_status_t status;
+
+    UCS_ASYNC_BLOCK(&worker->async);
+
+    if (ep->flags & UCP_EP_FLAG_FAILED) {
+        /* Endpoint was declared fully failed elsewhere; nothing more to do. */
+        goto done;
+    }
+
+    failed = ucp_ep_get_failed_lanes(ep);
+    if (failed == 0) {
+        /* Recovery completed between rounds. */
+        goto done;
+    }
+
+    recovered = ucp_ep_recovery_get_ready_lanes(ep, failed);
+    status    = ucp_ep_reconfig_clear_failed_lanes(ep, recovered);
+    if (status != UCS_OK) {
+        ucs_error("ep %p: failed to clear FAILED states for lanes 0x%" PRIx64,
+                  ep, recovered);
+        ucp_ep_set_lanes_failed_schedule(ep, 0, status);
+        goto done;
+    }
+
+    /* recovered is a subset of failed and we hold the worker async lock,
+     * so ucp_ep_get_failed_lanes(ep) == failed & ~recovered now. */
+    failed &= ~recovered;
+    if (failed == 0) {
+        goto done;
+    }
+
+    now = ucs_get_time();
+    if (now < recovery_arg->next_time) {
+        ucp_ep_recovery_arg_enqueue(recovery_arg);
+        goto out;
+    }
+
+    if (recovery_arg->retries_left == 0) {
+        ucs_error("ep %p: recovery retries exhausted", ep);
+        ucp_ep_set_lanes_failed_schedule(ep, 0, UCS_ERR_ENDPOINT_TIMEOUT);
+        goto done;
+    }
+
+    ucs_debug("ep %p: recovery round (retries_left=%u, failed=0x%" PRIx64 ")",
+              ep, recovery_arg->retries_left, (uint64_t)failed);
+
+    ucp_ep_recovery_send_request(ep);
+
+    --recovery_arg->retries_left;
+    recovery_arg->next_time = now + context->config.ext.recovery_interval;
+
+    /* Keep recovery armed across ticks - the arg will only be freed when a
+     * round actually succeeds (failed == 0 after clear), retries are
+     * exhausted, or the endpoint is torn down / fully failed. */
+    ucp_ep_recovery_arg_enqueue(recovery_arg);
+    goto out;
+
+done:
+    ucs_free(recovery_arg);
+out:
+    UCS_ASYNC_UNBLOCK(&worker->async);
+    return 1;
+}
+
 ucs_status_t
 ucp_ep_failover_reconfig(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,
                          ucs_status_t discard_status)

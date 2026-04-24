@@ -1046,6 +1046,21 @@ int ucp_ep_recovery_remove_filter(const ucs_callbackq_elem_t *elem, void *arg);
 
 
 /**
+ * @brief Rebuild UCT endpoints for the given set of currently-failed lanes
+ *        using remote addresses carried in a WIREUP LANES_ADDR message.
+ *
+ * Invoked by the LANES_ADDR_REQUEST / LANES_ADDR_REPLY message handlers in
+ * wireup.c. Dispatches per lane to the CONNECT_TO_IFACE or the p2p rebuild
+ * path, returning the bitmap of lanes successfully rebuilt. Lanes not in
+ * the returned bitmap remain UCP_LANE_TYPE_FAILED and will be re-attempted
+ * on a subsequent recovery tick.
+ */
+ucp_lane_map_t
+ucp_ep_recovery_rebuild_lanes(ucp_ep_h ep, ucp_lane_map_t lanes_to_rebuild,
+                              const ucp_unpacked_address_t *remote_address);
+
+
+/**
  * @brief Mark a subset of lanes as UCP_LANE_TYPE_FAILED and arm recovery.
  *
  * Same flow that ucp_ep_set_lanes_failed() invokes internally when a UCT

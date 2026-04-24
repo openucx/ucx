@@ -10,6 +10,7 @@
 #include <ucp/api/ucp.h>
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_ep.h>
+#include <ucp/wireup/address.h>
 #include <uct/api/uct.h>
 #include <ucs/arch/bitops.h>
 
@@ -242,6 +243,44 @@ ucp_wireup_connect_local(ucp_ep_h ep,
 uct_ep_h ucp_wireup_extract_lane(ucp_ep_h ep, ucp_lane_index_t lane);
 
 unsigned ucp_wireup_eps_progress(void *arg);
+
+/**
+ * @brief Schedule a single run of ucp_wireup_eps_progress() for the given EP.
+ *
+ * Registers a one-shot callback on the worker progress queue which, when
+ * dispatched, swaps any READY wireup proxies for their underlying transport
+ * EPs (see ucp_wireup_eps_progress()).
+ */
+void ucp_wireup_eps_progress_sched(ucp_ep_h ucp_ep);
+
+
+/**
+ * @brief Find a p2p ep_addr entry in a remote address for a given remote lane.
+ *
+ * Scans @a remote_address for a ucp_address_entry whose ep_addrs[] contains
+ * @a remote_lane.
+ *
+ * @return UCS_OK on match, UCS_ERR_UNREACHABLE otherwise.
+ */
+ucs_status_t
+ucp_wireup_find_remote_p2p_addr(ucp_ep_h ep, ucp_lane_index_t remote_lane,
+                                const ucp_unpacked_address_t *remote_address,
+                                const ucp_address_entry_t **address_entry_p,
+                                const ucp_address_entry_ep_addr_t **ep_entry_p);
+
+
+/**
+ * @brief Build and send a LANES_ADDR_REQUEST or LANES_ADDR_REPLY wireup
+ *        message over the operable AM lane.
+ *
+ * Packs the iface / ep addresses of the rscs used by the lanes in
+ * @a provided_lane_map and ships them in a wireup message of type
+ * @a msg_type, together with the @a requested_lane_map / @a provided_lane_map
+ * masks.
+ */
+void ucp_wireup_send_lanes_addr_msg(ucp_ep_h ep, uint8_t msg_type,
+                                    ucp_lane_map_t requested_lane_map,
+                                    ucp_lane_map_t provided_lane_map);
 
 double ucp_wireup_iface_lat_distance_v1(const ucp_worker_iface_t *wiface);
 
