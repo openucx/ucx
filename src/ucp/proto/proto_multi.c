@@ -448,7 +448,6 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
                      lpriv->weight;
         ucs_assert(ucp_proto_multi_scaled_length(lpriv->weight, min_length) >=
                    lane_perf->min_length);
-        perf.min_length = ucs_max(perf.min_length, min_length);
 
         weight_sum           += lpriv->weight;
         min_end_offset       += min_chunk;
@@ -464,12 +463,8 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     }
     ucs_assert(mpriv->num_lanes == ucs_popcount(selection.lane_map));
 
-    /* If all lanes support single-byte fragments, don’t scale the minimum
-     * message length by the number of lanes, since we can’t end up sending
-     * a fragment that’s too small for any lane. */
-    if (mpriv->min_frag <= 1) {
-        perf.min_length = mpriv->min_frag;
-    }
+    /* Multi-lane protocols with non-zero min_frag pad length if needed */
+    perf.min_length = mpriv->min_frag;
 
     if (mpriv->num_lanes == 1) {
         perf.node = lanes_perf[ucs_ffs64(selection.lane_map)].node;
