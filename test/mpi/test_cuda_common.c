@@ -341,9 +341,9 @@ static void free_mempool(alloc_mem_t *alloc_mem)
 }
 
 typedef struct {
-    CUmemGenericAllocationHandle *handles;
     size_t                       chunk_size;
     unsigned                     num_chunks;
+    CUmemGenericAllocationHandle handles[];
 } vmm_multi_chunk_t;
 
 static alloc_mem_t alloc_vmm_fabric_multi(size_t size)
@@ -383,7 +383,6 @@ static alloc_mem_t alloc_vmm_fabric_multi(size_t size)
         exit(-1);
     }
 
-    multi->handles    = (CUmemGenericAllocationHandle*)(multi + 1);
     multi->chunk_size = granularity;
     multi->num_chunks = num_chunks;
 

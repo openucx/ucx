@@ -45,6 +45,7 @@ libuct_cuda_la_SOURCES = \
 	cuda_copy/cuda_copy_iface.c \
 	cuda_copy/cuda_copy_ep.c \
 	cuda_ipc/cuda_ipc_md.c \
+	cuda_ipc/cuda_ipc_vmm_multi.c \
 	cuda_ipc/cuda_ipc_iface.c \
 	cuda_ipc/cuda_ipc_ep.c \
 	cuda_ipc/cuda_ipc_cache.c

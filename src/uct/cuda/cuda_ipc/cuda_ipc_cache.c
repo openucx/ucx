@@ -172,10 +172,10 @@ static ucs_status_t uct_cuda_ipc_close_memhandle(uct_cuda_ipc_cache_region_t *re
 {
 #if HAVE_CUDA_FABRIC
     ucs_status_t status;
-    uint16_t i;
-    ptrdiff_t chunk_offset;
 
-    if (region->key.ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM) {
+    if ((region->key.ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM) ||
+        (region->key.ph.handle_type ==
+         UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM_MULTI)) {
         status = UCT_CUDADRV_FUNC_LOG_WARN(cuMemUnmap(
                     (CUdeviceptr)region->mapped_addr, region->key.b_len));
         if (status != UCS_OK) {
@@ -184,20 +184,6 @@ static ucs_status_t uct_cuda_ipc_close_memhandle(uct_cuda_ipc_cache_region_t *re
 
         return UCT_CUDADRV_FUNC_LOG_WARN(cuMemAddressFree(
                 (CUdeviceptr)region->mapped_addr, region->key.b_len));
-    } else if (region->key.ph.handle_type ==
-               UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM_MULTI) {
-        for (i = 0; i < region->num_chunks; i++) {
-            chunk_offset = region->chunks[i].d_bptr - region->key.d_bptr;
-            UCT_CUDADRV_FUNC_LOG_WARN(cuMemUnmap(
-                    (CUdeviceptr)region->mapped_addr + chunk_offset,
-                    region->chunks[i].b_len));
-            UCT_CUDADRV_FUNC_LOG_WARN(cuMemRelease(region->imp_handles[i]));
-        }
-        status = UCT_CUDADRV_FUNC_LOG_WARN(cuMemAddressFree(
-                (CUdeviceptr)region->mapped_addr, region->key.b_len));
-        ucs_free(region->imp_handles);
-        ucs_free(region->chunks);
-        return status;
     } else if (region->key.ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL) {
         return UCT_CUDADRV_FUNC_LOG_WARN(
                 cuMemFree((CUdeviceptr)region->mapped_addr));
@@ -418,7 +404,6 @@ uct_cuda_ipc_open_memhandle_mempool(uct_cuda_ipc_rkey_t *key, CUdevice cu_dev,
     khash_t(cuda_ipc_rem_mpool_cache) *hash = &uct_cuda_ipc_rem_mpool_cache.hash;
     const CUmemFabricHandle *hkey           = &key->ph.handle.fabric_handle;
     ucs_status_t status                     = UCS_OK;
-    CUmemAccessDesc access_desc;
     CUmemoryPool mpool;
     khiter_t khiter;
     int khret;
@@ -460,15 +445,6 @@ uct_cuda_ipc_open_memhandle_mempool(uct_cuda_ipc_rkey_t *key, CUdevice cu_dev,
 out_import_pointer:
     status = UCT_CUDADRV_FUNC(cuMemPoolImportPointer(mapped_addr, key->ph.pool,
             (CUmemPoolPtrExportData*)&key->ph.ptr), log_level);
-    if (status == UCS_OK) {
-        uct_cuda_ipc_init_access_desc(&access_desc, cu_dev);
-        status = UCT_CUDADRV_FUNC(cuMemPoolSetAccess(key->ph.pool,
-                                                     &access_desc, 1),
-                                  log_level);
-        if (status != UCS_OK) {
-            cuMemFree(*mapped_addr);
-        }
-    }
 
 err:
     pthread_rwlock_unlock(&uct_cuda_ipc_rem_mpool_cache.lock);
@@ -478,28 +454,19 @@ err:
 static ucs_status_t
 uct_cuda_ipc_open_memhandle_vmm_multi(
         const uct_cuda_ipc_unpacked_rkey_t *unpacked, CUdevice cu_dev,
-        CUdeviceptr *mapped_addr,
-        CUmemGenericAllocationHandle **imp_handles_p,
-        ucs_log_level_t log_level)
+        CUdeviceptr *mapped_addr, ucs_log_level_t log_level)
 {
     const uct_cuda_ipc_rkey_t *key = &unpacked->super.super;
-    CUmemGenericAllocationHandle *imp_handles;
+    CUmemGenericAllocationHandle imp_handle;
     ucs_status_t status;
     uint16_t i, mapped;
     ptrdiff_t chunk_offset;
-
-    imp_handles = ucs_malloc(unpacked->num_chunks *
-                                     sizeof(CUmemGenericAllocationHandle),
-                             "vmm_multi_imp_handles");
-    if (imp_handles == NULL) {
-        return UCS_ERR_NO_MEMORY;
-    }
 
     status = UCT_CUDADRV_FUNC(cuMemAddressReserve(mapped_addr, key->b_len,
                                                   0, 0, 0),
                               log_level);
     if (status != UCS_OK) {
-        goto err_free_handles;
+        return status;
     }
 
     for (i = 0; i < unpacked->num_chunks; i++) {
@@ -513,7 +480,7 @@ uct_cuda_ipc_open_memhandle_vmm_multi(
         }
 
         status = UCT_CUDADRV_FUNC(cuMemImportFromShareableHandle(
-                &imp_handles[i],
+                &imp_handle,
                 (void*)&unpacked->chunks[i].vmm_handle.handle.fabric,
                 CU_MEM_HANDLE_TYPE_FABRIC), log_level);
         if (status != UCS_OK) {
@@ -524,10 +491,10 @@ uct_cuda_ipc_open_memhandle_vmm_multi(
         chunk_offset = unpacked->chunks[i].d_bptr - key->d_bptr;
         status       = UCT_CUDADRV_FUNC(
                 cuMemMap(*mapped_addr + chunk_offset,
-                         unpacked->chunks[i].b_len, 0, imp_handles[i], 0),
+                         unpacked->chunks[i].b_len, 0, imp_handle, 0),
                 log_level);
+        UCT_CUDADRV_FUNC_LOG_WARN(cuMemRelease(imp_handle));
         if (status != UCS_OK) {
-            UCT_CUDADRV_FUNC_LOG_WARN(cuMemRelease(imp_handles[i]));
             mapped = i;
             goto err_unmap;
         }
@@ -540,20 +507,16 @@ uct_cuda_ipc_open_memhandle_vmm_multi(
         goto err_unmap;
     }
 
-    *imp_handles_p = imp_handles;
     return UCS_OK;
 
 err_unmap:
-    for (i = 0; i < mapped; i++) {
-        chunk_offset = unpacked->chunks[i].d_bptr - key->d_bptr;
-        UCT_CUDADRV_FUNC_LOG_WARN(
-                cuMemUnmap(*mapped_addr + chunk_offset,
-                           unpacked->chunks[i].b_len));
-        UCT_CUDADRV_FUNC_LOG_WARN(cuMemRelease(imp_handles[i]));
+    if (mapped > 0) {
+        ptrdiff_t mapped_len = (unpacked->chunks[mapped - 1].d_bptr +
+                                unpacked->chunks[mapped - 1].b_len) -
+                               key->d_bptr;
+        UCT_CUDADRV_FUNC_LOG_WARN(cuMemUnmap(*mapped_addr, mapped_len));
     }
     UCT_CUDADRV_FUNC_LOG_WARN(cuMemAddressFree(*mapped_addr, key->b_len));
-err_free_handles:
-    ucs_free(imp_handles);
     return status;
 }
 #endif
@@ -722,10 +685,6 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
     uct_cuda_ipc_cache_region_t *region;
     CUuuid uuid;
     int ret;
-#if HAVE_CUDA_FABRIC
-    CUmemGenericAllocationHandle *imp_handles = NULL;
-    size_t chunks_size;
-#endif
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetUuid(&uuid, cu_dev));
     if (status != UCS_OK) {
@@ -785,8 +744,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
 #if HAVE_CUDA_FABRIC
     if (key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM_MULTI) {
         status = uct_cuda_ipc_open_memhandle_vmm_multi(
-                unpacked_key, cu_dev, (CUdeviceptr*)mapped_addr,
-                &imp_handles, log_level);
+                unpacked_key, cu_dev, (CUdeviceptr*)mapped_addr, log_level);
         if (ucs_unlikely(status != UCS_OK)) {
             ucs_debug("%s: failed to open VMM_MULTI mem handle. addr:%p "
                       "len:%lu", cache->name, (void *)key->d_bptr, key->b_len);
@@ -854,28 +812,6 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
     region->cu_dev      = cu_dev;
     region->in_lru      = 0; /* will be set after pgtable insert */
 
-#if HAVE_CUDA_FABRIC
-    if (key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM_MULTI) {
-        region->imp_handles = imp_handles;
-        region->num_chunks  = unpacked_key->num_chunks;
-        chunks_size         = unpacked_key->num_chunks *
-                              sizeof(uct_cuda_ipc_vmm_chunk_desc_t);
-        region->chunks      = ucs_malloc(chunks_size,
-                                         "vmm_multi_cache_chunks");
-        if (region->chunks == NULL) {
-            ucs_free(imp_handles);
-            ucs_free(region);
-            status = UCS_ERR_NO_MEMORY;
-            goto err;
-        }
-        memcpy(region->chunks, unpacked_key->chunks, chunks_size);
-    } else {
-        region->imp_handles = NULL;
-        region->chunks      = NULL;
-        region->num_chunks  = 0;
-    }
-#endif
-
     status = UCS_PROFILE_CALL(ucs_pgtable_insert,
                               &cache->pgtable, &region->super);
     if (status == UCS_ERR_ALREADY_EXISTS) {
@@ -891,10 +827,6 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
         ucs_error("%s: failed to insert region:"UCS_PGT_REGION_FMT" size:%lu :%s",
                   cache->name, UCS_PGT_REGION_ARG(&region->super), key->b_len,
                   ucs_status_string(status));
-#if HAVE_CUDA_FABRIC
-        ucs_free(region->imp_handles);
-        ucs_free(region->chunks);
-#endif
         ucs_free(region);
         goto err;
     }

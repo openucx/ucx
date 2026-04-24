@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -29,11 +29,6 @@ struct uct_cuda_ipc_cache_region {
     uint64_t                refcount;     /**< Track in-flight ops before unmapping*/
     CUdevice                cu_dev;       /**< CUDA device */
     uint8_t                 in_lru;       /**< Whether region is on the LRU list */
-#if HAVE_CUDA_FABRIC
-    CUmemGenericAllocationHandle *imp_handles; /**< Per-chunk imported handles (VMM_MULTI) */
-    uct_cuda_ipc_vmm_chunk_desc_t *chunks;     /**< Chunk descriptors (VMM_MULTI) */
-    uint16_t                num_chunks;        /**< Number of VMM chunks (VMM_MULTI) */
-#endif
 };
 
 

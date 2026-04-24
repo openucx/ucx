@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -131,14 +131,14 @@ typedef struct {
     size_t                    b_len;  /* Allocation size */
     ucs_list_link_t           link;
 #if HAVE_CUDA_FABRIC
-    CUdeviceptr vmm_header_dev_ptr;            /* GPU metadata header buffer VA */
-    CUdeviceptr vmm_chunks_dev_ptr;            /* GPU metadata chunks buffer VA */
-    CUmemFabricHandle vmm_header_fabric_handle;/* Fabric handle to header buffer */
-    size_t vmm_header_alloc_size;              /* Header buffer alloc size */
-    size_t vmm_chunks_alloc_size;              /* Chunks buffer alloc size */
-    CUdeviceptr vmm_d_bptr;                    /* Expanded base covering all chunks */
-    size_t vmm_b_len;                          /* Expanded length covering all chunks */
-    uint16_t vmm_meta_num_chunks;              /* Chunk count */
+    CUdeviceptr               vmm_multi_header_dev_ptr;     /* GPU metadata header buffer VA */
+    CUdeviceptr               vmm_multi_chunks_dev_ptr;     /* GPU metadata chunks buffer VA */
+    CUmemFabricHandle         vmm_multi_header_fabric_handle;/* Fabric handle to header buf */
+    size_t                    vmm_multi_header_alloc_size;  /* Header buffer alloc size */
+    size_t                    vmm_multi_chunks_alloc_size;  /* Chunks buffer alloc size */
+    CUdeviceptr               vmm_multi_d_bptr;             /* Expanded base, all chunks */
+    size_t                    vmm_multi_b_len;              /* Expanded length, all chunks */
+    uint16_t                  vmm_multi_meta_num_chunks;    /* Chunk count */
 #endif
 } uct_cuda_ipc_lkey_t;
 
@@ -174,14 +174,14 @@ typedef struct {
 
 typedef struct {
     uct_cuda_ipc_vmm_handle_t vmm_handle;
-    CUdeviceptr                d_bptr;
-    size_t                     b_len;
-    unsigned long long         buffer_id;
+    CUdeviceptr               d_bptr;
+    size_t                    b_len;
+    unsigned long long        buffer_id;
 } uct_cuda_ipc_vmm_chunk_desc_t;
 
 typedef struct {
     uct_cuda_ipc_vmm_handle_t chunks_handle;
-    uint16_t                   num_chunks;
+    uint16_t                  num_chunks;
 } uct_cuda_ipc_vmm_meta_header_t;
 
 static UCS_F_ALWAYS_INLINE void
@@ -191,16 +191,31 @@ uct_cuda_ipc_init_access_desc(CUmemAccessDesc *access_desc, CUdevice cu_dev)
     access_desc->flags         = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
     access_desc->location.id   = cu_dev;
 }
+
+void uct_cuda_ipc_vmm_multi_meta_cleanup(uct_cuda_ipc_lkey_t *key);
 #endif
 
 
 typedef struct {
-    uct_cuda_ipc_extended_rkey_t super;
-    int                          stream_id;
+    uct_cuda_ipc_extended_rkey_t   super;
+    int                            stream_id;
 #if HAVE_CUDA_FABRIC
     uct_cuda_ipc_vmm_chunk_desc_t *chunks;
-    uint16_t                      num_chunks;
+    uint16_t                       num_chunks;
 #endif
 } uct_cuda_ipc_unpacked_rkey_t;
+
+
+#if HAVE_CUDA_FABRIC
+ucs_status_t
+uct_cuda_ipc_mkey_pack_vmm_multi_chunk(uct_cuda_ipc_memh_t *memh,
+                                       uct_cuda_ipc_lkey_t *key, void *address,
+                                       size_t length);
+
+ucs_status_t
+uct_cuda_ipc_vmm_multi_fetch_chunks(uct_cuda_ipc_unpacked_rkey_t *rkey,
+                                    CUdevice cu_dev,
+                                    ucs_log_level_t log_level);
+#endif
 
 #endif
