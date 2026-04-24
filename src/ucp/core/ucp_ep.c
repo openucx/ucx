@@ -78,8 +78,6 @@ typedef struct ucp_ep_discard_lanes_arg {
     ucp_ep_h               ucp_ep;
     /* Config to deactivate when discard completes */
     ucp_worker_cfg_index_t deactivate_cfg_index;
-    /* Config to activate when discard completes */
-    ucp_worker_cfg_index_t activate_cfg_index;
     /* Completion status of operations after discarding is * done */
     ucs_status_t           status;
 } ucp_ep_discard_lanes_arg_t;
@@ -143,7 +141,6 @@ static const uct_iface_ops_t ucp_failed_tl_iface_ops = {
 
 static ucp_ep_discard_lanes_arg_t ucp_failed_tl_ep_discard_arg = {
     .deactivate_cfg_index = UCP_WORKER_CFG_INDEX_NULL,
-    .activate_cfg_index   = UCP_WORKER_CFG_INDEX_NULL,
     .status               = UCS_ERR_CANCELED
 };
 
@@ -1430,14 +1427,11 @@ ucp_ep_config_activate_worker_ifaces(ucp_worker_h worker,
                                      ucp_worker_cfg_index_t cfg_index)
 {
     ucp_ep_config_t *ep_config = ucp_worker_ep_config(worker, cfg_index);
-    int old_count              = ep_config->ep_count++;
 
-    ucs_trace("activate wifaces worker %p ep config %u ep count %d -> %d",
-              worker, cfg_index, old_count, ep_config->ep_count);
-    if (old_count == 0) {
-        /* Only the 0->1 transition actually bumps underlying iface refs. A
-         * -1->0 transition (a deactivate from an out-of-order
-         * ucp_ep_discard_lanes_callback ran first) just rebalances. */
+    ucs_assert(new_cfg_index != UCP_WORKER_CFG_INDEX_NULL);
+    ucs_trace("activate wifaces worker %p ep config %u ep count %u", worker,
+              cfg_index, ep_config->ep_count);
+    if (ep_config->ep_count++ == 0) {
         ucp_wiface_process_for_each_lane(worker, ep_config,
                                          ep_config->proto_lane_map,
                                          ucp_worker_iface_progress_ep);
@@ -1449,17 +1443,18 @@ ucp_ep_config_deactivate_worker_ifaces(ucp_worker_h worker,
                                        ucp_worker_cfg_index_t cfg_index)
 {
     ucp_ep_config_t *ep_config = ucp_worker_ep_config(worker, cfg_index);
-    int old_count              = ep_config->ep_count--;
 
-    ucs_trace("deactivate wifaces worker %p ep config %u ep count %d -> %d",
-              worker, cfg_index, old_count, ep_config->ep_count);
-    if (old_count == 1) {
-        /* Only the 1->0 transition actually drops underlying iface refs. A
-         * 0->-1 transition (this deactivate from a discard callback ran
-         * before the matching activate from the previous failover's
-         * callback) is tolerated; the matching activate will later bring
-         * the counter back to 0 without re-progressing ifaces, so the
-         * iface refcount stays balanced. */
+    ucs_trace("deactivate wifaces worker %p ep config %u ep count %u", worker,
+              cfg_index, ep_config->ep_count);
+
+    if (cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
+        return;
+    }
+
+    ucs_assertv(ep_config->ep_count > 0, "worker %p ep config %u", worker,
+                cfg_index);
+
+    if (--ep_config->ep_count == 0) {
         ucp_wiface_process_for_each_lane(worker, ep_config,
                                          ep_config->proto_lane_map,
                                          ucp_worker_iface_unprogress_ep);
@@ -1478,11 +1473,7 @@ ucp_ep_config_reactivate_worker_ifaces(ucp_worker_h worker,
         return;
     }
 
-    if (old_cfg_index != UCP_WORKER_CFG_INDEX_NULL) {
-        ucp_ep_config_deactivate_worker_ifaces(worker, old_cfg_index);
-    }
-
-    ucs_assert(new_cfg_index != UCP_WORKER_CFG_INDEX_NULL);
+    ucp_ep_config_deactivate_worker_ifaces(worker, old_cfg_index);
     ucp_ep_config_activate_worker_ifaces(worker, new_cfg_index);
 }
 
@@ -1500,9 +1491,8 @@ static void ucp_ep_discard_lanes_callback(void *request, ucs_status_t status,
 
     ucs_trace("ep %p: discard lanes completed", arg->ucp_ep);
     ucp_ep_reqs_purge(arg->ucp_ep, arg->status);
-    ucp_ep_config_reactivate_worker_ifaces(arg->ucp_ep->worker,
-                                           arg->deactivate_cfg_index,
-                                           arg->activate_cfg_index);
+    ucp_ep_config_deactivate_worker_ifaces(arg->ucp_ep->worker,
+                                           arg->deactivate_cfg_index);
     ucp_ep_release_discard_arg(arg);
 }
 
@@ -1567,9 +1557,17 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
     discard_arg->ucp_ep               = ep;
     discard_arg->discard_counter      = 1;
     discard_arg->destroy_counter      = ucs_popcount(lanes);
-    discard_arg->deactivate_cfg_index = old_cfg_index;
-    discard_arg->activate_cfg_index   = ep->cfg_index;
     discard_arg->status               = discard_status;
+
+    /* Activate ifaces for the new configuration upfront before discard callback
+     * completion to avoid race condition which leads to negative EP reference
+     * counter when discard callbacks run out of order */
+    if (old_cfg_index != ep->cfg_index) {
+        ucp_ep_config_activate_worker_ifaces(ep->worker, ep->cfg_index);
+        discard_arg->deactivate_cfg_index = old_cfg_index;
+    } else {
+        discard_arg->deactivate_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
+    }
 
     ucs_debug("ep %p: discarding lanes", ep);
     ucp_ep_extract_failed_lanes(ep, lanes, &discard_arg->failed_ep, uct_eps);
