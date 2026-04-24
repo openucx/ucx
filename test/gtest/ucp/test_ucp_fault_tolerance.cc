@@ -32,6 +32,8 @@ public:
         add_variant_with_value(variants, features_rma_am, TEST_OP_GET | TEST_OP_FLUSH,
                                op_name(TEST_OP_GET | TEST_OP_FLUSH));
         add_variant_with_value(variants, features_am, TEST_OP_AM, op_name(TEST_OP_AM));
+        add_variant_with_value(variants, features_am, TEST_OP_AM |TEST_OP_ALL_LANES_FAILED,
+                               op_name(TEST_OP_AM | TEST_OP_ALL_LANES_FAILED));
         add_variant_with_value(variants, features_am, TEST_OP_AM | TEST_OP_FLUSH,
                                op_name(TEST_OP_AM | TEST_OP_FLUSH));
      }
@@ -54,10 +56,11 @@ protected:
     };
 
     enum test_op_t {
-        TEST_OP_PUT      = UCS_BIT(0),
-        TEST_OP_GET      = UCS_BIT(1),
-        TEST_OP_AM       = UCS_BIT(2),
-        TEST_OP_FLUSH    = UCS_BIT(3)
+        TEST_OP_PUT              = UCS_BIT(0),
+        TEST_OP_GET              = UCS_BIT(1),
+        TEST_OP_AM               = UCS_BIT(2),
+        TEST_OP_FLUSH            = UCS_BIT(3),
+        TEST_OP_ALL_LANES_FAILED = UCS_BIT(4)
     };
 
     void init() override {
@@ -269,7 +272,9 @@ protected:
                                   << ucs_status_string(status);
 
         ucp_ep_h ucp_ep_for_injection = get_ucp_ep_for_err_injection(failure_side);
-        for (size_t lane_idx = 0; lane_idx < am_bw_lanes.size(); ++lane_idx) {
+        const size_t num_injections = (op_mask & TEST_OP_ALL_LANES_FAILED) ? am_bw_lanes.size() :
+                                      am_bw_lanes.size() - 1;
+        for (size_t lane_idx = 0; lane_idx < num_injections; ++lane_idx) {
             ucp_lane_index_t lane = am_bw_lanes[lane_idx];
             uct_ep_h uct_ep_for_injection = ucp_ep_get_lane(ucp_ep_for_injection, lane);
             status = uct_ep_invalidate(uct_ep_for_injection, 0);
@@ -295,19 +300,8 @@ protected:
                 EXPECT_EQ(UCS_OK, status) << op_str << " operation returned status: "
                                         << ucs_status_string(status);
                 ASSERT_EQ(0, m_err_count) << "Error callback invoked " << m_err_count << " times";
-            } else {
-                short_progress_loop();
-                size_t min_expected_err_count = 1;
-                if ((failure_side == FAILURE_SIDE_TARGET) &&
-                    has_transport("dc_x")) {
-                    min_expected_err_count = 0;
-                }
-                ASSERT_LE(min_expected_err_count, m_err_count)
-                        << "Error callback invoked " << m_err_count << " times";
             }
         }
-
-        UCS_TEST_MESSAGE << "Success";
     }
 
     /**
@@ -359,8 +353,9 @@ protected:
             EXPECT_EQ(UCS_OK, status) << op_str << " operation returned status: "
                                     << ucs_status_string(status);
 
-            for (ucp_lane_index_t valid_lane = lane_idx + 1; valid_lane < rma_bw_lanes.size();
-                 ++valid_lane) {
+            for (ucp_lane_index_t valid_lane_idx = lane_idx + 1;
+                 valid_lane_idx < rma_bw_lanes.size(); ++valid_lane_idx) {
+                ucp_lane_index_t valid_lane = rma_bw_lanes[valid_lane_idx];
                 const ucp_ep_config_t *ep_config = ucp_ep_config(sender().ep(0, INJECTED_EP_INDEX));
                 ASSERT_FALSE(UCS_BIT(UCP_LANE_TYPE_FAILED) &
                              ep_config->key.lanes[valid_lane].lane_types)
@@ -371,10 +366,14 @@ protected:
 
         short_progress_loop();
         ASSERT_EQ(0, m_err_count) << "Error callback invoked " << m_err_count << " times";
-        UCS_TEST_MESSAGE << "Success";
     }
 
     void test_recovery(unsigned op_mask) {
+        if (op_mask & TEST_OP_ALL_LANES_FAILED) {
+            // Recovery is not expected, it depends on timings
+            return;
+        }
+
         UCS_TEST_MESSAGE << "Checking recovery status...";
 
         wait_for_cond([this]() {
@@ -383,6 +382,10 @@ protected:
             short_progress_loop();
         });
 
+        const ucp_lane_map_t failed_lanes =
+                ucp_ep_get_failed_lanes(sender().ep(0, INJECTED_EP_INDEX));
+        ASSERT_EQ(0, failed_lanes)
+            << "Failed lanes are not recovered" << std::hex << failed_lanes;
         for (ucp_lane_index_t lane_idx = 0;
              lane_idx < ucp_ep_num_lanes(sender().ep(0, INJECTED_EP_INDEX));) {
             if (ucp_wireup_ep_test(ucp_ep_get_lane(sender().ep(0, INJECTED_EP_INDEX), lane_idx))) {
@@ -393,9 +396,29 @@ protected:
             ++lane_idx;
         }
 
-        ucs_status_t status = do_am_send_and_wait(sender().ep(0, INJECTED_EP_INDEX), am_msg_size(),
-                                                  true);
-        EXPECT_EQ(UCS_OK, status) << "AM operation returned status: " << ucs_status_string(status);
+        if (op_mask & TEST_OP_AM) {
+            ucs_status_t status = do_am_send_and_wait(sender().ep(0, INJECTED_EP_INDEX),
+                                                      am_msg_size(), true);
+            EXPECT_EQ(UCS_OK, status) << "AM operation returned status: " << ucs_status_string(status);
+        }
+
+        if (op_mask & TEST_OP_PUT) {
+            mem_buffer lbuf(rma_msg_size(), UCS_MEMORY_TYPE_HOST);
+            mapped_buffer rbuf(rma_msg_size(), receiver());
+            ucs::handle<ucp_rkey_h> rkey = rbuf.rkey(sender());
+            lbuf.pattern_fill(m_seed);
+            ucs_status_t status = do_put_and_wait(sender().ep(0, INJECTED_EP_INDEX), lbuf, rbuf, rkey, rma_msg_size(), true);
+            EXPECT_EQ(UCS_OK, status) << "PUT operation returned status: " << ucs_status_string(status);
+        }
+
+        if (op_mask & TEST_OP_GET) {
+            mem_buffer lbuf(rma_msg_size(), UCS_MEMORY_TYPE_HOST);
+            mapped_buffer rbuf(rma_msg_size(), receiver());
+            ucs::handle<ucp_rkey_h> rkey = rbuf.rkey(sender());
+            rbuf.pattern_fill(m_seed);
+            ucs_status_t status = do_get_and_wait(sender().ep(0, INJECTED_EP_INDEX), lbuf, rbuf, rkey, rma_msg_size(), true);
+            EXPECT_EQ(UCS_OK, status) << "GET operation returned status: " << ucs_status_string(status);
+        }
         ASSERT_EQ(0, m_err_count) << "Error callback invoked " << m_err_count << " times";
         UCS_TEST_MESSAGE << "All lanes are operational";
     }
@@ -444,6 +467,10 @@ private:
             name += "FLUSH|";
         }
 
+        if (op_mask & TEST_OP_ALL_LANES_FAILED) {
+            name += "ALL_LANES_FAILED|";
+        }
+
         if (!name.empty()) {
             name.pop_back();
         }
@@ -476,7 +503,9 @@ private:
         }
 
         wait_for_value(&m_am_received, true);
+        UCS_TEST_MESSAGE << "AM data validation...";
         mem_buffer::pattern_check(m_am_rbuf.data(), size, m_seed);
+        UCS_TEST_MESSAGE << "success";
         return UCS_OK;
     }
 
@@ -487,14 +516,18 @@ private:
                                                         rkey, &m_req_empty_param);
         ucs_status_ptr_t flush_status_ptr = flush ? ucp_ep_flush_nbx(ep, &m_req_empty_param) : NULL;
         ucs_status_t status               = request_wait(put_status_ptr);
-        if (status == UCS_OK) {
-            rbuf.pattern_check(m_seed, size);
-        }
 
         EXPECT_EQ(UCS_OK, status) << "put operation returned status: " << ucs_status_string(status);
-        if (flush) {
+        if (!UCS_STATUS_IS_ERR(status) && flush) {
             status = request_wait(flush_status_ptr);
             EXPECT_EQ(UCS_OK, status) << "flush operation returned status: " << ucs_status_string(status);
+        }
+
+        if (status == UCS_OK) {
+            short_progress_loop();
+            UCS_TEST_MESSAGE << "PUT data validation...";
+            rbuf.pattern_check(m_seed, size);
+            UCS_TEST_MESSAGE << "success";
         }
 
         return status;
@@ -552,6 +585,11 @@ UCP_INSTANTIATE_TEST_CASE(test_ucp_fault_tolerance)
 UCS_TEST_P(test_ucp_fault_tolerance, initiator_failure, "MAX_EAGER_LANES=8",
            "RECOVERY_INTERVAL=100ms", "RECOVERY_RETRIES=100")
 {
+    if ((get_variant_value() & TEST_OP_ALL_LANES_FAILED) && has_any_transport({"ud_v", "ud_x"})) {
+        UCS_TEST_SKIP_R("UD transport BUG: local error injection on all lanes leads to "
+                        "assertion failure in ud_ep_purge");
+    }
+
     do_test(FAILURE_SIDE_INITIATOR);
 }
 
