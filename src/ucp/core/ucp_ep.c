@@ -1430,10 +1430,14 @@ ucp_ep_config_activate_worker_ifaces(ucp_worker_h worker,
                                      ucp_worker_cfg_index_t cfg_index)
 {
     ucp_ep_config_t *ep_config = ucp_worker_ep_config(worker, cfg_index);
+    int old_count              = ep_config->ep_count++;
 
-    ucs_trace("activate wifaces worker %p ep config %u ep count %u", worker,
-              cfg_index, ep_config->ep_count);
-    if (ep_config->ep_count++ == 0) {
+    ucs_trace("activate wifaces worker %p ep config %u ep count %d -> %d",
+              worker, cfg_index, old_count, ep_config->ep_count);
+    if (old_count == 0) {
+        /* Only the 0->1 transition actually bumps underlying iface refs. A
+         * -1->0 transition (a deactivate from an out-of-order
+         * ucp_ep_discard_lanes_callback ran first) just rebalances. */
         ucp_wiface_process_for_each_lane(worker, ep_config,
                                          ep_config->proto_lane_map,
                                          ucp_worker_iface_progress_ep);
@@ -1445,13 +1449,17 @@ ucp_ep_config_deactivate_worker_ifaces(ucp_worker_h worker,
                                        ucp_worker_cfg_index_t cfg_index)
 {
     ucp_ep_config_t *ep_config = ucp_worker_ep_config(worker, cfg_index);
+    int old_count              = ep_config->ep_count--;
 
-    ucs_trace("deactivate wifaces worker %p ep config %u ep count %u", worker,
-              cfg_index, ep_config->ep_count);
-    ucs_assertv(ep_config->ep_count > 0, "worker %p ep config %u", worker,
-                cfg_index);
-
-    if (--ep_config->ep_count == 0) {
+    ucs_trace("deactivate wifaces worker %p ep config %u ep count %d -> %d",
+              worker, cfg_index, old_count, ep_config->ep_count);
+    if (old_count == 1) {
+        /* Only the 1->0 transition actually drops underlying iface refs. A
+         * 0->-1 transition (this deactivate from a discard callback ran
+         * before the matching activate from the previous failover's
+         * callback) is tolerated; the matching activate will later bring
+         * the counter back to 0 without re-progressing ifaces, so the
+         * iface refcount stays balanced. */
         ucp_wiface_process_for_each_lane(worker, ep_config,
                                          ep_config->proto_lane_map,
                                          ucp_worker_iface_unprogress_ep);
