@@ -512,7 +512,7 @@ uct_rc_gdaki_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     iface_attr->cap.put.min_zcopy = 0;
     iface_attr->cap.put.max_zcopy =
             uct_ib_iface_port_attr(&iface->super.super.super)->max_msg_sz;
-    iface_attr->ctl_device = uct_cuda_get_cuda_device(iface->cuda_dev);
+    iface_attr->ctl_device    = uct_cuda_get_sys_dev(iface->cuda_dev);
     iface_attr->dev_num_paths = 1;
 
     return UCS_OK;

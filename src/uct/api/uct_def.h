@@ -113,6 +113,7 @@ typedef void*                        uct_conn_request_h;
 typedef struct uct_device_ep         *uct_device_ep_h;
 typedef union uct_device_mem_element uct_device_mem_element_t;
 typedef struct uct_device_local_mem_list_elem uct_device_local_mem_list_elem_t;
+typedef struct uct_device_remote_tl_list_elem uct_device_remote_tl_list_elem_t;
 typedef struct uct_device_remote_mem_list_elem uct_device_remote_mem_list_elem_t;
 
 /**

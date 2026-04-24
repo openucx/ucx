@@ -105,19 +105,17 @@ UCS_F_DEVICE void ucp_device_request_init(uct_device_ep_t *device_ep,
     })
 
 
-#define UCP_DEVICE_GET_LANE(_handle, _channel_id) \
-    ({ \
-        unsigned _lane = _channel_id % _handle->num_lanes; \
-        _channel_id   /= _handle->num_lanes; \
-        _lane; \
-    })
+#define UCP_DEVICE_GET_LANE(_handle, _channel_id, _lane, _uct_channel_id) \
+    _lane           = _channel_id % _handle->num_lanes; \
+    _uct_channel_id = _channel_id / _handle->num_lanes;
 
 
 #define UCP_DEVICE_GET_ELEM(_handle, _index, _lane) \
-    static_cast<ucs_typeof(_handle->mem_elements[0])*>( \
-            UCS_PTR_BYTE_OFFSET(_handle->mem_elements, \
-                                ((_index * _handle->num_lanes) + _lane) * \
-                                        sizeof(_handle->mem_elements[0])))
+    static_cast<ucs_typeof(_handle->mem_elements[0])*>(UCS_PTR_BYTE_OFFSET( \
+            _handle->mem_elements, \
+            (sizeof(_handle->mem_elements[0]) + \
+             (sizeof(_handle->mem_elements[0].tl[0]) * _handle->num_lanes)) * \
+                    _index))
 
 
 UCS_F_DEVICE ucs_status_t ucp_device_prepare_send_remote(
@@ -137,8 +135,8 @@ UCS_F_DEVICE ucs_status_t ucp_device_prepare_send_remote(
     const auto dst_mem_element = UCP_DEVICE_GET_ELEM(dst_mem_list_h,
                                                      dst_mem_list_index, lane);
     remote_address             = dst_mem_element->addr;
-    device_ep                  = dst_mem_element->device_ep;
-    uct_elem                   = &dst_mem_element->uct_mem_element;
+    device_ep                  = dst_mem_element->tl[lane].ep;
+    uct_elem                   = &dst_mem_element->tl[lane].uct;
     ucp_device_request_init(device_ep, req, comp);
 
     return UCS_OK;
@@ -152,7 +150,7 @@ ucp_device_prepare_send(const ucp_device_local_mem_list_h src_mem_list_h,
                         unsigned dst_mem_list_index, const void *&address,
                         uint64_t &remote_address, unsigned lane,
                         ucp_device_request_t *req, uct_device_ep_t *&device_ep,
-                        const uct_device_local_mem_list_elem_t *&src_uct_elem,
+                        const uct_device_mem_element_t *&src_uct_elem,
                         const uct_device_mem_element_t *&uct_elem,
                         uct_device_completion_t *&comp)
 {
@@ -170,9 +168,10 @@ ucp_device_prepare_send(const ucp_device_local_mem_list_h src_mem_list_h,
         return status;
     }
 
-    src_uct_elem = UCP_DEVICE_GET_ELEM(src_mem_list_h, src_mem_list_index,
-                                       lane);
-    address      = src_uct_elem->addr;
+    const auto src_mem_elem = UCP_DEVICE_GET_ELEM(src_mem_list_h,
+                                                  src_mem_list_index, lane);
+    src_uct_elem            = src_mem_elem->tl + lane;
+    address                 = src_mem_elem->addr;
 
     return UCS_OK;
 }
@@ -223,14 +222,17 @@ ucp_device_put(const ucp_device_local_mem_list_h src_mem_list_h,
                unsigned dst_mem_list_index, size_t dst_offset, size_t length,
                unsigned channel_id, uint64_t flags, ucp_device_request_t *req)
 {
-    const unsigned lane = UCP_DEVICE_GET_LANE(dst_mem_list_h, channel_id);
+    unsigned uct_channel_id;
+    unsigned lane;
     const void *address;
     const uct_device_mem_element_t *uct_elem;
-    const uct_device_local_mem_list_elem_t *src_uct_elem;
+    const uct_device_mem_element_t *src_uct_elem;
     uint64_t remote_address;
     uct_device_completion_t *comp;
     uct_device_ep_t *device_ep;
     ucs_status_t status;
+
+    UCP_DEVICE_GET_LANE(dst_mem_list_h, channel_id, lane, uct_channel_id);
 
     status = ucp_device_prepare_send(src_mem_list_h, src_mem_list_index,
                                      dst_mem_list_h, dst_mem_list_index,
@@ -244,7 +246,7 @@ ucp_device_put(const ucp_device_local_mem_list_h src_mem_list_h,
                                     src_uct_elem, uct_elem,
                                     UCS_PTR_BYTE_OFFSET(address, src_offset),
                                     remote_address + dst_offset, length,
-                                    channel_id, flags, comp);
+                                    uct_channel_id, flags, comp);
 }
 
 
@@ -286,12 +288,15 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
         unsigned mem_list_index, size_t offset, unsigned channel_id,
         uint64_t flags, ucp_device_request_t *req)
 {
-    const unsigned lane = UCP_DEVICE_GET_LANE(mem_list_h, channel_id);
+    unsigned uct_channel_id;
+    unsigned lane;
     uint64_t remote_address;
     const uct_device_mem_element_t *uct_elem;
     uct_device_completion_t *comp;
     uct_device_ep_t *device_ep;
     ucs_status_t status;
+
+    UCP_DEVICE_GET_LANE(mem_list_h, channel_id, lane, uct_channel_id);
 
     status = ucp_device_prepare_send_remote(mem_list_h, mem_list_index,
                                             remote_address, lane, req,
@@ -302,8 +307,8 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
 
     return UCP_DEVICE_SEND_BLOCKING(level, uct_device_ep_atomic_add, device_ep,
                                     req, uct_elem, inc_value,
-                                    remote_address + offset, channel_id, flags,
-                                    comp);
+                                    remote_address + offset, uct_channel_id,
+                                    flags, comp);
 }
 
 
@@ -336,8 +341,7 @@ ucp_device_get_ptr(const ucp_device_remote_mem_list_h mem_list_h,
             UCS_PTR_BYTE_OFFSET(mem_list_h->mem_elements,
                                 mem_list_index * elem_size));
 
-    return uct_device_ep_get_ptr(mem_element->device_ep,
-                                 &mem_element->uct_mem_element,
+    return uct_device_ep_get_ptr(mem_element->tl[0].ep, &mem_element->tl[0].uct,
                                  mem_element->addr, addr_p);
 }
 

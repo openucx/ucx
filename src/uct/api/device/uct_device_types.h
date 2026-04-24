@@ -80,14 +80,18 @@ union uct_device_mem_element {
 
 struct uct_device_local_mem_list_elem {
     void                     *addr;
-    uct_device_mem_element_t uct_mem_element;
+    uct_device_mem_element_t tl[0];
 };
 
 
+struct uct_device_remote_tl_list_elem {
+    uct_device_ep_h          ep;
+    uct_device_mem_element_t uct;
+};
+
 struct uct_device_remote_mem_list_elem {
-    uct_device_ep_h          device_ep;
-    uint64_t                 addr;
-    uct_device_mem_element_t uct_mem_element;
+    uint64_t                         addr;
+    uct_device_remote_tl_list_elem_t tl[0];
 };
 
 #endif

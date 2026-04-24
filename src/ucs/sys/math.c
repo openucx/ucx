@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2012. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -27,31 +27,6 @@ static uint64_t ucs_large_primes[] = {
     9929050121ull, 9929050133ull, 9929050139ull, 9929050163ull,
     9929050207ull, 9929050217ull, 9929050249ull, 9929050253ull
 };
-
-uint64_t ucs_gcd(uint64_t a, uint64_t b)
-{
-    uint64_t t;
-
-    while (b != 0) {
-        t = a % b;
-        a = b;
-        b = t;
-    }
-
-    return a;
-}
-
-uint64_t ucs_lcm(uint64_t a, uint64_t b)
-{
-    uint64_t g;
-
-    if ((a == 0) || (b == 0)) {
-        return 0;
-    }
-
-    g = ucs_gcd(a, b);
-    return a / g * b;
-}
 
 uint64_t ucs_get_prime(unsigned index_val)
 {
