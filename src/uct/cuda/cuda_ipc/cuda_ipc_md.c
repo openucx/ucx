@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2019. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -87,16 +87,18 @@ static uct_cuda_ipc_dev_cache_t *uct_cuda_ipc_create_dev_cache(int dev_num)
 
 static uct_cuda_ipc_dev_cache_t *
 uct_cuda_ipc_get_dev_cache(uct_cuda_ipc_component_t *component,
-                           uct_cuda_ipc_rkey_t *rkey)
+                           const uct_cuda_ipc_extended_rkey_t *ext_rkey)
 {
+    const uct_cuda_ipc_rkey_t *rkey   = &ext_rkey->super;
     khash_t(cuda_ipc_uuid_hash) *hash = &component->uuid_hash;
     uct_cuda_ipc_uuid_hash_key_t key;
     uct_cuda_ipc_dev_cache_t *cache;
     khiter_t iter;
     int ret;
 
-    key.uuid = rkey->uuid;
-    key.type = rkey->ph.handle_type;
+    key.uuid     = rkey->uuid;
+    key.type     = rkey->ph.handle_type;
+    key.is_local = uct_cuda_ipc_is_rkey_local(rkey->pid, ext_rkey->pid_ns);
 
     iter = kh_put(cuda_ipc_uuid_hash, hash, key, &ret);
     if (ret == UCS_KH_PUT_KEY_PRESENT) {
@@ -685,30 +687,16 @@ found:
 static ucs_status_t
 uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *component,
                                 uct_cuda_ipc_unpacked_rkey_t *rkey,
-                                ucs_sys_device_t sys_dev)
+                                CUdevice cu_dev)
 {
-    CUdevice cu_dev;
     ucs_status_t status;
     void *d_mapped;
     uct_cuda_ipc_dev_cache_t *cache;
     uint8_t *accessible;
 
-    if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
-        /* Use device of the current context */
-        if (UCT_CUDADRV_FUNC_LOG_DEBUG(cuCtxGetDevice(&cu_dev)) != UCS_OK) {
-            return UCS_ERR_UNREACHABLE;
-        }
-    } else {
-        cu_dev = uct_cuda_get_cuda_device(sys_dev);
-        if (cu_dev == CU_DEVICE_INVALID) {
-            ucs_warn("failed to map sys device [%d] to cuda device", sys_dev);
-            return UCS_ERR_UNREACHABLE;
-        }
-    }
-
     pthread_mutex_lock(&component->lock);
 
-    cache = uct_cuda_ipc_get_dev_cache(component, &rkey->super.super);
+    cache = uct_cuda_ipc_get_dev_cache(component, &rkey->super);
     if (ucs_unlikely(NULL == cache)) {
         status = UCS_ERR_NO_RESOURCE;
         goto err;
@@ -948,25 +936,25 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_rkey_unpack,
     }
 #endif
 
-    status = uct_cuda_ipc_is_peer_accessible(com, unpacked, sys_dev);
-    if (status != UCS_OK) {
-        goto err_pop_ctx_free_chunks;
-    }
-
+    status = uct_cuda_ipc_is_peer_accessible(com, unpacked, avail_cuda_device);
     if (cuda_device != avail_cuda_device) {
         uct_cuda_ctx_primary_pop_and_release(avail_cuda_device);
+    }
+    if (status != UCS_OK) {
+        goto err_free_chunks;
     }
 
     *handle_p = NULL;
     *rkey_p   = (uintptr_t) unpacked;
     return UCS_OK;
 
-err_pop_ctx_free_chunks:
+err_free_chunks:
 #if HAVE_CUDA_FABRIC
     if (packed->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM_MULTI) {
         ucs_free(unpacked->chunks);
     }
 #endif
+    goto err_free_key;
 err_pop_ctx:
     if (cuda_device != avail_cuda_device) {
         uct_cuda_ctx_primary_pop_and_release(avail_cuda_device);

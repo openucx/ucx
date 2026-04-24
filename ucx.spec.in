@@ -2,7 +2,6 @@
 %bcond_without cma
 %bcond_with    cuda
 %bcond_with    gdrcopy
-%bcond_with    gda
 %bcond_without ib
 %bcond_with    knem
 %bcond_without rdmacm
@@ -137,7 +136,6 @@ Provides header files and examples for developing with UCX.
            %_with_arg ugni ugni \
            %_with_arg mad mad \
            %_with_arg ze ze \
-           %_with_arg gda gda \
            %{?configure_options}
 make %{?_smp_mflags} V=1
 
@@ -166,7 +164,10 @@ rm -f %{buildroot}%{_libdir}/ucx/lib*.so
 %{_sysconfdir}/ucx/ucx.conf
 
 %files devel
-%{_includedir}/uc*
+%{_includedir}/ucs
+%{_includedir}/ucm/api
+%{_includedir}/ucp/api
+%{_includedir}/uct/api
 %{_libdir}/lib*.so
 %{_libdir}/pkgconfig/ucx.pc
 %{_libdir}/pkgconfig/ucx-uct.pc
@@ -214,7 +215,7 @@ Provides static libraries required for developing with UCX.
 %if %{with vfs}
 %{_libdir}/pkgconfig/ucx-fuse.pc
 %endif
-%if %{with gda}
+%if %{with cuda} && %{with mlx5}
 %{_libdir}/pkgconfig/ucx-ib-mlx5-gda.pc
 %endif
 
@@ -248,6 +249,7 @@ technology for direct data transfer between GPU and RDMA devices.
 %{_libdir}/ucx/libucx_perftest_cuda.so.*
 %{_libdir}/ucx/libucm_cuda.so.*
 %{_libdir}/ucx/libuct_cuda.so.*
+%{_includedir}/uct/cuda/*
 %endif
 
 %if %{with gdrcopy}
@@ -434,7 +436,7 @@ Provides oneAPI Level Zero (ZE) Runtime support for UCX.
 %{_libdir}/ucx/libucm_ze.so.*
 %endif
 
-%if %{with gda}
+%if %{with cuda} && %{with mlx5}
 %package ib-mlx5-gda
 Requires: %{name}-cuda%{?_isa} = %{version}-%{release}
 Requires: %{name}-ib%{?_isa} = %{version}-%{release}
@@ -447,10 +449,13 @@ to initiate network communications directly without explicit synchronization
 with the host CPU.
 
 %files ib-mlx5-gda
-%{_libdir}/ucx/libuct_ib_mlx5_gda.so.*
+%{_libdir}/ucx/libuct_ib_mlx5_gda.*
+%{_includedir}/uct/ib/mlx5/gdaki/*
 %endif
 
 %changelog
+* Wed Mar 18 2026 Yossi Itigin <yosefe@nvidia.com> 1.22.0-1
+- Bump version to 1.22.0
 * Mon Oct 20 2025 Leonid Genkin <lgenkin@nvidia.com> 1.21.0-1
 - Bump version to 1.21.0
 * Fri Apr 11 2025 Yossi Itigin <yosefe@nvidia.com> 1.20.0-1

@@ -4,6 +4,10 @@
 * See file LICENSE for terms.
 */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "test_md.h"
 
 #include <common/mem_buffer.h>
@@ -1249,3 +1253,58 @@ UCS_TEST_P(test_cuda, sparse_regions)
 }
 
 UCT_MD_INSTANTIATE_TEST_CASE(test_cuda)
+
+#if HAVE_DECL_GDR_PIN_BUFFER_V2
+
+class test_gdr_copy : public test_md {
+protected:
+    ucs_status_t register_mem()
+    {
+        constexpr size_t size = 65536;
+        void *address         = NULL;
+        uct_mem_h memh;
+        ucs_status_t status;
+
+        alloc_memory(&address, size, NULL, UCS_MEMORY_TYPE_CUDA);
+        status = reg_mem(UCT_MD_MEM_ACCESS_ALL, address, size, &memh);
+        if (status == UCS_OK) {
+            (void)uct_md_mem_dereg(md(), memh);
+        }
+
+        free_memory(address, UCS_MEMORY_TYPE_CUDA);
+        return status;
+    }
+};
+
+UCS_TEST_SKIP_COND_P(test_gdr_copy, gdr_copy_reg_cuda_default_pin,
+                     !check_caps(UCT_MD_FLAG_REG), "GDR_COPY_USE_PCIE?=auto")
+{
+    ASSERT_UCS_OK(register_mem());
+}
+
+UCS_TEST_SKIP_COND_P(test_gdr_copy, gdr_copy_reg_cuda_pcie_pin,
+                     !mem_buffer::cuda_gpu_has_c2c() ||
+                             !check_caps(UCT_MD_FLAG_REG),
+                     "GDR_COPY_USE_PCIE?=yes")
+{
+    ASSERT_UCS_OK(register_mem());
+}
+
+UCS_TEST_SKIP_COND_P(test_gdr_copy, gdr_copy_reg_cuda_pcie_pin_fail,
+                     mem_buffer::cuda_gpu_has_c2c() ||
+                             !check_caps(UCT_MD_FLAG_REG),
+                     "GDR_COPY_USE_PCIE?=yes")
+{
+    scoped_log_handler slh(wrap_errors_logger);
+    ASSERT_UCS_STATUS_EQ(UCS_ERR_IO_ERROR, register_mem());
+}
+
+UCS_TEST_SKIP_COND_P(test_gdr_copy, gdr_copy_reg_cuda_try_pcie_pin,
+                     !check_caps(UCT_MD_FLAG_REG), "GDR_COPY_USE_PCIE=try")
+{
+    ASSERT_UCS_OK(register_mem());
+}
+
+_UCT_MD_INSTANTIATE_TEST_CASE(test_gdr_copy, gdr_copy)
+
+#endif /* HAVE_DECL_GDR_PIN_BUFFER_V2 */
