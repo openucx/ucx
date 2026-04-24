@@ -1007,53 +1007,26 @@ ucs_status_t ucp_ep_reconfig_clear_failed_lanes(ucp_ep_h ep,
 
 
 /**
- * @brief Arm (or re-arm) failed-lane recovery for an endpoint.
- *
- * Allocates a heap-resident recovery argument, enqueues a one-shot
- * progress callback (ucp_ep_recovery_progress()) with key=ep, and
- * frees any previously-enqueued recovery one-shot for the same ep
- * (including its heap argument) first. No recovery state is stored on
- * the endpoint itself - the heap arg is the single source of truth and
- * is reclaimed either by the one-shot itself on completion or by the
- * cascade filter in ucp_ep_destroy_base() on endpoint teardown.
- *
- * Called from ucp_ep_failover_reconfig() after lanes have been marked
- * UCP_LANE_TYPE_FAILED.
- *
- * @param [in] ep   Endpoint object.
- *
- * @return UCS_OK on success, UCS_ERR_NO_MEMORY on allocation failure.
+ * Arm (or re-arm) failed-lane recovery for an endpoint.
  */
 ucs_status_t ucp_ep_recovery_arm(ucp_ep_h ep);
 
 
 /**
- * @brief One-shot recovery progress callback.
- *
- * Exposed for ucp_ep_recovery_remove_filter() to match on. Not intended
- * to be called directly.
+ * One-shot recovery progress callback.
  */
 unsigned ucp_ep_recovery_progress(void *arg);
 
 
 /**
- * @brief Cascade-filter entry that removes and frees any pending recovery
- *        one-shot bound to @a arg (a ucp_ep_h).
- *
- * Called from ucp_ep_remove_filter() during ucp_ep_destroy_base().
+ * Cascade-filter entry that removes and frees any pending recovery one-shot
+ * bound to @a arg (a @ref ucp_ep_h).
  */
 int ucp_ep_recovery_remove_filter(const ucs_callbackq_elem_t *elem, void *arg);
 
 
 /**
- * @brief Rebuild UCT endpoints for the given set of currently-failed lanes
- *        using remote addresses carried in a WIREUP LANES_ADDR message.
- *
- * Invoked by the LANES_ADDR_REQUEST / LANES_ADDR_REPLY message handlers in
- * wireup.c. Dispatches per lane to the CONNECT_TO_IFACE or the p2p rebuild
- * path, returning the bitmap of lanes successfully rebuilt. Lanes not in
- * the returned bitmap remain UCP_LANE_TYPE_FAILED and will be re-attempted
- * on a subsequent recovery round.
+ * Rebuild UCT endpoints for the given set of currently-failed lanes.
  */
 ucp_lane_map_t
 ucp_ep_recovery_rebuild_lanes(ucp_ep_h ep, ucp_lane_map_t lanes_to_rebuild,
@@ -1061,23 +1034,7 @@ ucp_ep_recovery_rebuild_lanes(ucp_ep_h ep, ucp_lane_map_t lanes_to_rebuild,
 
 
 /**
- * @brief Mark a subset of lanes as UCP_LANE_TYPE_FAILED and arm recovery.
- *
- * Same flow that ucp_ep_set_lanes_failed() invokes internally when a UCT
- * error is observed locally: reconfigures the endpoint to set the FAILED
- * bit on the given lanes, asynchronously discards their old UCT EPs, and
- * calls ucp_ep_recovery_arm() so the next recovery round sends
- * WIREUP_MSG_LANES_ADDR_REQUEST.
- *
- * Exposed for the LANES_ADDR_REQUEST handler so an asymmetric failure
- * reported by the peer can be converted into a local failover flow.
- *
- * @param [in] ucp_ep         Endpoint object.
- * @param [in] failed_lanes   Lanes to mark failed.
- * @param [in] discard_status Status for discarded requests on these lanes.
- *
- * @return UCS_OK on success, an error code if reconfiguration isn't
- *         possible (e.g. no operable AM lane would remain).
+ * Mark a subset of lanes as UCP_LANE_TYPE_FAILED and arm recovery.
  */
 ucs_status_t ucp_ep_failover_reconfig(ucp_ep_h ucp_ep,
                                       ucp_lane_map_t failed_lanes,
