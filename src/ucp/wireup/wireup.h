@@ -52,10 +52,9 @@ enum {
     UCP_WIREUP_MSG_EP_REMOVED,
     UCP_WIREUP_MSG_REPLY_RECONFIG,
 
-    /* Ask the peer for remote addresses of a specific set of local lanes, and
-     * carry local addresses for those lanes to let the peer rebuild its side
-     * as well. Used by the failed-lane recovery flow, and intentionally named
-     * generically so it can also back future on-demand lane connection. */
+    /* Exchange per-lane addresses for a specific set of local lanes. Used by
+     * the failed-lane recovery flow; named generically so it can also back
+     * future on-demand lane connection. */
     UCP_WIREUP_MSG_LANES_ADDR_REQUEST,
     UCP_WIREUP_MSG_LANES_ADDR_REPLY,
 
@@ -139,11 +138,9 @@ typedef struct ucp_wireup_msg {
     uint64_t               dst_ep_id; /* Endpoint ID of destination, can be
                                          UCS_PTR_MAP_KEY_INVALID */
     /* The two fields below are only valid for UCP_WIREUP_MSG_LANES_ADDR_*
-     * messages and ignored otherwise. They describe which set of local lanes
-     * the sender asked about (requested) and which subset of those lanes it
-     * actually managed to prepare addresses for in this message (provided).
-     * The two masks decouple "what was asked" from "what is carried" so that
-     * partial recovery is a first-class case. */
+     * messages and ignored otherwise. `requested` is the set of local lanes
+     * the sender asked about; `provided` is the subset for which addresses
+     * are actually carried in this message. */
     ucp_lane_map_t         requested_lane_map;
     ucp_lane_map_t         provided_lane_map;
     /* packed addresses follow */
@@ -281,6 +278,24 @@ ucp_wireup_find_remote_p2p_addr(ucp_ep_h ep, ucp_lane_index_t remote_lane,
 void ucp_wireup_send_lanes_addr_msg(ucp_ep_h ep, uint8_t msg_type,
                                     ucp_lane_map_t requested_lane_map,
                                     ucp_lane_map_t provided_lane_map);
+
+
+/**
+ * @brief Create a fully-connected CONNECT_TO_IFACE UCT endpoint.
+ *
+ * @param [in]  wiface      Local worker iface to create the endpoint on.
+ * @param [in]  address     Remote address entry carrying dev/iface addresses.
+ * @param [in]  path_index  Path index to assign to the new endpoint.
+ * @param [out] uct_ep_p    Filled with the newly-created UCT endpoint on
+ *                          success.
+ *
+ * @return UCS_OK on success, error code from uct_ep_create() otherwise.
+ */
+ucs_status_t ucp_wireup_iface_ep_create(ucp_worker_iface_t *wiface,
+                                        const ucp_address_entry_t *address,
+                                        unsigned path_index,
+                                        uct_ep_h *uct_ep_p);
+
 
 double ucp_wireup_iface_lat_distance_v1(const ucp_worker_iface_t *wiface);
 
