@@ -1042,7 +1042,7 @@ enum uct_iface_attr_field {
     UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT = UCS_BIT(0),
 
     /** Enables @ref uct_iface_attr_v2_t::cap */
-    UCT_IFACE_ATTR_FIELD_CAP_FLAGS           = UCS_BIT(1)
+    UCT_IFACE_ATTR_FIELD_CAP_FLAGS               = UCS_BIT(1)
 };
 
 
