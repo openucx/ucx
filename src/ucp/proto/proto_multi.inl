@@ -8,6 +8,8 @@
 #define UCP_PROTO_MULTI_INL_
 
 #include "proto_multi.h"
+#include "ucp/api/ucp_def.h"
+#include "ucp/core/ucp_ep.inl"
 
 #include <ucp/proto/proto_common.inl>
 #include <ucp/rma/rma.inl>
@@ -372,6 +374,16 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_multi_rma_init_func(ucp_request_t *req)
 {
     const ucp_proto_multi_priv_t *mpriv = req->send.proto_config->priv;
+    ucs_status_t status;
+
+    if (ucs_unlikely(ucp_ep_err_mode_eq(req->send.ep,
+                                        UCP_ERR_HANDLING_MODE_FAILOVER))) {
+        status = ucp_ep_resolve_remote_id(req->send.ep,
+                                          mpriv->lanes[0].super.lane);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
 
     return ucp_ep_rma_handle_fence(req->send.ep, req, mpriv->lane_map);
 }
