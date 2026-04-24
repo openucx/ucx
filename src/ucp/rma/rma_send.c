@@ -342,7 +342,7 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
     ucs_status_t status;
     ucp_request_t *req;
 
-    UCP_REQUEST_CHECK_PARAM_ALLOW_REMOTE(param);
+    UCP_REQUEST_CHECK_PARAM_COMMON(param);
     UCP_RMA_CHECK_PTR(worker->context, buffer, count);
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 

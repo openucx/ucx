@@ -186,7 +186,7 @@ UCS_PTR_MAP_IMPL(request, 0);
     }
 
 
-#define UCP_REQUEST_CHECK_PARAM_ALLOW_REMOTE(_param) \
+#define UCP_REQUEST_CHECK_PARAM_COMMON(_param) \
     do { \
         if (ENABLE_PARAMS_CHECK) { \
             if (((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_MEMORY_TYPE) && \
@@ -207,9 +207,8 @@ UCS_PTR_MAP_IMPL(request, 0);
     } while (0)
 
 
-#define UCP_REQUEST_CHECK_PARAM(_param) \
+#define UCP_REQUEST_CHECK_PARAM_NO_REMOTE(_param) \
     do { \
-        UCP_REQUEST_CHECK_PARAM_ALLOW_REMOTE(_param); \
         if (ENABLE_PARAMS_CHECK && \
             (((_param)->op_attr_mask & \
               (UCP_OP_ATTR_FIELD_REMOTE | \
@@ -222,6 +221,13 @@ UCS_PTR_MAP_IMPL(request, 0);
                       "only supported for ucp_put_nbx"); \
             return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
         } \
+    } while (0)
+
+
+#define UCP_REQUEST_CHECK_PARAM(_param) \
+    do { \
+        UCP_REQUEST_CHECK_PARAM_COMMON(_param); \
+        UCP_REQUEST_CHECK_PARAM_NO_REMOTE(_param); \
     } while (0)
 
 
