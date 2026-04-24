@@ -994,13 +994,11 @@ ucp_lane_map_t ucp_ep_config_get_failed_lanes(const ucp_ep_config_key_t *key);
  * @brief Clear UCP_LANE_TYPE_FAILED for a subset of previously failed lanes
  *        that have just been recovered and reconfigure the endpoint.
  *
- * Accepts any subset: only the intersection with the currently failed set is
- * cleared. A no-op when nothing changes. Re-runs the post-failover am_lane
- * promotion so that if the operable AM lane was a fallback, we can switch
- * back to an earlier candidate that just came back.
- *
  * @param [in] ep     Endpoint object.
- * @param [in] lanes  Lanes to clear UCP_LANE_TYPE_FAILED for.
+ * @param [in] lanes  Lanes to clear UCP_LANE_TYPE_FAILED for. Must be a
+ *                    subset of ucp_ep_get_failed_lanes(ep); the caller is
+ *                    responsible for intersecting with the currently-failed
+ *                    set. Passing 0 is a no-op.
  *
  * @return Error code as defined by @ref ucs_status_t
  */

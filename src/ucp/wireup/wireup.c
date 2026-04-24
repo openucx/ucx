@@ -1282,21 +1282,23 @@ ucp_ep_recovery_rebuild_lanes(ucp_ep_h ep, ucp_lane_map_t lanes_to_rebuild,
 static ucp_lane_map_t
 ucp_ep_recovery_prepare_lanes(ucp_ep_h ep, ucp_lane_map_t lanes)
 {
-    const ucp_ep_config_key_t *k = &ucp_ep_config(ep)->key;
-    ucp_lane_map_t prepared      = 0;
+    const ucp_ep_config_key_t *cfg_key = &ucp_ep_config(ep)->key;
+    ucp_lane_map_t lane_map            = 0;
     ucp_lane_index_t lane;
 
     ucs_for_each_bit(lane, lanes) {
-        if (lane >= k->num_lanes) {
+        if (lane >= cfg_key->num_lanes) {
             continue;
         }
+
         if (ucp_ep_recovery_install_wireup_ep(ep, lane) != UCS_OK) {
             continue;
         }
-        prepared |= UCS_BIT(lane);
+
+        lane_map |= UCS_BIT(lane);
     }
 
-    return prepared;
+    return lane_map;
 }
 
 static void
@@ -1327,22 +1329,21 @@ ucp_ep_recovery_send_lanes_addr_msg(ucp_ep_h ep, uint8_t msg_type,
 static void ucp_ep_recovery_send_request(ucp_ep_h ep)
 {
     ucp_lane_map_t failed_lanes = ucp_ep_get_failed_lanes(ep);
-    ucp_lane_map_t prepared;
+    ucp_lane_map_t recovery_lanes;
 
     ucs_assert(ucp_ep_config(ep)->key.am_lane != UCP_NULL_LANE);
 
-    prepared = ucp_ep_recovery_prepare_lanes(ep, failed_lanes);
-    if (prepared == 0) {
-        ucs_diag("ep %p: recovery - no lanes could be prepared", ep);
+    recovery_lanes = ucp_ep_recovery_prepare_lanes(ep, failed_lanes);
+    if (recovery_lanes == 0) {
+        ucs_diag("ep %p: no lanes to recover", ep);
         return;
     }
 
-    ucs_debug("ep %p: recovery request, failed=0x%" PRIx64
-              " prepared=0x%" PRIx64,
-              ep, (uint64_t)failed_lanes, (uint64_t)prepared);
+    ucs_debug("ep %p: sending recovery request, failed=0x%" PRIx64
+              " recovery=0x%" PRIx64, ep, failed_lanes, recovery_lanes);
 
     ucp_ep_recovery_send_lanes_addr_msg(ep, UCP_WIREUP_MSG_LANES_ADDR_REQUEST,
-                                        failed_lanes, prepared);
+                                        failed_lanes, recovery_lanes);
 }
 
 /* A lane whose UCT EP is either a READY wireup proxy (about to be swapped
@@ -1370,6 +1371,21 @@ static int ucp_ep_recovery_lane_is_ready(ucp_ep_h ep, ucp_lane_index_t lane)
     }
 
     return !!(wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY);
+}
+
+static ucp_lane_map_t ucp_ep_recovery_get_ready_lanes(ucp_ep_h ep,
+                                                      ucp_lane_map_t failed_lanes)
+{
+    ucp_lane_map_t ready_lanes = 0;
+    ucp_lane_index_t lane;
+
+    ucs_for_each_bit(lane, failed_lanes) {
+        if (ucp_ep_recovery_lane_is_ready(ep, lane)) {
+            ready_lanes |= UCS_BIT(lane);
+        }
+    }
+
+    return ready_lanes;
 }
 
 /* Heap-resident retry state for failed-lane recovery. Allocated by
@@ -1416,10 +1432,7 @@ ucs_status_t ucp_ep_recovery_arm(ucp_ep_h ep)
     ucp_context_h context = worker->context;
     ucp_ep_recovery_arg_t *arg;
 
-    /* Remove (and free) any previously-queued recovery oneshot for this
-     * endpoint. A second failover on an ep already under recovery resets
-     * the retry budget - that's the right policy: fresh damage deserves a
-     * fresh budget. */
+    /* Remove (and free) any previously-queued recovery oneshot for this EP. */
     ucs_callbackq_remove_oneshot(&worker->uct->progress_q, ep,
                                  ucp_ep_recovery_remove_filter, ep);
 
@@ -1444,56 +1457,46 @@ unsigned ucp_ep_recovery_progress(void *arg)
     ucp_worker_h worker                 = ep->worker;
     ucp_context_h context               = worker->context;
     ucp_lane_map_t failed, recovered;
-    ucp_lane_index_t lane;
     ucs_time_t now;
+    ucs_status_t status;
 
     UCS_ASYNC_BLOCK(&worker->async);
 
     if (ep->flags & UCP_EP_FLAG_FAILED) {
         /* Endpoint was declared fully failed elsewhere; nothing more to do. */
-        goto out_drop;
+        goto done;
     }
 
     failed = ucp_ep_get_failed_lanes(ep);
     if (failed == 0) {
         /* Recovery completed between rounds. */
-        goto out_drop;
+        goto done;
     }
 
-    /* Clear FAILED for lanes that have reached READY state. Safe now -
-     * by the time this oneshot dispatches, the ucp_ep_discard_lanes()
-     * callback from failover_reconfig has long since finalized the
-     * ep_count reactivate transition (recovery_interval has elapsed). */
-    recovered = 0;
-    ucs_for_each_bit(lane, failed) {
-        if (ucp_ep_recovery_lane_is_ready(ep, lane)) {
-            recovered |= UCS_BIT(lane);
-        }
+    recovered = ucp_ep_recovery_get_ready_lanes(ep, failed);
+    status    = ucp_ep_reconfig_clear_failed_lanes(ep, recovered);
+    if (status != UCS_OK) {
+        ucs_error("ep %p: failed to clear FAILED states for lanes 0x%" PRIx64,
+                  ep, recovered);
+        ucp_ep_set_lanes_failed_schedule(ep, 0, status);
+        goto done;
     }
 
-    if (recovered != 0) {
-        ucs_debug("ep %p: recovery clearing FAILED on lanes 0x%" PRIx64, ep,
-                  (uint64_t)recovered);
-        ucp_ep_reconfig_clear_failed_lanes(ep, recovered);
-        failed = ucp_ep_get_failed_lanes(ep);
-        if (failed == 0) {
-            goto out_drop;
-        }
+    failed &= ~recovered;
+    if (failed == 0) {
+        goto done;
     }
 
     now = ucs_get_time();
     if (now < recovery_arg->next_time) {
-        /* Rate-limited by recovery_interval - re-enqueue and wait. */
-        goto out_requeue;
+        ucp_ep_recovery_arg_enqueue(recovery_arg);
+        goto out;
     }
 
     if (recovery_arg->retries_left == 0) {
-        ucs_diag("ep %p: recovery retries exhausted, marking endpoint failed",
-                 ep);
-        /* Fully fail the endpoint. Passing lanes=0 routes
-         * ucp_ep_set_lanes_failed() to ucp_ep_set_failed() (unrecoverable). */
+        ucs_error("ep %p: recovery retries exhausted", ep);
         ucp_ep_set_lanes_failed_schedule(ep, 0, UCS_ERR_ENDPOINT_TIMEOUT);
-        goto out_drop;
+        goto done;
     }
 
     ucs_debug("ep %p: recovery round (retries_left=%u, failed=0x%" PRIx64 ")",
@@ -1503,14 +1506,12 @@ unsigned ucp_ep_recovery_progress(void *arg)
 
     --recovery_arg->retries_left;
     recovery_arg->next_time = now + context->config.ext.recovery_interval;
-
-out_requeue:
     ucp_ep_recovery_arg_enqueue(recovery_arg);
-    UCS_ASYNC_UNBLOCK(&worker->async);
-    return 1;
+    goto out;
 
-out_drop:
+done:
     ucs_free(recovery_arg);
+out:
     UCS_ASYNC_UNBLOCK(&worker->async);
     return 1;
 }
