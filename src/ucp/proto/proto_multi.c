@@ -233,7 +233,8 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     double max_bandwidth, max_frag_ratio, min_bandwidth;
     ucp_lane_index_t i, lane, num_lanes, num_fast_lanes;
     ucp_proto_multi_lane_priv_t *lpriv;
-    size_t max_frag, min_length, min_end_offset, min_chunk;
+    size_t max_frag, min_end_offset, min_chunk;
+    size_t UCS_V_UNUSED min_length;
     ucp_proto_lane_selection_t selection;
     ucp_md_map_t reg_md_map;
     uint32_t weight_sum;
@@ -374,7 +375,6 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     mpriv->max_frag_sum = 0;
     mpriv->align_thresh = 1;
     perf.max_frag       = 0;
-    perf.min_length     = 0;
     weight_sum          = 0;
     min_end_offset      = 0;
 
