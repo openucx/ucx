@@ -1428,7 +1428,6 @@ ucp_ep_config_activate_worker_ifaces(ucp_worker_h worker,
 {
     ucp_ep_config_t *ep_config = ucp_worker_ep_config(worker, cfg_index);
 
-    ucs_assert(new_cfg_index != UCP_WORKER_CFG_INDEX_NULL);
     ucs_trace("activate wifaces worker %p ep config %u ep count %u", worker,
               cfg_index, ep_config->ep_count);
     if (ep_config->ep_count++ == 0) {
@@ -1442,15 +1441,15 @@ static void
 ucp_ep_config_deactivate_worker_ifaces(ucp_worker_h worker,
                                        ucp_worker_cfg_index_t cfg_index)
 {
-    ucp_ep_config_t *ep_config = ucp_worker_ep_config(worker, cfg_index);
-
-    ucs_trace("deactivate wifaces worker %p ep config %u ep count %u", worker,
-              cfg_index, ep_config->ep_count);
+    ucp_ep_config_t *ep_config;
 
     if (cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
         return;
     }
 
+    ep_config = ucp_worker_ep_config(worker, cfg_index);
+    ucs_trace("deactivate wifaces worker %p ep config %u ep count %u", worker,
+              cfg_index, ep_config->ep_count);
     ucs_assertv(ep_config->ep_count > 0, "worker %p ep config %u", worker,
                 cfg_index);
 
@@ -1732,13 +1731,6 @@ out:
     return UCS_OK;
 }
 
-/* Reconfigure an endpoint to clear UCP_LANE_TYPE_FAILED for a subset of
- * previously failed lanes that have just been recovered. Accepts any subset:
- * only the intersection with the currently failed set is actually cleared.
- * Re-runs the post-failover am_lane promotion so that if the operable AM lane
- * was a fallback and one of its original candidates is now back, we switch to
- * the earlier lane.
- */
 ucs_status_t ucp_ep_reconfig_clear_failed_lanes(ucp_ep_h ep,
                                                 ucp_lane_map_t lanes)
 {
@@ -1746,25 +1738,32 @@ ucs_status_t ucp_ep_reconfig_clear_failed_lanes(ucp_ep_h ep,
     ucp_ep_config_key_t cfg_key     = ucp_ep_config(ep)->key;
     const unsigned ep_init_flags    = (ep->flags & UCP_EP_FLAG_INTERNAL) ?
                                       UCP_EP_INIT_FLAG_INTERNAL : 0;
-    ucp_lane_map_t to_clear         = lanes & ucp_ep_get_failed_lanes(ep);
-    const ucs_log_level_t log_level = UCS_LOG_LEVEL_DIAG;
+    const ucs_log_level_t log_level = UCS_LOG_LEVEL_DEBUG;
     ucp_worker_cfg_index_t old_cfg_index;
     ucp_worker_cfg_index_t new_cfg_index;
     ucp_lane_index_t lane;
     ucs_status_t status;
     ucs_string_buffer_t strb;
 
-    if (to_clear == 0) {
+    ucs_debug("ep %p: recovery clearing FAILED states for lanes 0x%" PRIx64,
+              ep, lanes);
+
+    if (lanes == 0) {
         return UCS_OK;
     }
 
-    ucs_for_each_bit(lane, to_clear) {
+    ucs_assertv(ucs_test_all_flags(ucp_ep_get_failed_lanes(ep), lanes),
+                "ep %p: lanes 0x%" PRIx64 " contains non-failed bits"
+                " (failed=0x%" PRIx64 ")",
+                ep, lanes, ucp_ep_get_failed_lanes(ep));
+    ucs_for_each_bit(lane, lanes) {
         ucs_assert(lane < cfg_key.num_lanes);
         cfg_key.lanes[lane].lane_types &= ~UCS_BIT(UCP_LANE_TYPE_FAILED);
     }
 
     /* Re-promote am_lane to the earliest available AM_BW lane, in case the
-     * currently selected one was a post-failover fallback. */
+     * currently selected one was a post-failover fallback.
+     * TODO: maybe we can reevaluate am_lane promotion logic better here. */
     for (lane = 0; lane < cfg_key.num_lanes; ++lane) {
         if ((cfg_key.lanes[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_AM_BW)) &&
             !(cfg_key.lanes[lane].lane_types &
@@ -1779,16 +1778,16 @@ ucs_status_t ucp_ep_reconfig_clear_failed_lanes(ucp_ep_h ep,
     }
 
     old_cfg_index = ep->cfg_index;
-    status = ucp_worker_get_ep_config(worker, &cfg_key, ep_init_flags,
-                                      &new_cfg_index);
+    status        = ucp_worker_get_ep_config(worker, &cfg_key, ep_init_flags,
+                                             &new_cfg_index);
     if (status != UCS_OK) {
         return status;
     }
 
     ucp_ep_set_cfg_index(ep, new_cfg_index, 1);
-    ucs_debug("ep %p: cleared FAILED on lanes 0x%" PRIx64
+    ucs_debug("ep %p: cleared FAILED states for lanes 0x%" PRIx64
               " (cfg_index %u -> %u, am_lane=%d)",
-              ep, to_clear, old_cfg_index, ep->cfg_index, ep->am_lane);
+              ep, (uint64_t)lanes, old_cfg_index, ep->cfg_index, ep->am_lane);
     if (ucs_log_is_enabled(log_level)) {
         ucs_string_buffer_init(&strb);
         ucp_proto_select_info(ep->worker, ep->cfg_index, UCP_WORKER_CFG_INDEX_NULL,
