@@ -321,7 +321,10 @@ ucs_status_t ucp_datatype_iter_sgl_init(ucp_context_h context,
         ucp_datatype_iter_detect_mem_info(context, local->buffers[0],
                                           local->lengths[0], dt_iter, param);
         if (ENABLE_PARAMS_CHECK && (count > 1)) {
-            status = ucp_dt_sgl_check_same_mem_info(context, local, count,
+            status = ucp_dt_sgl_check_same_mem_info(context,
+                                                    local->buffers + 1,
+                                                    local->lengths + 1,
+                                                    count - 1,
                                                     &dt_iter->mem_info);
             if (status != UCS_OK) {
                 return status;

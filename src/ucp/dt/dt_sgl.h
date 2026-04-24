@@ -20,15 +20,17 @@
  * Check that all SGL entries match the given memory info
  *
  * @param [in]     context        Context for memory detection
- * @param [in]     local          @ref ucp_dt_local_sgl_t descriptor to check
- * @param [in]     count          Number of entries in the @a local descriptor
+ * @param [in]     buffers        Array of buffer pointers to check
+ * @param [in]     lengths        Array of buffer lengths
+ * @param [in]     count          Number of entries in @a buffers / @a lengths
  * @param [in]     mem_info       Compare the SGL entries to this memory info
  *
  * @return UCS_OK if all SGL entries match the given memory info, otherwise
  *         return UCS_ERR_INVALID_PARAM
  */
 ucs_status_t ucp_dt_sgl_check_same_mem_info(ucp_context_h context,
-                                            const ucp_dt_local_sgl_t *local,
+                                            void * const *buffers,
+                                            const size_t *lengths,
                                             size_t count,
                                             const ucp_memory_info_t *mem_info);
 
