@@ -497,16 +497,8 @@ struct ucp_ep_config {
     /* EP initialization flags from @ref ucp_ep_init_flags_t */
     unsigned                      proto_init_flags;
 
-    /* Number of endpoints using this configuration. Signed because the
-     * activate/deactivate pairs from ucp_ep_discard_lanes_callback may run
-     * out of order when multiple failovers happen back-to-back on the same
-     * endpoint (each discard's destroy_progress oneshot uses a distinct
-     * key - the flush request - so ucs_callbackq_add_oneshot doesn't
-     * guarantee cross-key ordering). Activates and deactivates on the same
-     * cfg still pair up correctly, so we tolerate a transient negative
-     * value and only touch the underlying worker iface refcounts on the
-     * positive<->zero transitions. */
-    int                           ep_count;
+    /* Number of endpoints using this configuration */
+    unsigned                      ep_count;
 };
 
 
