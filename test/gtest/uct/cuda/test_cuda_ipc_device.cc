@@ -189,7 +189,7 @@ UCS_TEST_P(test_cuda_ipc_rma, get_mem_elem_pack)
     mapped_buffer sendbuf(length, SEED1, *m_sender, 0, UCS_MEMORY_TYPE_CUDA);
     mapped_buffer recvbuf(length, SEED2, *m_receiver, 0, UCS_MEMORY_TYPE_CUDA);
 
-    uct_device_mem_element_t mem_elem_host;
+    uct_device_mem_elem_t mem_elem_host;
     EXPECT_UCS_OK(uct_md_mem_elem_pack(m_sender->md(), sendbuf.memh(),
                                        recvbuf.rkey(), &mem_elem_host));
 }
@@ -212,7 +212,7 @@ UCS_TEST_P(test_cuda_ipc_rma_device, put_zcopy_device)
     size_t             length        = base_length + offset;
     unsigned           num_blocks    = get_num_blocks();
     uct_device_ep_h device_ep;
-    uct_device_mem_element_t *mem_elem;
+    uct_device_mem_elem_t *mem_elem;
     void *send_buf;
 
     if (device_level == UCS_DEVICE_LEVEL_GRID) {
@@ -228,7 +228,7 @@ UCS_TEST_P(test_cuda_ipc_rma_device, put_zcopy_device)
 
     ASSERT_UCS_OK(uct_ep_get_device_ep(m_sender->ep(0), &device_ep));
 
-    uct_device_mem_element_t mem_elem_host;
+    uct_device_mem_elem_t mem_elem_host;
     ASSERT_EQ(CUDA_SUCCESS, cuMemAlloc((CUdeviceptr*)&mem_elem, mem_elem_size));
     ASSERT_UCS_OK(uct_md_mem_elem_pack(m_sender->md(), sendbuf.memh(),
                                        recvbuf.rkey(), &mem_elem_host));
@@ -257,7 +257,7 @@ UCS_TEST_P(test_cuda_ipc_rma_device, put_multi_device)
     size_t             length        = iovcnt * (base_length + offset);
     uint64_t           signal_val    = 4;
     uct_device_ep_h device_ep;
-    uct_device_mem_element_t *mem_elem;
+    uct_device_mem_elem_t *mem_elem;
     uint64_t *remote_addresses_dev, remote_addresses[iovcnt];
     size_t *lengths_dev, lengths[iovcnt];
     void **addresses_dev, *addresses[iovcnt];
@@ -278,8 +278,8 @@ UCS_TEST_P(test_cuda_ipc_rma_device, put_multi_device)
 
     size_t total_mem_elem_size = mem_elem_size * (iovcnt + 1);
     uct_cuda_ipc_md_device_mem_element_t mem_elem_host_arr[iovcnt + 1];
-    uct_device_mem_element_t *mem_elem_host =
-            (uct_device_mem_element_t*)mem_elem_host_arr;
+    uct_device_mem_elem_t *mem_elem_host = (uct_device_mem_elem_t*)
+            mem_elem_host_arr;
     ASSERT_EQ(CUDA_SUCCESS,
               cuMemAlloc((CUdeviceptr*)&mem_elem, total_mem_elem_size));
     ASSERT_EQ(CUDA_SUCCESS, cuMemAlloc((CUdeviceptr*)&remote_addresses_dev,
@@ -297,13 +297,13 @@ UCS_TEST_P(test_cuda_ipc_rma_device, put_multi_device)
         lengths[i]          = base_length;
         ASSERT_UCS_OK(uct_md_mem_elem_pack(
                 m_sender->md(), sendbuf.memh(), recvbuf.rkey(),
-                (uct_device_mem_element_t*)
+                (uct_device_mem_elem_t*)
                         UCS_PTR_BYTE_OFFSET(mem_elem_host, mem_elem_size * i)));
     }
 
     ASSERT_UCS_OK(
             uct_md_mem_elem_pack(m_sender->md(), nullptr, signal.rkey(),
-                                 (uct_device_mem_element_t*)UCS_PTR_BYTE_OFFSET(
+                                 (uct_device_mem_elem_t*)UCS_PTR_BYTE_OFFSET(
                                          mem_elem_host,
                                          mem_elem_size * iovcnt)));
 
@@ -354,7 +354,7 @@ UCS_TEST_P(test_cuda_ipc_rma_device, put_multi_partial_device)
     int counter_index               = 1;
     std::vector<size_t> offsets(iovcnt, 0);
     uct_device_ep_h device_ep;
-    uct_device_mem_element_t *mem_elements;
+    uct_device_mem_elem_t *mem_elements;
     uint64_t *remote_addresses_dev, remote_addresses[iovcnt + 1];
     size_t *lengths_dev, lengths[iovcnt];
     void **addresses_dev, *addresses[iovcnt + 1];
@@ -377,8 +377,8 @@ UCS_TEST_P(test_cuda_ipc_rma_device, put_multi_partial_device)
 
     size_t total_mem_elem_size = mem_elem_size * (iovcnt + 1);
     uct_cuda_ipc_md_device_mem_element_t mem_elements_host_arr[iovcnt + 1];
-    uct_device_mem_element_t *mem_elements_host =
-            (uct_device_mem_element_t*)mem_elements_host_arr;
+    uct_device_mem_elem_t *mem_elements_host = (uct_device_mem_elem_t*)
+            mem_elements_host_arr;
     ASSERT_EQ(CUDA_SUCCESS,
               cuMemAlloc((CUdeviceptr*)&mem_elements, total_mem_elem_size));
     ASSERT_EQ(CUDA_SUCCESS, cuMemAlloc((CUdeviceptr*)&remote_addresses_dev,
@@ -393,7 +393,7 @@ UCS_TEST_P(test_cuda_ipc_rma_device, put_multi_partial_device)
     /* Fill indices and pack PUT entries */
     int idx = 0;
     for (int i = 0; i < iovcnt + 1; i++) {
-        uct_device_mem_element_t *mem_elem = (uct_device_mem_element_t*)
+        uct_device_mem_elem_t *mem_elem = (uct_device_mem_elem_t*)
                 UCS_PTR_BYTE_OFFSET(mem_elements_host, mem_elem_size * i);
         if (i == counter_index) {
             ASSERT_UCS_OK(uct_md_mem_elem_pack(m_sender->md(), nullptr,
@@ -465,7 +465,7 @@ UCS_TEST_P(test_cuda_ipc_rma_device, atomic_add_device)
     unsigned           num_threads   = get_num_threads();
     unsigned           num_blocks    = get_num_blocks();
     uct_device_ep_h device_ep;
-    uct_device_mem_element_t *mem_elem;
+    uct_device_mem_elem_t *mem_elem;
 
     if (device_level == UCS_DEVICE_LEVEL_GRID) {
         GTEST_SKIP() << "Grid level is not supported";
@@ -478,7 +478,7 @@ UCS_TEST_P(test_cuda_ipc_rma_device, atomic_add_device)
     mapped_buffer signal(sizeof(uint64_t), 0, *m_receiver, 0, UCS_MEMORY_TYPE_CUDA);
     ASSERT_UCS_OK(uct_ep_get_device_ep(m_sender->ep(0), &device_ep));
 
-    uct_device_mem_element_t mem_elem_host;
+    uct_device_mem_elem_t mem_elem_host;
     ASSERT_EQ(CUDA_SUCCESS, cuMemAlloc((CUdeviceptr*)&mem_elem, mem_elem_size));
     ASSERT_UCS_OK(uct_md_mem_elem_pack(m_sender->md(), nullptr, signal.rkey(),
                                        &mem_elem_host));

@@ -16,22 +16,20 @@ namespace cuda_uct {
 int launch_memcmp(const void *s1, const void *s2, size_t size);
 
 ucs_status_t launch_uct_put_single(uct_device_ep_h device_ep,
-                                   const uct_device_mem_element_t *mem_elem,
+                                   const uct_device_mem_elem_t *mem_elem,
                                    const void *address, uint64_t remote_address,
                                    size_t length, ucs_device_level_t level,
                                    unsigned num_threads, unsigned num_blocks);
 
 ucs_status_t launch_uct_atomic(uct_device_ep_h device_ep,
-                               const uct_device_mem_element_t *mem_elem,
-                               uint64_t rva,
-                               uint64_t add,
-                               ucs_device_level_t level,
-                               unsigned num_threads,
+                               const uct_device_mem_elem_t *mem_elem,
+                               uint64_t rva, uint64_t add,
+                               ucs_device_level_t level, unsigned num_threads,
                                unsigned num_blocks);
 
 ucs_status_t
 launch_uct_put_multi(uct_device_ep_h device_ep,
-                     const uct_device_mem_element_t *mem_list,
+                     const uct_device_mem_elem_t *mem_list,
                      size_t mem_list_count, void *const *addresses,
                      const uint64_t *remote_addresses, const size_t *lengths,
                      uint64_t counter_inc_value,
@@ -39,7 +37,7 @@ launch_uct_put_multi(uct_device_ep_h device_ep,
                      unsigned num_threads, unsigned num_blocks);
 
 ucs_status_t launch_uct_put_multi_partial(
-        uct_device_ep_h device_ep, const uct_device_mem_element_t *mem_list,
+        uct_device_ep_h device_ep, const uct_device_mem_elem_t *mem_list,
         const unsigned *mem_list_indices, unsigned mem_list_count,
         void *const *addresses, const uint64_t *remote_addresses,
         const size_t *offsets, const size_t *lengths, unsigned counter_index,

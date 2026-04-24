@@ -13,7 +13,7 @@
 namespace ucx_cuda {
 
 static __global__ void
-uct_put_single_kernel(uct_device_ep_h ep, uct_device_mem_element_t *mem_elem,
+uct_put_single_kernel(uct_device_ep_h ep, uct_device_mem_elem_t *mem_elem,
                       const void *va, uint64_t rva, size_t length,
                       ucs_status_t *status_p)
 {
@@ -37,7 +37,7 @@ uct_put_single_kernel(uct_device_ep_h ep, uct_device_mem_element_t *mem_elem,
  * Basic single element put operation.
  */
 ucs_status_t launch_uct_put_single(uct_device_ep_h ep,
-                                   uct_device_mem_element_t *mem_elem,
+                                   uct_device_mem_elem_t *mem_elem,
                                    const void *va, uint64_t rva, size_t length)
 {
     device_result_ptr<ucs_status_t> status = UCS_ERR_NOT_IMPLEMENTED;
@@ -49,7 +49,7 @@ ucs_status_t launch_uct_put_single(uct_device_ep_h ep,
 }
 
 static __global__ void
-uct_atomic_kernel(uct_device_ep_h ep, uct_device_mem_element_t *mem_elem,
+uct_atomic_kernel(uct_device_ep_h ep, uct_device_mem_elem_t *mem_elem,
                   uint64_t rva, uint64_t add, ucs_status_t *status_p)
 {
     uct_device_completion_t comp;
@@ -72,7 +72,7 @@ uct_atomic_kernel(uct_device_ep_h ep, uct_device_mem_element_t *mem_elem,
  * Atomic operation.
  */
 ucs_status_t launch_uct_atomic(uct_device_ep_h ep,
-                               uct_device_mem_element_t *mem_elem, uint64_t rva,
+                               uct_device_mem_elem_t *mem_elem, uint64_t rva,
                                uint64_t add)
 {
     device_result_ptr<ucs_status_t> status = UCS_ERR_NOT_IMPLEMENTED;
@@ -84,7 +84,7 @@ ucs_status_t launch_uct_atomic(uct_device_ep_h ep,
 
 template<size_t iovcnt>
 static __global__ void
-uct_put_multi_kernel(uct_device_ep_h ep, uct_device_mem_element_t *mem_list,
+uct_put_multi_kernel(uct_device_ep_h ep, uct_device_mem_elem_t *mem_list,
                      const void *va, uint64_t rva, uint64_t atomic_rva,
                      size_t length, ucs_status_t *status_p)
 {
@@ -123,7 +123,7 @@ uct_put_multi_kernel(uct_device_ep_h ep, uct_device_mem_element_t *mem_list,
  */
 template<size_t iovcnt>
 ucs_status_t
-launch_uct_put_multi(uct_device_ep_h ep, uct_device_mem_element_t *mem_list,
+launch_uct_put_multi(uct_device_ep_h ep, uct_device_mem_elem_t *mem_list,
                      const void *va, uint64_t rva, uint64_t atomic_rva,
                      size_t length)
 {
@@ -142,13 +142,13 @@ launch_uct_put_multi(uct_device_ep_h ep, uct_device_mem_element_t *mem_list,
 }
 
 template ucs_status_t launch_uct_put_multi<UCS_DEVICE_NUM_THREADS_IN_WARP - 1>(
-        uct_device_ep_h ep, uct_device_mem_element_t *mem_list, const void *va,
+        uct_device_ep_h ep, uct_device_mem_elem_t *mem_list, const void *va,
         uint64_t rva, uint64_t atomic_rva, size_t length);
 
 
 template<size_t iovcnt>
 static __global__ void
-uct_put_partial_kernel(uct_device_ep_h ep, uct_device_mem_element_t *mem_list,
+uct_put_partial_kernel(uct_device_ep_h ep, uct_device_mem_elem_t *mem_list,
                        const void *va, uint64_t rva, uint64_t atomic_rva,
                        size_t length, ucs_status_t *status_p)
 {
@@ -191,7 +191,7 @@ uct_put_partial_kernel(uct_device_ep_h ep, uct_device_mem_element_t *mem_list,
  */
 template<size_t iovcnt>
 ucs_status_t
-launch_uct_put_partial(uct_device_ep_h ep, uct_device_mem_element_t *mem_list,
+launch_uct_put_partial(uct_device_ep_h ep, uct_device_mem_elem_t *mem_list,
                        const void *va, uint64_t rva, uint64_t atomic_rva,
                        size_t length)
 {
@@ -211,7 +211,7 @@ launch_uct_put_partial(uct_device_ep_h ep, uct_device_mem_element_t *mem_list,
 
 template ucs_status_t
 launch_uct_put_partial<UCS_DEVICE_NUM_THREADS_IN_WARP - 1>(
-        uct_device_ep_h ep, uct_device_mem_element_t *mem_list, const void *va,
+        uct_device_ep_h ep, uct_device_mem_elem_t *mem_list, const void *va,
         uint64_t rva, uint64_t atomic_rva, size_t length);
 
 } // namespace ucx_cuda

@@ -184,7 +184,7 @@ ucp_device_get_tl_bitmap(const ucp_worker_h worker,
 static ucs_status_t ucp_device_local_mem_list_element_pack(
         const ucp_worker_h worker, const ucp_worker_iface_t *wiface,
         const ucp_device_mem_list_elem_t *element,
-        const ucs_memory_type_t mem_type, uct_device_mem_element_t *mem_element)
+        const ucs_memory_type_t mem_type, uct_device_mem_elem_t *mem_element)
 {
     ucp_tl_resource_desc_t *resource;
     ucp_md_index_t md_index;
@@ -253,8 +253,8 @@ static ucs_status_t ucp_device_local_mem_list_create_handle(
     const ucp_device_mem_list_elem_t *ucp_element;
     const ucp_worker_iface_t *wiface;
     ucp_device_local_mem_list_t *handle;
-    uct_device_local_mem_list_elem_t *uct_element;
-    uct_device_mem_element_t *tl_element;
+    uct_device_local_mem_elem_t *uct_element;
+    uct_device_mem_elem_t *tl_element;
     size_t i, num_lanes;
     ucs_status_t status;
     ucp_rsc_index_t tl_id;
@@ -263,8 +263,8 @@ static ucs_status_t ucp_device_local_mem_list_create_handle(
     ucp_device_get_tl_bitmap(worker, tl_bitmap, local_sys_dev);
     num_lanes = UCS_STATIC_BITMAP_POPCOUNT(tl_bitmap[tl_type]);
 
-    uct_elem_size = sizeof(uct_device_local_mem_list_elem_t) +
-                    (sizeof(uct_device_mem_element_t) * num_lanes);
+    uct_elem_size = sizeof(uct_device_local_mem_elem_t) +
+                    (sizeof(uct_device_mem_elem_t) * num_lanes);
     handle_size   = (uct_elem_size * params->num_elements) + sizeof(*handle);
     handle        = ucs_calloc(1, handle_size, "ucp_device_local_mem_list_t");
     if (handle == NULL) {
@@ -434,7 +434,7 @@ ucp_device_ep_check_lanes(const ucp_ep_h ep, ucp_tl_bitmap_t *tl_bitmap)
 
 static ucs_status_t ucp_device_remote_mem_list_element_pack(
         const ucp_device_mem_list_elem_t *element, ucp_rsc_index_t tl_id,
-        uct_device_remote_tl_list_elem_t *mem_element)
+        uct_device_remote_tl_elem_t *mem_element)
 {
     const ucp_ep_h ep     = element->ep;
     const ucp_rkey_h rkey = element->rkey;
@@ -511,9 +511,9 @@ static ucp_ep_h ucp_device_remote_mem_list_get_first_ep(
 static ucs_status_t
 ucp_device_remote_mem_list_fill(const ucp_device_mem_list_elem_t *ucp_element,
                                 ucp_tl_bitmap_t *tl_bitmap, size_t num_lanes,
-                                uct_device_remote_mem_list_elem_t *uct_element)
+                                uct_device_remote_mem_elem_t *uct_element)
 {
-    uct_device_remote_tl_list_elem_t *tl_element;
+    uct_device_remote_tl_elem_t *tl_element;
     ucp_rsc_index_t tl_id;
     ucs_status_t status;
     size_t i;
@@ -546,7 +546,7 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
     ucp_tl_bitmap_t tl_bitmap[UCP_DEVICE_TL_TYPE_LAST] = {};
     const ucp_device_mem_list_elem_t *ucp_element;
     ucp_device_remote_mem_list_t *handle;
-    uct_device_remote_mem_list_elem_t *uct_element;
+    uct_device_remote_mem_elem_t *uct_element;
     ucs_sys_device_t local_sys_dev;
     size_t i, num_lanes;
     ucs_status_t status;
@@ -577,8 +577,8 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
     }
 
     ucp_element   = params->elements;
-    uct_elem_size = sizeof(uct_device_remote_mem_list_elem_t) +
-                    (sizeof(uct_device_remote_tl_list_elem_t) * num_lanes);
+    uct_elem_size = sizeof(uct_device_remote_mem_elem_t) +
+                    (sizeof(uct_device_remote_tl_elem_t) * num_lanes);
     handle_size   = sizeof(*handle) + (params->num_elements * uct_elem_size);
     handle      = ucs_calloc(1, handle_size, "ucp_device_remote_mem_list_t");
     if (handle == NULL) {

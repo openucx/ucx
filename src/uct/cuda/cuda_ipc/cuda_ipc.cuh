@@ -292,7 +292,7 @@ void uct_cuda_ipc_copy_level<UCS_DEVICE_LEVEL_GRID>(void *dst, const void *src, 
 
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_BLOCK>
 UCS_F_DEVICE ucs_status_t uct_cuda_ipc_ep_put_single(
-        uct_device_ep_h device_ep, const uct_device_mem_element_t *mem_elem,
+        uct_device_ep_h device_ep, const uct_device_mem_elem_t *mem_elem,
         const void *address, uint64_t remote_address, size_t length,
         uint64_t flags, uct_device_completion_t *comp)
 {
@@ -309,7 +309,7 @@ UCS_F_DEVICE ucs_status_t uct_cuda_ipc_ep_put_single(
 
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_BLOCK>
 UCS_F_DEVICE ucs_status_t uct_cuda_ipc_ep_put_multi(
-        uct_device_ep_h device_ep, const uct_device_mem_element_t *mem_list,
+        uct_device_ep_h device_ep, const uct_device_mem_elem_t *mem_list,
         unsigned mem_list_count, void *const *addresses,
         const uint64_t *remote_addresses, const size_t *lengths,
         uint64_t counter_inc_value, uint64_t counter_remote_address,
@@ -351,7 +351,7 @@ UCS_F_DEVICE ucs_status_t uct_cuda_ipc_ep_put_multi(
 
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_BLOCK>
 UCS_F_DEVICE ucs_status_t uct_cuda_ipc_ep_put_multi_partial(
-        uct_device_ep_h device_ep, const uct_device_mem_element_t *mem_list,
+        uct_device_ep_h device_ep, const uct_device_mem_elem_t *mem_list,
         const unsigned *mem_list_indices, unsigned mem_list_count,
         void *const *addresses, const uint64_t *remote_addresses,
         const size_t *local_offsets, const size_t *remote_offsets,
@@ -396,11 +396,10 @@ UCS_F_DEVICE ucs_status_t uct_cuda_ipc_ep_put_multi_partial(
 }
 
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_BLOCK>
-UCS_F_DEVICE ucs_status_t
-uct_cuda_ipc_ep_atomic_add(uct_device_ep_h device_ep,
-                           const uct_device_mem_element_t *mem_elem,
-                           uint64_t inc_value, uint64_t remote_address,
-                           uint64_t flags, uct_device_completion_t *comp)
+UCS_F_DEVICE ucs_status_t uct_cuda_ipc_ep_atomic_add(
+        uct_device_ep_h device_ep, const uct_device_mem_elem_t *mem_elem,
+        uint64_t inc_value, uint64_t remote_address, uint64_t flags,
+        uct_device_completion_t *comp)
 {
     auto cuda_ipc_mem_element =
             reinterpret_cast<const uct_cuda_ipc_md_device_mem_element_t*>(
@@ -420,7 +419,7 @@ uct_cuda_ipc_ep_atomic_add(uct_device_ep_h device_ep,
 }
 
 UCS_F_DEVICE ucs_status_t uct_cuda_ipc_ep_get_ptr(
-        uct_device_ep_h device_ep, const uct_device_mem_element_t *mem_elem,
+        uct_device_ep_h device_ep, const uct_device_mem_elem_t *mem_elem,
         uint64_t remote_address, void **addr_p)
 {
     auto cuda_ipc_mem_element =

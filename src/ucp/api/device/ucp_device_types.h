@@ -30,19 +30,22 @@ typedef struct ucp_device_remote_mem_list {
      * Structure version. Allow runtime ABI compatibility checks between host
      * and device code.
      */
-    uint16_t                          version;
+    uint16_t                     version;
 
-    uint16_t                          num_lanes;
+    /**
+     * Number of lanes in each memory descriptor.
+     */
+    uint16_t                     num_lanes;
 
     /**
      * Number of entries in the memory descriptors array @a elems.
      */
-    uint32_t                          length;
+    uint32_t                     length;
 
     /**
      * UCT memory element objects are allocated contiguously.
      */
-    uct_device_remote_mem_list_elem_t mem_elements[0];
+    uct_device_remote_mem_elem_t mem_elements[0];
 } ucp_device_remote_mem_list_t;
 
 
@@ -61,15 +64,19 @@ typedef struct ucp_device_local_mem_list {
      * Structure version. Allow runtime ABI compatibility checks between host
      * and device code.
      */
-    uint16_t                         version;
+    uint16_t                    version;
 
-    uint16_t                         num_lanes;
+    /**
+     * Number of lanes in each memory descriptor.
+     */
+    uint16_t                    num_lanes;
+
     /**
      * Number of entries in the memory descriptors array @a elems.
      */
-    uint32_t                         length;
+    uint32_t                    length;
 
-    uct_device_local_mem_list_elem_t mem_elements[0];
+    uct_device_local_mem_elem_t mem_elements[0];
 } ucp_device_local_mem_list_t;
 
 #endif /* UCP_DEVICE_TYPES_H */

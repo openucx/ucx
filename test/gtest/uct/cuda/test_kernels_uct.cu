@@ -97,13 +97,13 @@ template<typename T> class device_result_ptr {
     return false;
 }
 
- template<ucs_device_level_t level>
- static __global__ void
- uct_put_single_kernel(uct_device_ep_h device_ep,
-                       const uct_device_mem_element_t *mem_elem,
-                       const void *address, uint64_t remote_address,
-                       size_t length, ucs_status_t *status)
- {
+template<ucs_device_level_t level>
+static __global__ void
+uct_put_single_kernel(uct_device_ep_h device_ep,
+                      const uct_device_mem_elem_t *mem_elem,
+                      const void *address, uint64_t remote_address,
+                      size_t length, ucs_status_t *status)
+{
     uct_device_completion_t comp;
 
     if (is_op_enabled(level)) {
@@ -117,13 +117,11 @@ template<typename T> class device_result_ptr {
   * Basic single element put operation.
   */
 ucs_status_t launch_uct_put_single(uct_device_ep_h device_ep,
-                                   const uct_device_mem_element_t *mem_elem,
+                                   const uct_device_mem_elem_t *mem_elem,
                                    const void *address, uint64_t remote_address,
-                                   size_t length,
-                                   ucs_device_level_t level,
-                                   unsigned num_threads,
-                                   unsigned num_blocks)
- {
+                                   size_t length, ucs_device_level_t level,
+                                   unsigned num_threads, unsigned num_blocks)
+{
     device_result_ptr<ucs_status_t> status = UCS_ERR_NOT_IMPLEMENTED;
     cudaError_t st;
 
@@ -168,8 +166,7 @@ ucs_status_t launch_uct_put_single(uct_device_ep_h device_ep,
 
 template<ucs_device_level_t level>
 static __global__ void
-uct_atomic_kernel(uct_device_ep_h ep,
-                  const uct_device_mem_element_t *mem_elem,
+uct_atomic_kernel(uct_device_ep_h ep, const uct_device_mem_elem_t *mem_elem,
                   uint64_t rva, uint64_t add, ucs_status_t *status_p)
 {
     uct_device_completion_t comp;
@@ -182,11 +179,9 @@ uct_atomic_kernel(uct_device_ep_h ep,
 }
 
 ucs_status_t launch_uct_atomic(uct_device_ep_h device_ep,
-                               const uct_device_mem_element_t *mem_elem,
-                               uint64_t rva,
-                               uint64_t add,
-                               ucs_device_level_t level,
-                               unsigned num_threads,
+                               const uct_device_mem_elem_t *mem_elem,
+                               uint64_t rva, uint64_t add,
+                               ucs_device_level_t level, unsigned num_threads,
                                unsigned num_blocks)
 {
     device_result_ptr<ucs_status_t> status = UCS_ERR_NOT_IMPLEMENTED;
@@ -224,8 +219,7 @@ ucs_status_t launch_uct_atomic(uct_device_ep_h device_ep,
 
 template<ucs_device_level_t level>
 static __global__ void
-uct_put_multi_kernel(uct_device_ep_h ep,
-                     const uct_device_mem_element_t *mem_list,
+uct_put_multi_kernel(uct_device_ep_h ep, const uct_device_mem_elem_t *mem_list,
                      size_t mem_list_count, void *const *addresses,
                      const uint64_t *remote_addresses, const size_t *lengths,
                      uint64_t counter_inc_value,
@@ -245,7 +239,7 @@ uct_put_multi_kernel(uct_device_ep_h ep,
 
 ucs_status_t
 launch_uct_put_multi(uct_device_ep_h device_ep,
-                     const uct_device_mem_element_t *mem_list,
+                     const uct_device_mem_elem_t *mem_list,
                      size_t mem_list_count, void *const *addresses,
                      const uint64_t *remote_addresses, const size_t *lengths,
                      uint64_t counter_inc_value,
@@ -307,7 +301,7 @@ launch_uct_put_multi(uct_device_ep_h device_ep,
 
 template<ucs_device_level_t level>
 static __global__ void uct_put_multi_partial_kernel(
-        uct_device_ep_h ep, const uct_device_mem_element_t *mem_list,
+        uct_device_ep_h ep, const uct_device_mem_elem_t *mem_list,
         const unsigned *mem_list_indices, unsigned mem_list_count,
         void *const *addresses, const uint64_t *remote_addresses,
         const size_t *offsets, const size_t *lengths, unsigned counter_index,
@@ -326,7 +320,7 @@ static __global__ void uct_put_multi_partial_kernel(
 }
 
 ucs_status_t launch_uct_put_multi_partial(
-        uct_device_ep_h device_ep, const uct_device_mem_element_t *mem_list,
+        uct_device_ep_h device_ep, const uct_device_mem_elem_t *mem_list,
         const unsigned *mem_list_indices, unsigned mem_list_count,
         void *const *addresses, const uint64_t *remote_addresses,
         const size_t *offsets, const size_t *lengths, unsigned counter_index,

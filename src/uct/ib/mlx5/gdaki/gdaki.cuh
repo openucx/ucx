@@ -263,7 +263,7 @@ uct_rc_mlx5_gda_fc(const uct_rc_gdaki_dev_ep_t *ep, uint16_t wqe_idx)
 
 template<ucs_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_single(
-        uct_rc_gdaki_dev_ep_t *ep, const uct_device_mem_element_t *tl_mem_elem,
+        uct_rc_gdaki_dev_ep_t *ep, const uct_device_mem_elem_t *tl_mem_elem,
         const void *address, uint32_t lkey, uint64_t remote_address,
         uint32_t rkey, size_t length, unsigned cid, uint64_t flags,
         uct_device_completion_t *tl_comp, uint32_t opcode, bool is_atomic,
@@ -310,8 +310,8 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_single(
 
 template<ucs_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_single(
-        uct_device_ep_h tl_ep, const uct_device_mem_element_t *src_uct_elem,
-        const uct_device_mem_element_t *tl_mem_elem, const void *address,
+        uct_device_ep_h tl_ep, const uct_device_mem_elem_t *src_uct_elem,
+        const uct_device_mem_elem_t *tl_mem_elem, const void *address,
         uint64_t remote_address, size_t length, unsigned channel_id,
         uint64_t flags, uct_device_completion_t *comp)
 {
@@ -332,7 +332,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_single(
 
 template<ucs_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_single(
-        uct_device_ep_h tl_ep, const uct_device_mem_element_t *tl_mem_elem,
+        uct_device_ep_h tl_ep, const uct_device_mem_elem_t *tl_mem_elem,
         const void *address, uint64_t remote_address, size_t length,
         unsigned channel_id, uint64_t flags, uct_device_completion_t *comp)
 {
@@ -350,7 +350,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_single(
 
 template<ucs_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_atomic_add(
-        uct_device_ep_h tl_ep, const uct_device_mem_element_t *tl_mem_elem,
+        uct_device_ep_h tl_ep, const uct_device_mem_elem_t *tl_mem_elem,
         uint64_t value, uint64_t remote_address, unsigned channel_id,
         uint64_t flags, uct_device_completion_t *comp)
 {
@@ -368,7 +368,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_atomic_add(
 
 template<ucs_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi(
-        uct_device_ep_h tl_ep, const uct_device_mem_element_t *tl_mem_list,
+        uct_device_ep_h tl_ep, const uct_device_mem_elem_t *tl_mem_list,
         unsigned mem_list_count, void *const *addresses,
         const uint64_t *remote_addresses, const size_t *lengths,
         uint64_t counter_inc_value, uint64_t counter_remote_address,
@@ -460,7 +460,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi(
 
 template<ucs_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put_multi_partial(
-        uct_device_ep_h tl_ep, const uct_device_mem_element_t *tl_mem_list,
+        uct_device_ep_h tl_ep, const uct_device_mem_elem_t *tl_mem_list,
         const unsigned *mem_list_indices, unsigned mem_list_count,
         void *const *addresses, const uint64_t *remote_addresses,
         const size_t *local_offsets, const size_t *remote_offsets,
