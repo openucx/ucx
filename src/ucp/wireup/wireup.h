@@ -51,10 +51,6 @@ enum {
     UCP_WIREUP_MSG_EP_CHECK,
     UCP_WIREUP_MSG_EP_REMOVED,
     UCP_WIREUP_MSG_REPLY_RECONFIG,
-
-    /* Exchange per-lane addresses for a specific set of local lanes. Used by
-     * the failed-lane recovery flow; named generically so it can also back
-     * future on-demand lane connection. */
     UCP_WIREUP_MSG_LANES_ADDR_REQUEST,
     UCP_WIREUP_MSG_LANES_ADDR_REPLY,
 
@@ -137,16 +133,12 @@ typedef struct ucp_wireup_msg {
     uint64_t               src_ep_id; /* Endpoint ID of source */
     uint64_t               dst_ep_id; /* Endpoint ID of destination, can be
                                          UCS_PTR_MAP_KEY_INVALID */
-    /* The two fields below are only valid for UCP_WIREUP_MSG_LANES_ADDR_*
-     * messages and ignored otherwise. `requested` is the set of local lanes
-     * the sender asked about; `provided` is the subset for which addresses
-     * are actually carried in this message. */
-    ucp_lane_map_t         requested_lane_map;
-    ucp_lane_map_t         provided_lane_map;
+
+    /* TODO: move these to a separate header(s) due to compatibility reason. */
+    ucp_lane_map_t         requested_lane_map; /* lanes the sender asked about */
+    ucp_lane_map_t         provided_lane_map;  /* lanes actually carried here */
     /* packed addresses follow */
 } UCS_S_PACKED ucp_wireup_msg_t;
-
-
 typedef struct {
     double          score;
     unsigned        addr_index;
@@ -241,24 +233,6 @@ uct_ep_h ucp_wireup_extract_lane(ucp_ep_h ep, ucp_lane_index_t lane);
 
 unsigned ucp_wireup_eps_progress(void *arg);
 
-/**
- * @brief Schedule a single run of ucp_wireup_eps_progress() for the given EP.
- *
- * Registers a one-shot callback on the worker progress queue which, when
- * dispatched, swaps any READY wireup proxies for their underlying transport
- * EPs (see ucp_wireup_eps_progress()).
- */
-void ucp_wireup_eps_progress_sched(ucp_ep_h ucp_ep);
-
-
-/**
- * @brief Find a p2p ep_addr entry in a remote address for a given remote lane.
- *
- * Scans @a remote_address for a ucp_address_entry whose ep_addrs[] contains
- * @a remote_lane.
- *
- * @return UCS_OK on match, UCS_ERR_UNREACHABLE otherwise.
- */
 ucs_status_t
 ucp_wireup_find_remote_p2p_addr(ucp_ep_h ep, ucp_lane_index_t remote_lane,
                                 const ucp_unpacked_address_t *remote_address,

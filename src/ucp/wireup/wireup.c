@@ -495,7 +495,7 @@ static int ucp_ep_has_wireup_msg_pending(ucp_ep_h ucp_ep)
     return 0;
 }
 
-void ucp_wireup_eps_progress_sched(ucp_ep_h ucp_ep)
+static void ucp_wireup_eps_progress_sched(ucp_ep_h ucp_ep)
 {
     /* Use one-shot mode to avoid the need to save prog_id */
     ucs_callbackq_add_oneshot(&ucp_ep->worker->uct->progress_q, ucp_ep,
@@ -1038,10 +1038,6 @@ ucp_wireup_process_lanes_addr_request(
      * satisfy any of the lanes you asked about"). */
     ucp_wireup_send_lanes_addr_msg(ep, UCP_WIREUP_MSG_LANES_ADDR_REPLY,
                                    msg->requested_lane_map, peer_provided);
-
-    /* ucp_ep_recovery_progress owns FAILED-bit clearing once the rebuilt
-     * lanes reach READY; do not clear inline here to avoid racing with the
-     * failover_reconfig discard. */
 }
 
 static UCS_F_NOINLINE void
