@@ -711,6 +711,40 @@ ucs_status_t ucp_ep_evaluate_perf(ucp_ep_h ep,
     return UCS_OK;
 }
 
+static void ucp_worker_mem_type_ep_tl_bitmap(ucp_worker_h worker,
+                                             ucs_memory_type_t mem_type,
+                                             ucp_tl_bitmap_t *tl_bitmap)
+{
+    const ucp_tl_resource_desc_t *tl_rsc;
+    const uct_md_attr_v2_t *md_attr;
+    ucp_rsc_index_t rsc_index;
+    uint64_t avail_mem_types;
+
+    UCS_STATIC_BITMAP_RESET_ALL(tl_bitmap);
+    if (UCP_MEM_IS_HOST(mem_type)) {
+        return;
+    }
+
+    for (rsc_index = 0; rsc_index < worker->context->num_tls; ++rsc_index) {
+        tl_rsc = &worker->context->tl_rscs[rsc_index];
+
+        /* Use only accelerator transports */
+        if (tl_rsc->tl_rsc.dev_type != UCT_DEVICE_TYPE_ACC) {
+            continue;
+        }
+
+        /* Check if the transport supports both host and the memory type */
+        md_attr         = &worker->context->tl_mds[tl_rsc->md_index].attr;
+        avail_mem_types = md_attr->access_mem_types | md_attr->reg_mem_types;
+        if (!ucs_test_all_flags(avail_mem_types, UCS_BIT(UCS_MEMORY_TYPE_HOST) |
+                                                         UCS_BIT(mem_type))) {
+            continue;
+        }
+
+        UCS_STATIC_BITMAP_SET(tl_bitmap, rsc_index);
+    }
+}
+
 ucs_status_t ucp_worker_mem_type_eps_create(ucp_worker_h worker)
 {
     ucp_context_h context = worker->context;
@@ -724,23 +758,10 @@ ucs_status_t ucp_worker_mem_type_eps_create(ucp_worker_h worker)
     char ep_name[UCP_WORKER_ADDRESS_NAME_MAX];
     unsigned addr_indices[UCP_MAX_LANES];
     ucp_lane_index_t num_lanes;
-    ucp_rsc_index_t rsc_index;
 
     ucs_memory_type_for_each(mem_type) {
-        ucp_context_memaccess_tl_bitmap(context, UCS_BIT(mem_type), 0,
-                                        &mem_access_tls);
-
-        /* Exclude transports that map remote memory via rkey pointer
-         * since mem_type EP is for in-process communication */
-        UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &mem_access_tls) {
-            if (context->tl_mds[context->tl_rscs[rsc_index].md_index].attr.flags &
-                UCT_MD_FLAG_RKEY_PTR) {
-                UCS_STATIC_BITMAP_RESET(&mem_access_tls, rsc_index);
-            }
-        }
-
-        if (UCP_MEM_IS_HOST(mem_type) ||
-            UCS_STATIC_BITMAP_IS_ZERO(mem_access_tls)) {
+        ucp_worker_mem_type_ep_tl_bitmap(worker, mem_type, &mem_access_tls);
+        if (UCS_STATIC_BITMAP_IS_ZERO(mem_access_tls)) {
             continue;
         }
 
