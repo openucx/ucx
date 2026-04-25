@@ -75,7 +75,7 @@ BEGIN_C_DECLS
 /** @file sys.h */
 
 
-typedef ino_t ucs_sys_ns_t;
+typedef uint32_t ucs_sys_ns_t;
 
 
 /* namespace type used in @ref ucs_sys_get_ns and @ref ucs_sys_ns_is_default */

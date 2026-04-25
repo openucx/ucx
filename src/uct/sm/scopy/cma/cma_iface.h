@@ -24,4 +24,14 @@ typedef struct uct_cma_iface {
 } uct_cma_iface_t;
 
 
+typedef struct {
+    pid_t id;
+} ucs_cma_iface_base_device_addr_t;
+
+
+typedef struct {
+    ucs_cma_iface_base_device_addr_t super;
+    ucs_sys_ns_t                     pid_ns;
+} ucs_cma_iface_ext_device_addr_t;
+
 #endif

@@ -25,6 +25,9 @@ endif
 if HAVE_CRAY_UGNI
 ucx_info_CFLAGS   += $(CRAY_UGNI_CFLAGS)
 endif
+if HAVE_CUDA
+ucx_info_CPPFLAGS += $(CUDA_CPPFLAGS)
+endif
 
 ucx_info_SOURCES  = \
 	build_info.c \

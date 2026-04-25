@@ -26,6 +26,8 @@
 #include <uct/base/uct_md.h>
 #include <uct/base/uct_iface.h>
 #include <uct/sm/self/self.h>
+#include <uct/sm/scopy/cma/cma_ep.h>
+#include <uct/sm/scopy/cma/cma_iface.h>
 #include <uct/tcp/tcp.h>
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_ep.h>
@@ -60,6 +62,12 @@
 #  ifdef HAVE_MLX5_HW_UD
 #    include <uct/ib/mlx5/ud/ud_mlx5.h>
 #  endif
+#endif
+
+#if HAVE_CUDA
+#  include <uct/cuda/cuda_ipc/cuda_ipc_ep.h>
+#  include <uct/cuda/cuda_ipc/cuda_ipc_iface.h>
+#  include <uct/cuda/cuda_ipc/cuda_ipc_md.h>
 #endif
 
 
@@ -131,6 +139,7 @@ void print_type_info(const char * tl_name)
         PRINT_SIZE(ucs_rcache_region_t);
         PRINT_SIZE(ucs_conn_match_elem_t);
         PRINT_SIZE(ucs_memory_info_t);
+        PRINT_SIZE(ucs_sys_ns_t);
 
         printf("\nUCT:\n");
         PRINT_SIZE(uct_am_handler_t);
@@ -171,6 +180,14 @@ void print_type_info(const char * tl_name)
         PRINT_SIZE(uct_ib_recv_wr_t);
 #endif
         printf("\n");
+    }
+
+    if (tl_name == NULL || !strcasecmp(tl_name, "cma")) {
+        printf("CMA:\n");
+        PRINT_SIZE(uct_cma_ep_t);
+        PRINT_SIZE(uct_cma_iface_t);
+        PRINT_SIZE(ucs_cma_iface_base_device_addr_t);
+        PRINT_SIZE(ucs_cma_iface_ext_device_addr_t);
     }
 
 #if HAVE_TL_RC
@@ -244,6 +261,21 @@ void print_type_info(const char * tl_name)
         }
 #endif
         printf("\n");
+    }
+#endif
+
+#if HAVE_CUDA
+    if (tl_name == NULL || !strcasecmp(tl_name, "cuda_ipc")) {
+        printf("CUDA_IPC:\n");
+        PRINT_SIZE(uct_cuda_ipc_ep_t);
+        PRINT_SIZE(uct_cuda_ipc_iface_t);
+        PRINT_SIZE(uct_cuda_ipc_event_desc_t);
+        PRINT_SIZE(uct_cuda_ipc_ctx_rsc_t);
+        PRINT_SIZE(uct_cuda_ipc_md_handle_t);
+        PRINT_SIZE(uct_cuda_ipc_memh_t);
+        PRINT_SIZE(uct_cuda_ipc_lkey_t);
+        PRINT_SIZE(uct_cuda_ipc_rkey_t);
+        PRINT_SIZE(uct_cuda_ipc_extended_rkey_t);
     }
 #endif
 

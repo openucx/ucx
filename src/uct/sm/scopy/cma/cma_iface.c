@@ -15,17 +15,6 @@
 #include <uct/base/uct_md.h>
 #include <ucs/sys/string.h>
 
-
-typedef struct {
-    pid_t                            id;
-} ucs_cma_iface_base_device_addr_t;
-
-typedef struct {
-    ucs_cma_iface_base_device_addr_t super;
-    ucs_sys_ns_t                     pid_ns;
-} ucs_cma_iface_ext_device_addr_t;
-
-
 static ucs_config_field_t uct_cma_iface_config_table[] = {
     {"SCOPY_", "ALLOC=huge,thp,mmap,heap;SM_BW=11145MBs", NULL,
      ucs_offsetof(uct_cma_iface_config_t, super),
@@ -106,7 +95,7 @@ uct_cma_iface_is_reachable_v2(const uct_iface_h tl_iface,
     }
 
     if (ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID) != remote_pid_ns) {
-        uct_iface_fill_info_str_buf(params, "pid_ns local %lu remote %lu",
+        uct_iface_fill_info_str_buf(params, "pid_ns local %u remote %u",
                                     ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID),
                                     remote_pid_ns);
         return 0;
