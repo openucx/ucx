@@ -23,9 +23,6 @@
 #include "ucp_mm.inl"
 
 
-#define UCP_DEVICE_MEM_LIST_MAX_EPS 2
-
-
 typedef struct {
     uct_allocated_memory_t mem;
     uint32_t               mem_list_length;

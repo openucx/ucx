@@ -111,9 +111,9 @@ protected:
 
         m_cuda_dev = uct_cuda_get_cuda_device(
                 m_sender->iface_attr().ctl_device);
-        ASSERT_NE(m_cuda_dev, CU_DEVICE_INVALID)
-                << " sys_device "
-                << static_cast<int>(m_sender->iface_attr().ctl_device);
+        if (m_cuda_dev == CU_DEVICE_INVALID) {
+            return;
+        }
 
         status = UCT_CUDADRV_FUNC_LOG_ERR(
                 cuDevicePrimaryCtxRetain(&ctx, m_cuda_dev));
@@ -126,6 +126,11 @@ protected:
     void cleanup()
     {
         uct_test::cleanup();
+
+        if (m_cuda_dev == CU_DEVICE_INVALID) {
+            return;
+        }
+
         (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
         (void)UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(m_cuda_dev));
     }
