@@ -1667,7 +1667,8 @@ static ucs_status_t ucp_check_resources(ucp_context_h context,
     for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
         ucs_assert(context->tl_rscs != NULL);
         resource = &context->tl_rscs[tl_id];
-        if (!(resource->flags & UCP_TL_RSC_FLAG_AUX)) {
+        if ((resource->tl_rsc.dev_type != UCT_DEVICE_TYPE_ACC) &&
+            !(resource->flags & UCP_TL_RSC_FLAG_AUX)) {
             num_usable_tls++;
         }
     }
