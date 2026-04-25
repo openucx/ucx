@@ -14,7 +14,7 @@
 namespace ucx_cuda {
 
 ucs_status_t launch_uct_put(uct_device_ep_h ep,
-                            const uct_device_local_mem_elem_t *src_elem,
+                            const uct_device_mem_elem_t *src_elem,
                             const uct_device_mem_elem_t *mem_elem,
                             const void *va, uint64_t rva, size_t length);
 
