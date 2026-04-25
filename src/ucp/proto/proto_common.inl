@@ -21,7 +21,7 @@ ucp_proto_request_complete_success(ucp_request_t *req)
     return UCS_OK;
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
+static UCS_F_INLINE_OPTIMIZED ucs_status_t
 ucp_proto_request_bcopy_complete_success(ucp_request_t *req)
 {
     ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 0, UCP_DT_MASK_ALL);
@@ -50,7 +50,12 @@ ucp_proto_msg_multi_request_init(ucp_request_t *req)
         return UCS_OK;
     }
 
+    if (req->flags & UCP_REQUEST_FLAG_MSG_ID_SET) {
+        return UCS_OK;
+    }
+
     req->send.msg_proto.message_id = req->send.ep->worker->am_message_id++;
+    req->flags |= UCP_REQUEST_FLAG_MSG_ID_SET;
     return UCS_OK;
 }
 

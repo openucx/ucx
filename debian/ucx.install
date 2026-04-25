@@ -1,5 +1,8 @@
 usr/bin/*
-usr/include/*
+usr/include/ucs/*
+usr/include/ucm/api/*
+usr/include/ucp/api/*
+usr/include/uct/api/*
 usr/lib/lib*
 usr/lib/cmake
 usr/lib/pkgconfig

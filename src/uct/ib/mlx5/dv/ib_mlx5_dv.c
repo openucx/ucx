@@ -133,6 +133,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp_common(uct_ib_iface_t *iface,
 {
     uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.md, uct_ib_mlx5_md_t);
     uct_ib_device_t *dev = &md->super.dev;
+    uint64_t bf_size     = 0;
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(create_qp_in)]           = {};
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(create_qp_out)]         = {};
     char in_2init[UCT_IB_MLX5DV_ST_SZ_BYTES(rst2init_qp_in)]   = {};
@@ -144,8 +145,12 @@ ucs_status_t uct_ib_mlx5_devx_create_qp_common(uct_ib_iface_t *iface,
 
     uct_ib_iface_fill_attr(iface, &attr->super);
 
+    if (md->flags & UCT_IB_MLX5_MD_FLAG_UAR_USE_WC) {
+        bf_size = UCT_IB_MLX5_BF_REG_SIZE;
+    }
+
     status = uct_ib_mlx5_get_mmio_mode(iface->super.worker, attr->mmio_mode, 0,
-                                       UCT_IB_MLX5_BF_REG_SIZE, &mmio_mode);
+                                       bf_size, &mmio_mode);
     if (status != UCS_OK) {
         goto err;
     }

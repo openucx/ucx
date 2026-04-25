@@ -137,7 +137,7 @@ private:
     CUdevice m_cuda_dev;
 };
 
-UCS_TEST_P(test_device, single)
+UCS_TEST_P(test_device, put)
 {
     constexpr uint64_t SEED1 = 0x1111111111111111lu;
     constexpr uint64_t SEED2 = 0x2222222222222222lu;
@@ -145,24 +145,30 @@ UCS_TEST_P(test_device, single)
     mapped_buffer sendbuf(length, SEED1, *m_sender, 0, UCS_MEMORY_TYPE_CUDA);
     mapped_buffer recvbuf(length, SEED2, *m_receiver, 0, UCS_MEMORY_TYPE_CUDA);
 
-    mapped_buffer elembuf_host(sizeof(uct_device_mem_elem_t), 0, *m_sender, 0,
-                               UCS_MEMORY_TYPE_HOST);
-    mapped_buffer elembuf(sizeof(uct_device_mem_elem_t), 0, *m_sender, 0,
-                          UCS_MEMORY_TYPE_CUDA);
-    uct_device_mem_elem_t *mem_elem_host = (uct_device_mem_elem_t*)
-                                                   elembuf_host.ptr();
-    uct_device_mem_elem_t *mem_elem = (uct_device_mem_elem_t*)elembuf.ptr();
+    uct_device_local_mem_list_elem_t src_elem_host;
+    src_elem_host.addr = nullptr;
     ASSERT_UCS_OK(uct_md_mem_elem_pack(m_sender->md(), sendbuf.memh(),
-                                       recvbuf.rkey(), mem_elem_host));
-    /* Copy packed element from host to GPU */
-    ASSERT_EQ(CUDA_SUCCESS, cuMemcpyHtoD((CUdeviceptr)mem_elem, mem_elem_host,
-                                         sizeof(uct_device_mem_elem_t)));
+                                       recvbuf.rkey(),
+                                       &src_elem_host.uct_mem_element));
+
+    mapped_buffer src_elembuf(sizeof(uct_device_local_mem_list_elem_t), 0,
+                              *m_sender, 0, UCS_MEMORY_TYPE_CUDA);
+    ASSERT_EQ(CUDA_SUCCESS,
+              cuMemcpyHtoD((CUdeviceptr)src_elembuf.ptr(), &src_elem_host,
+                           sizeof(uct_device_local_mem_list_elem_t)));
+
+    mapped_buffer rem_elembuf(sizeof(uct_device_mem_element_t), 0, *m_sender, 0,
+                              UCS_MEMORY_TYPE_CUDA);
+    ASSERT_EQ(CUDA_SUCCESS, cuMemcpyHtoD((CUdeviceptr)rem_elembuf.ptr(),
+                                         &src_elem_host.uct_mem_element,
+                                         sizeof(uct_device_mem_element_t)));
 
     uct_device_ep_h dev_ep;
     ASSERT_UCS_OK(uct_ep_get_device_ep(m_sender->ep(0), &dev_ep));
-    ASSERT_UCS_OK(
-            ucx_cuda::launch_uct_put_single(dev_ep, mem_elem, sendbuf.ptr(),
-                                            (uintptr_t)recvbuf.ptr(), length));
+    ASSERT_UCS_OK(ucx_cuda::launch_uct_put(
+            dev_ep, (const uct_device_local_mem_list_elem_t*)src_elembuf.ptr(),
+            (const uct_device_mem_element_t*)rem_elembuf.ptr(), sendbuf.ptr(),
+            (uintptr_t)recvbuf.ptr(), length));
 
     recvbuf.pattern_check(SEED1);
     recvbuf.pattern_fill(SEED2);
@@ -197,110 +203,6 @@ UCS_TEST_P(test_device, atomic)
         while (!mem_buffer::compare(&signal_val, signal.ptr(),
                                     sizeof(signal_val), UCS_MEMORY_TYPE_CUDA))
             ;
-    }
-}
-
-UCS_TEST_P(test_device, multi)
-{
-    constexpr uint64_t SEED1 = 0x1111111111111111lu;
-    constexpr uint64_t SEED2 = 0x2222222222222222lu;
-    constexpr size_t iovcnt  = 31;
-    constexpr size_t length  = iovcnt * 32;
-    mapped_buffer sendbuf(length, SEED1, *m_sender, 0, UCS_MEMORY_TYPE_CUDA);
-    mapped_buffer recvbuf(length, SEED2, *m_receiver, 0, UCS_MEMORY_TYPE_CUDA);
-    mapped_buffer signal(sizeof(uint64_t), 0, *m_receiver, 0,
-                         UCS_MEMORY_TYPE_CUDA);
-    uint64_t signal_val = 0;
-    size_t i;
-
-    size_t total_elem_size = sizeof(uct_device_mem_elem_t) * (iovcnt + 1);
-    mapped_buffer elembuf_host(total_elem_size, 0, *m_sender, 0,
-                               UCS_MEMORY_TYPE_HOST);
-    mapped_buffer elembuf(total_elem_size, 0, *m_sender, 0,
-                          UCS_MEMORY_TYPE_CUDA);
-    for (i = 0; i < iovcnt; i++) {
-        ASSERT_UCS_OK(uct_md_mem_elem_pack(
-                m_sender->md(), sendbuf.memh(), recvbuf.rkey(),
-                (uct_device_mem_elem_t*)UCS_PTR_BYTE_OFFSET(
-                        elembuf_host.ptr(),
-                        sizeof(uct_device_mem_elem_t) * i)));
-    }
-
-    ASSERT_UCS_OK(uct_md_mem_elem_pack(
-            m_sender->md(), NULL, signal.rkey(),
-            (uct_device_mem_elem_t*)UCS_PTR_BYTE_OFFSET(
-                    elembuf_host.ptr(),
-                    sizeof(uct_device_mem_elem_t) * iovcnt)));
-
-    /* Copy all packed elements from host to GPU in one operation */
-    ASSERT_EQ(CUDA_SUCCESS, cuMemcpyHtoD((CUdeviceptr)elembuf.ptr(),
-                                         elembuf_host.ptr(), total_elem_size));
-
-    uct_device_ep_h dev_ep;
-    ASSERT_UCS_OK(uct_ep_get_device_ep(m_sender->ep(0), &dev_ep));
-    for (i = 0; i < 100; i++) {
-        ASSERT_UCS_OK(ucx_cuda::launch_uct_put_multi<iovcnt>(
-                dev_ep, (uct_device_mem_elem_t*)elembuf.ptr(), sendbuf.ptr(),
-                (uintptr_t)recvbuf.ptr(), (uintptr_t)signal.ptr(), length));
-
-        signal_val += 4;
-        while (!mem_buffer::compare(&signal_val, signal.ptr(),
-                                    sizeof(signal_val), UCS_MEMORY_TYPE_CUDA))
-            ;
-        recvbuf.pattern_check(SEED1);
-        recvbuf.pattern_fill(SEED2);
-    }
-}
-
-UCS_TEST_P(test_device, partial)
-{
-    constexpr uint64_t SEED1 = 0x1111111111111111lu;
-    constexpr uint64_t SEED2 = 0x2222222222222222lu;
-    constexpr size_t iovcnt  = 31;
-    constexpr size_t length  = iovcnt * 32;
-    mapped_buffer sendbuf(length, SEED1, *m_sender, 0, UCS_MEMORY_TYPE_CUDA);
-    mapped_buffer recvbuf(length, SEED2, *m_receiver, 0, UCS_MEMORY_TYPE_CUDA);
-    mapped_buffer signal(sizeof(uint64_t), 0, *m_receiver, 0,
-                         UCS_MEMORY_TYPE_CUDA);
-    uint64_t signal_val = 0;
-    size_t i;
-
-    size_t total_elem_size = sizeof(uct_device_mem_elem_t) * (iovcnt + 1);
-    mapped_buffer elembuf_host(total_elem_size, 0, *m_sender, 0,
-                               UCS_MEMORY_TYPE_HOST);
-    mapped_buffer elembuf(total_elem_size, 0, *m_sender, 0,
-                          UCS_MEMORY_TYPE_CUDA);
-    for (i = 0; i < iovcnt; i++) {
-        ASSERT_UCS_OK(uct_md_mem_elem_pack(
-                m_sender->md(), sendbuf.memh(), recvbuf.rkey(),
-                (uct_device_mem_elem_t*)UCS_PTR_BYTE_OFFSET(
-                        elembuf_host.ptr(),
-                        sizeof(uct_device_mem_elem_t) * i)));
-    }
-
-    ASSERT_UCS_OK(uct_md_mem_elem_pack(
-            m_sender->md(), NULL, signal.rkey(),
-            (uct_device_mem_elem_t*)UCS_PTR_BYTE_OFFSET(
-                    elembuf_host.ptr(),
-                    sizeof(uct_device_mem_elem_t) * iovcnt)));
-
-    /* Copy all packed elements from host to GPU in one operation */
-    ASSERT_EQ(CUDA_SUCCESS, cuMemcpyHtoD((CUdeviceptr)elembuf.ptr(),
-                                         elembuf_host.ptr(), total_elem_size));
-
-    uct_device_ep_h dev_ep;
-    ASSERT_UCS_OK(uct_ep_get_device_ep(m_sender->ep(0), &dev_ep));
-    for (i = 0; i < 100; i++) {
-        ASSERT_UCS_OK(ucx_cuda::launch_uct_put_partial<iovcnt>(
-                dev_ep, (uct_device_mem_elem_t*)elembuf.ptr(), sendbuf.ptr(),
-                (uintptr_t)recvbuf.ptr(), (uintptr_t)signal.ptr(), length));
-
-        signal_val += 4;
-        while (!mem_buffer::compare(&signal_val, signal.ptr(),
-                                    sizeof(signal_val), UCS_MEMORY_TYPE_CUDA))
-            ;
-        recvbuf.pattern_check(SEED1);
-        recvbuf.pattern_fill(SEED2);
     }
 }
 
