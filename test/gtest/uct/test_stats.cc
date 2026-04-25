@@ -5,6 +5,7 @@
 * See file LICENSE for terms.
 */
 
+#include "ucs/memory/memory_type.h"
 #include "uct_test.h"
 #include "uct_p2p_test.h"
 #include <common/test.h>
@@ -95,19 +96,45 @@ public:
         return cntr_init[side][stat_name];
     }
 
-    void init_bufs(size_t min, size_t max)
+    void init_bufs(size_t min, size_t max, ucs_memory_type_t send_mem_type,
+                   ucs_memory_type_t recv_mem_type)
     {
         size_t size = ucs_max(min, ucs_min(64ul, max));
-        uint8_t mem_type_index;
 
-        ucs_assert(sender().md_attr().access_mem_types != 0);
-        mem_type_index = ucs_ffs64(sender().md_attr().access_mem_types);
-
-        lbuf = new mapped_buffer(size, 0, sender(), 0, (ucs_memory_type_t)mem_type_index);
-        rbuf = new mapped_buffer(size, 0, receiver(), 0, (ucs_memory_type_t)mem_type_index);
+        lbuf = new mapped_buffer(size, 0, sender(), 0, send_mem_type);
+        rbuf = new mapped_buffer(size, 0, receiver(), 0, recv_mem_type);
     }
 
-    virtual void cleanup() {
+    ucs_memory_type_t mem_type_send_bcopy()
+    {
+        return (ucs_memory_type_t)ucs_ffs64(
+                sender().md_attr().access_mem_types);
+    }
+
+    ucs_memory_type_t mem_type_send_zcopy()
+    {
+        return (ucs_memory_type_t)ucs_ffs64(sender().md_attr().reg_mem_types);
+    }
+
+    void init_bufs_am(size_t min, size_t max, ucs_memory_type_t send_mem_type)
+    {
+        init_bufs(min, max, send_mem_type, UCS_MEMORY_TYPE_HOST);
+    }
+
+    void init_bufs_am_bcopy(size_t min, size_t max)
+    {
+        init_bufs_am(min, max, mem_type_send_bcopy());
+    }
+
+    void init_bufs_rma(size_t min, size_t max, ucs_memory_type_t send_mem_type)
+    {
+        ucs_memory_type_t recv_mem_type = (ucs_memory_type_t)ucs_ffs64(
+                receiver().md_attr().reg_mem_types);
+        init_bufs(min, max, send_mem_type, recv_mem_type);
+    }
+
+    virtual void cleanup()
+    {
         flush();
         delete lbuf;
         delete rbuf;
@@ -209,7 +236,7 @@ UCS_TEST_SKIP_COND_P(test_uct_stats, am_short,
     uint64_t hdr=0xdeadbeef, send_data=0xfeedf00d;
     ucs_status_t status;
 
-    init_bufs(0, sender().iface_attr().cap.am.max_short);
+    init_bufs_am_bcopy(0, sender().iface_attr().cap.am.max_short);
 
     status = uct_iface_set_am_handler(receiver().iface(), 0, am_handler,
                                       0, UCT_CB_FLAG_ASYNC);
@@ -230,7 +257,7 @@ UCS_TEST_SKIP_COND_P(test_uct_stats, am_short_iov,
 {
     ucs_status_t status;
 
-    init_bufs(0, sender().iface_attr().cap.am.max_short);
+    init_bufs_am_bcopy(0, sender().iface_attr().cap.am.max_short);
 
     status = uct_iface_set_am_handler(receiver().iface(), 0, am_handler, 0,
                                       UCT_CB_FLAG_ASYNC);
@@ -255,7 +282,7 @@ UCS_TEST_SKIP_COND_P(test_uct_stats, am_bcopy,
     ssize_t v;
     ucs_status_t status;
 
-    init_bufs(0, sender().iface_attr().cap.am.max_bcopy);
+    init_bufs_am_bcopy(0, sender().iface_attr().cap.am.max_bcopy);
 
     status = uct_iface_set_am_handler(receiver().iface(), 0, am_handler, 0, UCT_CB_FLAG_ASYNC);
     EXPECT_UCS_OK(status);
@@ -275,7 +302,8 @@ UCS_TEST_SKIP_COND_P(test_uct_stats, am_zcopy,
 {
     ucs_status_t status;
 
-    init_bufs(0, sender().iface_attr().cap.am.max_zcopy);
+    init_bufs_am(0, sender().iface_attr().cap.am.max_zcopy,
+                 mem_type_send_zcopy());
 
     status = uct_iface_set_am_handler(receiver().iface(), 0, am_handler, 0, UCT_CB_FLAG_ASYNC);
     EXPECT_UCS_OK(status);
@@ -300,7 +328,8 @@ UCS_TEST_SKIP_COND_P(test_uct_stats, put_short,
     uint64_t send_data=0xfeedf00d;
     ucs_status_t status;
 
-    init_bufs(0, sender().iface_attr().cap.put.max_short);
+    init_bufs_rma(0, sender().iface_attr().cap.put.max_short,
+                  mem_type_send_bcopy());
 
     UCT_TEST_CALL_AND_TRY_AGAIN(uct_ep_put_short(sender_ep(), &send_data, sizeof(send_data),
                                                  rbuf->addr(), rbuf->rkey()), status);
@@ -316,7 +345,8 @@ UCS_TEST_SKIP_COND_P(test_uct_stats, put_bcopy,
 {
     ssize_t v;
 
-    init_bufs(0, sender().iface_attr().cap.put.max_bcopy);
+    init_bufs_rma(0, sender().iface_attr().cap.put.max_bcopy,
+                  mem_type_send_bcopy());
 
     UCT_TEST_CALL_AND_TRY_AGAIN(uct_ep_put_bcopy(sender_ep(), mapped_buffer::pack, lbuf,
                                                  rbuf->addr(), rbuf->rkey()), v);
@@ -332,7 +362,8 @@ UCS_TEST_SKIP_COND_P(test_uct_stats, put_zcopy,
 {
     ucs_status_t status;
 
-    init_bufs(0, sender().iface_attr().cap.put.max_zcopy);
+    init_bufs_rma(0, sender().iface_attr().cap.put.max_zcopy,
+                  mem_type_send_zcopy());
 
     UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, lbuf->ptr(), lbuf->length(), lbuf->memh(),
                             sender().iface_attr().cap.put.max_iov);
@@ -353,7 +384,8 @@ UCS_TEST_SKIP_COND_P(test_uct_stats, get_bcopy,
 {
     ucs_status_t status;
 
-    init_bufs(0, sender().iface_attr().cap.get.max_bcopy);
+    init_bufs_rma(0, sender().iface_attr().cap.get.max_bcopy,
+                  mem_type_send_bcopy());
 
     init_completion();
     UCT_TEST_CALL_AND_TRY_AGAIN(
@@ -373,8 +405,9 @@ UCS_TEST_SKIP_COND_P(test_uct_stats, get_zcopy,
 {
     ucs_status_t status;
 
-    init_bufs(sender().iface_attr().cap.get.min_zcopy,
-              sender().iface_attr().cap.get.max_zcopy);
+    init_bufs_rma(sender().iface_attr().cap.get.min_zcopy,
+                  sender().iface_attr().cap.get.max_zcopy,
+                  mem_type_send_zcopy());
 
     UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, lbuf->ptr(), lbuf->length(), lbuf->memh(),
                             sender().iface_attr().cap.get.max_iov);
@@ -391,12 +424,13 @@ UCS_TEST_SKIP_COND_P(test_uct_stats, get_zcopy,
                 lbuf->length());
 }
 
-#define TEST_STATS_ATOMIC_POST(_op, _val) \
-UCS_TEST_SKIP_COND_P(test_uct_stats, atomic_post_ ## _op ## _val, \
-                     !check_atomics(UCS_BIT(UCT_ATOMIC_OP_ ## _op), OP ## _val)) \
-{ \
-    ucs_status_t status; \
-    init_bufs(sizeof(uint##_val##_t), sizeof(uint##_val##_t)); \
+#define TEST_STATS_ATOMIC_POST(_op, _val)                                      \
+  UCS_TEST_SKIP_COND_P(                                                        \
+      test_uct_stats, atomic_post_##_op##_val,                                 \
+      !check_atomics(UCS_BIT(UCT_ATOMIC_OP_##_op), OP##_val)) {                \
+    ucs_status_t status;                                                       \
+    init_bufs_rma(sizeof(uint##_val##_t), sizeof(uint##_val##_t),              \
+                  mem_type_send_bcopy());                                      \
     status = uct_ep_atomic ##_val##_post(sender_ep(), (UCT_ATOMIC_OP_ ## _op), \
                                          1, rbuf->addr(), rbuf->rkey()); \
     EXPECT_UCS_OK(status); \
@@ -420,7 +454,7 @@ UCS_TEST_SKIP_COND_P(test_uct_stats, atomic_fetch_## _op ## _val, \
     ucs_status_t status; \
     uint##_val##_t result; \
     \
-    init_bufs(sizeof(result), sizeof(result)); \
+    init_bufs_rma(sizeof(result), sizeof(result), mem_type_send_bcopy()); \
     \
     init_completion(); \
     status = uct_ep_atomic##_val##_fetch(sender_ep(), (UCT_ATOMIC_OP_ ## _op), 1, \
@@ -448,7 +482,7 @@ UCS_TEST_SKIP_COND_P(test_uct_stats, atomic_cswap##val, \
     ucs_status_t status; \
     uint##val##_t result; \
     \
-    init_bufs(sizeof(result), sizeof(result)); \
+    init_bufs_rma(sizeof(result), sizeof(result), mem_type_send_bcopy()); \
     \
     init_completion(); \
     UCT_TEST_CALL_AND_TRY_AGAIN( \
@@ -504,7 +538,7 @@ UCS_TEST_SKIP_COND_P(test_uct_stats, flush_wait_iface,
     uint64_t count_wait;
     ucs_status_t status;
 
-    init_bufs(0, sender().iface_attr().cap.am.max_bcopy);
+    init_bufs_am_bcopy(0, sender().iface_attr().cap.am.max_bcopy);
 
     status = uct_iface_set_am_handler(receiver().iface(), 0, am_handler, 0, UCT_CB_FLAG_ASYNC);
     EXPECT_UCS_OK(status);
@@ -529,7 +563,7 @@ UCS_TEST_SKIP_COND_P(test_uct_stats, flush_wait_ep,
     uint64_t count_wait;
     ucs_status_t status;
 
-    init_bufs(0, sender().iface_attr().cap.am.max_bcopy);
+    init_bufs_am_bcopy(0, sender().iface_attr().cap.am.max_bcopy);
 
     status = uct_iface_set_am_handler(receiver().iface(), 0, am_handler, 0, UCT_CB_FLAG_ASYNC);
     EXPECT_UCS_OK(status);
@@ -556,7 +590,7 @@ UCS_TEST_SKIP_COND_P(test_uct_stats, fence_iface,
 {
     ucs_status_t status;
 
-    init_bufs(0, sender().iface_attr().cap.am.max_bcopy);
+    init_bufs_am_bcopy(0, sender().iface_attr().cap.am.max_bcopy);
 
     status = uct_iface_set_am_handler(receiver().iface(), 0, am_handler, 0, UCT_CB_FLAG_ASYNC);
     EXPECT_UCS_OK(status);
@@ -576,7 +610,7 @@ UCS_TEST_SKIP_COND_P(test_uct_stats, fence_ep,
 {
     ucs_status_t status;
 
-    init_bufs(0, sender().iface_attr().cap.am.max_bcopy);
+    init_bufs_am_bcopy(0, sender().iface_attr().cap.am.max_bcopy);
 
     status = uct_iface_set_am_handler(receiver().iface(), 0, am_handler, 0, UCT_CB_FLAG_ASYNC);
     EXPECT_UCS_OK(status);
@@ -597,7 +631,7 @@ UCS_TEST_SKIP_COND_P(test_uct_stats, tx_no_res,
     uint64_t count;
     ucs_status_t status;
 
-    init_bufs(0, sender().iface_attr().cap.am.max_bcopy);
+    init_bufs_am_bcopy(0, sender().iface_attr().cap.am.max_bcopy);
 
     status = uct_iface_set_am_handler(receiver().iface(), 0, am_handler, 0, UCT_CB_FLAG_ASYNC);
     EXPECT_UCS_OK(status);
@@ -615,7 +649,7 @@ UCS_TEST_SKIP_COND_P(test_uct_stats, pending_add,
     uct_pending_req_t p_reqs[num_reqs];
     ssize_t len;
 
-    init_bufs(0, sender().iface_attr().cap.am.max_bcopy);
+    init_bufs_am_bcopy(0, sender().iface_attr().cap.am.max_bcopy);
 
     EXPECT_UCS_OK(uct_iface_set_am_handler(receiver().iface(), 0, am_handler, 0,
                                            UCT_CB_FLAG_ASYNC));
