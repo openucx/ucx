@@ -1861,6 +1861,7 @@ static void ucp_fill_resources_reg_md_map_update(ucp_context_h context)
         reg_nonblock_md_map = 0;
         for (md_index = 0; md_index < context->num_mds; ++md_index) {
             md_attr = &context->tl_mds[md_index].attr;
+            context->dmabuf_mem_types |= md_attr->dmabuf_mem_types;
             if (md_attr->dmabuf_mem_types & UCS_BIT(mem_type)) {
                 /* In case of multiple providers, take the first one */
                 if (context->dmabuf_mds[mem_type] == UCP_NULL_RESOURCE) {
@@ -1957,6 +1958,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     context->supported_mem_type_mask  = 0;
     context->num_mem_type_detect_mds  = 0;
     context->export_md_map            = 0;
+    context->dmabuf_mem_types         = 0;
 
     ucs_memory_type_for_each(mem_type) {
         context->reg_md_map[mem_type]           = 0;
@@ -2797,6 +2799,9 @@ void ucp_context_memaccess_tl_bitmap(ucp_context_h context,
         md_attr  = &context->tl_mds[md_index].attr;
         if (md_attr->flags & md_reg_flags) {
             mem_types = md_attr->reg_mem_types;
+            if (md_attr->flags & UCT_MD_FLAG_REG_DMABUF) {
+                mem_types |= context->dmabuf_mem_types;
+            }
         } else {
             mem_types = md_attr->access_mem_types;
         }
