@@ -25,22 +25,13 @@ public:
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
         add_variant_with_value(variants, UCP_FEATURE_RMA, 0, "flush_worker");
         add_variant_with_value(variants, UCP_FEATURE_RMA, FLUSH_EP, "flush_ep");
-        if (!RUNNING_ON_VALGRIND) {
-            add_variant_with_value(variants, UCP_FEATURE_RMA,
-                                   FLUSH_EP | DISABLE_PROTO,
-                                   "flush_ep_proto_v1");
-        }
         add_variant_with_value(variants, UCP_FEATURE_RMA, USER_MEMH,
                                "user_memh");
     }
 
     test_ucp_rma()
     {
-        if (get_variant_value() & DISABLE_PROTO) {
-            modify_config("PROTO_ENABLE", "n");
-        } else {
-            modify_config("MAX_RMA_LANES", "2");
-        }
+        modify_config("MAX_RMA_LANES", "2");
     }
 
     void do_nbi_iov(iov_op_t op, size_t size, void *expected_data,
@@ -189,9 +180,8 @@ protected:
 private:
     /* Test variants */
     enum {
-        FLUSH_EP      = UCS_BIT(0), /* If not set, flush worker */
-        DISABLE_PROTO = UCS_BIT(1),
-        USER_MEMH     = UCS_BIT(2),
+        FLUSH_EP  = UCS_BIT(0), /* If not set, flush worker */
+        USER_MEMH = UCS_BIT(1),
     };
 
     void init_iov(size_t size, ucp_dt_iov_t *iov, size_t iov_count,

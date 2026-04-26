@@ -51,11 +51,6 @@ const ucp_amo_proto_t *ucp_amo_proto_list[] = {
     [UCP_RKEY_SW_PROTO]    = &ucp_amo_sw_proto
 };
 
-const ucp_rma_proto_t *ucp_rma_proto_list[] = {
-    [UCP_RKEY_BASIC_PROTO] = &ucp_rma_basic_proto,
-    [UCP_RKEY_SW_PROTO]    = &ucp_rma_sw_proto
-};
-
 
 size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map,
                             ucs_sys_device_t sys_dev,
@@ -1235,17 +1230,10 @@ void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
                                                   config->key.rma_lanes, rkey,
                                                   0, &uct_rkey);
     if (rkey->cache.rma_lane == UCP_NULL_LANE) {
-        rkey->cache.rma_proto_index = UCP_RKEY_SW_PROTO;
         rkey->cache.rma_rkey        = UCT_INVALID_RKEY;
-        rkey->cache.max_put_short   = 0;
         rma_sw                      = !!(context->config.features & UCP_FEATURE_RMA);
     } else {
-        rkey->cache.rma_proto_index = UCP_RKEY_BASIC_PROTO;
         rkey->cache.rma_rkey        = uct_rkey;
-        UCS_STATIC_ASSERT(ucs_same_type(ucs_field_type(ucp_rkey_t,
-                                        cache.max_put_short), int8_t));
-        rkey->cache.max_put_short   =
-            ucs_min(config->rma[rkey->cache.rma_lane].max_put_short, INT8_MAX);
     }
 
     rkey->cache.amo_lane = ucp_rkey_find_rma_lane(context, config,
@@ -1287,8 +1275,7 @@ void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
 
     ucs_trace("rkey %p ep %p @ cfg[%d] %s: lane[%d] rkey 0x%"PRIxPTR
               " %s: lane[%d] rkey 0x%"PRIxPTR,
-              rkey, ep, ep->cfg_index,
-              UCP_RKEY_RMA_PROTO(rkey->cache.rma_proto_index)->name,
+              rkey, ep, ep->cfg_index, rma_sw ? ucp_rma_sw_proto.name : "rma",
               rkey->cache.rma_lane, rkey->cache.rma_rkey,
               UCP_RKEY_AMO_PROTO(rkey->cache.amo_proto_index)->name,
               rkey->cache.amo_lane, rkey->cache.amo_rkey);

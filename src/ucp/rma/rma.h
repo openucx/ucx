@@ -91,13 +91,11 @@ typedef struct {
 } UCS_S_PACKED ucp_atomic_req_hdr_t;
 
 
-extern ucp_rma_proto_t ucp_rma_basic_proto;
 extern ucp_rma_proto_t ucp_rma_sw_proto;
 extern ucp_amo_proto_t ucp_amo_basic_proto;
 extern ucp_amo_proto_t ucp_amo_sw_proto;
 
 
-extern const ucp_rma_proto_t *ucp_rma_proto_list[];
 extern const ucp_amo_proto_t *ucp_amo_proto_list[];
 
 

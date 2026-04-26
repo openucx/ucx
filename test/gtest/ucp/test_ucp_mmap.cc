@@ -395,15 +395,6 @@ void test_ucp_mmap::test_rkey_management(ucp_mem_h memh, bool is_dummy,
             }
         }
 
-        if (expect_rma_offload) {
-            if (is_dummy) {
-                EXPECT_EQ(&ucp_rma_sw_proto,
-                          UCP_RKEY_RMA_PROTO(rkey->cache.rma_proto_index));
-            } else {
-                EXPECT_EQ(&ucp_rma_basic_proto,
-                          UCP_RKEY_RMA_PROTO(rkey->cache.rma_proto_index));
-            }
-        }
     }
 
     if (mem_type == UCS_MEMORY_TYPE_HOST) {
