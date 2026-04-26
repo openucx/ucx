@@ -183,7 +183,7 @@ protected:
     void test_length0(unsigned flags);
     void test_rereg(unsigned map_flags = 0, bool import_mem = false);
     void
-    test_rkey_management(ucp_mem_h memh, bool is_dummy, bool expect_rma_offload,
+    test_rkey_management(ucp_mem_h memh, bool is_dummy,
                          ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST);
     void check_rkey_lanes_distance(ucp_rkey_h rkey,
                                    const ucp_memory_info_t &mem_info,
@@ -328,7 +328,6 @@ bool test_ucp_mmap::resolve_rma_bw_put_zcopy(entity *e, ucp_rkey_h rkey)
 }
 
 void test_ucp_mmap::test_rkey_management(ucp_mem_h memh, bool is_dummy,
-                                         bool expect_rma_offload,
                                          ucs_memory_type_t mem_type)
 {
     size_t rkey_size;
@@ -538,7 +537,6 @@ UCS_TEST_P(test_ucp_mmap, alloc_mem_type) {
             mem_buffer::supported_mem_types();
     ucs_status_t status;
     bool is_dummy;
-    bool expect_rma_offload;
 
     for (auto mem_type : mem_types) {
         for (int i = 0; i < (100 / ucs::test_time_multiplier()); ++i) {
@@ -560,10 +558,8 @@ UCS_TEST_P(test_ucp_mmap, alloc_mem_type) {
             ASSERT_UCS_OK(status);
 
             is_dummy           = (size == 0);
-            expect_rma_offload = (is_tl_rdma() || is_tl_shm()) &&
-                                 check_reg_mem_types(sender(), mem_type);
 
-            test_rkey_management(memh, is_dummy, expect_rma_offload, mem_type);
+            test_rkey_management(memh, is_dummy, mem_type);
 
             status = ucp_mem_unmap(sender().ucph(), memh);
             ASSERT_UCS_OK(status);
@@ -576,7 +572,6 @@ UCS_TEST_P(test_ucp_mmap, reg_mem_type) {
             mem_buffer::supported_mem_types();
     ucs_status_t status;
     bool is_dummy;
-    bool expect_rma_offload;
     ucs_memory_type_t alloc_mem_type;
 
     for (int i = 0; i < 1000 / ucs::test_time_multiplier(); ++i) {
@@ -609,11 +604,7 @@ UCS_TEST_P(test_ucp_mmap, reg_mem_type) {
             EXPECT_EQ(alloc_mem_type, memh->mem_type);
         }
 
-        expect_rma_offload = !UCP_MEM_IS_ROCM_MANAGED(alloc_mem_type) &&
-                             is_tl_rdma() &&
-                             check_reg_mem_types(sender(), alloc_mem_type);
-        test_rkey_management(memh, is_dummy, expect_rma_offload,
-                             alloc_mem_type);
+        test_rkey_management(memh, is_dummy, alloc_mem_type);
 
         status = ucp_mem_unmap(sender().ucph(), memh);
         ASSERT_UCS_OK(status);
@@ -829,12 +820,8 @@ void test_ucp_mmap::test_length0(unsigned flags)
     status = ucp_mem_map(sender().ucph(), &params, &memh[1]);
     ASSERT_UCS_OK(status);
 
-    bool expect_rma_offload = is_tl_rdma() ||
-                              ((flags & UCP_MEM_MAP_ALLOCATE) &&
-                               is_tl_shm());
-
     for (i = 0; i < buf_num; i++) {
-        test_rkey_management(memh[i], true, expect_rma_offload);
+        test_rkey_management(memh[i], true);
         test_rkey_proto(memh[i]);
         status = ucp_mem_unmap(sender().ucph(), memh[i]);
         ASSERT_UCS_OK(status);
@@ -888,7 +875,7 @@ UCS_TEST_P(test_ucp_mmap, alloc_advise) {
     ASSERT_UCS_OK(status);
 
     is_dummy = (size == 0);
-    test_rkey_management(memh, is_dummy, is_tl_rdma() || is_tl_shm());
+    test_rkey_management(memh, is_dummy);
 
     status = ucp_mem_unmap(sender().ucph(), memh);
     ASSERT_UCS_OK(status);
@@ -931,7 +918,7 @@ UCS_TEST_P(test_ucp_mmap, reg_advise) {
     status = ucp_mem_advise(sender().ucph(), memh, &advise_params);
     ASSERT_UCS_OK(status);
     is_dummy = (size == 0);
-    test_rkey_management(memh, is_dummy, is_tl_rdma());
+    test_rkey_management(memh, is_dummy);
 
     status = ucp_mem_unmap(sender().ucph(), memh);
     ASSERT_UCS_OK(status);
@@ -974,7 +961,7 @@ UCS_TEST_P(test_ucp_mmap, fixed) {
         EXPECT_GE(ucp_memh_length(memh), size);
 
         is_dummy = (size == 0);
-        test_rkey_management(memh, is_dummy, is_tl_rdma());
+        test_rkey_management(memh, is_dummy);
 
         ptr.detach();
         status = ucp_mem_unmap(sender().ucph(), memh);

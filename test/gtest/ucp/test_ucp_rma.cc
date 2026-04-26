@@ -112,6 +112,16 @@ protected:
         return 100;
     }
 
+    void expect_unsupported(ucs_status_ptr_t status_ptr)
+    {
+        if (UCS_PTR_IS_ERR(status_ptr)) {
+            EXPECT_EQ(UCS_ERR_UNSUPPORTED, UCS_PTR_STATUS(status_ptr));
+            return;
+        }
+
+        EXPECT_EQ(UCS_ERR_UNSUPPORTED, request_wait(status_ptr));
+    }
+
     void test_mem_types(send_func_t send_func, size_t min_size = 128,
                         size_t max_size = default_max_size()) {
         const std::vector<std::vector<ucs_memory_type_t> >& pairs =
@@ -313,6 +323,23 @@ UCS_TEST_P(test_ucp_rma, get_blocking_zcopy, "ZCOPY_THRESH=0") {
     /* test get_zcopy minimal message length is respected */
     test_mem_types(static_cast<send_func_t>(&test_ucp_rma::get_b), 128,
                    64 * UCS_KBYTE);
+}
+
+UCS_TEST_P(test_ucp_rma, proto_disabled_unsupported, "PROTO_ENABLE=n")
+{
+    const size_t size = 8;
+    mem_buffer sendbuf(size, UCS_MEMORY_TYPE_HOST);
+    mem_buffer recvbuf(size, UCS_MEMORY_TYPE_HOST);
+    mapped_buffer rbuf(size, receiver());
+    ucs::handle<ucp_rkey_h> rkey;
+    ucp_request_param_t param = {0};
+
+    rbuf.rkey(sender(), rkey);
+
+    expect_unsupported(ucp_put_nbx(sender().ep(), sendbuf.ptr(), size,
+                                   (uint64_t)rbuf.ptr(), rkey, &param));
+    expect_unsupported(ucp_get_nbx(sender().ep(), recvbuf.ptr(), size,
+                                   (uint64_t)rbuf.ptr(), rkey, &param));
 }
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_rma)
