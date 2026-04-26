@@ -25,6 +25,7 @@
 
 source $(dirname $0)/../buildlib/az-helpers.sh
 source $(dirname $0)/../buildlib/tools/common.sh
+source $(dirname $0)/test_namespace.sh
 
 WORKSPACE=${WORKSPACE:=$PWD}
 ucx_inst=${WORKSPACE}/install
@@ -1240,6 +1241,8 @@ run_configure_tests() {
 #
 run_tests() {
 	export UCX_PROTO_REQUEST_RESET=y
+
+	test_namespace
 
 	# all are running mpi tests
 	run_mpi_tests
