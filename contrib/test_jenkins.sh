@@ -1172,7 +1172,7 @@ run_ucx_info() {
 
 run_ucx_tl_check() {
 	# Test transport selection
-	../test/apps/test_ucx_tls.py -p $ucx_inst
+	../test/apps/test_ucx_tls.py -p $ucx_inst/bin/ucx_info
 
 	# Test setting many lanes
 	UCX_IB_NUM_PATHS=8 \
