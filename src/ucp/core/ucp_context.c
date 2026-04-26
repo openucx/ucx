@@ -2786,6 +2786,7 @@ void ucp_context_memaccess_tl_bitmap(ucp_context_h context,
                                      ucp_tl_bitmap_t *tl_bitmap)
 {
     const uct_md_attr_v2_t *md_attr;
+    ucs_memory_type_t mem_type;
     ucp_rsc_index_t rsc_index;
     ucp_md_index_t md_index;
     uint64_t mem_types;
@@ -2795,7 +2796,12 @@ void ucp_context_memaccess_tl_bitmap(ucp_context_h context,
         md_index = context->tl_rscs[rsc_index].md_index;
         md_attr  = &context->tl_mds[md_index].attr;
         if (md_attr->flags & md_reg_flags) {
-            mem_types = md_attr->reg_mem_types;
+            mem_types = 0;
+            ucs_memory_type_for_each(mem_type) {
+                if (context->reg_md_map[mem_type] & UCS_BIT(md_index)) {
+                    mem_types |= UCS_BIT(mem_type);
+                }
+            }
         } else {
             mem_types = md_attr->access_mem_types;
         }
