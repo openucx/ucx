@@ -28,6 +28,43 @@
 #define UCT_GDR_COPY_RCACHE_OVERHEAD_AUTO 50.0e-9
 
 
+static ucs_status_t
+uct_gdr_copy_use_pcie_params_get(ucs_ternary_auto_value_t use_pcie,
+                                 uint32_t *pin_gdr_flags_p, int *pin_pcie_fallback_p)
+{
+#if HAVE_DECL_GDR_PIN_BUFFER_V2
+    switch (use_pcie) {
+    case UCS_YES:
+        *pin_gdr_flags_p     = GDR_PIN_FLAG_FORCE_PCIE;
+        *pin_pcie_fallback_p = 0;
+        break;
+    case UCS_AUTO:
+        /* Fallthrough */
+    case UCS_NO:
+        *pin_gdr_flags_p     = GDR_PIN_FLAG_DEFAULT;
+        *pin_pcie_fallback_p = 0;
+        break;
+    case UCS_TRY:
+        *pin_gdr_flags_p     = GDR_PIN_FLAG_FORCE_PCIE;
+        *pin_pcie_fallback_p = 1;
+        break;
+    default:
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return UCS_OK;
+#else
+    if (use_pcie == UCS_YES) {
+        ucs_error("USE_PCIE=yes requires GDRCopy with gdr_pin_buffer_v2");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    *pin_gdr_flags_p     = 0;
+    *pin_pcie_fallback_p = 0;
+    return UCS_OK;
+#endif
+}
+
 typedef struct {
     pthread_mutex_t   lock;
     unsigned          refcount;
@@ -56,6 +93,15 @@ static ucs_config_field_t uct_gdr_copy_md_config_table[] = {
 
     {"MEM_REG_GROWTH", "0.06ns", "Memory registration growth rate", /* TODO take default from device */
      ucs_offsetof(uct_gdr_copy_md_config_t, uc_reg_cost.c), UCS_CONFIG_TYPE_TIME},
+
+    {"USE_PCIE", "auto",
+     "Mapping type for CPU access:\n"
+     " auto - default, driver chooses C2C or PCIe\n"
+     " yes  - Force PCIe (BAR1); may fail at registration\n"
+     " no   - default, driver chooses C2C or PCIe\n"
+     " try  - Try PCIe first, fall back to default in case of failure\n",
+     ucs_offsetof(uct_gdr_copy_md_config_t, use_pcie),
+     UCS_CONFIG_TYPE_TERNARY_AUTO},
 
     {"", "RCACHE_PURGE_ON_FORK=n", NULL,
      ucs_offsetof(uct_gdr_copy_md_config_t, rcache_config),
@@ -136,20 +182,35 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_gdr_copy_mem_reg_internal,
                  uct_md_h uct_md, void *address, size_t length,
                  unsigned flags, uct_gdr_copy_mem_t *mem_hndl)
 {
-    uct_gdr_copy_md_t *md = ucs_derived_of(uct_md, uct_gdr_copy_md_t);
-    unsigned long d_ptr   = ((unsigned long)(char*)address);
-    ucs_log_level_t log_level;
+    uct_gdr_copy_md_t *md     = ucs_derived_of(uct_md, uct_gdr_copy_md_t);
+    unsigned long d_ptr       = ((unsigned long)(char*)address);
+    ucs_log_level_t log_level = (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ?
+                                        UCS_LOG_LEVEL_DEBUG :
+                                        UCS_LOG_LEVEL_ERROR;
+    uint32_t pin_flags        = 0;
     int ret;
 
     ucs_assert((address != NULL) && (length != 0));
 
-    log_level = (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DEBUG :
-                UCS_LOG_LEVEL_ERROR;
-
+#if HAVE_DECL_GDR_PIN_BUFFER_V2
+    pin_flags = md->pin_gdr_flags;
+    ret       = gdr_pin_buffer_v2(md->gdrcpy_ctx, d_ptr, length, pin_flags,
+                                  &mem_hndl->mh);
+    if (ret && (pin_flags != GDR_PIN_FLAG_DEFAULT) && md->pin_pcie_fallback) {
+        ucs_debug("GPU memory non-default pin failed with length %lu ret %d "
+                  "pin_flags %u, retrying with default pin flag",
+                  length, ret, pin_flags);
+        pin_flags = GDR_PIN_FLAG_DEFAULT;
+        ret       = gdr_pin_buffer_v2(md->gdrcpy_ctx, d_ptr, length, pin_flags,
+                                      &mem_hndl->mh);
+    }
+#else
     ret = gdr_pin_buffer(md->gdrcpy_ctx, d_ptr, length, 0, 0, &mem_hndl->mh);
+#endif
     if (ret) {
-        ucs_log(log_level, "gdr_pin_buffer failed. length :%lu ret:%d",
-                length, ret);
+        ucs_log(log_level,
+                "GPU memory pin failed. length %lu ret %d pin_flags %u",
+                length, ret, pin_flags);
         goto err;
     }
 
@@ -167,9 +228,10 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_gdr_copy_mem_reg_internal,
         goto unmap_buffer;
     }
 
-    ucs_trace("registered memory:%p..%p length:%lu info.va:0x%"PRIx64" bar_ptr:%p",
+    ucs_trace("registered memory %p..%p length %lu info.va 0x%" PRIx64
+              " bar_ptr %p pin_flags %u",
               address, UCS_PTR_BYTE_OFFSET(address, length), length,
-              mem_hndl->info.va, mem_hndl->bar_ptr);
+              mem_hndl->info.va, mem_hndl->bar_ptr, pin_flags);
 
     return UCS_OK;
 
@@ -478,6 +540,12 @@ uct_gdr_copy_md_create(uct_component_t *component,
     md->reg_cost        = md_config->uc_reg_cost;
     md->super.ops       = &uct_gdr_copy_md_ops;
     md->rcache          = NULL;
+    status              = uct_gdr_copy_use_pcie_params_get(md_config->use_pcie,
+                                                           &md->pin_gdr_flags,
+                                                           &md->pin_pcie_fallback);
+    if (status != UCS_OK) {
+        goto err_free;
+    }
 
     md->gdrcpy_ctx = gdr_open();
     if (md->gdrcpy_ctx == NULL) {
@@ -529,6 +597,8 @@ uct_gdr_copy_md_open(uct_component_t *component, const char *md_name,
             ucs_derived_of(config, uct_gdr_copy_md_config_t);
     uct_gdr_copy_md_t *md;
     ucs_status_t status;
+    uint32_t new_pin_flags;
+    int new_pin_fallback;
 
     if (!md_config->shared) {
         status = uct_gdr_copy_md_create(component, md_config, &md);
@@ -546,7 +616,21 @@ uct_gdr_copy_md_open(uct_component_t *component, const char *md_name,
             ucs_error("inconsistent gdr_copy rcache enable param");
             status = UCS_ERR_INVALID_PARAM;
         } else {
-            status = UCS_OK;
+            status = uct_gdr_copy_use_pcie_params_get(md_config->use_pcie,
+                                                      &new_pin_flags,
+                                                      &new_pin_fallback);
+            if (status == UCS_OK) {
+                if ((uct_gdr_copy_context.md->pin_gdr_flags != new_pin_flags) ||
+                    (uct_gdr_copy_context.md->pin_pcie_fallback !=
+                     new_pin_fallback)) {
+                    ucs_error("inconsistent pin mode: shared pin_flags=%u "
+                              "fallback=%d, opening pin_flags=%u fallback=%d",
+                              uct_gdr_copy_context.md->pin_gdr_flags,
+                              uct_gdr_copy_context.md->pin_pcie_fallback,
+                              new_pin_flags, new_pin_fallback);
+                    status = UCS_ERR_INVALID_PARAM;
+                }
+            }
         }
     } else {
         status = uct_gdr_copy_md_create(component, md_config,
