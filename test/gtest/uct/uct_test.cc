@@ -868,6 +868,8 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
     status = uct_md_query_tl_resources(m_md, &tl, &num_tl);
     ASSERT_UCS_OK(status);
 
+    uct_release_tl_resource_list(tl);
+
     for (;;) {
         {
             scoped_log_handler slh(wrap_errors_logger);

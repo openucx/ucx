@@ -151,7 +151,6 @@ static int uct_gdaki_check_umem_dmabuf(const uct_ib_md_t *md)
 
     dmabuf = uct_cuda_copy_md_get_dmabuf((void*)buff, 1,
                                          UCS_SYS_DEVICE_ID_UNKNOWN);
-
     if (dmabuf.fd == UCT_DMABUF_FD_INVALID) {
         status = UCS_ERR_NO_MEMORY;
         goto out_free;
