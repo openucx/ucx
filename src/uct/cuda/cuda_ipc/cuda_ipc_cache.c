@@ -202,9 +202,7 @@ uct_cuda_ipc_cache_region_remove(uct_cuda_ipc_cache_t *cache,
                   (void *)region->key.d_bptr, ucs_status_string(status));
     }
 
-    ucs_assertv(region->in_lru, "region=%p, refcount=%lu", region, region->refcount);
     ucs_list_del(&region->lru_list);
-    region->in_lru = 0;
 
     ucs_assert(cache->num_regions > 0);
     cache->num_regions--;
@@ -716,7 +714,6 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
     region->mapped_addr = *mapped_addr;
     region->refcount    = 1;
     region->cu_dev      = cu_dev;
-    region->in_lru      = 0; /* will be set after pgtable insert */
 
     status = UCS_PROFILE_CALL(ucs_pgtable_insert,
                               &cache->pgtable, &region->super);
@@ -740,7 +737,6 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
     cache->num_regions++;
     cache->total_size += key->b_len;
     ucs_list_add_tail(&cache->lru_list, &region->lru_list);
-    region->in_lru = 1;
 
     uct_cuda_ipc_cache_evict_lru(cache);
 
