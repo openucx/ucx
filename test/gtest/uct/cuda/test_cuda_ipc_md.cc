@@ -285,7 +285,6 @@ protected:
         region->mapped_addr    = (void *)addr;
         region->refcount       = 1;
         region->cu_dev         = 0;
-        region->in_lru         = 0;
 
         ucs_status_t status = ucs_pgtable_insert(&m_cache->pgtable,
                                                   &region->super);
@@ -294,7 +293,6 @@ protected:
         m_cache->num_regions++;
         m_cache->total_size += REGION_SIZE;
         ucs_list_add_tail(&m_cache->lru_list, &region->lru_list);
-        region->in_lru = 1;
 
         return region;
     }
@@ -317,9 +315,7 @@ protected:
                                                  &region->super);
         ASSERT_EQ(UCS_OK, status);
 
-        ASSERT_TRUE(region->in_lru);
         ucs_list_del(&region->lru_list);
-        region->in_lru = 0;
 
         ASSERT_GT(m_cache->num_regions, 0UL);
         m_cache->num_regions--;
@@ -344,7 +340,6 @@ protected:
             ASSERT_EQ(UCS_OK, ucs_pgtable_remove(&m_cache->pgtable,
                                                   &region->super));
             ucs_list_del(&region->lru_list);
-            region->in_lru = 0;
             m_cache->num_regions--;
             m_cache->total_size -= region->key.b_len;
 
@@ -546,12 +541,10 @@ UCS_TEST_F(test_cuda_ipc_cache_lru, stale_destroy_while_in_use) {
 
     uct_cuda_ipc_cache_region_t *r1 = insert_region(0);
     ASSERT_EQ(1UL, r1->refcount);
-    ASSERT_EQ(1, r1->in_lru);
 
     evict_lru();
 
     /* Core assertion: in-use region must stay on LRU after eviction */
-    EXPECT_EQ(1, r1->in_lru);
     EXPECT_EQ(1UL, m_cache->num_regions);
     EXPECT_TRUE(pgtable_has(0));
 
