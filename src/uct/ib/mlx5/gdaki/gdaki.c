@@ -152,6 +152,11 @@ static int uct_gdaki_check_umem_dmabuf(const uct_ib_md_t *md)
     dmabuf = uct_cuda_copy_md_get_dmabuf((void*)buff, 1,
                                          UCS_SYS_DEVICE_ID_UNKNOWN);
 
+    if (dmabuf.fd == UCT_DMABUF_FD_INVALID) {
+        status = UCS_ERR_NO_MEMORY;
+        goto out_free;
+    }
+
     umem_in.addr        = (void *)(uintptr_t)dmabuf.offset;
     umem_in.size        = 1;
     umem_in.access      = IBV_ACCESS_LOCAL_WRITE;
@@ -162,12 +167,13 @@ static int uct_gdaki_check_umem_dmabuf(const uct_ib_md_t *md)
     umem = mlx5dv_devx_umem_reg_ex(md->dev.ibv_context, &umem_in);
     if (umem == NULL) {
         status = UCS_ERR_NO_MEMORY;
-        goto out_free;
+        goto out_close;
     }
 
     mlx5dv_devx_umem_dereg(umem);
-out_free:
+out_close:
     ucs_close_fd(&dmabuf.fd);
+out_free:
     cuMemFree(buff);
 out_ctx_pop:
     UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
