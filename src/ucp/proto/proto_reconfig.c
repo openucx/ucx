@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2021-2026. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2021. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -15,7 +15,6 @@
 
 #include <ucp/am/ucp_am.inl>
 #include <ucp/core/ucp_worker.inl>
-#include <ucp/wireup/wireup_ep.h>
 #include <ucs/sys/math.h>
 
 
@@ -35,33 +34,6 @@ static ucs_status_t ucp_proto_reconfig_select_progress(uct_pending_req_t *self)
     return req->send.uct.func(&req->send.uct);
 }
 
-static int ucp_proto_reconfig_ep_has_wireup_lane(ucp_ep_h ep)
-{
-    ucp_lane_index_t lane;
-
-    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        if (ucp_wireup_ep_test(ucp_ep_get_lane(ep, lane))) {
-            return 1;
-        }
-    }
-    return 0;
-}
-
-static void ucp_proto_reconfig_log_unreachable(ucp_request_t *req)
-{
-    UCS_STRING_BUFFER_ONSTACK(strb, 256);
-    ucp_ep_h ep = req->send.ep;
-
-    ucp_ep_config_name(ep->worker, req->send.proto_config->ep_cfg_index, &strb);
-    ucs_string_buffer_appendf(&strb, " | ");
-    ucp_proto_select_info_str(ep->worker,
-                              req->send.proto_config->rkey_cfg_index,
-                              &req->send.proto_config->select_param,
-                              ucp_operation_names, &strb);
-    ucs_error("cannot find remote protocol for: %s",
-              ucs_string_buffer_cstr(&strb));
-}
-
 static void ucp_proto_reconfig_abort(ucp_request_t *req, ucs_status_t status)
 {
     if (ucp_proto_config_is_am(req->send.proto_config)) {
@@ -75,11 +47,20 @@ static ucs_status_t ucp_proto_reconfig_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_h ep        = req->send.ep;
+    UCS_STRING_BUFFER_ONSTACK(strb, 256);
     ucs_status_t status;
 
     /* This protocol should not be selected for valid and connected endpoint */
     if (ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED) {
-        ucp_proto_reconfig_log_unreachable(req);
+        ucp_ep_config_name(ep->worker, req->send.proto_config->ep_cfg_index,
+                           &strb);
+        ucs_string_buffer_appendf(&strb, " | ");
+        ucp_proto_select_info_str(ep->worker,
+                                  req->send.proto_config->rkey_cfg_index,
+                                  &req->send.proto_config->select_param,
+                                  ucp_operation_names, &strb);
+        ucs_error("cannot find remote protocol for: %s",
+                  ucs_string_buffer_cstr(&strb));
         ucp_proto_request_abort(req, UCS_ERR_CANCELED);
         return UCS_OK;
     }
@@ -98,14 +79,6 @@ static ucs_status_t ucp_proto_reconfig_progress(uct_pending_req_t *self)
                       " reconfigure protocol",
                       req->send.proto_config->ep_cfg_index, ep->cfg_index);
         return ucp_proto_reconfig_select_progress(self);
-    }
-
-    /* Without a wireup proxy lane, current wireup flow won't change
-     * ep->cfg_index again, so reconfig cannot resolve to a real proto. */
-    if (!ucp_proto_reconfig_ep_has_wireup_lane(ep)) {
-        ucp_proto_reconfig_log_unreachable(req);
-        ucp_proto_request_abort(req, UCS_ERR_CANCELED);
-        return UCS_OK;
     }
 
     /* TODO select wireup lane when needed */

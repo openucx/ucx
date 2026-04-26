@@ -13,6 +13,7 @@ extern "C" {
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_rkey.h>
 #include <ucs/sys/sys.h>
+#include <uct/api/v2/uct_v2.h>
 }
 
 
@@ -809,6 +810,11 @@ protected:
                       bool expect_immediate_completion = false) {
         ASSERT_FALSE(expect_immediate_completion && use_callback);
 
+        if (!sender().has_lane_with_caps(0,
+                    UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY)) {
+            UCS_TEST_SKIP_R("put_sgl_zcopy is not supported");
+        }
+
         sgl_ctx ctx;
         init_sgl_ctx(ctx, elem_sizes);
 
@@ -843,10 +849,6 @@ protected:
             param.user_data = &cb;
         }
 
-        /* TODO: Remove this once SGL put UCT implementation is merged. */
-        short_progress_loop();
-        scoped_log_handler slh_err(wrap_errors_logger);
-
         ucs_status_ptr_t sptr = ucp_put_nbx(sender().ep(), &local, num,
                                             UCP_REMOTE_ADDR_INVALID,
                                             UCP_RKEY_INVALID, &param);
@@ -856,6 +858,8 @@ protected:
             EXPECT_EQ(UCS_OK, UCS_PTR_STATUS(sptr));
             return;
         }
+
+        ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
 
         auto verify_sgl_put_buffers = [&]() {
             ucs_memory_type_t mtype = mem_type();
@@ -870,19 +874,6 @@ protected:
                 }
             }
         };
-
-        /* TODO: Remove this once SGL put UCT implementation is merged. */
-        if (UCS_PTR_IS_ERR(sptr)) {
-            UCS_TEST_SKIP_R("Remote SGL put protocol is not available");
-        }
-
-        if (!UCS_PTR_IS_PTR(sptr)) {
-            ASSERT_FALSE(use_callback);
-            ASSERT_EQ(UCS_OK, UCS_PTR_RAW_STATUS(sptr));
-            flush_ep(sender());
-            verify_sgl_put_buffers();
-            return;
-        }
 
         if (use_callback) {
             while (!cb.completed) {
