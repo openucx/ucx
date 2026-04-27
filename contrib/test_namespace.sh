@@ -46,7 +46,9 @@ test_namespace() {
 
 		cmd="UCX_TLS=$tls $perftest -p $server_port"
 		step_server_port
-		unshare --user bash -c "{ $cmd & sleep 3; $cmd localhost; }"
+		$cmd & 
+		sleep 3
+		$cmd localhost
 	done
 
 	test_namespace_pid posix host ucp_get
