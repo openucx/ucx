@@ -2173,6 +2173,13 @@ ucs_status_t ucp_ep_recovery_arm(ucp_ep_h ep)
     ucp_context_h context = worker->context;
     ucp_ep_recovery_arg_t *arg;
 
+    if (ucp_ep_config(ep)->key.dst_version < 22) {
+        ucs_diag("ep: %p: recovery support requires UCX 1.22 or later, "
+                 "remote peer version %d is not supported",
+                 ep, ucp_ep_config(ep)->key.dst_version);
+        return UCS_OK;
+    }
+
     /* Remove (and free) any previously-queued recovery oneshot for this EP. */
     ucs_callbackq_remove_oneshot(&worker->uct->progress_q, ep,
                                  ucp_ep_recovery_remove_filter, ep);
@@ -2284,8 +2291,7 @@ ucp_ep_failover_reconfig(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,
 
     /* Arm recovery; the first round fires after recovery_interval, which
      * also lets the async discard above finalize. */
-    (void)ucp_ep_recovery_arm(ucp_ep);
-    return UCS_OK;
+    return ucp_ep_recovery_arm(ucp_ep);
 }
 
 void ucp_ep_set_lanes_failed(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
@@ -4311,7 +4317,7 @@ ucs_status_t ucp_ep_do_uct_ep_am_keepalive(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
     UCS_STATIC_BITMAP_SET(&tl_bitmap, rsc_idx);
 
     status = ucp_wireup_msg_prepare(ucp_ep, UCP_WIREUP_MSG_EP_CHECK,
-                                    &tl_bitmap, NULL, &wireup_msg,
+                                    &tl_bitmap, NULL, 0, 0, &wireup_msg,
                                     &wireup_msg_iov[1].iov_base,
                                     &wireup_msg_iov[1].iov_len);
     if (status != UCS_OK) {

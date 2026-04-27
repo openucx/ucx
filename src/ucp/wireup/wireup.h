@@ -133,12 +133,16 @@ typedef struct ucp_wireup_msg {
     uint64_t               src_ep_id; /* Endpoint ID of source */
     uint64_t               dst_ep_id; /* Endpoint ID of destination, can be
                                          UCS_PTR_MAP_KEY_INVALID */
+    /* packed addresses or @ref ucp_wireup_msg_lanes_addrs_t follow */
+} UCS_S_PACKED ucp_wireup_msg_t;
 
-    /* TODO: move these to a separate header(s) due to compatibility reason. */
+
+typedef struct ucp_wireup_msg_lanes_info_t {
     ucp_lane_map_t         requested_lane_map; /* lanes the sender asked about */
     ucp_lane_map_t         provided_lane_map;  /* lanes actually carried here */
     /* packed addresses follow */
-} UCS_S_PACKED ucp_wireup_msg_t;
+} UCS_S_PACKED ucp_wireup_msg_lanes_info_t;
+
 typedef struct {
     double          score;
     unsigned        addr_index;
@@ -176,6 +180,8 @@ ucs_status_t
 ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
                        const ucp_tl_bitmap_t *tl_bitmap,
                        const ucp_lane_index_t *lanes2remote,
+                       ucp_lane_map_t requested_lane_map,
+                       ucp_lane_map_t provided_lane_map,
                        ucp_wireup_msg_t *msg_hdr, void **address_p,
                        size_t *address_length_p);
 
