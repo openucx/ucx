@@ -595,3 +595,10 @@ void ucp_proto_multi_query(const ucp_proto_query_params_t *params,
     ucp_proto_default_query(params, attr);
     ucp_proto_multi_query_config(params, attr);
 }
+
+void ucp_proto_multi_bcopy_query(const ucp_proto_query_params_t *params,
+                                 ucp_proto_query_attr_t *attr)
+{
+    ucp_proto_multi_query(params, attr);
+    ucp_proto_query_append_memtype_info(params, attr);
+}

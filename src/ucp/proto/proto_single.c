@@ -98,3 +98,10 @@ void ucp_proto_single_query(const ucp_proto_query_params_t *params,
     ucp_proto_common_lane_priv_str(params, &spriv->super, 1, 1, &config_strb);
     attr->lane_map = UCS_BIT(spriv->super.lane);
 }
+
+void ucp_proto_single_bcopy_query(const ucp_proto_query_params_t *params,
+                                  ucp_proto_query_attr_t *attr)
+{
+    ucp_proto_single_query(params, attr);
+    ucp_proto_query_append_memtype_info(params, attr);
+}

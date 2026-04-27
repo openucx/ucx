@@ -184,4 +184,8 @@ void ucp_proto_multi_query_config(const ucp_proto_query_params_t *params,
 void ucp_proto_multi_query(const ucp_proto_query_params_t *params,
                            ucp_proto_query_attr_t *attr);
 
+
+void ucp_proto_multi_bcopy_query(const ucp_proto_query_params_t *params,
+                                 ucp_proto_query_attr_t *attr);
+
 #endif

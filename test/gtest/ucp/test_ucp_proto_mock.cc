@@ -454,7 +454,8 @@ protected:
             ctx_t *ctx = (ctx_t *)arg;
 
             if (param->recv_attr & UCP_AM_RECV_ATTR_FLAG_DATA) {
-                memcpy(ctx->buf->ptr(), data, len);
+                mem_buffer::copy_to(ctx->buf->ptr(), data, len,
+                                    ctx->buf->mem_type());
                 ctx->received = true;
                 return UCS_OK;
             }
@@ -924,6 +925,26 @@ public:
         test_ucp_proto_mock::init();
     }
 };
+
+UCS_TEST_P(test_ucp_proto_mock_gpu, cuda_bcopy_memtype_desc,
+           "PROTOS=*egr/multi/bcopy*")
+{
+    if (!has_resource(sender(), "gdr_copy")) {
+        UCS_TEST_SKIP_R("gdr_copy transport is not available");
+    }
+
+    send_recv_am(128, UCS_MEMORY_TYPE_CUDA);
+
+    ucp_proto_select_key_t key = any_key();
+    key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
+    key.param.op_attr          = 0;
+    key.param.mem_type         = UCS_MEMORY_TYPE_CUDA;
+
+    check_ep_config(sender(),
+                    {{0, INF, "gdr_copy multi-frag copy-in",
+                      "rc_mlx5/mock/path0"}},
+                    key);
+}
 
 UCS_TEST_P(test_ucp_proto_mock_gpu, cuda_managed_ppln_host_frag,
            "RNDV_FRAG_MEM_TYPES=host", "IB_NUM_PATHS?=1", "MAX_RNDV_LANES=1")

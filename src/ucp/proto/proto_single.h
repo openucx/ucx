@@ -36,6 +36,10 @@ void ucp_proto_single_query(const ucp_proto_query_params_t *params,
                             ucp_proto_query_attr_t *attr);
 
 
+void ucp_proto_single_bcopy_query(const ucp_proto_query_params_t *params,
+                                  ucp_proto_query_attr_t *attr);
+
+
 typedef ucs_status_t (*ucp_proto_send_single_cb_t)(
         ucp_request_t *req, const ucp_proto_single_priv_t *spriv,
         uct_iov_t *iov);
