@@ -44,7 +44,8 @@ test_namespace() {
 	do
 		echo "==== Running perftest same non-default USER namespace test for $tls ===="
 
-		cmd="UCX_TLS=$tls $perftest -p $server_port"
+        export UCX_TLS=$tls 
+		cmd="$perftest -p $server_port"
 		step_server_port
 		$cmd & 
 		sleep 3
