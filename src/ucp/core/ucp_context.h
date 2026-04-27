@@ -154,6 +154,14 @@ typedef struct ucp_context_config {
     /** Maximal number of endpoints to check on every keepalive round
      * (0 - disabled, inf - check all endpoints on every round) */
     unsigned                               keepalive_num_eps;
+    /** Time period between recovery rounds for an endpoint with lanes in
+     *  UCP_LANE_TYPE_FAILED state. Each round sends a
+     *  WIREUP_MSG_LANES_ADDR_REQUEST over the operable AM lane asking the
+     *  peer for up-to-date addresses of the failed lanes. */
+    ucs_time_t                             recovery_interval;
+    /** Maximal number of recovery rounds before the endpoint is declared
+     *  fully failed. Must be non-zero. */
+    unsigned                               recovery_retries;
     /** Time period between dynamic transport switching rounds */
     ucs_time_t                             dynamic_tl_switch_interval;
     /** Number of usage tracker rounds performed for each progress operation */

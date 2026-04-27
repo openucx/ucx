@@ -78,8 +78,6 @@ typedef struct ucp_ep_discard_lanes_arg {
     ucp_ep_h               ucp_ep;
     /* Config to deactivate when discard completes */
     ucp_worker_cfg_index_t deactivate_cfg_index;
-    /* Config to activate when discard completes */
-    ucp_worker_cfg_index_t activate_cfg_index;
     /* Completion status of operations after discarding is * done */
     ucs_status_t           status;
 } ucp_ep_discard_lanes_arg_t;
@@ -143,7 +141,6 @@ static const uct_iface_ops_t ucp_failed_tl_iface_ops = {
 
 static ucp_ep_discard_lanes_arg_t ucp_failed_tl_ep_discard_arg = {
     .deactivate_cfg_index = UCP_WORKER_CFG_INDEX_NULL,
-    .activate_cfg_index   = UCP_WORKER_CFG_INDEX_NULL,
     .status               = UCS_ERR_CANCELED
 };
 
@@ -512,7 +509,8 @@ static int ucp_ep_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
         ucp_listener_accept_cb_remove_filter(elem, arg) ||
         ucp_ep_local_disconnect_progress_remove_filter(elem, arg) ||
         ucp_ep_set_failed_remove_filter(elem, arg) ||
-        ucp_ep_wireup_eps_progress_filter(elem, arg)) {
+        ucp_ep_wireup_eps_progress_filter(elem, arg) ||
+        ucp_ep_recovery_remove_filter(elem, arg)) {
         return 1;
     }
 
@@ -854,8 +852,7 @@ static ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep,
         return status;
     }
 
-    ucp_ep_set_cfg_index(ep, cfg_index);
-    ep->am_lane = key.am_lane;
+    ucp_ep_set_cfg_index(ep, cfg_index, 1);
     if (!ucp_ep_has_cm_lane(ep)) {
         ucp_ep_update_flags(ep, UCP_EP_FLAG_CONNECT_REQ_QUEUED, 0);
     }
@@ -1444,8 +1441,13 @@ static void
 ucp_ep_config_deactivate_worker_ifaces(ucp_worker_h worker,
                                        ucp_worker_cfg_index_t cfg_index)
 {
-    ucp_ep_config_t *ep_config = ucp_worker_ep_config(worker, cfg_index);
+    ucp_ep_config_t *ep_config;
 
+    if (cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
+        return;
+    }
+
+    ep_config = ucp_worker_ep_config(worker, cfg_index);
     ucs_trace("deactivate wifaces worker %p ep config %u ep count %u", worker,
               cfg_index, ep_config->ep_count);
     ucs_assertv(ep_config->ep_count > 0, "worker %p ep config %u", worker,
@@ -1463,15 +1465,14 @@ ucp_ep_config_reactivate_worker_ifaces(ucp_worker_h worker,
                                        ucp_worker_cfg_index_t old_cfg_index,
                                        ucp_worker_cfg_index_t new_cfg_index)
 {
+    ucs_trace("worker %p: reactivating interfaces deactivate cfg_index %u "
+              "activate cfg_index %u", worker, old_cfg_index, new_cfg_index);
+
     if (old_cfg_index == new_cfg_index) {
         return;
     }
 
-    if (old_cfg_index != UCP_WORKER_CFG_INDEX_NULL) {
-        ucp_ep_config_deactivate_worker_ifaces(worker, old_cfg_index);
-    }
-
-    ucs_assert(new_cfg_index != UCP_WORKER_CFG_INDEX_NULL);
+    ucp_ep_config_deactivate_worker_ifaces(worker, old_cfg_index);
     ucp_ep_config_activate_worker_ifaces(worker, new_cfg_index);
 }
 
@@ -1487,10 +1488,10 @@ static void ucp_ep_discard_lanes_callback(void *request, ucs_status_t status,
         return;
     }
 
+    ucs_trace("ep %p: discard lanes completed", arg->ucp_ep);
     ucp_ep_reqs_purge(arg->ucp_ep, arg->status);
-    ucp_ep_config_reactivate_worker_ifaces(arg->ucp_ep->worker,
-                                           arg->deactivate_cfg_index,
-                                           arg->activate_cfg_index);
+    ucp_ep_config_deactivate_worker_ifaces(arg->ucp_ep->worker,
+                                           arg->deactivate_cfg_index);
     ucp_ep_release_discard_arg(arg);
 }
 
@@ -1535,6 +1536,8 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
          * endpoint's requests, if we already started discard and purge process
          * this endpoint. Doing so could complete send requests before UCT lanes
          * using them are flushed and destroyed. */
+        ucp_ep_config_reactivate_worker_ifaces(ep->worker, old_cfg_index,
+                                               ep->cfg_index);
         return;
     }
 
@@ -1553,9 +1556,17 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
     discard_arg->ucp_ep               = ep;
     discard_arg->discard_counter      = 1;
     discard_arg->destroy_counter      = ucs_popcount(lanes);
-    discard_arg->deactivate_cfg_index = old_cfg_index;
-    discard_arg->activate_cfg_index   = ep->cfg_index;
     discard_arg->status               = discard_status;
+
+    /* Activate ifaces for the new configuration upfront before discard callback
+     * completion to avoid race condition which leads to negative EP reference
+     * counter when discard callbacks run out of order */
+    if (old_cfg_index != ep->cfg_index) {
+        ucp_ep_config_activate_worker_ifaces(ep->worker, ep->cfg_index);
+        discard_arg->deactivate_cfg_index = old_cfg_index;
+    } else {
+        discard_arg->deactivate_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
+    }
 
     ucs_debug("ep %p: discarding lanes", ep);
     ucp_ep_extract_failed_lanes(ep, lanes, &discard_arg->failed_ep, uct_eps);
@@ -1610,7 +1621,7 @@ ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
     ++ucp_ep->worker->counters.ep_failures;
 
     /* The EP can be closed from last completion callback */
-    ucp_ep_discard_lanes(ucp_ep, UCS_MASK(ucp_ep_num_lanes(ucp_ep)), status,
+    ucp_ep_discard_lanes(ucp_ep, ucp_ep_get_live_lanes(ucp_ep), status,
                          ucp_ep->cfg_index);
     ucp_stream_ep_cleanup(ucp_ep, status);
 
@@ -1666,6 +1677,7 @@ ucp_ep_reconfig_internal(ucp_ep_h ep, ucp_lane_map_t failed_lanes)
     int port_speed_changed       = 0;
     ucp_lane_index_t lane;
     ucp_worker_iface_t *wiface;
+    ucp_worker_cfg_index_t new_cfg_index;
     ucs_status_t status;
 
     for (lane = 0; lane < cfg_key.num_lanes; lane++) {
@@ -1709,17 +1721,547 @@ ucp_ep_reconfig_internal(ucp_ep_h ep, ucp_lane_map_t failed_lanes)
     }
 
     status = ucp_worker_get_ep_config(worker, &cfg_key, ep_init_flags,
-                                      &ep->cfg_index);
+                                      &new_cfg_index);
     if (status != UCS_OK) {
         return status;
     }
 
-    ep->am_lane = cfg_key.am_lane;
+    ucp_ep_set_cfg_index(ep, new_cfg_index, 0);
 out:
     return UCS_OK;
 }
 
+ucs_status_t ucp_ep_reconfig_clear_failed_lanes(ucp_ep_h ep,
+                                                ucp_lane_map_t lanes)
+{
+    ucp_worker_h worker             = ep->worker;
+    ucp_ep_config_key_t cfg_key     = ucp_ep_config(ep)->key;
+    const unsigned ep_init_flags    = (ep->flags & UCP_EP_FLAG_INTERNAL) ?
+                                      UCP_EP_INIT_FLAG_INTERNAL : 0;
+    const ucs_log_level_t log_level = UCS_LOG_LEVEL_DEBUG;
+    ucp_worker_cfg_index_t old_cfg_index;
+    ucp_worker_cfg_index_t new_cfg_index;
+    ucp_lane_index_t lane;
+    ucs_status_t status;
+    ucs_string_buffer_t strb;
+
+    ucs_debug("ep %p: recovery clearing FAILED states for lanes 0x%" PRIx64,
+              ep, lanes);
+
+    if (lanes == 0) {
+        return UCS_OK;
+    }
+
+    ucs_assertv(ucs_test_all_flags(ucp_ep_get_failed_lanes(ep), lanes),
+                "ep %p: lanes 0x%" PRIx64 " contains non-failed bits"
+                " (failed=0x%" PRIx64 ")",
+                ep, lanes, ucp_ep_get_failed_lanes(ep));
+    ucs_for_each_bit(lane, lanes) {
+        ucs_assert(lane < cfg_key.num_lanes);
+        cfg_key.lanes[lane].lane_types &= ~UCS_BIT(UCP_LANE_TYPE_FAILED);
+    }
+
+    /* Re-promote am_lane to the earliest available AM_BW lane, in case the
+     * currently selected one was a post-failover fallback.
+     * TODO: maybe we can reevaluate am_lane promotion logic better here. */
+    for (lane = 0; lane < cfg_key.num_lanes; ++lane) {
+        if ((cfg_key.lanes[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_AM_BW)) &&
+            !(cfg_key.lanes[lane].lane_types &
+              UCS_BIT(UCP_LANE_TYPE_FAILED))) {
+            cfg_key.am_lane = lane;
+            break;
+        }
+    }
+
+    if (ucp_ep_config_is_equal(&cfg_key, &ucp_ep_config(ep)->key)) {
+        return UCS_OK;
+    }
+
+    old_cfg_index = ep->cfg_index;
+    status        = ucp_worker_get_ep_config(worker, &cfg_key, ep_init_flags,
+                                             &new_cfg_index);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ucp_ep_set_cfg_index(ep, new_cfg_index, 1);
+    ucs_debug("ep %p: cleared FAILED states for lanes 0x%" PRIx64
+              " (cfg_index %u -> %u, am_lane=%d)",
+              ep, (uint64_t)lanes, old_cfg_index, ep->cfg_index, ep->am_lane);
+    if (ucs_log_is_enabled(log_level)) {
+        ucs_string_buffer_init(&strb);
+        ucp_proto_select_info(ep->worker, ep->cfg_index, UCP_WORKER_CFG_INDEX_NULL,
+                              &ucp_ep_config(ep)->proto_select, 1, &strb);
+        ucs_log(log_level, "%s", ucs_string_buffer_cstr(&strb));
+        ucs_string_buffer_cleanup(&strb);
+    }
+
+    return UCS_OK;
+}
+
+/* Install an empty wireup proxy on the lane, replacing any failed-stub UCT
+ * EP left by a preceding ucp_ep_failover_reconfig(). The inner UCT EP is
+ * attached separately by ucp_ep_recovery_set_next_ep(). */
 static ucs_status_t
+ucp_ep_recovery_install_wireup_ep(ucp_ep_h ep, ucp_lane_index_t lane)
+{
+    uct_ep_h old_uct_ep = ucp_ep_get_lane(ep, lane);
+    uct_ep_h wireup_ep_uct;
+    ucs_status_t status;
+
+    if ((old_uct_ep != NULL) && ucp_wireup_ep_test(old_uct_ep)) {
+        return UCS_OK;
+    }
+
+    ucs_assertv((old_uct_ep == NULL) || ucp_is_uct_ep_failed(old_uct_ep),
+                "ep %p lane %d: unexpected live uct_ep=%p - recovery path "
+                "must be preceded by ucp_ep_failover_reconfig()",
+                ep, lane, old_uct_ep);
+
+    status = ucp_wireup_ep_create(ep, &wireup_ep_uct);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ucs_trace("ep %p: recovery lane[%d] %p -> wireup_ep %p", ep, lane,
+              old_uct_ep, wireup_ep_uct);
+    ucp_ep_set_lane(ep, lane, wireup_ep_uct);
+
+    if (old_uct_ep != NULL) {
+        uct_ep_destroy(old_uct_ep);
+    }
+
+    return UCS_OK;
+}
+
+/* Idempotently ensure the lane's wireup proxy has an inner transport EP. */
+static ucs_status_t
+ucp_ep_recovery_set_next_ep(ucp_ep_h ep, ucp_lane_index_t lane,
+                            const ucp_address_entry_t *ae)
+{
+    const ucp_ep_config_key_t *cfg_key = &ucp_ep_config(ep)->key;
+    const ucp_rsc_index_t rsc_index    = cfg_key->lanes[lane].rsc_index;
+    const unsigned path_index          = cfg_key->lanes[lane].path_index;
+    uct_ep_h proxy                     = ucp_ep_get_lane(ep, lane);
+    ucp_wireup_ep_t *wireup_ep         = ucp_wireup_ep(proxy);
+    uct_ep_h next_ep;
+    ucs_status_t status;
+
+    ucs_assertv(wireup_ep != NULL, "ep %p lane %d: expected wireup proxy",
+                ep, lane);
+
+    if (wireup_ep->super.uct_ep != NULL) {
+        return UCS_OK;
+    }
+
+    if (ae == NULL) {
+        ucs_assert(ucp_ep_is_lane_p2p(ep, lane));
+        return ucp_wireup_ep_connect(proxy, 0, rsc_index, path_index, 0, NULL);
+    }
+
+    status = ucp_wireup_iface_ep_create(ucp_worker_iface(ep->worker, rsc_index),
+                                        ae, path_index, &next_ep);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ucp_wireup_ep_set_next_ep(proxy, next_ep, rsc_index);
+    return UCS_OK;
+}
+
+/* Mark the lane's wireup proxy as ready+remote-connected. Called once the
+ * inner EP reaches a connected state (iface: immediately after
+ * ucp_ep_recovery_set_next_ep() with a non-NULL address; p2p: after
+ * ucp_wireup_ep_connect_to_ep_v2() succeeds). */
+static void
+ucp_ep_recovery_mark_ready(ucp_ep_h ep, ucp_lane_index_t lane)
+{
+    ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(ucp_ep_get_lane(ep, lane));
+
+    ucs_assert(wireup_ep != NULL);
+    ucs_assert(wireup_ep->super.uct_ep != NULL);
+
+    wireup_ep->flags |= UCP_WIREUP_EP_FLAG_READY |
+                        UCP_WIREUP_EP_FLAG_REMOTE_CONNECTED;
+}
+
+/* Find a CONNECT_TO_IFACE address entry reachable from `lane`'s local rsc.
+ *
+ * TODO: this picks the first reachable entry, which can silently migrate
+ * the lane to a different peer device when multiple peer rscs match (e.g.
+ * two HCAs on the same subnet running dc_mlx5). Disambiguate via
+ * cfg_key->lanes[lane].dst_md_index / dst_sys_dev, or carry the peer
+ * rsc_index per lane in LANES_ADDR_REQUEST/REPLY. */
+static const ucp_address_entry_t *
+ucp_ep_recovery_find_iface_addr(ucp_ep_h ep, ucp_lane_index_t lane,
+                                const ucp_unpacked_address_t *remote_address)
+{
+    ucp_rsc_index_t rsc_index = ucp_ep_config(ep)->key.lanes[lane].rsc_index;
+    const ucp_address_entry_t *ae;
+
+    ucp_unpacked_address_for_each(ae, remote_address) {
+        if ((ae->iface_addr != NULL) &&
+            ucp_wireup_is_reachable(ep, 0, rsc_index, ae, NULL, 0)) {
+            return ae;
+        }
+    }
+
+    return NULL;
+}
+
+/* Rebuild one CONNECT_TO_IFACE lane: find peer iface addr -> install empty
+ * wireup proxy -> create fully-connected inner UCT EP and attach it -> mark
+ * ready. */
+static ucs_status_t
+ucp_ep_recovery_rebuild_iface_lane(
+        ucp_ep_h ep, ucp_lane_index_t lane,
+        const ucp_unpacked_address_t *remote_address)
+{
+    const ucp_address_entry_t *ae;
+    ucs_status_t status;
+
+    ae = ucp_ep_recovery_find_iface_addr(ep, lane, remote_address);
+    if (ae == NULL) {
+        ucs_debug("ep %p: no remote iface address for lane %d", ep, lane);
+        return UCS_ERR_UNREACHABLE;
+    }
+
+    status = ucp_ep_recovery_install_wireup_ep(ep, lane);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = ucp_ep_recovery_set_next_ep(ep, lane, ae);
+    if (status != UCS_OK) {
+        ucs_diag("ep %p: set_next_ep failed for recovery iface lane %d: %s",
+                 ep, lane, ucs_status_string(status));
+        return status;
+    }
+
+    ucp_ep_recovery_mark_ready(ep, lane);
+    ucs_debug("ep %p: recovered iface-lane[%d] via rsc[%d]", ep, lane,
+              ucp_ep_get_rsc_index(ep, lane));
+    return UCS_OK;
+}
+
+/* Rebuild one p2p (CONNECT_TO_EP) lane. Flow: find peer ep_addr ->
+ * install empty wireup proxy -> ensure iface-only inner UCT EP ->
+ * connect_to_ep_v2 against peer ep_addr -> mark ready. */
+static ucs_status_t
+ucp_ep_recovery_rebuild_p2p_lane(
+        ucp_ep_h ep, ucp_lane_index_t lane,
+        const ucp_unpacked_address_t *remote_address)
+{
+    const ucp_address_entry_t *address_entry;
+    const ucp_address_entry_ep_addr_t *ep_entry;
+    ucp_lane_index_t remote_lane;
+    ucs_status_t status;
+
+    /* Symmetric assumption: the peer's lane index mirrors ours.
+     * ucp_address_pack() with lanes2remote==NULL stamps the sender-side local
+     * lane as the remote_lane tag in the ep_addr, so we look up by our own
+     * lane index. */
+    remote_lane = lane;
+    status = ucp_wireup_find_remote_p2p_addr(ep, remote_lane, remote_address,
+                                             &address_entry, &ep_entry);
+    if (status != UCS_OK) {
+        ucs_debug("ep %p: no remote ep_addr for p2p lane %d", ep, lane);
+        return status;
+    }
+
+    status = ucp_ep_recovery_install_wireup_ep(ep, lane);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = ucp_ep_recovery_set_next_ep(ep, lane, NULL);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = ucp_wireup_ep_connect_to_ep_v2(ucp_ep_get_lane(ep, lane),
+                                            address_entry, ep_entry);
+    if (status != UCS_OK) {
+        ucs_diag("ep %p: connect_to_ep_v2 failed for recovery p2p lane %d: %s",
+                 ep, lane, ucs_status_string(status));
+        return status;
+    }
+
+    ucp_ep_recovery_mark_ready(ep, lane);
+    ucs_debug("ep %p: recovered p2p-lane[%d] via rsc[%d]", ep, lane,
+              ucp_ep_get_rsc_index(ep, lane));
+    return UCS_OK;
+}
+
+/* For each lane in `lanes_to_rebuild`, bring its UCT resources back online.
+ * Dispatches to the iface-connect or p2p helper based on lane type. Returns
+ * the bitmap of lanes successfully rebuilt; lanes not in the returned bitmap
+ * stay UCP_LANE_TYPE_FAILED and will be retried on a future recovery round. */
+ucp_lane_map_t
+ucp_ep_recovery_rebuild_lanes(ucp_ep_h ep, ucp_lane_map_t lanes_to_rebuild,
+                              const ucp_unpacked_address_t *remote_address)
+{
+    const ucp_ep_config_key_t *k = &ucp_ep_config(ep)->key;
+    ucp_lane_map_t rebuilt       = 0;
+    ucp_lane_index_t lane;
+    ucs_status_t status;
+
+    ucs_for_each_bit(lane, lanes_to_rebuild) {
+        if (lane >= k->num_lanes) {
+            continue;
+        }
+
+        if (ucp_ep_is_lane_p2p(ep, lane)) {
+            status = ucp_ep_recovery_rebuild_p2p_lane(ep, lane,
+                                                      remote_address);
+        } else {
+            status = ucp_ep_recovery_rebuild_iface_lane(ep, lane,
+                                                        remote_address);
+        }
+
+        if (status == UCS_OK) {
+            rebuilt |= UCS_BIT(lane);
+        }
+    }
+
+    return rebuilt;
+}
+
+/* Replace failed UCT stubs with wireup proxies for the given lane set and,
+ * for p2p lanes, create their iface-only inner transport EP so that the
+ * local ep_addr is available to ucp_address_pack() at REQUEST-send time.
+ * Returns the bitmap of lanes that ended up with the full proxy state
+ * required to appear in LANES_ADDR_REQUEST. Lanes that failed to reach
+ * that state are excluded so they don't get packed (which would try to
+ * read addresses from a half-built proxy). */
+static ucp_lane_map_t
+ucp_ep_recovery_prepare_lanes(ucp_ep_h ep, ucp_lane_map_t lanes)
+{
+    const ucp_ep_config_key_t *cfg_key = &ucp_ep_config(ep)->key;
+    ucp_lane_map_t lane_map            = 0;
+    ucp_lane_index_t lane;
+
+    ucs_for_each_bit(lane, lanes) {
+        if (lane >= cfg_key->num_lanes) {
+            continue;
+        }
+
+        if (ucp_ep_recovery_install_wireup_ep(ep, lane) != UCS_OK) {
+            continue;
+        }
+
+        /* For p2p lanes the ep_addr has to exist before we pack the
+         * REQUEST (ucp_address_pack iterates p2p_lanes and calls
+         * uct_ep_get_address on each). On failure the lane stays with an
+         * empty proxy and is skipped from this round; the next recovery
+         * round will retry. */
+        if (ucp_ep_is_lane_p2p(ep, lane) &&
+            (ucp_ep_recovery_set_next_ep(ep, lane, NULL) != UCS_OK)) {
+            continue;
+        }
+
+        lane_map |= UCS_BIT(lane);
+    }
+
+    return lane_map;
+}
+
+/* Send one LANES_ADDR_REQUEST for the current set of failed lanes. Idempotent
+ * across retries: proxies already in place are left alone, only missing ones
+ * are installed. */
+static void ucp_ep_recovery_send_request(ucp_ep_h ep)
+{
+    ucp_lane_map_t failed_lanes = ucp_ep_get_failed_lanes(ep);
+    ucp_lane_map_t recovery_lanes;
+
+    ucs_assert(ucp_ep_config(ep)->key.am_lane != UCP_NULL_LANE);
+
+    recovery_lanes = ucp_ep_recovery_prepare_lanes(ep, failed_lanes);
+    if (recovery_lanes == 0) {
+        ucs_diag("ep %p: no lanes to recover", ep);
+        return;
+    }
+
+    ucs_debug("ep %p: sending recovery request, failed=0x%" PRIx64
+              " recovery=0x%" PRIx64, ep, failed_lanes, recovery_lanes);
+
+    ucp_wireup_send_lanes_addr_msg(ep, UCP_WIREUP_MSG_LANES_ADDR_REQUEST,
+                                   failed_lanes, recovery_lanes);
+}
+
+/* A lane whose UCT EP is either a READY wireup proxy (about to be swapped
+ * by ucp_wireup_eps_progress) or a real transport EP (already swapped) is
+ * effectively recovered - its FAILED bit can be cleared. A failed stub or
+ * a wireup proxy without READY still needs work. */
+static int ucp_ep_recovery_lane_is_ready(ucp_ep_h ep, ucp_lane_index_t lane)
+{
+    uct_ep_h uct_ep = ucp_ep_get_lane(ep, lane);
+    ucp_wireup_ep_t *wireup_ep;
+
+    if (uct_ep == NULL) {
+        return 0;
+    }
+
+    if (ucp_is_uct_ep_failed(uct_ep)) {
+        return 0;
+    }
+
+    wireup_ep = ucp_wireup_ep(uct_ep);
+    if (wireup_ep == NULL) {
+        /* ucp_wireup_eps_progress already replaced the proxy with the real
+         * transport EP - lane is fully operational. */
+        return 1;
+    }
+
+    return !!(wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY);
+}
+
+static ucp_lane_map_t
+ucp_ep_recovery_get_ready_lanes(ucp_ep_h ep, ucp_lane_map_t failed_lanes)
+{
+    ucp_lane_map_t ready_lanes = 0;
+    ucp_lane_index_t lane;
+
+    ucs_for_each_bit(lane, failed_lanes) {
+        if (ucp_ep_recovery_lane_is_ready(ep, lane)) {
+            ready_lanes |= UCS_BIT(lane);
+        }
+    }
+
+    return ready_lanes;
+}
+
+/* Heap-resident retry state for failed-lane recovery. Lifetime is owned by
+ * the callbackq (oneshot + cascade filter); no recovery state lives on the
+ * endpoint itself. */
+typedef struct ucp_ep_recovery_arg {
+    ucp_ep_h       ucp_ep;        /* Back-pointer used for callbackq key and
+                                     filter matching. */
+    ucs_time_t     next_time;     /* Earliest time at which the next round
+                                     may send LANES_ADDR_REQUEST. */
+    unsigned       retries_left;  /* Rounds remaining before the endpoint is
+                                     declared fully failed. */
+} ucp_ep_recovery_arg_t;
+
+/* Enqueue a recovery oneshot for @a arg. Caller keeps ownership of @a arg
+ * until the oneshot runs (it may free itself) or is purged via the filter. */
+static void ucp_ep_recovery_arg_enqueue(ucp_ep_recovery_arg_t *arg)
+{
+    ucp_worker_h worker = arg->ucp_ep->worker;
+
+    ucs_callbackq_add_oneshot(&worker->uct->progress_q, arg->ucp_ep,
+                              ucp_ep_recovery_progress, arg);
+    ucp_worker_signal_internal(worker);
+}
+
+int ucp_ep_recovery_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
+{
+    ucp_ep_recovery_arg_t *recovery_arg = elem->arg;
+
+    if ((elem->cb == ucp_ep_recovery_progress) &&
+        (recovery_arg->ucp_ep == arg)) {
+        ucs_free(recovery_arg);
+        return 1;
+    }
+
+    return 0;
+}
+
+ucs_status_t ucp_ep_recovery_arm(ucp_ep_h ep)
+{
+    ucp_worker_h worker   = ep->worker;
+    ucp_context_h context = worker->context;
+    ucp_ep_recovery_arg_t *arg;
+
+    /* Remove (and free) any previously-queued recovery oneshot for this EP. */
+    ucs_callbackq_remove_oneshot(&worker->uct->progress_q, ep,
+                                 ucp_ep_recovery_remove_filter, ep);
+
+    arg = ucs_malloc(sizeof(*arg), "ucp_ep_recovery_arg");
+    if (arg == NULL) {
+        ucs_error("ep %p: failed to allocate recovery argument", ep);
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    arg->ucp_ep       = ep;
+    arg->next_time    = ucs_get_time() + context->config.ext.recovery_interval;
+    arg->retries_left = context->config.ext.recovery_retries;
+
+    ucp_ep_recovery_arg_enqueue(arg);
+    return UCS_OK;
+}
+
+unsigned ucp_ep_recovery_progress(void *arg)
+{
+    ucp_ep_recovery_arg_t *recovery_arg = arg;
+    ucp_ep_h ep                         = recovery_arg->ucp_ep;
+    ucp_worker_h worker                 = ep->worker;
+    ucp_context_h context               = worker->context;
+    ucp_lane_map_t failed, recovered;
+    ucs_time_t now;
+    ucs_status_t status;
+
+    UCS_ASYNC_BLOCK(&worker->async);
+
+    if (ep->flags & UCP_EP_FLAG_FAILED) {
+        /* Endpoint was declared fully failed elsewhere; nothing more to do. */
+        goto done;
+    }
+
+    failed = ucp_ep_get_failed_lanes(ep);
+    if (failed == 0) {
+        /* Recovery completed between rounds. */
+        goto done;
+    }
+
+    recovered = ucp_ep_recovery_get_ready_lanes(ep, failed);
+    status    = ucp_ep_reconfig_clear_failed_lanes(ep, recovered);
+    if (status != UCS_OK) {
+        ucs_error("ep %p: failed to clear FAILED states for lanes 0x%" PRIx64,
+                  ep, recovered);
+        ucp_ep_set_lanes_failed_schedule(ep, 0, status);
+        goto done;
+    }
+
+    failed &= ~recovered;
+    if (failed == 0) {
+        goto done;
+    }
+
+    now = ucs_get_time();
+    if (now < recovery_arg->next_time) {
+        ucp_ep_recovery_arg_enqueue(recovery_arg);
+        goto out;
+    }
+
+    if (recovery_arg->retries_left == 0) {
+        ucs_error("ep %p: recovery retries exhausted", ep);
+        ucp_ep_set_lanes_failed_schedule(ep, 0, UCS_ERR_ENDPOINT_TIMEOUT);
+        goto done;
+    }
+
+    ucs_debug("ep %p: recovery round (retries_left=%u, failed=0x%" PRIx64 ")",
+              ep, recovery_arg->retries_left, (uint64_t)failed);
+
+    ucp_ep_recovery_send_request(ep);
+
+    --recovery_arg->retries_left;
+    recovery_arg->next_time = now + context->config.ext.recovery_interval;
+
+    /* Keep recovery armed across ticks - the arg will only be freed when a
+     * round actually succeeds (failed == 0 after clear), retries are
+     * exhausted, or the endpoint is torn down / fully failed. */
+    ucp_ep_recovery_arg_enqueue(recovery_arg);
+    goto out;
+
+done:
+    ucs_free(recovery_arg);
+out:
+    UCS_ASYNC_UNBLOCK(&worker->async);
+    return 1;
+}
+
+ucs_status_t
 ucp_ep_failover_reconfig(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,
                          ucs_status_t discard_status)
 {
@@ -1731,10 +2273,17 @@ ucp_ep_failover_reconfig(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,
 
     status = ucp_ep_reconfig_internal(ucp_ep, failed_lanes);
     if (status != UCS_OK) {
+        ucs_assertv(ucp_ep->cfg_index == old_cfg_index,
+                    "ep %p: cfg_index %u -> %u after reconfiguration error %s", ucp_ep, old_cfg_index,
+                    ucp_ep->cfg_index, ucs_status_string(status));
         return status;
     }
 
     ucp_ep_discard_lanes(ucp_ep, failed_lanes, discard_status, old_cfg_index);
+
+    /* Arm recovery; the first round fires after recovery_interval, which
+     * also lets the async discard above finalize. */
+    (void)ucp_ep_recovery_arm(ucp_ep);
     return UCS_OK;
 }
 
@@ -4151,10 +4700,17 @@ static void ucp_ep_config_proto_init(ucp_worker_h worker,
                              &ep_config->am_u.max_reply_eager_short);
 }
 
-void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index)
+void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index,
+                          int reactivate)
 {
-    ucp_ep_config_reactivate_worker_ifaces(ep->worker, ep->cfg_index, cfg_index);
+    if (reactivate) {
+        ucp_ep_config_reactivate_worker_ifaces(ep->worker, ep->cfg_index,
+                                               cfg_index);
+    }
+
+    ucs_trace("ep %p: set cfg_index %u -> %u", ep, ep->cfg_index, cfg_index);
     ep->cfg_index = cfg_index;
+    ep->am_lane   = ucp_ep_config(ep)->key.am_lane;
     ucp_ep_config_proto_init(ep->worker, cfg_index);
 }
 
