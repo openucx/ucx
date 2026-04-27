@@ -338,6 +338,7 @@ stages:
         name: gpu
         demands: ucx_gpu -equals yes
         test_perf: 1
+        container: ubuntu2404_doca31_gpunetio
     - template: tests.yml
       parameters:
         name: new
