@@ -1246,7 +1246,7 @@ static int uct_gdaki_dev_matrix_score(const void *pa, const void *pb, void *arg)
 uct_gdaki_dev_matrix_elem_t *
 uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
 {
-    unsigned ib_per_cuda              = ib_md->config.gda_max_hca_per_gpu;
+    unsigned long ib_per_cuda         = ib_md->config.gda_max_hca_per_gpu;
     uct_gdaki_dev_matrix_elem_t *dmat = NULL;
     ucs_status_t status;
     int ibdev_index, cudadev_index, ibdev_count, cudadev_count;
@@ -1324,6 +1324,10 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
     }
 
     ucs_assert(cudadev_count < UCT_GDAKI_MAX_CUDA_PER_IB);
+
+    if (ib_per_cuda == UCS_ULUNITS_AUTO) {
+        ib_per_cuda = ibdev_count / cudadev_count;
+    }
 
     /* Map each CUDA device to the best suited IB devices */
     for (cudadev_index = 0; cudadev_index < cudadev_count; cudadev_index++) {
