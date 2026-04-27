@@ -103,7 +103,7 @@ static void uct_rc_gdaki_calc_dev_ep_layout(size_t num_channels,
 
 static int uct_gdaki_check_umem_dmabuf(const uct_ib_md_t *md)
 {
-    ucs_status_t ret = 0;
+    int ret = 0;
 #if HAVE_DECL_MLX5DV_UMEM_MASK_DMABUF
     struct mlx5dv_devx_umem_in umem_in = {};
     struct mlx5dv_devx_umem *umem;
