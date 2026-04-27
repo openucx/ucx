@@ -30,7 +30,7 @@ public:
                                op_name(TEST_OP_GET | TEST_OP_FLUSH));
         add_variant_with_value(variants, UCP_FEATURE_AM,  TEST_OP_AM,
                                op_name(TEST_OP_AM));
-        add_variant_with_value(variants, UCP_FEATURE_AM | UCP_FEATURE_RMA,  TEST_OP_AM | TEST_OP_FLUSH,
+        add_variant_with_value(variants, UCP_FEATURE_AM,  TEST_OP_AM | TEST_OP_FLUSH,
                                op_name(TEST_OP_AM | TEST_OP_FLUSH));
     }
 
@@ -185,8 +185,18 @@ protected:
         EXPECT_EQ(UCS_OK, status) << op_str << " operation returned status: "
                                   << ucs_status_string(status);
 
+        size_t num_lanes_to_fail = am_bw_lanes.size();
+        if (has_any_transport({"ud_v", "ud_x"}) &&
+            (failure_side == FAILURE_SIDE_INITIATOR)) {
+            /* TODO: remove this once UD ep purge assertions are fixed */
+            UCS_TEST_MESSAGE << "Keep 1 live lane for UD transports since "
+                             << "local error injection on all lanes leads to "
+                                "failed assertion in ud_ep_purge";
+            num_lanes_to_fail--;
+        }
+
         ucp_ep_h ucp_ep_for_injection = get_ucp_ep_for_err_injection(failure_side);
-        for (size_t lane_idx = 0; lane_idx < am_bw_lanes.size() - 1; ++lane_idx) {
+        for (size_t lane_idx = 0; lane_idx < num_lanes_to_fail; ++lane_idx) {
             ucp_lane_index_t lane = am_bw_lanes[lane_idx];
             uct_ep_h uct_ep_for_injection = ucp_ep_get_lane(ucp_ep_for_injection, lane);
             status = uct_ep_invalidate(uct_ep_for_injection, 0);
@@ -200,14 +210,31 @@ protected:
             UCS_TEST_MESSAGE << "Attempting " << op_str
                              << " operation after failure injection on lane "
                              << size_t(lane) << '/' << am_bw_lanes.size() << "...";
+
+            std::unique_ptr<scoped_log_handler> slh;
+            if (lane_idx == (am_bw_lanes.size() - 1)) {
+                slh.reset(new scoped_log_handler(hide_errors_logger));
+            }
+
             status = do_am_send_and_wait(sender().ep(0, INJECTED_EP_INDEX), am_msg_size(),
                                          op_mask & TEST_OP_FLUSH);
-            EXPECT_EQ(UCS_OK, status) << op_str << " operation returned status: "
-                                      << ucs_status_string(status);
+            if (lane_idx < (am_bw_lanes.size() - 1)) {
+                EXPECT_EQ(UCS_OK, status) << op_str << " operation returned status: "
+                                        << ucs_status_string(status);
+                ASSERT_EQ(0, m_err_count) << "Error callback invoked " << m_err_count << " times";
+            } else {
+                // The last lane is expected to fail
+                short_progress_loop();
+                if ((failure_side == FAILURE_SIDE_TARGET) &&
+                    has_transport("dc_x")) {
+                    // DC transport is not able to detect failure of remote DCI since DC is a connect2iface transport.
+                    // This is a test limitation.
+                } else {
+                    ASSERT_EQ(1, m_err_count) << "Error callback invoked " << m_err_count << " times";
+                }
+            }
         }
 
-        short_progress_loop();
-        ASSERT_EQ(0, m_err_count) << "Error callback invoked " << m_err_count << " times";
         UCS_TEST_MESSAGE << "Success";
     }
 
@@ -337,6 +364,7 @@ private:
         if (flush_after) {
             ucs_status_t status = request_wait(ucp_ep_flush_nbx(ep, &param));
             if (status != UCS_OK) {
+                request_wait(sptr);
                 return status;
             }
         }
@@ -355,9 +383,10 @@ private:
                                  ucp_rkey_h rkey, size_t size, bool flush) {
         ucp_request_param_t param;
         param.op_attr_mask = 0;
-
         rbuf.memset(0);
-        ucs_status_ptr_t put_status_ptr   = ucp_put_nbx(ep, lbuf.ptr(), size, uintptr_t(rbuf.ptr()), rkey, &param);
+
+        ucs_status_ptr_t put_status_ptr   = ucp_put_nbx(ep, lbuf.ptr(), size, uintptr_t(rbuf.ptr()),
+                                                        rkey, &param);
         ucs_status_ptr_t flush_status_ptr = flush ? ucp_ep_flush_nbx(ep, &param) : NULL;
         ucs_status_t status               = request_wait(put_status_ptr);
         if (status == UCS_OK) {
