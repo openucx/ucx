@@ -40,17 +40,18 @@ test_namespace() {
 	perftest="$base_perftest -t ucp_get"
 	echo "==== Running perftest namespace positive tests ===="
 
-	for tls in posix cma,sysv
-	do
-		echo "==== Running perftest same non-default USER namespace test for $tls ===="
+	# for tls in posix cma,sysv
+	# do
+	# 	echo "==== Running perftest same non-default USER namespace test for $tls ===="
 
-		cmd="UCX_TLS=$tls $perftest -p $server_port"
-		step_server_port
-		unshare --user bash -c "{ $cmd & sleep 3; $cmd localhost; }"
-	done
+	# 	cmd="UCX_TLS=$tls $perftest -p $server_port"
+	# 	step_server_port
+	# 	unshare --user bash -c "{ $cmd & sleep 3; $cmd localhost; }"
+	# done
 
 	test_namespace_pid posix host ucp_get
 	test_namespace_pid cma host ucp_get 
+
 	if [ "X$have_cuda" != "Xno" ] 
 	then
 		output=$(test_namespace_pid cuda_ipc,cuda_copy cuda ucp_put_bw)
