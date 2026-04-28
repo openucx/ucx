@@ -659,6 +659,7 @@ static unsigned ucp_worker_flush_progress(void *arg)
     ucp_request_t *req        = arg;
     ucp_worker_h worker       = req->flush_worker.worker;
     ucp_ep_ext_t *next_ep_ext = req->flush_worker.next_ep_ext;
+    unsigned ret              = 0;
     void *ep_flush_request;
     ucs_status_t status;
     ucp_ep_h ep;
@@ -671,12 +672,14 @@ static unsigned ucp_worker_flush_progress(void *arg)
              * endpoints, no need to progress this request actively anymore
              * and we complete the flush operation with UCS_OK status. */
             ucp_worker_flush_complete_one(req, UCS_OK, 1);
+            ++ret;
             goto out;
         } else if (status != UCS_INPROGRESS) {
             /* Error returned from uct iface flush, no need to progress
              * this request actively anymore and we complete the flush
              * operation with an error status. */
             ucp_worker_flush_complete_one(req, status, 1);
+            ++ret;
             goto out;
         }
     }
@@ -697,18 +700,21 @@ static unsigned ucp_worker_flush_progress(void *arg)
                                                  "flush_worker",
                                                  req->flush_worker.uct_flags);
         if (UCS_PTR_IS_ERR(ep_flush_request)) {
-            /* endpoint flush resulted in an error */
             status = UCS_PTR_STATUS(ep_flush_request);
             ucs_diag("ucp_ep_flush_internal() failed: %s",
                      ucs_status_string(status));
+            ucp_worker_flush_complete_one(req, status, 1);
+            ++ret;
+            goto out;
         } else if (ep_flush_request != NULL) {
             /* endpoint flush started, increment refcount */
             ++req->flush_worker.comp_count;
+            ++ret;
         }
     }
 
 out:
-    return 0;
+    return ret;
 }
 
 static ucs_status_ptr_t
