@@ -115,7 +115,7 @@ static const char *ucp_rndv_modes[] = {
     [UCP_RNDV_MODE_LAST]         = NULL,
 };
 
-static size_t ucp_rndv_frag_default_sizes[] = {
+static size_t ucp_frag_default_sizes[] = {
     [UCS_MEMORY_TYPE_HOST]         = 512 * UCS_KBYTE,
     [UCS_MEMORY_TYPE_CUDA]         = 4 * UCS_MBYTE,
     [UCS_MEMORY_TYPE_CUDA_MANAGED] = 4 * UCS_MBYTE,
@@ -128,7 +128,7 @@ static size_t ucp_rndv_frag_default_sizes[] = {
     [UCS_MEMORY_TYPE_LAST]         = 0
 };
 
-static size_t ucp_rndv_frag_default_num_elems[] = {
+static size_t ucp_frag_default_num_elems[] = {
     [UCS_MEMORY_TYPE_HOST]         = 128,
     [UCS_MEMORY_TYPE_CUDA]         = 128,
     [UCS_MEMORY_TYPE_CUDA_MANAGED] = 128,
@@ -140,6 +140,7 @@ static size_t ucp_rndv_frag_default_num_elems[] = {
     [UCS_MEMORY_TYPE_ZE_MANAGED]   = 128,
     [UCS_MEMORY_TYPE_LAST]         = 0
 };
+
 
 const char *ucp_object_versions[] = {
     [UCP_OBJECT_VERSION_V1]   = "v1",
@@ -367,6 +368,12 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "Memory types of fragments used for RNDV pipeline protocol.\n"
    "Allowed memory types are: host, cuda, rocm, ze-host, ze-device",
    ucs_offsetof(ucp_context_config_t, rndv_frag_mem_types),
+   UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
+
+  {"PPLN_FRAG_MEM_TYPES", "host,cuda",
+   "Memory types of fragments used for RMA pipelining protocol.\n"
+   "Allowed memory types are: host, cuda, rocm, ze-host, ze-device",
+   ucs_offsetof(ucp_context_config_t, ppln_frag_mem_types),
    UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
 
   {"MEMTYPE_COPY_ENABLE", "y",
@@ -665,6 +672,16 @@ static ucs_config_field_t ucp_config_table[] = {
   {"RNDV_FRAG_ALLOC_COUNT", "host:128,cuda:128",
    "Comma separated list of memory pool allocation granularity per memory type.",
    ucs_offsetof(ucp_config_t, rndv_frag_elems), UCS_CONFIG_TYPE_STRING_ARRAY},
+
+  {"PPLN_FRAG_SIZE", "host:512K,cuda:4M",
+   "Comma-separated list of memory types and associated fragment sizes\n"
+   "for RMA pipelining bounce buffers.",
+   ucs_offsetof(ucp_config_t, ppln_frag_sizes), UCS_CONFIG_TYPE_STRING_ARRAY},
+
+  {"PPLN_FRAG_ALLOC_COUNT", "host:128,cuda:128",
+   "Comma separated list of memory pool allocation granularity per memory type\n"
+   "for RMA pipelining bounce buffers.",
+   ucs_offsetof(ucp_config_t, ppln_frag_elems), UCS_CONFIG_TYPE_STRING_ARRAY},
 
   {"SOCKADDR_TLS_PRIORITY", "rdmacm,tcp,sockcm",
    "Priority of sockaddr transports for client/server connection establishment.\n"
@@ -2152,7 +2169,7 @@ static void ucp_apply_params(ucp_context_h context, const ucp_params_t *params,
 }
 
 static ucs_status_t
-ucp_fill_rndv_frag_config(const ucp_context_config_names_t *config,
+ucp_fill_frag_config(const ucp_context_config_names_t *config,
                           const size_t *default_sizes, size_t *sizes)
 {
     const char *mem_type_name, *size_str;
@@ -2347,16 +2364,30 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
         }
     }
 
-    status = ucp_fill_rndv_frag_config(&config->rndv_frag_sizes,
-                                       ucp_rndv_frag_default_sizes,
+    status = ucp_fill_frag_config(&config->rndv_frag_sizes,
+                                       ucp_frag_default_sizes,
                                        context->config.ext.rndv_frag_size);
     if (status != UCS_OK) {
         goto err_free_alloc_methods;
     }
 
-    status = ucp_fill_rndv_frag_config(&config->rndv_frag_elems,
-                                       ucp_rndv_frag_default_num_elems,
+    status = ucp_fill_frag_config(&config->rndv_frag_elems,
+                                       ucp_frag_default_num_elems,
                                        context->config.ext.rndv_num_frags);
+    if (status != UCS_OK) {
+        goto err_free_alloc_methods;
+    }
+
+    status = ucp_fill_frag_config(&config->ppln_frag_sizes,
+                                       ucp_frag_default_sizes,
+                                       context->config.ext.ppln_frag_size);
+    if (status != UCS_OK) {
+        goto err_free_alloc_methods;
+    }
+
+    status = ucp_fill_frag_config(&config->ppln_frag_elems,
+                                       ucp_frag_default_num_elems,
+                                       context->config.ext.ppln_num_frags);
     if (status != UCS_OK) {
         goto err_free_alloc_methods;
     }

@@ -344,6 +344,7 @@ typedef struct ucp_worker {
     ucs_mpool_set_t                  am_mps;              /* Memory pool set for AM receives */
     ucs_mpool_t                      reg_mp;              /* Registered memory pool */
     ucp_worker_mpool_hash_t          mpool_hash;          /* Hash table of memory pools */
+    ucp_worker_mpool_hash_t          ppln_mpool_hash;     /* Hash table of ppln frag pools */
     ucs_queue_head_t                 rkey_ptr_reqs;       /* Queue of submitted RKEY PTR requests that
                                                            * are in-progress */
     uct_worker_cb_id_t               rkey_ptr_cb_id;      /* RKEY PTR worker callback queue ID */

@@ -1429,13 +1429,14 @@ void ucp_mpool_obj_init(ucs_mpool_t *mp, void *obj, void *chunk)
 }
 
 static ucs_status_t
-ucp_rndv_frag_malloc_mpools(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
+ucp_frag_malloc_common(ucs_mpool_t *mp, size_t *size_p, void **chunk_p,
+                       const size_t *frag_sizes)
 {
     ucp_rndv_mpool_priv_t *mpriv = ucs_mpool_priv(mp);
     ucp_context_h context        = mpriv->worker->context;
     ucs_memory_type_t mem_type   = mpriv->mem_type;
     ucs_sys_device_t sys_dev     = mpriv->sys_dev;
-    size_t frag_size             = context->config.ext.rndv_frag_size[mem_type];
+    size_t frag_size             = frag_sizes[mem_type];
     ucp_rndv_frag_mp_chunk_hdr_t *chunk_hdr;
     ucs_status_t status;
     unsigned num_elems;
@@ -1464,7 +1465,7 @@ ucp_rndv_frag_malloc_mpools(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
 }
 
 static void
-ucp_rndv_frag_free_mpools(ucs_mpool_t *mp, void *chunk)
+ucp_frag_free_common(ucs_mpool_t *mp, void *chunk)
 {
     ucp_rndv_mpool_priv_t *mpriv = ucs_mpool_priv(mp);
     ucp_rndv_frag_mp_chunk_hdr_t *chunk_hdr;
@@ -1474,20 +1475,36 @@ ucp_rndv_frag_free_mpools(ucs_mpool_t *mp, void *chunk)
     ucs_free(chunk_hdr);
 }
 
-void ucp_frag_mpool_obj_init(ucs_mpool_t *mp, void *obj, void *chunk)
+static void
+ucp_frag_obj_init_common(ucs_mpool_t *mp, void *obj, void *chunk,
+                         const size_t *frag_sizes)
 {
     ucp_rndv_frag_mp_chunk_hdr_t *chunk_hdr = (ucp_rndv_frag_mp_chunk_hdr_t*)chunk - 1;
     void *next_frag_ptr                     = chunk_hdr->next_frag_ptr;
     ucp_rndv_mpool_priv_t *mpriv            = ucs_mpool_priv(mp);
     ucs_memory_type_t mem_type              = mpriv->mem_type;
-    ucp_context_h context                   = mpriv->worker->context;
     ucp_mem_desc_t *elem_hdr                = obj;
-    size_t frag_size;
+    size_t frag_size                        = frag_sizes[mem_type];
 
-    frag_size                = context->config.ext.rndv_frag_size[mem_type];
     elem_hdr->memh           = chunk_hdr->memh;
     elem_hdr->ptr            = next_frag_ptr;
     chunk_hdr->next_frag_ptr = UCS_PTR_BYTE_OFFSET(next_frag_ptr, frag_size);
+}
+
+void ucp_frag_mpool_obj_init(ucs_mpool_t *mp, void *obj, void *chunk)
+{
+    ucp_rndv_mpool_priv_t *mpriv = ucs_mpool_priv(mp);
+    ucp_context_h context        = mpriv->worker->context;
+
+    ucp_frag_obj_init_common(mp, obj, chunk, context->config.ext.rndv_frag_size);
+}
+
+void ucp_ppln_frag_mpool_obj_init(ucs_mpool_t *mp, void *obj, void *chunk)
+{
+    ucp_rndv_mpool_priv_t *mpriv = ucs_mpool_priv(mp);
+    ucp_context_h context        = mpriv->worker->context;
+
+    ucp_frag_obj_init_common(mp, obj, chunk, context->config.ext.ppln_frag_size);
 }
 
 ucs_status_t ucp_reg_mpool_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
@@ -1506,12 +1523,31 @@ void ucp_reg_mpool_free(ucs_mpool_t *mp, void *chunk)
 
 ucs_status_t ucp_frag_mpool_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
 {
-    return ucp_rndv_frag_malloc_mpools(mp, size_p, chunk_p);
+    ucp_rndv_mpool_priv_t *mpriv = ucs_mpool_priv(mp);
+    ucp_context_h context        = mpriv->worker->context;
+
+    return ucp_frag_malloc_common(mp, size_p, chunk_p,
+                                  context->config.ext.rndv_frag_size);
 }
 
 void ucp_frag_mpool_free(ucs_mpool_t *mp, void *chunk)
 {
-    ucp_rndv_frag_free_mpools(mp, chunk);
+    ucp_frag_free_common(mp, chunk);
+}
+
+ucs_status_t ucp_ppln_frag_mpool_malloc(ucs_mpool_t *mp, size_t *size_p,
+                                        void **chunk_p)
+{
+    ucp_rndv_mpool_priv_t *mpriv = ucs_mpool_priv(mp);
+    ucp_context_h context        = mpriv->worker->context;
+
+    return ucp_frag_malloc_common(mp, size_p, chunk_p,
+                                  context->config.ext.ppln_frag_size);
+}
+
+void ucp_ppln_frag_mpool_free(ucs_mpool_t *mp, void *chunk)
+{
+    ucp_frag_free_common(mp, chunk);
 }
 
 void ucp_mem_print_info(const char *mem_spec, ucp_context_h context,

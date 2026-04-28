@@ -21,6 +21,72 @@
 
 
 /*
+ * ppln fragment pool — lazy-alloc per (mem_type, sys_dev), separate from rndv
+ */
+
+static ucs_mpool_ops_t ucp_ppln_frag_mpool_ops = {
+    .chunk_alloc   = ucp_ppln_frag_mpool_malloc,
+    .chunk_release = ucp_ppln_frag_mpool_free,
+    .obj_init      = ucp_ppln_frag_mpool_obj_init,
+    .obj_cleanup   = (ucs_mpool_obj_cleanup_func_t)ucs_empty_function
+};
+
+ucp_mem_desc_t *
+ucp_ppln_mpool_get(ucp_worker_h worker, ucs_memory_type_t mem_type,
+                   ucs_sys_device_t sys_dev)
+{
+    ucp_rndv_mpool_priv_t *mpriv;
+    ucp_worker_mpool_key_t key;
+    ucs_status_t status;
+    unsigned num_frags;
+    ucs_mpool_t *mpool;
+    khiter_t khiter;
+    int khret;
+    ucs_mpool_params_t mp_params;
+
+    key.sys_dev  = sys_dev;
+    key.mem_type = mem_type;
+
+    khiter = kh_get(ucp_worker_mpool_hash, &worker->ppln_mpool_hash, key);
+    if (ucs_likely(khiter != kh_end(&worker->ppln_mpool_hash))) {
+        mpool = &kh_val(&worker->ppln_mpool_hash, khiter);
+        goto out_mp_get;
+    }
+
+    khiter = kh_put(ucp_worker_mpool_hash, &worker->ppln_mpool_hash, key,
+                    &khret);
+    if (khret == UCS_KH_PUT_FAILED) {
+        return NULL;
+    }
+
+    ucs_assert_always(khret != UCS_KH_PUT_KEY_PRESENT);
+
+    mpool     = &kh_value(&worker->ppln_mpool_hash, khiter);
+    num_frags = worker->context->config.ext.ppln_num_frags[key.mem_type];
+
+    ucs_mpool_params_reset(&mp_params);
+    mp_params.priv_size       = sizeof(ucp_rndv_mpool_priv_t);
+    mp_params.elem_size       = sizeof(ucp_mem_desc_t);
+    mp_params.alignment       = 1;
+    mp_params.elems_per_chunk = num_frags;
+    mp_params.ops             = &ucp_ppln_frag_mpool_ops;
+    mp_params.name            = "ucp_ppln_frags";
+    status = ucs_mpool_init(&mp_params, mpool);
+    if (status != UCS_OK) {
+        return NULL;
+    }
+
+    mpriv            = ucs_mpool_priv(mpool);
+    mpriv->worker    = worker;
+    mpriv->mem_type  = key.mem_type;
+    mpriv->sys_dev   = sys_dev;
+
+out_mp_get:
+    return ucp_worker_mpool_get(mpool);
+}
+
+
+/*
  * put/mtype — copy-in (GPU → bounce) + multi-lane RDMA send (bounce → remote)
  */
 

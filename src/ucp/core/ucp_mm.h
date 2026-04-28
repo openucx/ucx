@@ -153,6 +153,13 @@ void ucp_frag_mpool_free(ucs_mpool_t *mp, void *chunk);
 
 void ucp_frag_mpool_obj_init(ucs_mpool_t *mp, void *obj, void *chunk);
 
+ucs_status_t ucp_ppln_frag_mpool_malloc(ucs_mpool_t *mp, size_t *size_p,
+                                        void **chunk_p);
+
+void ucp_ppln_frag_mpool_free(ucs_mpool_t *mp, void *chunk);
+
+void ucp_ppln_frag_mpool_obj_init(ucs_mpool_t *mp, void *obj, void *chunk);
+
 
 /**
  * Update memory registration to a specified set of memory domains.

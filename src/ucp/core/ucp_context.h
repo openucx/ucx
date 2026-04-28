@@ -90,6 +90,12 @@ typedef struct ucp_context_config {
     size_t                                 rndv_num_frags[UCS_MEMORY_TYPE_LAST];
     /** Memory types of fragments used for RNDV pipeline protocol */
     uint64_t                               rndv_frag_mem_types;
+    /** RMA pipelining fragment size */
+    size_t                                 ppln_frag_size[UCS_MEMORY_TYPE_LAST];
+    /** Number of RMA pipelining fragments per allocation */
+    size_t                                 ppln_num_frags[UCS_MEMORY_TYPE_LAST];
+    /** Memory types of fragments used for RMA pipelining protocol */
+    uint64_t                               ppln_frag_mem_types;
     /** Allows memtype copies that use bounce buffers, when set to true */
     int                                    memtype_copy_enable;
     /** RNDV pipeline send threshold */
@@ -242,6 +248,10 @@ struct ucp_config {
     ucp_context_config_names_t             rndv_frag_sizes;
     /** Array of rendezvous fragment elems per allocation */
     ucp_context_config_names_t             rndv_frag_elems;
+    /** Array of RMA pipelining fragment sizes */
+    ucp_context_config_names_t             ppln_frag_sizes;
+    /** Array of RMA pipelining fragment elems per allocation */
+    ucp_context_config_names_t             ppln_frag_elems;
     /** Array of transports for client-server transports and port selection */
     UCS_CONFIG_STRING_ARRAY_FIELD(cm_tls)  sockaddr_cm_tls;
     /** Warn on invalid configuration */

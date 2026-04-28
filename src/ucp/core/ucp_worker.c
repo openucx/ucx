@@ -2006,6 +2006,7 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
 
     /* Create a hashtable of memory pools for mem_type devices */
     kh_init_inplace(ucp_worker_mpool_hash, &worker->mpool_hash);
+    kh_init_inplace(ucp_worker_mpool_hash, &worker->ppln_mpool_hash);
 
     ucs_mpool_params_reset(&mp_params);
     mp_params.elem_size       = sizeof(ucp_request_t) +
@@ -2115,6 +2116,16 @@ static void ucp_worker_destroy_mpools(ucp_worker_h worker)
     }
 
     kh_destroy_inplace(ucp_worker_mpool_hash, &worker->mpool_hash);
+
+    for (iter = kh_begin(&worker->ppln_mpool_hash);
+         iter != kh_end(&worker->ppln_mpool_hash); ++iter) {
+        if (!kh_exist(&worker->ppln_mpool_hash, iter)) {
+            continue;
+        }
+        ucs_mpool_cleanup(&kh_val(&worker->ppln_mpool_hash, iter), 1);
+    }
+
+    kh_destroy_inplace(ucp_worker_mpool_hash, &worker->ppln_mpool_hash);
     ucs_mpool_cleanup(&worker->reg_mp, 1);
     if (worker->flags & UCP_WORKER_FLAG_AM_MPOOL_INITIALIZED) {
         ucs_mpool_set_cleanup(&worker->am_mps, 1);
