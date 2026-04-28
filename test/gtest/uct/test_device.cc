@@ -137,6 +137,10 @@ private:
 
 UCS_TEST_P(test_device, put)
 {
+    if (!(m_sender->md_attr().reg_mem_types & UCS_BIT(UCS_MEMORY_TYPE_CUDA))) {
+        UCS_TEST_SKIP_R("CUDA registration not supported");
+    }
+
     constexpr uint64_t SEED1 = 0x1111111111111111lu;
     constexpr uint64_t SEED2 = 0x2222222222222222lu;
     constexpr size_t length  = 1024;
@@ -174,6 +178,10 @@ UCS_TEST_P(test_device, put)
 
 UCS_TEST_P(test_device, atomic)
 {
+    if (!(m_sender->md_attr().reg_mem_types & UCS_BIT(UCS_MEMORY_TYPE_CUDA))) {
+        UCS_TEST_SKIP_R("CUDA registration not supported");
+    }
+
     mapped_buffer signal(sizeof(uint64_t), 0, *m_receiver, 0,
                          UCS_MEMORY_TYPE_CUDA);
     uint64_t signal_val = 0;
