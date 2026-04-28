@@ -1768,6 +1768,10 @@ ucp_add_component_resources(ucp_context_h context, ucp_rsc_index_t cmpt_index,
             ++context->num_mem_type_detect_mds;
         }
 
+        if (md_attr->detect_mem_types & ~UCS_BIT(UCS_MEMORY_TYPE_HOST)) {
+            context->has_non_host_detect_md = 1;
+        }
+
         detect_mem_type_mask |= md_attr->detect_mem_types;
         alloc_mem_type_mask  |= md_attr->alloc_mem_types;
 
@@ -1956,6 +1960,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     context->num_tls                  = 0;
     context->supported_mem_type_mask  = 0;
     context->num_mem_type_detect_mds  = 0;
+    context->has_non_host_detect_md   = 0;
     context->export_md_map            = 0;
 
     ucs_memory_type_for_each(mem_type) {

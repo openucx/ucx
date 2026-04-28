@@ -388,6 +388,7 @@ typedef struct ucp_context {
     /* List of MDs that detect non host memory type */
     ucp_md_index_t                mem_type_detect_mds[UCS_MEMORY_TYPE_LAST];
     ucp_md_index_t                num_mem_type_detect_mds;  /* Number of mem type MDs */
+    uint8_t                       has_non_host_detect_md;  /* Any detect MD supports non-host memory types */
 
     /* Map of dmabuf providers per memory type. Each entry in the array is
        either the index of the provider MD, or UCP_NULL_RESOURCE if no such MD
@@ -683,6 +684,14 @@ ucp_memory_detect_internal(ucp_context_h context, const void *address,
 
     status = ucs_memtype_cache_lookup(address, length, mem_info);
     if (ucs_likely(status == UCS_ERR_NO_ELEM)) {
+        if (context->has_non_host_detect_md) {
+            ucs_trace_req("address %p length %zu: not found in memtype cache, "
+                          "running slowpath for non-host capable context",
+                          address, length);
+            ucp_memory_detect_slowpath(context, address, length, mem_info);
+            return;
+        }
+
         ucs_trace_req("address %p length %zu: not found in memtype cache, "
                       "assuming host memory",
                       address, length);
