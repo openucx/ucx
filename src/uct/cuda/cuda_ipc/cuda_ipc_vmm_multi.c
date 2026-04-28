@@ -385,8 +385,9 @@ uct_cuda_ipc_vmm_multi_fetch_meta_import(const CUmemFabricHandle *fabric_handle,
     }
 
     uct_cuda_ipc_init_access_desc(&access, cu_dev);
-    status = UCT_CUDADRV_FUNC(
-            cuMemSetAccess(*dev_ptr_p, alloc_size, &access, 1), log_level);
+    status = UCT_CUDADRV_FUNC(cuMemSetAccess(*dev_ptr_p, alloc_size, &access,
+                                             1),
+                              log_level);
     if (status != UCS_OK) {
         goto err_unmap;
     }
@@ -414,8 +415,7 @@ uct_cuda_ipc_vmm_multi_fetch_meta_release(CUdeviceptr dev_ptr,
 
 ucs_status_t
 uct_cuda_ipc_vmm_multi_fetch_chunks(uct_cuda_ipc_unpacked_rkey_t *rkey,
-                                    CUdevice cu_dev,
-                                    ucs_log_level_t log_level)
+                                    CUdevice cu_dev, ucs_log_level_t log_level)
 {
     CUmemGenericAllocationHandle header_handle, chunks_handle;
     uct_cuda_ipc_vmm_meta_header_t header;
@@ -438,15 +438,16 @@ uct_cuda_ipc_vmm_multi_fetch_chunks(uct_cuda_ipc_unpacked_rkey_t *rkey,
     }
 
     header_alloc_size = alloc_granularity;
-    status = uct_cuda_ipc_vmm_multi_fetch_meta_import(
+    status            = uct_cuda_ipc_vmm_multi_fetch_meta_import(
             &rkey->super.super.ph.handle.fabric_handle, cu_dev,
             header_alloc_size, &header_dev_ptr, &header_handle, log_level);
     if (status != UCS_OK) {
         return status;
     }
 
-    status = UCT_CUDADRV_FUNC(
-            cuMemcpyDtoH(&header, header_dev_ptr, sizeof(header)), log_level);
+    status = UCT_CUDADRV_FUNC(cuMemcpyDtoH(&header, header_dev_ptr,
+                                           sizeof(header)),
+                              log_level);
     uct_cuda_ipc_vmm_multi_fetch_meta_release(header_dev_ptr, header_alloc_size,
                                               header_handle);
     if (status != UCS_OK) {
