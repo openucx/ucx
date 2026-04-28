@@ -3162,7 +3162,7 @@ uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
 static ucs_status_t
 uct_ib_md_mlx5_devx_md_mem_elem_pack(uct_md_h md, uct_mem_h memh,
                                      uct_rkey_t rkey,
-                                     uct_device_mem_element_t *mem_elem_p)
+                                     uct_device_mem_elem_t *mem_elem_p)
 {
     uct_ib_md_device_mem_element_t *mem_elem = (uct_ib_md_device_mem_element_t*)
             mem_elem_p;

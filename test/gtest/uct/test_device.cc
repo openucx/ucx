@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025-2026. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -101,17 +101,6 @@ protected:
         ucs_status_t status;
 
         uct_test::init();
-        m_cuda_dev = uct_cuda_get_cuda_device(GetParam()->sys_device);
-        ASSERT_NE(m_cuda_dev, CU_DEVICE_INVALID) << " sys_device "
-                  << static_cast<int>(GetParam()->sys_device);
-
-        status = UCT_CUDADRV_FUNC_LOG_ERR(
-                cuDevicePrimaryCtxRetain(&ctx, m_cuda_dev));
-        ASSERT_UCS_OK(status);
-
-        status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(ctx));
-        ASSERT_UCS_OK(status);
-
         m_receiver = uct_test::create_entity(0);
         m_entities.push_back(m_receiver);
 
@@ -119,11 +108,29 @@ protected:
         m_entities.push_back(m_sender);
 
         m_sender->connect(0, *m_receiver, 0);
+
+        m_cuda_dev = uct_cuda_get_cuda_device(
+                m_sender->iface_attr().ctl_device);
+        if (m_cuda_dev == CU_DEVICE_INVALID) {
+            return;
+        }
+
+        status = UCT_CUDADRV_FUNC_LOG_ERR(
+                cuDevicePrimaryCtxRetain(&ctx, m_cuda_dev));
+        ASSERT_UCS_OK(status);
+
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(ctx));
+        ASSERT_UCS_OK(status);
     }
 
     void cleanup()
     {
         uct_test::cleanup();
+
+        if (m_cuda_dev == CU_DEVICE_INVALID) {
+            return;
+        }
+
         (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
         (void)UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(m_cuda_dev));
     }
@@ -143,29 +150,27 @@ UCS_TEST_P(test_device, put)
     mapped_buffer sendbuf(length, SEED1, *m_sender, 0, UCS_MEMORY_TYPE_CUDA);
     mapped_buffer recvbuf(length, SEED2, *m_receiver, 0, UCS_MEMORY_TYPE_CUDA);
 
-    uct_device_local_mem_list_elem_t src_elem_host;
-    src_elem_host.addr = nullptr;
+    uct_device_mem_elem_t src_elem_host;
     ASSERT_UCS_OK(uct_md_mem_elem_pack(m_sender->md(), sendbuf.memh(),
-                                       recvbuf.rkey(),
-                                       &src_elem_host.uct_mem_element));
+                                       recvbuf.rkey(), &src_elem_host));
 
-    mapped_buffer src_elembuf(sizeof(uct_device_local_mem_list_elem_t), 0,
-                              *m_sender, 0, UCS_MEMORY_TYPE_CUDA);
+    mapped_buffer src_elembuf(sizeof(src_elem_host), 0, *m_sender, 0,
+                              UCS_MEMORY_TYPE_CUDA);
     ASSERT_EQ(CUDA_SUCCESS,
               cuMemcpyHtoD((CUdeviceptr)src_elembuf.ptr(), &src_elem_host,
-                           sizeof(uct_device_local_mem_list_elem_t)));
+                           sizeof(src_elem_host)));
 
-    mapped_buffer rem_elembuf(sizeof(uct_device_mem_element_t), 0, *m_sender, 0,
+    mapped_buffer rem_elembuf(sizeof(src_elem_host), 0, *m_sender, 0,
                               UCS_MEMORY_TYPE_CUDA);
-    ASSERT_EQ(CUDA_SUCCESS, cuMemcpyHtoD((CUdeviceptr)rem_elembuf.ptr(),
-                                         &src_elem_host.uct_mem_element,
-                                         sizeof(uct_device_mem_element_t)));
+    ASSERT_EQ(CUDA_SUCCESS,
+              cuMemcpyHtoD((CUdeviceptr)rem_elembuf.ptr(), &src_elem_host,
+                           sizeof(src_elem_host)));
 
     uct_device_ep_h dev_ep;
     ASSERT_UCS_OK(uct_ep_get_device_ep(m_sender->ep(0), &dev_ep));
     ASSERT_UCS_OK(ucx_cuda::launch_uct_put(
-            dev_ep, (const uct_device_local_mem_list_elem_t*)src_elembuf.ptr(),
-            (const uct_device_mem_element_t*)rem_elembuf.ptr(), sendbuf.ptr(),
+            dev_ep, (const uct_device_mem_elem_t*)src_elembuf.ptr(),
+            (const uct_device_mem_elem_t*)rem_elembuf.ptr(), sendbuf.ptr(),
             (uintptr_t)recvbuf.ptr(), length));
 
     recvbuf.pattern_check(SEED1);
@@ -179,18 +184,17 @@ UCS_TEST_P(test_device, atomic)
     uint64_t signal_val = 0;
     size_t i;
 
-    mapped_buffer elembuf_host(sizeof(uct_device_mem_element_t), 0, *m_sender,
-                               0, UCS_MEMORY_TYPE_HOST);
-    mapped_buffer elembuf(sizeof(uct_device_mem_element_t), 0, *m_sender, 0,
+    mapped_buffer elembuf_host(sizeof(uct_device_mem_elem_t), 0, *m_sender, 0,
+                               UCS_MEMORY_TYPE_HOST);
+    mapped_buffer elembuf(sizeof(uct_device_mem_elem_t), 0, *m_sender, 0,
                           UCS_MEMORY_TYPE_CUDA);
-    uct_device_mem_element_t *mem_elem_host = (uct_device_mem_element_t*)
-                                                      elembuf_host.ptr();
-    uct_device_mem_element_t *mem_elem      = (uct_device_mem_element_t*)
-                                                      elembuf.ptr();
+    uct_device_mem_elem_t *mem_elem_host = (uct_device_mem_elem_t*)
+                                                   elembuf_host.ptr();
+    uct_device_mem_elem_t *mem_elem = (uct_device_mem_elem_t*)elembuf.ptr();
     ASSERT_UCS_OK(uct_md_mem_elem_pack(m_sender->md(), nullptr, signal.rkey(),
                                        mem_elem_host));
     ASSERT_EQ(CUDA_SUCCESS, cuMemcpyHtoD((CUdeviceptr)mem_elem, mem_elem_host,
-                                         sizeof(uct_device_mem_element_t)));
+                                         sizeof(uct_device_mem_elem_t)));
 
     uct_device_ep_h dev_ep;
     ASSERT_UCS_OK(uct_ep_get_device_ep(m_sender->ep(0), &dev_ep));

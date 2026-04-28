@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -105,14 +105,25 @@ UCS_F_DEVICE void ucp_device_request_init(uct_device_ep_t *device_ep,
     })
 
 
+#define UCP_DEVICE_GET_LANE(_handle, _channel_id, _lane, _uct_channel_id) \
+    _lane           = _channel_id % _handle->num_lanes; \
+    _uct_channel_id = _channel_id / _handle->num_lanes;
+
+
+#define UCP_DEVICE_GET_ELEM(_handle, _index) \
+    static_cast<ucs_typeof(_handle->mem_elements[0])*>(UCS_PTR_BYTE_OFFSET( \
+            _handle->mem_elements, \
+            (sizeof(_handle->mem_elements[0]) + \
+             (sizeof(_handle->mem_elements[0].tl[0]) * _handle->num_lanes)) * \
+                    _index))
+
+
 UCS_F_DEVICE ucs_status_t ucp_device_prepare_send_remote(
         const ucp_device_remote_mem_list_h dst_mem_list_h,
-        unsigned dst_mem_list_index, uint64_t &remote_address,
+        unsigned dst_mem_list_index, uint64_t &remote_address, unsigned lane,
         ucp_device_request_t *req, uct_device_ep_t *&device_ep,
-        const uct_device_mem_element_t *&uct_elem,
-        uct_device_completion_t *&comp)
+        const uct_device_mem_elem_t *&uct_elem, uct_device_completion_t *&comp)
 {
-    const size_t elem_size = sizeof(uct_device_remote_mem_list_elem_t);
     ucs_status_t status;
 
     status = ucp_device_check_params(dst_mem_list_h, dst_mem_list_index);
@@ -120,30 +131,26 @@ UCS_F_DEVICE ucs_status_t ucp_device_prepare_send_remote(
         return status;
     }
 
-    const auto dst_mem_element = static_cast<uct_device_remote_mem_list_elem_t*>(
-            UCS_PTR_BYTE_OFFSET(dst_mem_list_h->mem_elements,
-                                dst_mem_list_index * elem_size));
+    const auto dst_mem_element = UCP_DEVICE_GET_ELEM(dst_mem_list_h,
+                                                     dst_mem_list_index);
     remote_address             = dst_mem_element->addr;
-    device_ep                  = dst_mem_element->device_ep;
-    uct_elem                   = &dst_mem_element->uct_mem_element;
+    device_ep                  = dst_mem_element->tl[lane].ep;
+    uct_elem                   = &dst_mem_element->tl[lane].uct;
     ucp_device_request_init(device_ep, req, comp);
 
     return UCS_OK;
 }
 
 
-UCS_F_DEVICE ucs_status_t
-ucp_device_prepare_send(const ucp_device_local_mem_list_h src_mem_list_h,
-                        unsigned src_mem_list_index,
-                        const ucp_device_remote_mem_list_h dst_mem_list_h,
-                        unsigned dst_mem_list_index, const void *&address,
-                        uint64_t &remote_address, ucp_device_request_t *req,
-                        uct_device_ep_t *&device_ep,
-                        const uct_device_local_mem_list_elem_t *&src_uct_elem,
-                        const uct_device_mem_element_t *&uct_elem,
-                        uct_device_completion_t *&comp)
+UCS_F_DEVICE ucs_status_t ucp_device_prepare_send(
+        const ucp_device_local_mem_list_h src_mem_list_h,
+        unsigned src_mem_list_index,
+        const ucp_device_remote_mem_list_h dst_mem_list_h,
+        unsigned dst_mem_list_index, const void *&address,
+        uint64_t &remote_address, unsigned lane, ucp_device_request_t *req,
+        uct_device_ep_t *&device_ep, const uct_device_mem_elem_t *&src_uct_elem,
+        const uct_device_mem_elem_t *&uct_elem, uct_device_completion_t *&comp)
 {
-    const size_t elem_size = sizeof(uct_device_local_mem_list_elem_t);
     ucs_status_t status;
 
     status = ucp_device_check_params(src_mem_list_h, src_mem_list_index);
@@ -152,16 +159,16 @@ ucp_device_prepare_send(const ucp_device_local_mem_list_h src_mem_list_h,
     }
 
     status = ucp_device_prepare_send_remote(dst_mem_list_h, dst_mem_list_index,
-                                            remote_address, req, device_ep,
-                                            uct_elem, comp);
+                                            remote_address, lane, req,
+                                            device_ep, uct_elem, comp);
     if (status != UCS_OK) {
         return status;
     }
 
-    src_uct_elem = static_cast<uct_device_local_mem_list_elem_t*>(
-            UCS_PTR_BYTE_OFFSET(src_mem_list_h->mem_elements,
-                                src_mem_list_index * elem_size));
-    address      = src_uct_elem->addr;
+    const auto src_mem_elem = UCP_DEVICE_GET_ELEM(src_mem_list_h,
+                                                  src_mem_list_index);
+    src_uct_elem            = src_mem_elem->tl + lane;
+    address                 = src_mem_elem->addr;
 
     return UCS_OK;
 }
@@ -212,18 +219,22 @@ ucp_device_put(const ucp_device_local_mem_list_h src_mem_list_h,
                unsigned dst_mem_list_index, size_t dst_offset, size_t length,
                unsigned channel_id, uint64_t flags, ucp_device_request_t *req)
 {
+    unsigned uct_channel_id;
+    unsigned lane;
     const void *address;
-    const uct_device_mem_element_t *uct_elem;
-    const uct_device_local_mem_list_elem_t *src_uct_elem;
+    const uct_device_mem_elem_t *uct_elem;
+    const uct_device_mem_elem_t *src_uct_elem;
     uint64_t remote_address;
     uct_device_completion_t *comp;
     uct_device_ep_t *device_ep;
     ucs_status_t status;
 
+    UCP_DEVICE_GET_LANE(dst_mem_list_h, channel_id, lane, uct_channel_id);
+
     status = ucp_device_prepare_send(src_mem_list_h, src_mem_list_index,
                                      dst_mem_list_h, dst_mem_list_index,
-                                     address, remote_address, req, device_ep,
-                                     src_uct_elem, uct_elem, comp);
+                                     address, remote_address, lane, req,
+                                     device_ep, src_uct_elem, uct_elem, comp);
     if (status != UCS_OK) {
         return status;
     }
@@ -232,7 +243,7 @@ ucp_device_put(const ucp_device_local_mem_list_h src_mem_list_h,
                                     src_uct_elem, uct_elem,
                                     UCS_PTR_BYTE_OFFSET(address, src_offset),
                                     remote_address + dst_offset, length,
-                                    channel_id, flags, comp);
+                                    uct_channel_id, flags, comp);
 }
 
 
@@ -274,23 +285,27 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
         unsigned mem_list_index, size_t offset, unsigned channel_id,
         uint64_t flags, ucp_device_request_t *req)
 {
+    unsigned uct_channel_id;
+    unsigned lane;
     uint64_t remote_address;
-    const uct_device_mem_element_t *uct_elem;
+    const uct_device_mem_elem_t *uct_elem;
     uct_device_completion_t *comp;
     uct_device_ep_t *device_ep;
     ucs_status_t status;
 
+    UCP_DEVICE_GET_LANE(mem_list_h, channel_id, lane, uct_channel_id);
+
     status = ucp_device_prepare_send_remote(mem_list_h, mem_list_index,
-                                            remote_address, req, device_ep,
-                                            uct_elem, comp);
+                                            remote_address, lane, req,
+                                            device_ep, uct_elem, comp);
     if (status != UCS_OK) {
         return status;
     }
 
     return UCP_DEVICE_SEND_BLOCKING(level, uct_device_ep_atomic_add, device_ep,
                                     req, uct_elem, inc_value,
-                                    remote_address + offset, channel_id, flags,
-                                    comp);
+                                    remote_address + offset, uct_channel_id,
+                                    flags, comp);
 }
 
 
@@ -311,7 +326,6 @@ UCS_F_DEVICE ucs_status_t
 ucp_device_get_ptr(const ucp_device_remote_mem_list_h mem_list_h,
                    unsigned mem_list_index, void **addr_p)
 {
-    const size_t elem_size = sizeof(uct_device_remote_mem_list_elem_t);
     ucs_status_t status;
 
     status = ucp_device_check_params(mem_list_h, mem_list_index);
@@ -319,12 +333,9 @@ ucp_device_get_ptr(const ucp_device_remote_mem_list_h mem_list_h,
         return status;
     }
 
-    const auto mem_element = static_cast<uct_device_remote_mem_list_elem_t*>(
-            UCS_PTR_BYTE_OFFSET(mem_list_h->mem_elements,
-                                mem_list_index * elem_size));
+    const auto mem_element = UCP_DEVICE_GET_ELEM(mem_list_h, mem_list_index);
 
-    return uct_device_ep_get_ptr(mem_element->device_ep,
-                                 &mem_element->uct_mem_element,
+    return uct_device_ep_get_ptr(mem_element->tl[0].ep, &mem_element->tl[0].uct,
                                  mem_element->addr, addr_p);
 }
 

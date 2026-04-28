@@ -112,7 +112,7 @@ typedef struct uct_ib_md_ext_config {
     unsigned long            reg_retry_cnt; /**< Memory registration retry count */
     unsigned                 smkey_block_size; /**< Mkey indexes in a symmetric block */
     int                      direct_nic; /**< Direct NIC with GPU functionality */
-    unsigned                 gda_max_hca_per_gpu; /**< Threshold of IB per GPU */
+    unsigned long            gda_max_hca_per_gpu; /**< Threshold of IB per GPU */
     int                      gda_dmabuf_enable; /**< Enable DMA-BUF in GDA */
 } uct_ib_md_ext_config_t;
 

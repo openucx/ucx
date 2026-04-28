@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2016. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  * Copyright (C) Los Alamos National Security, LLC. 2019 ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
@@ -1821,7 +1821,13 @@ static int ucp_wireup_add_bw_lanes_pairwise(
 
         /* Account for possible path override */
         local_num_paths  = iface_attr->dev_num_paths;
-        remote_num_paths = ae->dev_num_paths;
+
+        if (bw_info->criteria.lane_type == UCP_LANE_TYPE_DEVICE) {
+            remote_num_paths = 1;
+        } else {
+            remote_num_paths = ae->dev_num_paths;
+        }
+
         if (allow_extra_path &&
             ((skip_dev_index != UCP_NULL_RESOURCE) && /* clang sanitizer */
              (skip_dev_index == dev_index))) {

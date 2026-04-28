@@ -99,9 +99,8 @@ template<typename T> class device_result_ptr {
 
 template<ucs_device_level_t level>
 static __global__ void
-uct_put_kernel(uct_device_ep_h ep,
-               const uct_device_local_mem_list_elem_t *src_elem,
-               const uct_device_mem_element_t *mem_elem, const void *va,
+uct_put_kernel(uct_device_ep_h ep, const uct_device_mem_elem_t *src_elem,
+               const uct_device_mem_elem_t *mem_elem, const void *va,
                uint64_t rva, size_t length, ucs_status_t *status_p)
 {
     uct_device_completion_t comp;
@@ -119,12 +118,11 @@ uct_put_kernel(uct_device_ep_h ep,
     }
 }
 
-ucs_status_t launch_uct_put(uct_device_ep_h device_ep,
-                            const uct_device_local_mem_list_elem_t *src_elem,
-                            const uct_device_mem_element_t *mem_elem,
-                            const void *va, uint64_t rva, size_t length,
-                            ucs_device_level_t level, unsigned num_threads,
-                            unsigned num_blocks)
+ucs_status_t
+launch_uct_put(uct_device_ep_h device_ep, const uct_device_mem_elem_t *src_elem,
+               const uct_device_mem_elem_t *mem_elem, const void *va,
+               uint64_t rva, size_t length, ucs_device_level_t level,
+               unsigned num_threads, unsigned num_blocks)
 {
     device_result_ptr<ucs_status_t> status = UCS_ERR_NOT_IMPLEMENTED;
     cudaError_t st;
@@ -165,8 +163,7 @@ ucs_status_t launch_uct_put(uct_device_ep_h device_ep,
 
 template<ucs_device_level_t level>
 static __global__ void
-uct_atomic_kernel(uct_device_ep_h ep,
-                  const uct_device_mem_element_t *mem_elem,
+uct_atomic_kernel(uct_device_ep_h ep, const uct_device_mem_elem_t *mem_elem,
                   uint64_t rva, uint64_t add, ucs_status_t *status_p)
 {
     uct_device_completion_t comp;
@@ -179,11 +176,9 @@ uct_atomic_kernel(uct_device_ep_h ep,
 }
 
 ucs_status_t launch_uct_atomic(uct_device_ep_h device_ep,
-                               const uct_device_mem_element_t *mem_elem,
-                               uint64_t rva,
-                               uint64_t add,
-                               ucs_device_level_t level,
-                               unsigned num_threads,
+                               const uct_device_mem_elem_t *mem_elem,
+                               uint64_t rva, uint64_t add,
+                               ucs_device_level_t level, unsigned num_threads,
                                unsigned num_blocks)
 {
     device_result_ptr<ucs_status_t> status = UCS_ERR_NOT_IMPLEMENTED;

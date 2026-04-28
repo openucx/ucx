@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -51,8 +51,6 @@ typedef struct {
 
 struct test_ucp_device_kernel_result_t {
     ucs_status_t status;
-    uint64_t     producer_index;
-    uint64_t     ready_index;
 };
 
 test_ucp_device_kernel_result_t

@@ -802,6 +802,7 @@ uct_rc_gdaki_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     iface_attr->cap.flags = UCT_IFACE_FLAG_CONNECT_TO_EP |
                             UCT_IFACE_FLAG_INTER_NODE |
                             UCT_IFACE_FLAG_DEVICE_EP |
+                            UCT_IFACE_FLAG_DEVICE_LKEY |
                             UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
 
     iface_attr->ep_addr_len    = sizeof(uct_ib_uint24_t) * iface->num_channels;
@@ -811,6 +812,8 @@ uct_rc_gdaki_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     iface_attr->cap.put.min_zcopy = 0;
     iface_attr->cap.put.max_zcopy =
             uct_ib_iface_port_attr(&iface->super.super.super)->max_msg_sz;
+    iface_attr->ctl_device    = uct_cuda_get_sys_dev(iface->cuda_dev);
+    iface_attr->dev_num_paths = 1;
 
     return UCS_OK;
 }
@@ -1243,7 +1246,7 @@ static int uct_gdaki_dev_matrix_score(const void *pa, const void *pb, void *arg)
 uct_gdaki_dev_matrix_elem_t *
 uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
 {
-    unsigned ib_per_cuda              = ib_md->config.gda_max_hca_per_gpu;
+    unsigned long ib_per_cuda         = ib_md->config.gda_max_hca_per_gpu;
     uct_gdaki_dev_matrix_elem_t *dmat = NULL;
     ucs_status_t status;
     int ibdev_index, cudadev_index, ibdev_count, cudadev_count;
@@ -1322,6 +1325,10 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
 
     ucs_assert(cudadev_count < UCT_GDAKI_MAX_CUDA_PER_IB);
 
+    if (ib_per_cuda == UCS_ULUNITS_AUTO) {
+        ib_per_cuda = ibdev_count / cudadev_count;
+    }
+
     /* Map each CUDA device to the best suited IB devices */
     for (cudadev_index = 0; cudadev_index < cudadev_count; cudadev_index++) {
         status = UCT_CUDADRV_FUNC_LOG_ERR(
@@ -1383,7 +1390,6 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
     uct_tl_device_resource_t *tl_devices;
     ucs_status_t status;
     CUdevice device;
-    ucs_sys_device_t dev;
     int i;
     uct_gdaki_dev_matrix_elem_t *ibdesc;
     char dmabuf_str[8];
@@ -1449,14 +1455,12 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
             goto err;
         }
 
-        dev = uct_cuda_get_sys_dev(device);
-
         snprintf(tl_devices[num_tl_devices].name,
                  sizeof(tl_devices[num_tl_devices].name), "%s%d-%s:%d",
                  UCT_DEVICE_CUDA_NAME, device, uct_ib_device_name(&ib_md->dev),
                  ib_md->dev.first_port);
         tl_devices[num_tl_devices].type       = UCT_DEVICE_TYPE_NET;
-        tl_devices[num_tl_devices].sys_device = dev;
+        tl_devices[num_tl_devices].sys_device = ib_md->dev.sys_dev;
         num_tl_devices++;
     }
 

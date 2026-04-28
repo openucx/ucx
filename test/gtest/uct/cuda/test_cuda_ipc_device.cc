@@ -189,7 +189,7 @@ UCS_TEST_P(test_cuda_ipc_rma, get_mem_elem_pack)
     mapped_buffer sendbuf(length, SEED1, *m_sender, 0, UCS_MEMORY_TYPE_CUDA);
     mapped_buffer recvbuf(length, SEED2, *m_receiver, 0, UCS_MEMORY_TYPE_CUDA);
 
-    uct_device_mem_element_t mem_elem_host;
+    uct_device_mem_elem_t mem_elem_host;
     EXPECT_UCS_OK(uct_md_mem_elem_pack(m_sender->md(), sendbuf.memh(),
                                        recvbuf.rkey(), &mem_elem_host));
 }
@@ -221,26 +221,22 @@ UCS_TEST_P(test_cuda_ipc_rma_device, put_device)
     mapped_buffer sendbuf(length, SEED1, *m_sender, 0, UCS_MEMORY_TYPE_CUDA);
     mapped_buffer recvbuf(length, SEED2, *m_receiver, 0, UCS_MEMORY_TYPE_CUDA);
 
-    uct_device_local_mem_list_elem_t src_elem_host;
+    uct_device_mem_elem_t src_elem_host;
     ASSERT_UCS_OK(uct_md_mem_elem_pack(m_sender->md(), sendbuf.memh(),
-                                       recvbuf.rkey(),
-                                       &src_elem_host.uct_mem_element));
+                                       recvbuf.rkey(), &src_elem_host));
 
 
-    uct_device_local_mem_list_elem_t *src_elem;
-    ASSERT_EQ(CUDA_SUCCESS,
-              cuMemAlloc((CUdeviceptr*)&src_elem,
-                         sizeof(uct_device_local_mem_list_elem_t)));
-    ASSERT_EQ(CUDA_SUCCESS,
-              cuMemcpyHtoD((CUdeviceptr)src_elem, &src_elem_host,
-                           sizeof(uct_device_local_mem_list_elem_t)));
+    uct_device_mem_elem_t *src_elem;
+    ASSERT_EQ(CUDA_SUCCESS, cuMemAlloc((CUdeviceptr*)&src_elem,
+                                       sizeof(uct_device_mem_elem_t)));
+    ASSERT_EQ(CUDA_SUCCESS, cuMemcpyHtoD((CUdeviceptr)src_elem, &src_elem_host,
+                                         sizeof(uct_device_mem_elem_t)));
 
-    uct_device_mem_element_t *mem_elem;
+    uct_device_mem_elem_t *mem_elem;
     ASSERT_EQ(CUDA_SUCCESS, cuMemAlloc((CUdeviceptr*)&mem_elem,
-                                       sizeof(uct_device_mem_element_t)));
-    ASSERT_EQ(CUDA_SUCCESS, cuMemcpyHtoD((CUdeviceptr)mem_elem,
-                                         &src_elem_host.uct_mem_element,
-                                         sizeof(uct_device_mem_element_t)));
+                                       sizeof(uct_device_mem_elem_t)));
+    ASSERT_EQ(CUDA_SUCCESS, cuMemcpyHtoD((CUdeviceptr)mem_elem, &src_elem_host,
+                                         sizeof(uct_device_mem_elem_t)));
 
     uct_device_ep_h device_ep;
     ASSERT_UCS_OK(uct_ep_get_device_ep(m_sender->ep(0), &device_ep));
@@ -262,7 +258,7 @@ UCS_TEST_P(test_cuda_ipc_rma_device, atomic_add_device)
     unsigned           num_threads   = get_num_threads();
     unsigned           num_blocks    = get_num_blocks();
     uct_device_ep_h device_ep;
-    uct_device_mem_element_t *mem_elem;
+    uct_device_mem_elem_t *mem_elem;
 
     if (device_level == UCS_DEVICE_LEVEL_GRID) {
         GTEST_SKIP() << "Grid level is not supported";
@@ -275,7 +271,7 @@ UCS_TEST_P(test_cuda_ipc_rma_device, atomic_add_device)
     mapped_buffer signal(sizeof(uint64_t), 0, *m_receiver, 0, UCS_MEMORY_TYPE_CUDA);
     ASSERT_UCS_OK(uct_ep_get_device_ep(m_sender->ep(0), &device_ep));
 
-    uct_device_mem_element_t mem_elem_host;
+    uct_device_mem_elem_t mem_elem_host;
     ASSERT_EQ(CUDA_SUCCESS, cuMemAlloc((CUdeviceptr*)&mem_elem, mem_elem_size));
     ASSERT_UCS_OK(uct_md_mem_elem_pack(m_sender->md(), nullptr, signal.rkey(),
                                        &mem_elem_host));
