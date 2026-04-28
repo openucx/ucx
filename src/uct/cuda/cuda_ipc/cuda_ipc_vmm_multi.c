@@ -454,8 +454,7 @@ uct_cuda_ipc_vmm_multi_fetch_chunks(uct_cuda_ipc_unpacked_rkey_t *rkey,
     }
 
     rkey->num_chunks = header.num_chunks;
-    chunks_size      = header.num_chunks *
-                       sizeof(uct_cuda_ipc_vmm_chunk_desc_t);
+    chunks_size = header.num_chunks * sizeof(uct_cuda_ipc_vmm_chunk_desc_t);
 
     rkey->chunks = ucs_malloc(chunks_size, "vmm_multi_chunks");
     if (rkey->chunks == NULL) {
@@ -463,24 +462,23 @@ uct_cuda_ipc_vmm_multi_fetch_chunks(uct_cuda_ipc_unpacked_rkey_t *rkey,
     }
 
     chunks_alloc_size = ucs_align_up(chunks_size, alloc_granularity);
-    status = uct_cuda_ipc_vmm_multi_fetch_meta_import(
-            &header.chunks_handle.handle.fabric, cu_dev,
-            chunks_alloc_size, &chunks_dev_ptr, &chunks_handle, log_level);
+    status            = uct_cuda_ipc_vmm_multi_fetch_meta_import(
+            &header.chunks_handle.handle.fabric, cu_dev, chunks_alloc_size,
+            &chunks_dev_ptr, &chunks_handle, log_level);
     if (status != UCS_OK) {
         goto err_free;
     }
 
-    status = UCT_CUDADRV_FUNC(
-            cuMemcpyDtoH(rkey->chunks, chunks_dev_ptr, chunks_size),
-            log_level);
+    status = UCT_CUDADRV_FUNC(cuMemcpyDtoH(rkey->chunks, chunks_dev_ptr,
+                                           chunks_size),
+                              log_level);
     uct_cuda_ipc_vmm_multi_fetch_meta_release(chunks_dev_ptr, chunks_alloc_size,
                                               chunks_handle);
     if (status != UCS_OK) {
         goto err_free;
     }
 
-    ucs_trace("fetched %u VMM chunk descriptors from remote",
-              rkey->num_chunks);
+    ucs_trace("fetched %u VMM chunk descriptors from remote", rkey->num_chunks);
     return UCS_OK;
 
 err_free:
