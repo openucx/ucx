@@ -701,6 +701,7 @@ static unsigned ucp_worker_flush_progress(void *arg)
             status = UCS_PTR_STATUS(ep_flush_request);
             ucs_diag("ucp_ep_flush_internal() failed: %s",
                      ucs_status_string(status));
+            ucp_worker_flush_complete_one(req, status, 1);
         } else if (ep_flush_request != NULL) {
             /* endpoint flush started, increment refcount */
             ++req->flush_worker.comp_count;

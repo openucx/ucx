@@ -302,6 +302,9 @@ protected:
                 ASSERT_EQ(0, m_err_count) << "Error callback invoked " << m_err_count << " times";
             }
         }
+
+        // Flush here to avoid expected error messages on teardown
+        flush_workers();
     }
 
     /**
