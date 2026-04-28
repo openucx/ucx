@@ -30,6 +30,7 @@ noinst_HEADERS = \
 	cuda_copy/cuda_copy_iface.h \
 	cuda_copy/cuda_copy_ep.h \
 	cuda_ipc/cuda_ipc_md.h \
+	cuda_ipc/cuda_ipc_vmm_multi.h \
 	cuda_ipc/cuda_ipc_iface.h \
 	cuda_ipc/cuda_ipc_ep.h \
 	cuda_ipc/cuda_ipc_cache.h \

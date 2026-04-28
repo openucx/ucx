@@ -4,11 +4,12 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#  include "config.h"
+#include "config.h"
 #endif
 
 #include "cuda_ipc.inl"
 #include "cuda_ipc_md.h"
+#include "cuda_ipc_vmm_multi.h"
 
 #include <ucs/datastruct/array.h>
 #include <ucs/debug/log.h>
@@ -19,24 +20,22 @@
 
 void uct_cuda_ipc_vmm_multi_meta_cleanup(uct_cuda_ipc_lkey_t *key)
 {
-    if (key->vmm_multi_chunks_dev_ptr != 0) {
+    uct_cuda_ipc_vmm_multi_meta_t *meta = &key->vmm_multi;
+
+    if (meta->chunks_dev_ptr != 0) {
         UCT_CUDADRV_FUNC_LOG_WARN(
-                cuMemUnmap(key->vmm_multi_chunks_dev_ptr,
-                           key->vmm_multi_chunks_alloc_size));
+                cuMemUnmap(meta->chunks_dev_ptr, meta->chunks_alloc_size));
         UCT_CUDADRV_FUNC_LOG_WARN(
-                cuMemAddressFree(key->vmm_multi_chunks_dev_ptr,
-                                 key->vmm_multi_chunks_alloc_size));
-        key->vmm_multi_chunks_dev_ptr = 0;
+                cuMemAddressFree(meta->chunks_dev_ptr, meta->chunks_alloc_size));
+        meta->chunks_dev_ptr = 0;
     }
 
-    if (key->vmm_multi_header_dev_ptr != 0) {
+    if (meta->header_dev_ptr != 0) {
         UCT_CUDADRV_FUNC_LOG_WARN(
-                cuMemUnmap(key->vmm_multi_header_dev_ptr,
-                           key->vmm_multi_header_alloc_size));
+                cuMemUnmap(meta->header_dev_ptr, meta->header_alloc_size));
         UCT_CUDADRV_FUNC_LOG_WARN(
-                cuMemAddressFree(key->vmm_multi_header_dev_ptr,
-                                 key->vmm_multi_header_alloc_size));
-        key->vmm_multi_header_dev_ptr = 0;
+                cuMemAddressFree(meta->header_dev_ptr, meta->header_alloc_size));
+        meta->header_dev_ptr = 0;
     }
 }
 
@@ -80,8 +79,8 @@ uct_cuda_ipc_vmm_multi_discover_chunks(CUdeviceptr va_base, size_t va_len,
 
         status = UCT_CUDADRV_FUNC_LOG_ERR(
                 cuMemExportToShareableHandle(&elem->vmm_handle.handle.fabric,
-                                             handle,
-                                             CU_MEM_HANDLE_TYPE_FABRIC, 0));
+                                             handle, CU_MEM_HANDLE_TYPE_FABRIC,
+                                             0));
         UCT_CUDADRV_FUNC_LOG_WARN(cuMemRelease(handle));
         if (status != UCS_OK) {
             goto err;
@@ -116,14 +115,10 @@ err:
     return status;
 }
 
-static ucs_status_t
-uct_cuda_ipc_vmm_multi_meta_alloc_buffer(CUdeviceptr *dev_ptr_p,
-                                         size_t *alloc_size_p,
-                                         CUmemFabricHandle *fabric_handle_p,
-                                         size_t data_size,
-                                         const CUmemAllocationProp *prop,
-                                         size_t alloc_granularity,
-                                         int dev_num)
+static ucs_status_t uct_cuda_ipc_vmm_multi_meta_alloc_buffer(
+        CUdeviceptr *dev_ptr_p, size_t *alloc_size_p,
+        CUmemFabricHandle *fabric_handle_p, size_t data_size,
+        const CUmemAllocationProp *prop, size_t alloc_granularity, int dev_num)
 {
     CUmemGenericAllocationHandle alloc_handle;
     CUmemAccessDesc access;
@@ -183,23 +178,21 @@ err_release:
 }
 
 static ucs_status_t
-uct_cuda_ipc_vmm_multi_create_meta_buffer(uct_cuda_ipc_lkey_t *key,
-                                          int dev_num)
+uct_cuda_ipc_vmm_multi_create_meta_buffer(uct_cuda_ipc_lkey_t *key, int dev_num)
 {
-    uct_cuda_ipc_vmm_chunk_desc_t *host_chunks = NULL;
-    uint16_t num_chunks                        = 0;
-    CUmemAllocationProp prop                   = {};
-    uct_cuda_ipc_vmm_meta_header_t header      = {};
+    uct_cuda_ipc_vmm_multi_meta_t *meta         = &key->vmm_multi;
+    uct_cuda_ipc_vmm_chunk_desc_t *host_chunks  = NULL;
+    uint16_t num_chunks                         = 0;
+    CUmemAllocationProp prop                    = {};
+    uct_cuda_ipc_vmm_meta_header_t header       = {};
     uct_cuda_ipc_vmm_handle_t chunks_vmm_handle;
     CUdeviceptr chunks_dev_ptr, header_dev_ptr;
     size_t chunks_alloc_size, header_alloc_size;
     ucs_status_t status;
     size_t chunks_data_size, alloc_granularity;
 
-    status = uct_cuda_ipc_vmm_multi_discover_chunks(key->vmm_multi_d_bptr,
-                                                    key->vmm_multi_b_len,
-                                                    &host_chunks,
-                                                    &num_chunks);
+    status = uct_cuda_ipc_vmm_multi_discover_chunks(meta->d_bptr, meta->b_len,
+                                                    &host_chunks, &num_chunks);
     if (status != UCS_OK) {
         return status;
     }
@@ -220,8 +213,8 @@ uct_cuda_ipc_vmm_multi_create_meta_buffer(uct_cuda_ipc_lkey_t *key,
 
     status = uct_cuda_ipc_vmm_multi_meta_alloc_buffer(
             &chunks_dev_ptr, &chunks_alloc_size,
-            &chunks_vmm_handle.handle.fabric,
-            chunks_data_size, &prop, alloc_granularity, dev_num);
+            &chunks_vmm_handle.handle.fabric, chunks_data_size, &prop,
+            alloc_granularity, dev_num);
     if (status != UCS_OK) {
         goto err_free_host;
     }
@@ -233,8 +226,7 @@ uct_cuda_ipc_vmm_multi_create_meta_buffer(uct_cuda_ipc_lkey_t *key,
     }
 
     status = uct_cuda_ipc_vmm_multi_meta_alloc_buffer(
-            &header_dev_ptr, &header_alloc_size,
-            &key->vmm_multi_header_fabric_handle,
+            &header_dev_ptr, &header_alloc_size, &meta->header_fabric_handle,
             sizeof(header), &prop, alloc_granularity, dev_num);
     if (status != UCS_OK) {
         goto err_cleanup_chunks;
@@ -250,11 +242,11 @@ uct_cuda_ipc_vmm_multi_create_meta_buffer(uct_cuda_ipc_lkey_t *key,
         goto err_cleanup_header;
     }
 
-    key->vmm_multi_header_dev_ptr    = header_dev_ptr;
-    key->vmm_multi_header_alloc_size = header_alloc_size;
-    key->vmm_multi_chunks_dev_ptr    = chunks_dev_ptr;
-    key->vmm_multi_chunks_alloc_size = chunks_alloc_size;
-    key->vmm_multi_meta_num_chunks   = num_chunks;
+    meta->header_dev_ptr    = header_dev_ptr;
+    meta->header_alloc_size = header_alloc_size;
+    meta->chunks_dev_ptr    = chunks_dev_ptr;
+    meta->chunks_alloc_size = chunks_alloc_size;
+    meta->num_chunks        = num_chunks;
 
     ucs_trace("created VMM metadata: %u chunks, chunks_alloc=%zu "
               "header_alloc=%zu on GPU",
@@ -264,22 +256,23 @@ uct_cuda_ipc_vmm_multi_create_meta_buffer(uct_cuda_ipc_lkey_t *key,
 
 err_cleanup_header:
     UCT_CUDADRV_FUNC_LOG_WARN(cuMemUnmap(header_dev_ptr, header_alloc_size));
-    UCT_CUDADRV_FUNC_LOG_WARN(cuMemAddressFree(header_dev_ptr,
-                                                header_alloc_size));
+    UCT_CUDADRV_FUNC_LOG_WARN(
+            cuMemAddressFree(header_dev_ptr, header_alloc_size));
 err_cleanup_chunks:
     UCT_CUDADRV_FUNC_LOG_WARN(cuMemUnmap(chunks_dev_ptr, chunks_alloc_size));
-    UCT_CUDADRV_FUNC_LOG_WARN(cuMemAddressFree(chunks_dev_ptr,
-                                               chunks_alloc_size));
+    UCT_CUDADRV_FUNC_LOG_WARN(
+            cuMemAddressFree(chunks_dev_ptr, chunks_alloc_size));
 err_free_host:
     ucs_free(host_chunks);
     return status;
 }
 
-ucs_status_t
-uct_cuda_ipc_mkey_pack_vmm_multi_chunk(uct_cuda_ipc_memh_t *memh,
-                                       uct_cuda_ipc_lkey_t *key, void *address,
-                                       size_t length)
+ucs_status_t uct_cuda_ipc_mkey_pack_vmm_multi_chunk(uct_cuda_ipc_memh_t *memh,
+                                                    uct_cuda_ipc_lkey_t *key,
+                                                    void *address,
+                                                    size_t length)
 {
+    uct_cuda_ipc_vmm_multi_meta_t *meta = &key->vmm_multi;
     unsigned long long buf_id_start, buf_id_end;
     CUdeviceptr first_base, last_base, range_start, range_end;
     size_t first_size, last_size;
@@ -287,10 +280,9 @@ uct_cuda_ipc_mkey_pack_vmm_multi_chunk(uct_cuda_ipc_memh_t *memh,
     int is_ctx_pushed;
     ucs_status_t status;
 
-    if (key->vmm_multi_header_dev_ptr != 0) {
-        if ((CUdeviceptr)address >= key->vmm_multi_d_bptr &&
-            ((CUdeviceptr)address + length) <=
-                    (key->vmm_multi_d_bptr + key->vmm_multi_b_len)) {
+    if (meta->header_dev_ptr != 0) {
+        if ((CUdeviceptr)address >= meta->d_bptr &&
+            ((CUdeviceptr)address + length) <= (meta->d_bptr + meta->b_len)) {
             return UCS_OK;
         }
 
@@ -345,8 +337,8 @@ uct_cuda_ipc_mkey_pack_vmm_multi_chunk(uct_cuda_ipc_memh_t *memh,
         goto out_pop;
     }
 
-    key->vmm_multi_d_bptr = first_base;
-    key->vmm_multi_b_len  = (last_base + last_size) - first_base;
+    meta->d_bptr = first_base;
+    meta->b_len  = (last_base + last_size) - first_base;
 
     status = uct_cuda_ipc_vmm_multi_create_meta_buffer(key, memh->dev_num);
 
@@ -365,21 +357,23 @@ uct_cuda_ipc_vmm_multi_fetch_meta_import(const CUmemFabricHandle *fabric_handle,
     CUmemAccessDesc access;
     ucs_status_t status;
 
-    status = UCT_CUDADRV_FUNC(cuMemImportFromShareableHandle(
-            handle_p, (void*)fabric_handle, CU_MEM_HANDLE_TYPE_FABRIC),
+    status = UCT_CUDADRV_FUNC(
+            cuMemImportFromShareableHandle(handle_p, (void*)fabric_handle,
+                                           CU_MEM_HANDLE_TYPE_FABRIC),
             log_level);
     if (status != UCS_OK) {
         return status;
     }
 
-    status = UCT_CUDADRV_FUNC(
-            cuMemAddressReserve(dev_ptr_p, alloc_size, 0, 0, 0), log_level);
+    status = UCT_CUDADRV_FUNC(cuMemAddressReserve(dev_ptr_p, alloc_size, 0, 0,
+                                                  0),
+                              log_level);
     if (status != UCS_OK) {
         goto err_release;
     }
 
-    status = UCT_CUDADRV_FUNC(
-            cuMemMap(*dev_ptr_p, alloc_size, 0, *handle_p, 0), log_level);
+    status = UCT_CUDADRV_FUNC(cuMemMap(*dev_ptr_p, alloc_size, 0, *handle_p, 0),
+                              log_level);
     if (status != UCS_OK) {
         goto err_free_va;
     }

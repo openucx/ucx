@@ -10,6 +10,7 @@
 #include "cuda_ipc.inl"
 #include "cuda_ipc_cache.h"
 #include "cuda_ipc_md.h"
+#include "cuda_ipc_vmm_multi.h"
 
 #include <ucs/debug/log.h>
 #include <ucs/sys/ptr_arith.h>
@@ -316,17 +317,18 @@ found:
         status = uct_cuda_ipc_mkey_pack_vmm_multi_chunk(memh, key, address,
                                                         length);
         if (status == UCS_OK) {
-            packed->ph.handle_type      = UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM_MULTI;
-            packed->ph.handle.fabric_handle = key->vmm_multi_header_fabric_handle;
-            packed->d_bptr                  = key->vmm_multi_d_bptr;
-            packed->b_len                   = key->vmm_multi_b_len;
+            packed->ph.handle_type          = UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM_MULTI;
+            packed->ph.handle.fabric_handle = key->vmm_multi.header_fabric_handle;
+            packed->d_bptr                  = key->vmm_multi.d_bptr;
+            packed->b_len                   = key->vmm_multi.b_len;
         } else if (status != UCS_ERR_UNSUPPORTED) {
             return status;
         }
     }
 #endif
 
-    ucs_assertv(((uintptr_t)address + length) <= (packed->d_bptr + packed->b_len),
+    ucs_assertv(((uintptr_t)address + length) <=
+                        (packed->d_bptr + packed->b_len),
                 "buffer 0x%lx..0x%lx region 0x%llx..0x%llx", (uintptr_t)address,
                 (uintptr_t)address + length, packed->d_bptr,
                 packed->d_bptr + packed->b_len);

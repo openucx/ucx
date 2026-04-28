@@ -122,23 +122,41 @@ typedef struct {
 } uct_cuda_ipc_memh_t;
 
 
+#if HAVE_CUDA_FABRIC
+/**
+ * @brief multi-chunk VMM registration metadata
+ */
+typedef struct {
+    CUdeviceptr       d_bptr;               /* Expanded base, all chunks */
+    size_t            b_len;                /* Expanded length, all chunks */
+    CUdeviceptr       header_dev_ptr;       /* GPU header buffer VA */
+    size_t            header_alloc_size;    /* Header buffer alloc size */
+    CUmemFabricHandle header_fabric_handle; /* Fabric handle to header buf */
+    CUdeviceptr       chunks_dev_ptr;       /* GPU chunks buffer VA */
+    size_t            chunks_alloc_size;    /* Chunks buffer alloc size */
+    uint16_t          num_chunks;           /* Chunk count */
+} uct_cuda_ipc_vmm_multi_meta_t;
+
+static UCS_F_ALWAYS_INLINE void
+uct_cuda_ipc_init_access_desc(CUmemAccessDesc *access_desc, CUdevice cu_dev)
+{
+    access_desc->location.type = CU_MEM_LOCATION_TYPE_DEVICE;
+    access_desc->flags         = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
+    access_desc->location.id   = cu_dev;
+}
+#endif
+
+
 /**
  * @brief cuda ipc region registered for exposure
  */
 typedef struct {
-    uct_cuda_ipc_md_handle_t  ph;     /* Memory handle of GPU memory */
-    CUdeviceptr               d_bptr; /* Allocation base address */
-    size_t                    b_len;  /* Allocation size */
-    ucs_list_link_t           link;
+    uct_cuda_ipc_md_handle_t      ph;     /* Memory handle of GPU memory */
+    CUdeviceptr                   d_bptr; /* Allocation base address */
+    size_t                        b_len;  /* Allocation size */
+    ucs_list_link_t               link;
 #if HAVE_CUDA_FABRIC
-    CUdeviceptr               vmm_multi_header_dev_ptr;     /* GPU metadata header buffer VA */
-    CUdeviceptr               vmm_multi_chunks_dev_ptr;     /* GPU metadata chunks buffer VA */
-    CUmemFabricHandle         vmm_multi_header_fabric_handle;/* Fabric handle to header buf */
-    size_t                    vmm_multi_header_alloc_size;  /* Header buffer alloc size */
-    size_t                    vmm_multi_chunks_alloc_size;  /* Chunks buffer alloc size */
-    CUdeviceptr               vmm_multi_d_bptr;             /* Expanded base, all chunks */
-    size_t                    vmm_multi_b_len;              /* Expanded length, all chunks */
-    uint16_t                  vmm_multi_meta_num_chunks;    /* Chunk count */
+    uct_cuda_ipc_vmm_multi_meta_t vmm_multi; /* Multi-chunk VMM metadata */
 #endif
 } uct_cuda_ipc_lkey_t;
 
@@ -164,58 +182,14 @@ typedef struct {
 } uct_cuda_ipc_extended_rkey_t;
 
 
+typedef struct {
+    uct_cuda_ipc_extended_rkey_t        super;
+    int                                 stream_id;
 #if HAVE_CUDA_FABRIC
-typedef struct {
-    uct_cuda_ipc_key_handle_t handle_type;
-    union {
-        CUmemFabricHandle     fabric;
-    } handle;
-} uct_cuda_ipc_vmm_handle_t;
-
-typedef struct {
-    uct_cuda_ipc_vmm_handle_t vmm_handle;
-    CUdeviceptr               d_bptr;
-    size_t                    b_len;
-    unsigned long long        buffer_id;
-} uct_cuda_ipc_vmm_chunk_desc_t;
-
-typedef struct {
-    uct_cuda_ipc_vmm_handle_t chunks_handle;
-    uint16_t                  num_chunks;
-} uct_cuda_ipc_vmm_meta_header_t;
-
-static UCS_F_ALWAYS_INLINE void
-uct_cuda_ipc_init_access_desc(CUmemAccessDesc *access_desc, CUdevice cu_dev)
-{
-    access_desc->location.type = CU_MEM_LOCATION_TYPE_DEVICE;
-    access_desc->flags         = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
-    access_desc->location.id   = cu_dev;
-}
-
-void uct_cuda_ipc_vmm_multi_meta_cleanup(uct_cuda_ipc_lkey_t *key);
-#endif
-
-
-typedef struct {
-    uct_cuda_ipc_extended_rkey_t   super;
-    int                            stream_id;
-#if HAVE_CUDA_FABRIC
-    uct_cuda_ipc_vmm_chunk_desc_t *chunks;
-    uint16_t                       num_chunks;
+    /* Forward decl, defined in cuda_ipc_vmm_multi.h */
+    struct uct_cuda_ipc_vmm_chunk_desc *chunks;
+    uint16_t                            num_chunks;
 #endif
 } uct_cuda_ipc_unpacked_rkey_t;
-
-
-#if HAVE_CUDA_FABRIC
-ucs_status_t
-uct_cuda_ipc_mkey_pack_vmm_multi_chunk(uct_cuda_ipc_memh_t *memh,
-                                       uct_cuda_ipc_lkey_t *key, void *address,
-                                       size_t length);
-
-ucs_status_t
-uct_cuda_ipc_vmm_multi_fetch_chunks(uct_cuda_ipc_unpacked_rkey_t *rkey,
-                                    CUdevice cu_dev,
-                                    ucs_log_level_t log_level);
-#endif
 
 #endif
