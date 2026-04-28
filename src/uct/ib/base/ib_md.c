@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2020. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  * Copyright (C) The University of Tennessee and The University
  *               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
  *
@@ -128,6 +128,12 @@ ucs_config_field_t uct_ib_md_config_table[] = {
     {"GDA_DMABUF_ENABLE", "try",
      "Enable DMA-BUF in GDA.",
      ucs_offsetof(uct_ib_md_config_t, ext.gda_dmabuf_enable), UCS_CONFIG_TYPE_TERNARY},
+
+    {"GDA_RETAIN_INACTIVE_CTX", "n",
+     "Retain and use an inactive CUDA primary context to query device "
+     "capabilities.",
+     ucs_offsetof(uct_ib_md_config_t, ext.gda_retain_inactive_ctx),
+     UCS_CONFIG_TYPE_BOOL},
 
     {"PCI_BW", "",
      "Maximum effective data transfer rate of PCI bus connected to HCA\n",
