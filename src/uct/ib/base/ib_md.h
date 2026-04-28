@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2016. ALL RIGHTS RESERVED.
  * Copyright (C) The University of Tennessee and The University
  *               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
  *
@@ -114,8 +114,6 @@ typedef struct uct_ib_md_ext_config {
     int                      direct_nic; /**< Direct NIC with GPU functionality */
     unsigned                 gda_max_hca_per_gpu; /**< Threshold of IB per GPU */
     int                      gda_dmabuf_enable; /**< Enable DMA-BUF in GDA */
-    /**< Retain and use an inactive CUDA primary context to query device capabilities */
-    int                      gda_retain_inactive_ctx;
 } uct_ib_md_ext_config_t;
 
 
