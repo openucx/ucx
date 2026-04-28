@@ -176,7 +176,6 @@ public:
     ucp_mem_h import_memh(ucp_mem_h exported_memh);
 
 protected:
-    bool resolve_rma(entity *e, ucp_rkey_h rkey);
     bool resolve_amo(entity *e, ucp_rkey_h rkey);
     bool resolve_rma_bw_get_zcopy(entity *e, ucp_rkey_h rkey);
     bool resolve_rma_bw_put_zcopy(entity *e, ucp_rkey_h rkey);
@@ -253,26 +252,6 @@ ucp_rkey_h test_ucp_mmap::mem_chunk::unpack(ucp_ep_h ep, ucp_md_map_t md_map)
     ucp_rkey_buffer_release(rkey_buffer);
     rkeys.push_back(rkey);
     return rkey;
-}
-
-bool test_ucp_mmap::resolve_rma(entity *e, ucp_rkey_h rkey)
-{
-    ucs_status_t status;
-
-    {
-        scoped_log_handler slh(hide_errors_logger);
-        status = UCP_RKEY_RESOLVE(rkey, e->ep(), rma);
-    }
-
-    if (status == UCS_OK) {
-        EXPECT_NE(UCP_NULL_LANE, rkey->cache.rma_lane);
-        return true;
-    } else if (status == UCS_ERR_UNREACHABLE) {
-        EXPECT_EQ(UCP_NULL_LANE, rkey->cache.rma_lane);
-        return false;
-    } else {
-        UCS_TEST_ABORT("Invalid status from UCP_RKEY_RESOLVE");
-    }
 }
 
 bool test_ucp_mmap::resolve_amo(entity *e, ucp_rkey_h rkey)
@@ -367,7 +346,6 @@ void test_ucp_mmap::test_rkey_management(ucp_mem_h memh, bool is_dummy,
     if (is_proto_enabled()) {
         test_rkey_proto(memh);
     } else {
-        bool have_rma              = resolve_rma(&receiver(), rkey);
         bool have_amo              = resolve_amo(&receiver(), rkey);
         bool have_rma_bw_get_zcopy = resolve_rma_bw_get_zcopy(&receiver(),
                                                               rkey);
@@ -376,24 +354,20 @@ void test_ucp_mmap::test_rkey_management(ucp_mem_h memh, bool is_dummy,
 
         /* Test that lane resolution on the remote key returns consistent results */
         for (int i = 0; i < 10; ++i) {
-            switch (ucs::rand() % 4) {
+            switch (ucs::rand() % 3) {
             case 0:
-                EXPECT_EQ(have_rma, resolve_rma(&receiver(), rkey));
-                break;
-            case 1:
                 EXPECT_EQ(have_amo, resolve_amo(&receiver(), rkey));
                 break;
-            case 2:
+            case 1:
                 EXPECT_EQ(have_rma_bw_get_zcopy,
                           resolve_rma_bw_get_zcopy(&receiver(), rkey));
                 break;
-            case 3:
+            case 2:
                 EXPECT_EQ(have_rma_bw_put_zcopy,
                           resolve_rma_bw_put_zcopy(&receiver(), rkey));
                 break;
             }
         }
-
     }
 
     if (mem_type == UCS_MEMORY_TYPE_HOST) {

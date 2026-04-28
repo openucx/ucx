@@ -35,15 +35,6 @@
     } while (0)
 
 
-#define UCP_RMA_CHECK(_context, _buffer, _length) \
-    do { \
-        UCP_CONTEXT_CHECK_FEATURE_FLAGS(_context, UCP_FEATURE_RMA, \
-                                        return UCS_ERR_INVALID_PARAM); \
-        UCP_RMA_CHECK_ZERO_LENGTH(_length, return UCS_OK); \
-        UCP_RMA_CHECK_BUFFER(_buffer, return UCS_ERR_INVALID_PARAM); \
-    } while (0)
-
-
 #define UCP_RMA_CHECK_PTR(_context, _buffer, _length) \
     do { \
         UCP_CONTEXT_CHECK_FEATURE_FLAGS(_context, UCP_FEATURE_RMA, \
@@ -53,49 +44,6 @@
                              return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM)); \
     } while (0)
 
-
-/* request can be released if
- *  - all fragments were sent (length == 0) (bcopy & zcopy mix)
- *  - all zcopy fragments are done (uct_comp.count == 0)
- *  - and request was allocated from the mpool
- *    (checked in ucp_request_complete_send)
- *
- * Request can be released either immediately or in the completion callback.
- * We must check req length in the completion callback to avoid the following
- * scenario:
- *  partial_send;no_resos;progress;
- *  send_completed;cb called;req free(ooops);
- *  next_partial_send; (oops req already freed)
- */
-ucs_status_t ucp_rma_request_advance(ucp_request_t *req, ssize_t frag_length,
-                                     ucs_status_t status,
-                                     ucs_ptr_map_key_t req_id)
-{
-    ucs_assert(status != UCS_ERR_NOT_IMPLEMENTED);
-
-    ucp_request_send_state_advance(req, NULL, UCP_REQUEST_SEND_PROTO_RMA,
-                                   status);
-
-    if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
-        if (status == UCS_ERR_NO_RESOURCE) {
-            return UCS_ERR_NO_RESOURCE;
-        }
-
-        return UCS_OK;
-    }
-
-    ucs_assert(frag_length >= 0);
-    ucs_assert(req->send.length >= frag_length);
-    req->send.length -= frag_length;
-    if (req->send.length == 0) {
-        /* bcopy is the fast path */
-        ucp_send_request_invoke_uct_completion(req);
-        return UCS_OK;
-    }
-    req->send.buffer           = UCS_PTR_BYTE_OFFSET(req->send.buffer, frag_length);
-    req->send.rma.remote_addr += frag_length;
-    return UCS_INPROGRESS;
-}
 
 ucs_status_t ucp_put_nbi(ucp_ep_h ep, const void *buffer, size_t length,
                          uint64_t remote_addr, ucp_rkey_h rkey)

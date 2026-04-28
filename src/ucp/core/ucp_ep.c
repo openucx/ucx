@@ -3690,8 +3690,7 @@ void ucp_ep_req_purge(ucp_ep_h ucp_ep, ucp_request_t *req,
         }
 
         ucp_request_put(req);
-    } else if ((req->send.uct.func == ucp_rma_sw_proto.progress_get) ||
-               (req->send.uct.func == ucp_amo_sw_proto.progress_fetch)) {
+    } else if (req->send.uct.func == ucp_amo_sw_proto.progress_fetch) {
         /* Currently we don't support UCP EP request purging for proto mode */
         ucs_assert(!ucp_ep->worker->context->config.ext.proto_enable);
         ucs_assert(req->send.ep == ucp_ep);
@@ -3707,12 +3706,11 @@ void ucp_ep_req_purge(ucp_ep_h ucp_ep, ucp_request_t *req,
                 ucs_mpool_put_inline(req->send.rndv.mdesc);
             }
         } else {
-            /* SW RMA/PUT and AMO/Post operations don't allocate local request ID
-             * and don't need to be tracked, since they complete UCP request upon
-             * sending all data to a peer. Receiving RMA/CMPL and AMO/REP packets
-             * complete flush requests */
-            ucs_assert((req->send.uct.func != ucp_rma_sw_proto.progress_put) &&
-                       (req->send.uct.func != ucp_amo_sw_proto.progress_post));
+            /* SW AMO/Post operations don't allocate local request ID and don't
+             * need to be tracked, since they complete UCP request upon sending
+             * all data to a peer. Receiving AMO/REP packets complete flush
+             * requests */
+            ucs_assert(req->send.uct.func != ucp_amo_sw_proto.progress_post);
         }
 
         ucp_ep_req_purge(ucp_ep, ucp_request_get_super(req), status, 1);

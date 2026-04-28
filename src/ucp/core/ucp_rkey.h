@@ -115,10 +115,8 @@ typedef struct ucp_rkey {
             uint8_t                   flags;           /* Rkey flags */
             uint8_t                   mem_type;        /* Memory type of remote key memory */
             ucp_worker_cfg_index_t    ep_cfg_index;    /* EP configuration relevant for the cache */
-            ucp_lane_index_t          rma_lane;        /* Lane to use for RMAs */
             ucp_lane_index_t          amo_lane;        /* Lane to use for AMOs */
             ucp_rkey_proto_index_t    amo_proto_index; /* Protocol for AMOs */
-            uct_rkey_t                rma_rkey;        /* Key to use for RMAs */
             uct_rkey_t                amo_rkey;        /* Key to use for AMOs */
         } cache;
         struct {
