@@ -142,8 +142,8 @@ protected:
 
     static void shuffle_lanes(std::vector<ucp_lane_index_t> &lanes, const std::string &lane_type) {
         if (lanes.size() < 2) {
-            UCS_TEST_SKIP_R("At least 2 " + lane_type + "s are required, but only " +
-                            std::to_string(lanes.size()) + " available");
+            UCS_TEST_SKIP_R("At least 2 " + lane_type + "lanes are required, but only " + std::to_string(lanes.size()) +
+                            " available");
         }
 
         /* Allocate randomizer on heap to avoid exceeding stack frame size limits. */
@@ -163,31 +163,45 @@ protected:
 
     std::vector<ucp_lane_index_t> get_lanes(unsigned op_mask) {
         std::set<ucp_lane_index_t> tmp_lanes;
+        std::string lane_type_str;
+        unsigned lane_types;
         const ucp_lane_index_t *lane_idx;
         const ucp_lane_index_t *lanes_key_p;
 
+        unsigned lane_type_mask = 0;
         if (op_mask & (TEST_OP_PUT | TEST_OP_GET)) {
-            lanes_key_p = ucp_ep_config(sender().ep(0, INJECTED_EP_INDEX))->key.rma_bw_lanes;
+            lane_type_mask |= UCS_BIT(UCP_LANE_TYPE_RMA_BW);
+        }
 
+        if (op_mask & TEST_OP_AM) {
+            lane_type_mask |= UCS_BIT(UCP_LANE_TYPE_AM_BW);
+        }
+
+        if (op_mask & (TEST_OP_PUT | TEST_OP_GET)) {
+            lane_type_str  += "RMA BW ";
+            lanes_key_p = ucp_ep_config(sender().ep(0, INJECTED_EP_INDEX))->key.rma_bw_lanes;
             ucs_carray_for_each(lane_idx, lanes_key_p, UCP_MAX_LANES) {
-                if (*lane_idx != UCP_NULL_LANE) {
+                lane_types = ucp_ep_config(sender().ep(0, INJECTED_EP_INDEX))->key.lanes[*lane_idx].lane_types;
+                if (ucs_test_all_flags(lane_types, lane_type_mask) && (*lane_idx != UCP_NULL_LANE)) {
                     tmp_lanes.insert(*lane_idx);
                 }
             }
         }
 
         if (op_mask & TEST_OP_AM) {
+            lane_type_mask |= UCS_BIT(UCP_LANE_TYPE_AM_BW);
+            lane_type_str  += "AM BW ";
             lanes_key_p = ucp_ep_config(sender().ep(0, INJECTED_EP_INDEX))->key.am_bw_lanes;
-
             ucs_carray_for_each(lane_idx, lanes_key_p, UCP_MAX_LANES) {
-                if (*lane_idx != UCP_NULL_LANE) {
+                lane_types = ucp_ep_config(sender().ep(0, INJECTED_EP_INDEX))->key.lanes[*lane_idx].lane_types;
+                if (ucs_test_all_flags(lane_types, lane_type_mask) && (*lane_idx != UCP_NULL_LANE)) {
                     tmp_lanes.insert(*lane_idx);
                 }
             }
         }
 
         std::vector<ucp_lane_index_t> lanes(tmp_lanes.begin(), tmp_lanes.end());
-        shuffle_lanes(lanes, op_name(op_mask) + " lanes");
+        shuffle_lanes(lanes, lane_type_str);
         return lanes;
     }
 
@@ -270,8 +284,18 @@ protected:
         EXPECT_EQ(UCS_OK, status) << op_str << " operation returned status: "
                                   << ucs_status_string(status);
 
+        size_t num_lanes_to_fail = am_bw_lanes.size();
+        if (has_any_transport({"ud_v", "ud_x"}) &&
+            (failure_side == FAILURE_SIDE_INITIATOR)) {
+            /* TODO: remove this once UD ep purge assertions are fixed */
+            UCS_TEST_MESSAGE << "Keep 1 live lane for UD transports since "
+                             << "local error injection on all lanes leads to "
+                                "failed assertion in ud_ep_purge";
+            num_lanes_to_fail--;
+        }
+
         ucp_ep_h ucp_ep_for_injection = get_ucp_ep_for_err_injection(failure_side);
-        for (size_t lane_idx = 0; lane_idx < am_bw_lanes.size(); ++lane_idx) {
+        for (size_t lane_idx = 0; lane_idx < num_lanes_to_fail; ++lane_idx) {
             ucp_lane_index_t lane = am_bw_lanes[lane_idx];
             uct_ep_h uct_ep_for_injection = ucp_ep_get_lane(ucp_ep_for_injection, lane);
             status = uct_ep_invalidate(uct_ep_for_injection, 0);
