@@ -83,6 +83,8 @@ build_release_pkg() {
 			cd $subdir
 			dpkg-buildpackage -us -uc
 		)
+		echo "==== Test install DEB (dry-run) ===="
+		apt-get install -s -y ./*.deb
 	else
 		echo "==== Build RPM ===="
 		echo "$PWD"
@@ -91,6 +93,8 @@ build_release_pkg() {
 			azure_log_error "Release build depends on CUDA while it should not"
 			exit 1
 		fi
+		echo "==== Test install RPM (dry-run) ===="
+		rpm -Uvh --test ${PWD}/rpm-dist/*/*.rpm
 		echo "==== Build debug RPM ===="
 		${WORKSPACE}/contrib/buildrpm.sh -s -b -d --nodeps --define "_topdir $PWD/debug"
 	fi
