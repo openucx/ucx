@@ -28,8 +28,8 @@
 /* Select protocol which supports resume request after reset. */
 #define UCP_PROTO_SELECT_OP_FLAG_RESUME (UCP_PROTO_SELECT_OP_FLAGS_BASE << 0)
 
-/* Select a protocol for sending one fragment of a rendezvous pipeline.
- * Relevant for UCP_OP_ID_RNDV_SEND and UCP_OP_ID_RNDV_RECV. */
+/* Select a protocol for sending one fragment of a pipeline.
+ * Relevant for UCP_OP_ID_RNDV_SEND, UCP_OP_ID_RNDV_RECV, and UCP_OP_ID_PUT. */
 #define UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG (UCP_PROTO_SELECT_OP_FLAGS_BASE << 1)
 
 

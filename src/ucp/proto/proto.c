@@ -29,6 +29,8 @@
     _macro(ucp_put_offload_short_proto) \
     _macro(ucp_put_offload_bcopy_proto) \
     _macro(ucp_put_offload_zcopy_proto) \
+    _macro(ucp_put_ppln_proto) \
+    _macro(ucp_put_mtype_proto) \
     _macro(ucp_eager_bcopy_multi_proto) \
     _macro(ucp_eager_sync_bcopy_multi_proto) \
     _macro(ucp_eager_zcopy_multi_proto) \

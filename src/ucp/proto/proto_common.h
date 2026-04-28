@@ -24,6 +24,7 @@
 #define UCP_PROTO_COPY_OUT_DESC   "copy-out"
 #define UCP_PROTO_ZCOPY_DESC      "zero-copy"
 #define UCP_PROTO_MULTI_FRAG_DESC "multi-frag"
+#define UCP_PROTO_PPLN_DESC       "ppln"
 
 
 #define UCP_PROTO_LANE_FMT \
