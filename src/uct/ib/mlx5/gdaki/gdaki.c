@@ -848,7 +848,7 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
         if (dev_ep == NULL) {
             ucs_error("failed to allocate dev_ep on host buffer size=%zu ep=%p "
                       "iface=%p",
-                      qp_attr.umem_offset, ep, iface);
+                      dev_ep_host_size, ep, iface);
             status = UCS_ERR_NO_MEMORY;
             goto out_ctx;
         }
