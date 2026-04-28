@@ -205,10 +205,6 @@ ucs_status_ptr_t ucp_get_nbx(ucp_ep_h ep, void *buffer, size_t count,
     ucp_request_t *req;
     uintptr_t datatype;
 
-    if (ucs_unlikely(param->op_attr_mask & UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL)) {
-        return UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE);
-    }
-
     UCP_REQUEST_CHECK_PARAM(param);
     UCP_RMA_CHECK_PTR(worker->context, buffer, count);
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
@@ -220,6 +216,11 @@ ucs_status_ptr_t ucp_get_nbx(ucp_ep_h ep, void *buffer, size_t count,
 
     if (ucs_unlikely(!worker->context->config.ext.proto_enable)) {
         ret = UCS_STATUS_PTR(UCS_ERR_UNSUPPORTED);
+        goto out_unlock;
+    }
+
+    if (ucs_unlikely(param->op_attr_mask & UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL)) {
+        ret = UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE);
         goto out_unlock;
     }
 

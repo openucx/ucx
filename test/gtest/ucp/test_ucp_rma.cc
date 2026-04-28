@@ -332,6 +332,14 @@ UCS_TEST_P(test_ucp_rma, proto_disabled_unsupported, "PROTO_ENABLE=n")
     EXPECT_EQ(UCS_ERR_UNSUPPORTED,
               UCS_PTR_STATUS(ucp_get_nbx(sender().ep(), recvbuf.ptr(), size,
                                          (uint64_t)rbuf.ptr(), rkey, &param)));
+
+    param.op_attr_mask = UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL;
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED,
+              UCS_PTR_STATUS(ucp_put_nbx(sender().ep(), sendbuf.ptr(), size,
+                                         (uint64_t)rbuf.ptr(), rkey, &param)));
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED,
+              UCS_PTR_STATUS(ucp_get_nbx(sender().ep(), recvbuf.ptr(), size,
+                                         (uint64_t)rbuf.ptr(), rkey, &param)));
 }
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_rma)
