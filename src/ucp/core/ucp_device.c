@@ -561,6 +561,11 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
     }
 
     ucp_device_get_tl_bitmap(ep->worker, tl_bitmap, local_sys_dev);
+
+    /* handle->num_lanes is the least common multiple of both lane types, so:
+     * - each lane is replicated num_lanes / popcount(tl_bitmap) times
+     * - channel_id % num_lanes maps to the correct lane, regardless of lane type
+     */
     num_lanes = UCS_STATIC_BITMAP_POPCOUNT(tl_bitmap[UCP_DEVICE_TL_TYPE_LKEY]);
     if (!num_lanes) {
         if (!UCS_STATIC_BITMAP_POPCOUNT(tl_bitmap[UCP_DEVICE_TL_TYPE_NOLKEY])) {
@@ -594,7 +599,12 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
                 }
             }
 
-            ucs_assert(tl_type < UCP_DEVICE_TL_TYPE_LAST);
+            if (tl_type == UCP_DEVICE_TL_TYPE_LAST) {
+                ucs_error("lane not found for element %zd", i);
+                status =  UCS_ERR_INVALID_PARAM;
+                goto out;
+            }
+
             status = ucp_device_remote_mem_list_fill(ucp_element,
                                                      &tl_bitmap[tl_type],
                                                      num_lanes, uct_element);

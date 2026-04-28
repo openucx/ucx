@@ -110,7 +110,7 @@ UCS_F_DEVICE void ucp_device_request_init(uct_device_ep_t *device_ep,
     _uct_channel_id = _channel_id / _handle->num_lanes;
 
 
-#define UCP_DEVICE_GET_ELEM(_handle, _index, _lane) \
+#define UCP_DEVICE_GET_ELEM(_handle, _index) \
     static_cast<ucs_typeof(_handle->mem_elements[0])*>(UCS_PTR_BYTE_OFFSET( \
             _handle->mem_elements, \
             (sizeof(_handle->mem_elements[0]) + \
@@ -132,7 +132,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_prepare_send_remote(
     }
 
     const auto dst_mem_element = UCP_DEVICE_GET_ELEM(dst_mem_list_h,
-                                                     dst_mem_list_index, lane);
+                                                     dst_mem_list_index);
     remote_address             = dst_mem_element->addr;
     device_ep                  = dst_mem_element->tl[lane].ep;
     uct_elem                   = &dst_mem_element->tl[lane].uct;
@@ -166,7 +166,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_prepare_send(
     }
 
     const auto src_mem_elem = UCP_DEVICE_GET_ELEM(src_mem_list_h,
-                                                  src_mem_list_index, lane);
+                                                  src_mem_list_index);
     src_uct_elem            = src_mem_elem->tl + lane;
     address                 = src_mem_elem->addr;
 
@@ -326,7 +326,6 @@ UCS_F_DEVICE ucs_status_t
 ucp_device_get_ptr(const ucp_device_remote_mem_list_h mem_list_h,
                    unsigned mem_list_index, void **addr_p)
 {
-    const size_t elem_size = sizeof(uct_device_remote_mem_elem_t);
     ucs_status_t status;
 
     status = ucp_device_check_params(mem_list_h, mem_list_index);
@@ -334,9 +333,7 @@ ucp_device_get_ptr(const ucp_device_remote_mem_list_h mem_list_h,
         return status;
     }
 
-    const auto mem_element = static_cast<uct_device_remote_mem_elem_t*>(
-            UCS_PTR_BYTE_OFFSET(mem_list_h->mem_elements,
-                                mem_list_index * elem_size));
+    const auto mem_element = UCP_DEVICE_GET_ELEM(mem_list_h, mem_list_index);
 
     return uct_device_ep_get_ptr(mem_element->tl[0].ep, &mem_element->tl[0].uct,
                                  mem_element->addr, addr_p);

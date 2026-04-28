@@ -438,7 +438,7 @@ typedef enum uct_atomic_op {
         /* Interface capability */
 #define UCT_IFACE_FLAG_INTER_NODE      UCS_BIT(54) /**< Interface is inter-node capable */
 #define UCT_IFACE_FLAG_DEVICE_EP       UCS_BIT(55) /**< Interface supports device endpoint */
-#define UCT_IFACE_FLAG_DEVICE_LKEY     UCS_BIT(56) /**< Interface require lkey for device operations */
+#define UCT_IFACE_FLAG_DEVICE_LKEY     UCS_BIT(56) /**< Interface requires lkey for device operations */
 /**
  * @}
  */
