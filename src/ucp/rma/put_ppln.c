@@ -192,10 +192,70 @@ ucp_proto_put_mtype_probe(const ucp_proto_init_params_t *init_params)
     ucp_proto_multi_probe(&params);
 }
 
+static void
+ucp_proto_put_mtype_copy_complete(ucp_request_t *req)
+{
+    ucp_trace_req(req, "put/mtype: copy-in complete local_mdesc=%p",
+                  req->send.frag_ppln.local_mdesc);
+    ucp_proto_request_set_stage(req, UCP_PROTO_PUT_MTYPE_STAGE_SEND);
+}
+
+static void
+ucp_proto_put_mtype_copy_completion(uct_completion_t *uct_comp)
+{
+    ucp_request_t *req = ucs_container_of(uct_comp, ucp_request_t,
+                                          send.state.uct_comp);
+
+    ucp_proto_put_mtype_copy_complete(req);
+    ucp_request_send(req);
+}
+
 static ucs_status_t
 ucp_proto_put_mtype_copy_progress(uct_pending_req_t *self)
 {
-    return UCS_ERR_NOT_IMPLEMENTED;
+    ucp_request_t *req     = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_mem_desc_t *mdesc  = req->send.frag_ppln.local_mdesc;
+    ucs_memory_type_t frag_mem_type = mdesc->memh->mem_type;
+    ucp_worker_h worker    = req->send.ep->worker;
+    ucp_ep_h mtype_ep;
+    ucp_lane_index_t lane;
+    ucs_status_t status;
+    uct_iov_t iov;
+
+    /* Find mem_type EP for the copy */
+    mtype_ep = worker->mem_type_ep[req->send.state.dt_iter.mem_info.type];
+    ucs_assertv(mtype_ep != NULL, "no mem_type_ep for %s",
+                ucs_memory_type_names[req->send.state.dt_iter.mem_info.type]);
+
+    lane = ucp_ep_config(mtype_ep)->key.rma_bw_lanes[0];
+
+    ucp_trace_req(req, "put/mtype: copy-in src=%p dst=%p size=%zu "
+                  "mem_type=%s-%s",
+                  req->send.state.dt_iter.type.contig.buffer, mdesc->ptr,
+                  req->send.state.dt_iter.length,
+                  ucs_memory_type_names[req->send.state.dt_iter.mem_info.type],
+                  ucs_memory_type_names[frag_mem_type]);
+
+    ucp_proto_completion_init(&req->send.state.uct_comp,
+                              ucp_proto_put_mtype_copy_completion);
+
+    iov.buffer = mdesc->ptr;
+    iov.length = req->send.state.dt_iter.length;
+    iov.memh   = mdesc->memh->uct[ucp_ep_md_index(mtype_ep, lane)];
+    iov.stride = 0;
+    iov.count  = 1;
+
+    status = uct_ep_get_zcopy(ucp_ep_get_lane(mtype_ep, lane), &iov, 1,
+                              (uintptr_t)req->send.state.dt_iter.type.contig.buffer,
+                              UCT_INVALID_RKEY, &req->send.state.uct_comp);
+    if (status == UCS_OK) {
+        ucp_proto_put_mtype_copy_complete(req);
+        return UCS_INPROGRESS;
+    } else if (status != UCS_INPROGRESS) {
+        ucp_proto_request_abort(req, status);
+    }
+
+    return UCS_OK;
 }
 
 static ucs_status_t
