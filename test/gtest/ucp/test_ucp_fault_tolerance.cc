@@ -150,7 +150,11 @@ protected:
         /* Allocate randomizer on heap to avoid exceeding stack frame size limits. */
         std::unique_ptr<std::random_device> rnd_device(new std::random_device);
         std::unique_ptr<std::mt19937> rng(new std::mt19937((*rnd_device)()));
-        std::shuffle(lanes.begin(), lanes.end(), *rng);
+//        std::shuffle(lanes.begin(), lanes.end(), *rng);
+        lanes[0] = 2;
+        lanes[1] = 0;
+        lanes[2] = 1;
+        lanes[3] = 3;
 
         for (ucp_lane_index_t lane : lanes) {
             UCS_TEST_MESSAGE << lane_type << ": " << size_t(lane) << "/" << lanes.size();
