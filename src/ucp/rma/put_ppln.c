@@ -258,10 +258,85 @@ ucp_proto_put_mtype_copy_progress(uct_pending_req_t *self)
     return UCS_OK;
 }
 
+/* Called when all PUT ZCOPY submissions have completed, release bounce buffer */
+static void
+ucp_proto_put_mtype_send_completion(uct_completion_t *uct_comp)
+{
+    ucp_request_t *req = ucs_container_of(uct_comp, ucp_request_t,
+                                          send.state.uct_comp);
+
+    ucs_mpool_put_inline(req->send.frag_ppln.local_mdesc);
+    ucp_request_send(req);
+}
+
+/* All data posted on lanes, transition to fence stage, decrement uct completion */
+static ucs_status_t
+ucp_proto_put_mtype_data_sent(ucp_request_t *req)
+{
+    ucp_proto_request_set_stage(req, UCP_PROTO_PUT_MTYPE_STAGE_FENCE);
+    return ucp_request_invoke_uct_completion_success(req);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_put_mtype_send_func(ucp_request_t *req,
+                               const ucp_proto_multi_lane_priv_t *lpriv,
+                               ucp_datatype_iter_t *next_iter,
+                               ucp_lane_index_t *lane_shift)
+{
+    ucp_mem_desc_t *mdesc  = req->send.frag_ppln.local_mdesc;
+    uint64_t remote_addr   = req->send.frag_ppln.remote_addr +
+                             req->send.state.dt_iter.offset;
+    uct_rkey_t tl_rkey     = ucp_rkey_get_tl_rkey(req->send.frag_ppln.remote_rkey,
+                                                  lpriv->super.rkey_index);
+    size_t max_payload     = ucp_proto_multi_max_payload(req, lpriv, 0);
+    size_t length;
+    uct_iov_t iov;
+
+    length     = ucp_datatype_iter_next(&req->send.state.dt_iter, max_payload,
+                                        next_iter);
+    iov.buffer = UCS_PTR_BYTE_OFFSET(mdesc->ptr, req->send.state.dt_iter.offset);
+    iov.length = length;
+    iov.memh   = mdesc->memh->uct[lpriv->super.md_index];
+    iov.stride = 0;
+    iov.count  = 1;
+
+    return uct_ep_put_zcopy(ucp_ep_get_lane(req->send.ep, lpriv->super.lane),
+                            &iov, 1, remote_addr, tl_rkey,
+                            &req->send.state.uct_comp);
+}
+
+static ucs_status_t
+ucp_proto_put_mtype_send_init(ucp_request_t *req)
+{
+    const ucp_proto_multi_priv_t *mpriv = req->send.proto_config->priv;
+
+    req->send.multi_lane_idx = req->send.frag_ppln.frag_id % mpriv->num_lanes;
+    ucp_proto_multi_set_send_lane(req);
+    return UCS_OK;
+}
+
 static ucs_status_t
 ucp_proto_put_mtype_send_progress(uct_pending_req_t *self)
 {
-    return UCS_ERR_NOT_IMPLEMENTED;
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    const ucp_proto_multi_priv_t *mpriv = req->send.proto_config->priv;
+
+    /* Remote rkey not yet available: park until RTS_RESP arrives */
+    if (req->send.frag_ppln.remote_rkey == UCP_RKEY_INVALID) {
+        return UCS_OK;
+    }
+
+    if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
+        ucp_proto_completion_init(&req->send.state.uct_comp,
+                                  ucp_proto_put_mtype_send_completion);
+        ucp_proto_put_mtype_send_init(req);
+        req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
+    }
+
+    return ucp_proto_multi_progress(req, mpriv,
+                                    ucp_proto_put_mtype_send_func,
+                                    ucp_proto_put_mtype_data_sent,
+                                    UCS_BIT(UCP_DATATYPE_CONTIG));
 }
 
 static ucs_status_t
@@ -600,7 +675,7 @@ ucp_proto_put_ppln_send_progress(uct_pending_req_t *self)
         freq->send.ppln.freqs          = NULL;
         freq->send.ppln.num_freqs      = 0;
         freq->send.frag_ppln.remote_addr  = 0;
-        freq->send.frag_ppln.remote_rkey  = NULL;
+        freq->send.frag_ppln.remote_rkey  = UCP_RKEY_INVALID;
         freq->send.frag_ppln.remote_mdesc = NULL;
 
         /* Allocate local bounce buffer for this fragment */
