@@ -240,6 +240,19 @@ struct ucp_request {
                 } rma;
 
                 struct {
+                    ucp_request_t    **freqs;       /* Fragment request array */
+                    unsigned         num_freqs;     /* Number of fragment requests */
+                } ppln;
+
+                struct {
+                    ucp_mem_desc_t   *local_mdesc;  /* Local bounce buffer */
+                    ucp_lane_index_t frag_id;       /* Fragment index */
+                    uint64_t         remote_addr;   /* Remote bounce buffer address */
+                    ucp_rkey_h       remote_rkey;    /* Remote bounce buffer rkey */
+                    ucp_mem_desc_t   *remote_mdesc; /* Remote mdesc (opaque, for ATP) */
+                } frag_ppln;
+
+                struct {
                     /* Remote request ID received from a peer */
                     ucs_ptr_map_key_t      remote_req_id;
                     uint8_t                am_id;

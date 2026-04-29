@@ -16,6 +16,7 @@
 #include <ucp/dt/datatype_iter.inl>
 #include <ucp/proto/proto_init.h>
 #include <ucp/proto/proto_multi.inl>
+#include <ucp/proto/proto_am.h>
 #include <ucp/proto/proto_common.h>
 #include <ucp/proto/proto_debug.h>
 #include <ucp/proto/proto_perf.h>
@@ -237,6 +238,28 @@ ucp_proto_t ucp_put_mtype_proto = {
  *            ATP signaling, completion tracking
  */
 
+/* Sub-IDs for UCP_AM_ID_RMA_PPLN */
+enum {
+    UCP_RMA_PPLN_AM_RTS,
+    UCP_RMA_PPLN_AM_RTS_RESP,
+    UCP_RMA_PPLN_AM_ATP,
+};
+
+/* Common header for all RMA ppln active messages */
+typedef struct {
+    ucp_request_hdr_t super;
+    uint8_t           sub_id;
+} UCS_S_PACKED ucp_rma_ppln_hdr_t;
+
+/* RTS header: sender → receiver, requesting remote bounce buffers */
+typedef struct {
+    ucp_rma_ppln_hdr_t super;
+    int              count;     /* Number of fragments requested */
+    ucp_md_map_t     md_map;   /* MD map for fragment registration */
+    ucs_sys_device_t sys_dev;  /* System device for fragment allocation */
+    size_t           frag_size; /* Fragment size */
+} UCS_S_PACKED ucp_put_ppln_rts_hdr_t;
+
 /* Private data for put/ppln protocol */
 typedef struct {
     size_t             frag_size;
@@ -410,13 +433,155 @@ ucp_proto_put_ppln_query(const ucp_proto_query_params_t *params,
 }
 
 enum {
-    UCP_PROTO_PUT_PPLN_STAGE_SEND = UCP_PROTO_STAGE_START,
+    UCP_PROTO_PUT_PPLN_STAGE_RTS = UCP_PROTO_STAGE_START,
+    UCP_PROTO_PUT_PPLN_STAGE_SEND,
 };
 
-static ucs_status_t
-ucp_proto_put_ppln_progress(uct_pending_req_t *self)
+static ucp_md_map_t
+ucp_proto_put_ppln_remote_md_map(const ucp_request_t *req,
+                                 const ucp_proto_multi_priv_t *mpriv)
 {
-    return UCS_ERR_NOT_IMPLEMENTED;
+    ucp_worker_h worker = req->send.ep->worker;
+    const ucp_ep_config_key_t *ep_config_key;
+    ucp_md_map_t remote_md_map = 0;
+    ucp_lane_index_t i, lane;
+
+    ep_config_key = &ucs_array_elem(&worker->ep_config,
+                                    req->send.proto_config->ep_cfg_index).key;
+
+    for (i = 0; i < mpriv->num_lanes; i++) {
+        lane           = mpriv->lanes[i].super.lane;
+        remote_md_map |= UCS_BIT(ep_config_key->lanes[lane].dst_md_index);
+    }
+
+    return remote_md_map;
+}
+
+static size_t
+ucp_proto_put_ppln_rts_pack(void *dest, void *arg)
+{
+    ucp_put_ppln_rts_hdr_t *rts = dest;
+    ucp_request_t *req          = arg;
+    const ucp_proto_put_ppln_priv_t *rpriv;
+    const ucp_proto_multi_priv_t *mpriv;
+    size_t length;
+
+    rpriv  = req->send.proto_config->priv;
+    mpriv  = rpriv->frag_proto_cfg.priv;
+    length = req->send.state.dt_iter.length;
+
+    rts->super.super.req_id = ucp_send_request_get_id(req);
+    rts->super.super.ep_id  = ucp_send_request_get_ep_remote_id(req);
+    rts->super.sub_id       = UCP_RMA_PPLN_AM_RTS;
+    rts->frag_size          = rpriv->frag_size;
+    rts->count              = ucs_div_round_up(length, rpriv->frag_size);
+    rts->md_map             = ucp_proto_put_ppln_remote_md_map(req, mpriv);
+    rts->sys_dev            = ucp_rkey_config(req->send.ep->worker,
+                                  req->send.proto_config->rkey_cfg_index)->key.sys_dev;
+
+    return sizeof(*rts);
+}
+
+static ucs_status_t
+ucp_proto_put_ppln_rts_progress(uct_pending_req_t *self)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    ucs_status_t status;
+
+    status = ucp_do_am_single(self, UCP_AM_ID_RMA_PPLN,
+                              ucp_proto_put_ppln_rts_pack,
+                              sizeof(ucp_put_ppln_rts_hdr_t));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ucp_proto_request_set_stage(req, UCP_PROTO_PUT_PPLN_STAGE_SEND);
+    return UCS_INPROGRESS;
+}
+
+static ucs_status_t
+ucp_proto_put_ppln_send_progress(uct_pending_req_t *self)
+{
+    ucp_request_t *req  = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_worker_h worker = req->send.ep->worker;
+    const ucp_proto_put_ppln_priv_t *rpriv;
+    ucp_datatype_iter_t next_iter;
+    ucp_request_t *freq;
+    unsigned num_freqs;
+    unsigned frag_idx;
+    size_t overlap;
+
+    ucs_assert(req->send.state.dt_iter.length > 0);
+
+    req->send.state.completed_size = 0;
+    rpriv     = req->send.proto_config->priv;
+    num_freqs = ucs_div_round_up(req->send.state.dt_iter.length,
+                                 rpriv->frag_size);
+
+    req->send.ppln.freqs = ucs_malloc(num_freqs * sizeof(*req->send.ppln.freqs),
+                                      "put_ppln_freqs");
+    if (req->send.ppln.freqs == NULL) {
+        ucp_proto_request_abort(req, UCS_ERR_NO_MEMORY);
+        return UCS_OK;
+    }
+    req->send.ppln.num_freqs = num_freqs;
+
+    frag_idx = 0;
+    while (!ucp_datatype_iter_is_end(&req->send.state.dt_iter)) {
+        freq = ucp_request_get(worker);
+        if (freq == NULL) {
+            ucp_proto_request_abort(req, UCS_ERR_NO_MEMORY);
+            return UCS_OK;
+        }
+
+        ucp_proto_request_send_init(freq, req->send.ep, 0);
+        ucp_request_set_super(freq, req);
+
+        freq->send.ppln.freqs          = NULL;
+        freq->send.ppln.num_freqs      = 0;
+        freq->send.frag_ppln.remote_addr  = 0;
+        freq->send.frag_ppln.remote_rkey  = NULL;
+        freq->send.frag_ppln.remote_mdesc = NULL;
+
+        /* Allocate local bounce buffer for this fragment */
+        freq->send.frag_ppln.local_mdesc = ucp_ppln_mpool_get(
+                worker,
+                req->send.state.dt_iter.mem_info.type,
+                req->send.state.dt_iter.mem_info.sys_dev);
+        if (freq->send.frag_ppln.local_mdesc == NULL) {
+            ucp_request_put(freq);
+            ucp_proto_request_abort(req, UCS_ERR_NO_MEMORY);
+            return UCS_OK;
+        }
+
+        overlap = ucp_datatype_iter_next_slice_overlap(
+                        &req->send.state.dt_iter, rpriv->frag_size,
+                        rpriv->frag_proto_min_length,
+                        &freq->send.state.dt_iter, &next_iter);
+        ucs_assertv(overlap == 0, "overlap=%zu", overlap);
+        ucs_assert(freq->send.state.dt_iter.length > 0);
+
+        ucp_proto_request_set_proto(freq, &rpriv->frag_proto_cfg,
+                                    freq->send.state.dt_iter.length);
+
+        req->send.ppln.freqs[frag_idx] = freq;
+        freq->send.frag_ppln.frag_id = frag_idx++;
+
+        ucp_trace_req(req, "put_ppln_frag frag_id=%d freq=%p offset=%zu "
+                      "size=%zu local_mdesc=%p",
+                      freq->send.frag_ppln.frag_id, freq,
+                      req->send.state.dt_iter.offset,
+                      freq->send.state.dt_iter.length,
+                      freq->send.frag_ppln.local_mdesc);
+        UCS_PROFILE_CALL_VOID_ALWAYS(ucp_request_send, freq);
+
+        ucp_datatype_iter_copy_position(&req->send.state.dt_iter, &next_iter,
+                                        UCS_BIT(UCP_DATATYPE_CONTIG));
+    }
+
+    ucs_assertv(frag_idx == num_freqs, "frag_idx=%u num_freqs=%u",
+                frag_idx, num_freqs);
+    return UCS_OK;
 }
 
 ucp_proto_t ucp_put_ppln_proto = {
@@ -426,8 +591,72 @@ ucp_proto_t ucp_put_ppln_proto = {
     .probe    = ucp_proto_put_ppln_probe,
     .query    = ucp_proto_put_ppln_query,
     .progress = {
-        [UCP_PROTO_PUT_PPLN_STAGE_SEND] = ucp_proto_put_ppln_progress,
+        [UCP_PROTO_PUT_PPLN_STAGE_RTS]  = ucp_proto_put_ppln_rts_progress,
+        [UCP_PROTO_PUT_PPLN_STAGE_SEND] = ucp_proto_put_ppln_send_progress,
     },
     .abort    = ucp_proto_request_zcopy_abort,
     .reset    = ucp_proto_offload_zcopy_reset
 };
+
+
+/*
+ * AM handler for UCP_AM_ID_RMA_PPLN — dispatches by sub_id
+ */
+
+static ucs_status_t
+ucp_rma_ppln_handler(ucp_worker_h worker, void *data, size_t length,
+                     unsigned flags)
+{
+    const ucp_rma_ppln_hdr_t *hdr = data;
+
+    switch (hdr->sub_id) {
+    case UCP_RMA_PPLN_AM_RTS:
+        return UCS_OK;
+    case UCP_RMA_PPLN_AM_RTS_RESP:
+        return UCS_OK;
+    case UCP_RMA_PPLN_AM_ATP:
+        return UCS_OK;
+    default:
+        ucs_error("rma_ppln: unknown sub_id=%u", hdr->sub_id);
+        return UCS_ERR_INVALID_PARAM;
+    }
+}
+
+static void
+ucp_rma_ppln_dump(ucp_worker_h worker, uct_am_trace_type_t type, uint8_t id,
+                  const void *data, size_t length, char *buffer, size_t max)
+{
+    const ucp_rma_ppln_hdr_t *hdr = data;
+    UCS_STRING_BUFFER_FIXED(strb, buffer, max);
+
+    switch (hdr->sub_id) {
+    case UCP_RMA_PPLN_AM_RTS:
+    {
+        const ucp_put_ppln_rts_hdr_t *rts = data;
+        ucs_string_buffer_appendf(&strb,
+                "RMA_PPLN_RTS ep_id=0x%" PRIx64 " req_id=0x%" PRIx64
+                " count=%d frag_size=%zu sys_dev=%u md_map=0x%" PRIx64,
+                rts->super.super.ep_id, rts->super.super.req_id,
+                rts->count, rts->frag_size, rts->sys_dev,
+                (uint64_t)rts->md_map);
+        break;
+    }
+    case UCP_RMA_PPLN_AM_RTS_RESP:
+        ucs_string_buffer_appendf(&strb,
+                "RMA_PPLN_RTS_RESP ep_id=0x%" PRIx64 " req_id=0x%" PRIx64,
+                hdr->super.ep_id, hdr->super.req_id);
+        break;
+    case UCP_RMA_PPLN_AM_ATP:
+        ucs_string_buffer_appendf(&strb,
+                "RMA_PPLN_ATP ep_id=0x%" PRIx64 " req_id=0x%" PRIx64,
+                hdr->super.ep_id, hdr->super.req_id);
+        break;
+    default:
+        ucs_string_buffer_appendf(&strb, "RMA_PPLN unknown sub_id=%u",
+                                  hdr->sub_id);
+        break;
+    }
+}
+
+UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_RMA, UCP_AM_ID_RMA_PPLN,
+                         ucp_rma_ppln_handler, ucp_rma_ppln_dump, 0);

@@ -205,6 +205,8 @@ typedef enum {
                                           carrying remote ep and PSN for
                                           tracking */
     UCP_AM_ID_AM_MIDDLE_PSN     =  28,
+
+    UCP_AM_ID_RMA_PPLN          =  29, /* RMA pipelining (sub-id in header) */
     UCP_AM_ID_LAST
 } ucp_am_id_t;
 
