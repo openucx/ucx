@@ -387,6 +387,7 @@ uct_cuda_copy_mem_alloc(uct_md_h uct_md, size_t *length_p, void **address_p,
             status = uct_cuda_copy_mem_alloc_fabric(md, alloc_handle,
                                                     avail_cuda_device, flags);
             if (status == UCS_OK) {
+                printf("alloc_fabric succeeded\n");
                 goto allocated;
             } else {
                 /* alloc_fabric failed so revert changes to alloc handle */
