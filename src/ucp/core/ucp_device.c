@@ -435,15 +435,25 @@ ucs_status_t
 ucp_device_local_mem_list_create(const ucp_device_mem_list_params_t *params,
                                  ucp_device_local_mem_list_h *mem_list_h)
 {
-#if HAVE_ROCM
-    const ucs_memory_type_t export_mem_type = UCS_MEMORY_TYPE_ROCM;
-#else
-    const ucs_memory_type_t export_mem_type = UCS_MEMORY_TYPE_CUDA;
-#endif
+    ucs_memory_type_t export_mem_type;
     ucs_status_t status;
     uct_allocated_memory_t mem;
     ucs_sys_device_t local_sys_dev;
-
+    ucp_worker_h worker = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_PARAMS_FIELD, params,
+                                          worker, WORKER, NULL);
+    status = ucp_device_detect_local_sys_dev(worker->context, UCS_MEMORY_TYPE_CUDA,
+                                             &local_sys_dev);
+    if (status == UCS_OK) {
+        export_mem_type = UCS_MEMORY_TYPE_CUDA;
+    } else {
+        status = ucp_device_detect_local_sys_dev(worker->context, UCS_MEMORY_TYPE_ROCM,
+                                             &local_sys_dev);
+        if (status == UCS_OK) {
+            export_mem_type = UCS_MEMORY_TYPE_ROCM;
+        } else {
+            return status;
+        }
+    }
     status = ucp_device_local_mem_list_params_check(params, export_mem_type,
                                                     &local_sys_dev);
     if (status != UCS_OK) {
@@ -687,13 +697,26 @@ ucs_status_t
 ucp_device_remote_mem_list_create(const ucp_device_mem_list_params_t *params,
                                   ucp_device_remote_mem_list_h *mem_list_h)
 {
-#if HAVE_ROCM
-    const ucs_memory_type_t export_mem_type = UCS_MEMORY_TYPE_ROCM;
-#else
-    const ucs_memory_type_t export_mem_type = UCS_MEMORY_TYPE_CUDA;
-#endif
+    ucs_memory_type_t export_mem_type;
     ucs_status_t status;
     uct_allocated_memory_t mem;
+    ucs_sys_device_t sys_dev;
+
+    ucp_worker_h worker = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_PARAMS_FIELD, params,
+                                          worker, WORKER, NULL);
+    status = ucp_device_detect_local_sys_dev(worker->context, UCS_MEMORY_TYPE_CUDA,
+                                             &sys_dev);
+    if (status == UCS_OK) {
+        export_mem_type = UCS_MEMORY_TYPE_CUDA;
+    } else {
+        status = ucp_device_detect_local_sys_dev(worker->context, UCS_MEMORY_TYPE_ROCM,
+                                             &sys_dev);
+        if (status == UCS_OK) {
+            export_mem_type = UCS_MEMORY_TYPE_ROCM;
+        } else {
+            return status;
+        }
+    }
 
     status = ucp_device_remote_mem_list_params_check(params);
     if (status != UCS_OK) {
