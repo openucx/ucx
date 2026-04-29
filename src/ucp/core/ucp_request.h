@@ -248,8 +248,9 @@ struct ucp_request {
                     ucp_mem_desc_t   *local_mdesc;  /* Local bounce buffer */
                     ucp_lane_index_t frag_id;       /* Fragment index */
                     uint64_t         remote_addr;   /* Remote bounce buffer address */
-                    ucp_rkey_h       remote_rkey;    /* Remote bounce buffer rkey */
+                    ucp_rkey_h       remote_rkey;   /* Remote bounce buffer rkey */
                     ucp_mem_desc_t   *remote_mdesc; /* Remote mdesc (opaque, for ATP) */
+                    ucp_lane_map_t   send_lane_map; /* Lanes used for PUT ZCOPY */
                 } frag_ppln;
 
                 struct {

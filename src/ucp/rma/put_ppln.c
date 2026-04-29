@@ -16,6 +16,7 @@
 #include <ucp/dt/datatype_iter.inl>
 #include <ucp/proto/proto_init.h>
 #include <ucp/proto/proto_multi.inl>
+#include <ucp/proto/proto_single.inl>
 #include <ucp/proto/proto_am.h>
 #include <ucp/proto/proto_common.h>
 #include <ucp/proto/proto_debug.h>
@@ -91,14 +92,13 @@ out_mp_get:
 
 
 /*
- * put/mtype — copy-in (GPU → bounce) + multi-lane RDMA send (bounce → remote)
+ * put/mtype — copy-in (GPU to bounce) + multi-lane RDMA send (bounce to remote)
  */
 
 enum {
     UCP_PROTO_PUT_MTYPE_STAGE_COPY = UCP_PROTO_STAGE_START,
     UCP_PROTO_PUT_MTYPE_STAGE_SEND,
-    UCP_PROTO_PUT_MTYPE_STAGE_FENCE,
-    UCP_PROTO_PUT_MTYPE_STAGE_AM
+    UCP_PROTO_PUT_MTYPE_STAGE_FENCED_ATP,
 };
 
 static void
@@ -258,6 +258,20 @@ ucp_proto_put_mtype_copy_progress(uct_pending_req_t *self)
     return UCS_OK;
 }
 
+/* Called when all ATPs have been sent on all lanes */
+static void
+ucp_proto_put_mtype_atp_completion(uct_completion_t *uct_comp)
+{
+    ucp_request_t *req   = ucs_container_of(uct_comp, ucp_request_t,
+                                            send.state.uct_comp);
+    ucp_request_t *super = ucp_request_get_super(req);
+
+    ucp_trace_req(req, "put/mtype: frag_id=%u atp done",
+                  req->send.frag_ppln.frag_id);
+    super->send.ppln.freqs[req->send.frag_ppln.frag_id] = NULL;
+    ucp_request_put(req);
+}
+
 /* Called when all PUT ZCOPY submissions have completed, release bounce buffer */
 static void
 ucp_proto_put_mtype_send_completion(uct_completion_t *uct_comp)
@@ -266,6 +280,10 @@ ucp_proto_put_mtype_send_completion(uct_completion_t *uct_comp)
                                           send.state.uct_comp);
 
     ucs_mpool_put_inline(req->send.frag_ppln.local_mdesc);
+    /* Reset for lane_map iteration in fenced ATP stage */
+    req->send.multi_lane_idx = 0;
+    ucp_proto_completion_init(&req->send.state.uct_comp,
+                              ucp_proto_put_mtype_atp_completion);
     ucp_request_send(req);
 }
 
@@ -273,7 +291,7 @@ ucp_proto_put_mtype_send_completion(uct_completion_t *uct_comp)
 static ucs_status_t
 ucp_proto_put_mtype_data_sent(ucp_request_t *req)
 {
-    ucp_proto_request_set_stage(req, UCP_PROTO_PUT_MTYPE_STAGE_FENCE);
+    ucp_proto_request_set_stage(req, UCP_PROTO_PUT_MTYPE_STAGE_FENCED_ATP);
     return ucp_request_invoke_uct_completion_success(req);
 }
 
@@ -299,6 +317,8 @@ ucp_proto_put_mtype_send_func(ucp_request_t *req,
     iov.memh   = mdesc->memh->uct[lpriv->super.md_index];
     iov.stride = 0;
     iov.count  = 1;
+
+    req->send.frag_ppln.send_lane_map |= UCS_BIT(lpriv->super.lane);
 
     return uct_ep_put_zcopy(ucp_ep_get_lane(req->send.ep, lpriv->super.lane),
                             &iov, 1, remote_addr, tl_rkey,
@@ -339,16 +359,61 @@ ucp_proto_put_mtype_send_progress(uct_pending_req_t *self)
                                     UCS_BIT(UCP_DATATYPE_CONTIG));
 }
 
-static ucs_status_t
-ucp_proto_put_mtype_fence_progress(uct_pending_req_t *self)
+typedef struct {
+    ucp_request_t    *req;
+    ucp_lane_index_t lane;
+} ucp_proto_put_mtype_atp_pack_ctx_t;
+
+static size_t
+ucp_proto_put_mtype_atp_pack(void *dest, void *arg)
 {
-    return UCS_ERR_NOT_IMPLEMENTED;
+    ucp_proto_put_mtype_atp_pack_ctx_t *ctx = arg;
+    ucp_request_t *req                      = ctx->req;
+    ucp_put_ppln_atp_hdr_t *atp             = dest;
+
+    atp->super.super.req_id = ucp_send_request_get_id(
+            ucp_request_get_super(req));
+    atp->super.super.ep_id  = ucp_send_request_get_ep_remote_id(req);
+    atp->super.sub_id       = UCP_RMA_PPLN_AM_ATP;
+    atp->frag_id            = req->send.frag_ppln.frag_id;
+    atp->lane_id            = ctx->lane;
+    atp->atp_count          = ucs_popcount(req->send.frag_ppln.send_lane_map);
+    atp->remote_mdesc       = req->send.frag_ppln.remote_mdesc;
+    atp->rva                = 0; /* TODO: final destination address for copy-out */
+    atp->length             = req->send.state.dt_iter.length;
+
+    return sizeof(*atp);
 }
 
 static ucs_status_t
-ucp_proto_put_mtype_am_progress(uct_pending_req_t *self)
+ucp_proto_put_mtype_fenced_atp_send(ucp_request_t *req,
+                                    ucp_lane_index_t lane)
 {
-    return UCS_ERR_NOT_IMPLEMENTED;
+    ucp_proto_put_mtype_atp_pack_ctx_t ctx;
+    ucs_status_t status;
+
+    status = uct_ep_fence(ucp_ep_get_lane(req->send.ep, lane), 0);
+    if (ucs_unlikely(status != UCS_OK)) {
+        return status;
+    }
+
+    ctx.req  = req;
+    ctx.lane = lane;
+
+    return ucp_proto_am_bcopy_single_send(req, UCP_AM_ID_RMA_PPLN, lane,
+                                          ucp_proto_put_mtype_atp_pack, &ctx,
+                                          sizeof(ucp_put_ppln_atp_hdr_t), 0);
+}
+
+static ucs_status_t
+ucp_proto_put_mtype_fenced_atp_progress(uct_pending_req_t *self)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+
+    return ucp_proto_multi_lane_map_progress(
+            req, &req->send.multi_lane_idx,
+            req->send.frag_ppln.send_lane_map,
+            ucp_proto_put_mtype_fenced_atp_send);
 }
 
 ucp_proto_t ucp_put_mtype_proto = {
@@ -358,10 +423,9 @@ ucp_proto_t ucp_put_mtype_proto = {
     .probe    = ucp_proto_put_mtype_probe,
     .query    = ucp_proto_multi_query,
     .progress = {
-        [UCP_PROTO_PUT_MTYPE_STAGE_COPY]  = ucp_proto_put_mtype_copy_progress,
-        [UCP_PROTO_PUT_MTYPE_STAGE_SEND]  = ucp_proto_put_mtype_send_progress,
-        [UCP_PROTO_PUT_MTYPE_STAGE_FENCE] = ucp_proto_put_mtype_fence_progress,
-        [UCP_PROTO_PUT_MTYPE_STAGE_AM]    = ucp_proto_put_mtype_am_progress,
+        [UCP_PROTO_PUT_MTYPE_STAGE_COPY]       = ucp_proto_put_mtype_copy_progress,
+        [UCP_PROTO_PUT_MTYPE_STAGE_SEND]       = ucp_proto_put_mtype_send_progress,
+        [UCP_PROTO_PUT_MTYPE_STAGE_FENCED_ATP] = ucp_proto_put_mtype_fenced_atp_progress,
     },
     .abort    = ucp_proto_request_zcopy_abort,
     .reset    = ucp_proto_offload_zcopy_reset
@@ -386,7 +450,7 @@ typedef struct {
     uint8_t           sub_id;
 } UCS_S_PACKED ucp_rma_ppln_hdr_t;
 
-/* RTS header: sender → receiver, requesting remote bounce buffers */
+/* RTS header: sender to receiver, requesting remote bounce buffers */
 typedef struct {
     ucp_rma_ppln_hdr_t super;
     int              count;     /* Number of fragments requested */
@@ -394,6 +458,17 @@ typedef struct {
     ucs_sys_device_t sys_dev;  /* System device for fragment allocation */
     size_t           frag_size; /* Fragment size */
 } UCS_S_PACKED ucp_put_ppln_rts_hdr_t;
+
+/* ATP header: sender to receiver, one per lane, signals partial data arrival */
+typedef struct {
+    ucp_rma_ppln_hdr_t super;
+    ucp_lane_index_t frag_id;       /* Fragment index */
+    ucp_lane_index_t lane_id;       /* ATP lane index */
+    int              atp_count;     /* Total ATPs for this fragment */
+    ucp_mem_desc_t   *remote_mdesc; /* Remote bounce buffer (source for copy-out) */
+    uint64_t         rva;           /* Final destination address for copy-out */
+    size_t           length;        /* Bytes written by this ATP */
+} UCS_S_PACKED ucp_put_ppln_atp_hdr_t;
 
 /* Private data for put/ppln protocol */
 typedef struct {
@@ -674,9 +749,10 @@ ucp_proto_put_ppln_send_progress(uct_pending_req_t *self)
 
         freq->send.ppln.freqs          = NULL;
         freq->send.ppln.num_freqs      = 0;
-        freq->send.frag_ppln.remote_addr  = 0;
-        freq->send.frag_ppln.remote_rkey  = UCP_RKEY_INVALID;
-        freq->send.frag_ppln.remote_mdesc = NULL;
+        freq->send.frag_ppln.remote_addr   = 0;
+        freq->send.frag_ppln.remote_rkey   = UCP_RKEY_INVALID;
+        freq->send.frag_ppln.remote_mdesc  = NULL;
+        freq->send.frag_ppln.send_lane_map = 0;
 
         /* Allocate local bounce buffer for this fragment */
         freq->send.frag_ppln.local_mdesc = ucp_ppln_mpool_get(
