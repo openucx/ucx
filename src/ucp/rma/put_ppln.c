@@ -17,6 +17,9 @@
 #include <ucp/proto/proto_init.h>
 #include <ucp/proto/proto_multi.inl>
 #include <ucp/proto/proto_common.h>
+#include <ucp/proto/proto_debug.h>
+#include <ucp/proto/proto_perf.h>
+#include <ucp/proto/proto_select.h>
 #include <ucp/proto/proto_select.inl>
 
 
@@ -141,33 +144,15 @@ ucp_proto_put_mtype_probe(const ucp_proto_init_params_t *init_params)
                                             cap.put.opt_zcopy_align),
     };
 
-    if (sel_param->dt_class != UCP_DATATYPE_CONTIG) {
-        return;
-    }
-
-    /* Only inter-node */
-    if (!ucp_ep_config_is_inter_node(init_params->ep_config_key)) {
-        return;
-    }
-
-    /* Only GPU-to-GPU */
-    if (!UCP_MEM_IS_CUDA(sel_param->mem_type) ||
+    if ((sel_param->dt_class != UCP_DATATYPE_CONTIG) ||
+        !ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT)) ||
+        !(ucp_proto_select_op_flags(sel_param) &
+          UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG) ||
+        !ucp_ep_config_is_inter_node(init_params->ep_config_key) ||
+        !UCP_MEM_IS_CUDA(sel_param->mem_type) ||
         ((init_params->rkey_config_key != NULL) &&
-         !UCP_MEM_IS_CUDA(init_params->rkey_config_key->mem_type))) {
-        return;
-    }
-
-    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT))) {
-        return;
-    }
-
-    /* Only probe as a pipeline fragment protocol */
-    if (!(ucp_proto_select_op_flags(sel_param) &
-          UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG)) {
-        return;
-    }
-
-    if (context->config.ext.ppln_frag_mem_types == 0) {
+         !UCP_MEM_IS_CUDA(init_params->rkey_config_key->mem_type)) ||
+        (context->config.ext.ppln_frag_mem_types == 0)) {
         return;
     }
 
@@ -248,71 +233,185 @@ ucp_proto_t ucp_put_mtype_proto = {
 
 
 /*
- * put/ppln — orchestrator: RTS/RTS_RESP handshake, bounce buffer lifecycle,
+ * put/ppln — orchestrator: bounce buffer lifecycle, pipeline fragment dispatch,
  *            ATP signaling, completion tracking
  */
+
+/* Private data for put/ppln protocol */
+typedef struct {
+    size_t             frag_size;
+    ucp_proto_config_t frag_proto_cfg;
+    size_t             frag_proto_min_length;
+} ucp_proto_put_ppln_priv_t;
+
+static ucs_status_t
+ucp_proto_put_ppln_add_overhead(ucp_proto_perf_t *ppln_perf, size_t frag_size)
+{
+    static const double frag_overhead = 30e-9;
+    ucp_proto_perf_factors_t factors  = UCP_PROTO_PERF_FACTORS_INITIALIZER;
+    char frag_str[64];
+    ucp_proto_perf_node_t *node;
+
+    ucs_memunits_to_str(frag_size, frag_str, sizeof(frag_str));
+    factors[UCP_PROTO_PERF_FACTOR_LOCAL_CPU] =
+            ucs_linear_func_make(frag_overhead, frag_overhead / frag_size);
+    node = ucp_proto_perf_node_new_data("fragment overhead", "frag size: %s",
+                                        frag_str);
+    return ucp_proto_perf_add_funcs(ppln_perf, frag_size + 1, SIZE_MAX, factors,
+                                    node, NULL);
+}
+
+static void
+ucp_proto_put_ppln_set_frag_proto_config(
+        const ucp_proto_init_params_t *init_params,
+        const ucp_proto_init_elem_t *proto,
+        const ucp_proto_select_param_t *select_param, const void *priv,
+        ucp_proto_config_t *proto_config)
+{
+    proto_config->proto          = ucp_protocols[proto->proto_id];
+    proto_config->priv           = priv;
+    proto_config->ep_cfg_index   = init_params->ep_cfg_index;
+    proto_config->rkey_cfg_index = init_params->rkey_cfg_index;
+    proto_config->select_param   = *select_param;
+    proto_config->init_elem      = proto;
+    proto_config->selections     = 0;
+    ucp_request_progress_wrapper_init(init_params->worker, proto_config);
+}
 
 static void
 ucp_proto_put_ppln_probe(const ucp_proto_init_params_t *init_params)
 {
-    ucp_context_t *context                     = init_params->worker->context;
-    const ucp_proto_select_param_t *sel_param  = init_params->select_param;
-    const ucp_rkey_config_key_t *rkey_cfg_key  = init_params->rkey_config_key;
-    ucp_proto_multi_init_params_t params = {
-        .super.super         = *init_params,
-        .super.latency       = 0,
-        .super.overhead      = context->config.ext.proto_overhead_multi,
-        .super.cfg_thresh    = 0,
-        .super.cfg_priority  = 60,
-        .super.min_length    = 0,
-        .super.max_length    = SIZE_MAX,
-        .super.min_iov       = 1,
-        .super.min_frag_offs = ucs_offsetof(uct_iface_attr_t,
-                                            cap.put.min_zcopy),
-        .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t,
-                                            cap.put.max_zcopy),
-        .super.max_iov_offs  = ucs_offsetof(uct_iface_attr_t, cap.put.max_iov),
-        .super.hdr_size      = 0,
-        .super.send_op       = UCT_EP_OP_PUT_ZCOPY,
-        .super.memtype_op    = UCT_EP_OP_LAST,
-        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY   |
-                               UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY   |
-                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
-        .super.exclude_map   = 0,
-        .super.reg_mem_info  = ucp_proto_common_select_param_mem_info(
-                                                         sel_param),
-        .max_lanes           = context->config.ext.max_rma_lanes,
-        .min_chunk           = context->config.ext.min_rma_chunk_size,
-        .initial_reg_md_map  = 0,
-        .first.tl_cap_flags  = UCT_IFACE_FLAG_PUT_ZCOPY  |
-                               UCT_IFACE_FLAG_AM_BCOPY    |
-                               UCT_IFACE_FLAG_AM_SHORT,
-        .first.lane_type     = UCP_LANE_TYPE_RMA_BW,
-        .middle.tl_cap_flags = UCT_IFACE_FLAG_PUT_ZCOPY  |
-                               UCT_IFACE_FLAG_AM_BCOPY    |
-                               UCT_IFACE_FLAG_AM_SHORT,
-        .middle.lane_type    = UCP_LANE_TYPE_RMA_BW,
-        .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID,
-    };
+    ucp_worker_h worker                       = init_params->worker;
+    const ucp_proto_select_param_t *sel_param = init_params->select_param;
+    const ucp_proto_perf_segment_t *frag_seg, *first_seg;
+    const ucp_proto_select_elem_t *select_elem;
+    UCS_STRING_BUFFER_ONSTACK(seg_strb, 128);
+    ucp_worker_cfg_index_t rkey_cfg_index;
+    ucp_proto_select_param_t frag_sel_param;
+    ucp_proto_put_ppln_priv_t rpriv;
+    ucp_proto_select_t *proto_select;
+    ucp_proto_perf_t *ppln_perf;
+    ucp_proto_init_elem_t *proto;
+    char frag_size_str[32];
+    void *frag_proto_priv;
+    ucs_status_t status;
+    uint8_t proto_flags;
 
-    /* Only inter-node */
-    if (!ucp_ep_config_is_inter_node(init_params->ep_config_key)) {
+    if ((sel_param->dt_class != UCP_DATATYPE_CONTIG) ||
+        !ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT)) ||
+        (ucp_proto_select_op_flags(sel_param) &
+         UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG) ||
+        !ucp_ep_config_is_inter_node(init_params->ep_config_key) ||
+        (init_params->ep_config_key->am_lane == UCP_NULL_LANE) ||
+        !UCP_MEM_IS_CUDA(sel_param->mem_type) ||
+        ((init_params->rkey_config_key != NULL) &&
+         !UCP_MEM_IS_CUDA(init_params->rkey_config_key->mem_type))) {
         return;
     }
 
-    /* Only GPU-to-GPU */
-    if (!UCP_MEM_IS_CUDA(sel_param->mem_type) ||
-        ((rkey_cfg_key != NULL) &&
-         !UCP_MEM_IS_CUDA(rkey_cfg_key->mem_type))) {
+    /* Look up the fragment protocol (put/mtype) */
+    frag_sel_param             = *sel_param;
+    frag_sel_param.op_id_flags = ucp_proto_select_op_id(sel_param) |
+                                 UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG;
+    frag_sel_param.op_attr     = ucp_proto_select_op_attr_pack(
+            UCP_OP_ATTR_FLAG_MULTI_SEND, UCP_PROTO_SELECT_OP_ATTR_MASK);
+
+    proto_select = ucp_proto_select_get(worker, init_params->ep_cfg_index,
+                                        init_params->rkey_cfg_index,
+                                        &rkey_cfg_index);
+    if (proto_select == NULL) {
         return;
     }
 
-    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT))) {
+    select_elem = ucp_proto_select_lookup_slow(worker, proto_select, 1,
+                                               init_params->ep_cfg_index,
+                                               init_params->rkey_cfg_index,
+                                               &frag_sel_param);
+    if (select_elem == NULL) {
         return;
     }
 
-    ucp_proto_multi_probe(&params);
+    /* Add each fragment proto variant as a separate ppln variant */
+    ucs_array_for_each(proto, &select_elem->proto_init.protocols) {
+        proto_flags = ucp_proto_id_field(proto->proto_id, flags);
+        if (proto_flags & UCP_PROTO_FLAG_INVALID) {
+            continue;
+        }
+
+        ucs_assert(!ucp_proto_perf_is_empty(proto->perf));
+
+        status = ucp_proto_perf_create("pipeline", &ppln_perf);
+        if (status != UCS_OK) {
+            continue;
+        }
+
+        frag_seg = ucp_proto_perf_add_ppln(proto->perf, ppln_perf, SIZE_MAX);
+        if (frag_seg == NULL) {
+            goto out_destroy_ppln_perf;
+        }
+
+        rpriv.frag_size = ucp_proto_perf_segment_end(frag_seg);
+        first_seg       = ucp_proto_perf_find_segment_lb(proto->perf, 0);
+        rpriv.frag_proto_min_length = ucp_proto_perf_segment_start(first_seg);
+        ucs_assertv(rpriv.frag_size >= rpriv.frag_proto_min_length,
+                    "rpriv.frag_size=%zu rpriv.frag_proto_min_length=%zu",
+                    rpriv.frag_size, rpriv.frag_proto_min_length);
+
+        frag_proto_priv = &ucs_array_elem(&select_elem->proto_init.priv_buf,
+                                          proto->priv_offset);
+        ucp_proto_put_ppln_set_frag_proto_config(init_params, proto,
+                                                 &frag_sel_param,
+                                                 frag_proto_priv,
+                                                 &rpriv.frag_proto_cfg);
+
+        ucp_proto_perf_segment_str(frag_seg, &seg_strb);
+        ucs_trace("put_ppln frag=%s proto=%s segment=%s",
+                  ucs_memunits_to_str(rpriv.frag_size, frag_size_str,
+                                      sizeof(frag_size_str)),
+                  ucp_proto_id_field(proto->proto_id, name),
+                  ucs_string_buffer_cstr(&seg_strb));
+
+        status = ucp_proto_put_ppln_add_overhead(ppln_perf, rpriv.frag_size);
+        if (status != UCS_OK) {
+            goto out_destroy_ppln_perf;
+        }
+
+        ucp_proto_select_add_proto(init_params, proto->cfg_thresh,
+                                   proto->cfg_priority, ppln_perf, &rpriv,
+                                   sizeof(rpriv));
+
+    out_destroy_ppln_perf:
+        ucp_proto_perf_destroy(ppln_perf);
+    }
 }
+
+static void
+ucp_proto_put_ppln_query(const ucp_proto_query_params_t *params,
+                         ucp_proto_query_attr_t *attr)
+{
+    const ucp_proto_put_ppln_priv_t *rpriv = params->priv;
+    ucp_proto_query_attr_t frag_attr;
+
+    if (params->msg_length <= rpriv->frag_size) {
+        ucp_proto_config_query(params->worker, &rpriv->frag_proto_cfg,
+                               params->msg_length, attr);
+        attr->max_msg_length = rpriv->frag_size;
+    } else {
+        ucp_proto_config_query(params->worker, &rpriv->frag_proto_cfg,
+                               rpriv->frag_size, &frag_attr);
+
+        attr->max_msg_length = SIZE_MAX;
+        attr->is_estimation  = 0;
+        attr->lane_map       = frag_attr.lane_map;
+        ucs_snprintf_safe(attr->desc, sizeof(attr->desc), "pipeline %s",
+                          frag_attr.desc);
+        ucs_strncpy_safe(attr->config, frag_attr.config, sizeof(attr->config));
+    }
+}
+
+enum {
+    UCP_PROTO_PUT_PPLN_STAGE_SEND = UCP_PROTO_STAGE_START,
+};
 
 static ucs_status_t
 ucp_proto_put_ppln_progress(uct_pending_req_t *self)
@@ -325,8 +424,10 @@ ucp_proto_t ucp_put_ppln_proto = {
     .desc     = UCP_PROTO_PPLN_DESC,
     .flags    = 0,
     .probe    = ucp_proto_put_ppln_probe,
-    .query    = ucp_proto_multi_query,
-    .progress = {ucp_proto_put_ppln_progress},
+    .query    = ucp_proto_put_ppln_query,
+    .progress = {
+        [UCP_PROTO_PUT_PPLN_STAGE_SEND] = ucp_proto_put_ppln_progress,
+    },
     .abort    = ucp_proto_request_zcopy_abort,
     .reset    = ucp_proto_offload_zcopy_reset
 };
