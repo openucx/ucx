@@ -392,6 +392,7 @@ uct_cuda_copy_mem_alloc(uct_md_h uct_md, size_t *length_p, void **address_p,
                 /* alloc_fabric failed so revert changes to alloc handle */
                 alloc_handle->length = *length_p;
                 alloc_handle->is_vmm = 0;
+                printf("alloc_fabric failed so revert changes to alloc handle\n");
             }
         }
 
