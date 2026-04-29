@@ -411,9 +411,9 @@ ucs_status_t
 uct_cuda_ipc_vmm_multi_fetch_chunks(uct_cuda_ipc_unpacked_rkey_t *rkey,
                                     CUdevice cu_dev, ucs_log_level_t log_level)
 {
+    CUmemAllocationProp prop = {};
     CUmemGenericAllocationHandle header_handle, chunks_handle;
     uct_cuda_ipc_vmm_meta_header_t header;
-    CUmemAllocationProp prop = {};
     CUdeviceptr header_dev_ptr, chunks_dev_ptr;
     size_t alloc_granularity, header_alloc_size, chunks_alloc_size, chunks_size;
     ucs_status_t status;
