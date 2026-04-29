@@ -26,7 +26,7 @@ test_namespace_pid() {
 	echo "==== Running perftest different PID namespace test for $tl ====" >&2
 
 	cmd="$base_perftest -t $test_type -m $mem_type -p $server_port"
-	unshare_cmd="sudo unshare --pid --fork --mount-proc sudo -u $USER UCX_LOG_LEVEL=debug UCX_CUDA_COPY_ENABLE_FABRIC=y UCX_PROTO_INFO=y UCX_TLS=$tl,sysv $cmd"
+	unshare_cmd="sudo unshare --pid --fork --mount-proc sudo -u $USER UCX_CUDA_COPY_ENABLE_FABRIC=y UCX_PROTO_INFO=y UCX_TLS=$tl,sysv $cmd"
 	step_server_port
 	$unshare_cmd &
 	sleep 3
