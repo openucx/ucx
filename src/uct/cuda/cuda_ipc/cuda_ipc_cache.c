@@ -459,7 +459,7 @@ uct_cuda_ipc_open_memhandle(uct_cuda_ipc_rkey_t *key, CUdevice cu_dev,
     ucs_log_level_t level;
 
     ucs_trace("key handle type %u", key->ph.handle_type);
-
+    printf("cu_dev %d\n", cu_dev);
     switch(key->ph.handle_type) {
     case UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY:
         return uct_cuda_ipc_open_memhandle_legacy(key->ph.handle.legacy, cu_dev,
