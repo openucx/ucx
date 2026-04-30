@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2026. ALL RIGHTS RESERVED.
  * Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
@@ -44,8 +44,7 @@ ucp_datatype_iter_init_mem_info_from_user_memh(ucp_datatype_iter_t *dt_iter,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    dt_iter->mem_info.type    = memh->mem_type;
-    dt_iter->mem_info.sys_dev = memh->sys_dev;
+    dt_iter->mem_info = ucp_memory_info_from_memh(memh);
     return UCS_OK;
 }
 
@@ -142,6 +141,12 @@ ucp_datatype_iter_init(ucp_context_h context, void *buffer, size_t count,
         length = ucp_dt_iov_length((const ucp_dt_iov_t*)buffer, count);
         return ucp_datatype_iov_iter_init(context, buffer, count, length,
                                           dt_iter, param);
+    } else if (dt_iter->dt_class == UCP_DATATYPE_SGL) {
+        *sg_count = 0;
+        return ucp_datatype_iter_sgl_init(context, dt_iter,
+                                          (const ucp_dt_local_sgl_t*)buffer,
+                                          (const ucp_dt_remote_sgl_t*)param->remote,
+                                          count, param);
     } else if (!ENABLE_PARAMS_CHECK ||
                (dt_iter->dt_class == UCP_DATATYPE_GENERIC)) {
         *sg_count = 0;
@@ -335,6 +340,8 @@ ucp_datatype_iter_cleanup(ucp_datatype_iter_t *dt_iter, int dereg,
         ucp_datatatype_iter_memh_cleanup_check(dt_iter->type.contig.memh);
     } else if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_IOV, dt_mask)) {
         ucp_datatype_iter_iov_cleanup(dt_iter, dereg);
+    } else if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_SGL, dt_mask)) {
+        ucp_datatype_iter_sgl_cleanup(dt_iter, dereg);
     } else if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_GENERIC,
                                           dt_mask)) {
         dt_iter->type.generic.dt_gen->ops.finish(dt_iter->type.generic.state);
@@ -600,6 +607,15 @@ ucp_datatype_iter_next_iov(const ucp_datatype_iter_t *dt_iter,
     }
 }
 
+static UCS_F_ALWAYS_INLINE size_t
+ucp_datatype_iter_next_sgl(const ucp_datatype_iter_t *dt_iter,
+                           size_t max_elem_count,
+                           ucp_datatype_iter_t *next_iter)
+{
+    ucs_assert(dt_iter->dt_class == UCP_DATATYPE_SGL);
+    return ucp_datatype_iter_next(dt_iter, max_elem_count, next_iter);
+}
+
 /*
  * Copy iterator position only.
  * 'src_dt_iter' must be initialized from the same datatype object as 'dt_iter',
@@ -670,6 +686,9 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_datatype_iter_mem_reg(
     } else if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_IOV, dt_mask)) {
         return ucp_datatype_iter_iov_mem_reg(context, dt_iter, md_map,
                                              uct_flags);
+    } else if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_SGL,
+                                          dt_mask)) {
+        return ucp_datatype_iter_sgl_mem_reg(context, dt_iter, md_map, uct_flags);
     } else if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_GENERIC,
                                           dt_mask)) {
         return UCS_OK;
@@ -691,6 +710,10 @@ ucp_datatype_iter_mem_dereg(ucp_datatype_iter_t *dt_iter, unsigned dt_mask)
     } else if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_IOV, dt_mask)) {
         if (dt_iter->type.iov.memh != NULL) {
             ucp_datatype_iter_iov_mem_dereg(dt_iter);
+        }
+    } else if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_SGL, dt_mask)) {
+        if (dt_iter->type.sgl.memhs != NULL) {
+            ucp_datatype_iter_sgl_mem_dereg(dt_iter);
         }
     }
 }

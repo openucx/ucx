@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2021. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2021-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -82,6 +82,7 @@ ucp_proto_t ucp_eager_tag_offload_short_proto = {
     .name     = "egr/offload/short",
     .desc     = UCP_PROTO_EAGER_OFFLOAD_DESC " " UCP_PROTO_SHORT_DESC,
     .flags    = UCP_PROTO_FLAG_TAG_SHORT,
+    .dt_mask  = UCS_BIT(UCP_DATATYPE_CONTIG),
     .probe    = ucp_proto_eager_tag_offload_short_probe,
     .query    = ucp_proto_single_query,
     .progress = {ucp_proto_eager_tag_offload_short_progress},
@@ -178,6 +179,7 @@ ucp_proto_t ucp_tag_offload_eager_bcopy_single_proto = {
     .name     = "egr/offload/bcopy",
     .desc     = UCP_PROTO_EAGER_OFFLOAD_DESC " " UCP_PROTO_COPY_IN_DESC,
     .flags    = 0,
+    .dt_mask  = UCP_PROTO_DT_MASK_DEFAULT,
     .probe    = ucp_proto_eager_tag_offload_bcopy_probe,
     .query    = ucp_proto_single_query,
     .progress = {ucp_proto_eager_tag_offload_bcopy_progress},
@@ -218,6 +220,7 @@ ucp_proto_t ucp_eager_sync_bcopy_single_proto = {
     .name     = "egrsnc/offload/bcopy",
     .desc     = UCP_PROTO_EAGER_OFFLOAD_DESC " " UCP_PROTO_COPY_IN_DESC,
     .flags    = 0,
+    .dt_mask  = UCP_PROTO_DT_MASK_DEFAULT,
     .probe    = ucp_proto_eager_sync_tag_offload_bcopy_probe,
     .query    = ucp_proto_single_query,
     .progress = {ucp_proto_eager_sync_tag_offload_bcopy_progress},
@@ -258,8 +261,7 @@ static void ucp_proto_eager_tag_offload_zcopy_probe_common(
     };
 
     /* offload proto can not be used if no tag offload lane configured */
-    if (!ucp_tag_eager_check_op_id(init_params, op_id, 1) ||
-        (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG)) {
+    if (!ucp_tag_eager_check_op_id(init_params, op_id, 1)) {
         return;
     }
 
@@ -300,6 +302,7 @@ ucp_proto_t ucp_tag_offload_eager_zcopy_single_proto = {
     .name     = "egr/offload/zcopy",
     .desc     = UCP_PROTO_EAGER_OFFLOAD_DESC " " UCP_PROTO_ZCOPY_DESC,
     .flags    = 0,
+    .dt_mask  = UCS_BIT(UCP_DATATYPE_CONTIG),
     .probe    = ucp_proto_eager_tag_offload_zcopy_probe,
     .query    = ucp_proto_single_query,
     .progress = {ucp_proto_eager_tag_offload_zcopy_progress},
@@ -361,6 +364,7 @@ ucp_proto_t ucp_eager_sync_zcopy_single_proto = {
     .name     = "egrsnc/offload/zcopy",
     .desc     = UCP_PROTO_EAGER_OFFLOAD_DESC " " UCP_PROTO_ZCOPY_DESC,
     .flags    = 0,
+    .dt_mask  = UCS_BIT(UCP_DATATYPE_CONTIG),
     .probe    = ucp_proto_eager_sync_tag_offload_zcopy_probe,
     .query    = ucp_proto_single_query,
     .progress = {ucp_proto_eager_sync_tag_offload_zcopy_progress},

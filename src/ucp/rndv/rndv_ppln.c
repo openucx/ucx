@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021, NVIDIA CORPORATION & AFFILIATES. ALL RIGHTS RESERVED.
+ * Copyright (C) 2021-2026, NVIDIA CORPORATION & AFFILIATES. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -74,8 +74,7 @@ ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
         ack_params.flags |= UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING;
     }
 
-    if ((select_param->dt_class != UCP_DATATYPE_CONTIG) ||
-        !ucp_proto_init_check_op(init_params, UCP_PROTO_RNDV_OP_ID_MASK) ||
+    if (!ucp_proto_init_check_op(init_params, UCP_PROTO_RNDV_OP_ID_MASK) ||
         !ucp_proto_common_init_check_err_handling(&ack_params) ||
         ucp_proto_rndv_init_params_is_ppln_frag(init_params) ||
         !ucp_proto_common_check_memtype_copy(&ack_params)) {
@@ -344,6 +343,7 @@ ucp_proto_t ucp_rndv_send_ppln_proto = {
     .name     = "rndv/send/ppln",
     .desc     = NULL,
     .flags    = 0,
+    .dt_mask  = UCS_BIT(UCP_DATATYPE_CONTIG),
     .probe    = ucp_proto_rndv_send_ppln_probe,
     .query    = ucp_proto_rndv_ppln_query,
     .progress = {
@@ -397,6 +397,7 @@ ucp_proto_t ucp_rndv_recv_ppln_proto = {
     .name     = "rndv/recv/ppln",
     .desc     = NULL,
     .flags    = 0,
+    .dt_mask  = UCS_BIT(UCP_DATATYPE_CONTIG),
     .probe    = ucp_proto_rndv_recv_ppln_probe,
     .query    = ucp_proto_rndv_ppln_query,
     .progress = {

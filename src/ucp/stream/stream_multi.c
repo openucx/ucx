@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2023. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2023-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -109,6 +109,7 @@ ucp_proto_t ucp_stream_multi_bcopy_proto = {
     .name     = "stream/multi/bcopy",
     .desc     = UCP_PROTO_MULTI_FRAG_DESC " " UCP_PROTO_STREAM_BCOPY_DESC,
     .flags    = 0,
+    .dt_mask  = UCP_PROTO_DT_MASK_DEFAULT,
     .probe    = ucp_stream_multi_bcopy_probe,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_stream_multi_bcopy_progress},
@@ -184,6 +185,7 @@ ucp_proto_t ucp_stream_multi_zcopy_proto = {
     .name     = "stream/multi/zcopy",
     .desc     = UCP_PROTO_MULTI_FRAG_DESC " " UCP_PROTO_STREAM_ZCOPY_DESC,
     .flags    = 0,
+    .dt_mask  = UCP_DT_MASK_CONTIG_IOV,
     .probe    = ucp_stream_multi_zcopy_probe,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_stream_multi_zcopy_progress},
