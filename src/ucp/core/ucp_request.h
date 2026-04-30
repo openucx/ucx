@@ -255,7 +255,7 @@ struct ucp_request {
 
                 struct {
                     void             *frags;        /* Per-fragment tracking array */
-                    int              count;         /* Total number of fragments */
+                    int              frag_count;    /* Total number of fragments */
                     int              frags_done;    /* Fragments fully copied out */
                     ucs_ptr_map_key_t sender_req_id; /* Sender req ID for final ACK */
                     ucp_md_map_t     md_map;       /* MD map for fragment registration */
