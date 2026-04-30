@@ -13,6 +13,7 @@
 
 #include <ucp/core/ucp_mm.h>
 #include <ucp/core/ucp_request.inl>
+#include <ucp/core/ucp_worker.inl>
 #include <ucp/dt/datatype_iter.inl>
 #include <ucp/proto/proto_init.h>
 #include <ucp/proto/proto_multi.inl>
@@ -456,6 +457,8 @@ typedef struct {
     ucp_md_map_t     md_map;   /* MD map for fragment registration */
     ucs_sys_device_t sys_dev;  /* System device for fragment allocation */
     size_t           frag_size; /* Fragment size */
+    size_t           total_length;  /* Total transfer length */
+    uint64_t         remote_addr;   /* Final destination address on receiver */
 } UCS_S_PACKED ucp_put_ppln_rts_hdr_t;
 
 /* ATP header: sender to receiver, one per lane, signals partial data arrival */
@@ -468,6 +471,30 @@ typedef struct {
     uint64_t         rva;           /* Final destination address for copy-out */
     size_t           length;        /* Bytes written by this ATP */
 } UCS_S_PACKED ucp_put_ppln_atp_hdr_t;
+
+/* RTR entry: one per fragment, variable length (packed rkey follows) */
+typedef struct {
+    ucp_mem_desc_t *mdesc;          /* Remote bounce buffer descriptor */
+    uint64_t       addr;            /* Remote bounce buffer address */
+    uint8_t        packed_rkey_len; /* Length of packed rkey that follows */
+    uint8_t        packed_rkey[];   /* Packed remote key */
+} UCS_S_PACKED ucp_put_ppln_rtr_entry_t;
+
+/* RTR header: receiver to sender, providing remote bounce buffer info */
+typedef struct {
+    ucp_rma_ppln_hdr_t super;
+    ucs_ptr_map_key_t sender_req_id; /* Sender's request ID for lookup */
+    int              count;          /* Number of fragments */
+} UCS_S_PACKED ucp_put_ppln_rtr_hdr_t;
+
+/* Receiver-side per-fragment tracking */
+typedef struct {
+    ucp_mem_desc_t *mdesc;          /* Local bounce buffer for this fragment */
+    int            atp_count;       /* ATPs received for this fragment */
+    int            atp_total;       /* Total ATPs expected for this fragment */
+} ucp_put_ppln_recv_frag_t;
+
+/* Receiver-side state is stored in req->send.recv_ppln */
 
 /* Private data for put/ppln protocol */
 typedef struct {
@@ -698,6 +725,8 @@ ucp_proto_put_ppln_rts_pack(void *dest, void *arg)
     rts->super.sub_id       = UCP_RMA_PPLN_AM_RTS;
     rts->frag_size          = rpriv->frag_size;
     rts->count              = ucs_div_round_up(length, rpriv->frag_size);
+    rts->total_length       = length;
+    rts->remote_addr        = req->send.rma.remote_addr;
     rts->md_map             = ucp_proto_put_ppln_remote_md_map(req, mpriv);
     rts->sys_dev            = ucp_rkey_config(req->send.ep->worker,
                                   req->send.proto_config->rkey_cfg_index)->key.sys_dev;
@@ -847,10 +876,151 @@ ucp_proto_get_ppln_probe(const ucp_proto_init_params_t *init_params)
 }
 
 static ucs_status_t
+ucp_rma_ppln_recv_alloc_bufs(ucp_worker_h worker, ucp_request_t *req)
+{
+    ucs_memory_type_t mem_type = ucp_rma_ppln_frag_mem_type(worker->context);
+    ucp_put_ppln_recv_frag_t *frags = req->send.recv_ppln.frags;
+    int count                       = req->send.recv_ppln.count;
+    ucp_mem_desc_t *mdesc;
+    int i;
+
+    if (mem_type == UCS_MEMORY_TYPE_LAST) {
+        ucs_error("rma_ppln: no ppln_frag_mem_type configured");
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    for (i = 0; i < count; i++) {
+        mdesc = ucp_ppln_mpool_get(worker, mem_type,
+                                   req->send.recv_ppln.sys_dev);
+        if (mdesc == NULL) {
+            ucs_error("rma_ppln: bounce buffer alloc failed frag=%d", i);
+            while (i-- > 0) {
+                ucs_mpool_put_inline(frags[i].mdesc);
+            }
+            return UCS_ERR_NO_MEMORY;
+        }
+
+        frags[i].mdesc     = mdesc;
+        frags[i].atp_count = 0;
+        frags[i].atp_total = 0;
+
+        ucs_trace_req("rma_ppln: alloc frag=%d mdesc=%p addr=%p", i, mdesc,
+                      mdesc->ptr);
+    }
+
+    return UCS_OK;
+}
+
+static ssize_t
+ucp_rma_ppln_rtr_serialize(ucp_request_t *req, void *buf, size_t buf_size)
+{
+    ucp_worker_h worker                     = req->send.ep->worker;
+    const ucp_put_ppln_recv_frag_t *frags   = req->send.recv_ppln.frags;
+    int count                               = req->send.recv_ppln.count;
+    ucp_put_ppln_rtr_hdr_t *rtr = buf;
+    ucp_put_ppln_rtr_entry_t *entry;
+    ucp_memory_info_t mem_info;
+    ssize_t packed_rkey_size;
+    ucp_mem_desc_t *mdesc;
+    uint8_t *p;
+    int i;
+
+    rtr->super.super.req_id = ucp_send_request_get_id(req);
+    rtr->super.super.ep_id  = ucp_ep_remote_id(req->send.ep);
+    rtr->super.sub_id       = UCP_RMA_PPLN_AM_RTR;
+    rtr->sender_req_id      = req->send.recv_ppln.sender_req_id;
+    rtr->count              = count;
+
+    p = (uint8_t *)(rtr + 1);
+
+    for (i = 0; i < count; i++) {
+        mdesc = frags[i].mdesc;
+
+        entry = (ucp_put_ppln_rtr_entry_t *)p;
+        entry->mdesc = mdesc;
+        entry->addr  = (uint64_t)mdesc->ptr;
+
+        mem_info.type    = mdesc->memh->mem_type;
+        mem_info.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+
+        packed_rkey_size = ucp_rkey_pack_memh(
+                worker->context, req->send.recv_ppln.md_map,
+                mdesc->memh, mdesc->ptr,
+                req->send.recv_ppln.frag_size, &mem_info,
+                0, NULL, 0, 0, entry->packed_rkey);
+        if (packed_rkey_size < 0) {
+            ucs_error("rma_ppln: rkey pack failed frag=%d", i);
+            return packed_rkey_size;
+        }
+
+        ucs_assertv(packed_rkey_size <= UINT8_MAX,
+                    "packed_rkey_size=%zd", packed_rkey_size);
+        entry->packed_rkey_len = (uint8_t)packed_rkey_size;
+        p += sizeof(*entry) + packed_rkey_size;
+
+        ucs_trace_req("rma_ppln: RTR frag=%d mdesc=%p addr=%p rkey_len=%u",
+                      i, mdesc, mdesc->ptr, entry->packed_rkey_len);
+    }
+
+    /* TODO: handle splitting RTR across multiple bcopy messages */
+    ucs_assertv((size_t)(p - (uint8_t *)buf) <= buf_size,
+                "RTR packed size %zu exceeds max_bcopy %zu",
+                (size_t)(p - (uint8_t *)buf), buf_size);
+
+    return (ssize_t)(p - (uint8_t *)buf);
+}
+
+static size_t
+ucp_rma_ppln_rtr_pack(void *dest, void *arg)
+{
+    ucp_request_t *req         = arg;
+    ucp_lane_index_t am_lane   = ucp_ep_config(req->send.ep)->key.am_lane;
+    size_t max_bcopy           = ucp_ep_get_iface_attr(req->send.ep,
+                                                       am_lane)->cap.am.max_bcopy;
+    ssize_t packed;
+
+    packed = ucp_rma_ppln_rtr_serialize(req, dest, max_bcopy);
+    ucs_assertv(packed > 0, "RTR serialize failed packed=%zd", packed);
+    return (size_t)packed;
+}
+
+static ucs_status_t
 ucp_proto_get_ppln_rtr_progress(uct_pending_req_t *self)
 {
-    /* TODO: pack and send RTR */
-    return UCS_OK;
+    ucp_request_t *req              = ucs_container_of(self, ucp_request_t,
+                                                       send.uct);
+    ucp_worker_h worker             = req->send.ep->worker;
+    ucp_put_ppln_recv_frag_t *frags;
+    ucs_status_t status;
+
+    if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
+        ucp_send_request_id_alloc(req);
+
+        frags = ucs_malloc(req->send.recv_ppln.count * sizeof(*frags),
+                           "ppln_recv_frags");
+        if (frags == NULL) {
+            ucp_proto_request_abort(req, UCS_ERR_NO_MEMORY);
+            return UCS_OK;
+        }
+
+        req->send.recv_ppln.frags      = frags;
+        req->send.recv_ppln.frags_done = 0;
+
+        status = ucp_rma_ppln_recv_alloc_bufs(worker, req);
+        if (status != UCS_OK) {
+            ucs_free(frags);
+            req->send.recv_ppln.frags = NULL;
+            ucp_proto_request_abort(req, status);
+            return UCS_OK;
+        }
+
+        req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
+    }
+
+    return ucp_proto_am_bcopy_single_progress(
+            req, UCP_AM_ID_RMA_PPLN,
+            ucp_ep_config(req->send.ep)->key.am_lane,
+            ucp_rma_ppln_rtr_pack, req, SIZE_MAX, NULL, 0);
 }
 
 ucp_proto_t ucp_get_ppln_proto = {
@@ -866,10 +1036,61 @@ ucp_proto_t ucp_get_ppln_proto = {
     .reset    = ucp_proto_offload_zcopy_reset
 };
 
+static ucs_status_t
+ucp_rma_ppln_rts_handler(ucp_worker_h worker,
+                         const ucp_put_ppln_rts_hdr_t *rts)
+{
+    ucp_proto_select_param_t sel_param;
+    ucp_memory_info_t mem_info;
+    ucp_request_t *req;
+    ucs_status_t status;
+    ucp_ep_h ep;
 
-/*
- * AM handler for UCP_AM_ID_RMA_PPLN — dispatches by sub_id
- */
+    UCP_WORKER_GET_EP_BY_ID(&ep, worker, rts->super.super.ep_id,
+                            return UCS_OK, "rma_ppln RTS");
+
+    ucs_trace_req("rma_ppln: RTS received ep=%p sender_req_id=0x%" PRIx64
+                  " count=%d frag_size=%zu total_length=%zu"
+                  " remote_addr=0x%" PRIx64 " md_map=0x%" PRIx64
+                  " sys_dev=%u",
+                  ep, rts->super.super.req_id, rts->count, rts->frag_size,
+                  rts->total_length, rts->remote_addr,
+                  (uint64_t)rts->md_map, rts->sys_dev);
+
+    req = ucp_request_get(worker);
+    if (req == NULL) {
+        ucs_error("rma_ppln: failed to allocate receiver request");
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    ucp_proto_request_send_init(req, ep, 0);
+
+    req->send.recv_ppln.count         = rts->count;
+    req->send.recv_ppln.sender_req_id = rts->super.super.req_id;
+    req->send.recv_ppln.md_map        = rts->md_map;
+    req->send.recv_ppln.sys_dev       = rts->sys_dev;
+    req->send.recv_ppln.frag_size     = rts->frag_size;
+    req->send.recv_ppln.remote_addr   = rts->remote_addr;
+    req->send.recv_ppln.total_length  = rts->total_length;
+
+    mem_info.type    = UCS_MEMORY_TYPE_CUDA;
+    mem_info.sys_dev = worker->context->alloc_md[UCS_MEMORY_TYPE_CUDA].sys_dev;
+
+    ucp_proto_select_param_init(&sel_param, UCP_OP_ID_GET_PPLN, 0, 0,
+                                UCP_DATATYPE_CONTIG, &mem_info, 1);
+
+    status = ucp_proto_request_lookup_proto(
+            worker, ep, req, &ucp_ep_config(ep)->proto_select,
+            UCP_WORKER_CFG_INDEX_NULL, &sel_param,
+            rts->total_length);
+    if (status != UCS_OK) {
+        ucp_request_put(req);
+        return status;
+    }
+
+    ucp_request_send(req);
+    return UCS_OK;
+}
 
 static ucs_status_t
 ucp_rma_ppln_handler(ucp_worker_h worker, void *data, size_t length,
@@ -879,8 +1100,9 @@ ucp_rma_ppln_handler(ucp_worker_h worker, void *data, size_t length,
 
     switch (hdr->sub_id) {
     case UCP_RMA_PPLN_AM_RTS:
-        return UCS_OK;
-    case UCP_RMA_PPLN_AM_RTS_RESP:
+        return ucp_rma_ppln_rts_handler(worker,
+                                        (const ucp_put_ppln_rts_hdr_t *)data);
+    case UCP_RMA_PPLN_AM_RTR:
         return UCS_OK;
     case UCP_RMA_PPLN_AM_ATP:
         return UCS_OK;
@@ -903,17 +1125,24 @@ ucp_rma_ppln_dump(ucp_worker_h worker, uct_am_trace_type_t type, uint8_t id,
         const ucp_put_ppln_rts_hdr_t *rts = data;
         ucs_string_buffer_appendf(&strb,
                 "RMA_PPLN_RTS ep_id=0x%" PRIx64 " req_id=0x%" PRIx64
-                " count=%d frag_size=%zu sys_dev=%u md_map=0x%" PRIx64,
+                " count=%d frag_size=%zu total_length=%zu"
+                " remote_addr=0x%" PRIx64
+                " sys_dev=%u md_map=0x%" PRIx64,
                 rts->super.super.ep_id, rts->super.super.req_id,
-                rts->count, rts->frag_size, rts->sys_dev,
-                (uint64_t)rts->md_map);
+                rts->count, rts->frag_size, rts->total_length,
+                rts->remote_addr, rts->sys_dev, (uint64_t)rts->md_map);
         break;
     }
-    case UCP_RMA_PPLN_AM_RTS_RESP:
+    case UCP_RMA_PPLN_AM_RTR:
+    {
+        const ucp_put_ppln_rtr_hdr_t *rtr = data;
         ucs_string_buffer_appendf(&strb,
-                "RMA_PPLN_RTS_RESP ep_id=0x%" PRIx64 " req_id=0x%" PRIx64,
-                hdr->super.ep_id, hdr->super.req_id);
+                "RMA_PPLN_RTR ep_id=0x%" PRIx64 " req_id=0x%" PRIx64
+                " sender_req_id=0x%" PRIx64 " count=%d",
+                rtr->super.super.ep_id, rtr->super.super.req_id,
+                rtr->sender_req_id, rtr->count);
         break;
+    }
     case UCP_RMA_PPLN_AM_ATP:
         ucs_string_buffer_appendf(&strb,
                 "RMA_PPLN_ATP ep_id=0x%" PRIx64 " req_id=0x%" PRIx64,

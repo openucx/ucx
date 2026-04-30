@@ -254,6 +254,18 @@ struct ucp_request {
                 } frag_ppln;
 
                 struct {
+                    void             *frags;        /* Per-fragment tracking array */
+                    int              count;         /* Total number of fragments */
+                    int              frags_done;    /* Fragments fully copied out */
+                    ucs_ptr_map_key_t sender_req_id; /* Sender req ID for final ACK */
+                    ucp_md_map_t     md_map;       /* MD map for fragment registration */
+                    ucs_sys_device_t sys_dev;      /* System device for fragment alloc */
+                    size_t           frag_size;    /* Fragment size */
+                    uint64_t         remote_addr;  /* Final destination address */
+                    size_t           total_length; /* Total transfer length */
+                } recv_ppln;
+
+                struct {
                     /* Remote request ID received from a peer */
                     ucs_ptr_map_key_t      remote_req_id;
                     uint8_t                am_id;
