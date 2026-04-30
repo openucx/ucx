@@ -282,7 +282,7 @@ uct_cuda_ipc_open_memhandle_legacy(CUipcMemHandle memh, CUdevice cu_dev,
     cuerr = cuIpcOpenMemHandle(mapped_addr, memh,
                                CU_IPC_MEM_LAZY_ENABLE_PEER_ACCESS);
     if (cuerr != CUDA_SUCCESS) {
-        ucs_log(log_level, "cuIpcOpenMemHandle() failed: %s",
+        ucs_log(UCS_LOG_LEVEL_ERROR, "cuIpcOpenMemHandle() failed: %s",
                 uct_cuda_cu_get_error_string(cuerr));
         status = (cuerr == CUDA_ERROR_ALREADY_MAPPED) ?
             UCS_ERR_ALREADY_EXISTS : UCS_ERR_INVALID_PARAM;
