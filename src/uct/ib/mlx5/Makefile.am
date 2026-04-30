@@ -1,5 +1,5 @@
 #
-# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2024. ALL RIGHTS RESERVED.
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2024-2026. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 
@@ -18,6 +18,7 @@ libuct_ib_mlx5_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
 libuct_ib_mlx5_la_SOURCES = \
 	ib_mlx5_log.c \
 	ib_mlx5.c \
+	ib_mlx5_ext.c \
 	dv/ib_mlx5_dv.c \
 	dv/ib_mlx5dv_md.c
 
@@ -25,6 +26,7 @@ noinst_HEADERS = \
 	ib_mlx5_log.h \
 	ib_mlx5.h \
 	ib_mlx5.inl \
+	ib_mlx5_ext.h \
 	dv/ib_mlx5_dv.h \
 	dv/ib_mlx5_ifc.h
 
