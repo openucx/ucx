@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -23,7 +23,6 @@ typedef struct {
     unsigned                max_poll;            /* query attempts w.o success */
     unsigned                max_streams;         /* # concurrent streams for || progress*/
     unsigned                max_cuda_ipc_events; /* max mpool entries */
-    int                     enable_cache;        /* enable/disable ipc handle cache */
     ucs_on_off_auto_value_t enable_get_zcopy;    /* enable get_zcopy except for specific platforms */
     double                  bandwidth;           /* estimated bandwidth */
     double                  latency;             /* estimated latency */
