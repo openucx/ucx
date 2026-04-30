@@ -282,7 +282,7 @@ uct_cuda_ipc_open_memhandle_legacy(CUipcMemHandle memh, CUdevice cu_dev,
     cuerr = cuIpcOpenMemHandle(mapped_addr, memh,
                                CU_IPC_MEM_LAZY_ENABLE_PEER_ACCESS);
     if (cuerr != CUDA_SUCCESS) {
-        ucs_log(log_level, "cuIpcOpenMemHandle() failed: %s",
+        ucs_log(UCS_LOG_LEVEL_ERROR, "cuIpcOpenMemHandle() failed: %s",
                 uct_cuda_cu_get_error_string(cuerr));
         status = (cuerr == CUDA_ERROR_ALREADY_MAPPED) ?
             UCS_ERR_ALREADY_EXISTS : UCS_ERR_INVALID_PARAM;
@@ -333,7 +333,7 @@ uct_cuda_ipc_open_memhandle_vmm(const uct_cuda_ipc_rkey_t *key, CUdevice cu_dev,
     uct_cuda_ipc_init_access_desc(&access_desc, cu_dev);
 
     status = UCT_CUDADRV_FUNC(cuMemSetAccess(dptr, key->b_len, &access_desc, 1),
-                              log_level);
+                              UCS_LOG_LEVEL_ERROR);
     if (status != UCS_OK) {
         goto unmap_range;
     }
@@ -455,7 +455,7 @@ uct_cuda_ipc_open_memhandle(uct_cuda_ipc_rkey_t *key, CUdevice cu_dev,
     ucs_log_level_t level;
 
     ucs_trace("key handle type %u", key->ph.handle_type);
-
+    printf("cu_dev %d\n", cu_dev);
     switch(key->ph.handle_type) {
     case UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY:
         return uct_cuda_ipc_open_memhandle_legacy(key->ph.handle.legacy, cu_dev,
