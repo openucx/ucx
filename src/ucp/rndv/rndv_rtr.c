@@ -284,8 +284,9 @@ static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_rtr_mtype_complete(ucp_request_t *req, int abort)
 {
     if (!abort || (req->send.rndv.mdesc != NULL)) {
-        ucs_mpool_put_inline(req->send.rndv.mdesc);
+        ucp_proto_rndv_mtype_mdesc_release(req);
     }
+
     if (ucp_proto_rndv_request_is_ppln_frag(req)) {
         ucp_proto_rndv_ppln_recv_frag_complete(req, 0, abort);
     } else {
@@ -314,7 +315,7 @@ ucp_proto_rndv_rtr_mtype_abort(ucp_request_t *req, ucs_status_t status)
 static ucs_status_t ucp_proto_rndv_rtr_mtype_reset(ucp_request_t *req)
 {
     if (req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) {
-        ucs_mpool_put_inline(req->send.rndv.mdesc);
+        ucp_proto_rndv_mtype_mdesc_release(req);
         req->send.rndv.mdesc = NULL;
     }
 
@@ -348,12 +349,21 @@ ucp_proto_rndv_rtr_mtype_data_received(ucp_request_t *req, int in_buffer)
 static ucs_status_t ucp_proto_rndv_rtr_mtype_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-    const ucp_proto_rndv_rtr_mtype_priv_t *rpriv = req->send.proto_config->priv;
+    const ucp_proto_rndv_rtr_mtype_priv_t *rpriv;
     ucs_status_t status;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
+        rpriv = req->send.proto_config->priv;
+
+        /* Try to allocate a staging buffer. If the mpool quota is exhausted
+         * the request is queued and will be rescheduled later. */
         status = ucp_proto_rndv_mtype_request_init(req, rpriv->frag_mem_type,
-                                                   rpriv->frag_sys_dev);
+                                                   rpriv->frag_sys_dev,
+                                                   UCP_WORKER_RNDV_FC_OP_RTR);
+        if (status == UCS_ERR_NO_RESOURCE) {
+            return UCS_OK;
+        }
+
         if (status != UCS_OK) {
             ucp_proto_request_abort(req, status);
             return UCS_OK;
