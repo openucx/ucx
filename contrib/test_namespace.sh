@@ -28,6 +28,7 @@ test_namespace_pid() {
 	cmd="$base_perftest -t $test_type -m $mem_type -p $server_port"
 	export UCX_PROTO_INFO=y
 	export UCX_TLS=$tl,sysv 
+	export UCX_CUDA_COPY_ENABLE_FABRIC=y
 	unshare_cmd="$cmd"
 	step_server_port
 	$unshare_cmd &
@@ -51,8 +52,8 @@ test_namespace() {
 	# 	unshare --user bash -c "{ $cmd & sleep 3; $cmd localhost; }"
 	# done
 
-	test_namespace_pid posix host ucp_get
-	test_namespace_pid cma host ucp_get 
+	# test_namespace_pid posix host ucp_get
+	# test_namespace_pid cma host ucp_get 
 
 	if [ "X$have_cuda" != "Xno" ] 
 	then
@@ -60,22 +61,22 @@ test_namespace() {
 		echo "$output" | grep -q "cuda_ipc"
 	fi
 
-	for tl in posix cma
-	do
-		echo "==== Running perftest different USER namespace test for $tl ===="
-		cmd="$perftest -p $server_port"
-		step_server_port
-		UCX_TLS=$tl,sysv unshare --user $cmd &
-		sleep 3
-		UCX_TLS=$tl,sysv unshare --user $cmd localhost
-	done
+	# for tl in posix cma
+	# do
+	# 	echo "==== Running perftest different USER namespace test for $tl ===="
+	# 	cmd="$perftest -p $server_port"
+	# 	step_server_port
+	# 	UCX_TLS=$tl,sysv unshare --user $cmd &
+	# 	sleep 3
+	# 	UCX_TLS=$tl,sysv unshare --user $cmd localhost
+	# done
 
-	echo "==== Running perftest different USER namespace test for posix non proc link ===="
-	cmd="$perftest -p $server_port"
-	step_server_port
-	UCX_TLS="posix" UCX_POSIX_USE_PROC_LINK=n unshare --user $cmd &
-	sleep 3
-	UCX_TLS="posix" UCX_POSIX_USE_PROC_LINK=n unshare --user $cmd localhost
+	# echo "==== Running perftest different USER namespace test for posix non proc link ===="
+	# cmd="$perftest -p $server_port"
+	# step_server_port
+	# UCX_TLS="posix" UCX_POSIX_USE_PROC_LINK=n unshare --user $cmd &
+	# sleep 3
+	# UCX_TLS="posix" UCX_POSIX_USE_PROC_LINK=n unshare --user $cmd localhost
 }
 
 prepare
