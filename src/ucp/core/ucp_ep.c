@@ -854,7 +854,7 @@ static ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep,
         return status;
     }
 
-    ucp_ep_set_cfg_index(ep, cfg_index);
+    ucp_ep_set_cfg_index(ep, cfg_index, 1);
     ep->am_lane = key.am_lane;
     if (!ucp_ep_has_cm_lane(ep)) {
         ucp_ep_update_flags(ep, UCP_EP_FLAG_CONNECT_REQ_QUEUED, 0);
@@ -1463,6 +1463,9 @@ ucp_ep_config_reactivate_worker_ifaces(ucp_worker_h worker,
                                        ucp_worker_cfg_index_t old_cfg_index,
                                        ucp_worker_cfg_index_t new_cfg_index)
 {
+    ucs_trace("worker %p: reactivating interfaces deactivate cfg_index %u "
+              "activate cfg_index %u", worker, old_cfg_index, new_cfg_index);
+
     if (old_cfg_index == new_cfg_index) {
         return;
     }
@@ -1487,6 +1490,7 @@ static void ucp_ep_discard_lanes_callback(void *request, ucs_status_t status,
         return;
     }
 
+    ucs_trace("ep %p: discard lanes completed", arg->ucp_ep);
     ucp_ep_reqs_purge(arg->ucp_ep, arg->status);
     ucp_ep_config_reactivate_worker_ifaces(arg->ucp_ep->worker,
                                            arg->deactivate_cfg_index,
@@ -1535,6 +1539,8 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
          * endpoint's requests, if we already started discard and purge process
          * this endpoint. Doing so could complete send requests before UCT lanes
          * using them are flushed and destroyed. */
+        ucp_ep_config_reactivate_worker_ifaces(ep->worker, old_cfg_index,
+                                               ep->cfg_index);
         return;
     }
 
@@ -1610,7 +1616,7 @@ ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
     ++ucp_ep->worker->counters.ep_failures;
 
     /* The EP can be closed from last completion callback */
-    ucp_ep_discard_lanes(ucp_ep, UCS_MASK(ucp_ep_num_lanes(ucp_ep)), status,
+    ucp_ep_discard_lanes(ucp_ep, ucp_ep_get_live_lanes(ucp_ep), status,
                          ucp_ep->cfg_index);
     ucp_stream_ep_cleanup(ucp_ep, status);
 
@@ -1666,6 +1672,7 @@ ucp_ep_reconfig_internal(ucp_ep_h ep, ucp_lane_map_t failed_lanes)
     int port_speed_changed       = 0;
     ucp_lane_index_t lane;
     ucp_worker_iface_t *wiface;
+    ucp_worker_cfg_index_t new_cfg_index;
     ucs_status_t status;
 
     for (lane = 0; lane < cfg_key.num_lanes; lane++) {
@@ -1709,11 +1716,12 @@ ucp_ep_reconfig_internal(ucp_ep_h ep, ucp_lane_map_t failed_lanes)
     }
 
     status = ucp_worker_get_ep_config(worker, &cfg_key, ep_init_flags,
-                                      &ep->cfg_index);
+                                      &new_cfg_index);
     if (status != UCS_OK) {
         return status;
     }
 
+    ucp_ep_set_cfg_index(ep, new_cfg_index, 0);
     ep->am_lane = cfg_key.am_lane;
 out:
     return UCS_OK;
@@ -1731,6 +1739,10 @@ ucp_ep_failover_reconfig(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,
 
     status = ucp_ep_reconfig_internal(ucp_ep, failed_lanes);
     if (status != UCS_OK) {
+        ucs_assertv(ucp_ep->cfg_index == old_cfg_index,
+                    "ep %p: cfg_index %u -> %u after reconfiguration error %s",
+                    ucp_ep, old_cfg_index, ucp_ep->cfg_index,
+                    ucs_status_string(status));
         return status;
     }
 
@@ -4151,9 +4163,15 @@ static void ucp_ep_config_proto_init(ucp_worker_h worker,
                              &ep_config->am_u.max_reply_eager_short);
 }
 
-void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index)
+void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index,
+                          int reactivate)
 {
-    ucp_ep_config_reactivate_worker_ifaces(ep->worker, ep->cfg_index, cfg_index);
+    if (reactivate) {
+        ucp_ep_config_reactivate_worker_ifaces(ep->worker, ep->cfg_index,
+                                               cfg_index);
+    }
+
+    ucs_trace("ep %p: set cfg_index %u -> %u", ep, ep->cfg_index, cfg_index);
     ep->cfg_index = cfg_index;
     ucp_ep_config_proto_init(ep->worker, cfg_index);
 }

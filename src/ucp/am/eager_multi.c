@@ -380,7 +380,11 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_am_eager_multi_zcopy_psn_send_func(
 
 static void ucp_am_eager_multi_zcopy_psn_completion(uct_completion_t *self)
 {
-    if (ucs_likely(self->status == UCS_OK)) {
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t,
+                                          send.state.uct_comp);
+
+    if (ucs_likely(self->status == UCS_OK) ||
+        (req->send.ep->flags & UCP_EP_FLAG_FAILED)) {
         ucp_am_eager_zcopy_completion(self);
     } else {
         /* NOTE: do not release the user header to allow the request to be
@@ -398,6 +402,9 @@ static ucs_status_t ucp_am_eager_multi_zcopy_psn_init(ucp_request_t *req)
     if (status != UCS_OK) {
         return status;
     }
+
+    ucs_assertv(ucp_ep_get_am_lane(req->send.ep) != UCP_NULL_LANE,
+                "req %p: ep %p does not have any AM lanes", req, req->send.ep);
 
     return ucp_am_eager_multi_zcopy_init(req);
 }
@@ -430,7 +437,12 @@ static ucs_status_t ucp_am_eager_multi_zcopy_psn_reset(ucp_request_t *req)
     ucp_datatype_iter_rewind(&req->send.state.dt_iter, UCP_DT_MASK_CONTIG_IOV);
     /* Restart the request from the very first fragment */
     req->send.msg_proto.am.internal_flags &= ~UCP_REQUEST_AM_FLAG_HEADER_SENT;
-    return status;
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ucs_assert(ucp_ep_get_am_lane(req->send.ep) != UCP_NULL_LANE);
+    return UCS_OK;
 }
 
 ucp_proto_t ucp_am_eager_multi_zcopy_psn_proto = {
