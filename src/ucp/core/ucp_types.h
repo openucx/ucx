@@ -158,7 +158,10 @@ typedef enum {
     UCP_OP_ID_RNDV_RECV_DROP,
     UCP_OP_ID_RNDV_LAST,
 
-    UCP_OP_ID_LAST = UCP_OP_ID_RNDV_LAST
+    /* Internal RMA pipelining receiver operation */
+    UCP_OP_ID_GET_PPLN = UCP_OP_ID_RNDV_LAST,
+
+    UCP_OP_ID_LAST
 } ucp_operation_id_t;
 
 

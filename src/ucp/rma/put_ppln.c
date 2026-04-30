@@ -512,12 +512,12 @@ ucp_proto_ppln_set_frag_proto_config(
 
 static int
 ucp_proto_ppln_check_common(const ucp_proto_init_params_t *init_params,
-                            ucp_op_id_t op_id)
+                            uint64_t op_id_mask)
 {
     const ucp_proto_select_param_t *sel_param = init_params->select_param;
 
     return (sel_param->dt_class == UCP_DATATYPE_CONTIG) &&
-           ucp_proto_init_check_op(init_params, UCS_BIT(op_id)) &&
+           ucp_proto_init_check_op(init_params, op_id_mask) &&
            !(ucp_proto_select_op_flags(sel_param) &
              UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG) &&
            ucp_ep_config_is_inter_node(init_params->ep_config_key) &&
@@ -624,7 +624,7 @@ ucp_proto_ppln_probe_perf(const ucp_proto_init_params_t *init_params,
 static void
 ucp_proto_put_ppln_probe(const ucp_proto_init_params_t *init_params)
 {
-    if (!ucp_proto_ppln_check_common(init_params, UCP_OP_ID_PUT)) {
+    if (!ucp_proto_ppln_check_common(init_params, UCS_BIT(UCP_OP_ID_PUT))) {
         return;
     }
 
@@ -837,7 +837,9 @@ enum {
 static void
 ucp_proto_get_ppln_probe(const ucp_proto_init_params_t *init_params)
 {
-    if (!ucp_proto_ppln_check_common(init_params, UCP_OP_ID_GET)) {
+    if (!ucp_proto_ppln_check_common(init_params,
+                                     UCS_BIT(UCP_OP_ID_GET) |
+                                     UCS_BIT(UCP_OP_ID_GET_PPLN))) {
         return;
     }
 

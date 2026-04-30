@@ -100,6 +100,7 @@ const char *ucp_operation_names[] = {
     [UCP_OP_ID_RNDV_SEND]      = "rndv_send",
     [UCP_OP_ID_RNDV_RECV]      = "rndv_recv",
     [UCP_OP_ID_RNDV_RECV_DROP] = "rndv_recv_drop",
+    [UCP_OP_ID_GET_PPLN]       = "get_ppln",
     [UCP_OP_ID_LAST]           = NULL
 };
 
