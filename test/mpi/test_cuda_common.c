@@ -92,6 +92,8 @@ static void free_vmm(alloc_mem_t*);
 static alloc_mem_t alloc_mempool(size_t);
 static void free_mempool(alloc_mem_t*);
 static alloc_mem_t alloc_vmm_fabric(size_t);
+static alloc_mem_t alloc_vmm_fabric_multi(size_t);
+static void free_vmm_fabric_multi(alloc_mem_t*);
 #endif
 
 static int test_alloc_prim_send_prim(const test_params_t*);
@@ -109,7 +111,8 @@ const allocator_t allocators[] = {
     {"VMM", alloc_vmm, free_vmm},
 #if HAVE_CUDA_FABRIC
     {"mempool", alloc_mempool, free_mempool},
-    {"VMM_Fabric", alloc_vmm_fabric, free_vmm}
+    {"VMM_Fabric", alloc_vmm_fabric, free_vmm},
+    {"VMM_Multi", alloc_vmm_fabric_multi, free_vmm_fabric_multi}
 #endif
 };
 
@@ -335,6 +338,109 @@ static void free_mempool(alloc_mem_t *alloc_mem)
 {
     CUDA_CHECK(cuMemFree(alloc_mem->ptr));
     CUDA_CHECK(cuMemPoolDestroy((CUmemoryPool)alloc_mem->obj));
+}
+
+typedef struct {
+    size_t                       chunk_size;
+    unsigned                     num_chunks;
+    CUmemGenericAllocationHandle handles[];
+} vmm_multi_chunk_t;
+
+static alloc_mem_t alloc_vmm_fabric_multi(size_t size)
+{
+    CUmemAllocationProp prop    = {};
+    size_t granularity          = 0;
+    CUmemAccessDesc access_desc = {};
+    alloc_mem_t alloc_mem       = {};
+    CUdevice cu_dev;
+    CUdeviceptr ptr;
+    vmm_multi_chunk_t *multi;
+    CUresult result;
+    unsigned num_chunks, i;
+
+    CUDA_CHECK(cuCtxGetDevice(&cu_dev));
+
+    prop.type                            = CU_MEM_ALLOCATION_TYPE_PINNED;
+    prop.location.type                   = CU_MEM_LOCATION_TYPE_DEVICE;
+    prop.location.id                     = cu_dev;
+    prop.requestedHandleTypes            = (CUmemAllocationHandleType)
+            CU_MEM_HANDLE_TYPE_FABRIC;
+    prop.allocFlags.gpuDirectRDMACapable = 1;
+
+    CUDA_CHECK(cuMemGetAllocationGranularity(&granularity, &prop,
+                                             CU_MEM_ALLOC_GRANULARITY_MINIMUM));
+
+    num_chunks = (size + granularity - 1) / granularity;
+    if (num_chunks < 2) {
+        num_chunks = 2;
+    }
+    size = num_chunks * granularity;
+
+    multi = malloc(sizeof(*multi) +
+                   num_chunks * sizeof(CUmemGenericAllocationHandle));
+    if (multi == NULL) {
+        fprintf(stderr, "failed to allocate vmm_multi_chunk_t\n");
+        exit(-1);
+    }
+
+    multi->chunk_size = granularity;
+    multi->num_chunks = num_chunks;
+
+    result = cuMemAddressReserve(&ptr, size, 0, 0, 0);
+    if (result != CUDA_SUCCESS) {
+        free(multi);
+        alloc_mem.ptr = 0;
+        return alloc_mem;
+    }
+
+    for (i = 0; i < num_chunks; i++) {
+        result = cuMemCreate(&multi->handles[i], granularity, &prop, 0);
+        if (result != CUDA_SUCCESS) {
+            goto err_cleanup;
+        }
+
+        result = cuMemMap(ptr + i * granularity, granularity, 0,
+                          multi->handles[i], 0);
+        if (result != CUDA_SUCCESS) {
+            cuMemRelease(multi->handles[i]);
+            goto err_cleanup;
+        }
+    }
+
+    access_desc.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
+    access_desc.location.id   = cu_dev;
+    access_desc.flags         = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
+    CUDA_CHECK(cuMemSetAccess(ptr, size, &access_desc, 1));
+
+    alloc_mem.ptr  = ptr;
+    alloc_mem.size = size;
+    alloc_mem.obj  = multi;
+    return alloc_mem;
+
+err_cleanup:
+    num_chunks = i;
+    for (i = 0; i < num_chunks; i++) {
+        cuMemUnmap(ptr + i * granularity, granularity);
+        cuMemRelease(multi->handles[i]);
+    }
+    cuMemAddressFree(ptr, size);
+    free(multi);
+    alloc_mem.ptr = 0;
+    return alloc_mem;
+}
+
+static void free_vmm_fabric_multi(alloc_mem_t *alloc_mem)
+{
+    vmm_multi_chunk_t *multi = (vmm_multi_chunk_t*)alloc_mem->obj;
+    unsigned i;
+
+    for (i = 0; i < multi->num_chunks; i++) {
+        CUDA_CHECK(cuMemUnmap(alloc_mem->ptr + i * multi->chunk_size,
+                              multi->chunk_size));
+        CUDA_CHECK(cuMemRelease(multi->handles[i]));
+    }
+    CUDA_CHECK(cuMemAddressFree(alloc_mem->ptr, alloc_mem->size));
+    free(multi);
 }
 #endif
 
