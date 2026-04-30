@@ -337,7 +337,7 @@ uct_cuda_ipc_open_memhandle_vmm(const uct_cuda_ipc_rkey_t *key, CUdevice cu_dev,
     uct_cuda_ipc_init_access_desc(&access_desc, cu_dev);
 
     status = UCT_CUDADRV_FUNC(cuMemSetAccess(dptr, key->b_len, &access_desc, 1),
-                              log_level);
+                              UCS_LOG_LEVEL_ERROR);
     if (status != UCS_OK) {
         goto unmap_range;
     }
