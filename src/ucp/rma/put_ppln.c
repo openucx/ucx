@@ -922,7 +922,7 @@ ucp_rma_ppln_rtr_serialize(ucp_request_t *req, void *buf, size_t buf_size)
     ucp_memory_info_t mem_info;
     ssize_t packed_rkey_size;
     ucp_mem_desc_t *mdesc;
-    uint8_t *p;
+    void *p;
     int i;
 
     rtr->super.super.req_id = ucp_send_request_get_id(req);
@@ -931,12 +931,12 @@ ucp_rma_ppln_rtr_serialize(ucp_request_t *req, void *buf, size_t buf_size)
     rtr->sender_req_id      = req->send.recv_ppln.sender_req_id;
     rtr->count              = count;
 
-    p = (uint8_t *)(rtr + 1);
+    p = rtr + 1;
 
     for (i = 0; i < count; i++) {
         mdesc = frags[i].mdesc;
 
-        entry = (ucp_put_ppln_rtr_entry_t *)p;
+        entry = p;
         entry->mdesc = mdesc;
         entry->addr  = (uint64_t)mdesc->ptr;
 
@@ -956,18 +956,18 @@ ucp_rma_ppln_rtr_serialize(ucp_request_t *req, void *buf, size_t buf_size)
         ucs_assertv(packed_rkey_size <= UINT8_MAX,
                     "packed_rkey_size=%zd", packed_rkey_size);
         entry->packed_rkey_len = (uint8_t)packed_rkey_size;
-        p += sizeof(*entry) + packed_rkey_size;
+        p = UCS_PTR_BYTE_OFFSET(p, sizeof(*entry) + packed_rkey_size);
 
         ucs_trace_req("rma_ppln: RTR frag=%d mdesc=%p addr=%p rkey_len=%u",
                       i, mdesc, mdesc->ptr, entry->packed_rkey_len);
     }
 
     /* TODO: handle splitting RTR across multiple bcopy messages */
-    ucs_assertv((size_t)(p - (uint8_t *)buf) <= buf_size,
+    ucs_assertv((size_t)UCS_PTR_BYTE_DIFF(buf, p) <= buf_size,
                 "RTR packed size %zu exceeds max_bcopy %zu",
-                (size_t)(p - (uint8_t *)buf), buf_size);
+                (size_t)UCS_PTR_BYTE_DIFF(buf, p), buf_size);
 
-    return (ssize_t)(p - (uint8_t *)buf);
+    return (ssize_t)UCS_PTR_BYTE_DIFF(buf, p);
 }
 
 static size_t
@@ -1093,6 +1093,90 @@ ucp_rma_ppln_rts_handler(ucp_worker_h worker,
 }
 
 static ucs_status_t
+ucp_rma_ppln_rtr_unpack_frags(ucp_request_t *req,
+                              const ucp_put_ppln_rtr_hdr_t *rtr,
+                              size_t rtr_length)
+{
+    ucp_ep_h ep = req->send.ep;
+    const ucp_put_ppln_rtr_entry_t *entry;
+    ucp_request_t *freq;
+    ucs_status_t status;
+    const void *p;
+    int i;
+
+    ucs_assertv(rtr->count == (int)req->send.ppln.num_freqs,
+                "RTR count=%d num_freqs=%u", rtr->count,
+                req->send.ppln.num_freqs);
+
+    p = rtr + 1;
+
+    for (i = 0; i < rtr->count; i++) {
+        entry = p;
+        freq  = req->send.ppln.freqs[i];
+
+        ucs_assert(freq->send.frag_ppln.remote_rkey == UCP_RKEY_INVALID);
+
+        status = ucp_ep_rkey_unpack_reachable(ep, entry->packed_rkey,
+                                              entry->packed_rkey_len,
+                                              &freq->send.frag_ppln.remote_rkey);
+        if (status != UCS_OK) {
+            ucs_error("rma_ppln: rkey unpack failed frag=%d status=%s",
+                      i, ucs_status_string(status));
+            return status;
+        }
+
+        freq->send.frag_ppln.remote_addr  = entry->addr;
+        freq->send.frag_ppln.remote_mdesc = entry->mdesc;
+
+        ucs_trace_req("rma_ppln: RTR frag=%d freq=%p remote_addr=0x%" PRIx64
+                      " remote_mdesc=%p rkey_len=%u",
+                      i, freq, entry->addr, entry->mdesc,
+                      entry->packed_rkey_len);
+
+        p = UCS_PTR_BYTE_OFFSET(p, sizeof(*entry) + entry->packed_rkey_len);
+    }
+
+    ucs_assertv(p == UCS_PTR_BYTE_OFFSET(rtr, rtr_length),
+                "RTR parsed %zu bytes, expected %zu",
+                (size_t)UCS_PTR_BYTE_DIFF(rtr, p), rtr_length);
+
+    return UCS_OK;
+}
+
+static ucs_status_t
+ucp_rma_ppln_rtr_handler(ucp_worker_h worker,
+                         const ucp_put_ppln_rtr_hdr_t *rtr,
+                         size_t rtr_length)
+{
+    ucp_request_t *req;
+    ucp_request_t *freq;
+    ucs_status_t status;
+    unsigned i;
+
+    UCP_SEND_REQUEST_GET_BY_ID(&req, worker, rtr->sender_req_id, 0,
+                               return UCS_OK, "rma_ppln RTR");
+
+    ucs_trace_req("rma_ppln: RTR received req=%p sender_req_id=0x%" PRIx64
+                  " recv_req_id=0x%" PRIx64 " count=%d",
+                  req, rtr->sender_req_id, rtr->super.super.req_id,
+                  rtr->count);
+
+    status = ucp_rma_ppln_rtr_unpack_frags(req, rtr, rtr_length);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    for (i = 0; i < req->send.ppln.num_freqs; i++) {
+        freq = req->send.ppln.freqs[i];
+        if (freq->send.proto_stage == UCP_PROTO_PUT_MTYPE_STAGE_SEND) {
+            ucp_request_send(freq);
+        }
+    }
+
+    return UCS_OK;
+}
+
+static ucs_status_t
 ucp_rma_ppln_handler(ucp_worker_h worker, void *data, size_t length,
                      unsigned flags)
 {
@@ -1103,7 +1187,9 @@ ucp_rma_ppln_handler(ucp_worker_h worker, void *data, size_t length,
         return ucp_rma_ppln_rts_handler(worker,
                                         (const ucp_put_ppln_rts_hdr_t *)data);
     case UCP_RMA_PPLN_AM_RTR:
-        return UCS_OK;
+        return ucp_rma_ppln_rtr_handler(worker,
+                                        (const ucp_put_ppln_rtr_hdr_t *)data,
+                                        length);
     case UCP_RMA_PPLN_AM_ATP:
         return UCS_OK;
     default:
