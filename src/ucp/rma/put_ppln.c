@@ -441,6 +441,7 @@ enum {
     UCP_RMA_PPLN_AM_RTS,
     UCP_RMA_PPLN_AM_RTR,
     UCP_RMA_PPLN_AM_ATP,
+    UCP_RMA_PPLN_AM_ATS,
 };
 
 /* Common header for all RMA ppln active messages */
@@ -484,6 +485,12 @@ typedef struct {
     ucs_ptr_map_key_t sender_req_id; /* Sender's request ID for lookup */
     int              frag_count;     /* Number of fragments */
 } UCS_S_PACKED ucp_put_ppln_rtr_hdr_t;
+
+/* ATS header: receiver to sender, signals all copy-outs are done */
+typedef struct {
+    ucp_rma_ppln_hdr_t super;
+    ucs_ptr_map_key_t sender_req_id; /* Sender's request ID for completion */
+} UCS_S_PACKED ucp_put_ppln_ats_hdr_t;
 
 /* Receiver-side per-fragment tracking */
 typedef struct {
@@ -862,6 +869,7 @@ ucp_proto_t ucp_put_ppln_proto = {
 enum {
     UCP_PROTO_GET_PPLN_STAGE_RTR = UCP_PROTO_STAGE_START,
     UCP_PROTO_GET_PPLN_STAGE_COPY_OUT,
+    UCP_PROTO_GET_PPLN_STAGE_ATS,
 };
 
 static void
@@ -876,23 +884,24 @@ ucp_proto_get_ppln_probe(const ucp_proto_init_params_t *init_params)
     ucp_proto_ppln_probe_perf(init_params, UCP_OP_ID_PUT);
 }
 
-static void
-ucp_rma_ppln_copy_out_complete(uct_completion_t *self)
+static size_t
+ucp_rma_ppln_ats_pack(void *dest, void *arg)
 {
-    ucp_request_t *req =
-            ucs_container_of(self, ucp_request_t, send.state.uct_comp);
+    ucp_request_t *req        = arg;
+    ucp_put_ppln_ats_hdr_t *ats = dest;
 
-    ucs_trace_req("rma_ppln: all copy-outs done req=%p", req);
+    ats->super.super.req_id = ucp_send_request_get_id(req);
+    ats->super.super.ep_id  = ucp_ep_remote_id(req->send.ep);
+    ats->super.sub_id       = UCP_RMA_PPLN_AM_ATS;
+    ats->sender_req_id      = req->send.recv_ppln.sender_req_id;
 
-    /* TODO: send final ACK to sender, cleanup receiver request */
+    return sizeof(*ats);
 }
 
-static void
-ucp_rma_ppln_frag_copy_out_complete(uct_completion_t *self)
+static int
+ucp_rma_ppln_frag_copy_out_done(ucp_request_t *req,
+                                ucp_put_ppln_recv_frag_t *frag)
 {
-    ucp_put_ppln_recv_frag_t *frag =
-            ucs_container_of(self, ucp_put_ppln_recv_frag_t, comp);
-    ucp_request_t *req = frag->req;
     int frag_id = (int)(frag -
                         (ucp_put_ppln_recv_frag_t *)req->send.recv_ppln.frags);
 
@@ -902,7 +911,27 @@ ucp_rma_ppln_frag_copy_out_complete(uct_completion_t *self)
     ucs_trace_req("rma_ppln: frag copy-out done req=%p frag_id=%d", req,
                   frag_id);
 
-    uct_invoke_completion(&req->send.state.uct_comp, UCS_OK);
+    return (--req->send.state.uct_comp.count == 0);
+}
+
+static void
+ucp_rma_ppln_copy_out_set_ats(ucp_request_t *req)
+{
+    ucs_trace_req("rma_ppln: all copy-outs done req=%p", req);
+    ucp_proto_request_set_stage(req, UCP_PROTO_GET_PPLN_STAGE_ATS);
+}
+
+static void
+ucp_rma_ppln_frag_copy_out_complete(uct_completion_t *self)
+{
+    ucp_put_ppln_recv_frag_t *frag =
+            ucs_container_of(self, ucp_put_ppln_recv_frag_t, comp);
+    ucp_request_t *req = frag->req;
+
+    if (ucp_rma_ppln_frag_copy_out_done(req, frag)) {
+        ucp_rma_ppln_copy_out_set_ats(req);
+        ucp_request_send(req);
+    }
 }
 
 static ucs_status_t
@@ -941,7 +970,7 @@ ucp_rma_ppln_recv_alloc_bufs(ucp_worker_h worker, ucp_request_t *req)
                       mdesc->ptr);
     }
 
-    req->send.state.uct_comp.func   = ucp_rma_ppln_copy_out_complete;
+    req->send.state.uct_comp.func   = NULL;
     req->send.state.uct_comp.count  = count;
     req->send.state.uct_comp.status = UCS_OK;
 
@@ -1130,14 +1159,42 @@ ucp_proto_get_ppln_copy_out_progress(uct_pending_req_t *self)
                       req, frag_id, frag->mdesc->ptr, dest_addr, length);
 
         if (status == UCS_OK) {
-            ucp_rma_ppln_frag_copy_out_complete(&frag->comp);
+            ucp_rma_ppln_frag_copy_out_done(req, frag);
         } else if (ucs_unlikely(status != UCS_INPROGRESS)) {
             ucs_error("rma_ppln: copy-out failed req=%p frag_id=%d status=%s",
                       req, frag_id, ucs_status_string(status));
         }
     }
 
+    if (req->send.state.uct_comp.count == 0) {
+        ucp_rma_ppln_copy_out_set_ats(req);
+        return UCS_INPROGRESS;
+    }
+
     return UCS_OK;
+}
+
+static ucs_status_t
+ucp_proto_get_ppln_ats_complete(ucp_request_t *req)
+{
+    ucs_trace_req("rma_ppln: ATS sent req=%p, cleaning up receiver", req);
+    ucs_assert(ucs_queue_is_empty(&req->send.recv_ppln.copy_out_queue));
+    ucp_send_request_id_release(req);
+    ucs_free(req->send.recv_ppln.frags);
+    ucp_request_put(req);
+    return UCS_OK;
+}
+
+static ucs_status_t
+ucp_proto_get_ppln_ats_progress(uct_pending_req_t *self)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+
+    return ucp_proto_am_bcopy_single_progress(
+            req, UCP_AM_ID_RMA_PPLN,
+            ucp_ep_config(req->send.ep)->key.am_lane,
+            ucp_rma_ppln_ats_pack, req, SIZE_MAX,
+            ucp_proto_get_ppln_ats_complete, 0);
 }
 
 ucp_proto_t ucp_get_ppln_proto = {
@@ -1149,6 +1206,7 @@ ucp_proto_t ucp_get_ppln_proto = {
     .progress = {
         [UCP_PROTO_GET_PPLN_STAGE_RTR]      = ucp_proto_get_ppln_rtr_progress,
         [UCP_PROTO_GET_PPLN_STAGE_COPY_OUT] = ucp_proto_get_ppln_copy_out_progress,
+        [UCP_PROTO_GET_PPLN_STAGE_ATS]      = ucp_proto_get_ppln_ats_progress,
     },
     .abort    = ucp_proto_request_zcopy_abort,
     .reset    = ucp_proto_offload_zcopy_reset
@@ -1331,6 +1389,22 @@ ucp_rma_ppln_rtr_handler(ucp_worker_h worker,
 }
 
 static ucs_status_t
+ucp_rma_ppln_ats_handler(ucp_worker_h worker,
+                         const ucp_put_ppln_ats_hdr_t *ats)
+{
+    ucp_request_t *req;
+
+    UCP_SEND_REQUEST_GET_BY_ID(&req, worker, ats->sender_req_id, 0,
+                               return UCS_OK, "rma_ppln ATS");
+
+    ucs_trace_req("rma_ppln: ATS received req=%p sender_req_id=0x%" PRIx64,
+                  req, ats->sender_req_id);
+
+    /* TODO: complete sender request, free freqs array */
+    return UCS_OK;
+}
+
+static ucs_status_t
 ucp_rma_ppln_handler(ucp_worker_h worker, void *data, size_t length,
                      unsigned flags)
 {
@@ -1347,6 +1421,9 @@ ucp_rma_ppln_handler(ucp_worker_h worker, void *data, size_t length,
     case UCP_RMA_PPLN_AM_ATP:
         return ucp_rma_ppln_atp_handler(worker,
                                         (const ucp_put_ppln_atp_hdr_t *)data);
+    case UCP_RMA_PPLN_AM_ATS:
+        return ucp_rma_ppln_ats_handler(worker,
+                                        (const ucp_put_ppln_ats_hdr_t *)data);
     default:
         ucs_error("rma_ppln: unknown sub_id=%u", hdr->sub_id);
         return UCS_ERR_INVALID_PARAM;
@@ -1361,6 +1438,7 @@ ucp_rma_ppln_dump(ucp_worker_h worker, uct_am_trace_type_t type, uint8_t id,
     const ucp_put_ppln_rts_hdr_t *rts;
     const ucp_put_ppln_rtr_hdr_t *rtr;
     const ucp_put_ppln_atp_hdr_t *atp;
+    const ucp_put_ppln_ats_hdr_t *ats;
     UCS_STRING_BUFFER_FIXED(strb, buffer, max);
 
     switch (hdr->sub_id) {
@@ -1392,6 +1470,14 @@ ucp_rma_ppln_dump(ucp_worker_h worker, uct_am_trace_type_t type, uint8_t id,
                 atp->super.super.ep_id, atp->super.super.req_id,
                 atp->frag_id, atp->lane_id, atp->total,
                 atp->remote_mdesc, atp->length);
+        break;
+    case UCP_RMA_PPLN_AM_ATS:
+        ats = data;
+        ucs_string_buffer_appendf(&strb,
+                "RMA_PPLN_ATS ep_id=0x%" PRIx64 " req_id=0x%" PRIx64
+                " sender_req_id=0x%" PRIx64,
+                ats->super.super.ep_id, ats->super.super.req_id,
+                ats->sender_req_id);
         break;
     default:
         ucs_string_buffer_appendf(&strb, "RMA_PPLN unknown sub_id=%u",
