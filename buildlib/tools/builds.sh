@@ -94,7 +94,12 @@ build_release_pkg() {
 			exit 1
 		fi
 		echo "==== Test install RPM (dry-run) ===="
-		rpm -Uvh --test ${PWD}/rpm-dist/*/*.rpm
+		if rpm -q rpm >/dev/null 2>&1; then
+			rpm -Uvh --test ${PWD}/rpm-dist/*/*.rpm
+		else
+			azure_log_warning "Skip RPM install test: rpm db not readable as non-root"
+			azure_complete_with_issues "Skip RPM install test: rpm db not readable as non-root"
+		fi
 		echo "==== Build debug RPM ===="
 		${WORKSPACE}/contrib/buildrpm.sh -s -b -d --nodeps --define "_topdir $PWD/debug"
 	fi
