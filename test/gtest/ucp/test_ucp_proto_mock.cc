@@ -554,24 +554,39 @@ protected:
         return {rkey, ucp_rkey_destroy};
     }
 
-    void send_recv_rma_put(size_t size,
-                           ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST)
+    void send_recv_rma(size_t size, ucp_operation_id_t op_id,
+                       ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST)
     {
-        mem_buffer recv_buf(size, mem_type);
-        recv_buf.pattern_fill(1);
-        auto memh        = mem_map(receiver(), recv_buf);
+        static constexpr uint64_t local_seed  = 1;
+        static constexpr uint64_t remote_seed = 2;
+        mem_buffer remote_buf(size, mem_type);
+        remote_buf.pattern_fill(remote_seed);
+        auto memh        = mem_map(receiver(), remote_buf);
         auto rkey_packed = rkey_pack(receiver(), memh);
         auto rkey        = rkey_unpack(sender().ep(), rkey_packed);
 
-        mem_buffer send_buf(size, mem_type);
-        send_buf.pattern_fill(2);
+        mem_buffer local_buf(size, mem_type);
+        local_buf.pattern_fill(local_seed);
 
         ucp_request_param_t req_param;
         req_param.op_attr_mask = 0;
-        auto sptr = ucp_put_nbx(sender().ep(), send_buf.ptr(), size,
-                                (uint64_t)recv_buf.ptr(), rkey, &req_param);
+        ucs_status_ptr_t sptr;
+
+        if (op_id == UCP_OP_ID_PUT) {
+            sptr = ucp_put_nbx(sender().ep(), local_buf.ptr(), size,
+                               (uint64_t)remote_buf.ptr(), rkey, &req_param);
+        } else if (op_id == UCP_OP_ID_GET) {
+            sptr = ucp_get_nbx(sender().ep(), local_buf.ptr(), size,
+                               (uint64_t)remote_buf.ptr(), rkey, &req_param);
+        } else {
+            UCS_TEST_ABORT(std::string("Invalid operation ID: ") +
+                           std::to_string(op_id));
+        }
+
         EXPECT_EQ(UCS_OK, request_wait(sptr));
-        recv_buf.pattern_check(2);
+        auto expected = (op_id == UCP_OP_ID_PUT) ? local_seed : remote_seed;
+        local_buf.pattern_check(expected);
+        remote_buf.pattern_check(expected);
     }
 };
 
@@ -705,7 +720,7 @@ UCS_TEST_P(test_ucp_proto_mock_rcx, rndv_4_paths,
 UCS_TEST_P(test_ucp_proto_mock_rcx, rma_put_2_lanes,
            "IB_NUM_PATHS?=1", "MAX_RMA_RAILS=2")
 {
-    send_recv_rma_put(64 * UCS_KBYTE);
+    send_recv_rma(64 * UCS_KBYTE, UCP_OP_ID_PUT);
 
     ucp_proto_select_key_t key = any_key();
     key.param.op_id_flags      = UCP_OP_ID_PUT;
@@ -949,6 +964,116 @@ UCS_TEST_P(test_ucp_proto_mock_gpu, cuda_managed_ppln_host_frag,
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_gpu, rcx_gpu,
                               "rc_x,cuda,rocm")
+
+class test_ucp_proto_mock_cuda_ipc : public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_cuda_ipc()
+    {
+        if (has_transport("rc_mlx5")) {
+            mock_transport("rc_mlx5");
+        }
+    }
+
+    virtual void init() override
+    {
+        if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
+            UCS_TEST_SKIP_R("CUDA memory is not supported");
+        }
+
+        if (!has_transport("rc_mlx5")) {
+            UCS_TEST_SKIP_R("rc_mlx5 transport is not supported");
+        }
+
+        add_mock_iface("mock", [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short  = 208;
+            iface_attr.cap.put.max_short = 2048;
+            iface_attr.bandwidth.shared  = 28e9;
+            iface_attr.latency.c         = 500e-9;
+            iface_attr.latency.m         = 1e-9;
+        });
+        test_ucp_proto_mock::init();
+    }
+
+    ucp_worker_cfg_index_t get_cuda_rkey_cfg()
+    {
+        ucp_worker_h worker = sender().worker();
+        ucp_proto_select_key_t sel_key;
+
+        /* Find rkey config with CUDA mem_type for local and remote 
+         * memory */
+        for (auto i = 0; i < ucs_array_length(&worker->rkey_config); ++i) {
+            auto rkey_config = &ucs_array_elem(&worker->rkey_config, i);
+
+            if (rkey_config->key.mem_type != UCS_MEMORY_TYPE_CUDA) {
+                continue;
+            }
+
+            kh_foreach_key(rkey_config->proto_select.hash, sel_key.u64, {
+                if (sel_key.param.mem_type == UCS_MEMORY_TYPE_CUDA) {
+                    return i;
+                }
+            })
+        }
+
+        return UCP_WORKER_CFG_INDEX_NULL;
+    }
+
+    bool has_cuda_ipc_get_zcopy()
+    {
+        ucp_worker_h worker = sender().worker();
+        auto context        = worker->context;
+        std::string cuda_ipc_str("cuda_ipc");
+
+        for (auto idx = 0; idx < context->num_tls; ++idx) {
+            if (cuda_ipc_str != context->tl_rscs[idx].tl_rsc.tl_name) {
+                continue;
+            }
+
+            auto attr = ucp_worker_iface_get_attr(worker, idx);
+            return attr->cap.get.max_zcopy > 0;
+        }
+
+        return false;
+    }
+
+    void test_cuda_rma(ucp_operation_id_t op_id,
+                       const proto_select_data_vec_t &data_vec)
+    {
+        send_recv_rma(UCS_MBYTE, op_id, UCS_MEMORY_TYPE_CUDA);
+
+        ucp_proto_select_key_t key = any_key();
+        key.param.op_id_flags      = op_id;
+        key.param.op_attr          = 0;
+        key.param.mem_type         = UCS_MEMORY_TYPE_CUDA;
+
+        auto rkey_cfg_index = get_cuda_rkey_cfg();
+        ASSERT_NE(rkey_cfg_index, UCP_WORKER_CFG_INDEX_NULL);
+        check_rkey_config(sender(), data_vec, key, rkey_cfg_index);
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_cuda_ipc, put, "IB_NUM_PATHS?=1")
+{
+    test_cuda_rma(UCP_OP_ID_PUT, {
+        {0, 0,   "short",     "rc_mlx5/mock"},
+        {1, INF, "zero-copy", "cuda_ipc/cuda"},
+    });
+}
+
+UCS_TEST_P(test_ucp_proto_mock_cuda_ipc, get, "IB_NUM_PATHS?=1")
+{
+    if (!has_cuda_ipc_get_zcopy()) {
+        UCS_TEST_SKIP_R("cuda_ipc get_zcopy not supported");
+    }
+
+    test_cuda_rma(UCP_OP_ID_GET, {
+        {0, 0,   "copy-out",  "rc_mlx5/mock"},
+        {1, INF, "zero-copy", "cuda_ipc/cuda"},
+    });
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_proto_mock_cuda_ipc,
+                                        shm_ib_ipc, "shm,ib,cuda_ipc,rocm_ipc")
 
 class test_ucp_proto_mock_rcx_twins : public test_ucp_proto_mock {
 public:
