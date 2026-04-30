@@ -340,7 +340,7 @@ ucp_proto_put_mtype_send_progress(uct_pending_req_t *self)
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     const ucp_proto_multi_priv_t *mpriv = req->send.proto_config->priv;
 
-    /* Remote rkey not yet available: park until RTS_RESP arrives */
+    /* Remote rkey not yet available: park until RTR arrives */
     if (req->send.frag_ppln.remote_rkey == UCP_RKEY_INVALID) {
         return UCS_OK;
     }
@@ -439,7 +439,7 @@ ucp_proto_t ucp_put_mtype_proto = {
 /* Sub-IDs for UCP_AM_ID_RMA_PPLN */
 enum {
     UCP_RMA_PPLN_AM_RTS,
-    UCP_RMA_PPLN_AM_RTS_RESP,
+    UCP_RMA_PPLN_AM_RTR,
     UCP_RMA_PPLN_AM_ATP,
 };
 
@@ -474,10 +474,10 @@ typedef struct {
     size_t             frag_size;
     ucp_proto_config_t frag_proto_cfg;
     size_t             frag_proto_min_length;
-} ucp_proto_put_ppln_priv_t;
+} ucp_proto_ppln_priv_t;
 
 static ucs_status_t
-ucp_proto_put_ppln_add_overhead(ucp_proto_perf_t *ppln_perf, size_t frag_size)
+ucp_proto_ppln_add_overhead(ucp_proto_perf_t *ppln_perf, size_t frag_size)
 {
     static const double frag_overhead = 30e-9;
     ucp_proto_perf_factors_t factors  = UCP_PROTO_PERF_FACTORS_INITIALIZER;
@@ -494,7 +494,7 @@ ucp_proto_put_ppln_add_overhead(ucp_proto_perf_t *ppln_perf, size_t frag_size)
 }
 
 static void
-ucp_proto_put_ppln_set_frag_proto_config(
+ucp_proto_ppln_set_frag_proto_config(
         const ucp_proto_init_params_t *init_params,
         const ucp_proto_init_elem_t *proto,
         const ucp_proto_select_param_t *select_param, const void *priv,
@@ -510,8 +510,26 @@ ucp_proto_put_ppln_set_frag_proto_config(
     ucp_request_progress_wrapper_init(init_params->worker, proto_config);
 }
 
+static int
+ucp_proto_ppln_check_common(const ucp_proto_init_params_t *init_params,
+                            ucp_op_id_t op_id)
+{
+    const ucp_proto_select_param_t *sel_param = init_params->select_param;
+
+    return (sel_param->dt_class == UCP_DATATYPE_CONTIG) &&
+           ucp_proto_init_check_op(init_params, UCS_BIT(op_id)) &&
+           !(ucp_proto_select_op_flags(sel_param) &
+             UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG) &&
+           ucp_ep_config_is_inter_node(init_params->ep_config_key) &&
+           (init_params->ep_config_key->am_lane != UCP_NULL_LANE) &&
+           UCP_MEM_IS_CUDA(sel_param->mem_type) &&
+           ((init_params->rkey_config_key == NULL) ||
+            UCP_MEM_IS_CUDA(init_params->rkey_config_key->mem_type));
+}
+
 static void
-ucp_proto_put_ppln_probe(const ucp_proto_init_params_t *init_params)
+ucp_proto_ppln_probe_perf(const ucp_proto_init_params_t *init_params,
+                          ucp_op_id_t frag_op_id)
 {
     ucp_worker_h worker                       = init_params->worker;
     const ucp_proto_select_param_t *sel_param = init_params->select_param;
@@ -520,7 +538,7 @@ ucp_proto_put_ppln_probe(const ucp_proto_init_params_t *init_params)
     UCS_STRING_BUFFER_ONSTACK(seg_strb, 128);
     ucp_worker_cfg_index_t rkey_cfg_index;
     ucp_proto_select_param_t frag_sel_param;
-    ucp_proto_put_ppln_priv_t rpriv;
+    ucp_proto_ppln_priv_t rpriv;
     ucp_proto_select_t *proto_select;
     ucp_proto_perf_t *ppln_perf;
     ucp_proto_init_elem_t *proto;
@@ -529,21 +547,8 @@ ucp_proto_put_ppln_probe(const ucp_proto_init_params_t *init_params)
     ucs_status_t status;
     uint8_t proto_flags;
 
-    if ((sel_param->dt_class != UCP_DATATYPE_CONTIG) ||
-        !ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT)) ||
-        (ucp_proto_select_op_flags(sel_param) &
-         UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG) ||
-        !ucp_ep_config_is_inter_node(init_params->ep_config_key) ||
-        (init_params->ep_config_key->am_lane == UCP_NULL_LANE) ||
-        !UCP_MEM_IS_CUDA(sel_param->mem_type) ||
-        ((init_params->rkey_config_key != NULL) &&
-         !UCP_MEM_IS_CUDA(init_params->rkey_config_key->mem_type))) {
-        return;
-    }
-
-    /* Look up the fragment protocol (put/mtype) */
     frag_sel_param             = *sel_param;
-    frag_sel_param.op_id_flags = ucp_proto_select_op_id(sel_param) |
+    frag_sel_param.op_id_flags = frag_op_id |
                                  UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG;
     frag_sel_param.op_attr     = ucp_proto_select_op_attr_pack(
             UCP_OP_ATTR_FLAG_MULTI_SEND, UCP_PROTO_SELECT_OP_ATTR_MASK);
@@ -563,7 +568,6 @@ ucp_proto_put_ppln_probe(const ucp_proto_init_params_t *init_params)
         return;
     }
 
-    /* Add each fragment proto variant as a separate ppln variant */
     ucs_array_for_each(proto, &select_elem->proto_init.protocols) {
         proto_flags = ucp_proto_id_field(proto->proto_id, flags);
         if (proto_flags & UCP_PROTO_FLAG_INVALID) {
@@ -591,19 +595,19 @@ ucp_proto_put_ppln_probe(const ucp_proto_init_params_t *init_params)
 
         frag_proto_priv = &ucs_array_elem(&select_elem->proto_init.priv_buf,
                                           proto->priv_offset);
-        ucp_proto_put_ppln_set_frag_proto_config(init_params, proto,
-                                                 &frag_sel_param,
-                                                 frag_proto_priv,
-                                                 &rpriv.frag_proto_cfg);
+        ucp_proto_ppln_set_frag_proto_config(init_params, proto,
+                                             &frag_sel_param,
+                                             frag_proto_priv,
+                                             &rpriv.frag_proto_cfg);
 
         ucp_proto_perf_segment_str(frag_seg, &seg_strb);
-        ucs_trace("put_ppln frag=%s proto=%s segment=%s",
+        ucs_trace("ppln frag=%s proto=%s segment=%s",
                   ucs_memunits_to_str(rpriv.frag_size, frag_size_str,
                                       sizeof(frag_size_str)),
                   ucp_proto_id_field(proto->proto_id, name),
                   ucs_string_buffer_cstr(&seg_strb));
 
-        status = ucp_proto_put_ppln_add_overhead(ppln_perf, rpriv.frag_size);
+        status = ucp_proto_ppln_add_overhead(ppln_perf, rpriv.frag_size);
         if (status != UCS_OK) {
             goto out_destroy_ppln_perf;
         }
@@ -618,10 +622,20 @@ ucp_proto_put_ppln_probe(const ucp_proto_init_params_t *init_params)
 }
 
 static void
-ucp_proto_put_ppln_query(const ucp_proto_query_params_t *params,
+ucp_proto_put_ppln_probe(const ucp_proto_init_params_t *init_params)
+{
+    if (!ucp_proto_ppln_check_common(init_params, UCP_OP_ID_PUT)) {
+        return;
+    }
+
+    ucp_proto_ppln_probe_perf(init_params, UCP_OP_ID_PUT);
+}
+
+static void
+ucp_proto_ppln_query(const ucp_proto_query_params_t *params,
                          ucp_proto_query_attr_t *attr)
 {
-    const ucp_proto_put_ppln_priv_t *rpriv = params->priv;
+    const ucp_proto_ppln_priv_t *rpriv = params->priv;
     ucp_proto_query_attr_t frag_attr;
 
     if (params->msg_length <= rpriv->frag_size) {
@@ -671,7 +685,7 @@ ucp_proto_put_ppln_rts_pack(void *dest, void *arg)
 {
     ucp_put_ppln_rts_hdr_t *rts = dest;
     ucp_request_t *req          = arg;
-    const ucp_proto_put_ppln_priv_t *rpriv;
+    const ucp_proto_ppln_priv_t *rpriv;
     const ucp_proto_multi_priv_t *mpriv;
     size_t length;
 
@@ -713,7 +727,7 @@ ucp_proto_put_ppln_send_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req  = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_worker_h worker = req->send.ep->worker;
-    const ucp_proto_put_ppln_priv_t *rpriv;
+    const ucp_proto_ppln_priv_t *rpriv;
     ucp_datatype_iter_t next_iter;
     ucp_request_t *freq;
     unsigned num_freqs;
@@ -799,10 +813,52 @@ ucp_proto_t ucp_put_ppln_proto = {
     .desc     = UCP_PROTO_PPLN_DESC,
     .flags    = 0,
     .probe    = ucp_proto_put_ppln_probe,
-    .query    = ucp_proto_put_ppln_query,
+    .query    = ucp_proto_ppln_query,
     .progress = {
         [UCP_PROTO_PUT_PPLN_STAGE_RTS]  = ucp_proto_put_ppln_rts_progress,
         [UCP_PROTO_PUT_PPLN_STAGE_SEND] = ucp_proto_put_ppln_send_progress,
+    },
+    .abort    = ucp_proto_request_zcopy_abort,
+    .reset    = ucp_proto_offload_zcopy_reset
+};
+
+
+/*
+ * get/ppln — receiver side: bounce buffer lifecycle, RTR, copy-out, completion
+ *            Also used for user-initiated GET with pipelining.
+ *            Performance is symmetric to put/ppln (triggers a remote PUT).
+ */
+
+enum {
+    UCP_PROTO_GET_PPLN_STAGE_RTR = UCP_PROTO_STAGE_START,
+    UCP_PROTO_GET_PPLN_STAGE_COPY_OUT,
+};
+
+static void
+ucp_proto_get_ppln_probe(const ucp_proto_init_params_t *init_params)
+{
+    if (!ucp_proto_ppln_check_common(init_params, UCP_OP_ID_GET)) {
+        return;
+    }
+
+    ucp_proto_ppln_probe_perf(init_params, UCP_OP_ID_PUT);
+}
+
+static ucs_status_t
+ucp_proto_get_ppln_rtr_progress(uct_pending_req_t *self)
+{
+    /* TODO: pack and send RTR */
+    return UCS_OK;
+}
+
+ucp_proto_t ucp_get_ppln_proto = {
+    .name     = "get/ppln",
+    .desc     = UCP_PROTO_PPLN_DESC,
+    .flags    = 0,
+    .probe    = ucp_proto_get_ppln_probe,
+    .query    = ucp_proto_ppln_query,
+    .progress = {
+        [UCP_PROTO_GET_PPLN_STAGE_RTR]      = ucp_proto_get_ppln_rtr_progress,
     },
     .abort    = ucp_proto_request_zcopy_abort,
     .reset    = ucp_proto_offload_zcopy_reset
