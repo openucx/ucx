@@ -371,11 +371,11 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, rndv_frag_mem_types),
    UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
 
-  {"PPLN_FRAG_MEM_TYPES", "host,cuda",
-   "Memory types of fragments used for RMA pipelining protocol.\n"
-   "Allowed memory types are: host, cuda, rocm, ze-host, ze-device",
-   ucs_offsetof(ucp_context_config_t, ppln_frag_mem_types),
-   UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
+  {"PPLN_FRAG_MEM_TYPE", "cuda",
+   "Memory type of bounce buffers used for RMA pipelining protocol.\n"
+   "Allowed values: host, cuda, rocm, ze-host, ze-device",
+   ucs_offsetof(ucp_context_config_t, ppln_frag_mem_type),
+   UCS_CONFIG_TYPE_ENUM(ucs_memory_type_names)},
 
   {"MEMTYPE_COPY_ENABLE", "y",
    "Allows memory type copies. This option influences protocol selection.\n",

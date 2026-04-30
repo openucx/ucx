@@ -91,6 +91,13 @@ out_mp_get:
 }
 
 
+static UCS_F_ALWAYS_INLINE ucs_memory_type_t
+ucp_rma_ppln_frag_mem_type(ucp_context_t *context)
+{
+    return context->config.ext.ppln_frag_mem_type;
+}
+
+
 /*
  * put/mtype — copy-in (GPU to bounce) + multi-lane RDMA send (bounce to remote)
  */
@@ -152,21 +159,13 @@ ucp_proto_put_mtype_probe(const ucp_proto_init_params_t *init_params)
         !ucp_ep_config_is_inter_node(init_params->ep_config_key) ||
         !UCP_MEM_IS_CUDA(sel_param->mem_type) ||
         ((init_params->rkey_config_key != NULL) &&
-         !UCP_MEM_IS_CUDA(init_params->rkey_config_key->mem_type)) ||
-        (context->config.ext.ppln_frag_mem_types == 0)) {
+         !UCP_MEM_IS_CUDA(init_params->rkey_config_key->mem_type))) {
         return;
     }
 
-    /* Find a usable fragment memory type (prefer CUDA, fall back to host) */
-    frag_mem_type = UCP_MEM_IS_CUDA(sel_param->mem_type) ?
-                    UCS_MEMORY_TYPE_CUDA : UCS_MEMORY_TYPE_HOST;
-    if (!UCS_BIT_GET(context->config.ext.ppln_frag_mem_types,
-                     frag_mem_type)) {
-        frag_mem_type = UCS_MEMORY_TYPE_HOST;
-        if (!UCS_BIT_GET(context->config.ext.ppln_frag_mem_types,
-                         frag_mem_type)) {
-            return;
-        }
+    frag_mem_type = ucp_rma_ppln_frag_mem_type(context);
+    if (frag_mem_type == UCS_MEMORY_TYPE_LAST) {
+        return;
     }
 
     /* Check mem_type ep exists for staging copy */

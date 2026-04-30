@@ -94,8 +94,8 @@ typedef struct ucp_context_config {
     size_t                                 ppln_frag_size[UCS_MEMORY_TYPE_LAST];
     /** Number of RMA pipelining fragments per allocation */
     size_t                                 ppln_num_frags[UCS_MEMORY_TYPE_LAST];
-    /** Memory types of fragments used for RMA pipelining protocol */
-    uint64_t                               ppln_frag_mem_types;
+    /** Memory type of bounce buffers used for RMA pipelining protocol */
+    ucs_memory_type_t                      ppln_frag_mem_type;
     /** Allows memtype copies that use bounce buffers, when set to true */
     int                                    memtype_copy_enable;
     /** RNDV pipeline send threshold */
