@@ -3,7 +3,7 @@
 # See file LICENSE for terms.
 #
 
-if HAVE_CUDA
+if HAVE_GDA
 
 module_LTLIBRARIES             = libuct_ib_mlx5_gda.la
 libuct_ib_mlx5_gda_la_CPPFLAGS = $(BASE_CPPFLAGS) $(IBVERBS_CPPFLAGS) \
