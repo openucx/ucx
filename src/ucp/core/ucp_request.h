@@ -256,13 +256,13 @@ struct ucp_request {
                 struct {
                     void             *frags;        /* Per-fragment tracking array */
                     int              frag_count;    /* Total number of fragments */
-                    int              frags_done;    /* Fragments fully copied out */
                     ucs_ptr_map_key_t sender_req_id; /* Sender req ID for final ACK */
                     ucp_md_map_t     md_map;       /* MD map for fragment registration */
                     ucs_sys_device_t sys_dev;      /* System device for fragment alloc */
                     size_t           frag_size;    /* Fragment size */
                     uint64_t         remote_addr;  /* Final destination address */
                     size_t           total_length; /* Total transfer length */
+                    ucs_queue_head_t copy_out_queue; /* Frags ready for copy-out */
                 } recv_ppln;
 
                 struct {

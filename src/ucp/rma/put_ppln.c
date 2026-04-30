@@ -487,9 +487,12 @@ typedef struct {
 
 /* Receiver-side per-fragment tracking */
 typedef struct {
-    ucp_mem_desc_t *mdesc;          /* Local bounce buffer for this fragment */
-    int            atp_count;       /* ATPs received for this fragment */
-    int            atp_total;       /* Total ATPs expected for this fragment */
+    ucp_mem_desc_t   *mdesc;        /* Local bounce buffer for this fragment */
+    int              atp_count;     /* ATPs received for this fragment */
+    int              atp_total;     /* Total ATPs expected for this fragment */
+    ucs_queue_elem_t queue;         /* Copy-out ready queue element */
+    uct_completion_t comp;          /* Per-frag copy-out completion */
+    ucp_request_t    *req;          /* Back-pointer to receiver request */
 } ucp_put_ppln_recv_frag_t;
 
 /* Receiver-side state is stored in req->send.recv_ppln */
@@ -873,6 +876,35 @@ ucp_proto_get_ppln_probe(const ucp_proto_init_params_t *init_params)
     ucp_proto_ppln_probe_perf(init_params, UCP_OP_ID_PUT);
 }
 
+static void
+ucp_rma_ppln_copy_out_complete(uct_completion_t *self)
+{
+    ucp_request_t *req =
+            ucs_container_of(self, ucp_request_t, send.state.uct_comp);
+
+    ucs_trace_req("rma_ppln: all copy-outs done req=%p", req);
+
+    /* TODO: send final ACK to sender, cleanup receiver request */
+}
+
+static void
+ucp_rma_ppln_frag_copy_out_complete(uct_completion_t *self)
+{
+    ucp_put_ppln_recv_frag_t *frag =
+            ucs_container_of(self, ucp_put_ppln_recv_frag_t, comp);
+    ucp_request_t *req = frag->req;
+    int frag_id = (int)(frag -
+                        (ucp_put_ppln_recv_frag_t *)req->send.recv_ppln.frags);
+
+    ucs_mpool_put_inline(frag->mdesc);
+    frag->mdesc = NULL;
+
+    ucs_trace_req("rma_ppln: frag copy-out done req=%p frag_id=%d", req,
+                  frag_id);
+
+    uct_invoke_completion(&req->send.state.uct_comp, UCS_OK);
+}
+
 static ucs_status_t
 ucp_rma_ppln_recv_alloc_bufs(ucp_worker_h worker, ucp_request_t *req)
 {
@@ -898,13 +930,20 @@ ucp_rma_ppln_recv_alloc_bufs(ucp_worker_h worker, ucp_request_t *req)
             return UCS_ERR_NO_MEMORY;
         }
 
-        frags[i].mdesc     = mdesc;
-        frags[i].atp_count = 0;
-        frags[i].atp_total = 0;
+        frags[i].mdesc        = mdesc;
+        frags[i].atp_count    = 0;
+        frags[i].atp_total    = 0;
+        ucp_proto_completion_init(&frags[i].comp,
+                                  ucp_rma_ppln_frag_copy_out_complete);
+        frags[i].req          = req;
 
         ucs_trace_req("rma_ppln: alloc frag=%d mdesc=%p addr=%p", i, mdesc,
                       mdesc->ptr);
     }
+
+    req->send.state.uct_comp.func   = ucp_rma_ppln_copy_out_complete;
+    req->send.state.uct_comp.count  = count;
+    req->send.state.uct_comp.status = UCS_OK;
 
     return UCS_OK;
 }
@@ -983,6 +1022,14 @@ ucp_rma_ppln_rtr_pack(void *dest, void *arg)
 }
 
 static ucs_status_t
+ucp_proto_get_ppln_rtr_complete(ucp_request_t *req)
+{
+    /* Park; ATP handler will re-enqueue for copy-out */
+    ucp_proto_request_set_stage(req, UCP_PROTO_GET_PPLN_STAGE_COPY_OUT);
+    return UCS_OK;
+}
+
+static ucs_status_t
 ucp_proto_get_ppln_rtr_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req              = ucs_container_of(self, ucp_request_t,
@@ -1001,8 +1048,8 @@ ucp_proto_get_ppln_rtr_progress(uct_pending_req_t *self)
             return UCS_OK;
         }
 
-        req->send.recv_ppln.frags      = frags;
-        req->send.recv_ppln.frags_done = 0;
+        req->send.recv_ppln.frags = frags;
+        ucs_queue_head_init(&req->send.recv_ppln.copy_out_queue);
 
         status = ucp_rma_ppln_recv_alloc_bufs(worker, req);
         if (status != UCS_OK) {
@@ -1018,7 +1065,79 @@ ucp_proto_get_ppln_rtr_progress(uct_pending_req_t *self)
     return ucp_proto_am_bcopy_single_progress(
             req, UCP_AM_ID_RMA_PPLN,
             ucp_ep_config(req->send.ep)->key.am_lane,
-            ucp_rma_ppln_rtr_pack, req, SIZE_MAX, NULL, 0);
+            ucp_rma_ppln_rtr_pack, req, SIZE_MAX,
+            ucp_proto_get_ppln_rtr_complete, 0);
+}
+
+static ucs_status_t
+ucp_proto_get_ppln_copy_out_progress(uct_pending_req_t *self)
+{
+    ucp_request_t *req              = ucs_container_of(self, ucp_request_t,
+                                                       send.uct);
+    ucp_worker_h worker             = req->send.ep->worker;
+    ucp_put_ppln_recv_frag_t *frags = req->send.recv_ppln.frags;
+    size_t frag_size                 = req->send.recv_ppln.frag_size;
+    size_t total_length              = req->send.recv_ppln.total_length;
+    ucp_put_ppln_recv_frag_t *frag;
+    ucs_memory_type_t mem_type;
+    ucp_ep_h mem_type_ep;
+    ucp_lane_index_t lane;
+    uct_iov_t iov;
+    ucs_status_t status;
+    uint64_t dest_addr;
+    size_t offset;
+    size_t length;
+    int frag_id;
+
+    while (!ucs_queue_is_empty(&req->send.recv_ppln.copy_out_queue)) {
+        frag    = ucs_queue_head_elem_non_empty(
+                &req->send.recv_ppln.copy_out_queue,
+                ucp_put_ppln_recv_frag_t, queue);
+        frag_id = (int)(frag - frags);
+
+        offset    = (size_t)frag_id * frag_size;
+        dest_addr = req->send.recv_ppln.remote_addr + offset;
+        length    = ucs_min(frag_size, total_length - offset);
+
+        ucs_assertv((frag_id < req->send.recv_ppln.frag_count - 1)
+                            ? (length == frag_size)
+                            : (length <= frag_size),
+                    "frag_id=%d length=%zu frag_size=%zu frag_count=%d",
+                    frag_id, length, frag_size,
+                    req->send.recv_ppln.frag_count);
+
+        mem_type    = frag->mdesc->memh->mem_type;
+        mem_type_ep = worker->mem_type_ep[mem_type];
+        lane        = ucp_ep_config(mem_type_ep)->key.rma_bw_lanes[0];
+        ucs_assert(lane != UCP_NULL_LANE);
+
+        iov.buffer = frag->mdesc->ptr;
+        iov.length = length;
+        iov.count  = 1;
+        iov.memh   = UCT_MEM_HANDLE_NULL;
+
+        status = uct_ep_put_zcopy(ucp_ep_get_lane(mem_type_ep, lane),
+                                  &iov, 1, dest_addr, UCT_INVALID_RKEY,
+                                  &frag->comp);
+        if (status == UCS_ERR_NO_RESOURCE) {
+            return UCS_ERR_NO_RESOURCE;
+        }
+
+        ucs_queue_pull_non_empty(&req->send.recv_ppln.copy_out_queue);
+
+        ucs_trace_req("rma_ppln: copy-out req=%p frag_id=%d src=%p"
+                      " dst=0x%" PRIx64 " length=%zu",
+                      req, frag_id, frag->mdesc->ptr, dest_addr, length);
+
+        if (status == UCS_OK) {
+            ucp_rma_ppln_frag_copy_out_complete(&frag->comp);
+        } else if (ucs_unlikely(status != UCS_INPROGRESS)) {
+            ucs_error("rma_ppln: copy-out failed req=%p frag_id=%d status=%s",
+                      req, frag_id, ucs_status_string(status));
+        }
+    }
+
+    return UCS_OK;
 }
 
 ucp_proto_t ucp_get_ppln_proto = {
@@ -1029,10 +1148,47 @@ ucp_proto_t ucp_get_ppln_proto = {
     .query    = ucp_proto_ppln_query,
     .progress = {
         [UCP_PROTO_GET_PPLN_STAGE_RTR]      = ucp_proto_get_ppln_rtr_progress,
+        [UCP_PROTO_GET_PPLN_STAGE_COPY_OUT] = ucp_proto_get_ppln_copy_out_progress,
     },
     .abort    = ucp_proto_request_zcopy_abort,
     .reset    = ucp_proto_offload_zcopy_reset
 };
+
+static ucs_status_t
+ucp_rma_ppln_atp_handler(ucp_worker_h worker,
+                          const ucp_put_ppln_atp_hdr_t *atp)
+{
+    ucp_request_t *req;
+    ucp_put_ppln_recv_frag_t *frag;
+    int was_empty;
+
+    UCP_SEND_REQUEST_GET_BY_ID(&req, worker, atp->super.super.req_id, 0,
+                               return UCS_OK, "rma_ppln ATP");
+
+    ucs_assertv(atp->frag_id < req->send.recv_ppln.frag_count,
+                "frag_id=%u frag_count=%d", atp->frag_id,
+                req->send.recv_ppln.frag_count);
+
+    frag = &((ucp_put_ppln_recv_frag_t *)req->send.recv_ppln.frags)[atp->frag_id];
+    frag->atp_total = atp->total;
+    frag->atp_count++;
+
+    ucs_trace_req("rma_ppln: ATP received req=%p frag_id=%u lane_id=%u"
+                  " atp=%d/%d length=%zu remote_mdesc=%p",
+                  req, atp->frag_id, atp->lane_id,
+                  frag->atp_count, frag->atp_total, atp->length,
+                  atp->remote_mdesc);
+
+    if (frag->atp_count == frag->atp_total) {
+        was_empty = ucs_queue_is_empty(&req->send.recv_ppln.copy_out_queue);
+        ucs_queue_push(&req->send.recv_ppln.copy_out_queue, &frag->queue);
+        if (was_empty) {
+            ucp_request_send(req);
+        }
+    }
+
+    return UCS_OK;
+}
 
 static ucs_status_t
 ucp_rma_ppln_rts_handler(ucp_worker_h worker,
@@ -1189,7 +1345,8 @@ ucp_rma_ppln_handler(ucp_worker_h worker, void *data, size_t length,
                                         (const ucp_put_ppln_rtr_hdr_t *)data,
                                         length);
     case UCP_RMA_PPLN_AM_ATP:
-        return UCS_OK;
+        return ucp_rma_ppln_atp_handler(worker,
+                                        (const ucp_put_ppln_atp_hdr_t *)data);
     default:
         ucs_error("rma_ppln: unknown sub_id=%u", hdr->sub_id);
         return UCS_ERR_INVALID_PARAM;
