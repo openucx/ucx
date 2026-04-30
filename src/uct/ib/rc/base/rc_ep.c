@@ -147,8 +147,9 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface, uint32_t qp_num,
         return status;
     }
 
-    self->path_index = UCT_EP_PARAMS_GET_PATH_INDEX(params);
-    self->flags      = 0;
+    self->path_index   = UCT_EP_PARAMS_GET_PATH_INDEX(params);
+    self->flags        = 0;
+    self->txqp_reserve = 0;
 
     status = uct_rc_fc_init(&self->fc, iface UCS_STATS_ARG(self->super.stats));
     if (status != UCS_OK) {
@@ -344,6 +345,7 @@ ucs_arbiter_cb_result_t uct_rc_ep_process_pending(ucs_arbiter_t *arbiter,
 
     status = uct_rc_iface_invoke_pending_cb(iface, req);
     if (status == UCS_OK) {
+        ep->txqp_reserve = 0;
         return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
     } else if (status == UCS_INPROGRESS) {
         return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
