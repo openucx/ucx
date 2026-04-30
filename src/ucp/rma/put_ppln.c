@@ -269,6 +269,7 @@ ucp_proto_put_mtype_atp_completion(uct_completion_t *uct_comp)
     ucp_trace_req(req, "put/mtype: frag_id=%u atp done",
                   req->send.frag_ppln.frag_id);
     super->send.ppln.freqs[req->send.frag_ppln.frag_id] = NULL;
+    ucp_rkey_destroy(req->send.frag_ppln.remote_rkey);
     ucp_request_put(req);
 }
 
@@ -426,6 +427,7 @@ ucp_proto_t ucp_put_mtype_proto = {
         [UCP_PROTO_PUT_MTYPE_STAGE_SEND]       = ucp_proto_put_mtype_send_progress,
         [UCP_PROTO_PUT_MTYPE_STAGE_FENCED_ATP] = ucp_proto_put_mtype_fenced_atp_progress,
     },
+    /* TODO: custom abort to destroy remote_rkey and release local_mdesc */
     .abort    = ucp_proto_request_zcopy_abort,
     .reset    = ucp_proto_offload_zcopy_reset
 };
@@ -855,6 +857,7 @@ ucp_proto_t ucp_put_ppln_proto = {
         [UCP_PROTO_PUT_PPLN_STAGE_RTS]  = ucp_proto_put_ppln_rts_progress,
         [UCP_PROTO_PUT_PPLN_STAGE_SEND] = ucp_proto_put_ppln_send_progress,
     },
+    /* TODO: custom abort to free freqs array and abort fragment requests */
     .abort    = ucp_proto_request_zcopy_abort,
     .reset    = ucp_proto_offload_zcopy_reset
 };
@@ -1142,8 +1145,9 @@ ucp_proto_get_ppln_copy_out_progress(uct_pending_req_t *self)
 
         iov.buffer = frag->mdesc->ptr;
         iov.length = length;
+        iov.memh   = frag->mdesc->memh->uct[ucp_ep_md_index(mem_type_ep, lane)];
+        iov.stride = 0;
         iov.count  = 1;
-        iov.memh   = UCT_MEM_HANDLE_NULL;
 
         status = uct_ep_put_zcopy(ucp_ep_get_lane(mem_type_ep, lane),
                                   &iov, 1, dest_addr, UCT_INVALID_RKEY,
@@ -1208,6 +1212,7 @@ ucp_proto_t ucp_get_ppln_proto = {
         [UCP_PROTO_GET_PPLN_STAGE_COPY_OUT] = ucp_proto_get_ppln_copy_out_progress,
         [UCP_PROTO_GET_PPLN_STAGE_ATS]      = ucp_proto_get_ppln_ats_progress,
     },
+    /* TODO: custom abort to free frags, return bounce buffers, release req_id */
     .abort    = ucp_proto_request_zcopy_abort,
     .reset    = ucp_proto_offload_zcopy_reset
 };
@@ -1400,7 +1405,12 @@ ucp_rma_ppln_ats_handler(ucp_worker_h worker,
     ucs_trace_req("rma_ppln: ATS received req=%p sender_req_id=0x%" PRIx64,
                   req, ats->sender_req_id);
 
-    /* TODO: complete sender request, free freqs array */
+    ucp_send_request_id_release(req);
+    ucs_free(req->send.ppln.freqs);
+    req->send.ppln.freqs = NULL;
+    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
+    ucp_request_complete_send(req, UCS_OK);
+
     return UCS_OK;
 }
 
