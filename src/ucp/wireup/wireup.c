@@ -1951,7 +1951,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
         ucs_fatal("endpoint reconfiguration not supported yet");
     }
 
-    ucp_ep_set_cfg_index(ep, new_cfg_index);
+    ucp_ep_set_cfg_index(ep, new_cfg_index, 1);
     ep->am_lane = key.am_lane;
 
     snprintf(str, sizeof(str), "ep %p", ep);

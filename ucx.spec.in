@@ -164,7 +164,10 @@ rm -f %{buildroot}%{_libdir}/ucx/lib*.so
 %{_sysconfdir}/ucx/ucx.conf
 
 %files devel
-%{_includedir}/uc*
+%{_includedir}/ucs
+%{_includedir}/ucm/api
+%{_includedir}/ucp/api
+%{_includedir}/uct/api
 %{_libdir}/lib*.so
 %{_libdir}/pkgconfig/ucx.pc
 %{_libdir}/pkgconfig/ucx-uct.pc
@@ -246,6 +249,7 @@ technology for direct data transfer between GPU and RDMA devices.
 %{_libdir}/ucx/libucx_perftest_cuda.so.*
 %{_libdir}/ucx/libucm_cuda.so.*
 %{_libdir}/ucx/libuct_cuda.so.*
+%{_includedir}/uct/cuda/*
 %endif
 
 %if %{with gdrcopy}
@@ -445,7 +449,8 @@ to initiate network communications directly without explicit synchronization
 with the host CPU.
 
 %files ib-mlx5-gda
-%{_libdir}/ucx/libuct_ib_mlx5_gda.so.*
+%{_libdir}/ucx/libuct_ib_mlx5_gda.*
+%{_includedir}/uct/ib/mlx5/gdaki/*
 %endif
 
 %changelog
