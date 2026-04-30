@@ -641,6 +641,13 @@ static void ucp_worker_flush_complete_one(ucp_request_t *req, ucs_status_t statu
             ucp_worker_flush_req_set_next_ep(req, 1, &worker->all_eps);
         }
 
+        /* If a per-endpoint flush previously failed synchronously, its
+         * status was stashed in req->status; surface it now so the caller
+         * sees the failure instead of UCS_OK. */
+        if ((status == UCS_OK) && (req->status != UCS_OK)) {
+            status = req->status;
+        }
+
         /* Coverity wrongly resolves completion callback function to
          * 'ucp_cm_server_conn_request_progress' */
         /* coverity[offset_free] */
@@ -697,10 +704,20 @@ static unsigned ucp_worker_flush_progress(void *arg)
                                                  "flush_worker",
                                                  req->flush_worker.uct_flags);
         if (UCS_PTR_IS_ERR(ep_flush_request)) {
-            /* endpoint flush resulted in an error */
+            /* Endpoint flush resulted in an error. Remember the worst
+             * status on the worker flush request and keep iterating:
+             * other endpoints may still have asynchronous flush
+             * operations in flight which hold a reference (comp_count)
+             * to this request, so completing it now would risk a
+             * use-after-free when their callbacks fire. The saved
+             * status is propagated when the iteration self-reference is
+             * released and the request is finally completed. */
             status = UCS_PTR_STATUS(ep_flush_request);
             ucs_diag("ucp_ep_flush_internal() failed: %s",
                      ucs_status_string(status));
+            if (req->status == UCS_OK) {
+                req->status = status;
+            }
         } else if (ep_flush_request != NULL) {
             /* endpoint flush started, increment refcount */
             ++req->flush_worker.comp_count;

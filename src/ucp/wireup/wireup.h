@@ -10,6 +10,7 @@
 #include <ucp/api/ucp.h>
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_ep.h>
+#include <ucp/wireup/address.h>
 #include <uct/api/uct.h>
 #include <ucs/arch/bitops.h>
 
@@ -50,6 +51,9 @@ enum {
     UCP_WIREUP_MSG_EP_CHECK,
     UCP_WIREUP_MSG_EP_REMOVED,
     UCP_WIREUP_MSG_REPLY_RECONFIG,
+    UCP_WIREUP_MSG_LANES_ADDR_REQUEST,
+    UCP_WIREUP_MSG_LANES_ADDR_REPLY,
+
     UCP_WIREUP_MSG_LAST
 };
 
@@ -129,9 +133,15 @@ typedef struct ucp_wireup_msg {
     uint64_t               src_ep_id; /* Endpoint ID of source */
     uint64_t               dst_ep_id; /* Endpoint ID of destination, can be
                                          UCS_PTR_MAP_KEY_INVALID */
-    /* packed addresses follow */
+    /* packed addresses or @ref ucp_wireup_msg_lanes_addrs_t follow */
 } UCS_S_PACKED ucp_wireup_msg_t;
 
+
+typedef struct ucp_wireup_msg_lanes_info_t {
+    ucp_lane_map_t         requested_lane_map; /* lanes the sender asked about */
+    ucp_lane_map_t         provided_lane_map;  /* lanes actually carried here */
+    /* packed addresses follow */
+} UCS_S_PACKED ucp_wireup_msg_lanes_info_t;
 
 typedef struct {
     double          score;
@@ -170,6 +180,8 @@ ucs_status_t
 ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
                        const ucp_tl_bitmap_t *tl_bitmap,
                        const ucp_lane_index_t *lanes2remote,
+                       ucp_lane_map_t requested_lane_map,
+                       ucp_lane_map_t provided_lane_map,
                        ucp_wireup_msg_t *msg_hdr, void **address_p,
                        size_t *address_length_p);
 
@@ -226,6 +238,44 @@ ucp_wireup_connect_local(ucp_ep_h ep,
 uct_ep_h ucp_wireup_extract_lane(ucp_ep_h ep, ucp_lane_index_t lane);
 
 unsigned ucp_wireup_eps_progress(void *arg);
+
+ucs_status_t
+ucp_wireup_find_remote_p2p_addr(ucp_ep_h ep, ucp_lane_index_t remote_lane,
+                                const ucp_unpacked_address_t *remote_address,
+                                const ucp_address_entry_t **address_entry_p,
+                                const ucp_address_entry_ep_addr_t **ep_entry_p);
+
+
+/**
+ * @brief Build and send a LANES_ADDR_REQUEST or LANES_ADDR_REPLY wireup
+ *        message over the operable AM lane.
+ *
+ * Packs the iface / ep addresses of the rscs used by the lanes in
+ * @a provided_lane_map and ships them in a wireup message of type
+ * @a msg_type, together with the @a requested_lane_map / @a provided_lane_map
+ * masks.
+ */
+void ucp_wireup_send_lanes_addr_msg(ucp_ep_h ep, uint8_t msg_type,
+                                    ucp_lane_map_t requested_lane_map,
+                                    ucp_lane_map_t provided_lane_map);
+
+
+/**
+ * @brief Create a fully-connected CONNECT_TO_IFACE UCT endpoint.
+ *
+ * @param [in]  wiface      Local worker iface to create the endpoint on.
+ * @param [in]  address     Remote address entry carrying dev/iface addresses.
+ * @param [in]  path_index  Path index to assign to the new endpoint.
+ * @param [out] uct_ep_p    Filled with the newly-created UCT endpoint on
+ *                          success.
+ *
+ * @return UCS_OK on success, error code from uct_ep_create() otherwise.
+ */
+ucs_status_t ucp_wireup_iface_ep_create(ucp_worker_iface_t *wiface,
+                                        const ucp_address_entry_t *address,
+                                        unsigned path_index,
+                                        uct_ep_h *uct_ep_p);
+
 
 double ucp_wireup_iface_lat_distance_v1(const ucp_worker_iface_t *wiface);
 

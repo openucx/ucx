@@ -197,7 +197,10 @@ struct ucp_request {
             } state;
 
             union {
-                ucp_wireup_msg_t  wireup;
+                struct {
+                    ucp_wireup_msg_t            msg_hdr;
+                    ucp_wireup_msg_lanes_info_t lanes_info;
+                } UCS_S_PACKED wireup;
 
                 struct {
                     /* Used to identify matching parts of a large message */
