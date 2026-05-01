@@ -167,6 +167,9 @@ typedef struct ucp_context_config {
     uint64_t                               reg_whole_alloc_bitmap;
     /** Always use flush operation in rendezvous put */
     int                                    rndv_put_force_flush;
+    /** Allow RMA emulation protocols. When disabled, provide an explicit error
+      * if no suitable proto is found */
+    int                                    proto_emulation_enable;
     /** Maximum size of mem type direct rndv*/
     size_t                                 rndv_memtype_direct_size;
     /** UCP sockaddr private data format version */
