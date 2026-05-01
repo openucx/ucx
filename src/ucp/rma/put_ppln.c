@@ -98,6 +98,13 @@ ucp_rma_ppln_frag_mem_type(ucp_context_t *context)
     return context->config.ext.ppln_frag_mem_type;
 }
 
+static UCS_F_ALWAYS_INLINE ucs_sys_device_t
+ucp_rma_ppln_frag_sys_dev(ucp_context_t *context, ucs_sys_device_t sys_dev)
+{
+    return (ucp_rma_ppln_frag_mem_type(context) == UCS_MEMORY_TYPE_HOST)
+            ? UCS_SYS_DEVICE_ID_UNKNOWN : sys_dev;
+}
+
 
 /* Sub-IDs for UCP_AM_ID_RMA_PPLN */
 enum {
@@ -836,8 +843,9 @@ ucp_proto_put_ppln_send_progress(uct_pending_req_t *self)
         /* Allocate local bounce buffer for this fragment */
         freq->send.frag_ppln.local_mdesc = ucp_ppln_mpool_get(
                 worker,
-                req->send.state.dt_iter.mem_info.type,
-                req->send.state.dt_iter.mem_info.sys_dev);
+                ucp_rma_ppln_frag_mem_type(worker->context),
+                ucp_rma_ppln_frag_sys_dev(worker->context,
+                                          req->send.state.dt_iter.mem_info.sys_dev));
         if (freq->send.frag_ppln.local_mdesc == NULL) {
             ucp_request_put(freq);
             ucp_proto_request_abort(req, UCS_ERR_NO_MEMORY);
@@ -967,7 +975,7 @@ ucp_rma_ppln_frag_copy_out_complete(uct_completion_t *self)
 static ucs_status_t
 ucp_rma_ppln_recv_alloc_bufs(ucp_worker_h worker, ucp_request_t *req)
 {
-    ucs_memory_type_t mem_type = ucp_rma_ppln_frag_mem_type(worker->context);
+    ucs_memory_type_t mem_type      = ucp_rma_ppln_frag_mem_type(worker->context);
     ucp_put_ppln_recv_frag_t *frags = req->send.recv_ppln.frags;
     int count                       = req->send.recv_ppln.frag_count;
     ucp_mem_desc_t *mdesc;
@@ -980,7 +988,9 @@ ucp_rma_ppln_recv_alloc_bufs(ucp_worker_h worker, ucp_request_t *req)
 
     for (i = 0; i < count; i++) {
         mdesc = ucp_ppln_mpool_get(worker, mem_type,
-                                   req->send.recv_ppln.sys_dev);
+                                   ucp_rma_ppln_frag_sys_dev(
+                                           worker->context,
+                                           req->send.recv_ppln.sys_dev));
         if (mdesc == NULL) {
             ucs_error("rma_ppln: bounce buffer alloc failed frag=%d", i);
             while (i-- > 0) {
