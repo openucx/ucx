@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2016. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -1805,11 +1805,12 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
             ptr       = ucp_address_unpack_tl_length(
                                           worker, flags_ptr, ptr, addr_version,
                                           &iface_addr_len, 0, &last_tl);
-            address->iface_addr   = (iface_addr_len > 0) ? ptr : NULL;
-            address->num_ep_addrs = 0;
-            ptr                   = UCS_PTR_BYTE_OFFSET(ptr, iface_addr_len);
-            last_ep_addr          = !(*(uint8_t*)flags_ptr &
-                                      UCP_ADDRESS_FLAG_HAS_EP_ADDR);
+            address->iface_addr     = (iface_addr_len > 0) ? ptr : NULL;
+            address->iface_addr_len = iface_addr_len;
+            address->num_ep_addrs   = 0;
+            ptr                     = UCS_PTR_BYTE_OFFSET(ptr, iface_addr_len);
+            last_ep_addr            = !(*(uint8_t*)flags_ptr &
+                                        UCP_ADDRESS_FLAG_HAS_EP_ADDR);
             while (!last_ep_addr) {
                 if (address->num_ep_addrs >= UCP_MAX_LANES) {
                     ucp_address_error(

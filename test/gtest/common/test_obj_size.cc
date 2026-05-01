@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -77,7 +77,7 @@ UCS_TEST_F(test_obj_size, size) {
     EXPECTED_SIZE(uct_ud_verbs_ep_t, 264);
 #  endif
 #  if HAVE_CUDA
-    EXPECTED_SIZE(uct_cuda_ipc_ep_t, 24);
+    EXPECTED_SIZE(uct_cuda_ipc_ep_t, 32);
 #  endif
 #endif
 }

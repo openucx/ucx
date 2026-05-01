@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -11,6 +11,7 @@
 #include <ucs/datastruct/list.h>
 #include <ucs/type/init_once.h>
 #include <ucs/type/spinlock.h>
+#include "cuda_ipc_ep.h"
 #include "cuda_ipc_md.h"
 #include <cuda.h>
 
@@ -83,5 +84,11 @@ ucs_status_t uct_cuda_ipc_unmap_memhandle(pid_t pid, ucs_sys_ns_t pid_ns,
 void uct_cuda_ipc_cache_set_global_limits(unsigned long max_regions,
                                           size_t max_size);
 
+
+/**
+ * @brief Tear down all CUDA IPC remote caches for a peer process ID
+ */
+void uct_cuda_ipc_destroy_cache_by_iface_address(
+        const uct_cuda_ipc_iface_address_t *iface_address);
 
 #endif
