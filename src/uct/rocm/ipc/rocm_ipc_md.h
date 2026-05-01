@@ -14,9 +14,9 @@
 typedef struct uct_rocm_ipc_cache uct_rocm_ipc_cache_t;
 
 typedef struct uct_rocm_ipc_component {
-    uct_component_t       super;
+    uct_component_t      super;
     uct_rocm_ipc_cache_t *ipc_cache;
-    pthread_mutex_t       lock;
+    pthread_mutex_t      lock;
 } uct_rocm_ipc_component_t;
 
 extern uct_rocm_ipc_component_t uct_rocm_ipc_component;

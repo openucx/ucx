@@ -29,14 +29,14 @@ static ucs_config_field_t uct_rocm_ipc_iface_config_table[] = {
      UCS_CONFIG_TYPE_TIME},
 
     {"CACHE_IPC_HANDLES", "y",
-     "Enable caching IPC handles (Note: caching is always enabled for device initiated communication)",
+     "Enable caching IPC handles (Note: caching is always enabled for device "
+     "initiated communication)",
      ucs_offsetof(uct_rocm_ipc_iface_config_t, params.enable_ipc_handle_cache),
      UCS_CONFIG_TYPE_BOOL},
 
-    {"SIGPOOL_MAX_ELEMS", "1024",
-      "Maximum number of elements in signal pool",
-      ucs_offsetof(uct_rocm_ipc_iface_config_t, params.sigpool_max_elems),
-      UCS_CONFIG_TYPE_UINT},
+    {"SIGPOOL_MAX_ELEMS", "1024", "Maximum number of elements in signal pool",
+     ucs_offsetof(uct_rocm_ipc_iface_config_t, params.sigpool_max_elems),
+     UCS_CONFIG_TYPE_UINT},
 
     {NULL}
 };
@@ -164,15 +164,17 @@ static unsigned uct_rocm_ipc_iface_progress(uct_iface_h tl_iface)
 }
 
 static uct_iface_internal_ops_t uct_rocm_ipc_iface_internal_ops = {
-    .iface_query_v2         = uct_iface_base_query_v2,
-    .iface_estimate_perf    = uct_base_iface_estimate_perf,
-    .iface_vfs_refresh      = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
-    .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
-    .ep_invalidate          = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
-    .ep_connect_to_ep_v2    = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
-    .iface_is_reachable_v2  = uct_rocm_ipc_iface_is_reachable_v2,
-    .ep_is_connected        = uct_base_ep_is_connected,
-    .ep_get_device_ep       = uct_rocm_ipc_ep_get_device_ep
+    .iface_query_v2      = uct_iface_base_query_v2,
+    .iface_estimate_perf = uct_base_iface_estimate_perf,
+    .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+    .ep_query = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+    .ep_invalidate         = (uct_ep_invalidate_func_t)
+            ucs_empty_function_return_unsupported,
+    .ep_connect_to_ep_v2   = (uct_ep_connect_to_ep_v2_func_t)
+            ucs_empty_function_return_unsupported,
+    .iface_is_reachable_v2 = uct_rocm_ipc_iface_is_reachable_v2,
+    .ep_is_connected       = uct_base_ep_is_connected,
+    .ep_get_device_ep      = uct_rocm_ipc_ep_get_device_ep
 };
 
 static uct_iface_ops_t uct_rocm_ipc_iface_ops = {
@@ -246,6 +248,6 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_rocm_ipc_iface_t, uct_iface_t, uct_md_h,
                                  const uct_iface_config_t *);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rocm_ipc_iface_t, uct_iface_t);
 
-UCT_TL_DEFINE(&uct_rocm_ipc_component.super, rocm_ipc, uct_rocm_base_query_devices,
-              uct_rocm_ipc_iface_t, "ROCM_IPC_",
+UCT_TL_DEFINE(&uct_rocm_ipc_component.super, rocm_ipc,
+              uct_rocm_base_query_devices, uct_rocm_ipc_iface_t, "ROCM_IPC_",
               uct_rocm_ipc_iface_config_table, uct_rocm_ipc_iface_config_t);

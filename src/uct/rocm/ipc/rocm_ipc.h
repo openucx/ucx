@@ -20,7 +20,7 @@
 #define UCT_ROCM_IPC_WAVEFRONT_SIZE __AMDGCN_WAVEFRONT_SIZE
 #endif
 
-#define UCT_ROCM_IPC_COPY_LOOP_UNROLL        8
+#define UCT_ROCM_IPC_COPY_LOOP_UNROLL 8
 
 /* Vectorized load with cache coherency - using direct memory access */
 __device__ static inline int4 uct_rocm_ipc_ld_global_cg(const int4 *p)

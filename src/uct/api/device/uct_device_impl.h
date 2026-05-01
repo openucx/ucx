@@ -21,7 +21,7 @@
 #define UCT_CUDA_IPC_SUPPORTED 0
 #endif
 
-#if __has_include(<uct/rocm/ipc/rocm_ipc.h>)
+#if HAVE_ROCM
 #include <uct/rocm/ipc/rocm_ipc.h>
 #endif
 
