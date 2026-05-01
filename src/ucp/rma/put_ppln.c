@@ -369,17 +369,35 @@ ucp_proto_put_mtype_data_sent(ucp_request_t *req)
     return ucp_request_invoke_uct_completion_success(req);
 }
 
+static UCS_F_ALWAYS_INLINE ucp_md_index_t
+ucp_put_ppln_get_rkey_index(ucp_request_t *req, ucp_rkey_h rkey,
+                            ucp_lane_index_t lane)
+{
+    ucp_ep_config_t *ep_config  = ucp_ep_config(req->send.ep);
+    ucp_md_index_t md_index     = ep_config->md_index[lane];
+    ucp_md_index_t dst_md_index = ep_config->key.lanes[lane].dst_md_index;
+
+    ucs_assertv_always((UCS_BIT(dst_md_index) & rkey->md_map) &&
+                       (md_index != UCP_NULL_RESOURCE),
+                       "dst_md_index=%u rkey->md_map=0x%lx md_index=%u",
+                       dst_md_index, rkey->md_map, md_index);
+
+    return ucs_bitmap2idx(rkey->md_map, dst_md_index);
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_put_mtype_send_func(ucp_request_t *req,
                                const ucp_proto_multi_lane_priv_t *lpriv,
                                ucp_datatype_iter_t *next_iter,
                                ucp_lane_index_t *lane_shift)
 {
+    ucp_rkey_h rkey        = req->send.frag_ppln.remote_rkey;
+    ucp_md_index_t rkey_index = ucp_put_ppln_get_rkey_index(req, rkey,
+                                                            lpriv->super.lane);
     ucp_mem_desc_t *mdesc  = req->send.frag_ppln.local_mdesc;
     uint64_t remote_addr   = req->send.frag_ppln.remote_addr +
                              req->send.state.dt_iter.offset;
-    uct_rkey_t tl_rkey     = ucp_rkey_get_tl_rkey(req->send.frag_ppln.remote_rkey,
-                                                  lpriv->super.rkey_index);
+    uct_rkey_t tl_rkey     = ucp_rkey_get_tl_rkey(rkey, rkey_index);
     size_t max_payload     = ucp_proto_multi_max_payload(req, lpriv, 0);
     size_t length;
     uct_iov_t iov;
@@ -445,8 +463,7 @@ ucp_proto_put_mtype_atp_pack(void *dest, void *arg)
     ucp_request_t *req                      = ctx->req;
     ucp_put_ppln_atp_hdr_t *atp             = dest;
 
-    atp->super.super.req_id = ucp_send_request_get_id(
-            ucp_request_get_super(req));
+    atp->super.super.req_id = ucp_request_get_super(req)->send.ppln.remote_req_id;
     atp->super.super.ep_id  = ucp_send_request_get_ep_remote_id(req);
     atp->super.sub_id       = UCP_RMA_PPLN_AM_ATP;
     atp->frag_id            = req->send.frag_ppln.frag_id;
@@ -1380,6 +1397,8 @@ ucp_rma_ppln_rtr_handler(ucp_worker_h worker,
                   " recv_req_id=0x%" PRIx64 " count=%d",
                   req, rtr->sender_req_id, rtr->super.super.req_id,
                   rtr->frag_count);
+
+    req->send.ppln.remote_req_id = rtr->super.super.req_id;
 
     status = ucp_rma_ppln_rtr_unpack_frags(req, rtr, rtr_length);
     if (status != UCS_OK) {

@@ -242,6 +242,7 @@ struct ucp_request {
                 struct {
                     ucp_request_t    **freqs;       /* Fragment request array */
                     unsigned         num_freqs;     /* Number of fragment requests */
+                    ucs_ptr_map_key_t remote_req_id; /* Receiver's request ID */
                 } ppln;
 
                 struct {
