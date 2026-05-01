@@ -1482,26 +1482,25 @@ ucp_rma_ppln_rts_handler(ucp_worker_h worker,
 }
 
 static ucs_status_t
-ucp_rma_ppln_rtr_unpack_frags(ucp_request_t *req,
+ucp_rma_ppln_rtr_unpack_frags(ucp_ep_h ep, ucp_request_t **freqs,
+                              int num_freqs,
                               const ucp_put_ppln_rtr_hdr_t *rtr,
                               size_t rtr_length)
 {
-    ucp_ep_h ep = req->send.ep;
     const ucp_put_ppln_rtr_entry_t *entry;
     ucp_request_t *freq;
     ucs_status_t status;
     const void *p;
     int i;
 
-    ucs_assertv(rtr->frag_count == (int)req->send.ppln.num_freqs,
-                "RTR count=%d num_freqs=%u", rtr->frag_count,
-                req->send.ppln.num_freqs);
+    ucs_assertv(rtr->frag_count == num_freqs,
+                "RTR count=%d num_freqs=%d", rtr->frag_count, num_freqs);
 
     p = rtr + 1;
 
     for (i = 0; i < rtr->frag_count; i++) {
         entry = p;
-        freq  = req->send.ppln.freqs[i];
+        freq  = freqs[i];
 
         ucs_assert(freq->send.frag_ppln.remote_rkey == UCP_RKEY_INVALID);
 
@@ -1550,7 +1549,9 @@ ucp_rma_ppln_rtr_handler(ucp_worker_h worker,
                   req, rtr->sender_req_id, rtr->super.super.req_id,
                   rtr->frag_count);
 
-    status = ucp_rma_ppln_rtr_unpack_frags(req, rtr, rtr_length);
+    status = ucp_rma_ppln_rtr_unpack_frags(req->send.ep, req->send.ppln.freqs,
+                                           req->send.ppln.num_freqs,
+                                           rtr, rtr_length);
     if (status != UCS_OK) {
         return status;
     }
