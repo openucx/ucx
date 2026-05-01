@@ -199,7 +199,7 @@ ucp_proto_put_mtype_probe(const ucp_proto_init_params_t *init_params)
         .super.overhead      = 0,
         .super.latency       = 0,
         .super.cfg_thresh    = 0,
-        .super.cfg_priority  = 40,
+        .super.cfg_priority  = 30,
         .super.min_length    = 0,
         .super.max_length    = SIZE_MAX,
         .super.min_iov       = 1,
