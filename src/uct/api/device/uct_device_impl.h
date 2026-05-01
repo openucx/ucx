@@ -1,5 +1,6 @@
 /**
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025-2026. ALL RIGHTS RESERVED.
+ * Copyright (C) Advanced Micro Devices, Inc. 2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -20,7 +21,11 @@
 #define UCT_CUDA_IPC_SUPPORTED 0
 #endif
 
-#if __has_include(<uct/ib/mlx5/gdaki/gdaki.cuh>) && \
+#if HAVE_ROCM
+#include <uct/rocm/ipc/rocm_ipc.h>
+#endif
+
+#if defined(__NVCC__) && __has_include(<uct/ib/mlx5/gdaki/gdaki.cuh>) && \
     __has_include(<infiniband/mlx5dv.h>)
 #include <uct/ib/mlx5/gdaki/gdaki.cuh>
 #define UCT_RC_MLX5_GDA_SUPPORTED 1
@@ -34,6 +39,9 @@ union uct_device_completion {
 #endif
 #if UCT_CUDA_IPC_SUPPORTED
     uct_cuda_ipc_completion_t cuda_ipc;
+#endif
+#if HAVE_ROCM
+    uct_rocm_ipc_completion_t rocm_ipc;
 #endif
 };
 
@@ -89,6 +97,12 @@ uct_device_ep_put(uct_device_ep_h device_ep,
                                           remote_address, length, flags, comp);
     }
 #endif
+#if HAVE_ROCM
+    if (device_ep->uct_tl_id == UCT_DEVICE_TL_ROCM_IPC) {
+        return uct_rocm_ipc_ep_put<level>(device_ep, mem_elem, address,
+                                          remote_address, length, flags, comp);
+    }
+#endif
 
     return UCS_ERR_UNSUPPORTED;
 }
@@ -140,6 +154,12 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_atomic_add(
                                                  remote_address, flags, comp);
     }
 #endif
+#if HAVE_ROCM
+    if (device_ep->uct_tl_id == UCT_DEVICE_TL_ROCM_IPC) {
+        return uct_rocm_ipc_ep_atomic_add<level>(device_ep, mem_elem, inc_value,
+                                                 remote_address, flags, comp);
+    }
+#endif
 
     return UCS_ERR_UNSUPPORTED;
 }
@@ -168,10 +188,14 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_get_ptr(
         return uct_cuda_ipc_ep_get_ptr(device_ep, mem_elem, address, addr_p);
     }
 #endif
+#if HAVE_ROCM
+    if (device_ep->uct_tl_id == UCT_DEVICE_TL_ROCM_IPC) {
+        return uct_rocm_ipc_ep_get_ptr(device_ep, mem_elem, address, addr_p);
+    }
+#endif
 
     return UCS_ERR_UNSUPPORTED;
 }
-
 
 /**
  * @ingroup UCT_DEVICE

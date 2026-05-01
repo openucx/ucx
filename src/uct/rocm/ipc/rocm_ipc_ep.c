@@ -1,5 +1,5 @@
 /*
- * Copyright (C) Advanced Micro Devices, Inc. 2019-2023. ALL RIGHTS RESERVED.
+ * Copyright (C) Advanced Micro Devices, Inc. 2019-2026. ALL RIGHTS RESERVED.
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
@@ -10,7 +10,6 @@
 
 #include "rocm_ipc_ep.h"
 #include "rocm_ipc_iface.h"
-#include "rocm_ipc_md.h"
 
 #include <uct/rocm/base/rocm_base.h>
 #include <uct/rocm/base/rocm_signal.h>
@@ -20,27 +19,20 @@
 static UCS_CLASS_INIT_FUNC(uct_rocm_ipc_ep_t, const uct_ep_params_t *params)
 {
     uct_rocm_ipc_iface_t *iface = ucs_derived_of(params->iface, uct_rocm_ipc_iface_t);
-    char target_name[64];
-    ucs_status_t status;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super);
 
     self->remote_pid = *(const pid_t*)params->iface_addr;
-
-    snprintf(target_name, sizeof(target_name), "dest:%d", *(pid_t*)params->iface_addr);
-    status = uct_rocm_ipc_create_cache(&self->remote_memh_cache, target_name);
-    if (status != UCS_OK) {
-        ucs_error("could not create create rocm ipc cache: %s",
-                  ucs_status_string(status));
-        return status;
-    }
+    self->device_ep  = NULL;
 
     return UCS_OK;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rocm_ipc_ep_t)
 {
-    uct_rocm_ipc_destroy_cache(self->remote_memh_cache);
+    if (self->device_ep != NULL) {
+        hsa_amd_memory_pool_free(self->device_ep);
+    }
 }
 
 UCS_CLASS_DEFINE(uct_rocm_ipc_ep_t, uct_base_ep_t);
@@ -58,7 +50,6 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
                                    uct_completion_t *comp,
                                    int is_put)
 {
-    uct_rocm_ipc_ep_t *ep = ucs_derived_of(tl_ep, uct_rocm_ipc_ep_t);
     hsa_status_t status;
     hsa_agent_t local_agent, remote_agent;
     hsa_agent_t dst_agent, src_agent;
@@ -95,8 +86,15 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
     }
 
     if (iface->config.enable_ipc_handle_cache) {
-        ret = uct_rocm_ipc_cache_map_memhandle((void*)ep->remote_memh_cache,
-                                               key, &remote_base_addr);
+        /* Ensure component cache is initialized */
+        ret = uct_rocm_ipc_component_init_cache();
+        if (ucs_unlikely(ret != UCS_OK)) {
+            ucs_error("failed to initialize rocm_ipc component cache\n");
+            return ret;
+        }
+        ret = uct_rocm_ipc_cache_map_memhandle(
+                (void*)uct_rocm_ipc_component.ipc_cache, key,
+                &remote_base_addr);
         if (ucs_unlikely(ret != UCS_OK)) {
             ucs_error("fail to attach ipc mem %p %d\n", (void*)key->address,
                       ret);
@@ -220,4 +218,53 @@ ucs_status_t uct_rocm_ipc_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, siz
                             uct_iov_total_length(iov, iovcnt));
 
     return ret;
+}
+
+ucs_status_t
+uct_rocm_ipc_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
+{
+    uct_rocm_ipc_ep_t *ep = ucs_derived_of(tl_ep, uct_rocm_ipc_ep_t);
+    uct_device_ep_t device_ep;
+    ucs_status_t status;
+    hsa_status_t hsa_status;
+    hsa_amd_memory_pool_t pool;
+
+    if (ep->device_ep != NULL) {
+        goto out;
+    }
+    device_ep.uct_tl_id = UCT_DEVICE_TL_ROCM_IPC;
+
+    /* Get memory pool for device allocation */
+    status = uct_rocm_base_get_last_device_pool(&pool);
+    if (status != UCS_OK) {
+        ucs_error("Failed to get ROCm memory pool");
+        goto err;
+    }
+    /* Allocate device memory for endpoint structure */
+    hsa_status = hsa_amd_memory_pool_allocate(pool, sizeof(uct_device_ep_t), 0,
+                                              (void**)&ep->device_ep);
+
+    if (hsa_status != HSA_STATUS_SUCCESS) {
+        ucs_error("Failed to allocate device endpoint memory: %d", hsa_status);
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
+    }
+    /* Copy endpoint structure to device */
+    hsa_status = hsa_memory_copy(ep->device_ep, &device_ep,
+                                 sizeof(uct_device_ep_t));
+    if (hsa_status != HSA_STATUS_SUCCESS) {
+        ucs_error("Failed to copy endpoint to device: %d", hsa_status);
+        status = UCS_ERR_IO_ERROR;
+        goto err_free_mem;
+    }
+
+out:
+    *device_ep_p = ep->device_ep;
+    return UCS_OK;
+
+err_free_mem:
+    hsa_amd_memory_pool_free(ep->device_ep);
+    ep->device_ep = NULL;
+err:
+    return status;
 }
