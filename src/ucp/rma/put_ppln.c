@@ -531,16 +531,21 @@ ucp_proto_t ucp_put_mtype_proto = {
 static ucs_status_t
 ucp_proto_ppln_add_overhead(ucp_proto_perf_t *ppln_perf, size_t frag_size)
 {
-    static const double frag_overhead = 30e-9;
-    ucp_proto_perf_factors_t factors  = UCP_PROTO_PERF_FACTORS_INITIALIZER;
+    /* RTS/RTR round-trip + ATS one-way */
+    static const double rts_rtr_overhead = 275e-9; /* Full AM RTT */
+    static const double ats_overhead     = 150e-9; /* ~RTT/2 for final ACK */
+    static const double fixed_overhead   = rts_rtr_overhead + ats_overhead;
+    static const double frag_overhead    = 30e-9;
+    ucp_proto_perf_factors_t factors     = UCP_PROTO_PERF_FACTORS_INITIALIZER;
     char frag_str[64];
     ucp_proto_perf_node_t *node;
 
     ucs_memunits_to_str(frag_size, frag_str, sizeof(frag_str));
     factors[UCP_PROTO_PERF_FACTOR_LOCAL_CPU] =
-            ucs_linear_func_make(frag_overhead, frag_overhead / frag_size);
-    node = ucp_proto_perf_node_new_data("fragment overhead", "frag size: %s",
-                                        frag_str);
+            ucs_linear_func_make(fixed_overhead + frag_overhead,
+                                 frag_overhead / frag_size);
+    node = ucp_proto_perf_node_new_data("ppln overhead",
+                                        "rts_rtr + ats + frag %s", frag_str);
     return ucp_proto_perf_add_funcs(ppln_perf, 0, SIZE_MAX, factors,
                                     node, NULL);
 }
