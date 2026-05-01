@@ -230,7 +230,7 @@ ucp_proto_put_mtype_probe(const ucp_proto_init_params_t *init_params)
     if ((sel_param->dt_class != UCP_DATATYPE_CONTIG) ||
         !ucp_proto_init_check_op(init_params,
                                  UCS_BIT(UCP_OP_ID_PUT_MTYPE)) ||
-        !ucp_ep_config_is_inter_node(init_params->ep_config_key) ||
+        ucp_ep_config_is_self(init_params->ep_config_key) ||
         !UCP_MEM_IS_CUDA(sel_param->mem_type) ||
         ((init_params->rkey_config_key != NULL) &&
          !UCP_MEM_IS_CUDA(init_params->rkey_config_key->mem_type))) {
@@ -524,7 +524,7 @@ ucp_proto_ppln_add_overhead(ucp_proto_perf_t *ppln_perf, size_t frag_size)
             ucs_linear_func_make(frag_overhead, frag_overhead / frag_size);
     node = ucp_proto_perf_node_new_data("fragment overhead", "frag size: %s",
                                         frag_str);
-    return ucp_proto_perf_add_funcs(ppln_perf, frag_size + 1, SIZE_MAX, factors,
+    return ucp_proto_perf_add_funcs(ppln_perf, 0, SIZE_MAX, factors,
                                     node, NULL);
 }
 
@@ -555,7 +555,7 @@ ucp_proto_ppln_check_common(const ucp_proto_init_params_t *init_params,
            ucp_proto_init_check_op(init_params, op_id_mask) &&
            !(ucp_proto_select_op_flags(sel_param) &
              UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG) &&
-           ucp_ep_config_is_inter_node(init_params->ep_config_key) &&
+           !ucp_ep_config_is_self(init_params->ep_config_key) &&
            (init_params->ep_config_key->am_lane != UCP_NULL_LANE) &&
            UCP_MEM_IS_CUDA(sel_param->mem_type) &&
            ((init_params->rkey_config_key == NULL) ||
