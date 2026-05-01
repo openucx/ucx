@@ -1054,8 +1054,12 @@ ucp_rma_ppln_rtr_serialize(ucp_request_t *req, void *buf, size_t buf_size)
         entry->packed_rkey_len = (uint8_t)packed_rkey_size;
         p = UCS_PTR_BYTE_OFFSET(p, sizeof(*entry) + packed_rkey_size);
 
-        ucs_trace_req("rma_ppln: RTR frag=%d mdesc=%p addr=%p rkey_len=%u",
-                      i, mdesc, mdesc->ptr, entry->packed_rkey_len);
+        ucs_trace_req("rma_ppln: RTR frag=%d/%d mdesc=%p addr=0x%" PRIx64
+                      " mem_type=%s rkey_len=%u md_map=0x%" PRIx64,
+                      i, count, mdesc, entry->addr,
+                      ucs_memory_type_names[mdesc->memh->mem_type],
+                      entry->packed_rkey_len,
+                      (uint64_t)req->send.recv_ppln.md_map);
     }
 
     /* TODO: handle splitting RTR across multiple bcopy messages */
