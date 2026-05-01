@@ -127,7 +127,7 @@ static void uct_rc_gdaki_calc_dev_ep_layout(size_t num_channels, size_t wq_len,
 
 static int uct_gdaki_check_umem_dmabuf(const uct_ib_md_t *md)
 {
-    ucs_status_t ret = 0;
+    int ret = 0;
 #if HAVE_DECL_MLX5DV_UMEM_MASK_DMABUF
     struct mlx5dv_devx_umem_in umem_in = {};
     struct mlx5dv_devx_umem *umem;
@@ -135,13 +135,16 @@ static int uct_gdaki_check_umem_dmabuf(const uct_ib_md_t *md)
     CUdeviceptr buff;
 
     if (UCT_CUDADRV_FUNC_LOG_ERR(cuMemAlloc(&buff, 1)) != UCS_OK) {
-        return 0;
+        goto out;
     }
 
     dmabuf = uct_cuda_copy_md_get_dmabuf((void*)buff, 1,
                                          UCS_SYS_DEVICE_ID_UNKNOWN);
+    if (dmabuf.fd == UCT_DMABUF_FD_INVALID) {
+        goto out_free;
+    }
 
-    umem_in.addr        = (void*)buff;
+    umem_in.addr        = (void *)(uintptr_t)dmabuf.offset;
     umem_in.size        = 1;
     umem_in.access      = IBV_ACCESS_LOCAL_WRITE;
     umem_in.pgsz_bitmap = UINT64_MAX & ~(ucs_get_page_size() - 1);
@@ -149,17 +152,19 @@ static int uct_gdaki_check_umem_dmabuf(const uct_ib_md_t *md)
     umem_in.dmabuf_fd   = dmabuf.fd;
 
     umem = mlx5dv_devx_umem_reg_ex(md->dev.ibv_context, &umem_in);
-    if (umem != NULL) {
-        mlx5dv_devx_umem_dereg(umem);
-        ret = 1;
-    } else {
-        ret = 0;
+    if (umem == NULL) {
+        goto out_close;
     }
 
+    ret = 1;
+out_dereg:
+    mlx5dv_devx_umem_dereg(umem);
+out_close:
     ucs_close_fd(&dmabuf.fd);
+out_free:
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuMemFree(buff));
+out:
 #endif
-
     return ret;
 }
 
@@ -203,7 +208,6 @@ uct_rc_gdaki_umem_reg(const uct_ib_md_t *md, struct ibv_context *ibv_context,
     };
     struct mlx5dv_devx_umem *umem;
 
-    umem_in.addr        = address;
     umem_in.size        = length;
     umem_in.access      = IBV_ACCESS_LOCAL_WRITE;
     umem_in.pgsz_bitmap = pgsz_bitmap;
@@ -211,14 +215,17 @@ uct_rc_gdaki_umem_reg(const uct_ib_md_t *md, struct ibv_context *ibv_context,
     if (ib_mlx5_md->flags & UCT_IB_MLX5_MD_FLAG_REG_DMABUF_UMEM) {
         dmabuf = uct_cuda_copy_md_get_dmabuf(address, length,
                                              UCS_SYS_DEVICE_ID_UNKNOWN);
-        if (dmabuf.fd != UCT_DMABUF_FD_INVALID) {
-            umem_in.comp_mask = MLX5DV_UMEM_MASK_DMABUF;
-            umem_in.dmabuf_fd = dmabuf.fd;
-        }
+    }
+
+    if (dmabuf.fd == UCT_DMABUF_FD_INVALID) {
+        umem_in.addr      = address;
+    } else {
+        umem_in.comp_mask = MLX5DV_UMEM_MASK_DMABUF;
+        umem_in.dmabuf_fd = dmabuf.fd;
+        umem_in.addr      = (void *)(uintptr_t)dmabuf.offset;
     }
 
     umem = mlx5dv_devx_umem_reg_ex(ibv_context, &umem_in);
-
     if (dmabuf.fd != UCT_DMABUF_FD_INVALID) {
         ucs_close_fd(&dmabuf.fd);
     }
