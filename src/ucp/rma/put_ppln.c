@@ -342,13 +342,11 @@ ucp_proto_put_mtype_copy_progress(uct_pending_req_t *self)
 static void
 ucp_proto_put_mtype_atp_completion(uct_completion_t *uct_comp)
 {
-    ucp_request_t *req   = ucs_container_of(uct_comp, ucp_request_t,
-                                            send.state.uct_comp);
-    ucp_request_t *super = ucp_request_get_super(req);
+    ucp_request_t *req = ucs_container_of(uct_comp, ucp_request_t,
+                                           send.state.uct_comp);
 
     ucp_trace_req(req, "put/mtype: frag_id=%u atp done",
                   req->send.frag_ppln.frag_id);
-    super->send.ppln.freqs[req->send.frag_ppln.frag_id] = NULL;
     ucp_rkey_destroy(req->send.frag_ppln.remote_rkey);
     ucp_request_put(req);
 }
@@ -470,7 +468,7 @@ ucp_proto_put_mtype_atp_pack(void *dest, void *arg)
     ucp_request_t *req                      = ctx->req;
     ucp_put_ppln_atp_hdr_t *atp             = dest;
 
-    atp->super.super.req_id = ucp_request_get_super(req)->send.ppln.remote_req_id;
+    atp->super.super.req_id = req->send.frag_ppln.remote_req_id;
     atp->super.super.ep_id  = ucp_send_request_get_ep_remote_id(req);
     atp->super.sub_id       = UCP_RMA_PPLN_AM_ATP;
     atp->frag_id            = req->send.frag_ppln.frag_id;
@@ -1449,8 +1447,6 @@ ucp_rma_ppln_rtr_handler(ucp_worker_h worker,
                   req, rtr->sender_req_id, rtr->super.super.req_id,
                   rtr->frag_count);
 
-    req->send.ppln.remote_req_id = rtr->super.super.req_id;
-
     status = ucp_rma_ppln_rtr_unpack_frags(req, rtr, rtr_length);
     if (status != UCS_OK) {
         return status;
@@ -1458,6 +1454,7 @@ ucp_rma_ppln_rtr_handler(ucp_worker_h worker,
 
     for (i = 0; i < req->send.ppln.num_freqs; i++) {
         freq = req->send.ppln.freqs[i];
+        freq->send.frag_ppln.remote_req_id = rtr->super.super.req_id;
         if (freq->send.proto_stage == UCP_PROTO_PUT_MTYPE_STAGE_SEND) {
             ucp_request_send(freq);
         }

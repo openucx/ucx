@@ -242,7 +242,6 @@ struct ucp_request {
                 struct {
                     ucp_request_t    **freqs;       /* Fragment request array */
                     unsigned         num_freqs;     /* Number of fragment requests */
-                    ucs_ptr_map_key_t remote_req_id; /* Receiver's request ID */
                 } ppln;
 
                 struct {
@@ -252,6 +251,7 @@ struct ucp_request {
                     ucp_rkey_h       remote_rkey;   /* Remote bounce buffer rkey */
                     ucp_mem_desc_t   *remote_mdesc; /* Remote mdesc (opaque, for ATP) */
                     ucp_lane_map_t   send_lane_map; /* Lanes used for PUT ZCOPY */
+                    ucs_ptr_map_key_t remote_req_id; /* Peer's request ID for ATP */
                 } frag_ppln;
 
                 struct {
