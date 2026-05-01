@@ -748,6 +748,11 @@ ucp_proto_put_ppln_rts_progress(uct_pending_req_t *self)
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucs_status_t status;
 
+    if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
+        ucp_send_request_id_alloc(req);
+        req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
+    }
+
     status = ucp_do_am_single(self, UCP_AM_ID_RMA_PPLN,
                               ucp_proto_put_ppln_rts_pack,
                               sizeof(ucp_put_ppln_rts_hdr_t));
