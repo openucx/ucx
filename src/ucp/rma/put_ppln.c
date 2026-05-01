@@ -651,6 +651,7 @@ ucp_proto_ppln_probe_perf(const ucp_proto_init_params_t *init_params,
         ucp_proto_select_add_proto(init_params, proto->cfg_thresh,
                                    proto->cfg_priority, ppln_perf, &rpriv,
                                    sizeof(rpriv));
+        continue;
 
     out_destroy_ppln_perf:
         ucp_proto_perf_destroy(ppln_perf);
