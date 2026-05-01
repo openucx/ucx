@@ -312,6 +312,11 @@ gtest_LDADD += \
 endif
 endif
 
+if HAVE_ZE
+gtest_SOURCES += \
+	uct/ze/test_ze.cc
+endif
+
 noinst_HEADERS = \
 	common/mem_buffer.h \
 	common/test.h \

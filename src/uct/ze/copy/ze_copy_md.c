@@ -10,29 +10,28 @@
 #include "ze_copy_md.h"
 
 #include <uct/ze/base/ze_base.h>
-
-#include <string.h>
-#include <limits.h>
 #include <ucm/api/ucm.h>
-#include <ucs/debug/log.h>
-#include <ucs/sys/sys.h>
-#include <ucs/sys/math.h>
 #include <ucs/debug/memtrack_int.h>
+#include <ucs/debug/log.h>
+#include <ucs/sys/math.h>
+#include <ucs/sys/sys.h>
 #include <ucs/type/class.h>
 #include <ucs/memory/memtype_cache.h>
 
+#include <limits.h>
+#include <string.h>
 
-static ucs_config_field_t uct_ze_copy_md_config_table[] = {
-    {"", "", NULL, ucs_offsetof(uct_ze_copy_md_config_t, super),
-     UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
 
-    {"DEVICE_ORDINAL", "0",
-     "Ordinal of the GPU device to allocate memory from.",
-     ucs_offsetof(uct_ze_copy_md_config_t, device_ordinal),
-     UCS_CONFIG_TYPE_INT},
+static ucs_config_field_t uct_ze_copy_md_config_table[] =
+        {{"", "", NULL, ucs_offsetof(uct_ze_copy_md_config_t, super),
+          UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
 
-    {NULL}
-};
+         {"DEVICE_ORDINAL", "0",
+          "Ordinal of the GPU device to allocate memory from.",
+          ucs_offsetof(uct_ze_copy_md_config_t, device_ordinal),
+          UCS_CONFIG_TYPE_INT},
+
+         {NULL}};
 
 static ucs_status_t uct_ze_copy_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
 {
@@ -66,7 +65,7 @@ uct_ze_copy_mem_alloc(uct_md_h tl_md, size_t *length_p, void **address_p,
                       ucs_memory_type_t mem_type, ucs_sys_device_t sys_dev,
                       unsigned flags, const char *alloc_name, uct_mem_h *memh_p)
 {
-    uct_ze_copy_md_t *md                = ucs_derived_of(tl_md, uct_ze_copy_md_t);
+    uct_ze_copy_md_t *md = ucs_derived_of(tl_md, uct_ze_copy_md_t);
     ze_host_mem_alloc_desc_t host_desc  = {
         .stype = ZE_STRUCTURE_TYPE_HOST_MEM_ALLOC_DESC
     };
@@ -78,21 +77,20 @@ uct_ze_copy_mem_alloc(uct_md_h tl_md, size_t *length_p, void **address_p,
 
     switch (mem_type) {
     case UCS_MEMORY_TYPE_ZE_HOST:
-        status = UCT_ZE_FUNC_LOG_ERR(zeMemAllocHost(md->ze_context, &host_desc,
-                                                    *length_p, alignment,
-                                                    address_p));
+        status = UCT_ZE_FUNC_LOG_ERR(
+                zeMemAllocHost(md->ze_context, &host_desc, *length_p,
+                               alignment, address_p));
         break;
     case UCS_MEMORY_TYPE_ZE_DEVICE:
-        status = UCT_ZE_FUNC_LOG_ERR(zeMemAllocDevice(md->ze_context, &dev_desc,
-                                                      *length_p, alignment,
-                                                      md->ze_device,
-                                                      address_p));
+        status = UCT_ZE_FUNC_LOG_ERR(
+                zeMemAllocDevice(md->ze_context, &dev_desc, *length_p,
+                                 alignment, md->ze_device, address_p));
         break;
     case UCS_MEMORY_TYPE_ZE_MANAGED:
-        status = UCT_ZE_FUNC_LOG_ERR(zeMemAllocShared(md->ze_context, &dev_desc,
-                                                      &host_desc, *length_p,
-                                                      alignment, md->ze_device,
-                                                      address_p));
+        status = UCT_ZE_FUNC_LOG_ERR(
+                zeMemAllocShared(md->ze_context, &dev_desc, &host_desc,
+                                 *length_p, alignment, md->ze_device,
+                                 address_p));
         break;
     default:
         ucs_debug("unsupported mem_type: %d", mem_type);
@@ -133,6 +131,30 @@ uct_ze_copy_mem_reg(uct_md_h md, void *address, size_t length,
     return UCS_OK;
 }
 
+static ucs_status_t
+uct_ze_copy_mem_dereg(uct_md_h md, const uct_md_mem_dereg_params_t *params)
+{
+    uct_mem_h memh;
+    unsigned flags;
+
+    memh = (params->field_mask & UCT_MD_MEM_DEREG_FIELD_MEMH) ? params->memh :
+                                                                NULL;
+    if (memh == NULL) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (ENABLE_PARAMS_CHECK) {
+        flags = (params->field_mask & UCT_MD_MEM_DEREG_FIELD_FLAGS) ?
+                        params->flags :
+                        0;
+        if (flags & UCT_MD_MEM_DEREG_FLAG_INVALIDATE) {
+            return UCS_ERR_UNSUPPORTED;
+        }
+    }
+
+    return UCS_OK;
+}
+
 static void uct_ze_copy_md_close(uct_md_h uct_md)
 {
     uct_ze_copy_md_t *md = ucs_derived_of(uct_md, uct_ze_copy_md_t);
@@ -145,7 +167,7 @@ static ucs_status_t
 uct_ze_copy_md_query_attributes(uct_md_h md, const void *addr, size_t length,
                                 ucs_memory_info_t *mem_info, int *dmabuf_fd)
 {
-    uct_ze_copy_md_t *ze_md                  = ucs_derived_of(md, uct_ze_copy_md_t);
+    uct_ze_copy_md_t *ze_md = ucs_derived_of(md, uct_ze_copy_md_t);
     ze_external_memory_export_fd_t export_fd = {
         .stype = ZE_STRUCTURE_TYPE_EXTERNAL_MEMORY_EXPORT_FD,
         .flags = ZE_EXTERNAL_MEMORY_TYPE_FLAG_DMA_BUF,
@@ -272,14 +294,18 @@ static uct_md_ops_t md_ops = {
     .query              = uct_ze_copy_md_query,
     .mem_alloc          = uct_ze_copy_mem_alloc,
     .mem_free           = uct_ze_copy_mem_free,
-    .mem_advise         = (uct_md_mem_advise_func_t)ucs_empty_function_return_unsupported,
+    .mem_advise         = (uct_md_mem_advise_func_t)
+            ucs_empty_function_return_unsupported,
     .mem_reg            = uct_ze_copy_mem_reg,
-    .mem_dereg          = (uct_md_mem_dereg_func_t)ucs_empty_function_return_success,
+    .mem_dereg          = uct_ze_copy_mem_dereg,
     .mem_query          = uct_ze_copy_md_mem_query,
-    .mkey_pack          = (uct_md_mkey_pack_func_t)ucs_empty_function_return_success,
-    .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
+    .mkey_pack          = (uct_md_mkey_pack_func_t)
+            ucs_empty_function_return_success,
+    .mem_attach         = (uct_md_mem_attach_func_t)
+            ucs_empty_function_return_unsupported,
     .detect_memory_type = uct_ze_copy_md_detect_memory_type,
-    .mem_elem_pack      = (uct_md_mem_elem_pack_func_t)ucs_empty_function_return_unsupported
+    .mem_elem_pack      = (uct_md_mem_elem_pack_func_t)
+            ucs_empty_function_return_unsupported
 };
 
 static ucs_status_t
@@ -308,7 +334,8 @@ uct_ze_copy_md_open(uct_component_h component, const char *md_name,
     /* Get sub-device by device_ordinal (global sub-device ID) */
     subdevice = uct_ze_base_get_subdevice_by_global_id(config->device_ordinal);
     if (subdevice == NULL) {
-        ucs_error("Failed to get sub-device at ordinal %d", config->device_ordinal);
+        ucs_error("Failed to get sub-device at ordinal %d",
+                  config->device_ordinal);
         ucs_free(md);
         return UCS_ERR_NO_DEVICE;
     }
@@ -316,7 +343,8 @@ uct_ze_copy_md_open(uct_component_h component, const char *md_name,
     /* Get the actual device handle from the sub-device */
     md->ze_device = uct_ze_base_get_device_handle_from_subdevice(subdevice);
     if (md->ze_device == NULL) {
-        ucs_error("Failed to get device handle for sub-device %d", config->device_ordinal);
+        ucs_error("Failed to get device handle for sub-device %d",
+                  config->device_ordinal);
         ucs_free(md);
         return UCS_ERR_NO_DEVICE;
     }
@@ -338,20 +366,26 @@ uct_ze_copy_md_open(uct_component_h component, const char *md_name,
 uct_component_t uct_ze_copy_component = {
     .query_md_resources = uct_ze_base_query_md_resources,
     .md_open            = uct_ze_copy_md_open,
-    .cm_open            = (uct_component_cm_open_func_t)ucs_empty_function_return_unsupported,
+    .cm_open            = (uct_component_cm_open_func_t)
+            ucs_empty_function_return_unsupported,
     .rkey_unpack        = uct_ze_copy_rkey_unpack,
-    .rkey_ptr           = (uct_component_rkey_ptr_func_t)ucs_empty_function_return_unsupported,
-    .rkey_release       = (uct_component_rkey_release_func_t)ucs_empty_function_return_success,
+    .rkey_ptr           = (uct_component_rkey_ptr_func_t)
+            ucs_empty_function_return_unsupported,
+    .rkey_release       = (uct_component_rkey_release_func_t)
+            ucs_empty_function_return_success,
+    .rkey_compare       = uct_base_rkey_compare,
     .name               = "ze_cpy",
-    .md_config = {
-        .name       = "ze-copy memory domain",
-        .prefix     = "ZE_COPY_",
-        .table      = uct_ze_copy_md_config_table,
-        .size       = sizeof(uct_ze_copy_md_config_t),
-    },
-    .cm_config      = UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY,
-    .tl_list        = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_ze_copy_component),
-    .flags          = 0,
-    .md_vfs_init    = (uct_component_md_vfs_init_func_t)ucs_empty_function
+    .md_config          =
+            {
+                    .name   = "ze-copy memory domain",
+                    .prefix = "ZE_COPY_",
+                    .table  = uct_ze_copy_md_config_table,
+                    .size   = sizeof(uct_ze_copy_md_config_t),
+            },
+    .cm_config          = UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY,
+    .tl_list            = 
+            UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_ze_copy_component),
+    .flags              = 0,
+    .md_vfs_init        = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
 UCT_COMPONENT_REGISTER(&uct_ze_copy_component);
