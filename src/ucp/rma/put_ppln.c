@@ -27,7 +27,7 @@
 
 
 /*
- * ppln fragment pool — lazy-alloc per (mem_type, sys_dev), separate from rndv
+ * ppln fragment pool — lazy-alloc per (mem_type, sys_dev)
  */
 
 static ucs_mpool_ops_t ucp_ppln_frag_mpool_ops = {
@@ -1138,7 +1138,6 @@ ucp_proto_get_ppln_copy_out_progress(uct_pending_req_t *self)
     size_t frag_size                 = req->send.recv_ppln.frag_size;
     size_t total_length              = req->send.recv_ppln.total_length;
     ucp_put_ppln_recv_frag_t *frag;
-    ucs_memory_type_t mem_type;
     ucp_ep_h mem_type_ep;
     ucp_lane_index_t lane;
     uct_iov_t iov;
@@ -1165,8 +1164,8 @@ ucp_proto_get_ppln_copy_out_progress(uct_pending_req_t *self)
                     frag_id, length, frag_size,
                     req->send.recv_ppln.frag_count);
 
-        mem_type    = frag->mdesc->memh->mem_type;
-        mem_type_ep = worker->mem_type_ep[mem_type];
+        mem_type_ep = worker->mem_type_ep[req->send.proto_config->select_param.mem_type];
+        ucs_assert(mem_type_ep != NULL);
         lane        = ucp_ep_config(mem_type_ep)->key.rma_bw_lanes[0];
         ucs_assert(lane != UCP_NULL_LANE);
 
