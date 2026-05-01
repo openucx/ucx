@@ -784,13 +784,16 @@ ucp_proto_put_ppln_rts_progress(uct_pending_req_t *self)
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     }
 
+    ucp_worker_flush_ops_count_add(req->send.ep->worker, +1);
     status = ucp_do_am_single(self, UCP_AM_ID_RMA_PPLN,
                               ucp_proto_put_ppln_rts_pack,
                               sizeof(ucp_put_ppln_rts_hdr_t));
     if (status != UCS_OK) {
+        ucp_worker_flush_ops_count_add(req->send.ep->worker, -1);
         return status;
     }
 
+    ucp_ep_rma_remote_request_sent(req->send.ep);
     ucp_proto_request_set_stage(req, UCP_PROTO_PUT_PPLN_STAGE_SEND);
     return UCS_INPROGRESS;
 }
@@ -1468,6 +1471,7 @@ ucp_rma_ppln_ats_handler(ucp_worker_h worker,
                          const ucp_put_ppln_ats_hdr_t *ats)
 {
     ucp_request_t *req;
+    ucp_ep_h ep;
 
     UCP_SEND_REQUEST_GET_BY_ID(&req, worker, ats->sender_req_id, 0,
                                return UCS_OK, "rma_ppln ATS");
@@ -1475,11 +1479,14 @@ ucp_rma_ppln_ats_handler(ucp_worker_h worker,
     ucs_trace_req("rma_ppln: ATS received req=%p sender_req_id=0x%" PRIx64,
                   req, ats->sender_req_id);
 
+    ep = req->send.ep;
+
     ucp_send_request_id_release(req);
     ucs_free(req->send.ppln.freqs);
     req->send.ppln.freqs = NULL;
     ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 1, UCP_DT_MASK_ALL);
     ucp_request_complete_send(req, UCS_OK);
+    ucp_ep_rma_remote_request_completed(ep);
 
     return UCS_OK;
 }
