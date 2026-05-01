@@ -701,7 +701,7 @@ ucp_proto_ppln_query(const ucp_proto_query_params_t *params,
         attr->max_msg_length = SIZE_MAX;
         attr->is_estimation  = 0;
         attr->lane_map       = frag_attr.lane_map;
-        ucs_snprintf_safe(attr->desc, sizeof(attr->desc), "pipeline %s",
+        ucs_snprintf_safe(attr->desc, sizeof(attr->desc), "multi %s",
                           frag_attr.desc);
         ucs_strncpy_safe(attr->config, frag_attr.config, sizeof(attr->config));
     }
@@ -1221,12 +1221,40 @@ ucp_proto_get_ppln_ats_progress(uct_pending_req_t *self)
             ucp_proto_get_ppln_ats_complete, 0);
 }
 
+static void
+ucp_proto_get_ppln_query(const ucp_proto_query_params_t *params,
+                         ucp_proto_query_attr_t *attr)
+{
+    const ucp_proto_ppln_priv_t *rpriv = params->priv;
+    ucp_proto_query_attr_t frag_attr;
+
+    if (params->msg_length <= rpriv->frag_size) {
+        ucp_proto_config_query(params->worker, &rpriv->frag_proto_cfg,
+                               params->msg_length, &frag_attr);
+        attr->max_msg_length = rpriv->frag_size;
+        attr->is_estimation  = 0;
+        attr->lane_map       = frag_attr.lane_map;
+        ucs_snprintf_safe(attr->desc, sizeof(attr->desc), "%s %s",
+                          UCP_PROTO_PPLN_DESC, UCP_PROTO_COPY_OUT_DESC);
+        ucs_strncpy_safe(attr->config, frag_attr.config, sizeof(attr->config));
+    } else {
+        ucp_proto_config_query(params->worker, &rpriv->frag_proto_cfg,
+                               rpriv->frag_size, &frag_attr);
+        attr->max_msg_length = SIZE_MAX;
+        attr->is_estimation  = 0;
+        attr->lane_map       = frag_attr.lane_map;
+        ucs_snprintf_safe(attr->desc, sizeof(attr->desc), "multi %s %s",
+                          UCP_PROTO_PPLN_DESC, UCP_PROTO_COPY_OUT_DESC);
+        ucs_strncpy_safe(attr->config, frag_attr.config, sizeof(attr->config));
+    }
+}
+
 ucp_proto_t ucp_get_ppln_proto = {
     .name     = "get/ppln",
-    .desc     = UCP_PROTO_PPLN_DESC,
+    .desc     = UCP_PROTO_PPLN_DESC " " UCP_PROTO_COPY_OUT_DESC,
     .flags    = 0,
     .probe    = ucp_proto_get_ppln_probe,
-    .query    = ucp_proto_ppln_query,
+    .query    = ucp_proto_get_ppln_query,
     .progress = {
         [UCP_PROTO_GET_PPLN_STAGE_RTR]      = ucp_proto_get_ppln_rtr_progress,
         [UCP_PROTO_GET_PPLN_STAGE_COPY_OUT] = ucp_proto_get_ppln_copy_out_progress,
