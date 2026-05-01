@@ -99,6 +99,80 @@ ucp_rma_ppln_frag_mem_type(ucp_context_t *context)
 }
 
 
+/* Sub-IDs for UCP_AM_ID_RMA_PPLN */
+enum {
+    UCP_RMA_PPLN_AM_RTS,
+    UCP_RMA_PPLN_AM_RTR,
+    UCP_RMA_PPLN_AM_ATP,
+    UCP_RMA_PPLN_AM_ATS,
+};
+
+/* Common header for all RMA ppln active messages */
+typedef struct {
+    ucp_request_hdr_t super;
+    uint8_t           sub_id;
+} UCS_S_PACKED ucp_rma_ppln_hdr_t;
+
+/* RTS header: sender to receiver, requesting remote bounce buffers */
+typedef struct {
+    ucp_rma_ppln_hdr_t super;
+    int              frag_count; /* Number of fragments requested */
+    ucp_md_map_t     md_map;   /* MD map for fragment registration */
+    ucs_sys_device_t sys_dev;  /* System device for fragment allocation */
+    size_t           frag_size; /* Fragment size */
+    size_t           total_length;  /* Total transfer length */
+    uint64_t         remote_addr;   /* Final destination address on receiver */
+} UCS_S_PACKED ucp_put_ppln_rts_hdr_t;
+
+/* ATP header: sender to receiver, one per lane, signals partial data arrival */
+typedef struct {
+    ucp_rma_ppln_hdr_t super;
+    ucp_lane_index_t frag_id;       /* Fragment index */
+    ucp_lane_index_t lane_id;       /* ATP lane index */
+    int              total;         /* Total ATPs for this fragment */
+    ucp_mem_desc_t   *remote_mdesc; /* Remote bounce buffer (source for copy-out) */
+    size_t           length;        /* Bytes written by this ATP */
+} UCS_S_PACKED ucp_put_ppln_atp_hdr_t;
+
+/* RTR entry: one per fragment, variable length (packed rkey follows) */
+typedef struct {
+    ucp_mem_desc_t *mdesc;          /* Remote bounce buffer descriptor */
+    uint64_t       addr;            /* Remote bounce buffer address */
+    uint8_t        packed_rkey_len; /* Length of packed rkey that follows */
+    uint8_t        packed_rkey[];   /* Packed remote key */
+} UCS_S_PACKED ucp_put_ppln_rtr_entry_t;
+
+/* RTR header: receiver to sender, providing remote bounce buffer info */
+typedef struct {
+    ucp_rma_ppln_hdr_t super;
+    ucs_ptr_map_key_t sender_req_id; /* Sender's request ID for lookup */
+    int              frag_count;     /* Number of fragments */
+} UCS_S_PACKED ucp_put_ppln_rtr_hdr_t;
+
+/* ATS header: receiver to sender, signals all copy-outs are done */
+typedef struct {
+    ucp_rma_ppln_hdr_t super;
+    ucs_ptr_map_key_t sender_req_id; /* Sender's request ID for completion */
+} UCS_S_PACKED ucp_put_ppln_ats_hdr_t;
+
+/* Receiver-side per-fragment tracking */
+typedef struct {
+    ucp_mem_desc_t   *mdesc;        /* Local bounce buffer for this fragment */
+    int              atp_count;     /* ATPs received for this fragment */
+    int              atp_total;     /* Total ATPs expected for this fragment */
+    ucs_queue_elem_t queue;         /* Copy-out ready queue element */
+    uct_completion_t comp;          /* Per-frag copy-out completion */
+    ucp_request_t    *req;          /* Back-pointer to receiver request */
+} ucp_put_ppln_recv_frag_t;
+
+/* Private data for put/ppln and get/ppln protocols */
+typedef struct {
+    size_t             frag_size;
+    ucp_proto_config_t frag_proto_cfg;
+    size_t             frag_proto_min_length;
+} ucp_proto_ppln_priv_t;
+
+
 /*
  * put/mtype — copy-in (GPU to bounce) + multi-lane RDMA send (bounce to remote)
  */
@@ -438,81 +512,6 @@ ucp_proto_t ucp_put_mtype_proto = {
  *            ATP signaling, completion tracking
  */
 
-/* Sub-IDs for UCP_AM_ID_RMA_PPLN */
-enum {
-    UCP_RMA_PPLN_AM_RTS,
-    UCP_RMA_PPLN_AM_RTR,
-    UCP_RMA_PPLN_AM_ATP,
-    UCP_RMA_PPLN_AM_ATS,
-};
-
-/* Common header for all RMA ppln active messages */
-typedef struct {
-    ucp_request_hdr_t super;
-    uint8_t           sub_id;
-} UCS_S_PACKED ucp_rma_ppln_hdr_t;
-
-/* RTS header: sender to receiver, requesting remote bounce buffers */
-typedef struct {
-    ucp_rma_ppln_hdr_t super;
-    int              frag_count; /* Number of fragments requested */
-    ucp_md_map_t     md_map;   /* MD map for fragment registration */
-    ucs_sys_device_t sys_dev;  /* System device for fragment allocation */
-    size_t           frag_size; /* Fragment size */
-    size_t           total_length;  /* Total transfer length */
-    uint64_t         remote_addr;   /* Final destination address on receiver */
-} UCS_S_PACKED ucp_put_ppln_rts_hdr_t;
-
-/* ATP header: sender to receiver, one per lane, signals partial data arrival */
-typedef struct {
-    ucp_rma_ppln_hdr_t super;
-    ucp_lane_index_t frag_id;       /* Fragment index */
-    ucp_lane_index_t lane_id;       /* ATP lane index */
-    int              total;         /* Total ATPs for this fragment */
-    ucp_mem_desc_t   *remote_mdesc; /* Remote bounce buffer (source for copy-out) */
-    size_t           length;        /* Bytes written by this ATP */
-} UCS_S_PACKED ucp_put_ppln_atp_hdr_t;
-
-/* RTR entry: one per fragment, variable length (packed rkey follows) */
-typedef struct {
-    ucp_mem_desc_t *mdesc;          /* Remote bounce buffer descriptor */
-    uint64_t       addr;            /* Remote bounce buffer address */
-    uint8_t        packed_rkey_len; /* Length of packed rkey that follows */
-    uint8_t        packed_rkey[];   /* Packed remote key */
-} UCS_S_PACKED ucp_put_ppln_rtr_entry_t;
-
-/* RTR header: receiver to sender, providing remote bounce buffer info */
-typedef struct {
-    ucp_rma_ppln_hdr_t super;
-    ucs_ptr_map_key_t sender_req_id; /* Sender's request ID for lookup */
-    int              frag_count;     /* Number of fragments */
-} UCS_S_PACKED ucp_put_ppln_rtr_hdr_t;
-
-/* ATS header: receiver to sender, signals all copy-outs are done */
-typedef struct {
-    ucp_rma_ppln_hdr_t super;
-    ucs_ptr_map_key_t sender_req_id; /* Sender's request ID for completion */
-} UCS_S_PACKED ucp_put_ppln_ats_hdr_t;
-
-/* Receiver-side per-fragment tracking */
-typedef struct {
-    ucp_mem_desc_t   *mdesc;        /* Local bounce buffer for this fragment */
-    int              atp_count;     /* ATPs received for this fragment */
-    int              atp_total;     /* Total ATPs expected for this fragment */
-    ucs_queue_elem_t queue;         /* Copy-out ready queue element */
-    uct_completion_t comp;          /* Per-frag copy-out completion */
-    ucp_request_t    *req;          /* Back-pointer to receiver request */
-} ucp_put_ppln_recv_frag_t;
-
-/* Receiver-side state is stored in req->send.recv_ppln */
-
-/* Private data for put/ppln protocol */
-typedef struct {
-    size_t             frag_size;
-    ucp_proto_config_t frag_proto_cfg;
-    size_t             frag_proto_min_length;
-} ucp_proto_ppln_priv_t;
-
 static ucs_status_t
 ucp_proto_ppln_add_overhead(ucp_proto_perf_t *ppln_perf, size_t frag_size)
 {
@@ -566,7 +565,7 @@ ucp_proto_ppln_check_common(const ucp_proto_init_params_t *init_params,
 
 static void
 ucp_proto_ppln_probe_perf(const ucp_proto_init_params_t *init_params,
-                          ucp_op_id_t frag_op_id)
+                          ucp_operation_id_t frag_op_id)
 {
     ucp_worker_h worker                       = init_params->worker;
     const ucp_proto_select_param_t *sel_param = init_params->select_param;
@@ -738,8 +737,8 @@ ucp_proto_put_ppln_rts_pack(void *dest, void *arg)
     rts->total_length       = length;
     rts->remote_addr        = req->send.rma.remote_addr;
     rts->md_map             = ucp_proto_put_ppln_remote_md_map(req, mpriv);
-    rts->sys_dev            = ucp_rkey_config(req->send.ep->worker,
-                                  req->send.proto_config->rkey_cfg_index)->key.sys_dev;
+    rts->sys_dev            = ucs_array_elem(&req->send.ep->worker->rkey_config,
+                                  req->send.proto_config->rkey_cfg_index).key.sys_dev;
 
     return sizeof(*rts);
 }
@@ -1408,16 +1407,17 @@ ucp_rma_ppln_ats_handler(ucp_worker_h worker,
     ucp_send_request_id_release(req);
     ucs_free(req->send.ppln.freqs);
     req->send.ppln.freqs = NULL;
-    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
+    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 1, UCP_DT_MASK_ALL);
     ucp_request_complete_send(req, UCS_OK);
 
     return UCS_OK;
 }
 
 static ucs_status_t
-ucp_rma_ppln_handler(ucp_worker_h worker, void *data, size_t length,
+ucp_rma_ppln_handler(void *arg, void *data, size_t length,
                      unsigned flags)
 {
+    ucp_worker_h worker           = arg;
     const ucp_rma_ppln_hdr_t *hdr = data;
 
     switch (hdr->sub_id) {
