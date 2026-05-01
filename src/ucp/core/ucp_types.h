@@ -71,7 +71,6 @@ typedef struct ucp_wireup_ep          ucp_wireup_ep_t;
 typedef struct ucp_request_send_proto ucp_request_send_proto_t;
 typedef struct ucp_worker_iface       ucp_worker_iface_t;
 typedef struct ucp_worker_cm          ucp_worker_cm_t;
-typedef struct ucp_rma_proto          ucp_rma_proto_t;
 typedef struct ucp_amo_proto          ucp_amo_proto_t;
 typedef struct ucp_ep_config          ucp_ep_config_t;
 typedef struct ucp_ep_config_key      ucp_ep_config_key_t;

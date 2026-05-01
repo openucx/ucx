@@ -8,10 +8,8 @@
 #define UCP_RMA_H_
 
 #include <ucp/core/ucp_types.h>
-#include <ucp/core/ucp_rkey.h>
 #include <ucp/proto/proto_am.h>
 #include <uct/api/uct.h>
-#include <ucs/datastruct/ptr_map.h>
 
 
 #define UCP_PROTO_RMA_EMULATION_DESC "software emulation"
@@ -27,16 +25,6 @@
  * issues.
  */
 #define UCP_PROTO_RMA_MAX_BCOPY_LANES 1
-
-
-/**
- * Defines functions for RMA protocol
- */
-struct ucp_rma_proto {
-    const char                 *name;
-    uct_pending_callback_t     progress_put;
-    uct_pending_callback_t     progress_get;
-};
 
 
 /**
@@ -91,19 +79,12 @@ typedef struct {
 } UCS_S_PACKED ucp_atomic_req_hdr_t;
 
 
-extern ucp_rma_proto_t ucp_rma_basic_proto;
-extern ucp_rma_proto_t ucp_rma_sw_proto;
 extern ucp_amo_proto_t ucp_amo_basic_proto;
 extern ucp_amo_proto_t ucp_amo_sw_proto;
 
 
-extern const ucp_rma_proto_t *ucp_rma_proto_list[];
 extern const ucp_amo_proto_t *ucp_amo_proto_list[];
 
-
-ucs_status_t ucp_rma_request_advance(ucp_request_t *req, ssize_t frag_length,
-                                     ucs_status_t status,
-                                     ucs_ptr_map_key_t req_id);
 
 void ucp_ep_flush_remote_completed(ucp_request_t *req);
 

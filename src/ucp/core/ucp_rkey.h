@@ -114,13 +114,9 @@ typedef struct ucp_rkey {
         struct {
             uint8_t                   flags;           /* Rkey flags */
             uint8_t                   mem_type;        /* Memory type of remote key memory */
-            int8_t                    max_put_short;   /* Cached value of max_put_short */
             ucp_worker_cfg_index_t    ep_cfg_index;    /* EP configuration relevant for the cache */
-            ucp_lane_index_t          rma_lane;        /* Lane to use for RMAs */
             ucp_lane_index_t          amo_lane;        /* Lane to use for AMOs */
             ucp_rkey_proto_index_t    amo_proto_index; /* Protocol for AMOs */
-            ucp_rkey_proto_index_t    rma_proto_index; /* Protocol for RMAs */
-            uct_rkey_t                rma_rkey;        /* Key to use for RMAs */
             uct_rkey_t                amo_rkey;        /* Key to use for AMOs */
         } cache;
         struct {
@@ -158,9 +154,6 @@ typedef struct ucp_unpacked_exported_memh {
 
 
 #define UCP_RKEY_AMO_PROTO(_amo_proto_index) ucp_amo_proto_list[_amo_proto_index]
-
-
-#define UCP_RKEY_RMA_PROTO(_rma_proto_index) ucp_rma_proto_list[_rma_proto_index]
 
 
 #define UCP_RKEY_RESOLVE_NOCHECK(_rkey, _ep, _op_type) \
