@@ -1513,8 +1513,9 @@ ucp_rma_ppln_rtr_unpack_frags(ucp_ep_h ep, ucp_request_t **freqs,
             return status;
         }
 
-        freq->send.frag_ppln.remote_addr  = entry->addr;
-        freq->send.frag_ppln.remote_mdesc = entry->mdesc;
+        freq->send.frag_ppln.remote_addr   = entry->addr;
+        freq->send.frag_ppln.remote_mdesc  = entry->mdesc;
+        freq->send.frag_ppln.remote_req_id = rtr->super.super.req_id;
 
         ucs_trace_req("rma_ppln: RTR frag=%d freq=%p remote_addr=0x%" PRIx64
                       " remote_mdesc=%p rkey_len=%u",
@@ -1537,28 +1538,33 @@ ucp_rma_ppln_rtr_handler(ucp_worker_h worker,
                          size_t rtr_length)
 {
     ucp_request_t *req;
+    ucp_request_t **freqs;
     ucp_request_t *freq;
     ucs_status_t status;
+    unsigned num_freqs;
+    ucp_ep_h ep;
     unsigned i;
 
     UCP_SEND_REQUEST_GET_BY_ID(&req, worker, rtr->sender_req_id, 0,
                                return UCS_OK, "rma_ppln RTR");
+
+    ep        = req->send.ep;
+    freqs     = req->send.ppln.freqs;
+    num_freqs = req->send.ppln.num_freqs;
 
     ucs_trace_req("rma_ppln: RTR received req=%p sender_req_id=0x%" PRIx64
                   " recv_req_id=0x%" PRIx64 " count=%d",
                   req, rtr->sender_req_id, rtr->super.super.req_id,
                   rtr->frag_count);
 
-    status = ucp_rma_ppln_rtr_unpack_frags(req->send.ep, req->send.ppln.freqs,
-                                           req->send.ppln.num_freqs,
+    status = ucp_rma_ppln_rtr_unpack_frags(ep, freqs, num_freqs,
                                            rtr, rtr_length);
     if (status != UCS_OK) {
         return status;
     }
 
-    for (i = 0; i < req->send.ppln.num_freqs; i++) {
-        freq = req->send.ppln.freqs[i];
-        freq->send.frag_ppln.remote_req_id = rtr->super.super.req_id;
+    for (i = 0; i < num_freqs; i++) {
+        freq = freqs[i];
         if (freq->send.proto_stage == UCP_PROTO_PUT_MTYPE_STAGE_SEND) {
             ucp_request_send(freq);
         }
