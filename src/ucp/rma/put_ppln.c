@@ -156,10 +156,11 @@ typedef struct {
     ucs_ptr_map_key_t sender_req_id;
     int              frag_count;     /* Number of fragments */
     struct {
-        uint64_t         source_addr;  /* Source address (local on remote) */
-        size_t           total_length; /* Total transfer length */
-        ucp_md_map_t     md_map;      /* MD map for fragment registration */
-        ucs_sys_device_t sys_dev;     /* System device of source memory */
+        uint64_t          source_addr;  /* Source address (local on remote) */
+        size_t            total_length; /* Total transfer length */
+        ucp_md_map_t      md_map;      /* MD map for fragment registration */
+        ucs_sys_device_t  sys_dev;     /* System device of source memory */
+        ucs_memory_type_t mem_type;    /* Memory type of source buffer */
     } get;
 } UCS_S_PACKED ucp_put_ppln_rtr_hdr_t;
 
@@ -804,50 +805,71 @@ ucp_proto_put_ppln_rts_progress(uct_pending_req_t *self)
 }
 
 static ucs_status_t
-ucp_rma_ppln_create_freq(ucp_ep_h ep, ucp_datatype_iter_t *dt_iter,
-                         ucs_sys_device_t sys_dev,
-                         const ucp_proto_ppln_priv_t *rpriv,
-                         unsigned frag_idx, ucp_request_t **freq_p,
-                         ucp_datatype_iter_t *next_iter)
+ucp_rma_ppln_create_freqs(ucp_ep_h ep, ucp_datatype_iter_t *dt_iter,
+                          ucs_sys_device_t sys_dev, size_t frag_size,
+                          size_t min_frag_length,
+                          const ucp_proto_config_t *frag_proto_cfg,
+                          unsigned num_freqs, ucp_request_t **freqs)
 {
     ucp_worker_h worker = ep->worker;
+    ucp_datatype_iter_t next_iter;
     ucp_request_t *freq;
+    unsigned frag_idx;
     size_t overlap;
 
-    freq = ucp_request_get(worker);
-    if (freq == NULL) {
-        return UCS_ERR_NO_MEMORY;
+    frag_idx = 0;
+    while (!ucp_datatype_iter_is_end(dt_iter)) {
+        freq = ucp_request_get(worker);
+        if (freq == NULL) {
+            goto err_cleanup;
+        }
+
+        ucp_proto_request_send_init(freq, ep, 0);
+
+        freq->send.ppln.freqs              = NULL;
+        freq->send.ppln.num_freqs          = 0;
+        freq->send.frag_ppln.frag_id       = frag_idx;
+        freq->send.frag_ppln.remote_addr   = 0;
+        freq->send.frag_ppln.remote_rkey   = UCP_RKEY_INVALID;
+        freq->send.frag_ppln.remote_mdesc  = NULL;
+        freq->send.frag_ppln.send_lane_map = 0;
+
+        freq->send.frag_ppln.local_mdesc = ucp_ppln_mpool_get(
+                worker, ucp_rma_ppln_frag_mem_type(worker->context),
+                ucp_rma_ppln_frag_sys_dev(worker->context, sys_dev));
+        if (freq->send.frag_ppln.local_mdesc == NULL) {
+            ucp_request_put(freq);
+            goto err_cleanup;
+        }
+
+        overlap = ucp_datatype_iter_next_slice_overlap(
+                        dt_iter, frag_size, min_frag_length,
+                        &freq->send.state.dt_iter, &next_iter);
+        ucs_assertv(overlap == 0, "overlap=%zu", overlap);
+        ucs_assert(freq->send.state.dt_iter.length > 0);
+
+        if (frag_proto_cfg != NULL) {
+            ucp_proto_request_set_proto(freq, frag_proto_cfg,
+                                        freq->send.state.dt_iter.length);
+        }
+
+        freqs[frag_idx] = freq;
+        frag_idx++;
+
+        ucp_datatype_iter_copy_position(dt_iter, &next_iter,
+                                        UCS_BIT(UCP_DATATYPE_CONTIG));
     }
 
-    ucp_proto_request_send_init(freq, ep, 0);
-
-    freq->send.ppln.freqs              = NULL;
-    freq->send.ppln.num_freqs          = 0;
-    freq->send.frag_ppln.frag_id       = frag_idx;
-    freq->send.frag_ppln.remote_addr   = 0;
-    freq->send.frag_ppln.remote_rkey   = UCP_RKEY_INVALID;
-    freq->send.frag_ppln.remote_mdesc  = NULL;
-    freq->send.frag_ppln.send_lane_map = 0;
-
-    freq->send.frag_ppln.local_mdesc = ucp_ppln_mpool_get(
-            worker, ucp_rma_ppln_frag_mem_type(worker->context),
-            ucp_rma_ppln_frag_sys_dev(worker->context, sys_dev));
-    if (freq->send.frag_ppln.local_mdesc == NULL) {
-        ucp_request_put(freq);
-        return UCS_ERR_NO_MEMORY;
-    }
-
-    overlap = ucp_datatype_iter_next_slice_overlap(
-                    dt_iter, rpriv->frag_size, rpriv->frag_proto_min_length,
-                    &freq->send.state.dt_iter, next_iter);
-    ucs_assertv(overlap == 0, "overlap=%zu", overlap);
-    ucs_assert(freq->send.state.dt_iter.length > 0);
-
-    ucp_proto_request_set_proto(freq, &rpriv->frag_proto_cfg,
-                                freq->send.state.dt_iter.length);
-
-    *freq_p = freq;
+    ucs_assertv(frag_idx == num_freqs, "frag_idx=%u num_freqs=%u",
+                frag_idx, num_freqs);
     return UCS_OK;
+
+err_cleanup:
+    while (frag_idx-- > 0) {
+        ucs_mpool_put_inline(freqs[frag_idx]->send.frag_ppln.local_mdesc);
+        ucp_request_put(freqs[frag_idx]);
+    }
+    return UCS_ERR_NO_MEMORY;
 }
 
 static ucs_status_t
@@ -855,11 +877,9 @@ ucp_proto_put_ppln_send_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req  = ucs_container_of(self, ucp_request_t, send.uct);
     const ucp_proto_ppln_priv_t *rpriv;
-    ucp_datatype_iter_t next_iter;
-    ucp_request_t *freq;
     ucs_status_t status;
     unsigned num_freqs;
-    unsigned frag_idx;
+    unsigned i;
 
     ucs_assert(req->send.state.dt_iter.length > 0);
 
@@ -876,34 +896,21 @@ ucp_proto_put_ppln_send_progress(uct_pending_req_t *self)
     }
     req->send.ppln.num_freqs = num_freqs;
 
-    frag_idx = 0;
-    while (!ucp_datatype_iter_is_end(&req->send.state.dt_iter)) {
-        status = ucp_rma_ppln_create_freq(
-                req->send.ep, &req->send.state.dt_iter,
-                req->send.state.dt_iter.mem_info.sys_dev,
-                rpriv, frag_idx, &freq, &next_iter);
-        if (status != UCS_OK) {
-            ucp_proto_request_abort(req, status);
-            return UCS_OK;
-        }
-
-        ucp_request_set_super(freq, req);
-        req->send.ppln.freqs[frag_idx] = freq;
-
-        ucp_trace_req(req, "put_ppln_frag frag_id=%d freq=%p offset=%zu "
-                      "size=%zu local_mdesc=%p",
-                      frag_idx, freq, req->send.state.dt_iter.offset,
-                      freq->send.state.dt_iter.length,
-                      freq->send.frag_ppln.local_mdesc);
-        UCS_PROFILE_CALL_VOID_ALWAYS(ucp_request_send, freq);
-        frag_idx++;
-
-        ucp_datatype_iter_copy_position(&req->send.state.dt_iter, &next_iter,
-                                        UCS_BIT(UCP_DATATYPE_CONTIG));
+    status = ucp_rma_ppln_create_freqs(
+            req->send.ep, &req->send.state.dt_iter,
+            req->send.state.dt_iter.mem_info.sys_dev,
+            rpriv->frag_size, rpriv->frag_proto_min_length,
+            &rpriv->frag_proto_cfg, num_freqs, req->send.ppln.freqs);
+    if (status != UCS_OK) {
+        ucp_proto_request_abort(req, status);
+        return UCS_OK;
     }
 
-    ucs_assertv(frag_idx == num_freqs, "frag_idx=%u num_freqs=%u",
-                frag_idx, num_freqs);
+    for (i = 0; i < num_freqs; i++) {
+        UCS_PROFILE_CALL_VOID_ALWAYS(ucp_request_send,
+                                     req->send.ppln.freqs[i]);
+    }
+
     return UCS_OK;
 }
 
@@ -1084,6 +1091,7 @@ ucp_rma_ppln_rtr_serialize(ucp_request_t *req, void *buf, size_t buf_size)
     rtr->get.total_length      = req->send.recv_ppln.total_length;
     rtr->get.md_map            = req->send.recv_ppln.md_map;
     rtr->get.sys_dev           = req->send.recv_ppln.sys_dev;
+    rtr->get.mem_type          = req->send.recv_ppln.mem_type;
 
     p = rtr + 1;
 
@@ -1169,6 +1177,7 @@ ucp_proto_get_ppln_init_from_get(ucp_request_t *req)
     req->send.recv_ppln.sender_req_id = UCS_PTR_MAP_KEY_INVALID;
     req->send.recv_ppln.md_map        = ucp_ep_config(ep)->key.rma_bw_md_map;
     req->send.recv_ppln.sys_dev       = req->send.state.dt_iter.mem_info.sys_dev;
+    req->send.recv_ppln.mem_type      = req->send.state.dt_iter.mem_info.type;
 }
 
 static ucs_status_t
@@ -1533,29 +1542,102 @@ ucp_rma_ppln_rtr_unpack_frags(ucp_ep_h ep, ucp_request_t **freqs,
 }
 
 static ucs_status_t
+ucp_rma_ppln_rtr_create_get_freqs(ucp_worker_h worker, ucp_ep_h ep,
+                                  const ucp_put_ppln_rtr_hdr_t *rtr,
+                                  unsigned num_freqs, ucp_request_t **freqs)
+{
+    ucp_proto_select_param_t sel_param;
+    ucp_memory_info_t mem_info;
+    ucp_datatype_iter_t dt_iter;
+    ucs_status_t status;
+    size_t frag_size;
+    unsigned i;
+
+    frag_size = worker->context->config.ext.ppln_frag_size[
+                    ucp_rma_ppln_frag_mem_type(worker->context)];
+
+    ucs_trace_req("rma_ppln: GET RTR received ep=%p req_id=0x%" PRIx64
+                  " count=%d frag_size=%zu total_length=%zu"
+                  " source_addr=0x%" PRIx64,
+                  ep, rtr->super.super.req_id, num_freqs,
+                  frag_size, rtr->get.total_length, rtr->get.source_addr);
+
+    mem_info.type    = rtr->get.mem_type;
+    mem_info.sys_dev = rtr->get.sys_dev;
+
+    ucp_proto_select_param_init(&sel_param, UCP_OP_ID_PUT_MTYPE,
+                                UCP_OP_ATTR_FLAG_MULTI_SEND, 0,
+                                UCP_DATATYPE_CONTIG, &mem_info, 1);
+
+    dt_iter.dt_class           = UCP_DATATYPE_CONTIG;
+    dt_iter.length             = rtr->get.total_length;
+    dt_iter.offset             = 0;
+    dt_iter.type.contig.buffer = (void *)(uintptr_t)rtr->get.source_addr;
+    dt_iter.type.contig.memh   = NULL;
+    dt_iter.mem_info           = mem_info;
+
+    status = ucp_rma_ppln_create_freqs(ep, &dt_iter, rtr->get.sys_dev,
+                                       frag_size, 1, NULL,
+                                       num_freqs, freqs);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    for (i = 0; i < num_freqs; i++) {
+        status = ucp_proto_request_lookup_proto(
+                worker, ep, freqs[i], &ucp_ep_config(ep)->proto_select,
+                UCP_WORKER_CFG_INDEX_NULL, &sel_param,
+                freqs[i]->send.state.dt_iter.length);
+        if (status != UCS_OK) {
+            while (i-- > 0) {
+                ucs_mpool_put_inline(freqs[i]->send.frag_ppln.local_mdesc);
+                ucp_request_put(freqs[i]);
+            }
+            return status;
+        }
+    }
+
+    return UCS_OK;
+}
+
+static ucs_status_t
 ucp_rma_ppln_rtr_handler(ucp_worker_h worker,
                          const ucp_put_ppln_rtr_hdr_t *rtr,
                          size_t rtr_length)
 {
-    ucp_request_t *req;
+    unsigned num_freqs = rtr->frag_count;
+    ucp_request_t *freqs_buf[num_freqs];
     ucp_request_t **freqs;
-    ucp_request_t *freq;
     ucs_status_t status;
-    unsigned num_freqs;
     ucp_ep_h ep;
     unsigned i;
 
-    UCP_SEND_REQUEST_GET_BY_ID(&req, worker, rtr->sender_req_id, 0,
-                               return UCS_OK, "rma_ppln RTR");
+    if (rtr->sender_req_id == UCS_PTR_MAP_KEY_INVALID) {
+        /* GET-initiated: no sender request, resolve ep from header */
+        UCP_WORKER_GET_EP_BY_ID(&ep, worker, rtr->super.super.ep_id,
+                                return UCS_OK, "rma_ppln GET RTR");
 
-    ep        = req->send.ep;
-    freqs     = req->send.ppln.freqs;
-    num_freqs = req->send.ppln.num_freqs;
+        freqs  = freqs_buf;
+        status = ucp_rma_ppln_rtr_create_get_freqs(worker, ep, rtr,
+                                                   num_freqs, freqs);
+        if (status != UCS_OK) {
+            return status;
+        }
+    } else {
+        /* PUT-initiated: look up sender's request */
+        ucp_request_t *req;
 
-    ucs_trace_req("rma_ppln: RTR received req=%p sender_req_id=0x%" PRIx64
-                  " recv_req_id=0x%" PRIx64 " count=%d",
-                  req, rtr->sender_req_id, rtr->super.super.req_id,
-                  rtr->frag_count);
+        UCP_SEND_REQUEST_GET_BY_ID(&req, worker, rtr->sender_req_id, 0,
+                                   return UCS_OK, "rma_ppln RTR");
+
+        ep    = req->send.ep;
+        freqs = req->send.ppln.freqs;
+
+        ucs_trace_req("rma_ppln: RTR received req=%p sender_req_id=0x%" PRIx64
+                      " recv_req_id=0x%" PRIx64 " count=%d",
+                      req, rtr->sender_req_id, rtr->super.super.req_id,
+                      num_freqs);
+    }
 
     status = ucp_rma_ppln_rtr_unpack_frags(ep, freqs, num_freqs,
                                            rtr, rtr_length);
@@ -1564,9 +1646,8 @@ ucp_rma_ppln_rtr_handler(ucp_worker_h worker,
     }
 
     for (i = 0; i < num_freqs; i++) {
-        freq = freqs[i];
-        if (freq->send.proto_stage == UCP_PROTO_PUT_MTYPE_STAGE_SEND) {
-            ucp_request_send(freq);
+        if (freqs[i]->send.proto_stage == UCP_PROTO_PUT_MTYPE_STAGE_SEND) {
+            ucp_request_send(freqs[i]);
         }
     }
 
@@ -1648,10 +1729,12 @@ ucp_rma_ppln_dump(ucp_worker_h worker, uct_am_trace_type_t type, uint8_t id,
         ucs_string_buffer_appendf(&strb,
                 "RMA_PPLN_RTR ep_id=0x%" PRIx64 " req_id=0x%" PRIx64
                 " sender_req_id=0x%" PRIx64 " frag_count=%d"
-                " get_source_addr=0x%" PRIx64 " get_total_length=%zu",
+                " get_source_addr=0x%" PRIx64 " get_total_length=%zu"
+                " get_mem_type=%s",
                 rtr->super.super.ep_id, rtr->super.super.req_id,
                 rtr->sender_req_id, rtr->frag_count,
-                rtr->get.source_addr, rtr->get.total_length);
+                rtr->get.source_addr, rtr->get.total_length,
+                ucs_memory_type_names[rtr->get.mem_type]);
         break;
     case UCP_RMA_PPLN_AM_ATP:
         atp = data;
