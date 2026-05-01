@@ -199,7 +199,7 @@ ucp_proto_put_mtype_probe(const ucp_proto_init_params_t *init_params)
         .super.overhead      = 0,
         .super.latency       = 0,
         .super.cfg_thresh    = 0,
-        .super.cfg_priority  = 30,
+        .super.cfg_priority  = 0, /* TODO: Loose against all put/offload* */
         .super.min_length    = 0,
         .super.max_length    = SIZE_MAX,
         .super.min_iov       = 1,
@@ -531,9 +531,9 @@ ucp_proto_t ucp_put_mtype_proto = {
 static ucs_status_t
 ucp_proto_ppln_add_overhead(ucp_proto_perf_t *ppln_perf, size_t frag_size)
 {
-    static const double rts_rtr_overhead = 275e-9; /* RTS/RTR AM round-trip */
-    static const double ats_overhead     = 150e-9; /* ATS one-way (~RTT/2) */
-    static const double frag_overhead    = 30e-9;  /* Per-fragment mgmt */
+    static const double rts_rtr_overhead = 1000e-9; /* RTS/RTR AM round-trip */
+    static const double ats_overhead     = 500e-9; /* ATS one-way (~RTT/2) */
+    static const double frag_overhead    = 2000e-9;  /* Per-fragment mgmt */
     ucp_proto_perf_factors_t factors     = UCP_PROTO_PERF_FACTORS_INITIALIZER;
     char frag_str[64];
     ucp_proto_perf_node_t *node;
@@ -545,7 +545,7 @@ ucp_proto_ppln_add_overhead(ucp_proto_perf_t *ppln_perf, size_t frag_size)
             ucs_linear_func_make(rts_rtr_overhead + ats_overhead, 0);
     /* Per-fragment management overhead */
     factors[UCP_PROTO_PERF_FACTOR_LOCAL_CPU] =
-            ucs_linear_func_make(frag_overhead, frag_overhead / frag_size);
+            ucs_linear_func_make(frag_overhead, frag_overhead);
     node = ucp_proto_perf_node_new_data("ppln overhead",
                                         "rts_rtr + ats + frag %s", frag_str);
     return ucp_proto_perf_add_funcs(ppln_perf, 0, SIZE_MAX, factors,
