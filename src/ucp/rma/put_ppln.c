@@ -228,9 +228,8 @@ ucp_proto_put_mtype_probe(const ucp_proto_init_params_t *init_params)
     };
 
     if ((sel_param->dt_class != UCP_DATATYPE_CONTIG) ||
-        !ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT)) ||
-        !(ucp_proto_select_op_flags(sel_param) &
-          UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG) ||
+        !ucp_proto_init_check_op(init_params,
+                                 UCS_BIT(UCP_OP_ID_PUT_MTYPE)) ||
         !ucp_ep_config_is_inter_node(init_params->ep_config_key) ||
         !UCP_MEM_IS_CUDA(sel_param->mem_type) ||
         ((init_params->rkey_config_key != NULL) &&
@@ -584,8 +583,7 @@ ucp_proto_ppln_probe_perf(const ucp_proto_init_params_t *init_params,
     uint8_t proto_flags;
 
     frag_sel_param             = *sel_param;
-    frag_sel_param.op_id_flags = frag_op_id |
-                                 UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG;
+    frag_sel_param.op_id_flags = frag_op_id;
     frag_sel_param.op_attr     = ucp_proto_select_op_attr_pack(
             UCP_OP_ATTR_FLAG_MULTI_SEND, UCP_PROTO_SELECT_OP_ATTR_MASK);
 
@@ -648,7 +646,7 @@ ucp_proto_ppln_probe_perf(const ucp_proto_init_params_t *init_params,
             goto out_destroy_ppln_perf;
         }
 
-        ucp_proto_select_add_proto(init_params, proto->cfg_thresh,
+        ucp_proto_select_add_proto(init_params, rpriv.frag_size,
                                    proto->cfg_priority, ppln_perf, &rpriv,
                                    sizeof(rpriv));
         continue;
@@ -665,7 +663,7 @@ ucp_proto_put_ppln_probe(const ucp_proto_init_params_t *init_params)
         return;
     }
 
-    ucp_proto_ppln_probe_perf(init_params, UCP_OP_ID_PUT);
+    ucp_proto_ppln_probe_perf(init_params, UCP_OP_ID_PUT_MTYPE);
 }
 
 static void
@@ -884,7 +882,7 @@ ucp_proto_get_ppln_probe(const ucp_proto_init_params_t *init_params)
         return;
     }
 
-    ucp_proto_ppln_probe_perf(init_params, UCP_OP_ID_PUT);
+    ucp_proto_ppln_probe_perf(init_params, UCP_OP_ID_PUT_MTYPE);
 }
 
 static size_t
