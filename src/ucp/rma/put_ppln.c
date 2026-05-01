@@ -804,16 +804,62 @@ ucp_proto_put_ppln_rts_progress(uct_pending_req_t *self)
 }
 
 static ucs_status_t
+ucp_rma_ppln_create_freq(ucp_ep_h ep, ucp_datatype_iter_t *dt_iter,
+                         ucs_sys_device_t sys_dev,
+                         const ucp_proto_ppln_priv_t *rpriv,
+                         unsigned frag_idx, ucp_request_t **freq_p,
+                         ucp_datatype_iter_t *next_iter)
+{
+    ucp_worker_h worker = ep->worker;
+    ucp_request_t *freq;
+    size_t overlap;
+
+    freq = ucp_request_get(worker);
+    if (freq == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    ucp_proto_request_send_init(freq, ep, 0);
+
+    freq->send.ppln.freqs              = NULL;
+    freq->send.ppln.num_freqs          = 0;
+    freq->send.frag_ppln.frag_id       = frag_idx;
+    freq->send.frag_ppln.remote_addr   = 0;
+    freq->send.frag_ppln.remote_rkey   = UCP_RKEY_INVALID;
+    freq->send.frag_ppln.remote_mdesc  = NULL;
+    freq->send.frag_ppln.send_lane_map = 0;
+
+    freq->send.frag_ppln.local_mdesc = ucp_ppln_mpool_get(
+            worker, ucp_rma_ppln_frag_mem_type(worker->context),
+            ucp_rma_ppln_frag_sys_dev(worker->context, sys_dev));
+    if (freq->send.frag_ppln.local_mdesc == NULL) {
+        ucp_request_put(freq);
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    overlap = ucp_datatype_iter_next_slice_overlap(
+                    dt_iter, rpriv->frag_size, rpriv->frag_proto_min_length,
+                    &freq->send.state.dt_iter, next_iter);
+    ucs_assertv(overlap == 0, "overlap=%zu", overlap);
+    ucs_assert(freq->send.state.dt_iter.length > 0);
+
+    ucp_proto_request_set_proto(freq, &rpriv->frag_proto_cfg,
+                                freq->send.state.dt_iter.length);
+
+    *freq_p = freq;
+    return UCS_OK;
+}
+
+static ucs_status_t
 ucp_proto_put_ppln_send_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req  = ucs_container_of(self, ucp_request_t, send.uct);
-    ucp_worker_h worker = req->send.ep->worker;
     const ucp_proto_ppln_priv_t *rpriv;
     ucp_datatype_iter_t next_iter;
     ucp_request_t *freq;
+    ucs_status_t status;
     unsigned num_freqs;
     unsigned frag_idx;
-    size_t overlap;
 
     ucs_assert(req->send.state.dt_iter.length > 0);
 
@@ -832,54 +878,25 @@ ucp_proto_put_ppln_send_progress(uct_pending_req_t *self)
 
     frag_idx = 0;
     while (!ucp_datatype_iter_is_end(&req->send.state.dt_iter)) {
-        freq = ucp_request_get(worker);
-        if (freq == NULL) {
-            ucp_proto_request_abort(req, UCS_ERR_NO_MEMORY);
+        status = ucp_rma_ppln_create_freq(
+                req->send.ep, &req->send.state.dt_iter,
+                req->send.state.dt_iter.mem_info.sys_dev,
+                rpriv, frag_idx, &freq, &next_iter);
+        if (status != UCS_OK) {
+            ucp_proto_request_abort(req, status);
             return UCS_OK;
         }
 
-        ucp_proto_request_send_init(freq, req->send.ep, 0);
         ucp_request_set_super(freq, req);
-
-        freq->send.ppln.freqs          = NULL;
-        freq->send.ppln.num_freqs      = 0;
-        freq->send.frag_ppln.remote_addr   = 0;
-        freq->send.frag_ppln.remote_rkey   = UCP_RKEY_INVALID;
-        freq->send.frag_ppln.remote_mdesc  = NULL;
-        freq->send.frag_ppln.send_lane_map = 0;
-
-        /* Allocate local bounce buffer for this fragment */
-        freq->send.frag_ppln.local_mdesc = ucp_ppln_mpool_get(
-                worker,
-                ucp_rma_ppln_frag_mem_type(worker->context),
-                ucp_rma_ppln_frag_sys_dev(worker->context,
-                                          req->send.state.dt_iter.mem_info.sys_dev));
-        if (freq->send.frag_ppln.local_mdesc == NULL) {
-            ucp_request_put(freq);
-            ucp_proto_request_abort(req, UCS_ERR_NO_MEMORY);
-            return UCS_OK;
-        }
-
-        overlap = ucp_datatype_iter_next_slice_overlap(
-                        &req->send.state.dt_iter, rpriv->frag_size,
-                        rpriv->frag_proto_min_length,
-                        &freq->send.state.dt_iter, &next_iter);
-        ucs_assertv(overlap == 0, "overlap=%zu", overlap);
-        ucs_assert(freq->send.state.dt_iter.length > 0);
-
-        ucp_proto_request_set_proto(freq, &rpriv->frag_proto_cfg,
-                                    freq->send.state.dt_iter.length);
-
         req->send.ppln.freqs[frag_idx] = freq;
-        freq->send.frag_ppln.frag_id = frag_idx++;
 
         ucp_trace_req(req, "put_ppln_frag frag_id=%d freq=%p offset=%zu "
                       "size=%zu local_mdesc=%p",
-                      freq->send.frag_ppln.frag_id, freq,
-                      req->send.state.dt_iter.offset,
+                      frag_idx, freq, req->send.state.dt_iter.offset,
                       freq->send.state.dt_iter.length,
                       freq->send.frag_ppln.local_mdesc);
         UCS_PROFILE_CALL_VOID_ALWAYS(ucp_request_send, freq);
+        frag_idx++;
 
         ucp_datatype_iter_copy_position(&req->send.state.dt_iter, &next_iter,
                                         UCS_BIT(UCP_DATATYPE_CONTIG));
