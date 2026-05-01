@@ -1,6 +1,7 @@
 /**
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2020. ALL RIGHTS RESERVED.
  * Copyright (C) Advanced Micro Devices, Inc. 2019.  ALL RIGHTS RESERVED.
+ * Copyright (C) Intel Corporation, 2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -15,6 +16,7 @@
 #include <ucp/core/ucp_mm.h>
 #include <ucs/debug/assert.h>
 #include <ucs/sys/ptr_arith.h>
+#include <ucs/sys/sys.h>
 #include <common/test_helpers.h>
 
 #if HAVE_CUDA
@@ -64,6 +66,28 @@
 
 #endif
 
+#if HAVE_ZE
+#include <level_zero/ze_api.h>
+
+#define ZE_CALL(_code, _details) \
+    do { \
+        ze_result_t zerr = (_code); \
+        if (zerr != ZE_RESULT_SUCCESS) { \
+            UCS_TEST_ABORT(#_code << " failed: error=" << zerr << _details); \
+        } \
+    } while (0)
+
+
+namespace {
+
+bool mem_buffer_ze_init();
+void mem_buffer_ze_copy(void *dst, const void *src, size_t length);
+void mem_buffer_ze_memset(void *dst, int value, size_t length);
+
+}
+
+#endif
+
 
 bool mem_buffer::is_cuda_supported()
 {
@@ -87,9 +111,18 @@ bool mem_buffer::is_rocm_supported()
 #endif
 }
 
+bool mem_buffer::is_ze_supported()
+{
+#if HAVE_ZE
+    return mem_buffer_ze_init();
+#else
+    return false;
+#endif
+}
+
 bool mem_buffer::is_gpu_supported()
 {
-    return is_cuda_supported() || is_rocm_supported();
+    return is_cuda_supported() || is_rocm_supported() || is_ze_supported();
 }
 
 bool mem_buffer::is_rocm_managed_supported()
@@ -156,6 +189,11 @@ const std::vector<ucs_memory_type_t>&  mem_buffer::supported_mem_types()
         if (is_rocm_managed_supported()) {
             vec.push_back(UCS_MEMORY_TYPE_ROCM_MANAGED);
         }
+        if (is_ze_supported()) {
+            vec.push_back(UCS_MEMORY_TYPE_ZE_HOST);
+            vec.push_back(UCS_MEMORY_TYPE_ZE_DEVICE);
+            vec.push_back(UCS_MEMORY_TYPE_ZE_MANAGED);
+        }
     }
 
     return vec;
@@ -191,6 +229,10 @@ void mem_buffer::set_device_context()
     if (is_rocm_supported()) {
         hipSetDevice(0);
     }
+#endif
+
+#if HAVE_ZE
+    is_ze_supported();
 #endif
 
     device_set = true;
@@ -252,6 +294,119 @@ bool mem_buffer::cuda_gpu_has_c2c(unsigned gpu_index)
 #endif
 }
 
+#if HAVE_ZE
+namespace {
+
+ze_driver_handle_t mem_buffer_ze_driver;
+ze_context_handle_t mem_buffer_ze_context;
+ze_device_handle_t mem_buffer_ze_device;
+ze_command_list_handle_t mem_buffer_ze_cmdlist;
+int mem_buffer_ze_status = -1;  // -1: not checked, 0: not supported, 1: supported
+
+bool mem_buffer_ze_init()
+{
+    if (mem_buffer_ze_status != -1) {
+        return mem_buffer_ze_status == 1;
+    }
+
+    ze_context_desc_t context_desc{};
+    ze_command_queue_desc_t cmdq_desc{};
+    uint32_t driver_count = 1;
+    uint32_t device_count = 1;
+    ze_result_t ret;
+
+    context_desc.stype = ZE_STRUCTURE_TYPE_CONTEXT_DESC;
+
+    cmdq_desc.stype    = ZE_STRUCTURE_TYPE_COMMAND_QUEUE_DESC;
+    cmdq_desc.ordinal  = 0;
+    cmdq_desc.index    = 0;
+    cmdq_desc.flags    = 0;
+    cmdq_desc.mode     = ZE_COMMAND_QUEUE_MODE_SYNCHRONOUS;
+    cmdq_desc.priority = ZE_COMMAND_QUEUE_PRIORITY_NORMAL;
+
+    ret = zeInit(ZE_INIT_FLAG_GPU_ONLY);
+    if (ret != ZE_RESULT_SUCCESS) {
+        mem_buffer_ze_status = 0;
+        return false;
+    }
+
+    ret = zeDriverGet(&driver_count, &mem_buffer_ze_driver);
+    if ((ret != ZE_RESULT_SUCCESS) || (driver_count == 0)) {
+        mem_buffer_ze_status = 0;
+        return false;
+    }
+
+    ret = zeDeviceGet(mem_buffer_ze_driver, &device_count,
+                      &mem_buffer_ze_device);
+    if ((ret != ZE_RESULT_SUCCESS) || (device_count == 0)) {
+        mem_buffer_ze_status = 0;
+        return false;
+    }
+
+    ret = zeContextCreate(mem_buffer_ze_driver, &context_desc,
+                          &mem_buffer_ze_context);
+    if (ret != ZE_RESULT_SUCCESS) {
+        mem_buffer_ze_status = 0;
+        return false;
+    }
+
+    ret = zeCommandListCreateImmediate(mem_buffer_ze_context,
+                                       mem_buffer_ze_device, &cmdq_desc,
+                                       &mem_buffer_ze_cmdlist);
+    if (ret != ZE_RESULT_SUCCESS) {
+        ZE_CALL(zeContextDestroy(mem_buffer_ze_context), "");
+        mem_buffer_ze_context = NULL;
+        mem_buffer_ze_status = 0;
+        return false;
+    }
+
+    mem_buffer_ze_status = 1;
+    return true;
+}
+
+void mem_buffer_ze_cleanup()
+{
+    if (mem_buffer_ze_status == 1) {
+        if (mem_buffer_ze_cmdlist != NULL) {
+            zeCommandListDestroy(mem_buffer_ze_cmdlist);
+            mem_buffer_ze_cmdlist = NULL;
+        }
+        if (mem_buffer_ze_context != NULL) {
+            zeContextDestroy(mem_buffer_ze_context);
+            mem_buffer_ze_context = NULL;
+        }
+    }
+}
+
+/* Cleanup guard: automatically invokes mem_buffer_ze_cleanup() at process exit */
+struct ze_cleanup_guard {
+    ~ze_cleanup_guard() {
+        mem_buffer_ze_cleanup();
+    }
+} g_ze_cleanup_guard;
+
+void mem_buffer_ze_copy(void *dst, const void *src, size_t length)
+{
+    ZE_CALL(zeCommandListAppendMemoryCopy(mem_buffer_ze_cmdlist, dst, src,
+                                          length, NULL, 0, NULL),
+            ": dst=" << dst << " src=" << src << " length=" << length);
+    ZE_CALL(zeCommandListReset(mem_buffer_ze_cmdlist), "");
+}
+
+void mem_buffer_ze_memset(void *dst, int value, size_t length)
+{
+    unsigned char pattern = static_cast<unsigned char>(value);
+
+    ZE_CALL(zeCommandListAppendMemoryFill(mem_buffer_ze_cmdlist, dst, &pattern,
+                                          sizeof(pattern), length, NULL, 0,
+                                          NULL),
+            ": dst=" << dst << " value=" << value << " length=" << length);
+    ZE_CALL(zeCommandListReset(mem_buffer_ze_cmdlist), "");
+}
+
+} // namespace
+#endif
+
 void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type, bool async)
 {
     void *ptr;
@@ -295,6 +450,56 @@ void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type, bool async)
         ROCM_CALL(hipMallocManaged(&ptr, size));
         return ptr;
 #endif
+#if HAVE_ZE
+    case UCS_MEMORY_TYPE_ZE_HOST: {
+        if (!mem_buffer_ze_init()) {
+            UCS_TEST_SKIP_R("ZE memory is not supported");
+        }
+
+        ze_host_mem_alloc_desc_t host_desc{};
+        size_t alignment = ucs_get_page_size();
+
+        host_desc.stype = ZE_STRUCTURE_TYPE_HOST_MEM_ALLOC_DESC;
+
+        ZE_CALL(zeMemAllocHost(mem_buffer_ze_context, &host_desc, size,
+                               alignment, &ptr),
+                ": size=" << size);
+        return ptr;
+    }
+    case UCS_MEMORY_TYPE_ZE_DEVICE: {
+        if (!mem_buffer_ze_init()) {
+            UCS_TEST_SKIP_R("ZE memory is not supported");
+        }
+
+        ze_device_mem_alloc_desc_t device_desc{};
+        size_t alignment = ucs_get_page_size();
+
+        device_desc.stype = ZE_STRUCTURE_TYPE_DEVICE_MEM_ALLOC_DESC;
+
+        ZE_CALL(zeMemAllocDevice(mem_buffer_ze_context, &device_desc, size,
+                                 alignment, mem_buffer_ze_device, &ptr),
+                ": size=" << size);
+        return ptr;
+    }
+    case UCS_MEMORY_TYPE_ZE_MANAGED: {
+        if (!mem_buffer_ze_init()) {
+            UCS_TEST_SKIP_R("ZE memory is not supported");
+        }
+
+        ze_device_mem_alloc_desc_t device_desc{};
+        ze_host_mem_alloc_desc_t host_desc{};
+        size_t alignment = ucs_get_page_size();
+
+        device_desc.stype = ZE_STRUCTURE_TYPE_DEVICE_MEM_ALLOC_DESC;
+        host_desc.stype   = ZE_STRUCTURE_TYPE_HOST_MEM_ALLOC_DESC;
+
+        ZE_CALL(zeMemAllocShared(mem_buffer_ze_context, &device_desc,
+                                 &host_desc, size, alignment,
+                                 mem_buffer_ze_device, &ptr),
+                ": size=" << size);
+        return ptr;
+    }
+#endif
     default:
         UCS_TEST_SKIP_R(std::string(ucs_memory_type_names[mem_type]) +
                         " memory is not supported");
@@ -331,6 +536,16 @@ void mem_buffer::release(void *ptr, ucs_memory_type_t mem_type, bool async)
         case UCS_MEMORY_TYPE_ROCM:
         case UCS_MEMORY_TYPE_ROCM_MANAGED:
             ROCM_CALL(hipFree(ptr));
+            break;
+#endif
+#if HAVE_ZE
+        case UCS_MEMORY_TYPE_ZE_HOST:
+        case UCS_MEMORY_TYPE_ZE_DEVICE:
+        case UCS_MEMORY_TYPE_ZE_MANAGED:
+            if (ptr != NULL) {
+                ZE_CALL(zeMemFree(mem_buffer_ze_context, ptr),
+                        ": ptr=" << ptr);
+            }
             break;
 #endif
         default:
@@ -442,6 +657,10 @@ void mem_buffer::memset(void *buffer, size_t length, int c,
     switch (mem_type) {
     case UCS_MEMORY_TYPE_HOST:
     case UCS_MEMORY_TYPE_ROCM_MANAGED:
+#if HAVE_ZE
+    case UCS_MEMORY_TYPE_ZE_HOST:
+    case UCS_MEMORY_TYPE_ZE_MANAGED:
+#endif
         ::memset(buffer, c, length);
         break;
 #if HAVE_CUDA
@@ -460,6 +679,14 @@ void mem_buffer::memset(void *buffer, size_t length, int c,
             ROCM_CALL(hipMemset(buffer, c, length));
         }
         ROCM_CALL(hipDeviceSynchronize());
+        break;
+#endif
+#if HAVE_ZE
+    case UCS_MEMORY_TYPE_ZE_DEVICE:
+        if (!mem_buffer_ze_init()) {
+            UCS_TEST_ABORT("ZE memory is not supported");
+        }
+        mem_buffer_ze_memset(buffer, c, length);
         break;
 #endif
     default:
@@ -503,6 +730,13 @@ void mem_buffer::copy_between(void *dst, const void *src, size_t length,
                                     UCS_BIT(UCS_MEMORY_TYPE_ROCM) |
                                     UCS_BIT(UCS_MEMORY_TYPE_ROCM_MANAGED);
 #endif
+#if HAVE_ZE
+    const uint64_t ze_cpu_mem_types = host_mem_types |
+                                      UCS_BIT(UCS_MEMORY_TYPE_ZE_HOST) |
+                                      UCS_BIT(UCS_MEMORY_TYPE_ZE_MANAGED);
+    const uint64_t ze_mem_types = ze_cpu_mem_types |
+                                  UCS_BIT(UCS_MEMORY_TYPE_ZE_DEVICE);
+#endif
 
     if (check_mem_types(dst_mem_type, src_mem_type, host_mem_types)) {
         memcpy(dst, src, length);
@@ -516,6 +750,15 @@ void mem_buffer::copy_between(void *dst, const void *src, size_t length,
     } else if (check_mem_types(dst_mem_type, src_mem_type, rocm_mem_types)) {
         ROCM_CALL(hipMemcpy(dst, src, length, hipMemcpyDefault));
         ROCM_CALL(hipDeviceSynchronize());
+#endif
+#if HAVE_ZE
+    } else if (check_mem_types(dst_mem_type, src_mem_type, ze_cpu_mem_types)) {
+        memcpy(dst, src, length);
+    } else if (check_mem_types(dst_mem_type, src_mem_type, ze_mem_types)) {
+        if (!mem_buffer_ze_init()) {
+            UCS_TEST_ABORT("ZE memory is not supported");
+        }
+        mem_buffer_ze_copy(dst, src, length);
 #endif
     } else {
         UCS_TEST_ABORT("Wrong buffer memory type pair " +
