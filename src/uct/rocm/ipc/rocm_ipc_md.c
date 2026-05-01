@@ -126,7 +126,7 @@ uct_rocm_ipc_md_mem_elem_pack(uct_md_h md_h, uct_mem_h memh, uct_rkey_t rkey,
 {
     uct_md_t *md = (uct_md_t*)md_h;
     uct_rocm_ipc_component_t *rocm_comp =
-        ucs_derived_of(md->component, uct_rocm_ipc_component_t);
+            ucs_derived_of(md->component, uct_rocm_ipc_component_t);
     uct_rocm_ipc_key_t *key = (uct_rocm_ipc_key_t*)rkey;
     uct_rocm_ipc_device_mem_element_t *rocm_ipc_mem_element =
             (uct_rocm_ipc_device_mem_element_t*)mem_elem_p;
@@ -182,7 +182,7 @@ uct_rocm_ipc_md_open(uct_component_h component, const char *md_name,
         .detect_memory_type = (uct_md_detect_memory_type_func_t)
                 ucs_empty_function_return_unsupported
     };
-    static uct_md_t md = {
+    static uct_md_t md         = {
         .ops       = &md_ops,
         .component = &uct_rocm_ipc_component.super,
     };
@@ -224,7 +224,8 @@ ucs_status_t uct_rocm_ipc_rkey_ptr(uct_component_t *component, uct_rkey_t rkey,
                                    void *handle, uint64_t raddr, void **laddr_p)
 {
     uct_rocm_ipc_component_t *rocm_comp =
-        ucs_derived_of(component, uct_rocm_ipc_component_t);
+            ucs_derived_of(component, uct_rocm_ipc_component_t);
+
     uct_rocm_ipc_key_t *key = (uct_rocm_ipc_key_t*)rkey;
     void *mapped_addr;
     ptrdiff_t offset;
@@ -255,34 +256,35 @@ ucs_status_t uct_rocm_ipc_rkey_ptr(uct_component_t *component, uct_rkey_t rkey,
 }
 
 uct_rocm_ipc_component_t uct_rocm_ipc_component = {
-    .super = {
-        .query_md_resources = uct_rocm_base_query_md_resources,
-        .md_open            = uct_rocm_ipc_md_open,
-        .cm_open            = (uct_component_cm_open_func_t)
-                ucs_empty_function_return_unsupported,
-        .rkey_unpack        = uct_rocm_ipc_rkey_unpack,
-        .rkey_ptr           = uct_rocm_ipc_rkey_ptr,
-        .rkey_release       = uct_rocm_ipc_rkey_release,
-        .rkey_compare       = uct_base_rkey_compare,
-        .name               = "rocm_ipc",
-        .md_config =
-                {
-                        .name   = "ROCm-IPC memory domain",
-                        .prefix = "ROCM_IPC_MD_",
-                        .table  = uct_rocm_ipc_md_config_table,
-                        .size   = sizeof(uct_rocm_ipc_md_config_t),
-                },
-        .cm_config   = UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY,
-        .tl_list     = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_rocm_ipc_component.super),
-        .flags       = 0,
-        .md_vfs_init = (uct_component_md_vfs_init_func_t)ucs_empty_function
-    },
+    .super     = {.query_md_resources = uct_rocm_base_query_md_resources,
+              .md_open            = uct_rocm_ipc_md_open,
+              .cm_open            = (uct_component_cm_open_func_t)
+                                 ucs_empty_function_return_unsupported,
+              .rkey_unpack        = uct_rocm_ipc_rkey_unpack,
+              .rkey_ptr           = uct_rocm_ipc_rkey_ptr,
+              .rkey_release       = uct_rocm_ipc_rkey_release,
+              .rkey_compare       = uct_base_rkey_compare,
+              .name               = "rocm_ipc",
+              .md_config =
+                      {
+                              .name   = "ROCm-IPC memory domain",
+                              .prefix = "ROCM_IPC_MD_",
+                              .table  = uct_rocm_ipc_md_config_table,
+                              .size   = sizeof(uct_rocm_ipc_md_config_t),
+                      },
+              .cm_config   = UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY,
+              .tl_list     = UCT_COMPONENT_TL_LIST_INITIALIZER(
+                      &uct_rocm_ipc_component.super),
+              .flags       = 0,
+              .md_vfs_init = (uct_component_md_vfs_init_func_t)
+                      ucs_empty_function},
     .ipc_cache = NULL,
     .lock      = PTHREAD_MUTEX_INITIALIZER
 };
 UCT_COMPONENT_REGISTER(&uct_rocm_ipc_component.super);
 
-UCS_STATIC_CLEANUP {
+UCS_STATIC_CLEANUP
+{
     if (uct_rocm_ipc_component.ipc_cache != NULL) {
         ucs_debug("Destroying ROCm IPC component cache");
         uct_rocm_ipc_destroy_cache(uct_rocm_ipc_component.ipc_cache);
