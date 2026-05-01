@@ -152,11 +152,18 @@ typedef struct {
 /* RTR header: receiver to sender, providing remote bounce buffer info */
 typedef struct {
     ucp_rma_ppln_hdr_t super;
-    ucs_ptr_map_key_t sender_req_id; /* Sender's request ID for lookup */
+    /* UCS_PTR_MAP_KEY_INVALID if GET-initiated */
+    ucs_ptr_map_key_t sender_req_id;
     int              frag_count;     /* Number of fragments */
+    struct {
+        uint64_t         source_addr;  /* Source address (local on remote) */
+        size_t           total_length; /* Total transfer length */
+        ucp_md_map_t     md_map;      /* MD map for fragment registration */
+        ucs_sys_device_t sys_dev;     /* System device of source memory */
+    } get;
 } UCS_S_PACKED ucp_put_ppln_rtr_hdr_t;
 
-/* ATS header: receiver to sender, signals all copy-outs are done */
+/* ATS header: receiver to sender, signals all copy out are done */
 typedef struct {
     ucp_rma_ppln_hdr_t super;
     ucs_ptr_map_key_t sender_req_id; /* Sender's request ID for completion */
@@ -909,6 +916,7 @@ enum {
     UCP_PROTO_GET_PPLN_STAGE_RTR = UCP_PROTO_STAGE_START,
     UCP_PROTO_GET_PPLN_STAGE_COPY_OUT,
     UCP_PROTO_GET_PPLN_STAGE_ATS,
+    UCP_PROTO_GET_PPLN_STAGE_DONE,
 };
 
 static void
@@ -954,10 +962,28 @@ ucp_rma_ppln_frag_copy_out_done(ucp_request_t *req,
 }
 
 static void
-ucp_rma_ppln_copy_out_set_ats(ucp_request_t *req)
+ucp_rma_ppln_complete_req(ucp_request_t *req)
 {
-    ucs_trace_req("rma_ppln: all copy-outs done req=%p", req);
-    ucp_proto_request_set_stage(req, UCP_PROTO_GET_PPLN_STAGE_ATS);
+    ucp_ep_h ep = req->send.ep;
+
+    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 1, UCP_DT_MASK_ALL);
+    ucp_request_complete_send(req, UCS_OK);
+    ucp_ep_rma_remote_request_completed(ep);
+}
+
+static void
+ucp_rma_ppln_copy_out_done(ucp_request_t *req)
+{
+    ucs_trace_req("rma_ppln: copy out done req=%p sender_req_id=0x%"
+                  PRIx64, req, req->send.recv_ppln.sender_req_id);
+
+    if (req->send.recv_ppln.sender_req_id == UCS_PTR_MAP_KEY_INVALID) {
+        /* GET-initiator: no ATS needed, go directly to cleanup */
+        ucp_proto_request_set_stage(req, UCP_PROTO_GET_PPLN_STAGE_DONE);
+    } else {
+        /* PUT-initiator: send ATS to sender, then cleanup */
+        ucp_proto_request_set_stage(req, UCP_PROTO_GET_PPLN_STAGE_ATS);
+    }
 }
 
 static void
@@ -968,7 +994,7 @@ ucp_rma_ppln_frag_copy_out_complete(uct_completion_t *self)
     ucp_request_t *req = frag->req;
 
     if (ucp_rma_ppln_frag_copy_out_done(req, frag)) {
-        ucp_rma_ppln_copy_out_set_ats(req);
+        ucp_rma_ppln_copy_out_done(req);
         ucp_request_send(req);
     }
 }
@@ -1037,6 +1063,10 @@ ucp_rma_ppln_rtr_serialize(ucp_request_t *req, void *buf, size_t buf_size)
     rtr->super.sub_id       = UCP_RMA_PPLN_AM_RTR;
     rtr->sender_req_id      = req->send.recv_ppln.sender_req_id;
     rtr->frag_count              = count;
+    rtr->get.source_addr       = req->send.recv_ppln.remote_addr;
+    rtr->get.total_length      = req->send.recv_ppln.total_length;
+    rtr->get.md_map            = req->send.recv_ppln.md_map;
+    rtr->get.sys_dev           = req->send.recv_ppln.sys_dev;
 
     p = rtr + 1;
 
@@ -1098,9 +1128,30 @@ ucp_rma_ppln_rtr_pack(void *dest, void *arg)
 static ucs_status_t
 ucp_proto_get_ppln_rtr_complete(ucp_request_t *req)
 {
+    if (req->send.recv_ppln.sender_req_id == UCS_PTR_MAP_KEY_INVALID) {
+        ucp_ep_rma_remote_request_sent(req->send.ep);
+    }
+
     /* Park; ATP handler will re-enqueue for copy-out */
     ucp_proto_request_set_stage(req, UCP_PROTO_GET_PPLN_STAGE_COPY_OUT);
     return UCS_OK;
+}
+
+static void
+ucp_proto_get_ppln_init_from_get(ucp_request_t *req)
+{
+    const ucp_proto_ppln_priv_t *rpriv = req->send.proto_config->priv;
+    size_t total_length                = req->send.state.dt_iter.length;
+    ucp_ep_h ep                        = req->send.ep;
+
+    req->send.recv_ppln.frag_count    = ucs_div_round_up(total_length,
+                                                          rpriv->frag_size);
+    req->send.recv_ppln.frag_size     = rpriv->frag_size;
+    req->send.recv_ppln.total_length  = total_length;
+    req->send.recv_ppln.remote_addr   = req->send.rma.remote_addr;
+    req->send.recv_ppln.sender_req_id = UCS_PTR_MAP_KEY_INVALID;
+    req->send.recv_ppln.md_map        = ucp_ep_config(ep)->key.rma_bw_md_map;
+    req->send.recv_ppln.sys_dev       = req->send.state.dt_iter.mem_info.sys_dev;
 }
 
 static ucs_status_t
@@ -1113,6 +1164,11 @@ ucp_proto_get_ppln_rtr_progress(uct_pending_req_t *self)
     ucs_status_t status;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
+        /* User-initiated GET: populate recv_ppln from rma params */
+        if (req->send.proto_config->select_param.op_id == UCP_OP_ID_GET) {
+            ucp_proto_get_ppln_init_from_get(req);
+        }
+
         ucp_send_request_id_alloc(req);
 
         frags = ucs_malloc(req->send.recv_ppln.frag_count * sizeof(*frags),
@@ -1136,11 +1192,21 @@ ucp_proto_get_ppln_rtr_progress(uct_pending_req_t *self)
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     }
 
-    return ucp_proto_am_bcopy_single_progress(
+    if (req->send.recv_ppln.sender_req_id == UCS_PTR_MAP_KEY_INVALID) {
+        ucp_worker_flush_ops_count_add(req->send.ep->worker, +1);
+    }
+
+    status = ucp_proto_am_bcopy_single_progress(
             req, UCP_AM_ID_RMA_PPLN,
             ucp_ep_config(req->send.ep)->key.am_lane,
             ucp_rma_ppln_rtr_pack, req, SIZE_MAX,
             ucp_proto_get_ppln_rtr_complete, 0);
+    if ((req->send.recv_ppln.sender_req_id == UCS_PTR_MAP_KEY_INVALID) &&
+        (status != UCS_OK) && (status != UCS_INPROGRESS)) {
+        ucp_worker_flush_ops_count_add(req->send.ep->worker, -1);
+    }
+
+    return status;
 }
 
 static ucs_status_t
@@ -1212,7 +1278,7 @@ ucp_proto_get_ppln_copy_out_progress(uct_pending_req_t *self)
     }
 
     if (req->send.state.uct_comp.count == 0) {
-        ucp_rma_ppln_copy_out_set_ats(req);
+        ucp_rma_ppln_copy_out_done(req);
         return UCS_INPROGRESS;
     }
 
@@ -1222,12 +1288,8 @@ ucp_proto_get_ppln_copy_out_progress(uct_pending_req_t *self)
 static ucs_status_t
 ucp_proto_get_ppln_ats_complete(ucp_request_t *req)
 {
-    ucs_trace_req("rma_ppln: ATS sent req=%p, cleaning up receiver", req);
-    ucs_assert(ucs_queue_is_empty(&req->send.recv_ppln.copy_out_queue));
-    ucp_send_request_id_release(req);
-    ucs_free(req->send.recv_ppln.frags);
-    ucp_request_put(req);
-    return UCS_OK;
+    ucp_proto_request_set_stage(req, UCP_PROTO_GET_PPLN_STAGE_DONE);
+    return UCS_INPROGRESS;
 }
 
 static ucs_status_t
@@ -1240,6 +1302,29 @@ ucp_proto_get_ppln_ats_progress(uct_pending_req_t *self)
             ucp_ep_config(req->send.ep)->key.am_lane,
             ucp_rma_ppln_ats_pack, req, SIZE_MAX,
             ucp_proto_get_ppln_ats_complete, 0);
+}
+
+static ucs_status_t
+ucp_proto_get_ppln_done_progress(uct_pending_req_t *self)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+
+    ucs_trace_req("rma_ppln: done req=%p sender_req_id=0x%" PRIx64,
+                  req, req->send.recv_ppln.sender_req_id);
+    ucs_assert(ucs_queue_is_empty(&req->send.recv_ppln.copy_out_queue));
+
+    ucp_send_request_id_release(req);
+    ucs_free(req->send.recv_ppln.frags);
+
+    if (req->send.recv_ppln.sender_req_id == UCS_PTR_MAP_KEY_INVALID) {
+        /* GET-initiator: complete user request and unblock flush */
+        ucp_rma_ppln_complete_req(req);
+    } else {
+        /* PUT-initiator: internal request, just release */
+        ucp_request_put(req);
+    }
+
+    return UCS_OK;
 }
 
 static void
@@ -1280,6 +1365,7 @@ ucp_proto_t ucp_get_ppln_proto = {
         [UCP_PROTO_GET_PPLN_STAGE_RTR]      = ucp_proto_get_ppln_rtr_progress,
         [UCP_PROTO_GET_PPLN_STAGE_COPY_OUT] = ucp_proto_get_ppln_copy_out_progress,
         [UCP_PROTO_GET_PPLN_STAGE_ATS]      = ucp_proto_get_ppln_ats_progress,
+        [UCP_PROTO_GET_PPLN_STAGE_DONE]     = ucp_proto_get_ppln_done_progress,
     },
     /* TODO: custom abort to free frags, return bounce buffers, release req_id */
     .abort    = ucp_proto_request_zcopy_abort,
@@ -1468,7 +1554,6 @@ ucp_rma_ppln_ats_handler(ucp_worker_h worker,
                          const ucp_put_ppln_ats_hdr_t *ats)
 {
     ucp_request_t *req;
-    ucp_ep_h ep;
 
     UCP_SEND_REQUEST_GET_BY_ID(&req, worker, ats->sender_req_id, 0,
                                return UCS_OK, "rma_ppln ATS");
@@ -1476,14 +1561,10 @@ ucp_rma_ppln_ats_handler(ucp_worker_h worker,
     ucs_trace_req("rma_ppln: ATS received req=%p sender_req_id=0x%" PRIx64,
                   req, ats->sender_req_id);
 
-    ep = req->send.ep;
-
     ucp_send_request_id_release(req);
     ucs_free(req->send.ppln.freqs);
     req->send.ppln.freqs = NULL;
-    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 1, UCP_DT_MASK_ALL);
-    ucp_request_complete_send(req, UCS_OK);
-    ucp_ep_rma_remote_request_completed(ep);
+    ucp_rma_ppln_complete_req(req);
 
     return UCS_OK;
 }
@@ -1542,9 +1623,11 @@ ucp_rma_ppln_dump(ucp_worker_h worker, uct_am_trace_type_t type, uint8_t id,
         rtr = data;
         ucs_string_buffer_appendf(&strb,
                 "RMA_PPLN_RTR ep_id=0x%" PRIx64 " req_id=0x%" PRIx64
-                " sender_req_id=0x%" PRIx64 " frag_count=%d",
+                " sender_req_id=0x%" PRIx64 " frag_count=%d"
+                " get_source_addr=0x%" PRIx64 " get_total_length=%zu",
                 rtr->super.super.ep_id, rtr->super.super.req_id,
-                rtr->sender_req_id, rtr->frag_count);
+                rtr->sender_req_id, rtr->frag_count,
+                rtr->get.source_addr, rtr->get.total_length);
         break;
     case UCP_RMA_PPLN_AM_ATP:
         atp = data;

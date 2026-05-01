@@ -257,7 +257,8 @@ struct ucp_request {
                 struct {
                     void             *frags;        /* Per-fragment tracking array */
                     int              frag_count;    /* Total number of fragments */
-                    ucs_ptr_map_key_t sender_req_id; /* Sender req ID for final ACK */
+                    /* UCS_PTR_MAP_KEY_INVALID if GET-initiated */
+                    ucs_ptr_map_key_t sender_req_id;
                     ucp_md_map_t     md_map;       /* MD map for fragment registration */
                     ucs_sys_device_t sys_dev;      /* System device for fragment alloc */
                     size_t           frag_size;    /* Fragment size */
