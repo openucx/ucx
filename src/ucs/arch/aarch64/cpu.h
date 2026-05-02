@@ -16,6 +16,7 @@
 #include <string.h>
 #include <sys/times.h>
 #include <ucs/sys/compiler_def.h>
+#include <ucs/sys/ptr_arith.h>
 #include <ucs/arch/generic/cpu.h>
 #include <ucs/sys/math.h>
 #include <ucs/type/status.h>

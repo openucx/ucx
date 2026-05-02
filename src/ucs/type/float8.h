@@ -7,7 +7,28 @@
 #ifndef UCS_TYPE_FLOAT_H
 #define UCS_TYPE_FLOAT_H
 
+#ifdef HAVE_IEEE754_H
 #include <ieee754.h>
+#else
+/* Portable fallback for systems without <ieee754.h> (non-glibc, e.g. musl, FreeBSD libc) */
+union ieee754_double {
+    double d;
+    struct {
+#if defined(FLOAT_WORDS_BIGENDIAN)
+        unsigned int negative:1;
+        unsigned int exponent:11;
+        unsigned int mantissa0:20;
+        unsigned int mantissa1:32;
+#else
+        unsigned int mantissa1:32;
+        unsigned int mantissa0:20;
+        unsigned int exponent:11;
+        unsigned int negative:1;
+#endif
+    } ieee;
+};
+#define IEEE754_DOUBLE_BIAS 0x3ff
+#endif
 
 #include <ucs/sys/preprocessor.h>
 #include <ucs/debug/assert.h>

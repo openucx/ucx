@@ -114,7 +114,7 @@ unsigned ucs_numa_num_configured_cpus()
 
     if (num_cpus == 0) {
         max_cpu  = ucs_numa_get_max_dirent(UCS_SYS_FS_CPUS_PATH, "cpu",
-                                           __CPU_SETSIZE, 0);
+                                           UCS_CPU_SETSIZE, 0);
         num_cpus = max_cpu + 1;
     }
 
@@ -124,12 +124,13 @@ unsigned ucs_numa_num_configured_cpus()
 ucs_numa_node_t ucs_numa_node_of_cpu(int cpu)
 {
     /* Used for caching to improve performance */
-    static ucs_numa_node_t cpu_numa_node[__CPU_SETSIZE] = {0};
+    static ucs_numa_node_t cpu_numa_node[UCS_CPU_SETSIZE] = {0};
     char *core_dir_path;
     ucs_numa_node_t node;
     ucs_status_t status;
 
-    ucs_assert(cpu < __CPU_SETSIZE);
+    UCS_STATIC_ASSERT(UCS_CPU_SETSIZE >= __CPU_SETSIZE);
+    ucs_assert(cpu < UCS_CPU_SETSIZE);
 
     if (cpu_numa_node[cpu] == 0) {
         status = ucs_string_alloc_formatted_path(&core_dir_path,
