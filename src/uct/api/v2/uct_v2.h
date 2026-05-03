@@ -1259,6 +1259,13 @@ ucs_status_t uct_ep_get_device_ep(uct_ep_h ep, uct_device_ep_h *device_ep_p);
  * @param [in] remote_addrs Array of remote addresses.
  * @param [in] rkeys        Array of remote keys, obtained from
  *                          @ref ::uct_rkey_unpack.
+ * @param [in] counts       Array of repetition counts per element, or NULL.
+ *                          When provided, element @a i represents @a counts[i]
+ *                          blocks of @a lengths[i] bytes, each separated by
+ *                          @a strides[i] bytes, starting at @a buffers[i] /
+ *                          @a remote_addrs[i]. When NULL, each element is
+ *                          transferred once (equivalent to count=1, stride=0).
+ * @param [in] strides      Array of strides in bytes per element, or NULL.
  * @param [in] count        Number of elements in the arrays. Must not exceed
  *                          @ref uct_iface_attr_v2_max_put_sgl_zcopy_count
  *                          "uct_iface_attr_v2_t::max_put_sgl_zcopy_count".
@@ -1273,6 +1280,7 @@ ucs_status_t
 uct_ep_put_sgl_zcopy(uct_ep_h ep, void * const *buffers,
                      const size_t *lengths, uct_mem_h const *memhs,
                      const uint64_t *remote_addrs, uct_rkey_t const *rkeys,
+                     const size_t *counts, const size_t *strides,
                      size_t count, uct_completion_t *comp);
 
 
