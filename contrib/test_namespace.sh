@@ -24,19 +24,19 @@ test_namespace_pid() {
 	local test_type=$3
 	local base_perftest=$4
 	local expected_tl=$5
-	local cmd
 	local config
+	local base_cmd
 	local unshare_cmd
 
 	echo "==== Running perftest different PID namespace test for $tl ===="
 
-	cmd="$base_perftest -t $test_type -m $mem_type -p $server_port"
+	base_cmd="$base_perftest -t $test_type -m $mem_type -p $server_port"
 	config="UCX_PROTO_INFO=y UCX_TLS=$tl,sysv"
 
     # TODO: remove this once we have a way to test with multiple GPUs
     config="$config CUDA_VISIBLE_DEVICES=0"
 	
-	unshare_cmd="sudo unshare --mount-proc --pid --fork sudo -u $USER $config $cmd"
+	unshare_cmd="sudo unshare --mount-proc --pid --fork sudo -u $USER $config $base_cmd"
 	
 	step_server_port
 	$unshare_cmd &
@@ -52,10 +52,10 @@ test_namespace_pid() {
 test_namespace() {
 	# Make sure to try to use CMA when possible
 	# Expect fallback on SYSV
-	local base_perftest
+	local base_perftest="$ucx_inst/bin/ucx_perftest -s 9999999 -n 5"
+	local perftest="$base_perftest -t ucp_get"
+	local cmd
 
-	base_perftest="$ucx_inst/bin/ucx_perftest -s 9999999 -n 5"
-	perftest="$base_perftest -t ucp_get"
 	echo "==== Running perftest namespace positive tests ===="
 
 	# TODO: remove this once CUDA driver hang on GPU CI is fixed
