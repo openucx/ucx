@@ -27,5 +27,5 @@ void uct_ib_mlx5_ext_register(const uct_ib_mlx5_ext_ops_t *ops)
     ucs_assertv(ops->iface_flags != NULL, "ext_resgiter: iface_flags function is NULL");
     ucs_assertv(ops->qp_query != NULL, "ext_resgiter: qp_query function is NULL");
     uct_ib_mlx5_ext_ops = *ops;
-    ucs_info("ib mlx5: registered external ops successfully");
+    ucs_debug("ib mlx5: registered external ops successfully");
 }

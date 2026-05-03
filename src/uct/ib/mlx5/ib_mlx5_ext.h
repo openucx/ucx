@@ -7,14 +7,14 @@
 #ifndef UCT_IB_MLX5_EXT_H_
 #define UCT_IB_MLX5_EXT_H_
 
+#include <infiniband/verbs.h>
+#include <infiniband/mlx5dv.h>
+
 #include <stdint.h>
+
 #include <ucs/debug/assert.h>
 #include <ucs/type/status.h>
 #include <ucs/sys/stubs.h>
-
-
-struct ibv_qp;
-struct mlx5dv_devx_obj;
 
 /**
  * @brief Field mask bits for @ref uct_ib_mlx5_ext_qp_query_attr_t.
@@ -29,19 +29,26 @@ enum uct_ib_mlx5_ext_qp_query_attr_field {
 };
 
 /**
- * @brief QP query output attributes.
+ * @brief QP tx/rx token query output attributes.
  */
 typedef struct uct_ib_mlx5_ext_qp_query_attr {
-    uint64_t field_mask;
-    size_t   tx_token_len;
-    size_t   rx_token_len;
-    void     *tx_token;
-    void     *rx_token;
-    uint32_t qp_num;
+    uint64_t field_mask;   /**< Mask of valid fields in this structure, using bits from @ref uct_ib_mlx5_ext_qp_query_attr_field. */
+    size_t   tx_token_len; /**< Length of the TX token in bytes. */
+    size_t   rx_token_len; /**< Length of the RX token in bytes. */
+    void     *tx_token;    /**< TX token pointer. */
+    void     *rx_token;    /**< RX token pointer. */
+    uint32_t qp_num;       /**< QP number. */
 } uct_ib_mlx5_ext_qp_query_attr_t;
 
 
+/**
+ * @brief External plugin iface flags function type.
+ */
 typedef ucs_status_t (*uct_ib_mlx5_ext_iface_flags_func_t)(uint64_t *flags);
+
+/**
+ * @brief QP tx/rx token query function type.
+ */
 typedef ucs_status_t (*uct_ib_mlx5_ext_qp_query_func_t)(
         struct ibv_qp *qp, struct mlx5dv_devx_obj *devx_obj,
         uct_ib_mlx5_ext_qp_query_attr_t *attr);
