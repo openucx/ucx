@@ -58,26 +58,24 @@ test_namespace() {
 
 	echo "==== Running perftest namespace positive tests ===="
 
-	# TODO: remove this once CUDA driver hang on GPU CI is fixed
-	if [ "X$have_cuda" == "Xno" ]
-	then
-	    for tls in posix cma,sysv
-		do
-			echo "==== Running perftest same non-default USER namespace test for $tls ===="
-
-			cmd="UCX_TLS=$tls $perftest -p $server_port"
-			step_server_port
-			unshare --user bash -c "{ $cmd & sleep 3; $cmd localhost; }"
-		done
-	fi
-
-	test_namespace_pid posix host ucp_get "$base_perftest"
-	test_namespace_pid cma host ucp_get "$base_perftest"
-
 	if [ "X$have_cuda" != "Xno" ] 
 	then
 		test_namespace_pid cuda_ipc,cuda_copy cuda ucp_put_bw "$base_perftest" cuda_ipc
+	    # TODO: remove this once CUDA driver hang on GPU CI is fixed
+		return 0
 	fi
+
+	for tls in posix cma,sysv
+	do
+		echo "==== Running perftest same non-default USER namespace test for $tls ===="
+
+		cmd="UCX_TLS=$tls $perftest -p $server_port"
+		step_server_port
+		unshare --user bash -c "{ $cmd & sleep 3; $cmd localhost; }"
+	done
+
+	test_namespace_pid posix host ucp_get "$base_perftest"
+	test_namespace_pid cma host ucp_get "$base_perftest"
 
 	for tl in posix cma
 	do
