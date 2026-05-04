@@ -1,0 +1,79 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+# JJB for PR review only (Claude / pr-agent image). Keep parameters minimal — main UCX
+# CI parameters live in proj_jjb_oss.yaml.
+#
+# Apply with your JJB workflow alongside proj_jjb_oss.yaml, e.g.:
+#   jenkins-jobs update --delete-old path/to/proj_jjb_pr_agent.yaml
+
+- job-template:
+    name: "{jjb_proj}"
+    project-type: pipeline
+    folder: "UCX-OSS"
+    properties:
+        - github:
+            url: https://github.com/openucx/ucx
+        - build-discarder:
+            days-to-keep: 30
+            num-to-keep: 100
+        - inject:
+            keep-system-variables: true
+            properties-content: |
+              jjb_proj={jjb_proj}
+    description: PR review (Claude). Do NOT edit through the Web UI — use JJB.
+    concurrent: false
+    sandbox: false
+    parameters:
+        - string:
+            name: "sha1"
+            default: "{jjb_branch}"
+            description: "Commit to build (PR head)"
+        - string:
+            name: "ghprbPullId"
+            default: "${{sha1}}"
+            description: "Pull request ID when triggered by GHPRB"
+        - string:
+            name: "conf_file"
+            default: "{jjb_conf_file}"
+            description: "Matrix config file"
+        - string:
+            name: "DEBUG"
+            default: "0"
+            description: "CI-DEMO debug level 0-9"
+    triggers:
+        - github-pull-request:
+            cron: 'H/5 * * * *'
+            trigger-phrase: '.*\bagent-review\b.*'
+            only-trigger-phrase: true
+            status-context: "ucx-pr-agent"
+            success-status: "PR review passed."
+            failure-status: "PR review failed."
+            error-status: "PR review failed."
+            status-add-test-results: true
+            auth-id: 'svc-nixl_GHPRB_ID'
+            cancel-builds-on-update: true
+            org-list: ["Mellanox-lab", "Mellanox", "Nvidia"]
+            allow-whitelist-orgs-as-admins: true
+    pipeline-scm:
+        scm:
+            - git:
+                url: "{jjb_git}"
+                branches: ['$sha1']
+                shallow-clone: false
+                do-not-fetch-tags: false
+                refspec: "+refs/pull/*:refs/remotes/origin/pr/* +refs/heads/*:refs/remotes/origin/* +refs/tags/*:refs/remotes/origin/tags/*"
+                browser: githubweb
+                browser-url: "{jjb_git}"
+                lightweight-checkout: false
+        script-path: "{jjb_jenkinsfile}"
+
+- project:
+    name: ucx-pr-agent-jjb
+    jjb_proj: ucx-pr-agent-oss
+    jjb_git: 'https://github.com/openucx/ucx.git'
+    jjb_jenkinsfile: '.ci/jenkins/Jenkinsfile.github'
+    jjb_branch: 'master'
+    jjb_conf_file: '.ci/pipeline/job_matrix_pr_agent.yaml'
+    jobs:
+        - "{jjb_proj}"
