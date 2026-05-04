@@ -52,6 +52,15 @@ typedef enum {
     UCT_DEVICE_FLAG_NODELAY = UCS_BIT(0) /**< Complete before return. */
 } uct_device_flags_t;
 
+/**
+ * @brief Specify code optimization hints.
+ */
+typedef enum {
+    UCT_DEVICE_CODE_OPT_DEFAULT       = 0,
+    UCT_DEVICE_CODE_OPT_SQ_SKIP_CHECK = UCS_BIT(0),
+    UCT_DEVICE_CODE_OPT_DB_ONCE       = UCS_BIT(1)
+} uct_device_code_opt_t;
+
 
 /* Device transport id (for internal use) */
 typedef enum {
