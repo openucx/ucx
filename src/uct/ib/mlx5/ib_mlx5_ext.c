@@ -12,52 +12,35 @@
 
 #include <ucs/debug/assert.h>
 
-UCS_LIST_HEAD(uct_ib_mlx5_ext_providers_list);
+UCS_LIST_HEAD(uct_ib_mlx5_ext_ops_entries);
 
-static const uct_ib_mlx5_ext_ops_t *uct_ib_mlx5_ext_published_ops;
-
-static void uct_ib_mlx5_ext_republish(void)
+static const uct_ib_mlx5_ext_ops_t *uct_ib_mlx5_ext_get_ops(void)
 {
-    uct_ib_mlx5_ext_provider_t *iter;
-    uct_ib_mlx5_ext_provider_t *chosen = NULL;
+    uct_ib_mlx5_ext_ops_entry_t *entry;
 
-    ucs_list_for_each(iter, &uct_ib_mlx5_ext_providers_list, list) {
-        if ((iter->ops != NULL) && (iter->ops->ep_put_sgl_zcopy != NULL)) {
-            chosen = iter;
-            break;
-        }
+    if (ucs_list_is_empty(&uct_ib_mlx5_ext_ops_entries)) {
+        return NULL;
     }
 
-    uct_ib_mlx5_ext_published_ops = (chosen != NULL) ? chosen->ops : NULL;
+    entry = ucs_list_head(&uct_ib_mlx5_ext_ops_entries,
+                          uct_ib_mlx5_ext_ops_entry_t, list);
+    return entry->ops;
 }
 
-void uct_ib_mlx5_ext_register_provider(uct_ib_mlx5_ext_provider_t *provider)
+void uct_ib_mlx5_ext_register_entry(uct_ib_mlx5_ext_ops_entry_t *entry)
 {
-    ucs_assert(provider->ops != NULL);
-
-    if (provider->registered) {
-        return;
-    }
-
-    ucs_list_add_tail(&uct_ib_mlx5_ext_providers_list, &provider->list);
-    provider->registered = 1;
-    uct_ib_mlx5_ext_republish();
+    ucs_assert(entry->ops != NULL);
+    ucs_list_add_head(&uct_ib_mlx5_ext_ops_entries, &entry->list);
 }
 
-void uct_ib_mlx5_ext_unregister_provider(uct_ib_mlx5_ext_provider_t *provider)
+void uct_ib_mlx5_ext_unregister_entry(uct_ib_mlx5_ext_ops_entry_t *entry)
 {
-    if (!provider->registered) {
-        return;
-    }
-
-    ucs_list_del(&provider->list);
-    provider->registered = 0;
-    uct_ib_mlx5_ext_republish();
+    ucs_list_del(&entry->list);
 }
 
 size_t uct_ib_mlx5_ext_max_put_sgl_zcopy_count(void)
 {
-    const uct_ib_mlx5_ext_ops_t *ops = uct_ib_mlx5_ext_published_ops;
+    const uct_ib_mlx5_ext_ops_t *ops = uct_ib_mlx5_ext_get_ops();
 
     if ((ops == NULL) || (ops->max_put_sgl_zcopy_count == NULL)) {
         return 0;
@@ -73,7 +56,7 @@ uct_ib_mlx5_ext_ep_put_sgl_zcopy(uct_ep_h ep, void * const *buffers,
                                  uct_rkey_t const *rkeys, size_t count,
                                  uct_completion_t *comp)
 {
-    const uct_ib_mlx5_ext_ops_t *ops = uct_ib_mlx5_ext_published_ops;
+    const uct_ib_mlx5_ext_ops_t *ops = uct_ib_mlx5_ext_get_ops();
 
     if ((ops == NULL) || (ops->ep_put_sgl_zcopy == NULL)) {
         return UCS_ERR_UNSUPPORTED;

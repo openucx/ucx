@@ -20,15 +20,14 @@ typedef struct uct_ib_mlx5_ext_ops {
     uct_ep_put_sgl_zcopy_func_t                    ep_put_sgl_zcopy;
 } uct_ib_mlx5_ext_ops_t;
 
-typedef struct uct_ib_mlx5_ext_provider {
+typedef struct uct_ib_mlx5_ext_ops_entry {
     ucs_list_link_t             list;
     const uct_ib_mlx5_ext_ops_t *ops;
-    int                         registered;
-} uct_ib_mlx5_ext_provider_t;
+} uct_ib_mlx5_ext_ops_entry_t;
 
-void uct_ib_mlx5_ext_register_provider(uct_ib_mlx5_ext_provider_t *provider);
+void uct_ib_mlx5_ext_register_entry(uct_ib_mlx5_ext_ops_entry_t *entry);
 
-void uct_ib_mlx5_ext_unregister_provider(uct_ib_mlx5_ext_provider_t *provider);
+void uct_ib_mlx5_ext_unregister_entry(uct_ib_mlx5_ext_ops_entry_t *entry);
 
 size_t uct_ib_mlx5_ext_max_put_sgl_zcopy_count(void);
 
