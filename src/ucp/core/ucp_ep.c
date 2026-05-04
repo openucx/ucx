@@ -5,7 +5,6 @@
 * See file LICENSE for terms.
 */
 
-#include <ucp/api/ucp_def.h>
 #ifdef HAVE_CONFIG_H
 #  include "config.h"
 #endif
