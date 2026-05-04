@@ -601,10 +601,10 @@ ucp_proto_ppln_check_common(const ucp_proto_init_params_t *init_params,
 
 static void
 ucp_proto_ppln_probe_perf(const ucp_proto_init_params_t *init_params,
-                          ucp_operation_id_t frag_op_id)
+                          ucp_operation_id_t frag_op_id,
+                          const ucp_memory_info_t *frag_mem_info)
 {
     ucp_worker_h worker                       = init_params->worker;
-    const ucp_proto_select_param_t *sel_param = init_params->select_param;
     const ucp_proto_perf_segment_t *frag_seg, *first_seg;
     const ucp_proto_select_elem_t *select_elem;
     UCS_STRING_BUFFER_ONSTACK(seg_strb, 128);
@@ -619,10 +619,9 @@ ucp_proto_ppln_probe_perf(const ucp_proto_init_params_t *init_params,
     ucs_status_t status;
     uint8_t proto_flags;
 
-    frag_sel_param             = *sel_param;
-    frag_sel_param.op_id_flags = frag_op_id;
-    frag_sel_param.op_attr     = ucp_proto_select_op_attr_pack(
-            UCP_OP_ATTR_FLAG_MULTI_SEND, UCP_PROTO_SELECT_OP_ATTR_MASK);
+    ucp_proto_select_param_init(&frag_sel_param, frag_op_id,
+                                UCP_OP_ATTR_FLAG_MULTI_SEND, 0,
+                                UCP_DATATYPE_CONTIG, frag_mem_info, 1);
 
     proto_select = ucp_proto_select_get(worker, init_params->ep_cfg_index,
                                         init_params->rkey_cfg_index,
@@ -696,11 +695,17 @@ ucp_proto_ppln_probe_perf(const ucp_proto_init_params_t *init_params,
 static void
 ucp_proto_put_ppln_probe(const ucp_proto_init_params_t *init_params)
 {
+    ucp_memory_info_t rkey_mem_info;
+
     if (!ucp_proto_ppln_check_common(init_params, UCS_BIT(UCP_OP_ID_PUT))) {
         return;
     }
 
-    ucp_proto_ppln_probe_perf(init_params, UCP_OP_ID_PUT_MTYPE);
+    rkey_mem_info.type    = init_params->rkey_config_key->mem_type;
+    rkey_mem_info.sys_dev = init_params->rkey_config_key->sys_dev;
+
+    ucp_proto_ppln_probe_perf(init_params, UCP_OP_ID_PUT_MTYPE,
+                              &rkey_mem_info);
 }
 
 static void
@@ -753,10 +758,9 @@ ucp_proto_ppln_remote_md_map(const ucp_request_t *req,
 }
 
 static ucp_md_map_t
-ucp_proto_ppln_local_md_map(const ucp_request_t *req,
-                            const ucp_proto_multi_priv_t *mpriv)
+ucp_proto_ppln_local_md_map_from_config(ucp_ep_h ep,
+                                        const ucp_proto_multi_priv_t *mpriv)
 {
-    ucp_ep_h ep = req->send.ep;
     ucp_md_map_t local_md_map = 0;
     ucp_lane_index_t i;
 
@@ -962,13 +966,19 @@ enum {
 static void
 ucp_proto_get_ppln_probe(const ucp_proto_init_params_t *init_params)
 {
+    ucp_memory_info_t local_mem_info;
+
     if (!ucp_proto_ppln_check_common(init_params,
                                      UCS_BIT(UCP_OP_ID_GET) |
                                      UCS_BIT(UCP_OP_ID_GET_PPLN))) {
         return;
     }
 
-    ucp_proto_ppln_probe_perf(init_params, UCP_OP_ID_PUT_MTYPE);
+    local_mem_info.type    = init_params->select_param->mem_type;
+    local_mem_info.sys_dev = init_params->select_param->sys_dev;
+
+    ucp_proto_ppln_probe_perf(init_params, UCP_OP_ID_PUT_MTYPE,
+                              &local_mem_info);
 }
 
 static size_t
@@ -1209,7 +1219,8 @@ ucp_proto_get_ppln_init_from_get(ucp_request_t *req)
     req->send.recv_ppln.total_length  = total_length;
     req->send.recv_ppln.remote_addr   = req->send.rma.remote_addr;
     req->send.recv_ppln.sender_req_id = UCS_PTR_MAP_KEY_INVALID;
-    req->send.recv_ppln.md_map        = ucp_proto_ppln_local_md_map(req, mpriv);
+    req->send.recv_ppln.md_map        = ucp_proto_ppln_local_md_map_from_config(
+                                              req->send.ep, mpriv);
     req->send.recv_ppln.sys_dev       = req->send.state.dt_iter.mem_info.sys_dev;
 }
 
@@ -1580,12 +1591,12 @@ ucp_rma_ppln_rtr_create_get_freqs(ucp_worker_h worker, ucp_ep_h ep,
                                   const ucp_put_ppln_rtr_hdr_t *rtr,
                                   unsigned num_freqs, ucp_request_t **freqs)
 {
+    const ucp_proto_threshold_elem_t *thresh_elem;
     ucp_proto_select_param_t sel_param;
     ucp_memory_info_t mem_info;
     ucp_datatype_iter_t dt_iter;
     ucs_status_t status;
     size_t frag_size;
-    unsigned i;
 
     frag_size = worker->context->config.ext.ppln_frag_size[
                     ucp_rma_ppln_frag_mem_type(worker->context)];
@@ -1603,6 +1614,24 @@ ucp_rma_ppln_rtr_create_get_freqs(ucp_worker_h worker, ucp_ep_h ep,
                                 UCP_OP_ATTR_FLAG_MULTI_SEND, 0,
                                 UCP_DATATYPE_CONTIG, &mem_info, 1);
 
+    thresh_elem = ucp_proto_select_lookup(worker,
+                                          &ucp_ep_config(ep)->proto_select,
+                                          ep->cfg_index,
+                                          UCP_WORKER_CFG_INDEX_NULL,
+                                          &sel_param, frag_size);
+    if (thresh_elem == NULL) {
+        ucs_error("rma_ppln: GET RTR failed to find put/mtype proto");
+        return UCS_ERR_UNREACHABLE;
+    }
+
+    ucs_assertv(rtr->get.md_map ==
+                ucp_proto_ppln_local_md_map_from_config(
+                        ep, thresh_elem->proto_config.priv),
+                "md_map mismatch: rtr=0x%" PRIx64 " local=0x%" PRIx64,
+                (uint64_t)rtr->get.md_map,
+                (uint64_t)ucp_proto_ppln_local_md_map_from_config(
+                        ep, thresh_elem->proto_config.priv));
+
     dt_iter.dt_class           = UCP_DATATYPE_CONTIG;
     dt_iter.length             = rtr->get.total_length;
     dt_iter.offset             = 0;
@@ -1611,27 +1640,10 @@ ucp_rma_ppln_rtr_create_get_freqs(ucp_worker_h worker, ucp_ep_h ep,
     dt_iter.mem_info           = mem_info;
 
     status = ucp_rma_ppln_create_freqs(ep, &dt_iter, rtr->get.sys_dev,
-                                       frag_size, 1, NULL,
+                                       frag_size, 1,
+                                       &thresh_elem->proto_config,
                                        num_freqs, freqs);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    for (i = 0; i < num_freqs; i++) {
-        status = ucp_proto_request_lookup_proto(
-                worker, ep, freqs[i], &ucp_ep_config(ep)->proto_select,
-                UCP_WORKER_CFG_INDEX_NULL, &sel_param,
-                freqs[i]->send.state.dt_iter.length);
-        if (status != UCS_OK) {
-            while (i-- > 0) {
-                ucs_mpool_put_inline(freqs[i]->send.frag_ppln.local_mdesc);
-                ucp_request_put(freqs[i]);
-            }
-            return status;
-        }
-    }
-
-    return UCS_OK;
+    return status;
 }
 
 static ucs_status_t
