@@ -51,3 +51,4 @@ Follow these project docs instead of duplicating their contents:
 - `docs/LoggingStyle.md` for log levels and message style.
 - `docs/OptimizationStyle.md` for performance-sensitive changes.
 - `.github/CONTRIBUTING.md` for contribution workflow expectations.
+- `REVIEW.md` for UCX pull-request review checks and comment style.

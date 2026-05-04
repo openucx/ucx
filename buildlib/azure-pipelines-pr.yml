@@ -22,6 +22,7 @@ pr:
     - docs/LoggingStyle.md
     - docs/OptimizationStyle.md
     - README.md
+    - REVIEW.md
     - NEWS
     - AUTHORS
     - buildlib/azure-pipelines-perf.yml
