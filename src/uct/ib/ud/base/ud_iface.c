@@ -723,7 +723,8 @@ ucs_status_t uct_ud_iface_query(uct_ud_iface_t *iface,
                                          UCT_IFACE_FLAG_CB_SYNC          |
                                          UCT_IFACE_FLAG_CB_ASYNC         |
                                          UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE |
-                                         UCT_IFACE_FLAG_INTER_NODE;
+                                         UCT_IFACE_FLAG_INTER_NODE       |
+                                         UCT_IFACE_FLAG_PCIE_P2P_ROUTED;
 
     if (iface->super.comp_channel != NULL) {
         iface_attr->cap.event_flags = UCT_IFACE_FLAG_EVENT_SEND_COMP |

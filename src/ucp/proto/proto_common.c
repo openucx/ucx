@@ -691,6 +691,17 @@ ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
             continue;
         }
 
+        /* For ifaces that route user data peer-to-peer over PCIe, ensure
+         * PCIe ACS does not block P2P between the iface's NIC and the
+         * operation's memtype device. */
+        if ((iface_attr->cap.flags & UCT_IFACE_FLAG_PCIE_P2P_ROUTED) &&
+            ucs_topo_is_p2p_acs_enabled(lane_sys_dev, select_param->sys_dev)) {
+            ucs_trace("%s: PCIe ACS blocks p2p between lane_sys_dev=%u and "
+                      "sys_dev=%u",
+                      lane_desc, lane_sys_dev, select_param->sys_dev);
+            continue;
+        }
+
         ucs_trace("%s: added as lane %d", lane_desc, lane);
         lanes[num_lanes++] = lane;
     }

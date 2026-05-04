@@ -353,7 +353,8 @@ uct_gga_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
                                  UCT_IFACE_FLAG_PENDING |
                                  UCT_IFACE_FLAG_CONNECT_TO_EP |
                                  UCT_IFACE_FLAG_CB_SYNC |
-                                 UCT_IFACE_FLAG_INTER_NODE;
+                                 UCT_IFACE_FLAG_INTER_NODE |
+                                 UCT_IFACE_FLAG_PCIE_P2P_ROUTED;
 
     iface_attr->cap.event_flags = UCT_IFACE_FLAG_EVENT_SEND_COMP |
                                   UCT_IFACE_FLAG_EVENT_FD;

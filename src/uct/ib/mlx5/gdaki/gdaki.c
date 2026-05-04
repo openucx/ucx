@@ -781,7 +781,8 @@ uct_rc_gdaki_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     iface_attr->cap.flags = UCT_IFACE_FLAG_CONNECT_TO_EP |
                             UCT_IFACE_FLAG_INTER_NODE |
                             UCT_IFACE_FLAG_DEVICE_EP |
-                            UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
+                            UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE |
+                            UCT_IFACE_FLAG_PCIE_P2P_ROUTED;
 
     iface_attr->ep_addr_len    = sizeof(uct_ib_uint24_t) * iface->num_channels;
     iface_attr->iface_addr_len = sizeof(uint8_t);
@@ -1283,6 +1284,13 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
         cuda_sys_dev = uct_cuda_get_sys_dev(cuda_dev);
         for (ibdev_index = 0; ibdev_index < ibdev_count; ibdev_index++) {
             ibdesc = &dmat[scores[ibdev_index].index];
+            if (ucs_topo_is_p2p_acs_enabled(cuda_sys_dev, ibdesc->sys_dev)) {
+                /* PCIe ACS blocks GDR between this GPU and NIC; Other transport
+                 * method should be used. */
+                scores[ibdev_index].dist.latency   = UCS_INFINITY;
+                scores[ibdev_index].dist.bandwidth = 0;
+                continue;
+            }
             status = ucs_topo_get_distance(cuda_sys_dev, ibdesc->sys_dev,
                                            &scores[ibdev_index].dist);
             if (status != UCS_OK) {
@@ -1295,6 +1303,10 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
                     uct_gdaki_dev_matrix_score, NULL);
 
         for (ibdev_index = 0; ibdev_index < ib_per_cuda; ibdev_index++) {
+            if (scores[ibdev_index].dist.latency == UCS_INFINITY) {
+                /* From this device forward, none are selectable. */
+                break;
+            }
             ibdesc            = &dmat[scores[ibdev_index].index];
             ibdesc->cuda_map |= UCS_BIT(cudadev_index);
             scores[ibdev_index].usecount++;

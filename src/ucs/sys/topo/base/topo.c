@@ -626,11 +626,6 @@ ucs_topo_is_reachable(ucs_sys_device_t sys_dev, ucs_sys_device_t sys_dev_mem)
              sys_dev_mem);
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
-    if (result && (ucs_topo_global_ctx.acs.pair_cache[sys_dev][sys_dev_mem] ==
-                   UCS_TOPO_ACS_BLOCKED)) {
-        result = 0;
-    }
-
     return result;
 }
 
@@ -1521,6 +1516,10 @@ static int ucs_topo_check_acs_between_paths(const char *path1,
     return ucs_topo_check_acs_on_path(path2, common_len);
 }
 
+/* TODO: Only check if they share a PCI switch, if they are on different 
+ * branches then communication may still be possible */
+/* TODO: In case of different brancehs, check the effect of IOMMU isolation 
+ * settings on the possibility of communication */
 static int ucs_topo_check_acs_between_devices(ucs_sys_device_t sys_dev1,
                                               ucs_sys_device_t sys_dev2)
 {
@@ -1551,6 +1550,8 @@ static void ucs_topo_update_acs_for_new_device(ucs_sys_device_t new_dev,
     ucs_topo_acs_status_t acs_status;
     ucs_sys_device_t existing;
 
+    /* TODO: Do this only for GPU-NIC pairs, other combinations may not be 
+     * useful and can be skipped */
     for (existing = 0; existing < num_existing; ++existing) {
         acs_status = ucs_topo_check_acs_between_devices(new_dev, existing) ?
                              UCS_TOPO_ACS_BLOCKED :
