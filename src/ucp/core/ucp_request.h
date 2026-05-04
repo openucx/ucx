@@ -264,7 +264,6 @@ struct ucp_request {
                     size_t           frag_size;    /* Fragment size */
                     uint64_t         remote_addr;  /* Final destination address */
                     size_t           total_length; /* Total transfer length */
-                    ucs_memory_type_t mem_type;    /* Memory type of source buffer */
                     ucs_queue_head_t copy_out_queue; /* Frags ready for copy-out */
                 } recv_ppln;
 
