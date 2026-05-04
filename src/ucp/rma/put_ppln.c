@@ -713,7 +713,10 @@ ucp_proto_ppln_query(const ucp_proto_query_params_t *params,
                          ucp_proto_query_attr_t *attr)
 {
     const ucp_proto_ppln_priv_t *rpriv = params->priv;
+    ucs_memory_type_t frag_mem_type    =
+            rpriv->frag_proto_cfg.select_param.mem_type;
     ucp_proto_query_attr_t frag_attr;
+    size_t desc_len;
 
     if (params->msg_length <= rpriv->frag_size) {
         ucp_proto_config_query(params->worker, &rpriv->frag_proto_cfg,
@@ -730,6 +733,10 @@ ucp_proto_ppln_query(const ucp_proto_query_params_t *params,
                           frag_attr.desc);
         ucs_strncpy_safe(attr->config, frag_attr.config, sizeof(attr->config));
     }
+
+    desc_len = strlen(attr->desc);
+    ucs_snprintf_safe(attr->desc + desc_len, sizeof(attr->desc) - desc_len,
+                      " frag %s", ucs_memory_type_names[frag_mem_type]);
 }
 
 enum {
@@ -1403,7 +1410,10 @@ ucp_proto_get_ppln_query(const ucp_proto_query_params_t *params,
                          ucp_proto_query_attr_t *attr)
 {
     const ucp_proto_ppln_priv_t *rpriv = params->priv;
+    ucs_memory_type_t frag_mem_type    =
+            rpriv->frag_proto_cfg.select_param.mem_type;
     ucp_proto_query_attr_t frag_attr;
+    size_t desc_len;
 
     if (params->msg_length <= rpriv->frag_size) {
         ucp_proto_config_query(params->worker, &rpriv->frag_proto_cfg,
@@ -1424,6 +1434,10 @@ ucp_proto_get_ppln_query(const ucp_proto_query_params_t *params,
                           UCP_PROTO_PPLN_DESC, UCP_PROTO_COPY_OUT_DESC);
         ucs_strncpy_safe(attr->config, frag_attr.config, sizeof(attr->config));
     }
+
+    desc_len = strlen(attr->desc);
+    ucs_snprintf_safe(attr->desc + desc_len, sizeof(attr->desc) - desc_len,
+                      " frag %s", ucs_memory_type_names[frag_mem_type]);
 }
 
 ucp_proto_t ucp_get_ppln_proto = {
