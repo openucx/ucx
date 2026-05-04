@@ -377,6 +377,9 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
                 UCS_SYS_DEVICE_ID_UNKNOWN;
 
         ucs_debug("added sys_dev %d for bus id %s", *sys_dev, name);
+
+        ucs_topo_update_acs_for_new_device(*sys_dev, *sys_dev);
+
         status = UCS_OK;
     } else {
         ucs_error("failed to put key into hash table");
@@ -385,12 +388,6 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
 
 out:
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
-
-    if ((status == UCS_OK) && ((kh_put_status == UCS_KH_PUT_BUCKET_EMPTY) ||
-                               (kh_put_status == UCS_KH_PUT_BUCKET_CLEAR))) {
-        ucs_topo_update_acs_for_new_device(*sys_dev, *sys_dev);
-    }
-
     return status;
 }
 
@@ -1524,6 +1521,8 @@ static int ucs_topo_check_acs_between_paths(const char *path1,
  * P2P Completion Redirect (CR), Upstream Forwarding (UF), or P2P Egress
  * Control (EC).
  *
+ * Caller must hold `ucs_topo_global_ctx.lock`.
+ *
  * TODO: Only check if they share a PCI switch, if they are on different
  *       branches then communication may still be possible.
  * TODO: In case of different branches, check the effect of IOMMU isolation
@@ -1536,10 +1535,10 @@ static int ucs_topo_check_acs_between_devices(ucs_sys_device_t sys_dev1,
     ucs_status_t status;
     int result;
 
-    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+    ucs_assert(ucs_spinlock_is_held(&ucs_topo_global_ctx.lock));
+
     status = ucs_topo_get_common_path(sys_dev1, sys_dev2, &path1, &path2,
                                       &common_path);
-    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
     if (status != UCS_OK) {
         return 0;
     }
@@ -1553,26 +1552,39 @@ static int ucs_topo_check_acs_between_devices(ucs_sys_device_t sys_dev1,
     return result;
 }
 
+/* Caller must hold `ucs_topo_global_ctx.lock`. */
 static void ucs_topo_update_acs_for_new_device(ucs_sys_device_t new_dev,
                                                unsigned num_existing)
 {
     ucs_topo_acs_status_t acs_status;
     ucs_sys_device_t existing;
 
-    /* TODO: Do this only for GPU-NIC pairs, other combinations may not be 
+    ucs_assert(ucs_spinlock_is_held(&ucs_topo_global_ctx.lock));
+
+    /* TODO: Do this only for GPU-NIC pairs, other combinations may not be
      * useful and can be skipped */
     for (existing = 0; existing < num_existing; ++existing) {
         acs_status = ucs_topo_check_acs_between_devices(new_dev, existing) ?
                              UCS_TOPO_ACS_BLOCKED :
                              UCS_TOPO_ACS_ALLOWED;
 
+        ucs_assertv(ucs_topo_global_ctx.acs.pair_cache[new_dev][existing] ==
+                            UCS_TOPO_ACS_UNCHECKED,
+                    "pair_cache[%u][%u] already populated", new_dev, existing);
+        ucs_assertv(ucs_topo_global_ctx.acs.pair_cache[existing][new_dev] ==
+                            UCS_TOPO_ACS_UNCHECKED,
+                    "pair_cache[%u][%u] already populated", existing, new_dev);
+
         ucs_topo_global_ctx.acs.pair_cache[new_dev][existing] = acs_status;
         ucs_topo_global_ctx.acs.pair_cache[existing][new_dev] = acs_status;
 
         if (acs_status == UCS_TOPO_ACS_BLOCKED) {
+            /* Direct field access (caller holds the lock) instead of
+             * ucs_topo_sys_device_get_name(), which would self-deadlock the
+             * spinlock. */
             ucs_info("PCIe ACS is blocking P2P between %s and %s",
-                     ucs_topo_sys_device_get_name(new_dev),
-                     ucs_topo_sys_device_get_name(existing));
+                     ucs_topo_global_ctx.devices[new_dev].name,
+                     ucs_topo_global_ctx.devices[existing].name);
         }
     }
 }
@@ -1580,13 +1592,25 @@ static void ucs_topo_update_acs_for_new_device(ucs_sys_device_t new_dev,
 int ucs_topo_is_p2p_acs_enabled(ucs_sys_device_t sys_dev1,
                                 ucs_sys_device_t sys_dev2)
 {
+    ucs_topo_acs_status_t acs_status;
+
     if ((sys_dev1 == UCS_SYS_DEVICE_ID_UNKNOWN) ||
         (sys_dev2 == UCS_SYS_DEVICE_ID_UNKNOWN) || (sys_dev1 == sys_dev2)) {
         return 0;
     }
 
-    return ucs_topo_global_ctx.acs.pair_cache[sys_dev1][sys_dev2] ==
-           UCS_TOPO_ACS_BLOCKED;
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+    acs_status = ucs_topo_global_ctx.acs.pair_cache[sys_dev1][sys_dev2];
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+
+    /* Any registered sys_dev pair must have its pair_cache cell populated by
+     * ucs_topo_find_device_by_bus_id under the same lock; UNCHECKED here is a
+     * real bug, not a benign race. */
+    ucs_assertv(acs_status != UCS_TOPO_ACS_UNCHECKED,
+                "pair_cache[%u][%u] read before population", sys_dev1,
+                sys_dev2);
+
+    return acs_status == UCS_TOPO_ACS_BLOCKED;
 }
 
 const char *ucs_topo_resolve_sysfs_path(const char *dev_path, char *path_buffer)
