@@ -15,9 +15,10 @@ when changing code.
 
 ## Agent Skills
 
-Repository skills live under `.agents/skills/<skill-name>/SKILL.md`. Keep
-`.agents` as the canonical location and add tool-specific adapters only when a
-tool requires them.
+Repository skills live under `.agents/skills/<skill-name>/SKILL.md`. Use each
+skill's frontmatter description to decide when it applies. Keep `.agents` as
+the canonical location and add tool-specific adapters only when a tool requires
+them.
 
 ## Project Map
 
@@ -41,12 +42,6 @@ layers are:
 - `buildlib`: build, packaging, and CI helper scripts.
 - `config`: autotools helpers and m4 feature checks.
 - `debian`: Debian packaging metadata and scripts.
-
-## Common Workflows
-
-Use repository skills for repeatable workflows:
-
-- `.agents/skills/ucx-build/SKILL.md` for configuring and building UCX.
 
 ## Source-of-Truth Docs
 
