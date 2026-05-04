@@ -1224,7 +1224,8 @@ ucp_proto_get_ppln_rtr_progress(uct_pending_req_t *self)
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
         /* User-initiated GET: populate recv_ppln from rma params */
-        if (req->send.proto_config->select_param.op_id == UCP_OP_ID_GET) {
+        if (ucp_proto_select_op_id(&req->send.proto_config->select_param) ==
+            UCP_OP_ID_GET) {
             ucp_proto_get_ppln_init_from_get(req);
         }
 
