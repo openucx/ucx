@@ -1,0 +1,15 @@
+# Wraps the hpcx aarch64 builder with the svc-nixl user pyxis maps to on dlcluster.
+
+ARG BASE_IMAGE=harbor.mellanox.com/hpcx/aarch64/ubuntu24.04/builder:mofed-24.10-3.2.5.0
+FROM ${BASE_IMAGE}
+
+# Workaround: pyxis on dlcluster invokes a csh login flow when /bin/csh is
+# present, which aborts container start by reading bash-syntax env scripts.
+RUN apt-get -y purge tcsh && \
+    apt-get -y autoremove && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN groupadd -f -g 30 hardware && \
+    useradd -u 149917 -g 30 -m -s /bin/bash svcnbu-swx-hpcx
+
+ENTRYPOINT ["/bin/bash", "-c", "exec \"$@\"", "--"]

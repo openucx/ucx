@@ -88,6 +88,7 @@
         'ucx-build-static-oss',
         'ucx-test-oss',
         'ucx-test-gpu-oss',
+        'ucx-test-dl-oss',
       ]
 
       try {{
@@ -164,7 +165,7 @@
     name: ucx-dispatcher-oss
     jjb_proj: "ucx"
     jobs:
-      - "{jjb_proj}-dispatcher"
+      - "{jjb_proj}-dispatcher-oss"
 
 - project:
     name: ucx-codestyle
@@ -219,5 +220,13 @@
     jjb_proj: "ucx-test-gpu-oss"
     jjb_conf_file: ".ci/pipeline/test_gpu_matrix.yaml"
     jjb_description: "UCX GTest GPU (GitHub Blossom). Do NOT edit via Web GUI!"
+    jobs:
+      - "{jjb_proj}"
+
+- project:
+    name: ucx-test-dl
+    jjb_proj: "ucx-test-dl-oss"
+    jjb_conf_file: ".ci/pipeline/test_dl_matrix.yaml"
+    jjb_description: "UCX GTest on DL cluster (GB300/aarch64). Do NOT edit via Web GUI!"
     jobs:
       - "{jjb_proj}"

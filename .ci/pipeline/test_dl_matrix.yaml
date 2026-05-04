@@ -1,0 +1,124 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+# UCX DL Cluster (GB300/aarch64) test matrix.
+---
+job: ucx-test-dl
+
+failFast: false
+timeout_minutes: 240
+
+registry_host: harbor.mellanox.com
+registry_auth: ucx_harbor_credentials
+registry_path: /ucx/ci
+
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  limits: "{memory: 16Gi, cpu: 16000m}"
+  requests: "{memory: 8Gi, cpu: 8000m}"
+
+credentials:
+  - {credentialsId: 'ucx_harbor_credentials', usernameVariable: 'REPO_USER', passwordVariable: 'REPO_PASS'}
+
+env:
+  DOCKER_IMAGE: "harbor.mellanox.com#ucx/aarch64/ubuntu24.04/dl-base:2"
+  RUN_TESTS: "yes"
+  TEST_PERF: "1"
+  ASAN_CHECK: "no"
+  VALGRIND_CHECK: "no"
+  RUNNING_IN_AZURE: "no"
+  nworkers: "1"
+  worker: "0"
+  SLURM_NODES: 1
+  SLURM_PARTITION: gb300nvl72_ci
+  SLURM_HEAD_NODE: dlcluster.nvidia.com
+  SLURM_HEAD_USER: svcnbu-swx-hpcx
+  SLURM_ACCOUNT: blackwell-ci
+  SLURM_JOB_TIMEOUT: '02:45:00'
+  SLURM_IMMEDIATE_TIMEOUT: 3600
+  SSH_CREDENTIALS_ID: 'svcnbu-swx-hpcx_id_rsa_ssh_key'
+  JOB_ID_FILE_ROOT: "/mnt/pvc/${JOB_BASE_NAME}"
+  TEST_TIMEOUT: 140
+  CI_IMAGE_TAG: "20260504-1"
+
+pvc_volumes:
+  - {claimName: nbu-swx-ucx-pvc, mountPath: /mnt/pvc, readOnly: false}
+
+runs_on_dockers:
+  - {
+     file: '.ci/dockerfiles/Dockerfile.build_helper',
+     name: 'build_helper_dl',
+     arch: "aarch64",
+     tag: "${CI_IMAGE_TAG}",
+     build_args: '--build-arg BASE_IMAGE=dockerhub.nvidia.com/ubuntu:24.04 --build-arg ARCH=aarch64'
+    }
+
+matrix:
+  axes:
+    arch:
+      - aarch64
+
+taskName: '${arch}/${name}'
+
+steps:
+  - name: Allocate
+    containerSelector: "{name: 'build_helper_dl'}"
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: allocation
+    args:
+      partition: "${SLURM_PARTITION}"
+      headNode: "${SLURM_HEAD_NODE}"
+      headUser: "${SLURM_HEAD_USER}"
+      nodes: "${SLURM_NODES}"
+      jobTimeout: "${SLURM_JOB_TIMEOUT}"
+      immediateTimeout: "${SLURM_IMMEDIATE_TIMEOUT}"
+      jobName: "ucx-ci-dl-${BUILD_NUMBER}"
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${BUILD_NUMBER}.txt"
+      credentialsId: "${SSH_CREDENTIALS_ID}"
+      extraArgs: ["--account=${SLURM_ACCOUNT}"]
+
+  - name: Checkout & test
+    containerSelector: "{name: 'build_helper_dl'}"
+    timeout: "${TEST_TIMEOUT}"
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${BUILD_NUMBER}.txt"
+      # Workaround: dlcluster's UCX_NET_DEVICES preset breaks UCX loopback.
+      # memlock unlimited is required for UCX.
+      testScript: "unset UCX_NET_DEVICES && ulimit -l unlimited && git clone https://github.com/openucx/ucx.git . && git fetch --no-tags origin ${sha1} && git checkout ${sha1} && ./contrib/test_jenkins.sh"
+      headNode: "${SLURM_HEAD_NODE}"
+      headUser: "${SLURM_HEAD_USER}"
+      dockerImage: "${DOCKER_IMAGE}"
+      credentialsId: "${SSH_CREDENTIALS_ID}"
+      containerName: "ucx-ci-dl-${BUILD_NUMBER}"
+      # Workaround: svc-nixl's host ~/.cshrc breaks pyxis csh login flow.
+      extraArgs: ["--no-container-mount-home"]
+      slurmEnv: [
+        "SHELL=/bin/bash",
+        "RUN_TESTS=${RUN_TESTS}",
+        "TEST_PERF=${TEST_PERF}",
+        "ASAN_CHECK=${ASAN_CHECK}",
+        "VALGRIND_CHECK=${VALGRIND_CHECK}",
+        "RUNNING_IN_AZURE=${RUNNING_IN_AZURE}",
+        "EXECUTOR_NUMBER=${worker}",
+        "nworkers=${nworkers}",
+        "worker=${worker}"
+      ]
+
+pipeline_stop:
+  containerSelector: "{name: 'build_helper_dl'}"
+  parallel: false
+  shell: action
+  module: slurmCI
+  run: stopAllForBuild
+  args:
+    credentialsId: "${SSH_CREDENTIALS_ID}"
+    headNode: "${SLURM_HEAD_NODE}"
+    headUser: "${SLURM_HEAD_USER}"
+    jobIdDir: "${JOB_ID_FILE_ROOT}"
