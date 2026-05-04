@@ -32,17 +32,16 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_ep_t, const uct_ep_params_t *params)
 {
     uct_cuda_ipc_iface_t *iface = ucs_derived_of(params->iface,
                                                  uct_cuda_ipc_iface_t);
-    const uct_iface_addr_t *iface_addr;
     size_t iface_addr_length;
 
     UCT_EP_PARAMS_CHECK_DEV_IFACE_ADDRS(params);
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
 
-    iface_addr        = params->iface_addr;
     iface_addr_length = UCT_EP_PARAM_VALUE(params, iface_addr_length,
                                            IFACE_ADDR_LENGTH, 0);
     self->remote_iface_address =
-            uct_cuda_ipc_iface_address_unpack(iface_addr, iface_addr_length);
+            uct_cuda_ipc_iface_address_unpack(params->iface_addr,
+                                              iface_addr_length);
     self->device_ep = NULL;
     return UCS_OK;
 }
@@ -71,6 +70,10 @@ int uct_cuda_ipc_ep_is_connected(const uct_ep_h tl_ep,
         return 0;
     }
 
+    /* TODO: Comparing PIDs alone can yield false positives: PIDs are unique
+             only within a PID namespace, so unrelated peers (e.g., on another
+             node or in another namespace on the same host) may report the same
+             PID number. */
     return ep->remote_iface_address.pid ==
            uct_cuda_ipc_iface_address_unpack_pid(params->iface_addr);
 }

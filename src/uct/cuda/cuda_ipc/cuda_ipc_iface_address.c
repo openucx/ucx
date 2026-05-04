@@ -20,7 +20,7 @@ uct_cuda_ipc_iface_address_unpack_pid_ns(const uct_iface_addr_t *iface_addr,
 {
     const uct_cuda_ipc_iface_address_t *cuda_ipc_iface_address;
 
-    if (iface_addr_length != sizeof(uct_cuda_ipc_iface_address_t)) {
+    if (iface_addr_length < sizeof(uct_cuda_ipc_iface_address_t)) {
         return ucs_sys_get_default_ns(UCS_SYS_NS_TYPE_PID);
     }
 
