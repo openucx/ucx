@@ -324,22 +324,15 @@ unsigned ucs_topo_num_devices(void);
 
 
 /**
- * Check if PCIe Access Control Services (ACS) is enabled on any bridge
- * between two system devices, which would block peer-to-peer transactions
+ * Check whether peer-to-peer transactions between two system devices are
+ * blocked by PCIe Access Control Services (ACS) on any intermediate bridge
  * (e.g., GPUDirect RDMA between an RDMA NIC and a GPU).
- *
- * The function walks the PCIe bridge hierarchy from each device to their
- * common ancestor and reads the ACS Control Register from PCI config space.
- * P2P is considered blocked if any of the following ACS bits are set on any
- * intermediate bridge: P2P Request Redirect (RR), P2P Completion Redirect (CR),
- * Upstream Forwarding (UF), or P2P Egress Control (EC).
  *
  * @param [in] sys_dev1  First system device.
  * @param [in] sys_dev2  Second system device.
  *
- * @return 1 if ACS blocks P2P between the devices, 0 otherwise.
- *         Returns 0 if either device is unknown, if the devices are the same,
- *         or if the check cannot be performed (graceful degradation).
+ * @return 1 if ACS is known to block P2P between the devices, 0 otherwise.
+ *         Returns 0 if either device is unknown, if the devices are the same.
  */
 int ucs_topo_is_p2p_acs_enabled(ucs_sys_device_t sys_dev1,
                                 ucs_sys_device_t sys_dev2);

@@ -1285,7 +1285,7 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
         for (ibdev_index = 0; ibdev_index < ibdev_count; ibdev_index++) {
             ibdesc = &dmat[scores[ibdev_index].index];
             if (ucs_topo_is_p2p_acs_enabled(cuda_sys_dev, ibdesc->sys_dev)) {
-                /* PCIe ACS blocks GDR between this GPU and NIC; Other transport
+                /* PCIe ACS blocks GDR between this GPU and NIC; other transport
                  * method should be used. */
                 scores[ibdev_index].dist.latency   = UCS_INFINITY;
                 scores[ibdev_index].dist.bandwidth = 0;

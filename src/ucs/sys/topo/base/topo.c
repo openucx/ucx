@@ -1516,10 +1516,19 @@ static int ucs_topo_check_acs_between_paths(const char *path1,
     return ucs_topo_check_acs_on_path(path2, common_len);
 }
 
-/* TODO: Only check if they share a PCI switch, if they are on different 
- * branches then communication may still be possible */
-/* TODO: In case of different brancehs, check the effect of IOMMU isolation 
- * settings on the possibility of communication */
+/*
+ * Walk the PCIe bridge hierarchy from each of two system devices to their
+ * common ancestor and read the ACS Control Register from PCI config space
+ * on every intermediate bridge. P2P is considered blocked if any of the
+ * following ACS bits are set on any bridge: P2P Request Redirect (RR),
+ * P2P Completion Redirect (CR), Upstream Forwarding (UF), or P2P Egress
+ * Control (EC).
+ *
+ * TODO: Only check if they share a PCI switch, if they are on different
+ *       branches then communication may still be possible.
+ * TODO: In case of different branches, check the effect of IOMMU isolation
+ *       settings on the possibility of communication.
+ */
 static int ucs_topo_check_acs_between_devices(ucs_sys_device_t sys_dev1,
                                               ucs_sys_device_t sys_dev2)
 {
