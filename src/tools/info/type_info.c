@@ -1,5 +1,5 @@
 /**_t
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2017. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -25,9 +25,9 @@
 #include <ucs/type/class.h>
 #include <uct/base/uct_md.h>
 #include <uct/base/uct_iface.h>
-#include <uct/sm/self/self.h>
 #include <uct/sm/scopy/cma/cma_ep.h>
 #include <uct/sm/scopy/cma/cma_iface.h>
+#include <uct/sm/self/self.h>
 #include <uct/tcp/tcp.h>
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_ep.h>
