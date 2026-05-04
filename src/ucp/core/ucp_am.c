@@ -328,6 +328,8 @@ ucp_am_zcopy_pack_user_header(ucp_request_t *req)
 {
     ucp_mem_desc_t *reg_desc;
 
+    ucs_assert(req->send.msg_proto.am.header.reg_desc == NULL);
+
     reg_desc = ucp_worker_mpool_get(&req->send.ep->worker->reg_mp);
     if (ucs_unlikely(reg_desc == NULL)) {
         return UCS_ERR_NO_MEMORY;
@@ -616,6 +618,7 @@ static UCS_F_ALWAYS_INLINE void ucp_am_zcopy_complete_common(ucp_request_t *req)
     ucs_assert(req->send.state.uct_comp.count == 0);
 
     ucs_mpool_put_inline(req->send.msg_proto.am.header.reg_desc);
+    req->send.msg_proto.am.header.reg_desc = NULL;
     ucp_request_send_buffer_dereg(req); /* TODO register+lane change */
 }
 
@@ -1412,8 +1415,9 @@ ucp_am_copy_data_fragment(ucp_recv_desc_t *first_rdesc, void *data,
                            UCS_PTR_BYTE_OFFSET(first_rdesc + 1, offset),
                            data, length, UCS_ARCH_MEMCPY_NT_SOURCE, length);
 
-    ucs_interval_tree_insert(ucp_am_rdesc_frag_tree(first_rdesc), offset,
-                             offset + length - 1);
+    ucs_interval_tree_insert(ucp_am_rdesc_frag_tree(first_rdesc),
+                             (ucs_interval_tree_range_t){offset,
+                                                         offset + length - 1});
 }
 
 static UCS_F_ALWAYS_INLINE uint64_t
@@ -1456,10 +1460,10 @@ ucp_am_handle_unfinished(ucp_worker_h worker, ucp_recv_desc_t *rdesc,
         first_ftr = (ucp_am_first_ftr_t*)(first_rdesc + 1);
         seg_end   = first_rdesc->payload_offset + first_ftr->total_size - 1;
 
-        if (!ucs_interval_tree_is_equal_range(ucp_am_rdesc_frag_tree(
-                                                      first_rdesc),
-                                              first_rdesc->payload_offset,
-                                              seg_end)) {
+        if (!ucs_interval_tree_is_equal_range(
+                    ucp_am_rdesc_frag_tree(first_rdesc),
+                    (ucs_interval_tree_range_t){first_rdesc->payload_offset,
+                                                seg_end})) {
             /* not all fragments arrived yet */
             return;
         }
@@ -1472,7 +1476,7 @@ ucp_am_handle_unfinished(ucp_worker_h worker, ucp_recv_desc_t *rdesc,
         hdr             = (ucp_am_hdr_t*)(first_ftr + 1);
         recv_flags      = ucp_am_hdr_reply_ep(worker, hdr->flags, reply_ep,
                                             &reply_ep) |
-                        UCP_AM_RECV_ATTR_FLAG_DATA;
+                          UCP_AM_RECV_ATTR_FLAG_DATA;
         payload         = UCS_PTR_BYTE_OFFSET(first_rdesc + 1,
                                               first_rdesc->payload_offset);
         am_id           = hdr->am_id;
@@ -1923,7 +1927,9 @@ ucs_status_t ucp_am_proto_request_zcopy_reset(ucp_request_t *request)
 
     ucs_mpool_put_inline(request->send.msg_proto.am.header.reg_desc);
     request->send.msg_proto.am.header.reg_desc = NULL;
-
+    /* reg_desc was released; next progress must repack user header */
+    request->send.msg_proto.am.internal_flags &=
+            ~UCP_REQUEST_AM_FLAG_HEADER_PACKED;
     return ucp_proto_request_zcopy_reset(request);
 }
 

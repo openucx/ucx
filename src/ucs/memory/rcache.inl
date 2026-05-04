@@ -84,7 +84,7 @@ ucs_rcache_lookup_unsafe(ucs_rcache_t *rcache, void *address, size_t length,
                    length);
 
     UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_GETS, 1);
-    if (ucs_unlikely(!ucs_queue_is_empty(&rcache->inv_q))) {
+    if (ucs_unlikely(!ucs_interval_tree_is_empty(&rcache->inv_tree))) {
         return NULL;
     }
 

@@ -152,15 +152,12 @@ ucs_status_t uct_cuda_ctx_primary_push_avail(int retain_inactive,
         status = uct_cuda_ctx_primary_push(*avail_cuda_device_p, retain_inactive,
                                            log_level);
         if (status == UCS_OK) {
-            break;
+            return UCS_OK;
         }
     }
 
-    if (status != UCS_OK) {
-        ucs_log(log_level, "no active cuda primary context for memory allocation");
-    }
-
-    return status;
+    ucs_log(log_level, "no active cuda primary context for memory allocation");
+    return UCS_ERR_NO_DEVICE;
 }
 
 void uct_cuda_ctx_primary_pop_and_release(CUdevice cuda_device)

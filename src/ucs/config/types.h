@@ -116,7 +116,7 @@ ucs_ternary_auto_value_is_yes_or_no(ucs_ternary_auto_value_t value)
     struct { \
         _type    *_array_name; \
         unsigned count; \
-        unsigned pad; \
+        unsigned truncated; \
     }
 
 

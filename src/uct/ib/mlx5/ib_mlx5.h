@@ -130,8 +130,9 @@ struct mlx5_grh_av {
 #  define MLX5_WQE_CTRL_SOLICITED  (1<<1)
 #endif
 
-#define UCT_IB_MLX5_WQE_CTRL_FLAG_FENCE        (2<<5)
-#define UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER (3<<5)
+#define UCT_IB_MLX5_WQE_CTRL_FLAG_INITIATOR_SMALL_FENCE (1<<5)
+#define UCT_IB_MLX5_WQE_CTRL_FLAG_FENCE                 (2<<5)
+#define UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER          (3<<5)
 
 #define UCT_IB_MLX5_AM_ZCOPY_MAX_IOV  3UL
 
@@ -1324,5 +1325,9 @@ static inline const char *uct_ib_mlx5_dev_name(uct_ib_mlx5_md_t *md)
 {
     return uct_ib_device_name(&md->super.dev);
 }
+
+ucs_sys_device_t uct_ib_mlx5dv_check_direct_nic(struct ibv_context *ctx,
+                                                ucs_sys_device_t sys_dev_ib,
+                                                int direct_nic);
 
 #endif

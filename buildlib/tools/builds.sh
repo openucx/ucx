@@ -425,6 +425,20 @@ build_fuse() {
 	fi
 }
 
+#
+# Build without GDA-KI
+#
+build_no_gda() {
+	echo "==== Build without GDA-KI ===="
+	${WORKSPACE}/contrib/configure-release --prefix=$ucx_inst --without-gda
+	$MAKEP
+
+	if [ -f ${ucx_build_dir}/src/uct/ib/mlx5/gdaki/.libs/libuct_ib_mlx5_gda.so ] ; then
+		azure_log_error "build --without-gda created GDA-KI SO"
+		exit 1
+	fi
+}
+
 az_init_modules
 prepare_build
 
@@ -437,7 +451,8 @@ tests=('build_docs' \
 		'build_no_verbs' \
 		'build_release_pkg' \
 		'build_cmake_examples' \
-		'build_fuse')
+		'build_fuse' \
+		'build_no_gda')
 if [ "${long_test}" = "yes" ]
 then
 	tests+=('check_config_h' \

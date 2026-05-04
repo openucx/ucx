@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2013. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
 * Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
@@ -8,10 +8,12 @@
 #include <common/test.h>
 extern "C" {
 #include <ucs/stats/stats.h>
+#include <ucs/stats/client_server.h>
 }
 
-#include <sys/socket.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
 
 #ifdef ENABLE_STATS
 #define NUM_DATA_NODES 20
@@ -378,6 +380,52 @@ UCS_TEST_F(stats_aggregate_sum_test, report) {
     prepare_nodes(&cat_node, data_nodes);
     read_and_check_aggrgt_sum_stats(data_nodes);
     free_nodes(cat_node, data_nodes);
+}
+
+class stats_entity_cmp_test : public ucs::test {
+public:
+    static stats_entity_t create_stats_entity(uint32_t ip, uint16_t port)
+    {
+        stats_entity_t e          = {};
+        e.in_addr.sin_addr.s_addr = htonl(ip);
+        e.in_addr.sin_port        = htons(port);
+        return e;
+    }
+};
+
+UCS_TEST_F(stats_entity_cmp_test, entity_cmp) {
+    const uint32_t IP1 = 0x0A000001; /* 10.0.0.1 */
+    const uint32_t IP2 = 0x0A000002; /* 10.0.0.2 */
+
+    struct cmp_case {
+        uint32_t ip1;
+        uint16_t port1;
+        uint32_t ip2;
+        uint16_t port2;
+        int      expected_cmp;
+    };
+
+    std::vector<cmp_case> cases = {
+        {IP1, 9000, IP2, 1000, -1}, // address comparison takes precedence
+        {IP2, 1000, IP1, 9000,  1}, // reverse of above
+        {IP1, 5000, IP2, 5000, -1}, // different address, same port
+        {IP2, 5000, IP1, 5000,  1}, // reverse of above
+        {IP1, 9000, IP1, 9000,  0}, // same IP and port
+        {IP1, 5000, IP1, 6000, -1}, // same IP, lower port first
+        {IP1, 6000, IP1, 5000,  1}, // same IP, higher port first
+    };
+
+    for (const auto &tc : cases) {
+        auto e1 = create_stats_entity(tc.ip1, tc.port1);
+        auto e2 = create_stats_entity(tc.ip2, tc.port2);
+
+        int cmp = stats_entity_cmp(&e1, &e2);
+        int normalized_cmp = (cmp < 0) ? -1 : (cmp > 0) ? 1 : 0;
+
+        EXPECT_EQ(tc.expected_cmp, normalized_cmp)
+                << "Comparing {" << tc.ip1 << ":" << tc.port1 << "} vs {"
+                << tc.ip2 << ":" << tc.port2 << "} returned " << cmp;
+    }
 }
 
 #endif

@@ -203,162 +203,12 @@ UCS_TEST_P(test_cuda_ipc_rma, get_device_ep)
 
 _UCT_INSTANTIATE_TEST_CASE(test_cuda_ipc_rma, cuda_ipc)
 
-UCS_TEST_P(test_cuda_ipc_rma_device, put_zcopy_device)
+UCS_TEST_P(test_cuda_ipc_rma_device, put_device)
 {
-    size_t             offset        = get_offset();
-    size_t             mem_elem_size = get_mem_elem_size();
-    ucs_device_level_t device_level  = get_device_level();
-    unsigned           num_threads   = get_num_threads();
-    size_t             length        = base_length + offset;
-    unsigned           num_blocks    = get_num_blocks();
-    uct_device_ep_h device_ep;
-    uct_device_mem_element_t *mem_elem;
-    void *send_buf;
-
-    if (device_level == UCS_DEVICE_LEVEL_GRID) {
-        GTEST_SKIP() << "Grid level is not supported";
-    }
-
-    if ((device_level == UCS_DEVICE_LEVEL_WARP) && (num_threads < 32)) {
-        GTEST_SKIP() << "Warp level is not supported for less than 32 threads";
-    }
-
-    mapped_buffer sendbuf(length, SEED1, *m_sender, 0, UCS_MEMORY_TYPE_CUDA);
-    mapped_buffer recvbuf(length, SEED2, *m_receiver, 0, UCS_MEMORY_TYPE_CUDA);
-
-    ASSERT_UCS_OK(uct_ep_get_device_ep(m_sender->ep(0), &device_ep));
-
-    uct_device_mem_element_t mem_elem_host;
-    ASSERT_EQ(CUDA_SUCCESS, cuMemAlloc((CUdeviceptr*)&mem_elem, mem_elem_size));
-    ASSERT_UCS_OK(uct_md_mem_elem_pack(m_sender->md(), sendbuf.memh(),
-                                       recvbuf.rkey(), &mem_elem_host));
-    ASSERT_EQ(CUDA_SUCCESS, cuMemcpyHtoD((CUdeviceptr)mem_elem, &mem_elem_host,
-                                         mem_elem_size));
-
-    send_buf = UCS_PTR_BYTE_OFFSET(sendbuf.ptr(), offset);
-    mem_buffer::pattern_fill(send_buf, base_length, SEED1, UCS_MEMORY_TYPE_CUDA);
-    cuda_uct::launch_uct_put_single(device_ep, mem_elem, send_buf,
-                                    (uint64_t)recvbuf.ptr(), base_length,
-                                    device_level,
-                                    num_threads, num_blocks);
-    mem_buffer::pattern_check(recvbuf.ptr(), base_length, SEED1,
-                              UCS_MEMORY_TYPE_CUDA);
-    cuMemFree((CUdeviceptr)mem_elem);
-}
-
-UCS_TEST_P(test_cuda_ipc_rma_device, put_multi_device)
-{
-    size_t             mem_elem_size = get_mem_elem_size();
-    ucs_device_level_t device_level  = get_device_level();
-    unsigned           num_threads   = get_num_threads();
-    unsigned           num_blocks    = get_num_blocks();
-    size_t             offset        = get_offset();
-    const int          iovcnt        = 8;
-    size_t             length        = iovcnt * (base_length + offset);
-    uint64_t           signal_val    = 4;
-    uct_device_ep_h device_ep;
-    uct_device_mem_element_t *mem_elem;
-    uint64_t *remote_addresses_dev, remote_addresses[iovcnt];
-    size_t *lengths_dev, lengths[iovcnt];
-    void **addresses_dev, *addresses[iovcnt];
-
-    if (device_level == UCS_DEVICE_LEVEL_GRID) {
-        GTEST_SKIP() << "Grid level is not supported";
-    }
-
-    if ((device_level == UCS_DEVICE_LEVEL_WARP) && (num_threads < 32)) {
-        GTEST_SKIP() << "Warp level is not supported for less than 32 threads";
-    }
-
-    mapped_buffer sendbuf(length, SEED1, *m_sender, 0, UCS_MEMORY_TYPE_CUDA);
-    mapped_buffer recvbuf(length, SEED2, *m_receiver, 0, UCS_MEMORY_TYPE_CUDA);
-    mapped_buffer signal(sizeof(uint64_t), 0, *m_receiver, 0, UCS_MEMORY_TYPE_CUDA);
-
-    ASSERT_UCS_OK(uct_ep_get_device_ep(m_sender->ep(0), &device_ep));
-
-    size_t total_mem_elem_size = mem_elem_size * (iovcnt + 1);
-    uct_cuda_ipc_md_device_mem_element_t mem_elem_host_arr[iovcnt + 1];
-    uct_device_mem_element_t *mem_elem_host =
-            (uct_device_mem_element_t*)mem_elem_host_arr;
-    ASSERT_EQ(CUDA_SUCCESS,
-              cuMemAlloc((CUdeviceptr*)&mem_elem, total_mem_elem_size));
-    ASSERT_EQ(CUDA_SUCCESS, cuMemAlloc((CUdeviceptr*)&remote_addresses_dev,
-                                       iovcnt * sizeof(uint64_t)));
-    ASSERT_EQ(CUDA_SUCCESS,
-              cuMemAlloc((CUdeviceptr*)&lengths_dev, iovcnt * sizeof(size_t)));
-    ASSERT_EQ(CUDA_SUCCESS,
-              cuMemAlloc((CUdeviceptr*)&addresses_dev, iovcnt * sizeof(void*)));
-
-    for (int i = 0; i < iovcnt; i++) {
-        size_t iov_offset   = (base_length + offset) * i;
-        addresses[i]        = UCS_PTR_BYTE_OFFSET(sendbuf.ptr(), iov_offset);
-        remote_addresses[i] = (uint64_t)UCS_PTR_BYTE_OFFSET(recvbuf.ptr(),
-                                                            iov_offset);
-        lengths[i]          = base_length;
-        ASSERT_UCS_OK(uct_md_mem_elem_pack(
-                m_sender->md(), sendbuf.memh(), recvbuf.rkey(),
-                (uct_device_mem_element_t*)
-                        UCS_PTR_BYTE_OFFSET(mem_elem_host, mem_elem_size * i)));
-    }
-
-    ASSERT_UCS_OK(
-            uct_md_mem_elem_pack(m_sender->md(), nullptr, signal.rkey(),
-                                 (uct_device_mem_element_t*)UCS_PTR_BYTE_OFFSET(
-                                         mem_elem_host,
-                                         mem_elem_size * iovcnt)));
-
-    /* Copy all packed elements from host to GPU in one operation */
-    ASSERT_EQ(CUDA_SUCCESS, cuMemcpyHtoD((CUdeviceptr)mem_elem, mem_elem_host,
-                                         total_mem_elem_size));
-    ASSERT_EQ(CUDA_SUCCESS,
-              cuMemcpyHtoD((CUdeviceptr)remote_addresses_dev, remote_addresses,
-                           iovcnt * sizeof(uint64_t)));
-    ASSERT_EQ(CUDA_SUCCESS, cuMemcpyHtoD((CUdeviceptr)lengths_dev, lengths,
-                                         iovcnt * sizeof(size_t)));
-    ASSERT_EQ(CUDA_SUCCESS, cuMemcpyHtoD((CUdeviceptr)addresses_dev, addresses,
-                                         iovcnt * sizeof(void*)));
-
-    for (int i = 0; i < iovcnt; i++) {
-        mem_buffer::pattern_fill(addresses[i], base_length, SEED1, UCS_MEMORY_TYPE_CUDA);
-    }
-
-    cuda_uct::launch_uct_put_multi(device_ep, mem_elem, iovcnt + 1,
-                                   addresses_dev, remote_addresses_dev,
-                                   lengths_dev, 4, (uint64_t)signal.ptr(),
-                                   device_level, num_threads, num_blocks);
-
-    for (int i = 0; i < iovcnt; i++) {
-        mem_buffer::pattern_check(UCS_PTR_BYTE_OFFSET(recvbuf.ptr(), (base_length + offset) * i),
-                                  base_length, SEED1, UCS_MEMORY_TYPE_CUDA);
-    }
-
-    ASSERT_EQ(mem_buffer::compare(&signal_val, signal.ptr(),
-                                  sizeof(signal_val), UCS_MEMORY_TYPE_CUDA), 1);
-
-    cuMemFree((CUdeviceptr)mem_elem);
-    cuMemFree((CUdeviceptr)remote_addresses_dev);
-    cuMemFree((CUdeviceptr)lengths_dev);
-    cuMemFree((CUdeviceptr)addresses_dev);
-}
-
-UCS_TEST_P(test_cuda_ipc_rma_device, put_multi_partial_device)
-{
-    size_t mem_elem_size            = get_mem_elem_size();
+    size_t length                   = base_length + get_offset();
     ucs_device_level_t device_level = get_device_level();
     unsigned num_threads            = get_num_threads();
     unsigned num_blocks             = get_num_blocks();
-    size_t offset                   = get_offset();
-    const int iovcnt                = 8;
-    size_t length                   = iovcnt * (base_length + offset);
-    uint64_t signal_val             = 4;
-    int counter_index               = 1;
-    std::vector<size_t> offsets(iovcnt, 0);
-    uct_device_ep_h device_ep;
-    uct_device_mem_element_t *mem_elements;
-    uint64_t *remote_addresses_dev, remote_addresses[iovcnt + 1];
-    size_t *lengths_dev, lengths[iovcnt];
-    void **addresses_dev, *addresses[iovcnt + 1];
-    unsigned *mem_list_indices_dev, mem_list_indices[iovcnt];
 
     if (device_level == UCS_DEVICE_LEVEL_GRID) {
         GTEST_SKIP() << "Grid level is not supported";
@@ -370,91 +220,38 @@ UCS_TEST_P(test_cuda_ipc_rma_device, put_multi_partial_device)
 
     mapped_buffer sendbuf(length, SEED1, *m_sender, 0, UCS_MEMORY_TYPE_CUDA);
     mapped_buffer recvbuf(length, SEED2, *m_receiver, 0, UCS_MEMORY_TYPE_CUDA);
-    mapped_buffer signal(sizeof(uint64_t), 0, *m_receiver, 0,
-                         UCS_MEMORY_TYPE_CUDA);
 
+    uct_device_local_mem_list_elem_t src_elem_host;
+    ASSERT_UCS_OK(uct_md_mem_elem_pack(m_sender->md(), sendbuf.memh(),
+                                       recvbuf.rkey(),
+                                       &src_elem_host.uct_mem_element));
+
+
+    uct_device_local_mem_list_elem_t *src_elem;
+    ASSERT_EQ(CUDA_SUCCESS,
+              cuMemAlloc((CUdeviceptr*)&src_elem,
+                         sizeof(uct_device_local_mem_list_elem_t)));
+    ASSERT_EQ(CUDA_SUCCESS,
+              cuMemcpyHtoD((CUdeviceptr)src_elem, &src_elem_host,
+                           sizeof(uct_device_local_mem_list_elem_t)));
+
+    uct_device_mem_element_t *mem_elem;
+    ASSERT_EQ(CUDA_SUCCESS, cuMemAlloc((CUdeviceptr*)&mem_elem,
+                                       sizeof(uct_device_mem_element_t)));
+    ASSERT_EQ(CUDA_SUCCESS, cuMemcpyHtoD((CUdeviceptr)mem_elem,
+                                         &src_elem_host.uct_mem_element,
+                                         sizeof(uct_device_mem_element_t)));
+
+    uct_device_ep_h device_ep;
     ASSERT_UCS_OK(uct_ep_get_device_ep(m_sender->ep(0), &device_ep));
-
-    size_t total_mem_elem_size = mem_elem_size * (iovcnt + 1);
-    uct_cuda_ipc_md_device_mem_element_t mem_elements_host_arr[iovcnt + 1];
-    uct_device_mem_element_t *mem_elements_host =
-            (uct_device_mem_element_t*)mem_elements_host_arr;
-    ASSERT_EQ(CUDA_SUCCESS,
-              cuMemAlloc((CUdeviceptr*)&mem_elements, total_mem_elem_size));
-    ASSERT_EQ(CUDA_SUCCESS, cuMemAlloc((CUdeviceptr*)&remote_addresses_dev,
-                                       (iovcnt + 1) * sizeof(uint64_t)));
-    ASSERT_EQ(CUDA_SUCCESS, cuMemAlloc((CUdeviceptr*)&addresses_dev,
-                                       (iovcnt + 1) * sizeof(void*)));
-    ASSERT_EQ(CUDA_SUCCESS,
-              cuMemAlloc((CUdeviceptr*)&lengths_dev, iovcnt * sizeof(size_t)));
-    ASSERT_EQ(CUDA_SUCCESS, cuMemAlloc((CUdeviceptr*)&mem_list_indices_dev,
-                                       iovcnt * sizeof(unsigned)));
-
-    /* Fill indices and pack PUT entries */
-    int idx = 0;
-    for (int i = 0; i < iovcnt + 1; i++) {
-        uct_device_mem_element_t *mem_elem = (uct_device_mem_element_t*)
-                UCS_PTR_BYTE_OFFSET(mem_elements_host, mem_elem_size * i);
-        if (i == counter_index) {
-            ASSERT_UCS_OK(uct_md_mem_elem_pack(m_sender->md(), nullptr,
-                                               signal.rkey(), mem_elem));
-            addresses[i]        = nullptr;
-            remote_addresses[i] = (uint64_t)signal.ptr();
-            continue;
-        }
-
-        ASSERT_UCS_OK(uct_md_mem_elem_pack(m_sender->md(), sendbuf.memh(),
-                                           recvbuf.rkey(), mem_elem));
-        size_t iov_offset     = (base_length + offset) * idx;
-        addresses[i]          = UCS_PTR_BYTE_OFFSET(sendbuf.ptr(), iov_offset);
-        remote_addresses[i]   = (uint64_t)UCS_PTR_BYTE_OFFSET(recvbuf.ptr(),
-                                                              iov_offset);
-        lengths[idx]          = base_length;
-        mem_list_indices[idx] = i;
-        mem_buffer::pattern_fill(addresses[i], base_length, SEED1,
-                                 UCS_MEMORY_TYPE_CUDA);
-        idx++;
-    }
-
-    ASSERT_EQ(CUDA_SUCCESS,
-              cuMemcpyHtoD((CUdeviceptr)mem_elements, mem_elements_host,
-                           total_mem_elem_size));
-    ASSERT_EQ(CUDA_SUCCESS,
-              cuMemcpyHtoD((CUdeviceptr)remote_addresses_dev, remote_addresses,
-                           (iovcnt + 1) * sizeof(uint64_t)));
-    ASSERT_EQ(CUDA_SUCCESS, cuMemcpyHtoD((CUdeviceptr)addresses_dev, addresses,
-                                         (iovcnt + 1) * sizeof(void*)));
-    ASSERT_EQ(CUDA_SUCCESS, cuMemcpyHtoD((CUdeviceptr)lengths_dev, lengths,
-                                         iovcnt * sizeof(size_t)));
-    ASSERT_EQ(CUDA_SUCCESS,
-              cuMemcpyHtoD((CUdeviceptr)mem_list_indices_dev, mem_list_indices,
-                           iovcnt * sizeof(unsigned)));
-    auto offsets_dev = ucx_cuda::make_device_vector(offsets).ptr();
-
-    cuda_uct::launch_uct_put_multi_partial(device_ep, mem_elements,
-                                           mem_list_indices_dev, iovcnt,
-                                           addresses_dev, remote_addresses_dev,
-                                           offsets_dev, lengths_dev,
-                                           counter_index, signal_val,
-                                           (uint64_t)signal.ptr(), device_level,
-                                           num_threads, num_blocks);
-    for (int i = 0; i < iovcnt + 1; i++) {
-        if (i == counter_index) {
-            continue;
-        }
-        mem_buffer::pattern_check((void*)remote_addresses[i], base_length,
-                                  SEED1, UCS_MEMORY_TYPE_CUDA);
-    }
-
-    ASSERT_EQ(mem_buffer::compare(&signal_val, signal.ptr(), sizeof(signal_val),
-                                  UCS_MEMORY_TYPE_CUDA),
-              1);
-
-    cuMemFree((CUdeviceptr)mem_elements);
-    cuMemFree((CUdeviceptr)remote_addresses_dev);
-    cuMemFree((CUdeviceptr)lengths_dev);
-    cuMemFree((CUdeviceptr)addresses_dev);
-    cuMemFree((CUdeviceptr)mem_list_indices_dev);
+    ASSERT_UCS_OK(cuda_uct::launch_uct_put(device_ep, src_elem, mem_elem,
+                                           sendbuf.ptr(),
+                                           (uintptr_t)recvbuf.ptr(), length,
+                                           device_level, num_threads,
+                                           num_blocks));
+    recvbuf.pattern_check(SEED1);
+    cuMemFree((CUdeviceptr)src_elem);
+    cuMemFree((CUdeviceptr)mem_elem);
 }
 
 UCS_TEST_P(test_cuda_ipc_rma_device, atomic_add_device)

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2019. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -40,6 +40,20 @@ static ucs_config_field_t uct_cuda_ipc_md_config_table[] = {
      "Enable multi-node NVLINK capabilities.",
      ucs_offsetof(uct_cuda_ipc_md_config_t, enable_mnnvl), UCS_CONFIG_TYPE_TERNARY},
 
+    {"CACHE_MAX_REGIONS", "inf",
+     "Maximum number of regions in each per-peer CUDA IPC remote handle cache.\n"
+     "Each remote peer has a separate cache; this limit applies independently\n"
+     "to each one. Regions are evicted in LRU order when this limit is exceeded.",
+     ucs_offsetof(uct_cuda_ipc_md_config_t, cache_max_regions),
+     UCS_CONFIG_TYPE_ULUNITS},
+
+    {"CACHE_MAX_SIZE", "inf",
+     "Maximum total size of regions in each per-peer CUDA IPC remote handle cache.\n"
+     "Each remote peer has a separate cache; this limit applies independently\n"
+     "to each one. Regions are evicted in LRU order when this limit is exceeded.",
+     ucs_offsetof(uct_cuda_ipc_md_config_t, cache_max_size),
+     UCS_CONFIG_TYPE_MEMUNITS},
+
     {NULL}
 };
 
@@ -71,16 +85,18 @@ static uct_cuda_ipc_dev_cache_t *uct_cuda_ipc_create_dev_cache(int dev_num)
 
 static uct_cuda_ipc_dev_cache_t *
 uct_cuda_ipc_get_dev_cache(uct_cuda_ipc_component_t *component,
-                           uct_cuda_ipc_rkey_t *rkey)
+                           const uct_cuda_ipc_extended_rkey_t *ext_rkey)
 {
+    const uct_cuda_ipc_rkey_t *rkey   = &ext_rkey->super;
     khash_t(cuda_ipc_uuid_hash) *hash = &component->uuid_hash;
     uct_cuda_ipc_uuid_hash_key_t key;
     uct_cuda_ipc_dev_cache_t *cache;
     khiter_t iter;
     int ret;
 
-    key.uuid = rkey->uuid;
-    key.type = rkey->ph.handle_type;
+    key.uuid     = rkey->uuid;
+    key.type     = rkey->ph.handle_type;
+    key.is_local = uct_cuda_ipc_is_rkey_local(rkey->pid, ext_rkey->pid_ns);
 
     iter = kh_put(cuda_ipc_uuid_hash, hash, key, &ret);
     if (ret == UCS_KH_PUT_KEY_PRESENT) {
@@ -314,30 +330,16 @@ found:
 static ucs_status_t
 uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *component,
                                 uct_cuda_ipc_unpacked_rkey_t *rkey,
-                                ucs_sys_device_t sys_dev)
+                                CUdevice cu_dev)
 {
-    CUdevice cu_dev;
     ucs_status_t status;
     void *d_mapped;
     uct_cuda_ipc_dev_cache_t *cache;
     uint8_t *accessible;
 
-    if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
-        /* Use device of the current context */
-        if (UCT_CUDADRV_FUNC_LOG_DEBUG(cuCtxGetDevice(&cu_dev)) != UCS_OK) {
-            return UCS_ERR_UNREACHABLE;
-        }
-    } else {
-        cu_dev = uct_cuda_get_cuda_device(sys_dev);
-        if (cu_dev == CU_DEVICE_INVALID) {
-            ucs_warn("failed to map sys device [%d] to cuda device", sys_dev);
-            return UCS_ERR_UNREACHABLE;
-        }
-    }
-
     pthread_mutex_lock(&component->lock);
 
-    cache = uct_cuda_ipc_get_dev_cache(component, &rkey->super.super);
+    cache = uct_cuda_ipc_get_dev_cache(component, &rkey->super);
     if (ucs_unlikely(NULL == cache)) {
         status = UCS_ERR_NO_RESOURCE;
         goto err;
@@ -425,7 +427,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_rkey_unpack,
         goto err_free_key;
     }
 
-    status = uct_cuda_ipc_is_peer_accessible(com, unpacked, sys_dev);
+    status = uct_cuda_ipc_is_peer_accessible(com, unpacked, avail_cuda_device);
     if (cuda_device != avail_cuda_device) {
         uct_cuda_ctx_primary_pop_and_release(avail_cuda_device);
     }
@@ -615,7 +617,11 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
     md->super.component = &uct_cuda_ipc_component.super;
     md->enable_mnnvl    = uct_cuda_ipc_md_check_fabric_info(
                                                   md, ipc_config->enable_mnnvl);
-    *md_p               = &md->super;
+
+    uct_cuda_ipc_cache_set_global_limits(ipc_config->cache_max_regions,
+                                         ipc_config->cache_max_size);
+
+    *md_p                 = &md->super;
 
     return UCS_OK;
 }

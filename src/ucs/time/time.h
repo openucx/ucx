@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -43,6 +43,7 @@ typedef uint32_t             ucs_short_time_t;
 #define UCS_NSEC_PER_USEC  (UCS_NSEC_PER_SEC / UCS_USEC_PER_SEC)
 
 
+void ucs_init_cpu_clocks_per_sec();
 double ucs_get_cpu_clocks_per_sec();
 
 

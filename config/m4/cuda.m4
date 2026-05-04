@@ -132,6 +132,19 @@ AC_DEFUN([UCX_CUDA_CHECK_NVCC], [
                    [AC_MSG_RESULT([no])
                     NVCC=""])
                 AC_LANG_POP
+
+                # Check curand_kernel.h (optional, required for random channel mode)
+                AC_MSG_CHECKING([for curand_kernel.h])
+                AC_LANG_PUSH([CUDA])
+                AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
+                    #include <curand_kernel.h>
+                    __global__ void test(curandState *s) { curand_init(0, 0, 0, s); }
+                ]])],
+                [AC_MSG_RESULT([yes])
+                 AC_DEFINE([HAVE_CURAND], [1], [cuRAND device API is available])],
+                [AC_MSG_RESULT([no])
+                 AC_MSG_NOTICE([curand_kernel.h not found. Install libcurand-devel to enable random channel mode in perftest.])])
+                AC_LANG_POP
             ])
         ])
 
@@ -218,6 +231,8 @@ AS_IF([test "x$cuda_checked" != "xyes"],
                         [AC_MSG_NOTICE([nvmlDeviceGetGpuFabricInfoV function not found in libnvidia-ml. MNNVL support will be disabled.])],
                         [[#include <nvml.h>]])
 
+         AC_CHECK_DECLS([NVML_FI_DEV_C2C_LINK_COUNT], [], [],
+                        [[#include <nvml.h>]])
 
          # Check for cuda static library
          have_cuda_static="no"
