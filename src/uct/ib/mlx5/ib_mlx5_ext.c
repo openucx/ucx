@@ -55,14 +55,9 @@ void uct_ib_mlx5_ext_unregister_provider(uct_ib_mlx5_ext_provider_t *provider)
     uct_ib_mlx5_ext_republish();
 }
 
-static const uct_ib_mlx5_ext_ops_t *uct_ib_mlx5_ext_active_ops(void)
-{
-    return uct_ib_mlx5_ext_published_ops;
-}
-
 size_t uct_ib_mlx5_ext_max_put_sgl_zcopy_count(void)
 {
-    const uct_ib_mlx5_ext_ops_t *ops = uct_ib_mlx5_ext_active_ops();
+    const uct_ib_mlx5_ext_ops_t *ops = uct_ib_mlx5_ext_published_ops;
 
     if ((ops == NULL) || (ops->max_put_sgl_zcopy_count == NULL)) {
         return 0;
@@ -72,16 +67,13 @@ size_t uct_ib_mlx5_ext_max_put_sgl_zcopy_count(void)
 }
 
 ucs_status_t
-uct_ib_mlx5_ext_ep_put_sgl_zcopy(uct_ep_h ep,
-                                 void * const *buffers,
-                                 const size_t *lengths,
-                                 uct_mem_h const *memhs,
+uct_ib_mlx5_ext_ep_put_sgl_zcopy(uct_ep_h ep, void * const *buffers,
+                                 const size_t *lengths, uct_mem_h const *memhs,
                                  const uint64_t *remote_addrs,
-                                 uct_rkey_t const *rkeys,
-                                 size_t count,
+                                 uct_rkey_t const *rkeys, size_t count,
                                  uct_completion_t *comp)
 {
-    const uct_ib_mlx5_ext_ops_t *ops = uct_ib_mlx5_ext_active_ops();
+    const uct_ib_mlx5_ext_ops_t *ops = uct_ib_mlx5_ext_published_ops;
 
     if ((ops == NULL) || (ops->ep_put_sgl_zcopy == NULL)) {
         return UCS_ERR_UNSUPPORTED;
