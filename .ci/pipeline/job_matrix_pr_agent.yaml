@@ -1,0 +1,59 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+---
+# PR review: minimal image (git + claude + gh). Three steps — diff → Claude → GitHub comment.
+# Invokes the /ucx-pr-review skill defined in .agents/skills/ucx-pr-review/SKILL.md
+
+job: ucx-pr-agent-oss
+
+timeout_minutes: 45
+
+failFast: true
+
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  limits: "{memory: 2Gi, cpu: 1}"
+  requests: "{memory: 2Gi, cpu: 1}"
+  arch_table:
+    x86_64:
+      nodeSelector: 'kubernetes.io/arch=amd64'
+      jnlpImage: 'harbor.mellanox.com/toolbox/c3po-jnlp:latest'
+
+credentials:
+  - credentialsId: "inference-api-key"
+    usernameVariable: "INFERENCE_API_USERNAME"
+    passwordVariable: "ANTHROPIC_API_KEY"
+  - credentialsId: "svc-nixl-github-token"
+    usernameVariable: "GITHUB_USERNAME"
+    passwordVariable: "GITHUB_TOKEN"
+
+env:
+  ANTHROPIC_BASE_URL: "https://inference-api.nvidia.com/"
+  ANTHROPIC_MODEL: "aws/anthropic/bedrock-claude-sonnet-4-6"
+  CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
+  CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS: "1"
+
+runs_on_dockers:
+  - name: pr-agent
+    url: "nbu-harbor.gtm.nvidia.com/swx-infra/media/pr-agent:claude"
+    arch: x86_64
+
+steps:
+  - name: "Create diff file"
+    containerSelector: '{name:"pr-agent"}'
+    run: |
+      git diff "origin/${ghprbTargetBranch}...HEAD" > pr-agent.diff
+
+  - name: "Claude review"
+    containerSelector: '{name:"pr-agent"}'
+    credentialsId: ""
+    run: |
+      printf '/ucx-pr-review\n\n%s' "$(cat pr-agent.diff)" | claude --print --allowedTools none > pr-agent-review.md
+
+  - name: "Post review to GitHub"
+    containerSelector: '{name:"pr-agent"}'
+    credentialsId: ""
+    run: |
+      gh pr comment "${ghprbPullLink}" --body-file pr-agent-review.md
