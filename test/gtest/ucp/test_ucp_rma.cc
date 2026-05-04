@@ -25,22 +25,13 @@ public:
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
         add_variant_with_value(variants, UCP_FEATURE_RMA, 0, "flush_worker");
         add_variant_with_value(variants, UCP_FEATURE_RMA, FLUSH_EP, "flush_ep");
-        if (!RUNNING_ON_VALGRIND) {
-            add_variant_with_value(variants, UCP_FEATURE_RMA,
-                                   FLUSH_EP | DISABLE_PROTO,
-                                   "flush_ep_proto_v1");
-        }
         add_variant_with_value(variants, UCP_FEATURE_RMA, USER_MEMH,
                                "user_memh");
     }
 
     test_ucp_rma()
     {
-        if (get_variant_value() & DISABLE_PROTO) {
-            modify_config("PROTO_ENABLE", "n");
-        } else {
-            modify_config("MAX_RMA_LANES", "2");
-        }
+        modify_config("MAX_RMA_LANES", "2");
     }
 
     void do_nbi_iov(iov_op_t op, size_t size, void *expected_data,
@@ -189,9 +180,8 @@ protected:
 private:
     /* Test variants */
     enum {
-        FLUSH_EP      = UCS_BIT(0), /* If not set, flush worker */
-        DISABLE_PROTO = UCS_BIT(1),
-        USER_MEMH     = UCS_BIT(2),
+        FLUSH_EP  = UCS_BIT(0), /* If not set, flush worker */
+        USER_MEMH = UCS_BIT(1),
     };
 
     void init_iov(size_t size, ucp_dt_iov_t *iov, size_t iov_count,
@@ -323,6 +313,33 @@ UCS_TEST_P(test_ucp_rma, get_blocking_zcopy, "ZCOPY_THRESH=0") {
     /* test get_zcopy minimal message length is respected */
     test_mem_types(static_cast<send_func_t>(&test_ucp_rma::get_b), 128,
                    64 * UCS_KBYTE);
+}
+
+UCS_TEST_P(test_ucp_rma, proto_disabled_unsupported, "PROTO_ENABLE=n")
+{
+    constexpr size_t size = 8;
+    mem_buffer sendbuf(size, UCS_MEMORY_TYPE_HOST);
+    mem_buffer recvbuf(size, UCS_MEMORY_TYPE_HOST);
+    mapped_buffer rbuf(size, receiver());
+    ucs::handle<ucp_rkey_h> rkey;
+    ucp_request_param_t param = {0};
+
+    rbuf.rkey(sender(), rkey);
+
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED,
+              UCS_PTR_STATUS(ucp_put_nbx(sender().ep(), sendbuf.ptr(), size,
+                                         (uint64_t)rbuf.ptr(), rkey, &param)));
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED,
+              UCS_PTR_STATUS(ucp_get_nbx(sender().ep(), recvbuf.ptr(), size,
+                                         (uint64_t)rbuf.ptr(), rkey, &param)));
+
+    param.op_attr_mask = UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL;
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED,
+              UCS_PTR_STATUS(ucp_put_nbx(sender().ep(), sendbuf.ptr(), size,
+                                         (uint64_t)rbuf.ptr(), rkey, &param)));
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED,
+              UCS_PTR_STATUS(ucp_get_nbx(sender().ep(), recvbuf.ptr(), size,
+                                         (uint64_t)rbuf.ptr(), rkey, &param)));
 }
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_rma)
