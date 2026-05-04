@@ -471,6 +471,12 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "lane without waiting for remote completion.",
    ucs_offsetof(ucp_context_config_t, rndv_put_force_flush), UCS_CONFIG_TYPE_BOOL},
 
+  {"PROTO_EMULATION_ENABLE", "y",
+   "When set to 'no', emulation protocols for put and get are disabled. If no native\n"
+   "zero-copy RMA protocol exist for the memory type pair, RMA requests will be\n"
+   "cancelled.",
+   ucs_offsetof(ucp_context_config_t, proto_emulation_enable), UCS_CONFIG_TYPE_BOOL},
+
   {"SA_DATA_VERSION", "v2",
    "Defines the minimal header version the client will use for establishing\n"
    "client/server connection",
