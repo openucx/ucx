@@ -919,6 +919,36 @@ UCS_TEST_P(test_uct_sockaddr, cm_server_reject)
                  (TEST_STATE_SERVER_CONNECTED | TEST_STATE_CLIENT_CONNECTED)));
 }
 
+UCS_TEST_P(test_uct_sockaddr, cm_server_reject_stress)
+{
+    int num_iterations = ucs_max(2, 100 / ucs::test_time_multiplier());
+
+    for (int i = 0; i < num_iterations; ++i) {
+        m_state              = 0;
+        m_server_recv_req_cnt = 0;
+        m_reject_conn_request = true;
+
+        {
+            scoped_log_handler slh(detect_reject_error_logger);
+
+            start_listen(conn_request_cb);
+            connect();
+
+            wait_for_bits(&m_state, TEST_STATE_SERVER_REJECTED |
+                                    TEST_STATE_CLIENT_GOT_REJECT);
+            EXPECT_TRUE(ucs_test_all_flags(m_state,
+                                           (TEST_STATE_SERVER_REJECTED |
+                                            TEST_STATE_CLIENT_GOT_REJECT)));
+            EXPECT_FALSE(m_state & (TEST_STATE_SERVER_CONNECTED |
+                                    TEST_STATE_CLIENT_CONNECTED));
+        }
+
+        release_user_data();
+        m_client->destroy_eps();
+        uct_listener_destroy(m_server->revoke_listener());
+    }
+}
+
 UCS_TEST_P(test_uct_sockaddr, many_conns_on_client)
 {
     int num_conns_on_client = ucs_max(2, 100 / ucs::test_time_multiplier());
