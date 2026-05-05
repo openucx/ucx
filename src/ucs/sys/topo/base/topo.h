@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -321,6 +321,37 @@ int ucs_topo_device_has_sibling(ucs_sys_device_t sys_dev);
  * @return Number of system devices.
  */
 unsigned ucs_topo_num_devices(void);
+
+
+/**
+ * Check whether peer-to-peer transactions between two system devices are
+ * blocked by PCIe Access Control Services (ACS) on any intermediate bridge
+ * (e.g., GPUDirect RDMA between an RDMA NIC and a GPU).
+ *
+ * @param [in] sys_dev1  First system device.
+ * @param [in] sys_dev2  Second system device.
+ *
+ * @return 1 if ACS is known to block P2P between the devices, 0 otherwise.
+ *         Returns 0 if either device is unknown, if the devices are the same.
+ */
+int ucs_topo_is_p2p_acs_enabled(ucs_sys_device_t sys_dev1,
+                                ucs_sys_device_t sys_dev2);
+
+
+/**
+ * Check a PCIe config space buffer for ACS capabilities that block P2P routing.
+ *
+ * Walks the extended capability linked list starting at offset 0x100 and checks
+ * whether the ACS Control Register has any P2P-blocking bits set (RR, CR, UF,
+ * or EC).
+ *
+ * @param [in] cfg_buf   Buffer containing raw PCIe config space (from offset 0).
+ * @param [in] cfg_size  Size of the buffer in bytes.
+ *
+ * @return 1 if ACS is present with P2P-blocking bits set, 0 otherwise.
+ */
+int ucs_topo_is_acs_p2p_blocking_in_config(const uint8_t *cfg_buf,
+                                           size_t cfg_size);
 
 
 /**

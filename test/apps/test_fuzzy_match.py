@@ -64,10 +64,16 @@ class TestRunner:
     def get_fuzzy_matches(self):
         output = self.exec_ucx_info()
         output_lines = output.splitlines()
-        warn_msg = output_lines[0]
 
-        # This text is printed from 'parser.c' file (updates should be synced properly).
-        warn_match = re.match('.*unused environment variables?: (.*)', warn_msg)
+        warn_msg = None
+        warn_match = None
+        for line in output_lines:
+            # This text is printed from 'parser.c' file
+            warn_match = re.match(".*unused environment variables?: (.*)", line)
+            if warn_match:
+                warn_msg = line
+                break
+
         if not warn_match:
             print("First 5 lines of output:")
             print("\n".join(output_lines[:5]))

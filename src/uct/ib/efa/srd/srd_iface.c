@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -906,7 +906,8 @@ uct_srd_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
                                  UCT_IFACE_FLAG_INTER_NODE |
                                  UCT_IFACE_FLAG_AM_BCOPY |
                                  UCT_IFACE_FLAG_AM_SHORT |
-                                 UCT_IFACE_FLAG_AM_ZCOPY;
+                                 UCT_IFACE_FLAG_AM_ZCOPY |
+                                 UCT_IFACE_FLAG_PCIE_P2P_ROUTED;
     iface_attr->iface_addr_len = sizeof(uct_srd_iface_addr_t);
     iface_attr->ep_addr_len    = 0;
     iface_attr->max_conn_priv  = 0;

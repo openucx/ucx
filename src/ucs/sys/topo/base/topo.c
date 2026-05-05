@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019-2022. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -28,6 +28,20 @@
 #define UCS_TOPO_SYSFS_DEVICES_ROOT  "/sys/devices"
 #define UCS_TOPO_DEVICE_NAME_UNKNOWN "<unknown>"
 #define UCS_TOPO_DEVICE_NAME_INVALID "<invalid>"
+
+/* PCIe Extended Capability space constants for ACS detection */
+#define UCS_TOPO_PCI_EXT_CAP_START    0x100
+#define UCS_TOPO_PCI_EXT_CAP_ID_ACS   0x000D
+#define UCS_TOPO_PCI_ACS_CTRL_OFFSET  6
+#define UCS_TOPO_PCI_CFG_SPACE_SIZE   4096
+#define UCS_TOPO_PCI_EXT_CAP_MAX_WALK 48
+#define UCS_TOPO_PCI_ACS_RR           UCS_BIT(2) /* P2P Request Redirect */
+#define UCS_TOPO_PCI_ACS_CR           UCS_BIT(3) /* P2P Completion Redirect */
+#define UCS_TOPO_PCI_ACS_UF           UCS_BIT(4) /* Upstream Forwarding */
+#define UCS_TOPO_PCI_ACS_EC           UCS_BIT(5) /* P2P Egress Control */
+#define UCS_TOPO_PCI_ACS_P2P_BLOCK_MASK \
+    (UCS_TOPO_PCI_ACS_RR | UCS_TOPO_PCI_ACS_CR | UCS_TOPO_PCI_ACS_UF | \
+     UCS_TOPO_PCI_ACS_EC)
 
 /*
  * Function pointer used to refer to specific implementations of
@@ -94,16 +108,36 @@ typedef struct {
 
 KHASH_MAP_INIT_INT64(bus_to_sys_dev, ucs_sys_device_t);
 
+typedef enum {
+    UCS_TOPO_ACS_UNCHECKED,
+    UCS_TOPO_ACS_ALLOWED,
+    UCS_TOPO_ACS_BLOCKED
+} ucs_topo_acs_status_t;
+
+typedef ucs_topo_acs_status_t
+        ucs_topo_acs_pair_cache_t[UCS_TOPO_MAX_SYS_DEVICES]
+                                 [UCS_TOPO_MAX_SYS_DEVICES];
+
+KHASH_MAP_INIT_INT64(bridge_acs, ucs_topo_acs_status_t);
+
+typedef struct {
+    ucs_topo_acs_pair_cache_t pair_cache;
+    khash_t(bridge_acs)       bridge_cache;
+    int                       is_missing_permissions;
+} ucs_topo_acs_t;
+
 typedef struct ucs_topo_global_ctx {
     ucs_spinlock_t             lock;
     khash_t(bus_to_sys_dev)    bus_to_sys_dev_hash;
     ucs_topo_sys_device_info_t devices[UCS_TOPO_MAX_SYS_DEVICES];
     unsigned                   num_devices;
+    ucs_topo_acs_t             acs;
 } ucs_topo_global_ctx_t;
 
 
 struct ucs_global_state {
     unsigned                   num_devices;
+    ucs_topo_acs_pair_cache_t  pair_cache;
     ucs_topo_sys_device_info_t devices[];
 };
 
@@ -286,6 +320,9 @@ out:
     return numa_node;
 }
 
+static void ucs_topo_update_acs_for_new_device(ucs_sys_device_t new_dev,
+                                               unsigned num_existing);
+
 ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
                                             ucs_sys_device_t *sys_dev)
 {
@@ -341,6 +378,9 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
                 UCS_SYS_DEVICE_ID_UNKNOWN;
 
         ucs_debug("added sys_dev %d for bus id %s", *sys_dev, name);
+
+        ucs_topo_update_acs_for_new_device(*sys_dev, *sys_dev);
+
         status = UCS_OK;
     } else {
         ucs_error("failed to put key into hash table");
@@ -1034,6 +1074,11 @@ ucs_global_state_t *ucs_topo_extract_state(void)
     memcpy(state->devices, ucs_topo_global_ctx.devices, devices_size);
     state->num_devices = ucs_topo_global_ctx.num_devices;
 
+    memcpy(state->pair_cache, ucs_topo_global_ctx.acs.pair_cache,
+           sizeof(state->pair_cache));
+    memset(ucs_topo_global_ctx.acs.pair_cache, UCS_TOPO_ACS_UNCHECKED,
+           sizeof(ucs_topo_global_ctx.acs.pair_cache));
+
     ucs_topo_global_ctx.num_devices = 0;
     kh_clear(bus_to_sys_dev, &ucs_topo_global_ctx.bus_to_sys_dev_hash);
 
@@ -1056,6 +1101,9 @@ void ucs_topo_restore_state(ucs_global_state_t *state)
     memcpy(ucs_topo_global_ctx.devices, state->devices,
            sizeof(ucs_topo_sys_device_info_t) * state->num_devices);
     ucs_topo_global_ctx.num_devices = state->num_devices;
+
+    memcpy(ucs_topo_global_ctx.acs.pair_cache, state->pair_cache,
+           sizeof(ucs_topo_global_ctx.acs.pair_cache));
 
     /* Create the hash table */
     kh_clear(bus_to_sys_dev, &ucs_topo_global_ctx.bus_to_sys_dev_hash);
@@ -1088,6 +1136,8 @@ void ucs_topo_init()
     ucs_spinlock_init(&ucs_topo_global_ctx.lock, 0);
     kh_init_inplace(bus_to_sys_dev, &ucs_topo_global_ctx.bus_to_sys_dev_hash);
     ucs_topo_global_ctx.num_devices = 0;
+    memset(ucs_topo_global_ctx.acs.pair_cache, UCS_TOPO_ACS_UNCHECKED,
+           sizeof(ucs_topo_global_ctx.acs.pair_cache));
     ucs_list_add_tail(&ucs_sys_topo_providers_list,
                       &ucs_sys_topo_provider_default.list);
     ucs_list_add_tail(&ucs_sys_topo_providers_list,
@@ -1242,6 +1292,333 @@ double ucs_topo_get_pci_bw(const char *dev_name, const char *sysfs_path)
 out_max_bw:
     ucs_debug("%s: pci bandwidth undetected, using maximal value", dev_name);
     return UCS_INFINITY;
+}
+
+int ucs_topo_is_acs_p2p_blocking_in_config(const uint8_t *cfg_buf,
+                                           size_t cfg_size)
+{
+    uint32_t header, offset;
+    uint16_t cap_id, acs_ctrl;
+    int walk_count;
+
+    offset     = UCS_TOPO_PCI_EXT_CAP_START;
+    walk_count = 0;
+
+    while ((offset >= UCS_TOPO_PCI_EXT_CAP_START) && (offset + 4 <= cfg_size) &&
+           (walk_count++ < UCS_TOPO_PCI_EXT_CAP_MAX_WALK)) {
+        /* PCIe extended capability header (little-endian):
+         *   bits [15:0]  = capability ID
+         *   bits [19:16] = version
+         *   bits [31:20] = next capability offset */
+        header = (uint32_t)cfg_buf[offset] |
+                 ((uint32_t)cfg_buf[offset + 1] << 8) |
+                 ((uint32_t)cfg_buf[offset + 2] << 16) |
+                 ((uint32_t)cfg_buf[offset + 3] << 24);
+        cap_id = header & 0xFFFF;
+
+        if (cap_id == 0) {
+            break;
+        }
+
+        if (cap_id == UCS_TOPO_PCI_EXT_CAP_ID_ACS) {
+            if (offset + UCS_TOPO_PCI_ACS_CTRL_OFFSET + 2 > cfg_size) {
+                break;
+            }
+
+            acs_ctrl =
+                    (uint16_t)cfg_buf[offset + UCS_TOPO_PCI_ACS_CTRL_OFFSET] |
+                    ((uint16_t)cfg_buf[offset + UCS_TOPO_PCI_ACS_CTRL_OFFSET + 1]
+                     << 8);
+
+            return !!(acs_ctrl & UCS_TOPO_PCI_ACS_P2P_BLOCK_MASK);
+        }
+
+        /* Follow linked list: next offset from bits [31:20], DWORD-aligned */
+        offset = (header >> 20) & 0xFFC;
+        if (offset == 0) {
+            break;
+        }
+    }
+
+    return 0;
+}
+
+static int ucs_topo_is_bridge_acs_blocking(const char *bdf)
+{
+    ucs_bus_id_bit_rep_t key = 0;
+    ucs_sys_bus_id_t bus_id;
+    ucs_status_t status;
+    uint8_t *cfg_buf;
+    ssize_t nread;
+    khiter_t hash_it;
+    char *path;
+    int fd, result, bdf_parsed, kh_put_status;
+
+    result     = 0;
+    bdf_parsed = (sscanf(bdf, "%hx:%hhx:%hhx.%hhx", &bus_id.domain, &bus_id.bus,
+                         &bus_id.slot, &bus_id.function) == 4);
+
+    if (bdf_parsed) {
+        key     = ucs_topo_get_bus_id_bit_repr(&bus_id);
+        hash_it = kh_get(bridge_acs, &ucs_topo_global_ctx.acs.bridge_cache,
+                         key);
+        if (hash_it != kh_end(&ucs_topo_global_ctx.acs.bridge_cache)) {
+            return kh_value(&ucs_topo_global_ctx.acs.bridge_cache, hash_it) ==
+                   UCS_TOPO_ACS_BLOCKED;
+        }
+    }
+
+    /* Once we know this process can't read the PCI extended config space,
+     * we can skip it for all bridges in this process */
+    if (ucs_topo_global_ctx.acs.is_missing_permissions) {
+        goto out;
+    }
+
+    status = ucs_string_alloc_path_buffer(&path, "acs_config_path");
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    ucs_snprintf_safe(path, PATH_MAX, UCS_TOPO_SYSFS_PCI_PREFIX "%s/config",
+                      bdf);
+
+    fd = open(path, O_RDONLY);
+    if (fd < 0) {
+        if ((errno == EACCES) || (errno == EPERM)) {
+            ucs_trace("no permission to read %s for ACS check", path);
+        } else {
+            ucs_warn("could not open %s for ACS check: %m", path);
+        }
+        goto out_free_path;
+    }
+
+    cfg_buf = (uint8_t*)ucs_malloc(UCS_TOPO_PCI_CFG_SPACE_SIZE, "pci_config");
+    if (cfg_buf == NULL) {
+        goto out_close_fd;
+    }
+
+    nread = read(fd, cfg_buf, UCS_TOPO_PCI_CFG_SPACE_SIZE);
+    if (nread < 0) {
+        ucs_debug("failed to read PCI config space from %s: %m", path);
+    } else if (nread >= (ssize_t)UCS_TOPO_PCI_EXT_CAP_START) {
+        result = ucs_topo_is_acs_p2p_blocking_in_config(cfg_buf, (size_t)nread);
+        if (result) {
+            ucs_debug("bridge %s has ACS P2P blocking enabled", bdf);
+        }
+    } else {
+        /*
+         * Linux PCI sysfs caps unprivileged readers to the 64-byte legacy
+         * config header, but the ACS Extended Capability lives at offset
+         * >= UCS_TOPO_PCI_EXT_CAP_START (0x100) and is therefore invisible.
+         * Warn once per process and let the early-exit at the top of this
+         * function skip the I/O on every subsequent bridge.
+         */
+        ucs_topo_global_ctx.acs.is_missing_permissions = 1;
+        ucs_warn("PCIe ACS detection requires CAP_SYS_ADMIN (run as root) "
+                 "and will be skipped for all bridges in this process");
+    }
+
+    ucs_free(cfg_buf);
+out_close_fd:
+    close(fd);
+out_free_path:
+    ucs_free(path);
+out:
+    if (bdf_parsed) {
+        hash_it = kh_put(bridge_acs, &ucs_topo_global_ctx.acs.bridge_cache, key,
+                         &kh_put_status);
+        if (kh_put_status != UCS_KH_PUT_FAILED) {
+            kh_value(&ucs_topo_global_ctx.acs.bridge_cache,
+                     hash_it) = result ? UCS_TOPO_ACS_BLOCKED :
+                                         UCS_TOPO_ACS_ALLOWED;
+        }
+    }
+
+    return result;
+}
+
+/*
+ * Check ACS on all bridges between a device and its common ancestor.
+ *
+ * Walks the sysfs path components between common_path and device path,
+ * skipping the last component (the endpoint device itself).
+ *
+ * @param path        Full sysfs path of the device
+ * @param common_len  Length of the common ancestor path prefix
+ *
+ * @return 1 if any intermediate bridge has ACS blocking, 0 otherwise
+ */
+static int ucs_topo_check_acs_on_path(const char *path, size_t common_len)
+{
+    const char *rel, *slash, *last_slash;
+    char bdf[UCS_SYS_BDF_NAME_MAX];
+    size_t bdf_len;
+
+    rel = path + common_len;
+    if (*rel == '/') {
+        rel++;
+    }
+
+    last_slash = strrchr(rel, '/');
+    if (last_slash == NULL) {
+        return 0;
+    }
+
+    while (rel < last_slash) {
+        slash = strchr(rel, '/');
+        if ((slash == NULL) || (slash > last_slash)) {
+            break;
+        }
+
+        bdf_len = slash - rel;
+        if (bdf_len >= sizeof(bdf)) {
+            break;
+        }
+
+        memcpy(bdf, rel, bdf_len);
+        bdf[bdf_len] = '\0';
+
+        /* Only check valid BDFs (contain '.'), skip PCI root entries */
+        if ((strchr(bdf, '.') != NULL) &&
+            ucs_topo_is_bridge_acs_blocking(bdf)) {
+            return 1;
+        }
+
+        rel = slash + 1;
+    }
+
+    return 0;
+}
+
+/*
+ * Check ACS on all bridges on the path between two devices.
+ *
+ * Checks three sets of bridges:
+ * 1. The common ancestor itself (if it is a PCI bridge, not a root)
+ * 2. Bridges between device 1 and the common ancestor
+ * 3. Bridges between device 2 and the common ancestor
+ */
+static int ucs_topo_check_acs_between_paths(const char *path1,
+                                            const char *path2,
+                                            const char *common_path)
+{
+    size_t common_len = strlen(common_path);
+    const char *last_slash;
+    char bdf[UCS_SYS_BDF_NAME_MAX];
+
+    if (!ucs_topo_is_sys_root(common_path) &&
+        !ucs_topo_is_pci_root(common_path)) {
+        last_slash = strrchr(common_path, '/');
+        if (last_slash != NULL) {
+            ucs_strncpy_safe(bdf, last_slash + 1, sizeof(bdf));
+            if (ucs_topo_is_bridge_acs_blocking(bdf)) {
+                return 1;
+            }
+        }
+    }
+
+    if (ucs_topo_check_acs_on_path(path1, common_len)) {
+        return 1;
+    }
+
+    return ucs_topo_check_acs_on_path(path2, common_len);
+}
+
+/*
+ * Walk the PCIe bridge hierarchy from each of two system devices to their
+ * common ancestor and read the ACS Control Register from PCI config space
+ * on every intermediate bridge. P2P is considered blocked if any of the
+ * following ACS bits are set on any bridge: P2P Request Redirect (RR),
+ * P2P Completion Redirect (CR), Upstream Forwarding (UF), or P2P Egress
+ * Control (EC).
+ *
+ * Caller must hold `ucs_topo_global_ctx.lock`.
+ *
+ * TODO: Only check if they share a PCI switch, if they are on different
+ *       branches then communication may still be possible.
+ * TODO: In case of different branches, check the effect of IOMMU isolation
+ *       settings on the possibility of communication.
+ */
+static int ucs_topo_check_acs_between_devices(ucs_sys_device_t sys_dev1,
+                                              ucs_sys_device_t sys_dev2)
+{
+    char *path1, *path2, *common_path;
+    ucs_status_t status;
+    int result;
+
+    ucs_assert(ucs_spinlock_is_held(&ucs_topo_global_ctx.lock));
+
+    status = ucs_topo_get_common_path(sys_dev1, sys_dev2, &path1, &path2,
+                                      &common_path);
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    result = ucs_topo_check_acs_between_paths(path1, path2, common_path);
+
+    ucs_free(common_path);
+    ucs_free(path2);
+    ucs_free(path1);
+
+    return result;
+}
+
+/* Caller must hold `ucs_topo_global_ctx.lock`. */
+static void ucs_topo_update_acs_for_new_device(ucs_sys_device_t new_dev,
+                                               unsigned num_existing)
+{
+    ucs_topo_acs_status_t acs_status;
+    ucs_sys_device_t existing;
+
+    ucs_assert(ucs_spinlock_is_held(&ucs_topo_global_ctx.lock));
+
+    /* TODO: Do this only for GPU-NIC pairs, other combinations may not be
+     * useful and can be skipped */
+    for (existing = 0; existing < num_existing; ++existing) {
+        acs_status = ucs_topo_check_acs_between_devices(new_dev, existing) ?
+                             UCS_TOPO_ACS_BLOCKED :
+                             UCS_TOPO_ACS_ALLOWED;
+
+        ucs_assertv(ucs_topo_global_ctx.acs.pair_cache[new_dev][existing] ==
+                            UCS_TOPO_ACS_UNCHECKED,
+                    "pair_cache[%u][%u] already populated", new_dev, existing);
+        ucs_assertv(ucs_topo_global_ctx.acs.pair_cache[existing][new_dev] ==
+                            UCS_TOPO_ACS_UNCHECKED,
+                    "pair_cache[%u][%u] already populated", existing, new_dev);
+
+        ucs_topo_global_ctx.acs.pair_cache[new_dev][existing] = acs_status;
+        ucs_topo_global_ctx.acs.pair_cache[existing][new_dev] = acs_status;
+
+        if (acs_status == UCS_TOPO_ACS_BLOCKED) {
+            /* Direct field access (caller holds the lock) instead of
+             * ucs_topo_sys_device_get_name(), which would self-deadlock the
+             * spinlock. */
+            ucs_info("PCIe ACS is blocking P2P between %s and %s",
+                     ucs_topo_global_ctx.devices[new_dev].name,
+                     ucs_topo_global_ctx.devices[existing].name);
+        }
+    }
+}
+
+int ucs_topo_is_p2p_acs_enabled(ucs_sys_device_t sys_dev1,
+                                ucs_sys_device_t sys_dev2)
+{
+    ucs_topo_acs_status_t acs_status;
+
+    if ((sys_dev1 == UCS_SYS_DEVICE_ID_UNKNOWN) ||
+        (sys_dev2 == UCS_SYS_DEVICE_ID_UNKNOWN) || (sys_dev1 == sys_dev2)) {
+        return 0;
+    }
+
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+    acs_status = ucs_topo_global_ctx.acs.pair_cache[sys_dev1][sys_dev2];
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+
+    ucs_assertv_always(acs_status != UCS_TOPO_ACS_UNCHECKED,
+                       "pair_cache[%u][%u] read before population", sys_dev1,
+                       sys_dev2);
+
+    return acs_status == UCS_TOPO_ACS_BLOCKED;
 }
 
 const char *ucs_topo_resolve_sysfs_path(const char *dev_path, char *path_buffer)

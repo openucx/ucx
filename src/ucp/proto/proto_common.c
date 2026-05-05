@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -686,6 +686,17 @@ ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
         lane_sys_dev = context->tl_rscs[rsc_index].tl_rsc.sys_device;
         if (!ucs_topo_is_reachable(lane_sys_dev, select_param->sys_dev)) {
             ucs_trace("%s: no reachability between lane_sys_dev=%u and "
+                      "sys_dev=%u",
+                      lane_desc, lane_sys_dev, select_param->sys_dev);
+            continue;
+        }
+
+        /* For ifaces that route user data peer-to-peer over PCIe, ensure
+         * PCIe ACS does not block P2P between the iface's NIC and the
+         * operation's memtype device. */
+        if ((iface_attr->cap.flags & UCT_IFACE_FLAG_PCIE_P2P_ROUTED) &&
+            ucs_topo_is_p2p_acs_enabled(lane_sys_dev, select_param->sys_dev)) {
+            ucs_trace("%s: PCIe ACS blocks p2p between lane_sys_dev=%u and "
                       "sys_dev=%u",
                       lane_desc, lane_sys_dev, select_param->sys_dev);
             continue;

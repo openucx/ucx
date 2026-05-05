@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -362,5 +362,125 @@ UCS_TEST_F(test_topo, sibling) {
         ASSERT_TRUE(ucs_topo_is_reachable(hca_devs[1], gpu_dev));
         ASSERT_FALSE(ucs_topo_is_sibling(hca_devs[0], gpu_dev));
         ASSERT_FALSE(ucs_topo_is_sibling(gpu_dev, hca_devs[0]));
+    }
+}
+
+static void write_ext_cap_header(uint8_t *buf, uint32_t offset, uint16_t cap_id,
+                                 uint16_t next_offset)
+{
+    uint32_t header = (uint32_t)cap_id | ((uint32_t)next_offset << 20);
+    buf[offset]     = header & 0xFF;
+    buf[offset + 1] = (header >> 8) & 0xFF;
+    buf[offset + 2] = (header >> 16) & 0xFF;
+    buf[offset + 3] = (header >> 24) & 0xFF;
+}
+
+static void write_acs_ctrl(uint8_t *buf, uint32_t cap_offset, uint16_t ctrl)
+{
+    buf[cap_offset + 6] = ctrl & 0xFF;
+    buf[cap_offset + 7] = (ctrl >> 8) & 0xFF;
+}
+
+UCS_TEST_F(test_topo, acs_no_acs_present) {
+    struct {
+        const char *desc;
+        size_t     cfg_size;
+        bool       add_non_acs_chain;
+    } cases[] = {
+        {"buffer too short for ext caps", 0x80, false},
+        {"zeroed ext cap area", 0x200, false},
+        {"chain of non-ACS caps only", 0x200, true},
+    };
+
+    for (const auto &c : cases) {
+        std::vector<uint8_t> buf(c.cfg_size, 0);
+
+        if (c.add_non_acs_chain) {
+            write_ext_cap_header(buf.data(), 0x100, 0x0001, 0x110);
+            write_ext_cap_header(buf.data(), 0x110, 0x0010, 0x120);
+            write_ext_cap_header(buf.data(), 0x120, 0x0002, 0x000);
+        }
+
+        EXPECT_EQ(0, ucs_topo_is_acs_p2p_blocking_in_config(buf.data(),
+                                                            buf.size()))
+                << c.desc;
+    }
+}
+
+UCS_TEST_F(test_topo, acs_non_blocking_bits) {
+    uint16_t ctrl_values[] = {0x00, 0x01, 0x40, 0x41};
+
+    for (uint16_t ctrl : ctrl_values) {
+        std::vector<uint8_t> buf(0x200, 0);
+        write_ext_cap_header(buf.data(), 0x100, 0x000D, 0);
+        write_acs_ctrl(buf.data(), 0x100, ctrl);
+
+        EXPECT_EQ(0, ucs_topo_is_acs_p2p_blocking_in_config(buf.data(),
+                                                            buf.size()))
+                << "ctrl=0x" << std::hex << ctrl;
+    }
+}
+
+UCS_TEST_F(test_topo, acs_blocking_bits) {
+    struct {
+        const char *desc;
+        uint16_t   ctrl;
+        uint32_t   acs_offset;
+        bool       prepend_chain;
+    } cases[] = {
+        {"RR only", 0x04, 0x100, false},
+        {"CR only", 0x08, 0x100, false},
+        {"UF only", 0x10, 0x100, false},
+        {"EC only", 0x20, 0x100, false},
+        {"all blocking", 0x3C, 0x100, false},
+        {"mixed SV|RR", 0x05, 0x100, false},
+        {"ACS after other caps", 0x04, 0x120, true},
+    };
+
+    for (const auto &c : cases) {
+        std::vector<uint8_t> buf(0x200, 0);
+
+        if (c.prepend_chain) {
+            write_ext_cap_header(buf.data(), 0x100, 0x0001, 0x110);
+            write_ext_cap_header(buf.data(), 0x110, 0x0010, c.acs_offset);
+        }
+
+        write_ext_cap_header(buf.data(), c.acs_offset, 0x000D, 0);
+        write_acs_ctrl(buf.data(), c.acs_offset, c.ctrl);
+
+        EXPECT_EQ(1, ucs_topo_is_acs_p2p_blocking_in_config(buf.data(),
+                                                            buf.size()))
+                << c.desc;
+    }
+}
+
+UCS_TEST_F(test_topo, acs_edge_cases) {
+    struct {
+        const char *desc;
+        size_t     cfg_size;
+        uint32_t   acs_offset;
+        uint16_t   next_offset;
+    } cases[] = {
+        {"ACS header present but ctrl truncated", 0x106, 0x100, 0},
+        {"next offset past end of buffer", 0x200, 0x100, 0xF00},
+    };
+
+    for (const auto &c : cases) {
+        std::vector<uint8_t> buf(c.cfg_size, 0);
+
+        if (c.next_offset != 0) {
+            write_ext_cap_header(buf.data(), c.acs_offset, 0x0001,
+                                 c.next_offset);
+        } else {
+            /* Only write the 4-byte extended capability header. The ACS
+             * control bytes live at acs_offset + 6 / + 7 and are intentionally
+             * left off the end of the buffer to exercise the truncation
+             * guard in ucs_topo_is_acs_p2p_blocking_in_config(). */
+            write_ext_cap_header(buf.data(), c.acs_offset, 0x000D, 0);
+        }
+
+        EXPECT_EQ(0, ucs_topo_is_acs_p2p_blocking_in_config(buf.data(),
+                                                            buf.size()))
+                << c.desc;
     }
 }
