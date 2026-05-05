@@ -36,9 +36,9 @@ static void ucp_proto_get_offload_bcopy_unpack(void *arg, const void *data,
 
 static UCS_F_ALWAYS_INLINE size_t
 ucp_proto_get_offload_bcopy_num_frags(const ucp_request_t *req,
-                                      const ucp_proto_multi_lane_priv_t *lpriv)
+                                      size_t max_frag)
 {
-    return ucs_div_round_up(req->send.state.dt_iter.length, lpriv->max_frag);
+    return ucs_div_round_up(req->send.state.dt_iter.length, max_frag);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -47,20 +47,25 @@ ucp_proto_get_offload_bcopy_send_func(ucp_request_t *req,
                                       ucp_datatype_iter_t *next_iter,
                                       ucp_lane_index_t *lane_shift)
 {
-    ucp_proto_get_bcopy_unpack_ctx_t *unpack_ctx;
+    size_t max_frag    = lpriv->max_frag;
     uct_rkey_t tl_rkey = ucp_rkey_get_tl_rkey(req->send.rma.rkey,
                                               lpriv->super.rkey_index);
+    ucp_proto_get_bcopy_unpack_ctx_t *unpack_ctx;
     size_t max_length, length;
     size_t frag_idx;
     void *dest;
 
+    if (ucs_unlikely(max_frag == 0)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
     max_length = ucp_proto_multi_max_payload(req, lpriv, 0);
     length     = ucp_datatype_iter_next_ptr(&req->send.state.dt_iter,
                                             max_length, next_iter, &dest);
-    frag_idx   = req->send.state.dt_iter.offset / lpriv->max_frag;
-    ucs_assertv(frag_idx < ucp_proto_get_offload_bcopy_num_frags(req, lpriv),
+    frag_idx   = req->send.state.dt_iter.offset / max_frag;
+    ucs_assertv(frag_idx < ucp_proto_get_offload_bcopy_num_frags(req, max_frag),
                 "frag_idx=%zu offset=%zu max_frag=%zu length=%zu", frag_idx,
-                req->send.state.dt_iter.offset, lpriv->max_frag,
+                req->send.state.dt_iter.offset, max_frag,
                 req->send.state.dt_iter.length);
 
     unpack_ctx                = req->send.buffer;
@@ -93,6 +98,7 @@ static ucs_status_t ucp_proto_get_offload_bcopy_progress(uct_pending_req_t *self
                                                            send.uct);
     const ucp_proto_multi_priv_t *mpriv = req->send.proto_config->priv;
     size_t ctx_count;
+    size_t max_frag;
     size_t num_frags;
     ucs_status_t status;
 
@@ -108,8 +114,13 @@ static ucs_status_t ucp_proto_get_offload_bcopy_progress(uct_pending_req_t *self
         UCS_STATIC_ASSERT(UCP_PROTO_RMA_MAX_BCOPY_LANES == 1);
         ucs_assertv(mpriv->num_lanes == 1, "num_lanes=%u", mpriv->num_lanes);
 
-        num_frags        = ucp_proto_get_offload_bcopy_num_frags(req,
-                                                                 &mpriv->lanes[0]);
+        max_frag = mpriv->lanes[0].max_frag;
+        if (ucs_unlikely(max_frag == 0)) {
+            ucp_proto_request_abort(req, UCS_ERR_INVALID_PARAM);
+            return UCS_OK;
+        }
+
+        num_frags        = ucp_proto_get_offload_bcopy_num_frags(req, max_frag);
         ctx_count        = ucs_max(num_frags, (size_t)1);
         req->send.buffer = ucs_malloc(ctx_count *
                                       sizeof(ucp_proto_get_bcopy_unpack_ctx_t),
