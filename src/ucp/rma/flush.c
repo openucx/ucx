@@ -83,16 +83,20 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
     ucs_assertv(!(ep->flags & UCP_EP_FLAG_BLOCK_FLUSH), "req=%p ep=%p", req, 
                 ep);
 
-    /* If the number of lanes changed since flush operation was submitted, adjust
-     * the number of expected completions. Account for failed lanes. */
+    /* If the set of live lanes changed since flush operation was submitted,
+     * adjust the number of expected completions. Decrement the count only for
+     * lanes we never started: started lanes are already accounted for - by
+     * ucp_ep_flush_error, by the synchronous-OK decrement, or by the pending
+     * uct completion that will be delivered via the discard flow. */
     if (ucs_unlikely(ep_live_lanes != req->send.flush.all_lanes)) {
-        ep_destroyed_lanes = req->send.flush.all_lanes & ~ep_live_lanes;
+        ep_destroyed_lanes = req->send.flush.all_lanes & ~ep_live_lanes &
+                             ~req->send.flush.started_lanes;
         ep_new_lanes       = ep_live_lanes & ~req->send.flush.all_lanes;
         ucp_ep_flush_request_update_uct_comp(req,
                                              ucs_popcount(ep_new_lanes) -
                                              ucs_popcount(ep_destroyed_lanes),
                                              0);
-        req->send.flush.all_lanes |= ep_new_lanes;
+        req->send.flush.all_lanes = ep_live_lanes;
     }
 
     ucp_trace_req(req,
