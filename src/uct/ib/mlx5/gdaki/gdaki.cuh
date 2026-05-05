@@ -240,7 +240,11 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_db(uct_rc_gdaki_dev_ep_t *ep, unsigned cid,
 
     __threadfence();
     if (skip_db) {
-        doca_gpu_dev_common_mark_wqes_ready(qp->sq_ready_index, wqe_base, wqe_next - 1);
+        const uint64_t wqe_base_orig = wqe_base;
+        while (!ref.compare_exchange_strong(wqe_base, wqe_next,
+                                            cuda::std::memory_order_relaxed)) {
+            wqe_base = wqe_base_orig;
+        }
     } else {
         uint32_t qpn_ds = __ldg(&qp->qpn_ds);
         auto *db_ptr = (uint64_t*)__ldg((uintptr_t*)&qp->sq_db);
