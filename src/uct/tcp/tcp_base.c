@@ -17,11 +17,11 @@
 ucs_status_t ucs_tcp_base_set_syn_cnt(int fd, int tcp_syn_cnt)
 {
     if (tcp_syn_cnt != UCS_ULUNITS_AUTO) {
-        ucs_socket_setopt(fd, IPPROTO_TCP, TCP_SYNCNT, (const void*)&tcp_syn_cnt,
-                          sizeof(int));
+        return ucs_socket_setopt(fd, IPPROTO_TCP, TCP_SYNCNT,
+                                 (const void*)&tcp_syn_cnt,
+                                 sizeof(tcp_syn_cnt));
     }
 
-    /* return UCS_OK anyway since setting TCP_SYNCNT is done on best effort */
     return UCS_OK;
 }
 
@@ -30,11 +30,13 @@ ucs_status_t ucs_tcp_base_set_user_timeout(int fd, ucs_time_t user_timeout)
 #ifdef TCP_USER_TIMEOUT
     int user_timeout_ms;
     double user_timeout_ms_d;
+#endif
 
     if (user_timeout == UCS_TIME_AUTO) {
         return UCS_OK;
     }
 
+#ifdef TCP_USER_TIMEOUT
     if (user_timeout == UCS_TIME_INFINITY) {
         user_timeout_ms = 0;
     } else {
@@ -48,11 +50,11 @@ ucs_status_t ucs_tcp_base_set_user_timeout(int fd, ucs_time_t user_timeout)
         }
     }
 
-    ucs_socket_setopt(fd, IPPROTO_TCP, TCP_USER_TIMEOUT,
-                      (const void*)&user_timeout_ms,
-                      sizeof(user_timeout_ms));
+    return ucs_socket_setopt(fd, IPPROTO_TCP, TCP_USER_TIMEOUT,
+                             (const void*)&user_timeout_ms,
+                             sizeof(user_timeout_ms));
+#else
+    ucs_error("TCP_USER_TIMEOUT is not supported");
+    return UCS_ERR_UNSUPPORTED;
 #endif
-
-    /* return UCS_OK anyway since setting TCP_USER_TIMEOUT is best effort */
-    return UCS_OK;
 }
