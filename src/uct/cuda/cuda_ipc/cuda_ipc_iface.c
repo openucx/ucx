@@ -8,6 +8,7 @@
 #endif
 
 #include "cuda_ipc.inl"
+#include "cuda_ipc_iface_address.h"
 #include "cuda_ipc_iface.h"
 #include "cuda_ipc_md.h"
 #include "cuda_ipc_ep.h"
@@ -102,14 +103,7 @@ ucs_status_t uct_cuda_ipc_iface_get_device_address(uct_iface_t *tl_iface,
 static ucs_status_t uct_cuda_ipc_iface_get_address(uct_iface_h tl_iface,
                                                    uct_iface_addr_t *iface_addr)
 {
-    uct_cuda_ipc_iface_address_t *cuda_ipc_iface_address =
-            (uct_cuda_ipc_iface_address_t*)iface_addr;
-
-    cuda_ipc_iface_address->pid = getpid();
-    if (!ucs_sys_ns_is_default(UCS_SYS_NS_TYPE_PID)) {
-        cuda_ipc_iface_address->pid_ns = ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID);
-    }
-
+    uct_cuda_ipc_iface_address_pack(iface_addr);
     return UCS_OK;
 }
 
@@ -251,13 +245,6 @@ static size_t uct_cuda_ipc_iface_get_max_get_zcopy(uct_cuda_ipc_iface_t *iface)
     }
 
     return ULONG_MAX;
-}
-
-static size_t uct_cuda_ipc_iface_address_length(void)
-{
-    return ucs_sys_ns_is_default(UCS_SYS_NS_TYPE_PID) ?
-                   sizeof(pid_t) :
-                   sizeof(uct_cuda_ipc_iface_address_t);
 }
 
 static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
@@ -528,28 +515,3 @@ static UCS_CLASS_DEFINE_DELETE_FUNC(uct_cuda_ipc_iface_t, uct_iface_t);
 UCT_TL_DEFINE(&uct_cuda_ipc_component.super, cuda_ipc,
               uct_cuda_ipc_query_devices, uct_cuda_ipc_iface_t, "CUDA_IPC_",
               uct_cuda_ipc_iface_config_table, uct_cuda_ipc_iface_config_t);
-
-static ucs_sys_ns_t
-uct_cuda_ipc_iface_address_unpack_pid_ns(const uct_iface_addr_t *iface_addr,
-                                         size_t iface_addr_length)
-{
-    const uct_cuda_ipc_iface_address_t *cuda_ipc_iface_address;
-
-    if (iface_addr_length < sizeof(uct_cuda_ipc_iface_address_t)) {
-        return ucs_sys_get_default_ns(UCS_SYS_NS_TYPE_PID);
-    }
-
-    cuda_ipc_iface_address = (const uct_cuda_ipc_iface_address_t*)iface_addr;
-    return cuda_ipc_iface_address->pid_ns;
-}
-
-uct_cuda_ipc_iface_address_t
-uct_cuda_ipc_iface_address_unpack(const uct_iface_addr_t *iface_addr,
-                                  size_t iface_addr_length)
-{
-    return (uct_cuda_ipc_iface_address_t){
-        .pid    = *(const pid_t*)iface_addr;
-        .pid_ns = uct_cuda_ipc_iface_address_unpack_pid_ns(iface_addr,
-                                                           iface_addr_length)
-    };
-}

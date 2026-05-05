@@ -12,6 +12,7 @@
 #include <uct/api/device/uct_device_types.h>
 
 #include "cuda_ipc_ep.h"
+#include "cuda_ipc_iface_address.h"
 #include "cuda_ipc_iface.h"
 #include "cuda_ipc_md.h"
 #include "cuda_ipc.inl"
