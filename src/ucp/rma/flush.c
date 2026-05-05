@@ -699,18 +699,18 @@ static unsigned ucp_worker_flush_progress(void *arg)
                                                  ucp_worker_flush_ep_flushed_cb,
                                                  "flush_worker",
                                                  req->flush_worker.uct_flags);
-        if (UCS_PTR_IS_ERR(ep_flush_request)) {
-            status = UCS_PTR_STATUS(ep_flush_request);
-            ucs_diag("ucp_ep_flush_internal() failed: %s",
-                     ucs_status_string(status));
-            ucp_worker_flush_complete_one(req, status, 1);
-            ++ret;
-            goto out;
-        } else if (ep_flush_request != NULL) {
-            /* endpoint flush started, increment refcount */
+        if (UCS_STATUS_IS_ERR(ep_flush_request)) {
+            /* Endpoint flush resulted in an error which will be reported by
+             * the EP error callback accordingly to the error handling mode of
+             * the EP but don't affect the worker flush. */
+             ucs_diag("ucp_ep_flush_internal() failed: %s",
+                      ucs_status_string(UCS_PTR_STATUS(ep_flush_request)));
+             ucp_worker_flush_complete_one(req, UCS_OK, 1);
+        } else if (UCS_PTR_IS_PTR(ep_flush_request)) {
             ++req->flush_worker.comp_count;
-            ++ret;
         }
+
+        ++ret;
     }
 
 out:
