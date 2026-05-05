@@ -14,6 +14,7 @@
 #include "ucp_request.h"
 
 #include <ucs/config/parser.h>
+#include <ucs/algorithm/qsort_r.h>
 #include <ucs/algorithm/crc.h>
 #include <ucs/arch/atomic.h>
 #include <ucs/datastruct/mpool.inl>
@@ -22,12 +23,17 @@
 #include <ucs/debug/log.h>
 #include <ucs/debug/debug_int.h>
 #include <ucs/sys/compiler.h>
+#include <ucs/sys/math.h>
 #include <ucs/sys/string.h>
+#include <ucs/sys/topo/base/topo.h>
 #include <ucs/type/init_once.h>
 #include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <string.h>
 #include <dlfcn.h>
+#include <errno.h>
+#include <limits.h>
+#include <stdlib.h>
 
 
 #define UCP_RSC_CONFIG_ALL    "all"
@@ -596,6 +602,16 @@ static ucs_config_field_t ucp_context_config_table[] = {
   {"SINGLE_NET_DEVICE", "n", "Use only one network device for all protocols.",
    ucs_offsetof(ucp_context_config_t, proto_use_single_net_device),
    UCS_CONFIG_TYPE_BOOL},
+
+  {"DMABUF_REG_DEVICES", "all",
+   "Specifies which dmabuf-capable UCP memory domain(s) to use for broad "
+   "memory registration.\n"
+   " - all     : register on all reachable dmabuf-capable memory domains.\n"
+   " - closest : register on reachable memory domains with the lowest latency "
+   "from the memory device.\n"
+   " - <N>     : register on up to N lowest-latency reachable memory domains.",
+   ucs_offsetof(ucp_context_config_t, dmabuf_reg_devices),
+   UCS_CONFIG_TYPE_STRING},
 
   {"NODE_LOCAL_ID", "auto",
    "An optimization hint for the local identificator on a single node. Does \n"
@@ -1838,6 +1854,215 @@ static ucp_md_map_t ucp_fill_fallback_reg_nonblock_mds(ucp_context_h context)
     return (md_map == 0) ? ~md_map : md_map;
 }
 
+static int ucp_dmabuf_reg_select_md_name_cmp(const void *pa, const void *pb,
+                                             void *UCS_V_UNUSED arg)
+{
+    const ucp_dmabuf_reg_select_md_t *a = pa;
+    const ucp_dmabuf_reg_select_md_t *b = pb;
+
+    return strcmp(a->name, b->name);
+}
+
+static int ucp_dmabuf_reg_select_md_cmp(const ucp_dmabuf_reg_select_md_t *a,
+                                        const ucp_dmabuf_reg_select_md_t *b)
+{
+    int cmp;
+
+    cmp = ucs_fp_compare(a->latency, b->latency);
+    if (cmp != 0) {
+        return cmp;
+    }
+
+    if (a->last_used != b->last_used) {
+        return (a->last_used < b->last_used) ? -1 : 1;
+    }
+
+    return ucp_dmabuf_reg_select_md_name_cmp(a, b, NULL);
+}
+
+static int ucp_dmabuf_reg_select_md_qsort_cmp(const void *pa, const void *pb,
+                                              void *UCS_V_UNUSED arg)
+{
+    const ucp_dmabuf_reg_select_md_t *a = pa;
+    const ucp_dmabuf_reg_select_md_t *b = pb;
+
+    return ucp_dmabuf_reg_select_md_cmp(a, b);
+}
+
+static ucp_md_map_t
+ucp_dmabuf_reg_select_all(const ucp_dmabuf_reg_select_md_t *mds, unsigned count)
+{
+    ucp_md_map_t md_map = 0;
+    unsigned i;
+
+    for (i = 0; i < count; ++i) {
+        md_map |= UCS_BIT(mds[i].md_index);
+    }
+
+    return md_map;
+}
+
+static ucp_md_map_t
+ucp_dmabuf_reg_select_closest(const ucp_dmabuf_reg_select_md_t *mds,
+                              unsigned count)
+{
+    double min_latency = mds[0].latency;
+    ucp_md_map_t md_map;
+    unsigned i;
+
+    for (i = 1; i < count; ++i) {
+        if (ucs_fp_compare(mds[i].latency, min_latency) < 0) {
+            min_latency = mds[i].latency;
+        }
+    }
+
+    md_map = 0;
+    for (i = 0; i < count; ++i) {
+        if (ucs_fp_compare(mds[i].latency, min_latency) == 0) {
+            md_map |= UCS_BIT(mds[i].md_index);
+        }
+    }
+
+    return md_map;
+}
+
+static ucp_md_map_t
+ucp_dmabuf_reg_select_limit(const ucp_context_config_t *config,
+                            ucp_dmabuf_reg_select_md_t *mds, unsigned count)
+{
+    ucp_md_map_t md_map = 0;
+    unsigned i;
+
+    if (config->dmabuf_reg_devices_count >= count) {
+        return ucp_dmabuf_reg_select_all(mds, count);
+    }
+
+    ucs_qsort_r(mds, count, sizeof(*mds), ucp_dmabuf_reg_select_md_qsort_cmp,
+                NULL);
+    for (i = 0; i < config->dmabuf_reg_devices_count; ++i) {
+        md_map |= UCS_BIT(mds[i].md_index);
+    }
+
+    return md_map;
+}
+
+ucp_md_map_t ucp_dmabuf_reg_select(const ucp_context_config_t *config,
+                                   ucp_dmabuf_reg_select_md_t *mds,
+                                   unsigned count)
+{
+    ucs_assert(count <= UCP_MAX_MDS);
+
+    if (count == 0) {
+        return 0;
+    }
+
+    switch (config->dmabuf_reg_devices_mode) {
+    case UCP_DMABUF_REG_DEVICES_ALL:
+        return ucp_dmabuf_reg_select_all(mds, count);
+    case UCP_DMABUF_REG_DEVICES_CLOSEST:
+        return ucp_dmabuf_reg_select_closest(mds, count);
+    case UCP_DMABUF_REG_DEVICES_LIMIT:
+        return ucp_dmabuf_reg_select_limit(config, mds, count);
+    }
+
+    ucs_assertv(0, "invalid dmabuf_reg_devices_mode=%d",
+                config->dmabuf_reg_devices_mode);
+    return 0;
+}
+
+static uint32_t ucp_context_dmabuf_reg_md_last_used(ucp_context_h context,
+                                                    ucp_md_index_t md_index)
+{
+    return context->dmabuf_reg_md[md_index].last_used;
+}
+
+static double ucp_context_dmabuf_reg_latency(ucp_context_h context,
+                                             ucp_md_index_t md_index,
+                                             ucs_sys_device_t mem_sys_dev)
+{
+    double latency    = UCS_INFINITY;
+    int have_distance = 0;
+    ucs_sys_dev_distance_t distance;
+    ucs_sys_device_t sys_dev;
+
+    ucs_for_each_bit(sys_dev, context->tl_mds[md_index].sys_dev_map) {
+        if ((ucs_topo_get_distance(mem_sys_dev, sys_dev, &distance) ==
+             UCS_OK) &&
+            (!have_distance ||
+             (ucs_fp_compare(distance.latency, latency) < 0))) {
+            latency       = distance.latency;
+            have_distance = 1;
+        }
+    }
+
+    return have_distance ? latency : ucs_topo_default_distance.latency;
+}
+
+static ucp_md_map_t
+ucp_context_select_dmabuf_reg_md_map_config(ucp_context_h context,
+                                            const ucp_context_config_t *config,
+                                            ucp_md_map_t md_map,
+                                            ucs_sys_device_t mem_sys_dev)
+{
+    int track_lru  = config->dmabuf_reg_devices_mode ==
+                     UCP_DMABUF_REG_DEVICES_LIMIT;
+    unsigned count = 0;
+    ucp_dmabuf_reg_select_md_t select_mds[UCP_MAX_MDS];
+    ucp_md_index_t md_index;
+
+    md_map &= context->dmabuf_reg_md_map;
+    if (config->dmabuf_reg_devices_mode == UCP_DMABUF_REG_DEVICES_ALL) {
+        return md_map;
+    }
+
+    ucs_for_each_bit(md_index, md_map) {
+        select_mds[count].md_index  = md_index;
+        select_mds[count].name      = context->tl_mds[md_index].rsc.md_name;
+        select_mds[count].latency   = ucp_context_dmabuf_reg_latency(context,
+                                                                     md_index,
+                                                                     mem_sys_dev);
+        select_mds[count].last_used = 0;
+        if (track_lru) {
+            select_mds[count].last_used =
+                    ucp_context_dmabuf_reg_md_last_used(context, md_index);
+        }
+        ucs_trace("dmabuf_reg_select: md[%d]=%s mem_sys_dev=%d latency=%.2e"
+                  " last_used=%u",
+                  md_index, select_mds[count].name, mem_sys_dev,
+                  select_mds[count].latency, select_mds[count].last_used);
+        ++count;
+    }
+
+    return ucp_dmabuf_reg_select(config, select_mds, count);
+}
+
+ucp_md_map_t ucp_context_select_dmabuf_reg_md_map(ucp_context_h context,
+                                                  ucp_md_map_t md_map,
+                                                  ucs_sys_device_t mem_sys_dev)
+{
+    return ucp_context_select_dmabuf_reg_md_map_config(context,
+                                                       &context->config.ext,
+                                                       md_map, mem_sys_dev);
+}
+
+
+void ucp_context_dmabuf_reg_mark_used(ucp_context_h context,
+                                      ucp_md_map_t md_map)
+{
+    ucp_md_index_t md_index;
+
+    if (context->config.ext.dmabuf_reg_devices_mode !=
+        UCP_DMABUF_REG_DEVICES_LIMIT) {
+        return;
+    }
+
+    md_map &= context->dmabuf_reg_md_map;
+    ucs_for_each_bit(md_index, md_map) {
+        context->dmabuf_reg_md[md_index].last_used =
+                ucs_atomic_fadd32(&context->dmabuf_reg_timestamp, 1) + 1;
+    }
+}
+
 static void ucp_fill_resources_reg_md_map_update(ucp_context_h context)
 {
     UCS_STRING_BUFFER_ONSTACK(strb, 256);
@@ -2214,6 +2439,43 @@ ucp_dynamic_tl_switch_config_valid(const ucp_context_config_t *config)
     return 1;
 }
 
+static ucs_status_t
+ucp_context_config_parse_dmabuf_reg_devices(ucp_context_config_t *config)
+{
+    char buffer[32];
+    unsigned long count;
+    char *value, *endptr;
+
+    ucs_strncpy_safe(buffer, config->dmabuf_reg_devices, sizeof(buffer));
+    value = ucs_strtrim(buffer);
+
+    if (!strcasecmp(value, "all")) {
+        config->dmabuf_reg_devices_mode  = UCP_DMABUF_REG_DEVICES_ALL;
+        config->dmabuf_reg_devices_count = UCP_MAX_MDS;
+        return UCS_OK;
+    }
+
+    if (!strcasecmp(value, "closest")) {
+        config->dmabuf_reg_devices_mode  = UCP_DMABUF_REG_DEVICES_CLOSEST;
+        config->dmabuf_reg_devices_count = UCP_MAX_MDS;
+        return UCS_OK;
+    }
+
+    errno = 0;
+    count = strtoul(value, &endptr, 10);
+    if ((value[0] == '\0') || (endptr[0] != '\0') || (errno != 0) ||
+        (count == 0) || (count > UINT_MAX)) {
+        ucs_error("invalid UCX_DMABUF_REG_DEVICES value '%s', expected "
+                  "'all', 'closest', or a positive number",
+                  config->dmabuf_reg_devices);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    config->dmabuf_reg_devices_mode  = UCP_DMABUF_REG_DEVICES_LIMIT;
+    config->dmabuf_reg_devices_count = ucs_min((unsigned)count, UCP_MAX_MDS);
+    return UCS_OK;
+}
+
 static ucs_status_t ucp_fill_config(ucp_context_h context,
                                     const ucp_params_t *params,
                                     const ucp_config_t *config)
@@ -2233,6 +2495,11 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
                                           ucp_context_config_table);
     if (status != UCS_OK) {
         goto err;
+    }
+
+    status = ucp_context_config_parse_dmabuf_reg_devices(&context->config.ext);
+    if (status != UCS_OK) {
+        goto err_free_config_ext;
     }
 
     if (context->config.ext.estimated_num_eps != UCS_ULUNITS_AUTO) {

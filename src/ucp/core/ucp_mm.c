@@ -545,6 +545,23 @@ static int ucp_memh_sys_dev_reachable(ucs_sys_device_t mem_sys_dev,
     return 1;
 }
 
+static ucp_md_map_t
+ucp_memh_reachable_dmabuf_md_map(ucp_context_h context,
+                                 ucs_sys_device_t mem_sys_dev,
+                                 ucp_md_map_t dmabuf_md_map)
+{
+    ucp_md_index_t md_index;
+
+    ucs_for_each_bit(md_index, dmabuf_md_map) {
+        if (!ucp_memh_sys_dev_reachable(
+                    mem_sys_dev, context->tl_mds[md_index].sys_dev_map)) {
+            dmabuf_md_map &= ~UCS_BIT(md_index);
+        }
+    }
+
+    return dmabuf_md_map;
+}
+
 static ucs_status_t
 ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
                            ucp_md_map_t md_map, unsigned uct_flags,
@@ -842,20 +859,55 @@ ucp_memh_init_from_parent(ucp_mem_h memh, ucp_md_map_t parent_md_map)
     }
 }
 
-static ucs_status_t ucp_memh_init_uct_reg(ucp_context_h context, ucp_mem_h memh,
-                                          unsigned uct_flags,
-                                          const char *alloc_name)
+static ucp_md_map_t ucp_memh_reg_md_map(ucp_context_h context,
+                                        ucs_memory_type_t mem_type,
+                                        unsigned uct_flags)
 {
-    ucs_memory_type_t mem_type = memh->mem_type;
-    ucp_md_map_t reg_md_map    = context->reg_md_map[mem_type];
-    void *address              = ucp_memh_address(memh);
-    size_t length              = ucp_memh_length(memh);
-    ucp_md_map_t cache_md_map;
-    ucs_status_t status;
+    ucp_md_map_t reg_md_map = context->reg_md_map[mem_type];
 
     if (uct_flags & UCT_MD_MEM_FLAG_LOCK) {
         reg_md_map |= context->reg_block_md_map[mem_type];
     }
+
+    return reg_md_map;
+}
+
+/* Apply UCX_DMABUF_REG_DEVICES policy to narrow the dmabuf portion of
+ * reg_md_map by reachability and the configured device-limit selection.
+ * Only called for user-facing registrations (ucp_mem_map); internal
+ * allocations such as RNDV fragment pools bypass this entirely. */
+static ucp_md_map_t
+ucp_memh_apply_dmabuf_policy(ucp_context_h context, ucs_memory_type_t mem_type,
+                             ucs_sys_device_t sys_dev, ucp_md_map_t reg_md_map)
+{
+    ucp_md_map_t dmabuf_md_map, reachable, selected;
+
+    if (context->dmabuf_mds[mem_type] == UCP_NULL_RESOURCE) {
+        return reg_md_map;
+    }
+
+    dmabuf_md_map = context->dmabuf_reg_md_map & reg_md_map;
+    reachable     = ucp_memh_reachable_dmabuf_md_map(context, sys_dev,
+                                                     dmabuf_md_map);
+    selected      = ucp_context_select_dmabuf_reg_md_map(context, reachable,
+                                                         sys_dev);
+    ucs_trace("dmabuf_policy: mem_type=%d sys_dev=%d dmabuf=0x%" PRIx64
+              " reachable=0x%" PRIx64 " selected=0x%" PRIx64,
+              mem_type, sys_dev, (uint64_t)dmabuf_md_map, (uint64_t)reachable,
+              (uint64_t)selected);
+    return (reg_md_map & ~context->dmabuf_reg_md_map) | selected;
+}
+
+static ucs_status_t ucp_memh_init_uct_reg(ucp_context_h context, ucp_mem_h memh,
+                                          ucp_md_map_t reg_md_map,
+                                          unsigned uct_flags,
+                                          const char *alloc_name)
+{
+    void *address              = ucp_memh_address(memh);
+    size_t length              = ucp_memh_length(memh);
+    ucs_memory_type_t mem_type = memh->mem_type;
+    ucp_md_map_t cache_md_map;
+    ucs_status_t status;
 
     reg_md_map  &= ~memh->md_map;
     cache_md_map = context->cache_md_map[mem_type] & reg_md_map;
@@ -1019,8 +1071,9 @@ err_free_memh:
 static ucs_status_t ucp_memh_alloc(ucp_context_h context, void *address,
                                    size_t length, ucs_memory_type_t mem_type,
                                    ucs_sys_device_t sys_dev, uint8_t memh_flags,
-                                   unsigned uct_flags, const char *alloc_name,
-                                   ucp_mem_h *memh_p)
+                                   ucp_md_map_t reg_md_map, unsigned uct_flags,
+                                   int apply_dmabuf_policy,
+                                   const char *alloc_name, ucp_mem_h *memh_p)
 {
     uct_allocated_memory_t mem;
     ucs_status_t status;
@@ -1038,7 +1091,13 @@ static ucs_status_t ucp_memh_alloc(ucp_context_h context, void *address,
         goto err_dealloc;
     }
 
-    status = ucp_memh_init_uct_reg(context, memh, uct_flags, alloc_name);
+    if (apply_dmabuf_policy) {
+        reg_md_map = ucp_memh_apply_dmabuf_policy(context, memh->mem_type,
+                                                   memh->sys_dev, reg_md_map);
+    }
+
+    status = ucp_memh_init_uct_reg(context, memh, reg_md_map, uct_flags,
+                                   alloc_name);
     if (status != UCS_OK) {
         goto err_free_memh;
     }
@@ -1164,16 +1223,24 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
         status = ucp_memh_import(context, exported_memh_buffer, &memh);
     } else if (flags & UCP_MEM_MAP_ALLOCATE) {
         status = ucp_memh_alloc(context, address, length, mem_type,
-                                UCS_SYS_DEVICE_ID_UNKNOWN, 0, uct_flags,
-                                alloc_name, &memh);
+                                UCS_SYS_DEVICE_ID_UNKNOWN, 0,
+                                ucp_memh_reg_md_map(context, mem_type,
+                                                    uct_flags),
+                                uct_flags, 1, alloc_name, &memh);
     } else {
+        ucp_md_map_t reg_md_map;
+
         status = ucp_memh_create(context, address, length, mem_type,
                                  UCT_ALLOC_METHOD_LAST, 0, uct_flags, &memh);
         if (status != UCS_OK) {
             goto out;
         }
 
-        status = ucp_memh_init_uct_reg(context, memh, uct_flags, alloc_name);
+        reg_md_map = ucp_memh_apply_dmabuf_policy(
+                context, mem_type, memh->sys_dev,
+                ucp_memh_reg_md_map(context, mem_type, uct_flags));
+        status = ucp_memh_init_uct_reg(context, memh, reg_md_map, uct_flags,
+                                       alloc_name);
         if (status != UCS_OK) {
             ucs_free(memh);
         }
@@ -1182,6 +1249,9 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
 out:
     if (status == UCS_OK) {
         ucs_assert(ucp_memh_is_user_memh(memh));
+        ucp_context_dmabuf_reg_mark_used(context,
+                                         memh->md_map &
+                                                 context->dmabuf_reg_md_map);
         *memh_p = memh;
     }
     return status;
@@ -1398,8 +1468,12 @@ ucp_mpool_malloc(ucp_worker_h worker, ucs_mpool_t *mp, size_t *size_p, void **ch
 
     status = ucp_memh_alloc(worker->context, NULL, *size_p + sizeof(*chunk_hdr),
                             UCS_MEMORY_TYPE_HOST, UCS_SYS_DEVICE_ID_UNKNOWN,
-                            UCP_MEMH_FLAG_NO_RCACHE, UCT_MD_MEM_ACCESS_RMA,
-                            ucs_mpool_name(mp), &memh);
+                            UCP_MEMH_FLAG_NO_RCACHE,
+                            ucp_memh_reg_md_map(worker->context,
+                                                UCS_MEMORY_TYPE_HOST,
+                                                UCT_MD_MEM_ACCESS_RMA),
+                            UCT_MD_MEM_ACCESS_RMA, 0, ucs_mpool_name(mp),
+                            &memh);
     if (status != UCS_OK) {
         goto out;
     }
@@ -1452,7 +1526,10 @@ ucp_rndv_frag_malloc_mpools(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
     /* payload; need to get default flags from ucp_mem_map_params2uct_flags() */
     status = ucp_memh_alloc(context, NULL, frag_size * num_elems, mem_type,
                             sys_dev, UCP_MEMH_FLAG_NO_RCACHE,
-                            UCT_MD_MEM_ACCESS_RMA | UCT_MD_MEM_FLAG_LOCK,
+                            ucp_memh_reg_md_map(context, mem_type,
+                                                UCT_MD_MEM_ACCESS_RMA |
+                                                        UCT_MD_MEM_FLAG_LOCK),
+                            UCT_MD_MEM_ACCESS_RMA | UCT_MD_MEM_FLAG_LOCK, 0,
                             ucs_mpool_name(mp), &chunk_hdr->memh);
     if (status != UCS_OK) {
         return status;
