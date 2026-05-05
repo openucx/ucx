@@ -254,7 +254,8 @@ protected:
         }
 
         short_progress_loop();
-        ASSERT_EQ(0, m_err_count) << "Error callback invoked " << m_err_count << " times";
+        ASSERT_EQ(0, m_total_err_count) << "Error callback invoked " << m_total_err_count
+                                        << " times";
         UCS_TEST_MESSAGE << "Success";
     }
 
@@ -313,14 +314,15 @@ protected:
             if (lane_idx < (am_bw_lanes.size() - 1)) {
                 EXPECT_EQ(UCS_OK, status) << op_str << " operation returned status: "
                                         << ucs_status_string(status);
-                ASSERT_EQ(0, m_total_err_count) << "Error callback invoked " << m_total_err_count << " times";
+                ASSERT_EQ(0, m_total_err_count) << "Error callback invoked " << m_total_err_count
+                                                << " times";
             } else {
                 // The last lane is expected to fail
                 short_progress_loop();
                 if ((failure_side == FAILURE_SIDE_TARGET) &&
                     has_transport("dc_x")) {
-                    // DC transport is not able to detect failure of remote DCI since DC is a connect2iface transport.
-                    // This is a test limitation.
+                    // DC transport is not able to detect failure of remote DCI since DC is
+                    // a connect2iface transport. This is a test limitation.
                 } else {
                     ucs_time_t deadline = ucs::get_deadline();
                     while ((m_initiator_err_count == 0) && (ucs_get_time() < deadline)) {
@@ -328,8 +330,10 @@ protected:
                     }
 
                     // Initiator EP should invoke error callback only once
-                    ASSERT_EQ(1, m_initiator_err_count) << "Error callback invoked " << m_initiator_err_count << " times";
-                    // Remote side may detect failure by keepalive or other control messages but not more than 1 time
+                    ASSERT_EQ(1, m_initiator_err_count) << "Error callback invoked "
+                                                        << m_initiator_err_count << " times";
+                    // Remote side may detect failure by keepalive or other control messages but not
+                    // more than 1 time
                     ASSERT_LE(m_total_err_count - m_initiator_err_count, 1)
                             << "Error callback invoked " << m_total_err_count << " times";
                 }
@@ -401,7 +405,8 @@ protected:
         }
 
         short_progress_loop();
-        ASSERT_EQ(0, m_total_err_count) << "Error callback invoked " << m_total_err_count << " times";
+        ASSERT_EQ(0, m_total_err_count) << "Error callback invoked " << m_total_err_count
+                                        << " times";
         UCS_TEST_MESSAGE << "Success";
     }
 
@@ -436,7 +441,8 @@ protected:
         if (op_mask & TEST_OP_AM) {
             ucs_status_t status = do_am_send_and_wait(sender().ep(0, INJECTED_EP_INDEX),
                                                       am_msg_size(), true);
-            EXPECT_EQ(UCS_OK, status) << "AM operation returned status: " << ucs_status_string(status);
+            EXPECT_EQ(UCS_OK, status) << "AM operation returned status: "
+                                      << ucs_status_string(status);
         }
 
         if (op_mask & TEST_OP_PUT) {
@@ -444,8 +450,10 @@ protected:
             mapped_buffer rbuf(rma_msg_size(), receiver());
             ucs::handle<ucp_rkey_h> rkey = rbuf.rkey(sender());
             lbuf.pattern_fill(m_seed);
-            ucs_status_t status = do_put_and_wait(sender().ep(0, INJECTED_EP_INDEX), lbuf, rbuf, rkey, rma_msg_size(), true);
-            EXPECT_EQ(UCS_OK, status) << "PUT operation returned status: " << ucs_status_string(status);
+            ucs_status_t status = do_put_and_wait(sender().ep(0, INJECTED_EP_INDEX), lbuf, rbuf,
+                                                  rkey, rma_msg_size(), true);
+            EXPECT_EQ(UCS_OK, status) << "PUT operation returned status: "
+                                      << ucs_status_string(status);
         }
 
         if (op_mask & TEST_OP_GET) {
@@ -453,10 +461,14 @@ protected:
             mapped_buffer rbuf(rma_msg_size(), receiver());
             ucs::handle<ucp_rkey_h> rkey = rbuf.rkey(sender());
             rbuf.pattern_fill(m_seed);
-            ucs_status_t status = do_get_and_wait(sender().ep(0, INJECTED_EP_INDEX), lbuf, rbuf, rkey, rma_msg_size(), true);
-            EXPECT_EQ(UCS_OK, status) << "GET operation returned status: " << ucs_status_string(status);
+            ucs_status_t status = do_get_and_wait(sender().ep(0, INJECTED_EP_INDEX), lbuf, rbuf,
+                                                  rkey, rma_msg_size(), true);
+            EXPECT_EQ(UCS_OK, status) << "GET operation returned status: "
+                                      << ucs_status_string(status);
         }
-        ASSERT_EQ(0, m_err_count) << "Error callback invoked " << m_err_count << " times";
+
+        ASSERT_EQ(0, m_total_err_count) << "Error callback invoked " << m_total_err_count
+                                        << " times";
         UCS_TEST_MESSAGE << "All lanes are operational";
     }
 
@@ -557,7 +569,8 @@ private:
         EXPECT_EQ(UCS_OK, status) << "put operation returned status: " << ucs_status_string(status);
         if (!UCS_STATUS_IS_ERR(status) && flush) {
             status = request_wait(flush_status_ptr);
-            EXPECT_EQ(UCS_OK, status) << "flush operation returned status: " << ucs_status_string(status);
+            EXPECT_EQ(UCS_OK, status) << "flush operation returned status: "
+                                      << ucs_status_string(status);
         }
 
         if (status == UCS_OK) {
@@ -576,7 +589,8 @@ private:
         param.op_attr_mask = 0;
 
         lbuf.memset(0);
-        ucs_status_ptr_t status_ptr       = ucp_get_nbx(ep, lbuf.ptr(), size, uintptr_t(rbuf.ptr()), rkey, &param);
+        ucs_status_ptr_t status_ptr       = ucp_get_nbx(ep, lbuf.ptr(), size, uintptr_t(rbuf.ptr()),
+                                                        rkey, &param);
         ucs_status_ptr_t flush_status_ptr = flush ? ucp_ep_flush_nbx(ep, &param) : NULL;
         ucs_status_t status               = request_wait(status_ptr);
         EXPECT_EQ(UCS_OK, status) << "get operation returned status: " << ucs_status_string(status);
@@ -586,14 +600,15 @@ private:
 
         if (flush) {
             status = request_wait(flush_status_ptr);
-            EXPECT_EQ(UCS_OK, status) << "flush operation returned status: " << ucs_status_string(status);
+            EXPECT_EQ(UCS_OK, status) << "flush operation returned status: "
+                                      << ucs_status_string(status);
         }
 
         return status;
     }
 
-    ucs_status_t do_rma_and_wait(ucp_ep_h ep, unsigned op_mask, mem_buffer &lbuf, mapped_buffer &rbuf,
-                                 ucp_rkey_h rkey, size_t size) {
+    ucs_status_t do_rma_and_wait(ucp_ep_h ep, unsigned op_mask, mem_buffer &lbuf,
+                                 mapped_buffer &rbuf, ucp_rkey_h rkey, size_t size) {
         if (op_mask & TEST_OP_PUT) {
             return do_put_and_wait(ep, lbuf, rbuf, rkey, size, op_mask & TEST_OP_FLUSH);
         }
