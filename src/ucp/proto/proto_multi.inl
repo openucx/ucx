@@ -8,8 +8,6 @@
 #define UCP_PROTO_MULTI_INL_
 
 #include "proto_multi.h"
-#include "ucp/api/ucp_def.h"
-#include "ucp/core/ucp_ep.inl"
 
 #include <ucp/proto/proto_common.inl>
 #include <ucp/rma/rma.inl>

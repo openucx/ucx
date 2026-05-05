@@ -16,7 +16,6 @@
 #include <ucp/api/ucp.h>
 #include <uct/api/uct.h>
 #include <uct/api/v2/uct_v2.h>
-#include <ucs/datastruct/callbackq.h>
 #include <ucs/datastruct/queue.h>
 #include <ucs/datastruct/ptr_map.h>
 #include <ucs/datastruct/strided_alloc.h>

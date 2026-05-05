@@ -8,12 +8,10 @@
 #include <algorithm>
 #include <random>
 #include <string>
-#include <vector>
 
 extern "C" {
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_context.h>
-#include <ucp/wireup/wireup.h>
 #include <ucp/wireup/wireup_ep.h>
 }
 
@@ -452,7 +450,7 @@ protected:
     }
 private:
     static size_t rma_msg_size() {
-        return ucs::limit_buffer_size((1000 * UCS_MBYTE) / ucs::test_time_multiplier());
+        return ucs::limit_buffer_size((100 * UCS_MBYTE) / ucs::test_time_multiplier());
     }
 
     static size_t am_msg_size() {
