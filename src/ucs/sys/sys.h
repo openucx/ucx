@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  * Copyright (c) UT-Battelle, LLC. 2014-2019. ALL RIGHTS RESERVED.
  * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
  *
@@ -75,7 +75,7 @@ BEGIN_C_DECLS
 /** @file sys.h */
 
 
-typedef ino_t ucs_sys_ns_t;
+typedef uint32_t ucs_sys_ns_t;
 
 
 /* namespace type used in @ref ucs_sys_get_ns and @ref ucs_sys_ns_is_default */
