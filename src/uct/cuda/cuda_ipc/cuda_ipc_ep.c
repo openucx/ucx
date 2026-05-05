@@ -12,7 +12,6 @@
 #include <uct/api/device/uct_device_types.h>
 
 #include "cuda_ipc_ep.h"
-#include "cuda_ipc_iface_address.h"
 #include "cuda_ipc_iface.h"
 #include "cuda_ipc_md.h"
 #include "cuda_ipc.inl"
@@ -70,12 +69,12 @@ int uct_cuda_ipc_ep_is_connected(const uct_ep_h tl_ep,
         return 0;
     }
 
-    /* TODO: Comparing PIDs alone can yield false positives: PIDs are unique
+    /* TODO: Enhance the check to account for PID namespace and device address.
+             Comparing PIDs alone can yield false positives: PIDs are unique
              only within a PID namespace, so unrelated peers (e.g., on another
              node or in another namespace on the same host) may report the same
              PID number. */
-    return ep->remote_iface_address.pid ==
-           uct_cuda_ipc_iface_address_unpack_pid(params->iface_addr);
+    return ep->remote_iface_address.pid == *(const pid_t*)params->iface_addr;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_ipc_ctx_rsc_get(

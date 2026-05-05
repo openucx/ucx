@@ -6,8 +6,6 @@
 #ifndef UCT_CUDA_IPC_EP_H
 #define UCT_CUDA_IPC_EP_H
 
-#include "cuda_ipc_iface_address.h"
-
 #include <uct/api/uct.h>
 #include <uct/base/uct_iface.h>
 #include <ucs/type/class.h>
