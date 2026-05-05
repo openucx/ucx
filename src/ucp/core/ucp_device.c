@@ -310,7 +310,7 @@ out:
 
 static ucs_status_t ucp_device_local_mem_list_params_check(
         const ucp_device_mem_list_params_t *params, ucs_memory_type_t mem_type,
-        ucs_sys_device_t *local_sys_dev)
+        ucs_sys_device_t local_sys_dev)
 {
     const ucp_device_mem_list_elem_t *local_elements = UCS_PARAM_VALUE(
             UCP_DEVICE_MEM_LIST_PARAMS_FIELD, params, elements, ELEMENTS, NULL);
@@ -325,7 +325,6 @@ static ucs_status_t ucp_device_local_mem_list_params_check(
     const ucp_device_mem_list_elem_t *element;
     ucp_mem_h memh;
     size_t i;
-    ucs_status_t status;
 
     if ((local_elements == NULL) || (element_size == 0) ||
         (num_elements == 0) || (worker == NULL)) {
@@ -333,12 +332,6 @@ static ucs_status_t ucp_device_local_mem_list_params_check(
                   "element_size=%zu, num_elements=%zu, worker=%p",
                   local_elements, element_size, num_elements, worker);
         return UCS_ERR_INVALID_PARAM;
-    }
-
-    status = ucp_device_detect_local_sys_dev(worker->context, mem_type,
-                                             local_sys_dev);
-    if (status != UCS_OK) {
-        return status;
     }
 
     for (i = 0; i < num_elements; i++) {
@@ -351,10 +344,34 @@ static ucs_status_t ucp_device_local_mem_list_params_check(
             return UCS_ERR_INVALID_PARAM;
         }
 
-        if (memh->sys_dev != *local_sys_dev) {
+        if (memh->sys_dev != local_sys_dev) {
             ucs_error("mismatched local sys_dev for element=%zu", i);
             return UCS_ERR_UNSUPPORTED;
         }
+    }
+
+    return UCS_OK;
+}
+
+static ucs_status_t
+ucp_device_detect_export_mem_type(ucp_context_h context,
+                                  ucs_memory_type_t *export_mem_type_p,
+                                  ucs_sys_device_t *sys_dev_p)
+{
+    ucs_status_t status;
+
+    status = ucp_device_detect_local_sys_dev(context, UCS_MEMORY_TYPE_CUDA,
+                                             sys_dev_p);
+    if (status == UCS_OK) {
+        *export_mem_type_p = UCS_MEMORY_TYPE_CUDA;
+        return UCS_OK;
+    }
+
+    status = ucp_device_detect_local_sys_dev(context, UCS_MEMORY_TYPE_ROCM,
+                                             sys_dev_p);
+    if (status == UCS_OK) {
+        *export_mem_type_p = UCS_MEMORY_TYPE_ROCM;
+        return UCS_OK;
     }
 
     return status;
@@ -375,23 +392,14 @@ ucp_device_local_mem_list_create(const ucp_device_mem_list_params_t *params,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    status = ucp_device_detect_local_sys_dev(worker->context,
-                                             UCS_MEMORY_TYPE_CUDA,
-                                             &local_sys_dev);
-    if (status == UCS_OK) {
-        export_mem_type = UCS_MEMORY_TYPE_CUDA;
-    } else {
-        status = ucp_device_detect_local_sys_dev(worker->context,
-                                                 UCS_MEMORY_TYPE_ROCM,
-                                                 &local_sys_dev);
-        if (status == UCS_OK) {
-            export_mem_type = UCS_MEMORY_TYPE_ROCM;
-        } else {
-            return status;
-        }
+    status = ucp_device_detect_export_mem_type(worker->context,
+                                               &export_mem_type,
+                                               &local_sys_dev);
+    if (status != UCS_OK) {
+        return status;
     }
     status = ucp_device_local_mem_list_params_check(params, export_mem_type,
-                                                    &local_sys_dev);
+                                                    local_sys_dev);
     if (status != UCS_OK) {
         ucs_error("failed to check local mem list params: %s",
                   ucs_status_string(status));
@@ -556,7 +564,7 @@ ucp_device_remote_mem_list_fill(const ucp_device_mem_list_elem_t *ucp_element,
 
 static ucs_status_t ucp_device_remote_mem_list_create_handle(
         const ucp_device_mem_list_params_t *params, ucs_memory_type_t mem_type,
-        uct_allocated_memory_t *mem)
+        uct_allocated_memory_t *mem, ucs_sys_device_t local_sys_dev)
 {
     const ucp_ep_h ep = ucp_device_remote_mem_list_get_first_ep(params);
     size_t uct_elem_size;
@@ -725,19 +733,10 @@ ucp_device_remote_mem_list_create(const ucp_device_mem_list_params_t *params,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    status = ucp_device_detect_local_sys_dev(ep->worker->context,
-                                             UCS_MEMORY_TYPE_CUDA, &sys_dev);
-    if (status == UCS_OK) {
-        export_mem_type = UCS_MEMORY_TYPE_CUDA;
-    } else {
-        status = ucp_device_detect_local_sys_dev(ep->worker->context,
-                                                 UCS_MEMORY_TYPE_ROCM,
-                                                 &sys_dev);
-        if (status == UCS_OK) {
-            export_mem_type = UCS_MEMORY_TYPE_ROCM;
-        } else {
-            return status;
-        }
+    status = ucp_device_detect_export_mem_type(ep->worker->context,
+                                               &export_mem_type, &sys_dev);
+    if (status != UCS_OK) {
+        return status;
     }
 
     status = ucp_device_remote_mem_list_params_check(params);
@@ -746,7 +745,7 @@ ucp_device_remote_mem_list_create(const ucp_device_mem_list_params_t *params,
     }
 
     status = ucp_device_remote_mem_list_create_handle(params, export_mem_type,
-                                                      &mem);
+                                                      &mem, sys_dev);
     if (status != UCS_OK) {
         /*
          * Do not log error for UCS_ERR_NOT_CONNECTED because it is expected
