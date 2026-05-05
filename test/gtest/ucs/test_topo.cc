@@ -472,8 +472,11 @@ UCS_TEST_F(test_topo, acs_edge_cases) {
             write_ext_cap_header(buf.data(), c.acs_offset, 0x0001,
                                  c.next_offset);
         } else {
+            /* Only write the 4-byte extended capability header. The ACS
+             * control bytes live at acs_offset + 6 / + 7 and are intentionally
+             * left off the end of the buffer to exercise the truncation
+             * guard in ucs_topo_is_acs_p2p_blocking_in_config(). */
             write_ext_cap_header(buf.data(), c.acs_offset, 0x000D, 0);
-            write_acs_ctrl(buf.data(), c.acs_offset, 0x3C);
         }
 
         EXPECT_EQ(0, ucs_topo_is_acs_p2p_blocking_in_config(buf.data(),
