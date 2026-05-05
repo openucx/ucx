@@ -79,6 +79,7 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
     uct_ep_h uct_ep;
     ucp_lane_map_t ep_destroyed_lanes;
     ucp_lane_map_t ep_new_lanes;
+    ucp_lane_map_t next_lanes;
 
     ucs_assertv(!(ep->flags & UCP_EP_FLAG_BLOCK_FLUSH), "req=%p ep=%p", req, 
                 ep);
@@ -105,10 +106,10 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
                   ep, ep->flags, req->send.flush.started_lanes,
                   req->send.state.uct_comp.count);
 
-    while (req->send.flush.started_lanes != ep_live_lanes) {
+    while ((next_lanes = ep_live_lanes & ~req->send.flush.started_lanes) != 0) {
 
         /* Search for next lane to start flush */
-        lane   = ucs_ffs64(ep_live_lanes & ~req->send.flush.started_lanes);
+        lane   = ucs_ffs64(next_lanes);
         uct_ep = ucp_ep_get_lane(ep, lane);
         if (uct_ep == NULL) {
             ucp_ep_flush_request_update_uct_comp(req, -1, UCS_BIT(lane));
