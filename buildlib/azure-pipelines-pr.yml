@@ -14,6 +14,7 @@ pr:
     - .gitignore
     - .readthedocs.yaml
     - AGENTS.md
+    - "**/AGENTS.md"
     - CLAUDE.md
     - contrib/pr_merge_check.py
     - contrib/check_qps.sh
