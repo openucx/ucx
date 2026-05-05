@@ -52,6 +52,25 @@ enum {
     (ucs_ilog2(ucp_proto_select_op_attr_pack((_op_attr_flag), \
                                              UCP_OP_ATTR_INDEX_MASK)))
 
+typedef enum {
+    UCP_DMABUF_REG_DEVICES_ALL,
+    UCP_DMABUF_REG_DEVICES_CLOSEST,
+    UCP_DMABUF_REG_DEVICES_LIMIT
+} ucp_dmabuf_reg_devices_mode_t;
+
+
+typedef struct ucp_dmabuf_reg_select_md {
+    ucp_md_index_t md_index;
+    const char     *name;
+    double         latency;
+    uint32_t       last_used;
+} ucp_dmabuf_reg_select_md_t;
+
+
+typedef struct ucp_dmabuf_reg_md {
+    uint32_t last_used;
+} ucp_dmabuf_reg_md_t;
+
 
 typedef struct ucp_context_config {
     /** Threshold for switching UCP to buffered copy(bcopy) protocol */
@@ -222,6 +241,12 @@ typedef struct ucp_context_config {
     int                                    connect_all_to_all;
     /** Use only one network device for all protocols */
     int                                    proto_use_single_net_device;
+    /** Select dmabuf-capable memory domains for broad registration */
+    char                                   *dmabuf_reg_devices;
+    /** Parsed dmabuf registration memory-domain selection mode */
+    ucp_dmabuf_reg_devices_mode_t          dmabuf_reg_devices_mode;
+    /** Number of dmabuf-capable memory domains for broad registration */
+    unsigned                               dmabuf_reg_devices_count;
     /** Local identificator on a single node */
     unsigned long                          node_local_id;
 } ucp_context_config_t;
@@ -387,6 +412,12 @@ typedef struct ucp_context {
 
     /* Map of MDs that support dmabuf registration */
     ucp_md_map_t                  dmabuf_reg_md_map;
+
+    /* Dmabuf registration selection state per MD */
+    ucp_dmabuf_reg_md_t           dmabuf_reg_md[UCP_MAX_MDS];
+
+    /* Monotonic counter for LRU-based dmabuf MD selection */
+    volatile uint32_t             dmabuf_reg_timestamp;
 
     /* List of MDs that detect non host memory type */
     ucp_md_index_t                mem_type_detect_mds[UCS_MEMORY_TYPE_LAST];
@@ -759,6 +790,20 @@ void ucp_tl_bitmap_validate(const ucp_tl_bitmap_t *tl_bitmap,
 
 
 const char* ucp_context_cm_name(ucp_context_h context, ucp_rsc_index_t cm_idx);
+
+
+ucp_md_map_t ucp_dmabuf_reg_select(const ucp_context_config_t *config,
+                                   ucp_dmabuf_reg_select_md_t *mds,
+                                   unsigned count);
+
+
+ucp_md_map_t ucp_context_select_dmabuf_reg_md_map(ucp_context_h context,
+                                                  ucp_md_map_t md_map,
+                                                  ucs_sys_device_t mem_sys_dev);
+
+
+void ucp_context_dmabuf_reg_mark_used(ucp_context_h context,
+                                      ucp_md_map_t md_map);
 
 
 ucs_status_t
