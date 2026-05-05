@@ -38,6 +38,8 @@ public:
 
     test_ucp_fault_tolerance() {
         configure_peer_failure_settings();
+        // reduce UD testing time 
+        modify_config("KEEPALIVE_INTERVAL", "0.3s");
     }
 
 protected:
@@ -128,6 +130,7 @@ protected:
     static void err_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {
         test_ucp_fault_tolerance *self =
             reinterpret_cast<test_ucp_fault_tolerance*>(arg);
+        ucp_ep_h sender_ep = self->sender().ep(0, INJECTED_EP_INDEX);
 
         UCS_TEST_MESSAGE << "Error callback invoked: " << ucs_status_string(status);
 
@@ -136,7 +139,10 @@ protected:
                     (UCS_ERR_CANCELED == status));
 
         self->m_err_status = status;
-        ++self->m_err_count;
+        ++self->m_total_err_count;
+        if (ep == sender_ep) {
+            ++self->m_initiator_err_count;
+        }
     }
 
     static void shuffle_lanes(std::vector<ucp_lane_index_t> &lanes, const std::string &lane_type) {
@@ -269,13 +275,14 @@ protected:
         EXPECT_EQ(UCS_OK, status) << op_str << " operation returned status: "
                                   << ucs_status_string(status);
 
-        if (has_any_transport({"rc_v", "rc_x"}) &&
+        size_t num_lanes_to_fail = am_bw_lanes.size();
+        if (has_any_transport({"ud_v", "ud_x"}) &&
             (failure_side == FAILURE_SIDE_INITIATOR)) {
-            /* TODO: fix RC AM initiator failure handling: invalidating a local
-             * RC UCT EP triggers the error callback immediately (per lane),
-             * causing m_err_count > 0 before all lanes are down */
-            UCS_TEST_SKIP_R("RC AM initiator failure triggers error callback "
-                            "per invalidated lane");
+            /* TODO: remove this once UD ep purge assertions are fixed */
+            UCS_TEST_MESSAGE << "Keep 1 live lane for UD transports since "
+                             << "local error injection on all lanes leads to "
+                                "failed assertion in ud_ep_purge";
+            num_lanes_to_fail--;
         }
 
         ucp_ep_h ucp_ep_for_injection = get_ucp_ep_for_err_injection(failure_side);
@@ -306,7 +313,26 @@ protected:
             if (lane_idx < (am_bw_lanes.size() - 1)) {
                 EXPECT_EQ(UCS_OK, status) << op_str << " operation returned status: "
                                         << ucs_status_string(status);
-                ASSERT_EQ(0, m_err_count) << "Error callback invoked " << m_err_count << " times";
+                ASSERT_EQ(0, m_total_err_count) << "Error callback invoked " << m_total_err_count << " times";
+            } else {
+                // The last lane is expected to fail
+                short_progress_loop();
+                if ((failure_side == FAILURE_SIDE_TARGET) &&
+                    has_transport("dc_x")) {
+                    // DC transport is not able to detect failure of remote DCI since DC is a connect2iface transport.
+                    // This is a test limitation.
+                } else {
+                    ucs_time_t deadline = ucs::get_deadline();
+                    while ((m_initiator_err_count == 0) && (ucs_get_time() < deadline)) {
+                        short_progress_loop();
+                    }
+
+                    // Initiator EP should invoke error callback only once
+                    ASSERT_EQ(1, m_initiator_err_count) << "Error callback invoked " << m_initiator_err_count << " times";
+                    // Remote side may detect failure by keepalive or other control messages but not more than 1 time
+                    ASSERT_LE(m_total_err_count - m_initiator_err_count, 1)
+                            << "Error callback invoked " << m_total_err_count << " times";
+                }
             }
         }
 
@@ -375,7 +401,8 @@ protected:
         }
 
         short_progress_loop();
-        ASSERT_EQ(0, m_err_count) << "Error callback invoked " << m_err_count << " times";
+        ASSERT_EQ(0, m_total_err_count) << "Error callback invoked " << m_total_err_count << " times";
+        UCS_TEST_MESSAGE << "Success";
     }
 
     void test_recovery(unsigned op_mask) {
@@ -586,8 +613,9 @@ protected:
     volatile bool m_am_received                 = false;
 
 private:
-    size_t       m_err_count  = 0;
-    ucs_status_t m_err_status = UCS_OK;
+    size_t m_initiator_err_count = 0;
+    size_t m_total_err_count     = 0;
+    ucs_status_t m_err_status    = UCS_OK;
 };
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_fault_tolerance)

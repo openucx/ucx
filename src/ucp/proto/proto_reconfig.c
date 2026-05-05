@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2021. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2021-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -15,6 +15,7 @@
 
 #include <ucp/am/ucp_am.inl>
 #include <ucp/core/ucp_worker.inl>
+#include <ucs/memory/memory_type.h>
 #include <ucs/sys/math.h>
 
 
@@ -43,6 +44,37 @@ static void ucp_proto_reconfig_abort(ucp_request_t *req, ucs_status_t status)
     ucp_request_complete_send(req, status);
 }
 
+static int
+ucp_proto_reconfig_report_no_rma_emulation_no_proto(ucp_request_t *req,
+                                                    ucp_ep_h ep)
+{
+    ucp_operation_id_t op_id;
+    ucs_memory_type_t local_mem_type, remote_mem_type;
+
+    if (ep->worker->context->config.ext.proto_emulation_enable) {
+        return 0;
+    }
+
+    op_id = ucp_proto_select_op_id(&req->send.proto_config->select_param);
+    if (((op_id != UCP_OP_ID_PUT) && (op_id != UCP_OP_ID_GET))) {
+        return 0;
+    }
+
+    local_mem_type  = req->send.proto_config->select_param.mem_type;
+    remote_mem_type = req->send.rma.rkey->mem_type;
+
+    ucs_error("No zero-copy protocol found for %s %s %s %s, %zu bytes. "
+              "Please check for proper GPU and/or HCA support, or set "
+              "UCX_PROTO_EMULATION_ENABLE=y to proceed by allowing slower "
+              "software emulation.",
+              (op_id == UCP_OP_ID_PUT) ? "put from" : "get into",
+              ucs_memory_type_names[local_mem_type],
+              (op_id == UCP_OP_ID_PUT) ? "to" : "from",
+              ucs_memory_type_names[remote_mem_type],
+              req->send.state.dt_iter.length);
+    return 1;
+}
+
 static ucs_status_t ucp_proto_reconfig_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
@@ -52,6 +84,11 @@ static ucs_status_t ucp_proto_reconfig_progress(uct_pending_req_t *self)
 
     /* This protocol should not be selected for valid and connected endpoint */
     if (ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED) {
+        if (ucp_proto_reconfig_report_no_rma_emulation_no_proto(req, ep)) {
+            ucp_proto_request_abort(req, UCS_ERR_CANCELED);
+            return UCS_OK;
+        }
+
         ucp_ep_config_name(ep->worker, req->send.proto_config->ep_cfg_index,
                            &strb);
         ucs_string_buffer_appendf(&strb, " | ");
