@@ -329,6 +329,48 @@ UCS_TEST_P(test_ucp_rma, get_blocking_zcopy, "ZCOPY_THRESH=0") {
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_rma)
 
 
+class test_ucp_rma_dmabuf : public test_ucp_rma {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant_with_value(variants, UCP_FEATURE_RMA, 0, "");
+    }
+
+    void init() override
+    {
+        if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
+            UCS_TEST_SKIP_R("CUDA is not supported");
+        }
+
+        modify_config("MEMTYPE_REG_WHOLE_ALLOC_TYPES", "");
+        modify_config("CUDA_COPY_REG_WHOLE_ALLOC", "on", SETENV_IF_NOT_EXIST);
+        modify_config("CUDA_COPY_DMABUF", "try", SETENV_IF_NOT_EXIST);
+        test_ucp_rma::init();
+
+        if (receiver().ucph()->dmabuf_mds[UCS_MEMORY_TYPE_CUDA] ==
+            UCP_NULL_RESOURCE) {
+            UCS_TEST_SKIP_R("CUDA dmabuf is not supported");
+        }
+
+        if (receiver().ucph()->dmabuf_reg_md_map == 0) {
+            UCS_TEST_SKIP_R("dmabuf registration is not supported");
+        }
+    }
+};
+
+UCS_TEST_P(test_ucp_rma_dmabuf, put_registration_offset)
+{
+    ucs_memory_type_t mem_types[] = {UCS_MEMORY_TYPE_HOST,
+                                     UCS_MEMORY_TYPE_CUDA};
+
+    test_xfer(static_cast<send_func_t>(&test_ucp_rma::put_b),
+              ucs_get_page_size() - 1, 1, 1, UCS_MEMORY_TYPE_HOST,
+              UCS_MEMORY_TYPE_CUDA, 0, false, false, mem_types,
+              ucs_get_page_size());
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_dmabuf, ib_cuda, "ib,cuda_copy")
+
+
 class test_ucp_proto_emulation_enable : public test_ucp_rma {
 public:
     static constexpr size_t SMALL_SIZE = 8;
