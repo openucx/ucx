@@ -137,6 +137,7 @@ typedef struct ucs_topo_global_ctx {
 
 struct ucs_global_state {
     unsigned                   num_devices;
+    ucs_topo_acs_pair_cache_t  pair_cache;
     ucs_topo_sys_device_info_t devices[];
 };
 
@@ -1073,6 +1074,11 @@ ucs_global_state_t *ucs_topo_extract_state(void)
     memcpy(state->devices, ucs_topo_global_ctx.devices, devices_size);
     state->num_devices = ucs_topo_global_ctx.num_devices;
 
+    memcpy(state->pair_cache, ucs_topo_global_ctx.acs.pair_cache,
+           sizeof(state->pair_cache));
+    memset(ucs_topo_global_ctx.acs.pair_cache, UCS_TOPO_ACS_UNCHECKED,
+           sizeof(ucs_topo_global_ctx.acs.pair_cache));
+
     ucs_topo_global_ctx.num_devices = 0;
     kh_clear(bus_to_sys_dev, &ucs_topo_global_ctx.bus_to_sys_dev_hash);
 
@@ -1095,6 +1101,9 @@ void ucs_topo_restore_state(ucs_global_state_t *state)
     memcpy(ucs_topo_global_ctx.devices, state->devices,
            sizeof(ucs_topo_sys_device_info_t) * state->num_devices);
     ucs_topo_global_ctx.num_devices = state->num_devices;
+
+    memcpy(ucs_topo_global_ctx.acs.pair_cache, state->pair_cache,
+           sizeof(ucs_topo_global_ctx.acs.pair_cache));
 
     /* Create the hash table */
     kh_clear(bus_to_sys_dev, &ucs_topo_global_ctx.bus_to_sys_dev_hash);
@@ -1127,6 +1136,8 @@ void ucs_topo_init()
     ucs_spinlock_init(&ucs_topo_global_ctx.lock, 0);
     kh_init_inplace(bus_to_sys_dev, &ucs_topo_global_ctx.bus_to_sys_dev_hash);
     ucs_topo_global_ctx.num_devices = 0;
+    memset(ucs_topo_global_ctx.acs.pair_cache, UCS_TOPO_ACS_UNCHECKED,
+           sizeof(ucs_topo_global_ctx.acs.pair_cache));
     ucs_list_add_tail(&ucs_sys_topo_providers_list,
                       &ucs_sys_topo_provider_default.list);
     ucs_list_add_tail(&ucs_sys_topo_providers_list,
@@ -1603,12 +1614,9 @@ int ucs_topo_is_p2p_acs_enabled(ucs_sys_device_t sys_dev1,
     acs_status = ucs_topo_global_ctx.acs.pair_cache[sys_dev1][sys_dev2];
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
-    /* Any registered sys_dev pair must have its pair_cache cell populated by
-     * ucs_topo_find_device_by_bus_id under the same lock; UNCHECKED here is a
-     * real bug, not a benign race. */
-    ucs_assertv(acs_status != UCS_TOPO_ACS_UNCHECKED,
-                "pair_cache[%u][%u] read before population", sys_dev1,
-                sys_dev2);
+    ucs_assertv_always(acs_status != UCS_TOPO_ACS_UNCHECKED,
+                       "pair_cache[%u][%u] read before population", sys_dev1,
+                       sys_dev2);
 
     return acs_status == UCS_TOPO_ACS_BLOCKED;
 }
