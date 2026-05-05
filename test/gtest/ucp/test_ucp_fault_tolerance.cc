@@ -182,7 +182,7 @@ protected:
                 if (*lane_idx != UCP_NULL_LANE) {
                     tmp_lanes.insert(*lane_idx);
                 }
-            }   
+            }
         }
 
         std::vector<ucp_lane_index_t> lanes(tmp_lanes.begin(), tmp_lanes.end());
