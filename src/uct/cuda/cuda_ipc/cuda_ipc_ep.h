@@ -1,16 +1,19 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2026. ALL RIGHTS RESERVED.
-* See file LICENSE for terms.
-*/
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2026. ALL RIGHTS RESERVED.
+ * See file LICENSE for terms.
+ */
 
 #ifndef UCT_CUDA_IPC_EP_H
 #define UCT_CUDA_IPC_EP_H
 
 #include "cuda_ipc_iface_address.h"
+#include "ucs/type/class.h"
+#include "ucs/type/status.h"
+#include "uct/api/uct.h"
+#include "uct/base/uct_iface.h"
 
-#include <uct/api/uct.h>
-#include <uct/base/uct_iface.h>
-#include <ucs/type/class.h>
+#include <stddef.h>
+#include <stdint.h>
 
 
 typedef struct uct_cuda_ipc_ep {
