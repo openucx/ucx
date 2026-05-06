@@ -69,12 +69,11 @@ union uct_device_completion {
  * @return Error code as defined by @ref ucs_status_t
  */
 template<ucs_device_level_t level>
-UCS_F_DEVICE ucs_status_t
-uct_device_ep_put(uct_device_ep_h device_ep,
-                  const uct_device_local_mem_list_elem_t *src_uct_elem,
-                  const uct_device_mem_element_t *mem_elem, const void *address,
-                  uint64_t remote_address, size_t length, unsigned channel_id,
-                  uint64_t flags, uct_device_completion_t *comp)
+UCS_F_DEVICE ucs_status_t uct_device_ep_put(
+        uct_device_ep_h device_ep, const uct_device_mem_elem_t *src_uct_elem,
+        const uct_device_mem_elem_t *mem_elem, const void *address,
+        uint64_t remote_address, size_t length, unsigned channel_id,
+        uint64_t flags, uct_device_completion_t *comp)
 {
 #if UCT_RC_MLX5_GDA_SUPPORTED
     if (device_ep->uct_tl_id == UCT_DEVICE_TL_RC_MLX5_GDA) {
@@ -123,7 +122,7 @@ uct_device_ep_put(uct_device_ep_h device_ep,
  */
 template<ucs_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_device_ep_atomic_add(
-        uct_device_ep_h device_ep, const uct_device_mem_element_t *mem_elem,
+        uct_device_ep_h device_ep, const uct_device_mem_elem_t *mem_elem,
         uint64_t inc_value, uint64_t remote_address, unsigned channel_id,
         uint64_t flags, uct_device_completion_t *comp)
 {
@@ -160,7 +159,7 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_atomic_add(
  * @return Error code as defined by @ref ucs_status_t
  */
 UCS_F_DEVICE ucs_status_t uct_device_ep_get_ptr(
-        uct_device_ep_h device_ep, const uct_device_mem_element_t *mem_elem,
+        uct_device_ep_h device_ep, const uct_device_mem_elem_t *mem_elem,
         uint64_t address, void **addr_p)
 {
 #if UCT_CUDA_IPC_SUPPORTED

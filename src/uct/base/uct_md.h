@@ -128,7 +128,7 @@ typedef ucs_status_t (*uct_md_detect_memory_type_func_t)(uct_md_h md,
 
 typedef ucs_status_t (*uct_md_mem_elem_pack_func_t)(
         uct_md_h md, uct_mem_h memh, uct_rkey_t rkey,
-        uct_device_mem_element_t *mem_elem_p);
+        uct_device_mem_elem_t *mem_elem_p);
 
 /**
  * Memory domain operations

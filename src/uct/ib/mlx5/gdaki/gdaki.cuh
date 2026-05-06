@@ -263,7 +263,7 @@ uct_rc_mlx5_gda_fc(const uct_rc_gdaki_dev_ep_t *ep, uint16_t wqe_idx)
 
 template<ucs_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_single(
-        uct_rc_gdaki_dev_ep_t *ep, const uct_device_mem_element_t *tl_mem_elem,
+        uct_rc_gdaki_dev_ep_t *ep, const uct_device_mem_elem_t *tl_mem_elem,
         const void *address, uint32_t lkey, uint64_t remote_address,
         uint32_t rkey, size_t length, unsigned cid, uint64_t flags,
         uct_device_completion_t *tl_comp, uint32_t opcode, bool is_atomic,
@@ -310,9 +310,8 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_single(
 
 template<ucs_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put(
-        uct_device_ep_h tl_ep,
-        const uct_device_local_mem_list_elem_t *src_uct_elem,
-        const uct_device_mem_element_t *tl_mem_elem, const void *address,
+        uct_device_ep_h tl_ep, const uct_device_mem_elem_t *src_uct_elem,
+        const uct_device_mem_elem_t *tl_mem_elem, const void *address,
         uint64_t remote_address, size_t length, unsigned channel_id,
         uint64_t flags, uct_device_completion_t *comp)
 {
@@ -321,7 +320,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put(
             tl_mem_elem);
     auto local_mem_elem =
             reinterpret_cast<const uct_ib_md_device_mem_element_t*>(
-                    &src_uct_elem->uct_mem_element);
+                    src_uct_elem);
     auto cid = channel_id & ep->channel_mask;
 
     return uct_rc_mlx5_gda_ep_single<level>(ep, tl_mem_elem, address,
@@ -333,7 +332,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_put(
 
 template<ucs_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_atomic_add(
-        uct_device_ep_h tl_ep, const uct_device_mem_element_t *tl_mem_elem,
+        uct_device_ep_h tl_ep, const uct_device_mem_elem_t *tl_mem_elem,
         uint64_t value, uint64_t remote_address, unsigned channel_id,
         uint64_t flags, uct_device_completion_t *comp)
 {
