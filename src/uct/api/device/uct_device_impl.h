@@ -21,8 +21,11 @@
 #define UCT_CUDA_IPC_SUPPORTED 0
 #endif
 
-#if HAVE_ROCM
+#if HAVE_ROCM && __has_include(<uct/rocm/ipc/rocm_ipc.h>)
 #include <uct/rocm/ipc/rocm_ipc.h>
+#define UCT_ROCM_IPC_SUPPORTED 1
+#else
+#define UCT_ROCM_IPC_SUPPORTED 0
 #endif
 
 #if defined(__NVCC__) && __has_include(<uct/ib/mlx5/gdaki/gdaki.cuh>) && \
@@ -40,7 +43,7 @@ union uct_device_completion {
 #if UCT_CUDA_IPC_SUPPORTED
     uct_cuda_ipc_completion_t cuda_ipc;
 #endif
-#if HAVE_ROCM
+#if UCT_ROCM_IPC_SUPPORTED
     uct_rocm_ipc_completion_t rocm_ipc;
 #endif
 };
@@ -96,7 +99,7 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put(
                                           remote_address, length, flags, comp);
     }
 #endif
-#if HAVE_ROCM
+#if UCT_ROCM_IPC_SUPPORTED
     if (device_ep->uct_tl_id == UCT_DEVICE_TL_ROCM_IPC) {
         return uct_rocm_ipc_ep_put<level>(device_ep, mem_elem, address,
                                           remote_address, length, flags, comp);
@@ -153,7 +156,7 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_atomic_add(
                                                  remote_address, flags, comp);
     }
 #endif
-#if HAVE_ROCM
+#if UCT_ROCM_IPC_SUPPORTED
     if (device_ep->uct_tl_id == UCT_DEVICE_TL_ROCM_IPC) {
         return uct_rocm_ipc_ep_atomic_add<level>(device_ep, mem_elem, inc_value,
                                                  remote_address, flags, comp);
@@ -187,7 +190,7 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_get_ptr(
         return uct_cuda_ipc_ep_get_ptr(device_ep, mem_elem, address, addr_p);
     }
 #endif
-#if HAVE_ROCM
+#if UCT_ROCM_IPC_SUPPORTED
     if (device_ep->uct_tl_id == UCT_DEVICE_TL_ROCM_IPC) {
         return uct_rocm_ipc_ep_get_ptr(device_ep, mem_elem, address, addr_p);
     }

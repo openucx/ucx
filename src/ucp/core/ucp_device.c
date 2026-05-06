@@ -358,20 +358,20 @@ ucp_device_detect_export_mem_type(ucp_context_h context,
                                   ucs_memory_type_t *export_mem_type_p,
                                   ucs_sys_device_t *sys_dev_p)
 {
-    ucs_status_t status;
+    static const ucs_memory_type_t device_mem_types[] = {
+        UCS_MEMORY_TYPE_CUDA,
+        UCS_MEMORY_TYPE_ROCM
+    };
+    ucs_status_t status = UCS_ERR_UNSUPPORTED;
+    size_t i;
 
-    status = ucp_device_detect_local_sys_dev(context, UCS_MEMORY_TYPE_CUDA,
-                                             sys_dev_p);
-    if (status == UCS_OK) {
-        *export_mem_type_p = UCS_MEMORY_TYPE_CUDA;
-        return UCS_OK;
-    }
-
-    status = ucp_device_detect_local_sys_dev(context, UCS_MEMORY_TYPE_ROCM,
-                                             sys_dev_p);
-    if (status == UCS_OK) {
-        *export_mem_type_p = UCS_MEMORY_TYPE_ROCM;
-        return UCS_OK;
+    for (i = 0; i < ucs_static_array_size(device_mem_types); i++) {
+        status = ucp_device_detect_local_sys_dev(context, device_mem_types[i],
+                                                 sys_dev_p);
+        if (status == UCS_OK) {
+            *export_mem_type_p = device_mem_types[i];
+            return UCS_OK;
+        }
     }
 
     return status;
