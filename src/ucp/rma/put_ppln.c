@@ -842,7 +842,7 @@ ucp_rma_ppln_create_freqs(ucp_ep_h ep, ucp_datatype_iter_t *dt_iter,
     ucp_datatype_iter_t next_iter;
     ucp_request_t *freq;
     unsigned frag_idx;
-    size_t overlap;
+    size_t UCS_V_UNUSED overlap;
 
     frag_idx = 0;
     while (!ucp_datatype_iter_is_end(dt_iter)) {
@@ -1214,10 +1214,10 @@ ucp_proto_get_ppln_rtr_complete(ucp_request_t *req)
 static void
 ucp_proto_get_ppln_init_from_get(ucp_request_t *req)
 {
-    const ucp_proto_ppln_priv_t *rpriv = req->send.proto_config->priv;
+    const ucp_proto_ppln_priv_t *rpriv  = req->send.proto_config->priv;
     const ucp_proto_multi_priv_t *mpriv = rpriv->frag_proto_cfg.priv;
-    ucp_context_h context              = req->send.ep->worker->context;
-    size_t total_length                = req->send.state.dt_iter.length;
+    ucp_context_h UCS_V_UNUSED context  = req->send.ep->worker->context;
+    size_t total_length                 = req->send.state.dt_iter.length;
 
     ucs_assertv(rpriv->frag_size ==
                 context->config.ext.ppln_frag_size[
