@@ -11,12 +11,7 @@
 ### Features:
 ### Bugfixes:
 
-## 1.20.1-rc2 (April 6, 2026)
-### Bugfixes:
-#### Build
-* Fixed IB configuration const correctness for strchr() to allow compilation with GCC 15.2.1
-
-## 1.20.1-rc1 (March 18, 2026)
+## 1.20.1 (May 6, 2026)
 ### Features:
 #### RDMA CORE (IB, ROCE, etc.)
  * Added 'auto' option for UCX_IB_MLX5_DEVX_OBJECTS which disables DevX when ODP is available (for Grace)
@@ -24,6 +19,8 @@
 #### Documentation
  * Clarified that user buffer can be modified after calling ucp_atomic_op_nbx
 ### Bugfixes:
+#### Build
+* Fixed IB configuration const correctness for strchr() to allow compilation with GCC 15.2.1
 #### UCP
  * Increased TLS info buffer size in transport selection to prevent potential truncation
  * Fixed incorrect warning about valid environment variable names
@@ -44,6 +41,7 @@
 #### Packaging
  * Fix libnvidia-compute removal from ucx-cuda debian package dependencies, breaking existing installation
  * Obsoleted KNEM sub-package
+ * Fix maintainer field in debian packaging
 
 ## 1.20.0 (December 2, 2025)
 ### Features:
