@@ -30,6 +30,52 @@
 #include <stdlib.h>
 #include <poll.h>
 #include <float.h>
+#include <pthread.h>
+
+
+/*
+ * Process-wide registry of IB port LIDs that are locally present on a
+ * link-local (fe80::) subnet.  When a pure-IB iface is created it registers
+ * its own LID here; the reachability check consults the table so that ANY
+ * local port whose LID matches the remote LID causes the connection to be
+ * rejected.  This prevents two ports on the same isolated fabric from
+ * mistakenly connecting to matching LIDs on a *different* isolated fabric that
+ * happens to share the same link-local prefix.
+ */
+static pthread_mutex_t uct_ib_link_local_lid_lock = PTHREAD_MUTEX_INITIALIZER;
+/* refcount per LID value (uint16_t → index 0..65535) */
+static uint8_t         uct_ib_link_local_lid_refcnt[1u << 16];
+
+static void uct_ib_link_local_lid_register(uint16_t lid)
+{
+    if (lid == 0) {
+        return; /* LID 0 is unassigned; skip */
+    }
+    pthread_mutex_lock(&uct_ib_link_local_lid_lock);
+    if (uct_ib_link_local_lid_refcnt[lid] < UINT8_MAX) {
+        __atomic_store_n(&uct_ib_link_local_lid_refcnt[lid],
+                         uct_ib_link_local_lid_refcnt[lid] + 1, __ATOMIC_RELEASE);
+    }
+    pthread_mutex_unlock(&uct_ib_link_local_lid_lock);
+}
+
+static void uct_ib_link_local_lid_unregister(uint16_t lid)
+{
+    if (lid == 0) {
+        return;
+    }
+    pthread_mutex_lock(&uct_ib_link_local_lid_lock);
+    if (uct_ib_link_local_lid_refcnt[lid] > 0) {
+        __atomic_store_n(&uct_ib_link_local_lid_refcnt[lid],
+                         uct_ib_link_local_lid_refcnt[lid] - 1, __ATOMIC_RELEASE);
+    }
+    pthread_mutex_unlock(&uct_ib_link_local_lid_lock);
+}
+
+static int uct_ib_link_local_lid_is_local(uint16_t lid)
+{
+    return __atomic_load_n(&uct_ib_link_local_lid_refcnt[lid], __ATOMIC_ACQUIRE) > 0;
+}
 
 
 /**
@@ -929,6 +975,23 @@ static int uct_ib_iface_dev_addr_is_reachable(
     if (!is_local_eth && !(ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH)) {
         if (params.gid.global.subnet_prefix ==
             iface->gid_info.gid.global.subnet_prefix) {
+            /* For the link-local subnet prefix, multiple isolated IB
+             * fabrics may share the same fe80:: default prefix while
+             * being physically disjoint.  Any remote LID that is also
+             * present on a local port means the remote must be on a
+             * different isolated fabric: within a single fabric LIDs are
+             * unique, so a collision implies separate fabrics. */
+            if ((iface->gid_info.gid.global.subnet_prefix ==
+                 UCT_IB_LINK_LOCAL_PREFIX) &&
+                uct_ib_link_local_lid_is_local(params.lid)) {
+                uct_iface_fill_info_str_buf(
+                        is_reachable_params,
+                        "link-local IB subnet: remote LID %d matches a"
+                        " local port LID, indicating separate isolated"
+                        " fabrics",
+                        params.lid);
+                return 0;
+            }
             return 1;
         }
 
@@ -1843,6 +1906,14 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
               self->config.rx_headroom_offset, self->config.rx_payload_offset,
               self->config.rx_hdr_offset, self->config.seg_size);
 
+    /* Register this port's LID in the process-wide link-local LID table so
+     * that other local ports on the same isolated fabric can detect LID
+     * collisions with remote peers on different isolated fabrics. */
+    if (!uct_ib_iface_is_roce(self) &&
+        (self->gid_info.gid.global.subnet_prefix == UCT_IB_LINK_LOCAL_PREFIX)) {
+        uct_ib_link_local_lid_register(uct_ib_iface_port_attr(self)->lid);
+    }
+
     return UCS_OK;
 
 err_destroy_send_cq:
@@ -1860,6 +1931,11 @@ err:
 static UCS_CLASS_CLEANUP_FUNC(uct_ib_iface_t)
 {
     int ret;
+
+    if (!uct_ib_iface_is_roce(self) &&
+        (self->gid_info.gid.global.subnet_prefix == UCT_IB_LINK_LOCAL_PREFIX)) {
+        uct_ib_link_local_lid_unregister(uct_ib_iface_port_attr(self)->lid);
+    }
 
     self->ops->destroy_cq(self, UCT_IB_DIR_RX);
     self->ops->destroy_cq(self, UCT_IB_DIR_TX);
