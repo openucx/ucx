@@ -64,6 +64,13 @@ protected:
     };
 
     void init() override {
+        if (get_variant_value() & TEST_OP_ALL_LANES_FAILED) {
+            /* Defer recovery past the test deadline so failed_lanes
+             * accumulates across all per-lane invalidations. */
+            modify_config("RECOVERY_INTERVAL",
+                          std::to_string(ucs::test_timeout_in_sec) + "s");
+        }
+
         ucp_test::init();
 
         ucp_ep_params_t ep_params = get_ep_params();
@@ -275,16 +282,6 @@ protected:
                                                   op_mask & TEST_OP_FLUSH);
         EXPECT_EQ(UCS_OK, status) << op_str << " operation returned status: "
                                   << ucs_status_string(status);
-
-        size_t num_lanes_to_fail = am_bw_lanes.size();
-        if (has_any_transport({"ud_v", "ud_x"}) &&
-            (failure_side == FAILURE_SIDE_INITIATOR)) {
-            /* TODO: remove this once UD ep purge assertions are fixed */
-            UCS_TEST_MESSAGE << "Keep 1 live lane for UD transports since "
-                             << "local error injection on all lanes leads to "
-                                "failed assertion in ud_ep_purge";
-            num_lanes_to_fail--;
-        }
 
         ucp_ep_h ucp_ep_for_injection = get_ucp_ep_for_err_injection(failure_side);
         for (size_t num_lanes_to_fail = (op_mask & TEST_OP_ALL_LANES_FAILED) ? am_bw_lanes.size() :
