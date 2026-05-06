@@ -1050,6 +1050,13 @@ ucp_rma_ppln_frag_copy_out_complete(uct_completion_t *self)
             ucs_container_of(self, ucp_put_ppln_recv_frag_t, comp);
     ucp_request_t *req = frag->req;
 
+    if (ucs_unlikely(self->status != UCS_OK)) {
+        ucs_error("rma_ppln: copy-out completion error req=%p status=%s",
+                  req, ucs_status_string(self->status));
+        ucp_proto_request_abort(req, self->status);
+        return;
+    }
+
     if (ucp_rma_ppln_frag_copy_out_done(req, frag)) {
         ucp_rma_ppln_copy_out_done(req);
         ucp_request_send(req);
@@ -1220,11 +1227,15 @@ ucp_proto_get_ppln_init_from_get(ucp_request_t *req)
                 context->config.ext.ppln_frag_size[
                     ucp_rma_ppln_frag_mem_type(context)]);
 
+    /* Move this address first */
+    req->send.recv_ppln.remote_addr   = req->send.rma.remote_addr;
+
     req->send.recv_ppln.frag_count    = ucs_div_round_up(total_length,
                                                           rpriv->frag_size);
     req->send.recv_ppln.frag_size     = rpriv->frag_size;
     req->send.recv_ppln.total_length  = total_length;
-    req->send.recv_ppln.remote_addr   = req->send.rma.remote_addr;
+    req->send.recv_ppln.local_addr    =
+        (uint64_t)req->send.state.dt_iter.type.contig.buffer;
     req->send.recv_ppln.sender_req_id = UCS_PTR_MAP_KEY_INVALID;
     req->send.recv_ppln.md_map        = ucp_proto_ppln_local_md_map_from_config(
                                               req->send.ep, mpriv);
@@ -1313,7 +1324,7 @@ ucp_proto_get_ppln_copy_out_progress(uct_pending_req_t *self)
         frag_id = (int)(frag - frags);
 
         offset    = (size_t)frag_id * frag_size;
-        dest_addr = req->send.recv_ppln.remote_addr + offset;
+        dest_addr = req->send.recv_ppln.local_addr + offset;
         length    = ucs_min(frag_size, total_length - offset);
 
         ucs_assertv((frag_id < req->send.recv_ppln.frag_count - 1)
@@ -1352,6 +1363,8 @@ ucp_proto_get_ppln_copy_out_progress(uct_pending_req_t *self)
         } else if (ucs_unlikely(status != UCS_INPROGRESS)) {
             ucs_error("rma_ppln: copy-out failed req=%p frag_id=%d status=%s",
                       req, frag_id, ucs_status_string(status));
+            ucp_proto_request_abort(req, status);
+            return UCS_OK;
         }
     }
 
@@ -1527,7 +1540,7 @@ ucp_rma_ppln_rts_handler(ucp_worker_h worker,
     req->send.recv_ppln.md_map        = rts->md_map;
     req->send.recv_ppln.sys_dev       = rts->sys_dev;
     req->send.recv_ppln.frag_size     = rts->frag_size;
-    req->send.recv_ppln.remote_addr   = rts->remote_addr;
+    req->send.recv_ppln.local_addr    = rts->remote_addr;
     req->send.recv_ppln.total_length  = rts->total_length;
 
     mem_info.type    = UCS_MEMORY_TYPE_CUDA;
@@ -1585,7 +1598,7 @@ ucp_rma_ppln_rtr_unpack_frags(ucp_ep_h ep, ucp_request_t **freqs,
         freq->send.frag_ppln.remote_mdesc  = entry->mdesc;
         freq->send.frag_ppln.remote_req_id = rtr->super.super.req_id;
 
-        ucs_trace_req("rma_ppln: RTR frag=%d freq=%p remote_addr=0x%" PRIx64
+        ucs_trace_req("rma_ppln: RTR: create frag=%d freq=%p remote_addr=0x%" PRIx64
                       " remote_mdesc=%p rkey_len=%u",
                       i, freq, entry->addr, entry->mdesc,
                       entry->packed_rkey_len);
@@ -1706,7 +1719,8 @@ ucp_rma_ppln_rtr_handler(ucp_worker_h worker,
     }
 
     for (i = 0; i < num_freqs; i++) {
-        if (freqs[i]->send.proto_stage == UCP_PROTO_PUT_MTYPE_STAGE_SEND) {
+        if ((rtr->sender_req_id == UCS_PTR_MAP_KEY_INVALID) ||
+            (freqs[i]->send.proto_stage == UCP_PROTO_PUT_MTYPE_STAGE_SEND)) {
             ucp_request_send(freqs[i]);
         }
     }
