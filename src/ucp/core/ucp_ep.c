@@ -1885,22 +1885,26 @@ ucp_ep_recovery_mark_ready(ucp_ep_h ep, ucp_lane_index_t lane)
                         UCP_WIREUP_EP_FLAG_REMOTE_CONNECTED;
 }
 
-/* Find a CONNECT_TO_IFACE address entry reachable from `lane`'s local rsc.
+/**
+ * @brief Find a CONNECT_TO_IFACE address entry for the specified lane.
  *
- * TODO: this picks the first reachable entry, which can silently migrate
- * the lane to a different peer device when multiple peer rscs match (e.g.
- * two HCAs on the same subnet running dc_mlx5). Disambiguate via
- * cfg_key->lanes[lane].dst_md_index / dst_sys_dev, or carry the peer
- * rsc_index per lane in LANES_ADDR_REQUEST/REPLY. */
+ * Returns the reachable entry whose memory domain index and system device
+ * match the lane's recorded destination, to keep the rebuilt lane bound to
+ * the same peer device. Returns NULL if no such entry exists.
+ */
 static const ucp_address_entry_t *
 ucp_ep_recovery_find_iface_addr(ucp_ep_h ep, ucp_lane_index_t lane,
                                 const ucp_unpacked_address_t *remote_address)
 {
-    ucp_rsc_index_t rsc_index = ucp_ep_config(ep)->key.lanes[lane].rsc_index;
+    const ucp_ep_config_key_lane_t *cfg_lane =
+            &ucp_ep_config(ep)->key.lanes[lane];
+    const ucp_rsc_index_t rsc_index          = cfg_lane->rsc_index;
     const ucp_address_entry_t *ae;
 
     ucp_unpacked_address_for_each(ae, remote_address) {
         if ((ae->iface_addr != NULL) &&
+            (ae->md_index == cfg_lane->dst_md_index) &&
+            (ae->sys_dev  == cfg_lane->dst_sys_dev) &&
             ucp_wireup_is_reachable(ep, 0, rsc_index, ae, NULL, 0)) {
             return ae;
         }
