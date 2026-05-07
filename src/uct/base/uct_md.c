@@ -233,7 +233,9 @@ ucs_status_t uct_iface_open(uct_md_h md, uct_worker_h worker,
     UCT_CHECK_PARAM(params->field_mask & UCT_IFACE_PARAM_FIELD_OPEN_MODE,
                     "UCT_IFACE_PARAM_FIELD_OPEN_MODE is not defined");
 
-    if (params->open_mode & UCT_IFACE_OPEN_MODE_DEVICE) {
+    if (params->open_mode & UCT_IFACE_OPEN_MODE_STUB) {
+        return uct_stub_iface_open(params->mode.stub.status, iface_p);
+    } else if (params->open_mode & UCT_IFACE_OPEN_MODE_DEVICE) {
         tl = uct_find_tl(md->component, params->mode.device.tl_name);
     } else if ((params->open_mode & UCT_IFACE_OPEN_MODE_SOCKADDR_CLIENT) ||
                (params->open_mode & UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER)) {
@@ -655,4 +657,10 @@ ucs_status_t uct_md_dummy_mem_dereg(uct_md_h uct_md,
     ucs_assert(params->memh == (void*)0xdeadbeef);
 
     return UCS_OK;
+}
+
+ucs_status_t uct_md_mem_elem_pack(uct_md_h md, uct_mem_h memh, uct_rkey_t rkey,
+                                  uct_device_mem_elem_t *mem_elem)
+{
+    return md->ops->mem_elem_pack(md, memh, rkey, mem_elem);
 }

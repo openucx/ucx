@@ -801,7 +801,7 @@ const char* ucs_sockaddr_str(const struct sockaddr *sock_addr,
 
     if (sock_addr->sa_family == AF_INET6) {
         str_len = strlen(str);
-        ucs_snprintf_zero(str + str_len, max_size - str_len, "%%%d",
+        ucs_snprintf_zero(str + str_len, max_size - str_len, "%%%x",
                           ((struct sockaddr_in6*)sock_addr)->sin6_scope_id);
     }
 
@@ -973,9 +973,6 @@ int ucs_sockaddr_is_same_subnet(const struct sockaddr *sa1,
     size_t addr_size, addr_size_bits;
 
     if (sa1->sa_family != sa2->sa_family) {
-        ucs_debug("different addr_family: s1 %s s2 %s",
-                  ucs_sockaddr_address_family_str(sa1->sa_family),
-                  ucs_sockaddr_address_family_str(sa2->sa_family));
         return 0;
     }
 

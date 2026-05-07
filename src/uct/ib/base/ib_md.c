@@ -120,14 +120,20 @@ ucs_config_field_t uct_ib_md_config_table[] = {
      "Use GPU Direct RDMA for HCA to access GPU pages directly\n",
      ucs_offsetof(uct_ib_md_config_t, enable_gpudirect_rdma), UCS_CONFIG_TYPE_TERNARY},
 
-    {"GDA_MAX_HCA_PER_GPU", "1",
+    {"GDA_MAX_HCA_PER_GPU", "auto",
      "Max number of HCA devices to use for GDA per one GPU device.",
      ucs_offsetof(uct_ib_md_config_t, ext.gda_max_hca_per_gpu),
-     UCS_CONFIG_TYPE_UINT},
+     UCS_CONFIG_TYPE_ULUNITS},
 
     {"GDA_DMABUF_ENABLE", "try",
      "Enable DMA-BUF in GDA.",
      ucs_offsetof(uct_ib_md_config_t, ext.gda_dmabuf_enable), UCS_CONFIG_TYPE_TERNARY},
+
+    {"GDA_RETAIN_INACTIVE_CTX", "n",
+     "Retain and use an inactive CUDA primary context to query device "
+     "capabilities.",
+     ucs_offsetof(uct_ib_md_config_t, ext.gda_retain_inactive_ctx),
+     UCS_CONFIG_TYPE_BOOL},
 
     {"PCI_BW", "",
      "Maximum effective data transfer rate of PCI bus connected to HCA\n",
@@ -1596,6 +1602,7 @@ static uct_ib_md_ops_t uct_ib_verbs_md_ops = {
         .mkey_pack          = uct_ib_verbs_mkey_pack,
         .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
         .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported,
+        .mem_elem_pack      = (uct_md_mem_elem_pack_func_t)ucs_empty_function_return_unsupported
     },
     .open = uct_ib_verbs_md_open,
 };

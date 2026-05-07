@@ -9,8 +9,12 @@ pr:
     - v*.*.x
   paths:
     exclude:
+    - .agents
+    - .claude/skills
     - .gitignore
     - .readthedocs.yaml
+    - AGENTS.md
+    - CLAUDE.md
     - contrib/pr_merge_check.py
     - contrib/check_qps.sh
     - docs/source

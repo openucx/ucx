@@ -58,6 +58,11 @@ typedef enum {
  * will be different, in which case we prefer the 'local' library rather than the
  * 'installed' one.
  *
+ * After loading expected modules, external plugins matching the framework are
+ * discovered and loaded from:
+ *  1. Directories listed in UCX_PLUGIN_PATH (colon-separated)
+ *  2. The same built-in module search directories listed above
+ *
  * @param [in] _name  Framework name (as a token)
  */
 #define UCS_MODULE_FRAMEWORK_LOAD(_name, _flags) \
@@ -89,7 +94,7 @@ typedef enum {
 /**
  * Internal function. Please use @ref UCS_MODULE_FRAMEWORK_LOAD macro instead.
  */
-void ucs_load_modules(const char *framework, const char *modules,
+void ucs_load_modules(const char *framework, const char *expected_modules,
                       ucs_init_once_t *init_once, unsigned flags);
 
 

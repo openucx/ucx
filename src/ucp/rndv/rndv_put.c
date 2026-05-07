@@ -91,7 +91,7 @@ ucp_proto_rndv_put_common_flush_completion_send_atp(uct_completion_t *uct_comp)
     ucp_request_send(req);
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
+static UCS_F_INLINE_OPTIMIZED ucs_status_t
 ucp_proto_rndv_put_common_flush_send(ucp_request_t *req, ucp_lane_index_t lane)
 {
     ucp_ep_h ep = req->send.ep;
@@ -208,7 +208,7 @@ ucp_proto_rndv_put_common_fenced_atp_progress(uct_pending_req_t *uct_req)
             ucp_proto_rndv_put_common_fenced_atp_send);
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
+static UCS_F_INLINE_OPTIMIZED ucs_status_t
 ucp_proto_rndv_put_common_data_sent(ucp_request_t *req)
 {
     const ucp_proto_rndv_put_priv_t *rpriv = req->send.proto_config->priv;
@@ -502,7 +502,7 @@ static void ucp_proto_rndv_put_mtype_pack_completion(uct_completion_t *uct_comp)
     ucp_request_send(req);
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_put_mtype_send_func(
+static UCS_F_INLINE_OPTIMIZED ucs_status_t ucp_proto_rndv_put_mtype_send_func(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
         ucp_datatype_iter_t *next_iter, ucp_lane_index_t *lane_shift)
 {

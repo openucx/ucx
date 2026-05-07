@@ -1787,11 +1787,11 @@ public:
         UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
             auto wiface = ucp_worker_iface(worker, rsc_index);
 
-            /* Compare resources by device and transport */
-            if ((context->tl_rscs[rsc_index].tl_name_csum ==
+            /* Compare resources by md_index, transport name, and device */
+            if ((context->tl_rscs[rsc_index].md_index == ae->md_index) &&
+                (context->tl_rscs[rsc_index].tl_name_csum ==
                  ae->tl_name_csum) &&
                 uct_iface_is_reachable_v2(wiface->iface, &params)) {
-                EXPECT_EQ(ae->md_index, context->tl_rscs[rsc_index].md_index);
                 return &wiface->attr;
             }
         }

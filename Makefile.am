@@ -41,8 +41,7 @@ SUBDIRS = \
 	src/ucm \
 	src/ucs \
 	src/uct \
-	src/ucp \
-	stubs
+	src/ucp
 
 SUBDIRS += \
 	src/tools/vfs \

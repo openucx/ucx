@@ -473,20 +473,23 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
         max_iov  = attr.cap.am.max_iov;
         break;
     case UCX_PERF_CMD_PUT:
-        required_flags = __get_flag(params->uct.data_layout, UCT_IFACE_FLAG_PUT_SHORT,
-                                    UCT_IFACE_FLAG_PUT_BCOPY, UCT_IFACE_FLAG_PUT_ZCOPY);
-        min_size = __get_max_size(params->uct.data_layout, 0, 0,
-                                  attr.cap.put.min_zcopy);
-        max_size = __get_max_size(params->uct.data_layout, attr.cap.put.max_short,
-                                  attr.cap.put.max_bcopy, attr.cap.put.max_zcopy);
-        max_iov  = attr.cap.put.max_iov;
-        break;
-    case UCX_PERF_CMD_PUT_SINGLE:
-    case UCX_PERF_CMD_PUT_MULTI:
-    case UCX_PERF_CMD_PUT_PARTIAL:
-        min_size = 0;
-        max_size = 0;
-        max_iov  = 0;
+        if (params->send_device.mem_type != UCS_MEMORY_TYPE_LAST) {
+            min_size = 0;
+            max_size = 0;
+            max_iov  = 0;
+        } else {
+            required_flags = __get_flag(params->uct.data_layout,
+                                        UCT_IFACE_FLAG_PUT_SHORT,
+                                        UCT_IFACE_FLAG_PUT_BCOPY,
+                                        UCT_IFACE_FLAG_PUT_ZCOPY);
+            min_size       = __get_max_size(params->uct.data_layout, 0, 0,
+                                            attr.cap.put.min_zcopy);
+            max_size       = __get_max_size(params->uct.data_layout,
+                                            attr.cap.put.max_short,
+                                            attr.cap.put.max_bcopy,
+                                            attr.cap.put.max_zcopy);
+            max_iov        = attr.cap.put.max_iov;
+        }
         break;
     case UCX_PERF_CMD_GET:
         required_flags = __get_flag(params->uct.data_layout, UCT_IFACE_FLAG_GET_SHORT,
@@ -887,9 +890,6 @@ static ucs_status_t ucp_perf_test_fill_params(ucx_perf_params_t *params,
     message_size = ucx_perf_get_message_size(params);
     switch (params->command) {
     case UCX_PERF_CMD_PUT:
-    case UCX_PERF_CMD_PUT_SINGLE:
-    case UCX_PERF_CMD_PUT_MULTI:
-    case UCX_PERF_CMD_PUT_PARTIAL:
     case UCX_PERF_CMD_GET:
         ucp_params->features |= UCP_FEATURE_RMA;
         break;

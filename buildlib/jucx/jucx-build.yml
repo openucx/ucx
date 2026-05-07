@@ -44,10 +44,7 @@ jobs:
           az_module_load dev/mvn
           # use the lowest supported Java version for compatibility:
           az_module_load dev/jdk-1.8
-          TAG=`git describe --tags`
-          # Maven requires version to be of form MAJOR_VERSION.MINOR_VERSIOn,...
-          # ucx tags are of form v1.x.x - need to remove 'v' from the beginning of string
-          MAVEN_VERSION=${TAG:1}
+          MAVEN_VERSION=$(grep '^VERSION = ' Makefile | cut -d= -f2 | tr -d ' ')
           make -C bindings/java/src/main/native/ package JUCX_VERSION=${MAVEN_VERSION}
         displayName: Build JUCX
 
@@ -94,10 +91,7 @@ jobs:
           echo "allow-loopback-pinentry" > $GNUPGHOME/gpg-agent.conf
           gpg-connect-agent reloadagent /bye || true
 
-          TAG=`git describe --tags`
-          # Maven requires version to be of form MAJOR_VERSION.MINOR_VERSIOn,...
-          # ucx tags are of form v1.x.x - need to remove 'v' from the beginning of string
-          MAVEN_VERSION=${TAG:1}
+          MAVEN_VERSION=$(grep '^VERSION = ' Makefile | cut -d= -f2 | tr -d ' ')
           make -C bindings/java/src/main/native/ ${{ parameters.target }} \
               ARGS="--settings $(temp_cfg)" \
               JUCX_VERSION=${MAVEN_VERSION}${SUFFIX}

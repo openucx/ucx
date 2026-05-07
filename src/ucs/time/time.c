@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -10,17 +10,19 @@
 
 #include <ucs/time/time.h>
 #include <ucs/debug/log.h>
+#include <ucs/debug/assert.h>
 
+
+static double clocks_per_sec = -42.0;
+
+void ucs_init_cpu_clocks_per_sec()
+{
+    clocks_per_sec = ucs_arch_get_clocks_per_sec();
+    ucs_debug("arch clock frequency: %.2f Hz", clocks_per_sec);
+}
 
 double ucs_get_cpu_clocks_per_sec()
 {
-    static double clocks_per_sec = 0.0;
-    static int initialized = 0;
-
-    if (!initialized) {
-        clocks_per_sec = ucs_arch_get_clocks_per_sec();
-        ucs_debug("arch clock frequency: %.2f Hz", clocks_per_sec);
-        initialized = 1;
-    }
+    ucs_assert(clocks_per_sec > 0.0);
     return clocks_per_sec;
 }

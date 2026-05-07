@@ -2,7 +2,7 @@
 #
 # Testing script for OpenUCX, to run from Jenkins CI
 #
-# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2023. ALL RIGHTS RESERVED.
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 # Copyright (C) ARM Ltd. 2016-2018.  ALL RIGHTS RESERVED.
 #
 # See file LICENSE for terms.
@@ -744,6 +744,12 @@ run_mpi_tests() {
 				echo "==== Running MPI CUDA tests with put_ppln ===="
 				${MPIRUN_COMMON} -np 2  -x UCX_RNDV_SCHEME=put_ppln \
 						./test/mpi/test_mpi_cuda
+			fi
+
+			if [ "X$have_cuda" != "Xno" ] && [ -x ./test/mpi/test_rma_cuda ]
+			then
+				echo "==== Running RMA CUDA tests ===="
+				${MPIRUN_COMMON} -np 2 ./test/mpi/test_rma_cuda
 			fi
 
 			# Restore LD_LIBRARY_PATH so subsequent tests will not take UCX libs

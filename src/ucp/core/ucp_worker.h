@@ -491,6 +491,8 @@ ucp_worker_flush_ops_count_add(ucp_worker_h worker, int count)
 
     UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED_CONDITIONAL(worker);
 
+    ucs_debug("worker %p flush_ops_count %d -> %ld",
+              worker, worker->flush_ops_count, flush_ops_count);
     worker->flush_ops_count = flush_ops_count;
 }
 

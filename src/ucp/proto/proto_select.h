@@ -47,6 +47,8 @@
 #define ucp_proto_select_op_attr_pack(_op_attr, _mask) \
     (((_op_attr) & (_mask)) / UCP_PROTO_SELECT_OP_ATTR_BASE)
 
+/* Invalid private offset */
+#define UCP_PROTO_INIT_ELEM_PRIV_OFFSET_INVALID SIZE_MAX
 
 typedef struct {
     ucp_proto_id_t        proto_id;

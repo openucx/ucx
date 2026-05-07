@@ -5,27 +5,33 @@
  */
 
 #include <thread>
+#include <vector>
 
 #include <uct/test_md.h>
 #include <cuda.h>
 
 extern "C" {
 #include <uct/cuda/cuda_ipc/cuda_ipc_md.h>
+#include <uct/cuda/cuda_ipc/cuda_ipc_cache.h>
 #include <uct/cuda/base/cuda_iface.h>
+#include <uct/cuda/base/cuda_util.h>
+#include <ucs/datastruct/pgtable.h>
+#include <ucs/debug/memtrack_int.h>
+#include <ucs/sys/ptr_arith.h>
 }
 
 class test_cuda_ipc_md : public test_md {
 protected:
-    static uct_cuda_ipc_rkey_t
+    static uct_cuda_ipc_extended_rkey_t
     unpack_common(uct_md_h md, int64_t uuid, CUdeviceptr ptr, size_t size)
     {
-        uct_cuda_ipc_rkey_t rkey = {};
+        uct_cuda_ipc_extended_rkey_t rkey;
         uct_mem_h memh;
         EXPECT_UCS_OK(md->ops->mem_reg(md, (void *)ptr, size, NULL, &memh));
         EXPECT_UCS_OK(md->ops->mkey_pack(md, memh, (void *)ptr, size, NULL,
                                          &rkey));
 
-        int64_t *uuid64 = (int64_t *)rkey.uuid.bytes;
+        auto uuid64     = reinterpret_cast<int64_t*>(rkey.super.uuid.bytes);
         uuid64[0]       = uuid;
         uuid64[1]       = uuid;
 
@@ -43,11 +49,12 @@ protected:
         return rkey;
     }
 
-    static uct_cuda_ipc_rkey_t unpack(uct_md_h md, int64_t uuid)
+    static uct_cuda_ipc_extended_rkey_t unpack(uct_md_h md, int64_t uuid)
     {
         CUdeviceptr ptr;
         EXPECT_EQ(CUDA_SUCCESS, cuMemAlloc(&ptr, 64));
-        uct_cuda_ipc_rkey_t rkey = unpack_common(md, uuid, ptr, 64);
+        const uct_cuda_ipc_extended_rkey_t rkey = unpack_common(md, uuid, ptr,
+                                                                64);
         EXPECT_EQ(CUDA_SUCCESS, cuMemFree(ptr));
         return rkey;
     }
@@ -87,7 +94,7 @@ protected:
         EXPECT_EQ(CUDA_SUCCESS, cuStreamDestroy(*cu_stream));
     }
 
-    static uct_cuda_ipc_rkey_t unpack_masync(uct_md_h md, int64_t uuid)
+    static uct_cuda_ipc_extended_rkey_t unpack_masync(uct_md_h md, int64_t uuid)
     {
         size_t size = 4 * UCS_MBYTE;
         CUdeviceptr ptr;
@@ -95,7 +102,8 @@ protected:
         CUstream cu_stream;
 
         alloc_mempool(&ptr, &mpool, &cu_stream, size);
-        uct_cuda_ipc_rkey_t rkey = unpack_common(md, uuid, ptr, size);
+        const uct_cuda_ipc_extended_rkey_t rkey = unpack_common(md, uuid, ptr,
+                                                                size);
         free_mempool(&ptr, &mpool, &cu_stream);
         return rkey;
     }
@@ -116,32 +124,32 @@ protected:
                ASSERT_UCS_OK(uct_md_mkey_pack_v2(md(), memh, ptr, size,
                                                  &pack_params, rkey.data()));
 
+               auto unpack_rkey = [&](const uct_rkey_unpack_params_t &unpack_params) {
+                    ucs_status_t status = uct_rkey_unpack_v2(
+                                             md()->component, rkey.data(),
+                                             &unpack_params, &rkey_bundle);
+                    ASSERT_TRUE((status == UCS_OK) ||
+                                (status == UCS_ERR_UNREACHABLE));
+                    if (status == UCS_OK) {
+                        uct_rkey_release(md()->component, &rkey_bundle);
+                    }
+               };
+
                // No context and sys_dev is not provided
+               // Reachable, because active CUDA context exists in main thread
                uct_rkey_unpack_params_t unpack_params = {};
-               ucs_status_t status = uct_rkey_unpack_v2(
-                                         md()->component, rkey.data(),
-                                         &unpack_params, &rkey_bundle);
-               ASSERT_EQ(status, UCS_ERR_UNREACHABLE);
+               unpack_rkey(unpack_params);
 
                // No context and unknown sys_dev is provided
+               // Reachable, because active CUDA context exists for some valid GPU
                unpack_params.field_mask = UCT_RKEY_UNPACK_FIELD_SYS_DEVICE;
                unpack_params.sys_device = UCS_SYS_DEVICE_ID_UNKNOWN;
-               status = uct_rkey_unpack_v2(md()->component, rkey.data(),
-                                           &unpack_params, &rkey_bundle);
-               ASSERT_EQ(status, UCS_ERR_UNREACHABLE);
+               unpack_rkey(unpack_params);
 
                // No context and some valid sys_dev is provided
-               ucs_sys_device_t sys_dev;
-               uct_cuda_base_get_sys_dev(0, &sys_dev);
-
+               ucs_sys_device_t sys_dev = uct_cuda_get_sys_dev(0);
                unpack_params.sys_device = sys_dev;
-               status = uct_rkey_unpack_v2(md()->component, rkey.data(),
-                                           &unpack_params, &rkey_bundle);
-               ASSERT_TRUE((status == UCS_OK) ||
-                           (status == UCS_ERR_UNREACHABLE));
-               if (status == UCS_OK) {
-                   uct_rkey_release(md()->component, &rkey_bundle);
-               }
+               unpack_rkey(unpack_params);
            } catch (...) {
                thread_exception = std::current_exception();
            }
@@ -163,7 +171,7 @@ UCS_TEST_P(test_cuda_ipc_md, mpack_legacy)
     constexpr size_t size = 4096;
     ucs::handle<uct_md_h> md;
     uct_mem_h memh;
-    uct_cuda_ipc_rkey_t rkey;
+    uct_cuda_ipc_extended_rkey_t rkey;
     CUdeviceptr ptr;
 
     UCS_TEST_CREATE_HANDLE(uct_md_h, md, uct_md_close, uct_md_open,
@@ -174,7 +182,7 @@ UCS_TEST_P(test_cuda_ipc_md, mpack_legacy)
     EXPECT_UCS_OK(md->ops->mkey_pack(md, memh, (void *)ptr, size, NULL,
                                      &rkey));
 
-    EXPECT_EQ(UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY, rkey.ph.handle_type);
+    EXPECT_EQ(UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY, rkey.super.ph.handle_type);
 
     uct_md_mem_dereg_params_t params;
     params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
@@ -226,3 +234,324 @@ UCS_TEST_P(test_cuda_ipc_md, mnnvl_disabled)
 }
 
 _UCT_MD_INSTANTIATE_TEST_CASE(test_cuda_ipc_md, cuda_ipc);
+
+
+class test_cuda_ipc_cache_lru : public ucs::test {
+protected:
+    static const size_t REGION_SIZE = UCS_MBYTE * 2;
+    static const uintptr_t BASE_ADDR = 0x7f0000000000UL;
+
+    virtual void init() {
+        ucs::test::init();
+        m_cache = NULL;
+        /* Reset global limits to unlimited before each test */
+        uct_cuda_ipc_cache_set_global_limits(ULONG_MAX, SIZE_MAX);
+    }
+
+    virtual void cleanup() {
+        if (m_cache != NULL) {
+            drain_cache();
+            uct_cuda_ipc_destroy_cache(m_cache);
+        }
+        uct_cuda_ipc_cache_set_global_limits(ULONG_MAX, SIZE_MAX);
+        ucs::test::cleanup();
+    }
+
+    void create_cache(unsigned long max_regions, size_t max_size) {
+        uct_cuda_ipc_cache_set_global_limits(max_regions, max_size);
+        m_max_regions = max_regions;
+        m_max_size    = max_size;
+        ASSERT_EQ(UCS_OK, uct_cuda_ipc_create_cache(&m_cache, "test_lru"));
+    }
+
+    uct_cuda_ipc_cache_region_t *insert_region(size_t index) {
+        uct_cuda_ipc_cache_region_t *region;
+        uintptr_t addr = BASE_ADDR + (index * REGION_SIZE * 2);
+        int ret;
+
+        ret = ucs_posix_memalign((void **)&region,
+                                 ucs_max(sizeof(void *), UCS_PGT_ENTRY_MIN_ALIGN),
+                                 sizeof(uct_cuda_ipc_cache_region_t),
+                                 "test_cuda_ipc_cache_region");
+        EXPECT_EQ(0, ret);
+
+        region->super.start = ucs_align_down_pow2(addr, UCS_PGT_ADDR_ALIGN);
+        region->super.end   = ucs_align_up_pow2(addr + REGION_SIZE,
+                                                UCS_PGT_ADDR_ALIGN);
+        memset(&region->key, 0, sizeof(region->key));
+        region->key.b_len      = REGION_SIZE;
+        region->key.d_bptr     = addr;
+        region->key.ph.buffer_id = index;
+        region->mapped_addr    = (void *)addr;
+        region->refcount       = 1;
+        region->cu_dev         = 0;
+
+        ucs_status_t status = ucs_pgtable_insert(&m_cache->pgtable,
+                                                  &region->super);
+        EXPECT_EQ(UCS_OK, status);
+
+        m_cache->num_regions++;
+        m_cache->total_size += REGION_SIZE;
+        ucs_list_add_tail(&m_cache->lru_list, &region->lru_list);
+
+        return region;
+    }
+
+    void release_region(uct_cuda_ipc_cache_region_t *region) {
+        ASSERT_GE(region->refcount, 1UL);
+        region->refcount--;
+    }
+
+    void reacquire_region(uct_cuda_ipc_cache_region_t *region) {
+        /* Move to LRU tail (most recently used) */
+        ucs_list_del(&region->lru_list);
+        ucs_list_add_tail(&m_cache->lru_list, &region->lru_list);
+        region->refcount++;
+    }
+
+    void destroy_region(uct_cuda_ipc_cache_region_t *region)
+    {
+        ucs_status_t status = ucs_pgtable_remove(&m_cache->pgtable,
+                                                 &region->super);
+        ASSERT_EQ(UCS_OK, status);
+
+        ucs_list_del(&region->lru_list);
+
+        ASSERT_GT(m_cache->num_regions, 0UL);
+        m_cache->num_regions--;
+        m_cache->total_size -= region->key.b_len;
+
+        ucs_free(region);
+    }
+
+    void evict_lru() {
+        uct_cuda_ipc_cache_region_t *region, *tmp;
+
+        ucs_list_for_each_safe(region, tmp, &m_cache->lru_list, lru_list) {
+            if ((m_cache->num_regions <= m_max_regions) &&
+                (m_cache->total_size <= m_max_size)) {
+                break;
+            }
+
+            if (region->refcount > 0) {
+                continue;
+            }
+
+            ASSERT_EQ(UCS_OK, ucs_pgtable_remove(&m_cache->pgtable,
+                                                  &region->super));
+            ucs_list_del(&region->lru_list);
+            m_cache->num_regions--;
+            m_cache->total_size -= region->key.b_len;
+
+            ucs_free(region);
+        }
+    }
+
+    static void collect_region_cb(const ucs_pgtable_t *pgtable,
+                                  ucs_pgt_region_t *pgt_region, void *arg) {
+        ucs_list_link_t *list = (ucs_list_link_t *)arg;
+        uct_cuda_ipc_cache_region_t *region =
+                ucs_derived_of(pgt_region, uct_cuda_ipc_cache_region_t);
+        ucs_list_add_tail(list, &region->list);
+    }
+
+    void drain_cache() {
+        ucs_list_link_t region_list;
+        uct_cuda_ipc_cache_region_t *region, *tmp;
+
+        ucs_list_head_init(&region_list);
+        ucs_pgtable_purge(&m_cache->pgtable, collect_region_cb, &region_list);
+        ucs_list_for_each_safe(region, tmp, &region_list, list) {
+            ucs_free(region);
+        }
+
+        ucs_list_head_init(&m_cache->lru_list);
+        m_cache->num_regions = 0;
+        m_cache->total_size  = 0;
+    }
+
+    bool pgtable_has(size_t index) {
+        uintptr_t addr = BASE_ADDR + (index * REGION_SIZE * 2);
+        return ucs_pgtable_lookup(&m_cache->pgtable, addr) != NULL;
+    }
+
+    uct_cuda_ipc_cache_t *m_cache;
+    unsigned long         m_max_regions;
+    size_t                m_max_size;
+};
+
+const size_t    test_cuda_ipc_cache_lru::REGION_SIZE;
+const uintptr_t test_cuda_ipc_cache_lru::BASE_ADDR;
+
+UCS_TEST_F(test_cuda_ipc_cache_lru, evict_by_count) {
+    const unsigned long max_regions = 128;
+    const size_t num_insert         = 192;
+
+    create_cache(max_regions, SIZE_MAX);
+
+    std::vector<uct_cuda_ipc_cache_region_t *> regions(num_insert);
+    for (size_t i = 0; i < num_insert; i++) {
+        regions[i] = insert_region(i);
+    }
+
+    for (size_t i = 0; i < num_insert; i++) {
+        release_region(regions[i]);
+    }
+
+    EXPECT_EQ(num_insert, m_cache->num_regions);
+
+    evict_lru();
+
+    EXPECT_EQ(max_regions, m_cache->num_regions);
+    EXPECT_EQ(max_regions * REGION_SIZE, m_cache->total_size);
+
+    for (size_t i = 0; i < num_insert - max_regions; i++) {
+        EXPECT_FALSE(pgtable_has(i));
+    }
+    for (size_t i = num_insert - max_regions; i < num_insert; i++) {
+        EXPECT_TRUE(pgtable_has(i));
+    }
+}
+
+UCS_TEST_F(test_cuda_ipc_cache_lru, evict_by_size) {
+    const size_t max_size   = REGION_SIZE * 64;
+    const size_t num_insert = 100;
+
+    create_cache(ULONG_MAX, max_size);
+
+    std::vector<uct_cuda_ipc_cache_region_t *> regions(num_insert);
+    for (size_t i = 0; i < num_insert; i++) {
+        regions[i] = insert_region(i);
+    }
+
+    for (size_t i = 0; i < num_insert; i++) {
+        release_region(regions[i]);
+    }
+
+    EXPECT_EQ(num_insert, m_cache->num_regions);
+    EXPECT_EQ(num_insert * REGION_SIZE, m_cache->total_size);
+
+    evict_lru();
+
+    size_t expected_regions = max_size / REGION_SIZE;
+    EXPECT_EQ(expected_regions, m_cache->num_regions);
+    EXPECT_EQ(expected_regions * REGION_SIZE, m_cache->total_size);
+
+    for (size_t i = 0; i < num_insert - expected_regions; i++) {
+        EXPECT_FALSE(pgtable_has(i));
+    }
+    for (size_t i = num_insert - expected_regions; i < num_insert; i++) {
+        EXPECT_TRUE(pgtable_has(i));
+    }
+}
+
+UCS_TEST_F(test_cuda_ipc_cache_lru, no_evict_in_use) {
+    const unsigned long max_regions = 64;
+    const size_t num_insert         = 128;
+
+    create_cache(max_regions, SIZE_MAX);
+
+    std::vector<uct_cuda_ipc_cache_region_t *> regions(num_insert);
+    for (size_t i = 0; i < num_insert; i++) {
+        regions[i] = insert_region(i);
+    }
+
+    /* Release only the first half -- the second half stays in-use */
+    for (size_t i = 0; i < num_insert / 2; i++) {
+        release_region(regions[i]);
+    }
+
+    evict_lru();
+
+    /* Only released regions can be evicted; in-use ones remain */
+    EXPECT_EQ(max_regions, m_cache->num_regions);
+
+    for (size_t i = 0; i < num_insert / 2; i++) {
+        EXPECT_FALSE(pgtable_has(i));
+    }
+    for (size_t i = num_insert / 2; i < num_insert; i++) {
+        EXPECT_TRUE(pgtable_has(i));
+    }
+}
+
+UCS_TEST_F(test_cuda_ipc_cache_lru, lru_order) {
+    const unsigned long max_regions = 128;
+    const size_t num_insert         = 256;
+
+    create_cache(max_regions, SIZE_MAX);
+
+    std::vector<uct_cuda_ipc_cache_region_t *> regions(num_insert);
+    for (size_t i = 0; i < num_insert; i++) {
+        regions[i] = insert_region(i);
+    }
+
+    for (size_t i = 0; i < num_insert; i++) {
+        release_region(regions[i]);
+    }
+
+    /*
+     * Reacquire then release the first 64 regions, moving them to
+     * the tail of the LRU (most recently used). The eviction should
+     * then remove regions [64..191] and keep [0..63] + [192..255].
+     */
+    for (size_t i = 0; i < 64; i++) {
+        reacquire_region(regions[i]);
+        release_region(regions[i]);
+    }
+
+    evict_lru();
+
+    EXPECT_EQ(max_regions, m_cache->num_regions);
+
+    for (size_t i = 0; i < 64; i++) {
+        EXPECT_TRUE(pgtable_has(i));
+    }
+    for (size_t i = 64; i < num_insert - 64; i++) {
+        EXPECT_FALSE(pgtable_has(i));
+    }
+    for (size_t i = num_insert - 64; i < num_insert; i++) {
+        EXPECT_TRUE(pgtable_has(i));
+    }
+}
+
+UCS_TEST_F(test_cuda_ipc_cache_lru, unlimited) {
+    const size_t num_insert = 512;
+
+    create_cache(ULONG_MAX, SIZE_MAX);
+
+    for (size_t i = 0; i < num_insert; i++) {
+        uct_cuda_ipc_cache_region_t *r = insert_region(i);
+        release_region(r);
+    }
+
+    evict_lru();
+
+    EXPECT_EQ(num_insert, m_cache->num_regions);
+    EXPECT_EQ(num_insert * REGION_SIZE, m_cache->total_size);
+    for (size_t i = 0; i < num_insert; i++) {
+        EXPECT_TRUE(pgtable_has(i));
+    }
+}
+
+UCS_TEST_F(test_cuda_ipc_cache_lru, stale_destroy_while_in_use) {
+    /* Check that evict_lru does not pull in-use regions off
+     * the LRU. This could cause a failure if region is destroyed
+     * while not in LRU. */
+    create_cache(0 /* force eviction on every insert */, SIZE_MAX);
+
+    uct_cuda_ipc_cache_region_t *r1 = insert_region(0);
+    ASSERT_EQ(1UL, r1->refcount);
+
+    evict_lru();
+
+    /* Core assertion: in-use region must stay on LRU after eviction */
+    EXPECT_EQ(1UL, m_cache->num_regions);
+    EXPECT_TRUE(pgtable_has(0));
+
+    /* Simulate the stale-buffer_id destroy path */
+    destroy_region(r1);
+
+    EXPECT_EQ(0UL, m_cache->num_regions);
+    EXPECT_EQ(0UL, m_cache->total_size);
+    EXPECT_TRUE(ucs_list_is_empty(&m_cache->lru_list));
+}

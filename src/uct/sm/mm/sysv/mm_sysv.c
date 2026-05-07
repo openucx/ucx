@@ -45,7 +45,9 @@ static ucs_config_field_t uct_sysv_iface_config_table[] = {
 
 static ucs_status_t uct_sysv_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
 {
-    uct_mm_md_query(md, md_attr, ULONG_MAX);
+    size_t shmmax = ucs_get_shmmax();
+
+    uct_mm_md_query(md, md_attr, (shmmax > 0) ? shmmax : ULONG_MAX);
     md_attr->rkey_packed_size = sizeof(uct_sysv_packed_rkey_t);
     return UCS_OK;
 }

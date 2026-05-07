@@ -299,7 +299,7 @@ struct uct_rc_iface {
         uint8_t              flush_remote;
         uct_rc_fence_mode_t  fence_mode;
         unsigned             exp_backoff;
-        uint32_t             ece;
+        unsigned long        ece;
         size_t               max_get_zcopy;
 
         /* Atomic callbacks */
@@ -640,5 +640,15 @@ uct_rc_iface_send_op_set_name(uct_rc_iface_send_op_t *op, const char *name)
     op->name = name;
 #endif
 }
+
+
+/**
+ * Helper function to set ECE to qp.
+ *
+ * @param iface           Interface of the qp.
+ * @param qp              The qp to be set with ECE.
+ */
+ucs_status_t
+uct_rc_iface_set_ece(uct_rc_iface_t *iface, struct ibv_qp *qp);
 
 #endif

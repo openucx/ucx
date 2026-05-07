@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (c) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -27,7 +27,9 @@
 #include <sstream>
 #include <vector>
 #include <string>
+#include <initializer_list>
 #include <algorithm>
+#include <set>
 #include <unordered_map>
 #include <sys/socket.h>
 #include <dirent.h>
@@ -329,6 +331,16 @@ ssize_t get_proc_self_status_field(const std::string &parameter);
 std::vector<std::string> read_dir(const std::string &path);
 
 /**
+ * Return the set of currently open file descriptors.
+ */
+std::set<int> get_open_fds();
+
+/**
+ * Return the symlink target of the given file descriptor via readlink(2).
+ */
+std::string readlink_proc_fd(int fd);
+
+/**
  * Return the name of the given network device if it is supported by rdmacm.
  */
 std::string get_rdmacm_netdev(const char *ifa_name);
@@ -367,6 +379,25 @@ private:
  * Returns a compacted string with just head and tail, e.g "xxx...yyy"
  */
 std::string compact_string(const std::string &str, size_t length);
+
+
+/* Join container elements into a single string with a delimiter */
+template<typename Container>
+std::string join(const Container &strings, const std::string &delimiter)
+{
+    std::ostringstream oss;
+    for (auto it = strings.begin(); it != strings.end(); ++it) {
+        if (it != strings.begin()) {
+            oss << delimiter;
+        }
+        oss << *it;
+    }
+    return oss.str();
+}
+
+
+std::string join(std::initializer_list<std::string> strings,
+                 const std::string &delimiter);
 
 
 /*
