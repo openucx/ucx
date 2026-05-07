@@ -263,15 +263,19 @@ void ucs_log_print_compact(const char *str)
     while (*line != '\0') {
         next = strchr(line, '\n');
         if (next == NULL) {
-            /* Last line */
-            ucs_string_buffer_appendf(&output, "%s%s\n", prefix, line);
             break;
         }
 
         ucs_string_buffer_appendf(&output, "%s%.*s\n", prefix,
                                   (int)(next - line), line);
         line = next + 1;
+        if (*line == '\0') {
+            break;
+        }
     }
+
+    /* Last line */
+    ucs_string_buffer_appendf(&output, "%s%s\n", prefix, line);
 
     output_cstr = ucs_string_buffer_cstr(&output);
 

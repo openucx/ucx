@@ -6,6 +6,7 @@
 #include <common/test.h>
 #include <fstream>
 #include <set>
+#include <vector>
 #include <dirent.h>
 
 extern "C" {
@@ -389,116 +390,78 @@ protected:
                        std::string() :
                        log_line.substr(pos + suffix.size());
     }
+
+    void check_compact_log(const std::vector<std::string> &log_lines)
+    {
+        std::string input;
+        std::string ts, line;
+        size_t idx = 0;
+
+        for (size_t i = 0; i < log_lines.size(); ++i) {
+            if (i > 0) {
+                input += '\n';
+            }
+            input += log_lines[i];
+        }
+
+        ucs_log_print_compact(input.c_str());
+        ucs_log_flush();
+
+        std::stringstream content(read_logfile());
+
+        /* Discard the "<filename>:" header that read_logfile() prepends. */
+        std::getline(content, line);
+
+        while ((idx < log_lines.size()) && std::getline(content, line)) {
+            if (ts.empty()) {
+                ts = extract_timestamp(line);
+                ASSERT_FALSE(ts.empty());
+            } else {
+                ASSERT_EQ(ts, extract_timestamp(line));
+            }
+
+            EXPECT_EQ(log_lines[idx], extract_content(line));
+            ++idx;
+        }
+
+        EXPECT_EQ(log_lines.size(), idx);
+
+        std::getline(content, line);
+        EXPECT_TRUE(line.empty())
+                << "unexpected extra log line: '" << line << "'";
+    }
 };
 
+UCS_TEST_F(log_test_compact, empty) {
+    check_compact_log({""});
+}
+
 UCS_TEST_F(log_test_compact, single_line) {
-    const std::string marker = "compact_single_line";
-    std::string line;
-
-    ucs_log_print_compact(marker.c_str());
-    ucs_log_flush();
-
-    std::stringstream content(read_logfile());
-
-    /* Discard the "<filename>:" header that read_logfile() prepends. */
-    std::getline(content, line);
-
-    /* A single input segment with no '\n' produces one prefixed line. */
-    std::getline(content, line);
-    EXPECT_FALSE(extract_timestamp(line).empty());
-    EXPECT_EQ(marker, extract_content(line));
-
-    std::getline(content, line);
-    EXPECT_TRUE(line.empty()) << "unexpected extra log line: '" << line << "'";
+    check_compact_log({"single line"});
 }
 
 UCS_TEST_F(log_test_compact, multiline) {
-    static const char *markers[] = {"compact_multiline_a",
-                                    "compact_multiline_b",
-                                    "compact_multiline_c"};
-    const std::string input = std::string(markers[0]) + "\n" + markers[1] +
-                              "\n" + markers[2];
-    std::string ts, line;
-    size_t idx = 0;
+    check_compact_log({
+            "log_a",
+            "log_b",
+            "log_c",
+    });
+}
 
-    ucs_log_print_compact(input.c_str());
-    ucs_log_flush();
+UCS_TEST_F(log_test_compact, blank_at_start) {
+    check_compact_log({"", "log1"});
+}
 
-    std::stringstream content(read_logfile());
+UCS_TEST_F(log_test_compact, blank_at_end) {
+    check_compact_log({"log1", ""});
+}
 
-    /* Discard the "<filename>:" header that read_logfile() prepends. */
-    std::getline(content, line);
-
-    while ((idx < ucs_static_array_size(markers)) &&
-           std::getline(content, line)) {
-        if (ts.empty()) {
-            ts = extract_timestamp(line);
-            ASSERT_FALSE(ts.empty());
-        } else {
-            ASSERT_EQ(ts, extract_timestamp(line));
-        }
-
-        EXPECT_EQ(markers[idx], extract_content(line));
-        ++idx;
-    }
-
-    EXPECT_EQ(ucs_static_array_size(markers), idx);
-
-    std::getline(content, line);
-    EXPECT_TRUE(line.empty()) << "unexpected extra log line: '" << line << "'";
+UCS_TEST_F(log_test_compact, blank_in_middle) {
+    check_compact_log({"log1", "", "log2"});
 }
 
 UCS_TEST_F(log_test_compact, blank_lines) {
-    const std::string before = "compact_blank_before";
-    const std::string after  = "compact_blank_after";
-    const std::string input  = before + "\n\n" + after;
-    std::string ts, line;
-    enum state_t {
-        EXPECT_BEFORE,
-        EXPECT_BLANK,
-        EXPECT_AFTER,
-        DONE
-    };
-    state_t state = EXPECT_BEFORE;
-
-    ucs_log_print_compact(input.c_str());
-    ucs_log_flush();
-
-    std::stringstream content(read_logfile());
-
-    /* Discard the "<filename>:" header that read_logfile() prepends. */
-    std::getline(content, line);
-
-    while ((state != DONE) && std::getline(content, line)) {
-        if (ts.empty()) {
-            ts = extract_timestamp(line);
-            ASSERT_FALSE(ts.empty());
-        } else {
-            ASSERT_EQ(ts, extract_timestamp(line));
-        }
-
-        switch (state) {
-        case EXPECT_BEFORE:
-            EXPECT_EQ(before, extract_content(line));
-            state = EXPECT_BLANK;
-            break;
-        case EXPECT_BLANK:
-            EXPECT_EQ("", extract_content(line));
-            state = EXPECT_AFTER;
-            break;
-        case EXPECT_AFTER:
-            EXPECT_EQ(after, extract_content(line));
-            state = DONE;
-            break;
-        case DONE:
-            break;
-        }
-    }
-
-    EXPECT_EQ(DONE, state);
-
-    std::getline(content, line);
-    EXPECT_TRUE(line.empty()) << "unexpected extra log line: '" << line << "'";
+    check_compact_log({"", "log1", "", "", "", "log2", ""});
 }
 
 class log_demo : public ucs::test {
