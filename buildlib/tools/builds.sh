@@ -8,7 +8,41 @@
 realdir=$(realpath $(dirname $0))
 source ${realdir}/common.sh
 source ${realdir}/../az-helpers.sh
-long_test=${long_test:-no}
+build_mode=${build_mode:-}
+
+[ "${build_mode}" = "\$(build_mode)" ] && build_mode=
+
+build_mode=${build_mode:-long}
+
+case "${build_mode}" in
+long|short|sanity)
+	;;
+*)
+	azure_log_error "Unsupported build mode: ${build_mode}"
+	exit 1
+	;;
+esac
+
+common_disable_config_args=(
+	--disable-gtest
+	--disable-dependency-tracking
+	--without-go
+	--without-java
+	--without-valgrind
+)
+
+compile_only_config_args=(
+	"${common_disable_config_args[@]}"
+	--disable-examples
+	--disable-test-apps
+	--disable-static
+)
+
+static_link_config_args=(
+	"${common_disable_config_args[@]}"
+	--disable-examples
+	--disable-test-apps
+)
 
 #
 # Build documentation
@@ -186,6 +220,15 @@ build_debug() {
 }
 
 #
+# Basic compile-only build
+#
+build_sanity() {
+	echo "==== Build sanity ===="
+	${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst
+	$MAKEP
+}
+
+#
 # Build prof
 #
 build_prof() {
@@ -205,6 +248,7 @@ build_ugni() {
 	# relative paths.
 	#
 	${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --with-ugni \
+		--disable-gtest --without-go --without-java \
 		PKG_CONFIG_PATH=$PKG_CONFIG_PATH:/${WORKSPACE}/contrib/cray-ugni-mock \
 		PKG_CONFIG_TOP_BUILD_DIR=${WORKSPACE}
 	$MAKEP
@@ -219,44 +263,47 @@ build_ugni() {
 # Build CUDA
 #
 build_cuda() {
-	if [[ $CONTAINER == *"rocm"* ]]; then
+	if [[ ${CONTAINER} == *rocm* ]]; then
 		echo "==== Not building with cuda flags ===="
 		return
 	fi
 
-	if az_module_load $CUDA_MODULE
+	if ! az_module_load $CUDA_MODULE
 	then
-		if az_module_load $GDRCOPY_MODULE
-		then
-			echo "==== Build with enable cuda, gdr_copy ===="
-			${WORKSPACE}/contrib/configure-release --prefix=$ucx_inst --with-cuda --with-gdrcopy
-			$MAKEP
-			make_clean distclean
-
-			echo "==== Build with enable cuda, gdr_copy by ./configure parameter ===="
-			# Use path to CUDA instead of loading CUDA as module, to check
-			# GDRCopy subcomponent does not include CUDA headers
-			cuda_path=$(dirname $(dirname $(which nvcc)))
-			az_module_unload $CUDA_MODULE
-			${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --with-cuda=$cuda_path --with-gdrcopy
-			$MAKEP
-			make_clean distclean
-			az_module_load $CUDA_MODULE
-
-			az_module_unload $GDRCOPY_MODULE
-		fi
-
-		echo "==== Build with enable cuda, w/o gdr_copy ===="
-		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --with-cuda --without-gdrcopy
-		$MAKEP
-
-		az_module_unload $CUDA_MODULE
-
-		echo "==== Running test_link_map with cuda build but no cuda module ===="
-		env UCX_HANDLE_ERRORS=bt ./test/apps/test_link_map
-	else
 		echo "==== Not building with cuda flags ===="
+		return
 	fi
+
+	if az_module_load $GDRCOPY_MODULE
+	then
+		echo "==== Build with enable cuda, gdr_copy ===="
+		${WORKSPACE}/contrib/configure-release --prefix=$ucx_inst --with-cuda --with-gdrcopy
+		$MAKEP
+		make_clean distclean
+
+		echo "==== Build with enable cuda, gdr_copy by ./configure parameter ===="
+		# Use path to CUDA instead of loading CUDA as module, to check
+		# GDRCopy subcomponent does not include CUDA headers
+		cuda_path=$(dirname $(dirname $(which nvcc)))
+		az_module_unload $CUDA_MODULE
+		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --with-cuda=$cuda_path --with-gdrcopy
+		$MAKEP
+		make_clean distclean
+		az_module_load $CUDA_MODULE
+
+		az_module_unload $GDRCOPY_MODULE
+	fi
+
+	echo "==== Build with enable cuda, w/o gdr_copy and w/o GDA-KI ===="
+	${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst \
+		--with-cuda --without-gdrcopy --without-gda
+	$MAKEP
+	check_no_gda
+
+	az_module_unload $CUDA_MODULE
+
+	echo "==== Running test_link_map with cuda build but no cuda module ===="
+	env UCX_HANDLE_ERRORS=bt ./test/apps/test_link_map
 }
 
 #
@@ -307,7 +354,7 @@ build_gcc() {
 		if az_module_load $GCC_MODULE
 		then
 			echo "==== Build with GCC compiler ($(gcc --version|head -1)) ===="
-			${WORKSPACE}/contrib/configure-devel $@ --prefix=$ucx_inst
+			${WORKSPACE}/contrib/configure-devel "$@" --prefix=$ucx_inst
 			$MAKEP
 			$MAKEP install
 			az_module_unload $GCC_MODULE
@@ -325,12 +372,8 @@ build_no_openmp() {
 	build_gcc --disable-openmp
 }
 
-build_gcc_debug_opt() {
-	build_gcc CFLAGS=-Og CXXFLAGS=-Og
-}
-
-build_gcc_with_dndebug() {
-	build_gcc CFLAGS=-DNDEBUG CXXFLAGS=-DNDEBUG
+build_gcc_debug_opt_with_dndebug() {
+	build_gcc CFLAGS="-Og -DNDEBUG" CXXFLAGS="-Og -DNDEBUG"
 }
 
 #
@@ -358,14 +401,6 @@ build_armclang() {
 	az_module_unload $ARM_MODULE
 }
 
-check_inst_headers() {
-	echo "==== Testing installed headers ===="
-
-	${WORKSPACE}/contrib/configure-release --prefix=${ucx_inst}
-	$MAKEP install
-	${WORKSPACE}/contrib/check_inst_headers.sh ${ucx_inst}/include
-}
-
 check_config_h() {
 	srcdir=${WORKSPACE}/src
 
@@ -391,9 +426,13 @@ build_cmake_examples() {
 
 	if which cmake
 	then
-		${WORKSPACE}/contrib/configure-release --prefix=$ucx_inst
+		${WORKSPACE}/contrib/configure-release --prefix=$ucx_inst \
+			"${compile_only_config_args[@]}"
 		$MAKEP
 		$MAKEP install
+
+		echo "==== Testing installed headers ===="
+		${WORKSPACE}/contrib/check_inst_headers.sh ${ucx_inst}/include
 
 		mkdir -p /tmp/cmake-ucx
 		pushd /tmp/cmake-ucx
@@ -420,12 +459,14 @@ build_fuse() {
 	if az_module_load $FUSE3_MODULE
 	then
 		echo "==== Build with FUSE (dynamic link) ===="
-		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --with-fuse3
+		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst \
+			"${compile_only_config_args[@]}" --with-fuse3
 		$MAKEP
 		make_clean distclean
 
 		echo "==== Build with FUSE (static link) ===="
-		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --with-fuse3-static
+		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst \
+			"${static_link_config_args[@]}" --with-fuse3-static
 		$MAKEP
 
 		az_module_unload $FUSE3_MODULE
@@ -434,14 +475,7 @@ build_fuse() {
 	fi
 }
 
-#
-# Build without GDA-KI
-#
-build_no_gda() {
-	echo "==== Build without GDA-KI ===="
-	${WORKSPACE}/contrib/configure-release --prefix=$ucx_inst --without-gda
-	$MAKEP
-
+check_no_gda() {
 	if [ -f ${ucx_build_dir}/src/uct/ib/mlx5/gdaki/.libs/libuct_ib_mlx5_gda.so ] ; then
 		azure_log_error "build --without-gda created GDA-KI SO"
 		exit 1
@@ -451,31 +485,37 @@ build_no_gda() {
 az_init_modules
 prepare_build
 
-tests=('build_docs' \
-		'build_debug' \
-		'build_prof' \
-		'build_ugni' \
-		'build_cuda' \
-		'build_rocm' \
-		'build_no_verbs' \
-		'build_release_pkg' \
-		'build_cmake_examples' \
-		'build_fuse' \
-		'build_no_gda')
-if [ "${long_test}" = "yes" ]
-then
-	tests+=('check_config_h' \
-			'check_inst_headers' \
+base_tests=('build_docs' \
+			'build_debug' \
+			'build_prof' \
+			'build_cuda' \
+			'build_rocm' \
+			'build_no_verbs' \
+			'build_release_pkg' \
+			'build_cmake_examples' \
+			'build_fuse')
+
+case "${build_mode}" in
+sanity)
+	tests=('build_sanity')
+	;;
+short)
+	tests=("${base_tests[@]}")
+	;;
+long)
+	tests=("${base_tests[@]}" \
+			'build_ugni' \
+			'check_config_h' \
 			'build_icc'\
 			'build_pgi' \
 			'build_gcc' \
 			'build_no_devx' \
 			'build_no_openmp' \
-			'build_gcc_debug_opt' \
-			'build_gcc_with_dndebug' \
+			'build_gcc_debug_opt_with_dndebug' \
 			'build_clang' \
 			'build_armclang')
-fi
+	;;
+esac
 
 num_tests=${#tests[@]}
 for ((i=0;i<${num_tests};++i))
