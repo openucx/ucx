@@ -312,6 +312,18 @@ gtest_LDADD += \
 endif
 endif
 
+if HAVE_ZE
+gtest_SOURCES += \
+	uct/ze/test_ze_base.cc \
+	uct/ze/test_ze_ipc_md.cc
+gtest_CPPFLAGS += \
+	$(ZE_CPPFLAGS)
+gtest_LDADD += \
+	$(ZE_LDFLAGS) \
+	$(ZE_LIBS) \
+	$(top_builddir)/src/uct/ze/libuct_ze.la
+endif
+
 noinst_HEADERS = \
 	common/mem_buffer.h \
 	common/test.h \
