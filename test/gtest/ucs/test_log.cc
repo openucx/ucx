@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2017. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -350,6 +350,155 @@ class log_test_backtrace : public log_test {
 
 UCS_TEST_F(log_test_backtrace, backtrace) {
     ucs_log_print_backtrace(UCS_LOG_LEVEL_INFO);
+}
+
+class log_test_compact : public log_test {
+protected:
+    virtual void check_log_file()
+    {
+        /* Verification is performed in the test body, where each test
+         * defines its own assertions on the multi-line output. */
+    }
+
+    /* Extract the "[sec.usec]" timestamp prefix from a compact-format
+     * log line. Returns "" if the line does not start with '['. */
+    static std::string extract_timestamp(const std::string &log_line)
+    {
+        size_t close;
+
+        if (log_line.empty() || (log_line[0] != '[')) {
+            return "";
+        }
+
+        close = log_line.find(']');
+        if (close == std::string::npos) {
+            return "";
+        }
+        return log_line.substr(0, close + 1);
+    }
+
+    /* Extract the content portion of a compact-format log line, 
+     * fails the test on a malformed line. */
+    static std::string extract_content(const std::string &log_line)
+    {
+        static const std::string suffix = "]   ";
+        const size_t pos                = log_line.find(suffix);
+        EXPECT_NE(std::string::npos, pos)
+                << "malformed compact log line: '" << log_line << "'";
+        return (pos == std::string::npos) ?
+                       std::string() :
+                       log_line.substr(pos + suffix.size());
+    }
+};
+
+UCS_TEST_F(log_test_compact, single_line) {
+    const std::string marker = "compact_single_line";
+    std::string line;
+
+    ucs_log_print_compact(marker.c_str());
+    ucs_log_flush();
+
+    std::stringstream content(read_logfile());
+
+    /* Discard the "<filename>:" header that read_logfile() prepends. */
+    std::getline(content, line);
+
+    /* A single input segment with no '\n' produces one prefixed line. */
+    std::getline(content, line);
+    EXPECT_FALSE(extract_timestamp(line).empty());
+    EXPECT_EQ(marker, extract_content(line));
+
+    std::getline(content, line);
+    EXPECT_TRUE(line.empty()) << "unexpected extra log line: '" << line << "'";
+}
+
+UCS_TEST_F(log_test_compact, multiline) {
+    static const char *markers[] = {"compact_multiline_a",
+                                    "compact_multiline_b",
+                                    "compact_multiline_c"};
+    const std::string input = std::string(markers[0]) + "\n" + markers[1] +
+                              "\n" + markers[2];
+    std::string ts, line;
+    size_t idx = 0;
+
+    ucs_log_print_compact(input.c_str());
+    ucs_log_flush();
+
+    std::stringstream content(read_logfile());
+
+    /* Discard the "<filename>:" header that read_logfile() prepends. */
+    std::getline(content, line);
+
+    while ((idx < ucs_static_array_size(markers)) &&
+           std::getline(content, line)) {
+        if (ts.empty()) {
+            ts = extract_timestamp(line);
+            ASSERT_FALSE(ts.empty());
+        } else {
+            ASSERT_EQ(ts, extract_timestamp(line));
+        }
+
+        EXPECT_EQ(markers[idx], extract_content(line));
+        ++idx;
+    }
+
+    EXPECT_EQ(ucs_static_array_size(markers), idx);
+
+    std::getline(content, line);
+    EXPECT_TRUE(line.empty()) << "unexpected extra log line: '" << line << "'";
+}
+
+UCS_TEST_F(log_test_compact, blank_lines) {
+    const std::string before = "compact_blank_before";
+    const std::string after  = "compact_blank_after";
+    const std::string input  = before + "\n\n" + after;
+    std::string ts, line;
+    enum state_t {
+        EXPECT_BEFORE,
+        EXPECT_BLANK,
+        EXPECT_AFTER,
+        DONE
+    };
+    state_t state = EXPECT_BEFORE;
+
+    ucs_log_print_compact(input.c_str());
+    ucs_log_flush();
+
+    std::stringstream content(read_logfile());
+
+    /* Discard the "<filename>:" header that read_logfile() prepends. */
+    std::getline(content, line);
+
+    while ((state != DONE) && std::getline(content, line)) {
+        if (ts.empty()) {
+            ts = extract_timestamp(line);
+            ASSERT_FALSE(ts.empty());
+        } else {
+            ASSERT_EQ(ts, extract_timestamp(line));
+        }
+
+        switch (state) {
+        case EXPECT_BEFORE:
+            EXPECT_EQ(before, extract_content(line));
+            state = EXPECT_BLANK;
+            break;
+        case EXPECT_BLANK:
+            EXPECT_EQ("", extract_content(line));
+            state = EXPECT_AFTER;
+            break;
+        case EXPECT_AFTER:
+            EXPECT_EQ(after, extract_content(line));
+            state = DONE;
+            break;
+        case DONE:
+            break;
+        }
+    }
+
+    EXPECT_EQ(DONE, state);
+
+    std::getline(content, line);
+    EXPECT_TRUE(line.empty()) << "unexpected extra log line: '" << line << "'";
 }
 
 class log_demo : public ucs::test {
