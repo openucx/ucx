@@ -358,6 +358,19 @@ int uct_ze_base_get_device_ordinal(ze_device_handle_t device)
     return -1;  /* not found */
 }
 
+ze_device_handle_t uct_ze_base_get_device(int ordinal)
+{
+    if (uct_ze_base_init() != ZE_RESULT_SUCCESS) {
+        return NULL;
+    }
+
+    if ((ordinal < 0) || (ordinal >= uct_ze_base.num_devices)) {
+        return NULL;
+    }
+
+    return uct_ze_base.devices[ordinal].root_device;
+}
+
 
 int uct_ze_base_get_num_devices(void)
 {
