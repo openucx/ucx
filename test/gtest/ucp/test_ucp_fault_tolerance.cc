@@ -187,8 +187,12 @@ protected:
             lane_type_str  += "RMA BW ";
             lanes_key_p = ucp_ep_config(sender().ep(0, INJECTED_EP_INDEX))->key.rma_bw_lanes;
             ucs_carray_for_each(lane_idx, lanes_key_p, UCP_MAX_LANES) {
+                if (*lane_idx == UCP_NULL_LANE) {
+                    continue;
+                }
+
                 lane_types = ucp_ep_config(sender().ep(0, INJECTED_EP_INDEX))->key.lanes[*lane_idx].lane_types;
-                if (ucs_test_all_flags(lane_types, lane_type_mask) && (*lane_idx != UCP_NULL_LANE)) {
+                if (ucs_test_all_flags(lane_types, lane_type_mask)) {
                     tmp_lanes.insert(*lane_idx);
                 }
             }
@@ -199,8 +203,12 @@ protected:
             lane_type_str  += "AM BW ";
             lanes_key_p = ucp_ep_config(sender().ep(0, INJECTED_EP_INDEX))->key.am_bw_lanes;
             ucs_carray_for_each(lane_idx, lanes_key_p, UCP_MAX_LANES) {
+                if (*lane_idx == UCP_NULL_LANE) {
+                    continue;
+                }
+
                 lane_types = ucp_ep_config(sender().ep(0, INJECTED_EP_INDEX))->key.lanes[*lane_idx].lane_types;
-                if (ucs_test_all_flags(lane_types, lane_type_mask) && (*lane_idx != UCP_NULL_LANE)) {
+                if (ucs_test_all_flags(lane_types, lane_type_mask)) {
                     tmp_lanes.insert(*lane_idx);
                 }
             }
