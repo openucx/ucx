@@ -1733,7 +1733,87 @@ out:
     return UCS_OK;
 }
 
-static ucs_status_t
+ucs_status_t ucp_ep_reconfig_clear_failed_lanes(ucp_ep_h ep,
+                                                ucp_lane_map_t lanes)
+{
+    ucp_worker_h worker             = ep->worker;
+    ucp_ep_config_key_t cfg_key     = ucp_ep_config(ep)->key;
+    const unsigned ep_init_flags    = (ep->flags & UCP_EP_FLAG_INTERNAL) ?
+                                      UCP_EP_INIT_FLAG_INTERNAL : 0;
+    const ucs_log_level_t log_level = UCS_LOG_LEVEL_DEBUG;
+    ucp_worker_cfg_index_t old_cfg_index;
+    ucp_worker_cfg_index_t new_cfg_index;
+    ucp_lane_index_t lane;
+    ucs_status_t status;
+    ucs_string_buffer_t strb;
+
+    ucs_debug("ep %p: recovery clearing FAILED states for lanes 0x%" PRIx64,
+              ep, lanes);
+
+    if (lanes == 0) {
+        return UCS_OK;
+    }
+
+    ucs_assertv(ucs_test_all_flags(ucp_ep_get_failed_lanes(ep), lanes),
+                "ep %p: lanes 0x%" PRIx64 " contains non-failed bits"
+                " (failed=0x%" PRIx64 ")",
+                ep, lanes, ucp_ep_get_failed_lanes(ep));
+    ucs_for_each_bit(lane, lanes) {
+        ucs_assert(lane < cfg_key.num_lanes);
+        cfg_key.lanes[lane].lane_types &= ~UCS_BIT(UCP_LANE_TYPE_FAILED);
+    }
+
+    /* Re-promote am_lane to the earliest available AM_BW lane, in case the
+     * currently selected one was a post-failover fallback.
+     * TODO: maybe we can reevaluate am_lane promotion logic better here. */
+    for (lane = 0; lane < cfg_key.num_lanes; ++lane) {
+        if ((cfg_key.lanes[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_AM_BW)) &&
+            !(cfg_key.lanes[lane].lane_types &
+              UCS_BIT(UCP_LANE_TYPE_FAILED))) {
+            cfg_key.am_lane = lane;
+            break;
+        }
+    }
+
+    if (ucp_ep_config_is_equal(&cfg_key, &ucp_ep_config(ep)->key)) {
+        return UCS_OK;
+    }
+
+    old_cfg_index = ep->cfg_index;
+    status        = ucp_worker_get_ep_config(worker, &cfg_key, ep_init_flags,
+                                             &new_cfg_index);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ucp_ep_set_cfg_index(ep, new_cfg_index, 1);
+    ucs_debug("ep %p: cleared FAILED states for lanes 0x%" PRIx64
+              " (cfg_index %u -> %u, am_lane=%d)",
+              ep, (uint64_t)lanes, old_cfg_index, ep->cfg_index, ep->am_lane);
+    if (ucs_log_is_enabled(log_level)) {
+        ucs_string_buffer_init(&strb);
+        ucp_proto_select_info(ep->worker, ep->cfg_index, UCP_WORKER_CFG_INDEX_NULL,
+                              &ucp_ep_config(ep)->proto_select, 1, &strb);
+        ucs_log(log_level, "%s", ucs_string_buffer_cstr(&strb));
+        ucs_string_buffer_cleanup(&strb);
+    }
+
+    return UCS_OK;
+}
+
+/* Heap-resident retry state for failed-lane recovery. Lifetime is owned by
+ * the callbackq (oneshot + cascade filter); no recovery state lives on the
+ * endpoint itself. */
+typedef struct ucp_ep_recovery_arg {
+    ucp_ep_h       ucp_ep;        /* Back-pointer used for callbackq key and
+                                     filter matching. */
+    ucs_time_t     next_time;     /* Earliest time at which the next round
+                                     may send LANES_ADDR_REQUEST. */
+    unsigned       retries_left;  /* Rounds remaining before the endpoint is
+                                     declared fully failed. */
+} ucp_ep_recovery_arg_t;
+
+ucs_status_t
 ucp_ep_failover_reconfig(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,
                          ucs_status_t discard_status)
 {
