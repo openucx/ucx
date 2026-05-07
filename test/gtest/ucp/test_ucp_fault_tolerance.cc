@@ -413,8 +413,8 @@ protected:
                  ++valid_lane) {
                 const ucp_ep_config_t *ep_config = ucp_ep_config(sender().ep(0, INJECTED_EP_INDEX));
                 ASSERT_FALSE(UCS_BIT(UCP_LANE_TYPE_FAILED) &
-                             ep_config->key.lanes[valid_lane].lane_types)
-                    << "Lane " << size_t(valid_lane) << " has being marked as failed after "
+                             ep_config->key.lanes[rma_bw_lanes[valid_lane]].lane_types)
+                    << "Lane " << size_t(rma_bw_lanes[valid_lane]) << " has being marked as failed after "
                     << "failure injection on lane " << size_t(lane);
             }
         }
