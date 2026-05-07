@@ -5,7 +5,7 @@
 
 if HAVE_MLX5_DV
 
-SUBDIRS = . gdaki
+SUBDIRS = . gdaki gpi
 
 module_LTLIBRARIES         = libuct_ib_mlx5.la
 libuct_ib_mlx5_la_CPPFLAGS = $(BASE_CPPFLAGS) $(IBVERBS_CPPFLAGS)

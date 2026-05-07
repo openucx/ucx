@@ -231,6 +231,7 @@ AS_IF([test "x$with_docs_only" = xyes],
      AM_CONDITIONAL([HAVE_ZE], [false])
      AM_CONDITIONAL([HAVE_GAUDI], [false])
      AM_CONDITIONAL([HAVE_GDA], [false])
+     AM_CONDITIONAL([HAVE_GPI], [false])
     ],
     [
      AM_CONDITIONAL([DOCS_ONLY], [false])
