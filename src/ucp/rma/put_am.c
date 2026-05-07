@@ -57,6 +57,10 @@ static ucs_status_t ucp_proto_put_am_bcopy_progress(uct_pending_req_t *self)
     ucs_status_t status;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
+        if (ucs_unlikely(ucp_proto_rma_emulation_abort(req))) {
+            return UCS_OK;
+        }
+
         status = ucp_ep_resolve_remote_id(req->send.ep,
                                           mpriv->lanes[0].super.lane);
         if (status != UCS_OK) {
@@ -116,10 +120,6 @@ ucp_proto_put_am_bcopy_probe(const ucp_proto_init_params_t *init_params)
     };
 
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT))) {
-        return;
-    }
-
-    if (!init_params->worker->context->config.ext.proto_emulation_enable) {
         return;
     }
 

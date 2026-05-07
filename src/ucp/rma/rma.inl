@@ -11,6 +11,8 @@
 
 #include <ucp/api/ucp.h>
 #include <ucp/core/ucp_request.inl>
+#include <ucp/proto/proto_common.h>
+#include <ucp/proto/proto_select.inl>
 #include <ucs/debug/log.h>
 
 
@@ -142,6 +144,41 @@ ucp_proto_sw_rma_cfg_thresh(ucp_context_h context, size_t default_value)
     return (context->config.ext.prefer_offload == UCS_YES) ?
            UCS_MEMUNITS_INF: /* used only as last resort */
            default_value;
+}
+
+static UCS_F_ALWAYS_INLINE int ucp_proto_rma_emulation_abort(ucp_request_t *req)
+{
+    ucp_operation_id_t op_id;
+    const char *op_name;
+    ucs_memory_type_t local_mem_type, remote_mem_type;
+
+    if (ucs_likely(req->send.ep->worker->context->config.ext
+                           .proto_emulation_enable)) {
+        return 0;
+    }
+
+    if (req->send.state.dt_iter.length == 0) {
+        return 0;
+    }
+
+    op_id   = ucp_proto_select_op_id(&req->send.proto_config->select_param);
+    op_name = ((op_id <= UCP_OP_ID_LAST) &&
+               (ucp_operation_names[op_id] != NULL)) ?
+               ucp_operation_names[op_id] : "unknown";
+
+    local_mem_type  = req->send.proto_config->select_param.mem_type;
+    remote_mem_type = req->send.rma.rkey->mem_type;
+
+    ucs_error("No zero-copy protocol found for %s (op_id %u), %s -> %s, %zu "
+              "bytes. "
+              "Please check for proper GPU and/or HCA support, or set "
+              "UCX_PROTO_EMULATION_ENABLE=y to proceed by allowing slower "
+              "software emulation.",
+              op_name, (unsigned)op_id, ucs_memory_type_names[local_mem_type],
+              ucs_memory_type_names[remote_mem_type],
+              req->send.state.dt_iter.length);
+    ucp_proto_request_abort(req, UCS_ERR_CANCELED);
+    return 1;
 }
 
 static UCS_F_ALWAYS_INLINE int
