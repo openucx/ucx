@@ -315,11 +315,25 @@ ucs_status_t uct_cuda_base_iface_flush(uct_iface_h tl_iface, unsigned flags,
     return UCS_OK;
 }
 
-void uct_cuda_base_stream_destroy(CUstream *stream)
+static int uct_cuda_base_is_ctx_rsc_valid(const uct_cuda_ctx_rsc_t *ctx_rsc)
 {
-    if (*stream != NULL) {
-        (void)UCT_CUDADRV_FUNC_LOG_WARN(cuStreamDestroy(*stream));
+    unsigned version;
+    ucs_status_t status;
+
+    /* Avoid CUDA destroy calls after the application reset the context. */
+    status = UCT_CUDADRV_FUNC_LOG_DEBUG(
+                    cuCtxGetApiVersion(ctx_rsc->ctx, &version));
+    return (status == UCS_OK);
+}
+
+void uct_cuda_base_stream_destroy(const uct_cuda_ctx_rsc_t *ctx_rsc,
+                                  CUstream *stream)
+{
+    if ((*stream == NULL) || !uct_cuda_base_is_ctx_rsc_valid(ctx_rsc)) {
+        return;
     }
+
+    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuStreamDestroy(*stream));
 }
 
 static void
@@ -334,8 +348,12 @@ uct_cuda_base_event_desc_init(ucs_mpool_t *mp, void *obj, void *chunk)
 static void uct_cuda_base_event_desc_cleanup(ucs_mpool_t *mp, void *obj)
 {
     uct_cuda_event_desc_t *event_desc = obj;
+    uct_cuda_ctx_rsc_t *ctx_rsc       = ucs_container_of(mp, uct_cuda_ctx_rsc_t,
+                                                         event_mp);
 
-    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuEventDestroy(event_desc->event));
+    if (uct_cuda_base_is_ctx_rsc_valid(ctx_rsc)) {
+        (void)UCT_CUDADRV_FUNC_LOG_WARN(cuEventDestroy(event_desc->event));
+    }
 }
 
 void uct_cuda_base_queue_desc_init(uct_cuda_queue_desc_t *qdesc)
@@ -353,7 +371,7 @@ void uct_cuda_base_queue_desc_destroy(const uct_cuda_ctx_rsc_t *ctx_rsc,
                  ucs_queue_length(&qdesc->event_queue));
     }
 
-    uct_cuda_base_stream_destroy(&qdesc->stream);
+    uct_cuda_base_stream_destroy(ctx_rsc, &qdesc->stream);
 }
 
 static ucs_mpool_ops_t uct_cuda_event_desc_mpool_ops = {
