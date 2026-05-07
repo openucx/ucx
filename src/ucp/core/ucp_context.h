@@ -53,23 +53,47 @@ enum {
                                              UCP_OP_ATTR_INDEX_MASK)))
 
 typedef enum {
-    UCP_DMABUF_REG_DEVICES_ALL,
-    UCP_DMABUF_REG_DEVICES_CLOSEST,
-    UCP_DMABUF_REG_DEVICES_LIMIT
-} ucp_dmabuf_reg_devices_mode_t;
+    UCP_REG_DEVICES_ALL,
+    UCP_REG_DEVICES_CLOSEST,
+    UCP_REG_DEVICES_LIMIT
+} ucp_reg_devices_mode_t;
 
 
-typedef struct ucp_dmabuf_reg_select_md {
+static UCS_F_ALWAYS_INLINE ucp_reg_devices_mode_t
+ucp_reg_devices_mode(unsigned long max_hca_per_gpu)
+{
+    if ((max_hca_per_gpu == UCS_ULUNITS_INF) ||
+        (max_hca_per_gpu == UCS_ULUNITS_AUTO)) {
+        return UCP_REG_DEVICES_ALL;
+    } else if (max_hca_per_gpu == 0) {
+        return UCP_REG_DEVICES_CLOSEST;
+    }
+    return UCP_REG_DEVICES_LIMIT;
+}
+
+
+static UCS_F_ALWAYS_INLINE unsigned
+ucp_reg_devices_count(unsigned long max_hca_per_gpu)
+{
+    if (ucp_reg_devices_mode(max_hca_per_gpu) == UCP_REG_DEVICES_LIMIT) {
+        return (unsigned)ucs_min(max_hca_per_gpu, UCP_MAX_MDS);
+    }
+    return UCP_MAX_MDS;
+}
+
+
+typedef struct ucp_reg_select_md {
     ucp_md_index_t md_index;
     const char     *name;
     double         latency;
-    uint32_t       last_used;
-} ucp_dmabuf_reg_select_md_t;
+    uint32_t       use_count;
+} ucp_reg_select_md_t;
 
 
-typedef struct ucp_dmabuf_reg_md {
-    uint32_t last_used;
-} ucp_dmabuf_reg_md_t;
+typedef struct ucp_reg_md {
+    uint32_t use_count;
+    double   latency[UCP_MAX_SYS_DEVICES];
+} ucp_reg_md_t;
 
 
 typedef struct ucp_context_config {
@@ -241,12 +265,8 @@ typedef struct ucp_context_config {
     int                                    connect_all_to_all;
     /** Use only one network device for all protocols */
     int                                    proto_use_single_net_device;
-    /** Select dmabuf-capable memory domains for broad registration */
-    char                                   *dmabuf_reg_devices;
-    /** Parsed dmabuf registration memory-domain selection mode */
-    ucp_dmabuf_reg_devices_mode_t          dmabuf_reg_devices_mode;
-    /** Number of dmabuf-capable memory domains for broad registration */
-    unsigned                               dmabuf_reg_devices_count;
+    /** Max HCAs for GPU memory registration: 0=closest, N=limit, inf=all */
+    unsigned long                          max_hca_per_gpu;
     /** Local identificator on a single node */
     unsigned long                          node_local_id;
 } ucp_context_config_t;
@@ -413,11 +433,11 @@ typedef struct ucp_context {
     /* Map of MDs that support dmabuf registration */
     ucp_md_map_t                  dmabuf_reg_md_map;
 
-    /* Dmabuf registration selection state per MD */
-    ucp_dmabuf_reg_md_t           dmabuf_reg_md[UCP_MAX_MDS];
+    /* Pre-computed reachable dmabuf-capable MD map per memory sys_dev */
+    ucp_md_map_t                  reg_dev_reachable[UCP_MAX_SYS_DEVICES];
 
-    /* Monotonic counter for LRU-based dmabuf MD selection */
-    volatile uint32_t             dmabuf_reg_timestamp;
+    /* Registration selection state per MD (includes pre-computed latencies) */
+    ucp_reg_md_t                  reg_md[UCP_MAX_MDS];
 
     /* List of MDs that detect non host memory type */
     ucp_md_index_t                mem_type_detect_mds[UCS_MEMORY_TYPE_LAST];
@@ -792,18 +812,18 @@ void ucp_tl_bitmap_validate(const ucp_tl_bitmap_t *tl_bitmap,
 const char* ucp_context_cm_name(ucp_context_h context, ucp_rsc_index_t cm_idx);
 
 
-ucp_md_map_t ucp_dmabuf_reg_select(const ucp_context_config_t *config,
-                                   ucp_dmabuf_reg_select_md_t *mds,
-                                   unsigned count);
+ucp_md_map_t ucp_reg_select(const ucp_context_config_t *config,
+                            ucp_reg_select_md_t *mds,
+                            unsigned count);
 
 
-ucp_md_map_t ucp_context_select_dmabuf_reg_md_map(ucp_context_h context,
-                                                  ucp_md_map_t md_map,
-                                                  ucs_sys_device_t mem_sys_dev);
+ucp_md_map_t ucp_context_select_reg_md_map(ucp_context_h context,
+                                           ucp_md_map_t md_map,
+                                           ucs_sys_device_t mem_sys_dev);
 
 
-void ucp_context_dmabuf_reg_mark_used(ucp_context_h context,
-                                      ucp_md_map_t md_map);
+void ucp_context_reg_mark_used(ucp_context_h context,
+                               ucp_md_map_t md_map);
 
 
 ucs_status_t
