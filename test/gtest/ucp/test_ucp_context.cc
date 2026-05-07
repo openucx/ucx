@@ -7,6 +7,7 @@
 #include "ucp_test.h"
 
 #include <cstddef>
+#include <memory>
 #include <set>
 #include <vector>
 
@@ -63,25 +64,25 @@ UCS_TEST_P(test_ucp_context, minimal_field_mask) {
     }
 }
 
-UCS_TEST_P(test_ucp_context, dmabuf_reg_devices_config)
+UCS_TEST_P(test_ucp_context, max_hca_per_gpu_config)
 {
-    modify_config("DMABUF_REG_DEVICES", "2");
+    modify_config("MAX_HCA_PER_GPU", "2");
 
     entity *e = create_entity();
-    EXPECT_EQ(UCP_DMABUF_REG_DEVICES_LIMIT,
-              e->ucph()->config.ext.dmabuf_reg_devices_mode);
-    EXPECT_EQ(2u, e->ucph()->config.ext.dmabuf_reg_devices_count);
+    EXPECT_EQ(UCP_REG_DEVICES_LIMIT,
+              ucp_reg_devices_mode(e->ucph()->config.ext.max_hca_per_gpu));
+    EXPECT_EQ(2u, ucp_reg_devices_count(e->ucph()->config.ext.max_hca_per_gpu));
 }
 
-UCS_TEST_P(test_ucp_context, dmabuf_reg_devices_limits_memh_md_map)
+UCS_TEST_P(test_ucp_context, max_hca_per_gpu_limits_memh_md_map)
 {
     if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
         UCS_TEST_SKIP_R("CUDA is not supported");
     }
 
-    /* Create entity with dmabuf_reg_devices=all to discover how many dmabuf MDs
+    /* Create entity with max_hca_per_gpu=inf to discover how many dmabuf MDs
      * are available on this system */
-    modify_config("DMABUF_REG_DEVICES", "all");
+    modify_config("MAX_HCA_PER_GPU", "inf");
     entity *e_all         = create_entity();
     ucp_context_h ctx_all = e_all->ucph();
 
@@ -103,9 +104,9 @@ UCS_TEST_P(test_ucp_context, dmabuf_reg_devices_limits_memh_md_map)
     ucp_md_map_t dmabuf_all = memh_all->md_map & ctx_all->dmabuf_reg_md_map;
     ucp_mem_unmap(ctx_all, memh_all);
 
-    /* Create a second entity with dmabuf_reg_devices=1 and verify that fewer
+    /* Create a second entity with max_hca_per_gpu=1 and verify that fewer
      * dmabuf MDs end up on the memh */
-    modify_config("DMABUF_REG_DEVICES", "1");
+    modify_config("MAX_HCA_PER_GPU", "1");
     entity *e_lim         = create_entity();
     ucp_context_h ctx_lim = e_lim->ucph();
 
@@ -121,13 +122,13 @@ UCS_TEST_P(test_ucp_context, dmabuf_reg_devices_limits_memh_md_map)
     mem_buffer::release(ptr, UCS_MEMORY_TYPE_CUDA);
 }
 
-UCS_TEST_P(test_ucp_context, dmabuf_reg_devices_closest_is_subset)
+UCS_TEST_P(test_ucp_context, max_hca_per_gpu_closest_is_subset)
 {
     if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
         UCS_TEST_SKIP_R("CUDA is not supported");
     }
 
-    modify_config("DMABUF_REG_DEVICES", "all");
+    modify_config("MAX_HCA_PER_GPU", "inf");
     entity *e_all         = create_entity();
     ucp_context_h ctx_all = e_all->ucph();
 
@@ -149,7 +150,7 @@ UCS_TEST_P(test_ucp_context, dmabuf_reg_devices_closest_is_subset)
     ucp_md_map_t dmabuf_all = memh_all->md_map & ctx_all->dmabuf_reg_md_map;
     ucp_mem_unmap(ctx_all, memh_all);
 
-    modify_config("DMABUF_REG_DEVICES", "closest");
+    modify_config("MAX_HCA_PER_GPU", "0");
     entity *e_close         = create_entity();
     ucp_context_h ctx_close = e_close->ucph();
 
@@ -165,17 +166,17 @@ UCS_TEST_P(test_ucp_context, dmabuf_reg_devices_closest_is_subset)
     mem_buffer::release(ptr, UCS_MEMORY_TYPE_CUDA);
 }
 
-UCS_TEST_P(test_ucp_context, dmabuf_reg_devices_all_preserves_non_dmabuf)
+UCS_TEST_P(test_ucp_context, max_hca_per_gpu_preserves_non_dmabuf)
 {
     if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
         UCS_TEST_SKIP_R("CUDA is not supported");
     }
 
-    modify_config("DMABUF_REG_DEVICES", "all");
+    modify_config("MAX_HCA_PER_GPU", "inf");
     entity *e_all         = create_entity();
     ucp_context_h ctx_all = e_all->ucph();
 
-    modify_config("DMABUF_REG_DEVICES", "1");
+    modify_config("MAX_HCA_PER_GPU", "1");
     entity *e_lim         = create_entity();
     ucp_context_h ctx_lim = e_lim->ucph();
 
@@ -274,28 +275,37 @@ UCS_TEST_P(test_ucp_version, version_string) {
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_version, all, "all")
 
-class test_ucp_dmabuf_reg_devices : public ucs::test {
+class test_ucp_reg_devices : public ucs::test {
 protected:
     static ucp_context_config_t
-    config(ucp_dmabuf_reg_devices_mode_t mode, unsigned count = UCP_MAX_MDS)
+    config(ucp_reg_devices_mode_t mode, unsigned count = UCP_MAX_MDS)
     {
         ucp_context_config_t config = {};
 
-        config.dmabuf_reg_devices_mode  = mode;
-        config.dmabuf_reg_devices_count = count;
+        switch (mode) {
+        case UCP_REG_DEVICES_ALL:
+            config.max_hca_per_gpu = UCS_ULUNITS_INF;
+            break;
+        case UCP_REG_DEVICES_CLOSEST:
+            config.max_hca_per_gpu = 0;
+            break;
+        case UCP_REG_DEVICES_LIMIT:
+            config.max_hca_per_gpu = count;
+            break;
+        }
         return config;
     }
 
-    static ucp_dmabuf_reg_select_md_t md(ucp_md_index_t md_index,
+    static ucp_reg_select_md_t md(ucp_md_index_t md_index,
                                          const char *name, double latency,
-                                         uint32_t last_used = 0)
+                                         uint32_t use_count = 0)
     {
-        ucp_dmabuf_reg_select_md_t md = {};
+        ucp_reg_select_md_t md = {};
 
-        md.md_index  = md_index;
-        md.name      = name;
-        md.latency   = latency;
-        md.last_used = last_used;
+        md.md_index   = md_index;
+        md.name       = name;
+        md.latency    = latency;
+        md.use_count  = use_count;
         return md;
     }
 
@@ -307,14 +317,22 @@ protected:
     }
 
     static void init_context(ucp_context_t &context, ucp_tl_md_t *tl_mds,
-                             ucp_dmabuf_reg_devices_mode_t mode, unsigned count)
+                             ucp_reg_devices_mode_t mode, unsigned count)
     {
-        context.tl_mds                              = tl_mds;
-        context.num_mds                             = 4;
-        context.dmabuf_reg_md_map                   = UCS_MASK(4);
-        context.dmabuf_reg_timestamp                = 0;
-        context.config.ext.dmabuf_reg_devices_mode  = mode;
-        context.config.ext.dmabuf_reg_devices_count = count;
+        context.tl_mds            = tl_mds;
+        context.num_mds           = 4;
+        context.dmabuf_reg_md_map = UCS_MASK(4);
+        switch (mode) {
+        case UCP_REG_DEVICES_ALL:
+            context.config.ext.max_hca_per_gpu = UCS_ULUNITS_INF;
+            break;
+        case UCP_REG_DEVICES_CLOSEST:
+            context.config.ext.max_hca_per_gpu = 0;
+            break;
+        case UCP_REG_DEVICES_LIMIT:
+            context.config.ext.max_hca_per_gpu = count;
+            break;
+        }
 
         set_context_md(tl_mds, 0, "mlx5_0");
         set_context_md(tl_mds, 1, "mlx5_1");
@@ -323,83 +341,83 @@ protected:
     }
 };
 
-UCS_TEST_F(test_ucp_dmabuf_reg_devices, closest_by_latency) {
-    ucp_context_config_t cfg = config(UCP_DMABUF_REG_DEVICES_CLOSEST);
-    std::vector<ucp_dmabuf_reg_select_md_t> mds = {md(0, "mlx5_2", 5e-7),
+UCS_TEST_F(test_ucp_reg_devices, closest_by_latency) {
+    ucp_context_config_t cfg = config(UCP_REG_DEVICES_CLOSEST);
+    std::vector<ucp_reg_select_md_t> mds = {md(0, "mlx5_2", 5e-7),
                                                    md(1, "mlx5_0", 3e-7),
                                                    md(2, "mlx5_1", 3e-7),
                                                    md(3, "mlx5_3", 1e-6)};
 
     EXPECT_EQ(UCS_BIT(1) | UCS_BIT(2),
-              ucp_dmabuf_reg_select(&cfg, mds.data(), mds.size()));
+              ucp_reg_select(&cfg, mds.data(), mds.size()));
 }
 
-UCS_TEST_F(test_ucp_dmabuf_reg_devices, closest_selects_all_equal_latency) {
-    ucp_context_config_t cfg = config(UCP_DMABUF_REG_DEVICES_CLOSEST);
-    std::vector<ucp_dmabuf_reg_select_md_t> mds = {md(0, "mlx5_0", 3e-7),
+UCS_TEST_F(test_ucp_reg_devices, closest_selects_all_equal_latency) {
+    ucp_context_config_t cfg = config(UCP_REG_DEVICES_CLOSEST);
+    std::vector<ucp_reg_select_md_t> mds = {md(0, "mlx5_0", 3e-7),
                                                    md(1, "mlx5_1", 3e-7)};
 
     EXPECT_EQ(UCS_BIT(0) | UCS_BIT(1),
-              ucp_dmabuf_reg_select(&cfg, mds.data(), mds.size()));
+              ucp_reg_select(&cfg, mds.data(), mds.size()));
 }
 
-UCS_TEST_F(test_ucp_dmabuf_reg_devices, limit_uses_latency_before_last_used) {
-    ucp_context_config_t cfg = config(UCP_DMABUF_REG_DEVICES_LIMIT, 2);
-    std::vector<ucp_dmabuf_reg_select_md_t> mds = {md(0, "mlx5_0", 3e-7, 9),
+UCS_TEST_F(test_ucp_reg_devices, limit_uses_latency_before_use_count) {
+    ucp_context_config_t cfg = config(UCP_REG_DEVICES_LIMIT, 2);
+    std::vector<ucp_reg_select_md_t> mds = {md(0, "mlx5_0", 3e-7, 9),
                                                    md(1, "mlx5_1", 5e-7, 0),
                                                    md(2, "mlx5_2", 3e-7, 8),
                                                    md(3, "mlx5_3", 5e-7, 0)};
 
     EXPECT_EQ(UCS_BIT(0) | UCS_BIT(2),
-              ucp_dmabuf_reg_select(&cfg, mds.data(), mds.size()));
+              ucp_reg_select(&cfg, mds.data(), mds.size()));
 }
 
-UCS_TEST_F(test_ucp_dmabuf_reg_devices,
+UCS_TEST_F(test_ucp_reg_devices,
            limit_larger_than_available_selects_all) {
-    ucp_context_config_t cfg = config(UCP_DMABUF_REG_DEVICES_LIMIT, 8);
-    std::vector<ucp_dmabuf_reg_select_md_t> mds = {md(0, "mlx5_0", 3e-7),
+    ucp_context_config_t cfg = config(UCP_REG_DEVICES_LIMIT, 8);
+    std::vector<ucp_reg_select_md_t> mds = {md(0, "mlx5_0", 3e-7),
                                                    md(1, "mlx5_1", 5e-7)};
 
     EXPECT_EQ(UCS_BIT(0) | UCS_BIT(1),
-              ucp_dmabuf_reg_select(&cfg, mds.data(), mds.size()));
+              ucp_reg_select(&cfg, mds.data(), mds.size()));
 }
 
-UCS_TEST_F(test_ucp_dmabuf_reg_devices, empty_selects_none) {
-    ucp_context_config_t cfg = config(UCP_DMABUF_REG_DEVICES_LIMIT, 1);
+UCS_TEST_F(test_ucp_reg_devices, empty_selects_none) {
+    ucp_context_config_t cfg = config(UCP_REG_DEVICES_LIMIT, 1);
 
-    EXPECT_EQ((ucp_md_map_t)0, ucp_dmabuf_reg_select(&cfg, NULL, 0));
+    EXPECT_EQ((ucp_md_map_t)0, ucp_reg_select(&cfg, NULL, 0));
 }
 
-UCS_TEST_F(test_ucp_dmabuf_reg_devices, limit_prefers_least_recently_used) {
-    ucp_context_config_t cfg = config(UCP_DMABUF_REG_DEVICES_LIMIT, 1);
-    std::vector<ucp_dmabuf_reg_select_md_t> mds = {md(0, "mlx5_0", 3e-7, 9),
+UCS_TEST_F(test_ucp_reg_devices, limit_prefers_least_used) {
+    ucp_context_config_t cfg = config(UCP_REG_DEVICES_LIMIT, 1);
+    std::vector<ucp_reg_select_md_t> mds = {md(0, "mlx5_0", 3e-7, 9),
                                                    md(1, "mlx5_1", 3e-7, 0)};
 
-    EXPECT_EQ(UCS_BIT(1), ucp_dmabuf_reg_select(&cfg, mds.data(), mds.size()));
+    EXPECT_EQ(UCS_BIT(1), ucp_reg_select(&cfg, mds.data(), mds.size()));
 }
 
-UCS_TEST_F(test_ucp_dmabuf_reg_devices, limit_uses_name_after_last_used) {
-    ucp_context_config_t cfg = config(UCP_DMABUF_REG_DEVICES_LIMIT, 1);
-    std::vector<ucp_dmabuf_reg_select_md_t> mds = {md(0, "mlx5_1", 3e-7, 0),
+UCS_TEST_F(test_ucp_reg_devices, limit_uses_name_after_use_count) {
+    ucp_context_config_t cfg = config(UCP_REG_DEVICES_LIMIT, 1);
+    std::vector<ucp_reg_select_md_t> mds = {md(0, "mlx5_1", 3e-7, 0),
                                                    md(1, "mlx5_0", 3e-7, 0)};
 
-    EXPECT_EQ(UCS_BIT(1), ucp_dmabuf_reg_select(&cfg, mds.data(), mds.size()));
+    EXPECT_EQ(UCS_BIT(1), ucp_reg_select(&cfg, mds.data(), mds.size()));
 }
 
-UCS_TEST_F(test_ucp_dmabuf_reg_devices, context_selection_rotates_mds) {
-    ucp_context_t context = {};
+UCS_TEST_F(test_ucp_reg_devices, context_selection_rotates_mds) {
+    std::unique_ptr<ucp_context_t> ctx(new ucp_context_t{});
     ucp_tl_md_t tl_mds[4] = {};
     ucp_md_map_t md_map;
 
-    init_context(context, tl_mds, UCP_DMABUF_REG_DEVICES_LIMIT, 1);
+    init_context(*ctx, tl_mds, UCP_REG_DEVICES_LIMIT, 1);
 
-    md_map = ucp_context_select_dmabuf_reg_md_map(&context,
+    md_map = ucp_context_select_reg_md_map(ctx.get(),
                                                   UCS_BIT(1) | UCS_BIT(3),
                                                   UCS_SYS_DEVICE_ID_UNKNOWN);
     EXPECT_EQ(UCS_BIT(1), md_map);
 
-    ucp_context_dmabuf_reg_mark_used(&context, UCS_BIT(1));
-    md_map = ucp_context_select_dmabuf_reg_md_map(&context,
+    ucp_context_reg_mark_used(ctx.get(), UCS_BIT(1));
+    md_map = ucp_context_select_reg_md_map(ctx.get(),
                                                   UCS_BIT(1) | UCS_BIT(3),
                                                   UCS_SYS_DEVICE_ID_UNKNOWN);
     EXPECT_EQ(UCS_BIT(3), md_map);
