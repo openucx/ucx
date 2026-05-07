@@ -12,14 +12,19 @@ Good reviews are direct, specific, and short. The team's comments are almost alw
 Reviewers commonly ask a question rather than making a demand — "can we ...?", "why not ...?" —
 which signals a soft suggestion versus a hard requirement.
 
-- **Match title and description to the code** — if the PR says "fix login bug" but also refactors
-  the auth module, flag it
-- **Compactness** — the implementation should be as small as possible; avoid redundant state and
-  remove anything unused
-- **Consistency** — changes must match existing code in style, naming, abstraction level, and philosophy
-- **Optimize the hot path** — performance matters most where code runs frequently; call it out there
-- **Don't pile on** — if a comment is already raised or the author replied with a good explanation,
-  move on
+- **Match title and description to the code** — the description should follow
+  `.github/PULL_REQUEST_TEMPLATE.md`, the "Why?" should explain the value for
+  the user, and stale or missing major changes should be flagged with a
+  suggested update
+- **Compactness** — the implementation should be as small as possible; avoid
+  redundant state and remove anything unused
+- **Consistency** — changes must match existing code in style, naming,
+  abstraction level, and philosophy
+- **Optimize the hot path** — prioritize performance comments when the changed
+  code runs frequently
+- **Don't pile on** — if the same issue is already raised in an unresolved
+  thread, do not raise it again; support the existing thread instead. If the
+  author replied with a good explanation, move on
 
 ---
 
@@ -38,6 +43,9 @@ Large PRs slow down the entire team. Enforce these hard limits:
 
 Apply the `AGENTS.md` discovery rule from the root guide for changed paths, and
 read any style docs relevant to the diff before posting findings.
+Check whether changed folders need `AGENTS.md` updates: add guidance for new
+recurring patterns, remove stale local guidance, and do not leave ownership
+gaps.
 
 Review by risk, in order:
 
@@ -83,5 +91,6 @@ null check"`). Skip suggested code blocks unless the fix is non-obvious. One com
 issue; do not bundle unrelated points. Inline comments for file-level issues; general PR comment
 only for PR-level concerns.
 
-Use the GitHub `suggestion` block (` ```suggestion `) when the fix is mechanical and unambiguous.
+Use the GitHub `suggestion` block (` ```suggestion ... ``` `) when the fix is
+mechanical and unambiguous.
 For anything requiring judgment, describe the problem and let the author propose the fix.

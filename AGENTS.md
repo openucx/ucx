@@ -38,19 +38,19 @@ them.
 ## Project Map
 
 UCX is a C communication framework with C++ unit tests. Use the nearest
-subtree guide for local ownership, commands, and pitfalls:
+subtree guide when one exists for local ownership, commands, and pitfalls:
 
 - `src/AGENTS.md` for runtime source code.
 - `test/AGENTS.md` for test code.
-- `docs/AGENTS.md` for documentation and style references.
-- `examples/AGENTS.md` for public API examples.
-- `bindings/AGENTS.md` for Go and Java bindings.
 
 Other top-level areas:
 
+- `bindings`: Go and Java bindings over UCX APIs.
 - `buildlib`: build, packaging, and CI helper scripts.
 - `config`: autotools helpers and m4 feature checks.
 - `debian`: Debian packaging metadata and scripts.
+- `docs`: Sphinx, Doxygen, style, and user documentation.
+- `examples`: small programs that demonstrate public APIs.
 
 ## Source-of-Truth Docs
 
@@ -59,5 +59,4 @@ Follow these project docs instead of duplicating their contents:
 - `docs/CodeStyle.md` for C/C++ formatting and naming.
 - `docs/LoggingStyle.md` for log levels and message style.
 - `docs/OptimizationStyle.md` for performance-sensitive changes.
-- `.github/CONTRIBUTING.md` for contribution workflow expectations.
 - `REVIEW.md` for UCX pull-request review checks and comment style.
