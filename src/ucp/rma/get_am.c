@@ -48,7 +48,7 @@ static ucs_status_t ucp_proto_get_am_bcopy_progress(uct_pending_req_t *self)
     ucs_status_t status;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
-        if (ucs_unlikely(ucp_proto_rma_emulation_abort(req))) {
+        if (ucp_proto_rma_emulation_abort(req)) {
             return UCS_OK;
         }
 
