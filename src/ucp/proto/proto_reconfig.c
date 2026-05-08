@@ -118,8 +118,18 @@ static ucs_status_t ucp_proto_reconfig_progress(uct_pending_req_t *self)
         return ucp_proto_reconfig_select_progress(self);
     }
 
-    /* TODO select wireup lane when needed */
-    req->send.lane = ucp_ep_config(ep)->key.am_lane;
+    req->send.lane = ucp_ep_get_wireup_msg_lane(ep);
+    if (req->send.lane == UCP_NULL_LANE) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    /* Trigger wireup if not already done */
+    status = ucp_wireup_connect_remote(ep, req->send.lane);
+    if (status != UCS_OK) {
+        ucp_proto_request_abort(req, status);
+        return UCS_OK;
+    }
+
     return UCS_ERR_NO_RESOURCE;
 }
 
