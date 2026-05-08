@@ -842,31 +842,30 @@ ucp_memh_init_from_parent(ucp_mem_h memh, ucp_md_map_t parent_md_map)
     }
 }
 
-/* Apply UCX_MAX_HCA_PER_GPU policy to narrow the dmabuf-capable portion of
- * reg_md_map by reachability and the configured device-limit selection.
- * Only called for user-facing registrations (ucp_mem_map); internal
- * allocations such as RNDV fragment pools bypass this entirely. */
+/* Apply UCX_MAX_HCA_PER_GPU policy.
+ * The network MDs are ranked by bandwidth to the
+ * buffer's sys_dev and the highest N selected. */
 static ucp_md_map_t
 ucp_memh_apply_reg_policy(ucp_context_h context, ucs_memory_type_t mem_type,
                           ucs_sys_device_t sys_dev, ucp_md_map_t reg_md_map)
 {
-    ucp_md_map_t policy_md_map, reachable, selected;
+    ucp_md_map_t net_md_map = 0;
+    ucp_md_map_t policy_md_map, selected;
     ucp_md_index_t md_index;
+    ucp_rsc_index_t tl_idx;
 
-    if (context->dmabuf_mds[mem_type] == UCP_NULL_RESOURCE) {
+    if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
         return reg_md_map;
     }
 
-    policy_md_map = context->dmabuf_reg_md_map & reg_md_map;
-
-    if ((sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) &&
-        (sys_dev < UCP_MAX_SYS_DEVICES)) {
-        reachable = context->reg_dev_reachable[sys_dev] & policy_md_map;
-    } else {
-        reachable = policy_md_map;
+    for (tl_idx = 0; tl_idx < context->num_tls; ++tl_idx) {
+        if (context->tl_rscs[tl_idx].tl_rsc.dev_type == UCT_DEVICE_TYPE_NET) {
+            net_md_map |= UCS_BIT(context->tl_rscs[tl_idx].md_index);
+        }
     }
 
-    selected = ucp_context_select_reg_md_map(context, reachable, sys_dev);
+    policy_md_map = reg_md_map & net_md_map;
+    selected      = ucp_context_select_reg_mds(context, policy_md_map, sys_dev);
 
     if (ucs_log_is_enabled(UCS_LOG_LEVEL_DEBUG)) {
         UCS_STRING_BUFFER_ONSTACK(strb, 256);
@@ -881,21 +880,20 @@ ucp_memh_apply_reg_policy(ucp_context_h context, ucs_memory_type_t mem_type,
                   mem_type, sys_dev, ucs_string_buffer_cstr(&strb));
     }
 
-    return (reg_md_map & ~context->dmabuf_reg_md_map) | selected;
+    return (reg_md_map & ~net_md_map) | selected;
 }
 
 static ucs_status_t
 ucp_memh_init_uct_reg(ucp_context_h context, ucp_mem_h memh, unsigned uct_flags,
                       int apply_reg_policy, const char *alloc_name)
 {
+    ucs_memory_type_t mem_type = memh->mem_type;
+    ucp_md_map_t reg_md_map    = context->reg_md_map[mem_type];
     void *address              = ucp_memh_address(memh);
     size_t length              = ucp_memh_length(memh);
-    ucs_memory_type_t mem_type = memh->mem_type;
-    ucp_md_map_t reg_md_map;
     ucp_md_map_t cache_md_map;
     ucs_status_t status;
 
-    reg_md_map = context->reg_md_map[mem_type];
     if (uct_flags & UCT_MD_MEM_FLAG_LOCK) {
         reg_md_map |= context->reg_block_md_map[mem_type];
     }
@@ -1231,7 +1229,6 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
 out:
     if (status == UCS_OK) {
         ucs_assert(ucp_memh_is_user_memh(memh));
-        ucp_context_reg_mark_used(context, memh->md_map);
         *memh_p = memh;
     }
     return status;

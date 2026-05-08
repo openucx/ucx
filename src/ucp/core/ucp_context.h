@@ -82,19 +82,6 @@ ucp_reg_devices_count(unsigned long max_hca_per_gpu)
 }
 
 
-typedef struct ucp_reg_select_md {
-    ucp_md_index_t md_index;
-    const char     *name;
-    double         latency;
-    uint32_t       use_count;
-} ucp_reg_select_md_t;
-
-
-typedef struct ucp_reg_md {
-    uint32_t use_count;
-    double   latency[UCP_MAX_SYS_DEVICES];
-} ucp_reg_md_t;
-
 
 typedef struct ucp_context_config {
     /** Threshold for switching UCP to buffered copy(bcopy) protocol */
@@ -432,12 +419,6 @@ typedef struct ucp_context {
 
     /* Map of MDs that support dmabuf registration */
     ucp_md_map_t                  dmabuf_reg_md_map;
-
-    /* Pre-computed reachable dmabuf-capable MD map per memory sys_dev */
-    ucp_md_map_t                  reg_dev_reachable[UCP_MAX_SYS_DEVICES];
-
-    /* Registration selection state per MD (includes pre-computed latencies) */
-    ucp_reg_md_t                  reg_md[UCP_MAX_MDS];
 
     /* List of MDs that detect non host memory type */
     ucp_md_index_t                mem_type_detect_mds[UCS_MEMORY_TYPE_LAST];
@@ -812,16 +793,9 @@ void ucp_tl_bitmap_validate(const ucp_tl_bitmap_t *tl_bitmap,
 const char* ucp_context_cm_name(ucp_context_h context, ucp_rsc_index_t cm_idx);
 
 
-ucp_md_map_t ucp_reg_select(const ucp_context_config_t *config,
-                            ucp_reg_select_md_t *mds, unsigned count);
-
-
-ucp_md_map_t ucp_context_select_reg_md_map(ucp_context_h context,
-                                           ucp_md_map_t md_map,
-                                           ucs_sys_device_t mem_sys_dev);
-
-
-void ucp_context_reg_mark_used(ucp_context_h context, ucp_md_map_t md_map);
+ucp_md_map_t ucp_context_select_reg_mds(ucp_context_h context,
+                                        ucp_md_map_t md_map,
+                                        ucs_sys_device_t mem_sys_dev);
 
 
 ucs_status_t

@@ -7,15 +7,17 @@
 #include "ucp_test.h"
 
 #include <cstddef>
-#include <memory>
 #include <set>
-#include <vector>
 
 extern "C" {
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_mm.h>
 #include <ucs/sys/sys.h>
 }
+
+#if HAVE_CUDA
+#include <cuda_runtime.h>
+#endif
 
 class test_ucp_lib_query : public ucs::test {
 };
@@ -80,136 +82,119 @@ UCS_TEST_P(test_ucp_context, max_hca_per_gpu_limits_memh_md_map)
         UCS_TEST_SKIP_R("CUDA is not supported");
     }
 
-    /* Create entity with max_hca_per_gpu=inf to discover how many dmabuf MDs
-     * are available on this system */
     modify_config("MAX_HCA_PER_GPU", "inf");
     entity *e_all         = create_entity();
     ucp_context_h ctx_all = e_all->ucph();
 
-    if (ucs_popcount(ctx_all->dmabuf_reg_md_map) < 2) {
-        UCS_TEST_SKIP_R("need at least 2 dmabuf-capable MDs");
+    ucp_md_map_t net_md_map = 0;
+    for (ucp_rsc_index_t i = 0; i < ctx_all->num_tls; ++i) {
+        if (ctx_all->tl_rscs[i].tl_rsc.dev_type == UCT_DEVICE_TYPE_NET) {
+            net_md_map |= UCS_BIT(ctx_all->tl_rscs[i].md_index);
+        }
+    }
+
+    if (ucs_popcount(net_md_map) < 2) {
+        UCS_TEST_SKIP_R("need at least 2 network MDs");
     }
 
     const size_t size = 4096;
     void *ptr         = mem_buffer::allocate(size, UCS_MEMORY_TYPE_CUDA);
 
-    ucp_mem_map_params_t params = {};
-    params.field_mask           = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
-                                  UCP_MEM_MAP_PARAM_FIELD_LENGTH;
-    params.address              = ptr;
-    params.length               = size;
+    ucp_mem_map_params_t params;
+    params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                        UCP_MEM_MAP_PARAM_FIELD_LENGTH;
+    params.address    = ptr;
+    params.length     = size;
 
-    ucp_mem_h memh_all;
-    ASSERT_UCS_OK(ucp_mem_map(ctx_all, &params, &memh_all));
-    ucp_md_map_t dmabuf_all = memh_all->md_map & ctx_all->dmabuf_reg_md_map;
-    ucp_mem_unmap(ctx_all, memh_all);
+    ucp_mem_h memh;
+    ASSERT_UCS_OK(ucp_mem_map(ctx_all, &params, &memh));
+    ucp_md_map_t net_all     = memh->md_map & net_md_map;
+    ucp_md_map_t non_net_all = memh->md_map & ~net_md_map;
+    ucp_mem_unmap(ctx_all, memh);
 
-    /* Create a second entity with max_hca_per_gpu=1 and verify that fewer
-     * dmabuf MDs end up on the memh */
+    /* LIMIT=1: at most 1 network MD */
     modify_config("MAX_HCA_PER_GPU", "1");
     entity *e_lim         = create_entity();
     ucp_context_h ctx_lim = e_lim->ucph();
 
-    ucp_mem_h memh_lim;
-    ASSERT_UCS_OK(ucp_mem_map(ctx_lim, &params, &memh_lim));
-    ucp_md_map_t dmabuf_lim = memh_lim->md_map & ctx_lim->dmabuf_reg_md_map;
-    ucp_mem_unmap(ctx_lim, memh_lim);
+    ASSERT_UCS_OK(ucp_mem_map(ctx_lim, &params, &memh));
+    ucp_md_map_t net_lim     = memh->md_map & net_md_map;
+    ucp_md_map_t non_net_lim = memh->md_map & ~net_md_map;
+    ucp_mem_unmap(ctx_lim, memh);
 
-    EXPECT_GT(ucs_popcount(dmabuf_all), 0);
-    EXPECT_LE(ucs_popcount(dmabuf_lim), 1);
-    EXPECT_LE(ucs_popcount(dmabuf_lim), ucs_popcount(dmabuf_all));
-
-    mem_buffer::release(ptr, UCS_MEMORY_TYPE_CUDA);
-}
-
-UCS_TEST_P(test_ucp_context, max_hca_per_gpu_closest_is_subset)
-{
-    if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
-        UCS_TEST_SKIP_R("CUDA is not supported");
-    }
-
-    modify_config("MAX_HCA_PER_GPU", "inf");
-    entity *e_all         = create_entity();
-    ucp_context_h ctx_all = e_all->ucph();
-
-    if (ucs_popcount(ctx_all->dmabuf_reg_md_map) < 2) {
-        UCS_TEST_SKIP_R("need at least 2 dmabuf-capable MDs");
-    }
-
-    const size_t size = 4096;
-    void *ptr         = mem_buffer::allocate(size, UCS_MEMORY_TYPE_CUDA);
-
-    ucp_mem_map_params_t params = {};
-    params.field_mask           = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
-                                  UCP_MEM_MAP_PARAM_FIELD_LENGTH;
-    params.address              = ptr;
-    params.length               = size;
-
-    ucp_mem_h memh_all;
-    ASSERT_UCS_OK(ucp_mem_map(ctx_all, &params, &memh_all));
-    ucp_md_map_t dmabuf_all = memh_all->md_map & ctx_all->dmabuf_reg_md_map;
-    ucp_mem_unmap(ctx_all, memh_all);
-
+    /* CLOSEST: subset of all */
     modify_config("MAX_HCA_PER_GPU", "0");
     entity *e_close         = create_entity();
     ucp_context_h ctx_close = e_close->ucph();
 
-    ucp_mem_h memh_close;
-    ASSERT_UCS_OK(ucp_mem_map(ctx_close, &params, &memh_close));
-    ucp_md_map_t dmabuf_close = memh_close->md_map &
-                                ctx_close->dmabuf_reg_md_map;
-    ucp_mem_unmap(ctx_close, memh_close);
-
-    EXPECT_GT(ucs_popcount(dmabuf_close), 0);
-    EXPECT_LE(ucs_popcount(dmabuf_close), ucs_popcount(dmabuf_all));
+    ASSERT_UCS_OK(ucp_mem_map(ctx_close, &params, &memh));
+    ucp_md_map_t net_close = memh->md_map & net_md_map;
+    ucp_mem_unmap(ctx_close, memh);
 
     mem_buffer::release(ptr, UCS_MEMORY_TYPE_CUDA);
+
+    EXPECT_GT(ucs_popcount(net_all), 0);
+    EXPECT_LE(ucs_popcount(net_lim), 1);
+    EXPECT_GT(ucs_popcount(net_close), 0);
+    EXPECT_LE(ucs_popcount(net_close), ucs_popcount(net_all));
+    EXPECT_EQ(non_net_all, non_net_lim);
 }
 
-UCS_TEST_P(test_ucp_context, max_hca_per_gpu_preserves_non_dmabuf)
+UCS_TEST_P(test_ucp_context, max_hca_per_gpu_limits_per_gpu)
 {
+#if !HAVE_CUDA
+    UCS_TEST_SKIP_R("CUDA is not available");
+#else
     if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
         UCS_TEST_SKIP_R("CUDA is not supported");
     }
 
-    modify_config("MAX_HCA_PER_GPU", "inf");
-    entity *e_all         = create_entity();
-    ucp_context_h ctx_all = e_all->ucph();
-
-    modify_config("MAX_HCA_PER_GPU", "1");
-    entity *e_lim         = create_entity();
-    ucp_context_h ctx_lim = e_lim->ucph();
-
-    if (ctx_all->dmabuf_reg_md_map == 0) {
-        UCS_TEST_SKIP_R("no dmabuf-capable MDs");
+    int num_gpus;
+    if ((cudaGetDeviceCount(&num_gpus) != cudaSuccess) || (num_gpus < 2)) {
+        UCS_TEST_SKIP_R("need at least 2 CUDA devices");
     }
 
+    modify_config("MAX_HCA_PER_GPU", "1");
+    entity *e         = create_entity();
+    ucp_context_h ctx = e->ucph();
+
+    ucp_md_map_t net_md_map = 0;
+    for (ucp_rsc_index_t i = 0; i < ctx->num_tls; ++i) {
+        if (ctx->tl_rscs[i].tl_rsc.dev_type == UCT_DEVICE_TYPE_NET) {
+            net_md_map |= UCS_BIT(ctx->tl_rscs[i].md_index);
+        }
+    }
+
+    if (ucs_popcount(net_md_map) < 2) {
+        UCS_TEST_SKIP_R("need at least 2 network MDs");
+    }
+
+    int orig_dev;
+    ASSERT_EQ(cudaGetDevice(&orig_dev), cudaSuccess);
+
     const size_t size = 4096;
-    void *ptr         = mem_buffer::allocate(size, UCS_MEMORY_TYPE_CUDA);
+    ucp_mem_map_params_t params;
+    params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                        UCP_MEM_MAP_PARAM_FIELD_LENGTH;
 
-    ucp_mem_map_params_t params = {};
-    params.field_mask           = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
-                                  UCP_MEM_MAP_PARAM_FIELD_LENGTH;
-    params.address              = ptr;
-    params.length               = size;
+    for (int gpu = 0; gpu < ucs_min(num_gpus, 4); gpu++) {
+        ASSERT_EQ(cudaSetDevice(gpu), cudaSuccess);
 
-    ucp_mem_h memh_all;
-    ASSERT_UCS_OK(ucp_mem_map(ctx_all, &params, &memh_all));
+        void *ptr = mem_buffer::allocate(size, UCS_MEMORY_TYPE_CUDA);
+        params.address = ptr;
+        params.length  = size;
 
-    ucp_mem_h memh_lim;
-    ASSERT_UCS_OK(ucp_mem_map(ctx_lim, &params, &memh_lim));
+        ucp_mem_h memh;
+        ASSERT_UCS_OK(ucp_mem_map(ctx, &params, &memh));
+        ucp_md_map_t net_map = memh->md_map & net_md_map;
+        EXPECT_LE(ucs_popcount(net_map), 1)
+                << "GPU " << gpu << " should have at most 1 network MD";
+        ucp_mem_unmap(ctx, memh);
+        mem_buffer::release(ptr, UCS_MEMORY_TYPE_CUDA);
+    }
 
-    /* Non-dmabuf MDs (e.g. cuda_copy, self) should be registered identically
-     * regardless of the dmabuf device policy */
-    ucp_md_map_t non_dmabuf_all = memh_all->md_map &
-                                  ~ctx_all->dmabuf_reg_md_map;
-    ucp_md_map_t non_dmabuf_lim = memh_lim->md_map &
-                                  ~ctx_lim->dmabuf_reg_md_map;
-    EXPECT_EQ(non_dmabuf_all, non_dmabuf_lim);
-
-    ucp_mem_unmap(ctx_all, memh_all);
-    ucp_mem_unmap(ctx_lim, memh_lim);
-    mem_buffer::release(ptr, UCS_MEMORY_TYPE_CUDA);
+    ASSERT_EQ(cudaSetDevice(orig_dev), cudaSuccess);
+#endif
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_context, all, "all")
@@ -274,150 +259,6 @@ UCS_TEST_P(test_ucp_version, version_string) {
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_version, all, "all")
-
-class test_ucp_reg_devices : public ucs::test {
-protected:
-    static ucp_context_config_t
-    config(ucp_reg_devices_mode_t mode, unsigned count = UCP_MAX_MDS)
-    {
-        ucp_context_config_t config = {};
-
-        switch (mode) {
-        case UCP_REG_DEVICES_ALL:
-            config.max_hca_per_gpu = UCS_ULUNITS_INF;
-            break;
-        case UCP_REG_DEVICES_CLOSEST:
-            config.max_hca_per_gpu = 0;
-            break;
-        case UCP_REG_DEVICES_LIMIT:
-            config.max_hca_per_gpu = count;
-            break;
-        }
-        return config;
-    }
-
-    static ucp_reg_select_md_t md(ucp_md_index_t md_index, const char *name,
-                                  double latency, uint32_t use_count = 0)
-    {
-        ucp_reg_select_md_t md;
-
-        md.md_index  = md_index;
-        md.name      = name;
-        md.latency   = latency;
-        md.use_count = use_count;
-        return md;
-    }
-
-    static void set_context_md(ucp_tl_md_t *tl_mds, ucp_md_index_t md_index,
-                               const char *name)
-    {
-        ucs_strncpy_safe(tl_mds[md_index].rsc.md_name, name,
-                         sizeof(tl_mds[md_index].rsc.md_name));
-    }
-
-    static void init_context(ucp_context_t &context, ucp_tl_md_t *tl_mds,
-                             ucp_reg_devices_mode_t mode, unsigned count)
-    {
-        context.tl_mds            = tl_mds;
-        context.num_mds           = 4;
-        context.dmabuf_reg_md_map = UCS_MASK(4);
-        switch (mode) {
-        case UCP_REG_DEVICES_ALL:
-            context.config.ext.max_hca_per_gpu = UCS_ULUNITS_INF;
-            break;
-        case UCP_REG_DEVICES_CLOSEST:
-            context.config.ext.max_hca_per_gpu = 0;
-            break;
-        case UCP_REG_DEVICES_LIMIT:
-            context.config.ext.max_hca_per_gpu = count;
-            break;
-        }
-
-        set_context_md(tl_mds, 0, "mlx5_0");
-        set_context_md(tl_mds, 1, "mlx5_1");
-        set_context_md(tl_mds, 2, "mlx5_2");
-        set_context_md(tl_mds, 3, "mlx5_3");
-    }
-};
-
-UCS_TEST_F(test_ucp_reg_devices, closest_by_latency) {
-    ucp_context_config_t cfg             = config(UCP_REG_DEVICES_CLOSEST);
-    std::vector<ucp_reg_select_md_t> mds = {md(0, "mlx5_2", 5e-7),
-                                            md(1, "mlx5_0", 3e-7),
-                                            md(2, "mlx5_1", 3e-7),
-                                            md(3, "mlx5_3", 1e-6)};
-
-    EXPECT_EQ(UCS_BIT(1) | UCS_BIT(2),
-              ucp_reg_select(&cfg, mds.data(), mds.size()));
-}
-
-UCS_TEST_F(test_ucp_reg_devices, closest_selects_all_equal_latency) {
-    ucp_context_config_t cfg             = config(UCP_REG_DEVICES_CLOSEST);
-    std::vector<ucp_reg_select_md_t> mds = {md(0, "mlx5_0", 3e-7),
-                                            md(1, "mlx5_1", 3e-7)};
-
-    EXPECT_EQ(UCS_BIT(0) | UCS_BIT(1),
-              ucp_reg_select(&cfg, mds.data(), mds.size()));
-}
-
-UCS_TEST_F(test_ucp_reg_devices, limit_uses_latency_before_use_count) {
-    ucp_context_config_t cfg             = config(UCP_REG_DEVICES_LIMIT, 2);
-    std::vector<ucp_reg_select_md_t> mds = {md(0, "mlx5_0", 3e-7, 9),
-                                            md(1, "mlx5_1", 5e-7, 0),
-                                            md(2, "mlx5_2", 3e-7, 8),
-                                            md(3, "mlx5_3", 5e-7, 0)};
-
-    EXPECT_EQ(UCS_BIT(0) | UCS_BIT(2),
-              ucp_reg_select(&cfg, mds.data(), mds.size()));
-}
-
-UCS_TEST_F(test_ucp_reg_devices, limit_larger_than_available_selects_all) {
-    ucp_context_config_t cfg             = config(UCP_REG_DEVICES_LIMIT, 8);
-    std::vector<ucp_reg_select_md_t> mds = {md(0, "mlx5_0", 3e-7),
-                                            md(1, "mlx5_1", 5e-7)};
-
-    EXPECT_EQ(UCS_BIT(0) | UCS_BIT(1),
-              ucp_reg_select(&cfg, mds.data(), mds.size()));
-}
-
-UCS_TEST_F(test_ucp_reg_devices, empty_selects_none) {
-    ucp_context_config_t cfg = config(UCP_REG_DEVICES_LIMIT, 1);
-
-    EXPECT_EQ((ucp_md_map_t)0, ucp_reg_select(&cfg, NULL, 0));
-}
-
-UCS_TEST_F(test_ucp_reg_devices, limit_prefers_least_used) {
-    ucp_context_config_t cfg             = config(UCP_REG_DEVICES_LIMIT, 1);
-    std::vector<ucp_reg_select_md_t> mds = {md(0, "mlx5_0", 3e-7, 9),
-                                            md(1, "mlx5_1", 3e-7, 0)};
-
-    EXPECT_EQ(UCS_BIT(1), ucp_reg_select(&cfg, mds.data(), mds.size()));
-}
-
-UCS_TEST_F(test_ucp_reg_devices, limit_uses_name_after_use_count) {
-    ucp_context_config_t cfg             = config(UCP_REG_DEVICES_LIMIT, 1);
-    std::vector<ucp_reg_select_md_t> mds = {md(0, "mlx5_1", 3e-7, 0),
-                                            md(1, "mlx5_0", 3e-7, 0)};
-
-    EXPECT_EQ(UCS_BIT(1), ucp_reg_select(&cfg, mds.data(), mds.size()));
-}
-
-UCS_TEST_F(test_ucp_reg_devices, context_selection_rotates_mds) {
-    std::unique_ptr<ucp_context_t> ctx(new ucp_context_t{});
-    ucp_tl_md_t tl_mds[4] = {};
-    ucp_md_map_t md_map;
-
-    init_context(*ctx, tl_mds, UCP_REG_DEVICES_LIMIT, 1);
-
-    md_map = ucp_context_select_reg_md_map(ctx.get(), UCS_BIT(1) | UCS_BIT(3),
-                                           UCS_SYS_DEVICE_ID_UNKNOWN);
-    EXPECT_EQ(UCS_BIT(1), md_map);
-
-    ucp_context_reg_mark_used(ctx.get(), UCS_BIT(1));
-    md_map = ucp_context_select_reg_md_map(ctx.get(), UCS_BIT(1) | UCS_BIT(3),
-                                           UCS_SYS_DEVICE_ID_UNKNOWN);
-    EXPECT_EQ(UCS_BIT(3), md_map);
-}
 
 namespace {
 
