@@ -211,10 +211,10 @@ ucp_proto_put_mtype_probe(const ucp_proto_init_params_t *init_params)
     size_t frag_size;
     ucp_proto_multi_init_params_t params = {
         .super.super         = *init_params,
-        .super.overhead      = 0,
+        .super.overhead      = context->config.ext.proto_overhead_multi,
         .super.latency       = 0,
-        .super.cfg_thresh    = 0,
-        .super.cfg_priority  = 0, /* TODO: Loose against all put/offload* */
+        .super.cfg_thresh    = context->config.ext.zcopy_thresh,
+        .super.cfg_priority  = 0, /* TODO: Win against all put/offload* */
         .super.min_length    = 0,
         .super.max_length    = SIZE_MAX,
         .super.min_iov       = 1,
@@ -226,8 +226,7 @@ ucp_proto_put_mtype_probe(const ucp_proto_init_params_t *init_params)
         .super.hdr_size      = 0,
         .super.send_op       = UCT_EP_OP_PUT_ZCOPY,
         .super.memtype_op    = UCT_EP_OP_GET_ZCOPY,
-        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY   |
-                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
+        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
         .super.exclude_map   = 0,
         .max_lanes           = context->config.ext.max_rma_lanes,
         .min_chunk           = context->config.ext.min_rma_chunk_size,
@@ -245,7 +244,6 @@ ucp_proto_put_mtype_probe(const ucp_proto_init_params_t *init_params)
     if ((sel_param->dt_class != UCP_DATATYPE_CONTIG) ||
         !ucp_proto_init_check_op(init_params,
                                  UCS_BIT(UCP_OP_ID_PUT_MTYPE)) ||
-        ucp_ep_config_is_self(init_params->ep_config_key) ||
         !UCP_MEM_IS_CUDA(sel_param->mem_type) ||
         ((init_params->rkey_config_key != NULL) &&
          !UCP_MEM_IS_CUDA(init_params->rkey_config_key->mem_type))) {
@@ -545,7 +543,8 @@ static ucs_status_t
 ucp_proto_ppln_add_overhead(ucp_proto_perf_t *ppln_perf, size_t frag_size)
 {
     static const double rts_rtr_overhead = 1000e-9; /* RTS/RTR AM round-trip */
-    static const double ats_overhead     = 500e-9; /* ATS one-way (~RTT/2) */
+    static const double ats_overhead     = 500e-9;  /* ATS one-way (~RTT/2) */
+    static const double copy_latency     = 10000e-9; /* GPU copy-in + copy-out */
     static const double frag_overhead    = 2000e-9;  /* Per-fragment mgmt */
     ucp_proto_perf_factors_t factors     = UCP_PROTO_PERF_FACTORS_INITIALIZER;
     char frag_str[64];
@@ -553,9 +552,10 @@ ucp_proto_ppln_add_overhead(ucp_proto_perf_t *ppln_perf, size_t frag_size)
 
     ucs_memunits_to_str(frag_size, frag_str, sizeof(frag_str));
 
-    /* Fixed latency: RTS/RTR round-trip + ATS — not pipelined away */
+    /* Fixed latency: RTS/RTR round-trip + ATS + GPU copies — not pipelined */
     factors[UCP_PROTO_PERF_FACTOR_LATENCY] =
-            ucs_linear_func_make(rts_rtr_overhead + ats_overhead, 0);
+            ucs_linear_func_make(rts_rtr_overhead + ats_overhead +
+                                 copy_latency, 0);
     /* Per-fragment management overhead */
     factors[UCP_PROTO_PERF_FACTOR_LOCAL_CPU] =
             ucs_linear_func_make(frag_overhead, frag_overhead);
@@ -592,7 +592,6 @@ ucp_proto_ppln_check_common(const ucp_proto_init_params_t *init_params,
            ucp_proto_init_check_op(init_params, op_id_mask) &&
            !(ucp_proto_select_op_flags(sel_param) &
              UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG) &&
-           !ucp_ep_config_is_self(init_params->ep_config_key) &&
            (init_params->ep_config_key->am_lane != UCP_NULL_LANE) &&
            UCP_MEM_IS_CUDA(sel_param->mem_type) &&
            ((init_params->rkey_config_key == NULL) ||
@@ -682,7 +681,7 @@ ucp_proto_ppln_probe_perf(const ucp_proto_init_params_t *init_params,
             goto out_destroy_ppln_perf;
         }
 
-        ucp_proto_select_add_proto(init_params, proto->cfg_thresh,
+        ucp_proto_select_add_proto(init_params, rpriv.frag_size,
                                    proto->cfg_priority, ppln_perf, &rpriv,
                                    sizeof(rpriv));
         continue;
