@@ -296,16 +296,15 @@ protected:
         return config;
     }
 
-    static ucp_reg_select_md_t md(ucp_md_index_t md_index,
-                                         const char *name, double latency,
-                                         uint32_t use_count = 0)
+    static ucp_reg_select_md_t md(ucp_md_index_t md_index, const char *name,
+                                  double latency, uint32_t use_count = 0)
     {
         ucp_reg_select_md_t md = {};
 
-        md.md_index   = md_index;
-        md.name       = name;
-        md.latency    = latency;
-        md.use_count  = use_count;
+        md.md_index  = md_index;
+        md.name      = name;
+        md.latency   = latency;
+        md.use_count = use_count;
         return md;
     }
 
@@ -342,41 +341,40 @@ protected:
 };
 
 UCS_TEST_F(test_ucp_reg_devices, closest_by_latency) {
-    ucp_context_config_t cfg = config(UCP_REG_DEVICES_CLOSEST);
+    ucp_context_config_t cfg             = config(UCP_REG_DEVICES_CLOSEST);
     std::vector<ucp_reg_select_md_t> mds = {md(0, "mlx5_2", 5e-7),
-                                                   md(1, "mlx5_0", 3e-7),
-                                                   md(2, "mlx5_1", 3e-7),
-                                                   md(3, "mlx5_3", 1e-6)};
+                                            md(1, "mlx5_0", 3e-7),
+                                            md(2, "mlx5_1", 3e-7),
+                                            md(3, "mlx5_3", 1e-6)};
 
     EXPECT_EQ(UCS_BIT(1) | UCS_BIT(2),
               ucp_reg_select(&cfg, mds.data(), mds.size()));
 }
 
 UCS_TEST_F(test_ucp_reg_devices, closest_selects_all_equal_latency) {
-    ucp_context_config_t cfg = config(UCP_REG_DEVICES_CLOSEST);
+    ucp_context_config_t cfg             = config(UCP_REG_DEVICES_CLOSEST);
     std::vector<ucp_reg_select_md_t> mds = {md(0, "mlx5_0", 3e-7),
-                                                   md(1, "mlx5_1", 3e-7)};
+                                            md(1, "mlx5_1", 3e-7)};
 
     EXPECT_EQ(UCS_BIT(0) | UCS_BIT(1),
               ucp_reg_select(&cfg, mds.data(), mds.size()));
 }
 
 UCS_TEST_F(test_ucp_reg_devices, limit_uses_latency_before_use_count) {
-    ucp_context_config_t cfg = config(UCP_REG_DEVICES_LIMIT, 2);
+    ucp_context_config_t cfg             = config(UCP_REG_DEVICES_LIMIT, 2);
     std::vector<ucp_reg_select_md_t> mds = {md(0, "mlx5_0", 3e-7, 9),
-                                                   md(1, "mlx5_1", 5e-7, 0),
-                                                   md(2, "mlx5_2", 3e-7, 8),
-                                                   md(3, "mlx5_3", 5e-7, 0)};
+                                            md(1, "mlx5_1", 5e-7, 0),
+                                            md(2, "mlx5_2", 3e-7, 8),
+                                            md(3, "mlx5_3", 5e-7, 0)};
 
     EXPECT_EQ(UCS_BIT(0) | UCS_BIT(2),
               ucp_reg_select(&cfg, mds.data(), mds.size()));
 }
 
-UCS_TEST_F(test_ucp_reg_devices,
-           limit_larger_than_available_selects_all) {
-    ucp_context_config_t cfg = config(UCP_REG_DEVICES_LIMIT, 8);
+UCS_TEST_F(test_ucp_reg_devices, limit_larger_than_available_selects_all) {
+    ucp_context_config_t cfg             = config(UCP_REG_DEVICES_LIMIT, 8);
     std::vector<ucp_reg_select_md_t> mds = {md(0, "mlx5_0", 3e-7),
-                                                   md(1, "mlx5_1", 5e-7)};
+                                            md(1, "mlx5_1", 5e-7)};
 
     EXPECT_EQ(UCS_BIT(0) | UCS_BIT(1),
               ucp_reg_select(&cfg, mds.data(), mds.size()));
@@ -389,17 +387,17 @@ UCS_TEST_F(test_ucp_reg_devices, empty_selects_none) {
 }
 
 UCS_TEST_F(test_ucp_reg_devices, limit_prefers_least_used) {
-    ucp_context_config_t cfg = config(UCP_REG_DEVICES_LIMIT, 1);
+    ucp_context_config_t cfg             = config(UCP_REG_DEVICES_LIMIT, 1);
     std::vector<ucp_reg_select_md_t> mds = {md(0, "mlx5_0", 3e-7, 9),
-                                                   md(1, "mlx5_1", 3e-7, 0)};
+                                            md(1, "mlx5_1", 3e-7, 0)};
 
     EXPECT_EQ(UCS_BIT(1), ucp_reg_select(&cfg, mds.data(), mds.size()));
 }
 
 UCS_TEST_F(test_ucp_reg_devices, limit_uses_name_after_use_count) {
-    ucp_context_config_t cfg = config(UCP_REG_DEVICES_LIMIT, 1);
+    ucp_context_config_t cfg             = config(UCP_REG_DEVICES_LIMIT, 1);
     std::vector<ucp_reg_select_md_t> mds = {md(0, "mlx5_1", 3e-7, 0),
-                                                   md(1, "mlx5_0", 3e-7, 0)};
+                                            md(1, "mlx5_0", 3e-7, 0)};
 
     EXPECT_EQ(UCS_BIT(1), ucp_reg_select(&cfg, mds.data(), mds.size()));
 }
@@ -411,15 +409,13 @@ UCS_TEST_F(test_ucp_reg_devices, context_selection_rotates_mds) {
 
     init_context(*ctx, tl_mds, UCP_REG_DEVICES_LIMIT, 1);
 
-    md_map = ucp_context_select_reg_md_map(ctx.get(),
-                                                  UCS_BIT(1) | UCS_BIT(3),
-                                                  UCS_SYS_DEVICE_ID_UNKNOWN);
+    md_map = ucp_context_select_reg_md_map(ctx.get(), UCS_BIT(1) | UCS_BIT(3),
+                                           UCS_SYS_DEVICE_ID_UNKNOWN);
     EXPECT_EQ(UCS_BIT(1), md_map);
 
     ucp_context_reg_mark_used(ctx.get(), UCS_BIT(1));
-    md_map = ucp_context_select_reg_md_map(ctx.get(),
-                                                  UCS_BIT(1) | UCS_BIT(3),
-                                                  UCS_SYS_DEVICE_ID_UNKNOWN);
+    md_map = ucp_context_select_reg_md_map(ctx.get(), UCS_BIT(1) | UCS_BIT(3),
+                                           UCS_SYS_DEVICE_ID_UNKNOWN);
     EXPECT_EQ(UCS_BIT(3), md_map);
 }
 

@@ -35,7 +35,6 @@
 
 #define UCP_RSC_CONFIG_ALL    "all"
 
-
 #define UCP_AM_HANDLER_FOREACH(_macro) \
     _macro(UCP_AM_ID_WIREUP) \
     _macro(UCP_AM_ID_EAGER_ONLY) \
@@ -1850,8 +1849,8 @@ static ucp_md_map_t ucp_fill_fallback_reg_nonblock_mds(ucp_context_h context)
     return (md_map == 0) ? ~md_map : md_map;
 }
 
-static int ucp_reg_select_md_cmp(const void *pa, const void *pb,
-                                 void *UCS_V_UNUSED arg)
+static int
+ucp_reg_select_md_cmp(const void *pa, const void *pb, void *UCS_V_UNUSED arg)
 {
     const ucp_reg_select_md_t *a = pa;
     const ucp_reg_select_md_t *b = pb;
@@ -1870,8 +1869,7 @@ static int ucp_reg_select_md_cmp(const void *pa, const void *pb,
 }
 
 ucp_md_map_t ucp_reg_select(const ucp_context_config_t *config,
-                             ucp_reg_select_md_t *mds,
-                             unsigned count)
+                            ucp_reg_select_md_t *mds, unsigned count)
 {
     ucp_md_map_t md_map = 0;
     unsigned i, select_count;
@@ -1943,8 +1941,8 @@ ucp_md_map_t ucp_context_select_reg_md_map(ucp_context_h context,
         select_mds[count].md_index  = md_index;
         select_mds[count].name      = context->tl_mds[md_index].rsc.md_name;
         select_mds[count].latency   = ucp_context_reg_md_latency(context,
-                                                                  md_index,
-                                                                  mem_sys_dev);
+                                                                 md_index,
+                                                                 mem_sys_dev);
         select_mds[count].use_count = context->reg_md[md_index].use_count;
         ucs_trace("reg_select: md[%d]=%s mem_sys_dev=%d latency=%.2e"
                   " use_count=%u",
@@ -1957,8 +1955,7 @@ ucp_md_map_t ucp_context_select_reg_md_map(ucp_context_h context,
 }
 
 
-void ucp_context_reg_mark_used(ucp_context_h context,
-                               ucp_md_map_t md_map)
+void ucp_context_reg_mark_used(ucp_context_h context, ucp_md_map_t md_map)
 {
     ucp_md_index_t md_index;
 
@@ -1989,8 +1986,7 @@ static void ucp_context_build_reg_md_topo(ucp_context_h context)
 
         for (mem_sys_dev = 0; mem_sys_dev < num_sys_devs; ++mem_sys_dev) {
             latency = UCS_INFINITY;
-            ucs_for_each_bit(sys_dev,
-                             context->tl_mds[md_index].sys_dev_map) {
+            ucs_for_each_bit(sys_dev, context->tl_mds[md_index].sys_dev_map) {
                 if (!ucs_topo_is_reachable(sys_dev, mem_sys_dev)) {
                     latency = UCS_INFINITY;
                     break;
