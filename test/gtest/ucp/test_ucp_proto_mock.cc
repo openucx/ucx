@@ -927,7 +927,7 @@ public:
 };
 
 UCS_TEST_P(test_ucp_proto_mock_gpu, cuda_bcopy_memtype_desc,
-           "PROTOS=*egr/multi/bcopy*")
+           "IB_NUM_PATHS?=1", "PROTOS=*egr/multi/bcopy*")
 {
     if (!has_resource(sender(), "gdr_copy")) {
         UCS_TEST_SKIP_R("gdr_copy transport is not available");
@@ -942,7 +942,7 @@ UCS_TEST_P(test_ucp_proto_mock_gpu, cuda_bcopy_memtype_desc,
 
     check_ep_config(sender(),
                     {{0, INF, "gdr_copy multi-frag copy-in",
-                      "rc_mlx5/mock/path0"}},
+                      "rc_mlx5/mock"}},
                     key);
 }
 
