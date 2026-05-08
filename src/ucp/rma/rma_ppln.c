@@ -241,6 +241,7 @@ ucp_proto_put_mtype_probe(const ucp_proto_init_params_t *init_params)
                                             cap.put.opt_zcopy_align),
     };
 
+    /* TODO: Remove explicit CUDA memory type dependency */
     if ((sel_param->dt_class != UCP_DATATYPE_CONTIG) ||
         !ucp_proto_init_check_op(init_params,
                                  UCS_BIT(UCP_OP_ID_PUT_MTYPE)) ||
