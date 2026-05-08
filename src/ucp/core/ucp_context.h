@@ -813,8 +813,7 @@ const char* ucp_context_cm_name(ucp_context_h context, ucp_rsc_index_t cm_idx);
 
 
 ucp_md_map_t ucp_reg_select(const ucp_context_config_t *config,
-                            ucp_reg_select_md_t *mds,
-                            unsigned count);
+                            ucp_reg_select_md_t *mds, unsigned count);
 
 
 ucp_md_map_t ucp_context_select_reg_md_map(ucp_context_h context,
@@ -822,8 +821,7 @@ ucp_md_map_t ucp_context_select_reg_md_map(ucp_context_h context,
                                            ucs_sys_device_t mem_sys_dev);
 
 
-void ucp_context_reg_mark_used(ucp_context_h context,
-                               ucp_md_map_t md_map);
+void ucp_context_reg_mark_used(ucp_context_h context, ucp_md_map_t md_map);
 
 
 ucs_status_t
