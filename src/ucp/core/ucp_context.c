@@ -603,8 +603,8 @@ static ucs_config_field_t ucp_context_config_table[] = {
   {"MAX_HCA_PER_GPU", "inf",
    "Maximum number of HCAs to register GPU memory on.\n"
    " - inf : register on all reachable HCAs (default).\n"
-   " - 0   : register only on HCAs with the lowest latency to the GPU.\n"
-   " - <N> : register on up to N lowest-latency reachable HCAs.",
+   " - 0   : register only on HCAs with the highest bandwidth to the GPU.\n"
+   " - <N> : register on up to N highest-bandwidth reachable HCAs.",
    ucs_offsetof(ucp_context_config_t, max_hca_per_gpu),
    UCS_CONFIG_TYPE_ULUNITS},
 
@@ -1849,6 +1849,12 @@ static ucp_md_map_t ucp_fill_fallback_reg_nonblock_mds(ucp_context_h context)
     return (md_map == 0) ? ~md_map : md_map;
 }
 
+typedef struct ucp_reg_select_md {
+    ucp_md_index_t md_index;
+    const char     *name;
+    double         bandwidth;
+} ucp_reg_select_md_t;
+
 static int
 ucp_reg_select_md_cmp(const void *pa, const void *pb, void *UCS_V_UNUSED arg)
 {
@@ -1856,46 +1862,86 @@ ucp_reg_select_md_cmp(const void *pa, const void *pb, void *UCS_V_UNUSED arg)
     const ucp_reg_select_md_t *b = pb;
     int cmp;
 
-    cmp = ucs_fp_compare(a->latency, b->latency);
+    /* Sort by bandwidth descending (highest first = closest) */
+    cmp = ucs_fp_compare(b->bandwidth, a->bandwidth);
     if (cmp != 0) {
         return cmp;
-    }
-
-    if (a->use_count != b->use_count) {
-        return (a->use_count < b->use_count) ? -1 : 1;
     }
 
     return strcmp(a->name, b->name);
 }
 
-ucp_md_map_t ucp_reg_select(const ucp_context_config_t *config,
-                            ucp_reg_select_md_t *mds, unsigned count)
+ucp_md_map_t
+ucp_context_select_reg_mds(ucp_context_h context, ucp_md_map_t md_map,
+                           ucs_sys_device_t mem_sys_dev)
 {
-    ucp_md_map_t md_map = 0;
-    unsigned i, select_count;
+    const ucp_context_config_t *config = &context->config.ext;
+    ucp_md_map_t result                = 0;
+    unsigned count                     = 0;
+    ucp_reg_select_md_t select_mds[UCP_MAX_MDS];
+    ucs_sys_dev_distance_t distance;
+    ucs_sys_device_t sys_dev;
+    unsigned select_count, i;
+    ucp_md_index_t md_index;
+    double bw;
+    int reachable;
 
-    ucs_assert(count <= UCP_MAX_MDS);
+    if (ucp_reg_devices_mode(config->max_hca_per_gpu) == UCP_REG_DEVICES_ALL) {
+        return md_map;
+    }
+
+    ucs_for_each_bit(md_index, md_map) {
+        if (context->tl_mds[md_index].sys_dev_map == 0) {
+            bw = UCS_INFINITY;
+        } else {
+            reachable = 1;
+            bw        = 0;
+            ucs_for_each_bit(sys_dev,
+                             context->tl_mds[md_index].sys_dev_map) {
+                if (!ucs_topo_is_reachable(sys_dev, mem_sys_dev)) {
+                    reachable = 0;
+                    break;
+                }
+                if ((ucs_topo_get_distance(mem_sys_dev, sys_dev,
+                                           &distance) == UCS_OK) &&
+                    (ucs_fp_compare(distance.bandwidth, bw) > 0)) {
+                    bw = distance.bandwidth;
+                }
+            }
+
+            if (!reachable) {
+                continue;
+            }
+        }
+
+        select_mds[count].md_index  = md_index;
+        select_mds[count].name      = context->tl_mds[md_index].rsc.md_name;
+        select_mds[count].bandwidth = bw;
+        ucs_trace("reg_select: sys_dev=%d md[%d]=%s bw=%.2e",
+                  mem_sys_dev, md_index, select_mds[count].name,
+                  select_mds[count].bandwidth);
+        count++;
+    }
 
     if (count == 0) {
         return 0;
     }
 
+    ucs_qsort_r(select_mds, count, sizeof(select_mds[0]),
+                 ucp_reg_select_md_cmp, NULL);
+
     switch (ucp_reg_devices_mode(config->max_hca_per_gpu)) {
-    case UCP_REG_DEVICES_ALL:
-        select_count = count;
-        break;
     case UCP_REG_DEVICES_CLOSEST:
-        ucs_qsort_r(mds, count, sizeof(*mds), ucp_reg_select_md_cmp, NULL);
         select_count = count;
         for (i = 1; i < count; i++) {
-            if (ucs_fp_compare(mds[i].latency, mds[0].latency) != 0) {
+            if (ucs_fp_compare(select_mds[i].bandwidth,
+                               select_mds[0].bandwidth) != 0) {
                 select_count = i;
                 break;
             }
         }
         break;
     case UCP_REG_DEVICES_LIMIT:
-        ucs_qsort_r(mds, count, sizeof(*mds), ucp_reg_select_md_cmp, NULL);
         select_count = ucs_min(ucp_reg_devices_count(config->max_hca_per_gpu),
                                count);
         break;
@@ -1906,107 +1952,10 @@ ucp_md_map_t ucp_reg_select(const ucp_context_config_t *config,
     }
 
     for (i = 0; i < select_count; i++) {
-        md_map |= UCS_BIT(mds[i].md_index);
+        result |= UCS_BIT(select_mds[i].md_index);
     }
 
-    return md_map;
-}
-
-static double ucp_context_reg_md_latency(ucp_context_h context,
-                                         ucp_md_index_t md_index,
-                                         ucs_sys_device_t mem_sys_dev)
-{
-    if ((mem_sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) &&
-        (mem_sys_dev < UCP_MAX_SYS_DEVICES)) {
-        return context->reg_md[md_index].latency[mem_sys_dev];
-    }
-
-    return ucs_topo_default_distance.latency;
-}
-
-ucp_md_map_t ucp_context_select_reg_md_map(ucp_context_h context,
-                                           ucp_md_map_t md_map,
-                                           ucs_sys_device_t mem_sys_dev)
-{
-    const ucp_context_config_t *config = &context->config.ext;
-    unsigned count                     = 0;
-    ucp_reg_select_md_t select_mds[UCP_MAX_MDS];
-    ucp_md_index_t md_index;
-
-    if (ucp_reg_devices_mode(config->max_hca_per_gpu) == UCP_REG_DEVICES_ALL) {
-        return md_map;
-    }
-
-    ucs_for_each_bit(md_index, md_map) {
-        select_mds[count].md_index  = md_index;
-        select_mds[count].name      = context->tl_mds[md_index].rsc.md_name;
-        select_mds[count].latency   = ucp_context_reg_md_latency(context,
-                                                                 md_index,
-                                                                 mem_sys_dev);
-        select_mds[count].use_count = context->reg_md[md_index].use_count;
-        ucs_trace("reg_select: md[%d]=%s mem_sys_dev=%d latency=%.2e"
-                  " use_count=%u",
-                  md_index, select_mds[count].name, mem_sys_dev,
-                  select_mds[count].latency, select_mds[count].use_count);
-        count++;
-    }
-
-    return ucp_reg_select(config, select_mds, count);
-}
-
-
-void ucp_context_reg_mark_used(ucp_context_h context, ucp_md_map_t md_map)
-{
-    ucp_md_index_t md_index;
-
-    md_map &= context->dmabuf_reg_md_map;
-    ucs_for_each_bit(md_index, md_map) {
-        ucs_atomic_add32(&context->reg_md[md_index].use_count, 1);
-    }
-}
-
-static void ucp_context_build_reg_md_topo(ucp_context_h context)
-{
-    unsigned num_sys_devs = ucs_topo_num_devices();
-    ucs_sys_device_t mem_sys_dev, sys_dev;
-    ucs_sys_dev_distance_t distance;
-    ucp_md_index_t md_index;
-    double latency;
-
-    ucs_for_each_bit(md_index, context->dmabuf_reg_md_map) {
-        if (context->tl_mds[md_index].sys_dev_map == 0) {
-            /* MD with no known sys devices is reachable from everywhere */
-            for (mem_sys_dev = 0; mem_sys_dev < num_sys_devs; ++mem_sys_dev) {
-                context->reg_dev_reachable[mem_sys_dev] |= UCS_BIT(md_index);
-                context->reg_md[md_index].latency[mem_sys_dev] =
-                        ucs_topo_default_distance.latency;
-            }
-            continue;
-        }
-
-        for (mem_sys_dev = 0; mem_sys_dev < num_sys_devs; ++mem_sys_dev) {
-            latency = UCS_INFINITY;
-            ucs_for_each_bit(sys_dev, context->tl_mds[md_index].sys_dev_map) {
-                if (!ucs_topo_is_reachable(sys_dev, mem_sys_dev)) {
-                    latency = UCS_INFINITY;
-                    break;
-                }
-                if ((ucs_topo_get_distance(mem_sys_dev, sys_dev, &distance) ==
-                     UCS_OK) &&
-                    (ucs_fp_compare(distance.latency, latency) < 0)) {
-                    latency = distance.latency;
-                }
-            }
-
-            if (latency == UCS_INFINITY) {
-                context->reg_md[md_index].latency[mem_sys_dev] =
-                        ucs_topo_default_distance.latency;
-            } else {
-                context->reg_dev_reachable[mem_sys_dev] |= UCS_BIT(md_index);
-                context->reg_md[md_index].latency[mem_sys_dev] = latency;
-            }
-        }
-    }
+    return result;
 }
 
 static void ucp_fill_resources_reg_md_map_update(ucp_context_h context)
@@ -2029,8 +1978,6 @@ static void ucp_fill_resources_reg_md_map_update(ucp_context_h context)
             context->dmabuf_reg_md_map |= UCS_BIT(md_index);
         }
     }
-
-    ucp_context_build_reg_md_topo(context);
 
     fallback_reg_nonblock_md_map = ucp_fill_fallback_reg_nonblock_mds(context);
 
