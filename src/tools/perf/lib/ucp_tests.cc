@@ -655,6 +655,7 @@ public:
              * completion to server by PUTting LAST_ITER_SN to the sn slot at
              * the end of server's recv buffer */
             wait_send_window(m_max_outstanding);
+            fence();
 
             status_p = ucp_put_nbx(ep, &last_sn, sizeof(last_sn),
                                    remote_addr + size - sizeof(last_sn), rkey,
