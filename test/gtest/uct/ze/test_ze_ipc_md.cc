@@ -135,6 +135,75 @@ UCS_TEST_F(test_ze_ipc_md, md_attr_advertises_registerable_mem) {
     attr.field_mask = UINT64_MAX;
     EXPECT_UCS_OK(uct_md_query_v2(md, &attr));
     EXPECT_NE(0u, attr.reg_mem_types) << "no registerable mem types";
+    /* IPC MD must advertise the rkey size and require an rkey. */
+    EXPECT_GT(attr.rkey_packed_size, 0u);
+    EXPECT_TRUE(attr.flags & UCT_MD_FLAG_NEED_RKEY);
+    EXPECT_TRUE(attr.flags & UCT_MD_FLAG_REG);
+
+    uct_md_close(md);
+}
+
+
+/*
+ * End-to-end: allocate ZE device memory, register with the IPC MD, pack
+ * the IPC key, and deregister. This is the path NIXL relies on for KV
+ * cache exchange (mem_reg -> mkey_pack -> mem_dereg).
+ */
+UCS_TEST_F(test_ze_ipc_md, mem_reg_pack_dereg_device) {
+    uct_md_h md = open_first_md();
+    if (md == NULL) {
+        UCS_TEST_SKIP_R("Could not open ZE_IPC MD on this system");
+    }
+    auto *ze_md = ucs_derived_of(md, uct_ze_ipc_md_t);
+
+    const size_t                size     = 4096;
+    void                       *dev_ptr  = NULL;
+    ze_device_mem_alloc_desc_t  dev_desc = {};
+    dev_desc.stype = ZE_STRUCTURE_TYPE_DEVICE_MEM_ALLOC_DESC;
+
+    ASSERT_EQ(ZE_RESULT_SUCCESS,
+              zeMemAllocDevice(ze_md->ze_context, &dev_desc, size, 64,
+                               ze_md->ze_device, &dev_ptr));
+    ASSERT_TRUE(dev_ptr != NULL);
+
+    uct_mem_h memh = NULL;
+    EXPECT_UCS_OK(md->ops->mem_reg(md, dev_ptr, size, NULL, &memh));
+    ASSERT_TRUE(memh != NULL);
+
+    uct_ze_ipc_key_t packed = {};
+    EXPECT_UCS_OK(md->ops->mkey_pack(md, memh, dev_ptr, size, NULL, &packed));
+    EXPECT_EQ((pid_t)getpid(), packed.pid);
+    EXPECT_GE(packed.length, size);
+    EXPECT_NE(0u, packed.address);
+
+    uct_md_mem_dereg_params_t dereg_params = {};
+    dereg_params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
+    dereg_params.memh       = memh;
+    EXPECT_UCS_OK(md->ops->mem_dereg(md, &dereg_params));
+
+    EXPECT_EQ(ZE_RESULT_SUCCESS, zeMemFree(ze_md->ze_context, dev_ptr));
+    uct_md_close(md);
+}
+
+
+/*
+ * mem_reg must reject non-ZE pointers (the IPC MD only supports VRAM).
+ * The MD logs an error in this path, so we suppress error log capture.
+ */
+UCS_TEST_F(test_ze_ipc_md, mem_reg_rejects_host_pointer) {
+    uct_md_h md = open_first_md();
+    if (md == NULL) {
+        UCS_TEST_SKIP_R("Could not open ZE_IPC MD on this system");
+    }
+
+    char         buf[64];
+    uct_mem_h    memh   = NULL;
+    ucs_status_t status;
+    {
+        scoped_log_handler slh(hide_errors_logger);
+        status = md->ops->mem_reg(md, buf, sizeof(buf), NULL, &memh);
+    }
+    EXPECT_EQ(UCS_ERR_INVALID_ADDR, status);
 
     uct_md_close(md);
 }
