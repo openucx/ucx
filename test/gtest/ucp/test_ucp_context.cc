@@ -299,7 +299,7 @@ protected:
     static ucp_reg_select_md_t md(ucp_md_index_t md_index, const char *name,
                                   double latency, uint32_t use_count = 0)
     {
-        ucp_reg_select_md_t md = {};
+        ucp_reg_select_md_t md;
 
         md.md_index  = md_index;
         md.name      = name;
