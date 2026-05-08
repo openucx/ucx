@@ -256,30 +256,29 @@ ucs_status_t uct_rocm_ipc_rkey_ptr(uct_component_t *component, uct_rkey_t rkey,
 }
 
 uct_rocm_ipc_component_t uct_rocm_ipc_component = {
-    .super     = {.query_md_resources = uct_rocm_base_query_md_resources,
-              .md_open            = uct_rocm_ipc_md_open,
-              .cm_open            = (uct_component_cm_open_func_t)
-                                 ucs_empty_function_return_unsupported,
-              .rkey_unpack        = uct_rocm_ipc_rkey_unpack,
-              .rkey_ptr           = uct_rocm_ipc_rkey_ptr,
-              .rkey_release       = uct_rocm_ipc_rkey_release,
-              .rkey_compare       = uct_base_rkey_compare,
-              .name               = "rocm_ipc",
-              .md_config =
-                      {
-                              .name   = "ROCm-IPC memory domain",
-                              .prefix = "ROCM_IPC_MD_",
-                              .table  = uct_rocm_ipc_md_config_table,
-                              .size   = sizeof(uct_rocm_ipc_md_config_t),
-                      },
-              .cm_config   = UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY,
-              .tl_list     = UCT_COMPONENT_TL_LIST_INITIALIZER(
-                      &uct_rocm_ipc_component.super),
-              .flags       = 0,
-              .md_vfs_init = (uct_component_md_vfs_init_func_t)
-                      ucs_empty_function},
-    .ipc_cache = NULL,
-    .lock      = PTHREAD_MUTEX_INITIALIZER
+    .super = {
+        .query_md_resources = uct_rocm_base_query_md_resources,
+        .md_open            = uct_rocm_ipc_md_open,
+        .cm_open            = (uct_component_cm_open_func_t)ucs_empty_function_return_unsupported,
+        .rkey_unpack        = uct_rocm_ipc_rkey_unpack,
+        .rkey_ptr           = uct_rocm_ipc_rkey_ptr,
+        .rkey_release       = uct_rocm_ipc_rkey_release,
+        .rkey_compare       = uct_base_rkey_compare,
+        .name               = "rocm_ipc",
+        .md_config          = {
+            .name           = "ROCm-IPC memory domain",
+            .prefix         = "ROCM_IPC_MD_",
+            .table          = uct_rocm_ipc_md_config_table,
+            .size           = sizeof(uct_rocm_ipc_md_config_t),
+        },
+        .cm_config          = UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY,
+        .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_rocm_ipc_component.super),
+        .flags              = 0,
+        .md_vfs_init        =
+                (uct_component_md_vfs_init_func_t)ucs_empty_function
+    },
+    .ipc_cache              = NULL,
+    .lock                   = PTHREAD_MUTEX_INITIALIZER
 };
 UCT_COMPONENT_REGISTER(&uct_rocm_ipc_component.super);
 
