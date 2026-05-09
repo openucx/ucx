@@ -10,6 +10,7 @@ pr:
   paths:
     exclude:
     - .agents
+    - .ci
     - .claude/skills
     - .gitignore
     - .readthedocs.yaml
