@@ -432,21 +432,20 @@ check_config_h() {
 }
 
 #
-# Test if cmake can correctly find and link ucx
+# Test installed headers and CMake package discovery.
 #
-build_cmake_examples() {
-	echo "==== Build CMake sample ===="
+check_inst_headers() {
+	echo "==== Testing installed headers ===="
+
+	${WORKSPACE}/contrib/configure-release --prefix=$ucx_inst \
+		"${compile_only_config_args[@]}"
+	$MAKEP
+	$MAKEP install
+	${WORKSPACE}/contrib/check_inst_headers.sh ${ucx_inst}/include
 
 	if which cmake
 	then
-		${WORKSPACE}/contrib/configure-release --prefix=$ucx_inst \
-			"${compile_only_config_args[@]}"
-		$MAKEP
-		$MAKEP install
-
-		echo "==== Testing installed headers ===="
-		${WORKSPACE}/contrib/check_inst_headers.sh ${ucx_inst}/include
-
+		echo "==== Build CMake sample ===="
 		mkdir -p /tmp/cmake-ucx
 		pushd /tmp/cmake-ucx
 		cmake ${WORKSPACE}/examples/cmake -DCMAKE_PREFIX_PATH=$ucx_inst
@@ -461,7 +460,7 @@ build_cmake_examples() {
 		fi
 		popd
 	else
-		azure_log_warning "cmake executable not found, skipping cmake test"
+		azure_log_warning "cmake executable not found, skipping CMake test"
 	fi
 }
 
@@ -505,7 +504,6 @@ base_tests=('build_docs' \
 			'build_rocm' \
 			'build_no_verbs' \
 			'build_release_pkg' \
-			'build_cmake_examples' \
 			'build_fuse')
 
 case "${build_mode}" in
@@ -519,6 +517,7 @@ long)
 	tests=("${base_tests[@]}" \
 			'build_ugni' \
 			'check_config_h' \
+			'check_inst_headers' \
 			'build_icc'\
 			'build_pgi' \
 			'build_gcc' \
