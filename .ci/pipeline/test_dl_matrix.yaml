@@ -97,10 +97,7 @@ steps:
       dockerImage: "${DOCKER_IMAGE}"
       credentialsId: "${SSH_CREDENTIALS_ID}"
       containerName: "ucx-ci-dl-${BUILD_NUMBER}"
-      # Workaround: svc-nixl's host ~/.cshrc breaks pyxis csh login flow.
-      extraArgs: ["--no-container-mount-home"]
       slurmEnv: [
-        "SHELL=/bin/bash",
         "RUN_TESTS=${RUN_TESTS}",
         "TEST_PERF=${TEST_PERF}",
         "ASAN_CHECK=${ASAN_CHECK}",
