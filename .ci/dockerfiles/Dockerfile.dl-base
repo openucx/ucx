@@ -1,4 +1,4 @@
-# Wraps the hpcx aarch64 builder with the svc-nixl user pyxis maps to on dlcluster.
+# Wraps the hpcx aarch64 builder with the svcnbu-swx-hpcx user pyxis maps to on dlcluster.
 
 ARG BASE_IMAGE=harbor.mellanox.com/hpcx/aarch64/ubuntu24.04/builder:mofed-24.10-3.2.5.0
 FROM ${BASE_IMAGE}
