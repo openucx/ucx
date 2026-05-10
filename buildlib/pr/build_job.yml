@@ -24,7 +24,7 @@ jobs:
             extra_modules: ""
           ubuntu1804:
             CONTAINER: ubuntu1804
-            build_mode: short
+            build_mode: sanity
             extra_modules: ""
           ubuntu2204:
             CONTAINER: ubuntu2204
@@ -40,25 +40,25 @@ jobs:
             build_mode: short
           debian109:
             CONTAINER: debian109
-            build_mode: short
+            build_mode: sanity
           debian125:
             CONTAINER: debian125
             build_mode: short
           debian130:
             CONTAINER: debian130
-            build_mode: long
+            build_mode: short
           sles15sp7:
             CONTAINER: sles15sp7
             build_mode: short
           sles16sp0:
             CONTAINER: sles16sp0
-            build_mode: long
+            build_mode: short
           rhel82:
             CONTAINER: rhel82
             build_mode: short
           rhel82_gcc_15_2_0:
             CONTAINER: rhel82
-            build_mode: short
+            build_mode: sanity
             GCC_MODULE: dev/gcc-15.2.0
           rhel90:
             CONTAINER: rhel90
@@ -74,7 +74,7 @@ jobs:
             build_mode: sanity
           fedora41:
             CONTAINER: fedora41
-            build_mode: long
+            build_mode: sanity
           centos7:
             CONTAINER: centos7_ib
             build_mode: sanity
@@ -95,13 +95,13 @@ jobs:
             build_mode: short
           ctyunos2507:
             CONTAINER: ctyunos2507
-            build_mode: long
+            build_mode: short
       # ARM matrix
       ${{ if contains(parameters.name, 'aarch64') }}:
         matrix:
           ubuntu2404_aarch64:
             CONTAINER: ubuntu2404_aarch64
-            build_mode: short
+            build_mode: long
           rhel100_aarch64:
             CONTAINER: rhel100_aarch64
             build_mode: short
