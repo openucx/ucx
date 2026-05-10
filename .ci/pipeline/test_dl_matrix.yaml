@@ -22,7 +22,7 @@ credentials:
   - {credentialsId: 'ucx_harbor_credentials', usernameVariable: 'REPO_USER', passwordVariable: 'REPO_PASS'}
 
 env:
-  DOCKER_IMAGE: "harbor.mellanox.com#ucx/aarch64/ubuntu24.04/dl-base:2"
+  DOCKER_IMAGE: "${registry_host}#${registry_path}/aarch64/dl-base:${CI_IMAGE_TAG}"
   RUN_TESTS: "yes"
   TEST_PERF: "1"
   ASAN_CHECK: "no"
@@ -46,6 +46,12 @@ pvc_volumes:
   - {claimName: nbu-swx-ucx-pvc, mountPath: /mnt/pvc, readOnly: false}
 
 runs_on_dockers:
+  - {
+     file: '.ci/dockerfiles/Dockerfile.dl-base',
+     name: 'dl-base',
+     arch: "aarch64",
+     tag: "${CI_IMAGE_TAG}"
+    }
   - {
      file: '.ci/dockerfiles/Dockerfile.build_helper',
      name: 'build_helper_dl',
