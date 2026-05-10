@@ -88,7 +88,7 @@
         'ucx-build-static-oss',
         'ucx-test-oss',
         'ucx-test-gpu-oss',
-        'ucx-test-dl-oss',
+        'ucx-test-dl-gpu-oss',
       ]
 
       try {{
@@ -224,8 +224,8 @@
       - "{jjb_proj}"
 
 - project:
-    name: ucx-test-dl
-    jjb_proj: "ucx-test-dl-oss"
+    name: ucx-test-dl-gpu
+    jjb_proj: "ucx-test-dl-gpu-oss"
     jjb_conf_file: ".ci/pipeline/test_dl_matrix.yaml"
     jjb_description: "UCX GTest on DL cluster (GB300/aarch64). Do NOT edit via Web GUI!"
     jobs:
