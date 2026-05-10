@@ -156,15 +156,28 @@ build_release_pkg() {
 build_icc_check() {
 	cc=$1
 	cxx=$2
+	test_exe=./conftest-${cc}
+	can_build=yes
 
-	if $cc -v
+	rm -f ${test_exe}
+	if ! $cc -v
+	then
+		can_build=no
+		azure_log_warning "Not building with Intel compiler $cc: compiler is unavailable"
+	elif ! $cc -x c - -o ${test_exe} <<< "int main(void) {return 0;}" || \
+		 ! ${test_exe}
+	then
+		can_build=no
+		azure_log_warning "Not building with Intel compiler $cc: compiled test program cannot run"
+	fi
+	rm -f ${test_exe}
+
+	if [ "${can_build}" = "yes" ]
 	then
 		echo "==== Build with Intel compiler $cc ===="
 		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst CC=$cc CXX=$cxx
 		$MAKEP
 		make_clean distclean
-	else
-		azure_log_warning "Not building with Intel compiler $cc"
 	fi
 }
 
