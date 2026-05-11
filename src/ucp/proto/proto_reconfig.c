@@ -120,7 +120,9 @@ static ucs_status_t ucp_proto_reconfig_progress(uct_pending_req_t *self)
 
     req->send.lane = ucp_ep_get_wireup_msg_lane(ep);
     if (req->send.lane == UCP_NULL_LANE) {
-        return UCS_ERR_NO_RESOURCE;
+        ucs_error("no wireup lane available for req=%p", req);
+        ucp_proto_request_abort(req, UCS_ERR_CANCELED);
+        return UCS_OK;
     }
 
     /* Trigger wireup if not already done */
