@@ -30,6 +30,13 @@
 #  pragma warning(disable: 268)
 #endif
 
+/* Inline the function only when optimization level is high enough */
+#if defined(OPTIMIZATION_LEVEL) && (OPTIMIZATION_LEVEL >= 2)
+#define UCS_F_INLINE_OPTIMIZED   UCS_F_ALWAYS_INLINE
+#else
+#define UCS_F_INLINE_OPTIMIZED   inline
+#endif
+
 /* A function which should not be optimized */
 #if defined(__clang__)
 #define UCS_F_NOOPTIMIZE __attribute__((optnone))

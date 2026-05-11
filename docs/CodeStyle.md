@@ -11,6 +11,10 @@
   * Indent multiple consecutive assignments on the column
   * 2 space lines between types and prototypes (header files)
   * 1 space line between functions (source files) 
+  * Prefer `sizeof(*ptr)` or `sizeof(variable)` over `sizeof(type)`.
+  * Use `ucs_container_of` and `ucs_derived_of` instead of open-coded pointer
+    arithmetic.
+  * Use `ucs_assert*` for internal invariants, not user-input validation.
 
 
 ## Naming convention:
@@ -18,8 +22,13 @@
   * Names must begin with ucp_/uct_/ucs_/ucm_
   * Macro names must begin with UCP_/UCT_/UCS_/UCM_
   * An output argument which is a pointer to a user variable has _p suffix
+  * Output arguments go last
   * Value types (e.g struct types, integer types) have _t suffix
   * Pointer to structs, which are used as API handles, have _h suffix
+  * Function pointer types have _func_t suffix, and operations tables have
+    _ops_t suffix
+  * Function names should follow `<layer>_<object>_<verb>` and describe what
+    the function does, not how it happens internally
   * Macro arguments begin with _ (e.g _value) to avoid confusion with variables
   * No leading underscores in function names
 
@@ -61,6 +70,10 @@
   * The function which prints the log message is the first one which decides which
     error it is. If a functions returns an error because it's callee returned 
     erroneous `ucs_status_t`, it does not have to print a log message.
+  * Set output parameters only after success.
+  * Set `status` before jumping to a cleanup label.
+  * Cleanup labels should unwind resources in reverse initialization order and
+    be named for what they undo.
   * Destructors are not able to propagate error code to the caller because they
     return void. also, users are not ready to handle errors during cleanup flow.
     therefore a destructor should handle an error by printing a warning or an

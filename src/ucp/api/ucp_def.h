@@ -158,6 +158,28 @@ typedef struct ucp_rkey                  *ucp_rkey_h;
 
 
 /**
+ * @ingroup UCP_COMM
+ * @brief Invalid remote address sentinel.
+ *
+ * This value should be passed as the @a remote_addr parameter of
+ * @ref ucp_put_nbx when remote addresses are provided through an SGL
+ * descriptor (@ref ucp_dt_remote_sgl_t) instead.
+ */
+#define UCP_REMOTE_ADDR_INVALID  UINT64_MAX
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Invalid remote key sentinel.
+ *
+ * This value should be passed as the @a rkey parameter of
+ * @ref ucp_put_nbx when remote keys are provided through an SGL
+ * descriptor (@ref ucp_dt_remote_sgl_t) instead.
+ */
+#define UCP_RKEY_INVALID         NULL
+
+
+/**
  * @ingroup UCP_MEM
  * @brief UCP Memory handle
  *

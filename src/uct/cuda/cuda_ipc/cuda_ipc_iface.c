@@ -268,6 +268,9 @@ static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
                                           UCT_IFACE_FLAG_GET_ZCOPY        |
                                           UCT_IFACE_FLAG_PUT_ZCOPY        |
                                           UCT_IFACE_FLAG_DEVICE_EP;
+
+    iface_attr->ctl_device              = UCS_SYS_DEVICE_ID_UNKNOWN;
+
     if (md->enable_mnnvl) {
         iface_attr->cap.flags |= UCT_IFACE_FLAG_INTER_NODE;
     }
@@ -405,6 +408,7 @@ uct_cuda_ipc_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
 }
 
 static uct_iface_internal_ops_t uct_cuda_ipc_iface_internal_ops = {
+    .iface_query_v2         = uct_iface_base_query_v2,
     .iface_estimate_perf    = uct_cuda_ipc_estimate_perf,
     .iface_vfs_refresh      = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
     .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,

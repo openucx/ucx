@@ -24,18 +24,23 @@ void test_ucp_memheap::test_xfer(send_func_t send_func, size_t size,
                                  ucs_memory_type_t send_mem_type,
                                  ucs_memory_type_t target_mem_type,
                                  unsigned mem_map_flags,
-                                 bool is_ep_flush, bool user_memh, void *arg)
+                                 bool is_ep_flush, bool user_memh, void *arg,
+                                 size_t reg_offset)
 {
     ucp_mem_map_params_t params;
     ucs_status_t status;
     ptrdiff_t padding;
     ucp_mem_h memheap_memh, send_memh = NULL;
+    void *mapped_ptr;
 
     ucs_assert(!(mem_map_flags & (UCP_MEM_MAP_ALLOCATE | UCP_MEM_MAP_FIXED)));
 
-    mem_buffer memheap(num_iters * size + alignment, target_mem_type);
-    padding = UCS_PTR_BYTE_DIFF(memheap.ptr(),
-                                ucs_align_up_pow2_ptr(memheap.ptr(), alignment));
+    mem_buffer memheap(reg_offset + num_iters * size + alignment,
+                       target_mem_type);
+    mapped_ptr = UCS_PTR_BYTE_OFFSET(memheap.ptr(), reg_offset);
+    padding    = UCS_PTR_BYTE_DIFF(mapped_ptr,
+                                   ucs_align_up_pow2_ptr(mapped_ptr,
+                                                         alignment));
     ucs_assert(padding >= 0);
     ucs_assert(padding < alignment);
 
@@ -43,8 +48,8 @@ void test_ucp_memheap::test_xfer(send_func_t send_func, size_t size,
     params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
                         UCP_MEM_MAP_PARAM_FIELD_LENGTH |
                         UCP_MEM_MAP_PARAM_FIELD_FLAGS;
-    params.address    = memheap.ptr();
-    params.length     = memheap.size();
+    params.address    = mapped_ptr;
+    params.length     = memheap.size() - reg_offset;
     params.flags      = mem_map_flags;
 
     status = ucp_mem_map(receiver().ucph(), &params, &memheap_memh);
@@ -77,7 +82,7 @@ void test_ucp_memheap::test_xfer(send_func_t send_func, size_t size,
 
     /* Perform data sends */
     for (unsigned i = 0; i < num_iters; ++i) {
-        ptrdiff_t offset = padding + (i * size);
+        ptrdiff_t offset = reg_offset + padding + (i * size);
         ucs_assert(offset + size <= memheap.size());
 
         (this->*send_func)(size,
@@ -98,8 +103,10 @@ void test_ucp_memheap::test_xfer(send_func_t send_func, size_t size,
     }
 
     /* Validate data */
-    if (!mem_buffer::compare(UCS_PTR_BYTE_OFFSET(expected_data.ptr(), padding),
-                             UCS_PTR_BYTE_OFFSET(memheap.ptr(), padding),
+    if (!mem_buffer::compare(UCS_PTR_BYTE_OFFSET(expected_data.ptr(),
+                                                reg_offset + padding),
+                             UCS_PTR_BYTE_OFFSET(memheap.ptr(),
+                                                reg_offset + padding),
                              size * num_iters, send_mem_type, target_mem_type)) {
         ADD_FAILURE() << "data validation failed";
     }

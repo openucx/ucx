@@ -500,11 +500,21 @@ static ucs_status_t parse_channel_mode(const char *opt_arg,
 {
     if (!strcmp(opt_arg, "single")) {
         *channel_mode = UCX_PERF_CHANNEL_MODE_SINGLE;
-    } else if (!strncmp(opt_arg, "random:", 7)) {
-        *channel_mode      = UCX_PERF_CHANNEL_MODE_RANDOM;
-        *channel_rand_seed = strtoull(opt_arg + 7, NULL, 10);
-    } else if (!strcmp(opt_arg, "random")) {
+    } else if (!strncmp(opt_arg, "random", 6)) {
+        if (opt_arg[6] != '\0' && opt_arg[6] != ':') {
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+#ifdef HAVE_CURAND
         *channel_mode = UCX_PERF_CHANNEL_MODE_RANDOM;
+
+        if (opt_arg[6] == ':') {
+            *channel_rand_seed = strtoull(opt_arg + 7, NULL, 10);
+        }
+#else
+        ucs_warn("random channel mode is not supported (UCX was built without cuRAND). Falling back to per-thread mode.");
+        *channel_mode = UCX_PERF_CHANNEL_MODE_PER_THREAD;
+#endif
     } else if (!strcmp(opt_arg, "per-thread")) {
         *channel_mode = UCX_PERF_CHANNEL_MODE_PER_THREAD;
     } else {
