@@ -83,7 +83,7 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, log_ack_req_freq),
    UCS_CONFIG_TYPE_UINT},
 
-  {"DDP_ENABLE", "try",
+  {"DDP_ENABLE", "n",
    "Enable direct data placement\n",
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, ddp_enable), 
    UCS_CONFIG_TYPE_TERNARY},
