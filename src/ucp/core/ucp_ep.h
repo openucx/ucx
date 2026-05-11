@@ -987,6 +987,33 @@ ucs_status_t ucp_ep_reconfig_clear_failed_lanes(ucp_ep_h ep,
 
 
 /**
+ * Arm (or re-arm) failed-lane recovery for an endpoint.
+ */
+ucs_status_t ucp_ep_recovery_arm(ucp_ep_h ep);
+
+
+/**
+ * One-shot recovery progress callback.
+ */
+unsigned ucp_ep_recovery_progress(void *arg);
+
+
+/**
+ * Cascade-filter entry that removes and frees any pending recovery one-shot
+ * bound to @a arg (a @ref ucp_ep_h).
+ */
+int ucp_ep_recovery_remove_filter(const ucs_callbackq_elem_t *elem, void *arg);
+
+
+/**
+ * Rebuild UCT endpoints for the given set of currently-failed lanes.
+ */
+ucp_lane_map_t
+ucp_ep_recovery_rebuild_lanes(ucp_ep_h ep, ucp_lane_map_t lanes_to_rebuild,
+                              const ucp_unpacked_address_t *remote_address);
+
+
+/**
  * Mark a subset of lanes as UCP_LANE_TYPE_FAILED and arm recovery.
  */
 ucs_status_t ucp_ep_failover_reconfig(ucp_ep_h ucp_ep,
