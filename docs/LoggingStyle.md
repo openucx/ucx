@@ -13,6 +13,7 @@
 
 ## General
 
+* Use UCX logging macros for runtime diagnostics, not `printf`
 * Use lowercase letters
 * Avoid using `=`: prefer `"device %s"` instead of `"device=%s"`  
   This allows selecting the value using double-click from the terminal and searching for it in text editors

@@ -28,6 +28,7 @@ if (params.githubData) {
 try {
   matrix.main()
 } catch (Exception ex) {
+  currentBuild.result = 'FAILURE'
   println ex
   throw ex
 } finally {

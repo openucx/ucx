@@ -278,21 +278,6 @@ struct ucp_ep_config_key {
 
 
 /*
- * Configuration for RMA protocols
- */
-typedef struct ucp_ep_rma_config {
-    ssize_t                max_put_short;    /* Maximal payload of put short */
-    size_t                 max_put_bcopy;    /* Maximal total size of put_bcopy */
-    size_t                 max_put_zcopy;
-    ssize_t                max_get_short;    /* Maximal payload of get short */
-    size_t                 max_get_bcopy;    /* Maximal total size of get_bcopy */
-    size_t                 max_get_zcopy;
-    size_t                 put_zcopy_thresh;
-    size_t                 get_zcopy_thresh;
-} ucp_ep_rma_config_t;
-
-
-/*
  * Configuration for AM and tag offload protocols
  */
 typedef struct ucp_ep_msg_config {
@@ -400,12 +385,6 @@ struct ucp_ep_config {
 
     /* Flags which has to be used @ref uct_md_mkey_pack_v2 */
     unsigned                uct_rkey_pack_flags;
-
-    /* Configuration for each lane that provides RMA */
-    ucp_ep_rma_config_t     rma[UCP_MAX_LANES];
-
-    /* Threshold for switching from put_short to put_bcopy */
-    size_t                  bcopy_thresh;
 
     /* Configuration for AM lane */
     ucp_ep_msg_config_t     am;
