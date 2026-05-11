@@ -61,6 +61,10 @@ typedef struct {
 typedef struct {
     /* CUDA context handle */
     CUcontext          ctx;
+    /* Retained CUDA primary context, if @ctx is a primary context */
+    CUcontext          primary_ctx;
+    /* CUDA device of @primary_ctx */
+    CUdevice           cuda_device;
     /* CUDA context id */
     unsigned long long ctx_id;
     /* pool of cuda events to check completion of memcpy operations */
