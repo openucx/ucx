@@ -1145,3 +1145,23 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_twins_get, use_single_net_device_rank_2,
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_twins_get, rcx, "rc_x")
+
+class test_ucp_proto_mock_rcx_twins_get_inline_0 :
+    public test_ucp_proto_mock_rcx_twins_get {
+protected:
+    test_ucp_proto_mock_rcx_twins_get_inline_0()
+    {
+        modify_config("IB_NUM_PATHS", "1", SETENV_IF_NOT_EXIST);
+        modify_config("IB_TX_INLINE_RESP", "0", SETENV_IF_NOT_EXIST);
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_twins_get_inline_0,
+           multi_rail_max_min_size_one, "MAX_RMA_RAILS=2", "ZCOPY_THRESH=0")
+{
+    check_config({{1, INF, "zero-copy",
+                   "50% on rc_mlx5/mock_0:1 and 50% on rc_mlx5/mock_2:1"}});
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_twins_get_inline_0, rcx,
+                              "rc_x")

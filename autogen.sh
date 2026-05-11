@@ -25,7 +25,8 @@ done
 rm -rf autom4te.cache
 mkdir -p config/m4 config/aux
 
-git submodule update --init external/gpunetio
+git submodule update --init external/gpunetio ||
+    echo "WARNING: Failed to update GPUNetIO submodule, continuing..."
 
 autoreconf -v --install || exit 1
 rm -rf autom4te.cache

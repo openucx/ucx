@@ -10,18 +10,7 @@
 #include "ucp_types.h"
 
 #include <uct/api/uct.h>
-#include <uct/api/v2/uct_v2.h>
 #include <ucs/type/class.h>
-
-
-/**
- * Stub interface with internal_ops support for v2 operations on
- * proxy, wireup, and failed endpoints.
- */
-typedef struct ucp_stub_iface {
-    uct_iface_t              super;
-    uct_iface_internal_ops_t *internal_ops;
-} ucp_stub_iface_t;
 
 
 /**
@@ -35,12 +24,12 @@ typedef struct ucp_stub_iface {
  * TODO make sure it works with err handling and print_ucp_info
  */
 typedef struct ucp_proxy_ep {
-    uct_ep_t         super;     /**< Derived from uct_ep */
-    ucp_stub_iface_t iface;     /**< Stub iface for ops dispatch */
-    ucp_ep_h         ucp_ep;    /**< Pointer to UCP endpoint */
-    uct_ep_h         uct_ep;    /**< Underlying transport endpoint */
-    int              is_owner;  /**< Is uct_ep owned by this proxy ep */
-    ucp_rsc_index_t  rsc_index; /**< Resource index of underlying transport endpoint */
+    uct_ep_t        super;     /**< Derived from uct_ep */
+    uct_iface_h     iface;     /**< Stub iface for ops dispatch */
+    ucp_ep_h        ucp_ep;    /**< Pointer to UCP endpoint */
+    uct_ep_h        uct_ep;    /**< Underlying transport endpoint */
+    int             is_owner;  /**< Is uct_ep owned by this proxy ep */
+    ucp_rsc_index_t rsc_index; /**< Resource index of underlying transport endpoint */
 } ucp_proxy_ep_t;
 
 

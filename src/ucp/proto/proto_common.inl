@@ -50,7 +50,12 @@ ucp_proto_msg_multi_request_init(ucp_request_t *req)
         return UCS_OK;
     }
 
+    if (req->flags & UCP_REQUEST_FLAG_MSG_ID_SET) {
+        return UCS_OK;
+    }
+
     req->send.msg_proto.message_id = req->send.ep->worker->am_message_id++;
+    req->flags |= UCP_REQUEST_FLAG_MSG_ID_SET;
     return UCS_OK;
 }
 
@@ -99,7 +104,8 @@ ucp_proto_request_zcopy_complete(ucp_request_t *req, ucs_status_t status)
     }
 
     if (ucs_unlikely(status != UCS_OK) &&
-        ucp_ep_err_mode_eq(req->send.ep, UCP_ERR_HANDLING_MODE_FAILOVER)) {
+        ucp_ep_err_mode_eq(req->send.ep, UCP_ERR_HANDLING_MODE_FAILOVER) &&
+        !(req->send.ep->flags & UCP_EP_FLAG_FAILED)) {
         ucp_proto_request_restart(req);
     } else {
         ucp_request_complete_send(req, status);

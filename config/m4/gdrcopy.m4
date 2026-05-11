@@ -38,8 +38,10 @@ AS_IF([test "x$with_gdrcopy" != "xno"],
                             gdrcopy_happy="no"])
             ], [gdrcopy_happy="no"])
 
-        AS_IF([test "x$gdrcopy_happy" = "xyes"],
-            [AC_CHECK_DECLS([gdr_copy_to_mapping], [], [], [#include "gdrapi.h"])])
+        AS_IF([test "x$gdrcopy_happy" = "xyes"], [
+            AC_CHECK_DECLS([gdr_pin_buffer_v2, gdr_copy_to_mapping], [], [],
+                            [#include "gdrapi.h"])
+        ])
 
         CFLAGS="$save_CFLAGS"
         CPPFLAGS="$save_CPPFLAGS"

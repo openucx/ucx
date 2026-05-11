@@ -19,19 +19,6 @@
 #include <ucs/arch/cpu.h>
 
 
-static size_t ucs_mpool_elem_total_size(ucs_mpool_data_t *data)
-{
-    return ucs_align_up_pow2(data->elem_size, data->alignment);
-}
-
-static UCS_F_ALWAYS_INLINE ucs_mpool_elem_t *
-ucs_mpool_chunk_elem(ucs_mpool_data_t *data, ucs_mpool_chunk_t *chunk,
-                     unsigned elem_index)
-{
-    return UCS_PTR_BYTE_OFFSET(chunk->elems,
-                               elem_index * ucs_mpool_elem_total_size(data));
-}
-
 static void ucs_mpool_chunk_leak_check(ucs_mpool_t *mp, ucs_mpool_chunk_t *chunk)
 {
     UCS_STRING_BUFFER_ONSTACK(strb, 128);
@@ -41,10 +28,9 @@ static void ucs_mpool_chunk_leak_check(ucs_mpool_t *mp, ucs_mpool_chunk_t *chunk
     void *obj;
 
     for (i = 0; i < chunk->num_elems; ++i) {
-        elem = ucs_mpool_chunk_elem(mp->data, chunk, i);
-        VALGRIND_MAKE_MEM_DEFINED(elem, sizeof *elem);
+        obj  = ucs_mpool_chunk_obj(mp, chunk->elems, i);
+        elem = ucs_mpool_obj_to_elem(obj);
         if (elem->mpool != NULL) {
-            obj = elem + 1;
             ucs_string_buffer_reset(&strb);
             if (data->ops->obj_str != NULL) {
                 ucs_string_buffer_appendf(&strb, " {");
@@ -222,15 +208,6 @@ void ucs_mpool_put(void *obj)
     ucs_mpool_put_inline(obj);
 }
 
-static void *ucs_mpool_chunk_elems(ucs_mpool_t *mp, ucs_mpool_chunk_t *chunk)
-{
-    ucs_mpool_data_t *data = mp->data;
-    size_t chunk_padding;
-
-    chunk_padding = ucs_padding((uintptr_t)(chunk + 1) + data->align_offset,
-                                data->alignment);
-    return UCS_PTR_BYTE_OFFSET(chunk + 1, chunk_padding);
-}
 
 unsigned ucs_mpool_num_elems_per_chunk(ucs_mpool_t *mp,
                                        ucs_mpool_chunk_t *chunk,
@@ -250,11 +227,11 @@ void ucs_mpool_grow(ucs_mpool_t *mp, unsigned num_elems)
     ucs_mpool_data_t *data = mp->data;
     size_t chunk_size;
     ucs_mpool_chunk_t *chunk;
-    ucs_mpool_elem_t *elem;
     ucs_status_t status;
     unsigned i;
     unsigned allocated_num_elems;
     void *ptr;
+    void *obj;
 
     if (data->quota == 0) {
         return;
@@ -283,11 +260,11 @@ void ucs_mpool_grow(ucs_mpool_t *mp, unsigned num_elems)
     }
 
     for (i = 0; i < chunk->num_elems; ++i) {
-        elem         = ucs_mpool_chunk_elem(data, chunk, i);
+        obj = ucs_mpool_chunk_obj(mp, chunk->elems, i);
         if (data->ops->obj_init != NULL) {
-            data->ops->obj_init(mp, elem + 1, chunk);
+            data->ops->obj_init(mp, obj, chunk);
         }
-        ucs_mpool_add_to_freelist(mp, elem);
+        ucs_mpool_add_to_freelist(mp, ucs_mpool_obj_to_elem(obj));
     }
 
     chunk->next  = data->chunks;

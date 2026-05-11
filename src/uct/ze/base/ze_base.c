@@ -356,6 +356,41 @@ uct_ze_base_get_device_handle_from_subdevice(const uct_ze_subdevice_t *subdevice
     return subdevice->device->subdevices[subdevice->subdevice_idx];
 }
 
+ucs_sys_device_t uct_ze_base_get_sys_dev_from_handle(ze_device_handle_t device)
+{
+    const uct_ze_device_t *dev;
+    int i, j;
+
+    if ((device == NULL) || (uct_ze_base_init() != ZE_RESULT_SUCCESS)) {
+        return UCS_SYS_DEVICE_ID_UNKNOWN;
+    }
+
+    for (i = 0; i < uct_ze_base.num_devices; i++) {
+        dev = &uct_ze_base.devices[i];
+
+        /* Skip entries not fully initialized during discovery. */
+        if (dev->num_subdevices <= 0) {
+            continue;
+        }
+
+        if (dev->root_device == device) {
+            return dev->sys_dev;
+        }
+
+        for (j = 0; j < dev->num_subdevices; j++) {
+            if (dev->subdevices[j] == device) {
+                return dev->sys_dev;
+            }
+        }
+    }
+
+    ucs_trace("cannot map ze device handle %p to sys_dev, "
+              "falling back to unknown",
+              (void*)device);
+
+    return UCS_SYS_DEVICE_ID_UNKNOWN;
+}
+
 /**
  * Query MD resources - returns one MD per sub-device
  * This is correct because each sub-device has separate memory
