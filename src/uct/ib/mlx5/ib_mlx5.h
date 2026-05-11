@@ -130,8 +130,9 @@ struct mlx5_grh_av {
 #  define MLX5_WQE_CTRL_SOLICITED  (1<<1)
 #endif
 
-#define UCT_IB_MLX5_WQE_CTRL_FLAG_FENCE        (2<<5)
-#define UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER (3<<5)
+#define UCT_IB_MLX5_WQE_CTRL_FLAG_INITIATOR_SMALL_FENCE (1<<5)
+#define UCT_IB_MLX5_WQE_CTRL_FLAG_FENCE                 (2<<5)
+#define UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER          (3<<5)
 
 #define UCT_IB_MLX5_AM_ZCOPY_MAX_IOV  3UL
 

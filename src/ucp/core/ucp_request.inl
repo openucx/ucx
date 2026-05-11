@@ -381,9 +381,6 @@ ucp_request_send_state_reset(ucp_request_t *req,
                              uct_completion_callback_t comp_cb, unsigned proto)
 {
     switch (proto) {
-    case UCP_REQUEST_SEND_PROTO_RMA:
-        ucs_assert(UCP_DT_IS_CONTIG(req->send.datatype));
-        /* Fall through */
     case UCP_REQUEST_SEND_PROTO_RNDV_GET:
     case UCP_REQUEST_SEND_PROTO_RNDV_PUT:
     case UCP_REQUEST_SEND_PROTO_ZCOPY_AM:
@@ -457,8 +454,6 @@ ucp_request_send_state_advance(ucp_request_t *req,
             /* cppcheck-suppress nullPointer */
             req->send.state.dt        = *new_dt_state;
         }
-        /* Fall through */
-    case UCP_REQUEST_SEND_PROTO_RMA:
         if (status == UCS_INPROGRESS) {
             ++req->send.state.uct_comp.count;
         }
@@ -467,9 +462,7 @@ ucp_request_send_state_advance(ucp_request_t *req,
         ucs_fatal("unknown protocol %d", proto);
     }
 
-    /* offset is not used for RMA */
-    ucs_assert((proto == UCP_REQUEST_SEND_PROTO_RMA) ||
-               (req->send.state.dt.offset <= req->send.length));
+    ucs_assert(req->send.state.dt.offset <= req->send.length);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t

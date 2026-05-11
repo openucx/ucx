@@ -28,7 +28,6 @@ struct uct_cuda_ipc_cache_region {
     void                    *mapped_addr; /**< Local mapped address */
     uint64_t                refcount;     /**< Track in-flight ops before unmapping*/
     CUdevice                cu_dev;       /**< CUDA device */
-    uint8_t                 in_lru;       /**< Whether region is on the LRU list */
 };
 
 

@@ -268,6 +268,9 @@ static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
                                           UCT_IFACE_FLAG_GET_ZCOPY        |
                                           UCT_IFACE_FLAG_PUT_ZCOPY        |
                                           UCT_IFACE_FLAG_DEVICE_EP;
+
+    iface_attr->ctl_device              = UCS_SYS_DEVICE_ID_UNKNOWN;
+
     if (md->enable_mnnvl) {
         iface_attr->cap.flags |= UCT_IFACE_FLAG_INTER_NODE;
     }

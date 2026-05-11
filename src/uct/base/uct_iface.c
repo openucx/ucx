@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
 *
@@ -573,6 +573,14 @@ ucs_status_t uct_single_device_resource(uct_md_h md, const char *dev_name,
 ucs_status_t
 uct_iface_base_query_v2(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr)
 {
+    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_CAP_FLAGS) {
+        iface_attr->cap.flags = 0;
+    }
+
+    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT) {
+        iface_attr->max_put_sgl_zcopy_count = 0;
+    }
+
     return UCS_OK;
 }
 
@@ -1047,10 +1055,8 @@ int uct_iface_local_is_reachable(uct_iface_local_addr_ns_t *addr_ns,
     /* We are in non-root PID namespace - return 1 if ID of namespaces are the
      * same */
     if (addr_ns->sys_ns != my_addr.sys_ns) {
-        uct_iface_fill_info_str_buf(
-                    params,
-                    "different pid namespaces %"PRIx64" vs %"PRIx64"",
-                    my_addr.sys_ns, addr_ns->sys_ns);
+        uct_iface_fill_info_str_buf(params, "different pid namespaces %u vs %u",
+                                    my_addr.sys_ns, addr_ns->sys_ns);
         return 0;
     }
     return 1;

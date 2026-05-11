@@ -155,11 +155,12 @@ uct_ze_copy_md_query_attributes(uct_md_h md, const void *addr, size_t length,
         .stype = ZE_STRUCTURE_TYPE_MEMORY_ALLOCATION_PROPERTIES,
         .pNext = dmabuf_fd ? &export_fd : NULL
     };
+    ze_device_handle_t ze_device             = NULL;
     ze_result_t ret;
     void *base_address;
     size_t alloc_length;
 
-    ret = zeMemGetAllocProperties(ze_md->ze_context, addr, &props, NULL);
+    ret = zeMemGetAllocProperties(ze_md->ze_context, addr, &props, &ze_device);
     if ((ret != ZE_RESULT_SUCCESS) || (props.type == ZE_MEMORY_TYPE_UNKNOWN)) {
         return UCS_ERR_INVALID_ADDR;
     }
@@ -179,7 +180,7 @@ uct_ze_copy_md_query_attributes(uct_md_h md, const void *addr, size_t length,
     }
     mem_info->base_address = base_address;
     mem_info->alloc_length = alloc_length;
-    mem_info->sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
+    mem_info->sys_dev      = uct_ze_base_get_sys_dev_from_handle(ze_device);
     if (dmabuf_fd) {
         *dmabuf_fd = export_fd.fd;
     }

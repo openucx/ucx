@@ -37,6 +37,10 @@ some level of understanding of compiler optimizations.
   - No malloc()/free() - use memory pool instead
   - Avoid locks if possible. If needed, use spinlock, no mutex.
   - Reduce function calls and conditionals ("if").
+  - Prefer setup-time selection over hot-path conditionals. For UCT transport
+    polymorphism, prefer operations tables and typed function pointers.
+  - Use `static UCS_F_ALWAYS_INLINE` or local inline macros for hot-path helper
+    functions in headers.
   - Move error and slow-path handling code to non-inline functions, so
     their local variables will not add overhead to the prologue and 
     epilogue of the fast-path function.
@@ -66,6 +70,7 @@ some level of understanding of compiler optimizations.
     such as fairness between connections, fast convergence, etc.
   - Need to make sure we don't have O(n) complexity. As a thumb rule, 
     all scheduling mechanisms have to be O(1).
+  - Cache expensive capability queries when the result is stable.
 
 * Object creation and destruction flows:
   - It's ok to use system calls / malloc / free.
@@ -73,5 +78,4 @@ some level of understanding of compiler optimizations.
     make sure that creating/destroying an endpoint does not require 
     going over all existing endpoints.
    
-
 
