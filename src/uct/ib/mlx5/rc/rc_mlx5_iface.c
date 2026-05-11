@@ -59,6 +59,54 @@ ucs_stats_class_t uct_rc_mlx5_iface_stats_class = {
 };
 #endif
 
+static void
+uct_rc_mlx5_iface_handle_rx_failure(uct_rc_mlx5_iface_common_t *iface,
+                                    struct mlx5_cqe64 *cqe)
+{
+    uct_ib_mlx5_err_cqe_t *ecqe = (uct_ib_mlx5_err_cqe_t*)cqe;
+    unsigned qp_num             = ntohl(ecqe->s_wqe_opcode_qpn) &
+                                  UCS_MASK(UCT_IB_QPN_ORDER);
+    uct_ib_iface_t *ib_iface    = &iface->super.super;
+    uct_rc_mlx5_base_ep_t *ep;
+    ucs_log_level_t log_lvl;
+    ucs_status_t status;
+    ucs_status_t ep_status;
+    uint16_t pi;
+
+    pi = ntohs(ecqe->wqe_counter);
+    ep = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, qp_num),
+                        uct_rc_mlx5_base_ep_t);
+    if (ep == NULL) {
+        ucs_diag("ignoring receive failure on removed qpn 0x%x wqe[%d]",
+                 qp_num, pi);
+        return;
+    }
+
+    ucs_arbiter_group_purge(&iface->super.tx.arbiter, &ep->super.arb_group,
+                            uct_rc_ep_arbiter_purge_internal_cb, NULL);
+    uct_ib_mlx5_txwq_update_flags(&ep->tx.wq, UCT_IB_MLX5_TXWQ_FLAG_FAILED,
+                                  0);
+
+    if (ep->super.flags & (UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED |
+                           UCT_RC_EP_FLAG_FLUSH_CANCEL)) {
+        goto out;
+    }
+
+    ep->super.flags |= UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED;
+    uct_rc_fc_restore_wnd(&iface->super, &ep->super.fc);
+
+    ep_status = uct_ib_mlx5_completion_err_status(ecqe);
+    status    = uct_iface_handle_ep_err(&iface->super.super.super.super,
+                                        &ep->super.super.super, ep_status);
+    log_lvl   = uct_base_iface_failure_log_level(&ib_iface->super, status,
+                                                 ep_status);
+
+    uct_ib_mlx5_completion_with_err(ib_iface, ecqe, NULL, log_lvl);
+
+out:
+    uct_rc_iface_arbiter_dispatch(&iface->super);
+}
+
 struct mlx5_cqe64 *
 uct_rc_mlx5_iface_check_rx_completion(uct_ib_iface_t   *ib_iface,
                                       uct_ib_mlx5_cq_t *cq,
@@ -76,12 +124,9 @@ uct_rc_mlx5_iface_check_rx_completion(uct_ib_iface_t   *ib_iface,
         return uct_ib_mlx5_iface_cqe_unzip(cq);
     }
 
-    if (((ecqe->op_own >> 4) == MLX5_CQE_RESP_ERR) &&
-        (ecqe->syndrome == MLX5_CQE_SYNDROME_REMOTE_ABORTED_ERR) &&
-        ((ecqe->vendor_err_synd == UCT_IB_MLX5_CQE_VENDOR_SYND_ODP) ||
-         (ecqe->vendor_err_synd == UCT_IB_MLX5_CQE_VENDOR_SYND_PSN)))
-    {
-        UCS_STATIC_ASSERT(MLX5_CQE_INVALID & (UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK >> 4));
+    if ((ecqe->op_own >> 4) == MLX5_CQE_RESP_ERR) {
+        UCS_STATIC_ASSERT(MLX5_CQE_RESP_ERR &
+                          (UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK >> 4));
         ucs_assert((cqe->op_own >> 4) != MLX5_CQE_INVALID);
 
         /* Release the aborted segment */
@@ -89,11 +134,18 @@ uct_rc_mlx5_iface_check_rx_completion(uct_ib_iface_t   *ib_iface,
         seg     = uct_ib_mlx5_srq_get_wqe(&iface->rx.srq, wqe_ctr);
         ++cq->cq_ci;
         /* TODO: Check if ib_stride_index valid for error CQE */
-        uct_rc_mlx5_iface_release_srq_seg(iface, seg, cqe, wqe_ctr, UCS_OK,
-                                          iface->super.super.config.rx_headroom_offset,
-                                          &iface->super.super.release_desc,
-                                          poll_flags);
+        uct_rc_mlx5_iface_release_srq_seg(
+                iface, seg, cqe, wqe_ctr, UCS_OK,
+                iface->super.super.config.rx_headroom_offset,
+                &iface->super.super.release_desc, poll_flags);
         uct_ib_mlx5_update_db_cq_ci(cq);
+
+        if ((poll_flags & UCT_IB_MLX5_POLL_FLAG_HAS_EP) &&
+            ((ecqe->syndrome != MLX5_CQE_SYNDROME_REMOTE_ABORTED_ERR) ||
+             ((ecqe->vendor_err_synd != UCT_IB_MLX5_CQE_VENDOR_SYND_ODP) &&
+              (ecqe->vendor_err_synd != UCT_IB_MLX5_CQE_VENDOR_SYND_PSN)))) {
+            uct_rc_mlx5_iface_handle_rx_failure(iface, cqe);
+        }
     } else {
         ucs_assert((ecqe->op_own >> 4) != MLX5_CQE_INVALID);
         uct_ib_mlx5_check_completion_with_err(&iface->super.super, cq, cqe);

@@ -72,6 +72,23 @@ static int uct_ib_mlx5_is_qp_require_av_seg(int qp_type)
     return 0;
 }
 
+ucs_status_t uct_ib_mlx5_completion_err_status(uct_ib_mlx5_err_cqe_t *ecqe)
+{
+    switch (ecqe->syndrome) {
+    case MLX5_CQE_SYNDROME_WR_FLUSH_ERR:
+        return UCS_ERR_CANCELED;
+    case MLX5_CQE_SYNDROME_REMOTE_ACCESS_ERR:
+    case MLX5_CQE_SYNDROME_REMOTE_OP_ERR:
+        return UCS_ERR_CONNECTION_RESET;
+    case MLX5_CQE_SYNDROME_TRANSPORT_RETRY_EXC_ERR:
+    case MLX5_CQE_SYNDROME_RNR_RETRY_EXC_ERR:
+    case MLX5_CQE_SYNDROME_REMOTE_ABORTED_ERR:
+        return UCS_ERR_ENDPOINT_TIMEOUT;
+    default:
+        return UCS_ERR_IO_ERROR;
+    }
+}
+
 ucs_status_t uct_ib_mlx5_completion_with_err(uct_ib_iface_t *iface,
                                              uct_ib_mlx5_err_cqe_t *ecqe,
                                              uct_ib_mlx5_txwq_t *txwq,
