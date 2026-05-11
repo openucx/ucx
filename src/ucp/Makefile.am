@@ -142,7 +142,6 @@ libucp_la_SOURCES = \
 	rma/put_am.c \
 	rma/put_offload.c \
 	rma/rma_ppln.c \
-	rma/rma_basic.c \
 	rma/rma_send.c \
 	rma/rma_sw.c \
 	rma/flush.c \

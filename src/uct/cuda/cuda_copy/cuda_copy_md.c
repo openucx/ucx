@@ -881,7 +881,9 @@ uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address, size_t length,
             mem_attr->dmabuf_fd = dmabuf.fd;
         }
         if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET) {
-            mem_attr->dmabuf_offset = dmabuf.offset;
+            mem_attr->dmabuf_offset =
+                    dmabuf.offset + UCS_PTR_BYTE_DIFF(addr_mem_info.base_address,
+                                                      address);
         }
     }
 

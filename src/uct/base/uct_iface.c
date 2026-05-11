@@ -1055,10 +1055,8 @@ int uct_iface_local_is_reachable(uct_iface_local_addr_ns_t *addr_ns,
     /* We are in non-root PID namespace - return 1 if ID of namespaces are the
      * same */
     if (addr_ns->sys_ns != my_addr.sys_ns) {
-        uct_iface_fill_info_str_buf(
-                    params,
-                    "different pid namespaces %"PRIx64" vs %"PRIx64"",
-                    my_addr.sys_ns, addr_ns->sys_ns);
+        uct_iface_fill_info_str_buf(params, "different pid namespaces %u vs %u",
+                                    my_addr.sys_ns, addr_ns->sys_ns);
         return 0;
     }
     return 1;

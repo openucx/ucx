@@ -255,13 +255,18 @@ stages:
     jobs:
     - template: codestyle.yml
 
+  - stage: Basic_compile
+    dependsOn: []
+    jobs:
+    - template: basic_compile.yml
+
   - stage: Static_check
-    dependsOn: [Codestyle]
+    dependsOn: [Basic_compile]
     jobs:
     - template: static_checks.yml
 
   - stage: Build
-    dependsOn: [Static_check]
+    dependsOn: [Basic_compile]
     jobs:
       - template: build_job.yml
         parameters:
@@ -278,7 +283,7 @@ stages:
           displayName: Build on aarch64
 
   - stage: ucx_perftest_mad_rte
-    dependsOn: [Static_check]
+    dependsOn: [Basic_compile]
     displayName: ucx_perftest over MAD RTE
     lockBehavior: sequential
     variables:
@@ -287,7 +292,7 @@ stages:
     - template: mad_tests.yml
 
   - stage: WireCompat
-    dependsOn: [Static_check]
+    dependsOn: [Basic_compile]
     jobs:
     - template: wire_compat.yml
       parameters:
@@ -326,7 +331,7 @@ stages:
           container: coverity_rh7
 
   - stage: Tests
-    dependsOn: [Static_check]
+    dependsOn: [Basic_compile]
     jobs:
     - template: tests.yml
       parameters:
@@ -357,7 +362,7 @@ stages:
         test_perf: 0
 
   - stage: EFA_Tests
-    dependsOn: [Static_check]
+    dependsOn: [Basic_compile]
     jobs:
     - template: efa.yml
       parameters:
@@ -365,7 +370,7 @@ stages:
         demands: ucx_new -equals yes
 
   - stage: Namespace_Tests
-    dependsOn: [Static_check]
+    dependsOn: [Basic_compile]
     jobs:
     - template: namespace_tests.yml
       parameters:
@@ -373,13 +378,13 @@ stages:
         demands: ucx_new -equals yes
 
   - stage: io_demo
-    dependsOn: [Static_check]
+    dependsOn: [Basic_compile]
     condition: false
     jobs:
     - template: io_demo/io-demo.yml
 
   - stage: jucx
-    dependsOn: [Static_check]
+    dependsOn: [Basic_compile]
     jobs:
       - template: ../jucx/jucx-test.yml
         parameters:
@@ -393,7 +398,7 @@ stages:
           demands: ucx-arm64
 
   - stage: go
-    dependsOn: [Static_check]
+    dependsOn: [Basic_compile]
     jobs:
       - template: go/go-test.yml
         parameters:
@@ -405,7 +410,7 @@ stages:
             demands: ucx_gpu -equals yes
 
   - stage: Build_Static
-    dependsOn: [Static_check]
+    dependsOn: [Basic_compile]
     jobs:
       - job: build_source
         pool:
@@ -451,7 +456,7 @@ stages:
 
 
   - stage: Cuda
-    dependsOn: [Static_check]
+    dependsOn: [Basic_compile]
     jobs:
       - template: cuda/cuda.yml
 
@@ -489,6 +494,6 @@ stages:
 
 
 #  - stage: Cuda_compatible
-#    dependsOn: [Static_check]
+#    dependsOn: [Basic_compile]
 #    jobs:
 #    - template: cuda/cuda_compatible.yml
