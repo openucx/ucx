@@ -217,7 +217,8 @@ protected:
             return;
         }
 
-        cuDevicePrimaryCtxRelease(m_ctx_rsc->cuda_device);
+        EXPECT_EQ(CUDA_SUCCESS,
+                  cuDevicePrimaryCtxRelease(m_ctx_rsc->cuda_device));
         m_ctx_rsc->primary_ctx = NULL;
         m_ctx_rsc->cuda_device = CU_DEVICE_INVALID;
     }
