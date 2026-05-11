@@ -299,15 +299,11 @@ UCS_TEST_P(test_ucp_rma, get_nonblocking) {
     test_mem_types(static_cast<send_func_t>(&test_ucp_rma::get_nbi), 1);
 }
 
-UCS_TEST_P(test_ucp_rma, get_bcopy_forced_success,
-           "PROTOS=get/bcopy,reconfig")
+UCS_TEST_P(test_ucp_rma, get_bcopy_forced_success, "PROTOS=get/bcopy,reconfig")
 {
-    if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
-        UCS_TEST_SKIP_R("CUDA memory is not supported");
-    }
-
-    if (!check_reg_mem_types(sender(), UCS_MEMORY_TYPE_CUDA)) {
-        UCS_TEST_SKIP_R("CUDA memory registration is not supported");
+    if (!sender().has_lane_with_caps(UCT_IFACE_FLAG_GET_BCOPY) ||
+        !mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
+        UCS_TEST_SKIP_R("get_bcopy or CUDA memory not supported");
     }
 
     test_message_sizes(static_cast<send_func_t>(&test_ucp_rma::get_b), 1,
