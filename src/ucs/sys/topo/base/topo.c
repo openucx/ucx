@@ -676,6 +676,19 @@ const char *ucs_topo_distance_str(const ucs_sys_dev_distance_t *distance,
     return ucs_string_buffer_cstr(&strb);
 }
 
+int ucs_topo_distance_cmp(const ucs_sys_dev_distance_t *distance1,
+                          const ucs_sys_dev_distance_t *distance2)
+{
+    int cmp;
+
+    cmp = ucs_fp_compare(distance1->latency, distance2->latency);
+    if (cmp != 0) {
+        return cmp;
+    }
+
+    return ucs_fp_compare(distance2->bandwidth, distance1->bandwidth);
+}
+
 ucs_sys_device_t ucs_topo_get_sysfs_dev(const char *dev_name,
                                         const char *sysfs_path,
                                         unsigned name_priority)

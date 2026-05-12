@@ -843,32 +843,26 @@ ucp_memh_init_from_parent(ucp_mem_h memh, ucp_md_map_t parent_md_map)
 }
 
 /* Apply UCX_MAX_HCA_PER_GPU policy.
- * The network MDs are ranked by bandwidth to the
- * buffer's sys_dev and the highest N selected. */
+ * The network MDs are ranked by distance (latency, then bandwidth) to the
+ * buffer's sys_dev and the closest N selected. */
 static ucp_md_map_t
 ucp_memh_apply_reg_policy(ucp_context_h context, ucs_memory_type_t mem_type,
                           ucs_sys_device_t sys_dev, ucp_md_map_t reg_md_map)
 {
-    ucp_md_map_t net_md_map = 0;
-    ucp_md_map_t policy_md_map, selected;
+    ucp_md_map_t net_md_map, policy_md_map, selected;
     ucp_md_index_t md_index;
-    ucp_rsc_index_t tl_idx;
 
-    if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN ||
-        mem_type != UCS_MEMORY_TYPE_CUDA) {
+    if ((sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) ||
+        (mem_type != UCS_MEMORY_TYPE_CUDA)) {
         return reg_md_map;
     }
 
-    for (tl_idx = 0; tl_idx < context->num_tls; ++tl_idx) {
-        if (context->tl_rscs[tl_idx].tl_rsc.dev_type == UCT_DEVICE_TYPE_NET) {
-            net_md_map |= UCS_BIT(context->tl_rscs[tl_idx].md_index);
-        }
-    }
+    net_md_map = ucp_context_get_net_md_map(context);
 
     policy_md_map = reg_md_map & net_md_map;
     selected      = ucp_context_select_reg_mds(context, policy_md_map, sys_dev);
 
-    if (ucs_log_is_enabled(UCS_LOG_LEVEL_DEBUG)) {
+    if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE)) {
         UCS_STRING_BUFFER_ONSTACK(strb, 256);
         ucs_for_each_bit(md_index, selected) {
             if (ucs_string_buffer_length(&strb) > 0) {
@@ -877,7 +871,7 @@ ucp_memh_apply_reg_policy(ucp_context_h context, ucs_memory_type_t mem_type,
             ucs_string_buffer_appendf(&strb, "%s",
                                       context->tl_mds[md_index].rsc.md_name);
         }
-        ucs_debug("reg_devices_policy: mem_type=%d sys_dev=%d selected=[%s]",
+        ucs_trace("reg_devices_policy: mem_type=%d sys_dev=%d selected=[%s]",
                   mem_type, sys_dev, ucs_string_buffer_cstr(&strb));
     }
 

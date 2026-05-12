@@ -62,10 +62,9 @@ typedef enum {
 static UCS_F_ALWAYS_INLINE ucp_reg_devices_mode_t
 ucp_reg_devices_mode(unsigned long max_hca_per_gpu)
 {
-    if ((max_hca_per_gpu == UCS_ULUNITS_INF) ||
-        (max_hca_per_gpu == UCS_ULUNITS_AUTO)) {
+    if (max_hca_per_gpu == UCS_ULUNITS_INF) {
         return UCP_REG_DEVICES_ALL;
-    } else if (max_hca_per_gpu == 0) {
+    } else if (max_hca_per_gpu == UCS_ULUNITS_AUTO) {
         return UCP_REG_DEVICES_CLOSEST;
     }
     return UCP_REG_DEVICES_LIMIT;
@@ -252,7 +251,7 @@ typedef struct ucp_context_config {
     int                                    connect_all_to_all;
     /** Use only one network device for all protocols */
     int                                    proto_use_single_net_device;
-    /** Max HCAs for GPU memory registration: 0=closest, N=limit, inf=all */
+    /** Max HCAs for GPU memory registration: auto=closest, N=limit, inf=all */
     unsigned long                          max_hca_per_gpu;
     /** Local identificator on a single node */
     unsigned long                          node_local_id;
@@ -796,6 +795,9 @@ const char* ucp_context_cm_name(ucp_context_h context, ucp_rsc_index_t cm_idx);
 ucp_md_map_t ucp_context_select_reg_mds(ucp_context_h context,
                                         ucp_md_map_t md_map,
                                         ucs_sys_device_t mem_sys_dev);
+
+
+ucp_md_map_t ucp_context_get_net_md_map(ucp_context_h context);
 
 
 ucs_status_t
