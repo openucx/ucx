@@ -437,6 +437,28 @@ static ucs_status_t ucp_am_eager_multi_zcopy_psn_reset(ucp_request_t *req)
     ucp_datatype_iter_rewind(&req->send.state.dt_iter, UCP_DT_MASK_CONTIG_IOV);
     /* Restart the request from the very first fragment */
     req->send.msg_proto.am.internal_flags &= ~UCP_REQUEST_AM_FLAG_HEADER_SENT;
+    /* Tag the first fragment of every restart as a retransmit. The receiver
+     * only consults this bit when the restart delivers the whole payload in
+     * a single first fragment (am_length == total_length): in that case it
+     * needs to evict any partial first_rdesc the original (multi-fragment)
+     * attempt left in started_ams. The user callback for this msg_id is
+     * still invoked from the single-frag delivery path either way; the
+     * eviction is required because the receiver iterates started_ams in
+     * order and stops at the first incomplete rdesc to preserve in-order
+     * PSN delivery, so a leftover orphan would strand every later msg_id
+     * on this ep even after they fully assemble.
+     *
+     * All other restart shapes (multi-frag -> multi-frag, single-frag -> *)
+     * are already handled by ucp_am_find_first_rdesc or by the PSN dedup,
+     * so the bit is a no-op for them. Setting it unconditionally is cheap
+     * (one OR on the slow restart path) and avoids having to predict the
+     * post-reset segmentation here, before the proto is re-selected.
+     *
+     * Note: the zcopy reset path intentionally keeps
+     * UCP_REQUEST_FLAG_PROTO_INITIALIZED set to avoid memory
+     * re-registration, so the proto's init callback is skipped on restart
+     * and a hint set there would not fire. */
+    req->send.msg_proto.am.flags |= UCP_AM_HDR_FLAG_RESEND;
     if (status != UCS_OK) {
         return status;
     }

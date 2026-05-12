@@ -85,6 +85,14 @@ void ucp_am_ep_init(ucp_ep_h ep)
     }
 }
 
+static UCS_F_ALWAYS_INLINE void ucp_am_release_long_desc(ucp_recv_desc_t *desc)
+{
+    /* Don't use UCS_PTR_BYTE_OFFSET here due to coverity false positive report.
+     * Need to step back by release_desc_offset, where originally allocated
+     * pointer resides. */
+    ucs_free((char*)desc - desc->release_desc_offset);
+}
+
 void ucp_am_ep_cleanup(ucp_ep_h ep)
 {
     ucp_ep_ext_t *ep_ext = ep->ext;
@@ -100,8 +108,8 @@ void ucp_am_ep_cleanup(ucp_ep_h ep)
     ucs_list_for_each_safe(rdesc, tmp_rdesc, &ep_ext->am.started_ams,
                            am_first.list) {
         ucs_list_del(&rdesc->am_first.list);
-        /* Free from the start of frag_tree allocation, not rdesc */
-        ucs_free(UCS_PTR_BYTE_OFFSET(rdesc, -sizeof(ucs_interval_tree_t)));
+        ucs_interval_tree_cleanup(ucp_am_rdesc_frag_tree(rdesc));
+        ucp_am_release_long_desc(rdesc);
         ++count;
     }
     ucs_trace_data("worker %p: %zu unhandled first AM fragments have been"
@@ -137,14 +145,6 @@ static void ucp_am_rndv_send_ats(ucp_worker_h worker, ucp_rndv_rts_hdr_t *rts,
 
     ucp_rndv_req_send_ack(req, rts->size, rts->sreq.req_id, status,
                           UCP_AM_ID_RNDV_ATS, "send_ats");
-}
-
-static UCS_F_ALWAYS_INLINE void ucp_am_release_long_desc(ucp_recv_desc_t *desc)
-{
-    /* Don't use UCS_PTR_BYTE_OFFSET here due to coverity false positive report.
-     * Need to step back by release_desc_offset, where originally allocated
-     * pointer resides. */
-    ucs_free((char*)desc - desc->release_desc_offset);
 }
 
 static UCS_F_ALWAYS_INLINE int
@@ -1411,13 +1411,28 @@ static UCS_F_ALWAYS_INLINE void
 ucp_am_copy_data_fragment(ucp_recv_desc_t *first_rdesc, void *data,
                           size_t length, size_t offset)
 {
+    ucs_interval_tree_t *tree = ucp_am_rdesc_frag_tree(first_rdesc);
+    ucp_am_first_ftr_t *first_ftr;
+
     UCS_PROFILE_NAMED_CALL("am_memcpy_recv", ucs_memcpy_relaxed,
                            UCS_PTR_BYTE_OFFSET(first_rdesc + 1, offset),
                            data, length, UCS_ARCH_MEMCPY_NT_SOURCE, length);
 
-    ucs_interval_tree_insert(ucp_am_rdesc_frag_tree(first_rdesc),
+    ucs_interval_tree_insert(tree,
                              (ucs_interval_tree_range_t){offset,
                                                          offset + length - 1});
+
+    first_ftr = (ucp_am_first_ftr_t*)(first_rdesc + 1);
+    ucs_trace_data("AM-PSN-DBG: copy frag rdesc %p msg_id %" PRIu64
+                   " inserted [%zu..%zu] len %zu tree->num_nodes %zu"
+                   " expected [%zu..%zu] (payload_offset %zu total_size %zu)",
+                   first_rdesc, first_ftr->super.msg_id, offset,
+                   offset + length - 1, length, tree->num_nodes,
+                   (size_t)first_rdesc->payload_offset,
+                   (size_t)first_rdesc->payload_offset +
+                           (size_t)first_ftr->total_size - 1,
+                   (size_t)first_rdesc->payload_offset,
+                   (size_t)first_ftr->total_size);
 }
 
 static UCS_F_ALWAYS_INLINE uint64_t
@@ -1459,6 +1474,24 @@ ucp_am_handle_unfinished(ucp_worker_h worker, ucp_recv_desc_t *rdesc,
 
         first_ftr = (ucp_am_first_ftr_t*)(first_rdesc + 1);
         seg_end   = first_rdesc->payload_offset + first_ftr->total_size - 1;
+
+        {
+            ucs_interval_tree_t *_tree = ucp_am_rdesc_frag_tree(first_rdesc);
+            ucs_trace_data("AM-PSN-DBG: assemble check ep %p ep_ext %p"
+                           " worker_epoch %" PRIu64
+                           " psn %" PRIu64 " msg_id %" PRIu64 " ep_id %" PRIu64
+                           " expected [%zu..%zu] tree->num_nodes %zu"
+                           " root [%" PRIu64 "..%" PRIu64 "]",
+                           reply_ep, ep_ext, worker->epoch,
+                           ep_ext->am.psn, first_ftr->super.msg_id,
+                           first_ftr->super.ep_id,
+                           (size_t)first_rdesc->payload_offset, seg_end,
+                           _tree->num_nodes,
+                           (_tree->root != NULL) ? _tree->root->start :
+                                                   (uint64_t)0,
+                           (_tree->root != NULL) ? _tree->root->end :
+                                                   (uint64_t)0);
+        }
 
         if (!ucs_interval_tree_is_equal_range(
                     ucp_am_rdesc_frag_tree(first_rdesc),
@@ -1564,8 +1597,44 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_first_handler,
     total_length = first_ftr->total_size + user_hdr_length +
                    UCP_AM_FIRST_FRAG_META_LEN;
 
+    ucs_trace_data("AM-PSN-DBG: first frag ep %p ep_ext %p worker_epoch %" PRIu64
+                   " psn %" PRIu64 " msg_id %" PRIu64 " ep_id %" PRIu64
+                   " total_size %zu am_length %zu user_hdr_length %zu",
+                   ep, ep_ext, worker->epoch, ep_ext->am.psn,
+                   first_ftr->super.msg_id, first_ftr->super.ep_id,
+                   (size_t)first_ftr->total_size, am_length, user_hdr_length);
+
     if (ucs_unlikely(am_length == total_length)) {
-        /* Can be a single fragment if send was issued on stub ep */
+        /* Single-fragment delivery via the long-AM wire shape. Two sources:
+         *  (1) the send was issued on a stub ep, or
+         *  (2) a fault-recovery .reset on the sender re-selected a proto
+         *      whose segment fits the entire payload.
+         * Only case (2) can leave behind a partial first_rdesc in
+         * started_ams from the original multi-fragment attempt, and the
+         * sender flags it for us via UCP_AM_HDR_FLAG_RESEND.
+         *
+         * The user callback for this msg_id is invoked below either way
+         * (via ucp_am_handler_common with the single-frag payload, which
+         * is authoritative for [0..total_size-1]); the cleanup is needed
+         * because ucp_am_handle_unfinished iterates started_ams in order
+         * and returns on the first incomplete rdesc to preserve in-order
+         * PSN delivery. An orphan partial rdesc for this msg_id would
+         * therefore strand every later msg_id on this ep even after they
+         * fully assemble. Drop the orphan (and any queued mid fragments
+         * for the same msg_id) so subsequent messages can be delivered. */
+        if (ucs_unlikely(hdr->flags & UCP_AM_HDR_FLAG_RESEND)) {
+            first_rdesc = ucp_am_find_first_rdesc(worker, ep_ext,
+                                                  first_ftr->super.msg_id);
+            if (first_rdesc != NULL) {
+                ucs_list_del(&first_rdesc->am_first.list);
+                ucs_interval_tree_cleanup(
+                        ucp_am_rdesc_frag_tree(first_rdesc));
+                ucp_am_release_long_desc(first_rdesc);
+            }
+            ucp_am_release_mid_fragments_by_msg_id(ep_ext,
+                                                   first_ftr->super.msg_id);
+        }
+
         recv_flags     = ucp_am_hdr_reply_ep(worker, hdr->flags, ep, &ep);
         ep_ext->am.psn = first_ftr->super.msg_id;
 
@@ -1612,6 +1681,12 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_first_handler,
                               worker->am.alignment);
 
     first_rdesc->payload_offset = UCP_AM_FIRST_FRAG_META_LEN + padding;
+    /* Set release_desc_offset so ucp_am_release_long_desc() can free this
+     * partial descriptor before assembly completes (e.g. on resend cleanup).
+     * On completion (see end of ucp_am_handle_unfinished), the descriptor
+     * pointer is shifted by payload_offset and release_desc_offset is
+     * updated accordingly to keep pointing at the original allocation. */
+    first_rdesc->release_desc_offset = sizeof(ucs_interval_tree_t);
     /* Initialize frag_tree in the allocated storage before rdesc */
     ucs_interval_tree_init(ucp_am_rdesc_frag_tree(first_rdesc),
                            &worker->am.frag_tree_mpool);
@@ -1690,6 +1765,13 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_middle_handler,
 
     ep_ext      = ep->ext;
     first_rdesc = ucp_am_find_first_rdesc(worker, ep_ext, mid_ftr->msg_id);
+    ucs_trace_data("AM-PSN-DBG: mid frag ep %p ep_ext %p worker_epoch %" PRIu64
+                   " psn %" PRIu64 " msg_id %" PRIu64 " ep_id %" PRIu64
+                   " offset %zu am_length %zu first_rdesc %p%s",
+                   ep, ep_ext, worker->epoch, ep_ext->am.psn,
+                   mid_ftr->msg_id, mid_ftr->ep_id,
+                   (size_t)mid_hdr->offset, am_length, first_rdesc,
+                   (first_rdesc != NULL) ? " (assemble)" : " (queue)");
     if (first_rdesc != NULL) {
         /* First fragment already arrived, just copy the data */
         ucp_am_handle_unfinished(worker, first_rdesc, mid_hdr + 1,
@@ -1726,6 +1808,11 @@ ucp_am_is_duplicate_psn(ucp_worker_h worker, ucp_am_mid_ftr_t *ftr)
                                   "AM (psn proto)");
 
     ucs_assertv(ftr->msg_id != 0, "msg_id=%lu", ftr->msg_id);
+
+    ucs_trace_data("AM-PSN-DBG: dup-check ep %p worker_epoch %" PRIu64
+                   " psn %" PRIu64 " msg_id %" PRIu64 " ep_id %" PRIu64,
+                   ep, worker->epoch, ep->ext->am.psn, ftr->msg_id,
+                   ftr->ep_id);
 
     /* Drop packet if:
      * 1. This is not the first message for this EP and

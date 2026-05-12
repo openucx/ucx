@@ -83,6 +83,37 @@ typedef struct ucp_am_info {
  */
 
 
+/*
+ * Wire-internal flags that may be ORed into @ref ucp_am_hdr_t::flags by the
+ * sender for the first fragment of an eager AM. These occupy the upper bits
+ * of the 16-bit field and must not overlap with the user-facing
+ * @ref ucp_send_am_flags enum (which currently uses bits 0..3). Never expose
+ * these bits via the public API.
+ */
+enum {
+    /* Hint that this first-fragment header belongs to a restart of an
+     * already-identified message (same msg_id) after a sender-side .reset
+     * (e.g. fault recovery). The receiver only consults this hint on the
+     * single-fragment delivery branch (am_length == total_length): when set,
+     * it discards any partial first_rdesc the original multi-fragment
+     * attempt left in started_ams, since the single-fragment delivery
+     * supersedes it.
+     *
+     * Why this matters: ucp_am_handle_unfinished iterates started_ams in
+     * order and returns (not continues) on the first incomplete rdesc, to
+     * preserve in-order delivery for the PSN protocol. An orphan partial
+     * rdesc therefore does not just leak; it permanently blocks delivery of
+     * every subsequent msg_id on this ep, even after their own assembly is
+     * complete. Tagging the superseding single-frag retransmit lets the
+     * receiver evict the orphan before it strands later messages.
+     *
+     * All other restart shapes are handled either by the existing
+     * multi-fragment merge in ucp_am_long_first_handler or by the PSN
+     * duplicate-drop, so the bit has no effect there. */
+    UCP_AM_HDR_FLAG_RESEND = UCS_BIT(15)
+};
+
+
 typedef union {
     struct {
         uint16_t             am_id;         /* index into callback array */
