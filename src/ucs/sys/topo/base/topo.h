@@ -149,6 +149,22 @@ const char *ucs_topo_distance_str(const ucs_sys_dev_distance_t *distance,
                                   char *buffer, size_t max);
 
 /**
+ * Compare two distances.
+ *
+ * First compares by latency (lower is better), then by bandwidth (higher is
+ * better) as a tiebreaker.
+ *
+ * @param [in] distance1  First distance to compare.
+ * @param [in] distance2  Second distance to compare.
+ *
+ * @return Negative if distance1 is better, positive if distance2 is better,
+ *         0 if equal.
+ */
+int ucs_topo_distance_cmp(const ucs_sys_dev_distance_t *distance1,
+                          const ucs_sys_dev_distance_t *distance2);
+
+
+/**
  * Gets a system device. If the device doesn't exist, it will be added.
  *
  * @param [in]  dev_name       Device Name.

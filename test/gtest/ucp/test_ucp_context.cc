@@ -86,12 +86,7 @@ UCS_TEST_P(test_ucp_context, max_hca_per_gpu_limits_memh_md_map)
     entity *e_all         = create_entity();
     ucp_context_h ctx_all = e_all->ucph();
 
-    ucp_md_map_t net_md_map = 0;
-    for (ucp_rsc_index_t i = 0; i < ctx_all->num_tls; ++i) {
-        if (ctx_all->tl_rscs[i].tl_rsc.dev_type == UCT_DEVICE_TYPE_NET) {
-            net_md_map |= UCS_BIT(ctx_all->tl_rscs[i].md_index);
-        }
-    }
+    ucp_md_map_t net_md_map = ucp_context_get_net_md_map(ctx_all);
 
     if (ucs_popcount(net_md_map) < 2) {
         UCS_TEST_SKIP_R("need at least 2 network MDs");
@@ -123,7 +118,7 @@ UCS_TEST_P(test_ucp_context, max_hca_per_gpu_limits_memh_md_map)
     ASSERT_UCS_OK(ucp_mem_unmap(ctx_lim, memh));
 
     /* CLOSEST: subset of all */
-    modify_config("MAX_HCA_PER_GPU", "0");
+    modify_config("MAX_HCA_PER_GPU", "auto");
     entity *e_close         = create_entity();
     ucp_context_h ctx_close = e_close->ucph();
 
@@ -158,12 +153,7 @@ UCS_TEST_P(test_ucp_context, max_hca_per_gpu_limits_per_gpu)
     entity *e         = create_entity();
     ucp_context_h ctx = e->ucph();
 
-    ucp_md_map_t net_md_map = 0;
-    for (ucp_rsc_index_t i = 0; i < ctx->num_tls; ++i) {
-        if (ctx->tl_rscs[i].tl_rsc.dev_type == UCT_DEVICE_TYPE_NET) {
-            net_md_map |= UCS_BIT(ctx->tl_rscs[i].md_index);
-        }
-    }
+    ucp_md_map_t net_md_map = ucp_context_get_net_md_map(ctx);
 
     if (ucs_popcount(net_md_map) < 2) {
         UCS_TEST_SKIP_R("need at least 2 network MDs");
