@@ -110,7 +110,7 @@ UCS_TEST_P(test_ucp_context, max_hca_per_gpu_limits_memh_md_map)
     ASSERT_UCS_OK(ucp_mem_map(ctx_all, &params, &memh));
     ucp_md_map_t net_all     = memh->md_map & net_md_map;
     ucp_md_map_t non_net_all = memh->md_map & ~net_md_map;
-    ucp_mem_unmap(ctx_all, memh);
+    ASSERT_UCS_OK(ucp_mem_unmap(ctx_all, memh));
 
     /* LIMIT=1: at most 1 network MD */
     modify_config("MAX_HCA_PER_GPU", "1");
@@ -120,7 +120,7 @@ UCS_TEST_P(test_ucp_context, max_hca_per_gpu_limits_memh_md_map)
     ASSERT_UCS_OK(ucp_mem_map(ctx_lim, &params, &memh));
     ucp_md_map_t net_lim     = memh->md_map & net_md_map;
     ucp_md_map_t non_net_lim = memh->md_map & ~net_md_map;
-    ucp_mem_unmap(ctx_lim, memh);
+    ASSERT_UCS_OK(ucp_mem_unmap(ctx_lim, memh));
 
     /* CLOSEST: subset of all */
     modify_config("MAX_HCA_PER_GPU", "0");
@@ -129,7 +129,7 @@ UCS_TEST_P(test_ucp_context, max_hca_per_gpu_limits_memh_md_map)
 
     ASSERT_UCS_OK(ucp_mem_map(ctx_close, &params, &memh));
     ucp_md_map_t net_close = memh->md_map & net_md_map;
-    ucp_mem_unmap(ctx_close, memh);
+    ASSERT_UCS_OK(ucp_mem_unmap(ctx_close, memh));
 
     mem_buffer::release(ptr, UCS_MEMORY_TYPE_CUDA);
 
@@ -189,7 +189,7 @@ UCS_TEST_P(test_ucp_context, max_hca_per_gpu_limits_per_gpu)
         ucp_md_map_t net_map = memh->md_map & net_md_map;
         EXPECT_LE(ucs_popcount(net_map), 1)
                 << "GPU " << gpu << " should have at most 1 network MD";
-        ucp_mem_unmap(ctx, memh);
+        ASSERT_UCS_OK(ucp_mem_unmap(ctx, memh));
         mem_buffer::release(ptr, UCS_MEMORY_TYPE_CUDA);
     }
 
