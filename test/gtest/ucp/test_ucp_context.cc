@@ -180,7 +180,7 @@ UCS_TEST_P(test_ucp_context, max_hca_per_gpu_limits_per_gpu)
     for (int gpu = 0; gpu < ucs_min(num_gpus, 4); gpu++) {
         ASSERT_EQ(cudaSetDevice(gpu), cudaSuccess);
 
-        void *ptr = mem_buffer::allocate(size, UCS_MEMORY_TYPE_CUDA);
+        void *ptr      = mem_buffer::allocate(size, UCS_MEMORY_TYPE_CUDA);
         params.address = ptr;
         params.length  = size;
 

@@ -1871,9 +1871,9 @@ ucp_reg_select_md_cmp(const void *pa, const void *pb, void *UCS_V_UNUSED arg)
     return strcmp(a->name, b->name);
 }
 
-ucp_md_map_t
-ucp_context_select_reg_mds(ucp_context_h context, ucp_md_map_t md_map,
-                           ucs_sys_device_t mem_sys_dev)
+ucp_md_map_t ucp_context_select_reg_mds(ucp_context_h context,
+                                        ucp_md_map_t md_map,
+                                        ucs_sys_device_t mem_sys_dev)
 {
     const ucp_context_config_t *config = &context->config.ext;
     ucp_md_map_t result                = 0;
@@ -1896,15 +1896,13 @@ ucp_context_select_reg_mds(ucp_context_h context, ucp_md_map_t md_map,
         } else {
             reachable = 1;
             bw        = 0;
-            ucs_for_each_bit(sys_dev,
-                             context->tl_mds[md_index].sys_dev_map) {
+            ucs_for_each_bit(sys_dev, context->tl_mds[md_index].sys_dev_map) {
                 if (!ucs_topo_is_reachable(sys_dev, mem_sys_dev)) {
                     reachable = 0;
                     break;
                 }
-                if ((ucs_topo_get_distance(mem_sys_dev, sys_dev,
-                                           &distance) == UCS_OK) &&
-                    (ucs_fp_compare(distance.bandwidth, bw) > 0)) {
+                if ((ucs_topo_get_distance(mem_sys_dev, sys_dev, &distance) ==
+                     UCS_OK) && (ucs_fp_compare(distance.bandwidth, bw) > 0)) {
                     bw = distance.bandwidth;
                 }
             }
