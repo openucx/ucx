@@ -3,7 +3,7 @@
 #
 # UCX DL Cluster (GB300/aarch64) test matrix.
 ---
-job: ucx-test-dl
+job: ucx-test-dl-gpu
 
 failFast: false
 timeout_minutes: 240
