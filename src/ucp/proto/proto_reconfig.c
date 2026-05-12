@@ -82,8 +82,12 @@ static ucs_status_t ucp_proto_reconfig_progress(uct_pending_req_t *self)
     UCS_STRING_BUFFER_ONSTACK(strb, 256);
     ucs_status_t status;
 
-    /* This protocol should not be selected for valid and connected endpoint */
-    if (ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED) {
+    /* EP is in final state when the remote is connected, or there is no
+     * p2p lane and the configuration index is already the latest.
+     */
+    if ((ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED) ||
+        (!ucp_ep_config(ep)->p2p_lanes &&
+         (ep->cfg_index == req->send.proto_config->ep_cfg_index))) {
         if (ucp_proto_reconfig_report_no_rma_emulation_no_proto(req, ep)) {
             ucp_proto_request_abort(req, UCS_ERR_CANCELED);
             return UCS_OK;
@@ -118,20 +122,8 @@ static ucs_status_t ucp_proto_reconfig_progress(uct_pending_req_t *self)
         return ucp_proto_reconfig_select_progress(self);
     }
 
-    req->send.lane = ucp_ep_get_wireup_msg_lane(ep);
-    if (req->send.lane == UCP_NULL_LANE) {
-        ucs_error("no wireup lane available for req=%p", req);
-        ucp_proto_request_abort(req, UCS_ERR_CANCELED);
-        return UCS_OK;
-    }
-
-    /* Trigger wireup if not already done */
-    status = ucp_wireup_connect_remote(ep, req->send.lane);
-    if (status != UCS_OK) {
-        ucp_proto_request_abort(req, status);
-        return UCS_OK;
-    }
-
+    /* TODO select wireup lane when needed */
+    req->send.lane = ucp_ep_config(ep)->key.am_lane;
     return UCS_ERR_NO_RESOURCE;
 }
 
