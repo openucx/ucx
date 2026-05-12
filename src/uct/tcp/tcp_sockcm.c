@@ -26,6 +26,8 @@ ucs_config_field_t uct_tcp_sockcm_config_table[] = {
 
    UCT_TCP_SYN_CNT(ucs_offsetof(uct_tcp_sockcm_config_t, syn_cnt)),
 
+   UCT_TCP_USER_TIMEOUT(ucs_offsetof(uct_tcp_sockcm_config_t, user_timeout)),
+
   {NULL}
 };
 
@@ -221,6 +223,7 @@ UCS_CLASS_INIT_FUNC(uct_tcp_sockcm_t, uct_component_h component,
     self->sockopt_sndbuf = cm_config->sockopt.sndbuf;
     self->sockopt_rcvbuf = cm_config->sockopt.rcvbuf;
     self->syn_cnt        = cm_config->syn_cnt;
+    self->user_timeout   = cm_config->user_timeout;
 
     ucs_list_head_init(&self->ep_list);
 

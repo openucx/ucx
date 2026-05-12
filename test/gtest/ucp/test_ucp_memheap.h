@@ -39,7 +39,8 @@ protected:
     void test_xfer(send_func_t send_func, size_t size, unsigned num_iters,
                    size_t alignment, ucs_memory_type_t send_mem_type,
                    ucs_memory_type_t target_mem_type, unsigned mem_map_flags,
-                   bool is_ep_flush, bool user_memh, void *arg);
+                   bool is_ep_flush, bool user_memh, void *arg,
+                   size_t reg_offset = 0);
 };
 
 #endif

@@ -34,7 +34,10 @@ public:
                                op_name(TEST_OP_AM | TEST_OP_ALL_LANES_FAILED));
         add_variant_with_value(variants, features_am, TEST_OP_AM | TEST_OP_FLUSH,
                                op_name(TEST_OP_AM | TEST_OP_FLUSH));
-     }
+        add_variant_with_value(variants, UCP_FEATURE_AM | UCP_FEATURE_RMA,
+                               TEST_OP_PUT | TEST_OP_AM | TEST_OP_FLUSH,
+                               op_name(TEST_OP_PUT |TEST_OP_AM | TEST_OP_FLUSH));
+    }
 
     test_ucp_fault_tolerance() {
         configure_peer_failure_settings();
@@ -154,8 +157,8 @@ protected:
 
     static void shuffle_lanes(std::vector<ucp_lane_index_t> &lanes, const std::string &lane_type) {
         if (lanes.size() < 2) {
-            UCS_TEST_SKIP_R("At least 2 " + lane_type + "s are required, but only " +
-                            std::to_string(lanes.size()) + " available");
+            UCS_TEST_SKIP_R("At least 2 " + lane_type + "lanes are required, but only " + std::to_string(lanes.size()) +
+                            " available");
         }
 
         /* Allocate randomizer on heap to avoid exceeding stack frame size limits. */
@@ -172,34 +175,55 @@ protected:
         return (failure_side == FAILURE_SIDE_INITIATOR) ? sender().ep(0, INJECTED_EP_INDEX) :
                receiver().ep(0, INJECTED_EP_INDEX);
     }
-
     std::vector<ucp_lane_index_t> get_lanes(unsigned op_mask) {
         std::set<ucp_lane_index_t> tmp_lanes;
+        std::string lane_type_str;
+        unsigned lane_types;
         const ucp_lane_index_t *lane_idx;
         const ucp_lane_index_t *lanes_key_p;
-        
-        if (op_mask & (TEST_OP_PUT | TEST_OP_GET)) {
-            lanes_key_p = ucp_ep_config(sender().ep(0, INJECTED_EP_INDEX))->key.rma_bw_lanes;
 
+        unsigned lane_type_mask = 0;
+        if (op_mask & (TEST_OP_PUT | TEST_OP_GET)) {
+            lane_type_mask |= UCS_BIT(UCP_LANE_TYPE_RMA_BW);
+        }
+
+        if (op_mask & TEST_OP_AM) {
+            lane_type_mask |= UCS_BIT(UCP_LANE_TYPE_AM_BW);
+        }
+
+        if (op_mask & (TEST_OP_PUT | TEST_OP_GET)) {
+            lane_type_str  += "RMA BW ";
+            lanes_key_p = ucp_ep_config(sender().ep(0, INJECTED_EP_INDEX))->key.rma_bw_lanes;
             ucs_carray_for_each(lane_idx, lanes_key_p, UCP_MAX_LANES) {
-                if (*lane_idx != UCP_NULL_LANE) {
+                if (*lane_idx == UCP_NULL_LANE) {
+                    continue;
+                }
+
+                lane_types = ucp_ep_config(sender().ep(0, INJECTED_EP_INDEX))->key.lanes[*lane_idx].lane_types;
+                if (ucs_test_all_flags(lane_types, lane_type_mask)) {
                     tmp_lanes.insert(*lane_idx);
                 }
             }
         }
 
         if (op_mask & TEST_OP_AM) {
+            lane_type_mask |= UCS_BIT(UCP_LANE_TYPE_AM_BW);
+            lane_type_str  += "AM BW ";
             lanes_key_p = ucp_ep_config(sender().ep(0, INJECTED_EP_INDEX))->key.am_bw_lanes;
-
             ucs_carray_for_each(lane_idx, lanes_key_p, UCP_MAX_LANES) {
-                if (*lane_idx != UCP_NULL_LANE) {
+                if (*lane_idx == UCP_NULL_LANE) {
+                    continue;
+                }
+
+                lane_types = ucp_ep_config(sender().ep(0, INJECTED_EP_INDEX))->key.lanes[*lane_idx].lane_types;
+                if (ucs_test_all_flags(lane_types, lane_type_mask)) {
                     tmp_lanes.insert(*lane_idx);
                 }
             }
         }
 
         std::vector<ucp_lane_index_t> lanes(tmp_lanes.begin(), tmp_lanes.end());
-        shuffle_lanes(lanes, op_name(op_mask) + " lanes");
+        shuffle_lanes(lanes, lane_type_str);
         return lanes;
     }
 
@@ -261,8 +285,7 @@ protected:
         }
 
         short_progress_loop();
-        ASSERT_EQ(0, m_total_err_count) << "Error callback invoked " << m_total_err_count
-                                        << " times";
+        ASSERT_EQ(0, m_total_err_count) << "Error callback invoked " << m_total_err_count << " times";
         UCS_TEST_MESSAGE << "Success";
     }
 
