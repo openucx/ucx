@@ -854,7 +854,8 @@ ucp_memh_apply_reg_policy(ucp_context_h context, ucs_memory_type_t mem_type,
     ucp_md_index_t md_index;
     ucp_rsc_index_t tl_idx;
 
-    if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+    if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN ||
+        mem_type != UCS_MEMORY_TYPE_CUDA) {
         return reg_md_map;
     }
 
