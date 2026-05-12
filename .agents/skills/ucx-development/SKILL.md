@@ -40,9 +40,9 @@ From a fresh checkout, create an out-of-source build:
 
 ```sh
 ./autogen.sh
-mkdir -p build-<flavor>
+mkdir -p build-<flavor>  # <flavor> is "devel" or "release"
 cd build-<flavor>
-../contrib/configure-<flavor> --prefix=$PWD/install-<flavor>
+../contrib/configure-<flavor> --prefix=$PWD/install
 make -j$(nproc)
 make install
 ```

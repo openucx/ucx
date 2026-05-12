@@ -33,10 +33,10 @@ is `api/ucm.h`; everything else is internal.
 
 ## Conventions
 
-- Three interception strategies are stacked, in this order: PLT
-  override, dynamic loader symbol replacement, and bistro binary patching.
-  Add new hooks to `event/` and pick the strategy based on whether the
-  symbol is exported (use `replace.c` when possible, bistro otherwise).
+- Three interception strategies are available: bistro binary patching
+  (preferred), dynamic loader symbol replacement, and PLT override. Add
+  new hooks to `event/` and prefer `bistro/` unless an alternative is
+  clearly needed.
 - The library defines `UCM_MALLOC_PREFIX=ucm_dl` (see `Makefile.am`) so its
   own malloc symbols don't collide with the application's libc.
 - GPU allocator hooks must report into `event/` via the existing

@@ -21,7 +21,9 @@ exchanged out-of-band) and connection-manager wireup (sockaddr listener).
   (`AM`, `AM_BW`, `RMA`, `RMA_BW`, `RKEY_PTR`, `AMO`, `TAG`, `CM`,
   `KEEPALIVE`, `DEVICE`, plus the `FAILED` state) using the criteria
   tuples in `ucp_wireup_criteria_t` (mandatory and optional flag masks).
-  Honors `UCX_TLS`, distance, and bandwidth costs.
+  Ranks candidates by distance and bandwidth costs. The list of eligible
+  transports is already filtered upstream (e.g. by `UCX_TLS` in
+  `core/ucp_context.c`).
 - `wireup_ep.[ch]` — the proxy ep used during handshake. Buffers user
   requests until lanes are ready, then transparently re-issues them
   through the real lanes. Subclass of `uct_ep` via `UCS_CLASS_*`.
@@ -42,8 +44,11 @@ exchanged out-of-band) and connection-manager wireup (sockaddr listener).
 - New transport capabilities advertised via address records require both
   a packer in `address.c` and a consumer in `select.c`. Forgetting one
   half silently disables the capability for the new build vs. old peers.
-- `select.c` decisions must remain deterministic for given inputs — many
-  tests assert specific lane assignments. Use stable tie-breakers.
+- `select.c` decisions must be deterministic for given inputs and
+  symmetric across peers: given the same pair of local/remote addresses,
+  both sides must pick the same lane assignment, otherwise the connection
+  will mismatch. Many tests assert specific lane assignments, so use
+  stable tie-breakers.
 - The proxy-ep path (`wireup_ep.c`) holds user requests in a queue; never
   short-circuit it for a fast path that might run before all lanes are
   active. Use `ucp_wireup_ep_progress_pending` on transition.

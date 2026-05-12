@@ -21,7 +21,7 @@ at runtime.
   - `ud/` — UD over mlx5.
   - `dc/` — Dynamically-Connected transport (Mellanox-only). DC ep + iface
     plus DEVX management (`dc_mlx5_devx.c`).
-  - `gga/` — Generic GPU-DMA accelerator (`gga_mlx5.c`).
+  - `gga/` — DPU memory copy operations (`gga_mlx5.c`).
   - `gdaki/` — GPU Direct Async / Kernel Initiated; integrates with
     DOCA-GPUNetIO via the `gpunetio` git submodule. Includes a
     CUDA-syntax header (`gdaki.cuh`) consumed by GPUNetIO-side code.
@@ -62,5 +62,3 @@ at runtime.
 - Tests: `test/gtest/uct/ib/` (transport-specific) and `test/gtest/uct/`
   (parametrized fixtures iterate IB transports).
 - Mock harness for IB: `contrib/ibmock/` enables CI runs without real HW.
-- Build flags: `contrib/configure-devel` enables DEVX/DV by default; check
-  `configure.m4` files in each subdir for the relevant `--with-*` knobs.

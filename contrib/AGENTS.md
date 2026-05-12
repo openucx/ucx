@@ -6,21 +6,11 @@ should call these instead of inventing their own `./configure` flag sets.
 
 ## Configure Helpers
 
-All wrap `./configure` from the source root. Pass any extra flags through
-`"$@"`.
-
-- `configure-devel` — full debug build (logging, assertions,
-  `--enable-gtest`, `--enable-examples`, `--enable-test-apps`,
-  `--enable-stats`, `--enable-debug-data`, `--enable-mt`,
-  `--with-valgrind=guess`). **Default for any agent doing dev work — see
-  the `ucx-development` skill.**
-- `configure-opt` — release-style build with optimizations and reduced
-  logging. For perf experiments.
-- `configure-prof` — profiling build with frame pointers and the UCS
-  profiling subsystem enabled.
-- `configure-release` / `configure-release-mt` — packaging configurations
-  used by the RPM/Debian build paths. Agents should not modify these
-  casually; downstream packaging consumes them.
+The available helpers are `configure-devel`, `configure-opt`,
+`configure-prof`, `configure-release`, and `configure-release-mt`. Each
+wraps `./configure` with a curated flag set — read the script directly
+for the exact flags. See `.agents/skills/ucx-development/SKILL.md` for
+when to use which.
 
 ## Other Subdirectories
 
@@ -28,13 +18,13 @@ All wrap `./configure` from the source root. Pass any extra flags through
   (covered by `README`).
 - `mtt/` — Open MPI MTT integration scripts (test harness driver).
 - `ibmock/` — userspace IB Verbs mock used to run IB tests without
-  hardware (`README.md` here). CI heavily depends on this.
+  hardware (`README.md` here). EFA CI heavily depends on this.
 - `cray-ugni-mock/` — analogous mock for Cray uGNI builds.
 - `wireshark/` — UCX protocol dissectors.
 
 ## Top-level Scripts
 
-- `buildrpm.sh`, `rpmdef.sh.in`, `ucx.in` — RPM build entry points.
+- `buildrpm.sh`, `rpmdef.sh.in` — RPM build entry points.
 - `squash_commit.sh`, `pr_merge_check.py`, `authors_update.sh`,
   `api_update.sh` — git/PR utilities.
 - `check_inst_headers.sh`, `check_qps.sh`, `test_namespace.sh`,

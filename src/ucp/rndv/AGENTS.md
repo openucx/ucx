@@ -22,8 +22,10 @@ Defined in `rndv.h`:
 
 ## Algorithm Map
 
-- `rndv.[ch]`/`.inl`, `rndv.c` — the dispatch core. RTS/RTR/ATS/ATP
-  encode/decode, completion plumbing, AM handlers for control messages.
+- `rndv.[ch]`/`.inl`, `rndv.c` — legacy proto-v1 dispatch core (RTS/RTR/
+  ATS/ATP encode/decode, completion plumbing, AM handlers). New rndv work
+  should plug into the proto framework instead — see `proto_rndv.[ch]`
+  and the per-algorithm files below.
 - `proto_rndv.[ch]`/`.inl` — base class shared by all rndv-aware protos.
   Owns common state (sreq/rreq IDs, rkey unpacking, fragmentation).
 - `rndv_get.c` — receiver pulls data with `uct_ep_get_zcopy` (the default
@@ -34,8 +36,9 @@ Defined in `rndv.h`:
   active-message fragments. Used when no zcopy lane is available.
 - `rndv_rtr.c` — RTR generation/handling utilities consumed by the
   PUT-style protocols.
-- `rndv_ats.c` — ATS generation/handling utilities consumed by the
-  GET-style protocols.
+- `rndv_ats.c` — rendezvous protocol that completes with only an ATS
+  message and no data transfer. Used for 0-length receives and for the
+  `UCP_OP_ID_RNDV_RECV_DROP` "ignore data" path.
 - `rndv_ppln.c` — pipelined rndv: overlaps a GPU staging copy with the
   network transfer by chunking. Selection uses
   `UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG` for sub-fragments.
@@ -70,4 +73,5 @@ Defined in `rndv.h`:
 - Selection plumbing: `proto/proto_select.c` consumes the
   `UCP_PROTO_SELECT_OP_FLAG_*_RNDV` flags from `proto_select.h`.
 - Tests: `test/gtest/ucp/test_ucp_tag_xfer.cc`, `test_ucp_tag_mem_type.cc`,
-  `test_ucp_rma.cc`, `test_ucp_proto.cc`, `cuda/`.
+  `test_ucp_rma.cc`, `test_ucp_proto.cc`, and the GPU rndv tests under
+  `test/gtest/ucp/cuda/`.

@@ -48,7 +48,7 @@ loads the in-tree `libucs`/`libuct`/`libucp`. Driven from
 - `mem_buffer` is the canonical way to allocate test buffers — it
   honors the parametrized memory type and frees through the right
   allocator. Don't `malloc` in tests that should run for GPU memtypes.
-- `MemBuffer` and most fixtures support memtype skipping via
+- most fixtures support memtype skipping via
   `check_skip_test()` patterns; prefer `UCS_TEST_SKIP_R(...)` over silent
   short-circuits so the runner reports skipped cases.
 - New tests must be listed in the relevant `Makefile.am` source list.
@@ -59,13 +59,18 @@ loads the in-tree `libucs`/`libuct`/`libucp`. Driven from
   termination for cleanup.
 - `GTEST_FILTER=...` and `GTEST_EXTRA_ARGS=...` are the supported knobs
   for running a subset; use them via `make test`.
+- Use `UCS_TEST_MESSAGE` to print useful diagnostic information during
+  a test.
+- Tests that emit error or warning log messages will fail. Wrap any
+  intentional error path with `scoped_log_handler` to suppress those
+  messages while still letting the test run.
+- Each test must clean up every resource it allocates before completing
+  — leaks count as failures.
 
 ## Pointers
 
 - Run a test: `make -C test/gtest test GTEST_FILTER=test_ucp_tag*`.
 - Style: `docs/CodeStyle.md` (UCX C\+\+ idioms differ subtly from
   upstream gtest examples).
-- Mock IB infra: `contrib/ibmock/` is what makes IB tests runnable
-  without HW.
 - Sister test trees: `test/apps/` (standalone binaries),
   `test/mpi/` (MPI-launched correctness).

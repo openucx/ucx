@@ -54,8 +54,8 @@ should plug in here rather than going through the legacy direct paths.
   append `_macro(your_proto_name)` to `UCP_PROTO_FOR_EACH` in `proto.c`,
   and list the `.c` file in `src/ucp/Makefile.am`.
 - A proto's `probe` must be a pure function of its inputs; it runs once
-  per ep-config × selection-key and the result is cached. Reading worker
-  state mutably from `probe` is a bug.
+  per ep-config × selection-key and the result is cached. Reading mutable
+  worker state from `probe` is a bug.
 - Performance ranges must be monotonic in start size and use
   `linear_func`/`piecewise_func` from `ucs/datastruct`. Use
   `UCP_PROTO_PERF_EPSILON` (1e-15) for equality checks.
@@ -78,5 +78,7 @@ should plug in here rather than going through the legacy direct paths.
 - Tests: `test/gtest/ucp/test_ucp_proto.cc` and `test_ucp_proto_mock.cc`
   exercise the framework directly.
 - Introspection: `ucx_info -p`/`-e` calls into `proto_debug.c` and prints
-  the selection matrix for a configuration.
-- Style/perf: `docs/OptimizationStyle.md` is especially relevant here.
+  the selection matrix for a configuration. At runtime, set
+  `UCX_PROTO_INFO=y` (or `used`, `auto`, or a glob like `'*tag*gpu*'`) to
+  dump the selected protocols; `UCX_PROTO_INFO_DIR=<path>` writes the
+  output to files instead of stderr.

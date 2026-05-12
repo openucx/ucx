@@ -1,6 +1,6 @@
 # Agent Guide: src/ucp
 
-UCP is the high-level protocol layer (`libucp.la`). It composes UCT
+UCP is the high-level protocol layer (`libucp.so`). It composes UCT
 transports into a single endpoint that exposes tag matching, streams, RMA,
 atomics, active messages, and sockaddr-based connection establishment to
 applications. Almost every meaningful UCX feature lives here.
@@ -12,7 +12,7 @@ applications. Almost every meaningful UCX feature lives here.
 - `ucp_worker_t` (`core/ucp_worker.[ch]`) — async progress engine. Owns one
   `uct_worker_t` plus per-resource `ucp_worker_iface_t` slots.
 - `ucp_ep_t` (`core/ucp_ep.[ch]`) — peer endpoint composed of multiple
-  *lanes*. Each lane is one `uct_ep_t` chosen for a specific role
+  *lanes*. Each lane is one `uct_ep_t` chosen for one or more roles
   (AM, RMA, AMO, tag, CM, …). Lane roles are encoded in
   `proto/lane_type.h`.
 - `ucp_request_t` (`core/ucp_request.[ch]`) — operation in flight. Pooled,
@@ -26,9 +26,8 @@ applications. Almost every meaningful UCX feature lives here.
 - `api/` — public C headers (`ucp.h`, `ucp_def.h`, `ucp_compat.h`,
   experimental `ucpx.h`, `device/`). ABI-stable. `ucpx.h` only ships when
   `--enable-experimental-api`.
-- `core/` — the objects above plus `ucp_mm` (memory handles), `ucp_am`
-  (user AM dispatch), `ucp_device` (device-side stubs), `ucp_vfs`,
-  `ucp_thread`. Inline fast paths live in `*.inl`.
+- `core/` — implementation of UCP core objects such as context, worker,
+  endpoint, etc. Inline fast paths live in `*.inl`.
 - `proto/` — modern protocol-selection framework (init / select / single /
   multi / perf / debug / reconfig). **See `proto/AGENTS.md`** before
   touching protocol cost models or selection logic.
@@ -58,23 +57,15 @@ applications. Almost every meaningful UCX feature lives here.
 - `ucp_request_t` is allocated from a pool — never store pointers into it
   across `ucp_worker_progress()` calls without taking a ref. Use the
   helpers in `core/ucp_request.inl`.
-- Anything reachable from user-visible state must round-trip through
-  serialization in `wireup/address.c` if it has to cross the wire.
-- Inline fast-path helpers live in `*.inl` next to the matching `.h`. Keep
-  out-of-line slow paths in the corresponding `.c`.
-- Public `ucp.h` constants and types are part of the ABI — additions only,
-  no renumbering. Experimental additions go to `ucpx.h`.
+- For data sent during wireup (worker addresses, capability bits, etc.),
+  the pack/unpack lives in `wireup/address.c` — anything that needs to
+  cross the wire at handshake time must round-trip through it.
 
 ## Pointers
 
-- Selection of UCT transports for a peer happens in
-  `wireup/select.c` → `ucp_wireup_select_lanes`.
-- Proto-layer entry: `ucp_proto_request_send_op` in
-  `proto/proto_common.inl`.
-- Proto cost model and tie-breakers: `proto/proto_perf.[ch]`,
-  `proto/proto_select.c`.
+- Lane selection: see `wireup/AGENTS.md`.
+- Protocol selection and cost model: see `proto/AGENTS.md`.
 - Tests: `test/gtest/ucp/` — most files target one feature
   (`test_ucp_tag*`, `test_ucp_rma*`, `test_ucp_proto*`, etc.).
 - Tools: `ucx_info -e` introspects the ep proto matrix; profiling consumes
   `ucs/profile`.
-- Style/perf rules: `docs/CodeStyle.md`, `docs/OptimizationStyle.md`.

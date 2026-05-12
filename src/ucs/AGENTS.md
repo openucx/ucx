@@ -1,12 +1,10 @@
 # Agent Guide: src/ucs
 
-Common-services library (`libucs.la`) used by every other UCX layer. Pure C,
+Common-services library (`libucs.so`) used by every other UCX layer. Pure C,
 no transport or protocol logic — only foundational utilities.
 
 ## Subdirectory Map
 
-- `api/` — *(none; public headers are exposed directly from each subdir via
-  `nobase_dist_libucs_la_HEADERS` in `Makefile.am`)*
 - `algorithm/` — `crc`, `qsort_r`, `string_distance`.
 - `arch/` — per-CPU primitives (`x86_64`, `aarch64`, `ppc64`, `rv64`, `generic`):
   atomics, bitops, cycle counter, `global_opts`, optimized memcpy.
@@ -47,16 +45,10 @@ no transport or protocol logic — only foundational utilities.
   to avoid colliding with the bundled `debug.h`.
 - `libucs` links `libucm` and `libBFD` (when available); do not introduce
   reverse dependencies into `uct`/`ucp`/transports.
-- Use the `UCS_CLASS_*` macros from `type/class.h` for any reference-counted
-  or virtual-dispatch object; do not roll your own vtables.
 - Logging: prefer `ucs_*` log macros from `debug/log.h`; honor the level
   conventions in `docs/LoggingStyle.md`.
-- Performance-sensitive helpers belong in `.inl` files alongside the matching
-  `.h`. Follow `docs/OptimizationStyle.md`.
 
 ## Pointers
 
-- Public API headers ship under `$(includedir)/ucs/...` — keep them ABI-stable.
+- Public API headers ship under `$(includedir)/ucs/...` — keep them API/ABI stable.
 - Tests: `test/gtest/ucs/` mirrors this layout one-test-per-subsystem.
-- For style and logging rules see `docs/CodeStyle.md`,
-  `docs/LoggingStyle.md`, `docs/OptimizationStyle.md`.

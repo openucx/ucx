@@ -1,6 +1,6 @@
 # Agent Guide: src/uct
 
-UCT is the low-level Unified Communication Transport layer (`libuct.la`). It
+UCT is the low-level Unified Communication Transport layer (`libuct.so`). It
 abstracts hardware/software transports behind a uniform component / memory
 domain / interface / endpoint model that `ucp` builds on top of.
 
@@ -23,7 +23,7 @@ Defined in `api/uct.h` and `api/uct_def.h`; implemented per-transport.
 ## Subdirectory Map
 
 - `api/` — public C headers (`uct.h`, `uct_def.h`, `tl.h`, `v2/uct_v2.h`,
-  `device/`). Keep ABI-stable.
+  `device/`). Keep ABI and API stable.
 - `base/` — shared implementation: `uct_component`, `uct_md`, `uct_iface`,
   `uct_cm`, `uct_worker`, `uct_mem`, VFS attribute exposure. Every transport
   inherits from these C++-style classes (`UCS_CLASS_*`).
@@ -73,4 +73,3 @@ Defined in `api/uct.h` and `api/uct_def.h`; implemented per-transport.
   fixtures iterate every available transport.
 - Tools: `src/tools/info/tl_info.c` (`ucx_info -d`) prints transport
   capabilities; `src/tools/perf/` benchmarks them.
-- Style: `docs/CodeStyle.md`, `docs/OptimizationStyle.md`.
