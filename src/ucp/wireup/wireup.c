@@ -2342,6 +2342,7 @@ static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
 {
     ucp_context_h context       = worker->context;
     const ucp_wireup_msg_t *msg = data;
+    const void *addr_ptr        = msg + 1;
     ucp_unpacked_address_t unpacked_address;
     const ucp_address_entry_t *ae;
     ucp_tl_resource_desc_t *rsc;
@@ -2350,7 +2351,14 @@ static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     char *p, *end;
     ucp_rsc_index_t tl;
 
-    status = ucp_address_unpack(worker, msg + 1,
+    /* LANES_ADDR_REQ/REPLY carry a ucp_wireup_msg_lanes_info_t between the
+     * wireup header and the packed address; skip it before unpacking. */
+    if ((msg->type == UCP_WIREUP_MSG_LANES_ADDR_REQUEST) ||
+        (msg->type == UCP_WIREUP_MSG_LANES_ADDR_REPLY)) {
+        addr_ptr = UCS_PTR_TYPE_OFFSET(addr_ptr, ucp_wireup_msg_lanes_info_t);
+    }
+
+    status = ucp_address_unpack(worker, addr_ptr,
                                 UCP_ADDRESS_PACK_FLAGS_ALL |
                                 UCP_ADDRESS_PACK_FLAG_NO_TRACE,
                                 &unpacked_address);
