@@ -854,7 +854,6 @@ static ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep,
     }
 
     ucp_ep_set_cfg_index(ep, cfg_index, 1);
-    ep->am_lane = key.am_lane;
     if (!ucp_ep_has_cm_lane(ep)) {
         ucp_ep_update_flags(ep, UCP_EP_FLAG_CONNECT_REQ_QUEUED, 0);
     }
@@ -1721,7 +1720,6 @@ ucp_ep_reconfig_internal(ucp_ep_h ep, ucp_lane_map_t failed_lanes)
     }
 
     ucp_ep_set_cfg_index(ep, new_cfg_index, 0);
-    ep->am_lane = cfg_key.am_lane;
 out:
     return UCS_OK;
 }
@@ -4009,6 +4007,7 @@ void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index,
 
     ucs_trace("ep %p: set cfg_index %u -> %u", ep, ep->cfg_index, cfg_index);
     ep->cfg_index = cfg_index;
+    ep->am_lane   = ucp_ep_config(ep)->key.am_lane;
     ucp_ep_config_proto_init(ep->worker, cfg_index);
 }
 
