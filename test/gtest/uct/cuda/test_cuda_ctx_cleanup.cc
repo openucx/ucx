@@ -203,6 +203,9 @@ protected:
             m_ctx_retained = false;
         }
 
+        restore_current_cuda_context(m_restore_current_ctx);
+        m_restore_current_ctx = 0;
+
         ucs::test::cleanup();
     }
 
@@ -258,16 +261,49 @@ protected:
         m_ctx_retained = false;
     }
 
+    void pop_current_cuda_contexts(int *popped)
+    {
+        CUcontext cuda_ctx;
+
+        *popped = 0;
+        for (;;) {
+            ASSERT_EQ(CUDA_SUCCESS, cuCtxGetCurrent(&cuda_ctx));
+            if (cuda_ctx == NULL) {
+                return;
+            }
+
+            ASSERT_EQ(CUDA_SUCCESS, cuCtxPopCurrent(NULL));
+            *popped = 1;
+        }
+    }
+
+    void restore_current_cuda_context(int popped)
+    {
+        CUcontext cuda_ctx;
+
+        if (!popped) {
+            return;
+        }
+
+        /* Restore the gtest CUDA guard context that was current before reset. */
+        ASSERT_EQ(CUDA_SUCCESS, cuDevicePrimaryCtxRetain(&cuda_ctx, m_device));
+        ASSERT_EQ(CUDA_SUCCESS, cuCtxPushCurrent(cuda_ctx));
+    }
+
     void reset_primary_ctx()
     {
         CUcontext cuda_ctx;
+        int popped;
 
         ASSERT_TRUE(m_ctx_pushed);
         ASSERT_EQ(CUDA_SUCCESS, cuCtxPopCurrent(&cuda_ctx));
         ASSERT_EQ(m_cuda_ctx, cuda_ctx);
         m_ctx_pushed = false;
 
+        /* Avoid resetting a primary context which is still current. */
+        pop_current_cuda_contexts(&popped);
         ASSERT_EQ(CUDA_SUCCESS, cuDevicePrimaryCtxReset(m_device));
+        m_restore_current_ctx = popped;
         m_ctx_retained = false;
     }
 
@@ -293,6 +329,7 @@ protected:
     CUdevice m_device = 0;
     bool m_ctx_pushed = false;
     bool m_ctx_retained = false;
+    int m_restore_current_ctx = 0;
 
 private:
     void init_iface()
