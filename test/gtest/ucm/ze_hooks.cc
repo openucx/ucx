@@ -33,8 +33,8 @@ protected:
     {
         ucm_unset_event_handler(UCM_EVENT_MEM_TYPE_FREE, ze_mem_free_callback,
                                 this);
-        ucm_unset_event_handler(UCM_EVENT_MEM_TYPE_ALLOC,
-                                ze_mem_alloc_callback, this);
+        ucm_unset_event_handler(UCM_EVENT_MEM_TYPE_ALLOC, ze_mem_alloc_callback,
+                                this);
         cleanup_ze_context();
         ucs::test::cleanup();
     }
@@ -49,8 +49,7 @@ protected:
     void check_mem_free_events(void *ptr, size_t size,
                                ucs_memory_type_t expect_mem_type) const
     {
-        check_event_present(m_free_events, "free", ptr, size,
-                            expect_mem_type);
+        check_event_present(m_free_events, "free", ptr, size, expect_mem_type);
     }
 
     size_t free_event_count() const
@@ -156,15 +155,14 @@ private:
                                        event->mem_type.mem_type});
     }
 
-    ze_driver_handle_t m_ze_driver  = NULL;
+    ze_driver_handle_t m_ze_driver   = NULL;
     ze_context_handle_t m_ze_context = NULL;
-    ze_device_handle_t m_ze_device  = NULL;
+    ze_device_handle_t m_ze_device   = NULL;
     mem_event_vec_t m_alloc_events;
     mem_event_vec_t m_free_events;
 };
 
-UCS_TEST_F(ze_hooks, test_zeMemAllocHost)
-{
+UCS_TEST_F(ze_hooks, test_zeMemAllocHost) {
     ze_host_mem_alloc_desc_t host_desc = {};
     void *ptr                          = NULL;
 
@@ -176,16 +174,14 @@ UCS_TEST_F(ze_hooks, test_zeMemAllocHost)
     check_mem_free_events(ptr, 64, UCS_MEMORY_TYPE_ZE_HOST);
 }
 
-UCS_TEST_F(ze_hooks, test_zeMemAllocDevice)
-{
+UCS_TEST_F(ze_hooks, test_zeMemAllocDevice) {
     ze_device_mem_alloc_desc_t device_desc = {};
     void *ptr                              = NULL;
     void *ptr1                             = NULL;
 
     /* small allocation */
-    ASSERT_EQ(ZE_RESULT_SUCCESS,
-              zeMemAllocDevice(ze_context(), &device_desc, 64, 1,
-                               ze_device(), &ptr));
+    ASSERT_EQ(ZE_RESULT_SUCCESS, zeMemAllocDevice(ze_context(), &device_desc,
+                                                  64, 1, ze_device(), &ptr));
     check_mem_alloc_events(ptr, 64, UCS_MEMORY_TYPE_ZE_DEVICE);
 
     ASSERT_EQ(ZE_RESULT_SUCCESS, zeMemFree(ze_context(), ptr));
@@ -218,8 +214,7 @@ UCS_TEST_F(ze_hooks, test_zeMemAllocDevice)
     check_mem_free_events(ptr, UCS_MBYTE, UCS_MEMORY_TYPE_ZE_DEVICE);
 }
 
-UCS_TEST_F(ze_hooks, test_zeMemAllocShared)
-{
+UCS_TEST_F(ze_hooks, test_zeMemAllocShared) {
     ze_device_mem_alloc_desc_t device_desc = {};
     ze_host_mem_alloc_desc_t host_desc     = {};
     void *ptr                              = NULL;
@@ -233,8 +228,7 @@ UCS_TEST_F(ze_hooks, test_zeMemAllocShared)
     check_mem_free_events(ptr, 64, UCS_MEMORY_TYPE_ZE_MANAGED);
 }
 
-UCS_TEST_F(ze_hooks, test_zeMemFreeNull)
-{
+UCS_TEST_F(ze_hooks, test_zeMemFreeNull) {
     const size_t free_events_before = free_event_count();
     ze_result_t ret;
 

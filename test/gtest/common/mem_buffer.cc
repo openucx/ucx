@@ -84,7 +84,7 @@ bool mem_buffer_ze_init();
 void mem_buffer_ze_copy(void *dst, const void *src, size_t length);
 void mem_buffer_ze_memset(void *dst, int value, size_t length);
 
-}
+} // namespace
 
 #endif
 
@@ -301,7 +301,7 @@ ze_driver_handle_t mem_buffer_ze_driver;
 ze_context_handle_t mem_buffer_ze_context;
 ze_device_handle_t mem_buffer_ze_device;
 ze_command_list_handle_t mem_buffer_ze_cmdlist;
-int mem_buffer_ze_status = -1;  // -1: not checked, 0: not supported, 1: supported
+int mem_buffer_ze_status = -1; // -1: not checked, 0: not supported, 1: supported
 
 bool mem_buffer_ze_init()
 {
@@ -356,7 +356,7 @@ bool mem_buffer_ze_init()
     if (ret != ZE_RESULT_SUCCESS) {
         ZE_CALL(zeContextDestroy(mem_buffer_ze_context), "");
         mem_buffer_ze_context = NULL;
-        mem_buffer_ze_status = 0;
+        mem_buffer_ze_status  = 0;
         return false;
     }
 
@@ -380,7 +380,8 @@ void mem_buffer_ze_cleanup()
 
 /* Cleanup guard: automatically invokes mem_buffer_ze_cleanup() at process exit */
 struct ze_cleanup_guard {
-    ~ze_cleanup_guard() {
+    ~ze_cleanup_guard()
+    {
         mem_buffer_ze_cleanup();
     }
 } g_ze_cleanup_guard;
@@ -543,8 +544,7 @@ void mem_buffer::release(void *ptr, ucs_memory_type_t mem_type, bool async)
         case UCS_MEMORY_TYPE_ZE_DEVICE:
         case UCS_MEMORY_TYPE_ZE_MANAGED:
             if (ptr != NULL) {
-                ZE_CALL(zeMemFree(mem_buffer_ze_context, ptr),
-                        ": ptr=" << ptr);
+                ZE_CALL(zeMemFree(mem_buffer_ze_context, ptr), ": ptr=" << ptr);
             }
             break;
 #endif
@@ -734,8 +734,8 @@ void mem_buffer::copy_between(void *dst, const void *src, size_t length,
     const uint64_t ze_cpu_mem_types = host_mem_types |
                                       UCS_BIT(UCS_MEMORY_TYPE_ZE_HOST) |
                                       UCS_BIT(UCS_MEMORY_TYPE_ZE_MANAGED);
-    const uint64_t ze_mem_types = ze_cpu_mem_types |
-                                  UCS_BIT(UCS_MEMORY_TYPE_ZE_DEVICE);
+    const uint64_t ze_mem_types     = ze_cpu_mem_types |
+                                      UCS_BIT(UCS_MEMORY_TYPE_ZE_DEVICE);
 #endif
 
     if (check_mem_types(dst_mem_type, src_mem_type, host_mem_types)) {
