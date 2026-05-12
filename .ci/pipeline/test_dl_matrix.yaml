@@ -28,8 +28,8 @@ env:
   ASAN_CHECK: "no"
   VALGRIND_CHECK: "no"
   RUNNING_IN_AZURE: "no"
-  nworkers: "1"
-  worker: "0"
+  NWORKERS: "1"
+  WORKER: "0"
   SLURM_NODES: 1
   SLURM_PARTITION: gb300nvl72_ci
   SLURM_HEAD_NODE: dlcluster.nvidia.com
@@ -109,9 +109,9 @@ steps:
         "ASAN_CHECK=${ASAN_CHECK}",
         "VALGRIND_CHECK=${VALGRIND_CHECK}",
         "RUNNING_IN_AZURE=${RUNNING_IN_AZURE}",
-        "EXECUTOR_NUMBER=${worker}",
-        "nworkers=${nworkers}",
-        "worker=${worker}"
+        "EXECUTOR_NUMBER=${WORKER}",
+        "nworkers=${NWORKERS}",
+        "worker=${WORKER}"
       ]
 
 pipeline_stop:
