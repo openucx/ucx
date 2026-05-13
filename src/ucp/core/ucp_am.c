@@ -1411,28 +1411,13 @@ static UCS_F_ALWAYS_INLINE void
 ucp_am_copy_data_fragment(ucp_recv_desc_t *first_rdesc, void *data,
                           size_t length, size_t offset)
 {
-    ucs_interval_tree_t *tree = ucp_am_rdesc_frag_tree(first_rdesc);
-    ucp_am_first_ftr_t *first_ftr;
-
     UCS_PROFILE_NAMED_CALL("am_memcpy_recv", ucs_memcpy_relaxed,
                            UCS_PTR_BYTE_OFFSET(first_rdesc + 1, offset),
                            data, length, UCS_ARCH_MEMCPY_NT_SOURCE, length);
 
-    ucs_interval_tree_insert(tree,
+    ucs_interval_tree_insert(ucp_am_rdesc_frag_tree(first_rdesc),
                              (ucs_interval_tree_range_t){offset,
                                                          offset + length - 1});
-
-    first_ftr = (ucp_am_first_ftr_t*)(first_rdesc + 1);
-    ucs_trace_data("AM-PSN-DBG: copy frag rdesc %p msg_id %" PRIu64
-                   " inserted [%zu..%zu] len %zu tree->num_nodes %zu"
-                   " expected [%zu..%zu] (payload_offset %zu total_size %zu)",
-                   first_rdesc, first_ftr->super.msg_id, offset,
-                   offset + length - 1, length, tree->num_nodes,
-                   (size_t)first_rdesc->payload_offset,
-                   (size_t)first_rdesc->payload_offset +
-                           (size_t)first_ftr->total_size - 1,
-                   (size_t)first_rdesc->payload_offset,
-                   (size_t)first_ftr->total_size);
 }
 
 static UCS_F_ALWAYS_INLINE uint64_t
@@ -1474,24 +1459,6 @@ ucp_am_handle_unfinished(ucp_worker_h worker, ucp_recv_desc_t *rdesc,
 
         first_ftr = (ucp_am_first_ftr_t*)(first_rdesc + 1);
         seg_end   = first_rdesc->payload_offset + first_ftr->total_size - 1;
-
-        {
-            ucs_interval_tree_t *_tree = ucp_am_rdesc_frag_tree(first_rdesc);
-            ucs_trace_data("AM-PSN-DBG: assemble check ep %p ep_ext %p"
-                           " worker_epoch %" PRIu64
-                           " psn %" PRIu64 " msg_id %" PRIu64 " ep_id %" PRIu64
-                           " expected [%zu..%zu] tree->num_nodes %zu"
-                           " root [%" PRIu64 "..%" PRIu64 "]",
-                           reply_ep, ep_ext, worker->epoch,
-                           ep_ext->am.psn, first_ftr->super.msg_id,
-                           first_ftr->super.ep_id,
-                           (size_t)first_rdesc->payload_offset, seg_end,
-                           _tree->num_nodes,
-                           (_tree->root != NULL) ? _tree->root->start :
-                                                   (uint64_t)0,
-                           (_tree->root != NULL) ? _tree->root->end :
-                                                   (uint64_t)0);
-        }
 
         if (!ucs_interval_tree_is_equal_range(
                     ucp_am_rdesc_frag_tree(first_rdesc),
@@ -1596,13 +1563,6 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_first_handler,
 
     total_length = first_ftr->total_size + user_hdr_length +
                    UCP_AM_FIRST_FRAG_META_LEN;
-
-    ucs_trace_data("AM-PSN-DBG: first frag ep %p ep_ext %p worker_epoch %" PRIu64
-                   " psn %" PRIu64 " msg_id %" PRIu64 " ep_id %" PRIu64
-                   " total_size %zu am_length %zu user_hdr_length %zu",
-                   ep, ep_ext, worker->epoch, ep_ext->am.psn,
-                   first_ftr->super.msg_id, first_ftr->super.ep_id,
-                   (size_t)first_ftr->total_size, am_length, user_hdr_length);
 
     if (ucs_unlikely(am_length == total_length)) {
         /* Single-fragment delivery via the long-AM wire shape. Two sources:
@@ -1765,13 +1725,6 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_middle_handler,
 
     ep_ext      = ep->ext;
     first_rdesc = ucp_am_find_first_rdesc(worker, ep_ext, mid_ftr->msg_id);
-    ucs_trace_data("AM-PSN-DBG: mid frag ep %p ep_ext %p worker_epoch %" PRIu64
-                   " psn %" PRIu64 " msg_id %" PRIu64 " ep_id %" PRIu64
-                   " offset %zu am_length %zu first_rdesc %p%s",
-                   ep, ep_ext, worker->epoch, ep_ext->am.psn,
-                   mid_ftr->msg_id, mid_ftr->ep_id,
-                   (size_t)mid_hdr->offset, am_length, first_rdesc,
-                   (first_rdesc != NULL) ? " (assemble)" : " (queue)");
     if (first_rdesc != NULL) {
         /* First fragment already arrived, just copy the data */
         ucp_am_handle_unfinished(worker, first_rdesc, mid_hdr + 1,
@@ -1808,11 +1761,6 @@ ucp_am_is_duplicate_psn(ucp_worker_h worker, ucp_am_mid_ftr_t *ftr)
                                   "AM (psn proto)");
 
     ucs_assertv(ftr->msg_id != 0, "msg_id=%lu", ftr->msg_id);
-
-    ucs_trace_data("AM-PSN-DBG: dup-check ep %p worker_epoch %" PRIu64
-                   " psn %" PRIu64 " msg_id %" PRIu64 " ep_id %" PRIu64,
-                   ep, worker->epoch, ep->ext->am.psn, ftr->msg_id,
-                   ftr->ep_id);
 
     /* Drop packet if:
      * 1. This is not the first message for this EP and
