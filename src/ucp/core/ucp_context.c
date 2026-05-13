@@ -1931,7 +1931,7 @@ ucp_md_map_t ucp_context_select_reg_mds(ucp_context_h context,
         select_mds[count].md_index = md_index;
         select_mds[count].name     = context->tl_mds[md_index].rsc.md_name;
         select_mds[count].distance = best;
-        ucs_trace("reg_select: sys_dev=%d md[%d]=%s lat=%.2e bw=%.2e",
+        ucs_trace("reg_select: mem_sys_dev=%d md[%d]=%s lat=%.2e bw=%.2e",
                   mem_sys_dev, md_index, select_mds[count].name,
                   best.latency, best.bandwidth);
         count++;
@@ -1942,7 +1942,7 @@ ucp_md_map_t ucp_context_select_reg_mds(ucp_context_h context,
     }
 
     ucs_qsort_r(select_mds, count, sizeof(select_mds[0]),
-                 ucp_reg_select_md_cmp, NULL);
+                ucp_reg_select_md_cmp, NULL);
 
     switch (ucp_reg_devices_mode(config->max_hca_per_gpu)) {
     case UCP_REG_DEVICES_CLOSEST:

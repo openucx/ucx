@@ -871,9 +871,10 @@ ucp_memh_apply_reg_policy(ucp_context_h context, ucp_mem_h memh,
             ucs_string_buffer_appendf(&strb, "%s",
                                       context->tl_mds[md_index].rsc.md_name);
         }
-        ucs_trace("reg_devices_policy: mem_type=%d sys_dev=%d selected=[%s]",
-                  memh->mem_type, memh->sys_dev,
-                  ucs_string_buffer_cstr(&strb));
+        ucs_trace("reg_devices_policy: mem_type=%s sys_dev=%d "
+                  "reg_md_map=0x%" PRIx64 " selected=[%s]",
+                  ucs_memory_type_names[memh->mem_type], memh->sys_dev,
+                  reg_md_map, ucs_string_buffer_cstr(&strb));
     }
 
     return (reg_md_map & ~net_md_map) | selected;
