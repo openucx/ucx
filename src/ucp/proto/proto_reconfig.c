@@ -86,7 +86,7 @@ static ucs_status_t ucp_proto_reconfig_progress(uct_pending_req_t *self)
      * p2p lane and the configuration index is already the latest.
      */
     if ((ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED) ||
-        (!ucp_ep_config(ep)->p2p_lanes &&
+        (!ucp_ep_config(ep)->p2p_lanes && !ucp_ep_has_cm_lane(ep) &&
          (ep->cfg_index == req->send.proto_config->ep_cfg_index))) {
         if (ucp_proto_reconfig_report_no_rma_emulation_no_proto(req, ep)) {
             ucp_proto_request_abort(req, UCS_ERR_CANCELED);
