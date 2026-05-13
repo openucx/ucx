@@ -1912,10 +1912,10 @@ UCS_TEST_P(test_ucp_reconfig_connect_remote, put_canceled)
     recvbuf.rkey(sender(), rkey);
 
     ucp_request_param_t param = {};
-    ucs_status_ptr_t sreq = ucp_put_nbx(sender().ep(), sendbuf.data(), size,
-                                        (uintptr_t)recvbuf.ptr(), rkey.get(),
-                                        &param);
-    ucs_status_t status   = request_wait(sreq);
+    auto sreq                 = ucp_put_nbx(sender().ep(), sendbuf.data(), size,
+                                            (uintptr_t)recvbuf.ptr(),
+                                            rkey.get(), &param);
+    ucs_status_t status       = request_wait(sreq);
     EXPECT_EQ(UCS_ERR_CANCELED, status);
 }
 
