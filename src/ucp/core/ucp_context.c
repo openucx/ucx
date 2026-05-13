@@ -1880,9 +1880,11 @@ ucp_md_map_t ucp_context_select_reg_mds(ucp_context_h context,
     unsigned count                     = 0;
     ucp_reg_select_md_t select_mds[UCP_MAX_MDS];
     ucs_sys_dev_distance_t distance, best;
+    ucp_sys_dev_map_t sys_dev_map;
     ucs_sys_device_t sys_dev;
     unsigned select_count, i;
     ucp_md_index_t md_index;
+    ucp_rsc_index_t tl_idx;
     int reachable;
 
     if (ucp_reg_devices_mode(config->max_hca_per_gpu) == UCP_REG_DEVICES_ALL) {
@@ -1890,29 +1892,41 @@ ucp_md_map_t ucp_context_select_reg_mds(ucp_context_h context,
     }
 
     ucs_for_each_bit(md_index, md_map) {
-        if (context->tl_mds[md_index].sys_dev_map == 0) {
-            best = ucs_topo_default_distance;
-        } else {
-            reachable      = 1;
-            best.latency   = UCS_INFINITY;
-            best.bandwidth = 0;
-            ucs_for_each_bit(sys_dev, context->tl_mds[md_index].sys_dev_map) {
-                if (!ucs_topo_is_reachable(sys_dev, mem_sys_dev)) {
-                    /* Consistent with ucp_memh_sys_dev_reachable: skip the
-                     * entire MD if any of its ports is unreachable */
-                    reachable = 0;
-                    break;
-                }
-                if ((ucs_topo_get_distance(mem_sys_dev, sys_dev, &distance) ==
-                     UCS_OK) &&
-                    (ucs_topo_distance_cmp(&distance, &best) < 0)) {
-                    best = distance;
-                }
+        /* TODO: rc_gda has the gpu in the sys_dev_map so we need to skip it.
+         * This should be fixed in the tl. */
+        sys_dev_map = 0;
+        for (tl_idx = 0; tl_idx < context->num_tls; tl_idx++) {
+            if ((context->tl_rscs[tl_idx].md_index == md_index) &&
+                (context->tl_rscs[tl_idx].tl_rsc.sys_device <
+                 UCP_MAX_SYS_DEVICES) &&
+                (strncmp(context->tl_rscs[tl_idx].tl_rsc.dev_name,
+                         "cuda", 4) != 0)) {
+                sys_dev_map |=
+                    UCS_BIT(context->tl_rscs[tl_idx].tl_rsc.sys_device);
             }
+        }
 
-            if (!reachable) {
-                continue;
+        best.latency   = UCS_INFINITY;
+        best.bandwidth = 0;
+        reachable      = 1;
+
+        ucs_for_each_bit(sys_dev, sys_dev_map) {
+            ucs_assert(sys_dev != mem_sys_dev);
+            if (!ucs_topo_is_reachable(sys_dev, mem_sys_dev)) {
+                /* Consistent with ucp_memh_sys_dev_reachable: skip the
+                 * entire MD if any of its ports is unreachable */
+                reachable = 0;
+                break;
             }
+            if ((ucs_topo_get_distance(mem_sys_dev, sys_dev, &distance) ==
+                 UCS_OK) &&
+                (ucs_topo_distance_cmp(&distance, &best) < 0)) {
+                best = distance;
+            }
+        }
+
+        if (!reachable) {
+            continue;
         }
 
         select_mds[count].md_index = md_index;

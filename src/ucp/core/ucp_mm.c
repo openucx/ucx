@@ -846,21 +846,21 @@ ucp_memh_init_from_parent(ucp_mem_h memh, ucp_md_map_t parent_md_map)
  * The network MDs are ranked by distance (latency, then bandwidth) to the
  * buffer's sys_dev and the closest N selected. */
 static ucp_md_map_t
-ucp_memh_apply_reg_policy(ucp_context_h context, ucs_memory_type_t mem_type,
-                          ucs_sys_device_t sys_dev, ucp_md_map_t reg_md_map)
+ucp_memh_apply_reg_policy(ucp_context_h context, ucp_mem_h memh,
+                          ucp_md_map_t reg_md_map)
 {
     ucp_md_map_t net_md_map, policy_md_map, selected;
     ucp_md_index_t md_index;
 
-    if ((sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) ||
-        (mem_type != UCS_MEMORY_TYPE_CUDA)) {
+    if ((memh->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) ||
+        (memh->mem_type != UCS_MEMORY_TYPE_CUDA)) {
         return reg_md_map;
     }
 
-    net_md_map = ucp_context_get_net_md_map(context);
-
+    net_md_map    = ucp_context_get_net_md_map(context);
     policy_md_map = reg_md_map & net_md_map;
-    selected      = ucp_context_select_reg_mds(context, policy_md_map, sys_dev);
+    selected      = ucp_context_select_reg_mds(context, policy_md_map,
+                                               memh->sys_dev);
 
     if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE)) {
         UCS_STRING_BUFFER_ONSTACK(strb, 256);
@@ -872,7 +872,8 @@ ucp_memh_apply_reg_policy(ucp_context_h context, ucs_memory_type_t mem_type,
                                       context->tl_mds[md_index].rsc.md_name);
         }
         ucs_trace("reg_devices_policy: mem_type=%d sys_dev=%d selected=[%s]",
-                  mem_type, sys_dev, ucs_string_buffer_cstr(&strb));
+                  memh->mem_type, memh->sys_dev,
+                  ucs_string_buffer_cstr(&strb));
     }
 
     return (reg_md_map & ~net_md_map) | selected;
@@ -894,8 +895,7 @@ ucp_memh_init_uct_reg(ucp_context_h context, ucp_mem_h memh, unsigned uct_flags,
     }
 
     if (apply_reg_policy) {
-        reg_md_map = ucp_memh_apply_reg_policy(context, mem_type, memh->sys_dev,
-                                               reg_md_map);
+        reg_md_map = ucp_memh_apply_reg_policy(context, memh, reg_md_map);
     }
 
     reg_md_map  &= ~memh->md_map;
