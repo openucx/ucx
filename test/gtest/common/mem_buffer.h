@@ -88,14 +88,14 @@ public:
     /* set device context if compiled with GPU support */
     static void set_device_context();
 
-    /* Return the number of CUDA GPU devices, or 0 if not supported */
-    static int cuda_get_device_count();
+    /* Return the number of CUDA GPU devices, or -1 if not supported */
+    static int get_device_count();
 
-    /* Return the current CUDA device index, or 0 if not supported */
-    static int cuda_get_device();
+    /* Return the current CUDA device index, or -1 if not supported */
+    static int get_device();
 
     /* Set the current CUDA device */
-    static void cuda_set_device(int device);
+    static void set_device(int device);
 
     /* returns whether ROCM device supports managed memory */
     static bool is_rocm_managed_supported();

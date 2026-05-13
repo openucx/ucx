@@ -1472,7 +1472,7 @@ UCS_TEST_P(test_ucp_mmap_max_hca, limits_per_gpu)
         UCS_TEST_SKIP_R("CUDA is not supported");
     }
 
-    int num_gpus = mem_buffer::cuda_get_device_count();
+    int num_gpus = mem_buffer::get_device_count();
     if (num_gpus < 2) {
         UCS_TEST_SKIP_R("need at least 2 CUDA devices");
     }
@@ -1487,7 +1487,7 @@ UCS_TEST_P(test_ucp_mmap_max_hca, limits_per_gpu)
         UCS_TEST_SKIP_R("need at least 2 network MDs");
     }
 
-    int orig_dev = mem_buffer::cuda_get_device();
+    int orig_dev = mem_buffer::get_device();
 
     const size_t size = 4096;
     ucp_mem_map_params_t params;
@@ -1495,7 +1495,7 @@ UCS_TEST_P(test_ucp_mmap_max_hca, limits_per_gpu)
                         UCP_MEM_MAP_PARAM_FIELD_LENGTH;
 
     for (int gpu = 0; gpu < ucs_min(num_gpus, 4); gpu++) {
-        mem_buffer::cuda_set_device(gpu);
+        mem_buffer::set_device(gpu);
 
         void *ptr      = mem_buffer::allocate(size, UCS_MEMORY_TYPE_CUDA);
         params.address = ptr;
@@ -1510,7 +1510,7 @@ UCS_TEST_P(test_ucp_mmap_max_hca, limits_per_gpu)
         mem_buffer::release(ptr, UCS_MEMORY_TYPE_CUDA);
     }
 
-    mem_buffer::cuda_set_device(orig_dev);
+    mem_buffer::set_device(orig_dev);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_mmap_max_hca, all, "all")

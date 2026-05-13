@@ -196,31 +196,31 @@ void mem_buffer::set_device_context()
     device_set = true;
 }
 
-int mem_buffer::cuda_get_device_count()
+int mem_buffer::get_device_count()
 {
 #if HAVE_CUDA
     int num_gpus = 0;
     if (cudaGetDeviceCount(&num_gpus) != cudaSuccess) {
-        return 0;
+        return -1;
     }
     return num_gpus;
 #else
-    return 0;
+    return -1;
 #endif
 }
 
-int mem_buffer::cuda_get_device()
+int mem_buffer::get_device()
 {
 #if HAVE_CUDA
-    int device = 0;
-    cudaGetDevice(&device);
+    int device = -1;
+    CUDA_CALL(cudaGetDevice(&device), "");
     return device;
 #else
-    return 0;
+    return -1;
 #endif
 }
 
-void mem_buffer::cuda_set_device(int device)
+void mem_buffer::set_device(int device)
 {
 #if HAVE_CUDA
     CUDA_CALL(cudaSetDevice(device), ": device=" << device);
