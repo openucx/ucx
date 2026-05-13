@@ -1998,6 +1998,12 @@ public:
         return ucp_ep_is_lane_p2p(m_ep, m_lane);
     }
 
+    int is_p2p_transport() const
+    {
+        return ucp_worker_is_tl_p2p(m_worker, m_rsc_index) &&
+               !ucp_worker_is_tl_device(m_worker, m_rsc_index);
+    }
+
 private:
     wireup_lane(const wireup_lane&);
     wireup_lane& operator=(const wireup_lane&);
@@ -2006,14 +2012,25 @@ private:
     get_connected_address_entry(const ucp_unpacked_address_t *remote_address) const
     {
         const ucp_address_entry_t *address_entry;
+        const ucp_address_entry_t *matched_address_entry = NULL;
+        const ucp_ep_config_key_lane_t *key_lane = &m_key->lanes[m_lane];
 
         ucp_unpacked_address_for_each(address_entry, remote_address) {
-            if (m_tl_rsc->tl_name_csum == address_entry->tl_name_csum) {
+            if (m_tl_rsc->tl_name_csum != address_entry->tl_name_csum) {
+                continue;
+            }
+
+            if (ucp_wireup_is_lane_connected(m_ep, m_lane, address_entry)) {
                 return address_entry;
+            }
+
+            if ((key_lane->dst_md_index == address_entry->md_index) &&
+                (key_lane->dst_sys_dev == address_entry->sys_dev)) {
+                matched_address_entry = address_entry;
             }
         }
 
-        return NULL;
+        return matched_address_entry;
     }
 
     ucp_worker_h m_worker;
@@ -2034,6 +2051,7 @@ static std::ostream& operator<<(std::ostream& os, const wireup_lane& lane)
               << ", seg_size=" << lane.seg_size()
               << ", local_aux=" << lane.is_local_aux_capable()
               << ", remote_aux=" << lane.is_remote_aux_capable()
+              << ", p2p_transport=" << lane.is_p2p_transport()
               << ", p2p=" << lane.is_p2p() << ")";
 }
 
@@ -2123,9 +2141,12 @@ UCS_TEST_P(test_ucp_wireup_msg_lane, select_highest_seg_size_lane) {
             << wireup_info.seg_size() << ") has lower seg_size than the maximum "
             << "available AUX lane (" << max_aux_seg_size << ")";
     } else {
-        EXPECT_TRUE(wireup_info.is_p2p())
+        /* ucp_wireup_select_wireup_msg_lane() falls back to a p2p-capable
+         * transport, which is distinct from the final p2p lane bitmap. */
+        EXPECT_TRUE(wireup_info.is_p2p_transport())
             << "Expected wireup lane " << wireup_info.tl_name()
-            << " to fallback to a p2p lane when no AUX lane is available";
+            << " to fallback to a p2p-capable transport when no AUX lane is "
+               "available";
     }
 }
 
