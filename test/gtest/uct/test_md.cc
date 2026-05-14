@@ -598,9 +598,9 @@ UCS_TEST_P(test_md, sys_device) {
 
         /* Expect 0 latency and infinite bandwidth within same device */
         ucs_sys_dev_distance_t distance;
-        ucs_topo_get_distance(tl_resources[i].sys_device,
-                              tl_resources[i].sys_device,
-                              &distance);
+        status = ucs_topo_get_distance(tl_resources[i].sys_device,
+                                       tl_resources[i].sys_device, &distance);
+        ASSERT_UCS_OK(status);
         EXPECT_NEAR(distance.latency, 0, 1e-9);
         EXPECT_GT(distance.bandwidth, 1e12);
 
