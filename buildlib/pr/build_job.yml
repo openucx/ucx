@@ -75,6 +75,8 @@ jobs:
             CONTAINER: ctyunos2507
           ubuntu2604:
             CONTAINER: ubuntu2604
+          tencentos44:
+            CONTAINER: tencentos44
       # ARM matrix
       ${{ if contains(parameters.name, 'aarch64') }}:
         matrix:
@@ -94,6 +96,8 @@ jobs:
             CONTAINER: sles16sp0_aarch64
           ubuntu2604_aarch64:
             CONTAINER: ubuntu2604_aarch64
+          tencentos44_aarch64:
+            CONTAINER: tencentos44_aarch64
     timeoutInMinutes: 340
 
     steps:

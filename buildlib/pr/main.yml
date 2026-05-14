@@ -84,6 +84,12 @@ resources:
     - container: ubuntu2604_aarch64
       image: rdmz-harbor.rdmz.labs.mlnx/hpcx/aarch64/ubuntu26.04/builder:mofed-26.04-0.7.6.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: tencentos44
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/tencentos4.4/builder:mofed-26.04-0.7.6.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: tencentos44_aarch64
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/aarch64/tencentos4.4/builder:mofed-26.04-0.7.6.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: debian113
       image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/debian11.3/builder:mofed-5.8-3.0.7.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
