@@ -301,7 +301,26 @@ static ucs_status_t uct_cuda_copy_set_ctx_sync_memops(int log_level)
     static uct_cuda_cuCtxSetFlags_t cuda_cuCtxSetFlags_func =
         (uct_cuda_cuCtxSetFlags_t)ucs_empty_function;
     CUdriverProcAddressQueryResult sym_status;
+    CUcontext current_ctx;
+    ucs_status_t status;
     CUresult cu_err;
+    unsigned ctx_flags;
+
+    status = UCT_CUDADRV_FUNC(cuCtxGetCurrent(&current_ctx), log_level);
+    if (status != UCS_OK) {
+        return status;
+    } else if (current_ctx == NULL) {
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    status = UCT_CUDADRV_FUNC(cuCtxGetFlags(&ctx_flags), log_level);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (ctx_flags & CU_CTX_SYNC_MEMOPS) {
+        return UCS_OK;
+    }
 
     if (cuda_cuCtxSetFlags_func ==
         (uct_cuda_cuCtxSetFlags_t)ucs_empty_function) {
@@ -316,9 +335,9 @@ static ucs_status_t uct_cuda_copy_set_ctx_sync_memops(int log_level)
 
     if (cuda_cuCtxSetFlags_func != NULL) {
         /* Synchronize future DMA operations for all memory types */
-        UCT_CUDADRV_FUNC(cuda_cuCtxSetFlags_func(CU_CTX_SYNC_MEMOPS),
-                         log_level);
-        return UCS_OK;
+        return UCT_CUDADRV_FUNC(
+                cuda_cuCtxSetFlags_func(ctx_flags | CU_CTX_SYNC_MEMOPS),
+                log_level);
     }
 #endif
 

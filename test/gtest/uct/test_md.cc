@@ -14,6 +14,9 @@
 
 #include <uct/api/uct.h>
 #include <uct/api/v2/uct_v2.h>
+#if HAVE_CUDA
+#include <cuda.h>
+#endif
 extern "C" {
 #include <ucs/time/time.h>
 #include <ucs/sys/ptr_arith.h>
@@ -1189,6 +1192,152 @@ UCS_TEST_SKIP_COND_P(test_md_non_blocking, reg,
 }
 
 UCT_MD_INSTANTIATE_TEST_CASE(test_md_non_blocking)
+
+#if HAVE_CUDA
+class test_cuda_copy_no_current_ctx : public test_md
+{
+public:
+    test_cuda_copy_no_current_ctx() : m_prev_ctx(NULL)
+    {
+    }
+
+protected:
+    void init() override
+    {
+        clear_current_cuda_context();
+        test_md::init();
+    }
+
+    void cleanup() override
+    {
+        CUcontext current_ctx;
+        CUresult result;
+
+        test_md::cleanup();
+
+        result = cuCtxGetCurrent(&current_ctx);
+        EXPECT_EQ(CUDA_SUCCESS, result);
+        if (result == CUDA_SUCCESS) {
+            EXPECT_EQ(NULL, current_ctx);
+        }
+
+        if (m_prev_ctx != NULL) {
+            ASSERT_EQ(CUDA_SUCCESS, cuCtxPushCurrent(m_prev_ctx));
+            m_prev_ctx = NULL;
+        }
+    }
+
+    void clear_current_cuda_context()
+    {
+        CUcontext popped_ctx;
+        int num_devices;
+
+        if (cuInit(0) != CUDA_SUCCESS) {
+            UCS_TEST_SKIP_R("cuda is not initialized");
+        }
+
+        if ((cuDeviceGetCount(&num_devices) != CUDA_SUCCESS) ||
+            (num_devices == 0)) {
+            UCS_TEST_SKIP_R("no cuda devices available");
+        }
+
+        ASSERT_EQ(CUDA_SUCCESS, cuCtxGetCurrent(&m_prev_ctx));
+        if (m_prev_ctx != NULL) {
+            ASSERT_EQ(CUDA_SUCCESS, cuCtxPopCurrent(&popped_ctx));
+            ASSERT_EQ(m_prev_ctx, popped_ctx);
+        }
+    }
+
+    CUcontext m_prev_ctx;
+};
+
+UCS_TEST_P(test_cuda_copy_no_current_ctx, open)
+{
+    CUcontext current_ctx;
+
+    ASSERT_EQ(CUDA_SUCCESS, cuCtxGetCurrent(&current_ctx));
+    EXPECT_EQ(NULL, current_ctx);
+}
+
+_UCT_MD_INSTANTIATE_TEST_CASE(test_cuda_copy_no_current_ctx, cuda_cpy);
+
+class test_cuda_copy_current_ctx_flags : public test_md
+{
+public:
+    test_cuda_copy_current_ctx_flags() :
+        m_cuda_device(0), m_cuda_ctx(NULL), m_ctx_flags(0)
+    {
+    }
+
+protected:
+    void init() override
+    {
+        init_cuda_context();
+        test_md::init();
+    }
+
+    void cleanup() override
+    {
+        CUcontext current_ctx;
+
+        test_md::cleanup();
+
+        if (m_cuda_ctx == NULL) {
+            return;
+        }
+
+        if ((cuCtxGetCurrent(&current_ctx) == CUDA_SUCCESS) &&
+            (current_ctx == m_cuda_ctx)) {
+            (void)cuCtxPopCurrent(&current_ctx);
+        }
+
+        (void)cuCtxDestroy(m_cuda_ctx);
+        m_cuda_ctx = NULL;
+    }
+
+    void init_cuda_context()
+    {
+        int num_devices;
+
+        if (cuInit(0) != CUDA_SUCCESS) {
+            UCS_TEST_SKIP_R("cuda is not initialized");
+        }
+
+        if ((cuDeviceGetCount(&num_devices) != CUDA_SUCCESS) ||
+            (num_devices == 0)) {
+            UCS_TEST_SKIP_R("no cuda devices available");
+        }
+
+        ASSERT_EQ(CUDA_SUCCESS, cuDeviceGet(&m_cuda_device, 0));
+        ASSERT_EQ(CUDA_SUCCESS,
+                  cuCtxCreate(&m_cuda_ctx, CU_CTX_SCHED_AUTO,
+                              m_cuda_device));
+        ASSERT_EQ(CUDA_SUCCESS, cuCtxGetFlags(&m_ctx_flags));
+        ASSERT_EQ(0u, m_ctx_flags & CU_CTX_SYNC_MEMOPS);
+    }
+
+    CUdevice  m_cuda_device;
+    CUcontext m_cuda_ctx;
+    unsigned  m_ctx_flags;
+};
+
+UCS_TEST_P(test_cuda_copy_current_ctx_flags, open)
+{
+    CUcontext current_ctx;
+    unsigned ctx_flags;
+
+    ASSERT_EQ(CUDA_SUCCESS, cuCtxGetCurrent(&current_ctx));
+    EXPECT_EQ(m_cuda_ctx, current_ctx);
+    ASSERT_EQ(CUDA_SUCCESS, cuCtxGetFlags(&ctx_flags));
+#if HAVE_CUDA_FABRIC
+    EXPECT_NE(0u, ctx_flags & CU_CTX_SYNC_MEMOPS);
+#else
+    EXPECT_EQ(0u, ctx_flags & CU_CTX_SYNC_MEMOPS);
+#endif
+}
+
+_UCT_MD_INSTANTIATE_TEST_CASE(test_cuda_copy_current_ctx_flags, cuda_cpy);
+#endif
 
 class test_cuda : public test_md
 {
