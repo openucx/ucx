@@ -76,6 +76,7 @@ uct_perf_cuda_alloc_reg_mem(const ucx_perf_context_t *perf,
                             uct_allocated_memory_t *alloc_mem)
 {
     uct_md_attr_v2_t md_attr = {.field_mask = UCT_MD_ATTR_FIELD_REG_ALIGNMENT};
+    size_t reg_length;
     void *reg_address;
     ucs_status_t status;
 
@@ -92,9 +93,10 @@ uct_perf_cuda_alloc_reg_mem(const ucx_perf_context_t *perf,
 
     /* Register memory respecting MD reg_alignment */
     reg_address = alloc_mem->address;
-    ucs_align_ptr_range(&reg_address, &length, md_attr.reg_alignment);
+    reg_length  = length;
+    ucs_align_ptr_range(&reg_address, &reg_length, md_attr.reg_alignment);
 
-    status = uct_md_mem_reg(perf->uct.md, reg_address, length, flags,
+    status = uct_md_mem_reg(perf->uct.md, reg_address, reg_length, flags,
                             &alloc_mem->memh);
     if (status != UCS_OK) {
         cudaFree(alloc_mem->address);

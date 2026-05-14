@@ -176,9 +176,9 @@ void uct_p2p_test::test_xfer_multi_mem_type(send_func_t send, size_t min_length,
     ms << "memory_type:" << ucs_memory_type_names[mem_type] << " " << std::flush;
 
     /* Trim at the max allocation available. Divide by 2 for
-       2 buffers + 0.5 for spare capacity. 
-       Avoid this check for MDs that don't support allocation (eg. cuda_ipc) */
-    if (sender().md_attr().max_alloc > 0) {
+       2 buffers + 0.5 for spare capacity.
+       Avoid this check for memory types that MD can't allocate */
+    if (sender().md_attr().alloc_mem_types & UCS_BIT(mem_type)) {
         max_length = ucs_min(max_length, sender().md_attr().max_alloc / 2.5);
     }
 

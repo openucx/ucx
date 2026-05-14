@@ -999,9 +999,8 @@ public:
         ucp_worker_h worker = sender().worker();
         ucp_proto_select_key_t sel_key;
 
-        /* Find rkey config with CUDA mem_type for local and remote 
-         * memory */
-        for (auto i = 0; i < ucs_array_length(&worker->rkey_config); ++i) {
+        /* Find rkey config with CUDA mem_type for local and remote memory */
+        for (unsigned i = 0; i < ucs_array_length(&worker->rkey_config); ++i) {
             auto rkey_config = &ucs_array_elem(&worker->rkey_config, i);
 
             if (rkey_config->key.mem_type != UCS_MEMORY_TYPE_CUDA) {
@@ -1024,7 +1023,7 @@ public:
         auto context        = worker->context;
         std::string cuda_ipc_str("cuda_ipc");
 
-        for (auto idx = 0; idx < context->num_tls; ++idx) {
+        for (ucp_rsc_index_t idx = 0; idx < context->num_tls; ++idx) {
             if (cuda_ipc_str != context->tl_rscs[idx].tl_rsc.tl_name) {
                 continue;
             }

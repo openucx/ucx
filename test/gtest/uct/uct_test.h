@@ -514,8 +514,8 @@ protected:
 
 
 /**
- * Instantiate the parametrized test case for all transports (UCS_PP_FOREACH is 
- * split into 3 parts to avoid exceeding UCS_PP_MAX_ARGS.
+ * Instantiate the parametrized test case for all transports (UCS_PP_FOREACH is
+ * split into 3 parts to avoid exceeding UCS_PP_MAX_ARGS).
  *
  * @param _test_case  Test case class, derived from uct_test.
  */
