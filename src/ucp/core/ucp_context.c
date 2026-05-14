@@ -597,6 +597,12 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, proto_use_single_net_device),
    UCS_CONFIG_TYPE_BOOL},
 
+  {"WIREUP_PREFER_LOCAL_DEVICE", "y",
+   "Prefer a worker-local network device between matching transport resources\n"
+   "with the same priority.",
+   ucs_offsetof(ucp_context_config_t, wireup_prefer_local_device),
+   UCS_CONFIG_TYPE_BOOL},
+
   {"NODE_LOCAL_ID", "auto",
    "An optimization hint for the local identificator on a single node. Does \n"
    "not affect semantics, only transport selection criteria and the \n"

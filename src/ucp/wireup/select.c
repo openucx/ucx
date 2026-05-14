@@ -16,7 +16,11 @@
 #include <ucs/algorithm/qsort_r.h>
 #include <ucs/datastruct/array.h>
 #include <ucs/datastruct/queue.h>
+#include <ucs/memory/numa.h>
 #include <ucs/sys/sock.h>
+#include <ucs/sys/sys.h>
+#include <ucs/sys/topo/base/topo.h>
+#include <ucs/type/cpu_set.h>
 #include <ucp/core/ucp_ep.inl>
 #include <string.h>
 #include <inttypes.h>
@@ -384,6 +388,129 @@ ucp_wireup_max_lanes(const ucp_wireup_select_params_t *select_params,
                    ucp_wireup_bw_max_lanes(select_params);
 }
 
+static ucs_numa_node_t
+ucp_wireup_cpuset_numa_node(const ucs_cpu_set_t *cpuset)
+{
+    ucs_numa_node_t cpu_node, node = UCS_NUMA_NODE_UNDEFINED;
+    unsigned cpu, num_cpus;
+
+    num_cpus = ucs_min(ucs_numa_num_configured_cpus(), UCS_CPU_SETSIZE);
+    for (cpu = 0; cpu < num_cpus; ++cpu) {
+        if (!ucs_cpu_is_set(cpu, cpuset)) {
+            continue;
+        }
+
+        cpu_node = ucs_numa_node_of_cpu(cpu);
+        if (cpu_node == UCS_NUMA_NODE_UNDEFINED) {
+            continue;
+        }
+
+        if (node == UCS_NUMA_NODE_UNDEFINED) {
+            node = cpu_node;
+        } else if (node != cpu_node) {
+            return UCS_NUMA_NODE_UNDEFINED;
+        }
+    }
+
+    return node;
+}
+
+static ucs_numa_node_t
+ucp_wireup_worker_numa_node(ucp_worker_h worker)
+{
+    ucs_sys_cpuset_t thread_cpuset;
+    ucs_cpu_set_t cpuset;
+    ucs_numa_node_t node;
+
+    node = ucp_wireup_cpuset_numa_node(&worker->cpu_mask);
+    if (node != UCS_NUMA_NODE_UNDEFINED) {
+        return node;
+    }
+
+    if (ucs_sys_pthread_getaffinity(&thread_cpuset) != UCS_OK) {
+        return UCS_NUMA_NODE_UNDEFINED;
+    }
+
+    ucs_sys_cpuset_copy(&cpuset, &thread_cpuset);
+    return ucp_wireup_cpuset_numa_node(&cpuset);
+}
+
+static int
+ucp_wireup_iface_numa_info(const ucp_worker_iface_t *wiface,
+                           ucs_numa_node_t *worker_node_p,
+                           ucs_numa_node_t *dev_node_p)
+{
+    const ucp_context_h context = wiface->worker->context;
+    const uct_tl_resource_desc_t *tl_rsc;
+
+    *worker_node_p = ucp_wireup_worker_numa_node(wiface->worker);
+    *dev_node_p    = UCS_NUMA_NODE_UNDEFINED;
+
+    if (wiface->rsc_index == UCP_NULL_RESOURCE) {
+        return 0;
+    }
+
+    tl_rsc = &context->tl_rscs[wiface->rsc_index].tl_rsc;
+    if ((tl_rsc->dev_type != UCT_DEVICE_TYPE_NET) ||
+        (tl_rsc->sys_device == UCS_SYS_DEVICE_ID_UNKNOWN)) {
+        return 0;
+    }
+
+    *dev_node_p = ucs_topo_sys_device_get_numa_node(tl_rsc->sys_device);
+    if ((*worker_node_p == UCS_NUMA_NODE_UNDEFINED) ||
+        (*dev_node_p == UCS_NUMA_NODE_UNDEFINED)) {
+        return 0;
+    }
+
+    return *worker_node_p == *dev_node_p;
+}
+
+static int
+ucp_wireup_same_device_selection_class(ucp_context_h context,
+                                       ucp_rsc_index_t candidate_rsc_index,
+                                       ucp_rsc_index_t current_rsc_index)
+{
+    const uct_tl_resource_desc_t *candidate_tl_rsc;
+    const uct_tl_resource_desc_t *current_tl_rsc;
+
+    if ((candidate_rsc_index == UCP_NULL_RESOURCE) ||
+        (current_rsc_index == UCP_NULL_RESOURCE)) {
+        return 0;
+    }
+
+    candidate_tl_rsc = &context->tl_rscs[candidate_rsc_index].tl_rsc;
+    current_tl_rsc   = &context->tl_rscs[current_rsc_index].tl_rsc;
+
+    return (candidate_tl_rsc->dev_type == UCT_DEVICE_TYPE_NET) &&
+           (candidate_tl_rsc->dev_type == current_tl_rsc->dev_type) &&
+           !strcmp(candidate_tl_rsc->tl_name, current_tl_rsc->tl_name);
+}
+
+static int
+ucp_wireup_local_device_cmp(const ucp_worker_iface_t *candidate,
+                            ucp_rsc_index_t current_rsc_index)
+{
+    ucs_numa_node_t candidate_worker_node, candidate_dev_node;
+    ucs_numa_node_t current_worker_node, current_dev_node;
+    const ucp_context_h context = candidate->worker->context;
+    const ucp_worker_iface_t *current;
+    int candidate_local, current_local;
+
+    if (!context->config.ext.wireup_prefer_local_device ||
+        (current_rsc_index == UCP_NULL_RESOURCE)) {
+        return 0;
+    }
+
+    current         = ucp_worker_iface(candidate->worker, current_rsc_index);
+    candidate_local = ucp_wireup_iface_numa_info(candidate,
+                                                 &candidate_worker_node,
+                                                 &candidate_dev_node);
+    current_local   = ucp_wireup_iface_numa_info(current, &current_worker_node,
+                                                 &current_dev_node);
+
+    return candidate_local - current_local;
+}
+
 /**
  * Select a local and remote transport
  */
@@ -424,7 +551,9 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
     int is_reachable;
     double score;
     uint8_t priority;
+    int score_cmp, local_dev_cmp, numa_local;
     ucp_md_index_t md_index;
+    ucs_numa_node_t worker_node, dev_node;
 
     p            = tls_info;
     endp         = tls_info + sizeof(tls_info) - 1;
@@ -623,15 +752,46 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
             score        = criteria->calc_score(wiface, md_attr, address, ae,
                                                 0, criteria->arg);
             priority     = iface_attr->priority + ae->iface_attr.priority;
+            score_cmp    = found ?
+                           ucp_score_prio_cmp(score, priority, sinfo.score,
+                                              sinfo.priority) : 1;
+            local_dev_cmp = (found && (priority == sinfo.priority) &&
+                             ucp_wireup_same_device_selection_class(
+                                     context, rsc_index, sinfo.rsc_index)) ?
+                            ucp_wireup_local_device_cmp(wiface,
+                                                        sinfo.rsc_index) :
+                            0;
+            if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE)) {
+                worker_node = UCS_NUMA_NODE_UNDEFINED;
+                dev_node    = UCS_NUMA_NODE_UNDEFINED;
+                numa_local = ucp_wireup_iface_numa_info(wiface, &worker_node,
+                                                        &dev_node);
+                ucs_trace(UCT_TL_RESOURCE_DESC_FMT
+                          "->addr[%u] : %s score %.2f priority %d "
+                          "worker_numa %d dev_numa %d numa_local %d",
+                          UCT_TL_RESOURCE_DESC_ARG(resource), addr_index,
+                          criteria->title, score, priority, worker_node,
+                          dev_node, numa_local);
+            }
             is_reachable = 1;
 
-            ucs_trace(UCT_TL_RESOURCE_DESC_FMT
-                      "->addr[%u] : %s score %.2f priority %d",
-                      UCT_TL_RESOURCE_DESC_ARG(resource),
-                      addr_index, criteria->title, score, priority);
+            if (found && (local_dev_cmp < 0)) {
+                ucs_trace(UCT_TL_RESOURCE_DESC_FMT
+                          "->addr[%u] : not selected due to local device "
+                          "preference for resource[%u]",
+                          UCT_TL_RESOURCE_DESC_ARG(resource), addr_index,
+                          sinfo.rsc_index);
+                continue;
+            }
 
-            if (!found || (ucp_score_prio_cmp(score, priority, sinfo.score,
-                                              sinfo.priority) > 0)) {
+            if (!found || (score_cmp > 0) || (local_dev_cmp > 0)) {
+                if (found && (local_dev_cmp > 0)) {
+                    ucs_trace(UCT_TL_RESOURCE_DESC_FMT
+                              "->addr[%u] : selected by local device "
+                              "preference over resource[%u]",
+                              UCT_TL_RESOURCE_DESC_ARG(resource), addr_index,
+                              sinfo.rsc_index);
+                }
                 ucp_wireup_init_select_info(score, addr_index, rsc_index,
                                             priority, &sinfo);
                 found = 1;

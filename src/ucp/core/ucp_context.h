@@ -222,6 +222,8 @@ typedef struct ucp_context_config {
     int                                    connect_all_to_all;
     /** Use only one network device for all protocols */
     int                                    proto_use_single_net_device;
+    /** Prefer worker-local network devices between matching wireup resources */
+    int                                    wireup_prefer_local_device;
     /** Local identificator on a single node */
     unsigned long                          node_local_id;
 } ucp_context_config_t;
