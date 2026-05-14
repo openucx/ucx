@@ -21,6 +21,7 @@
 #include <uct/cuda/cuda_copy/cuda_copy_md.h>
 #include <uct/cuda/base/cuda_util.h>
 #include <uct/cuda/base/cuda_ctx.h>
+#include <uct/cuda/base/cuda_nvml.h>
 
 #include "gpunetio/common/doca_gpunetio_verbs_def.h"
 
@@ -1188,6 +1189,11 @@ typedef struct {
     uint64_t         cuda_map;
 } uct_gdaki_dev_matrix_elem_t;
 
+typedef struct {
+    ucs_sys_device_t sys_dev;
+    int              cuda_idx; /* CUDA driver index, -1 if not CUDA-visible */
+} uct_gdaki_gpu_info_t;
+
 static int uct_gdaki_dev_matrix_score(const void *pa, const void *pb, void *arg)
 {
     const uct_gdaki_dev_score_t *a = pa;
@@ -1199,21 +1205,109 @@ static int uct_gdaki_dev_matrix_score(const void *pa, const void *pb, void *arg)
            ucs_signum(a->usecount - b->usecount);
 }
 
+static ucs_status_t
+uct_gdaki_enum_gpus(uct_gdaki_gpu_info_t *gpus, unsigned *count_p)
+{
+    unsigned nvml_count, i;
+    int cudadev_count, cuda_idx;
+    ucs_sys_bus_id_t bus_id;
+    nvmlDevice_t nvml_dev;
+    nvmlPciInfo_t nvml_pci;
+    ucs_sys_device_t cuda_sys_dev;
+    CUdevice cuda_dev;
+    ucs_status_t status;
+
+    status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetCount_v2, &nvml_count);
+    if (status != UCS_OK) {
+        /* NVML unavailable: keep legacy CUDA-only enumeration. */
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetCount(&cudadev_count));
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        ucs_assert_always(cudadev_count <= UCT_GDAKI_MAX_CUDA_PER_IB);
+        for (cuda_idx = 0; cuda_idx < cudadev_count; cuda_idx++) {
+            status = UCT_CUDADRV_FUNC_LOG_ERR(
+                    cuDeviceGet(&cuda_dev, cuda_idx));
+            if (status != UCS_OK) {
+                return status;
+            }
+
+            gpus[cuda_idx].sys_dev  = uct_cuda_get_sys_dev(cuda_dev);
+            gpus[cuda_idx].cuda_idx = cuda_idx;
+        }
+
+        *count_p = cudadev_count;
+        return UCS_OK;
+    }
+
+    ucs_assert_always(nvml_count <= UCT_GDAKI_MAX_CUDA_PER_IB);
+    for (i = 0; i < nvml_count; i++) {
+        status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetHandleByIndex, i,
+                                         &nvml_dev);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetPciInfo_v3, nvml_dev,
+                                         &nvml_pci);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        bus_id.domain   = nvml_pci.domain;
+        bus_id.bus      = nvml_pci.bus;
+        bus_id.slot     = nvml_pci.device;
+        bus_id.function = 0;
+
+        status = ucs_topo_find_device_by_bus_id(&bus_id, &gpus[i].sys_dev);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        gpus[i].cuda_idx = -1;
+    }
+
+    /* Map CUDA-visible devices back to their NVML entry via sys_dev. */
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetCount(&cudadev_count));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    for (cuda_idx = 0; cuda_idx < cudadev_count; cuda_idx++) {
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&cuda_dev, cuda_idx));
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        cuda_sys_dev = uct_cuda_get_sys_dev(cuda_dev);
+        for (i = 0; i < nvml_count; i++) {
+            if (gpus[i].sys_dev == cuda_sys_dev) {
+                gpus[i].cuda_idx = cuda_idx;
+                break;
+            }
+        }
+    }
+
+    *count_p = nvml_count;
+    return UCS_OK;
+}
+
 uct_gdaki_dev_matrix_elem_t *
 uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
 {
     unsigned long ib_per_cuda         = ib_md->config.gda_max_hca_per_gpu;
     uct_gdaki_dev_matrix_elem_t *dmat = NULL;
+    uct_gdaki_gpu_info_t gpus[UCT_GDAKI_MAX_CUDA_PER_IB];
     ucs_status_t status;
-    int ibdev_index, cudadev_index, ibdev_count, cudadev_count;
+    int ibdev_index, ibdev_count;
+    unsigned gpu_count, gpu_index;
     struct ibv_device **device_list;
     struct ibv_device *ibdev;
     uct_gdaki_dev_score_t *scores;
     char *path_buffer;
-    ucs_sys_device_t cuda_sys_dev;
     const char *sysfs_path;
     uct_gdaki_dev_matrix_elem_t *ibdesc;
-    CUdevice cuda_dev;
     struct ibv_context *context;
     ucs_sys_device_t sys_dev_ib;
 
@@ -1269,48 +1363,44 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
         scores[ibdev_index].index = ibdev_index;
     }
 
-    /* Get the number of CUDA devices */
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetCount(&cudadev_count));
+    /* Enumerate physical GPUs via NVML (or CUDA fallback). NVML is used here
+     * so that CUDA_VISIBLE_DEVICES does not hide GPUs from the topology
+     * calculation */
+    status = uct_gdaki_enum_gpus(gpus, &gpu_count);
     if (status != UCS_OK) {
         goto out;
     }
 
-    if (cudadev_count == 0) {
+    if (gpu_count == 0) {
         goto out;
     }
 
-    ucs_assert(cudadev_count < UCT_GDAKI_MAX_CUDA_PER_IB);
-
     if (ib_per_cuda == UCS_ULUNITS_AUTO) {
-        ib_per_cuda = ibdev_count / cudadev_count;
+        ib_per_cuda = ibdev_count / gpu_count;
     }
 
-    /* Map each CUDA device to the best suited IB devices */
-    for (cudadev_index = 0; cudadev_index < cudadev_count; cudadev_index++) {
-        status = UCT_CUDADRV_FUNC_LOG_ERR(
-                cuDeviceGet(&cuda_dev, cudadev_index));
-        if (status != UCS_OK) {
-            goto out;
-        }
-
+    /* Map each GPU to the best suited IB devices */
+    for (gpu_index = 0; gpu_index < gpu_count; gpu_index++) {
         /* Update PCI distance in IB device scores */
-        cuda_sys_dev = uct_cuda_get_sys_dev(cuda_dev);
         for (ibdev_index = 0; ibdev_index < ibdev_count; ibdev_index++) {
             ibdesc = &dmat[scores[ibdev_index].index];
-            status = ucs_topo_get_distance(cuda_sys_dev, ibdesc->sys_dev,
+            status = ucs_topo_get_distance(gpus[gpu_index].sys_dev,
+                                           ibdesc->sys_dev,
                                            &scores[ibdev_index].dist);
             if (status != UCS_OK) {
                 goto out;
             }
         }
 
-        /* Sort and select the best suited IB devices for this CUDA device */
+        /* Sort and select the best suited IB devices for this GPU */
         ucs_qsort_r(scores, ibdev_count, sizeof(*scores),
                     uct_gdaki_dev_matrix_score, NULL);
 
         for (ibdev_index = 0; ibdev_index < ib_per_cuda; ibdev_index++) {
-            ibdesc            = &dmat[scores[ibdev_index].index];
-            ibdesc->cuda_map |= UCS_BIT(cudadev_index);
+            ibdesc = &dmat[scores[ibdev_index].index];
+            if (gpus[gpu_index].cuda_idx >= 0) {
+                ibdesc->cuda_map |= UCS_BIT(gpus[gpu_index].cuda_idx);
+            }
             scores[ibdev_index].usecount++;
         }
     }
