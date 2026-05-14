@@ -618,6 +618,18 @@ static void uct_cuda_copy_md_sync_memops_get_address_range(
         ucs_assert(md->config.alloc_whole_reg == UCS_CONFIG_ON);
     }
 
+    /* For multi-handle VMM allocations (multiple cuMemCreate handles mapped
+     * contiguously into a single VA range via cuMemMap), cuMemGetAddressRange
+     * returns the bounds of the cuMem handle containing the base pointer,
+     * not the full mapped extent. Silently shrinking the registration to
+     * that single chunk would cause downstream dmabuf-based IB registration
+     * to cover only the first chunk, and any RDMA that crossed a chunk
+     * boundary would fail with IBV_WC_LOC_PROT_ERR. Preserve the caller's
+     * requested extent in that case. */
+    if (is_vmm && (alloc_length < length)) {
+        goto out_ctx_pop;
+    }
+
     mem_info->base_address = (void*)base_address;
     mem_info->alloc_length = alloc_length;
 
