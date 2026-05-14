@@ -19,25 +19,19 @@ ucx_inst=${WORKSPACE}/install
 echo "==== Running namespace tests on $(hostname) ===="
 
 test_namespace_pid() {
-	local tl=$1
-	local mem_type=$2
-	local test_type=$3
-	local base_perftest=$4
-	local expected_tl=$5
-	local config
-	local base_cmd
-	local unshare_cmd
+	local tl=$1 mem_type=$2 test_type=$3 base_perftest=$4 expected_tl=$5
+	local config base_cmd unshare_cmd
 
 	echo "==== Running perftest different PID namespace test for $tl ===="
 
 	base_cmd="$base_perftest -t $test_type -m $mem_type -p $server_port"
 	config="UCX_PROTO_INFO=y UCX_TLS=$tl,sysv"
 
-    # TODO: remove this once we have a way to test with multiple GPUs
-    config="$config CUDA_VISIBLE_DEVICES=0"
-	
+	# TODO: remove this once we have a way to test with multiple GPUs
+	config="$config CUDA_VISIBLE_DEVICES=0"
+
 	unshare_cmd="sudo unshare --mount-proc --pid --fork sudo -u $USER $config $base_cmd"
-	
+
 	step_server_port
 	$unshare_cmd &
 	sleep 3
@@ -58,10 +52,10 @@ test_namespace() {
 
 	echo "==== Running perftest namespace positive tests ===="
 
-	if [ "X$have_cuda" != "Xno" ] 
+	if [ "X$have_cuda" != "Xno" ]
 	then
 		test_namespace_pid cuda_ipc,cuda_copy cuda ucp_put_bw "$base_perftest" cuda_ipc
-	    # TODO: remove this once CUDA driver hang on GPU CI is fixed
+		# TODO: remove this once CUDA driver hang on GPU CI is fixed
 		return 0
 	fi
 

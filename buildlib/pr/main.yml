@@ -375,7 +375,7 @@ stages:
       parameters:
         name: gpu_namespace
         demands: ucx_gpu -equals yes
-        
+
   - stage: io_demo
     dependsOn: [Static_check]
     condition: false
