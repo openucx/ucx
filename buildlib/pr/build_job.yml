@@ -73,6 +73,8 @@ jobs:
             CONTAINER: euleros2sp12
           ctyunos2507:
             CONTAINER: ctyunos2507
+          ubuntu2604:
+            CONTAINER: ubuntu2604
       # ARM matrix
       ${{ if contains(parameters.name, 'aarch64') }}:
         matrix:
@@ -90,6 +92,8 @@ jobs:
             CONTAINER: ctyunos2507_aarch64
           sles16sp0_aarch64:
             CONTAINER: sles16sp0_aarch64
+          ubuntu2604_aarch64:
+            CONTAINER: ubuntu2604_aarch64
     timeoutInMinutes: 340
 
     steps:
