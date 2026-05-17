@@ -15,7 +15,7 @@ build_mode=${build_mode:-}
 build_mode=${build_mode:-long}
 
 case "${build_mode}" in
-long|short|sanity)
+long|short|sanity|icc)
 	;;
 *)
 	azure_log_error "Unsupported build mode: ${build_mode}"
@@ -518,7 +518,6 @@ long)
 			'build_ugni' \
 			'check_config_h' \
 			'check_inst_headers' \
-			'build_icc'\
 			'build_pgi' \
 			'build_gcc' \
 			'build_no_devx' \
@@ -526,6 +525,9 @@ long)
 			'build_gcc_debug_opt_with_dndebug' \
 			'build_clang' \
 			'build_armclang')
+	;;
+icc)
+	tests=('build_icc')
 	;;
 esac
 

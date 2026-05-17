@@ -277,6 +277,13 @@ stages:
 
       - template: build_job.yml
         parameters:
+          name: build_icc
+          demands:
+            - ucx_docker
+          displayName: Build with Intel compiler on CentOS7 x86_64
+
+      - template: build_job.yml
+        parameters:
           name: build_aarch64
           demands:
             - ucx_arm64

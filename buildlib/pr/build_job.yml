@@ -96,6 +96,12 @@ jobs:
           ctyunos2507:
             CONTAINER: ctyunos2507
             build_mode: short
+      # ICC matrix
+      ${{ if contains(parameters.name, 'icc') }}:
+        matrix:
+          centos7_x86_64:
+            CONTAINER: centos7_ib
+            build_mode: icc
       # ARM matrix
       ${{ if contains(parameters.name, 'aarch64') }}:
         matrix:
