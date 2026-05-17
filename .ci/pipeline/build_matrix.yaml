@@ -55,4 +55,6 @@ steps:
     parallel: false
     timeout: 60
     run: |
+      # Workspace UID differs from container UID; trust it for git.
+      git config --global --add safe.directory '*'
       ./buildlib/tools/builds.sh
