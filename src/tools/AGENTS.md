@@ -29,7 +29,7 @@ with its own `Makefile.am`. Nothing in `src/tools` is linked from
 
 - Each tool is an independent consumer of the public APIs and runs against
   whichever build it links against — either the in-tree build directory or
-  an installed prefix. Don't pull internal headers beyond the public API.
+  an installed prefix.
 - `ucx_perftest` adds tests by appending to the `tests[]` table in
   `perftest.h`/`.c`. New flags need a slot in `TEST_PARAMS_ARGS` (the
   `getopt` short-option string) and an entry in `TEST_PARAMS_ARGS_LONG`.
