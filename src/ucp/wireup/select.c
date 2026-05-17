@@ -755,7 +755,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
             score_cmp    = found ?
                            ucp_score_prio_cmp(score, priority, sinfo.score,
                                               sinfo.priority) : 1;
-            local_dev_cmp = (found && (priority == sinfo.priority) &&
+            local_dev_cmp = (found && (score_cmp == 0) &&
                              ucp_wireup_same_device_selection_class(
                                      context, rsc_index, sinfo.rsc_index)) ?
                             ucp_wireup_local_device_cmp(wiface,
