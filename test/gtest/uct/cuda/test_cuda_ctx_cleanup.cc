@@ -150,7 +150,11 @@ protected:
         pop_current_cuda_contexts(&popped);
         ASSERT_EQ(CUDA_SUCCESS, cuDevicePrimaryCtxReset(m_device));
         m_restore_current_ctx = popped;
-        m_ctx_retained = false;
+        /*
+         * cuDevicePrimaryCtxReset() does not release the retain taken by
+         * push_primary_ctx(), so cleanup() should still release it.
+         */
+        ASSERT_TRUE(m_ctx_retained);
     }
 
     static uct_cuda_ctx_rsc_t *create_rsc(uct_iface_h iface)
