@@ -10,10 +10,12 @@ pr:
   paths:
     exclude:
     - .agents
+    - .ci
     - .claude/skills
     - .gitignore
     - .readthedocs.yaml
     - AGENTS.md
+    - "**/AGENTS.md"
     - CLAUDE.md
     - contrib/pr_merge_check.py
     - contrib/check_qps.sh
@@ -22,6 +24,7 @@ pr:
     - docs/LoggingStyle.md
     - docs/OptimizationStyle.md
     - README.md
+    - REVIEW.md
     - NEWS
     - AUTHORS
     - buildlib/azure-pipelines-perf.yml

@@ -3745,8 +3745,9 @@ ucp_worker_discard_tl_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
     khiter_t iter;
 
     if (ucp_is_uct_ep_failed(uct_ep)) {
-        /* No need to discard failed TL EP, because it may lead to adding the
-         * same UCT EP to the hash of discarded UCT EPs */
+        /* Failed TL EPs do not enter the worker discard hash; destroy
+         * directly to take ownership of uct_ep from the caller. */
+        uct_ep_destroy(uct_ep);
         return UCS_OK;
     }
 

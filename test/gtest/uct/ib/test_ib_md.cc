@@ -336,7 +336,7 @@ UCS_TEST_P(test_ib_md, smkey_reg_atomic_mt, "IB_REG_MT_THRESH=1k",
 UCS_TEST_P(test_ib_md, mt_fail, "IB_REG_MT_THRESH=128K", "IB_REG_MT_CHUNK=16K")
 {
     size_t size             = UCS_MBYTE;
-    const size_t align_mask = (8 * UCS_KBYTE) - 1;
+    const size_t align_mask = (2 * ucs_get_page_size()) - 1;
     size_t lower_size       = ((size / 3)) & ~align_mask;
     size_t upper_size       = (size / 2) & ~align_mask;
     void *start, *mid, *last;
@@ -359,7 +359,7 @@ UCS_TEST_P(test_ib_md, mt_fail, "IB_REG_MT_THRESH=128K", "IB_REG_MT_CHUNK=16K")
     ASSERT_NE(nullptr, start);
     mid  = UCS_PTR_BYTE_OFFSET(start, lower_size);
     last = UCS_PTR_BYTE_OFFSET(start, size - upper_size);
-    munmap(mid, size - upper_size - lower_size);
+    ASSERT_EQ(0, munmap(mid, size - upper_size - lower_size));
 
     /* Trigger MT registration failure */
     scoped_log_handler wrap_err(wrap_errors_logger);
