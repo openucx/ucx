@@ -155,6 +155,15 @@ uct_rocm_ipc_iface_flush(uct_iface_h tl_iface, unsigned flags,
     return UCS_INPROGRESS;
 }
 
+static ucs_status_t
+uct_rocm_ipc_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
+{
+    uct_rocm_ipc_iface_t *iface = ucs_derived_of(tl_ep->iface,
+                                                 uct_rocm_ipc_iface_t);
+    return uct_rocm_base_ep_flush(tl_ep, &iface->signal_pool,
+                                  &iface->signal_queue, comp);
+}
+
 static unsigned uct_rocm_ipc_iface_progress(uct_iface_h tl_iface)
 {
     uct_rocm_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_rocm_ipc_iface_t);
@@ -179,7 +188,7 @@ static uct_iface_ops_t uct_rocm_ipc_iface_ops = {
     .ep_get_zcopy             = uct_rocm_ipc_ep_get_zcopy,
     .ep_pending_add           = (uct_ep_pending_add_func_t)ucs_empty_function_return_busy,
     .ep_pending_purge         = (uct_ep_pending_purge_func_t)ucs_empty_function,
-    .ep_flush                 = uct_base_ep_flush,
+    .ep_flush                 = uct_rocm_ipc_ep_flush,
     .ep_fence                 = uct_base_ep_fence,
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_rocm_ipc_ep_t),
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_rocm_ipc_ep_t),
