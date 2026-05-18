@@ -361,40 +361,36 @@ protected:
          * defines its own assertions on the multi-line output. */
     }
 
-    /* Extract the "[sec.usec]" timestamp prefix from a compact-format
-     * log line. Returns "" if the line does not start with '['. */
-    static std::string extract_timestamp(const std::string &log_line)
+    struct log_line_parts {
+        std::string prefix;
+        std::string content;
+    };
+
+    /* Split a compact-format log line into its prefix and content portion. 
+     * Fails the test on a malformed line. */
+    static log_line_parts extract_parts(const std::string &log_line)
     {
-        size_t close;
+        static const std::string separator = "]   ";
 
-        if (log_line.empty() || (log_line[0] != '[')) {
-            return "";
-        }
-
-        close = log_line.find(']');
-        if (close == std::string::npos) {
-            return "";
-        }
-        return log_line.substr(0, close + 1);
-    }
-
-    /* Extract the content portion of a compact-format log line, 
-     * fails the test on a malformed line. */
-    static std::string extract_content(const std::string &log_line)
-    {
-        static const std::string suffix = "]   ";
-        const size_t pos                = log_line.find(suffix);
+        const size_t pos = log_line.find(separator);
         EXPECT_NE(std::string::npos, pos)
                 << "malformed compact log line: '" << log_line << "'";
-        return (pos == std::string::npos) ?
-                       std::string() :
-                       log_line.substr(pos + suffix.size());
+        if (pos == std::string::npos) {
+            return {};
+        }
+
+        const size_t content_pos = pos + separator.size();
+
+        return {
+            .prefix = log_line.substr(0, content_pos),
+            .content = log_line.substr(content_pos),
+        };
     }
 
     void check_compact_log(const std::vector<std::string> &log_lines)
     {
         std::string input;
-        std::string ts, line;
+        std::string prefix, line;
         size_t idx = 0;
 
         for (size_t i = 0; i < log_lines.size(); ++i) {
@@ -413,14 +409,15 @@ protected:
         std::getline(content, line);
 
         while ((idx < log_lines.size()) && std::getline(content, line)) {
-            if (ts.empty()) {
-                ts = extract_timestamp(line);
-                ASSERT_FALSE(ts.empty());
+            log_line_parts parts = extract_parts(line);
+            if (prefix.empty()) {
+                ASSERT_FALSE(parts.prefix.empty());
+                prefix = parts.prefix;
             } else {
-                ASSERT_EQ(ts, extract_timestamp(line));
+                ASSERT_EQ(prefix, parts.prefix);
             }
 
-            EXPECT_EQ(log_lines[idx], extract_content(line));
+            EXPECT_EQ(log_lines[idx], parts.content);
             ++idx;
         }
 
