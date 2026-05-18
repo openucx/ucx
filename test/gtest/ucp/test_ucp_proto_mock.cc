@@ -958,7 +958,7 @@ UCS_TEST_P(test_ucp_proto_mock_gpu, cuda_managed_ppln_host_frag,
 
     check_ep_config(sender(), {
         {0, 0,    "short",   "rc_mlx5/mock"},
-        {1, 8246, "copy-in", "rc_mlx5/mock"},
+        {1, 8246, "cuda_copy copy-in", "rc_mlx5/mock"},
         {8247, 512 * UCS_KBYTE,
          "rendezvous cuda_copy, fenced write to remote, frag host, cuda_copy, frag host",
          "rc_mlx5/mock"},
