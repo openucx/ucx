@@ -1203,8 +1203,8 @@ ucp_rma_ppln_rtr_serialize(ucp_request_t *req, void *buf, size_t buf_size)
         packed_rkey_size = ucp_rkey_pack_memh(
                 worker->context, req->send.recv_ppln.md_map,
                 mdesc->memh, mdesc->ptr,
-                req->send.recv_ppln.frag_size, &mem_info,
-                0, NULL, 0, 0, entry->packed_rkey);
+                rpriv->frag_size, &mem_info, 0, NULL, 0, 0,
+                entry->packed_rkey);
         if (packed_rkey_size < 0) {
             ucs_error("rma_ppln: rkey pack failed frag=%d", i);
             return packed_rkey_size;
@@ -1279,7 +1279,6 @@ ucp_proto_get_ppln_init_from_get(ucp_request_t *req)
 
     req->send.recv_ppln.frag_count    = ucs_div_round_up(total_length,
                                                           rpriv->frag_size);
-    req->send.recv_ppln.frag_size     = rpriv->frag_size;
     req->send.recv_ppln.total_length  = total_length;
     req->send.recv_ppln.local_addr    =
         (uint64_t)req->send.state.dt_iter.type.contig.buffer;
@@ -1350,10 +1349,11 @@ ucp_proto_get_ppln_copy_out_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req              = ucs_container_of(self, ucp_request_t,
                                                        send.uct);
-    ucp_worker_h worker             = req->send.ep->worker;
-    ucp_put_ppln_recv_frag_t *frags = req->send.recv_ppln.frags;
-    size_t frag_size                 = req->send.recv_ppln.frag_size;
-    size_t total_length              = req->send.recv_ppln.total_length;
+    const ucp_proto_ppln_priv_t *rpriv = req->send.proto_config->priv;
+    ucp_worker_h worker                 = req->send.ep->worker;
+    ucp_put_ppln_recv_frag_t *frags     = req->send.recv_ppln.frags;
+    size_t frag_size                    = rpriv->frag_size;
+    size_t total_length                 = req->send.recv_ppln.total_length;
     ucp_put_ppln_recv_frag_t *frag;
     ucp_ep_h mem_type_ep;
     ucp_lane_index_t lane;
@@ -1558,6 +1558,7 @@ ucp_rma_ppln_rts_handler(ucp_worker_h worker,
                          const ucp_put_ppln_rts_hdr_t *rts)
 {
     ucp_proto_select_param_t sel_param;
+    const ucp_proto_ppln_priv_t *rpriv UCS_V_UNUSED;
     ucp_memory_info_t mem_info;
     ucp_request_t *req;
     ucs_status_t status;
@@ -1586,7 +1587,6 @@ ucp_rma_ppln_rts_handler(ucp_worker_h worker,
     req->send.recv_ppln.sender_req_id = rts->super.super.req_id;
     req->send.recv_ppln.md_map        = rts->md_map;
     req->send.recv_ppln.sys_dev       = rts->sys_dev;
-    req->send.recv_ppln.frag_size     = rts->frag_size;
     req->send.recv_ppln.local_addr    = rts->remote_addr;
     req->send.recv_ppln.total_length  = rts->total_length;
 
@@ -1604,6 +1604,11 @@ ucp_rma_ppln_rts_handler(ucp_worker_h worker,
         ucp_request_put(req);
         return status;
     }
+
+    rpriv = req->send.proto_config->priv;
+    ucs_assertv(rts->frag_size == rpriv->frag_size,
+                "RTS frag_size=%zu local frag_size=%zu",
+                rts->frag_size, rpriv->frag_size);
 
     ucp_request_send(req);
     return UCS_OK;

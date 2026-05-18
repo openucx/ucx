@@ -260,7 +260,6 @@ struct ucp_request {
                     ucs_ptr_map_key_t sender_req_id;
                     ucp_md_map_t     md_map;       /* MD map for fragment registration */
                     ucs_sys_device_t sys_dev;      /* System device for fragment alloc */
-                    size_t           frag_size;    /* Fragment size */
                     uint64_t         local_addr;   /* Local destination address */
                     uint64_t         remote_addr;  /* Peer source address */
                     size_t           total_length; /* Total transfer length */
