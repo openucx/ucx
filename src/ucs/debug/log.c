@@ -240,7 +240,7 @@ void ucs_log_print_compact(const char *str)
     const char *line, *next, *output_cstr;
     struct timeval tv;
     char prefix[256];
-    int prefix_len;
+    int UCS_V_UNUSED prefix_len;
 
     gettimeofday(&tv, NULL);
 
