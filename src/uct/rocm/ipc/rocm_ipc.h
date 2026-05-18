@@ -245,7 +245,7 @@ uct_rocm_ipc_copy_level<UCS_DEVICE_LEVEL_GRID>(void *dst, const void *src,
 
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_BLOCK>
 __device__ ucs_status_t uct_rocm_ipc_ep_put(
-        uct_device_ep_h device_ep, const uct_device_mem_element_t *mem_elem,
+        uct_device_ep_h device_ep, const uct_device_mem_elem_t *mem_elem,
         const void *address, uint64_t remote_address, size_t length,
         uint64_t flags, uct_device_completion_t *comp)
 {
@@ -265,7 +265,7 @@ __device__ ucs_status_t uct_rocm_ipc_ep_put(
 /* Atomic add operation */
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_BLOCK>
 __device__ ucs_status_t uct_rocm_ipc_ep_atomic_add(
-        uct_device_ep_h device_ep, const uct_device_mem_element_t *mem_elem,
+        uct_device_ep_h device_ep, const uct_device_mem_elem_t *mem_elem,
         uint64_t inc_value, uint64_t remote_address, uint64_t flags,
         uct_device_completion_t *comp)
 {
@@ -288,7 +288,7 @@ __device__ ucs_status_t uct_rocm_ipc_ep_atomic_add(
 
 __device__ static inline ucs_status_t
 uct_rocm_ipc_ep_get_ptr(uct_device_ep_h device_ep,
-                        const uct_device_mem_element_t *mem_elem,
+                        const uct_device_mem_elem_t *mem_elem,
                         uint64_t address, void **addr_p)
 {
     auto rocm_ipc_mem_element =

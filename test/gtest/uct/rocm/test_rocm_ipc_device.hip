@@ -175,7 +175,7 @@ UCS_TEST_P(test_rocm_ipc_rma, get_mem_elem_pack)
     static const uint64_t SEED2 = 0xDEFlu;
     size_t length = 1024;
     size_t mem_elem_size = get_mem_elem_size();
-    uct_device_mem_element_t *mem_elem;
+    uct_device_mem_elem_t *mem_elem;
 
     mapped_buffer sendbuf(length, SEED1, *m_sender, 0, UCS_MEMORY_TYPE_ROCM);
     mapped_buffer recvbuf(length, SEED2, *m_receiver, 0, UCS_MEMORY_TYPE_ROCM);
@@ -213,30 +213,30 @@ UCS_TEST_P(test_rocm_ipc_rma_device, device_put)
     mapped_buffer sendbuf(length, SEED1, *m_sender, 0, UCS_MEMORY_TYPE_ROCM);
     mapped_buffer recvbuf(length, SEED2, *m_receiver, 0, UCS_MEMORY_TYPE_ROCM);
 
-    uct_device_local_mem_list_elem_t src_elem_host;
+    const size_t src_elem_size = sizeof(uct_device_local_mem_elem_t) +
+                                 sizeof(uct_device_mem_elem_t);
+    struct { uct_device_local_mem_elem_t hdr; uct_device_mem_elem_t tl; }
+            src_elem_host = {};
     ASSERT_UCS_OK(uct_md_mem_elem_pack(m_sender->md(), sendbuf.memh(),
                                        recvbuf.rkey(),
-                                       &src_elem_host.uct_mem_element));
+                                       &src_elem_host.tl));
 
-    uct_device_local_mem_list_elem_t *src_elem;
+    uct_device_local_mem_elem_t *src_elem;
+    ASSERT_EQ(hipSuccess, hipMalloc((void**)&src_elem, src_elem_size));
     ASSERT_EQ(hipSuccess,
-              hipMalloc((void**)&src_elem,
-                       sizeof(uct_device_local_mem_list_elem_t)));
-    ASSERT_EQ(hipSuccess,
-              hipMemcpy(src_elem, &src_elem_host,
-                       sizeof(uct_device_local_mem_list_elem_t),
-                       hipMemcpyHostToDevice));
+              hipMemcpy(src_elem, &src_elem_host, src_elem_size,
+                        hipMemcpyHostToDevice));
 
-    uct_device_mem_element_t *mem_elem;
+    uct_device_mem_elem_t *mem_elem;
     ASSERT_EQ(hipSuccess, hipMalloc((void**)&mem_elem,
-                                    sizeof(uct_device_mem_element_t)));
-    ASSERT_EQ(hipSuccess, hipMemcpy(mem_elem, &src_elem_host.uct_mem_element,
-                                    sizeof(uct_device_mem_element_t),
+                                    sizeof(uct_device_mem_elem_t)));
+    ASSERT_EQ(hipSuccess, hipMemcpy(mem_elem, &src_elem_host.tl,
+                                    sizeof(uct_device_mem_elem_t),
                                     hipMemcpyHostToDevice));
 
     uct_device_ep_h device_ep;
     ASSERT_UCS_OK(uct_ep_get_device_ep(m_sender->ep(0), &device_ep));
-    ASSERT_UCS_OK(rocm_uct::launch_uct_put(device_ep, src_elem, mem_elem,
+    ASSERT_UCS_OK(rocm_uct::launch_uct_put(device_ep, src_elem->tl, mem_elem,
                                            sendbuf.ptr(),
                                            (uintptr_t)recvbuf.ptr(), length,
                                            device_level, num_threads,

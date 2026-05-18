@@ -1,5 +1,6 @@
 /**
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025-2026. ALL RIGHTS RESERVED.
+ * Copyright (C) Advanced Micro Devices, Inc. 2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -562,7 +563,7 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
         ucs_memory_type_t mem_type, uct_allocated_memory_t *mem,
         ucs_sys_device_t local_sys_dev)
 {
-    const size_t uct_elem_size = sizeof(uct_device_remote_mem_list_elem_t);
+    size_t uct_elem_size;
     size_t handle_size         = 0;
     ucp_tl_bitmap_t tl_bitmap[UCP_DEVICE_TL_TYPE_LAST] = {};
     const ucp_device_mem_list_elem_t *ucp_element;
@@ -572,8 +573,29 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
     ucs_status_t status;
     int tl_type;
 
-    handle_size = sizeof(*handle) + (uct_elem_size * params->num_elements);
-    handle      = ucs_calloc(1, handle_size, "ucp_device_remote_mem_list_t");
+    ucp_device_get_tl_bitmap(ep->worker, tl_bitmap, local_sys_dev);
+
+    /* handle->num_lanes is the least common multiple of both lane types, so:
+     * - each lane is replicated num_lanes / popcount(tl_bitmap) times
+     * - channel_id % num_lanes maps to the correct lane, regardless of lane type
+     */
+    num_lanes = UCS_STATIC_BITMAP_POPCOUNT(tl_bitmap[UCP_DEVICE_TL_TYPE_LKEY]);
+    if (!num_lanes) {
+        if (!UCS_STATIC_BITMAP_POPCOUNT(tl_bitmap[UCP_DEVICE_TL_TYPE_NOLKEY])) {
+            ucs_error("failed to pack uct memory element for first element");
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        ucs_assert(UCS_STATIC_BITMAP_POPCOUNT(
+                           tl_bitmap[UCP_DEVICE_TL_TYPE_NOLKEY]) == 1);
+        num_lanes = 1;
+    }
+
+    ucp_element   = params->elements;
+    uct_elem_size = sizeof(uct_device_remote_mem_elem_t) +
+                    (sizeof(uct_device_remote_tl_elem_t) * num_lanes);
+    handle_size   = sizeof(*handle) + (params->num_elements * uct_elem_size);
+    handle        = ucs_calloc(1, handle_size, "ucp_device_remote_mem_list_t");
     if (handle == NULL) {
         ucs_error("failed to allocate ucp_device_remote_mem_list_t");
         return UCS_ERR_NO_MEMORY;
@@ -592,7 +614,7 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
 
             if (tl_type == UCP_DEVICE_TL_TYPE_LAST) {
                 ucs_error("lane not found for element %zd", i);
-                status =  UCS_ERR_INVALID_PARAM;
+                status = UCS_ERR_INVALID_PARAM;
                 goto out;
             }
 
@@ -607,10 +629,10 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
         ucp_element = UCS_PTR_BYTE_OFFSET(ucp_element, params->element_size);
     }
 
-    handle->version = UCP_DEVICE_MEM_LIST_VERSION_V1;
-    handle->length  = params->num_elements;
+    handle->version   = UCP_DEVICE_MEM_LIST_VERSION_V1;
+    handle->length    = params->num_elements;
     handle->num_lanes = num_lanes;
-    status          = ucp_device_mem_list_export_handle(
+    status            = ucp_device_mem_list_export_handle(
             ep->worker, handle, handle_size, mem_type, local_sys_dev, mem,
             "ucp_device_remote_mem_list_handle_t");
 

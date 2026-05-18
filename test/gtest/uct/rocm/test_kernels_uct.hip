@@ -101,8 +101,8 @@ template<typename T> class device_result_ptr {
 template<ucs_device_level_t level>
 __global__ void
 test_put_kernel(uct_device_ep_h ep,
-                const uct_device_local_mem_list_elem_t *src_elem,
-                const uct_device_mem_element_t *mem_elem, const void *va,
+                const uct_device_mem_elem_t *src_elem,
+                const uct_device_mem_elem_t *mem_elem, const void *va,
                 uint64_t rva, size_t length, ucs_status_t *status_p)
 {
     uct_device_completion_t comp;
@@ -121,8 +121,8 @@ test_put_kernel(uct_device_ep_h ep,
 }
 
 ucs_status_t launch_uct_put(uct_device_ep_h device_ep,
-                            const uct_device_local_mem_list_elem_t *src_elem,
-                            const uct_device_mem_element_t *mem_elem,
+                            const uct_device_mem_elem_t *src_elem,
+                            const uct_device_mem_elem_t *mem_elem,
                             const void *va, uint64_t rva, size_t length,
                             ucs_device_level_t level, unsigned num_threads,
                             unsigned num_blocks)
@@ -170,16 +170,16 @@ ucs_status_t launch_uct_put(uct_device_ep_h device_ep,
 
 // Explicit template instantiations for all device levels
 template __global__ void test_put_kernel<UCS_DEVICE_LEVEL_THREAD>(
-    uct_device_ep_h, const uct_device_local_mem_list_elem_t*,
-    const uct_device_mem_element_t*, const void*, uint64_t, size_t, ucs_status_t*);
+    uct_device_ep_h, const uct_device_mem_elem_t*,
+    const uct_device_mem_elem_t*, const void*, uint64_t, size_t, ucs_status_t*);
 template __global__ void test_put_kernel<UCS_DEVICE_LEVEL_WARP>(
-    uct_device_ep_h, const uct_device_local_mem_list_elem_t*,
-    const uct_device_mem_element_t*, const void*, uint64_t, size_t, ucs_status_t*);
+    uct_device_ep_h, const uct_device_mem_elem_t*,
+    const uct_device_mem_elem_t*, const void*, uint64_t, size_t, ucs_status_t*);
 template __global__ void test_put_kernel<UCS_DEVICE_LEVEL_BLOCK>(
-    uct_device_ep_h, const uct_device_local_mem_list_elem_t*,
-    const uct_device_mem_element_t*, const void*, uint64_t, size_t, ucs_status_t*);
+    uct_device_ep_h, const uct_device_mem_elem_t*,
+    const uct_device_mem_elem_t*, const void*, uint64_t, size_t, ucs_status_t*);
 template __global__ void test_put_kernel<UCS_DEVICE_LEVEL_GRID>(
-    uct_device_ep_h, const uct_device_local_mem_list_elem_t*,
-    const uct_device_mem_element_t*, const void*, uint64_t, size_t, ucs_status_t*);
+    uct_device_ep_h, const uct_device_mem_elem_t*,
+    const uct_device_mem_elem_t*, const void*, uint64_t, size_t, ucs_status_t*);
 
 } // namespace rocm_uct
