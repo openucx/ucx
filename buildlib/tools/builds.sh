@@ -15,7 +15,7 @@ build_mode=${build_mode:-}
 build_mode=${build_mode:-long}
 
 case "${build_mode}" in
-long|short|sanity|icc)
+long|short|sanity|compilers)
 	;;
 *)
 	azure_log_error "Unsupported build mode: ${build_mode}"
@@ -156,28 +156,16 @@ build_release_pkg() {
 build_icc_check() {
 	cc=$1
 	cxx=$2
-	test_exe=./conftest-${cc}
-	can_build=yes
 
-	rm -f ${test_exe}
-	if ! $cc -v
-	then
-		can_build=no
-		azure_log_warning "Not building with Intel compiler $cc: compiler is unavailable"
-	elif ! $cc -x c - -o ${test_exe} <<< "int main(void) {return 0;}" || \
-		 ! ${test_exe}
-	then
-		can_build=no
-		azure_log_warning "Not building with Intel compiler $cc: compiled test program cannot run"
-	fi
-	rm -f ${test_exe}
-
-	if [ "${can_build}" = "yes" ]
+	if $cc -v
 	then
 		echo "==== Build with Intel compiler $cc ===="
-		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst CC=$cc CXX=$cxx
+		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst \
+			"${common_disable_config_args[@]}" CC=$cc CXX=$cxx
 		$MAKEP
 		make_clean distclean
+	else
+		azure_log_warning "Not building with Intel compiler $cc"
 	fi
 }
 
@@ -206,11 +194,12 @@ build_pgi() {
 		# Doc: https://docs.nvidia.com/hpc-sdk/hpc-sdk-install-guide/index.html
 		add_network_host
 		echo "==== Build with PGI compiler ===="
-		# PGI failed to build valgrind headers, disable it for now
+		# PGI failed to build valgrind headers, disable it for now.
 		# TODO: Using non-default PGI compiler - pgcc18 which is going to be default
 		#       in next versions.
 		#       Switch to default CC compiler after pgcc18 is default for pgi module
-		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --without-valgrind
+		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst \
+			"${common_disable_config_args[@]}"
 		$MAKEP
 		# TODO: Check why "make distclean" is needed to cleanup after PGI compiler
 		make_clean distclean
@@ -518,7 +507,6 @@ long)
 			'build_ugni' \
 			'check_config_h' \
 			'check_inst_headers' \
-			'build_pgi' \
 			'build_gcc' \
 			'build_no_devx' \
 			'build_no_openmp' \
@@ -526,8 +514,8 @@ long)
 			'build_clang' \
 			'build_armclang')
 	;;
-icc)
-	tests=('build_icc')
+compilers)
+	tests=('build_icc' 'build_pgi')
 	;;
 esac
 

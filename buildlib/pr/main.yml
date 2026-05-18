@@ -277,10 +277,10 @@ stages:
 
       - template: build_job.yml
         parameters:
-          name: build_icc
+          name: build_icc_pgi
           demands:
             - ucx_docker
-          displayName: Build with Intel compiler on CentOS7 x86_64
+          displayName: Build with ICC and PGI on CentOS7 x86_64
 
       - template: build_job.yml
         parameters:
