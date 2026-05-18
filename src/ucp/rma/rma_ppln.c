@@ -331,7 +331,7 @@ ucp_proto_put_mtype_copy_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req     = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_mem_desc_t *mdesc  = req->send.frag_ppln.local_mdesc;
-    ucs_memory_type_t frag_mem_type = mdesc->memh->mem_type;
+    ucs_memory_type_t UCS_V_UNUSED frag_mem_type = mdesc->memh->mem_type;
     ucp_worker_h worker    = req->send.ep->worker;
     ucp_ep_h mtype_ep;
     ucp_lane_index_t lane;
@@ -1037,8 +1037,8 @@ static int
 ucp_rma_ppln_frag_copy_out_done(ucp_request_t *req,
                                 ucp_put_ppln_recv_frag_t *frag)
 {
-    int frag_id = (int)(frag -
-                        (ucp_put_ppln_recv_frag_t *)req->send.recv_ppln.frags);
+    int UCS_V_UNUSED frag_id = (int)(
+            frag - (ucp_put_ppln_recv_frag_t *)req->send.recv_ppln.frags);
 
     ucs_mpool_put_inline(frag->mdesc);
     frag->mdesc = NULL;
