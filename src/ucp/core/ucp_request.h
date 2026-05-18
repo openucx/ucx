@@ -139,6 +139,9 @@ typedef struct {
 } ucp_mem_flush_t;
 
 
+struct ucp_rma_ppln_recv_state;
+
+
 /**
  * Request in progress.
  */
@@ -253,18 +256,7 @@ struct ucp_request {
                     ucs_ptr_map_key_t remote_req_id; /* Peer's request ID for ATP */
                 } frag_ppln;
 
-                struct {
-                    void             *frags;        /* Per-fragment tracking array */
-                    int              frag_count;    /* Total number of fragments */
-                    /* UCS_PTR_MAP_KEY_INVALID if GET-initiated */
-                    ucs_ptr_map_key_t sender_req_id;
-                    ucp_md_map_t     md_map;       /* MD map for fragment registration */
-                    ucs_sys_device_t sys_dev;      /* System device for fragment alloc */
-                    uint64_t         local_addr;   /* Local destination address */
-                    uint64_t         remote_addr;  /* Peer source address */
-                    size_t           total_length; /* Total transfer length */
-                    ucs_queue_head_t copy_out_queue; /* Frags ready for copy-out */
-                } recv_ppln;
+                struct ucp_rma_ppln_recv_state *recv_ppln;
 
                 struct {
                     /* Remote request ID received from a peer */
