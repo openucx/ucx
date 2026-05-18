@@ -164,6 +164,31 @@ typedef struct {
     } get;
 } UCS_S_PACKED ucp_put_ppln_rtr_hdr_t;
 
+static size_t
+ucp_rma_ppln_rtr_rkey_size(ucp_context_h context, ucp_md_map_t md_map)
+{
+    /* Matches the RTR rkey pack below: no distance map and no terminator. */
+    return ucp_rkey_packed_size(context, md_map, UCS_SYS_DEVICE_ID_UNKNOWN, 0,
+                                0);
+}
+
+static size_t
+ucp_rma_ppln_rtr_packed_size(int frag_count, size_t rkey_size)
+{
+    size_t entry_size = sizeof(ucp_put_ppln_rtr_entry_t) + rkey_size;
+    size_t hdr_size   = sizeof(ucp_put_ppln_rtr_hdr_t);
+
+    ucs_assertv_always(rkey_size <= UINT8_MAX, "rkey_size=%zu",
+                       rkey_size);
+    ucs_assertv_always(frag_count >= 0, "frag_count=%d", frag_count);
+    ucs_assertv_always(((SIZE_MAX - hdr_size) / entry_size) >=
+                       (size_t)frag_count,
+                       "RTR size overflow frag_count=%d rkey_size=%zu",
+                       frag_count, rkey_size);
+
+    return hdr_size + ((size_t)frag_count * entry_size);
+}
+
 /* ATS header: receiver to sender, signals all copy out are done */
 typedef struct {
     ucp_rma_ppln_hdr_t super;
@@ -1127,9 +1152,19 @@ ucp_rma_ppln_rtr_serialize(ucp_request_t *req, void *buf, size_t buf_size)
     ucp_put_ppln_rtr_entry_t *entry;
     ucp_memory_info_t mem_info;
     ssize_t packed_rkey_size;
+    size_t rtr_size;
+    size_t rkey_size;
     ucp_mem_desc_t *mdesc;
     void *p;
     int i;
+
+    rkey_size = ucp_rma_ppln_rtr_rkey_size(worker->context,
+                                           req->send.recv_ppln.md_map);
+    rtr_size  = ucp_rma_ppln_rtr_packed_size(count, rkey_size);
+    ucs_assertv_always(rtr_size <= buf_size,
+                       "RTR packed size %zu exceeds max_bcopy %zu "
+                       "frag_count=%d rkey_size=%zu",
+                       rtr_size, buf_size, count, rkey_size);
 
     rtr->super.super.req_id = ucp_send_request_get_id(req);
     rtr->super.super.ep_id  = ucp_ep_remote_id(req->send.ep);
@@ -1175,8 +1210,9 @@ ucp_rma_ppln_rtr_serialize(ucp_request_t *req, void *buf, size_t buf_size)
             return packed_rkey_size;
         }
 
-        ucs_assertv(packed_rkey_size <= UINT8_MAX,
-                    "packed_rkey_size=%zd", packed_rkey_size);
+        ucs_assertv_always(packed_rkey_size == (ssize_t)rkey_size,
+                           "packed_rkey_size=%zd rkey_size=%zu",
+                           packed_rkey_size, rkey_size);
         entry->packed_rkey_len = (uint8_t)packed_rkey_size;
         p = UCS_PTR_BYTE_OFFSET(p, sizeof(*entry) + packed_rkey_size);
 
@@ -1189,11 +1225,11 @@ ucp_rma_ppln_rtr_serialize(ucp_request_t *req, void *buf, size_t buf_size)
     }
 
     /* TODO: handle splitting RTR across multiple bcopy messages */
-    ucs_assertv((size_t)UCS_PTR_BYTE_DIFF(buf, p) <= buf_size,
-                "RTR packed size %zu exceeds max_bcopy %zu",
-                (size_t)UCS_PTR_BYTE_DIFF(buf, p), buf_size);
+    ucs_assertv_always((size_t)UCS_PTR_BYTE_DIFF(buf, p) == rtr_size,
+                       "RTR packed size %zu expected %zu",
+                       (size_t)UCS_PTR_BYTE_DIFF(buf, p), rtr_size);
 
-    return (ssize_t)UCS_PTR_BYTE_DIFF(buf, p);
+    return (ssize_t)rtr_size;
 }
 
 static size_t
