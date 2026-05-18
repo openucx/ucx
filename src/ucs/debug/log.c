@@ -269,9 +269,6 @@ void ucs_log_print_compact(const char *str)
         ucs_string_buffer_appendf(&output, "%s%.*s\n", prefix,
                                   (int)(next - line), line);
         line = next + 1;
-        if (*line == '\0') {
-            break;
-        }
     }
 
     /* Last line */
