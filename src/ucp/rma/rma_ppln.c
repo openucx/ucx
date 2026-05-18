@@ -241,6 +241,10 @@ ucp_proto_put_mtype_probe(const ucp_proto_init_params_t *init_params)
                                             cap.put.opt_zcopy_align),
     };
 
+    if (!context->config.ext.memtype_copy_enable) {
+        return;
+    }
+
     /* TODO: Remove explicit CUDA memory type dependency */
     if ((sel_param->dt_class != UCP_DATATYPE_CONTIG) ||
         !ucp_proto_init_check_op(init_params,
@@ -587,9 +591,11 @@ static int
 ucp_proto_ppln_check_common(const ucp_proto_init_params_t *init_params,
                             uint64_t op_id_mask)
 {
+    ucp_context_t *context                    = init_params->worker->context;
     const ucp_proto_select_param_t *sel_param = init_params->select_param;
 
-    return (sel_param->dt_class == UCP_DATATYPE_CONTIG) &&
+    return context->config.ext.memtype_copy_enable &&
+           (sel_param->dt_class == UCP_DATATYPE_CONTIG) &&
            ucp_proto_init_check_op(init_params, op_id_mask) &&
            !(ucp_proto_select_op_flags(sel_param) &
              UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG) &&
