@@ -1136,6 +1136,11 @@ ucp_rma_ppln_rtr_serialize(ucp_request_t *req, void *buf, size_t buf_size)
     rtr->super.sub_id       = UCP_RMA_PPLN_AM_RTR;
     rtr->sender_req_id      = req->send.recv_ppln.sender_req_id;
     rtr->frag_count         = count;
+    rtr->get.source_addr    = 0;
+    rtr->get.total_length   = 0;
+    rtr->get.md_map         = 0;
+    rtr->get.sys_dev        = UCS_SYS_DEVICE_ID_UNKNOWN;
+    rtr->get.mem_type       = UCS_MEMORY_TYPE_UNKNOWN;
 
     if (rtr->sender_req_id == UCS_PTR_MAP_KEY_INVALID) {
         rkey_cfg = &ucs_array_elem(&worker->rkey_config,
@@ -1808,13 +1813,16 @@ ucp_rma_ppln_dump(ucp_worker_h worker, uct_am_trace_type_t type, uint8_t id,
         rtr = data;
         ucs_string_buffer_appendf(&strb,
                 "RMA_PPLN_RTR ep_id=0x%" PRIx64 " req_id=0x%" PRIx64
-                " sender_req_id=0x%" PRIx64 " frag_count=%d"
-                " get_source_addr=0x%" PRIx64 " get_total_length=%zu"
-                " get_mem_type=%s",
+                " sender_req_id=0x%" PRIx64 " frag_count=%d",
                 rtr->super.super.ep_id, rtr->super.super.req_id,
-                rtr->sender_req_id, rtr->frag_count,
-                rtr->get.source_addr, rtr->get.total_length,
-                ucs_memory_type_names[rtr->get.mem_type]);
+                rtr->sender_req_id, rtr->frag_count);
+        if (rtr->sender_req_id == UCS_PTR_MAP_KEY_INVALID) {
+            ucs_string_buffer_appendf(&strb,
+                    " get_source_addr=0x%" PRIx64 " get_total_length=%zu"
+                    " get_mem_type=%s",
+                    rtr->get.source_addr, rtr->get.total_length,
+                    ucs_memory_type_names[rtr->get.mem_type]);
+        }
         break;
     case UCP_RMA_PPLN_AM_ATP:
         atp = data;
