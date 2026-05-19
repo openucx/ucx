@@ -1111,7 +1111,10 @@ void ucp_proto_select_elem_trace(ucp_worker_h worker,
     /* Print human-readable protocol selection table to the log */
     ucp_proto_select_elem_info(worker, ep_cfg_index, rkey_cfg_index,
                                select_param, select_elem, 0, show_used, &strb);
-    ucs_log_print_compact(ucs_string_buffer_cstr(&strb));
+
+    if (ucs_string_buffer_length(&strb) > 0) {
+        ucs_log_print_compact(ucs_string_buffer_cstr(&strb));
+    }
 
     ucs_string_buffer_cleanup(&strb);
 }
