@@ -298,7 +298,7 @@ build_cuda() {
 
 	echo "==== Build with enable cuda, w/o gdr_copy and w/o GDA-KI ===="
 	${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst \
-		--with-cuda --without-gdrcopy --without-gda
+		--with-cuda --without-gdrcopy --without-gda --disable-gtest
 	$MAKEP
 	check_no_gda
 
