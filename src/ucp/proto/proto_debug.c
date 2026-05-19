@@ -201,18 +201,7 @@ ucp_proto_selections_dump(ucp_worker_h worker,
                           const ucp_proto_select_param_t *select_param,
                           char *counter_str, size_t size, int show_used)
 {
-    ucp_operation_id_t op_id;
-
     if (!show_used) {
-        *counter_str = '\0';
-        return;
-    }
-
-    /* Short active messages protocol selections are not counted */
-    op_id = ucp_proto_select_op_id(select_param);
-    if ((op_id == UCP_OP_ID_AM_SEND || op_id == UCP_OP_ID_AM_SEND_REPLY) &&
-        strstr(proto_attr->desc, "short") != NULL) {
-        ucs_assert(proto_attr->selections == 0);
         *counter_str = '\0';
         return;
     }
