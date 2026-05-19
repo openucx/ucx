@@ -1446,11 +1446,11 @@ public:
         ucp_recv_desc_t *rdesc = (ucp_recv_desc_t*)m_data_ptr - 1;
         if (!(rdesc->flags & UCP_RECV_DESC_FLAG_MALLOC)) {
             ucp_am_data_release(receiver().worker(), m_data_ptr);
-            UCS_TEST_SKIP_R("eager AM was not assembled into malloc-backed desc");
+            UCS_TEST_SKIP_R("eager AM was not in malloc-backed desc");
         }
 
         std::vector<char> rbuf(size);
-        size_t recv_length = SIZE_MAX;
+        size_t recv_length        = SIZE_MAX;
         ucp_request_param_t param = {};
 
         param.op_attr_mask     = UCP_OP_ATTR_FIELD_RECV_INFO;
@@ -1465,7 +1465,7 @@ public:
     }
 
 private:
-    void   *m_data_ptr;
+    void *m_data_ptr;
     size_t m_data_length;
 };
 

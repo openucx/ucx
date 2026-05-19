@@ -147,8 +147,7 @@ static UCS_F_ALWAYS_INLINE void ucp_am_release_long_desc(ucp_recv_desc_t *desc)
     ucs_free((char*)desc - desc->release_desc_offset);
 }
 
-static UCS_F_ALWAYS_INLINE void
-ucp_am_release_data_desc(ucp_recv_desc_t *desc)
+static UCS_F_ALWAYS_INLINE void ucp_am_release_data_desc(ucp_recv_desc_t *desc)
 {
     if (ucs_unlikely(desc->flags & UCP_RECV_DESC_FLAG_MALLOC)) {
         ucp_am_release_long_desc(desc);
