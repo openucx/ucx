@@ -147,6 +147,16 @@ static UCS_F_ALWAYS_INLINE void ucp_am_release_long_desc(ucp_recv_desc_t *desc)
     ucs_free((char*)desc - desc->release_desc_offset);
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucp_am_release_data_desc(ucp_recv_desc_t *desc)
+{
+    if (ucs_unlikely(desc->flags & UCP_RECV_DESC_FLAG_MALLOC)) {
+        ucp_am_release_long_desc(desc);
+    } else {
+        ucp_recv_desc_release(desc);
+    }
+}
+
 static UCS_F_ALWAYS_INLINE int
 ucp_am_rdesc_in_progress(ucp_recv_desc_t *desc, ucs_status_t am_cb_status)
 {
@@ -1230,7 +1240,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_recv_data_nbx,
          */
         desc->flags &= ~UCP_RECV_DESC_FLAG_AM_CB_INPROGRESS;
     } else {
-        ucp_recv_desc_release(desc);
+        ucp_am_release_data_desc(desc);
     }
 
 out:
