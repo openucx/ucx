@@ -62,6 +62,18 @@ int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote,
                              int *netmask_len_p);
 
 /**
+ * Check whether a local route exists for a given destination address.
+ *
+ * @param [in]  sa_remote        Pointer to the destination address.
+ * @param [out] if_index_p       Optional pointer to store the network
+ *                               interface index of the local route found.
+ *
+ * @return 1 if a local route exists, or 0 otherwise.
+ */
+int ucs_netlink_local_route_exists(const struct sockaddr *sa_remote,
+                                   int *if_index_p);
+
+/**
  * Check if this network interface has the best route to the destination
  * address.
  *
