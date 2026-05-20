@@ -700,10 +700,11 @@ uct_ib_iface_roce_is_routable(uct_ib_iface_t *iface, uint8_t gid_index,
 {
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
     uint8_t port_num     = iface->config.port_num;
+    unsigned lo_ndev_index = 0;
     char ndev_ifname[IFNAMSIZ], lo_ifname[IFNAMSIZ], local_ifname[IFNAMSIZ];
     char remote_str[128];
-    unsigned ndev_index, lo_ndev_index = 0;
     int local_ndev_index;
+    unsigned ndev_index;
 
     if (uct_ib_device_get_roce_ndev_index(dev, port_num, gid_index,
                                           &ndev_index) != UCS_OK) {

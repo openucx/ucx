@@ -282,14 +282,6 @@ ucs_netlink_lookup_in_iface_rules(const struct sockaddr *sa_remote,
                                                      RTN_UNSPEC);
 }
 
-static int
-ucs_netlink_lookup_local_route_in_iface_rules(
-        const struct sockaddr *sa_remote, ucs_netlink_rt_rules_t *iface_rules)
-{
-    return ucs_netlink_lookup_in_iface_rules_by_type(sa_remote, iface_rules,
-                                                     RTN_LOCAL);
-}
-
 static void ucs_netlink_init_routing_table_cache(void)
 {
     static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
@@ -366,27 +358,19 @@ int ucs_netlink_local_route_exists(const struct sockaddr *sa_remote,
 {
     int best_netmask_len = -1;
     int best_if_index    = -1;
-    ucs_netlink_rt_rules_t *iface_rules;
-    int curr_netmask_len;
-    khiter_t iter;
+    ucs_netlink_rt_rules_t iface_rules;
+    khint32_t if_index;
 
     ucs_netlink_init_routing_table_cache();
 
-    for (iter = kh_begin(&ucs_netlink_routing_table_cache);
-         iter != kh_end(&ucs_netlink_routing_table_cache); ++iter) {
-        if (!kh_exist(&ucs_netlink_routing_table_cache, iter)) {
-            continue;
-        }
-
-        iface_rules = &kh_val(&ucs_netlink_routing_table_cache, iter);
-        curr_netmask_len =
-                ucs_netlink_lookup_local_route_in_iface_rules(sa_remote,
-                                                              iface_rules);
+    kh_foreach(&ucs_netlink_routing_table_cache, if_index, iface_rules, {
+        int curr_netmask_len = ucs_netlink_lookup_in_iface_rules_by_type(
+                                            sa_remote, &iface_rules, RTN_LOCAL);
         if (curr_netmask_len > best_netmask_len) {
             best_netmask_len = curr_netmask_len;
-            best_if_index    = kh_key(&ucs_netlink_routing_table_cache, iter);
+            best_if_index    = if_index;
         }
-    }
+    })
 
     if (if_index_p != NULL) {
         *if_index_p = best_if_index;
