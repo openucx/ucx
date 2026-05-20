@@ -6,10 +6,13 @@
 #
 
 realdir=$(realpath $(dirname $0))
+requested_gcc_module=${GCC_MODULE:-}
 source ${realdir}/common.sh
 source ${realdir}/../az-helpers.sh
 build_mode=${build_mode:-}
 
+# Azure passes the literal template variable when a matrix row does not define
+# build_mode. Treat it as unset so the local default below still applies.
 [ "${build_mode}" = "\$(build_mode)" ] && build_mode=
 
 build_mode=${build_mode:-long}
@@ -226,6 +229,11 @@ build_debug() {
 #
 build_sanity() {
 	echo "==== Build sanity ===="
+	if [ -n "${requested_gcc_module}" ]; then
+		build_gcc
+		return
+	fi
+
 	${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst
 	$MAKEP
 }
@@ -250,7 +258,7 @@ build_ugni() {
 	# relative paths.
 	#
 	${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --with-ugni \
-		--disable-gtest --without-go --without-java \
+		"${common_disable_config_args[@]}" \
 		PKG_CONFIG_PATH=$PKG_CONFIG_PATH:/${WORKSPACE}/contrib/cray-ugni-mock \
 		PKG_CONFIG_TOP_BUILD_DIR=${WORKSPACE}
 	$MAKEP
@@ -306,6 +314,7 @@ build_cuda() {
 
 	echo "==== Running test_link_map with cuda build but no cuda module ===="
 	env UCX_HANDLE_ERRORS=bt ./test/apps/test_link_map
+	make_clean distclean
 }
 
 #
