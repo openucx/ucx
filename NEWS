@@ -15,9 +15,9 @@
 ### Features:
 #### UCP
  * Added UCX_PROTO_EMULATION_ENABLE option to force zero-copy RMA protocol selection
- * Added UCX_MAX_HCA_PER_GPU policy to limit GPU memory registrations to the closest HCAs
+ * Added UCX_MAX_HCA_PER_GPU policy to limit GPU memory registrations to nearest HCAs
  * Added device lanes that can access host memory for GPU transfer fallback
- * Enabled gdr_copy for mem_type endpoint transport
+ * Enabled gdr_copy for memtype endpoint transport
 #### UCT
  * Added device channel pool support
  * Added CPU memory usage as AMO local buffer for device operations
@@ -74,7 +74,7 @@
  * Fixed IB memory handle flags enum order
  * Disabled indirect atomic registration for Direct NIC
  * Fixed stale destination endpoint ID and acks from before connection reset in UD transport
- * Fix RoCE reachable route check when node_guuid is not unique among HCAs
+ * Fixed RoCE reachable route check when node_guid is not unique among HCAs
 #### CUDA
  * Fixed CUDA context handling for system device during rkey unpack
 #### ROCM
@@ -82,9 +82,9 @@
 #### UCS
  * Fixed rcache locking for GDR copy
 #### Packaging
- * Fix libnvidia-compute removal from ucx-cuda debian package dependencies, breaking existing installation
+ * Fixed removal of libnvidia-compute from ucx-cuda Debian package dependencies, which broke existing installations
  * Obsoleted KNEM sub-package
- * Fix maintainer field in debian packaging
+ * Fixed maintainer field in Debian packaging
 
 ## 1.20.0 (December 2, 2025)
 ### Features:
