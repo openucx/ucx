@@ -169,7 +169,7 @@ ucs_status_t uct_ze_copy_ep_get_short(uct_ep_h tl_ep, void *buffer,
     };
     ucs_status_t status;
 
-    ucs_info("ze_copy_ep: GET_SHORT buffer=%p length=%u remote_addr=%p",
+    ucs_trace("ze_copy_ep: GET_SHORT buffer=%p length=%u remote_addr=%p",
              buffer, length, (void*)remote_addr);
 
     status = uct_ze_copy_ep_zcopy(tl_ep, remote_addr, &iov, rkey, 0);
