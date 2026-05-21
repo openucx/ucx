@@ -1455,6 +1455,9 @@ public:
 
         param.op_attr_mask     = UCP_OP_ATTR_FIELD_RECV_INFO;
         param.recv_info.length = &recv_length;
+
+	// Dummy data to fix a Coverity false positive.
+	param.user_data  = this;
         param.cb.recv_am = [](void *, ucs_status_t, size_t, void *) {
             ADD_FAILURE();
         };
