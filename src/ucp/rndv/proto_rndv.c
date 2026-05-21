@@ -817,6 +817,7 @@ UCS_PROFILE_FUNC_VOID(ucp_proto_rndv_receive_start,
     ucp_ep_h ep;
 
     UCP_WORKER_GET_VALID_EP_BY_ID(&ep, worker, rts->sreq.ep_id, {
+        ucp_datatype_iter_cleanup(&recv_req->recv.dt_iter, 1, UCP_DT_MASK_ALL);
         ucp_proto_rndv_recv_req_complete(recv_req, UCS_ERR_CANCELED);
         return;
     }, "RTS on non-existing endpoint");
@@ -824,6 +825,8 @@ UCS_PROFILE_FUNC_VOID(ucp_proto_rndv_receive_start,
     req = ucp_request_get(worker);
     if (req == NULL) {
         ucs_error("failed to allocate rendezvous reply");
+        ucp_datatype_iter_cleanup(&recv_req->recv.dt_iter, 1, UCP_DT_MASK_ALL);
+        ucp_proto_rndv_recv_req_complete(recv_req, UCS_ERR_NO_MEMORY);
         return;
     }
 
@@ -856,6 +859,7 @@ UCS_PROFILE_FUNC_VOID(ucp_proto_rndv_receive_start,
     if (status != UCS_OK) {
         ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 1, UCP_DT_MASK_ALL);
         ucs_mpool_put(req);
+        ucp_proto_rndv_recv_req_complete(recv_req, status);
         return;
     }
 

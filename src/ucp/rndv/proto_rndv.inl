@@ -79,7 +79,7 @@ ucp_proto_rndv_ats_handler(void *arg, void *data, size_t length, unsigned flags)
         ucp_tag_offload_cancel_rndv(req);
     }
 
-    if (length >= sizeof(*ats)) {
+    if ((status == UCS_OK) && (length >= sizeof(*ats))) {
         /* ATS message carries a size field */
         ats = ucs_derived_of(rephdr, ucp_rndv_ack_hdr_t);
         if (!ucp_proto_common_frag_complete(req, ats->size, "rndv_ats")) {
@@ -360,7 +360,10 @@ ucp_proto_rndv_recv_req_complete(ucp_request_t *recv_req, ucs_status_t status)
     ucp_trace_req(recv_req, "rndv_recv_req_complete status '%s'",
                   ucs_status_string(status));
 
-    if (recv_req->flags & UCP_REQUEST_FLAG_RECV_AM) {
+    if (recv_req->flags & UCP_REQUEST_FLAG_RNDV_RECV_INTERNAL) {
+        recv_req->status = status;
+        recv_req->recv.rndv.complete_cb(recv_req);
+    } else if (recv_req->flags & UCP_REQUEST_FLAG_RECV_AM) {
         ucp_request_complete_am_recv(recv_req, status);
     } else {
         ucs_assert(recv_req->flags & UCP_REQUEST_FLAG_RECV_TAG);
