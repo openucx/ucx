@@ -1455,6 +1455,9 @@ public:
 
         param.op_attr_mask     = UCP_OP_ATTR_FIELD_RECV_INFO;
         param.recv_info.length = &recv_length;
+        param.cb.recv_am = [](void *, ucs_status_t, size_t, void *) {
+            ADD_FAILURE();
+        };
 
         ucs_status_ptr_t rptr = ucp_am_recv_data_nbx(receiver().worker(),
                                                      m_data_ptr, rbuf.data(),
