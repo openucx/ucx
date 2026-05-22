@@ -14,6 +14,7 @@
 #include "ucp_request.h"
 
 #include <ucs/config/parser.h>
+#include <ucs/algorithm/qsort_r.h>
 #include <ucs/algorithm/crc.h>
 #include <ucs/arch/atomic.h>
 #include <ucs/datastruct/mpool.inl>
@@ -22,7 +23,9 @@
 #include <ucs/debug/log.h>
 #include <ucs/debug/debug_int.h>
 #include <ucs/sys/compiler.h>
+#include <ucs/sys/math.h>
 #include <ucs/sys/string.h>
+#include <ucs/sys/topo/base/topo.h>
 #include <ucs/type/init_once.h>
 #include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
@@ -471,6 +474,12 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "lane without waiting for remote completion.",
    ucs_offsetof(ucp_context_config_t, rndv_put_force_flush), UCS_CONFIG_TYPE_BOOL},
 
+  {"PROTO_EMULATION_ENABLE", "y",
+   "When set to 'no', emulation protocols for put and get are disabled. If no native\n"
+   "zero-copy RMA protocol exist for the memory type pair, RMA requests will be\n"
+   "cancelled.",
+   ucs_offsetof(ucp_context_config_t, proto_emulation_enable), UCS_CONFIG_TYPE_BOOL},
+
   {"SA_DATA_VERSION", "v2",
    "Defines the minimal header version the client will use for establishing\n"
    "client/server connection",
@@ -590,6 +599,14 @@ static ucs_config_field_t ucp_context_config_table[] = {
   {"SINGLE_NET_DEVICE", "n", "Use only one network device for all protocols.",
    ucs_offsetof(ucp_context_config_t, proto_use_single_net_device),
    UCS_CONFIG_TYPE_BOOL},
+
+  {"MAX_HCA_PER_GPU", "inf",
+   "Maximum number of HCAs to register GPU memory on.\n"
+   " - inf  : register on all HCAs (default).\n"
+   " - auto : register only on HCAs closest to the GPU.\n"
+   " - <N>  : register on up to N closest HCAs.",
+   ucs_offsetof(ucp_context_config_t, max_hca_per_gpu),
+   UCS_CONFIG_TYPE_ULUNITS},
 
   {"NODE_LOCAL_ID", "auto",
    "An optimization hint for the local identificator on a single node. Does \n"
@@ -1667,7 +1684,8 @@ static ucs_status_t ucp_check_resources(ucp_context_h context,
     for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
         ucs_assert(context->tl_rscs != NULL);
         resource = &context->tl_rscs[tl_id];
-        if (!(resource->flags & UCP_TL_RSC_FLAG_AUX)) {
+        if ((resource->tl_rsc.dev_type != UCT_DEVICE_TYPE_ACC) &&
+            !(resource->flags & UCP_TL_RSC_FLAG_AUX)) {
             num_usable_tls++;
         }
     }
@@ -1830,6 +1848,144 @@ static ucp_md_map_t ucp_fill_fallback_reg_nonblock_mds(ucp_context_h context)
     }
 
     return (md_map == 0) ? ~md_map : md_map;
+}
+
+typedef struct ucp_reg_select_md {
+    ucp_md_index_t         md_index;
+    const char             *name;
+    ucs_sys_dev_distance_t distance;
+} ucp_reg_select_md_t;
+
+static int
+ucp_reg_select_md_cmp(const void *pa, const void *pb, void *UCS_V_UNUSED arg)
+{
+    const ucp_reg_select_md_t *a = pa;
+    const ucp_reg_select_md_t *b = pb;
+    int cmp;
+
+    cmp = ucs_topo_distance_cmp(&a->distance, &b->distance);
+    if (cmp != 0) {
+        return cmp;
+    }
+
+    return strcmp(a->name, b->name);
+}
+
+ucp_md_map_t ucp_context_select_reg_mds(ucp_context_h context,
+                                        ucp_md_map_t md_map,
+                                        ucs_sys_device_t mem_sys_dev)
+{
+    const ucp_context_config_t *config = &context->config.ext;
+    ucp_md_map_t result                = 0;
+    unsigned count                     = 0;
+    ucp_reg_select_md_t select_mds[UCP_MAX_MDS];
+    ucs_sys_dev_distance_t distance, best;
+    ucp_sys_dev_map_t sys_dev_map;
+    ucs_sys_device_t sys_dev;
+    unsigned select_count, i;
+    ucp_md_index_t md_index;
+    ucp_rsc_index_t tl_idx;
+    int reachable;
+
+    if (ucp_reg_devices_mode(config->max_hca_per_gpu) == UCP_REG_DEVICES_ALL) {
+        return md_map;
+    }
+
+    ucs_for_each_bit(md_index, md_map) {
+        /* TODO: rc_gda has the gpu in the sys_dev_map so we need to skip it.
+         * This should be fixed in the tl. */
+        sys_dev_map = 0;
+        for (tl_idx = 0; tl_idx < context->num_tls; tl_idx++) {
+            if ((context->tl_rscs[tl_idx].md_index == md_index) &&
+                (context->tl_rscs[tl_idx].tl_rsc.sys_device <
+                 UCP_MAX_SYS_DEVICES) &&
+                (strncmp(context->tl_rscs[tl_idx].tl_rsc.dev_name,
+                         "cuda", 4) != 0)) {
+                sys_dev_map |=
+                    UCS_BIT(context->tl_rscs[tl_idx].tl_rsc.sys_device);
+            }
+        }
+
+        best.latency   = UCS_INFINITY;
+        best.bandwidth = 0;
+        reachable      = 1;
+
+        ucs_for_each_bit(sys_dev, sys_dev_map) {
+            ucs_assert(sys_dev != mem_sys_dev);
+            if (!ucs_topo_is_reachable(sys_dev, mem_sys_dev)) {
+                /* Consistent with ucp_memh_sys_dev_reachable: skip the
+                 * entire MD if any of its ports is unreachable */
+                reachable = 0;
+                break;
+            }
+            if ((ucs_topo_get_distance(mem_sys_dev, sys_dev, &distance) ==
+                 UCS_OK) &&
+                (ucs_topo_distance_cmp(&distance, &best) < 0)) {
+                best = distance;
+            }
+        }
+
+        if (!reachable) {
+            continue;
+        }
+
+        select_mds[count].md_index = md_index;
+        select_mds[count].name     = context->tl_mds[md_index].rsc.md_name;
+        select_mds[count].distance = best;
+        ucs_trace("reg_select: mem_sys_dev=%d md[%d]=%s lat=%.2e bw=%.2e",
+                  mem_sys_dev, md_index, select_mds[count].name,
+                  best.latency, best.bandwidth);
+        count++;
+    }
+
+    if (count == 0) {
+        return 0;
+    }
+
+    ucs_qsort_r(select_mds, count, sizeof(select_mds[0]),
+                ucp_reg_select_md_cmp, NULL);
+
+    switch (ucp_reg_devices_mode(config->max_hca_per_gpu)) {
+    case UCP_REG_DEVICES_CLOSEST:
+        select_count = count;
+        for (i = 1; i < count; i++) {
+            if (ucs_topo_distance_cmp(&select_mds[i].distance,
+                                      &select_mds[0].distance) != 0) {
+                select_count = i;
+                break;
+            }
+        }
+        break;
+    case UCP_REG_DEVICES_LIMIT:
+        select_count = ucs_min(ucp_reg_devices_count(config->max_hca_per_gpu),
+                               count);
+        break;
+    default:
+        ucs_assertv(0, "invalid reg_devices_mode=%d, max_hca_per_gpu=%lu",
+                    ucp_reg_devices_mode(config->max_hca_per_gpu),
+                    config->max_hca_per_gpu);
+        return 0;
+    }
+
+    for (i = 0; i < select_count; i++) {
+        result |= UCS_BIT(select_mds[i].md_index);
+    }
+
+    return result;
+}
+
+ucp_md_map_t ucp_context_get_net_md_map(ucp_context_h context)
+{
+    ucp_md_map_t net_md_map = 0;
+    ucp_rsc_index_t tl_idx;
+
+    for (tl_idx = 0; tl_idx < context->num_tls; ++tl_idx) {
+        if (context->tl_rscs[tl_idx].tl_rsc.dev_type == UCT_DEVICE_TYPE_NET) {
+            net_md_map |= UCS_BIT(context->tl_rscs[tl_idx].md_index);
+        }
+    }
+
+    return net_md_map;
 }
 
 static void ucp_fill_resources_reg_md_map_update(ucp_context_h context)
@@ -2785,10 +2941,18 @@ void ucp_context_memaccess_tl_bitmap(ucp_context_h context,
                                      uint64_t md_reg_flags,
                                      ucp_tl_bitmap_t *tl_bitmap)
 {
+    uint64_t dmabuf_mem_types = 0;
     const uct_md_attr_v2_t *md_attr;
+    ucs_memory_type_t mem_type;
     ucp_rsc_index_t rsc_index;
     ucp_md_index_t md_index;
     uint64_t mem_types;
+
+    ucs_memory_type_for_each(mem_type) {
+        if (context->dmabuf_mds[mem_type] != UCP_NULL_RESOURCE) {
+            dmabuf_mem_types |= UCS_BIT(mem_type);
+        }
+    }
 
     UCS_STATIC_BITMAP_RESET_ALL(tl_bitmap);
     UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
@@ -2796,6 +2960,9 @@ void ucp_context_memaccess_tl_bitmap(ucp_context_h context,
         md_attr  = &context->tl_mds[md_index].attr;
         if (md_attr->flags & md_reg_flags) {
             mem_types = md_attr->reg_mem_types;
+            if (md_attr->flags & UCT_MD_FLAG_REG_DMABUF) {
+                mem_types |= dmabuf_mem_types;
+            }
         } else {
             mem_types = md_attr->access_mem_types;
         }

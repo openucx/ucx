@@ -37,7 +37,9 @@ uct_cuda_ipc_cache_hash_equal(uct_cuda_ipc_cache_hash_key_t key1,
 static UCS_F_ALWAYS_INLINE khint32_t
 uct_cuda_ipc_cache_hash_func(uct_cuda_ipc_cache_hash_key_t key)
 {
-    return kh_int64_hash_func(((key.pid << 8) | key.cu_device) ^ key.pid_ns);
+    uint64_t value = key.pid ^ ((uint64_t)key.pid_ns << 32) ^
+                     ((uint32_t)key.cu_device << 24);
+    return kh_int64_hash_func(value);
 }
 
 KHASH_INIT(cuda_ipc_rem_cache, uct_cuda_ipc_cache_hash_key_t,
@@ -202,9 +204,7 @@ uct_cuda_ipc_cache_region_remove(uct_cuda_ipc_cache_t *cache,
                   (void *)region->key.d_bptr, ucs_status_string(status));
     }
 
-    ucs_assertv(region->in_lru, "region=%p, refcount=%lu", region, region->refcount);
     ucs_list_del(&region->lru_list);
-    region->in_lru = 0;
 
     ucs_assert(cache->num_regions > 0);
     cache->num_regions--;
@@ -238,9 +238,7 @@ static void uct_cuda_ipc_cache_evict_lru(uct_cuda_ipc_cache_t *cache)
         }
 
         if (region->refcount > 0) {
-            /* In-use region -- pull off LRU, it will be re-added on release */
-            ucs_list_del(&region->lru_list);
-            region->in_lru = 0;
+            /* In-use region -- keep on LRU, revisit on next eviction pass */
             continue;
         }
 
@@ -533,7 +531,7 @@ uct_cuda_ipc_get_remote_cache(const uct_cuda_ipc_cache_hash_key_t *key,
                     &khret);
     if ((khret == UCS_KH_PUT_BUCKET_EMPTY) ||
         (khret == UCS_KH_PUT_BUCKET_CLEAR)) {
-        ucs_snprintf_safe(target_name, sizeof(target_name), "dest:%d:%ld:%d",
+        ucs_snprintf_safe(target_name, sizeof(target_name), "dest:%d:%u:%d",
                           key->pid, key->pid_ns, key->cu_device);
         status = uct_cuda_ipc_create_cache(cache, target_name);
         if (status != UCS_OK) {
@@ -591,10 +589,6 @@ ucs_status_t uct_cuda_ipc_unmap_memhandle(pid_t pid, ucs_sys_ns_t pid_ns,
     if (!region->refcount && !cache_enabled) {
         ucs_assert(region->mapped_addr == mapped_addr);
         uct_cuda_ipc_cache_region_destroy(cache, region);
-    } else if (!region->in_lru) {
-        /* Region becomes an eviction candidate -- add to LRU tail */
-        ucs_list_add_tail(&cache->lru_list, &region->lru_list);
-        region->in_lru = 1;
     }
 
     pthread_rwlock_unlock(&cache->lock);
@@ -649,12 +643,10 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
                       UCS_PGT_REGION_FMT, cache->name, (void *)key->d_bptr,
                       key->b_len, UCS_PGT_REGION_ARG(&region->super));
 
-            /* Move to LRU tail (most recently used) */
-            if (region->in_lru) {
-                ucs_list_del(&region->lru_list);
-            }
+            /* Move to LRU tail (most recently used). Region is always on LRU
+             * while alive, so unconditional del/add_tail is safe. */
+            ucs_list_del(&region->lru_list);
             ucs_list_add_tail(&cache->lru_list, &region->lru_list);
-            region->in_lru = 1;
 
             *mapped_addr = region->mapped_addr;
             ucs_assert(region->refcount < UINT64_MAX);
@@ -725,7 +717,6 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
     region->mapped_addr = *mapped_addr;
     region->refcount    = 1;
     region->cu_dev      = cu_dev;
-    region->in_lru      = 0; /* will be set after pgtable insert */
 
     status = UCS_PROFILE_CALL(ucs_pgtable_insert,
                               &cache->pgtable, &region->super);
@@ -749,7 +740,6 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
     cache->num_regions++;
     cache->total_size += key->b_len;
     ucs_list_add_tail(&cache->lru_list, &region->lru_list);
-    region->in_lru = 1;
 
     uct_cuda_ipc_cache_evict_lru(cache);
 
