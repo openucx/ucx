@@ -1456,9 +1456,13 @@ public:
         param.op_attr_mask     = UCP_OP_ATTR_FIELD_RECV_INFO;
         param.recv_info.length = &recv_length;
 
-        // Dummy data to fix a Coverity false positive.
-        param.user_data  = this;
-        param.cb.recv_am = [](void *, ucs_status_t, size_t, void *) {
+        // The following lines are for working around a
+        // false positive NULL dereference in Coverity;
+        // the callback is never called even when set.
+        param.op_attr_mask |= UCP_OP_ATTR_FIELD_USER_DATA;
+        param.user_data     = this;
+        param.op_attr_mask |= UCP_OP_ATTR_FIELD_CALLBACK;
+        param.cb.recv_am    = [](void *, ucs_status_t, size_t, void *) {
             ADD_FAILURE();
         };
 
