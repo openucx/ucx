@@ -201,7 +201,7 @@ protected:
         return get_variant_value() & USER_MEMH;
     }
 
-private:
+protected:
     /* Test variants */
     enum {
         FLUSH_EP  = UCS_BIT(0), /* If not set, flush worker */
@@ -386,6 +386,83 @@ UCS_TEST_P(test_ucp_rma_dmabuf, put_registration_offset)
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_dmabuf, ib_cuda, "ib,cuda_copy")
+
+
+class test_ucp_rma_rndv : public test_ucp_rma {
+public:
+    static constexpr size_t SIZE = 512 * UCS_KBYTE;
+
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_with_value(variants, UCP_FEATURE_RMA, 0, "flush_worker");
+        add_variant_with_value(variants, UCP_FEATURE_RMA, FLUSH_EP, "flush_ep");
+    }
+
+    test_ucp_rma_rndv()
+    {
+        modify_config("PROTOS", "put/rndv,get/rndv,rndv/*");
+    }
+
+    void init() override
+    {
+        m_env.push_back(
+                new ucs::scoped_setenv("UCX_IB_GPU_DIRECT_RDMA", "n"));
+        test_ucp_rma::init();
+    }
+
+protected:
+    static bool is_rndv_mem_type_pair(ucs_memory_type_t local_mem_type,
+                                      ucs_memory_type_t remote_mem_type)
+    {
+        return !UCP_MEM_IS_HOST(local_mem_type) ||
+               !UCP_MEM_IS_HOST(remote_mem_type);
+    }
+
+    void test_forced_rndv(send_func_t send_func)
+    {
+        unsigned num_tested = 0;
+
+        for (const auto &pair : ucs::supported_mem_type_pairs()) {
+            if (!is_rndv_mem_type_pair(pair[0], pair[1])) {
+                continue;
+            }
+
+            test_message_sizes(send_func, 128, default_max_size(),
+                               pair[0], pair[1], 0);
+            ++num_tested;
+            if (HasFailure() || (num_errors() > 0)) {
+                break;
+            }
+        }
+
+        if (num_tested == 0) {
+            UCS_TEST_SKIP_R("no memory type pair supports RMA/RNDV");
+        }
+    }
+};
+
+UCS_TEST_P(test_ucp_rma_rndv, put_blocking)
+{
+    test_forced_rndv(static_cast<send_func_t>(&test_ucp_rma::put_b));
+}
+
+UCS_TEST_P(test_ucp_rma_rndv, put_nonblocking)
+{
+    test_forced_rndv(static_cast<send_func_t>(&test_ucp_rma::put_nbi));
+}
+
+UCS_TEST_P(test_ucp_rma_rndv, get_blocking)
+{
+    test_forced_rndv(static_cast<send_func_t>(&test_ucp_rma::get_b));
+}
+
+UCS_TEST_P(test_ucp_rma_rndv, get_nonblocking)
+{
+    UCS_TEST_SKIP_R("TODO Fix crash");
+    test_forced_rndv(static_cast<send_func_t>(&test_ucp_rma::get_nbi));
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_rma_rndv, ib, "ib")
 
 
 class test_ucp_proto_emulation_enable : public test_ucp_rma {

@@ -137,7 +137,7 @@ ucp_proto_put_rndv_probe(const ucp_proto_init_params_t *init_params)
         .super.overhead      = context->config.ext.proto_overhead_rndv_rts,
         .super.cfg_thresh    = context->config.ext.zcopy_thresh,
         .super.cfg_priority  = 5,
-        .super.min_length    = 1,
+        .super.min_length    = 0,
         .super.max_length    = SIZE_MAX,
         .super.min_iov       = 1,
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
