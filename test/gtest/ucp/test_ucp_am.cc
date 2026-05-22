@@ -1405,7 +1405,7 @@ public:
     {
         modify_config("RNDV_THRESH", "inf");
         modify_config("ZCOPY_THRESH", "inf");
-        m_data_ptr    = NULL;
+        m_data_ptr    = nullptr;
         m_data_length = 0;
     }
 
@@ -1440,19 +1440,19 @@ public:
     {
         test_am_send_recv(size, 0, 0, UCP_AM_FLAG_PERSISTENT_DATA);
 
-        ASSERT_TRUE(m_data_ptr != NULL);
+        ASSERT_TRUE(m_data_ptr != nullptr);
         ASSERT_EQ(size, m_data_length);
 
-        ucp_recv_desc_t *rdesc = (ucp_recv_desc_t*)m_data_ptr - 1;
+        ucp_recv_desc_t *rdesc = static_cast<ucp_recv_desc_t *>(m_data_ptr) - 1;
         if (!(rdesc->flags & UCP_RECV_DESC_FLAG_MALLOC)) {
             ucp_am_data_release(receiver().worker(), m_data_ptr);
             UCS_TEST_SKIP_R("eager AM was not in malloc-backed desc");
         }
 
         std::vector<char> rbuf(size);
-        size_t recv_length        = SIZE_MAX;
-        ucp_request_param_t param = {};
+        ucp_request_param_t param;
 
+        size_t recv_length     = SIZE_MAX;
         param.op_attr_mask     = UCP_OP_ATTR_FIELD_RECV_INFO;
         param.recv_info.length = &recv_length;
 
