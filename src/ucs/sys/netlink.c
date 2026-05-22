@@ -353,8 +353,7 @@ int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote,
     return (info.netmask_len > -1);
 }
 
-int ucs_netlink_local_route_exists(const struct sockaddr *sa_remote,
-                                   int *if_index_p)
+int ucs_netlink_get_local_route_ndev_index(const struct sockaddr *sa_remote)
 {
     int best_netmask_len = -1;
     int best_if_index    = -1;
@@ -365,18 +364,14 @@ int ucs_netlink_local_route_exists(const struct sockaddr *sa_remote,
 
     kh_foreach(&ucs_netlink_routing_table_cache, if_index, iface_rules, {
         int curr_netmask_len = ucs_netlink_lookup_in_iface_rules_by_type(
-                                            sa_remote, &iface_rules, RTN_LOCAL);
+                sa_remote, &iface_rules, RTN_LOCAL);
         if (curr_netmask_len > best_netmask_len) {
             best_netmask_len = curr_netmask_len;
             best_if_index    = if_index;
         }
     })
 
-    if (if_index_p != NULL) {
-        *if_index_p = best_if_index;
-    }
-
-    return best_netmask_len > -1;
+    return best_if_index;
 }
 
 int ucs_netlink_is_best_route(int if_index, const struct sockaddr *sa_remote)

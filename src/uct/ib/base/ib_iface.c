@@ -734,7 +734,8 @@ uct_ib_iface_roce_is_routable(uct_ib_iface_t *iface, uint8_t gid_index,
     /* A same-host RoCE address can have the most specific route through a VRF
      * master instead of the RoCE netdev or loopback. Accept only kernel local
      * routes, which keeps this narrower than reachability_mode=all. */
-    if (ucs_netlink_local_route_exists(sa_remote, &local_ndev_index)) {
+    local_ndev_index = ucs_netlink_get_local_route_ndev_index(sa_remote);
+    if (local_ndev_index >= 0) {
         ucs_trace(UCT_IB_IFACE_FMT ": found local route via %s to %s",
                   UCT_IB_IFACE_ARG(iface),
                   ucs_ndev_index_to_ifname(local_ndev_index, local_ifname,
