@@ -9,6 +9,7 @@
 #include <uct/ib/mlx5/rc/rc_mlx5_common.h>
 #include <uct/base/uct_iface.h>
 #include <ucs/datastruct/mpool.h>
+#include <ucs/type/init_once.h>
 
 #include <cuda.h>
 #include <pthread.h>
@@ -40,6 +41,7 @@ typedef struct uct_rc_gdaki_iface {
     struct ibv_mr              *atomic_mr;
     uint64_t                   *atomic_buff;
     CUcontext                  cuda_ctx;
+    ucs_init_once_t            cuda_ctx_init_once;
     unsigned                   num_channels;
     unsigned                   ep_alloc_mode;
     pthread_mutex_t            ep_init_lock;

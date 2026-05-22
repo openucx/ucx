@@ -644,6 +644,16 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
     self->dev_ep_init = 0;
     uct_rc_gdaki_ep_reset_channels(self);
 
+    UCS_INIT_ONCE(&iface->cuda_ctx_init_once) {
+        (void)UCT_CUDADRV_FUNC_LOG_ERR(
+                cuDevicePrimaryCtxRetain(&iface->cuda_ctx, iface->cuda_dev));
+    }
+
+    if (iface->cuda_ctx == NULL) {
+        ucs_debug("iface %p: no cuda context", iface);
+        return UCS_ERR_NO_DEVICE;
+    }
+
     return uct_rc_gdaki_ep_init_channels(iface, self);
 }
 
@@ -1035,24 +1045,15 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
         return status;
     }
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuDevicePrimaryCtxRetain(&self->cuda_ctx, self->cuda_dev));
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(self->cuda_ctx));
-    if (status != UCS_OK) {
-        goto err_ctx_release;
-    }
+    self->cuda_ctx           = NULL;
+    self->cuda_ctx_init_once = UCS_INIT_ONCE_INITIALIZER;
 
     ret = ucs_posix_memalign((void**)&self->atomic_buff,
                              UCS_SYS_CACHE_LINE_SIZE, sizeof(uint64_t),
                              "gdaki_atomic_buf");
     if (ret != 0) {
         ucs_error("failed to allocate AMO buffer");
-        status = UCS_ERR_NO_MEMORY;
-        goto err_ctx;
+        return UCS_ERR_NO_MEMORY;
     }
 
     status = uct_ib_reg_mr(&md->super, self->atomic_buff, sizeof(uint64_t),
@@ -1074,7 +1075,6 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
         }
     }
 
-    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
     return UCS_OK;
 
 err_pool:
@@ -1083,10 +1083,6 @@ err_lock:
     ibv_dereg_mr(self->atomic_mr);
 err_atomic_buff:
     ucs_free(self->atomic_buff);
-err_ctx:
-    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
-err_ctx_release:
-    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(self->cuda_dev));
     return status;
 }
 
@@ -1095,12 +1091,14 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_gdaki_iface_t)
     pthread_mutex_destroy(&self->ep_init_lock);
     ibv_dereg_mr(self->atomic_mr);
     ucs_free(self->atomic_buff);
-    (void)UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(self->cuda_ctx));
     if (self->ep_alloc_mode == UCT_RC_GDAKI_EP_ALLOC_MODE_POOL) {
         uct_rc_gdaki_iface_cleanup_channel_pool(self);
     }
-    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
-    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(self->cuda_dev));
+
+    if (self->cuda_ctx != NULL) {
+        (void)UCT_CUDADRV_FUNC_LOG_WARN(
+                cuDevicePrimaryCtxRelease(self->cuda_dev));
+    }
 }
 
 UCS_CLASS_DEFINE(uct_rc_gdaki_iface_t, uct_rc_mlx5_iface_common_t);
