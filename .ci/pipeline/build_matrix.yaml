@@ -48,7 +48,7 @@ taskName: '${arch}/${name}'
 
 env:
   BUILD_ID: "${BUILD_NUMBER}"
-  long_test: "no"
+  build_mode: "short"
 
 steps:
   - name: Build
