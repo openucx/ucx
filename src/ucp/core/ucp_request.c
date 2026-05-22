@@ -51,6 +51,7 @@ static const char *ucp_request_flag_names[] = {
     [ucs_ilog2(UCP_REQUEST_DEBUG_FLAG_EXTERNAL)]        = "extrn",
     [ucs_ilog2(UCP_REQUEST_FLAG_SUPER_VALID)]           = "spr_vld",
 #endif
+    [ucs_ilog2(UCP_REQUEST_FLAG_RNDV_SEND_INTERNAL)]    = "rndv_snd_int",
 };
 
 static ucs_memory_type_t ucp_request_get_mem_type(ucp_request_t *req)

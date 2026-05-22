@@ -64,8 +64,9 @@ enum {
 #else
     UCP_REQUEST_FLAG_STREAM_RECV           = 0,
     UCP_REQUEST_DEBUG_FLAG_EXTERNAL        = 0,
-    UCP_REQUEST_FLAG_SUPER_VALID           = 0
+    UCP_REQUEST_FLAG_SUPER_VALID           = 0,
 #endif
+    UCP_REQUEST_FLAG_RNDV_SEND_INTERNAL    = UCS_BIT(26)
 };
 
 
