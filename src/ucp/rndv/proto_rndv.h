@@ -12,7 +12,8 @@
 #include <ucp/proto/proto_multi.h>
 
 
-/* Names of rendezvous control messages */
+/* Rendezvous protocol description and control message names */
+#define UCP_PROTO_RNDV_DESC         "rndv"
 #define UCP_PROTO_RNDV_RTS_NAME     "RTS"
 #define UCP_PROTO_RNDV_RTR_NAME     "RTR"
 #define UCP_PROTO_RNDV_RTR_REQ_NAME "RTR_REQ"

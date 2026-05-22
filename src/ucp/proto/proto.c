@@ -25,7 +25,6 @@
     _macro(ucp_get_am_bcopy_proto) \
     _macro(ucp_get_offload_bcopy_proto) \
     _macro(ucp_get_offload_zcopy_proto) \
-    _macro(ucp_get_rndv_push_proto) \
     _macro(ucp_get_rndv_proto) \
     _macro(ucp_put_am_bcopy_proto) \
     _macro(ucp_put_offload_short_proto) \
