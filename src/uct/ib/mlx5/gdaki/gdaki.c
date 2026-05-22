@@ -1187,6 +1187,7 @@ typedef struct {
 typedef struct {
     ucs_sys_device_t sys_dev;
     uint64_t         cuda_map;
+    int              direct_nic;
 } uct_gdaki_dev_matrix_elem_t;
 
 typedef struct {
@@ -1240,7 +1241,8 @@ uct_gdaki_enum_gpus(uct_gdaki_gpu_info_t *gpus, unsigned *count_p)
 
     status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetCount_v2, &nvml_dev_count);
     if (status != UCS_OK) {
-        /* NVML unavailable: keep legacy CUDA-only enumeration. */
+        ucs_diag("NVML unavailable: using legacy CUDA-only enumeration");
+
         for (cuda_idx = 0; cuda_idx < cuda_dev_count; cuda_idx++) {
             status = uct_gdaki_get_cuda_sys_dev(cuda_idx,
                                                 &gpus[cuda_idx].sys_dev);
@@ -1358,18 +1360,19 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
                                             sysfs_path, 0);
         context = ibv_open_device(ibdev);
         if (context == NULL) {
-            ucs_diag("ibv_open_device(%s) failed: %m, can't detect direct NIC "
-                     "device",
-                     ibv_get_device_name(ibdev));
-        } else {
-            uct_ib_mlx5dv_check_direct_nic(context, sys_dev_ib,
-                                           ib_md->config.direct_nic);
-            ibv_close_device(context);
+            ucs_error("ibv_open_device(%s) failed: %m",
+                      ibv_get_device_name(ibdev));
+            status = UCS_ERR_IO_ERROR;
+            goto out;
         }
 
+        ibdesc->direct_nic = uct_ib_mlx5dv_check_direct_nic(context, sys_dev_ib,
+                                                            1) !=
+                             UCS_SYS_DEVICE_ID_UNKNOWN;
         ibdesc->sys_dev = ucs_topo_get_sysfs_dev(ibv_get_device_name(ibdev),
                                                  sysfs_path, 0);
         scores[ibdev_index].index = ibdev_index;
+        ibv_close_device(context);
     }
 
     /* Enumerate physical GPUs via NVML (or CUDA fallback). NVML is used here
@@ -1411,6 +1414,12 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
                 ibdesc->cuda_map |= UCS_BIT(gpus[gpu_index].cuda_idx);
             }
             scores[ibdev_index].usecount++;
+
+            /* direct NIC is closest and can be only one */
+            if (ibdesc->direct_nic) {
+                ucs_assert_always(ibdev_index == 0);
+                break;
+            }
         }
     }
 
