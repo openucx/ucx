@@ -550,9 +550,18 @@ ucp_proto_select_lookup_slow(ucp_worker_h worker,
         return NULL;
     }
 
-    /* add to hash after initializing the temp element, since calling
-     * ucp_proto_select_elem_init() can recursively modify the hash
+    /* Add to hash after initializing the temp element, since calling
+     * ucp_proto_select_elem_init() can recursively modify the hash.
+     * Re-check the key because recursive lookup may have initialized this
+     * exact selection already.
      */
+    khiter = kh_get(ucp_proto_select_hash, proto_select->hash, key.u64);
+    if (khiter != kh_end(proto_select->hash)) {
+        ucp_proto_select_elem_cleanup(&tmp_select_elem);
+        select_elem = &kh_value(proto_select->hash, khiter);
+        goto out;
+    }
+
     khiter = kh_put(ucp_proto_select_hash, proto_select->hash, key.u64,
                     &khret);
     ucs_assert_always(khret == UCS_KH_PUT_BUCKET_EMPTY);

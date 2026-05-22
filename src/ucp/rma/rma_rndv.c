@@ -20,11 +20,10 @@
 #include <ucp/rndv/proto_rndv.inl>
 
 
-#define UCP_PROTO_RMA_RNDV_PUT_RTS_NAME  "RMA PUT RTS"
-#define UCP_PROTO_RMA_RNDV_GET_REQ_NAME  "RMA GET REQ"
-#define UCP_PROTO_RMA_RNDV_PUT_DESC      "RMA PUT rendezvous"
-#define UCP_PROTO_RMA_RNDV_GET_DESC      "RMA GET rendezvous"
-#define UCP_PROTO_RMA_RNDV_GET_PUSH_DESC "RMA GET rendezvous push"
+#define UCP_PROTO_RMA_RNDV_PUT_RTS_NAME "RMA PUT RTS"
+#define UCP_PROTO_RMA_RNDV_GET_REQ_NAME "RMA GET REQ"
+#define UCP_PROTO_RMA_RNDV_DESC         "rendezvous"
+#define UCP_PROTO_RMA_RNDV_PUSH_DESC    "rendezvous push"
 
 
 enum {
@@ -228,20 +227,20 @@ static void ucp_proto_rma_rndv_query(const ucp_proto_query_params_t *params,
 
     ucs_snprintf_safe(attr->desc, sizeof(attr->desc), "%s using %s", desc,
                       remote_attr.desc);
-    ucs_snprintf_safe(attr->config, sizeof(attr->config), "ctrl lane %u, %s",
-                      rpriv->lane, remote_attr.config);
+    ucs_snprintf_safe(attr->config, sizeof(attr->config), "%s",
+                      remote_attr.config);
 }
 
 static void ucp_proto_put_rndv_query(const ucp_proto_query_params_t *params,
                                      ucp_proto_query_attr_t *attr)
 {
-    ucp_proto_rma_rndv_query(params, attr, UCP_PROTO_RMA_RNDV_PUT_DESC);
+    ucp_proto_rma_rndv_query(params, attr, UCP_PROTO_RMA_RNDV_DESC);
 }
 
 static void ucp_proto_get_rndv_query(const ucp_proto_query_params_t *params,
                                      ucp_proto_query_attr_t *attr)
 {
-    ucp_proto_rma_rndv_query(params, attr, UCP_PROTO_RMA_RNDV_GET_DESC);
+    ucp_proto_rma_rndv_query(params, attr, UCP_PROTO_RMA_RNDV_DESC);
 }
 
 static void
@@ -249,7 +248,7 @@ ucp_proto_get_rndv_push_query(const ucp_proto_query_params_t *params,
                               ucp_proto_query_attr_t *attr)
 {
     ucp_proto_rma_rndv_query(params, attr,
-                             UCP_PROTO_RMA_RNDV_GET_PUSH_DESC);
+                             UCP_PROTO_RMA_RNDV_PUSH_DESC);
 }
 
 static size_t ucp_proto_get_rndv_req_pack(void *dest, void *arg)
@@ -976,7 +975,7 @@ UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_RMA, UCP_AM_ID_RMA_RNDV,
 
 ucp_proto_t ucp_put_rndv_proto = {
     .name     = "put/rndv",
-    .desc     = UCP_PROTO_RMA_RNDV_PUT_DESC,
+    .desc     = UCP_PROTO_RMA_RNDV_DESC,
     .flags    = 0,
     .probe    = ucp_proto_put_rndv_probe,
     .query    = ucp_proto_put_rndv_query,
@@ -987,7 +986,7 @@ ucp_proto_t ucp_put_rndv_proto = {
 
 ucp_proto_t ucp_get_rndv_proto = {
     .name     = "get/rndv",
-    .desc     = UCP_PROTO_RMA_RNDV_GET_DESC,
+    .desc     = UCP_PROTO_RMA_RNDV_DESC,
     .flags    = 0,
     .probe    = ucp_proto_get_rndv_probe,
     .query    = ucp_proto_get_rndv_query,
@@ -998,7 +997,7 @@ ucp_proto_t ucp_get_rndv_proto = {
 
 ucp_proto_t ucp_get_rndv_push_proto = {
     .name     = "get/rndv/push",
-    .desc     = UCP_PROTO_RMA_RNDV_GET_PUSH_DESC,
+    .desc     = UCP_PROTO_RMA_RNDV_PUSH_DESC,
     .flags    = 0,
     .probe    = ucp_proto_get_rndv_push_probe,
     .query    = ucp_proto_get_rndv_push_query,
