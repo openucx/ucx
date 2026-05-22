@@ -17,6 +17,7 @@
 #include <ucp/tag/tag_rndv.h>
 #include <ucp/tag/tag_match.inl>
 #include <ucp/tag/offload.h>
+#include <ucp/rma/rma_rndv.h>
 #include <ucp/proto/proto_am.inl>
 #include <ucs/datastruct/queue.h>
 
@@ -1759,9 +1760,11 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rts_handler,
 
     if (ucp_rndv_rts_is_am(rts_hdr)) {
         return ucp_am_rndv_process_rts(arg, data, length, tl_flags);
-    } else {
-        ucs_assert(ucp_rndv_rts_is_tag(rts_hdr));
+    } else if (ucp_rndv_rts_is_tag(rts_hdr)) {
         return ucp_tag_rndv_process_rts(worker, rts_hdr, length, tl_flags);
+    } else {
+        ucs_assert(ucp_rndv_rts_is_rma(rts_hdr));
+        return ucp_rma_rndv_process_rts(worker, data, length);
     }
 }
 
@@ -2436,6 +2439,7 @@ static void ucp_rndv_dump(ucp_worker_h worker, uct_am_trace_type_t type,
 {
     UCS_STRING_BUFFER_FIXED(strb, buffer, max);
     const ucp_rndv_rts_hdr_t *rndv_rts_hdr    = data;
+    const ucp_rma_rndv_rts_hdr_t *rma_rts     = data;
     const ucp_rndv_rtr_hdr_t *rndv_rtr_hdr    = data;
     const ucp_rndv_rtr_req_hdr_t *rtr_req     = data;
     const ucp_request_data_hdr_t *rndv_data   = data;
@@ -2450,13 +2454,19 @@ static void ucp_rndv_dump(ucp_worker_h worker, uct_am_trace_type_t type,
         if (ucp_rndv_rts_is_am(rndv_rts_hdr)) {
             ucs_string_buffer_appendf(&strb, "am_id %u",
                                       ucp_am_hdr_from_rts(rndv_rts_hdr)->am_id);
-        } else {
-            ucs_assert(ucp_rndv_rts_is_tag(rndv_rts_hdr));
+            rkey_buf = rndv_rts_hdr + 1;
+        } else if (ucp_rndv_rts_is_tag(rndv_rts_hdr)) {
             ucs_string_buffer_appendf(&strb, "tag %" PRIx64,
                                       ucp_tag_hdr_from_rts(rndv_rts_hdr)->tag);
+            rkey_buf = rndv_rts_hdr + 1;
+        } else {
+            ucs_assert(ucp_rndv_rts_is_rma(rndv_rts_hdr));
+            ucs_string_buffer_appendf(
+                    &strb, "RMA_RTS dst 0x%" PRIx64 " %s", rma_rts->address,
+                    ucs_memory_type_names[rma_rts->mem_type]);
+            rkey_buf = rma_rts + 1;
         }
 
-        rkey_buf = rndv_rts_hdr + 1;
         ucs_string_buffer_appendf(&strb,
                                   " ep_id 0x%" PRIx64 " sreq_id 0x%" PRIx64
                                   " address 0x%" PRIx64 " size %zu",
@@ -2526,8 +2536,9 @@ static void ucp_rndv_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     }
 }
 
-UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_TAG | UCP_FEATURE_AM, UCP_AM_ID_RNDV_RTS,
-                         ucp_rndv_rts_handler, ucp_rndv_dump, 0);
+UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_TAG | UCP_FEATURE_AM | UCP_FEATURE_RMA,
+                         UCP_AM_ID_RNDV_RTS, ucp_rndv_rts_handler,
+                         ucp_rndv_dump, 0);
 UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_TAG | UCP_FEATURE_AM | UCP_FEATURE_RMA,
                          UCP_AM_ID_RNDV_ATS,
                          ucp_rndv_ats_handler, ucp_rndv_dump, 0);

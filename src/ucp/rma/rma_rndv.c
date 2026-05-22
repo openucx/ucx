@@ -10,6 +10,7 @@
 
 #include "rma.h"
 #include "rma.inl"
+#include "rma_rndv.h"
 
 #include <ucp/core/ucp_request.inl>
 #include <ucp/dt/datatype_iter.inl>
@@ -21,19 +22,6 @@
 
 
 #define UCP_PROTO_RMA_RNDV_RTS_NAME "RMA_RTS"
-
-
-enum {
-    UCP_RMA_RNDV_AM_PUT_RTS
-};
-
-
-typedef struct {
-    ucp_rndv_rts_hdr_t super;
-    uint64_t           address;
-    ucs_sys_device_t   sys_dev;
-    ucs_memory_type_t  mem_type;
-} UCS_S_PACKED ucp_rma_rndv_put_rts_hdr_t;
 
 
 static void
@@ -70,14 +58,14 @@ ucp_proto_rma_rndv_probe_check(const ucp_proto_init_params_t *init_params,
 
 static size_t ucp_proto_put_rndv_rts_pack(void *dest, void *arg)
 {
-    ucp_request_t *req              = arg;
-    ucp_rma_rndv_put_rts_hdr_t *rts = dest;
+    ucp_request_t *req          = arg;
+    ucp_rma_rndv_rts_hdr_t *rts = dest;
     ucp_rkey_config_t *rkey_config;
 
     rkey_config = ucp_rkey_config(req->send.ep->worker, req->send.rma.rkey);
 
-    rts->super.hdr    = UCP_RMA_RNDV_AM_PUT_RTS;
-    rts->super.opcode = UCP_RNDV_RTS_TAG_OK;
+    rts->super.hdr    = 0;
+    rts->super.opcode = UCP_RNDV_RTS_RMA;
     rts->address      = req->send.rma.remote_addr;
     rts->sys_dev      = rkey_config->key.sys_dev;
     rts->mem_type     = req->send.rma.rkey->mem_type;
@@ -118,11 +106,10 @@ static ucs_status_t ucp_proto_put_rndv_progress(uct_pending_req_t *self)
 
     ep           = req->send.ep;
     rpriv        = req->send.proto_config->priv;
-    max_rts_size = sizeof(ucp_rma_rndv_put_rts_hdr_t) +
-                   rpriv->packed_rkey_size;
+    max_rts_size = sizeof(ucp_rma_rndv_rts_hdr_t) + rpriv->packed_rkey_size;
 
     ucp_worker_flush_ops_count_add(ep->worker, +1);
-    status = ucp_proto_am_bcopy_single_send(req, UCP_AM_ID_RMA_RNDV,
+    status = ucp_proto_am_bcopy_single_send(req, UCP_AM_ID_RNDV_RTS,
                                             rpriv->lane,
                                             ucp_proto_put_rndv_rts_pack, req,
                                             max_rts_size, 0);
@@ -156,7 +143,7 @@ ucp_proto_put_rndv_probe(const ucp_proto_init_params_t *init_params)
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.max_bcopy),
         .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
-        .super.hdr_size      = sizeof(ucp_rma_rndv_put_rts_hdr_t),
+        .super.hdr_size      = sizeof(ucp_rma_rndv_rts_hdr_t),
         .super.send_op       = UCT_EP_OP_AM_BCOPY,
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
@@ -488,10 +475,10 @@ static void ucp_rma_rndv_put_recv_complete(ucp_request_t *recv_req)
     ucp_request_put(recv_req);
 }
 
-static ucs_status_t
-ucp_rma_rndv_handle_put_rts(ucp_worker_h worker, void *data, size_t length)
+ucs_status_t ucp_rma_rndv_process_rts(ucp_worker_h worker,
+                                      const ucp_rma_rndv_rts_hdr_t *rts,
+                                      size_t length)
 {
-    const ucp_rma_rndv_put_rts_hdr_t *rts = data;
     const void *rkey_buffer;
     ucp_request_t *recv_req;
     ucp_ep_h ep;
@@ -525,60 +512,6 @@ ucp_rma_rndv_handle_put_rts(ucp_worker_h worker, void *data, size_t length)
                                  length - sizeof(*rts));
     return UCS_OK;
 }
-
-UCS_PROFILE_FUNC(ucs_status_t, ucp_rma_rndv_handler,
-                 (arg, data, length, am_flags), void *arg, void *data,
-                 size_t length, unsigned am_flags)
-{
-    const uint64_t *hdr = data;
-    ucp_worker_h worker = arg;
-
-    if (length < sizeof(*hdr)) {
-        return UCS_ERR_MESSAGE_TRUNCATED;
-    }
-
-    switch (*hdr) {
-    case UCP_RMA_RNDV_AM_PUT_RTS:
-        return ucp_rma_rndv_handle_put_rts(worker, data, length);
-    default:
-        ucs_debug("unexpected RMA RNDV AM sub-id %" PRIu64, *hdr);
-        return UCS_ERR_UNSUPPORTED;
-    }
-}
-
-static void
-ucp_rma_rndv_dump_packet(ucp_worker_h worker, uct_am_trace_type_t type,
-                         uint8_t id, const void *data, size_t length,
-                         char *buffer, size_t max)
-{
-    const ucp_rma_rndv_put_rts_hdr_t *put_rts = data;
-    const uint64_t *hdr                       = data;
-
-    if (length < sizeof(*hdr)) {
-        return;
-    }
-
-    switch (*hdr) {
-    case UCP_RMA_RNDV_AM_PUT_RTS:
-        if (length < sizeof(*put_rts)) {
-            return;
-        }
-
-        snprintf(buffer, max, "RMA_PUT_RTS [src 0x%" PRIx64
-                 " dst 0x%" PRIx64 " len %zu req_id 0x%" PRIx64
-                 " ep_id 0x%" PRIx64 " %s]", put_rts->super.address,
-                 put_rts->address, put_rts->super.size,
-                 put_rts->super.sreq.req_id, put_rts->super.sreq.ep_id,
-                 ucs_memory_type_names[put_rts->mem_type]);
-        break;
-    default:
-        snprintf(buffer, max, "RMA_RNDV [sub-id %" PRIu64 "]", *hdr);
-        break;
-    }
-}
-
-UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_RMA, UCP_AM_ID_RMA_RNDV,
-                         ucp_rma_rndv_handler, ucp_rma_rndv_dump_packet, 0);
 
 ucp_proto_t ucp_put_rndv_proto = {
     .name     = "put/rndv",

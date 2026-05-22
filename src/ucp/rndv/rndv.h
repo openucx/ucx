@@ -17,7 +17,9 @@ typedef enum {
      * the previous UCP versions) */
     UCP_RNDV_RTS_TAG_OK       = UCS_OK,
     /* RNDV AM operation */
-    UCP_RNDV_RTS_AM           = 1
+    UCP_RNDV_RTS_AM           = 1,
+    /* One-sided RNDV operation */
+    UCP_RNDV_RTS_RMA          = 2
 } UCS_S_PACKED ucp_rndv_rts_opcode_t;
 
 
