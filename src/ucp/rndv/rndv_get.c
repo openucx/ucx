@@ -61,6 +61,7 @@ ucp_proto_rndv_get_common_probe(const ucp_proto_init_params_t *init_params,
     ucs_status_t status;
 
     if ((init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
+        ucp_proto_rndv_init_params_is_push(init_params) ||
         !ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_RECV,
                                  support_ppln)) {
         return;

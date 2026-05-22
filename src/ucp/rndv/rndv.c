@@ -2437,6 +2437,7 @@ static void ucp_rndv_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     UCS_STRING_BUFFER_FIXED(strb, buffer, max);
     const ucp_rndv_rts_hdr_t *rndv_rts_hdr    = data;
     const ucp_rndv_rtr_hdr_t *rndv_rtr_hdr    = data;
+    const ucp_rndv_rtr_req_hdr_t *rtr_req     = data;
     const ucp_request_data_hdr_t *rndv_data   = data;
     const ucp_rndv_ack_hdr_t *ack_hdr         = data;
     const ucp_reply_hdr_t *rep_hdr            = data;
@@ -2477,6 +2478,22 @@ static void ucp_rndv_dump(ucp_worker_h worker, uct_am_trace_type_t type,
         }
         break;
     case UCP_AM_ID_RNDV_RTR:
+        if ((rndv_rtr_hdr->sreq_id == UCS_PTR_MAP_KEY_INVALID) &&
+            (length >= sizeof(*rtr_req))) {
+            ucs_string_buffer_appendf(
+                    &strb, "RNDV_RTR_REQ src 0x%" PRIx64 " dst 0x%" PRIx64
+                    " rreq_id 0x%" PRIx64 " ep_id 0x%" PRIx64 " size %zu"
+                    " offset %zu %s", rtr_req->address,
+                    rtr_req->super.address, rtr_req->super.rreq_id,
+                    rtr_req->req.ep_id, rtr_req->super.size,
+                    rtr_req->super.offset,
+                    ucs_memory_type_names[rtr_req->mem_type]);
+            if (rtr_req->super.address != 0) {
+                ucp_rndv_dump_rkey(rtr_req + 1, data_end, &strb);
+            }
+            break;
+        }
+
         ucs_string_buffer_appendf(&strb,
                                   "RNDV_RTR sreq_id 0x%" PRIx64
                                   " rreq_id 0x%" PRIx64 " address 0x%" PRIx64

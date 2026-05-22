@@ -84,7 +84,7 @@ ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
 
     /* Select a protocol for rndv recv */
     sel_param             = *select_param;
-    sel_param.op_id_flags = ucp_proto_select_op_id(select_param) |
+    sel_param.op_id_flags = select_param->op_id_flags |
                             UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG;
     sel_param.op_attr     = ucp_proto_select_op_attr_pack(
         UCP_OP_ATTR_FLAG_MULTI_SEND, UCP_PROTO_SELECT_OP_ATTR_MASK);

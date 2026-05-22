@@ -182,6 +182,10 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_frag_request_alloc(
 
     ucp_proto_request_send_init(freq, req->send.ep, UCP_REQUEST_FLAG_RNDV_FRAG);
     ucp_request_set_super(freq, req);
+    if (req->flags & UCP_REQUEST_FLAG_RNDV_RTR_REQ) {
+        freq->flags                     |= UCP_REQUEST_FLAG_RNDV_RTR_REQ;
+        freq->send.rndv.remote_mem_info = req->send.rndv.remote_mem_info;
+    }
 
     *freq_p = freq;
     return UCS_OK;
@@ -344,6 +348,13 @@ ucp_proto_rndv_init_params_is_ppln_frag(const ucp_proto_init_params_t *params)
 {
     return ucp_proto_select_op_flags(params->select_param) &
            UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG;
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_proto_rndv_init_params_is_push(const ucp_proto_init_params_t *params)
+{
+    return ucp_proto_select_op_flags(params->select_param) &
+           UCP_PROTO_SELECT_OP_FLAG_RNDV_PUSH;
 }
 
 static UCS_F_ALWAYS_INLINE int

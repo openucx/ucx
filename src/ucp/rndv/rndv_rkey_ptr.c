@@ -101,7 +101,8 @@ ucp_proto_rndv_rkey_ptr_probe(const ucp_proto_init_params_t *init_params)
     ucp_proto_perf_t *perf;
     ucs_status_t status;
 
-    if (!ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_RECV, 0) ||
+    if (ucp_proto_rndv_init_params_is_push(init_params) ||
+        !ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_RECV, 0) ||
         !ucp_proto_common_init_check_err_handling(&params.super) ||
         (ucp_proto_select_op_flags(params.super.super.select_param) &
          UCP_PROTO_SELECT_OP_FLAG_RESUME)) {

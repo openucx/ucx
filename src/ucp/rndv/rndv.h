@@ -64,6 +64,25 @@ typedef struct {
 
 
 /*
+ * RTR which requests the peer to create an internal sender.
+ */
+typedef struct {
+    /* Base RTR header; sreq_id is UCS_PTR_MAP_KEY_INVALID */
+    ucp_rndv_rtr_hdr_t super;
+
+    /* Endpoint on the RTR initiator side */
+    ucp_request_hdr_t  req;
+
+    /* Address of the source buffer on the peer */
+    uint64_t           address;
+
+    /* Memory locality of the source buffer on the peer */
+    ucs_sys_device_t   sys_dev;
+    ucs_memory_type_t  mem_type;
+} UCS_S_PACKED ucp_rndv_rtr_req_hdr_t;
+
+
+/*
  * RNDV_ATS/RNDV_ATP with size field
  */
 typedef struct {

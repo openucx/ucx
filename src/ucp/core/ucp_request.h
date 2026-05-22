@@ -66,7 +66,8 @@ enum {
     UCP_REQUEST_DEBUG_FLAG_EXTERNAL        = 0,
     UCP_REQUEST_FLAG_SUPER_VALID           = 0,
 #endif
-    UCP_REQUEST_FLAG_RNDV_SEND_INTERNAL    = UCS_BIT(26)
+    UCP_REQUEST_FLAG_RNDV_SEND_INTERNAL    = UCS_BIT(26),
+    UCP_REQUEST_FLAG_RNDV_RTR_REQ          = UCS_BIT(27)
 };
 
 
@@ -262,6 +263,9 @@ struct ucp_request {
 
                     /* Remote buffer address for get/put operation */
                     uint64_t          remote_address;
+
+                    /* Remote buffer memory info for RTR_REQ */
+                    ucp_memory_info_t remote_mem_info;
 
                     /* Key for remote buffer operation */
                     ucp_rkey_h        rkey;
