@@ -29,6 +29,10 @@ void ucs_table_init(ucs_table_t *table, const ucs_table_config_t *config)
     ucs_array_init_dynamic(&table->entries);
     ucs_array_init_dynamic(&table->row_handles);
 
+    ucs_assertv(config->n_cols > 0,
+                "number of columns must be positive (n_cols: %u)",
+                config->n_cols);
+
     table->widths = ucs_calloc(config->n_cols, sizeof(*table->widths),
                                "ucs_table_widths");
     if (table->widths == NULL) {
@@ -152,8 +156,9 @@ void ucs_table_row_add_cell_fmt(ucs_table_row_t *row, unsigned col_span,
 
 
 /* Calculate the total visible width of a cell spanning `col_span` columns. */
-static unsigned ucs_table_cell_pixel_width(const unsigned *body_widths,
-                                           unsigned start, unsigned col_span)
+static unsigned ucs_table_cell_character_width(const unsigned *body_widths,
+                                               unsigned start,
+                                               unsigned col_span)
 {
     unsigned width = 0;
     unsigned i;
@@ -215,8 +220,8 @@ static void ucs_table_compute_widths(ucs_table_t *table)
 
             if (cell->col_span > 1) {
                 content_len = ucs_table_cell_content_len(cell);
-                existing    = ucs_table_cell_pixel_width(widths, body_col,
-                                                         cell->col_span);
+                existing    = ucs_table_cell_character_width(widths, body_col,
+                                                             cell->col_span);
 
                 if (content_len > existing) {
                     widths[body_col + cell->col_span - 1] += content_len -
@@ -272,8 +277,7 @@ static void ucs_table_render_cell(ucs_string_buffer_t *strb,
 }
 
 
-/* Render one body row. The closing "|" has no trailing newline so callers
- * can splice extra content before the line break. */
+/* Render one row. The closing "|" has no trailing newline. */
 static void ucs_table_render_cells(const ucs_table_t *table,
                                    ucs_string_buffer_t *strb,
                                    const ucs_table_cells_t *cells)
@@ -287,9 +291,9 @@ static void ucs_table_render_cells(const ucs_table_t *table,
 
     ucs_array_for_each(cell, cells) {
         ucs_table_render_cell(strb, cell,
-                              ucs_table_cell_pixel_width(table->widths,
-                                                         body_col,
-                                                         cell->col_span));
+                              ucs_table_cell_character_width(table->widths,
+                                                             body_col,
+                                                             cell->col_span));
         body_col += cell->col_span;
     }
     ucs_string_buffer_appendf(strb, "|");
