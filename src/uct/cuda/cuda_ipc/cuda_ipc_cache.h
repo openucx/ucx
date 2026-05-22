@@ -20,7 +20,6 @@
 #include <pthread.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <sys/types.h>
 
 
 typedef struct uct_cuda_ipc_cache        uct_cuda_ipc_cache_t;
