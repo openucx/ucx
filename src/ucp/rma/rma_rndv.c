@@ -71,6 +71,23 @@ ucp_rma_rndv_dt_iter_init(ucp_datatype_iter_t *dt_iter, uint64_t address,
     dt_iter->type.contig.memh   = NULL;
 }
 
+static int
+ucp_proto_rma_rndv_probe_check(const ucp_proto_init_params_t *init_params,
+                               ucp_operation_id_t op_id)
+{
+    const ucp_proto_select_param_t *sel_param = init_params->select_param;
+
+    if (!ucp_proto_init_check_op(init_params, UCS_BIT(op_id)) ||
+        ucp_proto_rndv_init_params_is_ppln_frag(init_params) ||
+        (sel_param->dt_class != UCP_DATATYPE_CONTIG) ||
+        (init_params->rkey_config_key == NULL)) {
+        return 0;
+    }
+
+    return !UCP_MEM_IS_HOST(sel_param->mem_type) ||
+           !UCP_MEM_IS_HOST(init_params->rkey_config_key->mem_type);
+}
+
 
 static size_t ucp_proto_put_rndv_rts_pack(void *dest, void *arg)
 {
@@ -148,7 +165,6 @@ static void
 ucp_proto_put_rndv_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_context_h context                    = init_params->worker->context;
-    const ucp_proto_select_param_t *sel_param = init_params->select_param;
     ucp_proto_rndv_ctrl_init_params_t params = {
         .super.super         = *init_params,
         .super.latency       = 0,
@@ -179,15 +195,7 @@ ucp_proto_put_rndv_probe(const ucp_proto_init_params_t *init_params)
     };
     ucp_proto_rndv_ctrl_priv_t rpriv = {0};
 
-    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT)) ||
-        ucp_proto_rndv_init_params_is_ppln_frag(init_params) ||
-        (sel_param->dt_class != UCP_DATATYPE_CONTIG) ||
-        (init_params->rkey_config_key == NULL)) {
-        return;
-    }
-
-    if (UCP_MEM_IS_HOST(sel_param->mem_type) &&
-        UCP_MEM_IS_HOST(init_params->rkey_config_key->mem_type)) {
+    if (!ucp_proto_rma_rndv_probe_check(init_params, UCP_OP_ID_PUT)) {
         return;
     }
 
@@ -231,14 +239,9 @@ static void ucp_proto_rma_rndv_query(const ucp_proto_query_params_t *params,
                       remote_attr.config);
 }
 
-static void ucp_proto_put_rndv_query(const ucp_proto_query_params_t *params,
-                                     ucp_proto_query_attr_t *attr)
-{
-    ucp_proto_rma_rndv_query(params, attr, UCP_PROTO_RMA_RNDV_DESC);
-}
-
-static void ucp_proto_get_rndv_query(const ucp_proto_query_params_t *params,
-                                     ucp_proto_query_attr_t *attr)
+static void
+ucp_proto_rma_rndv_default_query(const ucp_proto_query_params_t *params,
+                                 ucp_proto_query_attr_t *attr)
 {
     ucp_proto_rma_rndv_query(params, attr, UCP_PROTO_RMA_RNDV_DESC);
 }
@@ -327,7 +330,6 @@ static void
 ucp_proto_get_rndv_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_context_h context                    = init_params->worker->context;
-    const ucp_proto_select_param_t *sel_param = init_params->select_param;
     ucp_proto_rndv_ctrl_init_params_t params = {
         .super.super         = *init_params,
         .super.latency       = 0,
@@ -357,15 +359,7 @@ ucp_proto_get_rndv_probe(const ucp_proto_init_params_t *init_params)
     };
     ucp_proto_rndv_ctrl_priv_t rpriv = {0};
 
-    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_GET)) ||
-        ucp_proto_rndv_init_params_is_ppln_frag(init_params) ||
-        (sel_param->dt_class != UCP_DATATYPE_CONTIG) ||
-        (init_params->rkey_config_key == NULL)) {
-        return;
-    }
-
-    if (UCP_MEM_IS_HOST(sel_param->mem_type) &&
-        UCP_MEM_IS_HOST(init_params->rkey_config_key->mem_type)) {
+    if (!ucp_proto_rma_rndv_probe_check(init_params, UCP_OP_ID_GET)) {
         return;
     }
 
@@ -421,7 +415,6 @@ static void
 ucp_proto_get_rndv_push_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_worker_h worker                     = init_params->worker;
-    const ucp_proto_select_param_t *sel_param = init_params->select_param;
     const ucp_proto_select_init_protocols_t *proto_init;
     ucp_proto_select_param_t rndv_sel_param;
     ucp_worker_cfg_index_t rkey_cfg_index;
@@ -432,15 +425,7 @@ ucp_proto_get_rndv_push_probe(const ucp_proto_init_params_t *init_params)
     ucp_lane_index_t lane;
     const void *priv;
 
-    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_GET)) ||
-        ucp_proto_rndv_init_params_is_ppln_frag(init_params) ||
-        (sel_param->dt_class != UCP_DATATYPE_CONTIG) ||
-        (init_params->rkey_config_key == NULL)) {
-        return;
-    }
-
-    if (UCP_MEM_IS_HOST(sel_param->mem_type) &&
-        UCP_MEM_IS_HOST(init_params->rkey_config_key->mem_type)) {
+    if (!ucp_proto_rma_rndv_probe_check(init_params, UCP_OP_ID_GET)) {
         return;
     }
 
@@ -449,7 +434,7 @@ ucp_proto_get_rndv_push_probe(const ucp_proto_init_params_t *init_params)
         return;
     }
 
-    mem_info = ucp_proto_common_select_param_mem_info(sel_param);
+    mem_info = ucp_proto_common_select_param_mem_info(init_params->select_param);
     ucp_proto_select_param_init(&rndv_sel_param, UCP_OP_ID_RNDV_RECV, 0,
                                 UCP_PROTO_SELECT_OP_FLAG_RNDV_PUSH,
                                 UCP_DATATYPE_CONTIG, &mem_info, 1);
@@ -978,7 +963,7 @@ ucp_proto_t ucp_put_rndv_proto = {
     .desc     = UCP_PROTO_RMA_RNDV_DESC,
     .flags    = 0,
     .probe    = ucp_proto_put_rndv_probe,
-    .query    = ucp_proto_put_rndv_query,
+    .query    = ucp_proto_rma_rndv_default_query,
     .progress = {ucp_proto_put_rndv_progress},
     .abort    = ucp_proto_rndv_rts_abort,
     .reset    = ucp_proto_rndv_rts_reset
@@ -989,7 +974,7 @@ ucp_proto_t ucp_get_rndv_proto = {
     .desc     = UCP_PROTO_RMA_RNDV_DESC,
     .flags    = 0,
     .probe    = ucp_proto_get_rndv_probe,
-    .query    = ucp_proto_get_rndv_query,
+    .query    = ucp_proto_rma_rndv_default_query,
     .progress = {ucp_proto_get_rndv_progress},
     .abort    = ucp_proto_get_rndv_abort,
     .reset    = ucp_proto_get_rndv_reset
