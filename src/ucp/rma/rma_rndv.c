@@ -356,8 +356,10 @@ static ucs_status_t ucp_proto_get_rndv_reset(ucp_request_t *req)
 static void ucp_rma_rndv_get_recv_complete(ucp_request_t *recv_req)
 {
     ucp_request_t *get_req = ucp_request_get_super(recv_req);
+    ucp_ep_h ep            = get_req->send.ep;
 
     ucp_request_complete_send(get_req, recv_req->status);
+    ucp_ep_rma_remote_request_completed(ep);
     ucp_request_put(recv_req);
 }
 
@@ -452,6 +454,8 @@ static ucs_status_t ucp_proto_get_rndv_progress(uct_pending_req_t *self)
         return UCS_OK;
     }
 
+    ucp_worker_flush_ops_count_add(get_req->send.ep->worker, +1);
+    ucp_ep_rma_remote_request_sent(get_req->send.ep);
     ucp_request_send(rndv_req);
     return UCS_OK;
 }

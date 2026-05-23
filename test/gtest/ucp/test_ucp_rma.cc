@@ -458,7 +458,6 @@ UCS_TEST_P(test_ucp_rma_rndv, get_blocking)
 
 UCS_TEST_P(test_ucp_rma_rndv, get_nonblocking)
 {
-    UCS_TEST_SKIP_R("TODO Fix crash");
     test_forced_rndv(static_cast<send_func_t>(&test_ucp_rma::get_nbi));
 }
 
