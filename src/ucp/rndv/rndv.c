@@ -423,6 +423,7 @@ static void ucp_rndv_complete_rma_put_zcopy(ucp_request_t *sreq, int is_frag_put
     }
 
     ucp_request_send_buffer_dereg(sreq);
+    ucp_request_rndv_flush_complete(sreq);
     ucp_request_complete_send(sreq, status);
 }
 
@@ -1891,6 +1892,7 @@ static void ucp_rndv_am_zcopy_send_req_complete(ucp_request_t *req,
 {
     ucs_assert(req->send.state.uct_comp.count == 0);
     ucp_request_send_buffer_dereg(req);
+    ucp_request_rndv_flush_complete(req);
     ucp_request_complete_send(req, status);
 }
 

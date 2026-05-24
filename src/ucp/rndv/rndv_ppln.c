@@ -231,6 +231,7 @@ ucp_proto_rndv_ppln_frag_complete(ucp_request_t *freq, int send_ack, int abort,
         ucp_proto_request_set_stage(req, UCP_PROTO_RNDV_PPLN_STAGE_ACK);
         ucp_request_send(req);
     } else {
+        ucp_request_rndv_flush_complete(req);
         complete_func(req);
     }
 }
@@ -337,7 +338,7 @@ ucp_proto_rndv_send_ppln_atp_progress(uct_pending_req_t *uct_req)
 
     return ucp_proto_rndv_ack_progress(req, &rpriv->ack, UCP_AM_ID_RNDV_ATP,
                                        ucp_proto_rndv_ppln_pack_ack,
-                                       ucp_proto_request_zcopy_complete_success);
+                                       ucp_proto_rndv_request_zcopy_complete_success);
 }
 
 ucp_proto_t ucp_rndv_send_ppln_proto = {

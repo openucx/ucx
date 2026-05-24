@@ -580,6 +580,7 @@ void ucp_proto_rndv_rts_query(const ucp_proto_query_params_t *params,
 void ucp_proto_rndv_rts_abort(ucp_request_t *req, ucs_status_t status)
 {
     ucp_am_release_user_header(req);
+    ucp_request_rndv_flush_complete(req);
 
     if (ucp_request_memh_invalidate(req, status)) {
         ucp_proto_rndv_rts_reset(req);
@@ -910,7 +911,7 @@ static void ucp_proto_rndv_send_complete_one(void *request, ucs_status_t status,
     }
 
     ucp_send_request_id_release(req);
-    ucp_proto_request_zcopy_complete(req, status);
+    ucp_proto_rndv_request_zcopy_complete(req, status);
 }
 
 static void

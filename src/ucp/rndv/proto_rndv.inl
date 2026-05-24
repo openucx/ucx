@@ -89,9 +89,33 @@ ucp_proto_rndv_ats_handler(void *arg, void *data, size_t length, unsigned flags)
 
     ucp_send_request_id_release(req);
     ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 1, UCP_DT_MASK_ALL);
+    ucp_request_rndv_flush_complete(req);
     ucp_request_complete_send(req, status);
 
     return UCS_OK;
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_rndv_request_zcopy_complete(ucp_request_t *req, ucs_status_t status)
+{
+    ucp_proto_request_zcopy_complete_cb(req, status,
+                                        ucp_request_rndv_flush_complete);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_rndv_request_zcopy_complete_success(ucp_request_t *req)
+{
+    ucp_proto_rndv_request_zcopy_complete(req, UCS_OK);
+    return UCS_OK;
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_rndv_request_zcopy_completion(uct_completion_t *self)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t,
+                                          send.state.uct_comp);
+
+    ucp_proto_rndv_request_zcopy_complete(req, req->send.state.uct_comp.status);
 }
 
 static UCS_F_ALWAYS_INLINE size_t ucp_proto_rndv_rts_pack(

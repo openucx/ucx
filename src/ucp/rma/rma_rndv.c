@@ -108,22 +108,30 @@ static ucs_status_t ucp_proto_put_rndv_progress(uct_pending_req_t *self)
     rpriv        = req->send.proto_config->priv;
     max_rts_size = sizeof(ucp_rma_rndv_rts_hdr_t) + rpriv->packed_rkey_size;
 
-    ucp_worker_flush_ops_count_add(ep->worker, +1);
+    req->flags |= UCP_REQUEST_FLAG_RNDV_FLUSH;
+    ucp_worker_flush_ops_count_add(ep->worker, +2);
     status = ucp_proto_am_bcopy_single_send(req, UCP_AM_ID_RNDV_RTS,
                                             rpriv->lane,
                                             ucp_proto_put_rndv_rts_pack, req,
                                             max_rts_size, 0);
-    if (status == UCS_ERR_NO_RESOURCE) {
-        ucp_worker_flush_ops_count_add(ep->worker, -1);
-        req->send.lane = rpriv->lane;
-        return status;
-    } else if (status != UCS_OK) {
-        ucp_worker_flush_ops_count_add(ep->worker, -1);
-        ucp_proto_request_abort(req, status);
-        return UCS_OK;
+    if (status != UCS_OK) {
+        if (status == UCS_ERR_NO_RESOURCE) {
+            req->send.lane = rpriv->lane;
+        }
+        goto err_flush_count;
     }
 
     ucp_ep_rma_remote_request_sent(ep);
+    return UCS_OK;
+
+err_flush_count:
+    req->flags &= ~UCP_REQUEST_FLAG_RNDV_FLUSH;
+    ucp_worker_flush_ops_count_add(ep->worker, -2);
+    if (status == UCS_ERR_NO_RESOURCE) {
+        return status;
+    }
+
+    ucp_proto_request_abort(req, status);
     return UCS_OK;
 }
 
