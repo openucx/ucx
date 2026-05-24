@@ -30,6 +30,10 @@
 #define UCT_GDAKI_DEV_EP_SIZE          64
 #define UCT_GDAKI_DEV_QP_SIZE          128
 
+#define UCT_GDAKI_CUDA_REG_FLAGS \
+    (CU_MEMHOSTREGISTER_PORTABLE | CU_MEMHOSTREGISTER_DEVICEMAP | \
+     CU_MEMHOSTREGISTER_IOMEMORY)
+
 typedef enum {
     UCT_RC_GDAKI_EP_ALLOC_MODE_POOL,
     UCT_RC_GDAKI_EP_ALLOC_MODE_DIRECT,
@@ -200,22 +204,20 @@ static int uct_gdaki_is_dmabuf_supported(const uct_ib_md_t *md)
     return dmabuf_supported;
 }
 
-static int uct_gdaki_md_check_uar(uct_ib_md_t *md)
+static int uct_gdaki_md_check_uar(const uct_ib_md_t *md)
 {
     int ret = 0;
     struct mlx5dv_devx_uar *uar;
     ucs_status_t status;
-    unsigned flags;
 
     uar = mlx5dv_devx_alloc_uar(md->dev.ibv_context, 0);
     if (uar == NULL) {
         return 0;
     }
 
-    flags  = CU_MEMHOSTREGISTER_PORTABLE | CU_MEMHOSTREGISTER_DEVICEMAP |
-             CU_MEMHOSTREGISTER_IOMEMORY;
     status = UCT_CUDADRV_FUNC_LOG_DEBUG(
-            cuMemHostRegister(uar->reg_addr, UCT_IB_MLX5_BF_REG_SIZE, flags));
+            cuMemHostRegister(uar->reg_addr, UCT_IB_MLX5_BF_REG_SIZE,
+                              UCT_GDAKI_CUDA_REG_FLAGS));
     if (status != UCS_OK) {
         goto out;
     }
@@ -260,14 +262,15 @@ static CUdevice uct_gdaki_push_primary_ctx(int retain_inactive_ctx)
     return cuda_dev;
 }
 
-static uint32_t uct_gdaki_check_cuda_ctx_dependent_features(uct_ib_md_t *md)
+static uint32_t
+uct_gdaki_check_cuda_ctx_dependent_features(const uct_ib_md_t *md)
 {
     uint32_t features = 0;
     CUdevice cuda_dev;
 
     cuda_dev = uct_gdaki_push_primary_ctx(md->config.gda_retain_inactive_ctx);
     if (cuda_dev == CU_DEVICE_INVALID) {
-        return 0;
+        return features;
     }
 
     if (!uct_gdaki_md_check_uar(md)) {
@@ -300,7 +303,7 @@ out:
     return features;
 }
 
-static uint32_t uct_gdaki_get_driver_features(uct_ib_md_t *md)
+static uint32_t uct_gdaki_get_driver_features(const uct_ib_md_t *md)
 {
     static ucs_init_once_t once = UCS_INIT_ONCE_INITIALIZER;
     static uint32_t features;
@@ -313,7 +316,7 @@ static uint32_t uct_gdaki_get_driver_features(uct_ib_md_t *md)
 }
 
 static struct mlx5dv_devx_umem *
-uct_rc_gdaki_umem_reg(uct_ib_md_t *md, struct ibv_context *ibv_context,
+uct_rc_gdaki_umem_reg(const uct_ib_md_t *md, struct ibv_context *ibv_context,
                       void *address, size_t length, uint64_t pgsz_bitmap)
 {
 #if HAVE_DECL_MLX5DV_UMEM_MASK_DMABUF
@@ -986,9 +989,7 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
             channel = &ep->channel_block->channels[i];
             (void)cuMemHostRegister(channel->qp.reg->addr.ptr,
                                     UCT_IB_MLX5_BF_REG_SIZE * 2,
-                                    CU_MEMHOSTREGISTER_PORTABLE |
-                                    CU_MEMHOSTREGISTER_DEVICEMAP |
-                                    CU_MEMHOSTREGISTER_IOMEMORY);
+                                    UCT_GDAKI_CUDA_REG_FLAGS);
 
             status = UCT_CUDADRV_FUNC_LOG_ERR(
                     cuMemHostGetDevicePointer(&sq_db, channel->qp.reg->addr.ptr,
