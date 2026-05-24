@@ -96,6 +96,12 @@ jobs:
           ctyunos2507:
             CONTAINER: ctyunos2507
             build_mode: short
+          ubuntu2604:
+            CONTAINER: ubuntu2604
+            build_mode: short
+          tencentos44:
+            CONTAINER: tencentos44
+            build_mode: short
       # ICC/PGI matrix
       ${{ if contains(parameters.name, 'icc_pgi') }}:
         matrix:
@@ -125,6 +131,12 @@ jobs:
             build_mode: short
           sles16sp0_aarch64:
             CONTAINER: sles16sp0_aarch64
+            build_mode: short
+          ubuntu2604_aarch64:
+            CONTAINER: ubuntu2604_aarch64
+            build_mode: short
+          tencentos44_aarch64:
+            CONTAINER: tencentos44_aarch64
             build_mode: short
     timeoutInMinutes: 340
 

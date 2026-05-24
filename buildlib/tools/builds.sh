@@ -446,7 +446,8 @@ check_inst_headers() {
 		echo "==== Build CMake sample ===="
 		mkdir -p /tmp/cmake-ucx
 		pushd /tmp/cmake-ucx
-		cmake ${WORKSPACE}/examples/cmake -DCMAKE_PREFIX_PATH=$ucx_inst
+		cmake ${WORKSPACE}/examples/cmake -DCMAKE_PREFIX_PATH=$ucx_inst \
+		      -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 		cmake --build .
 
 		if ./test_ucp && ./test_uct
