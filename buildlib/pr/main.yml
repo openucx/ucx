@@ -254,10 +254,11 @@ resources:
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/rapidsai-ci-conda:26.06-azp-1
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: ucxx_rapidsai_ci_conda_gpu
-      # Same image as above, +GPU. --user 0:0 because the host MPS daemon
-      # accepts root clients but rejects matching-uid container users.
+      # Same image as above, +GPU. Bind-mount host MPS dirs so the container's
+      # CUDA client can reach the host MPS daemon (host GPUs are in
+      # Exclusive_Process compute mode and need MPS for shared access).
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/rapidsai-ci-conda:26.06-azp-1
-      options: --user 0:0 $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU) -v /tmp/nvidia-mps:/tmp/nvidia-mps
 
 stages:
   - stage: Codestyle
@@ -265,16 +266,19 @@ stages:
     - template: codestyle.yml
 
   - stage: Basic_compile
+    condition: false  # temp: skip non-UCXX stage; restore before merge
     dependsOn: []
     jobs:
     - template: basic_compile.yml
 
   - stage: Static_check
+    condition: false  # temp: skip non-UCXX stage; restore before merge
     dependsOn: [Basic_compile]
     jobs:
     - template: static_checks.yml
 
   - stage: Build
+    condition: false  # temp: skip non-UCXX stage; restore before merge
     dependsOn: [Basic_compile]
     jobs:
       - template: build_job.yml
@@ -292,6 +296,7 @@ stages:
           displayName: Build on aarch64
 
   - stage: ucx_perftest_mad_rte
+    condition: false  # temp: skip non-UCXX stage; restore before merge
     dependsOn: [Basic_compile]
     displayName: ucx_perftest over MAD RTE
     lockBehavior: sequential
@@ -301,6 +306,7 @@ stages:
     - template: mad_tests.yml
 
   - stage: WireCompat
+    condition: false  # temp: skip non-UCXX stage; restore before merge
     dependsOn: [Basic_compile]
     jobs:
     - template: wire_compat.yml
@@ -332,6 +338,7 @@ stages:
     #    demands: ucx_iodemo -equals yes
 
   - stage: Coverity
+    condition: false  # temp: skip non-UCXX stage; restore before merge
     dependsOn: [Static_check]
     jobs:
       - template: coverity.yml
@@ -340,8 +347,11 @@ stages:
           container: coverity_rh7
 
   - template: ucxx_tests_stage.yml
+    parameters:
+      dependsOn: []  # temp: skip Static_check to test stage faster on this PR; restore [Static_check] before merge
 
   - stage: Tests
+    condition: false  # temp: skip non-UCXX stage; restore before merge
     dependsOn: [Basic_compile]
     jobs:
     - template: tests.yml
@@ -421,6 +431,7 @@ stages:
             demands: ucx_gpu -equals yes
 
   - stage: Build_Static
+    condition: false  # temp: skip non-UCXX stage; restore before merge
     dependsOn: [Basic_compile]
     jobs:
       - job: build_source
@@ -467,12 +478,14 @@ stages:
 
 
   - stage: Cuda
+    condition: false  # temp: skip non-UCXX stage; restore before merge
     dependsOn: [Basic_compile]
     jobs:
       - template: cuda/cuda.yml
 
 
   - stage: AddressSanitizer
+    condition: false  # temp: skip non-UCXX stage; restore before merge
     dependsOn: [Static_check]
     jobs:
     - template: tests.yml
