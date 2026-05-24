@@ -12,6 +12,7 @@ extern "C" {
 #include <uct/base/uct_iface.h>
 #include <ucp/proto/proto_debug.h>
 #include <ucp/proto/proto_select.inl>
+#include <ucs/sys/topo/base/topo.h>
 }
 
 class mock_iface {
@@ -92,21 +93,23 @@ private:
          * The number of real devices (and their names) do not match the mocked
          * ones. In order to pretend that all the mocked devices are supported,
          * we remember the first real device name, and then substitute the
-         * response with the mocked devices names. For each mocked device the
-         * individual sys_dev must be set, so that they are treated as different
-         * devices. Later on the iface_open_mock will use the real device name
-         * (same for all mocks) to create the mocked iface.
+         * response with the mocked devices names. Assign unique sys_device
+         * values beyond the currently known topology devices, so the mocked
+         * resources are distinct but cannot alias real topology entries. Later
+         * on the iface_open_mock will use the real device name (same for all
+         * mocks) to create the mocked iface.
          */
         auto mock_devices  = (uct_tl_device_resource_t*)ucs_calloc(
                                     m_self->m_iface_attrs_funcs.size(),
                                     sizeof(uct_tl_device_resource_t),
                                     "mock_tl_devices");
         unsigned dev_count = 0;
+        unsigned sys_device = ucs_topo_num_devices();
         for (const auto &it : m_self->m_iface_attrs_funcs) {
             ucs_strncpy_safe(mock_devices[dev_count].name, it.first.c_str(),
                              UCT_DEVICE_NAME_MAX);
             mock_devices[dev_count].type       = (*tl_devices_p)[0].type;
-            mock_devices[dev_count].sys_device = dev_count + 1;
+            mock_devices[dev_count].sys_device = sys_device++;
             ++dev_count;
         }
 
@@ -973,6 +976,13 @@ public:
             iface_attr.bandwidth.shared = 24e9;
             iface_attr.latency.c        = 600e-9;
             iface_attr.latency.m        = 1e-9;
+        }, [](uct_perf_attr_t &perf_attr) {
+            perf_attr.bandwidth.shared    *= 24.0 / 28.0;
+            perf_attr.bandwidth.dedicated *= 24.0 / 28.0;
+            perf_attr.path_bandwidth.shared =
+                    0.95 * perf_attr.bandwidth.shared;
+            perf_attr.path_bandwidth.dedicated =
+                    0.95 * perf_attr.bandwidth.dedicated;
         });
         add_mock_iface("mock_2:1", iface_attr_func);
         test_ucp_proto_mock::init();
@@ -981,6 +991,12 @@ public:
 
 class test_ucp_proto_mock_rcx_twins_tag : public test_ucp_proto_mock_rcx_twins {
 protected:
+    test_ucp_proto_mock_rcx_twins_tag()
+    {
+        modify_config("RNDV_SCHEME", "get_zcopy");
+        modify_config("RNDV_THRESH", "18543");
+    }
+
     void check_config(const proto_select_data_vec_t &data_vec);
 };
 
