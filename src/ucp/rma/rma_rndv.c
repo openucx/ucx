@@ -377,11 +377,6 @@ static ucs_status_t ucp_proto_get_rndv_init(ucp_request_t *get_req,
     uint64_t address;
     size_t length;
 
-    status = ucp_ep_resolve_remote_id(get_req->send.ep, rpriv->lane);
-    if (status != UCS_OK) {
-        return status;
-    }
-
     status = ucp_ep_rma_handle_fence(get_req->send.ep, get_req,
                                      UCS_BIT(rpriv->lane));
     if (status != UCS_OK) {
@@ -441,11 +436,27 @@ static ucs_status_t ucp_proto_get_rndv_init(ucp_request_t *get_req,
 static ucs_status_t ucp_proto_get_rndv_progress(uct_pending_req_t *self)
 {
     ucp_request_t *get_req = ucs_container_of(self, ucp_request_t, send.uct);
+    const ucp_proto_rndv_ctrl_priv_t *rpriv;
     ucp_request_t *rndv_req;
     ucs_status_t status;
 
     if (get_req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) {
         return UCS_OK;
+    }
+
+    rpriv              = get_req->send.proto_config->priv;
+    get_req->send.lane = rpriv->lane;
+    status             = ucp_ep_resolve_remote_id(get_req->send.ep,
+                                                  rpriv->lane);
+    if (status == UCS_ERR_NO_RESOURCE) {
+        return status;
+    } else if (status != UCS_OK) {
+        ucp_proto_request_abort(get_req, status);
+        return UCS_OK;
+    }
+
+    if (!(get_req->send.ep->flags & UCP_EP_FLAG_FLUSH_STATE_VALID)) {
+        return UCS_ERR_NO_RESOURCE;
     }
 
     status = ucp_proto_get_rndv_init(get_req, &rndv_req);
