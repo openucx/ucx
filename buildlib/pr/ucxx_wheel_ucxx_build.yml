@@ -1,0 +1,54 @@
+parameters:
+  container: ucxx_rapidsai_ci_wheel
+  slices: []
+
+jobs:
+  - ${{ each slice in parameters.slices }}:
+    - job: ucxx_wheel_ucxx_build_${{ slice.name }}
+      workspace:
+        clean: all
+      pool:
+        name: MLNX
+        demands: ${{ slice.demands }}
+      displayName: 'UCXX wheel-build-ucxx (${{ slice.name }})'
+      container: ${{ parameters.container }}
+      timeoutInMinutes: 60
+      dependsOn: ucxx_wheel_libucxx_build_${{ slice.libucxx_slice }}
+      variables:
+        UCX_DIR: $(Agent.BuildDirectory)/ucx
+        UCXX_DIR: $(Agent.BuildDirectory)/ucxx
+        RAPIDS_CUDA_VERSION: ${{ slice.rapids_cuda_version }}
+        RAPIDS_PY_VERSION: ${{ slice.rapids_py_version }}
+        RAPIDS_BLD_OUTPUT_DIR: $(Build.ArtifactStagingDirectory)
+        WHEEL_INPUT_DIR: $(Build.ArtifactStagingDirectory)/wheel-libucxx
+
+      steps:
+        - checkout: self
+          path: ucx
+          fetchDepth: 100
+          retryCountOnTaskFailure: 5
+
+        - checkout: ucxx
+          path: ucxx
+          retryCountOnTaskFailure: 5
+
+        - task: DownloadBuildArtifacts@1
+          displayName: Fetch libucxx wheel artifact
+          inputs:
+            buildType: current
+            artifactName: ucxx-wheel-libucxx-${{ slice.libucxx_slice }}
+            downloadPath: $(System.DefaultWorkingDirectory)/_dl
+
+        - bash: |
+            rm -rf "$(WHEEL_INPUT_DIR)"
+            mv $(System.DefaultWorkingDirectory)/_dl/ucxx-wheel-libucxx-${{ slice.libucxx_slice }} "$(WHEEL_INPUT_DIR)"
+          displayName: Stage libucxx wheel artifact
+
+        - bash: bash $(UCX_DIR)/buildlib/tools/build_ucxx.sh wheel_ucxx
+          displayName: Build ucxx wheel
+
+        - task: PublishBuildArtifacts@1
+          displayName: Publish ucxx wheel artifact
+          inputs:
+            pathToPublish: $(RAPIDS_BLD_OUTPUT_DIR)
+            artifactName: ucxx-wheel-ucxx-${{ slice.name }}

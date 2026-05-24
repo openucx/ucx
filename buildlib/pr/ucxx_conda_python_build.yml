@@ -1,0 +1,53 @@
+parameters:
+  container: ucxx_rapidsai_ci_conda
+  slices: []
+
+jobs:
+  - ${{ each slice in parameters.slices }}:
+    - job: ucxx_conda_python_build_${{ slice.name }}
+      workspace:
+        clean: all
+      pool:
+        name: MLNX
+        demands: ${{ slice.demands }}
+      displayName: 'UCXX conda-python-build (${{ slice.name }})'
+      container: ${{ parameters.container }}
+      timeoutInMinutes: 60
+      dependsOn: ucxx_conda_cpp_build_${{ slice.name }}
+      variables:
+        UCX_DIR: $(Agent.BuildDirectory)/ucx
+        UCXX_DIR: $(Agent.BuildDirectory)/ucxx
+        RAPIDS_CUDA_VERSION: ${{ slice.rapids_cuda_version }}
+        RAPIDS_PY_VERSION: ${{ slice.rapids_py_version }}
+        RAPIDS_BLD_OUTPUT_DIR: $(Build.ArtifactStagingDirectory)
+
+      steps:
+        - checkout: self
+          path: ucx
+          fetchDepth: 100
+          retryCountOnTaskFailure: 5
+
+        - checkout: ucxx
+          path: ucxx
+          retryCountOnTaskFailure: 5
+
+        - task: DownloadBuildArtifacts@1
+          displayName: Fetch conda-cpp artifact
+          inputs:
+            buildType: current
+            artifactName: ucxx-conda-cpp-${{ slice.name }}
+            downloadPath: $(System.DefaultWorkingDirectory)/_dl
+
+        - bash: |
+            rm -rf "$(RAPIDS_BLD_OUTPUT_DIR)"
+            mv "$(System.DefaultWorkingDirectory)/_dl/ucxx-conda-cpp-${{ slice.name }}" "$(RAPIDS_BLD_OUTPUT_DIR)"
+          displayName: Stage conda-cpp artifact
+
+        - bash: bash $(UCX_DIR)/buildlib/tools/build_ucxx.sh conda_python
+          displayName: Build UCXX conda Python package
+
+        - task: PublishBuildArtifacts@1
+          displayName: Publish conda-python artifact
+          inputs:
+            pathToPublish: $(RAPIDS_BLD_OUTPUT_DIR)
+            artifactName: ucxx-conda-python-${{ slice.name }}

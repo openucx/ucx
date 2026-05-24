@@ -259,6 +259,10 @@ resources:
       # Exclusive_Process compute mode and need MPS for shared access).
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/rapidsai-ci-conda:26.06-azp-1
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU) -v /tmp/nvidia-mps:/tmp/nvidia-mps
+    - container: ucxx_rapidsai_ci_wheel
+      # Thin wrapper of rapidsai/ci-wheel; see buildlib/dockers/rapidsai-ci-wheel.Dockerfile.
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/rapidsai-ci-wheel:26.06-azp-1
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
 
 stages:
   - stage: Codestyle
@@ -349,6 +353,112 @@ stages:
   - template: ucxx_tests_stage.yml
     parameters:
       dependsOn: []  # temp: skip Static_check to test stage faster on this PR; restore [Static_check] before merge
+
+  - stage: UCXX_build
+    dependsOn: []  # temp: skip Static_check while iterating Phase 2; restore [Static_check] before merge
+    jobs:
+      # 2.1: conda-cpp-build. Mirrors upstream conda-cpp-build matrix (4 legs).
+      - template: ucxx_conda_cpp_build.yml
+        parameters:
+          container: ucxx_rapidsai_ci_conda
+          slices:
+            - name: x86_64_cuda12_py311
+              demands: ucx_docker -equals yes
+              rapids_cuda_version: '12.9.1'
+              rapids_py_version: '3.11'
+            - name: x86_64_cuda13_py311
+              demands: ucx_docker -equals yes
+              rapids_cuda_version: '13.2.0'
+              rapids_py_version: '3.11'
+            - name: aarch64_cuda12_py311
+              demands: ucx_arm64
+              rapids_cuda_version: '12.9.1'
+              rapids_py_version: '3.11'
+            - name: aarch64_cuda13_py311
+              demands: ucx_arm64
+              rapids_cuda_version: '13.2.0'
+              rapids_py_version: '3.11'
+      # 2.2: conda-python-build. Depends on 2.1's artifacts (per-slice).
+      - template: ucxx_conda_python_build.yml
+        parameters:
+          container: ucxx_rapidsai_ci_conda
+          slices:
+            - name: x86_64_cuda12_py311
+              demands: ucx_docker -equals yes
+              rapids_cuda_version: '12.9.1'
+              rapids_py_version: '3.11'
+            - name: x86_64_cuda13_py311
+              demands: ucx_docker -equals yes
+              rapids_cuda_version: '13.2.0'
+              rapids_py_version: '3.11'
+            - name: aarch64_cuda12_py311
+              demands: ucx_arm64
+              rapids_cuda_version: '12.9.1'
+              rapids_py_version: '3.11'
+            - name: aarch64_cuda13_py311
+              demands: ucx_arm64
+              rapids_cuda_version: '13.2.0'
+              rapids_py_version: '3.11'
+      # 2.3: wheel-build-libucxx. Upstream filter = max_by(PY_VER) per (ARCH, CUDA major).
+      - template: ucxx_wheel_libucxx_build.yml
+        parameters:
+          container: ucxx_rapidsai_ci_wheel
+          slices:
+            - name: x86_64_cuda12_py314
+              demands: ucx_docker -equals yes
+              rapids_cuda_version: '12.9.1'
+              rapids_py_version: '3.14'
+            - name: x86_64_cuda13_py314
+              demands: ucx_docker -equals yes
+              rapids_cuda_version: '13.0.2'
+              rapids_py_version: '3.14'
+            - name: aarch64_cuda12_py314
+              demands: ucx_arm64
+              rapids_cuda_version: '12.9.1'
+              rapids_py_version: '3.14'
+            - name: aarch64_cuda13_py314
+              demands: ucx_arm64
+              rapids_cuda_version: '13.0.2'
+              rapids_py_version: '3.14'
+      # 2.4: wheel-build-ucxx. Upstream filter = min_by(PY_VER) per (CUDA, ARCH).
+      # Each ucxx wheel slice consumes a libucxx wheel slice; pair by (ARCH, CUDA).
+      - template: ucxx_wheel_ucxx_build.yml
+        parameters:
+          container: ucxx_rapidsai_ci_wheel
+          slices:
+            - name: x86_64_cuda12_py311
+              libucxx_slice: x86_64_cuda12_py314
+              demands: ucx_docker -equals yes
+              rapids_cuda_version: '12.9.1'
+              rapids_py_version: '3.11'
+            - name: x86_64_cuda13_py311
+              libucxx_slice: x86_64_cuda13_py314
+              demands: ucx_docker -equals yes
+              rapids_cuda_version: '13.0.2'
+              rapids_py_version: '3.11'
+            - name: aarch64_cuda12_py311
+              libucxx_slice: aarch64_cuda12_py314
+              demands: ucx_arm64
+              rapids_cuda_version: '12.9.1'
+              rapids_py_version: '3.11'
+            - name: aarch64_cuda13_py311
+              libucxx_slice: aarch64_cuda13_py314
+              demands: ucx_arm64
+              rapids_cuda_version: '13.0.2'
+              rapids_py_version: '3.11'
+      # 2.5: wheel-build-distributed-ucxx. Pure-python; upstream emits 2 amd64 legs.
+      - template: ucxx_wheel_distributed_ucxx_build.yml
+        parameters:
+          container: ucxx_rapidsai_ci_wheel
+          slices:
+            - name: x86_64_cuda12_py314
+              demands: ucx_docker -equals yes
+              rapids_cuda_version: '12.9.1'
+              rapids_py_version: '3.14'
+            - name: x86_64_cuda13_py314
+              demands: ucx_docker -equals yes
+              rapids_cuda_version: '13.0.2'
+              rapids_py_version: '3.14'
 
   - stage: Tests
     condition: false  # temp: skip non-UCXX stage; restore before merge
