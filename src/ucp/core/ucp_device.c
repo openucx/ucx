@@ -377,12 +377,13 @@ ucs_status_t
 ucp_device_local_mem_list_create(const ucp_device_mem_list_params_t *params,
                                  ucp_device_local_mem_list_h *mem_list_h)
 {
-    ucp_worker_h worker = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_PARAMS_FIELD,
+    const ucp_worker_h worker = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_PARAMS_FIELD,
                                           params, worker, WORKER, NULL);
     ucs_memory_type_t export_mem_type;
     ucs_sys_device_t local_sys_dev;
     uct_allocated_memory_t mem;
     ucs_status_t status;
+
     if (worker == NULL) {
         ucs_error("missing worker in local mem list params");
         return UCS_ERR_INVALID_PARAM;
@@ -394,6 +395,7 @@ ucp_device_local_mem_list_create(const ucp_device_mem_list_params_t *params,
     if (status != UCS_OK) {
         return status;
     }
+
     status = ucp_device_local_mem_list_params_check(params, export_mem_type,
                                                     local_sys_dev);
     if (status != UCS_OK) {
@@ -706,7 +708,7 @@ ucs_status_t
 ucp_device_remote_mem_list_create(const ucp_device_mem_list_params_t *params,
                                   ucp_device_remote_mem_list_h *mem_list_h)
 {
-    ucp_ep_h ep = ucp_device_remote_mem_list_get_first_ep(params);
+    const ucp_ep_h ep = ucp_device_remote_mem_list_get_first_ep(params);
     ucs_memory_type_t export_mem_type;
     ucs_sys_device_t sys_dev;
     uct_allocated_memory_t mem;

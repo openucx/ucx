@@ -16,6 +16,7 @@
 #include <ucs/profile/profile.h>
 #include <ucs/sys/ptr_arith.h>
 #include <ucs/sys/sys.h>
+#include <ucs/type/init_once.h>
 
 static ucs_pgt_dir_t *uct_rocm_ipc_cache_pgt_dir_alloc(const ucs_pgtable_t *pgtable)
 {
@@ -235,24 +236,24 @@ err:
 
 ucs_status_t uct_rocm_ipc_component_init_cache(void)
 {
+    static ucs_init_once_t cache_init_once = UCS_INIT_ONCE_INITIALIZER;
     ucs_status_t status;
 
-    pthread_mutex_lock(&uct_rocm_ipc_component.lock);
+    UCS_INIT_ONCE(&cache_init_once) {
+        if (uct_rocm_ipc_component.ipc_cache == NULL) {
+            status = uct_rocm_ipc_create_cache(&uct_rocm_ipc_component.ipc_cache,
+                                            "rocm_ipc_component");
+            if (status != UCS_OK) {
+                ucs_error("Failed to create ROCm IPC component cache: %s",
+                        ucs_status_string(status));
+                pthread_mutex_unlock(&uct_rocm_ipc_component.lock);
+                return status;
+            }
 
-    if (uct_rocm_ipc_component.ipc_cache == NULL) {
-        status = uct_rocm_ipc_create_cache(&uct_rocm_ipc_component.ipc_cache,
-                                           "rocm_ipc_component");
-        if (status != UCS_OK) {
-            ucs_error("Failed to create ROCm IPC component cache: %s",
-                      ucs_status_string(status));
-            pthread_mutex_unlock(&uct_rocm_ipc_component.lock);
-            return status;
+            ucs_debug("ROCm IPC component cache initialized");
         }
-
-        ucs_debug("ROCm IPC component cache initialized");
     }
 
-    pthread_mutex_unlock(&uct_rocm_ipc_component.lock);
     return UCS_OK;
 }
 

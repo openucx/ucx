@@ -92,6 +92,7 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
             ucs_error("failed to initialize rocm_ipc component cache\n");
             return ret;
         }
+
         ret = uct_rocm_ipc_cache_map_memhandle(
                 (void*)uct_rocm_ipc_component.ipc_cache, key,
                 &remote_base_addr);
@@ -223,7 +224,7 @@ ucs_status_t uct_rocm_ipc_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, siz
 ucs_status_t
 uct_rocm_ipc_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
 {
-    uct_rocm_ipc_ep_t *ep = ucs_derived_of(tl_ep, uct_rocm_ipc_ep_t);
+    uct_rocm_ipc_ep_t *const ep = ucs_derived_of(tl_ep, uct_rocm_ipc_ep_t);
     uct_device_ep_t device_ep;
     ucs_status_t status;
     hsa_status_t hsa_status;
@@ -232,6 +233,7 @@ uct_rocm_ipc_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
     if (ep->device_ep != NULL) {
         goto out;
     }
+
     device_ep.uct_tl_id = UCT_DEVICE_TL_ROCM_IPC;
 
     /* Get memory pool for device allocation */
