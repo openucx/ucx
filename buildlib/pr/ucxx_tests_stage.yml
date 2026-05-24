@@ -1,0 +1,151 @@
+parameters:
+  dependsOn: [Static_check]
+  cpu_container: ucxx_rapidsai_ci_conda
+  gpu_container: ucxx_rapidsai_ci_conda_gpu
+  slices:
+    # CPU coverage: mirrors rapidsai/ucxx upstream conda-cpp-build matrix.
+    - name: x86_64_cuda12_py311
+      gpu: false
+      demands: ucx_docker -equals yes
+      rapids_cuda_version: '12.9.1'
+      rapids_py_version: '3.11'
+    - name: x86_64_cuda13_py311
+      gpu: false
+      demands: ucx_docker -equals yes
+      rapids_cuda_version: '13.2.0'
+      rapids_py_version: '3.11'
+    - name: aarch64_cuda12_py311
+      gpu: false
+      demands: ucx_arm64
+      rapids_cuda_version: '12.9.1'
+      rapids_py_version: '3.11'
+    - name: aarch64_cuda13_py311
+      gpu: false
+      demands: ucx_arm64
+      rapids_cuda_version: '13.2.0'
+      rapids_py_version: '3.11'
+    # GPU coverage: mirrors x86_64 subset of upstream UCXX conda-cpp-tests.
+    # arm64 GPU legs deferred: no MLNX arm64+GPU+gdrcopy pool, no UCX-side
+    # arm64 GPU demand pattern to crib from.
+    - name: amd64_cuda1302_py312
+      gpu: true
+      demands: ucx_gpu_test -equals yes
+      rapids_cuda_version: '13.0.2'
+      rapids_py_version: '3.12'
+    - name: amd64_cuda1322_py313
+      gpu: true
+      demands: ucx_gpu_test -equals yes
+      rapids_cuda_version: '13.2.0'
+      rapids_py_version: '3.13'
+
+stages:
+  - stage: UCXX_tests
+    dependsOn: ${{ parameters.dependsOn }}
+    jobs:
+      - ${{ each slice in parameters.slices }}:
+        - job: ucxx_tests_${{ slice.name }}
+          workspace:
+            clean: all
+          pool:
+            name: MLNX
+            demands: ${{ slice.demands }}
+          ${{ if eq(slice.gpu, true) }}:
+            displayName: 'UCXX GPU tests (${{ slice.name }})'
+            container: ${{ parameters.gpu_container }}
+            timeoutInMinutes: 120
+          ${{ if eq(slice.gpu, false) }}:
+            displayName: 'UCXX tests (${{ slice.name }})'
+            container: ${{ parameters.cpu_container }}
+            timeoutInMinutes: 90
+
+          steps:
+            - checkout: self
+              clean: true
+              fetchDepth: 100
+              retryCountOnTaskFailure: 5
+
+            - checkout: ucxx
+              clean: true
+              path: bindings/ucxx
+              retryCountOnTaskFailure: 5
+
+            - bash: |
+                set -eE
+                IS_GPU=${{ slice.gpu }}
+                echo "=== id: $(id), arch: $(uname -m), gpu: $IS_GPU ==="
+                which python && python --version
+                if [ "$IS_GPU" = "True" ]; then nvidia-smi || true; fi
+
+                export RAPIDS_CUDA_VERSION=${{ slice.rapids_cuda_version }}
+                export RAPIDS_PY_VERSION=${{ slice.rapids_py_version }}
+                export RAPIDS_CONDA_BLD_OUTPUT_DIR=/tmp/conda-bld-output
+                mkdir -p "$RAPIDS_CONDA_BLD_OUTPUT_DIR"
+
+                mkdir -p "$HOME/.local/bin"
+                for tool in rapids-download-conda-from-github rapids-download-from-github; do
+                  printf '#!/bin/bash\necho "%s"\n' "$RAPIDS_CONDA_BLD_OUTPUT_DIR" > "$HOME/.local/bin/$tool"
+                  chmod +x "$HOME/.local/bin/$tool"
+                done
+
+                if [ "$IS_GPU" = "True" ]; then
+                  # py 3.13+ sccache version crashes on CMake TryCompile dirs.
+                  cat > "$HOME/.local/bin/rapids-configure-sccache" <<'EOF'
+                #!/bin/bash
+                export CMAKE_C_COMPILER_LAUNCHER=
+                export CMAKE_CXX_COMPILER_LAUNCHER=
+                export CMAKE_CUDA_COMPILER_LAUNCHER=
+                export RUSTC_WRAPPER=
+                EOF
+                  chmod +x "$HOME/.local/bin/rapids-configure-sccache"
+                fi
+                export PATH="$HOME/.local/bin:$PATH"
+
+                cd $(Build.SourcesDirectory)/../bindings/ucxx
+
+                if [ "$IS_GPU" = "False" ]; then
+                  # No --gpus; tolerate missing nvidia-smi in test_common.sh.
+                  sed -i 's#^  nvidia-smi$#  command -v nvidia-smi >/dev/null \&\& nvidia-smi || echo "(no GPU - CPU-runtime UCXX slice)"#' ci/test_common.sh
+                else
+                  # Upstream UCXX header missing #include <unistd.h>; only
+                  # bites on newer libstdc++ header chains.
+                  hdr=python/ucxx/ucxx/examples/python_future_task.h
+                  grep -q "include <unistd.h>" "$hdr" || sed -i '/^#pragma once/a #include <unistd.h>' "$hdr"
+                fi
+
+                bash ci/build_cpp.sh
+                bash ci/build_python.sh
+              displayName: Build UCXX
+
+            - bash: |
+                set -eE
+                IS_GPU=${{ slice.gpu }}
+                export RAPIDS_CUDA_VERSION=${{ slice.rapids_cuda_version }}
+                export RAPIDS_PY_VERSION=${{ slice.rapids_py_version }}
+                export RAPIDS_CONDA_BLD_OUTPUT_DIR=/tmp/conda-bld-output
+                export PATH="$HOME/.local/bin:$PATH"
+
+                cd $(Build.SourcesDirectory)/../bindings/ucxx
+
+                if [ "$IS_GPU" = "True" ]; then
+                  # Azure docker-execs as svc user regardless of `--user 0:0`.
+                  # Host MPS daemon rejects non-root CUDA clients; wrap in
+                  # sudo + bypass MPS via CUDA_MPS_PIPE_DIRECTORY.
+                  sudo -E env \
+                    RAPIDS_CUDA_VERSION="$RAPIDS_CUDA_VERSION" \
+                    RAPIDS_PY_VERSION="$RAPIDS_PY_VERSION" \
+                    RAPIDS_CONDA_BLD_OUTPUT_DIR="$RAPIDS_CONDA_BLD_OUTPUT_DIR" \
+                    PATH="$PATH" \
+                    CUDA_MPS_PIPE_DIRECTORY=/tmp/no-mps-here \
+                    bash -eE -c '
+                      bash ci/test_cpp.sh
+                      bash ci/test_python.sh
+                    '
+                else
+                  # CPU slice: no CUDA driver, host transports only.
+                  export CUDA_VISIBLE_DEVICES=
+                  export UCX_TLS=tcp,sm,self
+                  export GTEST_FILTER='-RMM*.*:CCCL*.*'
+                  bash ci/test_cpp.sh
+                  # test_python.sh skipped: imports libucxx (dlopens libcuda).
+                fi
+              displayName: Run UCXX tests

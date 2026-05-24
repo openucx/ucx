@@ -249,6 +249,15 @@ resources:
     - container: centos10stream
       image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/centos10stream/builder:inbox
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: ucxx_rapidsai_ci_conda
+      # Thin wrapper of rapidsai/ci-conda; see buildlib/dockers/rapidsai-ci-conda.Dockerfile.
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/rapidsai-ci-conda:26.06-azp-1
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: ucxx_rapidsai_ci_conda_gpu
+      # Same image as above, +GPU. --user 0:0 because the host MPS daemon
+      # accepts root clients but rejects matching-uid container users.
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/rapidsai-ci-conda:26.06-azp-1
+      options: --user 0:0 $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
 
 stages:
   - stage: Codestyle
@@ -329,6 +338,8 @@ stages:
         parameters:
           demands: ucx_docker -equals yes
           container: coverity_rh7
+
+  - template: ucxx_tests_stage.yml
 
   - stage: Tests
     dependsOn: [Basic_compile]
