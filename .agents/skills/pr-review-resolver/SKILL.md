@@ -74,7 +74,10 @@ gh api graphql -f query='
                 author { login }
                 path
                 line
+                startLine
                 originalLine
+                originalStartLine
+                subjectType
                 body
               }
             }
@@ -98,9 +101,15 @@ From the response:
 - Keep only `reviewThreads.nodes` where `isResolved == false`. For each kept thread, take the **first comment** in the thread (the originating comment) as the actionable comment; treat any later comments in the thread as reply context.
 - Keep `reviews.nodes` where `body` is non-empty and the body is not a duplicate of one of the inline-comment bodies. These are the top-level review summaries — surfaced at end-of-run as non-actionable reminders.
 
-Normalize each actionable comment to: `{ id, author, file, line, body, has_suggestion_block, reply_context }`.
+Normalize each actionable comment to: `{ id, author, file, line, start_line, subject_type, body, has_suggestion_block, reply_context }`.
 
 `has_suggestion_block` is true when the body contains a ` ```suggestion ` fenced block.
+
+Render the `Location:` field per comment based on anchor type:
+
+- `subject_type == FILE` (or `line == null`): `<file>` — file-level review comment, no line anchor.
+- `start_line != null && start_line != line`: `<file>:<start_line>-<line>` — multi-line comment; the reviewer is anchored on the whole range, treat the full range as the change scope.
+- otherwise: `<file>:<line>`.
 
 ### Step 4 — Classify each comment
 
@@ -111,7 +120,7 @@ For every actionable comment, apply this rubric **before** the user sees anythin
 | File type | `.md`, `.rst`, `.txt`, or comment-only lines inside `.c` / `.h` / `.cpp` / `.py` | source lines in `.c` / `.h` / `.cpp` / `.py` (non-comment) |
 | Change kind | typo, wording, formatting, doc link, comment rewrite | logic, API signature, control flow, error handling, memory / locking / RDMA semantics, build files |
 | Reviewer ask | direct textual instruction ("fix typo", "rename `X` to `Y`") | open-ended ("consider…", "what if…?", "could leak / race / deadlock") |
-| Scope | ≤ ~3 lines, single hunk, no cross-file rename of an exported symbol | multi-file, cross-function, or any rename of an exported symbol |
+| Scope | anchor spans ≤ 3 lines (single-line, or `line - start_line + 1 ≤ 3`), single hunk, no cross-file rename of an exported symbol | anchor spans > 3 lines (`line - start_line + 1 > 3`), multi-file, cross-function, or any rename of an exported symbol |
 | Test impact | none (build + test outcome unchanged) | could change build, runtime, or test results |
 
 **Default to manual-tier whenever any signal is ambiguous.** Friction is cheaper than a silently-applied wrong fix.
@@ -142,43 +151,50 @@ Accept these responses:
 
 For each approved change, edit the file in the working tree. Do **not** stage or commit at this step.
 
-### Step 6 — Manual-tier walk
+### Step 6 — Manual-tier batch review
 
-For each manual-tier comment, first print this four-block context, then gate the decision with the **AskUserQuestion tool** so the user can pick with arrow keys / number keys instead of typing free-form text:
+If there are no manual-tier comments, skip this step.
+
+First, print one summary table of every manual-tier change for at-a-glance review:
+
+| # | Location | Author | Proposed change | Risk |
+|---|----------|--------|-----------------|------|
+| 1 | `<file>:<line>` | `<login>` | `<one-line summary>` | low / med / high |
+| ... | ... | ... | ... | ... |
+
+Then, below the table, print the full context for each row using this compact form:
 
 ```
---- Comment <i> of <N manual> ---
-Author:    <login>
-Location:  <file>:<line>
-Comment:   <body>
+--- Comment <i>/<N> --- <author> <file>:<line>
+> <comment body>
 
 Proposed change:
 <diff or before/after block>
 
-Reasoning:
-<one sentence explaining why this addresses the comment>
-
-Risk note:
-<one sentence flagging what could regress, callers that may need attention,
- or "no expected risk — change is local to this function">
+Why:  <one sentence>
+Risk: <one sentence, or "local change, no expected risk">
 ```
 
-Then call `AskUserQuestion` with:
+Then gate the decision with **one** `AskUserQuestion` call covering the whole batch:
 
-- `question`: `"How to handle this comment?"`
+- `question`: `"How to handle the batch?"`
 - `header`: `"Decision"`
 - `multiSelect`: `false`
-- `options` (in this order, so option 1 is the default-accept):
-  1. **Approve** — Apply the proposed change as shown.
-  2. **Edit** — Apply a user-revised version of the change.
-  3. **Skip** — Leave the file untouched and record a reason.
+- `options`:
+  1. **Approve all** — Apply every proposed change as shown.
+  2. **Approve except** — Apply the rest; user names the exclusions.
+  3. **Edit** — Apply a user-revised version for one index, then re-gate the remainder.
+  4. **Skip all** — Record every comment as skipped.
 
 Handle the selection:
 
-- **Approve** → apply the proposed change to the working tree.
-- **Edit** → follow up with a normal text prompt: `"Paste the revised change (diff or full replacement text):"`. Apply the user's revision instead of the original proposal.
-- **Skip** → follow up with a normal text prompt: `"Reason for skipping?"`. Do not edit; record the reason verbatim.
-- **Other** (the free-form fallback AskUserQuestion always offers) → treat the typed text as a clarifying instruction; re-issue the AskUserQuestion once the intent is clear.
+- **Approve all** → apply every proposed change to the working tree.
+- **Approve except** → follow up with a normal text prompt: `"Comma-separated indices to exclude:"`. Apply the rest; record each excluded index as skipped with reason `"user excluded from batch"`.
+- **Edit** → follow up with a normal text prompt: `"Index to edit, then the revised change (diff or full replacement text):"`. Apply the user's revision for that index, then re-issue the `AskUserQuestion` gate over the remaining (still-pending) indices.
+- **Skip all** → record every comment as skipped with reason `"user declined batch"`.
+- **Other** (the free-form fallback AskUserQuestion always offers) → treat the typed text as a clarifying instruction; re-issue the gate once the intent is clear.
+
+**Index semantics for re-gates.** Indices always refer to the **original** table numbering printed at the top of Step 6. When a re-gate fires (after `Edit` or `Approve except`), reprint the table with only the still-pending rows but keep their original numbers — never renumber, leave gaps where indices have been resolved. Once an index has been applied, edited, or excluded, it is terminal: it does not reappear in subsequent gates, and its outcome is preserved for the end-of-run summary. `Edit` revises one index per gate; invoke it across successive re-gates to revise multiple comments.
 
 Apply edits in the working tree only — no staging, no commits at this step.
 
@@ -253,7 +269,7 @@ UCX uses subject-line module prefixes:
 MODULE/UNIT1/UNIT2/...: <summary>
 ```
 
-This skill always uses the literal summary `PR fixes from agent` and copies the `MODULE/UNIT...` prefix (everything before the first `:`) from `git log -1 --pretty=%s` on the PR HEAD.
+This skill always uses the literal summary `PR fixes from agent` and copies the module prefix (`MODULE/UNIT...:`) 
 
 Examples:
 
@@ -273,11 +289,5 @@ Examples:
 - Replying to comments on GitHub or marking threads resolved via the API.
 - Force-push, rebase, branch creation, opening a new PR.
 - Running tests, builds, or linters before pushing.
-- Comments outside the formal review (general PR conversation thread, commit-line comments).
+- General PR conversation comments (the issue-style thread on a PR) and commit-line comments. Only review-thread comments — inline, multi-line, and file-level — are processed.
 - GitLab merge requests.
-
-## Additional Resources
-
-- [gh CLI manual](https://cli.github.com/manual/)
-- [GitHub PR review API (GraphQL)](https://docs.github.com/en/graphql/reference/objects#pullrequest)
-- UCX commit conventions — see top of the UCX repo `CONTRIBUTING.md`.
