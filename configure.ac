@@ -72,6 +72,22 @@ AC_SUBST(EXTRA_VERSION)
 AC_SUBST(SCM_VERSION)
 AC_SUBST(SOVERSION)
 
+UCX_LT_RELEASE=
+ucx_soname_suffix_summary="<disabled>"
+AC_ARG_WITH([soname-suffix],
+        AS_HELP_STRING([--with-soname-suffix=SUFFIX],
+                       [Append SUFFIX to UCX core shared library SONAMEs. Disabled by default. [default=NO]]),
+        [], [with_soname_suffix=no])
+AS_IF([test "x$with_soname_suffix" != xno],
+      [AS_IF([test "x$with_soname_suffix" = xyes],
+             [AC_MSG_ERROR([--with-soname-suffix requires an explicit suffix value])])
+       AS_IF([printf '%s\n' "$with_soname_suffix" | grep -Eq '^@<:@A-Za-z0-9@:>@@<:@A-Za-z0-9_.-@:>@*$'],
+             [],
+             [AC_MSG_ERROR([--with-soname-suffix must contain only letters, digits, dots, underscores, and dashes])])
+       UCX_LT_RELEASE="-release $with_soname_suffix"
+       ucx_soname_suffix_summary="$with_soname_suffix"])
+AC_SUBST([UCX_LT_RELEASE])
+
 AC_PROG_CC
 AC_PROG_CXX
 AC_OPENMP
@@ -434,6 +450,7 @@ AC_MSG_NOTICE([        Multi-thread:   ${mt_enable}])
 AC_MSG_NOTICE([           MPI tests:   ${mpi_enable}])
 AC_MSG_NOTICE([         VFS support:   ${vfs_enable}])
 AC_MSG_NOTICE([       Devel headers:   ${enable_devel_headers}])
+AC_MSG_NOTICE([       SONAME suffix:   ${ucx_soname_suffix_summary}])
 AC_MSG_NOTICE([io_demo CUDA support:   ${with_iodemo_cuda}])
 AC_MSG_NOTICE([            Bindings:   <$(echo ${build_bindings}|tr ':' ' ') >])
 AC_MSG_NOTICE([         UCS modules:   <$(echo ${ucs_modules}|tr ':' ' ') >])
