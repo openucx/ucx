@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2016. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  * Copyright (C) Los Alamos National Security, LLC. 2019 ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
@@ -898,14 +898,14 @@ static void ucp_wireup_unset_tl_by_md(const ucp_wireup_select_params_t *sparams,
 }
 
 static void ucp_wireup_memaccess_bitmap(ucp_context_h context,
-                                        ucs_memory_type_t mem_type,
+                                        uint64_t mem_type_bitmap,
                                         ucp_tl_bitmap_t *tl_bitmap)
 {
     const uint64_t md_reg_flags = UCT_MD_FLAG_NEED_MEMH | UCT_MD_FLAG_NEED_RKEY;
 
     /* If a local or a remote key is needed, the memory domain has to be able
        to register. Otherwise, it must be able to access. */
-    ucp_context_memaccess_tl_bitmap(context, UCS_BIT(mem_type), md_reg_flags,
+    ucp_context_memaccess_tl_bitmap(context, mem_type_bitmap, md_reg_flags,
                                     tl_bitmap);
 }
 
@@ -936,7 +936,8 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_add_memaccess_lanes(
     mem_criteria.alloc_mem_types = 0;
     mem_criteria.lane_type       = lane_type;
 
-    ucp_wireup_memaccess_bitmap(context, mem_type, &mem_type_tl_bitmap);
+    ucp_wireup_memaccess_bitmap(context, UCS_BIT(mem_type),
+                                &mem_type_tl_bitmap);
     UCS_STATIC_BITMAP_AND_INPLACE(&mem_type_tl_bitmap, tl_bitmap);
 
     status = ucp_wireup_select_transport(select_ctx, select_params,
@@ -1839,7 +1840,13 @@ static int ucp_wireup_add_bw_lanes_pairwise(
 
         /* Account for possible path override */
         local_num_paths  = iface_attr->dev_num_paths;
-        remote_num_paths = ae->dev_num_paths;
+
+        if (bw_info->criteria.lane_type == UCP_LANE_TYPE_DEVICE) {
+            remote_num_paths = 1;
+        } else {
+            remote_num_paths = ae->dev_num_paths;
+        }
+
         if (allow_extra_path &&
             ((skip_dev_index != UCP_NULL_RESOURCE) && /* clang sanitizer */
              (skip_dev_index == dev_index))) {
@@ -1896,7 +1903,7 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
                 continue;
             }
 
-            ucp_wireup_memaccess_bitmap(worker->context, mem_type,
+            ucp_wireup_memaccess_bitmap(worker->context, UCS_BIT(mem_type),
                                         &mem_type_tl_bitmap);
             UCS_STATIC_BITMAP_AND_INPLACE(&mem_type_tl_bitmap, tl_bitmap);
 
@@ -2222,7 +2229,8 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
         UCS_STATIC_BITMAP_RESET_ALL(&tl_bitmap);
 
         ucs_memory_type_for_each(mem_type) {
-            ucp_wireup_memaccess_bitmap(context, mem_type, &mem_type_tl_bitmap);
+            ucp_wireup_memaccess_bitmap(context, UCS_BIT(mem_type),
+                                        &mem_type_tl_bitmap);
 
             found_lane |= ucp_wireup_add_bw_lanes(
                     select_params, &bw_info,
@@ -2491,13 +2499,16 @@ static ucs_status_t
 ucp_wireup_add_device_lanes(const ucp_wireup_select_params_t *select_params,
                             ucp_wireup_select_context_t *select_ctx)
 {
-    ucp_context_h context  = select_params->ep->worker->context;
-    unsigned ep_init_flags = ucp_wireup_ep_init_flags(select_params,
-                                                      select_ctx);
-    ucp_wireup_select_flags_t iface_rma_flags, peer_rma_flags;
+    ucp_context_h context        = select_params->ep->worker->context;
+    const unsigned ep_init_flags = ucp_wireup_ep_init_flags(select_params,
+                                                            select_ctx);
     ucp_wireup_select_bw_info_t bw_info = {};
+    const uint64_t mem_type_bitmaps[]   = {UCS_BIT(UCS_MEMORY_TYPE_CUDA),
+                                           UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
+                                                   UCS_BIT(UCS_MEMORY_TYPE_HOST)};
+    int found_lane                      = 0;
+    size_t i;
     ucp_tl_bitmap_t mem_type_tl_bitmap;
-    int found_lane;
 
     if (!context->config.ext.proto_enable ||
         (ep_init_flags &
@@ -2509,8 +2520,6 @@ ucp_wireup_add_device_lanes(const ucp_wireup_select_params_t *select_params,
         return UCS_OK;
     }
 
-    ucp_wireup_init_select_flags(&iface_rma_flags, 0, 0);
-    ucp_wireup_init_select_flags(&peer_rma_flags, 0, 0);
     ucp_wireup_criteria_init(&bw_info.criteria);
 
     bw_info.criteria.calc_score = ucp_wireup_device_score_func;
@@ -2529,11 +2538,14 @@ ucp_wireup_add_device_lanes(const ucp_wireup_select_params_t *select_params,
      */
     bw_info.max_lanes = ucp_wireup_bw_max_lanes(select_params);
 
-    ucp_wireup_memaccess_bitmap(context, UCS_MEMORY_TYPE_CUDA,
-                                &mem_type_tl_bitmap);
-    found_lane = ucp_wireup_add_bw_lanes(select_params, &bw_info,
-                                         mem_type_tl_bitmap, UCP_NULL_LANE,
-                                         select_ctx, 0);
+    for (i = 0; i < ucs_static_array_size(mem_type_bitmaps); ++i) {
+        ucp_wireup_memaccess_bitmap(context, mem_type_bitmaps[i],
+                                    &mem_type_tl_bitmap);
+        found_lane |= ucp_wireup_add_bw_lanes(select_params, &bw_info,
+                                              mem_type_tl_bitmap, UCP_NULL_LANE,
+                                              select_ctx, 0);
+    }
+
     if (!found_lane) {
         ucs_debug("ep %p: could not find device lanes", select_params->ep);
     }

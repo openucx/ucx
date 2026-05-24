@@ -37,7 +37,9 @@ uct_cuda_ipc_cache_hash_equal(uct_cuda_ipc_cache_hash_key_t key1,
 static UCS_F_ALWAYS_INLINE khint32_t
 uct_cuda_ipc_cache_hash_func(uct_cuda_ipc_cache_hash_key_t key)
 {
-    return kh_int64_hash_func(((key.pid << 8) | key.cu_device) ^ key.pid_ns);
+    uint64_t value = key.pid ^ ((uint64_t)key.pid_ns << 32) ^
+                     ((uint32_t)key.cu_device << 24);
+    return kh_int64_hash_func(value);
 }
 
 KHASH_INIT(cuda_ipc_rem_cache, uct_cuda_ipc_cache_hash_key_t,
@@ -529,7 +531,7 @@ uct_cuda_ipc_get_remote_cache(const uct_cuda_ipc_cache_hash_key_t *key,
                     &khret);
     if ((khret == UCS_KH_PUT_BUCKET_EMPTY) ||
         (khret == UCS_KH_PUT_BUCKET_CLEAR)) {
-        ucs_snprintf_safe(target_name, sizeof(target_name), "dest:%d:%ld:%d",
+        ucs_snprintf_safe(target_name, sizeof(target_name), "dest:%d:%u:%d",
                           key->pid, key->pid_ns, key->cu_device);
         status = uct_cuda_ipc_create_cache(cache, target_name);
         if (status != UCS_OK) {

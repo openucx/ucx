@@ -2151,3 +2151,53 @@ UCS_TEST_P(test_ucp_wireup_msg_lane, select_highest_seg_size_lane) {
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_msg_lane, all, "^sm")
+
+class test_ucp_reconfig_connect_remote : public ucp_test {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant(variants, UCP_FEATURE_RMA);
+    }
+
+    void init() override
+    {
+        if (!is_proto_enabled()) {
+            UCS_TEST_SKIP_R("Proto v2 is disabled");
+        }
+
+        modify_config("PROTOS", "^put*");
+        ucp_test::init();
+    }
+};
+
+/*
+ * This test excludes all put protocols to force proto_reconfig for put
+ * operations and verifies the request completes with UCS_ERR_CANCELED rather
+ * than hanging.
+ */
+UCS_TEST_P(test_ucp_reconfig_connect_remote, put_canceled)
+{
+    ucs::watchdog_set(ucs::WATCHDOG_TEST, 30.0);
+    scoped_log_handler slh(wrap_errors_logger);
+
+    sender().connect(&receiver(), get_ep_params());
+    if (!is_loopback()) {
+        receiver().connect(&sender(), get_ep_params());
+    }
+
+    static const size_t size = 4096;
+    std::vector<uint8_t> sendbuf(size, 0xab);
+    mapped_buffer recvbuf(size, receiver());
+    ucs::handle<ucp_rkey_h> rkey;
+    recvbuf.rkey(sender(), rkey);
+
+    ucp_request_param_t param = {};
+    auto sreq                 = ucp_put_nbx(sender().ep(), sendbuf.data(), size,
+                                            (uintptr_t)recvbuf.ptr(),
+                                            rkey.get(), &param);
+    ucs_status_t status       = request_wait(sreq);
+    EXPECT_EQ(UCS_ERR_CANCELED, status);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_reconfig_connect_remote, tcp, "tcp")
+
