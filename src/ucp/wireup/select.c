@@ -2933,7 +2933,7 @@ ucp_wireup_select_aux_transport(ucp_ep_h ep, unsigned ep_init_flags,
     criteria.calc_score = ucp_wireup_aux_seg_size_score_func;
     status = ucp_wireup_select_transport(&select_ctx, &select_params, &criteria,
                                          ucp_tl_bitmap_max, UINT64_MAX,
-                                         UINT64_MAX, UINT64_MAX, 0,
+                                         UINT64_MAX, UINT64_MAX, 1,
                                          select_info);
     if (status == UCS_OK) {
         return UCS_OK;
