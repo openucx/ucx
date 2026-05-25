@@ -674,8 +674,8 @@ static ssize_t ucp_memh_do_pack(ucp_mem_h memh, uint64_t flags, int rkey_compat,
         ucs_fatal("packing rkey using ucp_memh_pack() is unsupported");
     }
 
-    mem_info         = ucp_memory_info_from_memh(memh);
-    sys_distance     = sys_dev_distances;
+    mem_info     = ucp_memory_info_from_memh(memh);
+    sys_distance = sys_dev_distances;
 
     ucs_for_each_bit(ep_sys_dev, sys_dev_map) {
         status = ucs_topo_get_distance(memh->sys_dev, ep_sys_dev, sys_distance);
