@@ -420,7 +420,9 @@ int ucp_request_memh_invalidate(ucp_request_t *req, ucs_status_t status)
         memh_p = &req->send.state.dt.dt.contig.memh;
     }
 
-    if ((*memh_p == NULL) || ucp_memh_is_user_memh(*memh_p)) {
+    if ((context->rcache == NULL) ||
+        (*memh_p == NULL) ||
+        ucp_memh_is_user_memh(*memh_p)) {
         return 0;
     }
 
