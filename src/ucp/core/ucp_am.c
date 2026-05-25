@@ -1230,6 +1230,10 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_recv_data_nbx,
          * returning UCS_OK) back to UCT.
          */
         desc->flags &= ~UCP_RECV_DESC_FLAG_AM_CB_INPROGRESS;
+    } else if (ucs_unlikely(desc->flags & UCP_RECV_DESC_FLAG_MALLOC)) {
+        UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
+        ucp_am_release_long_desc(desc);
+        return ret;
     } else {
         ucp_recv_desc_release(desc);
     }
