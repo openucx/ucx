@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -63,6 +63,7 @@ typedef struct ucs_sys_dev_distance {
 
 
 extern const ucs_sys_dev_distance_t ucs_topo_default_distance;
+extern const ucs_sys_dev_distance_t ucs_topo_max_distance;
 
 
 /*

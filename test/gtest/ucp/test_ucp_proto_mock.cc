@@ -1165,3 +1165,97 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_twins_get_inline_0,
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_twins_get_inline_0, rcx,
                               "rc_x")
+
+/*
+ * Regression coverage for the sort-by-sys_device step in
+ * ucp_proto_multi_filter_single_net_device(): when the wireup AM-lane
+ * heuristic places a non-lowest-sys_device NIC at lane[0], the sys_devs[] 
+ * insertion order [2, 1, 3] gives node_local_id=0 the
+ * wrong NIC (sys_dev=2 = mock_1:1) if sorting is not done. 
+ * The sorting fixes the order to [1, 2, 3].
+ *
+ * mock_1:1 wins the AM/RMA-lane race purely on iface latency.
+ *
+ * All three mocks carry the same bandwidth, so all three survive the
+ * filter's min-distance criterion (synthetic distance (0, 28e9) for each).
+ */
+class test_ucp_proto_mock_rcx_trio_unsorted : public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_rcx_trio_unsorted()
+    {
+        mock_transport("rc_mlx5");
+    }
+
+    virtual void init() override
+    {
+        auto iface_attr_slow = [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short  = 208;
+            iface_attr.cap.put.max_short = 2048;
+            iface_attr.bandwidth.shared  = 28e9;
+            iface_attr.latency.c         = 600e-9;
+            iface_attr.latency.m         = 1e-9;
+        };
+
+        /* Lower iface latency wins the wireup AM/RMA score functions, so
+         * this mock lands at lane[0] of the endpoint config. Its
+         * sys_device (2) is intentionally not the first in the list. */
+        auto iface_attr_fast = [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short  = 208;
+            iface_attr.cap.put.max_short = 2048;
+            iface_attr.bandwidth.shared  = 28e9;
+            iface_attr.latency.c         = 300e-9;
+            iface_attr.latency.m         = 1e-9;
+        };
+
+        add_mock_iface("mock_0:1", iface_attr_slow); /* sys_dev = 1 */
+        add_mock_iface("mock_1:1", iface_attr_fast); /* sys_dev = 2, lane[0] */
+        add_mock_iface("mock_2:1", iface_attr_slow); /* sys_dev = 3 */
+        test_ucp_proto_mock::init();
+    }
+
+protected:
+    /*
+     * Verify the rendezvous proto (which goes through proto_multi's
+     * SINGLE_NET_DEVICE filter) picks the expected mock NIC at a
+     * sufficiently large message size (1 MiB) where rendezvous always
+     * applies, regardless of how the eager threshold shifts in this
+     * fixture.
+     */
+    void check_rndv_picks(const std::string &expected_mock)
+    {
+        ucp_proto_select_key_t key = any_key();
+        key.param.op_id_flags      = UCP_OP_ID_TAG_SEND;
+        key.param.op_attr          = 0;
+
+        const std::string config = "rc_mlx5/" + expected_mock +
+                                   " 50% on path0 and 50% on path1";
+        check_ep_config(sender(),
+                        {{UCS_MBYTE, INF,
+                          "rendezvous zero-copy read from remote", config}},
+                        key);
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_trio_unsorted,
+           sort_local_id_0_picks_lowest_sys_dev, "IB_NUM_PATHS?=2",
+           "SINGLE_NET_DEVICE=y", "NODE_LOCAL_ID=0")
+{
+    check_rndv_picks("mock_0:1");
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_trio_unsorted,
+           sort_local_id_1_picks_am_lane_sys_dev, "IB_NUM_PATHS?=2",
+           "SINGLE_NET_DEVICE=y", "NODE_LOCAL_ID=1")
+{
+    check_rndv_picks("mock_1:1");
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_trio_unsorted,
+           sort_local_id_2_picks_highest_sys_dev, "IB_NUM_PATHS?=2",
+           "SINGLE_NET_DEVICE=y", "NODE_LOCAL_ID=2")
+{
+    check_rndv_picks("mock_2:1");
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_trio_unsorted, rcx,
+                              "rc_x")

@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019-2022. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -111,6 +111,11 @@ struct ucs_global_state {
 const ucs_sys_dev_distance_t ucs_topo_default_distance = {
     .latency   = 0,
     .bandwidth = INFINITY
+};
+
+const ucs_sys_dev_distance_t ucs_topo_max_distance = {
+    .latency   = INFINITY,
+    .bandwidth = 0
 };
 
 static ucs_topo_global_ctx_t ucs_topo_global_ctx;
