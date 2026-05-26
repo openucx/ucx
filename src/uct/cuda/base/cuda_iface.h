@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -166,8 +166,8 @@ uct_cuda_base_init_stream(CUstream *stream)
         return UCS_OK;
     }
 
-    return UCT_CUDADRV_FUNC_LOG_ERR(
-            cuStreamCreate(stream, CU_STREAM_NON_BLOCKING));
+    return UCT_CUDADRV_FUNC_LOG_ERR(cuStreamCreate, stream,
+                                    CU_STREAM_NON_BLOCKING);
 }
 
 #endif

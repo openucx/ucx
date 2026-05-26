@@ -20,8 +20,8 @@ ucs_status_t uct_cuda_ctx_primary_retain(CUdevice cuda_device, int force,
     CUcontext cuda_ctx;
 
     if (!force) {
-        status = UCT_CUDADRV_FUNC_LOG_ERR(
-                    cuDevicePrimaryCtxGetState(cuda_device, &flags, &active));
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuDevicePrimaryCtxGetState,
+                                          cuda_device, &flags, &active);
         if (status != UCS_OK) {
             return status;
         }
@@ -33,8 +33,8 @@ ucs_status_t uct_cuda_ctx_primary_retain(CUdevice cuda_device, int force,
         }
     }
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(
-                cuDevicePrimaryCtxRetain(&cuda_ctx, cuda_device));
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDevicePrimaryCtxRetain, &cuda_ctx,
+                                      cuda_device);
     if (status != UCS_OK) {
         return status;
     }
@@ -49,14 +49,14 @@ ucs_status_t uct_cuda_ctx_primary_push_first_active(CUdevice *cuda_device_p)
     ucs_status_t status;
     CUdevice cuda_device;
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetCount(&num_devices));
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetCount, &num_devices);
     if (status != UCS_OK) {
         return status;
     }
 
     for (device_index = 0; device_index < num_devices; ++device_index) {
-        status = UCT_CUDADRV_FUNC_LOG_ERR(
-                    cuDeviceGet(&cuda_device, device_index));
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet, &cuda_device,
+                                          device_index);
         if (status != UCS_OK) {
             return status;
         }
@@ -85,9 +85,9 @@ ucs_status_t uct_cuda_ctx_primary_push(CUdevice cuda_device, int retain_inactive
         return status;
     }
 
-    status = UCT_CUDADRV_FUNC(cuCtxPushCurrent(primary_ctx), log_level);
+    status = UCT_CUDADRV_FUNC(log_level, cuCtxPushCurrent, primary_ctx);
     if (status != UCS_OK) {
-        (void)UCT_CUDADRV_FUNC(cuDevicePrimaryCtxRelease(cuda_device), log_level);
+        (void)UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease, cuda_device);
     }
 
     return status;
@@ -102,7 +102,7 @@ ucs_status_t uct_cuda_ctx_primary_push_avail(int retain_inactive,
     ucs_status_t status;
     int dev_ordinal, num_devices;
 
-    status = UCT_CUDADRV_FUNC_LOG_DEBUG(cuCtxGetDevice(cuda_device_p));
+    status = UCT_CUDADRV_FUNC_LOG_DEBUG(cuCtxGetDevice, cuda_device_p);
     if (status != UCS_OK) {
         *cuda_device_p = CU_DEVICE_INVALID;
     }
@@ -137,15 +137,15 @@ ucs_status_t uct_cuda_ctx_primary_push_avail(int retain_inactive,
         return UCS_OK;
     }
 
-    status = UCT_CUDADRV_FUNC(cuDeviceGetCount(&num_devices), UCS_LOG_LEVEL_DIAG);
+    status = UCT_CUDADRV_FUNC_LOG_DIAG(cuDeviceGetCount, &num_devices);
     if (status != UCS_OK) {
         return UCS_ERR_INVALID_PARAM;
     }
 
     /* Use the first active cuda device for allocation */
     for (dev_ordinal = 0; dev_ordinal < num_devices; dev_ordinal++) {
-        if (UCT_CUDADRV_FUNC_LOG_DEBUG(cuDeviceGet(avail_cuda_device_p,
-                                                   dev_ordinal)) != UCS_OK) {
+        if (UCT_CUDADRV_FUNC_LOG_DEBUG(cuDeviceGet, avail_cuda_device_p,
+                                       dev_ordinal) != UCS_OK) {
             continue;
         }
 
@@ -162,6 +162,6 @@ ucs_status_t uct_cuda_ctx_primary_push_avail(int retain_inactive,
 
 void uct_cuda_ctx_primary_pop_and_release(CUdevice cuda_device)
 {
-    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
-    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(cuda_device));
+    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent, NULL);
+    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease, cuda_device);
 }

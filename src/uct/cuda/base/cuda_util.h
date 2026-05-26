@@ -7,8 +7,9 @@
 #ifndef UCT_CUDA_UTIL_H
 #define UCT_CUDA_UTIL_H
 
-#include <ucs/sys/topo/base/topo.h>
 #include <ucs/debug/log.h>
+#include <ucs/profile/profile_defs.h>
+#include <ucs/sys/topo/base/topo.h>
 
 #include <cuda.h>
 
@@ -16,35 +17,39 @@
 const char *uct_cuda_cu_get_error_string(CUresult result);
 
 
-#define UCT_CUDADRV_LOG(_func, _log_level, _result) \
+#define UCT_CUDADRV_LOG(_log_level, _func, _result) \
     ucs_log((_log_level), "%s failed: %s", UCS_PP_MAKE_STRING(_func), \
             uct_cuda_cu_get_error_string(_result))
 
 
-#define UCT_CUDADRV_FUNC(_func, _log_level) \
+#define UCT_CUDADRV_FUNC(_log_level, _func, ...) \
     ({ \
-        CUresult _result = (_func); \
+        CUresult _result = UCS_PROFILE_CALL_ALWAYS(_func, ##__VA_ARGS__); \
         ucs_status_t _status; \
         if (ucs_likely(_result == CUDA_SUCCESS)) { \
             _status = UCS_OK; \
         } else { \
-            UCT_CUDADRV_LOG(_func, _log_level, _result); \
+            UCT_CUDADRV_LOG(_log_level, _func, _result); \
             _status = UCS_ERR_IO_ERROR; \
         } \
         _status; \
     })
 
 
-#define UCT_CUDADRV_FUNC_LOG_ERR(_func) \
-    UCT_CUDADRV_FUNC(_func, UCS_LOG_LEVEL_ERROR)
+#define UCT_CUDADRV_FUNC_LOG_ERR(_func, ...) \
+    UCT_CUDADRV_FUNC(UCS_LOG_LEVEL_ERROR, _func, ##__VA_ARGS__)
 
 
-#define UCT_CUDADRV_FUNC_LOG_WARN(_func) \
-    UCT_CUDADRV_FUNC(_func, UCS_LOG_LEVEL_WARN)
+#define UCT_CUDADRV_FUNC_LOG_WARN(_func, ...) \
+    UCT_CUDADRV_FUNC(UCS_LOG_LEVEL_WARN, _func, ##__VA_ARGS__)
 
 
-#define UCT_CUDADRV_FUNC_LOG_DEBUG(_func) \
-    UCT_CUDADRV_FUNC(_func, UCS_LOG_LEVEL_DEBUG)
+#define UCT_CUDADRV_FUNC_LOG_DIAG(_func, ...) \
+    UCT_CUDADRV_FUNC(UCS_LOG_LEVEL_DIAG, _func, ##__VA_ARGS__)
+
+
+#define UCT_CUDADRV_FUNC_LOG_DEBUG(_func, ...) \
+    UCT_CUDADRV_FUNC(UCS_LOG_LEVEL_DEBUG, _func, ##__VA_ARGS__)
 
 
 /**

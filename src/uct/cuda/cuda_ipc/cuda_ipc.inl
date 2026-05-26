@@ -29,9 +29,9 @@ uct_cuda_ipc_check_and_push_ctx(CUdeviceptr address, CUdevice *cuda_device_p,
     attr_type[1] = CU_POINTER_ATTRIBUTE_DEVICE_ORDINAL;
     attr_data[1] = &cuda_device_ordinal;
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuPointerGetAttributes(UCT_CUDA_IPC_NUM_ATTRS, attr_type, attr_data,
-                                   address));
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuPointerGetAttributes,
+                                      UCT_CUDA_IPC_NUM_ATTRS, attr_type,
+                                      attr_data, address);
     if (ucs_unlikely(status != UCS_OK)) {
         return status;
     }
@@ -39,8 +39,8 @@ uct_cuda_ipc_check_and_push_ctx(CUdeviceptr address, CUdevice *cuda_device_p,
     ucs_assertv(cuda_device_ordinal >= 0, "cuda_device_ordinal=%d",
                 cuda_device_ordinal);
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&cuda_device,
-                                                  cuda_device_ordinal));
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet, &cuda_device,
+                                      cuda_device_ordinal);
     if (ucs_unlikely(status != UCS_OK)) {
         return status;
     }
@@ -51,16 +51,16 @@ uct_cuda_ipc_check_and_push_ctx(CUdeviceptr address, CUdevice *cuda_device_p,
            return status;
         }
 
-        UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(cuda_device));
+        (void)UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease, cuda_device);
     }
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetCurrent(&cuda_ctx_current));
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetCurrent, &cuda_ctx_current);
     if (ucs_unlikely(status != UCS_OK)) {
         return status;
     }
 
     if (cuda_ctx != cuda_ctx_current) {
-        status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(cuda_ctx));
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent, cuda_ctx);
         if (ucs_unlikely(status != UCS_OK)) {
             return status;
         }
@@ -78,7 +78,7 @@ static UCS_F_ALWAYS_INLINE void
 uct_cuda_ipc_check_and_pop_ctx(int is_ctx_pushed)
 {
     if (is_ctx_pushed) {
-        UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
+        (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent, NULL);
     }
 }
 
