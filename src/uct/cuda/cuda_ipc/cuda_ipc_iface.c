@@ -4,25 +4,25 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#  include "config.h"
+#include "config.h"
 #endif
 
-#include "cuda_ipc.inl"
+#include "cuda_ipc_ep.h"
 #include "cuda_ipc_iface_address.h"
 #include "cuda_ipc_iface.h"
 #include "cuda_ipc_md.h"
-#include "cuda_ipc_ep.h"
+#include "cuda_ipc.inl"
 
+#include <ucs/async/eventfd.h>
+#include <ucs/debug/assert.h>
+#include <ucs/sys/string.h>
+#include <ucs/type/class.h>
+#include <uct/api/device/uct_device_types.h>
 #include <uct/cuda/base/cuda_iface.h>
 #include <uct/cuda/base/cuda_md.h>
 #include <uct/cuda/base/cuda_nvml.h>
-#include <uct/api/device/uct_device_types.h>
-#include <ucs/type/class.h>
-#include <ucs/sys/string.h>
-#include <ucs/debug/assert.h>
-#include <ucs/async/eventfd.h>
-#include <pthread.h>
 
+#include <pthread.h>
 
 typedef enum {
     UCT_CUDA_IPC_DEVICE_ADDR_FLAG_MNNVL = UCS_BIT(0)

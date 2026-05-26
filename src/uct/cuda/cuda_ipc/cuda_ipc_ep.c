@@ -7,22 +7,21 @@
 #include "config.h"
 #endif
 
-#include <uct/cuda/base/cuda_iface.h>
-#include <uct/api/uct_def.h>
-#include <uct/api/device/uct_device_types.h>
-
 #include "cuda_ipc_ep.h"
 #include "cuda_ipc_iface_address.h"
 #include "cuda_ipc_iface.h"
 #include "cuda_ipc_md.h"
 #include "cuda_ipc.inl"
 
-#include <uct/base/uct_log.h>
-#include <uct/base/uct_iov.inl>
 #include <ucs/debug/memtrack_int.h>
+#include <ucs/profile/profile.h>
 #include <ucs/sys/math.h>
 #include <ucs/type/class.h>
-#include <ucs/profile/profile.h>
+#include <uct/api/device/uct_device_types.h>
+#include <uct/api/uct_def.h>
+#include <uct/base/uct_iov.inl>
+#include <uct/base/uct_log.h>
+#include <uct/cuda/base/cuda_iface.h>
 
 #define UCT_CUDA_IPC_PUT 0
 #define UCT_CUDA_IPC_GET 1
