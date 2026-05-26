@@ -165,10 +165,28 @@ private:
     static ucs_status_t perf_mock(uct_iface_h iface, uct_perf_attr_t *perf_attr)
     {
         uct_base_iface_t *base = ucs_derived_of(iface, uct_base_iface_t);
+        uct_iface_attr_t iface_attr;
+        ucs_status_t status;
 
         UCS_MOCK_ORIG_FUNC(m_self->m_mock,
                            &base->internal_ops->iface_estimate_perf, iface,
                            perf_attr);
+
+        if (perf_attr->field_mask & (UCT_PERF_ATTR_FIELD_BANDWIDTH |
+                                     UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH)) {
+            status = iface_query_mock(iface, &iface_attr);
+            if (status != UCS_OK) {
+                return status;
+            }
+
+            if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
+                perf_attr->bandwidth = iface_attr.bandwidth;
+            }
+
+            if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH) {
+                perf_attr->path_bandwidth = iface_attr.bandwidth;
+            }
+        }
 
         std::string &iface_name = m_self->m_iface_names[base];
         auto it                 = m_self->m_perf_attrs_funcs.find(iface_name);
@@ -178,7 +196,11 @@ private:
 
     static void default_perf_mock(uct_perf_attr_t& perf_attr)
     {
-        perf_attr.path_bandwidth = perf_attr.bandwidth;
+        if (ucs_test_all_flags(perf_attr.field_mask,
+                               UCT_PERF_ATTR_FIELD_BANDWIDTH |
+                               UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH)) {
+            perf_attr.path_bandwidth = perf_attr.bandwidth;
+        }
     }
 
     /* We have to use singleton to mock C functions */
@@ -1218,6 +1240,7 @@ public:
             iface_attr.latency.m         = 1e-9;
         }, [this](uct_perf_attr_t &perf_attr) {
             perf_attr.bandwidth.shared = this->m_port_speed["mock_0:1"];
+            perf_attr.path_bandwidth   = perf_attr.bandwidth;
         });
 
         m_port_speed["mock_1:1"] = 24e9;
@@ -1228,6 +1251,7 @@ public:
             iface_attr.latency.m         = 1e-9;
         }, [this](uct_perf_attr_t &perf_attr) {
             perf_attr.bandwidth.shared = this->m_port_speed["mock_1:1"];
+            perf_attr.path_bandwidth   = perf_attr.bandwidth;
         });
         test_ucp_proto_mock::init();
     }
