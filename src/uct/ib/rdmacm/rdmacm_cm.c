@@ -813,9 +813,15 @@ static void uct_rdmacm_cm_event_handler(int fd, ucs_event_set_types_t events,
     int                  ret;
 
     for (;;) {
+        /* Hold the async block across rdma_get_cm_event() so a concurrent
+         * rdma_destroy_id() (held under the same block in the ep destructor)
+         * cannot free the cm_id userspace tracking mid-lookup. */
+        UCS_ASYNC_BLOCK(uct_rdmacm_cm_get_async(cm));
+
         /* Fetch an event */
         ret = rdma_get_cm_event(cm->ev_ch, &event);
         if (ret) {
+            UCS_ASYNC_UNBLOCK(uct_rdmacm_cm_get_async(cm));
             /* EAGAIN (in a non-blocking rdma_get_cm_event) means that
              * there are no more events */
             if ((errno != EAGAIN) && (errno != EINTR)) {
@@ -825,7 +831,6 @@ static void uct_rdmacm_cm_event_handler(int fd, ucs_event_set_types_t events,
             return;
         }
 
-        UCS_ASYNC_BLOCK(uct_rdmacm_cm_get_async(cm));
         uct_rdmacm_cm_process_event(cm, event);
         UCS_ASYNC_UNBLOCK(uct_rdmacm_cm_get_async(cm));
     }
