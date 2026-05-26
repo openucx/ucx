@@ -56,15 +56,22 @@ steps:
     parallel: false
     timeout: "${STEP_TIMEOUT_MINUTES}"
     run: |
-      # Limit tests to 2 CPUs to prevent max_threads exhaustion in k8s (similar to Azure CPU affinity)
+      # Pin gtest to up to 4 CPUs in k8s: keeps max_threads bounded (similar to Azure
+      # CPU affinity) while giving the UCS async thread headroom alongside gtest workers
+      # and UCP progress threads. A 2-CPU mask starved async under MT variants and
+      # exposed a poll_missed race in rdmacm.
+      cpu_width=4
       allowed_cpus=$(awk '/^Cpus_allowed_list:/ {print $2}' /proc/self/status)
       first_chunk=${allowed_cpus%%,*}
-      # In k8s, pin to up to 2 CPUs so max_threads stays bounded and avoids resource exhaustion.
       if [[ "${first_chunk}" == *-* ]]; then
         start_cpu=${first_chunk%-*}
         end_cpu=${first_chunk#*-}
+        max_end=$((start_cpu + cpu_width - 1))
+        if [ "${end_cpu}" -gt "${max_end}" ]; then
+          end_cpu=${max_end}
+        fi
         if [ "${end_cpu}" -gt "${start_cpu}" ]; then
-          cpu_set="${start_cpu}-$((start_cpu + 1))"
+          cpu_set="${start_cpu}-${end_cpu}"
         else
           cpu_set="${start_cpu}"
         fi
