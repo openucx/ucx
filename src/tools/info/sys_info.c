@@ -128,7 +128,7 @@ static void print_sys_topo_distances(unsigned num_devices)
         for (sys_dev2 = 0; sys_dev2 < num_devices; ++sys_dev2) {
             if (sys_dev1 == sys_dev2) {
                 /* Do not print distance of device to itself */
-                ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_RIGHT, "%s",
+                ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_CENTER, "%s",
                                            "-");
                 continue;
             }
