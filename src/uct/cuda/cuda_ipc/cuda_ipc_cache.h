@@ -9,17 +9,13 @@
 
 #include "cuda_ipc_iface_address.h"
 #include "cuda_ipc_md.h"
-#include "ucs/config/types.h"
-#include "ucs/datastruct/list.h"
-#include "ucs/datastruct/pgtable.h"
-#include "ucs/sys/sys.h"
-#include "ucs/type/status.h"
+
+#include <ucs/datastruct/list.h>
+#include <ucs/datastruct/pgtable.h>
+#include <ucs/type/init_once.h>
+#include <ucs/type/spinlock.h>
 
 #include <cuda.h>
-
-#include <pthread.h>
-#include <stddef.h>
-#include <stdint.h>
 
 
 typedef struct uct_cuda_ipc_cache        uct_cuda_ipc_cache_t;

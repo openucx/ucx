@@ -6,8 +6,8 @@
 #ifndef UCT_CUDA_IPC_IFACE_ADDRESS_H
 #define UCT_CUDA_IPC_IFACE_ADDRESS_H
 
-#include "ucs/sys/sys.h"
-#include "uct/api/uct_def.h"
+#include <ucs/sys/sys.h>
+#include <uct/api/uct_def.h>
 
 #include <sys/types.h>
 

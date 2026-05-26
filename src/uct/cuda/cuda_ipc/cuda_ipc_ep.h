@@ -7,13 +7,10 @@
 #define UCT_CUDA_IPC_EP_H
 
 #include "cuda_ipc_iface_address.h"
-#include "ucs/type/class.h"
-#include "ucs/type/status.h"
-#include "uct/api/uct.h"
-#include "uct/base/uct_iface.h"
 
-#include <stddef.h>
-#include <stdint.h>
+#include <ucs/type/class.h>
+#include <uct/api/uct.h>
+#include <uct/base/uct_iface.h>
 
 
 typedef struct uct_cuda_ipc_ep {

@@ -9,8 +9,8 @@
 
 #include "cuda_ipc_iface_address.h"
 
-#include "ucs/sys/compiler_def.h"
-#include "ucs/sys/sys.h"
+#include <ucs/sys/compiler_def.h>
+#include <ucs/sys/sys.h>
 
 #include <unistd.h>
 
