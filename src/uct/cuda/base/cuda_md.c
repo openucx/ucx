@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2019. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -27,14 +27,13 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
     char device_name[10];
     int i, num_gpus;
 
-    status = UCT_CUDADRV_FUNC(cuDeviceGetCount(&num_gpus), UCS_LOG_LEVEL_DIAG);
+    status = UCT_CUDADRV_FUNC_LOG_DIAG(cuDeviceGetCount, &num_gpus);
     if ((status != UCS_OK) || (num_gpus == 0)) {
         return uct_md_query_empty_md_resource(resources_p, num_resources_p);
     }
 
     for (i = 0; i < num_gpus; ++i) {
-        status = UCT_CUDADRV_FUNC(cuDeviceGet(&cuda_device, i),
-                                  UCS_LOG_LEVEL_DIAG);
+        status = UCT_CUDADRV_FUNC_LOG_DIAG(cuDeviceGet, &cuda_device, i);
         if (status != UCS_OK) {
             continue;
         }
@@ -57,7 +56,7 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
 
 UCS_STATIC_INIT
 {
-    UCT_CUDADRV_FUNC_LOG_DEBUG(cuInit(0));
+    UCT_CUDADRV_FUNC_LOG_DEBUG(cuInit, 0);
 }
 
 UCS_STATIC_CLEANUP

@@ -1,11 +1,11 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2019. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
- #ifdef HAVE_CONFIG_H
- #  include "config.h"
- #endif
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
 
 #include <uct/cuda/base/cuda_iface.h>
 #include <uct/api/uct_def.h>
@@ -43,7 +43,8 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_ep_t, const uct_ep_params_t *params)
 static UCS_CLASS_CLEANUP_FUNC(uct_cuda_ipc_ep_t)
 {
     if (self->device_ep != NULL) {
-        (void)UCT_CUDADRV_FUNC_LOG_WARN(cuMemFree((CUdeviceptr)self->device_ep));
+        (void)UCT_CUDADRV_FUNC_LOG_WARN(cuMemFree,
+                                        (CUdeviceptr)self->device_ep);
     }
 }
 
@@ -76,7 +77,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_ipc_ctx_rsc_get(
 
     result = uct_cuda_ctx_get_id(NULL, &ctx_id);
     if (ucs_unlikely(result != CUDA_SUCCESS)) {
-        UCT_CUDADRV_LOG(cuCtxGetId, UCS_LOG_LEVEL_ERROR, result);
+        UCT_CUDADRV_LOG(UCS_LOG_LEVEL_ERROR, cuCtxGetId, result);
         return UCS_ERR_IO_ERROR;
     }
 
@@ -159,15 +160,15 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
     src = (CUdeviceptr)
         ((direction == UCT_CUDA_IPC_PUT) ? iov[0].buffer : mapped_rem_addr);
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemcpyDtoDAsync(dst, src, iov[0].length,
-                                                        *stream));
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemcpyDtoDAsync, dst, src,
+                                      iov[0].length, *stream);
     if (UCS_OK != status) {
         ucs_mpool_put(cuda_ipc_event);
         goto out;
     }
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuEventRecord(cuda_ipc_event->super.event,
-                                                    *stream));
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuEventRecord,
+                                      cuda_ipc_event->super.event, *stream);
     if (UCS_OK != status) {
         ucs_mpool_put(cuda_ipc_event);
         goto out;
@@ -247,14 +248,14 @@ ucs_status_t uct_cuda_ipc_ep_get_device_ep(uct_ep_h tl_ep,
     }
 
     device_ep.uct_tl_id = UCT_DEVICE_TL_CUDA_IPC;
-    status = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuMemAlloc((CUdeviceptr *)&ep->device_ep, sizeof(uct_device_ep_t)));
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemAlloc, (CUdeviceptr*)&ep->device_ep,
+                                      sizeof(uct_device_ep_t));
     if (status != UCS_OK) {
         goto err;
     }
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuMemcpyHtoD((CUdeviceptr)ep->device_ep, &device_ep, sizeof(uct_device_ep_t)));
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemcpyHtoD, (CUdeviceptr)ep->device_ep,
+                                      &device_ep, sizeof(uct_device_ep_t));
     if (status != UCS_OK) {
         goto err_free_mem;
     }
@@ -263,7 +264,7 @@ out:
     *device_ep_p = ep->device_ep;
     return UCS_OK;
 err_free_mem:
-    cuMemFree((CUdeviceptr)ep->device_ep);
+    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuMemFree, (CUdeviceptr)ep->device_ep);
     ep->device_ep = NULL;
 err:
     return status;

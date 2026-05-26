@@ -40,9 +40,9 @@ private:
 
     test_device_cuda_ctx_guard() : m_dev(0), m_ctx(NULL), m_is_active(false)
     {
-        (void)UCT_CUDADRV_FUNC_LOG_DEBUG(cuInit(0));
+        (void)UCT_CUDADRV_FUNC_LOG_DEBUG(cuInit, 0);
 
-        if (UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&m_dev, 0)) != UCS_OK) {
+        if (UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet, &m_dev, 0) != UCS_OK) {
             return;
         }
 
@@ -65,13 +65,13 @@ private:
             return;
         }
 
-        if (UCT_CUDADRV_FUNC_LOG_ERR(cuDevicePrimaryCtxRetain(&m_ctx, m_dev)) !=
+        if (UCT_CUDADRV_FUNC_LOG_ERR(cuDevicePrimaryCtxRetain, &m_ctx, m_dev) !=
             UCS_OK) {
             return;
         }
 
-        if (UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(m_ctx)) != UCS_OK) {
-            (void)UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(m_dev));
+        if (UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent, m_ctx) != UCS_OK) {
+            (void)UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease, m_dev);
             return;
         }
 
@@ -84,8 +84,8 @@ private:
             return;
         }
 
-        (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
-        (void)UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(m_dev));
+        (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent, NULL);
+        (void)UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease, m_dev);
         m_is_active = false;
     }
 };
@@ -115,11 +115,11 @@ protected:
             return;
         }
 
-        status = UCT_CUDADRV_FUNC_LOG_ERR(
-                cuDevicePrimaryCtxRetain(&ctx, m_cuda_dev));
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuDevicePrimaryCtxRetain, &ctx,
+                                          m_cuda_dev);
         ASSERT_UCS_OK(status);
 
-        status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(ctx));
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent, ctx);
         ASSERT_UCS_OK(status);
     }
 
@@ -131,8 +131,8 @@ protected:
             return;
         }
 
-        (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
-        (void)UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(m_cuda_dev));
+        (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent, NULL);
+        (void)UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease, m_cuda_dev);
     }
 
     entity *m_sender;

@@ -38,12 +38,12 @@ uct_cuda_ctx_pop_and_release(CUdevice cuda_device, CUcontext cuda_context)
         return;
     }
 
-    UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
+    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent, NULL);
     if (cuda_device == CU_DEVICE_INVALID) {
         return;
     }
 
-    UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(cuda_device));
+    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease, cuda_device);
 }
 
 #endif

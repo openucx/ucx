@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -28,7 +28,7 @@ uct_cuda_base_query_devices_common(
     ucs_status_t status;
 
     if (uct_cuda_ctx_is_active()) {
-        status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetDevice(&cuda_device));
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetDevice, &cuda_device);
         if (status != UCS_OK) {
             return status;
         }
@@ -141,15 +141,13 @@ ucs_status_t uct_cuda_base_iface_event_fd_arm(uct_iface_h tl_iface,
         if (!ucs_queue_is_empty(event_q)) {
             status =
 #if (__CUDACC_VER_MAJOR__ >= 100000)
-                UCT_CUDADRV_FUNC_LOG_ERR(
-                        cuLaunchHostFunc(*stream,
-                                         uct_cuda_base_iface_stream_cb_fxn,
-                                         iface));
+                    UCT_CUDADRV_FUNC_LOG_ERR(cuLaunchHostFunc, *stream,
+                                             uct_cuda_base_iface_stream_cb_fxn,
+                                             iface);
 #else
-                UCT_CUDADRV_FUNC_LOG_ERR(
-                        cuStreamAddCallback(*stream,
-                                            uct_cuda_base_iface_stream_cb_fxn,
-                                            iface, 0));
+                    UCT_CUDADRV_FUNC_LOG_ERR(cuStreamAddCallback, *stream,
+                                             uct_cuda_base_iface_stream_cb_fxn,
+                                             iface, 0);
 #endif
             if (UCS_OK != status) {
                 return status;
@@ -318,7 +316,7 @@ ucs_status_t uct_cuda_base_iface_flush(uct_iface_h tl_iface, unsigned flags,
 void uct_cuda_base_stream_destroy(CUstream *stream)
 {
     if (*stream != NULL) {
-        (void)UCT_CUDADRV_FUNC_LOG_WARN(cuStreamDestroy(*stream));
+        (void)UCT_CUDADRV_FUNC_LOG_WARN(cuStreamDestroy, *stream);
     }
 }
 
@@ -327,15 +325,15 @@ uct_cuda_base_event_desc_init(ucs_mpool_t *mp, void *obj, void *chunk)
 {
     uct_cuda_event_desc_t *event_desc = obj;
 
-    UCT_CUDADRV_FUNC_LOG_ERR(cuEventCreate(&event_desc->event,
-                                           CU_EVENT_DISABLE_TIMING));
+    UCT_CUDADRV_FUNC_LOG_ERR(cuEventCreate, &event_desc->event,
+                             CU_EVENT_DISABLE_TIMING);
 }
 
 static void uct_cuda_base_event_desc_cleanup(ucs_mpool_t *mp, void *obj)
 {
     uct_cuda_event_desc_t *event_desc = obj;
 
-    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuEventDestroy(event_desc->event));
+    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuEventDestroy, event_desc->event);
 }
 
 void uct_cuda_base_queue_desc_init(uct_cuda_queue_desc_t *qdesc)
@@ -375,7 +373,7 @@ ucs_status_t uct_cuda_base_ctx_rsc_create(uct_cuda_iface_t *iface,
     uct_cuda_ctx_rsc_t *ctx_rsc;
     ucs_mpool_params_t mp_params;
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetCurrent(&ctx));
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetCurrent, &ctx);
     if (status != UCS_OK) {
         return status;
     } else if (ctx == NULL) {

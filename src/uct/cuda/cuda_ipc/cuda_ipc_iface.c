@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2019. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -157,15 +157,14 @@ static double uct_cuda_ipc_iface_get_bw()
     int major_version;
     ucs_status_t status;
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&cu_device, 0));
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet, &cu_device, 0);
     if (status != UCS_OK) {
         return 0;
     }
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuDeviceGetAttribute(&major_version,
-                                 CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR,
-                                 cu_device));
+            cuDeviceGetAttribute, &major_version,
+            CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, cu_device);
     if (status != UCS_OK) {
         return 0;
     }
