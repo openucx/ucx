@@ -56,6 +56,10 @@ steps:
     parallel: false
     timeout: "${STEP_TIMEOUT_MINUTES}"
     run: |
+      # Raise memlock for RDMA pinning. Cap with what the container actually allows.
+      ulimit -l unlimited 2>/dev/null || true
+      echo "memlock soft=$(ulimit -l) hard=$(ulimit -Hl)"
+
       # Pin gtest to up to 4 CPUs in k8s: keeps max_threads bounded (similar to Azure
       # CPU affinity) while giving the UCS async thread headroom alongside gtest workers
       # and UCP progress threads. A 2-CPU mask starved async under MT variants and
