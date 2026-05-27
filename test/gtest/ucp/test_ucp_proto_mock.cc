@@ -517,7 +517,8 @@ protected:
     {
         ucp_mem_map_params_t mem_map_params;
         mem_map_params.field_mask  = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
-                                     UCP_MEM_MAP_PARAM_FIELD_LENGTH;
+                                     UCP_MEM_MAP_PARAM_FIELD_LENGTH  |
+                                     UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE;
         mem_map_params.address     = address;
         mem_map_params.length      = length;
         mem_map_params.memory_type = mem_type;
@@ -969,7 +970,7 @@ class test_ucp_proto_mock_cuda_ipc : public test_ucp_proto_mock {
 public:
     test_ucp_proto_mock_cuda_ipc()
     {
-        if (has_transport("rc_mlx5")) {
+        if (has_transport("rc_x")) {
             mock_transport("rc_mlx5");
         }
     }
@@ -980,7 +981,7 @@ public:
             UCS_TEST_SKIP_R("CUDA memory is not supported");
         }
 
-        if (!has_transport("rc_mlx5")) {
+        if (!has_transport("rc_x")) {
             UCS_TEST_SKIP_R("rc_mlx5 transport is not supported");
         }
 
@@ -1072,7 +1073,7 @@ UCS_TEST_P(test_ucp_proto_mock_cuda_ipc, get, "IB_NUM_PATHS?=1")
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_proto_mock_cuda_ipc,
-                                        shm_ib_ipc, "shm,ib,cuda_ipc,rocm_ipc")
+                                        shm_rc_ipc, "shm,rc_x,cuda_ipc,rocm_ipc")
 
 class test_ucp_proto_mock_rcx_twins : public test_ucp_proto_mock {
 public:
