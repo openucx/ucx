@@ -388,6 +388,10 @@ stages:
       parameters:
         name: new_namespace
         demands: ucx_new -equals yes
+    - template: namespace_tests.yml
+      parameters:
+        name: gpu_namespace
+        demands: ucx_gpu -equals yes
 
   - stage: io_demo
     dependsOn: [Basic_compile]
