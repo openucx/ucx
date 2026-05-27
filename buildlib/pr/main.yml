@@ -289,6 +289,13 @@ stages:
 
       - template: build_job.yml
         parameters:
+          name: build_icc_pgi
+          demands:
+            - ucx_docker
+          displayName: Build with ICC and PGI on CentOS7 x86_64
+
+      - template: build_job.yml
+        parameters:
           name: build_aarch64
           demands:
             - ucx_arm64
