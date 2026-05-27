@@ -58,6 +58,16 @@ ucp_proto_multi_get_avail_bw(const ucp_proto_init_params_t *params,
     return lane_perf->bandwidth * ratio;
 }
 
+static int ucp_proto_multi_sys_dev_cmp(const void *pa, const void *pb,
+                                       void *UCS_V_UNUSED arg)
+{
+    const ucs_sys_device_t a = *(const ucs_sys_device_t*)pa;
+    const ucs_sys_device_t b = *(const ucs_sys_device_t*)pb;
+
+    /* ascending order by sys_device */
+    return (a > b) - (a < b);
+}
+
 static ucp_lane_index_t
 ucp_proto_multi_find_max_avail_bw_lane(const ucp_proto_init_params_t *params,
                                        const ucp_lane_index_t *lanes,
@@ -67,25 +77,107 @@ ucp_proto_multi_find_max_avail_bw_lane(const ucp_proto_init_params_t *params,
 {
     /* Initial value is 1Bps, so we don't consider lanes with lower available
      * bandwidth. */
-    double max_avail_bw        = 1.0;
-    ucp_lane_index_t max_index = UCP_NULL_LANE;
-    double avail_bw;
+    double max_avail_bw              = 1.0;
+    ucp_lane_map_t lane_map          = 0;
+    ucp_lane_index_t num_max_bw_devs = 0;
+    int n                            = 0;
+    ucs_sys_device_t sys_devs[UCP_PROTO_MAX_LANES];
+    ucp_lane_index_t i, index, selected_index, first_max_bw_lane;
     const ucp_proto_common_tl_perf_t *lane_perf;
-    ucp_lane_index_t lane, index;
+    const char *dev_name;
+    ucs_sys_device_t sys_dev, selected_sys_dev, req_sys_dev;
+    unsigned seed, gpu_idx;
+    double avail_bw;
+    int cmp;
 
     ucs_assert(index_map != 0);
+
+    /* Pass 1: find max avail_bw and the set of lanes with that bandwidth. */
     ucs_for_each_bit(index, index_map) {
-        lane      = lanes[index];
-        lane_perf = &lanes_perf[lane];
-        avail_bw  = ucp_proto_multi_get_avail_bw(params, lane, lane_perf,
-                                                 selection);
-        if (avail_bw > max_avail_bw) {
+        lane_perf = &lanes_perf[lanes[index]];
+        avail_bw = ucp_proto_multi_get_avail_bw(params, lanes[index], lane_perf,
+                                                selection);
+        cmp      = ucs_fp_compare(avail_bw, max_avail_bw);
+        if (cmp > 0) {
             max_avail_bw = avail_bw;
-            max_index    = index;
+            lane_map     = UCS_BIT(index);
+        } else if (cmp == 0) {
+            lane_map |= UCS_BIT(index);
         }
     }
 
-    return max_index;
+    if (lane_map == 0) {
+        return UCP_NULL_LANE;
+    }
+
+    first_max_bw_lane = ucs_ffs64(lane_map);
+
+    if (ucs_popcount(lane_map) == 1) {
+        ucs_trace("only one max bw lane %d", first_max_bw_lane);
+        return first_max_bw_lane;
+    }
+
+    /* Host memory flows use the first max bw lane. */
+    req_sys_dev = params->select_param->sys_dev;
+    if (req_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        ucs_trace("unknown sys_dev; falling back to first max bw lane %d",
+                  first_max_bw_lane);
+        return first_max_bw_lane;
+    }
+
+    /* Use the integer suffix of the requesting GPU's name ("GPU<N>") as a
+     * per-process seed. Anything else falls back to the first max bw lane. */
+    dev_name = ucs_topo_sys_device_get_name(req_sys_dev);
+    if ((sscanf(dev_name, "GPU%u%n", &gpu_idx, &n) != 1) ||
+        (dev_name[n] != '\0')) {
+        ucs_trace("unknown device name: '%s'; "
+                  "falling back to first max bw lane %d",
+                  dev_name, first_max_bw_lane);
+        return first_max_bw_lane;
+    }
+
+    /* Pass 2: collect unique sys_devs among the tied lanes. */
+    ucs_for_each_bit(index, lane_map) {
+        sys_dev = ucp_proto_common_get_sys_dev(params, lanes[index]);
+        for (i = 0; i < num_max_bw_devs; ++i) {
+            if (sys_dev == sys_devs[i]) {
+                break;
+            }
+        }
+
+        if (i == num_max_bw_devs) {
+            sys_devs[num_max_bw_devs++] = sys_dev;
+        }
+    }
+
+    /* Sort sys_devs so every process observes the same ordering. */
+    ucs_qsort_r(sys_devs, num_max_bw_devs, sizeof(sys_devs[0]),
+                ucp_proto_multi_sys_dev_cmp, NULL);
+
+    seed             = (unsigned)gpu_idx % num_max_bw_devs;
+    selected_sys_dev = sys_devs[seed];
+
+    /* Pass 3: return the first tied index whose lane is on selected_sys_dev. */
+    selected_index = UCP_NULL_LANE;
+    ucs_for_each_bit(index, lane_map) {
+        if (ucp_proto_common_get_sys_dev(params, lanes[index]) ==
+            selected_sys_dev) {
+            selected_index = index;
+            break;
+        }
+    }
+
+    ucs_assertv(selected_index != UCP_NULL_LANE,
+                "selected_sys_dev=%d num_max_bw_devs=%u seed=%u",
+                selected_sys_dev, num_max_bw_devs, seed);
+
+    ucs_trace("max bw lane: proto %s gpu_idx %d num_max_bw_devs %u seed %u "
+              "-> sys_dev %d index %u lane %u",
+              ucp_proto_id_field(params->proto_id, name), gpu_idx,
+              num_max_bw_devs, seed, selected_sys_dev, selected_index,
+              lanes[selected_index]);
+
+    return selected_index;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -158,16 +250,6 @@ static ucp_sys_dev_map_t ucp_proto_multi_init_flush_sys_dev_mask(
     }
 
     return UCS_BIT(key->sys_dev);
-}
-
-static int ucp_proto_multi_sys_dev_cmp(const void *pa, const void *pb,
-                                       void *UCS_V_UNUSED arg)
-{
-    const ucs_sys_device_t a = *(const ucs_sys_device_t*)pa;
-    const ucs_sys_device_t b = *(const ucs_sys_device_t*)pb;
-
-    /* ascending order by sys_device */
-    return (a > b) - (a < b);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_sys_dev_distance_t
