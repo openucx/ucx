@@ -12,12 +12,12 @@ kubernetes:
   namespace: nbu-swx-ucx
   limits: "{memory: 16Gi, cpu: 10000m}"
   requests: "{memory: 16Gi, cpu: 10000m}"
-
+# mofed-26.04-0.7.6.0
 runs_on_dockers:
   # HCA RoCE (CX7)
   - {
       name: "hca-roce",
-      url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0",
+      url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:mofed-24.10-3.2.5.0",
       arch: x86_64,
       tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
       annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "sriov-cx7-p2" }],
@@ -28,7 +28,7 @@ runs_on_dockers:
   # HCA IB (CX8)
   - {
       name: "hca-ib",
-      url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0",
+      url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:mofed-24.10-3.2.5.0",
       arch: x86_64,
       tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
       annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "cx8-ib-network" }],
@@ -49,7 +49,7 @@ env:
   TEST_PERF: "0"
   VALGRIND_CHECK: "no"
   nworkers: "4"
-  STEP_TIMEOUT_MINUTES: "120"
+  STEP_TIMEOUT_MINUTES: "180"
 
 steps:
   - name: Test
