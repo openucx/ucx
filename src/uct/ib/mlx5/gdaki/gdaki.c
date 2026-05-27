@@ -638,21 +638,21 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
 {
     uct_rc_gdaki_iface_t *iface = ucs_derived_of(params->iface,
                                                  uct_rc_gdaki_iface_t);
+    ucs_status_t status;
+
+    if (iface->cuda_ctx == NULL) {
+        status = UCT_CUDADRV_FUNC_LOG_ERR(
+                cuDevicePrimaryCtxRetain(&iface->cuda_ctx, iface->cuda_dev));
+        if (status != UCS_OK) {
+            iface->cuda_ctx = NULL;
+            return status;
+        }
+    }
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super.super.super);
 
     self->dev_ep_init = 0;
     uct_rc_gdaki_ep_reset_channels(self);
-
-    UCS_INIT_ONCE(&iface->cuda_ctx_init_once) {
-        (void)UCT_CUDADRV_FUNC_LOG_ERR(
-                cuDevicePrimaryCtxRetain(&iface->cuda_ctx, iface->cuda_dev));
-    }
-
-    if (iface->cuda_ctx == NULL) {
-        ucs_debug("iface %p: no cuda context", iface);
-        return UCS_ERR_NO_DEVICE;
-    }
 
     return uct_rc_gdaki_ep_init_channels(iface, self);
 }
@@ -1046,7 +1046,6 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
     }
 
     self->cuda_ctx           = NULL;
-    self->cuda_ctx_init_once = UCS_INIT_ONCE_INITIALIZER;
 
     ret = ucs_posix_memalign((void**)&self->atomic_buff,
                              UCS_SYS_CACHE_LINE_SIZE, sizeof(uint64_t),
