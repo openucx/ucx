@@ -196,13 +196,14 @@ ucp_proto_multi_filter_single_net_device(ucp_lane_index_t num_lanes,
     ucp_lane_map_t lane_map;
     ucs_sys_device_t sys_dev, selected_sys_dev;
     const uct_tl_resource_desc_t *tl_rsc;
+    int cmp;
 
     ucs_trace("single net dev: proto %s node_local_id %lu num_lanes %u "
               "fixed_first_lane %d",
               ucp_proto_id_field(params->proto_id, name),
               context->config.node_local_id, num_lanes, fixed_first_lane);
 
-    /* Pass 1: find all net devices and track the minimum distance. */
+    /* Pass 1: collect net lanes at the minimum distance. */
     lane_map = 0;
     for (i = 0; i < num_lanes; ++i) {
         lane = lanes[i];
@@ -210,25 +211,18 @@ ucp_proto_multi_filter_single_net_device(ucp_lane_index_t num_lanes,
             continue;
         }
 
-        lane_map |= UCS_BIT(lane);
         lane_dist = ucp_proto_multi_lane_distance(&tl_perfs[lane]);
-        if (ucs_topo_distance_cmp(&lane_dist, &min_distance) < 0) {
+        cmp       = ucs_topo_distance_cmp(&lane_dist, &min_distance);
+        if (cmp < 0) {
             min_distance = lane_dist;
+            lane_map     = UCS_BIT(lane);
+        } else if (cmp == 0) {
+            lane_map |= UCS_BIT(lane);
         }
-    }
-
-    if (lane_map == 0) {
-        ucs_trace("single net dev: no net devices found");
-        return num_lanes;
     }
 
     /* Pass 2: collect unique sys_devices for lanes at min distance. */
     ucs_for_each_bit(lane, lane_map) {
-        lane_dist = ucp_proto_multi_lane_distance(&tl_perfs[lane]);
-        if (ucs_topo_distance_cmp(&lane_dist, &min_distance) != 0) {
-            continue;
-        }
-
         sys_dev = ucp_proto_common_get_sys_dev(params, lane);
         for (i = 0; i < num_min_dist_devs; ++i) {
             if (sys_dev == sys_devs[i]) {
@@ -239,6 +233,10 @@ ucp_proto_multi_filter_single_net_device(ucp_lane_index_t num_lanes,
         if (i == num_min_dist_devs) {
             sys_devs[num_min_dist_devs++] = sys_dev;
         }
+    }
+
+    if (num_min_dist_devs == 0) {
+        return num_lanes;
     }
 
     /* Sort sys_devs so every rank on the node observes the same ordering. */
