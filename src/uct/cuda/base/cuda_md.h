@@ -6,8 +6,18 @@
 #ifndef UCT_CUDA_MD_H
 #define UCT_CUDA_MD_H
 
+#include <uct/cuda/base/cuda_util.h>
 #include <uct/base/uct_iface.h>
 #include <uct/base/uct_md.h>
+
+
+typedef struct uct_cuda_base_fabric_alloc {
+    CUdeviceptr                 ptr;
+    size_t                      length;
+#if HAVE_CUDA_FABRIC
+    CUmemGenericAllocationHandle generic_handle;
+#endif
+} uct_cuda_base_fabric_alloc_t;
 
 
 ucs_status_t
@@ -41,5 +51,16 @@ uct_cuda_base_query_devices(uct_md_h md,
  *         invalid.
  */
 ucs_status_t uct_cuda_base_check_device_name(const uct_iface_params_t *params);
+
+
+ucs_status_t
+uct_cuda_base_fabric_alloc(CUdevice cuda_device, size_t *granularity_p,
+                           uct_cuda_base_fabric_alloc_t *alloc_handle,
+                           ucs_log_level_t log_level);
+
+
+ucs_status_t
+uct_cuda_base_fabric_release(uct_cuda_base_fabric_alloc_t *alloc_handle,
+                             ucs_log_level_t log_level);
 
 #endif
