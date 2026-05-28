@@ -198,8 +198,8 @@ ucp_proto_multi_filter_single_net_device(ucp_lane_index_t num_lanes,
     const uct_tl_resource_desc_t *tl_rsc;
     int cmp;
 
-    ucs_trace("single net dev: proto %s node_local_id %lu num_lanes %u "
-              "fixed_first_lane %d",
+    ucs_trace("single net dev: proto=%s node_local_id=%lu num_lanes=%u "
+              "fixed_first_lane=%d",
               ucp_proto_id_field(params->proto_id, name),
               context->config.node_local_id, num_lanes, fixed_first_lane);
 
@@ -250,8 +250,8 @@ ucp_proto_multi_filter_single_net_device(ucp_lane_index_t num_lanes,
     seed             = context->config.node_local_id % num_min_dist_devs;
     selected_sys_dev = sys_devs[seed];
 
-    ucs_trace("single net dev: pick node_local_id %lu %% %u = seed %u -> "
-              "sys_dev %d",
+    ucs_trace("single net dev: pick node_local_id=%lu %% num_min_dist_devs=%u "
+              "-> seed=%u sys_dev=%d",
               context->config.node_local_id, num_min_dist_devs, seed,
               selected_sys_dev);
 
@@ -261,6 +261,8 @@ ucp_proto_multi_filter_single_net_device(ucp_lane_index_t num_lanes,
         tl_rsc = ucp_proto_common_get_tl_rsc(params, lane);
         if ((tl_rsc->dev_type == UCT_DEVICE_TYPE_NET) &&
             (tl_rsc->sys_device != selected_sys_dev)) {
+            ucs_trace("single net dev: filtered out " UCP_PROTO_LANE_FMT,
+                      UCP_PROTO_LANE_ARG(params, lane, &tl_perfs[lane]));
             ucp_proto_perf_node_deref(&tl_perfs[lane].node);
             continue;
         }
@@ -268,7 +270,7 @@ ucp_proto_multi_filter_single_net_device(ucp_lane_index_t num_lanes,
         lanes[num_filtered_lanes++] = lane;
     }
 
-    ucs_trace("single net dev: kept %u/%u lanes", num_filtered_lanes,
+    ucs_trace("single net dev: kept=%u/%u lanes", num_filtered_lanes,
               num_lanes);
 
     return num_filtered_lanes;

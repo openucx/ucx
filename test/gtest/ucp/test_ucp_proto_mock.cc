@@ -1237,21 +1237,21 @@ protected:
 };
 
 UCS_TEST_P(test_ucp_proto_mock_rcx_trio_unsorted,
-           sort_local_id_0_picks_lowest_sys_dev, "IB_NUM_PATHS?=2",
+           single_net_dev_local_id_0_picks_lowest_sys_dev, "IB_NUM_PATHS?=2",
            "SINGLE_NET_DEVICE=y", "NODE_LOCAL_ID=0")
 {
     check_rndv_picks("mock_0:1");
 }
 
 UCS_TEST_P(test_ucp_proto_mock_rcx_trio_unsorted,
-           sort_local_id_1_picks_am_lane_sys_dev, "IB_NUM_PATHS?=2",
+           single_net_dev_local_id_1_picks_am_lane_sys_dev, "IB_NUM_PATHS?=2",
            "SINGLE_NET_DEVICE=y", "NODE_LOCAL_ID=1")
 {
     check_rndv_picks("mock_1:1");
 }
 
 UCS_TEST_P(test_ucp_proto_mock_rcx_trio_unsorted,
-           sort_local_id_2_picks_highest_sys_dev, "IB_NUM_PATHS?=2",
+           single_net_dev_local_id_2_picks_highest_sys_dev, "IB_NUM_PATHS?=2",
            "SINGLE_NET_DEVICE=y", "NODE_LOCAL_ID=2")
 {
     check_rndv_picks("mock_2:1");
