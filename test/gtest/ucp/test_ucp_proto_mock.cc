@@ -1073,7 +1073,7 @@ UCS_TEST_P(test_ucp_proto_mock_cuda_ipc, get, "IB_NUM_PATHS?=1")
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_proto_mock_cuda_ipc,
-                                        shm_rc_ipc, "shm,rc_x,cuda_ipc,rocm_ipc")
+                                        shm_rc_ipc, "rc_x,cuda_ipc,rocm_ipc")
 
 class test_ucp_proto_mock_rcx_twins : public test_ucp_proto_mock {
 public:

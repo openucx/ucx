@@ -251,7 +251,7 @@ public:
     }
 
     void test_flush_put_zcopy(flush_func_t flush) {
-        auto access_mem_types = sender().md_attr().access_mem_types;
+        const auto access_mem_types = sender().md_attr().access_mem_types;
 
         ASSERT_NE(access_mem_types, 0);
         ucs_memory_type_t mem_type = (ucs_memory_type_t)ucs_ffs64(

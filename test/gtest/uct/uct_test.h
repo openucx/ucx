@@ -512,17 +512,18 @@ protected:
     UCT_TEST_NO_SELF_TLS, \
     self
 
-
+#define UCT_TEST_TLS \
+    UCT_TEST_NO_GPU_MEM_TYPE_TLS, \
+    UCT_TEST_ROCM_MEM_TYPE_TLS, \
+    UCT_TEST_CUDA_MEM_TYPE_TLS
+    
 /**
- * Instantiate the parametrized test case for all transports (UCS_PP_FOREACH is
- * split into 3 parts to avoid exceeding UCS_PP_MAX_ARGS).
+ * Instantiate the parametrized test case for all transports.
  *
  * @param _test_case  Test case class, derived from uct_test.
  */
 #define UCT_INSTANTIATE_TEST_CASE(_test_case) \
-    UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, UCT_TEST_NO_GPU_MEM_TYPE_TLS) \
-    UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, UCT_TEST_ROCM_MEM_TYPE_TLS) \
-    UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, UCT_TEST_CUDA_MEM_TYPE_TLS)
+    UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, UCT_TEST_TLS)
 #define _UCT_INSTANTIATE_TEST_CASE(_test_case, _tl_name) \
     INSTANTIATE_TEST_SUITE_P(_tl_name, _test_case, \
                             testing::ValuesIn(_test_case::enum_resources(UCS_PP_QUOTE(_tl_name))));
