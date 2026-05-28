@@ -20,17 +20,10 @@
 #include <string.h>
 
 
-struct ucs_table_row {
-    ucs_table_t *table;
-    unsigned    entry_idx;
-};
-
-
 void ucs_table_init(ucs_table_t *table, const ucs_table_config_t *config)
 {
     table->config = *config;
     ucs_array_init_dynamic(&table->entries);
-    ucs_array_init_dynamic(&table->row_handles);
 
     ucs_assertv(config->n_cols > 0,
                 "number of columns must be positive (n_cols: %u)",
@@ -48,7 +41,6 @@ void ucs_table_cleanup(ucs_table_t *table)
 {
     ucs_table_entry_t *entry;
     ucs_table_cell_t *cell;
-    ucs_table_row_t **row_p;
 
     ucs_array_for_each(entry, &table->entries) {
         if (entry->kind != UCS_TABLE_ENTRY_ROW) {
@@ -60,11 +52,6 @@ void ucs_table_cleanup(ucs_table_t *table)
         ucs_array_cleanup_dynamic(&entry->cells);
     }
     ucs_array_cleanup_dynamic(&table->entries);
-
-    ucs_array_for_each(row_p, &table->row_handles) {
-        ucs_free(*row_p);
-    }
-    ucs_array_cleanup_dynamic(&table->row_handles);
 
     ucs_free(table->widths);
     table->widths = NULL;
@@ -80,16 +67,10 @@ void ucs_table_add_separator(ucs_table_t *table)
 }
 
 
-ucs_table_row_t *ucs_table_add_row(ucs_table_t *table)
+ucs_table_row_h ucs_table_add_row(ucs_table_t *table)
 {
     ucs_table_entry_t *entry;
-    ucs_table_row_t *row, **row_slot;
     ucs_status_t status;
-
-    row = ucs_malloc(sizeof(*row), "ucs_table_row");
-    if (row == NULL) {
-        ucs_fatal("failed to allocate table row");
-    }
 
     entry       = ucs_array_append_fixed(&table->entries);
     entry->kind = UCS_TABLE_ENTRY_ROW;
@@ -101,31 +82,25 @@ ucs_table_row_t *ucs_table_add_row(ucs_table_t *table)
         ucs_fatal("failed to reserve table row cells");
     }
 
-    row->table     = table;
-    row->entry_idx = ucs_array_length(&table->entries) - 1;
-
-    row_slot  = ucs_array_append_fixed(&table->row_handles);
-    *row_slot = row;
-
-    return row;
+    return ucs_array_length(&table->entries) - 1;
 }
 
 
-static ucs_table_cells_t *ucs_table_row_cells(ucs_table_row_t *row)
+static ucs_table_cells_t *
+ucs_table_row_cells(ucs_table_t *table, ucs_table_row_h row)
 {
-    ucs_table_entry_t *entry = &ucs_array_elem(&row->table->entries,
-                                               row->entry_idx);
+    ucs_table_entry_t *entry = &ucs_array_elem(&table->entries, row);
 
     ucs_assert(entry->kind == UCS_TABLE_ENTRY_ROW);
     return &entry->cells;
 }
 
 
-static ucs_table_cell_t *ucs_table_row_add_cell(ucs_table_row_t *row,
-                                                unsigned col_span,
-                                                ucs_table_align_t align)
+static ucs_table_cell_t *
+ucs_table_row_add_cell(ucs_table_t *table, ucs_table_row_h row,
+                       unsigned col_span, ucs_table_align_t align)
 {
-    ucs_table_cells_t *cells = ucs_table_row_cells(row);
+    ucs_table_cells_t *cells = ucs_table_row_cells(table, row);
     ucs_table_cell_t *cell   = ucs_array_append_fixed(cells);
 
     cell->col_span = col_span;
@@ -134,16 +109,19 @@ static ucs_table_cell_t *ucs_table_row_add_cell(ucs_table_row_t *row,
     return cell;
 }
 
-void ucs_table_row_add_cell_empty(ucs_table_row_t *row, unsigned col_span)
+void ucs_table_row_add_cell_empty(ucs_table_t *table, ucs_table_row_h row,
+                                  unsigned col_span)
 {
-    ucs_table_row_add_cell(row, col_span, UCS_TABLE_ALIGN_LEFT);
+    ucs_table_row_add_cell(table, row, col_span, UCS_TABLE_ALIGN_LEFT);
 }
 
 
-void ucs_table_row_add_cell_fmt(ucs_table_row_t *row, unsigned col_span,
-                                ucs_table_align_t align, const char *fmt, ...)
+void ucs_table_row_add_cell_fmt(ucs_table_t *table, ucs_table_row_h row,
+                                unsigned col_span, ucs_table_align_t align,
+                                const char *fmt, ...)
 {
-    ucs_table_cell_t *cell = ucs_table_row_add_cell(row, col_span, align);
+    ucs_table_cell_t *cell = ucs_table_row_add_cell(table, row, col_span,
+                                                    align);
     const char UCS_V_UNUSED *cstr;
     va_list ap;
 

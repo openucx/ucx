@@ -62,8 +62,9 @@ UCS_TEST_F(test_table, empty_table) {
 
 UCS_TEST_F(test_table, single_cell) {
     table_t table(1);
-    auto *row = ucs_table_add_row(table.get());
-    ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_LEFT, "%s", "abc");
+    auto row = ucs_table_add_row(table.get());
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
+                               "abc");
 
     EXPECT_EQ("+-----+\n"
               "| abc |\n"
@@ -73,8 +74,8 @@ UCS_TEST_F(test_table, single_cell) {
 
 UCS_TEST_F(test_table, single_cell_empty) {
     table_t table(1);
-    auto *row = ucs_table_add_row(table.get());
-    ucs_table_row_add_cell_empty(row, 1);
+    auto row = ucs_table_add_row(table.get());
+    ucs_table_row_add_cell_empty(table.get(), row, 1);
 
     EXPECT_EQ("+--+\n"
               "|  |\n"
@@ -86,18 +87,21 @@ UCS_TEST_F(test_table, single_cell_empty) {
 UCS_TEST_F(test_table, wide_columns) {
     table_t table(3);
 
-    auto *row = ucs_table_add_row(table.get());
-    ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_LEFT, "%s", "short");
-    ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_CENTER, "%s",
-                               "even longer cell");
-    ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_RIGHT, "%s",
+    auto row = ucs_table_add_row(table.get());
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
+                               "short");
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_CENTER,
+                               "%s", "even longer cell");
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_RIGHT, "%s",
                                "wide third column");
 
     row = ucs_table_add_row(table.get());
-    ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
                                "a much wider value");
-    ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_CENTER, "%s", "x");
-    ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_RIGHT, "%s", "y");
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_CENTER,
+                               "%s", "x");
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_RIGHT, "%s",
+                               "y");
 
     EXPECT_EQ("+--------------------+------------------+-------------------+\n"
               "| short              | even longer cell | wide third column |\n"
@@ -109,23 +113,27 @@ UCS_TEST_F(test_table, wide_columns) {
 UCS_TEST_F(test_table, separator) {
     table_t table(2);
 
-    auto *row = ucs_table_add_row(table.get());
-    ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_LEFT, "%s", "a");
-    ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_LEFT, "%s", "b");
+    auto row = ucs_table_add_row(table.get());
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
+                               "a");
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
+                               "b");
 
     ucs_table_add_separator(table.get());
 
     row = ucs_table_add_row(table.get());
-    ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_LEFT, "%s", "c");
-    ucs_table_row_add_cell_empty(row, 1);
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
+                               "c");
+    ucs_table_row_add_cell_empty(table.get(), row, 1);
 
     /* multiple separators */
     ucs_table_add_separator(table.get());
     ucs_table_add_separator(table.get());
 
     row = ucs_table_add_row(table.get());
-    ucs_table_row_add_cell_empty(row, 1);
-    ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_LEFT, "%s", "d");
+    ucs_table_row_add_cell_empty(table.get(), row, 1);
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
+                               "d");
 
     EXPECT_EQ("+---+---+\n"
               "| a | b |\n"
@@ -141,9 +149,10 @@ UCS_TEST_F(test_table, separator) {
 UCS_TEST_F(test_table, trailing_separator_avoids_bottom_frame) {
     table_t table(2);
 
-    auto *row = ucs_table_add_row(table.get());
-    ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_LEFT, "%s", "x");
-    ucs_table_row_add_cell_empty(row, 1);
+    auto row = ucs_table_add_row(table.get());
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
+                               "x");
+    ucs_table_row_add_cell_empty(table.get(), row, 1);
 
     /* trailing separator, would prevent bottom frame from being rendered */
     ucs_table_add_separator(table.get());
@@ -158,24 +167,31 @@ UCS_TEST_F(test_table, trailing_separator_avoids_bottom_frame) {
 UCS_TEST_F(test_table, col_span) {
     table_t table(4);
 
-    auto *row = ucs_table_add_row(table.get());
-    ucs_table_row_add_cell_fmt(row, 4, UCS_TABLE_ALIGN_RIGHT, "col_span = %d",
-                               4);
+    auto row = ucs_table_add_row(table.get());
+    ucs_table_row_add_cell_fmt(table.get(), row, 4, UCS_TABLE_ALIGN_RIGHT,
+                               "col_span = %d", 4);
 
     row = ucs_table_add_row(table.get());
-    ucs_table_row_add_cell_fmt(row, 3, UCS_TABLE_ALIGN_LEFT, "col_span = %d",
-                               3);
-    ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_RIGHT, "%d", 1);
+    ucs_table_row_add_cell_fmt(table.get(), row, 3, UCS_TABLE_ALIGN_LEFT,
+                               "col_span = %d", 3);
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_RIGHT, "%d",
+                               1);
 
     row = ucs_table_add_row(table.get());
-    ucs_table_row_add_cell_fmt(row, 2, UCS_TABLE_ALIGN_CENTER, "left_%d", 2);
-    ucs_table_row_add_cell_fmt(row, 2, UCS_TABLE_ALIGN_CENTER, "right_%d", 2);
+    ucs_table_row_add_cell_fmt(table.get(), row, 2, UCS_TABLE_ALIGN_CENTER,
+                               "left_%d", 2);
+    ucs_table_row_add_cell_fmt(table.get(), row, 2, UCS_TABLE_ALIGN_CENTER,
+                               "right_%d", 2);
 
     row = ucs_table_add_row(table.get());
-    ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_LEFT, "%s", "abcd");
-    ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_LEFT, "%s", "efgh");
-    ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_LEFT, "%s", "ijkl");
-    ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_LEFT, "%s", "mnop");
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
+                               "abcd");
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
+                               "efgh");
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
+                               "ijkl");
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
+                               "mnop");
 
     EXPECT_EQ("+------+------+------+------+\n"
               "|              col_span = 4 |\n"
@@ -189,13 +205,15 @@ UCS_TEST_F(test_table, col_span) {
 UCS_TEST_F(test_table, col_span_sets_width) {
     table_t table(2);
 
-    auto *row = ucs_table_add_row(table.get());
-    ucs_table_row_add_cell_fmt(row, 2, UCS_TABLE_ALIGN_LEFT, "%s",
+    auto row = ucs_table_add_row(table.get());
+    ucs_table_row_add_cell_fmt(table.get(), row, 2, UCS_TABLE_ALIGN_LEFT, "%s",
                                "this header is too wide");
 
     row = ucs_table_add_row(table.get());
-    ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_LEFT, "%s", "ab");
-    ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_RIGHT, "%s", "cd");
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
+                               "ab");
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_RIGHT, "%s",
+                               "cd");
 
     EXPECT_EQ("+----+--------------------+\n"
               "| this header is too wide |\n"
@@ -207,15 +225,17 @@ UCS_TEST_F(test_table, col_span_sets_width) {
 UCS_TEST_F(test_table, cell_fmt) {
     table_t table(2);
 
-    auto *row = ucs_table_add_row(table.get());
-    ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_CENTER, "%d %s..%s", 42,
-                               "lo", "hi");
-    ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_LEFT, "%s=%u", "k", 7u);
+    auto row = ucs_table_add_row(table.get());
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_CENTER,
+                               "%d %s..%s", 42, "lo", "hi");
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT,
+                               "%s=%u", "k", 7u);
 
     row = ucs_table_add_row(table.get());
-    ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_LEFT, "%.10f",
-                               3.14159265358979);
-    ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_RIGHT, "%s", "x");
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT,
+                               "%.10f", 3.14159265358979);
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_RIGHT, "%s",
+                               "x");
 
     EXPECT_EQ("+--------------+-----+\n"
               "|  42 lo..hi   | k=7 |\n"
@@ -231,11 +251,13 @@ UCS_TEST_F(test_table, row_prefix) {
     };
     table_t table(cfg);
 
-    auto *row = ucs_table_add_row(table.get());
-    ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_LEFT, "%s", "a");
+    auto row = ucs_table_add_row(table.get());
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
+                               "a");
     ucs_table_add_separator(table.get());
     row = ucs_table_add_row(table.get());
-    ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_LEFT, "%s", "b");
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
+                               "b");
 
     EXPECT_EQ("# +---+\n"
               "# | a |\n"
@@ -254,10 +276,13 @@ UCS_TEST_F(test_table, equal_widths) {
     };
     table_t table(cfg);
 
-    auto *row = ucs_table_add_row(table.get());
-    ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_LEFT, "%s", "a");
-    ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_LEFT, "%s", "longer");
-    ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_LEFT, "%s", "xy");
+    auto row = ucs_table_add_row(table.get());
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
+                               "a");
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
+                               "longer");
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
+                               "xy");
 
     EXPECT_EQ("+--------+--------+--------+\n"
               "| a      | longer | xy     |\n"
@@ -273,13 +298,15 @@ UCS_TEST_F(test_table, equal_widths_with_col_span) {
     };
     table_t table(cfg);
 
-    auto *row = ucs_table_add_row(table.get());
-    ucs_table_row_add_cell_fmt(row, 2, UCS_TABLE_ALIGN_LEFT, "%s",
+    auto row = ucs_table_add_row(table.get());
+    ucs_table_row_add_cell_fmt(table.get(), row, 2, UCS_TABLE_ALIGN_LEFT, "%s",
                                "this header is too wide");
 
     row = ucs_table_add_row(table.get());
-    ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_LEFT, "%s", "ab");
-    ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_LEFT, "%s", "cd");
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
+                               "ab");
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
+                               "cd");
 
     EXPECT_EQ("+--------------------+--------------------+\n"
               "| this header is too wide                 |\n"
@@ -293,9 +320,11 @@ UCS_TEST_F(test_table, render_twice) {
     /* Widths are recomputed on every render: a wider row added between
      * renders must widen the columns on the second render. */
     table_t table(2);
-    auto *row = ucs_table_add_row(table.get());
-    ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_LEFT, "%s", "a");
-    ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_LEFT, "%s", "b");
+    auto row = ucs_table_add_row(table.get());
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
+                               "a");
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
+                               "b");
 
     EXPECT_EQ("+---+---+\n"
               "| a | b |\n"
@@ -303,9 +332,9 @@ UCS_TEST_F(test_table, render_twice) {
               table.render());
 
     row = ucs_table_add_row(table.get());
-    ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
                                "aaaaaaaaaaa");
-    ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
                                "bbbbbbbbbbb");
 
     EXPECT_EQ("+-------------+-------------+\n"

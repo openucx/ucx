@@ -189,7 +189,7 @@ ucp_proto_select_elem_info(ucp_worker_h worker,
     };
     ucp_proto_query_attr_t proto_attr;
     ucs_table_t table;
-    ucs_table_row_t *row;
+    ucs_table_row_h row;
     size_t range_start, range_end;
     char range_str[32];
     int proto_valid;
@@ -213,22 +213,25 @@ ucp_proto_select_elem_info(ucp_worker_h worker,
     /* Title: two full-width rows (ep_cfg, sel_param) without a separator
      * between them, terminated by a single separator before the headers. */
     row = ucs_table_add_row(&table);
-    ucs_table_row_add_cell_fmt(row, n_cols, UCS_TABLE_ALIGN_LEFT, "%s",
+    ucs_table_row_add_cell_fmt(&table, row, n_cols, UCS_TABLE_ALIGN_LEFT, "%s",
                                ucs_string_buffer_cstr(&ep_cfg_strb));
 
     row = ucs_table_add_row(&table);
-    ucs_table_row_add_cell_fmt(row, n_cols, UCS_TABLE_ALIGN_LEFT, "%s",
+    ucs_table_row_add_cell_fmt(&table, row, n_cols, UCS_TABLE_ALIGN_LEFT, "%s",
                                ucs_string_buffer_cstr(&sel_param_strb));
     ucs_table_add_separator(&table);
 
     /* Column headers */
     row = ucs_table_add_row(&table);
     if (show_used) {
-        ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_CENTER, "Count");
+        ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_CENTER,
+                                   "Count");
     }
-    ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_CENTER, "Range");
-    ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_CENTER, "Description");
-    ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_CENTER, "Config");
+    ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_CENTER, "Range");
+    ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_CENTER,
+                               "Description");
+    ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_CENTER,
+                               "Config");
     ucs_table_add_separator(&table);
 
     /* One body row per valid protocol range. */
@@ -248,15 +251,15 @@ ucp_proto_select_elem_info(ucp_worker_h worker,
         ucs_memunits_range_str(range_start, range_end, range_str,
                                sizeof(range_str));
         if (show_used) {
-            ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_RIGHT, "%u",
-                                       proto_attr.selections);
+            ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_RIGHT,
+                                       "%u", proto_attr.selections);
         }
-        ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_RIGHT, "%s",
+        ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_RIGHT, "%s",
                                    range_str);
-        ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_LEFT, "%s%s",
+        ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_LEFT, "%s%s",
                                    proto_attr.is_estimation ? "(?) " : "",
                                    proto_attr.desc);
-        ucs_table_row_add_cell_fmt(row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
+        ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
                                    proto_attr.config);
     } while (range_end != SIZE_MAX);
 
