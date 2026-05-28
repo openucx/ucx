@@ -538,9 +538,10 @@ public:
     test_uct_ep_check_async() : m_e1(NULL), m_e2(NULL), m_comp_count(0),
                                 m_comp_status(UCS_OK)
     {
-        m_comp.func   = comp_cb;
-        m_comp.count  = 1;
-        m_comp.status = UCS_OK;
+        m_comp.self       = this;
+        m_comp.uct.func   = comp_cb;
+        m_comp.uct.count  = 1;
+        m_comp.uct.status = UCS_OK;
     }
 
     void init()
@@ -554,12 +555,16 @@ public:
     }
 
 protected:
+    struct completion {
+        test_uct_ep_check_async *self;
+        uct_completion_t         uct;
+    };
+
     static void comp_cb(uct_completion_t *self)
     {
-        test_uct_ep_check_async *test =
-                ucs_container_of(self, test_uct_ep_check_async, m_comp);
-        test->m_comp_status = self->status;
-        test->m_comp_count++;
+        completion *comp = ucs_container_of(self, completion, uct);
+        comp->self->m_comp_status = self->status;
+        comp->self->m_comp_count++;
     }
 
     static ucs_status_t err_handler(void *arg, uct_ep_h ep, ucs_status_t status)
@@ -573,7 +578,7 @@ protected:
      * reported as UCS_INPROGRESS and propagated via @c comp. */
     void check_ep_check_async(uct_ep_h ep)
     {
-        ucs_status_t status = uct_ep_check(ep, 0, &m_comp);
+        ucs_status_t status = uct_ep_check(ep, 0, &m_comp.uct);
         if (status == UCS_OK) {
             EXPECT_EQ(0u, m_comp_count);
             return;
@@ -586,7 +591,7 @@ protected:
 
     entity            *m_e1;
     entity            *m_e2;
-    uct_completion_t   m_comp;
+    completion         m_comp;
     volatile unsigned  m_comp_count;
     ucs_status_t       m_comp_status;
 };
