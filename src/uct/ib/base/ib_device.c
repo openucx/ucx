@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
 * Copyright (C) Huawei Technologies Co., Ltd. 2020.  ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
@@ -1209,7 +1209,7 @@ int uct_ib_device_is_port_roce(uct_ib_device_t *dev, uint8_t port_num)
     return IBV_PORT_IS_LINK_LAYER_ETHERNET(uct_ib_device_port_attr(dev, port_num));
 }
 
-const char *uct_ib_device_name(uct_ib_device_t *dev)
+const char *uct_ib_device_name(const uct_ib_device_t *dev)
 {
     return ibv_get_device_name(dev->ibv_context->device);
 }
