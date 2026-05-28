@@ -203,7 +203,7 @@ ucp_proto_multi_filter_single_net_device(ucp_lane_index_t num_lanes,
               ucp_proto_id_field(params->proto_id, name),
               context->config.node_local_id, num_lanes, fixed_first_lane);
 
-    /* Pass 1: collect net lanes at the minimum distance. */
+    /* Pass 1: collect net lanes at the min distance (min latency, max BW). */
     lane_map = 0;
     for (i = 0; i < num_lanes; ++i) {
         lane = lanes[i];
