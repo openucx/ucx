@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -63,7 +63,7 @@ void uct_cuda_ipc_destroy_cache(uct_cuda_ipc_cache_t *cache);
  * 
  * @return UCS_OK on success, or error status on failure
  */
-ucs_status_t uct_cuda_ipc_map_memhandle(uct_cuda_ipc_extended_rkey_t *key,
+ucs_status_t uct_cuda_ipc_map_memhandle(uct_cuda_ipc_unpacked_rkey_t *key,
                                         CUdevice cu_dev, void **mapped_addr,
                                         ucs_log_level_t log_level);
 

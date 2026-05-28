@@ -96,7 +96,7 @@ uct_cuda_ipc_is_rkey_local(pid_t rkey_pid, ucs_sys_ns_t rkey_pid_ns)
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_ipc_get_remote_address(
-        uct_cuda_ipc_extended_rkey_t *rkey, uint64_t raddr, CUdevice cu_dev,
+        uct_cuda_ipc_unpacked_rkey_t *rkey, uint64_t raddr, CUdevice cu_dev,
         void **laddr_p, void **base_addr_p)
 {
     ucs_status_t status;
@@ -109,9 +109,9 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_ipc_get_remote_address(
         return status;
     }
 
-    offset = UCS_PTR_BYTE_DIFF(rkey->super.d_bptr, raddr);
-    ucs_assertv(offset <= rkey->super.b_len, "offset:%ld b_len:%lu", offset,
-                rkey->super.b_len);
+    offset = UCS_PTR_BYTE_DIFF(rkey->super.super.d_bptr, raddr);
+    ucs_assertv(offset <= rkey->super.super.b_len, "offset:%ld b_len:%lu",
+                offset, rkey->super.super.b_len);
     *laddr_p = UCS_PTR_BYTE_OFFSET(mapped_addr, offset);
     if (base_addr_p != NULL) {
         *base_addr_p = mapped_addr;
