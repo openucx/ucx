@@ -339,6 +339,7 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
         ucs_queue_push(&iface->super.active_queue, &q_desc->queue);
     }
 
+    VALGRIND_MAKE_MEM_DEFINED(&cuda_event->event, sizeof(cuda_event->event));
     ucs_queue_push(event_q, &cuda_event->queue);
     cuda_event->comp = comp;
 

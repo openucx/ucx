@@ -19,6 +19,7 @@
 #include <uct/base/uct_log.h>
 #include <uct/base/uct_iov.inl>
 #include <ucs/debug/memtrack_int.h>
+#include <ucs/sys/checker.h>
 #include <ucs/sys/math.h>
 #include <ucs/type/class.h>
 #include <ucs/profile/profile.h>
@@ -177,6 +178,8 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
         ucs_queue_push(&iface->super.active_queue, &q_desc->queue);
     }
 
+    VALGRIND_MAKE_MEM_DEFINED(&cuda_ipc_event->super.event,
+                              sizeof(cuda_ipc_event->super.event));
     ucs_queue_push(&q_desc->event_queue, &cuda_ipc_event->super.queue);
     cuda_ipc_event->super.comp  = comp;
     cuda_ipc_event->mapped_addr = mapped_addr;

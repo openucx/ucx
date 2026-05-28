@@ -211,10 +211,11 @@ uct_cuda_base_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
             goto error;
         }
 
-        flush_stream_desc->flush_desc = flush_desc;
-        flush_stream_desc->comp.func  = uct_cuda_base_stream_flushed_cb;
-        flush_stream_desc->comp.count = 1;
-        flush_stream_desc->super.comp = &flush_stream_desc->comp;
+        flush_stream_desc->flush_desc  = flush_desc;
+        flush_stream_desc->comp.func   = uct_cuda_base_stream_flushed_cb;
+        flush_stream_desc->comp.count  = 1;
+        flush_stream_desc->super.comp  = &flush_stream_desc->comp;
+        flush_stream_desc->super.event = NULL;
         ucs_queue_push(&q_desc->event_queue, &flush_stream_desc->super.queue);
         flush_desc->stream_counter++;
     }
@@ -243,8 +244,7 @@ error:
 static UCS_F_ALWAYS_INLINE int
 uct_cuda_base_event_is_flush(const uct_cuda_event_desc_t *event)
 {
-    return (event->comp != NULL) &&
-           (event->comp->func == uct_cuda_base_stream_flushed_cb);
+    return event->event == NULL;
 }
 
 static UCS_F_ALWAYS_INLINE unsigned

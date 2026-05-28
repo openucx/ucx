@@ -25,6 +25,7 @@
 #include <ucs/memory/memory_type.h>
 #include <ucs/memory/rcache.h>
 #include <ucs/type/spinlock.h>
+#include <ucs/sys/checker.h>
 #include <ucs/sys/string.h>
 #include <ucs/type/param.h>
 
@@ -717,6 +718,13 @@ ucp_memory_detect_internal(ucp_context_h context, const void *address,
 
     status = ucs_memtype_cache_lookup(address, length, mem_info);
     if (ucs_likely(status == UCS_ERR_NO_ELEM)) {
+        if (ucs_unlikely(RUNNING_ON_VALGRIND)) {
+            ucs_trace_req("address %p length %zu: not found in memtype cache, "
+                          "detecting memory type under Valgrind", address, length);
+            ucp_memory_detect_slowpath(context, address, length, mem_info);
+            return;
+        }
+
         ucs_trace_req("address %p length %zu: not found in memtype cache, "
                       "assuming host memory",
                       address, length);
