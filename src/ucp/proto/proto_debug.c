@@ -262,6 +262,9 @@ ucp_proto_select_elem_info(ucp_worker_h worker,
 
     ucs_table_render(&table, strb);
     ucs_table_cleanup(&table);
+
+    /* Remove trailing newline */
+    ucs_string_buffer_rtrim(strb, "\n");
 }
 
 void ucp_proto_select_info(ucp_worker_h worker,
