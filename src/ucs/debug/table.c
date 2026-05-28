@@ -12,7 +12,6 @@
 #include <ucs/datastruct/array.h>
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log_def.h>
-#include <ucs/debug/memtrack_int.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/string.h>
@@ -28,12 +27,6 @@ void ucs_table_init(ucs_table_t *table, const ucs_table_config_t *config)
     ucs_assertv(config->n_cols > 0,
                 "number of columns must be positive (n_cols: %u)",
                 config->n_cols);
-
-    table->widths = ucs_calloc(config->n_cols, sizeof(*table->widths),
-                               "ucs_table_widths");
-    if (table->widths == NULL) {
-        ucs_fatal("failed to allocate table widths");
-    }
 }
 
 
@@ -52,9 +45,6 @@ void ucs_table_cleanup(ucs_table_t *table)
         ucs_array_cleanup_dynamic(&entry->cells);
     }
     ucs_array_cleanup_dynamic(&table->entries);
-
-    ucs_free(table->widths);
-    table->widths = NULL;
 }
 
 
@@ -158,9 +148,8 @@ static unsigned ucs_table_cell_content_len(ucs_table_cell_t *cell)
 }
 
 
-static void ucs_table_compute_widths(ucs_table_t *table)
+static void ucs_table_compute_widths(const ucs_table_t *table, unsigned *widths)
 {
-    unsigned *widths = table->widths;
     ucs_table_entry_t *entry;
     ucs_table_cell_t *cell;
     unsigned i, body_col, content_len;
@@ -260,8 +249,9 @@ static void ucs_table_render_cell(ucs_string_buffer_t *strb,
 
 /* Render one row. The closing "|" has no trailing newline. */
 static void ucs_table_render_cells(const ucs_table_t *table,
-                                   ucs_string_buffer_t *strb,
-                                   const ucs_table_cells_t *cells)
+                                   const unsigned *widths,
+                                   const ucs_table_cells_t *cells,
+                                   ucs_string_buffer_t *strb)
 {
     const ucs_table_cell_t *cell;
     unsigned body_col = 0;
@@ -272,8 +262,7 @@ static void ucs_table_render_cells(const ucs_table_t *table,
 
     ucs_array_for_each(cell, cells) {
         ucs_table_render_cell(strb, cell,
-                              ucs_table_cell_character_width(table->widths,
-                                                             body_col,
+                              ucs_table_cell_character_width(widths, body_col,
                                                              cell->col_span));
         body_col += cell->col_span;
     }
@@ -281,8 +270,9 @@ static void ucs_table_render_cells(const ucs_table_t *table,
 }
 
 
-static void
-ucs_table_render_separator(const ucs_table_t *table, ucs_string_buffer_t *strb)
+static void ucs_table_render_separator(const ucs_table_t *table,
+                                       const unsigned *widths,
+                                       ucs_string_buffer_t *strb)
 {
     unsigned i;
 
@@ -292,7 +282,7 @@ ucs_table_render_separator(const ucs_table_t *table, ucs_string_buffer_t *strb)
 
     for (i = 0; i < table->config.n_cols; ++i) {
         ucs_string_buffer_appendc(strb, '+', 1);
-        ucs_string_buffer_appendc(strb, '-', table->widths[i] + 2);
+        ucs_string_buffer_appendc(strb, '-', widths[i] + 2);
     }
     ucs_string_buffer_appendc(strb, '+', 1);
     ucs_string_buffer_appendc(strb, '\n', 1);
@@ -301,25 +291,26 @@ ucs_table_render_separator(const ucs_table_t *table, ucs_string_buffer_t *strb)
 
 void ucs_table_render(ucs_table_t *table, ucs_string_buffer_t *strb)
 {
+    unsigned *widths = ucs_alloca(table->config.n_cols * sizeof(*widths));
     const ucs_table_entry_t *entry;
     unsigned i;
 
-    ucs_table_compute_widths(table);
+    ucs_table_compute_widths(table, widths);
 
     /* Top frame */
-    ucs_table_render_separator(table, strb);
+    ucs_table_render_separator(table, widths, strb);
 
     /* Body rows and separators */
     for (i = 0; i < ucs_array_length(&table->entries); ++i) {
         entry = &ucs_array_elem(&table->entries, i);
         switch (entry->kind) {
         case UCS_TABLE_ENTRY_ROW:
-            ucs_table_render_cells(table, strb, &entry->cells);
+            ucs_table_render_cells(table, widths, &entry->cells, strb);
             ucs_string_buffer_appendf(strb, "\n");
             break;
 
         case UCS_TABLE_ENTRY_SEPARATOR:
-            ucs_table_render_separator(table, strb);
+            ucs_table_render_separator(table, widths, strb);
             break;
 
         default:
@@ -330,7 +321,7 @@ void ucs_table_render(ucs_table_t *table, ucs_string_buffer_t *strb)
     /* Bottom frame; skip when the last entry is already a separator. */
     if (ucs_array_is_empty(&table->entries) ||
         (ucs_array_last(&table->entries)->kind != UCS_TABLE_ENTRY_SEPARATOR)) {
-        ucs_table_render_separator(table, strb);
+        ucs_table_render_separator(table, widths, strb);
     }
 }
 

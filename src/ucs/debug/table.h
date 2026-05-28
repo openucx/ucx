@@ -80,7 +80,6 @@ typedef struct ucs_table_config {
 typedef struct ucs_table {
     ucs_table_config_t  config;
     ucs_table_entries_t entries;
-    unsigned            *widths;
 } ucs_table_t;
 
 
