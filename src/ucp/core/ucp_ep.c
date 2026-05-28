@@ -1669,6 +1669,27 @@ ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
     }
 }
 
+/* Return the first non-failed AM_BW lane in @a key, or UCP_NULL_LANE if
+ * no such lane exists. Used after lane reconfiguration to (re-)promote
+ * am_lane to the earliest available AM_BW lane, in case the currently
+ * selected one was a post-failover fallback.
+ * TODO: maybe we can reevaluate am_lane promotion logic better here. */
+static ucp_lane_index_t
+ucp_ep_config_key_find_am_lane(const ucp_ep_config_key_t *key)
+{
+    const ucp_lane_type_mask_t mask = UCS_BIT(UCP_LANE_TYPE_AM_BW) |
+                                      UCS_BIT(UCP_LANE_TYPE_FAILED);
+    const ucp_ep_config_key_lane_t *lane;
+
+    ucs_carray_for_each(lane, key->lanes, key->num_lanes) {
+        if ((lane->lane_types & mask) == UCS_BIT(UCP_LANE_TYPE_AM_BW)) {
+            return lane - key->lanes;
+        }
+    }
+
+    return UCP_NULL_LANE;
+}
+
 static ucs_status_t
 ucp_ep_reconfig_internal(ucp_ep_h ep, ucp_lane_map_t failed_lanes)
 {
@@ -1698,13 +1719,7 @@ ucp_ep_reconfig_internal(ucp_ep_h ep, ucp_lane_map_t failed_lanes)
     }
 
     if (cfg_key.am_lane == UCP_NULL_LANE) {
-        for (lane = 0; lane < cfg_key.num_lanes; lane++) {
-            if ((cfg_key.lanes[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_AM_BW)) &&
-                !(cfg_key.lanes[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_FAILED))) {
-                cfg_key.am_lane = lane;
-                break;
-            }
-        }
+        cfg_key.am_lane = ucp_ep_config_key_find_am_lane(&cfg_key);
     }
 
     if ((cfg_key.am_lane == UCP_NULL_LANE) &&
@@ -1763,17 +1778,7 @@ ucs_status_t ucp_ep_reconfig_clear_failed_lanes(ucp_ep_h ep,
         cfg_key.lanes[lane].lane_types &= ~UCS_BIT(UCP_LANE_TYPE_FAILED);
     }
 
-    /* Re-promote am_lane to the earliest available AM_BW lane, in case the
-     * currently selected one was a post-failover fallback.
-     * TODO: maybe we can reevaluate am_lane promotion logic better here. */
-    for (lane = 0; lane < cfg_key.num_lanes; ++lane) {
-        if ((cfg_key.lanes[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_AM_BW)) &&
-            !(cfg_key.lanes[lane].lane_types &
-              UCS_BIT(UCP_LANE_TYPE_FAILED))) {
-            cfg_key.am_lane = lane;
-            break;
-        }
-    }
+    cfg_key.am_lane = ucp_ep_config_key_find_am_lane(&cfg_key);
 
     if (ucp_ep_config_is_equal(&cfg_key, &ucp_ep_config(ep)->key)) {
         return UCS_OK;
@@ -1800,18 +1805,6 @@ ucs_status_t ucp_ep_reconfig_clear_failed_lanes(ucp_ep_h ep,
 
     return UCS_OK;
 }
-
-/* Heap-resident retry state for failed-lane recovery. Lifetime is owned by
- * the callbackq (oneshot + cascade filter); no recovery state lives on the
- * endpoint itself. */
-typedef struct ucp_ep_recovery_arg {
-    ucp_ep_h       ucp_ep;        /* Back-pointer used for callbackq key and
-                                     filter matching. */
-    ucs_time_t     next_time;     /* Earliest time at which the next round
-                                     may send LANES_ADDR_REQUEST. */
-    unsigned       retries_left;  /* Rounds remaining before the endpoint is
-                                     declared fully failed. */
-} ucp_ep_recovery_arg_t;
 
 ucs_status_t
 ucp_ep_failover_reconfig(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,

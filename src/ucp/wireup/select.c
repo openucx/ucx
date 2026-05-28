@@ -2689,6 +2689,8 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_rsc_index_t rsc_index;
     ucp_md_index_t md_index;
     ucp_lane_index_t i;
+    ucp_wireup_lane_desc_t *lane_desc;
+    ucp_worker_iface_t *wiface;
 
     key->num_lanes   = select_ctx->num_lanes;
     first_am_bw_lane = context->config.ext.proto_enable ? 0 : 1;
@@ -2705,14 +2707,13 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
                                                 UCS_BIT(UCP_LANE_TYPE_RMA)    |
                                                 UCS_BIT(UCP_LANE_TYPE_AMO)    |
                                                 UCS_BIT(UCP_LANE_TYPE_AM_BW);
-        for (lane = 0; lane < key->num_lanes; ++lane) {
-            ucp_worker_iface_t *wiface = ucp_worker_iface(
-                    ep->worker, select_ctx->lane_descs[lane].rsc_index);
 
-            if ((select_ctx->lane_descs[lane].lane_types & data_types) &&
+        ucs_carray_for_each(lane_desc, select_ctx->lane_descs,
+                            key->num_lanes) {
+            wiface = ucp_worker_iface(ep->worker, lane_desc->rsc_index);
+            if ((lane_desc->lane_types & data_types) &&
                 (wiface->attr.cap.flags & am_caps)) {
-                select_ctx->lane_descs[lane].lane_types |=
-                        UCS_BIT(UCP_LANE_TYPE_AM_BW);
+                lane_desc->lane_types |= UCS_BIT(UCP_LANE_TYPE_AM_BW);
             }
         }
     }
