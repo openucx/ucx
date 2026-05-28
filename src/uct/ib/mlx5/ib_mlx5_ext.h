@@ -12,9 +12,11 @@
 
 #include <stdint.h>
 
-#include <ucs/debug/assert.h>
 #include <ucs/type/status.h>
 #include <ucs/sys/stubs.h>
+
+
+#define UCT_IB_MLX5_EXT_NAME_MAX 32
 
 /**
  * @brief Field mask bits for @ref uct_ib_mlx5_ext_qp_query_attr_t.
@@ -54,12 +56,49 @@ typedef ucs_status_t (*uct_ib_mlx5_ext_qp_query_func_t)(
         uct_ib_mlx5_ext_qp_query_attr_t *attr);
 
 typedef struct uct_ib_mlx5_ext_ops {
+    char                               name[UCT_IB_MLX5_EXT_NAME_MAX];
     uct_ib_mlx5_ext_iface_flags_func_t iface_flags;
     uct_ib_mlx5_ext_qp_query_func_t    qp_query;
 } uct_ib_mlx5_ext_ops_t;
 
-extern uct_ib_mlx5_ext_ops_t uct_ib_mlx5_ext_ops;
 
-extern void uct_ib_mlx5_ext_register(const uct_ib_mlx5_ext_ops_t *ops);
+/**
+ * @brief Initialize the provider registry and register the default provider.
+ */
+void uct_ib_mlx5_ext_init(void);
+
+/**
+ * @brief Remove all registered providers and release resources.
+ */
+void uct_ib_mlx5_ext_cleanup(void);
+
+/**
+ * @brief Register an external provider.
+ *
+ * @param [in] ops Pointer to the provider operations.
+ */
+void uct_ib_mlx5_ext_register(const uct_ib_mlx5_ext_ops_t *ops);
+
+/**
+ * @brief Call the first provider supporting iface_flags.
+ *
+ * @param [out] flags Pointer to the iface flags.
+ *
+ * @return UCS_OK on success, error code otherwise.
+ */
+ucs_status_t uct_ib_mlx5_ext_iface_flags(uint64_t *flags);
+
+/**
+ * @brief Call the first provider supporting qp_query.
+ *
+ * @param [in]     qp          QP pointer.
+ * @param [in]     devx_obj    DevX object pointer.
+ * @param [in,out] attr        Output attributes.
+ *
+ * @return UCS_OK on success, error code otherwise.
+ */
+ucs_status_t uct_ib_mlx5_ext_qp_query(struct ibv_qp *qp,
+                                      struct mlx5dv_devx_obj *devx_obj,
+                                      uct_ib_mlx5_ext_qp_query_attr_t *attr);
 
 #endif /* UCT_IB_MLX5_EXT_H_ */
