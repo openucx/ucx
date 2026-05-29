@@ -14,6 +14,7 @@
 #include <ucp/proto/proto_debug.h>
 #include <ucp/proto/proto_init.h>
 #include <ucp/proto/proto_single.inl>
+#include <ucp/rma/rma_rndv.h>
 
 #include <string.h>
 
@@ -69,16 +70,25 @@ static ucs_status_t ucp_proto_rndv_rtr_common_send(ucp_request_t *req)
     const ucp_proto_rndv_rtr_priv_t *rpriv = req->send.proto_config->priv;
     ucp_worker_h UCS_V_UNUSED worker       = req->send.ep->worker;
     uct_pack_callback_t pack_cb            = rpriv->pack_cb;
+    ucp_request_t *recv_req                = NULL;
+    ucp_ep_h ep                            = req->send.ep;
     size_t max_rtr_size;
     ucs_status_t status;
 
     if (req->flags & UCP_REQUEST_FLAG_RNDV_RTR_REQ) {
         pack_cb      = ucp_proto_rndv_rtr_req_pack;
         max_rtr_size = ucp_proto_rndv_rtr_req_max_size(req);
-    } else {
-        max_rtr_size = ucp_proto_rndv_rtr_max_size(req);
+        recv_req = ucp_rma_rndv_rtr_flush_open(req);
+        status   = ucp_proto_am_bcopy_single_send(
+                req, UCP_AM_ID_RNDV_RTR, rpriv->super.lane, pack_cb, req,
+                max_rtr_size, 0);
+        ucp_rma_rndv_rtr_flush_close(recv_req, ep, status);
+
+        return ucp_proto_single_status_handle(req, 0, NULL,
+                                              rpriv->super.lane, status);
     }
 
+    max_rtr_size = ucp_proto_rndv_rtr_max_size(req);
     status = ucp_proto_am_bcopy_single_progress(req, UCP_AM_ID_RNDV_RTR,
                                                 rpriv->super.lane, pack_cb,
                                                 req, max_rtr_size, NULL, 0);

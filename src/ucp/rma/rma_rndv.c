@@ -361,13 +361,55 @@ static ucs_status_t ucp_proto_get_rndv_reset(ucp_request_t *req)
     return UCS_OK;
 }
 
+ucp_request_t *ucp_rma_rndv_rtr_flush_open(ucp_request_t *rtr_req)
+{
+    ucp_request_t *recv_req = rtr_req;
+    ucp_ep_h ep = rtr_req->send.ep;
+
+    if (!(rtr_req->flags & UCP_REQUEST_FLAG_RNDV_RTR_REQ)) {
+        return NULL;
+    }
+
+    while (!(recv_req->flags & UCP_REQUEST_FLAG_RNDV_RECV_INTERNAL)) {
+        ucs_assert(recv_req->flags & UCP_REQUEST_FLAG_RNDV_RTR_REQ);
+        recv_req = ucp_request_get_super(recv_req);
+    }
+
+    if (recv_req->flags & UCP_REQUEST_FLAG_RNDV_START_FLUSH) {
+        /* Claim before the AM send, since SELF can complete inline. */
+        recv_req->flags &= ~UCP_REQUEST_FLAG_RNDV_START_FLUSH;
+        ucp_worker_flush_ops_count_add(ep->worker, +1);
+        return recv_req;
+    }
+
+    return NULL;
+}
+
+void ucp_rma_rndv_rtr_flush_close(ucp_request_t *recv_req, ucp_ep_h ep,
+                                  ucs_status_t status)
+{
+    if (recv_req != NULL) {
+        if (status == UCS_OK) {
+            /* recv_req may complete inline, so only touch ep on success. */
+            ucp_ep_rma_remote_request_sent(ep);
+        } else {
+            ucp_worker_flush_ops_count_add(ep->worker, -1);
+            recv_req->flags |= UCP_REQUEST_FLAG_RNDV_START_FLUSH;
+        }
+    }
+}
+
 static void ucp_rma_rndv_get_recv_complete(ucp_request_t *recv_req)
 {
     ucp_request_t *get_req = ucp_request_get_super(recv_req);
     ucp_ep_h ep            = get_req->send.ep;
+    int start_flush;
 
+    start_flush = recv_req->flags & UCP_REQUEST_FLAG_RNDV_START_FLUSH;
     ucp_request_complete_send(get_req, recv_req->status);
-    ucp_ep_rma_remote_request_completed(ep);
+    if (!start_flush) {
+        ucp_ep_rma_remote_request_completed(ep);
+    }
     ucp_request_put(recv_req);
 }
 
@@ -412,7 +454,8 @@ static ucs_status_t ucp_proto_get_rndv_init(ucp_request_t *get_req,
     }
 
     get_req->flags                 |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
-    recv_req->flags                 = UCP_REQUEST_FLAG_RNDV_RECV_INTERNAL;
+    recv_req->flags                 = UCP_REQUEST_FLAG_RNDV_RECV_INTERNAL |
+                                      UCP_REQUEST_FLAG_RNDV_START_FLUSH;
     recv_req->recv.worker           = worker;
     recv_req->recv.op_attr          = 0;
     recv_req->recv.remote_req_id    = UCS_PTR_MAP_KEY_INVALID;
@@ -463,18 +506,12 @@ static ucs_status_t ucp_proto_get_rndv_progress(uct_pending_req_t *self)
         return UCS_OK;
     }
 
-    if (!(get_req->send.ep->flags & UCP_EP_FLAG_FLUSH_STATE_VALID)) {
-        return UCS_ERR_NO_RESOURCE;
-    }
-
     status = ucp_proto_get_rndv_init(get_req, &rndv_req);
     if (status != UCS_OK) {
         ucp_proto_request_abort(get_req, status);
         return UCS_OK;
     }
 
-    ucp_worker_flush_ops_count_add(get_req->send.ep->worker, +1);
-    ucp_ep_rma_remote_request_sent(get_req->send.ep);
     ucp_request_send(rndv_req);
     return UCS_OK;
 }
