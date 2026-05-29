@@ -1248,8 +1248,7 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_twins_get_inline_0, rcx,
 class test_ucp_proto_mock_rcx_trio_local_distance_get :
     public test_ucp_proto_mock {
 public:
-    test_ucp_proto_mock_rcx_trio_local_distance_get() :
-        m_topo_provider_added(false)
+    test_ucp_proto_mock_rcx_trio_local_distance_get()
     {
         mock_transport("rc_mlx5");
     }
@@ -1277,20 +1276,17 @@ public:
         add_mock_iface("mock_2:1", iface_attr_slow); /* sys_dev = 3 */
         test_ucp_proto_mock::init();
 
-        ucs_list_add_head(&ucs_sys_topo_providers_list, &m_topo_provider.list);
-        m_topo_provider_added = true;
+        m_topo_provider = ucs_sys_topo_provider_add("proto_mock", get_distance,
+                                                    get_memory_distance);
+        ASSERT_TRUE(m_topo_provider != nullptr);
         modify_config("TOPO_PRIO", "proto_mock");
         ucs_sys_topo_reset_provider();
     }
 
     virtual void cleanup() override
     {
-        if (m_topo_provider_added) {
-            modify_config("TOPO_PRIO", "default");
-            ucs_sys_topo_reset_provider();
-            ucs_list_del(&m_topo_provider.list);
-            m_topo_provider_added = false;
-        }
+        modify_config("TOPO_PRIO", "default");
+        ucs_sys_topo_provider_remove(m_topo_provider);
         test_ucp_proto_mock::cleanup();
     }
 
@@ -1328,18 +1324,6 @@ protected:
                           key, rkey->cfg_index);
     }
 
-    /* Layout-compatible analog of ucs_sys_topo_provider_t (which is
-     * private to src/ucs/sys/topo/base/topo.c). */
-    struct topo_provider {
-        const char *name;
-        struct {
-            ucs_topo_get_distance_func_t get_distance;
-            void (*get_memory_distance)(ucs_sys_device_t,
-                                        ucs_sys_dev_distance_t*);
-        } ops;
-        ucs_list_link_t list;
-    };
-
     static ucs_status_t get_distance(ucs_sys_device_t device1,
                                      ucs_sys_device_t device2,
                                      ucs_sys_dev_distance_t *distance)
@@ -1366,13 +1350,8 @@ private:
         return (device1 > device2) ? (device1 - device2) : (device2 - device1);
     }
 
-    static topo_provider m_topo_provider;
-    bool m_topo_provider_added;
+    ucs_sys_topo_provider_t *m_topo_provider = nullptr;
 };
-
-test_ucp_proto_mock_rcx_trio_local_distance_get::topo_provider
-        test_ucp_proto_mock_rcx_trio_local_distance_get::m_topo_provider =
-                {"proto_mock", {get_distance, get_memory_distance}, {}};
 
 UCS_TEST_P(test_ucp_proto_mock_rcx_trio_local_distance_get,
            single_net_dev_local_id_0_picks_lowest_adjacent_sys_dev,
