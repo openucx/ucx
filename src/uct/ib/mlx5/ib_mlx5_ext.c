@@ -13,6 +13,7 @@
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/sys/compiler.h>
+#include <ucs/sys/string.h>
 #include <ucs/sys/stubs.h>
 
 #include "ib_mlx5_ext.h"
@@ -33,14 +34,11 @@ static ucs_status_t uct_ib_mlx5_ext_default_iface_flags(uint64_t *flags)
     return UCS_OK;
 }
 
-static uct_ib_mlx5_ext_ops_t uct_ib_mlx5_ext_ops_default = {
+static uct_ib_mlx5_ext_ops_t uct_ib_mlx5_ext_ops_current = {
     .name        = "default",
     .iface_flags = uct_ib_mlx5_ext_default_iface_flags,
     .qp_query    = (uct_ib_mlx5_ext_qp_query_func_t)ucs_empty_function_return_unsupported,
 };
-
-static uct_ib_mlx5_ext_ops_t uct_ib_mlx5_ext_ops_current =
-        uct_ib_mlx5_ext_ops_default;
 
 static int uct_ib_mlx5_ext_is_unsupported_op(const void *op)
 {
@@ -100,8 +98,8 @@ void uct_ib_mlx5_ext_register(const uct_ib_mlx5_ext_ops_t *ops)
     }
 
     if (updated) {
-        ucs_strncpy(uct_ib_mlx5_ext_ops_current.name, ops->name,
-                    sizeof(uct_ib_mlx5_ext_ops_current.name));
+        ucs_strncpy_safe(uct_ib_mlx5_ext_ops_current.name, ops->name,
+                         sizeof(uct_ib_mlx5_ext_ops_current.name));
         ucs_debug("ib mlx5 ext: updated provider name=%s iface_flags=%s "
                   "qp_query=%s",
                   ops->name,
