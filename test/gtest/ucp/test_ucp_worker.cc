@@ -316,6 +316,11 @@ out:
         m_destroyed_ep_count++;
     }
 
+    static void failed_ep_destroy_func(uct_ep_h ep) {
+        m_failed_destroy_count++;
+        ep->iface = NULL;
+    }
+
     static ep_test_info_t& ep_test_info_get(uct_ep_h ep) {
         ep_test_info_map_t::iterator it = m_ep_test_info_map.find(ep);
 
@@ -417,6 +422,7 @@ out:
 protected:
     static       unsigned m_created_ep_count;
     static       unsigned m_destroyed_ep_count;
+    static       unsigned m_failed_destroy_count;
     static       ucp_ep_t m_fake_ep;
     static       ucp_ep_h m_ucp_ep;
     static const unsigned m_pending_purge_reqs_count;
@@ -428,6 +434,7 @@ protected:
 
 unsigned test_ucp_worker_discard::m_created_ep_count               = 0;
 unsigned test_ucp_worker_discard::m_destroyed_ep_count             = 0;
+unsigned test_ucp_worker_discard::m_failed_destroy_count           = 0;
 ucp_ep_t test_ucp_worker_discard::m_fake_ep                        = {};
 ucp_ep_h test_ucp_worker_discard::m_ucp_ep                         = NULL;
 const unsigned test_ucp_worker_discard::m_pending_purge_reqs_count = 10;
@@ -635,6 +642,56 @@ UCS_TEST_P(test_ucp_worker_discard, wireup_ep_flush_ok_not_wait_comp)
                         8                                        /* UCT EP count */,
                         6                                        /* WIREUP EP count */,
                         3                                        /* WIREUP AUX EP count */);
+}
+
+/*
+ * Regression test for PR #11446.
+ *
+ * Verifies that ucp_worker_discard_uct_ep() takes ownership of and destroys a
+ * UCT EP that is already a failed-TL stub (i.e. ucp_is_uct_ep_failed() is
+ * true). Before the fix, ucp_worker_discard_tl_uct_ep() returned UCS_OK
+ * without calling uct_ep_destroy() on the input, leaking the EP.
+ *
+ * The test fabricates a uct_iface_t whose ep_flush pointer matches the
+ * failed-TL iface singleton (so ucp_is_uct_ep_failed() returns true) but
+ * owns its own ep_destroy so the test can observe the destruction.
+ */
+UCS_TEST_P(test_ucp_worker_discard, failed_tl_uct_ep_destroyed)
+{
+    /* The discard_disabled variant exercises the same early-return branch,
+     * skip to keep the test focused. */
+    if (get_variant_value() & TEST_DISCARD_DISABLED) {
+        UCS_TEST_SKIP_R("not applicable for discard_disabled variant");
+    }
+
+    m_ucp_ep                 = sender().ep();
+    m_failed_destroy_count   = 0;
+    unsigned discarded_count = 0;
+
+    uct_iface_h failed_iface = ucp_failed_tl_iface_get();
+    uct_iface_t fake_iface          = {};
+    fake_iface.ops.ep_flush         = failed_iface->ops.ep_flush;
+    fake_iface.ops.ep_pending_purge = (uct_ep_pending_purge_func_t)ucs_empty_function;
+    fake_iface.ops.ep_destroy       = failed_ep_destroy_func;
+
+    uct_ep_t fake_ep = {};
+    fake_ep.iface    = &fake_iface;
+
+    ASSERT_TRUE(ucp_is_uct_ep_failed(&fake_ep));
+
+    ucs_status_t status;
+    UCS_ASYNC_BLOCK(&sender().worker()->async);
+    status = ucp_worker_discard_uct_ep(
+            m_ucp_ep, &fake_ep, UCP_NULL_RESOURCE, UCT_FLUSH_FLAG_LOCAL,
+            (uct_pending_purge_callback_t)ucs_empty_function, NULL,
+            discarded_cb, static_cast<void*>(&discarded_count));
+    UCS_ASYNC_UNBLOCK(&sender().worker()->async);
+
+    EXPECT_EQ(UCS_OK, status);
+    /* Pre-fix: 0 (uct_ep leaked); post-fix: 1 */
+    EXPECT_EQ(1u, m_failed_destroy_count);
+    /* discarded_cb is not invoked for failed-TL EPs (no request scheduled) */
+    EXPECT_EQ(0u, discarded_count);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_worker_discard, all, "all")

@@ -95,8 +95,11 @@ static ze_result_t
 uct_ze_base_get_root_devices(ze_device_handle_t *root_devices,
                              uint32_t *root_dev_count_p)
 {
-    uint32_t driver_count = 1;
+    uint32_t driver_count = 0;
+    ze_driver_handle_t *drivers;
     ze_result_t ret;
+    uint32_t dev_count;
+    uint32_t i;
 
     ret = zeInit(ZE_INIT_FLAG_GPU_ONLY);
     if (ret != ZE_RESULT_SUCCESS) {
@@ -104,27 +107,56 @@ uct_ze_base_get_root_devices(ze_device_handle_t *root_devices,
         return ret;
     }
 
-    ret = zeDriverGet(&driver_count, &uct_ze_base.driver);
+    ret = zeDriverGet(&driver_count, NULL);
     if ((ret != ZE_RESULT_SUCCESS) || (driver_count == 0)) {
-        ucs_debug("failure to get ze driver: 0x%x, count=%u", ret,
-                  driver_count);
+        ucs_debug("failure to get ze driver count: 0x%x, count=%u",
+                  ret, driver_count);
         return (ret != ZE_RESULT_SUCCESS) ? ret : ZE_RESULT_ERROR_UNKNOWN;
     }
 
-    *root_dev_count_p = UCT_ZE_MAX_DEVICES;
-    ret = zeDeviceGet(uct_ze_base.driver, root_dev_count_p, root_devices);
+    drivers = ucs_calloc(driver_count, sizeof(*drivers), "ze_drivers");
+    if (drivers == NULL) {
+        ucs_debug("failed to allocate ze drivers array, count=%u",
+                  driver_count);
+        return ZE_RESULT_ERROR_UNKNOWN;
+    }
+
+    ret = zeDriverGet(&driver_count, drivers);
     if (ret != ZE_RESULT_SUCCESS) {
-        ucs_debug("failure to get ze devices: 0x%x", ret);
+        ucs_debug("failure to enumerate ze drivers: 0x%x", ret);
+        ucs_free(drivers);
         return ret;
     }
 
-    if (*root_dev_count_p > UCT_ZE_MAX_DEVICES) {
-        ucs_warn("ze returned %u devices, limiting to %u", *root_dev_count_p,
-                 UCT_ZE_MAX_DEVICES);
-        *root_dev_count_p = UCT_ZE_MAX_DEVICES;
+    for (i = 0; i < driver_count; i++) {
+        dev_count = 0;
+        ret       = zeDeviceGet(drivers[i], &dev_count, NULL);
+        if ((ret != ZE_RESULT_SUCCESS) || (dev_count == 0)) {
+            continue;
+        }
+
+        if (dev_count > UCT_ZE_MAX_DEVICES) {
+            ucs_warn("ze returned %u devices, limiting to %u", dev_count,
+                     UCT_ZE_MAX_DEVICES);
+            dev_count = UCT_ZE_MAX_DEVICES;
+        }
+
+        *root_dev_count_p = dev_count;
+        ret               = zeDeviceGet(drivers[i], root_dev_count_p,
+                                        root_devices);
+        if (ret == ZE_RESULT_SUCCESS) {
+            uct_ze_base.driver = drivers[i];
+            ucs_free(drivers);
+            return ZE_RESULT_SUCCESS;
+        }
+
+        ucs_debug("failure to get ze devices from driver %u: 0x%x", i, ret);
     }
 
-    return ZE_RESULT_SUCCESS;
+    ucs_debug("no ze driver exposed any devices (tried %u drivers)",
+              driver_count);
+    ucs_free(drivers);
+    return ZE_RESULT_ERROR_UNKNOWN;
 }
 
 static ze_result_t
@@ -305,13 +337,14 @@ ze_result_t uct_ze_base_init(void)
 
             ret = uct_ze_get_pci_properties(device->root_device, &bus_id);
             if (ret != ZE_RESULT_SUCCESS) {
-                ucs_debug("failure to get pci properties for device %d: 0x%x",
+                ucs_debug("failure to get pci properties for device %d: 0x%x"
+                          ", using sys_dev=unknown",
                           device_idx, ret);
-                continue;
+                device->sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+            } else {
+                uct_ze_base_set_device_sys_dev(device, device_idx, &bus_id,
+                                               pci_info);
             }
-
-            uct_ze_base_set_device_sys_dev(device, device_idx, &bus_id,
-                                           pci_info);
             uct_ze_base_init_device_subdevices(device, device_idx);
             uct_ze_base_add_global_subdevices(device, &global_subdevice_id);
 

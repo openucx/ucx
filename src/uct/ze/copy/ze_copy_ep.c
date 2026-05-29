@@ -106,6 +106,8 @@ ucs_status_t uct_ze_copy_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
 {
     ucs_status_t status;
 
+    UCT_CHECK_IOV_SIZE(iovcnt, 1ul, "uct_ze_copy_ep_get_zcopy");
+
     status = uct_ze_copy_ep_zcopy(tl_ep, remote_addr, iov, rkey, 0);
 
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), GET, ZCOPY,
@@ -121,6 +123,8 @@ ucs_status_t uct_ze_copy_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
                                       uct_rkey_t rkey, uct_completion_t *comp)
 {
     ucs_status_t status;
+
+    UCT_CHECK_IOV_SIZE(iovcnt, 1ul, "uct_ze_copy_ep_put_zcopy");
 
     status = uct_ze_copy_ep_zcopy(tl_ep, remote_addr, iov, rkey, 1);
 
