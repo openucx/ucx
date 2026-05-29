@@ -104,8 +104,7 @@ void ucs_table_cleanup(ucs_table_t *table);
 
 /**
  * Append a horizontal separator. The top and bottom frame separators are
- * inserted automatically by ucs_table_render(); do not add them
- * explicitly.
+ * inserted automatically by ucs_table_render();
  *
  * @param [in,out] table  Table to append to.
  */
