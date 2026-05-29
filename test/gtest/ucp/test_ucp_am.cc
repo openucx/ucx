@@ -22,6 +22,11 @@ extern "C" {
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_resource.h>
 #include <ucs/datastruct/mpool.inl>
+
+/* Test-only declaration of the long-AM first-fragment receive handler;
+ * invoked directly by the resend-eviction regression test below. */
+ucs_status_t ucp_am_long_first_handler(void *am_arg, void *am_data,
+                                       size_t am_length, unsigned am_flags);
 }
 
 #define NUM_MESSAGES 17
@@ -982,6 +987,139 @@ UCS_TEST_P(test_ucp_am_nbx, rx_am_mpools,
     }
 
     ucp_am_data_release(receiver().worker(), rx_data);
+}
+
+/*
+ * Regression test for PR #11452 review r3318247178.
+ *
+ * Verifies that ucp_am_long_first_handler() evicts an orphan partial
+ * first_rdesc from started_ams when a single-fragment delivery arrives
+ * with UCP_AM_HDR_FLAG_RESEND set (sender retransmitted the message in a
+ * single fragment after an earlier multi-fragment attempt left a partial
+ * assembly behind).
+ *
+ * Without the eviction, ucp_am_handle_unfinished() would iterate
+ * started_ams in order, hit the orphan first, and stall every subsequent
+ * msg_id on this ep. The test forges a partial first_rdesc, fires a
+ * synthesized resend at the receiver, and then sends a real multi-fragment
+ * AM to confirm that subsequent messages still flow.
+ */
+UCS_TEST_P(test_ucp_am_nbx, resend_evicts_orphan_partial_msg)
+{
+    /* macro from ucp_am.c: frag_tree storage sits immediately before rdesc */
+    auto rdesc_frag_tree = [](ucp_recv_desc_t *rdesc) -> ucs_interval_tree_t * {
+        return reinterpret_cast<ucs_interval_tree_t*>(
+                UCS_PTR_BYTE_OFFSET(rdesc, -sizeof(ucs_interval_tree_t)));
+    };
+
+    const uint64_t orphan_msg_id = 0xC0DE5E11ull;
+    const size_t   payload_len   = 1024;
+    const size_t   user_hdr_len  = 16;
+    const size_t   total_length  = UCP_AM_FIRST_FRAG_META_LEN + payload_len +
+                                   user_hdr_len;
+
+    set_am_data_handler(receiver(), TEST_AM_NBX_ID, am_data_cb, this);
+
+    ucp_ep_h     r_ep        = receiver().ep();
+    ucp_ep_ext_t *r_ep_ext   = r_ep->ext;
+    ucp_worker_h r_worker    = receiver().worker();
+    uint64_t     r_local_id  = r_ep_ext->local_ep_id;
+
+    /* Prepare expected user-header pattern; the AM callback in this fixture
+     * checks the received header bytes match m_hdr. */
+    m_hdr.resize(user_hdr_len);
+    ucs::fill_random(m_hdr);
+
+    /* Forge a partial first_rdesc and link it into started_ams. Buffer
+     * layout matches ucp_am_long_first_handler's allocation:
+     *   [frag_tree][rdesc][first_ftr][hdr][padding][payload][user_hdr]
+     * Only the prefix up to first_ftr is needed by ucp_am_release_partial_msg.
+     */
+    const size_t alloc_size = total_length + sizeof(ucp_recv_desc_t) +
+                              sizeof(ucs_interval_tree_t) +
+                              r_worker->am.alignment;
+    void *forged_alloc = ucs_malloc(alloc_size, "test_resend_partial");
+    ASSERT_TRUE(forged_alloc != NULL);
+
+    ucp_recv_desc_t *forged_rdesc = reinterpret_cast<ucp_recv_desc_t*>(
+            UCS_PTR_BYTE_OFFSET(forged_alloc, sizeof(ucs_interval_tree_t)));
+    forged_rdesc->release_desc_offset = sizeof(ucs_interval_tree_t);
+    forged_rdesc->payload_offset      = UCP_AM_FIRST_FRAG_META_LEN;
+
+    ucp_am_first_ftr_t *partial_ftr = reinterpret_cast<ucp_am_first_ftr_t*>(
+            forged_rdesc + 1);
+    partial_ftr->super.msg_id = orphan_msg_id;
+    partial_ftr->super.ep_id  = r_local_id;
+    partial_ftr->total_size   = payload_len;
+
+    ucs_interval_tree_init(rdesc_frag_tree(forged_rdesc),
+                           &r_worker->am.frag_tree_mpool);
+
+    /* Helper: walk started_ams and report whether forged_rdesc is linked. */
+    auto orphan_is_linked = [&]() -> bool {
+        ucp_recv_desc_t *rdesc;
+        ucs_list_for_each(rdesc, &r_ep_ext->am.started_ams,
+                          am_first.list) {
+            if (rdesc == forged_rdesc) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    {
+        UCS_ASYNC_BLOCK(&r_worker->async);
+        ucs_list_add_tail(&r_ep_ext->am.started_ams,
+                          &forged_rdesc->am_first.list);
+        UCS_ASYNC_UNBLOCK(&r_worker->async);
+    }
+    EXPECT_TRUE(orphan_is_linked());
+
+    /* Build a single-fragment long-AM frame for the same msg_id with the
+     * RESEND flag set. */
+    std::vector<uint8_t> wire(total_length, 0);
+    ucp_am_hdr_t *wire_hdr = reinterpret_cast<ucp_am_hdr_t*>(wire.data());
+    wire_hdr->am_id         = TEST_AM_NBX_ID;
+    wire_hdr->flags         = UCP_AM_HDR_FLAG_RESEND;
+    wire_hdr->header_length = user_hdr_len;
+
+    void *payload = wire.data() + sizeof(*wire_hdr);
+    mem_buffer::pattern_fill(payload, payload_len, SEED);
+
+    void *user_hdr_dst = UCS_PTR_BYTE_OFFSET(payload, payload_len);
+    memcpy(user_hdr_dst, m_hdr.data(), m_hdr.size());
+
+    ucp_am_first_ftr_t *wire_ftr = reinterpret_cast<ucp_am_first_ftr_t*>(
+            UCS_PTR_BYTE_OFFSET(user_hdr_dst, user_hdr_len));
+    wire_ftr->super.msg_id = orphan_msg_id;
+    wire_ftr->super.ep_id  = r_local_id;
+    wire_ftr->total_size   = payload_len;
+
+    /* Drive the user callback path; a single user message is being delivered. */
+    reset_counters();
+    m_send_counter = 1;
+
+    ucs_status_t status;
+    {
+        UCS_ASYNC_BLOCK(&r_worker->async);
+        status = ucp_am_long_first_handler(r_worker, wire.data(),
+                                           total_length, 0);
+        UCS_ASYNC_UNBLOCK(&r_worker->async);
+    }
+
+    EXPECT_EQ(UCS_OK, status);
+    EXPECT_EQ(1u, m_recv_counter);
+    /* Eviction was performed: orphan no longer in started_ams. */
+    EXPECT_FALSE(orphan_is_linked());
+
+    /* Restore PSN so the strand-test below isn't classified as duplicate. */
+    r_ep_ext->am.psn = 0;
+
+    /* Strand-test: after eviction, a real multi-fragment AM must still
+     * deliver. Without the fix, the orphan would have remained in
+     * started_ams and ucp_am_handle_unfinished() would stop on it,
+     * stranding this message. */
+    test_am_send_recv(64 * UCS_KBYTE, 8);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx)
