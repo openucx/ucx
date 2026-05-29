@@ -15,7 +15,6 @@
 #include <ucs/type/status.h>
 #include <ucs/sys/stubs.h>
 
-
 #define UCT_IB_MLX5_EXT_NAME_MAX 32
 
 /**
