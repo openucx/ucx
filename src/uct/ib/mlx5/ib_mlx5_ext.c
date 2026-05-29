@@ -18,13 +18,6 @@
 
 #include "ib_mlx5_ext.h"
 
-UCS_LIST_HEAD(uct_ib_mlx5_ext_providers);
-
-typedef struct uct_ib_mlx5_ext_provider {
-    ucs_list_link_t       list;
-    uct_ib_mlx5_ext_ops_t ops;
-} uct_ib_mlx5_ext_provider_t;
-
 static ucs_status_t uct_ib_mlx5_ext_default_iface_flags(uint64_t *flags)
 {
     if (ucs_likely(flags != NULL)) {
@@ -69,23 +62,6 @@ ucs_status_t uct_ib_mlx5_ext_qp_query(struct ibv_qp *qp,
 void uct_ib_mlx5_ext_register(const uct_ib_mlx5_ext_ops_t *ops)
 {
     int updated = 0;
-    uct_ib_mlx5_ext_provider_t *provider;
-
-    if (ucs_unlikely(ops == NULL)) {
-        ucs_debug("ib mlx5 ext: ignored NULL provider");
-        return;
-    }
-
-    provider = ucs_malloc(sizeof(*provider), "mlx5_ext_provider");
-    if (ucs_unlikely(provider == NULL)) {
-        ucs_debug("ib mlx5 ext: failed to allocate provider entry for %s",
-                  ops->name);
-        return;
-    }
-
-    provider->ops = *ops;
-
-    ucs_list_add_head(&uct_ib_mlx5_ext_providers, &provider->list);
 
     if (!(uct_ib_mlx5_ext_is_unsupported_op(ops->iface_flags))) {
         uct_ib_mlx5_ext_ops_current.iface_flags = ops->iface_flags;
