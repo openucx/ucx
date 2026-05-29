@@ -10,15 +10,17 @@ requested_gcc_module=${GCC_MODULE:-}
 source ${realdir}/common.sh
 source ${realdir}/../az-helpers.sh
 build_mode=${build_mode:-}
+require_ze=${require_ze:-}
 
 # Azure passes the literal template variable when a matrix row does not define
 # build_mode. Treat it as unset so the local default below still applies.
 [ "${build_mode}" = "\$(build_mode)" ] && build_mode=
+[ "${require_ze}" = "\$(require_ze)" ] && require_ze=
 
 build_mode=${build_mode:-long}
 
 case "${build_mode}" in
-long|short|sanity|compilers)
+long|short|sanity|compilers|ze)
 	;;
 *)
 	azure_log_error "Unsupported build mode: ${build_mode}"
@@ -331,6 +333,35 @@ build_rocm() {
 }
 
 #
+# Build ZE (compile-only)
+#
+build_ze() {
+	if [ "${require_ze}" = "yes" ]; then
+		echo "==== Build with ZE (compile-only, strict) ===="
+		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst \
+			"${compile_only_config_args[@]}" --with-ze
+		$MAKEP
+
+		grep '#define HAVE_ZE 1' config.h
+		return
+	fi
+
+	if [ ! -f /usr/include/level_zero/ze_api.h ] &&
+	   [ ! -f /usr/local/include/level_zero/ze_api.h ]; then
+		echo "==== Not building with ZE: level_zero/ze_api.h was not found ===="
+		return
+	fi
+
+	echo "==== Build with ZE (compile-only) ===="
+	${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst \
+		"${compile_only_config_args[@]}" --with-ze
+	$MAKEP
+
+	# Verify ZE support is really enabled when dependencies are present.
+	grep '#define HAVE_ZE 1' config.h
+}
+
+#
 # Build with clang compiler
 #
 build_clang() {
@@ -501,6 +532,7 @@ base_tests=('build_docs' \
 			'build_prof' \
 			'build_cuda' \
 			'build_rocm' \
+			'build_ze' \
 			'build_no_verbs' \
 			'build_release_pkg' \
 			'build_fuse')
@@ -508,6 +540,9 @@ base_tests=('build_docs' \
 case "${build_mode}" in
 sanity)
 	tests=('build_sanity')
+	;;
+ze)
+	tests=('build_ze')
 	;;
 short)
 	tests=("${base_tests[@]}")

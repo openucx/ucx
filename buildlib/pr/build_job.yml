@@ -32,6 +32,11 @@ jobs:
           ubuntu2404:
             CONTAINER: ubuntu2404
             build_mode: long
+          ubuntu2404_ze:
+            CONTAINER: ubuntu2404_ze
+            build_mode: ze
+            require_ze: yes
+            install_ze_deps: yes
           ubuntu2210:
             CONTAINER: ubuntu2210
             build_mode: sanity
@@ -147,9 +152,24 @@ jobs:
         retryCountOnTaskFailure: 5
 
       - bash: |
+          set -eEx
+          if [ "${install_ze_deps}" != "yes" ]; then
+              exit 0
+          fi
+
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y --no-install-recommends libze-dev || \
+              apt-get install -y --no-install-recommends level-zero-dev
+        displayName: Install ZE dev package
+        env:
+          install_ze_deps: $(install_ze_deps)
+
+      - bash: |
           ./buildlib/tools/builds.sh
         displayName: ${{ parameters.displayName }}
         env:
           BUILD_ID: "$(Build.BuildId)-$(Build.BuildNumber)"
           build_mode: $(build_mode)
+          require_ze: $(require_ze)
           test_static: $(test_static)
