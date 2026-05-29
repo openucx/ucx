@@ -30,16 +30,6 @@
 #define UCS_TOPO_DEVICE_NAME_INVALID "<invalid>"
 
 /*
- * Function pointer used to refer to specific implementations of
- * ucs_topo_get_memory_distance function by topology modules.
- * This function estimates the distance between the device and the system
- * memory used by the current thread according to its CPU affinity.
- * The function must have a fallback behavior.
- */
-typedef void (*ucs_topo_get_memory_distance_func_t)(
-        ucs_sys_device_t device, ucs_sys_dev_distance_t *distance);
-
-/*
  * Topology API.
  */
 typedef struct {
@@ -54,7 +44,7 @@ typedef struct {
 /*
  * Structure needed to define a topology module implementation
  */
-typedef struct {
+struct ucs_sys_topo_provider {
     /* Name of the topology module */
     const char         *name;
 
@@ -62,7 +52,7 @@ typedef struct {
     ucs_sys_topo_ops_t ops;
 
     ucs_list_link_t    list;
-} ucs_sys_topo_provider_t;
+};
 
 typedef int64_t ucs_bus_id_bit_rep_t;
 
@@ -121,7 +111,7 @@ const ucs_sys_dev_distance_t ucs_topo_max_distance = {
 static ucs_topo_global_ctx_t ucs_topo_global_ctx;
 
 /* Global list of topology detectors */
-UCS_LIST_HEAD(ucs_sys_topo_providers_list);
+static UCS_LIST_HEAD(ucs_sys_topo_providers_list);
 
 /* Selected topo provider */
 static ucs_sys_topo_provider_t *ucs_sys_topo_provider = NULL;
@@ -138,6 +128,36 @@ static inline double ucs_topo_sysfs_numa_distance_to_latency(double distance)
 void ucs_sys_topo_reset_provider()
 {
     ucs_sys_topo_provider = NULL;
+}
+
+ucs_sys_topo_provider_t *ucs_sys_topo_provider_add(
+        const char *name, ucs_topo_get_distance_func_t get_distance,
+        ucs_topo_get_memory_distance_func_t get_memory_distance)
+{
+    ucs_sys_topo_provider_t *provider;
+
+    provider = ucs_malloc(sizeof(*provider), "topo_provider");
+    if (provider == NULL) {
+        ucs_error("failed to allocate topo provider \"%s\"", name);
+        return NULL;
+    }
+
+    provider->name                    = name;
+    provider->ops.get_distance        = get_distance;
+    provider->ops.get_memory_distance = get_memory_distance;
+    ucs_list_add_tail(&ucs_sys_topo_providers_list, &provider->list);
+
+    return provider;
+}
+
+void ucs_sys_topo_provider_remove(ucs_sys_topo_provider_t *provider)
+{
+    if (ucs_sys_topo_provider == provider) {
+        ucs_sys_topo_reset_provider();
+    }
+
+    ucs_list_del(&provider->list);
+    ucs_free(provider);
 }
 
 static ucs_sys_topo_provider_t *ucs_sys_topo_get_provider()

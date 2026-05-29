@@ -76,14 +76,67 @@ typedef ucs_status_t
                                 ucs_sys_dev_distance_t *distance);
 
 
-/* Global list of topology detection methods */
-extern ucs_list_link_t ucs_sys_topo_providers_list;
+/*
+ * Function pointer used to refer to specific implementations of
+ * ucs_topo_get_memory_distance function by topology modules. This function
+ * estimates the distance between the device and the system memory used by the
+ * current thread according to its CPU affinity. The function must have a
+ * fallback behavior.
+ */
+typedef void (*ucs_topo_get_memory_distance_func_t)(
+        ucs_sys_device_t device, ucs_sys_dev_distance_t *distance);
+
+
+/**
+ * Opaque handle to a registered system topology provider.
+ */
+typedef struct ucs_sys_topo_provider ucs_sys_topo_provider_t;
 
 
 /**
  * Reset the internal singleton system topology provider.
  */
 void ucs_sys_topo_reset_provider(void);
+
+
+/**
+ * Register a system topology provider.
+ *
+ * The provider becomes selectable by the TOPO_PRIO configuration by
+ * its @a name. After registration, call @ref ucs_sys_topo_reset_provider if a
+ * provider was already cached and the selection needs to be re-evaluated.
+ *
+ * @param [in]  name                 Provider name used for selection. The
+ *                                   pointer is stored, not copied, so the
+ *                                   string must remain valid for the lifetime
+ *                                   of the provider. Registering a name that is
+ *                                   already used by another provider (such as
+ *                                   "default" or "sysfs") silently shadows it
+ *                                   during selection, so the name should be
+ *                                   unique.
+ * @param [in]  get_distance         Implementation of @ref ucs_topo_get_distance.
+ * @param [in]  get_memory_distance  Implementation of
+ *                                   @ref ucs_topo_get_memory_distance.
+ *
+ * @return Handle of the registered provider, to be passed to
+ *         @ref ucs_sys_topo_provider_remove, or NULL on error.
+ */
+ucs_sys_topo_provider_t *ucs_sys_topo_provider_add(
+        const char *name, ucs_topo_get_distance_func_t get_distance,
+        ucs_topo_get_memory_distance_func_t get_memory_distance);
+
+
+/**
+ * Unregister a system topology provider previously added by
+ * @ref ucs_sys_topo_provider_add.
+ *
+ * If the removed provider is the currently cached selection, the cached
+ * selection is invalidated, so the caller does not need to call
+ * @ref ucs_sys_topo_reset_provider for safety.
+ *
+ * @param [in] provider  Provider handle to remove. Freed by this call.
+ */
+void ucs_sys_topo_provider_remove(ucs_sys_topo_provider_t *provider);
 
 
 /**

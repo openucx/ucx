@@ -61,6 +61,10 @@ typedef struct {
 typedef struct {
     /* CUDA context handle */
     CUcontext          ctx;
+    /* Retained CUDA primary context, if @ctx is a primary context */
+    CUcontext          primary_ctx;
+    /* CUDA device of @primary_ctx */
+    CUdevice           cuda_device;
     /* CUDA context id */
     unsigned long long ctx_id;
     /* pool of cuda events to check completion of memcpy operations */
@@ -129,7 +133,8 @@ void uct_cuda_base_queue_desc_init(uct_cuda_queue_desc_t *qdesc);
 void uct_cuda_base_queue_desc_destroy(const uct_cuda_ctx_rsc_t *ctx_rsc,
                                       uct_cuda_queue_desc_t *qdesc);
 
-void uct_cuda_base_stream_destroy(CUstream *stream);
+void uct_cuda_base_stream_destroy(const uct_cuda_ctx_rsc_t *ctx_rsc,
+                                  CUstream *stream);
 
 #if (__CUDACC_VER_MAJOR__ >= 100000)
 void CUDA_CB uct_cuda_base_iface_stream_cb_fxn(void *arg);
