@@ -1429,7 +1429,8 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
     }
 
     if (dmat == NULL) {
-        ucs_debug("%s: no gpu found", uct_ib_device_name(&ib_md->dev));
+        ucs_debug("%s: global device matrix initialization failed",
+                  uct_ib_device_name(&ib_md->dev));
         status = UCS_ERR_NO_DEVICE;
         goto out;
     }
