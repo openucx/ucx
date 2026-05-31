@@ -106,11 +106,10 @@ private:
          * The number of real devices (and their names) do not match the mocked
          * ones. In order to pretend that all the mocked devices are supported,
          * we remember the first real device name, and then substitute the
-         * response with the mocked devices names. Assign unique sys_device
-         * values beyond the currently known topology devices, so the mocked
-         * resources are distinct but cannot alias real topology entries. Later
-         * on the iface_open_mock will use the real device name (same for all
-         * mocks) to create the mocked iface.
+         * response with the mocked devices names. For each mocked device the
+         * individual sys_dev must be set, so that they are treated as different
+         * devices. Later on the iface_open_mock will use the real device name
+         * (same for all mocks) to create the mocked iface.
          */
         auto mock_devices  = (uct_tl_device_resource_t*)ucs_calloc(
                                     m_self->m_iface_attrs_funcs.size(),
