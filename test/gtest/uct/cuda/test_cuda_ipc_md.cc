@@ -624,11 +624,9 @@ UCS_TEST_P(test_cuda_copy_md, vmm_multi_handle_range) {
     mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE |
                           UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH;
 
-    /* Query the full multi-handle range. Without the multi-handle guard,
-     * uct_cuda_copy_md_sync_memops_get_address_range overwrites
-     * mem_attr.alloc_length with the bounds of the single cuMem handle
-     * containing the base pointer (one chunk). The guard preserves the
-     * caller's requested extent. */
+    /* Query the full multi-handle range; the guard preserves the caller's
+     * requested extent instead of shrinking to the single chunk that
+     * contains the base pointer. */
     const size_t query_len = chunk_size * num_chunks;
     ASSERT_UCS_OK(uct_md_mem_query(md(), (void*)va, query_len, &mem_attr));
 
