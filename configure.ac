@@ -74,9 +74,10 @@ AC_SUBST(SOVERSION)
 
 UCX_LT_RELEASE=
 ucx_soname_suffix_summary="<disabled>"
+ucx_module_deepbind_summary="no"
 AC_ARG_WITH([soname-suffix],
         AS_HELP_STRING([--with-soname-suffix=SUFFIX],
-                       [Append SUFFIX to UCX core shared library SONAMEs. Disabled by default. [default=NO]]),
+                       [Append SUFFIX to UCX shared library and module SONAMEs. Disabled by default. [default=NO]]),
         [], [with_soname_suffix=no])
 AS_IF([test "x$with_soname_suffix" != xno],
       [AS_IF([test "x$with_soname_suffix" = xyes],
@@ -85,8 +86,21 @@ AS_IF([test "x$with_soname_suffix" != xno],
              [],
              [AC_MSG_ERROR([--with-soname-suffix must contain only letters, digits, dots, underscores, and dashes])])
        UCX_LT_RELEASE="-release $with_soname_suffix"
+       AC_DEFINE_UNQUOTED([UCX_MODULE_SONAME_SUFFIX],
+                          ["-$with_soname_suffix"],
+                          [Suffix appended to private UCX module library names])
        ucx_soname_suffix_summary="$with_soname_suffix"])
 AC_SUBST([UCX_LT_RELEASE])
+UCT_MODULE_LDFLAGS='$(UCX_LT_RELEASE)'
+AC_SUBST([UCT_MODULE_LDFLAGS])
+
+AC_ARG_ENABLE([module-deepbind],
+        AS_HELP_STRING([--enable-module-deepbind],
+                       [Load UCX modules with RTLD_DEEPBIND. Intended for private UCX bundles. Disabled by default. [default=NO]]),
+        [], [enable_module_deepbind=no])
+AS_IF([test "x$enable_module_deepbind" = xyes],
+      [AS_IF([test "x$with_soname_suffix" = xno],
+             [AC_MSG_ERROR([--enable-module-deepbind requires --with-soname-suffix])])])
 
 AC_PROG_CC
 AC_PROG_CXX
@@ -102,6 +116,14 @@ AC_C_RESTRICT
 AC_FUNC_STRERROR_R
 
 AC_PATH_TOOL([PKG_CONFIG], [pkg-config], [pkg-config])
+
+AS_IF([test "x$enable_module_deepbind" = xyes],
+      [AC_CHECK_DECLS([RTLD_DEEPBIND],
+                      [AC_DEFINE([UCX_MODULE_DLOPEN_DEEPBIND], [1],
+                                 [Load UCX modules with RTLD_DEEPBIND])
+                       ucx_module_deepbind_summary="yes"],
+                      [AC_MSG_ERROR([--enable-module-deepbind requires RTLD_DEEPBIND support from <dlfcn.h>])],
+                      [[#include <dlfcn.h>]])])
 
 
 #
@@ -451,6 +473,7 @@ AC_MSG_NOTICE([           MPI tests:   ${mpi_enable}])
 AC_MSG_NOTICE([         VFS support:   ${vfs_enable}])
 AC_MSG_NOTICE([       Devel headers:   ${enable_devel_headers}])
 AC_MSG_NOTICE([       SONAME suffix:   ${ucx_soname_suffix_summary}])
+AC_MSG_NOTICE([     Module deepbind:   ${ucx_module_deepbind_summary}])
 AC_MSG_NOTICE([io_demo CUDA support:   ${with_iodemo_cuda}])
 AC_MSG_NOTICE([            Bindings:   <$(echo ${build_bindings}|tr ':' ' ') >])
 AC_MSG_NOTICE([         UCS modules:   <$(echo ${ucs_modules}|tr ':' ' ') >])

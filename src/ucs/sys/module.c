@@ -245,6 +245,9 @@ static int ucs_module_flags_to_dlopen_mode(unsigned flags)
     } else {
         mode |= RTLD_LOCAL;
     }
+#if defined(UCX_MODULE_DLOPEN_DEEPBIND) && defined(RTLD_DEEPBIND)
+    mode |= RTLD_DEEPBIND;
+#endif
 
     return mode;
 }
@@ -292,6 +295,19 @@ ucs_module_filename_to_base(const char *filename, char *base, size_t base_max)
     base[base_len] = '\0';
 }
 
+static void ucs_module_normalize_base(char *base)
+{
+#ifdef UCX_MODULE_SONAME_SUFFIX
+    size_t suffix_len = strlen(UCX_MODULE_SONAME_SUFFIX);
+    size_t base_len   = strlen(base);
+
+    if ((base_len > suffix_len) &&
+        !strcmp(base + base_len - suffix_len, UCX_MODULE_SONAME_SUFFIX)) {
+        base[base_len - suffix_len] = '\0';
+    }
+#endif
+}
+
 static void ucs_module_load_from_dir(const char *dir, const char *framework,
                                      int mode, ucs_string_set_t *loaded_set)
 {
@@ -324,6 +340,7 @@ static void ucs_module_load_from_dir(const char *dir, const char *framework,
         }
 
         ucs_module_filename_to_base(entry->d_name, base, sizeof(base));
+        ucs_module_normalize_base(base);
         if (strchr(base + prefix_len, '_') != NULL) {
             ucs_module_debug("module name contains '_': %s, skipping", base + prefix_len);
             continue;

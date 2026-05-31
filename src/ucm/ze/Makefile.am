@@ -12,7 +12,7 @@ libucm_ze_la_CFLAGS   = $(BASE_CFLAGS) $(ZE_CFLAGS) $(LT_CFLAGS)
 libucm_ze_la_LIBADD   = ../libucm.la $(ZE_LIBS)
 libucm_ze_la_LDFLAGS  = $(UCM_MODULE_LDFLAGS) \
                           $(patsubst %, -Xlinker %, $(ZE_LDFLAGS)) \
-                          -version-info $(SOVERSION)
+                          -version-info $(SOVERSION) $(UCX_LT_RELEASE)
 
 noinst_HEADERS = \
 	zemem.h
