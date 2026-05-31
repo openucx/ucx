@@ -862,6 +862,7 @@ protected:
         std::vector<void*>                   buffers;
         std::vector<uint64_t>                remote_addrs;
         std::vector<size_t>                  lengths;
+        std::vector<size_t>                  remote_lengths;
         std::vector<ucp_mem_h>               memhs;
         std::vector<ucp_rkey_h>              rkeys;
     };
@@ -895,6 +896,8 @@ protected:
             ctx.lengths[i]      = elem_sizes[i];
             ctx.rkeys[i]        = ctx.rkey_handles[i];
         }
+
+        ctx.remote_lengths = ctx.lengths;
     }
 
     void init_sgl_ctx(sgl_ctx &ctx, size_t num_elems, size_t buf_size) {
@@ -932,6 +935,8 @@ protected:
             ctx.lengths[i]      = buf_size;
             ctx.rkeys[i]        = ctx.rkey_handles[i];
         }
+
+        ctx.remote_lengths = ctx.lengths;
     }
 
     static ucp_dt_local_sgl_t
@@ -951,7 +956,7 @@ protected:
         ucp_dt_remote_sgl_t sgl = {};
         sgl.field_mask          = field_mask;
         sgl.remote_addrs        = ctx.remote_addrs.data();
-        sgl.lengths             = ctx.lengths.data();
+        sgl.lengths             = ctx.remote_lengths.data();
         sgl.rkeys               = ctx.rkeys.data();
         return sgl;
     }
@@ -1255,6 +1260,13 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_missing_remote_rkeys,
     expect_sgl_put_invalid_param(LOCAL_MASK_DEFAULT,
                                  UCP_DT_REMOTE_SGL_FIELD_REMOTE_ADDRS |
                                  UCP_DT_REMOTE_SGL_FIELD_LENGTHS);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_missing_remote_lengths,
+                     !ENABLE_PARAMS_CHECK) {
+    expect_sgl_put_invalid_param(LOCAL_MASK_DEFAULT,
+                                 UCP_DT_REMOTE_SGL_FIELD_REMOTE_ADDRS |
+                                 UCP_DT_REMOTE_SGL_FIELD_RKEYS);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_count_mismatch,
