@@ -841,7 +841,9 @@ void ucp_proto_request_restart(ucp_request_t *req)
 
     status = proto_config->proto->reset(req);
     if (status != UCS_OK) {
-        ucs_assert_always(status == UCS_ERR_CANCELED);
+        ucs_assertv_always(status == UCS_ERR_CANCELED,
+                           "req %p, failed to reset: status %s", req,
+                           ucs_status_string(status));
         return;
     }
 

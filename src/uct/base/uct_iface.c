@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
 *
@@ -573,6 +573,14 @@ ucs_status_t uct_single_device_resource(uct_md_h md, const char *dev_name,
 ucs_status_t
 uct_iface_base_query_v2(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr)
 {
+    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_CAP_FLAGS) {
+        iface_attr->cap.flags = 0;
+    }
+
+    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT) {
+        iface_attr->max_put_sgl_zcopy_count = 0;
+    }
+
     return UCS_OK;
 }
 
@@ -1047,10 +1055,8 @@ int uct_iface_local_is_reachable(uct_iface_local_addr_ns_t *addr_ns,
     /* We are in non-root PID namespace - return 1 if ID of namespaces are the
      * same */
     if (addr_ns->sys_ns != my_addr.sys_ns) {
-        uct_iface_fill_info_str_buf(
-                    params,
-                    "different pid namespaces %"PRIx64" vs %"PRIx64"",
-                    my_addr.sys_ns, addr_ns->sys_ns);
+        uct_iface_fill_info_str_buf(params, "different pid namespaces %u vs %u",
+                                    my_addr.sys_ns, addr_ns->sys_ns);
         return 0;
     }
     return 1;
@@ -1092,4 +1098,70 @@ ucs_status_t uct_ep_get_device_ep(uct_ep_h ep, uct_device_ep_h *device_ep_p)
     const uct_base_iface_t *iface = ucs_derived_of(ep->iface, uct_base_iface_t);
 
     return iface->internal_ops->ep_get_device_ep(ep, device_ep_p);
+}
+
+ucs_status_t
+uct_ep_put_sgl_zcopy(uct_ep_h ep, void * const *buffers,
+                     const size_t *lengths, uct_mem_h const *memhs,
+                     const uint64_t *remote_addrs, uct_rkey_t const *rkeys,
+                     size_t count, uct_completion_t *comp)
+{
+    const uct_base_iface_t *iface = ucs_derived_of(ep->iface, uct_base_iface_t);
+
+    return iface->internal_ops->ep_put_sgl_zcopy(ep, buffers, lengths, memhs,
+                                                 remote_addrs, rkeys, count,
+                                                 comp);
+}
+
+typedef struct uct_stub_iface {
+    uct_iface_t              super;
+    uct_iface_internal_ops_t *internal_ops;
+    ucs_status_t             status;
+} uct_stub_iface_t;
+
+static ucs_status_t uct_stub_iface_return_status(uct_iface_h iface)
+{
+    return ((uct_stub_iface_t*)iface)->status;
+}
+
+static ucs_status_t uct_stub_ep_return_status(uct_ep_h ep)
+{
+    return uct_stub_iface_return_status(ep->iface);
+}
+
+static void uct_stub_iface_close(uct_iface_h iface)
+{
+    ucs_free(iface);
+}
+
+static uct_iface_internal_ops_t uct_stub_internal_ops = {
+    .iface_query_v2        = uct_iface_base_query_v2,
+    .iface_estimate_perf   = (uct_iface_estimate_perf_func_t)uct_stub_iface_return_status,
+    .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+    .ep_query              = (uct_ep_query_func_t)uct_stub_ep_return_status,
+    .ep_invalidate         = (uct_ep_invalidate_func_t)uct_stub_ep_return_status,
+    .ep_connect_to_ep_v2   = (uct_ep_connect_to_ep_v2_func_t)uct_stub_ep_return_status,
+    .iface_is_reachable_v2 = (uct_iface_is_reachable_v2_func_t)ucs_empty_function_return_zero,
+    .ep_is_connected       = (uct_ep_is_connected_func_t)ucs_empty_function_return_zero,
+    .ep_get_device_ep      = (uct_ep_get_device_ep_func_t)uct_stub_ep_return_status,
+    .ep_put_sgl_zcopy      = (uct_ep_put_sgl_zcopy_func_t)uct_stub_ep_return_status,
+};
+
+ucs_status_t uct_stub_iface_open(ucs_status_t status, uct_iface_h *iface_p)
+{
+    uct_stub_iface_t *stub;
+
+    UCS_STATIC_ASSERT(ucs_offsetof(uct_stub_iface_t, internal_ops) ==
+                      ucs_offsetof(uct_base_iface_t, internal_ops));
+
+    stub = ucs_calloc(1, sizeof(*stub), "uct_stub_iface");
+    if (stub == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    stub->super.ops.iface_close = uct_stub_iface_close;
+    stub->internal_ops          = &uct_stub_internal_ops;
+    stub->status                = status;
+    *iface_p                    = &stub->super;
+    return UCS_OK;
 }

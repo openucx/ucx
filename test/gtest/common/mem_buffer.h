@@ -88,6 +88,15 @@ public:
     /* set device context if compiled with GPU support */
     static void set_device_context();
 
+    /* Return the number of CUDA GPU devices, or -1 if not supported */
+    static int get_device_count();
+
+    /* Return the current CUDA device index, or -1 if not supported */
+    static int get_device();
+
+    /* Set the current CUDA device */
+    static void set_device(int device);
+
     /* returns whether ROCM device supports managed memory */
     static bool is_rocm_managed_supported();
 
@@ -96,6 +105,9 @@ public:
 
     /* Get from NVML BAR1 free size */
     static void get_bar1_free_size_nvml();
+
+    /* NVML NVLink-C2C link count > 0 for CUDA device */
+    static bool cuda_gpu_has_c2c(unsigned gpu_index = 0);
 
     /* Return free memory on the BAR1 / GPU. If GPU is not used
      * SIZE_MAX is returned */

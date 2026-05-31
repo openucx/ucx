@@ -1,6 +1,6 @@
 /**
  * Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -23,5 +23,15 @@ typedef struct uct_cma_iface {
     uct_scopy_iface_t             super;
 } uct_cma_iface_t;
 
+
+typedef struct {
+    pid_t id;
+} ucs_cma_iface_base_device_addr_t;
+
+
+typedef struct {
+    ucs_cma_iface_base_device_addr_t super;
+    ucs_sys_ns_t                     pid_ns;
+} ucs_cma_iface_ext_device_addr_t;
 
 #endif

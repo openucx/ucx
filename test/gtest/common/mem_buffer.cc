@@ -196,6 +196,39 @@ void mem_buffer::set_device_context()
     device_set = true;
 }
 
+int mem_buffer::get_device_count()
+{
+#if HAVE_CUDA
+    int num_gpus = 0;
+    if (cudaGetDeviceCount(&num_gpus) != cudaSuccess) {
+        return -1;
+    }
+    return num_gpus;
+#else
+    return -1;
+#endif
+}
+
+int mem_buffer::get_device()
+{
+#if HAVE_CUDA
+    int device = -1;
+    CUDA_CALL(cudaGetDevice(&device), "");
+    return device;
+#else
+    return -1;
+#endif
+}
+
+void mem_buffer::set_device(int device)
+{
+#if HAVE_CUDA
+    CUDA_CALL(cudaSetDevice(device), ": device=" << device);
+#else
+    (void)device;
+#endif
+}
+
 size_t mem_buffer::m_bar1_free_size = SIZE_MAX;
 
 void mem_buffer::get_bar1_free_size_nvml()
@@ -218,6 +251,37 @@ void mem_buffer::get_bar1_free_size_nvml()
     }
 
     NVML_CALL(nvmlShutdown());
+#endif
+}
+
+bool mem_buffer::cuda_gpu_has_c2c(unsigned gpu_index)
+{
+#if HAVE_CUDA && HAVE_DECL_NVML_FI_DEV_C2C_LINK_COUNT
+    bool has_c2c;
+    nvmlDevice_t device;
+    nvmlFieldValue_t value = {0};
+
+    if (NVML_CALL(nvmlInit_v2()) != UCS_OK) {
+        return false;
+    }
+
+    if (NVML_CALL(nvmlDeviceGetHandleByIndex(gpu_index, &device)) != UCS_OK) {
+        NVML_CALL(nvmlShutdown());
+        return false;
+    }
+
+    value.fieldId = NVML_FI_DEV_C2C_LINK_COUNT;
+    if (NVML_CALL(nvmlDeviceGetFieldValues(device, 1, &value)) != UCS_OK) {
+        NVML_CALL(nvmlShutdown());
+        return false;
+    }
+
+    has_c2c = (value.nvmlReturn == NVML_SUCCESS) && (value.value.uiVal > 0);
+    NVML_CALL(nvmlShutdown());
+    return has_c2c;
+#else
+    (void)gpu_index;
+    return false;
 #endif
 }
 

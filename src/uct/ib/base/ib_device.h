@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) Huawei Technologies Co., Ltd. 2020.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -325,7 +325,7 @@ uct_ib_device_select_gid(uct_ib_device_t *dev, uint8_t port_num,
 /**
  * @return device name.
  */
-const char *uct_ib_device_name(uct_ib_device_t *dev);
+const char *uct_ib_device_name(const uct_ib_device_t *dev);
 
 
 /**
