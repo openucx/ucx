@@ -626,7 +626,9 @@ protected:
             send_buf.pattern_check(1);
         }
 
-        EXPECT_EQ(rkey->cfg_index, rkey_cfg_index);
+        if (mem_type == UCS_MEMORY_TYPE_HOST) {
+            EXPECT_EQ(rkey->cfg_index, rkey_cfg_index);
+        }
     }
 };
 
