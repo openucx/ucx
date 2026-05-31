@@ -592,8 +592,8 @@ protected:
     }
 
     void send_recv_rma(size_t size, ucp_operation_id_t op_id,
-                       unsigned rkey_cfg_index = 1,
-                       ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST)
+                       ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST,
+                       unsigned rkey_cfg_index = 1)
     {
         mem_buffer recv_buf(size, mem_type);
         recv_buf.pattern_fill(1);
@@ -1446,7 +1446,8 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_speed_change, rma_put,
            "IB_NUM_PATHS?=1", "MAX_RMA_RAILS=2", "ZCOPY_THRESH=0")
 {
     test_port_speed([this](unsigned rkey_cfg_index) {
-        send_recv_rma(64 * UCS_KBYTE, UCP_OP_ID_PUT, rkey_cfg_index);
+        send_recv_rma(64 * UCS_KBYTE, UCP_OP_ID_PUT, UCS_MEMORY_TYPE_HOST,
+                      rkey_cfg_index);
     }, UCP_OP_ID_PUT);
 }
 
@@ -1454,7 +1455,8 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_speed_change, rma_get,
            "IB_NUM_PATHS?=1", "MAX_RMA_RAILS=2", "ZCOPY_THRESH=0")
 {
     test_port_speed([this](unsigned rkey_cfg_index) {
-        send_recv_rma(64 * UCS_KBYTE, UCP_OP_ID_GET, rkey_cfg_index);
+        send_recv_rma(64 * UCS_KBYTE, UCP_OP_ID_GET, UCS_MEMORY_TYPE_HOST,
+                      rkey_cfg_index);
     }, UCP_OP_ID_GET);
 }
 
