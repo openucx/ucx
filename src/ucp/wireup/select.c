@@ -81,6 +81,13 @@ typedef struct {
 } ucp_wireup_dev_usage_count;
 
 
+typedef enum {
+    UCP_WIREUP_NUMA_UNKNOWN,
+    UCP_WIREUP_NUMA_NONLOCAL,
+    UCP_WIREUP_NUMA_LOCAL
+} ucp_wireup_numa_status_t;
+
+
 /**
  * Global parameters for lanes selection during UCP wireup procedure
  */
@@ -389,42 +396,13 @@ ucp_wireup_max_lanes(const ucp_wireup_select_params_t *select_params,
 }
 
 static ucs_numa_node_t
-ucp_wireup_cpuset_numa_node(const ucs_cpu_set_t *cpuset)
-{
-    ucs_numa_node_t cpu_node, node = UCS_NUMA_NODE_UNDEFINED;
-    unsigned cpu, num_cpus;
-
-    num_cpus = ucs_min(ucs_numa_num_configured_cpus(), UCS_CPU_SETSIZE);
-    for (cpu = 0; cpu < num_cpus; ++cpu) {
-        if (!ucs_cpu_is_set(cpu, cpuset)) {
-            continue;
-        }
-
-        cpu_node = ucs_numa_node_of_cpu(cpu);
-        if (cpu_node == UCS_NUMA_NODE_UNDEFINED) {
-            continue;
-        }
-
-        if (node == UCS_NUMA_NODE_UNDEFINED) {
-            node = cpu_node;
-        } else if (node != cpu_node) {
-            return UCS_NUMA_NODE_UNDEFINED;
-        }
-    }
-
-    return node;
-}
-
-static ucs_numa_node_t
 ucp_wireup_worker_numa_node(ucp_worker_h worker)
 {
     ucs_sys_cpuset_t thread_cpuset;
     ucs_cpu_set_t cpuset;
-    ucs_numa_node_t node;
 
-    node = ucp_wireup_cpuset_numa_node(&worker->cpu_mask);
-    if (node != UCS_NUMA_NODE_UNDEFINED) {
-        return node;
+    if (!ucs_cpu_set_is_empty(&worker->cpu_mask)) {
+        return ucs_numa_node_of_cpuset(&worker->cpu_mask);
     }
 
     if (ucs_sys_pthread_getaffinity(&thread_cpuset) != UCS_OK) {
@@ -432,13 +410,13 @@ ucp_wireup_worker_numa_node(ucp_worker_h worker)
     }
 
     ucs_sys_cpuset_copy(&cpuset, &thread_cpuset);
-    return ucp_wireup_cpuset_numa_node(&cpuset);
+    return ucs_numa_node_of_cpuset(&cpuset);
 }
 
-static int
-ucp_wireup_iface_numa_info(const ucp_worker_iface_t *wiface,
-                           ucs_numa_node_t *worker_node_p,
-                           ucs_numa_node_t *dev_node_p)
+static ucp_wireup_numa_status_t
+ucp_wireup_iface_numa_status(const ucp_worker_iface_t *wiface,
+                             ucs_numa_node_t *worker_node_p,
+                             ucs_numa_node_t *dev_node_p)
 {
     const ucp_context_h context = wiface->worker->context;
     const uct_tl_resource_desc_t *tl_rsc;
@@ -447,22 +425,23 @@ ucp_wireup_iface_numa_info(const ucp_worker_iface_t *wiface,
     *dev_node_p    = UCS_NUMA_NODE_UNDEFINED;
 
     if (wiface->rsc_index == UCP_NULL_RESOURCE) {
-        return 0;
+        return UCP_WIREUP_NUMA_UNKNOWN;
     }
 
     tl_rsc = &context->tl_rscs[wiface->rsc_index].tl_rsc;
     if ((tl_rsc->dev_type != UCT_DEVICE_TYPE_NET) ||
         (tl_rsc->sys_device == UCS_SYS_DEVICE_ID_UNKNOWN)) {
-        return 0;
+        return UCP_WIREUP_NUMA_UNKNOWN;
     }
 
     *dev_node_p = ucs_topo_sys_device_get_numa_node(tl_rsc->sys_device);
     if ((*worker_node_p == UCS_NUMA_NODE_UNDEFINED) ||
         (*dev_node_p == UCS_NUMA_NODE_UNDEFINED)) {
-        return 0;
+        return UCP_WIREUP_NUMA_UNKNOWN;
     }
 
-    return *worker_node_p == *dev_node_p;
+    return (*worker_node_p == *dev_node_p) ? UCP_WIREUP_NUMA_LOCAL :
+                                             UCP_WIREUP_NUMA_NONLOCAL;
 }
 
 static int
@@ -494,7 +473,7 @@ ucp_wireup_local_device_cmp(const ucp_worker_iface_t *candidate,
     ucs_numa_node_t current_worker_node, current_dev_node;
     const ucp_context_h context = candidate->worker->context;
     const ucp_worker_iface_t *current;
-    int candidate_local, current_local;
+    ucp_wireup_numa_status_t candidate_numa, current_numa;
 
     if (!context->config.ext.wireup_prefer_local_device ||
         (current_rsc_index == UCP_NULL_RESOURCE)) {
@@ -502,13 +481,19 @@ ucp_wireup_local_device_cmp(const ucp_worker_iface_t *candidate,
     }
 
     current         = ucp_worker_iface(candidate->worker, current_rsc_index);
-    candidate_local = ucp_wireup_iface_numa_info(candidate,
-                                                 &candidate_worker_node,
-                                                 &candidate_dev_node);
-    current_local   = ucp_wireup_iface_numa_info(current, &current_worker_node,
-                                                 &current_dev_node);
+    candidate_numa  = ucp_wireup_iface_numa_status(candidate,
+                                                   &candidate_worker_node,
+                                                   &candidate_dev_node);
+    current_numa    = ucp_wireup_iface_numa_status(current,
+                                                   &current_worker_node,
+                                                   &current_dev_node);
 
-    return candidate_local - current_local;
+    if ((candidate_numa == UCP_WIREUP_NUMA_UNKNOWN) ||
+        (current_numa == UCP_WIREUP_NUMA_UNKNOWN)) {
+        return 0;
+    }
+
+    return candidate_numa - current_numa;
 }
 
 /**
@@ -551,7 +536,8 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
     int is_reachable;
     double score;
     uint8_t priority;
-    int score_cmp, local_dev_cmp, numa_local;
+    int score_cmp, local_dev_cmp;
+    ucp_wireup_numa_status_t numa_status;
     ucp_md_index_t md_index;
     ucs_numa_node_t worker_node, dev_node;
 
@@ -764,14 +750,15 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
             if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE)) {
                 worker_node = UCS_NUMA_NODE_UNDEFINED;
                 dev_node    = UCS_NUMA_NODE_UNDEFINED;
-                numa_local = ucp_wireup_iface_numa_info(wiface, &worker_node,
-                                                        &dev_node);
+                numa_status = ucp_wireup_iface_numa_status(wiface,
+                                                           &worker_node,
+                                                           &dev_node);
                 ucs_trace(UCT_TL_RESOURCE_DESC_FMT
                           "->addr[%u] : %s score %.2f priority %d "
-                          "worker_numa %d dev_numa %d numa_local %d",
+                          "worker_numa %d dev_numa %d numa_status %d",
                           UCT_TL_RESOURCE_DESC_ARG(resource), addr_index,
                           criteria->title, score, priority, worker_node,
-                          dev_node, numa_local);
+                          dev_node, numa_status);
             }
             is_reachable = 1;
 

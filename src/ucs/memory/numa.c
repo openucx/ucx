@@ -152,6 +152,32 @@ ucs_numa_node_t ucs_numa_node_of_cpu(int cpu)
     return cpu_numa_node[cpu] - 1;
 }
 
+ucs_numa_node_t ucs_numa_node_of_cpuset(const ucs_cpu_set_t *cpuset)
+{
+    ucs_numa_node_t cpu_node, node = UCS_NUMA_NODE_UNDEFINED;
+    unsigned cpu, num_cpus;
+
+    num_cpus = ucs_min(ucs_numa_num_configured_cpus(), UCS_CPU_SETSIZE);
+    for (cpu = 0; cpu < num_cpus; ++cpu) {
+        if (!ucs_cpu_is_set(cpu, cpuset)) {
+            continue;
+        }
+
+        cpu_node = ucs_numa_node_of_cpu(cpu);
+        if (cpu_node == UCS_NUMA_NODE_UNDEFINED) {
+            continue;
+        }
+
+        if (node == UCS_NUMA_NODE_UNDEFINED) {
+            node = cpu_node;
+        } else if (node != cpu_node) {
+            return UCS_NUMA_NODE_UNDEFINED;
+        }
+    }
+
+    return node;
+}
+
 ucs_numa_node_t ucs_numa_node_of_device(const char *dev_path)
 {
     long parsed_node;
