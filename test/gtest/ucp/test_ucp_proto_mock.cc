@@ -592,8 +592,8 @@ protected:
     }
 
     void send_recv_rma(size_t size, ucp_operation_id_t op_id,
-        unsigned rkey_cfg_index = 1,
-        ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST)
+                       unsigned rkey_cfg_index = 1,
+                       ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST)
     {
         mem_buffer recv_buf(size, mem_type);
         recv_buf.pattern_fill(1);
@@ -608,22 +608,22 @@ protected:
         req_param.op_attr_mask = 0;
         ucs_status_ptr_t sptr;
         if (op_id == UCP_OP_ID_PUT) {
-        sptr = ucp_put_nbx(sender().ep(), send_buf.ptr(), size,
-                        (uint64_t)recv_buf.ptr(), rkey, &req_param);
+            sptr = ucp_put_nbx(sender().ep(), send_buf.ptr(), size,
+                               (uint64_t)recv_buf.ptr(), rkey, &req_param);
         } else if (op_id == UCP_OP_ID_GET) {
-        sptr = ucp_get_nbx(sender().ep(), send_buf.ptr(), size,
-                        (uint64_t)recv_buf.ptr(), rkey, &req_param);
+            sptr = ucp_get_nbx(sender().ep(), send_buf.ptr(), size,
+                               (uint64_t)recv_buf.ptr(), rkey, &req_param);
         } else {
-        sptr = nullptr;
-        FAIL() << "Invalid operation ID: " << op_id;
+            sptr = nullptr;
+            FAIL() << "Invalid operation ID: " << op_id;
         }
 
         EXPECT_EQ(UCS_OK, request_wait(sptr));
 
         if (op_id == UCP_OP_ID_PUT) {
-        recv_buf.pattern_check(2);
+            recv_buf.pattern_check(2);
         } else if (op_id == UCP_OP_ID_GET) {
-        send_buf.pattern_check(1);
+            send_buf.pattern_check(1);
         }
 
         EXPECT_EQ(rkey->cfg_index, rkey_cfg_index);
