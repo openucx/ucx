@@ -34,24 +34,24 @@ Before editing or judging code:
 
 ## Build
 
-From a fresh checkout, create an out-of-source development build:
+The two main helpers are `configure-devel` and `configure-release`: pick `configure-devel` for failure investigation, debug-oriented and feature work (logging, assertions, gtest, and valgrind enabled), `configure-release` for performance work (those checks disabled and optimized for speed).
+
+From a fresh checkout, create an out-of-source build:
 
 ```sh
 ./autogen.sh
-mkdir -p build-devel
-cd build-devel
-../contrib/configure-devel --prefix=$PWD/install-debug
+mkdir -p build-<flavor>  # <flavor> is "devel" or "release"
+cd build-<flavor>
+../contrib/configure-<flavor> --prefix=$PWD/install
 make -j$(nproc)
 make install
 ```
 
 Run `autogen.sh` and configure once per build directory. For incremental
-builds, run `make -j$(nproc)` again from `build-devel`; use `make clean`
+builds, run `make -j$(nproc)` again from `build-<flavor>`; use `make clean`
 before a fresh rebuild when necessary.
 
-Prefer repository configure helpers over ad hoc flag sets. If a dependency or
-optional transport is unavailable, report the missing capability instead of
-editing around it.
+Prefer repository configure helpers over ad hoc flag sets. If a dependency or optional transport is unavailable, report the missing capability instead of editing around it.
 
 When build configuration details matter, inspect `autogen.sh`,
 `contrib/configure-devel`, `configure.ac`, and `config/m4`.

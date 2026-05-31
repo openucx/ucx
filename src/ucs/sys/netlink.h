@@ -62,6 +62,16 @@ int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote,
                              int *netmask_len_p);
 
 /**
+ * Get the network interface index of a local route to a given destination
+ * address.
+ *
+ * @param [in]  sa_remote        Pointer to the destination address.
+ *
+ * @return Network interface index of a local route, or -1 if not found.
+ */
+int ucs_netlink_get_local_route_ndev_index(const struct sockaddr *sa_remote);
+
+/**
  * Check if this network interface has the best route to the destination
  * address.
  *

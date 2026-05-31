@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2021. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -862,13 +862,6 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
     m_md_attr.field_mask = UINT64_MAX;
     status               = uct_md_query_v2(m_md, &m_md_attr);
     ASSERT_UCS_OK(status);
-
-    uct_tl_resource_desc_t *tl;
-    unsigned num_tl;
-    status = uct_md_query_tl_resources(m_md, &tl, &num_tl);
-    ASSERT_UCS_OK(status);
-
-    uct_release_tl_resource_list(tl);
 
     for (;;) {
         {
