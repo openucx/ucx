@@ -336,27 +336,24 @@ uct_cuda_base_ctx_cmp(const uct_cuda_ctx_rsc_t *ctx_rsc,
 }
 
 static ucs_status_t
-uct_cuda_base_ctx_rsc_push(const uct_cuda_ctx_rsc_t *ctx_rsc)
+uct_cuda_base_ctx_rsc_check(const uct_cuda_ctx_rsc_t *ctx_rsc)
 {
+    CUcontext primary_ctx;
     ucs_status_t status;
 
     if (ctx_rsc->cuda_device == CU_DEVICE_INVALID) {
         return UCS_OK;
     }
 
-    status = uct_cuda_base_ctx_cmp(ctx_rsc, ctx_rsc->ctx);
+    status = uct_cuda_ctx_primary_retain(ctx_rsc->cuda_device, 0,
+                                         &primary_ctx);
     if (status != UCS_OK) {
         return status;
     }
 
-    return UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPushCurrent(ctx_rsc->ctx));
-}
-
-static void uct_cuda_base_ctx_rsc_pop(const uct_cuda_ctx_rsc_t *ctx_rsc)
-{
-    if (ctx_rsc->cuda_device != CU_DEVICE_INVALID) {
-        UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
-    }
+    status = uct_cuda_base_ctx_cmp(ctx_rsc, primary_ctx);
+    UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(ctx_rsc->cuda_device));
+    return status;
 }
 
 void uct_cuda_base_stream_destroy(const uct_cuda_ctx_rsc_t *ctx_rsc,
@@ -366,12 +363,11 @@ void uct_cuda_base_stream_destroy(const uct_cuda_ctx_rsc_t *ctx_rsc,
         return;
     }
 
-    if (uct_cuda_base_ctx_rsc_push(ctx_rsc) != UCS_OK) {
+    if (uct_cuda_base_ctx_rsc_check(ctx_rsc) != UCS_OK) {
         return;
     }
 
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuStreamDestroy(*stream));
-    uct_cuda_base_ctx_rsc_pop(ctx_rsc);
 }
 
 static void
@@ -389,12 +385,11 @@ static void uct_cuda_base_event_desc_cleanup(ucs_mpool_t *mp, void *obj)
     uct_cuda_ctx_rsc_t *ctx_rsc       = ucs_container_of(mp, uct_cuda_ctx_rsc_t,
                                                          event_mp);
 
-    if (uct_cuda_base_ctx_rsc_push(ctx_rsc) != UCS_OK) {
+    if (uct_cuda_base_ctx_rsc_check(ctx_rsc) != UCS_OK) {
         return;
     }
 
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuEventDestroy(event_desc->event));
-    uct_cuda_base_ctx_rsc_pop(ctx_rsc);
 }
 
 void uct_cuda_base_queue_desc_init(uct_cuda_queue_desc_t *qdesc)
@@ -545,7 +540,7 @@ err_del_iter:
 static void uct_cuda_base_ctx_rsc_destroy(uct_cuda_iface_t *iface,
                                           uct_cuda_ctx_rsc_t *ctx_rsc)
 {
-    CUdevice cuda_device = ctx_rsc->cuda_device;
+    const CUdevice cuda_device = ctx_rsc->cuda_device;
 
     ucs_mpool_cleanup(&ctx_rsc->event_mp, 1);
     iface->ops->destroy_rsc(&iface->super.super, ctx_rsc);
