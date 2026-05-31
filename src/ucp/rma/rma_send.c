@@ -22,79 +22,93 @@
 #include <ucp/wireup/wireup_ep.h>
 
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_put_sgl_check_params(const void *buffer, size_t count,
-                         uint64_t remote_addr, ucp_rkey_h rkey,
-                         const ucp_request_param_t *param)
-{
-    const ucp_dt_local_sgl_t *local;
-    const ucp_dt_remote_sgl_t *remote;
-
-    if (!ENABLE_PARAMS_CHECK) {
-        /* For Coverity */
-        ucs_assert(param->remote != NULL);
-
-        return UCS_OK;
-    }
-
-    if (ucs_unlikely(remote_addr != UCP_REMOTE_ADDR_INVALID)) {
-        ucs_error("sgl put: remote_addr must be UCP_REMOTE_ADDR_INVALID, "
-                  "got 0x%" PRIx64, remote_addr);
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    if (ucs_unlikely(rkey != UCP_RKEY_INVALID)) {
-        ucs_error("sgl put: rkey must be UCP_RKEY_INVALID, got %p", rkey);
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    if (ucs_unlikely(!(param->op_attr_mask & UCP_OP_ATTR_FIELD_REMOTE))) {
-        ucs_error("sgl put: UCP_OP_ATTR_FIELD_REMOTE must be set");
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    if (ucs_unlikely(param->remote == NULL)) {
-        ucs_error("sgl put: remote descriptor must not be NULL");
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    local = (const ucp_dt_local_sgl_t*)buffer;
-
-    if (ucs_unlikely(!(local->field_mask & UCP_DT_LOCAL_SGL_FIELD_BUFFERS))) {
-        ucs_error("sgl put: local buffers field must be set");
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    if (ucs_unlikely(!(local->field_mask & UCP_DT_LOCAL_SGL_FIELD_LENGTHS))) {
-        ucs_error("sgl put: local lengths field must be set");
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    remote = (const ucp_dt_remote_sgl_t*)param->remote;
-
-    if (ucs_unlikely(!(remote->field_mask &
-                       UCP_DT_REMOTE_SGL_FIELD_REMOTE_ADDRS))) {
-        ucs_error("sgl put: remote addrs field must be set");
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    if (ucs_unlikely(!(remote->field_mask &
-                       UCP_DT_REMOTE_SGL_FIELD_RKEYS))) {
-        ucs_error("sgl put: remote rkeys field must be set");
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    if (ucs_unlikely((param->op_attr_mask &
-                      UCP_OP_ATTR_FIELD_REMOTE_COUNT) &&
-                     (param->remote_count != count))) {
-        ucs_error("sgl put: local count %zu != remote count %zu"
-                  " (only N->N mapping is supported)",
-                  count, param->remote_count);
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    return UCS_OK;
-}
+#define UCP_PUT_SGL_CHECK_PARAMS(_buffer, _count, _remote_addr, _rkey, \
+                                 _param) \
+    do { \
+        if (!ENABLE_PARAMS_CHECK) { \
+            ucs_assert((_param)->remote != NULL); /* For Coverity */ \
+        } else { \
+            const ucp_dt_local_sgl_t *_local; \
+            const ucp_dt_remote_sgl_t *_remote; \
+            \
+            if (ucs_unlikely((_remote_addr) != UCP_REMOTE_ADDR_INVALID)) { \
+                ucs_error("sgl put: remote_addr must be " \
+                          "UCP_REMOTE_ADDR_INVALID, got 0x%" PRIx64, \
+                          (_remote_addr)); \
+                ret = UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
+                goto out_unlock; \
+            } \
+            \
+            if (ucs_unlikely((_rkey) != UCP_RKEY_INVALID)) { \
+                ucs_error("sgl put: rkey must be UCP_RKEY_INVALID, got %p", \
+                          (_rkey)); \
+                ret = UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
+                goto out_unlock; \
+            } \
+            \
+            if (ucs_unlikely(((_param)->op_attr_mask & \
+                              UCP_OP_ATTR_FIELD_REMOTE) == 0)) { \
+                ucs_error("sgl put: UCP_OP_ATTR_FIELD_REMOTE must be set"); \
+                ret = UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
+                goto out_unlock; \
+            } \
+            \
+            if (ucs_unlikely((_param)->remote == NULL)) { \
+                ucs_error("sgl put: remote descriptor must not be NULL"); \
+                ret = UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
+                goto out_unlock; \
+            } \
+            \
+            _local = (const ucp_dt_local_sgl_t*)(_buffer); \
+            \
+            if (ucs_unlikely((_local->field_mask & \
+                              UCP_DT_LOCAL_SGL_FIELD_BUFFERS) == 0)) { \
+                ucs_error("sgl put: local buffers field must be set"); \
+                ret = UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
+                goto out_unlock; \
+            } \
+            \
+            if (ucs_unlikely((_local->field_mask & \
+                              UCP_DT_LOCAL_SGL_FIELD_LENGTHS) == 0)) { \
+                ucs_error("sgl put: local lengths field must be set"); \
+                ret = UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
+                goto out_unlock; \
+            } \
+            \
+            _remote = (_param)->remote; \
+            \
+            if (ucs_unlikely((_remote->field_mask & \
+                              UCP_DT_REMOTE_SGL_FIELD_REMOTE_ADDRS) == 0)) { \
+                ucs_error("sgl put: remote addrs field must be set"); \
+                ret = UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
+                goto out_unlock; \
+            } \
+            \
+            if (ucs_unlikely((_remote->field_mask & \
+                              UCP_DT_REMOTE_SGL_FIELD_LENGTHS) == 0)) { \
+                ucs_error("sgl put: remote lengths field must be set"); \
+                ret = UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
+                goto out_unlock; \
+            } \
+            \
+            if (ucs_unlikely((_remote->field_mask & \
+                              UCP_DT_REMOTE_SGL_FIELD_RKEYS) == 0)) { \
+                ucs_error("sgl put: remote rkeys field must be set"); \
+                ret = UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
+                goto out_unlock; \
+            } \
+            \
+            if (ucs_unlikely(((_param)->op_attr_mask & \
+                              UCP_OP_ATTR_FIELD_REMOTE_COUNT) && \
+                             ((_param)->remote_count != (_count)))) { \
+                ucs_error("sgl put: local count %zu != remote count %zu" \
+                          " (only N->N mapping is supported)", \
+                          (_count), (_param)->remote_count); \
+                ret = UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
+                goto out_unlock; \
+            } \
+        } \
+    } while (0)
 
 
 #define UCP_RMA_CHECK_BUFFER(_buffer, _action) \
@@ -226,13 +240,8 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
     if (ucs_unlikely(param->op_attr_mask & UCP_OP_ATTR_FIELD_DATATYPE)) {
         datatype = param->datatype;
         if (UCP_DT_IS_SGL(datatype)) {
-            status = ucp_put_sgl_check_params(buffer, count, remote_addr,
-                                              rkey, param);
-            if (ucs_unlikely(status != UCS_OK)) {
-                ret = UCS_STATUS_PTR(status);
-                goto out_unlock;
-            }
-            remote = (const ucp_dt_remote_sgl_t *)param->remote;
+            UCP_PUT_SGL_CHECK_PARAMS(buffer, count, remote_addr, rkey, param);
+            remote = param->remote;
             rkey   = remote->rkeys[0];
         } else if (UCP_DT_IS_CONTIG(datatype)) {
             contig_length = ucp_contig_dt_length(datatype, count);
