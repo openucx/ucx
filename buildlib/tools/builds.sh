@@ -336,29 +336,21 @@ build_rocm() {
 # Build ZE (compile-only)
 #
 build_ze() {
-	if [ "${require_ze}" = "yes" ]; then
-		echo "==== Build with ZE (compile-only, strict) ===="
-		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst \
-			"${compile_only_config_args[@]}" --with-ze
-		$MAKEP
-
-		grep '#define HAVE_ZE 1' config.h
+	# Only the dedicated ZE lane (require_ze=yes) installs libze-dev and
+	# is expected to build with ZE. Other lanes skip this step, mirroring
+	# how build_cuda / build_rocm skip when their toolkits are absent.
+	if [ "${require_ze}" != "yes" ]; then
+		echo "==== Not building with ZE (require_ze!=yes) ===="
 		return
 	fi
 
-	if [ ! -f /usr/include/level_zero/ze_api.h ] &&
-	   [ ! -f /usr/local/include/level_zero/ze_api.h ]; then
-		echo "==== Not building with ZE: level_zero/ze_api.h was not found ===="
-		return
-	fi
-
-	echo "==== Build with ZE (compile-only) ===="
+	echo "==== Build with ZE (compile-only, strict) ===="
 	${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst \
 		"${compile_only_config_args[@]}" --with-ze
 	$MAKEP
 
-	# Verify ZE support is really enabled when dependencies are present.
 	grep '#define HAVE_ZE 1' config.h
+	make_clean distclean
 }
 
 #
