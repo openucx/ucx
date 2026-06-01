@@ -315,11 +315,59 @@ ucs_status_t uct_cuda_base_iface_flush(uct_iface_h tl_iface, unsigned flags,
     return UCS_OK;
 }
 
-void uct_cuda_base_stream_destroy(CUstream *stream)
+static ucs_status_t
+uct_cuda_base_ctx_cmp(const uct_cuda_ctx_rsc_t *ctx_rsc,
+                      CUcontext cuda_ctx)
 {
-    if (*stream != NULL) {
-        (void)UCT_CUDADRV_FUNC_LOG_WARN(cuStreamDestroy(*stream));
+#if CUDA_VERSION >= 12000
+    unsigned long long ctx_id;
+    ucs_status_t status;
+
+    status = UCT_CUDADRV_FUNC_LOG_DEBUG(
+            uct_cuda_ctx_get_id(cuda_ctx, &ctx_id));
+    if (status != UCS_OK) {
+        return status;
     }
+
+    return (ctx_id == ctx_rsc->ctx_id) ? UCS_OK : UCS_ERR_NO_DEVICE;
+#else
+    return (cuda_ctx == ctx_rsc->ctx) ? UCS_OK : UCS_ERR_NO_DEVICE;
+#endif
+}
+
+static ucs_status_t
+uct_cuda_base_ctx_rsc_check(const uct_cuda_ctx_rsc_t *ctx_rsc)
+{
+    CUcontext primary_ctx;
+    ucs_status_t status;
+
+    if (ctx_rsc->cuda_device == CU_DEVICE_INVALID) {
+        return UCS_OK;
+    }
+
+    status = uct_cuda_ctx_primary_retain(ctx_rsc->cuda_device, 0,
+                                         &primary_ctx);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = uct_cuda_base_ctx_cmp(ctx_rsc, primary_ctx);
+    UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(ctx_rsc->cuda_device));
+    return status;
+}
+
+void uct_cuda_base_stream_destroy(const uct_cuda_ctx_rsc_t *ctx_rsc,
+                                  CUstream *stream)
+{
+    if (*stream == NULL) {
+        return;
+    }
+
+    if (uct_cuda_base_ctx_rsc_check(ctx_rsc) != UCS_OK) {
+        return;
+    }
+
+    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuStreamDestroy(*stream));
 }
 
 static void
@@ -334,6 +382,12 @@ uct_cuda_base_event_desc_init(ucs_mpool_t *mp, void *obj, void *chunk)
 static void uct_cuda_base_event_desc_cleanup(ucs_mpool_t *mp, void *obj)
 {
     uct_cuda_event_desc_t *event_desc = obj;
+    uct_cuda_ctx_rsc_t *ctx_rsc       = ucs_container_of(mp, uct_cuda_ctx_rsc_t,
+                                                         event_mp);
+
+    if (uct_cuda_base_ctx_rsc_check(ctx_rsc) != UCS_OK) {
+        return;
+    }
 
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuEventDestroy(event_desc->event));
 }
@@ -353,7 +407,7 @@ void uct_cuda_base_queue_desc_destroy(const uct_cuda_ctx_rsc_t *ctx_rsc,
                  ucs_queue_length(&qdesc->event_queue));
     }
 
-    uct_cuda_base_stream_destroy(&qdesc->stream);
+    uct_cuda_base_stream_destroy(ctx_rsc, &qdesc->stream);
 }
 
 static ucs_mpool_ops_t uct_cuda_event_desc_mpool_ops = {
@@ -363,6 +417,57 @@ static ucs_mpool_ops_t uct_cuda_event_desc_mpool_ops = {
     .obj_cleanup   = uct_cuda_base_event_desc_cleanup,
     .obj_str       = NULL
 };
+
+static void uct_cuda_base_ctx_rsc_release_primary_ctx(
+        uct_cuda_ctx_rsc_t *ctx_rsc)
+{
+    if (ctx_rsc->cuda_device == CU_DEVICE_INVALID) {
+        return;
+    }
+
+    UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(ctx_rsc->cuda_device));
+    ctx_rsc->cuda_device = CU_DEVICE_INVALID;
+}
+
+static ucs_status_t
+uct_cuda_base_ctx_rsc_retain_primary_ctx(uct_cuda_ctx_rsc_t *ctx_rsc)
+{
+    CUcontext primary_ctx;
+    CUdevice cuda_device;
+    ucs_status_t status;
+
+    ctx_rsc->cuda_device = CU_DEVICE_INVALID;
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetDevice(&cuda_device));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = uct_cuda_ctx_primary_retain(cuda_device, 0, &primary_ctx);
+    if (status == UCS_ERR_NO_DEVICE) {
+        return UCS_OK;
+    } else if (status != UCS_OK) {
+        return status;
+    }
+
+    status = uct_cuda_base_ctx_cmp(ctx_rsc, primary_ctx);
+    if (status == UCS_ERR_NO_DEVICE) {
+        ucs_debug("cuda context %llu is not the primary context on device %d",
+                  ctx_rsc->ctx_id, cuda_device);
+        status = UCS_OK;
+        goto out_release_primary_ctx;
+    } else if (status != UCS_OK) {
+        goto out_release_primary_ctx;
+    }
+
+    ctx_rsc->ctx         = primary_ctx;
+    ctx_rsc->cuda_device = cuda_device;
+    return UCS_OK;
+
+out_release_primary_ctx:
+    UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(cuda_device));
+    return status;
+}
 
 ucs_status_t uct_cuda_base_ctx_rsc_create(uct_cuda_iface_t *iface,
                                           unsigned long long ctx_id,
@@ -399,6 +504,14 @@ ucs_status_t uct_cuda_base_ctx_rsc_create(uct_cuda_iface_t *iface,
         goto err_del_iter;
     }
 
+    ctx_rsc->ctx    = ctx;
+    ctx_rsc->ctx_id = ctx_id;
+
+    status = uct_cuda_base_ctx_rsc_retain_primary_ctx(ctx_rsc);
+    if (status != UCS_OK) {
+        goto err_free_ctx_rsc;
+    }
+
     ucs_mpool_params_reset(&mp_params);
     mp_params.elem_size       = iface->config.event_desc_size;
     mp_params.elems_per_chunk = 128;
@@ -408,27 +521,33 @@ ucs_status_t uct_cuda_base_ctx_rsc_create(uct_cuda_iface_t *iface,
 
     status = ucs_mpool_init(&mp_params, &ctx_rsc->event_mp);
     if (status != UCS_OK) {
-        goto err_free_ctx_rsc;
+        goto err_release_primary_ctx;
     }
 
-    ctx_rsc->ctx                     = ctx;
-    ctx_rsc->ctx_id                  = ctx_id;
     kh_value(&iface->ctx_rscs, iter) = ctx_rsc;
     *ctx_rsc_p                       = ctx_rsc;
     return UCS_OK;
 
+err_release_primary_ctx:
+    uct_cuda_base_ctx_rsc_release_primary_ctx(ctx_rsc);
 err_free_ctx_rsc:
     iface->ops->destroy_rsc(&iface->super.super, ctx_rsc);
 err_del_iter:
     kh_del(cuda_ctx_rscs, &iface->ctx_rscs, iter);
-    return UCS_ERR_NO_MEMORY;
+    return status;
 }
 
 static void uct_cuda_base_ctx_rsc_destroy(uct_cuda_iface_t *iface,
                                           uct_cuda_ctx_rsc_t *ctx_rsc)
 {
+    const CUdevice cuda_device = ctx_rsc->cuda_device;
+
     ucs_mpool_cleanup(&ctx_rsc->event_mp, 1);
     iface->ops->destroy_rsc(&iface->super.super, ctx_rsc);
+
+    if (cuda_device != CU_DEVICE_INVALID) {
+        UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(cuda_device));
+    }
 }
 
 static ucs_mpool_ops_t uct_cuda_flush_desc_mpool_ops = {
