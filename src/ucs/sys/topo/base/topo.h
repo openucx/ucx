@@ -91,6 +91,19 @@ typedef void (*ucs_topo_get_memory_distance_func_t)(
         ucs_sys_device_t device, ucs_sys_dev_distance_t *distance);
 
 
+/*
+ * Topology provider operations, implementing the topology API for a topology
+ * module.
+ */
+typedef struct ucs_sys_topo_ops {
+    /* Provider's ucs_topo_get_distance implementation */
+    ucs_topo_get_distance_func_t        get_distance;
+
+    /* Provider's ucs_topo_get_memory_distance implementation */
+    ucs_topo_get_memory_distance_func_t get_memory_distance;
+} ucs_sys_topo_ops_t;
+
+
 /**
  * Opaque handle to a registered system topology provider.
  */
@@ -110,24 +123,19 @@ void ucs_sys_topo_reset_provider(void);
  * its @a name. After registration, call @ref ucs_sys_topo_reset_provider if a
  * provider was already cached and the selection needs to be re-evaluated.
  *
- * @param [in]  name                 Provider name used for selection. The
- *                                   pointer is stored, not copied, so the
- *                                   string must remain valid for the lifetime
- *                                   of the provider. Registering a name that is
- *                                   already used by another provider (such as
- *                                   "default" or "sysfs") silently shadows it
- *                                   during selection, so the name should be
- *                                   unique.
- * @param [in]  get_distance         Implementation of @ref ucs_topo_get_distance.
- * @param [in]  get_memory_distance  Implementation of
- *                                   @ref ucs_topo_get_memory_distance.
+ * @param [in]  name  Provider name used for selection. The pointer is stored, 
+ *                    not copied, so the string must remain valid for the lifetime
+ *                    of the provider. Registering a name that is already used by
+ *                    another provider (such as "default" or "sysfs") silently 
+ *                    shadows it during selection, so the name should be unique.
+ * @param [in]  ops   Topology operations. The contents are copied, so the
+ *                    pointer does not need to remain valid after the call.
  *
  * @return Handle of the registered provider, to be passed to
  *         @ref ucs_sys_topo_provider_remove, or NULL on error.
  */
-ucs_sys_topo_provider_t *ucs_sys_topo_provider_add(
-        const char *name, ucs_topo_get_distance_func_t get_distance,
-        ucs_topo_get_memory_distance_func_t get_memory_distance);
+ucs_sys_topo_provider_t *
+ucs_sys_topo_provider_add(const char *name, const ucs_sys_topo_ops_t *ops);
 
 
 /**

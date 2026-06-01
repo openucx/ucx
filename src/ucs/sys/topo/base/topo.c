@@ -30,18 +30,6 @@
 #define UCS_TOPO_DEVICE_NAME_INVALID "<invalid>"
 
 /*
- * Topology API.
- */
-typedef struct {
-    /* Provider's ucs_topo_get_distance implementation */
-    ucs_topo_get_distance_func_t        get_distance;
-
-    /* Provider's ucs_topo_get_memory_distance implementation */
-    ucs_topo_get_memory_distance_func_t get_memory_distance;
-} ucs_sys_topo_ops_t;
-
-
-/*
  * Structure needed to define a topology module implementation
  */
 struct ucs_sys_topo_provider {
@@ -128,9 +116,8 @@ void ucs_sys_topo_reset_provider()
     ucs_sys_topo_provider = NULL;
 }
 
-ucs_sys_topo_provider_t *ucs_sys_topo_provider_add(
-        const char *name, ucs_topo_get_distance_func_t get_distance,
-        ucs_topo_get_memory_distance_func_t get_memory_distance)
+ucs_sys_topo_provider_t *
+ucs_sys_topo_provider_add(const char *name, const ucs_sys_topo_ops_t *ops)
 {
     ucs_sys_topo_provider_t *provider;
 
@@ -140,9 +127,8 @@ ucs_sys_topo_provider_t *ucs_sys_topo_provider_add(
         return NULL;
     }
 
-    provider->name                    = name;
-    provider->ops.get_distance        = get_distance;
-    provider->ops.get_memory_distance = get_memory_distance;
+    provider->name = name;
+    provider->ops  = *ops;
     ucs_list_add_tail(&ucs_sys_topo_providers_list, &provider->list);
 
     return provider;

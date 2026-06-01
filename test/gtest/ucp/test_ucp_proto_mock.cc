@@ -1299,8 +1299,8 @@ public:
         add_mock_iface("mock_2:1", iface_attr_slow); /* bus 2 */
         test_ucp_proto_mock::init();
 
-        m_topo_provider = ucs_sys_topo_provider_add("proto_mock", get_distance,
-                                                    get_memory_distance);
+        const ucs_sys_topo_ops_t topo_ops = {get_distance, get_memory_distance};
+        m_topo_provider = ucs_sys_topo_provider_add("proto_mock", &topo_ops);
         ASSERT_TRUE(m_topo_provider != nullptr);
         modify_config("TOPO_PRIO", "proto_mock");
         ucs_sys_topo_reset_provider();
