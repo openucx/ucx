@@ -32,6 +32,13 @@
 #define UCP_TL_INFO_NUM_COLS 4
 
 
+static const char *ucp_tl_info_legend_rows[] = {
+    "Legend: + = enabled, - = disabled",
+    "All of the available transports are listed, some may be disabled or unsupported on your system.",
+    "All of the visible devices are listed per transport, some may be disabled.",
+};
+
+
 static int ucp_tl_info_is_same_group(const ucp_tl_info_entry_t *entries,
                                      unsigned a, unsigned b)
 {
@@ -316,6 +323,15 @@ void ucp_context_log_tl_info(ucp_context_h context,
             }
             printed_any = 1;
         }
+    }
+
+    /* Legend information */
+    ucs_table_add_separator(&table);
+    for (i = 0; i < ucs_static_array_size(ucp_tl_info_legend_rows); ++i) {
+        row = ucs_table_add_row(&table);
+        ucs_table_row_add_cell_fmt(&table, row, UCP_TL_INFO_NUM_COLS,
+                                   UCS_TABLE_ALIGN_LEFT, "%s",
+                                   ucp_tl_info_legend_rows[i]);
     }
 
     ucs_table_render(&table, &strb);
