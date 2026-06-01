@@ -48,12 +48,24 @@ void ucs_table_cleanup(ucs_table_t *table)
 }
 
 
-void ucs_table_add_separator(ucs_table_t *table)
+void ucs_table_add_separator_with_merged_cols(ucs_table_t *table,
+                                              unsigned merged_cols)
 {
     ucs_table_entry_t *entry;
 
-    entry       = ucs_array_append_fixed(&table->entries);
-    entry->kind = UCS_TABLE_ENTRY_SEPARATOR;
+    ucs_assertv(merged_cols <= table->config.n_cols,
+                "merged_cols=%u exceeds n_cols=%u", merged_cols,
+                table->config.n_cols);
+
+    entry              = ucs_array_append_fixed(&table->entries);
+    entry->kind        = UCS_TABLE_ENTRY_SEPARATOR;
+    entry->merged_cols = merged_cols;
+}
+
+
+void ucs_table_add_separator(ucs_table_t *table)
+{
+    ucs_table_add_separator_with_merged_cols(table, 0);
 }
 
 
@@ -62,8 +74,9 @@ ucs_table_row_h ucs_table_add_row(ucs_table_t *table)
     ucs_table_entry_t *entry;
     ucs_status_t status;
 
-    entry       = ucs_array_append_fixed(&table->entries);
-    entry->kind = UCS_TABLE_ENTRY_ROW;
+    entry              = ucs_array_append_fixed(&table->entries);
+    entry->kind        = UCS_TABLE_ENTRY_ROW;
+    entry->merged_cols = 0;
     ucs_array_init_dynamic(&entry->cells);
 
     /* Pre-reserve so cell pointers stay stable across add_cell. */
@@ -286,18 +299,29 @@ static void ucs_table_render_cells(const ucs_table_t *table,
 }
 
 
-static void ucs_table_render_separator(const ucs_table_t *table,
-                                       const unsigned *widths,
-                                       ucs_string_buffer_t *strb)
+static void
+ucs_table_render_separator(const ucs_table_t *table, const unsigned *widths,
+                           unsigned merged_cols, ucs_string_buffer_t *strb)
 {
     unsigned i;
 
+    ucs_assertv(merged_cols <= table->config.n_cols,
+                "merged_cols=%u exceeds n_cols=%u", merged_cols,
+                table->config.n_cols);
+
     ucs_table_append_row_prefix(table, strb);
 
-    for (i = 0; i < table->config.n_cols; ++i) {
+    /* Blank carry-over: continue the cells above into the cells below. */
+    for (i = 0; i < merged_cols; ++i) {
+        ucs_string_buffer_appendc(strb, '|', 1);
+        ucs_string_buffer_appendc(strb, ' ', widths[i] + 2);
+    }
+
+    for (i = merged_cols; i < table->config.n_cols; ++i) {
         ucs_string_buffer_appendc(strb, '+', 1);
         ucs_string_buffer_appendc(strb, '-', widths[i] + 2);
     }
+
     ucs_string_buffer_appendc(strb, '+', 1);
     ucs_string_buffer_appendc(strb, '\n', 1);
 }
@@ -312,7 +336,7 @@ void ucs_table_render(ucs_table_t *table, ucs_string_buffer_t *strb)
     ucs_table_compute_widths(table, widths);
 
     /* Top frame */
-    ucs_table_render_separator(table, widths, strb);
+    ucs_table_render_separator(table, widths, 0, strb);
 
     /* Body rows and separators */
     for (i = 0; i < ucs_array_length(&table->entries); ++i) {
@@ -324,7 +348,7 @@ void ucs_table_render(ucs_table_t *table, ucs_string_buffer_t *strb)
             break;
 
         case UCS_TABLE_ENTRY_SEPARATOR:
-            ucs_table_render_separator(table, widths, strb);
+            ucs_table_render_separator(table, widths, entry->merged_cols, strb);
             break;
 
         default:
@@ -335,7 +359,7 @@ void ucs_table_render(ucs_table_t *table, ucs_string_buffer_t *strb)
     /* Bottom frame; skip when the last entry is already a separator. */
     if (ucs_array_is_empty(&table->entries) ||
         (ucs_array_last(&table->entries)->kind != UCS_TABLE_ENTRY_SEPARATOR)) {
-        ucs_table_render_separator(table, widths, strb);
+        ucs_table_render_separator(table, widths, 0, strb);
     }
 }
 
