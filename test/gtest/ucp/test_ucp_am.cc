@@ -1405,7 +1405,8 @@ public:
     {
         modify_config("RNDV_THRESH", "inf");
         modify_config("ZCOPY_THRESH", "inf");
-        m_data_ptr = NULL;
+        m_data_ptr    = nullptr;
+        m_data_length = 0;
     }
 
     virtual ucs_status_t
@@ -1415,7 +1416,8 @@ public:
         EXPECT_LT(m_recv_counter, m_send_counter);
         EXPECT_TRUE(rx_param->recv_attr & UCP_AM_RECV_ATTR_FLAG_DATA);
 
-        m_data_ptr = data;
+        m_data_ptr    = data;
+        m_data_length = length;
 
         check_header(header, header_length);
         mem_buffer::pattern_check(data, length, SEED);
@@ -1434,8 +1436,47 @@ public:
         ucp_am_data_release(receiver().worker(), m_data_ptr);
     }
 
+    void test_recv_data_late(size_t size)
+    {
+        test_am_send_recv(size, 0, 0, UCP_AM_FLAG_PERSISTENT_DATA);
+
+        ASSERT_TRUE(m_data_ptr != nullptr);
+        ASSERT_EQ(size, m_data_length);
+
+        ucp_recv_desc_t *rdesc = static_cast<ucp_recv_desc_t *>(m_data_ptr) - 1;
+        if (!(rdesc->flags & UCP_RECV_DESC_FLAG_MALLOC)) {
+            ucp_am_data_release(receiver().worker(), m_data_ptr);
+            UCS_TEST_SKIP_R("eager AM was not in malloc-backed desc");
+        }
+
+        std::vector<char> rbuf(size);
+        ucp_request_param_t param;
+
+        size_t recv_length     = SIZE_MAX;
+        param.op_attr_mask     = UCP_OP_ATTR_FIELD_RECV_INFO;
+        param.recv_info.length = &recv_length;
+
+        // The following lines are for working around a
+        // false positive NULL dereference in Coverity;
+        // the callback is never called even when set.
+        param.op_attr_mask |= UCP_OP_ATTR_FIELD_USER_DATA;
+        param.user_data     = this;
+        param.op_attr_mask |= UCP_OP_ATTR_FIELD_CALLBACK;
+        param.cb.recv_am    = [](void *, ucs_status_t, size_t, void *) {
+            ADD_FAILURE();
+        };
+
+        ucs_status_ptr_t rptr = ucp_am_recv_data_nbx(receiver().worker(),
+                                                     m_data_ptr, rbuf.data(),
+                                                     rbuf.size(), &param);
+        EXPECT_EQ(UCS_OK, request_wait(rptr));
+        EXPECT_EQ(size, recv_length);
+        mem_buffer::pattern_check(rbuf.data(), rbuf.size(), SEED);
+    }
+
 private:
     void *m_data_ptr;
+    size_t m_data_length;
 };
 
 UCS_TEST_P(test_ucp_am_nbx_eager_data_release, short)
@@ -1451,6 +1492,11 @@ UCS_TEST_P(test_ucp_am_nbx_eager_data_release, single)
 UCS_TEST_P(test_ucp_am_nbx_eager_data_release, multi)
 {
     test_data_release(fragment_size() * 2);
+}
+
+UCS_TEST_P(test_ucp_am_nbx_eager_data_release, multi_recv_data_late)
+{
+    test_recv_data_late(fragment_size() * 2);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_eager_data_release)
