@@ -1352,15 +1352,16 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
                      uint64_t *tl_cfg_mask, ucp_tl_info_entry_t **all_rscs_p,
                      unsigned *num_all_rscs_p)
 {
-    ucp_tl_md_t *md = &context->tl_mds[md_index];
+    ucp_tl_md_t *md    = &context->tl_mds[md_index];
+    unsigned info_base = 0;
+    int info_added     = 0;
     uct_tl_resource_desc_t *tl_resources;
     ucp_tl_resource_desc_t *tmp;
     ucp_tl_info_entry_t *tmp_info;
-    unsigned info_base;
-    int info_added;
     unsigned num_tl_resources;
     ucs_status_t status;
-    ucp_rsc_index_t i;
+    int rsc_enabled;
+    unsigned i;
 
     *num_resources_p = 0;
 
@@ -1376,25 +1377,26 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
         goto free_resources;
     }
 
-    /* Collect all resources before filtering */
-    tmp_info = ucs_realloc(*all_rscs_p,
-                           sizeof(**all_rscs_p) *
-                                   (*num_all_rscs_p + num_tl_resources),
-                           "tl info");
-    if (tmp_info == NULL) {
-        ucs_warn("failed to allocate transport info entries, "
-                 "table will be incomplete");
-        info_added = 0;
-        info_base  = 0;
-    } else {
-        *all_rscs_p = tmp_info;
-        info_base   = *num_all_rscs_p;
-        info_added  = 1;
-        for (i = 0; i < num_tl_resources; ++i) {
-            (*all_rscs_p)[*num_all_rscs_p].rsc        = tl_resources[i];
-            (*all_rscs_p)[*num_all_rscs_p].cmpt_index = md->cmpt_index;
-            (*all_rscs_p)[*num_all_rscs_p].enabled    = 0;
-            (*num_all_rscs_p)++;
+    /* Collect the full (pre-filter) resource list only when the transports
+     * table will be printed; */
+    if (context->config.ext.print_transport_tables) {
+        tmp_info = ucs_realloc(*all_rscs_p,
+                               sizeof(**all_rscs_p) *
+                                       (*num_all_rscs_p + num_tl_resources),
+                               "tl info");
+        if (tmp_info == NULL) {
+            ucs_warn("failed to allocate transport info entries, "
+                     "table will be incomplete");
+        } else {
+            *all_rscs_p = tmp_info;
+            info_base   = *num_all_rscs_p;
+            info_added  = 1;
+            for (i = 0; i < num_tl_resources; ++i) {
+                (*all_rscs_p)[*num_all_rscs_p].rsc        = tl_resources[i];
+                (*all_rscs_p)[*num_all_rscs_p].cmpt_index = md->cmpt_index;
+                (*all_rscs_p)[*num_all_rscs_p].enabled    = 0;
+                (*num_all_rscs_p)++;
+            }
         }
     }
 
@@ -1410,7 +1412,7 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
 
     /* print configuration */
     for (i = 0; i < config->tls.array.count; ++i) {
-        ucs_trace("allowed transport %d : '%s'", i, config->tls.array.names[i]);
+        ucs_trace("allowed transport %u : '%s'", i, config->tls.array.names[i]);
     }
 
     /* copy only the resources enabled by user configuration */
@@ -1420,10 +1422,12 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
                             "'%s'(%s)", tl_resources[i].dev_name,
                             context->tl_cmpts[md->cmpt_index].attr.name);
         ucs_string_set_add(avail_tls, tl_resources[i].tl_name);
-        if (ucp_add_tl_resource_if_enabled(context, md_index, config, aux_tls,
-                                           &tl_resources[i], num_resources_p,
-                                           dev_cfg_masks, tl_cfg_mask) &&
-            info_added) {
+        rsc_enabled = ucp_add_tl_resource_if_enabled(context, md_index, config,
+                                                     aux_tls, &tl_resources[i],
+                                                     num_resources_p,
+                                                     dev_cfg_masks,
+                                                     tl_cfg_mask);
+        if (info_added && rsc_enabled) {
             (*all_rscs_p)[info_base + i].enabled = 1;
         }
     }

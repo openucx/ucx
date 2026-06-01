@@ -153,6 +153,9 @@ void ucp_context_log_tl_info(ucp_context_h context,
         return;
     }
 
+    ucs_assertv(all_rscs != NULL, "all_rscs must not be NULL");
+    ucs_assertv(num_all_rscs > 0, "num_all_rscs must be greater than 0");
+
     ucs_table_init(&table, &tcfg);
 
     if (!ucs_string_is_empty(context->name)) {
