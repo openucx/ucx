@@ -177,8 +177,8 @@ UCS_TEST_F(test_ze_ipc_md, mem_reg_pack_dereg_device) {
     EXPECT_NE(0u, packed.address);
 
     uct_md_mem_dereg_params_t dereg_params = {};
-    dereg_params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
-    dereg_params.memh       = memh;
+    dereg_params.field_mask                = UCT_MD_MEM_DEREG_FIELD_MEMH;
+    dereg_params.memh                      = memh;
     EXPECT_UCS_OK(md->ops->mem_dereg(md, &dereg_params));
 
     EXPECT_EQ(ZE_RESULT_SUCCESS, zeMemFree(ze_md->ze_context, dev_ptr));
@@ -196,8 +196,8 @@ UCS_TEST_F(test_ze_ipc_md, mem_reg_rejects_host_pointer) {
         UCS_TEST_SKIP_R("Could not open ZE_IPC MD on this system");
     }
 
-    char         buf[64];
-    uct_mem_h    memh   = NULL;
+    char buf[64];
+    uct_mem_h memh = NULL;
     ucs_status_t status;
     {
         scoped_log_handler slh(hide_errors_logger);
