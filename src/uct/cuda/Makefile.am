@@ -11,7 +11,7 @@ module_LTLIBRARIES      = libuct_cuda.la
 libuct_cuda_la_CPPFLAGS = $(BASE_CPPFLAGS) $(CUDA_CPPFLAGS)
 libuct_cuda_la_CFLAGS   = $(BASE_CFLAGS) $(CUDA_CFLAGS) $(LT_CFLAGS)
 libuct_cuda_la_LDFLAGS  = $(CUDA_LDFLAGS) -version-info $(SOVERSION) \
-                          $(UCT_MODULE_LDFLAGS)
+                          $(UCX_LT_RELEASE)
 libuct_cuda_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
                           $(top_builddir)/src/uct/libuct.la \
                           $(CUDA_LIBS) $(NVML_LIBS)

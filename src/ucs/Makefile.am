@@ -130,6 +130,7 @@ noinst_HEADERS = \
 	sys/compiler.h \
 	sys/lib.h \
 	sys/module.h \
+	sys/module_int.h \
 	sys/sys.h \
 	sys/iovec.h \
 	sys/iovec.inl \

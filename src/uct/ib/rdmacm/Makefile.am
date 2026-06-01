@@ -21,7 +21,7 @@ endif
 
 libuct_rdmacm_la_LDFLAGS  = $(IBVERBS_LDFLAGS) $(RDMACM_LDFLAGS) \
                             -version-info $(SOVERSION) \
-                            $(UCT_MODULE_LDFLAGS)
+                            $(UCX_LT_RELEASE)
 
 noinst_HEADERS = \
 	rdmacm_cm.h \

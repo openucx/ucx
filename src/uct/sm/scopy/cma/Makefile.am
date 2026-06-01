@@ -10,7 +10,7 @@ libuct_cma_la_CFLAGS   = $(BASE_CFLAGS) $(LT_CFLAGS)
 libuct_cma_la_CPPFLAGS = $(BASE_CPPFLAGS)
 libuct_cma_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
                          $(top_builddir)/src/uct/libuct.la
-libuct_cma_la_LDFLAGS  = -version-info $(SOVERSION) $(UCT_MODULE_LDFLAGS)
+libuct_cma_la_LDFLAGS  = -version-info $(SOVERSION) $(UCX_LT_RELEASE)
 
 noinst_HEADERS = \
 	cma_iface.h \

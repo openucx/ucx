@@ -77,22 +77,26 @@ ucx_soname_suffix_summary="<disabled>"
 ucx_module_deepbind_summary="no"
 AC_ARG_WITH([soname-suffix],
         AS_HELP_STRING([--with-soname-suffix=SUFFIX],
-                       [Append SUFFIX to UCX shared library and module SONAMEs. Disabled by default. [default=NO]]),
+                       [Append SUFFIX to UCX installed shared library names and SONAMEs. Disabled by default. [default=NO]]),
         [], [with_soname_suffix=no])
 AS_IF([test "x$with_soname_suffix" != xno],
       [AS_IF([test "x$with_soname_suffix" = xyes],
              [AC_MSG_ERROR([--with-soname-suffix requires an explicit suffix value])])
-       AS_IF([printf '%s\n' "$with_soname_suffix" | grep -Eq '^@<:@A-Za-z0-9@:>@@<:@A-Za-z0-9_.-@:>@*$'],
-             [],
-             [AC_MSG_ERROR([--with-soname-suffix must contain only letters, digits, dots, underscores, and dashes])])
+       case "$with_soname_suffix" in
+           @<:@A-Za-z0-9@:>@*) ;;
+           *) AC_MSG_ERROR([--with-soname-suffix must start with a letter or digit]) ;;
+       esac
+       case "$with_soname_suffix" in
+           *@<:@!A-Za-z0-9_-@:>@*)
+               AC_MSG_ERROR([--with-soname-suffix must contain only letters, digits, underscores, and dashes])
+               ;;
+       esac
        UCX_LT_RELEASE="-release $with_soname_suffix"
-       AC_DEFINE_UNQUOTED([UCX_MODULE_SONAME_SUFFIX],
+       AC_DEFINE_UNQUOTED([UCX_MODULE_FILE_SUFFIX],
                           ["-$with_soname_suffix"],
-                          [Suffix appended to private UCX module library names])
+                          [Suffix appended to private UCX module file names])
        ucx_soname_suffix_summary="$with_soname_suffix"])
 AC_SUBST([UCX_LT_RELEASE])
-UCT_MODULE_LDFLAGS='$(UCX_LT_RELEASE)'
-AC_SUBST([UCT_MODULE_LDFLAGS])
 
 AC_ARG_ENABLE([module-deepbind],
         AS_HELP_STRING([--enable-module-deepbind],

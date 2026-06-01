@@ -7,6 +7,7 @@
 #include <common/test.h>
 extern "C" {
 #include <ucs/sys/module.h>
+#include <ucs/sys/module_int.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/sock.h>
 #include <ucs/type/spinlock.h>
@@ -142,6 +143,21 @@ UCS_TEST_F(test_sys, module) {
     EXPECT_EQ(0, test_module_loaded);
     UCS_MODULE_FRAMEWORK_LOAD(test, 0);
     EXPECT_EQ(1, test_module_loaded);
+}
+
+UCS_TEST_F(test_sys, module_file_suffix) {
+#ifndef UCX_MODULE_FILE_SUFFIX
+    UCS_TEST_SKIP_R("module file suffix is not configured");
+#else
+    char suffixed_base[] = "libtest_module" UCX_MODULE_FILE_SUFFIX;
+    char plain_base[]    = "libtest_module";
+
+    ucs_module_normalize_base(suffixed_base);
+    ucs_module_normalize_base(plain_base);
+
+    EXPECT_STREQ("libtest_module", suffixed_base);
+    EXPECT_STREQ("libtest_module", plain_base);
+#endif
 }
 
 UCS_TEST_F(test_sys, dirname) {

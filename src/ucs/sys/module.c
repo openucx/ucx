@@ -13,6 +13,7 @@
 #endif
 
 #include "module.h"
+#include "module_int.h"
 
 #include <ucs/sys/preprocessor.h>
 #include <ucs/datastruct/string_buffer.h>
@@ -293,19 +294,6 @@ ucs_module_filename_to_base(const char *filename, char *base, size_t base_max)
     }
     memcpy(base, filename, base_len);
     base[base_len] = '\0';
-}
-
-static void ucs_module_normalize_base(char *base)
-{
-#ifdef UCX_MODULE_SONAME_SUFFIX
-    size_t suffix_len = strlen(UCX_MODULE_SONAME_SUFFIX);
-    size_t base_len   = strlen(base);
-
-    if ((base_len > suffix_len) &&
-        !strcmp(base + base_len - suffix_len, UCX_MODULE_SONAME_SUFFIX)) {
-        base[base_len - suffix_len] = '\0';
-    }
-#endif
 }
 
 static void ucs_module_load_from_dir(const char *dir, const char *framework,

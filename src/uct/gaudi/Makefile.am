@@ -14,7 +14,7 @@ libuct_gaudi_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
                            $(top_builddir)/src/uct/libuct.la
 libuct_gaudi_la_LDFLAGS  = $(GAUDI_LDFLAGS) $(GAUDI_LIBS) \
                            -version-info $(SOVERSION) \
-                           $(UCT_MODULE_LDFLAGS)
+                           $(UCX_LT_RELEASE)
 
 noinst_HEADERS = \
     base/scal.h \

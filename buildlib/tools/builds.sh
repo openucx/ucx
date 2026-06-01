@@ -448,6 +448,144 @@ build_no_gda() {
 	fi
 }
 
+check_elf_soname() {
+	lib_path=$1
+	soname=$2
+
+	if [ ! -f "$lib_path" ]; then
+		azure_log_error "Missing library $lib_path"
+		exit 1
+	fi
+
+	if ! readelf -d "$lib_path" | grep -q "Library soname: \\[$soname\\]"; then
+		azure_log_error "Library $lib_path does not have SONAME $soname"
+		exit 1
+	fi
+}
+
+check_elf_needed() {
+	binary_path=$1
+	needed=$2
+
+	if [ ! -f "$binary_path" ]; then
+		azure_log_error "Missing binary $binary_path"
+		exit 1
+	fi
+
+	if ! readelf -d "$binary_path" | grep -q "Shared library: \\[$needed\\]"; then
+		azure_log_error "Binary $binary_path is not linked to $needed"
+		exit 1
+	fi
+}
+
+check_linker_symlink() {
+	link_path=$1
+	target_pattern=$2
+
+	if [ ! -L "$link_path" ]; then
+		azure_log_error "Missing linker symlink $link_path"
+		exit 1
+	fi
+
+	if ! readlink "$link_path" | grep -q "$target_pattern"; then
+		azure_log_error "Linker symlink $link_path does not point to $target_pattern"
+		exit 1
+	fi
+}
+
+build_soname_suffix() {
+	suffix=ci
+	foreign_build_dir=${ucx_build_dir}/foreign
+	foreign_inst=${ucx_build_dir}/foreign-install
+
+	echo "==== Build foreign UCX without SONAME suffix ===="
+	mkdir -p $foreign_build_dir
+	pushd $foreign_build_dir
+	${WORKSPACE}/contrib/configure-release --prefix=$foreign_inst \
+		--without-java \
+		--without-go \
+		--without-verbs \
+		--without-rdmacm \
+		--without-cuda \
+		--without-rocm \
+		--without-xpmem \
+		--without-knem \
+		--disable-doxygen-doc
+	$MAKEP
+	$MAKEP install
+	popd
+
+	echo "==== Build with SONAME suffix and module deepbind ===="
+	${WORKSPACE}/contrib/configure-release --prefix=$ucx_inst \
+		--enable-gtest \
+		--enable-test-apps \
+		--with-soname-suffix=$suffix \
+		--enable-module-deepbind \
+		--without-java \
+		--without-go \
+		--without-verbs \
+		--without-rdmacm \
+		--without-cuda \
+		--without-rocm \
+		--without-xpmem \
+		--without-knem \
+		--disable-doxygen-doc
+	$MAKEP
+	$MAKEP install
+
+	grep "#define UCX_MODULE_FILE_SUFFIX \"-$suffix\"" config.h
+	grep "#define UCX_MODULE_DLOPEN_DEEPBIND 1" config.h
+
+	for lib in ucm ucs uct ucp; do
+		check_elf_soname \
+			"${ucx_inst}/lib/lib${lib}-${suffix}.so.0.0.0" \
+			"lib${lib}-${suffix}.so.0"
+		check_linker_symlink \
+			"${ucx_inst}/lib/lib${lib}.so" \
+			"lib${lib}-${suffix}\\.so"
+	done
+
+	check_elf_soname \
+		"${ucx_inst}/lib/ucx/libuct_cma-${suffix}.so.0.0.0" \
+		"libuct_cma-${suffix}.so.0"
+	check_elf_needed \
+		"${ucx_inst}/lib/ucx/libuct_cma-${suffix}.so.0.0.0" \
+		"libuct-${suffix}.so.0"
+	check_elf_needed \
+		"${ucx_inst}/lib/ucx/libuct_cma-${suffix}.so.0.0.0" \
+		"libucs-${suffix}.so.0"
+	check_elf_soname \
+		"${ucx_build_dir}/test/gtest/ucs/test_module/.libs/libtest_module-${suffix}.so.0.0.0" \
+		"libtest_module-${suffix}.so.0"
+	check_elf_needed \
+		"${ucx_inst}/lib/libucp-${suffix}.so.0.0.0" \
+		"libuct-${suffix}.so.0"
+	check_elf_needed \
+		"${ucx_inst}/lib/libucp-${suffix}.so.0.0.0" \
+		"libucs-${suffix}.so.0"
+	check_elf_needed \
+		"${ucx_inst}/bin/ucx_info" \
+		"libucp-${suffix}.so.0"
+	check_elf_needed \
+		"${ucx_inst}/bin/ucx_info" \
+		"libuct-${suffix}.so.0"
+	check_elf_needed \
+		"${ucx_inst}/bin/ucx_info" \
+		"libucs-${suffix}.so.0"
+	check_elf_needed \
+		"${ucx_build_dir}/test/apps/.libs/libtest_ucx_isolation_plugin.so" \
+		"libucp-${suffix}.so.0"
+
+	LD_LIBRARY_PATH="${ucx_inst}/lib:${foreign_inst}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" \
+		"${ucx_build_dir}/test/apps/test_ucx_dlopen_isolation" \
+		"${foreign_inst}/lib/libucp.so.0.0.0" \
+		"${ucx_build_dir}/test/apps/.libs/libtest_ucx_isolation_plugin.so" \
+		"$suffix" deepbind
+
+	GTEST_FILTER=test_sys.module_file_suffix:test_sys.module \
+		$MAKE -C test/gtest test
+}
+
 az_init_modules
 prepare_build
 
@@ -474,7 +612,8 @@ then
 			'build_gcc_debug_opt' \
 			'build_gcc_with_dndebug' \
 			'build_clang' \
-			'build_armclang')
+			'build_armclang' \
+			'build_soname_suffix')
 fi
 
 num_tests=${#tests[@]}

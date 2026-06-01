@@ -12,7 +12,7 @@ libuct_ugni_la_CFLAGS   = $(BASE_CFLAGS) $(CRAY_UGNI_CFLAGS) \
 libuct_ugni_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
                           $(top_builddir)/src/uct/libuct.la
 libuct_ugni_la_LDFLAGS  = $(CRAY_UGNI_LIBS) -version-info $(SOVERSION) \
-                          $(UCT_MODULE_LDFLAGS)
+                          $(UCX_LT_RELEASE)
 
 noinst_HEADERS = \
 	base/ugni_def.h \

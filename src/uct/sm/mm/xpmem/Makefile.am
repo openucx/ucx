@@ -12,7 +12,7 @@ libuct_xpmem_la_CPPFLAGS = $(BASE_CPPFLAGS)
 libuct_xpmem_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
                            $(top_builddir)/src/uct/libuct.la
 libuct_xpmem_la_LDFLAGS  = $(XPMEM_LIBS) -version-info $(SOVERSION) \
-                           $(UCT_MODULE_LDFLAGS)
+                           $(UCX_LT_RELEASE)
 libuct_xpmem_la_SOURCES  = mm_xpmem.c
 
 PKG_CONFIG_NAME=xpmem
