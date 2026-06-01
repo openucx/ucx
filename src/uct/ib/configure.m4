@@ -353,13 +353,11 @@ AS_IF([test "x$with_ib" = "xyes"],
        uct_modules="${uct_modules}:ib"
     ],
     [
+        AS_IF([test "x$with_gga" = xyes],
+              [AC_MSG_ERROR([GGA requested but IB/verbs support is not available])])
         with_dc=no
         with_rc=no
         with_ud=no
-
-        AS_IF([test "x$with_gga" = xyes],
-              [AC_MSG_ERROR([GGA requested but IB/verbs support is not available])])
-              
         with_gga=no
         have_gga=no
         with_mlx5=no
