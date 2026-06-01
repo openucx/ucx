@@ -142,7 +142,7 @@ private:
             ucs_assert_always(status == UCS_OK);
             ucs_assert_always(sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN);
 
-            mock_devices[dev_count].sys_device = sys_dev;
+            mock_devices[dev_count].sys_device   = sys_dev;
             m_self->m_sys_devs_by_name[it.first] = sys_dev;
             ++dev_count;
         }
@@ -234,7 +234,7 @@ private:
     std::unordered_map<uct_base_iface_t *, std::string> m_iface_names;
     std::map<std::string, iface_attr_func_t>            m_iface_attrs_funcs;
     std::map<std::string, perf_attr_func_t>             m_perf_attrs_funcs;
-    std::map<std::string, ucs_sys_device_t>             m_sys_devs_by_name;
+    std::map<std::string, ucs_sys_device_t> m_sys_devs_by_name;
     std::string                                         m_real_dev_name;
     uct_md_h                                            m_real_md;
 };
@@ -1300,16 +1300,12 @@ public:
         test_ucp_proto_mock::init();
 
         const ucs_sys_topo_ops_t topo_ops = {get_distance, get_memory_distance};
-        m_topo_provider = ucs_sys_topo_provider_add("proto_mock", &topo_ops);
-        ASSERT_TRUE(m_topo_provider != nullptr);
-        modify_config("TOPO_PRIO", "proto_mock");
-        ucs_sys_topo_reset_provider();
+        ASSERT_UCS_OK(ucs_sys_topo_provider_push(&topo_ops));
     }
 
     virtual void cleanup() override
     {
-        modify_config("TOPO_PRIO", "default");
-        ucs_sys_topo_provider_remove(m_topo_provider);
+        ucs_sys_topo_provider_pop();
         test_ucp_proto_mock::cleanup();
     }
 
@@ -1372,8 +1368,6 @@ private:
     {
         return (device1 > device2) ? (device1 - device2) : (device2 - device1);
     }
-
-    ucs_sys_topo_provider_t *m_topo_provider = nullptr;
 };
 
 UCS_TEST_P(test_ucp_proto_mock_rcx_trio_local_distance_get,

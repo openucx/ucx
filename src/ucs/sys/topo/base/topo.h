@@ -105,50 +105,35 @@ typedef struct ucs_sys_topo_ops {
 
 
 /**
- * Opaque handle to a registered system topology provider.
- */
-typedef struct ucs_sys_topo_provider ucs_sys_topo_provider_t;
-
-
-/**
  * Reset the internal singleton system topology provider.
  */
 void ucs_sys_topo_reset_provider(void);
 
 
 /**
- * Register a system topology provider.
+ * Push a topology provider that overrides the configuration-selected provider.
  *
- * The provider becomes selectable by the TOPO_PRIO configuration by
- * its @a name. After registration, call @ref ucs_sys_topo_reset_provider if a
- * provider was already cached and the selection needs to be re-evaluated.
+ * The pushed provider takes precedence over the provider chosen by the
+ * TOPO_PRIO configuration until it is removed with
+ * @ref ucs_sys_topo_provider_pop. Pushes nest as a stack: the most recently
+ * pushed provider is the active one. Intended primarily for tests that need
+ * deterministic topology behavior.
  *
- * @param [in]  name  Provider name used for selection. The pointer is stored, 
- *                    not copied, so the string must remain valid for the lifetime
- *                    of the provider. Registering a name that is already used by
- *                    another provider (such as "default" or "sysfs") silently 
- *                    shadows it during selection, so the name should be unique.
- * @param [in]  ops   Topology operations. The contents are copied, so the
- *                    pointer does not need to remain valid after the call.
+ * @param [in] ops  Topology operations. The contents are copied, so the
+ *                  pointer does not need to remain valid after the call.
  *
- * @return Handle of the registered provider, to be passed to
- *         @ref ucs_sys_topo_provider_remove, or NULL on error.
+ * @return UCS_OK on success, or UCS_ERR_NO_MEMORY on allocation failure.
  */
-ucs_sys_topo_provider_t *
-ucs_sys_topo_provider_add(const char *name, const ucs_sys_topo_ops_t *ops);
+ucs_status_t ucs_sys_topo_provider_push(const ucs_sys_topo_ops_t *ops);
 
 
 /**
- * Unregister a system topology provider previously added by
- * @ref ucs_sys_topo_provider_add.
+ * Pop the topology provider most recently pushed with
+ * @ref ucs_sys_topo_provider_push, restoring the previously active provider.
  *
- * If the removed provider is the currently cached selection, the cached
- * selection is invalidated, so the caller does not need to call
- * @ref ucs_sys_topo_reset_provider for safety.
- *
- * @param [in] provider  Provider handle to remove. Freed by this call.
+ * Must be balanced with a prior @ref ucs_sys_topo_provider_push call.
  */
-void ucs_sys_topo_provider_remove(ucs_sys_topo_provider_t *provider);
+void ucs_sys_topo_provider_pop(void);
 
 
 /**

@@ -32,7 +32,7 @@
 /*
  * Structure needed to define a topology module implementation
  */
-struct ucs_sys_topo_provider {
+typedef struct ucs_sys_topo_provider {
     /* Name of the topology module */
     const char         *name;
 
@@ -40,7 +40,7 @@ struct ucs_sys_topo_provider {
     ucs_sys_topo_ops_t ops;
 
     ucs_list_link_t    list;
-};
+} ucs_sys_topo_provider_t;
 
 /* Possible role of a current device wrt its sibling */
 typedef enum {
@@ -102,6 +102,11 @@ static UCS_LIST_HEAD(ucs_sys_topo_providers_list);
 /* Selected topo provider */
 static ucs_sys_topo_provider_t *ucs_sys_topo_provider = NULL;
 
+/* Stack of override providers. When non-empty, the head overrides the
+ * provider selected by TOPO_PRIO. Pushed/popped by
+ * `ucs_sys_topo_provider_push` / `ucs_sys_topo_provider_pop`. */
+static UCS_LIST_HEAD(ucs_sys_topo_provider_stack);
+
 /* According to NUMA distance definition distances are normalized to 10
  * and the relative distance correlates with the latency.
  * The following translation formula assumes that
@@ -116,30 +121,31 @@ void ucs_sys_topo_reset_provider()
     ucs_sys_topo_provider = NULL;
 }
 
-ucs_sys_topo_provider_t *
-ucs_sys_topo_provider_add(const char *name, const ucs_sys_topo_ops_t *ops)
+ucs_status_t ucs_sys_topo_provider_push(const ucs_sys_topo_ops_t *ops)
 {
     ucs_sys_topo_provider_t *provider;
 
-    provider = ucs_malloc(sizeof(*provider), "topo_provider");
+    provider = ucs_malloc(sizeof(*provider), "topo_provider_override");
     if (provider == NULL) {
-        ucs_error("failed to allocate topo provider \"%s\"", name);
-        return NULL;
+        ucs_error("failed to allocate topo provider override");
+        return UCS_ERR_NO_MEMORY;
     }
 
-    provider->name = name;
+    provider->name = "<override>";
     provider->ops  = *ops;
-    ucs_list_add_tail(&ucs_sys_topo_providers_list, &provider->list);
+    ucs_list_add_head(&ucs_sys_topo_provider_stack, &provider->list);
 
-    return provider;
+    return UCS_OK;
 }
 
-void ucs_sys_topo_provider_remove(ucs_sys_topo_provider_t *provider)
+void ucs_sys_topo_provider_pop(void)
 {
-    if (ucs_sys_topo_provider == provider) {
-        ucs_sys_topo_reset_provider();
-    }
+    ucs_sys_topo_provider_t *provider;
 
+    ucs_assert(!ucs_list_is_empty(&ucs_sys_topo_provider_stack));
+
+    provider = ucs_list_head(&ucs_sys_topo_provider_stack,
+                             ucs_sys_topo_provider_t, list);
     ucs_list_del(&provider->list);
     ucs_free(provider);
 }
@@ -148,6 +154,11 @@ static ucs_sys_topo_provider_t *ucs_sys_topo_get_provider()
 {
     ucs_sys_topo_provider_t *list_provider;
     unsigned i;
+
+    if (!ucs_list_is_empty(&ucs_sys_topo_provider_stack)) {
+        return ucs_list_head(&ucs_sys_topo_provider_stack,
+                             ucs_sys_topo_provider_t, list);
+    }
 
     if (ucs_sys_topo_provider != NULL) {
         return ucs_sys_topo_provider;
@@ -1118,6 +1129,10 @@ void ucs_topo_init()
 
 void ucs_topo_cleanup()
 {
+    while (!ucs_list_is_empty(&ucs_sys_topo_provider_stack)) {
+        ucs_sys_topo_provider_pop();
+    }
+
     ucs_list_del(&ucs_sys_topo_provider_sysfs.list);
     ucs_list_del(&ucs_sys_topo_provider_default.list);
 
