@@ -7,11 +7,14 @@
 #ifndef UCT_CUDA_IPC_CACHE_H_
 #define UCT_CUDA_IPC_CACHE_H_
 
-#include <ucs/datastruct/pgtable.h>
+#include "cuda_ipc_iface_address.h"
+#include "cuda_ipc_md.h"
+
 #include <ucs/datastruct/list.h>
+#include <ucs/datastruct/pgtable.h>
 #include <ucs/type/init_once.h>
 #include <ucs/type/spinlock.h>
-#include "cuda_ipc_md.h"
+
 #include <cuda.h>
 
 
@@ -82,5 +85,11 @@ void uct_cuda_ipc_unmap_memhandle(pid_t pid, ucs_sys_ns_t pid_ns,
 void uct_cuda_ipc_cache_set_global_limits(unsigned long max_regions,
                                           size_t max_size);
 
+
+/**
+ * @brief Tear down all CUDA IPC remote caches for a peer process ID
+ */
+void uct_cuda_ipc_destroy_cache_by_iface_address(
+        const uct_cuda_ipc_iface_address_t *iface_address);
 
 #endif

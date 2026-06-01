@@ -10,8 +10,8 @@ timeout_minutes: 90
 kubernetes:
   cloud: il-ipp-blossom-prod-nbu-swx-ucx
   namespace: nbu-swx-ucx
-  limits: "{memory: 16Gi, cpu: 16000m}"
-  requests: "{memory: 16Gi, cpu: 16000m}"
+  limits: "{memory: 16Gi, cpu: 8000m}"
+  requests: "{memory: 16Gi, cpu: 8000m}"
 
 runs_on_dockers:
   # x86_64
