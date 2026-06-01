@@ -214,11 +214,11 @@ AS_IF([test "x$with_ib" = "xyes"],
                AC_MSG_ERROR([devx requested but not found])])
 
        AS_IF([test "x$with_gga" != xno], [
-               AS_IF([test "x$has_mlx5_mmo" = xyes -a "x$have_devx" = xyes -a "x$with_rc" != xno],
+               AS_IF([test "x$have_mlx5" = xyes -a "x$has_mlx5_mmo" = xyes -a "x$have_devx" = xyes -a "x$with_rc" != xno],
                      [have_gga=yes
                       AC_DEFINE([HAVE_TL_GGA], 1, [GGA transport support])],
                      [AS_IF([test "x$with_gga" = xyes],
-                            [AC_MSG_ERROR([GGA requested but MLX5 MMO, DEVX, or RC support is not available])])
+                            [AC_MSG_ERROR([GGA requested but MLX5, MLX5 MMO, DEVX, or RC support is not available])])
                       have_gga=no])
              ],
              [have_gga=no])
@@ -356,6 +356,10 @@ AS_IF([test "x$with_ib" = "xyes"],
         with_dc=no
         with_rc=no
         with_ud=no
+
+        AS_IF([test "x$with_gga" = xyes],
+              [AC_MSG_ERROR([GGA requested but IB/verbs support is not available])])
+              
         with_gga=no
         have_gga=no
         with_mlx5=no
