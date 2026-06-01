@@ -36,6 +36,10 @@ typedef struct ucs_sys_bus_id {
 } ucs_sys_bus_id_t;
 
 
+/* Packed bit representation of a PCI bus id */
+typedef int64_t ucs_bus_id_bit_rep_t;
+
+
 /**
  * @ingroup UCS_RESOURCE
  * System Device Index
@@ -161,6 +165,17 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
  */
 ucs_status_t ucs_topo_get_device_bus_id(ucs_sys_device_t sys_dev,
                                         ucs_sys_bus_id_t *bus_id);
+
+
+/**
+ * Pack a PCI bus id into its bit representation.
+ *
+ * @param [in] bus_id  Bus id to pack.
+ *
+ * @return Packed bit representation of the bus id.
+ */
+ucs_bus_id_bit_rep_t
+ucs_topo_get_bus_id_bit_repr(const ucs_sys_bus_id_t *bus_id);
 
 
 /**

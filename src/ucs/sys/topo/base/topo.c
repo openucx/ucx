@@ -54,8 +54,6 @@ struct ucs_sys_topo_provider {
     ucs_list_link_t    list;
 };
 
-typedef int64_t ucs_bus_id_bit_rep_t;
-
 /* Possible role of a current device wrt its sibling */
 typedef enum {
     /* No sibling capability */
@@ -224,7 +222,7 @@ void ucs_topo_get_memory_distance(ucs_sys_device_t device,
     provider->ops.get_memory_distance(device, distance);
 }
 
-static ucs_bus_id_bit_rep_t
+ucs_bus_id_bit_rep_t
 ucs_topo_get_bus_id_bit_repr(const ucs_sys_bus_id_t *bus_id)
 {
     return (((uint64_t)bus_id->domain << 24) |
