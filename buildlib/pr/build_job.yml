@@ -157,10 +157,17 @@ jobs:
               exit 0
           fi
 
+          # The Azure container runs as a non-root user; use sudo when
+          # available to install the Level Zero development headers.
+          SUDO=
+          if [ "$(id -u)" -ne 0 ]; then
+              SUDO="sudo -E"
+          fi
+
           export DEBIAN_FRONTEND=noninteractive
-          apt-get update
-          apt-get install -y --no-install-recommends libze-dev || \
-              apt-get install -y --no-install-recommends level-zero-dev
+          $SUDO apt-get update
+          $SUDO apt-get install -y --no-install-recommends libze-dev || \
+              $SUDO apt-get install -y --no-install-recommends level-zero-dev
         displayName: Install ZE dev package
         env:
           install_ze_deps: $(install_ze_deps)
