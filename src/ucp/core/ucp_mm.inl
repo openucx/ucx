@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2022, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * Copyright (c) 2022-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * See file LICENSE for terms.
  */
@@ -111,6 +111,16 @@ static UCS_F_ALWAYS_INLINE int ucp_memh_put(ucp_mem_h memh)
 static UCS_F_ALWAYS_INLINE int ucp_memh_is_user_memh(ucp_mem_h memh)
 {
     return (memh->parent != NULL) && !ucp_memh_is_zero_length(memh);
+}
+
+static UCS_F_ALWAYS_INLINE ucp_memory_info_t
+ucp_memory_info_from_memh(ucp_mem_h memh)
+{
+    ucp_memory_info_t mem_info;
+
+    mem_info.type    = memh->mem_type;
+    mem_info.sys_dev = memh->sys_dev;
+    return mem_info;
 }
 
 static UCS_F_ALWAYS_INLINE int ucp_memh_is_buffer_in_range(const ucp_mem_h memh,

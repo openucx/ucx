@@ -153,7 +153,7 @@ public:
     {
         *total_length = ucx_perf_get_message_size(&m_perf.params);
 
-        if (CMD == UCX_PERF_CMD_PUT) {
+        if ((CMD == UCX_PERF_CMD_PUT) || (CMD == UCX_PERF_CMD_GET)) {
             ucs_assert(*total_length >= sizeof(psn_t));
         }
 
@@ -599,6 +599,7 @@ public:
     void send_last_iter(ucp_ep_h ep, void *buffer, size_t size,
                         uint64_t remote_addr, ucp_rkey_h rkey)
     {
+        psn_t last_sn         = LAST_ITER_SN;
         uint64_t atomic_value = 0;
         ucs_status_ptr_t status_p;
         ucp_request_param_t atomic_param;
@@ -648,6 +649,12 @@ public:
             atomic_param.reply_buffer  = &atomic_value;
             status_p = ucp_atomic_op_nbx(ep, m_atomic_op, buffer, 1,
                                          remote_addr, rkey, &atomic_param);
+            break;
+        case UCX_PERF_CMD_GET:
+            /* Set remotely LAST_ITER_SN */
+            status_p = ucp_put_nbx(ep, &last_sn, sizeof(last_sn),
+                                   remote_addr + size - sizeof(last_sn), rkey,
+                                   &m_send_params);
             break;
         default:
             status_p = NULL;
@@ -710,7 +717,8 @@ public:
 
     inline bool use_psn() const
     {
-        return (CMD == UCX_PERF_CMD_PUT) || is_atomic();
+        return (CMD == UCX_PERF_CMD_PUT) || (CMD == UCX_PERF_CMD_GET) ||
+               is_atomic();
     }
 
     void reset_buffers(size_t length, psn_t sn)
