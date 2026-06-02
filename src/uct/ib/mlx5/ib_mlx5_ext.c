@@ -116,7 +116,6 @@ void uct_ib_mlx5_ext_cleanup(void)
         ucs_free(provider);
     }
 
-    ucs_list_head_init(&uct_ib_mlx5_ext_providers);
     ucs_spin_unlock(&uct_ib_mlx5_ext_lock);
 
     ucs_spinlock_destroy(&uct_ib_mlx5_ext_lock);
