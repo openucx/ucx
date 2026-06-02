@@ -167,7 +167,8 @@ ucp_proto_multi_find_max_avail_bw_lane(const ucp_proto_init_params_t *params,
         }
     }
 
-    /* Sort sys_devs so every process observes the same ordering. */
+    /* Sort sys_devs by PCI bus id so every rank on the node observes the same
+     * ordering, regardless of local device discovery order. */
     ucs_qsort_r(sys_devs, num_max_bw_devs, sizeof(sys_devs[0]),
                 ucp_proto_multi_sys_dev_cmp, NULL);
 
