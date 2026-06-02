@@ -251,8 +251,6 @@ typedef struct ucp_context_config {
     int                                    connect_all_to_all;
     /** Use only one network device for all protocols */
     int                                    proto_use_single_net_device;
-    /** Prefer worker-local network devices between matching wireup resources */
-    int                                    wireup_prefer_local_device;
     /** Max HCAs for GPU memory registration: auto=closest, N=limit, inf=all */
     unsigned long                          max_hca_per_gpu;
     /** Local identificator on a single node */

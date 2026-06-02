@@ -8,7 +8,6 @@
 #define UCS_NUMA_H_
 
 #include <ucs/sys/compiler_def.h>
-#include <ucs/type/cpu_set.h>
 #include <stdint.h>
 
 BEGIN_C_DECLS
@@ -49,16 +48,6 @@ unsigned ucs_numa_num_configured_nodes(void);
  * @return The NUMA node that the cpu belongs to.
  */
 ucs_numa_node_t ucs_numa_node_of_cpu(int cpu);
-
-
-/**
- * @param [in]  cpuset CPU set to query.
- *
- * @return The NUMA node represented by the CPU set, or undefined if the set is
- *         empty, spans multiple NUMA nodes, or contains only CPUs whose NUMA
- *         node is unknown.
- */
-ucs_numa_node_t ucs_numa_node_of_cpuset(const ucs_cpu_set_t *cpuset);
 
 
 /**

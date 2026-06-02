@@ -12,6 +12,10 @@ extern "C" {
 #include <uct/base/uct_iface.h>
 #include <ucp/proto/proto_debug.h>
 #include <ucp/proto/proto_select.inl>
+#include <ucs/memory/numa.h>
+#include <ucs/sys/sys.h>
+#include <ucs/sys/topo/base/topo.h>
+#include <ucs/type/cpu_set.h>
 
 #if HAVE_IB
 #include <uct/ib/base/ib_md.h>
@@ -41,11 +45,23 @@ public:
     }
 
     void add_mock_iface(const std::string &dev_name = "mock",
-                        iface_attr_func_t cb = [](uct_iface_attr_t &iface_attr) {},
-                        perf_attr_func_t perf_cb = default_perf_mock)
+                        iface_attr_func_t cb =
+                                [](uct_iface_attr_t &iface_attr) {},
+                        perf_attr_func_t perf_cb = default_perf_mock,
+                        ucs_sys_device_t sys_device = UCS_SYS_DEVICE_ID_UNKNOWN)
     {
         m_iface_attrs_funcs[dev_name] = std::move(cb);
         m_perf_attrs_funcs[dev_name]  = std::move(perf_cb);
+        m_sys_devices[dev_name]       = sys_device;
+    }
+
+    void add_mock_iface_on_sys_device(
+            const std::string &dev_name, ucs_sys_device_t sys_device,
+            iface_attr_func_t cb = [](uct_iface_attr_t &iface_attr) {},
+            perf_attr_func_t perf_cb = default_perf_mock)
+    {
+        add_mock_iface(dev_name, std::move(cb), std::move(perf_cb),
+                       sys_device);
     }
 
     void mock_transport(const std::string &tl_name)
@@ -106,21 +122,26 @@ private:
          * The number of real devices (and their names) do not match the mocked
          * ones. In order to pretend that all the mocked devices are supported,
          * we remember the first real device name, and then substitute the
-         * response with the mocked devices names. For each mocked device the
-         * individual sys_dev must be set, so that they are treated as different
-         * devices. Later on the iface_open_mock will use the real device name
-         * (same for all mocks) to create the mocked iface.
+         * response with the mocked devices names. Assign unique sys_device
+         * values beyond the currently known topology devices, so the mocked
+         * resources are distinct but cannot alias real topology entries. Later
+         * on the iface_open_mock will use the real device name (same for all
+         * mocks) to create the mocked iface.
          */
         auto mock_devices  = (uct_tl_device_resource_t*)ucs_calloc(
                                     m_self->m_iface_attrs_funcs.size(),
                                     sizeof(uct_tl_device_resource_t),
                                     "mock_tl_devices");
-        unsigned dev_count = 0;
+        unsigned dev_count  = 0;
+        unsigned sys_device = ucs_topo_num_devices();
         for (const auto &it : m_self->m_iface_attrs_funcs) {
             ucs_strncpy_safe(mock_devices[dev_count].name, it.first.c_str(),
                              UCT_DEVICE_NAME_MAX);
             mock_devices[dev_count].type       = (*tl_devices_p)[0].type;
-            mock_devices[dev_count].sys_device = dev_count + 1;
+            mock_devices[dev_count].sys_device =
+                    (m_self->m_sys_devices[it.first] ==
+                     UCS_SYS_DEVICE_ID_UNKNOWN) ?
+                    sys_device++ : m_self->m_sys_devices[it.first];
             ++dev_count;
         }
 
@@ -211,6 +232,7 @@ private:
     std::unordered_map<uct_base_iface_t *, std::string> m_iface_names;
     std::map<std::string, iface_attr_func_t>            m_iface_attrs_funcs;
     std::map<std::string, perf_attr_func_t>             m_perf_attrs_funcs;
+    std::map<std::string, ucs_sys_device_t>             m_sys_devices;
     std::string                                         m_real_dev_name;
     uct_md_h                                            m_real_md;
 };
@@ -292,7 +314,7 @@ public:
          * We keep only default config to always have the same topo distances
          * when test is being executed on different machines.
          */
-        modify_config("TOPO_PRIO", "default");
+        modify_config("TOPO_PRIO", topo_prio());
 
         ucp_test::init();
         connect();
@@ -347,6 +369,11 @@ public:
     }
 
 protected:
+    virtual const char *topo_prio() const
+    {
+        return "default";
+    }
+
     static bool
     select_elem_match(ucp_worker_h worker, const ucp_proto_select_elem_t &elem,
                       const proto_select_data &data, size_t range_start)
@@ -866,6 +893,186 @@ UCS_TEST_P(test_ucp_proto_mock_rcx3, single_lane_no_zcopy,
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx3, rcx, "rc_x")
+
+class test_ucp_proto_mock_rcx_numa : public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_rcx_numa() :
+        m_topo_state(nullptr), m_local_sys_dev(UCS_SYS_DEVICE_ID_UNKNOWN),
+        m_remote_sys_dev(UCS_SYS_DEVICE_ID_UNKNOWN), m_affinity_set(false)
+    {
+        UCS_CPU_ZERO(&m_worker_cpu_mask);
+        mock_transport("rc_mlx5");
+    }
+
+    virtual ucp_worker_params_t get_worker_params() override
+    {
+        ucp_worker_params_t params = ucp_test::get_worker_params();
+
+        params.field_mask |= UCP_WORKER_PARAM_FIELD_CPU_MASK;
+        params.cpu_mask    = m_worker_cpu_mask;
+        return params;
+    }
+
+    virtual void init() override
+    {
+        auto iface_attr_func = [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short  = 2000;
+            iface_attr.cap.put.max_short = 2048;
+            iface_attr.bandwidth.shared  = 28e9;
+            iface_attr.latency.c         = 500e-9;
+            iface_attr.latency.m         = 1e-9;
+            iface_attr.cap.get.max_zcopy = 16384;
+        };
+
+        setup_numa_topology();
+        add_mock_iface_on_sys_device("mock_0:1", m_remote_sys_dev,
+                                     iface_attr_func);
+        add_mock_iface_on_sys_device("mock_1:1", m_local_sys_dev,
+                                     iface_attr_func);
+        test_ucp_proto_mock::init();
+    }
+
+    virtual void cleanup() override
+    {
+        test_ucp_proto_mock::cleanup();
+        cleanup_numa_topology();
+    }
+
+protected:
+    virtual const char *topo_prio() const override
+    {
+        return "sysfs";
+    }
+
+private:
+    void setup_numa_topology()
+    {
+        ucs_sys_cpuset_t test_affinity;
+        ucs_numa_node_t local_node, remote_node;
+        int local_cpu, remote_cpu;
+
+        if (ucs_sys_getaffinity(&m_orig_affinity) != 0) {
+            UCS_TEST_SKIP_R("failed to get process affinity");
+        }
+
+        find_numa_cpus(local_cpu, remote_cpu, local_node, remote_node);
+
+        CPU_ZERO(&test_affinity);
+        CPU_SET(local_cpu, &test_affinity);
+        CPU_SET(remote_cpu, &test_affinity);
+        if (ucs_sys_setaffinity(&test_affinity) != 0) {
+            UCS_TEST_SKIP_R("failed to set process affinity");
+        }
+
+        m_affinity_set = true;
+        UCS_CPU_ZERO(&m_worker_cpu_mask);
+        UCS_CPU_SET(local_cpu, &m_worker_cpu_mask);
+
+        m_topo_state = ucs_topo_extract_state();
+        ASSERT_TRUE(m_topo_state != nullptr);
+
+        add_fake_sys_device("mock_remote", 0, remote_node, &m_remote_sys_dev);
+        add_fake_sys_device("mock_local", 1, local_node, &m_local_sys_dev);
+    }
+
+    void cleanup_numa_topology()
+    {
+        if (m_topo_state != nullptr) {
+            ucs_topo_restore_state(m_topo_state);
+            m_topo_state = nullptr;
+            ucs_sys_topo_reset_provider();
+        }
+
+        if (m_affinity_set) {
+            ucs_sys_setaffinity(&m_orig_affinity);
+            m_affinity_set = false;
+        }
+    }
+
+    void find_numa_cpus(int &local_cpu, int &remote_cpu,
+                        ucs_numa_node_t &local_node,
+                        ucs_numa_node_t &remote_node) const
+    {
+        unsigned cpu, num_cpus;
+
+        local_cpu   = -1;
+        remote_cpu  = -1;
+        local_node  = UCS_NUMA_NODE_UNDEFINED;
+        remote_node = UCS_NUMA_NODE_UNDEFINED;
+
+        num_cpus = ucs_min(ucs_numa_num_configured_cpus(), UCS_CPU_SETSIZE);
+        for (cpu = 0; cpu < num_cpus; ++cpu) {
+            ucs_numa_node_t cpu_node;
+
+            if (!CPU_ISSET(cpu, &m_orig_affinity)) {
+                continue;
+            }
+
+            cpu_node = ucs_numa_node_of_cpu(cpu);
+            if (cpu_node == UCS_NUMA_NODE_UNDEFINED) {
+                continue;
+            }
+
+            if (local_cpu < 0) {
+                local_cpu  = cpu;
+                local_node = cpu_node;
+            } else if (cpu_node != local_node) {
+                remote_cpu  = cpu;
+                remote_node = cpu_node;
+                break;
+            }
+        }
+
+        if (remote_cpu < 0) {
+            UCS_TEST_SKIP_R("need CPUs from at least two NUMA nodes");
+        }
+    }
+
+    static void
+    add_fake_sys_device(const char *name, uint8_t function,
+                        ucs_numa_node_t numa_node,
+                        ucs_sys_device_t *sys_dev_p)
+    {
+        ucs_sys_bus_id_t bus_id;
+
+        bus_id.domain   = 0xfffe;
+        bus_id.bus      = 0xfe;
+        bus_id.slot     = 0x1f;
+        bus_id.function = function;
+
+        ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, sys_dev_p));
+        ASSERT_UCS_OK(ucs_topo_sys_device_set_name(*sys_dev_p, name, 10));
+        ASSERT_UCS_OK(ucs_topo_sys_device_set_numa_node(*sys_dev_p,
+                                                        numa_node));
+    }
+
+protected:
+    ucs_global_state_t *m_topo_state;
+    ucs_sys_cpuset_t    m_orig_affinity;
+    ucs_cpu_set_t       m_worker_cpu_mask;
+    ucs_sys_device_t    m_local_sys_dev;
+    ucs_sys_device_t    m_remote_sys_dev;
+    bool                m_affinity_set;
+};
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_numa, worker_cpu_mask_affects_score,
+           "IB_NUM_PATHS?=1", "MAX_RNDV_LANES=1", "MAX_EAGER_LANES=1")
+{
+    ucp_ep_config_t *config = ucp_worker_ep_config(sender().worker(),
+                                                   ep_config_index(sender()));
+    ucp_lane_index_t lane   = config->key.am_lane;
+    ucp_rsc_index_t rsc_index;
+    ucs_sys_device_t sys_dev;
+
+    ASSERT_NE(UCP_NULL_LANE, lane);
+
+    rsc_index = config->key.lanes[lane].rsc_index;
+    sys_dev   = sender().worker()->context->tl_rscs[rsc_index].
+                tl_rsc.sys_device;
+    EXPECT_EQ(m_local_sys_dev, sys_dev);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_numa, rcx, "rc_x")
 
 class test_ucp_proto_mock_cma : public test_ucp_proto_mock {
 public:
