@@ -156,13 +156,11 @@ jobs:
           if [ "${install_ze_deps}" != "yes" ]; then
               exit 0
           fi
-          SUDO=
-          if [ "$(id -u)" -ne 0 ]; then
-              SUDO="sudo -E"
-          fi
+          # The ZE container is started with --user 0:0 (see main.yml)
+          # because the public Intel oneAPI images do not ship sudo.
           export DEBIAN_FRONTEND=noninteractive
-          $SUDO apt-get update -q
-          $SUDO apt-get install -y --no-install-recommends \
+          apt-get update -q
+          apt-get install -y --no-install-recommends \
               autoconf automake libtool doxygen
         displayName: Install build tools for ZE lane
         env:
