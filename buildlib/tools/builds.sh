@@ -20,7 +20,7 @@ require_ze=${require_ze:-}
 build_mode=${build_mode:-long}
 
 case "${build_mode}" in
-long|short|sanity|compilers|ze)
+long|short|sanity|compilers)
 	;;
 *)
 	azure_log_error "Unsupported build mode: ${build_mode}"
@@ -532,9 +532,6 @@ base_tests=('build_docs' \
 case "${build_mode}" in
 sanity)
 	tests=('build_sanity')
-	;;
-ze)
-	tests=('build_ze')
 	;;
 short)
 	tests=("${base_tests[@]}")
