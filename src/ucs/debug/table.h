@@ -29,7 +29,7 @@ typedef enum {
 
 
 /** Cell entry (internal). */
-typedef struct ucs_table_cell {
+typedef struct {
     unsigned            col_span; /**< body columns spanned */
     ucs_table_align_t   align; /**< alignment selected at add-cell time */
     ucs_string_buffer_t text; /**< cell content, owned by the table */
@@ -63,7 +63,7 @@ UCS_ARRAY_DECLARE_TYPE(ucs_table_entries_t, unsigned, ucs_table_entry_t);
  * Configuration for `ucs_table_init()`. Zero-initialize and set the fields
  * you need; only `n_cols` is required.
  */
-typedef struct ucs_table_config {
+typedef struct {
     /** Total number of columns; per-row cells' col_spans must sum to this. */
     unsigned   n_cols;
     /** Prepended to every rendered line */
@@ -77,7 +77,7 @@ typedef struct ucs_table_config {
 /**
  * Buffered ASCII table.
  */
-typedef struct ucs_table {
+typedef struct {
     ucs_table_config_t  config;
     ucs_table_entries_t entries;
 } ucs_table_t;
@@ -94,8 +94,7 @@ void ucs_table_init(ucs_table_t *table, const ucs_table_config_t *config);
 
 
 /**
- * Release all storage owned by the table. After this call the table is
- * unusable.
+ * Release the table.
  *
  * @param [in,out] table  Table to clean up.
  */
@@ -155,7 +154,7 @@ void ucs_table_row_add_cell_fmt(ucs_table_t *table, ucs_table_row_h row,
  * @param [in,out] table  Table to render.
  * @param [in,out] strb   Destination string buffer.
  */
-void ucs_table_render(ucs_table_t *table, ucs_string_buffer_t *strb);
+void ucs_table_render(ucs_table_t const *table, ucs_string_buffer_t *strb);
 
 
 /**
@@ -163,7 +162,7 @@ void ucs_table_render(ucs_table_t *table, ucs_string_buffer_t *strb);
  *
  * @param [in,out] table  Table to print.
  */
-void ucs_table_print(ucs_table_t *table);
+void ucs_table_print(ucs_table_t const *table);
 
 
 END_C_DECLS

@@ -9,26 +9,22 @@
 
 #include "table.h"
 
-#include <ucs/datastruct/array.h>
 #include <ucs/debug/assert.h>
-#include <ucs/debug/log_def.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/string.h>
-#include <stdio.h>
 #include <string.h>
 
 
 void ucs_table_init(ucs_table_t *table, const ucs_table_config_t *config)
 {
+    ucs_assertv_always(config->n_cols > 0,
+                       "number of columns must be positive (n_cols: %u)",
+                       config->n_cols);
+
     table->config = *config;
     ucs_array_init_dynamic(&table->entries);
-
-    ucs_assertv(config->n_cols > 0,
-                "number of columns must be positive (n_cols: %u)",
-                config->n_cols);
 }
-
 
 void ucs_table_cleanup(ucs_table_t *table)
 {
@@ -39,6 +35,7 @@ void ucs_table_cleanup(ucs_table_t *table)
         if (entry->kind != UCS_TABLE_ENTRY_ROW) {
             continue;
         }
+
         ucs_array_for_each(cell, &entry->cells) {
             ucs_string_buffer_cleanup(&cell->text);
         }
@@ -47,7 +44,6 @@ void ucs_table_cleanup(ucs_table_t *table)
     ucs_array_cleanup_dynamic(&table->entries);
 }
 
-
 void ucs_table_add_separator(ucs_table_t *table)
 {
     ucs_table_entry_t *entry;
@@ -55,7 +51,6 @@ void ucs_table_add_separator(ucs_table_t *table)
     entry       = ucs_array_append_fixed(&table->entries);
     entry->kind = UCS_TABLE_ENTRY_SEPARATOR;
 }
-
 
 ucs_table_row_h ucs_table_add_row(ucs_table_t *table)
 {
@@ -75,7 +70,6 @@ ucs_table_row_h ucs_table_add_row(ucs_table_t *table)
     return ucs_array_length(&table->entries) - 1;
 }
 
-
 static ucs_table_cells_t *
 ucs_table_row_cells(ucs_table_t *table, ucs_table_row_h row)
 {
@@ -84,7 +78,6 @@ ucs_table_row_cells(ucs_table_t *table, ucs_table_row_h row)
     ucs_assert(entry->kind == UCS_TABLE_ENTRY_ROW);
     return &entry->cells;
 }
-
 
 static ucs_table_cell_t *
 ucs_table_row_add_cell(ucs_table_t *table, ucs_table_row_h row,
@@ -108,7 +101,6 @@ void ucs_table_row_add_cell_empty(ucs_table_t *table, ucs_table_row_h row,
     ucs_table_row_add_cell(table, row, col_span, UCS_TABLE_ALIGN_LEFT);
 }
 
-
 void ucs_table_row_add_cell_fmt(ucs_table_t *table, ucs_table_row_h row,
                                 unsigned col_span, ucs_table_align_t align,
                                 const char *fmt, ...)
@@ -127,7 +119,6 @@ void ucs_table_row_add_cell_fmt(ucs_table_t *table, ucs_table_row_h row,
     ucs_assertv(strchr(cstr, '\n') == NULL,
                 "table cell content must not contain '\\n': '%s'", cstr);
 }
-
 
 /* Calculate the total visible width of a cell spanning `col_span` columns. */
 static unsigned
@@ -151,13 +142,6 @@ ucs_table_cell_character_width(const ucs_table_t *table, const unsigned *widths,
     return width;
 }
 
-
-static unsigned ucs_table_cell_content_len(ucs_table_cell_t *cell)
-{
-    return ucs_string_buffer_length(&cell->text);
-}
-
-
 static void ucs_table_compute_widths(const ucs_table_t *table, unsigned *widths)
 {
     ucs_table_entry_t *entry;
@@ -174,14 +158,15 @@ static void ucs_table_compute_widths(const ucs_table_t *table, unsigned *widths)
         if (entry->kind != UCS_TABLE_ENTRY_ROW) {
             continue;
         }
+
         col = 0;
         ucs_array_for_each(cell, &entry->cells) {
             ucs_assertv(col + cell->col_span <= table->config.n_cols,
                         "row column span exceeds number of columns");
 
             if (cell->col_span == 1) {
-                content_len      = ucs_table_cell_content_len(cell);
-                widths[col]      = ucs_max(widths[col], content_len);
+                content_len = ucs_string_buffer_length(&cell->text);
+                widths[col] = ucs_max(widths[col], content_len);
             }
             col += cell->col_span;
         }
@@ -199,7 +184,7 @@ static void ucs_table_compute_widths(const ucs_table_t *table, unsigned *widths)
                         "row column span exceeds number of columns");
 
             if (cell->col_span > 1) {
-                content_len = ucs_table_cell_content_len(cell);
+                content_len = ucs_string_buffer_length(&cell->text);
                 existing = ucs_table_cell_character_width(table, widths, col,
                                                           cell->col_span);
 
@@ -222,7 +207,6 @@ static void ucs_table_compute_widths(const ucs_table_t *table, unsigned *widths)
         }
     }
 }
-
 
 /* Format a single cell at the given pixel width, branching on alignment. */
 static void ucs_table_render_cell(ucs_string_buffer_t *strb,
@@ -255,7 +239,6 @@ static void ucs_table_render_cell(ucs_string_buffer_t *strb,
     }
 }
 
-
 static void
 ucs_table_append_row_prefix(const ucs_table_t *table, ucs_string_buffer_t *strb)
 {
@@ -263,7 +246,6 @@ ucs_table_append_row_prefix(const ucs_table_t *table, ucs_string_buffer_t *strb)
         ucs_string_buffer_appendf(strb, "%s", table->config.row_prefix);
     }
 }
-
 
 /* Render one row. The closing "|" has no trailing newline. */
 static void ucs_table_render_cells(const ucs_table_t *table,
@@ -285,7 +267,6 @@ static void ucs_table_render_cells(const ucs_table_t *table,
     ucs_string_buffer_appendf(strb, "|");
 }
 
-
 static void ucs_table_render_separator(const ucs_table_t *table,
                                        const unsigned *widths,
                                        ucs_string_buffer_t *strb)
@@ -302,8 +283,7 @@ static void ucs_table_render_separator(const ucs_table_t *table,
     ucs_string_buffer_appendc(strb, '\n', 1);
 }
 
-
-void ucs_table_render(ucs_table_t *table, ucs_string_buffer_t *strb)
+void ucs_table_render(ucs_table_t const *table, ucs_string_buffer_t *strb)
 {
     unsigned *widths = ucs_alloca(table->config.n_cols * sizeof(*widths));
     const ucs_table_entry_t *entry;
@@ -339,8 +319,7 @@ void ucs_table_render(ucs_table_t *table, ucs_string_buffer_t *strb)
     }
 }
 
-
-void ucs_table_print(ucs_table_t *table)
+void ucs_table_print(ucs_table_t const *table)
 {
     ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
 
