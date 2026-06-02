@@ -18,7 +18,7 @@ build_mode=${build_mode:-}
 build_mode=${build_mode:-long}
 
 case "${build_mode}" in
-long|short|sanity|compilers)
+long|short|sanity|compilers|soname_suffix)
 	;;
 *)
 	azure_log_error "Unsupported build mode: ${build_mode}"
@@ -538,24 +538,78 @@ check_linker_symlink() {
 	fi
 }
 
+check_uct_module_linkage() {
+	module=$1
+	suffix=$2
+	module_path="${ucx_inst}/lib/ucx/libuct_${module}-${suffix}.so.0.0.0"
+	shift 2
+
+	check_elf_soname "$module_path" "libuct_${module}-${suffix}.so.0"
+	for needed in "$@"; do
+		check_elf_needed "$module_path" "$needed"
+	done
+}
+
 build_soname_suffix() {
 	suffix=ci
 	foreign_build_dir=${ucx_build_dir}/foreign
 	foreign_inst=${ucx_build_dir}/foreign-install
+	soname_suffix_check_hw=${soname_suffix_check_hw:-no}
+	common_soname_config_args=(
+		--without-java
+		--without-go
+		--without-rocm
+		--without-xpmem
+		--without-knem
+		--disable-doxygen-doc
+	)
+
+	if [ "${soname_suffix_check_hw}" = "yes" ]; then
+		echo "==== Enable CUDA and IB for SONAME suffix build ===="
+		cuda_local_dir="/usr/local/cuda"
+		have_gdrcopy=no
+
+		if ! nvidia-smi -L; then
+			azure_log_error "SONAME suffix CUDA/IB check requires a GPU"
+			exit 1
+		fi
+
+		if [ ! -d /dev/infiniband ]; then
+			azure_log_error "SONAME suffix CUDA/IB check requires IB devices"
+			exit 1
+		fi
+
+		if [ -d "$cuda_local_dir" ] &&
+		   find "$cuda_local_dir" -name 'libcudart.so.1[2-9]*' | grep -q .; then
+			common_soname_config_args+=(--with-cuda=$cuda_local_dir)
+		elif az_module_load $CUDA_MODULE; then
+			common_soname_config_args+=(--with-cuda)
+		else
+			azure_log_error "SONAME suffix CUDA/IB check requires CUDA"
+			exit 1
+		fi
+
+		if [ -w "/dev/gdrdrv" ] && az_module_load $GDRCOPY_MODULE; then
+			have_gdrcopy=yes
+			common_soname_config_args+=(--with-gdrcopy)
+		else
+			common_soname_config_args+=(--without-gdrcopy)
+		fi
+
+		common_soname_config_args+=(--with-verbs --with-rdmacm)
+	else
+		common_soname_config_args+=(
+			--without-verbs
+			--without-rdmacm
+			--without-cuda
+		)
+	fi
 
 	echo "==== Build foreign UCX without SONAME suffix ===="
 	mkdir -p $foreign_build_dir
 	pushd $foreign_build_dir
 	${WORKSPACE}/contrib/configure-release --prefix=$foreign_inst \
-		--without-java \
-		--without-go \
-		--without-verbs \
-		--without-rdmacm \
-		--without-cuda \
-		--without-rocm \
-		--without-xpmem \
-		--without-knem \
-		--disable-doxygen-doc
+		"${common_soname_config_args[@]}"
 	$MAKEP
 	$MAKEP install
 	popd
@@ -566,20 +620,16 @@ build_soname_suffix() {
 		--enable-test-apps \
 		--with-soname-suffix=$suffix \
 		--enable-module-deepbind \
-		--without-java \
-		--without-go \
-		--without-verbs \
-		--without-rdmacm \
-		--without-cuda \
-		--without-rocm \
-		--without-xpmem \
-		--without-knem \
-		--disable-doxygen-doc
+		"${common_soname_config_args[@]}"
 	$MAKEP
 	$MAKEP install
 
 	grep "#define UCX_MODULE_FILE_SUFFIX \"-$suffix\"" config.h
 	grep "#define UCX_MODULE_DLOPEN_DEEPBIND 1" config.h
+	if [ "${soname_suffix_check_hw}" = "yes" ]; then
+		grep "#define HAVE_CUDA 1" config.h
+		grep "#define HAVE_IB 1" config.h
+	fi
 
 	for lib in ucm ucs uct ucp; do
 		check_elf_soname \
@@ -590,15 +640,24 @@ build_soname_suffix() {
 			"lib${lib}-${suffix}\\.so"
 	done
 
-	check_elf_soname \
-		"${ucx_inst}/lib/ucx/libuct_cma-${suffix}.so.0.0.0" \
-		"libuct_cma-${suffix}.so.0"
-	check_elf_needed \
-		"${ucx_inst}/lib/ucx/libuct_cma-${suffix}.so.0.0.0" \
-		"libuct-${suffix}.so.0"
-	check_elf_needed \
-		"${ucx_inst}/lib/ucx/libuct_cma-${suffix}.so.0.0.0" \
+	check_uct_module_linkage cma $suffix \
+		"libuct-${suffix}.so.0" \
 		"libucs-${suffix}.so.0"
+	if [ "${soname_suffix_check_hw}" = "yes" ]; then
+		check_uct_module_linkage cuda $suffix \
+			"libuct-${suffix}.so.0" \
+			"libucs-${suffix}.so.0"
+		check_uct_module_linkage ib $suffix \
+			"libuct-${suffix}.so.0" \
+			"libucs-${suffix}.so.0"
+		check_uct_module_linkage rdmacm $suffix \
+			"libuct-${suffix}.so.0" \
+			"libucs-${suffix}.so.0"
+		if [ "${have_gdrcopy}" = "yes" ]; then
+			check_uct_module_linkage cuda_gdrcopy $suffix \
+				"libuct_cuda-${suffix}.so.0"
+		fi
+	fi
 	check_elf_soname \
 		"${ucx_build_dir}/test/gtest/ucs/test_module/.libs/libtest_module-${suffix}.so.0.0.0" \
 		"libtest_module-${suffix}.so.0"
@@ -665,6 +724,9 @@ long)
 	;;
 compilers)
 	tests=('build_icc' 'build_pgi')
+	;;
+soname_suffix)
+	tests=('build_soname_suffix')
 	;;
 esac
 
