@@ -61,17 +61,21 @@ typedef struct uct_ib_mlx5_ext_ops {
 } uct_ib_mlx5_ext_ops_t;
 
 /**
+ * @brief Initialize mlx5 external extension.
+ */
+void uct_ib_mlx5_ext_init(void);
+
+/**
+ * @brief Release mlx5 external extension.
+ */
+void uct_ib_mlx5_ext_cleanup(void);
+
+/**
  * @brief Register an external provider.
  *
  * @param [in] ops Pointer to the provider operations.
  */
 void uct_ib_mlx5_ext_register(const uct_ib_mlx5_ext_ops_t *ops);
-
-
-/**
- * @brief Release all registered providers.
- */
-void uct_ib_mlx5_ext_cleanup(void);
 
 /**
  * @brief Call the first registered provider supporting iface_flags.
