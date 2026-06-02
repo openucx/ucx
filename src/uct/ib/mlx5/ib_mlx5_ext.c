@@ -136,7 +136,7 @@ void uct_ib_mlx5_ext_register(const uct_ib_mlx5_ext_ops_t *ops)
 
     provider = ucs_malloc(sizeof(*provider), "mlx5_ext_provider");
     if (ucs_unlikely(provider == NULL)) {
-        ucs_debug("ib mlx5 ext: failed to allocate provider entry for %s",
+        ucs_error("ib mlx5 ext: failed to allocate provider entry for %s",
                   ops->name);
         return;
     }
