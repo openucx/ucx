@@ -24,6 +24,8 @@
 #define UCP_WIREUP_RMA_BW_TEST_MSG_SIZE    262144
 #define UCP_WIREUP_MAX_FLAGS_STRING_SIZE   50
 #define UCP_WIREUP_PATH_INDEX_UNDEFINED    UINT_MAX
+#define UCP_WIREUP_SCORE_MAX_DIFF          0.02
+#define UCP_WIREUP_NO_SCORE_TIEBREAK       (-1.0)
 
 /* 6 for the string format constant length */
 #define UCP_WIREUP_TLS_INFO_SIZE       (UCP_WIREUP_UCT_INFO_SIZE + \
@@ -352,9 +354,8 @@ ucp_wireup_check_keepalive(const ucp_wireup_select_params_t *select_params,
 }
 
 static void
-ucp_wireup_init_select_info(double score, unsigned addr_index,
-                            ucp_rsc_index_t rsc_index,
-                            uint8_t priority,
+ucp_wireup_init_select_info(double score, double tiebreak, unsigned addr_index,
+                            ucp_rsc_index_t rsc_index, uint8_t priority,
                             ucp_wireup_select_info_t *select_info)
 {
     /* score == 0.0 could be specified only when initializing a selection info
@@ -362,10 +363,33 @@ ucp_wireup_init_select_info(double score, unsigned addr_index,
     ucs_assert((score >= 0.0) || (rsc_index == UCP_NULL_RESOURCE));
 
     select_info->score      = score;
+    select_info->tiebreak   = tiebreak;
     select_info->addr_index = addr_index;
     select_info->path_index = UCP_WIREUP_PATH_INDEX_UNDEFINED;
     select_info->rsc_index  = rsc_index;
     select_info->priority   = priority;
+}
+
+/*
+ * Compare a candidate transport against the currently selected one. When the
+ * candidate has a tiebreak and its score is within UCP_WIREUP_SCORE_MAX_DIFF of
+ * the lower score, the tiebreak (then priority) decides; otherwise the score
+ * (then priority) decides. Returns >0 if the candidate is better, <0 if worse,
+ * 0 if equal.
+ */
+static int ucp_wireup_candidate_cmp(double cand_score, double cand_tiebreak,
+                                    int cand_prio,
+                                    const ucp_wireup_select_info_t *sel)
+{
+    double ref_score = ucs_min(cand_score, sel->score);
+
+    if ((cand_tiebreak >= 0.0) && (fabs(cand_score - sel->score) <=
+                                   (UCP_WIREUP_SCORE_MAX_DIFF * ref_score))) {
+        return ucp_score_prio_cmp(cand_tiebreak, cand_prio, sel->tiebreak,
+                                  sel->priority);
+    }
+
+    return ucp_score_prio_cmp(cand_score, cand_prio, sel->score, sel->priority);
 }
 
 static size_t
@@ -422,7 +446,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
     uct_md_attr_v2_t *md_attr;
     const uct_component_attr_t *cmpt_attr;
     int is_reachable;
-    double score;
+    double score, tiebreak;
     uint8_t priority;
     ucp_md_index_t md_index;
 
@@ -621,19 +645,24 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
             }
 
             score        = criteria->calc_score(wiface, md_attr, address, ae,
-                                                0, criteria->arg);
+                                                   0, criteria->arg);
+            tiebreak     = (criteria->calc_tiebreak == NULL) ?
+                             UCP_WIREUP_NO_SCORE_TIEBREAK :
+                             criteria->calc_tiebreak(wiface, md_attr,
+                                                     address, ae, 0,
+                                                     criteria->tiebreak_arg);
             priority     = iface_attr->priority + ae->iface_attr.priority;
             is_reachable = 1;
 
             ucs_trace(UCT_TL_RESOURCE_DESC_FMT
-                      "->addr[%u] : %s score %.2f priority %d",
-                      UCT_TL_RESOURCE_DESC_ARG(resource),
-                      addr_index, criteria->title, score, priority);
+                      "->addr[%u] : %s score %.2f tiebreak %.2f priority %d",
+                      UCT_TL_RESOURCE_DESC_ARG(resource), addr_index,
+                      criteria->title, score, tiebreak, priority);
 
-            if (!found || (ucp_score_prio_cmp(score, priority, sinfo.score,
-                                              sinfo.priority) > 0)) {
-                ucp_wireup_init_select_info(score, addr_index, rsc_index,
-                                            priority, &sinfo);
+            if (!found || (ucp_wireup_candidate_cmp(score, tiebreak, priority,
+                                                    &sinfo) > 0)) {
+                ucp_wireup_init_select_info(score, tiebreak, addr_index,
+                                            rsc_index, priority, &sinfo);
                 found = 1;
             }
         }
@@ -662,13 +691,14 @@ out:
     }
 
     ucs_trace("ep %p: selected for %s: " UCT_TL_RESOURCE_DESC_FMT " md[%d]"
-              " -> '%s' address[%d],md[%d] score %.2f",
+              " -> '%s' address[%d],md[%d] score %.2f tiebreak %.2f",
               ep, criteria->title,
               UCT_TL_RESOURCE_DESC_ARG(
                       &context->tl_rscs[sinfo.rsc_index].tl_rsc),
               context->tl_rscs[sinfo.rsc_index].md_index, ucp_ep_peer_name(ep),
               sinfo.addr_index,
-              address->address_list[sinfo.addr_index].md_index, sinfo.score);
+              address->address_list[sinfo.addr_index].md_index, sinfo.score,
+              sinfo.tiebreak);
 
     *select_info = sinfo;
     return UCS_OK;
@@ -1018,13 +1048,11 @@ static uint64_t ucp_ep_get_context_features(const ucp_ep_h ep)
     return ep->worker->context->config.features;
 }
 
-static double ucp_wireup_rma_score_func(const ucp_worker_iface_t *wiface,
-                                        const uct_md_attr_v2_t *md_attr,
-                                        const ucp_unpacked_address_t *unpacked_addr,
-                                        const ucp_address_entry_t *remote_addr,
-                                        int is_prioritized_ep, void *arg)
+static double
+ucp_wireup_iface_score_bandwidth(const ucp_worker_iface_t *wiface,
+                                 const ucp_unpacked_address_t *unpacked_addr,
+                                 const ucp_address_entry_t *remote_addr)
 {
-    /* best for 4k messages */
     double local_bw;
 
     if (unpacked_addr->dst_version < 17) {
@@ -1034,12 +1062,24 @@ static double ucp_wireup_rma_score_func(const ucp_worker_iface_t *wiface,
         local_bw = ucp_wireup_iface_bw_distance(wiface);
     }
 
+    return ucs_min(local_bw, remote_addr->iface_attr.bandwidth);
+}
+
+static double
+ucp_wireup_rma_score_func(const ucp_worker_iface_t *wiface,
+                          const uct_md_attr_v2_t *md_attr,
+                          const ucp_unpacked_address_t *unpacked_addr,
+                          const ucp_address_entry_t *remote_addr,
+                          int is_prioritized_ep, void *arg)
+{
+    /* best for 4k messages */
     return 1e-3 /
            (ucp_wireup_tl_iface_latency(
                 wiface, unpacked_addr, &remote_addr->iface_attr,
                 is_prioritized_ep) +
             wiface->attr.overhead +
-            (4096.0 / ucs_min(local_bw, remote_addr->iface_attr.bandwidth)));
+            (4096.0 / ucp_wireup_iface_score_bandwidth(wiface, unpacked_addr,
+                                                       remote_addr)));
 }
 
 static void ucp_wireup_fill_peer_err_criteria(ucp_wireup_criteria_t *criteria,
@@ -1106,6 +1146,8 @@ static void ucp_wireup_criteria_init(ucp_wireup_criteria_t *criteria)
     criteria->alloc_mem_types    = 0;
     criteria->is_keepalive       = 0;
     criteria->calc_score         = NULL;
+    criteria->calc_tiebreak      = NULL;
+    criteria->tiebreak_arg       = NULL;
     criteria->tl_rsc_flags       = 0;
     ucp_wireup_init_select_flags(&criteria->local_iface_flags, 0, 0);
     ucp_wireup_init_select_flags(&criteria->remote_iface_flags, 0, 0);
@@ -1140,7 +1182,7 @@ ucp_wireup_add_cm_lane(const ucp_wireup_select_params_t *select_params,
         return UCS_OK;
     }
 
-    ucp_wireup_init_select_info(0., UINT_MAX, UCP_NULL_RESOURCE, 0,
+    ucp_wireup_init_select_info(0., 0., UINT_MAX, UCP_NULL_RESOURCE, 0,
                                 &select_info);
 
     /* server is not a proxy because it can create all lanes connected */
@@ -1267,12 +1309,26 @@ ucp_wireup_am_score_func(const ucp_worker_iface_t *wiface,
                          const ucp_address_entry_t *remote_addr,
                          int is_prioritized_ep, void *arg)
 {
-    /* best end-to-end latency */
     return 1e-3 /
            (ucp_wireup_tl_iface_latency(
                 wiface, unpacked_addr, &remote_addr->iface_attr,
                 is_prioritized_ep) +
             wiface->attr.overhead + remote_addr->iface_attr.overhead);
+}
+
+/*
+ * AM-lane tiebreak: rank transports by bandwidth (scaled to MiB/s for a smaller,
+ * more readable value) to break ties between candidates with close scores.
+ */
+static double
+ucp_wireup_tiebreak_func(const ucp_worker_iface_t *wiface,
+                         const uct_md_attr_v2_t *md_attr,
+                         const ucp_unpacked_address_t *unpacked_addr,
+                         const ucp_address_entry_t *remote_addr,
+                         int is_prioritized_ep, void *arg)
+{
+    return ucp_wireup_iface_score_bandwidth(wiface, unpacked_addr,
+                                            remote_addr) / UCS_MBYTE;
 }
 
 static double ucp_tl_iface_bandwidth_ratio(ucp_context_h context,
@@ -1480,6 +1536,7 @@ ucp_wireup_add_am_lane(const ucp_wireup_select_params_t *select_params,
         ucp_wireup_criteria_init(&criteria);
         criteria.title              = "active messages";
         criteria.calc_score         = ucp_wireup_am_score_func;
+        criteria.calc_tiebreak      = ucp_wireup_tiebreak_func;
         criteria.lane_type          = UCP_LANE_TYPE_AM;
         criteria.tl_rsc_flags       =
                 (ep_init_flags & UCP_EP_INIT_ALLOW_AM_AUX_TL) ?
@@ -2426,6 +2483,7 @@ ucp_wireup_add_keepalive_lane(const ucp_wireup_select_params_t *select_params,
     criteria.local_md_flags     = 0;
     criteria.is_keepalive       = 1;
     criteria.calc_score         = ucp_wireup_keepalive_score_func;
+    criteria.calc_tiebreak      = ucp_wireup_tiebreak_func;
     /* Keepalive can also use auxiliary transports */
     criteria.tl_rsc_flags       = UCP_TL_RSC_FLAG_AUX;
     criteria.lane_type          = UCP_LANE_TYPE_KEEPALIVE;
