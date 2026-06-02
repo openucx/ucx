@@ -125,6 +125,7 @@ static ucs_status_t uct_rocm_ipc_iface_query(uct_iface_h tl_iface,
                                           UCT_IFACE_FLAG_PUT_ZCOPY | UCT_IFACE_FLAG_PENDING |
                                           UCT_IFACE_FLAG_CONNECT_TO_IFACE |
                                           UCT_IFACE_FLAG_DEVICE_EP;
+    iface_attr->ctl_device              = UCS_SYS_DEVICE_ID_UNKNOWN;
 
     iface_attr->latency = ucs_linear_func_make(iface->config.latency, 0);
     iface_attr->bandwidth.dedicated     = 0;

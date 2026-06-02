@@ -11,7 +11,6 @@
 #include <ucs/sys/device_code.h>
 #include <ucs/type/status.h>
 
-#define UCT_ROCM_IPC_IS_ALIGNED_POW2(_n, _p) (!((_n) & ((_p)-1)))
 
 /* Dynamically detect wavefront size using compiler builtin. */
 #if __has_builtin(__builtin_amdgcn_wavefrontsize)
@@ -130,8 +129,8 @@ uct_rocm_ipc_copy_level<UCS_DEVICE_LEVEL_WARP>(void *dst, const void *src,
     auto d1 = reinterpret_cast<char*>(dst);
 
     /* 16B-aligned fast path using vec4 */
-    if (UCT_ROCM_IPC_IS_ALIGNED_POW2((intptr_t)s1, sizeof(vec4)) &&
-        UCT_ROCM_IPC_IS_ALIGNED_POW2((intptr_t)d1, sizeof(vec4))) {
+    if (UCT_IPC_IS_ALIGNED_POW2((intptr_t)s1, sizeof(vec4)) &&
+        UCT_IPC_IS_ALIGNED_POW2((intptr_t)d1, sizeof(vec4))) {
         const vec4 *s4 = reinterpret_cast<const vec4*>(s1);
         vec4 *d4       = reinterpret_cast<vec4*>(d1);
         size_t n4      = len / sizeof(vec4);
@@ -151,8 +150,8 @@ uct_rocm_ipc_copy_level<UCS_DEVICE_LEVEL_WARP>(void *dst, const void *src,
     }
 
     /* 8B-aligned fast path using vec2 */
-    if (UCT_ROCM_IPC_IS_ALIGNED_POW2((intptr_t)s1, sizeof(vec2)) &&
-        UCT_ROCM_IPC_IS_ALIGNED_POW2((intptr_t)d1, sizeof(vec2))) {
+    if (UCT_IPC_IS_ALIGNED_POW2((intptr_t)s1, sizeof(vec2)) &&
+        UCT_IPC_IS_ALIGNED_POW2((intptr_t)d1, sizeof(vec2))) {
         const vec2 *s2 = reinterpret_cast<const vec2*>(s1);
         vec2 *d2       = reinterpret_cast<vec2*>(d1);
         size_t n2      = len / sizeof(vec2);
@@ -187,8 +186,8 @@ uct_rocm_ipc_copy_level<UCS_DEVICE_LEVEL_BLOCK>(void *dst, const void *src,
     auto s1    = reinterpret_cast<const char*>(src);
     auto d1    = reinterpret_cast<char*>(dst);
 
-    if (UCT_ROCM_IPC_IS_ALIGNED_POW2((intptr_t)s1, sizeof(vec4)) &&
-        UCT_ROCM_IPC_IS_ALIGNED_POW2((intptr_t)d1, sizeof(vec4))) {
+    if (UCT_IPC_IS_ALIGNED_POW2((intptr_t)s1, sizeof(vec4)) &&
+        UCT_IPC_IS_ALIGNED_POW2((intptr_t)d1, sizeof(vec4))) {
         const vec4 *s4   = reinterpret_cast<const vec4*>(s1);
         vec4 *d4         = reinterpret_cast<vec4*>(d1);
         size_t num_lines = len / sizeof(vec4);
@@ -208,8 +207,8 @@ uct_rocm_ipc_copy_level<UCS_DEVICE_LEVEL_BLOCK>(void *dst, const void *src,
     }
 
     /* 8B-aligned fast path using vec2 */
-    if (UCT_ROCM_IPC_IS_ALIGNED_POW2((intptr_t)s1, sizeof(vec2)) &&
-        UCT_ROCM_IPC_IS_ALIGNED_POW2((intptr_t)d1, sizeof(vec2))) {
+    if (UCT_IPC_IS_ALIGNED_POW2((intptr_t)s1, sizeof(vec2)) &&
+        UCT_IPC_IS_ALIGNED_POW2((intptr_t)d1, sizeof(vec2))) {
         const vec2 *s2   = reinterpret_cast<const vec2*>(s1);
         vec2 *d2         = reinterpret_cast<vec2*>(d1);
         size_t num_lines = len / sizeof(vec2);
