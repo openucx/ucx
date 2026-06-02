@@ -26,6 +26,7 @@ typedef struct uct_ib_mlx5_ext_provider {
 UCS_LIST_HEAD(uct_ib_mlx5_ext_providers);
 
 static ucs_spinlock_t uct_ib_mlx5_ext_lock;
+static int            uct_ib_mlx5_ext_initialized;
 
 static ucs_status_t uct_ib_mlx5_ext_default_iface_flags(uint64_t *flags)
 {
@@ -137,16 +138,26 @@ void uct_ib_mlx5_ext_init(void)
 {
     ucs_status_t status;
 
+    if (uct_ib_mlx5_ext_initialized) {
+        return;
+    }
+
     status = ucs_spinlock_init(&uct_ib_mlx5_ext_lock, 0);
     if (status != UCS_OK) {
         ucs_fatal("failed to initialize mlx5 ext lock: %s",
                   ucs_status_string(status));
     }
+
+    uct_ib_mlx5_ext_initialized = 1;
 }
 
 void uct_ib_mlx5_ext_cleanup(void)
 {
     uct_ib_mlx5_ext_provider_t *provider, *tmp;
+
+    if (!uct_ib_mlx5_ext_initialized) {
+        return;
+    }
 
     ucs_spin_lock(&uct_ib_mlx5_ext_lock);
 
@@ -158,23 +169,24 @@ void uct_ib_mlx5_ext_cleanup(void)
     ucs_spin_unlock(&uct_ib_mlx5_ext_lock);
 
     ucs_spinlock_destroy(&uct_ib_mlx5_ext_lock);
+    uct_ib_mlx5_ext_initialized = 0;
 }
 
-void uct_ib_mlx5_ext_register(const uct_ib_mlx5_ext_ops_t *ops)
+ucs_status_t uct_ib_mlx5_ext_register(const uct_ib_mlx5_ext_ops_t *ops)
 {
     uct_ib_mlx5_ext_provider_t *provider;
     unsigned num_providers;
 
     if (ucs_unlikely(ops == NULL)) {
-        ucs_debug("ib mlx5 ext: ignored NULL provider");
-        return;
+        ucs_warn("ib mlx5 ext: ignored NULL provider");
+        return UCS_ERR_INVALID_PARAM;
     }
 
     provider = ucs_malloc(sizeof(*provider), "mlx5_ext_provider");
     if (ucs_unlikely(provider == NULL)) {
         ucs_error("ib mlx5 ext: failed to allocate provider entry for %.*s",
                   UCT_COMPONENT_NAME_MAX, ops->name);
-        return;
+        return UCS_ERR_NO_MEMORY;
     }
 
     provider->ops = *ops;
@@ -197,4 +209,5 @@ void uct_ib_mlx5_ext_register(const uct_ib_mlx5_ext_ops_t *ops)
                       "unsupported" :
                       "supported",
               num_providers);
+    return UCS_OK;
 }
