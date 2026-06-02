@@ -261,6 +261,27 @@ resources:
     - container: centos10stream
       image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/centos10stream/builder:inbox
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: ucxx_rapidsai_ci_conda
+      # Thin wrapper of rapidsai/ci-conda; see buildlib/dockers/rapidsai-ci-conda.Dockerfile.
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/rapidsai-ci-conda:26.06-azp-1
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: ucxx_rapidsai_ci_conda_gpu
+      # No IB/host-net: with IB, UCX binds rc_mlx5 and the AM/tag tests hang here.
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/rapidsai-ci-conda:26.06-azp-1
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) --gpus all --ipc=host
+    # Wheel images are CUDA-pinned: one base per CUDA version (see rapidsai-ci-wheel.Dockerfile).
+    - container: ucxx_rapidsai_ci_wheel_cuda13
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/rapidsai-ci-wheel:26.06-cuda13-azp-1
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: ucxx_rapidsai_ci_wheel_cuda13_gpu
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/rapidsai-ci-wheel:26.06-cuda13-azp-1
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) --gpus all --ipc=host
+    - container: ucxx_rapidsai_ci_wheel_cuda12
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/rapidsai-ci-wheel:26.06-cuda12-azp-1
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: ucxx_rapidsai_ci_wheel_cuda12_gpu
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/rapidsai-ci-wheel:26.06-cuda12-azp-1
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) --gpus all --ipc=host
 
 stages:
   - stage: Codestyle
@@ -348,6 +369,52 @@ stages:
         parameters:
           demands: ucx_docker -equals yes
           container: coverity_rh7
+
+  - template: ucxx_build.yml
+    parameters:
+      dependsOn: [Static_check]
+      # Wheel GPU tests run on x86 only (no arm64 GPU runner); cuda12 + cuda13.
+      wheel_tests_ucxx_slices:
+        - { name: x86_64_cuda12_py311, container: ucxx_rapidsai_ci_wheel_cuda12_gpu, libucxx_slice: x86_64_cuda12_py311, ucxx_slice: x86_64_cuda12_py311,
+            demands: ucx_gpu, rapids_cuda_version: '12.9.1', rapids_py_version: '3.11' }
+        - { name: x86_64_cuda13_py311, container: ucxx_rapidsai_ci_wheel_cuda13_gpu, libucxx_slice: x86_64_cuda13_py311, ucxx_slice: x86_64_cuda13_py311,
+            demands: ucx_gpu, rapids_cuda_version: '13.2.0', rapids_py_version: '3.11' }
+      conda_cpp_slices:
+        - { name: x86_64_cuda12_py311,  demands: ucx_docker, rapids_cuda_version: '12.9.1', rapids_py_version: '3.11' }
+        - { name: x86_64_cuda13_py311,  demands: ucx_docker, rapids_cuda_version: '13.2.0', rapids_py_version: '3.11' }
+        - { name: aarch64_cuda12_py311, demands: ucx_arm64,  rapids_cuda_version: '12.9.1', rapids_py_version: '3.11' }
+        - { name: aarch64_cuda13_py311, demands: ucx_arm64,  rapids_cuda_version: '13.2.0', rapids_py_version: '3.11' }
+      conda_python_slices:
+        - { name: x86_64_cuda12_py311,  demands: ucx_docker, rapids_cuda_version: '12.9.1', rapids_py_version: '3.11' }
+        - { name: x86_64_cuda13_py311,  demands: ucx_docker, rapids_cuda_version: '13.2.0', rapids_py_version: '3.11' }
+        - { name: aarch64_cuda12_py311, demands: ucx_arm64,  rapids_cuda_version: '12.9.1', rapids_py_version: '3.11' }
+        - { name: aarch64_cuda13_py311, demands: ucx_arm64,  rapids_cuda_version: '13.2.0', rapids_py_version: '3.11' }
+      # libucxx + ucxx wheels for cuda12 + cuda13, x86_64 + aarch64.
+      wheel_libucxx_slices:
+        - { name: x86_64_cuda12_py311,  container: ucxx_rapidsai_ci_wheel_cuda12, demands: ucx_docker, rapids_cuda_version: '12.9.1', rapids_py_version: '3.11' }
+        - { name: x86_64_cuda13_py311,  container: ucxx_rapidsai_ci_wheel_cuda13, demands: ucx_docker, rapids_cuda_version: '13.2.0', rapids_py_version: '3.11' }
+        - { name: aarch64_cuda12_py311, container: ucxx_rapidsai_ci_wheel_cuda12, demands: ucx_arm64,  rapids_cuda_version: '12.9.1', rapids_py_version: '3.11' }
+        - { name: aarch64_cuda13_py311, container: ucxx_rapidsai_ci_wheel_cuda13, demands: ucx_arm64,  rapids_cuda_version: '13.2.0', rapids_py_version: '3.11' }
+      wheel_ucxx_slices:
+        - { name: x86_64_cuda12_py311,  container: ucxx_rapidsai_ci_wheel_cuda12, libucxx_slice: x86_64_cuda12_py311,  demands: ucx_docker, rapids_cuda_version: '12.9.1', rapids_py_version: '3.11' }
+        - { name: x86_64_cuda13_py311,  container: ucxx_rapidsai_ci_wheel_cuda13, libucxx_slice: x86_64_cuda13_py311,  demands: ucx_docker, rapids_cuda_version: '13.2.0', rapids_py_version: '3.11' }
+        - { name: aarch64_cuda12_py311, container: ucxx_rapidsai_ci_wheel_cuda12, libucxx_slice: aarch64_cuda12_py311, demands: ucx_arm64,  rapids_cuda_version: '12.9.1', rapids_py_version: '3.11' }
+        - { name: aarch64_cuda13_py311, container: ucxx_rapidsai_ci_wheel_cuda13, libucxx_slice: aarch64_cuda13_py311, demands: ucx_arm64,  rapids_cuda_version: '13.2.0', rapids_py_version: '3.11' }
+      docs_slices:
+        - { name: x86_64_cuda13_py311, cpp_slice: x86_64_cuda13_py311, python_slice: x86_64_cuda13_py311,
+            demands: ucx_docker, rapids_cuda_version: '13.2.0', rapids_py_version: '3.11' }
+      devcontainer_slices:
+        - { name: x86_64_cuda13_py311, demands: ucx_docker, rapids_cuda_version: '13.2.0', rapids_py_version: '3.11' }
+
+  - template: ucxx_tests.yml
+    parameters:
+      dependsOn: [Static_check]
+      slices:
+        - { name: x86_64_cuda13_py313,  gpu: true,  demands: ucx_gpu,    rapids_cuda_version: '13.2.0', rapids_py_version: '3.13' }
+        - { name: x86_64_cuda12_py311,  gpu: false, demands: ucx_docker, rapids_cuda_version: '12.9.1', rapids_py_version: '3.11' }
+        - { name: x86_64_cuda13_py311,  gpu: false, demands: ucx_docker, rapids_cuda_version: '13.2.0', rapids_py_version: '3.11' }
+        - { name: aarch64_cuda12_py311, gpu: false, demands: ucx_arm64,  rapids_cuda_version: '12.9.1', rapids_py_version: '3.11' }
+        - { name: aarch64_cuda13_py311, gpu: false, demands: ucx_arm64,  rapids_cuda_version: '13.2.0', rapids_py_version: '3.11' }
 
   - stage: Tests
     dependsOn: [Basic_compile]
