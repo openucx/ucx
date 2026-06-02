@@ -20,7 +20,7 @@ require_ze=${require_ze:-}
 build_mode=${build_mode:-long}
 
 case "${build_mode}" in
-long|short|sanity|compilers)
+long|short|sanity|compilers|ze)
 	;;
 *)
 	azure_log_error "Unsupported build mode: ${build_mode}"
@@ -516,7 +516,12 @@ check_no_gda() {
 	fi
 }
 
-az_init_modules
+# The ZE lane uses a public Intel container that does not have the MLNX
+# Environment Modules system (/etc/profile.d/modules.sh). Skip module
+# initialisation entirely; build_ze does not need any modules.
+if [ "${build_mode}" != "ze" ]; then
+	az_init_modules
+fi
 prepare_build
 
 base_tests=('build_docs' \
@@ -532,6 +537,9 @@ base_tests=('build_docs' \
 case "${build_mode}" in
 sanity)
 	tests=('build_sanity')
+	;;
+ze)
+	tests=('build_ze')
 	;;
 short)
 	tests=("${base_tests[@]}")

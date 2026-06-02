@@ -34,7 +34,7 @@ jobs:
             build_mode: long
           ubuntu2404_ze:
             CONTAINER: ubuntu2404_ze
-            build_mode: short
+            build_mode: ze
             require_ze: yes
           ubuntu2210:
             CONTAINER: ubuntu2210
