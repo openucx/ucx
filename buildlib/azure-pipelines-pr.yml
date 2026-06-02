@@ -37,7 +37,7 @@ resources:
       type: github
       name: rapidsai/ucxx
       endpoint: Mellanox-lab
-      ref: refs/heads/main
+      ref: refs/tags/v0.51.00a
 
 extends:
   template: pr/main.yml
