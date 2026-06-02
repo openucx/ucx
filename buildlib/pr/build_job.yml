@@ -34,8 +34,9 @@ jobs:
             build_mode: long
           ubuntu2404_ze:
             CONTAINER: ubuntu2404_ze
-            build_mode: ze
+            build_mode: short
             require_ze: yes
+            install_ze_deps: yes
           ubuntu2210:
             CONTAINER: ubuntu2210
             build_mode: sanity
@@ -149,6 +150,23 @@ jobs:
         clean: true
         fetchDepth: 100
         retryCountOnTaskFailure: 5
+
+      - bash: |
+          set -eEx
+          if [ "${install_ze_deps}" != "yes" ]; then
+              exit 0
+          fi
+          SUDO=
+          if [ "$(id -u)" -ne 0 ]; then
+              SUDO="sudo -E"
+          fi
+          export DEBIAN_FRONTEND=noninteractive
+          $SUDO apt-get update -q
+          $SUDO apt-get install -y --no-install-recommends \
+              autoconf automake libtool doxygen
+        displayName: Install build tools for ZE lane
+        env:
+          install_ze_deps: $(install_ze_deps)
 
       - bash: |
           ./buildlib/tools/builds.sh
