@@ -9,7 +9,6 @@
 #endif
 
 #include <ucs/datastruct/list.h>
-#include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/sys/compiler.h>
@@ -33,38 +32,10 @@ static ucs_status_t uct_ib_mlx5_ext_default_iface_flags(uint64_t *flags)
     return UCS_OK;
 }
 
-static uct_ib_mlx5_ext_provider_t uct_ib_mlx5_ext_provider_default = {
-    .ops = {
-        .name        = "default",
-        .iface_flags = uct_ib_mlx5_ext_default_iface_flags,
-        .qp_query    = (uct_ib_mlx5_ext_qp_query_func_t)ucs_empty_function_return_unsupported,
-    },
-};
-
 static int uct_ib_mlx5_ext_is_unsupported_op(const void *op)
 {
     return (op == NULL) ||
            (op == (const void*)ucs_empty_function_return_unsupported);
-}
-
-void uct_ib_mlx5_ext_init(void)
-{
-    ucs_list_add_tail(&uct_ib_mlx5_ext_providers,
-                      &uct_ib_mlx5_ext_provider_default.list);
-}
-
-void uct_ib_mlx5_ext_cleanup(void)
-{
-    uct_ib_mlx5_ext_provider_t *provider, *tmp;
-
-    ucs_list_for_each_safe(provider, tmp, &uct_ib_mlx5_ext_providers, list) {
-        ucs_list_del(&provider->list);
-        if (provider != &uct_ib_mlx5_ext_provider_default) {
-            ucs_free(provider);
-        }
-    }
-
-    ucs_list_head_init(&uct_ib_mlx5_ext_providers);
 }
 
 ucs_status_t uct_ib_mlx5_ext_iface_flags(uint64_t *flags)
@@ -84,9 +55,8 @@ ucs_status_t uct_ib_mlx5_ext_iface_flags(uint64_t *flags)
         return provider->ops.iface_flags(flags);
     }
 
-    return UCS_ERR_UNSUPPORTED;
+    return uct_ib_mlx5_ext_default_iface_flags(flags);
 }
-
 
 ucs_status_t uct_ib_mlx5_ext_qp_query(struct ibv_qp *qp,
                                       struct mlx5dv_devx_obj *devx_obj,
@@ -109,7 +79,6 @@ ucs_status_t uct_ib_mlx5_ext_qp_query(struct ibv_qp *qp,
 
     return UCS_ERR_UNSUPPORTED;
 }
-
 
 void uct_ib_mlx5_ext_register(const uct_ib_mlx5_ext_ops_t *ops)
 {
@@ -142,4 +111,16 @@ void uct_ib_mlx5_ext_register(const uct_ib_mlx5_ext_ops_t *ops)
                       "unsupported" :
                       "supported",
               ucs_list_length(&uct_ib_mlx5_ext_providers));
+}
+
+void uct_ib_mlx5_ext_cleanup(void)
+{
+    uct_ib_mlx5_ext_provider_t *provider, *tmp;
+
+    ucs_list_for_each_safe(provider, tmp, &uct_ib_mlx5_ext_providers, list) {
+        ucs_list_del(&provider->list);
+        ucs_free(provider);
+    }
+
+    ucs_list_head_init(&uct_ib_mlx5_ext_providers);
 }

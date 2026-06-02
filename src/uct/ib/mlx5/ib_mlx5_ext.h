@@ -61,24 +61,20 @@ typedef struct uct_ib_mlx5_ext_ops {
 } uct_ib_mlx5_ext_ops_t;
 
 /**
- * @brief Initialize the provider list and register the default provider.
- */
-void uct_ib_mlx5_ext_init(void);
-
-/**
- * @brief Remove all registered providers and release resources.
- */
-void uct_ib_mlx5_ext_cleanup(void);
-
-/**
  * @brief Register an external provider.
  *
  * @param [in] ops Pointer to the provider operations.
  */
 void uct_ib_mlx5_ext_register(const uct_ib_mlx5_ext_ops_t *ops);
 
+
 /**
- * @brief Call the first provider supporting iface_flags.
+ * @brief Release all registered providers.
+ */
+void uct_ib_mlx5_ext_cleanup(void);
+
+/**
+ * @brief Call the first registered provider supporting iface_flags.
  *
  * @param [out] flags Pointer to the iface flags.
  *
@@ -87,7 +83,7 @@ void uct_ib_mlx5_ext_register(const uct_ib_mlx5_ext_ops_t *ops);
 ucs_status_t uct_ib_mlx5_ext_iface_flags(uint64_t *flags);
 
 /**
- * @brief Call the first provider supporting qp_query.
+ * @brief Call the first registered provider supporting qp_query.
  *
  * @param [in]     qp          QP pointer.
  * @param [in]     devx_obj    DevX object pointer.
