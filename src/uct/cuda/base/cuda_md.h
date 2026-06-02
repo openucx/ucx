@@ -63,4 +63,8 @@ ucs_status_t
 uct_cuda_base_fabric_release(uct_cuda_base_fabric_alloc_t *alloc_handle,
                              ucs_log_level_t log_level);
 
+
+int uct_cuda_base_device_supports_fabric(CUdevice cuda_device,
+                                         ucs_log_level_t log_level);
+
 #endif

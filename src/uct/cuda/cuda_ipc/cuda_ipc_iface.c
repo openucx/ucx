@@ -15,6 +15,7 @@
 
 #include <ucs/async/eventfd.h>
 #include <ucs/debug/assert.h>
+#include <ucs/sys/sys.h>
 #include <ucs/sys/string.h>
 #include <ucs/type/class.h>
 #include <uct/api/device/uct_device_types.h>
@@ -24,6 +25,10 @@
 
 #include <limits.h>
 #include <pthread.h>
+#include <unistd.h>
+
+#define UCT_CUDA_IPC_IMEX_CHANNELS_PATH \
+    "/dev/nvidia-caps-imex-channels"
 
 typedef enum {
     UCT_CUDA_IPC_DEVICE_ADDR_FLAG_MNNVL  = UCS_BIT(0),
@@ -88,30 +93,46 @@ static ucs_config_field_t uct_cuda_ipc_iface_config_table[] = {
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_ipc_iface_t)(uct_iface_t*);
 
 #if HAVE_CUDA_FABRIC
-static int uct_cuda_ipc_iface_check_fabric_supported(void)
+static ucs_status_t
+uct_cuda_ipc_iface_check_imex_channel_cb(const struct dirent *entry, void *arg)
 {
-    uct_cuda_base_fabric_alloc_t alloc_handle = {
-        .ptr    = 0,
-        .length = 1
-    };
-    ucs_status_t status;
-    CUdevice cu_device;
-    size_t granularity = SIZE_MAX;
+    char path[PATH_MAX];
+    int *found = (int*)arg;
 
-    status = UCT_CUDADRV_FUNC(cuCtxGetDevice(&cu_device),
-                              UCS_LOG_LEVEL_DEBUG);
-    if (status != UCS_OK) {
+    if (strncmp(entry->d_name, "channel", 7) != 0) {
+        return UCS_OK;
+    }
+
+    ucs_snprintf_safe(path, sizeof(path), "%s/%s",
+                      UCT_CUDA_IPC_IMEX_CHANNELS_PATH, entry->d_name);
+    if (access(path, R_OK | W_OK) == 0) {
+        *found = 1;
+    }
+
+    return UCS_OK;
+}
+
+static int uct_cuda_ipc_iface_imex_channel_accessible(void)
+{
+    int found = 0;
+
+    if (ucs_sys_readdir(UCT_CUDA_IPC_IMEX_CHANNELS_PATH,
+                        uct_cuda_ipc_iface_check_imex_channel_cb,
+                        &found) != UCS_OK) {
         return 0;
     }
 
-    status = uct_cuda_base_fabric_alloc(cu_device, &granularity, &alloc_handle,
-                                        UCS_LOG_LEVEL_DEBUG);
-    if (status != UCS_OK) {
+    return found;
+}
+
+static int uct_cuda_ipc_iface_check_fabric_supported(CUdevice cu_device)
+{
+    if (!uct_cuda_base_device_supports_fabric(cu_device,
+                                              UCS_LOG_LEVEL_DEBUG)) {
         return 0;
     }
 
-    uct_cuda_base_fabric_release(&alloc_handle, UCS_LOG_LEVEL_DEBUG);
-    return 1;
+    return uct_cuda_ipc_iface_imex_channel_accessible();
 }
 #endif
 
@@ -120,11 +141,19 @@ static int uct_cuda_ipc_iface_check_fabric_supported(void)
 static int uct_cuda_ipc_iface_fabric_supported(void)
 {
 #if HAVE_CUDA_FABRIC
+    static CUdevice cached_device = CU_DEVICE_INVALID;
     static int fabric_supported = -1;
+    CUdevice cu_device;
 
-    if (fabric_supported == -1) {
-        fabric_supported = uct_cuda_ipc_iface_check_fabric_supported();
-        ucs_debug("CUDA fabric IPC support is %s",
+    if (UCT_CUDADRV_FUNC(cuCtxGetDevice(&cu_device),
+                         UCS_LOG_LEVEL_DEBUG) != UCS_OK) {
+        return 0;
+    }
+
+    if (cu_device != cached_device) {
+        fabric_supported = uct_cuda_ipc_iface_check_fabric_supported(cu_device);
+        cached_device    = cu_device;
+        ucs_debug("CUDA fabric IPC support on device %d is %s", cu_device,
                   fabric_supported ? "enabled" : "disabled");
     }
 

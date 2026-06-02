@@ -185,6 +185,26 @@ uct_cuda_base_fabric_release(uct_cuda_base_fabric_alloc_t *alloc_handle,
 #endif
 }
 
+int uct_cuda_base_device_supports_fabric(CUdevice cuda_device,
+                                         ucs_log_level_t log_level)
+{
+#if HAVE_CUDA_FABRIC && \
+    HAVE_DECL_CU_DEVICE_ATTRIBUTE_HANDLE_TYPE_FABRIC_SUPPORTED
+    int supported;
+
+    if (UCT_CUDADRV_FUNC(cuDeviceGetAttribute(
+                &supported,
+                CU_DEVICE_ATTRIBUTE_HANDLE_TYPE_FABRIC_SUPPORTED,
+                cuda_device), log_level) != UCS_OK) {
+        return 0;
+    }
+
+    return supported;
+#else
+    return 0;
+#endif
+}
+
 UCS_STATIC_INIT
 {
     UCT_CUDADRV_FUNC_LOG_DEBUG(cuInit(0));
