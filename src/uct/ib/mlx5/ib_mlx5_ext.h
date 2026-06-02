@@ -61,6 +61,16 @@ typedef struct uct_ib_mlx5_ext_ops {
 } uct_ib_mlx5_ext_ops_t;
 
 /**
+ * @brief Initialize the provider list and register the default provider.
+ */
+void uct_ib_mlx5_ext_init(void);
+
+/**
+ * @brief Remove all registered providers and release resources.
+ */
+void uct_ib_mlx5_ext_cleanup(void);
+
+/**
  * @brief Register an external provider.
  *
  * @param [in] ops Pointer to the provider operations.
