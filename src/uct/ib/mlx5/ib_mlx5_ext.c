@@ -29,9 +29,7 @@ static ucs_spinlock_t uct_ib_mlx5_ext_lock;
 
 static ucs_status_t uct_ib_mlx5_ext_default_iface_flags(uint64_t *flags)
 {
-    if (ucs_likely(flags != NULL)) {
-        *flags = 0;
-    }
+    *flags = 0;
 
     return UCS_OK;
 }
