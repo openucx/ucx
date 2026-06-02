@@ -36,6 +36,10 @@ typedef struct ucs_sys_bus_id {
 } ucs_sys_bus_id_t;
 
 
+/* Packed bit representation of a PCI bus id */
+typedef int64_t ucs_bus_id_bit_rep_t;
+
+
 /**
  * @ingroup UCS_RESOURCE
  * System Device Index
@@ -87,10 +91,17 @@ typedef void (*ucs_topo_get_memory_distance_func_t)(
         ucs_sys_device_t device, ucs_sys_dev_distance_t *distance);
 
 
-/**
- * Opaque handle to a registered system topology provider.
+/*
+ * Topology provider operations, implementing the topology API for a topology
+ * module.
  */
-typedef struct ucs_sys_topo_provider ucs_sys_topo_provider_t;
+typedef struct ucs_sys_topo_ops {
+    /* Provider's ucs_topo_get_distance implementation */
+    ucs_topo_get_distance_func_t        get_distance;
+
+    /* Provider's ucs_topo_get_memory_distance implementation */
+    ucs_topo_get_memory_distance_func_t get_memory_distance;
+} ucs_sys_topo_ops_t;
 
 
 /**
@@ -100,43 +111,29 @@ void ucs_sys_topo_reset_provider(void);
 
 
 /**
- * Register a system topology provider.
+ * Push a topology provider that overrides the configuration-selected provider.
  *
- * The provider becomes selectable by the TOPO_PRIO configuration by
- * its @a name. After registration, call @ref ucs_sys_topo_reset_provider if a
- * provider was already cached and the selection needs to be re-evaluated.
+ * The pushed provider takes precedence over the provider chosen by the
+ * TOPO_PRIO configuration until it is removed with
+ * @ref ucs_sys_topo_provider_pop. Pushes nest as a stack: the most recently
+ * pushed provider is the active one. Intended primarily for tests that need
+ * deterministic topology behavior.
  *
- * @param [in]  name                 Provider name used for selection. The
- *                                   pointer is stored, not copied, so the
- *                                   string must remain valid for the lifetime
- *                                   of the provider. Registering a name that is
- *                                   already used by another provider (such as
- *                                   "default" or "sysfs") silently shadows it
- *                                   during selection, so the name should be
- *                                   unique.
- * @param [in]  get_distance         Implementation of @ref ucs_topo_get_distance.
- * @param [in]  get_memory_distance  Implementation of
- *                                   @ref ucs_topo_get_memory_distance.
+ * @param [in] ops  Topology operations. The contents are copied, so the
+ *                  pointer does not need to remain valid after the call.
  *
- * @return Handle of the registered provider, to be passed to
- *         @ref ucs_sys_topo_provider_remove, or NULL on error.
+ * @return UCS_OK on success, or UCS_ERR_NO_MEMORY on allocation failure.
  */
-ucs_sys_topo_provider_t *ucs_sys_topo_provider_add(
-        const char *name, ucs_topo_get_distance_func_t get_distance,
-        ucs_topo_get_memory_distance_func_t get_memory_distance);
+ucs_status_t ucs_sys_topo_provider_push(const ucs_sys_topo_ops_t *ops);
 
 
 /**
- * Unregister a system topology provider previously added by
- * @ref ucs_sys_topo_provider_add.
+ * Pop the topology provider most recently pushed with
+ * @ref ucs_sys_topo_provider_push, restoring the previously active provider.
  *
- * If the removed provider is the currently cached selection, the cached
- * selection is invalidated, so the caller does not need to call
- * @ref ucs_sys_topo_reset_provider for safety.
- *
- * @param [in] provider  Provider handle to remove. Freed by this call.
+ * Must be balanced with a prior @ref ucs_sys_topo_provider_push call.
  */
-void ucs_sys_topo_provider_remove(ucs_sys_topo_provider_t *provider);
+void ucs_sys_topo_provider_pop(void);
 
 
 /**
@@ -161,6 +158,17 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
  */
 ucs_status_t ucs_topo_get_device_bus_id(ucs_sys_device_t sys_dev,
                                         ucs_sys_bus_id_t *bus_id);
+
+
+/**
+ * Pack a PCI bus id into its bit representation.
+ *
+ * @param [in] bus_id  Bus id to pack.
+ *
+ * @return Packed bit representation of the bus id.
+ */
+ucs_bus_id_bit_rep_t
+ucs_topo_get_bus_id_bit_repr(const ucs_sys_bus_id_t *bus_id);
 
 
 /**
