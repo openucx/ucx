@@ -40,6 +40,40 @@ static int uct_ib_mlx5_ext_is_unsupported_op(const void *op)
            (op == (const void*)ucs_empty_function_return_unsupported);
 }
 
+static ucs_status_t
+uct_ib_mlx5_ext_qp_query_validate(struct ibv_qp *qp,
+                                  struct mlx5dv_devx_obj *devx_obj,
+                                  const uct_ib_mlx5_ext_qp_query_attr_t *attr)
+{
+    const uint64_t token_mask = UCT_IB_MLX5_EXT_QP_QUERY_ATTR_FIELD_TX_TOKEN |
+                                UCT_IB_MLX5_EXT_QP_QUERY_ATTR_FIELD_RX_TOKEN;
+
+    if (attr->field_mask & UCT_IB_MLX5_EXT_QP_QUERY_ATTR_FIELD_TX_TOKEN) {
+        if (attr->tx_token == NULL) {
+            return UCS_ERR_INVALID_PARAM;
+        }
+    }
+
+    if (attr->field_mask & UCT_IB_MLX5_EXT_QP_QUERY_ATTR_FIELD_RX_TOKEN) {
+        if (attr->rx_token == NULL) {
+            return UCS_ERR_INVALID_PARAM;
+        }
+    }
+
+    if (attr->field_mask & token_mask) {
+        if ((qp == NULL) && (devx_obj == NULL)) {
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        if ((qp == NULL) && (devx_obj != NULL) &&
+            !(attr->field_mask & UCT_IB_MLX5_EXT_QP_QUERY_ATTR_FIELD_QP_NUM)) {
+            return UCS_ERR_INVALID_PARAM;
+        }
+    }
+
+    return UCS_OK;
+}
+
 ucs_status_t uct_ib_mlx5_ext_iface_flags(uint64_t *flags)
 {
     uct_ib_mlx5_ext_provider_t *provider;
@@ -75,6 +109,11 @@ ucs_status_t uct_ib_mlx5_ext_qp_query(struct ibv_qp *qp,
 
     if (ucs_unlikely(attr == NULL)) {
         return UCS_ERR_INVALID_PARAM;
+    }
+
+    status = uct_ib_mlx5_ext_qp_query_validate(qp, devx_obj, attr);
+    if (ucs_unlikely(status != UCS_OK)) {
+        return status;
     }
 
     ucs_spin_lock(&uct_ib_mlx5_ext_lock);
