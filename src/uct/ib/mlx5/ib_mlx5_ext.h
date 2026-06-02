@@ -133,11 +133,14 @@ void uct_ib_mlx5_ext_cleanup(void);
  * @brief Register an external provider.
  *
  * @param [in] ops Provider operations.
+ *
+ * @return UCS_OK on success, or an error if registration failed.
  */
-void uct_ib_mlx5_ext_register(const uct_ib_mlx5_ext_ops_t *ops);
+ucs_status_t uct_ib_mlx5_ext_register(const uct_ib_mlx5_ext_ops_t *ops);
 
 /**
- * @brief Query iface flags from a registered external provider.
+ * @brief Query iface flags from the first registered provider that supports
+ * this operation.
  *
  * @param [out] flags Filled with interface capability flags.
  *
@@ -146,7 +149,8 @@ void uct_ib_mlx5_ext_register(const uct_ib_mlx5_ext_ops_t *ops);
 ucs_status_t uct_ib_mlx5_ext_iface_flags(uint64_t *flags);
 
 /**
- * @brief Query QP token attributes from a registered external provider.
+ * @brief Query QP token attributes from the first registered provider that
+ * supports this operation.
  *
  * @param [in]     qp       Verbs QP handle, or NULL when @a devx_obj is set.
  * @param [in]     devx_obj DevX QP object, or NULL when @a qp is set.
