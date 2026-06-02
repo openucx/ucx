@@ -7,15 +7,25 @@
 #ifndef UCT_IB_MLX5_EXT_H_
 #define UCT_IB_MLX5_EXT_H_
 
-#include <infiniband/verbs.h>
-#include <infiniband/mlx5dv.h>
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
+#if HAVE_MLX5_DV
+#  include <infiniband/verbs.h>
+#  include <infiniband/mlx5dv.h>
+#else
+struct ibv_qp;
+struct mlx5dv_devx_obj;
+#endif
 
 #include <stdint.h>
 
+#include <uct/api/uct_def.h>
 #include <ucs/type/status.h>
 #include <ucs/sys/stubs.h>
 
-#define UCT_IB_MLX5_EXT_NAME_MAX 32
+BEGIN_C_DECLS
 
 /**
  * @brief Field mask bits for @ref uct_ib_mlx5_ext_qp_query_attr_t.
@@ -55,7 +65,7 @@ typedef ucs_status_t (*uct_ib_mlx5_ext_qp_query_func_t)(
         uct_ib_mlx5_ext_qp_query_attr_t *attr);
 
 typedef struct uct_ib_mlx5_ext_ops {
-    char                               name[UCT_IB_MLX5_EXT_NAME_MAX];
+    char                               name[UCT_COMPONENT_NAME_MAX];
     uct_ib_mlx5_ext_iface_flags_func_t iface_flags;
     uct_ib_mlx5_ext_qp_query_func_t    qp_query;
 } uct_ib_mlx5_ext_ops_t;
@@ -98,5 +108,7 @@ ucs_status_t uct_ib_mlx5_ext_iface_flags(uint64_t *flags);
 ucs_status_t uct_ib_mlx5_ext_qp_query(struct ibv_qp *qp,
                                       struct mlx5dv_devx_obj *devx_obj,
                                       uct_ib_mlx5_ext_qp_query_attr_t *attr);
+
+END_C_DECLS
 
 #endif /* UCT_IB_MLX5_EXT_H_ */

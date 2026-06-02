@@ -8,6 +8,8 @@
 #  include "config.h"
 #endif
 
+#include "ib_mlx5_ext.h"
+
 #include <ucs/datastruct/list.h>
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
@@ -15,8 +17,6 @@
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/stubs.h>
 #include <ucs/type/spinlock.h>
-
-#include "ib_mlx5_ext.h"
 
 typedef struct uct_ib_mlx5_ext_provider {
     ucs_list_link_t       list;
