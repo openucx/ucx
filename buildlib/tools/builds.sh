@@ -379,6 +379,13 @@ build_no_devx() {
 	build_gcc --with-devx=no
 }
 
+build_no_gga() {
+	echo "==== Build without GGA transport ===="
+	${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --without-gga --disable-gtest
+	$MAKEP
+	check_no_gga
+}
+
 build_no_openmp() {
 	build_gcc --disable-openmp
 }
@@ -493,6 +500,13 @@ check_no_gda() {
 	fi
 }
 
+check_no_gga() {
+	if [ -f ${ucx_build_dir}/src/uct/ib/mlx5/gga/.libs/libuct_ib_mlx5_la-gga_mlx5.o ] ; then
+		azure_log_error "build --without-gga created GGA object"
+		exit 1
+	fi
+}
+
 az_init_modules
 prepare_build
 
@@ -519,6 +533,7 @@ long)
 			'check_inst_headers' \
 			'build_gcc' \
 			'build_no_devx' \
+            'build_no_gga' \
 			'build_no_openmp' \
 			'build_gcc_debug_opt_with_dndebug' \
 			'build_clang' \
