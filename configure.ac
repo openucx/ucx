@@ -73,6 +73,7 @@ AC_SUBST(SCM_VERSION)
 AC_SUBST(SOVERSION)
 
 UCX_LT_RELEASE=
+UCX_LIBRARY_FILE_SUFFIX=
 ucx_soname_suffix_summary="<disabled>"
 ucx_module_deepbind_summary="no"
 AC_ARG_WITH([soname-suffix],
@@ -91,12 +92,14 @@ AS_IF([test "x$with_soname_suffix" != xno],
                AC_MSG_ERROR([--with-soname-suffix must contain only letters, digits, underscores, and dashes])
                ;;
        esac
+       UCX_LIBRARY_FILE_SUFFIX="-$with_soname_suffix"
        UCX_LT_RELEASE="-release $with_soname_suffix"
        AC_DEFINE_UNQUOTED([UCX_MODULE_FILE_SUFFIX],
-                          ["-$with_soname_suffix"],
+                          ["$UCX_LIBRARY_FILE_SUFFIX"],
                           [Suffix appended to private UCX module file names])
        ucx_soname_suffix_summary="$with_soname_suffix"])
 AC_SUBST([UCX_LT_RELEASE])
+AC_SUBST([UCX_LIBRARY_FILE_SUFFIX])
 
 AC_ARG_ENABLE([module-deepbind],
         AS_HELP_STRING([--enable-module-deepbind],

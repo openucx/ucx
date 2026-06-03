@@ -626,6 +626,16 @@ build_soname_suffix() {
 
 	grep "#define UCX_MODULE_FILE_SUFFIX \"-$suffix\"" config.h
 	grep "#define UCX_MODULE_DLOPEN_DEEPBIND 1" config.h
+	grep " -lucp-${suffix}" "${ucx_inst}/lib/pkgconfig/ucx.pc"
+	grep " -lucs-${suffix} -lucm-${suffix}" \
+		"${ucx_inst}/lib/pkgconfig/ucx-ucs.pc"
+	grep " -luct-${suffix}" "${ucx_inst}/lib/pkgconfig/ucx-uct.pc"
+	grep "libucp-${suffix}.so" \
+		"${ucx_inst}/lib/cmake/ucx/ucx-targets.cmake"
+	grep "libucs-${suffix}.so" \
+		"${ucx_inst}/lib/cmake/ucx/ucx-targets.cmake"
+	grep "libuct-${suffix}.so" \
+		"${ucx_inst}/lib/cmake/ucx/ucx-targets.cmake"
 	if [ "${soname_suffix_check_hw}" = "yes" ]; then
 		grep "#define HAVE_CUDA 1" config.h
 		grep "#define HAVE_IB 1" config.h

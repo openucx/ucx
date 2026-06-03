@@ -151,12 +151,15 @@ UCS_TEST_F(test_sys, module_file_suffix) {
 #else
     char suffixed_base[] = "libtest_module" UCX_MODULE_FILE_SUFFIX;
     char plain_base[]    = "libtest_module";
+    char other_base[]    = "libother_module" UCX_MODULE_FILE_SUFFIX;
 
-    ucs_module_normalize_base(suffixed_base);
-    ucs_module_normalize_base(plain_base);
+    ucs_module_normalize_base(suffixed_base, "libtest_");
+    ucs_module_normalize_base(plain_base, "libtest_");
+    ucs_module_normalize_base(other_base, "libtest_");
 
     EXPECT_STREQ("libtest_module", suffixed_base);
     EXPECT_STREQ("libtest_module", plain_base);
+    EXPECT_STREQ("libother_module" UCX_MODULE_FILE_SUFFIX, other_base);
 #endif
 }
 
