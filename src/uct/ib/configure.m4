@@ -57,6 +57,14 @@ AC_ARG_WITH([dc],
             [],
             [with_dc=yes])
 
+#
+# GGA Support
+#
+AC_ARG_WITH([gga],
+            [AS_HELP_STRING([--with-gga], [Compile with GGA DPU transport support])],
+            [],
+            [with_gga=guess])
+
 
 #
 # TM (IB Tag Matching) Support
@@ -205,6 +213,16 @@ AS_IF([test "x$with_ib" = "xyes"],
        AS_IF([test x$with_devx = xyes -a x$have_devx != xyes], [
                AC_MSG_ERROR([devx requested but not found])])
 
+       AS_IF([test "x$with_gga" != xno], [
+               AS_IF([test "x$have_mlx5" = xyes -a "x$has_mlx5_mmo" = xyes -a "x$have_devx" = xyes -a "x$with_rc" != xno],
+                     [have_gga=yes
+                      AC_DEFINE([HAVE_TL_GGA], 1, [GGA transport support])],
+                     [AS_IF([test "x$with_gga" = xyes],
+                            [AC_MSG_ERROR([GGA requested but MLX5, MLX5 MMO, DEVX, or RC support is not available])])
+                      have_gga=no])
+             ],
+             [have_gga=no])
+
        AC_CHECK_DECLS([IBV_LINK_LAYER_INFINIBAND,
                        IBV_LINK_LAYER_ETHERNET,
                        IBV_EVENT_GID_CHANGE,
@@ -335,9 +353,13 @@ AS_IF([test "x$with_ib" = "xyes"],
        uct_modules="${uct_modules}:ib"
     ],
     [
+        AS_IF([test "x$with_gga" = xyes],
+              [AC_MSG_ERROR([GGA requested but IB/verbs support is not available])])
         with_dc=no
         with_rc=no
         with_ud=no
+        with_gga=no
+        have_gga=no
         with_mlx5=no
     ])
 
@@ -351,6 +373,7 @@ AM_CONDITIONAL([HAVE_TL_DC],   [test "x$with_dc" != xno])
 AM_CONDITIONAL([HAVE_DC_DV],   [test -n "$have_dc_dv"])
 AM_CONDITIONAL([HAVE_TL_UD],   [test "x$with_ud" != xno])
 AM_CONDITIONAL([HAVE_DEVX],    [test -n "$have_devx"])
+AM_CONDITIONAL([HAVE_TL_GGA],  [test "x$have_gga" = xyes])
 AM_CONDITIONAL([HAVE_MLX5_HW_UD], [test "x$have_mlx5" = xyes -a "x$has_get_av" != xno])
 AM_CONDITIONAL([HAVE_MLX5_MMO],   [test -n "$has_mlx5_mmo"])
 

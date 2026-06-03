@@ -1506,6 +1506,8 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
     uct_gdaki_dev_matrix_elem_t *ibdesc;
 
     if (!(uct_gdaki_get_driver_features(ib_md) & UCT_GDAKI_SUPPORTED)) {
+        ucs_debug("%s: GDAKI is not supported",
+                  uct_ib_device_name(&ib_md->dev));
         status = UCS_ERR_NO_DEVICE;
         goto out;
     }
@@ -1515,6 +1517,8 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
     }
 
     if (dmat == NULL) {
+        ucs_debug("%s: global device matrix initialization failed",
+                  uct_ib_device_name(&ib_md->dev));
         status = UCS_ERR_NO_DEVICE;
         goto out;
     }
@@ -1529,6 +1533,7 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
                 uct_ib_device_name(&ib_md->dev));
 
     if (ibdesc->cuda_map == 0) {
+        ucs_debug("%s: no assigned gpu found", uct_ib_device_name(&ib_md->dev));
         status = UCS_ERR_NO_DEVICE;
         goto out;
     }

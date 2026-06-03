@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -200,6 +200,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_recv_nbr,
     };
     ucs_status_ptr_t status;
 
+    /* coverity[var_deref_model] */
     status = ucp_tag_recv_nbx(worker, buffer, count, tag, tag_mask, &param);
     return UCS_PTR_IS_ERR(status) ? UCS_PTR_STATUS(status) : UCS_OK;
 }
@@ -218,6 +219,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_recv_nb,
         .datatype     = datatype
     };
 
+    /* coverity[var_deref_model] */
     return ucp_tag_recv_nbx(worker, buffer, count, tag, tag_mask, &param);
 }
 
@@ -263,6 +265,7 @@ ucs_status_ptr_t ucp_tag_msg_recv_nb(ucp_worker_h worker, void *buffer, size_t c
         .cb.recv      = (ucp_tag_recv_nbx_callback_t)cb
     };
 
+    /* coverity[var_deref_model] */
     return ucp_tag_msg_recv_nbx(worker, buffer, count, message, &param);
 }
 

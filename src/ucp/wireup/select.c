@@ -424,6 +424,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
     int is_reachable;
     double score;
     uint8_t priority;
+    int score_cmp;
     ucp_md_index_t md_index;
 
     p            = tls_info;
@@ -623,15 +624,12 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
             score        = criteria->calc_score(wiface, md_attr, address, ae,
                                                 0, criteria->arg);
             priority     = iface_attr->priority + ae->iface_attr.priority;
+            score_cmp    = found ?
+                           ucp_score_prio_cmp(score, priority, sinfo.score,
+                                              sinfo.priority) : 1;
             is_reachable = 1;
 
-            ucs_trace(UCT_TL_RESOURCE_DESC_FMT
-                      "->addr[%u] : %s score %.2f priority %d",
-                      UCT_TL_RESOURCE_DESC_ARG(resource),
-                      addr_index, criteria->title, score, priority);
-
-            if (!found || (ucp_score_prio_cmp(score, priority, sinfo.score,
-                                              sinfo.priority) > 0)) {
+            if (!found || (score_cmp > 0)) {
                 ucp_wireup_init_select_info(score, addr_index, rsc_index,
                                             priority, &sinfo);
                 found = 1;
