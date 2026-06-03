@@ -1,5 +1,6 @@
 parameters:
   dependsOn: [Basic_compile]
+  condition: succeeded()
   conda_container: ucxx_rapidsai_ci_conda
   slices: []
 
@@ -9,6 +10,7 @@ stages:
   - stage: UCXX_ucx
     displayName: 'UCXX: UCX build'
     dependsOn: ${{ parameters.dependsOn }}
+    condition: ${{ parameters.condition }}
     variables:
       UCX_DIR: $(Agent.BuildDirectory)/ucx
     jobs:
