@@ -414,6 +414,47 @@ uct_rc_gdaki_channel_block(uct_rc_gdaki_iface_t *iface, ucs_mpool_t *mp,
     }
 }
 
+static ucs_status_t uct_rc_gdaki_channel_reset_qp(uct_ib_iface_t *ib_iface,
+                                                  uct_ib_mlx5_txwq_t *txwq)
+{
+    ucs_status_t status;
+
+    (void)uct_ib_mlx5_modify_qp_state(ib_iface, &txwq->super, IBV_QPS_ERR);
+
+    status = uct_ib_mlx5_modify_qp_state(ib_iface, &txwq->super, IBV_QPS_RESET);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    uct_ib_mlx5_txwq_reset(txwq);
+    return UCS_OK;
+}
+
+static ucs_status_t
+uct_rc_gdaki_channel_connect(uct_rc_gdaki_iface_t *iface,
+                             uct_rc_gdaki_channel_t *channel,
+                             uint32_t dest_qp_num,
+                             const struct ibv_ah_attr *ah_attr,
+                             enum ibv_mtu path_mtu, uint8_t path_index)
+{
+    uct_ib_iface_t *ib_iface = &iface->super.super.super;
+    ucs_status_t status;
+
+    status = uct_rc_gdaki_channel_reset_qp(ib_iface, &channel->qp);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = uct_ib_mlx5_devx_qp_rst2init(ib_iface, &channel->qp.super);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return uct_rc_mlx5_iface_common_devx_connect_qp(
+            &iface->super, &channel->qp.super, dest_qp_num, ah_attr, path_mtu,
+            path_index, iface->super.super.config.max_rd_atomic);
+}
+
 static void uct_rc_gdaki_chunk_channels_destroy(uct_rc_gdaki_iface_t *iface,
                                                 ucs_mpool_t *mp, void *elems,
                                                 unsigned num_elems,
@@ -661,7 +702,8 @@ uct_rc_gdaki_ep_reset_channels(uct_rc_gdaki_ep_t *ep)
     ep->channel_block = NULL;
 }
 
-static void uct_rc_gdaki_cleanup_channels_pooled(uct_rc_gdaki_ep_t *ep)
+static void uct_rc_gdaki_cleanup_channels_pooled(uct_rc_gdaki_iface_t *iface,
+                                                 uct_rc_gdaki_ep_t *ep)
 {
     if (ep->channel_block == NULL) {
         return;
@@ -747,7 +789,7 @@ static void uct_rc_gdaki_ep_cleanup_channels(uct_rc_gdaki_iface_t *iface,
                                              uct_rc_gdaki_ep_t *ep)
 {
     if (iface->ep_alloc_mode == UCT_RC_GDAKI_EP_ALLOC_MODE_POOL) {
-        uct_rc_gdaki_cleanup_channels_pooled(ep);
+        uct_rc_gdaki_cleanup_channels_pooled(iface, ep);
         return;
     }
 
@@ -849,9 +891,8 @@ uct_rc_gdaki_ep_connect_to_ep_v2(uct_ep_h tl_ep,
     for (i = 0; i < iface->num_channels; i++) {
         dest_qp_num = uct_ib_unpack_uint24(
                 *ucs_serialize_next(&ep_addr, uct_ib_uint24_t));
-        status      = uct_rc_mlx5_iface_common_devx_connect_qp(
-                &iface->super, &channels[i].qp.super, dest_qp_num, &ah_attr,
-                path_mtu, path_index, iface->super.super.config.max_rd_atomic);
+        status = uct_rc_gdaki_channel_connect(iface, &channels[i], dest_qp_num,
+                                              &ah_attr, path_mtu, path_index);
         if (status != UCS_OK) {
             return status;
         }

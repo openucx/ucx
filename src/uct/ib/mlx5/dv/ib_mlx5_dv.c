@@ -412,6 +412,32 @@ ucs_status_t uct_ib_mlx5_devx_modify_qp_state(uct_ib_mlx5_qp_t *qp,
     return uct_ib_mlx5_devx_modify_qp(qp, in, sizeof(in), out, sizeof(out));
 }
 
+ucs_status_t
+uct_ib_mlx5_devx_qp_rst2init(uct_ib_iface_t *iface, uct_ib_mlx5_qp_t *qp)
+{
+    char in_2init[UCT_IB_MLX5DV_ST_SZ_BYTES(rst2init_qp_in)]   = {};
+    char out_2init[UCT_IB_MLX5DV_ST_SZ_BYTES(rst2init_qp_out)] = {};
+    void *qpc;
+
+    UCT_IB_MLX5DV_SET(rst2init_qp_in, in_2init, opcode,
+                      UCT_IB_MLX5_CMD_OP_RST2INIT_QP);
+    UCT_IB_MLX5DV_SET(rst2init_qp_in, in_2init, qpn, qp->qp_num);
+
+    qpc = UCT_IB_MLX5DV_ADDR_OF(rst2init_qp_in, in_2init, qpc);
+    UCT_IB_MLX5DV_SET(qpc, qpc, pm_state, UCT_IB_MLX5_QPC_PM_STATE_MIGRATED);
+    UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.vhca_port_num,
+                      iface->config.port_num);
+    if (!uct_ib_iface_is_roce(iface)) {
+        UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.pkey_index,
+                          iface->pkey_index);
+    }
+    UCT_IB_MLX5DV_SET(qpc, qpc, counter_set_id,
+                      uct_ib_mlx5_iface_get_counter_set_id(iface));
+
+    return uct_ib_mlx5_devx_modify_qp(qp, in_2init, sizeof(in_2init), out_2init,
+                                      sizeof(out_2init));
+}
+
 void uct_ib_mlx5_devx_destroy_qp_common(uct_ib_mlx5_qp_t *qp)
 {
     uct_ib_mlx5_devx_obj_destroy(qp->devx.obj, "QP");
