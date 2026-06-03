@@ -1,6 +1,6 @@
 /**
 * Copyright (C) Los Alamos National Security, LLC. 2019 ALL RIGHTS RESERVED.
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019-2026. ALL RIGHTS RESERVED.
 * Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -1132,6 +1132,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_recv_data_nbx,
 
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(context, UCP_FEATURE_AM,
                                     return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
+    UCP_REQUEST_CHECK_PARAM(param);
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
 

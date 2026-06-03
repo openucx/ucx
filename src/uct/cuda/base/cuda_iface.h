@@ -61,9 +61,7 @@ typedef struct {
 typedef struct {
     /* CUDA context handle */
     CUcontext          ctx;
-    /* Retained CUDA primary context, if @ctx is a primary context */
-    CUcontext          primary_ctx;
-    /* CUDA device of @primary_ctx */
+    /* CUDA device, if @ctx is a primary context. CU_DEVICE_INVALID otherwise */
     CUdevice           cuda_device;
     /* CUDA context id */
     unsigned long long ctx_id;

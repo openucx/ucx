@@ -1,5 +1,5 @@
 /*
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2020. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2014-2017. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
 * Copyright (C) Los Alamos National Security, LLC. 2018 ALL RIGHTS RESERVED.
@@ -941,6 +941,10 @@ enum ucp_dt_remote_sgl_field {
  *
  * @note Currently only N->N mapping is supported: both sides must use
  *       the SGL datatype with equal counts and matching lengths.
+ *
+ * @note All buffers in the descriptor must share the same memory type
+ *       (see @ref ucs_memory_type_t), otherwise @ref UCS_ERR_INVALID_PARAM
+ *       is returned.
  */
 typedef struct {
     uint64_t        field_mask; /**< Valid fields, using bits from

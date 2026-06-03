@@ -8,6 +8,7 @@
 
 extern "C" {
 #include <uct/cuda/base/cuda_iface.h>
+#include <uct/cuda/base/cuda_ctx.inl>
 #include <ucs/datastruct/mpool.h>
 }
 
@@ -57,18 +58,22 @@ protected:
 
     void create_ctx_rsc()
     {
-        ASSERT_UCS_OK(uct_cuda_base_ctx_rsc_create(&m_iface, 1, &m_ctx_rsc));
+        unsigned long long ctx_id;
+
+        ASSERT_EQ(CUDA_SUCCESS, uct_cuda_ctx_get_id(NULL, &ctx_id));
+        ASSERT_UCS_OK(uct_cuda_base_ctx_rsc_create(&m_iface, ctx_id,
+                                                   &m_ctx_rsc));
     }
 
     void release_ctx_rsc_primary_ctx()
     {
-        if ((m_ctx_rsc == NULL) || (m_ctx_rsc->primary_ctx == NULL)) {
+        if ((m_ctx_rsc == NULL) ||
+            (m_ctx_rsc->cuda_device == CU_DEVICE_INVALID)) {
             return;
         }
 
         EXPECT_EQ(CUDA_SUCCESS,
                   cuDevicePrimaryCtxRelease(m_ctx_rsc->cuda_device));
-        m_ctx_rsc->primary_ctx = NULL;
         m_ctx_rsc->cuda_device = CU_DEVICE_INVALID;
     }
 
@@ -209,7 +214,6 @@ private:
 UCS_TEST_F(test_cuda_ctx_cleanup, retain_primary_ctx_until_rsc_cleanup)
 {
     create_ctx_rsc();
-    EXPECT_EQ(m_cuda_ctx, m_ctx_rsc->primary_ctx);
     EXPECT_EQ(m_device, m_ctx_rsc->cuda_device);
 
     destroy_ctx_rsc();

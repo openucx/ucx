@@ -1,27 +1,27 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2019. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
- #ifdef HAVE_CONFIG_H
- #  include "config.h"
- #endif
-
-#include <uct/cuda/base/cuda_iface.h>
-#include <uct/api/uct_def.h>
-#include <uct/api/device/uct_device_types.h>
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
 
 #include "cuda_ipc_ep.h"
+#include "cuda_ipc_iface_address.h"
 #include "cuda_ipc_iface.h"
 #include "cuda_ipc_md.h"
 #include "cuda_ipc.inl"
 
-#include <uct/base/uct_log.h>
-#include <uct/base/uct_iov.inl>
 #include <ucs/debug/memtrack_int.h>
+#include <ucs/profile/profile.h>
 #include <ucs/sys/math.h>
 #include <ucs/type/class.h>
-#include <ucs/profile/profile.h>
+#include <uct/api/device/uct_device_types.h>
+#include <uct/api/uct_def.h>
+#include <uct/base/uct_iov.inl>
+#include <uct/base/uct_log.h>
+#include <uct/cuda/base/cuda_iface.h>
 
 #define UCT_CUDA_IPC_PUT 0
 #define UCT_CUDA_IPC_GET 1
@@ -31,17 +31,22 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_ep_t, const uct_ep_params_t *params)
 {
     uct_cuda_ipc_iface_t *iface = ucs_derived_of(params->iface,
                                                  uct_cuda_ipc_iface_t);
+    size_t iface_addr_length;
 
     UCT_EP_PARAMS_CHECK_DEV_IFACE_ADDRS(params);
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
 
-    self->remote_pid = *(const pid_t*)params->iface_addr;
-    self->device_ep  = NULL;
+    iface_addr_length          = UCT_EP_PARAM_VALUE(params, iface_addr_length,
+                                                    IFACE_ADDR_LENGTH, 0);
+    self->remote_iface_address = uct_cuda_ipc_iface_address_unpack(
+            params->iface_addr, iface_addr_length);
+    self->device_ep            = NULL;
     return UCS_OK;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_cuda_ipc_ep_t)
 {
+    uct_cuda_ipc_destroy_cache_by_iface_address(&self->remote_iface_address);
     if (self->device_ep != NULL) {
         (void)UCT_CUDADRV_FUNC_LOG_WARN(cuMemFree((CUdeviceptr)self->device_ep));
     }
@@ -63,7 +68,12 @@ int uct_cuda_ipc_ep_is_connected(const uct_ep_h tl_ep,
         return 0;
     }
 
-    return ep->remote_pid == *(pid_t*)params->iface_addr;
+    /* TODO: Enhance the check to account for PID namespace and device address.
+             Comparing PIDs alone can yield false positives: PIDs are unique
+             only within a PID namespace, so unrelated peers (e.g., on another
+             node or in another namespace on the same host) may report the same
+             PID number. */
+    return ep->remote_iface_address.pid == *(const pid_t*)params->iface_addr;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_ipc_ctx_rsc_get(

@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2021. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -1091,14 +1091,16 @@ ucp_wireup_connect_lane_to_iface(ucp_ep_h ep, ucp_lane_index_t lane,
     /* create an endpoint connected to the remote interface */
     ucs_trace("ep %p: connect uct_ep[%d] to addr %p", ep, lane,
               address);
-    uct_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE      |
-                               UCT_EP_PARAM_FIELD_DEV_ADDR   |
-                               UCT_EP_PARAM_FIELD_IFACE_ADDR |
-                               UCT_EP_PARAM_FIELD_PATH_INDEX;
-    uct_ep_params.iface      = wiface->iface;
-    uct_ep_params.dev_addr   = address->dev_addr;
-    uct_ep_params.iface_addr = address->iface_addr;
-    uct_ep_params.path_index = path_index;
+    uct_ep_params.field_mask        = UCT_EP_PARAM_FIELD_IFACE |
+                                      UCT_EP_PARAM_FIELD_DEV_ADDR |
+                                      UCT_EP_PARAM_FIELD_IFACE_ADDR |
+                                      UCT_EP_PARAM_FIELD_PATH_INDEX |
+                                      UCT_EP_PARAM_FIELD_IFACE_ADDR_LENGTH;
+    uct_ep_params.iface             = wiface->iface;
+    uct_ep_params.dev_addr          = address->dev_addr;
+    uct_ep_params.iface_addr        = address->iface_addr;
+    uct_ep_params.iface_addr_length = address->iface_addr_len;
+    uct_ep_params.path_index        = path_index;
     status = uct_ep_create(&uct_ep_params, &uct_ep);
     if (status != UCS_OK) {
         /* coverity[leaked_storage] */
