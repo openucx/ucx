@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2020. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) Los Alamos National Security, LLC. 2019 ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -3395,6 +3395,7 @@ static void ucp_ep_print_info_internal(ucp_ep_h ep, const char *name,
     ucp_lane_index_t wireup_msg_lane;
     ucs_string_buffer_t strb;
     uct_ep_h wireup_ep;
+    ucs_status_t status;
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
@@ -3418,9 +3419,15 @@ static void ucp_ep_print_info_internal(ucp_ep_h ep, const char *name,
 
     if (worker->context->config.ext.proto_enable) {
         ucs_string_buffer_init(&strb);
-        ucp_proto_select_info(worker, ep->cfg_index, UCP_WORKER_CFG_INDEX_NULL,
-                              &config->proto_select, 1, &strb);
-        ucs_string_buffer_dump(&strb, "# ", stream);
+        status = ucp_proto_select_info(worker, ep->cfg_index,
+                                       UCP_WORKER_CFG_INDEX_NULL,
+                                       &config->proto_select, 1, &strb);
+        if (status == UCS_OK) {
+            ucs_string_buffer_dump(&strb, "# ", stream);
+        } else {
+            ucs_error("failed to print protocol selection info for ep %p: %s",
+                      ep, ucs_status_string(status));
+        }
         ucs_string_buffer_cleanup(&strb);
     }
 

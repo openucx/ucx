@@ -90,7 +90,8 @@ typedef struct {
  * @param [in]  config  Configuration (non-NULL); see ucs_table_config_t.
  *                      Copied into the table.
  */
-void ucs_table_init(ucs_table_t *table, const ucs_table_config_t *config);
+ucs_status_t
+ucs_table_init(ucs_table_t *table, const ucs_table_config_t *config);
 
 
 /**
@@ -106,8 +107,10 @@ void ucs_table_cleanup(ucs_table_t *table);
  * inserted automatically by ucs_table_render();
  *
  * @param [in,out] table  Table to append to.
+ *
+ * @return UCS_OK on success, or an error code on failure.
  */
-void ucs_table_add_separator(ucs_table_t *table);
+ucs_status_t ucs_table_add_separator(ucs_table_t *table);
 
 
 /**
@@ -116,9 +119,11 @@ void ucs_table_add_separator(ucs_table_t *table);
  * handle is valid until the table is cleaned up;
  *
  * @param [in,out] table  Table to append to.
- * @return Row handle for use with add-cell functions.
+ * @param [out]    row_p  Row handle for use with add-cell functions.
+ *
+ * @return UCS_OK on success, or an error code on failure.
  */
-ucs_table_row_h ucs_table_add_row(ucs_table_t *table);
+ucs_status_t ucs_table_add_row(ucs_table_t *table, ucs_table_row_h *row_p);
 
 
 /**
@@ -127,23 +132,29 @@ ucs_table_row_h ucs_table_add_row(ucs_table_t *table);
  * @param [in,out] table     Table that owns @a row.
  * @param [in]     row       Row returned by ucs_table_add_row().
  * @param [in]     col_span  Number of body columns to span.
+ *
+ * @return UCS_OK on success, or an error code on failure.
  */
-void ucs_table_row_add_cell_empty(ucs_table_t *table, ucs_table_row_h row,
-                                  unsigned col_span);
+ucs_status_t ucs_table_row_add_cell_empty(ucs_table_t *table,
+                                          ucs_table_row_h row,
+                                          unsigned col_span);
 
 
 /**
- * Add a cell with printf-style content. Asserts the result has no '\n'.
+ * Add a cell with printf-style content.
  *
  * @param [in,out] table     Table that owns @a row.
  * @param [in]     row       Row returned by ucs_table_add_row().
  * @param [in]     col_span  Number of body columns to span.
  * @param [in]     align     Cell alignment.
  * @param [in]     fmt       printf format string.
+ *
+ * @return UCS_OK on success, or an error code on failure.
  */
-void ucs_table_row_add_cell_fmt(ucs_table_t *table, ucs_table_row_h row,
-                                unsigned col_span, ucs_table_align_t align,
-                                const char *fmt, ...) UCS_F_PRINTF(5, 6);
+ucs_status_t
+ucs_table_row_add_cell_fmt(ucs_table_t *table, ucs_table_row_h row,
+                           unsigned col_span, ucs_table_align_t align,
+                           const char *fmt, ...) UCS_F_PRINTF(5, 6);
 
 
 /**
@@ -153,16 +164,21 @@ void ucs_table_row_add_cell_fmt(ucs_table_t *table, ucs_table_row_h row,
  *
  * @param [in,out] table  Table to render.
  * @param [in,out] strb   Destination string buffer.
+ *
+ * @return UCS_OK on success, or an error code on failure.
  */
-void ucs_table_render(ucs_table_t const *table, ucs_string_buffer_t *strb);
+ucs_status_t
+ucs_table_render(ucs_table_t const *table, ucs_string_buffer_t *strb);
 
 
 /**
  * Render the table directly to stdout.
  *
  * @param [in,out] table  Table to print.
+ *
+ * @return UCS_OK on success, or an error code on failure.
  */
-void ucs_table_print(ucs_table_t const *table);
+ucs_status_t ucs_table_print(ucs_table_t const *table);
 
 
 END_C_DECLS
