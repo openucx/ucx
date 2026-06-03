@@ -434,7 +434,7 @@ static ucs_status_t
 uct_rc_gdaki_channel_connect(uct_rc_gdaki_iface_t *iface,
                              uct_rc_gdaki_channel_t *channel,
                              uint32_t dest_qp_num,
-                             const struct ibv_ah_attr *ah_attr,
+                             struct ibv_ah_attr *ah_attr,
                              enum ibv_mtu path_mtu, uint8_t path_index)
 {
     uct_ib_iface_t *ib_iface = &iface->super.super.super;
