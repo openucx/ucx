@@ -655,7 +655,8 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
                                                      criteria->tiebreak_arg);
             priority     = iface_attr->priority + ae->iface_attr.priority;
             score_cmp    = found ?
-                           ucp_wireup_candidate_cmp(score, tiebreak, priority, &sinfo) : 1;
+                           ucp_wireup_candidate_cmp(score, tiebreak, priority,
+                                                    &sinfo) : 1;
             is_reachable = 1;
 
             if (!found || (score_cmp > 0)) {
