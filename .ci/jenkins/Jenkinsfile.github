@@ -6,7 +6,7 @@
  */
 
 @Library('blossom-github-lib@master')
-@Library('github.com/Mellanox/ci-demo@stable_ucx')
+@Library('ci-demo')
 def matrix = new com.mellanox.cicd.Matrix()
 
 import ipp.blossom.*
@@ -28,6 +28,7 @@ if (params.githubData) {
 try {
   matrix.main()
 } catch (Exception ex) {
+  currentBuild.result = 'FAILURE'
   println ex
   throw ex
 } finally {

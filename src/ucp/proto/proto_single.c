@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -36,7 +36,8 @@ ucs_status_t ucp_proto_single_init(const ucp_proto_single_init_params_t *params,
 
     num_lanes = ucp_proto_common_find_lanes(
             &params->super.super, params->super.flags, params->lane_type,
-            params->tl_cap_flags, 1, params->super.exclude_map,
+            params->tl_cap_flags, params->tl_v2_cap_flags,
+            1, params->super.exclude_map,
             ucp_proto_common_filter_min_frag, &lane);
     if (num_lanes == 0) {
         ucs_trace("no lanes for %s",
