@@ -15,6 +15,8 @@
 #include <ucp/wireup/wireup.h>
 #include <uct/api/v2/uct_v2.h>
 
+#include <string.h>
+
 
 ucp_proto_common_init_params_t
 ucp_proto_common_init_params(const ucp_proto_init_params_t *init_params)
@@ -143,36 +145,122 @@ void ucp_proto_common_lane_priv_str(const ucp_proto_query_params_t *params,
     }
 }
 
-void ucp_proto_query_append_memtype_info(const ucp_proto_query_params_t *params,
-                                         ucp_proto_query_attr_t *attr)
+static int
+ucp_proto_query_memtype_info_mem_type(const ucp_proto_query_params_t *params,
+                                      int append_copy_out,
+                                      ucs_memory_type_t *mem_type_p)
 {
-    ucs_memory_type_t mem_type = params->select_param->mem_type;
+    switch (ucp_proto_select_op_id(params->select_param)) {
+    case UCP_OP_ID_GET:
+    case UCP_OP_ID_RNDV_RECV:
+        if (append_copy_out) {
+            *mem_type_p = params->select_param->mem_type;
+            return 1;
+        }
+        return 0;
+    case UCP_OP_ID_AMO_FETCH:
+    case UCP_OP_ID_AMO_CSWAP:
+        if (append_copy_out) {
+            *mem_type_p = params->select_param->op.reply.mem_type;
+        } else {
+            *mem_type_p = params->select_param->mem_type;
+        }
+        return 1;
+    default:
+        if (append_copy_out) {
+            return 0;
+        }
+        *mem_type_p = params->select_param->mem_type;
+        return 1;
+    }
+}
+
+static const char *
+ucp_proto_query_memtype_info_tl_name(const ucp_proto_query_params_t *params,
+                                     int append_copy_out)
+{
     ucp_context_h context      = params->worker->context;
     const ucp_ep_config_t *ep_config;
+    ucs_memory_type_t mem_type;
     ucp_rsc_index_t rsc_index;
     ucp_lane_index_t lane;
     ucp_ep_h mtype_ep;
-    char desc_copy[sizeof(attr->desc)];
+
+    if (!ucp_proto_query_memtype_info_mem_type(params, append_copy_out,
+                                               &mem_type)) {
+        return NULL;
+    }
 
     if (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type)) {
-        return;
+        return NULL;
     }
 
     mtype_ep = params->worker->mem_type_ep[mem_type];
     if (mtype_ep == NULL) {
-        return;
+        return NULL;
     }
 
     ep_config = ucp_ep_config(mtype_ep);
     lane      = ep_config->key.rma_lanes[0];
     if (lane == UCP_NULL_LANE) {
-        return;
+        return NULL;
     }
 
     rsc_index = ep_config->key.lanes[lane].rsc_index;
-    ucs_strncpy_safe(desc_copy, attr->desc, sizeof(desc_copy));
-    ucs_snprintf_safe(attr->desc, sizeof(attr->desc), "%s %s",
-                      context->tl_rscs[rsc_index].tl_rsc.tl_name, desc_copy);
+    return context->tl_rscs[rsc_index].tl_rsc.tl_name;
+}
+
+static int
+ucp_proto_query_append_memtype_step(ucs_string_buffer_t *strb,
+                                    const char **desc_p,
+                                    const char *step_desc,
+                                    const char *tl_name)
+{
+    const char *step_pos;
+
+    if (tl_name == NULL) {
+        return 0;
+    }
+
+    step_pos = strstr(*desc_p, step_desc);
+    if (step_pos == NULL) {
+        return 0;
+    }
+
+    ucs_string_buffer_appendf(strb, "%.*s%s %s",
+                              (int)(step_pos - *desc_p), *desc_p, tl_name,
+                              step_desc);
+    *desc_p = step_pos + strlen(step_desc);
+    return 1;
+}
+
+void ucp_proto_query_append_memtype_info(const ucp_proto_query_params_t *params,
+                                         ucs_string_buffer_t *strb,
+                                         const char *desc)
+{
+    const char *copy_in_tl;
+    const char *copy_out_tl;
+    int copy_in_found;
+    int copy_out_found;
+
+    copy_in_tl  = ucp_proto_query_memtype_info_tl_name(params, 0);
+    copy_out_tl = ucp_proto_query_memtype_info_tl_name(params, 1);
+
+    copy_in_found = ucp_proto_query_append_memtype_step(
+            strb, &desc, UCP_PROTO_COPY_IN_DESC, copy_in_tl);
+    copy_out_found = ucp_proto_query_append_memtype_step(
+            strb, &desc, UCP_PROTO_COPY_OUT_DESC, copy_out_tl);
+    ucs_string_buffer_appendf(strb, "%s", desc);
+
+    if ((copy_in_tl != NULL) && !copy_in_found) {
+        ucs_string_buffer_appendf(strb, " %s " UCP_PROTO_COPY_IN_DESC,
+                                  copy_in_tl);
+    }
+
+    if ((copy_out_tl != NULL) && !copy_out_found) {
+        ucs_string_buffer_appendf(strb, " %s " UCP_PROTO_COPY_OUT_DESC,
+                                  copy_out_tl);
+    }
 }
 
 ucp_md_index_t

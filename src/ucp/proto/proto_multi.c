@@ -599,6 +599,9 @@ void ucp_proto_multi_query(const ucp_proto_query_params_t *params,
 void ucp_proto_multi_bcopy_query(const ucp_proto_query_params_t *params,
                                  ucp_proto_query_attr_t *attr)
 {
+    UCS_STRING_BUFFER_FIXED(desc_strb, attr->desc, sizeof(attr->desc));
+
     ucp_proto_multi_query(params, attr);
-    ucp_proto_query_append_memtype_info(params, attr);
+    ucp_proto_query_append_memtype_info(params, &desc_strb,
+                                        params->proto->desc);
 }
