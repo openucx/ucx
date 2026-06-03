@@ -658,7 +658,19 @@ void __ucs_async_poll_missed(ucs_async_context_t *async)
         if (handler != NULL) {
             ucs_assert(handler->async == async);
             handler->missed = 0;
-            ucs_async_handler_invoke(handler, events);
+            if (handler_id < UCS_ASYNC_TIMER_ID_MIN) {
+                events &= handler->events;
+            }
+
+            if ((handler_id >= UCS_ASYNC_TIMER_ID_MIN) || (events != 0)) {
+                ucs_async_handler_invoke(handler, events);
+            } else {
+                ucs_trace_async("skipping stale missed "
+                                UCS_ASYNC_HANDLER_FMT
+                                " with current events 0x%x",
+                                UCS_ASYNC_HANDLER_ARG(handler),
+                                handler->events);
+            }
             ucs_async_handler_put(handler);
         }
         UCS_ASYNC_UNBLOCK(async);
