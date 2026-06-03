@@ -40,6 +40,8 @@ resources:
       endpoint: Mellanox-lab
       # rapids_cuda_version of the UCXX slices in pr/main.yml follows the CUDA
       # versions this ucxx commit builds with (matrix in its dependencies.yaml).
+      # Keep in sync with the ucxx ref in azure-pipelines-release.yml, so the
+      # release pipeline builds the UCXX tree this pipeline validates.
       ref: 7d0234f3131794bd37cf509ab3bde2026ae7eb78
 
 extends:
