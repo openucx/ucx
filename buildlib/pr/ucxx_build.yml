@@ -1,5 +1,6 @@
 parameters:
   dependsOn: [Static_check]
+  condition: succeeded()
   conda_container: ucxx_rapidsai_ci_conda
   conda_cpp_slices: []
   conda_python_slices: []
@@ -11,7 +12,9 @@ parameters:
 
 stages:
   - stage: UCXX_build
+    displayName: 'UCXX build + publish'
     dependsOn: ${{ parameters.dependsOn }}
+    condition: ${{ parameters.condition }}
     variables:
       UCX_DIR: $(Agent.BuildDirectory)/ucx
       UCXX_DIR: $(Agent.BuildDirectory)/ucxx
@@ -45,6 +48,9 @@ stages:
               inputs:
                 pathToPublish: $(RAPIDS_BLD_OUTPUT_DIR)
                 artifactName: ucxx-conda-cpp-${{ slice.name }}
+            # conda packages are not published from this pipeline: per RAPIDS,
+            # ucxx conda ships via conda-forge (separate feedstock) once the
+            # codebase is officially upstream. Nightlies stay RAPIDS-side.
 
       - ${{ each slice in parameters.conda_python_slices }}:
         - job: ucxx_conda_python_build_${{ slice.name }}
@@ -85,6 +91,9 @@ stages:
               inputs:
                 pathToPublish: $(RAPIDS_BLD_OUTPUT_DIR)
                 artifactName: ucxx-conda-python-${{ slice.name }}
+            # conda packages are not published from this pipeline: per RAPIDS,
+            # ucxx conda ships via conda-forge (separate feedstock) once the
+            # codebase is officially upstream. Nightlies stay RAPIDS-side.
 
       - ${{ each slice in parameters.wheel_libucxx_slices }}:
         - job: ucxx_wheel_libucxx_build_${{ slice.name }}
@@ -114,6 +123,8 @@ stages:
               inputs:
                 pathToPublish: $(RAPIDS_BLD_OUTPUT_DIR)
                 artifactName: ucxx-wheel-libucxx-${{ slice.name }}
+            # libucxx wheel is an intermediate build input (staged into the
+            # ucxx wheel build below); it is not published.
 
       - ${{ each slice in parameters.wheel_ucxx_slices }}:
         - job: ucxx_wheel_ucxx_build_${{ slice.name }}
@@ -129,7 +140,7 @@ stages:
           variables:
             RAPIDS_CUDA_VERSION: ${{ slice.rapids_cuda_version }}
             RAPIDS_PY_VERSION: ${{ slice.rapids_py_version }}
-            WHEEL_INPUT_DIR: $(System.DefaultWorkingDirectory)/wheel-libucxx
+            WHEEL_INPUT_DIR: $(Build.ArtifactStagingDirectory)/wheel-libucxx
           steps:
             - checkout: self
               path: ucx
@@ -155,6 +166,11 @@ stages:
               inputs:
                 pathToPublish: $(RAPIDS_BLD_OUTPUT_DIR)
                 artifactName: ucxx-wheel-ucxx-${{ slice.name }}
+            # TODO release: publish the ucxx wheels (ucxx-cu12 / ucxx-cu13) to
+            # PyPI on a UCX tag. Per RAPIDS the upload goes through Kitmaker
+            # (which dual-publishes PyPI + NVIDIA PyPI); the exact process and
+            # credentials are pending RAPIDS/Kitmaker. Wire it here once defined -
+            # the built wheel above is the artifact Kitmaker would consume.
 
       - ${{ each slice in parameters.docs_slices }}:
         - job: ucxx_docs_build_${{ slice.name }}
@@ -204,6 +220,9 @@ stages:
               inputs:
                 pathToPublish: $(DOCS_OUT_DIR)
                 artifactName: ucxx-docs-${{ slice.name }}
+            # docs publishing target is not defined by the current RAPIDS release
+            # plan (wheels -> Kitmaker/PyPI, conda -> conda-forge); the built docs
+            # remain a pipeline artifact for now.
 
       - ${{ each slice in parameters.wheel_tests_ucxx_slices }}:
         - job: ucxx_wheel_tests_ucxx_${{ slice.name }}
