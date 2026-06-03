@@ -73,11 +73,14 @@ resources:
       image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: ubuntu2404_ze
-      image: intel/deep-learning-essentials:2026.0.0-devel-ubuntu24.04
-      # Public Intel images do not ship sudo and the Azure agent would
-      # otherwise run them as a non-root uid.  Run as root so the install
-      # step can apt-get the few missing autotools.
-      options: --user 0:0 $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+      # Builder image derived from intel/deep-learning-essentials with
+      # the autotools and doxygen pre-installed (see
+      # buildlib/dockers/ze-builder.Dockerfile).  This mirrors what the
+      # CUDA / ROCm lanes do: the public Intel image is wrapped in a
+      # small builder image so the pipeline step does not need to run
+      # apt-get (and therefore does not need root inside the container).
+      image: ghcr.io/yuanwu2017/ucx-ze-builder:ubuntu24.04
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: ubuntu2404_aarch64
       image: rdmz-harbor.rdmz.labs.mlnx/hpcx/aarch64/ubuntu24.04/builder:doca-2.9.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)

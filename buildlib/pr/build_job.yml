@@ -36,7 +36,6 @@ jobs:
             CONTAINER: ubuntu2404_ze
             build_mode: short
             require_ze: yes
-            install_ze_deps: yes
           ubuntu2210:
             CONTAINER: ubuntu2210
             build_mode: sanity
@@ -150,21 +149,6 @@ jobs:
         clean: true
         fetchDepth: 100
         retryCountOnTaskFailure: 5
-
-      - bash: |
-          set -eEx
-          if [ "${install_ze_deps}" != "yes" ]; then
-              exit 0
-          fi
-          # The ZE container is started with --user 0:0 (see main.yml)
-          # because the public Intel oneAPI images do not ship sudo.
-          export DEBIAN_FRONTEND=noninteractive
-          apt-get update -q
-          apt-get install -y --no-install-recommends \
-              autoconf automake libtool doxygen
-        displayName: Install build tools for ZE lane
-        env:
-          install_ze_deps: $(install_ze_deps)
 
       - bash: |
           ./buildlib/tools/builds.sh
