@@ -39,8 +39,10 @@ void ucs_table_cleanup(ucs_table_t *table)
         ucs_array_for_each(cell, &entry->cells) {
             ucs_string_buffer_cleanup(&cell->text);
         }
+
         ucs_array_cleanup_dynamic(&entry->cells);
     }
+
     ucs_array_cleanup_dynamic(&table->entries);
 }
 
@@ -138,6 +140,7 @@ ucs_table_cell_character_width(const ucs_table_t *table, const unsigned *widths,
     for (i = 0; i < col_span; ++i) {
         width += widths[start + i];
     }
+
     width += 3 * (col_span - 1);
     return width;
 }
@@ -168,6 +171,7 @@ static void ucs_table_compute_widths(const ucs_table_t *table, unsigned *widths)
                 content_len = ucs_string_buffer_length(&cell->text);
                 widths[col] = ucs_max(widths[col], content_len);
             }
+
             col += cell->col_span;
         }
     }
@@ -192,6 +196,7 @@ static void ucs_table_compute_widths(const ucs_table_t *table, unsigned *widths)
                     widths[col + cell->col_span - 1] += content_len - existing;
                 }
             }
+
             col += cell->col_span;
         }
     }
@@ -202,6 +207,7 @@ static void ucs_table_compute_widths(const ucs_table_t *table, unsigned *widths)
         for (i = 0; i < table->config.n_cols; ++i) {
             max_width = ucs_max(max_width, widths[i]);
         }
+
         for (i = 0; i < table->config.n_cols; ++i) {
             widths[i] = max_width;
         }
@@ -279,6 +285,7 @@ static void ucs_table_render_separator(const ucs_table_t *table,
         ucs_string_buffer_appendc(strb, '+', 1);
         ucs_string_buffer_appendc(strb, '-', widths[i] + 2);
     }
+
     ucs_string_buffer_appendc(strb, '+', 1);
     ucs_string_buffer_appendc(strb, '\n', 1);
 }
