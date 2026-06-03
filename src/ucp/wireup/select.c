@@ -20,6 +20,7 @@
 #include <ucp/core/ucp_ep.inl>
 #include <string.h>
 #include <inttypes.h>
+#include <math.h>
 
 #define UCP_WIREUP_RMA_BW_TEST_MSG_SIZE    262144
 #define UCP_WIREUP_MAX_FLAGS_STRING_SIZE   50
