@@ -575,13 +575,13 @@ void ucp_ep_flush_state_reset(ucp_ep_h ep)
     flush_state->cmpl_sn         = 0;
     flush_state->mem_in_progress = 0;
     ucs_hlist_head_init(&flush_state->reqs);
-    ucp_ep_update_flags(ep, UCP_EP_FLAG_FLUSH_STATE_VALID, 0);
+    ucp_ep_update_debug_flags(ep, UCP_EP_FLAG_FLUSH_STATE_VALID, 0);
 }
 
 void ucp_ep_flush_state_invalidate(ucp_ep_h ep)
 {
     ucs_assert(ucs_hlist_is_empty(&ucp_ep_flush_state(ep)->reqs));
-    ucp_ep_update_flags(ep, 0, UCP_EP_FLAG_FLUSH_STATE_VALID);
+    ucp_ep_update_debug_flags(ep, 0, UCP_EP_FLAG_FLUSH_STATE_VALID);
 }
 
 /* Since release function resets EP ID to @ref UCS_PTR_MAP_KEY_INVALID and PTR
