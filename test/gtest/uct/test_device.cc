@@ -189,7 +189,7 @@ protected:
     entity *m_receiver;
 
 private:
-    CUdevice m_cuda_dev;
+    CUdevice m_cuda_dev = CU_DEVICE_INVALID;
 };
 
 UCS_TEST_P(test_device, put)
@@ -198,7 +198,7 @@ UCS_TEST_P(test_device, put)
     device_put(0x1111111111111111lu, 0x2222222222222222lu);
 }
 
-UCS_TEST_P(test_device, reconnect, "IB_GDA_RETAIN_INACTIVE_CTX?=y")
+UCS_TEST_P(test_device, reconnect)
 {
     skip_if_no_cuda();
     skip_if_not_rc_gda();
@@ -210,6 +210,8 @@ UCS_TEST_P(test_device, reconnect, "IB_GDA_RETAIN_INACTIVE_CTX?=y")
 
     m_sender->create_ep(0);
     m_sender->connect_p2p_ep(m_sender->ep(0), m_receiver->ep(0));
+    m_receiver->connect_p2p_ep(m_receiver->ep(0), m_sender->ep(0));
+    short_progress_loop();
 
     device_put(0x3333333333333333lu, 0x4444444444444444lu);
 }
