@@ -1,13 +1,33 @@
 parameters:
   dependsOn: [Static_check]
   conda_container: ucxx_rapidsai_ci_conda
-  conda_cpp_slices: []
-  conda_python_slices: []
-  wheel_libucxx_slices: []
-  wheel_ucxx_slices: []
+  # Build slices shared by the PR and release pipelines.
+  conda_cpp_slices:
+    - { name: x86_64_cuda12_py312,  demands: ucx_docker, rapids_cuda_version: '12.9.2', rapids_py_version: '3.12' }
+    - { name: x86_64_cuda13_py312,  demands: ucx_docker, rapids_cuda_version: '13.4.3', rapids_py_version: '3.12' }
+    - { name: aarch64_cuda12_py312, demands: ucx_arm64,  rapids_cuda_version: '12.9.2', rapids_py_version: '3.12' }
+    - { name: aarch64_cuda13_py312, demands: ucx_arm64,  rapids_cuda_version: '13.4.3', rapids_py_version: '3.12' }
+  conda_python_slices:
+    - { name: x86_64_cuda12_py312,  demands: ucx_docker, rapids_cuda_version: '12.9.2', rapids_py_version: '3.12' }
+    - { name: x86_64_cuda13_py312,  demands: ucx_docker, rapids_cuda_version: '13.4.3', rapids_py_version: '3.12' }
+    - { name: aarch64_cuda12_py312, demands: ucx_arm64,  rapids_cuda_version: '12.9.2', rapids_py_version: '3.12' }
+    - { name: aarch64_cuda13_py312, demands: ucx_arm64,  rapids_cuda_version: '13.4.3', rapids_py_version: '3.12' }
+  # libucxx + ucxx wheels for cuda12 + cuda13, x86_64 + aarch64.
+  wheel_libucxx_slices:
+    - { name: x86_64_cuda12_py312,  container: ucxx_rapidsai_ci_wheel_cuda12, demands: ucx_docker, rapids_cuda_version: '12.9.2', rapids_py_version: '3.12' }
+    - { name: x86_64_cuda13_py312,  container: ucxx_rapidsai_ci_wheel_cuda13, demands: ucx_docker, rapids_cuda_version: '13.4.3', rapids_py_version: '3.12' }
+    - { name: aarch64_cuda12_py312, container: ucxx_rapidsai_ci_wheel_cuda12, demands: ucx_arm64,  rapids_cuda_version: '12.9.2', rapids_py_version: '3.12' }
+    - { name: aarch64_cuda13_py312, container: ucxx_rapidsai_ci_wheel_cuda13, demands: ucx_arm64,  rapids_cuda_version: '13.4.3', rapids_py_version: '3.12' }
+  wheel_ucxx_slices:
+    - { name: x86_64_cuda12_py312,  container: ucxx_rapidsai_ci_wheel_cuda12, libucxx_slice: x86_64_cuda12_py312,  demands: ucx_docker, rapids_cuda_version: '12.9.2', rapids_py_version: '3.12' }
+    - { name: x86_64_cuda13_py312,  container: ucxx_rapidsai_ci_wheel_cuda13, libucxx_slice: x86_64_cuda13_py312,  demands: ucx_docker, rapids_cuda_version: '13.4.3', rapids_py_version: '3.12' }
+    - { name: aarch64_cuda12_py312, container: ucxx_rapidsai_ci_wheel_cuda12, libucxx_slice: aarch64_cuda12_py312, demands: ucx_arm64,  rapids_cuda_version: '12.9.2', rapids_py_version: '3.12' }
+    - { name: aarch64_cuda13_py312, container: ucxx_rapidsai_ci_wheel_cuda13, libucxx_slice: aarch64_cuda13_py312, demands: ucx_arm64,  rapids_cuda_version: '13.4.3', rapids_py_version: '3.12' }
   wheel_tests_ucxx_slices: []
   conda_tests_slices: []
-  docs_slices: []
+  docs_slices:
+    - { name: x86_64_cuda13_py312, cpp_slice: x86_64_cuda13_py312, python_slice: x86_64_cuda13_py312,
+        demands: ucx_docker, rapids_cuda_version: '13.4.3', rapids_py_version: '3.12' }
 
 stages:
   # UCXX results are informational: every job is continueOnError, so failures
@@ -48,6 +68,9 @@ stages:
               inputs:
                 pathToPublish: $(RAPIDS_BLD_OUTPUT_DIR)
                 artifactName: ucxx-conda-cpp-${{ slice.name }}
+            # conda packages are not published from this pipeline: per RAPIDS,
+            # ucxx conda ships via conda-forge (separate feedstock) once the
+            # codebase is officially upstream. Nightlies stay RAPIDS-side.
 
       - ${{ each slice in parameters.conda_python_slices }}:
         - job: ucxx_conda_python_build_${{ slice.name }}
@@ -87,6 +110,9 @@ stages:
               inputs:
                 pathToPublish: $(RAPIDS_BLD_OUTPUT_DIR)
                 artifactName: ucxx-conda-python-${{ slice.name }}
+            # conda packages are not published from this pipeline: per RAPIDS,
+            # ucxx conda ships via conda-forge (separate feedstock) once the
+            # codebase is officially upstream. Nightlies stay RAPIDS-side.
 
       - ${{ each slice in parameters.wheel_libucxx_slices }}:
         - job: ucxx_wheel_libucxx_build_${{ slice.name }}
@@ -115,6 +141,8 @@ stages:
               inputs:
                 pathToPublish: $(RAPIDS_BLD_OUTPUT_DIR)
                 artifactName: ucxx-wheel-libucxx-${{ slice.name }}
+            # libucxx wheel is an intermediate build input (staged into the
+            # ucxx wheel build below); it is not published.
 
       - ${{ each slice in parameters.wheel_ucxx_slices }}:
         - job: ucxx_wheel_ucxx_build_${{ slice.name }}
@@ -155,6 +183,11 @@ stages:
               inputs:
                 pathToPublish: $(RAPIDS_BLD_OUTPUT_DIR)
                 artifactName: ucxx-wheel-ucxx-${{ slice.name }}
+            # TODO release: publish the ucxx wheels (ucxx-cu12 / ucxx-cu13) to
+            # PyPI on a UCX tag. Per RAPIDS the upload goes through Kitmaker
+            # (which dual-publishes PyPI + NVIDIA PyPI); the exact process and
+            # credentials are pending RAPIDS/Kitmaker. Wire it here once defined -
+            # the built wheel above is the artifact Kitmaker would consume.
 
       - ${{ each slice in parameters.docs_slices }}:
         - job: ucxx_docs_build_${{ slice.name }}
@@ -203,6 +236,9 @@ stages:
               inputs:
                 pathToPublish: $(DOCS_OUT_DIR)
                 artifactName: ucxx-docs-${{ slice.name }}
+            # docs publishing target is not defined by the current RAPIDS release
+            # plan (wheels -> Kitmaker/PyPI, conda -> conda-forge); the built docs
+            # remain a pipeline artifact for now.
 
       - ${{ each slice in parameters.wheel_tests_ucxx_slices }}:
         - job: ucxx_wheel_tests_ucxx_${{ slice.name }}

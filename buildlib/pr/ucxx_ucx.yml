@@ -1,7 +1,13 @@
 parameters:
   dependsOn: [Basic_compile]
+  condition: succeeded()
   conda_container: ucxx_rapidsai_ci_conda
-  slices: []
+  # UCX builds shared by the PR and release pipelines.
+  slices:
+    - { name: x86_64_cuda12,  demands: ucx_docker, rapids_cuda_version: '12.9.2' }
+    - { name: x86_64_cuda13,  demands: ucx_docker, rapids_cuda_version: '13.4.3' }
+    - { name: aarch64_cuda12, demands: ucx_arm64,  rapids_cuda_version: '12.9.2' }
+    - { name: aarch64_cuda13, demands: ucx_arm64,  rapids_cuda_version: '13.4.3' }
 
 stages:
   # Builds the PR's UCX once per arch/cuda pair and publishes it; the UCXX
@@ -9,6 +15,7 @@ stages:
   - stage: UCXX_ucx
     displayName: 'UCXX: UCX build'
     dependsOn: ${{ parameters.dependsOn }}
+    condition: ${{ parameters.condition }}
     variables:
       CI_UCX_DIR: $(Agent.BuildDirectory)/ucx
     jobs:
