@@ -82,8 +82,12 @@ static ucs_status_t ucp_proto_reconfig_progress(uct_pending_req_t *self)
     UCS_STRING_BUFFER_ONSTACK(strb, 256);
     ucs_status_t status;
 
-    /* This protocol should not be selected for valid and connected endpoint */
-    if (ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED) {
+    /* EP is in final state when the remote is connected, or there is no
+     * p2p lane and the configuration index is already the latest.
+     */
+    if ((ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED) ||
+        (!ucp_ep_config(ep)->p2p_lanes && !ucp_ep_has_cm_lane(ep) &&
+         (ep->cfg_index == req->send.proto_config->ep_cfg_index))) {
         if (ucp_proto_reconfig_report_no_rma_emulation_no_proto(req, ep)) {
             ucp_proto_request_abort(req, UCS_ERR_CANCELED);
             return UCS_OK;
@@ -158,6 +162,7 @@ ucp_proto_t ucp_reconfig_proto = {
     .name     = "reconfig",
     .desc     = "stub protocol",
     .flags    = UCP_PROTO_FLAG_INVALID,
+    .dt_mask  = UCP_DT_MASK_ALL,
     .probe    = ucp_proto_reconfig_probe,
     .query    = ucp_proto_default_query,
     .progress = {ucp_proto_reconfig_progress},
