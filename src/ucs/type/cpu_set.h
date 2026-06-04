@@ -63,19 +63,6 @@ static inline int ucs_cpu_is_set(int cpu, const ucs_cpu_set_t *cpusetp)
     return 0;
 }
 
-static inline int ucs_cpu_set_is_empty(const ucs_cpu_set_t *cpusetp)
-{
-    int i;
-
-    for (i = 0; i < (int)(UCS_CPU_SETSIZE / UCS_NCPUBITS); ++i) {
-        if (cpusetp->ucs_bits[i] != 0) {
-            return 0;
-        }
-    }
-
-    return 1;
-}
-
 static inline int ucs_cpu_set_find_lcs(const ucs_cpu_set_t * cpu_mask)
 {
     int i;

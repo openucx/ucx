@@ -10,7 +10,6 @@
 #include <ucs/type/status.h>
 #include <ucs/datastruct/list.h>
 #include <ucs/memory/numa.h>
-#include <ucs/type/cpu_set.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -135,18 +134,6 @@ ucs_status_t ucs_topo_get_distance(ucs_sys_device_t device1,
  */
 void ucs_topo_get_memory_distance(ucs_sys_device_t device,
                                   ucs_sys_dev_distance_t *distance);
-
-
-/**
- * Find the memory distance of the device according to a CPU set.
- *
- * @param [in]  device   System device index.
- * @param [in]  cpuset   CPU set representing the memory locality.
- * @param [out] distance Result populated with the device memory distance.
- */
-void ucs_topo_get_memory_distance_for_cpuset(ucs_sys_device_t device,
-                                             const ucs_cpu_set_t *cpuset,
-                                             ucs_sys_dev_distance_t *distance);
 
 
 /**
@@ -275,18 +262,6 @@ const char *ucs_topo_sys_device_get_name(ucs_sys_device_t sys_dev);
  * @return The number of NUMA node closest to given device.
  */
 ucs_numa_node_t ucs_topo_sys_device_get_numa_node(ucs_sys_device_t sys_dev);
-
-
-/**
- * Set the closest NUMA node for a given system device.
- *
- * @param [in] sys_dev   System device index.
- * @param [in] numa_node NUMA node to set.
- *
- * @return UCS_OK on success, error otherwise.
- */
-ucs_status_t ucs_topo_sys_device_set_numa_node(ucs_sys_device_t sys_dev,
-                                               ucs_numa_node_t numa_node);
 
 
 /**
