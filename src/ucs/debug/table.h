@@ -90,8 +90,7 @@ typedef struct {
  * @param [in]  config  Configuration (non-NULL); see ucs_table_config_t.
  *                      Copied into the table.
  */
-ucs_status_t
-ucs_table_init(ucs_table_t *table, const ucs_table_config_t *config);
+void ucs_table_init(ucs_table_t *table, const ucs_table_config_t *config);
 
 
 /**
@@ -132,12 +131,9 @@ ucs_status_t ucs_table_add_row(ucs_table_t *table, ucs_table_row_h *row_p);
  * @param [in,out] table     Table that owns @a row.
  * @param [in]     row       Row returned by ucs_table_add_row().
  * @param [in]     col_span  Number of body columns to span.
- *
- * @return UCS_OK on success, or an error code on failure.
  */
-ucs_status_t ucs_table_row_add_cell_empty(ucs_table_t *table,
-                                          ucs_table_row_h row,
-                                          unsigned col_span);
+void ucs_table_row_add_cell_empty(ucs_table_t *table, ucs_table_row_h row,
+                                  unsigned col_span);
 
 
 /**
@@ -148,13 +144,10 @@ ucs_status_t ucs_table_row_add_cell_empty(ucs_table_t *table,
  * @param [in]     col_span  Number of body columns to span.
  * @param [in]     align     Cell alignment.
  * @param [in]     fmt       printf format string.
- *
- * @return UCS_OK on success, or an error code on failure.
  */
-ucs_status_t
-ucs_table_row_add_cell_fmt(ucs_table_t *table, ucs_table_row_h row,
-                           unsigned col_span, ucs_table_align_t align,
-                           const char *fmt, ...) UCS_F_PRINTF(5, 6);
+void ucs_table_row_add_cell_fmt(ucs_table_t *table, ucs_table_row_h row,
+                                unsigned col_span, ucs_table_align_t align,
+                                const char *fmt, ...) UCS_F_PRINTF(5, 6);
 
 
 /**
@@ -164,11 +157,8 @@ ucs_table_row_add_cell_fmt(ucs_table_t *table, ucs_table_row_h row,
  *
  * @param [in,out] table  Table to render.
  * @param [in,out] strb   Destination string buffer.
- *
- * @return UCS_OK on success, or an error code on failure.
  */
-ucs_status_t
-ucs_table_render(ucs_table_t const *table, ucs_string_buffer_t *strb);
+void ucs_table_render(ucs_table_t const *table, ucs_string_buffer_t *strb);
 
 
 /**
@@ -176,9 +166,8 @@ ucs_table_render(ucs_table_t const *table, ucs_string_buffer_t *strb);
  *
  * @param [in,out] table  Table to print.
  *
- * @return UCS_OK on success, or an error code on failure.
  */
-ucs_status_t ucs_table_print(ucs_table_t const *table);
+void ucs_table_print(ucs_table_t const *table);
 
 
 END_C_DECLS

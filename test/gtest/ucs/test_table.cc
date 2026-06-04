@@ -20,12 +20,12 @@ protected:
             ucs_table_config_t cfg = {
                 .n_cols = n_cols
             };
-            EXPECT_EQ(UCS_OK, ucs_table_init(&m_table, &cfg));
+            ucs_table_init(&m_table, &cfg);
         }
 
         explicit table_t(const ucs_table_config_t &cfg)
         {
-            EXPECT_EQ(UCS_OK, ucs_table_init(&m_table, &cfg));
+            ucs_table_init(&m_table, &cfg);
         }
 
         ~table_t()
@@ -48,7 +48,7 @@ protected:
         std::string render()
         {
             ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
-            EXPECT_EQ(UCS_OK, ucs_table_render(&m_table, &strb));
+            ucs_table_render(&m_table, &strb);
             const std::string out(ucs_string_buffer_cstr(&strb));
             ucs_string_buffer_cleanup(&strb);
             return out;
@@ -349,59 +349,4 @@ UCS_TEST_F(test_table, render_twice) {
               "| aaaaaaaaaaa | bbbbbbbbbbb |\n"
               "+-------------+-------------+\n",
               table.render());
-}
-
-
-UCS_TEST_F(test_table, invalid_n_cols) {
-    ucs_table_t table;
-    ucs_table_config_t cfg = {
-        .n_cols = 0
-    };
-    scoped_log_handler slh(hide_errors_logger);
-
-    EXPECT_EQ(UCS_ERR_INVALID_PARAM, ucs_table_init(&table, &cfg));
-}
-
-UCS_TEST_F(test_table, zero_col_span) {
-    table_t table(2);
-    auto row = table.add_row();
-    scoped_log_handler slh(hide_errors_logger);
-
-    EXPECT_EQ(UCS_ERR_INVALID_PARAM,
-              ucs_table_row_add_cell_empty(table.get(), row, 0));
-}
-
-UCS_TEST_F(test_table, col_span_exceeds) {
-    table_t table(2);
-    auto row = table.add_row();
-
-    /* an oversized span is only detected at render time. */
-    EXPECT_EQ(UCS_OK, ucs_table_row_add_cell_empty(table.get(), row, 3));
-
-    ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
-    {
-        scoped_log_handler slh(hide_errors_logger);
-        EXPECT_EQ(UCS_ERR_INVALID_PARAM, ucs_table_render(table.get(), &strb));
-    }
-    ucs_string_buffer_cleanup(&strb);
-}
-
-UCS_TEST_F(test_table, cell_fmt_newline_1) {
-    table_t table(1);
-    auto row = table.add_row();
-    scoped_log_handler slh(hide_errors_logger);
-
-    EXPECT_EQ(UCS_ERR_INVALID_PARAM,
-              ucs_table_row_add_cell_fmt(table.get(), row, 1,
-                                         UCS_TABLE_ALIGN_LEFT, "a\nb"));
-}
-
-UCS_TEST_F(test_table, cell_fmt_newline_2) {
-    table_t table(1);
-    auto row = table.add_row();
-    scoped_log_handler slh(hide_errors_logger);
-
-    EXPECT_EQ(UCS_ERR_INVALID_PARAM,
-              ucs_table_row_add_cell_fmt(table.get(), row, 1,
-                                         UCS_TABLE_ALIGN_LEFT, "a%sb", "\n"));
 }

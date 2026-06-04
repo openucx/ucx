@@ -75,10 +75,7 @@ static ucs_status_t print_sys_topo_add_padding(ucs_table_t *table)
     }
 
     for (i = 0; i < table->config.n_cols; ++i) {
-        status = ucs_table_row_add_cell_empty(table, row, 1);
-        if (status != UCS_OK) {
-            goto out;
-        }
+        ucs_table_row_add_cell_empty(table, row, 1);
     }
 
 out:
@@ -106,20 +103,12 @@ print_sys_topo_add_devices_header(ucs_table_t *table,
         goto out;
     }
 
-    status = ucs_table_row_add_cell_fmt(table, row, 1, UCS_TABLE_ALIGN_RIGHT,
-                                        "%s", first_col_label);
-    if (status != UCS_OK) {
-        goto out;
-    }
+    ucs_table_row_add_cell_fmt(table, row, 1, UCS_TABLE_ALIGN_RIGHT, "%s",
+                               first_col_label);
 
     for (sys_dev = 0; sys_dev < num_devices; ++sys_dev) {
-        status = ucs_table_row_add_cell_fmt(table, row, 1,
-                                            UCS_TABLE_ALIGN_RIGHT, "%s",
-                                            ucs_topo_sys_device_get_name(
-                                                    sys_dev));
-        if (status != UCS_OK) {
-            goto out;
-        }
+        ucs_table_row_add_cell_fmt(table, row, 1, UCS_TABLE_ALIGN_RIGHT, "%s",
+                                   ucs_topo_sys_device_get_name(sys_dev));
     }
 
     status = print_sys_topo_add_padding(table);
@@ -148,10 +137,7 @@ static void print_sys_topo_distances(unsigned num_devices)
 
     printf("#\n# System topology\n#\n");
 
-    status = ucs_table_init(&table, &cfg);
-    if (status != UCS_OK) {
-        return;
-    }
+    ucs_table_init(&table, &cfg);
 
     status = print_sys_topo_add_devices_header(&table, "MB/s", num_devices);
     if (status != UCS_OK) {
@@ -176,42 +162,30 @@ static void print_sys_topo_distances(unsigned num_devices)
             goto cleanup;
         }
 
-        status = ucs_table_row_add_cell_fmt(&table, row, 1,
-                                            UCS_TABLE_ALIGN_RIGHT, "%s",
-                                            ucs_topo_sys_device_get_name(
-                                                    sys_dev1));
-        if (status != UCS_OK) {
-            goto cleanup;
-        }
+        ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_RIGHT, "%s",
+                                   ucs_topo_sys_device_get_name(sys_dev1));
 
         for (sys_dev2 = 0; sys_dev2 < num_devices; ++sys_dev2) {
             if (sys_dev1 == sys_dev2) {
                 /* Do not print distance of device to itself */
-                status = ucs_table_row_add_cell_fmt(&table, row, 1,
-                                                    UCS_TABLE_ALIGN_CENTER,
-                                                    "%s", "-");
+                ucs_table_row_add_cell_fmt(&table, row, 1,
+                                           UCS_TABLE_ALIGN_CENTER, "%s", "-");
             } else {
                 dist_status = ucs_topo_get_distance(sys_dev1, sys_dev2,
                                                     &distance);
                 if (dist_status != UCS_OK) {
-                    status = ucs_table_row_add_cell_fmt(
-                            &table, row, 1, UCS_TABLE_ALIGN_RIGHT, "<%s>",
-                            ucs_status_string(dist_status));
+                    ucs_table_row_add_cell_fmt(&table, row, 1,
+                                               UCS_TABLE_ALIGN_RIGHT, "<%s>",
+                                               ucs_status_string(dist_status));
                 } else if (distance.bandwidth > UCS_PBYTE) {
-                    status = ucs_table_row_add_cell_fmt(&table, row, 1,
-                                                        UCS_TABLE_ALIGN_RIGHT,
-                                                        "%s", "inf");
+                    ucs_table_row_add_cell_fmt(&table, row, 1,
+                                               UCS_TABLE_ALIGN_RIGHT, "%s",
+                                               "inf");
                 } else {
-                    status = ucs_table_row_add_cell_fmt(&table, row, 1,
-                                                        UCS_TABLE_ALIGN_RIGHT,
-                                                        "%.1f",
-                                                        distance.bandwidth /
-                                                                UCS_MBYTE);
+                    ucs_table_row_add_cell_fmt(&table, row, 1,
+                                               UCS_TABLE_ALIGN_RIGHT, "%.1f",
+                                               distance.bandwidth / UCS_MBYTE);
                 }
-            }
-
-            if (status != UCS_OK) {
-                goto cleanup;
             }
         }
 
@@ -221,7 +195,7 @@ static void print_sys_topo_distances(unsigned num_devices)
         }
     }
 
-    status = ucs_table_print(&table);
+    ucs_table_print(&table);
 
 cleanup:
     ucs_table_cleanup(&table);
@@ -242,10 +216,7 @@ static void print_sys_topo_memory_latency(unsigned num_devices)
 
     printf("#\n# NUMA memory latency\n#\n");
 
-    status = ucs_table_init(&table, &cfg);
-    if (status != UCS_OK) {
-        return;
-    }
+    ucs_table_init(&table, &cfg);
 
     status = print_sys_topo_add_devices_header(&table, "device", num_devices);
     if (status != UCS_OK) {
@@ -262,21 +233,13 @@ static void print_sys_topo_memory_latency(unsigned num_devices)
         goto cleanup;
     }
 
-    status = ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_RIGHT,
-                                        "%s", "nsec");
-    if (status != UCS_OK) {
-        goto cleanup;
-    }
+    ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_RIGHT, "%s",
+                               "nsec");
 
     for (sys_dev = 0; sys_dev < num_devices; ++sys_dev) {
         ucs_topo_get_memory_distance(sys_dev, &distance);
-        status = ucs_table_row_add_cell_fmt(&table, row, 1,
-                                            UCS_TABLE_ALIGN_RIGHT, "%.1f",
-                                            distance.latency *
-                                                    UCS_NSEC_PER_SEC);
-        if (status != UCS_OK) {
-            goto cleanup;
-        }
+        ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_RIGHT,
+                                   "%.1f", distance.latency * UCS_NSEC_PER_SEC);
     }
 
     status = print_sys_topo_add_padding(&table);
@@ -284,10 +247,7 @@ static void print_sys_topo_memory_latency(unsigned num_devices)
         goto cleanup;
     }
 
-    status = ucs_table_print(&table);
-    if (status != UCS_OK) {
-        goto cleanup;
-    }
+    ucs_table_print(&table);
 
     printf("# Memory latency is calculated according to the CPU affinity\n");
 
