@@ -109,6 +109,8 @@ ucp_proto_multi_find_max_avail_bw_lane(const ucp_proto_init_params_t *params,
 
     ucs_assert(index_map != 0);
 
+    ucs_log_indent(1);
+
     /* Pass 1: find max avail_bw and the set of lanes with that bandwidth. */
     ucs_for_each_bit(index, index_map) {
         lane_perf = &lanes_perf[lanes[index]];
@@ -122,6 +124,8 @@ ucp_proto_multi_find_max_avail_bw_lane(const ucp_proto_init_params_t *params,
             lane_map |= UCS_BIT(index);
         }
     }
+
+    ucs_log_indent(-1);
 
     if (lane_map == 0) {
         return UCP_NULL_LANE;
@@ -483,12 +487,17 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
                 lanes);
     }
 
+    ucs_log_indent(1);
+
     ucp_proto_multi_select_bw_lanes(&params->super.super, lanes, num_lanes,
                                     params->max_lanes, lanes_perf,
                                     fixed_first_lane, &selection);
 
+    ucs_log_indent(-1);
+
     ucs_trace("selected %u lanes for %s", selection.num_lanes,
               ucp_proto_id_field(params->super.super.proto_id, name));
+
     ucs_log_indent(1);
 
     for (i = 0; i < selection.num_lanes; ++i) {
