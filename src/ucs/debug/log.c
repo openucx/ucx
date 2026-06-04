@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -13,6 +13,7 @@
 #include <ucs/arch/atomic.h>
 #include <ucs/debug/debug_int.h>
 #include <ucs/datastruct/khash.h>
+#include <ucs/datastruct/string_buffer.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/checker.h>
 #include <ucs/sys/string.h>
@@ -29,10 +30,14 @@
 #define UCS_LOG_METADATA_FMT    "%17s:%-4u %-4s %-5s %*s"
 #define UCS_LOG_PROC_DATA_FMT   "[%s:%-5d:%s]"
 
-#define UCS_LOG_COMPACT_FMT     UCS_LOG_TIME_FMT " " UCS_LOG_PROC_DATA_FMT "  "
-#define UCS_LOG_SHORT_FMT       UCS_LOG_TIME_FMT " [%s] " UCS_LOG_METADATA_FMT "%s\n"
-#define UCS_LOG_FMT             UCS_LOG_TIME_FMT " " UCS_LOG_PROC_DATA_FMT " " \
-                                UCS_LOG_METADATA_FMT "%s\n"
+#define UCS_LOG_COMPACT_SPACING "   "
+#define UCS_LOG_TIME_PREFIX_FMT UCS_LOG_TIME_FMT UCS_LOG_COMPACT_SPACING
+#define UCS_LOG_COMPACT_PREFIX_FMT \
+    UCS_LOG_TIME_FMT " " UCS_LOG_PROC_DATA_FMT UCS_LOG_COMPACT_SPACING
+
+#define UCS_LOG_SHORT_FMT UCS_LOG_TIME_FMT " [%s] " UCS_LOG_METADATA_FMT "%s\n"
+#define UCS_LOG_FMT \
+    UCS_LOG_TIME_FMT " " UCS_LOG_PROC_DATA_FMT " " UCS_LOG_METADATA_FMT "%s\n"
 
 #define UCS_LOG_TIME_ARG(_tv)  (_tv)->tv_sec, (_tv)->tv_usec
 
@@ -43,7 +48,9 @@
 #define UCS_LOG_PROC_DATA_ARG() \
     ucs_log_hostname, ucs_log_get_pid(), ucs_log_get_thread_name()
 
-#define UCS_LOG_COMPACT_ARG(_tv)\
+#define UCS_LOG_TIME_PREFIX_ARG(_tv) UCS_LOG_TIME_ARG(_tv)
+
+#define UCS_LOG_COMPACT_PREFIX_ARG(_tv) \
     UCS_LOG_TIME_ARG(_tv), UCS_LOG_PROC_DATA_ARG()
 
 #define UCS_LOG_SHORT_ARG(_short_file, _line, _level, _comp_conf, _tv, \
@@ -229,23 +236,60 @@ static void ucs_log_handle_file_max_size(int log_entry_len)
 
 void ucs_log_print_compact(const char *str)
 {
+    ucs_string_buffer_t output = UCS_STRING_BUFFER_INITIALIZER;
+    const char *line, *next, *output_cstr;
     struct timeval tv;
+    char prefix[256];
+    int UCS_V_UNUSED prefix_len;
 
     gettimeofday(&tv, NULL);
 
     if (RUNNING_ON_VALGRIND) {
-        VALGRIND_PRINTF(UCS_LOG_TIME_FMT " %s\n", UCS_LOG_TIME_ARG(&tv), str);
-    } else if (ucs_log_initialized) {
-        if (ucs_log_file_close) { /* non-stdout/stderr */
-            ucs_log_handle_file_max_size(strlen(str) + 1);
+        prefix_len = snprintf(prefix, sizeof(prefix), UCS_LOG_TIME_PREFIX_FMT,
+                              UCS_LOG_TIME_PREFIX_ARG(&tv));
+    } else {
+        prefix_len = snprintf(prefix, sizeof(prefix),
+                              UCS_LOG_COMPACT_PREFIX_FMT,
+                              UCS_LOG_COMPACT_PREFIX_ARG(&tv));
+    }
+
+    ucs_assertv((prefix_len >= 0) && (prefix_len < (int)sizeof(prefix)),
+                "log prefix snprintf failed; returned: %d, buffer size: %zu",
+                prefix_len, sizeof(prefix));
+
+    /* Compose all '\n'-separated lines under the same prefix and emit them in
+     * a single fprintf, to avoid interleaving. */
+    line = str;
+    while (*line != '\0') {
+        next = strchr(line, '\n');
+        if (next == NULL) {
+            break;
         }
 
-        fprintf(ucs_log_file, UCS_LOG_COMPACT_FMT " %s\n",
-                UCS_LOG_COMPACT_ARG(&tv), str);
-    } else {
-        fprintf(stdout, UCS_LOG_COMPACT_FMT " %s\n", UCS_LOG_COMPACT_ARG(&tv),
-                str);
+        ucs_string_buffer_appendf(&output, "%s%.*s\n", prefix,
+                                  (int)(next - line), line);
+        line = next + 1;
     }
+
+    /* Last line */
+    ucs_string_buffer_appendf(&output, "%s%s\n", prefix, line);
+
+    output_cstr = ucs_string_buffer_cstr(&output);
+
+    if (RUNNING_ON_VALGRIND) {
+        VALGRIND_PRINTF("%s", output_cstr);
+    } else if (ucs_log_initialized) {
+        if (ucs_log_file_close) { /* non-stdout/stderr */
+            ucs_log_handle_file_max_size(
+                    (int)ucs_string_buffer_length(&output));
+        }
+
+        fprintf(ucs_log_file, "%s", output_cstr);
+    } else {
+        fprintf(stdout, "%s", output_cstr);
+    }
+
+    ucs_string_buffer_cleanup(&output);
 }
 
 static void ucs_log_print(const char *short_file, int line,

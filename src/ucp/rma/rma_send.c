@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2018. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -12,11 +12,103 @@
 #include "rma.inl"
 
 #include <ucp/dt/dt_contig.h>
+#include <ucp/dt/dt_sgl.h>
 #include <ucs/profile/profile.h>
 #include <ucs/sys/stubs.h>
 
 #include <ucp/core/ucp_rkey.inl>
 #include <ucp/proto/proto_common.inl>
+#include <ucp/proto/proto_multi.inl>
+#include <ucp/wireup/wireup_ep.h>
+
+
+#define UCP_PUT_SGL_CHECK_PARAMS(_buffer, _count, _remote_addr, _rkey, \
+                                 _param) \
+    do { \
+        if (!ENABLE_PARAMS_CHECK) { \
+            ucs_assert((_param)->remote != NULL); /* For Coverity */ \
+        } else { \
+            const ucp_dt_local_sgl_t *_local; \
+            const ucp_dt_remote_sgl_t *_remote; \
+            \
+            if (ucs_unlikely((_remote_addr) != UCP_REMOTE_ADDR_INVALID)) { \
+                ucs_error("sgl put: remote_addr must be " \
+                          "UCP_REMOTE_ADDR_INVALID, got 0x%" PRIx64, \
+                          (_remote_addr)); \
+                ret = UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
+                goto out_unlock; \
+            } \
+            \
+            if (ucs_unlikely((_rkey) != UCP_RKEY_INVALID)) { \
+                ucs_error("sgl put: rkey must be UCP_RKEY_INVALID, got %p", \
+                          (_rkey)); \
+                ret = UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
+                goto out_unlock; \
+            } \
+            \
+            if (ucs_unlikely(((_param)->op_attr_mask & \
+                              UCP_OP_ATTR_FIELD_REMOTE) == 0)) { \
+                ucs_error("sgl put: UCP_OP_ATTR_FIELD_REMOTE must be set"); \
+                ret = UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
+                goto out_unlock; \
+            } \
+            \
+            if (ucs_unlikely((_param)->remote == NULL)) { \
+                ucs_error("sgl put: remote descriptor must not be NULL"); \
+                ret = UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
+                goto out_unlock; \
+            } \
+            \
+            _local = (const ucp_dt_local_sgl_t*)(_buffer); \
+            \
+            if (ucs_unlikely((_local->field_mask & \
+                              UCP_DT_LOCAL_SGL_FIELD_BUFFERS) == 0)) { \
+                ucs_error("sgl put: local buffers field must be set"); \
+                ret = UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
+                goto out_unlock; \
+            } \
+            \
+            if (ucs_unlikely((_local->field_mask & \
+                              UCP_DT_LOCAL_SGL_FIELD_LENGTHS) == 0)) { \
+                ucs_error("sgl put: local lengths field must be set"); \
+                ret = UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
+                goto out_unlock; \
+            } \
+            \
+            _remote = (_param)->remote; \
+            \
+            if (ucs_unlikely((_remote->field_mask & \
+                              UCP_DT_REMOTE_SGL_FIELD_REMOTE_ADDRS) == 0)) { \
+                ucs_error("sgl put: remote addrs field must be set"); \
+                ret = UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
+                goto out_unlock; \
+            } \
+            \
+            if (ucs_unlikely((_remote->field_mask & \
+                              UCP_DT_REMOTE_SGL_FIELD_LENGTHS) == 0)) { \
+                ucs_error("sgl put: remote lengths field must be set"); \
+                ret = UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
+                goto out_unlock; \
+            } \
+            \
+            if (ucs_unlikely((_remote->field_mask & \
+                              UCP_DT_REMOTE_SGL_FIELD_RKEYS) == 0)) { \
+                ucs_error("sgl put: remote rkeys field must be set"); \
+                ret = UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
+                goto out_unlock; \
+            } \
+            \
+            if (ucs_unlikely(((_param)->op_attr_mask & \
+                              UCP_OP_ATTR_FIELD_REMOTE_COUNT) && \
+                             ((_param)->remote_count != (_count)))) { \
+                ucs_error("sgl put: local count %zu != remote count %zu" \
+                          " (only N->N mapping is supported)", \
+                          (_count), (_param)->remote_count); \
+                ret = UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
+                goto out_unlock; \
+            } \
+        } \
+    } while (0)
 
 
 #define UCP_RMA_CHECK_BUFFER(_buffer, _action) \
@@ -118,11 +210,12 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
     ucp_worker_h worker     = ep->worker;
     size_t contig_length    = 0;
     ucp_datatype_t datatype = ucp_dt_make_contig(1);
+    const ucp_dt_remote_sgl_t *remote;
     ucs_status_ptr_t ret;
     ucs_status_t status;
     ucp_request_t *req;
 
-    UCP_REQUEST_CHECK_PARAM(param);
+    UCP_REQUEST_CHECK_PARAM_COMMON(param);
     UCP_RMA_CHECK_PTR(worker->context, buffer, count);
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
@@ -143,20 +236,25 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
         goto out_unlock;
     }
 
-    req = ucp_request_get_param(worker, param,
-                                {ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
-                                goto out_unlock;});
-    req->send.rma.rkey        = rkey;
-    req->send.rma.remote_addr = remote_addr;
 
     if (ucs_unlikely(param->op_attr_mask & UCP_OP_ATTR_FIELD_DATATYPE)) {
         datatype = param->datatype;
-        if (UCP_DT_IS_CONTIG(datatype)) {
+        if (UCP_DT_IS_SGL(datatype)) {
+            UCP_PUT_SGL_CHECK_PARAMS(buffer, count, remote_addr, rkey, param);
+            remote = param->remote;
+            rkey   = remote->rkeys[0];
+        } else if (UCP_DT_IS_CONTIG(datatype)) {
             contig_length = ucp_contig_dt_length(datatype, count);
         }
     } else {
         contig_length = count;
     }
+
+    req = ucp_request_get_param(worker, param,
+                                {ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+                                goto out_unlock;});
+    req->send.rma.rkey        = rkey;
+    req->send.rma.remote_addr = remote_addr;
 
     ret = ucp_proto_request_send_op_rma(
             ep, rkey, req, ucp_ep_rma_get_fence_flag(ep), UCP_OP_ID_PUT,
