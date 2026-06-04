@@ -1208,11 +1208,17 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_gdaki_iface_t)
     pthread_mutex_destroy(&self->ep_init_lock);
     ibv_dereg_mr(self->atomic_mr);
     ucs_free(self->atomic_buff);
+    
+    if (self->cuda_ctx != NULL) {
+        (void)UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(self->cuda_ctx));
+    }
+
     if (self->ep_alloc_mode == UCT_RC_GDAKI_EP_ALLOC_MODE_POOL) {
         uct_rc_gdaki_iface_cleanup_channel_pool(self);
     }
 
     if (self->cuda_ctx != NULL) {
+        (void)UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPopCurrent(self->cuda_ctx));
         (void)UCT_CUDADRV_FUNC_LOG_WARN(
                 cuDevicePrimaryCtxRelease(self->cuda_dev));
     }
