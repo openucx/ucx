@@ -178,10 +178,16 @@ UCS_TEST_F(test_topo, get_distance) {
 
 UCS_TEST_F(test_topo, provider_push_pop) {
     ucs_sys_dev_distance_t dist;
-    const ucs_sys_topo_ops_t ops_a = {topo_test_distance_a, topo_test_mem_dist,
-                                      topo_test_mem_dist_cpuset};
-    const ucs_sys_topo_ops_t ops_b = {topo_test_distance_b, topo_test_mem_dist,
-                                      topo_test_mem_dist_cpuset};
+    const ucs_sys_topo_ops_t ops_a = {
+        .get_distance                   = topo_test_distance_a,
+        .get_memory_distance            = topo_test_mem_dist,
+        .get_memory_distance_for_cpuset = topo_test_mem_dist_cpuset,
+    };
+    const ucs_sys_topo_ops_t ops_b = {
+        .get_distance                   = topo_test_distance_b,
+        .get_memory_distance            = topo_test_mem_dist,
+        .get_memory_distance_for_cpuset = topo_test_mem_dist_cpuset,
+    };
 
     ASSERT_UCS_OK(ucs_sys_topo_provider_push(&ops_a));
     ASSERT_UCS_OK(ucs_topo_get_distance(UCS_SYS_DEVICE_ID_UNKNOWN,
