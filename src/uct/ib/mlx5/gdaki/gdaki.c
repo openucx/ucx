@@ -583,7 +583,7 @@ static void uct_rc_gdaki_pool_chunk_release(ucs_mpool_t *mp, void *chunk)
     mlx5dv_devx_umem_dereg(hdr->umem);
     (void)UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(iface->cuda_ctx));
     cuMemFree(hdr->gpu_raw);
-    (void)UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPopCurrent(iface->cuda_ctx));
+    (void)UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPopCurrent(NULL));
     ucs_free(hdr);
 }
 
@@ -732,7 +732,7 @@ static void uct_rc_gdaki_cleanup_channels_direct(uct_rc_gdaki_iface_t *iface,
     mlx5dv_devx_umem_dereg(ep->mem.umem);
     (void)UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(iface->cuda_ctx));
     cuMemFree(ep->mem.gpu_raw);
-    (void)UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPopCurrent(iface->cuda_ctx));
+    (void)UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPopCurrent(NULL));
     ucs_free(ep->channel_block);
     uct_rc_gdaki_ep_reset_channels(ep);
 }
