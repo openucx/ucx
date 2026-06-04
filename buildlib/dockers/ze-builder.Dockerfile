@@ -8,7 +8,8 @@
 # pipeline step itself does not need apt-get (and therefore does not
 # need root inside the container).
 #
-# Build & publish:
+# Build & publish (must be re-run whenever this Dockerfile changes,
+# otherwise the CI lane will keep pulling the previous image):
 #   docker build -f buildlib/dockers/ze-builder.Dockerfile \
 #       -t ghcr.io/yuanwu2017/ucx-ze-builder:ubuntu24.04 .
 #   docker push ghcr.io/yuanwu2017/ucx-ze-builder:ubuntu24.04
