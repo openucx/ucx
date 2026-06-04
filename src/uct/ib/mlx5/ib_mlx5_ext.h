@@ -28,26 +28,58 @@ struct mlx5dv_devx_obj;
 BEGIN_C_DECLS
 
 /**
+ * @brief Iface query attributes field mask.
+ *
+ * The enumeration allows specifying which fields in
+ * @ref uct_ib_mlx5_ext_iface_query_attr_t are present.
+ */
+enum uct_ib_mlx5_ext_iface_query_attr_field {
+    /** Enables @ref uct_ib_mlx5_ext_iface_query_attr_t::flags */
+    UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_FLAGS        = UCS_BIT(0),
+
+    /** Enables @ref uct_ib_mlx5_ext_iface_query_attr_t::tx_token_len */
+    UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_TX_TOKEN_LEN = UCS_BIT(1),
+
+    /** Enables @ref uct_ib_mlx5_ext_iface_query_attr_t::rx_token_len */
+    UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_RX_TOKEN_LEN = UCS_BIT(2)
+};
+
+/**
+ * @brief Iface query parameters.
+ */
+typedef struct uct_ib_mlx5_ext_iface_query_attr {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_ib_mlx5_ext_iface_query_attr_field. Fields not specified in
+     * this mask will be ignored.
+     */
+    uint64_t field_mask;
+
+    /** Interface capability flags. */
+    uint64_t flags;
+
+    /** TX token length in bytes. */
+    size_t   tx_token_len;
+
+    /** RX token length in bytes. */
+    size_t   rx_token_len;
+} uct_ib_mlx5_ext_iface_query_attr_t;
+
+/**
  * @brief QP token query attributes field mask.
  *
  * The enumeration allows specifying which fields in
  * @ref uct_ib_mlx5_ext_qp_query_attr_t are present.
  */
 enum uct_ib_mlx5_ext_qp_query_attr_field {
-    /** Enables @ref uct_ib_mlx5_ext_qp_query_attr_t::tx_token_len */
-    UCT_IB_MLX5_EXT_QP_QUERY_ATTR_FIELD_TX_TOKEN_LEN = UCS_BIT(0),
-
-    /** Enables @ref uct_ib_mlx5_ext_qp_query_attr_t::rx_token_len */
-    UCT_IB_MLX5_EXT_QP_QUERY_ATTR_FIELD_RX_TOKEN_LEN = UCS_BIT(1),
-
     /** Enables @ref uct_ib_mlx5_ext_qp_query_attr_t::tx_token */
-    UCT_IB_MLX5_EXT_QP_QUERY_ATTR_FIELD_TX_TOKEN     = UCS_BIT(2),
+    UCT_IB_MLX5_EXT_QP_QUERY_ATTR_FIELD_TX_TOKEN = UCS_BIT(0),
 
     /** Enables @ref uct_ib_mlx5_ext_qp_query_attr_t::rx_token */
-    UCT_IB_MLX5_EXT_QP_QUERY_ATTR_FIELD_RX_TOKEN     = UCS_BIT(3),
+    UCT_IB_MLX5_EXT_QP_QUERY_ATTR_FIELD_RX_TOKEN = UCS_BIT(1),
 
     /** Enables @ref uct_ib_mlx5_ext_qp_query_attr_t::qp_num */
-    UCT_IB_MLX5_EXT_QP_QUERY_ATTR_FIELD_QP_NUM       = UCS_BIT(4)
+    UCT_IB_MLX5_EXT_QP_QUERY_ATTR_FIELD_QP_NUM   = UCS_BIT(2)
 };
 
 /**
@@ -61,21 +93,17 @@ typedef struct uct_ib_mlx5_ext_qp_query_attr {
      */
     uint64_t field_mask;
 
-    /** TX token length in bytes. */
-    size_t   tx_token_len;
-
-    /** RX token length in bytes. */
-    size_t   rx_token_len;
-
     /**
      * Pointer to a caller-allocated buffer for TX token data. The buffer size
-     * must be at least @ref tx_token_len bytes.
+     * must be at least the TX token length returned by
+     * @ref uct_ib_mlx5_ext_iface_query.
      */
     void     *tx_token;
 
     /**
      * Pointer to a caller-allocated buffer for RX token data. The buffer size
-     * must be at least @ref rx_token_len bytes.
+     * must be at least the RX token length returned by
+     * @ref uct_ib_mlx5_ext_iface_query.
      */
     void     *rx_token;
 
@@ -88,13 +116,15 @@ typedef struct uct_ib_mlx5_ext_qp_query_attr {
 
 
 /**
- * @brief External provider iface flags callback.
+ * @brief External provider iface query callback.
  *
- * @param [out] flags Interface capability flags to fill.
+ * @param [in,out] attr Query parameters. Only fields selected by
+ *                      @a attr->field_mask should be accessed.
  *
  * @return UCS_OK on success, or an error if the operation failed.
  */
-typedef ucs_status_t (*uct_ib_mlx5_ext_iface_flags_func_t)(uint64_t *flags);
+typedef ucs_status_t (*uct_ib_mlx5_ext_iface_query_func_t)(
+        uct_ib_mlx5_ext_iface_query_attr_t *attr);
 
 /**
  * @brief External provider QP token query callback.
@@ -115,7 +145,7 @@ typedef ucs_status_t (*uct_ib_mlx5_ext_qp_query_func_t)(
  */
 typedef struct uct_ib_mlx5_ext_ops {
     char                               name[UCT_COMPONENT_NAME_MAX]; /**< Provider name */
-    uct_ib_mlx5_ext_iface_flags_func_t iface_flags;                  /**< Iface flags callback */
+    uct_ib_mlx5_ext_iface_query_func_t iface_query;                  /**< Iface query callback */
     uct_ib_mlx5_ext_qp_query_func_t    qp_query;                     /**< QP query callback */
 } uct_ib_mlx5_ext_ops_t;
 
@@ -139,14 +169,15 @@ void uct_ib_mlx5_ext_cleanup(void);
 ucs_status_t uct_ib_mlx5_ext_register(const uct_ib_mlx5_ext_ops_t *ops);
 
 /**
- * @brief Query iface flags from the first registered provider that supports
- * this operation.
+ * @brief Query iface attributes from the first registered provider that
+ * supports this operation.
  *
- * @param [out] flags Filled with interface capability flags.
+ * @param [in,out] attr Query parameters and output fields.
  *
  * @return UCS_OK on success, or an error if the operation failed.
  */
-ucs_status_t uct_ib_mlx5_ext_iface_flags(uint64_t *flags);
+ucs_status_t
+uct_ib_mlx5_ext_iface_query(uct_ib_mlx5_ext_iface_query_attr_t *attr);
 
 /**
  * @brief Query QP token attributes from the first registered provider that

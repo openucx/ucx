@@ -28,9 +28,20 @@ UCS_LIST_HEAD(uct_ib_mlx5_ext_providers);
 static ucs_spinlock_t uct_ib_mlx5_ext_lock;
 static int            uct_ib_mlx5_ext_initialized;
 
-static ucs_status_t uct_ib_mlx5_ext_default_iface_flags(uint64_t *flags)
+static ucs_status_t
+uct_ib_mlx5_ext_iface_query_default(uct_ib_mlx5_ext_iface_query_attr_t *attr)
 {
-    *flags = 0;
+    const uint64_t token_len_mask =
+            UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_TX_TOKEN_LEN |
+            UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_RX_TOKEN_LEN;
+
+    if (attr->field_mask & UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_FLAGS) {
+        attr->flags = 0;
+    }
+
+    if (attr->field_mask & token_len_mask) {
+        return UCS_ERR_UNSUPPORTED;
+    }
 
     return UCS_OK;
 }
@@ -75,12 +86,13 @@ uct_ib_mlx5_ext_qp_query_validate(struct ibv_qp *qp,
     return UCS_OK;
 }
 
-ucs_status_t uct_ib_mlx5_ext_iface_flags(uint64_t *flags)
+ucs_status_t
+uct_ib_mlx5_ext_iface_query(uct_ib_mlx5_ext_iface_query_attr_t *attr)
 {
     uct_ib_mlx5_ext_provider_t *provider;
     ucs_status_t status;
 
-    if (ucs_unlikely(flags == NULL)) {
+    if (ucs_unlikely(attr == NULL)) {
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -88,17 +100,17 @@ ucs_status_t uct_ib_mlx5_ext_iface_flags(uint64_t *flags)
 
     ucs_list_for_each(provider, &uct_ib_mlx5_ext_providers, list) {
         if (ucs_unlikely(uct_ib_mlx5_ext_is_unsupported_op(
-                    (const void*)provider->ops.iface_flags))) {
+                    (const void*)provider->ops.iface_query))) {
             continue;
         }
 
-        status = provider->ops.iface_flags(flags);
+        status = provider->ops.iface_query(attr);
         ucs_spin_unlock(&uct_ib_mlx5_ext_lock);
         return status;
     }
 
     ucs_spin_unlock(&uct_ib_mlx5_ext_lock);
-    return uct_ib_mlx5_ext_default_iface_flags(flags);
+    return uct_ib_mlx5_ext_iface_query_default(attr);
 }
 
 ucs_status_t uct_ib_mlx5_ext_qp_query(struct ibv_qp *qp,
@@ -189,7 +201,7 @@ ucs_status_t uct_ib_mlx5_ext_register(const uct_ib_mlx5_ext_ops_t *ops)
         return UCS_ERR_NO_MEMORY;
     }
 
-    provider->ops = *ops;
+    provider->ops                                  = *ops;
     provider->ops.name[UCT_COMPONENT_NAME_MAX - 1] = '\0';
 
     ucs_spin_lock(&uct_ib_mlx5_ext_lock);
@@ -197,11 +209,11 @@ ucs_status_t uct_ib_mlx5_ext_register(const uct_ib_mlx5_ext_ops_t *ops)
     num_providers = ucs_list_length(&uct_ib_mlx5_ext_providers);
     ucs_spin_unlock(&uct_ib_mlx5_ext_lock);
 
-    ucs_debug("ib mlx5 ext: registered provider name=%s iface_flags=%s "
+    ucs_debug("ib mlx5 ext: registered provider name=%s iface_query=%s "
               "qp_query=%s (total=%u)",
               provider->ops.name,
               uct_ib_mlx5_ext_is_unsupported_op(
-                      (const void*)provider->ops.iface_flags) ?
+                      (const void*)provider->ops.iface_query) ?
                       "unsupported" :
                       "supported",
               uct_ib_mlx5_ext_is_unsupported_op(
