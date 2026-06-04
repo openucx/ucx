@@ -66,4 +66,7 @@ ucs_sys_device_t uct_cuda_get_sys_dev(CUdevice cuda_device);
  */
 CUdevice uct_cuda_get_cuda_device(ucs_sys_device_t sys_dev);
 
+
+int uct_cuda_base_device_supports_fabric(CUdevice cuda_device);
+
 #endif

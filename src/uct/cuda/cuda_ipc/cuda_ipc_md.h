@@ -45,6 +45,7 @@ typedef struct uct_cuda_ipc_md_handle {
 typedef struct uct_cuda_ipc_md {
     uct_md_t                 super;             /**< Domain info */
     int                      enable_mnnvl;      /**< Multi-node NVLINK support status */
+    int                      fabric_supported;  /**< CUDA fabric support status */
 } uct_cuda_ipc_md_t;
 
 
