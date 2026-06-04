@@ -129,10 +129,9 @@ typedef struct {
     /* UCT operation used to sending the data. Used for performance estimation */
     uct_ep_operation_t      send_op;
 
-    /* UCT operation used for copying data between request buffer and a
-     * transport bounce buffer. If set to LAST, the protocol supports only
-     * CPU-accessible memory copy. TODO: report the exact CPU copy method, such
-     * as memcpy or ucs_memcpy_relaxed, in protocol info. */
+    /* UCT operation used for copying from memory from request buffer to a
+     * bounce buffer used by the transport. If set to LAST, the protocol supports
+     * only host memory copy using memcpy(). */
     uct_ep_operation_t      memtype_op;
 
     /* Protocol instance flags, see @ref ucp_proto_common_init_flags_t */
@@ -255,8 +254,7 @@ void ucp_proto_common_lane_priv_str(const ucp_proto_query_params_t *params,
 
 
 void ucp_proto_query_append_memtype_info(const ucp_proto_query_params_t *params,
-                                         ucs_string_buffer_t *strb,
-                                         const char *desc);
+                                         ucp_proto_query_attr_t *attr);
 
 
 ucp_rsc_index_t

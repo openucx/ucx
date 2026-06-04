@@ -658,30 +658,6 @@ protected:
             EXPECT_EQ(rkey->cfg_index, rkey_cfg_index);
         }
     }
-
-    void check_rma_get_config(size_t size, ucs_memory_type_t mem_type,
-                              const proto_select_data_vec_t &data_vec,
-                              ucp_proto_select_key_t key)
-    {
-        mem_buffer remote_buf(size, UCS_MEMORY_TYPE_HOST);
-        remote_buf.pattern_fill(1);
-        auto memh        = mem_map(receiver(), remote_buf);
-        auto rkey_packed = rkey_pack(receiver(), memh);
-        auto rkey        = rkey_unpack(sender().ep(), rkey_packed);
-
-        mem_buffer local_buf(size, mem_type);
-        local_buf.pattern_fill(2);
-
-        ucp_request_param_t req_param;
-        req_param.op_attr_mask = 0;
-        auto sptr              = ucp_get_nbx(sender().ep(), local_buf.ptr(),
-                                             size, (uint64_t)remote_buf.ptr(),
-                                             rkey, &req_param);
-        EXPECT_EQ(UCS_OK, request_wait(sptr));
-        local_buf.pattern_check(1);
-
-        check_rkey_config(sender(), data_vec, key, rkey->cfg_index);
-    }
 };
 
 class test_ucp_proto_mock_rcx : public test_ucp_proto_mock {
@@ -1229,27 +1205,9 @@ UCS_TEST_P(test_ucp_proto_mock_gpu, cuda_bcopy_memtype_desc,
     key.param.mem_type         = UCS_MEMORY_TYPE_CUDA;
 
     check_ep_config(sender(),
-                    {{0, INF, "multi-frag gdr_copy copy-in",
+                    {{0, INF, "gdr_copy multi-frag copy-in",
                       "rc_mlx5/mock"}},
                     key);
-}
-
-UCS_TEST_P(test_ucp_proto_mock_gpu, cuda_get_bcopy_memtype_desc,
-           "IB_NUM_PATHS?=1", "PROTOS=*am/egr/multi/bcopy*,*get/am/bcopy*")
-{
-    if (!has_resource(sender(), "gdr_copy")) {
-        UCS_TEST_SKIP_R("gdr_copy transport is not available");
-    }
-
-    ucp_proto_select_key_t key = any_key();
-    key.param.op_id_flags      = UCP_OP_ID_GET;
-    key.param.op_attr          = 0;
-    key.param.mem_type         = UCS_MEMORY_TYPE_CUDA;
-
-    check_rma_get_config(128, UCS_MEMORY_TYPE_CUDA,
-                         {{0, INF, "software emulation gdr_copy copy-out",
-                           "rc_mlx5/mock"}},
-                         key);
 }
 
 UCS_TEST_P(test_ucp_proto_mock_gpu, cuda_managed_ppln_host_frag,
