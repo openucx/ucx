@@ -152,8 +152,10 @@ void ucp_proto_query_append_memtype_info(const ucp_proto_query_params_t *params,
     ucp_rsc_index_t rsc_index;
     ucp_lane_index_t lane;
     ucp_ep_h mtype_ep;
-    char desc_copy[sizeof(attr->desc)];
+    size_t desc_len;
 
+    /* TODO: Report the exact CPU copy routine, such as memcpy or
+     * ucs_memcpy_relaxed, in protocol info. */
     if (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type)) {
         return;
     }
@@ -170,9 +172,13 @@ void ucp_proto_query_append_memtype_info(const ucp_proto_query_params_t *params,
     }
 
     rsc_index = ep_config->key.lanes[lane].rsc_index;
-    ucs_strncpy_safe(desc_copy, attr->desc, sizeof(desc_copy));
-    ucs_snprintf_safe(attr->desc, sizeof(attr->desc), "%s %s",
-                      context->tl_rscs[rsc_index].tl_rsc.tl_name, desc_copy);
+    desc_len  = strnlen(attr->desc, sizeof(attr->desc));
+    if (desc_len >= sizeof(attr->desc)) {
+        return;
+    }
+
+    ucs_snprintf_safe(attr->desc + desc_len, sizeof(attr->desc) - desc_len,
+                      " %s", context->tl_rscs[rsc_index].tl_rsc.tl_name);
 }
 
 ucp_md_index_t
