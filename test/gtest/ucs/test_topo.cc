@@ -44,6 +44,13 @@ topo_test_mem_dist(ucs_sys_device_t, ucs_sys_dev_distance_t *distance)
     *distance = ucs_topo_default_distance;
 }
 
+static void
+topo_test_mem_dist_cpuset(ucs_sys_device_t, const ucs_cpu_set_t *,
+                          ucs_sys_dev_distance_t *distance)
+{
+    *distance = ucs_topo_default_distance;
+}
+
 class test_topo : public ucs::test {
 protected:
     std::vector<std::string> m_hcas, m_gpus, m_dmas;
@@ -171,8 +178,10 @@ UCS_TEST_F(test_topo, get_distance) {
 
 UCS_TEST_F(test_topo, provider_push_pop) {
     ucs_sys_dev_distance_t dist;
-    const ucs_sys_topo_ops_t ops_a = {topo_test_distance_a, topo_test_mem_dist};
-    const ucs_sys_topo_ops_t ops_b = {topo_test_distance_b, topo_test_mem_dist};
+    const ucs_sys_topo_ops_t ops_a = {topo_test_distance_a, topo_test_mem_dist,
+                                      topo_test_mem_dist_cpuset};
+    const ucs_sys_topo_ops_t ops_b = {topo_test_distance_b, topo_test_mem_dist,
+                                      topo_test_mem_dist_cpuset};
 
     ASSERT_UCS_OK(ucs_sys_topo_provider_push(&ops_a));
     ASSERT_UCS_OK(ucs_topo_get_distance(UCS_SYS_DEVICE_ID_UNKNOWN,
