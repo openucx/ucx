@@ -190,10 +190,11 @@ ucp_proto_multi_find_max_avail_bw_lane(const ucp_proto_init_params_t *params,
                 selected_sys_dev, num_max_bw_devs, seed);
 
     ucs_trace("max bw lane: proto %s gpu_idx %d num_max_bw_devs %u seed %u "
-              "-> sys_dev %d index %u lane %u",
+              "-> sys_dev %d index %u " UCP_PROTO_LANE_FMT,
               ucp_proto_id_field(params->proto_id, name), gpu_idx,
               num_max_bw_devs, seed, selected_sys_dev, selected_index,
-              lanes[selected_index]);
+              UCP_PROTO_LANE_ARG(params, lanes[selected_index],
+                                 &lanes_perf[lanes[selected_index]]));
 
     return selected_index;
 }
