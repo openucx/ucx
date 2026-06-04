@@ -26,5 +26,8 @@ RUN apt-get update -q && \
         make \
         pkg-config \
         doxygen \
-        ca-certificates && \
+        ca-certificates \
+        fakeroot \
+        debhelper \
+        dpkg-dev && \
     rm -rf /var/lib/apt/lists/*
