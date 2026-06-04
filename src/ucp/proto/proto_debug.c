@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022, NVIDIA CORPORATION & AFFILIATES. ALL RIGHTS RESERVED.
+ * Copyright (C) 2022-2026, NVIDIA CORPORATION & AFFILIATES. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -201,18 +201,7 @@ ucp_proto_selections_dump(ucp_worker_h worker,
                           const ucp_proto_select_param_t *select_param,
                           char *counter_str, size_t size, int show_used)
 {
-    ucp_operation_id_t op_id;
-
     if (!show_used) {
-        *counter_str = '\0';
-        return;
-    }
-
-    /* Short active messages protocol selections are not counted */
-    op_id = ucp_proto_select_op_id(select_param);
-    if ((op_id == UCP_OP_ID_AM_SEND || op_id == UCP_OP_ID_AM_SEND_REPLY) &&
-        strstr(proto_attr->desc, "short") != NULL) {
-        ucs_assert(proto_attr->selections == 0);
         *counter_str = '\0';
         return;
     }
@@ -313,6 +302,9 @@ ucp_proto_select_elem_info(ucp_worker_h worker,
                                   row_elem->config);
     }
     ucp_proto_table_row_separator(strb, col_width, 3);
+
+    /* remove trailing newline */
+    ucs_string_buffer_rtrim(strb, "\n");
 
     ucs_array_cleanup_dynamic(&table);
 }
@@ -1104,13 +1096,13 @@ void ucp_proto_select_elem_trace(ucp_worker_h worker,
     ucp_worker_cfg_index_t ep_cfg_index    = proto_config->ep_cfg_index;
     ucp_worker_cfg_index_t rkey_cfg_index  = proto_config->rkey_cfg_index;
     ucs_string_buffer_t strb               = UCS_STRING_BUFFER_INITIALIZER;
-    char *line;
 
     /* Print human-readable protocol selection table to the log */
     ucp_proto_select_elem_info(worker, ep_cfg_index, rkey_cfg_index,
                                select_param, select_elem, 0, show_used, &strb);
-    ucs_string_buffer_for_each_token(line, &strb, "\n") {
-        ucs_log_print_compact(line);
+
+    if (ucs_string_buffer_length(&strb) > 0) {
+        ucs_log_print_compact(ucs_string_buffer_cstr(&strb));
     }
 
     ucs_string_buffer_cleanup(&strb);
