@@ -1210,7 +1210,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_gdaki_iface_t)
     pthread_mutex_destroy(&self->ep_init_lock);
     ibv_dereg_mr(self->atomic_mr);
     ucs_free(self->atomic_buff);
-
     if (self->ep_alloc_mode == UCT_RC_GDAKI_EP_ALLOC_MODE_POOL) {
         uct_rc_gdaki_iface_cleanup_channel_pool(self);
     }
