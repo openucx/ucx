@@ -629,6 +629,10 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
                                               sinfo.priority) : 1;
             is_reachable = 1;
 
+            ucs_trace(UCT_TL_RESOURCE_DESC_FMT
+                      "->addr[%u] : %s score %.2f priority %d",
+                      UCT_TL_RESOURCE_DESC_ARG(resource), addr_index,
+                      criteria->title, score, priority);
             if (!found || (score_cmp > 0)) {
                 ucp_wireup_init_select_info(score, addr_index, rsc_index,
                                             priority, &sinfo);
