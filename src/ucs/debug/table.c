@@ -220,9 +220,7 @@ ucs_table_compute_widths(ucs_table_t *table, unsigned *widths)
     unsigned i, col, content_len;
     unsigned existing;
 
-    for (i = 0; i < table->config.n_cols; ++i) {
-        widths[i] = 0;
-    }
+    memset(widths, 0, table->config.n_cols * sizeof(*widths));
 
     /* Pass 1: col_span == 1 cells. */
     ucs_array_for_each(entry, &table->entries) {
