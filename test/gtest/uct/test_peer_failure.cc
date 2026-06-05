@@ -528,6 +528,106 @@ UCS_TEST_P(test_uct_keepalive, ep_check)
 _UCT_INSTANTIATE_TEST_CASE(test_uct_keepalive, posix)
 
 
+/* Verify that uct_ep_check honors a user completion: peer status that is not
+ * yet known must be reported asynchronously via @c comp rather than being
+ * faked as UCS_OK. Instantiated on every transport so that any transport
+ * that advertises @c UCT_IFACE_FLAG_EP_CHECK but has not yet implemented the
+ * asynchronous form of @ref uct_ep_check is surfaced as a test failure. */
+class test_uct_ep_check_async : public uct_test {
+public:
+    test_uct_ep_check_async() : m_e1(NULL), m_e2(NULL), m_comp_count(0),
+                                m_comp_status(UCS_OK)
+    {
+        m_comp.func   = comp_cb;
+        m_comp.count  = 1;
+        m_comp.status = UCS_OK;
+    }
+
+    void init()
+    {
+        uct_test::init();
+        m_e1 = uct_test::create_entity(0, err_handler);
+        m_e2 = uct_test::create_entity(0, err_handler);
+        m_entities.push_back(m_e1);
+        m_entities.push_back(m_e2);
+        check_skip_test();
+    }
+
+protected:
+    static void comp_cb(uct_completion_t *self)
+    {
+        test_uct_ep_check_async *test =
+                ucs_container_of(self, test_uct_ep_check_async, m_comp);
+        test->m_comp_status = self->status;
+        test->m_comp_count++;
+    }
+
+    static ucs_status_t err_handler(void *arg, uct_ep_h ep, ucs_status_t status)
+    {
+        ADD_FAILURE() << "unexpected EP error: " << ucs_status_string(status);
+        return UCS_OK;
+    }
+
+    /* Verify uct_ep_check honors @c comp: peer status known synchronously
+     * may be reported as UCS_OK without firing @c comp, otherwise it must be
+     * reported as UCS_INPROGRESS and propagated via @c comp. */
+    void check_ep_check_async(uct_ep_h ep)
+    {
+        ucs_status_t status = uct_ep_check(ep, 0, &m_comp);
+        if (status == UCS_OK) {
+            EXPECT_EQ(0u, m_comp_count);
+            return;
+        }
+        ASSERT_EQ(UCS_INPROGRESS, status);
+        wait_for_flag(&m_comp_count);
+        EXPECT_EQ(1u, m_comp_count);
+        EXPECT_UCS_OK(m_comp_status);
+    }
+
+    entity            *m_e1;
+    entity            *m_e2;
+    uct_completion_t   m_comp;
+    volatile unsigned  m_comp_count;
+    ucs_status_t       m_comp_status;
+};
+
+
+/* ep_check on a freshly created connected EP must report peer status via
+ * @c comp (asynchronously) or as a synchronous UCS_OK when the transport
+ * already knows the answer. */
+UCS_TEST_SKIP_COND_P(test_uct_ep_check_async, comp_during_wireup,
+                     !check_caps(UCT_IFACE_FLAG_EP_CHECK))
+{
+    m_e1->connect(0, *m_e2, 0);
+    check_ep_check_async(m_e1->ep(0));
+}
+
+
+/* Same as above on a fully connected, idle EP. */
+UCS_TEST_SKIP_COND_P(test_uct_ep_check_async, comp_when_idle,
+                     !check_caps(UCT_IFACE_FLAG_EP_CHECK))
+{
+    m_e1->connect(0, *m_e2, 0);
+    flush();
+    check_ep_check_async(m_e1->ep(0));
+}
+
+
+/* ep_check with @c comp == NULL on a fully connected idle EP keeps the
+ * legacy synchronous behavior and returns UCS_OK. */
+UCS_TEST_SKIP_COND_P(test_uct_ep_check_async, no_comp_when_connected,
+                     !check_caps(UCT_IFACE_FLAG_EP_CHECK))
+{
+    m_e1->connect(0, *m_e2, 0);
+    flush();
+
+    EXPECT_EQ(UCS_OK, uct_ep_check(m_e1->ep(0), 0, NULL));
+}
+
+
+UCT_INSTANTIATE_NO_SELF_TEST_CASE(test_uct_ep_check_async)
+
+
 class test_uct_peer_failure_keepalive : public test_uct_peer_failure
 {
 public:

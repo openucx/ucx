@@ -1269,20 +1269,44 @@ ucs_status_t uct_ud_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *c
     uct_ud_ep_t *ep       = ucs_derived_of(tl_ep, uct_ud_ep_t);
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
     char dummy            = 0;
+    ucs_status_t status;
 
-    UCT_EP_KEEPALIVE_CHECK_PARAM(flags, comp);
+    UCT_EP_KEEPALIVE_CHECK_PARAM(flags);
 
     uct_ud_enter(iface);
-    if (/* check that no TX resources are available (i.e. there is signaled
-         * operation which provides actual peer status) */
-        !uct_ud_ep_is_connected(ep) ||
-        !uct_ud_ep_is_last_ack_received(ep)) {
-        uct_ud_leave(iface);
-        return UCS_OK;
-    }
-    uct_ud_leave(iface);
 
-    return uct_ep_put_short(tl_ep, &dummy, 0, 0, 0);
+    if (!uct_ud_ep_is_connected(ep)) {
+        /* Wireup pending - nudge the CREQ out if it isn't on the wire yet. */
+        if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_CREQ)) {
+            uct_ud_ep_do_pending_ctl(ep, iface);
+            if (ucs_queue_is_empty(&ep->tx.window)) {
+                /* CREQ couldn't be posted - caller retries. */
+                status = UCS_ERR_NO_RESOURCE;
+                goto out;
+            }
+        }
+    } else if (uct_ud_ep_is_last_ack_received(ep)) {
+        /* Connected and idle - emit a probe for the peer to ACK
+         * (uct_ud_enter is recursive so put_short is safe under the lock). */
+        status = uct_ep_put_short(tl_ep, &dummy, 0, 0, 0);
+        if (UCS_STATUS_IS_ERR(status) || (comp == NULL)) {
+            goto out;
+        }
+    } else if (comp == NULL) {
+        /* Connected with in-flight signaled op - reliability layer is
+         * already monitoring it, status known good. */
+        status = UCS_OK;
+        goto out;
+    }
+
+    /* Chain @c comp onto the last skb in tx.window (CREQ, in-flight op, or
+     * the probe we just posted); fires UCS_OK on peer ACK or an error from
+     * the reliability layer purge if peer becomes unreachable. */
+    status = uct_ud_ep_comp_skb_add(iface, ep, comp);
+
+out:
+    uct_ud_leave(iface);
+    return status;
 }
 
 static uct_ud_send_skb_t *uct_ud_ep_prepare_crep(uct_ud_ep_t *ep)
