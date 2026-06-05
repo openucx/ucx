@@ -1294,40 +1294,46 @@ static void ucp_add_tl_resource_if_enabled(
     uint8_t rsc_flags;
     ucp_rsc_index_t dev_index, i;
 
-    if (ucp_is_resource_enabled(resource, config, aux_tls, &rsc_flags,
-                                dev_cfg_masks, tl_cfg_mask)) {
-        if ((resource->sys_device != UCS_SYS_DEVICE_ID_UNKNOWN) &&
-            (resource->sys_device >= UCP_MAX_SYS_DEVICES)) {
-            ucs_diag(UCT_TL_RESOURCE_DESC_FMT
-                     " system device is %d, which exceeds the maximal "
-                     "supported (%d), system locality may be ignored",
-                     UCT_TL_RESOURCE_DESC_ARG(resource), resource->sys_device,
-                     UCP_MAX_SYS_DEVICES);
-        }
-        context->tl_rscs[context->num_tls].tl_rsc       = *resource;
-        context->tl_rscs[context->num_tls].md_index     = md_index;
-        context->tl_rscs[context->num_tls].tl_name_csum =
-                                  ucs_crc16_string(resource->tl_name);
-        context->tl_rscs[context->num_tls].flags        = rsc_flags;
-
-        dev_index = 0;
-        for (i = 0; i < context->num_tls; ++i) {
-            if (ucp_tl_resource_is_same_device(&context->tl_rscs[i].tl_rsc, resource)) {
-                dev_index = context->tl_rscs[i].dev_index;
-                break;
-            } else {
-                dev_index = ucs_max(context->tl_rscs[i].dev_index + 1, dev_index);
-            }
-        }
-        context->tl_rscs[context->num_tls].dev_index = dev_index;
-
-        if (resource->sys_device < UCP_MAX_SYS_DEVICES) {
-            md->sys_dev_map |= UCS_BIT(resource->sys_device);
-        }
-
-        ++context->num_tls;
-        ++(*num_resources_p);
+    if (context->num_tls == UINT8_MAX) {
+        return;
     }
+
+    if (!ucp_is_resource_enabled(resource, config, aux_tls, &rsc_flags,
+                                 dev_cfg_masks, tl_cfg_mask)) {
+        return;
+    }
+
+    if ((resource->sys_device != UCS_SYS_DEVICE_ID_UNKNOWN) &&
+        (resource->sys_device >= UCP_MAX_SYS_DEVICES)) {
+        ucs_diag(UCT_TL_RESOURCE_DESC_FMT
+                 " system device is %d, which exceeds the maximal "
+                 "supported (%d), system locality may be ignored",
+                 UCT_TL_RESOURCE_DESC_ARG(resource), resource->sys_device,
+                 UCP_MAX_SYS_DEVICES);
+    }
+    context->tl_rscs[context->num_tls].tl_rsc       = *resource;
+    context->tl_rscs[context->num_tls].md_index     = md_index;
+    context->tl_rscs[context->num_tls].tl_name_csum =
+                              ucs_crc16_string(resource->tl_name);
+    context->tl_rscs[context->num_tls].flags        = rsc_flags;
+
+    dev_index = 0;
+    for (i = 0; i < context->num_tls; ++i) {
+        if (ucp_tl_resource_is_same_device(&context->tl_rscs[i].tl_rsc, resource)) {
+            dev_index = context->tl_rscs[i].dev_index;
+            break;
+        } else {
+            dev_index = ucs_max(context->tl_rscs[i].dev_index + 1, dev_index);
+        }
+    }
+    context->tl_rscs[context->num_tls].dev_index = dev_index;
+
+    if (resource->sys_device < UCP_MAX_SYS_DEVICES) {
+        md->sys_dev_map |= UCS_BIT(resource->sys_device);
+    }
+
+    ++context->num_tls;
+    ++(*num_resources_p);
 }
 
 static ucs_status_t
@@ -1343,7 +1349,7 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
     ucp_tl_resource_desc_t *tmp;
     unsigned num_tl_resources;
     ucs_status_t status;
-    ucp_rsc_index_t i;
+    unsigned i;
 
     *num_resources_p = 0;
 
@@ -1696,14 +1702,6 @@ static ucs_status_t ucp_check_resources(ucp_context_h context,
         return UCS_ERR_NO_DEVICE;
     }
 
-    /* Error check: Make sure there are not too many transports */
-    if (context->num_tls >= UCP_MAX_RESOURCES) {
-        ucs_error("exceeded transports/devices limit "
-                  "(%u requested, up to %d are supported)",
-                  context->num_tls, UCP_MAX_RESOURCES);
-        return UCS_ERR_EXCEEDS_LIMIT;
-    }
-
     return ucp_check_tl_names(context);
 }
 
@@ -1720,11 +1718,11 @@ ucp_add_component_resources(ucp_context_h context, ucp_rsc_index_t cmpt_index,
     uct_component_attr_t uct_component_attr;
     unsigned num_tl_resources;
     ucs_status_t status;
-    ucp_rsc_index_t i;
     const uct_md_attr_v2_t *md_attr;
     unsigned md_index;
     uint64_t detect_mem_type_mask;
     uint64_t alloc_mem_type_mask;
+    unsigned i;
 
     /* List memory domain resources */
     uct_component_attr.field_mask   = UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES |
@@ -2199,6 +2197,18 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         if (status != UCS_OK) {
             goto err_free_resources;
         }
+    }
+
+    /* Error check: Make sure there are not too many transports.
+     * UCP_MAX_RESOURCES must be less than UINT8_MAX to detect overflow. */
+    UCS_STATIC_ASSERT(UCP_MAX_RESOURCES < UINT8_MAX);
+    if (context->num_tls > UCP_MAX_RESOURCES) {
+        ucs_error("exceeded transports/devices limit "
+                  "(%s%u requested, up to %d are supported)",
+                  (context->num_tls == UINT8_MAX) ? ">=" : "", context->num_tls,
+                  UCP_MAX_RESOURCES);
+        status = UCS_ERR_EXCEEDS_LIMIT;
+        goto err_free_resources;
     }
 
     ucp_fill_resources_reg_md_map_update(context);
