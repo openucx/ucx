@@ -35,7 +35,7 @@ jobs:
           load_cuda_env
           ./autogen.sh
           ./contrib/configure-devel --prefix=$(Build.Repository.LocalPath)/install \
-            --with-java --enable-gtest=no --with-cuda=$have_cuda
+            --with-java --enable-gtest=no --with-cuda=$have_cuda --with-nvcc-arch=native
           make -j`nproc`
           make install
         displayName: Build UCX

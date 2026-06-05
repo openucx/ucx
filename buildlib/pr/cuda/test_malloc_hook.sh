@@ -27,7 +27,8 @@ check_cuda_driver() {
 }
 
 build() {
-	../contrib/configure-devel --enable-gtest --without-valgrind --enable-examples --with-cuda=/usr/local/cuda --prefix=$ucx_inst
+	../contrib/configure-devel --enable-gtest --without-valgrind --enable-examples \
+		--with-cuda=/usr/local/cuda  --with-nvcc-arch=native --prefix=$ucx_inst
 
 	make -j$(nproc)
 }
