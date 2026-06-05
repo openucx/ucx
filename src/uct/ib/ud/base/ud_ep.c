@@ -1292,17 +1292,16 @@ ucs_status_t uct_ud_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *c
         if (UCS_STATUS_IS_ERR(status) || (comp == NULL)) {
             goto out;
         }
-    } else if (comp == NULL) {
-        /* Connected with in-flight signaled op - reliability layer is
-         * already monitoring it, status known good. */
-        status = UCS_OK;
-        goto out;
     }
 
-    /* Chain @c comp onto the last skb in tx.window (CREQ, in-flight op, or
-     * the probe we just posted); fires UCS_OK on peer ACK or an error from
-     * the reliability layer purge if peer becomes unreachable. */
-    status = uct_ud_ep_comp_skb_add(iface, ep, comp);
+    if (comp == NULL) {
+        status = UCS_OK;
+    } else {
+        /* Chain @c comp onto the last skb in tx.window (CREQ, in-flight op, or
+        * the probe we just posted); fires UCS_OK on peer ACK or an error from
+        * the reliability layer purge if peer becomes unreachable. */
+        status = uct_ud_ep_comp_skb_add(iface, ep, comp);
+    }
 
 out:
     uct_ud_leave(iface);
