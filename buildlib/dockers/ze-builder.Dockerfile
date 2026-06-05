@@ -30,5 +30,7 @@ RUN apt-get update -q && \
         ca-certificates \
         fakeroot \
         debhelper \
-        dpkg-dev && \
+        dpkg-dev \
+        libibverbs-dev \
+        librdmacm-dev && \
     rm -rf /var/lib/apt/lists/*
