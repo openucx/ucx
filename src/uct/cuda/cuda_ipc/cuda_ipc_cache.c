@@ -559,7 +559,8 @@ uct_cuda_ipc_remote_cache_put(uct_cuda_ipc_cache_hash_key_t key,
     status = uct_cuda_ipc_create_cache(&cache, target_name);
     if (status != UCS_OK) {
         kh_del(cuda_ipc_rem_cache, &uct_cuda_ipc_remote_cache.hash, it);
-        ucs_error("failed to create create cuda ipc cache: %s", target_name);
+        ucs_error("failed to create cuda ipc cache: %s",
+                  ucs_status_string(status));
         return status;
     }
 
