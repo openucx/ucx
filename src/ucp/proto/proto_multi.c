@@ -51,9 +51,9 @@ ucp_proto_multi_get_avail_bw(const ucp_proto_init_params_t *params,
         ratio = MIN_RATIO / path_index;
     }
 
-    ucs_trace("ratio=%0.3f path_index=%u avail_bw=" UCP_PROTO_PERF_FUNC_BW_FMT
+    ucs_trace("ratio=%0.3f path_index=%u" UCP_PROTO_BW_FMT(avail_bw)
               " " UCP_PROTO_LANE_FMT, ratio, path_index,
-              (lane_perf->bandwidth * ratio) / UCS_MBYTE,
+              UCP_PROTO_BW_ARG(lane_perf->bandwidth * ratio),
               UCP_PROTO_LANE_ARG(params, lane, lane_perf));
     return lane_perf->bandwidth * ratio;
 }
