@@ -41,7 +41,8 @@ protected:
         ucs_table_row_h add_row()
         {
             ucs_table_row_h row;
-            EXPECT_EQ(UCS_OK, ucs_table_add_row(&m_table, &row));
+            ucs_table_add_row(&m_table, &row);
+            EXPECT_EQ(UCS_OK, ucs_table_get_status(&m_table));
             return row;
         }
 
@@ -65,6 +66,8 @@ UCS_TEST_F(test_table, empty_table) {
     EXPECT_EQ("+--+--+\n"
               "+--+--+\n",
               table.render());
+
+    EXPECT_EQ(UCS_OK, ucs_table_get_status(table.get()));
 }
 
 UCS_TEST_F(test_table, single_cell) {
@@ -77,6 +80,8 @@ UCS_TEST_F(test_table, single_cell) {
               "| abc |\n"
               "+-----+\n",
               table.render());
+
+    EXPECT_EQ(UCS_OK, ucs_table_get_status(table.get()));
 }
 
 UCS_TEST_F(test_table, single_cell_empty) {
@@ -88,6 +93,8 @@ UCS_TEST_F(test_table, single_cell_empty) {
               "|  |\n"
               "+--+\n",
               table.render());
+
+    EXPECT_EQ(UCS_OK, ucs_table_get_status(table.get()));
 }
 
 
@@ -115,6 +122,8 @@ UCS_TEST_F(test_table, wide_columns) {
               "| a much wider value |        x         |                 y |\n"
               "+--------------------+------------------+-------------------+\n",
               table.render());
+
+    EXPECT_EQ(UCS_OK, ucs_table_get_status(table.get()));
 }
 
 UCS_TEST_F(test_table, separator) {
@@ -151,6 +160,8 @@ UCS_TEST_F(test_table, separator) {
               "|   | d |\n"
               "+---+---+\n",
               table.render());
+
+    EXPECT_EQ(UCS_OK, ucs_table_get_status(table.get()));
 }
 
 UCS_TEST_F(test_table, trailing_separator_avoids_bottom_frame) {
@@ -168,6 +179,8 @@ UCS_TEST_F(test_table, trailing_separator_avoids_bottom_frame) {
               "| x |  |\n"
               "+---+--+\n",
               table.render());
+
+    EXPECT_EQ(UCS_OK, ucs_table_get_status(table.get()));
 }
 
 
@@ -207,6 +220,8 @@ UCS_TEST_F(test_table, col_span) {
               "| abcd | efgh | ijkl | mnop |\n"
               "+------+------+------+------+\n",
               table.render());
+
+    EXPECT_EQ(UCS_OK, ucs_table_get_status(table.get()));
 }
 
 UCS_TEST_F(test_table, col_span_sets_width) {
@@ -227,6 +242,8 @@ UCS_TEST_F(test_table, col_span_sets_width) {
               "| ab |                 cd |\n"
               "+----+--------------------+\n",
               table.render());
+
+    EXPECT_EQ(UCS_OK, ucs_table_get_status(table.get()));
 }
 
 UCS_TEST_F(test_table, cell_fmt) {
@@ -249,6 +266,8 @@ UCS_TEST_F(test_table, cell_fmt) {
               "| 3.1415926536 |   x |\n"
               "+--------------+-----+\n",
               table.render());
+
+    EXPECT_EQ(UCS_OK, ucs_table_get_status(table.get()));
 }
 
 UCS_TEST_F(test_table, row_prefix) {
@@ -272,6 +291,7 @@ UCS_TEST_F(test_table, row_prefix) {
               "# | b |\n"
               "# +---+\n",
               table.render());
+    EXPECT_EQ(UCS_OK, ucs_table_get_status(table.get()));
 }
 
 
@@ -295,6 +315,8 @@ UCS_TEST_F(test_table, equal_widths) {
               "| a      | longer | xy     |\n"
               "+--------+--------+--------+\n",
               table.render());
+
+    EXPECT_EQ(UCS_OK, ucs_table_get_status(table.get()));
 }
 
 UCS_TEST_F(test_table, equal_widths_with_col_span) {
@@ -320,6 +342,8 @@ UCS_TEST_F(test_table, equal_widths_with_col_span) {
               "| ab                 | cd                 |\n"
               "+--------------------+--------------------+\n",
               table.render());
+
+    EXPECT_EQ(UCS_OK, ucs_table_get_status(table.get()));
 }
 
 
@@ -349,4 +373,61 @@ UCS_TEST_F(test_table, render_twice) {
               "| aaaaaaaaaaa | bbbbbbbbbbb |\n"
               "+-------------+-------------+\n",
               table.render());
+
+    EXPECT_EQ(UCS_OK, ucs_table_get_status(table.get()));
+}
+
+UCS_TEST_F(test_table, invalid_n_cols) {
+    ucs_table_t table;
+    ucs_table_config_t cfg = {
+        .n_cols = 0
+    };
+    scoped_log_handler slh(hide_errors_logger);
+
+    ucs_table_init(&table, &cfg);
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, ucs_table_get_status(&table));
+}
+
+UCS_TEST_F(test_table, zero_col_span) {
+    table_t table(2);
+    auto row = table.add_row();
+    scoped_log_handler slh(hide_errors_logger);
+
+    ucs_table_row_add_cell_empty(table.get(), row, 0);
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, ucs_table_get_status(table.get()));
+}
+
+UCS_TEST_F(test_table, col_span_exceeds) {
+    table_t table(2);
+    auto row = table.add_row();
+
+    /* an oversized span is only detected at render time. */
+    ucs_table_row_add_cell_empty(table.get(), row, 3);
+    EXPECT_EQ(UCS_OK, ucs_table_get_status(table.get()));
+
+    {
+        scoped_log_handler slh(hide_errors_logger);
+        table.render();
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM, ucs_table_get_status(table.get()));
+    }
+}
+
+UCS_TEST_F(test_table, cell_fmt_newline_1) {
+    table_t table(1);
+    auto row = table.add_row();
+    scoped_log_handler slh(hide_errors_logger);
+
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT,
+                               "a\nb");
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, ucs_table_get_status(table.get()));
+}
+
+UCS_TEST_F(test_table, cell_fmt_newline_2) {
+    table_t table(1);
+    auto row = table.add_row();
+    scoped_log_handler slh(hide_errors_logger);
+
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT,
+                               "a%sb", "\n");
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, ucs_table_get_status(table.get()));
 }

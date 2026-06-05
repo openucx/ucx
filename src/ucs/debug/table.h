@@ -10,6 +10,7 @@
 #include <ucs/datastruct/array.h>
 #include <ucs/datastruct/string_buffer.h>
 #include <ucs/sys/compiler_def.h>
+#include <ucs/type/status.h>
 
 
 BEGIN_C_DECLS
@@ -80,6 +81,9 @@ typedef struct {
 typedef struct {
     ucs_table_config_t  config;
     ucs_table_entries_t entries;
+    /** Sticky status; set on the first error. Once it is not UCS_OK,
+     *  every public API function becomes a silent no-op. */
+    ucs_status_t        status;
 } ucs_table_t;
 
 
@@ -102,14 +106,26 @@ void ucs_table_cleanup(ucs_table_t *table);
 
 
 /**
+ * Get the current table status.
+ *
+ * The table fails silently: once an operation hits an error the status is set
+ * and every subsequent public API call becomes a no-op.
+ * This function can be used to query the status if needed.
+ *
+ * @param [in] table  Table to query.
+ *
+ * @return UCS_OK if no error has occurred, otherwise the first error code.
+ */
+ucs_status_t ucs_table_get_status(const ucs_table_t *table);
+
+
+/**
  * Append a horizontal separator. The top and bottom frame separators are
  * inserted automatically by ucs_table_render();
  *
  * @param [in,out] table  Table to append to.
- *
- * @return UCS_OK on success, or an error code on failure.
  */
-ucs_status_t ucs_table_add_separator(ucs_table_t *table);
+void ucs_table_add_separator(ucs_table_t *table);
 
 
 /**
@@ -119,10 +135,8 @@ ucs_status_t ucs_table_add_separator(ucs_table_t *table);
  *
  * @param [in,out] table  Table to append to.
  * @param [out]    row_p  Row handle for use with add-cell functions.
- *
- * @return UCS_OK on success, or an error code on failure.
  */
-ucs_status_t ucs_table_add_row(ucs_table_t *table, ucs_table_row_h *row_p);
+void ucs_table_add_row(ucs_table_t *table, ucs_table_row_h *row_p);
 
 
 /**
@@ -158,7 +172,7 @@ void ucs_table_row_add_cell_fmt(ucs_table_t *table, ucs_table_row_h row,
  * @param [in,out] table  Table to render.
  * @param [in,out] strb   Destination string buffer.
  */
-void ucs_table_render(ucs_table_t const *table, ucs_string_buffer_t *strb);
+void ucs_table_render(ucs_table_t *table, ucs_string_buffer_t *strb);
 
 
 /**
@@ -167,7 +181,7 @@ void ucs_table_render(ucs_table_t const *table, ucs_string_buffer_t *strb);
  * @param [in,out] table  Table to print.
  *
  */
-void ucs_table_print(ucs_table_t const *table);
+void ucs_table_print(ucs_table_t *table);
 
 
 END_C_DECLS

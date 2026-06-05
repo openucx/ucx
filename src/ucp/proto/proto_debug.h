@@ -57,11 +57,11 @@ void ucp_proto_select_init_trace_perf(const ucp_proto_init_params_t *init_params
                                       const void *priv);
 
 
-ucs_status_t ucp_proto_select_info(ucp_worker_h worker,
-                                   ucp_worker_cfg_index_t ep_cfg_index,
-                                   ucp_worker_cfg_index_t rkey_cfg_index,
-                                   const ucp_proto_select_t *proto_select,
-                                   int show_all, ucs_string_buffer_t *strb);
+void ucp_proto_select_info(ucp_worker_h worker,
+                           ucp_worker_cfg_index_t ep_cfg_index,
+                           ucp_worker_cfg_index_t rkey_cfg_index,
+                           const ucp_proto_select_t *proto_select, int show_all,
+                           ucs_string_buffer_t *strb);
 
 
 void ucp_proto_select_dump_short(const ucp_proto_select_short_t *select_short,
@@ -152,14 +152,13 @@ void ucp_proto_perf_node_replace(ucp_proto_perf_node_t **old_perf_node_p,
                                  ucp_proto_perf_node_t **new_perf_node_p);
 
 
-ucs_status_t
-ucp_proto_select_elem_info(ucp_worker_h worker,
-                           ucp_worker_cfg_index_t ep_cfg_index,
-                           ucp_worker_cfg_index_t rkey_cfg_index,
-                           const ucp_proto_select_param_t *select_param,
-                           const ucp_proto_select_elem_t *select_elem,
-                           int show_all, int show_used,
-                           ucs_string_buffer_t *strb);
+void ucp_proto_select_elem_info(ucp_worker_h worker,
+                                ucp_worker_cfg_index_t ep_cfg_index,
+                                ucp_worker_cfg_index_t rkey_cfg_index,
+                                const ucp_proto_select_param_t *select_param,
+                                const ucp_proto_select_elem_t *select_elem,
+                                int show_all, int show_used,
+                                ucs_string_buffer_t *strb);
 
 
 void ucp_proto_select_elem_trace(ucp_worker_h worker,

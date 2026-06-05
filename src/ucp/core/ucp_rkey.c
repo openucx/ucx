@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -1278,17 +1278,10 @@ void ucp_rkey_proto_select_dump(ucp_worker_h worker,
 {
     const ucp_rkey_config_t *rkey_config = &ucs_array_elem(&worker->rkey_config,
                                                            rkey_cfg_index);
-    ucs_status_t status;
 
     ucp_proto_select_dump_short(&rkey_config->put_short, "put_short", strb);
-    status = ucp_proto_select_info(worker, rkey_config->key.ep_cfg_index,
-                                   rkey_cfg_index, &rkey_config->proto_select,
-                                   0, strb);
-    if (status != UCS_OK) {
-        ucs_error("failed to print protocol selection info for rkey config "
-                  "%d: %s",
-                  rkey_cfg_index, ucs_status_string(status));
-    }
+    ucp_proto_select_info(worker, rkey_config->key.ep_cfg_index, rkey_cfg_index,
+                          &rkey_config->proto_select, 0, strb);
 }
 
 ucs_status_t
