@@ -34,7 +34,9 @@ Before editing or judging code:
 
 ## Pull Requests
 
-PR and commit titles should match `^[0-9A-Z/_-]*: \w`.
+PR and commit titles should match `^[0-9A-Z/_-]+: \w`: The title should start
+with module path, followed by a semicolon, and an imperative description of
+the change. For example: "UCP/WIREUP: consider NUMA locality for lane selection".
 
 ## Build
 
