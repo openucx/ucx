@@ -3,9 +3,9 @@
 # Derived from intel/deep-learning-essentials, with autotools, doxygen,
 # Debian packaging tools and IB dev headers pre-installed so the PR
 # pipeline can run the build_release_pkg step without runtime apt-get.
-# We get the Level Zero loader, headers and pkg-config out of the box
-# from the base image, plus the autotools and doxygen that the UCX
-# build requires.  This mirrors what the CUDA and ROCm CI lanes do:
+# The base image already provides the Level Zero loader, headers and
+# pkg-config out of the box, plus the autotools and doxygen that the
+# UCX build requires.  This mirrors what the CUDA and ROCm CI lanes do:
 # the public NVIDIA / AMD images are wrapped in a small builder image
 # that has all the build deps pre-installed, so the pipeline step
 # itself does not need apt-get (and therefore does not need root
