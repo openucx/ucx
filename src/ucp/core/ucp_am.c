@@ -87,9 +87,7 @@ void ucp_am_ep_init(ucp_ep_h ep)
 
 static UCS_F_ALWAYS_INLINE void ucp_am_release_long_desc(ucp_recv_desc_t *desc)
 {
-    /* Don't use UCS_PTR_BYTE_OFFSET here due to coverity false positive report.
-     * Need to step back by release_desc_offset, where originally allocated
-     * pointer resides. */
+    /* Don't use UCS_PTR_BYTE_OFFSET here due to coverity false positive report. */
     ucs_free((char*)desc - desc->release_desc_offset);
 }
 
