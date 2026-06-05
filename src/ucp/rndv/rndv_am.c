@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2021. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2021-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -135,6 +135,7 @@ ucp_proto_t ucp_rndv_am_bcopy_proto = {
     .name     = "rndv/am/bcopy",
     .desc     = "fragmented " UCP_PROTO_COPY_IN_DESC " " UCP_PROTO_COPY_OUT_DESC,
     .flags    = 0,
+    .dt_mask  = UCP_PROTO_DT_MASK_DEFAULT,
     .probe    = ucp_rndv_am_bcopy_probe,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_rndv_am_bcopy_progress},
@@ -210,6 +211,7 @@ ucp_proto_t ucp_rndv_am_zcopy_proto = {
     .name     = "rndv/am/zcopy",
     .desc     = UCP_PROTO_ZCOPY_DESC,
     .flags    = 0,
+    .dt_mask  = UCP_DT_MASK_CONTIG_IOV,
     .probe    = ucp_rndv_am_zcopy_probe,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_rndv_am_zcopy_proto_progress},
