@@ -591,7 +591,7 @@ static ucs_status_t uct_rc_ep_check_progress(uct_pending_req_t *self)
     }
 
     if (status == UCS_INPROGRESS) {
-        return status;
+        return UCS_OK;
     }
 
     ucs_assert(UCS_STATUS_IS_ERR(status));
