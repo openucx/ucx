@@ -544,7 +544,8 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     weight_sum          = 0;
     min_end_offset      = 0;
 
-    ucs_for_each_bit(lane, selection.lane_map) {
+    for (i = 0; i < selection.num_lanes; ++i) {
+        lane = selection.lanes[i];
         ucs_assert(lane < UCP_MAX_LANES);
 
         lpriv     = &mpriv->lanes[mpriv->num_lanes++];
