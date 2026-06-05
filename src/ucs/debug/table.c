@@ -17,6 +17,11 @@
 #include <string.h>
 #include <ucs/debug/log.h>
 
+#define CHECK_STATUS(table) \
+    if (table->status != UCS_OK) { \
+        return; \
+    }
+
 void ucs_table_init(ucs_table_t *table, const ucs_table_config_t *config)
 {
     table->status = UCS_OK;
@@ -59,9 +64,7 @@ void ucs_table_add_separator(ucs_table_t *table)
 {
     ucs_table_entry_t *entry;
 
-    if (table->status != UCS_OK) {
-        return;
-    }
+    CHECK_STATUS(table);
 
     entry = ucs_array_append(
             &table->entries,
@@ -82,9 +85,7 @@ void ucs_table_add_row(ucs_table_t *table, ucs_table_row_h *row_p)
 
     *row_p = 0;
 
-    if (table->status != UCS_OK) {
-        return;
-    }
+    CHECK_STATUS(table);
 
     entry = ucs_array_append(
             &table->entries,
@@ -157,17 +158,10 @@ ucs_table_row_add_cell(ucs_table_t *table, ucs_table_row_h row,
 void ucs_table_row_add_cell_empty(ucs_table_t *table, ucs_table_row_h row,
                                   unsigned col_span)
 {
-    ucs_status_t status;
+    CHECK_STATUS(table);
 
-    if (table->status != UCS_OK) {
-        return;
-    }
-
-    status = ucs_table_row_add_cell(table, row, col_span, UCS_TABLE_ALIGN_LEFT,
-                                    NULL);
-    if (status != UCS_OK) {
-        table->status = status;
-    }
+    table->status = ucs_table_row_add_cell(table, row, col_span,
+                                           UCS_TABLE_ALIGN_LEFT, NULL);
 }
 
 void ucs_table_row_add_cell_fmt(ucs_table_t *table, ucs_table_row_h row,
@@ -175,19 +169,14 @@ void ucs_table_row_add_cell_fmt(ucs_table_t *table, ucs_table_row_h row,
                                 const char *fmt, ...)
 {
     ucs_table_cell_t *cell;
-    ucs_status_t status;
     const char *cstr;
     va_list ap;
 
-    if (table->status != UCS_OK) {
-        return;
-    }
+    CHECK_STATUS(table);
 
-    status = ucs_table_row_add_cell(table, row, col_span, align, &cell);
-    if (status != UCS_OK) {
-        table->status = status;
-        return;
-    }
+    table->status = ucs_table_row_add_cell(table, row, col_span, align, &cell);
+
+    CHECK_STATUS(table);
 
     va_start(ap, fmt);
     ucs_string_buffer_vappendf(&cell->text, fmt, ap);
@@ -378,9 +367,7 @@ void ucs_table_render(ucs_table_t *table, ucs_string_buffer_t *strb)
     unsigned *widths;
     unsigned i;
 
-    if (table->status != UCS_OK) {
-        return;
-    }
+    CHECK_STATUS(table);
 
     widths = ucs_alloca(table->config.n_cols * sizeof(*widths));
     status = ucs_table_compute_widths(table, widths);
@@ -421,9 +408,7 @@ void ucs_table_print(ucs_table_t *table)
 {
     ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
 
-    if (table->status != UCS_OK) {
-        return;
-    }
+    CHECK_STATUS(table);
 
     ucs_table_render(table, &strb);
     printf("%s", ucs_string_buffer_cstr(&strb));

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2026, NVIDIA CORPORATION & AFFILIATES. ALL RIGHTS RESERVED.
+ * Copyright (C) 2022-2026, NVIDIA CORPORATION & AFFILIATES. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -173,13 +173,13 @@ ucp_proto_select_elem_has_selections(const ucp_proto_select_elem_t *select_elem)
 }
 
 
-void ucp_proto_select_elem_info(ucp_worker_h worker,
-                                ucp_worker_cfg_index_t ep_cfg_index,
-                                ucp_worker_cfg_index_t rkey_cfg_index,
-                                const ucp_proto_select_param_t *select_param,
-                                const ucp_proto_select_elem_t *select_elem,
-                                int show_all, int show_used,
-                                ucs_string_buffer_t *strb)
+void
+ucp_proto_select_elem_info(ucp_worker_h worker,
+                           ucp_worker_cfg_index_t ep_cfg_index,
+                           ucp_worker_cfg_index_t rkey_cfg_index,
+                           const ucp_proto_select_param_t *select_param,
+                           const ucp_proto_select_elem_t *select_elem,
+                           int show_all, int show_used, ucs_string_buffer_t *strb)
 {
     UCS_STRING_BUFFER_ONSTACK(ep_cfg_strb, UCP_PROTO_CONFIG_STR_MAX);
     UCS_STRING_BUFFER_ONSTACK(sel_param_strb, UCP_PROTO_CONFIG_STR_MAX);
@@ -271,7 +271,7 @@ void ucp_proto_select_elem_info(ucp_worker_h worker,
 
     ucs_table_render(&table, strb);
 
-    /* Remove trailing newline */
+    /* remove trailing newline */
     ucs_string_buffer_rtrim(strb, "\n");
 
     ucs_table_cleanup(&table);
