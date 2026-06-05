@@ -15,7 +15,8 @@ then
 fi
 
 # Failure message triggered if range is not valid
-lines=$(git log --no-merges --pretty=format:"%an%x09%ae" "$range" | sort -u)
+lines=$(git log --first-parent --no-merges --pretty=format:"%an%x09%ae" \
+            "$range" | sort -u)
 if [ -z "$lines" ]
 then
     echo "Error: provided range \"$range\" is empty"
