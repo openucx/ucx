@@ -110,6 +110,29 @@ protected:
         }
     }
 
+    bool is_connected_to(const entity &remote, uct_ep_h ep) const
+    {
+        uct_iface_attr_t iface_attr;
+        uct_ep_is_connected_params_t params;
+        std::string dev_addr, ep_addr;
+
+        ASSERT_UCS_OK(uct_iface_query(remote.iface(), &iface_attr));
+        dev_addr.resize(iface_attr.device_addr_len);
+        ep_addr.resize(iface_attr.ep_addr_len);
+
+        ASSERT_UCS_OK(uct_iface_get_device_address(
+                remote.iface(), (uct_device_addr_t*)dev_addr.data()));
+        ASSERT_UCS_OK(uct_ep_get_address(remote.ep(0),
+                                         (uct_ep_addr_t*)ep_addr.data()));
+
+        params.field_mask  = UCT_EP_IS_CONNECTED_FIELD_DEVICE_ADDR |
+                             UCT_EP_IS_CONNECTED_FIELD_EP_ADDR;
+        params.device_addr = (uct_device_addr_t*)dev_addr.data();
+        params.ep_addr     = (uct_ep_addr_t*)ep_addr.data();
+
+        return uct_ep_is_connected(ep, &params);
+    }
+
     void device_put(uint64_t send_seed, uint64_t recv_seed)
     {
         constexpr size_t length = 1024;
@@ -203,14 +226,25 @@ UCS_TEST_P(test_device, reconnect)
     skip_if_no_cuda();
     skip_if_not_rc_gda();
 
+    EXPECT_TRUE(is_connected_to(*m_receiver, m_sender->ep(0)));
+    EXPECT_TRUE(is_connected_to(*m_sender, m_receiver->ep(0)));
+
     device_put(0x1111111111111111lu, 0x2222222222222222lu);
 
     m_sender->destroy_ep(0);
+    m_receiver->destroy_ep(0);
     short_progress_loop();
 
     m_sender->create_ep(0);
+    m_receiver->create_ep(0);
+    EXPECT_FALSE(is_connected_to(*m_receiver, m_sender->ep(0)));
+    EXPECT_FALSE(is_connected_to(*m_sender, m_receiver->ep(0)));
+
     m_sender->connect_p2p_ep(m_sender->ep(0), m_receiver->ep(0));
+    EXPECT_TRUE(is_connected_to(*m_receiver, m_sender->ep(0)));
+
     m_receiver->connect_p2p_ep(m_receiver->ep(0), m_sender->ep(0));
+    EXPECT_TRUE(is_connected_to(*m_sender, m_receiver->ep(0)));
     short_progress_loop();
 
     device_put(0x3333333333333333lu, 0x4444444444444444lu);
