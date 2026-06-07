@@ -14,10 +14,6 @@
 #include <common/test.h>
 #include <uct/test_md.h>
 
-class test_ib_md_relaxed_order_policy : public ucs::test
-{
-};
-
 class test_ib_md : public test_md
 {
 protected:
@@ -54,7 +50,7 @@ private:
                        bool is_expected_to_have_auxiliary_key);
 };
 
-UCS_TEST_F(test_ib_md_relaxed_order_policy, auto_mem_types)
+TEST(test_ib_md_relaxed_order_policy, auto_mem_types)
 {
     uint64_t all_mem_types  = UCS_MASK(UCS_MEMORY_TYPE_LAST);
     uint64_t cuda_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
@@ -72,13 +68,14 @@ UCS_TEST_F(test_ib_md_relaxed_order_policy, auto_mem_types)
                       UCS_CPU_VENDOR_INTEL, UCS_CPU_MODEL_INTEL_ICELAKE));
 }
 
-UCS_TEST_F(test_ib_md_relaxed_order_policy, memh_mem_type)
+TEST(test_ib_md_relaxed_order_policy, memh_mem_type)
 {
     uct_md_mem_reg_params_t params = {};
     uct_ib_md_t md                 = {};
 
     md.relaxed_order_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
 
+    EXPECT_FALSE(uct_ib_memh_is_relaxed_order(&md, NULL));
     EXPECT_FALSE(uct_ib_memh_is_relaxed_order(&md, &params));
 
     params.field_mask = UCT_MD_MEM_REG_FIELD_MEM_TYPE;

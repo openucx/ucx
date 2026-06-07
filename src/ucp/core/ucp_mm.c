@@ -146,6 +146,13 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
     /* prev_uct_memh should contain the handles which should be reused */
     ucs_assert(prev_memh_index == prev_num_memh);
 
+    reg_params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS;
+    reg_params.flags      = uct_flags;
+    if (!(UCS_BIT(mem_type) & UCS_MEMORY_TYPES_CPU_ACCESSIBLE)) {
+        reg_params.field_mask |= UCT_MD_MEM_REG_FIELD_MEM_TYPE;
+        reg_params.mem_type    = mem_type;
+    }
+
     /* Go over requested MD map, and use / register new handles */
     new_md_map      = 0;
     memh_index      = 0;
@@ -192,13 +199,6 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
             }
 
             /* MD supports registration, register new memh on it */
-            reg_params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS;
-            reg_params.flags      = uct_flags;
-            if (!(UCS_BIT(mem_type) & UCS_MEMORY_TYPES_CPU_ACCESSIBLE)) {
-                reg_params.field_mask |= UCT_MD_MEM_REG_FIELD_MEM_TYPE;
-                reg_params.mem_type    = mem_type;
-            }
-
             status = uct_md_mem_reg_v2(context->tl_mds[md_index].md,
                                        base_address, reg_length, &reg_params,
                                        &uct_memh[memh_index]);
@@ -568,6 +568,7 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
     ucp_md_map_t dmabuf_md_map          = 0;
     ucp_md_map_t reg_md_map;
     uct_md_mem_reg_params_t reg_params;
+    uct_md_mem_reg_params_t md_reg_params;
     uct_md_mem_attr_t mem_attr;
     ucp_md_index_t md_index;
     ucs_status_t status;
@@ -594,9 +595,14 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
     }
 
     /* When adding registrations, existing access flags must be supported */
+    reg_params.field_mask    = UCT_MD_MEM_REG_FIELD_FLAGS;
     reg_params.flags         = uct_flags | memh->uct_flags;
     reg_params.dmabuf_fd     = UCT_DMABUF_FD_INVALID;
     reg_params.dmabuf_offset = 0;
+    if (!(UCS_BIT(mem_type) & UCS_MEMORY_TYPES_CPU_ACCESSIBLE)) {
+        reg_params.field_mask |= UCT_MD_MEM_REG_FIELD_MEM_TYPE;
+        reg_params.mem_type    = mem_type;
+    }
 
     if ((dmabuf_prov_md_index != UCP_NULL_RESOURCE) &&
         (reg_md_map & context->dmabuf_reg_md_map)) {
@@ -643,16 +649,13 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
                     context->reg_md_map[mem_type],
                     context->reg_block_md_map[mem_type]);
 
-        reg_params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS;
-        if (!(UCS_BIT(mem_type) & UCS_MEMORY_TYPES_CPU_ACCESSIBLE)) {
-            reg_params.field_mask |= UCT_MD_MEM_REG_FIELD_MEM_TYPE;
-            reg_params.mem_type    = mem_type;
-        }
-
+        md_reg_params = reg_params;
         if (dmabuf_md_map & UCS_BIT(md_index)) {
             /* If this MD can consume a dmabuf and we have it - provide it */
-            reg_params.field_mask |= UCT_MD_MEM_REG_FIELD_DMABUF_FD |
-                                     UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET;
+            md_reg_params.field_mask |= UCT_MD_MEM_REG_FIELD_DMABUF_FD |
+                                        UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET;
+        } else {
+            md_reg_params.dmabuf_fd = UCT_DMABUF_FD_INVALID;
         }
 
         reg_address = address;
@@ -664,11 +667,12 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
         }
 
         status = uct_md_mem_reg_v2(context->tl_mds[md_index].md, reg_address,
-                                   reg_length, &reg_params, &memh->uct[md_index]);
+                                   reg_length, &md_reg_params,
+                                   &memh->uct[md_index]);
         if (ucs_unlikely(status != UCS_OK)) {
             ucp_memh_register_log_fail(err_level, reg_address, reg_length,
-                                       mem_type, reg_params.dmabuf_fd, md_index,
-                                       context, status);
+                                       mem_type, md_reg_params.dmabuf_fd,
+                                       md_index, context, status);
             if (allow_partial_reg &&
                 (uct_flags & UCT_MD_MEM_FLAG_HIDE_ERRORS)) {
                 continue;
@@ -680,10 +684,8 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
 
         ucs_trace("register address %p length %zu dmabuf-fd %d flags %ld "
                   "on md[%d]=%s %p",
-                  reg_address, reg_length,
-                  (dmabuf_md_map & UCS_BIT(md_index)) ? reg_params.dmabuf_fd :
-                                                        UCT_DMABUF_FD_INVALID,
-                  reg_params.flags,
+                  reg_address, reg_length, md_reg_params.dmabuf_fd,
+                  md_reg_params.flags,
                   md_index, context->tl_mds[md_index].rsc.md_name,
                   memh->uct[md_index]);
         md_map_registered |= UCS_BIT(md_index);

@@ -1209,10 +1209,6 @@ void uct_ib_md_parse_relaxed_order(uct_ib_md_t *md,
     uint64_t all_mem_types = UCS_MASK(UCS_MEMORY_TYPE_LAST);
     uint64_t mem_types     = 0;
 
-    md->relaxed_order                = 0;
-    md->relaxed_order_mem_types      = 0;
-    md->relaxed_order_auto_mem_types = 0;
-
     if (md_config->mr_relaxed_order == UCS_YES) {
         if (have_relaxed_order) {
             mem_types = all_mem_types;

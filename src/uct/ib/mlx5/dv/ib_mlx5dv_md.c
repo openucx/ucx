@@ -821,7 +821,14 @@ uct_ib_mlx5_direct_nic_reg_mr(uct_ib_mlx5_md_t *md, void *address,
 
 static int
 uct_ib_mlx5_devx_memh_has_ro(uct_ib_mlx5_md_t *md,
-                             uct_ib_mlx5_devx_mem_t *memh);
+                             uct_ib_mlx5_devx_mem_t *memh)
+{
+    if (memh->super.flags & UCT_IB_MEM_FLAG_GVA) {
+        return md->flags & UCT_IB_MLX5_MD_FLAG_GVA_RO;
+    }
+
+    return memh->super.flags & UCT_IB_MEM_RELAXED_ORDER;
+}
 
 static ucs_status_t
 uct_ib_mlx5_devx_reg_mr(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mem_t *memh,
@@ -913,16 +920,6 @@ uct_ib_mlx5_devx_memh_alloc(uct_ib_mlx5_md_t *md, size_t length,
 
     *memh_p = memh;
     return UCS_OK;
-}
-
-static int
-uct_ib_mlx5_devx_memh_has_ro(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mem_t *memh)
-{
-    if (memh->super.flags & UCT_IB_MEM_FLAG_GVA) {
-        return md->flags & UCT_IB_MLX5_MD_FLAG_GVA_RO;
-    }
-
-    return memh->super.flags & UCT_IB_MEM_RELAXED_ORDER;
 }
 
 static ucs_status_t
