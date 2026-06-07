@@ -733,6 +733,56 @@ uct_rc_mlx5_iface_subscribe_cqs(uct_rc_mlx5_iface_common_t *iface)
     return status;
 }
 
+static int
+uct_rc_mlx5_iface_need_strong_order(uct_rc_mlx5_iface_common_t *iface)
+{
+    return (iface->config.dp_ordering_devx > UCT_IB_MLX5_DP_ORDERING_IBTA) ||
+           iface->config.ddp_enabled_dv;
+}
+
+static ucs_status_t
+uct_rc_mlx5_iface_init_fence_flags(uct_rc_mlx5_iface_common_t *iface,
+                                   uct_rc_iface_common_config_t *rc_config,
+                                   uct_ib_mlx5_md_t *md,
+                                   uct_ib_device_t *dev)
+{
+    int strong_order = uct_rc_mlx5_iface_need_strong_order(iface);
+    int pci_atomics  = uct_ib_device_has_pci_atomics(dev);
+
+    iface->config.put_fence_flag =
+            strong_order ? UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER : 0;
+
+    switch (rc_config->fence_mode) {
+    case UCT_RC_FENCE_MODE_WEAK:
+        break;
+    case UCT_RC_FENCE_MODE_AUTO:
+        if (strong_order || pci_atomics || md->super.relaxed_order) {
+            break;
+        }
+
+        /* Fall through */
+    case UCT_RC_FENCE_MODE_NONE:
+        iface->config.atomic_fence_flag = 0;
+        iface->super.config.fence_mode  = UCT_RC_FENCE_MODE_NONE;
+        return UCS_OK;
+    default:
+        ucs_error("incorrect fence value: %d", iface->super.config.fence_mode);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (strong_order) {
+        iface->config.atomic_fence_flag =
+                UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER;
+    } else if (pci_atomics) {
+        iface->config.atomic_fence_flag = UCT_IB_MLX5_WQE_CTRL_FLAG_FENCE;
+    } else {
+        iface->config.atomic_fence_flag = 0;
+    }
+
+    iface->super.config.fence_mode = UCT_RC_FENCE_MODE_WEAK;
+    return UCS_OK;
+}
+
 UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
                     uct_rc_iface_ops_t *ops, uct_md_h tl_md,
                     uct_worker_h worker, const uct_iface_params_t *params,
@@ -815,24 +865,9 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
     self->config.log_ack_req_freq  = ucs_min(mlx5_config->log_ack_req_freq,
                                              UCT_RC_MLX5_MAX_LOG_ACK_REQ_FREQ);
 
-    if ((rc_config->fence_mode == UCT_RC_FENCE_MODE_WEAK) ||
-        ((rc_config->fence_mode == UCT_RC_FENCE_MODE_AUTO) &&
-         (uct_ib_device_has_pci_atomics(dev) || md->super.relaxed_order))) {
-        if (uct_ib_device_has_pci_atomics(dev)) {
-            self->config.atomic_fence_flag = UCT_IB_MLX5_WQE_CTRL_FLAG_FENCE;
-        } else {
-            self->config.atomic_fence_flag = 0;
-        }
-        self->super.config.fence_mode      = UCT_RC_FENCE_MODE_WEAK;
-    } else if ((rc_config->fence_mode == UCT_RC_FENCE_MODE_NONE) ||
-               ((rc_config->fence_mode == UCT_RC_FENCE_MODE_AUTO) &&
-                !uct_ib_device_has_pci_atomics(dev))) {
-        self->config.atomic_fence_flag     = 0;
-        self->super.config.fence_mode      = UCT_RC_FENCE_MODE_NONE;
-    } else {
-        ucs_error("incorrect fence value: %d", self->super.config.fence_mode);
-        status = UCS_ERR_INVALID_PARAM;
-        goto cleanup_tm;
+    status = uct_rc_mlx5_iface_init_fence_flags(self, rc_config, md, dev);
+    if (status != UCS_OK) {
+        goto cleanup_dm;
     }
 
     /* By default set to something that is always in cache */
