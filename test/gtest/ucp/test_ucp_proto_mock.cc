@@ -8,6 +8,7 @@
 
 extern "C" {
 #include <ucp/core/ucp_ep.inl>
+#include <ucp/core/ucp_mm.h>
 #include <ucp/core/ucp_types.h>
 #include <uct/base/uct_iface.h>
 #include <ucp/proto/proto_debug.h>
@@ -62,6 +63,13 @@ public:
     {
         add_mock_iface(dev_name, std::move(cb), std::move(perf_cb),
                        sys_device);
+    }
+
+    /* Return the sys_dev assigned to a mock device during topology
+     * registration in query_devices_mock(). */
+    ucs_sys_device_t get_mock_sys_dev_by_name(const std::string &dev_name) const
+    {
+        return m_sys_devs_by_name.at(dev_name);
     }
 
     void mock_transport(const std::string &tl_name)
@@ -122,9 +130,11 @@ private:
          * The number of real devices (and their names) do not match the mocked
          * ones. In order to pretend that all the mocked devices are supported,
          * we remember the first real device name, and then substitute the
-         * response with the mocked devices names. Assign unique sys_device
-         * values beyond the currently known topology devices, so the mocked
-         * resources are distinct but cannot alias real topology entries. Later
+         * response with the mocked devices names. Each mocked device is
+         * assigned a distinct sys_device: either the one explicitly requested
+         * via add_mock_iface(), or a freshly registered synthetic topology
+         * device (so that mocked distances can be set) when none was requested.
+         * The resulting sys_device is recorded per name for later lookup. Later
          * on the iface_open_mock will use the real device name (same for all
          * mocks) to create the mocked iface.
          */
@@ -132,16 +142,28 @@ private:
                                     m_self->m_iface_attrs_funcs.size(),
                                     sizeof(uct_tl_device_resource_t),
                                     "mock_tl_devices");
-        unsigned dev_count  = 0;
-        unsigned sys_device = ucs_topo_num_devices();
+        unsigned dev_count = 0;
         for (const auto &it : m_self->m_iface_attrs_funcs) {
             ucs_strncpy_safe(mock_devices[dev_count].name, it.first.c_str(),
                              UCT_DEVICE_NAME_MAX);
-            mock_devices[dev_count].type       = (*tl_devices_p)[0].type;
-            mock_devices[dev_count].sys_device =
-                    (m_self->m_sys_devices[it.first] ==
-                     UCS_SYS_DEVICE_ID_UNKNOWN) ?
-                    sys_device++ : m_self->m_sys_devices[it.first];
+            mock_devices[dev_count].type = (*tl_devices_p)[0].type;
+
+            ucs_sys_device_t sys_dev = m_self->m_sys_devices[it.first];
+            if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+                ucs_sys_bus_id_t bus_id = {
+                    .domain   = 0xffff,
+                    .bus      = 0xff,
+                    .slot     = 0xff,
+                    .function = static_cast<uint8_t>(dev_count),
+                };
+
+                auto status = ucs_topo_find_device_by_bus_id(&bus_id, &sys_dev);
+                ucs_assert_always(status == UCS_OK);
+                ucs_assert_always(sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN);
+            }
+
+            mock_devices[dev_count].sys_device   = sys_dev;
+            m_self->m_sys_devs_by_name[it.first] = sys_dev;
             ++dev_count;
         }
 
@@ -233,6 +255,7 @@ private:
     std::map<std::string, iface_attr_func_t>            m_iface_attrs_funcs;
     std::map<std::string, perf_attr_func_t>             m_perf_attrs_funcs;
     std::map<std::string, ucs_sys_device_t>             m_sys_devices;
+    std::map<std::string, ucs_sys_device_t>             m_sys_devs_by_name;
     std::string                                         m_real_dev_name;
     uct_md_h                                            m_real_md;
 };
@@ -1539,6 +1562,172 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_twins_get_inline_0,
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_twins_get_inline_0, rcx,
                               "rc_x")
 
+/*
+ * Tests the min-distance filter and deterministic sort in
+ * ucp_proto_multi_filter_single_net_device(). Sets up three mock NICs
+ * with identical bandwidth (so all survive the filter's bandwidth
+ * tiebreaker) and gives mock_1:1 a lower iface latency so it wins the
+ * wireup AM/RMA-lane race and lands at lane[0]. This makes the
+ * lane-index insertion order (mock_1:1 first) differ from the
+ * deterministic bus-id sorted order [mock_0:1, mock_1:1, mock_2:1].
+ *
+ * Installs a "proto_mock" topology provider that gives any sys_dev
+ * pair a 100ns latency penalty unless their indices differ by 1, and
+ * forces the local memory onto mock_1:1's sys_dev.
+ * Because the three mock devices get consecutive sys_devs, mock_0:1 and
+ * mock_2:1 are adjacent to the buffer while mock_1:1 (the buffer's own device)
+ * is "far".
+ *
+ * Each test asserts two ranges in the proto cache:
+ *   - 0..64 (get/bcopy "copy-out"): reg_mem_info unknown, so all NICs
+ *     have sys_latency=0 and survive the filter; the seed runs over
+ *     the sorted set [mock_0:1, mock_1:1, mock_2:1].
+ *   - 65..INF (get/zcopy "zero-copy"): reg_mem_info is filled from
+ *     select_param; the filter drops mock_1:1 and the seed runs over
+ *     [mock_0:1, mock_2:1].
+ */
+class test_ucp_proto_mock_rcx_trio_local_distance_get :
+    public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_rcx_trio_local_distance_get()
+    {
+        mock_transport("rc_mlx5");
+    }
+
+    virtual void init() override
+    {
+        auto iface_attr_slow = [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short  = 208;
+            iface_attr.cap.put.max_short = 2048;
+            iface_attr.bandwidth.shared  = 28e9;
+            iface_attr.latency.c         = 600e-9;
+            iface_attr.latency.m         = 1e-9;
+        };
+
+        auto iface_attr_fast = [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short  = 208;
+            iface_attr.cap.put.max_short = 2048;
+            iface_attr.bandwidth.shared  = 28e9;
+            iface_attr.latency.c         = 300e-9;
+            iface_attr.latency.m         = 1e-9;
+        };
+
+        add_mock_iface("mock_0:1", iface_attr_slow); /* bus 0 */
+        add_mock_iface("mock_1:1", iface_attr_fast); /* bus 1, lane[0] */
+        add_mock_iface("mock_2:1", iface_attr_slow); /* bus 2 */
+        test_ucp_proto_mock::init();
+
+        const ucs_sys_topo_ops_t topo_ops = {
+            .get_distance                   = get_distance,
+            .get_memory_distance            = get_memory_distance,
+            .get_memory_distance_for_cpuset = get_memory_distance_for_cpuset
+        };
+        ASSERT_UCS_OK(ucs_sys_topo_provider_push(&topo_ops));
+    }
+
+    virtual void cleanup() override
+    {
+        ucs_sys_topo_provider_pop();
+        test_ucp_proto_mock::cleanup();
+    }
+
+protected:
+    void check_get_picks(const std::string &zcopy_mock,
+                         const std::string &bcopy_mock)
+    {
+        uint8_t remote   = 42;
+        auto memh        = mem_map(receiver(), &remote, sizeof(remote));
+        auto rkey_packed = rkey_pack(receiver(), memh);
+        auto rkey        = rkey_unpack(sender().ep(), rkey_packed);
+
+        uint8_t local       = 0;
+        auto local_memh     = mem_map(sender(), &local, sizeof(local));
+        local_memh->sys_dev = get_mock_sys_dev_by_name("mock_1:1");
+
+        ucp_request_param_t req_param;
+        req_param.op_attr_mask = UCP_OP_ATTR_FIELD_MEMH;
+        req_param.memh         = local_memh;
+
+        auto *status = ucp_get_nbx(sender().ep(), &local, sizeof(local),
+                                   (uint64_t)&remote, rkey, &req_param);
+        request_wait(status);
+        ASSERT_EQ(local, 42);
+
+        ucp_proto_select_key_t key = any_key();
+        key.param.op_id_flags      = UCP_OP_ID_GET;
+        key.param.op_attr          = 0;
+
+        const std::string bcopy_config = "rc_mlx5/" + bcopy_mock + "/path0";
+        const std::string zcopy_config = "rc_mlx5/" + zcopy_mock + "/path0";
+        check_rkey_config(sender(),
+                          {{0, 64, "copy-out", bcopy_config},
+                           {65, INF, "zero-copy", zcopy_config}},
+                          key, rkey->cfg_index);
+    }
+
+    static ucs_status_t get_distance(ucs_sys_device_t device1,
+                                     ucs_sys_device_t device2,
+                                     ucs_sys_dev_distance_t *distance)
+    {
+        *distance = ucs_topo_default_distance;
+        if ((device1 != UCS_SYS_DEVICE_ID_UNKNOWN) &&
+            (device2 != UCS_SYS_DEVICE_ID_UNKNOWN) &&
+            (sys_dev_delta(device1, device2) != 1)) {
+            distance->latency = 100e-9;
+        }
+        return UCS_OK;
+    }
+
+    static void
+    get_memory_distance(ucs_sys_device_t, ucs_sys_dev_distance_t *distance)
+    {
+        *distance = ucs_topo_default_distance;
+    }
+
+    static void
+    get_memory_distance_for_cpuset(ucs_sys_device_t, const ucs_cpu_set_t *,
+                                   ucs_sys_dev_distance_t *distance)
+    {
+        *distance = ucs_topo_default_distance;
+    }
+
+private:
+    static unsigned
+    sys_dev_delta(ucs_sys_device_t device1, ucs_sys_device_t device2)
+    {
+        return (device1 > device2) ? (device1 - device2) : (device2 - device1);
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_trio_local_distance_get,
+           single_net_dev_local_id_0_picks_lowest_adjacent_sys_dev,
+           "IB_NUM_PATHS?=2", "SINGLE_NET_DEVICE=y", "NODE_LOCAL_ID=0",
+           "ZCOPY_THRESH=0")
+{
+    /* zcopy: 0 % 2 = 0 -> mock_0:1.   bcopy: 0 % 3 = 0 -> mock_0:1. */
+    check_get_picks("mock_0:1", "mock_0:1");
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_trio_local_distance_get,
+           single_net_dev_local_id_1_picks_highest_adjacent_sys_dev,
+           "IB_NUM_PATHS?=2", "SINGLE_NET_DEVICE=y", "NODE_LOCAL_ID=1",
+           "ZCOPY_THRESH=0")
+{
+    /* zcopy: 1 % 2 = 1 -> mock_2:1.   bcopy: 1 % 3 = 1 -> mock_1:1. */
+    check_get_picks("mock_2:1", "mock_1:1");
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_trio_local_distance_get,
+           single_net_dev_local_id_2_wraps_to_lowest_adjacent_sys_dev,
+           "IB_NUM_PATHS?=2", "SINGLE_NET_DEVICE=y", "NODE_LOCAL_ID=2",
+           "ZCOPY_THRESH=0")
+{
+    /* zcopy: 2 % 2 = 0 -> mock_0:1.   bcopy: 2 % 3 = 2 -> mock_2:1. */
+    check_get_picks("mock_0:1", "mock_2:1");
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_trio_local_distance_get,
+                              rcx, "rc_x")
 
 class test_ucp_proto_mock_am_tiebreak : public test_ucp_proto_mock {
 public:

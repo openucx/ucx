@@ -591,14 +591,6 @@ uct_gga_mlx5_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
     return status;
 }
 
-static void
-uct_gga_mlx5_ep_get_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
-                                             const void *resp)
-{
-    uct_rc_op_release_iov_get_zcopy(op);
-    uct_rc_ep_send_op_completion_handler(op, resp);
-}
-
 static ucs_status_t
 uct_gga_mlx5_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
                           uint64_t remote_addr, uct_rkey_t rkey,
@@ -632,11 +624,12 @@ uct_gga_mlx5_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
             ep, MLX5_OPCODE_MMO | UCT_RC_MLX5_OPCODE_FLAG_MMO_GET, iov, iovcnt,
             total_length, 0, NULL, 0, remote_addr, rkey_copy, 0ul, 0, 0,
             &gga_ep->dma_opaque.opaque_mr, fm_ce_se,
-            uct_gga_mlx5_ep_get_zcopy_completion_handler,
+            uct_rc_ep_get_zcopy_completion_handler,
             UCT_RC_IFACE_SEND_OP_FLAG_IOV, comp);
 
     if (!UCS_STATUS_IS_ERR(status)) {
         UCT_TL_EP_STAT_OP(&ep->super.super, GET, ZCOPY, total_length);
+        UCT_RC_RDMA_READ_POSTED(&iface->super, total_length);
     }
 
     return status;
