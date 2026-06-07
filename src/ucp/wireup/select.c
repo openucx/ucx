@@ -377,8 +377,7 @@ ucp_wireup_init_select_info(double score, double tiebreak, unsigned addr_index,
  * cannot change the tiebreak window and make the result depend on iteration
  * order.
  */
-static void
-ucp_wireup_select_transport_tiebreak(
+static void ucp_wireup_select_transport_tiebreak(
         const ucp_proto_select_info_array_t *candidates_array,
         ucp_wireup_select_info_t *sinfo)
 {
@@ -688,9 +687,8 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
                                             rsc_index, priority, candidate);
             }
 
-            if (!found ||
-                (ucp_score_prio_cmp(score, priority, sinfo.score,
-                                    sinfo.priority) > 0)) {
+            if (!found || (ucp_score_prio_cmp(score, priority, sinfo.score,
+                                              sinfo.priority) > 0)) {
                 if (criteria->calc_tiebreak != NULL) {
                     sinfo = *candidate;
                 } else {

@@ -1687,9 +1687,9 @@ protected:
 
     void check_keepalive_lane(const std::string &dev_name)
     {
-        const ucp_ep_config_t *config =
-                ucp_worker_ep_config(sender().worker(),
-                                     ep_config_index(sender()));
+        const ucp_ep_config_t *config = ucp_worker_ep_config(sender().worker(),
+                                                             ep_config_index(
+                                                                     sender()));
         const ucp_lane_index_t lane   = config->key.keepalive_lane;
 
         ASSERT_NE(UCP_NULL_LANE, lane);
