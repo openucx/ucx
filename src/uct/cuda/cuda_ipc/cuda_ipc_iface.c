@@ -1,27 +1,28 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2019. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
 #ifdef HAVE_CONFIG_H
-#  include "config.h"
+#include "config.h"
 #endif
 
-#include "cuda_ipc.inl"
+#include "cuda_ipc_ep.h"
+#include "cuda_ipc_iface_address.h"
 #include "cuda_ipc_iface.h"
 #include "cuda_ipc_md.h"
-#include "cuda_ipc_ep.h"
+#include "cuda_ipc.inl"
 
+#include <ucs/async/eventfd.h>
+#include <ucs/debug/assert.h>
+#include <ucs/sys/string.h>
+#include <ucs/type/class.h>
+#include <uct/api/device/uct_device_types.h>
 #include <uct/cuda/base/cuda_iface.h>
 #include <uct/cuda/base/cuda_md.h>
 #include <uct/cuda/base/cuda_nvml.h>
-#include <uct/api/device/uct_device_types.h>
-#include <ucs/type/class.h>
-#include <ucs/sys/string.h>
-#include <ucs/debug/assert.h>
-#include <ucs/async/eventfd.h>
-#include <pthread.h>
 
+#include <pthread.h>
 
 typedef enum {
     UCT_CUDA_IPC_DEVICE_ADDR_FLAG_MNNVL = UCS_BIT(0)
@@ -81,7 +82,6 @@ static ucs_config_field_t uct_cuda_ipc_iface_config_table[] = {
 /* Forward declaration for the delete function */
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_ipc_iface_t)(uct_iface_t*);
 
-
 ucs_status_t uct_cuda_ipc_iface_get_device_address(uct_iface_t *tl_iface,
                                                    uct_device_addr_t *addr)
 {
@@ -103,7 +103,7 @@ ucs_status_t uct_cuda_ipc_iface_get_device_address(uct_iface_t *tl_iface,
 static ucs_status_t uct_cuda_ipc_iface_get_address(uct_iface_h tl_iface,
                                                    uct_iface_addr_t *iface_addr)
 {
-    *(pid_t*)iface_addr = getpid();
+    uct_cuda_ipc_iface_address_pack(iface_addr);
     return UCS_OK;
 }
 
@@ -256,7 +256,7 @@ static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
 
     uct_base_iface_query(&iface->super.super, iface_attr);
 
-    iface_attr->iface_addr_len          = sizeof(pid_t);
+    iface_attr->iface_addr_len          = uct_cuda_ipc_iface_address_length();
     iface_attr->device_addr_len         = md->enable_mnnvl ?
                                           sizeof(uct_cuda_ipc_device_addr_t) :
                                           sizeof(uint64_t);
@@ -268,6 +268,9 @@ static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
                                           UCT_IFACE_FLAG_GET_ZCOPY        |
                                           UCT_IFACE_FLAG_PUT_ZCOPY        |
                                           UCT_IFACE_FLAG_DEVICE_EP;
+
+    iface_attr->ctl_device              = UCS_SYS_DEVICE_ID_UNKNOWN;
+
     if (md->enable_mnnvl) {
         iface_attr->cap.flags |= UCT_IFACE_FLAG_INTER_NODE;
     }

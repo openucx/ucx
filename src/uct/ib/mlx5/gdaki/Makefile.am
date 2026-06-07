@@ -3,7 +3,7 @@
 # See file LICENSE for terms.
 #
 
-if HAVE_CUDA
+if HAVE_GDA
 
 module_LTLIBRARIES             = libuct_ib_mlx5_gda.la
 libuct_ib_mlx5_gda_la_CPPFLAGS = $(BASE_CPPFLAGS) $(IBVERBS_CPPFLAGS) \
@@ -16,7 +16,7 @@ libuct_ib_mlx5_gda_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
                                  $(top_builddir)/src/uct/ib/libuct_ib.la \
                                  $(top_builddir)/src/uct/ib/mlx5/libuct_ib_mlx5.la \
                                  $(top_builddir)/src/uct/cuda/libuct_cuda.la \
-                                 $(CUDA_LIBS)
+                                 $(CUDA_LIBS) $(NVML_LIBS)
 libuct_ib_mlx5_gda_ladir       = $(includedir)/uct/ib/mlx5/gdaki
 
 libuct_ib_mlx5_gda_la_SOURCES = \

@@ -228,18 +228,18 @@ static ucs_status_t uct_ze_copy_md_mem_query(uct_md_h md, const void *addr,
 
     if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD) {
         if (dmabuf_fd == UCT_DMABUF_FD_INVALID) {
-            return UCS_ERR_UNSUPPORTED;
-        }
+            mem_attr_p->dmabuf_fd = UCT_DMABUF_FD_INVALID;
+        } else {
+            mem_attr_p->dmabuf_fd = dup(dmabuf_fd);
+            if (mem_attr_p->dmabuf_fd < 0) {
+                return UCS_ERR_IO_ERROR;
+            }
 
-        mem_attr_p->dmabuf_fd = dup(dmabuf_fd);
-        if (mem_attr_p->dmabuf_fd < 0) {
-            return UCS_ERR_IO_ERROR;
+            /* NOTE: Do not close(dmabuf_fd) here. Level Zero caches this fd
+             * internally per allocation. Closing it can invalidate the cache
+             * and lead to fd reuse conflicts with other transports.
+             */
         }
-
-        /* NOTE: Do not close(dmabuf_fd) here. Level Zero caches this fd
-         * internally per allocation. Closing it can invalidate the cache and
-         * lead to fd reuse conflicts with other transports.
-         */
     }
 
     if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET) {
