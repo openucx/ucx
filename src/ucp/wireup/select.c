@@ -466,6 +466,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
     int is_reachable;
     double score, tiebreak;
     uint8_t priority;
+    int score_cmp;
     ucp_md_index_t md_index;
 
     p            = tls_info;
@@ -670,6 +671,9 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
                                                      address, ae, 0,
                                                      criteria->tiebreak_arg);
             priority     = iface_attr->priority + ae->iface_attr.priority;
+            score_cmp    = found ?
+                           ucp_score_prio_cmp(score, priority, sinfo.score,
+                                              sinfo.priority) : 1;
             is_reachable = 1;
 
             ucs_trace(UCT_TL_RESOURCE_DESC_FMT
@@ -687,8 +691,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
                                             rsc_index, priority, candidate);
             }
 
-            if (!found || (ucp_score_prio_cmp(score, priority, sinfo.score,
-                                              sinfo.priority) > 0)) {
+            if (!found || (score_cmp > 0)) {
                 if (criteria->calc_tiebreak != NULL) {
                     sinfo = *candidate;
                 } else {
