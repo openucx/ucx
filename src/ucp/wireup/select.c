@@ -372,25 +372,38 @@ ucp_wireup_init_select_info(double score, double tiebreak, unsigned addr_index,
 }
 
 /*
- * Compare a candidate transport against the currently selected one. When the
- * candidate has a tiebreak and its score is within UCP_WIREUP_SCORE_MAX_DIFF of
- * the lower score, the tiebreak (then priority) decides; otherwise the score
- * (then priority) decides. Returns >0 if the candidate is better, <0 if worse,
- * 0 if equal.
+ * Select by tiebreak only among candidates whose score is close to the best
+ * primary score. Keep the reference score fixed so later updates to *sinfo
+ * cannot change the tiebreak window and make the result depend on iteration
+ * order.
  */
-static int ucp_wireup_candidate_cmp(double cand_score, double cand_tiebreak,
-                                    int cand_prio,
-                                    const ucp_wireup_select_info_t *sel)
+static void
+ucp_wireup_select_transport_tiebreak(
+        const ucp_proto_select_info_array_t *candidates_array,
+        ucp_wireup_select_info_t *sinfo)
 {
-    double ref_score = ucs_min(cand_score, sel->score);
+    const double ref_score = sinfo->score;
+    int found              = 0;
+    const ucp_wireup_select_info_t *candidate;
 
-    if ((cand_tiebreak >= 0.0) && (fabs(cand_score - sel->score) <=
-                                   (UCP_WIREUP_SCORE_MAX_DIFF * ref_score))) {
-        return ucp_score_prio_cmp(cand_tiebreak, cand_prio, sel->tiebreak,
-                                  sel->priority);
+    ucs_array_for_each(candidate, candidates_array) {
+        if (fabs(candidate->score - ref_score) >
+            (UCP_WIREUP_SCORE_MAX_DIFF * ref_score)) {
+            continue;
+        }
+
+        if (!found ||
+            (ucp_score_prio_cmp(candidate->tiebreak, candidate->priority,
+                                sinfo->tiebreak, sinfo->priority) > 0)) {
+            *sinfo = *candidate;
+            found  = 1;
+        }
     }
 
-    return ucp_score_prio_cmp(cand_score, cand_prio, sel->score, sel->priority);
+    ucs_assertv(found, "score=%f tiebreak=%f addr_index=%u path_index=%u "
+                "rsc_index=%d priority=%u", sinfo->score, sinfo->tiebreak,
+                sinfo->addr_index, sinfo->path_index, sinfo->rsc_index,
+                sinfo->priority);
 }
 
 static size_t
@@ -422,13 +435,17 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
 {
     UCS_STRING_BUFFER_ONSTACK(missing_flags_str,
                               UCP_WIREUP_MAX_FLAGS_STRING_SIZE);
-    const ucp_unpacked_address_t *address         = select_params->address;
-    ucp_ep_h ep                                   = select_params->ep;
-    ucp_worker_h worker                           = ep->worker;
-    ucp_context_h context                         = worker->context;
-    ucp_wireup_select_info_t sinfo                = {0};
-    int found                                     = 0;
-    ucp_wireup_select_flags_t local_iface_flags = criteria->local_iface_flags;
+    const ucp_unpacked_address_t *address          = select_params->address;
+    ucp_ep_h ep                                    = select_params->ep;
+    ucp_worker_h worker                            = ep->worker;
+    ucp_context_h context                          = worker->context;
+    ucp_proto_select_info_array_t candidates_array =
+            UCS_ARRAY_DYNAMIC_INITIALIZER;
+    ucp_wireup_select_info_t sinfo                 = {0};
+    int found                                      = 0;
+    ucp_wireup_select_flags_t local_iface_flags    =
+            criteria->local_iface_flags;
+    ucp_wireup_select_info_t *candidate;
     int has_cm;
     uint64_t local_md_flags;
     ucp_tl_addr_bitmap_t addr_index_map, rsc_addr_index_map;
@@ -446,10 +463,10 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
     uct_iface_attr_t *iface_attr;
     uct_md_attr_v2_t *md_attr;
     const uct_component_attr_t *cmpt_attr;
+    ucs_status_t status;
     int is_reachable;
     double score, tiebreak;
     uint8_t priority;
-    int score_cmp;
     ucp_md_index_t md_index;
 
     p            = tls_info;
@@ -654,14 +671,32 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
                                                      address, ae, 0,
                                                      criteria->tiebreak_arg);
             priority     = iface_attr->priority + ae->iface_attr.priority;
-            score_cmp    = found ?
-                           ucp_wireup_candidate_cmp(score, tiebreak, priority,
-                                                    &sinfo) : 1;
             is_reachable = 1;
 
-            if (!found || (score_cmp > 0)) {
-                ucp_wireup_init_select_info(score, tiebreak, addr_index, rsc_index,
-                                            priority, &sinfo);
+            ucs_trace(UCT_TL_RESOURCE_DESC_FMT
+                      "->addr[%u] : %s score %.2f tiebreak %.2f priority %d",
+                      UCT_TL_RESOURCE_DESC_ARG(resource), addr_index,
+                      criteria->title, score, tiebreak, priority);
+
+            if (criteria->calc_tiebreak != NULL) {
+                /* Save every reachable candidate so the tiebreak pass can
+                 * compare them after the best primary score is known. */
+                candidate = ucs_array_append(&candidates_array,
+                                             status = UCS_ERR_NO_MEMORY;
+                                             goto out_cleanup);
+                ucp_wireup_init_select_info(score, tiebreak, addr_index,
+                                            rsc_index, priority, candidate);
+            }
+
+            if (!found ||
+                (ucp_score_prio_cmp(score, priority, sinfo.score,
+                                    sinfo.priority) > 0)) {
+                if (criteria->calc_tiebreak != NULL) {
+                    sinfo = *candidate;
+                } else {
+                    ucp_wireup_init_select_info(score, tiebreak, addr_index,
+                                                rsc_index, priority, &sinfo);
+                }
                 found = 1;
             }
         }
@@ -686,7 +721,12 @@ out:
                       address->name, tls_info);
         }
 
-        return UCS_ERR_UNREACHABLE;
+        status = UCS_ERR_UNREACHABLE;
+        goto out_cleanup;
+    }
+
+    if (criteria->calc_tiebreak != NULL) {
+        ucp_wireup_select_transport_tiebreak(&candidates_array, &sinfo);
     }
 
     ucs_trace("ep %p: selected for %s: " UCT_TL_RESOURCE_DESC_FMT " md[%d]"
@@ -700,7 +740,11 @@ out:
               sinfo.tiebreak);
 
     *select_info = sinfo;
-    return UCS_OK;
+    status       = UCS_OK;
+
+out_cleanup:
+    ucs_array_cleanup_dynamic(&candidates_array);
+    return status;
 }
 
 static inline double
@@ -1059,6 +1103,12 @@ ucp_wireup_iface_score_bandwidth(const ucp_worker_iface_t *wiface,
                                           &wiface->attr.bandwidth);
     } else {
         local_bw = ucp_wireup_iface_bw_distance(wiface);
+    }
+
+    if (unpacked_addr->addr_version == UCP_OBJECT_VERSION_V2) {
+        /* FP8 is a lossy compression method, so in order to create a symmetric
+         * calculation we pack/unpack the local bandwidth as well */
+        local_bw = UCS_FP8_PACK_UNPACK(BANDWIDTH, local_bw);
     }
 
     return ucs_min(local_bw, remote_addr->iface_attr.bandwidth);
