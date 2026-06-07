@@ -262,8 +262,8 @@ ucp_proto_multi_filter_single_net_device(ucp_lane_index_t num_lanes,
                 ucp_proto_multi_sys_dev_cmp, NULL);
 
     /* Select a single device based on the node_local_id.
-     * This calculation assumes that there is symmetry in the topology,
-     * and also that local ids are consecutive between ranks that see
+     * This calculation assumes that there is symmetry in the topology, 
+     * and also that local ids are consecutive between ranks that see 
      * the same devices with the same minimum distance. */
     seed             = context->config.node_local_id % num_min_dist_devs;
     selected_sys_dev = sys_devs[seed];
