@@ -442,11 +442,12 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
             (criteria->calc_tiebreak != NULL);
     ucp_proto_select_info_array_t candidates_array =
             UCS_ARRAY_DYNAMIC_INITIALIZER;
+    ucp_wireup_select_info_t candidate_info        = {0};
     ucp_wireup_select_info_t sinfo                 = {0};
     int found                                      = 0;
     ucp_wireup_select_flags_t local_iface_flags    =
             criteria->local_iface_flags;
-    ucp_wireup_select_info_t *candidate;
+    ucp_wireup_select_info_t *candidate_slot;
     int has_cm;
     uint64_t local_md_flags;
     ucp_tl_addr_bitmap_t addr_index_map, rsc_addr_index_map;
@@ -683,23 +684,19 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
                       UCT_TL_RESOURCE_DESC_ARG(resource), addr_index,
                       criteria->title, score, tiebreak, priority);
 
+            ucp_wireup_init_select_info(score, tiebreak, addr_index, rsc_index,
+                                        priority, &candidate_info);
             if (has_tiebreak) {
                 /* Save every reachable candidate so the tiebreak pass can
                  * compare them after the best primary score is known. */
-                candidate = ucs_array_append(&candidates_array,
-                                             status = UCS_ERR_NO_MEMORY;
-                                             goto out_cleanup);
-                ucp_wireup_init_select_info(score, tiebreak, addr_index,
-                                            rsc_index, priority, candidate);
+                candidate_slot  = ucs_array_append(&candidates_array,
+                                                   status = UCS_ERR_NO_MEMORY;
+                                                   goto out_cleanup);
+                *candidate_slot = candidate_info;
             }
 
             if (!found || (score_cmp > 0)) {
-                if (has_tiebreak) {
-                    sinfo = *candidate;
-                } else {
-                    ucp_wireup_init_select_info(score, tiebreak, addr_index,
-                                                rsc_index, priority, &sinfo);
-                }
+                sinfo = candidate_info;
                 found = 1;
             }
         }
