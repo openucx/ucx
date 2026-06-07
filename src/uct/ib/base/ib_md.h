@@ -12,6 +12,8 @@
 #include "ib_device.h"
 
 #include <uct/base/uct_md.h>
+#include <ucs/arch/cpu.h>
+#include <ucs/memory/memory_type.h>
 #include <ucs/stats/stats.h>
 
 #define UCT_IB_MD_MAX_MR_SIZE        0x80000000UL
@@ -75,6 +77,8 @@ enum {
                                                         GVA region */
     UCT_IB_MEM_DIRECT_NIC            = UCS_BIT(6), /**< The memory handle was
                                                         registered using Direct NIC */
+    UCT_IB_MEM_RELAXED_ORDER         = UCS_BIT(7), /**< Relaxed ordering is enabled
+                                                        for this memory handle */
 };
 
 enum {
@@ -160,6 +164,8 @@ typedef struct uct_ib_md {
     uint64_t                 subnet_filter;
     double                   pci_bw;
     int                      relaxed_order;
+    uint64_t                 relaxed_order_mem_types;
+    uint64_t                 relaxed_order_auto_mem_types;
     int                      fork_init;
     uint64_t                 reg_mem_types;
     uint64_t                 gva_mem_types;
@@ -325,9 +331,50 @@ static inline uint16_t uct_ib_md_atomic_offset(uint8_t atomic_mr_id)
 
 
 static UCS_F_ALWAYS_INLINE uct_ib_mr_type_t
-uct_ib_md_get_atomic_mr_type(uct_ib_md_t *md)
+uct_ib_memh_get_atomic_mr_type(const uct_ib_mem_t *memh)
 {
-    return md->relaxed_order ? UCT_IB_MR_STRICT_ORDER : UCT_IB_MR_DEFAULT;
+    return (memh->flags & UCT_IB_MEM_RELAXED_ORDER) ?
+           UCT_IB_MR_STRICT_ORDER : UCT_IB_MR_DEFAULT;
+}
+
+static UCS_F_ALWAYS_INLINE uint64_t
+uct_ib_md_relaxed_order_auto_mem_types(ucs_cpu_vendor_t cpu_vendor,
+                                       ucs_cpu_model_t cpu_model)
+{
+    if (ucs_cpu_model_prefer_relaxed_order(cpu_vendor, cpu_model)) {
+        return UCS_MASK(UCS_MEMORY_TYPE_LAST);
+    }
+
+    if ((cpu_vendor == UCS_CPU_VENDOR_INTEL) &&
+        (cpu_model == UCS_CPU_MODEL_INTEL_EMERALD_RAPIDS)) {
+        return UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
+               UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
+    }
+
+    return 0;
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_ib_memh_is_relaxed_order(uct_ib_md_t *md,
+                             const uct_md_mem_reg_params_t *params)
+{
+    ucs_memory_type_t mem_type;
+
+    mem_type = UCT_MD_MEM_REG_FIELD_VALUE(params, mem_type, FIELD_MEM_TYPE,
+                                          UCS_MEMORY_TYPE_HOST);
+    if (mem_type >= UCS_MEMORY_TYPE_LAST) {
+        return 0;
+    }
+
+    if (md->relaxed_order_mem_types != 0) {
+        return !!(md->relaxed_order_mem_types & UCS_BIT(mem_type));
+    }
+
+    if (UCS_BIT(mem_type) & UCS_MEMORY_TYPES_CPU_ACCESSIBLE) {
+        return 0;
+    }
+
+    return !!(md->relaxed_order_auto_mem_types & UCS_BIT(mem_type));
 }
 
 static UCS_F_ALWAYS_INLINE uint32_t uct_ib_memh_get_lkey(uct_mem_h memh)
@@ -439,8 +486,9 @@ ucs_status_t uct_ib_fork_init(const uct_ib_md_config_t *md_config,
                               int *fork_init_p);
 
 ucs_status_t uct_ib_memh_alloc(uct_ib_md_t *md, size_t length,
-                               unsigned mem_flags, size_t memh_base_size,
-                               size_t mr_size, uct_ib_mem_t **memh_p);
+                               unsigned mem_flags, int relaxed_order,
+                               size_t memh_base_size, size_t mr_size,
+                               uct_ib_mem_t **memh_p);
 
 void uct_ib_check_gpudirect_driver(uct_ib_md_t *md,
                                    const char *file,

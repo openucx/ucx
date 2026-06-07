@@ -97,6 +97,7 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
     ucs_status_t status;
     ucs_log_level_t level;
     ucs_memory_info_t mem_info;
+    uct_md_mem_reg_params_t reg_params;
     size_t reg_length;
     void *base_address;
 
@@ -191,8 +192,16 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
             }
 
             /* MD supports registration, register new memh on it */
-            status = uct_md_mem_reg(context->tl_mds[md_index].md, base_address,
-                                    reg_length, uct_flags, &uct_memh[memh_index]);
+            reg_params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS;
+            reg_params.flags      = uct_flags;
+            if (!(UCS_BIT(mem_type) & UCS_MEMORY_TYPES_CPU_ACCESSIBLE)) {
+                reg_params.field_mask |= UCT_MD_MEM_REG_FIELD_MEM_TYPE;
+                reg_params.mem_type    = mem_type;
+            }
+
+            status = uct_md_mem_reg_v2(context->tl_mds[md_index].md,
+                                       base_address, reg_length, &reg_params,
+                                       &uct_memh[memh_index]);
             if (status == UCS_OK) {
                 ucs_trace("registered address %p length %zu on md[%d]"
                           " memh[%d]=%p",
@@ -635,6 +644,11 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
                     context->reg_block_md_map[mem_type]);
 
         reg_params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS;
+        if (!(UCS_BIT(mem_type) & UCS_MEMORY_TYPES_CPU_ACCESSIBLE)) {
+            reg_params.field_mask |= UCT_MD_MEM_REG_FIELD_MEM_TYPE;
+            reg_params.mem_type    = mem_type;
+        }
+
         if (dmabuf_md_map & UCS_BIT(md_index)) {
             /* If this MD can consume a dmabuf and we have it - provide it */
             reg_params.field_mask |= UCT_MD_MEM_REG_FIELD_DMABUF_FD |
@@ -1275,6 +1289,7 @@ ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
     ucp_context_h context            = worker->context;
     const uct_md_attr_v2_t *md_attr  = &context->tl_mds[md_index].attr;
     uct_md_mkey_pack_params_t params = { .field_mask = 0 };
+    uct_md_mem_reg_params_t reg_params;
     uct_component_h cmpt;
     ucp_tl_md_t *tl_md;
     ucs_status_t status;
@@ -1290,9 +1305,16 @@ ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
     tl_md  = &context->tl_mds[md_index];
     cmpt   = context->tl_cmpts[tl_md->cmpt_index].cmpt;
     if (!(context->cache_md_map[mem_type] & UCS_BIT(md_index))) {
-        status = uct_md_mem_reg(context->tl_mds[md_index].md, remote_addr,
-                                length, UCT_MD_MEM_ACCESS_ALL,
-                                &pack_context->uct_memh);
+        reg_params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS;
+        reg_params.flags      = UCT_MD_MEM_ACCESS_ALL;
+        if (!(UCS_BIT(mem_type) & UCS_MEMORY_TYPES_CPU_ACCESSIBLE)) {
+            reg_params.field_mask |= UCT_MD_MEM_REG_FIELD_MEM_TYPE;
+            reg_params.mem_type    = mem_type;
+        }
+
+        status = uct_md_mem_reg_v2(context->tl_mds[md_index].md, remote_addr,
+                                   length, &reg_params,
+                                   &pack_context->uct_memh);
         if (status != UCS_OK) {
             return status;
         }

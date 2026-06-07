@@ -226,7 +226,8 @@ typedef struct {
 typedef enum {
     UCT_MD_MEM_REG_FIELD_FLAGS         = UCS_BIT(0),
     UCT_MD_MEM_REG_FIELD_DMABUF_FD     = UCS_BIT(1),
-    UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET = UCS_BIT(2)
+    UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET = UCS_BIT(2),
+    UCT_MD_MEM_REG_FIELD_MEM_TYPE      = UCS_BIT(3)
 } uct_md_mem_reg_field_mask_t;
 
 
@@ -491,6 +492,13 @@ typedef struct uct_md_mem_reg_params {
      * dmabuf region, then this field must be omitted or set to 0.
      */
     size_t                       dmabuf_offset;
+
+    /**
+     * Memory type of the region to register.
+     *
+     * If not set, it's assumed to be @ref UCS_MEMORY_TYPE_HOST.
+     */
+    ucs_memory_type_t            mem_type;
 } uct_md_mem_reg_params_t;
 
 

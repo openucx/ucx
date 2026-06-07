@@ -14,6 +14,10 @@
 #include <common/test.h>
 #include <uct/test_md.h>
 
+class test_ib_md_relaxed_order_policy : public ucs::test
+{
+};
+
 class test_ib_md : public test_md
 {
 protected:
@@ -49,6 +53,53 @@ private:
     void check_mlx5_mr(uct_ib_mem_t *ib_memh, bool is_expected_to_have_atomic,
                        bool is_expected_to_have_auxiliary_key);
 };
+
+UCS_TEST_F(test_ib_md_relaxed_order_policy, auto_mem_types)
+{
+    uint64_t all_mem_types  = UCS_MASK(UCS_MEMORY_TYPE_LAST);
+    uint64_t cuda_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
+                              UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
+
+    EXPECT_EQ(all_mem_types,
+              uct_ib_md_relaxed_order_auto_mem_types(UCS_CPU_VENDOR_AMD,
+                                                     UCS_CPU_MODEL_AMD_ROME));
+    EXPECT_EQ(cuda_mem_types,
+              uct_ib_md_relaxed_order_auto_mem_types(
+                      UCS_CPU_VENDOR_INTEL,
+                      UCS_CPU_MODEL_INTEL_EMERALD_RAPIDS));
+    EXPECT_EQ(0ul,
+              uct_ib_md_relaxed_order_auto_mem_types(
+                      UCS_CPU_VENDOR_INTEL, UCS_CPU_MODEL_INTEL_ICELAKE));
+}
+
+UCS_TEST_F(test_ib_md_relaxed_order_policy, memh_mem_type)
+{
+    uct_md_mem_reg_params_t params = {};
+    uct_ib_md_t md                 = {};
+
+    md.relaxed_order_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
+
+    EXPECT_FALSE(uct_ib_memh_is_relaxed_order(&md, &params));
+
+    params.field_mask = UCT_MD_MEM_REG_FIELD_MEM_TYPE;
+    params.mem_type   = UCS_MEMORY_TYPE_CUDA;
+    EXPECT_TRUE(uct_ib_memh_is_relaxed_order(&md, &params));
+
+    params.mem_type = UCS_MEMORY_TYPE_HOST;
+    EXPECT_FALSE(uct_ib_memh_is_relaxed_order(&md, &params));
+
+    md.relaxed_order_mem_types      = 0;
+    md.relaxed_order_auto_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
+
+    params.mem_type = UCS_MEMORY_TYPE_CUDA;
+    EXPECT_TRUE(uct_ib_memh_is_relaxed_order(&md, &params));
+
+    params.mem_type = UCS_MEMORY_TYPE_RDMA;
+    EXPECT_FALSE(uct_ib_memh_is_relaxed_order(&md, &params));
+
+    params.mem_type = UCS_MEMORY_TYPE_HOST;
+    EXPECT_FALSE(uct_ib_memh_is_relaxed_order(&md, &params));
+}
 
 void test_ib_md::init() {
     test_md::init();

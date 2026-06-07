@@ -12,6 +12,7 @@
 #include <tools/perf/lib/libperf_int.h>
 
 #include <hip/hip_runtime.h>
+#include <uct/api/v2/uct_v2.h>
 #include <ucs/sys/compiler.h>
 
 
@@ -66,6 +67,7 @@ uct_perf_rocm_alloc_reg_mem(const ucx_perf_context_t *perf,
                             unsigned flags,
                             uct_allocated_memory_t *alloc_mem)
 {
+    uct_md_mem_reg_params_t reg_params;
     ucs_status_t status;
 
     status = ucx_perf_rocm_alloc(length, mem_type, &alloc_mem->address);
@@ -73,8 +75,13 @@ uct_perf_rocm_alloc_reg_mem(const ucx_perf_context_t *perf,
         return status;
     }
 
-    status = uct_md_mem_reg(perf->uct.md, alloc_mem->address,
-                            length, flags, &alloc_mem->memh);
+    reg_params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS |
+                            UCT_MD_MEM_REG_FIELD_MEM_TYPE;
+    reg_params.flags      = flags;
+    reg_params.mem_type   = mem_type;
+
+    status = uct_md_mem_reg_v2(perf->uct.md, alloc_mem->address, length,
+                               &reg_params, &alloc_mem->memh);
     if (status != UCS_OK) {
         hipFree(alloc_mem->address);
         ucs_error("failed to register memory");
