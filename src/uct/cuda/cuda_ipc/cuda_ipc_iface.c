@@ -175,12 +175,12 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
     iface_addr_len    = UCS_PARAM_VALUE(UCT_IFACE_IS_REACHABLE_FIELD, params,
                                         iface_addr_length, IFACE_ADDR_LENGTH,
                                         sizeof(remote_iface_addr.pid));
-    /* Older peers do not send pid_ns, so unpack reports the default PID
-     * namespace. The comparison below treats them as same-namespace peers only
-     * when the local process is also in the default PID namespace. */
+    /* Older peers do not send pid_ns, so preserve legacy same-node reachability
+     * and apply the cross-namespace fabric check only to extended addresses. */
     remote_iface_addr = uct_cuda_ipc_iface_address_unpack(params->iface_addr,
                                                           iface_addr_len);
-    if (remote_iface_addr.pid_ns != ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID)) {
+    if ((iface_addr_len >= sizeof(remote_iface_addr)) &&
+        (remote_iface_addr.pid_ns != ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID))) {
         local_fabric_supported  = md->fabric_supported;
         remote_fabric_supported = !!(
                 uct_cuda_ipc_iface_dev_addr_flags(dev_addr, dev_addr_len) &
