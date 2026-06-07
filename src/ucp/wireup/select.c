@@ -438,6 +438,8 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
     ucp_ep_h ep                                    = select_params->ep;
     ucp_worker_h worker                            = ep->worker;
     ucp_context_h context                          = worker->context;
+    const int has_tiebreak                         =
+            (criteria->calc_tiebreak != NULL);
     ucp_proto_select_info_array_t candidates_array =
             UCS_ARRAY_DYNAMIC_INITIALIZER;
     ucp_wireup_select_info_t sinfo                 = {0};
@@ -665,11 +667,11 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
 
             score        = criteria->calc_score(wiface, md_attr, address, ae,
                                                    0, criteria->arg);
-            tiebreak     = (criteria->calc_tiebreak == NULL) ?
-                             UCP_WIREUP_NO_SCORE_TIEBREAK :
-                             criteria->calc_tiebreak(wiface, md_attr,
-                                                     address, ae, 0,
-                                                     criteria->tiebreak_arg);
+            tiebreak     = has_tiebreak ?
+                             criteria->calc_tiebreak(wiface, md_attr, address,
+                                                     ae, 0,
+                                                     criteria->tiebreak_arg) :
+                             UCP_WIREUP_NO_SCORE_TIEBREAK;
             priority     = iface_attr->priority + ae->iface_attr.priority;
             score_cmp    = found ?
                            ucp_score_prio_cmp(score, priority, sinfo.score,
@@ -681,7 +683,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
                       UCT_TL_RESOURCE_DESC_ARG(resource), addr_index,
                       criteria->title, score, tiebreak, priority);
 
-            if (criteria->calc_tiebreak != NULL) {
+            if (has_tiebreak) {
                 /* Save every reachable candidate so the tiebreak pass can
                  * compare them after the best primary score is known. */
                 candidate = ucs_array_append(&candidates_array,
@@ -692,7 +694,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
             }
 
             if (!found || (score_cmp > 0)) {
-                if (criteria->calc_tiebreak != NULL) {
+                if (has_tiebreak) {
                     sinfo = *candidate;
                 } else {
                     ucp_wireup_init_select_info(score, tiebreak, addr_index,
@@ -726,7 +728,7 @@ out:
         goto out_cleanup;
     }
 
-    if (criteria->calc_tiebreak != NULL) {
+    if (has_tiebreak) {
         ucp_wireup_select_transport_tiebreak(&candidates_array, &sinfo);
     }
 
