@@ -1571,11 +1571,11 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_twins_get_inline_0, rcx,
  * lane-index insertion order (mock_1:1 first) differ from the
  * deterministic bus-id sorted order [mock_0:1, mock_1:1, mock_2:1].
  *
- * Installs a "proto_mock" topology provider that gives any sys_dev
- * pair a 100ns latency penalty unless their indices differ by 1, and
- * forces the local memory onto mock_1:1's sys_dev.
- * Because the three mock devices get consecutive sys_devs, mock_0:1 and
- * mock_2:1 are adjacent to the buffer while mock_1:1 (the buffer's own device)
+ * Installs a "proto_mock" topology provider that gives any sys_dev 
+ * pair a 100ns latency penalty unless their indices differ by 1, and 
+ * forces the local memory onto mock_1:1's sys_dev. 
+ * Because the three mock devices get consecutive sys_devs, mock_0:1 and 
+ * mock_2:1 are adjacent to the buffer while mock_1:1 (the buffer's own device) 
  * is "far".
  *
  * Each test asserts two ranges in the proto cache:
