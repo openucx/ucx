@@ -548,10 +548,13 @@ uct_rc_ep_check_internal(uct_ep_h tl_ep, uct_completion_t *comp)
                                              uct_rc_iface_ops_t);
     ucs_status_t status;
 
-    /* in case if no TX resources are available then there is at least
-     * one signaled operation which provides actual peer status, in this case
-     * just return without any actions */
-    UCT_RC_CHECK_TXQP_RET(iface, ep, UCS_OK);
+    /* In case if no TX resources are available then:
+     * no comp: there is at least  one signaled operation which provides actual
+     *          peer status, in this case just return without any actions;
+     * with comp: WQE should be posted to to invoke completion,
+     *            so return NO_RESOURCE. */
+    UCT_RC_CHECK_TXQP_RET(iface, ep,
+                          (comp == NULL) ? UCS_OK : UCS_ERR_NO_RESOURCE);
 
     /* in case of not iface resources available then return NO_RESOURCE
      * to add request to pending queue */
