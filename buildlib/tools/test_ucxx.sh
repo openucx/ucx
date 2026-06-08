@@ -49,10 +49,6 @@ done
 
 case "$phase" in
   build)
-    # Upstream ucxx examples header uses usleep() but omits <unistd.h>;
-    # undeclared on newer gcc. Same patch as build_ucxx.sh.
-    hdr=python/ucxx/ucxx/examples/python_future_task.h
-    grep -q "include <unistd.h>" "$hdr" || sed -i '/^#pragma once/a #include <unistd.h>' "$hdr"
     if [ "${IS_GPU,,}" = "true" ]; then
       # sccache wrapper crashes CMake's compiler probe on the GPU build hosts; no-op it.
       cat > "$HOME/.local/bin/rapids-configure-sccache" <<'EOF'

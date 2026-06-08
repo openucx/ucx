@@ -79,13 +79,6 @@ if [[ "$phase" == wheel_* ]]; then
   export CC="$toolset/gcc" CXX="$toolset/g++"
 fi
 
-# Upstream ucxx header uses usleep() but omits <unistd.h>; undeclared on
-# newer gcc. Affects all C++ phases.
-if [[ "$phase" != docs ]]; then
-  hdr=python/ucxx/ucxx/examples/python_future_task.h
-  grep -q "include <unistd.h>" "$hdr" || sed -i '/^#pragma once/a #include <unistd.h>' "$hdr"
-fi
-
 case "$phase" in
   conda_cpp)              bash ci/build_cpp.sh ;;
   conda_python)           bash ci/build_python.sh ;;
