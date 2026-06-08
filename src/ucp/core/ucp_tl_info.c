@@ -135,24 +135,26 @@ void ucp_context_log_tl_info(ucp_context_h context,
     const ucs_table_config_t tcfg = {
         .n_cols = UCP_TL_INFO_NUM_COLS
     };
-    ucs_table_t table;
-    ucs_table_row_h row;
-    ucp_rsc_index_t cmpt_idx;
-    uct_device_type_t dev_type, cmpt_dev_type;
-    unsigned i, j;
-    size_t dev_buf_len;
-    int printed_any, first_type, first_cmpt, first_tl, first_unavail;
-    int dev_count, tl_enabled;
+    char tl_buf[UCT_TL_NAME_MAX + 8];
     char dev_buf[512];
     char title_buf[96];
-    char tl_buf[UCT_TL_NAME_MAX + 8];
+    int printed_any, first_type, first_cmpt, first_tl, first_unavail,
+            tl_enabled, dev_count;
+    uct_device_type_t dev_type, cmpt_dev_type;
+    ucp_rsc_index_t cmpt_idx;
+    ucs_table_row_h row;
+    ucs_table_t table;
+    size_t dev_buf_len;
+    unsigned i, j;
 
     if (!context->config.ext.print_transport_tables) {
         return;
     }
 
-    ucs_assertv(all_rscs != NULL, "all_rscs must not be NULL");
-    ucs_assertv(num_all_rscs > 0, "num_all_rscs must be greater than 0");
+    if ((all_rscs == NULL) || (num_all_rscs == 0)) {
+        ucs_warn("skipping transport table: no resource info captured");
+        return;
+    }
 
     ucs_table_init(&table, &tcfg);
 
@@ -319,7 +321,6 @@ void ucp_context_log_tl_info(ucp_context_h context,
         }
     }
 
-    /* Legend information */
     ucs_table_add_separator(&table);
     for (i = 0; i < ucs_static_array_size(ucp_tl_info_legend_rows); ++i) {
         ucs_table_add_row(&table, &row);

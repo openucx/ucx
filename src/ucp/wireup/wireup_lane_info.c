@@ -146,6 +146,7 @@ ucp_wireup_collect_lane_types(const ucp_ep_config_key_t *key,
     if (count_p != NULL) {
         *count_p = count;
     }
+
     return types_union;
 }
 
