@@ -162,6 +162,73 @@ UCS_TEST_F(test_topo, find_device_by_bus_id) {
     EXPECT_GE(ucs_topo_num_devices(), 2);
 }
 
+UCS_TEST_F(test_topo, find_device_by_bus_id_and_user_value) {
+    static const uintptr_t user_value1 = 17;
+    static const uintptr_t user_value2 = 42;
+    ucs_global_state_t *state;
+    ucs_sys_device_t dev1, dev2, dev1_again, dev2_again, bdf_dev;
+    ucs_sys_bus_id_t dummy_bus_id;
+    ucs_sys_bus_id_t bus_id1;
+    ucs_sys_bus_id_t bus_id2;
+    ucs_sys_dev_distance_t distance;
+    ucs_status_t status;
+
+    dummy_bus_id.domain   = 0x0001;
+    dummy_bus_id.bus      = 0x23;
+    dummy_bus_id.slot     = 0x04;
+    dummy_bus_id.function = 0;
+
+    status = ucs_topo_find_device_by_bus_id_and_user_value(&dummy_bus_id,
+                                                           user_value1, &dev1);
+    ASSERT_UCS_OK(status);
+    EXPECT_LT(dev1, UCS_SYS_DEVICE_ID_MAX);
+
+    status = ucs_topo_find_device_by_bus_id_and_user_value(&dummy_bus_id,
+                                                           user_value1,
+                                                           &dev1_again);
+    ASSERT_UCS_OK(status);
+    EXPECT_EQ(dev1, dev1_again);
+
+    status = ucs_topo_find_device_by_bus_id_and_user_value(&dummy_bus_id,
+                                                           user_value2, &dev2);
+    ASSERT_UCS_OK(status);
+    EXPECT_NE(dev1, dev2);
+
+    status = ucs_topo_find_device_by_bus_id(&dummy_bus_id, &bdf_dev);
+    ASSERT_UCS_OK(status);
+    EXPECT_EQ(dev1, bdf_dev);
+
+    EXPECT_EQ(user_value1, ucs_topo_sys_device_get_user_value(dev1));
+    EXPECT_EQ(user_value2, ucs_topo_sys_device_get_user_value(dev2));
+
+    status = ucs_topo_get_device_bus_id(dev1, &bus_id1);
+    ASSERT_UCS_OK(status);
+    status = ucs_topo_get_device_bus_id(dev2, &bus_id2);
+    ASSERT_UCS_OK(status);
+    EXPECT_EQ(bus_id1.domain, bus_id2.domain);
+    EXPECT_EQ(bus_id1.bus, bus_id2.bus);
+    EXPECT_EQ(bus_id1.slot, bus_id2.slot);
+    EXPECT_EQ(bus_id1.function, bus_id2.function);
+
+    status = ucs_topo_get_distance(dev1, dev2, &distance);
+    ASSERT_UCS_OK(status);
+    EXPECT_NEAR(distance.latency, 0.0, 1e-9);
+
+    state = ucs_topo_extract_state();
+    ASSERT_TRUE(state != NULL);
+    ucs_topo_restore_state(state);
+
+    status = ucs_topo_find_device_by_bus_id_and_user_value(&dummy_bus_id,
+                                                           user_value2,
+                                                           &dev2_again);
+    ASSERT_UCS_OK(status);
+    EXPECT_EQ(dev2, dev2_again);
+
+    status = ucs_topo_find_device_by_bus_id_and_user_value(
+            &dummy_bus_id, UINTPTR_MAX, &dev2_again);
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+}
+
 UCS_TEST_F(test_topo, get_distance) {
     ucs_status_t status;
     ucs_sys_dev_distance_t distance;

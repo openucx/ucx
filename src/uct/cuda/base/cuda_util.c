@@ -61,12 +61,8 @@ ucs_sys_device_t uct_cuda_get_sys_dev(CUdevice cuda_device)
     /* Function - always 0 */
     bus_id.function = 0;
 
-    status = ucs_topo_find_device_by_bus_id(&bus_id, &sys_dev);
-    if (status != UCS_OK) {
-        goto err;
-    }
-
-    status = ucs_topo_sys_device_set_user_value(sys_dev, cuda_device);
+    status = ucs_topo_find_device_by_bus_id_and_user_value(
+            &bus_id, (uintptr_t)cuda_device, &sys_dev);
     if (status != UCS_OK) {
         goto err;
     }

@@ -165,6 +165,27 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
 
 
 /**
+ * Find system device by pci bus id and user-defined value.
+ *
+ * This is used for logical devices which share the same PCI bus id but still
+ * need different system device indexes. If an existing system device with the
+ * same bus id and user value exists, it is returned. Otherwise, if the
+ * canonical system device for this bus id has no user value, it is claimed; if
+ * not, a new system device with the same bus id is created.
+ *
+ * @param [in]  bus_id      pointer to bus id of the device of interest.
+ * @param [in]  user_value  user-defined value identifying the logical device.
+ * @param [out] sys_dev     system device index associated with the value.
+ *
+ * @return UCS_OK or error in case device cannot be found.
+ */
+ucs_status_t
+ucs_topo_find_device_by_bus_id_and_user_value(const ucs_sys_bus_id_t *bus_id,
+                                              uintptr_t user_value,
+                                              ucs_sys_device_t *sys_dev);
+
+
+/**
  * Find pci bus id of the given system device.
  *
  * @param [in]  sys_dev system device index.
