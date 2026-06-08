@@ -127,19 +127,16 @@ ucs_status_t ucs_table_get_status(const ucs_table_t *table);
  * blank "|     " carry-over segments (visually continuing the cells above into
  * the cells below); the remaining columns render as "+----" dashed segments.
  *
- * The top and bottom frame separators are inserted automatically by
- * ucs_table_render(); do not add them explicitly.
- *
  * @param [in,out] table        Table to append to.
  * @param [in]     merged_cols  Number of leading columns to render as blank
- *                              carry-over (must be <= n_cols).
+ *                              carry-over.
  */
 void ucs_table_add_separator_with_merged_cols(ucs_table_t *table,
                                               unsigned merged_cols);
 
 
 /**
- * Shorthand for ucs_table_add_separator_with_merged_cols(table, 0).
+ * Append a horizontal separator.
  *
  * @param [in,out] table  Table to append to.
  */

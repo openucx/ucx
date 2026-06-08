@@ -28,7 +28,6 @@
 #define UCP_TL_INFO_HDR_COMPONENT "Component"
 #define UCP_TL_INFO_UNAVAILABLE   "<unavailable>"
 
-/* Number of body columns in the rendered table. */
 #define UCP_TL_INFO_NUM_COLS 4
 
 
@@ -88,11 +87,8 @@ ucp_tl_info_cmpt_dev_type(const ucp_tl_info_entry_t *all_rscs,
 }
 
 /*
- * Emit one data row and toggle the per-(type, cmpt, tl) "first" flags so
- * that subsequent rows in the same group leave those columns blank. The
- * carry-over rendering above an inter-group separator is decided by the
- * `merged_cols` argument passed when the separator is created (see the
- * call sites of ucs_table_add_separator_with_merged_cols below).
+ * Emit one data row and clear the per-(type, cmpt, tl) "first" flags so
+ * subsequent rows in the same group leave those columns blank.
  */
 static void ucp_tl_info_emit_row(ucs_table_t *table, const char *type_str,
                                  const char *cmpt_str, const char *tl_str,
@@ -207,14 +203,9 @@ void ucp_context_log_tl_info(ucp_context_h context,
                 }
 
                 if (printed_any) {
-                    /* Carry-over depth on the separator above the
-                     * row about to be emitted:
-                     *  - 2 cols (type + component) when joining a
-                     *    new TL within the same component.
-                     *  - 1 col (type only) when joining a new
-                     *    component within the same dev_type.
-                     *  - 0 (plain dashed) when starting a brand-new
-                     *    dev_type. */
+                    /* Carry-over cols on the separator above this row:
+                     * 2 for a new TL in the same component, 1 for a
+                     * new component in the same dev_type, 0 otherwise. */
                     ucs_table_add_separator_with_merged_cols(
                             &table, !first_cmpt ? 2 : (first_type ? 0 : 1));
                 }
@@ -313,10 +304,8 @@ void ucp_context_log_tl_info(ucp_context_h context,
                 ucs_table_row_add_cell_empty(&table, row, 1);
                 first_unavail = 0;
             } else {
-                /* "type" column on the row below stays empty; carry
-                 * it over via the separator's merged_cols=1 so the
-                 * renderer emits a blank "|     " segment above the
-                 * empty type cell instead of a dashed "+---". */
+                /* Carry over the empty "type" column with merged_cols=1
+                 * so the separator stays blank above it. */
                 ucs_table_add_separator_with_merged_cols(&table, 1);
                 ucs_table_add_row(&table, &row);
                 ucs_table_row_add_cell_empty(&table, row, 1);

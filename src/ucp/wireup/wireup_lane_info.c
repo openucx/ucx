@@ -24,7 +24,6 @@
 #define UCP_EP_LANE_INFO_HDR_COUNT "# Lanes"
 #define UCP_EP_LANE_INFO_HDR_TYPES "Lane Types"
 
-/* Number of body columns in the rendered table. */
 #define UCP_EP_LANE_INFO_NUM_COLS 4
 
 

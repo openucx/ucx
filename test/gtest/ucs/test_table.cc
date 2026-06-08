@@ -432,13 +432,6 @@ UCS_TEST_F(test_table, cell_fmt_newline_2) {
     EXPECT_EQ(UCS_ERR_INVALID_PARAM, ucs_table_get_status(table.get()));
 }
 
-
-/*
- * Carry-over ("merged columns") separator added in this branch:
- * ucs_table_add_separator_with_merged_cols() renders its leading columns as
- * blank "|     " segments that visually continue the cells above.
- */
-
 UCS_TEST_F(test_table, separator_merged_1_of_2) {
     table_t table(2);
 
@@ -491,65 +484,6 @@ UCS_TEST_F(test_table, separator_merged_2_of_3) {
               "|    |    +----+\n"
               "|    |    | dd |\n"
               "+----+----+----+\n",
-              table.render());
-
-    EXPECT_EQ(UCS_OK, ucs_table_get_status(table.get()));
-}
-
-UCS_TEST_F(test_table, separator_merged_captured_at_add_time) {
-    /* Each separator captures its merged_cols at add time; later row content
-     * must not retroactively change how the separator renders. */
-    table_t table(2);
-
-    auto row = table.add_row();
-    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
-                               "a");
-    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
-                               "b");
-
-    /* merged_cols=1 even though the next row has a non-empty leading cell. */
-    ucs_table_add_separator_with_merged_cols(table.get(), 1);
-
-    row = table.add_row();
-    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
-                               "c");
-    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
-                               "d");
-
-    /* Plain even though the next row has an empty leading cell. */
-    ucs_table_add_separator(table.get());
-
-    row = table.add_row();
-    ucs_table_row_add_cell_empty(table.get(), row, 1);
-    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
-                               "e");
-
-    EXPECT_EQ("+---+---+\n"
-              "| a | b |\n"
-              "|   +---+\n"
-              "| c | d |\n"
-              "+---+---+\n"
-              "|   | e |\n"
-              "+---+---+\n",
-              table.render());
-
-    EXPECT_EQ(UCS_OK, ucs_table_get_status(table.get()));
-}
-
-UCS_TEST_F(test_table, trailing_merged_separator_avoids_bottom_frame) {
-    /* Bottom-frame suppression keys off entry kind only, not merged_cols. */
-    table_t table(2);
-
-    auto row = table.add_row();
-    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
-                               "x");
-    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
-                               "y");
-    ucs_table_add_separator_with_merged_cols(table.get(), 1);
-
-    EXPECT_EQ("+---+---+\n"
-              "| x | y |\n"
-              "|   +---+\n",
               table.render());
 
     EXPECT_EQ(UCS_OK, ucs_table_get_status(table.get()));

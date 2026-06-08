@@ -1291,13 +1291,11 @@ static int ucp_tl_resource_is_same_device(const uct_tl_resource_desc_t *resource
            (resource1->sys_device == resource2->sys_device));
 }
 
-static int
-ucp_add_tl_resource_if_enabled(ucp_context_h context, ucp_md_index_t md_index,
-                               const ucp_config_t *config,
-                               const ucs_string_set_t *aux_tls,
-                               const uct_tl_resource_desc_t *resource,
-                               unsigned *num_resources_p,
-                               uint64_t dev_cfg_masks[], uint64_t *tl_cfg_mask)
+static int ucp_add_tl_resource_if_enabled(
+    ucp_context_h context, ucp_md_index_t md_index,
+    const ucp_config_t *config, const ucs_string_set_t *aux_tls,
+    const uct_tl_resource_desc_t *resource, unsigned *num_resources_p,
+    uint64_t dev_cfg_masks[], uint64_t *tl_cfg_mask)
 {
     ucp_tl_md_t *md = &context->tl_mds[md_index];
     uint8_t rsc_flags;
@@ -1377,8 +1375,7 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
         goto free_resources;
     }
 
-    /* Collect the full (pre-filter) resource list only when the transports
-     * table will be printed; */
+    /* Collect the full (pre-filter) resource list for the transport tables */
     if (context->config.ext.print_transport_tables) {
         tmp_info = ucs_realloc(*all_rscs_p,
                                sizeof(**all_rscs_p) *
@@ -2134,8 +2131,8 @@ static void ucp_fill_resources_reg_md_map_update(ucp_context_h context)
     }
 }
 
-static ucs_status_t
-ucp_fill_resources(ucp_context_h context, const ucp_config_t *config)
+static ucs_status_t ucp_fill_resources(ucp_context_h context,
+    const ucp_config_t *config)
 {
     uint64_t dev_cfg_masks[UCT_DEVICE_TYPE_LAST] = {};
     uint64_t tl_cfg_mask                         = 0;
