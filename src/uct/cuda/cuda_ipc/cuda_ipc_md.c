@@ -112,24 +112,25 @@ uct_cuda_ipc_md_check_imex_channel_cb(const struct dirent *entry, void *arg)
 static int uct_cuda_ipc_md_check_fabric_support(void)
 {
 #if HAVE_CUDA_FABRIC
-    int fabric_supported = 0;
+    int imex_channel_found = 0;
+    ucs_status_t status;
     CUdevice cu_device;
 
-    if ((UCT_CUDADRV_FUNC(cuCtxGetDevice(&cu_device),
-                          UCS_LOG_LEVEL_DEBUG) != UCS_OK) ||
-        !uct_cuda_base_device_supports_fabric(cu_device)) {
+    /* md_open can run without a current context, so query CUDA device 0. */
+    status = UCT_CUDADRV_FUNC(cuDeviceGet(&cu_device, 0), UCS_LOG_LEVEL_DEBUG);
+    if ((status != UCS_OK) || !uct_cuda_base_device_supports_fabric(cu_device)) {
         return 0;
     }
 
     if (ucs_sys_readdir(UCT_CUDA_IPC_IMEX_CHANNELS_PATH,
                         uct_cuda_ipc_md_check_imex_channel_cb,
-                        &fabric_supported) != UCS_OK) {
+                        &imex_channel_found) != UCS_OK) {
         return 0;
     }
 
     ucs_debug("CUDA fabric IPC support on device %d is %s", cu_device,
-              fabric_supported ? "enabled" : "disabled");
-    return fabric_supported;
+              imex_channel_found ? "enabled" : "disabled");
+    return imex_channel_found;
 #else
     return 0;
 #endif
