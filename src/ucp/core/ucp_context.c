@@ -1292,10 +1292,10 @@ static int ucp_tl_resource_is_same_device(const uct_tl_resource_desc_t *resource
 }
 
 static int ucp_add_tl_resource_if_enabled(
-    ucp_context_h context, ucp_md_index_t md_index,
-    const ucp_config_t *config, const ucs_string_set_t *aux_tls,
-    const uct_tl_resource_desc_t *resource, unsigned *num_resources_p,
-    uint64_t dev_cfg_masks[], uint64_t *tl_cfg_mask)
+        ucp_context_h context, ucp_md_index_t md_index,
+        const ucp_config_t *config, const ucs_string_set_t *aux_tls,
+        const uct_tl_resource_desc_t *resource, unsigned *num_resources_p,
+        uint64_t dev_cfg_masks[], uint64_t *tl_cfg_mask)
 {
     ucp_tl_md_t *md = &context->tl_mds[md_index];
     uint8_t rsc_flags;
