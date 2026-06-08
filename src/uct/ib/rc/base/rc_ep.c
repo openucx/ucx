@@ -577,8 +577,7 @@ static ucs_status_t uct_rc_ep_check_progress(uct_pending_req_t *self)
      * rest run. With comp == NULL we have nothing to fire and the sibling's
      * keepalive WQE already covers peer-liveness - skip the redundant post. */
     if ((comp == NULL) && !(ep->flags & UCT_RC_EP_FLAG_KEEPALIVE_PENDING)) {
-        ucs_mpool_put(req);
-        return UCS_OK;
+        goto out;
     }
 
     status = uct_rc_ep_check_internal(req->ep, comp);
@@ -589,16 +588,16 @@ static ucs_status_t uct_rc_ep_check_progress(uct_pending_req_t *self)
     ep->flags &= ~UCT_RC_EP_FLAG_KEEPALIVE_PENDING;
     if (status == UCS_OK) {
         ucs_assert(comp == NULL);
-        ucs_mpool_put(req);
-        return UCS_OK;
+        goto out;
     }
 
     if (status == UCS_INPROGRESS) {
-        return UCS_OK;
+        goto out;
     }
 
     ucs_assert(UCS_STATUS_IS_ERR(status));
     uct_invoke_completion(comp, status);
+out:
     ucs_mpool_put(req);
     return UCS_OK;
 }
