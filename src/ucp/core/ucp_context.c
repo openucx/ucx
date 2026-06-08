@@ -1350,9 +1350,8 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
                      uint64_t *tl_cfg_mask, ucp_tl_info_entry_t **all_rscs_p,
                      unsigned *num_all_rscs_p)
 {
-    ucp_tl_md_t *md    = &context->tl_mds[md_index];
-    unsigned info_base = 0;
-    int info_added     = 0;
+    ucp_tl_md_t *md                 = &context->tl_mds[md_index];
+    ucp_tl_info_entry_t *info_slice = NULL;
     uct_tl_resource_desc_t *tl_resources;
     ucp_tl_resource_desc_t *tmp;
     ucp_tl_info_entry_t *tmp_info;
@@ -1386,14 +1385,13 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
                      "table will be incomplete");
         } else {
             *all_rscs_p = tmp_info;
-            info_base   = *num_all_rscs_p;
-            info_added  = 1;
+            info_slice  = &(*all_rscs_p)[*num_all_rscs_p];
             for (i = 0; i < num_tl_resources; ++i) {
-                (*all_rscs_p)[*num_all_rscs_p].rsc        = tl_resources[i];
-                (*all_rscs_p)[*num_all_rscs_p].cmpt_index = md->cmpt_index;
-                (*all_rscs_p)[*num_all_rscs_p].enabled    = 0;
-                (*num_all_rscs_p)++;
+                info_slice[i].rsc        = tl_resources[i];
+                info_slice[i].cmpt_index = md->cmpt_index;
+                info_slice[i].enabled    = 0;
             }
+            *num_all_rscs_p += num_tl_resources;
         }
     }
 
@@ -1424,8 +1422,8 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
                                                      num_resources_p,
                                                      dev_cfg_masks,
                                                      tl_cfg_mask);
-        if (info_added && rsc_enabled) {
-            (*all_rscs_p)[info_base + i].enabled = 1;
+        if ((info_slice != NULL) && rsc_enabled) {
+            info_slice[i].enabled = 1;
         }
     }
 
