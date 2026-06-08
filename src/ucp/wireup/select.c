@@ -2913,6 +2913,37 @@ out:
     return UCS_OK;
 }
 
+static ucs_status_t
+ucp_wireup_select_aux_transport_by_seg_size(
+        const ucp_wireup_select_context_t *select_ctx,
+        const ucp_wireup_select_params_t *select_params,
+        const ucp_wireup_criteria_t *criteria, int show_error,
+        ucp_wireup_select_info_t *select_info)
+{
+    ucs_status_t status;
+
+    status = ucp_wireup_select_transport(select_ctx, select_params, criteria,
+                                         ucp_tl_bitmap_max, UINT64_MAX,
+                                         UINT64_MAX, UINT64_MAX, show_error,
+                                         select_info);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (ucs_fp_compare(select_info->score, 0.0) > 0) {
+        return UCS_OK;
+    }
+
+    ucs_trace("ep %p: no %s transport to %s with non-zero seg_size",
+              select_params->ep, criteria->title, select_params->address->name);
+    if (select_params->show_error && show_error) {
+        ucs_error("no %s transport to %s with non-zero seg_size",
+                  criteria->title, select_params->address->name);
+    }
+
+    return UCS_ERR_UNREACHABLE;
+}
+
 ucs_status_t
 ucp_wireup_select_aux_transport(ucp_ep_h ep, unsigned ep_init_flags,
                                 ucp_tl_bitmap_t tl_bitmap,
@@ -2931,10 +2962,10 @@ ucp_wireup_select_aux_transport(ucp_ep_h ep, unsigned ep_init_flags,
     ucp_wireup_fill_aux_criteria(&criteria, ep_init_flags,
                                  UCP_ADDR_IFACE_FLAG_CB_ASYNC);
     criteria.calc_score = ucp_wireup_aux_seg_size_score_func;
-    status = ucp_wireup_select_transport(&select_ctx, &select_params, &criteria,
-                                         ucp_tl_bitmap_max, UINT64_MAX,
-                                         UINT64_MAX, UINT64_MAX, 1,
-                                         select_info);
+    status = ucp_wireup_select_aux_transport_by_seg_size(&select_ctx,
+                                                         &select_params,
+                                                         &criteria, 0,
+                                                         select_info);
     if (status == UCS_OK) {
         return UCS_OK;
     }
@@ -2943,7 +2974,8 @@ ucp_wireup_select_aux_transport(ucp_ep_h ep, unsigned ep_init_flags,
      * requirement */
     ucp_wireup_fill_aux_criteria(&criteria, ep_init_flags, 0);
     criteria.calc_score = ucp_wireup_aux_seg_size_score_func;
-    return ucp_wireup_select_transport(&select_ctx, &select_params, &criteria,
-                                       ucp_tl_bitmap_max, UINT64_MAX,
-                                       UINT64_MAX, UINT64_MAX, 1, select_info);
+    return ucp_wireup_select_aux_transport_by_seg_size(&select_ctx,
+                                                       &select_params,
+                                                       &criteria, 1,
+                                                       select_info);
 }
