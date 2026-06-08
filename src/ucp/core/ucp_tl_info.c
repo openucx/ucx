@@ -10,6 +10,7 @@
 
 #include "ucp_tl_info.h"
 
+#include <ucs/algorithm/qsort_r.h>
 #include <ucs/datastruct/string_buffer.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/table.h>
@@ -46,16 +47,23 @@ static int ucp_tl_info_is_same_group(const ucp_tl_info_entry_t *entries,
 }
 
 static int
-ucp_tl_info_is_group_leader(const ucp_tl_info_entry_t *entries, unsigned idx)
+ucp_tl_info_compare(const void *a, const void *b, void *UCS_V_UNUSED arg)
 {
-    unsigned j;
+    const ucp_tl_info_entry_t *ea = a;
+    const ucp_tl_info_entry_t *eb = b;
+    int diff;
 
-    for (j = 0; j < idx; ++j) {
-        if (ucp_tl_info_is_same_group(entries, j, idx)) {
-            return 0;
-        }
+    diff = (int)ea->rsc.dev_type - (int)eb->rsc.dev_type;
+    if (diff != 0) {
+        return diff;
     }
-    return 1;
+
+    diff = (int)ea->cmpt_index - (int)eb->cmpt_index;
+    if (diff != 0) {
+        return diff;
+    }
+
+    return strcmp(ea->rsc.tl_name, eb->rsc.tl_name);
 }
 
 static int ucp_tl_info_cmpt_has_rscs(const ucp_tl_info_entry_t *all_rscs,
@@ -70,20 +78,6 @@ static int ucp_tl_info_cmpt_has_rscs(const ucp_tl_info_entry_t *all_rscs,
         }
     }
     return 0;
-}
-
-static uct_device_type_t
-ucp_tl_info_cmpt_dev_type(const ucp_tl_info_entry_t *all_rscs,
-                          unsigned num_all_rscs, ucp_rsc_index_t cmpt_idx)
-{
-    unsigned i;
-
-    for (i = 0; i < num_all_rscs; ++i) {
-        if (all_rscs[i].cmpt_index == cmpt_idx) {
-            return all_rscs[i].rsc.dev_type;
-        }
-    }
-    return UCT_DEVICE_TYPE_LAST;
 }
 
 /*
@@ -128,24 +122,24 @@ static void ucp_tl_info_emit_row(ucs_table_t *table, const char *type_str,
 }
 
 void ucp_context_log_tl_info(ucp_context_h context,
-                             const ucp_tl_info_entry_t *all_rscs,
+                             ucp_tl_info_entry_t *all_rscs,
                              unsigned num_all_rscs)
 {
     ucs_string_buffer_t strb      = UCS_STRING_BUFFER_INITIALIZER;
     const ucs_table_config_t tcfg = {
         .n_cols = UCP_TL_INFO_NUM_COLS
     };
-    char tl_buf[UCT_TL_NAME_MAX + 8];
-    char dev_buf[512];
-    char title_buf[96];
-    int printed_any, first_type, first_cmpt, first_tl, first_unavail,
-            tl_enabled, dev_count;
-    uct_device_type_t dev_type, cmpt_dev_type;
+    UCS_STRING_BUFFER_ONSTACK(tl_strb, UCT_TL_NAME_MAX + 8);
+    UCS_STRING_BUFFER_ONSTACK(dev_strb, 512);
+    UCS_STRING_BUFFER_ONSTACK(title_strb, 128);
+    int printed_any, first_type, first_cmpt, first_tl, first_unavail;
+    int tl_enabled, dev_count, new_dev_type, new_cmpt;
+    uct_device_type_t dev_type;
     ucp_rsc_index_t cmpt_idx;
     ucs_table_row_h row;
     ucs_table_t table;
-    size_t dev_buf_len;
-    unsigned i, j;
+    ucs_status_t status;
+    unsigned i, j, group_end;
 
     if (!context->config.ext.print_transport_tables) {
         return;
@@ -156,20 +150,24 @@ void ucp_context_log_tl_info(ucp_context_h context,
         return;
     }
 
+    /* Sort by (dev_type, component, transport) so that the rows of each group
+     * are contiguous and group boundaries can be found by comparing adjacent
+     * entries, instead of rescanning the whole array per group. */
+    ucs_qsort_r(all_rscs, num_all_rscs, sizeof(*all_rscs), ucp_tl_info_compare,
+                NULL);
+
     ucs_table_init(&table, &tcfg);
 
+    ucs_string_buffer_appendf(&title_strb, "Available Transports and Devices");
     if (!ucs_string_is_empty(context->name)) {
-        snprintf(title_buf, sizeof(title_buf),
-                 "Available Transports and Devices (ctx: %s)", context->name);
-    } else {
-        snprintf(title_buf, sizeof(title_buf),
-                 "Available Transports and Devices");
+        ucs_string_buffer_appendf(&title_strb, " (ctx: %s)", context->name);
     }
 
     /* Title spans all body columns. */
     ucs_table_add_row(&table, &row);
     ucs_table_row_add_cell_fmt(&table, row, UCP_TL_INFO_NUM_COLS,
-                               UCS_TABLE_ALIGN_LEFT, "%s", title_buf);
+                               UCS_TABLE_ALIGN_LEFT, "%s",
+                               ucs_string_buffer_cstr(&title_strb));
     ucs_table_add_separator(&table);
 
     /* Column headers. */
@@ -185,107 +183,89 @@ void ucp_context_log_tl_info(ucp_context_h context,
     ucs_table_add_separator(&table);
 
     printed_any = 0;
-    for (dev_type = UCT_DEVICE_TYPE_NET; dev_type < UCT_DEVICE_TYPE_LAST;
-         ++dev_type) {
-        first_type = 1;
-        for (cmpt_idx = 0; cmpt_idx < context->num_cmpts; ++cmpt_idx) {
-            /* All resources from a single component are assumed to share the
-             * same device type, so the first match determines the type */
-            cmpt_dev_type = ucp_tl_info_cmpt_dev_type(all_rscs, num_all_rscs,
-                                                      cmpt_idx);
-            if (cmpt_dev_type != dev_type) {
-                continue;
+    for (i = 0; i < num_all_rscs; i = group_end) {
+        /* The sorted array keeps each (component, transport) group contiguous;
+         * find the end of the group that starts at i. */
+        for (group_end = i + 1; group_end < num_all_rscs; ++group_end) {
+            if (!ucp_tl_info_is_same_group(all_rscs, i, group_end)) {
+                break;
+            }
+        }
+
+        dev_type = all_rscs[i].rsc.dev_type;
+        cmpt_idx = all_rscs[i].cmpt_index;
+
+        new_dev_type = (i == 0) || (all_rscs[i - 1].rsc.dev_type != dev_type);
+        new_cmpt   = new_dev_type || (all_rscs[i - 1].cmpt_index != cmpt_idx);
+        first_type = new_dev_type;
+        first_cmpt = new_cmpt;
+        first_tl   = 1;
+
+        if (printed_any) {
+            /* Carry-over cols on the separator above this row:
+             * 2 for a new TL in the same component, 1 for a
+             * new component in the same dev_type, 0 otherwise. */
+            ucs_table_add_separator_with_merged_cols(
+                    &table, !new_cmpt ? 2 : (new_dev_type ? 0 : 1));
+        }
+
+        tl_enabled = 0;
+        for (j = i; j < group_end; ++j) {
+            if (all_rscs[j].enabled) {
+                tl_enabled = 1;
+                break;
+            }
+        }
+
+        ucs_string_buffer_reset(&tl_strb);
+        ucs_string_buffer_appendf(&tl_strb, "%s %s",
+                                  tl_enabled ? UCP_TL_INFO_MARK_ENABLED :
+                                               UCP_TL_INFO_MARK_DISABLED,
+                                  all_rscs[i].rsc.tl_name);
+
+        dev_count = 0;
+        ucs_string_buffer_reset(&dev_strb);
+        for (j = i; j < group_end; ++j) {
+            if ((dev_count > 0) &&
+                (dev_count % UCP_TL_INFO_DEVS_PER_LINE == 0)) {
+                ucp_tl_info_emit_row(&table, uct_device_type_names[dev_type],
+                                     context->tl_cmpts[cmpt_idx].attr.name,
+                                     ucs_string_buffer_cstr(&tl_strb),
+                                     ucs_string_buffer_cstr(&dev_strb),
+                                     &first_type, &first_cmpt, &first_tl,
+                                     &printed_any);
+                ucs_string_buffer_reset(&dev_strb);
             }
 
-            first_cmpt = 1;
-            for (i = 0; i < num_all_rscs; ++i) {
-                if ((all_rscs[i].cmpt_index != cmpt_idx) ||
-                    !ucp_tl_info_is_group_leader(all_rscs, i)) {
-                    continue;
-                }
-
-                if (printed_any) {
-                    /* Carry-over cols on the separator above this row:
-                     * 2 for a new TL in the same component, 1 for a
-                     * new component in the same dev_type, 0 otherwise. */
-                    ucs_table_add_separator_with_merged_cols(
-                            &table, !first_cmpt ? 2 : (first_type ? 0 : 1));
-                }
-
-                tl_enabled = 0;
-                for (j = i; j < num_all_rscs; ++j) {
-                    if (ucp_tl_info_is_same_group(all_rscs, j, i) &&
-                        all_rscs[j].enabled) {
-                        tl_enabled = 1;
-                        break;
-                    }
-                }
-
-                snprintf(tl_buf, sizeof(tl_buf), "%s %s",
-                         tl_enabled ? UCP_TL_INFO_MARK_ENABLED :
-                                      UCP_TL_INFO_MARK_DISABLED,
-                         all_rscs[i].rsc.tl_name);
-
-                first_tl    = 1;
-                dev_count   = 0;
-                dev_buf[0]  = '\0';
-                dev_buf_len = 0;
-                for (j = i; j < num_all_rscs; ++j) {
-                    if (!ucp_tl_info_is_same_group(all_rscs, j, i)) {
-                        continue;
-                    }
-
-                    if ((dev_count > 0) &&
-                        (dev_count % UCP_TL_INFO_DEVS_PER_LINE == 0)) {
-                        ucp_tl_info_emit_row(
-                                &table, uct_device_type_names[dev_type],
-                                context->tl_cmpts[cmpt_idx].attr.name, tl_buf,
-                                dev_buf, &first_type, &first_cmpt, &first_tl,
-                                &printed_any);
-                        dev_buf[0]  = '\0';
-                        dev_buf_len = 0;
-                    }
-
-                    if (dev_count % UCP_TL_INFO_DEVS_PER_LINE > 0) {
-                        dev_buf_len += snprintf(dev_buf + dev_buf_len,
-                                                sizeof(dev_buf) - dev_buf_len,
-                                                "  ");
-                        if (dev_buf_len >= sizeof(dev_buf)) {
-                            dev_buf_len = sizeof(dev_buf) - 1;
-                        }
-                    }
-                    if (all_rscs[j].rsc.sys_device !=
-                        UCS_SYS_DEVICE_ID_UNKNOWN) {
-                        dev_buf_len += snprintf(
-                                dev_buf + dev_buf_len,
-                                sizeof(dev_buf) - dev_buf_len, "%s %s (%s)",
-                                all_rscs[j].enabled ? UCP_TL_INFO_MARK_ENABLED :
-                                                      UCP_TL_INFO_MARK_DISABLED,
-                                all_rscs[j].rsc.dev_name,
-                                ucs_topo_sys_device_get_name(
-                                        all_rscs[j].rsc.sys_device));
-                    } else {
-                        dev_buf_len += snprintf(
-                                dev_buf + dev_buf_len,
-                                sizeof(dev_buf) - dev_buf_len, "%s %s",
-                                all_rscs[j].enabled ? UCP_TL_INFO_MARK_ENABLED :
-                                                      UCP_TL_INFO_MARK_DISABLED,
-                                all_rscs[j].rsc.dev_name);
-                    }
-                    if (dev_buf_len >= sizeof(dev_buf)) {
-                        dev_buf_len = sizeof(dev_buf) - 1;
-                    }
-                    dev_count++;
-                }
-
-                if (dev_buf[0] != '\0') {
-                    ucp_tl_info_emit_row(&table,
-                                         uct_device_type_names[dev_type],
-                                         context->tl_cmpts[cmpt_idx].attr.name,
-                                         tl_buf, dev_buf, &first_type,
-                                         &first_cmpt, &first_tl, &printed_any);
-                }
+            if (dev_count % UCP_TL_INFO_DEVS_PER_LINE > 0) {
+                ucs_string_buffer_appendf(&dev_strb, "  ");
             }
+
+            if (all_rscs[j].rsc.sys_device != UCS_SYS_DEVICE_ID_UNKNOWN) {
+                ucs_string_buffer_appendf(&dev_strb, "%s %s (%s)",
+                                          all_rscs[j].enabled ?
+                                                  UCP_TL_INFO_MARK_ENABLED :
+                                                  UCP_TL_INFO_MARK_DISABLED,
+                                          all_rscs[j].rsc.dev_name,
+                                          ucs_topo_sys_device_get_name(
+                                                  all_rscs[j].rsc.sys_device));
+            } else {
+                ucs_string_buffer_appendf(&dev_strb, "%s %s",
+                                          all_rscs[j].enabled ?
+                                                  UCP_TL_INFO_MARK_ENABLED :
+                                                  UCP_TL_INFO_MARK_DISABLED,
+                                          all_rscs[j].rsc.dev_name);
+            }
+
+            dev_count++;
+        }
+
+        if (ucs_string_buffer_length(&dev_strb) > 0) {
+            ucp_tl_info_emit_row(&table, uct_device_type_names[dev_type],
+                                 context->tl_cmpts[cmpt_idx].attr.name,
+                                 ucs_string_buffer_cstr(&tl_strb),
+                                 ucs_string_buffer_cstr(&dev_strb), &first_type,
+                                 &first_cmpt, &first_tl, &printed_any);
         }
     }
 
@@ -330,6 +310,13 @@ void ucp_context_log_tl_info(ucp_context_h context,
     }
 
     ucs_table_render(&table, &strb);
+
+    status = ucs_table_get_status(&table);
+    if (status != UCS_OK) {
+        ucs_warn("transport table render incomplete: %s",
+                 ucs_status_string(status));
+    }
+
     ucs_log_print_compact(ucs_string_buffer_cstr(&strb));
     ucs_string_buffer_cleanup(&strb);
     ucs_table_cleanup(&table);

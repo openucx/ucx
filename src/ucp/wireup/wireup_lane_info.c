@@ -30,11 +30,8 @@
 static int ucp_ep_lane_is_same_dev(const ucp_ep_config_key_t *key,
                                    ucp_lane_index_t a, ucp_lane_index_t b)
 {
-    if ((a == key->cm_lane) && (b == key->cm_lane)) {
-        return 1;
-    }
     if ((a == key->cm_lane) || (b == key->cm_lane)) {
-        return 0;
+        return a == b;
     }
     return key->lanes[a].rsc_index == key->lanes[b].rsc_index;
 }
@@ -56,11 +53,8 @@ static int ucp_ep_lane_is_same_tl(const ucp_ep_config_key_t *key,
                                   ucp_context_h context, ucp_lane_index_t a,
                                   ucp_lane_index_t b)
 {
-    if ((a == key->cm_lane) && (b == key->cm_lane)) {
-        return 1;
-    }
     if ((a == key->cm_lane) || (b == key->cm_lane)) {
-        return 0;
+        return a == b;
     }
     return strcmp(context->tl_rscs[key->lanes[a].rsc_index].tl_rsc.tl_name,
                   context->tl_rscs[key->lanes[b].rsc_index].tl_rsc.tl_name) ==
@@ -85,46 +79,44 @@ ucp_wireup_get_lane_names(const ucp_ep_config_key_t *key, ucp_context_h context,
 static void
 ucp_wireup_format_lane_dev(const ucp_ep_config_key_t *key,
                            ucp_context_h context, ucp_lane_index_t lane,
-                           const char *dev_name, char *buf, size_t buf_size)
+                           const char *dev_name, ucs_string_buffer_t *strb)
 {
-    const char *sysdev_name;
+    const uct_tl_resource_desc_t *rsc;
+    const char *sysdev_name = NULL;
 
-    if ((lane != key->cm_lane) &&
-        (context->tl_rscs[key->lanes[lane].rsc_index].tl_rsc.sys_device !=
-         UCS_SYS_DEVICE_ID_UNKNOWN)) {
-        sysdev_name = ucs_topo_sys_device_get_name(
-                context->tl_rscs[key->lanes[lane].rsc_index].tl_rsc.sys_device);
-        if (sysdev_name != NULL) {
-            snprintf(buf, buf_size, "%s (%s)", dev_name, sysdev_name);
-        } else {
-            snprintf(buf, buf_size, "%s", dev_name);
+    if (lane != key->cm_lane) {
+        rsc = &context->tl_rscs[key->lanes[lane].rsc_index].tl_rsc;
+        if (rsc->sys_device != UCS_SYS_DEVICE_ID_UNKNOWN) {
+            sysdev_name = ucs_topo_sys_device_get_name(rsc->sys_device);
         }
+    }
+
+    if (sysdev_name != NULL) {
+        ucs_string_buffer_appendf(strb, "%s (%s)", dev_name, sysdev_name);
     } else {
-        snprintf(buf, buf_size, "%s", dev_name);
+        ucs_string_buffer_appendf(strb, "%s", dev_name);
     }
 }
 
 static void ucp_wireup_format_lane_types(ucp_lane_type_mask_t types_union,
-                                         char *buf, size_t buf_size)
+                                         ucs_string_buffer_t *strb)
 {
+    int first = 1;
     ucp_lane_type_t lt;
-    size_t len = 0;
 
-    buf[0] = '\0';
     for (lt = UCP_LANE_TYPE_FIRST; lt < UCP_LANE_TYPE_LAST; ++lt) {
-        if (types_union & UCS_BIT(lt)) {
-            if (len > 0) {
-                len += snprintf(buf + len, buf_size - len, ", ");
-                if (len >= buf_size) {
-                    len = buf_size - 1;
-                }
-            }
-            len += snprintf(buf + len, buf_size - len, "%s",
-                            ucp_lane_type_info[lt].short_name);
-            if (len >= buf_size) {
-                len = buf_size - 1;
-            }
+        if (!(types_union & UCS_BIT(lt)) ||
+            (ucp_lane_type_info[lt].short_name == NULL)) {
+            continue;
         }
+
+        if (!first) {
+            ucs_string_buffer_appendf(strb, ", ");
+        }
+
+        ucs_string_buffer_appendf(strb, "%s",
+                                  ucp_lane_type_info[lt].short_name);
+        first = 0;
     }
 }
 
@@ -159,14 +151,15 @@ void ucp_wireup_log_ep_lanes(ucp_worker_h worker,
     const ucs_table_config_t tcfg = {
         .n_cols = UCP_EP_LANE_INFO_NUM_COLS
     };
+    UCS_STRING_BUFFER_ONSTACK(title_strb, 128);
+    UCS_STRING_BUFFER_ONSTACK(types_strb, 128);
+    UCS_STRING_BUFFER_ONSTACK(dev_strb, 128);
     ucs_table_t table;
     ucs_table_row_h row;
     ucp_lane_index_t lane, j;
     ucp_lane_type_mask_t types_union;
     const char *tl_name, *dev_name, *ep_type;
-    char title_buf[96];
-    char types_buf[128];
-    char dev_buf[128];
+    ucs_status_t status;
     int count, first_tl, printed_any;
 
     if (!context->config.ext.print_transport_tables) {
@@ -181,21 +174,19 @@ void ucp_wireup_log_ep_lanes(ucp_worker_h worker,
         ep_type = "inter-node";
     }
 
+    ucs_string_buffer_appendf(&title_strb, "Endpoint Config #%d (", cfg_index);
     if (!ucs_string_is_empty(context->name)) {
-        snprintf(title_buf, sizeof(title_buf),
-                 "Endpoint Config #%d (ctx: %s, type: %s)", cfg_index,
-                 context->name, ep_type);
-    } else {
-        snprintf(title_buf, sizeof(title_buf), "Endpoint Config #%d (type: %s)",
-                 cfg_index, ep_type);
+        ucs_string_buffer_appendf(&title_strb, "ctx: %s, ", context->name);
     }
+    ucs_string_buffer_appendf(&title_strb, "type: %s)", ep_type);
 
     ucs_table_init(&table, &tcfg);
 
     /* Title spans all body columns. */
     ucs_table_add_row(&table, &row);
     ucs_table_row_add_cell_fmt(&table, row, UCP_EP_LANE_INFO_NUM_COLS,
-                               UCS_TABLE_ALIGN_LEFT, "%s", title_buf);
+                               UCS_TABLE_ALIGN_LEFT, "%s",
+                               ucs_string_buffer_cstr(&title_strb));
     ucs_table_add_separator(&table);
 
     /* Column headers. */
@@ -232,26 +223,35 @@ void ucp_wireup_log_ep_lanes(ucp_worker_h worker,
         }
 
         ucp_wireup_get_lane_names(key, context, lane, &tl_name, &dev_name);
-        ucp_wireup_format_lane_dev(key, context, lane, dev_name, dev_buf,
-                                   sizeof(dev_buf));
+
+        ucs_string_buffer_reset(&dev_strb);
+        ucp_wireup_format_lane_dev(key, context, lane, dev_name, &dev_strb);
 
         types_union = ucp_wireup_collect_lane_types(key, lane, &count);
-        ucp_wireup_format_lane_types(types_union, types_buf, sizeof(types_buf));
+        ucs_string_buffer_reset(&types_strb);
+        ucp_wireup_format_lane_types(types_union, &types_strb);
 
         ucs_table_add_row(&table, &row);
         ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
                                    first_tl ? tl_name : "");
         ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
-                                   dev_buf);
+                                   ucs_string_buffer_cstr(&dev_strb));
         ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_LEFT, "%d",
                                    count);
         ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
-                                   types_buf);
+                                   ucs_string_buffer_cstr(&types_strb));
 
         printed_any = 1;
     }
 
     ucs_table_render(&table, &strb);
+
+    status = ucs_table_get_status(&table);
+    if (status != UCS_OK) {
+        ucs_warn("endpoint lane table render incomplete: %s",
+                 ucs_status_string(status));
+    }
+
     ucs_log_print_compact(ucs_string_buffer_cstr(&strb));
     ucs_string_buffer_cleanup(&strb);
     ucs_table_cleanup(&table);

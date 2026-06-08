@@ -2284,6 +2284,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
 
     ucp_fill_sockaddr_prio_list(context, config);
 
+    /* Note: sorts all_rscs in place; the array is freed right after */
     ucp_context_log_tl_info(context, all_rscs, num_all_rscs);
 
 out_release_components:

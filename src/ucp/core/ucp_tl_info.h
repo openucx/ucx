@@ -20,7 +20,7 @@ typedef struct {
 
 
 void ucp_context_log_tl_info(ucp_context_h context,
-                             const ucp_tl_info_entry_t *all_rscs,
+                             ucp_tl_info_entry_t *all_rscs,
                              unsigned num_all_rscs);
 
 
