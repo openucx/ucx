@@ -51,6 +51,7 @@ noinst_HEADERS = \
 	dt/dt.inl \
 	dt/dt_contig.h \
 	dt/dt_iov.h \
+	dt/dt_sgl.h \
 	dt/dt_generic.h \
 	proto/lane_type.h \
 	proto/proto_am.h \
@@ -123,6 +124,7 @@ libucp_la_SOURCES = \
 	core/ucp_device.c \
 	dt/datatype_iter.c \
 	dt/dt_iov.c \
+	dt/dt_sgl.c \
 	dt/dt_generic.c \
 	dt/dt.c \
 	proto/lane_type.c \

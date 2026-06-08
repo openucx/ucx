@@ -14,6 +14,7 @@
 #include "ucx_info.h"
 
 #include <ucs/debug/table.h>
+#include <ucs/debug/log.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/math.h>
 #include <ucs/time/time.h>
@@ -64,8 +65,10 @@ out:
 /* Add an empty row used as vertical padding around content rows */
 static void print_sys_topo_add_padding(ucs_table_t *table)
 {
-    ucs_table_row_h row = ucs_table_add_row(table);
+    ucs_table_row_h row;
     unsigned i;
+
+    ucs_table_add_row(table, &row);
 
     for (i = 0; i < table->config.n_cols; ++i) {
         ucs_table_row_add_cell_empty(table, row, 1);
@@ -83,9 +86,10 @@ static void print_sys_topo_add_devices_header(ucs_table_t *table,
 
     print_sys_topo_add_padding(table);
 
-    row = ucs_table_add_row(table);
+    ucs_table_add_row(table, &row);
     ucs_table_row_add_cell_fmt(table, row, 1, UCS_TABLE_ALIGN_RIGHT, "%s",
                                first_col_label);
+
     for (sys_dev = 0; sys_dev < num_devices; ++sys_dev) {
         ucs_table_row_add_cell_fmt(table, row, 1, UCS_TABLE_ALIGN_RIGHT, "%s",
                                    ucs_topo_sys_device_get_name(sys_dev));
@@ -104,7 +108,7 @@ static void print_sys_topo_distances(unsigned num_devices)
     };
     ucs_sys_device_t sys_dev1, sys_dev2;
     ucs_sys_dev_distance_t distance;
-    ucs_status_t status;
+    ucs_status_t dist_status;
     ucs_table_row_h row;
     ucs_table_t table;
 
@@ -121,7 +125,7 @@ static void print_sys_topo_distances(unsigned num_devices)
 
         print_sys_topo_add_padding(&table);
 
-        row = ucs_table_add_row(&table);
+        ucs_table_add_row(&table, &row);
         ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_RIGHT, "%s",
                                    ucs_topo_sys_device_get_name(sys_dev1));
 
@@ -133,11 +137,11 @@ static void print_sys_topo_distances(unsigned num_devices)
                 continue;
             }
 
-            status = ucs_topo_get_distance(sys_dev1, sys_dev2, &distance);
-            if (status != UCS_OK) {
+            dist_status = ucs_topo_get_distance(sys_dev1, sys_dev2, &distance);
+            if (dist_status != UCS_OK) {
                 ucs_table_row_add_cell_fmt(&table, row, 1,
                                            UCS_TABLE_ALIGN_RIGHT, "<%s>",
-                                           ucs_status_string(status));
+                                           ucs_status_string(dist_status));
             } else if (distance.bandwidth > UCS_PBYTE) {
                 ucs_table_row_add_cell_fmt(&table, row, 1,
                                            UCS_TABLE_ALIGN_RIGHT, "%s", "inf");
@@ -172,12 +176,12 @@ static void print_sys_topo_memory_latency(unsigned num_devices)
     ucs_table_init(&table, &cfg);
 
     print_sys_topo_add_devices_header(&table, "device", num_devices);
-
     print_sys_topo_add_padding(&table);
 
-    row = ucs_table_add_row(&table);
+    ucs_table_add_row(&table, &row);
     ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_RIGHT, "%s",
                                "nsec");
+
     for (sys_dev = 0; sys_dev < num_devices; ++sys_dev) {
         ucs_topo_get_memory_distance(sys_dev, &distance);
         ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_RIGHT,
@@ -187,9 +191,10 @@ static void print_sys_topo_memory_latency(unsigned num_devices)
     print_sys_topo_add_padding(&table);
 
     ucs_table_print(&table);
-    ucs_table_cleanup(&table);
 
     printf("# Memory latency is calculated according to the CPU affinity\n");
+
+    ucs_table_cleanup(&table);
 }
 
 static void print_sys_topo()

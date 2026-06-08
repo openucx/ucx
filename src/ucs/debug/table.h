@@ -10,6 +10,7 @@
 #include <ucs/datastruct/array.h>
 #include <ucs/datastruct/string_buffer.h>
 #include <ucs/sys/compiler_def.h>
+#include <ucs/type/status.h>
 
 
 BEGIN_C_DECLS
@@ -29,7 +30,7 @@ typedef enum {
 
 
 /** Cell entry (internal). */
-typedef struct ucs_table_cell {
+typedef struct {
     unsigned            col_span; /**< body columns spanned */
     ucs_table_align_t   align; /**< alignment selected at add-cell time */
     ucs_string_buffer_t text; /**< cell content, owned by the table */
@@ -66,7 +67,7 @@ UCS_ARRAY_DECLARE_TYPE(ucs_table_entries_t, unsigned, ucs_table_entry_t);
  * Configuration for `ucs_table_init()`. Zero-initialize and set the fields
  * you need; only `n_cols` is required.
  */
-typedef struct ucs_table_config {
+typedef struct {
     /** Total number of columns; per-row cells' col_spans must sum to this. */
     unsigned   n_cols;
     /** Prepended to every rendered line */
@@ -80,9 +81,12 @@ typedef struct ucs_table_config {
 /**
  * Buffered ASCII table.
  */
-typedef struct ucs_table {
+typedef struct {
     ucs_table_config_t  config;
     ucs_table_entries_t entries;
+    /** Sticky status; set on the first error. Once it is not UCS_OK,
+     *  every public API function becomes a silent no-op. */
+    ucs_status_t        status;
 } ucs_table_t;
 
 
@@ -97,12 +101,25 @@ void ucs_table_init(ucs_table_t *table, const ucs_table_config_t *config);
 
 
 /**
- * Release all storage owned by the table. After this call the table is
- * unusable.
+ * Release the table.
  *
  * @param [in,out] table  Table to clean up.
  */
 void ucs_table_cleanup(ucs_table_t *table);
+
+
+/**
+ * Get the current table status.
+ *
+ * The table fails silently: once an operation hits an error the status is set
+ * and every subsequent public API call becomes a no-op.
+ * This function can be used to query the status if needed.
+ *
+ * @param [in] table  Table to query.
+ *
+ * @return UCS_OK if no error has occurred, otherwise the first error code.
+ */
+ucs_status_t ucs_table_get_status(const ucs_table_t *table);
 
 
 /**
@@ -135,9 +152,9 @@ void ucs_table_add_separator(ucs_table_t *table);
  * handle is valid until the table is cleaned up;
  *
  * @param [in,out] table  Table to append to.
- * @return Row handle for use with add-cell functions.
+ * @param [out]    row_p  Row handle for use with add-cell functions.
  */
-ucs_table_row_h ucs_table_add_row(ucs_table_t *table);
+void ucs_table_add_row(ucs_table_t *table, ucs_table_row_h *row_p);
 
 
 /**
@@ -152,7 +169,7 @@ void ucs_table_row_add_cell_empty(ucs_table_t *table, ucs_table_row_h row,
 
 
 /**
- * Add a cell with printf-style content. Asserts the result has no '\n'.
+ * Add a cell with printf-style content.
  *
  * @param [in,out] table     Table that owns @a row.
  * @param [in]     row       Row returned by ucs_table_add_row().
@@ -180,6 +197,7 @@ void ucs_table_render(ucs_table_t *table, ucs_string_buffer_t *strb);
  * Render the table directly to stdout.
  *
  * @param [in,out] table  Table to print.
+ *
  */
 void ucs_table_print(ucs_table_t *table);
 

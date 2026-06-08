@@ -1336,7 +1336,12 @@ ucp_worker_iface_get_memory_distance(const ucp_worker_iface_t *wiface,
 
     if ((md_attr->access_mem_types | md_attr->reg_mem_types) &
         UCS_BIT(UCS_MEMORY_TYPE_HOST)) {
-        ucs_topo_get_memory_distance(sys_dev, distance);
+        if (ucs_cpu_set_is_empty(&wiface->worker->cpu_mask)) {
+            ucs_topo_get_memory_distance(sys_dev, distance);
+        } else {
+            ucs_topo_get_memory_distance_for_cpuset(
+                    sys_dev, &wiface->worker->cpu_mask, distance);
+        }
     } else {
         *distance = ucs_topo_default_distance;
     }
