@@ -1677,12 +1677,20 @@ ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
 static ucp_lane_index_t
 ucp_ep_config_key_find_am_lane(const ucp_ep_config_key_t *key)
 {
-    const ucp_lane_type_mask_t mask = UCS_BIT(UCP_LANE_TYPE_AM_BW) |
+    const ucp_lane_type_mask_t mask = UCS_BIT(UCP_LANE_TYPE_AM) |
                                       UCS_BIT(UCP_LANE_TYPE_FAILED);
     const ucp_ep_config_key_lane_t *lane;
 
+    /* TODO: do not reconfigure am_lane if it is not failed but there is a room
+     *       for optimization if faster lane has been recovered */
+    if ((key->am_lane != UCP_NULL_LANE) &&
+        !(key->lanes[key->am_lane].lane_types &
+          UCS_BIT(UCP_LANE_TYPE_FAILED))) {
+        return key->am_lane;
+    }
+
     ucs_carray_for_each(lane, key->lanes, key->num_lanes) {
-        if ((lane->lane_types & mask) == UCS_BIT(UCP_LANE_TYPE_AM_BW)) {
+        if ((lane->lane_types & mask) == UCS_BIT(UCP_LANE_TYPE_AM)) {
             return lane - key->lanes;
         }
     }
