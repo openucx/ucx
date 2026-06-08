@@ -23,9 +23,9 @@ ucs_status_t ucp_rma_rndv_process_rts(ucp_worker_h worker,
                                       const ucp_rma_rndv_rts_hdr_t *rts,
                                       size_t length);
 
-ucp_request_t *ucp_rma_rndv_rtr_flush_open(ucp_request_t *rtr_req);
+ucp_request_t *ucp_rma_rndv_flush_open(ucp_request_t *rndv_req);
 
-void ucp_rma_rndv_rtr_flush_close(ucp_request_t *recv_req, ucp_ep_h ep,
-                                  ucs_status_t status);
+void ucp_rma_rndv_flush_close(ucp_request_t *recv_req, ucp_ep_h ep,
+                              ucs_status_t status);
 
 #endif

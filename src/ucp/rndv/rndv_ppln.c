@@ -378,6 +378,11 @@ ucp_proto_rndv_recv_ppln_ats_progress(uct_pending_req_t *uct_req)
     ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);
     const ucp_proto_rndv_ppln_priv_t *rpriv;
 
+    if (req->flags & UCP_REQUEST_FLAG_RNDV_GET_REQ) {
+        /* RMA GET/RNDV has no peer RTS request to acknowledge. */
+        return ucp_proto_rndv_recv_complete(req);
+    }
+
     rpriv = req->send.proto_config->priv;
     return ucp_proto_rndv_ack_progress(req, &rpriv->ack, UCP_AM_ID_RNDV_ATS,
                                        ucp_proto_rndv_ppln_pack_ack,

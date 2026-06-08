@@ -75,10 +75,10 @@ static ucs_status_t ucp_proto_rndv_rtr_common_send(ucp_request_t *req)
     size_t max_rtr_size;
     ucs_status_t status;
 
-    if (req->flags & UCP_REQUEST_FLAG_RNDV_RTR_REQ) {
+    if (req->flags & UCP_REQUEST_FLAG_RNDV_GET_REQ) {
         pack_cb      = ucp_proto_rndv_rtr_req_pack;
         max_rtr_size = ucp_proto_rndv_rtr_req_max_size(req);
-        recv_req     = ucp_rma_rndv_rtr_flush_open(req);
+        recv_req     = ucp_rma_rndv_flush_open(req);
     } else {
         pack_cb      = rpriv->pack_cb;
         max_rtr_size = ucp_proto_rndv_rtr_max_size(req);
@@ -87,7 +87,7 @@ static ucs_status_t ucp_proto_rndv_rtr_common_send(ucp_request_t *req)
     status = ucp_proto_am_bcopy_single_send(req, UCP_AM_ID_RNDV_RTR,
                                             rpriv->super.lane, pack_cb, req,
                                             max_rtr_size, 0);
-    ucp_rma_rndv_rtr_flush_close(recv_req, ep, status);
+    ucp_rma_rndv_flush_close(recv_req, ep, status);
 
     return ucp_proto_single_status_handle(req, 0, NULL, rpriv->super.lane,
                                           status);

@@ -52,7 +52,7 @@ static const char *ucp_request_flag_names[] = {
     [ucs_ilog2(UCP_REQUEST_FLAG_SUPER_VALID)]           = "spr_vld",
 #endif
     [ucs_ilog2(UCP_REQUEST_FLAG_RNDV_SEND_INTERNAL)]    = "rndv_snd_int",
-    [ucs_ilog2(UCP_REQUEST_FLAG_RNDV_RTR_REQ)]          = "rndv_rtr_req",
+    [ucs_ilog2(UCP_REQUEST_FLAG_RNDV_GET_REQ)]          = "rndv_get_req",
     [ucs_ilog2(UCP_REQUEST_FLAG_RNDV_FLUSH)]            = "rndv_flush",
     [ucs_ilog2(UCP_REQUEST_FLAG_RNDV_START_FLUSH)]      = "rndv_start_flush",
 };

@@ -298,8 +298,7 @@ ucp_proto_get_rndv_probe(const ucp_proto_init_params_t *init_params)
     mem_info = ucp_proto_common_select_param_mem_info(
             init_params->select_param);
     ucp_proto_select_param_init(&rndv_sel_param, UCP_OP_ID_RNDV_RECV, 0,
-                                UCP_PROTO_SELECT_OP_FLAG_RNDV_PUSH,
-                                UCP_DATATYPE_CONTIG, &mem_info, 1);
+                                0, UCP_DATATYPE_CONTIG, &mem_info, 1);
 
     proto_select = ucp_proto_select_get(worker, init_params->ep_cfg_index,
                                         init_params->rkey_cfg_index,
@@ -361,22 +360,22 @@ static ucs_status_t ucp_proto_get_rndv_reset(ucp_request_t *req)
     return UCS_OK;
 }
 
-ucp_request_t *ucp_rma_rndv_rtr_flush_open(ucp_request_t *rtr_req)
+ucp_request_t *ucp_rma_rndv_flush_open(ucp_request_t *rndv_req)
 {
-    ucp_request_t *recv_req = rtr_req;
-    ucp_ep_h ep = rtr_req->send.ep;
+    ucp_request_t *recv_req = rndv_req;
+    ucp_ep_h ep            = rndv_req->send.ep;
 
-    if (!(rtr_req->flags & UCP_REQUEST_FLAG_RNDV_RTR_REQ)) {
+    if (!(rndv_req->flags & UCP_REQUEST_FLAG_RNDV_GET_REQ)) {
         return NULL;
     }
 
     while (!(recv_req->flags & UCP_REQUEST_FLAG_RNDV_RECV_INTERNAL)) {
-        ucs_assert(recv_req->flags & UCP_REQUEST_FLAG_RNDV_RTR_REQ);
+        ucs_assert(recv_req->flags & UCP_REQUEST_FLAG_RNDV_GET_REQ);
         recv_req = ucp_request_get_super(recv_req);
     }
 
     if (recv_req->flags & UCP_REQUEST_FLAG_RNDV_START_FLUSH) {
-        /* Claim before the AM send, since SELF can complete inline. */
+        /* Claim before the operation, since SELF can complete inline. */
         recv_req->flags &= ~UCP_REQUEST_FLAG_RNDV_START_FLUSH;
         ucp_worker_flush_ops_count_add(ep->worker, +1);
         return recv_req;
@@ -385,11 +384,11 @@ ucp_request_t *ucp_rma_rndv_rtr_flush_open(ucp_request_t *rtr_req)
     return NULL;
 }
 
-void ucp_rma_rndv_rtr_flush_close(ucp_request_t *recv_req, ucp_ep_h ep,
-                                  ucs_status_t status)
+void ucp_rma_rndv_flush_close(ucp_request_t *recv_req, ucp_ep_h ep,
+                              ucs_status_t status)
 {
     if (recv_req != NULL) {
-        if (status == UCS_OK) {
+        if (!UCS_STATUS_IS_ERR(status)) {
             /* recv_req may complete inline, so only touch ep on success. */
             ucp_ep_rma_remote_request_sent(ep);
         } else {
@@ -467,12 +466,12 @@ static ucs_status_t ucp_proto_get_rndv_init(ucp_request_t *get_req,
                           &get_req->send.state.dt_iter, length, &sg_count);
 
     ucp_proto_request_send_init(rndv_req, get_req->send.ep,
-                                UCP_REQUEST_FLAG_RNDV_RTR_REQ);
+                                UCP_REQUEST_FLAG_RNDV_GET_REQ);
     ucp_request_set_super(rndv_req, recv_req);
     rndv_req->send.rndv.remote_req_id      = UCS_PTR_MAP_KEY_INVALID;
     rndv_req->send.rndv.remote_address     = address;
     rndv_req->send.rndv.remote_mem_info    = mem_info;
-    rndv_req->send.rndv.rkey               = NULL;
+    rndv_req->send.rndv.rkey               = get_req->send.rma.rkey;
     rndv_req->send.rndv.offset             = 0;
 
     UCS_PROFILE_CALL_VOID(ucp_datatype_iter_move,

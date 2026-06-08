@@ -32,10 +32,6 @@
  * Relevant for UCP_OP_ID_RNDV_SEND and UCP_OP_ID_RNDV_RECV. */
 #define UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG (UCP_PROTO_SELECT_OP_FLAGS_BASE << 1)
 
-/* Select only push-based rendezvous receive protocols. */
-#define UCP_PROTO_SELECT_OP_FLAG_RNDV_PUSH (UCP_PROTO_SELECT_OP_FLAGS_BASE << 3)
-
-
 /* Select eager/rendezvous protocol for Active Message sends.
  * Relevant for UCP_OP_ID_AM_SEND and UCP_OP_ID_AM_SEND_REPLY. */
 #define UCP_PROTO_SELECT_OP_FLAG_AM_EAGER (UCP_PROTO_SELECT_OP_FLAGS_BASE << 1)
