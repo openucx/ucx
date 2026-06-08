@@ -193,13 +193,13 @@ void ucp_wireup_log_ep_lanes(ucp_worker_h worker,
     ucs_table_init(&table, &tcfg);
 
     /* Title spans all body columns. */
-    row = ucs_table_add_row(&table);
+    ucs_table_add_row(&table, &row);
     ucs_table_row_add_cell_fmt(&table, row, UCP_EP_LANE_INFO_NUM_COLS,
                                UCS_TABLE_ALIGN_LEFT, "%s", title_buf);
     ucs_table_add_separator(&table);
 
     /* Column headers. */
-    row = ucs_table_add_row(&table);
+    ucs_table_add_row(&table, &row);
     ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
                                UCP_EP_LANE_INFO_HDR_TL);
     ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
@@ -238,7 +238,7 @@ void ucp_wireup_log_ep_lanes(ucp_worker_h worker,
         types_union = ucp_wireup_collect_lane_types(key, lane, &count);
         ucp_wireup_format_lane_types(types_union, types_buf, sizeof(types_buf));
 
-        row = ucs_table_add_row(&table);
+        ucs_table_add_row(&table, &row);
         ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
                                    first_tl ? tl_name : "");
         ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_LEFT, "%s",

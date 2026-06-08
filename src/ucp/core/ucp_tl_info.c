@@ -100,7 +100,9 @@ static void ucp_tl_info_emit_row(ucs_table_t *table, const char *type_str,
                                  int *first_cmpt, int *first_tl,
                                  int *printed_any)
 {
-    ucs_table_row_h row = ucs_table_add_row(table);
+    ucs_table_row_h row;
+
+    ucs_table_add_row(table, &row);
 
     if (*first_type) {
         ucs_table_row_add_cell_fmt(table, row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
@@ -167,13 +169,13 @@ void ucp_context_log_tl_info(ucp_context_h context,
     }
 
     /* Title spans all body columns. */
-    row = ucs_table_add_row(&table);
+    ucs_table_add_row(&table, &row);
     ucs_table_row_add_cell_fmt(&table, row, UCP_TL_INFO_NUM_COLS,
                                UCS_TABLE_ALIGN_LEFT, "%s", title_buf);
     ucs_table_add_separator(&table);
 
     /* Column headers. */
-    row = ucs_table_add_row(&table);
+    ucs_table_add_row(&table, &row);
     ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
                                UCP_TL_INFO_HDR_TYPE);
     ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
@@ -301,7 +303,7 @@ void ucp_context_log_tl_info(ucp_context_h context,
                 if (printed_any) {
                     ucs_table_add_separator(&table);
                 }
-                row = ucs_table_add_row(&table);
+                ucs_table_add_row(&table, &row);
                 ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_LEFT,
                                            "%s", UCP_TL_INFO_UNAVAILABLE);
                 ucs_table_row_add_cell_fmt(
@@ -316,7 +318,7 @@ void ucp_context_log_tl_info(ucp_context_h context,
                  * renderer emits a blank "|     " segment above the
                  * empty type cell instead of a dashed "+---". */
                 ucs_table_add_separator_with_merged_cols(&table, 1);
-                row = ucs_table_add_row(&table);
+                ucs_table_add_row(&table, &row);
                 ucs_table_row_add_cell_empty(&table, row, 1);
                 ucs_table_row_add_cell_fmt(
                         &table, row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
@@ -331,7 +333,7 @@ void ucp_context_log_tl_info(ucp_context_h context,
     /* Legend information */
     ucs_table_add_separator(&table);
     for (i = 0; i < ucs_static_array_size(ucp_tl_info_legend_rows); ++i) {
-        row = ucs_table_add_row(&table);
+        ucs_table_add_row(&table, &row);
         ucs_table_row_add_cell_fmt(&table, row, UCP_TL_INFO_NUM_COLS,
                                    UCS_TABLE_ALIGN_LEFT, "%s",
                                    ucp_tl_info_legend_rows[i]);
