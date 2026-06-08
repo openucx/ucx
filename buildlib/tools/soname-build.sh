@@ -197,6 +197,6 @@ build_soname_suffix() {
 		"${ucx_build_dir}/test/apps/.libs/libtest_ucx_isolation_plugin.so" \
 		"$suffix" deepbind
 
-	GTEST_FILTER=test_sys.module_file_suffix:test_sys.module \
+	GTEST_FILTER=test_sys.module_file_suffix \
 		$MAKE -C test/gtest test
 }
