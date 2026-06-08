@@ -1061,7 +1061,6 @@ typedef enum {
  * are present, for backward compatibility support.
  */
 enum uct_iface_attr_field {
-<<<<<<< HEAD
     /** Enables @ref uct_iface_attr_v2_t::max_put_sgl_zcopy_count */
     UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT = UCS_BIT(0),
 
