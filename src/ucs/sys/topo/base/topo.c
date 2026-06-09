@@ -328,7 +328,7 @@ out:
 }
 
 /* Parse the device ordinal from the trailing decimal digits of its name */
-static int ucs_topo_parse_name_ordinal(const char *name)
+static unsigned ucs_topo_parse_name_ordinal(const char *name)
 {
     size_t length = strlen(name);
     size_t offset = length;
@@ -902,7 +902,7 @@ const char *ucs_topo_sys_device_get_name(ucs_sys_device_t sys_dev)
     return name;
 }
 
-int ucs_topo_sys_device_get_name_ordinal(ucs_sys_device_t sys_dev)
+unsigned ucs_topo_sys_device_get_name_ordinal(ucs_sys_device_t sys_dev)
 {
     int name_ordinal;
 

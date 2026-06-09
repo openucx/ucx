@@ -26,7 +26,7 @@ BEGIN_C_DECLS
 #define UCS_SYS_DEVICE_ID_UNKNOWN UINT8_MAX
 
 /* Indicate that the ordinal of a given system device is invalid */
-#define UCS_SYS_DEVICE_NAME_ORDINAL_INVALID -1
+#define UCS_SYS_DEVICE_NAME_ORDINAL_INVALID UINT_MAX
 
 /* Maximal size of BDF string */
 #define UCS_SYS_BDF_NAME_MAX 16
@@ -358,10 +358,10 @@ const char *ucs_topo_sys_device_get_name(ucs_sys_device_t sys_dev);
  * @param [in]  sys_dev System device to query.
  *
  * @return The ordinal of the system device, or UCS_SYS_DEVICE_NAME_ORDINAL_INVALID
- *         if the system device is unknown/invalid or the name has no trailing 
+ *         if the system device is unknown/invalid or the name has no trailing
  *         decimal digits.
  */
-int ucs_topo_sys_device_get_name_ordinal(ucs_sys_device_t sys_dev);
+unsigned ucs_topo_sys_device_get_name_ordinal(ucs_sys_device_t sys_dev);
 
 /**
  * Get the closest NUMA node for a given system device.

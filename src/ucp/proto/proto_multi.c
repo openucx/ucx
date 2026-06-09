@@ -99,9 +99,9 @@ ucp_proto_multi_find_max_avail_bw_lane(const ucp_proto_init_params_t *params,
     ucp_lane_index_t i, index, selected_index, first_max_bw_lane;
     const ucp_proto_common_tl_perf_t *lane_perf;
     ucs_sys_device_t sys_dev, selected_sys_dev, req_sys_dev;
-    int cmp, req_sys_dev_ord;
+    unsigned seed, req_sys_dev_ord;
     double avail_bw;
-    unsigned seed;
+    int cmp;
 
     ucs_assert(index_map != 0);
 
@@ -137,9 +137,9 @@ ucp_proto_multi_find_max_avail_bw_lane(const ucp_proto_init_params_t *params,
     req_sys_dev     = params->select_param->sys_dev;
     req_sys_dev_ord = ucs_topo_sys_device_get_name_ordinal(req_sys_dev);
     if (req_sys_dev_ord == UCS_SYS_DEVICE_NAME_ORDINAL_INVALID) {
-        ucs_trace("could not determine req_sys_dev ordinal; "
+        ucs_trace("could not determine req_sys_dev %d ordinal; "
                   "falling back to first max bw lane %d",
-                  first_max_bw_lane);
+                  req_sys_dev, first_max_bw_lane);
         return first_max_bw_lane;
     }
 
