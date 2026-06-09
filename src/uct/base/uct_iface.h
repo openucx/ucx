@@ -315,7 +315,8 @@ typedef ucs_status_t (*uct_ep_get_device_ep_func_t)(
 typedef ucs_status_t (*uct_ep_put_sgl_zcopy_func_t)(
         uct_ep_h ep, void * const *buffers, const size_t *lengths,
         uct_mem_h const *memhs, const uint64_t *remote_addrs,
-        uct_rkey_t const *rkeys, size_t count, uct_completion_t *comp);
+        uct_rkey_t const *rkeys, const size_t *counts, const size_t *strides,
+        size_t count, uct_completion_t *comp);
 
 /* Internal operations, not exposed by the external API */
 typedef struct uct_iface_internal_ops {

@@ -83,6 +83,19 @@ typedef struct ucp_am_info {
  */
 
 
+/*
+ * Wire-internal flags ORed into @ref ucp_am_hdr_t::flags on the first fragment
+ * of an eager AM. Live in the upper bits to avoid overlap with the user-facing
+ * @ref ucp_send_am_flags (bits 0..3); never exposed via the public API.
+ */
+enum ucp_am_hdr_flags {
+    /* First fragment of a restarted (same msg_id) message. Receiver uses it
+     * on the single-fragment branch to evict any orphan partial first_rdesc
+     * left by the previous attempt. No-op on other restart shapes. */
+    UCP_AM_HDR_FLAG_RESEND = UCS_BIT(15)
+};
+
+
 typedef union {
     struct {
         uint16_t             am_id;         /* index into callback array */
