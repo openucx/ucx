@@ -778,7 +778,7 @@ UCS_TEST_P(test_ucp_proto_mock_rcx, rndv_2_lanes, "IB_NUM_PATHS?=2",
         {405,   8246,  "zero-copy",            "rc_mlx5/mock_1:1/path0"},
         {8247,  19149, "multi-frag zero-copy", "rc_mlx5/mock_1:1/path0"},
         {19150, INF,   "rendezvous zero-copy read from remote",
-         "53% on rc_mlx5/mock_0:1/path0 and 47% on rc_mlx5/mock_1:1/path0"},
+         "47% on rc_mlx5/mock_1:1/path0 and 53% on rc_mlx5/mock_0:1/path0"},
     }, key);
 }
 
@@ -820,7 +820,7 @@ UCS_TEST_P(test_ucp_proto_mock_rcx, rma_put_2_lanes,
 
     check_rkey_config(sender(), {
         {0,    2048, "short",     "rc_mlx5/mock_1:1"},
-        {2049, INF,  "zero-copy", "53% on rc_mlx5/mock_0:1 and 47% on rc_mlx5/mock_1:1"},
+        {2049, INF,  "zero-copy", "47% on rc_mlx5/mock_1:1 and 53% on rc_mlx5/mock_0:1"},
     }, key, 0);
 }
 
@@ -1795,7 +1795,7 @@ public:
         key.param.op_attr          = 0;
 
         check_rkey_config(sender(), {
-            {0, INF,  "zero-copy", "53% on rc_mlx5/mock_0:1 and 47% on rc_mlx5/mock_1:1"},
+            {0, INF,  "zero-copy", "47% on rc_mlx5/mock_1:1 and 53% on rc_mlx5/mock_0:1"},
         }, key, 1);
 
         // Reduce port_speed of mock_0:1 by 50%, new EP & rkey configs are created
