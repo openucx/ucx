@@ -2697,9 +2697,34 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_rsc_index_t rsc_index;
     ucp_md_index_t md_index;
     ucp_lane_index_t i;
+    ucp_wireup_lane_desc_t *lane_desc;
+    ucp_worker_iface_t *wiface;
 
     key->num_lanes   = select_ctx->num_lanes;
     first_am_bw_lane = context->config.ext.proto_enable ? 0 : 1;
+
+    /* Failover mode: promote each user-data lane that supports AM to AM_BW,
+     * so recovery always has a backup am_lane. Infrastructure lanes are not
+     * promoted. Promotion happens before constructing the key to keep
+     * lane_types consistent. */
+    if (key->err_mode == UCP_ERR_HANDLING_MODE_FAILOVER) {
+        const uint64_t am_caps                = UCT_IFACE_FLAG_AM_BCOPY |
+                                                UCT_IFACE_FLAG_AM_SHORT |
+                                                UCT_IFACE_FLAG_AM_ZCOPY;
+        const ucp_lane_type_mask_t data_types = UCS_BIT(UCP_LANE_TYPE_RMA_BW) |
+                                                UCS_BIT(UCP_LANE_TYPE_RMA)    |
+                                                UCS_BIT(UCP_LANE_TYPE_AMO)    |
+                                                UCS_BIT(UCP_LANE_TYPE_AM_BW);
+
+        ucs_carray_for_each(lane_desc, select_ctx->lane_descs,
+                            key->num_lanes) {
+            wiface = ucp_worker_iface(ep->worker, lane_desc->rsc_index);
+            if ((lane_desc->lane_types & data_types) &&
+                (wiface->attr.cap.flags & am_caps)) {
+                lane_desc->lane_types |= UCS_BIT(UCP_LANE_TYPE_AM_BW);
+            }
+        }
+    }
 
     /* Construct the endpoint configuration key:
      * - arrange lane description in the EP configuration
