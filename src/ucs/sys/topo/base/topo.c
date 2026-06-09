@@ -20,8 +20,8 @@
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
 #include <ucs/time/time.h>
-#include <inttypes.h>
 #include <ctype.h>
+#include <inttypes.h>
 
 
 #define UCS_TOPO_MAX_SYS_DEVICES     256
@@ -339,7 +339,7 @@ static int ucs_topo_parse_name_ordinal(const char *name)
     }
 
     if ((offset == length) || (offset == 0)) {
-        return -1;
+        return UCS_SYS_DEVICE_NAME_ORDINAL_INVALID;
     }
 
     return atoi(name + offset);
@@ -907,14 +907,14 @@ int ucs_topo_sys_device_get_name_ordinal(ucs_sys_device_t sys_dev)
     int name_ordinal;
 
     if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
-        return -1;
+        return UCS_SYS_DEVICE_NAME_ORDINAL_INVALID;
     }
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
     if (sys_dev < ucs_topo_global_ctx.num_devices) {
         name_ordinal = ucs_topo_global_ctx.devices[sys_dev].name_ordinal;
     } else {
-        name_ordinal = -1;
+        name_ordinal = UCS_SYS_DEVICE_NAME_ORDINAL_INVALID;
     }
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 

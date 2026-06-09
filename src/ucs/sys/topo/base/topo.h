@@ -25,6 +25,9 @@ BEGIN_C_DECLS
  * e.g. virtual devices like CMA/knem */
 #define UCS_SYS_DEVICE_ID_UNKNOWN UINT8_MAX
 
+/* Indicate that the ordinal of a given system device is invalid */
+#define UCS_SYS_DEVICE_NAME_ORDINAL_INVALID -1
+
 /* Maximal size of BDF string */
 #define UCS_SYS_BDF_NAME_MAX 16
 
@@ -349,13 +352,14 @@ const char *ucs_topo_sys_device_get_name(ucs_sys_device_t sys_dev);
  * digits of the device name.
  *
  * For example:
- * - GPUx (GPU0 -> 0, GPU1 -> 1)
- * - mlx5_x (mlx5_0 -> 0, mlx5_1 -> 1)
+ * - GPU<N> (GPU0 -> 0, GPU1 -> 1)
+ * - mlx5_<N> (mlx5_0 -> 0, mlx5_1 -> 1)
  *
  * @param [in]  sys_dev System device to query.
  *
- * @return The ordinal of the system device, or -1 if the system device is
- *         unknown/invalid or the name has no trailing decimal digits.
+ * @return The ordinal of the system device, or UCS_SYS_DEVICE_NAME_ORDINAL_INVALID
+ *         if the system device is unknown/invalid or the name has no trailing 
+ *         decimal digits.
  */
 int ucs_topo_sys_device_get_name_ordinal(ucs_sys_device_t sys_dev);
 

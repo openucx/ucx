@@ -71,7 +71,7 @@ ucp_proto_multi_sys_dev_bus_id_key(ucs_sys_device_t sys_dev)
 }
 
 static int ucp_proto_multi_sys_dev_cmp(const void *pa, const void *pb,
-                                    void *UCS_V_UNUSED arg)
+                                       void *UCS_V_UNUSED arg)
 {
     const ucs_sys_device_t a   = *(const ucs_sys_device_t*)pa;
     const ucs_sys_device_t b   = *(const ucs_sys_device_t*)pb;
@@ -79,7 +79,7 @@ static int ucp_proto_multi_sys_dev_cmp(const void *pa, const void *pb,
     ucs_bus_id_bit_rep_t key_b = ucp_proto_multi_sys_dev_bus_id_key(b);
 
     /* ascending order by PCI bus id so every rank on the node observes the
-    * same ordering regardless of local device discovery order */
+     * same ordering regardless of local device discovery order. */
     return (key_a > key_b) - (key_a < key_b);
 }
 
@@ -99,9 +99,9 @@ ucp_proto_multi_find_max_avail_bw_lane(const ucp_proto_init_params_t *params,
     ucp_lane_index_t i, index, selected_index, first_max_bw_lane;
     const ucp_proto_common_tl_perf_t *lane_perf;
     ucs_sys_device_t sys_dev, selected_sys_dev, req_sys_dev;
-    unsigned seed, req_sys_dev_ord;
+    int cmp, req_sys_dev_ord;
     double avail_bw;
-    int cmp;
+    unsigned seed;
 
     ucs_assert(index_map != 0);
 
@@ -136,7 +136,7 @@ ucp_proto_multi_find_max_avail_bw_lane(const ucp_proto_init_params_t *params,
 
     req_sys_dev     = params->select_param->sys_dev;
     req_sys_dev_ord = ucs_topo_sys_device_get_name_ordinal(req_sys_dev);
-    if (req_sys_dev_ord == -1) {
+    if (req_sys_dev_ord == UCS_SYS_DEVICE_NAME_ORDINAL_INVALID) {
         ucs_trace("could not determine req_sys_dev ordinal; "
                   "falling back to first max bw lane %d",
                   first_max_bw_lane);

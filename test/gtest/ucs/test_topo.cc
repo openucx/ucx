@@ -319,10 +319,11 @@ UCS_TEST_F(test_topo, device_name_ordinal) {
     /* A name without trailing digits caches an invalid ordinal. */
     status = ucs_topo_sys_device_set_name(sys_dev, "abcd", 30);
     ASSERT_UCS_OK(status);
-    EXPECT_EQ(-1, ucs_topo_sys_device_get_name_ordinal(sys_dev));
+    EXPECT_EQ(UCS_SYS_DEVICE_NAME_ORDINAL_INVALID,
+              ucs_topo_sys_device_get_name_ordinal(sys_dev));
 
     /* An unknown system device has no ordinal. */
-    EXPECT_EQ(-1,
+    EXPECT_EQ(UCS_SYS_DEVICE_NAME_ORDINAL_INVALID,
               ucs_topo_sys_device_get_name_ordinal(UCS_SYS_DEVICE_ID_UNKNOWN));
 }
 
