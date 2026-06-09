@@ -8,6 +8,7 @@
 #endif
 
 #include "rocm_base.h"
+#include "rocm_signal.h"
 
 #include <ucs/sys/string.h>
 #include <ucs/sys/module.h>
@@ -544,6 +545,36 @@ uct_rocm_amd_gpu_product_t uct_rocm_base_get_gpu_product(void)
     }
 
     return gpu_product;
+}
+
+ucs_status_t uct_rocm_base_ep_flush(uct_ep_h tl_ep, ucs_mpool_t *signal_pool,
+                                    ucs_queue_head_t *signal_queue,
+                                    uct_completion_t *comp)
+{
+    uct_rocm_base_signal_desc_t *flush_signal;
+
+    if (ucs_queue_is_empty(signal_queue)) {
+        UCT_TL_EP_STAT_FLUSH(ucs_derived_of(tl_ep, uct_base_ep_t));
+        return UCS_OK;
+    }
+
+    if (comp == NULL) {
+        UCT_TL_EP_STAT_FLUSH_WAIT(ucs_derived_of(tl_ep, uct_base_ep_t));
+        return UCS_INPROGRESS;
+    }
+
+    flush_signal = ucs_mpool_get(signal_pool);
+    if (flush_signal == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    hsa_signal_store_screlease(flush_signal->signal, 0);
+    flush_signal->comp        = comp;
+    flush_signal->mapped_addr = NULL;
+    ucs_queue_push(signal_queue, &flush_signal->queue);
+
+    UCT_TL_EP_STAT_FLUSH_WAIT(ucs_derived_of(tl_ep, uct_base_ep_t));
+    return UCS_INPROGRESS;
 }
 
 UCS_MODULE_INIT() {
