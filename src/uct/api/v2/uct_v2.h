@@ -1068,13 +1068,13 @@ enum uct_iface_attr_field {
     UCT_IFACE_ATTR_FIELD_CAP_FLAGS               = UCS_BIT(1),
 
     /** Enables @ref uct_iface_attr_v2_t::flags. */
-    UCT_IFACE_ATTR_FIELD_FLAGS           = UCS_BIT(2),
+    UCT_IFACE_ATTR_FIELD_FLAGS                   = UCS_BIT(2),
 
     /** Enables @ref uct_iface_attr_v2_t::tx_token_length. */
-    UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH = UCS_BIT(3),
+    UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH         = UCS_BIT(3),
 
     /** Enables @ref uct_iface_attr_v2_t::rx_token_length. */
-    UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH = UCS_BIT(4),
+    UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH         = UCS_BIT(4),
 
     /**
      * Enables the RX token derivation path.
@@ -1082,7 +1082,7 @@ enum uct_iface_attr_field {
      * When both set, @ref uct_iface_attr_v2_t::tx_token is input (from sender),
      * and @ref uct_iface_attr_v2_t::rx_token is output (derived by receiver).
      */
-    UCT_IFACE_ATTR_FIELD_TX_TOKEN        = UCS_BIT(5),
+    UCT_IFACE_ATTR_FIELD_TX_TOKEN                = UCS_BIT(5),
 
     /**
      * Enables the RX token derivation path.
@@ -1090,7 +1090,7 @@ enum uct_iface_attr_field {
      * when both set, @ref uct_iface_attr_v2_t::tx_token is input (from sender),
      * and @ref uct_iface_attr_v2_t::rx_token is output (derived by receiver).
      */
-    UCT_IFACE_ATTR_FIELD_RX_TOKEN        = UCS_BIT(6)
+    UCT_IFACE_ATTR_FIELD_RX_TOKEN                = UCS_BIT(6)
 };
 
 
