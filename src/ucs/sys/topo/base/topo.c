@@ -21,6 +21,7 @@
 #include <ucs/debug/log.h>
 #include <ucs/time/time.h>
 #include <inttypes.h>
+#include <ctype.h>
 
 
 #define UCS_TOPO_MAX_SYS_DEVICES     256
@@ -876,6 +877,26 @@ const char *ucs_topo_sys_device_get_name(ucs_sys_device_t sys_dev)
     }
 
     return name;
+}
+
+int ucs_topo_sys_device_get_identifier(ucs_sys_device_t sys_dev)
+{
+    const char *name = ucs_topo_sys_device_get_name(sys_dev);
+    size_t length    = strlen(name);
+    size_t offset    = length;
+
+    /* Find the last non-digit character */
+    while ((offset > 0) && isdigit(name[offset - 1])) {
+        --offset;
+    }
+
+    /* Parse the identifier from the name */
+    if ((offset == length) || (offset == 0)) {
+        ucs_trace("could not parse identifier from name %s", name);
+        return -1;
+    }
+
+    return atoi(name + offset);
 }
 
 ucs_numa_node_t ucs_topo_sys_device_get_numa_node(ucs_sys_device_t sys_dev)

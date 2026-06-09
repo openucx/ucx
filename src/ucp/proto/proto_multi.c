@@ -95,13 +95,11 @@ ucp_proto_multi_find_max_avail_bw_lane(const ucp_proto_init_params_t *params,
     double max_avail_bw              = 1.0;
     ucp_lane_map_t lane_map          = 0;
     ucp_lane_index_t num_max_bw_devs = 0;
-    int n                            = 0;
     ucs_sys_device_t sys_devs[UCP_PROTO_MAX_LANES];
     ucp_lane_index_t i, index, selected_index, first_max_bw_lane;
     const ucp_proto_common_tl_perf_t *lane_perf;
-    const char *dev_name;
     ucs_sys_device_t sys_dev, selected_sys_dev, req_sys_dev;
-    unsigned seed, gpu_idx;
+    unsigned seed, req_sys_dev_id;
     double avail_bw;
     int cmp;
 
@@ -136,22 +134,12 @@ ucp_proto_multi_find_max_avail_bw_lane(const ucp_proto_init_params_t *params,
         return first_max_bw_lane;
     }
 
-    /* Host memory flows use the first max bw lane. */
-    req_sys_dev = params->select_param->sys_dev;
-    if (req_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
-        ucs_trace("unknown sys_dev; falling back to first max bw lane %d",
-                  first_max_bw_lane);
-        return first_max_bw_lane;
-    }
-
-    /* Use the integer suffix of the requesting GPU's name ("GPU<N>") as a
-     * per-process seed. Anything else falls back to the first max bw lane. */
-    dev_name = ucs_topo_sys_device_get_name(req_sys_dev);
-    if ((sscanf(dev_name, "GPU%u%n", &gpu_idx, &n) != 1) ||
-        (dev_name[n] != '\0')) {
-        ucs_trace("unknown device name: '%s'; "
+    req_sys_dev    = params->select_param->sys_dev;
+    req_sys_dev_id = ucs_topo_sys_device_get_identifier(req_sys_dev);
+    if (req_sys_dev_id == -1) {
+        ucs_trace("could not parse req_sys_dev identifier; "
                   "falling back to first max bw lane %d",
-                  dev_name, first_max_bw_lane);
+                  first_max_bw_lane);
         return first_max_bw_lane;
     }
 
@@ -174,7 +162,10 @@ ucp_proto_multi_find_max_avail_bw_lane(const ucp_proto_init_params_t *params,
     ucs_qsort_r(sys_devs, num_max_bw_devs, sizeof(sys_devs[0]),
                 ucp_proto_multi_sys_dev_cmp, NULL);
 
-    seed             = (unsigned)gpu_idx % num_max_bw_devs;
+    /* Use the device identifier as seed because seeds for neighboring devices
+     * need to be consecutive in order for the algorithm to work correctly. 
+     * (e.g GPU0 and GPU1) */
+    seed             = (unsigned)req_sys_dev_id % num_max_bw_devs;
     selected_sys_dev = sys_devs[seed];
 
     /* Pass 3: return the first tied index whose lane is on selected_sys_dev. */
@@ -193,7 +184,7 @@ ucp_proto_multi_find_max_avail_bw_lane(const ucp_proto_init_params_t *params,
 
     ucs_trace("max bw lane: proto %s gpu_idx %d num_max_bw_devs %u seed %u "
               "-> sys_dev %d index %u " UCP_PROTO_LANE_FMT,
-              ucp_proto_id_field(params->proto_id, name), gpu_idx,
+              ucp_proto_id_field(params->proto_id, name), req_sys_dev_id,
               num_max_bw_devs, seed, selected_sys_dev, selected_index,
               UCP_PROTO_LANE_ARG(params, lanes[selected_index],
                                  &lanes_perf[lanes[selected_index]]));
