@@ -59,6 +59,7 @@ typedef struct {
     ucs_sys_bus_id_t        bus_id;
     char                    *name;
     unsigned                name_priority;
+    int                     name_ordinal;
     ucs_numa_node_t         numa_node;
     uintptr_t               user_value;
 
@@ -326,6 +327,24 @@ out:
     return numa_node;
 }
 
+/* Parse the device ordinal from the trailing decimal digits of its name */
+static int ucs_topo_parse_name_ordinal(const char *name)
+{
+    size_t length = strlen(name);
+    size_t offset = length;
+
+    /* Find the last non-digit character */
+    while ((offset > 0) && isdigit(name[offset - 1])) {
+        --offset;
+    }
+
+    if ((offset == length) || (offset == 0)) {
+        return -1;
+    }
+
+    return atoi(name + offset);
+}
+
 ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
                                             ucs_sys_device_t *sys_dev)
 {
@@ -370,6 +389,8 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
         ucs_topo_global_ctx.devices[*sys_dev].bus_id        = *bus_id;
         ucs_topo_global_ctx.devices[*sys_dev].name          = name;
         ucs_topo_global_ctx.devices[*sys_dev].name_priority = 0;
+        ucs_topo_global_ctx.devices[*sys_dev].name_ordinal =
+                ucs_topo_parse_name_ordinal(name);
         ucs_topo_global_ctx.devices[*sys_dev].numa_node     =
                 ucs_topo_read_device_numa_node(bus_id);
         ucs_topo_global_ctx.devices[*sys_dev].user_value    = UINTPTR_MAX;
@@ -853,6 +874,8 @@ ucs_status_t ucs_topo_sys_device_set_name(ucs_sys_device_t sys_dev,
         ucs_free(ucs_topo_global_ctx.devices[sys_dev].name);
         ucs_topo_global_ctx.devices[sys_dev].name = ucs_strdup(name,
                                                                "sys_dev_name");
+        ucs_topo_global_ctx.devices[sys_dev].name_ordinal =
+                ucs_topo_parse_name_ordinal(name);
         ucs_topo_global_ctx.devices[sys_dev].name_priority = priority;
     }
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
@@ -879,24 +902,23 @@ const char *ucs_topo_sys_device_get_name(ucs_sys_device_t sys_dev)
     return name;
 }
 
-int ucs_topo_sys_device_get_identifier(ucs_sys_device_t sys_dev)
+int ucs_topo_sys_device_get_name_ordinal(ucs_sys_device_t sys_dev)
 {
-    const char *name = ucs_topo_sys_device_get_name(sys_dev);
-    size_t length    = strlen(name);
-    size_t offset    = length;
+    int name_ordinal;
 
-    /* Find the last non-digit character */
-    while ((offset > 0) && isdigit(name[offset - 1])) {
-        --offset;
-    }
-
-    /* Parse the identifier from the name */
-    if ((offset == length) || (offset == 0)) {
-        ucs_trace("could not parse identifier from name %s", name);
+    if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
         return -1;
     }
 
-    return atoi(name + offset);
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+    if (sys_dev < ucs_topo_global_ctx.num_devices) {
+        name_ordinal = ucs_topo_global_ctx.devices[sys_dev].name_ordinal;
+    } else {
+        name_ordinal = -1;
+    }
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+
+    return name_ordinal;
 }
 
 ucs_numa_node_t ucs_topo_sys_device_get_numa_node(ucs_sys_device_t sys_dev)

@@ -345,18 +345,19 @@ ucs_topo_resolve_sysfs_path(const char *dev_path, char *path_buffer);
 const char *ucs_topo_sys_device_get_name(ucs_sys_device_t sys_dev);
 
 /**
- * Get the identifier of a given system device, parsed from the device name.
+ * Get the ordinal of a given system device, parsed from the trailing decimal
+ * digits of the device name.
  *
- * For example: 
+ * For example:
  * - GPUx (GPU0 -> 0, GPU1 -> 1)
  * - mlx5_x (mlx5_0 -> 0, mlx5_1 -> 1)
  *
- * @param [in]  sys_dev System device's name to get.
+ * @param [in]  sys_dev System device to query.
  *
- * @return The identifier of the system device, or -1 if the system device is
- *         invalid or the name does not match the expected format.
+ * @return The ordinal of the system device, or -1 if the system device is
+ *         unknown/invalid or the name has no trailing decimal digits.
  */
-int ucs_topo_sys_device_get_identifier(ucs_sys_device_t sys_dev);
+int ucs_topo_sys_device_get_name_ordinal(ucs_sys_device_t sys_dev);
 
 /**
  * Get the closest NUMA node for a given system device.
