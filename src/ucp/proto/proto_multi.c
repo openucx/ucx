@@ -77,10 +77,16 @@ static int ucp_proto_multi_sys_dev_cmp(const void *pa, const void *pb,
     const ucs_sys_device_t b   = *(const ucs_sys_device_t*)pb;
     ucs_bus_id_bit_rep_t key_a = ucp_proto_multi_sys_dev_bus_id_key(a);
     ucs_bus_id_bit_rep_t key_b = ucp_proto_multi_sys_dev_bus_id_key(b);
+    uintptr_t user_a, user_b;
 
-    /* ascending order by PCI bus id so every rank on the node observes the
-     * same ordering regardless of local device discovery order. */
-    return (key_a > key_b) - (key_a < key_b);
+    if (key_a != key_b) {
+        return (key_a > key_b) - (key_a < key_b);
+    }
+
+    /* Use user value as tiebreaker when devices share the same bus id */
+    user_a = ucs_topo_sys_device_get_user_value(a);
+    user_b = ucs_topo_sys_device_get_user_value(b);
+    return (user_a > user_b) - (user_a < user_b);
 }
 
 static ucp_lane_index_t
