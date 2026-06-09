@@ -58,8 +58,6 @@ ucp_proto_multi_get_avail_bw(const ucp_proto_init_params_t *params,
     return lane_perf->bandwidth * ratio;
 }
 
-/* Pack a device's PCI bus id (BDF) into a comparable key. Devices without a
- * bus id sort last, ordered by sys_dev to keep a deterministic total order. */
 static ucs_bus_id_bit_rep_t
 ucp_proto_multi_sys_dev_bus_id_key(ucs_sys_device_t sys_dev)
 {
