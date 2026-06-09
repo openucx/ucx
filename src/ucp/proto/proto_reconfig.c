@@ -4,6 +4,7 @@
  * See file LICENSE for terms.
  */
 
+#include "core/ucp_ep.inl"
 #ifdef HAVE_CONFIG_H
 #  include "config.h"
 #endif
@@ -102,6 +103,14 @@ static ucs_status_t ucp_proto_reconfig_progress(uct_pending_req_t *self)
                                   ucp_operation_names, &strb);
         ucs_error("cannot find remote protocol for: %s",
                   ucs_string_buffer_cstr(&strb));
+
+        /* No protocol can serve this op on the current lane set - fail
+         * the EP so the user error callback fires. */
+        if (!ucp_ep_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_NONE) &&
+            !(ep->flags & UCP_EP_FLAG_FAILED)) {
+            ucp_ep_set_lanes_failed_schedule(ep, 0, UCS_ERR_ENDPOINT_TIMEOUT);
+        }
+
         ucp_proto_request_abort(req, UCS_ERR_CANCELED);
         return UCS_OK;
     }
