@@ -464,12 +464,6 @@ ucp_proto_common_is_net_dev(const ucp_proto_init_params_t *params,
            UCT_DEVICE_TYPE_NET;
 }
 
-static UCS_F_ALWAYS_INLINE int
-ucp_proto_common_bandwidth_equal(double bw1, double bw2)
-{
-    return fabs(bw1 - bw2) <= UCP_PROTO_PERF_EPSILON;
-}
-
 static UCS_F_ALWAYS_INLINE double
 ucp_proto_common_iface_bandwidth(ucp_context_h context,
                                  const uct_ppn_bandwidth_t *bandwidth)
