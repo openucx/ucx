@@ -185,7 +185,8 @@ uct_rc_mlx5_base_ep_atomic32_fetch(uct_ep_h ep, uct_atomic_op_t opcode,
 
 ucs_status_t uct_rc_mlx5_base_ep_fence(uct_ep_h tl_ep, unsigned flags);
 
-void uct_rc_mlx5_base_ep_post_check(uct_ep_h tl_ep);
+ucs_status_t
+uct_rc_mlx5_base_ep_post_check(uct_ep_h tl_ep, uct_completion_t *comp);
 
 void uct_rc_mlx5_base_ep_vfs_populate(uct_rc_ep_t *rc_ep);
 
