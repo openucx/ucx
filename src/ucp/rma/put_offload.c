@@ -444,6 +444,8 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
                  uct_memhs,
                  &dt_iter->type.sgl.remote_addrs[start_index],
                  uct_rkeys,
+                 NULL,
+                 NULL,
                  elem_count, &req->send.state.uct_comp);
 
     ucs_free_on_stack(uct_memhs, memhs_size);
