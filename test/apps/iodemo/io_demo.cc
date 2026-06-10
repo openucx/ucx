@@ -2759,7 +2759,9 @@ static void usage(void)
     std::cout << "                              NOTE: if using several IO operations, performance" << std::endl;
     std::cout << "                                    measurements may be inaccurate" << std::endl;
     std::cout << "  -d <min>:<max>              Range that should be used to get data" << std::endl;
-    std::cout << "                              size of IO payload" << std::endl;
+    std::cout << "                              size of IO payload. Values can use" << std::endl;
+    std::cout << "                              B, K, M, G or T suffixes; for example:" << std::endl;
+    std::cout << "                              -d 64K:1M" << std::endl;
     std::cout << "  -b <number of buffers>      Number of offcache IO buffers" << std::endl;
     std::cout << "  -i <iterations-count>       Number of iterations to run communication" << std::endl;
     std::cout << "  -w <window-size>            Number of outstanding requests" << std::endl;
