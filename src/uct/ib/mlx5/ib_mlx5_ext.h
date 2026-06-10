@@ -34,8 +34,8 @@ BEGIN_C_DECLS
  * @ref uct_ib_mlx5_ext_iface_query_attr_t are present.
  */
 enum uct_ib_mlx5_ext_iface_query_attr_field {
-    /** Enables @ref uct_ib_mlx5_ext_iface_query_attr_t::flags */
-    UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_FLAGS        = UCS_BIT(0),
+    /** Enables @ref uct_ib_mlx5_ext_iface_query_attr_t::cap */
+    UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_CAP_FLAGS    = UCS_BIT(0),
 
     /** Enables @ref uct_ib_mlx5_ext_iface_query_attr_t::tx_token_len */
     UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_TX_TOKEN_LEN = UCS_BIT(1),
@@ -55,14 +55,16 @@ typedef struct uct_ib_mlx5_ext_iface_query_attr {
      */
     uint64_t field_mask;
 
-    /** Interface capability flags. */
-    uint64_t flags;
+    /** Interface capabilities (v2 flags) */
+    struct {
+        uint64_t flags; /**< Flags from @ref UCT_RESOURCE_IFACE_CAP_V2 */
+    } cap;
 
     /** TX token length in bytes. */
-    size_t   tx_token_len;
+    size_t tx_token_len;
 
     /** RX token length in bytes. */
-    size_t   rx_token_len;
+    size_t rx_token_len;
 } uct_ib_mlx5_ext_iface_query_attr_t;
 
 /**
@@ -118,13 +120,14 @@ typedef struct uct_ib_mlx5_ext_qp_query_attr {
 /**
  * @brief External plugin iface query callback.
  *
- * @param [in,out] attr Query parameters. Only fields selected by
- *                      @a attr->field_mask should be accessed.
+ * @param [in]     iface Interface to query.
+ * @param [in,out] attr  Query parameters. Only fields selected by
+ *                       @a attr->field_mask should be accessed.
  *
  * @return UCS_OK on success, or an error if the operation failed.
  */
 typedef ucs_status_t (*uct_ib_mlx5_ext_iface_query_func_t)(
-        uct_ib_mlx5_ext_iface_query_attr_t *attr);
+        uct_iface_h iface, uct_ib_mlx5_ext_iface_query_attr_t *attr);
 
 /**
  * @brief External plugin QP token query callback.
@@ -169,7 +172,8 @@ void uct_ib_mlx5_ext_cleanup(void);
 ucs_status_t uct_ib_mlx5_ext_register(const uct_ib_mlx5_ext_ops_t *ops);
 
 ucs_status_t
-uct_ib_mlx5_ext_iface_query(uct_ib_mlx5_ext_iface_query_attr_t *attr);
+uct_ib_mlx5_ext_iface_query(uct_iface_h iface,
+                            uct_ib_mlx5_ext_iface_query_attr_t *attr);
 
 ucs_status_t uct_ib_mlx5_ext_qp_query(struct ibv_qp *qp,
                                       struct mlx5dv_devx_obj *devx_obj,

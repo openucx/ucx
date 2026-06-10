@@ -35,8 +35,8 @@ uct_ib_mlx5_ext_iface_query_default(uct_ib_mlx5_ext_iface_query_attr_t *attr)
             UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_TX_TOKEN_LEN |
             UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_RX_TOKEN_LEN;
 
-    if (attr->field_mask & UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_FLAGS) {
-        attr->flags = 0;
+    if (attr->field_mask & UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_CAP_FLAGS) {
+        attr->cap.flags = 0;
     }
 
     if (attr->field_mask & token_len_mask) {
@@ -86,7 +86,8 @@ static ucs_status_t uct_ib_mlx5_ext_qp_query_check_param(
 }
 
 ucs_status_t
-uct_ib_mlx5_ext_iface_query(uct_ib_mlx5_ext_iface_query_attr_t *attr)
+uct_ib_mlx5_ext_iface_query(uct_iface_h iface,
+                            uct_ib_mlx5_ext_iface_query_attr_t *attr)
 {
     uct_ib_mlx5_ext_plugin_t *plugin;
     ucs_status_t status;
@@ -103,7 +104,7 @@ uct_ib_mlx5_ext_iface_query(uct_ib_mlx5_ext_iface_query_attr_t *attr)
             continue;
         }
 
-        status = plugin->ops.iface_query(attr);
+        status = plugin->ops.iface_query(iface, attr);
         ucs_spin_unlock(&uct_ib_mlx5_ext_lock);
         return status;
     }
