@@ -1729,6 +1729,174 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_trio_local_distance_get,
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_trio_local_distance_get,
                               rcx, "rc_x")
 
+class test_ucp_proto_mock_am_tiebreak : public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_am_tiebreak()
+    {
+        mock_transport("rc_mlx5");
+    }
+
+protected:
+    void add_mock_device(const std::string &dev_name, double bandwidth,
+                         double latency)
+    {
+        add_mock_iface(dev_name,
+                       [bandwidth, latency](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short = 208;
+            iface_attr.bandwidth.shared = bandwidth;
+            iface_attr.latency.c        = latency;
+            iface_attr.latency.m        = 1e-9;
+        });
+    }
+
+    void check_config(const std::string &config)
+    {
+        ucp_proto_select_key_t key = any_key();
+        key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
+        key.param.op_attr          = 0;
+
+        check_ep_config(sender(), {{0, 200, "short", config}}, key);
+    }
+};
+
+class test_ucp_proto_mock_am_tiebreak_equal_score :
+    public test_ucp_proto_mock_am_tiebreak {
+public:
+    virtual void init() override
+    {
+        add_mock_device("mock_0:1", 10e9, 500e-9);
+        add_mock_device("mock_1:1", 28e9, 500e-9);
+        test_ucp_proto_mock::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_am_tiebreak_equal_score, higher_bandwidth_wins,
+           "IB_NUM_PATHS?=1")
+{
+    check_config("rc_mlx5/mock_1:1");
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_am_tiebreak_equal_score, rcx,
+                              "rc_x")
+
+class test_ucp_proto_mock_am_tiebreak_score_dominates :
+    public test_ucp_proto_mock_am_tiebreak {
+public:
+    virtual void init() override
+    {
+        add_mock_device("mock_0:1", 10e9, 500e-9);
+        add_mock_device("mock_1:1", 28e9, 2000e-9);
+        test_ucp_proto_mock::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_am_tiebreak_score_dominates,
+           score_beats_bandwidth, "IB_NUM_PATHS?=1")
+{
+    check_config("rc_mlx5/mock_0:1");
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_am_tiebreak_score_dominates,
+                              rcx, "rc_x")
+
+class test_ucp_proto_mock_am_tiebreak_within_window :
+    public test_ucp_proto_mock_am_tiebreak {
+public:
+    virtual void init() override
+    {
+        add_mock_device("mock_0:1", 10e9, 500e-9);
+        add_mock_device("mock_1:1", 28e9, 508e-9);
+        test_ucp_proto_mock::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_am_tiebreak_within_window,
+           bandwidth_within_window, "IB_NUM_PATHS?=1")
+{
+    check_config("rc_mlx5/mock_1:1");
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_am_tiebreak_within_window,
+                              rcx, "rc_x")
+
+class test_ucp_proto_mock_keepalive_tiebreak :
+    public test_ucp_proto_mock_am_tiebreak {
+public:
+    test_ucp_proto_mock_keepalive_tiebreak()
+    {
+        modify_config("KEEPALIVE_INTERVAL", "1s");
+    }
+
+    virtual ucp_ep_params_t get_ep_params() override
+    {
+        ucp_ep_params_t params = test_ucp_proto_mock::get_ep_params();
+
+        params.field_mask     |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
+                                 UCP_EP_PARAM_FIELD_ERR_HANDLER;
+        params.err_mode        = UCP_ERR_HANDLING_MODE_PEER;
+        params.err_handler.cb  = reinterpret_cast<ucp_err_handler_cb_t>(
+                                         ucs_empty_function);
+        params.err_handler.arg = reinterpret_cast<void*>(this);
+
+        return params;
+    }
+
+    virtual void init() override
+    {
+        const size_t lower_max_inflight_eps = SIZE_MAX - (SIZE_MAX / 100);
+
+        add_keepalive_mock_device("mock_0:1", 10e9, 500e-9, SIZE_MAX);
+        add_keepalive_mock_device("mock_1:1", 28e9, 500e-9,
+                                  lower_max_inflight_eps);
+        test_ucp_proto_mock::init();
+    }
+
+protected:
+    void add_keepalive_mock_device(const std::string &dev_name,
+                                   double bandwidth, double latency,
+                                   size_t max_inflight_eps)
+    {
+        add_mock_iface(dev_name,
+                       [bandwidth, latency](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.flags &= ~UCT_IFACE_FLAG_EP_KEEPALIVE;
+            iface_attr.cap.flags |= UCT_IFACE_FLAG_EP_CHECK |
+                                    UCT_IFACE_FLAG_CONNECT_TO_EP |
+                                    UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
+            iface_attr.cap.am.max_short = 208;
+            iface_attr.bandwidth.shared = bandwidth;
+            iface_attr.latency.c        = latency;
+            iface_attr.latency.m        = 1e-9;
+        }, [max_inflight_eps](uct_perf_attr_t &perf_attr) {
+            if (perf_attr.field_mask &
+                UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS) {
+                perf_attr.max_inflight_eps = max_inflight_eps;
+            }
+        });
+    }
+
+    void check_keepalive_lane(const std::string &dev_name)
+    {
+        const ucp_ep_config_t *config = ucp_worker_ep_config(sender().worker(),
+                                                             ep_config_index(
+                                                                     sender()));
+        const ucp_lane_index_t lane   = config->key.keepalive_lane;
+
+        ASSERT_NE(UCP_NULL_LANE, lane);
+        EXPECT_STREQ(dev_name.c_str(),
+                     ucp_ep_get_tl_rsc(sender().ep(), lane)->dev_name);
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_keepalive_tiebreak,
+           higher_bandwidth_within_score_window, "IB_NUM_PATHS?=1")
+{
+    check_keepalive_lane("mock_1:1");
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_keepalive_tiebreak, rcx,
+                              "rc_x")
+
+
 #if HAVE_DECL_IBV_EVENT_PORT_SPEED_CHANGE
 
 class test_ucp_proto_mock_rcx_speed_change : public test_ucp_proto_mock {
