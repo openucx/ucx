@@ -62,6 +62,19 @@ ucp_datatype_iter_detect_mem_info(ucp_context_h context, void *buffer,
     ucp_memory_detect(context, buffer, length, &dt_iter->mem_info);
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucp_datatype_iter_init_contig(ucp_datatype_iter_t *dt_iter, void *buffer,
+                              size_t length,
+                              const ucp_memory_info_t *mem_info)
+{
+    dt_iter->dt_class           = UCP_DATATYPE_CONTIG;
+    dt_iter->mem_info           = *mem_info;
+    dt_iter->length             = length;
+    dt_iter->offset             = 0;
+    dt_iter->type.contig.buffer = buffer;
+    dt_iter->type.contig.memh   = NULL;
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_datatype_contig_iter_init(ucp_context_h context, void *buffer,
                               size_t length, ucp_datatype_iter_t *dt_iter,
@@ -200,13 +213,11 @@ static UCS_F_ALWAYS_INLINE void
 ucp_datatype_iter_init_null(ucp_datatype_iter_t *dt_iter, size_t length,
                             uint8_t *sg_count)
 {
-    dt_iter->dt_class               = UCP_DATATYPE_CONTIG;
-    dt_iter->length                 = length;
-    dt_iter->offset                 = 0;
-    dt_iter->type.contig.buffer     = NULL;
-    dt_iter->type.contig.memh       = NULL;
-    *sg_count                       = 1;
-    ucp_memory_info_set_host(&dt_iter->mem_info);
+    ucp_memory_info_t mem_info;
+
+    ucp_memory_info_set_host(&mem_info);
+    ucp_datatype_iter_init_contig(dt_iter, NULL, length, &mem_info);
+    *sg_count = 1;
 }
 
 /* Move the datatype iterator state from 'src' to 'dst', reset 'src', and

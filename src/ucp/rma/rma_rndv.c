@@ -24,20 +24,6 @@
 #define UCP_PROTO_RMA_RNDV_RTS_NAME "RMA_RTS"
 
 
-static void
-ucp_rma_rndv_dt_iter_init(ucp_datatype_iter_t *dt_iter, uint64_t address,
-                          size_t length, ucs_memory_type_t mem_type,
-                          ucs_sys_device_t sys_dev)
-{
-    dt_iter->dt_class           = UCP_DATATYPE_CONTIG;
-    dt_iter->mem_info.type      = mem_type;
-    dt_iter->mem_info.sys_dev   = sys_dev;
-    dt_iter->length             = length;
-    dt_iter->offset             = 0;
-    dt_iter->type.contig.buffer = (void*)(uintptr_t)address;
-    dt_iter->type.contig.memh   = NULL;
-}
-
 static int
 ucp_proto_rma_rndv_probe_check(const ucp_proto_init_params_t *init_params,
                                ucp_operation_id_t op_id)
@@ -537,6 +523,7 @@ ucs_status_t ucp_rma_rndv_process_rts(ucp_worker_h worker,
                                       size_t length)
 {
     const void *rkey_buffer;
+    ucp_memory_info_t mem_info;
     ucp_request_t *recv_req;
     ucp_ep_h ep;
 
@@ -559,8 +546,11 @@ ucs_status_t ucp_rma_rndv_process_rts(ucp_worker_h worker,
     recv_req->recv.worker        = worker;
     recv_req->recv.op_attr       = 0;
     recv_req->recv.remote_req_id = rts->super.sreq.req_id;
-    ucp_rma_rndv_dt_iter_init(&recv_req->recv.dt_iter, rts->address,
-                              rts->super.size, rts->mem_type, rts->sys_dev);
+    mem_info.type                = rts->mem_type;
+    mem_info.sys_dev             = rts->sys_dev;
+    ucp_datatype_iter_init_contig(&recv_req->recv.dt_iter,
+                                  (void*)(uintptr_t)rts->address,
+                                  rts->super.size, &mem_info);
     recv_req->recv.rndv.ep_id                 = rts->super.sreq.ep_id;
     recv_req->recv.rndv.complete_cb           = ucp_rma_rndv_put_recv_complete;
 

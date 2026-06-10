@@ -947,6 +947,10 @@ ucp_proto_rndv_rtr_req_sreq_init(ucp_ep_h ep, ucp_request_t *req,
                                  const ucp_rndv_rtr_req_hdr_t *rtr_req)
 {
     const ucp_rndv_rtr_hdr_t *rtr = &rtr_req->super;
+    ucp_memory_info_t mem_info    = {
+        .type    = rtr_req->mem_type,
+        .sys_dev = rtr_req->sys_dev
+    };
 
     ucp_proto_request_send_init(req, ep,
                                 UCP_REQUEST_FLAG_RNDV_SEND_INTERNAL);
@@ -958,14 +962,9 @@ ucp_proto_rndv_rtr_req_sreq_init(ucp_ep_h ep, ucp_request_t *req,
     req->send.rndv.remote_req_id  = rtr->rreq_id;
     req->send.rndv.rkey           = NULL;
     req->send.rndv.remote_address = rtr_req->address;
-    req->send.state.dt_iter.dt_class           = UCP_DATATYPE_CONTIG;
-    req->send.state.dt_iter.mem_info.type      = rtr_req->mem_type;
-    req->send.state.dt_iter.mem_info.sys_dev   = rtr_req->sys_dev;
-    req->send.state.dt_iter.length             = rtr->size;
-    req->send.state.dt_iter.offset             = 0;
-    req->send.state.dt_iter.type.contig.buffer =
-            (void*)(uintptr_t)rtr_req->address;
-    req->send.state.dt_iter.type.contig.memh   = NULL;
+    ucp_datatype_iter_init_contig(&req->send.state.dt_iter,
+                                  (void*)(uintptr_t)rtr_req->address,
+                                  rtr->size, &mem_info);
 }
 
 static ucs_status_t
