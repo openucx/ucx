@@ -72,7 +72,7 @@ typedef struct {
     /* Base RTR header; sreq_id is UCS_PTR_MAP_KEY_INVALID */
     ucp_rndv_rtr_hdr_t super;
 
-    /* Endpoint on the RTR initiator side */
+    /* Request on the RTR initiator side */
     ucp_request_hdr_t  req;
 
     /* Address of the source buffer on the peer */

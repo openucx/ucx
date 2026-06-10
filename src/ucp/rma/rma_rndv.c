@@ -377,7 +377,9 @@ ucp_request_t *ucp_rma_rndv_flush_open(ucp_request_t *rndv_req)
     }
 
     if (recv_req->flags & UCP_REQUEST_FLAG_RNDV_START_FLUSH) {
-        /* Claim before the operation, since SELF can complete inline. */
+        /* Account the RMA GET/RNDV nested transfer as an RMA remote operation,
+         * so RMA flush waits for the internal receive request to complete.
+         * Claim before issuing it, since SELF can complete inline. */
         recv_req->flags &= ~UCP_REQUEST_FLAG_RNDV_START_FLUSH;
         ucp_worker_flush_ops_count_add(ep->worker, +1);
         return recv_req;

@@ -92,8 +92,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_get_common_send(
 {
     ucp_ep_h ep              = req->send.ep;
     uct_ep_h uct_ep          = ucp_ep_get_lane(ep, lpriv->super.lane);
-    uct_rkey_t tl_rkey      = ucp_rkey_get_tl_rkey(req->send.rndv.rkey,
-                                                   lpriv->super.rkey_index);
+    uct_rkey_t tl_rkey       = ucp_rkey_get_tl_rkey(req->send.rndv.rkey,
+                                                    lpriv->super.rkey_index);
     uint64_t remote_address = req->send.rndv.remote_address + offset;
     ucp_request_t *recv_req;
     ucs_status_t status;
