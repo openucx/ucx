@@ -34,7 +34,7 @@
 #define UCS_DEVICE_NUM_THREADS_IN_WARP 32
 
 /* Check if _n is aligned to a power-of-2 boundary _p */
-#define UCT_IPC_IS_ALIGNED_POW2(_n, _p) (!((_n) & ((_p) - 1)))
+#define UCS_DEVICE_IS_ALIGNED_POW2(_n, _p) (!((_n) & ((_p) - 1)))
 
 
 /* nvcc does not provide __builtin_ia32_prefetch used by GCC's x86 intrinsic headers.

@@ -107,8 +107,8 @@ static uct_allocated_memory_t ucp_device_mem_handle_hash_remove(void *handle)
 }
 
 static ucs_status_t
-ucp_device_detect_local_sys_dev(ucp_context_h context,
-                                ucs_memory_type_t mem_type,
+ucp_device_detect_local_sys_dev(const ucp_context_h context,
+                                const ucs_memory_type_t mem_type,
                                 ucs_sys_device_t *local_sys_dev)
 {
     ucs_memory_info_t mem_info;
@@ -355,7 +355,7 @@ static ucs_status_t ucp_device_local_mem_list_params_check(
 }
 
 static ucs_status_t
-ucp_device_detect_export_mem_type(ucp_context_h context,
+ucp_device_detect_export_mem_type(const ucp_context_h context,
                                   ucs_memory_type_t *export_mem_type_p,
                                   ucs_sys_device_t *sys_dev_p)
 {
@@ -562,8 +562,8 @@ ucp_device_remote_mem_list_fill(const ucp_device_mem_list_elem_t *ucp_element,
 
 static ucs_status_t ucp_device_remote_mem_list_create_handle(
         const ucp_device_mem_list_params_t *params, ucp_ep_h ep,
-        ucs_memory_type_t mem_type, uct_allocated_memory_t *mem,
-        ucs_sys_device_t local_sys_dev)
+        const ucs_memory_type_t mem_type, uct_allocated_memory_t *mem,
+        const ucs_sys_device_t local_sys_dev)
 {
     size_t uct_elem_size;
     size_t handle_size         = 0;
