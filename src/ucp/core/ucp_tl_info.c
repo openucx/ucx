@@ -321,10 +321,10 @@ static void ucp_tl_info_render_legend(ucs_table_t *table)
     }
 }
 
-void ucp_context_log_tl_info(ucp_context_h context,
-                             ucp_tl_info_array_t *all_rscs)
+ucs_status_t ucp_context_render_tl_info(ucp_context_h context,
+                                        ucp_tl_info_array_t *all_rscs,
+                                        ucs_string_buffer_t *strb)
 {
-    ucs_string_buffer_t strb      = UCS_STRING_BUFFER_INITIALIZER;
     const ucs_table_config_t tcfg = {
         .n_cols = UCP_TL_INFO_NUM_COLS
     };
@@ -333,14 +333,8 @@ void ucp_context_log_tl_info(ucp_context_h context,
     ucs_table_t table;
     int printed_any;
 
-    if (!context->config.ext.print_transport_tables) {
-        return;
-    }
-
-    if (ucs_array_is_empty(all_rscs)) {
-        ucs_warn("skipping transport table: no resource info captured");
-        return;
-    }
+    ucs_assertv_always(!ucs_array_is_empty(all_rscs),
+                       "no resource info captured");
 
     /* Sort by (dev_type, component, transport) so that the rows of each group
      * are contiguous and group boundaries can be found by comparing adjacent
@@ -366,9 +360,29 @@ void ucp_context_log_tl_info(ucp_context_h context,
                                          &printed_any);
     ucp_tl_info_render_legend(&table);
 
-    ucs_table_render(&table, &strb);
+    ucs_table_render(&table, strb);
 
     status = ucs_table_get_status(&table);
+    ucs_table_cleanup(&table);
+    return status;
+}
+
+void ucp_context_log_tl_info(ucp_context_h context,
+                             ucp_tl_info_array_t *all_rscs)
+{
+    ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
+    ucs_status_t status;
+
+    if (!context->config.ext.print_transport_tables) {
+        return;
+    }
+
+    if (ucs_array_is_empty(all_rscs)) {
+        ucs_warn("skipping transport table: no resource info captured");
+        return;
+    }
+
+    status = ucp_context_render_tl_info(context, all_rscs, &strb);
     if (status != UCS_OK) {
         ucs_warn("transport table render incomplete: %s",
                  ucs_status_string(status));
@@ -376,5 +390,4 @@ void ucp_context_log_tl_info(ucp_context_h context,
 
     ucs_log_print_compact(ucs_string_buffer_cstr(&strb));
     ucs_string_buffer_cleanup(&strb);
-    ucs_table_cleanup(&table);
 }
