@@ -218,15 +218,23 @@ UCS_TEST_F(test_topo, find_device_by_bus_id_and_user_value) {
     ASSERT_TRUE(state != NULL);
     ucs_topo_restore_state(state);
 
+    status = ucs_topo_find_device_by_bus_id(&dummy_bus_id, &bdf_dev);
+    ASSERT_UCS_OK(status);
+    EXPECT_EQ(dev1, bdf_dev);
+
     status = ucs_topo_find_device_by_bus_id_and_user_value(&dummy_bus_id,
                                                            user_value2,
                                                            &dev2_again);
     ASSERT_UCS_OK(status);
     EXPECT_EQ(dev2, dev2_again);
 
-    status = ucs_topo_find_device_by_bus_id_and_user_value(
-            &dummy_bus_id, UINTPTR_MAX, &dev2_again);
-    EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+    {
+        scoped_log_handler slh(hide_errors_logger);
+
+        status = ucs_topo_find_device_by_bus_id_and_user_value(
+                &dummy_bus_id, UCS_SYS_DEVICE_USER_VALUE_EMPTY, &dev2_again);
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+    }
 }
 
 UCS_TEST_F(test_topo, get_distance) {

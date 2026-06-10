@@ -25,6 +25,9 @@ BEGIN_C_DECLS
  * e.g. virtual devices like CMA/knem */
 #define UCS_SYS_DEVICE_ID_UNKNOWN UINT8_MAX
 
+/* User-defined system device value is not set */
+#define UCS_SYS_DEVICE_USER_VALUE_EMPTY UINTPTR_MAX
+
 /* Maximal size of BDF string */
 #define UCS_SYS_BDF_NAME_MAX 16
 
@@ -170,19 +173,20 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
  * This is used for logical devices which share the same PCI bus id but still
  * need different system device indexes. If an existing system device with the
  * same bus id and user value exists, it is returned. Otherwise, if the
- * canonical system device for this bus id has no user value, it is claimed; if
- * not, a new system device with the same bus id is created.
+ * canonical system device for this bus id has no user value, the requested user
+ * value is assigned to it and it is returned; if not, a new system device with
+ * the same bus id is created.
  *
  * @param [in]  bus_id      pointer to bus id of the device of interest.
  * @param [in]  user_value  user-defined value identifying the logical device.
- * @param [out] sys_dev     system device index associated with the value.
+ * @param [out] sys_dev_p   system device index associated with the value.
  *
  * @return UCS_OK or error in case device cannot be found.
  */
 ucs_status_t
 ucs_topo_find_device_by_bus_id_and_user_value(const ucs_sys_bus_id_t *bus_id,
                                               uintptr_t user_value,
-                                              ucs_sys_device_t *sys_dev);
+                                              ucs_sys_device_t *sys_dev_p);
 
 
 /**
@@ -404,8 +408,8 @@ ucs_topo_sys_device_set_user_value(ucs_sys_device_t sys_dev, uintptr_t value);
  *
  * @param [in] sys_dev System device index.
  *
- * @return User-defined value, or UINTPTR_MAX if no value is set or the device
- *         does not exist.
+ * @return User-defined value, or UCS_SYS_DEVICE_USER_VALUE_EMPTY if no value is
+ *         set or the device does not exist.
  */
 uintptr_t ucs_topo_sys_device_get_user_value(ucs_sys_device_t sys_dev);
 

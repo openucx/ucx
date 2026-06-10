@@ -364,7 +364,7 @@ ucs_topo_add_device_locked(const ucs_sys_bus_id_t *bus_id,
     device->sibling_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
     device->sys_dev_aux     = UCS_SYS_DEVICE_ID_UNKNOWN;
 
-    if (user_value == UINTPTR_MAX) {
+    if (user_value == UCS_SYS_DEVICE_USER_VALUE_EMPTY) {
         ucs_debug("added sys_dev %d for bus id %s", *sys_dev, name);
     } else {
         ucs_debug("added sys_dev %d for bus id %s with user value %" PRIuPTR,
@@ -374,97 +374,113 @@ ucs_topo_add_device_locked(const ucs_sys_bus_id_t *bus_id,
     return UCS_OK;
 }
 
-ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
-                                            ucs_sys_device_t *sys_dev)
+static ucs_status_t
+ucs_topo_find_device_by_bus_id_locked(const ucs_sys_bus_id_t *bus_id,
+                                      ucs_sys_device_t *sys_dev_p)
 {
     ucs_bus_id_bit_rep_t bus_id_bit_rep;
     int kh_put_status;
     khiter_t hash_it;
     ucs_status_t status;
 
-    bus_id_bit_rep  = ucs_topo_get_bus_id_bit_repr(bus_id);
+    bus_id_bit_rep = ucs_topo_get_bus_id_bit_repr(bus_id);
 
-    ucs_spin_lock(&ucs_topo_global_ctx.lock);
     hash_it = kh_put(
             bus_to_sys_dev /*name*/,
             &ucs_topo_global_ctx.bus_to_sys_dev_hash /*pointer to hashmap*/,
             bus_id_bit_rep /*key*/, &kh_put_status);
 
     if (kh_put_status == UCS_KH_PUT_KEY_PRESENT) {
-        *sys_dev = kh_value(&ucs_topo_global_ctx.bus_to_sys_dev_hash, hash_it);
-        status   = UCS_OK;
+        *sys_dev_p = kh_value(&ucs_topo_global_ctx.bus_to_sys_dev_hash,
+                              hash_it);
+        status     = UCS_OK;
     } else if ((kh_put_status == UCS_KH_PUT_BUCKET_EMPTY) ||
                (kh_put_status == UCS_KH_PUT_BUCKET_CLEAR)) {
         status = ucs_topo_add_device_locked(
-                bus_id, ucs_topo_read_device_numa_node(bus_id), UINTPTR_MAX,
-                sys_dev);
+                bus_id, ucs_topo_read_device_numa_node(bus_id),
+                UCS_SYS_DEVICE_USER_VALUE_EMPTY, sys_dev_p);
         if (status != UCS_OK) {
             kh_del(bus_to_sys_dev, &ucs_topo_global_ctx.bus_to_sys_dev_hash,
                    hash_it);
-            goto out;
+            return status;
         }
 
-        kh_value(&ucs_topo_global_ctx.bus_to_sys_dev_hash, hash_it) = *sys_dev;
+        kh_value(&ucs_topo_global_ctx.bus_to_sys_dev_hash, hash_it) =
+                *sys_dev_p;
         status = UCS_OK;
     } else {
         ucs_error("failed to put key into hash table");
         status = UCS_ERR_IO_ERROR;
     }
 
-out:
+    return status;
+}
+
+ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
+                                            ucs_sys_device_t *sys_dev)
+{
+    ucs_status_t status;
+
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+    status = ucs_topo_find_device_by_bus_id_locked(bus_id, sys_dev);
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+
     return status;
 }
 
 ucs_status_t
 ucs_topo_find_device_by_bus_id_and_user_value(const ucs_sys_bus_id_t *bus_id,
                                               uintptr_t user_value,
-                                              ucs_sys_device_t *sys_dev)
+                                              ucs_sys_device_t *sys_dev_p)
 {
-    ucs_sys_device_t base_sys_dev;
+    ucs_topo_sys_device_info_t *base_device;
+    ucs_sys_device_t base_sys_dev, sys_dev;
     ucs_topo_sys_device_info_t *device;
     ucs_status_t status;
-    ucs_sys_device_t dev;
 
-    if (user_value == UINTPTR_MAX) {
+    if (user_value == UCS_SYS_DEVICE_USER_VALUE_EMPTY) {
+        ucs_error("empty user value is reserved");
         return UCS_ERR_INVALID_PARAM;
-    }
-
-    status = ucs_topo_find_device_by_bus_id(bus_id, &base_sys_dev);
-    if (status != UCS_OK) {
-        return status;
     }
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
 
-    device = &ucs_topo_global_ctx.devices[base_sys_dev];
-    if (device->user_value == UINTPTR_MAX) {
-        device->user_value = user_value;
-        *sys_dev           = base_sys_dev;
-        status             = UCS_OK;
+    /* Keep the BDF hash as the canonical BDF-only lookup. */
+    status = ucs_topo_find_device_by_bus_id_locked(bus_id, &base_sys_dev);
+    if (status != UCS_OK) {
         goto out_unlock;
     }
 
-    for (dev = 0; dev < ucs_topo_global_ctx.num_devices; ++dev) {
-        device = &ucs_topo_global_ctx.devices[dev];
+    base_device = &ucs_topo_global_ctx.devices[base_sys_dev];
+    if (base_device->user_value == UCS_SYS_DEVICE_USER_VALUE_EMPTY) {
+        /* First logical device for this BDF reuses the canonical sys_dev. */
+        base_device->user_value = user_value;
+        *sys_dev_p              = base_sys_dev;
+        status                  = UCS_OK;
+        goto out_unlock;
+    }
+
+    /* Find a previous duplicate-BDF sys_dev with the same user value. */
+    for (sys_dev = 0; sys_dev < ucs_topo_global_ctx.num_devices; ++sys_dev) {
+        device = &ucs_topo_global_ctx.devices[sys_dev];
         if (!ucs_topo_bus_id_equal(&device->bus_id, bus_id)) {
             continue;
         }
 
-        ucs_assertv_always(device->user_value != UINTPTR_MAX,
-                           "sys_dev %u for bus id has no user value",
-                           dev);
+        ucs_assertv_always(
+                device->user_value != UCS_SYS_DEVICE_USER_VALUE_EMPTY,
+                "sys_dev %u has no user value", sys_dev);
 
         if (device->user_value == user_value) {
-            *sys_dev = dev;
-            status   = UCS_OK;
+            *sys_dev_p = sys_dev;
+            status     = UCS_OK;
             goto out_unlock;
         }
     }
 
+    /* No matching user value exists, so add another sys_dev for this BDF. */
     status = ucs_topo_add_device_locked(
-            bus_id, ucs_topo_global_ctx.devices[base_sys_dev].numa_node,
-            user_value, sys_dev);
+            bus_id, base_device->numa_node, user_value, sys_dev_p);
 
 out_unlock:
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
@@ -474,12 +490,18 @@ out_unlock:
 ucs_status_t ucs_topo_get_device_bus_id(ucs_sys_device_t sys_dev,
                                         ucs_sys_bus_id_t *bus_id)
 {
-    if (sys_dev >= ucs_topo_global_ctx.num_devices) {
-        return UCS_ERR_NO_ELEM;
-    }
+    ucs_status_t status;
 
-    *bus_id = ucs_topo_global_ctx.devices[sys_dev].bus_id;
-    return UCS_OK;
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+    if (sys_dev >= ucs_topo_global_ctx.num_devices) {
+        status = UCS_ERR_NO_ELEM;
+    } else {
+        *bus_id = ucs_topo_global_ctx.devices[sys_dev].bus_id;
+        status  = UCS_OK;
+    }
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+
+    return status;
 }
 
 static ucs_status_t
@@ -1162,7 +1184,7 @@ uintptr_t ucs_topo_sys_device_get_user_value(ucs_sys_device_t sys_dev)
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
     if (sys_dev >= ucs_topo_global_ctx.num_devices) {
-        user_value = UINTPTR_MAX;
+        user_value = UCS_SYS_DEVICE_USER_VALUE_EMPTY;
     } else {
         user_value = ucs_topo_global_ctx.devices[sys_dev].user_value;
     }
@@ -1244,6 +1266,7 @@ void ucs_topo_restore_state(ucs_global_state_t *state)
                          ucs_topo_get_bus_id_bit_repr(&device->bus_id),
                          &kh_put_status);
         ucs_assert(kh_put_status != UCS_KH_PUT_FAILED);
+        /* Preserve the first sys_dev as the canonical BDF-only lookup. */
         if ((kh_put_status == UCS_KH_PUT_BUCKET_EMPTY) ||
             (kh_put_status == UCS_KH_PUT_BUCKET_CLEAR)) {
             kh_val(&ucs_topo_global_ctx.bus_to_sys_dev_hash, hash_it) =

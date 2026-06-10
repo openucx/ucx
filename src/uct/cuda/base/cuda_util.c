@@ -83,7 +83,7 @@ CUdevice uct_cuda_get_cuda_device(ucs_sys_device_t sys_dev)
     uintptr_t user_value;
 
     user_value = ucs_topo_sys_device_get_user_value(sys_dev);
-    if (user_value == UINTPTR_MAX) {
+    if (user_value == UCS_SYS_DEVICE_USER_VALUE_EMPTY) {
         return CU_DEVICE_INVALID;
     }
 
