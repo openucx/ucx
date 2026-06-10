@@ -181,8 +181,7 @@ ucp_rma_rndv_send_ats_err(ucp_ep_h ep, ucs_ptr_map_key_t remote_req_id,
 }
 
 static void ucp_proto_rma_rndv_query(const ucp_proto_query_params_t *params,
-                                     ucp_proto_query_attr_t *attr,
-                                     const char *desc)
+                                     ucp_proto_query_attr_t *attr)
 {
     const ucp_proto_rndv_ctrl_priv_t *rpriv = params->priv;
     ucp_proto_query_attr_t remote_attr;
@@ -194,24 +193,10 @@ static void ucp_proto_rma_rndv_query(const ucp_proto_query_params_t *params,
     attr->max_msg_length = remote_attr.max_msg_length;
     attr->lane_map       = UCS_BIT(rpriv->lane) | remote_attr.lane_map;
 
-    ucs_snprintf_safe(attr->desc, sizeof(attr->desc), "%s using %s", desc,
-                      remote_attr.desc);
+    ucs_snprintf_safe(attr->desc, sizeof(attr->desc), "%s using %s",
+                      UCP_PROTO_RNDV_DESC, remote_attr.desc);
     ucs_snprintf_safe(attr->config, sizeof(attr->config), "%s",
                       remote_attr.config);
-}
-
-static void
-ucp_proto_put_rndv_query(const ucp_proto_query_params_t *params,
-                         ucp_proto_query_attr_t *attr)
-{
-    ucp_proto_rma_rndv_query(params, attr, UCP_PROTO_RNDV_DESC);
-}
-
-static void
-ucp_proto_get_rndv_query(const ucp_proto_query_params_t *params,
-                         ucp_proto_query_attr_t *attr)
-{
-    ucp_proto_rma_rndv_query(params, attr, UCP_PROTO_RNDV_DESC);
 }
 
 static void
@@ -565,7 +550,7 @@ ucp_proto_t ucp_put_rndv_proto = {
     .flags    = 0,
     .dt_mask  = UCS_BIT(UCP_DATATYPE_CONTIG),
     .probe    = ucp_proto_put_rndv_probe,
-    .query    = ucp_proto_put_rndv_query,
+    .query    = ucp_proto_rma_rndv_query,
     .progress = {ucp_proto_put_rndv_progress},
     .abort    = ucp_proto_rndv_rts_abort,
     .reset    = ucp_proto_rndv_rts_reset
@@ -577,7 +562,7 @@ ucp_proto_t ucp_get_rndv_proto = {
     .flags    = 0,
     .dt_mask  = UCS_BIT(UCP_DATATYPE_CONTIG),
     .probe    = ucp_proto_get_rndv_probe,
-    .query    = ucp_proto_get_rndv_query,
+    .query    = ucp_proto_rma_rndv_query,
     .progress = {ucp_proto_get_rndv_progress},
     .abort    = ucp_proto_get_rndv_abort,
     .reset    = ucp_proto_get_rndv_reset
