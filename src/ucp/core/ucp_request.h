@@ -266,9 +266,6 @@ struct ucp_request {
                     /* Remote buffer address for get/put operation */
                     uint64_t          remote_address;
 
-                    /* Remote buffer memory info for RTR_REQ */
-                    ucp_memory_info_t remote_mem_info;
-
                     /* Key for remote buffer operation */
                     ucp_rkey_h        rkey;
 

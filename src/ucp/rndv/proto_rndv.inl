@@ -221,8 +221,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_frag_request_alloc(
     ucp_proto_request_send_init(freq, req->send.ep, UCP_REQUEST_FLAG_RNDV_FRAG);
     ucp_request_set_super(freq, req);
     if (req->flags & UCP_REQUEST_FLAG_RNDV_GET_REQ) {
-        freq->flags                     |= UCP_REQUEST_FLAG_RNDV_GET_REQ;
-        freq->send.rndv.remote_mem_info = req->send.rndv.remote_mem_info;
+        freq->flags |= UCP_REQUEST_FLAG_RNDV_GET_REQ;
     }
 
     *freq_p = freq;

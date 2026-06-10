@@ -163,8 +163,13 @@ static size_t ucp_proto_rndv_rtr_req_pack(void *dest, void *arg)
     ucp_request_t *req                      = arg;
     ucp_rndv_rtr_req_hdr_t *rtr_req         = dest;
     const ucp_proto_rndv_rtr_priv_t *rpriv = req->send.proto_config->priv;
+    ucp_rkey_config_t *rkey_config;
     void *rkey_src, *rkey_dst;
     size_t rkey_size, packed_size;
+
+    ucs_assert(req->send.rndv.rkey != NULL);
+    rkey_config = ucp_rkey_config(req->send.ep->worker,
+                                  req->send.rndv.rkey);
 
     packed_size = rpriv->pack_cb(&rtr_req->super, req);
     rkey_size   = packed_size - sizeof(rtr_req->super);
@@ -179,8 +184,8 @@ static size_t ucp_proto_rndv_rtr_req_pack(void *dest, void *arg)
     rtr_req->req.ep_id     = ucp_send_request_get_ep_remote_id(req);
     rtr_req->req.req_id    = UCS_PTR_MAP_KEY_INVALID;
     rtr_req->address       = req->send.rndv.remote_address;
-    rtr_req->sys_dev       = req->send.rndv.remote_mem_info.sys_dev;
-    rtr_req->mem_type      = req->send.rndv.remote_mem_info.type;
+    rtr_req->sys_dev       = rkey_config->key.sys_dev;
+    rtr_req->mem_type      = req->send.rndv.rkey->mem_type;
 
     return sizeof(*rtr_req) + rkey_size;
 }

@@ -417,11 +417,9 @@ static ucs_status_t ucp_proto_get_rndv_init(ucp_request_t *get_req,
 {
     const ucp_proto_rndv_ctrl_priv_t *rpriv = get_req->send.proto_config->priv;
     ucp_worker_h worker                     = get_req->send.ep->worker;
-    ucp_rkey_config_t *rkey_config;
     ucp_request_t *recv_req;
     ucp_request_t *rndv_req;
     uint8_t UCS_V_UNUSED sg_count;
-    ucp_memory_info_t mem_info;
     ucs_status_t status;
     uint64_t address;
     size_t length;
@@ -433,9 +431,6 @@ static ucs_status_t ucp_proto_get_rndv_init(ucp_request_t *get_req,
     }
 
     address              = get_req->send.rma.remote_addr;
-    rkey_config          = ucp_rkey_config(worker, get_req->send.rma.rkey);
-    mem_info.type        = get_req->send.rma.rkey->mem_type;
-    mem_info.sys_dev     = rkey_config->key.sys_dev;
     length               = get_req->send.state.dt_iter.length;
     get_req->send.buffer =
             get_req->send.state.dt_iter.type.contig.buffer;
@@ -470,7 +465,6 @@ static ucs_status_t ucp_proto_get_rndv_init(ucp_request_t *get_req,
     ucp_request_set_super(rndv_req, recv_req);
     rndv_req->send.rndv.remote_req_id      = UCS_PTR_MAP_KEY_INVALID;
     rndv_req->send.rndv.remote_address     = address;
-    rndv_req->send.rndv.remote_mem_info    = mem_info;
     rndv_req->send.rndv.rkey               = get_req->send.rma.rkey;
     rndv_req->send.rndv.offset             = 0;
 
