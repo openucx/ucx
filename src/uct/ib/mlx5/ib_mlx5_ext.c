@@ -52,10 +52,9 @@ static int uct_ib_mlx5_ext_is_unsupported_op(const void *op)
            (op == (const void*)ucs_empty_function_return_unsupported);
 }
 
-static ucs_status_t
-uct_ib_mlx5_ext_qp_query_validate(struct ibv_qp *qp,
-                                  struct mlx5dv_devx_obj *devx_obj,
-                                  const uct_ib_mlx5_ext_qp_query_attr_t *attr)
+static ucs_status_t uct_ib_mlx5_ext_qp_query_check_param(
+        struct ibv_qp *qp, struct mlx5dv_devx_obj *devx_obj,
+        const uct_ib_mlx5_ext_qp_query_attr_t *attr)
 {
     const uint64_t token_mask = UCT_IB_MLX5_EXT_QP_QUERY_ATTR_FIELD_TX_TOKEN |
                                 UCT_IB_MLX5_EXT_QP_QUERY_ATTR_FIELD_RX_TOKEN;
@@ -124,7 +123,7 @@ ucs_status_t uct_ib_mlx5_ext_qp_query(struct ibv_qp *qp,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    status = uct_ib_mlx5_ext_qp_query_validate(qp, devx_obj, attr);
+    status = uct_ib_mlx5_ext_qp_query_check_param(qp, devx_obj, attr);
     if (ucs_unlikely(status != UCS_OK)) {
         return status;
     }

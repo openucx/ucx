@@ -168,27 +168,9 @@ void uct_ib_mlx5_ext_cleanup(void);
  */
 ucs_status_t uct_ib_mlx5_ext_register(const uct_ib_mlx5_ext_ops_t *ops);
 
-/**
- * @brief Query iface attributes from the first registered provider that
- * supports this operation.
- *
- * @param [in,out] attr Query parameters and output fields.
- *
- * @return UCS_OK on success, or an error if the operation failed.
- */
 ucs_status_t
 uct_ib_mlx5_ext_iface_query(uct_ib_mlx5_ext_iface_query_attr_t *attr);
 
-/**
- * @brief Query QP token attributes from the first registered provider that
- * supports this operation.
- *
- * @param [in]     qp       Verbs QP handle, or NULL when @a devx_obj is set.
- * @param [in]     devx_obj DevX QP object, or NULL when @a qp is set.
- * @param [in,out] attr     Query parameters and output fields.
- *
- * @return UCS_OK on success, or an error if the operation failed.
- */
 ucs_status_t uct_ib_mlx5_ext_qp_query(struct ibv_qp *qp,
                                       struct mlx5dv_devx_obj *devx_obj,
                                       uct_ib_mlx5_ext_qp_query_attr_t *attr);
