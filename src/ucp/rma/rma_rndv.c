@@ -207,8 +207,8 @@ ucp_proto_get_rndv_add_variant(
         ucp_proto_init_elem_t *proto, const void *proto_priv)
 {
     ucp_context_h context = init_params->worker->context;
-    const ucp_proto_perf_t *perf_elems[1];
     ucp_proto_rndv_ctrl_priv_t rpriv = {0};
+    const ucp_proto_perf_t *perf_elems[1];
     ucp_proto_init_params_t variant_params;
     UCS_STRING_BUFFER_ONSTACK(perf_name, 128);
     ucp_proto_perf_t *perf;
@@ -535,8 +535,8 @@ ucs_status_t ucp_rma_rndv_process_rts(ucp_worker_h worker,
     ucp_datatype_iter_init_contig(&recv_req->recv.dt_iter,
                                   (void*)(uintptr_t)rts->address,
                                   rts->super.size, &mem_info);
-    recv_req->recv.rndv.ep_id                 = rts->super.sreq.ep_id;
-    recv_req->recv.rndv.complete_cb           = ucp_rma_rndv_put_recv_complete;
+    recv_req->recv.rndv.ep_id       = rts->super.sreq.ep_id;
+    recv_req->recv.rndv.complete_cb = ucp_rma_rndv_put_recv_complete;
 
     rkey_buffer = UCS_PTR_BYTE_OFFSET(rts, sizeof(*rts));
     ucp_proto_rndv_receive_start(worker, recv_req, &rts->super, rkey_buffer,
