@@ -459,6 +459,7 @@ uct_rc_gdaki_init_channel_chunk(uct_rc_gdaki_iface_t *iface,
 
     cq_attr.flags                           |= UCT_IB_MLX5_CQ_IGNORE_OVERRUN;
     qp_attr.mmio_mode                        = UCT_IB_MLX5_MMIO_MODE_DB;
+    qp_attr.bf_copy_mode                     = UCT_IB_MLX5_BF_COPY_MODE_GENERIC;
     qp_attr.super.srq_num                    = 0;
     qp_attr.super.max_inl_cqe[UCT_IB_DIR_TX] = 0;
     uct_ib_mlx5_wq_calc_sizes(&qp_attr);

@@ -20,6 +20,7 @@ AC_CHECK_LIB([rt], [timer_create], [], AC_MSG_ERROR([librt not found]))
 # Extended string functions
 #
 AC_CHECK_HEADERS([libgen.h])
+AC_CHECK_HEADERS([sys/auxv.h])
 AC_CHECK_DECLS([asprintf, basename, fmemopen], [],
 				AC_MSG_ERROR([GNU string extensions not found]), 
 				[#define _GNU_SOURCE 1
@@ -29,6 +30,10 @@ AC_CHECK_DECLS([asprintf, basename, fmemopen], [],
 				 #include <libgen.h>
 				 #endif
 				 ])
+AC_CHECK_DECLS([getauxval], [], [],
+               [#if HAVE_SYS_AUXV_H
+                #include <sys/auxv.h>
+                #endif])
 
 
 #

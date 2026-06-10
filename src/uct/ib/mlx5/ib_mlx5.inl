@@ -536,9 +536,6 @@ size_t uct_ib_mlx5_set_data_seg_iov(uct_ib_mlx5_txwq_t *txwq,
 static UCS_F_ALWAYS_INLINE void uct_ib_mlx5_bf_copy_bb(void * restrict dst,
                                                        void * restrict src)
 {
-#if defined(__ARM_NEON)
-    UCS_WORD_COPY(int16x8_t, dst, int16x8_t, src, MLX5_SEND_WQE_BB);
-#else
 #if defined(__SSE4_2__)
     typedef __m128i uct_ib_mlx5_send_wqe_bb_block_t;
 #else
@@ -553,13 +550,15 @@ static UCS_F_ALWAYS_INLINE void uct_ib_mlx5_bf_copy_bb(void * restrict dst,
     UCS_WORD_COPY(uct_ib_mlx5_send_wqe_bb_t, dst,
                   uct_ib_mlx5_send_wqe_bb_t, src,
                   MLX5_SEND_WQE_BB);
-#endif
 }
 
 static UCS_F_ALWAYS_INLINE
 void *uct_ib_mlx5_bf_copy(void *dst, void *src, uint16_t num_bb,
                           const uct_ib_mlx5_txwq_t *wq)
 {
+#if defined(__aarch64__)
+    return wq->bf_copy(dst, src, num_bb, wq);
+#else
     uint16_t n;
 
     for (n = 0; n < num_bb; ++n) {
@@ -571,6 +570,7 @@ void *uct_ib_mlx5_bf_copy(void *dst, void *src, uint16_t num_bb,
         }
     }
     return src;
+#endif
 }
 
 static UCS_F_ALWAYS_INLINE uint16_t

@@ -9,6 +9,16 @@
 #include <uct/ib/rc/verbs/rc_verbs.h>
 #include <uct/test_peer_failure.h>
 
+extern "C" {
+#include <ucs/arch/cpu.h>
+}
+
+#ifdef HAVE_MLX5_DV
+extern "C" {
+#include <uct/ib/mlx5/rc/rc_mlx5.h>
+#include <uct/ib/mlx5/rc/rc_mlx5_common.h>
+}
+#endif
 
 void test_rc::init()
 {
@@ -143,6 +153,90 @@ UCS_TEST_SKIP_COND_P(test_rc_max_wr, send_limit,
 }
 
 UCT_INSTANTIATE_RC_TEST_CASE(test_rc_max_wr)
+
+#ifdef HAVE_MLX5_DV
+/* Real-HCA BF MMIO workload to compare copy modes with external counters. */
+class test_rc_mlx5_bf_mmio : public test_rc {
+protected:
+    enum {
+        NUM_ITERS = 65536
+    };
+
+    void verify_bf_post()
+    {
+        uct_rc_mlx5_base_ep_t *ep;
+
+        ep = ucs_derived_of(m_e1->ep(0), uct_rc_mlx5_base_ep_t);
+        ASSERT_TRUE(ep->tx.wq.reg != NULL);
+        ASSERT_EQ(UCT_IB_MLX5_MMIO_MODE_BF_POST, ep->tx.wq.reg->mode);
+    }
+
+    void run_bf_mmio_workload()
+    {
+        const uint64_t payload = 0xdeadbeefULL;
+        ucs_status_t status;
+
+        ASSERT_NO_FATAL_FAILURE(verify_bf_post());
+
+        for (unsigned i = 0; i < NUM_ITERS; ++i) {
+            do {
+                status = uct_ep_am_short(m_e1->ep(0), 0, i, &payload,
+                                         sizeof(payload));
+                if (status == UCS_ERR_NO_RESOURCE) {
+                    short_progress_loop();
+                }
+            } while (status == UCS_ERR_NO_RESOURCE);
+
+            ASSERT_UCS_OK(status);
+
+            if ((i & 0x3ff) == 0) {
+                progress();
+            }
+        }
+
+        flush();
+        UCS_TEST_MESSAGE << "posted " << NUM_ITERS
+                         << " rc_mlx5 BlueFlame AM short operations";
+    }
+};
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_bf_mmio, bf_copy_generic,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT),
+                     "RC_MLX5_MMIO_MODE=bf_post",
+                     "RC_MLX5_BF_COPY_MODE=generic",
+                     "RC_FC_ENABLE?=n")
+{
+    run_bf_mmio_workload();
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_rc_mlx5_bf_mmio, rc_mlx5)
+
+#if defined(__aarch64__) && HAVE_AARCH64_ST64B_ASM
+class test_rc_mlx5_bf_mmio_st64b : public test_rc_mlx5_bf_mmio {
+public:
+    virtual void init()
+    {
+        if (!(ucs_arch_get_cpu_flag() & UCS_CPU_FLAG_ST64B)) {
+            UCS_TEST_SKIP_R("CPU does not report ST64B support");
+        }
+
+        test_rc_mlx5_bf_mmio::init();
+    }
+};
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_bf_mmio_st64b, bf_copy_st64b,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT),
+                     "RC_MLX5_MMIO_MODE=bf_post",
+                     "RC_MLX5_BF_COPY_MODE=st64b",
+                     "RC_FC_ENABLE?=n")
+{
+    run_bf_mmio_workload();
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_rc_mlx5_bf_mmio_st64b, rc_mlx5)
+#endif
+
+#endif
 
 
 class test_rc_iface_flush_remote : public uct_test {
@@ -1024,12 +1118,6 @@ UCS_TEST_SKIP_COND_P(test_rc_flow_control_stats, soft_request,
 
 UCT_INSTANTIATE_RC_TEST_CASE(test_rc_flow_control_stats)
 
-#endif
-
-#ifdef HAVE_MLX5_DV
-extern "C" {
-#include <uct/ib/mlx5/rc/rc_mlx5_common.h>
-}
 #endif
 
 test_uct_iface_attrs::attr_map_t test_rc_iface_attrs::get_num_iov() {

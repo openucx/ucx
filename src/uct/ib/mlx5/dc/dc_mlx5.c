@@ -464,7 +464,8 @@ init_qp:
 
     if (dci->txwq.super.type == UCT_IB_MLX5_OBJ_TYPE_VERBS) {
         status = uct_ib_mlx5_txwq_init(iface->super.super.super.super.worker,
-                                       iface->super.tx.mmio_mode, &dci->txwq,
+                                       iface->super.tx.mmio_mode,
+                                       iface->super.tx.bf_copy_mode, &dci->txwq,
                                        dci->txwq.super.verbs.qp);
         if (status != UCS_OK) {
             goto err;
