@@ -1059,6 +1059,7 @@ enum uct_iface_attr_field {
  */
         /* PUT capabilities */
 #define UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY       UCS_BIT(0)  /**< Zero-copy SGL put */
+#define UCT_IFACE_FLAG_V2_QUERY_TOKEN         UCS_BIT(1)  /**< Interface supports token query */
 /**
  * @}
  */
