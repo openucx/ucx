@@ -488,12 +488,18 @@ typedef struct uct_tcp_md_config {
 
 
 typedef struct uct_tcp_ep_pending_req {
-    uct_pending_req_t           super;
-    uct_tcp_ep_t                *ep;
-    struct {
-        uct_tcp_cm_conn_event_t event;
-        uint8_t                 log_error;
-    } cm;
+    uct_pending_req_t               super;
+    uct_tcp_ep_t                    *ep;
+    union {
+        struct {
+            uct_tcp_cm_conn_event_t event;
+            uint8_t                 log_error;
+        } cm;
+        struct {
+            /* User completion passed to uct_ep_check */
+            uct_completion_t        *comp;
+        } keepalive;
+    };
 } uct_tcp_ep_pending_req_t;
 
 

@@ -789,7 +789,7 @@ void ucp_proto_request_select_error(ucp_request_t *req,
                                     size_t msg_length)
 {
     UCS_STRING_BUFFER_ONSTACK(sel_param_strb, UCP_PROTO_SELECT_PARAM_STR_MAX);
-    UCS_STRING_BUFFER_ONSTACK(proto_select_strb, UCP_PROTO_CONFIG_STR_MAX);
+    UCS_STRING_BUFFER_ONSTACK(proto_select_strb, UCS_ALLOCA_MAX_SIZE);
     ucp_ep_h ep = req->send.ep;
 
     ucp_proto_select_param_str(sel_param, ucp_operation_names, &sel_param_strb);

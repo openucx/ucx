@@ -1124,13 +1124,14 @@ ucs_status_t
 uct_ep_put_sgl_zcopy(uct_ep_h ep, void * const *buffers,
                      const size_t *lengths, uct_mem_h const *memhs,
                      const uint64_t *remote_addrs, uct_rkey_t const *rkeys,
+                     const size_t *counts, const size_t *strides,
                      size_t count, uct_completion_t *comp)
 {
     const uct_base_iface_t *iface = ucs_derived_of(ep->iface, uct_base_iface_t);
 
     return iface->internal_ops->ep_put_sgl_zcopy(ep, buffers, lengths, memhs,
-                                                 remote_addrs, rkeys, count,
-                                                 comp);
+                                                 remote_addrs, rkeys, counts,
+                                                 strides, count, comp);
 }
 
 typedef struct uct_stub_iface {
