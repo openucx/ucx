@@ -559,9 +559,11 @@ ucp_proto_select_lookup_slow(ucp_worker_h worker,
     }
 
     /* Add to hash after initializing the temp element, since calling
-     * ucp_proto_select_elem_init() can recursively modify the hash.
-     * Re-check the key because recursive lookup may have initialized this
-     * exact selection already.
+     * ucp_proto_select_elem_init() can recursively modify the hash. For
+     * example, RNDV_RECV may probe RTR, which models its peer side by
+     * selecting RNDV_SEND; that RNDV_SEND may probe RTS and select the
+     * same RNDV_RECV key. Re-check the key because recursive lookup may
+     * have initialized this exact selection.
      */
     khiter = kh_get(ucp_proto_select_hash, proto_select->hash, key.u64);
     if (khiter != kh_end(proto_select->hash)) {
