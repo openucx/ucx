@@ -85,7 +85,6 @@ uct_ib_mlx5_ext_iface_query(uct_iface_h iface,
                             uct_ib_mlx5_ext_iface_query_attr_t *attr)
 {
     uct_ib_mlx5_ext_plugin_t *plugin;
-    ucs_status_t status;
 
     if (ucs_unlikely(attr == NULL)) {
         return UCS_ERR_INVALID_PARAM;
@@ -129,10 +128,6 @@ ucs_status_t uct_ib_mlx5_ext_qp_query(struct ibv_qp *qp,
     }
 
     return UCS_ERR_UNSUPPORTED;
-}
-
-void uct_ib_mlx5_ext_init(void)
-{
 }
 
 void uct_ib_mlx5_ext_cleanup(void)

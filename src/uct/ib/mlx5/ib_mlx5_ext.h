@@ -153,11 +153,6 @@ typedef struct uct_ib_mlx5_ext_ops {
 } uct_ib_mlx5_ext_ops_t;
 
 /**
- * @brief Initialize mlx5 external extension.
- */
-void uct_ib_mlx5_ext_init(void);
-
-/**
  * @brief Release mlx5 external extension.
  */
 void uct_ib_mlx5_ext_cleanup(void);
