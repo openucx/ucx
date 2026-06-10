@@ -116,7 +116,7 @@ typedef struct uct_ib_mlx5_ext_qp_query_attr {
 
 
 /**
- * @brief External provider iface query callback.
+ * @brief External plugin iface query callback.
  *
  * @param [in,out] attr Query parameters. Only fields selected by
  *                      @a attr->field_mask should be accessed.
@@ -127,7 +127,7 @@ typedef ucs_status_t (*uct_ib_mlx5_ext_iface_query_func_t)(
         uct_ib_mlx5_ext_iface_query_attr_t *attr);
 
 /**
- * @brief External provider QP token query callback.
+ * @brief External plugin QP token query callback.
  *
  * @param [in]     qp       Verbs QP handle, or NULL when @a devx_obj is set.
  * @param [in]     devx_obj DevX QP object, or NULL when @a qp is set.
@@ -141,10 +141,10 @@ typedef ucs_status_t (*uct_ib_mlx5_ext_qp_query_func_t)(
         uct_ib_mlx5_ext_qp_query_attr_t *attr);
 
 /**
- * @brief External provider operations.
+ * @brief External plugin operations.
  */
 typedef struct uct_ib_mlx5_ext_ops {
-    char                               name[UCT_COMPONENT_NAME_MAX]; /**< Provider name */
+    char                               name[UCT_COMPONENT_NAME_MAX]; /**< Plugin name */
     uct_ib_mlx5_ext_iface_query_func_t iface_query;                  /**< Iface query callback */
     uct_ib_mlx5_ext_qp_query_func_t    qp_query;                     /**< QP query callback */
 } uct_ib_mlx5_ext_ops_t;
@@ -160,9 +160,9 @@ void uct_ib_mlx5_ext_init(void);
 void uct_ib_mlx5_ext_cleanup(void);
 
 /**
- * @brief Register an external provider.
+ * @brief Register an external plugin.
  *
- * @param [in] ops Provider operations.
+ * @param [in] ops Plugin operations.
  *
  * @return UCS_OK on success, or an error if registration failed.
  */
