@@ -36,7 +36,6 @@ ucp_proto_rma_rndv_probe_check(const ucp_proto_init_params_t *init_params,
         (init_params->rkey_config_key == NULL)) {
         return 0;
     }
-
     return !UCP_MEM_IS_HOST(sel_param->mem_type) ||
            !UCP_MEM_IS_HOST(init_params->rkey_config_key->mem_type);
 }
@@ -62,12 +61,10 @@ static size_t ucp_proto_put_rndv_rts_pack(void *dest, void *arg)
 static ucs_status_t ucp_proto_put_rndv_init(ucp_request_t *req)
 {
     const ucp_proto_rndv_ctrl_priv_t *rpriv = req->send.proto_config->priv;
-    int was_initialized;
     ucs_status_t status;
 
-    was_initialized = req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED;
-    status          = ucp_proto_rndv_rts_request_init(req);
-    if ((status != UCS_OK) || was_initialized) {
+    status = ucp_proto_rndv_rts_request_init(req);
+    if (status != UCS_OK) {
         return status;
     }
 
@@ -84,10 +81,12 @@ static ucs_status_t ucp_proto_put_rndv_progress(uct_pending_req_t *self)
     ucs_status_t status;
     ucp_ep_h ep;
 
-    status = ucp_proto_put_rndv_init(req);
-    if (status != UCS_OK) {
-        ucp_proto_request_abort(req, status);
-        return UCS_OK;
+    if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
+        status = ucp_proto_put_rndv_init(req);
+        if (status != UCS_OK) {
+            ucp_proto_request_abort(req, status);
+            return UCS_OK;
+        }
     }
 
     ep           = req->send.ep;
