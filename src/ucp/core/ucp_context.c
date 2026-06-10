@@ -1303,7 +1303,7 @@ ucp_add_tl_resource_if_enabled(ucp_context_h context, ucp_md_index_t md_index,
 
     if (context->num_tls >= UCP_MAX_RESOURCES) {
         ucs_error("exceeded transports/devices limit (up to %d are supported)",
-            UCP_MAX_RESOURCES);
+                  UCP_MAX_RESOURCES);
         return UCS_ERR_EXCEEDS_LIMIT;
     }
 
@@ -1315,15 +1315,17 @@ ucp_add_tl_resource_if_enabled(ucp_context_h context, ucp_md_index_t md_index,
                  UCT_TL_RESOURCE_DESC_ARG(resource), resource->sys_device,
                  UCP_MAX_SYS_DEVICES);
     }
+
     context->tl_rscs[context->num_tls].tl_rsc       = *resource;
     context->tl_rscs[context->num_tls].md_index     = md_index;
-    context->tl_rscs[context->num_tls].tl_name_csum =
-                              ucs_crc16_string(resource->tl_name);
+    context->tl_rscs[context->num_tls].tl_name_csum = ucs_crc16_string(
+            resource->tl_name);
     context->tl_rscs[context->num_tls].flags        = rsc_flags;
 
     dev_index = 0;
     for (i = 0; i < context->num_tls; ++i) {
-        if (ucp_tl_resource_is_same_device(&context->tl_rscs[i].tl_rsc, resource)) {
+        if (ucp_tl_resource_is_same_device(&context->tl_rscs[i].tl_rsc,
+                                           resource)) {
             dev_index = context->tl_rscs[i].dev_index;
             break;
         } else {
@@ -1393,9 +1395,10 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
                             "'%s'(%s)", tl_resources[i].dev_name,
                             context->tl_cmpts[md->cmpt_index].attr.name);
         ucs_string_set_add(avail_tls, tl_resources[i].tl_name);
-        status = ucp_add_tl_resource_if_enabled(context, md_index, config, aux_tls,
-                                       &tl_resources[i], num_resources_p, 
-                                       dev_cfg_masks, tl_cfg_mask); 
+        status = ucp_add_tl_resource_if_enabled(context, md_index, config,
+                                                aux_tls, &tl_resources[i],
+                                                num_resources_p, dev_cfg_masks,
+                                                tl_cfg_mask);
         if (status != UCS_OK) {
             goto free_resources;
         }
