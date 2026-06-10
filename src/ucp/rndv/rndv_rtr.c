@@ -61,8 +61,9 @@ static size_t ucp_proto_rndv_rtr_max_size(ucp_request_t *req)
 
 static size_t ucp_proto_rndv_rtr_req_max_size(ucp_request_t *req)
 {
-    return ucp_proto_rndv_rtr_max_size(req) +
-           sizeof(ucp_rndv_rtr_req_hdr_t) - sizeof(ucp_rndv_rtr_hdr_t);
+    const ucp_proto_rndv_rtr_priv_t *rpriv = req->send.proto_config->priv;
+
+    return sizeof(ucp_rndv_rtr_req_hdr_t) + rpriv->super.packed_rkey_size;
 }
 
 static ucs_status_t ucp_proto_rndv_rtr_common_send(ucp_request_t *req)
