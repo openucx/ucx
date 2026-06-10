@@ -1284,7 +1284,7 @@ static int ucp_tl_resource_is_same_device(const uct_tl_resource_desc_t *resource
            (resource1->sys_device == resource2->sys_device));
 }
 
-static void ucp_add_tl_resource_if_enabled(
+static ucs_status_t ucp_add_tl_resource_if_enabled(
         ucp_context_h context, ucp_md_index_t md_index,
         const ucp_config_t *config, const ucs_string_set_t *aux_tls,
         const uct_tl_resource_desc_t *resource, unsigned *num_resources_p,
@@ -1294,13 +1294,15 @@ static void ucp_add_tl_resource_if_enabled(
     uint8_t rsc_flags;
     ucp_rsc_index_t dev_index, i;
 
-    if (context->num_tls == UINT8_MAX) {
-        return;
-    }
-
     if (!ucp_is_resource_enabled(resource, config, aux_tls, &rsc_flags,
                                  dev_cfg_masks, tl_cfg_mask)) {
-        return;
+        return UCS_OK;
+    }
+
+    if (context->num_tls >= UCP_MAX_RESOURCES) {
+        ucs_error("exceeded transports/devices limit (up to %d are supported)",
+            UCP_MAX_RESOURCES);
+        return UCS_ERR_EXCEEDS_LIMIT;
     }
 
     if ((resource->sys_device != UCS_SYS_DEVICE_ID_UNKNOWN) &&
@@ -1334,6 +1336,8 @@ static void ucp_add_tl_resource_if_enabled(
 
     ++context->num_tls;
     ++(*num_resources_p);
+
+    return UCS_OK;
 }
 
 static ucs_status_t
@@ -1387,9 +1391,12 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
                             "'%s'(%s)", tl_resources[i].dev_name,
                             context->tl_cmpts[md->cmpt_index].attr.name);
         ucs_string_set_add(avail_tls, tl_resources[i].tl_name);
-        ucp_add_tl_resource_if_enabled(context, md_index, config, aux_tls,
-                                       &tl_resources[i], num_resources_p,
-                                       dev_cfg_masks, tl_cfg_mask);
+        status = ucp_add_tl_resource_if_enabled(context, md_index, config, aux_tls,
+                                       &tl_resources[i], num_resources_p, 
+                                       dev_cfg_masks, tl_cfg_mask); 
+        if (status != UCS_OK) {
+            goto free_resources;
+        }
     }
 
     status = UCS_OK;
@@ -2197,18 +2204,6 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         if (status != UCS_OK) {
             goto err_free_resources;
         }
-    }
-
-    /* Error check: Make sure there are not too many transports.
-     * UCP_MAX_RESOURCES must be less than UINT8_MAX to detect overflow. */
-    UCS_STATIC_ASSERT(UCP_MAX_RESOURCES < UINT8_MAX);
-    if (context->num_tls > UCP_MAX_RESOURCES) {
-        ucs_error("exceeded transports/devices limit "
-                  "(%s%u requested, up to %d are supported)",
-                  (context->num_tls == UINT8_MAX) ? ">=" : "", context->num_tls,
-                  UCP_MAX_RESOURCES);
-        status = UCS_ERR_EXCEEDS_LIMIT;
-        goto err_free_resources;
     }
 
     ucp_fill_resources_reg_md_map_update(context);
