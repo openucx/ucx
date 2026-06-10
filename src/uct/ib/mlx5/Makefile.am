@@ -43,10 +43,10 @@ if HAVE_DEVX
 libuct_ib_mlx5_la_SOURCES += \
 	rc/rc_mlx5_devx.c
 
-if HAVE_MLX5_MMO
+if HAVE_TL_GGA
 libuct_ib_mlx5_la_SOURCES += \
 	gga/gga_mlx5.c
-endif # HAVE_MLX5_MMO
+endif # HAVE_TL_GGA
 endif # HAVE_DEVX
 
 endif # HAVE_TL_RC

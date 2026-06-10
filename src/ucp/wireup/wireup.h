@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -55,66 +55,77 @@ enum {
 
 
 /**
+ * Calculates a score of a potential transport. Used both for the primary
+ * selection score and for the tiebreak score.
+ *
+ * @param [in]  wiface            UCP worker iface.
+ * @param [in]  md_attr           Local MD attributes.
+ * @param [in]  unpacked_addr     The whole remote address unpacked.
+ * @param [in]  remote_addr       Remote transport address info and attributes.
+ * @param [in]  is_prioritized_ep Endpoint is prioritized.
+ * @param [in]  arg               Custom argument.
+ *
+ * @return Transport score, the higher the better.
+ */
+typedef double (*ucp_wireup_calc_score_func_t)(
+        const ucp_worker_iface_t *wiface, const uct_md_attr_v2_t *md_attr,
+        const ucp_unpacked_address_t *unpacked_addr,
+        const ucp_address_entry_t *remote_addr, int is_prioritized_ep,
+        void *arg);
+
+
+/**
  * Criteria for transport selection.
  */
 typedef struct {
     /* Name of the criteria for debugging */
-    const char                 *title;
+    const char                   *title;
 
     /* Required local MD flags */
-    uint64_t                    local_md_flags;
+    uint64_t                     local_md_flags;
 
     /* Required local component flags */
-    uint64_t                    local_cmpt_flags;
+    uint64_t                     local_cmpt_flags;
 
     /* Required local interface flags */
-    ucp_wireup_select_flags_t   local_iface_flags;
+    ucp_wireup_select_flags_t    local_iface_flags;
 
     /* Required remote interface flags */
-    ucp_wireup_select_flags_t   remote_iface_flags;
+    ucp_wireup_select_flags_t    remote_iface_flags;
 
     /* Required local event flags */
-    uint64_t                    local_event_flags;
+    uint64_t                     local_event_flags;
 
     /* Required remote event flags */
-    uint64_t                    remote_event_flags;
+    uint64_t                     remote_event_flags;
 
     /* Mandatory memory types for allocation */
-    uint64_t                    alloc_mem_types;
+    uint64_t                     alloc_mem_types;
 
     /* Required support of keepalive mechanism */
-    int                         is_keepalive;
+    int                          is_keepalive;
 
-    /**
-     * Calculates score of a potential transport.
-     *
-     * @param [in]  wiface            UCP worker iface.
-     * @param [in]  md_attr           Local MD attributes.
-     * @param [in]  unpacked_addr     The whole remote address unpacked.
-     * @param [in]  remote_addr       Remote transport address info and
-     *                                attributes.
-     * @param [in]  is_prioritized_ep Endpoint is prioritized.
-     * @param [in]  arg               Custom argument.
-     *
-     * @return Transport score, the higher the better.
-     */
-    double                      (*calc_score)(const ucp_worker_iface_t *wiface,
-                                              const uct_md_attr_v2_t *md_attr,
-                                              const ucp_unpacked_address_t *unpacked_addr,
-                                              const ucp_address_entry_t *remote_addr,
-                                              int is_prioritized_ep,
-                                              void *arg);
+    /* Calculates the primary selection score of a potential transport. */
+    ucp_wireup_calc_score_func_t calc_score;
+
+    /* Calculates the tiebreak score, used to choose between candidates whose
+     * @ref calc_score values are close. May be NULL, which disables
+     * tiebreaking (single-score selection). */
+    ucp_wireup_calc_score_func_t calc_tiebreak;
 
     /* Custom argument of @a calc_score function */
-    void                       *arg;
+    void                         *arg;
+
+    /* Custom argument of @a calc_tiebreak function */
+    void                         *tiebreak_arg;
 
     /* Flags that describe TL specifics */
-    uint8_t                     tl_rsc_flags;
+    uint8_t                      tl_rsc_flags;
 
-    ucp_tl_iface_atomic_flags_t local_atomic_flags;
+    ucp_tl_iface_atomic_flags_t  local_atomic_flags;
 
-    ucp_tl_iface_atomic_flags_t remote_atomic_flags;
-    ucp_lane_type_t             lane_type;
+    ucp_tl_iface_atomic_flags_t  remote_atomic_flags;
+    ucp_lane_type_t              lane_type;
 } ucp_wireup_criteria_t;
 
 
@@ -135,6 +146,7 @@ typedef struct ucp_wireup_msg {
 
 typedef struct {
     double          score;
+    double          tiebreak;
     unsigned        addr_index;
     unsigned        path_index;
     ucp_rsc_index_t rsc_index;
