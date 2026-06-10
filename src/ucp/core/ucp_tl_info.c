@@ -174,28 +174,30 @@ ucp_tl_info_tl_group_end(const ucp_tl_info_array_t *all_rscs, unsigned start)
     return end;
 }
 
-static void
-ucp_tl_info_render_tl_group(ucs_table_t *table, ucp_context_h context,
-                            const ucp_tl_info_array_t *all_rscs, unsigned i,
-                            unsigned group_end, int *printed_any)
+static void ucp_tl_info_render_tl_group(ucs_table_t *table,
+                                        ucp_context_h context,
+                                        const ucp_tl_info_array_t *all_rscs,
+                                        unsigned group_start,
+                                        unsigned group_end, int *printed_any)
 {
     UCS_STRING_BUFFER_ONSTACK(tl_strb, UCT_TL_NAME_MAX + 8);
     UCS_STRING_BUFFER_ONSTACK(dev_strb, 512);
-    const ucp_tl_info_entry_t *first_entry = &ucs_array_elem(all_rscs, i);
+    const ucp_tl_info_entry_t *first_entry = &ucs_array_elem(all_rscs,
+                                                             group_start);
     uct_device_type_t dev_type             = first_entry->rsc.dev_type;
     ucp_rsc_index_t cmpt_idx               = first_entry->cmpt_index;
     int tl_enabled                         = 0;
-    int dev_count                          = 0;
     ucp_tl_info_tl_group_state_t group_state;
     const ucp_tl_info_entry_t *entry;
-    unsigned j;
+    unsigned i, dev_count;
 
-    group_state.is_first_type = (i == 0) ||
-                                (ucs_array_elem(all_rscs, i - 1).rsc.dev_type !=
-                                 dev_type);
-    group_state.is_first_cmpt = group_state.is_first_type ||
-                                (ucs_array_elem(all_rscs, i - 1).cmpt_index !=
-                                 cmpt_idx);
+    group_state.is_first_type =
+            (group_start == 0) ||
+            (ucs_array_elem(all_rscs, group_start - 1).rsc.dev_type !=
+             dev_type);
+    group_state.is_first_cmpt =
+            group_state.is_first_type ||
+            (ucs_array_elem(all_rscs, group_start - 1).cmpt_index != cmpt_idx);
     group_state.is_first_tl   = 1;
 
     if (*printed_any) {
@@ -209,8 +211,8 @@ ucp_tl_info_render_tl_group(ucs_table_t *table, ucp_context_h context,
     }
 
     /* The transport is enabled if any of the devices in the group is enabled */
-    for (j = i; j < group_end; ++j) {
-        if (ucs_array_elem(all_rscs, j).enabled) {
+    for (i = group_start; i < group_end; ++i) {
+        if (ucs_array_elem(all_rscs, i).enabled) {
             tl_enabled = 1;
             break;
         }
@@ -221,20 +223,12 @@ ucp_tl_info_render_tl_group(ucs_table_t *table, ucp_context_h context,
                                            UCP_TL_INFO_MARK_DISABLED,
                               first_entry->rsc.tl_name);
 
-    for (j = i; j < group_end; ++j) {
-        entry = &ucs_array_elem(all_rscs, j);
+    for (i = group_start; i < group_end; ++i) {
+        entry   = &ucs_array_elem(all_rscs, i);
+        dev_count = i - group_start + 1;
 
-        if ((dev_count > 0) && (dev_count % UCP_TL_INFO_DEVS_PER_LINE == 0)) {
-            ucp_tl_info_emit_row(table, uct_device_type_names[dev_type],
-                                 context->tl_cmpts[cmpt_idx].attr.name,
-                                 ucs_string_buffer_cstr(&tl_strb),
-                                 ucs_string_buffer_cstr(&dev_strb),
-                                 &group_state);
-            ucs_string_buffer_reset(&dev_strb);
-            *printed_any = 1;
-        }
-
-        if (dev_count % UCP_TL_INFO_DEVS_PER_LINE > 0) {
+        /* Add space between devices on the same line. */
+        if (ucs_string_buffer_length(&dev_strb) > 0) {
             ucs_string_buffer_appendf(&dev_strb, "  ");
         }
 
@@ -254,15 +248,17 @@ ucp_tl_info_render_tl_group(ucs_table_t *table, ucp_context_h context,
                                       entry->rsc.dev_name);
         }
 
-        dev_count++;
-    }
-
-    if (ucs_string_buffer_length(&dev_strb) > 0) {
-        ucp_tl_info_emit_row(table, uct_device_type_names[dev_type],
-                             context->tl_cmpts[cmpt_idx].attr.name,
-                             ucs_string_buffer_cstr(&tl_strb),
-                             ucs_string_buffer_cstr(&dev_strb), &group_state);
-        *printed_any = 1;
+        /* Emit once a line is full or this is the last device in the group. */
+        if ((dev_count % UCP_TL_INFO_DEVS_PER_LINE == 0) ||
+            (i == (group_end - 1))) {
+            ucp_tl_info_emit_row(table, uct_device_type_names[dev_type],
+                                 context->tl_cmpts[cmpt_idx].attr.name,
+                                 ucs_string_buffer_cstr(&tl_strb),
+                                 ucs_string_buffer_cstr(&dev_strb),
+                                 &group_state);
+            ucs_string_buffer_reset(&dev_strb);
+            *printed_any = 1;
+        }
     }
 }
 
@@ -332,7 +328,7 @@ void ucp_context_log_tl_info(ucp_context_h context,
     const ucs_table_config_t tcfg = {
         .n_cols = UCP_TL_INFO_NUM_COLS
     };
-    unsigned i, group_end;
+    unsigned group_start, group_end;
     ucs_status_t status;
     ucs_table_t table;
     int printed_any;
@@ -358,12 +354,12 @@ void ucp_context_log_tl_info(ucp_context_h context,
     ucp_tl_info_render_headers(&table);
 
     printed_any = 0;
-    i           = 0;
-    while (i < ucs_array_length(all_rscs)) {
-        group_end = ucp_tl_info_tl_group_end(all_rscs, i);
-        ucp_tl_info_render_tl_group(&table, context, all_rscs, i, group_end,
-                                    &printed_any);
-        i = group_end;
+    group_start = 0;
+    while (group_start < ucs_array_length(all_rscs)) {
+        group_end = ucp_tl_info_tl_group_end(all_rscs, group_start);
+        ucp_tl_info_render_tl_group(&table, context, all_rscs, group_start,
+                                    group_end, &printed_any);
+        group_start = group_end;
     }
 
     ucp_tl_info_render_unavailable_cmpts(&table, context, all_rscs,
