@@ -842,8 +842,9 @@ uct_ib_mlx5_bf_copy_st64b(void *dst, void *src, uint16_t num_bb,
 }
 #endif
 
-static uct_ib_mlx5_bf_copy_func_t
-uct_ib_mlx5_select_bf_copy(uct_ib_mlx5_bf_copy_mode_t bf_copy_mode)
+static ucs_status_t
+uct_ib_mlx5_select_bf_copy(uct_ib_mlx5_bf_copy_mode_t bf_copy_mode,
+                           uct_ib_mlx5_bf_copy_func_t *bf_copy_func_p)
 {
     static uct_ib_mlx5_bf_copy_func_t cached_bf_copy_func;
     uct_ib_mlx5_bf_copy_mode_t mode = bf_copy_mode;
@@ -851,10 +852,6 @@ uct_ib_mlx5_select_bf_copy(uct_ib_mlx5_bf_copy_mode_t bf_copy_mode)
     int have_st64b = 0;
 
     ucs_assert(bf_copy_mode < UCT_IB_MLX5_BF_COPY_MODE_LAST);
-
-    if (cached_bf_copy_func != NULL) {
-        return cached_bf_copy_func;
-    }
 
     bf_copy_func = uct_ib_mlx5_bf_copy_generic;
     if (mode == UCT_IB_MLX5_BF_COPY_MODE_GENERIC) {
@@ -869,18 +866,29 @@ uct_ib_mlx5_select_bf_copy(uct_ib_mlx5_bf_copy_mode_t bf_copy_mode)
                             UCT_IB_MLX5_BF_COPY_MODE_GENERIC;
     }
 
-#if HAVE_AARCH64_ST64B_ASM
     if (mode == UCT_IB_MLX5_BF_COPY_MODE_ST64B) {
-        ucs_assert(have_st64b);
+#if HAVE_AARCH64_ST64B_ASM
+        if (!have_st64b) {
+            ucs_error("mlx5 BlueFlame ST64B copy was requested but CPU does "
+                      "not report ST64B support");
+            return UCS_ERR_UNSUPPORTED;
+        }
+
         bf_copy_func = uct_ib_mlx5_bf_copy_st64b;
-    }
 #else
-    ucs_assert(mode != UCT_IB_MLX5_BF_COPY_MODE_ST64B);
+        ucs_error("mlx5 BlueFlame ST64B copy was requested but UCX was built "
+                  "without assembler support for ST64B");
+        return UCS_ERR_UNSUPPORTED;
 #endif
+    }
 
 out:
-    cached_bf_copy_func = bf_copy_func;
-    return bf_copy_func;
+    if (cached_bf_copy_func == NULL) {
+        cached_bf_copy_func = bf_copy_func;
+    }
+
+    *bf_copy_func_p = cached_bf_copy_func;
+    return UCS_OK;
 }
 #endif
 
@@ -889,21 +897,7 @@ uct_ib_mlx5_txwq_init_bf_copy(uct_ib_mlx5_txwq_t *txwq,
                               uct_ib_mlx5_bf_copy_mode_t bf_copy_mode)
 {
 #if defined(__aarch64__)
-    if (bf_copy_mode == UCT_IB_MLX5_BF_COPY_MODE_ST64B) {
-#if !HAVE_AARCH64_ST64B_ASM
-        ucs_error("mlx5 BlueFlame ST64B copy was requested but UCX was built "
-                  "without assembler support for ST64B");
-        return UCS_ERR_UNSUPPORTED;
-#else
-        if (!(ucs_arch_get_cpu_flag() & UCS_CPU_FLAG_ST64B)) {
-            ucs_error("mlx5 BlueFlame ST64B copy was requested but CPU does "
-                      "not report ST64B support");
-            return UCS_ERR_UNSUPPORTED;
-        }
-#endif
-    }
-
-    txwq->bf_copy = uct_ib_mlx5_select_bf_copy(bf_copy_mode);
+    return uct_ib_mlx5_select_bf_copy(bf_copy_mode, &txwq->bf_copy);
 #else
     (void)txwq;
 
