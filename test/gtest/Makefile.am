@@ -169,6 +169,7 @@ gtest_SOURCES = \
 	ucp/test_ucp_tag.cc \
 	ucp/test_ucp_context.cc \
 	ucp/test_ucp_tl_info.cc \
+	ucp/test_ucp_wireup_lane_info.cc \
 	ucp/test_ucp_worker.cc \
 	ucp/test_ucp_wireup.cc \
 	ucp/test_ucp_request.cc \

@@ -142,12 +142,11 @@ ucp_wireup_collect_lane_types(const ucp_ep_config_key_t *key,
     return types_union;
 }
 
-void ucp_wireup_log_ep_lanes(ucp_worker_h worker,
-                             const ucp_ep_config_key_t *key,
-                             ucp_worker_cfg_index_t cfg_index)
+ucs_status_t ucp_wireup_render_ep_lanes(ucp_context_h context,
+                                        const ucp_ep_config_key_t *key,
+                                        ucp_worker_cfg_index_t cfg_index,
+                                        ucs_string_buffer_t *strb)
 {
-    ucp_context_h context         = worker->context;
-    ucs_string_buffer_t strb      = UCS_STRING_BUFFER_INITIALIZER;
     const ucs_table_config_t tcfg = {
         .n_cols = UCP_EP_LANE_INFO_NUM_COLS
     };
@@ -161,10 +160,6 @@ void ucp_wireup_log_ep_lanes(ucp_worker_h worker,
     const char *tl_name, *dev_name, *ep_type;
     ucs_status_t status;
     int count, first_tl, printed_any;
-
-    if (!context->config.ext.print_transport_tables) {
-        return;
-    }
 
     if (key->flags & UCP_EP_CONFIG_KEY_FLAG_SELF) {
         ep_type = "self";
@@ -236,7 +231,7 @@ void ucp_wireup_log_ep_lanes(ucp_worker_h worker,
                                    first_tl ? tl_name : "");
         ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
                                    ucs_string_buffer_cstr(&dev_strb));
-        ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_LEFT, "%d",
+        ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_RIGHT, "%d",
                                    count);
         ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
                                    ucs_string_buffer_cstr(&types_strb));
@@ -244,9 +239,26 @@ void ucp_wireup_log_ep_lanes(ucp_worker_h worker,
         printed_any = 1;
     }
 
-    ucs_table_render(&table, &strb);
+    ucs_table_render(&table, strb);
 
     status = ucs_table_get_status(&table);
+    ucs_table_cleanup(&table);
+    return status;
+}
+
+void ucp_wireup_log_ep_lanes(ucp_worker_h worker,
+                             const ucp_ep_config_key_t *key,
+                             ucp_worker_cfg_index_t cfg_index)
+{
+    ucp_context_h context    = worker->context;
+    ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
+    ucs_status_t status;
+
+    if (!context->config.ext.print_transport_tables) {
+        return;
+    }
+
+    status = ucp_wireup_render_ep_lanes(context, key, cfg_index, &strb);
     if (status != UCS_OK) {
         ucs_warn("endpoint lane table render incomplete: %s",
                  ucs_status_string(status));
@@ -254,5 +266,4 @@ void ucp_wireup_log_ep_lanes(ucp_worker_h worker,
 
     ucs_log_print_compact(ucs_string_buffer_cstr(&strb));
     ucs_string_buffer_cleanup(&strb);
-    ucs_table_cleanup(&table);
 }
