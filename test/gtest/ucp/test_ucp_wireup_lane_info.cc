@@ -6,6 +6,7 @@
 
 #include <common/test.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -51,9 +52,9 @@ protected:
     public:
         dummy_context(const std::vector<rsc_desc> &rscs,
                       const std::string &name = "") :
-            m_rscs(rscs.size())
+            m_ctx(new ucp_context_t()), m_rscs(rscs.size())
         {
-            memset(&m_ctx, 0, sizeof(m_ctx));
+            memset(m_ctx.get(), 0, sizeof(*m_ctx));
             for (size_t i = 0; i < rscs.size(); ++i) {
                 uct_tl_resource_desc_t *tl = &m_rscs[i].tl_rsc;
                 ucs_strncpy_safe(tl->tl_name, rscs[i].tl_name,
@@ -62,18 +63,18 @@ protected:
                                  sizeof(tl->dev_name));
                 tl->sys_device = rscs[i].sys_device;
             }
-            m_ctx.tl_rscs = m_rscs.data();
-            m_ctx.num_tls = static_cast<ucp_rsc_index_t>(rscs.size());
-            ucs_strncpy_safe(m_ctx.name, name.c_str(), sizeof(m_ctx.name));
+            m_ctx->tl_rscs = m_rscs.data();
+            m_ctx->num_tls = static_cast<ucp_rsc_index_t>(rscs.size());
+            ucs_strncpy_safe(m_ctx->name, name.c_str(), sizeof(m_ctx->name));
         }
 
         ucp_context_h get()
         {
-            return &m_ctx;
+            return m_ctx.get();
         }
 
     private:
-        ucp_context_t m_ctx;
+        std::unique_ptr<ucp_context_t> m_ctx;
         std::vector<ucp_tl_resource_desc_t> m_rscs;
     };
 
@@ -299,21 +300,28 @@ UCS_TEST_F(test_ucp_wireup_lane_info, cm_lane) {
 /* The title reflects the endpoint type and only includes the context name when
  * it is set. */
 UCS_TEST_F(test_ucp_wireup_lane_info, title_variants) {
-    dummy_context named_ctx({{"tcp", "eth0", UCS_SYS_DEVICE_ID_UNKNOWN}},
-                            "perftest");
-    dummy_context anon_ctx({{"tcp", "eth0", UCS_SYS_DEVICE_ID_UNKNOWN}});
-    ucp_ep_config_key_t key;
+    {
+        dummy_context named_ctx({{"tcp", "eth0", UCS_SYS_DEVICE_ID_UNKNOWN}},
+                                "perftest");
+        ucp_ep_config_key_t key = make_key(UCP_EP_CONFIG_KEY_FLAG_INTRA_NODE);
 
-    key = make_key(UCP_EP_CONFIG_KEY_FLAG_INTRA_NODE);
-    add_lane(named_ctx.get(), key, "tcp", "eth0", {UCP_LANE_TYPE_AM});
-    EXPECT_NE(std::string::npos,
-              render(named_ctx.get(), key, 2)
-                      .find("Endpoint Config #2 (ctx: perftest, "
-                            "type: intra-node)"));
+        add_lane(named_ctx.get(), key, "tcp", "eth0", {UCP_LANE_TYPE_AM});
+        EXPECT_NE(
+            std::string::npos,
+            render(named_ctx.get(), key, 2)
+                .find("Endpoint Config #2 (ctx: perftest, type: intra-node)")
+        );
+    }
 
-    key = make_key(0);
-    add_lane(anon_ctx.get(), key, "tcp", "eth0", {UCP_LANE_TYPE_AM});
-    EXPECT_NE(std::string::npos,
-              render(anon_ctx.get(), key, 3)
-                      .find("Endpoint Config #3 (type: inter-node)"));
+    {
+        dummy_context anon_ctx({{"tcp", "eth0", UCS_SYS_DEVICE_ID_UNKNOWN}});
+        ucp_ep_config_key_t key = make_key(0);
+
+        add_lane(anon_ctx.get(), key, "tcp", "eth0", {UCP_LANE_TYPE_AM});
+        EXPECT_NE(
+            std::string::npos,
+            render(anon_ctx.get(), key, 3)
+                    .find("Endpoint Config #3 (type: inter-node)")
+        );
+    }
 }
