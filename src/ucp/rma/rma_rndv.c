@@ -108,6 +108,8 @@ static ucs_status_t ucp_proto_put_rndv_progress(uct_pending_req_t *self)
     rpriv        = req->send.proto_config->priv;
     max_rts_size = sizeof(ucp_rma_rndv_rts_hdr_t) + rpriv->packed_rkey_size;
 
+    /* Both the RNDV request and the remote completion must complete to unblock
+     * flush, and they may complete in any order. */
     req->flags |= UCP_REQUEST_FLAG_RNDV_FLUSH;
     ucp_worker_flush_ops_count_add(ep->worker, +2);
     status = ucp_proto_am_bcopy_single_send(req, UCP_AM_ID_RNDV_RTS,
