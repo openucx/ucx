@@ -316,7 +316,8 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
         goto out_pop_and_release;
     }
 
-    cuda_event = ucs_mpool_get(&ctx.ctx_rsc->super.event_mp);
+    cuda_event = uct_cuda_base_event_desc_mpool_get(
+            &ctx.ctx_rsc->super.event_mp);
     if (ucs_unlikely(cuda_event == NULL)) {
         ucs_error("failed to allocate cuda event object");
         status = UCS_ERR_NO_MEMORY;
@@ -339,7 +340,6 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
         ucs_queue_push(&iface->super.active_queue, &q_desc->queue);
     }
 
-    VALGRIND_MAKE_MEM_DEFINED(&cuda_event->event, sizeof(cuda_event->event));
     ucs_queue_push(event_q, &cuda_event->queue);
     cuda_event->comp = comp;
 

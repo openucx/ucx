@@ -15,7 +15,6 @@
 
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/profile/profile.h>
-#include <ucs/sys/checker.h>
 #include <ucs/sys/math.h>
 #include <ucs/type/class.h>
 #include <uct/api/device/uct_device_types.h>
@@ -158,7 +157,8 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
         goto out;
     }
 
-    cuda_ipc_event = ucs_mpool_get(&ctx_rsc->super.event_mp);
+    cuda_ipc_event = uct_cuda_base_event_desc_mpool_get(
+            &ctx_rsc->super.event_mp);
     if (ucs_unlikely(cuda_ipc_event == NULL)) {
         ucs_error("Failed to allocate cuda_ipc event object");
         status = UCS_ERR_NO_MEMORY;
@@ -188,8 +188,6 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
         ucs_queue_push(&iface->super.active_queue, &q_desc->queue);
     }
 
-    VALGRIND_MAKE_MEM_DEFINED(&cuda_ipc_event->super.event,
-                              sizeof(cuda_ipc_event->super.event));
     ucs_queue_push(&q_desc->event_queue, &cuda_ipc_event->super.queue);
     cuda_ipc_event->super.comp  = comp;
     cuda_ipc_event->mapped_addr = mapped_addr;

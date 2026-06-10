@@ -95,6 +95,12 @@ ucs_status_t uct_cuda_base_check_device_name(const uct_iface_params_t *params)
     return UCS_OK;
 }
 
+static UCS_F_ALWAYS_INLINE int
+uct_cuda_base_event_is_flush(const uct_cuda_event_desc_t *event)
+{
+    return event->event == NULL;
+}
+
 static UCS_F_ALWAYS_INLINE unsigned
 uct_cuda_base_queue_head_ready(ucs_queue_head_t *queue_head)
 {
@@ -106,7 +112,8 @@ uct_cuda_base_queue_head_ready(ucs_queue_head_t *queue_head)
 
     cuda_event = ucs_queue_head_elem_non_empty(queue_head,
                                                uct_cuda_event_desc_t, queue);
-    return (CUDA_SUCCESS == cuEventQuery(cuda_event->event));
+    return uct_cuda_base_event_is_flush(cuda_event) ||
+           (CUDA_SUCCESS == cuEventQuery(cuda_event->event));
 }
 
 ucs_status_t uct_cuda_base_iface_event_fd_arm(uct_iface_h tl_iface,
@@ -239,12 +246,6 @@ error:
 
     ucs_free(flush_desc);
     return UCS_ERR_NO_MEMORY;
-}
-
-static UCS_F_ALWAYS_INLINE int
-uct_cuda_base_event_is_flush(const uct_cuda_event_desc_t *event)
-{
-    return event->event == NULL;
 }
 
 static UCS_F_ALWAYS_INLINE unsigned
