@@ -10,6 +10,7 @@
 
 #include <ucp/core/ucp_context.h>
 #include <uct/api/uct.h>
+#include <ucs/datastruct/array.h>
 
 
 typedef struct {
@@ -19,9 +20,11 @@ typedef struct {
 } ucp_tl_info_entry_t;
 
 
+UCS_ARRAY_DECLARE_TYPE(ucp_tl_info_array_t, unsigned, ucp_tl_info_entry_t);
+
+
 void ucp_context_log_tl_info(ucp_context_h context,
-                             ucp_tl_info_entry_t *all_rscs,
-                             unsigned num_all_rscs);
+                             ucp_tl_info_array_t *all_rscs);
 
 
 #endif
