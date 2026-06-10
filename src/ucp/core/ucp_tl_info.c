@@ -76,6 +76,7 @@ static int ucp_tl_info_cmpt_has_rscs(const ucp_tl_info_entry_t *all_rscs,
             return 1;
         }
     }
+
     return 0;
 }
 

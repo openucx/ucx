@@ -2144,8 +2144,8 @@ static void ucp_fill_resources_reg_md_map_update(ucp_context_h context)
     }
 }
 
-static ucs_status_t ucp_fill_resources(ucp_context_h context,
-    const ucp_config_t *config)
+static ucs_status_t
+ucp_fill_resources(ucp_context_h context, const ucp_config_t *config)
 {
     uint64_t dev_cfg_masks[UCT_DEVICE_TYPE_LAST] = {};
     uint64_t tl_cfg_mask                         = 0;
