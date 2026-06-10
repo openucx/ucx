@@ -2583,20 +2583,22 @@ private:
     MemoryPool<IoReadResponseCallback>      _read_callback_pool;
 };
 
-static int set_memunits(const char *str, size_t *value)
+static int set_memunits(const char *str, size_t *value_p)
 {
     ucs_status_t status;
+    size_t value;
 
     if (*str == '-') {
         return -1;
     }
 
-    status = ucs_str_to_memunits(str, value);
-    if ((status != UCS_OK) || (*value == UCS_MEMUNITS_INF) ||
-        (*value == UCS_MEMUNITS_AUTO)) {
+    status = ucs_str_to_memunits(str, &value);
+    if ((status != UCS_OK) || (value == UCS_MEMUNITS_INF) ||
+        (value == UCS_MEMUNITS_AUTO)) {
         return -1;
     }
 
+    *value_p = value;
     return 0;
 }
 
@@ -2621,18 +2623,17 @@ static int set_data_size(char *str, options_t *test_opts)
         return -1;
     }
 
-    if ((*val1 != '\0') &&
-        (set_memunits(val1, &test_opts->min_data_size) != 0)) {
-        return -1;
+    if (*val1 != '\0') {
+        if (set_memunits(val1, &test_opts->min_data_size) != 0) {
+            return -1;
+        }
+    } else {
+        test_opts->min_data_size = 0;
     }
 
     if ((*val2 != '\0') &&
         (set_memunits(val2, &test_opts->max_data_size) != 0)) {
         return -1;
-    }
-
-    if (*val1 == '\0') {
-        test_opts->min_data_size = 0;
     }
 
     if (test_opts->min_data_size > test_opts->max_data_size) {
