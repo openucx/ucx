@@ -11,6 +11,7 @@
 #include "wireup_lane_info.h"
 
 #include <ucp/proto/lane_type.h>
+#include <ucs/algorithm/qsort_r.h>
 #include <ucs/datastruct/string_buffer.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/table.h>
@@ -25,6 +26,12 @@
 #define UCP_EP_LANE_INFO_HDR_TYPES "Lane Types"
 
 #define UCP_EP_LANE_INFO_NUM_COLS 4
+
+
+typedef struct {
+    const char       *tl_name;
+    ucp_lane_index_t lane;
+} ucp_wireup_lane_entry_t;
 
 
 static int ucp_ep_lane_is_same_dev(const ucp_ep_config_key_t *key,
@@ -142,24 +149,42 @@ ucp_wireup_collect_lane_types(const ucp_ep_config_key_t *key,
     return types_union;
 }
 
+static int ucp_wireup_lane_entry_compare(const void *a, const void *b,
+                                         void *UCS_V_UNUSED arg)
+{
+    const ucp_wireup_lane_entry_t *ea = a;
+    const ucp_wireup_lane_entry_t *eb = b;
+    int diff;
+
+    diff = strcmp(ea->tl_name, eb->tl_name);
+    if (diff != 0) {
+        return diff;
+    }
+
+    /* Stable tie-break: keep a transport's devices in their original order. */
+    return (int)ea->lane - (int)eb->lane;
+}
+
 ucs_status_t ucp_wireup_render_ep_lanes(ucp_context_h context,
                                         const ucp_ep_config_key_t *key,
                                         ucp_worker_cfg_index_t cfg_index,
                                         ucs_string_buffer_t *strb)
 {
+    ucp_wireup_lane_entry_t entries[UCP_MAX_LANES];
     const ucs_table_config_t tcfg = {
         .n_cols = UCP_EP_LANE_INFO_NUM_COLS
     };
     UCS_STRING_BUFFER_ONSTACK(title_strb, 128);
     UCS_STRING_BUFFER_ONSTACK(types_strb, 128);
     UCS_STRING_BUFFER_ONSTACK(dev_strb, 128);
-    ucs_table_t table;
-    ucs_table_row_h row;
-    ucp_lane_index_t lane, j;
-    ucp_lane_type_mask_t types_union;
     const char *tl_name, *dev_name, *ep_type;
+    ucp_lane_type_mask_t types_union;
+    int count, is_first_tl, printed_any;
+    unsigned i, num_entries;
+    ucp_lane_index_t lane;
     ucs_status_t status;
-    int count, first_tl, printed_any;
+    ucs_table_row_h row;
+    ucs_table_t table;
 
     if (key->flags & UCP_EP_CONFIG_KEY_FLAG_SELF) {
         ep_type = "self";
@@ -196,24 +221,32 @@ ucs_status_t ucp_wireup_render_ep_lanes(ucp_context_h context,
                                UCP_EP_LANE_INFO_HDR_TYPES);
     ucs_table_add_separator(&table);
 
-    printed_any = 0;
+    /* Collect one entry per device (its leader lane). */
+    num_entries = 0;
     for (lane = 0; lane < key->num_lanes; ++lane) {
         if (!ucp_ep_lane_is_dev_leader(key, lane)) {
             continue;
         }
 
-        first_tl = 1;
-        for (j = 0; j < lane; ++j) {
-            if (!ucp_ep_lane_is_dev_leader(key, j)) {
-                continue;
-            }
-            if (ucp_ep_lane_is_same_tl(key, context, j, lane)) {
-                first_tl = 0;
-                break;
-            }
-        }
+        ucp_wireup_get_lane_names(key, context, lane, &tl_name, &dev_name);
+        entries[num_entries].tl_name = tl_name;
+        entries[num_entries].lane    = lane;
+        ++num_entries;
+    }
 
-        if (first_tl && printed_any) {
+    /* Sort the devices alphabetically by transport name. */
+    ucs_qsort_r(entries, num_entries, sizeof(*entries),
+                ucp_wireup_lane_entry_compare, NULL);
+
+    printed_any = 0;
+    for (i = 0; i < num_entries; ++i) {
+        lane = entries[i].lane;
+
+        is_first_tl = (i == 0) ||
+                      !ucp_ep_lane_is_same_tl(key, context, entries[i - 1].lane,
+                                              lane);
+
+        if (is_first_tl && printed_any) {
             ucs_table_add_separator(&table);
         }
 
@@ -228,7 +261,7 @@ ucs_status_t ucp_wireup_render_ep_lanes(ucp_context_h context,
 
         ucs_table_add_row(&table, &row);
         ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
-                                   first_tl ? tl_name : "");
+                                   is_first_tl ? tl_name : "");
         ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
                                    ucs_string_buffer_cstr(&dev_strb));
         ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_RIGHT, "%d",

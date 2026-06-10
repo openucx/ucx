@@ -200,7 +200,9 @@ UCS_TEST_F(test_ucp_wireup_lane_info, single_transport_multi_device) {
 }
 
 /* Several transports, some spanning multiple devices and some sharing a device
- * name across transports, with system-device annotations (example output #1). */
+ * name across transports, with system-device annotations (example output #1).
+ * The resources are added in non-alphabetical order, so this also verifies that
+ * transports are listed alphabetically. */
 UCS_TEST_F(test_ucp_wireup_lane_info, multi_transport) {
     ucs_sys_device_t sd_mlx5_2 = add_sys_device(0x01, "mlx5_2");
     ucs_sys_device_t sd_mlx5_1 = add_sys_device(0x02, "mlx5_1");
@@ -239,17 +241,17 @@ UCS_TEST_F(test_ucp_wireup_lane_info, multi_transport) {
         "+-----------+--------------------+---------+-------------------+\n"
         "| Transport | Device (Sys. dev.) | # Lanes | Lane Types        |\n"
         "+-----------+--------------------+---------+-------------------+\n"
-        "| self      | memory             |       1 | am, rma, rkey_ptr |\n"
-        "+-----------+--------------------+---------+-------------------+\n"
-        "| rc_mlx5   | mlx5_2:1 (mlx5_2)  |       2 | rma, rma_bw       |\n"
-        "|           | mlx5_1:1 (mlx5_1)  |       2 | rma_bw            |\n"
-        "+-----------+--------------------+---------+-------------------+\n"
         "| cma       | memory             |       1 | rma_bw            |\n"
         "+-----------+--------------------+---------+-------------------+\n"
         "| cuda_copy | cuda (GPU0)        |       1 | rma_bw            |\n"
         "|           | mlx5_0:1 (mlx5_0)  |       2 | rma_bw            |\n"
         "+-----------+--------------------+---------+-------------------+\n"
         "| cuda_ipc  | cuda (GPU0)        |       1 | rma_bw            |\n"
+        "+-----------+--------------------+---------+-------------------+\n"
+        "| rc_mlx5   | mlx5_2:1 (mlx5_2)  |       2 | rma, rma_bw       |\n"
+        "|           | mlx5_1:1 (mlx5_1)  |       2 | rma_bw            |\n"
+        "+-----------+--------------------+---------+-------------------+\n"
+        "| self      | memory             |       1 | am, rma, rkey_ptr |\n"
         "+-----------+--------------------+---------+-------------------+\n",
         render(context.get(), key, 1));
 }
@@ -287,9 +289,9 @@ UCS_TEST_F(test_ucp_wireup_lane_info, cm_lane) {
               "+-----------+--------------------+---------+------------+\n"
               "| Transport | Device (Sys. dev.) | # Lanes | Lane Types |\n"
               "+-----------+--------------------+---------+------------+\n"
-              "| tcp       | eth0               |       1 | am         |\n"
-              "+-----------+--------------------+---------+------------+\n"
               "| cm        | cm                 |       1 | cm         |\n"
+              "+-----------+--------------------+---------+------------+\n"
+              "| tcp       | eth0               |       1 | am         |\n"
               "+-----------+--------------------+---------+------------+\n",
               render(context.get(), key, 0));
 }
