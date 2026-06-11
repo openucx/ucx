@@ -9,8 +9,10 @@
 #include <uct/base/uct_iface.h>
 #include <ucs/sys/preprocessor.h>
 #include <ucs/profile/profile.h>
+#include <ucs/sys/checker.h>
 #include <ucs/async/eventfd.h>
 #include <ucs/datastruct/khash.h>
+#include <ucs/datastruct/mpool.h>
 #include <uct/cuda/base/cuda_util.h>
 
 
@@ -39,6 +41,21 @@ typedef struct {
     CUevent          event;
     uct_completion_t *comp;
 } uct_cuda_event_desc_t;
+
+
+static UCS_F_ALWAYS_INLINE void*
+uct_cuda_base_event_desc_mpool_get(ucs_mpool_t *mp)
+{
+    uct_cuda_event_desc_t *event_desc =
+            (uct_cuda_event_desc_t*)ucs_mpool_get(mp);
+
+    if (ucs_likely(event_desc != NULL)) {
+        VALGRIND_MAKE_MEM_DEFINED(&event_desc->event,
+                                  sizeof(event_desc->event));
+    }
+
+    return event_desc;
+}
 
 
 /* Base flush descriptor */
