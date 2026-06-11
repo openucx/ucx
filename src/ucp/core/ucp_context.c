@@ -2295,7 +2295,6 @@ ucp_fill_resources(ucp_context_h context, const ucp_config_t *config)
 
     ucp_fill_sockaddr_prio_list(context, config);
 
-    /* Note: sorts all_rscs in place; the array is freed right after */
     ucp_context_log_tl_info(context, &all_rscs);
 
 out_release_components:
