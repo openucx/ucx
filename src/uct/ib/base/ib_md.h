@@ -147,6 +147,8 @@ typedef enum {
 typedef struct uct_ib_md {
     uct_md_t                 super;
     struct ibv_pd            *pd;       /**< IB memory domain */
+    struct ibv_pd            *coco_pd;  /**< CoCo parent PD for control objects */
+    int                      cc_dma_bounce; /**< Device requires CoCo DMA bounce */
     uct_ib_device_t          dev;       /**< IB device */
     ucs_linear_func_t        reg_cost;  /**< Memory registration cost */
     UCS_STATS_NODE_DECLARE(stats)
@@ -179,6 +181,19 @@ typedef struct uct_ib_md {
         uint32_t             size;
     } mkey_by_name_reserve;
 } uct_ib_md_t;
+
+
+static UCS_F_ALWAYS_INLINE int uct_ib_md_is_cc_dma_bounce(const uct_ib_md_t *md)
+{
+    return md->cc_dma_bounce;
+}
+
+static UCS_F_ALWAYS_INLINE struct ibv_pd*
+uct_ib_md_control_pd(const uct_ib_md_t *md)
+{
+    ucs_assert(!md->cc_dma_bounce || (md->coco_pd != NULL));
+    return (md->cc_dma_bounce && (md->coco_pd != NULL)) ? md->coco_pd : md->pd;
+}
 
 
 typedef struct {
