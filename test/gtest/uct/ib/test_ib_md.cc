@@ -16,6 +16,8 @@
 #include <common/mem_buffer.h>
 #include <uct/test_md.h>
 
+#include <string>
+
 class test_ib_md : public test_md
 {
 protected:

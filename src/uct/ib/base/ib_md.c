@@ -1294,12 +1294,7 @@ void uct_ib_md_check_odp(uct_ib_md_t *md, const uct_ib_md_config_t *md_config)
 
 static int uct_ib_md_detect_cc_dma_bounce(uct_ib_md_t *md)
 {
-#if HAVE_DECL_IBV_DEVICE_CC_DMA_BOUNCE && HAVE_DECL_IBV_QUERY_DEVICE_EX
-    return !!(md->dev.dev_attr.device_cap_flags_ex &
-              IBV_DEVICE_CC_DMA_BOUNCE);
-#else
-    return 0;
-#endif
+    return uct_ib_device_is_cc_dma_bounce(&md->dev);
 }
 
 static ucs_status_t uct_ib_md_create_coco_pd(uct_ib_md_t *md)
@@ -1324,6 +1319,51 @@ static ucs_status_t uct_ib_md_create_coco_pd(uct_ib_md_t *md)
     return UCS_OK;
 #else
     ucs_error("%s: device reports IBV_DEVICE_CC_DMA_BOUNCE but rdma-core lacks CoCo parent-domain APIs",
+              uct_ib_device_name(&md->dev));
+    return UCS_ERR_UNSUPPORTED;
+#endif
+}
+
+static ucs_status_t uct_ib_md_probe_coco_control_cq(uct_ib_md_t *md)
+{
+#if HAVE_DECL_IBV_CREATE_CQ_EX && HAVE_DECL_IBV_CQ_INIT_ATTR_MASK_PD && \
+    HAVE_STRUCT_IBV_CQ_INIT_ATTR_EX_PARENT_DOMAIN
+    struct ibv_cq_init_attr_ex cq_attr = {
+        .cqe           = 1,
+        .comp_mask     = IBV_CQ_INIT_ATTR_MASK_PD,
+        .parent_domain = md->coco_pd
+    };
+    struct ibv_cq_ex *cq_ex;
+    struct ibv_cq *cq;
+    int saved_errno;
+
+    cq_ex = ibv_create_cq_ex(md->dev.ibv_context, &cq_attr);
+    if (cq_ex == NULL) {
+        saved_errno = errno;
+        errno       = saved_errno;
+        if ((saved_errno == EOPNOTSUPP) || (saved_errno == ENOSYS) ||
+            (saved_errno == EINVAL)) {
+            ucs_error("%s: CoCo control CQ probe requires ibv_create_cq_ex() "
+                      "parent-domain support: %m",
+                      uct_ib_device_name(&md->dev));
+            return UCS_ERR_UNSUPPORTED;
+        }
+
+        errno = saved_errno;
+        uct_ib_check_memlock_limit_msg(md->dev.ibv_context,
+                                       UCS_LOG_LEVEL_ERROR,
+                                       "ibv_create_cq_ex(cqe=%d)", 1);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    cq = ibv_cq_ex_to_cq(cq_ex);
+    ibv_destroy_cq(cq);
+    ucs_debug("%s: CoCo control CQ probe succeeded",
+              uct_ib_device_name(&md->dev));
+    return UCS_OK;
+#else
+    ucs_error("%s: device reports IBV_DEVICE_CC_DMA_BOUNCE but rdma-core lacks "
+              "CoCo CQ parent-domain APIs",
               uct_ib_device_name(&md->dev));
     return UCS_ERR_UNSUPPORTED;
 #endif
@@ -1361,6 +1401,11 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
     md->cc_dma_bounce = uct_ib_md_detect_cc_dma_bounce(md);
     if (md->cc_dma_bounce) {
         status = uct_ib_md_create_coco_pd(md);
+        if (status != UCS_OK) {
+            goto err_cleanup_device;
+        }
+
+        status = uct_ib_md_probe_coco_control_cq(md);
         if (status != UCS_OK) {
             goto err_cleanup_device;
         }

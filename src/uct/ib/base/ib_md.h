@@ -183,6 +183,17 @@ typedef struct uct_ib_md {
 } uct_ib_md_t;
 
 
+static UCS_F_ALWAYS_INLINE int
+uct_ib_device_is_cc_dma_bounce(const uct_ib_device_t *dev)
+{
+#if HAVE_DECL_IBV_DEVICE_CC_DMA_BOUNCE && HAVE_DECL_IBV_QUERY_DEVICE_EX
+    return !!(dev->dev_attr.device_cap_flags_ex &
+              IBV_DEVICE_CC_DMA_BOUNCE);
+#else
+    return 0;
+#endif
+}
+
 static UCS_F_ALWAYS_INLINE int uct_ib_md_is_cc_dma_bounce(const uct_ib_md_t *md)
 {
     return md->cc_dma_bounce;
