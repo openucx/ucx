@@ -6,6 +6,7 @@
  * See file LICENSE for terms.
  */
 
+#include "ucs/type/status.h"
 #ifdef HAVE_CONFIG_H
 #  include "config.h"
 #endif
@@ -1306,12 +1307,18 @@ static int ucp_tl_resource_is_same_device(const uct_tl_resource_desc_t *resource
            (resource1->sys_device == resource2->sys_device));
 }
 
-static void ucp_add_tl_resource(ucp_context_h context, ucp_md_index_t md_index,
-                                const uct_tl_resource_desc_t *resource,
-                                uint8_t rsc_flags)
+static ucs_status_t
+ucp_add_tl_resource(ucp_context_h context, ucp_md_index_t md_index,
+                    const uct_tl_resource_desc_t *resource, uint8_t rsc_flags)
 {
     ucp_tl_md_t *md = &context->tl_mds[md_index];
     ucp_rsc_index_t dev_index, i;
+
+    if (context->num_tls >= UCP_MAX_RESOURCES) {
+        ucs_error("exceeded transports/devices limit (up to %d are supported)",
+                  UCP_MAX_RESOURCES);
+        return UCS_ERR_EXCEEDS_LIMIT;
+    }
 
     if ((resource->sys_device != UCS_SYS_DEVICE_ID_UNKNOWN) &&
         (resource->sys_device >= UCP_MAX_SYS_DEVICES)) {
@@ -1345,6 +1352,8 @@ static void ucp_add_tl_resource(ucp_context_h context, ucp_md_index_t md_index,
     }
 
     ++context->num_tls;
+
+    return UCS_OK;
 }
 
 static ucs_status_t
@@ -1425,7 +1434,12 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
             continue;
         }
 
-        ucp_add_tl_resource(context, md_index, &tl_resources[i], rsc_flags);
+        status = ucp_add_tl_resource(context, md_index, &tl_resources[i],
+                                     rsc_flags);
+        if (status != UCS_OK) {
+            goto free_resources;
+        }
+
         ++(*num_resources_p);
 
         if (added_rscs != NULL) {
@@ -1743,14 +1757,6 @@ static ucs_status_t ucp_check_resources(ucp_context_h context,
         return UCS_ERR_NO_DEVICE;
     }
 
-    /* Error check: Make sure there are not too many transports */
-    if (context->num_tls >= UCP_MAX_RESOURCES) {
-        ucs_error("exceeded transports/devices limit "
-                  "(%u requested, up to %d are supported)",
-                  context->num_tls, UCP_MAX_RESOURCES);
-        return UCS_ERR_EXCEEDS_LIMIT;
-    }
-
     return ucp_check_tl_names(context);
 }
 
@@ -1768,11 +1774,11 @@ ucp_add_component_resources(ucp_context_h context, ucp_rsc_index_t cmpt_index,
     uct_component_attr_t uct_component_attr;
     unsigned num_tl_resources;
     ucs_status_t status;
-    ucp_rsc_index_t i;
     const uct_md_attr_v2_t *md_attr;
     unsigned md_index;
     uint64_t detect_mem_type_mask;
     uint64_t alloc_mem_type_mask;
+    unsigned i;
 
     /* List memory domain resources */
     uct_component_attr.field_mask   = UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES |

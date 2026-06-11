@@ -244,8 +244,7 @@ enum {
 /**
  * In debug mode, check that keepalive params are valid
  */
-#define UCT_EP_KEEPALIVE_CHECK_PARAM(_flags, _comp) \
-    UCT_CHECK_PARAM((_comp) == NULL, "Unsupported completion on ep_check"); \
+#define UCT_EP_KEEPALIVE_CHECK_PARAM(_flags) \
     UCT_CHECK_PARAM((_flags) == 0, "Unsupported flags: %x", (_flags));
 
 

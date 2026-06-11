@@ -3598,7 +3598,7 @@ static int ucp_worker_do_ep_keepalive(ucp_worker_h worker, ucs_time_t now)
 
     if (status == UCS_ERR_NO_RESOURCE) {
         return 0;
-    } else if (status != UCS_OK) {
+    } else if (UCS_STATUS_IS_ERR(status)) {
         ucs_diag("worker %p: keepalive failed on ep %p lane[%d]=%p: %s", worker,
                  ep, lane, uct_ep, ucs_status_string(status));
     } else {
