@@ -789,6 +789,14 @@ uct_ib_fill_cq_attr(struct ibv_cq_init_attr_ex *cq_attr,
         cq_attr->flags     = IBV_CREATE_CQ_ATTR_IGNORE_OVERRUN;
     }
 #endif /* HAVE_DECL_IBV_CREATE_CQ_ATTR_IGNORE_OVERRUN */
+
+#if HAVE_DECL_IBV_CQ_INIT_ATTR_MASK_PD && \
+    HAVE_STRUCT_IBV_CQ_INIT_ATTR_EX_PARENT_DOMAIN
+    if (uct_ib_md_is_cc_dma_bounce(uct_ib_iface_md(iface))) {
+        cq_attr->comp_mask    |= IBV_CQ_INIT_ATTR_MASK_PD;
+        cq_attr->parent_domain = uct_ib_md_control_pd(uct_ib_iface_md(iface));
+    }
+#endif
 }
 #endif /* HAVE_DECL_IBV_CREATE_CQ_EX */
 

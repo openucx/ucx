@@ -19,6 +19,7 @@
 #include <ucs/arch/bitops.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/debug/log.h>
+#include <errno.h>
 #include <string.h>
 
 
@@ -519,8 +520,57 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .ep_vfs_populate = uct_rc_verbs_ep_vfs_populate
 };
 
-static ucs_status_t uct_rc_verbs_can_create_qp(struct ibv_pd *pd)
+static ucs_status_t
+uct_rc_verbs_create_probe_cq(uct_ib_md_t *ib_md, struct ibv_cq **cq_p)
 {
+    struct ibv_pd *pd = uct_ib_md_control_pd(ib_md);
+
+#if HAVE_DECL_IBV_CREATE_CQ_EX && HAVE_DECL_IBV_CQ_INIT_ATTR_MASK_PD && \
+    HAVE_STRUCT_IBV_CQ_INIT_ATTR_EX_PARENT_DOMAIN
+    struct ibv_cq_init_attr_ex cq_attr = {
+        .cqe           = 1,
+        .comp_mask     = IBV_CQ_INIT_ATTR_MASK_PD,
+        .parent_domain = pd
+    };
+
+    if (uct_ib_md_is_cc_dma_bounce(ib_md)) {
+        *cq_p = ibv_cq_ex_to_cq(ibv_create_cq_ex(pd->context, &cq_attr));
+        if (*cq_p != NULL) {
+            return UCS_OK;
+        }
+
+        if ((errno == EOPNOTSUPP) || (errno == ENOSYS) ||
+            (errno == EINVAL)) {
+            ucs_debug("CoCo RC verbs QP probe requires ibv_create_cq_ex() "
+                      "parent-domain support");
+            return UCS_ERR_UNSUPPORTED;
+        }
+
+        uct_ib_check_memlock_limit_msg(pd->context, UCS_LOG_LEVEL_DEBUG,
+                                       "ibv_create_cq_ex(cqe=%d)", 1);
+        return UCS_ERR_IO_ERROR;
+    }
+#else
+    if (uct_ib_md_is_cc_dma_bounce(ib_md)) {
+        ucs_debug("CoCo RC verbs QP probe requires ibv_create_cq_ex() "
+                  "parent-domain support");
+        return UCS_ERR_UNSUPPORTED;
+    }
+#endif
+
+    *cq_p = ibv_create_cq(pd->context, 1, NULL, NULL, 0);
+    if (*cq_p == NULL) {
+        uct_ib_check_memlock_limit_msg(pd->context, UCS_LOG_LEVEL_DEBUG,
+                                       "ibv_create_cq()");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
+}
+
+static ucs_status_t uct_rc_verbs_can_create_qp(uct_ib_md_t *ib_md)
+{
+    struct ibv_pd *pd = uct_ib_md_control_pd(ib_md);
     struct ibv_qp_init_attr qp_init_attr = {
         .qp_type             = IBV_QPT_RC,
         .sq_sig_all          = 0,
@@ -534,11 +584,8 @@ static ucs_status_t uct_rc_verbs_can_create_qp(struct ibv_pd *pd)
     struct ibv_qp *qp;
     ucs_status_t status;
 
-    cq = ibv_create_cq(pd->context, 1, NULL, NULL, 0);
-    if (cq == NULL) {
-        uct_ib_check_memlock_limit_msg(pd->context, UCS_LOG_LEVEL_DEBUG,
-                                       "ibv_create_cq()");
-        status = UCS_ERR_IO_ERROR;
+    status = uct_rc_verbs_create_probe_cq(ib_md, &cq);
+    if (status != UCS_OK) {
         goto err;
     }
 
@@ -571,7 +618,7 @@ uct_rc_verbs_query_tl_devices(uct_md_h md,
     ucs_status_t status;
 
     /* device does not support RC if we cannot create an RC QP */
-    status = uct_rc_verbs_can_create_qp(ib_md->pd);
+    status = uct_rc_verbs_can_create_qp(ib_md);
     if (status != UCS_OK) {
         return status;
     }
