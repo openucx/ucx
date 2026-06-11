@@ -107,6 +107,66 @@ protected:
         free_mempool(&ptr, &mpool, &cu_stream);
         return rkey;
     }
+
+    static CUmemAllocationProp vmm_posix_fd_prop()
+    {
+        CUmemAllocationProp prop = {};
+        CUdevice cu_device;
+
+        EXPECT_EQ(CUDA_SUCCESS, cuCtxGetDevice(&cu_device));
+        prop.type                 = CU_MEM_ALLOCATION_TYPE_PINNED;
+        prop.location.type        = CU_MEM_LOCATION_TYPE_DEVICE;
+        prop.location.id          = (int)cu_device;
+        prop.requestedHandleTypes = CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR;
+        return prop;
+    }
+
+    static bool vmm_posix_fd_supported()
+    {
+        constexpr CUdevice_attribute attr =
+                CU_DEVICE_ATTRIBUTE_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR_SUPPORTED;
+        CUdevice cu_device;
+        int supported = 0;
+
+        EXPECT_EQ(CUDA_SUCCESS, cuCtxGetDevice(&cu_device));
+        EXPECT_EQ(CUDA_SUCCESS,
+                  cuDeviceGetAttribute(&supported, attr, cu_device));
+        return supported != 0;
+    }
+
+    static void alloc_vmm_posix_fd(CUdeviceptr *ptr, size_t size,
+                                   CUmemGenericAllocationHandle *handle)
+    {
+        CUmemAllocationProp prop    = vmm_posix_fd_prop();
+        CUmemAccessDesc access_desc = {};
+
+        EXPECT_EQ(CUDA_SUCCESS, cuMemAddressReserve(ptr, size, 0, 0, 0));
+        EXPECT_EQ(CUDA_SUCCESS, cuMemCreate(handle, size, &prop, 0));
+        EXPECT_EQ(CUDA_SUCCESS, cuMemMap(*ptr, size, 0, *handle, 0));
+
+        access_desc.location = prop.location;
+        access_desc.flags    = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
+        EXPECT_EQ(CUDA_SUCCESS, cuMemSetAccess(*ptr, size, &access_desc, 1));
+    }
+
+    static void free_vmm_posix_fd(CUdeviceptr ptr, size_t size,
+                                  CUmemGenericAllocationHandle handle)
+    {
+        EXPECT_EQ(CUDA_SUCCESS, cuMemUnmap(ptr, size));
+        EXPECT_EQ(CUDA_SUCCESS, cuMemRelease(handle));
+        EXPECT_EQ(CUDA_SUCCESS, cuMemAddressFree(ptr, size));
+    }
+
+    static size_t vmm_posix_fd_granularity()
+    {
+        CUmemAllocationProp prop = vmm_posix_fd_prop();
+        size_t granularity       = 0;
+
+        EXPECT_EQ(CUDA_SUCCESS,
+                  cuMemGetAllocationGranularity(&granularity, &prop,
+                                                CU_MEM_ALLOC_GRANULARITY_MINIMUM));
+        return granularity;
+    }
 #endif
 
     void test_mkey_pack_on_thread(void *ptr, size_t size)
@@ -221,6 +281,91 @@ UCS_TEST_P(test_cuda_ipc_md, mkey_pack_mempool)
     alloc_mempool(&ptr, &mpool, &cu_stream, size);
     test_mkey_pack_on_thread((void*)ptr, size);
     free_mempool(&ptr, &mpool, &cu_stream);
+#else
+    UCS_TEST_SKIP_R("built without fabric support");
+#endif
+}
+
+UCS_TEST_P(test_cuda_ipc_md, mkey_pack_vmm_posix_fd)
+{
+#if HAVE_CUDA_FABRIC
+    if (!vmm_posix_fd_supported()) {
+        UCS_TEST_SKIP_R("posix fd handle type is not supported");
+    }
+
+    const size_t size = vmm_posix_fd_granularity();
+    CUmemGenericAllocationHandle handle;
+    uct_cuda_ipc_extended_rkey_t rkey;
+    CUdeviceptr ptr;
+    uct_mem_h memh;
+
+    alloc_vmm_posix_fd(&ptr, size, &handle);
+
+    EXPECT_UCS_OK(md()->ops->mem_reg(md(), (void*)ptr, size, NULL, &memh));
+    EXPECT_UCS_OK(md()->ops->mkey_pack(md(), memh, (void*)ptr, size, NULL,
+                                       &rkey));
+    EXPECT_EQ(UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD,
+              rkey.super.ph.handle_type);
+
+    /* Self-import: spoof the device uuid so that rkey unpack does not take
+     * the local rkey shortcut and exercises the pidfd import path. The
+     * import may be blocked by the environment (kernel < 5.6, seccomp), in
+     * which case the peer is unreachable, same as a no-ipc key. */
+    auto uuid64 = reinterpret_cast<int64_t*>(rkey.super.uuid.bytes);
+    uuid64[0]   = ~uuid64[0];
+    uuid64[1]   = ~uuid64[1];
+
+    uct_rkey_unpack_params_t unpack_params = {0};
+    uct_rkey_bundle_t rkey_bundle;
+    ucs_status_t status = uct_rkey_unpack_v2(md()->component, &rkey,
+                                             &unpack_params, &rkey_bundle);
+    EXPECT_TRUE((status == UCS_OK) || (status == UCS_ERR_UNREACHABLE))
+            << ucs_status_string(status);
+    if (status == UCS_OK) {
+        uct_rkey_release(md()->component, &rkey_bundle);
+    } else {
+        UCS_TEST_MESSAGE << "posix fd import is unavailable: "
+                         << ucs_status_string(status);
+    }
+
+    uct_md_mem_dereg_params_t params;
+    params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
+    params.memh       = memh;
+    EXPECT_UCS_OK(md()->ops->mem_dereg(md(), &params));
+
+    free_vmm_posix_fd(ptr, size, handle);
+#else
+    UCS_TEST_SKIP_R("built without fabric support");
+#endif
+}
+
+UCS_TEST_P(test_cuda_ipc_md, mkey_pack_vmm_posix_fd_disabled,
+           "CUDA_IPC_ENABLE_POSIX_FD=n")
+{
+#if HAVE_CUDA_FABRIC
+    if (!vmm_posix_fd_supported()) {
+        UCS_TEST_SKIP_R("posix fd handle type is not supported");
+    }
+
+    const size_t size = vmm_posix_fd_granularity();
+    CUmemGenericAllocationHandle handle;
+    uct_cuda_ipc_extended_rkey_t rkey;
+    CUdeviceptr ptr;
+    uct_mem_h memh;
+
+    alloc_vmm_posix_fd(&ptr, size, &handle);
+
+    EXPECT_UCS_OK(md()->ops->mem_reg(md(), (void*)ptr, size, NULL, &memh));
+    EXPECT_UCS_OK(md()->ops->mkey_pack(md(), memh, (void*)ptr, size, NULL,
+                                       &rkey));
+    EXPECT_EQ(UCT_CUDA_IPC_KEY_HANDLE_TYPE_NO_IPC, rkey.super.ph.handle_type);
+
+    uct_md_mem_dereg_params_t params;
+    params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
+    params.memh       = memh;
+    EXPECT_UCS_OK(md()->ops->mem_dereg(md(), &params));
+
+    free_vmm_posix_fd(ptr, size, handle);
 #else
     UCS_TEST_SKIP_R("built without fabric support");
 #endif

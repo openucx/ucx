@@ -19,7 +19,9 @@ typedef enum {
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY, /* cudaMalloc memory */
 #if HAVE_CUDA_FABRIC
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM, /* cuMemCreate memory */
-    UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL /* cudaMallocAsync memory */
+    UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL, /* cudaMallocAsync memory */
+    UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD /* cuMemCreate memory exported as a
+                                             POSIX file descriptor */
 #endif
 } uct_cuda_ipc_key_handle_t;
 
@@ -30,6 +32,10 @@ typedef struct uct_cuda_ipc_md_handle {
         CUipcMemHandle        legacy;        /* Legacy IPC handle */
 #if HAVE_CUDA_FABRIC
         CUmemFabricHandle     fabric_handle; /* VMM/Mallocasync export handle */
+        int                   posix_fd;      /* Exporter-side file descriptor;
+                                                the importer retrieves a local
+                                                duplicate of it with
+                                                pidfd_getfd(2) */
 #endif
     } handle;
 #if HAVE_CUDA_FABRIC
@@ -45,6 +51,8 @@ typedef struct uct_cuda_ipc_md_handle {
 typedef struct uct_cuda_ipc_md {
     uct_md_t                 super;             /**< Domain info */
     int                      enable_mnnvl;      /**< Multi-node NVLINK support status */
+    int                      enable_posix_fd;   /**< Allow exporting VMM memory
+                                                     as a POSIX file descriptor */
 } uct_cuda_ipc_md_t;
 
 
@@ -105,6 +113,8 @@ extern uct_cuda_ipc_component_t uct_cuda_ipc_component;
 typedef struct uct_cuda_ipc_md_config {
     uct_md_config_t          super;
     ucs_ternary_auto_value_t enable_mnnvl;
+    int                      enable_posix_fd;   /**< Allow exporting VMM memory
+                                                     as a POSIX file descriptor */
     unsigned long            cache_max_regions; /**< Max cached IPC regions per peer */
     size_t                   cache_max_size;    /**< Max total cached IPC mapping size */
 } uct_cuda_ipc_md_config_t;

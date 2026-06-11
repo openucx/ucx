@@ -40,6 +40,17 @@ static ucs_config_field_t uct_cuda_ipc_md_config_table[] = {
      "Enable multi-node NVLINK capabilities.",
      ucs_offsetof(uct_cuda_ipc_md_config_t, enable_mnnvl), UCS_CONFIG_TYPE_TERNARY},
 
+    {"ENABLE_POSIX_FD", "y",
+     "Allow exporting VMM (cuMemCreate) memory whose allowed handle types\n"
+     "include CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR but which cannot be\n"
+     "exported as a fabric handle. The importing process retrieves the file\n"
+     "descriptor with pidfd_getfd(2), which requires Linux >= 5.6, a shared\n"
+     "PID namespace, and ptrace permission toward the exporting process.\n"
+     "Each registered region keeps one file descriptor open in the exporting\n"
+     "process until it is deregistered.",
+     ucs_offsetof(uct_cuda_ipc_md_config_t, enable_posix_fd),
+     UCS_CONFIG_TYPE_BOOL},
+
     {"CACHE_MAX_REGIONS", "inf",
      "Maximum number of regions in each per-peer CUDA IPC remote handle cache.\n"
      "Each remote peer has a separate cache; this limit applies independently\n"
@@ -134,8 +145,78 @@ uct_cuda_ipc_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
     return UCS_OK;
 }
 
+#if HAVE_CUDA_FABRIC
+/* An rkey carries a single allocation handle, so a VA range that is backed by
+ * more than one VMM allocation (e.g. a PyTorch expandable segment that grew
+ * over time) cannot be exported. Check that the same allocation backs both
+ * ends of the range. */
 static ucs_status_t
-uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
+uct_cuda_ipc_check_single_handle_range(CUmemGenericAllocationHandle handle,
+                                       const uct_cuda_ipc_lkey_t *key)
+{
+    CUmemGenericAllocationHandle end_handle;
+    ucs_status_t status;
+
+    status = UCT_CUDADRV_FUNC(
+            cuMemRetainAllocationHandle(
+                    &end_handle,
+                    (void*)(uintptr_t)(key->d_bptr + key->b_len - 1)),
+            UCS_LOG_LEVEL_DIAG);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    UCT_CUDADRV_FUNC_LOG_WARN(cuMemRelease(end_handle));
+    if (end_handle != handle) {
+        ucs_diag("vmm range %p..%p is backed by multiple allocation handles",
+                 (void*)key->d_bptr,
+                 (void*)(uintptr_t)(key->d_bptr + key->b_len));
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    return UCS_OK;
+}
+
+static ucs_status_t
+uct_cuda_ipc_pack_posix_fd(uct_cuda_ipc_md_t *md, uct_cuda_ipc_lkey_t *key,
+                           CUmemGenericAllocationHandle handle,
+                           uint64_t allowed_handle_types, void *addr)
+{
+    ucs_status_t status;
+    int fd;
+
+    if (!md->enable_posix_fd ||
+        !(allowed_handle_types & CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    status = uct_cuda_ipc_check_single_handle_range(handle, key);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = UCT_CUDADRV_FUNC(cuMemExportToShareableHandle(
+                                      &fd, handle,
+                                      CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR,
+                                      0),
+                              UCS_LOG_LEVEL_DIAG);
+    if (status != UCS_OK) {
+        ucs_debug("unable to export posix fd handle for VMM ptr: %p", addr);
+        return status;
+    }
+
+    /* The file descriptor stays open until the region is deregistered, so
+     * that the importer can retrieve it with pidfd_getfd(2) at any time */
+    key->ph.handle.posix_fd = fd;
+    key->ph.handle_type     = UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD;
+    ucs_trace("packed vmm posix fd %d for %p", fd, addr);
+    return UCS_OK;
+}
+#endif
+
+static ucs_status_t
+uct_cuda_ipc_mem_add_reg(uct_cuda_ipc_md_t *md, void *addr,
+                         uct_cuda_ipc_memh_t *memh,
                          uct_cuda_ipc_lkey_t **key_p)
 {
     uct_cuda_ipc_lkey_t *key;
@@ -198,7 +279,9 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
         goto legacy_path;
     }
 
-    if (!(allowed_handle_types & CU_MEM_HANDLE_TYPE_FABRIC)) {
+    if (!(allowed_handle_types &
+          (CU_MEM_HANDLE_TYPE_FABRIC |
+           CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR))) {
         goto non_ipc;
     }
 
@@ -206,19 +289,35 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
         UCT_CUDADRV_FUNC(cuMemRetainAllocationHandle(&handle, addr),
                 UCS_LOG_LEVEL_DIAG);
     if (status == UCS_OK) {
-        status =
-            UCT_CUDADRV_FUNC_LOG_ERR(cuMemExportToShareableHandle(
-                        &key->ph.handle.fabric_handle, handle,
-                        CU_MEM_HANDLE_TYPE_FABRIC, 0));
-        UCT_CUDADRV_FUNC_LOG_WARN(cuMemRelease(handle));
-        if (status != UCS_OK) {
-            ucs_debug("unable to export handle for VMM ptr: %p", addr);
-            goto non_ipc;
+        if (allowed_handle_types & CU_MEM_HANDLE_TYPE_FABRIC) {
+            status = UCT_CUDADRV_FUNC(cuMemExportToShareableHandle(
+                                              &key->ph.handle.fabric_handle,
+                                              handle, CU_MEM_HANDLE_TYPE_FABRIC,
+                                              0),
+                                      UCS_LOG_LEVEL_DIAG);
+            if (status == UCS_OK) {
+                UCT_CUDADRV_FUNC_LOG_WARN(cuMemRelease(handle));
+                key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM;
+                ucs_trace("packed vmm fabric handle for %p", addr);
+                goto common_path;
+            }
+
+            ucs_debug("unable to export fabric handle for VMM ptr: %p", addr);
         }
 
-        key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM;
-        ucs_trace("packed vmm fabric handle for %p", addr);
-        goto common_path;
+        status = uct_cuda_ipc_pack_posix_fd(md, key, handle,
+                                            allowed_handle_types, addr);
+        UCT_CUDADRV_FUNC_LOG_WARN(cuMemRelease(handle));
+        if (status == UCS_OK) {
+            goto common_path;
+        }
+
+        goto non_ipc;
+    }
+
+    if (!(allowed_handle_types & CU_MEM_HANDLE_TYPE_FABRIC)) {
+        /* Mempool memory is currently exported as a fabric handle only */
+        goto non_ipc;
     }
 
     if (mempool == 0) {
@@ -298,7 +397,8 @@ uct_cuda_ipc_mkey_pack(uct_md_h md, uct_mem_h tl_memh, void *address,
         }
     }
 
-    status = uct_cuda_ipc_mem_add_reg(address, memh, &key);
+    status = uct_cuda_ipc_mem_add_reg(ucs_derived_of(md, uct_cuda_ipc_md_t),
+                                      address, memh, &key);
     if (status != UCS_OK) {
         return status;
     }
@@ -484,6 +584,11 @@ uct_cuda_ipc_mem_dereg(uct_md_h md, const uct_md_mem_dereg_params_t *params)
     UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
 
     ucs_list_for_each_safe(key, tmp, &memh->list, link) {
+#if HAVE_CUDA_FABRIC
+        if (key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD) {
+            close(key->ph.handle.posix_fd);
+        }
+#endif
         ucs_free(key);
     }
 
@@ -617,6 +722,7 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
     md->super.component = &uct_cuda_ipc_component.super;
     md->enable_mnnvl    = uct_cuda_ipc_md_check_fabric_info(
                                                   md, ipc_config->enable_mnnvl);
+    md->enable_posix_fd = ipc_config->enable_posix_fd;
 
     uct_cuda_ipc_cache_set_global_limits(ipc_config->cache_max_regions,
                                          ipc_config->cache_max_size);
