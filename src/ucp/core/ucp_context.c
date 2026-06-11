@@ -2136,6 +2136,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         context->dmabuf_mds[mem_type]           = UCP_NULL_RESOURCE;
         context->alloc_md[mem_type].md_index    = UCP_NULL_RESOURCE;
         context->alloc_md[mem_type].sys_dev     = UCS_SYS_DEVICE_ID_UNKNOWN;
+        context->alloc_md[mem_type].mem_flags   = UCS_MEM_FLAG_CAN_REGISTER;
         context->alloc_md[mem_type].initialized = 0;
     }
 
@@ -2928,7 +2929,7 @@ uct_md_h ucp_context_find_tl_md(ucp_context_h context, const char *md_name)
 void ucp_memory_detect_slowpath(ucp_context_h context, const void *address,
                                 size_t length, ucs_memory_info_t *mem_info)
 {
-    uct_md_mem_attr_t mem_attr;
+    uct_md_mem_attr_v2_t mem_attr = {};
     ucs_status_t status;
     ucp_tl_md_t *tl_md;
     ucp_md_index_t i;
@@ -2936,11 +2937,12 @@ void ucp_memory_detect_slowpath(ucp_context_h context, const void *address,
     mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE |
                           UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS |
                           UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH |
-                          UCT_MD_MEM_ATTR_FIELD_SYS_DEV;
+                          UCT_MD_MEM_ATTR_FIELD_SYS_DEV |
+                          UCT_MD_MEM_ATTR_FIELD_MEM_FLAGS;
 
     for (i = 0; i < context->num_mem_type_detect_mds; ++i) {
         tl_md  = &context->tl_mds[context->mem_type_detect_mds[i]];
-        status = uct_md_mem_query(tl_md->md, address, length, &mem_attr);
+        status = uct_md_mem_query_v2(tl_md->md, address, length, &mem_attr);
         if (status != UCS_OK) {
             continue;
         }
@@ -2953,6 +2955,7 @@ void ucp_memory_detect_slowpath(ucp_context_h context, const void *address,
         mem_info->sys_dev      = mem_attr.sys_dev;
         mem_info->base_address = mem_attr.base_address;
         mem_info->alloc_length = mem_attr.alloc_length;
+        mem_info->mem_flags    = mem_attr.mem_flags;
         return;
     }
 

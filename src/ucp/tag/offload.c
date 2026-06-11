@@ -296,7 +296,10 @@ ucp_tag_offload_do_post(ucp_request_t *req)
         }
 
         if (!(context->reg_md_map[req->recv.dt_iter.mem_info.type] &
-              UCS_BIT(mdi))) {
+              UCS_BIT(mdi)) ||
+            !ucs_test_all_flags(
+                    req->recv.dt_iter.mem_info.mem_flags,
+                    context->tl_mds[mdi].attr.required_mem_flags)) {
             UCP_WORKER_STAT_TAG_OFFLOAD(worker, BLOCK_MEM_REG);
             return UCS_ERR_CANCELED;
         }

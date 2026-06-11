@@ -77,7 +77,7 @@ uct_cuda_copy_get_mem_type(uct_md_h md, const void *address, size_t length,
                            ucs_sys_device_t *sys_dev)
 {
     ucs_memory_info_t mem_info;
-    uct_md_mem_attr_t mem_attr;
+    uct_md_mem_attr_v2_t mem_attr;
     ucs_status_t status;
 
     status = ucs_memtype_cache_lookup(address, length, &mem_info);
@@ -466,4 +466,3 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_get_short,
                    length, (void *)remote_addr, buffer);
     return status;
 }
-

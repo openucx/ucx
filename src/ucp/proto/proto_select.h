@@ -91,8 +91,8 @@ struct ucp_proto_select_param {
             uint8_t         sys_dev;    /* Reply buffer system device */
         } UCS_S_PACKED reply;
 
-        /* Align struct size to uint64_t */
-        uint8_t             padding[2];
+        uint8_t             mem_flags;  /* UCS memory flags */
+        uint8_t             padding[2]; /* Align union size to uint64_t */
 
     } UCS_S_PACKED op;
 } UCS_S_PACKED;

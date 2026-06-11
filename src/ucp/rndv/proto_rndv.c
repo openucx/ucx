@@ -13,6 +13,7 @@
 #include <ucp/proto/proto_init.h>
 #include <ucp/proto/proto_debug.h>
 #include <ucp/proto/proto_common.inl>
+#include <uct/api/v2/uct_v2.h>
 
 
 static void
@@ -74,6 +75,16 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
         if (!(params->md_map & UCS_BIT(md_index)) &&
             !(context->reg_md_map[params->super.reg_mem_info.type] &
              UCS_BIT(md_index))) {
+            continue;
+        }
+
+        if (!ucs_test_all_flags(params->super.reg_mem_info.mem_flags,
+                                md_attr->required_mem_flags)) {
+            ucs_trace_req("lane[%d]: md %s requires memory flags 0x%x, "
+                          "mem_flags 0x%x",
+                          lane, context->tl_mds[md_index].rsc.md_name,
+                          md_attr->required_mem_flags,
+                          params->super.reg_mem_info.mem_flags);
             continue;
         }
 
@@ -274,8 +285,9 @@ static ucp_proto_select_param_t ucp_proto_rndv_remote_select_param_init(
     /* Construct select parameter for the remote protocol */
     if (init_params->rkey_config_key == NULL) {
         /* Remote buffer is unknown, assume same params as local */
-        mem_info.type    = select_param->mem_type;
-        mem_info.sys_dev = select_param->sys_dev;
+        mem_info.type      = select_param->mem_type;
+        mem_info.sys_dev   = select_param->sys_dev;
+        mem_info.mem_flags = select_param->op.mem_flags;
         ucp_proto_select_param_init(&remote_select_param, params->remote_op_id,
                                     op_attr_mask, 0, select_param->dt_class,
                                     &mem_info, select_param->sg_count);
@@ -283,8 +295,9 @@ static ucp_proto_select_param_t ucp_proto_rndv_remote_select_param_init(
         /* If we know the remote buffer parameters, these are actually the local
          * parameters for the remote protocol
          */
-        mem_info.sys_dev = init_params->rkey_config_key->sys_dev;
-        mem_info.type    = init_params->rkey_config_key->mem_type;
+        mem_info.sys_dev   = init_params->rkey_config_key->sys_dev;
+        mem_info.type      = init_params->rkey_config_key->mem_type;
+        mem_info.mem_flags = UCS_MEM_FLAG_CAN_REGISTER;
         ucp_proto_select_param_init(&remote_select_param, params->remote_op_id,
                                     op_attr_mask, 0, UCP_DATATYPE_CONTIG,
                                     &mem_info, 1);

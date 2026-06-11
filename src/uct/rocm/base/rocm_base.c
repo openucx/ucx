@@ -371,7 +371,7 @@ static void uct_rocm_base_dmabuf_export(const void *addr, const size_t length,
 
 ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
                                      const size_t length,
-                                     uct_md_mem_attr_t *mem_attr_p)
+                                     uct_md_mem_attr_v2_t *mem_attr_p)
 {
     size_t dmabuf_offset       = 0;
     int is_exported            = 0;
@@ -435,7 +435,8 @@ ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
     }
 
     if (mem_type == UCS_MEMORY_TYPE_ROCM) {
-        ucs_memtype_cache_update(base_addr, base_size, mem_type, sys_dev);
+        ucs_memtype_cache_update(base_addr, base_size, mem_type, sys_dev,
+                                 UCS_MEM_FLAG_CAN_REGISTER);
     }
 
     return UCS_OK;

@@ -150,7 +150,7 @@ ucp_proto_select_param_init(ucp_proto_select_param_t *select_param,
 {
     ucp_proto_select_param_init_common(select_param, op_id, op_attr_mask,
                                        op_flags, dt_class, mem_info, sg_count);
-    select_param->op.padding[0] = 0;
+    select_param->op.mem_flags  = mem_info->mem_flags;
     select_param->op.padding[1] = 0;
 }
 

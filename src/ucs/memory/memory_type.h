@@ -51,6 +51,11 @@ typedef enum ucs_memory_type {
 } ucs_memory_type_t;
 
 
+typedef enum ucs_mem_flags {
+    UCS_MEM_FLAG_CAN_REGISTER = UCS_BIT(0) /**< Can be registered by MDs */
+} ucs_mem_flags_t;
+
+
 /**
  * Array of string names for each memory type
  */

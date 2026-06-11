@@ -424,8 +424,9 @@ static void
 ucp_proto_rndv_put_zcopy_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_memory_info_t reg_mem_info = {
-        .type    = init_params->select_param->mem_type,
-        .sys_dev = init_params->select_param->sys_dev
+        .type      = init_params->select_param->mem_type,
+        .sys_dev   = init_params->select_param->sys_dev,
+        .mem_flags = init_params->select_param->op.mem_flags
     };
 
     ucp_proto_rndv_put_common_probe(

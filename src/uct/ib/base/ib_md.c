@@ -264,6 +264,7 @@ ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
     md_attr->gva_mem_types             = md->gva_mem_types;
     md_attr->reg_nonblock_mem_types    = md->reg_nonblock_mem_types;
     md_attr->cache_mem_types           = UCS_MASK(UCS_MEMORY_TYPE_LAST);
+    md_attr->required_mem_flags        = UCS_MEM_FLAG_CAN_REGISTER;
     md_attr->rkey_packed_size          = UCT_IB_MD_PACKED_RKEY_SIZE;
     md_attr->reg_cost                  = md->reg_cost;
     md_attr->exported_mkey_packed_size = sizeof(uct_ib_md_packed_mkey_t);

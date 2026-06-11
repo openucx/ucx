@@ -8,6 +8,7 @@
 
 #include <common/test.h>
 #include <common/mem_buffer.h>
+#include <cstring>
 #include <unordered_map>
 #include <memory>
 
@@ -18,9 +19,11 @@ extern "C" {
 #include <ucp/proto/proto_debug.h>
 #include <ucp/proto/proto_perf.h>
 #include <ucp/proto/proto_init.h>
+#include <ucp/rndv/proto_rndv.h>
 #include <ucs/datastruct/linear_func.h>
 #include <ucp/proto/proto_select.inl>
 #include <ucp/core/ucp_worker.inl>
+#include <uct/api/v2/uct_v2.h>
 }
 
 class test_ucp_proto : public ucp_test {
@@ -131,7 +134,7 @@ UCS_TEST_P(test_ucp_proto, dump_protocols) {
     select_param.mem_type      = UCS_MEMORY_TYPE_HOST;
     select_param.sys_dev       = UCS_SYS_DEVICE_ID_UNKNOWN;
     select_param.sg_count      = 1;
-    select_param.op.padding[0] = 0;
+    select_param.op.mem_flags  = UCS_MEM_FLAG_CAN_REGISTER;
     select_param.op.padding[1] = 0;
 
     ucs_string_buffer_init(&strb);
@@ -212,6 +215,262 @@ UCS_TEST_P(test_ucp_proto, dt_iter_mem_reg)
 UCP_INSTANTIATE_TEST_CASE(test_ucp_proto)
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_proto, shm_ipc,
                                         "shm,cuda_ipc,rocm_ipc")
+
+class test_ucp_proto_cuda_async_non_reg : public test_ucp_proto {
+protected:
+    class scoped_reg_md_map {
+    public:
+        scoped_reg_md_map(ucp_context_h context, ucs_memory_type_t mem_type,
+                          ucp_md_map_t md_map) :
+            m_context(context), m_mem_type(mem_type),
+            m_orig_reg_md_map(context->reg_md_map[mem_type])
+        {
+            context->reg_md_map[mem_type] = m_orig_reg_md_map | md_map;
+        }
+
+        ~scoped_reg_md_map()
+        {
+            m_context->reg_md_map[m_mem_type] = m_orig_reg_md_map;
+        }
+
+    private:
+        ucp_context_h     m_context;
+        ucs_memory_type_t m_mem_type;
+        ucp_md_map_t      m_orig_reg_md_map;
+    };
+
+    static ucp_md_map_t get_required_mem_flags_md_map(
+            ucp_context_h context, ucs_memory_type_t mem_type,
+            uint8_t mem_flags);
+
+    static bool has_rndv_remote_proto(
+            const ucp_proto_select_elem_t *select_elem,
+            const char *remote_proto_name);
+};
+
+ucp_md_map_t
+test_ucp_proto_cuda_async_non_reg::get_required_mem_flags_md_map(
+        ucp_context_h context, ucs_memory_type_t mem_type, uint8_t mem_flags)
+{
+    ucp_md_map_t md_map = context->reg_md_map[mem_type] &
+                          context->cache_md_map[mem_type];
+    ucp_md_map_t result = 0;
+    ucp_md_index_t md_index;
+
+    ucs_for_each_bit(md_index, md_map) {
+        if (context->tl_mds[md_index].attr.required_mem_flags & mem_flags) {
+            result |= UCS_BIT(md_index);
+        }
+    }
+
+    return result;
+}
+
+bool test_ucp_proto_cuda_async_non_reg::has_rndv_remote_proto(
+        const ucp_proto_select_elem_t *select_elem,
+        const char *remote_proto_name)
+{
+    const ucp_proto_init_elem_t *proto;
+
+    ucs_array_for_each(proto, &select_elem->proto_init.protocols) {
+        const char *proto_name = ucp_proto_id_field(proto->proto_id, name);
+
+        if ((std::strcmp(proto_name, "tag/rndv") != 0) &&
+            (std::strcmp(proto_name, "tag/rndv/offload") != 0) &&
+            (std::strcmp(proto_name, "tag/rndv/offload_sw") != 0) &&
+            (std::strcmp(proto_name, "rndv/rts") != 0)) {
+            continue;
+        }
+
+        if (proto->priv_offset == UCP_PROTO_INIT_ELEM_PRIV_OFFSET_INVALID) {
+            continue;
+        }
+
+        const void *priv = &ucs_array_elem(&select_elem->proto_init.priv_buf,
+                                           proto->priv_offset);
+        const ucp_proto_rndv_ctrl_priv_t *rpriv =
+                reinterpret_cast<const ucp_proto_rndv_ctrl_priv_t*>(priv);
+
+        if ((rpriv->remote_proto_config.proto != NULL) &&
+            (std::strcmp(rpriv->remote_proto_config.proto->name,
+                         remote_proto_name) == 0)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+UCS_TEST_P(test_ucp_proto_cuda_async_non_reg,
+           cuda_async_can_register_filter)
+{
+    constexpr size_t buffer_size = 8192;
+    ucp_request_param_t param = {};
+    uct_md_mem_attr_t v1_mem_attr = {};
+    int v1_queried = 0;
+    ucp_md_map_t hca_md_map;
+    ucp_datatype_iter_t dt_iter;
+    ucs_memory_type_t mem_type;
+    ucs_status_t status;
+    ucp_md_index_t i, md_index;
+    uint8_t sg_count;
+
+    if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
+        UCS_TEST_SKIP_R("CUDA is not supported");
+    }
+
+    if (!mem_buffer::is_async_supported(UCS_MEMORY_TYPE_CUDA)) {
+        UCS_TEST_SKIP_R("CUDA async allocation is not supported");
+    }
+
+    scoped_async_cuda_buffer buffer(buffer_size);
+
+    for (i = 0; i < context()->num_mem_type_detect_mds; ++i) {
+        md_index                 = context()->mem_type_detect_mds[i];
+        v1_mem_attr.field_mask   = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE;
+        status = uct_md_mem_query(context()->tl_mds[md_index].md,
+                                  buffer.ptr(), buffer_size, &v1_mem_attr);
+        if ((status == UCS_OK) &&
+            ((v1_mem_attr.mem_type == UCS_MEMORY_TYPE_CUDA) ||
+             (v1_mem_attr.mem_type == UCS_MEMORY_TYPE_CUDA_MANAGED))) {
+            v1_queried = 1;
+            break;
+        }
+    }
+    ASSERT_TRUE(v1_queried);
+
+    ASSERT_UCS_OK(ucp_datatype_iter_init(context(), buffer.ptr(), buffer_size,
+                                         UCP_DATATYPE_CONTIG, buffer_size, 1,
+                                         &dt_iter, &sg_count, &param));
+
+    mem_type = static_cast<ucs_memory_type_t>(dt_iter.mem_info.type);
+    if (mem_type != UCS_MEMORY_TYPE_CUDA_MANAGED) {
+        UCS_TEST_SKIP_R("CUDA async memory is not classified as CUDA managed");
+    }
+
+    hca_md_map = get_required_mem_flags_md_map(
+            context(), UCS_MEMORY_TYPE_CUDA, UCS_MEM_FLAG_CAN_REGISTER);
+    hca_md_map &= context()->cache_md_map[mem_type];
+    if (hca_md_map == 0) {
+        UCS_TEST_SKIP_R("no CUDA-registering IB/HCA MDs");
+    }
+
+    ASSERT_EQ(0, dt_iter.mem_info.mem_flags & UCS_MEM_FLAG_CAN_REGISTER);
+
+    scoped_reg_md_map reg_md_map(context(), mem_type, hca_md_map);
+    status = ucp_datatype_iter_mem_reg(context(), &dt_iter, hca_md_map,
+                                       UCT_MD_MEM_ACCESS_RMA,
+                                       UCP_DT_MASK_ALL);
+    ASSERT_UCS_OK(status);
+    ASSERT_NE(nullptr, dt_iter.type.contig.memh);
+    EXPECT_EQ(static_cast<ucp_md_map_t>(0),
+              dt_iter.type.contig.memh->md_map & hca_md_map);
+    ucp_datatype_iter_mem_dereg(&dt_iter, UCP_DT_MASK_ALL);
+}
+
+UCS_TEST_P(test_ucp_proto_cuda_async_non_reg,
+           cuda_async_rndv_get_zcopy_proto_filter,
+           "RNDV_THRESH=0", "RNDV_SCHEME=get_zcopy")
+{
+    constexpr size_t buffer_size = 8192;
+    ucp_request_param_t param = {};
+    ucp_datatype_iter_t dt_iter;
+    ucp_proto_select_param_t select_param;
+    ucp_memory_info_t mem_info;
+    const ucp_ep_config_t *ep_config;
+    const ucp_proto_select_elem_t *select_elem;
+    ucp_proto_select_t *proto_select;
+    const uct_iface_attr_t *iface_attr;
+    ucp_worker_cfg_index_t ep_cfg_index;
+    ucp_md_map_t hca_md_map, lane_md_map;
+    ucp_lane_index_t lane;
+    ucp_md_index_t md_index;
+    uint8_t sg_count;
+    bool no_flag_has_get_zcopy;
+    bool can_reg_has_get_zcopy;
+
+    if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
+        UCS_TEST_SKIP_R("CUDA is not supported");
+    }
+
+    if (!mem_buffer::is_async_supported(UCS_MEMORY_TYPE_CUDA)) {
+        UCS_TEST_SKIP_R("CUDA async allocation is not supported");
+    }
+
+    scoped_async_cuda_buffer buffer(buffer_size);
+
+    ASSERT_UCS_OK(ucp_datatype_iter_init(context(), buffer.ptr(), buffer_size,
+                                         UCP_DATATYPE_CONTIG, buffer_size, 1,
+                                         &dt_iter, &sg_count, &param));
+
+    mem_info = dt_iter.mem_info;
+    if (mem_info.type != UCS_MEMORY_TYPE_CUDA_MANAGED) {
+        UCS_TEST_SKIP_R("CUDA async memory is not classified as CUDA managed");
+    }
+
+    hca_md_map = get_required_mem_flags_md_map(
+            context(), UCS_MEMORY_TYPE_CUDA, UCS_MEM_FLAG_CAN_REGISTER);
+    hca_md_map &= context()->cache_md_map[mem_info.type];
+    if (hca_md_map == 0) {
+        UCS_TEST_SKIP_R("no CUDA-registering IB/HCA MDs");
+    }
+
+    ep_config   = &ucs_array_elem(&worker()->ep_config,
+                                  sender().ep()->cfg_index);
+    lane_md_map = 0;
+    for (lane = 0; lane < ep_config->key.num_lanes; ++lane) {
+        md_index = context()->tl_rscs[ep_config->key.lanes[lane].rsc_index].
+                   md_index;
+        iface_attr = ucp_worker_iface_get_attr(
+                worker(), ep_config->key.lanes[lane].rsc_index);
+        if ((hca_md_map & UCS_BIT(md_index)) &&
+            (context()->tl_mds[md_index].attr.flags & UCT_MD_FLAG_NEED_RKEY) &&
+            (iface_attr->cap.flags & UCT_IFACE_FLAG_GET_ZCOPY)) {
+            lane_md_map |= UCS_BIT(md_index);
+        }
+    }
+
+    if (lane_md_map == 0) {
+        UCS_TEST_SKIP_R("no endpoint lanes support IB/HCA get zcopy");
+    }
+
+    ASSERT_EQ(0, mem_info.mem_flags & UCS_MEM_FLAG_CAN_REGISTER);
+
+    ep_cfg_index = sender().ep()->cfg_index;
+    proto_select = &ucs_array_elem(&worker()->ep_config,
+                                   ep_cfg_index).proto_select;
+
+    scoped_reg_md_map reg_md_map(
+            context(), static_cast<ucs_memory_type_t>(mem_info.type),
+            lane_md_map);
+
+    ucp_proto_select_param_init(&select_param, UCP_OP_ID_TAG_SEND, 0, 0,
+                                UCP_DATATYPE_CONTIG, &mem_info, 1);
+    select_elem = ucp_proto_select_lookup_slow(
+            worker(), proto_select, 0, ep_cfg_index, UCP_WORKER_CFG_INDEX_NULL,
+            &select_param);
+    EXPECT_NE(nullptr, select_elem);
+    no_flag_has_get_zcopy = (select_elem != NULL) &&
+            has_rndv_remote_proto(select_elem, "rndv/get/zcopy");
+
+    mem_info.mem_flags |= UCS_MEM_FLAG_CAN_REGISTER;
+    ucp_proto_select_param_init(&select_param, UCP_OP_ID_TAG_SEND, 0, 0,
+                                UCP_DATATYPE_CONTIG, &mem_info, 1);
+    select_elem = ucp_proto_select_lookup_slow(
+            worker(), proto_select, 0, ep_cfg_index, UCP_WORKER_CFG_INDEX_NULL,
+            &select_param);
+    EXPECT_NE(nullptr, select_elem);
+    can_reg_has_get_zcopy = (select_elem != NULL) &&
+            has_rndv_remote_proto(select_elem, "rndv/get/zcopy");
+
+    EXPECT_FALSE(no_flag_has_get_zcopy);
+    EXPECT_TRUE(can_reg_has_get_zcopy);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_cuda_async_non_reg, rcx,
+                              "rc_x,cuda_copy")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_cuda_async_non_reg, rcv,
+                              "rc_v,cuda_copy")
 
 class test_perf_node : public test_ucp_proto {
 };

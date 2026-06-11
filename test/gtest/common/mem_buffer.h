@@ -176,4 +176,26 @@ private:
 };
 
 
+class scoped_async_cuda_buffer {
+public:
+    explicit scoped_async_cuda_buffer(size_t size) :
+        m_ptr(mem_buffer::allocate(size, UCS_MEMORY_TYPE_CUDA, true))
+    {
+    }
+
+    ~scoped_async_cuda_buffer()
+    {
+        mem_buffer::release(m_ptr, UCS_MEMORY_TYPE_CUDA, true);
+    }
+
+    void *ptr() const
+    {
+        return m_ptr;
+    }
+
+private:
+    void *m_ptr;
+};
+
+
 #endif

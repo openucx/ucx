@@ -826,6 +826,74 @@ ucs_status_t uct_md_mem_dereg_v2(uct_md_h md,
 
 /**
  * @ingroup UCT_MD
+ * @brief UCT MD memory attributes v2 field mask.
+ *
+ * The v2 memory attributes structure uses the same field bits as
+ * @ref uct_md_mem_attr_t and adds @ref UCT_MD_MEM_ATTR_FIELD_MEM_FLAGS.
+ */
+enum {
+    /** Request per-buffer memory flags, see @ref ucs_mem_flags_t. */
+    UCT_MD_MEM_ATTR_FIELD_MEM_FLAGS = UCS_BIT(6)
+};
+
+
+/**
+ * @ingroup UCT_MD
+ * @brief Memory pointer attributes with UCS memory flags.
+ */
+typedef struct uct_md_mem_attr_v2 {
+    /**
+     * Mask of valid fields in this structure, using
+     * @ref uct_md_mem_attr_field_t and
+     * @ref UCT_MD_MEM_ATTR_FIELD_MEM_FLAGS.
+     */
+    uint64_t          field_mask;
+
+    /** See @ref uct_md_mem_attr_t::mem_type. */
+    ucs_memory_type_t mem_type;
+
+    /** See @ref uct_md_mem_attr_t::sys_dev. */
+    ucs_sys_device_t  sys_dev;
+
+    /** See @ref uct_md_mem_attr_t::base_address. */
+    void              *base_address;
+
+    /** See @ref uct_md_mem_attr_t::alloc_length. */
+    size_t            alloc_length;
+
+    /** See @ref uct_md_mem_attr_t::dmabuf_fd. */
+    int               dmabuf_fd;
+
+    /** See @ref uct_md_mem_attr_t::dmabuf_offset. */
+    size_t            dmabuf_offset;
+
+    /** Per-buffer memory flags, see @ref ucs_mem_flags_t. */
+    uint8_t           mem_flags;
+} uct_md_mem_attr_v2_t;
+
+
+/**
+ * @ingroup UCT_MD
+ * @brief Query v2 attributes of a given pointer.
+ *
+ * This is a superset of @ref uct_md_mem_query which can also return
+ * per-buffer memory flags.
+ *
+ * @param [in]     md          Memory domain to run the query on.
+ * @param [in]     address     Address of the pointer.
+ * @param [in]     length      Length of the memory region to examine.
+ * @param [inout]  mem_attr    If successful, filled with pointer attributes.
+ *
+ * @return UCS_OK if requested attributes are successfully queried, otherwise
+ *         an error code as defined by @ref ucs_status_t.
+ */
+ucs_status_t uct_md_mem_query_v2(uct_md_h md, const void *address,
+                                 size_t length,
+                                 uct_md_mem_attr_v2_t *mem_attr);
+
+
+/**
+ * @ingroup UCT_MD
  * @brief UCT MD attributes field mask.
  *
  * The enumeration allows specifying which fields in @ref uct_md_attr_v2_t
@@ -884,7 +952,10 @@ typedef enum uct_md_attr_field {
     UCT_MD_ATTR_FIELD_REG_ALIGNMENT             = UCS_BIT(16),
 
     /** Indicate memory types that the MD can register using global VA MR. */
-    UCT_MD_ATTR_FIELD_GVA_MEM_TYPES             = UCS_BIT(17)
+    UCT_MD_ATTR_FIELD_GVA_MEM_TYPES             = UCS_BIT(17),
+
+    /** Memory flags required for registration by this MD. */
+    UCT_MD_ATTR_FIELD_REQUIRED_MEM_FLAGS        = UCS_BIT(18)
 } uct_md_attr_field_t;
 
 
@@ -1000,6 +1071,11 @@ typedef struct {
      * Registration alignment.
      */
     size_t            reg_alignment;
+
+    /**
+     * Memory flags required for registration by this MD.
+     */
+    uint8_t           required_mem_flags;
 } uct_md_attr_v2_t;
 
 

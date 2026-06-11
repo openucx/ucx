@@ -258,10 +258,11 @@ ucp_datatype_iter_slice(const ucp_datatype_iter_t *dt_iter, size_t offset,
 
 static UCS_F_ALWAYS_INLINE ucs_status_t ucp_datatype_iter_mem_reg_single(
         ucp_context_h context, void *buffer, size_t length,
-        ucs_memory_type_t mem_type, ucp_md_map_t md_map, unsigned uct_flags,
-        ucp_mem_h *memh_p)
+        const ucp_memory_info_t *mem_info, ucp_md_map_t md_map,
+        unsigned uct_flags, ucp_mem_h *memh_p)
 {
     const char *alloc_name = "dt_iter";
+    ucs_memory_type_t mem_type = (ucs_memory_type_t)mem_info->type;
     ucp_mem_h memh = *memh_p;
     ucs_status_t status;
 
@@ -274,9 +275,11 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_datatype_iter_mem_reg_single(
                 context->cache_md_map[mem_type], md_map);
 
     if (memh == NULL) {
-        return ucp_memh_get(context, buffer, length, mem_type, md_map,
+        return ucp_memh_get(context, buffer, length, mem_info, md_map,
                             uct_flags, alloc_name, memh_p);
     }
+
+    ucp_memh_assert_mem_info_compatible(memh, mem_info);
 
     if (ucs_likely(ucs_test_all_flags(memh->md_map, md_map)) ||
         ucp_memh_is_zero_length(memh)) {
@@ -681,7 +684,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_datatype_iter_mem_reg(
     if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_CONTIG, dt_mask)) {
         return ucp_datatype_iter_mem_reg_single(
                 context, dt_iter->type.contig.buffer, dt_iter->length,
-                (ucs_memory_type_t)dt_iter->mem_info.type, md_map, uct_flags,
+                &dt_iter->mem_info, md_map, uct_flags,
                 &dt_iter->type.contig.memh);
     } else if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_IOV, dt_mask)) {
         return ucp_datatype_iter_iov_mem_reg(context, dt_iter, md_map,

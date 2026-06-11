@@ -388,6 +388,7 @@ typedef struct ucp_context_alloc_md_index {
      * using ucp_memh_alloc(). */
     ucp_md_index_t   md_index;
     ucs_sys_device_t sys_dev;
+    uint8_t          mem_flags;
 } ucp_context_alloc_md_index_t;
 
 
@@ -709,8 +710,9 @@ ucp_cmpt_attr_by_md_index(ucp_context_h context, ucp_md_index_t md_index)
 static UCS_F_ALWAYS_INLINE void
 ucp_memory_info_set_host(ucp_memory_info_t *mem_info)
 {
-    mem_info->type    = UCS_MEMORY_TYPE_HOST;
-    mem_info->sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+    mem_info->type      = UCS_MEMORY_TYPE_HOST;
+    mem_info->sys_dev   = UCS_SYS_DEVICE_ID_UNKNOWN;
+    mem_info->mem_flags = UCS_MEM_FLAG_CAN_REGISTER;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -761,8 +763,9 @@ ucp_memory_detect(ucp_context_h context, const void *address, size_t length,
 
     ucp_memory_detect_internal(context, address, length, &mem_info_internal);
 
-    mem_info->type    = mem_info_internal.type;
-    mem_info->sys_dev = mem_info_internal.sys_dev;
+    mem_info->type      = mem_info_internal.type;
+    mem_info->sys_dev   = mem_info_internal.sys_dev;
+    mem_info->mem_flags = mem_info_internal.mem_flags;
 }
 
 static UCS_F_ALWAYS_INLINE int

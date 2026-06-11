@@ -80,7 +80,7 @@ ucs_status_t uct_cuda_copy_md_detect_memory_type(uct_md_h md,
 
 ucs_status_t
 uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address, size_t length,
-                           uct_md_mem_attr_t *mem_attr);
+                           uct_md_mem_attr_v2_t *mem_attr);
 
 /**
  * @brief Check if dmabuf is supported on the 0th device.
