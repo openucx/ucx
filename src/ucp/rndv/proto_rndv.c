@@ -10,9 +10,27 @@
 
 #include "proto_rndv.inl"
 
+#include <string.h>
+
 #include <ucp/proto/proto_init.h>
 #include <ucp/proto/proto_debug.h>
 #include <ucp/proto/proto_common.inl>
+
+#define UCP_PROTO_RNDV_GPU_READ_FACTOR 100.0
+
+
+static int ucp_proto_rndv_ctrl_is_gpu_read_auto(
+        const ucp_proto_rndv_ctrl_init_params_t *params,
+        const char *variant_name)
+{
+    ucp_context_h context = params->super.super.worker->context;
+
+    return (context->config.ext.rndv_mode == UCP_RNDV_MODE_AUTO) &&
+           UCP_MEM_IS_GPU(params->super.super.select_param->mem_type) &&
+           (!strcmp(variant_name, "rndv/get/zcopy") ||
+            !strcmp(variant_name, "rndv/get/mtype") ||
+            !strcmp(variant_name, "rndv/recv/ppln"));
+}
 
 
 static void
@@ -418,6 +436,20 @@ static void ucp_proto_rndv_ctrl_variant_probe(
                                   ucs_linear_func_make(0.0,
                                                        1.0 - params->perf_bias),
                                   "bias", "%.2f %%", params->perf_bias);
+    }
+
+    if (ucp_proto_rndv_ctrl_is_gpu_read_auto(params, variant_name)) {
+        /*
+         * Transport estimates do not include the extra cost of remote RDMA
+         * reads from GPU memory on RoCE. Keep explicit get_zcopy selection
+         * intact, but make auto prefer put-side RNDV protocols for GPU
+         * buffers.
+         */
+        ucp_proto_perf_apply_func(
+                perf, ucs_linear_func_make(0.0,
+                                           UCP_PROTO_RNDV_GPU_READ_FACTOR),
+                "gpu read penalty", "x%.2f",
+                UCP_PROTO_RNDV_GPU_READ_FACTOR);
     }
 
     ucp_proto_select_add_proto(&params->super.super, cfg_thresh, cfg_priority,
