@@ -14,6 +14,134 @@
 #include <common/test.h>
 #include <uct/test_md.h>
 
+#include <fstream>
+#include <sstream>
+#include <string>
+
+namespace {
+
+std::string test_ib_md_read_source_file(const char *relative_path)
+{
+    std::string path = std::string(TOP_SRCDIR) + "/" + relative_path;
+    std::ifstream input(path.c_str());
+    std::stringstream contents;
+
+    EXPECT_TRUE(input.is_open()) << path;
+    if (!input.is_open()) {
+        return std::string();
+    }
+
+    contents << input.rdbuf();
+    return contents.str();
+}
+
+std::string test_ib_md_get_source_span(const char *relative_path,
+                                       const char *begin_marker,
+                                       const char *end_marker)
+{
+    std::string source = test_ib_md_read_source_file(relative_path);
+    size_t begin_pos   = source.find(begin_marker);
+
+    EXPECT_NE(std::string::npos, begin_pos) << begin_marker;
+    if (begin_pos == std::string::npos) {
+        return std::string();
+    }
+
+    size_t end_pos = source.find(end_marker, begin_pos);
+    EXPECT_NE(std::string::npos, end_pos) << end_marker;
+    if (end_pos == std::string::npos) {
+        return std::string();
+    }
+
+    return source.substr(begin_pos, end_pos - begin_pos);
+}
+
+class test_ib_md_coco_source : public ucs::test {
+};
+
+UCS_TEST_F(test_ib_md_coco_source, devx_probe_skips_plain_cq_in_coco)
+{
+    std::string probe_source = test_ib_md_get_source_span(
+        "src/uct/ib/mlx5/dv/ib_mlx5dv_md.c",
+        "uct_ib_mlx5_devx_check_event_channel",
+        "static uct_ib_md_ops_t");
+    std::string open_source = test_ib_md_get_source_span(
+        "src/uct/ib/mlx5/dv/ib_mlx5dv_md.c",
+        "uct_ib_mlx5_devx_md_open_common",
+        "md->port_select_mode");
+    size_t query_pos        = open_source.find("uct_ib_device_query");
+    size_t event_check_pos  = open_source.find(
+        "uct_ib_mlx5_devx_check_event_channel");
+
+    EXPECT_NE(std::string::npos,
+              probe_source.find("int is_coco_context"));
+    EXPECT_NE(std::string::npos,
+              probe_source.find("if (!is_coco_context)"));
+    EXPECT_NE(std::string::npos, probe_source.find("ibv_create_cq(ctx"));
+    EXPECT_NE(std::string::npos,
+              probe_source.find("mlx5dv_devx_create_event_channel"));
+
+    ASSERT_NE(std::string::npos, query_pos);
+    ASSERT_NE(std::string::npos, event_check_pos);
+    EXPECT_LT(query_pos, event_check_pos);
+    EXPECT_NE(std::string::npos,
+              open_source.find("uct_ib_device_is_cc_dma_bounce(dev)"));
+}
+
+UCS_TEST_F(test_ib_md_coco_source, coco_control_cq_probe_follows_coco_pd)
+{
+    std::string helper_source = test_ib_md_get_source_span(
+        "src/uct/ib/base/ib_md.c",
+        "uct_ib_md_probe_coco_control_cq",
+        "ucs_status_t uct_ib_md_open_common");
+    std::string open_source = test_ib_md_get_source_span(
+        "src/uct/ib/base/ib_md.c",
+        "uct_ib_md_open_common",
+        "if (strlen(md_config->subnet_prefix) > 0)");
+    size_t create_pos       = open_source.find("uct_ib_md_create_coco_pd(md)");
+    size_t probe_pos        = open_source.find(
+        "uct_ib_md_probe_coco_control_cq(md)");
+
+    EXPECT_NE(std::string::npos, helper_source.find("ibv_create_cq_ex"));
+    EXPECT_NE(std::string::npos,
+              helper_source.find("IBV_CQ_INIT_ATTR_MASK_PD"));
+    EXPECT_NE(std::string::npos, helper_source.find("md->coco_pd"));
+
+    ASSERT_NE(std::string::npos, create_pos);
+    ASSERT_NE(std::string::npos, probe_pos);
+    EXPECT_LT(create_pos, probe_pos);
+}
+
+UCS_TEST_F(test_ib_md_coco_source,
+           shared_devx_buffer_free_caches_dmabuf_metadata)
+{
+    std::string free_source = test_ib_md_get_source_span(
+        "src/uct/ib/mlx5/ib_mlx5.h",
+        "uct_ib_mlx5_md_buf_free",
+        "#else");
+    size_t fd_cache_pos     = free_source.find("= mem->dmabuf_fd");
+    size_t mmap_cache_pos   = free_source.find("= mem->mmap_size");
+    size_t reset_pos        = free_source.find(
+        "uct_ib_mlx5_devx_umem_reset(mem)");
+    size_t munmap_pos       = free_source.find("munmap(buf, mmap_size)");
+    size_t close_pos        = free_source.find("close(dmabuf_fd)");
+
+    ASSERT_NE(std::string::npos, fd_cache_pos);
+    ASSERT_NE(std::string::npos, mmap_cache_pos);
+    ASSERT_NE(std::string::npos, reset_pos);
+    ASSERT_NE(std::string::npos, munmap_pos);
+    ASSERT_NE(std::string::npos, close_pos);
+
+    EXPECT_LT(fd_cache_pos, munmap_pos);
+    EXPECT_LT(mmap_cache_pos, munmap_pos);
+    EXPECT_LT(reset_pos, munmap_pos);
+    EXPECT_LT(munmap_pos, close_pos);
+    EXPECT_EQ(std::string::npos, free_source.find("close(mem->dmabuf_fd)"));
+    EXPECT_EQ(std::string::npos, free_source.find("munmap(buf, mem->mmap_size)"));
+}
+
+} // namespace
+
 class test_ib_md : public test_md
 {
 protected:

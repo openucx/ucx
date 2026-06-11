@@ -1915,19 +1915,25 @@ struct ibv_context* uct_ib_mlx5_devx_open_device(struct ibv_device *ibv_device)
 }
 
 static ucs_status_t
-uct_ib_mlx5_devx_check_event_channel(struct ibv_context *ctx)
+uct_ib_mlx5_devx_check_event_channel(struct ibv_context *ctx,
+                                     int is_coco_context)
 {
     struct mlx5dv_devx_event_channel *event_channel;
     struct ibv_cq *cq;
 
-    cq = ibv_create_cq(ctx, 1, NULL, NULL, 0);
-    if (cq == NULL) {
-        uct_ib_check_memlock_limit_msg(ctx, UCS_LOG_LEVEL_DEBUG,
-                                       "ibv_create_cq()");
-        return UCS_ERR_UNSUPPORTED;
-    }
+    if (!is_coco_context) {
+        cq = ibv_create_cq(ctx, 1, NULL, NULL, 0);
+        if (cq == NULL) {
+            uct_ib_check_memlock_limit_msg(ctx, UCS_LOG_LEVEL_DEBUG,
+                                           "ibv_create_cq()");
+            return UCS_ERR_UNSUPPORTED;
+        }
 
-    ibv_destroy_cq(cq);
+        ibv_destroy_cq(cq);
+    } else {
+        ucs_debug("%s: skipping plain CQ DEVX probe in CoCo DMA-bounce mode",
+                  ibv_get_device_name(ctx->device));
+    }
 
     event_channel = mlx5dv_devx_create_event_channel(
             ctx, MLX5_IB_UAPI_DEVX_CR_EV_CH_FLAGS_OMIT_DATA);
@@ -2345,11 +2351,6 @@ ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
         goto err_free_buffer;
     }
 
-    status = uct_ib_mlx5_devx_check_event_channel(ctx);
-    if (status != UCS_OK) {
-        goto err_free_context;
-    }
-
     md = ucs_derived_of(uct_ib_md_alloc(size, name, ctx), uct_ib_mlx5_md_t);
     if (md == NULL) {
         status = UCS_ERR_NO_MEMORY;
@@ -2366,6 +2367,12 @@ ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
     uct_ib_mlx5_devx_mr_lru_init(md);
 
     status = uct_ib_device_query(dev, ibv_device);
+    if (status != UCS_OK) {
+        goto err_lru_cleanup;
+    }
+
+    status = uct_ib_mlx5_devx_check_event_channel(
+            ctx, uct_ib_device_is_cc_dma_bounce(dev));
     if (status != UCS_OK) {
         goto err_lru_cleanup;
     }
