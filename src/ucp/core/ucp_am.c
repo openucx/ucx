@@ -1,6 +1,6 @@
 /**
 * Copyright (C) Los Alamos National Security, LLC. 2019 ALL RIGHTS RESERVED.
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019-2026. ALL RIGHTS RESERVED.
 * Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -85,6 +85,12 @@ void ucp_am_ep_init(ucp_ep_h ep)
     }
 }
 
+static UCS_F_ALWAYS_INLINE void ucp_am_release_long_desc(ucp_recv_desc_t *desc)
+{
+    /* Don't use UCS_PTR_BYTE_OFFSET here due to coverity false positive report. */
+    ucs_free((char*)desc - desc->release_desc_offset);
+}
+
 void ucp_am_ep_cleanup(ucp_ep_h ep)
 {
     ucp_ep_ext_t *ep_ext = ep->ext;
@@ -100,8 +106,8 @@ void ucp_am_ep_cleanup(ucp_ep_h ep)
     ucs_list_for_each_safe(rdesc, tmp_rdesc, &ep_ext->am.started_ams,
                            am_first.list) {
         ucs_list_del(&rdesc->am_first.list);
-        /* Free from the start of frag_tree allocation, not rdesc */
-        ucs_free(UCS_PTR_BYTE_OFFSET(rdesc, -sizeof(ucs_interval_tree_t)));
+        ucs_interval_tree_cleanup(ucp_am_rdesc_frag_tree(rdesc));
+        ucp_am_release_long_desc(rdesc);
         ++count;
     }
     ucs_trace_data("worker %p: %zu unhandled first AM fragments have been"
@@ -137,14 +143,6 @@ static void ucp_am_rndv_send_ats(ucp_worker_h worker, ucp_rndv_rts_hdr_t *rts,
 
     ucp_rndv_req_send_ack(req, rts->size, rts->sreq.req_id, status,
                           UCP_AM_ID_RNDV_ATS, "send_ats");
-}
-
-static UCS_F_ALWAYS_INLINE void ucp_am_release_long_desc(ucp_recv_desc_t *desc)
-{
-    /* Don't use UCS_PTR_BYTE_OFFSET here due to coverity false positive report.
-     * Need to step back by release_desc_offset, where originally allocated
-     * pointer resides. */
-    ucs_free((char*)desc - desc->release_desc_offset);
 }
 
 static UCS_F_ALWAYS_INLINE int
@@ -1132,6 +1130,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_recv_data_nbx,
 
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(context, UCP_FEATURE_AM,
                                     return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
+    UCP_REQUEST_CHECK_PARAM(param);
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
 
@@ -1538,6 +1537,23 @@ static void ucp_am_release_mid_fragments_by_msg_id(ucp_ep_ext_t *ep_ext,
     }
 }
 
+/* Release partial first_rdesc and queued mid fragments for msg_id.
+ * Used to evict an orphan partial assembly when the sender retransmits
+ * the message in a single fragment (see @ref UCP_AM_HDR_FLAG_RESEND). */
+static void ucp_am_release_partial_msg(ucp_worker_h worker,
+                                       ucp_ep_ext_t *ep_ext, uint64_t msg_id)
+{
+    ucp_recv_desc_t *first_rdesc = ucp_am_find_first_rdesc(worker, ep_ext,
+                                                           msg_id);
+    if (first_rdesc != NULL) {
+        ucs_list_del(&first_rdesc->am_first.list);
+        ucs_interval_tree_cleanup(ucp_am_rdesc_frag_tree(first_rdesc));
+        ucp_am_release_long_desc(first_rdesc);
+    }
+
+    ucp_am_release_mid_fragments_by_msg_id(ep_ext, msg_id);
+}
+
 UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_first_handler,
                  (am_arg, am_data, am_length, am_flags),
                  void *am_arg, void *am_data, size_t am_length,
@@ -1569,7 +1585,11 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_first_handler,
                    UCP_AM_FIRST_FRAG_META_LEN;
 
     if (ucs_unlikely(am_length == total_length)) {
-        /* Can be a single fragment if send was issued on stub ep */
+        if (ucs_unlikely(hdr->flags & UCP_AM_HDR_FLAG_RESEND)) {
+            ucp_am_release_partial_msg(worker, ep_ext,
+                                       first_ftr->super.msg_id);
+        }
+
         recv_flags     = ucp_am_hdr_reply_ep(worker, hdr->flags, ep, &ep);
         ep_ext->am.psn = first_ftr->super.msg_id;
 
@@ -1615,7 +1635,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_first_handler,
                               first_rdesc + 1, UCP_AM_FIRST_FRAG_META_LEN),
                               worker->am.alignment);
 
-    first_rdesc->payload_offset = UCP_AM_FIRST_FRAG_META_LEN + padding;
+    first_rdesc->payload_offset      = UCP_AM_FIRST_FRAG_META_LEN + padding;
+    first_rdesc->release_desc_offset = sizeof(ucs_interval_tree_t);
     /* Initialize frag_tree in the allocated storage before rdesc */
     ucs_interval_tree_init(ucp_am_rdesc_frag_tree(first_rdesc),
                            &worker->am.frag_tree_mpool);

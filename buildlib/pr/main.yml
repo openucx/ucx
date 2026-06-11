@@ -289,6 +289,13 @@ stages:
 
       - template: build_job.yml
         parameters:
+          name: build_icc_pgi
+          demands:
+            - ucx_docker
+          displayName: Build with ICC and PGI on CentOS7 x86_64
+
+      - template: build_job.yml
+        parameters:
           name: build_aarch64
           demands:
             - ucx_arm64
@@ -388,6 +395,10 @@ stages:
       parameters:
         name: new_namespace
         demands: ucx_new -equals yes
+    - template: namespace_tests.yml
+      parameters:
+        name: gpu_namespace
+        demands: ucx_gpu -equals yes
 
   - stage: io_demo
     dependsOn: [Basic_compile]

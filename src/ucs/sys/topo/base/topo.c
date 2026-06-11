@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019-2022. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -30,31 +30,9 @@
 #define UCS_TOPO_DEVICE_NAME_INVALID "<invalid>"
 
 /*
- * Function pointer used to refer to specific implementations of
- * ucs_topo_get_memory_distance function by topology modules.
- * This function estimates the distance between the device and the system
- * memory used by the current thread according to its CPU affinity.
- * The function must have a fallback behavior.
- */
-typedef void (*ucs_topo_get_memory_distance_func_t)(
-        ucs_sys_device_t device, ucs_sys_dev_distance_t *distance);
-
-/*
- * Topology API.
- */
-typedef struct {
-    /* Provider's ucs_topo_get_distance implementation */
-    ucs_topo_get_distance_func_t        get_distance;
-
-    /* Provider's ucs_topo_get_memory_distance implementation */
-    ucs_topo_get_memory_distance_func_t get_memory_distance;
-} ucs_sys_topo_ops_t;
-
-
-/*
  * Structure needed to define a topology module implementation
  */
-typedef struct {
+typedef struct ucs_sys_topo_provider {
     /* Name of the topology module */
     const char         *name;
 
@@ -63,8 +41,6 @@ typedef struct {
 
     ucs_list_link_t    list;
 } ucs_sys_topo_provider_t;
-
-typedef int64_t ucs_bus_id_bit_rep_t;
 
 /* Possible role of a current device wrt its sibling */
 typedef enum {
@@ -113,13 +89,23 @@ const ucs_sys_dev_distance_t ucs_topo_default_distance = {
     .bandwidth = INFINITY
 };
 
+const ucs_sys_dev_distance_t ucs_topo_max_distance = {
+    .latency   = INFINITY,
+    .bandwidth = 0
+};
+
 static ucs_topo_global_ctx_t ucs_topo_global_ctx;
 
 /* Global list of topology detectors */
-UCS_LIST_HEAD(ucs_sys_topo_providers_list);
+static UCS_LIST_HEAD(ucs_sys_topo_providers_list);
 
 /* Selected topo provider */
 static ucs_sys_topo_provider_t *ucs_sys_topo_provider = NULL;
+
+/* Stack of override providers. When non-empty, the head overrides the
+ * provider selected by TOPO_PRIO. Pushed/popped by
+ * `ucs_sys_topo_provider_push` / `ucs_sys_topo_provider_pop`. */
+static UCS_LIST_HEAD(ucs_sys_topo_provider_stack);
 
 /* According to NUMA distance definition distances are normalized to 10
  * and the relative distance correlates with the latency.
@@ -135,10 +121,44 @@ void ucs_sys_topo_reset_provider()
     ucs_sys_topo_provider = NULL;
 }
 
+ucs_status_t ucs_sys_topo_provider_push(const ucs_sys_topo_ops_t *ops)
+{
+    ucs_sys_topo_provider_t *provider;
+
+    provider = ucs_malloc(sizeof(*provider), "topo_provider_override");
+    if (provider == NULL) {
+        ucs_error("failed to allocate topo provider override");
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    provider->name = "<override>";
+    provider->ops  = *ops;
+    ucs_list_add_head(&ucs_sys_topo_provider_stack, &provider->list);
+
+    return UCS_OK;
+}
+
+void ucs_sys_topo_provider_pop(void)
+{
+    ucs_sys_topo_provider_t *provider;
+
+    ucs_assert(!ucs_list_is_empty(&ucs_sys_topo_provider_stack));
+
+    provider = ucs_list_head(&ucs_sys_topo_provider_stack,
+                             ucs_sys_topo_provider_t, list);
+    ucs_list_del(&provider->list);
+    ucs_free(provider);
+}
+
 static ucs_sys_topo_provider_t *ucs_sys_topo_get_provider()
 {
     ucs_sys_topo_provider_t *list_provider;
     unsigned i;
+
+    if (!ucs_list_is_empty(&ucs_sys_topo_provider_stack)) {
+        return ucs_list_head(&ucs_sys_topo_provider_stack,
+                             ucs_sys_topo_provider_t, list);
+    }
 
     if (ucs_sys_topo_provider != NULL) {
         return ucs_sys_topo_provider;
@@ -174,11 +194,21 @@ ucs_topo_get_memory_distance_default(ucs_sys_device_t device,
     *distance = ucs_topo_default_distance;
 }
 
+static void
+ucs_topo_get_memory_distance_for_cpuset_default(
+        ucs_sys_device_t device, const ucs_cpu_set_t *cpuset,
+        ucs_sys_dev_distance_t *distance)
+{
+    *distance = ucs_topo_default_distance;
+}
+
 static ucs_sys_topo_provider_t ucs_sys_topo_provider_default = {
     .name = "default",
     .ops = {
-        .get_distance        = ucs_topo_get_distance_default,
-        .get_memory_distance = ucs_topo_get_memory_distance_default,
+        .get_distance                   = ucs_topo_get_distance_default,
+        .get_memory_distance            = ucs_topo_get_memory_distance_default,
+        .get_memory_distance_for_cpuset =
+                ucs_topo_get_memory_distance_for_cpuset_default,
     }
 };
 
@@ -199,7 +229,16 @@ void ucs_topo_get_memory_distance(ucs_sys_device_t device,
     provider->ops.get_memory_distance(device, distance);
 }
 
-static ucs_bus_id_bit_rep_t
+void ucs_topo_get_memory_distance_for_cpuset(ucs_sys_device_t device,
+                                             const ucs_cpu_set_t *cpuset,
+                                             ucs_sys_dev_distance_t *distance)
+{
+    const ucs_sys_topo_provider_t *provider = ucs_sys_topo_get_provider();
+
+    provider->ops.get_memory_distance_for_cpuset(device, cpuset, distance);
+}
+
+ucs_bus_id_bit_rep_t
 ucs_topo_get_bus_id_bit_repr(const ucs_sys_bus_id_t *bus_id)
 {
     return (((uint64_t)bus_id->domain << 24) |
@@ -613,27 +652,19 @@ int ucs_topo_is_sibling(ucs_sys_device_t sys_dev, ucs_sys_device_t sys_dev_mem)
     return is_sibling;
 }
 
-static void ucs_topo_get_memory_distance_sysfs(ucs_sys_device_t device,
-                                               ucs_sys_dev_distance_t *distance)
+static void ucs_topo_get_memory_distance_for_cpuset_sysfs(
+        ucs_sys_device_t device, const ucs_cpu_set_t *cpuset,
+        ucs_sys_dev_distance_t *distance)
 {
     double total_distance = 0;
-    int full_affinity     = 0;
-    ucs_sys_cpuset_t thread_cpuset;
-    unsigned cpu, num_cpus, cpuset_size;
-    ucs_numa_node_t dev_node;
-    ucs_status_t status;
+    unsigned cpu, num_cpus, cpuset_size = 0;
+    ucs_numa_node_t cpu_node, dev_node;
 
     /* If the device is unknown, we assume min distance */
-    if (device == UCS_SYS_DEVICE_ID_UNKNOWN) {
+    if ((device == UCS_SYS_DEVICE_ID_UNKNOWN) ||
+        ucs_cpu_set_is_empty(cpuset)) {
         ucs_topo_get_memory_distance_default(device, distance);
         return;
-    }
-
-    status = ucs_sys_pthread_getaffinity(&thread_cpuset);
-    if (status != UCS_OK) {
-        /* If we failed to read thread affinity distance is calculated
-         * for a process with full CPU affinity */
-        full_affinity = 1;
     }
 
     dev_node = ucs_topo_sys_device_get_numa_node(device);
@@ -641,20 +672,54 @@ static void ucs_topo_get_memory_distance_sysfs(ucs_sys_device_t device,
         dev_node = UCS_NUMA_NODE_DEFAULT;
     }
 
-    num_cpus = ucs_numa_num_configured_cpus();
+    num_cpus = ucs_min(ucs_numa_num_configured_cpus(), UCS_CPU_SETSIZE);
     for (cpu = 0; cpu < num_cpus; ++cpu) {
-        if (!full_affinity && !CPU_ISSET(cpu, &thread_cpuset)) {
+        if (!ucs_cpu_is_set(cpu, cpuset)) {
             continue;
         }
 
-        total_distance += ucs_numa_distance(dev_node,
-                                            ucs_numa_node_of_cpu(cpu));
+        cpu_node = ucs_numa_node_of_cpu(cpu);
+        if (cpu_node == UCS_NUMA_NODE_UNDEFINED) {
+            continue;
+        }
+
+        total_distance += ucs_numa_distance(dev_node, cpu_node);
+        ++cpuset_size;
+    }
+
+    if (cpuset_size == 0) {
+        ucs_topo_get_memory_distance_default(device, distance);
+        return;
     }
 
     distance->bandwidth = ucs_topo_default_distance.bandwidth;
-    cpuset_size         = full_affinity ? num_cpus : CPU_COUNT(&thread_cpuset);
     distance->latency = ucs_topo_sysfs_numa_distance_to_latency(total_distance /
                                                                 cpuset_size);
+}
+
+static void ucs_topo_get_memory_distance_sysfs(ucs_sys_device_t device,
+                                               ucs_sys_dev_distance_t *distance)
+{
+    ucs_sys_cpuset_t thread_cpuset;
+    ucs_cpu_set_t cpuset;
+    unsigned cpu, num_cpus;
+    ucs_status_t status;
+
+    status = ucs_sys_pthread_getaffinity(&thread_cpuset);
+    UCS_CPU_ZERO(&cpuset);
+
+    if (status == UCS_OK) {
+        ucs_sys_cpuset_copy(&cpuset, &thread_cpuset);
+    } else {
+        /* If we failed to read thread affinity distance is calculated
+         * for a process with full CPU affinity */
+        num_cpus = ucs_min(ucs_numa_num_configured_cpus(), UCS_CPU_SETSIZE);
+        for (cpu = 0; cpu < num_cpus; ++cpu) {
+            UCS_CPU_SET(cpu, &cpuset);
+        }
+    }
+
+    ucs_topo_get_memory_distance_for_cpuset_sysfs(device, &cpuset, distance);
 }
 
 const char *ucs_topo_distance_str(const ucs_sys_dev_distance_t *distance,
@@ -830,6 +895,26 @@ ucs_numa_node_t ucs_topo_sys_device_get_numa_node(ucs_sys_device_t sys_dev)
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
     return numa_node;
+}
+
+ucs_status_t ucs_topo_sys_device_set_numa_node(ucs_sys_device_t sys_dev,
+                                               ucs_numa_node_t numa_node)
+{
+    ucs_status_t status = UCS_OK;
+
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+    if (sys_dev >= ucs_topo_global_ctx.num_devices) {
+        ucs_error("system device %d is invalid (max: %d)", sys_dev,
+                  ucs_topo_global_ctx.num_devices);
+        status = UCS_ERR_INVALID_PARAM;
+        goto out;
+    }
+
+    ucs_topo_global_ctx.devices[sys_dev].numa_node = numa_node;
+
+out:
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+    return status;
 }
 
 /**
@@ -1091,8 +1176,10 @@ void ucs_topo_restore_state(ucs_global_state_t *state)
 static ucs_sys_topo_provider_t ucs_sys_topo_provider_sysfs = {
     .name = "sysfs",
     .ops = {
-        .get_distance        = ucs_topo_get_distance_sysfs,
-        .get_memory_distance = ucs_topo_get_memory_distance_sysfs,
+        .get_distance                   = ucs_topo_get_distance_sysfs,
+        .get_memory_distance            = ucs_topo_get_memory_distance_sysfs,
+        .get_memory_distance_for_cpuset =
+                ucs_topo_get_memory_distance_for_cpuset_sysfs,
     }
 };
 
@@ -1109,6 +1196,10 @@ void ucs_topo_init()
 
 void ucs_topo_cleanup()
 {
+    while (!ucs_list_is_empty(&ucs_sys_topo_provider_stack)) {
+        ucs_sys_topo_provider_pop();
+    }
+
     ucs_list_del(&ucs_sys_topo_provider_sysfs.list);
     ucs_list_del(&ucs_sys_topo_provider_default.list);
 

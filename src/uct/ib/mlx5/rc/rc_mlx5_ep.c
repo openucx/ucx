@@ -523,18 +523,25 @@ ucs_status_t uct_rc_mlx5_base_ep_fence(uct_ep_h tl_ep, unsigned flags)
     return uct_rc_ep_fence(tl_ep, &ep->tx.wq.fi);
 }
 
-void uct_rc_mlx5_base_ep_post_check(uct_ep_h tl_ep)
+ucs_status_t
+uct_rc_mlx5_base_ep_post_check(uct_ep_h tl_ep, uct_completion_t *comp)
 {
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
     uint64_t dummy = 0; /* Dummy buffer to suppress compiler warning */
 
-    uct_rc_mlx5_txqp_inline_post(iface, IBV_QPT_RC,
-                                 &ep->super.txqp, &ep->tx.wq,
-                                 MLX5_OPCODE_RDMA_WRITE, &dummy, 0,
-                                 0, 0, 0,
-                                 0, 0,
-                                 0, 0,
+    if (comp == NULL) {
+        uct_rc_mlx5_txqp_inline_post(iface, IBV_QPT_RC, &ep->super.txqp,
+                                     &ep->tx.wq, MLX5_OPCODE_RDMA_WRITE, &dummy,
+                                     0, 0, 0, 0, 0, 0, 0, 0, 0, INT_MAX);
+        return UCS_OK;
+    }
+
+    uct_rc_mlx5_txqp_inline_post(iface, IBV_QPT_RC, &ep->super.txqp,
+                                 &ep->tx.wq, MLX5_OPCODE_RDMA_WRITE, &dummy,
+                                 0, 0, 0, 0, 0, 0, 0, MLX5_WQE_CTRL_CQ_UPDATE,
                                  0, INT_MAX);
+    return uct_rc_txqp_add_flush_comp(&iface->super, &ep->super.super,
+                                      &ep->super.txqp, comp, ep->tx.wq.sig_pi);
 }
 
 void uct_rc_mlx5_base_ep_vfs_populate(uct_rc_ep_t *rc_ep)

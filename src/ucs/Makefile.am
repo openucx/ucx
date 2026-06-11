@@ -1,5 +1,5 @@
 #
-# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 # Copyright (C) UT-Battelle, LLC. 2014-2017. ALL RIGHTS RESERVED.
 # Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
 # Copyright (C) Tactical Computing Labs, LLC. 2022. ALL RIGHTS RESERVED.
@@ -120,6 +120,7 @@ noinst_HEADERS = \
 	debug/debug_int.h \
 	debug/log.h \
 	debug/memtrack_int.h \
+	debug/table.h \
 	memory/numa.h \
 	memory/rcache_int.h \
 	memory/rcache.inl \
@@ -192,6 +193,7 @@ libucs_la_SOURCES = \
 	debug/assert.c \
 	debug/debug.c \
 	debug/log.c \
+	debug/table.c \
 	debug/memtrack.c \
 	memory/memory_type.c \
 	memory/memtype_cache.c \
