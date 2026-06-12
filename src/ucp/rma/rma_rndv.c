@@ -23,6 +23,7 @@
 
 #define UCP_PROTO_RMA_RNDV_RTS_NAME "RMA_RTS"
 #define UCP_PROTO_RMA_RNDV_ZERO_GET_PENALTY 1e-3
+#define UCP_PROTO_RMA_RNDV_PUT_FALLBACK_PENALTY 1e-3
 
 
 static int
@@ -158,7 +159,10 @@ ucp_proto_put_rndv_probe(const ucp_proto_init_params_t *init_params)
     ucp_proto_rndv_ctrl_init_params_t params = {
         .super.super         = *init_params,
         .super.latency       = 0,
-        .super.overhead      = context->config.ext.proto_overhead_rndv_rts,
+        /* Prefer direct PUT zcopy when it is available; keep PUT/RNDV as a
+         * fallback for cases where the peer can only pull the data. */
+        .super.overhead      = context->config.ext.proto_overhead_rndv_rts +
+                               UCP_PROTO_RMA_RNDV_PUT_FALLBACK_PENALTY,
         .super.cfg_thresh    = context->config.ext.zcopy_thresh,
         .super.cfg_priority  = 5,
         .super.min_length    = 0,
