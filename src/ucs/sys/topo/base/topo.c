@@ -890,17 +890,23 @@ ucs_status_t ucs_topo_sys_device_set_class(ucs_sys_device_t sys_dev,
 {
     ucs_status_t status = UCS_OK;
 
+    if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        ucs_error("system device %d is unknown", sys_dev);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
+
     if (sys_dev >= ucs_topo_global_ctx.num_devices) {
         ucs_error("system device %d is invalid (max: %d)", sys_dev,
                   ucs_topo_global_ctx.num_devices);
         status = UCS_ERR_INVALID_PARAM;
-        goto out;
+        goto out_unlock;
     }
 
     ucs_topo_global_ctx.devices[sys_dev].device_class = device_class;
 
-out:
+out_unlock:
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
     return status;
 }
