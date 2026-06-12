@@ -89,12 +89,11 @@ static int ucp_proto_multi_sys_dev_cmp(const void *pa, const void *pb,
     return (user_a > user_b) - (user_a < user_b);
 }
 
-static ucp_lane_index_t
-ucp_proto_multi_find_max_avail_bw_lane(const ucp_proto_init_params_t *params,
-                                       const ucp_lane_index_t *lanes,
-                                       const ucp_proto_common_tl_perf_t *lanes_perf,
-                                       const ucp_proto_lane_selection_t *selection,
-                                       ucp_lane_map_t index_map)
+static ucp_lane_index_t ucp_proto_multi_find_max_avail_bw_lane(
+        const ucp_proto_init_params_t *params, const ucp_lane_index_t *lanes,
+        const ucp_proto_common_tl_perf_t *lanes_perf,
+        const ucp_proto_lane_selection_t *selection, ucp_lane_map_t index_map,
+        unsigned req_sys_dev_ord)
 {
     /* Initial value is 1Bps, so we don't consider lanes with lower available
      * bandwidth. */
@@ -104,8 +103,8 @@ ucp_proto_multi_find_max_avail_bw_lane(const ucp_proto_init_params_t *params,
     ucs_sys_device_t sys_devs[UCP_PROTO_MAX_LANES];
     ucp_lane_index_t i, index, selected_index, first_max_bw_lane;
     const ucp_proto_common_tl_perf_t *lane_perf;
-    ucs_sys_device_t sys_dev, selected_sys_dev, req_sys_dev;
-    unsigned seed, req_sys_dev_ord;
+    ucs_sys_device_t sys_dev, selected_sys_dev;
+    unsigned seed;
     double avail_bw;
     int cmp;
 
@@ -140,12 +139,10 @@ ucp_proto_multi_find_max_avail_bw_lane(const ucp_proto_init_params_t *params,
         return first_max_bw_lane;
     }
 
-    req_sys_dev     = params->select_param->sys_dev;
-    req_sys_dev_ord = ucs_topo_sys_device_get_name_ordinal(req_sys_dev);
-    if (req_sys_dev_ord == UCS_SYS_DEVICE_NAME_ORDINAL_INVALID) {
+    if (req_sys_dev_ord == UCS_SYS_DEVICE_ORDINAL_INVALID) {
         ucs_trace("could not determine req_sys_dev %d ordinal; "
                   "falling back to first max bw lane %d",
-                  req_sys_dev, first_max_bw_lane);
+                  params->select_param->sys_dev, first_max_bw_lane);
         return first_max_bw_lane;
     }
 
@@ -170,10 +167,10 @@ ucp_proto_multi_find_max_avail_bw_lane(const ucp_proto_init_params_t *params,
     ucs_qsort_r(sys_devs, num_max_bw_devs, sizeof(sys_devs[0]),
                 ucp_proto_multi_sys_dev_cmp, NULL);
 
-    /* Use the device ordinal as seed because seeds for neighboring devices
-     * need to be consecutive in order for the algorithm to work correctly.
-     * (e.g GPU0 and GPU1) */
-    seed             = (unsigned)req_sys_dev_ord % num_max_bw_devs;
+    /* Use the device's BDF ordinal as seed: it is the device's rank among all
+     * devices of the same class ordered by bus id, so seeds for neighboring
+     * devices are consecutive as the algorithm requires (e.g GPU0 and GPU1). */
+    seed             = req_sys_dev_ord % num_max_bw_devs;
     selected_sys_dev = sys_devs[seed];
 
     /* Pass 3: return the first tied index whose lane is on selected_sys_dev. */
@@ -190,7 +187,7 @@ ucp_proto_multi_find_max_avail_bw_lane(const ucp_proto_init_params_t *params,
                 "selected_sys_dev=%d num_max_bw_devs=%u seed=%u",
                 selected_sys_dev, num_max_bw_devs, seed);
 
-    ucs_trace("max bw lane: proto %s gpu_idx %d num_max_bw_devs %u seed %u "
+    ucs_trace("max bw lane: proto %s bdf_ord %u num_max_bw_devs %u seed %u "
               "-> sys_dev %d index %u " UCP_PROTO_LANE_FMT,
               ucp_proto_id_field(params->proto_id, name), req_sys_dev_ord,
               num_max_bw_devs, seed, selected_sys_dev, selected_index,
@@ -224,24 +221,37 @@ ucp_proto_multi_select_bw_lanes(const ucp_proto_init_params_t *params,
                                 int fixed_first_lane,
                                 ucp_proto_lane_selection_t *selection)
 {
+    ucs_sys_device_t req_sys_dev = params->select_param->sys_dev;
     ucp_lane_index_t i, lane_index;
     ucp_lane_map_t index_map;
+    unsigned req_sys_dev_ord;
 
     memset(selection, 0, sizeof(*selection));
 
     /* Select all available indexes */
     index_map = UCS_MASK(num_lanes);
 
+    /* The requesting device ordinal is constant across the greedy loop, so
+     * resolve it once instead of on every lane selection. */
+    req_sys_dev_ord = ucs_topo_sys_device_get_bdf_class_ordinal(req_sys_dev);
+
+    ucs_trace("select bw lanes: proto %s req_sys_dev=%d (%s) "
+              "bdf_class_ordinal=%u",
+              ucp_proto_id_field(params->proto_id, name), req_sys_dev,
+              ucs_topo_sys_device_get_name(req_sys_dev), req_sys_dev_ord);
+
     if (fixed_first_lane) {
         ucp_proto_select_add_lane(selection, params, lanes[0]);
         index_map &= ~UCS_BIT(0);
     }
 
-    for (i = fixed_first_lane? 1 : 0; i < ucs_min(max_lanes, num_lanes); ++i) {
+    for (i = fixed_first_lane ? 1 : 0; i < ucs_min(max_lanes, num_lanes); ++i) {
         /* Greedy algorithm: find the best option at every step */
         lane_index = ucp_proto_multi_find_max_avail_bw_lane(params, lanes,
-                                                            lanes_perf, selection,
-                                                            index_map);
+                                                            lanes_perf,
+                                                            selection,
+                                                            index_map,
+                                                            req_sys_dev_ord);
         if (lane_index == UCP_NULL_LANE) {
             break;
         }

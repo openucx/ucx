@@ -200,6 +200,13 @@ uct_gaudi_base_configure_sys_device_from_fd(int fd, int index,
                  ucs_status_string(status));
     }
 
+    status = ucs_topo_sys_device_set_class(*sys_dev_p,
+                                           UCS_TOPO_DEVICE_CLASS_ACC);
+    if (status != UCS_OK) {
+        ucs_warn("failed to set class for index %d: %s", index,
+                 ucs_status_string(status));
+    }
+
     status = ucs_topo_sys_device_enable_aux_path(*sys_dev_p);
     if (status != UCS_OK) {
         ucs_debug("no aux path for %s: %s", device_name,

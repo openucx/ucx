@@ -26,7 +26,7 @@ BEGIN_C_DECLS
 #define UCS_SYS_DEVICE_ID_UNKNOWN UINT8_MAX
 
 /* Indicate that the ordinal of a given system device is invalid */
-#define UCS_SYS_DEVICE_NAME_ORDINAL_INVALID UINT_MAX
+#define UCS_SYS_DEVICE_ORDINAL_INVALID UINT_MAX
 
 /* Maximal size of BDF string */
 #define UCS_SYS_BDF_NAME_MAX 16
@@ -51,6 +51,20 @@ typedef int64_t ucs_bus_id_bit_rep_t;
  * Refer ucs_topo_find_device_by_bus_id()
  */
 typedef uint8_t ucs_sys_device_t;
+
+
+/**
+ * @ingroup UCS_RESOURCE
+ * Classification of a system device, used to group devices of the same kind
+ * (for example when computing a per-class device ordinal). The class is set by
+ * the owning transport, which maps its UCT device type onto one of these
+ * values.
+ */
+typedef enum {
+    UCS_TOPO_DEVICE_CLASS_UNKNOWN = 0, /**< Unclassified device */
+    UCS_TOPO_DEVICE_CLASS_NET, /**< Network device */
+    UCS_TOPO_DEVICE_CLASS_ACC /**< Acceleration device (e.g. GPU) */
+} ucs_topo_device_class_t;
 
 
 /**
@@ -348,20 +362,32 @@ ucs_topo_resolve_sysfs_path(const char *dev_path, char *path_buffer);
 const char *ucs_topo_sys_device_get_name(ucs_sys_device_t sys_dev);
 
 /**
- * Get the ordinal of a given system device, parsed from the trailing decimal
- * digits of the device name.
+ * Set the device class of a given system device.
  *
- * For example:
- * - GPU<N> (GPU0 -> 0, GPU1 -> 1)
- * - mlx5_<N> (mlx5_0 -> 0, mlx5_1 -> 1)
+ * @param [in]  sys_dev       System device index.
+ * @param [in]  device_class  Class to assign to the device.
+ *
+ * @return UCS_OK on success, error otherwise.
+ */
+ucs_status_t
+ucs_topo_sys_device_set_class(ucs_sys_device_t sys_dev,
+                              ucs_topo_device_class_t device_class);
+
+/**
+ * Get the ordinal of a given system device: its rank among all system devices
+ * of the same class, ordered by PCI bus id (BDF).
+ *
+ * For example, with GPUs (class @ref UCS_TOPO_DEVICE_CLASS_ACC) registered, the
+ * device with the smallest BDF returns 0, the next returns 1, and so on. The
+ * ordering depends only on the bus id, not on the device name or discovery
+ * order.
  *
  * @param [in]  sys_dev System device to query.
  *
- * @return The ordinal of the system device, or UCS_SYS_DEVICE_NAME_ORDINAL_INVALID
- *         if the system device is unknown/invalid or the name has no trailing
- *         decimal digits.
+ * @return The ordinal of the system device, or UCS_SYS_DEVICE_ORDINAL_INVALID
+ *         if the system device is unknown/invalid or has no assigned class.
  */
-unsigned ucs_topo_sys_device_get_name_ordinal(ucs_sys_device_t sys_dev);
+unsigned ucs_topo_sys_device_get_bdf_class_ordinal(ucs_sys_device_t sys_dev);
 
 /**
  * Get the closest NUMA node for a given system device.

@@ -20,7 +20,6 @@
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
 #include <ucs/time/time.h>
-#include <ctype.h>
 #include <inttypes.h>
 
 
@@ -59,9 +58,9 @@ typedef struct {
     ucs_sys_bus_id_t        bus_id;
     char                    *name;
     unsigned                name_priority;
-    int                     name_ordinal;
     ucs_numa_node_t         numa_node;
     uintptr_t               user_value;
+    ucs_topo_device_class_t class;
 
     /* Secondary device for the current device */
     ucs_sys_device_t        sys_dev_aux;
@@ -243,10 +242,14 @@ void ucs_topo_get_memory_distance_for_cpuset(ucs_sys_device_t device,
 ucs_bus_id_bit_rep_t
 ucs_topo_get_bus_id_bit_repr(const ucs_sys_bus_id_t *bus_id)
 {
-    return (((uint64_t)bus_id->domain << 24) |
-            ((uint64_t)bus_id->bus << 16)    |
-            ((uint64_t)bus_id->slot << 8)    |
-            (bus_id->function));
+    ucs_bus_id_bit_rep_t bit_repr = (ucs_bus_id_bit_rep_t)(
+            ((uint64_t)bus_id->domain << 24) | ((uint64_t)bus_id->bus << 16) |
+            ((uint64_t)bus_id->slot << 8) | (bus_id->function));
+
+    /* The bit representation is signed, but we expect it to be non-negative */
+    ucs_assert(bit_repr >= 0);
+
+    return bit_repr;
 }
 
 unsigned ucs_topo_num_devices()
@@ -327,24 +330,6 @@ out:
     return numa_node;
 }
 
-/* Parse the device ordinal from the trailing decimal digits of its name */
-static unsigned ucs_topo_parse_name_ordinal(const char *name)
-{
-    size_t length = strlen(name);
-    size_t offset = length;
-
-    /* Find the last non-digit character */
-    while ((offset > 0) && isdigit(name[offset - 1])) {
-        --offset;
-    }
-
-    if ((offset == length) || (offset == 0)) {
-        return UCS_SYS_DEVICE_NAME_ORDINAL_INVALID;
-    }
-
-    return atoi(name + offset);
-}
-
 ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
                                             ucs_sys_device_t *sys_dev)
 {
@@ -389,8 +374,8 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
         ucs_topo_global_ctx.devices[*sys_dev].bus_id        = *bus_id;
         ucs_topo_global_ctx.devices[*sys_dev].name          = name;
         ucs_topo_global_ctx.devices[*sys_dev].name_priority = 0;
-        ucs_topo_global_ctx.devices[*sys_dev].name_ordinal =
-                ucs_topo_parse_name_ordinal(name);
+        ucs_topo_global_ctx.devices[*sys_dev].class =
+                UCS_TOPO_DEVICE_CLASS_UNKNOWN;
         ucs_topo_global_ctx.devices[*sys_dev].numa_node     =
                 ucs_topo_read_device_numa_node(bus_id);
         ucs_topo_global_ctx.devices[*sys_dev].user_value    = UINTPTR_MAX;
@@ -872,10 +857,8 @@ ucs_status_t ucs_topo_sys_device_set_name(ucs_sys_device_t sys_dev,
 
     if (priority > ucs_topo_global_ctx.devices[sys_dev].name_priority) {
         ucs_free(ucs_topo_global_ctx.devices[sys_dev].name);
-        ucs_topo_global_ctx.devices[sys_dev].name = ucs_strdup(name,
-                                                               "sys_dev_name");
-        ucs_topo_global_ctx.devices[sys_dev].name_ordinal =
-                ucs_topo_parse_name_ordinal(name);
+        ucs_topo_global_ctx.devices[sys_dev].name          = ucs_strdup(name,
+                                                                        "sys_dev_name");
         ucs_topo_global_ctx.devices[sys_dev].name_priority = priority;
     }
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
@@ -902,23 +885,71 @@ const char *ucs_topo_sys_device_get_name(ucs_sys_device_t sys_dev)
     return name;
 }
 
-unsigned ucs_topo_sys_device_get_name_ordinal(ucs_sys_device_t sys_dev)
+ucs_status_t ucs_topo_sys_device_set_class(ucs_sys_device_t sys_dev,
+                                           ucs_topo_device_class_t device_class)
 {
-    int name_ordinal;
+    ucs_status_t status = UCS_OK;
+
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+    if (sys_dev >= ucs_topo_global_ctx.num_devices) {
+        ucs_error("system device %d is invalid (max: %d)", sys_dev,
+                  ucs_topo_global_ctx.num_devices);
+        status = UCS_ERR_INVALID_PARAM;
+        goto out;
+    }
+
+    ucs_topo_global_ctx.devices[sys_dev].class = device_class;
+
+out:
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+    return status;
+}
+
+unsigned ucs_topo_sys_device_get_bdf_class_ordinal(ucs_sys_device_t sys_dev)
+{
+    ucs_topo_device_class_t class;
+    ucs_bus_id_bit_rep_t ref_key, key;
+    unsigned ordinal, d;
 
     if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
-        return UCS_SYS_DEVICE_NAME_ORDINAL_INVALID;
+        return UCS_SYS_DEVICE_ORDINAL_INVALID;
     }
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
-    if (sys_dev < ucs_topo_global_ctx.num_devices) {
-        name_ordinal = ucs_topo_global_ctx.devices[sys_dev].name_ordinal;
-    } else {
-        name_ordinal = UCS_SYS_DEVICE_NAME_ORDINAL_INVALID;
-    }
-    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
-    return name_ordinal;
+    if (sys_dev >= ucs_topo_global_ctx.num_devices) {
+        ordinal = UCS_SYS_DEVICE_ORDINAL_INVALID;
+        goto out_unlock;
+    }
+
+    class = ucs_topo_global_ctx.devices[sys_dev].class;
+    if (class == UCS_TOPO_DEVICE_CLASS_UNKNOWN) {
+        ordinal = UCS_SYS_DEVICE_ORDINAL_INVALID;
+        goto out_unlock;
+    }
+
+    /* The ordinal is the rank of the device's bus id (BDF) among all devices
+     * of the same class. Counting devices with a smaller BDF is equivalent to
+     * sorting the class by BDF and taking the index, and yields a stable,
+     * name-independent ordering. */
+    ref_key = ucs_topo_get_bus_id_bit_repr(
+            &ucs_topo_global_ctx.devices[sys_dev].bus_id);
+    ordinal = 0;
+    for (d = 0; d < ucs_topo_global_ctx.num_devices; ++d) {
+        if (ucs_topo_global_ctx.devices[d].class != class) {
+            continue;
+        }
+
+        key = ucs_topo_get_bus_id_bit_repr(
+                &ucs_topo_global_ctx.devices[d].bus_id);
+        if (key < ref_key) {
+            ++ordinal;
+        }
+    }
+
+out_unlock:
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+    return ordinal;
 }
 
 ucs_numa_node_t ucs_topo_sys_device_get_numa_node(ucs_sys_device_t sys_dev)

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2019. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -48,6 +48,10 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
                           cuda_device);
         status = ucs_topo_sys_device_set_name(sys_dev, device_name,
                                               sys_device_priority);
+        ucs_assert_always(status == UCS_OK);
+
+        status = ucs_topo_sys_device_set_class(sys_dev,
+                                               UCS_TOPO_DEVICE_CLASS_ACC);
         ucs_assert_always(status == UCS_OK);
     }
 
