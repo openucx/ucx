@@ -25,6 +25,7 @@
 #include <ucs/memory/memory_type.h>
 #include <ucs/memory/rcache.h>
 #include <ucs/type/spinlock.h>
+#include <ucs/sys/checker.h>
 #include <ucs/sys/string.h>
 #include <ucs/type/param.h>
 
@@ -51,6 +52,35 @@ enum {
 #define UCP_OP_ATTR_INDEX(_op_attr_flag) \
     (ucs_ilog2(ucp_proto_select_op_attr_pack((_op_attr_flag), \
                                              UCP_OP_ATTR_INDEX_MASK)))
+
+typedef enum {
+    UCP_REG_DEVICES_ALL,
+    UCP_REG_DEVICES_CLOSEST,
+    UCP_REG_DEVICES_LIMIT
+} ucp_reg_devices_mode_t;
+
+
+static UCS_F_ALWAYS_INLINE ucp_reg_devices_mode_t
+ucp_reg_devices_mode(unsigned long max_hca_per_gpu)
+{
+    if (max_hca_per_gpu == UCS_ULUNITS_INF) {
+        return UCP_REG_DEVICES_ALL;
+    } else if (max_hca_per_gpu == UCS_ULUNITS_AUTO) {
+        return UCP_REG_DEVICES_CLOSEST;
+    }
+    return UCP_REG_DEVICES_LIMIT;
+}
+
+
+static UCS_F_ALWAYS_INLINE unsigned
+ucp_reg_devices_count(unsigned long max_hca_per_gpu)
+{
+    if (ucp_reg_devices_mode(max_hca_per_gpu) == UCP_REG_DEVICES_LIMIT) {
+        return (unsigned)ucs_min(max_hca_per_gpu, UCP_MAX_MDS);
+    }
+    return UCP_MAX_MDS;
+}
+
 
 
 typedef struct ucp_context_config {
@@ -154,6 +184,14 @@ typedef struct ucp_context_config {
     /** Maximal number of endpoints to check on every keepalive round
      * (0 - disabled, inf - check all endpoints on every round) */
     unsigned                               keepalive_num_eps;
+    /** Time period between recovery rounds for an endpoint with lanes in
+     *  UCP_LANE_TYPE_FAILED state. Each round sends a
+     *  WIREUP_MSG_LANES_ADDR_REQUEST over the operable AM lane asking the
+     *  peer for up-to-date addresses of the failed lanes. */
+    ucs_time_t                             recovery_interval;
+    /** Maximal number of recovery rounds before the endpoint is declared
+     *  fully failed. Must be non-zero. */
+    unsigned                               recovery_retries;
     /** Time period between dynamic transport switching rounds */
     ucs_time_t                             dynamic_tl_switch_interval;
     /** Number of usage tracker rounds performed for each progress operation */
@@ -167,6 +205,9 @@ typedef struct ucp_context_config {
     uint64_t                               reg_whole_alloc_bitmap;
     /** Always use flush operation in rendezvous put */
     int                                    rndv_put_force_flush;
+    /** Allow RMA emulation protocols. When disabled, provide an explicit error
+      * if no suitable proto is found */
+    int                                    proto_emulation_enable;
     /** Maximum size of mem type direct rndv*/
     size_t                                 rndv_memtype_direct_size;
     /** UCP sockaddr private data format version */
@@ -219,6 +260,8 @@ typedef struct ucp_context_config {
     int                                    connect_all_to_all;
     /** Use only one network device for all protocols */
     int                                    proto_use_single_net_device;
+    /** Max HCAs for GPU memory registration: auto=closest, N=limit, inf=all */
+    unsigned long                          max_hca_per_gpu;
     /** Local identificator on a single node */
     unsigned long                          node_local_id;
 } ucp_context_config_t;
@@ -683,6 +726,13 @@ ucp_memory_detect_internal(ucp_context_h context, const void *address,
 
     status = ucs_memtype_cache_lookup(address, length, mem_info);
     if (ucs_likely(status == UCS_ERR_NO_ELEM)) {
+        if (ucs_unlikely(RUNNING_ON_VALGRIND)) {
+            ucs_trace_req("address %p length %zu: not found in memtype cache, "
+                          "detecting memory type under Valgrind", address, length);
+            ucp_memory_detect_slowpath(context, address, length, mem_info);
+            return;
+        }
+
         ucs_trace_req("address %p length %zu: not found in memtype cache, "
                       "assuming host memory",
                       address, length);
@@ -756,6 +806,14 @@ void ucp_tl_bitmap_validate(const ucp_tl_bitmap_t *tl_bitmap,
 
 
 const char* ucp_context_cm_name(ucp_context_h context, ucp_rsc_index_t cm_idx);
+
+
+ucp_md_map_t ucp_context_select_reg_mds(ucp_context_h context,
+                                        ucp_md_map_t md_map,
+                                        ucs_sys_device_t mem_sys_dev);
+
+
+ucp_md_map_t ucp_context_get_net_md_map(ucp_context_h context);
 
 
 ucs_status_t

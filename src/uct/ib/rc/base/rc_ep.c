@@ -320,7 +320,7 @@ ucs_status_t uct_rc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n,
         return UCS_ERR_BUSY;
     }
 
-    UCS_STATIC_ASSERT(sizeof(uct_pending_req_priv_arb_t) <=
+    UCS_STATIC_ASSERT(sizeof(uct_rc_pending_req_priv_t) <=
                       UCT_PENDING_REQ_PRIV_LEN);
     uct_pending_req_arb_group_push(&ep->arb_group, n);
     UCT_TL_EP_STAT_PEND(&ep->super);
@@ -374,9 +374,16 @@ uct_rc_ep_arbiter_purge_internal_cb(ucs_arbiter_t *arbiter,
     uct_pending_req_t *req = ucs_container_of(elem, uct_pending_req_t, priv);
     uct_rc_ep_t *ep        = ucs_container_of(group, uct_rc_ep_t, arb_group);
     uct_rc_pending_req_t *freq;
+    uct_completion_t *comp;
 
     if (req->func == uct_rc_ep_check_progress) {
         ep->flags &= ~UCT_RC_EP_FLAG_KEEPALIVE_PENDING;
+
+        comp = uct_rc_pending_req_priv(req)->comp;
+        if (comp != NULL) {
+            uct_invoke_completion(comp, UCS_ERR_CANCELED);
+        }
+
         ucs_mpool_put(req);
     } else if (req->func == uct_rc_ep_fc_grant) {
         freq = ucs_derived_of(req, uct_rc_pending_req_t);
@@ -533,68 +540,92 @@ ucs_status_t uct_rc_ep_flush(uct_rc_ep_t *ep, int16_t max_available,
     return UCS_INPROGRESS;
 }
 
-static ucs_status_t uct_rc_ep_check_internal(uct_ep_h tl_ep)
+static ucs_status_t
+uct_rc_ep_check_internal(uct_ep_h tl_ep, uct_completion_t *comp)
 {
     uct_rc_ep_t *ep         = ucs_derived_of(tl_ep, uct_rc_ep_t);
     uct_rc_iface_t *iface   = ucs_derived_of(tl_ep->iface,
                                             uct_rc_iface_t);
-    uct_rc_iface_ops_t *ops = ucs_derived_of(iface->super.ops, uct_rc_iface_ops_t);
+    uct_rc_iface_ops_t *ops = ucs_derived_of(iface->super.ops,
+                                             uct_rc_iface_ops_t);
+    ucs_status_t status;
 
-    /* in case if no TX resources are available then there is at least
-     * one signaled operation which provides actual peer status, in this case
-     * just return without any actions */
-    UCT_RC_CHECK_TXQP_RET(iface, ep, UCS_OK);
+    /* In case if no TX resources are available then:
+     * no comp: there is at least  one signaled operation which provides actual
+     *          peer status, in this case just return without any actions;
+     * with comp: WQE should be posted to to invoke completion,
+     *            so return NO_RESOURCE. */
+    UCT_RC_CHECK_TXQP_RET(iface, ep,
+                          (comp == NULL) ? UCS_OK : UCS_ERR_NO_RESOURCE);
 
     /* in case of not iface resources available then return NO_RESOURCE
      * to add request to pending queue */
     UCT_RC_CHECK_CQE_RET(iface, ep, UCS_ERR_NO_RESOURCE);
 
-    ops->ep_post_check(tl_ep);
-
-    return UCS_OK;
+    status = ops->ep_post_check(tl_ep, comp);
+    return (comp == NULL) ? UCS_OK : status;
 }
 
 static ucs_status_t uct_rc_ep_check_progress(uct_pending_req_t *self)
 {
     uct_rc_pending_req_t *req = ucs_derived_of(self, uct_rc_pending_req_t);
     uct_rc_ep_t *ep           = ucs_derived_of(req->ep, uct_rc_ep_t);
+    uct_completion_t *comp    = uct_rc_pending_req_priv(self)->comp;
     ucs_status_t status;
 
-    ucs_assert(ep->flags & UCT_RC_EP_FLAG_KEEPALIVE_PENDING);
-
-    status = uct_rc_ep_check_internal(req->ep);
-    if (status == UCS_OK) {
-        ep->flags &= ~UCT_RC_EP_FLAG_KEEPALIVE_PENDING;
-        ucs_mpool_put(req);
-    } else {
-        ucs_assert(status == UCS_ERR_NO_RESOURCE);
+    /* The flag may already be cleared here: when multiple uct_rc_ep_check
+     * calls land on the same EP under CQE pressure each queues its own
+     * pending req, and the first req's dispatch clears the flag before the
+     * rest run. With comp == NULL we have nothing to fire and the sibling's
+     * keepalive WQE already covers peer-liveness - skip the redundant post. */
+    if ((comp == NULL) && !(ep->flags & UCT_RC_EP_FLAG_KEEPALIVE_PENDING)) {
+        goto out;
     }
 
-    return status;
+    status = uct_rc_ep_check_internal(req->ep, comp);
+    if (status == UCS_ERR_NO_RESOURCE) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    ep->flags &= ~UCT_RC_EP_FLAG_KEEPALIVE_PENDING;
+    if (status == UCS_OK) {
+        ucs_assert(comp == NULL);
+        goto out;
+    }
+
+    if (status == UCS_INPROGRESS) {
+        goto out;
+    }
+
+    ucs_assert(UCS_STATUS_IS_ERR(status));
+    uct_invoke_completion(comp, status);
+out:
+    ucs_mpool_put(req);
+    return UCS_OK;
 }
 
 ucs_status_t
 uct_rc_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
 {
     uct_rc_ep_t *ep       = ucs_derived_of(tl_ep, uct_rc_ep_t);
-    uct_rc_iface_t *iface = ucs_derived_of(tl_ep->iface,
-                                           uct_rc_iface_t);
+    uct_rc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_iface_t);
     uct_rc_pending_req_t *req;
     ucs_status_t status;
 
-    UCT_EP_KEEPALIVE_CHECK_PARAM(flags, comp);
+    UCT_EP_KEEPALIVE_CHECK_PARAM(flags);
 
     ucs_assert(ep->flags & UCT_RC_EP_FLAG_CONNECTED);
 
-    if (ep->flags & UCT_RC_EP_FLAG_KEEPALIVE_PENDING) {
+    if ((comp == NULL) && (ep->flags & UCT_RC_EP_FLAG_KEEPALIVE_PENDING)) {
         /* keepalive request is in pending queue and will be
          * processed when resources are available */
         return UCS_OK;
     }
 
-    status = uct_rc_ep_check_internal(tl_ep);
+    status = uct_rc_ep_check_internal(tl_ep, comp);
     if (status != UCS_ERR_NO_RESOURCE) {
-        ucs_assert(status == UCS_OK);
+        ucs_assert((comp == NULL) ? (status == UCS_OK) :
+                   (status == UCS_INPROGRESS));
         return status;
     }
 
@@ -604,13 +635,13 @@ uct_rc_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
         return UCS_ERR_NO_MEMORY;
     }
 
-    req->ep          = &ep->super.super;
-    req->super.func  = uct_rc_ep_check_progress;
-    status           = uct_rc_ep_pending_add(tl_ep, &req->super, 0);
-    ep->flags       |= UCT_RC_EP_FLAG_KEEPALIVE_PENDING;
+    req->ep                                    = &ep->super.super;
+    req->super.func                            = uct_rc_ep_check_progress;
+    uct_rc_pending_req_priv(&req->super)->comp = comp;
+    status     = uct_rc_ep_pending_add(tl_ep, &req->super, 0);
+    ep->flags |= UCT_RC_EP_FLAG_KEEPALIVE_PENDING;
     ucs_assert_always(status == UCS_OK);
-
-    return UCS_OK;
+    return (comp == NULL) ? UCS_OK : UCS_INPROGRESS;
 }
 
 int uct_rc_ep_is_connected(uct_rc_ep_t *ep, struct ibv_ah_attr *ah_attr,

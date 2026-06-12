@@ -196,6 +196,39 @@ void mem_buffer::set_device_context()
     device_set = true;
 }
 
+int mem_buffer::get_device_count()
+{
+#if HAVE_CUDA
+    int num_gpus = 0;
+    if (cudaGetDeviceCount(&num_gpus) != cudaSuccess) {
+        return -1;
+    }
+    return num_gpus;
+#else
+    return -1;
+#endif
+}
+
+int mem_buffer::get_device()
+{
+#if HAVE_CUDA
+    int device = -1;
+    CUDA_CALL(cudaGetDevice(&device), "");
+    return device;
+#else
+    return -1;
+#endif
+}
+
+void mem_buffer::set_device(int device)
+{
+#if HAVE_CUDA
+    CUDA_CALL(cudaSetDevice(device), ": device=" << device);
+#else
+    (void)device;
+#endif
+}
+
 size_t mem_buffer::m_bar1_free_size = SIZE_MAX;
 
 void mem_buffer::get_bar1_free_size_nvml()

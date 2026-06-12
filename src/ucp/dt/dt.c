@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2017. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  * Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
@@ -23,8 +23,40 @@ const char * ucp_datatype_class_names[] = {
     [UCP_DATATYPE_CONTIG]   = "contiguous",
     [UCP_DATATYPE_STRIDED]  = "strided",
     [UCP_DATATYPE_IOV]      = "iov",
+    [UCP_DATATYPE_SGL]      = "sgl",
     [UCP_DATATYPE_GENERIC]  = "generic"
 };
+
+
+ucs_status_t ucp_dt_mem_info_check_elem(ucp_context_h context,
+                                        const void *buffer, size_t length,
+                                        const ucp_memory_info_t *ref,
+                                        const char *dt_name, size_t index,
+                                        size_t count)
+{
+    ucp_memory_info_t memory_info;
+
+    ucp_memory_detect(context, buffer, length, &memory_info);
+    return ucp_dt_mem_info_verify(dt_name, index, &memory_info, ref, count);
+}
+
+ucs_status_t ucp_dt_mem_info_verify(const char *dt_name, size_t index,
+                                    const ucp_memory_info_t *cur,
+                                    const ucp_memory_info_t *ref,
+                                    size_t count)
+{
+    if (ucp_memory_info_equal(cur, ref)) {
+        return UCS_OK;
+    }
+
+    ucs_error("inconsistent %s mem_info: [%zu]=%s-%s [0]=%s-%s count=%zu",
+              dt_name, index,
+              ucs_memory_type_names[cur->type],
+              ucs_topo_sys_device_get_name(cur->sys_dev),
+              ucs_memory_type_names[ref->type],
+              ucs_topo_sys_device_get_name(ref->sys_dev), count);
+    return UCS_ERR_INVALID_PARAM;
+}
 
 
 UCS_PROFILE_FUNC_VOID(ucp_mem_type_unpack,

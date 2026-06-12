@@ -700,9 +700,11 @@ uct_ib_iface_roce_is_routable(uct_ib_iface_t *iface, uint8_t gid_index,
 {
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
     uint8_t port_num     = iface->config.port_num;
-    char ndev_ifname[IFNAMSIZ], lo_ifname[IFNAMSIZ];
+    unsigned lo_ndev_index = 0;
+    char ndev_ifname[IFNAMSIZ], lo_ifname[IFNAMSIZ], local_ifname[IFNAMSIZ];
     char remote_str[128];
-    unsigned ndev_index, lo_ndev_index;
+    int local_ndev_index;
+    unsigned ndev_index;
 
     if (uct_ib_device_get_roce_ndev_index(dev, port_num, gid_index,
                                           &ndev_index) != UCS_OK) {
@@ -729,8 +731,22 @@ uct_ib_iface_roce_is_routable(uct_ib_iface_t *iface, uint8_t gid_index,
         return 1;
     }
 
+    /* A same-host RoCE address can have the most specific route through a VRF
+     * master instead of the RoCE netdev or loopback. Accept only kernel local
+     * routes, which keeps this narrower than reachability_mode=all. */
+    local_ndev_index = ucs_netlink_get_local_route_ndev_index(sa_remote);
+    if (local_ndev_index >= 0) {
+        ucs_trace(UCT_IB_IFACE_FMT ": found local route via %s to %s",
+                  UCT_IB_IFACE_ARG(iface),
+                  ucs_ndev_index_to_ifname(local_ndev_index, local_ifname,
+                                           sizeof(local_ifname)),
+                  ucs_sockaddr_str(sa_remote, remote_str, sizeof(remote_str)));
+        return 1;
+    }
+
     uct_iface_fill_info_str_buf(
-            params, "no route to %s from %s (idx %u) or %s (idx %u)",
+            params, "no route to %s from %s (idx %u), %s (idx %u), or local "
+                    "route",
             ucs_sockaddr_str(sa_remote, remote_str, sizeof(remote_str)),
             ucs_ndev_index_to_ifname(ndev_index, ndev_ifname,
                                      sizeof(ndev_ifname)),

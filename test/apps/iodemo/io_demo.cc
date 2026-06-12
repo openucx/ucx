@@ -6,6 +6,8 @@
 
 #include "ucx_wrapper.h"
 
+#include <ucs/sys/string.h>
+
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <sys/time.h>
@@ -2581,31 +2583,60 @@ private:
     MemoryPool<IoReadResponseCallback>      _read_callback_pool;
 };
 
+static int set_memunits(const char *str, size_t *value_p)
+{
+    ucs_status_t status;
+    size_t value;
+
+    if (*str == '-') {
+        return -1;
+    }
+
+    status = ucs_str_to_memunits(str, &value);
+    if ((status != UCS_OK) || (value == UCS_MEMUNITS_INF) ||
+        (value == UCS_MEMUNITS_AUTO)) {
+        return -1;
+    }
+
+    *value_p = value;
+    return 0;
+}
+
 static int set_data_size(char *str, options_t *test_opts)
 {
-    const static char token = ':';
-    char *val1, *val2;
+    char *val1, *val2, *token;
 
-    if (strchr(str, token) == NULL) {
-        test_opts->min_data_size =
-            test_opts->max_data_size = strtol(str, NULL, 0);
+    token = strchr(str, ':');
+    if (token == NULL) {
+        if (set_memunits(str, &test_opts->min_data_size) != 0) {
+            return -1;
+        }
+        test_opts->max_data_size = test_opts->min_data_size;
         return 0;
     }
 
-    val1 = strtok(str, ":");
-    val2 = strtok(NULL, ":");
+    *token = '\0';
+    val1   = str;
+    val2   = token + 1;
 
-    if ((val1 != NULL) && (val2 != NULL)) {
-        test_opts->min_data_size = strtol(val1, NULL, 0);
-        test_opts->max_data_size = strtol(val2, NULL, 0);
-    } else if (val1 != NULL) {
-        if (str[0] == ':') {
-            test_opts->min_data_size = 0;
-            test_opts->max_data_size = strtol(val1, NULL, 0);
-        } else {
-            test_opts->min_data_size = strtol(val1, NULL, 0);
+    if ((*val1 == '\0') && (*val2 == '\0')) {
+        return -1;
+    }
+
+    if (*val1 != '\0') {
+        if (set_memunits(val1, &test_opts->min_data_size) != 0) {
+            return -1;
         }
     } else {
+        test_opts->min_data_size = 0;
+    }
+
+    if ((*val2 != '\0') &&
+        (set_memunits(val2, &test_opts->max_data_size) != 0)) {
+        return -1;
+    }
+
+    if (test_opts->min_data_size > test_opts->max_data_size) {
         return -1;
     }
 
@@ -2729,7 +2760,9 @@ static void usage(void)
     std::cout << "                              NOTE: if using several IO operations, performance" << std::endl;
     std::cout << "                                    measurements may be inaccurate" << std::endl;
     std::cout << "  -d <min>:<max>              Range that should be used to get data" << std::endl;
-    std::cout << "                              size of IO payload" << std::endl;
+    std::cout << "                              size of IO payload. Values can use" << std::endl;
+    std::cout << "                              B, K, M, G or T suffixes; for example:" << std::endl;
+    std::cout << "                              -d 64K:1M" << std::endl;
     std::cout << "  -b <number of buffers>      Number of offcache IO buffers" << std::endl;
     std::cout << "  -i <iterations-count>       Number of iterations to run communication" << std::endl;
     std::cout << "  -w <window-size>            Number of outstanding requests" << std::endl;

@@ -842,9 +842,47 @@ ucp_memh_init_from_parent(ucp_mem_h memh, ucp_md_map_t parent_md_map)
     }
 }
 
-static ucs_status_t ucp_memh_init_uct_reg(ucp_context_h context, ucp_mem_h memh,
-                                          unsigned uct_flags,
-                                          const char *alloc_name)
+/* Apply UCX_MAX_HCA_PER_GPU policy.
+ * The network MDs are ranked by distance (latency, then bandwidth) to the
+ * buffer's sys_dev and the closest N selected. */
+static ucp_md_map_t
+ucp_memh_apply_reg_policy(ucp_context_h context, ucp_mem_h memh,
+                          ucp_md_map_t reg_md_map)
+{
+    ucp_md_map_t net_md_map, policy_md_map, selected;
+    ucp_md_index_t md_index;
+
+    if ((memh->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) ||
+        (memh->mem_type != UCS_MEMORY_TYPE_CUDA)) {
+        return reg_md_map;
+    }
+
+    net_md_map    = ucp_context_get_net_md_map(context);
+    policy_md_map = reg_md_map & net_md_map;
+    selected      = ucp_context_select_reg_mds(context, policy_md_map,
+                                               memh->sys_dev);
+
+    if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE)) {
+        UCS_STRING_BUFFER_ONSTACK(strb, 256);
+        ucs_for_each_bit(md_index, selected) {
+            if (ucs_string_buffer_length(&strb) > 0) {
+                ucs_string_buffer_appendf(&strb, ",");
+            }
+            ucs_string_buffer_appendf(&strb, "%s",
+                                      context->tl_mds[md_index].rsc.md_name);
+        }
+        ucs_trace("reg_devices_policy: mem_type=%s sys_dev=%d "
+                  "reg_md_map=0x%" PRIx64 " selected=[%s]",
+                  ucs_memory_type_names[memh->mem_type], memh->sys_dev,
+                  reg_md_map, ucs_string_buffer_cstr(&strb));
+    }
+
+    return (reg_md_map & ~net_md_map) | selected;
+}
+
+static ucs_status_t
+ucp_memh_init_uct_reg(ucp_context_h context, ucp_mem_h memh, unsigned uct_flags,
+                      int apply_reg_policy, const char *alloc_name)
 {
     ucs_memory_type_t mem_type = memh->mem_type;
     ucp_md_map_t reg_md_map    = context->reg_md_map[mem_type];
@@ -855,6 +893,10 @@ static ucs_status_t ucp_memh_init_uct_reg(ucp_context_h context, ucp_mem_h memh,
 
     if (uct_flags & UCT_MD_MEM_FLAG_LOCK) {
         reg_md_map |= context->reg_block_md_map[mem_type];
+    }
+
+    if (apply_reg_policy) {
+        reg_md_map = ucp_memh_apply_reg_policy(context, memh, reg_md_map);
     }
 
     reg_md_map  &= ~memh->md_map;
@@ -1019,8 +1061,8 @@ err_free_memh:
 static ucs_status_t ucp_memh_alloc(ucp_context_h context, void *address,
                                    size_t length, ucs_memory_type_t mem_type,
                                    ucs_sys_device_t sys_dev, uint8_t memh_flags,
-                                   unsigned uct_flags, const char *alloc_name,
-                                   ucp_mem_h *memh_p)
+                                   unsigned uct_flags, int apply_reg_policy,
+                                   const char *alloc_name, ucp_mem_h *memh_p)
 {
     uct_allocated_memory_t mem;
     ucs_status_t status;
@@ -1038,7 +1080,8 @@ static ucs_status_t ucp_memh_alloc(ucp_context_h context, void *address,
         goto err_dealloc;
     }
 
-    status = ucp_memh_init_uct_reg(context, memh, uct_flags, alloc_name);
+    status = ucp_memh_init_uct_reg(context, memh, uct_flags, apply_reg_policy,
+                                   alloc_name);
     if (status != UCS_OK) {
         goto err_free_memh;
     }
@@ -1164,7 +1207,7 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
         status = ucp_memh_import(context, exported_memh_buffer, &memh);
     } else if (flags & UCP_MEM_MAP_ALLOCATE) {
         status = ucp_memh_alloc(context, address, length, mem_type,
-                                UCS_SYS_DEVICE_ID_UNKNOWN, 0, uct_flags,
+                                UCS_SYS_DEVICE_ID_UNKNOWN, 0, uct_flags, 1,
                                 alloc_name, &memh);
     } else {
         status = ucp_memh_create(context, address, length, mem_type,
@@ -1173,7 +1216,7 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
             goto out;
         }
 
-        status = ucp_memh_init_uct_reg(context, memh, uct_flags, alloc_name);
+        status = ucp_memh_init_uct_reg(context, memh, uct_flags, 1, alloc_name);
         if (status != UCS_OK) {
             ucs_free(memh);
         }
@@ -1398,7 +1441,7 @@ ucp_mpool_malloc(ucp_worker_h worker, ucs_mpool_t *mp, size_t *size_p, void **ch
 
     status = ucp_memh_alloc(worker->context, NULL, *size_p + sizeof(*chunk_hdr),
                             UCS_MEMORY_TYPE_HOST, UCS_SYS_DEVICE_ID_UNKNOWN,
-                            UCP_MEMH_FLAG_NO_RCACHE, UCT_MD_MEM_ACCESS_RMA,
+                            UCP_MEMH_FLAG_NO_RCACHE, UCT_MD_MEM_ACCESS_RMA, 0,
                             ucs_mpool_name(mp), &memh);
     if (status != UCS_OK) {
         goto out;
@@ -1452,7 +1495,7 @@ ucp_rndv_frag_malloc_mpools(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
     /* payload; need to get default flags from ucp_mem_map_params2uct_flags() */
     status = ucp_memh_alloc(context, NULL, frag_size * num_elems, mem_type,
                             sys_dev, UCP_MEMH_FLAG_NO_RCACHE,
-                            UCT_MD_MEM_ACCESS_RMA | UCT_MD_MEM_FLAG_LOCK,
+                            UCT_MD_MEM_ACCESS_RMA | UCT_MD_MEM_FLAG_LOCK, 0,
                             ucs_mpool_name(mp), &chunk_hdr->memh);
     if (status != UCS_OK) {
         return status;

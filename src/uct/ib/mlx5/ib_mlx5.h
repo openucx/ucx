@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
 * Copyright (c) Google, LLC, 2024. ALL RIGHTS RESERVED.
 *
@@ -130,8 +130,9 @@ struct mlx5_grh_av {
 #  define MLX5_WQE_CTRL_SOLICITED  (1<<1)
 #endif
 
-#define UCT_IB_MLX5_WQE_CTRL_FLAG_FENCE        (2<<5)
-#define UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER (3<<5)
+#define UCT_IB_MLX5_WQE_CTRL_FLAG_INITIATOR_SMALL_FENCE (1<<5)
+#define UCT_IB_MLX5_WQE_CTRL_FLAG_FENCE                 (2<<5)
+#define UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER          (3<<5)
 
 #define UCT_IB_MLX5_AM_ZCOPY_MAX_IOV  3UL
 
@@ -208,10 +209,6 @@ enum {
     UCT_IB_MLX5_MD_FLAG_GVA_RO               = UCS_BIT(17),
     /* Device supports forcing ordering configuration */
     UCT_IB_MLX5_MD_FLAG_DP_ORDERING_FORCE    = UCS_BIT(18),
-
-    /* Device supports registering UMEM with DMA-BUF.
-     * NOTE: initiazlied in uct_gdaki_query_tl_devices */
-    UCT_IB_MLX5_MD_FLAG_REG_DMABUF_UMEM      = UCS_BIT(19),
 
     /* Object to be created by DevX */
     UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 20,
