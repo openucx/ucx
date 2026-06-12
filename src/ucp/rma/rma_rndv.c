@@ -22,6 +22,7 @@
 
 
 #define UCP_PROTO_RMA_RNDV_RTS_NAME "RMA_RTS"
+#define UCP_PROTO_RMA_RNDV_ZERO_GET_PENALTY 1e-3
 
 
 static int
@@ -36,8 +37,36 @@ ucp_proto_rma_rndv_probe_check(const ucp_proto_init_params_t *init_params,
         (init_params->rkey_config_key == NULL)) {
         return 0;
     }
+
     return !UCP_MEM_IS_HOST(sel_param->mem_type) ||
            !UCP_MEM_IS_HOST(init_params->rkey_config_key->mem_type);
+}
+
+static ucs_status_t
+ucp_proto_rma_rndv_overhead_perf(const char *name, double overhead,
+                                 ucp_proto_perf_t **perf_p)
+{
+    ucp_proto_perf_factors_t perf_factors = UCP_PROTO_PERF_FACTORS_INITIALIZER;
+    ucp_proto_perf_t *perf;
+    ucs_status_t status;
+
+    status = ucp_proto_perf_create(name, &perf);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    perf_factors[UCP_PROTO_PERF_FACTOR_LOCAL_CPU] =
+            ucs_linear_func_make(overhead, 0);
+    status = ucp_proto_perf_add_funcs(perf, 0, SIZE_MAX, perf_factors,
+                                      ucp_proto_perf_node_new_data(name, ""),
+                                      NULL);
+    if (status != UCS_OK) {
+        ucp_proto_perf_destroy(perf);
+        return status;
+    }
+
+    *perf_p = perf;
+    return UCS_OK;
 }
 
 
@@ -199,6 +228,30 @@ static void ucp_proto_rma_rndv_query(const ucp_proto_query_params_t *params,
                       remote_attr.config);
 }
 
+static int
+ucp_proto_get_rndv_zero_length_variant(const ucp_proto_init_elem_t *proto)
+{
+    const ucp_proto_flat_perf_range_t *range;
+
+    range = ucp_proto_flat_perf_find_lb(proto->flat_perf, 0);
+    return (range != NULL) && (range->start == 0) && (range->end == 0) &&
+           (ucs_array_length(proto->flat_perf) == 1);
+}
+
+static double ucp_proto_get_rndv_variant_overhead(ucp_context_h context,
+                                                  ucp_proto_init_elem_t *proto)
+{
+    double overhead = context->config.ext.proto_overhead_rndv_rtr;
+
+    if (ucp_proto_get_rndv_zero_length_variant(proto)) {
+        /* Keep zero-only RNDV receive variants available, but make direct GET
+         * protocols preferable for zero-length RMA GET. */
+        overhead += UCP_PROTO_RMA_RNDV_ZERO_GET_PENALTY;
+    }
+
+    return overhead;
+}
+
 static void
 ucp_proto_get_rndv_add_variant(
         const ucp_proto_init_params_t *init_params,
@@ -208,19 +261,31 @@ ucp_proto_get_rndv_add_variant(
 {
     ucp_context_h context = init_params->worker->context;
     ucp_proto_rndv_ctrl_priv_t rpriv = {0};
-    const ucp_proto_perf_t *perf_elems[1];
+    const ucp_proto_perf_t *perf_elems[2];
+    ucp_proto_perf_t *overhead_perf;
     ucp_proto_init_params_t variant_params;
     UCS_STRING_BUFFER_ONSTACK(perf_name, 128);
     ucp_proto_perf_t *perf;
     size_t cfg_thresh;
     ucs_status_t status;
 
-    perf_elems[0] = proto->perf;
     ucs_string_buffer_appendf(&perf_name, "%s" UCP_PROTO_PERF_NODE_NEW_LINE
                               "%s", UCP_PROTO_RNDV_RTR_REQ_NAME,
                               ucp_proto_perf_name(proto->perf));
+
+    status = ucp_proto_rma_rndv_overhead_perf(
+            "GET/RNDV start",
+            ucp_proto_get_rndv_variant_overhead(context, proto),
+            &overhead_perf);
+    if (status != UCS_OK) {
+        return;
+    }
+
+    perf_elems[0] = proto->perf;
+    perf_elems[1] = overhead_perf;
     status = ucp_proto_perf_aggregate(ucs_string_buffer_cstr(&perf_name),
-                                      perf_elems, 1, &perf);
+                                      perf_elems, 2, &perf);
+    ucp_proto_perf_destroy(overhead_perf);
     if (status != UCS_OK) {
         return;
     } else if (ucp_proto_perf_is_empty(perf)) {
