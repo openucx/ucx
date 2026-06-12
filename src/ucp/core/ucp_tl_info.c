@@ -123,7 +123,7 @@ static void ucp_tl_info_emit_row(ucs_table_t *table, const char *type_str,
                                dev_str);
 }
 
-static void ucp_tl_info_render_title(ucs_table_t *table, ucp_context_h context)
+static void ucp_tl_info_add_title(ucs_table_t *table, ucp_context_h context)
 {
     UCS_STRING_BUFFER_ONSTACK(title_strb, 128);
     ucs_table_row_h row;
@@ -141,7 +141,7 @@ static void ucp_tl_info_render_title(ucs_table_t *table, ucp_context_h context)
     ucs_table_add_separator(table);
 }
 
-static void ucp_tl_info_render_headers(ucs_table_t *table)
+static void ucp_tl_info_add_headers(ucs_table_t *table)
 {
     ucs_table_row_h row;
 
@@ -174,7 +174,7 @@ ucp_tl_info_tl_group_end(const ucp_tl_info_array_t *all_rscs, unsigned start)
     return end;
 }
 
-static void ucp_tl_info_render_tl_group(ucs_table_t *table,
+static void ucp_tl_info_add_tl_group(ucs_table_t *table,
                                         ucp_context_h context,
                                         const ucp_tl_info_array_t *all_rscs,
                                         unsigned group_start,
@@ -263,7 +263,7 @@ static void ucp_tl_info_render_tl_group(ucs_table_t *table,
 }
 
 static void
-ucp_tl_info_render_unavailable_cmpts(ucs_table_t *table, ucp_context_h context,
+ucp_tl_info_add_unavailable_cmpts(ucs_table_t *table, ucp_context_h context,
                                      const ucp_tl_info_array_t *all_rscs,
                                      int *printed_any)
 {
@@ -307,7 +307,7 @@ ucp_tl_info_render_unavailable_cmpts(ucs_table_t *table, ucp_context_h context,
     }
 }
 
-static void ucp_tl_info_render_legend(ucs_table_t *table)
+static void ucp_tl_info_add_legend(ucs_table_t *table)
 {
     ucs_table_row_h row;
     unsigned i;
@@ -344,21 +344,21 @@ ucs_status_t ucp_context_render_tl_info(ucp_context_h context,
 
     ucs_table_init(&table, &tcfg);
 
-    ucp_tl_info_render_title(&table, context);
-    ucp_tl_info_render_headers(&table);
+    ucp_tl_info_add_title(&table, context);
+    ucp_tl_info_add_headers(&table);
 
     printed_any = 0;
     group_start = 0;
     while (group_start < ucs_array_length(all_rscs)) {
         group_end = ucp_tl_info_tl_group_end(all_rscs, group_start);
-        ucp_tl_info_render_tl_group(&table, context, all_rscs, group_start,
+        ucp_tl_info_add_tl_group(&table, context, all_rscs, group_start,
                                     group_end, &printed_any);
         group_start = group_end;
     }
 
-    ucp_tl_info_render_unavailable_cmpts(&table, context, all_rscs,
+    ucp_tl_info_add_unavailable_cmpts(&table, context, all_rscs,
                                          &printed_any);
-    ucp_tl_info_render_legend(&table);
+    ucp_tl_info_add_legend(&table);
 
     ucs_table_render(&table, strb);
 
