@@ -276,6 +276,11 @@ ucp_tl_info_add_unavailable_cmpts(ucs_table_t *table, ucp_context_h context,
             continue;
         }
 
+        /* Don't list components with no memory domains. (e.g. rdmacm) */
+        if (context->tl_cmpts[cmpt_idx].attr.md_resource_count == 0) {
+            continue;
+        }
+
         if (first_unavail) {
             if (*printed_any) {
                 ucs_table_add_separator(table);
