@@ -24,6 +24,7 @@
 #define UCP_PROTO_RMA_RNDV_RTS_NAME "RMA_RTS"
 #define UCP_PROTO_RMA_RNDV_ZERO_GET_PENALTY 1e-3
 #define UCP_PROTO_RMA_RNDV_PUT_FALLBACK_PENALTY 1e-3
+#define UCP_PROTO_RMA_RNDV_GET_FALLBACK_PENALTY 1e-3
 
 
 static int
@@ -245,7 +246,10 @@ ucp_proto_get_rndv_zero_length_variant(const ucp_proto_init_elem_t *proto)
 static double ucp_proto_get_rndv_variant_overhead(ucp_context_h context,
                                                   ucp_proto_init_elem_t *proto)
 {
-    double overhead = context->config.ext.proto_overhead_rndv_rtr;
+    /* Prefer direct GET zcopy when it is available; keep GET/RNDV as a
+     * fallback for cases where the peer can only send the data. */
+    double overhead = context->config.ext.proto_overhead_rndv_rtr +
+                      UCP_PROTO_RMA_RNDV_GET_FALLBACK_PENALTY;
 
     if (ucp_proto_get_rndv_zero_length_variant(proto)) {
         /* Keep zero-only RNDV receive variants available, but make direct GET
