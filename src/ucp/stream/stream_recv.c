@@ -534,7 +534,7 @@ void ucp_stream_ep_init(ucp_ep_h ep)
 {
     ucp_ep_ext_t *ep_ext = ep->ext;
 
-    if (ep->worker->context->config.features & UCP_FEATURE_STREAM) {
+    if (ep->worker->context->config.all_features & UCP_FEATURE_STREAM) {
         ep_ext->stream.ready_list.prev = NULL;
         ep_ext->stream.ready_list.next = NULL;
         ucs_queue_head_init(&ep_ext->stream.match_q);
@@ -548,7 +548,7 @@ void ucp_stream_ep_cleanup(ucp_ep_h ep, ucs_status_t status)
     size_t length;
     void *data;
 
-    if (!(ep->worker->context->config.features & UCP_FEATURE_STREAM)) {
+    if (!(ep->worker->context->config.all_features & UCP_FEATURE_STREAM)) {
         return;
     }
 
@@ -575,7 +575,7 @@ void ucp_stream_ep_activate(ucp_ep_h ep)
 {
     ucp_ep_ext_t *ep_ext = ep->ext;
 
-    if ((ep->worker->context->config.features & UCP_FEATURE_STREAM) &&
+    if ((ep->worker->context->config.all_features & UCP_FEATURE_STREAM) &&
         ucp_stream_ep_has_data(ep_ext) && !ucp_stream_ep_is_queued(ep_ext)) {
         ucp_stream_ep_enqueue(ep_ext, ep->worker);
     }

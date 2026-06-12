@@ -145,7 +145,7 @@ static ucs_status_t ucp_worker_wakeup_ctl_fd(ucp_worker_h worker,
     ucs_event_set_types_t events = UCS_EVENT_SET_EVREAD;
     ucs_status_t status;
 
-    if (!(worker->context->config.features & UCP_FEATURE_WAKEUP)) {
+    if (!(worker->context->config.all_features & UCP_FEATURE_WAKEUP)) {
         return UCS_OK;
     }
 
@@ -190,7 +190,8 @@ static void ucp_worker_set_am_handlers(ucp_worker_iface_t *wiface, int is_proxy)
             continue;
         }
 
-        if (!(context->config.features & ucp_am_handlers[am_id]->features)) {
+        if (!(context->config.all_features &
+              ucp_am_handlers[am_id]->features)) {
             continue;
         }
 
@@ -255,7 +256,8 @@ static void ucp_worker_remove_am_handlers(ucp_worker_h worker)
                 continue;
             }
 
-            if (context->config.features & ucp_am_handlers[am_id]->features) {
+            if (context->config.all_features &
+                ucp_am_handlers[am_id]->features) {
                 (void)uct_iface_set_am_handler(wiface->iface,
                                                am_id, ucp_stub_am_handler,
                                                worker, UCT_CB_FLAG_ASYNC);
@@ -286,7 +288,7 @@ static ucs_status_t ucp_worker_wakeup_init(ucp_worker_h worker,
     unsigned events;
     ucs_status_t status;
 
-    if (!(context->config.features & UCP_FEATURE_WAKEUP)) {
+    if (!(context->config.all_features & UCP_FEATURE_WAKEUP)) {
         worker->event_fd   = -1;
         worker->event_set  = NULL;
         worker->eventfd    = -1;
@@ -448,7 +450,7 @@ static ucs_status_t ucp_worker_wakeup_signal_fd(ucp_worker_h worker)
 
 void ucp_worker_signal_internal(ucp_worker_h worker)
 {
-    if (worker->context->config.features & UCP_FEATURE_WAKEUP) {
+    if (worker->context->config.all_features & UCP_FEATURE_WAKEUP) {
         ucp_worker_wakeup_signal_fd(worker);
     }
 }
@@ -909,28 +911,29 @@ static void ucp_worker_uct_iface_close(ucp_worker_iface_t *wiface)
 
 static uint64_t ucp_worker_get_uct_features(ucp_context_h context)
 {
+    uint64_t context_features = context->config.all_features;
     uint64_t features = 0;
 
-    if (context->config.features & UCP_FEATURE_TAG) {
+    if (context_features & UCP_FEATURE_TAG) {
         features |= UCT_IFACE_FEATURE_TAG;
     }
 
-    if (context->config.features &
+    if (context_features &
         (UCP_FEATURE_AM | UCP_FEATURE_TAG | UCP_FEATURE_STREAM |
          UCP_FEATURE_RMA | UCP_FEATURE_AMO32 | UCP_FEATURE_AMO64)) {
         features |= UCT_IFACE_FEATURE_AM;
     }
 
-    if (context->config.features & UCP_FEATURE_RMA) {
+    if (context_features & UCP_FEATURE_RMA) {
         features |= UCT_IFACE_FEATURE_PUT | UCT_IFACE_FEATURE_GET |
                     UCT_IFACE_FEATURE_FLUSH_REMOTE;
     }
 
-    if (context->config.features & UCP_FEATURE_AMO32) {
+    if (context_features & UCP_FEATURE_AMO32) {
         features |= UCT_IFACE_FEATURE_AMO32 | UCT_IFACE_FEATURE_FLUSH_REMOTE;
     }
 
-    if (context->config.features & UCP_FEATURE_AMO64) {
+    if (context_features & UCP_FEATURE_AMO64) {
         features |= UCT_IFACE_FEATURE_AMO64 | UCT_IFACE_FEATURE_FLUSH_REMOTE;
     }
 
@@ -992,6 +995,15 @@ static int ucp_worker_iface_support_keepalive(ucp_worker_iface_t *wiface)
                               UCT_IFACE_FLAG_EP_KEEPALIVE);
 }
 
+static uint8_t ucp_worker_tl_usage_flags(ucp_context_h context,
+                                         ucp_rsc_index_t rsc_index)
+{
+    return (UCS_STATIC_BITMAP_GET(context->data_tl_bitmap, rsc_index) ?
+                    UCS_BIT(0) : 0) |
+           (UCS_STATIC_BITMAP_GET(context->extra_tl_bitmap, rsc_index) ?
+                    UCS_BIT(1) : 0);
+}
+
 /* Compare 'compare_attr' atomic capabilities to 'test_attr',
  * and decide if it contains all of 'test_attr' capabilities */
 static int
@@ -1035,7 +1047,9 @@ static int ucp_worker_iface_find_better(ucp_worker_h worker,
         /* Need to check resources which belong to the same device only */
         if ((ctx->tl_rscs[rsc_index].dev_index != ctx->tl_rscs[wiface->rsc_index].dev_index) ||
             (if_iter->flags & UCP_WORKER_IFACE_FLAG_UNUSED) ||
-            (rsc_index == wiface->rsc_index)) {
+            (rsc_index == wiface->rsc_index) ||
+            (ucp_worker_tl_usage_flags(ctx, rsc_index) !=
+             ucp_worker_tl_usage_flags(ctx, wiface->rsc_index))) {
             continue;
         }
 
@@ -1451,7 +1465,7 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     iface_params.mode.device.dev_name = resource->tl_rsc.dev_name;
 
 
-    if (context->config.features & UCP_FEATURE_TAG) {
+    if (context->config.all_features & UCP_FEATURE_TAG) {
         iface_params.eager_arg     = iface_params.rndv_arg = wiface;
         iface_params.eager_cb      = ucp_tag_offload_unexp_eager;
         iface_params.rndv_cb       = ucp_tag_offload_unexp_rndv;
@@ -1843,7 +1857,7 @@ static void ucp_worker_init_atomic_tls(ucp_worker_h worker)
 
     UCS_STATIC_BITMAP_RESET_ALL(&worker->atomic_tls);
 
-    if (context->config.features & UCP_FEATURE_AMO) {
+    if (context->config.all_features & UCP_FEATURE_AMO) {
         switch(context->config.ext.atomic_mode) {
         case UCP_ATOMIC_MODE_CPU:
             ucp_worker_init_cpu_atomics(worker);
@@ -1922,23 +1936,23 @@ ucp_worker_print_used_tls(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index)
         if ((key->am_lane == lane) || (key->rkey_ptr_lane == lane) ||
             (ucp_ep_config_get_multi_lane_prio(key->am_bw_lanes, lane) >= 0)  ||
             (ucp_ep_config_get_multi_lane_prio(key->rma_bw_lanes, lane) >= 0)) {
-            if (context->config.features & UCP_FEATURE_TAG) {
+            if (context->config.all_features & UCP_FEATURE_TAG) {
                 tag_lanes_map |= UCS_BIT(lane);
             }
 
-            if (context->config.features & UCP_FEATURE_AM) {
+            if (context->config.all_features & UCP_FEATURE_AM) {
                 am_lanes_map |= UCS_BIT(lane);
             }
         }
 
         if (key->tag_lane == lane) {
             /* tag_lane is initialized if TAG feature is requested */
-            ucs_assert(context->config.features & UCP_FEATURE_TAG);
+            ucs_assert(context->config.all_features & UCP_FEATURE_TAG);
             tag_lanes_map |= UCS_BIT(lane);
         }
 
         if ((key->am_lane == lane) &&
-            (context->config.features & UCP_FEATURE_STREAM)) {
+            (context->config.all_features & UCP_FEATURE_STREAM)) {
             stream_lanes_map |= UCS_BIT(lane);
         }
 
@@ -1963,13 +1977,15 @@ ucp_worker_print_used_tls(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index)
         return;
     }
 
-    if ((context->config.features & UCP_FEATURE_RMA) && (rma_lanes_map == 0)) {
+    if ((context->config.all_features & UCP_FEATURE_RMA) &&
+        (rma_lanes_map == 0)) {
         ucs_assert(key->am_lane != UCP_NULL_LANE);
         rma_lanes_map |= UCS_BIT(key->am_lane);
         rma_emul       = 1;
     }
 
-    if ((context->config.features & UCP_FEATURE_AMO) && (amo_lanes_map == 0) &&
+    if ((context->config.all_features & UCP_FEATURE_AMO) &&
+        (amo_lanes_map == 0) &&
         (key->am_lane != UCP_NULL_LANE)) {
         amo_lanes_map |= UCS_BIT(key->am_lane);
         amo_emul       = 1;
@@ -2337,7 +2353,7 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
     *cfg_index_p = rkey_cfg_index;
 
     /* Set threshold for short put */
-    if (worker->context->config.features & UCP_FEATURE_RMA) {
+    if (worker->context->config.all_features & UCP_FEATURE_RMA) {
         ucp_proto_select_short_init(worker, &rkey_config->proto_select,
                                     key->ep_cfg_index, rkey_cfg_index,
                                     UCP_OP_ID_PUT, UCP_PROTO_FLAG_PUT_SHORT,
@@ -2491,7 +2507,7 @@ static void ucp_worker_set_max_am_header(ucp_worker_h worker)
     ucp_rsc_index_t iface_id;
     size_t max_am_header, max_rts_size, max_ucp_header, max_uct_fragment;
 
-    if (!(context->config.features & UCP_FEATURE_AM)) {
+    if (!(context->config.all_features & UCP_FEATURE_AM)) {
         worker->max_am_header = 0ul;
         return;
     }
@@ -3072,7 +3088,8 @@ void ucp_worker_destroy(ucp_worker_h worker)
     UCS_ASYNC_UNBLOCK(&worker->async);
 
     if (worker->keepalive.timerfd >= 0) {
-        ucs_assert(worker->context->config.features & UCP_FEATURE_WAKEUP);
+        ucs_assert(worker->context->config.all_features &
+                   UCP_FEATURE_WAKEUP);
         ucp_worker_wakeup_ctl_fd(worker, UCP_WORKER_EPFD_OP_DEL,
                                  worker->keepalive.timerfd);
         close(worker->keepalive.timerfd);
@@ -3464,7 +3481,7 @@ void ucp_worker_print_info(ucp_worker_h worker, FILE *stream)
         fprintf(stream, "# <failed to get address>\n");
     }
 
-    if (context->config.features & UCP_FEATURE_AMO) {
+    if (context->config.all_features & UCP_FEATURE_AMO) {
         fprintf(stream, "#                 atomics: ");
         first = 1;
         for (rsc_index = 0; rsc_index < worker->context->num_tls; ++rsc_index) {
@@ -3507,7 +3524,7 @@ ucp_worker_keepalive_timerfd_init(ucp_worker_h worker)
     struct timespec ts;
     int ret;
 
-    if (!(worker->context->config.features & UCP_FEATURE_WAKEUP) ||
+    if (!(worker->context->config.all_features & UCP_FEATURE_WAKEUP) ||
         (worker->keepalive.timerfd >= 0)) {
         return;
     }

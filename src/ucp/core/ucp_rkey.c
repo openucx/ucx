@@ -1230,7 +1230,7 @@ void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
     if (rkey->cache.amo_lane == UCP_NULL_LANE) {
         rkey->cache.amo_proto_index = UCP_RKEY_SW_PROTO;
         rkey->cache.amo_rkey        = UCT_INVALID_RKEY;
-        amo_sw                      = !!(context->config.features &
+        amo_sw                      = !!(context->config.all_features &
                                          (UCP_FEATURE_AMO32 | UCP_FEATURE_AMO64));
     } else {
         rkey->cache.amo_proto_index = UCP_RKEY_BASIC_PROTO;
