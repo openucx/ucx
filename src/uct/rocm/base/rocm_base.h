@@ -46,5 +46,8 @@ ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
 ucs_status_t uct_rocm_base_get_link_type(hsa_amd_link_info_type_t *type);
 uct_rocm_amd_gpu_product_t uct_rocm_base_get_gpu_product(void);
 int uct_rocm_base_is_dmabuf_supported();
+ucs_status_t uct_rocm_base_ep_flush(uct_ep_h tl_ep, ucs_mpool_t *signal_pool,
+                                    ucs_queue_head_t *signal_queue,
+                                    uct_completion_t *comp);
 
 #endif

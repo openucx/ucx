@@ -1335,7 +1335,12 @@ ucp_worker_iface_get_memory_distance(const ucp_worker_iface_t *wiface,
 
     if ((md_attr->access_mem_types | md_attr->reg_mem_types) &
         UCS_BIT(UCS_MEMORY_TYPE_HOST)) {
-        ucs_topo_get_memory_distance(sys_dev, distance);
+        if (ucs_cpu_set_is_empty(&wiface->worker->cpu_mask)) {
+            ucs_topo_get_memory_distance(sys_dev, distance);
+        } else {
+            ucs_topo_get_memory_distance_for_cpuset(
+                    sys_dev, &wiface->worker->cpu_mask, distance);
+        }
     } else {
         *distance = ucs_topo_default_distance;
     }
@@ -3591,7 +3596,7 @@ static int ucp_worker_do_ep_keepalive(ucp_worker_h worker, ucs_time_t now)
 
     if (status == UCS_ERR_NO_RESOURCE) {
         return 0;
-    } else if (status != UCS_OK) {
+    } else if (UCS_STATUS_IS_ERR(status)) {
         ucs_diag("worker %p: keepalive failed on ep %p lane[%d]=%p: %s", worker,
                  ep, lane, uct_ep, ucs_status_string(status));
     } else {
