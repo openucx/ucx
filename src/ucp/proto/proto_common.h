@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -27,7 +27,7 @@
 
 
 #define UCP_PROTO_LANE_FMT \
-    "lane[%d] " UCT_TL_RESOURCE_DESC_FMT " bw " UCP_PROTO_PERF_FUNC_BW_FMT \
+    "lane[%d] " UCT_TL_RESOURCE_DESC_FMT UCP_PROTO_BW_FMT(bw) \
     UCP_PROTO_TIME_FMT(latency)
 
 
@@ -36,7 +36,7 @@
     UCT_TL_RESOURCE_DESC_ARG( \
         &(_params)->worker->context->tl_rscs[ \
             ucp_proto_common_get_rsc_index(_params, _lane)].tl_rsc), \
-    (_lane_perf)->bandwidth / UCS_MBYTE, \
+    UCP_PROTO_BW_ARG((_lane_perf)->bandwidth), \
     UCP_PROTO_TIME_ARG((_lane_perf)->latency)
 
 
@@ -301,7 +301,8 @@ ucp_proto_common_filter_min_frag(const ucp_proto_init_params_t *params,
 ucp_lane_index_t
 ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
                             unsigned flags, ucp_lane_type_t lane_type,
-                            uint64_t tl_cap_flags, ucp_lane_index_t max_lanes,
+                            uint64_t tl_cap_flags, uint64_t tl_v2_cap_flags,
+                            ucp_lane_index_t max_lanes,
                             ucp_lane_map_t exclude_map,
                             ucp_proto_common_filter_lane_cb_t filter,
                             ucp_lane_index_t *lanes);

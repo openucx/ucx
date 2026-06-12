@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2022, NVIDIA CORPORATION & AFFILIATES. ALL RIGHTS RESERVED.
+ * Copyright (C) 2022-2026, NVIDIA CORPORATION & AFFILIATES. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -175,6 +175,7 @@ ucp_proto_t ucp_am_eager_multi_bcopy_proto = {
     .name     = "am/egr/multi/bcopy",
     .desc     = UCP_PROTO_MULTI_FRAG_DESC " " UCP_PROTO_COPY_IN_DESC,
     .flags    = 0,
+    .dt_mask  = UCP_PROTO_DT_MASK_DEFAULT,
     .probe    = ucp_am_eager_multi_bcopy_proto_probe,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_am_eager_multi_bcopy_proto_progress},
@@ -349,6 +350,7 @@ ucp_proto_t ucp_am_eager_multi_zcopy_proto = {
     .name     = "am/egr/multi/zcopy",
     .desc     = UCP_PROTO_MULTI_FRAG_DESC " " UCP_PROTO_ZCOPY_DESC,
     .flags    = 0,
+    .dt_mask  = UCP_DT_MASK_CONTIG_IOV,
     .probe    = ucp_am_eager_multi_zcopy_proto_probe,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_am_eager_multi_zcopy_proto_progress},
@@ -380,7 +382,11 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_am_eager_multi_zcopy_psn_send_func(
 
 static void ucp_am_eager_multi_zcopy_psn_completion(uct_completion_t *self)
 {
-    if (ucs_likely(self->status == UCS_OK)) {
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t,
+                                          send.state.uct_comp);
+
+    if (ucs_likely(self->status == UCS_OK) ||
+        (req->send.ep->flags & UCP_EP_FLAG_FAILED)) {
         ucp_am_eager_zcopy_completion(self);
     } else {
         /* NOTE: do not release the user header to allow the request to be
@@ -398,6 +404,9 @@ static ucs_status_t ucp_am_eager_multi_zcopy_psn_init(ucp_request_t *req)
     if (status != UCS_OK) {
         return status;
     }
+
+    ucs_assertv(ucp_ep_get_am_lane(req->send.ep) != UCP_NULL_LANE,
+                "req %p: ep %p does not have any AM lanes", req, req->send.ep);
 
     return ucp_am_eager_multi_zcopy_init(req);
 }
@@ -430,13 +439,22 @@ static ucs_status_t ucp_am_eager_multi_zcopy_psn_reset(ucp_request_t *req)
     ucp_datatype_iter_rewind(&req->send.state.dt_iter, UCP_DT_MASK_CONTIG_IOV);
     /* Restart the request from the very first fragment */
     req->send.msg_proto.am.internal_flags &= ~UCP_REQUEST_AM_FLAG_HEADER_SENT;
-    return status;
+    /* Mark restart as a retransmit so the receiver can evict any orphan
+     * partial first_rdesc left by the previous attempt. */
+    req->send.msg_proto.am.flags |= UCP_AM_HDR_FLAG_RESEND;
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ucs_assert(ucp_ep_get_am_lane(req->send.ep) != UCP_NULL_LANE);
+    return UCS_OK;
 }
 
 ucp_proto_t ucp_am_eager_multi_zcopy_psn_proto = {
     .name     = "am/egr/multi/zcopy/psn",
     .desc     = UCP_PROTO_MULTI_FRAG_DESC " " UCP_PROTO_ZCOPY_DESC " psn",
     .flags    = 0,
+    .dt_mask  = UCP_DT_MASK_CONTIG_IOV,
     .probe    = ucp_am_eager_multi_zcopy_psn_proto_probe,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_am_eager_multi_zcopy_psn_proto_progress},

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -186,23 +186,49 @@ UCS_PTR_MAP_IMPL(request, 0);
     }
 
 
+#define UCP_REQUEST_CHECK_PARAM_COMMON(_param) \
+    do { \
+        if (ENABLE_PARAMS_CHECK) { \
+            if (((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_MEMORY_TYPE) && \
+                ((_param)->memory_type > UCS_MEMORY_TYPE_LAST)) { \
+                ucs_error("invalid memory type parameter: %d", \
+                          (_param)->memory_type); \
+                return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
+            } \
+            \
+            if (ucs_test_all_flags((_param)->op_attr_mask, \
+                                   (UCP_OP_ATTR_FLAG_FAST_CMPL | \
+                                    UCP_OP_ATTR_FLAG_MULTI_SEND))) { \
+                ucs_error("UCP_OP_ATTR_FLAG_FAST_CMPL and " \
+                          "UCP_OP_ATTR_FLAG_MULTI_SEND are mutually exclusive"); \
+                return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
+            } \
+        } \
+    } while (0)
+
+
+#define UCP_REQUEST_CHECK_PARAM_NO_REMOTE(_param) \
+    do { \
+        if (ENABLE_PARAMS_CHECK && \
+            (((_param)->op_attr_mask & \
+              (UCP_OP_ATTR_FIELD_REMOTE | \
+               UCP_OP_ATTR_FIELD_REMOTE_DATATYPE | \
+               UCP_OP_ATTR_FIELD_REMOTE_COUNT)) || \
+             (((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_DATATYPE) && \
+              (((_param)->datatype & UCP_DATATYPE_CLASS_MASK) == \
+               UCP_DATATYPE_SGL)))) { \
+            ucs_error("SGL datatype and remote descriptor parameters are " \
+                      "only supported for ucp_put_nbx"); \
+            return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
+        } \
+    } while (0)
+
+
 #define UCP_REQUEST_CHECK_PARAM(_param) \
-    if (ENABLE_PARAMS_CHECK) { \
-        if (((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_MEMORY_TYPE) && \
-            ((_param)->memory_type > UCS_MEMORY_TYPE_LAST)) { \
-            ucs_error("invalid memory type parameter: %d", \
-                      (_param)->memory_type); \
-            return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
-        } \
-        \
-        if (ucs_test_all_flags((_param)->op_attr_mask, \
-                               (UCP_OP_ATTR_FLAG_FAST_CMPL | \
-                                UCP_OP_ATTR_FLAG_MULTI_SEND))) { \
-            ucs_error("UCP_OP_ATTR_FLAG_FAST_CMPL and " \
-                      "UCP_OP_ATTR_FLAG_MULTI_SEND are mutually exclusive"); \
-            return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
-        } \
-    }
+    do { \
+        UCP_REQUEST_CHECK_PARAM_COMMON(_param); \
+        UCP_REQUEST_CHECK_PARAM_NO_REMOTE(_param); \
+    } while (0)
 
 
 #if UCS_ENABLE_ASSERT
@@ -381,9 +407,6 @@ ucp_request_send_state_reset(ucp_request_t *req,
                              uct_completion_callback_t comp_cb, unsigned proto)
 {
     switch (proto) {
-    case UCP_REQUEST_SEND_PROTO_RMA:
-        ucs_assert(UCP_DT_IS_CONTIG(req->send.datatype));
-        /* Fall through */
     case UCP_REQUEST_SEND_PROTO_RNDV_GET:
     case UCP_REQUEST_SEND_PROTO_RNDV_PUT:
     case UCP_REQUEST_SEND_PROTO_ZCOPY_AM:
@@ -457,8 +480,6 @@ ucp_request_send_state_advance(ucp_request_t *req,
             /* cppcheck-suppress nullPointer */
             req->send.state.dt        = *new_dt_state;
         }
-        /* Fall through */
-    case UCP_REQUEST_SEND_PROTO_RMA:
         if (status == UCS_INPROGRESS) {
             ++req->send.state.uct_comp.count;
         }
@@ -467,9 +488,7 @@ ucp_request_send_state_advance(ucp_request_t *req,
         ucs_fatal("unknown protocol %d", proto);
     }
 
-    /* offset is not used for RMA */
-    ucs_assert((proto == UCP_REQUEST_SEND_PROTO_RMA) ||
-               (req->send.state.dt.offset <= req->send.length));
+    ucs_assert(req->send.state.dt.offset <= req->send.length);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t

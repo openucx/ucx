@@ -79,20 +79,25 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
     uct_ep_h uct_ep;
     ucp_lane_map_t ep_destroyed_lanes;
     ucp_lane_map_t ep_new_lanes;
+    ucp_lane_map_t next_lanes;
 
     ucs_assertv(!(ep->flags & UCP_EP_FLAG_BLOCK_FLUSH), "req=%p ep=%p", req, 
                 ep);
 
-    /* If the number of lanes changed since flush operation was submitted, adjust
-     * the number of expected completions. Account for failed lanes. */
+    /* If the set of live lanes changed since flush operation was submitted,
+     * adjust the number of expected completions. Decrement the count only for
+     * lanes we never started: started lanes are already accounted for - by
+     * ucp_ep_flush_error, by the synchronous-OK decrement, or by the pending
+     * uct completion that will be delivered via the discard flow. */
     if (ucs_unlikely(ep_live_lanes != req->send.flush.all_lanes)) {
-        ep_destroyed_lanes = req->send.flush.all_lanes & ~ep_live_lanes;
+        ep_destroyed_lanes = req->send.flush.all_lanes & ~ep_live_lanes &
+                             ~req->send.flush.started_lanes;
         ep_new_lanes       = ep_live_lanes & ~req->send.flush.all_lanes;
         ucp_ep_flush_request_update_uct_comp(req,
                                              ucs_popcount(ep_new_lanes) -
                                              ucs_popcount(ep_destroyed_lanes),
                                              0);
-        req->send.flush.all_lanes |= ep_new_lanes;
+        req->send.flush.all_lanes = ep_live_lanes;
     }
 
     ucp_trace_req(req,
@@ -101,10 +106,10 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
                   ep, ep->flags, req->send.flush.started_lanes,
                   req->send.state.uct_comp.count);
 
-    while (req->send.flush.started_lanes != ep_live_lanes) {
+    while ((next_lanes = ep_live_lanes & ~req->send.flush.started_lanes) != 0) {
 
         /* Search for next lane to start flush */
-        lane   = ucs_ffs64(ep_live_lanes & ~req->send.flush.started_lanes);
+        lane   = ucs_ffs64(next_lanes);
         uct_ep = ucp_ep_get_lane(ep, lane);
         if (uct_ep == NULL) {
             ucp_ep_flush_request_update_uct_comp(req, -1, UCS_BIT(lane));
@@ -654,6 +659,9 @@ static void ucp_worker_flush_ep_flushed_cb(ucp_request_t *req)
     ucp_request_put(req);
 }
 
+/* Drive the worker flush state machine one step. Returns the number of
+ * completed operations in this invocation (0 means no work was done;
+ * non-zero advertises progress to the UCT worker progress engine). */
 static unsigned ucp_worker_flush_progress(void *arg)
 {
     ucp_request_t *req        = arg;
@@ -671,13 +679,13 @@ static unsigned ucp_worker_flush_progress(void *arg)
              * endpoints, no need to progress this request actively anymore
              * and we complete the flush operation with UCS_OK status. */
             ucp_worker_flush_complete_one(req, UCS_OK, 1);
-            goto out;
+            return 1;
         } else if (status != UCS_INPROGRESS) {
             /* Error returned from uct iface flush, no need to progress
              * this request actively anymore and we complete the flush
              * operation with an error status. */
             ucp_worker_flush_complete_one(req, status, 1);
-            goto out;
+            return 1;
         }
     }
 
@@ -688,7 +696,7 @@ static unsigned ucp_worker_flush_progress(void *arg)
          * and start flush operation on it. */
         ep = ucp_worker_flush_req_set_next_ep(req, 1, next_ep_ext->ep_list.next);
         if (ep == NULL) {
-            goto out;
+            return 1;
         }
 
         ep_flush_request = ucp_ep_flush_internal(ep, UCP_REQUEST_FLAG_RELEASED,
@@ -697,17 +705,21 @@ static unsigned ucp_worker_flush_progress(void *arg)
                                                  "flush_worker",
                                                  req->flush_worker.uct_flags);
         if (UCS_PTR_IS_ERR(ep_flush_request)) {
-            /* endpoint flush resulted in an error */
+            /* Endpoint flush resulted in an error which will be reported by
+             * the EP error callback accordingly to the error handling mode of
+             * the EP but doesn't affect the worker flush. */
             status = UCS_PTR_STATUS(ep_flush_request);
             ucs_diag("ucp_ep_flush_internal() failed: %s",
                      ucs_status_string(status));
-        } else if (ep_flush_request != NULL) {
+        } else if (UCS_PTR_IS_PTR(ep_flush_request)) {
             /* endpoint flush started, increment refcount */
             ++req->flush_worker.comp_count;
         }
+
+        return 1;
     }
 
-out:
+    /* no work was done */
     return 0;
 }
 
