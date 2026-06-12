@@ -1294,6 +1294,7 @@ public:
     {
         auto rkey_cfg_index = send_recv_rma(UCS_MBYTE, op_id,
                                             UCS_MEMORY_TYPE_CUDA);
+        ASSERT_NE(rkey_cfg_index, UCP_WORKER_CFG_INDEX_NULL);
 
         ucp_proto_select_key_t key = any_key();
         key.param.op_id_flags      = op_id;
