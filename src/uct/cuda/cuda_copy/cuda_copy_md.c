@@ -845,15 +845,32 @@ static int uct_cuda_copy_md_is_async_alloc(const void *address)
 }
 
 static uint8_t
-uct_cuda_copy_md_detect_mem_flags(const ucs_memory_info_t *mem_info)
+uct_cuda_copy_md_detect_mem_flags(uct_cuda_copy_md_t *md,
+                                  const ucs_memory_info_t *mem_info)
 {
-    /* Async allocations are CUDA-managed by default; Grace config classifies
-     * them as CUDA, which keeps them on the regular CUDA registration path. */
+    uct_cuda_copy_md_dmabuf_t dmabuf;
+
     if ((mem_info->type == UCS_MEMORY_TYPE_CUDA_MANAGED) &&
         uct_cuda_copy_md_is_async_alloc(mem_info->base_address)) {
         return 0;
     }
 
+    if (mem_info->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        return UCS_MEM_FLAG_CAN_REGISTER;
+    }
+
+    if (!md->config.dmabuf_supported) {
+        return UCS_MEM_FLAG_CAN_REGISTER;
+    }
+
+    dmabuf = uct_cuda_copy_md_get_dmabuf(mem_info->base_address,
+                                         mem_info->alloc_length,
+                                         mem_info->sys_dev);
+    if (dmabuf.fd == UCT_DMABUF_FD_INVALID) {
+        return 0;
+    }
+
+    ucs_close_fd(&dmabuf.fd);
     return UCS_MEM_FLAG_CAN_REGISTER;
 }
 
@@ -925,7 +942,7 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
 
     if (address != NULL) {
         addr_mem_info.mem_flags = uct_cuda_copy_md_detect_mem_flags(
-                &addr_mem_info);
+                md, &addr_mem_info);
         ucs_memtype_cache_update(addr_mem_info.base_address,
                                  addr_mem_info.alloc_length, addr_mem_info.type,
                                  addr_mem_info.sys_dev,
