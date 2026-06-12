@@ -42,16 +42,29 @@ protected:
     class dummy_context {
     public:
         dummy_context(const std::vector<std::string> &cmpt_names,
-                      const std::string &name = "") :
-            m_cmpts(cmpt_names.size())
+                      const std::string &name = "")
         {
-            memset(&m_ctx, 0, sizeof(m_ctx));
+            auto num_cmpts = cmpt_names.size() + 1;
+            m_cmpts        = std::vector<ucp_tl_cmpt_t>(num_cmpts);
+
             for (size_t i = 0; i < cmpt_names.size(); ++i) {
+                EXPECT_NE(std::string("rdmacm"), cmpt_names[i]);
+
                 ucs_strncpy_safe(m_cmpts[i].attr.name, cmpt_names[i].c_str(),
                                  sizeof(m_cmpts[i].attr.name));
+
+                /* Set the MD resource count to 1 for all components. */
+                m_cmpts[i].attr.md_resource_count = 1;
             }
+
+            /* Add rdmacm with no MD resources. */
+            ucs_strncpy_safe(m_cmpts[cmpt_names.size()].attr.name, "rdmacm",
+                             sizeof("rdmacm"));
+            m_cmpts[cmpt_names.size()].attr.md_resource_count = 0;
+
+            memset(&m_ctx, 0, sizeof(m_ctx));
             m_ctx.tl_cmpts  = m_cmpts.data();
-            m_ctx.num_cmpts = static_cast<ucp_rsc_index_t>(cmpt_names.size());
+            m_ctx.num_cmpts = num_cmpts;
             ucs_strncpy_safe(m_ctx.name, name.c_str(), sizeof(m_ctx.name));
         }
 
