@@ -262,17 +262,17 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_datatype_iter_mem_reg_single(
         unsigned uct_flags, ucp_mem_h *memh_p)
 {
     const char *alloc_name = "dt_iter";
-    ucs_memory_type_t mem_type = (ucs_memory_type_t)mem_info->type;
     ucp_mem_h memh = *memh_p;
     ucs_status_t status;
 
     /* Iterator may work with cacheable MDs only */
     ucs_assertv((context->rcache == NULL) ||
-                ucs_test_all_flags(context->cache_md_map[mem_type], md_map),
+                ucs_test_all_flags(context->cache_md_map[mem_info->type],
+                                   md_map),
                 "iterator mem_type=%s cache_md_map=0x%" PRIx64
                 " md_map=0x%" PRIx64,
-                ucs_memory_type_names[mem_type],
-                context->cache_md_map[mem_type], md_map);
+                ucs_memory_type_names[mem_info->type],
+                context->cache_md_map[mem_info->type], md_map);
 
     if (memh == NULL) {
         return ucp_memh_get(context, buffer, length, mem_info, md_map,

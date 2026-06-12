@@ -989,7 +989,6 @@ ucp_memh_find_slow(ucp_context_h context, void *address, size_t length,
                    const char *alloc_name, ucp_mem_h *memh_p)
 {
     unsigned access_flags = UCP_MM_UCT_ACCESS_FLAGS(uct_flags);
-    ucs_memory_type_t mem_type = mem_info->type;
     ucs_status_t status;
     ucp_mem_h memh;
 
@@ -1007,9 +1006,9 @@ ucp_memh_find_slow(ucp_context_h context, void *address, size_t length,
             return status;
         }
 
-        ucs_assertv(mem_type == memh->mem_type,
+        ucs_assertv(mem_info->type == memh->mem_type,
                     "mem_type=%s got memh->mem_type=%s",
-                    ucs_memory_type_names[mem_type],
+                    ucs_memory_type_names[mem_info->type],
                     ucs_memory_type_names[memh->mem_type]);
         ucs_ptr_check_align(ucp_memh_address(memh), ucp_memh_length(memh),
                             align);
