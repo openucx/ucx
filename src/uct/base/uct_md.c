@@ -626,8 +626,8 @@ ucs_status_t uct_md_mem_dereg_v2(uct_md_h md,
     return md->ops->mem_dereg(md, params);
 }
 
-static void uct_md_mem_attr_from_v2(uct_md_mem_attr_t *dst,
-                                    const uct_md_mem_attr_v2_t *src)
+static void
+uct_md_mem_attr_from_v2(uct_md_mem_attr_t *dst, const uct_md_mem_attr_v2_t *src)
 {
     if (dst->field_mask & UCT_MD_MEM_ATTR_FIELD_MEM_TYPE) {
         dst->mem_type = src->mem_type;
@@ -661,12 +661,12 @@ ucs_status_t uct_md_mem_query(uct_md_h md, const void *address, size_t length,
     ucs_status_t status;
 
     mem_attr_v2.field_mask = mem_attr->field_mask &
-                              (UCT_MD_MEM_ATTR_FIELD_MEM_TYPE |
-                               UCT_MD_MEM_ATTR_FIELD_SYS_DEV |
-                               UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS |
-                               UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH |
-                               UCT_MD_MEM_ATTR_FIELD_DMABUF_FD |
-                               UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET);
+                             (UCT_MD_MEM_ATTR_FIELD_MEM_TYPE |
+                              UCT_MD_MEM_ATTR_FIELD_SYS_DEV |
+                              UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS |
+                              UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH |
+                              UCT_MD_MEM_ATTR_FIELD_DMABUF_FD |
+                              UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET);
 
     status = md->ops->mem_query(md, address, length, &mem_attr_v2);
     if (status != UCS_OK) {
@@ -678,15 +678,14 @@ ucs_status_t uct_md_mem_query(uct_md_h md, const void *address, size_t length,
 }
 
 ucs_status_t uct_md_mem_query_v2(uct_md_h md, const void *address,
-                                 size_t length,
-                                 uct_md_mem_attr_v2_t *mem_attr)
+                                 size_t length, uct_md_mem_attr_v2_t *mem_attr)
 {
-    uint64_t v1_fields = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE |
-                         UCT_MD_MEM_ATTR_FIELD_SYS_DEV |
-                         UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS |
-                         UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH |
-                         UCT_MD_MEM_ATTR_FIELD_DMABUF_FD |
-                         UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET;
+    uint64_t v1_fields  = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE |
+                          UCT_MD_MEM_ATTR_FIELD_SYS_DEV |
+                          UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS |
+                          UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH |
+                          UCT_MD_MEM_ATTR_FIELD_DMABUF_FD |
+                          UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET;
     uint64_t field_mask = mem_attr->field_mask;
     ucs_status_t status;
 

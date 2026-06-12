@@ -35,7 +35,7 @@ typedef struct ucs_memory_info {
     ucs_sys_device_t  sys_dev;       /**< System device index */
     void              *base_address; /**< Base address of the underlying allocation */
     size_t            alloc_length;  /**< Whole length of the underlying allocation */
-    uint8_t           mem_flags;     /**< UCS memory flags */
+    uint8_t           mem_flags; /**< UCS memory flags */
 } ucs_memory_info_t;
 
 

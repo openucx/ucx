@@ -184,8 +184,7 @@ UCS_PROFILE_FUNC_VOID(ucs_memtype_cache_update_internal,
                        mem_flags, action),
                       ucs_memtype_cache_t *memtype_cache, const void *address,
                       size_t size, ucs_memory_type_t mem_type,
-                      ucs_sys_device_t sys_dev,
-                      uint8_t mem_flags,
+                      ucs_sys_device_t sys_dev, uint8_t mem_flags,
                       ucs_memtype_cache_action_t action)
 {
     ucs_pgt_addr_t start, end, search_start, search_end;

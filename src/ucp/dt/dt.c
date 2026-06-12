@@ -51,13 +51,11 @@ ucs_status_t ucp_dt_mem_info_verify(const char *dt_name, size_t index,
 
     ucs_error("inconsistent %s mem_info: [%zu]=%s-%s flags 0x%x "
               "[0]=%s-%s flags 0x%x count=%zu",
-              dt_name, index,
-              ucs_memory_type_names[cur->type],
-              ucs_topo_sys_device_get_name(cur->sys_dev),
-              cur->mem_flags,
+              dt_name, index, ucs_memory_type_names[cur->type],
+              ucs_topo_sys_device_get_name(cur->sys_dev), cur->mem_flags,
               ucs_memory_type_names[ref->type],
-              ucs_topo_sys_device_get_name(ref->sys_dev),
-              ref->mem_flags, count);
+              ucs_topo_sys_device_get_name(ref->sys_dev), ref->mem_flags,
+              count);
     return UCS_ERR_INVALID_PARAM;
 }
 

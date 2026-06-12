@@ -337,8 +337,8 @@ UCS_TEST_P(test_ib_md, smkey_reg_atomic_mt, "IB_REG_MT_THRESH=1k",
 
 UCS_TEST_P(test_ib_md, cuda_async_mem_reg_fails)
 {
-    constexpr size_t size = 8192;
-    uct_md_mem_attr_v2_t mem_attr = {};
+    constexpr size_t size              = 8192;
+    uct_md_mem_attr_v2_t mem_attr      = {};
     uct_md_mem_reg_params_t reg_params = {};
     std::vector<test_md_param> cuda_mds;
     ucs::handle<uct_md_config_t*> cuda_md_config;
@@ -372,8 +372,8 @@ UCS_TEST_P(test_ib_md, cuda_async_mem_reg_fails)
                            uct_md_config_read, cuda_mds[0].component, NULL,
                            NULL);
     UCS_TEST_CREATE_HANDLE(uct_md_h, cuda_md, uct_md_close, uct_md_open,
-                           cuda_mds[0].component,
-                           cuda_mds[0].md_name.c_str(), cuda_md_config);
+                           cuda_mds[0].component, cuda_mds[0].md_name.c_str(),
+                           cuda_md_config);
 
     mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE |
                           UCT_MD_MEM_ATTR_FIELD_MEM_FLAGS;
@@ -385,8 +385,7 @@ UCS_TEST_P(test_ib_md, cuda_async_mem_reg_fails)
     ASSERT_EQ(0, mem_attr.mem_flags & UCS_MEM_FLAG_CAN_REGISTER);
 
     reg_params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS;
-    reg_params.flags      = UCT_MD_MEM_ACCESS_RMA |
-                            UCT_MD_MEM_FLAG_HIDE_ERRORS;
+    reg_params.flags = UCT_MD_MEM_ACCESS_RMA | UCT_MD_MEM_FLAG_HIDE_ERRORS;
 
     status = uct_md_mem_reg_v2(md(), buffer.ptr(), size, &reg_params, &memh);
     if (status == UCS_OK) {

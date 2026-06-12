@@ -222,7 +222,8 @@ protected:
     public:
         scoped_reg_md_map(ucp_context_h context, ucs_memory_type_t mem_type,
                           ucp_md_map_t md_map) :
-            m_context(context), m_mem_type(mem_type),
+            m_context(context),
+            m_mem_type(mem_type),
             m_orig_reg_md_map(context->reg_md_map[mem_type])
         {
             context->reg_md_map[mem_type] = m_orig_reg_md_map | md_map;
@@ -234,22 +235,22 @@ protected:
         }
 
     private:
-        ucp_context_h     m_context;
+        ucp_context_h m_context;
         ucs_memory_type_t m_mem_type;
-        ucp_md_map_t      m_orig_reg_md_map;
+        ucp_md_map_t m_orig_reg_md_map;
     };
 
-    static ucp_md_map_t get_required_mem_flags_md_map(
-            ucp_context_h context, ucs_memory_type_t mem_type,
-            uint8_t mem_flags);
+    static ucp_md_map_t
+    get_required_mem_flags_md_map(ucp_context_h context,
+                                  ucs_memory_type_t mem_type,
+                                  uint8_t mem_flags);
 
-    static bool has_rndv_remote_proto(
-            const ucp_proto_select_elem_t *select_elem,
-            const char *remote_proto_name);
+    static bool
+    has_rndv_remote_proto(const ucp_proto_select_elem_t *select_elem,
+                          const char *remote_proto_name);
 };
 
-ucp_md_map_t
-test_ucp_proto_cuda_async_non_reg::get_required_mem_flags_md_map(
+ucp_md_map_t test_ucp_proto_cuda_async_non_reg::get_required_mem_flags_md_map(
         ucp_context_h context, ucs_memory_type_t mem_type, uint8_t mem_flags)
 {
     ucp_md_map_t md_map = context->reg_md_map[mem_type] &
@@ -301,13 +302,12 @@ bool test_ucp_proto_cuda_async_non_reg::has_rndv_remote_proto(
     return false;
 }
 
-UCS_TEST_P(test_ucp_proto_cuda_async_non_reg,
-           cuda_async_can_register_filter)
+UCS_TEST_P(test_ucp_proto_cuda_async_non_reg, cuda_async_can_register_filter)
 {
-    constexpr size_t buffer_size = 8192;
-    ucp_request_param_t param = {};
+    constexpr size_t buffer_size  = 8192;
+    ucp_request_param_t param     = {};
     uct_md_mem_attr_t v1_mem_attr = {};
-    int v1_queried = 0;
+    int v1_queried                = 0;
     ucp_md_map_t hca_md_map;
     ucp_datatype_iter_t dt_iter;
     ucs_memory_type_t mem_type;
@@ -326,10 +326,10 @@ UCS_TEST_P(test_ucp_proto_cuda_async_non_reg,
     scoped_async_cuda_buffer buffer(buffer_size);
 
     for (i = 0; i < context()->num_mem_type_detect_mds; ++i) {
-        md_index                 = context()->mem_type_detect_mds[i];
-        v1_mem_attr.field_mask   = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE;
-        status = uct_md_mem_query(context()->tl_mds[md_index].md,
-                                  buffer.ptr(), buffer_size, &v1_mem_attr);
+        md_index               = context()->mem_type_detect_mds[i];
+        v1_mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE;
+        status = uct_md_mem_query(context()->tl_mds[md_index].md, buffer.ptr(),
+                                  buffer_size, &v1_mem_attr);
         if ((status == UCS_OK) &&
             ((v1_mem_attr.mem_type == UCS_MEMORY_TYPE_CUDA) ||
              (v1_mem_attr.mem_type == UCS_MEMORY_TYPE_CUDA_MANAGED))) {
@@ -348,8 +348,8 @@ UCS_TEST_P(test_ucp_proto_cuda_async_non_reg,
         UCS_TEST_SKIP_R("CUDA async memory is not classified as CUDA managed");
     }
 
-    hca_md_map = get_required_mem_flags_md_map(
-            context(), UCS_MEMORY_TYPE_CUDA, UCS_MEM_FLAG_CAN_REGISTER);
+    hca_md_map = get_required_mem_flags_md_map(context(), UCS_MEMORY_TYPE_CUDA,
+                                               UCS_MEM_FLAG_CAN_REGISTER);
     hca_md_map &= context()->cache_md_map[mem_type];
     if (hca_md_map == 0) {
         UCS_TEST_SKIP_R("no CUDA-registering IB/HCA MDs");
@@ -359,8 +359,7 @@ UCS_TEST_P(test_ucp_proto_cuda_async_non_reg,
 
     scoped_reg_md_map reg_md_map(context(), mem_type, hca_md_map);
     status = ucp_datatype_iter_mem_reg(context(), &dt_iter, hca_md_map,
-                                       UCT_MD_MEM_ACCESS_RMA,
-                                       UCP_DT_MASK_ALL);
+                                       UCT_MD_MEM_ACCESS_RMA, UCP_DT_MASK_ALL);
     ASSERT_UCS_OK(status);
     ASSERT_NE(nullptr, dt_iter.type.contig.memh);
     EXPECT_EQ(static_cast<ucp_md_map_t>(0),
@@ -369,11 +368,11 @@ UCS_TEST_P(test_ucp_proto_cuda_async_non_reg,
 }
 
 UCS_TEST_P(test_ucp_proto_cuda_async_non_reg,
-           cuda_async_rndv_get_zcopy_proto_filter,
-           "RNDV_THRESH=0", "RNDV_SCHEME=get_zcopy")
+           cuda_async_rndv_get_zcopy_proto_filter, "RNDV_THRESH=0",
+           "RNDV_SCHEME=get_zcopy")
 {
     constexpr size_t buffer_size = 8192;
-    ucp_request_param_t param = {};
+    ucp_request_param_t param    = {};
     ucp_datatype_iter_t dt_iter;
     ucp_proto_select_param_t select_param;
     ucp_memory_info_t mem_info;
@@ -408,19 +407,18 @@ UCS_TEST_P(test_ucp_proto_cuda_async_non_reg,
         UCS_TEST_SKIP_R("CUDA async memory is not classified as CUDA managed");
     }
 
-    hca_md_map = get_required_mem_flags_md_map(
-            context(), UCS_MEMORY_TYPE_CUDA, UCS_MEM_FLAG_CAN_REGISTER);
+    hca_md_map = get_required_mem_flags_md_map(context(), UCS_MEMORY_TYPE_CUDA,
+                                               UCS_MEM_FLAG_CAN_REGISTER);
     hca_md_map &= context()->cache_md_map[mem_info.type];
     if (hca_md_map == 0) {
         UCS_TEST_SKIP_R("no CUDA-registering IB/HCA MDs");
     }
 
-    ep_config   = &ucs_array_elem(&worker()->ep_config,
-                                  sender().ep()->cfg_index);
+    ep_config = &ucs_array_elem(&worker()->ep_config, sender().ep()->cfg_index);
     lane_md_map = 0;
     for (lane = 0; lane < ep_config->key.num_lanes; ++lane) {
-        md_index = context()->tl_rscs[ep_config->key.lanes[lane].rsc_index].
-                   md_index;
+        md_index =
+                context()->tl_rscs[ep_config->key.lanes[lane].rsc_index].md_index;
         iface_attr = ucp_worker_iface_get_attr(
                 worker(), ep_config->key.lanes[lane].rsc_index);
         if ((hca_md_map & UCS_BIT(md_index)) &&
@@ -437,31 +435,35 @@ UCS_TEST_P(test_ucp_proto_cuda_async_non_reg,
     ASSERT_EQ(0, mem_info.mem_flags & UCS_MEM_FLAG_CAN_REGISTER);
 
     ep_cfg_index = sender().ep()->cfg_index;
-    proto_select = &ucs_array_elem(&worker()->ep_config,
-                                   ep_cfg_index).proto_select;
+    proto_select =
+            &ucs_array_elem(&worker()->ep_config, ep_cfg_index).proto_select;
 
-    scoped_reg_md_map reg_md_map(
-            context(), static_cast<ucs_memory_type_t>(mem_info.type),
-            lane_md_map);
+    scoped_reg_md_map reg_md_map(context(),
+                                 static_cast<ucs_memory_type_t>(mem_info.type),
+                                 lane_md_map);
 
     ucp_proto_select_param_init(&select_param, UCP_OP_ID_TAG_SEND, 0, 0,
                                 UCP_DATATYPE_CONTIG, &mem_info, 1);
-    select_elem = ucp_proto_select_lookup_slow(
-            worker(), proto_select, 0, ep_cfg_index, UCP_WORKER_CFG_INDEX_NULL,
-            &select_param);
+    select_elem = ucp_proto_select_lookup_slow(worker(), proto_select, 0,
+                                               ep_cfg_index,
+                                               UCP_WORKER_CFG_INDEX_NULL,
+                                               &select_param);
     EXPECT_NE(nullptr, select_elem);
     no_flag_has_get_zcopy = (select_elem != NULL) &&
-            has_rndv_remote_proto(select_elem, "rndv/get/zcopy");
+                            has_rndv_remote_proto(select_elem,
+                                                  "rndv/get/zcopy");
 
     mem_info.mem_flags |= UCS_MEM_FLAG_CAN_REGISTER;
     ucp_proto_select_param_init(&select_param, UCP_OP_ID_TAG_SEND, 0, 0,
                                 UCP_DATATYPE_CONTIG, &mem_info, 1);
-    select_elem = ucp_proto_select_lookup_slow(
-            worker(), proto_select, 0, ep_cfg_index, UCP_WORKER_CFG_INDEX_NULL,
-            &select_param);
+    select_elem = ucp_proto_select_lookup_slow(worker(), proto_select, 0,
+                                               ep_cfg_index,
+                                               UCP_WORKER_CFG_INDEX_NULL,
+                                               &select_param);
     EXPECT_NE(nullptr, select_elem);
     can_reg_has_get_zcopy = (select_elem != NULL) &&
-            has_rndv_remote_proto(select_elem, "rndv/get/zcopy");
+                            has_rndv_remote_proto(select_elem,
+                                                  "rndv/get/zcopy");
 
     EXPECT_FALSE(no_flag_has_get_zcopy);
     EXPECT_TRUE(can_reg_has_get_zcopy);

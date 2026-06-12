@@ -27,7 +27,7 @@
 
 /* Context for rcache memory registration callback */
 typedef struct {
-    ucp_memory_info_t mem_info;    /* Memory type, system device and flags */
+    ucp_memory_info_t mem_info; /* Memory type, system device and flags */
     ucp_md_map_t      reg_md_map;  /* Map of memory domains to be registered */
     unsigned          uct_flags;   /* UCT memory registration flags */
     const char        *alloc_name; /* Memory allocation name */
@@ -579,8 +579,7 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
 
     reg_md_map = ~memh->md_map & md_map;
     ucs_for_each_bit(md_index, reg_md_map) {
-        required_mem_flags =
-                context->tl_mds[md_index].attr.required_mem_flags;
+        required_mem_flags = context->tl_mds[md_index].attr.required_mem_flags;
 
         if (!ucs_test_all_flags(memh->mem_flags, required_mem_flags)) {
             ucs_trace("md[%d]=%s skipped: memory flags 0x%x do not include "
@@ -782,9 +781,8 @@ ucp_memh_create(ucp_context_h context, void *address, size_t length,
 static ucs_status_t
 ucp_memh_rcache_get(ucs_rcache_t *rcache, void *address, size_t length,
                     size_t alignment, const ucp_memory_info_t *mem_info,
-                    ucp_md_map_t reg_md_map,
-                    unsigned uct_flags, const char *alloc_name,
-                    ucp_mem_h *memh_p)
+                    ucp_md_map_t reg_md_map, unsigned uct_flags,
+                    const char *alloc_name, ucp_mem_h *memh_p)
 {
     ucp_mem_rcache_reg_ctx_t reg_ctx = {
         .mem_info   = *mem_info,
@@ -1037,15 +1035,13 @@ ucp_memh_find_slow(ucp_context_h context, void *address, size_t length,
 }
 
 ucs_status_t ucp_memh_get_slow(ucp_context_h context, void *address,
-                               size_t length,
-                               const ucp_memory_info_t *mem_info,
+                               size_t length, const ucp_memory_info_t *mem_info,
                                ucp_md_map_t reg_md_map, unsigned uct_flags,
                                const char *alloc_name, ucp_mem_h *memh_p)
 {
-    size_t reg_align                = ucp_memh_reg_align(context,
-                                                         reg_md_map);
-    ucs_memory_type_t mem_type      = mem_info->type;
-    ucp_memory_info_t reg_mem_info  = *mem_info;
+    size_t reg_align               = ucp_memh_reg_align(context, reg_md_map);
+    ucs_memory_type_t mem_type     = mem_info->type;
+    ucp_memory_info_t reg_mem_info = *mem_info;
     ucs_memory_info_t internal_mem_info;
     ucs_status_t status;
     void *reg_address;
@@ -2031,9 +2027,9 @@ ucp_memh_import_slow(ucp_context_h context, ucs_rcache_t *existing_rcache,
         mem_info.type      = unpacked->mem_type;
         mem_info.sys_dev   = UCS_SYS_DEVICE_ID_UNKNOWN;
         mem_info.mem_flags = UCS_MEM_FLAG_CAN_REGISTER;
-        status = ucp_memh_rcache_get(rcache, unpacked->address,
-                                     unpacked->length, UCS_RCACHE_MIN_ALIGNMENT,
-                                     &mem_info, 0, 0, "", &memh);
+        status             = ucp_memh_rcache_get(rcache, unpacked->address,
+                                                 unpacked->length, UCS_RCACHE_MIN_ALIGNMENT,
+                                                 &mem_info, 0, 0, "", &memh);
         if (status != UCS_OK) {
             goto err_rcache_destroy;
         }

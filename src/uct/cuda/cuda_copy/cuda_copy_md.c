@@ -821,28 +821,21 @@ uct_cuda_copy_md_dmabuf_t uct_cuda_copy_md_get_dmabuf(const void *address,
 
 static int uct_cuda_copy_md_is_async_alloc(const void *address)
 {
-    CUmemorytype cuda_mem_type = CU_MEMORYTYPE_HOST;
-    uint32_t is_managed        = 0;
-    CUcontext cuda_mem_ctx     = NULL;
-    CUdevice cuda_device       = CU_DEVICE_INVALID;
-    CUpointer_attribute attr_type[] = {
-        CU_POINTER_ATTRIBUTE_MEMORY_TYPE,
-        CU_POINTER_ATTRIBUTE_IS_MANAGED,
-        CU_POINTER_ATTRIBUTE_DEVICE_ORDINAL,
-        CU_POINTER_ATTRIBUTE_CONTEXT
-    };
-    void *attr_data[] = {
-        &cuda_mem_type,
-        &is_managed,
-        &cuda_device,
-        &cuda_mem_ctx
-    };
+    CUmemorytype cuda_mem_type      = CU_MEMORYTYPE_HOST;
+    uint32_t is_managed             = 0;
+    CUcontext cuda_mem_ctx          = NULL;
+    CUdevice cuda_device            = CU_DEVICE_INVALID;
+    CUpointer_attribute attr_type[] = {CU_POINTER_ATTRIBUTE_MEMORY_TYPE,
+                                       CU_POINTER_ATTRIBUTE_IS_MANAGED,
+                                       CU_POINTER_ATTRIBUTE_DEVICE_ORDINAL,
+                                       CU_POINTER_ATTRIBUTE_CONTEXT};
+    void *attr_data[] = {&cuda_mem_type, &is_managed, &cuda_device,
+                         &cuda_mem_ctx};
     ucs_status_t status;
 
     status = UCT_CUDADRV_FUNC_LOG_DEBUG(
-            cuPointerGetAttributes(ucs_static_array_size(attr_data),
-                                   attr_type, attr_data,
-                                   (CUdeviceptr)address));
+            cuPointerGetAttributes(ucs_static_array_size(attr_data), attr_type,
+                                   attr_data, (CUdeviceptr)address));
     if (status != UCS_OK) {
         return 0;
     }
@@ -864,9 +857,9 @@ uct_cuda_copy_md_detect_mem_flags(const ucs_memory_info_t *mem_info)
     return UCS_MEM_FLAG_CAN_REGISTER;
 }
 
-ucs_status_t
-uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address, size_t length,
-                           uct_md_mem_attr_v2_t *mem_attr)
+ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
+                                        size_t length,
+                                        uct_md_mem_attr_v2_t *mem_attr)
 {
     ucs_memory_info_t default_mem_info = {
         .type         = UCS_MEMORY_TYPE_HOST,
@@ -934,14 +927,14 @@ uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address, size_t length,
         addr_mem_info.mem_flags = uct_cuda_copy_md_detect_mem_flags(
                 &addr_mem_info);
         ucs_memtype_cache_update(addr_mem_info.base_address,
-                                 addr_mem_info.alloc_length,
-                                 addr_mem_info.type, addr_mem_info.sys_dev,
+                                 addr_mem_info.alloc_length, addr_mem_info.type,
+                                 addr_mem_info.sys_dev,
                                  addr_mem_info.mem_flags);
     }
 
     if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_MEM_FLAGS) {
         mem_attr->mem_flags = (address != NULL) ? addr_mem_info.mem_flags :
-                              UCS_MEM_FLAG_CAN_REGISTER;
+                                                  UCS_MEM_FLAG_CAN_REGISTER;
     }
 
     return UCS_OK;

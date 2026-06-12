@@ -888,8 +888,7 @@ typedef struct uct_md_mem_attr_v2 {
  *         an error code as defined by @ref ucs_status_t.
  */
 ucs_status_t uct_md_mem_query_v2(uct_md_h md, const void *address,
-                                 size_t length,
-                                 uct_md_mem_attr_v2_t *mem_attr);
+                                 size_t length, uct_md_mem_attr_v2_t *mem_attr);
 
 
 /**
