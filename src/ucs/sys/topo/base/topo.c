@@ -60,7 +60,7 @@ typedef struct {
     unsigned                name_priority;
     ucs_numa_node_t         numa_node;
     uintptr_t               user_value;
-    ucs_topo_device_class_t class;
+    ucs_topo_device_class_t device_class;
 
     /* Secondary device for the current device */
     ucs_sys_device_t        sys_dev_aux;
@@ -374,7 +374,7 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
         ucs_topo_global_ctx.devices[*sys_dev].bus_id        = *bus_id;
         ucs_topo_global_ctx.devices[*sys_dev].name          = name;
         ucs_topo_global_ctx.devices[*sys_dev].name_priority = 0;
-        ucs_topo_global_ctx.devices[*sys_dev].class =
+        ucs_topo_global_ctx.devices[*sys_dev].device_class =
                 UCS_TOPO_DEVICE_CLASS_UNKNOWN;
         ucs_topo_global_ctx.devices[*sys_dev].numa_node     =
                 ucs_topo_read_device_numa_node(bus_id);
@@ -898,7 +898,7 @@ ucs_status_t ucs_topo_sys_device_set_class(ucs_sys_device_t sys_dev,
         goto out;
     }
 
-    ucs_topo_global_ctx.devices[sys_dev].class = device_class;
+    ucs_topo_global_ctx.devices[sys_dev].device_class = device_class;
 
 out:
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
@@ -907,7 +907,7 @@ out:
 
 unsigned ucs_topo_sys_device_get_bdf_class_ordinal(ucs_sys_device_t sys_dev)
 {
-    ucs_topo_device_class_t class;
+    ucs_topo_device_class_t device_class;
     ucs_bus_id_bit_rep_t ref_key, key;
     unsigned ordinal, d;
 
@@ -922,8 +922,8 @@ unsigned ucs_topo_sys_device_get_bdf_class_ordinal(ucs_sys_device_t sys_dev)
         goto out_unlock;
     }
 
-    class = ucs_topo_global_ctx.devices[sys_dev].class;
-    if (class == UCS_TOPO_DEVICE_CLASS_UNKNOWN) {
+    device_class = ucs_topo_global_ctx.devices[sys_dev].device_class;
+    if (device_class == UCS_TOPO_DEVICE_CLASS_UNKNOWN) {
         ordinal = UCS_SYS_DEVICE_ORDINAL_INVALID;
         goto out_unlock;
     }
@@ -936,7 +936,7 @@ unsigned ucs_topo_sys_device_get_bdf_class_ordinal(ucs_sys_device_t sys_dev)
             &ucs_topo_global_ctx.devices[sys_dev].bus_id);
     ordinal = 0;
     for (d = 0; d < ucs_topo_global_ctx.num_devices; ++d) {
-        if (ucs_topo_global_ctx.devices[d].class != class) {
+        if (ucs_topo_global_ctx.devices[d].device_class != device_class) {
             continue;
         }
 
