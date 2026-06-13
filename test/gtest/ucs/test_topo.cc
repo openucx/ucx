@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -20,6 +20,35 @@ static std::string get_sysfs_device_path(const std::string &bdf)
     } else {
         return ""; // Not found or invalid BDF
     }
+}
+
+static ucs_status_t topo_test_distance_a(ucs_sys_device_t, ucs_sys_device_t,
+                                         ucs_sys_dev_distance_t *distance)
+{
+    distance->latency   = 11e-9;
+    distance->bandwidth = ucs_topo_default_distance.bandwidth;
+    return UCS_OK;
+}
+
+static ucs_status_t topo_test_distance_b(ucs_sys_device_t, ucs_sys_device_t,
+                                         ucs_sys_dev_distance_t *distance)
+{
+    distance->latency   = 22e-9;
+    distance->bandwidth = ucs_topo_default_distance.bandwidth;
+    return UCS_OK;
+}
+
+static void
+topo_test_mem_dist(ucs_sys_device_t, ucs_sys_dev_distance_t *distance)
+{
+    *distance = ucs_topo_default_distance;
+}
+
+static void
+topo_test_mem_dist_cpuset(ucs_sys_device_t, const ucs_cpu_set_t *,
+                          ucs_sys_dev_distance_t *distance)
+{
+    *distance = ucs_topo_default_distance;
 }
 
 class test_topo : public ucs::test {
@@ -145,6 +174,44 @@ UCS_TEST_F(test_topo, get_distance) {
     char buf[128];
     UCS_TEST_MESSAGE << "distance: "
                      << ucs_topo_distance_str(&distance, buf, sizeof(buf));
+}
+
+UCS_TEST_F(test_topo, provider_push_pop) {
+    ucs_sys_dev_distance_t dist;
+    const ucs_sys_topo_ops_t ops_a = {
+        .get_distance                   = topo_test_distance_a,
+        .get_memory_distance            = topo_test_mem_dist,
+        .get_memory_distance_for_cpuset = topo_test_mem_dist_cpuset,
+    };
+    const ucs_sys_topo_ops_t ops_b = {
+        .get_distance                   = topo_test_distance_b,
+        .get_memory_distance            = topo_test_mem_dist,
+        .get_memory_distance_for_cpuset = topo_test_mem_dist_cpuset,
+    };
+
+    ASSERT_UCS_OK(ucs_sys_topo_provider_push(&ops_a));
+    ASSERT_UCS_OK(ucs_topo_get_distance(UCS_SYS_DEVICE_ID_UNKNOWN,
+                                        UCS_SYS_DEVICE_ID_UNKNOWN, &dist));
+    EXPECT_NEAR(dist.latency, 11e-9, 1e-12);
+
+    /* The most recently pushed provider takes precedence */
+    ASSERT_UCS_OK(ucs_sys_topo_provider_push(&ops_b));
+    ASSERT_UCS_OK(ucs_topo_get_distance(UCS_SYS_DEVICE_ID_UNKNOWN,
+                                        UCS_SYS_DEVICE_ID_UNKNOWN, &dist));
+    EXPECT_NEAR(dist.latency, 22e-9, 1e-12);
+
+    /* Popping restores the previously pushed provider */
+    ucs_sys_topo_provider_pop();
+    ASSERT_UCS_OK(ucs_topo_get_distance(UCS_SYS_DEVICE_ID_UNKNOWN,
+                                        UCS_SYS_DEVICE_ID_UNKNOWN, &dist));
+    EXPECT_NEAR(dist.latency, 11e-9, 1e-12);
+
+    /* After the last pop the override is gone and the configured provider
+     * (default/sysfs) returns the default distance for unknown devices */
+    ucs_sys_topo_provider_pop();
+    ASSERT_UCS_OK(ucs_topo_get_distance(UCS_SYS_DEVICE_ID_UNKNOWN,
+                                        UCS_SYS_DEVICE_ID_UNKNOWN, &dist));
+    EXPECT_NEAR(dist.latency, 0.0, 1e-12);
 }
 
 UCS_TEST_F(test_topo, print_info) {
