@@ -1,5 +1,5 @@
 #
-# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 # Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 # Copyright (C) The University of Tennessee and the University of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
 # Copyright (C) Los Alamos National Security, LLC. 2018 ALL RIGHTS RESERVED.
@@ -213,6 +213,7 @@ gtest_SOURCES = \
 	ucs/test_frag_list.cc \
 	ucs/test_type.cc \
 	ucs/test_log.cc \
+	ucs/test_table.cc \
 	ucs/test_iov.cc \
 	ucs/test_vfs.cc \
 	ucs/arch/test_x86_64.cc
