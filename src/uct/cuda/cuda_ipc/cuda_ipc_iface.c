@@ -176,7 +176,9 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                         iface_addr_length, IFACE_ADDR_LENGTH,
                                         sizeof(remote_iface_addr.pid));
     /* Older peers do not send pid_ns, so preserve legacy same-node reachability
-     * and apply the cross-namespace fabric check only to extended addresses. */
+     * and apply the cross-namespace fabric check only to extended addresses.
+     * New peers always send extended addresses, including from the default PID
+     * namespace. */
     remote_iface_addr = uct_cuda_ipc_iface_address_unpack(params->iface_addr,
                                                           iface_addr_len);
     if ((iface_addr_len >= sizeof(remote_iface_addr)) &&
