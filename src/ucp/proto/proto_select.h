@@ -49,6 +49,10 @@
 /* Invalid private offset */
 #define UCP_PROTO_INIT_ELEM_PRIV_OFFSET_INVALID SIZE_MAX
 
+/* Bound staged-model metadata to the audited perf components we compose. */
+#define UCP_PROTO_INIT_ELEM_MAX_STAGED_PIPELINE_STAGES \
+        (UCP_PROTO_PERF_FACTOR_LAST * 3)
+
 typedef struct {
     ucp_proto_id_t        proto_id;
     size_t                priv_offset;
@@ -56,6 +60,9 @@ typedef struct {
     unsigned              cfg_priority; /* Priority of configuration */
     ucp_proto_perf_t      *perf;
     ucp_proto_flat_perf_t *flat_perf; /* Flat performance considering all parts */
+    ucp_proto_perf_stage_t staged_pipeline[
+            UCP_PROTO_INIT_ELEM_MAX_STAGED_PIPELINE_STAGES];
+    unsigned              num_staged_pipeline_stages;
 } ucp_proto_init_elem_t;
 
 
@@ -205,6 +212,12 @@ void ucp_proto_select_add_proto(const ucp_proto_init_params_t *init_params,
                                 size_t cfg_thresh, unsigned cfg_priority,
                                 ucp_proto_perf_t *perf, const void *priv,
                                 size_t priv_size);
+
+void ucp_proto_select_add_proto_staged(
+        const ucp_proto_init_params_t *init_params, size_t cfg_thresh,
+        unsigned cfg_priority, ucp_proto_perf_t *perf, const void *priv,
+        size_t priv_size, const ucp_proto_perf_stage_t *stages,
+        unsigned num_stages);
 
 
 ucp_proto_select_elem_t *

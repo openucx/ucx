@@ -297,37 +297,40 @@ ucp_proto_buffer_copy_factor_id(ucs_memory_type_t local_mem_type,
 }
 
 ucs_status_t
-ucp_proto_init_add_buffer_copy_time(ucp_worker_h worker, const char *title,
-                                    ucs_memory_type_t local_mem_type,
-                                    ucs_memory_type_t remote_mem_type,
-                                    uct_ep_operation_t memtype_op,
-                                    size_t range_start, size_t range_end,
-                                    int local, ucp_proto_perf_t *perf)
+ucp_proto_init_buffer_copy_perf(ucp_worker_h worker,
+                                ucs_memory_type_t local_mem_type,
+                                ucs_memory_type_t remote_mem_type,
+                                ucs_sys_device_t local_sys_dev,
+                                ucs_sys_device_t remote_sys_dev,
+                                uct_ep_operation_t memtype_op, int local,
+                                ucp_proto_init_buffer_copy_perf_t *copy_perf)
 {
-    ucp_proto_perf_factors_t perf_factors = UCP_PROTO_PERF_FACTORS_INITIALIZER;
-    ucp_context_h context                 = worker->context;
-    ucp_proto_perf_factor_id_t buffer_copy_factor_id;
-    ucs_memory_type_t src_mem_type, dst_mem_type;
-    ucp_proto_perf_node_t *tl_perf_node;
+    ucp_context_h context = worker->context;
     const ucp_ep_config_t *ep_config;
     ucp_worker_iface_t *wiface;
-    uct_perf_attr_t perf_attr;
-    ucp_rsc_index_t rsc_index;
+    uct_perf_attr_t *perf_attr;
     ucp_lane_index_t lane;
     ucs_status_t status;
-    ucp_proto_perf_node_t *reg_perf_node;
-    ucp_proto_perf_node_t *perf_node;
-    ucp_md_map_t md_map;
 
-    buffer_copy_factor_id = ucp_proto_buffer_copy_factor_id(local_mem_type,
-                                                            remote_mem_type,
-                                                            memtype_op, local);
+    memset(copy_perf, 0, sizeof(*copy_perf));
+    copy_perf->rsc_index = UCP_NULL_RESOURCE;
+    copy_perf->factor_id = ucp_proto_buffer_copy_factor_id(local_mem_type,
+                                                           remote_mem_type,
+                                                           memtype_op, local);
+
+    if ((memtype_op == UCT_EP_OP_GET_SHORT) ||
+        (memtype_op == UCT_EP_OP_GET_ZCOPY)) {
+        copy_perf->src_mem_type = remote_mem_type;
+        copy_perf->dst_mem_type = local_mem_type;
+    } else {
+        copy_perf->src_mem_type = local_mem_type;
+        copy_perf->dst_mem_type = remote_mem_type;
+    }
+
     if (UCP_MEM_IS_HOST(local_mem_type) && UCP_MEM_IS_HOST(remote_mem_type)) {
-        perf_factors[buffer_copy_factor_id] =
+        copy_perf->perf_factors[copy_perf->factor_id] =
                 ucs_linear_func_make(0, 1.0 / context->config.ext.bcopy_bw);
-        perf_node = ucp_proto_perf_node_new_data(title, "memcpy");
-        return ucp_proto_perf_add_funcs(perf, range_start, range_end,
-                                        perf_factors, perf_node, NULL);
+        return UCS_OK;
     }
 
     if (worker->mem_type_ep[local_mem_type] != NULL) {
@@ -341,10 +344,12 @@ ucp_proto_init_add_buffer_copy_time(ucp_worker_h worker, const char *title,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    /* Use the v2 API to query overhead and BW */
-    perf_attr.local_memory_type  = local_mem_type;
-    perf_attr.remote_memory_type = remote_mem_type;
-    perf_attr.operation          = memtype_op;
+    perf_attr                     = &copy_perf->perf_attr;
+    perf_attr->local_memory_type  = local_mem_type;
+    perf_attr->remote_memory_type = remote_mem_type;
+    perf_attr->local_sys_device   = local_sys_dev;
+    perf_attr->remote_sys_device  = remote_sys_dev;
+    perf_attr->operation          = memtype_op;
 
     switch (memtype_op) {
     case UCT_EP_OP_PUT_SHORT:
@@ -361,57 +366,88 @@ ucp_proto_init_add_buffer_copy_time(ucp_worker_h worker, const char *title,
         ucs_fatal("invalid UCT copy operation: %d", memtype_op);
     }
 
-    perf_attr.field_mask = UCT_PERF_ATTR_FIELD_OPERATION |
-                           UCT_PERF_ATTR_FIELD_LOCAL_MEMORY_TYPE |
-                           UCT_PERF_ATTR_FIELD_REMOTE_MEMORY_TYPE |
-                           UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD |
-                           UCT_PERF_ATTR_FIELD_SEND_POST_OVERHEAD |
-                           UCT_PERF_ATTR_FIELD_RECV_OVERHEAD |
-                           UCT_PERF_ATTR_FIELD_BANDWIDTH |
-                           UCT_PERF_ATTR_FIELD_LATENCY;
-    perf_attr.operation  = memtype_op;
+    perf_attr->field_mask = UCT_PERF_ATTR_FIELD_OPERATION |
+                            UCT_PERF_ATTR_FIELD_LOCAL_MEMORY_TYPE |
+                            UCT_PERF_ATTR_FIELD_REMOTE_MEMORY_TYPE |
+                            UCT_PERF_ATTR_FIELD_LOCAL_SYS_DEVICE |
+                            UCT_PERF_ATTR_FIELD_REMOTE_SYS_DEVICE |
+                            UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD |
+                            UCT_PERF_ATTR_FIELD_SEND_POST_OVERHEAD |
+                            UCT_PERF_ATTR_FIELD_RECV_OVERHEAD |
+                            UCT_PERF_ATTR_FIELD_BANDWIDTH |
+                            UCT_PERF_ATTR_FIELD_LATENCY;
+    perf_attr->operation  = memtype_op;
 
-    rsc_index = ep_config->key.lanes[lane].rsc_index;
-    wiface    = ucp_worker_iface(worker, rsc_index);
-    status    = ucp_worker_iface_estimate_perf(wiface, &perf_attr);
+    copy_perf->rsc_index = ep_config->key.lanes[lane].rsc_index;
+    wiface               = ucp_worker_iface(worker, copy_perf->rsc_index);
+    status               = ucp_worker_iface_estimate_perf(wiface, perf_attr);
     if (status != UCS_OK) {
         return status;
     }
 
     /* all allowed copy operations are one-sided */
-    ucs_assert(perf_attr.recv_overhead < UCP_PROTO_PERF_EPSILON);
+    ucs_assert(perf_attr->recv_overhead < UCP_PROTO_PERF_EPSILON);
 
-    perf_factors[ucp_proto_buffer_copy_cpu_factor_id(local)].c +=
-            perf_attr.send_pre_overhead + perf_attr.send_post_overhead +
-            perf_attr.recv_overhead;
-    perf_factors[buffer_copy_factor_id].c +=
-            ucp_tl_iface_latency(context, &perf_attr.latency);
-    perf_factors[buffer_copy_factor_id].m +=
-            1.0 / ucp_proto_common_iface_bandwidth(context, &perf_attr.bandwidth);
+    copy_perf->perf_factors[ucp_proto_buffer_copy_cpu_factor_id(local)].c +=
+            perf_attr->send_pre_overhead + perf_attr->send_post_overhead +
+            perf_attr->recv_overhead;
+    copy_perf->perf_factors[copy_perf->factor_id].c +=
+            ucp_tl_iface_latency(context, &perf_attr->latency);
+    copy_perf->perf_factors[copy_perf->factor_id].m +=
+            1.0 / ucp_proto_common_iface_bandwidth(context,
+                                                   &perf_attr->bandwidth);
+    copy_perf->md_map = UCS_BIT(context->tl_rscs[copy_perf->rsc_index].md_index);
 
-    if ((memtype_op == UCT_EP_OP_GET_SHORT) ||
-        (memtype_op == UCT_EP_OP_GET_ZCOPY)) {
-        src_mem_type = remote_mem_type;
-        dst_mem_type = local_mem_type;
-    } else {
-        src_mem_type = local_mem_type;
-        dst_mem_type = remote_mem_type;
+    return UCS_OK;
+}
+
+ucs_status_t
+ucp_proto_init_add_buffer_copy_time(ucp_worker_h worker, const char *title,
+                                    ucs_memory_type_t local_mem_type,
+                                    ucs_memory_type_t remote_mem_type,
+                                    ucs_sys_device_t local_sys_dev,
+                                    ucs_sys_device_t remote_sys_dev,
+                                    uct_ep_operation_t memtype_op,
+                                    size_t range_start, size_t range_end,
+                                    int local, ucp_proto_perf_t *perf)
+{
+    ucp_context_h context = worker->context;
+    ucp_proto_init_buffer_copy_perf_t copy_perf;
+    ucp_proto_perf_node_t *tl_perf_node;
+    ucp_proto_perf_node_t *reg_perf_node;
+    ucp_proto_perf_node_t *perf_node;
+    ucs_status_t status;
+
+    status = ucp_proto_init_buffer_copy_perf(worker, local_mem_type,
+                                             remote_mem_type, local_sys_dev,
+                                             remote_sys_dev, memtype_op, local,
+                                             &copy_perf);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (copy_perf.rsc_index == UCP_NULL_RESOURCE) {
+        perf_node = ucp_proto_perf_node_new_data(title, "memcpy");
+        return ucp_proto_perf_add_funcs(perf, range_start, range_end,
+                                        copy_perf.perf_factors, perf_node,
+                                        NULL);
     }
 
     perf_node = ucp_proto_perf_node_new_data(
-            title, "%s to %s", ucs_memory_type_names[src_mem_type],
-            ucs_memory_type_names[dst_mem_type]);
+            title, "%s to %s", ucs_memory_type_names[copy_perf.src_mem_type],
+            ucs_memory_type_names[copy_perf.dst_mem_type]);
 
-    ucp_proto_common_lane_perf_node(context, rsc_index, &perf_attr,
-                                    &tl_perf_node);
+    ucp_proto_common_lane_perf_node(context, copy_perf.rsc_index,
+                                    &copy_perf.perf_attr, &tl_perf_node);
 
-    md_map        = UCS_BIT(context->tl_rscs[rsc_index].md_index);
     reg_perf_node = ucp_proto_init_memreg_node(
-            context, &md_map, &perf_factors[buffer_copy_factor_id]);
+            context, &copy_perf.md_map,
+            &copy_perf.perf_factors[copy_perf.factor_id]);
 
     ucp_proto_perf_node_own_child(perf_node, &reg_perf_node);
     status = ucp_proto_perf_add_funcs(perf, range_start, range_end,
-                                      perf_factors, perf_node, tl_perf_node);
+                                      copy_perf.perf_factors, perf_node,
+                                      tl_perf_node);
     ucp_proto_perf_node_deref(&tl_perf_node);
 
     return status;
@@ -425,6 +461,8 @@ ucp_proto_init_add_buffer_perf(const ucp_proto_common_init_params_t *params,
     const ucp_proto_select_param_t *select_param = params->super.select_param;
     ucs_memory_type_t buffer_mem_type;
     ucs_memory_type_t recv_mem_type;
+    ucs_sys_device_t buffer_sys_dev;
+    ucs_sys_device_t recv_sys_dev;
     uint32_t op_attr_mask;
     ucs_status_t status;
 
@@ -444,13 +482,15 @@ ucp_proto_init_add_buffer_perf(const ucp_proto_common_init_params_t *params,
          */
         if (params->reg_mem_info.type != UCS_MEMORY_TYPE_UNKNOWN) {
             buffer_mem_type = params->reg_mem_info.type;
+            buffer_sys_dev  = params->reg_mem_info.sys_dev;
         } else {
             buffer_mem_type = UCS_MEMORY_TYPE_HOST;
+            buffer_sys_dev  = UCS_SYS_DEVICE_ID_UNKNOWN;
         }
         status = ucp_proto_init_add_buffer_copy_time(
                 params->super.worker, "local copy", buffer_mem_type,
-                select_param->mem_type, params->memtype_op, range_start,
-                range_end, 1, perf);
+                select_param->mem_type, buffer_sys_dev, select_param->sys_dev,
+                params->memtype_op, range_start, range_end, 1, perf);
         if (status != UCS_OK) {
             return status;
         }
@@ -473,13 +513,18 @@ ucp_proto_init_add_buffer_perf(const ucp_proto_common_init_params_t *params,
 
     /* Receiver has to copy data.
      * Assume same memory type as sender if no rkey */
-    recv_mem_type = (params->super.rkey_config_key == NULL) ?
-                            select_param->mem_type :
-                            params->super.rkey_config_key->mem_type;
-    status        = ucp_proto_init_add_buffer_copy_time(
+    if (params->super.rkey_config_key == NULL) {
+        recv_mem_type = select_param->mem_type;
+        recv_sys_dev  = UCS_SYS_DEVICE_ID_UNKNOWN;
+    } else {
+        recv_mem_type = params->super.rkey_config_key->mem_type;
+        recv_sys_dev  = params->super.rkey_config_key->sys_dev;
+    }
+
+    status = ucp_proto_init_add_buffer_copy_time(
             params->super.worker, "remote copy", UCS_MEMORY_TYPE_HOST,
-            recv_mem_type, UCT_EP_OP_PUT_SHORT, range_start, range_end, 0,
-            perf);
+            recv_mem_type, UCS_SYS_DEVICE_ID_UNKNOWN, recv_sys_dev,
+            UCT_EP_OP_PUT_SHORT, range_start, range_end, 0, perf);
 
     return status;
 }

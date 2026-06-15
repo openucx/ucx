@@ -57,6 +57,40 @@ typedef ucs_linear_func_t ucp_proto_perf_factors_t[UCP_PROTO_PERF_FACTOR_LAST];
 #define UCP_PROTO_PERF_FACTORS_INITIALIZER {}
 
 
+/* Role of a stage in a staged protocol performance model. These roles are
+ * generic UCP composition metadata: transport and memory-type code owns the raw
+ * costs, while protocol code owns the staging semantics. */
+typedef enum {
+    UCP_PROTO_PERF_STAGE_ROLE_SETUP,
+    UCP_PROTO_PERF_STAGE_ROLE_RECURRING,
+    UCP_PROTO_PERF_STAGE_ROLE_DRAIN,
+    UCP_PROTO_PERF_STAGE_ROLE_CONTROL
+} ucp_proto_perf_stage_role_t;
+
+
+/* Overlap semantics for a recurring stage. Generic pipeline code consumes this
+ * metadata without knowing which transport or memory type produced the stage. */
+typedef enum {
+    UCP_PROTO_PERF_STAGE_OVERLAP_SERIAL,
+    UCP_PROTO_PERF_STAGE_OVERLAP_PARALLEL,
+    UCP_PROTO_PERF_STAGE_OVERLAP_RESOURCE_SERIAL
+} ucp_proto_perf_stage_overlap_t;
+
+
+/* Description of one modeled stage in a staged protocol. The factors field uses
+ * the existing UCP perf-factor representation so staged composition can stay in
+ * generic protocol code without embedding transport-specific perf structures. */
+typedef struct {
+    const char                         *name;
+    ucp_proto_perf_stage_role_t        role;
+    ucp_proto_perf_stage_overlap_t     overlap;
+    ucp_proto_perf_factors_t           factors;
+    ucp_proto_perf_node_t              *perf_node;
+    size_t                             frag_size;
+    uint64_t                           resource_id;
+} ucp_proto_perf_stage_t;
+
+
 /* Iterate on all segments within a given range */
 #define ucp_proto_perf_segment_foreach_range(_seg, _seg_start, _seg_end, \
                                              _perf, _range_start, _range_end) \
@@ -211,6 +245,92 @@ const ucp_proto_perf_segment_t *
 ucp_proto_perf_add_ppln(const ucp_proto_perf_t *perf,
                         ucp_proto_perf_t *ppln_perf, size_t max_length);
 
+/*
+ * Keep exact staged-pipeline ranges for small fragment counts, then switch to
+ * an asymptotic tail segment. This preserves boundary behavior without
+ * enumerating an unbounded number of fragment-count ranges.
+ */
+#define UCP_PROTO_PERF_STAGED_PIPELINE_MAX_EXACT_FRAGS 16
+
+
+/**
+ * Add a pipelined performance range, optionally using declared stage semantics.
+ *
+ * When @a num_stages is zero, this helper preserves the legacy
+ * @ref ucp_proto_perf_add_ppln() model. When stages are provided, it derives the
+ * fragment size from the fragment protocol and uses
+ * @ref ucp_proto_perf_add_staged_pipeline() for the multi-fragment range.
+ *
+ * @param [in] frag_perf  Fragment protocol performance.
+ * @param [in] ppln_perf  Performance data structure to update.
+ * @param [in] max_length Message size until what @a ppln_perf would be updated.
+ * @param [in] stages     Optional declared stages.
+ * @param [in] num_stages Number of entries in @a stages.
+ *
+ * @return NULL in case of error, last segment of @a frag_perf used as the
+ *         fragment performance estimate otherwise.
+ */
+const ucp_proto_perf_segment_t *
+ucp_proto_perf_add_ppln_staged(const ucp_proto_perf_t *frag_perf,
+                              ucp_proto_perf_t *ppln_perf,
+                              size_t max_length,
+                              const ucp_proto_perf_stage_t *stages,
+                              unsigned num_stages);
+
+
+/**
+ * Add a declared staged-pipeline performance range.
+ *
+ * This API is intentionally transport-agnostic. Callers that own a staged data
+ * plan provide the raw stage factors and semantic metadata; generic UCP perf
+ * code composes them without checking transport names or memory-type-specific
+ * policy. Callers without an audited stage plan should keep using
+ * @ref ucp_proto_perf_add_ppln().
+ *
+ * @param [in]  ppln_perf       Performance data structure to update.
+ * @param [in]  range_start     Start of the message-size range to add.
+ * @param [in]  range_end       End of the message-size range to add.
+ * @param [in]  stages          Array of declared stages.
+ * @param [in]  num_stages      Number of entries in @a stages.
+ * @param [in]  frag_size       Fragment size for the staged plan.
+ * @param [in]  child_perf_node Optional child node for protocol graph output.
+ *
+ * @return UCS_OK on success, or an error status if the staged plan is invalid or
+ *         unsupported by the current implementation.
+ */
+ucs_status_t
+ucp_proto_perf_add_staged_pipeline(ucp_proto_perf_t *ppln_perf,
+                                   size_t range_start, size_t range_end,
+                                   const ucp_proto_perf_stage_t *stages,
+                                   unsigned num_stages, size_t frag_size,
+                                   ucp_proto_perf_node_t *child_perf_node);
+
+
+/**
+ * Split a fragment performance segment into recurring stage descriptors, one
+ * per nonzero side-scoped performance factor. Factors on the same side are
+ * marked resource-serial so protocol owners do not accidentally parallelize
+ * generic CPU/progress cost with data movement.
+ *
+ * This is useful for protocols whose one-fragment performance already carries
+ * separate raw factors and whose owner wants a parent pipeline to compose those
+ * factors as staged work instead of using legacy pipeline smoothing.
+ *
+ * @param [in]  seg          Fragment performance segment.
+ * @param [in]  frag_size    Fragment size used by the stage plan.
+ * @param [out] stages       Array to fill with stage descriptors.
+ * @param [in]  max_stages   Number of entries available in @a stages.
+ * @param [out] num_stages_p Number of filled stage descriptors.
+ *
+ * @return UCS_OK on success, or an error status if @a stages is too small.
+ */
+ucs_status_t
+ucp_proto_perf_segment_make_stages(const ucp_proto_perf_segment_t *seg,
+                                   size_t frag_size,
+                                   ucp_proto_perf_stage_t *stages,
+                                   unsigned max_stages,
+                                   unsigned *num_stages_p);
+
 
 /**
  * Create a proto perf structure based on @a remote_perf, converting the values
@@ -259,6 +379,17 @@ ucs_status_t ucp_proto_perf_sum(const ucp_proto_perf_t *perf,
  */
 ucp_proto_perf_segment_t *
 ucp_proto_perf_find_segment_lb(const ucp_proto_perf_t *perf, size_t lb);
+
+
+/**
+ * Find the last segment in a given performance data structure.
+ *
+ * @param [in] perf          Performance data structure.
+ *
+ * @return Pointer to the last segment, or NULL if @a perf is empty.
+ */
+ucp_proto_perf_segment_t *
+ucp_proto_perf_find_segment_tail(const ucp_proto_perf_t *perf);
 
 
 /**

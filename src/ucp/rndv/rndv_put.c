@@ -359,6 +359,27 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
     rpriv.atp_num_lanes = ucs_popcount(rpriv.atp_map);
     rpriv.stat_counter  = stat_counter;
 
+    if ((memtype_op != UCT_EP_OP_LAST) &&
+        ucp_proto_rndv_init_params_is_ppln_frag(init_params)) {
+        ucp_proto_perf_stage_t stages[
+                UCP_PROTO_INIT_ELEM_MAX_STAGED_PIPELINE_STAGES];
+        unsigned num_stages;
+        size_t frag_size;
+
+        /* Pipeline-fragment probes use max_length as the fragment size. */
+        frag_size  = max_length;
+        num_stages = ucp_proto_rndv_perf_make_stages(
+                perf, frag_size, stages, ucs_static_array_size(stages));
+        if (num_stages > 0) {
+            ucp_proto_select_add_proto_staged(
+                    &params.super.super, params.super.cfg_thresh,
+                    params.super.cfg_priority, perf, &rpriv,
+                    UCP_PROTO_MULTI_EXTENDED_PRIV_SIZE(&rpriv, bulk.mpriv),
+                    stages, num_stages);
+            return;
+        }
+    }
+
     ucp_proto_select_add_proto(&params.super.super, params.super.cfg_thresh,
                                params.super.cfg_priority, perf, &rpriv,
                                UCP_PROTO_MULTI_EXTENDED_PRIV_SIZE(&rpriv,

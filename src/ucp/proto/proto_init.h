@@ -57,10 +57,32 @@ ucp_proto_init_add_memreg_time(const ucp_proto_common_init_params_t *params,
                                size_t range_end, ucp_proto_perf_t *perf);
 
 
+typedef struct {
+    ucp_proto_perf_factors_t       perf_factors;
+    uct_perf_attr_t                perf_attr;
+    ucp_proto_perf_factor_id_t     factor_id;
+    ucp_rsc_index_t                rsc_index;
+    ucp_md_map_t                   md_map;
+    ucs_memory_type_t              src_mem_type;
+    ucs_memory_type_t              dst_mem_type;
+} ucp_proto_init_buffer_copy_perf_t;
+
+
+ucs_status_t
+ucp_proto_init_buffer_copy_perf(ucp_worker_h worker,
+                                ucs_memory_type_t local_mem_type,
+                                ucs_memory_type_t remote_mem_type,
+                                ucs_sys_device_t local_sys_dev,
+                                ucs_sys_device_t remote_sys_dev,
+                                uct_ep_operation_t memtype_op, int local,
+                                ucp_proto_init_buffer_copy_perf_t *copy_perf);
+
 ucs_status_t
 ucp_proto_init_add_buffer_copy_time(ucp_worker_h worker, const char *title,
                                     ucs_memory_type_t local_mem_type,
                                     ucs_memory_type_t remote_mem_type,
+                                    ucs_sys_device_t local_sys_dev,
+                                    ucs_sys_device_t remote_sys_dev,
                                     uct_ep_operation_t memtype_op,
                                     size_t range_start, size_t range_end,
                                     int local, ucp_proto_perf_t *perf);

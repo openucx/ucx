@@ -35,7 +35,8 @@ typedef struct {
 static void ucp_proto_rndv_rkey_ptr_probe_common(
         const ucp_proto_common_init_params_t *init_params,
         ucp_proto_perf_t *rndv_op_perf, ucp_proto_rndv_rkey_ptr_priv_t *rpriv,
-        size_t priv_size)
+        size_t priv_size, const ucp_proto_perf_stage_t *stages,
+        unsigned num_stages)
 {
     const char *proto_name = ucp_proto_id_field(init_params->super.proto_id,
                                                 name);
@@ -63,9 +64,16 @@ static void ucp_proto_rndv_rkey_ptr_probe_common(
         }
     }
 
-    ucp_proto_select_add_proto(&init_params->super, init_params->cfg_thresh,
-                               init_params->cfg_priority, perf, rpriv,
-                               priv_size);
+    if (num_stages > 0) {
+        ucp_proto_select_add_proto_staged(
+                &init_params->super, init_params->cfg_thresh,
+                init_params->cfg_priority, perf, rpriv, priv_size, stages,
+                num_stages);
+    } else {
+        ucp_proto_select_add_proto(&init_params->super, init_params->cfg_thresh,
+                                   init_params->cfg_priority, perf, rpriv,
+                                   priv_size);
+    }
 }
 
 static void
@@ -114,7 +122,7 @@ ucp_proto_rndv_rkey_ptr_probe(const ucp_proto_init_params_t *init_params)
     }
 
     ucp_proto_rndv_rkey_ptr_probe_common(&params.super, perf, &rpriv,
-                                         sizeof(rpriv));
+                                         sizeof(rpriv), NULL, 0);
 }
 
 static void
@@ -309,8 +317,19 @@ ucp_proto_rndv_rkey_ptr_mtype_probe(const ucp_proto_init_params_t *init_params)
                 "dst_md_index %u rkey->md_map 0x%lx", rpriv.dst_md_index,
                 init_params->rkey_config_key->md_map);
 
-    ucp_proto_rndv_rkey_ptr_probe_common(&params.super, perf, &rpriv.super,
-                                         sizeof(rpriv));
+    {
+        ucp_proto_perf_stage_t stages[
+                UCP_PROTO_INIT_ELEM_MAX_STAGED_PIPELINE_STAGES];
+        unsigned num_stages;
+
+        num_stages = ucp_proto_rndv_perf_make_stages(
+                perf, params.super.max_length, stages,
+                ucs_static_array_size(stages));
+
+        ucp_proto_rndv_rkey_ptr_probe_common(&params.super, perf, &rpriv.super,
+                                             sizeof(rpriv), stages,
+                                             num_stages);
+    }
 }
 
 static ucs_status_t ucp_proto_rndv_rkey_ptr_mtype_completion(ucp_request_t *req)

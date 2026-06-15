@@ -493,7 +493,9 @@ ucp_proto_rndv_rtr_mtype_probe(const ucp_proto_init_params_t *init_params)
         if ((status == UCS_OK) && (md_index != UCP_NULL_RESOURCE)) {
             params.md_map = UCS_BIT(md_index);
         } else if (frag_mem_type == UCS_MEMORY_TYPE_HOST) {
-            params.md_map = 0;
+            params.md_map                  = 0;
+            params.super.reg_mem_info.type = UCS_MEMORY_TYPE_HOST;
+            params.super.reg_mem_info.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
         } else {
             /* To use non-host staging buffers it should be possible to
              * allocate them with MD */
@@ -507,7 +509,9 @@ ucp_proto_rndv_rtr_mtype_probe(const ucp_proto_init_params_t *init_params)
 
         status = ucp_proto_init_add_buffer_copy_time(
                 init_params->worker, "unpack copy", frag_mem_type,
-                init_params->select_param->mem_type, UCT_EP_OP_PUT_ZCOPY,
+                init_params->select_param->mem_type,
+                params.super.reg_mem_info.sys_dev,
+                init_params->select_param->sys_dev, UCT_EP_OP_PUT_ZCOPY,
                 params.super.min_length, params.super.max_length, 1,
                 params.unpack_perf);
         if (status != UCS_OK) {

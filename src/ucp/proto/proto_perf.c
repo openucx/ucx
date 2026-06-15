@@ -16,6 +16,7 @@
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/sys/compiler.h>
+#include <ucs/sys/math.h>
 #include <ucs/sys/string.h>
 
 #include <float.h>
@@ -531,6 +532,540 @@ ucp_proto_perf_add_ppln(const ucp_proto_perf_t *perf,
     return frag_seg;
 }
 
+static size_t
+ucp_proto_perf_stage_num_frags(size_t msg_size, size_t frag_size)
+{
+    return (msg_size == 0) ? 0 : ucs_div_round_up(msg_size, frag_size);
+}
+
+static size_t
+ucp_proto_perf_stage_frag_range_end(size_t num_frags, size_t frag_size)
+{
+    if (num_frags == 0) {
+        return 0;
+    }
+
+    if (num_frags > (SIZE_MAX / frag_size)) {
+        return SIZE_MAX;
+    }
+
+    return num_frags * frag_size;
+}
+
+static int
+ucp_proto_perf_stage_role_is_valid(ucp_proto_perf_stage_role_t role)
+{
+    return (role == UCP_PROTO_PERF_STAGE_ROLE_SETUP) ||
+           (role == UCP_PROTO_PERF_STAGE_ROLE_RECURRING) ||
+           (role == UCP_PROTO_PERF_STAGE_ROLE_DRAIN) ||
+           (role == UCP_PROTO_PERF_STAGE_ROLE_CONTROL);
+}
+
+static int
+ucp_proto_perf_stage_overlap_is_valid(ucp_proto_perf_stage_overlap_t overlap)
+{
+    return (overlap == UCP_PROTO_PERF_STAGE_OVERLAP_SERIAL) ||
+           (overlap == UCP_PROTO_PERF_STAGE_OVERLAP_PARALLEL) ||
+           (overlap == UCP_PROTO_PERF_STAGE_OVERLAP_RESOURCE_SERIAL);
+}
+
+static int
+ucp_proto_perf_stage_is_recurring_serial(const ucp_proto_perf_stage_t *stage)
+{
+    return (stage->role == UCP_PROTO_PERF_STAGE_ROLE_RECURRING) &&
+           ((stage->overlap == UCP_PROTO_PERF_STAGE_OVERLAP_SERIAL) ||
+            (stage->overlap == UCP_PROTO_PERF_STAGE_OVERLAP_RESOURCE_SERIAL));
+}
+
+static int
+ucp_proto_perf_stage_same_serial_resource(const ucp_proto_perf_stage_t *stage1,
+                                          const ucp_proto_perf_stage_t *stage2)
+{
+    if (!ucp_proto_perf_stage_is_recurring_serial(stage1) ||
+        !ucp_proto_perf_stage_is_recurring_serial(stage2)) {
+        return 0;
+    }
+
+    if ((stage1->overlap == UCP_PROTO_PERF_STAGE_OVERLAP_SERIAL) ||
+        (stage2->overlap == UCP_PROTO_PERF_STAGE_OVERLAP_SERIAL)) {
+        return stage1->overlap == stage2->overlap;
+    }
+
+    return stage1->resource_id == stage2->resource_id;
+}
+
+static ucs_linear_func_t
+ucp_proto_perf_stage_factor(const ucp_proto_perf_stage_t *stage,
+                            ucp_proto_perf_factor_id_t factor_id,
+                            size_t num_frags)
+{
+    ucs_linear_func_t func = stage->factors[factor_id];
+
+    if (stage->role == UCP_PROTO_PERF_STAGE_ROLE_RECURRING) {
+        func.c *= num_frags;
+    }
+
+    return func;
+}
+
+static void
+ucp_proto_perf_stage_add_factor(ucp_proto_perf_factors_t factors,
+                                ucp_proto_perf_factor_id_t factor_id,
+                                ucs_linear_func_t func)
+{
+    if (ucs_linear_func_is_zero(func, UCP_PROTO_PERF_EPSILON)) {
+        return;
+    }
+
+    ucs_linear_func_add_inplace(&factors[factor_id], func);
+}
+
+static ucp_proto_perf_factor_id_t
+ucp_proto_perf_stage_first_factor(const ucp_proto_perf_stage_t *stage)
+{
+    ucp_proto_perf_factor_id_t factor_id;
+
+    for (factor_id = 0; factor_id < UCP_PROTO_PERF_FACTOR_LAST_WO_LATENCY;
+         ++factor_id) {
+        if (!ucs_linear_func_is_zero(stage->factors[factor_id],
+                                     UCP_PROTO_PERF_EPSILON)) {
+            return factor_id;
+        }
+    }
+
+    return UCP_PROTO_PERF_FACTOR_LAST;
+}
+
+static ucp_proto_perf_factor_id_t
+ucp_proto_perf_stage_serial_group_factor(const ucp_proto_perf_stage_t *stages,
+                                         unsigned num_stages,
+                                         unsigned stage_index)
+{
+    ucp_proto_perf_factor_id_t factor_id;
+    unsigned i;
+
+    for (i = stage_index; i < num_stages; ++i) {
+        if (!ucp_proto_perf_stage_same_serial_resource(&stages[stage_index],
+                                                       &stages[i])) {
+            continue;
+        }
+
+        factor_id = ucp_proto_perf_stage_first_factor(&stages[i]);
+        if (factor_id != UCP_PROTO_PERF_FACTOR_LAST) {
+            return factor_id;
+        }
+    }
+
+    return UCP_PROTO_PERF_FACTOR_LAST;
+}
+
+static void
+ucp_proto_perf_stage_add_parallel(ucp_proto_perf_factors_t factors,
+                                  const ucp_proto_perf_stage_t *stage,
+                                  size_t num_frags)
+{
+    ucp_proto_perf_factor_id_t factor_id;
+
+    for (factor_id = 0; factor_id < UCP_PROTO_PERF_FACTOR_LAST; ++factor_id) {
+        ucp_proto_perf_stage_add_factor(
+                factors, factor_id,
+                ucp_proto_perf_stage_factor(stage, factor_id, num_frags));
+    }
+}
+
+static void
+ucp_proto_perf_stage_add_serial_group(ucp_proto_perf_factors_t factors,
+                                      const ucp_proto_perf_stage_t *stages,
+                                      unsigned num_stages,
+                                      unsigned stage_index,
+                                      size_t num_frags)
+{
+    ucp_proto_perf_factor_id_t group_factor_id, factor_id;
+    ucs_linear_func_t func;
+    unsigned i;
+
+    group_factor_id = ucp_proto_perf_stage_serial_group_factor(
+            stages, num_stages, stage_index);
+    if (group_factor_id == UCP_PROTO_PERF_FACTOR_LAST) {
+        group_factor_id = UCP_PROTO_PERF_FACTOR_LOCAL_CPU;
+    }
+
+    for (i = stage_index; i < num_stages; ++i) {
+        if (!ucp_proto_perf_stage_same_serial_resource(&stages[stage_index],
+                                                       &stages[i])) {
+            continue;
+        }
+
+        for (factor_id = 0; factor_id < UCP_PROTO_PERF_FACTOR_LAST;
+             ++factor_id) {
+            func = ucp_proto_perf_stage_factor(&stages[i], factor_id,
+                                               num_frags);
+            if (factor_id == UCP_PROTO_PERF_FACTOR_LATENCY) {
+                ucp_proto_perf_stage_add_factor(factors, factor_id, func);
+            } else {
+                ucp_proto_perf_stage_add_factor(factors, group_factor_id,
+                                                func);
+            }
+        }
+    }
+}
+
+static int
+ucp_proto_perf_stage_serial_group_was_added(const ucp_proto_perf_stage_t *stages,
+                                            unsigned stage_index)
+{
+    unsigned i;
+
+    for (i = 0; i < stage_index; ++i) {
+        if (ucp_proto_perf_stage_same_serial_resource(&stages[i],
+                                                      &stages[stage_index])) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static void
+ucp_proto_perf_staged_pipeline_factors(ucp_proto_perf_factors_t factors,
+                                       const ucp_proto_perf_stage_t *stages,
+                                       unsigned num_stages,
+                                       size_t num_frags)
+{
+    unsigned i;
+
+    for (i = 0; i < num_stages; ++i) {
+        if (ucp_proto_perf_stage_is_recurring_serial(&stages[i])) {
+            if (!ucp_proto_perf_stage_serial_group_was_added(stages, i)) {
+                ucp_proto_perf_stage_add_serial_group(factors, stages,
+                                                      num_stages, i,
+                                                      num_frags);
+            }
+        } else {
+            ucp_proto_perf_stage_add_parallel(factors, &stages[i], num_frags);
+        }
+    }
+}
+
+static void
+ucp_proto_perf_stage_add_recurring_fixed(ucp_proto_perf_factors_t factors,
+                                         ucp_proto_perf_factor_id_t factor_id,
+                                         ucs_linear_func_t func)
+{
+    func.m = 0;
+    ucp_proto_perf_stage_add_factor(factors, factor_id, func);
+}
+
+static void
+ucp_proto_perf_stage_add_parallel_recurring_fixed(
+        ucp_proto_perf_factors_t factors, const ucp_proto_perf_stage_t *stage)
+{
+    ucp_proto_perf_factor_id_t factor_id;
+
+    for (factor_id = 0; factor_id < UCP_PROTO_PERF_FACTOR_LAST;
+         ++factor_id) {
+        ucp_proto_perf_stage_add_recurring_fixed(factors, factor_id,
+                                                 stage->factors[factor_id]);
+    }
+}
+
+static void
+ucp_proto_perf_stage_add_serial_group_recurring_fixed(
+        ucp_proto_perf_factors_t factors, const ucp_proto_perf_stage_t *stages,
+        unsigned num_stages, unsigned stage_index)
+{
+    ucp_proto_perf_factor_id_t group_factor_id, factor_id;
+    unsigned i;
+
+    group_factor_id = ucp_proto_perf_stage_serial_group_factor(
+            stages, num_stages, stage_index);
+    if (group_factor_id == UCP_PROTO_PERF_FACTOR_LAST) {
+        group_factor_id = UCP_PROTO_PERF_FACTOR_LOCAL_CPU;
+    }
+
+    for (i = stage_index; i < num_stages; ++i) {
+        if (!ucp_proto_perf_stage_same_serial_resource(&stages[stage_index],
+                                                       &stages[i])) {
+            continue;
+        }
+
+        for (factor_id = 0; factor_id < UCP_PROTO_PERF_FACTOR_LAST;
+             ++factor_id) {
+            ucp_proto_perf_stage_add_recurring_fixed(
+                    factors, group_factor_id, stages[i].factors[factor_id]);
+        }
+    }
+}
+
+static void
+ucp_proto_perf_staged_pipeline_recurring_fixed(
+        ucp_proto_perf_factors_t factors, const ucp_proto_perf_stage_t *stages,
+        unsigned num_stages)
+{
+    unsigned i;
+
+    for (i = 0; i < num_stages; ++i) {
+        if (stages[i].role != UCP_PROTO_PERF_STAGE_ROLE_RECURRING) {
+            continue;
+        }
+
+        if (ucp_proto_perf_stage_is_recurring_serial(&stages[i])) {
+            if (!ucp_proto_perf_stage_serial_group_was_added(stages, i)) {
+                ucp_proto_perf_stage_add_serial_group_recurring_fixed(
+                        factors, stages, num_stages, i);
+            }
+        } else {
+            ucp_proto_perf_stage_add_parallel_recurring_fixed(factors,
+                                                              &stages[i]);
+        }
+    }
+}
+
+static void
+ucp_proto_perf_staged_pipeline_make_tail_factors(
+        ucp_proto_perf_factors_t factors, const ucp_proto_perf_stage_t *stages,
+        unsigned num_stages, size_t frag_size, size_t range_start,
+        size_t num_frags)
+{
+    ucp_proto_perf_factors_t fixed_factors;
+    ucp_proto_perf_factor_id_t factor_id;
+    double fixed_slope;
+
+    ucp_proto_perf_staged_pipeline_factors(factors, stages, num_stages,
+                                           num_frags);
+
+    memset(fixed_factors, 0, sizeof(fixed_factors));
+    ucp_proto_perf_staged_pipeline_recurring_fixed(fixed_factors, stages,
+                                                   num_stages);
+
+    for (factor_id = 0; factor_id < UCP_PROTO_PERF_FACTOR_LAST; ++factor_id) {
+        fixed_slope = fixed_factors[factor_id].c / frag_size;
+        factors[factor_id].m += fixed_slope;
+        factors[factor_id].c -= fixed_slope * range_start;
+    }
+}
+
+static ucs_status_t
+ucp_proto_perf_staged_pipeline_check_params(size_t range_start,
+                                            size_t range_end,
+                                            const ucp_proto_perf_stage_t *stages,
+                                            unsigned num_stages,
+                                            size_t frag_size)
+{
+    unsigned i;
+
+    if ((num_stages == 0) || (stages == NULL) || (frag_size == 0) ||
+        (range_start > range_end)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    for (i = 0; i < num_stages; ++i) {
+        if (!ucp_proto_perf_stage_role_is_valid(stages[i].role) ||
+            !ucp_proto_perf_stage_overlap_is_valid(stages[i].overlap) ||
+            ((stages[i].frag_size != 0) &&
+             (stages[i].frag_size != frag_size))) {
+            return UCS_ERR_INVALID_PARAM;
+        }
+    }
+
+    return UCS_OK;
+}
+
+static ucs_status_t
+ucp_proto_perf_add_staged_pipeline_tail(
+        ucp_proto_perf_t *ppln_perf, size_t range_start, size_t range_end,
+        const ucp_proto_perf_stage_t *stages, unsigned num_stages,
+        size_t frag_size, ucp_proto_perf_node_t *child_perf_node)
+{
+    ucp_proto_perf_factors_t factors;
+    ucp_proto_perf_node_t *perf_node;
+    size_t num_frags;
+    unsigned i;
+    char frag_str[64];
+
+    memset(factors, 0, sizeof(factors));
+    num_frags = ucp_proto_perf_stage_num_frags(range_start, frag_size);
+
+    ucp_proto_perf_staged_pipeline_make_tail_factors(factors, stages,
+                                                     num_stages, frag_size,
+                                                     range_start, num_frags);
+
+    ucs_memunits_to_str(frag_size, frag_str, sizeof(frag_str));
+    perf_node = ucp_proto_perf_node_new_data(
+            "staged pipeline", "frag size: %s, fragments: %zu+", frag_str,
+            num_frags);
+    for (i = 0; i < num_stages; ++i) {
+        ucp_proto_perf_node_add_child(perf_node, stages[i].perf_node);
+    }
+
+    /*
+     * Exact per-fragment ranges preserve small boundary behavior. The tail
+     * keeps the exact value at range_start and amortizes recurring fixed
+     * fragment cost into the slope, avoiding unbounded range enumeration.
+     */
+    return ucp_proto_perf_add_funcs(ppln_perf, range_start, range_end,
+                                    factors, perf_node, child_perf_node);
+}
+
+ucs_status_t
+ucp_proto_perf_add_staged_pipeline(ucp_proto_perf_t *ppln_perf,
+                                   size_t range_start, size_t range_end,
+                                   const ucp_proto_perf_stage_t *stages,
+                                   unsigned num_stages, size_t frag_size,
+                                   ucp_proto_perf_node_t *child_perf_node)
+{
+    ucp_proto_perf_factors_t factors;
+    ucp_proto_perf_node_t *perf_node;
+    ucs_status_t status;
+    size_t range_iter, range_iter_end, num_frags;
+    unsigned i;
+    char frag_str[64];
+
+    status = ucp_proto_perf_staged_pipeline_check_params(
+            range_start, range_end, stages, num_stages, frag_size);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ucs_memunits_to_str(frag_size, frag_str, sizeof(frag_str));
+
+    range_iter = range_start;
+    while (range_iter <= range_end) {
+        memset(factors, 0, sizeof(factors));
+        num_frags      = ucp_proto_perf_stage_num_frags(range_iter,
+                                                        frag_size);
+        if (num_frags >
+            UCP_PROTO_PERF_STAGED_PIPELINE_MAX_EXACT_FRAGS) {
+            return ucp_proto_perf_add_staged_pipeline_tail(
+                    ppln_perf, range_iter, range_end, stages, num_stages,
+                    frag_size, child_perf_node);
+        }
+
+        range_iter_end = ucp_proto_perf_stage_frag_range_end(num_frags,
+                                                             frag_size);
+        range_iter_end = ucs_min(range_iter_end, range_end);
+
+        ucp_proto_perf_staged_pipeline_factors(factors, stages, num_stages,
+                                               num_frags);
+
+        perf_node = ucp_proto_perf_node_new_data(
+                "staged pipeline", "frag size: %s, fragments: %zu", frag_str,
+                num_frags);
+        for (i = 0; i < num_stages; ++i) {
+            ucp_proto_perf_node_add_child(perf_node, stages[i].perf_node);
+        }
+
+        status = ucp_proto_perf_add_funcs(ppln_perf, range_iter,
+                                          range_iter_end, factors, perf_node,
+                                          child_perf_node);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        if (range_iter_end == SIZE_MAX) {
+            break;
+        }
+
+        range_iter = range_iter_end + 1;
+    }
+
+    return UCS_OK;
+}
+
+enum {
+    UCP_PROTO_PERF_STAGE_RESOURCE_LOCAL  = 1,
+    UCP_PROTO_PERF_STAGE_RESOURCE_REMOTE = 2
+};
+
+static int
+ucp_proto_perf_factor_stage_resource(ucp_proto_perf_factor_id_t factor_id,
+                                     uint64_t *resource_id_p)
+{
+    switch (factor_id) {
+    case UCP_PROTO_PERF_FACTOR_LOCAL_CPU:
+    case UCP_PROTO_PERF_FACTOR_LOCAL_TL:
+    case UCP_PROTO_PERF_FACTOR_LOCAL_MTYPE_COPY:
+        *resource_id_p = UCP_PROTO_PERF_STAGE_RESOURCE_LOCAL;
+        return 1;
+    case UCP_PROTO_PERF_FACTOR_REMOTE_CPU:
+    case UCP_PROTO_PERF_FACTOR_REMOTE_TL:
+    case UCP_PROTO_PERF_FACTOR_REMOTE_MTYPE_COPY:
+        *resource_id_p = UCP_PROTO_PERF_STAGE_RESOURCE_REMOTE;
+        return 1;
+    default:
+        return 0;
+    }
+}
+
+ucs_status_t
+ucp_proto_perf_segment_make_stages(const ucp_proto_perf_segment_t *seg,
+                                   size_t frag_size,
+                                   ucp_proto_perf_stage_t *stages,
+                                   unsigned max_stages,
+                                   unsigned *num_stages_p)
+{
+    ucp_proto_perf_factor_id_t factor_id;
+    ucs_linear_func_t factor;
+    uint64_t resource_id;
+    unsigned num_stages = 0;
+
+    for (factor_id = 0; factor_id < UCP_PROTO_PERF_FACTOR_LAST; ++factor_id) {
+        factor = ucp_proto_perf_segment_func(seg, factor_id);
+        if (ucs_linear_func_is_zero(factor, UCP_PROTO_PERF_EPSILON) ||
+            !ucp_proto_perf_factor_stage_resource(factor_id, &resource_id)) {
+            continue;
+        }
+
+        if (num_stages == max_stages) {
+            return UCS_ERR_EXCEEDS_LIMIT;
+        }
+
+        memset(&stages[num_stages], 0, sizeof(stages[num_stages]));
+        stages[num_stages].name      = ucp_proto_perf_factor_names[factor_id];
+        stages[num_stages].role      = UCP_PROTO_PERF_STAGE_ROLE_RECURRING;
+        stages[num_stages].overlap   = UCP_PROTO_PERF_STAGE_OVERLAP_RESOURCE_SERIAL;
+        stages[num_stages].frag_size = frag_size;
+        stages[num_stages].resource_id = resource_id;
+        stages[num_stages].factors[factor_id] = factor;
+        ++num_stages;
+    }
+
+    *num_stages_p = num_stages;
+    return UCS_OK;
+}
+
+const ucp_proto_perf_segment_t *
+ucp_proto_perf_add_ppln_staged(const ucp_proto_perf_t *frag_perf,
+                              ucp_proto_perf_t *ppln_perf,
+                              size_t max_length,
+                              const ucp_proto_perf_stage_t *stages,
+                              unsigned num_stages)
+{
+    ucp_proto_perf_segment_t *frag_seg;
+    size_t frag_size;
+    ucs_status_t status;
+
+    if (num_stages == 0) {
+        return ucp_proto_perf_add_ppln(frag_perf, ppln_perf, max_length);
+    }
+
+    frag_seg  = ucs_list_tail(&frag_perf->segments, ucp_proto_perf_segment_t,
+                              list);
+    frag_size = ucp_proto_perf_segment_end(frag_seg);
+    if (frag_size >= max_length) {
+        return NULL;
+    }
+
+    status = ucp_proto_perf_add_staged_pipeline(
+            ppln_perf, frag_size + 1, max_length, stages, num_stages,
+            frag_size, ucp_proto_perf_segment_node(frag_seg));
+    if (status != UCS_OK) {
+        return NULL;
+    }
+
+    return frag_seg;
+}
+
 ucs_status_t ucp_proto_perf_remote(const ucp_proto_perf_t *remote_perf,
                                    ucp_proto_perf_t **perf_p)
 {
@@ -708,6 +1243,16 @@ ucp_proto_perf_find_segment_lb(const ucp_proto_perf_t *perf, size_t lb)
     }
 
     return NULL;
+}
+
+ucp_proto_perf_segment_t *
+ucp_proto_perf_find_segment_tail(const ucp_proto_perf_t *perf)
+{
+    if (ucs_list_is_empty(&perf->segments)) {
+        return NULL;
+    }
+
+    return ucs_list_tail(&perf->segments, ucp_proto_perf_segment_t, list);
 }
 
 ucs_linear_func_t
