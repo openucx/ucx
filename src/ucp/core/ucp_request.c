@@ -481,6 +481,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
         ucs_assert(!(flags & UCT_MD_MEM_FLAG_HIDE_ERRORS));
         iovcnt = state->dt.iov.iovcnt;
         iov    = buffer;
+        /* IOV buffers are assumed to have the same memory type. Detect memory
+         * information once from the first non-empty entry and use it for all
+         * registrations.
+         */
         ucp_mem_info_detect_for_type(context, NULL, 0, mem_type, &mem_info);
         for (iov_it = 0; iov_it < iovcnt; ++iov_it) {
             if (iov[iov_it].length != 0) {

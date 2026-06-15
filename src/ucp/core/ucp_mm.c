@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -27,7 +27,7 @@
 
 /* Context for rcache memory registration callback */
 typedef struct {
-    ucp_memory_info_t mem_info; /* Memory type, system device and flags */
+    ucp_memory_info_t mem_info;    /* Memory type, system device and flags */
     ucp_md_map_t      reg_md_map;  /* Map of memory domains to be registered */
     unsigned          uct_flags;   /* UCT memory registration flags */
     const char        *alloc_name; /* Memory allocation name */
@@ -1331,8 +1331,6 @@ ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
 
     tl_md  = &context->tl_mds[md_index];
     cmpt   = context->tl_cmpts[tl_md->cmpt_index].cmpt;
-    ucp_mem_info_detect_for_type(context, remote_addr, length, mem_type,
-                                 &mem_info);
     if (!(context->cache_md_map[mem_type] & UCS_BIT(md_index))) {
         status = uct_md_mem_reg(context->tl_mds[md_index].md, remote_addr,
                                 length, UCT_MD_MEM_ACCESS_ALL,
@@ -1343,6 +1341,8 @@ ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
 
         pack_context->ucp_memh = NULL;
     } else {
+        ucp_mem_info_detect_for_type(context, remote_addr, length, mem_type,
+                                     &mem_info);
         status = ucp_memh_get(context, remote_addr, length, &mem_info,
                               UCS_BIT(md_index), UCT_MD_MEM_ACCESS_ALL,
                               "mem_type", &pack_context->ucp_memh);
