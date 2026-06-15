@@ -86,8 +86,8 @@ typedef struct ucp_ep_discard_lanes_arg {
 typedef struct ucp_ep_recovery_arg {
     /* owner EP (also the callbackq filter key,
        @ref ucp_ep_recovery_remove_filter) */
-    ucp_ep_h   ucp_ep;   
-    /* earliest time for the next request */    
+    ucp_ep_h   ucp_ep;
+    /* earliest time for the next request */
     ucs_time_t next_time;
     /* request rounds left before giving up */
     unsigned   retries_left;
@@ -1865,21 +1865,13 @@ static int ucp_ep_recovery_lane_is_ready(ucp_ep_h ep, ucp_lane_index_t lane)
     uct_ep_h uct_ep = ucp_ep_get_lane(ep, lane);
     ucp_wireup_ep_t *wireup_ep;
 
-    if (uct_ep == NULL) {
-        return 0;
-    }
-
     if (ucp_is_uct_ep_failed(uct_ep)) {
         return 0;
     }
 
     wireup_ep = ucp_wireup_ep(uct_ep);
-    if (wireup_ep == NULL) {
-        /* proxy already swapped for the real transport EP */
-        return 1;
-    }
-
-    return !!(wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY);
+    /* proxy already swapped for the real transport EP or it's ready for for that */
+    return (wireup_ep == NULL) || !!(wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY);
 }
 
 static ucp_lane_map_t

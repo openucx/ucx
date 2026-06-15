@@ -163,8 +163,8 @@ ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
 
     wireup_msg_iov[0].iov_base = &req->send.wireup.msg_hdr;
     wireup_msg_iov[0].iov_len  = sizeof(req->send.wireup.msg_hdr);
-    if (req->send.wireup.msg_hdr.type == UCP_WIREUP_MSG_LANES_ADDR_REQUEST ||
-        req->send.wireup.msg_hdr.type == UCP_WIREUP_MSG_LANES_ADDR_REPLY) {
+    if ((req->send.wireup.msg_hdr.type == UCP_WIREUP_MSG_LANES_ADDR_REQUEST) ||
+        (req->send.wireup.msg_hdr.type == UCP_WIREUP_MSG_LANES_ADDR_REPLY)) {
         VALGRIND_CHECK_MEM_IS_DEFINED(&req->send.wireup.lanes_info,
                                       sizeof(req->send.wireup.lanes_info));
         wireup_msg_iov[0].iov_len += sizeof(req->send.wireup.lanes_info);
@@ -257,8 +257,8 @@ ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
         msg_hdr->dst_ep_id = UCS_PTR_MAP_KEY_INVALID;
     }
 
-    if (type == UCP_WIREUP_MSG_LANES_ADDR_REQUEST ||
-        type == UCP_WIREUP_MSG_LANES_ADDR_REPLY) {
+    if ((type == UCP_WIREUP_MSG_LANES_ADDR_REQUEST) ||
+        (type == UCP_WIREUP_MSG_LANES_ADDR_REPLY)) {
         lanes_info = (ucp_wireup_msg_lanes_info_t *)(msg_hdr + 1);
         lanes_info->requested_lane_map = requested_lane_map;
         lanes_info->provided_lane_map  = provided_lane_map;
@@ -428,7 +428,7 @@ ucp_wireup_match_p2p_lanes(ucp_ep_h ep,
     }
 }
 
-ucs_status_t
+static ucs_status_t
 ucp_wireup_find_remote_p2p_addr(ucp_ep_h ep, ucp_lane_index_t remote_lane,
                                 const ucp_unpacked_address_t *remote_address,
                                 const ucp_address_entry_t **address_entry_p,
@@ -1010,8 +1010,6 @@ ucp_wireup_process_lanes_addr_request(
     const ucp_wireup_msg_lanes_info_t *lanes_info =
             (const ucp_wireup_msg_lanes_info_t *)(msg + 1);
 
-    ucs_assert(ep != NULL);
-
     ucp_ep_update_remote_id(ep, msg->src_ep_id);
 
     ucs_debug("ep %p: LANES_ADDR_REQ requested=0x%" PRIx64
@@ -1032,8 +1030,6 @@ ucp_wireup_process_lanes_addr_reply(
 {
     const ucp_wireup_msg_lanes_info_t *lanes_info =
             (const ucp_wireup_msg_lanes_info_t *)(msg + 1);
-
-    ucs_assert(ep != NULL);
 
     ucp_ep_update_remote_id(ep, msg->src_ep_id);
 
@@ -1075,8 +1071,8 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
     }
 
     address_ptr = msg + 1;
-    if (msg->type == UCP_WIREUP_MSG_LANES_ADDR_REQUEST ||
-        msg->type == UCP_WIREUP_MSG_LANES_ADDR_REPLY) {
+    if ((msg->type == UCP_WIREUP_MSG_LANES_ADDR_REQUEST) ||
+        (msg->type == UCP_WIREUP_MSG_LANES_ADDR_REPLY)) {
         address_ptr = UCS_PTR_TYPE_OFFSET(address_ptr,
                                           ucp_wireup_msg_lanes_info_t);
     }
@@ -1193,10 +1189,10 @@ static int ucp_wireup_should_activate_wiface(ucp_worker_iface_t *wiface,
            (ep->flags & UCP_EP_FLAG_INTERNAL);
 }
 
-ucs_status_t ucp_wireup_iface_ep_create(ucp_worker_iface_t *wiface,
-                                        const ucp_address_entry_t *address,
-                                        unsigned path_index,
-                                        uct_ep_h *uct_ep_p)
+static ucs_status_t
+ucp_wireup_iface_ep_create(ucp_worker_iface_t *wiface,
+                           const ucp_address_entry_t *address,
+                           unsigned path_index, uct_ep_h *uct_ep_p)
 {
     uct_ep_params_t uct_ep_params;
 
