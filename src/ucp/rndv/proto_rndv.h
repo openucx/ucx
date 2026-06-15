@@ -12,11 +12,13 @@
 #include <ucp/proto/proto_multi.h>
 
 
-/* Names of rendezvous control messages */
-#define UCP_PROTO_RNDV_RTS_NAME "RTS"
-#define UCP_PROTO_RNDV_RTR_NAME "RTR"
-#define UCP_PROTO_RNDV_ATS_NAME "ATS"
-#define UCP_PROTO_RNDV_ATP_NAME "ATP"
+/* Rendezvous protocol description and control message names */
+#define UCP_PROTO_RNDV_DESC         "rndv"
+#define UCP_PROTO_RNDV_RTS_NAME     "RTS"
+#define UCP_PROTO_RNDV_RTR_NAME     "RTR"
+#define UCP_PROTO_RNDV_RTR_REQ_NAME "RTR_REQ"
+#define UCP_PROTO_RNDV_ATS_NAME     "ATS"
+#define UCP_PROTO_RNDV_ATP_NAME     "ATP"
 
 
 /* Mask of rendezvous operations */
@@ -201,6 +203,13 @@ void ucp_proto_rndv_receive_start(ucp_worker_h worker, ucp_request_t *recv_req,
 ucs_status_t
 ucp_proto_rndv_handle_rtr(void *arg, void *data, size_t length, unsigned flags);
 
+ucs_status_t ucp_proto_rndv_send_start(ucp_worker_h worker,
+                                       ucp_request_t *req,
+                                       uint32_t op_attr_mask,
+                                       const ucp_rndv_rtr_hdr_t *rtr,
+                                       const void *rkey_buffer,
+                                       size_t rkey_length,
+                                       uint8_t sg_count);
 
 ucs_status_t ucp_proto_rndv_rtr_handle_atp(void *arg, void *data, size_t length,
                                            unsigned flags);

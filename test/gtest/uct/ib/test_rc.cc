@@ -677,6 +677,37 @@ UCS_TEST_SKIP_COND_P(test_rc_get_limit, ordering_comp_cb,
 
 UCT_INSTANTIATE_RC_DC_GGA_TEST_CASE(test_rc_get_limit)
 
+
+class test_gga_get_zcopy_purge : public test_rc {
+};
+
+UCS_TEST_SKIP_COND_P(test_gga_get_zcopy_purge, get_zcopy_purge,
+                     !check_caps(UCT_IFACE_FLAG_GET_ZCOPY))
+{
+    mapped_buffer localbuf(64, 0ul, *m_e1);
+    mapped_buffer remotebuf(64, 0ul, *m_e2);
+
+    uct_completion_t comp;
+    comp.func   = [](uct_completion_t*) {};
+    comp.count  = 2;
+    comp.status = UCS_OK;
+
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, localbuf.ptr(), localbuf.length(),
+                            localbuf.memh(), m_e1->iface_attr().cap.get.max_iov);
+    ASSERT_UCS_OK_OR_INPROGRESS(uct_ep_get_zcopy(m_e1->ep(0), iov, iovcnt,
+                                                 remotebuf.addr(),
+                                                 remotebuf.rkey(), &comp));
+
+    scoped_log_handler hide_warn(hide_warns_logger);
+    m_e1->destroy_eps();
+
+    EXPECT_EQ(1, comp.count);
+    EXPECT_EQ(UCS_ERR_CANCELED, comp.status);
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_gga_get_zcopy_purge, gga_mlx5)
+
+
 class test_rc_ece : public test_rc {
 public:
     void init()
