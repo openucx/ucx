@@ -14,6 +14,9 @@
 #include <ucp/proto/proto_debug.h>
 #include <ucp/proto/proto_init.h>
 #include <ucp/proto/proto_single.inl>
+#include <ucp/rma/rma_rndv.h>
+
+#include <string.h>
 
 
 /**
@@ -38,6 +41,10 @@ typedef struct {
     ucs_sys_device_t          frag_sys_dev;
 } ucp_proto_rndv_rtr_mtype_priv_t;
 
+
+static size_t ucp_proto_rndv_rtr_req_pack(void *dest, void *arg);
+
+
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_rtr_common_request_init(ucp_request_t *req)
 {
@@ -45,19 +52,46 @@ ucp_proto_rtr_common_request_init(ucp_request_t *req)
     req->send.state.completed_size = 0;
 }
 
+static size_t ucp_proto_rndv_rtr_max_size(ucp_request_t *req)
+{
+    const ucp_proto_rndv_rtr_priv_t *rpriv = req->send.proto_config->priv;
+
+    return sizeof(ucp_rndv_rtr_hdr_t) + rpriv->super.packed_rkey_size;
+}
+
+static size_t ucp_proto_rndv_rtr_req_max_size(ucp_request_t *req)
+{
+    const ucp_proto_rndv_rtr_priv_t *rpriv = req->send.proto_config->priv;
+
+    return sizeof(ucp_rndv_rtr_req_hdr_t) + rpriv->super.packed_rkey_size;
+}
+
 static ucs_status_t ucp_proto_rndv_rtr_common_send(ucp_request_t *req)
 {
     const ucp_proto_rndv_rtr_priv_t *rpriv = req->send.proto_config->priv;
     ucp_worker_h UCS_V_UNUSED worker       = req->send.ep->worker;
+    ucp_ep_h ep                            = req->send.ep;
+    ucp_request_t *recv_req                = NULL;
+    uct_pack_callback_t pack_cb;
     size_t max_rtr_size;
     ucs_status_t status;
 
-    max_rtr_size = sizeof(ucp_rndv_rtr_hdr_t) + rpriv->super.packed_rkey_size;
-    status       = ucp_proto_am_bcopy_single_progress(req, UCP_AM_ID_RNDV_RTR,
-                                                      rpriv->super.lane,
-                                                      rpriv->pack_cb, req,
-                                                      max_rtr_size, NULL, 0);
-    return status;
+    if (req->flags & UCP_REQUEST_FLAG_RNDV_GET_REQ) {
+        pack_cb      = ucp_proto_rndv_rtr_req_pack;
+        max_rtr_size = ucp_proto_rndv_rtr_req_max_size(req);
+        recv_req     = ucp_rma_rndv_flush_open(req);
+    } else {
+        pack_cb      = rpriv->pack_cb;
+        max_rtr_size = ucp_proto_rndv_rtr_max_size(req);
+    }
+
+    status = ucp_proto_am_bcopy_single_send(req, UCP_AM_ID_RNDV_RTR,
+                                            rpriv->super.lane, pack_cb, req,
+                                            max_rtr_size, 0);
+    ucp_rma_rndv_flush_close(recv_req, ep, status);
+
+    return ucp_proto_single_status_handle(req, 0, NULL, rpriv->super.lane,
+                                          status);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -123,6 +157,38 @@ static size_t ucp_proto_rndv_rtr_pack_with_rkey(void *dest, void *arg)
                 rpriv->super.packed_rkey_size);
 
     return sizeof(*rtr) + rkey_size;
+}
+
+static size_t ucp_proto_rndv_rtr_req_pack(void *dest, void *arg)
+{
+    ucp_request_t *req                      = arg;
+    ucp_rndv_rtr_req_hdr_t *rtr_req         = dest;
+    const ucp_proto_rndv_rtr_priv_t *rpriv = req->send.proto_config->priv;
+    ucp_rkey_config_t *rkey_config;
+    void *rkey_src, *rkey_dst;
+    size_t rkey_size, packed_size;
+
+    ucs_assert(req->send.rndv.rkey != NULL);
+    rkey_config = ucp_rkey_config(req->send.ep->worker,
+                                  req->send.rndv.rkey);
+
+    packed_size = rpriv->pack_cb(&rtr_req->super, req);
+    rkey_size   = packed_size - sizeof(rtr_req->super);
+    if (rkey_size > 0) {
+        rkey_src = UCS_PTR_BYTE_OFFSET(rtr_req, sizeof(rtr_req->super));
+        rkey_dst = UCS_PTR_BYTE_OFFSET(rtr_req, sizeof(*rtr_req));
+        memmove(rkey_dst, rkey_src, rkey_size);
+    }
+
+    rtr_req->super.sreq_id = UCS_PTR_MAP_KEY_INVALID;
+    rtr_req->super.offset  = 0;
+    rtr_req->req.ep_id     = ucp_send_request_get_ep_remote_id(req);
+    rtr_req->req.req_id    = UCS_PTR_MAP_KEY_INVALID;
+    rtr_req->address       = req->send.rndv.remote_address;
+    rtr_req->sys_dev       = rkey_config->key.sys_dev;
+    rtr_req->mem_type      = req->send.rndv.rkey->mem_type;
+
+    return sizeof(*rtr_req) + rkey_size;
 }
 
 static ucs_status_t ucp_proto_rndv_rtr_progress(uct_pending_req_t *self)
@@ -497,6 +563,11 @@ ucs_status_t ucp_proto_rndv_rtr_handle_atp(void *arg, void *data, size_t length,
 
     UCP_SEND_REQUEST_GET_BY_ID(&req, worker, atp->super.req_id, 0,
                                return UCS_OK, "ATP %p", atp);
+
+    if (atp->super.status != UCS_OK) {
+        req->send.proto_config->proto->abort(req, atp->super.status);
+        return UCS_OK;
+    }
 
     if (!ucp_proto_common_frag_complete(req, atp->size, "rndv_atp")) {
         return UCS_OK;
