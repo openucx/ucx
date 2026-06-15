@@ -246,7 +246,8 @@ static size_t uct_cuda_ipc_iface_get_max_get_zcopy(uct_cuda_ipc_iface_t *iface)
     /* assume there is at least >= 1 GPUs on the system; assume uniformity */
     num_nvlinks = uct_cuda_ipc_get_device_nvlinks(0);
 
-    if (!num_nvlinks && (iface->config.enable_get_zcopy != UCS_CONFIG_ON)) {
+    if ((num_nvlinks == 0) &&
+        (iface->config.enable_get_zcopy != UCS_CONFIG_ON)) {
         ucs_debug("cuda-ipc get zcopy disabled as no nvlinks detected");
         return 0;
     }
