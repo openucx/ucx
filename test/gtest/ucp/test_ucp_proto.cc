@@ -184,6 +184,42 @@ UCS_TEST_P(test_ucp_proto, rkey_config) {
     EXPECT_NE(static_cast<int>(cfg_index1), static_cast<int>(cfg_index3));
 }
 
+UCS_TEST_P(test_ucp_proto, buffer_copy_host_memory_class)
+{
+    ucp_proto_common_init_params_t params = {};
+
+    params.reg_mem_info.type = UCS_MEMORY_TYPE_HOST;
+    EXPECT_EQ(UCT_PERF_ATTR_HOST_MEMORY_CLASS_REGISTERED_LOCKED,
+              ucp_proto_init_buffer_copy_host_memory_class(
+                      &params, UCS_MEMORY_TYPE_HOST));
+
+    params.flags = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY;
+    EXPECT_EQ(UCT_PERF_ATTR_HOST_MEMORY_CLASS_UNKNOWN,
+              ucp_proto_init_buffer_copy_host_memory_class(
+                      &params, UCS_MEMORY_TYPE_HOST));
+
+    params.flags = UCP_PROTO_COMMON_INIT_FLAG_RKEY_PTR;
+    EXPECT_EQ(UCT_PERF_ATTR_HOST_MEMORY_CLASS_UNKNOWN,
+              ucp_proto_init_buffer_copy_host_memory_class(
+                      &params, UCS_MEMORY_TYPE_HOST));
+
+    params.flags             = 0;
+    params.reg_mem_info.type = UCS_MEMORY_TYPE_UNKNOWN;
+    EXPECT_EQ(UCT_PERF_ATTR_HOST_MEMORY_CLASS_UNKNOWN,
+              ucp_proto_init_buffer_copy_host_memory_class(
+                      &params, UCS_MEMORY_TYPE_HOST));
+
+    params.reg_mem_info.type = UCS_MEMORY_TYPE_HOST;
+    EXPECT_EQ(UCT_PERF_ATTR_HOST_MEMORY_CLASS_UNKNOWN,
+              ucp_proto_init_buffer_copy_host_memory_class(
+                      &params, UCS_MEMORY_TYPE_CUDA));
+
+    params.reg_mem_info.type = UCS_MEMORY_TYPE_CUDA;
+    EXPECT_EQ(UCT_PERF_ATTR_HOST_MEMORY_CLASS_UNKNOWN,
+              ucp_proto_init_buffer_copy_host_memory_class(
+                      &params, UCS_MEMORY_TYPE_HOST));
+}
+
 UCS_TEST_P(test_ucp_proto, worker_print_info_rkey)
 {
     ucp_rkey_config_key_t rkey_config_key = create_rkey_config_key(0);

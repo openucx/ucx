@@ -110,6 +110,7 @@ class test_uct_query_cuda_copy : public test_uct_query {
 protected:
     static constexpr double LEGACY_H2D_BW = 8300.0 * UCS_MBYTE;
     static constexpr double LEGACY_D2H_BW = 11660.0 * UCS_MBYTE;
+    static constexpr double REG_HOST_BW  = 30000.0 * UCS_MBYTE;
 };
 
 UCS_TEST_P(test_uct_query_cuda_copy, auto_host_device_bw_and_scope)
@@ -150,6 +151,150 @@ UCS_TEST_P(test_uct_query_cuda_copy, auto_host_device_bw_and_scope)
               d2h_attr.bandwidth_shared_scope);
     EXPECT_EQ(UCS_SYS_DEVICE_ID_UNKNOWN,
               d2h_attr.bandwidth_shared_sys_device);
+}
+
+UCS_TEST_P(test_uct_query_cuda_copy, auto_bw_uses_host_memory_class,
+           "CUDA_COPY_BW=default:10000MBs,h2d:auto,d2h:auto,d2d:320GBs")
+{
+    auto h2d_unknown            = init_perf_attr();
+    auto h2d_reg                = init_perf_attr();
+    auto h2d_short              = init_perf_attr();
+    auto h2d_reg_unknown_sysdev = init_perf_attr();
+    auto d2h_unknown            = init_perf_attr();
+    auto d2h_reg                = init_perf_attr();
+    auto d2h_remote             = init_perf_attr();
+    auto d2h_reg_unknown_sysdev = init_perf_attr();
+
+    h2d_unknown.field_mask |= UCT_PERF_ATTR_FIELD_BANDWIDTH |
+                              UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH;
+    h2d_unknown.operation          = UCT_EP_OP_PUT_ZCOPY;
+    h2d_unknown.local_memory_type  = UCS_MEMORY_TYPE_HOST;
+    h2d_unknown.remote_memory_type = UCS_MEMORY_TYPE_CUDA;
+    h2d_unknown.remote_sys_device  = 2;
+    EXPECT_EQ(iface_estimate_perf(&h2d_unknown), UCS_OK);
+    EXPECT_DOUBLE_EQ(LEGACY_H2D_BW, h2d_unknown.bandwidth.shared);
+    EXPECT_DOUBLE_EQ(LEGACY_H2D_BW, h2d_unknown.path_bandwidth.shared);
+    EXPECT_EQ(0, h2d_unknown.bandwidth.dedicated);
+
+    h2d_reg.field_mask |= UCT_PERF_ATTR_FIELD_BANDWIDTH |
+                          UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH |
+                          UCT_PERF_ATTR_FIELD_LOCAL_HOST_MEMORY_CLASS;
+    h2d_reg.operation                = UCT_EP_OP_PUT_ZCOPY;
+    h2d_reg.local_memory_type        = UCS_MEMORY_TYPE_HOST;
+    h2d_reg.remote_memory_type       = UCS_MEMORY_TYPE_CUDA;
+    h2d_reg.remote_sys_device        = 2;
+    h2d_reg.local_host_memory_class  =
+            UCT_PERF_ATTR_HOST_MEMORY_CLASS_REGISTERED_LOCKED;
+    EXPECT_EQ(iface_estimate_perf(&h2d_reg), UCS_OK);
+    EXPECT_DOUBLE_EQ(REG_HOST_BW, h2d_reg.bandwidth.shared);
+    EXPECT_DOUBLE_EQ(h2d_reg.bandwidth.shared,
+                     h2d_reg.path_bandwidth.shared);
+    EXPECT_EQ(0, h2d_reg.bandwidth.dedicated);
+
+    h2d_short.field_mask |= UCT_PERF_ATTR_FIELD_BANDWIDTH |
+                            UCT_PERF_ATTR_FIELD_LOCAL_HOST_MEMORY_CLASS;
+    h2d_short.operation                = UCT_EP_OP_PUT_SHORT;
+    h2d_short.local_memory_type        = UCS_MEMORY_TYPE_HOST;
+    h2d_short.remote_memory_type       = UCS_MEMORY_TYPE_CUDA;
+    h2d_short.remote_sys_device        = 2;
+    h2d_short.local_host_memory_class  =
+            UCT_PERF_ATTR_HOST_MEMORY_CLASS_REGISTERED_LOCKED;
+    EXPECT_EQ(iface_estimate_perf(&h2d_short), UCS_OK);
+    EXPECT_DOUBLE_EQ(0.95 * LEGACY_H2D_BW, h2d_short.bandwidth.shared);
+
+    h2d_reg_unknown_sysdev.field_mask |=
+            UCT_PERF_ATTR_FIELD_BANDWIDTH |
+            UCT_PERF_ATTR_FIELD_LOCAL_HOST_MEMORY_CLASS;
+    h2d_reg_unknown_sysdev.operation                = UCT_EP_OP_PUT_ZCOPY;
+    h2d_reg_unknown_sysdev.local_memory_type        = UCS_MEMORY_TYPE_HOST;
+    h2d_reg_unknown_sysdev.remote_memory_type       = UCS_MEMORY_TYPE_CUDA;
+    h2d_reg_unknown_sysdev.remote_sys_device        =
+            UCS_SYS_DEVICE_ID_UNKNOWN;
+    h2d_reg_unknown_sysdev.local_host_memory_class  =
+            UCT_PERF_ATTR_HOST_MEMORY_CLASS_REGISTERED_LOCKED;
+    EXPECT_EQ(iface_estimate_perf(&h2d_reg_unknown_sysdev), UCS_OK);
+    EXPECT_DOUBLE_EQ(REG_HOST_BW,
+                     h2d_reg_unknown_sysdev.bandwidth.shared);
+
+    d2h_unknown.field_mask |= UCT_PERF_ATTR_FIELD_BANDWIDTH |
+                              UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH;
+    d2h_unknown.operation          = UCT_EP_OP_GET_ZCOPY;
+    d2h_unknown.local_memory_type  = UCS_MEMORY_TYPE_HOST;
+    d2h_unknown.remote_memory_type = UCS_MEMORY_TYPE_CUDA;
+    d2h_unknown.remote_sys_device  = 3;
+    EXPECT_EQ(iface_estimate_perf(&d2h_unknown), UCS_OK);
+    EXPECT_DOUBLE_EQ(LEGACY_D2H_BW, d2h_unknown.bandwidth.shared);
+    EXPECT_DOUBLE_EQ(LEGACY_D2H_BW, d2h_unknown.path_bandwidth.shared);
+    EXPECT_EQ(0, d2h_unknown.bandwidth.dedicated);
+
+    d2h_reg.field_mask |= UCT_PERF_ATTR_FIELD_BANDWIDTH |
+                          UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH |
+                          UCT_PERF_ATTR_FIELD_LOCAL_HOST_MEMORY_CLASS;
+    d2h_reg.operation                = UCT_EP_OP_GET_ZCOPY;
+    d2h_reg.local_memory_type        = UCS_MEMORY_TYPE_HOST;
+    d2h_reg.remote_memory_type       = UCS_MEMORY_TYPE_CUDA;
+    d2h_reg.remote_sys_device        = 3;
+    d2h_reg.local_host_memory_class  =
+            UCT_PERF_ATTR_HOST_MEMORY_CLASS_REGISTERED_LOCKED;
+    EXPECT_EQ(iface_estimate_perf(&d2h_reg), UCS_OK);
+    EXPECT_DOUBLE_EQ(REG_HOST_BW, d2h_reg.bandwidth.shared);
+    EXPECT_DOUBLE_EQ(d2h_reg.bandwidth.shared,
+                     d2h_reg.path_bandwidth.shared);
+    EXPECT_EQ(0, d2h_reg.bandwidth.dedicated);
+
+    d2h_reg_unknown_sysdev.field_mask |=
+            UCT_PERF_ATTR_FIELD_BANDWIDTH |
+            UCT_PERF_ATTR_FIELD_LOCAL_HOST_MEMORY_CLASS;
+    d2h_reg_unknown_sysdev.operation                = UCT_EP_OP_GET_ZCOPY;
+    d2h_reg_unknown_sysdev.local_memory_type        = UCS_MEMORY_TYPE_HOST;
+    d2h_reg_unknown_sysdev.remote_memory_type       = UCS_MEMORY_TYPE_CUDA;
+    d2h_reg_unknown_sysdev.remote_sys_device        =
+            UCS_SYS_DEVICE_ID_UNKNOWN;
+    d2h_reg_unknown_sysdev.local_host_memory_class  =
+            UCT_PERF_ATTR_HOST_MEMORY_CLASS_REGISTERED_LOCKED;
+    EXPECT_EQ(iface_estimate_perf(&d2h_reg_unknown_sysdev), UCS_OK);
+    EXPECT_DOUBLE_EQ(REG_HOST_BW,
+                     d2h_reg_unknown_sysdev.bandwidth.shared);
+
+    d2h_remote.field_mask |= UCT_PERF_ATTR_FIELD_BANDWIDTH |
+                             UCT_PERF_ATTR_FIELD_REMOTE_HOST_MEMORY_CLASS;
+    d2h_remote.operation                 = UCT_EP_OP_PUT_ZCOPY;
+    d2h_remote.local_memory_type         = UCS_MEMORY_TYPE_CUDA;
+    d2h_remote.remote_memory_type        = UCS_MEMORY_TYPE_HOST;
+    d2h_remote.local_sys_device          = 3;
+    d2h_remote.remote_host_memory_class  =
+            UCT_PERF_ATTR_HOST_MEMORY_CLASS_REGISTERED_LOCKED;
+    EXPECT_EQ(iface_estimate_perf(&d2h_remote), UCS_OK);
+    EXPECT_DOUBLE_EQ(REG_HOST_BW, d2h_remote.bandwidth.shared);
+}
+
+UCS_TEST_P(test_uct_query_cuda_copy, explicit_bw_overrides_host_memory_class,
+           "CUDA_COPY_BW=default:10000MBs,h2d:12345MBs,d2h:23456MBs,d2d:320GBs")
+{
+    auto h2d_reg = init_perf_attr();
+    auto d2h_reg = init_perf_attr();
+
+    h2d_reg.field_mask |= UCT_PERF_ATTR_FIELD_BANDWIDTH |
+                          UCT_PERF_ATTR_FIELD_LOCAL_HOST_MEMORY_CLASS;
+    h2d_reg.operation               = UCT_EP_OP_PUT_ZCOPY;
+    h2d_reg.local_memory_type       = UCS_MEMORY_TYPE_HOST;
+    h2d_reg.remote_memory_type      = UCS_MEMORY_TYPE_CUDA;
+    h2d_reg.remote_sys_device       = 2;
+    h2d_reg.local_host_memory_class =
+            UCT_PERF_ATTR_HOST_MEMORY_CLASS_REGISTERED_LOCKED;
+    EXPECT_EQ(iface_estimate_perf(&h2d_reg), UCS_OK);
+    EXPECT_DOUBLE_EQ(12345.0 * UCS_MBYTE, h2d_reg.bandwidth.shared);
+
+    d2h_reg.field_mask |= UCT_PERF_ATTR_FIELD_BANDWIDTH |
+                          UCT_PERF_ATTR_FIELD_REMOTE_HOST_MEMORY_CLASS;
+    d2h_reg.operation                = UCT_EP_OP_PUT_ZCOPY;
+    d2h_reg.local_memory_type        = UCS_MEMORY_TYPE_CUDA;
+    d2h_reg.remote_memory_type       = UCS_MEMORY_TYPE_HOST;
+    d2h_reg.local_sys_device         = 3;
+    d2h_reg.remote_host_memory_class =
+            UCT_PERF_ATTR_HOST_MEMORY_CLASS_REGISTERED_LOCKED;
+    EXPECT_EQ(iface_estimate_perf(&d2h_reg), UCS_OK);
+    EXPECT_DOUBLE_EQ(23456.0 * UCS_MBYTE, d2h_reg.bandwidth.shared);
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_uct_query_cuda_copy, cuda_copy)
