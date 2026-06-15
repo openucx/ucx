@@ -219,7 +219,8 @@ static int uct_cuda_ipc_get_device_nvlinks(unsigned ordinal)
 
     num_detected_nvlinks = ((value.nvmlReturn == NVML_SUCCESS) &&
                             (value.valueType == NVML_VALUE_TYPE_UNSIGNED_INT)) ?
-                           value.value.uiVal : 0;
+                                   value.value.uiVal :
+                                   0;
 
     /* not enough to check number of nvlinks; need to check if links are active
      * by seeing if remote info can be obtained */
