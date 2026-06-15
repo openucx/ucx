@@ -270,6 +270,7 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_db(uct_rc_gdaki_dev_ep_t *ep, unsigned cid,
         doca_gpu_dev_common_update_dbr(dbrec_ptr, wqe_next);
         doca_gpu_dev_common_ring_db(db_ptr, qpn_ds, wqe_next);
         ref.store(wqe_next, cuda::std::memory_order_relaxed);
+        doca_gpu_dev_verbs_fence_acquire<DOCA_GPUNETIO_VERBS_SYNC_SCOPE_CTA>();
     }
 }
 
