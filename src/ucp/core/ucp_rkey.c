@@ -717,7 +717,7 @@ ucp_memh_pack_internal(ucp_mem_h memh, const ucp_memh_pack_params_t *params,
               ucp_memh_is_zero_length(memh)       ? "zero_length " :
                                                     "",
               memh, ucp_memh_address(memh), memh->md_map,
-              context ? context->export_md_map : 0);
+              (context != NULL) ? context->export_md_map : 0);
 
     if (ucp_memh_is_zero_length(memh)) {
         /* Dummy memh, return dummy key */
