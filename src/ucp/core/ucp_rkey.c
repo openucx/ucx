@@ -711,6 +711,14 @@ ucp_memh_pack_internal(ucp_mem_h memh, const ucp_memh_pack_params_t *params,
 
     flags = UCP_PARAM_VALUE(MEMH_PACK, params, flags, FLAGS, 0);
 
+    ucs_trace("packing %smemh %p for buffer %p md_map 0x%" PRIx64
+              " export_md_map 0x%" PRIx64,
+              (flags & UCP_MEMH_PACK_FLAG_EXPORT) ? "exported " :
+              ucp_memh_is_zero_length(memh)       ? "zero_length " :
+                                                    "",
+              memh, ucp_memh_address(memh), memh->md_map,
+              context ? context->export_md_map : 0);
+
     if (ucp_memh_is_zero_length(memh)) {
         /* Dummy memh, return dummy key */
         if (rkey_compat) {
@@ -722,11 +730,6 @@ ucp_memh_pack_internal(ucp_mem_h memh, const ucp_memh_pack_params_t *params,
         }
         return UCS_OK;
     }
-
-    ucs_trace("packing %smemh %p for buffer %p md_map 0x%" PRIx64
-              " export_md_map 0x%" PRIx64,
-              (flags & UCP_MEMH_PACK_FLAG_EXPORT) ? "exported " : "", memh,
-              ucp_memh_address(memh), memh->md_map, context->export_md_map);
 
     UCP_THREAD_CS_ENTER(&context->mt_lock);
 
