@@ -13,6 +13,7 @@
 #include <uct/base/uct_worker.h>
 #include <uct/ib/base/ib_log.h>
 #include <uct/ib/base/ib_device.h>
+#include <uct/ib/mlx5/ib_mlx5_coco.h>
 #include <uct/ib/mlx5/dv/ib_mlx5_ifc.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/debug/log.h>
@@ -278,6 +279,8 @@ typedef struct uct_ib_mlx5_dma_seg {
 #if HAVE_DEVX
 typedef struct {
     struct mlx5dv_devx_obj *dvmr;
+    uint32_t               lkey;
+    uint32_t               rkey;
     int                    mr_num;
     size_t                 length;
     struct ibv_mr          *mrs[];
@@ -339,12 +342,13 @@ typedef struct {
 } uct_ib_mlx5_devx_mem_t;
 
 
-typedef struct {
+typedef struct uct_ib_mlx5_devx_umem {
     struct mlx5dv_devx_umem  *mem;
     size_t                   size;
     size_t                   mmap_size;
     int                      dmabuf_fd;
     int                      is_dmabuf;
+    uct_ib_mlx5_coco_shared_alloc_t *coco_shared;
 } uct_ib_mlx5_devx_umem_t;
 
 
@@ -412,11 +416,13 @@ typedef struct uct_ib_mlx5_md {
     uint32_t                  flags;
     ucs_mpool_t               dbrec_pool;
     ucs_recursive_spinlock_t  dbrec_lock;
+    uct_ib_mlx5_coco_state_t  *coco;
     uct_ib_port_select_mode_t port_select_mode;
     ucs_sys_device_t          direct_nic_sys_dev;
 #if HAVE_DEVX
     void                     *zero_buf;
     uct_ib_mlx5_devx_umem_t  zero_mem;
+    ucs_list_link_t          dbrec_pages;
 
     struct {
         ucs_list_link_t      list;
@@ -1111,6 +1117,7 @@ uct_ib_mlx5_devx_umem_reset(uct_ib_mlx5_devx_umem_t *mem)
     mem->mmap_size = 0;
     mem->dmabuf_fd = UCT_IB_MLX5_INVALID_DMABUF_FD;
     mem->is_dmabuf = 0;
+    mem->coco_shared = NULL;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -1128,126 +1135,6 @@ uct_ib_mlx5_devx_umem_reg_status(int sys_errno)
     return (sys_errno == ENOMEM) ? UCS_ERR_NO_MEMORY : UCS_ERR_IO_ERROR;
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
-uct_ib_mlx5_md_buf_alloc_shared(uct_ib_mlx5_md_t *md, size_t size, int silent,
-                                void **buf_p, uct_ib_mlx5_devx_umem_t *mem,
-                                int access_mode, char *name)
-{
-    const ucs_log_level_t level = silent ? UCS_LOG_LEVEL_DEBUG :
-                                           UCS_LOG_LEVEL_ERROR;
-    const char *alloc_name      = (name != NULL) ? name : "unknown";
-#if HAVE_LINUX_DMA_HEAP_H && HAVE_DECL_MLX5DV_DEVX_UMEM_REG_EX && \
-    HAVE_DECL_MLX5DV_UMEM_MASK_DMABUF && HAVE_STRUCT_MLX5DV_DEVX_UMEM_IN
-    struct ibv_context *ibv_context = md->super.dev.ibv_context;
-    struct mlx5dv_devx_umem_in umem_in;
-    struct dma_heap_allocation_data heap_data;
-    ucs_status_t status;
-    void *buf = NULL;
-    size_t mmap_size;
-    int reg_errno;
-    int heap_fd;
-    int ret;
-
-    uct_ib_mlx5_devx_umem_reset(mem);
-    *buf_p = NULL;
-
-    mmap_size = ucs_align_up(size, ucs_get_page_size());
-    heap_fd   = open(UCT_IB_MLX5_CC_DMA_HEAP, O_RDWR | O_CLOEXEC);
-    if (heap_fd < 0) {
-        status = (errno == ENOENT) ? UCS_ERR_UNSUPPORTED : UCS_ERR_IO_ERROR;
-        ucs_log(level, "failed to open %s for %s: %m",
-                UCT_IB_MLX5_CC_DMA_HEAP, alloc_name);
-        uct_ib_mlx5_devx_umem_reset(mem);
-        return status;
-    }
-
-    memset(&heap_data, 0, sizeof(heap_data));
-    heap_data.len      = mmap_size;
-    heap_data.fd_flags = O_RDWR | O_CLOEXEC;
-
-    ret = ioctl(heap_fd, DMA_HEAP_IOCTL_ALLOC, &heap_data);
-    if (ret != 0) {
-        status = (errno == ENOMEM) ? UCS_ERR_NO_MEMORY : UCS_ERR_IO_ERROR;
-        ucs_log(level, "DMA_HEAP_IOCTL_ALLOC(%s, name=%s size=%zu) failed: %m",
-                UCT_IB_MLX5_CC_DMA_HEAP, alloc_name, mmap_size);
-        ret = close(heap_fd);
-        if (ret != 0) {
-            ucs_warn("close(dma_heap_fd=%d) failed: %m", heap_fd);
-        }
-        uct_ib_mlx5_devx_umem_reset(mem);
-        return status;
-    }
-
-    ret = close(heap_fd);
-    if (ret != 0) {
-        ucs_warn("close(dma_heap_fd=%d) failed: %m", heap_fd);
-    }
-
-    mem->dmabuf_fd = heap_data.fd;
-    buf = mmap(NULL, mmap_size, PROT_READ | PROT_WRITE, MAP_SHARED,
-               mem->dmabuf_fd, 0);
-    if (buf == MAP_FAILED) {
-        status = (errno == ENOMEM) ? UCS_ERR_NO_MEMORY : UCS_ERR_IO_ERROR;
-        ucs_log(level, "mmap(name=%s dmabuf_fd=%d size=%zu) failed: %m",
-                alloc_name, mem->dmabuf_fd, mmap_size);
-        buf = NULL;
-        ret = close(mem->dmabuf_fd);
-        if (ret != 0) {
-            ucs_warn("close(dmabuf_fd=%d) failed: %m", mem->dmabuf_fd);
-        }
-        uct_ib_mlx5_devx_umem_reset(mem);
-        return status;
-    }
-
-    memset(buf, 0, mmap_size);
-
-    memset(&umem_in, 0, sizeof(umem_in));
-    umem_in.addr        = NULL;
-    umem_in.size        = mmap_size;
-    umem_in.access      = access_mode;
-    umem_in.pgsz_bitmap = UINT64_MAX & ~(ucs_get_page_size() - 1);
-    umem_in.comp_mask   = MLX5DV_UMEM_MASK_DMABUF;
-    umem_in.dmabuf_fd   = mem->dmabuf_fd;
-
-    mem->mem = mlx5dv_devx_umem_reg_ex(ibv_context, &umem_in);
-    if (mem->mem == NULL) {
-        reg_errno = errno;
-        status    = uct_ib_mlx5_devx_umem_reg_status(reg_errno);
-        errno     = reg_errno;
-        uct_ib_check_memlock_limit_msg(
-                ibv_context, level,
-                "mlx5dv_devx_umem_reg_ex(name=%s dmabuf_fd=%d size=%zu access=0x%x)",
-                alloc_name, mem->dmabuf_fd, mmap_size, access_mode);
-        ret = munmap(buf, mmap_size);
-        if (ret != 0) {
-            ucs_warn("munmap(buf=%p, len=%zu) failed: %m", buf, mmap_size);
-        }
-        ret = close(mem->dmabuf_fd);
-        if (ret != 0) {
-            ucs_warn("close(dmabuf_fd=%d) failed: %m", mem->dmabuf_fd);
-        }
-        uct_ib_mlx5_devx_umem_reset(mem);
-        return status;
-    }
-
-    mem->size      = size;
-    mem->mmap_size = mmap_size;
-    mem->is_dmabuf = 1;
-    *buf_p         = buf;
-    return UCS_OK;
-#else
-    (void)md;
-    (void)size;
-    (void)access_mode;
-
-    ucs_log(level, "shared DEVX UMEM allocation for %s is unsupported",
-            alloc_name);
-    *buf_p = NULL;
-    uct_ib_mlx5_devx_umem_reset(mem);
-    return UCS_ERR_UNSUPPORTED;
-#endif
-}
-
 static inline ucs_status_t
 uct_ib_mlx5_md_buf_alloc(uct_ib_mlx5_md_t *md, size_t size, int silent,
                          void **buf_p, uct_ib_mlx5_devx_umem_t *mem,
@@ -1260,11 +1147,12 @@ uct_ib_mlx5_md_buf_alloc(uct_ib_mlx5_md_t *md, size_t size, int silent,
     void *buf;
     int ret;
 
-    if (uct_ib_md_is_cc_dma_bounce(&md->super)) {
-        return uct_ib_mlx5_md_buf_alloc_shared(md, size, silent, buf_p, mem,
-                                               access_mode, name);
+    if (uct_ib_md_is_coco_hardened(&md->super)) {
+        return uct_ib_mlx5_coco_md_buf_alloc_shared(md, size, silent, buf_p,
+                                                    mem, access_mode, name);
     }
 
+    uct_ib_mlx5_devx_umem_reset(mem);
     mem->mmap_size = size;
     mem->dmabuf_fd = UCT_IB_MLX5_INVALID_DMABUF_FD;
     mem->is_dmabuf = 0;
@@ -1311,46 +1199,23 @@ err_free:
 static inline void
 uct_ib_mlx5_md_buf_free(uct_ib_mlx5_md_t *md, void *buf, uct_ib_mlx5_devx_umem_t *mem)
 {
-    struct mlx5dv_devx_umem *umem;
-    size_t mmap_size;
-    size_t size;
-    int dmabuf_fd;
-    int is_dmabuf;
     int ret;
 
     if (buf == NULL) {
         return;
     }
 
-    umem       = mem->mem;
-    mmap_size  = mem->mmap_size;
-    size       = mem->size;
-    dmabuf_fd  = mem->dmabuf_fd;
-    is_dmabuf  = mem->is_dmabuf;
-
-    mlx5dv_devx_umem_dereg(umem);
-    if (is_dmabuf) {
-        uct_ib_mlx5_devx_umem_reset(mem);
-
-        ret = munmap(buf, mmap_size);
-        if (ret != 0) {
-            ucs_warn("munmap(buf=%p, len=%zu) failed: %m", buf,
-                     mmap_size);
-        }
-
-        if (dmabuf_fd != UCT_IB_MLX5_INVALID_DMABUF_FD) {
-            ret = close(dmabuf_fd);
-            if (ret != 0) {
-                ucs_warn("close(dmabuf_fd=%d) failed: %m", dmabuf_fd);
-            }
-        }
+    if (mem->coco_shared != NULL) {
+        uct_ib_mlx5_coco_md_buf_free_shared(md, buf, mem);
         return;
     }
 
+    mlx5dv_devx_umem_dereg(mem->mem);
+
     if (md->super.fork_init) {
-        ret = madvise(buf, size, MADV_DOFORK);
+        ret = madvise(buf, mem->size, MADV_DOFORK);
         if (ret != 0) {
-            ucs_warn("madvise(DOFORK, buf=%p, len=%zu) failed: %m", buf, size);
+            ucs_warn("madvise(DOFORK, buf=%p, len=%zu) failed: %m", buf, mem->size);
         }
     }
     ucs_free(buf);

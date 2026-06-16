@@ -252,8 +252,10 @@ if HAVE_TL_RC
 gtest_SOURCES += \
 	uct/ib/test_rc.cc
 if HAVE_MLX5_DV
+if HAVE_DEVX
 gtest_SOURCES += \
 	uct/ib/test_coco_hardening.cc
+endif
 endif
 endif
 if HAVE_TL_DC

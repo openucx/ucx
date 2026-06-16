@@ -115,29 +115,51 @@ UCS_TEST_F(test_ib_md_coco_source, coco_control_cq_probe_follows_coco_pd)
 UCS_TEST_F(test_ib_md_coco_source,
            shared_devx_buffer_free_caches_dmabuf_metadata)
 {
-    std::string free_source = test_ib_md_get_source_span(
+    std::string wrapper_source = test_ib_md_get_source_span(
         "src/uct/ib/mlx5/ib_mlx5.h",
         "uct_ib_mlx5_md_buf_free",
         "#else");
-    size_t fd_cache_pos     = free_source.find("= mem->dmabuf_fd");
-    size_t mmap_cache_pos   = free_source.find("= mem->mmap_size");
-    size_t reset_pos        = free_source.find(
+    std::string free_source = wrapper_source;
+    size_t unmap_pos;
+    size_t close_pos;
+
+    if (wrapper_source.find("uct_ib_mlx5_coco_md_buf_free_shared") !=
+        std::string::npos) {
+        free_source = test_ib_md_get_source_span(
+            "src/uct/ib/mlx5/ib_mlx5_coco.c",
+            "uct_ib_mlx5_coco_md_buf_free_shared",
+            "ucs_free(alloc);");
+    }
+
+    size_t fd_cache_pos   = free_source.find("= mem->dmabuf_fd");
+    size_t mmap_cache_pos = free_source.find("= mem->mmap_size");
+    size_t reset_pos      = free_source.find(
         "uct_ib_mlx5_devx_umem_reset(mem)");
-    size_t munmap_pos       = free_source.find("munmap(buf, mmap_size)");
-    size_t close_pos        = free_source.find("close(dmabuf_fd)");
+    unmap_pos             = free_source.find("munmap(buf, mmap_size)");
+    if (unmap_pos == std::string::npos) {
+        unmap_pos = free_source.find("unmap(buf, mmap_size");
+    }
+    close_pos = free_source.find("close(dmabuf_fd)");
+    if (close_pos == std::string::npos) {
+        close_pos = free_source.find("close_fd(dmabuf_fd");
+    }
 
     ASSERT_NE(std::string::npos, fd_cache_pos);
     ASSERT_NE(std::string::npos, mmap_cache_pos);
     ASSERT_NE(std::string::npos, reset_pos);
-    ASSERT_NE(std::string::npos, munmap_pos);
+    ASSERT_NE(std::string::npos, unmap_pos);
     ASSERT_NE(std::string::npos, close_pos);
 
-    EXPECT_LT(fd_cache_pos, munmap_pos);
-    EXPECT_LT(mmap_cache_pos, munmap_pos);
-    EXPECT_LT(reset_pos, munmap_pos);
-    EXPECT_LT(munmap_pos, close_pos);
+    EXPECT_LT(fd_cache_pos, unmap_pos);
+    EXPECT_LT(mmap_cache_pos, unmap_pos);
+    EXPECT_LT(reset_pos, unmap_pos);
+    EXPECT_LT(unmap_pos, close_pos);
     EXPECT_EQ(std::string::npos, free_source.find("close(mem->dmabuf_fd)"));
     EXPECT_EQ(std::string::npos, free_source.find("munmap(buf, mem->mmap_size)"));
+    EXPECT_EQ(std::string::npos,
+              free_source.find("close_fd(mem->dmabuf_fd"));
+    EXPECT_EQ(std::string::npos,
+              free_source.find("unmap(buf, mem->mmap_size"));
 }
 
 } // namespace

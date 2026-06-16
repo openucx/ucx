@@ -142,10 +142,14 @@ void uct_rc_mlx5_coco_mask_capabilities(const uct_ib_mlx5_md_t *md,
         return;
     }
 
-    iface_attr->cap.flags &= ~(rma_flags | UCT_IFACE_FLAG_ATOMIC_CPU |
+    iface_attr->cap.flags &= ~(UCT_IFACE_FLAG_ATOMIC_CPU |
                                UCT_IFACE_FLAG_ATOMIC_DEVICE);
-    memset(&iface_attr->cap.put, 0, sizeof(iface_attr->cap.put));
-    memset(&iface_attr->cap.get, 0, sizeof(iface_attr->cap.get));
+    if (md->coco == NULL) {
+        iface_attr->cap.flags &= ~rma_flags;
+        memset(&iface_attr->cap.put, 0, sizeof(iface_attr->cap.put));
+        memset(&iface_attr->cap.get, 0, sizeof(iface_attr->cap.get));
+    }
+
     memset(&iface_attr->cap.atomic32, 0, sizeof(iface_attr->cap.atomic32));
     memset(&iface_attr->cap.atomic64, 0, sizeof(iface_attr->cap.atomic64));
 }
