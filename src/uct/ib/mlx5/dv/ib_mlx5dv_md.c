@@ -685,6 +685,8 @@ uct_ib_mlx5_devx_reg_mt(uct_ib_mlx5_md_t *md, void *address, size_t length,
         goto err_dereg;
     }
 
+    ksm_data->lkey = *mkey_p;
+    ksm_data->rkey = *mkey_p;
     *ksm_data_p = ksm_data;
     return UCS_OK;
 
@@ -838,6 +840,10 @@ uct_ib_mlx5_devx_reg_mr(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mem_t *memh,
     ucs_status_t status;
     uint32_t mkey;
 
+    if (uct_ib_md_is_coco_hardened(&md->super)) {
+        access_flags = uct_ib_mlx5_coco_mkey_sanitize_access(access_flags);
+    }
+
     if ((length >= md->super.config.min_mt_reg) &&
         !(access_flags & IBV_ACCESS_ON_DEMAND) &&
         !uct_ib_mlx5_devx_symmetric_rkey(md, flags)) {
@@ -850,6 +856,13 @@ uct_ib_mlx5_devx_reg_mr(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mem_t *memh,
         if (status == UCS_OK) {
             *rkey_p = *lkey_p = mkey;
             memh->super.flags |= UCT_IB_MEM_MULTITHREADED;
+            status = uct_ib_mlx5_coco_mkey_record_add(
+                    md->coco, *lkey_p, *rkey_p, address, length, access_flags);
+            if (status != UCS_OK) {
+                (void)uct_ib_mlx5_devx_dereg_mt(
+                        md, memh->mrs[mr_type].ksm_data);
+                return status;
+            }
             return UCS_OK;
         } else if (status != UCS_ERR_UNSUPPORTED) {
             return status;
@@ -875,6 +888,13 @@ uct_ib_mlx5_devx_reg_mr(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mem_t *memh,
 out:
     *lkey_p = memh->mrs[mr_type].super.ib->lkey;
     *rkey_p = memh->mrs[mr_type].super.ib->rkey;
+    status = uct_ib_mlx5_coco_mkey_record_add(md->coco, *lkey_p, *rkey_p,
+                                              address, length, access_flags);
+    if (status != UCS_OK) {
+        (void)uct_ib_dereg_mr(memh->mrs[mr_type].super.ib);
+        return status;
+    }
+
     return UCS_OK;
 }
 
@@ -882,10 +902,26 @@ static ucs_status_t uct_ib_mlx5_devx_dereg_mr(uct_ib_mlx5_md_t *md,
                                               uct_ib_mlx5_devx_mem_t *memh,
                                               uct_ib_mr_type_t mr_type)
 {
+    ucs_status_t status;
+
     if (memh->super.flags & UCT_IB_MEM_MULTITHREADED) {
-        return uct_ib_mlx5_devx_dereg_mt(md, memh->mrs[mr_type].ksm_data);
+        uint32_t lkey = memh->mrs[mr_type].ksm_data->lkey;
+        uint32_t rkey = memh->mrs[mr_type].ksm_data->rkey;
+
+        status = uct_ib_mlx5_devx_dereg_mt(md, memh->mrs[mr_type].ksm_data);
+        if (status == UCS_OK) {
+            (void)uct_ib_mlx5_coco_mkey_record_remove(md->coco, lkey, rkey);
+        }
+        return status;
     } else {
-        return uct_ib_dereg_mr(memh->mrs[mr_type].super.ib);
+        uint32_t lkey = memh->mrs[mr_type].super.ib->lkey;
+        uint32_t rkey = memh->mrs[mr_type].super.ib->rkey;
+
+        status = uct_ib_dereg_mr(memh->mrs[mr_type].super.ib);
+        if (status == UCS_OK) {
+            (void)uct_ib_mlx5_coco_mkey_record_remove(md->coco, lkey, rkey);
+        }
+        return status;
     }
 }
 
@@ -2591,6 +2627,11 @@ ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
         goto err_lru_cleanup;
     }
 
+    status = uct_ib_mlx5_coco_state_init(md);
+    if (status != UCS_OK) {
+        goto err_md_close_common;
+    }
+
     uct_ib_mlx5_md_port_counter_set_id_init(md);
     ucs_recursive_spinlock_init(&md->dbrec_lock, 0);
     ucs_mpool_params_reset(&mp_params);
@@ -2679,6 +2720,8 @@ err_dbrec_mpool_cleanup:
     ucs_mpool_cleanup(&md->dbrec_pool, 0);
 err_lock_destroy:
     ucs_recursive_spinlock_destroy(&md->dbrec_lock);
+    uct_ib_mlx5_coco_state_cleanup(md);
+err_md_close_common:
     uct_ib_md_close_common(&md->super);
 err_lru_cleanup:
     uct_ib_mlx5_devx_mr_lru_cleanup(md);
@@ -2731,6 +2774,7 @@ void uct_ib_mlx5_devx_md_close(uct_md_h tl_md)
     ucs_mpool_cleanup(&md->dbrec_pool, 1);
     ucs_recursive_spinlock_destroy(&md->dbrec_lock);
     uct_ib_mlx5_devx_umr_cleanup(md);
+    uct_ib_mlx5_coco_state_cleanup(md);
     uct_ib_md_close_common(&md->super);
     uct_ib_mlx5_devx_mr_lru_cleanup(md);
     uct_ib_md_free(&md->super);
@@ -2956,6 +3000,13 @@ uct_ib_mlx5_devx_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
 
     flags = UCS_PARAM_VALUE(UCT_MD_MKEY_PACK_FIELD, params, flags, FLAGS, 0);
     if (flags & UCT_MD_MKEY_PACK_FLAG_EXPORT) {
+        if (uct_ib_md_is_coco_hardened(&md->super)) {
+            ucs_error("%s: exporting CoCo memory keys requires bounded "
+                      "metadata and is disabled",
+                      uct_ib_device_name(&md->super.dev));
+            return UCS_ERR_UNSUPPORTED;
+        }
+
         if (uct_ib_mlx5_devx_has_dm(memh)) {
             ucs_error("%s: cannot export memory allocated on the device "
                       "(address %p length %zu)",
@@ -3001,6 +3052,7 @@ uct_ib_mlx5_devx_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
          uct_ib_mlx5_devx_memh_has_ro(md, memh)) &&
         !(memh->super.flags & UCT_IB_MEM_IMPORTED) &&
         !(memh->super.flags & UCT_IB_MEM_DIRECT_NIC) &&
+        !uct_ib_md_is_coco_hardened(&md->super) &&
         md->super.config.enable_indirect_atomic &&
         ucs_test_all_flags(md->flags,
                            UCT_IB_MLX5_MD_FLAG_KSM |
@@ -3077,6 +3129,12 @@ ucs_status_t uct_ib_mlx5_devx_mem_attach(uct_md_h uct_md,
     ucs_status_t status;
     void *access_key;
     int ret;
+
+    if (uct_ib_md_is_coco_hardened(&md->super)) {
+        ucs_error("%s: importing CoCo memory keys requires bounded metadata "
+                  "and is disabled", uct_ib_device_name(&md->super.dev));
+        return UCS_ERR_UNSUPPORTED;
+    }
 
     status = uct_ib_mlx5_devx_memh_alloc(md, 0, 0, 0, &memh);
     if (status != UCS_OK) {
