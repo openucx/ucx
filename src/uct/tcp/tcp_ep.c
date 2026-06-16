@@ -2160,13 +2160,33 @@ ucs_status_t uct_tcp_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *req,
     return UCS_OK;
 }
 
+static ucs_status_t uct_tcp_ep_keepalive_pending_cb(uct_pending_req_t *self)
+{
+    uct_tcp_ep_pending_req_t *req = ucs_derived_of(self,
+                                                   uct_tcp_ep_pending_req_t);
+
+    /* Dispatch implies EP is CONNECTED: the wireup handshake completed,
+     * which is the peer-alive proof uct_ep_check needs. */
+    uct_invoke_completion(req->keepalive.comp, UCS_OK);
+    ucs_free(req);
+    return UCS_OK;
+}
+
 static void uct_tcp_ep_pending_purge_cb(uct_pending_req_t *self, void *arg)
 {
     uct_tcp_ep_pending_purge_arg_t *purge_arg = arg;
     uct_tcp_ep_pending_req_t *tcp_pending_req;
+    ucs_status_t status;
 
     if (self->func == uct_tcp_cm_send_event_pending_cb) {
         tcp_pending_req = ucs_derived_of(self, uct_tcp_ep_pending_req_t);
+        ucs_free(tcp_pending_req);
+    } else if (self->func == uct_tcp_ep_keepalive_pending_cb) {
+        tcp_pending_req = ucs_derived_of(self, uct_tcp_ep_pending_req_t);
+        status          = (tcp_pending_req->ep->conn_state ==
+                           UCT_TCP_EP_CONN_STATE_CLOSED) ?
+                          UCS_ERR_CONNECTION_RESET : UCS_ERR_CANCELED;
+        uct_invoke_completion(tcp_pending_req->keepalive.comp, status);
         ucs_free(tcp_pending_req);
     } else {
         purge_arg->cb(self, purge_arg->arg);
@@ -2235,10 +2255,39 @@ uct_tcp_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
     uct_tcp_ep_t *ep       = ucs_derived_of(tl_ep, uct_tcp_ep_t);
     uct_tcp_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_tcp_iface_t);
     uct_tcp_am_hdr_t *hdr  = NULL; /* init to suppress build warning */
+    uct_tcp_ep_pending_req_t *req;
     ucs_status_t status;
 
-    UCT_EP_KEEPALIVE_CHECK_PARAM(flags, comp);
+    UCT_EP_KEEPALIVE_CHECK_PARAM(flags);
 
+    if (ep->conn_state == UCT_TCP_EP_CONN_STATE_CLOSED) {
+        return UCS_ERR_CONNECTION_RESET;
+    }
+
+    if (ep->conn_state != UCT_TCP_EP_CONN_STATE_CONNECTED) {
+        /* Wireup in progress - defer @c comp on pending_q. It fires with
+         * UCS_OK on CONNECTED via uct_tcp_ep_keepalive_pending_cb, or with
+         * UCS_ERR_CANCELED on EP teardown via the pending-purge path. */
+        if (comp == NULL) {
+            return UCS_INPROGRESS;
+        }
+
+        req = ucs_malloc(sizeof(*req), "tcp_keepalive_pending_req");
+        if (ucs_unlikely(req == NULL)) {
+            return UCS_ERR_NO_MEMORY;
+        }
+
+        req->ep             = ep;
+        req->keepalive.comp = comp;
+        req->super.func     = uct_tcp_ep_keepalive_pending_cb;
+        uct_pending_req_queue_push(&ep->pending_q, &req->super);
+        UCT_TL_EP_STAT_PEND(&ep->super);
+        return UCS_INPROGRESS;
+    }
+
+    /* CONNECTED: fire-and-forget keepalive AM. TCP socket failures are picked
+     * up asynchronously via the existing EPOLLERR / EPOLLHUP path and
+     * delivered through the iface err_handler. */
     status = uct_tcp_ep_am_prepare(iface, ep, UCT_TCP_EP_KEEPALIVE_AM_ID,
                                    &hdr);
     if (status != UCS_OK) {
