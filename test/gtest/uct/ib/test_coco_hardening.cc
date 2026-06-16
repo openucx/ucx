@@ -82,6 +82,69 @@ std::string get_function_source(const char *relative_path,
     return source.substr(function_pos, end_pos - function_pos);
 }
 
+struct source_span {
+    size_t start;
+    size_t end;
+};
+
+size_t count_occurrences(const std::string& source, const std::string& needle)
+{
+    size_t count = 0;
+    size_t pos   = 0;
+
+    while ((pos = source.find(needle, pos)) != std::string::npos) {
+        ++count;
+        pos += needle.size();
+    }
+
+    return count;
+}
+
+source_span get_source_span(const std::string& source,
+                            const char *function_name,
+                            const char *end_marker)
+{
+    source_span span;
+
+    span.start = source.find(function_name);
+    EXPECT_NE(std::string::npos, span.start) << function_name;
+    if (span.start == std::string::npos) {
+        span.end = std::string::npos;
+        return span;
+    }
+
+    span.end = source.find(end_marker, span.start);
+    EXPECT_NE(std::string::npos, span.end) << end_marker;
+    return span;
+}
+
+bool position_is_in_spans(size_t pos, const std::vector<source_span>& spans)
+{
+    for (size_t i = 0; i < spans.size(); ++i) {
+        if ((spans[i].start != std::string::npos) &&
+            (spans[i].end != std::string::npos) &&
+            (pos >= spans[i].start) && (pos < spans[i].end)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void expect_markers_only_in_spans(const std::string& source,
+                                  const std::vector<std::string>& markers,
+                                  const std::vector<source_span>& spans)
+{
+    for (size_t i = 0; i < markers.size(); ++i) {
+        size_t pos = 0;
+
+        while ((pos = source.find(markers[i], pos)) != std::string::npos) {
+            EXPECT_TRUE(position_is_in_spans(pos, spans)) << markers[i];
+            pos += markers[i].size();
+        }
+    }
+}
+
 void expect_init_backstop_uses_hardened_predicate(const char *relative_path,
                                                   const char *function_name,
                                                   const char *feature_name)
@@ -2324,3 +2387,95 @@ UCS_TEST_F(test_coco_hardening,
     EXPECT_LT(ok_pos, release_pos);
 }
 
+UCS_TEST_F(test_coco_hardening, integration_static_allowlist)
+{
+    std::string hardening_doc = read_source_file(
+        "docs/confidential-computing/coco-rdma-hardening.md");
+
+    ASSERT_NE(std::string::npos,
+              hardening_doc.find(
+                  "# UCX Confidential Computing RDMA Hardening"));
+    EXPECT_NE(std::string::npos,
+              hardening_doc.find("Security Properties"));
+    EXPECT_NE(std::string::npos,
+              hardening_doc.find("Taint And Validation Contract"));
+    EXPECT_NE(std::string::npos,
+              hardening_doc.find("Non-CoCo Behavior"));
+    EXPECT_NE(std::string::npos,
+              hardening_doc.find("Supported CoCo Profile"));
+
+    std::string coco_source = read_source_file(
+        "src/uct/ib/mlx5/rc/rc_mlx5_coco.c");
+    std::vector<source_span> cqe_validator_spans;
+    std::vector<std::string> cqe_markers;
+
+    cqe_validator_spans.push_back(get_source_span(
+        coco_source, "uct_rc_mlx5_coco_tx_cqe_validate(",
+        "ucs_status_t\nuct_rc_mlx5_coco_rx_cqe_validate("));
+    cqe_validator_spans.push_back(get_source_span(
+        coco_source, "uct_rc_mlx5_coco_rx_cqe_validate(",
+        "ucs_status_t\nuct_rc_mlx5_coco_error_cqe_validate("));
+    cqe_validator_spans.push_back(get_source_span(
+        coco_source, "uct_rc_mlx5_coco_error_cqe_validate(",
+        "ucs_status_t\nuct_rc_mlx5_coco_error_cqe_poison("));
+
+    cqe_markers.push_back("cqe->op_own");
+    cqe_markers.push_back("cqe->sop_drop_qpn");
+    cqe_markers.push_back("cqe->wqe_counter");
+    cqe_markers.push_back("cqe->byte_cnt");
+    cqe_markers.push_back("cqe->imm_inval_pkey");
+    cqe_markers.push_back("cqe->app");
+    cqe_markers.push_back("ecqe->op_own");
+    cqe_markers.push_back("ecqe->s_wqe_opcode_qpn");
+    cqe_markers.push_back("ecqe->wqe_counter");
+    expect_markers_only_in_spans(coco_source, cqe_markers,
+                                 cqe_validator_spans);
+
+    std::string devx_source = read_source_file(
+        "src/uct/ib/mlx5/ib_mlx5_coco.c");
+    std::vector<source_span> devx_output_spans;
+    std::vector<std::string> devx_markers;
+
+    devx_output_spans.push_back(get_source_span(
+        devx_source, "uct_ib_mlx5_coco_validate_out_header(",
+        "static int uct_ib_mlx5_coco_is_pow2("));
+    devx_output_spans.push_back(get_source_span(
+        devx_source, "uct_ib_mlx5_coco_validate_cq_output(",
+        "ucs_status_t\nuct_ib_mlx5_coco_validate_qp_output("));
+    devx_output_spans.push_back(get_source_span(
+        devx_source, "uct_ib_mlx5_coco_validate_qp_output(",
+        "ucs_status_t\nuct_ib_mlx5_coco_validate_rmp_output("));
+    devx_output_spans.push_back(get_source_span(
+        devx_source, "uct_ib_mlx5_coco_validate_rmp_output(",
+        "static void uct_ib_mlx5_coco_scrub("));
+
+    devx_markers.push_back("UCT_IB_MLX5DV_GET(");
+    expect_markers_only_in_spans(devx_source, devx_markers,
+                                 devx_output_spans);
+
+    std::string inl_source = read_source_file(
+        "src/uct/ib/mlx5/rc/rc_mlx5.inl");
+
+    EXPECT_EQ(3ul, count_occurrences(inl_source, "iface->coco.enabled"));
+    EXPECT_NE(std::string::npos,
+              inl_source.find("uct_rc_mlx5_coco_tx_shadow_record"));
+    EXPECT_NE(std::string::npos,
+              inl_source.find("uct_rc_mlx5_coco_rx_cqe_validate"));
+    EXPECT_NE(std::string::npos,
+              inl_source.find("uct_rc_mlx5_coco_tx_cqe_validate"));
+    EXPECT_NE(std::string::npos,
+              inl_source.find("uct_rc_mlx5_iface_common_data_coco"));
+
+    std::string devx_rx_source = get_function_source(
+        "src/uct/ib/mlx5/rc/rc_mlx5_devx.c",
+        "ucs_status_t uct_rc_mlx5_devx_init_rx(",
+        "void uct_rc_mlx5_devx_cleanup_srq(");
+    size_t validate_pos = devx_rx_source.find(
+        "uct_ib_mlx5_coco_validate_rmp_output");
+    size_t consume_pos = devx_rx_source.find(
+        "UCT_IB_MLX5DV_GET(create_rmp_out");
+
+    ASSERT_NE(std::string::npos, validate_pos);
+    ASSERT_NE(std::string::npos, consume_pos);
+    EXPECT_LT(validate_pos, consume_pos);
+}
