@@ -435,6 +435,20 @@ typedef struct uct_rc_mlx5_iface_common_config {
     UCS_CONFIG_STRING_ARRAY_FIELD(types) srq_topo;
 } uct_rc_mlx5_iface_common_config_t;
 
+ucs_status_t
+uct_rc_mlx5_coco_check_config(
+        const uct_ib_mlx5_md_t *md,
+        const uct_rc_iface_common_config_t *rc_config,
+        const uct_rc_mlx5_iface_common_config_t *mlx5_config);
+
+void uct_rc_mlx5_coco_apply_effective_config(
+        const uct_ib_mlx5_md_t *md, uct_rc_iface_common_config_t *rc_config,
+        uct_rc_mlx5_iface_common_config_t *mlx5_config,
+        uct_ib_iface_init_attr_t *init_attr);
+
+void uct_rc_mlx5_coco_mask_capabilities(const uct_ib_mlx5_md_t *md,
+                                        uct_iface_attr_t *iface_attr);
+
 
 UCS_CLASS_DECLARE(uct_rc_mlx5_iface_common_t, uct_iface_ops_t*,
                   uct_rc_iface_ops_t*, uct_md_h, uct_worker_h,

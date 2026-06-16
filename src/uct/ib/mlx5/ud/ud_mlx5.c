@@ -989,7 +989,7 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t, uct_md_h tl_md,
 
     ucs_trace_func("");
 
-    if (uct_ib_md_is_cc_dma_bounce(&md->super)) {
+    if (uct_ib_md_is_coco_hardened(&md->super)) {
         ucs_error("%s: %s is not CoCo control-object safe in this milestone",
                   uct_ib_device_name(&md->super.dev), "ud_mlx5");
         return UCS_ERR_UNSUPPORTED;
@@ -1088,6 +1088,10 @@ uct_ud_mlx5_query_tl_devices(uct_md_h md,
     uct_ib_md_t *ib_md = ucs_derived_of(md, uct_ib_md_t);
 
     if (strcmp(ib_md->name, UCT_IB_MD_NAME(mlx5))) {
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    if (!uct_ib_md_coco_transport_allowed(ib_md, "ud_mlx5")) {
         return UCS_ERR_NO_DEVICE;
     }
 

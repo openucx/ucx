@@ -13,6 +13,7 @@
 
 #include <uct/base/uct_md.h>
 #include <ucs/stats/stats.h>
+#include <string.h>
 
 #define UCT_IB_MD_MAX_MR_SIZE        0x80000000UL
 #define UCT_IB_MD_PACKED_RKEY_SIZE   sizeof(uint64_t)
@@ -197,6 +198,21 @@ uct_ib_device_is_cc_dma_bounce(const uct_ib_device_t *dev)
 static UCS_F_ALWAYS_INLINE int uct_ib_md_is_cc_dma_bounce(const uct_ib_md_t *md)
 {
     return md->cc_dma_bounce;
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_ib_md_is_coco_hardened(const uct_ib_md_t *md)
+{
+    int enabled = md->cc_dma_bounce;
+
+    ucs_assert(!enabled || md->cc_dma_bounce);
+    return enabled;
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_ib_md_coco_transport_allowed(const uct_ib_md_t *md, const char *tl_name)
+{
+    return !uct_ib_md_is_coco_hardened(md) || !strcmp(tl_name, "rc_mlx5");
 }
 
 static UCS_F_ALWAYS_INLINE struct ibv_pd*
