@@ -82,18 +82,6 @@ typedef struct ucp_ep_discard_lanes_arg {
 } ucp_ep_discard_lanes_arg_t;
 
 
-/* Per-EP recovery retry state, owned by @ref ucp_ep_recovery_progress. */
-typedef struct ucp_ep_recovery_arg {
-    /* owner EP (also the callbackq filter key,
-       @ref ucp_ep_recovery_remove_filter) */
-    ucp_ep_h   ucp_ep;
-    /* earliest time for the next request */
-    ucs_time_t next_time;
-    /* request rounds left before giving up */
-    unsigned   retries_left;
-} ucp_ep_recovery_arg_t;
-
-
 extern const ucp_request_send_proto_t ucp_stream_am_proto;
 extern const ucp_request_send_proto_t ucp_am_proto;
 extern const ucp_request_send_proto_t ucp_am_reply_proto;
@@ -526,8 +514,7 @@ static int ucp_ep_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
         ucp_listener_accept_cb_remove_filter(elem, arg) ||
         ucp_ep_local_disconnect_progress_remove_filter(elem, arg) ||
         ucp_ep_set_failed_remove_filter(elem, arg) ||
-        ucp_ep_wireup_eps_progress_filter(elem, arg) ||
-        ucp_ep_recovery_remove_filter(elem, arg)) {
+        ucp_ep_wireup_eps_progress_filter(elem, arg)) {
         return 1;
     }
 
@@ -553,6 +540,10 @@ void ucp_ep_destroy_base(ucp_ep_h ep)
     ucp_worker_keepalive_remove_ep(ep);
     ucp_ep_release_id(ep);
     ucs_list_del(&ep->ext->ep_list);
+    if (ucp_ep_has_cm_lane(ep) && (ep->ext->recovery_arg != NULL)) {
+        ucs_free(ep->ext->recovery_arg);
+        ep->ext->recovery_arg = NULL;
+    }
 
     ucs_vfs_obj_remove(ep);
     ucs_callbackq_remove_oneshot(&worker->uct->progress_q, ep,
@@ -1889,34 +1880,11 @@ ucp_ep_recovery_get_ready_lanes(ucp_ep_h ep, ucp_lane_map_t failed_lanes)
     return ready_lanes;
 }
 
-/* Enqueue a recovery oneshot for @a arg. */
-static void ucp_ep_recovery_arg_enqueue(ucp_ep_recovery_arg_t *arg)
-{
-    ucp_worker_h worker = arg->ucp_ep->worker;
-
-    ucs_callbackq_add_oneshot(&worker->uct->progress_q, arg->ucp_ep,
-                              ucp_ep_recovery_progress, arg);
-    ucp_worker_signal_internal(worker);
-}
-
-int ucp_ep_recovery_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
-{
-    ucp_ep_recovery_arg_t *recovery_arg = elem->arg;
-
-    if ((elem->cb == ucp_ep_recovery_progress) &&
-        (recovery_arg->ucp_ep == arg)) {
-        ucs_free(recovery_arg);
-        return 1;
-    }
-
-    return 0;
-}
-
 ucs_status_t ucp_ep_recovery_arm(ucp_ep_h ep)
 {
-    ucp_worker_h worker   = ep->worker;
-    ucp_context_h context = worker->context;
-    ucp_ep_recovery_arg_t *arg;
+    ucp_ep_recovery_arg_t *arg = ep->ext->recovery_arg;
+    ucp_worker_h worker        = ep->worker;
+    ucp_context_h context      = worker->context;
 
     if (ucp_ep_config(ep)->key.dst_version < 22) {
         ucs_diag("ep: %p: recovery support requires UCX 1.22 or later, "
@@ -1925,46 +1893,50 @@ ucs_status_t ucp_ep_recovery_arm(ucp_ep_h ep)
         return UCS_OK;
     }
 
-    /* Remove (and free) any previously-queued recovery oneshot for this EP. */
-    ucs_callbackq_remove_oneshot(&worker->uct->progress_q, ep,
-                                 ucp_ep_recovery_remove_filter, ep);
-
-    arg = ucs_malloc(sizeof(*arg), "ucp_ep_recovery_arg");
     if (arg == NULL) {
-        ucs_error("ep %p: failed to allocate recovery argument", ep);
-        return UCS_ERR_NO_MEMORY;
+        // first time failure
+        arg = ucs_calloc(1, sizeof(*arg), "ucp_ep_recovery_arg");
+        if (arg == NULL) {
+            ucs_error("ep %p: failed to allocate recovery argument", ep);
+            return UCS_ERR_NO_MEMORY;
+        }
+
+        ep->ext->recovery_arg = arg;
     }
 
-    arg->ucp_ep       = ep;
-    arg->next_time    = ucs_get_time() + context->config.ext.recovery_interval;
+    // reset counter by new event
     arg->retries_left = context->config.ext.recovery_retries;
-
-    ucp_ep_recovery_arg_enqueue(arg);
     return UCS_OK;
 }
 
-unsigned ucp_ep_recovery_progress(void *arg)
+int ucp_ep_recovery_progress(ucp_ep_h ep)
 {
-    ucp_ep_recovery_arg_t *recovery_arg = arg;
-    ucp_ep_h ep                         = recovery_arg->ucp_ep;
-    ucp_worker_h worker                 = ep->worker;
-    ucp_context_h context               = worker->context;
+    ucp_worker_h worker = ep->worker;
+    int ret             = 0;
     ucp_lane_map_t failed, recovered;
-    ucs_time_t now;
     ucs_status_t status;
 
     UCS_ASYNC_BLOCK(&worker->async);
 
+    if (ucp_ep_has_cm_lane(ep)) {
+        goto done;
+    }
+
     if (ep->flags & UCP_EP_FLAG_FAILED) {
         /* Endpoint was declared fully failed elsewhere; nothing more to do. */
+        ret = 1;
         goto done;
     }
 
     failed = ucp_ep_get_failed_lanes(ep);
     if (failed == 0) {
-        /* Recovery completed between rounds. */
+        /* Recovery completed between rounds, the ep operates normally */
+        ucs_assert(ep->ext->recovery_arg == NULL);
         goto done;
     }
+
+    ucs_assert(ep->ext->recovery_arg != NULL);
+    ucs_assert(ep->ext->recovery_arg->retries_left > 0);
 
     recovered = ucp_ep_recovery_get_ready_lanes(ep, failed);
     status    = ucp_ep_reconfig_clear_failed_lanes(ep, recovered);
@@ -1972,6 +1944,7 @@ unsigned ucp_ep_recovery_progress(void *arg)
         ucs_error("ep %p: failed to clear FAILED states for lanes 0x%" PRIx64,
                   ep, recovered);
         ucp_ep_set_lanes_failed_schedule(ep, 0, status);
+        ret = 1;
         goto done;
     }
 
@@ -1980,41 +1953,31 @@ unsigned ucp_ep_recovery_progress(void *arg)
         goto done;
     }
 
-    now = ucs_get_time();
-    if (now < recovery_arg->next_time) {
-        ucp_ep_recovery_arg_enqueue(recovery_arg);
-        goto out;
-    }
-
-    if (recovery_arg->retries_left == 0) {
-        if (ucp_ep_get_live_lanes(ep) == 0) {
-            ucs_error("ep %p: recovery retries exhausted", ep);
-            ucp_ep_set_lanes_failed_schedule(ep, 0, UCS_ERR_ENDPOINT_TIMEOUT);
-        } else {
-            ucs_diag("ep %p: recovery retries exhausted, giving up on "
-                     "failed lanes 0x%" PRIx64, ep, (uint64_t)failed);
-        }
-        goto done;
-    }
-
     ucs_debug("ep %p: recovery round (retries_left=%u, failed=0x%" PRIx64 ")",
-              ep, recovery_arg->retries_left, (uint64_t)failed);
+              ep, ep->ext->recovery_arg->retries_left, (uint64_t)failed);
 
     ucp_ep_recovery_send_request(ep);
 
-    --recovery_arg->retries_left;
-    recovery_arg->next_time = now + context->config.ext.recovery_interval;
+    if (--ep->ext->recovery_arg->retries_left > 0) {
+        ret = 1;
+        goto done;
+    }
 
-    /* Keep recovery armed; the arg is freed only on success, retry
-     * exhaustion, or EP teardown. */
-    ucp_ep_recovery_arg_enqueue(recovery_arg);
-    goto out;
+    if (ucp_ep_get_live_lanes(ep) == 0) {
+        ucs_error("ep %p: recovery retries exhausted", ep);
+        ucp_ep_set_lanes_failed_schedule(ep, 0, UCS_ERR_ENDPOINT_TIMEOUT);
+    } else {
+        ucs_diag("ep %p: recovery retries exhausted, giving up on "
+                    "failed lanes 0x%" PRIx64, ep, (uint64_t)failed);
+    }
+
+    ucs_free(ep->ext->recovery_arg);
+    ep->ext->recovery_arg = NULL;
+    ret = 1;
 
 done:
-    ucs_free(recovery_arg);
-out:
     UCS_ASYNC_UNBLOCK(&worker->async);
-    return 1;
+    return ret;
 }
 
 ucs_status_t
