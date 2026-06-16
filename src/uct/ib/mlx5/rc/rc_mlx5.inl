@@ -439,6 +439,9 @@ uct_rc_mlx5_common_post_send(uct_rc_mlx5_iface_common_t *iface, int qp_type,
                              uct_ib_log_sge_t *log_sge)
 {
     struct mlx5_wqe_ctrl_seg *ctrl;
+    uct_rc_mlx5_coco_qp_record_t *coco_record;
+    uct_rc_mlx5_coco_tx_op_t coco_op;
+    ucs_status_t status;
     uint16_t res_count;
 
     if (opcode != MLX5_OPCODE_NOP) {
@@ -465,6 +468,35 @@ uct_rc_mlx5_common_post_send(uct_rc_mlx5_iface_common_t *iface, int qp_type,
                        max_log_sge, log_sge,
                        ((opcode == MLX5_OPCODE_SEND) || (opcode == MLX5_OPCODE_SEND_IMM)) ?
                        uct_rc_mlx5_common_packet_dump : NULL);
+
+    if (iface->coco.enabled && (qp_type == IBV_QPT_RC)) {
+        coco_record = uct_rc_mlx5_coco_qp_record_lookup(
+                &iface->coco, txwq->super.qp_num);
+        coco_op     = uct_rc_mlx5_coco_tx_op_from_opcode(opcode);
+        if ((coco_record == NULL) || (coco_op == UCT_RC_MLX5_COCO_TX_LAST)) {
+            uct_rc_mlx5_coco_poison(
+                    iface, coco_record, &iface->cq[UCT_IB_DIR_TX],
+                    UCT_RC_MLX5_COCO_POISON_TX_CQ |
+                    UCT_RC_MLX5_COCO_POISON_IFACE_TX |
+                    UCT_RC_MLX5_COCO_POISON_QP,
+                    "tx shadow metadata mismatch");
+            ucs_fatal("CoCo RC mlx5 TX shadow metadata mismatch");
+        }
+
+        status = uct_rc_mlx5_coco_tx_shadow_record(
+                coco_record, txwq->sw_pi, coco_op,
+                fm_ce_se & MLX5_WQE_CTRL_CQ_UPDATE, wqe_size, NULL, NULL);
+        if (status != UCS_OK) {
+            uct_rc_mlx5_coco_poison(
+                    iface, coco_record, &iface->cq[UCT_IB_DIR_TX],
+                    UCT_RC_MLX5_COCO_POISON_TX_CQ |
+                    UCT_RC_MLX5_COCO_POISON_IFACE_TX |
+                    UCT_RC_MLX5_COCO_POISON_QP,
+                    "tx shadow record failed");
+            ucs_fatal("CoCo RC mlx5 TX shadow record failed: %s",
+                      ucs_status_string(status));
+        }
+    }
 
     res_count = uct_ib_mlx5_post_send(txwq, ctrl, wqe_size, 1);
     if (fm_ce_se & MLX5_WQE_CTRL_CQ_UPDATE) {
@@ -1884,7 +1916,9 @@ static UCS_F_ALWAYS_INLINE unsigned
 uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface, int poll_flags)
 {
     struct mlx5_cqe64 *cqe;
+    uct_rc_mlx5_coco_tx_cqe_result_t coco_result;
     uct_rc_mlx5_base_ep_t *ep;
+    ucs_status_t status;
     unsigned qp_num;
     uint16_t hw_ci;
 
@@ -1899,12 +1933,31 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface, int poll_flags)
 
     ucs_memory_cpu_load_fence();
 
-    qp_num = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
-    ep     = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, qp_num),
-                            uct_rc_mlx5_base_ep_t);
-    ucs_assert(ep != NULL);
+    if (iface->coco.enabled) {
+        status = uct_rc_mlx5_coco_tx_cqe_validate(
+                &iface->coco, &iface->cq[UCT_IB_DIR_TX], cqe, &coco_result);
+        if (status != UCS_OK) {
+            uct_rc_mlx5_coco_poison(
+                    iface, coco_result.qp_record, &iface->cq[UCT_IB_DIR_TX],
+                    UCT_RC_MLX5_COCO_POISON_TX_CQ |
+                    UCT_RC_MLX5_COCO_POISON_IFACE_TX |
+                    UCT_RC_MLX5_COCO_POISON_QP,
+                    "invalid tx cqe");
+            uct_ib_mlx5_update_db_cq_ci(&iface->cq[UCT_IB_DIR_TX]);
+            return 1;
+        }
 
-    hw_ci = ntohs(cqe->wqe_counter);
+        ep     = coco_result.qp_record->ep;
+        qp_num = coco_result.qp_record->qpn;
+        hw_ci  = coco_result.hw_ci;
+    } else {
+        qp_num = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
+        ep     = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, qp_num),
+                                uct_rc_mlx5_base_ep_t);
+        ucs_assert(ep != NULL);
+        hw_ci = ntohs(cqe->wqe_counter);
+    }
+
     ucs_trace_poll("rc_mlx5 iface %p tx_cqe: ep %p qpn 0x%x hw_ci %d", iface,
                    ep, qp_num, hw_ci);
 

@@ -11,6 +11,7 @@
 #include <uct/ib/rc/base/rc_iface.h>
 #include <uct/ib/rc/base/rc_ep.h>
 #include <uct/ib/mlx5/ib_mlx5.h>
+#include <uct/ib/mlx5/rc/rc_mlx5_coco.h>
 
 
 /*
@@ -354,6 +355,7 @@ typedef struct uct_rc_mlx5_iface_common {
         void                           *pref_ptr;
     } rx;
     uct_ib_mlx5_cq_t                   cq[UCT_IB_DIR_LAST];
+    uct_rc_mlx5_coco_state_t           coco;
     struct {
         uct_rc_mlx5_cmd_wq_t           cmd_wq;
         uct_rc_mlx5_tag_entry_t        *head;

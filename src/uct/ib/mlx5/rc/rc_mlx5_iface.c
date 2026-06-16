@@ -921,6 +921,9 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
         return status;
     }
 
+    uct_rc_mlx5_coco_state_init(&self->coco,
+                                uct_ib_md_is_coco_hardened(&md->super));
+
     self->rx.srq.type                = UCT_IB_MLX5_OBJ_TYPE_LAST;
     self->tm.cmd_wq.super.super.type = UCT_IB_MLX5_OBJ_TYPE_LAST;
     init_attr->rx_hdr_len            = UCT_RC_MLX5_MP_ENABLED(self) ?
@@ -1048,6 +1051,7 @@ cleanup_dm:
 cleanup_tm:
     uct_rc_mlx5_iface_common_tag_cleanup(self);
 cleanup_stats:
+    uct_rc_mlx5_coco_state_cleanup(&self->coco);
     UCS_STATS_NODE_FREE(self->stats);
     return status;
 }
@@ -1055,6 +1059,7 @@ cleanup_stats:
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_iface_common_t)
 {
     uct_rc_iface_cleanup_qps(&self->super);
+    uct_rc_mlx5_coco_state_cleanup(&self->coco);
     uct_rc_mlx5_devx_iface_free_events(self);
     ucs_mpool_cleanup(&self->tx.atomic_desc_mp, 1);
     uct_rc_mlx5_iface_common_dm_cleanup(self);

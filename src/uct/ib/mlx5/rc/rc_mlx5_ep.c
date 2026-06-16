@@ -1073,11 +1073,23 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_base_ep_t, const uct_ep_params_t *params)
         goto err_event_unreg;
     }
 
+    if (iface->coco.enabled) {
+        status = uct_rc_mlx5_coco_qp_record_add(
+                &iface->coco, self->tx.wq.super.qp_num, iface,
+                &iface->cq[UCT_IB_DIR_TX], &iface->cq[UCT_IB_DIR_RX], self,
+                NULL);
+        if (status != UCS_OK) {
+            goto err_remove_qp;
+        }
+    }
+
     self->tx.wq.bb_max = ucs_min(self->tx.wq.bb_max, iface->tx.bb_max);
     uct_rc_txqp_available_set(&self->super.txqp, self->tx.wq.bb_max);
     uct_rc_mlx5_iface_common_prepost_recvs(iface);
     return UCS_OK;
 
+err_remove_qp:
+    uct_rc_iface_remove_qp(&iface->super, self->tx.wq.super.qp_num);
 err_event_unreg:
     if (iface->rx.srq.type != UCT_IB_MLX5_OBJ_TYPE_NULL) {
         uct_ib_device_async_event_unregister(&md->super.dev,
@@ -1149,6 +1161,10 @@ UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
 
     uct_rc_txqp_purge_outstanding(&iface->super, &self->super.super.txqp,
                                   UCS_ERR_CANCELED, self->super.tx.wq.sw_pi, 1);
+    if (iface->coco.enabled) {
+        (void)uct_rc_mlx5_coco_qp_record_destroy(
+                &iface->coco, self->super.tx.wq.super.qp_num);
+    }
 #if IBV_HW_TM
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
         uct_rc_iface_remove_qp(&iface->super, self->tm_qp.qp_num);
