@@ -378,6 +378,55 @@ UCS_TEST_P(test_memtype_cache, update_adjacent_regions_and_remove_subintervals) 
                                                0, remove_regions);
 }
 
+UCS_TEST_P(test_memtype_cache, merge_regions_by_mem_flags) {
+    const size_t region_size = UCS_PGT_ADDR_ALIGN;
+    const size_t total_size  = 3 * region_size;
+    void *base               = reinterpret_cast<void*>(0x7f6ef0000000);
+    void *overlap            = UCS_PTR_BYTE_OFFSET(base, region_size);
+    ucs_memory_type_t mem_type;
+    ucs_memory_info_t mem_info;
+
+    if (GetParam() == UCS_MEMORY_TYPE_HOST) {
+        UCS_TEST_SKIP_R("memtype cache does not store host memory");
+    }
+
+    mem_type = GetParam();
+
+    ucs_memtype_cache_remove(base, total_size);
+    ucs_memtype_cache_update(base, 2 * region_size, mem_type,
+                             UCS_SYS_DEVICE_ID_UNKNOWN,
+                             UCS_MEM_FLAG_REGISTRABLE);
+    ucs_memtype_cache_update(overlap, 2 * region_size, mem_type,
+                             UCS_SYS_DEVICE_ID_UNKNOWN,
+                             UCS_MEM_FLAG_REGISTRABLE);
+    ASSERT_UCS_OK(ucs_memtype_cache_lookup(base, total_size, &mem_info));
+    EXPECT_EQ(mem_type, mem_info.type);
+    EXPECT_EQ(UCS_MEM_FLAG_REGISTRABLE, mem_info.mem_flags);
+
+    ucs_memtype_cache_remove(base, total_size);
+    ucs_memtype_cache_update(base, 2 * region_size, mem_type,
+                             UCS_SYS_DEVICE_ID_UNKNOWN, 0);
+    ucs_memtype_cache_update(overlap, 2 * region_size, mem_type,
+                             UCS_SYS_DEVICE_ID_UNKNOWN,
+                             UCS_MEM_FLAG_REGISTRABLE);
+
+    /* Check that the flags are still set correctly */
+    ASSERT_UCS_OK(ucs_memtype_cache_lookup(base, region_size, &mem_info));
+    EXPECT_EQ(mem_type, mem_info.type);
+    EXPECT_EQ(0, mem_info.mem_flags);
+
+    ASSERT_UCS_OK(ucs_memtype_cache_lookup(overlap, 2 * region_size,
+                                           &mem_info));
+    EXPECT_EQ(mem_type, mem_info.type);
+    EXPECT_EQ(UCS_MEM_FLAG_REGISTRABLE, mem_info.mem_flags);
+
+    /* The regions should not be merged because of different mem flags */
+    ASSERT_UCS_OK(ucs_memtype_cache_lookup(base, total_size, &mem_info));
+    EXPECT_EQ(UCS_MEMORY_TYPE_UNKNOWN, mem_info.type);
+
+    ucs_memtype_cache_remove(base, total_size);
+}
+
 UCS_TEST_P(test_memtype_cache, shared_page_regions) {
     const size_t size = 1000000;
 

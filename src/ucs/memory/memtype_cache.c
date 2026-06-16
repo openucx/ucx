@@ -102,7 +102,7 @@ ucs_memory_info_set_unknown(ucs_memory_info_t *mem_info)
     mem_info->alloc_length = -1;
     /* Unknown memory: assume registrable. The type is UNKNOWN so consumers
      * re-detect via the MD anyway, which overwrites this default. */
-    mem_info->mem_flags    = UCS_MEM_FLAG_CAN_REGISTER;
+    mem_info->mem_flags    = UCS_MEM_FLAG_REGISTRABLE;
 }
 
 static ucs_pgt_dir_t *ucs_memtype_cache_pgt_dir_alloc(const ucs_pgtable_t *pgtable)
@@ -322,7 +322,7 @@ static void ucs_memtype_cache_event_callback(ucm_event_type_t event_type,
                                       event->mem_type.size,
                                       event->mem_type.mem_type,
                                       UCS_SYS_DEVICE_ID_UNKNOWN,
-                                      UCS_MEM_FLAG_CAN_REGISTER, action);
+                                      UCS_MEM_FLAG_REGISTRABLE, action);
 }
 
 static void ucs_memtype_cache_purge(ucs_memtype_cache_t *memtype_cache)

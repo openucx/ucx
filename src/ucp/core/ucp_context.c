@@ -2146,7 +2146,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         context->dmabuf_mds[mem_type]           = UCP_NULL_RESOURCE;
         context->alloc_md[mem_type].md_index    = UCP_NULL_RESOURCE;
         context->alloc_md[mem_type].sys_dev     = UCS_SYS_DEVICE_ID_UNKNOWN;
-        context->alloc_md[mem_type].mem_flags   = UCS_MEM_FLAG_CAN_REGISTER;
+        context->alloc_md[mem_type].mem_flags   = UCS_MEM_FLAG_REGISTRABLE;
         context->alloc_md[mem_type].initialized = 0;
     }
 

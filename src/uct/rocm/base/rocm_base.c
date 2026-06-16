@@ -436,7 +436,7 @@ ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
 
     if (mem_type == UCS_MEMORY_TYPE_ROCM) {
         ucs_memtype_cache_update(base_addr, base_size, mem_type, sys_dev,
-                                 UCS_MEM_FLAG_CAN_REGISTER);
+                                 UCS_MEM_FLAG_REGISTRABLE);
     }
 
     return UCS_OK;

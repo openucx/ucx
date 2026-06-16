@@ -42,7 +42,7 @@ ucp_memh_mem_info_is_compatible(ucp_mem_h memh,
 {
     return (memh->mem_type == mem_info->type) &&
            (memh->sys_dev == mem_info->sys_dev) &&
-           (memh->mem_flags == mem_info->mem_flags);
+           (memh->super.mem_flags == mem_info->mem_flags);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -56,7 +56,7 @@ ucp_memh_assert_mem_info_compatible(ucp_mem_h memh,
                 memh, ucs_memory_type_names[mem_info->type],
                 mem_info->sys_dev, mem_info->mem_flags,
                 ucs_memory_type_names[memh->mem_type], memh->sys_dev,
-                memh->mem_flags);
+                memh->super.mem_flags);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -65,7 +65,7 @@ ucp_mem_info_update_for_type(ucp_memory_info_t *mem_info,
 {
     if (mem_info->type != mem_type) {
         mem_info->sys_dev   = UCS_SYS_DEVICE_ID_UNKNOWN;
-        mem_info->mem_flags = UCS_MEM_FLAG_CAN_REGISTER;
+        mem_info->mem_flags = UCS_MEM_FLAG_REGISTRABLE;
     }
 
     mem_info->type = mem_type;
@@ -79,7 +79,7 @@ ucp_mem_info_detect_for_type(ucp_context_h context, const void *address,
     if ((length == 0) || UCP_MEM_IS_HOST(mem_type)) {
         mem_info->type      = mem_type;
         mem_info->sys_dev   = UCS_SYS_DEVICE_ID_UNKNOWN;
-        mem_info->mem_flags = UCS_MEM_FLAG_CAN_REGISTER;
+        mem_info->mem_flags = UCS_MEM_FLAG_REGISTRABLE;
         return;
     }
 
@@ -107,7 +107,8 @@ ucp_memh_get(ucp_context_h context, void *address, size_t length,
     if (ucs_likely(context->rcache != NULL)) {
         UCP_THREAD_CS_ENTER(&context->mt_lock);
         rregion = UCS_PROFILE_CALL(ucs_rcache_lookup_unsafe, context->rcache,
-                                   address, length, 1, PROT_READ | PROT_WRITE);
+                                   address, length, 1, PROT_READ | PROT_WRITE,
+                                   mem_info->mem_flags);
         if (rregion == NULL) {
             goto not_found;
         }
@@ -131,7 +132,7 @@ ucp_memh_get(ucp_context_h context, void *address, size_t length,
                       memh, ucs_memory_type_names[mem_info->type],
                       mem_info->sys_dev, mem_info->mem_flags,
                       ucs_memory_type_names[memh->mem_type], memh->sys_dev,
-                      memh->mem_flags);
+                      memh->super.mem_flags);
         }
 
         ucs_rcache_region_put_unsafe(context->rcache, rregion);
@@ -182,7 +183,7 @@ ucp_memory_info_from_memh(ucp_mem_h memh)
 
     mem_info.type      = memh->mem_type;
     mem_info.sys_dev   = memh->sys_dev;
-    mem_info.mem_flags = memh->mem_flags;
+    mem_info.mem_flags = memh->super.mem_flags;
     return mem_info;
 }
 

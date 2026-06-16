@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2022, NVIDIA CORPORATION & AFFILIATES. ALL RIGHTS RESERVED.
+ * Copyright (C) 2022-2026, NVIDIA CORPORATION & AFFILIATES. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -11,10 +11,12 @@
 #include <ucs/profile/profile.h>
 
 static UCS_F_ALWAYS_INLINE int
-ucs_rcache_region_test(ucs_rcache_region_t *region, int prot, size_t alignment)
+ucs_rcache_region_test(ucs_rcache_region_t *region, int prot, size_t alignment,
+                       uint8_t mem_flags)
 {
     return (region->flags & UCS_RCACHE_REGION_FLAG_REGISTERED) &&
            ucs_test_all_flags(region->prot, prot) &&
+           (region->mem_flags == mem_flags) &&
            ((alignment == 1) || (region->alignment >= alignment));
 }
 
@@ -74,7 +76,7 @@ ucs_rcache_region_lru_put(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
 
 static UCS_F_ALWAYS_INLINE ucs_rcache_region_t *
 ucs_rcache_lookup_unsafe(ucs_rcache_t *rcache, void *address, size_t length,
-                         size_t alignment, int prot)
+                         size_t alignment, int prot, uint8_t mem_flags)
 {
     ucs_pgt_addr_t start = (uintptr_t)address;
     ucs_pgt_region_t *pgt_region;
@@ -95,7 +97,7 @@ ucs_rcache_lookup_unsafe(ucs_rcache_t *rcache, void *address, size_t length,
 
     region = ucs_derived_of(pgt_region, ucs_rcache_region_t);
     if (((start + length) > region->super.end) ||
-        !ucs_rcache_region_test(region, prot, alignment))
+        !ucs_rcache_region_test(region, prot, alignment, mem_flags))
     {
         return NULL;
     }
@@ -108,12 +110,13 @@ ucs_rcache_lookup_unsafe(ucs_rcache_t *rcache, void *address, size_t length,
 
 static UCS_F_ALWAYS_INLINE ucs_rcache_region_t *
 ucs_rcache_lookup(ucs_rcache_t *rcache, void *address, size_t length,
-                  size_t alignment, int prot)
+                  size_t alignment, int prot, uint8_t mem_flags)
 {
     ucs_rcache_region_t *region;
 
     ucs_rw_spinlock_read_lock(&rcache->pgt_lock);
-    region = ucs_rcache_lookup_unsafe(rcache, address, length, alignment, prot);
+    region = ucs_rcache_lookup_unsafe(rcache, address, length, alignment, prot,
+                                      mem_flags);
     ucs_rw_spinlock_read_unlock(&rcache->pgt_lock);
     return region;
 }

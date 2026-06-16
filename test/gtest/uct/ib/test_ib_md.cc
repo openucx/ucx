@@ -360,12 +360,12 @@ UCS_TEST_P(test_ib_md, cuda_async_mem_reg_fails)
         UCS_TEST_SKIP_R("IB MD supports ODP registration for CUDA memory");
     }
 
-    scoped_async_cuda_buffer buffer(size);
-
     cuda_mds = enum_mds("cuda_cpy");
     if (cuda_mds.empty()) {
         UCS_TEST_SKIP_R("cuda_cpy MD is not available");
     }
+
+    scoped_async_cuda_buffer buffer(size);
 
     UCS_TEST_CREATE_HANDLE(uct_md_config_t*, cuda_md_config,
                            (void (*)(uct_md_config_t*))uct_config_release,
@@ -382,7 +382,7 @@ UCS_TEST_P(test_ib_md, cuda_async_mem_reg_fails)
         UCS_TEST_SKIP_R("CUDA async memory is not classified as CUDA managed");
     }
 
-    ASSERT_EQ(0, mem_attr.mem_flags & UCS_MEM_FLAG_CAN_REGISTER);
+    ASSERT_EQ(0, mem_attr.mem_flags & UCS_MEM_FLAG_REGISTRABLE);
 
     reg_params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS;
     reg_params.flags = UCT_MD_MEM_ACCESS_RMA | UCT_MD_MEM_FLAG_HIDE_ERRORS;

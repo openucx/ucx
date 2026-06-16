@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2018. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -181,6 +181,7 @@ struct ucs_rcache_region {
                                            in the page table */
     ucs_status_t           status;    /**< Current status code */
     uint8_t                prot;      /**< Protection bits */
+    uint8_t                mem_flags; /**< Memory flags. */
     uint8_t                flags;     /**< Status flags. Protected by page table lock. */
     uint8_t                lru_flags; /**< LRU flags */
     union {
@@ -222,6 +223,10 @@ void ucs_rcache_destroy(ucs_rcache_t *rcache);
  * @param [in]  length      Length of buffer to register or resolve.
  * @param [in]  alignment   Alignment for registration buffer.
  * @param [in]  prot        Requested access flags, PROT_xx (same as passed to mmap).
+ * @param [in]  mem_flags   Opaque per-region attribute. A cached region is
+ *                          reused or merged only if its mem_flags match
+ *                          exactly; an overlapping region with a different
+ *                          value is invalidated rather than merged.
  * @param [in]  arg         Custom argument passed down to memory registration
  *                          callback, if a memory registration happens during
  *                          this call.
@@ -234,8 +239,8 @@ void ucs_rcache_destroy(ucs_rcache_t *rcache);
  * @return Error code.
  */
 ucs_status_t ucs_rcache_get(ucs_rcache_t *rcache, void *address, size_t length,
-                            size_t alignment, int prot, void *arg,
-                            ucs_rcache_region_t **region_p);
+                            size_t alignment, int prot, uint8_t mem_flags,
+                            void *arg, ucs_rcache_region_t **region_p);
 
 
 /**

@@ -603,8 +603,9 @@ ucs_status_t ucp_rma_rndv_process_rts(ucp_worker_h worker,
     recv_req->recv.worker        = worker;
     recv_req->recv.op_attr       = 0;
     recv_req->recv.remote_req_id = rts->super.sreq.req_id;
-    mem_info.type                = rts->mem_type;
-    mem_info.sys_dev             = rts->sys_dev;
+    ucp_mem_info_detect_for_type(worker->context,
+                                 (void*)(uintptr_t)rts->address,
+                                 rts->super.size, rts->mem_type, &mem_info);
     ucp_datatype_iter_init_contig(&recv_req->recv.dt_iter,
                                   (void*)(uintptr_t)rts->address,
                                   rts->super.size, &mem_info);

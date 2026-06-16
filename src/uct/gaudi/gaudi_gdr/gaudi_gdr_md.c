@@ -82,7 +82,7 @@ static ucs_status_t uct_gaudi_md_mem_query(uct_md_h md, const void *addr,
 
     ucs_memtype_cache_update(mem_info.base_address, mem_info.alloc_length,
                              mem_info.type, mem_info.sys_dev,
-                             UCS_MEM_FLAG_CAN_REGISTER);
+                             UCS_MEM_FLAG_REGISTRABLE);
 
     if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_MEM_TYPE) {
         mem_attr_p->mem_type = mem_info.type;

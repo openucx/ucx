@@ -297,7 +297,7 @@ static ucp_proto_select_param_t ucp_proto_rndv_remote_select_param_init(
          */
         mem_info.sys_dev   = init_params->rkey_config_key->sys_dev;
         mem_info.type      = init_params->rkey_config_key->mem_type;
-        mem_info.mem_flags = UCS_MEM_FLAG_CAN_REGISTER;
+        mem_info.mem_flags = UCS_MEM_FLAG_REGISTRABLE;
         ucp_proto_select_param_init(&remote_select_param, params->remote_op_id,
                                     op_attr_mask, 0, UCP_DATATYPE_CONTIG,
                                     &mem_info, 1);

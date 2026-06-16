@@ -692,7 +692,7 @@ ucs_status_t uct_md_mem_query_v2(uct_md_h md, const void *address,
     /* Default to registrable; MDs that detect per-buffer registrability
      * (e.g. cuda_copy) override this. */
     if (field_mask & UCT_MD_MEM_ATTR_FIELD_MEM_FLAGS) {
-        mem_attr->mem_flags = UCS_MEM_FLAG_CAN_REGISTER;
+        mem_attr->mem_flags = UCS_MEM_FLAG_REGISTRABLE;
     }
 
     status = md->ops->mem_query(md, address, length, mem_attr);

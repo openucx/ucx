@@ -52,7 +52,7 @@ typedef enum ucs_memory_type {
 
 
 typedef enum ucs_mem_flags {
-    UCS_MEM_FLAG_CAN_REGISTER = UCS_BIT(0) /**< Can be registered by MDs */
+    UCS_MEM_FLAG_REGISTRABLE = UCS_BIT(0) /**< Memory is registrable by MDs */
 } ucs_mem_flags_t;
 
 

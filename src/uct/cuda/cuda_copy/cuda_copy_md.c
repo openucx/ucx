@@ -858,11 +858,11 @@ uct_cuda_copy_md_detect_mem_flags(uct_cuda_copy_md_t *md,
     }
 
     if (mem_info->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
-        return UCS_MEM_FLAG_CAN_REGISTER;
+        return UCS_MEM_FLAG_REGISTRABLE;
     }
 
     if (!md->config.dmabuf_supported) {
-        return UCS_MEM_FLAG_CAN_REGISTER;
+        return UCS_MEM_FLAG_REGISTRABLE;
     }
 
     if (dmabuf == NULL) {
@@ -881,7 +881,7 @@ uct_cuda_copy_md_detect_mem_flags(uct_cuda_copy_md_t *md,
         ucs_close_fd(&local_dmabuf.fd);
     }
 
-    return UCS_MEM_FLAG_CAN_REGISTER;
+    return UCS_MEM_FLAG_REGISTRABLE;
 }
 
 ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
@@ -966,7 +966,7 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
 
     if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_MEM_FLAGS) {
         mem_attr->mem_flags = (address != NULL) ? addr_mem_info.mem_flags :
-                                                  UCS_MEM_FLAG_CAN_REGISTER;
+                                                  UCS_MEM_FLAG_REGISTRABLE;
     }
 
     /* If dmabuf_fd was returned to the caller, the caller is responsible to
