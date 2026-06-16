@@ -469,8 +469,8 @@ typedef enum {
 
 
 typedef enum {
-    UCT_IB_MLX5_BF_COPY_MODE_GENERIC,
     UCT_IB_MLX5_BF_COPY_MODE_AUTO,
+    UCT_IB_MLX5_BF_COPY_MODE_GENERIC,
     UCT_IB_MLX5_BF_COPY_MODE_ST64B,
     UCT_IB_MLX5_BF_COPY_MODE_LAST
 } uct_ib_mlx5_bf_copy_mode_t;
@@ -683,15 +683,6 @@ typedef struct uct_ib_mlx5_qp {
     };
 } uct_ib_mlx5_qp_t;
 
-/* Send work-queue */
-struct uct_ib_mlx5_txwq;
-
-#if defined(__aarch64__)
-typedef void *(*uct_ib_mlx5_bf_copy_func_t)(
-        void *dst, void *src, uint16_t num_bb,
-        const struct uct_ib_mlx5_txwq *wq);
-#endif
-
 typedef struct uct_ib_mlx5_txwq {
     uct_ib_mlx5_qp_t            super;
     uint16_t                    sw_pi;      /* PI for next WQE */
@@ -703,14 +694,14 @@ typedef struct uct_ib_mlx5_txwq {
     void                        *qend;
     uint16_t                    bb_max;
     uint16_t                    sig_pi;     /* PI for last signaled WQE */
+#if defined(__aarch64__)
+    uint8_t                     bf_copy_mode;
+#endif
 #if UCS_ENABLE_ASSERT
     uint16_t                    hw_ci; /* First BB index of last completed WQE */
     uint8_t                     flags; /* Debug flags */
 #endif
     uct_ib_fence_info_t         fi;
-#if defined(__aarch64__)
-    uct_ib_mlx5_bf_copy_func_t  bf_copy;
-#endif
 } uct_ib_mlx5_txwq_t;
 
 

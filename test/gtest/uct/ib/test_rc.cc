@@ -216,8 +216,8 @@ class test_rc_mlx5_bf_mmio_st64b : public test_rc_mlx5_bf_mmio {
 public:
     virtual void init()
     {
-        if (!(ucs_arch_get_cpu_flag() & UCS_CPU_FLAG_ST64B)) {
-            UCS_TEST_SKIP_R("CPU does not report ST64B support");
+        if (!(ucs_arch_get_cpu_flag() & UCS_CPU_FLAG_LS64)) {
+            UCS_TEST_SKIP_R("CPU does not report LS64 support");
         }
 
         test_rc_mlx5_bf_mmio::init();

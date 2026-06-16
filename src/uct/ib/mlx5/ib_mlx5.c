@@ -33,8 +33,8 @@ static const char *uct_ib_mlx5_mmio_modes[] = {
 };
 
 static const char *uct_ib_mlx5_bf_copy_modes[] = {
-    [UCT_IB_MLX5_BF_COPY_MODE_GENERIC] = "generic",
     [UCT_IB_MLX5_BF_COPY_MODE_AUTO]    = "auto",
+    [UCT_IB_MLX5_BF_COPY_MODE_GENERIC] = "generic",
     [UCT_IB_MLX5_BF_COPY_MODE_ST64B]   = "st64b",
     [UCT_IB_MLX5_BF_COPY_MODE_LAST]    = NULL
 };
@@ -64,9 +64,9 @@ ucs_config_field_t uct_ib_mlx5_iface_config_table[] = {
     {"BF_COPY_MODE", "auto",
      "How to copy WQE building blocks to BlueFlame MMIO register. One of "
      "the following:\n"
+     " auto    - Select best according to runtime CPU capabilities.\n"
      " generic - Use portable scalar stores.\n"
-     " st64b   - Use AArch64 ST64B store when supported.\n"
-     " auto    - Select best according to runtime CPU capabilities.",
+     " st64b   - Use AArch64 ST64B store when supported.",
      ucs_offsetof(uct_ib_mlx5_iface_config_t, bf_copy_mode),
      UCS_CONFIG_TYPE_ENUM(uct_ib_mlx5_bf_copy_modes)},
 
@@ -779,125 +779,35 @@ uct_ib_mlx5_get_mmio_mode(uct_priv_worker_t *worker,
     return UCS_OK;
 }
 
-#if defined(__aarch64__)
-static UCS_F_ALWAYS_INLINE void
-uct_ib_mlx5_bf_copy_bb_generic(void *restrict dst, void *restrict src)
-{
-    UCS_WORD_COPY(volatile uint64_t, dst, uint64_t, src, MLX5_SEND_WQE_BB);
-}
-
-static UCS_F_ALWAYS_INLINE void *
-uct_ib_mlx5_bf_copy_generic(void *dst, void *src, uint16_t num_bb,
-                            const uct_ib_mlx5_txwq_t *wq)
-{
-    uint16_t n;
-
-    for (n = 0; n < num_bb; ++n) {
-        uct_ib_mlx5_bf_copy_bb_generic(dst, src);
-        dst = UCS_PTR_BYTE_OFFSET(dst, MLX5_SEND_WQE_BB);
-        src = UCS_PTR_BYTE_OFFSET(src, MLX5_SEND_WQE_BB);
-        if (ucs_unlikely(src == wq->qend)) {
-            src = wq->qstart;
-        }
-    }
-
-    return src;
-}
-
-#if HAVE_AARCH64_ST64B_ASM
-static UCS_F_ALWAYS_INLINE void
-uct_ib_mlx5_bf_copy_bb_st64b(void *restrict dst, void *restrict src)
-{
-    ucs_assert(((uintptr_t)src % MLX5_SEND_WQE_BB) == 0);
-    ucs_assert(((uintptr_t)dst % MLX5_SEND_WQE_BB) == 0);
-
-    asm volatile(".arch_extension ls64\n"
-                 "ldp x8, x9, [%[src], #0]\n"
-                 "ldp x10, x11, [%[src], #16]\n"
-                 "ldp x12, x13, [%[src], #32]\n"
-                 "ldp x14, x15, [%[src], #48]\n"
-                 "st64b x8, [%[dst]]"
-                 :
-                 : [src] "r"(src), [dst] "r"(dst)
-                 : "x8", "x9", "x10", "x11", "x12", "x13", "x14",
-                   "x15", "memory");
-}
-
-static UCS_F_ALWAYS_INLINE void *
-uct_ib_mlx5_bf_copy_st64b(void *dst, void *src, uint16_t num_bb,
-                          const uct_ib_mlx5_txwq_t *wq)
-{
-    uint16_t n;
-
-    for (n = 0; n < num_bb; ++n) {
-        uct_ib_mlx5_bf_copy_bb_st64b(dst, src);
-        dst = UCS_PTR_BYTE_OFFSET(dst, MLX5_SEND_WQE_BB);
-        src = UCS_PTR_BYTE_OFFSET(src, MLX5_SEND_WQE_BB);
-        if (ucs_unlikely(src == wq->qend)) {
-            src = wq->qstart;
-        }
-    }
-
-    return src;
-}
-#endif
-
-static ucs_status_t
-uct_ib_mlx5_select_bf_copy(uct_ib_mlx5_bf_copy_mode_t bf_copy_mode,
-                           uct_ib_mlx5_bf_copy_func_t *bf_copy_func_p)
-{
-    static uct_ib_mlx5_bf_copy_func_t cached_bf_copy_func;
-    uct_ib_mlx5_bf_copy_mode_t mode = bf_copy_mode;
-    uct_ib_mlx5_bf_copy_func_t bf_copy_func;
-    int have_st64b = 0;
-
-    ucs_assert(bf_copy_mode < UCT_IB_MLX5_BF_COPY_MODE_LAST);
-
-    bf_copy_func = uct_ib_mlx5_bf_copy_generic;
-    if (mode == UCT_IB_MLX5_BF_COPY_MODE_GENERIC) {
-        goto out;
-    }
-
-#if HAVE_AARCH64_ST64B_ASM
-    have_st64b = ucs_arch_get_cpu_flag() & UCS_CPU_FLAG_ST64B;
-#endif
-    if (mode == UCT_IB_MLX5_BF_COPY_MODE_AUTO) {
-        mode = have_st64b ? UCT_IB_MLX5_BF_COPY_MODE_ST64B :
-                            UCT_IB_MLX5_BF_COPY_MODE_GENERIC;
-    }
-
-    if (mode == UCT_IB_MLX5_BF_COPY_MODE_ST64B) {
-#if HAVE_AARCH64_ST64B_ASM
-        if (!have_st64b) {
-            ucs_error("mlx5 BlueFlame ST64B copy was requested but CPU does "
-                      "not report ST64B support");
-            return UCS_ERR_UNSUPPORTED;
-        }
-
-        bf_copy_func = uct_ib_mlx5_bf_copy_st64b;
-#else
-        ucs_error("mlx5 BlueFlame ST64B copy was requested but UCX was built "
-                  "without assembler support for ST64B");
-        return UCS_ERR_UNSUPPORTED;
-#endif
-    }
-
-out:
-    if (cached_bf_copy_func == NULL) {
-        cached_bf_copy_func = bf_copy_func;
-    }
-
-    *bf_copy_func_p = cached_bf_copy_func;
-    return UCS_OK;
-}
-#endif
-
 ucs_status_t
 uct_ib_mlx5_txwq_init_bf_copy(uct_ib_mlx5_txwq_t *txwq,
                               uct_ib_mlx5_bf_copy_mode_t bf_copy_mode)
 {
+    ucs_assert(bf_copy_mode < UCT_IB_MLX5_BF_COPY_MODE_LAST);
+
 #if defined(__aarch64__)
-    return uct_ib_mlx5_select_bf_copy(bf_copy_mode, &txwq->bf_copy);
+    txwq->bf_copy_mode = UCT_IB_MLX5_BF_COPY_MODE_GENERIC;
+    if (bf_copy_mode == UCT_IB_MLX5_BF_COPY_MODE_GENERIC) {
+        return UCS_OK;
+    }
+
+#if HAVE_AARCH64_ST64B_ASM
+    if (ucs_arch_get_cpu_flag() & UCS_CPU_FLAG_LS64) {
+        txwq->bf_copy_mode = UCT_IB_MLX5_BF_COPY_MODE_ST64B;
+        return UCS_OK;
+    }
+#endif
+
+    if (bf_copy_mode == UCT_IB_MLX5_BF_COPY_MODE_ST64B) {
+#if HAVE_AARCH64_ST64B_ASM
+        ucs_error("mlx5 BlueFlame ST64B copy was requested but CPU does "
+                  "not report LS64 support");
+#else
+        ucs_error("mlx5 BlueFlame ST64B copy was requested but UCX was built "
+                  "without assembler support for ST64B");
+#endif
+        return UCS_ERR_UNSUPPORTED;
+    }
 #else
     (void)txwq;
 

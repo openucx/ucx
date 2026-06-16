@@ -66,7 +66,7 @@ typedef enum ucs_cpu_flag {
     UCS_CPU_FLAG_SSE42      = UCS_BIT(8),
     UCS_CPU_FLAG_AVX        = UCS_BIT(9),
     UCS_CPU_FLAG_AVX2       = UCS_BIT(10),
-    UCS_CPU_FLAG_ST64B      = UCS_BIT(11)
+    UCS_CPU_FLAG_LS64       = UCS_BIT(11)
 } ucs_cpu_flag_t;
 
 

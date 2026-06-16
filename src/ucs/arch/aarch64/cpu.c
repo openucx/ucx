@@ -15,7 +15,6 @@
 
 #if HAVE_SYS_AUXV_H
 #  include <sys/auxv.h>
-#endif
 
 /* Older userspace headers may not expose Arm64 HWCAP3 definitions. */
 #ifndef AT_HWCAP3
@@ -24,6 +23,7 @@
 
 #ifndef HWCAP3_LS64
 #  define HWCAP3_LS64 (1UL << 3)
+#endif
 #endif
 
 static void ucs_aarch64_cpuid_from_proc(ucs_aarch64_cpuid_t *cpuid)
@@ -90,7 +90,7 @@ ucs_cpu_flag_t ucs_arch_get_cpu_flag()
 
 #if HAVE_SYS_AUXV_H && HAVE_DECL_GETAUXVAL
         if (getauxval(AT_HWCAP3) & HWCAP3_LS64) {
-            result |= UCS_CPU_FLAG_ST64B;
+            result |= UCS_CPU_FLAG_LS64;
         }
 #endif
 
