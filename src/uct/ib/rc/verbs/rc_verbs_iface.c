@@ -617,6 +617,10 @@ uct_rc_verbs_query_tl_devices(uct_md_h md,
     uct_ib_md_t *ib_md = ucs_derived_of(md, uct_ib_md_t);
     ucs_status_t status;
 
+    if (!uct_ib_md_coco_transport_allowed(ib_md, "rc_verbs")) {
+        return UCS_ERR_NO_DEVICE;
+    }
+
     /* device does not support RC if we cannot create an RC QP */
     status = uct_rc_verbs_can_create_qp(ib_md);
     if (status != UCS_OK) {

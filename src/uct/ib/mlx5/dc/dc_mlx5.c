@@ -1812,6 +1812,10 @@ uct_dc_mlx5_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_
         return UCS_ERR_NO_DEVICE;
     }
 
+    if (!uct_ib_md_coco_transport_allowed(ib_md, "dc_mlx5")) {
+        return UCS_ERR_NO_DEVICE;
+    }
+
     flags = UCT_IB_DEVICE_FLAG_SRQ | UCT_IB_DEVICE_FLAG_MLX5_PRM |
             UCT_IB_DEVICE_FLAG_DC |
             (ib_md->config.eth_pause ? 0 : UCT_IB_DEVICE_FLAG_LINK_IB);

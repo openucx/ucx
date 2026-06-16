@@ -13,6 +13,7 @@
 
 #include <uct/base/uct_md.h>
 #include <ucs/stats/stats.h>
+#include <string.h>
 
 #define UCT_IB_MD_MAX_MR_SIZE        0x80000000UL
 #define UCT_IB_MD_PACKED_RKEY_SIZE   sizeof(uint64_t)
@@ -199,6 +200,12 @@ static UCS_F_ALWAYS_INLINE int uct_ib_md_is_cc_dma_bounce(const uct_ib_md_t *md)
     return md->cc_dma_bounce;
 }
 
+static UCS_F_ALWAYS_INLINE int
+uct_ib_md_is_coco_hardened(const uct_ib_md_t *md)
+{
+    return md->cc_dma_bounce && (md->coco_pd != NULL);
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_ib_md_check_cc_dma_bounce_supported(const uct_ib_md_t *md,
                                         const char *transport_name)
@@ -215,8 +222,7 @@ uct_ib_md_check_cc_dma_bounce_supported(const uct_ib_md_t *md,
 static UCS_F_ALWAYS_INLINE struct ibv_pd*
 uct_ib_md_control_pd(const uct_ib_md_t *md)
 {
-    ucs_assert(!md->cc_dma_bounce || (md->coco_pd != NULL));
-    return (md->cc_dma_bounce && (md->coco_pd != NULL)) ? md->coco_pd : md->pd;
+    return uct_ib_md_is_coco_hardened(md) ? md->coco_pd : md->pd;
 }
 
 

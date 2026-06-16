@@ -251,6 +251,10 @@ endif
 if HAVE_TL_RC
 gtest_SOURCES += \
 	uct/ib/test_rc.cc
+if HAVE_MLX5_DV
+gtest_SOURCES += \
+	uct/ib/test_coco_hardening.cc
+endif
 endif
 if HAVE_TL_DC
 gtest_SOURCES += \

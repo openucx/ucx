@@ -1090,6 +1090,10 @@ uct_ud_mlx5_query_tl_devices(uct_md_h md,
         return UCS_ERR_NO_DEVICE;
     }
 
+    if (!uct_ib_md_coco_transport_allowed(ib_md, "ud_mlx5")) {
+        return UCS_ERR_NO_DEVICE;
+    }
+
     return uct_ib_device_query_ports(&ib_md->dev, UCT_IB_DEVICE_FLAG_MLX5_PRM,
                                      tl_devices_p, num_tl_devices_p);
 }
