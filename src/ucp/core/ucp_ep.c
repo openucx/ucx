@@ -540,7 +540,7 @@ void ucp_ep_destroy_base(ucp_ep_h ep)
     ucp_worker_keepalive_remove_ep(ep);
     ucp_ep_release_id(ep);
     ucs_list_del(&ep->ext->ep_list);
-    if (ucp_ep_has_cm_lane(ep) && (ep->ext->recovery_arg != NULL)) {
+    if (!ucp_ep_has_cm_lane(ep) && (ep->ext->recovery_arg != NULL)) {
         ucs_free(ep->ext->recovery_arg);
         ep->ext->recovery_arg = NULL;
     }
