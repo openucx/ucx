@@ -344,7 +344,16 @@ ucs_status_t uct_rc_mlx5_devx_init_rx(uct_rc_mlx5_iface_common_t *iface,
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(create_rmp_in)]   = {};
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(create_rmp_out)] = {};
     ucs_status_t status;
+    uct_ib_mlx5_coco_rmp_req_t coco_req;
+    int stride, max;
+    uint32_t rmpn;
     void *rmpc;
+
+    if (uct_ib_md_is_coco_hardened(&md->super) &&
+        ((iface->config.srq_topo != UCT_RC_MLX5_SRQ_TOPO_CYCLIC) ||
+         UCT_RC_MLX5_MP_ENABLED(iface))) {
+        return UCS_ERR_UNSUPPORTED;
+    }
 
     UCT_IB_MLX5DV_SET(create_rmp_in, in, opcode, UCT_IB_MLX5_CMD_OP_CREATE_RMP);
     rmpc = UCT_IB_MLX5DV_ADDR_OF(create_rmp_in, in, rmp_context);
@@ -357,6 +366,18 @@ ucs_status_t uct_rc_mlx5_devx_init_rx(uct_rc_mlx5_iface_common_t *iface,
         return status;
     }
 
+    stride = uct_ib_mlx5_srq_stride(iface->tm.mp.num_strides);
+    max    = uct_ib_mlx5_srq_max_wrs(config->super.rx.queue_len,
+                                     iface->tm.mp.num_strides);
+    max    = ucs_roundup_pow2(max);
+
+    coco_req.wq_umem_id  = iface->rx.srq.devx.mem.mem->umem_id;
+    coco_req.dbr_umem_id = iface->rx.srq.devx.dbrec->mem_id;
+    coco_req.wq_size     = max;
+    coco_req.stride      = stride;
+    coco_req.cyclic      = 1;
+    coco_req.mp_enabled  = 0;
+
     iface->rx.srq.devx.obj = uct_ib_mlx5_devx_obj_create(dev->ibv_context, in,
                                                          sizeof(in), out,
                                                          sizeof(out), "RMP",
@@ -366,10 +387,21 @@ ucs_status_t uct_rc_mlx5_devx_init_rx(uct_rc_mlx5_iface_common_t *iface,
         goto err_cleanup_srq;
     }
 
-    iface->rx.srq.srq_num = UCT_IB_MLX5DV_GET(create_rmp_out, out, rmpn);
+    if (uct_ib_md_is_coco_hardened(&md->super)) {
+        status = uct_ib_mlx5_coco_validate_rmp_output(md, &coco_req, out,
+                                                      sizeof(out), &rmpn);
+        if (status != UCS_OK) {
+            goto err_destroy_rmp;
+        }
+    } else {
+        rmpn = UCT_IB_MLX5DV_GET(create_rmp_out, out, rmpn);
+    }
+    iface->rx.srq.srq_num = rmpn;
 
     return UCS_OK;
 
+err_destroy_rmp:
+    uct_ib_mlx5_devx_obj_destroy(iface->rx.srq.devx.obj, "RMP");
 err_cleanup_srq:
     uct_rc_mlx5_devx_cleanup_srq(md, &iface->rx.srq);
     return status;
@@ -377,6 +409,7 @@ err_cleanup_srq:
 
 void uct_rc_mlx5_devx_cleanup_srq(uct_ib_mlx5_md_t *md, uct_ib_mlx5_srq_t *srq)
 {
+    (void)uct_ib_mlx5_coco_rmpn_record_remove(md->coco, srq->srq_num);
     uct_ib_mlx5_put_dbrec(srq->devx.dbrec);
     uct_ib_mlx5_md_buf_free(md, srq->buf, &srq->devx.mem);
 }
@@ -515,4 +548,3 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
               iface->super.config.max_rd_atomic);
     return UCS_OK;
 }
-

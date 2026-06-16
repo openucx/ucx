@@ -11,6 +11,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <sys/mman.h>
 #include <vector>
 
 extern "C" {
@@ -224,6 +225,153 @@ public:
 private:
     uct_ib_mlx5_coco_shared_alloc_ops_t ops;
 };
+
+class guarded_output {
+public:
+    explicit guarded_output(size_t readable_size) : m_base(MAP_FAILED),
+                                                    m_ptr(NULL),
+                                                    m_readable_size(readable_size),
+                                                    m_mapping_size(0)
+    {
+        const size_t page_size = ucs_get_page_size();
+
+        m_mapping_size = 2 * page_size;
+        m_base = mmap(NULL, m_mapping_size, PROT_READ | PROT_WRITE,
+                      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        EXPECT_NE(MAP_FAILED, m_base);
+        if (m_base == MAP_FAILED) {
+            return;
+        }
+
+        EXPECT_EQ(0, mprotect(UCS_PTR_BYTE_OFFSET(m_base, page_size),
+                              page_size, PROT_NONE));
+        m_ptr = UCS_PTR_BYTE_OFFSET(m_base, page_size - readable_size);
+        memset(m_ptr, 0, readable_size);
+    }
+
+    ~guarded_output()
+    {
+        if (m_base != MAP_FAILED) {
+            munmap(m_base, m_mapping_size);
+        }
+    }
+
+    const void *ptr() const
+    {
+        return m_ptr;
+    }
+
+    size_t size() const
+    {
+        return m_readable_size;
+    }
+
+private:
+    void   *m_base;
+    void   *m_ptr;
+    size_t m_readable_size;
+    size_t m_mapping_size;
+};
+
+enum {
+    TEST_COCO_CQ_UMEM_ID  = 0x11,
+    TEST_COCO_DBR_UMEM_ID = 0x12,
+    TEST_COCO_WQ_UMEM_ID  = 0x13
+};
+
+void add_lifecycle_umems(uct_ib_mlx5_md_t *md, void *cq_buf, void *dbr_buf,
+                         void *wq_buf)
+{
+    ASSERT_EQ(UCS_OK, uct_ib_mlx5_coco_umem_record_add(
+                          md->coco, TEST_COCO_CQ_UMEM_ID, cq_buf, 128,
+                          ucs_get_page_size(), IBV_ACCESS_LOCAL_WRITE));
+    ASSERT_EQ(UCS_OK, uct_ib_mlx5_coco_umem_record_add(
+                          md->coco, TEST_COCO_DBR_UMEM_ID, dbr_buf, 64,
+                          ucs_get_page_size(), 0));
+    ASSERT_EQ(UCS_OK, uct_ib_mlx5_coco_umem_record_add(
+                          md->coco, TEST_COCO_WQ_UMEM_ID, wq_buf, 256,
+                          ucs_get_page_size(), 0));
+}
+
+uct_ib_mlx5_coco_cq_req_t make_valid_cq_req()
+{
+    uct_ib_mlx5_coco_cq_req_t req = {};
+
+    req.cq_len         = 16;
+    req.cqe_size       = 64;
+    req.cq_umem_id     = TEST_COCO_CQ_UMEM_ID;
+    req.cq_umem_offset = 0;
+    req.dbr_umem_id    = TEST_COCO_DBR_UMEM_ID;
+    req.dbr_offset     = 0;
+    req.eqn            = 1;
+    req.uar_page       = 2;
+    return req;
+}
+
+uct_ib_mlx5_coco_qp_req_t make_valid_qp_req(uint32_t send_cqn,
+                                            uint32_t recv_cqn)
+{
+    uct_ib_mlx5_coco_qp_req_t req = {};
+
+    req.qp_type       = IBV_QPT_RC;
+    req.send_cqn      = send_cqn;
+    req.recv_cqn      = recv_cqn;
+    req.rmpn          = 0;
+    req.wq_umem_id    = TEST_COCO_WQ_UMEM_ID;
+    req.dbr_umem_id   = TEST_COCO_DBR_UMEM_ID;
+    req.sq_wqe_count  = 64;
+    req.rq_wqe_count  = 0;
+    return req;
+}
+
+uct_ib_mlx5_coco_rmp_req_t make_valid_rmp_req()
+{
+    uct_ib_mlx5_coco_rmp_req_t req = {};
+
+    req.wq_umem_id  = TEST_COCO_WQ_UMEM_ID;
+    req.dbr_umem_id = TEST_COCO_DBR_UMEM_ID;
+    req.wq_size     = 64;
+    req.stride      = 64;
+    req.cyclic      = 1;
+    req.mp_enabled  = 0;
+    return req;
+}
+
+void set_cq_output(void *out, uint32_t cqn)
+{
+    memset(out, 0, UCT_IB_MLX5DV_ST_SZ_BYTES(create_cq_out));
+    UCT_IB_MLX5DV_SET(create_cq_out, static_cast<char*>(out), cqn, cqn);
+}
+
+void set_qp_output(void *out, uint32_t qpn)
+{
+    memset(out, 0, UCT_IB_MLX5DV_ST_SZ_BYTES(create_qp_out));
+    UCT_IB_MLX5DV_SET(create_qp_out, static_cast<char*>(out), qpn, qpn);
+}
+
+void set_rmp_output(void *out, uint32_t rmpn)
+{
+    memset(out, 0, UCT_IB_MLX5DV_ST_SZ_BYTES(create_rmp_out));
+    UCT_IB_MLX5DV_SET(create_rmp_out, static_cast<char*>(out), rmpn, rmpn);
+}
+
+void add_valid_cq_objects(uct_ib_mlx5_md_t *md, uint32_t send_cqn,
+                          uint32_t recv_cqn)
+{
+    char out[UCT_IB_MLX5DV_ST_SZ_BYTES(create_cq_out)];
+    uct_ib_mlx5_coco_cq_req_t req = make_valid_cq_req();
+    uint32_t cqn;
+
+    set_cq_output(out, send_cqn);
+    ASSERT_EQ(UCS_OK, uct_ib_mlx5_coco_validate_cq_output(
+                          md, &req, out, sizeof(out), &cqn));
+    EXPECT_EQ(send_cqn, cqn);
+
+    set_cq_output(out, recv_cqn);
+    ASSERT_EQ(UCS_OK, uct_ib_mlx5_coco_validate_cq_output(
+                          md, &req, out, sizeof(out), &cqn));
+    EXPECT_EQ(recv_cqn, cqn);
+}
 
 }
 
@@ -813,4 +961,215 @@ UCS_TEST_F(test_coco_hardening, mr_mkey_non_coco_no_registry)
 
     EXPECT_EQ(UCS_OK, uct_ib_mlx5_coco_state_init(&md));
     EXPECT_EQ(NULL, md.coco);
+}
+
+UCS_TEST_F(test_coco_hardening, devx_output_cq_rejects_short_buffer_guarded)
+{
+    uct_ib_mlx5_md_t md = make_mlx5_md(1);
+    uint8_t cq_buf[128], dbr_buf[64], wq_buf[256];
+    guarded_output out(1);
+    uct_ib_mlx5_coco_cq_req_t req = make_valid_cq_req();
+    uint32_t cqn = 0xdeadbeefu;
+
+    ASSERT_EQ(UCS_OK, uct_ib_mlx5_coco_state_init(&md));
+    add_lifecycle_umems(&md, cq_buf, dbr_buf, wq_buf);
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+              uct_ib_mlx5_coco_validate_cq_output(&md, &req, out.ptr(),
+                                                  out.size(), &cqn));
+    EXPECT_EQ(0xdeadbeefu, cqn);
+    uct_ib_mlx5_coco_state_cleanup(&md);
+}
+
+UCS_TEST_F(test_coco_hardening, devx_output_cq_rejects_duplicate_cqn)
+{
+    uct_ib_mlx5_md_t md = make_mlx5_md(1);
+    uint8_t cq_buf[128], dbr_buf[64], wq_buf[256];
+    char out[UCT_IB_MLX5DV_ST_SZ_BYTES(create_cq_out)];
+    uct_ib_mlx5_coco_cq_req_t req = make_valid_cq_req();
+    uint32_t cqn;
+
+    ASSERT_EQ(UCS_OK, uct_ib_mlx5_coco_state_init(&md));
+    add_lifecycle_umems(&md, cq_buf, dbr_buf, wq_buf);
+    set_cq_output(out, 0x31);
+
+    ASSERT_EQ(UCS_OK, uct_ib_mlx5_coco_validate_cq_output(
+                          &md, &req, out, sizeof(out), &cqn));
+    EXPECT_EQ(0x31u, cqn);
+    EXPECT_EQ(UCS_ERR_ALREADY_EXISTS,
+              uct_ib_mlx5_coco_validate_cq_output(&md, &req, out,
+                                                  sizeof(out), &cqn));
+    uct_ib_mlx5_coco_state_cleanup(&md);
+}
+
+UCS_TEST_F(test_coco_hardening, devx_output_qp_rejects_duplicate_qpn)
+{
+    uct_ib_mlx5_md_t md = make_mlx5_md(1);
+    uint8_t cq_buf[128], dbr_buf[64], wq_buf[256];
+    char out[UCT_IB_MLX5DV_ST_SZ_BYTES(create_qp_out)];
+    uct_ib_mlx5_coco_qp_req_t req = make_valid_qp_req(0x41, 0x42);
+    uint32_t qpn;
+
+    ASSERT_EQ(UCS_OK, uct_ib_mlx5_coco_state_init(&md));
+    add_lifecycle_umems(&md, cq_buf, dbr_buf, wq_buf);
+    add_valid_cq_objects(&md, 0x41, 0x42);
+    set_qp_output(out, 0x51);
+
+    ASSERT_EQ(UCS_OK, uct_ib_mlx5_coco_validate_qp_output(
+                          &md, &req, out, sizeof(out), &qpn));
+    EXPECT_EQ(0x51u, qpn);
+    EXPECT_EQ(UCS_ERR_ALREADY_EXISTS,
+              uct_ib_mlx5_coco_validate_qp_output(&md, &req, out,
+                                                  sizeof(out), &qpn));
+    uct_ib_mlx5_coco_state_cleanup(&md);
+}
+
+UCS_TEST_F(test_coco_hardening, devx_output_rmp_rejects_duplicate_rmpn)
+{
+    uct_ib_mlx5_md_t md = make_mlx5_md(1);
+    uint8_t cq_buf[128], dbr_buf[64], wq_buf[256];
+    char out[UCT_IB_MLX5DV_ST_SZ_BYTES(create_rmp_out)];
+    uct_ib_mlx5_coco_rmp_req_t req = make_valid_rmp_req();
+    uint32_t rmpn;
+
+    ASSERT_EQ(UCS_OK, uct_ib_mlx5_coco_state_init(&md));
+    add_lifecycle_umems(&md, cq_buf, dbr_buf, wq_buf);
+    set_rmp_output(out, 0x61);
+
+    ASSERT_EQ(UCS_OK, uct_ib_mlx5_coco_validate_rmp_output(
+                          &md, &req, out, sizeof(out), &rmpn));
+    EXPECT_EQ(0x61u, rmpn);
+    EXPECT_EQ(UCS_ERR_ALREADY_EXISTS,
+              uct_ib_mlx5_coco_validate_rmp_output(&md, &req, out,
+                                                   sizeof(out), &rmpn));
+    uct_ib_mlx5_coco_state_cleanup(&md);
+}
+
+UCS_TEST_F(test_coco_hardening, devx_input_qp_rejects_non_rc)
+{
+    uct_ib_mlx5_md_t md = make_mlx5_md(1);
+    uint8_t cq_buf[128], dbr_buf[64], wq_buf[256];
+    char out[UCT_IB_MLX5DV_ST_SZ_BYTES(create_qp_out)];
+    uct_ib_mlx5_coco_qp_req_t req = make_valid_qp_req(0x41, 0x42);
+    uint32_t qpn = 0;
+
+    ASSERT_EQ(UCS_OK, uct_ib_mlx5_coco_state_init(&md));
+    add_lifecycle_umems(&md, cq_buf, dbr_buf, wq_buf);
+    add_valid_cq_objects(&md, 0x41, 0x42);
+    set_qp_output(out, 0x51);
+    req.qp_type = UCT_IB_QPT_DCI;
+
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED,
+              uct_ib_mlx5_coco_validate_qp_output(&md, &req, out,
+                                                  sizeof(out), &qpn));
+    uct_ib_mlx5_coco_state_cleanup(&md);
+}
+
+UCS_TEST_F(test_coco_hardening, devx_input_rmp_rejects_mp)
+{
+    uct_ib_mlx5_md_t md = make_mlx5_md(1);
+    uint8_t cq_buf[128], dbr_buf[64], wq_buf[256];
+    char out[UCT_IB_MLX5DV_ST_SZ_BYTES(create_rmp_out)];
+    uct_ib_mlx5_coco_rmp_req_t req = make_valid_rmp_req();
+    uint32_t rmpn = 0;
+
+    ASSERT_EQ(UCS_OK, uct_ib_mlx5_coco_state_init(&md));
+    add_lifecycle_umems(&md, cq_buf, dbr_buf, wq_buf);
+    set_rmp_output(out, 0x61);
+    req.mp_enabled = 1;
+
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED,
+              uct_ib_mlx5_coco_validate_rmp_output(&md, &req, out,
+                                                   sizeof(out), &rmpn));
+    uct_ib_mlx5_coco_state_cleanup(&md);
+}
+
+UCS_TEST_F(test_coco_hardening, devx_input_rmp_rejects_non_cyclic)
+{
+    uct_ib_mlx5_md_t md = make_mlx5_md(1);
+    uint8_t cq_buf[128], dbr_buf[64], wq_buf[256];
+    char out[UCT_IB_MLX5DV_ST_SZ_BYTES(create_rmp_out)];
+    uct_ib_mlx5_coco_rmp_req_t req = make_valid_rmp_req();
+    uint32_t rmpn = 0;
+
+    ASSERT_EQ(UCS_OK, uct_ib_mlx5_coco_state_init(&md));
+    add_lifecycle_umems(&md, cq_buf, dbr_buf, wq_buf);
+    set_rmp_output(out, 0x61);
+    req.cyclic = 0;
+
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED,
+              uct_ib_mlx5_coco_validate_rmp_output(&md, &req, out,
+                                                   sizeof(out), &rmpn));
+    uct_ib_mlx5_coco_state_cleanup(&md);
+}
+
+UCS_TEST_F(test_coco_hardening,
+           devx_wrapper_order_cq_validates_before_cqn_consume)
+{
+    std::string function_source = get_function_source(
+        "src/uct/ib/mlx5/dv/ib_mlx5_dv.c",
+        "uct_ib_mlx5_devx_create_cq_common(",
+        "ucs_status_t\nuct_ib_mlx5_devx_create_cq(");
+    size_t validate_pos = function_source.find(
+        "uct_ib_mlx5_coco_validate_cq_output");
+    size_t consume_pos = function_source.find("uct_ib_mlx5_init_cq_common");
+
+    ASSERT_NE(std::string::npos, validate_pos);
+    ASSERT_NE(std::string::npos, consume_pos);
+    EXPECT_LT(validate_pos, consume_pos);
+}
+
+UCS_TEST_F(test_coco_hardening,
+           devx_wrapper_order_qp_validates_before_qpn_publish)
+{
+    std::string function_source = get_function_source(
+        "src/uct/ib/mlx5/dv/ib_mlx5_dv.c",
+        "uct_ib_mlx5_devx_create_qp_common(",
+        "ucs_status_t uct_ib_mlx5_devx_create_qp(");
+    size_t validate_pos = function_source.find(
+        "uct_ib_mlx5_coco_validate_qp_output");
+    size_t publish_pos = function_source.find("qp->qp_num =");
+
+    ASSERT_NE(std::string::npos, validate_pos);
+    ASSERT_NE(std::string::npos, publish_pos);
+    EXPECT_LT(validate_pos, publish_pos);
+}
+
+UCS_TEST_F(test_coco_hardening,
+           devx_wrapper_order_rmp_validates_before_rmpn_publish)
+{
+    std::string function_source = get_function_source(
+        "src/uct/ib/mlx5/rc/rc_mlx5_devx.c",
+        "ucs_status_t uct_rc_mlx5_devx_init_rx(",
+        "void uct_rc_mlx5_devx_cleanup_srq(");
+    size_t validate_pos = function_source.find(
+        "uct_ib_mlx5_coco_validate_rmp_output");
+    size_t publish_pos = function_source.find("iface->rx.srq.srq_num =");
+
+    ASSERT_NE(std::string::npos, validate_pos);
+    ASSERT_NE(std::string::npos, publish_pos);
+    EXPECT_LT(validate_pos, publish_pos);
+}
+
+UCS_TEST_F(test_coco_hardening,
+           devx_wrapper_order_non_coco_validation_not_called)
+{
+    std::string cq_source = get_function_source(
+        "src/uct/ib/mlx5/dv/ib_mlx5_dv.c",
+        "uct_ib_mlx5_devx_create_cq_common(",
+        "ucs_status_t\nuct_ib_mlx5_devx_create_cq(");
+    std::string qp_source = get_function_source(
+        "src/uct/ib/mlx5/dv/ib_mlx5_dv.c",
+        "uct_ib_mlx5_devx_create_qp_common(",
+        "ucs_status_t uct_ib_mlx5_devx_create_qp(");
+    std::string rmp_source = get_function_source(
+        "src/uct/ib/mlx5/rc/rc_mlx5_devx.c",
+        "ucs_status_t uct_rc_mlx5_devx_init_rx(",
+        "void uct_rc_mlx5_devx_cleanup_srq(");
+
+    EXPECT_NE(std::string::npos,
+              cq_source.find("if (uct_ib_md_is_coco_hardened(&md->super))"));
+    EXPECT_NE(std::string::npos,
+              qp_source.find("if (uct_ib_md_is_coco_hardened(&md->super))"));
+    EXPECT_NE(std::string::npos,
+              rmp_source.find("if (uct_ib_md_is_coco_hardened(&md->super))"));
 }

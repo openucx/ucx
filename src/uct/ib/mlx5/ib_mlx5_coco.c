@@ -25,7 +25,22 @@ struct uct_ib_mlx5_coco_state {
     uct_ib_mlx5_coco_mkey_record_t *mkey_records;
     size_t                         mkey_count;
     size_t                         mkey_capacity;
+    struct uct_ib_mlx5_coco_obj_record *obj_records;
+    size_t                         obj_count;
+    size_t                         obj_capacity;
 };
+
+typedef enum {
+    UCT_IB_MLX5_COCO_OBJ_CQ,
+    UCT_IB_MLX5_COCO_OBJ_QP,
+    UCT_IB_MLX5_COCO_OBJ_RMP
+} uct_ib_mlx5_coco_obj_type_t;
+
+typedef struct uct_ib_mlx5_coco_obj_record {
+    uct_ib_mlx5_coco_obj_type_t type;
+    uint32_t                    id;
+    uint8_t                     live;
+} uct_ib_mlx5_coco_obj_record_t;
 
 typedef struct {
     uct_ib_mlx5_coco_shared_alloc_ops_t ops;
@@ -227,6 +242,7 @@ void uct_ib_mlx5_coco_state_cleanup(uct_ib_mlx5_md_t *md)
 
     ucs_free(md->coco->umem_records);
     ucs_free(md->coco->mkey_records);
+    ucs_free(md->coco->obj_records);
     ucs_free(md->coco);
     md->coco = NULL;
 }
@@ -496,6 +512,329 @@ uct_ib_mlx5_coco_mkey_record_remove_rkey(uct_ib_mlx5_coco_state_t *state,
     }
 
     return UCS_ERR_NO_ELEM;
+}
+
+static const uct_ib_mlx5_coco_obj_record_t*
+uct_ib_mlx5_coco_obj_record_find(const uct_ib_mlx5_coco_state_t *state,
+                                 uct_ib_mlx5_coco_obj_type_t type,
+                                 uint32_t id)
+{
+    size_t i;
+
+    if (state == NULL) {
+        return NULL;
+    }
+
+    for (i = 0; i < state->obj_count; ++i) {
+        if (state->obj_records[i].live &&
+            (state->obj_records[i].type == type) &&
+            (state->obj_records[i].id == id)) {
+            return &state->obj_records[i];
+        }
+    }
+
+    return NULL;
+}
+
+static ucs_status_t
+uct_ib_mlx5_coco_obj_record_add(uct_ib_mlx5_coco_state_t *state,
+                                uct_ib_mlx5_coco_obj_type_t type,
+                                uint32_t id)
+{
+    uct_ib_mlx5_coco_obj_record_t *record;
+    ucs_status_t status;
+
+    if (state == NULL) {
+        return UCS_OK;
+    }
+
+    if (id == 0) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (uct_ib_mlx5_coco_obj_record_find(state, type, id) != NULL) {
+        return UCS_ERR_ALREADY_EXISTS;
+    }
+
+    status = uct_ib_mlx5_coco_grow((void**)&state->obj_records,
+                                   &state->obj_capacity, state->obj_count,
+                                   sizeof(*state->obj_records),
+                                   "CoCo DEVX object records");
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    record       = &state->obj_records[state->obj_count++];
+    record->type = type;
+    record->id   = id;
+    record->live = 1;
+    return UCS_OK;
+}
+
+static ucs_status_t
+uct_ib_mlx5_coco_obj_record_remove(uct_ib_mlx5_coco_state_t *state,
+                                   uct_ib_mlx5_coco_obj_type_t type,
+                                   uint32_t id)
+{
+    size_t i;
+
+    if (state == NULL) {
+        return UCS_OK;
+    }
+
+    for (i = 0; i < state->obj_count; ++i) {
+        if (state->obj_records[i].live &&
+            (state->obj_records[i].type == type) &&
+            (state->obj_records[i].id == id)) {
+            state->obj_records[i].live = 0;
+            return UCS_OK;
+        }
+    }
+
+    return UCS_ERR_NO_ELEM;
+}
+
+ucs_status_t uct_ib_mlx5_coco_cqn_record_remove(
+        uct_ib_mlx5_coco_state_t *state, uint32_t cqn)
+{
+    return uct_ib_mlx5_coco_obj_record_remove(
+            state, UCT_IB_MLX5_COCO_OBJ_CQ, cqn);
+}
+
+ucs_status_t uct_ib_mlx5_coco_qpn_record_remove(
+        uct_ib_mlx5_coco_state_t *state, uint32_t qpn)
+{
+    return uct_ib_mlx5_coco_obj_record_remove(
+            state, UCT_IB_MLX5_COCO_OBJ_QP, qpn);
+}
+
+ucs_status_t uct_ib_mlx5_coco_rmpn_record_remove(
+        uct_ib_mlx5_coco_state_t *state, uint32_t rmpn)
+{
+    return uct_ib_mlx5_coco_obj_record_remove(
+            state, UCT_IB_MLX5_COCO_OBJ_RMP, rmpn);
+}
+
+static ucs_status_t
+uct_ib_mlx5_coco_validate_umem_ref(const uct_ib_mlx5_coco_state_t *state,
+                                   uint32_t umem_id, uint64_t offset)
+{
+    const uct_ib_mlx5_coco_umem_record_t *record =
+            uct_ib_mlx5_coco_umem_record_find(state, umem_id);
+
+    if (record == NULL) {
+        return UCS_ERR_NO_ELEM;
+    }
+
+    return (offset < record->exposed_size) ? UCS_OK : UCS_ERR_INVALID_PARAM;
+}
+
+static ucs_status_t
+uct_ib_mlx5_coco_validate_out_header(const void *out, size_t out_len,
+                                     size_t required_len)
+{
+    if ((out == NULL) || (out_len < required_len)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return (UCT_IB_MLX5DV_GET(general_obj_out_cmd_hdr, out, status) == 0) ?
+           UCS_OK : UCS_ERR_IO_ERROR;
+}
+
+static int uct_ib_mlx5_coco_is_pow2(uint32_t value)
+{
+    return (value != 0) && ((value & (value - 1)) == 0);
+}
+
+static ucs_status_t
+uct_ib_mlx5_coco_validate_cq_req(const uct_ib_mlx5_coco_state_t *state,
+                                 const uct_ib_mlx5_coco_cq_req_t *req)
+{
+    ucs_status_t status;
+
+    if ((req == NULL) || !uct_ib_mlx5_coco_is_pow2(req->cq_len) ||
+        ((req->cqe_size != 64) && (req->cqe_size != 128))) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    status = uct_ib_mlx5_coco_validate_umem_ref(
+            state, req->cq_umem_id, req->cq_umem_offset);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return uct_ib_mlx5_coco_validate_umem_ref(
+            state, req->dbr_umem_id, req->dbr_offset);
+}
+
+static ucs_status_t
+uct_ib_mlx5_coco_validate_qp_req(const uct_ib_mlx5_coco_state_t *state,
+                                 const uct_ib_mlx5_coco_qp_req_t *req)
+{
+    ucs_status_t status;
+
+    if (req == NULL) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (req->qp_type != IBV_QPT_RC) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    if (!uct_ib_mlx5_coco_is_pow2(req->sq_wqe_count)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (uct_ib_mlx5_coco_obj_record_find(
+                state, UCT_IB_MLX5_COCO_OBJ_CQ, req->send_cqn) == NULL) {
+        return UCS_ERR_NO_ELEM;
+    }
+
+    if (uct_ib_mlx5_coco_obj_record_find(
+                state, UCT_IB_MLX5_COCO_OBJ_CQ, req->recv_cqn) == NULL) {
+        return UCS_ERR_NO_ELEM;
+    }
+
+    if ((req->rmpn != 0) &&
+        (uct_ib_mlx5_coco_obj_record_find(
+                state, UCT_IB_MLX5_COCO_OBJ_RMP, req->rmpn) == NULL)) {
+        return UCS_ERR_NO_ELEM;
+    }
+
+    status = uct_ib_mlx5_coco_validate_umem_ref(state, req->wq_umem_id, 0);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return uct_ib_mlx5_coco_validate_umem_ref(state, req->dbr_umem_id, 0);
+}
+
+static ucs_status_t
+uct_ib_mlx5_coco_validate_rmp_req(const uct_ib_mlx5_coco_state_t *state,
+                                  const uct_ib_mlx5_coco_rmp_req_t *req)
+{
+    ucs_status_t status;
+
+    if ((req == NULL) || !uct_ib_mlx5_coco_is_pow2(req->wq_size) ||
+        !uct_ib_mlx5_coco_is_pow2(req->stride)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (!req->cyclic || req->mp_enabled) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    status = uct_ib_mlx5_coco_validate_umem_ref(state, req->wq_umem_id, 0);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return uct_ib_mlx5_coco_validate_umem_ref(state, req->dbr_umem_id, 0);
+}
+
+ucs_status_t
+uct_ib_mlx5_coco_validate_cq_output(uct_ib_mlx5_md_t *md,
+                                    const uct_ib_mlx5_coco_cq_req_t *req,
+                                    const void *out, size_t out_len,
+                                    uint32_t *cqn_p)
+{
+    ucs_status_t status;
+    uint32_t cqn;
+
+    if ((md == NULL) || (cqn_p == NULL)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    status = uct_ib_mlx5_coco_validate_cq_req(md->coco, req);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = uct_ib_mlx5_coco_validate_out_header(
+            out, out_len, UCT_IB_MLX5DV_ST_SZ_BYTES(create_cq_out));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    cqn    = UCT_IB_MLX5DV_GET(create_cq_out, out, cqn);
+    status = uct_ib_mlx5_coco_obj_record_add(
+            md->coco, UCT_IB_MLX5_COCO_OBJ_CQ, cqn);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    *cqn_p = cqn;
+    return UCS_OK;
+}
+
+ucs_status_t
+uct_ib_mlx5_coco_validate_qp_output(uct_ib_mlx5_md_t *md,
+                                    const uct_ib_mlx5_coco_qp_req_t *req,
+                                    const void *out, size_t out_len,
+                                    uint32_t *qpn_p)
+{
+    ucs_status_t status;
+    uint32_t qpn;
+
+    if ((md == NULL) || (qpn_p == NULL)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    status = uct_ib_mlx5_coco_validate_qp_req(md->coco, req);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = uct_ib_mlx5_coco_validate_out_header(
+            out, out_len, UCT_IB_MLX5DV_ST_SZ_BYTES(create_qp_out));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    qpn    = UCT_IB_MLX5DV_GET(create_qp_out, out, qpn);
+    status = uct_ib_mlx5_coco_obj_record_add(
+            md->coco, UCT_IB_MLX5_COCO_OBJ_QP, qpn);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    *qpn_p = qpn;
+    return UCS_OK;
+}
+
+ucs_status_t
+uct_ib_mlx5_coco_validate_rmp_output(uct_ib_mlx5_md_t *md,
+                                     const uct_ib_mlx5_coco_rmp_req_t *req,
+                                     const void *out, size_t out_len,
+                                     uint32_t *rmpn_p)
+{
+    ucs_status_t status;
+    uint32_t rmpn;
+
+    if ((md == NULL) || (rmpn_p == NULL)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    status = uct_ib_mlx5_coco_validate_rmp_req(md->coco, req);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = uct_ib_mlx5_coco_validate_out_header(
+            out, out_len, UCT_IB_MLX5DV_ST_SZ_BYTES(create_rmp_out));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    rmpn   = UCT_IB_MLX5DV_GET(create_rmp_out, out, rmpn);
+    status = uct_ib_mlx5_coco_obj_record_add(
+            md->coco, UCT_IB_MLX5_COCO_OBJ_RMP, rmpn);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    *rmpn_p = rmpn;
+    return UCS_OK;
 }
 
 static void uct_ib_mlx5_coco_scrub(void *addr, size_t size)

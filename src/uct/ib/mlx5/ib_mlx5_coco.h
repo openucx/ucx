@@ -45,6 +45,37 @@ typedef struct uct_ib_mlx5_coco_mkey_record {
     uint8_t  live;
 } uct_ib_mlx5_coco_mkey_record_t;
 
+typedef struct uct_ib_mlx5_coco_cq_req {
+    uint32_t cq_len;
+    uint32_t cqe_size;
+    uint32_t cq_umem_id;
+    uint64_t cq_umem_offset;
+    uint32_t dbr_umem_id;
+    uint64_t dbr_offset;
+    uint32_t eqn;
+    uint32_t uar_page;
+} uct_ib_mlx5_coco_cq_req_t;
+
+typedef struct uct_ib_mlx5_coco_qp_req {
+    uint8_t  qp_type;
+    uint32_t send_cqn;
+    uint32_t recv_cqn;
+    uint32_t rmpn;
+    uint32_t wq_umem_id;
+    uint32_t dbr_umem_id;
+    uint32_t sq_wqe_count;
+    uint32_t rq_wqe_count;
+} uct_ib_mlx5_coco_qp_req_t;
+
+typedef struct uct_ib_mlx5_coco_rmp_req {
+    uint32_t wq_umem_id;
+    uint32_t dbr_umem_id;
+    uint32_t wq_size;
+    uint32_t stride;
+    uint8_t  cyclic;
+    uint8_t  mp_enabled;
+} uct_ib_mlx5_coco_rmp_req_t;
+
 typedef struct uct_ib_mlx5_coco_shared_alloc_ops {
     ucs_status_t (*alloc)(size_t size, void **addr_p, int *fd_p, void *arg);
     ucs_status_t (*umem_reg)(uct_ib_mlx5_md_t *md,
@@ -122,5 +153,35 @@ uct_ib_mlx5_coco_mkey_record_remove_rkey(uct_ib_mlx5_coco_state_t *state,
 const uct_ib_mlx5_coco_mkey_record_t*
 uct_ib_mlx5_coco_mkey_record_find_lkey(const uct_ib_mlx5_coco_state_t *state,
                                        uint32_t lkey);
+
+ucs_status_t
+uct_ib_mlx5_coco_validate_cq_output(uct_ib_mlx5_md_t *md,
+                                    const uct_ib_mlx5_coco_cq_req_t *req,
+                                    const void *out, size_t out_len,
+                                    uint32_t *cqn_p);
+
+ucs_status_t
+uct_ib_mlx5_coco_validate_qp_output(uct_ib_mlx5_md_t *md,
+                                    const uct_ib_mlx5_coco_qp_req_t *req,
+                                    const void *out, size_t out_len,
+                                    uint32_t *qpn_p);
+
+ucs_status_t
+uct_ib_mlx5_coco_validate_rmp_output(uct_ib_mlx5_md_t *md,
+                                     const uct_ib_mlx5_coco_rmp_req_t *req,
+                                     const void *out, size_t out_len,
+                                     uint32_t *rmpn_p);
+
+ucs_status_t
+uct_ib_mlx5_coco_cqn_record_remove(uct_ib_mlx5_coco_state_t *state,
+                                   uint32_t cqn);
+
+ucs_status_t
+uct_ib_mlx5_coco_qpn_record_remove(uct_ib_mlx5_coco_state_t *state,
+                                   uint32_t qpn);
+
+ucs_status_t
+uct_ib_mlx5_coco_rmpn_record_remove(uct_ib_mlx5_coco_state_t *state,
+                                    uint32_t rmpn);
 
 #endif
