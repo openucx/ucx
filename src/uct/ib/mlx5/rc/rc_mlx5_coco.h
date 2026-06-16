@@ -7,6 +7,7 @@
 #ifndef UCT_RC_MLX5_COCO_H
 #define UCT_RC_MLX5_COCO_H
 
+#include <uct/ib/base/ib_iface.h>
 #include <uct/ib/mlx5/ib_mlx5.h>
 #include <uct/ib/rc/base/rc_def.h>
 #include <ucs/type/status.h>
@@ -52,6 +53,14 @@ typedef enum {
     UCT_RC_MLX5_COCO_TX_LAST
 } uct_rc_mlx5_coco_tx_op_t;
 
+typedef enum {
+    UCT_RC_MLX5_COCO_SRQ_FREE,
+    UCT_RC_MLX5_COCO_SRQ_POSTED,
+    UCT_RC_MLX5_COCO_SRQ_COMPLETING,
+    UCT_RC_MLX5_COCO_SRQ_CONSUMED,
+    UCT_RC_MLX5_COCO_SRQ_POISONED
+} uct_rc_mlx5_coco_srq_state_t;
+
 typedef struct uct_rc_mlx5_coco_tx_slot {
     uint16_t                    wqe_counter;
     uint16_t                    generation;
@@ -61,6 +70,14 @@ typedef struct uct_rc_mlx5_coco_tx_slot {
     size_t                      expected_length;
     uct_rc_iface_send_op_t      *send_op;
 } uct_rc_mlx5_coco_tx_slot_t;
+
+typedef struct uct_rc_mlx5_coco_srq_slot {
+    uct_rc_mlx5_coco_srq_state_t state;
+    uint16_t                     generation;
+    uint16_t                     slot;
+    size_t                       posted_length;
+    uct_ib_iface_recv_desc_t     *desc;
+} uct_rc_mlx5_coco_srq_slot_t;
 
 typedef struct uct_rc_mlx5_coco_qp_record {
     uint32_t                         qpn;
@@ -76,6 +93,8 @@ typedef struct uct_rc_mlx5_coco_qp_record {
     uct_rc_mlx5_coco_tx_slot_t       *tx_slots;
     size_t                           tx_slot_count;
     size_t                           tx_slot_capacity;
+    uint32_t                         srq_generation;
+    uint8_t                          srq_attached;
 } uct_rc_mlx5_coco_qp_record_t;
 
 struct uct_rc_mlx5_coco_state {
@@ -85,6 +104,11 @@ struct uct_rc_mlx5_coco_state {
     size_t                           qp_capacity;
     unsigned                         poison_scope;
     const char                       *poison_reason;
+    uct_rc_mlx5_iface_common_t       *srq_iface;
+    uct_ib_mlx5_cq_t                 *srq_rx_cq;
+    uct_rc_mlx5_coco_srq_slot_t      *srq_slots;
+    size_t                           srq_slot_count;
+    uint32_t                         srq_generation;
 };
 
 typedef struct uct_rc_mlx5_coco_tx_cqe_result {
@@ -92,6 +116,23 @@ typedef struct uct_rc_mlx5_coco_tx_cqe_result {
     uct_rc_mlx5_coco_tx_slot_t   *slot;
     uint16_t                     hw_ci;
 } uct_rc_mlx5_coco_tx_cqe_result_t;
+
+typedef struct uct_rc_mlx5_coco_rx_cqe_result {
+    uct_rc_mlx5_coco_qp_record_t  *qp_record;
+    uct_rc_mlx5_coco_srq_slot_t   *slot;
+    uct_ib_iface_recv_desc_t      *desc;
+    size_t                        length;
+    uint32_t                      imm_data;
+    uint8_t                       am_id;
+} uct_rc_mlx5_coco_rx_cqe_result_t;
+
+typedef struct uct_rc_mlx5_coco_error_cqe_result {
+    uct_rc_mlx5_coco_qp_record_t  *qp_record;
+    uct_rc_mlx5_coco_tx_slot_t    *tx_slot;
+    uct_rc_mlx5_coco_srq_slot_t   *srq_slot;
+    uint16_t                      wqe_counter;
+    uct_ib_dir_t                  dir;
+} uct_rc_mlx5_coco_error_cqe_result_t;
 
 void uct_rc_mlx5_coco_state_init(uct_rc_mlx5_coco_state_t *state, int enabled);
 void uct_rc_mlx5_coco_state_cleanup(uct_rc_mlx5_coco_state_t *state);
@@ -152,7 +193,48 @@ uct_rc_mlx5_coco_tx_cqe_validate(uct_rc_mlx5_coco_state_t *state,
                                  const struct mlx5_cqe64 *cqe,
                                  uct_rc_mlx5_coco_tx_cqe_result_t *result);
 
+ucs_status_t
+uct_rc_mlx5_coco_rx_cqe_validate(uct_rc_mlx5_coco_state_t *state,
+                                 uct_ib_mlx5_cq_t *cq,
+                                 const struct mlx5_cqe64 *cqe,
+                                 uct_rc_mlx5_coco_rx_cqe_result_t *result);
+
+ucs_status_t
+uct_rc_mlx5_coco_error_cqe_validate(
+        uct_rc_mlx5_coco_state_t *state, uct_ib_mlx5_cq_t *cq,
+        uct_ib_dir_t dir, const struct mlx5_cqe64 *cqe,
+        uct_rc_mlx5_coco_error_cqe_result_t *result);
+
+ucs_status_t
+uct_rc_mlx5_coco_error_cqe_poison(
+        uct_rc_mlx5_iface_common_t *iface, uct_ib_mlx5_cq_t *cq,
+        uct_ib_dir_t dir, uct_rc_mlx5_coco_error_cqe_result_t *result,
+        const char *reason);
+
 uct_rc_mlx5_coco_tx_op_t
 uct_rc_mlx5_coco_tx_op_from_opcode(uint8_t opcode);
+
+ucs_status_t
+uct_rc_mlx5_coco_srq_shadow_init(uct_rc_mlx5_coco_state_t *state,
+                                 uct_rc_mlx5_iface_common_t *iface,
+                                 uct_ib_mlx5_cq_t *rx_cq,
+                                 size_t slot_count);
+
+ucs_status_t
+uct_rc_mlx5_coco_srq_shadow_post(uct_rc_mlx5_coco_state_t *state,
+                                 uint16_t slot_index, size_t posted_length,
+                                 uct_ib_iface_recv_desc_t *desc,
+                                 uct_rc_mlx5_coco_srq_slot_t **slot_p);
+
+ucs_status_t
+uct_rc_mlx5_coco_srq_shadow_validate(uct_rc_mlx5_coco_state_t *state,
+                                     uint32_t qpn, uct_ib_mlx5_cq_t *rx_cq,
+                                     uint16_t slot_index, uint16_t generation,
+                                     size_t byte_count,
+                                     uct_rc_mlx5_coco_srq_slot_t **slot_p);
+
+ucs_status_t
+uct_rc_mlx5_coco_srq_shadow_consume(uct_rc_mlx5_coco_state_t *state,
+                                    uint16_t slot_index, uint16_t generation);
 
 #endif

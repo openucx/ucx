@@ -94,9 +94,10 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_mlx5_iface_srq_set_seg(uct_rc_mlx5_iface_common_t *iface,
-                              uct_ib_mlx5_srq_seg_t *seg)
+                              uct_ib_mlx5_srq_seg_t *seg, uint16_t wqe_index)
 {
     uct_ib_iface_recv_desc_t *desc;
+    ucs_status_t status;
     uint64_t desc_map;
     void *hdr;
     int i;
@@ -109,6 +110,16 @@ uct_rc_mlx5_iface_srq_set_seg(uct_rc_mlx5_iface_common_t *iface,
         /* Set receive data segment pointer. Length is pre-initialized. */
         hdr                = uct_ib_iface_recv_desc_hdr(&iface->super.super,
                                                         desc);
+        if (iface->coco.enabled) {
+            status = uct_rc_mlx5_coco_srq_shadow_post(
+                    &iface->coco, wqe_index, iface->super.super.config.seg_size,
+                    desc, NULL);
+            if (status != UCS_OK) {
+                ucs_mpool_put_inline(desc);
+                return status;
+            }
+        }
+
         seg->srq.ptr_mask |= UCS_BIT(i);
         seg->srq.desc      = desc; /* Optimization for non-MP case (1 stride) */
         seg->dptr[i].lkey  = htonl(desc->lkey);
@@ -167,7 +178,7 @@ unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_mlx5_iface_common_t *iface)
             srq->free_idx  = next_index;
         }
 
-        if (uct_rc_mlx5_iface_srq_set_seg(iface, seg) != UCS_OK) {
+        if (uct_rc_mlx5_iface_srq_set_seg(iface, seg, next_index) != UCS_OK) {
             break;
         }
 
@@ -200,7 +211,7 @@ unsigned uct_rc_mlx5_iface_srq_post_recv_ll(uct_rc_mlx5_iface_common_t *iface)
         }
         seg = uct_ib_mlx5_srq_get_wqe(srq, next_index);
 
-        if (uct_rc_mlx5_iface_srq_set_seg(iface, seg) != UCS_OK) {
+        if (uct_rc_mlx5_iface_srq_set_seg(iface, seg, next_index) != UCS_OK) {
             break;
         }
 

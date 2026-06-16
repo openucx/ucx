@@ -1210,6 +1210,30 @@ static void set_tx_cqe(struct mlx5_cqe64 *cqe, uint32_t qpn, uint16_t hw_ci,
     cqe->wqe_counter  = htons(hw_ci);
 }
 
+static void set_rx_cqe(struct mlx5_cqe64 *cqe, uint32_t qpn, uint16_t wqe_ctr,
+                       unsigned byte_len, uint8_t opcode)
+{
+    memset(cqe, 0, sizeof(*cqe));
+    cqe->op_own       = opcode << 4;
+    cqe->sop_drop_qpn = htonl(qpn);
+    cqe->wqe_counter  = htons(wqe_ctr);
+    cqe->byte_cnt     = htonl(byte_len);
+    cqe->imm_inval_pkey = htonl(0x1234);
+}
+
+static void set_error_cqe(struct mlx5_cqe64 *cqe, uint32_t qpn,
+                          uint16_t wqe_ctr, uint8_t opcode)
+{
+    struct mlx5_err_cqe *ecqe = reinterpret_cast<struct mlx5_err_cqe*>(cqe);
+
+    memset(cqe, 0, sizeof(*cqe));
+    ecqe->op_own           = opcode << 4;
+    ecqe->s_wqe_opcode_qpn = htonl(qpn);
+    ecqe->wqe_counter      = htons(wqe_ctr);
+    ecqe->syndrome         = MLX5_CQE_SYNDROME_REMOTE_ABORTED_ERR;
+    ecqe->vendor_err_synd  = UCT_IB_MLX5_CQE_VENDOR_SYND_ODP;
+}
+
 UCS_TEST_F(test_coco_hardening, registry_rejects_unknown_qpn)
 {
     static uct_rc_mlx5_iface_common_t iface;
@@ -1647,3 +1671,656 @@ UCS_TEST_F(test_coco_hardening, tx_cqe_accepts_expected_completion)
     EXPECT_NE(static_cast<uct_rc_mlx5_coco_tx_slot_t*>(NULL), result.slot);
     cleanup_rc_coco_iface(&iface);
 }
+
+UCS_TEST_F(test_coco_hardening, srq_shadow_post_marks_live)
+{
+    static uct_rc_mlx5_iface_common_t iface;
+    uct_ib_mlx5_cq_t rx_cq = {};
+    uct_ib_iface_recv_desc_t desc = {};
+    uct_rc_mlx5_coco_srq_slot_t *slot = NULL;
+
+    init_rc_coco_iface(&iface);
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_init(&iface.coco, &iface,
+                                                       &rx_cq, 8));
+    EXPECT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_post(&iface.coco, 3, 128,
+                                                       &desc, &slot));
+    ASSERT_NE(static_cast<uct_rc_mlx5_coco_srq_slot_t*>(NULL), slot);
+    EXPECT_EQ(UCT_RC_MLX5_COCO_SRQ_POSTED, slot->state);
+    EXPECT_EQ(3, slot->slot);
+    EXPECT_EQ(1, slot->generation);
+    EXPECT_EQ(128ul, slot->posted_length);
+    EXPECT_EQ(&desc, slot->desc);
+    cleanup_rc_coco_iface(&iface);
+}
+
+UCS_TEST_F(test_coco_hardening, srq_shadow_rejects_unposted_slot)
+{
+    static uct_rc_mlx5_iface_common_t iface;
+    uct_ib_mlx5_cq_t tx_cq = {}, rx_cq = {};
+    uct_rc_mlx5_base_ep_t ep = {};
+
+    init_rc_coco_iface(&iface);
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_init(&iface.coco, &iface,
+                                                       &rx_cq, 8));
+    add_test_qp(&iface, 0xabc, &tx_cq, &rx_cq, &ep);
+    EXPECT_EQ(UCS_ERR_NO_ELEM,
+              uct_rc_mlx5_coco_srq_shadow_validate(&iface.coco, 0xabc,
+                                                    &rx_cq, 3, 1, 64, NULL));
+    cleanup_rc_coco_iface(&iface);
+}
+
+UCS_TEST_F(test_coco_hardening, srq_shadow_rejects_duplicate_completion)
+{
+    static uct_rc_mlx5_iface_common_t iface;
+    uct_ib_mlx5_cq_t tx_cq = {}, rx_cq = {};
+    uct_rc_mlx5_base_ep_t ep = {};
+    uct_ib_iface_recv_desc_t desc = {};
+    uct_rc_mlx5_coco_srq_slot_t *slot;
+    uint16_t generation;
+
+    init_rc_coco_iface(&iface);
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_init(&iface.coco, &iface,
+                                                       &rx_cq, 8));
+    add_test_qp(&iface, 0xabc, &tx_cq, &rx_cq, &ep);
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_post(&iface.coco, 3, 128,
+                                                       &desc, &slot));
+    generation = slot->generation;
+    ASSERT_EQ(UCS_OK,
+              uct_rc_mlx5_coco_srq_shadow_validate(&iface.coco, 0xabc,
+                                                    &rx_cq, 3, generation, 64,
+                                                    NULL));
+    EXPECT_EQ(UCS_ERR_NO_ELEM,
+              uct_rc_mlx5_coco_srq_shadow_validate(&iface.coco, 0xabc,
+                                                    &rx_cq, 3, generation, 64,
+                                                    NULL));
+    cleanup_rc_coco_iface(&iface);
+}
+
+UCS_TEST_F(test_coco_hardening, srq_shadow_rejects_stale_generation)
+{
+    static uct_rc_mlx5_iface_common_t iface;
+    uct_ib_mlx5_cq_t tx_cq = {}, rx_cq = {};
+    uct_rc_mlx5_base_ep_t ep = {};
+    uct_ib_iface_recv_desc_t desc = {};
+    uct_rc_mlx5_coco_srq_slot_t *slot;
+    uint16_t generation;
+
+    init_rc_coco_iface(&iface);
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_init(&iface.coco, &iface,
+                                                       &rx_cq, 8));
+    add_test_qp(&iface, 0xabc, &tx_cq, &rx_cq, &ep);
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_post(&iface.coco, 3, 128,
+                                                       &desc, &slot));
+    generation = slot->generation;
+    ASSERT_EQ(UCS_OK,
+              uct_rc_mlx5_coco_srq_shadow_consume(&iface.coco, 3,
+                                                  generation));
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_post(&iface.coco, 11, 128,
+                                                       &desc, &slot));
+    EXPECT_EQ(UCS_ERR_IO_ERROR,
+              uct_rc_mlx5_coco_srq_shadow_validate(&iface.coco, 0xabc,
+                                                    &rx_cq, 3, generation, 64,
+                                                    NULL));
+    cleanup_rc_coco_iface(&iface);
+}
+
+UCS_TEST_F(test_coco_hardening, srq_shadow_rejects_qp_not_attached_to_srq)
+{
+    static uct_rc_mlx5_iface_common_t iface;
+    uct_ib_mlx5_cq_t tx_cq = {}, rx_cq = {};
+    uct_rc_mlx5_base_ep_t ep = {};
+    uct_ib_iface_recv_desc_t desc = {};
+    uct_rc_mlx5_coco_qp_record_t *record;
+    uct_rc_mlx5_coco_srq_slot_t *slot;
+
+    init_rc_coco_iface(&iface);
+    record = add_test_qp(&iface, 0xabc, &tx_cq, &rx_cq, &ep);
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_init(&iface.coco, &iface,
+                                                       &rx_cq, 8));
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_post(&iface.coco, 3, 128,
+                                                       &desc, &slot));
+    EXPECT_EQ(UCS_ERR_IO_ERROR,
+              uct_rc_mlx5_coco_srq_shadow_validate(&iface.coco, record->qpn,
+                                                    &rx_cq, 3,
+                                                    slot->generation, 64,
+                                                    NULL));
+    cleanup_rc_coco_iface(&iface);
+}
+
+UCS_TEST_F(test_coco_hardening, srq_shadow_rejects_oversized_byte_cnt)
+{
+    static uct_rc_mlx5_iface_common_t iface;
+    uct_ib_mlx5_cq_t tx_cq = {}, rx_cq = {};
+    uct_rc_mlx5_base_ep_t ep = {};
+    uct_ib_iface_recv_desc_t desc = {};
+    uct_rc_mlx5_coco_srq_slot_t *slot;
+
+    init_rc_coco_iface(&iface);
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_init(&iface.coco, &iface,
+                                                       &rx_cq, 8));
+    add_test_qp(&iface, 0xabc, &tx_cq, &rx_cq, &ep);
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_post(&iface.coco, 3, 64,
+                                                       &desc, &slot));
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+              uct_rc_mlx5_coco_srq_shadow_validate(&iface.coco, 0xabc,
+                                                    &rx_cq, 3,
+                                                    slot->generation, 65,
+                                                    NULL));
+    cleanup_rc_coco_iface(&iface);
+}
+
+UCS_TEST_F(test_coco_hardening, srq_shadow_wraparound_generation)
+{
+    static uct_rc_mlx5_iface_common_t iface;
+    uct_ib_mlx5_cq_t rx_cq = {};
+    uct_ib_iface_recv_desc_t desc = {};
+    uct_rc_mlx5_coco_srq_slot_t *slot0, *slot1;
+    uint16_t generation0;
+
+    init_rc_coco_iface(&iface);
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_init(&iface.coco, &iface,
+                                                       &rx_cq, 8));
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_post(&iface.coco, 3, 128,
+                                                       &desc, &slot0));
+    generation0 = slot0->generation;
+    ASSERT_EQ(UCS_OK,
+              uct_rc_mlx5_coco_srq_shadow_consume(&iface.coco, 3,
+                                                  generation0));
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_post(&iface.coco, 11, 128,
+                                                       &desc, &slot1));
+    EXPECT_GT(slot1->generation, generation0);
+    EXPECT_EQ(11, slot1->slot);
+    cleanup_rc_coco_iface(&iface);
+}
+
+UCS_TEST_F(test_coco_hardening, rx_cqe_rejects_wrong_opcode)
+{
+    static uct_rc_mlx5_iface_common_t iface;
+    uct_ib_mlx5_cq_t tx_cq = {}, rx_cq = {};
+    uct_rc_mlx5_base_ep_t ep = {};
+    uct_ib_iface_recv_desc_t desc = {};
+    struct mlx5_cqe64 cqe;
+
+    init_rc_coco_iface(&iface);
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_init(&iface.coco, &iface,
+                                                       &rx_cq, 8));
+    add_test_qp(&iface, 0xabc, &tx_cq, &rx_cq, &ep);
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_post(&iface.coco, 3, 128,
+                                                       &desc, NULL));
+    set_rx_cqe(&cqe, 0xabc, 3, 64, MLX5_CQE_REQ);
+    EXPECT_EQ(UCS_ERR_IO_ERROR,
+              uct_rc_mlx5_coco_rx_cqe_validate(&iface.coco, &rx_cq, &cqe,
+                                                NULL));
+    cleanup_rc_coco_iface(&iface);
+}
+
+UCS_TEST_F(test_coco_hardening, rx_cqe_rejects_zipped)
+{
+    static uct_rc_mlx5_iface_common_t iface;
+    uct_ib_mlx5_cq_t tx_cq = {}, rx_cq = {};
+    uct_rc_mlx5_base_ep_t ep = {};
+    uct_ib_iface_recv_desc_t desc = {};
+    struct mlx5_cqe64 cqe;
+
+    init_rc_coco_iface(&iface);
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_init(&iface.coco, &iface,
+                                                       &rx_cq, 8));
+    add_test_qp(&iface, 0xabc, &tx_cq, &rx_cq, &ep);
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_post(&iface.coco, 3, 128,
+                                                       &desc, NULL));
+    set_rx_cqe(&cqe, 0xabc, 3, 64, MLX5_CQE_RESP_SEND);
+    cqe.op_own |= UCT_IB_MLX5_CQE_FORMAT_MASK;
+    EXPECT_EQ(UCS_ERR_IO_ERROR,
+              uct_rc_mlx5_coco_rx_cqe_validate(&iface.coco, &rx_cq, &cqe,
+                                                NULL));
+    cleanup_rc_coco_iface(&iface);
+}
+
+UCS_TEST_F(test_coco_hardening, rx_cqe_rejects_tm_app)
+{
+    static uct_rc_mlx5_iface_common_t iface;
+    uct_ib_mlx5_cq_t tx_cq = {}, rx_cq = {};
+    uct_rc_mlx5_base_ep_t ep = {};
+    uct_ib_iface_recv_desc_t desc = {};
+    struct mlx5_cqe64 cqe;
+
+    init_rc_coco_iface(&iface);
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_init(&iface.coco, &iface,
+                                                       &rx_cq, 8));
+    add_test_qp(&iface, 0xabc, &tx_cq, &rx_cq, &ep);
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_post(&iface.coco, 3, 128,
+                                                       &desc, NULL));
+    set_rx_cqe(&cqe, 0xabc, 3, 64, MLX5_CQE_RESP_SEND);
+    cqe.app = UCT_RC_MLX5_CQE_APP_TAG_MATCHING;
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED,
+              uct_rc_mlx5_coco_rx_cqe_validate(&iface.coco, &rx_cq, &cqe,
+                                                NULL));
+    cleanup_rc_coco_iface(&iface);
+}
+
+UCS_TEST_F(test_coco_hardening, rx_cqe_rejects_inline_scatter)
+{
+    static uct_rc_mlx5_iface_common_t iface;
+    uct_ib_mlx5_cq_t tx_cq = {}, rx_cq = {};
+    uct_rc_mlx5_base_ep_t ep = {};
+    uct_ib_iface_recv_desc_t desc = {};
+    struct mlx5_cqe64 cqe;
+
+    init_rc_coco_iface(&iface);
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_init(&iface.coco, &iface,
+                                                       &rx_cq, 8));
+    add_test_qp(&iface, 0xabc, &tx_cq, &rx_cq, &ep);
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_post(&iface.coco, 3, 128,
+                                                       &desc, NULL));
+    set_rx_cqe(&cqe, 0xabc, 3, 64, MLX5_CQE_RESP_SEND);
+    cqe.op_own |= MLX5_INLINE_SCATTER_32;
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED,
+              uct_rc_mlx5_coco_rx_cqe_validate(&iface.coco, &rx_cq, &cqe,
+                                                NULL));
+    cleanup_rc_coco_iface(&iface);
+}
+
+UCS_TEST_F(test_coco_hardening, rx_cqe_rejects_wrong_qpn)
+{
+    static uct_rc_mlx5_iface_common_t iface;
+    uct_ib_mlx5_cq_t tx_cq = {}, rx_cq = {};
+    uct_rc_mlx5_base_ep_t ep = {};
+    uct_ib_iface_recv_desc_t desc = {};
+    struct mlx5_cqe64 cqe;
+
+    init_rc_coco_iface(&iface);
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_init(&iface.coco, &iface,
+                                                       &rx_cq, 8));
+    add_test_qp(&iface, 0xabc, &tx_cq, &rx_cq, &ep);
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_post(&iface.coco, 3, 128,
+                                                       &desc, NULL));
+    set_rx_cqe(&cqe, 0xabd, 3, 64, MLX5_CQE_RESP_SEND);
+    EXPECT_EQ(UCS_ERR_NO_ELEM,
+              uct_rc_mlx5_coco_rx_cqe_validate(&iface.coco, &rx_cq, &cqe,
+                                                NULL));
+    cleanup_rc_coco_iface(&iface);
+}
+
+UCS_TEST_F(test_coco_hardening, rx_cqe_rejects_destroyed_qp)
+{
+    static uct_rc_mlx5_iface_common_t iface;
+    uct_ib_mlx5_cq_t tx_cq = {}, rx_cq = {};
+    uct_rc_mlx5_base_ep_t ep = {};
+    uct_ib_iface_recv_desc_t desc = {};
+    struct mlx5_cqe64 cqe;
+
+    init_rc_coco_iface(&iface);
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_init(&iface.coco, &iface,
+                                                       &rx_cq, 8));
+    add_test_qp(&iface, 0xabc, &tx_cq, &rx_cq, &ep);
+    ASSERT_EQ(UCS_OK,
+              uct_rc_mlx5_coco_qp_record_destroy(&iface.coco, 0xabc));
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_post(&iface.coco, 3, 128,
+                                                       &desc, NULL));
+    set_rx_cqe(&cqe, 0xabc, 3, 64, MLX5_CQE_RESP_SEND);
+    EXPECT_EQ(UCS_ERR_IO_ERROR,
+              uct_rc_mlx5_coco_rx_cqe_validate(&iface.coco, &rx_cq, &cqe,
+                                                NULL));
+    cleanup_rc_coco_iface(&iface);
+}
+
+UCS_TEST_F(test_coco_hardening, rx_cqe_rejects_unposted_srq_index)
+{
+    static uct_rc_mlx5_iface_common_t iface;
+    uct_ib_mlx5_cq_t tx_cq = {}, rx_cq = {};
+    uct_rc_mlx5_base_ep_t ep = {};
+    struct mlx5_cqe64 cqe;
+
+    init_rc_coco_iface(&iface);
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_init(&iface.coco, &iface,
+                                                       &rx_cq, 8));
+    add_test_qp(&iface, 0xabc, &tx_cq, &rx_cq, &ep);
+    set_rx_cqe(&cqe, 0xabc, 3, 64, MLX5_CQE_RESP_SEND);
+    EXPECT_EQ(UCS_ERR_NO_ELEM,
+              uct_rc_mlx5_coco_rx_cqe_validate(&iface.coco, &rx_cq, &cqe,
+                                                NULL));
+    cleanup_rc_coco_iface(&iface);
+}
+
+UCS_TEST_F(test_coco_hardening, rx_cqe_rejects_duplicate_srq_completion)
+{
+    static uct_rc_mlx5_iface_common_t iface;
+    uct_ib_mlx5_cq_t tx_cq = {}, rx_cq = {};
+    uct_rc_mlx5_base_ep_t ep = {};
+    uct_ib_iface_recv_desc_t desc = {};
+    struct mlx5_cqe64 cqe;
+
+    init_rc_coco_iface(&iface);
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_init(&iface.coco, &iface,
+                                                       &rx_cq, 8));
+    add_test_qp(&iface, 0xabc, &tx_cq, &rx_cq, &ep);
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_post(&iface.coco, 3, 128,
+                                                       &desc, NULL));
+    set_rx_cqe(&cqe, 0xabc, 3, 64, MLX5_CQE_RESP_SEND);
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_rx_cqe_validate(&iface.coco, &rx_cq,
+                                                       &cqe, NULL));
+    EXPECT_EQ(UCS_ERR_NO_ELEM,
+              uct_rc_mlx5_coco_rx_cqe_validate(&iface.coco, &rx_cq, &cqe,
+                                                NULL));
+    cleanup_rc_coco_iface(&iface);
+}
+
+UCS_TEST_F(test_coco_hardening, rx_cqe_rejects_stale_srq_generation)
+{
+    static uct_rc_mlx5_iface_common_t iface;
+    uct_ib_mlx5_cq_t tx_cq = {}, rx_cq = {};
+    uct_rc_mlx5_base_ep_t ep = {};
+    uct_ib_iface_recv_desc_t desc = {};
+    uct_rc_mlx5_coco_srq_slot_t *slot;
+    struct mlx5_cqe64 cqe;
+
+    init_rc_coco_iface(&iface);
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_init(&iface.coco, &iface,
+                                                       &rx_cq, 8));
+    add_test_qp(&iface, 0xabc, &tx_cq, &rx_cq, &ep);
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_post(&iface.coco, 3, 128,
+                                                       &desc, &slot));
+    ASSERT_EQ(UCS_OK,
+              uct_rc_mlx5_coco_srq_shadow_consume(&iface.coco, 3,
+                                                  slot->generation));
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_post(&iface.coco, 11, 128,
+                                                       &desc, NULL));
+    set_rx_cqe(&cqe, 0xabc, 3, 64, MLX5_CQE_RESP_SEND);
+    EXPECT_EQ(UCS_ERR_IO_ERROR,
+              uct_rc_mlx5_coco_rx_cqe_validate(&iface.coco, &rx_cq, &cqe,
+                                                NULL));
+    cleanup_rc_coco_iface(&iface);
+}
+
+UCS_TEST_F(test_coco_hardening, rx_cqe_rejects_unattached_qp)
+{
+    static uct_rc_mlx5_iface_common_t iface;
+    uct_ib_mlx5_cq_t tx_cq = {}, rx_cq = {};
+    uct_rc_mlx5_base_ep_t ep = {};
+    uct_ib_iface_recv_desc_t desc = {};
+    struct mlx5_cqe64 cqe;
+
+    init_rc_coco_iface(&iface);
+    add_test_qp(&iface, 0xabc, &tx_cq, &rx_cq, &ep);
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_init(&iface.coco, &iface,
+                                                       &rx_cq, 8));
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_post(&iface.coco, 3, 128,
+                                                       &desc, NULL));
+    set_rx_cqe(&cqe, 0xabc, 3, 64, MLX5_CQE_RESP_SEND);
+    EXPECT_EQ(UCS_ERR_IO_ERROR,
+              uct_rc_mlx5_coco_rx_cqe_validate(&iface.coco, &rx_cq, &cqe,
+                                                NULL));
+    cleanup_rc_coco_iface(&iface);
+}
+
+UCS_TEST_F(test_coco_hardening, rx_cqe_rejects_oversized_byte_cnt)
+{
+    static uct_rc_mlx5_iface_common_t iface;
+    uct_ib_mlx5_cq_t tx_cq = {}, rx_cq = {};
+    uct_rc_mlx5_base_ep_t ep = {};
+    uct_ib_iface_recv_desc_t desc = {};
+    struct mlx5_cqe64 cqe;
+
+    init_rc_coco_iface(&iface);
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_init(&iface.coco, &iface,
+                                                       &rx_cq, 8));
+    add_test_qp(&iface, 0xabc, &tx_cq, &rx_cq, &ep);
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_post(&iface.coco, 3, 64,
+                                                       &desc, NULL));
+    set_rx_cqe(&cqe, 0xabc, 3, 65, MLX5_CQE_RESP_SEND);
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+              uct_rc_mlx5_coco_rx_cqe_validate(&iface.coco, &rx_cq, &cqe,
+                                                NULL));
+    cleanup_rc_coco_iface(&iface);
+}
+
+UCS_TEST_F(test_coco_hardening, rx_cqe_accepts_valid_am)
+{
+    static uct_rc_mlx5_iface_common_t iface;
+    uct_ib_mlx5_cq_t tx_cq = {}, rx_cq = {};
+    uct_rc_mlx5_base_ep_t ep = {};
+    uct_ib_iface_recv_desc_t desc = {};
+    uct_rc_mlx5_coco_qp_record_t *record;
+    uct_rc_mlx5_coco_rx_cqe_result_t result = {};
+    struct mlx5_cqe64 cqe;
+
+    init_rc_coco_iface(&iface);
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_init(&iface.coco, &iface,
+                                                       &rx_cq, 8));
+    record = add_test_qp(&iface, 0xabc, &tx_cq, &rx_cq, &ep);
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_post(&iface.coco, 3, 128,
+                                                       &desc, NULL));
+    set_rx_cqe(&cqe, 0xabc, 3, 64, MLX5_CQE_RESP_SEND);
+    EXPECT_EQ(UCS_OK, uct_rc_mlx5_coco_rx_cqe_validate(&iface.coco, &rx_cq,
+                                                       &cqe, &result));
+    EXPECT_EQ(record, result.qp_record);
+    ASSERT_NE(static_cast<uct_rc_mlx5_coco_srq_slot_t*>(NULL), result.slot);
+    EXPECT_EQ(UCT_RC_MLX5_COCO_SRQ_COMPLETING, result.slot->state);
+    EXPECT_EQ(&desc, result.desc);
+    EXPECT_EQ(64ul, result.length);
+    EXPECT_EQ(htonl(0x1234), result.imm_data);
+    cleanup_rc_coco_iface(&iface);
+}
+
+UCS_TEST_F(test_coco_hardening, error_cqe_rejects_unmatchable)
+{
+    static uct_rc_mlx5_iface_common_t iface;
+    uct_ib_mlx5_cq_t tx_cq = {}, rx_cq = {};
+    uct_rc_mlx5_base_ep_t ep = {};
+    uct_rc_mlx5_coco_error_cqe_result_t result = {};
+    struct mlx5_cqe64 cqe;
+
+    init_rc_coco_iface(&iface);
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_init(&iface.coco, &iface,
+                                                       &rx_cq, 8));
+    add_test_qp(&iface, 0xabc, &tx_cq, &rx_cq, &ep);
+    set_error_cqe(&cqe, 0xabc, 3, MLX5_CQE_RESP_ERR);
+
+    EXPECT_EQ(UCS_ERR_NO_ELEM,
+              uct_rc_mlx5_coco_error_cqe_validate(&iface.coco, &rx_cq,
+                                                  UCT_IB_DIR_RX, &cqe,
+                                                  &result));
+    cleanup_rc_coco_iface(&iface);
+}
+
+UCS_TEST_F(test_coco_hardening, error_cqe_rejects_wrong_cq)
+{
+    static uct_rc_mlx5_iface_common_t iface;
+    uct_ib_mlx5_cq_t tx_cq = {}, rx_cq = {}, wrong_cq = {};
+    uct_rc_mlx5_base_ep_t ep = {};
+    uct_ib_iface_recv_desc_t desc = {};
+    struct mlx5_cqe64 cqe;
+
+    init_rc_coco_iface(&iface);
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_init(&iface.coco, &iface,
+                                                       &rx_cq, 8));
+    add_test_qp(&iface, 0xabc, &tx_cq, &rx_cq, &ep);
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_post(&iface.coco, 3, 128,
+                                                       &desc, NULL));
+    set_error_cqe(&cqe, 0xabc, 3, MLX5_CQE_RESP_ERR);
+
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+              uct_rc_mlx5_coco_error_cqe_validate(&iface.coco, &wrong_cq,
+                                                  UCT_IB_DIR_RX, &cqe,
+                                                  NULL));
+    cleanup_rc_coco_iface(&iface);
+}
+
+UCS_TEST_F(test_coco_hardening, error_cqe_rejects_unknown_qpn)
+{
+    static uct_rc_mlx5_iface_common_t iface;
+    uct_ib_mlx5_cq_t rx_cq = {};
+    uct_ib_iface_recv_desc_t desc = {};
+    struct mlx5_cqe64 cqe;
+
+    init_rc_coco_iface(&iface);
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_init(&iface.coco, &iface,
+                                                       &rx_cq, 8));
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_post(&iface.coco, 3, 128,
+                                                       &desc, NULL));
+    set_error_cqe(&cqe, 0xabc, 3, MLX5_CQE_RESP_ERR);
+
+    EXPECT_EQ(UCS_ERR_NO_ELEM,
+              uct_rc_mlx5_coco_error_cqe_validate(&iface.coco, &rx_cq,
+                                                  UCT_IB_DIR_RX, &cqe,
+                                                  NULL));
+    cleanup_rc_coco_iface(&iface);
+}
+
+UCS_TEST_F(test_coco_hardening, error_cqe_rejects_stale_replay)
+{
+    static uct_rc_mlx5_iface_common_t iface;
+    uct_ib_mlx5_cq_t tx_cq = {}, rx_cq = {};
+    uct_rc_mlx5_base_ep_t ep = {};
+    uct_ib_iface_recv_desc_t desc = {};
+    struct mlx5_cqe64 cqe;
+
+    init_rc_coco_iface(&iface);
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_init(&iface.coco, &iface,
+                                                       &rx_cq, 8));
+    add_test_qp(&iface, 0xabc, &tx_cq, &rx_cq, &ep);
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_post(&iface.coco, 3, 128,
+                                                       &desc, NULL));
+    set_error_cqe(&cqe, 0xabc, 3, MLX5_CQE_RESP_ERR);
+
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_error_cqe_validate(&iface.coco,
+                                                          &rx_cq,
+                                                          UCT_IB_DIR_RX,
+                                                          &cqe, NULL));
+    EXPECT_EQ(UCS_ERR_NO_ELEM,
+              uct_rc_mlx5_coco_error_cqe_validate(&iface.coco, &rx_cq,
+                                                  UCT_IB_DIR_RX, &cqe,
+                                                  NULL));
+    cleanup_rc_coco_iface(&iface);
+}
+
+UCS_TEST_F(test_coco_hardening, error_cqe_poison_scope_is_narrow)
+{
+    static uct_rc_mlx5_iface_common_t iface;
+    uct_ib_mlx5_cq_t tx_cq = {}, rx_cq = {};
+    uct_rc_mlx5_base_ep_t ep = {};
+    uct_ib_iface_recv_desc_t desc = {};
+    uct_rc_mlx5_coco_qp_record_t *record;
+    uct_rc_mlx5_coco_error_cqe_result_t result = {};
+    struct mlx5_cqe64 cqe;
+
+    init_rc_coco_iface(&iface);
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_init(&iface.coco, &iface,
+                                                       &rx_cq, 8));
+    record = add_test_qp(&iface, 0xabc, &tx_cq, &rx_cq, &ep);
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_srq_shadow_post(&iface.coco, 3, 128,
+                                                       &desc, NULL));
+    set_error_cqe(&cqe, 0xabc, 3, MLX5_CQE_RESP_ERR);
+    ASSERT_EQ(UCS_OK, uct_rc_mlx5_coco_error_cqe_validate(&iface.coco,
+                                                          &rx_cq,
+                                                          UCT_IB_DIR_RX,
+                                                          &cqe, &result));
+    EXPECT_EQ(UCS_OK, uct_rc_mlx5_coco_error_cqe_poison(&iface, &rx_cq,
+                                                        UCT_IB_DIR_RX,
+                                                        &result,
+                                                        "rx error cqe"));
+
+    EXPECT_EQ(UCT_RC_MLX5_COCO_QP_POISONED, record->state);
+    EXPECT_TRUE(record->poison_scope & UCT_RC_MLX5_COCO_POISON_QP);
+    EXPECT_TRUE(iface.coco.poison_scope & UCT_RC_MLX5_COCO_POISON_RX_CQ);
+    EXPECT_TRUE(iface.coco.poison_scope & UCT_RC_MLX5_COCO_POISON_IFACE_RX);
+    EXPECT_FALSE(iface.coco.poison_scope & UCT_RC_MLX5_COCO_POISON_TX_CQ);
+    EXPECT_FALSE(iface.coco.poison_scope & UCT_RC_MLX5_COCO_POISON_IFACE_TX);
+    cleanup_rc_coco_iface(&iface);
+}
+
+UCS_TEST_F(test_coco_hardening, error_cqe_validator_precedes_srq_release)
+{
+    std::string function_source = get_function_source(
+        "src/uct/ib/mlx5/rc/rc_mlx5_iface.c",
+        "uct_rc_mlx5_iface_check_rx_completion(",
+        "static UCS_F_ALWAYS_INLINE unsigned");
+    size_t validate_pos = function_source.find(
+        "uct_rc_mlx5_coco_error_cqe_validate");
+    size_t release_pos  = function_source.find(
+        "uct_rc_mlx5_iface_release_srq_seg");
+
+    ASSERT_NE(std::string::npos, validate_pos);
+    ASSERT_NE(std::string::npos, release_pos);
+    EXPECT_LT(validate_pos, release_pos);
+}
+
+UCS_TEST_F(test_coco_hardening, srq_shadow_post_precedes_wqe_publish)
+{
+    std::string function_source = get_function_source(
+        "src/uct/ib/mlx5/rc/rc_mlx5_common.c",
+        "uct_rc_mlx5_iface_srq_set_seg(",
+        "/* Update resources and write doorbell record */");
+    size_t shadow_pos = function_source.find("uct_rc_mlx5_coco_srq_shadow_post");
+    size_t wqe_lkey_pos = function_source.find("seg->dptr[i].lkey");
+    size_t wqe_addr_pos = function_source.find("seg->dptr[i].addr");
+
+    ASSERT_NE(std::string::npos, shadow_pos);
+    ASSERT_NE(std::string::npos, wqe_lkey_pos);
+    ASSERT_NE(std::string::npos, wqe_addr_pos);
+    EXPECT_LT(shadow_pos, wqe_lkey_pos);
+    EXPECT_LT(shadow_pos, wqe_addr_pos);
+}
+
+UCS_TEST_F(test_coco_hardening, rx_cqe_validator_precedes_coco_data)
+{
+    std::string function_source = get_function_source(
+        "src/uct/ib/mlx5/rc/rc_mlx5.inl",
+        "uct_rc_mlx5_iface_common_poll_rx(",
+        "#if HAVE_IBV_DM");
+    size_t validate_pos = function_source.find("uct_rc_mlx5_coco_rx_cqe_validate");
+    size_t data_pos = function_source.find("uct_rc_mlx5_iface_common_data_coco");
+    size_t handler_pos = function_source.find("uct_rc_mlx5_iface_common_am_handler");
+
+    ASSERT_NE(std::string::npos, validate_pos);
+    ASSERT_NE(std::string::npos, data_pos);
+    ASSERT_NE(std::string::npos, handler_pos);
+    EXPECT_LT(validate_pos, data_pos);
+    EXPECT_LT(validate_pos, handler_pos);
+}
+
+UCS_TEST_F(test_coco_hardening, rx_coco_data_uses_private_desc)
+{
+    std::string function_source = get_function_source(
+        "src/uct/ib/mlx5/rc/rc_mlx5.inl",
+        "uct_rc_mlx5_iface_common_data_coco(",
+        "static UCS_F_ALWAYS_INLINE uct_rc_mlx5_mp_context_t*");
+
+    EXPECT_NE(std::string::npos, function_source.find("result->desc"));
+    EXPECT_EQ(std::string::npos, function_source.find("seg->srq.desc"));
+    EXPECT_EQ(std::string::npos, function_source.find("ntohs(cqe->wqe_counter)"));
+}
+
+UCS_TEST_F(test_coco_hardening,
+           rx_coco_inprogress_holds_srq_segment_before_release)
+{
+    std::string hold_source = get_function_source(
+        "src/uct/ib/mlx5/rc/rc_mlx5.inl",
+        "uct_rc_mlx5_iface_hold_srq_desc_coco(",
+        "static UCS_F_ALWAYS_INLINE void\nuct_rc_mlx5_iface_release_srq_seg");
+    std::string handler_source = get_function_source(
+        "src/uct/ib/mlx5/rc/rc_mlx5.inl",
+        "uct_rc_mlx5_iface_common_am_handler(",
+        "static UCS_F_ALWAYS_INLINE uint8_t");
+    size_t inprogress_pos = handler_source.find("status == UCS_INPROGRESS");
+    size_t hold_pos       = handler_source.find(
+        "uct_rc_mlx5_iface_hold_srq_desc_coco", inprogress_pos);
+    size_t ok_pos         = handler_source.find("status = UCS_OK",
+                                                inprogress_pos);
+    size_t release_pos    = handler_source.find(
+        "uct_rc_mlx5_iface_release_srq_seg");
+
+    EXPECT_NE(std::string::npos, hold_source.find("uct_ib_mlx5_srq_seg_t *seg"));
+    EXPECT_NE(std::string::npos, hold_source.find("seg->srq.ptr_mask"));
+    EXPECT_NE(std::string::npos, hold_source.find("&= ~1"));
+    EXPECT_NE(std::string::npos, hold_source.find("seg->srq.desc"));
+    EXPECT_NE(std::string::npos, hold_source.find("= NULL"));
+
+    ASSERT_NE(std::string::npos, inprogress_pos);
+    ASSERT_NE(std::string::npos, hold_pos);
+    ASSERT_NE(std::string::npos, ok_pos);
+    ASSERT_NE(std::string::npos, release_pos);
+    EXPECT_LT(hold_pos, ok_pos);
+    EXPECT_LT(ok_pos, release_pos);
+}
+

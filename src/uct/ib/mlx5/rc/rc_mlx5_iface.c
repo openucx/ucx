@@ -188,8 +188,10 @@ uct_rc_mlx5_iface_check_rx_completion(uct_ib_iface_t   *ib_iface,
     uct_rc_mlx5_iface_common_t *iface =
             ucs_derived_of(ib_iface, uct_rc_mlx5_iface_common_t);
     struct mlx5_err_cqe *ecqe = (void*)cqe;
+    uct_rc_mlx5_coco_error_cqe_result_t coco_result;
     uct_ib_mlx5_srq_seg_t *seg;
     uint16_t wqe_ctr;
+    ucs_status_t status;
 
     if (uct_ib_mlx5_check_and_init_zipped(cq, cqe)) {
         ++cq->cq_ci;
@@ -205,8 +207,35 @@ uct_rc_mlx5_iface_check_rx_completion(uct_ib_iface_t   *ib_iface,
         UCS_STATIC_ASSERT(MLX5_CQE_INVALID & (UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK >> 4));
         ucs_assert((cqe->op_own >> 4) != MLX5_CQE_INVALID);
 
-        /* Release the aborted segment */
-        wqe_ctr = ntohs(ecqe->wqe_counter);
+        if (iface->coco.enabled) {
+            memset(&coco_result, 0, sizeof(coco_result));
+            status = uct_rc_mlx5_coco_error_cqe_validate(
+                    &iface->coco, cq, UCT_IB_DIR_RX, cqe, &coco_result);
+            if (status != UCS_OK) {
+                uct_rc_mlx5_coco_error_cqe_poison(
+                        iface, cq, UCT_IB_DIR_RX, &coco_result,
+                        "invalid rx error cqe");
+                ++cq->cq_ci;
+                uct_ib_mlx5_update_db_cq_ci(cq);
+                return NULL;
+            }
+
+            wqe_ctr = coco_result.wqe_counter;
+            status  = uct_rc_mlx5_coco_srq_shadow_consume(
+                    &iface->coco, coco_result.srq_slot->slot,
+                    coco_result.srq_slot->generation);
+            if (status != UCS_OK) {
+                uct_rc_mlx5_coco_error_cqe_poison(
+                        iface, cq, UCT_IB_DIR_RX, &coco_result,
+                        "stale rx error cqe");
+                ++cq->cq_ci;
+                uct_ib_mlx5_update_db_cq_ci(cq);
+                return NULL;
+            }
+        } else {
+            wqe_ctr = ntohs(ecqe->wqe_counter);
+        }
+
         seg     = uct_ib_mlx5_srq_get_wqe(&iface->rx.srq, wqe_ctr);
         ++cq->cq_ci;
         /* TODO: Check if ib_stride_index valid for error CQE */
@@ -970,6 +999,15 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
 
     self->super.config.fence_mode  = (uct_rc_fence_mode_t)rc_config->fence_mode;
     self->super.rx.srq.quota       = self->rx.srq.mask + 1;
+    if (self->coco.enabled) {
+        status = uct_rc_mlx5_coco_srq_shadow_init(
+                &self->coco, self, &self->cq[UCT_IB_DIR_RX],
+                self->rx.srq.mask + 1);
+        if (status != UCS_OK) {
+            goto cleanup_dm;
+        }
+    }
+
     self->super.config.exp_backoff = mlx5_config->exp_backoff;
     self->config.log_ack_req_freq  = ucs_min(mlx5_config->log_ack_req_freq,
                                              UCT_RC_MLX5_MAX_LOG_ACK_REQ_FREQ);
