@@ -467,3 +467,4 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_get_short,
                    length, (void *)remote_addr, buffer);
     return status;
 }
+

@@ -49,8 +49,8 @@ ucs_status_t ucp_dt_mem_info_verify(const char *dt_name, size_t index,
         return UCS_OK;
     }
 
-    ucs_error("inconsistent %s mem_info: [%zu]=%s-%s flags 0x%x "
-              "[0]=%s-%s flags 0x%x count=%zu",
+    ucs_error("inconsistent %s mem_info: [%zu]=%s-%s flags=0x%x "
+              "[0]=%s-%s flags=0x%x count=%zu",
               dt_name, index, ucs_memory_type_names[cur->type],
               ucs_topo_sys_device_get_name(cur->sys_dev), cur->mem_flags,
               ucs_memory_type_names[ref->type],

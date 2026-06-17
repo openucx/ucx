@@ -1,6 +1,6 @@
 /**
  * Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
  * Copyright (c) Los Alamos National Security, LLC. 2016.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
@@ -369,8 +369,8 @@ uct_xpmem_mem_attach_common(xpmem_segid_t xsegid, uintptr_t remote_address,
     end   = ucs_align_up_pow2  (remote_address + length, ucs_get_page_size());
 
     status = ucs_rcache_get(rmem->rcache, (void*)start, end - start,
-                            ucs_get_page_size(), PROT_READ | PROT_WRITE, 0,
-                            NULL, &rcache_region);
+			    ucs_get_page_size(), PROT_READ | PROT_WRITE, NULL,
+			    &rcache_region);
     if (status != UCS_OK) {
         goto err_rmem_put;
     }

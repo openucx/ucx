@@ -129,8 +129,8 @@ ucs_status_t ucp_datatype_iter_iov_mem_reg(ucp_context_h context,
     for (iov_index = 0; iov_index < iov_count; ++iov_index) {
         iov    = ucp_datatype_iter_iov_at(dt_iter, iov_index);
         status = ucp_datatype_iter_mem_reg_single(
-                context, iov->buffer, iov->length, &dt_iter->mem_info, md_map,
-                uct_flags, &dt_iter->type.iov.memh[iov_index]);
+                context, iov->buffer, iov->length, dt_iter->mem_info.type,
+                md_map, uct_flags, &dt_iter->type.iov.memh[iov_index]);
         if (status != UCS_OK) {
             ucp_datatype_iter_iov_mem_dereg(dt_iter);
             return status;
@@ -362,11 +362,10 @@ ucs_status_t ucp_datatype_iter_sgl_mem_reg(ucp_context_h context,
     }
 
     for (i = 0; i < count; ++i) {
-        status = ucp_datatype_iter_mem_reg_single(context,
-                                                  dt_iter->type.sgl.buffers[i],
-                                                  dt_iter->type.sgl.lengths[i],
-                                                  &dt_iter->mem_info, md_map,
-                                                  uct_flags, &memhs[i]);
+        status = ucp_datatype_iter_mem_reg_single(
+                context, dt_iter->type.sgl.buffers[i],
+                dt_iter->type.sgl.lengths[i], dt_iter->mem_info.type,
+                md_map, uct_flags, &memhs[i]);
         if (status != UCS_OK) {
             while (i-- > 0) {
                 ucp_datatype_iter_mem_dereg_single(&memhs[i]);

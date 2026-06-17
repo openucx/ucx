@@ -509,8 +509,8 @@ ucp_proto_common_filter_min_frag(const ucp_proto_init_params_t *params,
         if (md_attr->flags & UCT_MD_FLAG_NEED_MEMH) {
             if (!ucs_test_all_flags(common_params->reg_mem_info.mem_flags,
                                     md_attr->required_mem_flags)) {
-                ucs_trace("%s: md %s requires memory flags 0x%x, "
-                          "mem_flags 0x%x",
+                ucs_trace("%s: md %s missing required_mem_flags=0x%x for "
+                          "mem_flags=0x%x",
                           lane_desc, context->tl_mds[md_index].rsc.md_name,
                           md_attr->required_mem_flags,
                           common_params->reg_mem_info.mem_flags);

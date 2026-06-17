@@ -247,8 +247,9 @@ protected:
                                   ucs_memory_type_t mem_type,
                                   uint8_t mem_flags);
 
-    static ucp_md_map_t
-    rndv_ctrl_md_map(const ucp_proto_select_elem_t *select_elem);
+    static const ucp_proto_config_t *
+    get_rma_get_rndv_remote_proto_config(
+            const ucp_proto_select_elem_t *select_elem, size_t length);
 };
 
 ucp_md_map_t test_ucp_proto_cuda_async_non_reg::get_required_mem_flags_md_map(
@@ -268,37 +269,22 @@ ucp_md_map_t test_ucp_proto_cuda_async_non_reg::get_required_mem_flags_md_map(
     return result;
 }
 
-/* Union of the RNDV control protocols' packed-rkey md_maps, i.e. the MDs the
- * peer may use to pull the data. This is where the REGISTRABLE filter applies. */
-ucp_md_map_t test_ucp_proto_cuda_async_non_reg::rndv_ctrl_md_map(
-        const ucp_proto_select_elem_t *select_elem)
+const ucp_proto_config_t *
+test_ucp_proto_cuda_async_non_reg::get_rma_get_rndv_remote_proto_config(
+        const ucp_proto_select_elem_t *select_elem, size_t length)
 {
-    const ucp_proto_init_elem_t *proto;
-    ucp_md_map_t md_map = 0;
+    const ucp_proto_threshold_elem_t *thresh =
+            ucp_proto_thresholds_search_slow(select_elem->thresholds, length);
+    const ucp_proto_config_t *proto_config = &thresh->proto_config;
+    const ucp_proto_rndv_ctrl_priv_t *rpriv;
 
-    ucs_array_for_each(proto, &select_elem->proto_init.protocols) {
-        const char *proto_name = ucp_proto_id_field(proto->proto_id, name);
-
-        /* Only RNDV control protocols use ucp_proto_rndv_ctrl_priv_t */
-        if ((std::strcmp(proto_name, "tag/rndv") != 0) &&
-            (std::strcmp(proto_name, "tag/rndv/offload") != 0) &&
-            (std::strcmp(proto_name, "tag/rndv/offload_sw") != 0) &&
-            (std::strcmp(proto_name, "rndv/rts") != 0)) {
-            continue;
-        }
-
-        if (proto->priv_offset == UCP_PROTO_INIT_ELEM_PRIV_OFFSET_INVALID) {
-            continue;
-        }
-
-        const ucp_proto_rndv_ctrl_priv_t *rpriv =
-                reinterpret_cast<const ucp_proto_rndv_ctrl_priv_t*>(
-                        &ucs_array_elem(&select_elem->proto_init.priv_buf,
-                                        proto->priv_offset));
-        md_map |= rpriv->md_map;
+    if (std::strcmp(proto_config->proto->name, "get/rndv") != 0) {
+        return nullptr;
     }
 
-    return md_map;
+    rpriv = static_cast<const ucp_proto_rndv_ctrl_priv_t*>(
+            proto_config->priv);
+    return &rpriv->remote_proto_config;
 }
 
 UCS_TEST_P(test_ucp_proto_cuda_async_non_reg, cuda_async_registrable_filter)
@@ -313,10 +299,6 @@ UCS_TEST_P(test_ucp_proto_cuda_async_non_reg, cuda_async_registrable_filter)
     ucs_status_t status;
     ucp_md_index_t i, md_index;
     uint8_t sg_count;
-
-    if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
-        UCS_TEST_SKIP_R("CUDA is not supported");
-    }
 
     if (!mem_buffer::is_async_supported(UCS_MEMORY_TYPE_CUDA)) {
         UCS_TEST_SKIP_R("CUDA async allocation is not supported");
@@ -373,7 +355,10 @@ UCS_TEST_P(test_ucp_proto_cuda_async_non_reg,
            cuda_async_rndv_get_zcopy_proto_filter, "RNDV_THRESH=0",
            "RNDV_SCHEME=get_zcopy")
 {
+    /* Keep the real CUDA allocation small, but inspect a large protocol range
+     * where RMA GET/RNDV is selected. */
     constexpr size_t buffer_size = 8192;
+    constexpr size_t select_size = UCS_GBYTE;
     ucp_request_param_t param    = {};
     ucp_datatype_iter_t dt_iter;
     ucp_proto_select_param_t select_param;
@@ -382,17 +367,13 @@ UCS_TEST_P(test_ucp_proto_cuda_async_non_reg,
     const ucp_proto_select_elem_t *select_elem;
     ucp_proto_select_t *proto_select;
     const uct_iface_attr_t *iface_attr;
-    ucp_worker_cfg_index_t ep_cfg_index;
-    ucp_md_map_t hca_md_map, lane_md_map;
+    ucp_worker_cfg_index_t ep_cfg_index, rkey_cfg_index;
+    ucp_md_map_t hca_md_map, lane_md_map, rkey_md_map;
     ucp_lane_index_t lane;
     ucp_md_index_t md_index;
     uint8_t sg_count;
-    ucp_md_map_t no_flag_md_map;
-    ucp_md_map_t can_reg_md_map;
-
-    if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
-        UCS_TEST_SKIP_R("CUDA is not supported");
-    }
+    const ucp_proto_config_t *no_flag_remote_proto_config;
+    const ucp_proto_config_t *can_reg_remote_proto_config;
 
     if (!mem_buffer::is_async_supported(UCS_MEMORY_TYPE_CUDA)) {
         UCS_TEST_SKIP_R("CUDA async allocation is not supported");
@@ -416,17 +397,20 @@ UCS_TEST_P(test_ucp_proto_cuda_async_non_reg,
         UCS_TEST_SKIP_R("no CUDA-registering IB/HCA MDs");
     }
 
-    ep_config = &ucs_array_elem(&worker()->ep_config, sender().ep()->cfg_index);
+    ep_config   = &ucs_array_elem(&worker()->ep_config,
+                                  sender().ep()->cfg_index);
     lane_md_map = 0;
+    rkey_md_map = 0;
     for (lane = 0; lane < ep_config->key.num_lanes; ++lane) {
-        md_index =
-                context()->tl_rscs[ep_config->key.lanes[lane].rsc_index].md_index;
+        md_index = context()->tl_rscs[
+                ep_config->key.lanes[lane].rsc_index].md_index;
         iface_attr = ucp_worker_iface_get_attr(
                 worker(), ep_config->key.lanes[lane].rsc_index);
         if ((hca_md_map & UCS_BIT(md_index)) &&
             (context()->tl_mds[md_index].attr.flags & UCT_MD_FLAG_NEED_RKEY) &&
             (iface_attr->cap.flags & UCT_IFACE_FLAG_GET_ZCOPY)) {
             lane_md_map |= UCS_BIT(md_index);
+            rkey_md_map |= UCS_BIT(ep_config->key.lanes[lane].dst_md_index);
         }
     }
 
@@ -434,11 +418,15 @@ UCS_TEST_P(test_ucp_proto_cuda_async_non_reg,
         UCS_TEST_SKIP_R("no endpoint lanes support IB/HCA get zcopy");
     }
 
-    /* Select the tag-send proto twice, toggling only REGISTRABLE, and check
-     * the RNDV get-zcopy MDs are packed only when the buffer is registrable. */
     ASSERT_EQ(0, mem_info.mem_flags & UCS_MEM_FLAG_REGISTRABLE);
 
     ep_cfg_index = sender().ep()->cfg_index;
+
+    ucp_rkey_config_key_t rkey_config_key = create_rkey_config_key(rkey_md_map);
+    rkey_config_key.ep_cfg_index = ep_cfg_index;
+    ASSERT_UCS_OK(ucp_worker_rkey_config_get(worker(), &rkey_config_key, NULL,
+                                             &rkey_cfg_index));
+
     proto_select =
             &ucs_array_elem(&worker()->ep_config, ep_cfg_index).proto_select;
 
@@ -446,28 +434,33 @@ UCS_TEST_P(test_ucp_proto_cuda_async_non_reg,
                                  static_cast<ucs_memory_type_t>(mem_info.type),
                                  lane_md_map);
 
-    ucp_proto_select_param_init(&select_param, UCP_OP_ID_TAG_SEND, 0, 0,
+    /* Select the GET/RNDV proto twice, toggling only REGISTRABLE, and check
+     * that direct GET zcopy is selected only for registrable memory. */
+    ucp_proto_select_param_init(&select_param, UCP_OP_ID_GET, 0, 0,
                                 UCP_DATATYPE_CONTIG, &mem_info, 1);
     select_elem = ucp_proto_select_lookup_slow(worker(), proto_select, 0,
-                                               ep_cfg_index,
-                                               UCP_WORKER_CFG_INDEX_NULL,
+                                               ep_cfg_index, rkey_cfg_index,
                                                &select_param);
     ASSERT_NE(nullptr, select_elem);
-    no_flag_md_map = rndv_ctrl_md_map(select_elem);
+    no_flag_remote_proto_config =
+            get_rma_get_rndv_remote_proto_config(select_elem, select_size);
+    ASSERT_NE(nullptr, no_flag_remote_proto_config);
 
     mem_info.mem_flags |= UCS_MEM_FLAG_REGISTRABLE;
-    ucp_proto_select_param_init(&select_param, UCP_OP_ID_TAG_SEND, 0, 0,
+    ucp_proto_select_param_init(&select_param, UCP_OP_ID_GET, 0, 0,
                                 UCP_DATATYPE_CONTIG, &mem_info, 1);
     select_elem = ucp_proto_select_lookup_slow(worker(), proto_select, 0,
-                                               ep_cfg_index,
-                                               UCP_WORKER_CFG_INDEX_NULL,
+                                               ep_cfg_index, rkey_cfg_index,
                                                &select_param);
     ASSERT_NE(nullptr, select_elem);
-    can_reg_md_map = rndv_ctrl_md_map(select_elem);
+    can_reg_remote_proto_config =
+            get_rma_get_rndv_remote_proto_config(select_elem, select_size);
+    ASSERT_NE(nullptr, can_reg_remote_proto_config);
 
-    /* Non-registrable: get-zcopy lanes excluded. Registrable: included. */
-    EXPECT_EQ(0, no_flag_md_map & lane_md_map);
-    EXPECT_NE(0, can_reg_md_map & lane_md_map);
+    EXPECT_STRNE("rndv/get/zcopy",
+                 no_flag_remote_proto_config->proto->name);
+    EXPECT_STREQ("rndv/get/zcopy",
+                 can_reg_remote_proto_config->proto->name);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_cuda_async_non_reg, rcx,

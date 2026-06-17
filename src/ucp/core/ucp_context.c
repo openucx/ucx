@@ -2939,7 +2939,7 @@ uct_md_h ucp_context_find_tl_md(ucp_context_h context, const char *md_name)
 void ucp_memory_detect_slowpath(ucp_context_h context, const void *address,
                                 size_t length, ucs_memory_info_t *mem_info)
 {
-    uct_md_mem_attr_v2_t mem_attr = {};
+    uct_md_mem_attr_v2_t mem_attr;
     ucs_status_t status;
     ucp_tl_md_t *tl_md;
     ucp_md_index_t i;

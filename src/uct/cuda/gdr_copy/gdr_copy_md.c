@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2017-2026. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2017-2019. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -422,13 +422,13 @@ uct_gdr_copy_mem_rcache_reg(uct_md_h uct_md, void *address, size_t length,
     uct_gdr_copy_mem_t *memh;
 
     rregion = ucs_rcache_lookup(md->rcache, address, length, GPU_PAGE_SIZE,
-                                PROT_READ | PROT_WRITE, 0);
+                                PROT_READ | PROT_WRITE);
     if (rregion != NULL) {
         goto out;
     }
 
     status = ucs_rcache_get(md->rcache, address, length, GPU_PAGE_SIZE,
-                            PROT_READ | PROT_WRITE, 0, &flags, &rregion);
+                            PROT_READ | PROT_WRITE, &flags, &rregion);
     if (status != UCS_OK) {
         return status;
     }

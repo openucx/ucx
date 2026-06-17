@@ -316,8 +316,8 @@ uct_rocm_copy_mem_rcache_reg(uct_md_h uct_md, void *address, size_t length,
     uct_rocm_copy_mem_t *memh;
 
     status = ucs_rcache_get(md->rcache, (void *)address, length,
-                            ucs_get_page_size(), PROT_READ | PROT_WRITE, 0,
-                            &flags, &rregion);
+                            ucs_get_page_size(), PROT_READ | PROT_WRITE, &flags,
+                            &rregion);
     if (status != UCS_OK) {
         return status;
     }

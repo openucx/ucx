@@ -964,6 +964,11 @@ ucp_proto_rndv_rtr_req_sreq_init(ucp_ep_h ep, ucp_request_t *req,
         .type    = rtr_req->mem_type,
         .sys_dev = rtr_req->sys_dev
     };
+    ucp_memory_info_t local_mem_info;
+
+    ucp_memory_detect(ep->worker->context, (void*)(uintptr_t)rtr_req->address,
+                      rtr->size, &local_mem_info);
+    mem_info.mem_flags = local_mem_info.mem_flags;
 
     ucp_proto_request_send_init(req, ep,
                                 UCP_REQUEST_FLAG_RNDV_SEND_INTERNAL);

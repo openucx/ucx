@@ -461,7 +461,6 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
     ucs_status_t status     = UCS_OK;
     size_t iov_it, iovcnt;
     const ucp_dt_iov_t *iov;
-    ucp_memory_info_t mem_info;
     ucp_mem_h *memhs;
     int level;
 
@@ -471,9 +470,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
 
     switch (datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
-        ucp_mem_info_detect_for_type(context, buffer, length, mem_type,
-                                     &mem_info);
-        status = ucp_memh_get_or_update(context, buffer, length, &mem_info,
+        status = ucp_memh_get_or_update(context, buffer, length, mem_type,
                                         reg_md_map, flags,
                                         &state->dt.contig.memh);
         if (status != UCS_OK) {
@@ -487,20 +484,6 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
         ucs_assert(!(flags & UCT_MD_MEM_FLAG_HIDE_ERRORS));
         iovcnt = state->dt.iov.iovcnt;
         iov    = buffer;
-        /* IOV buffers are assumed to have the same memory type. Detect memory
-         * information once from the first non-empty entry and use it for all
-         * registrations.
-         */
-        ucp_mem_info_detect_for_type(context, NULL, 0, mem_type, &mem_info);
-        for (iov_it = 0; iov_it < iovcnt; ++iov_it) {
-            if (iov[iov_it].length != 0) {
-                ucp_mem_info_detect_for_type(context, iov[iov_it].buffer,
-                                             iov[iov_it].length, mem_type,
-                                             &mem_info);
-                break;
-            }
-        }
-
         if (ucs_unlikely(state->dt.iov.memhs != NULL)) {
             memhs = state->dt.iov.memhs;
         } else {
@@ -513,7 +496,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
 
         for (iov_it = 0; iov_it < iovcnt; ++iov_it) {
             status = ucp_memh_get_or_update(context, iov[iov_it].buffer,
-                                            iov[iov_it].length, &mem_info,
+                                            iov[iov_it].length, mem_type,
                                             reg_md_map, flags, &memhs[iov_it]);
             if (status != UCS_OK) {
                 /* unregister previously registered memory */

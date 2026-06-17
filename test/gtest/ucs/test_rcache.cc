@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2016. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -101,18 +101,17 @@ protected:
     }
 
     region *get(void *address, size_t length, int prot = PROT_READ | PROT_WRITE,
-                size_t alignment = UCS_PGT_ADDR_ALIGN, uint8_t mem_flags = 0)
+                size_t alignment = UCS_PGT_ADDR_ALIGN)
     {
         ucs_status_t status;
         ucs_rcache_region_t *r;
         status = ucs_rcache_get(m_rcache, address, length, alignment, prot,
-                                mem_flags, NULL, &r);
+                                NULL, &r);
         ASSERT_UCS_OK(status);
         EXPECT_TRUE(r != NULL);
         struct region *region = ucs_derived_of(r, struct region);
         EXPECT_EQ(uint32_t(MAGIC), region->magic);
         EXPECT_TRUE(ucs_test_all_flags(region->super.prot, prot));
-        EXPECT_EQ(mem_flags, region->super.mem_flags);
         return region;
     }
 
@@ -657,93 +656,6 @@ UCS_MT_TEST_F(test_rcache, merge_invalid_prot, 6)
     munmap(mem, size1+size2);
 }
 
-/*
- * Overlapping regions that share the same mem_flags are merged, and the merged
- * region carries that value:
- * +---------+-----+---------+
- * | region1 | pad | region2 |   both mem_flags=1
- * +---+-----+-----+----+----+
- *     |   region3      |         mem_flags=1 -> merges region1 and region2
- *     +----------------+
- */
-UCS_TEST_F(test_rcache, merge_same_mem_flags) {
-    static const size_t size1  = 256 * ucs_get_page_size();
-    static const size_t size2  = 512 * ucs_get_page_size();
-    static const size_t pad    = 64 * ucs_get_page_size();
-    static const uint8_t flags = 1;
-    region *region1, *region2, *region3, *region1_2;
-    void *ptr1, *ptr2, *ptr3, *mem;
-    size_t size3;
-
-    mem = alloc_pages(size1 + pad + size2, PROT_READ | PROT_WRITE);
-
-    ptr1    = (char*)mem;
-    region1 = get(ptr1, size1, PROT_READ | PROT_WRITE, UCS_PGT_ADDR_ALIGN,
-                  flags);
-
-    ptr2    = (char*)mem + pad + size1;
-    region2 = get(ptr2, size2, PROT_READ | PROT_WRITE, UCS_PGT_ADDR_ALIGN,
-                  flags);
-
-    /* Spanning region merges region1 and region2 */
-    ptr3    = (char*)mem + pad;
-    size3   = size1 + size2 - pad;
-    region3 = get(ptr3, size3, PROT_READ | PROT_WRITE, UCS_PGT_ADDR_ALIGN,
-                  flags);
-    EXPECT_EQ(flags, region3->super.mem_flags);
-    EXPECT_LE(region3->super.super.start, (uintptr_t)ptr1);
-    EXPECT_GE(region3->super.super.end, (uintptr_t)ptr2 + size2);
-
-    /* Re-getting region1's range with the same flags returns the merged
-     * region (region1 was merged away). */
-    region1_2 = get(ptr1, size1, PROT_READ | PROT_WRITE, UCS_PGT_ADDR_ALIGN,
-                    flags);
-    EXPECT_NE(region1, region1_2);
-    EXPECT_EQ(region3, region1_2);
-    put(region1_2);
-
-    put(region1);
-    put(region2);
-    put(region3);
-    munmap(mem, size1 + pad + size2);
-}
-
-/*
- * A region whose mem_flags differ from an overlapping cached region must not be
- * merged with it. The cached region is invalidated (kicked out of the page
- * table) and a new region with the requested flags is created over its own
- * range, mirroring the incompatible-protection handling.
- * +---------------------+
- * |       region1       |          mem_flags=1
- * +----------+----------+----------+
- *            |       region2       |  mem_flags=2, overlaps region1
- *            +---------------------+
- */
-UCS_TEST_F(test_rcache, merge_mismatch_mem_flags) {
-    static const size_t size = 8 * ucs_get_page_size();
-    void *mem  = alloc_pages(size * 2, PROT_READ | PROT_WRITE);
-    void *ptr1 = mem;
-    void *ptr2 = (char*)mem + (size / 2);
-
-    region *region1 = get(ptr1, size, PROT_READ | PROT_WRITE,
-                          UCS_PGT_ADDR_ALIGN, 1);
-
-    /* Overlap region1 with a different mem_flags value - must not merge */
-    region *region2 = get(ptr2, size, PROT_READ | PROT_WRITE,
-                          UCS_PGT_ADDR_ALIGN, 2);
-
-    /* region2 keeps its own flags and is not expanded to cover region1 */
-    EXPECT_EQ(2, region2->super.mem_flags);
-    EXPECT_EQ((uintptr_t)ptr2, region2->super.super.start);
-
-    /* region1 was invalidated rather than merged (still held, so not freed) */
-    EXPECT_FALSE(region1->super.flags & UCS_RCACHE_REGION_FLAG_PGTABLE);
-
-    put(region1);
-    put(region2);
-    munmap(mem, size * 2);
-}
-
 UCS_MT_TEST_F(test_rcache, shared_region, 6) {
     static const size_t size = 1 * 1024 * 1024;
 
@@ -810,7 +722,7 @@ UCS_MT_TEST_F(test_rcache_no_register, register_failure, 10) {
     ucs_status_t status;
     ucs_rcache_region_t *r;
     status = ucs_rcache_get(m_rcache, ptr, size, UCS_PGT_ADDR_ALIGN,
-                            PROT_READ | PROT_WRITE, 0, NULL, &r);
+                            PROT_READ | PROT_WRITE, NULL, &r);
     EXPECT_EQ(UCS_ERR_IO_ERROR, status);
     EXPECT_EQ(0u, m_reg_count);
 
@@ -857,7 +769,7 @@ UCS_MT_TEST_F(test_rcache_no_register, merge_invalid_prot_slow, 5)
     ucs_rcache_region_t *r;
 
     status = ucs_rcache_get(m_rcache, ptr2, size2, UCS_PGT_ADDR_ALIGN,
-                            PROT_WRITE, 0, NULL, &r);
+                            PROT_WRITE, NULL, &r);
     EXPECT_EQ(UCS_ERR_IO_ERROR, status);
 
     barrier();

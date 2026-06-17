@@ -40,10 +40,10 @@ typedef enum {
 } ucs_memtype_cache_action_t;
 
 struct ucs_memtype_cache_region {
-    ucs_pgt_region_t  super;    /**< Base class - page table region */
-    ucs_list_link_t   list;     /**< List element */
-    ucs_memory_type_t mem_type; /**< Memory type, use uint8 for compact size */
-    ucs_sys_device_t  sys_dev;  /**< System device index */
+    ucs_pgt_region_t  super;     /**< Base class - page table region */
+    ucs_list_link_t   list;      /**< List element */
+    ucs_memory_type_t mem_type;  /**< Memory type, use uint8 for compact size */
+    ucs_sys_device_t  sys_dev;   /**< System device index */
     uint8_t           mem_flags; /**< UCS memory flags */
 };
 

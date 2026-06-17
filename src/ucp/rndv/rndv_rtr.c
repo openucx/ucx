@@ -334,7 +334,7 @@ static size_t ucp_proto_rndv_rtr_mtype_pack(void *dest, void *arg)
     /* Pack remote key for the fragment */
     mem_info.type      = mdesc->memh->mem_type;
     mem_info.sys_dev   = UCS_SYS_DEVICE_ID_UNKNOWN;
-    mem_info.mem_flags = mdesc->memh->super.mem_flags;
+    mem_info.mem_flags = mdesc->memh->mem_flags;
     packed_rkey_size = ucp_rkey_pack_memh(req->send.ep->worker->context, md_map,
                                           mdesc->memh, mdesc->ptr,
                                           req->send.state.dt_iter.length,
