@@ -556,6 +556,12 @@ unsigned ucp_wireup_eps_progress(void *arg)
             continue;
         }
 
+        /* A recovery proxy is still probing the route (UD uct_ep_check) and
+         * its fresh inner RC EP is not connected yet - leave it in place. */
+        if (wireup_ep->flags & UCP_WIREUP_EP_FLAG_FAILED_PROBING) {
+            continue;
+        }
+
         ucs_assert(wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY);
         ucs_assert(wireup_ep->super.uct_ep != NULL);
 
@@ -981,6 +987,44 @@ void ucp_wireup_process_ack(ucp_worker_h worker, ucp_ep_h ep,
     ucp_wireup_remote_connected(ep);
 }
 
+/* Add to @a tl_bitmap the UD resources living on the same physical device as
+ * each provided p2p lane, so the packed LANES_ADDR addresses also carry the
+ * local UD iface address. The receiver uses it to bind a fresh aux UD ep and
+ * probe the route (uct_ep_check) before connecting the recovered RC lane,
+ * without an extra wireup round-trip. */
+static void
+ucp_wireup_augment_aux_ud_tls(ucp_ep_h ep, ucp_lane_map_t lane_map,
+                              ucp_tl_bitmap_t *tl_bitmap)
+{
+    ucp_context_h context = ep->worker->context;
+    const uct_tl_resource_desc_t *tl;
+    ucp_rsc_index_t lane_rsc, aux_rsc;
+    ucp_lane_index_t lane;
+
+    ucs_for_each_bit(lane, lane_map) {
+        lane_rsc = ucp_ep_get_rsc_index(ep, lane);
+        if (lane_rsc == UCP_NULL_RESOURCE) {
+            continue;
+        }
+
+        for (aux_rsc = 0; aux_rsc < context->num_tls; ++aux_rsc) {
+            if (UCS_STATIC_BITMAP_GET(*tl_bitmap, aux_rsc)) {
+                continue;
+            }
+            if (context->tl_rscs[aux_rsc].dev_index !=
+                context->tl_rscs[lane_rsc].dev_index) {
+                continue;
+            }
+
+            tl = &context->tl_rscs[aux_rsc].tl_rsc;
+            if ((strcmp(tl->tl_name, "ud_verbs") == 0) ||
+                (strcmp(tl->tl_name, "ud_mlx5") == 0)) {
+                UCS_STATIC_BITMAP_SET(tl_bitmap, aux_rsc);
+            }
+        }
+    }
+}
+
 void ucp_wireup_send_lanes_addr_msg(ucp_ep_h ep, uint8_t msg_type,
                                     ucp_lane_map_t requested_lane_map,
                                     ucp_lane_map_t provided_lane_map)
@@ -989,6 +1033,8 @@ void ucp_wireup_send_lanes_addr_msg(ucp_ep_h ep, uint8_t msg_type,
     ucs_status_t status;
 
     tl_bitmap = ucp_wireup_get_ep_tl_bitmap(ep, provided_lane_map);
+    /* Also pack the same-device UD iface address(es) for route probing. */
+    ucp_wireup_augment_aux_ud_tls(ep, provided_lane_map, &tl_bitmap);
 
     ucs_debug("ep %p: send %s requested=0x%" PRIx64 " provided=0x%" PRIx64, ep,
               ucp_wireup_msg_str(msg_type), (uint64_t)requested_lane_map,

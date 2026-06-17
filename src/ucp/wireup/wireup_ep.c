@@ -396,6 +396,54 @@ static ucs_status_t ucp_wireup_ep_check(uct_ep_h uct_ep, unsigned flags,
 }
 
 
+/* uct_ep_check completion for the recovery probe. Records the outcome on the
+ * proxy; the next ucp_ep_recovery_rebuild_p2p_lane() tick consumes it. */
+static void ucp_wireup_ep_recovery_probe_comp(uct_completion_t *self)
+{
+    ucp_wireup_ep_t *wireup_ep = ucs_container_of(self, ucp_wireup_ep_t,
+                                                  recovery_comp);
+
+    wireup_ep->recovery_probe_status    = self->status;
+    wireup_ep->recovery_probe_done      = 1;
+    wireup_ep->recovery_probe_in_flight = 0;
+
+    ucs_debug("wireup_ep %p: recovery probe completion status=%s", wireup_ep,
+              ucs_status_string(self->status));
+}
+
+ucs_status_t
+ucp_wireup_ep_arm_recovery_probe(ucp_wireup_ep_t *wireup_ep, uct_ep_h aux_ep,
+                                 ucp_rsc_index_t aux_rsc_index)
+{
+    ucs_status_t status;
+
+    ucs_assert(aux_ep != NULL);
+    ucs_assert(wireup_ep->aux_ep == NULL);
+    ucs_assert(!wireup_ep->recovery_probe_in_flight);
+
+    /* Take ownership of the aux UD ep for the probe lifetime; the wireup_ep
+     * destructor (or the success path) tears it down. */
+    wireup_ep->aux_ep        = aux_ep;
+    wireup_ep->aux_rsc_index = aux_rsc_index;
+
+    wireup_ep->recovery_comp.func       = ucp_wireup_ep_recovery_probe_comp;
+    wireup_ep->recovery_comp.count      = 1;
+    wireup_ep->recovery_comp.status     = UCS_OK;
+    wireup_ep->recovery_probe_done      = 0;
+    wireup_ep->recovery_probe_in_flight = 1;
+
+    status = uct_ep_check(aux_ep, 0, &wireup_ep->recovery_comp);
+    if (status == UCS_INPROGRESS) {
+        return UCS_INPROGRESS;
+    }
+
+    /* Synchronous completion (OK or error): record now. */
+    wireup_ep->recovery_probe_status    = status;
+    wireup_ep->recovery_probe_done      = 1;
+    wireup_ep->recovery_probe_in_flight = 0;
+    return status;
+}
+
 UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep)
 {
     static uct_iface_ops_t ops = {
@@ -434,6 +482,9 @@ UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep)
     self->aux_rsc_index = UCP_NULL_RESOURCE;
     self->pending_count = 0;
     self->flags         = 0;
+    self->recovery_probe_status    = UCS_OK;
+    self->recovery_probe_in_flight = 0;
+    self->recovery_probe_done      = 0;
     ucs_queue_head_init(&self->pending_q);
     UCS_STATIC_BITMAP_RESET_ALL(&self->cm_resolve_tl_bitmap);
 

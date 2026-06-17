@@ -1901,8 +1901,9 @@ ucp_ep_recovery_mark_ready(ucp_ep_h ep, ucp_lane_index_t lane)
     ucs_assert(wireup_ep != NULL);
     ucs_assert(wireup_ep->super.uct_ep != NULL);
 
-    wireup_ep->flags |= UCP_WIREUP_EP_FLAG_READY |
-                        UCP_WIREUP_EP_FLAG_REMOTE_CONNECTED;
+    wireup_ep->flags |=  UCP_WIREUP_EP_FLAG_READY |
+                         UCP_WIREUP_EP_FLAG_REMOTE_CONNECTED;
+    wireup_ep->flags &= ~UCP_WIREUP_EP_FLAG_FAILED_PROBING;
 }
 
 /**
@@ -1941,8 +1942,16 @@ ucp_ep_recovery_rebuild_iface_lane(
         ucp_ep_h ep, ucp_lane_index_t lane,
         const ucp_unpacked_address_t *remote_address)
 {
+    uct_ep_h lane_ep = ucp_ep_get_lane(ep, lane);
     const ucp_address_entry_t *ae;
     ucs_status_t status;
+
+    /* Tolerate re-entry on an already-recovered (live) lane; see the p2p
+     * variant for details. */
+    if ((lane_ep != NULL) && !ucp_is_uct_ep_failed(lane_ep) &&
+        !ucp_wireup_ep_test(lane_ep)) {
+        return UCS_OK;
+    }
 
     ae = ucp_ep_recovery_find_iface_addr(ep, lane, remote_address);
     if (ae == NULL) {
@@ -1968,9 +1977,100 @@ ucp_ep_recovery_rebuild_iface_lane(
     return UCS_OK;
 }
 
-/* Rebuild one p2p (CONNECT_TO_EP) lane. Flow: find peer ep_addr ->
- * install empty wireup proxy -> ensure iface-only inner UCT EP ->
- * connect_to_ep_v2 against peer ep_addr -> mark ready. */
+/* Locate the peer UD iface address that lives on the same peer-side device as
+ * the failed RC lane (inside remote_address). Match: find the peer RC address
+ * entry for this lane, then pick another entry on the same sys_dev that carries
+ * an iface_addr (the UD aux). Returns NULL if none. */
+static const ucp_address_entry_t *
+ucp_ep_recovery_find_peer_ud(ucp_ep_h ep, ucp_lane_index_t lane,
+                             const ucp_unpacked_address_t *remote_address)
+{
+    const ucp_address_entry_t *rc_entry;
+    const ucp_address_entry_ep_addr_t *unused;
+    const ucp_address_entry_t *ae;
+    ucs_status_t status;
+
+    status = ucp_wireup_find_remote_p2p_addr(ep, lane, remote_address,
+                                             &rc_entry, &unused);
+    if (status != UCS_OK) {
+        return NULL;
+    }
+
+    ucp_unpacked_address_for_each(ae, remote_address) {
+        if ((ae == rc_entry) || (ae->iface_addr == NULL)) {
+            continue;
+        }
+        if (ae->sys_dev != rc_entry->sys_dev) {
+            continue;
+        }
+        return ae;
+    }
+
+    return NULL;
+}
+
+/* Create a local UD aux ep on the same device as the failed RC lane, targeting
+ * the peer UD iface address @a peer_ae. Used to probe (uct_ep_check) the route
+ * before reconnecting the RC lane. */
+static ucs_status_t
+ucp_ep_recovery_create_aux(ucp_ep_h ep, ucp_lane_index_t lane,
+                           const ucp_address_entry_t *peer_ae,
+                           uct_ep_h *aux_ep_p,
+                           ucp_rsc_index_t *aux_rsc_index_p)
+{
+    ucp_worker_h worker      = ep->worker;
+    ucp_context_h context    = worker->context;
+    ucp_rsc_index_t lane_rsc = ucp_ep_get_rsc_index(ep, lane);
+    ucp_rsc_index_t aux_rsc;
+    const uct_tl_resource_desc_t *tl;
+    ucp_worker_iface_t *wiface;
+    uct_ep_params_t uct_ep_params;
+    ucs_status_t status;
+
+    if (lane_rsc == UCP_NULL_RESOURCE) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    for (aux_rsc = 0; aux_rsc < context->num_tls; ++aux_rsc) {
+        if (context->tl_rscs[aux_rsc].dev_index !=
+            context->tl_rscs[lane_rsc].dev_index) {
+            continue;
+        }
+
+        tl = &context->tl_rscs[aux_rsc].tl_rsc;
+        if ((strcmp(tl->tl_name, "ud_verbs") != 0) &&
+            (strcmp(tl->tl_name, "ud_mlx5") != 0)) {
+            continue;
+        }
+
+        wiface                   = ucp_worker_iface(worker, aux_rsc);
+        uct_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE    |
+                                   UCT_EP_PARAM_FIELD_DEV_ADDR |
+                                   UCT_EP_PARAM_FIELD_IFACE_ADDR;
+        uct_ep_params.iface      = wiface->iface;
+        uct_ep_params.dev_addr   = peer_ae->dev_addr;
+        uct_ep_params.iface_addr = peer_ae->iface_addr;
+        status = uct_ep_create(&uct_ep_params, aux_ep_p);
+        if (status != UCS_OK) {
+            ucs_debug("ep %p lane %d: aux UD ep_create rsc=%d failed: %s", ep,
+                      lane, aux_rsc, ucs_status_string(status));
+            continue;
+        }
+
+        *aux_rsc_index_p = aux_rsc;
+        ucp_worker_iface_progress_ep(wiface);
+        return UCS_OK;
+    }
+
+    return UCS_ERR_NO_RESOURCE;
+}
+
+/* Rebuild one p2p (CONNECT_TO_EP) lane with a UD route probe gate:
+ * find peer ep_addr -> install empty wireup proxy -> ensure fresh iface-only
+ * inner UCT EP -> arm a UD uct_ep_check probe and wait for it -> only on probe
+ * success connect_to_ep_v2 against peer ep_addr, destroy the aux, mark ready.
+ * Returns UCS_INPROGRESS while the probe is pending so the lane stays failed
+ * and is retried on the next recovery round. */
 static ucs_status_t
 ucp_ep_recovery_rebuild_p2p_lane(
         ucp_ep_h ep, ucp_lane_index_t lane,
@@ -1978,8 +2078,21 @@ ucp_ep_recovery_rebuild_p2p_lane(
 {
     const ucp_address_entry_t *address_entry;
     const ucp_address_entry_ep_addr_t *ep_entry;
+    const ucp_address_entry_t *peer_ud_ae;
+    ucp_wireup_ep_t *wireup_ep;
+    uct_ep_h aux_ep;
+    ucp_rsc_index_t aux_rsc_index;
     ucp_lane_index_t remote_lane;
+    uct_ep_h lane_ep = ucp_ep_get_lane(ep, lane);
     ucs_status_t status;
+
+    /* Tolerate re-entry: the lane may have already been recovered (live ep
+     * swapped in by ucp_wireup_eps_progress) in a previous round while its
+     * FAILED bit is still set; the next recovery_progress tick clears it. */
+    if ((lane_ep != NULL) && !ucp_is_uct_ep_failed(lane_ep) &&
+        !ucp_wireup_ep_test(lane_ep)) {
+        return UCS_OK;
+    }
 
     /* Symmetric assumption: the peer's lane index mirrors ours.
      * ucp_address_pack() with lanes2remote==NULL stamps the sender-side local
@@ -1998,17 +2111,72 @@ ucp_ep_recovery_rebuild_p2p_lane(
         return status;
     }
 
+    /* Create the fresh inner RC EP early (iface-only) so its address is
+     * packable into LANES_ADDR; it is connected only after the probe. */
     status = ucp_ep_recovery_set_next_ep(ep, lane, NULL);
     if (status != UCS_OK) {
         return status;
     }
 
+    wireup_ep = ucp_wireup_ep(ucp_ep_get_lane(ep, lane));
+    ucs_assert(wireup_ep != NULL);
+
+    /* Probe gate: confirm the route via a UD aux uct_ep_check before
+     * connecting the fresh RC QP, so we don't churn reconnecting RC over a
+     * broken route. */
+    if (!(wireup_ep->recovery_probe_done &&
+          (wireup_ep->recovery_probe_status == UCS_OK))) {
+        if (wireup_ep->recovery_probe_in_flight) {
+            return UCS_INPROGRESS; /* wait for the probe completion */
+        }
+
+        peer_ud_ae = ucp_ep_recovery_find_peer_ud(ep, lane, remote_address);
+        if (peer_ud_ae == NULL) {
+            ucs_debug("ep %p: no peer UD addr for p2p lane %d yet", ep, lane);
+            return UCS_INPROGRESS;
+        }
+
+        /* Drop a stale aux from a previous (failed) probe before re-arming. */
+        if (wireup_ep->aux_ep != NULL) {
+            uct_ep_destroy(wireup_ep->aux_ep);
+            wireup_ep->aux_ep        = NULL;
+            wireup_ep->aux_rsc_index = UCP_NULL_RESOURCE;
+        }
+
+        status = ucp_ep_recovery_create_aux(ep, lane, peer_ud_ae, &aux_ep,
+                                            &aux_rsc_index);
+        if (status != UCS_OK) {
+            ucs_debug("ep %p: cannot create aux for p2p lane %d: %s", ep, lane,
+                      ucs_status_string(status));
+            return UCS_INPROGRESS;
+        }
+
+        wireup_ep->flags |= UCP_WIREUP_EP_FLAG_FAILED_PROBING;
+        status = ucp_wireup_ep_arm_recovery_probe(wireup_ep, aux_ep,
+                                                  aux_rsc_index);
+        if (status != UCS_OK) {
+            /* INPROGRESS (async) or a synchronous error: retry next round. */
+            return UCS_INPROGRESS;
+        }
+        /* Synchronous probe success - fall through to connect. */
+    }
+
+    /* Probe succeeded: connect the fresh inner RC EP to the peer. */
     status = ucp_wireup_ep_connect_to_ep_v2(ucp_ep_get_lane(ep, lane),
                                             address_entry, ep_entry);
     if (status != UCS_OK) {
         ucs_diag("ep %p: connect_to_ep_v2 failed for recovery p2p lane %d: %s",
                  ep, lane, ucs_status_string(status));
+        /* Re-validate the route on the next round. */
+        wireup_ep->recovery_probe_done = 0;
         return status;
+    }
+
+    /* Tear down the probe aux before promoting the lane to ready. */
+    if (wireup_ep->aux_ep != NULL) {
+        uct_ep_destroy(wireup_ep->aux_ep);
+        wireup_ep->aux_ep        = NULL;
+        wireup_ep->aux_rsc_index = UCP_NULL_RESOURCE;
     }
 
     ucp_ep_recovery_mark_ready(ep, lane);
