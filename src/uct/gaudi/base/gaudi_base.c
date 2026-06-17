@@ -169,7 +169,7 @@ uct_gaudi_base_configure_sys_device_from_fd(int fd, int index,
     struct hlthunk_hw_ip_info hw_ip;
     const unsigned sys_device_priority = 10;
     char device_name[16];
-    int rc;
+    int hw_ip_rc;
 
     ucs_assert(fd >= 0);
 
@@ -179,9 +179,9 @@ uct_gaudi_base_configure_sys_device_from_fd(int fd, int index,
     }
 
     memset(&hw_ip, 0, sizeof(hw_ip));
-    rc = hlthunk_get_hw_ip_info(fd, &hw_ip);
-    if (rc) {
-        ucs_debug("failed to get hw_ip info for fd %d (rc=%d)", fd, rc);
+    hw_ip_rc = hlthunk_get_hw_ip_info(fd, &hw_ip);
+    if (hw_ip_rc) {
+        ucs_debug("failed to get hw_ip info for fd %d (rc=%d)", fd, hw_ip_rc);
     }
 
     ucs_snprintf_safe(device_name, sizeof(device_name), "GAUDI_%d", index);
@@ -198,7 +198,7 @@ uct_gaudi_base_configure_sys_device_from_fd(int fd, int index,
                   ucs_status_string(status));
     }
 
-    if (rc == 0) {
+    if (hw_ip_rc == 0) {
         ucs_debug("registered %s (sys_dev %d module_id %u)", device_name,
                   *sys_dev_p, hw_ip.module_id);
     } else {
