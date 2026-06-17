@@ -3777,6 +3777,10 @@ void ucp_ep_req_purge(ucp_ep_h ucp_ep, ucp_request_t *req,
         }
 
         ucp_request_put(req);
+    } else if (req->flags & UCP_REQUEST_FLAG_RNDV_SEND_INTERNAL) {
+        ucs_assert(req->send.ep == ucp_ep);
+
+        ucp_proto_request_abort(req, status);
     } else if (req->send.uct.func == ucp_amo_sw_proto.progress_fetch) {
         /* Currently we don't support UCP EP request purging for proto mode */
         ucs_assert(!ucp_ep->worker->context->config.ext.proto_enable);

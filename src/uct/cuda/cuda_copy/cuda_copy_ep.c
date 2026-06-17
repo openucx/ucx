@@ -316,7 +316,8 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
         goto out_pop_and_release;
     }
 
-    cuda_event = ucs_mpool_get(&ctx.ctx_rsc->super.event_mp);
+    cuda_event = uct_cuda_base_event_desc_mpool_get(
+            &ctx.ctx_rsc->super.event_mp);
     if (ucs_unlikely(cuda_event == NULL)) {
         ucs_error("failed to allocate cuda event object");
         status = UCS_ERR_NO_MEMORY;

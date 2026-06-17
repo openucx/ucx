@@ -267,6 +267,17 @@ ucp_request_put(ucp_request_t *req)
 }
 
 static UCS_F_ALWAYS_INLINE void
+ucp_request_rndv_flush_complete(ucp_request_t *req)
+{
+    /* Complete the extra flush op held by a RNDV wrapper until the RNDV data
+     * path completes. */
+    if (ucs_unlikely(req->flags & UCP_REQUEST_FLAG_RNDV_FLUSH)) {
+        req->flags &= ~UCP_REQUEST_FLAG_RNDV_FLUSH;
+        ucp_worker_flush_ops_count_add(req->send.ep->worker, -1);
+    }
+}
+
+static UCS_F_ALWAYS_INLINE void
 ucp_request_complete_send(ucp_request_t *req, ucs_status_t status)
 {
     ucs_trace_req("completing send request %p (%p) " UCP_REQUEST_FLAGS_FMT

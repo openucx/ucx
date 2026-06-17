@@ -79,7 +79,7 @@ ucp_proto_rndv_ats_handler(void *arg, void *data, size_t length, unsigned flags)
         ucp_tag_offload_cancel_rndv(req);
     }
 
-    if (length >= sizeof(*ats)) {
+    if ((status == UCS_OK) && (length >= sizeof(*ats))) {
         /* ATS message carries a size field */
         ats = ucs_derived_of(rephdr, ucp_rndv_ack_hdr_t);
         if (!ucp_proto_common_frag_complete(req, ats->size, "rndv_ats")) {
@@ -89,9 +89,33 @@ ucp_proto_rndv_ats_handler(void *arg, void *data, size_t length, unsigned flags)
 
     ucp_send_request_id_release(req);
     ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 1, UCP_DT_MASK_ALL);
+    ucp_request_rndv_flush_complete(req);
     ucp_request_complete_send(req, status);
 
     return UCS_OK;
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_rndv_request_zcopy_complete(ucp_request_t *req, ucs_status_t status)
+{
+    ucp_proto_request_zcopy_complete_cb(req, status,
+                                        ucp_request_rndv_flush_complete);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_rndv_request_zcopy_complete_success(ucp_request_t *req)
+{
+    ucp_proto_rndv_request_zcopy_complete(req, UCS_OK);
+    return UCS_OK;
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_rndv_request_zcopy_completion(uct_completion_t *self)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t,
+                                          send.state.uct_comp);
+
+    ucp_proto_rndv_request_zcopy_complete(req, req->send.state.uct_comp.status);
 }
 
 static UCS_F_ALWAYS_INLINE size_t ucp_proto_rndv_rts_pack(
@@ -152,15 +176,29 @@ static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_rkey_destroy(ucp_request_t *req)
 {
     ucs_assert(req->send.rndv.rkey != NULL);
-    ucp_rkey_destroy(req->send.rndv.rkey);
+
+    /* RMA GET/RNDV borrows the user rkey for its internal RNDV receive. */
+    if (!(req->flags & UCP_REQUEST_FLAG_RNDV_GET_REQ)) {
+        ucp_rkey_destroy(req->send.rndv.rkey);
+    }
+
     req->send.rndv.rkey = NULL;
 }
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_rndv_recv_complete(ucp_request_t *req);
 
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_recv_complete_with_ats(ucp_request_t *req, uint8_t ats_stage)
 {
     if (req->send.rndv.rkey != NULL) {
         ucp_proto_rndv_rkey_destroy(req);
+    }
+
+    if (req->flags & UCP_REQUEST_FLAG_RNDV_GET_REQ) {
+        /* RMA GET/RNDV has no peer RTS request to acknowledge. */
+        ucp_proto_rndv_recv_complete(req);
+        return;
     }
 
     ucp_proto_request_set_stage(req, ats_stage);
@@ -182,6 +220,9 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_frag_request_alloc(
 
     ucp_proto_request_send_init(freq, req->send.ep, UCP_REQUEST_FLAG_RNDV_FRAG);
     ucp_request_set_super(freq, req);
+    if (req->flags & UCP_REQUEST_FLAG_RNDV_GET_REQ) {
+        freq->flags |= UCP_REQUEST_FLAG_RNDV_GET_REQ;
+    }
 
     *freq_p = freq;
     return UCS_OK;
@@ -360,7 +401,10 @@ ucp_proto_rndv_recv_req_complete(ucp_request_t *recv_req, ucs_status_t status)
     ucp_trace_req(recv_req, "rndv_recv_req_complete status '%s'",
                   ucs_status_string(status));
 
-    if (recv_req->flags & UCP_REQUEST_FLAG_RECV_AM) {
+    if (recv_req->flags & UCP_REQUEST_FLAG_RNDV_RECV_INTERNAL) {
+        recv_req->status = status;
+        recv_req->recv.rndv.complete_cb(recv_req);
+    } else if (recv_req->flags & UCP_REQUEST_FLAG_RECV_AM) {
         ucp_request_complete_am_recv(recv_req, status);
     } else {
         ucs_assert(recv_req->flags & UCP_REQUEST_FLAG_RECV_TAG);
