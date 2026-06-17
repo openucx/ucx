@@ -1255,7 +1255,7 @@ void ucs_topo_restore_state(ucs_global_state_t *state)
         status = ucs_topo_bus_value_hash_add_nolock(&device->bus_id,
                                                     device->user_value,
                                                     sys_dev);
-        ucs_assert(status == UCS_OK);
+        ucs_assert_always(status == UCS_OK);
     }
 
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
