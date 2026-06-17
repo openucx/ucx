@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2021. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2021-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -10,7 +10,9 @@
 
 #include "proto_rndv.inl"
 #include "rndv_mtype.inl"
+
 #include <ucp/proto/proto_debug.h>
+#include <ucp/rma/rma_rndv.h>
 
 
 #define UCP_PROTO_RNDV_GET_DESC "read from remote"
@@ -60,8 +62,7 @@ ucp_proto_rndv_get_common_probe(const ucp_proto_init_params_t *init_params,
     ucp_proto_perf_t *perf;
     ucs_status_t status;
 
-    if ((init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
-        !ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_RECV,
+    if (!ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_RECV,
                                  support_ppln)) {
         return;
     }
@@ -89,12 +90,20 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_get_common_send(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
         const uct_iov_t *iov, size_t offset, uct_completion_t *comp)
 {
-    uct_rkey_t tl_rkey      = ucp_rkey_get_tl_rkey(req->send.rndv.rkey,
-                                                   lpriv->super.rkey_index);
-    uint64_t remote_address = req->send.rndv.remote_address + offset;
+    ucp_ep_h ep              = req->send.ep;
+    uct_ep_h uct_ep          = ucp_ep_get_lane(ep, lpriv->super.lane);
+    uct_rkey_t tl_rkey       = ucp_rkey_get_tl_rkey(req->send.rndv.rkey,
+                                                    lpriv->super.rkey_index);
+    uint64_t remote_address  = req->send.rndv.remote_address + offset;
+    ucp_request_t *recv_req;
+    ucs_status_t status;
 
-    return uct_ep_get_zcopy(ucp_ep_get_lane(req->send.ep, lpriv->super.lane),
-                            iov, 1, remote_address, tl_rkey, comp);
+    recv_req = ucp_rma_rndv_flush_open(req);
+    status   = uct_ep_get_zcopy(uct_ep, iov, 1, remote_address, tl_rkey,
+                                comp);
+    ucp_rma_rndv_flush_close(recv_req, ep, status);
+
+    return status;
 }
 
 static void
@@ -227,6 +236,7 @@ ucp_proto_t ucp_rndv_get_zcopy_proto = {
     .name     = "rndv/get/zcopy",
     .desc     = UCP_PROTO_ZCOPY_DESC " " UCP_PROTO_RNDV_GET_DESC,
     .flags    = 0,
+    .dt_mask  = UCS_BIT(UCP_DATATYPE_CONTIG),
     .probe    = ucp_proto_rndv_get_zcopy_probe,
     .query    = ucp_proto_rndv_get_zcopy_query,
     .progress = {
@@ -376,6 +386,7 @@ ucp_proto_t ucp_rndv_get_mtype_proto = {
     .name     = "rndv/get/mtype",
     .desc     = NULL,
     .flags    = 0,
+    .dt_mask  = UCS_BIT(UCP_DATATYPE_CONTIG),
     .probe    = ucp_proto_rndv_get_mtype_probe,
     .query    = ucp_proto_rndv_get_mtype_query,
     .progress = {

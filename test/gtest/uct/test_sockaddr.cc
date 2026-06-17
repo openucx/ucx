@@ -1142,7 +1142,12 @@ public:
          * for the connect() to fail when connecting to a non-existing ip.
          * A transport for which this value is not configurable, like rdmacm,
          * will have no effect. */
-        modify_config("SYN_CNT", "1", SETENV_IF_NOT_EXIST);
+        modify_config("TCP_CM_SYN_CNT", "1", IGNORE_IF_NOT_EXIST);
+
+        /* TCP_SYNCNT may still leave SYN retransmission timeouts in the
+         * minutes range on some systems. Bound TCP_USER_TIMEOUT as well when
+         * the transport supports it. */
+        modify_config("TCP_CM_USER_TIMEOUT", "1s", IGNORE_IF_NOT_EXIST);
 
         test_uct_sockaddr::init();
     }

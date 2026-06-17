@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2021. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2021-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -513,8 +513,8 @@ ucp_proto_rndv_find_ctrl_lane(const ucp_proto_init_params_t *params)
     num_lanes = ucp_proto_common_find_lanes(params,
                                             UCP_PROTO_COMMON_INIT_FLAG_HDR_ONLY,
                                             UCP_LANE_TYPE_AM,
-                                            UCT_IFACE_FLAG_AM_BCOPY, 1, 0, NULL,
-                                            &lane);
+                                            UCT_IFACE_FLAG_AM_BCOPY, 0, 1, 0,
+                                            NULL, &lane);
     if (num_lanes == 0) {
         ucs_debug("no active message lane for %s",
                   ucp_proto_id_field(params->proto_id, name));
@@ -580,6 +580,7 @@ void ucp_proto_rndv_rts_query(const ucp_proto_query_params_t *params,
 void ucp_proto_rndv_rts_abort(ucp_request_t *req, ucs_status_t status)
 {
     ucp_am_release_user_header(req);
+    ucp_request_rndv_flush_complete(req);
 
     if (ucp_request_memh_invalidate(req, status)) {
         ucp_proto_rndv_rts_reset(req);
@@ -817,6 +818,7 @@ UCS_PROFILE_FUNC_VOID(ucp_proto_rndv_receive_start,
     ucp_ep_h ep;
 
     UCP_WORKER_GET_VALID_EP_BY_ID(&ep, worker, rts->sreq.ep_id, {
+        ucp_datatype_iter_cleanup(&recv_req->recv.dt_iter, 1, UCP_DT_MASK_ALL);
         ucp_proto_rndv_recv_req_complete(recv_req, UCS_ERR_CANCELED);
         return;
     }, "RTS on non-existing endpoint");
@@ -824,6 +826,8 @@ UCS_PROFILE_FUNC_VOID(ucp_proto_rndv_receive_start,
     req = ucp_request_get(worker);
     if (req == NULL) {
         ucs_error("failed to allocate rendezvous reply");
+        ucp_datatype_iter_cleanup(&recv_req->recv.dt_iter, 1, UCP_DT_MASK_ALL);
+        ucp_proto_rndv_recv_req_complete(recv_req, UCS_ERR_NO_MEMORY);
         return;
     }
 
@@ -856,6 +860,7 @@ UCS_PROFILE_FUNC_VOID(ucp_proto_rndv_receive_start,
     if (status != UCS_OK) {
         ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 1, UCP_DT_MASK_ALL);
         ucs_mpool_put(req);
+        ucp_proto_rndv_recv_req_complete(recv_req, status);
         return;
     }
 
@@ -868,16 +873,13 @@ UCS_PROFILE_FUNC_VOID(ucp_proto_rndv_receive_start,
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_rndv_send_start,
-                 (worker, req, op_attr_mask, rtr, header_length, sg_count),
+                 (worker, req, op_attr_mask, rtr, rkey_buffer, rkey_length,
+                  sg_count),
                  ucp_worker_h worker, ucp_request_t *req, uint32_t op_attr_mask,
-                 const ucp_rndv_rtr_hdr_t *rtr, size_t header_length,
-                 uint8_t sg_count)
+                 const ucp_rndv_rtr_hdr_t *rtr, const void *rkey_buffer,
+                 size_t rkey_length, uint8_t sg_count)
 {
     ucs_status_t status;
-    size_t rkey_length;
-
-    ucs_assert(header_length >= sizeof(*rtr));
-    rkey_length = header_length - sizeof(*rtr);
 
     ucp_proto_rndv_check_rkey_length(rtr->address, rkey_length, "rtr");
     req->send.rndv.remote_address = rtr->address;
@@ -886,7 +888,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_rndv_send_start,
 
     ucs_assert(rtr->size == req->send.state.dt_iter.length);
     status = ucp_proto_rndv_send_reply(worker, req, UCP_OP_ID_RNDV_SEND,
-                                       op_attr_mask, rtr->size, rtr + 1,
+                                       op_attr_mask, rtr->size, rkey_buffer,
                                        rkey_length, sg_count);
     if (status != UCS_OK) {
         return status;
@@ -909,7 +911,100 @@ static void ucp_proto_rndv_send_complete_one(void *request, ucs_status_t status,
     }
 
     ucp_send_request_id_release(req);
-    ucp_proto_request_zcopy_complete(req, status);
+    ucp_proto_rndv_request_zcopy_complete(req, status);
+}
+
+static void
+ucp_proto_rndv_rtr_req_send_complete(void *request,
+                                     ucs_status_t UCS_V_UNUSED status,
+                                     void *UCS_V_UNUSED user_data)
+{
+    ucp_request_t *req = (ucp_request_t*)request - 1;
+
+    ucp_request_put(req);
+}
+
+static void
+ucp_proto_rndv_rtr_req_send_atp_err(ucp_ep_h ep,
+                                    ucs_ptr_map_key_t remote_req_id,
+                                    ucs_status_t status)
+{
+    ucp_request_t *req;
+
+    req = ucp_request_get(ep->worker);
+    if (req == NULL) {
+        ucs_error("failed to allocate RNDV RTR_REQ error ATP");
+        return;
+    }
+
+    ucp_proto_request_send_init(req, ep, 0);
+    ucp_rndv_req_send_ack(req, 0, remote_req_id, status, UCP_AM_ID_RNDV_ATP,
+                          "send_atp_err");
+}
+
+static void
+ucp_proto_rndv_rtr_req_sreq_init(ucp_ep_h ep, ucp_request_t *req,
+                                 const ucp_rndv_rtr_req_hdr_t *rtr_req)
+{
+    const ucp_rndv_rtr_hdr_t *rtr = &rtr_req->super;
+    ucp_memory_info_t mem_info    = {
+        .type    = rtr_req->mem_type,
+        .sys_dev = rtr_req->sys_dev
+    };
+
+    ucp_proto_request_send_init(req, ep,
+                                UCP_REQUEST_FLAG_RNDV_SEND_INTERNAL);
+    ucp_request_set_callback(req, send.cb,
+                             ucp_proto_rndv_rtr_req_send_complete);
+    req->send.buffer              = (void*)(uintptr_t)rtr_req->address;
+    req->send.length              = rtr->size;
+    req->send.mem_type            = rtr_req->mem_type;
+    req->send.rndv.remote_req_id  = rtr->rreq_id;
+    req->send.rndv.rkey           = NULL;
+    req->send.rndv.remote_address = rtr_req->address;
+    ucp_datatype_iter_init_contig(&req->send.state.dt_iter,
+                                  (void*)(uintptr_t)rtr_req->address,
+                                  rtr->size, &mem_info);
+}
+
+static ucs_status_t
+ucp_proto_rndv_handle_rtr_req(ucp_worker_h worker, void *data, size_t length)
+{
+    const ucp_rndv_rtr_req_hdr_t *rtr_req = data;
+    const void *rkey_buffer;
+    ucp_request_t *req;
+    ucs_status_t status;
+    ucp_ep_h ep;
+
+    if (length < sizeof(*rtr_req)) {
+        return UCS_ERR_MESSAGE_TRUNCATED;
+    }
+
+    UCP_WORKER_GET_EP_BY_ID(&ep, worker, rtr_req->req.ep_id, return UCS_OK,
+                            "RNDV RTR_REQ");
+
+    req = ucp_request_get(worker);
+    if (req == NULL) {
+        ucs_error("failed to allocate RNDV RTR_REQ send request");
+        ucp_proto_rndv_rtr_req_send_atp_err(ep, rtr_req->super.rreq_id,
+                                            UCS_ERR_NO_MEMORY);
+        return UCS_OK;
+    }
+
+    rkey_buffer = rtr_req + 1;
+    ucp_proto_rndv_rtr_req_sreq_init(ep, req, rtr_req);
+    status = ucp_proto_rndv_send_start(worker, req, 0, &rtr_req->super,
+                                       rkey_buffer,
+                                       length - sizeof(*rtr_req), 1);
+    if (status != UCS_OK) {
+        ucp_proto_rndv_rtr_req_send_atp_err(ep, rtr_req->super.rreq_id,
+                                            status);
+        ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 1,
+                                  UCP_DT_MASK_ALL);
+        ucp_request_put(req);
+    }
+
+    return UCS_OK;
 }
 
 ucs_status_t
@@ -922,6 +1017,14 @@ ucp_proto_rndv_handle_rtr(void *arg, void *data, size_t length, unsigned flags)
     uint32_t op_attr_mask;
     ucs_status_t status;
     uint8_t sg_count;
+
+    if (length < sizeof(*rtr)) {
+        return UCS_ERR_MESSAGE_TRUNCATED;
+    }
+
+    if (rtr->sreq_id == UCS_PTR_MAP_KEY_INVALID) {
+        return ucp_proto_rndv_handle_rtr_req(worker, data, length);
+    }
 
     UCP_SEND_REQUEST_GET_BY_ID(&req, worker, rtr->sreq_id, 0, return UCS_OK,
                                "RTR %p", rtr);
@@ -950,7 +1053,8 @@ ucp_proto_rndv_handle_rtr(void *arg, void *data, size_t length, unsigned flags)
 
         sg_count = select_param->sg_count;
         status   = ucp_proto_rndv_send_start(worker, req, op_attr_mask, rtr,
-                                             length, sg_count);
+                                             rtr + 1, length - sizeof(*rtr),
+                                             sg_count);
         if (status != UCS_OK) {
             goto err_request_fail;
         }
@@ -980,7 +1084,8 @@ ucp_proto_rndv_handle_rtr(void *arg, void *data, size_t length, unsigned flags)
         status = ucp_proto_rndv_send_start(worker, freq,
                                            op_attr_mask |
                                            UCP_OP_ATTR_FLAG_MULTI_SEND,
-                                           rtr, length, 1);
+                                           rtr, rtr + 1,
+                                           length - sizeof(*rtr), 1);
         if (status != UCS_OK) {
             goto err_put_freq;
         }

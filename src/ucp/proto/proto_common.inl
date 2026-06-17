@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -94,10 +94,12 @@ ucp_proto_request_zcopy_clean(ucp_request_t *req, unsigned dt_mask)
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_proto_request_zcopy_complete(ucp_request_t *req, ucs_status_t status)
+ucp_proto_request_zcopy_complete_cb(ucp_request_t *req, ucs_status_t status,
+                                    ucp_request_callback_t complete_cb)
 {
     ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 1,
-                              UCP_DT_MASK_CONTIG_IOV);
+                              UCP_DT_MASK_CONTIG_IOV |
+                              UCS_BIT(UCP_DATATYPE_SGL));
     if (ucp_proto_select_op_id(&req->send.proto_config->select_param) ==
         UCP_OP_ID_TAG_SEND) {
         UCP_EP_STAT_TAG_OP(req->send.ep, EAGER)
@@ -108,8 +110,18 @@ ucp_proto_request_zcopy_complete(ucp_request_t *req, ucs_status_t status)
         !(req->send.ep->flags & UCP_EP_FLAG_FAILED)) {
         ucp_proto_request_restart(req);
     } else {
+        if (complete_cb != NULL) {
+            complete_cb(req);
+        }
+
         ucp_request_complete_send(req, status);
     }
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_request_zcopy_complete(ucp_request_t *req, ucs_status_t status)
+{
+    ucp_proto_request_zcopy_complete_cb(req, status, NULL);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -461,12 +473,6 @@ ucp_proto_common_is_net_dev(const ucp_proto_init_params_t *params,
 {
     return ucp_proto_common_get_tl_rsc(params, lane)->dev_type ==
            UCT_DEVICE_TYPE_NET;
-}
-
-static UCS_F_ALWAYS_INLINE int
-ucp_proto_common_bandwidth_equal(double bw1, double bw2)
-{
-    return fabs(bw1 - bw2) <= UCP_PROTO_PERF_EPSILON;
 }
 
 static UCS_F_ALWAYS_INLINE double
