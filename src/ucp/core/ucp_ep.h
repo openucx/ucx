@@ -1016,6 +1016,15 @@ int ucp_ep_recovery_progress(ucp_ep_h ep);
 
 
 /**
+ * Rebuild UCT endpoints for the given set of currently-failed lanes using the
+ * peer addresses in @a remote_address. Returns the bitmap of lanes rebuilt.
+ */
+ucp_lane_map_t
+ucp_ep_recovery_rebuild_lanes(ucp_ep_h ep, ucp_lane_map_t lanes_to_rebuild,
+                              const ucp_unpacked_address_t *remote_address);
+
+
+/**
  * Mark a subset of lanes as UCP_LANE_TYPE_FAILED and arm recovery.
  */
 ucs_status_t ucp_ep_failover_reconfig(ucp_ep_h ucp_ep,

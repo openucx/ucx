@@ -261,6 +261,25 @@ void ucp_wireup_send_lanes_addr_msg(ucp_ep_h ep, uint8_t msg_type,
                                     ucp_lane_map_t provided_lane_map);
 
 
+/**
+ * Find the remote p2p address entry for @a remote_lane (used by lane recovery).
+ */
+ucs_status_t
+ucp_wireup_find_remote_p2p_addr(ucp_ep_h ep, ucp_lane_index_t remote_lane,
+                                const ucp_unpacked_address_t *remote_address,
+                                const ucp_address_entry_t **address_entry_p,
+                                const ucp_address_entry_ep_addr_t **ep_entry_p);
+
+
+/**
+ * Create a fully-connected CONNECT_TO_IFACE UCT endpoint from @a address.
+ */
+ucs_status_t ucp_wireup_iface_ep_create(ucp_worker_iface_t *wiface,
+                                        const ucp_address_entry_t *address,
+                                        unsigned path_index,
+                                        uct_ep_h *uct_ep_p);
+
+
 double ucp_wireup_iface_lat_distance_v1(const ucp_worker_iface_t *wiface);
 
 double ucp_wireup_iface_lat_distance_v2(const ucp_worker_iface_t *wiface,
