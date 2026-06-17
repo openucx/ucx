@@ -207,24 +207,22 @@ uct_ze_base_set_device_sys_dev(uct_ze_device_t *device, int device_idx,
         ucs_debug("device %d shares sys_dev %u with device %d (same pci)",
                   device_idx, device->sys_dev, found_idx);
     } else {
-        status = ucs_topo_find_device_by_bus_id(bus_id, &device->sys_dev);
+        status = ucs_topo_find_device_by_bus_id_and_user_value(
+                bus_id, (uintptr_t)device_idx, &device->sys_dev);
         if (status != UCS_OK) {
-            ucs_debug("ucs_topo_find_device_by_bus_id failed for device %d",
+            ucs_debug("ucs_topo_find_device_by_bus_id_and_user_value failed "
+                      "for device %d",
                       device_idx);
             device->sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
         } else {
             ucs_snprintf_safe(name, sizeof(name), "GPU%d", device_idx);
             ucs_topo_sys_device_set_name(device->sys_dev, name, 10);
 
-            status = ucs_topo_sys_device_set_user_value(device->sys_dev,
-                                                        device_idx);
-            if (status == UCS_OK) {
-                status = ucs_topo_sys_device_enable_aux_path(device->sys_dev);
-                if (status != UCS_OK) {
-                    ucs_debug("ucs_topo_sys_device_enable_aux_path failed "
-                              "for device %d",
-                              device_idx);
-                }
+            status = ucs_topo_sys_device_enable_aux_path(device->sys_dev);
+            if (status != UCS_OK) {
+                ucs_debug("ucs_topo_sys_device_enable_aux_path failed "
+                          "for device %d",
+                          device_idx);
             }
         }
 

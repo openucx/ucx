@@ -171,11 +171,10 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
  * Find system device by pci bus id and user-defined value.
  *
  * This is used for logical devices which share the same PCI bus id but still
- * need different system device indexes. If an existing system device with the
- * same bus id and user value exists, it is returned. Otherwise, if the
- * canonical system device for this bus id has no user value, the requested user
- * value is assigned to it and it is returned; if not, a new system device with
- * the same bus id is created.
+ * need different system device indexes. The lookup key is a combination of the
+ * bus id and the user value. BDF-only lookup uses an implicit empty user value.
+ * If an existing system device with the same bus id and user value exists, it is
+ * returned. Otherwise, a system device for this key is registered and returned.
  *
  * @param [in]  bus_id      pointer to bus id of the device of interest.
  * @param [in]  user_value  user-defined value identifying the logical device.
@@ -389,18 +388,6 @@ ucs_numa_node_t ucs_topo_sys_device_get_numa_node(ucs_sys_device_t sys_dev);
  */
 ucs_status_t ucs_topo_sys_device_set_numa_node(ucs_sys_device_t sys_dev,
                                                ucs_numa_node_t numa_node);
-
-
-/**
- * Set a user-defined value for a given system device.
- *
- * @param [in] sys_dev System device index.
- * @param [in] value   User-defined value to set.
- *
- * @return UCS_OK on success, error otherwise.
- */
-ucs_status_t
-ucs_topo_sys_device_set_user_value(ucs_sys_device_t sys_dev, uintptr_t value);
 
 
 /**

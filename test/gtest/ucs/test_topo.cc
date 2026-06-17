@@ -166,7 +166,8 @@ UCS_TEST_F(test_topo, find_device_by_bus_id_and_user_value) {
     static const uintptr_t user_value1 = 17;
     static const uintptr_t user_value2 = 42;
     ucs_global_state_t *state;
-    ucs_sys_device_t dev1, dev2, dev1_again, dev2_again, bdf_dev;
+    ucs_sys_device_t dev1, dev2, dev1_again, dev2_again;
+    ucs_sys_device_t bdf_dev, bdf_dev_again;
     ucs_sys_bus_id_t dummy_bus_id;
     ucs_sys_bus_id_t bus_id1;
     ucs_sys_bus_id_t bus_id2;
@@ -196,10 +197,13 @@ UCS_TEST_F(test_topo, find_device_by_bus_id_and_user_value) {
 
     status = ucs_topo_find_device_by_bus_id(&dummy_bus_id, &bdf_dev);
     ASSERT_UCS_OK(status);
-    EXPECT_EQ(dev1, bdf_dev);
+    EXPECT_NE(dev1, bdf_dev);
+    EXPECT_NE(dev2, bdf_dev);
 
     EXPECT_EQ(user_value1, ucs_topo_sys_device_get_user_value(dev1));
     EXPECT_EQ(user_value2, ucs_topo_sys_device_get_user_value(dev2));
+    EXPECT_EQ(UCS_SYS_DEVICE_USER_VALUE_EMPTY,
+              ucs_topo_sys_device_get_user_value(bdf_dev));
 
     status = ucs_topo_get_device_bus_id(dev1, &bus_id1);
     ASSERT_UCS_OK(status);
@@ -218,9 +222,17 @@ UCS_TEST_F(test_topo, find_device_by_bus_id_and_user_value) {
     ASSERT_TRUE(state != NULL);
     ucs_topo_restore_state(state);
 
-    status = ucs_topo_find_device_by_bus_id(&dummy_bus_id, &bdf_dev);
+    status = ucs_topo_find_device_by_bus_id(&dummy_bus_id, &bdf_dev_again);
     ASSERT_UCS_OK(status);
-    EXPECT_EQ(dev1, bdf_dev);
+    EXPECT_EQ(bdf_dev, bdf_dev_again);
+    EXPECT_NE(dev1, bdf_dev_again);
+    EXPECT_NE(dev2, bdf_dev_again);
+
+    status = ucs_topo_find_device_by_bus_id_and_user_value(&dummy_bus_id,
+                                                           user_value1,
+                                                           &dev1_again);
+    ASSERT_UCS_OK(status);
+    EXPECT_EQ(dev1, dev1_again);
 
     status = ucs_topo_find_device_by_bus_id_and_user_value(&dummy_bus_id,
                                                            user_value2,
@@ -300,7 +312,6 @@ UCS_TEST_F(test_topo, print_info) {
 UCS_TEST_F(test_topo, bdf_name) {
     static const char *bdf_name = "0002:8f:5c.0";
     static const char *dev_name = "test_bdf_name";
-    static const uintptr_t user_value = 1337;
 
     ucs_sys_device_t sys_dev    = UCS_SYS_DEVICE_ID_UNKNOWN;
 
@@ -311,18 +322,10 @@ UCS_TEST_F(test_topo, bdf_name) {
     status = ucs_topo_sys_device_set_name(sys_dev, dev_name, 10);
     ASSERT_UCS_OK(status);
 
-    status = ucs_topo_sys_device_set_user_value(sys_dev, user_value);
-    ASSERT_UCS_OK(status);
-
     const char *result_name = ucs_topo_sys_device_get_name(sys_dev);
     ASSERT_UCS_OK(status);
     EXPECT_EQ(std::string(dev_name), std::string(result_name));
     UCS_TEST_MESSAGE << "name: " << result_name;
-
-    uintptr_t result_user_value = ucs_topo_sys_device_get_user_value(sys_dev);
-    ASSERT_UCS_OK(status);
-    EXPECT_EQ(user_value, result_user_value);
-    UCS_TEST_MESSAGE << "user value: " << result_user_value;
 
     char name_buffer[UCS_SYS_BDF_NAME_MAX];
     const char *found_name = ucs_topo_sys_device_bdf_name(sys_dev, name_buffer,
