@@ -312,18 +312,16 @@ UCS_STATIC_INIT
         .memset    = ucx_perf_ze_memset
     };
 
-    ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_ZE_HOST] = &ze_host_allocator;
-    ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_ZE_DEVICE] =
-            &ze_device_allocator;
-    ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_ZE_MANAGED] =
-            &ze_managed_allocator;
+    ucx_perf_allocator_register(&ze_host_allocator);
+    ucx_perf_allocator_register(&ze_device_allocator);
+    ucx_perf_allocator_register(&ze_managed_allocator);
 }
 
 UCS_STATIC_CLEANUP
 {
     ucx_perf_ze_destroy_tls_cmdlist();
 
-    ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_ZE_HOST]    = NULL;
-    ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_ZE_DEVICE]  = NULL;
-    ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_ZE_MANAGED] = NULL;
+    ucx_perf_allocator_unregister(&ze_managed_allocator);
+    ucx_perf_allocator_unregister(&ze_device_allocator);
+    ucx_perf_allocator_unregister(&ze_host_allocator);
 }

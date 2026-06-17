@@ -160,11 +160,10 @@ UCS_STATIC_INIT {
         .memset    = ucx_perf_rocm_memset
     };
 
-    ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_ROCM]         = &rocm_allocator;
-    ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_ROCM_MANAGED] = &rocm_managed_allocator;
+    ucx_perf_allocator_register(&rocm_allocator);
+    ucx_perf_allocator_register(&rocm_managed_allocator);
 }
 UCS_STATIC_CLEANUP {
-    ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_ROCM]         = NULL;
-    ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_ROCM_MANAGED] = NULL;
-
+    ucx_perf_allocator_unregister(&rocm_managed_allocator);
+    ucx_perf_allocator_unregister(&rocm_allocator);
 }

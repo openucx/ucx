@@ -30,6 +30,10 @@ static void print_memory_type_usage(void)
         printf("                        %s - %s\n", ucs_memory_type_names[it],
                ucs_memory_type_descs[it]);
     }
+    if (ucx_perf_allocator_by_name("cuda-async") != NULL) {
+        printf("                        cuda-async - NVIDIA GPU memory allocated "
+               "with cudaMallocAsync\n");
+    }
 }
 
 static void usage(const struct perftest_context *ctx, const char *program)
@@ -88,8 +92,9 @@ static void usage(const struct perftest_context *ctx, const char *program)
                                 ctx->params.super.msg_size_list[0]);
     printf("                    for example: \"-s 16,48,8192,8192,14\"\n");
     printf("                    compact form example: \"-s 1024:16 expands to [1024, ..., 1024] with 16 elements\n");
-    printf("     -m <send mem type>[,<recv mem type>]\n");
-    printf("                    memory type of message for sender and receiver (host)\n");
+    printf("     -m <send memory>[,<recv memory>]\n");
+    printf("                    memory allocator for sender and receiver "
+           "(host)\n");
     print_memory_type_usage();
     printf("     -n <iters>     number of iterations to run (%"PRIu64")\n", ctx->params.super.max_iter);
     printf("     -w <iters>     number of warm-up iterations (%"PRIu64")\n",
@@ -235,6 +240,33 @@ static ucs_status_t parse_mem_type(const char *opt_arg,
     return UCS_ERR_INVALID_PARAM;
 }
 
+static ucs_status_t parse_perf_mem_allocator(const char *opt_arg,
+                                             ucs_memory_type_t *mem_type,
+                                             char *alloc_name)
+{
+    const ucx_perf_allocator_t *allocator;
+
+    if (opt_arg == NULL) {
+        ucs_error("memory allocator string is NULL");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (strlen(opt_arg) >= UCX_PERF_ALLOC_NAME_MAX) {
+        ucs_error("memory allocator name is too long: \"%s\"", opt_arg);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    allocator = ucx_perf_allocator_by_name(opt_arg);
+    if (allocator != NULL) {
+        *mem_type = allocator->mem_type;
+        ucs_strncpy_safe(alloc_name, opt_arg, UCX_PERF_ALLOC_NAME_MAX);
+        return UCS_OK;
+    }
+
+    ucs_error("unsupported memory allocator: \"%s\"", opt_arg);
+    return UCS_ERR_INVALID_PARAM;
+}
+
 static ucs_status_t
 parse_accel_device(char *opt_arg, ucx_perf_accel_dev_t *dev)
 {
@@ -273,13 +305,15 @@ parse_accel_device(char *opt_arg, ucx_perf_accel_dev_t *dev)
 
 static ucs_status_t parse_mem_type_params(const char *opt_arg,
                                           ucs_memory_type_t *send_mem_type,
-                                          ucs_memory_type_t *recv_mem_type)
+                                          ucs_memory_type_t *recv_mem_type,
+                                          char *send_alloc_name,
+                                          char *recv_alloc_name)
 {
-    const char *delim   = ",";
-    char *token         = strtok((char*)opt_arg, delim);
+    const char *delim = ",";
+    char *token       = strtok((char*)opt_arg, delim);
     ucs_status_t status;
 
-    status = parse_mem_type(token, send_mem_type);
+    status = parse_perf_mem_allocator(token, send_mem_type, send_alloc_name);
     if (status != UCS_OK) {
         return status;
     }
@@ -287,9 +321,11 @@ static ucs_status_t parse_mem_type_params(const char *opt_arg,
     token = strtok(NULL, delim);
     if (NULL == token) {
         *recv_mem_type = *send_mem_type;
+        ucs_strncpy_safe(recv_alloc_name, send_alloc_name,
+                         UCX_PERF_ALLOC_NAME_MAX);
         return UCS_OK;
     } else {
-        return parse_mem_type(token, recv_mem_type);
+        return parse_perf_mem_allocator(token, recv_mem_type, recv_alloc_name);
     }
 }
 
@@ -753,7 +789,9 @@ ucs_status_t parse_test_params(perftest_params_t *params, char opt,
         }
     case 'm':
         return parse_mem_type_params(opt_arg, &params->super.send_mem_type,
-                                     &params->super.recv_mem_type);
+                                     &params->super.recv_mem_type,
+                                     params->super.send_mem_alloc_name,
+                                     params->super.recv_mem_alloc_name);
     case 'a':
         return parse_accel_device_params(opt_arg, &params->super.send_device,
                                          &params->super.recv_device);

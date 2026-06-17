@@ -30,6 +30,8 @@
 #   include <omp.h>
 #endif /* _OPENMP */
 
+#define UCX_PERF_ALLOCATOR_MAX (UCS_MEMORY_TYPE_LAST + 16)
+
 #define ATOMIC_OP_CONFIG(_size, _op32, _op64, _op, _msg, _params, _status) \
     _status = __get_atomic_flag((_size), (_op32), (_op64), (_op)); \
     if (_status != UCS_OK) { \
@@ -83,10 +85,67 @@ typedef struct {
 } ucp_perf_flush_context_t;
 
 
-const ucx_perf_allocator_t* ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_LAST];
+static const ucx_perf_allocator_t*
+        ucx_perf_allocators[UCX_PERF_ALLOCATOR_MAX];
+static unsigned ucx_perf_num_allocators;
 
 const ucx_perf_device_dispatcher_t*
 ucx_perf_mem_type_device_dispatchers[UCS_MEMORY_TYPE_LAST];
+
+ucs_status_t
+ucx_perf_allocator_register(const ucx_perf_allocator_t *allocator)
+{
+    const char *name = ucx_perf_allocator_name(allocator);
+    unsigned i;
+
+    if (strlen(name) >= UCX_PERF_ALLOC_NAME_MAX) {
+        ucs_error("perftest memory allocator name is too long: \"%s\"", name);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    for (i = 0; i < ucx_perf_num_allocators; ++i) {
+        if (!strcmp(name, ucx_perf_allocator_name(ucx_perf_allocators[i]))) {
+            return (ucx_perf_allocators[i] == allocator) ?
+                   UCS_OK : UCS_ERR_ALREADY_EXISTS;
+        }
+    }
+
+    if (ucx_perf_num_allocators == ucs_static_array_size(ucx_perf_allocators)) {
+        ucs_error("too many perftest memory allocators");
+        return UCS_ERR_EXCEEDS_LIMIT;
+    }
+
+    ucx_perf_allocators[ucx_perf_num_allocators++] = allocator;
+    return UCS_OK;
+}
+
+void ucx_perf_allocator_unregister(const ucx_perf_allocator_t *allocator)
+{
+    unsigned i;
+
+    for (i = 0; i < ucx_perf_num_allocators; ++i) {
+        if (ucx_perf_allocators[i] == allocator) {
+            --ucx_perf_num_allocators;
+            ucx_perf_allocators[i] =
+                    ucx_perf_allocators[ucx_perf_num_allocators];
+            ucx_perf_allocators[ucx_perf_num_allocators] = NULL;
+            return;
+        }
+    }
+}
+
+const ucx_perf_allocator_t *ucx_perf_allocator_by_name(const char *name)
+{
+    unsigned i;
+
+    for (i = 0; i < ucx_perf_num_allocators; ++i) {
+        if (!strcmp(name, ucx_perf_allocator_name(ucx_perf_allocators[i]))) {
+            return ucx_perf_allocators[i];
+        }
+    }
+
+    return NULL;
+}
 
 static const char *perf_iface_ops[] = {
     [ucs_ilog2(UCT_IFACE_FLAG_AM_SHORT)]         = "am short",
@@ -2163,23 +2222,32 @@ ucx_perf_funcs_t ucx_perf_funcs[] = {
                           ucp_perf_test_dispatch, ucp_perf_thread_barrier}
 };
 
+static const ucx_perf_allocator_t *ucx_perf_params_allocator(
+        const ucx_perf_params_t *params, int is_send)
+{
+    const char *alloc_name;
+
+    alloc_name = ucx_perf_mem_alloc_name(params, is_send);
+    return ucx_perf_allocator_by_name(alloc_name);
+}
+
 ucs_status_t ucx_perf_allocators_init(ucx_perf_context_t *perf,
                                       const ucx_perf_params_t *params)
 {
-    ucs_debug("set send allocator by send mem type %s",
-              ucs_memory_type_names[params->send_mem_type]);
-    perf->send_allocator = ucx_perf_mem_type_allocators[params->send_mem_type];
-
-    ucs_debug("set recv allocator by recv mem type %s",
-              ucs_memory_type_names[params->recv_mem_type]);
-    perf->recv_allocator = ucx_perf_mem_type_allocators[params->recv_mem_type];
+    perf->send_allocator = ucx_perf_params_allocator(params, 1);
+    perf->recv_allocator = ucx_perf_params_allocator(params, 0);
 
     if ((perf->send_allocator == NULL) || (perf->recv_allocator == NULL)) {
-        ucs_error("Unsupported memory types %s<->%s",
-                  ucs_memory_type_names[params->send_mem_type],
-                  ucs_memory_type_names[params->recv_mem_type]);
+        ucs_error("Unsupported memory allocators %s<->%s",
+                  ucx_perf_mem_alloc_name(params, 1),
+                  ucx_perf_mem_alloc_name(params, 0));
         return UCS_ERR_UNSUPPORTED;
     }
+
+    ucs_debug("set send allocator %s",
+              ucx_perf_allocator_name(perf->send_allocator));
+    ucs_debug("set recv allocator %s",
+              ucx_perf_allocator_name(perf->recv_allocator));
 
     if (perf->params.api == UCX_PERF_API_UCT) {
         if (perf->send_allocator->mem_type != UCS_MEMORY_TYPE_HOST) {

@@ -84,6 +84,9 @@ typedef enum {
 } ucx_perf_channel_mode_t;
 
 
+#define UCX_PERF_ALLOC_NAME_MAX 32     /* Max memory allocator name length */
+
+
 enum ucx_perf_test_flags {
     UCX_PERF_TEST_FLAG_VALIDATE         = UCS_BIT(1), /* Validate data. Affects performance. */
     UCX_PERF_TEST_FLAG_ONE_SIDED        = UCS_BIT(2), /* For tests which involves only one side,
@@ -272,6 +275,10 @@ typedef struct ucx_perf_params {
     ucx_perf_wait_mode_t    wait_mode;       /* How to wait */
     ucs_memory_type_t       send_mem_type;   /* Send memory type */
     ucs_memory_type_t       recv_mem_type;   /* Recv memory type */
+    char                    send_mem_alloc_name[UCX_PERF_ALLOC_NAME_MAX]; /* Send memory allocator
+                                                                             name */
+    char                    recv_mem_alloc_name[UCX_PERF_ALLOC_NAME_MAX]; /* Recv memory allocator
+                                                                             name */
     ucx_perf_accel_dev_t    send_device;     /* Send memory device */
     ucx_perf_accel_dev_t    recv_device;     /* Recv memory device */
     ucs_device_level_t      device_level;    /* Device level */
@@ -336,10 +343,6 @@ typedef struct {
     uint64_t length;
 } ucp_perf_daemon_req_t;
 
-
-/* Allocators for each memory type */
-typedef struct ucx_perf_allocator ucx_perf_allocator_t;
-extern const ucx_perf_allocator_t* ucx_perf_mem_type_allocators[];
 
 /* Device test dispatchers for each memory type */
 typedef struct ucx_perf_device_dispatcher ucx_perf_device_dispatcher_t;

@@ -40,6 +40,7 @@ BEGIN_C_DECLS
 
 
 typedef struct ucx_perf_context        ucx_perf_context_t;
+typedef struct ucx_perf_allocator      ucx_perf_allocator_t;
 typedef struct uct_peer                uct_peer_t;
 typedef struct ucp_perf_request        ucp_perf_request_t;
 typedef struct ucx_perf_thread_context ucx_perf_thread_context_t;
@@ -54,6 +55,12 @@ typedef ucs_status_t (*ucx_perf_uct_alloc_func_t)(
 typedef void (*ucx_perf_uct_free_func_t)(const ucx_perf_context_t *perf,
                                          uct_allocated_memory_t *alloc_mem);
 
+typedef ucs_status_t (*ucx_perf_mem_alloc_func_t)(
+        const ucx_perf_context_t *perf, size_t length, void **address_p);
+
+typedef void (*ucx_perf_mem_free_func_t)(const ucx_perf_context_t *perf,
+                                         void *address);
+
 typedef void (*ucx_perf_memcpy_func_t)(void *dst,
                                        ucs_memory_type_t dst_mem_type,
                                        const void *src,
@@ -63,12 +70,15 @@ typedef void (*ucx_perf_memcpy_func_t)(void *dst,
 typedef void *(*ucx_perf_memset_func_t)(void *dst, int value, size_t count);
 
 struct ucx_perf_allocator {
-    ucs_memory_type_t         mem_type;
-    ucx_perf_init_func_t      init;
-    ucx_perf_uct_alloc_func_t uct_alloc;
-    ucx_perf_uct_free_func_t  uct_free;
-    ucx_perf_memcpy_func_t    memcpy;
-    ucx_perf_memset_func_t    memset;
+    const char                *name;
+    ucs_memory_type_t          mem_type;
+    ucx_perf_init_func_t       init;
+    ucx_perf_uct_alloc_func_t  uct_alloc;
+    ucx_perf_uct_free_func_t   uct_free;
+    ucx_perf_mem_alloc_func_t  mem_alloc;
+    ucx_perf_mem_free_func_t   mem_free;
+    ucx_perf_memcpy_func_t     memcpy;
+    ucx_perf_memset_func_t     memset;
 };
 
 
@@ -206,6 +216,36 @@ size_t ucx_perf_get_message_size(const ucx_perf_params_t *params);
 void ucx_perf_report(ucx_perf_context_t *perf);
 
 ucs_status_t ucx_perf_allocators_init_thread(ucx_perf_context_t *perf);
+
+ucs_status_t
+ucx_perf_allocator_register(const ucx_perf_allocator_t *allocator);
+
+void ucx_perf_allocator_unregister(const ucx_perf_allocator_t *allocator);
+
+const ucx_perf_allocator_t *ucx_perf_allocator_by_name(const char *name);
+
+static UCS_F_ALWAYS_INLINE const char *
+ucx_perf_allocator_name(const ucx_perf_allocator_t *allocator)
+{
+    return (allocator->name != NULL) ? allocator->name :
+           ucs_memory_type_names[allocator->mem_type];
+}
+
+static UCS_F_ALWAYS_INLINE const char *
+ucx_perf_mem_alloc_name(const ucx_perf_params_t *params, int is_send)
+{
+    const char *alloc_name;
+    ucs_memory_type_t mem_type;
+
+    alloc_name = is_send ? params->send_mem_alloc_name :
+                           params->recv_mem_alloc_name;
+    if (alloc_name[0] != '\0') {
+        return alloc_name;
+    }
+
+    mem_type = is_send ? params->send_mem_type : params->recv_mem_type;
+    return ucs_memory_type_names[mem_type];
+}
 
 static UCS_F_ALWAYS_INLINE int ucx_perf_context_done(ucx_perf_context_t *perf)
 {
