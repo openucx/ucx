@@ -677,3 +677,26 @@ UCS_TEST_P(test_ucp_fault_tolerance, target_failure, "MAX_EAGER_LANES=8",
 {
     do_test(FAILURE_SIDE_TARGET);
 }
+
+/* Verify that recovering an RC p2p lane goes through the UD-aux uct_ep_check
+ * probe gate: against a live peer the lane must recover, and at least one
+ * recovery probe must have been armed in the process. */
+UCS_TEST_P(test_ucp_fault_tolerance, probe_gated_recovery, "MAX_EAGER_LANES=8",
+           "RECOVERY_RETRIES=100")
+{
+    if (get_variant_value() != TEST_OP_AM) {
+        UCS_TEST_SKIP_R("pure AM variant only");
+    }
+    /* The probe gate is only used to recover RC p2p lanes; other transports
+     * rebuild without a probe. */
+    if (!has_any_transport({"rc_x", "rc_v"})) {
+        UCS_TEST_SKIP_R("probe gate applies to RC p2p lanes only");
+    }
+
+    const uint64_t probes_before = ucp_wireup_ep_recovery_probe_count;
+
+    do_test(FAILURE_SIDE_TARGET);
+
+    EXPECT_GT(ucp_wireup_ep_recovery_probe_count, probes_before)
+            << "RC p2p lane recovery completed without arming a UD probe";
+}

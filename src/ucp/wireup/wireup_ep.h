@@ -126,6 +126,9 @@ ucs_status_t
 ucp_wireup_ep_arm_recovery_probe(ucp_wireup_ep_t *wireup_ep, uct_ep_h aux_ep,
                                  ucp_rsc_index_t aux_rsc_index);
 
+/* Test hook: total number of recovery probes armed since process start. */
+extern uint64_t ucp_wireup_ep_recovery_probe_count;
+
 void ucp_wireup_ep_discard_aux_ep(ucp_wireup_ep_t *wireup_ep,
                                   unsigned ep_flush_flags,
                                   uct_pending_purge_callback_t purge_cb,

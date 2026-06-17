@@ -396,6 +396,10 @@ static ucs_status_t ucp_wireup_ep_check(uct_ep_h uct_ep, unsigned flags,
 }
 
 
+/* Number of recovery probes armed (uct_ep_check on a UD aux ep). Test hook
+ * for verifying that lane recovery goes through the probe gate. */
+uint64_t ucp_wireup_ep_recovery_probe_count = 0;
+
 /* uct_ep_check completion for the recovery probe. Records the outcome on the
  * proxy; the next ucp_ep_recovery_rebuild_p2p_lane() tick consumes it. */
 static void ucp_wireup_ep_recovery_probe_comp(uct_completion_t *self)
@@ -431,6 +435,7 @@ ucp_wireup_ep_arm_recovery_probe(ucp_wireup_ep_t *wireup_ep, uct_ep_h aux_ep,
     wireup_ep->recovery_comp.status     = UCS_OK;
     wireup_ep->recovery_probe_done      = 0;
     wireup_ep->recovery_probe_in_flight = 1;
+    ++ucp_wireup_ep_recovery_probe_count;
 
     status = uct_ep_check(aux_ep, 0, &wireup_ep->recovery_comp);
     if (status == UCS_INPROGRESS) {
