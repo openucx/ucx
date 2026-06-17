@@ -1457,7 +1457,6 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_twins_put, rcx, "rc_x")
 class test_ucp_proto_mock_rcx_same_bdf_put : public test_ucp_proto_mock {
 public:
     test_ucp_proto_mock_rcx_same_bdf_put() :
-        m_topo_state(nullptr),
         m_low_user_value_sys_dev(UCS_SYS_DEVICE_ID_UNKNOWN),
         m_high_user_value_sys_dev(UCS_SYS_DEVICE_ID_UNKNOWN)
     {
@@ -1481,15 +1480,6 @@ public:
         test_ucp_proto_mock::init();
     }
 
-    virtual void cleanup() override
-    {
-        test_ucp_proto_mock::cleanup();
-        if (m_topo_state != nullptr) {
-            ucs_topo_restore_state(m_topo_state);
-            m_topo_state = nullptr;
-        }
-    }
-
 protected:
     void check_config(const proto_select_data_vec_t &data_vec)
     {
@@ -1510,9 +1500,8 @@ private:
         bus_id.slot     = 0x1f;
         bus_id.function = 0;
 
-        m_topo_state = ucs_topo_extract_state();
-        ASSERT_TRUE(m_topo_state != nullptr);
-
+        /* Do not extract/restore topology here: UCP init still probes real
+         * transports, and clearing global topology can break hardware caches. */
         ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id_and_user_value(
                 &bus_id, 2, &m_high_user_value_sys_dev));
         ASSERT_UCS_OK(ucs_topo_sys_device_set_name(
@@ -1524,9 +1513,8 @@ private:
                 m_low_user_value_sys_dev, "mock_low_user_value", 10));
     }
 
-    ucs_global_state_t *m_topo_state;
-    ucs_sys_device_t    m_low_user_value_sys_dev;
-    ucs_sys_device_t    m_high_user_value_sys_dev;
+    ucs_sys_device_t m_low_user_value_sys_dev;
+    ucs_sys_device_t m_high_user_value_sys_dev;
 };
 
 UCS_TEST_P(test_ucp_proto_mock_rcx_same_bdf_put,
