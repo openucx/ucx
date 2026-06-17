@@ -160,31 +160,53 @@ static ucp_sys_dev_map_t ucp_proto_multi_init_flush_sys_dev_mask(
     return UCS_BIT(key->sys_dev);
 }
 
-/* Pack a device's PCI bus id (BDF) into a comparable key. Devices without a
- * bus id sort last, ordered by sys_dev to keep a deterministic total order. */
-static ucs_bus_id_bit_rep_t
-ucp_proto_multi_sys_dev_bus_id_key(ucs_sys_device_t sys_dev)
+typedef struct {
+    ucs_bus_id_bit_rep_t bus_id;
+    uintptr_t            user_value;
+    ucs_sys_device_t     sys_dev;
+} ucp_proto_multi_sys_dev_sort_key_t;
+
+static ucp_proto_multi_sys_dev_sort_key_t
+ucp_proto_multi_sys_dev_sort_key(ucs_sys_device_t sys_dev)
 {
+    ucp_proto_multi_sys_dev_sort_key_t key;
     ucs_sys_bus_id_t bus_id;
 
     if (ucs_topo_get_device_bus_id(sys_dev, &bus_id) != UCS_OK) {
         ucs_fatal("failed to get device bus id for sys_dev %d", sys_dev);
     }
 
-    return ucs_topo_get_bus_id_bit_repr(&bus_id);
+    key.bus_id     = ucs_topo_get_bus_id_bit_repr(&bus_id);
+    key.user_value = ucs_topo_sys_device_get_user_value(sys_dev);
+    key.sys_dev    = sys_dev;
+
+    return key;
 }
 
 static int ucp_proto_multi_sys_dev_cmp(const void *pa, const void *pb,
                                        void *UCS_V_UNUSED arg)
 {
-    const ucs_sys_device_t a   = *(const ucs_sys_device_t*)pa;
-    const ucs_sys_device_t b   = *(const ucs_sys_device_t*)pb;
-    ucs_bus_id_bit_rep_t key_a = ucp_proto_multi_sys_dev_bus_id_key(a);
-    ucs_bus_id_bit_rep_t key_b = ucp_proto_multi_sys_dev_bus_id_key(b);
+    const ucs_sys_device_t a = *(const ucs_sys_device_t*)pa;
+    const ucs_sys_device_t b = *(const ucs_sys_device_t*)pb;
+    ucp_proto_multi_sys_dev_sort_key_t key_a =
+            ucp_proto_multi_sys_dev_sort_key(a);
+    ucp_proto_multi_sys_dev_sort_key_t key_b =
+            ucp_proto_multi_sys_dev_sort_key(b);
 
-    /* ascending order by PCI bus id so every rank on the node observes the
-     * same ordering regardless of local device discovery order */
-    return (key_a > key_b) - (key_a < key_b);
+    /* Sort by topology identity so every rank on the node observes the same
+     * ordering regardless of local device discovery order. */
+    if (key_a.bus_id != key_b.bus_id) {
+        return (key_a.bus_id > key_b.bus_id) -
+               (key_a.bus_id < key_b.bus_id);
+    }
+
+    if (key_a.user_value != key_b.user_value) {
+        return (key_a.user_value > key_b.user_value) -
+               (key_a.user_value < key_b.user_value);
+    }
+
+    return (key_a.sys_dev > key_b.sys_dev) -
+           (key_a.sys_dev < key_b.sys_dev);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_sys_dev_distance_t

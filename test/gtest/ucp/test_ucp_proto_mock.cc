@@ -1454,6 +1454,100 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_twins_put, use_single_net_device_rank_2,
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_twins_put, rcx, "rc_x")
 
+class test_ucp_proto_mock_rcx_same_bdf_put : public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_rcx_same_bdf_put() :
+        m_topo_state(nullptr),
+        m_low_user_value_sys_dev(UCS_SYS_DEVICE_ID_UNKNOWN),
+        m_high_user_value_sys_dev(UCS_SYS_DEVICE_ID_UNKNOWN)
+    {
+        mock_transport("rc_mlx5");
+    }
+
+    virtual void init() override
+    {
+        auto iface_attr_func = [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.put.max_short = 2048;
+            iface_attr.bandwidth.shared  = 28e9;
+            iface_attr.latency.c         = 500e-9;
+            iface_attr.latency.m         = 1e-9;
+        };
+
+        setup_same_bdf_topology();
+        add_mock_iface_on_sys_device("mock_0:1", m_high_user_value_sys_dev,
+                                     iface_attr_func);
+        add_mock_iface_on_sys_device("mock_1:1", m_low_user_value_sys_dev,
+                                     iface_attr_func);
+        test_ucp_proto_mock::init();
+    }
+
+    virtual void cleanup() override
+    {
+        test_ucp_proto_mock::cleanup();
+        if (m_topo_state != nullptr) {
+            ucs_topo_restore_state(m_topo_state);
+            m_topo_state = nullptr;
+        }
+    }
+
+protected:
+    void check_config(const proto_select_data_vec_t &data_vec)
+    {
+        ucp_proto_select_key_t key = any_key();
+        key.param.op_id_flags      = UCP_OP_ID_PUT;
+        key.param.op_attr          = 0;
+
+        check_rkey_config(sender(), data_vec, key, 0);
+    }
+
+private:
+    void setup_same_bdf_topology()
+    {
+        ucs_sys_bus_id_t bus_id;
+
+        bus_id.domain   = 0xfffd;
+        bus_id.bus      = 0xfd;
+        bus_id.slot     = 0x1f;
+        bus_id.function = 0;
+
+        m_topo_state = ucs_topo_extract_state();
+        ASSERT_TRUE(m_topo_state != nullptr);
+
+        ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id_and_user_value(
+                &bus_id, 2, &m_high_user_value_sys_dev));
+        ASSERT_UCS_OK(ucs_topo_sys_device_set_name(
+                m_high_user_value_sys_dev, "mock_high_user_value", 10));
+
+        ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id_and_user_value(
+                &bus_id, 1, &m_low_user_value_sys_dev));
+        ASSERT_UCS_OK(ucs_topo_sys_device_set_name(
+                m_low_user_value_sys_dev, "mock_low_user_value", 10));
+    }
+
+    ucs_global_state_t *m_topo_state;
+    ucs_sys_device_t    m_low_user_value_sys_dev;
+    ucs_sys_device_t    m_high_user_value_sys_dev;
+};
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_same_bdf_put,
+           single_net_device_orders_same_bdf_by_user_value_0,
+           "IB_NUM_PATHS?=2", "SINGLE_NET_DEVICE=y", "NODE_LOCAL_ID=0")
+{
+    check_config({{0, 2048, "short", "rc_mlx5/mock_0:1/path0"},
+                  {2049, INF, "zero-copy", "rc_mlx5/mock_1:1/path0"}});
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_same_bdf_put,
+           single_net_device_orders_same_bdf_by_user_value_1,
+           "IB_NUM_PATHS?=2", "SINGLE_NET_DEVICE=y", "NODE_LOCAL_ID=1")
+{
+    check_config({{0, 2048, "short", "rc_mlx5/mock_0:1/path0"},
+                  {2049, INF, "zero-copy", "rc_mlx5/mock_0:1/path0"}});
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_same_bdf_put, rcx,
+                              "rc_x")
+
 class test_ucp_proto_mock_rcx_twins_get : public test_ucp_proto_mock_rcx_twins {
 protected:
     void check_config(const proto_select_data_vec_t &data_vec);
