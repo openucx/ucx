@@ -1894,7 +1894,7 @@ ucs_status_t ucp_ep_recovery_arm(ucp_ep_h ep)
     }
 
     if (arg == NULL) {
-        // first time failure
+        /* First time failure. */
         arg = ucs_calloc(1, sizeof(*arg), "ucp_ep_recovery_arg");
         if (arg == NULL) {
             ucs_error("ep %p: failed to allocate recovery argument", ep);
@@ -1904,7 +1904,7 @@ ucs_status_t ucp_ep_recovery_arm(ucp_ep_h ep)
         ep->ext->recovery_arg = arg;
     }
 
-    // reset counter by new event
+    /* Reset counter by new event. */
     arg->retries_left = context->config.ext.recovery_retries;
     return UCS_OK;
 }
@@ -1973,7 +1973,7 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
 
     ucs_free(ep->ext->recovery_arg);
     ep->ext->recovery_arg = NULL;
-    ret = 1;
+    ret                   = 1;
 
 done:
     UCS_ASYNC_UNBLOCK(&worker->async);
