@@ -898,7 +898,7 @@ ucs_status_t ucs_topo_sys_device_set_class(ucs_sys_device_t sys_dev,
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
 
     if (sys_dev >= ucs_topo_global_ctx.num_devices) {
-        ucs_error("system device %d is invalid (max: %d)", sys_dev,
+        ucs_error("system device %d is invalid (max: %u)", sys_dev,
                   ucs_topo_global_ctx.num_devices);
         status = UCS_ERR_INVALID_PARAM;
         goto out_unlock;

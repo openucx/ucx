@@ -27,6 +27,14 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
     char device_name[10];
     int i, num_gpus;
 
+    /* Register all physical GPUs in the topology, regardless of
+     * CUDA_VISIBLE_DEVICES. Done before the visible-device check below so the
+     * topology is always aware of all GPUs. */
+    status = uct_cuda_enum_gpus(NULL, NULL);
+    if (status != UCS_OK) {
+        ucs_diag("failed to enumerate all gpus: %s", ucs_status_string(status));
+    }
+
     status = UCT_CUDADRV_FUNC(cuDeviceGetCount(&num_gpus), UCS_LOG_LEVEL_DIAG);
     if ((status != UCS_OK) || (num_gpus == 0)) {
         return uct_md_query_empty_md_resource(resources_p, num_resources_p);
@@ -48,10 +56,6 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
                           cuda_device);
         status = ucs_topo_sys_device_set_name(sys_dev, device_name,
                                               sys_device_priority);
-        ucs_assert_always(status == UCS_OK);
-
-        status = ucs_topo_sys_device_set_class(sys_dev,
-                                               UCS_TOPO_DEVICE_CLASS_ACC);
         ucs_assert_always(status == UCS_OK);
     }
 
