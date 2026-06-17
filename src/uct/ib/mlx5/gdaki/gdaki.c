@@ -414,22 +414,6 @@ uct_rc_gdaki_channel_block(uct_rc_gdaki_iface_t *iface, ucs_mpool_t *mp,
     }
 }
 
-static ucs_status_t uct_rc_gdaki_channel_reset_qp(uct_ib_iface_t *ib_iface,
-                                                  uct_ib_mlx5_txwq_t *txwq)
-{
-    ucs_status_t status;
-
-    (void)uct_ib_mlx5_modify_qp_state(ib_iface, &txwq->super, IBV_QPS_ERR);
-
-    status = uct_ib_mlx5_modify_qp_state(ib_iface, &txwq->super, IBV_QPS_RESET);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    uct_ib_mlx5_txwq_reset(txwq);
-    return UCS_OK;
-}
-
 static void
 uct_rc_gdaki_channel_block_reset_qps(uct_rc_gdaki_iface_t *iface,
                                      uct_rc_gdaki_channel_block_t *block)
@@ -441,12 +425,19 @@ uct_rc_gdaki_channel_block_reset_qps(uct_rc_gdaki_iface_t *iface,
 
     for (i = 0; i < iface->num_channels; i++) {
         channel = &block->channels[i];
-        status  = uct_rc_gdaki_channel_reset_qp(ib_iface, &channel->qp);
+
+        (void)uct_ib_mlx5_modify_qp_state(ib_iface, &channel->qp.super,
+                                          IBV_QPS_ERR);
+
+        status = uct_ib_mlx5_modify_qp_state(ib_iface, &channel->qp.super,
+                                             IBV_QPS_RESET);
         if (status != UCS_OK) {
             ucs_warn("failed to reset gdaki qp %u: %s",
                      channel->qp.super.qp_num, ucs_status_string(status));
             continue;
         }
+
+        uct_ib_mlx5_txwq_reset(&channel->qp);
 
         status = uct_ib_mlx5_devx_qp_rst2init(ib_iface, &channel->qp.super);
         if (status != UCS_OK) {
