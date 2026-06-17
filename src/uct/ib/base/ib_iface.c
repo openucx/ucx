@@ -29,6 +29,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <poll.h>
+#include <errno.h>
 #include <float.h>
 
 
@@ -2091,6 +2092,7 @@ uct_ib_iface_estimate_bandwidth(uct_ib_iface_t *iface,
 {
 #if HAVE_DECL_IBV_QUERY_PORT_SPEED
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
+    ucs_log_level_t log_level;
     uint64_t port_speed;
     double wire_speed;
     int ret;
@@ -2098,8 +2100,13 @@ uct_ib_iface_estimate_bandwidth(uct_ib_iface_t *iface,
     ret = ibv_query_port_speed(dev->ibv_context, iface->config.port_num,
                                &port_speed);
     if (ret != 0) {
-        ucs_warn("ibv_query_port_speed("UCT_IB_IFACE_FMT", port_num=%d) failed:"
-                 " %m", UCT_IB_IFACE_ARG(iface), iface->config.port_num);
+        log_level = ((errno == EOPNOTSUPP) ||
+                     (errno == EPROTONOSUPPORT) ||
+                     (errno == ENOSYS)) ? UCS_LOG_LEVEL_DEBUG :
+                                          UCS_LOG_LEVEL_WARN;
+        ucs_log(log_level,
+                "ibv_query_port_speed("UCT_IB_IFACE_FMT", port_num=%d) failed:"
+                " %m", UCT_IB_IFACE_ARG(iface), iface->config.port_num);
         return iface_attr->bandwidth;
     }
 
