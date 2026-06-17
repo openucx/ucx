@@ -92,10 +92,10 @@ KHASH_INIT(bus_to_sys_dev, ucs_topo_bus_value_key_t, ucs_sys_device_t, 1,
            ucs_topo_bus_value_key_hash, ucs_topo_bus_value_key_equal);
 
 typedef struct ucs_topo_global_ctx {
-    ucs_spinlock_t                   lock;
-    khash_t(bus_to_sys_dev)          bus_to_sys_dev_hash;
-    ucs_topo_sys_device_info_t       devices[UCS_TOPO_MAX_SYS_DEVICES];
-    unsigned                         num_devices;
+    ucs_spinlock_t             lock;
+    khash_t(bus_to_sys_dev)    bus_to_sys_dev_hash;
+    ucs_topo_sys_device_info_t devices[UCS_TOPO_MAX_SYS_DEVICES];
+    unsigned                   num_devices;
 } ucs_topo_global_ctx_t;
 
 
