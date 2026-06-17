@@ -155,6 +155,9 @@ build_soname_suffix() {
 			"${ucx_inst}/lib/lib${lib}-${suffix}.so.0.0.0" \
 			"lib${lib}-${suffix}.so.0"
 		check_linker_symlink \
+			"${ucx_inst}/lib/lib${lib}-${suffix}.so" \
+			"lib${lib}-${suffix}\\.so"
+		check_linker_symlink \
 			"${ucx_inst}/lib/lib${lib}.so" \
 			"lib${lib}-${suffix}\\.so"
 	done
