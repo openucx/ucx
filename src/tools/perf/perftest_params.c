@@ -30,8 +30,7 @@ static void print_memory_allocator_usage(void)
     for (i = 0; i < ucx_perf_num_allocators; ++i) {
         allocator = ucx_perf_allocators[i];
         printf("                        %s - %s\n",
-               ucx_perf_allocator_name(allocator),
-               ucs_memory_type_descs[allocator->mem_type]);
+               allocator->name, ucs_memory_type_descs[allocator->mem_type]);
     }
 }
 

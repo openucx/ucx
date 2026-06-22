@@ -144,6 +144,7 @@ static void* ucx_perf_rocm_memset(void *dst, int value, size_t count)
 
 UCS_STATIC_INIT {
     static ucx_perf_allocator_t rocm_allocator = {
+        .name      = "rocm",
         .mem_type  = UCS_MEMORY_TYPE_ROCM,
         .init      = ucx_perf_rocm_init,
         .uct_alloc = uct_perf_rocm_alloc,
@@ -152,6 +153,7 @@ UCS_STATIC_INIT {
         .memset    = ucx_perf_rocm_memset
     };
     static ucx_perf_allocator_t rocm_managed_allocator = {
+        .name      = "rocm-managed",
         .mem_type  = UCS_MEMORY_TYPE_ROCM_MANAGED,
         .init      = ucx_perf_rocm_init,
         .uct_alloc = uct_perf_rocm_managed_alloc,

@@ -187,8 +187,8 @@ static ucs_status_t uct_perf_cuda_async_alloc(
         return status;
     }
 
-    status = uct_perf_cuda_reg_mem(perf, length, UCS_MEMORY_TYPE_CUDA, flags,
-                                   alloc_mem);
+    status = uct_perf_cuda_reg_mem(perf, length, UCS_MEMORY_TYPE_CUDA_MANAGED,
+                                   flags, alloc_mem);
     if (status != UCS_OK) {
         ucx_perf_cuda_async_mem_free(perf, alloc_mem->address);
         return status;

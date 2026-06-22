@@ -95,7 +95,7 @@ const ucx_perf_allocator_t *ucx_perf_allocator_by_name(const char *name)
     unsigned i;
 
     for (i = 0; i < ucx_perf_num_allocators; ++i) {
-        if (!strcmp(name, ucx_perf_allocator_name(ucx_perf_allocators[i]))) {
+        if (!strcmp(name, ucx_perf_allocators[i]->name)) {
             return ucx_perf_allocators[i];
         }
     }
@@ -2200,10 +2200,8 @@ ucs_status_t ucx_perf_allocators_init(ucx_perf_context_t *perf,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    ucs_debug("set send allocator %s",
-              ucx_perf_allocator_name(perf->send_allocator));
-    ucs_debug("set recv allocator %s",
-              ucx_perf_allocator_name(perf->recv_allocator));
+    ucs_debug("set send allocator %s", perf->send_allocator->name);
+    ucs_debug("set recv allocator %s", perf->recv_allocator->name);
 
     if (perf->params.api == UCX_PERF_API_UCT) {
         if (perf->send_allocator->mem_type != UCS_MEMORY_TYPE_HOST) {

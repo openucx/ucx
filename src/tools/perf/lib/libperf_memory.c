@@ -376,6 +376,7 @@ void uct_perf_test_free_mem(ucx_perf_context_t *perf)
 void ucx_perf_global_init()
 {
     static ucx_perf_allocator_t host_allocator = {
+        .name      = "host",
         .mem_type  = UCS_MEMORY_TYPE_HOST,
         .init      = (ucx_perf_init_func_t)ucs_empty_function_return_success,
         .uct_alloc = uct_perf_test_alloc_host,
@@ -384,6 +385,7 @@ void ucx_perf_global_init()
         .memset    = memset
     };
     static ucx_perf_allocator_t rdma_allocator = {
+        .name      = "rdma",
         .mem_type  = UCS_MEMORY_TYPE_RDMA,
         .init      = (ucx_perf_init_func_t)ucs_empty_function_return_success,
         .uct_alloc = (ucx_perf_uct_alloc_func_t)ucs_empty_function_do_assert,

@@ -87,18 +87,16 @@ struct ucx_perf_allocator {
 extern const ucx_perf_allocator_t *ucx_perf_allocators[UCX_PERF_ALLOCATOR_MAX];
 extern unsigned ucx_perf_num_allocators;
 
-static UCS_F_ALWAYS_INLINE const char *
-ucx_perf_allocator_name(const ucx_perf_allocator_t *allocator)
-{
-    return (allocator->name != NULL) ? allocator->name :
-           ucs_memory_type_names[allocator->mem_type];
-}
-
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucx_perf_allocator_register(const ucx_perf_allocator_t *allocator)
 {
-    const char *name = ucx_perf_allocator_name(allocator);
+    const char *name = allocator->name;
     unsigned i;
+
+    if (name == NULL) {
+        ucs_error("perftest memory allocator name is not set");
+        return UCS_ERR_INVALID_PARAM;
+    }
 
     if (strlen(name) >= UCX_PERF_ALLOC_NAME_MAX) {
         ucs_error("perftest memory allocator name is too long: \"%s\"", name);
@@ -106,7 +104,7 @@ ucx_perf_allocator_register(const ucx_perf_allocator_t *allocator)
     }
 
     for (i = 0; i < ucx_perf_num_allocators; ++i) {
-        if (!strcmp(name, ucx_perf_allocator_name(ucx_perf_allocators[i]))) {
+        if (!strcmp(name, ucx_perf_allocators[i]->name)) {
             return (ucx_perf_allocators[i] == allocator) ?
                    UCS_OK : UCS_ERR_ALREADY_EXISTS;
         }
