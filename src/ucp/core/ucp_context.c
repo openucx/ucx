@@ -441,18 +441,11 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "(inf - check all endpoints on every round, must be greater than 0)",
    ucs_offsetof(ucp_context_config_t, keepalive_num_eps), UCS_CONFIG_TYPE_UINT},
 
-  {"RECOVERY_INTERVAL", "5s",
-   "Time interval between attempts to recover failed endpoint lanes.\n"
-   "Applies only to endpoints created with UCP_ERR_HANDLING_MODE_FAILOVER.\n"
-   "Must be non-zero.",
-   ucs_offsetof(ucp_context_config_t, recovery_interval),
-   UCS_CONFIG_TYPE_TIME_UNITS},
-
   {"RECOVERY_RETRIES", "inf",
    "Maximum number of recovery rounds before a partially failed endpoint\n"
    "is declared fully failed (inf - retry indefinitely, must be greater\n"
-   "than 0). Applies only to endpoints created with\n"
-   "UCP_ERR_HANDLING_MODE_FAILOVER.",
+   "than 0). Each round occurs after UCX_KEEPALIVE_INTERVAL.\n"
+   "Applies only to endpoints created with UCP_ERR_HANDLING_MODE_FAILOVER.",
    ucs_offsetof(ucp_context_config_t, recovery_retries),
    UCS_CONFIG_TYPE_UINT},
 
@@ -2568,12 +2561,6 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
 
     if (context->config.ext.keepalive_interval == 0) {
         ucs_error("UCX_KEEPALIVE_INTERVAL value must be greater than 0");
-        status = UCS_ERR_INVALID_PARAM;
-        goto err_free_alloc_methods;
-    }
-
-    if (context->config.ext.recovery_interval == 0) {
-        ucs_error("UCX_RECOVERY_INTERVAL value must be greater than 0");
         status = UCS_ERR_INVALID_PARAM;
         goto err_free_alloc_methods;
     }

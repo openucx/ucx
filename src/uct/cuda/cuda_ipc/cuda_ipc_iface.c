@@ -189,9 +189,10 @@ static double uct_cuda_ipc_iface_get_bw()
     }
 }
 
-static int uct_cuda_ipc_get_device_nvlinks(int ordinal)
+static int uct_cuda_ipc_get_device_nvlinks(unsigned ordinal)
 {
     static int num_nvlinks = -1;
+    unsigned num_detected_nvlinks;
     unsigned link;
     nvmlDevice_t device;
     nvmlFieldValue_t value;
@@ -202,22 +203,28 @@ static int uct_cuda_ipc_get_device_nvlinks(int ordinal)
         return num_nvlinks;
     }
 
-    status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetHandleByIndex, 0, &device);
+    status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetHandleByIndex, ordinal,
+                                     &device);
     if (status != UCS_OK) {
         goto err;
     }
 
     value.fieldId = NVML_FI_DEV_NVLINK_LINK_COUNT;
 
-    UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetFieldValues, device, 1, &value);
+    status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetFieldValues, device, 1,
+                                     &value);
+    if (status != UCS_OK) {
+        goto err;
+    }
 
-    num_nvlinks = ((value.nvmlReturn == NVML_SUCCESS) &&
-                   (value.valueType == NVML_VALUE_TYPE_UNSIGNED_INT)) ?
-                  value.value.uiVal : 0;
+    num_detected_nvlinks = ((value.nvmlReturn == NVML_SUCCESS) &&
+                            (value.valueType == NVML_VALUE_TYPE_UNSIGNED_INT)) ?
+                                   value.value.uiVal :
+                                   0;
 
     /* not enough to check number of nvlinks; need to check if links are active
      * by seeing if remote info can be obtained */
-    for (link = 0; link < num_nvlinks; ++link) {
+    for (link = 0; link < num_detected_nvlinks; ++link) {
         status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetNvLinkRemotePciInfo,
                                          device, link, &pci);
         if (status != UCS_OK) {
@@ -226,6 +233,7 @@ static int uct_cuda_ipc_get_device_nvlinks(int ordinal)
         }
     }
 
+    num_nvlinks = num_detected_nvlinks;
     return num_nvlinks;
 
 err:
@@ -239,7 +247,8 @@ static size_t uct_cuda_ipc_iface_get_max_get_zcopy(uct_cuda_ipc_iface_t *iface)
     /* assume there is at least >= 1 GPUs on the system; assume uniformity */
     num_nvlinks = uct_cuda_ipc_get_device_nvlinks(0);
 
-    if (!num_nvlinks && (iface->config.enable_get_zcopy != UCS_CONFIG_ON)) {
+    if ((num_nvlinks == 0) &&
+        (iface->config.enable_get_zcopy != UCS_CONFIG_ON)) {
         ucs_debug("cuda-ipc get zcopy disabled as no nvlinks detected");
         return 0;
     }
