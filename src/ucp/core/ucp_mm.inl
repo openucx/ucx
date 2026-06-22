@@ -118,9 +118,9 @@ ucp_memory_info_from_memh(ucp_mem_h memh)
 {
     ucp_memory_info_t mem_info;
 
-    mem_info.type      = memh->mem_type;
-    mem_info.sys_dev   = memh->sys_dev;
-    mem_info.mem_flags = memh->mem_flags;
+    mem_info.type    = memh->mem_type;
+    mem_info.sys_dev = memh->sys_dev;
+    mem_info.flags   = memh->mem_flags;
     return mem_info;
 }
 

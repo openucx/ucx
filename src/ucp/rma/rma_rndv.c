@@ -603,13 +603,11 @@ ucs_status_t ucp_rma_rndv_process_rts(ucp_worker_h worker,
     recv_req->recv.worker        = worker;
     recv_req->recv.op_attr       = 0;
     recv_req->recv.remote_req_id = rts->super.sreq.req_id;
-    /* rts->address is this peer's local buffer; detection resolves its system
-     * device and memory flags. The memory type, however, must match the type
-     * the initiator used for its remote protocol selection (rts->mem_type), so
-     * that both sides agree on a wire-compatible protocol. */
     ucp_memory_detect(worker->context, (void*)(uintptr_t)rts->address,
                       rts->super.size, &mem_info);
-    mem_info.type = rts->mem_type;
+    ucs_assertv(mem_info.type == rts->mem_type, "detected mem_type=%s rts=%s",
+                ucs_memory_type_names[mem_info.type],
+                ucs_memory_type_names[rts->mem_type]);
     ucp_datatype_iter_init_contig(&recv_req->recv.dt_iter,
                                   (void*)(uintptr_t)rts->address,
                                   rts->super.size, &mem_info);

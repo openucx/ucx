@@ -904,12 +904,13 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
     ucs_status_t status;
 
     if (!(mem_attr->field_mask &
-          (UCT_MD_MEM_ATTR_FIELD_MEM_TYPE | UCT_MD_MEM_ATTR_FIELD_SYS_DEV |
-           UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS |
-           UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH |
-           UCT_MD_MEM_ATTR_FIELD_DMABUF_FD |
-           UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET |
-           UCT_MD_MEM_ATTR_FIELD_MEM_FLAGS))) {
+          (UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE |
+           UCT_MD_MEM_ATTR_V2_FIELD_SYS_DEV |
+           UCT_MD_MEM_ATTR_V2_FIELD_BASE_ADDRESS |
+           UCT_MD_MEM_ATTR_V2_FIELD_ALLOC_LENGTH |
+           UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD |
+           UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_OFFSET |
+           UCT_MD_MEM_ATTR_V2_FIELD_MEM_FLAGS))) {
         return UCS_OK;
     }
 
@@ -923,32 +924,32 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
         addr_mem_info = default_mem_info;
     }
 
-    if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_MEM_TYPE) {
+    if (mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE) {
         mem_attr->mem_type = addr_mem_info.type;
     }
 
-    if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_SYS_DEV) {
+    if (mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_SYS_DEV) {
         mem_attr->sys_dev = addr_mem_info.sys_dev;
     }
 
-    if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS) {
+    if (mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_BASE_ADDRESS) {
         mem_attr->base_address = addr_mem_info.base_address;
     }
 
-    if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH) {
+    if (mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_ALLOC_LENGTH) {
         mem_attr->alloc_length = addr_mem_info.alloc_length;
     }
 
-    if ((mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD) ||
-        (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET)) {
+    if ((mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD) ||
+        (mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_OFFSET)) {
         dmabuf = uct_cuda_copy_md_get_dmabuf(addr_mem_info.base_address,
                                              addr_mem_info.alloc_length,
                                              addr_mem_info.sys_dev);
         dmabuf_queried = 1;
-        if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD) {
+        if (mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD) {
             mem_attr->dmabuf_fd = dmabuf.fd;
         }
-        if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET) {
+        if (mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_OFFSET) {
             mem_attr->dmabuf_offset =
                     dmabuf.offset + UCS_PTR_BYTE_DIFF(addr_mem_info.base_address,
                                                       address);
@@ -964,7 +965,7 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
                                  addr_mem_info.mem_flags);
     }
 
-    if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_MEM_FLAGS) {
+    if (mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_MEM_FLAGS) {
         mem_attr->mem_flags = (address != NULL) ? addr_mem_info.mem_flags :
                                                   UCS_MEM_FLAG_REGISTRABLE;
     }
@@ -974,7 +975,7 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
      * memory flags.
      */
     if (dmabuf_queried &&
-        !(mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD)) {
+        !(mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD)) {
         ucs_close_fd(&dmabuf.fd);
     }
 
@@ -989,7 +990,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_md_detect_memory_type,
     uct_md_mem_attr_v2_t mem_attr;
     ucs_status_t status;
 
-    mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE;
+    mem_attr.field_mask = UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE;
 
     status = uct_cuda_copy_md_mem_query(md, address, length, &mem_attr);
     if (status != UCS_OK) {

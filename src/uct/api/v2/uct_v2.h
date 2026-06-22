@@ -848,13 +848,31 @@ ucs_status_t uct_md_mem_dereg_v2(uct_md_h md,
  * @ingroup UCT_MD
  * @brief UCT MD memory attributes v2 field mask.
  *
- * The v2 memory attributes structure uses the same field bits as
- * @ref uct_md_mem_attr_t and adds @ref UCT_MD_MEM_ATTR_FIELD_MEM_FLAGS.
+ * The enumeration allows specifying which fields in @ref uct_md_mem_attr_v2_t
+ * are present.
  */
-enum {
-    /** Request per-buffer memory flags, see @ref ucs_mem_flags_t. */
-    UCT_MD_MEM_ATTR_FIELD_MEM_FLAGS = UCS_BIT(6)
-};
+typedef enum {
+    /** Memory type */
+    UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE      = UCS_BIT(0),
+
+    /** System device */
+    UCT_MD_MEM_ATTR_V2_FIELD_SYS_DEV       = UCS_BIT(1),
+
+    /** Base address */
+    UCT_MD_MEM_ATTR_V2_FIELD_BASE_ADDRESS  = UCS_BIT(2),
+
+    /** Allocation length */
+    UCT_MD_MEM_ATTR_V2_FIELD_ALLOC_LENGTH  = UCS_BIT(3),
+
+    /** DMABUF file descriptor */
+    UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD     = UCS_BIT(4),
+
+    /** DMABUF offset */
+    UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_OFFSET = UCS_BIT(5),
+
+    /** Per-buffer memory flags, see @ref ucs_mem_flags_t */
+    UCT_MD_MEM_ATTR_V2_FIELD_MEM_FLAGS     = UCS_BIT(6)
+} uct_md_mem_attr_v2_field_t;
 
 
 /**
@@ -864,8 +882,7 @@ enum {
 typedef struct uct_md_mem_attr_v2 {
     /**
      * Mask of valid fields in this structure, using
-     * @ref uct_md_mem_attr_field_t and
-     * @ref UCT_MD_MEM_ATTR_FIELD_MEM_FLAGS.
+     * @ref uct_md_mem_attr_v2_field_t.
      */
     uint64_t          field_mask;
 

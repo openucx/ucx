@@ -375,8 +375,8 @@ UCS_TEST_P(test_ib_md, cuda_async_mem_reg_fails)
                            cuda_mds[0].component, cuda_mds[0].md_name.c_str(),
                            cuda_md_config);
 
-    mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE |
-                          UCT_MD_MEM_ATTR_FIELD_MEM_FLAGS;
+    mem_attr.field_mask = UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE |
+                          UCT_MD_MEM_ATTR_V2_FIELD_MEM_FLAGS;
     ASSERT_UCS_OK(uct_md_mem_query_v2(cuda_md, buffer.ptr(), size, &mem_attr));
     if (mem_attr.mem_type != UCS_MEMORY_TYPE_CUDA_MANAGED) {
         UCS_TEST_SKIP_R("CUDA async memory is not classified as CUDA managed");

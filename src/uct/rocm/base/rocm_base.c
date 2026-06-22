@@ -403,30 +403,30 @@ ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
         }
     }
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_MEM_TYPE) {
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE) {
         mem_attr_p->mem_type = mem_type;
     }
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_SYS_DEV) {
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_SYS_DEV) {
         mem_attr_p->sys_dev = sys_dev;
     }
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS) {
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_BASE_ADDRESS) {
         mem_attr_p->base_address = (void*) addr;
     }
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH) {
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_ALLOC_LENGTH) {
         mem_attr_p->alloc_length = length;
     }
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD) {
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD) {
         uct_rocm_base_dmabuf_export(addr, length, mem_type, &dmabuf_fd,
                                     &dmabuf_offset);
         mem_attr_p->dmabuf_fd = dmabuf_fd;
         is_exported           = 1;
     }
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET) {
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_OFFSET) {
         if (!is_exported) {
             uct_rocm_base_dmabuf_export(addr, length, mem_type, &dmabuf_fd,
                                         &dmabuf_offset);

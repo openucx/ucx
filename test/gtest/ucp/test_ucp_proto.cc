@@ -337,7 +337,7 @@ UCS_TEST_P(test_ucp_proto_cuda_async_non_reg, cuda_async_registrable_filter)
     }
 
     /* Precondition: the async CUDA buffer is detected as non-registrable. */
-    ASSERT_EQ(0, dt_iter.mem_info.mem_flags & UCS_MEM_FLAG_REGISTRABLE);
+    ASSERT_EQ(0, dt_iter.mem_info.flags & UCS_MEM_FLAG_REGISTRABLE);
 
     /* Even with the IB/HCA MDs force-enabled, the REGISTRABLE filter must keep
      * them out of memh->md_map. */
@@ -418,7 +418,7 @@ UCS_TEST_P(test_ucp_proto_cuda_async_non_reg,
         UCS_TEST_SKIP_R("no endpoint lanes support IB/HCA get zcopy");
     }
 
-    ASSERT_EQ(0, mem_info.mem_flags & UCS_MEM_FLAG_REGISTRABLE);
+    ASSERT_EQ(0, mem_info.flags & UCS_MEM_FLAG_REGISTRABLE);
 
     ep_cfg_index = sender().ep()->cfg_index;
 
@@ -446,7 +446,7 @@ UCS_TEST_P(test_ucp_proto_cuda_async_non_reg,
             get_rma_get_rndv_remote_proto_config(select_elem, select_size);
     ASSERT_NE(nullptr, no_flag_remote_proto_config);
 
-    mem_info.mem_flags |= UCS_MEM_FLAG_REGISTRABLE;
+    mem_info.flags |= UCS_MEM_FLAG_REGISTRABLE;
     ucp_proto_select_param_init(&select_param, UCP_OP_ID_GET, 0, 0,
                                 UCP_DATATYPE_CONTIG, &mem_info, 1);
     select_elem = ucp_proto_select_lookup_slow(worker(), proto_select, 0,

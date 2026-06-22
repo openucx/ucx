@@ -50,9 +50,9 @@ ucp_mem_dummy_handle_t ucp_mem_dummy_handle = {
 };
 
 const ucp_memory_info_t ucp_mem_info_unknown = {
-    .type      = UCS_MEMORY_TYPE_UNKNOWN,
-    .sys_dev   = UCS_SYS_DEVICE_ID_UNKNOWN,
-    .mem_flags = UCS_MEM_FLAG_REGISTRABLE
+    .type    = UCS_MEMORY_TYPE_UNKNOWN,
+    .sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN,
+    .flags   = UCS_MEM_FLAG_REGISTRABLE
 };
 
 
@@ -762,7 +762,7 @@ ucp_memh_create(ucp_context_h context, void *address, size_t length,
     memh->super.super.end   = (uintptr_t)address + length;
     ucp_memory_detect(context, address, length, &info);
     ucp_memh_init(memh, context, memh_flags, uct_flags, method, mem_type,
-                  info.sys_dev, info.mem_flags);
+                  info.sys_dev, info.flags);
 
     *memh_p = memh;
     return UCS_OK;
@@ -1736,10 +1736,10 @@ static void ucp_mem_rcache_merge_cb(void *ctx, ucs_rcache_t *rcache, void *arg,
     ucs_log_indent(+1);
     ucs_trace("merge with memh %p uct_flags 0x%x mem_flags 0x%x/0x%x", memh,
               memh->uct_flags, reg_ctx->mem_flags, memh->mem_flags);
-    reg_ctx->uct_flags  |= memh->uct_flags;
+    reg_ctx->uct_flags |= memh->uct_flags;
     /* TODO: The regions shouldn't be merged if they have different mem_flags */
-    reg_ctx->mem_flags  &= memh->mem_flags;
-    memh->flags         &= ~UCP_MEMH_FLAG_MLOCKED;
+    reg_ctx->mem_flags &= memh->mem_flags;
+    memh->flags        &= ~UCP_MEMH_FLAG_MLOCKED;
     ucs_log_indent(-1);
 }
 
@@ -1873,7 +1873,7 @@ ucs_status_t ucp_mm_get_alloc_md_index(ucp_context_h context,
 
         context->alloc_md[alloc_mem_type].initialized = 1;
         context->alloc_md[alloc_mem_type].sys_dev     = mem_info.sys_dev;
-        context->alloc_md[alloc_mem_type].mem_flags   = mem_info.mem_flags;
+        context->alloc_md[alloc_mem_type].mem_flags   = mem_info.flags;
         context->alloc_md[alloc_mem_type].md_index    =
                 ucp_mem_get_md_index(context, mem.md, mem.method);
 
@@ -1882,7 +1882,7 @@ ucs_status_t ucp_mm_get_alloc_md_index(ucp_context_h context,
 
     *md_idx_p             = context->alloc_md[alloc_mem_type].md_index;
     mem_info_p->type      = alloc_mem_type;
-    mem_info_p->mem_flags = context->alloc_md[alloc_mem_type].mem_flags;
+    mem_info_p->flags     = context->alloc_md[alloc_mem_type].mem_flags;
 
     /* TODO: Extend the cache by alloc sys dev */
     if (UCP_MEM_IS_HOST(alloc_mem_type) ||

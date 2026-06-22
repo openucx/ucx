@@ -48,9 +48,9 @@ typedef struct ucp_dt_state {
  * UCP layer memory information
  */
 typedef struct {
-    uint8_t          type;      /**< Memory type, use uint8 for compact size */
-    ucs_sys_device_t sys_dev;   /**< System device index */
-    uint8_t          mem_flags; /**< UCS memory flags */
+    uint8_t          type;    /**< Memory type, use uint8 for compact size */
+    ucs_sys_device_t sys_dev; /**< System device index */
+    uint8_t          flags;   /**< UCS memory flags */
 } ucp_memory_info_t;
 
 
@@ -75,7 +75,7 @@ static UCS_F_ALWAYS_INLINE int
 ucp_memory_info_equal(const ucp_memory_info_t *a, const ucp_memory_info_t *b)
 {
     return (a->type == b->type) && (a->sys_dev == b->sys_dev) &&
-           (a->mem_flags == b->mem_flags);
+           (a->flags == b->flags);
 }
 
 void ucp_mem_type_pack(ucp_worker_h worker, void *dest, const void *src,

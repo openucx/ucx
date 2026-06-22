@@ -87,8 +87,8 @@ uct_cuda_copy_get_mem_type(uct_md_h md, const void *address, size_t length,
 
     if (ucs_unlikely((status == UCS_ERR_UNSUPPORTED) ||
                      (mem_info.type == UCS_MEMORY_TYPE_UNKNOWN))) {
-        mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE |
-                              UCT_MD_MEM_ATTR_FIELD_SYS_DEV;
+        mem_attr.field_mask = UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE |
+                              UCT_MD_MEM_ATTR_V2_FIELD_SYS_DEV;
 
         status = uct_cuda_copy_md_mem_query(md, address, length, &mem_attr);
         if (status != UCS_OK) {
