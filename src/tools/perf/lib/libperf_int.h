@@ -16,12 +16,14 @@
 #include <omp.h>
 #endif
 
+#include <string.h>
 
 BEGIN_C_DECLS
 
 /** @file libperf_int.h */
 
 #include <ucs/async/async.h>
+#include <ucs/debug/log.h>
 #include <ucs/time/time.h>
 #include <ucs/sys/math.h>
 
@@ -31,6 +33,7 @@ BEGIN_C_DECLS
 #define ADDR_BUF_SIZE        4096
 #define EXTRA_INFO_SIZE      256
 #define ONESIDED_SIGNAL_SIZE sizeof(uint64_t)
+#define UCX_PERF_ALLOCATOR_MAX (UCS_MEMORY_TYPE_LAST + 16)
 
 #define UCX_PERF_TEST_FOREACH(perf) \
     while (!ucx_perf_context_done(perf))
@@ -71,15 +74,68 @@ typedef void *(*ucx_perf_memset_func_t)(void *dst, int value, size_t count);
 
 struct ucx_perf_allocator {
     const char                *name;
-    ucs_memory_type_t          mem_type;
-    ucx_perf_init_func_t       init;
-    ucx_perf_uct_alloc_func_t  uct_alloc;
-    ucx_perf_uct_free_func_t   uct_free;
-    ucx_perf_mem_alloc_func_t  mem_alloc;
-    ucx_perf_mem_free_func_t   mem_free;
-    ucx_perf_memcpy_func_t     memcpy;
-    ucx_perf_memset_func_t     memset;
+    ucs_memory_type_t         mem_type;
+    ucx_perf_init_func_t      init;
+    ucx_perf_uct_alloc_func_t uct_alloc;
+    ucx_perf_uct_free_func_t  uct_free;
+    ucx_perf_mem_alloc_func_t mem_alloc;
+    ucx_perf_mem_free_func_t  mem_free;
+    ucx_perf_memcpy_func_t    memcpy;
+    ucx_perf_memset_func_t    memset;
 };
+
+extern const ucx_perf_allocator_t *ucx_perf_allocators[UCX_PERF_ALLOCATOR_MAX];
+extern unsigned ucx_perf_num_allocators;
+
+static UCS_F_ALWAYS_INLINE const char *
+ucx_perf_allocator_name(const ucx_perf_allocator_t *allocator)
+{
+    return (allocator->name != NULL) ? allocator->name :
+           ucs_memory_type_names[allocator->mem_type];
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucx_perf_allocator_register(const ucx_perf_allocator_t *allocator)
+{
+    const char *name = ucx_perf_allocator_name(allocator);
+    unsigned i;
+
+    if (strlen(name) >= UCX_PERF_ALLOC_NAME_MAX) {
+        ucs_error("perftest memory allocator name is too long: \"%s\"", name);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    for (i = 0; i < ucx_perf_num_allocators; ++i) {
+        if (!strcmp(name, ucx_perf_allocator_name(ucx_perf_allocators[i]))) {
+            return (ucx_perf_allocators[i] == allocator) ?
+                   UCS_OK : UCS_ERR_ALREADY_EXISTS;
+        }
+    }
+
+    if (ucx_perf_num_allocators == ucs_static_array_size(ucx_perf_allocators)) {
+        ucs_error("too many perftest memory allocators");
+        return UCS_ERR_EXCEEDS_LIMIT;
+    }
+
+    ucx_perf_allocators[ucx_perf_num_allocators++] = allocator;
+    return UCS_OK;
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucx_perf_allocator_unregister(const ucx_perf_allocator_t *allocator)
+{
+    unsigned i;
+
+    for (i = 0; i < ucx_perf_num_allocators; ++i) {
+        if (ucx_perf_allocators[i] == allocator) {
+            --ucx_perf_num_allocators;
+            ucx_perf_allocators[i] =
+                    ucx_perf_allocators[ucx_perf_num_allocators];
+            ucx_perf_allocators[ucx_perf_num_allocators] = NULL;
+            return;
+        }
+    }
+}
 
 
 typedef ucs_status_t (*ucp_perf_dispatch_func_t)(ucx_perf_context_t *perf);
@@ -217,19 +273,7 @@ void ucx_perf_report(ucx_perf_context_t *perf);
 
 ucs_status_t ucx_perf_allocators_init_thread(ucx_perf_context_t *perf);
 
-ucs_status_t
-ucx_perf_allocator_register(const ucx_perf_allocator_t *allocator);
-
-void ucx_perf_allocator_unregister(const ucx_perf_allocator_t *allocator);
-
 const ucx_perf_allocator_t *ucx_perf_allocator_by_name(const char *name);
-
-static UCS_F_ALWAYS_INLINE const char *
-ucx_perf_allocator_name(const ucx_perf_allocator_t *allocator)
-{
-    return (allocator->name != NULL) ? allocator->name :
-           ucs_memory_type_names[allocator->mem_type];
-}
 
 static UCS_F_ALWAYS_INLINE const char *
 ucx_perf_mem_alloc_name(const ucx_perf_params_t *params, int is_send)

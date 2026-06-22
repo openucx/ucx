@@ -84,7 +84,7 @@ typedef enum {
 } ucx_perf_channel_mode_t;
 
 
-#define UCX_PERF_ALLOC_NAME_MAX 32     /* Max memory allocator name length */
+#define UCX_PERF_ALLOC_NAME_MAX 32 /* Max memory allocator name length */
 
 
 enum ucx_perf_test_flags {

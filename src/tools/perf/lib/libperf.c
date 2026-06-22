@@ -30,8 +30,6 @@
 #   include <omp.h>
 #endif /* _OPENMP */
 
-#define UCX_PERF_ALLOCATOR_MAX (UCS_MEMORY_TYPE_LAST + 16)
-
 #define ATOMIC_OP_CONFIG(_size, _op32, _op64, _op, _msg, _params, _status) \
     _status = __get_atomic_flag((_size), (_op32), (_op64), (_op)); \
     if (_status != UCS_OK) { \
@@ -85,54 +83,12 @@ typedef struct {
 } ucp_perf_flush_context_t;
 
 
-static const ucx_perf_allocator_t*
+const ucx_perf_allocator_t*
         ucx_perf_allocators[UCX_PERF_ALLOCATOR_MAX];
-static unsigned ucx_perf_num_allocators;
+unsigned ucx_perf_num_allocators;
 
 const ucx_perf_device_dispatcher_t*
 ucx_perf_mem_type_device_dispatchers[UCS_MEMORY_TYPE_LAST];
-
-ucs_status_t
-ucx_perf_allocator_register(const ucx_perf_allocator_t *allocator)
-{
-    const char *name = ucx_perf_allocator_name(allocator);
-    unsigned i;
-
-    if (strlen(name) >= UCX_PERF_ALLOC_NAME_MAX) {
-        ucs_error("perftest memory allocator name is too long: \"%s\"", name);
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    for (i = 0; i < ucx_perf_num_allocators; ++i) {
-        if (!strcmp(name, ucx_perf_allocator_name(ucx_perf_allocators[i]))) {
-            return (ucx_perf_allocators[i] == allocator) ?
-                   UCS_OK : UCS_ERR_ALREADY_EXISTS;
-        }
-    }
-
-    if (ucx_perf_num_allocators == ucs_static_array_size(ucx_perf_allocators)) {
-        ucs_error("too many perftest memory allocators");
-        return UCS_ERR_EXCEEDS_LIMIT;
-    }
-
-    ucx_perf_allocators[ucx_perf_num_allocators++] = allocator;
-    return UCS_OK;
-}
-
-void ucx_perf_allocator_unregister(const ucx_perf_allocator_t *allocator)
-{
-    unsigned i;
-
-    for (i = 0; i < ucx_perf_num_allocators; ++i) {
-        if (ucx_perf_allocators[i] == allocator) {
-            --ucx_perf_num_allocators;
-            ucx_perf_allocators[i] =
-                    ucx_perf_allocators[ucx_perf_num_allocators];
-            ucx_perf_allocators[ucx_perf_num_allocators] = NULL;
-            return;
-        }
-    }
-}
 
 const ucx_perf_allocator_t *ucx_perf_allocator_by_name(const char *name)
 {

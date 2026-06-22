@@ -245,7 +245,7 @@ static void* ucx_perf_cuda_memset(void *dst, int value, size_t count)
 #if CUDART_VERSION >= 11020
 static ucx_perf_allocator_t cuda_async_allocator = {
     .name      = "cuda-async",
-    .mem_type  = UCS_MEMORY_TYPE_CUDA,
+    .mem_type  = UCS_MEMORY_TYPE_CUDA_MANAGED,
     .init      = ucx_perf_cuda_init,
     .uct_alloc = uct_perf_cuda_async_alloc,
     .uct_free  = uct_perf_cuda_async_free,
@@ -257,6 +257,7 @@ static ucx_perf_allocator_t cuda_async_allocator = {
 #endif
 
 static ucx_perf_allocator_t cuda_allocator = {
+    .name      = "cuda",
     .mem_type  = UCS_MEMORY_TYPE_CUDA,
     .init      = ucx_perf_cuda_init,
     .uct_alloc = uct_perf_cuda_alloc,
@@ -266,6 +267,7 @@ static ucx_perf_allocator_t cuda_allocator = {
 };
 
 static ucx_perf_allocator_t cuda_managed_allocator = {
+    .name      = "cuda-managed",
     .mem_type  = UCS_MEMORY_TYPE_CUDA_MANAGED,
     .init      = ucx_perf_cuda_init,
     .uct_alloc = uct_perf_cuda_managed_alloc,

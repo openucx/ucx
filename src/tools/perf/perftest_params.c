@@ -22,17 +22,16 @@ const struct option TEST_PARAMS_ARGS_LONG[] =
     {0, 0, 0, 0}
 };
 
-static void print_memory_type_usage(void)
+static void print_memory_allocator_usage(void)
 {
-    ucs_memory_type_t it;
+    const ucx_perf_allocator_t *allocator;
+    unsigned i;
 
-    ucs_memory_type_for_each(it) {
-        printf("                        %s - %s\n", ucs_memory_type_names[it],
-               ucs_memory_type_descs[it]);
-    }
-    if (ucx_perf_allocator_by_name("cuda-async") != NULL) {
-        printf("                        cuda-async - NVIDIA GPU memory allocated "
-               "with cudaMallocAsync\n");
+    for (i = 0; i < ucx_perf_num_allocators; ++i) {
+        allocator = ucx_perf_allocators[i];
+        printf("                        %s - %s\n",
+               ucx_perf_allocator_name(allocator),
+               ucs_memory_type_descs[allocator->mem_type]);
     }
 }
 
@@ -95,7 +94,7 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("     -m <send memory>[,<recv memory>]\n");
     printf("                    memory allocator for sender and receiver "
            "(host)\n");
-    print_memory_type_usage();
+    print_memory_allocator_usage();
     printf("     -n <iters>     number of iterations to run (%"PRIu64")\n", ctx->params.super.max_iter);
     printf("     -w <iters>     number of warm-up iterations (%"PRIu64")\n",
                                 ctx->params.super.warmup_iter);

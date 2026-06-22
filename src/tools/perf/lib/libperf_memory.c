@@ -52,8 +52,7 @@ static ucs_status_t ucp_perf_mem_alloc(const ucx_perf_context_t *perf,
     void *address;
     ucs_status_t status;
 
-    ucs_assert((allocator->mem_alloc == NULL) ==
-               (allocator->mem_free == NULL));
+    ucs_assert((allocator->mem_alloc == NULL) == (allocator->mem_free == NULL));
     params.field_mask  = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
                          UCP_MEM_MAP_PARAM_FIELD_LENGTH |
                          UCP_MEM_MAP_PARAM_FIELD_FLAGS |
