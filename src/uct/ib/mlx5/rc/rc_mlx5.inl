@@ -2000,7 +2000,7 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface, int poll_flags)
     uct_rc_mlx5_coco_tx_cqe_result_t coco_result;
     uct_rc_mlx5_base_ep_t *ep;
     ucs_status_t status;
-    unsigned qp_num;
+    unsigned UCS_V_UNUSED qp_num;
     uint16_t hw_ci;
 
     cqe = uct_ib_mlx5_poll_cq(&iface->super.super, &iface->cq[UCT_IB_DIR_TX],

@@ -8,7 +8,7 @@
 #  include "config.h"
 #endif
 
-#include "rc_mlx5_common.h"
+#include "rc_mlx5.h"
 #include "rc_mlx5_coco.h"
 
 #include <ucs/debug/memtrack_int.h>

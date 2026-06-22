@@ -14,8 +14,8 @@
 
 struct mlx5dv_devx_umem;
 
-typedef struct uct_ib_mlx5_md uct_ib_mlx5_md_t;
-typedef struct uct_ib_mlx5_devx_umem uct_ib_mlx5_devx_umem_t;
+struct uct_ib_mlx5_md;
+struct uct_ib_mlx5_devx_umem;
 typedef struct uct_ib_mlx5_coco_state uct_ib_mlx5_coco_state_t;
 
 typedef struct uct_ib_mlx5_coco_shared_alloc {
@@ -78,7 +78,7 @@ typedef struct uct_ib_mlx5_coco_rmp_req {
 
 typedef struct uct_ib_mlx5_coco_shared_alloc_ops {
     ucs_status_t (*alloc)(size_t size, void **addr_p, int *fd_p, void *arg);
-    ucs_status_t (*umem_reg)(uct_ib_mlx5_md_t *md,
+    ucs_status_t (*umem_reg)(struct uct_ib_mlx5_md *md,
                              const uct_ib_mlx5_coco_shared_alloc_t *alloc,
                              int access_mode,
                              struct mlx5dv_devx_umem **umem_p, void *arg);
@@ -90,23 +90,24 @@ typedef struct uct_ib_mlx5_coco_shared_alloc_ops {
 ucs_status_t uct_ib_mlx5_coco_exposed_size(size_t requested_size,
                                            size_t *exposed_size_p);
 
-ucs_status_t uct_ib_mlx5_coco_state_init(uct_ib_mlx5_md_t *md);
+ucs_status_t uct_ib_mlx5_coco_state_init(struct uct_ib_mlx5_md *md);
 
-void uct_ib_mlx5_coco_state_cleanup(uct_ib_mlx5_md_t *md);
+void uct_ib_mlx5_coco_state_cleanup(struct uct_ib_mlx5_md *md);
 
-int uct_ib_mlx5_coco_mkey_policy_ready(const uct_ib_mlx5_md_t *md);
+int uct_ib_mlx5_coco_mkey_policy_ready(const struct uct_ib_mlx5_md *md);
 
 void uct_ib_mlx5_coco_set_shared_alloc_ops(
         const uct_ib_mlx5_coco_shared_alloc_ops_t *ops, void *arg);
 
 ucs_status_t
-uct_ib_mlx5_coco_md_buf_alloc_shared(uct_ib_mlx5_md_t *md, size_t size,
+uct_ib_mlx5_coco_md_buf_alloc_shared(struct uct_ib_mlx5_md *md, size_t size,
                                      int silent, void **buf_p,
-                                     uct_ib_mlx5_devx_umem_t *mem,
+                                     struct uct_ib_mlx5_devx_umem *mem,
                                      int access_mode, char *name);
 
-void uct_ib_mlx5_coco_md_buf_free_shared(uct_ib_mlx5_md_t *md, void *buf,
-                                         uct_ib_mlx5_devx_umem_t *mem);
+void
+uct_ib_mlx5_coco_md_buf_free_shared(struct uct_ib_mlx5_md *md, void *buf,
+                                    struct uct_ib_mlx5_devx_umem *mem);
 
 ucs_status_t
 uct_ib_mlx5_coco_umem_record_add(uct_ib_mlx5_coco_state_t *state,
@@ -155,19 +156,19 @@ uct_ib_mlx5_coco_mkey_record_find_lkey(const uct_ib_mlx5_coco_state_t *state,
                                        uint32_t lkey);
 
 ucs_status_t
-uct_ib_mlx5_coco_validate_cq_output(uct_ib_mlx5_md_t *md,
+uct_ib_mlx5_coco_validate_cq_output(struct uct_ib_mlx5_md *md,
                                     const uct_ib_mlx5_coco_cq_req_t *req,
                                     const void *out, size_t out_len,
                                     uint32_t *cqn_p);
 
 ucs_status_t
-uct_ib_mlx5_coco_validate_qp_output(uct_ib_mlx5_md_t *md,
+uct_ib_mlx5_coco_validate_qp_output(struct uct_ib_mlx5_md *md,
                                     const uct_ib_mlx5_coco_qp_req_t *req,
                                     const void *out, size_t out_len,
                                     uint32_t *qpn_p);
 
 ucs_status_t
-uct_ib_mlx5_coco_validate_rmp_output(uct_ib_mlx5_md_t *md,
+uct_ib_mlx5_coco_validate_rmp_output(struct uct_ib_mlx5_md *md,
                                      const uct_ib_mlx5_coco_rmp_req_t *req,
                                      const void *out, size_t out_len,
                                      uint32_t *rmpn_p);

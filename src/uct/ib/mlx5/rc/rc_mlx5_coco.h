@@ -13,8 +13,8 @@
 #include <ucs/type/status.h>
 
 
-typedef struct uct_rc_mlx5_iface_common uct_rc_mlx5_iface_common_t;
-typedef struct uct_rc_mlx5_base_ep uct_rc_mlx5_base_ep_t;
+struct uct_rc_mlx5_iface_common;
+struct uct_rc_mlx5_base_ep;
 typedef struct uct_rc_mlx5_coco_state uct_rc_mlx5_coco_state_t;
 
 /*
@@ -83,10 +83,10 @@ typedef struct uct_rc_mlx5_coco_qp_record {
     uint32_t                         qpn;
     uint32_t                         generation;
     uct_rc_mlx5_coco_qp_state_t      state;
-    uct_rc_mlx5_iface_common_t       *iface;
+    struct uct_rc_mlx5_iface_common  *iface;
     uct_ib_mlx5_cq_t                 *tx_cq;
     uct_ib_mlx5_cq_t                 *rx_cq;
-    uct_rc_mlx5_base_ep_t            *ep;
+    struct uct_rc_mlx5_base_ep       *ep;
     unsigned                         poison_scope;
     const char                       *poison_reason;
     uct_rc_mlx5_coco_state_t         *owner;
@@ -104,7 +104,7 @@ struct uct_rc_mlx5_coco_state {
     size_t                           qp_capacity;
     unsigned                         poison_scope;
     const char                       *poison_reason;
-    uct_rc_mlx5_iface_common_t       *srq_iface;
+    struct uct_rc_mlx5_iface_common  *srq_iface;
     uct_ib_mlx5_cq_t                 *srq_rx_cq;
     uct_rc_mlx5_coco_srq_slot_t      *srq_slots;
     size_t                           srq_slot_count;
@@ -139,10 +139,10 @@ void uct_rc_mlx5_coco_state_cleanup(uct_rc_mlx5_coco_state_t *state);
 
 ucs_status_t
 uct_rc_mlx5_coco_qp_record_add(uct_rc_mlx5_coco_state_t *state, uint32_t qpn,
-                               uct_rc_mlx5_iface_common_t *iface,
+                               struct uct_rc_mlx5_iface_common *iface,
                                uct_ib_mlx5_cq_t *tx_cq,
                                uct_ib_mlx5_cq_t *rx_cq,
-                               uct_rc_mlx5_base_ep_t *ep,
+                               struct uct_rc_mlx5_base_ep *ep,
                                uct_rc_mlx5_coco_qp_record_t **record_p);
 
 ucs_status_t
@@ -152,7 +152,7 @@ uct_rc_mlx5_coco_qp_record_destroy(uct_rc_mlx5_coco_state_t *state,
 ucs_status_t
 uct_rc_mlx5_coco_qp_record_validate(uct_rc_mlx5_coco_state_t *state,
                                     uint32_t qpn, uint32_t generation,
-                                    uct_rc_mlx5_iface_common_t *iface,
+                                    struct uct_rc_mlx5_iface_common *iface,
                                     uct_ib_mlx5_cq_t *cq,
                                     uct_ib_dir_t dir,
                                     uct_rc_mlx5_coco_qp_record_t **record_p);
@@ -162,7 +162,7 @@ uct_rc_mlx5_coco_qp_record_lookup(uct_rc_mlx5_coco_state_t *state,
                                   uint32_t qpn);
 
 ucs_status_t
-uct_rc_mlx5_coco_poison(uct_rc_mlx5_iface_common_t *iface,
+uct_rc_mlx5_coco_poison(struct uct_rc_mlx5_iface_common *iface,
                         uct_rc_mlx5_coco_qp_record_t *qp_record,
                         uct_ib_mlx5_cq_t *cq, unsigned poison_scope,
                         const char *reason);
@@ -207,7 +207,7 @@ uct_rc_mlx5_coco_error_cqe_validate(
 
 ucs_status_t
 uct_rc_mlx5_coco_error_cqe_poison(
-        uct_rc_mlx5_iface_common_t *iface, uct_ib_mlx5_cq_t *cq,
+        struct uct_rc_mlx5_iface_common *iface, uct_ib_mlx5_cq_t *cq,
         uct_ib_dir_t dir, uct_rc_mlx5_coco_error_cqe_result_t *result,
         const char *reason);
 
@@ -216,7 +216,7 @@ uct_rc_mlx5_coco_tx_op_from_opcode(uint8_t opcode);
 
 ucs_status_t
 uct_rc_mlx5_coco_srq_shadow_init(uct_rc_mlx5_coco_state_t *state,
-                                 uct_rc_mlx5_iface_common_t *iface,
+                                 struct uct_rc_mlx5_iface_common *iface,
                                  uct_ib_mlx5_cq_t *rx_cq,
                                  size_t slot_count);
 

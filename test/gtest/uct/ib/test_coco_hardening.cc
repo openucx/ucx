@@ -1241,7 +1241,7 @@ UCS_TEST_F(test_coco_hardening,
 
 static void init_rc_coco_iface(uct_rc_mlx5_iface_common_t *iface)
 {
-    *iface = {};
+    memset(iface, 0, sizeof(*iface));
     uct_rc_mlx5_coco_state_init(&iface->coco, 1);
 }
 
