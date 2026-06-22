@@ -1880,9 +1880,9 @@ ucs_status_t ucp_mm_get_alloc_md_index(ucp_context_h context,
         uct_mem_free(&mem);
     }
 
-    *md_idx_p             = context->alloc_md[alloc_mem_type].md_index;
-    mem_info_p->type      = alloc_mem_type;
-    mem_info_p->flags     = context->alloc_md[alloc_mem_type].mem_flags;
+    *md_idx_p         = context->alloc_md[alloc_mem_type].md_index;
+    mem_info_p->type  = alloc_mem_type;
+    mem_info_p->flags = context->alloc_md[alloc_mem_type].mem_flags;
 
     /* TODO: Extend the cache by alloc sys dev */
     if (UCP_MEM_IS_HOST(alloc_mem_type) ||

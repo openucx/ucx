@@ -250,6 +250,13 @@ protected:
     static const ucp_proto_config_t *
     get_rma_get_rndv_remote_proto_config(
             const ucp_proto_select_elem_t *select_elem, size_t length);
+
+    const ucp_proto_config_t *
+    select_get_rndv_remote_proto_config(ucp_proto_select_t *proto_select,
+                                        ucp_worker_cfg_index_t ep_cfg_index,
+                                        ucp_worker_cfg_index_t rkey_cfg_index,
+                                        const ucp_memory_info_t *mem_info,
+                                        size_t length);
 };
 
 ucp_md_map_t test_ucp_proto_cuda_async_non_reg::get_required_mem_flags_md_map(
@@ -285,6 +292,27 @@ test_ucp_proto_cuda_async_non_reg::get_rma_get_rndv_remote_proto_config(
     rpriv = static_cast<const ucp_proto_rndv_ctrl_priv_t*>(
             proto_config->priv);
     return &rpriv->remote_proto_config;
+}
+
+const ucp_proto_config_t *
+test_ucp_proto_cuda_async_non_reg::select_get_rndv_remote_proto_config(
+        ucp_proto_select_t *proto_select, ucp_worker_cfg_index_t ep_cfg_index,
+        ucp_worker_cfg_index_t rkey_cfg_index,
+        const ucp_memory_info_t *mem_info, size_t length)
+{
+    ucp_proto_select_param_t select_param;
+    const ucp_proto_select_elem_t *select_elem;
+
+    ucp_proto_select_param_init(&select_param, UCP_OP_ID_GET, 0, 0,
+                                UCP_DATATYPE_CONTIG, mem_info, 1);
+    select_elem = ucp_proto_select_lookup_slow(worker(), proto_select, 0,
+                                               ep_cfg_index, rkey_cfg_index,
+                                               &select_param);
+    if (select_elem == nullptr) {
+        return nullptr;
+    }
+
+    return get_rma_get_rndv_remote_proto_config(select_elem, length);
 }
 
 UCS_TEST_P(test_ucp_proto_cuda_async_non_reg, cuda_async_registrable_filter)
@@ -361,10 +389,8 @@ UCS_TEST_P(test_ucp_proto_cuda_async_non_reg,
     constexpr size_t select_size = UCS_GBYTE;
     ucp_request_param_t param    = {};
     ucp_datatype_iter_t dt_iter;
-    ucp_proto_select_param_t select_param;
     ucp_memory_info_t mem_info;
     const ucp_ep_config_t *ep_config;
-    const ucp_proto_select_elem_t *select_elem;
     ucp_proto_select_t *proto_select;
     const uct_iface_attr_t *iface_attr;
     ucp_worker_cfg_index_t ep_cfg_index, rkey_cfg_index;
@@ -436,25 +462,13 @@ UCS_TEST_P(test_ucp_proto_cuda_async_non_reg,
 
     /* Select the GET/RNDV proto twice, toggling only REGISTRABLE, and check
      * that direct GET zcopy is selected only for registrable memory. */
-    ucp_proto_select_param_init(&select_param, UCP_OP_ID_GET, 0, 0,
-                                UCP_DATATYPE_CONTIG, &mem_info, 1);
-    select_elem = ucp_proto_select_lookup_slow(worker(), proto_select, 0,
-                                               ep_cfg_index, rkey_cfg_index,
-                                               &select_param);
-    ASSERT_NE(nullptr, select_elem);
-    no_flag_remote_proto_config =
-            get_rma_get_rndv_remote_proto_config(select_elem, select_size);
+    no_flag_remote_proto_config = select_get_rndv_remote_proto_config(
+            proto_select, ep_cfg_index, rkey_cfg_index, &mem_info, select_size);
     ASSERT_NE(nullptr, no_flag_remote_proto_config);
 
     mem_info.flags |= UCS_MEM_FLAG_REGISTRABLE;
-    ucp_proto_select_param_init(&select_param, UCP_OP_ID_GET, 0, 0,
-                                UCP_DATATYPE_CONTIG, &mem_info, 1);
-    select_elem = ucp_proto_select_lookup_slow(worker(), proto_select, 0,
-                                               ep_cfg_index, rkey_cfg_index,
-                                               &select_param);
-    ASSERT_NE(nullptr, select_elem);
-    can_reg_remote_proto_config =
-            get_rma_get_rndv_remote_proto_config(select_elem, select_size);
+    can_reg_remote_proto_config = select_get_rndv_remote_proto_config(
+            proto_select, ep_cfg_index, rkey_cfg_index, &mem_info, select_size);
     ASSERT_NE(nullptr, can_reg_remote_proto_config);
 
     EXPECT_STRNE("rndv/get/zcopy",

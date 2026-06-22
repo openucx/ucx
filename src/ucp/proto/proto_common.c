@@ -507,6 +507,15 @@ ucp_proto_common_filter_min_frag(const ucp_proto_init_params_t *params,
                     ucs_memory_type_names[params->select_param->mem_type]);
 
         if (md_attr->flags & UCT_MD_FLAG_NEED_MEMH) {
+            /* Memory domain must support registration on the relevant memory
+             * type */
+            if (!(context->reg_md_map[reg_mem_type] & UCS_BIT(md_index))) {
+                ucs_trace("%s: md %s cannot register %s memory", lane_desc,
+                          context->tl_mds[md_index].rsc.md_name,
+                          ucs_memory_type_names[reg_mem_type]);
+                return 0;
+            }
+
             if (!ucs_test_all_flags(common_params->reg_mem_info.flags,
                                     md_attr->required_mem_flags)) {
                 ucs_trace("%s: md %s missing required_mem_flags=0x%x for "
@@ -514,15 +523,6 @@ ucp_proto_common_filter_min_frag(const ucp_proto_init_params_t *params,
                           lane_desc, context->tl_mds[md_index].rsc.md_name,
                           md_attr->required_mem_flags,
                           common_params->reg_mem_info.flags);
-                return 0;
-            }
-
-            /* Memory domain must support registration on the relevant memory
-             * type */
-            if (!(context->reg_md_map[reg_mem_type] & UCS_BIT(md_index))) {
-                ucs_trace("%s: md %s cannot register %s memory", lane_desc,
-                          context->tl_mds[md_index].rsc.md_name,
-                          ucs_memory_type_names[reg_mem_type]);
                 return 0;
             }
         } else if (!(md_attr->access_mem_types & UCS_BIT(reg_mem_type))) {

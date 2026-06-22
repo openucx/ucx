@@ -632,7 +632,8 @@ out_ctx_pop:
 static ucs_status_t
 uct_cuda_copy_md_query_attributes(const uct_cuda_copy_md_t *md,
                                   const void *address, size_t length,
-                                  ucs_memory_info_t *mem_info)
+                                  ucs_memory_info_t *mem_info,
+                                  int *is_async_managed)
 {
 #define UCT_CUDA_MEM_QUERY_NUM_ATTRS 4
     CUmemorytype cuda_mem_type = CU_MEMORYTYPE_HOST;
@@ -645,6 +646,8 @@ uct_cuda_copy_md_query_attributes(const uct_cuda_copy_md_t *md,
     int is_vmm;
     CUresult cu_err;
     ucs_status_t status;
+
+    *is_async_managed = 0;
 
     is_vmm = uct_cuda_copy_detect_vmm(address, &mem_info->type, &cuda_device);
     if (is_vmm) {
@@ -712,7 +715,8 @@ uct_cuda_copy_md_query_attributes(const uct_cuda_copy_md_t *md,
              * false in that case. Therefore, checking whether the allocation
              * was not allocated in a context should also allows us to
              * identify virtual/stream-ordered CUDA allocations. */
-            mem_info->type = UCS_MEMORY_TYPE_CUDA_MANAGED;
+            mem_info->type    = UCS_MEMORY_TYPE_CUDA_MANAGED;
+            *is_async_managed = 1;
         } else {
             mem_info->type = UCS_MEMORY_TYPE_CUDA;
         }
@@ -819,41 +823,16 @@ uct_cuda_copy_md_dmabuf_t uct_cuda_copy_md_get_dmabuf(const void *address,
     return dmabuf;
 }
 
-static int uct_cuda_copy_md_is_async_alloc(const void *address)
-{
-    CUmemorytype cuda_mem_type      = CU_MEMORYTYPE_HOST;
-    uint32_t is_managed             = 0;
-    CUcontext cuda_mem_ctx          = NULL;
-    CUdevice cuda_device            = CU_DEVICE_INVALID;
-    CUpointer_attribute attr_type[] = {CU_POINTER_ATTRIBUTE_MEMORY_TYPE,
-                                       CU_POINTER_ATTRIBUTE_IS_MANAGED,
-                                       CU_POINTER_ATTRIBUTE_DEVICE_ORDINAL,
-                                       CU_POINTER_ATTRIBUTE_CONTEXT};
-    void *attr_data[] = {&cuda_mem_type, &is_managed, &cuda_device,
-                         &cuda_mem_ctx};
-    ucs_status_t status;
-
-    status = UCT_CUDADRV_FUNC_LOG_DEBUG(
-            cuPointerGetAttributes(ucs_static_array_size(attr_data), attr_type,
-                                   attr_data, (CUdeviceptr)address));
-    if (status != UCS_OK) {
-        return 0;
-    }
-
-    return (cuda_mem_type == CU_MEMORYTYPE_DEVICE) && !is_managed &&
-           (cuda_mem_ctx == NULL);
-}
-
 static uint8_t
 uct_cuda_copy_md_detect_mem_flags(uct_cuda_copy_md_t *md,
                                   const ucs_memory_info_t *mem_info,
+                                  int is_async_managed,
                                   const uct_cuda_copy_md_dmabuf_t *dmabuf)
 {
     int close_dmabuf = 0;
     uct_cuda_copy_md_dmabuf_t local_dmabuf;
 
-    if ((mem_info->type == UCS_MEMORY_TYPE_CUDA_MANAGED) &&
-        uct_cuda_copy_md_is_async_alloc(mem_info->base_address)) {
+    if (is_async_managed) {
         return 0;
     }
 
@@ -899,7 +878,8 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
         .fd     = UCT_DMABUF_FD_INVALID,
         .offset = 0
     };
-    int dmabuf_queried = 0;
+    int dmabuf_queried    = 0;
+    int is_async_managed  = 0;
     ucs_memory_info_t addr_mem_info;
     ucs_status_t status;
 
@@ -916,7 +896,8 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
 
     if (address != NULL) {
         status = uct_cuda_copy_md_query_attributes(md, address, length,
-                                                   &addr_mem_info);
+                                                   &addr_mem_info,
+                                                   &is_async_managed);
         if (status != UCS_OK) {
             return status;
         }
@@ -958,7 +939,8 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
 
     if (address != NULL) {
         addr_mem_info.mem_flags = uct_cuda_copy_md_detect_mem_flags(
-                md, &addr_mem_info, dmabuf_queried ? &dmabuf : NULL);
+                md, &addr_mem_info, is_async_managed,
+                dmabuf_queried ? &dmabuf : NULL);
         ucs_memtype_cache_update(addr_mem_info.base_address,
                                  addr_mem_info.alloc_length, addr_mem_info.type,
                                  addr_mem_info.sys_dev,

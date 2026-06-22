@@ -607,6 +607,9 @@ std::string mem_buffer::mem_type_name(ucs_memory_type_t mem_type)
 bool mem_buffer::is_async_supported(ucs_memory_type_t mem_type)
 {
 #if CUDART_VERSION >= 11020
+    if (!is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
+        return false;
+    }
     return mem_type == UCS_MEMORY_TYPE_CUDA;
 #else
     return false;

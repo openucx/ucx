@@ -470,8 +470,7 @@ class test_ucp_rma_rndv_cuda_async : public test_ucp_rma_rndv {
 public:
     void init() override
     {
-        if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA) ||
-            !mem_buffer::is_async_supported(UCS_MEMORY_TYPE_CUDA)) {
+        if (!mem_buffer::is_async_supported(UCS_MEMORY_TYPE_CUDA)) {
             UCS_TEST_SKIP_R("asynchronous CUDA memory is not supported");
         }
 

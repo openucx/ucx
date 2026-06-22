@@ -346,10 +346,6 @@ UCS_TEST_P(test_ib_md, cuda_async_mem_reg_fails)
     uct_mem_h memh;
     ucs_status_t status;
 
-    if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
-        UCS_TEST_SKIP_R("CUDA is not supported");
-    }
-
     if (!mem_buffer::is_async_supported(UCS_MEMORY_TYPE_CUDA)) {
         UCS_TEST_SKIP_R("CUDA async allocation is not supported");
     }
