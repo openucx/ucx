@@ -2103,7 +2103,7 @@ uct_ib_iface_estimate_bandwidth(uct_ib_iface_t *iface,
         log_level = ((errno == EOPNOTSUPP) ||
                      (errno == EPROTONOSUPPORT) ||
                      (errno == ENOSYS)) ? UCS_LOG_LEVEL_DEBUG :
-                                          UCS_LOG_LEVEL_WARN;
+                                          UCS_LOG_LEVEL_DIAG;
         ucs_log(log_level,
                 "ibv_query_port_speed("UCT_IB_IFACE_FMT", port_num=%d) failed:"
                 " %m", UCT_IB_IFACE_ARG(iface), iface->config.port_num);
