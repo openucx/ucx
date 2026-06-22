@@ -97,6 +97,9 @@ function add_timestamp() {
 }
 
 function az_init_modules() {
+    # Public vendor images (e.g. the Intel oneAPI ZE builder) do not ship the
+    # Environment Modules system. Nothing to initialize there.
+    [ -f /etc/profile.d/modules.sh ] || return 0
     . /etc/profile.d/modules.sh
     export MODULEPATH="/hpc/local/etc/modulefiles:$MODULEPATH"
     # Read module files (W/A if there're some network instabilities lead to autofs issues)
