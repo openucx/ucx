@@ -286,12 +286,14 @@ ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep, unsigned ep_init_flags,
     wiface   = ucp_worker_iface(worker, select_info.rsc_index);
 
     /* create auxiliary endpoint connected to the remote iface. */
-    uct_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE    |
-                               UCT_EP_PARAM_FIELD_DEV_ADDR |
-                               UCT_EP_PARAM_FIELD_IFACE_ADDR;
-    uct_ep_params.iface      = wiface->iface;
-    uct_ep_params.dev_addr   = aux_addr->dev_addr;
-    uct_ep_params.iface_addr = aux_addr->iface_addr;
+    uct_ep_params.field_mask        = UCT_EP_PARAM_FIELD_IFACE |
+                                      UCT_EP_PARAM_FIELD_DEV_ADDR |
+                                      UCT_EP_PARAM_FIELD_IFACE_ADDR |
+                                      UCT_EP_PARAM_FIELD_IFACE_ADDR_LENGTH;
+    uct_ep_params.iface             = wiface->iface;
+    uct_ep_params.dev_addr          = aux_addr->dev_addr;
+    uct_ep_params.iface_addr        = aux_addr->iface_addr;
+    uct_ep_params.iface_addr_length = aux_addr->iface_addr_len;
     status = uct_ep_create(&uct_ep_params, &uct_ep);
     if (status != UCS_OK) {
         /* coverity[leaked_storage] */
