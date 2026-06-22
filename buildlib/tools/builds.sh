@@ -17,8 +17,19 @@ build_mode=${build_mode:-}
 
 build_mode=${build_mode:-long}
 
+require_ze=${require_ze:-}
+# Azure passes the literal template variable when a matrix row does not define
+# require_ze. Treat it as unset.
+[ "${require_ze}" = "\$(require_ze)" ] && require_ze=
+
+require_real_ze=${require_real_ze:-}
+# Azure passes the literal template variable when a matrix row does not define
+# require_real_ze. Treat it as unset so default no-GPU CI can use the ZE null
+# driver, while manual Intel GPU runs can set require_real_ze=yes.
+[ "${require_real_ze}" = "\$(require_real_ze)" ] && require_real_ze=
+
 case "${build_mode}" in
-long|short|sanity|compilers)
+long|short|sanity|compilers|ze)
 	;;
 *)
 	azure_log_error "Unsupported build mode: ${build_mode}"
@@ -331,6 +342,79 @@ build_rocm() {
 }
 
 #
+# Confirm the ZE memory domain and transport enumerate in ucx_info output.
+#
+check_ze_devices() {
+	local ze_info=$1
+	local mode=$2
+
+	echo "${ze_info}"
+	if ! echo "${ze_info}" | grep -q "ze_cpy"; then
+		azure_log_error "ZE ${mode} smoke failed: ze_cpy MD not found"
+		exit 1
+	fi
+	if ! echo "${ze_info}" | grep -q "ze_copy"; then
+		azure_log_error "ZE ${mode} smoke failed: ze_copy transport not found"
+		exit 1
+	fi
+}
+
+#
+# Build with Intel Level Zero (ZE) and run a smoke check.
+#
+# Like build_cuda/build_rocm, this detects real hardware at runtime: if a real
+# Intel GPU is present (ZE enumerates a device without the null driver), it runs
+# the real smoke; otherwise it falls back to the in-tree Level Zero "null
+# driver", which returns synthetic success for init/discovery/object-lifecycle
+# calls. This lets the same function run real on an Intel GPU host or cluster
+# and no-GPU in the public Intel oneAPI CI container.
+#
+build_ze() {
+	if [ "${require_ze}" != "yes" ]; then
+		echo "==== Not building with ZE (require_ze!=yes) ===="
+		return
+	fi
+
+	echo "==== Build with enable ZE ===="
+	${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst \
+		"${compile_only_config_args[@]}" --with-ze
+	$MAKEP
+
+	# Compilation check: configure must have detected ZE.
+	grep '#define HAVE_ZE 1' config.h
+
+	$MAKEP install
+
+	# Probe for a real Intel GPU: query ZE without the null driver. If the
+	# ze_copy transport enumerates a device, real hardware is present.
+	local real_ze_info
+	real_ze_info=$(${ucx_inst}/bin/ucx_info -d 2>/dev/null || true)
+	if echo "${real_ze_info}" | grep -q "ze_copy"; then
+		echo "==== Running ZE smoke on real Intel GPU ===="
+		check_ze_devices "${real_ze_info}" "real-GPU"
+	else
+		if [ "${require_real_ze}" = "yes" ]; then
+			echo "${real_ze_info}"
+			azure_log_error "ZE real-GPU smoke failed: ze_copy transport not found"
+			exit 1
+		fi
+
+		# No real GPU: load the Level Zero null driver (synthetic device).
+		# ZE_ENABLE_NULL_DRIVER must be the literal "1"; the loader's
+		# getenv_tobool rejects anything else. The null driver soname is
+		# resolved from the linker cache (ldconfig in the builder image),
+		# so no ZEL_LIBRARY_PATH is needed.
+		echo "==== Running ZE null-driver smoke (no GPU) ===="
+		local null_ze_info
+		null_ze_info=$(ZE_ENABLE_NULL_DRIVER=1 ZE_ENABLE_LOADER_DEBUG_TRACE=1 \
+			${ucx_inst}/bin/ucx_info -d)
+		check_ze_devices "${null_ze_info}" "null-driver"
+	fi
+
+	make_clean distclean
+}
+
+#
 # Build with clang compiler
 #
 build_clang() {
@@ -541,6 +625,9 @@ long)
 	;;
 compilers)
 	tests=('build_icc' 'build_pgi')
+	;;
+ze)
+	tests=('build_ze')
 	;;
 esac
 
