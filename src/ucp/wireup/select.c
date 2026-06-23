@@ -1142,20 +1142,6 @@ static void ucp_wireup_fill_peer_err_criteria(ucp_wireup_criteria_t *criteria,
     }
 }
 
-static double ucp_wireup_aux_score_func(const ucp_worker_iface_t *wiface,
-                                        const uct_md_attr_v2_t *md_attr,
-                                        const ucp_unpacked_address_t *unpacked_addr,
-                                        const ucp_address_entry_t *remote_addr,
-                                        int is_prioritized_ep, void *arg)
-{
-    /* best end-to-end latency and larger bcopy size */
-    return (1e-3 /
-            (ucp_wireup_tl_iface_latency(
-                 wiface, unpacked_addr, &remote_addr->iface_attr,
-                 is_prioritized_ep) +
-             wiface->attr.overhead + remote_addr->iface_attr.overhead));
-}
-
 static size_t
 ucp_wireup_aux_seg_size(const uct_iface_attr_t *local_iface_attr,
                         const ucp_address_entry_t *remote_addr)
@@ -1196,7 +1182,7 @@ static void ucp_wireup_fill_aux_criteria(ucp_wireup_criteria_t *criteria,
     criteria->local_cmpt_flags   = 0;
     criteria->local_event_flags  = 0;
     criteria->remote_event_flags = 0;
-    criteria->calc_score         = ucp_wireup_aux_score_func;
+    criteria->calc_score         = ucp_wireup_aux_seg_size_score_func;
     criteria->tl_rsc_flags       = UCP_TL_RSC_FLAG_AUX; /* Can use aux transports */
     criteria->lane_type          = UCP_LANE_TYPE_LAST;
 
@@ -3068,10 +3054,6 @@ ucp_wireup_select_aux_transport_by_seg_size(
 
     ucs_trace("ep %p: no %s transport to %s with non-zero seg_size",
               select_params->ep, criteria->title, select_params->address->name);
-    if (select_params->show_error && show_error) {
-        ucs_error("no %s transport to %s with non-zero seg_size",
-                  criteria->title, select_params->address->name);
-    }
 
     return UCS_ERR_UNREACHABLE;
 }
@@ -3093,7 +3075,6 @@ ucp_wireup_select_aux_transport(ucp_ep_h ep, unsigned ep_init_flags,
     /* Select auxiliary transport that supports async active message callback */
     ucp_wireup_fill_aux_criteria(&criteria, ep_init_flags,
                                  UCP_ADDR_IFACE_FLAG_CB_ASYNC);
-    criteria.calc_score = ucp_wireup_aux_seg_size_score_func;
     status = ucp_wireup_select_aux_transport_by_seg_size(&select_ctx,
                                                          &select_params,
                                                          &criteria, 0,
@@ -3105,7 +3086,6 @@ ucp_wireup_select_aux_transport(ucp_ep_h ep, unsigned ep_init_flags,
     /* Fallback to an auxiliary transport without async active message callback
      * requirement */
     ucp_wireup_fill_aux_criteria(&criteria, ep_init_flags, 0);
-    criteria.calc_score = ucp_wireup_aux_seg_size_score_func;
     return ucp_wireup_select_aux_transport_by_seg_size(&select_ctx,
                                                        &select_params,
                                                        &criteria, 1,

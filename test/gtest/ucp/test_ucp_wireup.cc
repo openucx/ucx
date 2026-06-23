@@ -2073,15 +2073,15 @@ private:
         uct_ep_is_connected_params_t params = {};
         uint64_t field_mask;
 
-        if (address_entry->dev_addr != NULL) {
-            params.device_addr = address_entry->dev_addr;
-            params.field_mask |= UCT_EP_IS_CONNECTED_FIELD_DEVICE_ADDR;
+        if ((address_entry->dev_addr == NULL) ||
+            (address_entry->iface_addr == NULL)) {
+            return 0;
         }
 
-        if (address_entry->iface_addr != NULL) {
-            params.iface_addr  = address_entry->iface_addr;
-            params.field_mask |= UCT_EP_IS_CONNECTED_FIELD_IFACE_ADDR;
-        }
+        params.device_addr = address_entry->dev_addr;
+        params.iface_addr  = address_entry->iface_addr;
+        params.field_mask  = UCT_EP_IS_CONNECTED_FIELD_DEVICE_ADDR |
+                             UCT_EP_IS_CONNECTED_FIELD_IFACE_ADDR;
 
         if (address_entry->num_ep_addrs == 0) {
             return uct_ep_is_connected(uct_ep, &params);
@@ -2089,6 +2089,10 @@ private:
 
         field_mask = params.field_mask | UCT_EP_IS_CONNECTED_FIELD_EP_ADDR;
         for (unsigned i = 0; i < address_entry->num_ep_addrs; ++i) {
+            if (address_entry->ep_addrs[i].addr == NULL) {
+                continue;
+            }
+
             params.field_mask = field_mask;
             params.ep_addr    = address_entry->ep_addrs[i].addr;
 
