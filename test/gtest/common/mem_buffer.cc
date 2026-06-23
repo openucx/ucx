@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2020. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  * Copyright (C) Advanced Micro Devices, Inc. 2019.  ALL RIGHTS RESERVED.
  * Copyright (C) Intel Corporation, 2026. ALL RIGHTS RESERVED.
  *
@@ -850,6 +850,9 @@ std::string mem_buffer::mem_type_name(ucs_memory_type_t mem_type)
 bool mem_buffer::is_async_supported(ucs_memory_type_t mem_type)
 {
 #if CUDART_VERSION >= 11020
+    if (!is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
+        return false;
+    }
     return mem_type == UCS_MEMORY_TYPE_CUDA;
 #else
     return false;
@@ -857,16 +860,25 @@ bool mem_buffer::is_async_supported(ucs_memory_type_t mem_type)
 }
 
 mem_buffer::mem_buffer(size_t size, ucs_memory_type_t mem_type) :
-    m_mem_type(mem_type), m_ptr(allocate(size, mem_type)), m_size(size) {
+    m_mem_type(mem_type), m_ptr(allocate(size, mem_type)), m_size(size),
+    m_async(false) {
 }
 
 mem_buffer::mem_buffer(size_t size, ucs_memory_type_t mem_type, uint64_t seed) :
-    m_mem_type(mem_type), m_ptr(allocate(size, mem_type)), m_size(size) {
+    m_mem_type(mem_type), m_ptr(allocate(size, mem_type)), m_size(size),
+    m_async(false) {
     pattern_fill(seed);
 }
 
+mem_buffer::mem_buffer(size_t size, ucs_memory_type_t mem_type,
+                       alloc_mode mode) :
+    m_mem_type(mem_type),
+    m_ptr(allocate(size, mem_type, mode == alloc_mode::ASYNC)), m_size(size),
+    m_async(mode == alloc_mode::ASYNC) {
+}
+
 mem_buffer::~mem_buffer() {
-    release(ptr(), mem_type());
+    release(ptr(), mem_type(), m_async);
 }
 
 ucs_memory_type_t mem_buffer::mem_type() const {

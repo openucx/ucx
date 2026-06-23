@@ -2093,8 +2093,7 @@ private:
     {
         ucp_test::add_variant_memtypes(variants, generator);
 
-        if (mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA) &&
-            mem_buffer::is_async_supported(UCS_MEMORY_TYPE_CUDA)) {
+        if (mem_buffer::is_async_supported(UCS_MEMORY_TYPE_CUDA)) {
             add_variant_values(variants, generator, MEMORY_TYPE_CUDA_ASYNC,
                                "cuda-async");
         }

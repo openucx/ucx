@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2017-2019. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2017-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -12,6 +12,7 @@
 #include <string.h>
 #include <limits.h>
 #include <ucs/debug/log.h>
+#include <ucs/sys/sock.h>
 #include <ucs/sys/sys.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/memory/memtype_cache.h>
@@ -631,7 +632,8 @@ out_ctx_pop:
 static ucs_status_t
 uct_cuda_copy_md_query_attributes(const uct_cuda_copy_md_t *md,
                                   const void *address, size_t length,
-                                  ucs_memory_info_t *mem_info)
+                                  ucs_memory_info_t *mem_info,
+                                  int *is_async_managed)
 {
 #define UCT_CUDA_MEM_QUERY_NUM_ATTRS 4
     CUmemorytype cuda_mem_type = CU_MEMORYTYPE_HOST;
@@ -644,6 +646,8 @@ uct_cuda_copy_md_query_attributes(const uct_cuda_copy_md_t *md,
     int is_vmm;
     CUresult cu_err;
     ucs_status_t status;
+
+    *is_async_managed = 0;
 
     is_vmm = uct_cuda_copy_detect_vmm(address, &mem_info->type, &cuda_device);
     if (is_vmm) {
@@ -711,7 +715,8 @@ uct_cuda_copy_md_query_attributes(const uct_cuda_copy_md_t *md,
              * false in that case. Therefore, checking whether the allocation
              * was not allocated in a context should also allows us to
              * identify virtual/stream-ordered CUDA allocations. */
-            mem_info->type = UCS_MEMORY_TYPE_CUDA_MANAGED;
+            mem_info->type    = UCS_MEMORY_TYPE_CUDA_MANAGED;
+            *is_async_managed = 1;
         } else {
             mem_info->type = UCS_MEMORY_TYPE_CUDA;
         }
@@ -818,9 +823,49 @@ uct_cuda_copy_md_dmabuf_t uct_cuda_copy_md_get_dmabuf(const void *address,
     return dmabuf;
 }
 
-ucs_status_t
-uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address, size_t length,
-                           uct_md_mem_attr_t *mem_attr)
+static uint8_t
+uct_cuda_copy_md_detect_mem_flags(uct_cuda_copy_md_t *md,
+                                  const ucs_memory_info_t *mem_info,
+                                  int is_async_managed,
+                                  const uct_cuda_copy_md_dmabuf_t *dmabuf)
+{
+    int close_dmabuf = 0;
+    uct_cuda_copy_md_dmabuf_t local_dmabuf;
+
+    if (is_async_managed) {
+        return 0;
+    }
+
+    if (mem_info->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        return UCS_MEM_FLAG_REGISTRABLE;
+    }
+
+    if (!md->config.dmabuf_supported) {
+        return UCS_MEM_FLAG_REGISTRABLE;
+    }
+
+    if (dmabuf == NULL) {
+        local_dmabuf = uct_cuda_copy_md_get_dmabuf(mem_info->base_address,
+                                                   mem_info->alloc_length,
+                                                   mem_info->sys_dev);
+        dmabuf       = &local_dmabuf;
+        close_dmabuf = 1;
+    }
+
+    if (dmabuf->fd == UCT_DMABUF_FD_INVALID) {
+        return 0;
+    }
+
+    if (close_dmabuf) {
+        ucs_close_fd(&local_dmabuf.fd);
+    }
+
+    return UCS_MEM_FLAG_REGISTRABLE;
+}
+
+ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
+                                        size_t length,
+                                        uct_md_mem_attr_v2_t *mem_attr)
 {
     ucs_memory_info_t default_mem_info = {
         .type         = UCS_MEMORY_TYPE_HOST,
@@ -829,62 +874,91 @@ uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address, size_t length,
         .alloc_length = length
     };
     uct_cuda_copy_md_t *md = ucs_derived_of(tl_md, uct_cuda_copy_md_t);
+    uct_cuda_copy_md_dmabuf_t dmabuf = {
+        .fd     = UCT_DMABUF_FD_INVALID,
+        .offset = 0
+    };
+    int dmabuf_queried    = 0;
+    int is_async_managed  = 0;
     ucs_memory_info_t addr_mem_info;
     ucs_status_t status;
-    uct_cuda_copy_md_dmabuf_t dmabuf;
 
     if (!(mem_attr->field_mask &
-          (UCT_MD_MEM_ATTR_FIELD_MEM_TYPE | UCT_MD_MEM_ATTR_FIELD_SYS_DEV |
-           UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS |
-           UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH |
-           UCT_MD_MEM_ATTR_FIELD_DMABUF_FD |
-           UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET))) {
+          (UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE |
+           UCT_MD_MEM_ATTR_V2_FIELD_SYS_DEV |
+           UCT_MD_MEM_ATTR_V2_FIELD_BASE_ADDRESS |
+           UCT_MD_MEM_ATTR_V2_FIELD_ALLOC_LENGTH |
+           UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD |
+           UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_OFFSET |
+           UCT_MD_MEM_ATTR_V2_FIELD_MEM_FLAGS))) {
         return UCS_OK;
     }
 
     if (address != NULL) {
         status = uct_cuda_copy_md_query_attributes(md, address, length,
-                                                   &addr_mem_info);
+                                                   &addr_mem_info,
+                                                   &is_async_managed);
         if (status != UCS_OK) {
             return status;
         }
-
-        ucs_memtype_cache_update(addr_mem_info.base_address,
-                                 addr_mem_info.alloc_length, addr_mem_info.type,
-                                 addr_mem_info.sys_dev);
     } else {
         addr_mem_info = default_mem_info;
     }
 
-    if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_MEM_TYPE) {
+    if (mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE) {
         mem_attr->mem_type = addr_mem_info.type;
     }
 
-    if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_SYS_DEV) {
+    if (mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_SYS_DEV) {
         mem_attr->sys_dev = addr_mem_info.sys_dev;
     }
 
-    if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS) {
+    if (mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_BASE_ADDRESS) {
         mem_attr->base_address = addr_mem_info.base_address;
     }
 
-    if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH) {
+    if (mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_ALLOC_LENGTH) {
         mem_attr->alloc_length = addr_mem_info.alloc_length;
     }
 
-    if ((mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD) ||
-        (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET)) {
+    if ((mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD) ||
+        (mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_OFFSET)) {
         dmabuf = uct_cuda_copy_md_get_dmabuf(addr_mem_info.base_address,
                                              addr_mem_info.alloc_length,
                                              addr_mem_info.sys_dev);
-        if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD) {
+        dmabuf_queried = 1;
+        if (mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD) {
             mem_attr->dmabuf_fd = dmabuf.fd;
         }
-        if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET) {
+        if (mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_OFFSET) {
             mem_attr->dmabuf_offset =
                     dmabuf.offset + UCS_PTR_BYTE_DIFF(addr_mem_info.base_address,
                                                       address);
         }
+    }
+
+    if (address != NULL) {
+        addr_mem_info.mem_flags = uct_cuda_copy_md_detect_mem_flags(
+                md, &addr_mem_info, is_async_managed,
+                dmabuf_queried ? &dmabuf : NULL);
+        ucs_memtype_cache_update(addr_mem_info.base_address,
+                                 addr_mem_info.alloc_length, addr_mem_info.type,
+                                 addr_mem_info.sys_dev,
+                                 addr_mem_info.mem_flags);
+    }
+
+    if (mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_MEM_FLAGS) {
+        mem_attr->mem_flags = (address != NULL) ? addr_mem_info.mem_flags :
+                                                  UCS_MEM_FLAG_REGISTRABLE;
+    }
+
+    /* If dmabuf_fd was returned to the caller, the caller is responsible to
+     * close it. Otherwise, release the fd opened to query dmabuf_offset or
+     * memory flags.
+     */
+    if (dmabuf_queried &&
+        !(mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD)) {
+        ucs_close_fd(&dmabuf.fd);
     }
 
     return UCS_OK;
@@ -895,10 +969,10 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_md_detect_memory_type,
                  const void *address, size_t length,
                  ucs_memory_type_t *mem_type_p)
 {
-    uct_md_mem_attr_t mem_attr;
+    uct_md_mem_attr_v2_t mem_attr;
     ucs_status_t status;
 
-    mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE;
+    mem_attr.field_mask = UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE;
 
     status = uct_cuda_copy_md_mem_query(md, address, length, &mem_attr);
     if (status != UCS_OK) {
