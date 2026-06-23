@@ -533,7 +533,8 @@ ucp_proto_rndv_rtr_mtype_probe(const ucp_proto_init_params_t *init_params)
                 UCT_PERF_ATTR_HOST_MEMORY_CLASS_UNKNOWN, UCT_EP_OP_PUT_ZCOPY,
                 init_params->select_param->mem_type,
                 init_params->select_param->sys_dev, peer_mem_type,
-                peer_sys_dev, params.super.min_length, params.super.max_length, 1,
+                peer_sys_dev, UCP_PROTO_INIT_BUFFER_COPY_FLAG_NONE,
+                params.super.min_length, params.super.max_length, 1,
                 params.unpack_perf);
         if (status != UCS_OK) {
             goto out_unpack_perf_destroy;

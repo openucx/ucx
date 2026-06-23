@@ -295,13 +295,47 @@ ucp_proto_init_memtype_copy_known_nonhost(ucs_memory_type_t mem_type,
            (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN);
 }
 
+static int
+ucp_proto_init_memtype_copy_is_attached_host_staging(
+        const uct_perf_attr_t *perf_attr, ucs_memory_type_t mem_type1,
+        ucs_sys_device_t sys_dev1, ucs_memory_type_t mem_type2,
+        ucs_sys_device_t sys_dev2, unsigned flags)
+{
+    int mem_type1_known_nonhost;
+    int mem_type2_known_nonhost;
+
+    if (!(flags & UCP_PROTO_INIT_BUFFER_COPY_FLAG_ATTACHED_HOST_STAGING)) {
+        return 0;
+    }
+
+    mem_type1_known_nonhost =
+            ucp_proto_init_memtype_copy_known_nonhost(mem_type1, sys_dev1);
+    mem_type2_known_nonhost =
+            ucp_proto_init_memtype_copy_known_nonhost(mem_type2, sys_dev2);
+
+    if (mem_type1_known_nonhost == mem_type2_known_nonhost) {
+        return 0;
+    }
+
+    if (mem_type1_known_nonhost) {
+        return UCP_MEM_IS_CUDA(mem_type1) &&
+               UCP_MEM_IS_HOST(mem_type2) &&
+               (perf_attr->bandwidth_shared_sys_device == sys_dev1);
+    }
+
+    return UCP_MEM_IS_HOST(mem_type1) &&
+           UCP_MEM_IS_CUDA(mem_type2) &&
+           (perf_attr->bandwidth_shared_sys_device == sys_dev2);
+}
+
 unsigned
 ucp_proto_init_memtype_copy_shared_divisor(ucp_worker_h worker,
                                            const uct_perf_attr_t *perf_attr,
                                            ucs_memory_type_t mem_type1,
                                            ucs_sys_device_t sys_dev1,
                                            ucs_memory_type_t mem_type2,
-                                           ucs_sys_device_t sys_dev2)
+                                           ucs_sys_device_t sys_dev2,
+                                           unsigned flags)
 {
     ucs_sys_device_t shared_sys_dev;
     unsigned ppn = ucs_min(worker->context->config.est_num_ppn, 8);
@@ -314,6 +348,11 @@ ucp_proto_init_memtype_copy_shared_divisor(ucp_worker_h worker,
     shared_sys_dev = perf_attr->bandwidth_shared_sys_device;
     if (shared_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
         return ppn;
+    }
+
+    if (ucp_proto_init_memtype_copy_is_attached_host_staging(
+                perf_attr, mem_type1, sys_dev1, mem_type2, sys_dev2, flags)) {
+        return ucs_max(ucs_div_round_up(ppn, 2), 1);
     }
 
     if (!ucp_proto_init_memtype_copy_known_nonhost(mem_type1, sys_dev1) ||
@@ -370,6 +409,31 @@ ucp_proto_init_buffer_copy_host_memory_class(
     return UCT_PERF_ATTR_HOST_MEMORY_CLASS_UNKNOWN;
 }
 
+unsigned
+ucp_proto_init_buffer_copy_flags(
+        ucs_memory_type_t local_mem_type,
+        uct_perf_attr_host_memory_class_t local_host_mem_class,
+        ucs_memory_type_t remote_mem_type,
+        uct_perf_attr_host_memory_class_t remote_host_mem_class, unsigned flags)
+{
+    if (!(flags & UCP_PROTO_INIT_BUFFER_COPY_FLAG_ATTACHED_HOST_STAGING)) {
+        return flags;
+    }
+
+    if (((local_mem_type == UCS_MEMORY_TYPE_HOST) &&
+         (local_host_mem_class ==
+          UCT_PERF_ATTR_HOST_MEMORY_CLASS_REGISTERED_LOCKED) &&
+         !UCP_MEM_IS_HOST(remote_mem_type)) ||
+        ((remote_mem_type == UCS_MEMORY_TYPE_HOST) &&
+         (remote_host_mem_class ==
+          UCT_PERF_ATTR_HOST_MEMORY_CLASS_REGISTERED_LOCKED) &&
+         !UCP_MEM_IS_HOST(local_mem_type))) {
+        return flags;
+    }
+
+    return flags & ~UCP_PROTO_INIT_BUFFER_COPY_FLAG_ATTACHED_HOST_STAGING;
+}
+
 ucs_status_t
 ucp_proto_init_buffer_copy_perf(ucp_worker_h worker,
                                 ucs_memory_type_t local_mem_type,
@@ -384,7 +448,8 @@ ucp_proto_init_buffer_copy_perf(ucp_worker_h worker,
                                 ucs_memory_type_t scope_mem_type1,
                                 ucs_sys_device_t scope_sys_dev1,
                                 ucs_memory_type_t scope_mem_type2,
-                                ucs_sys_device_t scope_sys_dev2, int local,
+                                ucs_sys_device_t scope_sys_dev2,
+                                unsigned flags, int local,
                                 ucp_proto_init_buffer_copy_perf_t *copy_perf)
 {
     ucp_context_h context = worker->context;
@@ -415,6 +480,10 @@ ucp_proto_init_buffer_copy_perf(ucp_worker_h worker,
                 ucs_linear_func_make(0, 1.0 / context->config.ext.bcopy_bw);
         return UCS_OK;
     }
+
+    flags = ucp_proto_init_buffer_copy_flags(
+            local_mem_type, local_host_mem_class, remote_mem_type,
+            remote_host_mem_class, flags);
 
     if (worker->mem_type_ep[local_mem_type] != NULL) {
         ep_config = ucp_ep_config(worker->mem_type_ep[local_mem_type]);
@@ -497,7 +566,7 @@ ucp_proto_init_buffer_copy_perf(ucp_worker_h worker,
             ucp_tl_iface_latency(context, &perf_attr->latency);
     shared_bw_divisor = ucp_proto_init_memtype_copy_shared_divisor(
             worker, perf_attr, scope_mem_type1, scope_sys_dev1,
-            scope_mem_type2, scope_sys_dev2);
+            scope_mem_type2, scope_sys_dev2, flags);
     copy_perf->perf_factors[copy_perf->factor_id].m +=
             1.0 / ucp_proto_init_iface_bandwidth(context,
                     &perf_attr->bandwidth, shared_bw_divisor);
@@ -521,8 +590,9 @@ ucp_proto_init_add_buffer_copy_time(ucp_worker_h worker, const char *title,
                                     ucs_sys_device_t scope_sys_dev1,
                                     ucs_memory_type_t scope_mem_type2,
                                     ucs_sys_device_t scope_sys_dev2,
-                                    size_t range_start, size_t range_end,
-                                    int local, ucp_proto_perf_t *perf)
+                                    unsigned flags, size_t range_start,
+                                    size_t range_end, int local,
+                                    ucp_proto_perf_t *perf)
 {
     ucp_context_h context = worker->context;
     ucp_proto_init_buffer_copy_perf_t copy_perf;
@@ -538,7 +608,8 @@ ucp_proto_init_add_buffer_copy_time(ucp_worker_h worker, const char *title,
                                              remote_host_mem_class,
                                              scope_mem_type1, scope_sys_dev1,
                                              scope_mem_type2, scope_sys_dev2,
-                                             local, &copy_perf);
+                                             flags, local,
+                                             &copy_perf);
     if (status != UCS_OK) {
         return status;
     }
@@ -622,7 +693,8 @@ ucp_proto_init_add_buffer_perf(const ucp_proto_common_init_params_t *params,
                 UCT_PERF_ATTR_HOST_MEMORY_CLASS_UNKNOWN,
                 params->memtype_op, select_param->mem_type,
                 select_param->sys_dev, recv_mem_type, recv_sys_dev,
-                range_start, range_end, 1, perf);
+                UCP_PROTO_INIT_BUFFER_COPY_FLAG_NONE, range_start, range_end, 1,
+                perf);
         if (status != UCS_OK) {
             return status;
         }
@@ -650,8 +722,10 @@ ucp_proto_init_add_buffer_perf(const ucp_proto_common_init_params_t *params,
             recv_mem_type, UCS_SYS_DEVICE_ID_UNKNOWN, recv_sys_dev,
             UCT_PERF_ATTR_HOST_MEMORY_CLASS_UNKNOWN,
             UCT_PERF_ATTR_HOST_MEMORY_CLASS_UNKNOWN,
-            UCT_EP_OP_PUT_SHORT, select_param->mem_type, select_param->sys_dev,
-            recv_mem_type, recv_sys_dev, range_start, range_end, 0, perf);
+            UCT_EP_OP_PUT_SHORT, select_param->mem_type,
+            select_param->sys_dev, recv_mem_type, recv_sys_dev,
+            UCP_PROTO_INIT_BUFFER_COPY_FLAG_NONE, range_start, range_end, 0,
+            perf);
 
     return status;
 }

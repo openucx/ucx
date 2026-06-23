@@ -220,6 +220,37 @@ UCS_TEST_P(test_ucp_proto, buffer_copy_host_memory_class)
                       &params, UCS_MEMORY_TYPE_HOST));
 }
 
+UCS_TEST_P(test_ucp_proto, buffer_copy_flags_attached_host_staging)
+{
+    const unsigned attached_flag =
+            UCP_PROTO_INIT_BUFFER_COPY_FLAG_ATTACHED_HOST_STAGING;
+
+    EXPECT_EQ(attached_flag, ucp_proto_init_buffer_copy_flags(
+            UCS_MEMORY_TYPE_HOST,
+            UCT_PERF_ATTR_HOST_MEMORY_CLASS_REGISTERED_LOCKED,
+            UCS_MEMORY_TYPE_CUDA, UCT_PERF_ATTR_HOST_MEMORY_CLASS_UNKNOWN,
+            attached_flag));
+    EXPECT_EQ(attached_flag, ucp_proto_init_buffer_copy_flags(
+            UCS_MEMORY_TYPE_CUDA, UCT_PERF_ATTR_HOST_MEMORY_CLASS_UNKNOWN,
+            UCS_MEMORY_TYPE_HOST,
+            UCT_PERF_ATTR_HOST_MEMORY_CLASS_REGISTERED_LOCKED,
+            attached_flag));
+    EXPECT_EQ(UCP_PROTO_INIT_BUFFER_COPY_FLAG_NONE,
+              ucp_proto_init_buffer_copy_flags(
+                      UCS_MEMORY_TYPE_HOST,
+                      UCT_PERF_ATTR_HOST_MEMORY_CLASS_UNKNOWN,
+                      UCS_MEMORY_TYPE_CUDA,
+                      UCT_PERF_ATTR_HOST_MEMORY_CLASS_UNKNOWN,
+                      attached_flag));
+    EXPECT_EQ(UCP_PROTO_INIT_BUFFER_COPY_FLAG_NONE,
+              ucp_proto_init_buffer_copy_flags(
+                      UCS_MEMORY_TYPE_HOST,
+                      UCT_PERF_ATTR_HOST_MEMORY_CLASS_REGISTERED_LOCKED,
+                      UCS_MEMORY_TYPE_HOST,
+                      UCT_PERF_ATTR_HOST_MEMORY_CLASS_UNKNOWN,
+                      attached_flag));
+}
+
 UCS_TEST_P(test_ucp_proto, worker_print_info_rkey)
 {
     ucp_rkey_config_key_t rkey_config_key = create_rkey_config_key(0);
@@ -250,38 +281,71 @@ UCS_TEST_P(test_ucp_proto, memtype_copy_shared_divisor)
     set_scope(UCT_PERF_ATTR_BANDWIDTH_SHARED_SCOPE_SYS_DEVICE, sys_dev1);
     EXPECT_EQ(1u, ucp_proto_init_memtype_copy_shared_divisor(
             worker(), &perf_attr, UCS_MEMORY_TYPE_CUDA, sys_dev0,
-            UCS_MEMORY_TYPE_CUDA, sys_dev1));
+            UCS_MEMORY_TYPE_CUDA, sys_dev1,
+            UCP_PROTO_INIT_BUFFER_COPY_FLAG_NONE));
 
     context()->config.est_num_ppn = 4;
     EXPECT_EQ(2u, ucp_proto_init_memtype_copy_shared_divisor(
             worker(), &perf_attr, UCS_MEMORY_TYPE_CUDA, sys_dev0,
-            UCS_MEMORY_TYPE_CUDA, sys_dev1));
+            UCS_MEMORY_TYPE_CUDA, sys_dev1,
+            UCP_PROTO_INIT_BUFFER_COPY_FLAG_NONE));
 
     context()->config.est_num_ppn = 2;
     EXPECT_EQ(2u, ucp_proto_init_memtype_copy_shared_divisor(
             worker(), &perf_attr, UCS_MEMORY_TYPE_CUDA, sys_dev1,
-            UCS_MEMORY_TYPE_CUDA, sys_dev1));
+            UCS_MEMORY_TYPE_CUDA, sys_dev1,
+            UCP_PROTO_INIT_BUFFER_COPY_FLAG_NONE));
     EXPECT_EQ(2u, ucp_proto_init_memtype_copy_shared_divisor(
             worker(), &perf_attr, UCS_MEMORY_TYPE_CUDA, sys_dev0,
-            UCS_MEMORY_TYPE_CUDA, UCS_SYS_DEVICE_ID_UNKNOWN));
+            UCS_MEMORY_TYPE_CUDA, UCS_SYS_DEVICE_ID_UNKNOWN,
+            UCP_PROTO_INIT_BUFFER_COPY_FLAG_NONE));
     EXPECT_EQ(2u, ucp_proto_init_memtype_copy_shared_divisor(
             worker(), &perf_attr, UCS_MEMORY_TYPE_HOST,
-            UCS_SYS_DEVICE_ID_UNKNOWN, UCS_MEMORY_TYPE_CUDA, sys_dev1));
+            UCS_SYS_DEVICE_ID_UNKNOWN, UCS_MEMORY_TYPE_CUDA, sys_dev1,
+            UCP_PROTO_INIT_BUFFER_COPY_FLAG_NONE));
+    EXPECT_EQ(1u, ucp_proto_init_memtype_copy_shared_divisor(
+            worker(), &perf_attr, UCS_MEMORY_TYPE_HOST,
+            UCS_SYS_DEVICE_ID_UNKNOWN, UCS_MEMORY_TYPE_CUDA, sys_dev1,
+            UCP_PROTO_INIT_BUFFER_COPY_FLAG_ATTACHED_HOST_STAGING));
+    EXPECT_EQ(2u, ucp_proto_init_memtype_copy_shared_divisor(
+            worker(), &perf_attr, UCS_MEMORY_TYPE_HOST,
+            UCS_SYS_DEVICE_ID_UNKNOWN, UCS_MEMORY_TYPE_CUDA,
+            UCS_SYS_DEVICE_ID_UNKNOWN,
+            UCP_PROTO_INIT_BUFFER_COPY_FLAG_ATTACHED_HOST_STAGING));
+    EXPECT_EQ(1u, ucp_proto_init_memtype_copy_shared_divisor(
+            worker(), &perf_attr, UCS_MEMORY_TYPE_CUDA, sys_dev1,
+            UCS_MEMORY_TYPE_HOST, UCS_SYS_DEVICE_ID_UNKNOWN,
+            UCP_PROTO_INIT_BUFFER_COPY_FLAG_ATTACHED_HOST_STAGING));
     EXPECT_EQ(2u, ucp_proto_init_memtype_copy_shared_divisor(
             worker(), &perf_attr, UCS_MEMORY_TYPE_CUDA, sys_dev0,
-            UCS_MEMORY_TYPE_CUDA, sys_dev2));
+            UCS_MEMORY_TYPE_HOST, UCS_SYS_DEVICE_ID_UNKNOWN,
+            UCP_PROTO_INIT_BUFFER_COPY_FLAG_ATTACHED_HOST_STAGING));
+    EXPECT_EQ(2u, ucp_proto_init_memtype_copy_shared_divisor(
+            worker(), &perf_attr, UCS_MEMORY_TYPE_HOST,
+            UCS_SYS_DEVICE_ID_UNKNOWN, UCS_MEMORY_TYPE_CUDA_MANAGED, sys_dev1,
+            UCP_PROTO_INIT_BUFFER_COPY_FLAG_ATTACHED_HOST_STAGING));
+    EXPECT_EQ(2u, ucp_proto_init_memtype_copy_shared_divisor(
+            worker(), &perf_attr, UCS_MEMORY_TYPE_HOST,
+            UCS_SYS_DEVICE_ID_UNKNOWN, UCS_MEMORY_TYPE_ROCM, sys_dev1,
+            UCP_PROTO_INIT_BUFFER_COPY_FLAG_ATTACHED_HOST_STAGING));
+    EXPECT_EQ(2u, ucp_proto_init_memtype_copy_shared_divisor(
+            worker(), &perf_attr, UCS_MEMORY_TYPE_CUDA, sys_dev0,
+            UCS_MEMORY_TYPE_CUDA, sys_dev2,
+            UCP_PROTO_INIT_BUFFER_COPY_FLAG_NONE));
 
     set_scope(UCT_PERF_ATTR_BANDWIDTH_SHARED_SCOPE_SYS_DEVICE,
               UCS_SYS_DEVICE_ID_UNKNOWN);
     EXPECT_EQ(2u, ucp_proto_init_memtype_copy_shared_divisor(
             worker(), &perf_attr, UCS_MEMORY_TYPE_CUDA, sys_dev0,
-            UCS_MEMORY_TYPE_CUDA, sys_dev1));
+            UCS_MEMORY_TYPE_CUDA, sys_dev1,
+            UCP_PROTO_INIT_BUFFER_COPY_FLAG_NONE));
 
     set_scope(UCT_PERF_ATTR_BANDWIDTH_SHARED_SCOPE_NODE,
               UCS_SYS_DEVICE_ID_UNKNOWN);
     EXPECT_EQ(0u, ucp_proto_init_memtype_copy_shared_divisor(
             worker(), &perf_attr, UCS_MEMORY_TYPE_CUDA, sys_dev0,
-            UCS_MEMORY_TYPE_CUDA, sys_dev1));
+            UCS_MEMORY_TYPE_CUDA, sys_dev1,
+            UCP_PROTO_INIT_BUFFER_COPY_FLAG_NONE));
 
     context()->config.est_num_ppn = orig_ppn;
 }
