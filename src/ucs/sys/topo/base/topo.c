@@ -364,6 +364,7 @@ ucs_topo_bus_value_hash_add_nolock(const ucs_sys_bus_id_t *bus_id,
                                    ucs_sys_device_t sys_dev)
 {
     ucs_topo_bus_value_key_t key;
+    ucs_sys_device_t existing_sys_dev;
     int kh_put_status;
     khiter_t hash_it;
 
@@ -377,11 +378,13 @@ ucs_topo_bus_value_hash_add_nolock(const ucs_sys_bus_id_t *bus_id,
     }
 
     if (kh_put_status == UCS_KH_PUT_KEY_PRESENT) {
-        if (kh_val(&ucs_topo_global_ctx.bus_to_sys_dev_hash, hash_it) !=
-            sys_dev) {
+        existing_sys_dev = kh_val(&ucs_topo_global_ctx.bus_to_sys_dev_hash,
+                                  hash_it);
+        if (existing_sys_dev != sys_dev) {
             ucs_error("user value %" PRIuPTR " for bus id 0x%" PRIx64
-                      " already exists", user_value,
-                      (uint64_t)key.bus_id_bit_rep);
+                      " maps to sys_dev %u, not sys_dev %u", user_value,
+                      (uint64_t)key.bus_id_bit_rep, existing_sys_dev,
+                      sys_dev);
             return UCS_ERR_ALREADY_EXISTS;
         }
 
@@ -393,10 +396,10 @@ ucs_topo_bus_value_hash_add_nolock(const ucs_sys_bus_id_t *bus_id,
 }
 
 static ucs_status_t
-ucs_topo_find_device_by_bus_id_value_nolock(const ucs_sys_bus_id_t *bus_id,
-                                            const ucs_numa_node_t *numa_node_p,
-                                            uintptr_t user_value,
-                                            ucs_sys_device_t *sys_dev_p)
+ucs_topo_find_device_by_bus_id_value(const ucs_sys_bus_id_t *bus_id,
+                                     const ucs_numa_node_t *numa_node_p,
+                                     uintptr_t user_value,
+                                     ucs_sys_device_t *sys_dev_p)
 {
     ucs_topo_sys_device_info_t *device;
     ucs_topo_bus_value_key_t key;
@@ -405,6 +408,8 @@ ucs_topo_find_device_by_bus_id_value_nolock(const ucs_sys_bus_id_t *bus_id,
     khiter_t hash_it;
     ucs_status_t status;
     char *name;
+
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
 
     key     = ucs_topo_bus_value_key_make(bus_id, user_value);
     hash_it = kh_put(bus_to_sys_dev,
@@ -424,7 +429,8 @@ ucs_topo_find_device_by_bus_id_value_nolock(const ucs_sys_bus_id_t *bus_id,
             ucs_error("failed to allocate memory for sys_dev_bdf_name");
             kh_del(bus_to_sys_dev,
                    &ucs_topo_global_ctx.bus_to_sys_dev_hash, hash_it);
-            return UCS_ERR_NO_MEMORY;
+            status = UCS_ERR_NO_MEMORY;
+            goto out_unlock;
         }
 
         ucs_topo_bus_id_str(bus_id, 1, name, UCS_SYS_BDF_NAME_MAX);
@@ -459,6 +465,8 @@ ucs_topo_find_device_by_bus_id_value_nolock(const ucs_sys_bus_id_t *bus_id,
         status = UCS_ERR_IO_ERROR;
     }
 
+out_unlock:
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
     return status;
 }
 
@@ -467,10 +475,8 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
 {
     ucs_status_t status;
 
-    ucs_spin_lock(&ucs_topo_global_ctx.lock);
-    status = ucs_topo_find_device_by_bus_id_value_nolock(
+    status = ucs_topo_find_device_by_bus_id_value(
             bus_id, NULL, UCS_SYS_DEVICE_USER_VALUE_EMPTY, sys_dev);
-    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
     return status;
 }
@@ -487,10 +493,8 @@ ucs_topo_find_device_by_bus_id_and_user_value(const ucs_sys_bus_id_t *bus_id,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    ucs_spin_lock(&ucs_topo_global_ctx.lock);
-    status = ucs_topo_find_device_by_bus_id_value_nolock(
-            bus_id, NULL, user_value, sys_dev_p);
-    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+    status = ucs_topo_find_device_by_bus_id_value(bus_id, NULL, user_value,
+                                                  sys_dev_p);
 
     return status;
 }
@@ -500,6 +504,7 @@ ucs_status_t ucs_topo_get_device_bus_id(ucs_sys_device_t sys_dev,
 {
     ucs_status_t status;
 
+    /* Read num_devices and device entry under the topology update lock. */
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
     if (sys_dev >= ucs_topo_global_ctx.num_devices) {
         status = UCS_ERR_NO_ELEM;
