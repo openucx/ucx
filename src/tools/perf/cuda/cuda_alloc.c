@@ -50,9 +50,9 @@ static ucs_status_t ucx_perf_cuda_init(ucx_perf_context_t *perf)
     return UCS_OK;
 }
 
-static inline ucs_status_t ucx_perf_cuda_alloc(size_t length,
-                                               ucs_memory_type_t mem_type,
-                                               void **address_p)
+static inline ucs_status_t ucx_perf_cuda_mem_alloc(size_t length,
+                                                   ucs_memory_type_t mem_type,
+                                                   void **address_p)
 {
     if (mem_type == UCS_MEMORY_TYPE_CUDA) {
         CUDA_CALL_RET(UCS_ERR_NO_MEMORY, cudaMalloc, address_p, length);
@@ -102,11 +102,10 @@ static void ucx_perf_cuda_async_mem_free(
 }
 #endif
 
-static ucs_status_t uct_perf_cuda_reg_mem(const ucx_perf_context_t *perf,
-                                          size_t length,
-                                          ucs_memory_type_t mem_type,
-                                          unsigned flags,
-                                          uct_allocated_memory_t *alloc_mem)
+static ucs_status_t ucx_perf_cuda_uct_reg_mem(
+        const ucx_perf_context_t *perf, size_t length,
+        ucs_memory_type_t mem_type, unsigned flags,
+        uct_allocated_memory_t *alloc_mem)
 {
     uct_md_attr_v2_t md_attr = {.field_mask = UCT_MD_ATTR_FIELD_REG_ALIGNMENT};
     size_t reg_length;
@@ -137,19 +136,20 @@ static ucs_status_t uct_perf_cuda_reg_mem(const ucx_perf_context_t *perf,
     return UCS_OK;
 }
 
-static ucs_status_t uct_perf_cuda_alloc_reg_mem(
+static ucs_status_t ucx_perf_cuda_uct_alloc_reg_mem(
         const ucx_perf_context_t *perf, size_t length,
         ucs_memory_type_t mem_type, unsigned flags,
         uct_allocated_memory_t *alloc_mem)
 {
     ucs_status_t status;
 
-    status = ucx_perf_cuda_alloc(length, mem_type, &alloc_mem->address);
+    status = ucx_perf_cuda_mem_alloc(length, mem_type, &alloc_mem->address);
     if (status != UCS_OK) {
         return status;
     }
 
-    status = uct_perf_cuda_reg_mem(perf, length, mem_type, flags, alloc_mem);
+    status = ucx_perf_cuda_uct_reg_mem(perf, length, mem_type, flags,
+                                       alloc_mem);
     if (status != UCS_OK) {
         CUDA_CALL_WARN(cudaFree, alloc_mem->address);
         return status;
@@ -158,25 +158,25 @@ static ucs_status_t uct_perf_cuda_alloc_reg_mem(
     return UCS_OK;
 }
 
-static ucs_status_t uct_perf_cuda_alloc(const ucx_perf_context_t *perf,
-                                        size_t length, unsigned flags,
-                                        uct_allocated_memory_t *alloc_mem)
+static ucs_status_t ucx_perf_cuda_uct_alloc(const ucx_perf_context_t *perf,
+                                            size_t length, unsigned flags,
+                                            uct_allocated_memory_t *alloc_mem)
 {
-    return uct_perf_cuda_alloc_reg_mem(perf, length, UCS_MEMORY_TYPE_CUDA,
-                                       flags, alloc_mem);
+    return ucx_perf_cuda_uct_alloc_reg_mem(perf, length, UCS_MEMORY_TYPE_CUDA,
+                                           flags, alloc_mem);
 }
 
-static ucs_status_t uct_perf_cuda_managed_alloc(
+static ucs_status_t ucx_perf_cuda_managed_uct_alloc(
         const ucx_perf_context_t *perf, size_t length, unsigned flags,
         uct_allocated_memory_t *alloc_mem)
 {
-    return uct_perf_cuda_alloc_reg_mem(perf, length,
-                                       UCS_MEMORY_TYPE_CUDA_MANAGED, flags,
-                                       alloc_mem);
+    return ucx_perf_cuda_uct_alloc_reg_mem(perf, length,
+                                           UCS_MEMORY_TYPE_CUDA_MANAGED, flags,
+                                           alloc_mem);
 }
 
 #if CUDART_VERSION >= 11020
-static ucs_status_t uct_perf_cuda_async_alloc(
+static ucs_status_t ucx_perf_cuda_async_uct_alloc(
         const ucx_perf_context_t *perf, size_t length, unsigned flags,
         uct_allocated_memory_t *alloc_mem)
 {
@@ -187,8 +187,9 @@ static ucs_status_t uct_perf_cuda_async_alloc(
         return status;
     }
 
-    status = uct_perf_cuda_reg_mem(perf, length, UCS_MEMORY_TYPE_CUDA_MANAGED,
-                                   flags, alloc_mem);
+    status = ucx_perf_cuda_uct_reg_mem(perf, length,
+                                       UCS_MEMORY_TYPE_CUDA_MANAGED, flags,
+                                       alloc_mem);
     if (status != UCS_OK) {
         ucx_perf_cuda_async_mem_free(perf, alloc_mem->address);
         return status;
@@ -198,8 +199,8 @@ static ucs_status_t uct_perf_cuda_async_alloc(
 }
 #endif
 
-static void uct_perf_cuda_dereg(const ucx_perf_context_t *perf,
-                                uct_allocated_memory_t *alloc_mem)
+static void ucx_perf_cuda_uct_dereg(const ucx_perf_context_t *perf,
+                                    uct_allocated_memory_t *alloc_mem)
 {
     ucs_status_t status;
 
@@ -211,18 +212,18 @@ static void uct_perf_cuda_dereg(const ucx_perf_context_t *perf,
     }
 }
 
-static void uct_perf_cuda_free(const ucx_perf_context_t *perf,
-                               uct_allocated_memory_t *alloc_mem)
+static void ucx_perf_cuda_uct_free(const ucx_perf_context_t *perf,
+                                   uct_allocated_memory_t *alloc_mem)
 {
-    uct_perf_cuda_dereg(perf, alloc_mem);
+    ucx_perf_cuda_uct_dereg(perf, alloc_mem);
     CUDA_CALL_WARN(cudaFree, alloc_mem->address);
 }
 
 #if CUDART_VERSION >= 11020
-static void uct_perf_cuda_async_free(const ucx_perf_context_t *perf,
-                                     uct_allocated_memory_t *alloc_mem)
+static void ucx_perf_cuda_async_uct_free(const ucx_perf_context_t *perf,
+                                         uct_allocated_memory_t *alloc_mem)
 {
-    uct_perf_cuda_dereg(perf, alloc_mem);
+    ucx_perf_cuda_uct_dereg(perf, alloc_mem);
     ucx_perf_cuda_async_mem_free(perf, alloc_mem->address);
 }
 #endif
@@ -247,8 +248,8 @@ static ucx_perf_allocator_t cuda_async_allocator = {
     .name      = "cuda-async",
     .mem_type  = UCS_MEMORY_TYPE_CUDA_MANAGED,
     .init      = ucx_perf_cuda_init,
-    .uct_alloc = uct_perf_cuda_async_alloc,
-    .uct_free  = uct_perf_cuda_async_free,
+    .uct_alloc = ucx_perf_cuda_async_uct_alloc,
+    .uct_free  = ucx_perf_cuda_async_uct_free,
     .mem_alloc = ucx_perf_cuda_async_mem_alloc,
     .mem_free  = ucx_perf_cuda_async_mem_free,
     .memcpy    = ucx_perf_cuda_memcpy,
@@ -260,8 +261,8 @@ static ucx_perf_allocator_t cuda_allocator = {
     .name      = "cuda",
     .mem_type  = UCS_MEMORY_TYPE_CUDA,
     .init      = ucx_perf_cuda_init,
-    .uct_alloc = uct_perf_cuda_alloc,
-    .uct_free  = uct_perf_cuda_free,
+    .uct_alloc = ucx_perf_cuda_uct_alloc,
+    .uct_free  = ucx_perf_cuda_uct_free,
     .memcpy    = ucx_perf_cuda_memcpy,
     .memset    = ucx_perf_cuda_memset
 };
@@ -270,8 +271,8 @@ static ucx_perf_allocator_t cuda_managed_allocator = {
     .name      = "cuda-managed",
     .mem_type  = UCS_MEMORY_TYPE_CUDA_MANAGED,
     .init      = ucx_perf_cuda_init,
-    .uct_alloc = uct_perf_cuda_managed_alloc,
-    .uct_free  = uct_perf_cuda_free,
+    .uct_alloc = ucx_perf_cuda_managed_uct_alloc,
+    .uct_free  = ucx_perf_cuda_uct_free,
     .memcpy    = ucx_perf_cuda_memcpy,
     .memset    = ucx_perf_cuda_memset
 };

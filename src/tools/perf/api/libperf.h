@@ -275,10 +275,10 @@ typedef struct ucx_perf_params {
     ucx_perf_wait_mode_t    wait_mode;       /* How to wait */
     ucs_memory_type_t       send_mem_type;   /* Send memory type */
     ucs_memory_type_t       recv_mem_type;   /* Recv memory type */
-    char                    send_mem_alloc_name[UCX_PERF_ALLOC_NAME_MAX]; /* Send memory allocator
-                                                                             name */
-    char                    recv_mem_alloc_name[UCX_PERF_ALLOC_NAME_MAX]; /* Recv memory allocator
-                                                                             name */
+    /* Send memory allocator name */
+    char                    send_mem_alloc_name[UCX_PERF_ALLOC_NAME_MAX];
+    /* Recv memory allocator name */
+    char                    recv_mem_alloc_name[UCX_PERF_ALLOC_NAME_MAX];
     ucx_perf_accel_dev_t    send_device;     /* Send memory device */
     ucx_perf_accel_dev_t    recv_device;     /* Recv memory device */
     ucs_device_level_t      device_level;    /* Device level */
