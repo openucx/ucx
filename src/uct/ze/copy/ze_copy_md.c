@@ -211,14 +211,14 @@ uct_ze_copy_md_query_attributes(uct_md_h md, const void *addr, size_t length,
 
 static ucs_status_t uct_ze_copy_md_mem_query(uct_md_h md, const void *addr,
                                              const size_t length,
-                                             uct_md_mem_attr_t *mem_attr_p)
+                                             uct_md_mem_attr_v2_t *mem_attr_p)
 {
     int dmabuf_fd    = UCT_DMABUF_FD_INVALID;
     int *dmabuf_fd_p = NULL;
     ucs_memory_info_t mem_info;
     ucs_status_t status;
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD) {
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD) {
         mem_attr_p->dmabuf_fd = UCT_DMABUF_FD_INVALID;
         dmabuf_fd_p           = &dmabuf_fd;
     }
@@ -230,25 +230,26 @@ static ucs_status_t uct_ze_copy_md_mem_query(uct_md_h md, const void *addr,
     }
 
     ucs_memtype_cache_update(mem_info.base_address, mem_info.alloc_length,
-                             mem_info.type, mem_info.sys_dev);
+                             mem_info.type, mem_info.sys_dev,
+                             UCS_MEM_FLAG_REGISTRABLE);
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_MEM_TYPE) {
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE) {
         mem_attr_p->mem_type = mem_info.type;
     }
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_SYS_DEV) {
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_SYS_DEV) {
         mem_attr_p->sys_dev = mem_info.sys_dev;
     }
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS) {
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_BASE_ADDRESS) {
         mem_attr_p->base_address = mem_info.base_address;
     }
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH) {
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_ALLOC_LENGTH) {
         mem_attr_p->alloc_length = mem_info.alloc_length;
     }
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD) {
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD) {
         if (dmabuf_fd == UCT_DMABUF_FD_INVALID) {
             mem_attr_p->dmabuf_fd = UCT_DMABUF_FD_INVALID;
         } else {
@@ -264,7 +265,7 @@ static ucs_status_t uct_ze_copy_md_mem_query(uct_md_h md, const void *addr,
         }
     }
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET) {
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_OFFSET) {
         mem_attr_p->dmabuf_offset = UCS_PTR_BYTE_DIFF(mem_info.base_address,
                                                       addr);
     }
@@ -276,10 +277,10 @@ static ucs_status_t
 uct_ze_copy_md_detect_memory_type(uct_md_h md, const void *addr, size_t length,
                                   ucs_memory_type_t *mem_type_p)
 {
-    uct_md_mem_attr_t mem_attr;
+    uct_md_mem_attr_v2_t mem_attr;
     ucs_status_t status;
 
-    mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE;
+    mem_attr.field_mask = UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE;
     status = uct_ze_copy_md_mem_query(md, addr, length, &mem_attr);
     if (status != UCS_OK) {
         return status;
