@@ -22,6 +22,7 @@ struct mlx5dv_devx_obj;
 #include <stdint.h>
 
 #include <uct/api/uct_def.h>
+#include <uct/base/uct_iface.h>
 #include <ucs/type/status.h>
 #include <ucs/sys/stubs.h>
 
@@ -144,12 +145,23 @@ typedef ucs_status_t (*uct_ib_mlx5_ext_qp_query_func_t)(
         uct_ib_mlx5_ext_qp_query_attr_t *attr);
 
 /**
+ * @brief External plugin maximum PUT SGL zero-copy entry count callback.
+ *
+ * @return Maximum number of SGL entries supported by the plugin's
+ *         @ref uct_ib_mlx5_ext_ep_put_sgl_zcopy implementation, or 0 if
+ *         unsupported.
+ */
+typedef size_t (*uct_ib_mlx5_ext_max_put_sgl_zcopy_count_func_t)(void);
+
+/**
  * @brief External plugin operations.
  */
 typedef struct uct_ib_mlx5_ext_ops {
-    char                               name[UCT_COMPONENT_NAME_MAX]; /**< Plugin name */
-    uct_ib_mlx5_ext_iface_query_func_t iface_query;                  /**< Iface query callback */
-    uct_ib_mlx5_ext_qp_query_func_t    qp_query;                     /**< QP query callback */
+    char                                           name[UCT_COMPONENT_NAME_MAX]; /**< Plugin name */
+    uct_ib_mlx5_ext_iface_query_func_t             iface_query;                  /**< Iface query callback */
+    uct_ib_mlx5_ext_qp_query_func_t                qp_query;                     /**< QP query callback */
+    uct_ib_mlx5_ext_max_put_sgl_zcopy_count_func_t max_put_sgl_zcopy_count;      /**< Maximum PUT SGL zero-copy entry count callback */
+    uct_ep_put_sgl_zcopy_func_t                    ep_put_sgl_zcopy;             /**< PUT SGL zero-copy callback */
 } uct_ib_mlx5_ext_ops_t;
 
 /**
@@ -173,6 +185,19 @@ uct_ib_mlx5_ext_iface_query(uct_iface_h iface,
 ucs_status_t uct_ib_mlx5_ext_qp_query(struct ibv_qp *qp,
                                       struct mlx5dv_devx_obj *devx_obj,
                                       uct_ib_mlx5_ext_qp_query_attr_t *attr);
+
+size_t uct_ib_mlx5_ext_max_put_sgl_zcopy_count(void);
+
+ucs_status_t uct_ib_mlx5_ext_ep_put_sgl_zcopy(uct_ep_h ep,
+                                              void * const *buffers,
+                                              const size_t *lengths,
+                                              uct_mem_h const *memhs,
+                                              const uint64_t *remote_addrs,
+                                              uct_rkey_t const *rkeys,
+                                              const size_t *counts,
+                                              const size_t *strides,
+                                              size_t count,
+                                              uct_completion_t *comp);
 
 END_C_DECLS
 

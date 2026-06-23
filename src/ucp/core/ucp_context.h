@@ -25,6 +25,7 @@
 #include <ucs/memory/memory_type.h>
 #include <ucs/memory/rcache.h>
 #include <ucs/type/spinlock.h>
+#include <ucs/sys/checker.h>
 #include <ucs/sys/string.h>
 #include <ucs/type/param.h>
 
@@ -183,11 +184,6 @@ typedef struct ucp_context_config {
     /** Maximal number of endpoints to check on every keepalive round
      * (0 - disabled, inf - check all endpoints on every round) */
     unsigned                               keepalive_num_eps;
-    /** Time period between recovery rounds for an endpoint with lanes in
-     *  UCP_LANE_TYPE_FAILED state. Each round sends a
-     *  WIREUP_MSG_LANES_ADDR_REQUEST over the operable AM lane asking the
-     *  peer for up-to-date addresses of the failed lanes. */
-    ucs_time_t                             recovery_interval;
     /** Maximal number of recovery rounds before the endpoint is declared
      *  fully failed. Must be non-zero. */
     unsigned                               recovery_retries;
@@ -725,6 +721,13 @@ ucp_memory_detect_internal(ucp_context_h context, const void *address,
 
     status = ucs_memtype_cache_lookup(address, length, mem_info);
     if (ucs_likely(status == UCS_ERR_NO_ELEM)) {
+        if (ucs_unlikely(RUNNING_ON_VALGRIND)) {
+            ucs_trace_req("address %p length %zu: not found in memtype cache, "
+                          "detecting memory type under Valgrind", address, length);
+            ucp_memory_detect_slowpath(context, address, length, mem_info);
+            return;
+        }
+
         ucs_trace_req("address %p length %zu: not found in memtype cache, "
                       "assuming host memory",
                       address, length);

@@ -492,6 +492,13 @@ typedef struct {
 } ucp_ep_flush_state_t;
 
 
+/* Per-EP recovery retry state. */
+typedef struct ucp_ep_recovery_arg {
+    /* number of retries left before giving up */
+    unsigned    retries_left;
+} ucp_ep_recovery_arg_t;
+
+
 /**
  * Endpoint extension
  */
@@ -503,7 +510,13 @@ typedef struct ucp_ep_ext {
     ucs_ptr_map_key_t             local_ep_id;   /* Local EP ID */
     ucs_ptr_map_key_t             remote_ep_id;  /* Remote EP ID */
     ucp_err_handler_cb_t          err_cb;        /* Error handler */
-    ucp_request_t                 *close_req;    /* Close protocol request */
+    union {
+        ucp_request_t             *close_req;    /* Close protocol request */
+        ucp_ep_recovery_arg_t     *recovery_arg; /* Lanes recovery state object.
+                                                    United with close request since:
+                                                    1) recovery is not supported for connected to sockaddr EPs
+                                                    2) it does not make sense to recover lanes during close protocol */
+    };
     khash_t(ucp_ep_peer_mem_hash) *peer_mem;     /* Hash of remote memory segments
                                                     used by 2-stage ppln rndv proto */
     /* List of requests which are waiting for remote completion */
@@ -984,6 +997,22 @@ ucp_lane_map_t ucp_ep_config_get_failed_lanes(const ucp_ep_config_key_t *key);
  */
 ucs_status_t ucp_ep_reconfig_clear_failed_lanes(ucp_ep_h ep,
                                                 ucp_lane_map_t lanes);
+
+
+/**
+ * Arm (or re-arm) failed-lane recovery for an endpoint.
+ */
+ucs_status_t ucp_ep_recovery_arm(ucp_ep_h ep);
+
+
+/**
+ * Progress function for failed lanes recovery.
+ *
+ * @return 0 if the @a ep is recovered, continue normal keep alive checks,
+ *         otherwise non-zero - the @a ep is under recovery, fully failed or
+ *         other reason to skip keepalive round.
+ */
+int ucp_ep_recovery_progress(ucp_ep_h ep);
 
 
 /**
