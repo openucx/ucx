@@ -1,3 +1,6 @@
+# Copyright (C) Intel Corporation, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
 # UCX Level Zero (ZE) builder image.
 #
 # Local build:

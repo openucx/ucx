@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -16,6 +16,7 @@
 #include <ucs/sys/topo/base/topo.h>
 #include <ucs/type/spinlock.h>
 #include <pthread.h>
+#include <stdint.h>
 
 
 BEGIN_C_DECLS
@@ -34,6 +35,7 @@ typedef struct ucs_memory_info {
     ucs_sys_device_t  sys_dev;       /**< System device index */
     void              *base_address; /**< Base address of the underlying allocation */
     size_t            alloc_length;  /**< Whole length of the underlying allocation */
+    uint8_t           mem_flags;     /**< UCS memory flags */
 } ucs_memory_info_t;
 
 
@@ -76,10 +78,13 @@ ucs_status_t ucs_memtype_cache_lookup(const void *address, size_t size,
  *                              value.
  * @param [in]  sys_dev         Set the system device of the address range to
  *                              this value.
+ * @param [in]  mem_flags       UCS memory flags to store for the address
+ *                              range. The cache stores and compares them as
+ *                              part of the region key.
  */
 void ucs_memtype_cache_update(const void *address, size_t size,
                               ucs_memory_type_t mem_type,
-                              ucs_sys_device_t sys_dev);
+                              ucs_sys_device_t sys_dev, uint8_t mem_flags);
 
 
 /**
@@ -115,6 +120,7 @@ ucs_memory_info_set_host(ucs_memory_info_t *mem_info)
     mem_info->sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
     mem_info->base_address = NULL;
     mem_info->alloc_length = -1;
+    mem_info->mem_flags    = UCS_MEM_FLAG_REGISTRABLE;
 }
 
 END_C_DECLS
