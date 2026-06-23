@@ -926,6 +926,18 @@ static void uct_ib_fork_warn_enable()
     }
 }
 
+static int uct_ib_fork_init_is_unneeded()
+{
+#if HAVE_DECL_IBV_IS_FORK_INITIALIZED && HAVE_DECL_IBV_FORK_UNNEEDED
+    if (ibv_is_fork_initialized() == IBV_FORK_UNNEEDED) {
+        ucs_debug("ibv_fork_init() is not needed");
+        return 1;
+    }
+#endif
+
+    return 0;
+}
+
 static void uct_ib_md_release_device_config(uct_ib_md_t *md)
 {
     unsigned i;
@@ -1110,6 +1122,10 @@ uct_ib_fork_init(const uct_ib_md_config_t *md_config, int *fork_init_p)
     int ret;
 
     *fork_init_p = 0;
+
+    if (uct_ib_fork_init_is_unneeded()) {
+        return UCS_OK;
+    }
 
     if (md_config->fork_init == UCS_NO) {
         uct_ib_fork_warn_enable();
