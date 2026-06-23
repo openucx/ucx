@@ -2024,6 +2024,9 @@ static void ucp_fill_resources_reg_md_map_update(ucp_context_h context)
 
         if (md_attr->flags & UCT_MD_FLAG_REG_DMABUF) {
             context->dmabuf_reg_md_map |= UCS_BIT(md_index);
+            if (md_attr->flags & UCT_MD_FLAG_DMABUF_REG_PCIE) {
+                context->dmabuf_pcie_md_map |= UCS_BIT(md_index);
+            }
         }
     }
 

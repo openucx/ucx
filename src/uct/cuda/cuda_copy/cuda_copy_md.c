@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2017-2019. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2017-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -740,7 +740,7 @@ out_default_range:
 }
 
 static int uct_cuda_copy_md_get_dmabuf_fd(uintptr_t address, size_t length,
-                                          ucs_sys_device_t sys_dev)
+                                          uct_md_dmabuf_mapping_t mapping)
 {
 #if CUDA_VERSION >= 11070
     unsigned long long flags = 0;
@@ -772,15 +772,8 @@ static int uct_cuda_copy_md_get_dmabuf_fd(uintptr_t address, size_t length,
 #endif
 
 #if CUDA_VERSION >= 12080
-    /**
-     * DMA_BUF handle mapped via PCIE BAR1 can only be used in conjunction with
-     * mlx5dv_reg_dmabuf_mr. Other interfaces (e.g. ibv_reg_dmabuf_mr) may
-     * successfully register the handle, but the subsequent remote ib operation
-     * will fail.
-     * Check if there is a sibling device to determine if the handle will be
-     * used by a Direct NIC via mlx5dv_reg_dmabuf_mr.
-     */
-    if (ucs_topo_device_has_sibling(sys_dev)) {
+    /* Set flags to the requested mapping; host mapping (flags 0) is the default. */
+    if (mapping == UCT_MD_DMABUF_MAPPING_PCIE) {
         flags = CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE;
     }
 #endif
@@ -801,9 +794,9 @@ static int uct_cuda_copy_md_get_dmabuf_fd(uintptr_t address, size_t length,
     return UCT_DMABUF_FD_INVALID;
 }
 
-uct_cuda_copy_md_dmabuf_t uct_cuda_copy_md_get_dmabuf(const void *address,
-                                                      size_t length,
-                                                      ucs_sys_device_t sys_dev)
+uct_cuda_copy_md_dmabuf_t
+uct_cuda_copy_md_get_dmabuf(const void *address, size_t length,
+                            uct_md_dmabuf_mapping_t mapping)
 {
     uct_cuda_copy_md_dmabuf_t dmabuf;
     uintptr_t base_address, aligned_start, aligned_end;
@@ -811,9 +804,9 @@ uct_cuda_copy_md_dmabuf_t uct_cuda_copy_md_get_dmabuf(const void *address,
     base_address  = (uintptr_t)address;
     aligned_start = ucs_align_down_pow2(base_address, ucs_get_page_size());
     aligned_end = ucs_align_up_pow2(base_address + length, ucs_get_page_size());
-    dmabuf.fd   = uct_cuda_copy_md_get_dmabuf_fd(aligned_start,
-                                                 aligned_end - aligned_start,
-                                                 sys_dev);
+    dmabuf.fd     = uct_cuda_copy_md_get_dmabuf_fd(aligned_start,
+                                                   aligned_end - aligned_start,
+                                                   mapping);
     dmabuf.offset = base_address - aligned_start;
     return dmabuf;
 }
@@ -832,6 +825,7 @@ uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address, size_t length,
     ucs_memory_info_t addr_mem_info;
     ucs_status_t status;
     uct_cuda_copy_md_dmabuf_t dmabuf;
+    uct_md_dmabuf_mapping_t mapping;
 
     if (!(mem_attr->field_mask &
           (UCT_MD_MEM_ATTR_FIELD_MEM_TYPE | UCT_MD_MEM_ATTR_FIELD_SYS_DEV |
@@ -874,9 +868,12 @@ uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address, size_t length,
 
     if ((mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD) ||
         (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET)) {
-        dmabuf = uct_cuda_copy_md_get_dmabuf(addr_mem_info.base_address,
-                                             addr_mem_info.alloc_length,
-                                             addr_mem_info.sys_dev);
+        mapping = (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_MAPPING) ?
+                          mem_attr->dmabuf_mapping :
+                          UCT_MD_DMABUF_MAPPING_HOST;
+        dmabuf  = uct_cuda_copy_md_get_dmabuf(addr_mem_info.base_address,
+                                              addr_mem_info.alloc_length,
+                                              mapping);
         if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD) {
             mem_attr->dmabuf_fd = dmabuf.fd;
         }

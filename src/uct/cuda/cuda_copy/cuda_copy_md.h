@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2017. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2017-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -94,14 +94,15 @@ int uct_cuda_copy_md_is_dmabuf_supported();
  *
  * @param address [in] Starting address of the MR
  * @param length  [in] Size of the MR
- * @param sys_dev [in] System device ID of the MR. The ID is used to check if
-                       file descriptor can be used by a Direct NIC. If sys_dev
-                       is UCS_SYS_DEVICE_ID_UNKNOWN, the file descriptor can
-                       be used by any device.
+ * @param mapping [in] Requested mapping type of the region backing the file
+                       descriptor. UCT_MD_DMABUF_MAPPING_PCIE maps it via the
+                       device PCIe BAR (Direct NIC / DATA_DIRECT);
+                       UCT_MD_DMABUF_MAPPING_HOST maps it through the host
+                       (generic verbs).
  * @return The dmabuf file descriptor and offset
  */
-uct_cuda_copy_md_dmabuf_t uct_cuda_copy_md_get_dmabuf(const void *address,
-                                                      size_t length,
-                                                      ucs_sys_device_t sys_dev);
+uct_cuda_copy_md_dmabuf_t
+uct_cuda_copy_md_get_dmabuf(const void *address, size_t length,
+                            uct_md_dmabuf_mapping_t mapping);
 
 #endif

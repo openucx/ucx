@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -2505,6 +2505,12 @@ ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
 
     md->direct_nic_sys_dev = uct_ib_mlx5dv_check_direct_nic(
             ctx, dev->sys_dev, md_config->ext.direct_nic);
+    if (md->direct_nic_sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
+        /* This MD registers device-memory dmabuf via the Direct NIC
+         * (mlx5dv_reg_dmabuf_mr + DATA_DIRECT), which needs a PCIe-mapped
+         * handle. Advertise it so UCP requests the matching mapping. */
+        md->super.cap_flags |= UCT_MD_FLAG_DMABUF_REG_PCIE;
+    }
 
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, atomic)) {
         int ops = UCT_IB_MLX5_ATOMIC_OPS_CMP_SWAP |
