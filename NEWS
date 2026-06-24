@@ -11,6 +11,236 @@
 ### Features:
 ### Bugfixes:
 
+## 1.21.0 (June 24, 2026)
+### Features:
+#### UCP
+ * Added UCX_PROTO_EMULATION_ENABLE option to force zero-copy RMA protocol selection
+ * Added UCX_MAX_HCA_PER_GPU policy to limit GPU memory registrations to nearest HCAs
+ * Added device lanes that can access host memory for GPU transfer fallback
+ * Enabled gdr_copy for memtype endpoint transport
+#### UCT
+ * Added device channel pool support
+ * Added CPU memory usage as AMO local buffer for device operations
+#### RDMA CORE (IB, ROCE, etc.)
+ * Added UCX_IB_GDA_RETAIN_INACTIVE_CTX option to control inactive CUDA context retention in GDAKI
+ * Added configure option to enable or disable GGA transport
+#### Build
+ * Added --without-gda configure option
+ * Made cuRAND an optional dependency for perftest CUDA kernels
+#### CI/Testing
+ * Added dry-run package installation checks to the release package build
+### Bugfixes:
+#### Build
+ * Fixed support for -Og by disabling always-inline attributes
+#### UCP
+ * Fixed progress counter to return the actual operation status
+ * Fixed multi protocol minimum size handling for 1-byte operations
+ * Fixed endpoint finalization when no P2P or connection-manager lane is available
+#### UCT
+ * Fixed notify callback handling by adding a NULL check
+#### CUDA
+ * Fixed CUDA IPC accessibility cache separation for local and remote rkeys
+ * Fixed CUDA IPC cache/LRU invariant for referenced regions
+ * Fixed DMA-BUF offsets for interior CUDA addresses
+#### ROCM
+ * Fixed hangs in HIP MPI and OMB tests
+ * Fixed endpoint flush for in-flight ROCm operations
+#### RDMA CORE (IB, ROCE, etc.)
+ * Fixed GDA DMA-BUF offset handling
+ * Fixed GDA WQE ordering by using CAS-based readiness marking
+ * Fixed GDAKI CUDA context handling during endpoint creation
+ * Fixed GDAKI NIC/GPU mapping when CUDA_VISIBLE_DEVICES hides physical GPUs
+### TCP
+ * Fixed interface selection by skipping IPv4 link-local addresses
+#### UCS
+ * Reverted dynamically loaded external module/plugin support
+#### Packaging
+ * Fixed Debian maintainer field
+ * Fixed GDA RPM build
+ * Fixed GDA RPM/devel package layout for CUDA/GDA subpackages
+ * Fixed RPM/DEB handling when GDA is disabled
+
+## 1.20.1 (May 6, 2026)
+### Features:
+#### RDMA CORE (IB, ROCE, etc.)
+ * Added 'auto' option for UCX_IB_MLX5_DEVX_OBJECTS which disables DevX when ODP is available (for Grace)
+ * Prioritize routes with longer subnet masks for improved reachability check accuracy
+#### Documentation
+ * Clarified that user buffer can be modified after calling ucp_atomic_op_nbx
+### Bugfixes:
+#### Build
+* Fixed IB configuration const correctness for strchr() to allow compilation with GCC 15.2.1
+#### UCP
+ * Increased TLS info buffer size in transport selection to prevent potential truncation
+ * Fixed incorrect warning about valid environment variable names
+ * Fixed ucp_config_modify not reporting an error when no matching modifiable configuration exists.
+#### RDMA CORE (IB, ROCE, etc.)
+ * Fixed DevX objects flag handling
+ * Fixed device memory allocation alignment in MLX5 DevX
+ * Fixed IB memory handle flags enum order
+ * Disabled indirect atomic registration for Direct NIC
+ * Fixed stale destination endpoint ID and acks from before connection reset in UD transport
+ * Fix RoCE reachable route check when node_guuid is not unique among HCAs
+#### CUDA
+ * Fixed CUDA context handling for system device during rkey unpack
+#### ROCM
+ * Fixed HSA memory type check for newer ROCm releases
+#### UCS
+ * Fixed rcache locking for GDR copy
+#### Packaging
+ * Fix libnvidia-compute removal from ucx-cuda debian package dependencies, breaking existing installation
+ * Obsoleted KNEM sub-package
+ * Fix maintainer field in debian packaging
+
+## 1.20.0 (December 2, 2025)
+### Features:
+#### UCP
+ * Added new GPU device API for direct GPU-to-GPU communication
+ * Added host API for GPU device management
+ * Added device signaling API with cooperation levels and flags
+ * Added API for working with offsets and channel id in device operations
+ * Added method to write to local counter in device operations
+ * Added local and remote address fields to memory list element in device API
+ * Added device lane selection and allocated handle population
+ * Added support for Direct NIC (DPU) data path with CUDA
+ * Added rkey packing support for Direct NIC
+ * Added sender flush mechanism when memory sys_dev differs from remote lane sys_dev
+ * Added option to use single network device per protocol
+ * Added MIN_RMA_CHUNK_SIZE configuration parameter
+ * Decreased default value for MIN_RMA_CHUNK_SIZE from 16k to 8k
+ * Improved protocol lane selection with find_lanes callback to minimize overhead
+ * Improved send-zcopy latency factor for fast-completion cases
+ * Improved multi-ppn performance estimation
+ * Removed deprecated ucp_mem functions
+ * Deprecated ucp_request_alloc API
+#### UCT
+ * Added new device API for GPU communication (rc_gda transport)
+ * Added GDAKI transport with endpoint export to GPU
+ * Added DEVX QP/CQ support on foreign memory
+ * Added device API implementation for CUDA_IPC transport
+ * Added device put multi, put partial, and atomic operations for CUDA_IPC
+ * Added peer failure error handling capability for GDAKI
+ * Added check for nvidia_peermem driver when using GDA transport
+ * Enabled Direct NIC by default for IB transport
+ * Added XDR performance recognition
+ * Added support for mapping DMA_BUF handle via PCIe for Direct NIC
+ * Improved GDR_COPY performance with fast-path cache lookup
+#### RDMA CORE (IB, ROCE, etc.)
+ * Added ConnectX-9 device support
+ * Split dp_ordering flag for DV/DevX transports
+ * Added VRF tables support for RoCE reachability check
+ * Added EFA-specific GPUDirect support detection
+#### TCP
+ * Added routing table check during reachability verification
+#### UCS
+ * Introduced lightweight rwlock data structure
+ * Added built-in atomics for rcache rwlock
+ * Improved VFS symlink paths and duplicate object handling
+ * Disabled error signal interception by default
+#### CUDA
+ * Added wrappers for NVML functions
+ * Added hook for cuLibraryGetGlobal
+ * Improved CUDA call logging
+ * Improved source/destination memory type detection for lane performance estimation
+ * Removed unsafe usage of cuCtxGetId
+ * Added support for cuCtxCreate_v4 for newer CUDA versions
+ * Improved context management for CUDA_IPC operations
+#### UCM
+ * Changed module info print to debug level by default
+#### Tools
+ * Added GDAKI kernel option to perftest
+ * Added UCP cuda device tests to perftest
+ * Added MPI+CUDA example
+ * Differentiated wakeup feature and extra info options in perftest
+#### Build
+ * Added ability to build CUDA device code for supported architectures
+ * Added ucx.spec into tarball for Universal Build System support
+ * Added CUDA 13 support
+ * Added GDA build failure when gpunetio not found
+#### Packaging
+ * Moved driver level dependencies under Recommends section in Debian packages
+ * Added Provides field for upstream packages in Debian
+ * Migrated JUCX publish from OSSRH to Central Portal
+ * Added ib-mlx5-gda separate package
+#### CI/Testing
+ * Added Rocky OS support to release pipeline
+ * Added RHEL 10 containers to build matrices
+ * Added Debian 13 to CI build stage
+ * Added ARM build testing
+ * Switched to MOFED 25.07
+ * Switched GPU tests to Ubuntu 24.04 DOCA 3.1 (GPUNetIO) image
+ * Added support for nvidia_peermem module in testing
+ * Disabled Valgrind in CI Tests stage
+ * Disabled tag matching offload tests
+#### GO Bindings
+ * Made go bindings thread safe
+#### Documentation
+ * Added note about reachability check mode in README
+ * Mentioned nvlink as supported transport
+ * Documented return status for device APIs
+#### AWS EFA
+ * Added RMA WRITE operations support
+ * Added flush and fence operations for SRD
+ * Enabled EFA SRD support in tests
+### Bugfixes:
+#### UCP
+ * Fixed fallback to blocking registration for network device only
+ * Fixed flush_state validity check before using it
+ * Fixed single net dev filtering for single proto
+ * Fixed rkey size estimation for rendezvous
+ * Fixed memory invalidation without RNDV
+ * Fixed gather_pending_requests to execute only when reconfig occurs
+#### UCT
+ * Fixed CUDA_IPC protocol selection for cuda_ipc
+ * Fixed GDA compilation issues
+ * Fixed GDAKI wqe_idx overflow
+ * Fixed MM FIFO room calculation for tail > head case
+ * Fixed CUDA_IPC indices handling in put partial
+ * Removed DOCA runtime dependency from GDAKI
+ * Fixed GDA log spam by reducing DOCA log level
+ * Fixed UAR support check when querying resources for GDA/MLX5
+ * Fixed crash in GGA transport when EXPORTED_MKEY flag is missing
+#### CUDA
+ * Fixed stack overflow bug when calling cuPointerGetAttribute
+ * Fixed mapping of DMA_BUF handle for Direct NIC
+ * Returned object to mpool in case of failure in CUDA_COPY
+ * Reduced log level of rkey unpacking failures
+ * Handled cuMemRelease error status properly
+ * Fixed context setting for local buffer in CUDA_IPC
+ * Fixed host unregister error message (changed to diagnostic)
+ * Fixed CUDA_IPC header installation
+#### RDMA CORE (IB, ROCE, etc.)
+ * Fixed RoCE network device name reading
+ * Fixed Direct NIC related issues
+ * Reverted RC EP address size adaptation without flush_rkey
+#### UCS
+ * Fixed ARCH header inclusion when building with nvcc (arm_neon.h)
+ * Fixed VFS symlink path handling
+ * Fixed netlink message receiving to continue until 'done' flag is set
+#### Build
+ * Fixed NVCC search with explicit --with-cuda
+ * Fixed ZE transport build failures
+ * Fixed ucs_arch_get_cpu_flag compilation
+ * Fixed CUDA device code build for supported architectures
+#### Testing
+ * Fixed test_jenkins CI issues
+ * Decreased rwlock test duration
+ * Fixed error counting in gtest
+ * Enabled retries for test_arch.memcpy
+ * Fixed test_cuda_nvml condition relaxation
+ * Skipped build when generating packages
+ * Fixed CUDA device restoration in tests
+ * Improved error detection in UCP device tests
+ * Fixed global topo state cleanup during gtest
+#### Tools
+ * Fixed perftest CUDA kernel issues
+#### GO Bindings
+ * Fixed go bindings compilation with CUDA
+#### IB/EFA
+ * Fixed error message when FLID is not available
+#### Packaging
+ * Fixed RPM SPEC debug_package macro execution on SLES16
+
 ## 1.19.1 (Sep 18, 2025)
 ### Features:
 #### UCP
