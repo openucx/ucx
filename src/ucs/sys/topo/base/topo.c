@@ -65,6 +65,7 @@ typedef struct {
     ucs_sys_device_t        sys_dev_aux;
 
     ucs_topo_sibling_role_t sibling_role; /* Role of the current device */
+    /* MEM role: matched DEV. DEV role: one representative matched MEM. */
     ucs_sys_device_t        sibling_sys_dev;
 } ucs_topo_sys_device_info_t;
 
@@ -733,9 +734,11 @@ ucs_topo_is_reachable(ucs_sys_device_t sys_dev, ucs_sys_device_t sys_dev_mem)
             /* The device itself never uses auxiliary path */
             (ucs_topo_global_ctx.devices[sys_dev].sibling_role !=
              UCS_TOPO_SIBLING_ROLE_DEV) ||
-            /* The device is the identified sibling */
+            /* The device and memory device identified each other as siblings */
             (ucs_topo_global_ctx.devices[sys_dev].sibling_sys_dev ==
-             sys_dev_mem);
+             sys_dev_mem) ||
+            (ucs_topo_global_ctx.devices[sys_dev_mem].sibling_sys_dev ==
+             sys_dev);
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
     return result;
@@ -748,10 +751,14 @@ int ucs_topo_is_sibling(ucs_sys_device_t sys_dev, ucs_sys_device_t sys_dev_mem)
     ucs_topo_sibling_role_t UCS_V_UNUSED role_dev_mem;
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
-    is_sibling = (sys_dev < ucs_topo_global_ctx.num_devices) &&
+    is_sibling = (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) &&
+                 (sys_dev < ucs_topo_global_ctx.num_devices) &&
                  (sys_dev_mem != UCS_SYS_DEVICE_ID_UNKNOWN) &&
-                 (ucs_topo_global_ctx.devices[sys_dev].sibling_sys_dev ==
-                  sys_dev_mem);
+                 (sys_dev_mem < ucs_topo_global_ctx.num_devices) &&
+                 ((ucs_topo_global_ctx.devices[sys_dev].sibling_sys_dev ==
+                   sys_dev_mem) ||
+                  (ucs_topo_global_ctx.devices[sys_dev_mem].sibling_sys_dev ==
+                   sys_dev));
 
     if (is_sibling) {
         role_dev     = ucs_topo_global_ctx.devices[sys_dev].sibling_role;
@@ -1147,11 +1154,9 @@ ucs_status_t ucs_topo_sys_device_set_sys_dev_aux(ucs_sys_device_t sys_dev,
     ucs_topo_global_ctx.devices[sys_dev].sibling_role =
             UCS_TOPO_SIBLING_ROLE_DEV;
 
-    /* Try to match the device with a sibling */
+    /* Try to match the device with all existing memory aliases. */
     for (dev = 0; dev < ucs_topo_global_ctx.num_devices; ++dev) {
-        if (ucs_topo_sys_device_sibling_match(sys_dev, dev)) {
-            break;
-        }
+        ucs_topo_sys_device_sibling_match(sys_dev, dev);
     }
 
     status = UCS_OK;

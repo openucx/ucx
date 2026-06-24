@@ -497,8 +497,6 @@ UCS_TEST_F(test_topo, sibling) {
     ASSERT_FALSE(ucs_topo_is_sibling(hca_devs[1], gpu_dev));
     ASSERT_FALSE(ucs_topo_is_sibling(hca_devs[2], gpu_dev));
 
-    ASSERT_TRUE(ucs_topo_is_reachable(hca_devs[1], gpu_dev));
-
     if (!sibling_dma.empty()) {
         ASSERT_FALSE(ucs_topo_is_reachable(hca_devs[1], gpu_dev));
         ASSERT_TRUE(ucs_topo_is_sibling(hca_devs[0], gpu_dev));
@@ -508,4 +506,57 @@ UCS_TEST_F(test_topo, sibling) {
         ASSERT_FALSE(ucs_topo_is_sibling(hca_devs[0], gpu_dev));
         ASSERT_FALSE(ucs_topo_is_sibling(gpu_dev, hca_devs[0]));
     }
+}
+
+// Multiple GPUs with same HCA sibling can be seen with MPS MLOPart
+UCS_TEST_F(test_topo, sibling_multiple_memory_devices) {
+    static const uintptr_t user_value1 = 1;
+    static const uintptr_t user_value2 = 2;
+
+    read_pcie_devices();
+    if ((m_hcas.empty()) || (m_gpus.empty()) || (m_dmas.empty())) {
+        UCS_TEST_SKIP_R("Not enough HCA, GPU and DMA PCIe device");
+    }
+
+    std::string sibling_gpu, sibling_dma;
+    get_siblings(m_hcas[0], sibling_gpu, sibling_dma);
+    if (sibling_dma.empty()) {
+        UCS_TEST_SKIP_R("No sibling DMA device found");
+    }
+
+    auto hca_dev = register_device("hca0", m_hcas[0]);
+    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, hca_dev);
+    auto dma_dev = register_device("dma", sibling_dma);
+    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, dma_dev);
+    auto gpu_dev0 = register_device("gpu0", sibling_gpu);
+    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, gpu_dev0);
+
+    ucs_sys_bus_id_t gpu_bus_id;
+    ASSERT_UCS_OK(ucs_topo_get_device_bus_id(gpu_dev0, &gpu_bus_id));
+
+    ucs_sys_device_t gpu_dev1, gpu_dev2;
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id_and_user_value(
+            &gpu_bus_id, user_value1, &gpu_dev1));
+
+    ASSERT_UCS_OK(ucs_topo_sys_device_enable_aux_path(gpu_dev0));
+    ASSERT_UCS_OK(ucs_topo_sys_device_enable_aux_path(gpu_dev1));
+    ASSERT_UCS_OK(ucs_topo_sys_device_set_sys_dev_aux(hca_dev, dma_dev));
+
+    auto expect_sibling = [hca_dev](ucs_sys_device_t gpu_dev) {
+        EXPECT_TRUE(ucs_topo_device_has_sibling(gpu_dev));
+        EXPECT_TRUE(ucs_topo_is_reachable(hca_dev, gpu_dev));
+        EXPECT_TRUE(ucs_topo_is_sibling(hca_dev, gpu_dev));
+        EXPECT_TRUE(ucs_topo_is_sibling(gpu_dev, hca_dev));
+    };
+
+    expect_sibling(gpu_dev0);
+    expect_sibling(gpu_dev1);
+
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id_and_user_value(
+            &gpu_bus_id, user_value2, &gpu_dev2));
+    ASSERT_UCS_OK(ucs_topo_sys_device_enable_aux_path(gpu_dev2));
+
+    expect_sibling(gpu_dev0);
+    expect_sibling(gpu_dev1);
+    expect_sibling(gpu_dev2);
 }

@@ -1319,6 +1319,10 @@ uct_gdaki_enum_gpus(uct_gdaki_gpu_info_t *gpus, unsigned *count_p)
         }
 
         if (uct_gdaki_gpu_bus_id_match(gpus, gpu_count, &bus_id)) {
+            ucs_debug("skip cuda device %d with duplicate bdf "
+                      "%04x:%02x:%02x.%u", cuda_idx,
+                      (unsigned)bus_id.domain, (unsigned)bus_id.bus,
+                      (unsigned)bus_id.slot, (unsigned)bus_id.function);
             /* Same BDF. TODO: support MLOPart. */
             continue;
         }
