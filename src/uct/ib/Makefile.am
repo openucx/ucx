@@ -18,7 +18,6 @@ noinst_HEADERS = \
 	base/ib_device.h \
 	base/ib_iface.h \
 	base/ib_log.h \
-	base/ib_log.inl \
 	base/ib_md.h \
 	base/ib_verbs.h
 
@@ -59,6 +58,8 @@ libuct_ib_la_SOURCES += \
 	ud/base/ud_ep.c \
 	ud/base/ud_log.c \
 	ud/verbs/ud_verbs.c
+
+libuct_ib_la_SOURCES += base/ib_verbs_dlopen.c
 
 endif # HAVE_TL_UD
 
