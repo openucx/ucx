@@ -129,7 +129,8 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
     uct_cuda_ipc_md_t *md       = ucs_derived_of(iface->super.super.md,
                                                  uct_cuda_ipc_md_t);
     const uct_cuda_ipc_device_addr_t *dev_addr;
-    size_t dev_addr_len;
+    uct_cuda_ipc_iface_address_t ipc_addr;
+    size_t dev_addr_len, iface_addr_len;
     int same_uuid;
 
     if (!uct_iface_is_reachable_params_addrs_valid(params)) {
@@ -141,6 +142,17 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                    sizeof(dev_addr->system_uuid));
     dev_addr     = (const uct_cuda_ipc_device_addr_t *)params->device_addr;
     same_uuid    = (ucs_get_system_id() == dev_addr->system_uuid);
+
+    iface_addr_len = UCS_PARAM_VALUE(UCT_IFACE_IS_REACHABLE_FIELD, params,
+                                     iface_addr_length, IFACE_ADDR_LENGTH,
+                                     sizeof(pid_t));
+    ipc_addr = uct_cuda_ipc_iface_address_unpack(params->iface_addr,
+                                                 iface_addr_len);
+    if (same_uuid && uct_cuda_ipc_is_rkey_local(ipc_addr.pid,
+                                                ipc_addr.pid_ns)) {
+        uct_iface_fill_info_str_buf(params, "same process");
+        return 0;
+    }
 
     if (same_uuid ||
         uct_cuda_ipc_iface_mnnvl_supported(md, dev_addr, dev_addr_len)) {
