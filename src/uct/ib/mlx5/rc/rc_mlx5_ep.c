@@ -14,6 +14,7 @@
 #endif
 
 #include <uct/ib/mlx5/ib_mlx5_log.h>
+#include <uct/ib/mlx5/ib_mlx5_ext.h>
 #include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <ucs/arch/cpu.h>
@@ -23,6 +24,61 @@
 
 #include "rc_mlx5.inl"
 
+
+ucs_status_t
+uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep, uct_ep_attr_t *ep_attr)
+{
+    uct_rc_mlx5_base_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_base_ep_t);
+    uct_ib_mlx5_ext_qp_query_attr_t attr = {};
+    struct ibv_qp *qp                    = NULL;
+#if HAVE_DEVX
+    struct mlx5dv_devx_obj *devx_obj     = NULL;
+#endif
+
+    if (ep_attr->field_mask & (UCT_EP_ATTR_FIELD_LOCAL_SOCKADDR |
+                               UCT_EP_ATTR_FIELD_REMOTE_SOCKADDR)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    if (ep_attr->field_mask & UCT_EP_ATTR_FIELD_TX_TOKEN) {
+        attr.field_mask |= UCT_IB_MLX5_EXT_QP_QUERY_ATTR_FIELD_TX_TOKEN;
+        attr.tx_token    = ep_attr->tx_token;
+    }
+
+    if (ep_attr->field_mask & UCT_EP_ATTR_FIELD_RX_TOKEN) {
+        attr.field_mask |= UCT_IB_MLX5_EXT_QP_QUERY_ATTR_FIELD_RX_TOKEN;
+        attr.rx_token    = ep_attr->rx_token;
+    }
+
+    if (attr.field_mask == 0) {
+        return UCS_OK;
+    }
+
+    if (ep->tx.wq.super.type == UCT_IB_MLX5_OBJ_TYPE_VERBS) {
+        qp = ep->tx.wq.super.verbs.qp;
+#if HAVE_DEVX
+    } else if (ep->tx.wq.super.type == UCT_IB_MLX5_OBJ_TYPE_DEVX) {
+        devx_obj = ep->tx.wq.super.devx.obj;
+        attr.field_mask |= UCT_IB_MLX5_EXT_QP_QUERY_ATTR_FIELD_QP_NUM;
+        attr.qp_num      = ep->tx.wq.super.qp_num;
+#endif
+    }
+
+    return uct_ib_mlx5_ext_qp_query(qp,
+#if HAVE_DEVX
+                                    devx_obj,
+#else
+                                    NULL,
+#endif
+                                    &attr);
+}
+
+ucs_status_t
+uct_rc_mlx5_ep_outstanding_extract(uct_ep_h ep,
+                                   const uct_ep_outstanding_extract_params_t *params)
+{
+    return uct_ib_mlx5_ext_ep_outstanding_extract(ep, params);
+}
 
 static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_base_ep_put_short_inline(
         uct_ep_h tl_ep, const void *buffer, unsigned length,

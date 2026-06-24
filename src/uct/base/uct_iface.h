@@ -318,18 +318,25 @@ typedef ucs_status_t (*uct_ep_put_sgl_zcopy_func_t)(
         uct_rkey_t const *rkeys, const size_t *counts, const size_t *strides,
         size_t count, uct_completion_t *comp);
 
+
+/* Extract outstanding operations from an endpoint */
+typedef ucs_status_t (*uct_ep_outstanding_extract_func_t)(
+        uct_ep_h ep, const uct_ep_outstanding_extract_params_t *params);
+
+
 /* Internal operations, not exposed by the external API */
 typedef struct uct_iface_internal_ops {
-    uct_iface_query_v2_func_t        iface_query_v2;
-    uct_iface_estimate_perf_func_t   iface_estimate_perf;
-    uct_iface_vfs_refresh_func_t     iface_vfs_refresh;
-    uct_ep_query_func_t              ep_query;
-    uct_ep_invalidate_func_t         ep_invalidate;
-    uct_ep_connect_to_ep_v2_func_t   ep_connect_to_ep_v2;
-    uct_iface_is_reachable_v2_func_t iface_is_reachable_v2;
-    uct_ep_is_connected_func_t       ep_is_connected;
-    uct_ep_get_device_ep_func_t      ep_get_device_ep;
-    uct_ep_put_sgl_zcopy_func_t      ep_put_sgl_zcopy;
+    uct_iface_query_v2_func_t         iface_query_v2;
+    uct_iface_estimate_perf_func_t    iface_estimate_perf;
+    uct_iface_vfs_refresh_func_t      iface_vfs_refresh;
+    uct_ep_query_func_t               ep_query;
+    uct_ep_invalidate_func_t          ep_invalidate;
+    uct_ep_connect_to_ep_v2_func_t    ep_connect_to_ep_v2;
+    uct_iface_is_reachable_v2_func_t  iface_is_reachable_v2;
+    uct_ep_is_connected_func_t        ep_is_connected;
+    uct_ep_get_device_ep_func_t       ep_get_device_ep;
+    uct_ep_put_sgl_zcopy_func_t       ep_put_sgl_zcopy;
+    uct_ep_outstanding_extract_func_t ep_outstanding_extract;
 } uct_iface_internal_ops_t;
 
 
