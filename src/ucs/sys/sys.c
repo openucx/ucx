@@ -23,16 +23,27 @@
 #include <ucm/util/sys.h>
 
 #include <unistd.h>
+#include <limits.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
 #include <sys/shm.h>
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <sys/resource.h>
+#include <netinet/in.h>
 #include <net/if.h>
+#include <pthread.h>
 #include <dirent.h>
 #include <sched.h>
 #include <ctype.h>
+#include <sys/syscall.h>
+#if defined(__FreeBSD__)
+#include <ifaddrs.h>
+#include <net/if_dl.h>
+#include <net/if_types.h>
+#include <sys/param.h>
+#include <sys/cpuset.h>
+#endif
 #ifdef HAVE_SYS_THR_H
 #include <sys/thr.h>
 #endif
@@ -94,7 +105,7 @@ const char *ucs_get_tmpdir()
 
 const char *ucs_get_host_name()
 {
-    static char hostname[HOST_NAME_MAX] = {0};
+    static char hostname[UCS_HOST_NAME_MAX] = {0};
 
     if (*hostname == 0) {
         gethostname(hostname, sizeof(hostname));
@@ -206,6 +217,54 @@ ucs_status_t ucs_get_loopback_ndev_index(unsigned *ndev_index_p)
     return init_status;
 }
 
+#if defined(__FreeBSD__)
+static uint64_t ucs_get_mac_address()
+{
+    static uint64_t mac_address = 0;
+    struct ifaddrs *ifap = NULL, *ifa;
+
+    if (mac_address != 0) {
+        return mac_address;
+    }
+
+    if (getifaddrs(&ifap) != 0) {
+        ucs_error("getifaddrs() failed: %m");
+        return 0;
+    }
+
+    for (ifa = ifap; ifa != NULL; ifa = ifa->ifa_next) {
+        const struct sockaddr *sa = ifa->ifa_addr;
+        const struct sockaddr_dl *sdl;
+        const unsigned char *lladdr;
+
+        if ((ifa->ifa_flags & IFF_LOOPBACK) || (sa == NULL)) {
+            continue;
+        }
+        if (sa->sa_family != AF_LINK) {
+            continue;
+        }
+
+        sdl = (const struct sockaddr_dl *)sa;
+        if (sdl->sdl_alen < 6) {
+            continue;
+        }
+
+        lladdr = (const unsigned char *)LLADDR(sdl);
+        /*
+         * Copy first 6 bytes (MAC). Keep same semantics as Linux code:
+         * store into low bytes of uint64_t.
+         */
+        mac_address = 0;
+        memcpy(&mac_address, lladdr, 6);
+        break;
+    }
+
+    freeifaddrs(ifap);
+
+    ucs_trace("MAC address is 0x%012"PRIX64, mac_address);
+    return mac_address;
+}
+#else
 static uint64_t ucs_get_mac_address()
 {
     static uint64_t mac_address = 0;
@@ -257,6 +316,7 @@ static uint64_t ucs_get_mac_address()
 
     return mac_address;
 }
+#endif
 
 static uint64_t __sumup_host_name(unsigned prime_index)
 {
@@ -789,6 +849,15 @@ size_t ucs_get_shmmax()
     return size;
 }
 
+#if defined(__FreeBSD__)
+static void ucs_sysv_shmget_error_check_ENOSPC(size_t alloc_size,
+                                               const struct shminfo *ipc_info,
+                                               char *buf, size_t max)
+{
+    (void)alloc_size; (void)ipc_info; (void)buf; (void)max;
+    return;
+}
+#else
 static void ucs_sysv_shmget_error_check_ENOSPC(size_t alloc_size,
                                                const struct shminfo *ipc_info,
                                                char *buf, size_t max)
@@ -825,6 +894,7 @@ static void ucs_sysv_shmget_error_check_ENOSPC(size_t alloc_size,
                  new_shm_tot, ipc_info->shmall);
     }
 }
+#endif
 
 ucs_status_t ucs_sys_get_proc_cap(uint32_t *effective)
 {
@@ -880,6 +950,18 @@ static void ucs_sysv_shmget_error_check_EPERM(int flags, char *buf, size_t max)
     }
 }
 
+#if defined(__FreeBSD__)
+static void ucs_sysv_shmget_format_error(size_t alloc_size, int flags,
+                                         const char *alloc_name, int sys_errno,
+                                         char *buf, size_t max)
+{
+    snprintf(buf, max,
+             "shmget(size=%zu flags=0x%x) for %s failed: %s, please check shared "
+             "memory limits by 'sysctl kern.ipc' / 'sysctl hw.pagesize' / 'ipcs -a'",
+             alloc_size, flags, alloc_name, strerror(sys_errno));
+    return;
+}
+#else
 static void ucs_sysv_shmget_format_error(size_t alloc_size, int flags,
                                          const char *alloc_name, int sys_errno,
                                          char *buf, size_t max)
@@ -922,6 +1004,7 @@ static void ucs_sysv_shmget_format_error(size_t alloc_size, int flags,
         snprintf(p, endp - p, ", please check shared memory limits by 'ipcs -l'");
     }
 }
+#endif
 
 ucs_status_t ucs_sysv_alloc(size_t *size, size_t max_size, void **address_p,
                             int flags, const char *alloc_name, int *shmid)
@@ -1311,6 +1394,43 @@ double ucs_get_cpuinfo_clock_freq(const char *header, double scale)
     return value * scale;
 }
 
+#if defined(__FreeBSD__)
+void *ucs_sys_realloc(void *old_ptr, size_t old_length, size_t new_length)
+{
+    void *ptr;
+    size_t copy_length;
+
+    new_length = ucs_align_up_pow2(new_length, ucs_get_page_size());
+    if (old_ptr == NULL) {
+        ptr = mmap(NULL, new_length, PROT_READ | PROT_WRITE,
+                   MAP_PRIVATE | MAP_ANON, -1, 0);
+        if (ptr == MAP_FAILED) {
+            ucs_log_fatal_error("mmap(NULL, %zu, READ|WRITE, PRIVATE|ANON) failed: %m",
+                                new_length);
+            return NULL;
+        }
+        return ptr;
+    }
+
+    old_length = ucs_align_up_pow2(old_length, ucs_get_page_size());
+    ptr = mmap(NULL, new_length, PROT_READ | PROT_WRITE,
+               MAP_PRIVATE | MAP_ANON, -1, 0);
+    if (ptr == MAP_FAILED) {
+        ucs_log_fatal_error("mmap(NULL, %zu, READ|WRITE, PRIVATE|ANON) failed: %m",
+                            new_length);
+        return NULL;
+    }
+
+    copy_length = ucs_min(old_length, new_length);
+    memcpy(ptr, old_ptr, copy_length);
+
+    if (munmap(old_ptr, old_length) != 0) {
+        ucs_log_fatal_error("munmap(%p, %zu) failed: %m", old_ptr, old_length);
+    }
+
+    return ptr;
+}
+#else
 void *ucs_sys_realloc(void *old_ptr, size_t old_length, size_t new_length)
 {
     void *ptr;
@@ -1319,7 +1439,7 @@ void *ucs_sys_realloc(void *old_ptr, size_t old_length, size_t new_length)
     if (old_ptr == NULL) {
         /* Note: Must pass the 0 offset as "long", otherwise it will be
          * partially undefined when converted to syscall arguments */
-        ptr = (void*)syscall(__NR_mmap, NULL, new_length, PROT_READ|PROT_WRITE,
+        ptr = (void*)syscall(SYS_mmap, NULL, new_length, PROT_READ|PROT_WRITE,
                              MAP_PRIVATE|MAP_ANONYMOUS, -1, 0ul);
         if (ptr == MAP_FAILED) {
             ucs_log_fatal_error("mmap(NULL, %zu, READ|WRITE, PRIVATE|ANON) failed: %m",
@@ -1328,7 +1448,7 @@ void *ucs_sys_realloc(void *old_ptr, size_t old_length, size_t new_length)
         }
     } else {
         old_length = ucs_align_up_pow2(old_length, ucs_get_page_size());
-        ptr = (void*)syscall(__NR_mremap, old_ptr, old_length, new_length,
+        ptr = (void*)syscall(SYS_mremap, old_ptr, old_length, new_length,
                              MREMAP_MAYMOVE);
         if (ptr == MAP_FAILED) {
             ucs_log_fatal_error("mremap(%p, %zu, %zu, MAYMOVE) failed: %m",
@@ -1339,19 +1459,35 @@ void *ucs_sys_realloc(void *old_ptr, size_t old_length, size_t new_length)
 
     return ptr;
 }
+#endif
 
+#if defined(__FreeBSD__)
 void ucs_sys_free(void *ptr, size_t length)
 {
     int ret;
 
     if (ptr != NULL) {
         length = ucs_align_up_pow2(length, ucs_get_page_size());
-        ret = syscall(__NR_munmap, ptr, length);
+        ret = munmap(ptr, length);
         if (ret) {
             ucs_log_fatal_error("munmap(%p, %zu) failed: %m", ptr, length);
         }
     }
 }
+#else
+void ucs_sys_free(void *ptr, size_t length)
+{
+    int ret;
+
+    if (ptr != NULL) {
+        length = ucs_align_up_pow2(length, ucs_get_page_size());
+        ret = syscall(SYS_munmap, ptr, length);
+        if (ret) {
+            ucs_log_fatal_error("munmap(%p, %zu) failed: %m", ptr, length);
+        }
+    }
+}
+#endif
 
 char* ucs_make_affinity_str(const ucs_sys_cpuset_t *cpuset, char *str, size_t len)
 {
@@ -1417,6 +1553,28 @@ int ucs_sys_getaffinity(ucs_sys_cpuset_t *cpuset)
     return ret;
 }
 
+#if defined(__FreeBSD__)
+ucs_status_t ucs_sys_pthread_getaffinity(ucs_sys_cpuset_t *cpuset)
+{
+    long tid;
+    int ret;
+
+#ifdef HAVE_SYS_THR_H
+    thr_self(&tid);
+#else
+    /* Fallback: best-effort use process id */
+    tid = (long)getpid();
+#endif
+
+    ret = cpuset_getaffinity(CPU_LEVEL_WHICH, CPU_WHICH_TID, tid,
+                             sizeof(*cpuset), cpuset);
+    if (ret != 0) {
+        ucs_error("cpuset_getaffinity(TID=%ld) failed: %m", tid);
+        return UCS_ERR_INVALID_PARAM;
+    }
+    return UCS_OK;
+}
+#else
 ucs_status_t ucs_sys_pthread_getaffinity(ucs_sys_cpuset_t *cpuset)
 {
     if (pthread_getaffinity_np(pthread_self(), sizeof(*cpuset), cpuset)) {
@@ -1426,6 +1584,7 @@ ucs_status_t ucs_sys_pthread_getaffinity(ucs_sys_cpuset_t *cpuset)
 
     return UCS_OK;
 }
+#endif
 
 void ucs_sys_cpuset_copy(ucs_cpu_set_t *dst, const ucs_sys_cpuset_t *src)
 {
@@ -1601,7 +1760,8 @@ ucs_status_t ucs_pthread_create(pthread_t *thread_id_p,
 
     ret = pthread_create(&thread_id, NULL, start_routine, arg);
     if (ret != 0) {
-        ucs_error("pthread_create() failed: %m");
+        ucs_error("pthread_create(start_routine=%p arg=%p) failed: %s (%d)",
+                  start_routine, arg, strerror(ret), ret);
         return UCS_ERR_IO_ERROR;
     }
 
