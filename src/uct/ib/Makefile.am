@@ -18,6 +18,7 @@ noinst_HEADERS = \
 	base/ib_device.h \
 	base/ib_iface.h \
 	base/ib_log.h \
+	base/ib_log.inl \
 	base/ib_md.h \
 	base/ib_verbs.h
 
