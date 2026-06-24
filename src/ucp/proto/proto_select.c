@@ -221,7 +221,8 @@ ucp_proto_select_init_protocols(ucp_worker_h worker,
     ucs_array_init_dynamic(&proto_init->protocols);
     ucs_array_init_dynamic(&proto_init->priv_buf);
 
-    ucs_for_each_bit(init_params.proto_id, worker->context->proto_bitmap) {
+    UCS_STATIC_BITMAP_FOR_EACH_BIT(init_params.proto_id,
+                                   &worker->context->proto_bitmap) {
         const ucp_proto_t *proto;
 
         ucs_assert(init_params.proto_id < ucp_protocols_count()); /* Coverity */
