@@ -871,21 +871,22 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
         .fd     = UCT_DMABUF_FD_INVALID,
         .offset = 0
     };
-    int dmabuf_queried               = 0;
-    int is_async_managed             = 0;
+    int dmabuf_queried    = 0;
+    int is_async_managed  = 0;
     ucs_memory_info_t addr_mem_info;
     ucs_status_t status;
     uct_md_dmabuf_mapping_t mapping;
 
-    if (!(mem_attr->field_mask & (UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE |
-                                  UCT_MD_MEM_ATTR_V2_FIELD_SYS_DEV |
-                                  UCT_MD_MEM_ATTR_V2_FIELD_BASE_ADDRESS |
-                                  UCT_MD_MEM_ATTR_V2_FIELD_ALLOC_LENGTH |
-                                  UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD |
-                                  UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_OFFSET |
-                                  UCT_MD_MEM_ATTR_V2_FIELD_MEM_FLAGS))) {
+    if (!(mem_attr->field_mask &
+          (UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE |
+           UCT_MD_MEM_ATTR_V2_FIELD_SYS_DEV |
+           UCT_MD_MEM_ATTR_V2_FIELD_BASE_ADDRESS |
+           UCT_MD_MEM_ATTR_V2_FIELD_ALLOC_LENGTH |
+           UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD |
+           UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_OFFSET |
+           UCT_MD_MEM_ATTR_V2_FIELD_MEM_FLAGS))) {
         return UCS_OK;
-    }
+  }
 
     if (address != NULL) {
         status = uct_cuda_copy_md_query_attributes(md, address, length,
