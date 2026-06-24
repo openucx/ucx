@@ -1,6 +1,6 @@
 /**
  * @file        uct.h
- * @date        2014-2026
+ * @date        2014-2020
  * @copyright   NVIDIA CORPORATION & AFFILIATES. ALL RIGHTS RESERVED.
  * @copyright   Oak Ridge National Laboratory. All rights received.
  * @copyright   Advanced Micro Devices, Inc. All rights received.
@@ -1601,60 +1601,33 @@ struct uct_md_attr {
  */
 typedef enum uct_md_mem_attr_field {
     /** Indicate if memory type is populated. E.g. CPU/GPU */
-    UCT_MD_MEM_ATTR_FIELD_MEM_TYPE       = UCS_BIT(0),
+    UCT_MD_MEM_ATTR_FIELD_MEM_TYPE      = UCS_BIT(0),
 
     /**
      * Indicate if details of system device backing the pointer are populated.
      * For example: GPU device, NUMA domain, etc.
      */
-    UCT_MD_MEM_ATTR_FIELD_SYS_DEV        = UCS_BIT(1),
+    UCT_MD_MEM_ATTR_FIELD_SYS_DEV       = UCS_BIT(1),
 
     /** Request base address of the allocation to which the buffer belongs. */
-    UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS   = UCS_BIT(2),
+    UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS  = UCS_BIT(2),
 
     /** Request the whole length of the allocation to which the buffer belongs. */
-    UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH   = UCS_BIT(3),
+    UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH  = UCS_BIT(3),
 
     /**
      * Request a cross-device dmabuf file descriptor that represents a memory
      * region, and can be used to register the region with another memory
      * domain.
      */
-    UCT_MD_MEM_ATTR_FIELD_DMABUF_FD      = UCS_BIT(4),
+    UCT_MD_MEM_ATTR_FIELD_DMABUF_FD     = UCS_BIT(4),
 
     /**
      * Request the offset of the provided virtual address relative to the
      * beginning of its backing dmabuf region.
      */
-    UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET  = UCS_BIT(5),
-
-    /** Select the dmabuf mapping type (see @ref uct_md_dmabuf_mapping_t). */
-    UCT_MD_MEM_ATTR_FIELD_DMABUF_MAPPING = UCS_BIT(6)
+    UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET = UCS_BIT(5)
 } uct_md_mem_attr_field_t;
-
-
-/**
- * @ingroup UCT_MD
- * @brief  Mapping type of a dmabuf file descriptor.
- *
- * Used as an input hint to @ref uct_md_mem_query (via the @a dmabuf_mapping
- * field of @ref uct_md_mem_attr_t) to control how the memory domain maps the
- * memory region backing the returned dmabuf file descriptor. The mapping must
- * match the verb that will be used to register the descriptor.
- */
-typedef enum uct_md_dmabuf_mapping {
-    /**
-     * Map the region through the host (default), so the descriptor can be
-     * registered by generic verbs (e.g. ibv_reg_dmabuf_mr).
-     */
-    UCT_MD_DMABUF_MAPPING_HOST = 0,
-
-    /**
-     * Map the region through the device PCIe BAR, so the descriptor can be
-     * registered by a Direct NIC (e.g. mlx5dv_reg_dmabuf_mr with DATA_DIRECT).
-     */
-    UCT_MD_DMABUF_MAPPING_PCIE
-} uct_md_dmabuf_mapping_t;
 
 
 /**
@@ -1715,14 +1688,6 @@ typedef struct uct_md_mem_attr {
      * (identified by dmabuf_fd) backing the memory region being queried.
      */
     size_t            dmabuf_offset;
-
-    /**
-     * Input hint for the dmabuf mapping of the returned @a dmabuf_fd, from
-     * @ref uct_md_dmabuf_mapping_t. Used only when
-     * @ref UCT_MD_MEM_ATTR_FIELD_DMABUF_MAPPING is set, otherwise the default
-     * (host) mapping is used.
-     */
-    uct_md_dmabuf_mapping_t dmabuf_mapping;
 } uct_md_mem_attr_t;
 
 

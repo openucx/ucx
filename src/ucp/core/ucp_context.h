@@ -424,10 +424,6 @@ typedef struct ucp_context {
     /* Map of MDs that support dmabuf registration */
     ucp_md_map_t                  dmabuf_reg_md_map;
 
-    /* Subset of dmabuf_reg_md_map that registers device-memory dmabuf via the
-       device PCIe BAR (Direct NIC / DATA_DIRECT) and needs a PCIe-mapped fd */
-    ucp_md_map_t                  dmabuf_pcie_md_map;
-
     /* List of MDs that detect non host memory type */
     ucp_md_index_t                mem_type_detect_mds[UCS_MEMORY_TYPE_LAST];
     ucp_md_index_t                num_mem_type_detect_mds;  /* Number of mem type MDs */

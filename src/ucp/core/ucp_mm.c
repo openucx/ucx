@@ -13,6 +13,7 @@
 #include "ucp_worker.h"
 #include "ucp_mm.inl"
 
+#include <uct/base/uct_md.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/sys/math.h>
@@ -560,14 +561,14 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
     size_t length                       = ucp_memh_length(memh);
     ucp_md_map_t md_map_registered      = 0;
     ucp_md_map_t dmabuf_md_map          = 0;
+    int dmabuf_fd                       = UCT_DMABUF_FD_INVALID;
     int host_dmabuf_fd                  = UCT_DMABUF_FD_INVALID;
-    int pcie_dmabuf_fd                  = UCT_DMABUF_FD_INVALID;
-    size_t pcie_dmabuf_offset           = 0;
+    size_t dmabuf_offset                = 0;
     size_t host_dmabuf_offset           = 0;
+    int dmabuf_is_pcie                  = 0;
     ucp_md_map_t reg_md_map;
     uct_md_mem_reg_params_t reg_params;
     uct_md_mem_attr_t mem_attr;
-    uct_md_mem_attr_t pcie_attr;
     ucp_md_index_t md_index;
     uint8_t required_mem_flags;
     ucs_status_t status;
@@ -612,13 +613,13 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
 
     if ((dmabuf_prov_md_index != UCP_NULL_RESOURCE) &&
         (reg_md_map & context->dmabuf_reg_md_map)) {
-        /* Query the host-mapped dmabuf fd shared by all generic-verb mds;
-           Direct-NIC importers get a PCIe-mapped fd below. */
-        mem_attr.field_mask     = UCT_MD_MEM_ATTR_FIELD_DMABUF_FD |
-                                  UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET |
-                                  UCT_MD_MEM_ATTR_FIELD_SYS_DEV |
-                                  UCT_MD_MEM_ATTR_FIELD_DMABUF_MAPPING;
-        mem_attr.dmabuf_mapping = UCT_MD_DMABUF_MAPPING_HOST;
+        /* Query the dmabuf fd using the exporter's automatic mapping (PCIe when
+           the GPU has a sibling Direct NIC, host otherwise). A PCIe-mapped fd
+           that a generic-verb importer cannot register is retried below with a
+           host-mapped fd. */
+        mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_DMABUF_FD |
+                              UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET |
+                              UCT_MD_MEM_ATTR_FIELD_SYS_DEV;
         status = uct_md_mem_query(context->tl_mds[dmabuf_prov_md_index].md,
                                   address, length, &mem_attr);
         if (status != UCS_OK) {
@@ -631,9 +632,11 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
                       address, length, mem_attr.dmabuf_fd,
                       mem_attr.dmabuf_offset, mem_attr.sys_dev);
 
-            dmabuf_md_map      = context->dmabuf_reg_md_map;
-            host_dmabuf_fd     = mem_attr.dmabuf_fd;
-            host_dmabuf_offset = mem_attr.dmabuf_offset;
+            dmabuf_md_map  = context->dmabuf_reg_md_map;
+            dmabuf_fd      = mem_attr.dmabuf_fd;
+            dmabuf_offset  = mem_attr.dmabuf_offset;
+            dmabuf_is_pcie = (uct_md_dmabuf_get_mapping(mem_attr.sys_dev) ==
+                              UCT_MD_DMABUF_MAPPING_PCIE);
 
             /* Exclude any unreachable MD from registration */
             ucs_for_each_bit(md_index, dmabuf_md_map) {
@@ -643,20 +646,6 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
                     ucs_trace("md[%d] skipped: cannot reach mem_sys_dev=%u",
                               md_index, mem_attr.sys_dev);
                     reg_md_map &= ~UCS_BIT(md_index);
-                }
-            }
-
-            /* Query a PCIe-mapped handle once if any md needs it. */
-            if (reg_md_map & context->dmabuf_pcie_md_map) {
-                pcie_attr.field_mask     = UCT_MD_MEM_ATTR_FIELD_DMABUF_FD |
-                                           UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET |
-                                           UCT_MD_MEM_ATTR_FIELD_DMABUF_MAPPING;
-                pcie_attr.dmabuf_mapping = UCT_MD_DMABUF_MAPPING_PCIE;
-                pcie_attr.dmabuf_fd      = UCT_DMABUF_FD_INVALID;
-                if (uct_md_mem_query(context->tl_mds[dmabuf_prov_md_index].md,
-                                     address, length, &pcie_attr) == UCS_OK) {
-                    pcie_dmabuf_fd     = pcie_attr.dmabuf_fd;
-                    pcie_dmabuf_offset = pcie_attr.dmabuf_offset;
                 }
             }
         }
@@ -675,20 +664,10 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
         reg_params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS;
         if (dmabuf_md_map & UCS_BIT(md_index)) {
             /* If this MD can consume a dmabuf and we have it - provide it */
-            reg_params.field_mask |= UCT_MD_MEM_REG_FIELD_DMABUF_FD |
-                                     UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET;
-
-            /* A Direct-NIC importer (dmabuf_pcie_md_map) registers via mlx5dv +
-               DATA_DIRECT and must use the PCIe-mapped handle; every other
-               importer uses the shared host-mapped handle. */
-            if ((pcie_dmabuf_fd != UCT_DMABUF_FD_INVALID) &&
-                (context->dmabuf_pcie_md_map & UCS_BIT(md_index))) {
-                reg_params.dmabuf_fd     = pcie_dmabuf_fd;
-                reg_params.dmabuf_offset = pcie_dmabuf_offset;
-            } else {
-                reg_params.dmabuf_fd     = host_dmabuf_fd;
-                reg_params.dmabuf_offset = host_dmabuf_offset;
-            }
+            reg_params.field_mask   |= UCT_MD_MEM_REG_FIELD_DMABUF_FD |
+                                       UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET;
+            reg_params.dmabuf_fd     = dmabuf_fd;
+            reg_params.dmabuf_offset = dmabuf_offset;
         }
 
         reg_address = address;
@@ -701,14 +680,38 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
 
         status = uct_md_mem_reg_v2(context->tl_mds[md_index].md, reg_address,
                                    reg_length, &reg_params, &memh->uct[md_index]);
+        if (ucs_unlikely(status != UCS_OK) && dmabuf_is_pcie &&
+            (reg_params.field_mask & UCT_MD_MEM_REG_FIELD_DMABUF_FD)) {
+            /* The exporter's automatic mapping produced a PCIe-mapped fd 
+             * (the GPU has a sibling Direct NIC), but registration failed,
+             * retry with host-mapped fd instead. */
+            ucs_debug("register address %p length %zu pcie dmabuf-fd %d on "
+                      "md[%d]=%s failed: %s; retrying with host dmabuf",
+                      reg_address, reg_length, reg_params.dmabuf_fd, md_index,
+                      context->tl_mds[md_index].rsc.md_name,
+                      ucs_status_string(status));
+
+            /* Fetch a host-mapped fd once. */
+            if (host_dmabuf_fd == UCT_DMABUF_FD_INVALID) {
+                uct_md_mem_query_dmabuf(context->tl_mds[dmabuf_prov_md_index].md,
+                                        address, length,
+                                        UCT_MD_DMABUF_MAPPING_HOST,
+                                        &host_dmabuf_fd, &host_dmabuf_offset);
+            }
+
+            if (host_dmabuf_fd != UCT_DMABUF_FD_INVALID) {
+                reg_params.dmabuf_fd     = host_dmabuf_fd;
+                reg_params.dmabuf_offset = host_dmabuf_offset;
+                status = uct_md_mem_reg_v2(context->tl_mds[md_index].md,
+                                           reg_address, reg_length, &reg_params,
+                                           &memh->uct[md_index]);
+            }
+        }
+
         if (ucs_unlikely(status != UCS_OK)) {
             ucp_memh_register_log_fail(err_level, reg_address, reg_length,
-                                       mem_type,
-                                       (reg_params.field_mask &
-                                        UCT_MD_MEM_REG_FIELD_DMABUF_FD) ?
-                                               reg_params.dmabuf_fd :
-                                               UCT_DMABUF_FD_INVALID,
-                                       md_index, context, status);
+                                       mem_type, reg_params.dmabuf_fd, md_index,
+                                       context, status);
             if (allow_partial_reg &&
                 (uct_flags & UCT_MD_MEM_FLAG_HIDE_ERRORS)) {
                 continue;
@@ -721,11 +724,11 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
         ucs_trace("register address %p length %zu dmabuf-fd %d flags %ld "
                   "on md[%d]=%s %p",
                   reg_address, reg_length,
-                  (reg_params.field_mask & UCT_MD_MEM_REG_FIELD_DMABUF_FD) ?
-                          reg_params.dmabuf_fd :
-                          UCT_DMABUF_FD_INVALID,
-                  reg_params.flags, md_index,
-                  context->tl_mds[md_index].rsc.md_name, memh->uct[md_index]);
+                  (dmabuf_md_map & UCS_BIT(md_index)) ? reg_params.dmabuf_fd :
+                                                        UCT_DMABUF_FD_INVALID,
+                  reg_params.flags,
+                  md_index, context->tl_mds[md_index].rsc.md_name,
+                  memh->uct[md_index]);
         md_map_registered |= UCS_BIT(md_index);
     }
 
@@ -737,8 +740,8 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
 
 out_close_dmabuf_fd:
     UCS_STATIC_ASSERT(UCT_DMABUF_FD_INVALID == -1);
+    ucs_close_fd(&dmabuf_fd);
     ucs_close_fd(&host_dmabuf_fd);
-    ucs_close_fd(&pcie_dmabuf_fd);
     return status;
 }
 

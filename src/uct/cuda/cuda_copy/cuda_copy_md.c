@@ -816,6 +816,19 @@ uct_cuda_copy_md_get_dmabuf(const void *address, size_t length,
     return dmabuf;
 }
 
+static uct_cuda_copy_md_dmabuf_t
+uct_cuda_copy_md_query_dmabuf(const ucs_memory_info_t *mem_info,
+                              const void *address,
+                              uct_md_dmabuf_mapping_t mapping)
+{
+    uct_cuda_copy_md_dmabuf_t dmabuf;
+
+    dmabuf         = uct_cuda_copy_md_get_dmabuf(mem_info->base_address,
+                                                 mem_info->alloc_length, mapping);
+    dmabuf.offset += UCS_PTR_BYTE_DIFF(mem_info->base_address, address);
+    return dmabuf;
+}
+
 static uint8_t
 uct_cuda_copy_md_detect_mem_flags(uct_cuda_copy_md_t *md,
                                   const ucs_memory_info_t *mem_info,
@@ -886,7 +899,7 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
            UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_OFFSET |
            UCT_MD_MEM_ATTR_V2_FIELD_MEM_FLAGS))) {
         return UCS_OK;
-  }
+    }
 
     if (address != NULL) {
         status = uct_cuda_copy_md_query_attributes(md, address, length,
@@ -917,21 +930,20 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
 
     if ((mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD) ||
         (mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_OFFSET)) {
-        mapping = (mem_attr->field_mask &
-                   UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_MAPPING) ?
-                          mem_attr->dmabuf_mapping :
-                          UCT_MD_DMABUF_MAPPING_HOST;
-        dmabuf  = uct_cuda_copy_md_get_dmabuf(addr_mem_info.base_address,
-                                              addr_mem_info.alloc_length,
-                                              mapping);
+        /* The exporter cannot know which importer's verb will consume the fd,
+         * so it maps via PCIe when the GPU has a sibling Direct NIC and via the
+         * host otherwise. UCP corrects a mismatch by retrying registration with
+         * a host-mapped fd (see uct_md_mem_query_dmabuf). */
+        mapping = uct_md_dmabuf_get_mapping(addr_mem_info.sys_dev);
+        dmabuf  = uct_cuda_copy_md_query_dmabuf(&addr_mem_info, address,
+                                                mapping);
+
         dmabuf_queried = 1;
         if (mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD) {
             mem_attr->dmabuf_fd = dmabuf.fd;
         }
         if (mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_OFFSET) {
-            mem_attr->dmabuf_offset =
-                    dmabuf.offset + UCS_PTR_BYTE_DIFF(addr_mem_info.base_address,
-                                                      address);
+            mem_attr->dmabuf_offset = dmabuf.offset;
         }
     }
 
@@ -959,6 +971,31 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
         ucs_close_fd(&dmabuf.fd);
     }
 
+    return UCS_OK;
+}
+
+static ucs_status_t
+uct_cuda_copy_md_mem_query_dmabuf(uct_md_h tl_md, const void *address,
+                                  size_t length,
+                                  uct_md_dmabuf_mapping_t mapping,
+                                  int *dmabuf_fd_p, size_t *dmabuf_offset_p)
+{
+    uct_cuda_copy_md_t *md = ucs_derived_of(tl_md, uct_cuda_copy_md_t);
+    uct_cuda_copy_md_dmabuf_t dmabuf;
+    ucs_memory_info_t addr_mem_info;
+    int is_async_managed;
+    ucs_status_t status;
+
+    status = uct_cuda_copy_md_query_attributes(md, address, length,
+                                               &addr_mem_info,
+                                               &is_async_managed);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    dmabuf = uct_cuda_copy_md_query_dmabuf(&addr_mem_info, address, mapping);
+    *dmabuf_fd_p     = dmabuf.fd;
+    *dmabuf_offset_p = dmabuf.offset;
     return UCS_OK;
 }
 
@@ -990,6 +1027,7 @@ static uct_md_ops_t md_ops = {
     .mem_reg            = uct_cuda_copy_mem_reg,
     .mem_dereg          = uct_cuda_copy_mem_dereg,
     .mem_query          = uct_cuda_copy_md_mem_query,
+    .mem_query_dmabuf   = uct_cuda_copy_md_mem_query_dmabuf,
     .mkey_pack          = (uct_md_mkey_pack_func_t)ucs_empty_function_return_success,
     .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
     .mem_elem_pack      = (uct_md_mem_elem_pack_func_t)ucs_empty_function_return_unsupported,

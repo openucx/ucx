@@ -853,28 +853,25 @@ ucs_status_t uct_md_mem_dereg_v2(uct_md_h md,
  */
 typedef enum {
     /** Memory type */
-    UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE       = UCS_BIT(0),
+    UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE      = UCS_BIT(0),
 
     /** System device */
-    UCT_MD_MEM_ATTR_V2_FIELD_SYS_DEV        = UCS_BIT(1),
+    UCT_MD_MEM_ATTR_V2_FIELD_SYS_DEV       = UCS_BIT(1),
 
     /** Base address */
-    UCT_MD_MEM_ATTR_V2_FIELD_BASE_ADDRESS   = UCS_BIT(2),
+    UCT_MD_MEM_ATTR_V2_FIELD_BASE_ADDRESS  = UCS_BIT(2),
 
     /** Allocation length */
-    UCT_MD_MEM_ATTR_V2_FIELD_ALLOC_LENGTH   = UCS_BIT(3),
+    UCT_MD_MEM_ATTR_V2_FIELD_ALLOC_LENGTH  = UCS_BIT(3),
 
     /** DMABUF file descriptor */
-    UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD      = UCS_BIT(4),
+    UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD     = UCS_BIT(4),
 
     /** DMABUF offset */
-    UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_OFFSET  = UCS_BIT(5),
+    UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_OFFSET = UCS_BIT(5),
 
     /** Per-buffer memory flags, see @ref ucs_mem_flags_t */
-    UCT_MD_MEM_ATTR_V2_FIELD_MEM_FLAGS      = UCS_BIT(6),
-
-    /** Select the dmabuf mapping type (see @ref uct_md_dmabuf_mapping_t). */
-    UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_MAPPING = UCS_BIT(7)
+    UCT_MD_MEM_ATTR_V2_FIELD_MEM_FLAGS     = UCS_BIT(6)
 } uct_md_mem_attr_v2_field_t;
 
 
@@ -887,31 +884,28 @@ typedef struct uct_md_mem_attr_v2 {
      * Mask of valid fields in this structure, using
      * @ref uct_md_mem_attr_v2_field_t.
      */
-    uint64_t                field_mask;
+    uint64_t          field_mask;
 
     /** See @ref uct_md_mem_attr_t::mem_type. */
-    ucs_memory_type_t       mem_type;
+    ucs_memory_type_t mem_type;
 
     /** See @ref uct_md_mem_attr_t::sys_dev. */
-    ucs_sys_device_t        sys_dev;
+    ucs_sys_device_t  sys_dev;
 
     /** See @ref uct_md_mem_attr_t::base_address. */
-    void                    *base_address;
+    void              *base_address;
 
     /** See @ref uct_md_mem_attr_t::alloc_length. */
-    size_t                  alloc_length;
+    size_t            alloc_length;
 
     /** See @ref uct_md_mem_attr_t::dmabuf_fd. */
-    int                     dmabuf_fd;
+    int               dmabuf_fd;
 
     /** See @ref uct_md_mem_attr_t::dmabuf_offset. */
-    size_t                  dmabuf_offset;
+    size_t            dmabuf_offset;
 
     /** Per-buffer memory flags, see @ref ucs_mem_flags_t. */
-    uint8_t                 mem_flags;
-
-    /** See @ref uct_md_mem_attr_t::dmabuf_mapping. */
-    uct_md_dmabuf_mapping_t dmabuf_mapping;
+    uint8_t           mem_flags;
 } uct_md_mem_attr_v2_t;
 
 
@@ -1126,7 +1120,7 @@ typedef struct {
  * @brief  Memory domain capability flags.
  */
 typedef enum {
-    UCT_MD_FLAG_V2_FIRST        = UCT_MD_FLAG_LAST,
+    UCT_MD_FLAG_V2_FIRST       = UCT_MD_FLAG_LAST,
 
     /**
      * Memory domain supports invalidation of memory handle registered by
@@ -1134,7 +1128,7 @@ typedef enum {
      * key by @ref uct_md_mkey_pack_v2 with
      * @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA flag.
      */
-    UCT_MD_FLAG_INVALIDATE_RMA  = UCT_MD_FLAG_V2_FIRST,
+    UCT_MD_FLAG_INVALIDATE_RMA = UCT_MD_FLAG_V2_FIRST,
 
     /**
      * Memory domain supports invalidation of memory handle registered by
@@ -1142,19 +1136,12 @@ typedef enum {
      * packed key by @ref uct_md_mkey_pack_v2 with
      * @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE_AMO flag.
      */
-    UCT_MD_FLAG_INVALIDATE_AMO  = UCS_BIT(12),
+    UCT_MD_FLAG_INVALIDATE_AMO = UCS_BIT(12),
 
     /**
      * Memory domain performs memory type related copy operations.
      */
-    UCT_MD_FLAG_MEMTYPE_COPY    = UCS_BIT(13),
-
-    /**
-     * Memory domain registers device-memory dmabuf through the device PCIe BAR
-     * (Direct NIC / DATA_DIRECT) and therefore requires a PCIe-mapped dmabuf
-     * handle (see @ref uct_md_dmabuf_mapping_t).
-     */
-    UCT_MD_FLAG_DMABUF_REG_PCIE = UCS_BIT(14)
+    UCT_MD_FLAG_MEMTYPE_COPY   = UCS_BIT(13)
 } uct_md_flags_v2_t;
 
 
