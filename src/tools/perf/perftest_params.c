@@ -8,8 +8,10 @@
 #  include "config.h"
 #endif
 
+#include "api/libperf.h"
 #include "perftest.h"
 
+#include "ucs/memory/memory_type.h"
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/sock.h>
@@ -173,6 +175,7 @@ static void usage(const struct perftest_context *ctx, const char *program)
                                 ctx->params.super.ucp.am_hdr_size);
     printf("     -y             do additional memcopy to the user memory in active message receive handler\n");
     printf("     -z             pass pre-registered memory handle\n");
+    printf("     -V             validate data correctness for pingpong tests\n");
     printf("     -g <IP>[:<port>], --daemon-local <IP>[:<port>]\n");
     printf("                    IP address and port of the local daemon to offload UCP operations to\n");
     printf("                    Port is optional, by default daemon port is (%d)\n",
@@ -771,6 +774,9 @@ ucs_status_t parse_test_params(perftest_params_t *params, char opt,
     case 'z':
         params->super.flags |= UCX_PERF_TEST_FLAG_PREREG;
         return UCS_OK;
+    case 'V':
+        params->super.flags |= UCX_PERF_TEST_FLAG_VALIDATE;
+        return UCS_OK;
     default:
        return UCS_ERR_INVALID_PARAM;
     }
@@ -819,11 +825,41 @@ ucs_status_t clone_params(perftest_params_t *dest,
     return UCS_OK;
 }
 
+ucs_status_t check_validation_params(const ucx_perf_params_t *params)
+{
+    if (!(params->flags & UCX_PERF_TEST_FLAG_VALIDATE)) {
+        return UCS_OK;
+    }
+
+    if (params->api == UCX_PERF_API_UCT) {
+        ucs_error("validation mode is not compatible with UCT tests");
+        return UCS_ERR_INVALID_PARAM;
+    }
+   
+    if (params->test_type != UCX_PERF_TEST_TYPE_PINGPONG) {
+        ucs_error("validation mode requires using a PingPong test");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if ((params->send_mem_type != UCS_MEMORY_TYPE_HOST) || 
+        (params->recv_mem_type != UCS_MEMORY_TYPE_HOST)) {
+        ucs_error("validation mode requires send and recv buffers to use host memory");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return UCS_OK;
+}
+
 ucs_status_t check_params(const perftest_params_t *params)
 {
     ucs_status_t status;
 
     status = check_daemon_params(&params->super);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = check_validation_params(&params->super);
     if (status != UCS_OK) {
         return status;
     }
@@ -916,7 +952,7 @@ ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized,
 
     optind = 1;
     while ((c = getopt_long(argc, argv,
-                            "p:b:6NfvXc:P:hK:g:G:k" TEST_PARAMS_ARGS,
+                            "p:b:6NfvXc:P:hK:g:G:kV" TEST_PARAMS_ARGS,
                             TEST_PARAMS_ARGS_LONG, NULL)) != -1) {
         switch (c) {
         case 'p':

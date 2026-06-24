@@ -16,6 +16,7 @@
 
 #include <ucs/sys/preprocessor.h>
 #include <ucs/sys/string.h>
+#include "ucs/type/status.h"
 #include <limits>
 
 
@@ -733,6 +734,21 @@ public:
                  m_perf.ucp.self_recv_rkey);
     }
 
+    ucs_status_t validate_buffers(void *send_buffer, void *recv_buffer,
+                                  size_t length)
+    {
+        if (CMD == UCX_PERF_CMD_PUT) {
+            fence();
+        }
+
+        if (memcmp(send_buffer, recv_buffer, length)) {
+            ucs_error("data mismatch between send and receive buffers");
+            return UCS_ERR_IO_ERROR;
+        }
+
+        return UCS_OK;
+    }
+
     ucs_status_t run_pingpong()
     {
         unsigned my_index;
@@ -744,6 +760,8 @@ public:
         ucp_rkey_h rkey;
         size_t length, send_length, recv_length;
         psn_t sn;
+        bool validate;
+        ucs_status_t status;
 
         send_buffer = m_perf.send_buffer;
         recv_buffer = m_perf.recv_buffer;
@@ -751,13 +769,15 @@ public:
         ep          = m_perf.ucp.ep;
         remote_addr = m_perf.ucp.remote_addr;
         rkey        = m_perf.ucp.rkey;
-        sn          = 0;
+        sn          = 1;
 
         ucp_perf_init_common_params(&length, &send_length, &send_datatype,
                                     &send_buffer, &recv_length, &recv_datatype,
                                     &recv_buffer);
 
         reset_buffers(length, UNKNOWN_SN);
+
+        validate = m_perf.params.flags & UCX_PERF_TEST_FLAG_VALIDATE;
 
         ucp_perf_barrier(&m_perf);
 
@@ -769,9 +789,23 @@ public:
 
         if (my_index == 0) {
             UCX_PERF_TEST_FOREACH(&m_perf) {
+
+                if (validate) {
+                    memset(send_buffer, sn, send_length);
+                }
+
                 send(ep, send_buffer, send_length, send_datatype, sn, remote_addr, rkey);
                 recv(worker, ep, recv_buffer, recv_length, recv_datatype, sn);
                 wait_recv_window(m_max_outstanding);
+
+                if (validate) {
+                    status = validate_buffers(send_buffer, recv_buffer,
+                                              send_length);
+                    if (status != UCS_OK) {
+                        return status;
+                    }
+                }
+
                 ucx_perf_update(&m_perf, 1, 1, length);
                 ++sn;
             }
@@ -779,6 +813,11 @@ public:
             UCX_PERF_TEST_FOREACH(&m_perf) {
                 recv(worker, ep, recv_buffer, recv_length, recv_datatype, sn);
                 wait_recv_window(m_max_outstanding);
+
+                if (validate) {
+                    memcpy(send_buffer, recv_buffer, send_length);
+                }
+
                 send(ep, send_buffer, send_length, send_datatype, sn,
                      remote_addr, rkey, m_perf.current.iters == 0);
                 ucx_perf_update(&m_perf, 1, 1, length);
@@ -834,7 +873,7 @@ public:
         if (m_perf.params.flags & UCX_PERF_TEST_FLAG_LOOPBACK) {
             UCX_PERF_TEST_FOREACH(&m_perf) {
                 send(ep, send_buffer, send_length, send_datatype,
-                     sn, remote_addr, rkey);
+                    sn, remote_addr, rkey);
                 recv(worker, ep, recv_buffer, recv_length, recv_datatype, sn);
                 ucx_perf_update(&m_perf, 1, 1, length);
                 ++sn;
