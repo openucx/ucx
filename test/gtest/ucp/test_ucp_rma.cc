@@ -466,6 +466,54 @@ UCS_TEST_P(test_ucp_rma_rndv, get_nonblocking)
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_rma_rndv, ib, "ib")
 
 
+class test_ucp_rma_rndv_cuda_async : public test_ucp_rma_rndv {
+public:
+    void init() override
+    {
+        if (!mem_buffer::is_async_supported(UCS_MEMORY_TYPE_CUDA)) {
+            UCS_TEST_SKIP_R("asynchronous CUDA memory is not supported");
+        }
+
+        m_env.push_back(
+                new ucs::scoped_setenv("UCX_IB_GPU_DIRECT_RDMA", "y"));
+        test_ucp_rma::init();
+    }
+
+protected:
+    mem_buffer *create_mem_buffer(size_t size,
+                                  ucs_memory_type_t mem_type) override
+    {
+        const mem_buffer::alloc_mode mode =
+                (mem_type == UCS_MEMORY_TYPE_CUDA) ?
+                        mem_buffer::alloc_mode::ASYNC :
+                        mem_buffer::alloc_mode::DEFAULT;
+        return new mem_buffer(size, mem_type, mode);
+    }
+};
+
+UCS_TEST_P(test_ucp_rma_rndv_cuda_async, put_blocking)
+{
+    test_forced_rndv(static_cast<send_func_t>(&test_ucp_rma::put_b));
+}
+
+UCS_TEST_P(test_ucp_rma_rndv_cuda_async, put_nonblocking)
+{
+    test_forced_rndv(static_cast<send_func_t>(&test_ucp_rma::put_nbi));
+}
+
+UCS_TEST_P(test_ucp_rma_rndv_cuda_async, get_blocking)
+{
+    test_forced_rndv(static_cast<send_func_t>(&test_ucp_rma::get_b));
+}
+
+UCS_TEST_P(test_ucp_rma_rndv_cuda_async, get_nonblocking)
+{
+    test_forced_rndv(static_cast<send_func_t>(&test_ucp_rma::get_nbi));
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_rma_rndv_cuda_async, ib, "ib")
+
+
 class test_ucp_proto_emulation_enable : public test_ucp_rma {
 public:
     static constexpr size_t SMALL_SIZE = 8;

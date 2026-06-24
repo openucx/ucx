@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016-2017. ALL RIGHTS RESERVED.
 * Copyright (c) Triad National Security, LLC. 2023. ALL RIGHTS RESERVED.
@@ -18,6 +18,7 @@
 #include <uct/api/v2/uct_v2.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack_int.h>
+#include <ucs/memory/memtype_cache.h>
 #include <ucs/memory/rcache.h>
 #include <ucs/type/class.h>
 #include <ucs/sys/module.h>
@@ -451,6 +452,8 @@ uct_md_attr_v2_copy(uct_md_attr_v2_t *dst, const uct_md_attr_v2_t *src)
                               UCT_MD_ATTR_FIELD_GLOBAL_ID);
     UCT_MD_ATTR_V2_FIELD_COPY(dst, src, reg_alignment,
                               UCT_MD_ATTR_FIELD_REG_ALIGNMENT);
+    UCT_MD_ATTR_V2_FIELD_COPY(dst, src, required_mem_flags,
+                              UCT_MD_ATTR_FIELD_REQUIRED_MEM_FLAGS);
 }
 
 static ucs_status_t uct_md_attr_v2_init(uct_md_h md, uct_md_attr_v2_t *md_attr)
@@ -521,6 +524,7 @@ void uct_md_base_md_query(uct_md_attr_v2_t *md_attr)
     md_attr->rkey_packed_size          = 0;
     md_attr->exported_mkey_packed_size = 0;
     md_attr->reg_alignment             = 1;
+    md_attr->required_mem_flags        = 0;
     memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
 }
 
@@ -622,10 +626,98 @@ ucs_status_t uct_md_mem_dereg_v2(uct_md_h md,
     return md->ops->mem_dereg(md, params);
 }
 
+static void
+uct_md_mem_attr_from_v2(uct_md_mem_attr_t *dst, const uct_md_mem_attr_v2_t *src)
+{
+    if (dst->field_mask & UCT_MD_MEM_ATTR_FIELD_MEM_TYPE) {
+        dst->mem_type = src->mem_type;
+    }
+
+    if (dst->field_mask & UCT_MD_MEM_ATTR_FIELD_SYS_DEV) {
+        dst->sys_dev = src->sys_dev;
+    }
+
+    if (dst->field_mask & UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS) {
+        dst->base_address = src->base_address;
+    }
+
+    if (dst->field_mask & UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH) {
+        dst->alloc_length = src->alloc_length;
+    }
+
+    if (dst->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD) {
+        dst->dmabuf_fd = src->dmabuf_fd;
+    }
+
+    if (dst->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET) {
+        dst->dmabuf_offset = src->dmabuf_offset;
+    }
+}
+
 ucs_status_t uct_md_mem_query(uct_md_h md, const void *address, size_t length,
                               uct_md_mem_attr_t *mem_attr)
 {
-    return md->ops->mem_query(md, address, length, mem_attr);
+    uct_md_mem_attr_v2_t mem_attr_v2 = {0};
+    ucs_status_t status;
+
+    /* The v1 field bits are a subset of the v2 field bits with identical
+     * values, so the v1 field mask can be passed through directly. Enforce
+     * that invariant at compile time, since reordering the v2 enum would
+     * otherwise silently corrupt this bridge. */
+    UCS_STATIC_ASSERT((uint64_t)UCT_MD_MEM_ATTR_FIELD_MEM_TYPE ==
+                      (uint64_t)UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE);
+    UCS_STATIC_ASSERT((uint64_t)UCT_MD_MEM_ATTR_FIELD_SYS_DEV ==
+                      (uint64_t)UCT_MD_MEM_ATTR_V2_FIELD_SYS_DEV);
+    UCS_STATIC_ASSERT((uint64_t)UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS ==
+                      (uint64_t)UCT_MD_MEM_ATTR_V2_FIELD_BASE_ADDRESS);
+    UCS_STATIC_ASSERT((uint64_t)UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH ==
+                      (uint64_t)UCT_MD_MEM_ATTR_V2_FIELD_ALLOC_LENGTH);
+    UCS_STATIC_ASSERT((uint64_t)UCT_MD_MEM_ATTR_FIELD_DMABUF_FD ==
+                      (uint64_t)UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD);
+    UCS_STATIC_ASSERT((uint64_t)UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET ==
+                      (uint64_t)UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_OFFSET);
+
+    mem_attr_v2.field_mask = mem_attr->field_mask &
+                             (UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE |
+                              UCT_MD_MEM_ATTR_V2_FIELD_SYS_DEV |
+                              UCT_MD_MEM_ATTR_V2_FIELD_BASE_ADDRESS |
+                              UCT_MD_MEM_ATTR_V2_FIELD_ALLOC_LENGTH |
+                              UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD |
+                              UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_OFFSET);
+
+    status = md->ops->mem_query(md, address, length, &mem_attr_v2);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    uct_md_mem_attr_from_v2(mem_attr, &mem_attr_v2);
+    return UCS_OK;
+}
+
+ucs_status_t uct_md_mem_query_v2(uct_md_h md, const void *address,
+                                 size_t length, uct_md_mem_attr_v2_t *mem_attr)
+{
+    uint64_t v1_fields  = UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE |
+                          UCT_MD_MEM_ATTR_V2_FIELD_SYS_DEV |
+                          UCT_MD_MEM_ATTR_V2_FIELD_BASE_ADDRESS |
+                          UCT_MD_MEM_ATTR_V2_FIELD_ALLOC_LENGTH |
+                          UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD |
+                          UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_OFFSET;
+    uint64_t field_mask = mem_attr->field_mask;
+    ucs_status_t status;
+
+    /* Default to registrable; MDs that detect per-buffer registrability
+     * (e.g. cuda_copy) override this. */
+    if (field_mask & UCT_MD_MEM_ATTR_V2_FIELD_MEM_FLAGS) {
+        mem_attr->mem_flags = UCS_MEM_FLAG_REGISTRABLE;
+    }
+
+    status = md->ops->mem_query(md, address, length, mem_attr);
+    if ((status == UCS_ERR_UNSUPPORTED) && !(field_mask & v1_fields)) {
+        return UCS_OK;
+    }
+
+    return status;
 }
 
 int uct_md_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockaddr,

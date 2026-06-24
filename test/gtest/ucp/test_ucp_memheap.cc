@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (c) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -35,9 +35,11 @@ void test_ucp_memheap::test_xfer(send_func_t send_func, size_t size,
 
     ucs_assert(!(mem_map_flags & (UCP_MEM_MAP_ALLOCATE | UCP_MEM_MAP_FIXED)));
 
-    mem_buffer memheap(reg_offset + num_iters * size + alignment,
-                       target_mem_type);
-    mapped_ptr = UCS_PTR_BYTE_OFFSET(memheap.ptr(), reg_offset);
+    ucs::auto_ptr<mem_buffer> memheap_buf(
+            create_mem_buffer(reg_offset + num_iters * size + alignment,
+                              target_mem_type));
+    mem_buffer &memheap = *memheap_buf;
+    mapped_ptr          = UCS_PTR_BYTE_OFFSET(memheap.ptr(), reg_offset);
     padding    = UCS_PTR_BYTE_DIFF(mapped_ptr,
                                    ucs_align_up_pow2_ptr(mapped_ptr,
                                                          alignment));
@@ -71,7 +73,9 @@ void test_ucp_memheap::test_xfer(send_func_t send_func, size_t size,
 
     ucp_rkey_buffer_release(rkey_buffer);
 
-    mem_buffer expected_data(memheap.size(), send_mem_type);
+    ucs::auto_ptr<mem_buffer> expected_data_buf(
+            create_mem_buffer(memheap.size(), send_mem_type));
+    mem_buffer &expected_data = *expected_data_buf;
 
     if (user_memh) {
         params.address = expected_data.ptr();
