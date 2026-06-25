@@ -294,11 +294,23 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma, put_nonblocking_iov_zcopy,
 
 
 UCS_TEST_P(test_ucp_rma, get_blocking) {
-    test_mem_types(static_cast<send_func_t>(&test_ucp_rma::get_b));
+    test_mem_types(static_cast<send_func_t>(&test_ucp_rma::get_b), 1);
 }
 
 UCS_TEST_P(test_ucp_rma, get_nonblocking) {
-    test_mem_types(static_cast<send_func_t>(&test_ucp_rma::get_nbi));
+    test_mem_types(static_cast<send_func_t>(&test_ucp_rma::get_nbi), 1);
+}
+
+UCS_TEST_P(test_ucp_rma, get_bcopy_forced_success, "PROTOS=get/bcopy,reconfig")
+{
+    if (!sender().has_lane_with_caps(UCT_IFACE_FLAG_GET_BCOPY) ||
+        !mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
+        UCS_TEST_SKIP_R("get_bcopy or CUDA memory not supported");
+    }
+
+    test_message_sizes(static_cast<send_func_t>(&test_ucp_rma::get_b), 1,
+                       4 * UCS_MBYTE,
+                       UCS_MEMORY_TYPE_CUDA, UCS_MEMORY_TYPE_HOST, 0);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_rma, get_nonblocking_iov_zcopy,
@@ -608,6 +620,12 @@ UCS_TEST_P(test_ucp_proto_emulation_enable, no_zcopy_proto_fails_get_big,
 
 UCS_TEST_P(test_ucp_proto_emulation_enable, get_zcopy_forced_success,
            "PROTOS=get/bcopy,get/zcopy,reconfig")
+{
+    test_forced_message_sizes(static_cast<send_func_t>(&test_ucp_rma::get_b));
+}
+
+UCS_TEST_P(test_ucp_proto_emulation_enable, get_bcopy_forced_success,
+           "PROTOS=get/bcopy,reconfig")
 {
     test_forced_message_sizes(static_cast<send_func_t>(&test_ucp_rma::get_b));
 }
