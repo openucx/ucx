@@ -58,7 +58,7 @@ uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep, uct_ep_attr_t *ep_attr)
         qp = ep->tx.wq.super.verbs.qp;
 #if HAVE_DEVX
     } else if (ep->tx.wq.super.type == UCT_IB_MLX5_OBJ_TYPE_DEVX) {
-        devx_obj = ep->tx.wq.super.devx.obj;
+        devx_obj         = ep->tx.wq.super.devx.obj;
         attr.field_mask |= UCT_IB_MLX5_EXT_QP_QUERY_ATTR_FIELD_QP_NUM;
         attr.qp_num      = ep->tx.wq.super.qp_num;
 #endif
@@ -73,9 +73,8 @@ uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep, uct_ep_attr_t *ep_attr)
                                     &attr);
 }
 
-ucs_status_t
-uct_rc_mlx5_ep_outstanding_extract(uct_ep_h ep,
-                                   const uct_ep_outstanding_extract_params_t *params)
+ucs_status_t uct_rc_mlx5_ep_outstanding_extract(
+        uct_ep_h ep, const uct_ep_outstanding_extract_params_t *params)
 {
     return uct_ib_mlx5_ext_ep_outstanding_extract(ep, params);
 }

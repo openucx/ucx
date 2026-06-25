@@ -1551,7 +1551,7 @@ ucs_status_t uct_md_mem_elem_pack(uct_md_h md, uct_mem_h memh, uct_rkey_t rkey,
  * The enumeration allows specifying which fields in @ref uct_ep_op_info_t are
  * present, for backward compatibility support.
  */
- enum uct_ep_op_info_field {
+enum uct_ep_op_info_field {
     UCT_EP_OP_INFO_FIELD_AM     = UCS_BIT(0), /**< am_id, am_hdr* fields */
     UCT_EP_OP_INFO_FIELD_DATA   = UCS_BIT(1), /**< data/length (short/bcopy) */
     UCT_EP_OP_INFO_FIELD_IOV    = UCS_BIT(2), /**< iov/iovcnt (zcopy) */
