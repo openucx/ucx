@@ -78,9 +78,16 @@ EOF
   test_wheel_ucxx)
     : "${LIBUCXX_WHL_DIR:?LIBUCXX_WHL_DIR required}"
     : "${UCXX_WHL_DIR:?UCXX_WHL_DIR required}"
-    printf '#!/bin/bash\necho "%s"\n' "$LIBUCXX_WHL_DIR" > "$HOME/.local/bin/rapids-download-wheels-from-github"
-    printf '#!/bin/bash\necho "%s"\n' "$UCXX_WHL_DIR"    > "$HOME/.local/bin/rapids-download-from-github"
-    chmod +x "$HOME/.local/bin/rapids-download-wheels-from-github" "$HOME/.local/bin/rapids-download-from-github"
+    # The wheel test installs from both the libucxx and ucxx wheelhouses via
+    # the download helpers; stage both wheels in one dir and point the helpers
+    # there so the libucxx_*.whl / ucxx_*.whl globs resolve.
+    wheelhouse="$RAPIDS_CONDA_BLD_OUTPUT_DIR/ucxx-wheelhouse"
+    mkdir -p "$wheelhouse"
+    cp "$LIBUCXX_WHL_DIR"/*.whl "$UCXX_WHL_DIR"/*.whl "$wheelhouse"/
+    for tool in rapids-download-from-github rapids-download-wheels-from-github; do
+      printf '#!/bin/bash\necho "%s"\n' "$wheelhouse" > "$HOME/.local/bin/$tool"
+      chmod +x "$HOME/.local/bin/$tool"
+    done
     bash ci/test_wheel_ucxx.sh
     ;;
 
