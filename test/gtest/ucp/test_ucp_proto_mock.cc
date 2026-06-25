@@ -2081,6 +2081,9 @@ public:
             iface_attr.bandwidth.shared  = 28e9;
             iface_attr.latency.c         = 600e-9;
             iface_attr.latency.m         = 1e-9;
+            /* BW lane can be selected after the
+             * primary AM lane has consumed the first path. */
+            iface_attr.dev_num_paths     = 2;
         });
         test_ucp_proto_mock::init();
     }
@@ -2147,7 +2150,335 @@ UCS_TEST_P(test_ucp_proto_mock_extra_features, extra_feature_tl_scope,
     EXPECT_TRUE(UCS_STATIC_BITMAP_GET(context->extra_tl_bitmap, am_rsc));
 }
 
+/*
+ * Verify that AM bandwidth lanes follow the same TL scope as the AM lane.
+ */
+UCS_TEST_P(test_ucp_proto_mock_extra_features, am_bw_lane_extra_scope,
+           "MAX_EAGER_LANES=2")
+{
+    ucp_context_h context      = sender().ucph();
+    ucp_ep_config_t *ep_config = ucp_worker_ep_config(sender().worker(),
+                                                       ep_config_index(sender()));
+
+    /* With dev_num_paths=2 and MAX_EAGER_LANES=2 there must be at least one
+     * AM_BW lane. */
+    ASSERT_NE(UCP_NULL_LANE, ep_config->key.am_bw_lanes[0])
+            << "no am_bw_lanes found; check dev_num_paths and MAX_EAGER_LANES";
+
+    for (ucp_lane_index_t i = 0; i < UCP_MAX_LANES; ++i) {
+        ucp_lane_index_t lane = ep_config->key.am_bw_lanes[i];
+        if (lane == UCP_NULL_LANE) {
+            break;
+        }
+        ucp_rsc_index_t rsc = ep_config->key.lanes[lane].rsc_index;
+        EXPECT_TRUE(UCS_STATIC_BITMAP_GET(context->extra_tl_bitmap, rsc))
+                << "am_bw_lanes[" << (int)i << "] TL not in extra_tl_bitmap";
+    }
+}
+
+/*
+ * Verify that the wireup message lane comes from extra_tl_bitmap.
+ */
+UCS_TEST_P(test_ucp_proto_mock_extra_features, wireup_msg_lane_extra_scope,
+           "IB_NUM_PATHS?=1")
+{
+    ucp_context_h context      = sender().ucph();
+    ucp_ep_config_t *ep_config = ucp_worker_ep_config(sender().worker(),
+                                                       ep_config_index(sender()));
+
+    /* The wireup msg lane is the dedicated wireup lane, or falls back to
+     * am_lane when not explicitly set (see ucp_ep_get_wireup_msg_lane()). */
+    ucp_lane_index_t wireup_lane = ep_config->key.wireup_msg_lane;
+    if (wireup_lane == UCP_NULL_LANE) {
+        wireup_lane = ep_config->key.am_lane;
+    }
+
+    ASSERT_NE(UCP_NULL_LANE, wireup_lane);
+    ucp_rsc_index_t wireup_rsc = ep_config->key.lanes[wireup_lane].rsc_index;
+    EXPECT_TRUE(UCS_STATIC_BITMAP_GET(context->extra_tl_bitmap, wireup_rsc))
+            << "wireup msg lane TL not in extra_tl_bitmap";
+}
+
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_extra_features, rcx, "rc_x")
+
+/*
+ * When the same feature appears in both features and extra_features,
+ * verify that the AM lane is confined to data_tl_bitmap.
+ */
+class test_ucp_proto_mock_extra_features_overlap : public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_extra_features_overlap()
+    {
+        mock_transport("rc_mlx5");
+    }
+
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        ucp_params_t params   = {};
+        params.field_mask     = UCP_PARAM_FIELD_FEATURES |
+                                UCP_PARAM_FIELD_EXTRA_FEATURES;
+        params.features       = UCP_FEATURE_AM | UCP_FEATURE_RMA;
+        params.extra_features = UCP_FEATURE_AM;
+        add_variant(variants, params);
+    }
+
+    virtual void init() override
+    {
+        add_mock_iface("mock", [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short  = 208;
+            iface_attr.cap.put.max_short = 2048;
+            iface_attr.bandwidth.shared  = 28e9;
+            iface_attr.latency.c         = 600e-9;
+            iface_attr.latency.m         = 1e-9;
+        });
+        test_ucp_proto_mock::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_extra_features_overlap, feature_overlap_uses_data_scope,
+           "IB_NUM_PATHS?=1")
+{
+    ucp_context_h context      = sender().ucph();
+    ucp_ep_config_t *ep_config = ucp_worker_ep_config(sender().worker(),
+                                                       ep_config_index(sender()));
+
+    /* AM appears in both features and extra_features. */
+    EXPECT_EQ(uint64_t(UCP_FEATURE_AM | UCP_FEATURE_RMA),
+              context->config.features);
+    EXPECT_EQ(uint64_t(UCP_FEATURE_AM), context->config.extra_features);
+    EXPECT_EQ(uint64_t(UCP_FEATURE_AM | UCP_FEATURE_RMA),
+              context->config.all_features);
+
+    /* Because AM is in data features, ucp_wireup_feature_tl_scope() returns
+     * DATA for AM. The AM lane must therefore be restricted to data_tl_bitmap
+     * (UCX_TLS=rc_x → the mocked rc_mlx5). */
+    ucp_lane_index_t am_lane = ep_config->key.am_lane;
+    ASSERT_NE(UCP_NULL_LANE, am_lane);
+    ucp_rsc_index_t am_rsc = ep_config->key.lanes[am_lane].rsc_index;
+    EXPECT_TRUE(UCS_STATIC_BITMAP_GET(context->data_tl_bitmap, am_rsc))
+            << "AM lane not in data_tl_bitmap despite AM being a data feature";
+    EXPECT_STREQ("rc_mlx5",
+                 ucp_ep_get_tl_rsc(sender().ep(), am_lane)->tl_name);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_extra_features_overlap, rcx,
+                               "rc_x")
+
+
+/*
+ * Verify the path where features == 0 and only extra_features is set. 
+ */
+class test_ucp_proto_mock_extra_only : public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_extra_only()
+    {
+        mock_transport("rc_mlx5");
+    }
+
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        ucp_params_t params   = {};
+        params.field_mask     = UCP_PARAM_FIELD_FEATURES |
+                                UCP_PARAM_FIELD_EXTRA_FEATURES;
+        params.features       = 0;
+        params.extra_features = UCP_FEATURE_AM;
+        add_variant(variants, params);
+    }
+
+    virtual void init() override
+    {
+        add_mock_iface("mock", [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short  = 208;
+            iface_attr.cap.put.max_short = 2048;
+            iface_attr.bandwidth.shared  = 28e9;
+            iface_attr.latency.c         = 600e-9;
+            iface_attr.latency.m         = 1e-9;
+        });
+        test_ucp_proto_mock::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_extra_only, extra_only_am_lane, "IB_NUM_PATHS?=1")
+{
+    ucp_context_h context      = sender().ucph();
+    ucp_ep_config_t *ep_config = ucp_worker_ep_config(sender().worker(),
+                                                       ep_config_index(sender()));
+
+    /* features == 0: the data-TL count check is bypassed. extra_features
+     * carries the only workload. */
+    EXPECT_EQ(uint64_t(0), context->config.features);
+    EXPECT_EQ(uint64_t(UCP_FEATURE_AM), context->config.extra_features);
+    EXPECT_EQ(uint64_t(UCP_FEATURE_AM), context->config.all_features);
+
+    /* extra_tl_bitmap must be non-empty: at least one transport is
+     * device-enabled and thus available for extra scope. */
+    EXPECT_GE(UCS_STATIC_BITMAP_POPCOUNT(context->extra_tl_bitmap), 1u);
+
+    /* AM is the only feature and it is extra-only, so the AM lane must come
+     * from extra_tl_bitmap. */
+    ucp_lane_index_t am_lane = ep_config->key.am_lane;
+    ASSERT_NE(UCP_NULL_LANE, am_lane);
+    ucp_rsc_index_t am_rsc = ep_config->key.lanes[am_lane].rsc_index;
+    EXPECT_TRUE(UCS_STATIC_BITMAP_GET(context->extra_tl_bitmap, am_rsc))
+            << "AM lane TL not in extra_tl_bitmap";
+
+    /* No RMA was requested, so no RMA lanes should be present. */
+    EXPECT_EQ(UCP_NULL_LANE, ep_config->key.rma_lanes[0]);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_extra_only, rcx, "rc_x")
+
+
+/*
+ * Verify that when TAG is an extra-only feature, ucp_wireup_add_tag_lane()
+ * uses the EXTRA TL scope, so the tag lane (if the hardware supports tag
+ * offload) is selected from extra_tl_bitmap rather than data_tl_bitmap.
+ * On hardware without tag offload the tag_lane check is skipped, but the
+ * config-field and bitmap-relationship assertions still run.
+ */
+class test_ucp_proto_mock_extra_features_tag : public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_extra_features_tag()
+    {
+        mock_transport("rc_mlx5");
+    }
+
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        ucp_params_t params   = {};
+        params.field_mask     = UCP_PARAM_FIELD_FEATURES |
+                                UCP_PARAM_FIELD_EXTRA_FEATURES;
+        params.features       = UCP_FEATURE_AM | UCP_FEATURE_RMA;
+        params.extra_features = UCP_FEATURE_TAG;
+        add_variant(variants, params);
+    }
+
+    virtual void init() override
+    {
+        add_mock_iface("mock", [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short  = 208;
+            iface_attr.cap.put.max_short = 2048;
+            iface_attr.bandwidth.shared  = 28e9;
+            iface_attr.latency.c         = 600e-9;
+            iface_attr.latency.m         = 1e-9;
+        });
+        test_ucp_proto_mock::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_extra_features_tag, tag_lane_extra_scope,
+           "IB_NUM_PATHS?=1")
+{
+    ucp_context_h context      = sender().ucph();
+    ucp_ep_config_t *ep_config = ucp_worker_ep_config(sender().worker(),
+                                                       ep_config_index(sender()));
+
+    /* TAG is not a data feature; it is extra-only. */
+    EXPECT_EQ(uint64_t(UCP_FEATURE_AM | UCP_FEATURE_RMA),
+              context->config.features);
+    EXPECT_EQ(uint64_t(UCP_FEATURE_TAG), context->config.extra_features);
+    EXPECT_EQ(uint64_t(UCP_FEATURE_AM | UCP_FEATURE_RMA | UCP_FEATURE_TAG),
+              context->config.all_features);
+
+    /* Scope separation: extra bitmap is a superset of data bitmap. */
+    size_t num_data_tls  = UCS_STATIC_BITMAP_POPCOUNT(context->data_tl_bitmap);
+    size_t num_extra_tls = UCS_STATIC_BITMAP_POPCOUNT(context->extra_tl_bitmap);
+    EXPECT_GE(num_data_tls, 1u);
+    EXPECT_GE(num_extra_tls, num_data_tls);
+
+    /* Every data TL is also in the extra bitmap. */
+    for (ucp_rsc_index_t i = 0; i < context->num_tls; ++i) {
+        if (UCS_STATIC_BITMAP_GET(context->data_tl_bitmap, i)) {
+            EXPECT_TRUE(UCS_STATIC_BITMAP_GET(context->extra_tl_bitmap, i))
+                    << "data TL " << (int)i << " not in extra_tl_bitmap";
+        }
+    }
+
+    /* When tag offload is available the tag lane must be in extra_tl_bitmap,
+     * because ucp_wireup_feature_tl_scope() returns EXTRA for TAG here
+     * (TAG is not in config.features). On hardware without tag offload this
+     * check is skipped; the scope invariants above are still verified. */
+    ucp_lane_index_t tag_lane = ep_config->key.tag_lane;
+    if (tag_lane != UCP_NULL_LANE) {
+        ucp_rsc_index_t tag_rsc = ep_config->key.lanes[tag_lane].rsc_index;
+        EXPECT_TRUE(UCS_STATIC_BITMAP_GET(context->extra_tl_bitmap, tag_rsc))
+                << "tag lane TL not in extra_tl_bitmap";
+        EXPECT_FALSE(UCS_STATIC_BITMAP_GET(context->data_tl_bitmap, tag_rsc) &&
+                     !UCS_STATIC_BITMAP_GET(context->extra_tl_bitmap, tag_rsc))
+                << "tag lane TL in data only (impossible: data ⊆ extra)";
+    }
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_extra_features_tag, rcx,
+                               "rc_x")
+
+
+/*
+ * Verify the baseline path where no extra_features are requested. This guards
+ * the compatibility case: the new data/extra bitmap split must not expand the
+ * transport scope unless UCP_PARAM_FIELD_EXTRA_FEATURES is explicitly used.
+ */
+class test_ucp_proto_mock_no_extra_features : public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_no_extra_features()
+    {
+        mock_transport("rc_mlx5");
+    }
+
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        ucp_params_t params = {};
+        params.field_mask   = UCP_PARAM_FIELD_FEATURES;
+        params.features     = UCP_FEATURE_RMA | UCP_FEATURE_AM;
+        add_variant(variants, params);
+    }
+
+    virtual void init() override
+    {
+        add_mock_iface("mock", [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short  = 208;
+            iface_attr.cap.put.max_short = 2048;
+            iface_attr.bandwidth.shared  = 28e9;
+            iface_attr.latency.c         = 600e-9;
+            iface_attr.latency.m         = 1e-9;
+        });
+        test_ucp_proto_mock::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_no_extra_features, data_scope_only,
+           "IB_NUM_PATHS?=1")
+{
+    ucp_context_h context      = sender().ucph();
+    ucp_ep_config_t *ep_config = ucp_worker_ep_config(sender().worker(),
+                                                       ep_config_index(sender()));
+
+    EXPECT_EQ(uint64_t(UCP_FEATURE_RMA | UCP_FEATURE_AM),
+              context->config.features);
+    EXPECT_EQ(uint64_t(0), context->config.extra_features);
+    EXPECT_EQ(uint64_t(UCP_FEATURE_RMA | UCP_FEATURE_AM),
+              context->config.all_features);
+
+    EXPECT_FALSE(UCS_STATIC_BITMAP_IS_ZERO(context->data_tl_bitmap));
+    EXPECT_TRUE(UCS_STATIC_BITMAP_IS_ZERO(context->extra_tl_bitmap));
+    EXPECT_TRUE(UCS_STATIC_BITMAP_IS_ZERO(
+            UCS_STATIC_BITMAP_XOR(context->tl_bitmap,
+                                  context->data_tl_bitmap)));
+
+    for (ucp_rsc_index_t i = 0; i < context->num_tls; ++i) {
+        EXPECT_FALSE(UCS_STATIC_BITMAP_GET(context->extra_tl_bitmap, i));
+    }
+
+    ucp_lane_index_t rma_lane = ep_config->key.rma_lanes[0];
+    ASSERT_NE(UCP_NULL_LANE, rma_lane);
+    ucp_rsc_index_t rma_rsc = ep_config->key.lanes[rma_lane].rsc_index;
+    EXPECT_TRUE(UCS_STATIC_BITMAP_GET(context->data_tl_bitmap, rma_rsc));
+    EXPECT_STREQ("rc_mlx5",
+                 ucp_ep_get_tl_rsc(sender().ep(), rma_lane)->tl_name);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_no_extra_features, rcx,
+                              "rc_x")
 
 
 #if HAVE_DECL_IBV_EVENT_PORT_SPEED_CHANGE
