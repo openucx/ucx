@@ -495,7 +495,7 @@ typedef struct uct_ib_mlx5_iface_config {
  * MLX5 DoorBell record
  */
 typedef struct uct_ib_mlx5_dbrec {
-   volatile uint32_t  db[2];
+   volatile uint32_t  *db;
    uint32_t           mem_id;
    size_t             offset;
    uct_ib_mlx5_md_t   *md;
