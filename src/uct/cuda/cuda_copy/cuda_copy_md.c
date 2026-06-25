@@ -37,9 +37,10 @@ static const char *uct_cuda_pref_loc[] = {
     [UCT_CUDA_PREF_LOC_LAST] = NULL,
 };
 
+/* clang-format off */
 static ucs_config_field_t uct_cuda_copy_md_config_table[] = {
     {"", "", NULL,
-        ucs_offsetof(uct_cuda_copy_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
+     ucs_offsetof(uct_cuda_copy_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
 
     {"REG_WHOLE_ALLOC", "auto",
      "Allow registration of whole allocation\n"
@@ -86,6 +87,7 @@ static ucs_config_field_t uct_cuda_copy_md_config_table[] = {
 
     {NULL}
 };
+/* clang-format on */
 
 static struct {} uct_cuda_dummy_memh;
 
@@ -983,6 +985,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_md_detect_memory_type,
     return UCS_OK;
 }
 
+/* clang-format off */
 static uct_md_ops_t md_ops = {
     .close              = uct_cuda_copy_md_close,
     .query              = uct_cuda_copy_md_query,
@@ -997,6 +1000,7 @@ static uct_md_ops_t md_ops = {
     .mem_elem_pack      = (uct_md_mem_elem_pack_func_t)ucs_empty_function_return_unsupported,
     .detect_memory_type = uct_cuda_copy_md_detect_memory_type
 };
+/* clang-format on */
 
 static ucs_status_t
 uct_cuda_copy_md_open(uct_component_t *component, const char *md_name,
@@ -1063,6 +1067,7 @@ err:
     return status;
 }
 
+/* clang-format off */
 uct_component_t uct_cuda_copy_component = {
     .query_md_resources = uct_cuda_base_query_md_resources,
     .md_open            = uct_cuda_copy_md_open,
@@ -1083,4 +1088,5 @@ uct_component_t uct_cuda_copy_component = {
     .flags              = 0,
     .md_vfs_init        = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
+/* clang-format on */
 UCT_COMPONENT_REGISTER(&uct_cuda_copy_component);

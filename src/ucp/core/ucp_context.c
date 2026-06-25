@@ -161,6 +161,7 @@ const char *ucp_extra_op_attr_flags_names[] = {
 static UCS_CONFIG_DEFINE_ARRAY(memunit_sizes, sizeof(size_t),
                                UCS_CONFIG_TYPE_MEMUNITS);
 
+/* clang-format off */
 static ucs_config_field_t ucp_context_config_table[] = {
   {"SELECT_DISTANCE_MD", "cuda_cpy",
    "MD whose distance is queried when evaluating transport selection score",
@@ -731,7 +732,6 @@ static ucs_config_field_t ucp_config_table[] = {
 };
 UCS_CONFIG_DECLARE_TABLE(ucp_config_table, "UCP context", NULL, ucp_config_t)
 
-
 static ucp_tl_alias_t ucp_tl_aliases[] = {
   { "mm",    { "posix", "sysv", "xpmem", NULL } }, /* for backward compatibility */
   { "sm",    { "posix", "sysv", "xpmem", "knem", "cma", NULL } },
@@ -756,6 +756,7 @@ static ucp_tl_alias_t ucp_tl_aliases[] = {
   { "gga",   { "gga_mlx5", NULL } },
   { NULL }
 };
+/* clang-format on */
 
 
 const char *ucp_feature_str[] = {

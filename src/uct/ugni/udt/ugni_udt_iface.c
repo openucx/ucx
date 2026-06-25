@@ -17,6 +17,7 @@
 
 extern ucs_class_t UCS_CLASS_DECL_NAME(uct_ugni_udt_iface_t);
 
+/* clang-format off */
 static ucs_config_field_t uct_ugni_udt_iface_config_table[] = {
     {"", "ALLOC=huge,thp,mmap,heap", NULL,
     ucs_offsetof(uct_ugni_iface_config_t, super),
@@ -29,6 +30,7 @@ static ucs_config_field_t uct_ugni_udt_iface_config_table[] = {
 
     {NULL}
 };
+/* clang-format on */
 
 static ucs_status_t processs_datagram(uct_ugni_udt_iface_t *iface, uct_ugni_udt_desc_t *desc)
 {

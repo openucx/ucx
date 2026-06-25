@@ -32,6 +32,7 @@ static const char *uct_ib_mlx5_mmio_modes[] = {
     [UCT_IB_MLX5_MMIO_MODE_LAST]       = NULL
 };
 
+/* clang-format off */
 ucs_config_field_t uct_ib_mlx5_iface_config_table[] = {
 #if HAVE_IBV_DM
     {"DM_SIZE", "2k",
@@ -84,6 +85,7 @@ ucs_config_field_t uct_ib_mlx5_iface_config_table[] = {
 
     {NULL}
 };
+/* clang-format on */
 
 void uct_ib_mlx5_parse_cqe_zipping(uct_ib_mlx5_md_t *md,
                                    const uct_ib_mlx5_iface_config_t *mlx5_config,

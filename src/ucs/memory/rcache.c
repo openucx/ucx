@@ -88,6 +88,7 @@ static ucs_stats_class_t ucs_rcache_stats_class = {
 };
 #endif
 
+/* clang-format off */
 ucs_config_field_t ucs_config_rcache_table[] = {
     {"RCACHE_MEM_PRIO", "1000", "Registration cache memory event priority",
      ucs_offsetof(ucs_rcache_config_t, event_prio), UCS_CONFIG_TYPE_UINT},
@@ -116,6 +117,7 @@ ucs_config_field_t ucs_config_rcache_table[] = {
 
     {NULL}
 };
+/* clang-format on */
 
 
 /*

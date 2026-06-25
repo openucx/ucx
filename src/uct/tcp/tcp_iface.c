@@ -25,6 +25,7 @@
 
 extern ucs_class_t UCS_CLASS_DECL_NAME(uct_tcp_iface_t);
 
+/* clang-format off */
 static ucs_config_field_t uct_tcp_iface_config_table[] = {
   {"", "MAX_NUM_EPS=256", NULL,
    ucs_offsetof(uct_tcp_iface_config_t, super),
@@ -123,6 +124,7 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
 
   {NULL}
 };
+/* clang-format on */
 
 
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_tcp_iface_t, uct_iface_t);

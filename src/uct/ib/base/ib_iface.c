@@ -92,6 +92,7 @@ static const char *uct_ib_iface_addr_types[] = {
    [UCT_IB_IFACE_ADDRESS_TYPE_LAST] = NULL
 };
 
+/* clang-format off */
 ucs_config_field_t uct_ib_iface_config_table[] = {
   {"", "ALLOC=thp,mmap,heap", NULL,
    ucs_offsetof(uct_ib_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
@@ -268,6 +269,7 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
 
   {NULL}
 };
+/* clang-format on */
 
 #ifdef ENABLE_STATS
 static ucs_stats_class_t uct_ib_iface_stats_class = {

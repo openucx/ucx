@@ -26,6 +26,7 @@ static const char *ucm_module_unload_prevent_modes[] = {
     [UCM_UNLOAD_PREVENT_MODE_LAST] = NULL
 };
 
+/* clang-format off */
 static ucs_config_field_t ucm_global_config_table[] = {
   {"LOG_LEVEL", "warn",
    "Logging level for memory events", ucs_offsetof(ucm_global_config_t, log_level),
@@ -121,6 +122,7 @@ static ucs_config_field_t ucm_global_config_table[] = {
 
   {NULL}
 };
+/* clang-format on */
 
 UCS_CONFIG_DECLARE_TABLE(ucm_global_config_table, "UCM", UCM_CONFIG_PREFIX,
                          ucm_global_config_t)

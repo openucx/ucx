@@ -910,6 +910,7 @@ UCS_CLASS_DEFINE(uct_base_ep_t, uct_ep_t);
 UCS_CONFIG_DEFINE_ARRAY(alloc_methods, sizeof(uct_alloc_method_t),
                         UCS_CONFIG_TYPE_ENUM(uct_alloc_method_names));
 
+/* clang-format off */
 ucs_config_field_t uct_iface_config_table[] = {
   {"MAX_SHORT", "",
    "The configuration parameter replaced by: "
@@ -935,6 +936,7 @@ ucs_config_field_t uct_iface_config_table[] = {
 
   {NULL}
 };
+/* clang-format on */
 
 ucs_status_t uct_base_ep_stats_reset(uct_base_ep_t *ep, uct_base_iface_t *iface)
 {

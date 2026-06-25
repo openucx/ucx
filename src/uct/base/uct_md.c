@@ -40,10 +40,11 @@
     }
 
 
+/* clang-format off */
 ucs_config_field_t uct_md_config_table[] = {
-
   {NULL}
 };
+/* clang-format on */
 
 
 const char *uct_device_type_names[] = {

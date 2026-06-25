@@ -27,6 +27,7 @@
 #define UCT_MM_IFACE_OVERHEAD 10e-9
 #define UCT_MM_IFACE_LATENCY  ucs_linear_func_make(80e-9, 0)
 
+/* clang-format off */
 ucs_config_field_t uct_mm_iface_config_table[] = {
     {"SM_", "ALLOC=md,mmap,heap;BW=15360MBs", NULL,
      ucs_offsetof(uct_mm_iface_config_t, super),
@@ -82,13 +83,13 @@ ucs_config_field_t uct_mm_iface_config_table[] = {
      UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_TIME,
         {"am_short", "receive overhead for short Active Message operation type",
          ucs_offsetof(uct_mm_iface_config_t, overhead.recv.am_short)},
-        {"am_bcopy", "receive overhead for buffered Active Message operation "
-                     "type",
+        {"am_bcopy", "receive overhead for buffered Active Message operation type",
          ucs_offsetof(uct_mm_iface_config_t, overhead.recv.am_bcopy)},
         {NULL})},
 
     {NULL}
 };
+/* clang-format on */
 
 static ucs_status_t uct_mm_iface_get_address(uct_iface_t *tl_iface,
                                              uct_iface_addr_t *addr)

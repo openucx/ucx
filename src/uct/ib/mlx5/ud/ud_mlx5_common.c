@@ -11,6 +11,7 @@
 #include "ud_mlx5_common.h"
 
 
+/* clang-format off */
 ucs_config_field_t uct_ud_mlx5_iface_common_config_table[] = {
   {"COMPACT_AV", "yes",
    "Enable compact address-vector optimization.",
@@ -18,6 +19,7 @@ ucs_config_field_t uct_ud_mlx5_iface_common_config_table[] = {
 
   {NULL}
 };
+/* clang-format on */
 
 ucs_status_t uct_ud_mlx5_iface_common_init(uct_ib_iface_t *ib_iface,
                                            uct_ud_mlx5_iface_common_t *iface,

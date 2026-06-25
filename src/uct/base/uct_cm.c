@@ -15,6 +15,7 @@
 #include <ucs/sys/string.h>
 
 
+/* clang-format off */
 ucs_config_field_t uct_cm_config_table[] = {
   {"FAILURE", "diag",
    "Log level of network errors for the connection manager",
@@ -26,6 +27,7 @@ ucs_config_field_t uct_cm_config_table[] = {
 
   {NULL}
 };
+/* clang-format on */
 
 ucs_status_t uct_cm_open(uct_component_h component, uct_worker_h worker,
                          const uct_cm_config_t *config, uct_cm_h *cm_p)

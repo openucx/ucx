@@ -43,7 +43,7 @@ static const char *uct_dct_affinity_policy_names[] = {
     [UCT_DC_MLX5_DCT_AFFINITY_LAST]    = NULL
 };
 
-/* DC specific parameters, expecting DC_ prefix */
+/* clang-format off */
 ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
     {"RC_", "IB_TX_QUEUE_LEN=128;FC_ENABLE=y;"
             UCT_IB_SEND_OVERHEAD_DEFAULT(UCT_RC_MLX5_IFACE_OVERHEAD),
@@ -154,6 +154,7 @@ ucs_config_field_t uct_dc_mlx5_iface_config_table[] = {
 
     {NULL}
 };
+/* clang-format on */
 
 static uint8_t
 uct_dc_mlx5_max_rd_atomic(const uct_dc_mlx5_iface_addr_t *if_addr)

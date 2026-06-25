@@ -15,6 +15,7 @@
 #include <uct/base/uct_md.h>
 #include <ucs/sys/string.h>
 
+/* clang-format off */
 static ucs_config_field_t uct_cma_iface_config_table[] = {
     {"SCOPY_", "ALLOC=huge,thp,mmap,heap;SM_BW=11145MBs", NULL,
      ucs_offsetof(uct_cma_iface_config_t, super),
@@ -22,6 +23,7 @@ static ucs_config_field_t uct_cma_iface_config_table[] = {
 
     {NULL}
 };
+/* clang-format on */
 
 static ucs_status_t uct_cma_iface_get_address(uct_iface_t *tl_iface,
                                               uct_iface_addr_t *addr)

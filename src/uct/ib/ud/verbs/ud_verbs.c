@@ -40,12 +40,14 @@ uct_ud_verbs_iface_post_recv_always(uct_ud_verbs_iface_t *iface, int max);
 static inline void
 uct_ud_verbs_iface_post_recv(uct_ud_verbs_iface_t *iface);
 
+/* clang-format off */
 static ucs_config_field_t uct_ud_verbs_iface_config_table[] = {
   {"UD_", UCT_IB_SEND_OVERHEAD_DEFAULT(UCT_UD_VERBS_IFACE_OVERHEAD), NULL,
    0, UCS_CONFIG_TYPE_TABLE(uct_ud_iface_config_table)},
 
   {NULL}
 };
+/* clang-format on */
 
 
 UCS_CLASS_INIT_FUNC(uct_ud_verbs_ep_t, const uct_ep_params_t *params)

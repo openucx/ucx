@@ -19,14 +19,18 @@
 #include <hlthunk.h>
 
 
-static ucs_config_field_t uct_gaudi_md_config_table[] =
-        {{"", "", NULL, ucs_offsetof(uct_gaudi_md_config_t, super),
-          UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
+/* clang-format off */
+static ucs_config_field_t uct_gaudi_md_config_table[] = {
+    {"", "", NULL, 
+     ucs_offsetof(uct_gaudi_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
 
-         {"DEVICE_ID", "0", "Index of the HPU devices to query memory from.",
-          ucs_offsetof(uct_gaudi_md_config_t, device_id), UCS_CONFIG_TYPE_INT},
+    {"DEVICE_ID", "0", 
+     "Index of the HPU devices to query memory from.",
+     ucs_offsetof(uct_gaudi_md_config_t, device_id), UCS_CONFIG_TYPE_INT},
 
-         {NULL}};
+    {NULL}
+};
+/* clang-format on */
 
 static ucs_status_t uct_gaudi_md_query(uct_md_h md, uct_md_attr_v2_t *attr)
 {

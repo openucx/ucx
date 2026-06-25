@@ -24,6 +24,7 @@
 #define UCT_SCOPY_IFACE_OVERHEAD 500e-9
 
 
+/* clang-format off */
 ucs_config_field_t uct_scopy_iface_config_table[] = {
     {"SM_", "", NULL,
      ucs_offsetof(uct_scopy_iface_config_t, super),
@@ -53,6 +54,7 @@ ucs_config_field_t uct_scopy_iface_config_table[] = {
 
     {NULL}
 };
+/* clang-format on */
 
 static ucs_mpool_ops_t uct_scopy_mpool_ops = {
     .chunk_alloc   = ucs_mpool_chunk_malloc,

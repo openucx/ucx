@@ -107,6 +107,7 @@ typedef struct {
 } car_opts_t;
 
 
+/* clang-format off */
 ucs_config_field_t seat_opts_table[] = {
   {"COLOR", "black", "Seat color",
    ucs_offsetof(seat_opts_t, color), UCS_CONFIG_TYPE_ENUM(color_names)},
@@ -259,6 +260,7 @@ ucs_config_field_t car_opts_table[] = {
 
   {NULL}
 };
+/* clang-format on */
 
 static std::vector<std::string> config_err_exp_str;
 

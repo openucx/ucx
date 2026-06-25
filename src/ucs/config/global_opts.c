@@ -76,18 +76,17 @@ static UCS_CONFIG_DEFINE_ARRAY(signo,
                                UCS_CONFIG_TYPE_SIGNO);
 
 
+/* clang-format off */
 #define UCS_DISTANCE_KEYS_DESCRIPTION(_field) \
     {"phb", \
-     "connection traversing PCIe as well as a PCIe Host Bridge (typically " \
-     "the CPU)", \
+     "connection traversing PCIe as well as a PCIe Host Bridge (typically the CPU)", \
      ucs_offsetof(ucs_global_opts_t, dist.phb._field)}, \
     {"node", \
      "connection traversing PCIe as well as the interconnect between PCIe " \
      "Host Bridges within a NUMA node", \
      ucs_offsetof(ucs_global_opts_t, dist.node._field)}, \
     {"sys", \
-     "connection traversing PCIe as well as the SMP interconnect between " \
-     "NUMA nodes", \
+     "connection traversing PCIe as well as the SMP interconnect between NUMA nodes", \
      ucs_offsetof(ucs_global_opts_t, dist.sys._field)}, \
     {NULL}
 
@@ -348,6 +347,7 @@ static ucs_config_field_t ucs_global_opts_read_only_table[] = {
 
  {NULL}
 };
+/* clang-format on */
 
 UCS_CONFIG_DECLARE_TABLE(ucs_global_opts_read_only_table,
                          "UCS global (runtime read-only)", NULL,

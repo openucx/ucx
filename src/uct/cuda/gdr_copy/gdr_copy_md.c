@@ -77,6 +77,7 @@ static uct_gdr_copy_global_context_t uct_gdr_copy_context = {
     .md       = NULL,
 };
 
+/* clang-format off */
 static ucs_config_field_t uct_gdr_copy_md_config_table[] = {
     {"", "", NULL,
      ucs_offsetof(uct_gdr_copy_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
@@ -109,6 +110,7 @@ static ucs_config_field_t uct_gdr_copy_md_config_table[] = {
 
     {NULL}
 };
+/* clang-format on */
 
 static ucs_status_t
 uct_gdr_copy_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)

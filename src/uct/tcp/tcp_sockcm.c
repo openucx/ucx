@@ -14,6 +14,7 @@
 #include <ucs/sys/sock.h>
 
 
+/* clang-format off */
 ucs_config_field_t uct_tcp_sockcm_config_table[] = {
   {"CM_", "", NULL,
    ucs_offsetof(uct_tcp_sockcm_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_cm_config_table)},
@@ -30,6 +31,7 @@ ucs_config_field_t uct_tcp_sockcm_config_table[] = {
 
   {NULL}
 };
+/* clang-format on */
 
 static ucs_status_t uct_tcp_sockcm_query(uct_cm_h cm, uct_cm_attr_t *cm_attr)
 {

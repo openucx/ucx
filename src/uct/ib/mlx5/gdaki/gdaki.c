@@ -60,6 +60,7 @@ typedef struct {
     unsigned                          num_eps;
 } uct_rc_gdaki_iface_config_t;
 
+/* clang-format off */
 ucs_config_field_t uct_rc_gdaki_iface_config_table[] = {
     {UCT_IB_CONFIG_PREFIX, "", NULL,
      ucs_offsetof(uct_rc_gdaki_iface_config_t, super),
@@ -89,6 +90,7 @@ ucs_config_field_t uct_rc_gdaki_iface_config_table[] = {
 
     {NULL}
 };
+/* clang-format on */
 
 
 ucs_status_t

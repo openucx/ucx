@@ -15,30 +15,30 @@
 #include <uct/rocm/base/rocm_base.h>
 #include <uct/rocm/base/rocm_signal.h>
 
+/* clang-format off */
 static ucs_config_field_t uct_rocm_ipc_iface_config_table[] = {
-
     {"", "", NULL, ucs_offsetof(uct_rocm_ipc_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
-    {"MIN_ZCOPY", "128", "Minimum data size for ROCm/IPC zcopy protocols",
-     ucs_offsetof(uct_rocm_ipc_iface_config_t, params.min_zcopy),
-     UCS_CONFIG_TYPE_MEMUNITS},
+    {"MIN_ZCOPY", "128", 
+     "Minimum data size for ROCm/IPC zcopy protocols",
+     ucs_offsetof(uct_rocm_ipc_iface_config_t, params.min_zcopy),UCS_CONFIG_TYPE_MEMUNITS},
 
-    {"LAT", "1e-7", "Latency",
-     ucs_offsetof(uct_rocm_ipc_iface_config_t, params.latency),
-     UCS_CONFIG_TYPE_TIME},
+    {"LAT", "1e-7", 
+     "Latency",
+     ucs_offsetof(uct_rocm_ipc_iface_config_t, params.latency), UCS_CONFIG_TYPE_TIME},
 
-    {"CACHE_IPC_HANDLES", "y", "Enable caching IPC handles",
-     ucs_offsetof(uct_rocm_ipc_iface_config_t, params.enable_ipc_handle_cache),
-     UCS_CONFIG_TYPE_BOOL},
+    {"CACHE_IPC_HANDLES", "y", 
+     "Enable caching IPC handles",
+     ucs_offsetof(uct_rocm_ipc_iface_config_t, params.enable_ipc_handle_cache), UCS_CONFIG_TYPE_BOOL},
 
     {"SIGPOOL_MAX_ELEMS", "1024",
       "Maximum number of elements in signal pool",
-      ucs_offsetof(uct_rocm_ipc_iface_config_t, params.sigpool_max_elems),
-      UCS_CONFIG_TYPE_UINT},
+      ucs_offsetof(uct_rocm_ipc_iface_config_t, params.sigpool_max_elems), UCS_CONFIG_TYPE_UINT},
 
     {NULL}
 };
+/* clang-format on */
 
 static double uct_rocm_ipc_iface_get_bw()
 {

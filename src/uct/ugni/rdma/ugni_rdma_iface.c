@@ -15,6 +15,7 @@
 #include <uct/ugni/base/ugni_device.h>
 #include <ucs/sys/math.h>
 
+/* clang-format off */
 static ucs_config_field_t uct_ugni_rdma_iface_config_table[] = {
     /* This tuning controls the allocation priorities for bouncing buffers */
     { "", "ALLOC=huge,mmap,heap", NULL,
@@ -27,6 +28,7 @@ static ucs_config_field_t uct_ugni_rdma_iface_config_table[] = {
 
     {NULL}
 };
+/* clang-format on */
 
 static ucs_status_t uct_ugni_rdma_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {

@@ -18,6 +18,7 @@
 #include <ucs/type/init_once.h>
 
 
+/* clang-format off */
 ucs_config_field_t uct_sm_iface_config_table[] = {
     {"", "", NULL,
      ucs_offsetof(uct_sm_iface_config_t, super),
@@ -29,6 +30,7 @@ ucs_config_field_t uct_sm_iface_config_table[] = {
 
     {NULL}
 };
+/* clang-format on */
 
 ucs_status_t
 uct_sm_base_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,

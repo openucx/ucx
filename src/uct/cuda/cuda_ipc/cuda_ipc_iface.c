@@ -35,8 +35,8 @@ typedef struct {
 } UCS_S_PACKED uct_cuda_ipc_device_addr_t;
 
 
+/* clang-format off */
 static ucs_config_field_t uct_cuda_ipc_iface_config_table[] = {
-
     {"", "", NULL,
      ucs_offsetof(uct_cuda_ipc_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
@@ -77,6 +77,7 @@ static ucs_config_field_t uct_cuda_ipc_iface_config_table[] = {
 
     {NULL}
 };
+/* clang-format on */
 
 
 /* Forward declaration for the delete function */
@@ -334,6 +335,7 @@ static void uct_cuda_ipc_complete_event(uct_iface_h tl_iface,
     }
 }
 
+/* clang-format off */
 static uct_iface_ops_t uct_cuda_ipc_iface_ops = {
     .ep_get_zcopy             = uct_cuda_ipc_ep_get_zcopy,
     .ep_put_zcopy             = uct_cuda_ipc_ep_put_zcopy,
@@ -357,6 +359,7 @@ static uct_iface_ops_t uct_cuda_ipc_iface_ops = {
     .iface_get_address        = uct_cuda_ipc_iface_get_address,
     .iface_is_reachable       = uct_base_iface_is_reachable,
 };
+/* clang-format on */
 
 static ucs_status_t
 uct_cuda_ipc_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
@@ -416,6 +419,7 @@ uct_cuda_ipc_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
     return UCS_OK;
 }
 
+/* clang-format off */
 static uct_iface_internal_ops_t uct_cuda_ipc_iface_internal_ops = {
     .iface_query_v2         = uct_iface_base_query_v2,
     .iface_estimate_perf    = uct_cuda_ipc_estimate_perf,
@@ -427,6 +431,7 @@ static uct_iface_internal_ops_t uct_cuda_ipc_iface_internal_ops = {
     .ep_is_connected        = uct_cuda_ipc_ep_is_connected,
     .ep_get_device_ep       = uct_cuda_ipc_ep_get_device_ep
 };
+/* clang-format on */
 
 static uct_cuda_ctx_rsc_t * uct_cuda_ipc_ctx_rsc_create(uct_iface_h tl_iface)
 {

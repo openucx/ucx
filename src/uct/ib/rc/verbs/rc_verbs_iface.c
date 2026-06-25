@@ -35,6 +35,7 @@ static const char *uct_rc_verbs_flush_mode_names[] = {
     [UCT_RC_VERBS_FLUSH_MODE_LAST]         = NULL
 };
 
+/* clang-format off */
 static ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
   {"RC_", UCT_IB_SEND_OVERHEAD_DEFAULT(UCT_RC_VERBS_IFACE_OVERHEAD), NULL,
    ucs_offsetof(uct_rc_verbs_iface_config_t, super),
@@ -60,6 +61,7 @@ static ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
 
   {NULL}
 };
+/* clang-format on */
 
 static unsigned uct_rc_verbs_get_tx_res_count(uct_rc_verbs_ep_t *ep,
                                               struct ibv_wc *wc)

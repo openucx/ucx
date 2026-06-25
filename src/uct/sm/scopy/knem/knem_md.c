@@ -22,12 +22,14 @@
 #define UCT_KNEM_MD_MEM_DEREG_CHECK_PARAMS(_params) \
     UCT_MD_MEM_DEREG_CHECK_PARAMS(_params, 0)
 
+/* clang-format off */
 static ucs_config_field_t uct_knem_md_config_table[] = {
     {"", "", NULL,
      ucs_offsetof(uct_knem_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
 
     {NULL}
 };
+/* clang-format on */
 
 static ucs_status_t
 uct_knem_query_md_resources(uct_component_t *component,

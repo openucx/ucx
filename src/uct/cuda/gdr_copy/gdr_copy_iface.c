@@ -18,8 +18,8 @@
 
 #define UCT_GDR_COPY_IFACE_OVERHEAD 0
 
+/* clang-format off */
 static ucs_config_field_t uct_gdr_copy_iface_config_table[] = {
-
     {"", "", NULL,
      ucs_offsetof(uct_gdr_copy_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
@@ -48,6 +48,7 @@ static ucs_config_field_t uct_gdr_copy_iface_config_table[] = {
 
     {NULL}
 };
+/* clang-format on */
 
 /* Forward declaration for the delete function */
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_gdr_copy_iface_t)(uct_iface_t*);

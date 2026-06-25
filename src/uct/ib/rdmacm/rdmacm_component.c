@@ -10,6 +10,7 @@
 #include "rdmacm_cm.h"
 
 
+/* clang-format off */
 static ucs_config_field_t uct_rdmacm_cm_config_table[] = {
     {"CM_", "", NULL,
      ucs_offsetof(uct_rdmacm_cm_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_cm_config_table)},
@@ -33,6 +34,7 @@ static ucs_config_field_t uct_rdmacm_cm_config_table[] = {
 
     {NULL}
 };
+/* clang-format on */
 
 static ucs_status_t
 uct_rdmacm_query_md_resources(uct_component_t *component,

@@ -49,6 +49,7 @@ static const char *uct_ib_devx_objs[] = {
     NULL
 };
 
+/* clang-format off */
 ucs_config_field_t uct_ib_md_config_table[] = {
     {"", "", NULL,
      ucs_offsetof(uct_ib_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
@@ -198,6 +199,7 @@ ucs_config_field_t uct_ib_md_config_table[] = {
 
     {NULL}
 };
+/* clang-format on */
 
 #ifdef ENABLE_STATS
 static ucs_stats_class_t uct_ib_md_stats_class = {

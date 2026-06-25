@@ -648,6 +648,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_iface_t)
 
 UCS_CLASS_DEFINE(uct_ud_iface_t, uct_ib_iface_t);
 
+/* clang-format off */
 ucs_config_field_t uct_ud_iface_config_table[] = {
     {UCT_IB_CONFIG_PREFIX, "", NULL,
      ucs_offsetof(uct_ud_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_ib_iface_config_table)},
@@ -701,6 +702,7 @@ ucs_config_field_t uct_ud_iface_config_table[] = {
 
     {NULL}
 };
+/* clang-format on */
 
 
 ucs_status_t uct_ud_iface_query(uct_ud_iface_t *iface,

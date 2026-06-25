@@ -65,6 +65,7 @@ typedef struct uct_posix_packed_rkey {
 } UCS_S_PACKED uct_posix_packed_rkey_t;
 
 
+/* clang-format off */
 static ucs_config_field_t uct_posix_md_config_table[] = {
     {"MM_", "", NULL, ucs_offsetof(uct_posix_md_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_mm_md_config_table)},
@@ -96,6 +97,7 @@ static ucs_config_field_t uct_posix_iface_config_table[] = {
 
   {NULL}
 };
+/* clang-format on */
 
 static int uct_posix_use_shm_open(const uct_posix_md_config_t *posix_config)
 {

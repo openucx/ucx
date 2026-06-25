@@ -16,6 +16,7 @@
 #include <limits.h>
 
 
+/* clang-format off */
 ucs_config_field_t uct_mm_md_config_table[] = {
   {"", "", NULL,
    ucs_offsetof(uct_mm_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
@@ -30,6 +31,7 @@ ucs_config_field_t uct_mm_md_config_table[] = {
 
   {NULL}
 };
+/* clang-format on */
 
 ucs_status_t uct_mm_query_md_resources(uct_component_t *component,
                                        uct_md_resource_desc_t **resources_p,

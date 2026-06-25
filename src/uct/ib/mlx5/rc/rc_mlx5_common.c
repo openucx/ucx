@@ -17,6 +17,7 @@
 #include <ucs/profile/profile.h>
 
 
+/* clang-format off */
 ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
   {UCT_IB_CONFIG_PREFIX, "", NULL,
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, super),
@@ -90,6 +91,7 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
 
   {NULL}
 };
+/* clang-format on */
 
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
