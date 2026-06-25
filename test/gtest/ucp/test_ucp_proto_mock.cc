@@ -260,8 +260,8 @@ private:
         return UCS_OK;
     }
 
-    static ucs_status_t cuda_ipc_get_address_mock(uct_iface_h iface,
-                                                  uct_iface_addr_t *iface_addr)
+    static ucs_status_t
+    cuda_ipc_get_address_mock(uct_iface_h iface, uct_iface_addr_t *iface_addr)
     {
         UCS_MOCK_ORIG_FUNC(m_self->m_mock, &iface->ops.iface_get_address, iface,
                            iface_addr);

@@ -146,10 +146,10 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
     iface_addr_len = UCS_PARAM_VALUE(UCT_IFACE_IS_REACHABLE_FIELD, params,
                                      iface_addr_length, IFACE_ADDR_LENGTH,
                                      sizeof(pid_t));
-    ipc_addr = uct_cuda_ipc_iface_address_unpack(params->iface_addr,
-                                                 iface_addr_len);
-    if (same_uuid && uct_cuda_ipc_is_rkey_local(ipc_addr.pid,
-                                                ipc_addr.pid_ns)) {
+    ipc_addr       = uct_cuda_ipc_iface_address_unpack(params->iface_addr,
+                                                       iface_addr_len);
+    if (same_uuid &&
+        uct_cuda_ipc_is_rkey_local(ipc_addr.pid, ipc_addr.pid_ns)) {
         uct_iface_fill_info_str_buf(params, "same process");
         return 0;
     }
