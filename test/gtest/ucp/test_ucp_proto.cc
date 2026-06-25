@@ -224,31 +224,60 @@ UCS_TEST_P(test_ucp_proto, buffer_copy_flags_attached_host_staging)
 {
     const unsigned attached_flag =
             UCP_PROTO_INIT_BUFFER_COPY_FLAG_ATTACHED_HOST_STAGING;
+    const unsigned skip_send_pre_flag =
+            UCP_PROTO_INIT_BUFFER_COPY_FLAG_SKIP_SEND_PRE_OVERHEAD;
+    const unsigned attached_skip_send_pre_flags =
+            attached_flag | skip_send_pre_flag;
 
     EXPECT_EQ(attached_flag, ucp_proto_init_buffer_copy_flags(
             UCS_MEMORY_TYPE_HOST,
             UCT_PERF_ATTR_HOST_MEMORY_CLASS_REGISTERED_LOCKED,
             UCS_MEMORY_TYPE_CUDA, UCT_PERF_ATTR_HOST_MEMORY_CLASS_UNKNOWN,
             attached_flag));
-    EXPECT_EQ(attached_flag, ucp_proto_init_buffer_copy_flags(
+    EXPECT_EQ(attached_skip_send_pre_flags, ucp_proto_init_buffer_copy_flags(
+            UCS_MEMORY_TYPE_HOST,
+            UCT_PERF_ATTR_HOST_MEMORY_CLASS_REGISTERED_LOCKED,
+            UCS_MEMORY_TYPE_CUDA, UCT_PERF_ATTR_HOST_MEMORY_CLASS_UNKNOWN,
+            attached_skip_send_pre_flags));
+    EXPECT_EQ(attached_skip_send_pre_flags, ucp_proto_init_buffer_copy_flags(
             UCS_MEMORY_TYPE_CUDA, UCT_PERF_ATTR_HOST_MEMORY_CLASS_UNKNOWN,
             UCS_MEMORY_TYPE_HOST,
             UCT_PERF_ATTR_HOST_MEMORY_CLASS_REGISTERED_LOCKED,
-            attached_flag));
+            attached_skip_send_pre_flags));
+    EXPECT_EQ(UCP_PROTO_INIT_BUFFER_COPY_FLAG_NONE,
+              ucp_proto_init_buffer_copy_flags(
+            UCS_MEMORY_TYPE_HOST,
+            UCT_PERF_ATTR_HOST_MEMORY_CLASS_REGISTERED_LOCKED,
+            UCS_MEMORY_TYPE_CUDA_MANAGED,
+            UCT_PERF_ATTR_HOST_MEMORY_CLASS_UNKNOWN,
+            attached_skip_send_pre_flags));
+    EXPECT_EQ(UCP_PROTO_INIT_BUFFER_COPY_FLAG_NONE,
+              ucp_proto_init_buffer_copy_flags(
+            UCS_MEMORY_TYPE_HOST,
+            UCT_PERF_ATTR_HOST_MEMORY_CLASS_REGISTERED_LOCKED,
+            UCS_MEMORY_TYPE_ROCM, UCT_PERF_ATTR_HOST_MEMORY_CLASS_UNKNOWN,
+            attached_skip_send_pre_flags));
+    EXPECT_EQ(UCP_PROTO_INIT_BUFFER_COPY_FLAG_NONE,
+              ucp_proto_init_buffer_copy_flags(
+                      UCS_MEMORY_TYPE_HOST,
+                      UCT_PERF_ATTR_HOST_MEMORY_CLASS_REGISTERED_LOCKED,
+                      UCS_MEMORY_TYPE_CUDA,
+                      UCT_PERF_ATTR_HOST_MEMORY_CLASS_UNKNOWN,
+                      skip_send_pre_flag));
     EXPECT_EQ(UCP_PROTO_INIT_BUFFER_COPY_FLAG_NONE,
               ucp_proto_init_buffer_copy_flags(
                       UCS_MEMORY_TYPE_HOST,
                       UCT_PERF_ATTR_HOST_MEMORY_CLASS_UNKNOWN,
                       UCS_MEMORY_TYPE_CUDA,
                       UCT_PERF_ATTR_HOST_MEMORY_CLASS_UNKNOWN,
-                      attached_flag));
+                      attached_skip_send_pre_flags));
     EXPECT_EQ(UCP_PROTO_INIT_BUFFER_COPY_FLAG_NONE,
               ucp_proto_init_buffer_copy_flags(
                       UCS_MEMORY_TYPE_HOST,
                       UCT_PERF_ATTR_HOST_MEMORY_CLASS_REGISTERED_LOCKED,
                       UCS_MEMORY_TYPE_HOST,
                       UCT_PERF_ATTR_HOST_MEMORY_CLASS_UNKNOWN,
-                      attached_flag));
+                      attached_skip_send_pre_flags));
 }
 
 UCS_TEST_P(test_ucp_proto, worker_print_info_rkey)

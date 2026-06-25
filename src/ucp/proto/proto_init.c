@@ -416,8 +416,21 @@ ucp_proto_init_buffer_copy_flags(
         ucs_memory_type_t remote_mem_type,
         uct_perf_attr_host_memory_class_t remote_host_mem_class, unsigned flags)
 {
+    const unsigned attached_skip_send_pre_flags =
+            UCP_PROTO_INIT_BUFFER_COPY_FLAG_ATTACHED_HOST_STAGING |
+            UCP_PROTO_INIT_BUFFER_COPY_FLAG_SKIP_SEND_PRE_OVERHEAD;
+    const int cuda_host_copy =
+            (((local_mem_type == UCS_MEMORY_TYPE_HOST) &&
+              (remote_mem_type == UCS_MEMORY_TYPE_CUDA)) ||
+             ((local_mem_type == UCS_MEMORY_TYPE_CUDA) &&
+              (remote_mem_type == UCS_MEMORY_TYPE_HOST)));
+
     if (!(flags & UCP_PROTO_INIT_BUFFER_COPY_FLAG_ATTACHED_HOST_STAGING)) {
-        return flags;
+        return flags & ~UCP_PROTO_INIT_BUFFER_COPY_FLAG_SKIP_SEND_PRE_OVERHEAD;
+    }
+
+    if (!cuda_host_copy) {
+        return flags & ~attached_skip_send_pre_flags;
     }
 
     if (((local_mem_type == UCS_MEMORY_TYPE_HOST) &&
@@ -431,7 +444,7 @@ ucp_proto_init_buffer_copy_flags(
         return flags;
     }
 
-    return flags & ~UCP_PROTO_INIT_BUFFER_COPY_FLAG_ATTACHED_HOST_STAGING;
+    return flags & ~attached_skip_send_pre_flags;
 }
 
 ucs_status_t
@@ -560,8 +573,12 @@ ucp_proto_init_buffer_copy_perf(ucp_worker_h worker,
     ucs_assert(perf_attr->recv_overhead < UCP_PROTO_PERF_EPSILON);
 
     copy_perf->perf_factors[ucp_proto_buffer_copy_cpu_factor_id(local)].c +=
-            perf_attr->send_pre_overhead + perf_attr->send_post_overhead +
-            perf_attr->recv_overhead;
+            perf_attr->send_post_overhead + perf_attr->recv_overhead;
+    if (!(flags & UCP_PROTO_INIT_BUFFER_COPY_FLAG_SKIP_SEND_PRE_OVERHEAD)) {
+        copy_perf->perf_factors[
+                ucp_proto_buffer_copy_cpu_factor_id(local)].c +=
+                perf_attr->send_pre_overhead;
+    }
     copy_perf->perf_factors[copy_perf->factor_id].c +=
             ucp_tl_iface_latency(context, &perf_attr->latency);
     shared_bw_divisor = ucp_proto_init_memtype_copy_shared_divisor(

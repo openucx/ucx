@@ -287,8 +287,9 @@ ucp_proto_rndv_rkey_ptr_mtype_add_copy_perf(
             UCT_PERF_ATTR_HOST_MEMORY_CLASS_UNKNOWN, UCT_EP_OP_GET_ZCOPY,
             select_param->mem_type, select_param->sys_dev, UCS_MEMORY_TYPE_HOST,
             UCS_SYS_DEVICE_ID_UNKNOWN,
-            UCP_PROTO_INIT_BUFFER_COPY_FLAG_ATTACHED_HOST_STAGING, 1, frag_size,
-            1, perf);
+            UCP_PROTO_INIT_BUFFER_COPY_FLAG_ATTACHED_HOST_STAGING |
+            UCP_PROTO_INIT_BUFFER_COPY_FLAG_SKIP_SEND_PRE_OVERHEAD,
+            1, frag_size, 1, perf);
 }
 
 static void

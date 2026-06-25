@@ -475,6 +475,7 @@ ucp_proto_rndv_rtr_mtype_probe(const ucp_proto_init_params_t *init_params)
     ucs_memory_type_t peer_mem_type;
     ucs_sys_device_t peer_sys_dev;
     uct_perf_attr_host_memory_class_t frag_host_mem_class;
+    unsigned unpack_copy_flags;
 
     if (!ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_RECV, 1) ||
         (init_params->rkey_cfg_index == UCP_WORKER_CFG_INDEX_NULL)) {
@@ -525,6 +526,21 @@ ucp_proto_rndv_rtr_mtype_probe(const ucp_proto_init_params_t *init_params)
                 UCT_PERF_ATTR_HOST_MEMORY_CLASS_REGISTERED_LOCKED :
                 UCT_PERF_ATTR_HOST_MEMORY_CLASS_UNKNOWN;
 
+        unpack_copy_flags = UCP_PROTO_INIT_BUFFER_COPY_FLAG_NONE;
+        if ((frag_mem_type == UCS_MEMORY_TYPE_HOST) &&
+            (frag_host_mem_class ==
+             UCT_PERF_ATTR_HOST_MEMORY_CLASS_REGISTERED_LOCKED) &&
+            UCP_MEM_IS_CUDA(init_params->select_param->mem_type)) {
+            /* Host RTR fragments are internal registered staging buffers.
+             * The attached-staging path can post these async CUDA copies ahead;
+             * keep CUDA latency recurring, but do not model cuda_copy
+             * send-pre overhead as a serialized per-fragment CPU barrier.
+             */
+            unpack_copy_flags =
+                    UCP_PROTO_INIT_BUFFER_COPY_FLAG_ATTACHED_HOST_STAGING |
+                    UCP_PROTO_INIT_BUFFER_COPY_FLAG_SKIP_SEND_PRE_OVERHEAD;
+        }
+
         status = ucp_proto_init_add_buffer_copy_time(
                 init_params->worker, "unpack copy", frag_mem_type,
                 init_params->select_param->mem_type,
@@ -533,9 +549,8 @@ ucp_proto_rndv_rtr_mtype_probe(const ucp_proto_init_params_t *init_params)
                 UCT_PERF_ATTR_HOST_MEMORY_CLASS_UNKNOWN, UCT_EP_OP_PUT_ZCOPY,
                 init_params->select_param->mem_type,
                 init_params->select_param->sys_dev, peer_mem_type,
-                peer_sys_dev, UCP_PROTO_INIT_BUFFER_COPY_FLAG_NONE,
-                params.super.min_length, params.super.max_length, 1,
-                params.unpack_perf);
+                peer_sys_dev, unpack_copy_flags, params.super.min_length,
+                params.super.max_length, 1, params.unpack_perf);
         if (status != UCS_OK) {
             goto out_unpack_perf_destroy;
         }
