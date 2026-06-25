@@ -2084,6 +2084,7 @@ private:
                              UCT_EP_IS_CONNECTED_FIELD_IFACE_ADDR;
 
         if (address_entry->num_ep_addrs == 0) {
+            /* coverity[var_deref_model] */
             return uct_ep_is_connected(uct_ep, &params);
         }
 
