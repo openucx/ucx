@@ -694,19 +694,6 @@ ucs_status_t uct_md_mem_query(uct_md_h md, const void *address, size_t length,
     return UCS_OK;
 }
 
-ucs_status_t uct_md_mem_query_dmabuf(uct_md_h md, const void *address,
-                                     size_t length,
-                                     uct_md_dmabuf_mapping_t mapping,
-                                     int *dmabuf_fd_p, size_t *dmabuf_offset_p)
-{
-    if (md->ops->mem_query_dmabuf == NULL) {
-        return UCS_ERR_UNSUPPORTED;
-    }
-
-    return md->ops->mem_query_dmabuf(md, address, length, mapping, dmabuf_fd_p,
-                                     dmabuf_offset_p);
-}
-
 ucs_status_t uct_md_mem_query_v2(uct_md_h md, const void *address,
                                  size_t length, uct_md_mem_attr_v2_t *mem_attr)
 {
@@ -723,6 +710,14 @@ ucs_status_t uct_md_mem_query_v2(uct_md_h md, const void *address,
      * (e.g. cuda_copy) override this. */
     if (field_mask & UCT_MD_MEM_ATTR_V2_FIELD_MEM_FLAGS) {
         mem_attr->mem_flags = UCS_MEM_FLAG_REGISTRABLE;
+    }
+
+    if (field_mask & UCT_MD_MEM_ATTR_V2_FIELD_FALLBACK_DMABUF_FD) {
+        mem_attr->fallback_dmabuf_fd = UCT_DMABUF_FD_INVALID;
+    }
+
+    if (field_mask & UCT_MD_MEM_ATTR_V2_FIELD_FALLBACK_DMABUF_OFFSET) {
+        mem_attr->fallback_dmabuf_offset = 0;
     }
 
     status = md->ops->mem_query(md, address, length, mem_attr);

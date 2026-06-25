@@ -13,7 +13,6 @@
 #include "ucp_worker.h"
 #include "ucp_mm.inl"
 
-#include <uct/base/uct_md.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/sys/math.h>
@@ -22,6 +21,7 @@
 #include <ucs/sys/sys.h>
 #include <ucs/type/serialize.h>
 #include <ucs/type/param.h>
+#include <uct/api/v2/uct_v2.h>
 #include <ucm/api/ucm.h>
 #include <string.h>
 #include <inttypes.h>
@@ -560,15 +560,14 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
     void *address                       = ucp_memh_address(memh);
     size_t length                       = ucp_memh_length(memh);
     ucp_md_map_t md_map_registered      = 0;
-    ucp_md_map_t dmabuf_md_map          = 0;
+    ucp_md_map_t dmabuf_reg_md_map      = 0;
     int dmabuf_fd                       = UCT_DMABUF_FD_INVALID;
-    int host_dmabuf_fd                  = UCT_DMABUF_FD_INVALID;
+    int fallback_dmabuf_fd              = UCT_DMABUF_FD_INVALID;
     size_t dmabuf_offset                = 0;
-    size_t host_dmabuf_offset           = 0;
-    int dmabuf_is_pcie                  = 0;
+    size_t fallback_dmabuf_offset       = 0;
     ucp_md_map_t reg_md_map;
     uct_md_mem_reg_params_t reg_params;
-    uct_md_mem_attr_t mem_attr;
+    uct_md_mem_attr_v2_t mem_attr;
     ucp_md_index_t md_index;
     uint8_t required_mem_flags;
     ucs_status_t status;
@@ -576,6 +575,7 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
     size_t reg_length;
     size_t reg_align;
     ucp_sys_dev_map_t sys_dev_map;
+    int md_supports_dmabuf;
 
     if (gva_enable) {
         status = ucp_memh_register_gva(context, memh, md_map);
@@ -613,33 +613,32 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
 
     if ((dmabuf_prov_md_index != UCP_NULL_RESOURCE) &&
         (reg_md_map & context->dmabuf_reg_md_map)) {
-        /* Query the dmabuf fd using the exporter's automatic mapping (PCIe when
-           the GPU has a sibling Direct NIC, host otherwise). A PCIe-mapped fd
-           that a generic-verb importer cannot register is retried below with a
-           host-mapped fd. */
-        mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_DMABUF_FD |
-                              UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET |
-                              UCT_MD_MEM_ATTR_FIELD_SYS_DEV;
-        status = uct_md_mem_query(context->tl_mds[dmabuf_prov_md_index].md,
-                                  address, length, &mem_attr);
+        mem_attr.field_mask = UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD |
+                              UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_OFFSET |
+                              UCT_MD_MEM_ATTR_V2_FIELD_SYS_DEV |
+                              UCT_MD_MEM_ATTR_V2_FIELD_FALLBACK_DMABUF_FD |
+                              UCT_MD_MEM_ATTR_V2_FIELD_FALLBACK_DMABUF_OFFSET;
+        status = uct_md_mem_query_v2(context->tl_mds[dmabuf_prov_md_index].md,
+                                     address, length, &mem_attr);
         if (status != UCS_OK) {
             ucs_log(err_level,
-                    "uct_md_mem_query(dmabuf address %p length %zu) failed: %s",
+                    "uct_md_mem_query_v2(dmabuf address %p length %zu) failed: "
+                    "%s",
                     address, length, ucs_status_string(status));
         } else {
-            ucs_trace("uct_md_mem_query(dmabuf address %p length %zu) returned "
-                      "fd %d offset %zu sys_dev %u",
+            ucs_trace("uct_md_mem_query_v2(dmabuf address %p length %zu) "
+                      "returned fd %d offset %zu sys_dev %u",
                       address, length, mem_attr.dmabuf_fd,
                       mem_attr.dmabuf_offset, mem_attr.sys_dev);
 
-            dmabuf_md_map  = context->dmabuf_reg_md_map;
-            dmabuf_fd      = mem_attr.dmabuf_fd;
-            dmabuf_offset  = mem_attr.dmabuf_offset;
-            dmabuf_is_pcie = (uct_md_dmabuf_get_mapping(mem_attr.sys_dev) ==
-                              UCT_MD_DMABUF_MAPPING_PCIE);
+            dmabuf_reg_md_map      = context->dmabuf_reg_md_map;
+            dmabuf_fd              = mem_attr.dmabuf_fd;
+            dmabuf_offset          = mem_attr.dmabuf_offset;
+            fallback_dmabuf_fd     = mem_attr.fallback_dmabuf_fd;
+            fallback_dmabuf_offset = mem_attr.fallback_dmabuf_offset;
 
             /* Exclude any unreachable MD from registration */
-            ucs_for_each_bit(md_index, dmabuf_md_map) {
+            ucs_for_each_bit(md_index, dmabuf_reg_md_map) {
                 sys_dev_map = context->tl_mds[md_index].sys_dev_map;
                 if (!ucp_memh_sys_dev_reachable(mem_attr.sys_dev,
                                                 sys_dev_map)) {
@@ -662,7 +661,8 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
                     context->reg_block_md_map[mem_type]);
 
         reg_params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS;
-        if (dmabuf_md_map & UCS_BIT(md_index)) {
+        md_supports_dmabuf    = !!(dmabuf_reg_md_map & UCS_BIT(md_index));
+        if (md_supports_dmabuf) {
             /* If this MD can consume a dmabuf and we have it - provide it */
             reg_params.field_mask   |= UCT_MD_MEM_REG_FIELD_DMABUF_FD |
                                        UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET;
@@ -680,32 +680,19 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
 
         status = uct_md_mem_reg_v2(context->tl_mds[md_index].md, reg_address,
                                    reg_length, &reg_params, &memh->uct[md_index]);
-        if (ucs_unlikely(status != UCS_OK) && dmabuf_is_pcie &&
-            (reg_params.field_mask & UCT_MD_MEM_REG_FIELD_DMABUF_FD)) {
-            /* The exporter's automatic mapping produced a PCIe-mapped fd 
-             * (the GPU has a sibling Direct NIC), but registration failed,
-             * retry with host-mapped fd instead. */
+        if (ucs_unlikely(status != UCS_OK) && md_supports_dmabuf &&
+            (fallback_dmabuf_fd != UCT_DMABUF_FD_INVALID)) {
             ucs_debug("register address %p length %zu pcie dmabuf-fd %d on "
-                      "md[%d]=%s failed: %s; retrying with host dmabuf",
+                      "md[%d]=%s failed: %s; retrying with fallback",
                       reg_address, reg_length, reg_params.dmabuf_fd, md_index,
                       context->tl_mds[md_index].rsc.md_name,
                       ucs_status_string(status));
 
-            /* Fetch a host-mapped fd once. */
-            if (host_dmabuf_fd == UCT_DMABUF_FD_INVALID) {
-                uct_md_mem_query_dmabuf(context->tl_mds[dmabuf_prov_md_index].md,
-                                        address, length,
-                                        UCT_MD_DMABUF_MAPPING_HOST,
-                                        &host_dmabuf_fd, &host_dmabuf_offset);
-            }
-
-            if (host_dmabuf_fd != UCT_DMABUF_FD_INVALID) {
-                reg_params.dmabuf_fd     = host_dmabuf_fd;
-                reg_params.dmabuf_offset = host_dmabuf_offset;
-                status = uct_md_mem_reg_v2(context->tl_mds[md_index].md,
-                                           reg_address, reg_length, &reg_params,
-                                           &memh->uct[md_index]);
-            }
+            reg_params.dmabuf_fd     = fallback_dmabuf_fd;
+            reg_params.dmabuf_offset = fallback_dmabuf_offset;
+            status = uct_md_mem_reg_v2(context->tl_mds[md_index].md,
+                                       reg_address, reg_length, &reg_params,
+                                       &memh->uct[md_index]);
         }
 
         if (ucs_unlikely(status != UCS_OK)) {
@@ -724,11 +711,10 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
         ucs_trace("register address %p length %zu dmabuf-fd %d flags %ld "
                   "on md[%d]=%s %p",
                   reg_address, reg_length,
-                  (dmabuf_md_map & UCS_BIT(md_index)) ? reg_params.dmabuf_fd :
-                                                        UCT_DMABUF_FD_INVALID,
-                  reg_params.flags,
-                  md_index, context->tl_mds[md_index].rsc.md_name,
-                  memh->uct[md_index]);
+                  md_supports_dmabuf ? reg_params.dmabuf_fd :
+                                       UCT_DMABUF_FD_INVALID,
+                  reg_params.flags, md_index,
+                  context->tl_mds[md_index].rsc.md_name, memh->uct[md_index]);
         md_map_registered |= UCS_BIT(md_index);
     }
 
@@ -741,7 +727,7 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
 out_close_dmabuf_fd:
     UCS_STATIC_ASSERT(UCT_DMABUF_FD_INVALID == -1);
     ucs_close_fd(&dmabuf_fd);
-    ucs_close_fd(&host_dmabuf_fd);
+    ucs_close_fd(&fallback_dmabuf_fd);
     return status;
 }
 

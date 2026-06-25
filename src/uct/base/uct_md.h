@@ -102,44 +102,10 @@ typedef ucs_status_t
 (*uct_md_mem_dereg_func_t)(uct_md_h md,
                            const uct_md_mem_dereg_params_t *param);
 
-/**
- * Mapping type of a dmabuf file descriptor (internal). Selects how the memory
- * domain maps the region backing a dmabuf fd; the mapping must match the verb
- * that will register the descriptor: generic verb (e.g. ibv_reg_dmabuf_mr) uses
- * HOST, Direct NIC (mlx5dv_reg_dmabuf_mr + DATA_DIRECT) uses PCIE.
- */
-typedef enum uct_md_dmabuf_mapping {
-    UCT_MD_DMABUF_MAPPING_HOST = 0, /* host mapping (generic verbs) */
-    UCT_MD_DMABUF_MAPPING_PCIE /* device PCIe BAR mapping (Direct NIC) */
-} uct_md_dmabuf_mapping_t;
-
-
-/**
- * A device-memory dmabuf is mapped through the PCIe BAR (consumable only by a 
- * Direct NIC) when the device has a sibling Direct NIC, and through the host 
- * (generic verbs) otherwise.
- */
-static UCS_F_ALWAYS_INLINE uct_md_dmabuf_mapping_t
-uct_md_dmabuf_get_mapping(ucs_sys_device_t sys_dev)
-{
-    if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
-        return UCT_MD_DMABUF_MAPPING_HOST;
-    }
-
-    return ucs_topo_device_has_sibling(sys_dev) ? UCT_MD_DMABUF_MAPPING_PCIE :
-                                                  UCT_MD_DMABUF_MAPPING_HOST;
-}
-
-
 typedef ucs_status_t (*uct_md_mem_query_func_t)(uct_md_h md,
                                                 const void *address,
                                                 size_t length,
                                                 uct_md_mem_attr_v2_t *mem_attr);
-
-typedef ucs_status_t (*uct_md_mem_query_dmabuf_func_t)(
-        uct_md_h md, const void *address, size_t length,
-        uct_md_dmabuf_mapping_t mapping, int *dmabuf_fd_p,
-        size_t *dmabuf_offset_p);
 
 typedef ucs_status_t (*uct_md_mkey_pack_func_t)(
         uct_md_h md, uct_mem_h memh, void *address, size_t length,
@@ -176,7 +142,6 @@ struct uct_md_ops {
     uct_md_mem_reg_func_t                mem_reg;
     uct_md_mem_dereg_func_t              mem_dereg;
     uct_md_mem_query_func_t              mem_query;
-    uct_md_mem_query_dmabuf_func_t       mem_query_dmabuf;
     uct_md_mkey_pack_func_t              mkey_pack;
     uct_md_mem_attach_func_t             mem_attach;
     uct_md_detect_memory_type_func_t     detect_memory_type;
@@ -248,25 +213,6 @@ ucs_status_t uct_md_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
  * @param [in]     memh        Memory handle, as returned from @ref uct_md_mem_alloc.
  */
 ucs_status_t uct_md_mem_free(uct_md_h md, uct_mem_h memh);
-
-
-/**
- * Query a dmabuf file descriptor for a memory region with an explicit mapping
- * type. Dispatches to the MD's mem_query_dmabuf op, and returns
- * UCS_ERR_UNSUPPORTED if the MD does not implement it.
- *
- * @param [in]  md              Memory domain (dmabuf exporter).
- * @param [in]  address         Start address of the region.
- * @param [in]  length          Length of the region.
- * @param [in]  mapping         Requested dmabuf mapping type.
- * @param [out] dmabuf_fd_p     Filled with the dmabuf file descriptor.
- * @param [out] dmabuf_offset_p Filled with the offset of @a address within the
- *                              backing dmabuf region.
- */
-ucs_status_t uct_md_mem_query_dmabuf(uct_md_h md, const void *address,
-                                     size_t length,
-                                     uct_md_dmabuf_mapping_t mapping,
-                                     int *dmabuf_fd_p, size_t *dmabuf_offset_p);
 
 
 /**

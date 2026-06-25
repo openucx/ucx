@@ -871,7 +871,13 @@ typedef enum {
     UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_OFFSET = UCS_BIT(5),
 
     /** Per-buffer memory flags, see @ref ucs_mem_flags_t */
-    UCT_MD_MEM_ATTR_V2_FIELD_MEM_FLAGS     = UCS_BIT(6)
+    UCT_MD_MEM_ATTR_V2_FIELD_MEM_FLAGS              = UCS_BIT(6),
+
+    /** Fallback dmabuf file descriptor */
+    UCT_MD_MEM_ATTR_V2_FIELD_FALLBACK_DMABUF_FD     = UCS_BIT(7),
+
+    /** Fallback dmabuf offset */
+    UCT_MD_MEM_ATTR_V2_FIELD_FALLBACK_DMABUF_OFFSET = UCS_BIT(8)
 } uct_md_mem_attr_v2_field_t;
 
 
@@ -903,6 +909,15 @@ typedef struct uct_md_mem_attr_v2 {
 
     /** See @ref uct_md_mem_attr_t::dmabuf_offset. */
     size_t            dmabuf_offset;
+
+    /**
+     * Fallback for when registration with @a dmabuf_fd fails.
+     * Set to UCT_DMABUF_FD_INVALID if not supported.
+     */
+    int               fallback_dmabuf_fd;
+
+    /** Offset of the queried address within the fallback dmabuf region. */
+    size_t            fallback_dmabuf_offset;
 
     /** Per-buffer memory flags, see @ref ucs_mem_flags_t. */
     uint8_t           mem_flags;
