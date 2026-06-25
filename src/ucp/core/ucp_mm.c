@@ -576,6 +576,7 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
     size_t reg_align;
     ucp_sys_dev_map_t sys_dev_map;
     int md_supports_dmabuf;
+    unsigned reg_flags;
 
     if (gva_enable) {
         status = ucp_memh_register_gva(context, memh, md_map);
@@ -605,9 +606,10 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
         !(uct_flags & UCT_MD_MEM_FLAG_LOCK)) {
         uct_flags |= UCT_MD_MEM_FLAG_NONBLOCK;
     }
-
+    
     /* When adding registrations, existing access flags must be supported */
-    reg_params.flags         = uct_flags | memh->uct_flags;
+    reg_flags = uct_flags | memh->uct_flags;
+
     reg_params.dmabuf_fd     = UCT_DMABUF_FD_INVALID;
     reg_params.dmabuf_offset = 0;
 
@@ -660,7 +662,9 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
                     context->reg_md_map[mem_type],
                     context->reg_block_md_map[mem_type]);
 
+        /* When adding registrations, existing access flags must be supported */
         reg_params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS;
+        reg_params.flags      = reg_flags;
         md_supports_dmabuf    = !!(dmabuf_reg_md_map & UCS_BIT(md_index));
         if (md_supports_dmabuf) {
             /* If this MD can consume a dmabuf and we have it - provide it */
@@ -668,6 +672,11 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
                                        UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET;
             reg_params.dmabuf_fd     = dmabuf_fd;
             reg_params.dmabuf_offset = dmabuf_offset;
+            if (fallback_dmabuf_fd != UCT_DMABUF_FD_INVALID) {
+                /* Suppress the first-attempt error so a recovered failure
+                 * is not logged as an error. */
+                reg_params.flags |= UCT_MD_MEM_FLAG_HIDE_ERRORS;
+            }
         }
 
         reg_address = address;
@@ -688,6 +697,8 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
                       context->tl_mds[md_index].rsc.md_name,
                       ucs_status_string(status));
 
+            /* The fallback is the last attempt, restore flags to original value. */
+            reg_params.flags         = reg_flags;
             reg_params.dmabuf_fd     = fallback_dmabuf_fd;
             reg_params.dmabuf_offset = fallback_dmabuf_offset;
             status = uct_md_mem_reg_v2(context->tl_mds[md_index].md,
