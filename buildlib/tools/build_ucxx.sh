@@ -61,9 +61,13 @@ if [ "$phase" = "docs" ]; then
   printf '#!/bin/bash\necho "%s"\n' "$PYTHON_CHANNEL_DIR" > "$HOME/.local/bin/rapids-download-from-github"
 fi
 
+# Point the wheel-download helpers at the staged libucxx wheelhouse so the
+# wheel_ucxx build resolves it.
 if [ -n "${WHEEL_INPUT_DIR:-}" ]; then
-  printf '#!/bin/bash\necho "%s"\n' "$WHEEL_INPUT_DIR" > "$HOME/.local/bin/rapids-download-wheels-from-github"
-  chmod +x "$HOME/.local/bin/rapids-download-wheels-from-github"
+  for tool in rapids-download-from-github rapids-download-wheels-from-github; do
+    printf '#!/bin/bash\necho "%s"\n' "$WHEEL_INPUT_DIR" > "$HOME/.local/bin/$tool"
+    chmod +x "$HOME/.local/bin/$tool"
+  done
 fi
 
 export PATH="$HOME/.local/bin:$PATH"
