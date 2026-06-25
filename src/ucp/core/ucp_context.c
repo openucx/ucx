@@ -2435,8 +2435,9 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     ucs_debug("estimated bcopy bandwidth is %f", context->config.ext.bcopy_bw);
 
     if (config->protos.mode == UCS_CONFIG_ALLOW_LIST_ALLOW_ALL) {
-        context->proto_bitmap = UCS_MASK(ucp_protocols_count());
+        UCS_STATIC_BITMAP_MASK(&context->proto_bitmap, ucp_protocols_count());
     } else {
+        UCS_STATIC_BITMAP_RESET_ALL(&context->proto_bitmap);
         for (proto_id = 0; proto_id < ucp_protocols_count(); ++proto_id) {
             match = ucs_config_names_search(&config->protos.array,
                                             ucp_proto_id_field(proto_id, name));
@@ -2444,7 +2445,7 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
                  (match >= 0)) ||
                 ((config->protos.mode == UCS_CONFIG_ALLOW_LIST_NEGATE) &&
                  (match == -1))) {
-                context->proto_bitmap |= UCS_BIT(proto_id);
+                UCS_STATIC_BITMAP_SET(&context->proto_bitmap, proto_id);
             }
         }
     }
