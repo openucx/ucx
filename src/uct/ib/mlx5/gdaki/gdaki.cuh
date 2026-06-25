@@ -24,7 +24,7 @@
 #endif
 
 template <typename T>
-__device__ __forceinline__ T uct_rc_mlx5_load_const(const T *ptr) {
+UCS_F_DEVICE T uct_rc_mlx5_load_const(const T *ptr) {
 #if UCT_RC_GDA_USE_LDG
     return __ldg(ptr);
 #else
@@ -258,7 +258,6 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_db(uct_rc_gdaki_dev_ep_t *ep, unsigned cid,
                                             cuda::std::memory_order_relaxed)) {
             wqe_base = wqe_base_orig;
         }
-        doca_gpu_dev_verbs_fence_acquire<DOCA_GPUNETIO_VERBS_SYNC_SCOPE_CTA>();
     } else {
         uint32_t qpn_ds = uct_rc_mlx5_load_const(&qp->qpn_ds);
         auto *db_ptr = (uint64_t*)uct_rc_mlx5_load_const((uintptr_t*)&qp->sq_db);
@@ -270,8 +269,8 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_db(uct_rc_gdaki_dev_ep_t *ep, unsigned cid,
         doca_gpu_dev_common_update_dbr(dbrec_ptr, wqe_next);
         doca_gpu_dev_common_ring_db(db_ptr, qpn_ds, wqe_next);
         ref.store(wqe_next, cuda::std::memory_order_relaxed);
-        doca_gpu_dev_verbs_fence_acquire<DOCA_GPUNETIO_VERBS_SYNC_SCOPE_CTA>();
     }
+    doca_gpu_dev_verbs_fence_acquire<DOCA_GPUNETIO_VERBS_SYNC_SCOPE_CTA>();
 }
 
 UCS_F_DEVICE bool
