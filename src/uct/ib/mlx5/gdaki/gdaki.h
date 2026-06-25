@@ -8,6 +8,7 @@
 
 #include <uct/ib/mlx5/rc/rc_mlx5_common.h>
 #include <uct/base/uct_iface.h>
+#include <ucs/datastruct/list.h>
 #include <ucs/datastruct/mpool.h>
 
 #include <cuda.h>
@@ -25,6 +26,8 @@ typedef struct {
 
 typedef struct {
     uintptr_t              gpu_ptr;
+    ucs_mpool_chunk_t      *chunk;
+    ucs_list_link_t        err_list;
     uct_rc_gdaki_channel_t channels[0];
 } uct_rc_gdaki_channel_block_t;
 
@@ -32,6 +35,8 @@ typedef struct {
     void                    *gpu_mem;
     CUdeviceptr             gpu_raw;
     struct mlx5dv_devx_umem *umem;
+    ucs_list_link_t         err_list;
+    unsigned                err_count;
 } uct_rc_gdaki_channel_block_mem_t;
 
 typedef struct uct_rc_gdaki_iface {
