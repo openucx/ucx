@@ -94,7 +94,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_get_common_send(
     uct_ep_h uct_ep          = ucp_ep_get_lane(ep, lpriv->super.lane);
     uct_rkey_t tl_rkey       = ucp_rkey_get_tl_rkey(req->send.rndv.rkey,
                                                     lpriv->super.rkey_index);
-    uint64_t remote_address = req->send.rndv.remote_address + offset;
+    uint64_t remote_address  = req->send.rndv.remote_address + offset;
     ucp_request_t *recv_req;
     ucs_status_t status;
 
@@ -129,7 +129,8 @@ ucp_proto_rndv_get_zcopy_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_memory_info_t reg_mem_info = {
         .type    = init_params->select_param->mem_type,
-        .sys_dev = init_params->select_param->sys_dev
+        .sys_dev = init_params->select_param->sys_dev,
+        .flags   = init_params->select_param->op.mem_flags
     };
 
     ucp_proto_rndv_get_common_probe(

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -90,8 +90,11 @@ struct ucp_proto_select_param {
             uint8_t         sys_dev;    /* Reply buffer system device */
         } UCS_S_PACKED reply;
 
-        /* Align struct size to uint64_t */
-        uint8_t             padding[2];
+        /* UCS memory flags of the operation buffer. Used for all operations
+         * except UCP_OP_ID_AMO_FETCH and UCP_OP_ID_AMO_CSWAP, which use the
+         * 'reply' member above instead. */
+        uint8_t             mem_flags;
+        uint8_t             padding[2]; /* Pad select key to sizeof(uint64_t) */
 
     } UCS_S_PACKED op;
 } UCS_S_PACKED;

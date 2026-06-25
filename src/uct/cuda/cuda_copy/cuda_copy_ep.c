@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2017-2019. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2017-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -77,7 +77,7 @@ uct_cuda_copy_get_mem_type(uct_md_h md, const void *address, size_t length,
                            ucs_sys_device_t *sys_dev)
 {
     ucs_memory_info_t mem_info;
-    uct_md_mem_attr_t mem_attr;
+    uct_md_mem_attr_v2_t mem_attr;
     ucs_status_t status;
 
     status = ucs_memtype_cache_lookup(address, length, &mem_info);
@@ -87,8 +87,8 @@ uct_cuda_copy_get_mem_type(uct_md_h md, const void *address, size_t length,
 
     if (ucs_unlikely((status == UCS_ERR_UNSUPPORTED) ||
                      (mem_info.type == UCS_MEMORY_TYPE_UNKNOWN))) {
-        mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE |
-                              UCT_MD_MEM_ATTR_FIELD_SYS_DEV;
+        mem_attr.field_mask = UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE |
+                              UCT_MD_MEM_ATTR_V2_FIELD_SYS_DEV;
 
         status = uct_cuda_copy_md_mem_query(md, address, length, &mem_attr);
         if (status != UCS_OK) {

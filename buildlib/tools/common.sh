@@ -298,7 +298,7 @@ check_machine() {
 	lscpu
 	uname -a
 	free -m
-	ofed_info -s || true
+	apt info doca-networking doca-devel 2>/dev/null || yum info doca-networking doca-devel 2>/dev/null || true
 	ibv_devinfo -v || true
 	show_gids || true
 }

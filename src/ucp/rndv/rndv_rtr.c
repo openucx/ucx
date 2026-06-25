@@ -152,7 +152,9 @@ static size_t ucp_proto_rndv_rtr_pack_with_rkey(void *dest, void *arg)
                                             rpriv->super.sys_dev_map,
                                             rpriv->super.sys_dev_distance,
                                             rtr + 1);
-    ucs_assertv(rkey_size == rpriv->super.packed_rkey_size,
+    /* The precomputed rkey size is an upper bound: actual packing may leave
+     * out unavailable MDs or sysdev distance records. */
+    ucs_assertv(rkey_size <= rpriv->super.packed_rkey_size,
                 "rkey_size=%zu exp=%zu", rkey_size,
                 rpriv->super.packed_rkey_size);
 
@@ -163,7 +165,7 @@ static size_t ucp_proto_rndv_rtr_req_pack(void *dest, void *arg)
 {
     ucp_request_t *req                      = arg;
     ucp_rndv_rtr_req_hdr_t *rtr_req         = dest;
-    const ucp_proto_rndv_rtr_priv_t *rpriv = req->send.proto_config->priv;
+    const ucp_proto_rndv_rtr_priv_t *rpriv  = req->send.proto_config->priv;
     ucp_rkey_config_t *rkey_config;
     void *rkey_src, *rkey_dst;
     size_t rkey_size, packed_size;
@@ -334,6 +336,7 @@ static size_t ucp_proto_rndv_rtr_mtype_pack(void *dest, void *arg)
     /* Pack remote key for the fragment */
     mem_info.type    = mdesc->memh->mem_type;
     mem_info.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+    mem_info.flags   = mdesc->memh->mem_flags;
     packed_rkey_size = ucp_rkey_pack_memh(req->send.ep->worker->context, md_map,
                                           mdesc->memh, mdesc->ptr,
                                           req->send.state.dt_iter.length,

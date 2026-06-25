@@ -1261,6 +1261,9 @@ public:
             UCS_TEST_SKIP_R("rc_mlx5 transport is not supported");
         }
 
+        /* Keep protocol selection independent of NVLink probing. */
+        modify_config("CUDA_IPC_ENABLE_GET_ZCOPY", "on", SETENV_IF_NOT_EXIST);
+
         add_mock_iface("mock", [](uct_iface_attr_t &iface_attr) {
             iface_attr.cap.am.max_short  = 208;
             iface_attr.cap.put.max_short = 2048;
@@ -1271,29 +1274,12 @@ public:
         test_ucp_proto_mock::init();
     }
 
-    bool has_cuda_ipc_get_zcopy()
-    {
-        ucp_worker_h worker = sender().worker();
-        auto context        = worker->context;
-        std::string cuda_ipc_str("cuda_ipc");
-
-        for (ucp_rsc_index_t idx = 0; idx < context->num_tls; ++idx) {
-            if (cuda_ipc_str != context->tl_rscs[idx].tl_rsc.tl_name) {
-                continue;
-            }
-
-            auto attr = ucp_worker_iface_get_attr(worker, idx);
-            return attr->cap.get.max_zcopy > 0;
-        }
-
-        return false;
-    }
-
     void test_cuda_rma(ucp_operation_id_t op_id,
                        const proto_select_data_vec_t &data_vec)
     {
         auto rkey_cfg_index = send_recv_rma(UCS_MBYTE, op_id,
                                             UCS_MEMORY_TYPE_CUDA);
+        ASSERT_NE(rkey_cfg_index, UCP_WORKER_CFG_INDEX_NULL);
 
         ucp_proto_select_key_t key = any_key();
         key.param.op_id_flags      = op_id;
@@ -1314,10 +1300,6 @@ UCS_TEST_P(test_ucp_proto_mock_cuda_ipc, put, "IB_NUM_PATHS?=1")
 
 UCS_TEST_P(test_ucp_proto_mock_cuda_ipc, get, "IB_NUM_PATHS?=1")
 {
-    if (!has_cuda_ipc_get_zcopy()) {
-        UCS_TEST_SKIP_R("cuda_ipc get_zcopy not supported");
-    }
-
     test_cuda_rma(UCP_OP_ID_GET, {
         {0, 0,   "copy-out",  "rc_mlx5/mock"},
         {1, INF, "zero-copy", "cuda_ipc/cuda"},

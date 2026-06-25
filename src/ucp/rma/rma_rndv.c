@@ -21,8 +21,9 @@
 #include <ucp/rndv/proto_rndv.inl>
 
 
-#define UCP_PROTO_RMA_RNDV_RTS_NAME "RMA_RTS"
-#define UCP_PROTO_RMA_RNDV_ZERO_GET_PENALTY 1e-3
+#define UCP_PROTO_RMA_RNDV_RTS_NAME             "RMA_RTS"
+#define UCP_PROTO_RMA_RNDV_MIN_DST_VERSION      22
+#define UCP_PROTO_RMA_RNDV_ZERO_GET_PENALTY     1e-3
 #define UCP_PROTO_RMA_RNDV_PUT_FALLBACK_PENALTY 1e-3
 #define UCP_PROTO_RMA_RNDV_GET_FALLBACK_PENALTY 1e-3
 
@@ -36,6 +37,8 @@ ucp_proto_rma_rndv_probe_check(const ucp_proto_init_params_t *init_params,
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(op_id)) ||
         ucp_proto_rndv_init_params_is_ppln_frag(init_params) ||
         (sel_param->dt_class != UCP_DATATYPE_CONTIG) ||
+        (init_params->ep_config_key->dst_version <
+         UCP_PROTO_RMA_RNDV_MIN_DST_VERSION) ||
         (init_params->rkey_config_key == NULL)) {
         return 0;
     }
@@ -70,7 +73,6 @@ ucp_proto_rma_rndv_overhead_perf(const char *name, double overhead,
     *perf_p = perf;
     return UCS_OK;
 }
-
 
 static size_t ucp_proto_put_rndv_rts_pack(void *dest, void *arg)
 {
@@ -267,7 +269,7 @@ ucp_proto_get_rndv_add_variant(
         ucp_worker_cfg_index_t rkey_cfg_index, ucp_lane_index_t lane,
         ucp_proto_init_elem_t *proto, const void *proto_priv)
 {
-    ucp_context_h context = init_params->worker->context;
+    ucp_context_h context            = init_params->worker->context;
     ucp_proto_rndv_ctrl_priv_t rpriv = {0};
     const ucp_proto_perf_t *perf_elems[2];
     ucp_proto_perf_t *overhead_perf;
@@ -408,7 +410,7 @@ static ucs_status_t ucp_proto_get_rndv_reset(ucp_request_t *req)
 ucp_request_t *ucp_rma_rndv_flush_open(ucp_request_t *rndv_req)
 {
     ucp_request_t *recv_req = rndv_req;
-    ucp_ep_h ep            = rndv_req->send.ep;
+    ucp_ep_h ep             = rndv_req->send.ep;
 
     if (!(rndv_req->flags & UCP_REQUEST_FLAG_RNDV_GET_REQ)) {
         return NULL;
@@ -603,8 +605,11 @@ ucs_status_t ucp_rma_rndv_process_rts(ucp_worker_h worker,
     recv_req->recv.worker        = worker;
     recv_req->recv.op_attr       = 0;
     recv_req->recv.remote_req_id = rts->super.sreq.req_id;
-    mem_info.type                = rts->mem_type;
-    mem_info.sys_dev             = rts->sys_dev;
+    ucp_memory_detect(worker->context, (void*)(uintptr_t)rts->address,
+                      rts->super.size, &mem_info);
+    ucs_assertv(mem_info.type == rts->mem_type, "detected mem_type=%s rts=%s",
+                ucs_memory_type_names[mem_info.type],
+                ucs_memory_type_names[rts->mem_type]);
     ucp_datatype_iter_init_contig(&recv_req->recv.dt_iter,
                                   (void*)(uintptr_t)rts->address,
                                   rts->super.size, &mem_info);
