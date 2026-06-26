@@ -97,9 +97,10 @@ static int ucs_numa_get_max_dirent(const char *path, const char *prefix,
 }
 
 static FILE *
-ucs_numa_open_distance_file(ucs_numa_node_t node, ucs_log_level_t log_level)
+ucs_numa_open_distance_file(ucs_numa_node_t node)
 {
-    return ucs_open_file("r", log_level, UCS_NUMA_NODE_DISTANCE_PATH, node);
+    return ucs_open_file("r", UCS_LOG_LEVEL_DEBUG,
+                         UCS_NUMA_NODE_DISTANCE_PATH, node);
 }
 
 static void ucs_numa_init_distance_nodes()
@@ -118,7 +119,7 @@ static void ucs_numa_init_distance_nodes()
      * ids and columns.
      */
     for (node = 0; node < num_nodes; ++node) {
-        distance_fp = ucs_numa_open_distance_file(node, UCS_LOG_LEVEL_TRACE);
+        distance_fp = ucs_numa_open_distance_file(node);
         if (distance_fp == NULL) {
             continue;
         }
@@ -235,7 +236,7 @@ ucs_numa_node_parse_distances(ucs_numa_node_t source, ucs_numa_node_t dest)
     FILE *distance_fp;
 
     ucs_numa_init_distance_nodes();
-    distance_fp = ucs_numa_open_distance_file(source, UCS_LOG_LEVEL_DEBUG);
+    distance_fp = ucs_numa_open_distance_file(source);
     if (distance_fp == NULL) {
         return distance_to_dest;
     }
