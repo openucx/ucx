@@ -221,12 +221,29 @@ typedef struct {
 
 /**
  * @ingroup UCT_MD
+ * @brief DMABUF mapping type.
+ *
+ * Indicates how a dmabuf file descriptor is mapped, allowing a consumer to
+ * select a descriptor compatible with its access path.
+ */
+typedef enum {
+    UCT_DMABUF_MAP_TYPE_HOST = 0, /**< Host-accessible mapping (default) */
+    UCT_DMABUF_MAP_TYPE_PCIE /**< Device PCIe-accessible mapping */
+} uct_dmabuf_map_type_t;
+
+
+/**
+ * @ingroup UCT_MD
  * @brief MD memory registration operation flags.
  */
 typedef enum {
-    UCT_MD_MEM_REG_FIELD_FLAGS         = UCS_BIT(0),
-    UCT_MD_MEM_REG_FIELD_DMABUF_FD     = UCS_BIT(1),
-    UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET = UCS_BIT(2)
+    UCT_MD_MEM_REG_FIELD_FLAGS                    = UCS_BIT(0),
+    UCT_MD_MEM_REG_FIELD_DMABUF_FD                = UCS_BIT(1),
+    UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET            = UCS_BIT(2),
+    UCT_MD_MEM_REG_FIELD_DMABUF_MAP_TYPE          = UCS_BIT(3),
+    UCT_MD_MEM_REG_FIELD_FALLBACK_DMABUF_FD       = UCS_BIT(4),
+    UCT_MD_MEM_REG_FIELD_FALLBACK_DMABUF_OFFSET   = UCS_BIT(5),
+    UCT_MD_MEM_REG_FIELD_FALLBACK_DMABUF_MAP_TYPE = UCS_BIT(6)
 } uct_md_mem_reg_field_mask_t;
 
 
@@ -511,6 +528,39 @@ typedef struct uct_md_mem_reg_params {
      * dmabuf region, then this field must be omitted or set to 0.
      */
     size_t                       dmabuf_offset;
+
+    /**
+     * Mapping type of @ref uct_md_mem_reg_params_t.dmabuf_fd. If not set (along
+     * with @ref UCT_MD_MEM_REG_FIELD_DMABUF_MAP_TYPE), it's assumed to be
+     * @ref UCT_DMABUF_MAP_TYPE_HOST.
+     */
+    uct_dmabuf_map_type_t        dmabuf_map_type;
+
+    /**
+     * Fallback dmabuf file descriptor, provided alongside
+     * @ref uct_md_mem_reg_params_t.dmabuf_fd so the memory domain can
+     * deterministically select the descriptor matching its registration path.
+     * The fallback descriptor is always host-mapped
+     * (@ref UCT_DMABUF_MAP_TYPE_HOST).
+     *
+     * If not set (along with @ref UCT_MD_MEM_REG_FIELD_FALLBACK_DMABUF_FD),
+     * it's assumed to be @ref UCT_DMABUF_FD_INVALID.
+     */
+    int                          fallback_dmabuf_fd;
+
+    /**
+     * Offset of the region to register relative to the start of the fallback
+     * dmabuf region. If not set (along with
+     * @ref UCT_MD_MEM_REG_FIELD_FALLBACK_DMABUF_OFFSET), it's assumed to be 0.
+     */
+    size_t                       fallback_dmabuf_offset;
+
+    /**
+     * Mapping type of @ref uct_md_mem_reg_params_t.fallback_dmabuf_fd. If not
+     * set (along with @ref UCT_MD_MEM_REG_FIELD_FALLBACK_DMABUF_MAP_TYPE), it's
+     * assumed to be @ref UCT_DMABUF_MAP_TYPE_HOST.
+     */
+    uct_dmabuf_map_type_t        fallback_dmabuf_map_type;
 } uct_md_mem_reg_params_t;
 
 
@@ -870,14 +920,20 @@ typedef enum {
     /** DMABUF offset */
     UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_OFFSET = UCS_BIT(5),
 
-    /** Per-buffer memory flags, see @ref ucs_mem_flags_t */
-    UCT_MD_MEM_ATTR_V2_FIELD_MEM_FLAGS              = UCS_BIT(6),
+    /** DMABUF mapping type */
+    UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_MAP_TYPE          = UCS_BIT(6),
 
     /** Fallback dmabuf file descriptor */
-    UCT_MD_MEM_ATTR_V2_FIELD_FALLBACK_DMABUF_FD     = UCS_BIT(7),
+    UCT_MD_MEM_ATTR_V2_FIELD_FALLBACK_DMABUF_FD       = UCS_BIT(7),
 
     /** Fallback dmabuf offset */
-    UCT_MD_MEM_ATTR_V2_FIELD_FALLBACK_DMABUF_OFFSET = UCS_BIT(8)
+    UCT_MD_MEM_ATTR_V2_FIELD_FALLBACK_DMABUF_OFFSET   = UCS_BIT(8),
+
+    /** Fallback dmabuf mapping type */
+    UCT_MD_MEM_ATTR_V2_FIELD_FALLBACK_DMABUF_MAP_TYPE = UCS_BIT(9),
+
+    /** Per-buffer memory flags, see @ref ucs_mem_flags_t */
+    UCT_MD_MEM_ATTR_V2_FIELD_MEM_FLAGS                = UCS_BIT(10)
 } uct_md_mem_attr_v2_field_t;
 
 
@@ -911,13 +967,26 @@ typedef struct uct_md_mem_attr_v2 {
     size_t            dmabuf_offset;
 
     /**
-     * Fallback for when registration with @a dmabuf_fd fails.
+     * Mapping type of @a dmabuf_fd, indicating which registration path it is
+     * compatible with. Defaults to @ref UCT_DMABUF_MAP_TYPE_HOST.
+     */
+    uct_dmabuf_map_type_t dmabuf_map_type;
+
+    /**
+     * Fallback for when registration with @a dmabuf_fd fails. The fallback
+     * descriptor is always host-mapped (@ref UCT_DMABUF_MAP_TYPE_HOST).
      * Set to UCT_DMABUF_FD_INVALID if not supported.
      */
-    int               fallback_dmabuf_fd;
+    int                   fallback_dmabuf_fd;
 
     /** Offset of the queried address within the fallback dmabuf region. */
-    size_t            fallback_dmabuf_offset;
+    size_t                fallback_dmabuf_offset;
+
+    /**
+     * Mapping type of @a fallback_dmabuf_fd. Defaults to
+     * @ref UCT_DMABUF_MAP_TYPE_HOST.
+     */
+    uct_dmabuf_map_type_t fallback_dmabuf_map_type;
 
     /** Per-buffer memory flags, see @ref ucs_mem_flags_t. */
     uint8_t           mem_flags;

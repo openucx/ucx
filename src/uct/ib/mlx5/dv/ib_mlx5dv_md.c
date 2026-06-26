@@ -790,15 +790,14 @@ uct_ib_mlx5_direct_nic_reg_mr(uct_ib_mlx5_md_t *md, void *address,
         return NULL;
     }
 
-    dmabuf_fd = UCS_PARAM_VALUE(UCT_MD_MEM_REG_FIELD, params, dmabuf_fd,
-                                DMABUF_FD, UCT_DMABUF_FD_INVALID);
+    /* A Direct NIC can only consume a PCIe-mapped descriptor. */
+    dmabuf_fd = uct_ib_dmabuf_select_fd(params, UCT_DMABUF_MAP_TYPE_PCIE,
+                                        &dmabuf_offset);
     if (dmabuf_fd == UCT_DMABUF_FD_INVALID) {
         return NULL;
     }
 
-    dmabuf_offset = UCS_PARAM_VALUE(UCT_MD_MEM_REG_FIELD, params, dmabuf_offset,
-                                    DMABUF_OFFSET, 0);
-    start_time    = ucs_get_time();
+    start_time = ucs_get_time();
 
     mr = UCS_PROFILE_CALL_ALWAYS(mlx5dv_reg_dmabuf_mr, md->super.pd, 0,
                                  length + dmabuf_offset,

@@ -92,16 +92,19 @@ int uct_cuda_copy_md_is_dmabuf_supported();
 /**
  * @brief Get dmabuf file descriptor and offset for a given memory region (MR)
  *
- * @param address [in] Starting address of the MR
- * @param length  [in] Size of the MR
- * @param sys_dev [in] System device ID of the MR. The ID is used to check if
-                       file descriptor can be used by a Direct NIC. If sys_dev
-                       is UCS_SYS_DEVICE_ID_UNKNOWN, the file descriptor can
-                       be used by any device.
+ * @param address  [in]  Starting address of the MR
+ * @param length   [in]  Size of the MR
+ * @param sys_dev  [in]  System device ID of the MR. The ID is used to check if
+                         file descriptor can be used by a Direct NIC. If sys_dev
+                         is UCS_SYS_DEVICE_ID_UNKNOWN, the file descriptor can
+                         be used by any device.
+ * @param map_type [out] If not NULL, filled with the mapping type of the
+                         returned file descriptor (host or PCIe).
  * @return The dmabuf file descriptor and offset
  */
-uct_cuda_copy_md_dmabuf_t uct_cuda_copy_md_get_dmabuf(const void *address,
-                                                      size_t length,
-                                                      ucs_sys_device_t sys_dev);
+uct_cuda_copy_md_dmabuf_t
+uct_cuda_copy_md_get_dmabuf(const void *address, size_t length,
+                            ucs_sys_device_t sys_dev,
+                            uct_dmabuf_map_type_t *map_type);
 
 #endif

@@ -384,6 +384,24 @@ ucs_status_t uct_ib_reg_mr(const uct_ib_md_t *md, void *address, size_t length,
                            uint64_t access_flags, struct ibv_dm *dm,
                            struct ibv_mr **mr_p);
 
+/*
+ * Select the dmabuf file descriptor matching the requested mapping type from the
+ * registration parameters. The primary descriptor is used when its map type
+ * matches the request; otherwise the host-mapped fallback descriptor is used for
+ * host requests. Map type defaults to host, so legacy callers that set only
+ * @a dmabuf_fd are treated as host-mapped.
+ *
+ * @param [in]  params    Memory registration parameters.
+ * @param [in]  map_type  Mapping type the caller can consume.
+ * @param [out] offset_p  Set to the dmabuf offset of the selected descriptor,
+ *                        or 0 when no matching descriptor is available.
+ *
+ * @return The matching dmabuf file descriptor, or @ref UCT_DMABUF_FD_INVALID
+ *         when no descriptor matches @a map_type.
+ */
+int uct_ib_dmabuf_select_fd(const uct_md_mem_reg_params_t *params,
+                            uct_dmabuf_map_type_t map_type, size_t *offset_p);
+
 ucs_status_t uct_ib_dereg_mr(struct ibv_mr *mr);
 
 ucs_status_t uct_ib_mem_prefetch(uct_ib_md_t *md, uct_ib_mem_t *ib_memh,

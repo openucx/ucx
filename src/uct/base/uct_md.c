@@ -720,6 +720,16 @@ ucs_status_t uct_md_mem_query_v2(uct_md_h md, const void *address,
         mem_attr->fallback_dmabuf_offset = 0;
     }
 
+    /* Default to a host mapping, compatible with generic-verb registration.
+     * MDs that export PCIe-mapped descriptors (e.g. cuda_copy) override this. */
+    if (field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_MAP_TYPE) {
+        mem_attr->dmabuf_map_type = UCT_DMABUF_MAP_TYPE_HOST;
+    }
+
+    if (field_mask & UCT_MD_MEM_ATTR_V2_FIELD_FALLBACK_DMABUF_MAP_TYPE) {
+        mem_attr->fallback_dmabuf_map_type = UCT_DMABUF_MAP_TYPE_HOST;
+    }
+
     status = md->ops->mem_query(md, address, length, mem_attr);
     if ((status == UCS_ERR_UNSUPPORTED) && !(field_mask & v1_fields)) {
         return UCS_OK;

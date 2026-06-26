@@ -149,7 +149,7 @@ static int uct_gdaki_check_umem_dmabuf(const uct_ib_md_t *md)
     }
 
     dmabuf = uct_cuda_copy_md_get_dmabuf((void*)buff, 1,
-                                         UCS_SYS_DEVICE_ID_UNKNOWN);
+                                         UCS_SYS_DEVICE_ID_UNKNOWN, NULL);
     if (dmabuf.fd == UCT_DMABUF_FD_INVALID) {
         goto out_free;
     }
@@ -334,7 +334,7 @@ uct_rc_gdaki_umem_reg(const uct_ib_md_t *md, struct ibv_context *ibv_context,
 
     if (uct_gdaki_get_driver_features(md) & UCT_GDAKI_DMABUF_UMEM) {
         dmabuf = uct_cuda_copy_md_get_dmabuf(address, length,
-                                             UCS_SYS_DEVICE_ID_UNKNOWN);
+                                             UCS_SYS_DEVICE_ID_UNKNOWN, NULL);
     }
 
     if (dmabuf.fd == UCT_DMABUF_FD_INVALID) {

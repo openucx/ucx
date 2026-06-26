@@ -577,6 +577,8 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
     ucp_sys_dev_map_t sys_dev_map;
     int md_supports_dmabuf;
     unsigned reg_flags;
+    uct_dmabuf_map_type_t dmabuf_map_type          = UCT_DMABUF_MAP_TYPE_HOST;
+    uct_dmabuf_map_type_t fallback_dmabuf_map_type = UCT_DMABUF_MAP_TYPE_HOST;
 
     if (gva_enable) {
         status = ucp_memh_register_gva(context, memh, md_map);
@@ -615,11 +617,13 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
 
     if ((dmabuf_prov_md_index != UCP_NULL_RESOURCE) &&
         (reg_md_map & context->dmabuf_reg_md_map)) {
-        mem_attr.field_mask = UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD |
+        mem_attr.field_mask = UCT_MD_MEM_ATTR_V2_FIELD_SYS_DEV |
+                              UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD |
                               UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_OFFSET |
-                              UCT_MD_MEM_ATTR_V2_FIELD_SYS_DEV |
+                              UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_MAP_TYPE |
                               UCT_MD_MEM_ATTR_V2_FIELD_FALLBACK_DMABUF_FD |
-                              UCT_MD_MEM_ATTR_V2_FIELD_FALLBACK_DMABUF_OFFSET;
+                              UCT_MD_MEM_ATTR_V2_FIELD_FALLBACK_DMABUF_OFFSET |
+                              UCT_MD_MEM_ATTR_V2_FIELD_FALLBACK_DMABUF_MAP_TYPE;
         status = uct_md_mem_query_v2(context->tl_mds[dmabuf_prov_md_index].md,
                                      address, length, &mem_attr);
         if (status != UCS_OK) {
@@ -633,11 +637,13 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
                       address, length, mem_attr.dmabuf_fd,
                       mem_attr.dmabuf_offset, mem_attr.sys_dev);
 
-            dmabuf_reg_md_map      = context->dmabuf_reg_md_map;
-            dmabuf_fd              = mem_attr.dmabuf_fd;
-            dmabuf_offset          = mem_attr.dmabuf_offset;
-            fallback_dmabuf_fd     = mem_attr.fallback_dmabuf_fd;
-            fallback_dmabuf_offset = mem_attr.fallback_dmabuf_offset;
+            dmabuf_reg_md_map        = context->dmabuf_reg_md_map;
+            dmabuf_fd                = mem_attr.dmabuf_fd;
+            dmabuf_offset            = mem_attr.dmabuf_offset;
+            fallback_dmabuf_fd       = mem_attr.fallback_dmabuf_fd;
+            fallback_dmabuf_offset   = mem_attr.fallback_dmabuf_offset;
+            dmabuf_map_type          = mem_attr.dmabuf_map_type;
+            fallback_dmabuf_map_type = mem_attr.fallback_dmabuf_map_type;
 
             /* Exclude any unreachable MD from registration */
             ucs_for_each_bit(md_index, dmabuf_reg_md_map) {
@@ -667,16 +673,22 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
         reg_params.flags      = reg_flags;
         md_supports_dmabuf    = UCS_BIT_GET(dmabuf_reg_md_map, md_index);
         if (md_supports_dmabuf) {
-            /* If this MD can consume a dmabuf and we have it - provide it */
-            reg_params.field_mask   |= UCT_MD_MEM_REG_FIELD_DMABUF_FD |
-                                       UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET;
-            reg_params.dmabuf_fd     = dmabuf_fd;
-            reg_params.dmabuf_offset = dmabuf_offset;
-            if (fallback_dmabuf_fd != UCT_DMABUF_FD_INVALID) {
-                /* Suppress the first-attempt error so a recovered failure
-                 * is not logged as an error. */
-                reg_params.flags |= UCT_MD_MEM_FLAG_HIDE_ERRORS;
-            }
+            /* Provide both the primary and host-fallback descriptors tagged
+             * with their mapping types; the MD deterministically selects the fd
+             * matching its registration path. */
+            reg_params.field_mask |=
+                    UCT_MD_MEM_REG_FIELD_DMABUF_FD |
+                    UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET |
+                    UCT_MD_MEM_REG_FIELD_DMABUF_MAP_TYPE |
+                    UCT_MD_MEM_REG_FIELD_FALLBACK_DMABUF_FD |
+                    UCT_MD_MEM_REG_FIELD_FALLBACK_DMABUF_OFFSET |
+                    UCT_MD_MEM_REG_FIELD_FALLBACK_DMABUF_MAP_TYPE;
+            reg_params.dmabuf_fd                = dmabuf_fd;
+            reg_params.dmabuf_offset            = dmabuf_offset;
+            reg_params.dmabuf_map_type          = dmabuf_map_type;
+            reg_params.fallback_dmabuf_fd       = fallback_dmabuf_fd;
+            reg_params.fallback_dmabuf_offset   = fallback_dmabuf_offset;
+            reg_params.fallback_dmabuf_map_type = fallback_dmabuf_map_type;
         }
 
         reg_address = address;
@@ -688,24 +700,8 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
         }
 
         status = uct_md_mem_reg_v2(context->tl_mds[md_index].md, reg_address,
-                                   reg_length, &reg_params, &memh->uct[md_index]);
-        if (ucs_unlikely(status != UCS_OK) && md_supports_dmabuf &&
-            (fallback_dmabuf_fd != UCT_DMABUF_FD_INVALID)) {
-            ucs_debug("register address %p length %zu dmabuf-fd %d on "
-                      "md[%d]=%s failed: %s; retrying with fallback",
-                      reg_address, reg_length, reg_params.dmabuf_fd, md_index,
-                      context->tl_mds[md_index].rsc.md_name,
-                      ucs_status_string(status));
-
-            /* The fallback is the last attempt, restore flags to original value. */
-            reg_params.flags         = reg_flags;
-            reg_params.dmabuf_fd     = fallback_dmabuf_fd;
-            reg_params.dmabuf_offset = fallback_dmabuf_offset;
-            status = uct_md_mem_reg_v2(context->tl_mds[md_index].md,
-                                       reg_address, reg_length, &reg_params,
-                                       &memh->uct[md_index]);
-        }
-
+                                   reg_length, &reg_params,
+                                   &memh->uct[md_index]);
         if (ucs_unlikely(status != UCS_OK)) {
             ucp_memh_register_log_fail(err_level, reg_address, reg_length,
                                        mem_type, reg_params.dmabuf_fd, md_index,

@@ -744,28 +744,12 @@ out_default_range:
     return UCS_OK;
 }
 
-/*
- * Whether the dmabuf for a buffer on the given system device should be mapped
- * through the device PCIe BAR rather than the host. A PCIe-BAR handle can only
- * be registered by a Direct NIC (mlx5dv_reg_dmabuf_mr with DATA_DIRECT); a
- * generic verb such as ibv_reg_dmabuf_mr may accept it, but the subsequent
- * remote operation fails. A host mapping works with any importer.
- *
- * PCIe is selected when the GPU has a sibling Direct NIC expected to consume the
- * handle. The sibling check is only a hint: the NIC may be down or disabled in
- * UCX, so a generic-verb importer can still reject a PCIe handle at registration
- * time, in which case UCP retries the registration with a host-mapped fallback
- * descriptor.
- */
-static UCS_F_ALWAYS_INLINE int
-uct_cuda_copy_md_is_dmabuf_mapping_pcie(ucs_sys_device_t sys_dev)
-{
-    return ucs_topo_device_has_sibling(sys_dev);
-}
-
 static int uct_cuda_copy_md_get_dmabuf_fd(uintptr_t address, size_t length,
-                                          ucs_sys_device_t sys_dev)
+                                          ucs_sys_device_t sys_dev,
+                                          uct_dmabuf_map_type_t *map_type_p)
 {
+    uct_dmabuf_map_type_t map_type = UCT_DMABUF_MAP_TYPE_HOST;
+    
 #if CUDA_VERSION >= 11070
     unsigned long long flags = 0;
     PFN_cuMemGetHandleForAddressRange_v11070 get_handle_func;
@@ -796,30 +780,38 @@ static int uct_cuda_copy_md_get_dmabuf_fd(uintptr_t address, size_t length,
 #endif
 
 #if CUDA_VERSION >= 12080
-    if (uct_cuda_copy_md_is_dmabuf_mapping_pcie(sys_dev)) {
+    if (ucs_topo_device_has_sibling(sys_dev)) {
         flags = CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE;
+        map_type = UCT_DMABUF_MAP_TYPE_PCIE;
     }
 #endif
 
     cu_err = get_handle_func((void*)&fd, address, length,
                              CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD, flags);
-    if (cu_err == CUDA_SUCCESS) {
-        ucs_trace("dmabuf for address 0x%lx length %zu flags %llx is fd %d",
-                  address, length, flags, fd);
-        return fd;
+    if (cu_err != CUDA_SUCCESS) {
+        ucs_debug("cuMemGetHandleForAddressRange(address=0x%lx length=%zu "
+                  "flags=%llx DMA_BUF_FD) failed: %s",
+                  address, length, flags,
+                  uct_cuda_cu_get_error_string(cu_err));
+        return UCT_DMABUF_FD_INVALID;
     }
 
-    ucs_debug("cuMemGetHandleForAddressRange(address=0x%lx length=%zu "
-              "flags=%llx DMA_BUF_FD) failed: %s",
-              address, length, flags,
-              uct_cuda_cu_get_error_string(cu_err));
+    ucs_trace("dmabuf for address 0x%lx length %zu flags %llx is fd %d",
+                address, length, flags, fd);
+
+    if (map_type_p != NULL) {
+        *map_type_p = map_type;
+    }
+    return fd;
 #endif
+
     return UCT_DMABUF_FD_INVALID;
 }
 
-uct_cuda_copy_md_dmabuf_t uct_cuda_copy_md_get_dmabuf(const void *address,
-                                                      size_t length,
-                                                      ucs_sys_device_t sys_dev)
+uct_cuda_copy_md_dmabuf_t
+uct_cuda_copy_md_get_dmabuf(const void *address, size_t length,
+                            ucs_sys_device_t sys_dev,
+                            uct_dmabuf_map_type_t *map_type_p)
 {
     uct_cuda_copy_md_dmabuf_t dmabuf;
     uintptr_t base_address, aligned_start, aligned_end;
@@ -827,9 +819,9 @@ uct_cuda_copy_md_dmabuf_t uct_cuda_copy_md_get_dmabuf(const void *address,
     base_address  = (uintptr_t)address;
     aligned_start = ucs_align_down_pow2(base_address, ucs_get_page_size());
     aligned_end = ucs_align_up_pow2(base_address + length, ucs_get_page_size());
-    dmabuf.fd   = uct_cuda_copy_md_get_dmabuf_fd(aligned_start,
-                                                 aligned_end - aligned_start,
-                                                 sys_dev);
+    dmabuf.fd     = uct_cuda_copy_md_get_dmabuf_fd(aligned_start,
+                                                   aligned_end - aligned_start,
+                                                   sys_dev, map_type_p);
     dmabuf.offset = base_address - aligned_start;
     return dmabuf;
 }
@@ -858,7 +850,7 @@ uct_cuda_copy_md_detect_mem_flags(uct_cuda_copy_md_t *md,
     if (dmabuf == NULL) {
         local_dmabuf = uct_cuda_copy_md_get_dmabuf(mem_info->base_address,
                                                    mem_info->alloc_length,
-                                                   mem_info->sys_dev);
+                                                   mem_info->sys_dev, NULL);
         dmabuf       = &local_dmabuf;
         close_dmabuf = 1;
     }
@@ -892,6 +884,8 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
     int dmabuf_queried               = 0;
     int fallback_dmabuf_queried      = 0;
     int is_async_managed             = 0;
+    uct_dmabuf_map_type_t dmabuf_map_type;
+    uct_dmabuf_map_type_t UCS_V_UNUSED fallback_dmabuf_map_type;
     uct_cuda_copy_md_dmabuf_t fallback_dmabuf;
     ucs_memory_info_t addr_mem_info;
     ucs_status_t status;
@@ -935,10 +929,12 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
     }
 
     if ((mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD) ||
-        (mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_OFFSET)) {
+        (mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_OFFSET) ||
+        (mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_MAP_TYPE)) {
         dmabuf = uct_cuda_copy_md_get_dmabuf(addr_mem_info.base_address,
                                              addr_mem_info.alloc_length,
-                                             addr_mem_info.sys_dev);
+                                             addr_mem_info.sys_dev,
+                                             &dmabuf_map_type);
         dmabuf_queried = 1;
         if (mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD) {
             mem_attr->dmabuf_fd = dmabuf.fd;
@@ -948,27 +944,39 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
                     dmabuf.offset +
                     UCS_PTR_BYTE_DIFF(addr_mem_info.base_address, address);
         }
-    }
-
-    if (((mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_FALLBACK_DMABUF_FD) ||
-         (mem_attr->field_mask &
-          UCT_MD_MEM_ATTR_V2_FIELD_FALLBACK_DMABUF_OFFSET)) &&
-        uct_cuda_copy_md_is_dmabuf_mapping_pcie(addr_mem_info.sys_dev)) {
-        /* Query the fallback dmabuf file descriptor and offset using the
-         * host mapping. */
-        fallback_dmabuf         = uct_cuda_copy_md_get_dmabuf(
-                addr_mem_info.base_address, addr_mem_info.alloc_length,
-                UCS_SYS_DEVICE_ID_UNKNOWN);
-        fallback_dmabuf_queried = 1;
-        if (mem_attr->field_mask &
-            UCT_MD_MEM_ATTR_V2_FIELD_FALLBACK_DMABUF_FD) {
-            mem_attr->fallback_dmabuf_fd = fallback_dmabuf.fd;
+        if (mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_MAP_TYPE) {
+            mem_attr->dmabuf_map_type = dmabuf_map_type;
         }
-        if (mem_attr->field_mask &
-            UCT_MD_MEM_ATTR_V2_FIELD_FALLBACK_DMABUF_OFFSET) {
-            mem_attr->fallback_dmabuf_offset =
-                    fallback_dmabuf.offset +
-                    UCS_PTR_BYTE_DIFF(addr_mem_info.base_address, address);
+
+        /* Fallback dmabuf depends on the querying of the primary dmabuf. */
+        if (((mem_attr->field_mask &
+              UCT_MD_MEM_ATTR_V2_FIELD_FALLBACK_DMABUF_FD) ||
+             (mem_attr->field_mask &
+              UCT_MD_MEM_ATTR_V2_FIELD_FALLBACK_DMABUF_OFFSET) ||
+             (mem_attr->field_mask &
+              UCT_MD_MEM_ATTR_V2_FIELD_FALLBACK_DMABUF_MAP_TYPE)) &&
+            (dmabuf_map_type == UCT_DMABUF_MAP_TYPE_PCIE)) {
+            /* When the primary dmabuf fd uses a PCIe mapping, query a host
+             * fallback dmabuf fd usable by any importer. */
+            fallback_dmabuf = uct_cuda_copy_md_get_dmabuf(
+                    addr_mem_info.base_address, addr_mem_info.alloc_length,
+                    UCS_SYS_DEVICE_ID_UNKNOWN, &fallback_dmabuf_map_type);
+            ucs_assert(fallback_dmabuf_map_type == UCT_DMABUF_MAP_TYPE_HOST);
+            fallback_dmabuf_queried = 1;
+            if (mem_attr->field_mask &
+                UCT_MD_MEM_ATTR_V2_FIELD_FALLBACK_DMABUF_FD) {
+                mem_attr->fallback_dmabuf_fd = fallback_dmabuf.fd;
+            }
+            if (mem_attr->field_mask &
+                UCT_MD_MEM_ATTR_V2_FIELD_FALLBACK_DMABUF_OFFSET) {
+                mem_attr->fallback_dmabuf_offset =
+                        fallback_dmabuf.offset +
+                        UCS_PTR_BYTE_DIFF(addr_mem_info.base_address, address);
+            }
+            if (mem_attr->field_mask &
+                UCT_MD_MEM_ATTR_V2_FIELD_FALLBACK_DMABUF_MAP_TYPE) {
+                mem_attr->fallback_dmabuf_map_type = UCT_DMABUF_MAP_TYPE_HOST;
+            }
         }
     }
 

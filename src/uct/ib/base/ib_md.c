@@ -478,6 +478,45 @@ uct_ib_md_handle_mr_list_mt(uct_ib_md_t *md, void *address, size_t length,
     return status;
 }
 
+int uct_ib_dmabuf_select_fd(const uct_md_mem_reg_params_t *params,
+                            uct_dmabuf_map_type_t map_type, size_t *offset_p)
+{
+    int primary_fd, fallback_fd;
+    uct_dmabuf_map_type_t primary_map_type, fallback_map_type;
+
+    primary_fd = UCS_PARAM_VALUE(UCT_MD_MEM_REG_FIELD, params, dmabuf_fd,
+                                 DMABUF_FD, UCT_DMABUF_FD_INVALID);
+    if (primary_fd != UCT_DMABUF_FD_INVALID) {
+        primary_map_type = UCS_PARAM_VALUE(UCT_MD_MEM_REG_FIELD, params,
+                                           dmabuf_map_type, DMABUF_MAP_TYPE,
+                                           UCT_DMABUF_MAP_TYPE_HOST);
+        if (primary_map_type == map_type) {
+            *offset_p = UCS_PARAM_VALUE(UCT_MD_MEM_REG_FIELD, params,
+                                        dmabuf_offset, DMABUF_OFFSET, 0);
+            return primary_fd;
+        }
+    }
+
+    fallback_fd = UCS_PARAM_VALUE(UCT_MD_MEM_REG_FIELD, params,
+                                  fallback_dmabuf_fd, FALLBACK_DMABUF_FD,
+                                  UCT_DMABUF_FD_INVALID);
+    if (fallback_fd != UCT_DMABUF_FD_INVALID) {
+        fallback_map_type = UCS_PARAM_VALUE(UCT_MD_MEM_REG_FIELD, params,
+                                            fallback_dmabuf_map_type,
+                                            FALLBACK_DMABUF_MAP_TYPE,
+                                            UCT_DMABUF_MAP_TYPE_HOST);
+        if (fallback_map_type == map_type) {
+            *offset_p = UCS_PARAM_VALUE(UCT_MD_MEM_REG_FIELD, params,
+                                        fallback_dmabuf_offset,
+                                        FALLBACK_DMABUF_OFFSET, 0);
+            return fallback_fd;
+        }
+    }
+
+    *offset_p = 0;
+    return UCT_DMABUF_FD_INVALID;
+}
+
 ucs_status_t uct_ib_reg_mr(const uct_ib_md_t *md, void *address, size_t length,
                            const uct_md_mem_reg_params_t *params,
                            uint64_t access_flags, struct ibv_dm *dm,
@@ -491,11 +530,10 @@ ucs_status_t uct_ib_reg_mr(const uct_ib_md_t *md, void *address, size_t length,
     uint64_t flags;
     int dmabuf_fd;
 
-    flags         = UCT_MD_MEM_REG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0);
-    dmabuf_fd     = UCS_PARAM_VALUE(UCT_MD_MEM_REG_FIELD, params, dmabuf_fd,
-                                    DMABUF_FD, UCT_DMABUF_FD_INVALID);
-    dmabuf_offset = UCS_PARAM_VALUE(UCT_MD_MEM_REG_FIELD, params, dmabuf_offset,
-                                    DMABUF_OFFSET, 0);
+    flags     = UCT_MD_MEM_REG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0);
+    /* A generic verb can only consume a host-mapped descriptor. */
+    dmabuf_fd = uct_ib_dmabuf_select_fd(params, UCT_DMABUF_MAP_TYPE_HOST,
+                                        &dmabuf_offset);
 
     if (dm != NULL) {
 #if HAVE_IBV_DM
