@@ -41,7 +41,8 @@ KHASH_IMPL(ucp_context_imported_mem_hash, uint64_t, ucs_rcache_t*, 1,
 enum {
     /* The flag indicates that the resource may be used for auxiliary
      * wireup communications only */
-    UCP_TL_RSC_FLAG_AUX = UCS_BIT(0)
+    UCP_TL_RSC_FLAG_AUX       = UCS_BIT(0),
+    UCP_TL_RSC_FLAG_EXTRA_AUX = UCS_BIT(1)
 };
 
 #define UCP_OP_ATTR_INDEX_MASK (UCP_OP_ATTR_FLAG_NO_IMM_CMPL    | \
@@ -440,6 +441,10 @@ typedef struct ucp_context {
     ucp_tl_bitmap_t               tl_bitmap;  /* Cached map of tl resources used by workers.
                                                * Not all resources may be used if unified
                                                * mode is enabled. */
+    ucp_tl_bitmap_t               data_tl_bitmap; /* Map of resources selected by data
+                                                   * transport policy */
+    ucp_tl_bitmap_t               extra_tl_bitmap;/* Map of resources selected by extra
+                                                   * transport policy */
     ucp_rsc_index_t               num_tls;    /* Number of resources in the array */
     ucp_proto_id_mask_t           proto_bitmap;  /* Enabled protocols */
 
@@ -451,8 +456,9 @@ typedef struct ucp_context {
 
     struct {
 
-        /* Bitmap of features supported by the context */
-        uint64_t                  features;
+        uint64_t                  features;       /* Data features */
+        uint64_t                  extra_features; /* Extra/control features */
+        uint64_t                  all_features;   /* Data and extra features */
         uint64_t                  tag_sender_mask;
 
         /* How many endpoints are expected to be created */
@@ -606,13 +612,14 @@ typedef struct ucp_tl_iface_atomic_flags {
  */
 #define UCP_CONTEXT_CHECK_FEATURE_FLAGS(_context, _flags, _action) \
     do { \
+        uint64_t _context_features = (_context)->config.all_features; \
         if (ENABLE_PARAMS_CHECK && \
-            ucs_unlikely(!((_context)->config.features & (_flags)))) {  \
+            ucs_unlikely(!(_context_features & (_flags)))) {  \
             size_t feature_list_str_max = 512; \
             char *feature_list_str = ucs_alloca(feature_list_str_max);  \
             ucs_error("feature flags %s were not set for ucp_init()", \
                       ucs_flags_str(feature_list_str, feature_list_str_max,  \
-                                    (_flags) & ~(_context)->config.features, \
+                                    (_flags) & ~_context_features, \
                                     ucp_feature_str)); \
             _action; \
         } \

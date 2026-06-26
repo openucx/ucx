@@ -1182,7 +1182,7 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
         ucp_ep_update_remote_id(ep, ucp_ep_local_id(ep));
     } else if (!ucp_ep_match_insert(worker, ep, remote_address.uuid, conn_sn,
                                     UCS_CONN_MATCH_QUEUE_EXP)) {
-        if (context->config.features & UCP_FEATURE_STREAM) {
+        if (context->config.all_features & UCP_FEATURE_STREAM) {
             status = UCS_ERR_EXCEEDS_LIMIT;
             ucs_error("worker %p: failed to create the endpoint without"
                       "connection matching and Stream API support", worker);
@@ -1736,7 +1736,7 @@ ucp_ep_reconfig_internal(ucp_ep_h ep, ucp_lane_map_t failed_lanes)
     }
 
     if ((cfg_key.am_lane == UCP_NULL_LANE) &&
-        (ep->worker->context->config.features & UCP_FEATURE_AM)) {
+        (ep->worker->context->config.all_features & UCP_FEATURE_AM)) {
         ucs_diag("ep %p: AM lane not found after reconfiguration with "
                  "failed lanes 0x%lx", ep, failed_lanes);
         return UCS_ERR_UNREACHABLE;
@@ -3578,7 +3578,7 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
 
     fprintf(stream, "#\n");
 
-    if (context->config.features & UCP_FEATURE_TAG) {
+    if (context->config.all_features & UCP_FEATURE_TAG) {
         ucp_ep_config_print_proto(stream, "tag_send",
                                   config->tag.eager.max_short,
                                   config->tag.eager.zcopy_thresh[0],
@@ -3598,7 +3598,7 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
                                   config->tag.rndv.am_thresh.remote);
     }
 
-    if (context->config.features & UCP_FEATURE_STREAM) {
+    if (context->config.all_features & UCP_FEATURE_STREAM) {
         ucp_ep_config_print_proto(stream, "stream_send",
                                   config->am.max_short,
                                   config->am.zcopy_thresh[0],
@@ -3606,7 +3606,7 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
                                   SIZE_MAX, SIZE_MAX);
     }
 
-    if (context->config.features & UCP_FEATURE_AM) {
+    if (context->config.all_features & UCP_FEATURE_AM) {
         ucp_ep_config_print_proto(stream, "am_send",
                                   config->am_u.max_eager_short.memtype_on,
                                   config->am.zcopy_thresh[0],
@@ -3614,7 +3614,7 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
                                   config->rndv.am_thresh.remote);
     }
 
-    if (context->config.features & (UCP_FEATURE_TAG | UCP_FEATURE_AM)) {
+    if (context->config.all_features & (UCP_FEATURE_TAG | UCP_FEATURE_AM)) {
         fprintf(stream, "#\n");
         fprintf(stream, "# %23s: mds ", "rma_bw");
         ucs_for_each_bit(md_index, config->key.rma_bw_md_map) {
@@ -3628,7 +3628,7 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
         }
     }
 
-    if (context->config.features & (UCP_FEATURE_TAG | UCP_FEATURE_AM)) {
+    if (context->config.all_features & (UCP_FEATURE_TAG | UCP_FEATURE_AM)) {
         fprintf(stream, "rndv_rkey_size %zu\n", config->rndv.rkey_size);
     }
 }
@@ -4197,7 +4197,7 @@ ucp_ep_select_short_init(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index,
     ucp_ep_config_t *ep_config = ucp_worker_ep_config(worker, cfg_index);
     ucp_proto_select_short_t proto_short;
 
-    if (worker->context->config.features & feature_flag) {
+    if (worker->context->config.all_features & feature_flag) {
         ucp_proto_select_short_init(worker, &ep_config->proto_select,
                                     cfg_index, UCP_WORKER_CFG_INDEX_NULL,
                                     op_id, proto_flags, &proto_short);

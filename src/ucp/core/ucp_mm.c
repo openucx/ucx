@@ -310,11 +310,11 @@ ucp_mem_map_params2uct_flags(const ucp_context_h context,
 {
     unsigned flags = 0;
 
-    if (context->config.features & UCP_FEATURE_RMA) {
+    if (context->config.all_features & UCP_FEATURE_RMA) {
         flags |= UCT_MD_MEM_ACCESS_RMA;
     }
 
-    if (context->config.features & UCP_FEATURE_AMO) {
+    if (context->config.all_features & UCP_FEATURE_AMO) {
         flags |= UCT_MD_MEM_ACCESS_REMOTE_ATOMIC;
     }
 
@@ -1809,7 +1809,7 @@ ucs_status_t ucp_mem_rcache_init(ucp_context_h context,
         goto err;
     }
 
-    if (context->config.features & UCP_FEATURE_EXPORTED_MEMH) {
+    if (context->config.all_features & UCP_FEATURE_EXPORTED_MEMH) {
         context->imported_mem_hash = kh_init(ucp_context_imported_mem_hash);
         if (context->imported_mem_hash == NULL) {
             status = UCS_ERR_NO_MEMORY;

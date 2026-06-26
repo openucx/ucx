@@ -41,7 +41,7 @@ ucs_status_t ucp_am_init(ucp_worker_h worker)
     ucs_mpool_params_t mp_params;
     ucs_status_t status;
 
-    if (!(worker->context->config.features & UCP_FEATURE_AM)) {
+    if (!(worker->context->config.all_features & UCP_FEATURE_AM)) {
         return UCS_OK;
     }
 
@@ -66,7 +66,7 @@ ucs_status_t ucp_am_init(ucp_worker_h worker)
 
 void ucp_am_cleanup(ucp_worker_h worker)
 {
-    if (!(worker->context->config.features & UCP_FEATURE_AM)) {
+    if (!(worker->context->config.all_features & UCP_FEATURE_AM)) {
         return;
     }
 
@@ -78,7 +78,7 @@ void ucp_am_ep_init(ucp_ep_h ep)
 {
     ucp_ep_ext_t *ep_ext = ep->ext;
 
-    if (ep->worker->context->config.features & UCP_FEATURE_AM) {
+    if (ep->worker->context->config.all_features & UCP_FEATURE_AM) {
         ucs_list_head_init(&ep_ext->am.started_ams);
         ucs_queue_head_init(&ep_ext->am.mid_rdesc_q);
         ep_ext->am.psn = 0;
@@ -98,7 +98,7 @@ void ucp_am_ep_cleanup(ucp_ep_h ep)
     ucs_queue_iter_t iter;
     size_t count;
 
-    if (!(ep->worker->context->config.features & UCP_FEATURE_AM)) {
+    if (!(ep->worker->context->config.all_features & UCP_FEATURE_AM)) {
         return;
     }
 

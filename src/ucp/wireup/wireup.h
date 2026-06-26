@@ -58,6 +58,12 @@ enum {
 };
 
 
+typedef enum {
+    UCP_WIREUP_TL_SCOPE_DATA,
+    UCP_WIREUP_TL_SCOPE_EXTRA
+} ucp_wireup_tl_scope_t;
+
+
 /**
  * Calculates a score of a potential transport. Used both for the primary
  * selection score and for the tiebreak score.
@@ -130,6 +136,7 @@ typedef struct {
 
     ucp_tl_iface_atomic_flags_t  remote_atomic_flags;
     ucp_lane_type_t              lane_type;
+    ucp_wireup_tl_scope_t        tl_scope;
 } ucp_wireup_criteria_t;
 
 

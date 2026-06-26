@@ -1904,6 +1904,107 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_keepalive_tiebreak, rcx,
                               "rc_x")
 
 
+/*
+ * Verify the transport scope split introduced by extra_features. The data
+ * feature (RMA) is confined to the transports allowed by UCX_TLS (the mocked
+ * rc_mlx5 device), while a feature requested only via extra_features (AM) uses
+ * the unrestricted "extra" scope, which opens every device-enabled transport
+ * regardless of UCX_TLS.
+ */
+class test_ucp_proto_mock_extra_features : public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_extra_features()
+    {
+        mock_transport("rc_mlx5");
+    }
+
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        ucp_params_t params   = {};
+        params.field_mask     = UCP_PARAM_FIELD_FEATURES |
+                                UCP_PARAM_FIELD_EXTRA_FEATURES;
+        params.features       = UCP_FEATURE_RMA;
+        params.extra_features = UCP_FEATURE_AM;
+        add_variant(variants, params);
+    }
+
+    virtual void init() override
+    {
+        add_mock_iface("mock", [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short  = 208;
+            iface_attr.cap.put.max_short = 2048;
+            iface_attr.bandwidth.shared  = 28e9;
+            iface_attr.latency.c         = 600e-9;
+            iface_attr.latency.m         = 1e-9;
+        });
+        test_ucp_proto_mock::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_extra_features, extra_feature_tl_scope,
+           "IB_NUM_PATHS?=1")
+{
+    ucp_context_h context      = sender().ucph();
+    ucp_ep_config_t *ep_config = ucp_worker_ep_config(sender().worker(),
+                                                       ep_config_index(sender()));
+    ucp_rsc_index_t rsc_index;
+
+    /* AM is enabled even though it is not a data feature, because extra
+     * features are merged into all_features. */
+    EXPECT_EQ(uint64_t(UCP_FEATURE_RMA), context->config.features);
+    EXPECT_EQ(uint64_t(UCP_FEATURE_AM), context->config.extra_features);
+    EXPECT_EQ(uint64_t(UCP_FEATURE_RMA | UCP_FEATURE_AM),
+              context->config.all_features);
+
+    /* UCX_TLS=rc_x restricts the data scope to the mocked rc_mlx5 device, while
+     * the extra scope is unrestricted (every device-enabled transport). The
+     * extra bitmap is therefore a strict superset of the data bitmap. */
+    size_t num_data_tls  = UCS_STATIC_BITMAP_POPCOUNT(context->data_tl_bitmap);
+    size_t num_extra_tls = UCS_STATIC_BITMAP_POPCOUNT(context->extra_tl_bitmap);
+    EXPECT_GE(num_data_tls, 1u);
+    EXPECT_GT(num_extra_tls, num_data_tls);
+
+    /* Every data transport is also an extra transport, and at least one
+     * extra-only transport exists - precisely the device-enabled transports
+     * that UCX_TLS=rc_x excludes from the data scope. */
+    bool has_extra_only = false;
+    for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
+        bool in_data  = UCS_STATIC_BITMAP_GET(context->data_tl_bitmap,
+                                              rsc_index);
+        bool in_extra = UCS_STATIC_BITMAP_GET(context->extra_tl_bitmap,
+                                              rsc_index);
+        if (in_data) {
+            EXPECT_TRUE(in_extra); /* data is a subset of extra */
+        } else if (in_extra) {
+            has_extra_only = true;
+            EXPECT_STRNE("rc_mlx5",
+                         context->tl_rscs[rsc_index].tl_rsc.tl_name);
+        }
+    }
+    EXPECT_TRUE(has_extra_only);
+
+    /* The RMA data lane is confined to the UCX_TLS-allowed mocked rc_mlx5. */
+    ucp_lane_index_t rma_lane = ep_config->key.rma_lanes[0];
+    ASSERT_NE(UCP_NULL_LANE, rma_lane);
+    ucp_rsc_index_t rma_rsc = ep_config->key.lanes[rma_lane].rsc_index;
+    EXPECT_TRUE(UCS_STATIC_BITMAP_GET(context->data_tl_bitmap, rma_rsc));
+    EXPECT_STREQ("rc_mlx5",
+                 ucp_ep_get_tl_rsc(sender().ep(), rma_lane)->tl_name);
+    EXPECT_STREQ("mock", ucp_ep_get_tl_rsc(sender().ep(), rma_lane)->dev_name);
+
+    /* AM is an extra-only feature, so its lane is selected with the extra
+     * (unrestricted) TL scope and may use any extra transport. Here the best
+     * reachable transport is the mocked rc_mlx5, which is part of the extra
+     * scope. */
+    ucp_lane_index_t am_lane = ep_config->key.am_lane;
+    ASSERT_NE(UCP_NULL_LANE, am_lane);
+    ucp_rsc_index_t am_rsc = ep_config->key.lanes[am_lane].rsc_index;
+    EXPECT_TRUE(UCS_STATIC_BITMAP_GET(context->extra_tl_bitmap, am_rsc));
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_extra_features, rcx, "rc_x")
+
+
 #if HAVE_DECL_IBV_EVENT_PORT_SPEED_CHANGE
 
 class test_ucp_proto_mock_rcx_speed_change : public test_ucp_proto_mock {
