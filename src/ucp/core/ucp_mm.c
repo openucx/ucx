@@ -691,7 +691,7 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
                                    reg_length, &reg_params, &memh->uct[md_index]);
         if (ucs_unlikely(status != UCS_OK) && md_supports_dmabuf &&
             (fallback_dmabuf_fd != UCT_DMABUF_FD_INVALID)) {
-            ucs_debug("register address %p length %zu pcie dmabuf-fd %d on "
+            ucs_debug("register address %p length %zu dmabuf-fd %d on "
                       "md[%d]=%s failed: %s; retrying with fallback",
                       reg_address, reg_length, reg_params.dmabuf_fd, md_index,
                       context->tl_mds[md_index].rsc.md_name,
