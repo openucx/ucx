@@ -606,7 +606,7 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
         !(uct_flags & UCT_MD_MEM_FLAG_LOCK)) {
         uct_flags |= UCT_MD_MEM_FLAG_NONBLOCK;
     }
-    
+
     /* When adding registrations, existing access flags must be supported */
     reg_flags = uct_flags | memh->uct_flags;
 
@@ -665,7 +665,7 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
         /* When adding registrations, existing access flags must be supported */
         reg_params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS;
         reg_params.flags      = reg_flags;
-        md_supports_dmabuf    = !!(dmabuf_reg_md_map & UCS_BIT(md_index));
+        md_supports_dmabuf    = UCS_BIT_GET(dmabuf_reg_md_map, md_index);
         if (md_supports_dmabuf) {
             /* If this MD can consume a dmabuf and we have it - provide it */
             reg_params.field_mask   |= UCT_MD_MEM_REG_FIELD_DMABUF_FD |
