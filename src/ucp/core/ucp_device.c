@@ -378,7 +378,7 @@ ucp_device_local_mem_list_create(const ucp_device_mem_list_params_t *params,
                                  ucp_device_local_mem_list_h *mem_list_h)
 {
     const ucp_worker_h worker = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_PARAMS_FIELD,
-                                          params, worker, WORKER, NULL);
+                                               params, worker, WORKER, NULL);
     ucs_memory_type_t export_mem_type;
     ucs_sys_device_t local_sys_dev;
     uct_allocated_memory_t mem;
@@ -561,7 +561,7 @@ ucp_device_remote_mem_list_fill(const ucp_device_mem_list_elem_t *ucp_element,
 }
 
 static ucs_status_t ucp_device_remote_mem_list_create_handle(
-        const ucp_device_mem_list_params_t *params, ucp_ep_h ep,
+        const ucp_device_mem_list_params_t *params, const ucp_ep_h ep,
         const ucs_memory_type_t mem_type, uct_allocated_memory_t *mem,
         const ucs_sys_device_t local_sys_dev)
 {

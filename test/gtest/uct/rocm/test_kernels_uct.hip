@@ -14,9 +14,13 @@
 
 #define UCS_DEVICE_LEVEL_EXEC_ID 1
 
-#define UCS_DEVICE_LEVEL_EXEC_SELECT(scope_ok, count, id) \
-    ((scope_ok) ? (((count) > UCS_DEVICE_LEVEL_EXEC_ID) ? \
-                    ((id) == UCS_DEVICE_LEVEL_EXEC_ID) : true) : false)
+static __device__ inline bool
+ucs_device_level_exec_select(bool scope_ok, unsigned count, unsigned id)
+{
+    return scope_ok &&
+           ((count > UCS_DEVICE_LEVEL_EXEC_ID) ? (id == UCS_DEVICE_LEVEL_EXEC_ID)
+                                               : true);
+}
 
 namespace rocm_uct {
 
@@ -80,18 +84,18 @@ template<typename T> class device_result_ptr {
  {
     unsigned int thread_id   = threadIdx.x;
     unsigned int num_threads = blockDim.x;
-    unsigned int warp_id     = thread_id / 64;  // ROCm wavefront size
-    unsigned int num_warps   = num_threads / 64;
+    unsigned int warp_id     = thread_id / UCT_ROCM_IPC_WAVEFRONT_SIZE;
+    unsigned int num_warps   = num_threads / UCT_ROCM_IPC_WAVEFRONT_SIZE;
     unsigned int block_id    = blockIdx.x;
     unsigned int num_blocks  = gridDim.x;
 
     switch (level) {
     case UCS_DEVICE_LEVEL_THREAD:
-        return UCS_DEVICE_LEVEL_EXEC_SELECT(block_id == 0, num_threads, thread_id);
+        return ucs_device_level_exec_select(block_id == 0, num_threads, thread_id);
     case UCS_DEVICE_LEVEL_WARP:
-        return UCS_DEVICE_LEVEL_EXEC_SELECT(block_id == 0, num_warps, warp_id);
+        return ucs_device_level_exec_select(block_id == 0, num_warps, warp_id);
     case UCS_DEVICE_LEVEL_BLOCK:
-        return UCS_DEVICE_LEVEL_EXEC_SELECT(true, num_blocks, block_id);
+        return ucs_device_level_exec_select(true, num_blocks, block_id);
     case UCS_DEVICE_LEVEL_GRID:
         return true;
     }

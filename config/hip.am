@@ -7,7 +7,7 @@ SUFFIXES = .hip
 
 HIPCC ?= hipcc
 
-HIPCC_CMD = $(HIPCC) -DHAVE_CONFIG_H -DUCT_DEVICE_CODE_HIP -fPIE -I$(top_srcdir)/src -I$(top_builddir)/src $(BASE_CXXFLAGS) $(CXXFLAGS) $(HIP_CPPFLAGS) $(HIP_CXXFLAGS) $(HIPCC_EXTRA_FLAGS) -Wno-c++20-extensions -c $< -MT $@ -MF $(DEPDIR)/hip/$@.d -MMD -o $@
+HIPCC_CMD = $(HIPCC) $(DEFS) -DUCT_DEVICE_CODE_HIP -fPIE -I$(top_srcdir)/src -I$(top_builddir)/src $(BASE_CXXFLAGS) $(CXXFLAGS) $(HIP_CPPFLAGS) $(HIP_CXXFLAGS) $(HIPCC_EXTRA_FLAGS) -Wno-c++20-extensions -c $< -MT $@ -MF $(DEPDIR)/hip/$@.d -MMD -o $@
 HIPCC_LT_CMD = $(LIBTOOL) --tag=CXX --mode=compile $(HIPCC_CMD)
 
 define hipcc-build

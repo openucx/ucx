@@ -180,10 +180,11 @@ UCS_TEST_P(test_rocm_ipc_rma, get_mem_elem_pack)
     mapped_buffer sendbuf(length, SEED1, *m_sender, 0, UCS_MEMORY_TYPE_ROCM);
     mapped_buffer recvbuf(length, SEED2, *m_receiver, 0, UCS_MEMORY_TYPE_ROCM);
 
-    ASSERT_EQ(hipSuccess, hipMalloc((void **)&mem_elem, mem_elem_size));
+    mem_elem = static_cast<uct_device_mem_elem_t*>(malloc(mem_elem_size));
+    ASSERT_NE(nullptr, mem_elem);
     EXPECT_UCS_OK(uct_md_mem_elem_pack(m_sender->md(), sendbuf.memh(),
                                        recvbuf.rkey(), mem_elem));
-    hipFree(mem_elem);
+    free(mem_elem);
 }
 
 UCS_TEST_P(test_rocm_ipc_rma, get_device_ep)
