@@ -44,18 +44,20 @@ static ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
   {"MAX_AM_HDR", "128",
    "Buffer size to reserve for active message headers. If set to 0, the transport will\n"
    "not support zero-copy active messages.",
-   ucs_offsetof(uct_rc_verbs_iface_config_t, max_am_hdr), UCS_CONFIG_TYPE_MEMUNITS},
+   ucs_offsetof(uct_rc_verbs_iface_config_t, max_am_hdr),
+   UCS_CONFIG_TYPE_MEMUNITS},
 
   {"TX_MAX_WR", "-1",
    "Limits the number of outstanding posted work requests. The actual limit is\n"
    "a minimum between this value and the TX queue length. -1 means no limit.",
-   ucs_offsetof(uct_rc_verbs_iface_config_t, tx_max_wr), UCS_CONFIG_TYPE_UINT},
+   ucs_offsetof(uct_rc_verbs_iface_config_t, tx_max_wr),
+   UCS_CONFIG_TYPE_UINT},
 
   {"FLUSH_MODE", "auto",
    "Method to use for posting flush operation:\n"
-   " - write0 : Post empty RDMA_WRITE\n"
-   " - fc     : Send flow control message\n"
-   " - auto   : Select automatically based on device support",
+   " write0 - Post empty RDMA_WRITE.\n"
+   " fc     - Send flow control message.\n"
+   " auto   - Select automatically based on device support.",
    ucs_offsetof(uct_rc_verbs_iface_config_t, flush_mode),
    UCS_CONFIG_TYPE_ENUM(uct_rc_verbs_flush_mode_names)},
 

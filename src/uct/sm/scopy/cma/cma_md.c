@@ -43,11 +43,12 @@ static ucs_config_field_t uct_cma_md_config_table[] = {
      ucs_offsetof(uct_cma_md_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
 
-    {"MEMORY_INVALIDATE", "n", 
+    {"MEMORY_INVALIDATE", "n",
      "Expose memory invalidate support capability.\n"
      "Note: this capability is not really supported yet. This variable will\n"
      "be deprecated, when memory invalidation support is implemented.",
-     ucs_offsetof(uct_cma_md_config_t, mem_invalidate), UCS_CONFIG_TYPE_BOOL},
+     ucs_offsetof(uct_cma_md_config_t, mem_invalidate),
+     UCS_CONFIG_TYPE_BOOL},
 
     {NULL}
 };

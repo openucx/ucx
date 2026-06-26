@@ -17,11 +17,13 @@
 /* clang-format off */
 ucs_config_field_t uct_tcp_sockcm_config_table[] = {
   {"CM_", "", NULL,
-   ucs_offsetof(uct_tcp_sockcm_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_cm_config_table)},
+   ucs_offsetof(uct_tcp_sockcm_config_t, super),
+   UCS_CONFIG_TYPE_TABLE(uct_cm_config_table)},
 
   {"PRIV_DATA_LEN", "2048",
-   "TCP CM private data length",
-   ucs_offsetof(uct_tcp_sockcm_config_t, priv_data_len), UCS_CONFIG_TYPE_MEMUNITS},
+   "TCP CM private data length.",
+   ucs_offsetof(uct_tcp_sockcm_config_t, priv_data_len),
+   UCS_CONFIG_TYPE_MEMUNITS},
 
    UCT_TCP_SEND_RECV_BUF_FIELDS(ucs_offsetof(uct_tcp_sockcm_config_t, sockopt)),
 

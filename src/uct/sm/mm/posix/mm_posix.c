@@ -67,14 +67,15 @@ typedef struct uct_posix_packed_rkey {
 
 /* clang-format off */
 static ucs_config_field_t uct_posix_md_config_table[] = {
-    {"MM_", "", NULL, ucs_offsetof(uct_posix_md_config_t, super),
+    {"MM_", "", NULL,
+     ucs_offsetof(uct_posix_md_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_mm_md_config_table)},
 
     {"DIR", UCT_POSIX_SHM_OPEN_DIR,
-     "The path to the backing file. If it's equal to " UCT_POSIX_SHM_OPEN_DIR
-     " then \n"
+     "The path to the backing file. If it's equal to " UCT_POSIX_SHM_OPEN_DIR " then \n"
      "shm_open() is used. Otherwise, open() is used.",
-     ucs_offsetof(uct_posix_md_config_t, dir), UCS_CONFIG_TYPE_STRING},
+     ucs_offsetof(uct_posix_md_config_t, dir),
+     UCS_CONFIG_TYPE_STRING},
 
     {"SHM_MIN_SIZE", "16mb",
      "Minimal size of the shared memory file system.\n"
@@ -85,15 +86,18 @@ static ucs_config_field_t uct_posix_md_config_table[] = {
 
     {"USE_PROC_LINK", "y",
      "Use /proc/<pid>/fd/<fd> to share posix file.\n"
-     " y   - Use /proc/<pid>/fd/<fd> to share posix file.\n"
-     " n   - Use original file path to share posix file.\n",
-     ucs_offsetof(uct_posix_md_config_t, use_proc_link), UCS_CONFIG_TYPE_BOOL},
+     " y - Use /proc/<pid>/fd/<fd> to share posix file.\n"
+     " n - Use original file path to share posix file.",
+     ucs_offsetof(uct_posix_md_config_t, use_proc_link),
+     UCS_CONFIG_TYPE_BOOL},
 
     {NULL}
 };
 
 static ucs_config_field_t uct_posix_iface_config_table[] = {
-  {"MM_", "", NULL, 0, UCS_CONFIG_TYPE_TABLE(uct_mm_iface_config_table)},
+  {"MM_", "", NULL,
+   0,
+   UCS_CONFIG_TYPE_TABLE(uct_mm_iface_config_table)},
 
   {NULL}
 };

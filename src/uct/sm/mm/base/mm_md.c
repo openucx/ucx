@@ -19,15 +19,17 @@
 /* clang-format off */
 ucs_config_field_t uct_mm_md_config_table[] = {
   {"", "", NULL,
-   ucs_offsetof(uct_mm_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
+   ucs_offsetof(uct_mm_md_config_t, super),
+   UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
 
   {"HUGETLB_MODE", "try",
-   "Enable using huge pages for internal buffers. "
+   "Enable using huge pages for internal buffers.\n"
    "Possible values are:\n"
    " y   - Allocate memory using huge pages only.\n"
    " n   - Allocate memory using regular pages only.\n"
-   " try - Try to allocate memory using huge pages and if it fails, allocate regular pages.\n",
-   ucs_offsetof(uct_mm_md_config_t, hugetlb_mode), UCS_CONFIG_TYPE_TERNARY},
+   " try - Try to allocate memory using huge pages and if it fails, allocate regular pages.",
+   ucs_offsetof(uct_mm_md_config_t, hugetlb_mode),
+   UCS_CONFIG_TYPE_TERNARY},
 
   {NULL}
 };

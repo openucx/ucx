@@ -36,72 +36,85 @@ ucs_config_field_t uct_rc_iface_common_config_table[] = {
   {"MAX_RD_ATOMIC", "auto",
    "Maximal number of outstanding read or atomic replies. Auto means using the\n"
    "maximum value supported by the hardware.",
-   ucs_offsetof(uct_rc_iface_common_config_t, max_rd_atomic), UCS_CONFIG_TYPE_ULUNITS},
+   ucs_offsetof(uct_rc_iface_common_config_t, max_rd_atomic),
+   UCS_CONFIG_TYPE_ULUNITS},
 
   {"TIMEOUT", "1.0s",
-   "Transport timeout",
-   ucs_offsetof(uct_rc_iface_common_config_t, tx.timeout), UCS_CONFIG_TYPE_TIME},
+   "Transport timeout.",
+   ucs_offsetof(uct_rc_iface_common_config_t, tx.timeout),
+   UCS_CONFIG_TYPE_TIME},
 
   {"RETRY_COUNT", "7",
-   "Transport retries",
-   ucs_offsetof(uct_rc_iface_common_config_t, tx.retry_count), UCS_CONFIG_TYPE_UINT},
+   "Transport retries.",
+   ucs_offsetof(uct_rc_iface_common_config_t, tx.retry_count),
+   UCS_CONFIG_TYPE_UINT},
 
   {"RNR_TIMEOUT", "1ms",
-   "RNR timeout",
-   ucs_offsetof(uct_rc_iface_common_config_t, tx.rnr_timeout), UCS_CONFIG_TYPE_TIME},
+   "RNR timeout.",
+   ucs_offsetof(uct_rc_iface_common_config_t, tx.rnr_timeout),
+   UCS_CONFIG_TYPE_TIME},
 
   {"RNR_RETRY_COUNT", "7",
-   "RNR retries",
-   ucs_offsetof(uct_rc_iface_common_config_t, tx.rnr_retry_count), UCS_CONFIG_TYPE_UINT},
+   "RNR retries.",
+   ucs_offsetof(uct_rc_iface_common_config_t, tx.rnr_retry_count),
+   UCS_CONFIG_TYPE_UINT},
 
   {"FC_ENABLE", "y",
    "Enable flow control protocol to prevent sender from overwhelming the receiver,\n"
    "thus avoiding RC RnR backoff timer.",
-   ucs_offsetof(uct_rc_iface_common_config_t, fc.enable), UCS_CONFIG_TYPE_BOOL},
+   ucs_offsetof(uct_rc_iface_common_config_t, fc.enable),
+   UCS_CONFIG_TYPE_BOOL},
 
   {"FC_WND_SIZE", "512",
    "The size of flow control window per endpoint. limits the number of AM\n"
    "which can be sent w/o acknowledgment.",
-   ucs_offsetof(uct_rc_iface_common_config_t, fc.wnd_size), UCS_CONFIG_TYPE_UINT},
+   ucs_offsetof(uct_rc_iface_common_config_t, fc.wnd_size),
+   UCS_CONFIG_TYPE_UINT},
 
   {"FC_HARD_THRESH", "0.25",
    "Threshold for sending hard request for FC credits to the peer. This value\n"
-   "refers to the percentage of the FC_WND_SIZE value. (must be > 0 and < 1)",
-   ucs_offsetof(uct_rc_iface_common_config_t, fc.hard_thresh), UCS_CONFIG_TYPE_DOUBLE},
+   "refers to the percentage of the FC_WND_SIZE value. (must be > 0 and < 1).",
+   ucs_offsetof(uct_rc_iface_common_config_t, fc.hard_thresh),
+   UCS_CONFIG_TYPE_DOUBLE},
 
   {"FENCE", "auto",
    "IB fence type when API fence requested:\n"
-   "  none   - fence is a no-op\n"
-   "  weak   - fence makes sure remote reads are ordered with respect to remote writes\n"
-   "  auto   - select fence mode based on hardware capabilities",
+   " none - fence is a no-op.\n"
+   " weak - fence makes sure remote reads are ordered with respect to remote writes.\n"
+   " auto - select fence mode based on hardware capabilities.",
    ucs_offsetof(uct_rc_iface_common_config_t, fence_mode),
-                UCS_CONFIG_TYPE_ENUM(uct_rc_fence_mode_values)},
+   UCS_CONFIG_TYPE_ENUM(uct_rc_fence_mode_values)},
 
   {"TX_NUM_GET_OPS", "",
    "The configuration parameter replaced by UCX_RC_TX_NUM_GET_BYTES.",
-   UCS_CONFIG_DEPRECATED_FIELD_OFFSET, UCS_CONFIG_TYPE_DEPRECATED},
+   UCS_CONFIG_DEPRECATED_FIELD_OFFSET,
+   UCS_CONFIG_TYPE_DEPRECATED},
 
   {"MAX_GET_ZCOPY", "auto",
    "Maximal size of get operation with zcopy protocol.",
-   ucs_offsetof(uct_rc_iface_common_config_t, tx.max_get_zcopy), UCS_CONFIG_TYPE_MEMUNITS},
+   ucs_offsetof(uct_rc_iface_common_config_t, tx.max_get_zcopy),
+   UCS_CONFIG_TYPE_MEMUNITS},
 
   {"TX_NUM_GET_BYTES", "inf",
    "Maximal number of bytes simultaneously transferred by get/RDMA_READ operations.",
-   ucs_offsetof(uct_rc_iface_common_config_t, tx.max_get_bytes), UCS_CONFIG_TYPE_MEMUNITS},
+   ucs_offsetof(uct_rc_iface_common_config_t, tx.max_get_bytes),
+   UCS_CONFIG_TYPE_MEMUNITS},
 
   {"TX_POLL_ALWAYS", "n",
    "When enabled, TX completions are polled every time the progress function is invoked.\n"
    "Otherwise poll TX completions only if no RX completions found.",
-   ucs_offsetof(uct_rc_iface_common_config_t, tx.poll_always), UCS_CONFIG_TYPE_BOOL},
+   ucs_offsetof(uct_rc_iface_common_config_t, tx.poll_always),
+   UCS_CONFIG_TYPE_BOOL},
 
   {"ECE", "auto",
    "config Enhanced Connection Establishment to establish connection.\n"
-   "  auto      : Use default ECE.\n"
-   "  inf       : Use maximal supported ECE.\n"
-   "  otherwise : Set the ECE to the given numeric 32-bit value.\n"
-   "              This value is used as best-effort and can be adjusted by\n"
-   "              the transport implementation.\n",
-   ucs_offsetof(uct_rc_iface_common_config_t, ece), UCS_CONFIG_TYPE_ULUNITS},
+   " 'auto'    - Use default ECE.\n"
+   " 'inf'     - Use maximal supported ECE.\n"
+   " otherwise - Set the ECE to the given numeric 32-bit value.\n"
+   "             This value is used as best-effort and can be adjusted by\n"
+   "             the transport implementation.",
+   ucs_offsetof(uct_rc_iface_common_config_t, ece),
+   UCS_CONFIG_TYPE_ULUNITS},
 
   {NULL}
 };
@@ -115,16 +128,19 @@ ucs_config_field_t uct_rc_iface_config_table[] = {
 
   {"FC_SOFT_THRESH", "0.5",
    "Threshold for sending soft request for FC credits to the peer. This value\n"
-   "refers to the percentage of the FC_WND_SIZE value. (must be > HARD_THRESH and < 1)",
-   ucs_offsetof(uct_rc_iface_config_t, soft_thresh), UCS_CONFIG_TYPE_DOUBLE},
+   "refers to the percentage of the FC_WND_SIZE value (must be > HARD_THRESH and < 1).",
+   ucs_offsetof(uct_rc_iface_config_t, soft_thresh),
+   UCS_CONFIG_TYPE_DOUBLE},
 
   {"TX_CQ_MODERATION", "64",
    "Maximum number of send WQEs which can be posted without requesting a completion.",
-   ucs_offsetof(uct_rc_iface_config_t, tx_cq_moderation), UCS_CONFIG_TYPE_UINT},
+   ucs_offsetof(uct_rc_iface_config_t, tx_cq_moderation),
+   UCS_CONFIG_TYPE_UINT},
 
   {"TX_CQ_LEN", "4096",
    "Length of send completion queue. This limits the total number of outstanding signaled sends.",
-   ucs_offsetof(uct_rc_iface_config_t, tx_cq_len), UCS_CONFIG_TYPE_UINT},
+   ucs_offsetof(uct_rc_iface_config_t, tx_cq_len),
+   UCS_CONFIG_TYPE_UINT},
 
   {NULL}
 };

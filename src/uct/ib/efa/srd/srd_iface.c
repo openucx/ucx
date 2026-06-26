@@ -614,7 +614,8 @@ ucs_config_field_t uct_srd_iface_config_table[] = {
      ucs_offsetof(uct_srd_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_ib_iface_config_table)},
 
-    {"SRD_", "", NULL, ucs_offsetof(uct_srd_iface_config_t, ud_common),
+    {"SRD_", "", NULL,
+     ucs_offsetof(uct_srd_iface_config_t, ud_common),
      UCS_CONFIG_TYPE_TABLE(uct_ud_iface_common_config_table)},
 
     {NULL}

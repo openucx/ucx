@@ -43,22 +43,26 @@ static uct_component_t uct_self_component;
 /* clang-format off */
 static ucs_config_field_t uct_self_iface_config_table[] = {
     {"", "", NULL,
-     ucs_offsetof(uct_self_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
+     ucs_offsetof(uct_self_iface_config_t, super),
+     UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
     {"SEG_SIZE", "8k",
-     "Size of copy-out buffer",
-     ucs_offsetof(uct_self_iface_config_t, seg_size), UCS_CONFIG_TYPE_MEMUNITS},
+     "Size of copy-out buffer.",
+     ucs_offsetof(uct_self_iface_config_t, seg_size),
+     UCS_CONFIG_TYPE_MEMUNITS},
 
     {NULL}
 };
 
 static ucs_config_field_t uct_self_md_config_table[] = {
-    {"", "", NULL, 
-     ucs_offsetof(uct_self_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
+    {"", "", NULL,
+     ucs_offsetof(uct_self_md_config_t, super),
+     UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
 
-    {"NUM_DEVICES", "1", 
-     "Number of \"self\" devices to create",
-     ucs_offsetof(uct_self_md_config_t, num_devices), UCS_CONFIG_TYPE_INT},
+    {"NUM_DEVICES", "1",
+     "Number of \"self\" devices to create.",
+     ucs_offsetof(uct_self_md_config_t, num_devices),
+     UCS_CONFIG_TYPE_INT},
 
     {NULL}
 };

@@ -43,7 +43,8 @@ uct_ud_verbs_iface_post_recv(uct_ud_verbs_iface_t *iface);
 /* clang-format off */
 static ucs_config_field_t uct_ud_verbs_iface_config_table[] = {
   {"UD_", UCT_IB_SEND_OVERHEAD_DEFAULT(UCT_UD_VERBS_IFACE_OVERHEAD), NULL,
-   0, UCS_CONFIG_TYPE_TABLE(uct_ud_iface_config_table)},
+   0,
+   UCS_CONFIG_TYPE_TABLE(uct_ud_iface_config_table)},
 
   {NULL}
 };

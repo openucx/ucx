@@ -80,27 +80,35 @@ static uct_gdr_copy_global_context_t uct_gdr_copy_context = {
 /* clang-format off */
 static ucs_config_field_t uct_gdr_copy_md_config_table[] = {
     {"", "", NULL,
-     ucs_offsetof(uct_gdr_copy_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
+     ucs_offsetof(uct_gdr_copy_md_config_t, super),
+     UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
 
-    {"SHARED_MD", "y", "Use a single memory domain instance that will be "
-     "shared across all contexts",
-     ucs_offsetof(uct_gdr_copy_md_config_t, shared), UCS_CONFIG_TYPE_BOOL},
+    {"SHARED_MD", "y",
+     "Use a single memory domain instance that will be shared across all contexts.",
+     ucs_offsetof(uct_gdr_copy_md_config_t, shared),
+     UCS_CONFIG_TYPE_BOOL},
 
-    {"RCACHE", "yes", "Enable using memory registration cache",
-     ucs_offsetof(uct_gdr_copy_md_config_t, enable_rcache), UCS_CONFIG_TYPE_BOOL},
+    {"RCACHE", "yes",
+     "Enable using memory registration cache.",
+     ucs_offsetof(uct_gdr_copy_md_config_t, enable_rcache),
+     UCS_CONFIG_TYPE_BOOL},
 
-    {"MEM_REG_OVERHEAD", "16us", "Memory registration overhead", /* TODO take default from device */
-     ucs_offsetof(uct_gdr_copy_md_config_t, uc_reg_cost.m), UCS_CONFIG_TYPE_TIME},
+    {"MEM_REG_OVERHEAD", "16us", /* TODO: take default from device */
+     "Memory registration overhead.",
+     ucs_offsetof(uct_gdr_copy_md_config_t, uc_reg_cost.m),
+     UCS_CONFIG_TYPE_TIME},
 
-    {"MEM_REG_GROWTH", "0.06ns", "Memory registration growth rate", /* TODO take default from device */
-     ucs_offsetof(uct_gdr_copy_md_config_t, uc_reg_cost.c), UCS_CONFIG_TYPE_TIME},
+    {"MEM_REG_GROWTH", "0.06ns", /* TODO: take default from device */
+     "Memory registration growth rate.",
+     ucs_offsetof(uct_gdr_copy_md_config_t, uc_reg_cost.c),
+     UCS_CONFIG_TYPE_TIME},
 
     {"USE_PCIE", "auto",
      "Mapping type for CPU access:\n"
-     " auto - default, driver chooses C2C or PCIe\n"
-     " yes  - Force PCIe (BAR1); may fail at registration\n"
-     " no   - default, driver chooses C2C or PCIe\n"
-     " try  - Try PCIe first, fall back to default in case of failure\n",
+     " auto - default, driver chooses C2C or PCIe.\n"
+     " yes  - Force PCIe (BAR1); may fail at registration.\n"
+     " no   - default, driver chooses C2C or PCIe.\n"
+     " try  - Try PCIe first, fall back to default in case of failure.",
      ucs_offsetof(uct_gdr_copy_md_config_t, use_pcie),
      UCS_CONFIG_TYPE_TERNARY_AUTO},
 

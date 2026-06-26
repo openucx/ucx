@@ -35,11 +35,13 @@
 /* clang-format off */
 static ucs_config_field_t uct_cuda_ipc_md_config_table[] = {
     {"", "", NULL,
-     ucs_offsetof(uct_cuda_ipc_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
+     ucs_offsetof(uct_cuda_ipc_md_config_t, super),
+     UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
 
     {"ENABLE_MNNVL", "try",
      "Enable multi-node NVLINK capabilities.",
-     ucs_offsetof(uct_cuda_ipc_md_config_t, enable_mnnvl), UCS_CONFIG_TYPE_TERNARY},
+     ucs_offsetof(uct_cuda_ipc_md_config_t, enable_mnnvl),
+     UCS_CONFIG_TYPE_TERNARY},
 
     {"CACHE_MAX_REGIONS", "inf",
      "Maximum number of regions in each per-peer CUDA IPC remote handle cache.\n"

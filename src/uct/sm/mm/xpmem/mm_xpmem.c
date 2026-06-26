@@ -73,7 +73,9 @@ static ucs_config_field_t uct_xpmem_md_config_table[] = {
 };
 
 static ucs_config_field_t uct_xpmem_iface_config_table[] = {
-  {"MM_", "", NULL, 0, UCS_CONFIG_TYPE_TABLE(uct_mm_iface_config_table)},
+  {"MM_", "", NULL,
+   0,
+   UCS_CONFIG_TYPE_TABLE(uct_mm_iface_config_table)},
 
   {NULL}
 };

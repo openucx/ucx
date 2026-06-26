@@ -47,7 +47,8 @@ static const char *uct_dct_affinity_policy_names[] = {
 ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
     {"RC_", "IB_TX_QUEUE_LEN=128;FC_ENABLE=y;"
             UCT_IB_SEND_OVERHEAD_DEFAULT(UCT_RC_MLX5_IFACE_OVERHEAD),
-     NULL, ucs_offsetof(uct_dc_mlx5_iface_config_t, super),
+     NULL,
+     ucs_offsetof(uct_dc_mlx5_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_rc_iface_common_config_table)},
 
     /* Since long timeout will block SRQ in case of network failure on single
@@ -62,36 +63,33 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
 
     {"NUM_DCI", "32",
      "Number of DC initiator QPs (DCI) used by the interface. Not relevant for hw_dcs policy.",
-     ucs_offsetof(uct_dc_mlx5_iface_config_t, ndci), UCS_CONFIG_TYPE_UINT},
+     ucs_offsetof(uct_dc_mlx5_iface_config_t, ndci),
+     UCS_CONFIG_TYPE_UINT},
 
     {"TX_POLICY", "dcs_quota",
-     "Specifies how DC initiator (DCI) is selected by the endpoint. The policies are:\n"
-     "\n"
-     "dcs        The endpoint either uses already assigned DCI or one is allocated\n"
-     "           in a LIFO order, and released once it has no outstanding operations.\n"
-     "\n"
-     "dcs_quota  Same as \"dcs\" but in addition the DCI is scheduled for release\n"
-     "           if it has sent more than quota, and there are endpoints waiting for a DCI.\n"
-     "           The dci is released once it completes all outstanding operations.\n"
-     "           This policy ensures that there will be no starvation among endpoints.\n"
-     "\n"
-     "rand       Every endpoint is assigned with a randomly selected DCI.\n"
-     "           Multiple endpoints may share the same DCI.\n"
-     "\n"
-     "hw_dcs     A single DCI that operates as a HW DCS queue. The channels are assigned\n"
-     "           in a round-robin fashion.\n"
-     "\n"
-     "dcs_hybrid Same as \"dcs_quota\" but when there are no DCIs available,\n" 
-     "           a dedicated HW DCI is used in the same manner as in \"hw_dcs\" policy.",
+     "Specifies how DC initiator (DCI) is selected by the endpoint.\n"
+     "The policies are:\n"
+     " dcs        - The endpoint either uses already assigned DCI or one is allocated\n"
+     "              in a LIFO order, and released once it has no outstanding operations.\n"
+     " dcs_quota  - Same as \"dcs\" but in addition the DCI is scheduled for release\n"
+     "              if it has sent more than quota, and there are endpoints waiting for a DCI.\n"
+     "              The dci is released once it completes all outstanding operations.\n"
+     "              This policy ensures that there will be no starvation among endpoints.\n"
+     " rand       - Every endpoint is assigned with a randomly selected DCI.\n"
+     "              Multiple endpoints may share the same DCI.\n"
+     " hw_dcs     - A single DCI that operates as a HW DCS queue. The channels are assigned\n"
+     "              in a round-robin fashion.\n"
+     " dcs_hybrid - Same as \"dcs_quota\" but when there are no DCIs available,\n"
+     "              a dedicated HW DCI is used in the same manner as in \"hw_dcs\" policy.",
      ucs_offsetof(uct_dc_mlx5_iface_config_t, tx_policy),
      UCS_CONFIG_TYPE_ENUM(uct_dc_tx_policy_names)},
 
     {"LAG_PORT_AFFINITY", "auto",
      "Specifies how DCI select port under RoCE LAG. The values are:\n"
-     " auto     Set DCI QP port affinity only if the hardware is configured\n"
-     "          to QUEUE_AFFINITY mode.\n"
-     " on       Always set DCI QP port affinity.\n"
-     " off      Never set DCI QP port affinity.\n",
+     " auto - Set DCI QP port affinity only if the hardware is configured\n"
+     "        to QUEUE_AFFINITY mode.\n"
+     " on   - Always set DCI QP port affinity.\n"
+     " off  - Never set DCI QP port affinity.",
      ucs_offsetof(uct_dc_mlx5_iface_config_t, tx_port_affinity),
      UCS_CONFIG_TYPE_ON_OFF_AUTO},
 
@@ -103,26 +101,29 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
      UCS_CONFIG_TYPE_TERNARY},
 
     {"DCT_PORT_AFFINITY", "default",
-     "Specifies how to set DCT port affinity under queue affinity RoCE LAG. "
+     "Specifies how to set DCT port affinity under queue affinity RoCE LAG.\n"
      "The values are:\n"
-     " default : Set affinity to the first physical port.\n"
-     " random  : Use random physical port for each iface.\n"
-     " <num>   : Set affinity to this physical port.",
+     " default - Set affinity to the first physical port.\n"
+     " random  - Use random physical port for each iface.\n"
+     " <num>   - Set affinity to this physical port.",
      ucs_offsetof(uct_dc_mlx5_iface_config_t, dct_affinity),
      UCS_CONFIG_TYPE_UINT_ENUM(uct_dct_affinity_policy_names)},
 
-    {"DCT_FULL_HANDSHAKE", "no", "Force full-handshake protocol for DC target.",
+    {"DCT_FULL_HANDSHAKE", "no",
+     "Force full-handshake protocol for DC target.",
      ucs_offsetof(uct_dc_mlx5_iface_config_t, dct_full_handshake),
      UCS_CONFIG_TYPE_TERNARY},
 
     {"RAND_DCI_SEED", "0",
      "Seed for DCI allocation when \"rand\" dci policy is used (0 - use default).",
-     ucs_offsetof(uct_dc_mlx5_iface_config_t, rand_seed), UCS_CONFIG_TYPE_UINT},
+     ucs_offsetof(uct_dc_mlx5_iface_config_t, rand_seed),
+     UCS_CONFIG_TYPE_UINT},
 
     {"QUOTA", "32",
      "When \"dcs_quota\" policy is selected, how much to send from a DCI when\n"
      "there are other endpoints waiting for it.",
-     ucs_offsetof(uct_dc_mlx5_iface_config_t, quota), UCS_CONFIG_TYPE_UINT},
+     ucs_offsetof(uct_dc_mlx5_iface_config_t, quota),
+     UCS_CONFIG_TYPE_UINT},
 
     {"FC_HARD_REQ_TIMEOUT", "5s",
      "Timeout for re-sending FC_HARD_REQ when FC window is empty.",
@@ -130,8 +131,9 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
      UCS_CONFIG_TYPE_TIME_UNITS},
 
     {"NUM_DCI_CHANNELS", "32",
-     "Number of stream channels per DCI to be used. A value "
-     "of 1 disables DCI multi-channel support. Relevant only for hw_dcs policy.",
+     "Number of stream channels per DCI to be used.\n" 
+     "A value of 1 disables DCI multi-channel support.\n"
+     "Relevant only for hw_dcs policy.",
      ucs_offsetof(uct_dc_mlx5_iface_config_t, num_dci_channels),
      UCS_CONFIG_TYPE_UINT},
 
@@ -145,7 +147,8 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
 
 /* Bundle of all parameters */
 ucs_config_field_t uct_dc_mlx5_iface_config_table[] = {
-    {"DC_", "", NULL, 0,
+    {"DC_", "", NULL,
+     0,
      UCS_CONFIG_TYPE_TABLE(uct_dc_mlx5_iface_config_sub_table)},
 
     {"UD_", "", NULL,

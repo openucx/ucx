@@ -27,17 +27,20 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
    "Limits the number of outstanding WQE building blocks. The actual limit is\n"
    "a minimum between this value and the number of building blocks in the TX QP.\n"
    "-1 means no limit.",
-   ucs_offsetof(uct_rc_mlx5_iface_common_config_t, tx_max_bb), UCS_CONFIG_TYPE_UINT},
+   ucs_offsetof(uct_rc_mlx5_iface_common_config_t, tx_max_bb),
+   UCS_CONFIG_TYPE_UINT},
 
   {"TM_ENABLE", "n",
-   "Enable HW tag matching",
-   ucs_offsetof(uct_rc_mlx5_iface_common_config_t, tm.enable), UCS_CONFIG_TYPE_BOOL},
+   "Enable HW tag matching.",
+   ucs_offsetof(uct_rc_mlx5_iface_common_config_t, tm.enable),
+   UCS_CONFIG_TYPE_BOOL},
 
   {"TM_LIST_SIZE", "1024",
-   "Limits the number of tags posted to the HW for matching. The actual limit \n"
-   "is a minimum between this value and the maximum value supported by the HW. \n"
+   "Limits the number of tags posted to the HW for matching. The actual limit\n"
+   "is a minimum between this value and the maximum value supported by the HW.\n"
    "-1 means no limit.",
-   ucs_offsetof(uct_rc_mlx5_iface_common_config_t, tm.list_size), UCS_CONFIG_TYPE_UINT},
+   ucs_offsetof(uct_rc_mlx5_iface_common_config_t, tm.list_size),
+   UCS_CONFIG_TYPE_UINT},
 
   {"TM_SEG_SIZE", "48k",
    "Maximal size of copy-out sends when tag-matching offload is enabled.",
@@ -67,13 +70,10 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
 
   {"SRQ_TOPO", "cyclic,cyclic_emulated,list",
    "List of SRQ topology types in order of preference. Supported types are:\n"
-   "\n"
-   "list              SRQ is organized as a buffer containing linked list of WQEs.\n"
-   "\n"
-   "cyclic            SRQ is organized as a continuous array of WQEs. Requires DEVX.\n"
+   "list            - SRQ is organized as a buffer containing linked list of WQEs.\n"
+   "cyclic          - SRQ is organized as a continuous array of WQEs. Requires DEVX.\n"
    "                  cannot be used with DDP enabled.\n"
-   "\n"
-   "cyclic_emulated   SRQ is organized as a continuous array of WQEs, but HW\n"
+   "cyclic_emulated - SRQ is organized as a continuous array of WQEs, but HW\n"
    "                  treats it as a linked list. Doesn`t require DEVX.",
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, srq_topo),
    UCS_CONFIG_TYPE_STRING_ARRAY},
@@ -85,7 +85,7 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
    UCS_CONFIG_TYPE_UINT},
 
   {"DDP_ENABLE", "try",
-   "Enable direct data placement\n",
+   "Enable direct data placement.",
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, ddp_enable), 
    UCS_CONFIG_TYPE_TERNARY},
 

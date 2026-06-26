@@ -90,20 +90,25 @@ static ucs_stats_class_t ucs_rcache_stats_class = {
 
 /* clang-format off */
 ucs_config_field_t ucs_config_rcache_table[] = {
-    {"RCACHE_MEM_PRIO", "1000", "Registration cache memory event priority",
-     ucs_offsetof(ucs_rcache_config_t, event_prio), UCS_CONFIG_TYPE_UINT},
+    {"RCACHE_MEM_PRIO", "1000",
+     "Registration cache memory event priority.",
+     ucs_offsetof(ucs_rcache_config_t, event_prio),
+     UCS_CONFIG_TYPE_UINT},
 
-    {"RCACHE_OVERHEAD", "auto", "Registration cache lookup overhead",
-     ucs_offsetof(ucs_rcache_config_t, overhead), UCS_CONFIG_TYPE_TIME_UNITS},
+    {"RCACHE_OVERHEAD", "auto",
+     "Registration cache lookup overhead.",
+     ucs_offsetof(ucs_rcache_config_t, overhead),
+     UCS_CONFIG_TYPE_TIME_UNITS},
 
     {"RCACHE_MAX_REGIONS", "inf",
-     "Maximal number of regions in the registration cache",
+     "Maximal number of regions in the registration cache.",
      ucs_offsetof(ucs_rcache_config_t, max_regions),
      UCS_CONFIG_TYPE_ULUNITS},
 
     {"RCACHE_MAX_SIZE", "inf",
-     "Maximal total size of registration cache regions",
-     ucs_offsetof(ucs_rcache_config_t, max_size), UCS_CONFIG_TYPE_MEMUNITS},
+     "Maximal total size of registration cache regions.",
+     ucs_offsetof(ucs_rcache_config_t, max_size),
+     UCS_CONFIG_TYPE_MEMUNITS},
 
     {"RCACHE_MAX_UNRELEASED", "inf",
      "Maximal size of total memory regions in invalidate queue and garbage,\n"
@@ -112,8 +117,9 @@ ucs_config_field_t ucs_config_rcache_table[] = {
      UCS_CONFIG_TYPE_MEMUNITS},
 
     {"RCACHE_PURGE_ON_FORK", "y",
-     "Purge registration cache upon fork",
-     ucs_offsetof(ucs_rcache_config_t, purge_on_fork), UCS_CONFIG_TYPE_BOOL},
+     "Purge registration cache upon fork.",
+     ucs_offsetof(ucs_rcache_config_t, purge_on_fork),
+     UCS_CONFIG_TYPE_BOOL},
 
     {NULL}
 };

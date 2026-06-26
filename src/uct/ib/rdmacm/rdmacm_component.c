@@ -13,24 +13,27 @@
 /* clang-format off */
 static ucs_config_field_t uct_rdmacm_cm_config_table[] = {
     {"CM_", "", NULL,
-     ucs_offsetof(uct_rdmacm_cm_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_cm_config_table)},
+     ucs_offsetof(uct_rdmacm_cm_config_t, super),
+     UCS_CONFIG_TYPE_TABLE(uct_cm_config_table)},
 
     {"SOURCE_ADDRESS", "",
-     "If non-empty, specify the local source address (IPv4 or IPv6) to use \n"
-     "when creating a client connection",
-     ucs_offsetof(uct_rdmacm_cm_config_t, src_addr), UCS_CONFIG_TYPE_STRING},
+     "If non-empty, specify the local source address (IPv4 or IPv6) to use\n"
+     "when creating a client connection.",
+     ucs_offsetof(uct_rdmacm_cm_config_t, src_addr),
+     UCS_CONFIG_TYPE_STRING},
 
     {"TIMEOUT", "10s",
-     "Timeout for RDMA address and route resolve operations",
-     ucs_offsetof(uct_rdmacm_cm_config_t, timeout), UCS_CONFIG_TYPE_TIME},
+     "Timeout for RDMA address and route resolve operations.",
+     ucs_offsetof(uct_rdmacm_cm_config_t, timeout),
+     UCS_CONFIG_TYPE_TIME},
 
     {"RESERVED_QPN", "try",
      "Reserved qpn enable mode:\n"
-     "  yes  - Always use reserved qpn, app fail if it's not supported\n"
-     "  try  - Use reserved qpn if it's supported, otherwise use dummy qp\n"
-     "  no   - Always use dummy qp",
+     " yes - Always use reserved qpn, app fail if it's not supported.\n"
+     " try - Use reserved qpn if it's supported, otherwise use dummy qp.\n"
+     " no  - Always use dummy qp.",
      ucs_offsetof(uct_rdmacm_cm_config_t, reserved_qpn),
-                  UCS_CONFIG_TYPE_TERNARY},
+     UCS_CONFIG_TYPE_TERNARY},
 
     {NULL}
 };

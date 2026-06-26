@@ -25,11 +25,13 @@
 /* clang-format off */
 static ucs_config_field_t uct_ze_copy_md_config_table[] = {
     {"", "", NULL, 
-     ucs_offsetof(uct_ze_copy_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
+     ucs_offsetof(uct_ze_copy_md_config_t, super),
+     UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
 
     {"DEVICE_ORDINAL", "0",
      "Ordinal of the GPU device to allocate memory from.",
-     ucs_offsetof(uct_ze_copy_md_config_t, device_ordinal), UCS_CONFIG_TYPE_INT},
+     ucs_offsetof(uct_ze_copy_md_config_t, device_ordinal),
+     UCS_CONFIG_TYPE_INT},
 
     {NULL}
 };

@@ -15,7 +15,8 @@
 ucs_config_field_t uct_ud_mlx5_iface_common_config_table[] = {
   {"COMPACT_AV", "yes",
    "Enable compact address-vector optimization.",
-   ucs_offsetof(uct_ud_mlx5_iface_common_config_t, enable_compact_av), UCS_CONFIG_TYPE_BOOL},
+   ucs_offsetof(uct_ud_mlx5_iface_common_config_t, enable_compact_av),
+   UCS_CONFIG_TYPE_BOOL},
 
   {NULL}
 };

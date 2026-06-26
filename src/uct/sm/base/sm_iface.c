@@ -25,8 +25,9 @@ ucs_config_field_t uct_sm_iface_config_table[] = {
      UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
     {"BW", "12179MBs",
-     "Effective memory bandwidth",
-     ucs_offsetof(uct_sm_iface_config_t, bandwidth), UCS_CONFIG_TYPE_BW},
+     "Effective memory bandwidth.",
+     ucs_offsetof(uct_sm_iface_config_t, bandwidth),
+     UCS_CONFIG_TYPE_BW},
 
     {NULL}
 };

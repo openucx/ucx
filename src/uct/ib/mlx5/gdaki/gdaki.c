@@ -71,22 +71,24 @@ ucs_config_field_t uct_rc_gdaki_iface_config_table[] = {
      UCS_CONFIG_TYPE_TABLE(uct_rc_mlx5_common_config_table)},
 
     {"NUM_CHANNELS", "1",
-     "Number of channels. \nRounded up to the next power-of-2 value.\n"
+     "Number of channels.\n"
+     "Rounded up to the next power-of-2 value.\n"
      "Maximum value is 256.",
      ucs_offsetof(uct_rc_gdaki_iface_config_t, num_channels),
      UCS_CONFIG_TYPE_UINT},
 
     {"EP_ALLOC_MODE", "pool",
      "Endpoint channel allocation mode.\n"
-     " - pool   : allocate channels from pooled chunks\n"
-     " - direct : allocate channels per endpoint directly",
+     " pool   - allocate channels from pooled chunks.\n"
+     " direct - allocate channels per endpoint directly.",
      ucs_offsetof(uct_rc_gdaki_iface_config_t, ep_alloc_mode),
      UCS_CONFIG_TYPE_ENUM(uct_rc_gdaki_ep_alloc_mode_names)},
 
     {"NUM_PRE_ALLOC_EPS", "32",
      "Expected number of pre-allocated endpoints. The channel pool grows if\n"
      "more are needed.",
-     ucs_offsetof(uct_rc_gdaki_iface_config_t, num_eps), UCS_CONFIG_TYPE_UINT},
+     ucs_offsetof(uct_rc_gdaki_iface_config_t, num_eps),
+     UCS_CONFIG_TYPE_UINT},
 
     {NULL}
 };

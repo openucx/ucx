@@ -32,13 +32,15 @@ typedef struct uct_sysv_md_config {
 /* clang-format off */
 static ucs_config_field_t uct_sysv_md_config_table[] = {
   {"MM_", "", NULL,
-   ucs_offsetof(uct_sysv_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_mm_md_config_table)},
+   ucs_offsetof(uct_sysv_md_config_t, super),
+   UCS_CONFIG_TYPE_TABLE(uct_mm_md_config_table)},
 
   {NULL}
 };
 
 static ucs_config_field_t uct_sysv_iface_config_table[] = {
-  {"MM_", "RX_GROW_FACTOR=2.0", NULL, ucs_offsetof(uct_mm_iface_config_t, super),
+  {"MM_", "RX_GROW_FACTOR=2.0", NULL,
+   ucs_offsetof(uct_mm_iface_config_t, super),
    UCS_CONFIG_TYPE_TABLE(uct_mm_iface_config_table)},
 
   {NULL}

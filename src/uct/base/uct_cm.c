@@ -18,12 +18,14 @@
 /* clang-format off */
 ucs_config_field_t uct_cm_config_table[] = {
   {"FAILURE", "diag",
-   "Log level of network errors for the connection manager",
-   ucs_offsetof(uct_cm_config_t, failure), UCS_CONFIG_TYPE_ENUM(ucs_log_level_names)},
+   "Log level of network errors for the connection manager.",
+   ucs_offsetof(uct_cm_config_t, failure),
+   UCS_CONFIG_TYPE_ENUM(ucs_log_level_names)},
 
   {"REUSEADDR", "no",
    "Allow using an address that is already in use.",
-   ucs_offsetof(uct_cm_config_t, reuse_addr), UCS_CONFIG_TYPE_BOOL},
+   ucs_offsetof(uct_cm_config_t, reuse_addr),
+   UCS_CONFIG_TYPE_BOOL},
 
   {NULL}
 };
