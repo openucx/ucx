@@ -576,7 +576,6 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
     size_t reg_align;
     ucp_sys_dev_map_t sys_dev_map;
     int md_supports_dmabuf;
-    unsigned reg_flags;
     uct_dmabuf_map_type_t dmabuf_map_type          = UCT_DMABUF_MAP_TYPE_HOST;
     uct_dmabuf_map_type_t fallback_dmabuf_map_type = UCT_DMABUF_MAP_TYPE_HOST;
 
@@ -610,8 +609,7 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
     }
 
     /* When adding registrations, existing access flags must be supported */
-    reg_flags = uct_flags | memh->uct_flags;
-
+    reg_params.flags         = uct_flags | memh->uct_flags;
     reg_params.dmabuf_fd     = UCT_DMABUF_FD_INVALID;
     reg_params.dmabuf_offset = 0;
 
@@ -670,7 +668,6 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
 
         /* When adding registrations, existing access flags must be supported */
         reg_params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS;
-        reg_params.flags      = reg_flags;
         md_supports_dmabuf    = UCS_BIT_GET(dmabuf_reg_md_map, md_index);
         if (md_supports_dmabuf) {
             /* Provide both the primary and host-fallback descriptors tagged
