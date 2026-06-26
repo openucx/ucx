@@ -949,12 +949,9 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
         }
 
         /* Fallback dmabuf depends on the querying of the primary dmabuf. */
-        if (((mem_attr->field_mask &
-              UCT_MD_MEM_ATTR_V2_FIELD_FALLBACK_DMABUF_FD) ||
-             (mem_attr->field_mask &
-              UCT_MD_MEM_ATTR_V2_FIELD_FALLBACK_DMABUF_OFFSET) ||
-             (mem_attr->field_mask &
-              UCT_MD_MEM_ATTR_V2_FIELD_FALLBACK_DMABUF_MAP_TYPE)) &&
+        if (((mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_FALLBACK_DMABUF_FD) ||
+             (mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_FALLBACK_DMABUF_OFFSET) ||
+             (mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_FALLBACK_DMABUF_MAP_TYPE)) &&
             (dmabuf_map_type == UCT_DMABUF_MAP_TYPE_PCIE)) {
             /* When the primary dmabuf fd uses a PCIe mapping, query a host
              * fallback dmabuf fd usable by any importer. */
@@ -963,18 +960,15 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
                     UCS_SYS_DEVICE_ID_UNKNOWN, &fallback_dmabuf_map_type);
             ucs_assert(fallback_dmabuf_map_type == UCT_DMABUF_MAP_TYPE_HOST);
             fallback_dmabuf_queried = 1;
-            if (mem_attr->field_mask &
-                UCT_MD_MEM_ATTR_V2_FIELD_FALLBACK_DMABUF_FD) {
+            if (mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_FALLBACK_DMABUF_FD) {
                 mem_attr->fallback_dmabuf_fd = fallback_dmabuf.fd;
             }
-            if (mem_attr->field_mask &
-                UCT_MD_MEM_ATTR_V2_FIELD_FALLBACK_DMABUF_OFFSET) {
+            if (mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_FALLBACK_DMABUF_OFFSET) {
                 mem_attr->fallback_dmabuf_offset =
                         fallback_dmabuf.offset +
                         UCS_PTR_BYTE_DIFF(addr_mem_info.base_address, address);
             }
-            if (mem_attr->field_mask &
-                UCT_MD_MEM_ATTR_V2_FIELD_FALLBACK_DMABUF_MAP_TYPE) {
+            if (mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_FALLBACK_DMABUF_MAP_TYPE) {
                 mem_attr->fallback_dmabuf_map_type = UCT_DMABUF_MAP_TYPE_HOST;
             }
         }
