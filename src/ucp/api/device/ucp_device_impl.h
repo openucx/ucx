@@ -54,7 +54,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_check_params(const T mem_list_h,
                                                   unsigned index)
 {
     if (UCP_DEVICE_ENABLE_PARAMS_CHECK) {
-        if ((mem_list_h->version != UCP_DEVICE_MEM_LIST_VERSION_V1) ||
+        if ((mem_list_h->version != UCP_DEVICE_MEM_LIST_VERSION) ||
             (index >= mem_list_h->length)) {
             ucs_device_error("Invalid parameters for %p\n", mem_list_h);
             return UCS_ERR_INVALID_PARAM;
@@ -105,17 +105,26 @@ UCS_F_DEVICE void ucp_device_request_init(uct_device_ep_t *device_ep,
     })
 
 
-#define UCP_DEVICE_GET_LANE(_handle, _channel_id, _lane, _uct_channel_id) \
-    _lane           = _channel_id % _handle->num_lanes; \
-    _uct_channel_id = _channel_id / _handle->num_lanes;
+template<typename H>
+UCS_F_DEVICE void ucp_device_get_lane(const H handle, unsigned channel_id,
+                                      unsigned &lane, unsigned &uct_channel_id)
+{
+    lane           = channel_id & handle->num_lanes_mask;
+    uct_channel_id = channel_id >> handle->num_lanes_shift;
+}
 
 
-#define UCP_DEVICE_GET_ELEM(_handle, _index) \
-    static_cast<ucs_typeof(_handle->mem_elements[0])*>(UCS_PTR_BYTE_OFFSET( \
-            _handle->mem_elements, \
-            (sizeof(_handle->mem_elements[0]) + \
-             (sizeof(_handle->mem_elements[0].tl[0]) * _handle->num_lanes)) * \
-                    _index))
+template<typename H>
+UCS_F_DEVICE auto ucp_device_get_elem(H handle, unsigned index)
+        -> decltype(&handle->mem_elements[0])
+{
+    return static_cast<decltype(&handle->mem_elements[0])>(
+            UCS_PTR_BYTE_OFFSET(handle->mem_elements,
+                                (sizeof(handle->mem_elements[0]) +
+                                 (sizeof(handle->mem_elements[0].tl[0])
+                                  << handle->num_lanes_shift)) *
+                                        index));
+}
 
 
 UCS_F_DEVICE ucs_status_t ucp_device_prepare_send_remote(
@@ -131,7 +140,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_prepare_send_remote(
         return status;
     }
 
-    const auto dst_mem_element = UCP_DEVICE_GET_ELEM(dst_mem_list_h,
+    const auto dst_mem_element = ucp_device_get_elem(dst_mem_list_h,
                                                      dst_mem_list_index);
     remote_address             = dst_mem_element->addr;
     device_ep                  = dst_mem_element->tl[lane].ep;
@@ -165,7 +174,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_prepare_send(
         return status;
     }
 
-    const auto src_mem_elem = UCP_DEVICE_GET_ELEM(src_mem_list_h,
+    const auto src_mem_elem = ucp_device_get_elem(src_mem_list_h,
                                                   src_mem_list_index);
     src_uct_elem            = src_mem_elem->tl + lane;
     address                 = src_mem_elem->addr;
@@ -229,7 +238,7 @@ ucp_device_put(const ucp_device_local_mem_list_h src_mem_list_h,
     uct_device_ep_t *device_ep;
     ucs_status_t status;
 
-    UCP_DEVICE_GET_LANE(dst_mem_list_h, channel_id, lane, uct_channel_id);
+    ucp_device_get_lane(dst_mem_list_h, channel_id, lane, uct_channel_id);
 
     status = ucp_device_prepare_send(src_mem_list_h, src_mem_list_index,
                                      dst_mem_list_h, dst_mem_list_index,
@@ -293,7 +302,7 @@ UCS_F_DEVICE ucs_status_t ucp_device_counter_inc(
     uct_device_ep_t *device_ep;
     ucs_status_t status;
 
-    UCP_DEVICE_GET_LANE(mem_list_h, channel_id, lane, uct_channel_id);
+    ucp_device_get_lane(mem_list_h, channel_id, lane, uct_channel_id);
 
     status = ucp_device_prepare_send_remote(mem_list_h, mem_list_index,
                                             remote_address, lane, req,
@@ -333,7 +342,7 @@ ucp_device_get_ptr(const ucp_device_remote_mem_list_h mem_list_h,
         return status;
     }
 
-    const auto mem_element = UCP_DEVICE_GET_ELEM(mem_list_h, mem_list_index);
+    const auto mem_element = ucp_device_get_elem(mem_list_h, mem_list_index);
 
     return uct_device_ep_get_ptr(mem_element->tl[0].ep, &mem_element->tl[0].uct,
                                  mem_element->addr, addr_p);

@@ -147,7 +147,9 @@ ucp_device_get_tl_bitmap(const ucp_worker_h worker,
                          ucp_tl_bitmap_t tl_bitmap[UCP_DEVICE_TL_TYPE_LAST],
                          ucs_sys_device_t local_sys_dev)
 {
+    ucp_rsc_index_t last_pow2_bit[UCP_DEVICE_TL_TYPE_LAST];
     const ucp_worker_iface_t *wiface;
+    ucp_tl_bitmap_t mask;
     ucp_rsc_index_t tl_id;
     int tl_type;
 
@@ -155,6 +157,7 @@ ucp_device_get_tl_bitmap(const ucp_worker_h worker,
     for (tl_type = UCP_DEVICE_TL_TYPE_FIRST;
          tl_type < UCP_DEVICE_TL_TYPE_LAST; tl_type++) {
         UCS_STATIC_BITMAP_RESET_ALL(&tl_bitmap[tl_type]);
+        last_pow2_bit[tl_type] = 0;
     }
 
     UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &worker->context->tl_bitmap) {
@@ -174,7 +177,17 @@ ucp_device_get_tl_bitmap(const ucp_worker_h worker,
         } else {
             tl_type = UCP_DEVICE_TL_TYPE_NOLKEY;
         }
+
         UCS_STATIC_BITMAP_SET(&tl_bitmap[tl_type], tl_id);
+        if (ucs_is_pow2(UCS_STATIC_BITMAP_POPCOUNT(tl_bitmap[tl_type]))) {
+            last_pow2_bit[tl_type] = tl_id;
+        }
+    }
+
+    for (tl_type = UCP_DEVICE_TL_TYPE_FIRST; tl_type < UCP_DEVICE_TL_TYPE_LAST;
+         tl_type++) {
+        UCS_STATIC_BITMAP_MASK(&mask, last_pow2_bit[tl_type] + 1);
+        UCS_STATIC_BITMAP_AND_INPLACE(&tl_bitmap[tl_type], mask);
     }
 }
 
@@ -296,10 +309,12 @@ static ucs_status_t ucp_device_local_mem_list_create_handle(
         ucp_element = UCS_PTR_BYTE_OFFSET(ucp_element, params->element_size);
     }
 
-    handle->version = UCP_DEVICE_MEM_LIST_VERSION_V1;
-    handle->length  = params->num_elements;
-    handle->num_lanes = num_lanes;
-    status          = ucp_device_mem_list_export_handle(
+    UCS_STATIC_ASSERT(UCP_MAX_LANES <= 255);
+    handle->version         = UCP_DEVICE_MEM_LIST_VERSION;
+    handle->length          = params->num_elements;
+    handle->num_lanes_mask  = num_lanes - 1;
+    handle->num_lanes_shift = ucs_ilog2(num_lanes);
+    status                  = ucp_device_mem_list_export_handle(
             worker, handle, handle_size, mem_type, local_sys_dev, mem,
             "ucp_device_local_mem_list_handle_t");
 
@@ -565,6 +580,7 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
     /* handle->num_lanes is the least common multiple of both lane types, so:
      * - each lane is replicated num_lanes / popcount(tl_bitmap) times
      * - channel_id % num_lanes maps to the correct lane, regardless of lane type
+     * handle->num_lanes is always power of 2
      */
     num_lanes = UCS_STATIC_BITMAP_POPCOUNT(tl_bitmap[UCP_DEVICE_TL_TYPE_LKEY]);
     if (!num_lanes) {
@@ -616,10 +632,11 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
         ucp_element = UCS_PTR_BYTE_OFFSET(ucp_element, params->element_size);
     }
 
-    handle->version = UCP_DEVICE_MEM_LIST_VERSION_V1;
-    handle->length  = params->num_elements;
-    handle->num_lanes = num_lanes;
-    status          = ucp_device_mem_list_export_handle(
+    handle->version         = UCP_DEVICE_MEM_LIST_VERSION;
+    handle->length          = params->num_elements;
+    handle->num_lanes_mask  = num_lanes - 1;
+    handle->num_lanes_shift = ucs_ilog2(num_lanes);
+    status                  = ucp_device_mem_list_export_handle(
             ep->worker, handle, handle_size, mem_type, local_sys_dev, mem,
             "ucp_device_remote_mem_list_handle_t");
 

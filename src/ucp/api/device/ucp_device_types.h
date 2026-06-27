@@ -12,7 +12,7 @@
 #include <uct/api/uct.h>
 
 
-#define UCP_DEVICE_MEM_LIST_VERSION_V1 2
+#define UCP_DEVICE_MEM_LIST_VERSION 3
 
 
 /**
@@ -33,9 +33,10 @@ typedef struct ucp_device_remote_mem_list {
     uint16_t                     version;
 
     /**
-     * Number of lanes in each memory descriptor.
+     * Bit-shift and bit-mask based on number of lanes.
      */
-    uint16_t                     num_lanes;
+    uint8_t                      num_lanes_shift;
+    uint8_t                      num_lanes_mask;
 
     /**
      * Number of entries in the memory descriptors array @a elems.
@@ -67,9 +68,10 @@ typedef struct ucp_device_local_mem_list {
     uint16_t                    version;
 
     /**
-     * Number of lanes in each memory descriptor.
+     * Bit-shift and bit-mask based on number of lanes.
      */
-    uint16_t                    num_lanes;
+    uint8_t                     num_lanes_shift;
+    uint8_t                     num_lanes_mask;
 
     /**
      * Number of entries in the memory descriptors array @a elems.
