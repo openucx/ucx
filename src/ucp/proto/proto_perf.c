@@ -466,6 +466,28 @@ void ucp_proto_perf_apply_func(ucp_proto_perf_t *perf, ucs_linear_func_t func,
     }
 }
 
+void ucp_proto_perf_stages_apply_func(ucp_proto_perf_stage_t *stages,
+                                      unsigned num_stages,
+                                      ucs_linear_func_t func)
+{
+    ucp_proto_perf_factor_id_t factor_id;
+    unsigned i;
+
+    for (i = 0; i < num_stages; ++i) {
+        for (factor_id = 0; factor_id < UCP_PROTO_PERF_FACTOR_LAST;
+             ++factor_id) {
+            if (ucs_linear_func_is_zero(stages[i].factors[factor_id],
+                                        UCP_PROTO_PERF_EPSILON)) {
+                continue;
+            }
+
+            stages[i].factors[factor_id] = ucs_linear_func_compose(
+                    func, stages[i].factors[factor_id]);
+        }
+    }
+}
+
+
 /* TODO:
  * Reconsider correctness of PPLN perf estimation logic since in case of async
  * operations it seems wrong to choose the longest factor without paying
@@ -972,11 +994,6 @@ ucp_proto_perf_add_staged_pipeline(ucp_proto_perf_t *ppln_perf,
     return UCS_OK;
 }
 
-enum {
-    UCP_PROTO_PERF_STAGE_RESOURCE_LOCAL  = 1,
-    UCP_PROTO_PERF_STAGE_RESOURCE_REMOTE = 2
-};
-
 static int
 ucp_proto_perf_factor_stage_resource(ucp_proto_perf_factor_id_t factor_id,
                                      uint64_t *resource_id_p)
@@ -1131,6 +1148,119 @@ ucp_proto_flat_perf_alloc(ucp_proto_flat_perf_t **flat_perf_p)
 
     *flat_perf_p = flat_perf;
     return UCS_OK;
+}
+
+static ucs_linear_func_t
+ucp_proto_perf_factors_sum(const ucs_linear_func_t *factors)
+{
+    ucp_proto_perf_factor_id_t factor_id;
+    ucs_linear_func_t sum = UCS_LINEAR_FUNC_ZERO;
+
+    for (factor_id = 0; factor_id < UCP_PROTO_PERF_FACTOR_LAST;
+         ++factor_id) {
+        ucs_linear_func_add_inplace(&sum, factors[factor_id]);
+    }
+
+    return sum;
+}
+
+static void
+ucp_proto_perf_staged_pipeline_segment_factors(
+        ucp_proto_perf_factors_t factors,
+        const ucp_proto_perf_stage_t *stages, unsigned num_stages,
+        size_t frag_size, size_t range_start)
+{
+    size_t num_frags;
+
+    memset(factors, 0, sizeof(ucp_proto_perf_factors_t));
+    num_frags = ucp_proto_perf_stage_num_frags(range_start, frag_size);
+    if (num_frags > UCP_PROTO_PERF_STAGED_PIPELINE_MAX_EXACT_FRAGS) {
+        ucp_proto_perf_staged_pipeline_make_tail_factors(
+                factors, stages, num_stages, frag_size, range_start,
+                num_frags);
+    } else {
+        ucp_proto_perf_staged_pipeline_factors(factors, stages, num_stages,
+                                               num_frags);
+    }
+}
+
+ucs_status_t
+ucp_proto_perf_staged_pipeline_flat(const ucp_proto_perf_t *perf,
+                                    const ucp_proto_perf_stage_t *stages,
+                                    unsigned num_stages,
+                                    ucp_proto_flat_perf_t **flat_perf_ptr)
+{
+    ucp_proto_perf_envelope_elem_t *envelope_elem;
+    ucp_proto_perf_factors_t stage_factors;
+    const ucp_proto_perf_segment_t *seg;
+    ucp_proto_flat_perf_range_t *range;
+    ucp_proto_perf_envelope_t envelope;
+    ucp_proto_flat_perf_t *flat_perf;
+    ucs_linear_func_t non_stage_func;
+    ucs_linear_func_t stage_latency;
+    ucs_linear_func_t stage_sum;
+    ucs_status_t status;
+    size_t range_start;
+    size_t frag_size;
+
+    ucs_assert(num_stages > 0);
+    frag_size = stages[0].frag_size;
+
+    status = ucp_proto_flat_perf_alloc(&flat_perf);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ucp_proto_perf_check(perf);
+
+    ucs_array_init_dynamic(flat_perf);
+    ucs_array_init_dynamic(&envelope);
+    ucp_proto_perf_segment_foreach(seg, perf) {
+        ucs_array_clear(&envelope);
+        ucp_proto_perf_staged_pipeline_segment_factors(
+                stage_factors, stages, num_stages, frag_size, seg->start);
+
+        stage_latency = stage_factors[UCP_PROTO_PERF_FACTOR_LATENCY];
+        stage_sum     = ucp_proto_perf_factors_sum(stage_factors);
+        non_stage_func = ucs_linear_func_sub(
+                ucp_proto_perf_factors_sum(seg->perf_factors), stage_sum);
+        stage_factors[UCP_PROTO_PERF_FACTOR_LATENCY] = UCS_LINEAR_FUNC_ZERO;
+
+        status = ucp_proto_perf_envelope_make(
+                stage_factors, UCP_PROTO_PERF_FACTOR_LAST_WO_LATENCY,
+                seg->start, seg->end, 0, &envelope);
+        if (status != UCS_OK) {
+            goto err_cleanup;
+        }
+
+        range_start = seg->start;
+        ucs_array_for_each(envelope_elem, &envelope) {
+            range        = ucs_array_append(flat_perf,
+                                            status = UCS_ERR_NO_MEMORY;
+                                            goto err_cleanup);
+            range->start = range_start;
+            range->end   = envelope_elem->max_length;
+            range->value = non_stage_func;
+            ucs_linear_func_add_inplace(&range->value, stage_latency);
+            ucs_linear_func_add_inplace(
+                    &range->value, stage_factors[envelope_elem->index]);
+            range->node  = ucp_proto_perf_node_new_data(perf->name,
+                                                        "staged flat perf");
+            ucp_proto_perf_node_add_child(range->node, seg->node);
+            ucp_proto_perf_node_add_data(range->node, "total", range->value);
+
+            range_start = envelope_elem->max_length + 1;
+        }
+    }
+
+    *flat_perf_ptr = flat_perf;
+    ucs_array_cleanup_dynamic(&envelope);
+    return UCS_OK;
+
+err_cleanup:
+    ucp_proto_flat_perf_destroy(flat_perf);
+    ucs_array_cleanup_dynamic(&envelope);
+    return status;
 }
 
 ucs_status_t ucp_proto_perf_envelope(const ucp_proto_perf_t *perf, int convex,

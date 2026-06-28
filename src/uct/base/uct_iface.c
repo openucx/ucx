@@ -208,6 +208,17 @@ uct_iface_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
 {
     uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
 
+    if (perf_attr->field_mask &
+        UCT_PERF_ATTR_FIELD_BANDWIDTH_SHARED_SCOPE) {
+        perf_attr->bandwidth_shared_scope =
+                UCT_PERF_ATTR_BANDWIDTH_SHARED_SCOPE_NODE;
+    }
+
+    if (perf_attr->field_mask &
+        UCT_PERF_ATTR_FIELD_BANDWIDTH_SHARED_SYS_DEVICE) {
+        perf_attr->bandwidth_shared_sys_device = UCS_SYS_DEVICE_ID_UNKNOWN;
+    }
+
     return iface->internal_ops->iface_estimate_perf(tl_iface, perf_attr);
 }
 
@@ -647,6 +658,17 @@ uct_base_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_FLAGS) {
         perf_attr->flags = 0;
+    }
+
+    if (perf_attr->field_mask &
+        UCT_PERF_ATTR_FIELD_BANDWIDTH_SHARED_SCOPE) {
+        perf_attr->bandwidth_shared_scope =
+                UCT_PERF_ATTR_BANDWIDTH_SHARED_SCOPE_NODE;
+    }
+
+    if (perf_attr->field_mask &
+        UCT_PERF_ATTR_FIELD_BANDWIDTH_SHARED_SYS_DEVICE) {
+        perf_attr->bandwidth_shared_sys_device = UCS_SYS_DEVICE_ID_UNKNOWN;
     }
 
     return UCS_OK;

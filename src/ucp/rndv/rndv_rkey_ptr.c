@@ -322,7 +322,7 @@ ucp_proto_rndv_rkey_ptr_mtype_probe(const ucp_proto_init_params_t *init_params)
                 UCP_PROTO_INIT_ELEM_MAX_STAGED_PIPELINE_STAGES];
         unsigned num_stages;
 
-        num_stages = ucp_proto_rndv_perf_make_stages(
+        num_stages = ucp_proto_rndv_perf_make_mtype_copy_stages(
                 perf, params.super.max_length, stages,
                 ucs_static_array_size(stages));
 

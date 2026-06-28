@@ -506,6 +506,73 @@ void test_ucp_mmap::test_rkey_proto(ucp_mem_h memh)
     ucp_rkey_destroy(rkey);
 }
 
+static uint8_t
+test_ucp_mmap_packed_rkey_sys_dev(const void *rkey_buffer)
+{
+    const void *p = rkey_buffer;
+    ucp_md_map_t md_map;
+    ucp_md_index_t md_index;
+    uint8_t tl_rkey_size;
+
+    md_map = *ucs_serialize_next(&p, const ucp_md_map_t);
+    ucs_serialize_next(&p, const uint8_t); /* memory type */
+
+    ucs_for_each_bit(md_index, md_map) {
+        tl_rkey_size = *ucs_serialize_next(&p, const uint8_t);
+        ucs_serialize_next_raw(&p, const void, tl_rkey_size);
+    }
+
+    return *ucs_serialize_next(&p, const uint8_t);
+}
+
+UCS_TEST_P(test_ucp_mmap, rkey_pack_memh_keeps_flush_bit_with_detected_sys_dev)
+{
+    const size_t buffer_size = 4096;
+    mem_buffer buf(buffer_size, UCS_MEMORY_TYPE_HOST);
+    ucp_memory_info_t mem_info;
+    ucp_mem_map_params_t params;
+    ucp_sys_dev_map_t sys_dev_map = 0;
+    ucp_mem_h memh;
+    std::vector<char> rkey_buf;
+    size_t rkey_size;
+    ssize_t packed_size;
+    uint8_t packed_sys_dev;
+
+    params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                        UCP_MEM_MAP_PARAM_FIELD_LENGTH;
+    params.address    = buf.ptr();
+    params.length     = buffer_size;
+
+    ASSERT_UCS_OK(ucp_mem_map(sender().ucph(), &params, &memh));
+
+    if (memh->md_map == 0) {
+        ASSERT_UCS_OK(ucp_mem_unmap(sender().ucph(), memh));
+        UCS_TEST_SKIP_R("no memory domains to pack");
+    }
+
+    mem_info.type    = memh->mem_type;
+    mem_info.sys_dev = 1;
+    memh->sys_dev    = 0;
+    memh->flags     |= UCP_MEMH_FLAG_SEND_FLUSH_CHECKED |
+                       UCP_MEMH_FLAG_SEND_FLUSH_NEEDED;
+
+    rkey_size = ucp_rkey_packed_size(sender().ucph(), memh->md_map,
+                                     mem_info.sys_dev, sys_dev_map, 0);
+    rkey_buf.resize(rkey_size);
+    packed_size = ucp_rkey_pack_memh(sender().ucph(), memh->md_map, memh,
+                                     buf.ptr(), buffer_size, &mem_info,
+                                     sys_dev_map, NULL, 0, 0, &rkey_buf[0]);
+    ASSERT_EQ(static_cast<ssize_t>(rkey_size), packed_size);
+
+    packed_sys_dev = test_ucp_mmap_packed_rkey_sys_dev(&rkey_buf[0]);
+    EXPECT_EQ(mem_info.sys_dev,
+              static_cast<ucs_sys_device_t>(packed_sys_dev &
+                                            ~UCP_SYS_DEVICE_FLUSH_BIT));
+    EXPECT_TRUE(packed_sys_dev & UCP_SYS_DEVICE_FLUSH_BIT);
+
+    ASSERT_UCS_OK(ucp_mem_unmap(sender().ucph(), memh));
+}
+
 UCS_TEST_P(test_ucp_mmap, alloc_mem_type) {
     const std::vector<ucs_memory_type_t> &mem_types =
             mem_buffer::supported_mem_types();
