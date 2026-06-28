@@ -3571,8 +3571,15 @@ static int ucp_worker_do_ep_keepalive(ucp_worker_h worker, ucs_time_t now)
 
     ep = ucs_container_of(worker->keepalive.iter, ucp_ep_ext_t, ep_list)->ep;
     if ((ep->cfg_index == UCP_WORKER_CFG_INDEX_NULL) ||
-        (ep->flags & UCP_EP_FLAG_FAILED) ||
-        (ucp_ep_config(ep)->key.keepalive_lane == UCP_NULL_LANE)) {
+        (ep->flags & UCP_EP_FLAG_FAILED)) {
+        goto out_done;
+    }
+
+    if (ucp_ep_recovery_progress(ep)) {
+        goto out_done;
+    }
+
+    if (ucp_ep_config(ep)->key.keepalive_lane == UCP_NULL_LANE) {
         goto out_done;
     }
 
@@ -3596,7 +3603,7 @@ static int ucp_worker_do_ep_keepalive(ucp_worker_h worker, ucs_time_t now)
 
     if (status == UCS_ERR_NO_RESOURCE) {
         return 0;
-    } else if (status != UCS_OK) {
+    } else if (UCS_STATUS_IS_ERR(status)) {
         ucs_diag("worker %p: keepalive failed on ep %p lane[%d]=%p: %s", worker,
                  ep, lane, uct_ep, ucs_status_string(status));
     } else {

@@ -94,6 +94,29 @@ public:
         FAIL() << "Transport " << tl_name << " not found";
     }
 
+    void mock_cuda_ipc_remote_pid(ucp_worker_h worker)
+    {
+        ucp_context_h context = worker->context;
+
+        for (ucp_rsc_index_t rsc_index = 0; rsc_index < context->num_tls;
+             ++rsc_index) {
+            const uct_tl_resource_desc_t *tl_rsc =
+                    &context->tl_rscs[rsc_index].tl_rsc;
+
+            if (std::string(tl_rsc->tl_name) != "cuda_ipc") {
+                continue;
+            }
+
+            if (!UCS_STATIC_BITMAP_GET(context->tl_bitmap, rsc_index)) {
+                continue;
+            }
+
+            ucp_worker_iface_t *wiface = ucp_worker_iface(worker, rsc_index);
+            m_mock.setup(&wiface->iface->ops.iface_get_address,
+                         cuda_ipc_get_address_mock);
+        }
+    }
+
 #if HAVE_IB
     void ib_event(enum ibv_event_type event_type, uint8_t port_num)
     {
@@ -237,6 +260,16 @@ private:
         return UCS_OK;
     }
 
+    static ucs_status_t
+    cuda_ipc_get_address_mock(uct_iface_h iface, uct_iface_addr_t *iface_addr)
+    {
+        UCS_MOCK_ORIG_FUNC(m_self->m_mock, &iface->ops.iface_get_address, iface,
+                           iface_addr);
+
+        *(pid_t*)iface_addr = getpid() + 1;
+        return UCS_OK;
+    }
+
     static void default_perf_mock(uct_perf_attr_t& perf_attr)
     {
         if (ucs_test_all_flags(perf_attr.field_mask,
@@ -340,6 +373,7 @@ public:
         modify_config("TOPO_PRIO", topo_prio());
 
         ucp_test::init();
+        post_ucp_init();
         connect();
     }
 
@@ -395,6 +429,10 @@ protected:
     virtual const char *topo_prio() const
     {
         return "default";
+    }
+
+    virtual void post_ucp_init()
+    {
     }
 
     static bool
@@ -641,9 +679,10 @@ protected:
         return {rkey, ucp_rkey_destroy};
     }
 
-    void send_recv_rma(size_t size, ucp_operation_id_t op_id,
-                       ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST,
-                       unsigned rkey_cfg_index = 1)
+    ucp_worker_cfg_index_t
+    send_recv_rma(size_t size, ucp_operation_id_t op_id,
+                  ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST,
+                  unsigned rkey_cfg_index = 1)
     {
         mem_buffer recv_buf(size, mem_type);
         recv_buf.pattern_fill(1);
@@ -665,7 +704,8 @@ protected:
                                (uint64_t)recv_buf.ptr(), rkey, &req_param);
         } else {
             sptr = nullptr;
-            FAIL() << "Invalid operation ID: " << op_id;
+            ADD_FAILURE() << "Invalid operation ID: " << op_id;
+            return UCP_WORKER_CFG_INDEX_NULL;
         }
 
         EXPECT_EQ(UCS_OK, request_wait(sptr));
@@ -676,9 +716,12 @@ protected:
             send_buf.pattern_check(1);
         }
 
+        auto actual_rkey_cfg_index = rkey->cfg_index;
         if (mem_type == UCS_MEMORY_TYPE_HOST) {
-            EXPECT_EQ(rkey->cfg_index, rkey_cfg_index);
+            EXPECT_EQ(actual_rkey_cfg_index, rkey_cfg_index);
         }
+
+        return actual_rkey_cfg_index;
     }
 };
 
@@ -1256,6 +1299,9 @@ public:
             UCS_TEST_SKIP_R("rc_mlx5 transport is not supported");
         }
 
+        /* Keep protocol selection independent of NVLink probing. */
+        modify_config("CUDA_IPC_ENABLE_GET_ZCOPY", "on", SETENV_IF_NOT_EXIST);
+
         add_mock_iface("mock", [](uct_iface_attr_t &iface_attr) {
             iface_attr.cap.am.max_short  = 208;
             iface_attr.cap.put.max_short = 2048;
@@ -1266,59 +1312,24 @@ public:
         test_ucp_proto_mock::init();
     }
 
-    ucp_worker_cfg_index_t get_cuda_rkey_cfg()
+    virtual void post_ucp_init() override
     {
-        ucp_worker_h worker = sender().worker();
-        ucp_proto_select_key_t sel_key;
-
-        /* Find rkey config with CUDA mem_type for local and remote memory */
-        for (unsigned i = 0; i < ucs_array_length(&worker->rkey_config); ++i) {
-            auto rkey_config = &ucs_array_elem(&worker->rkey_config, i);
-
-            if (rkey_config->key.mem_type != UCS_MEMORY_TYPE_CUDA) {
-                continue;
-            }
-
-            kh_foreach_key(rkey_config->proto_select.hash, sel_key.u64, {
-                if (sel_key.param.mem_type == UCS_MEMORY_TYPE_CUDA) {
-                    return i;
-                }
-            })
-        }
-
-        return UCP_WORKER_CFG_INDEX_NULL;
-    }
-
-    bool has_cuda_ipc_get_zcopy()
-    {
-        ucp_worker_h worker = sender().worker();
-        auto context        = worker->context;
-        std::string cuda_ipc_str("cuda_ipc");
-
-        for (ucp_rsc_index_t idx = 0; idx < context->num_tls; ++idx) {
-            if (cuda_ipc_str != context->tl_rscs[idx].tl_rsc.tl_name) {
-                continue;
-            }
-
-            auto attr = ucp_worker_iface_get_attr(worker, idx);
-            return attr->cap.get.max_zcopy > 0;
-        }
-
-        return false;
+        mock_cuda_ipc_remote_pid(sender().worker());
+        mock_cuda_ipc_remote_pid(receiver().worker());
     }
 
     void test_cuda_rma(ucp_operation_id_t op_id,
                        const proto_select_data_vec_t &data_vec)
     {
-        send_recv_rma(UCS_MBYTE, op_id, UCS_MEMORY_TYPE_CUDA);
+        auto rkey_cfg_index = send_recv_rma(UCS_MBYTE, op_id,
+                                            UCS_MEMORY_TYPE_CUDA);
+        ASSERT_NE(rkey_cfg_index, UCP_WORKER_CFG_INDEX_NULL);
 
         ucp_proto_select_key_t key = any_key();
         key.param.op_id_flags      = op_id;
         key.param.op_attr          = 0;
         key.param.mem_type         = UCS_MEMORY_TYPE_CUDA;
 
-        auto rkey_cfg_index = get_cuda_rkey_cfg();
-        ASSERT_NE(rkey_cfg_index, UCP_WORKER_CFG_INDEX_NULL);
         check_rkey_config(sender(), data_vec, key, rkey_cfg_index);
     }
 };
@@ -1333,10 +1344,6 @@ UCS_TEST_P(test_ucp_proto_mock_cuda_ipc, put, "IB_NUM_PATHS?=1")
 
 UCS_TEST_P(test_ucp_proto_mock_cuda_ipc, get, "IB_NUM_PATHS?=1")
 {
-    if (!has_cuda_ipc_get_zcopy()) {
-        UCS_TEST_SKIP_R("cuda_ipc get_zcopy not supported");
-    }
-
     test_cuda_rma(UCP_OP_ID_GET, {
         {0, 0,   "copy-out",  "rc_mlx5/mock"},
         {1, INF, "zero-copy", "cuda_ipc/cuda"},
@@ -1728,6 +1735,174 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_trio_local_distance_get,
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_trio_local_distance_get,
                               rcx, "rc_x")
+
+class test_ucp_proto_mock_am_tiebreak : public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_am_tiebreak()
+    {
+        mock_transport("rc_mlx5");
+    }
+
+protected:
+    void add_mock_device(const std::string &dev_name, double bandwidth,
+                         double latency)
+    {
+        add_mock_iface(dev_name,
+                       [bandwidth, latency](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short = 208;
+            iface_attr.bandwidth.shared = bandwidth;
+            iface_attr.latency.c        = latency;
+            iface_attr.latency.m        = 1e-9;
+        });
+    }
+
+    void check_config(const std::string &config)
+    {
+        ucp_proto_select_key_t key = any_key();
+        key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
+        key.param.op_attr          = 0;
+
+        check_ep_config(sender(), {{0, 200, "short", config}}, key);
+    }
+};
+
+class test_ucp_proto_mock_am_tiebreak_equal_score :
+    public test_ucp_proto_mock_am_tiebreak {
+public:
+    virtual void init() override
+    {
+        add_mock_device("mock_0:1", 10e9, 500e-9);
+        add_mock_device("mock_1:1", 28e9, 500e-9);
+        test_ucp_proto_mock::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_am_tiebreak_equal_score, higher_bandwidth_wins,
+           "IB_NUM_PATHS?=1")
+{
+    check_config("rc_mlx5/mock_1:1");
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_am_tiebreak_equal_score, rcx,
+                              "rc_x")
+
+class test_ucp_proto_mock_am_tiebreak_score_dominates :
+    public test_ucp_proto_mock_am_tiebreak {
+public:
+    virtual void init() override
+    {
+        add_mock_device("mock_0:1", 10e9, 500e-9);
+        add_mock_device("mock_1:1", 28e9, 2000e-9);
+        test_ucp_proto_mock::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_am_tiebreak_score_dominates,
+           score_beats_bandwidth, "IB_NUM_PATHS?=1")
+{
+    check_config("rc_mlx5/mock_0:1");
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_am_tiebreak_score_dominates,
+                              rcx, "rc_x")
+
+class test_ucp_proto_mock_am_tiebreak_within_window :
+    public test_ucp_proto_mock_am_tiebreak {
+public:
+    virtual void init() override
+    {
+        add_mock_device("mock_0:1", 10e9, 500e-9);
+        add_mock_device("mock_1:1", 28e9, 508e-9);
+        test_ucp_proto_mock::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_am_tiebreak_within_window,
+           bandwidth_within_window, "IB_NUM_PATHS?=1")
+{
+    check_config("rc_mlx5/mock_1:1");
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_am_tiebreak_within_window,
+                              rcx, "rc_x")
+
+class test_ucp_proto_mock_keepalive_tiebreak :
+    public test_ucp_proto_mock_am_tiebreak {
+public:
+    test_ucp_proto_mock_keepalive_tiebreak()
+    {
+        modify_config("KEEPALIVE_INTERVAL", "1s");
+    }
+
+    virtual ucp_ep_params_t get_ep_params() override
+    {
+        ucp_ep_params_t params = test_ucp_proto_mock::get_ep_params();
+
+        params.field_mask     |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
+                                 UCP_EP_PARAM_FIELD_ERR_HANDLER;
+        params.err_mode        = UCP_ERR_HANDLING_MODE_PEER;
+        params.err_handler.cb  = reinterpret_cast<ucp_err_handler_cb_t>(
+                                         ucs_empty_function);
+        params.err_handler.arg = reinterpret_cast<void*>(this);
+
+        return params;
+    }
+
+    virtual void init() override
+    {
+        const size_t lower_max_inflight_eps = SIZE_MAX - (SIZE_MAX / 100);
+
+        add_keepalive_mock_device("mock_0:1", 10e9, 500e-9, SIZE_MAX);
+        add_keepalive_mock_device("mock_1:1", 28e9, 500e-9,
+                                  lower_max_inflight_eps);
+        test_ucp_proto_mock::init();
+    }
+
+protected:
+    void add_keepalive_mock_device(const std::string &dev_name,
+                                   double bandwidth, double latency,
+                                   size_t max_inflight_eps)
+    {
+        add_mock_iface(dev_name,
+                       [bandwidth, latency](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.flags &= ~UCT_IFACE_FLAG_EP_KEEPALIVE;
+            iface_attr.cap.flags |= UCT_IFACE_FLAG_EP_CHECK |
+                                    UCT_IFACE_FLAG_CONNECT_TO_EP |
+                                    UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
+            iface_attr.cap.am.max_short = 208;
+            iface_attr.bandwidth.shared = bandwidth;
+            iface_attr.latency.c        = latency;
+            iface_attr.latency.m        = 1e-9;
+        }, [max_inflight_eps](uct_perf_attr_t &perf_attr) {
+            if (perf_attr.field_mask &
+                UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS) {
+                perf_attr.max_inflight_eps = max_inflight_eps;
+            }
+        });
+    }
+
+    void check_keepalive_lane(const std::string &dev_name)
+    {
+        const ucp_ep_config_t *config = ucp_worker_ep_config(sender().worker(),
+                                                             ep_config_index(
+                                                                     sender()));
+        const ucp_lane_index_t lane   = config->key.keepalive_lane;
+
+        ASSERT_NE(UCP_NULL_LANE, lane);
+        EXPECT_STREQ(dev_name.c_str(),
+                     ucp_ep_get_tl_rsc(sender().ep(), lane)->dev_name);
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_keepalive_tiebreak,
+           higher_bandwidth_within_score_window, "IB_NUM_PATHS?=1")
+{
+    check_keepalive_lane("mock_1:1");
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_keepalive_tiebreak, rcx,
+                              "rc_x")
+
 
 #if HAVE_DECL_IBV_EVENT_PORT_SPEED_CHANGE
 
