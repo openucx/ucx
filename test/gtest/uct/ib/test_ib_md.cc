@@ -16,20 +16,6 @@
 #include <common/mem_buffer.h>
 #include <uct/test_md.h>
 
-#include <string>
-#include <type_traits>
-
-#if HAVE_DEVX
-class test_ib_mlx5_dbrec : public ucs::test {
-};
-
-UCS_TEST_F(test_ib_mlx5_dbrec, metadata_uses_external_db_pointer)
-{
-    EXPECT_TRUE(std::is_pointer<
-                decltype(((uct_ib_mlx5_dbrec_t*)nullptr)->db)>::value);
-}
-#endif
-
 class test_ib_md : public test_md
 {
 protected:

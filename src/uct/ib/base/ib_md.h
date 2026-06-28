@@ -199,6 +199,19 @@ static UCS_F_ALWAYS_INLINE int uct_ib_md_is_cc_dma_bounce(const uct_ib_md_t *md)
     return md->cc_dma_bounce;
 }
 
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_ib_md_check_cc_dma_bounce_supported(const uct_ib_md_t *md,
+                                        const char *transport_name)
+{
+    if (!uct_ib_md_is_cc_dma_bounce(md)) {
+        return UCS_OK;
+    }
+
+    ucs_error("%s: %s does not support CoCo control-object allocation",
+              uct_ib_device_name(&md->dev), transport_name);
+    return UCS_ERR_UNSUPPORTED;
+}
+
 static UCS_F_ALWAYS_INLINE struct ibv_pd*
 uct_ib_md_control_pd(const uct_ib_md_t *md)
 {

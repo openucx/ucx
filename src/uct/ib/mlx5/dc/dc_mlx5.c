@@ -1586,10 +1586,9 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
 
     ucs_trace_func("");
 
-    if (uct_ib_md_is_cc_dma_bounce(&md->super)) {
-        ucs_error("%s: %s is not CoCo control-object safe in this milestone",
-                  uct_ib_device_name(&md->super.dev), "dc_mlx5");
-        return UCS_ERR_UNSUPPORTED;
+    status = uct_ib_md_check_cc_dma_bounce_supported(&md->super, "dc_mlx5");
+    if (status != UCS_OK) {
+        return status;
     }
 
     self->tx.policy = config->tx_policy;

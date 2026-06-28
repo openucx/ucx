@@ -1157,7 +1157,6 @@ uct_ib_mlx5_md_buf_alloc_shared(uct_ib_mlx5_md_t *md, size_t size, int silent,
         status = (errno == ENOENT) ? UCS_ERR_UNSUPPORTED : UCS_ERR_IO_ERROR;
         ucs_log(level, "failed to open %s for %s: %m",
                 UCT_IB_MLX5_CC_DMA_HEAP, alloc_name);
-        uct_ib_mlx5_devx_umem_reset(mem);
         return status;
     }
 
@@ -1174,7 +1173,6 @@ uct_ib_mlx5_md_buf_alloc_shared(uct_ib_mlx5_md_t *md, size_t size, int silent,
         if (ret != 0) {
             ucs_warn("close(dma_heap_fd=%d) failed: %m", heap_fd);
         }
-        uct_ib_mlx5_devx_umem_reset(mem);
         return status;
     }
 
@@ -1201,6 +1199,26 @@ uct_ib_mlx5_md_buf_alloc_shared(uct_ib_mlx5_md_t *md, size_t size, int silent,
 
     memset(buf, 0, mmap_size);
 
+    if (md->super.fork_init) {
+        ret = madvise(buf, mmap_size, MADV_DONTFORK);
+        if (ret != 0) {
+            status = UCS_ERR_IO_ERROR;
+            ucs_log(level, "madvise(DONTFORK, buf=%p, len=%zu) failed: %m",
+                    buf, mmap_size);
+            ret = munmap(buf, mmap_size);
+            if (ret != 0) {
+                ucs_warn("munmap(buf=%p, len=%zu) failed: %m", buf,
+                         mmap_size);
+            }
+            ret = close(mem->dmabuf_fd);
+            if (ret != 0) {
+                ucs_warn("close(dmabuf_fd=%d) failed: %m", mem->dmabuf_fd);
+            }
+            uct_ib_mlx5_devx_umem_reset(mem);
+            return status;
+        }
+    }
+
     memset(&umem_in, 0, sizeof(umem_in));
     umem_in.addr        = NULL;
     umem_in.size        = mmap_size;
@@ -1218,6 +1236,13 @@ uct_ib_mlx5_md_buf_alloc_shared(uct_ib_mlx5_md_t *md, size_t size, int silent,
                 ibv_context, level,
                 "mlx5dv_devx_umem_reg_ex(name=%s dmabuf_fd=%d size=%zu access=0x%x)",
                 alloc_name, mem->dmabuf_fd, mmap_size, access_mode);
+        if (md->super.fork_init) {
+            ret = madvise(buf, mmap_size, MADV_DOFORK);
+            if (ret != 0) {
+                ucs_warn("madvise(DOFORK, buf=%p, len=%zu) failed: %m", buf,
+                         mmap_size);
+            }
+        }
         ret = munmap(buf, mmap_size);
         if (ret != 0) {
             ucs_warn("munmap(buf=%p, len=%zu) failed: %m", buf, mmap_size);
@@ -1332,6 +1357,13 @@ uct_ib_mlx5_md_buf_free(uct_ib_mlx5_md_t *md, void *buf, uct_ib_mlx5_devx_umem_t
     if (is_dmabuf) {
         uct_ib_mlx5_devx_umem_reset(mem);
 
+        if (md->super.fork_init) {
+            ret = madvise(buf, mmap_size, MADV_DOFORK);
+            if (ret != 0) {
+                ucs_warn("madvise(DOFORK, buf=%p, len=%zu) failed: %m", buf,
+                         mmap_size);
+            }
+        }
         ret = munmap(buf, mmap_size);
         if (ret != 0) {
             ucs_warn("munmap(buf=%p, len=%zu) failed: %m", buf,
