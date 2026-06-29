@@ -1256,7 +1256,7 @@ UCS_TEST_F(test_config, test_key_value_dump_full) {
                 UCS_CONFIG_PRINT_COMMENT_DEFAULT;
     std::string dump = opts.dump((ucs_config_print_flags_t)flags);
 
-    size_t it = dump.find("# Temperature\n"
+    size_t it = dump.find("# Temperature.\n"
                           "#  front     - front temperature\n"
                           "#  rear      - rear temperature\n"
                           "#\n"
