@@ -10,7 +10,7 @@
 AC_PREREQ([2.63])
 
 define([ucx_ver_major], 1)  # Major version. Usually does not change.
-define([ucx_ver_minor], 21) # Minor version. Increased for each release.
+define([ucx_ver_minor], 23) # Minor version. Increased for each release.
 define([ucx_ver_patch], 0)  # Patch version. Increased for a bugfix release.
 define([ucx_ver_extra], )   # Extra version string. Empty for a general release.
 
@@ -148,7 +148,6 @@ AC_DEFINE_UNQUOTED([UCX_MODULE_SUBDIR], ["${modulesubdir}"], [UCX module sub-dir
 #
 m4_include([config/m4/ax_prog_doxygen.m4])
 m4_include([config/m4/graphviz.m4])
-m4_include([config/m4/ucg.m4])
 
 AC_ARG_WITH([docs_only],
         AS_HELP_STRING([--with-docs-only],
@@ -194,12 +193,12 @@ AS_IF([test "x$with_docs_only" = xyes],
      AM_CONDITIONAL([HAVE_TL_DC], [false])
      AM_CONDITIONAL([HAVE_DC_DV], [false])
      AM_CONDITIONAL([HAVE_TL_UD], [false])
+     AM_CONDITIONAL([HAVE_TL_GGA], [false])
      AM_CONDITIONAL([HAVE_CRAY_UGNI], [false])
      AM_CONDITIONAL([HAVE_CUDA], [false])
      AM_CONDITIONAL([HAVE_CUDA_STATIC], [false])
      AM_CONDITIONAL([HAVE_NVCC], [false])
      AM_CONDITIONAL([HAVE_GDR_COPY], [false])
-     AM_CONDITIONAL([HAVE_GPUNETIO], [false])
      AM_CONDITIONAL([HAVE_ROCM], [false])
      AM_CONDITIONAL([HAVE_HIP], [false])
      AM_CONDITIONAL([HAVE_XPMEM], [false])
@@ -231,6 +230,8 @@ AS_IF([test "x$with_docs_only" = xyes],
      AM_CONDITIONAL([HAVE_GCOV], [false])
      AM_CONDITIONAL([HAVE_LCOV], [false])
      AM_CONDITIONAL([HAVE_ZE], [false])
+     AM_CONDITIONAL([HAVE_GAUDI], [false])
+     AM_CONDITIONAL([HAVE_GDA], [false])
     ],
     [
      AM_CONDITIONAL([DOCS_ONLY], [false])
@@ -247,6 +248,7 @@ AS_IF([test "x$with_docs_only" = xyes],
      m4_include([config/m4/gdrcopy.m4])
      m4_include([config/m4/mad.m4])
      m4_include([config/m4/lcov.m4])
+     m4_include([config/m4/gaudi.m4])
      m4_include([src/ucm/configure.m4])
      m4_include([src/ucs/configure.m4])
      m4_include([src/uct/configure.m4])
@@ -359,7 +361,6 @@ build_modules="${build_modules}${uct_cuda_modules}"
 build_modules="${build_modules}${ucm_modules}"
 build_modules="${build_modules}${ucx_perftest_modules}"
 build_modules="${build_modules}${uct_rocm_modules}"
-build_modules="${build_modules}${ucg_modules}"
 AC_SUBST([build_modules], [${build_modules}])
 AC_SUBST([build_bindings], [${build_bindings}])
 
@@ -367,7 +368,6 @@ AC_SUBST([build_bindings], [${build_bindings}])
 # Final output
 #
 AC_CONFIG_FILES([Makefile
-                 stubs/Makefile
                  docs/doxygen/header.tex
                  src/uct/api/version.h
                  ])
@@ -445,7 +445,5 @@ AC_MSG_NOTICE([          IB modules:   <$(echo ${uct_ib_modules}|tr ':' ' ') >])
 AC_MSG_NOTICE([        MLX5 modules:   <$(echo ${uct_ib_mlx5_modules}|tr ':' ' ') >])
 AC_MSG_NOTICE([         UCM modules:   <$(echo ${ucm_modules}|tr ':' ' ') >])
 AC_MSG_NOTICE([        Perf modules:   <$(echo ${ucx_perftest_modules}|tr ':' ' ') >])
-AS_IF([test "x$enable_ucg" != "xno"], [
-    AC_MSG_NOTICE([       UCG modules:   <$(echo ${ucg_modules}|tr ':' ' ') >])])
 ])
 AC_MSG_NOTICE([=========================================================])

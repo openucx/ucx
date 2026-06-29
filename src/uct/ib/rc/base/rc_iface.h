@@ -141,6 +141,12 @@ typedef struct uct_rc_pending_req {
 } uct_rc_pending_req_t;
 
 
+typedef struct {
+    uct_pending_req_priv_arb_t arb;
+    uct_completion_t           *comp;
+} uct_rc_pending_req_priv_t;
+
+
 /**
  * RC fence type.
  */
@@ -218,7 +224,8 @@ typedef void (*uct_rc_iface_qp_cleanup_func_t)(
         uct_rc_iface_qp_cleanup_ctx_t *cleanup_ctx);
 
 
-typedef void (*uct_rc_iface_ep_post_check_func_t)(uct_ep_h tl_ep);
+typedef ucs_status_t (*uct_rc_iface_ep_post_check_func_t)(
+        uct_ep_h tl_ep, uct_completion_t *comp);
 
 
 typedef void (*uct_rc_iface_ep_vfs_populate_func_t)(uct_rc_ep_t *rc_ep);
@@ -299,7 +306,7 @@ struct uct_rc_iface {
         uint8_t              flush_remote;
         uct_rc_fence_mode_t  fence_mode;
         unsigned             exp_backoff;
-        uint32_t             ece;
+        unsigned long        ece;
         size_t               max_get_zcopy;
 
         /* Atomic callbacks */
@@ -640,5 +647,20 @@ uct_rc_iface_send_op_set_name(uct_rc_iface_send_op_t *op, const char *name)
     op->name = name;
 #endif
 }
+
+static UCS_F_ALWAYS_INLINE uct_rc_pending_req_priv_t*
+uct_rc_pending_req_priv(uct_pending_req_t *req)
+{
+    return (uct_rc_pending_req_priv_t*)&req->priv;
+}
+
+/**
+ * Helper function to set ECE to qp.
+ *
+ * @param iface           Interface of the qp.
+ * @param qp              The qp to be set with ECE.
+ */
+ucs_status_t
+uct_rc_iface_set_ece(uct_rc_iface_t *iface, struct ibv_qp *qp);
 
 #endif

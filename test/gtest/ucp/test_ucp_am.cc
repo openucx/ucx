@@ -22,6 +22,11 @@ extern "C" {
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_resource.h>
 #include <ucs/datastruct/mpool.inl>
+
+/* Test-only declaration of the long-AM first-fragment receive handler;
+ * invoked directly by the resend-eviction regression test below. */
+ucs_status_t ucp_am_long_first_handler(void *am_arg, void *am_data,
+                                       size_t am_length, unsigned am_flags);
 }
 
 #define NUM_MESSAGES 17
@@ -984,6 +989,114 @@ UCS_TEST_P(test_ucp_am_nbx, rx_am_mpools,
     ucp_am_data_release(receiver().worker(), rx_data);
 }
 
+/*
+ * Regression test for FLAG_RESEND orphan eviction: forges a partial
+ * first_rdesc on the receiver, drives a single-fragment resend at
+ * ucp_am_long_first_handler(), and verifies the orphan is evicted and
+ * subsequent AMs still flow.
+ */
+UCS_TEST_P(test_ucp_am_nbx, resend_evicts_orphan_partial_msg)
+{
+    auto rdesc_frag_tree = [](ucp_recv_desc_t *rdesc) -> ucs_interval_tree_t * {
+        return reinterpret_cast<ucs_interval_tree_t*>(
+                UCS_PTR_BYTE_OFFSET(rdesc, -sizeof(ucs_interval_tree_t)));
+    };
+
+    constexpr uint64_t orphan_msg_id = 0xC0DE5E11ull;
+    constexpr size_t   payload_len   = 1024;
+    constexpr size_t   user_hdr_len  = 16;
+    constexpr size_t   total_length  = UCP_AM_FIRST_FRAG_META_LEN +
+                                       payload_len + user_hdr_len;
+
+    set_am_data_handler(receiver(), TEST_AM_NBX_ID, am_data_cb, this);
+
+    ucp_ep_h     r_ep        = receiver().ep();
+    ucp_ep_ext_t *r_ep_ext   = r_ep->ext;
+    ucp_worker_h r_worker    = receiver().worker();
+    uint64_t     r_local_id  = r_ep_ext->local_ep_id;
+
+    m_hdr.resize(user_hdr_len);
+    ucs::fill_random(m_hdr);
+
+    const size_t alloc_size = total_length + sizeof(ucp_recv_desc_t) +
+                              sizeof(ucs_interval_tree_t) +
+                              r_worker->am.alignment;
+    void *forged_alloc = ucs_malloc(alloc_size, "test_resend_partial");
+    ASSERT_TRUE(forged_alloc != NULL);
+
+    ucp_recv_desc_t *forged_rdesc = reinterpret_cast<ucp_recv_desc_t*>(
+            UCS_PTR_BYTE_OFFSET(forged_alloc, sizeof(ucs_interval_tree_t)));
+    forged_rdesc->release_desc_offset = sizeof(ucs_interval_tree_t);
+    forged_rdesc->payload_offset      = UCP_AM_FIRST_FRAG_META_LEN;
+
+    ucp_am_first_ftr_t *partial_ftr = reinterpret_cast<ucp_am_first_ftr_t*>(
+            forged_rdesc + 1);
+    partial_ftr->super.msg_id = orphan_msg_id;
+    partial_ftr->super.ep_id  = r_local_id;
+    partial_ftr->total_size   = payload_len;
+
+    ucs_interval_tree_init(rdesc_frag_tree(forged_rdesc),
+                           &r_worker->am.frag_tree_mpool);
+
+    auto orphan_is_linked = [&]() -> bool {
+        ucp_recv_desc_t *rdesc;
+        ucs_list_for_each(rdesc, &r_ep_ext->am.started_ams,
+                          am_first.list) {
+            if (rdesc == forged_rdesc) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    {
+        UCS_ASYNC_BLOCK(&r_worker->async);
+        ucs_list_add_tail(&r_ep_ext->am.started_ams,
+                          &forged_rdesc->am_first.list);
+        UCS_ASYNC_UNBLOCK(&r_worker->async);
+    }
+    EXPECT_TRUE(orphan_is_linked());
+
+    std::vector<uint8_t> wire(total_length, 0);
+    ucp_am_hdr_t *wire_hdr = reinterpret_cast<ucp_am_hdr_t*>(wire.data());
+    wire_hdr->am_id         = TEST_AM_NBX_ID;
+    wire_hdr->flags         = UCP_AM_HDR_FLAG_RESEND;
+    wire_hdr->header_length = user_hdr_len;
+
+    void *payload = wire.data() + sizeof(*wire_hdr);
+    mem_buffer::pattern_fill(payload, payload_len, SEED);
+
+    void *user_hdr_dst = UCS_PTR_BYTE_OFFSET(payload, payload_len);
+    memcpy(user_hdr_dst, m_hdr.data(), m_hdr.size());
+
+    ucp_am_first_ftr_t *wire_ftr = reinterpret_cast<ucp_am_first_ftr_t*>(
+            UCS_PTR_BYTE_OFFSET(user_hdr_dst, user_hdr_len));
+    wire_ftr->super.msg_id = orphan_msg_id;
+    wire_ftr->super.ep_id  = r_local_id;
+    wire_ftr->total_size   = payload_len;
+
+    reset_counters();
+    m_send_counter = 1;
+
+    ucs_status_t status;
+    {
+        UCS_ASYNC_BLOCK(&r_worker->async);
+        status = ucp_am_long_first_handler(r_worker, wire.data(),
+                                           total_length, 0);
+        UCS_ASYNC_UNBLOCK(&r_worker->async);
+    }
+
+    EXPECT_EQ(UCS_OK, status);
+    EXPECT_EQ(1u, m_recv_counter);
+    EXPECT_FALSE(orphan_is_linked());
+
+    /* Restore PSN so the message below isn't classified as duplicate. */
+    r_ep_ext->am.psn = 0;
+
+    /* After eviction, a real multi-fragment AM must still deliver. */
+    test_am_send_recv(64 * UCS_KBYTE, 8);
+}
+
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx)
 
 
@@ -1405,7 +1518,8 @@ public:
     {
         modify_config("RNDV_THRESH", "inf");
         modify_config("ZCOPY_THRESH", "inf");
-        m_data_ptr = NULL;
+        m_data_ptr    = nullptr;
+        m_data_length = 0;
     }
 
     virtual ucs_status_t
@@ -1415,7 +1529,8 @@ public:
         EXPECT_LT(m_recv_counter, m_send_counter);
         EXPECT_TRUE(rx_param->recv_attr & UCP_AM_RECV_ATTR_FLAG_DATA);
 
-        m_data_ptr = data;
+        m_data_ptr    = data;
+        m_data_length = length;
 
         check_header(header, header_length);
         mem_buffer::pattern_check(data, length, SEED);
@@ -1434,8 +1549,47 @@ public:
         ucp_am_data_release(receiver().worker(), m_data_ptr);
     }
 
+    void test_recv_data_late(size_t size)
+    {
+        test_am_send_recv(size, 0, 0, UCP_AM_FLAG_PERSISTENT_DATA);
+
+        ASSERT_TRUE(m_data_ptr != nullptr);
+        ASSERT_EQ(size, m_data_length);
+
+        ucp_recv_desc_t *rdesc = static_cast<ucp_recv_desc_t *>(m_data_ptr) - 1;
+        if (!(rdesc->flags & UCP_RECV_DESC_FLAG_MALLOC)) {
+            ucp_am_data_release(receiver().worker(), m_data_ptr);
+            UCS_TEST_SKIP_R("eager AM was not in malloc-backed desc");
+        }
+
+        std::vector<char> rbuf(size);
+        ucp_request_param_t param;
+
+        size_t recv_length     = SIZE_MAX;
+        param.op_attr_mask     = UCP_OP_ATTR_FIELD_RECV_INFO;
+        param.recv_info.length = &recv_length;
+
+        // The following lines are for working around a
+        // false positive NULL dereference in Coverity;
+        // the callback is never called even when set.
+        param.op_attr_mask |= UCP_OP_ATTR_FIELD_USER_DATA;
+        param.user_data     = this;
+        param.op_attr_mask |= UCP_OP_ATTR_FIELD_CALLBACK;
+        param.cb.recv_am    = [](void *, ucs_status_t, size_t, void *) {
+            ADD_FAILURE();
+        };
+
+        ucs_status_ptr_t rptr = ucp_am_recv_data_nbx(receiver().worker(),
+                                                     m_data_ptr, rbuf.data(),
+                                                     rbuf.size(), &param);
+        EXPECT_EQ(UCS_OK, request_wait(rptr));
+        EXPECT_EQ(size, recv_length);
+        mem_buffer::pattern_check(rbuf.data(), rbuf.size(), SEED);
+    }
+
 private:
     void *m_data_ptr;
+    size_t m_data_length;
 };
 
 UCS_TEST_P(test_ucp_am_nbx_eager_data_release, short)
@@ -1451,6 +1605,11 @@ UCS_TEST_P(test_ucp_am_nbx_eager_data_release, single)
 UCS_TEST_P(test_ucp_am_nbx_eager_data_release, multi)
 {
     test_data_release(fragment_size() * 2);
+}
+
+UCS_TEST_P(test_ucp_am_nbx_eager_data_release, multi_recv_data_late)
+{
+    test_recv_data_late(fragment_size() * 2);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_eager_data_release)
@@ -1934,8 +2093,7 @@ private:
     {
         ucp_test::add_variant_memtypes(variants, generator);
 
-        if (mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA) &&
-            mem_buffer::is_async_supported(UCS_MEMORY_TYPE_CUDA)) {
+        if (mem_buffer::is_async_supported(UCS_MEMORY_TYPE_CUDA)) {
             add_variant_values(variants, generator, MEMORY_TYPE_CUDA_ASYNC,
                                "cuda-async");
         }
@@ -2050,27 +2208,28 @@ UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_rndv_memtype_disable_zcopy);
 #ifdef ENABLE_STATS
 class test_ucp_am_nbx_rndv_ppln : public test_ucp_am_nbx_rndv {
 public:
-    test_ucp_am_nbx_rndv_ppln() : m_mem_type(UCS_MEMORY_TYPE_HOST) {}
-
-    void init() override
+    test_ucp_am_nbx_rndv_ppln() : m_mem_type(UCS_MEMORY_TYPE_HOST)
     {
-        if (!is_proto_enabled()) {
-            UCS_TEST_SKIP_R("proto v1");
-        }
-        stats_activate();
         modify_config("RNDV_THRESH", "128");
         modify_config("RNDV_SCHEME", "put_ppln");
         modify_config("RNDV_PIPELINE_SHM_ENABLE", "n");
         /* FIXME: Advertise error handling support for RNDV PPLN protocol.
          * Remove this once invalidation workflow is implemented. */
         modify_config("RNDV_PIPELINE_ERROR_HANDLING", "y");
-        test_ucp_am_nbx::init();
+        stats_activate();
     }
 
-    void cleanup() override
+    ~test_ucp_am_nbx_rndv_ppln()
     {
-        test_ucp_am_nbx::cleanup();
         stats_restore();
+    }
+
+    void init() override
+    {
+        if (!is_proto_enabled()) {
+            UCS_TEST_SKIP_R("proto v1");
+        }
+        test_ucp_am_nbx::init();
     }
 
     static void get_test_variants(variant_vec_t &variants)
@@ -2188,3 +2347,95 @@ UCS_TEST_P(test_ucp_am_nbx_rndv_ppln, cuda_managed_buff,
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_rndv_ppln);
 
 #endif
+
+/* Test class for AM PSN protocol */
+class test_ucp_am_psn : public test_ucp_am_nbx {
+public:
+    void init() override
+    {
+        if (!is_proto_enabled()) {
+            UCS_TEST_SKIP_R("proto v1");
+        }
+        test_ucp_am_nbx::init();
+    }
+
+    ucp_ep_params_t get_ep_params() override
+    {
+        ucp_ep_params_t ep_params = test_ucp_am_nbx::get_ep_params();
+        ep_params.field_mask     |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
+        ep_params.err_mode        = UCP_ERR_HANDLING_MODE_FAILOVER;
+        return ep_params;
+    }
+
+    ucs_status_t am_data_handler(const void *header, size_t header_length,
+                                 void *data, size_t length,
+                                 const ucp_am_recv_param_t *rx_param) override
+    {
+        EXPECT_LT(m_recv_counter, m_send_counter);
+        check_header(header, header_length);
+        mem_buffer::pattern_check(data, length, SEED + m_recv_counter);
+        m_recv_counter++;
+        return UCS_OK;
+    }
+
+    void test_psn_send_recv(size_t total_msgs, size_t num_duplicates)
+    {
+        const size_t msg_size = 65536;
+        std::vector<std::unique_ptr<mem_buffer>> sbufs;
+        std::vector<ucs_status_ptr_t> requests;
+
+        for (size_t i = 0; i < total_msgs; i++) {
+            sbufs.emplace_back(new mem_buffer(msg_size, tx_memtype()));
+            sbufs[i]->pattern_fill(SEED + i);
+        }
+
+        reset_counters();
+        set_am_data_handler(receiver(), TEST_AM_NBX_ID, am_data_cb, this);
+
+        /* Send num_duplicates messages with IDs 1-num_duplicates */
+        for (size_t i = 0; i < num_duplicates; i++) {
+            ucp::data_type_desc_t sdt_desc(m_dt, sbufs[i]->ptr(), msg_size);
+            requests.push_back(
+                    send_am(sdt_desc, get_send_flag(), NULL, 0, NULL));
+        }
+
+        /* Rewind worker's message ID counter by num_duplicates */
+        sender().worker()->am_message_id -= num_duplicates;
+
+        /* Send all messages */
+        for (size_t i = 0; i < total_msgs; i++) {
+            ucp::data_type_desc_t sdt_desc(m_dt, sbufs[i]->ptr(), msg_size);
+            requests.push_back(
+                    send_am(sdt_desc, get_send_flag(), NULL, 0, NULL));
+        }
+
+        for (auto request : requests) {
+            request_wait(request);
+        }
+
+        wait_for_value(&m_recv_counter, total_msgs);
+
+        /* Validate total messages sent but only expected were received (all
+         * duplicates dropped) */
+        EXPECT_EQ(total_msgs + num_duplicates, m_send_counter);
+        EXPECT_EQ(total_msgs, m_recv_counter);
+    }
+};
+
+UCS_TEST_P(test_ucp_am_psn, no_duplicates, "ZCOPY_THRESH=0", "RNDV_THRESH=inf", "PROTO_REQUEST_RESET=n")
+{
+    test_psn_send_recv(300, 0);
+}
+
+UCS_TEST_P(test_ucp_am_psn, some_duplicates, "ZCOPY_THRESH=0",
+           "RNDV_THRESH=inf", "PROTO_REQUEST_RESET=n")
+{
+    test_psn_send_recv(200, 100);
+}
+
+UCS_TEST_P(test_ucp_am_psn, all_duplicates, "ZCOPY_THRESH=0", "RNDV_THRESH=inf", "PROTO_REQUEST_RESET=n")
+{
+    test_psn_send_recv(400, 400);
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_am_psn)

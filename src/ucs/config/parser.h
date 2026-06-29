@@ -1,5 +1,5 @@
 /*
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -264,9 +264,13 @@ ucs_status_t ucs_config_clone_range_spec(const void *src, void *dest, const void
 
 int ucs_config_sscanf_array(const char *buf, void *dest, const void *arg);
 int ucs_config_sprintf_array(char *buf, size_t max, const void *src, const void *arg);
+int ucs_config_sscanf_path_array(const char *buf, void *dest, const void *arg);
+int ucs_config_sprintf_path_array(char *buf, size_t max, const void *src,
+                                  const void *arg);
 ucs_status_t ucs_config_clone_array(const void *src, void *dest, const void *arg);
 void ucs_config_release_array(void *ptr, const void *arg);
 void ucs_config_help_array(char *buf, size_t max, const void *arg);
+void ucs_config_help_path_array(char *buf, size_t max, const void *arg);
 
 int ucs_config_sscanf_allow_list(const char *buf, void *dest, const void *arg);
 int ucs_config_sprintf_allow_list(char *buf, size_t max, const void *src,
@@ -274,6 +278,11 @@ int ucs_config_sprintf_allow_list(char *buf, size_t max, const void *src,
 ucs_status_t ucs_config_clone_allow_list(const void *src, void *dest, const void *arg);
 void ucs_config_release_allow_list(void *ptr, const void *arg);
 void ucs_config_help_allow_list(char *buf, size_t max, const void *arg);
+
+int ucs_config_sscanf_allow_list_with_ranges(const char *buf, void *dest,
+                                             const void *arg);
+void ucs_config_help_allow_list_with_ranges(char *buf, size_t max,
+                                            const void *arg);
 
 int ucs_config_sscanf_table(const char *buf, void *dest, const void *arg);
 ucs_status_t ucs_config_clone_table(const void *src, void *dest, const void *arg);
@@ -434,6 +443,12 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
                                     ucs_config_help_allow_list,       ucs_config_doc_nop, \
                                     &ucs_config_array_string}
 
+#define UCS_CONFIG_TYPE_ALLOW_LIST_WITH_RANGES \
+                                   {ucs_config_sscanf_allow_list_with_ranges, ucs_config_sprintf_allow_list, \
+                                    ucs_config_clone_allow_list,              ucs_config_release_allow_list, \
+                                    ucs_config_help_allow_list_with_ranges,   ucs_config_doc_nop, \
+                                    &ucs_config_array_string}
+
 #define UCS_CONFIG_TYPE_TABLE(t)   {ucs_config_sscanf_table,     NULL, \
                                     ucs_config_clone_table,      ucs_config_release_table, \
                                     ucs_config_help_table,       ucs_config_doc_nop, \
@@ -467,6 +482,15 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
  */
 #define UCS_CONFIG_TYPE_STRING_ARRAY \
     UCS_CONFIG_TYPE_ARRAY(string)
+
+/**
+ * Colon-separated array of path strings (e.g. "/path/a:/path/b")
+ */
+#define UCS_CONFIG_TYPE_PATH_ARRAY \
+    {ucs_config_sscanf_path_array, ucs_config_sprintf_path_array, \
+     ucs_config_clone_array,       ucs_config_release_array, \
+     ucs_config_help_path_array,   ucs_config_doc_nop, \
+     &ucs_config_array_string}
 
 UCS_CONFIG_DECLARE_ARRAY(string)
 
@@ -658,6 +682,26 @@ int ucs_config_parser_has_field(const ucs_config_field_t *fields,
  * @return       1 if the field exists, 0 otherwise.
  */
 int ucs_config_global_list_has_field(const char *name);
+
+
+/**
+ * Check if an allow list is empty.
+ *
+ * @param allow_list Allow list to check.
+ * @return           1 if the allow list is empty, 0 otherwise.
+ */
+int ucs_config_is_allow_list_empty(const ucs_config_allow_list_t *allow_list);
+
+
+/**
+ * Check if all allow lists in an array are empty.
+ *
+ * @param allow_lists Array of allow lists to check.
+ * @param count       Number of elements in the array.
+ * @return            1 if all allow lists are empty, 0 otherwise.
+ */
+int ucs_config_are_all_allow_lists_empty(
+        const ucs_config_allow_list_t *allow_lists, size_t count);
 
 END_C_DECLS
 

@@ -6,7 +6,7 @@ jobs:
     displayName: ${{ parameters.name }} on worker
     timeoutInMinutes: 30
     workspace:
-      clean: outputs
+      clean: all
     steps:
       - checkout: self
         clean: true

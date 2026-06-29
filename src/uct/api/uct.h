@@ -438,6 +438,7 @@ typedef enum uct_atomic_op {
         /* Interface capability */
 #define UCT_IFACE_FLAG_INTER_NODE      UCS_BIT(54) /**< Interface is inter-node capable */
 #define UCT_IFACE_FLAG_DEVICE_EP       UCS_BIT(55) /**< Interface supports device endpoint */
+#define UCT_IFACE_FLAG_DEVICE_LKEY     UCS_BIT(56) /**< Interface requires lkey for device operations */
 /**
  * @}
  */
@@ -500,8 +501,9 @@ typedef enum {
 enum uct_iface_event_types {
     UCT_EVENT_SEND_COMP     = UCS_BIT(0), /**< Send completion event */
     UCT_EVENT_RECV          = UCS_BIT(1), /**< Tag or active message received */
-    UCT_EVENT_RECV_SIG      = UCS_BIT(2)  /**< Signaled tag or active message
+    UCT_EVENT_RECV_SIG      = UCS_BIT(2), /**< Signaled tag or active message
                                                received */
+    UCT_EVENT_SPEED_CHANGE  = UCS_BIT(3)  /**< Speed change event */
 };
 
 
@@ -615,7 +617,11 @@ enum uct_iface_open_mode {
 
    /** Interface is opened on a specific address on the client side This mode
        will be deprecated in the near future for a better API. */
-   UCT_IFACE_OPEN_MODE_SOCKADDR_CLIENT = UCS_BIT(2)
+   UCT_IFACE_OPEN_MODE_SOCKADDR_CLIENT = UCS_BIT(2),
+
+   /** Interface is opened as a stub, not associated with any transport or
+       device. */
+   UCT_IFACE_OPEN_MODE_STUB            = UCS_BIT(3)
 };
 
 
@@ -1185,6 +1191,9 @@ struct uct_iface_attr {
                                                 achieve higher total bandwidth
                                                 compared to using only a single
                                                 endpoint. */
+
+    ucs_sys_device_t ctl_device;           /**< System device controlling this iface,
+                                                if it's not CPU. */
 };
 
 
@@ -1233,6 +1242,14 @@ struct uct_iface_params {
              * @ref uct_cb_flags */
             uint32_t                             cb_flags;
         } sockaddr;
+        /** @anchor uct_iface_params_t_mode_stub
+         *  The fields in this structure need to be set only when the @ref
+         *  UCT_IFACE_OPEN_MODE_STUB bit is set in @ref
+         *  uct_iface_params_t.open_mode */
+        struct {
+            /** Status returned by stub internal operations. */
+            ucs_status_t                         status;
+        } stub;
     } mode;
 
     /** Root in the statistics tree. Can be NULL. If non NULL, it will be

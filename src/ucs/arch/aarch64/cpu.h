@@ -3,6 +3,7 @@
 * Copyright (C) ARM Ltd. 2016-2020.  ALL RIGHTS RESERVED.
 * Copyright (C) Stony Brook University. 2016-2020.  ALL RIGHTS RESERVED.
 * Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
+* Copyright (C) Fujitsu Limited. 2025. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -15,6 +16,7 @@
 #include <string.h>
 #include <sys/times.h>
 #include <ucs/sys/compiler_def.h>
+#include <ucs/sys/ptr_arith.h>
 #include <ucs/arch/generic/cpu.h>
 #include <ucs/sys/math.h>
 #include <ucs/type/status.h>
@@ -132,7 +134,8 @@ static inline ucs_cpu_vendor_t ucs_arch_get_cpu_vendor()
         return UCS_CPU_VENDOR_FUJITSU_ARM;
     }
 
-    if ((cpuid.implementer == 0x41) && (cpuid.architecture == 8)) {
+    if (((cpuid.implementer == 0x41) || (cpuid.implementer == 0x4e)) &&
+        (cpuid.architecture == 8)) {
         return UCS_CPU_VENDOR_NVIDIA;
     }
 
@@ -144,9 +147,23 @@ static inline ucs_cpu_model_t ucs_arch_get_cpu_model()
     ucs_aarch64_cpuid_t cpuid;
     ucs_aarch64_cpuid(&cpuid);
 
-    if ((ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_NVIDIA) &&
-        (cpuid.part == 0xd4f)) {
-        return UCS_CPU_MODEL_NVIDIA_GRACE;
+    if (ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_NVIDIA) {
+        if (cpuid.part == 0xd4f) {
+            return UCS_CPU_MODEL_NVIDIA_GRACE;
+        }
+
+        if (cpuid.part == 0x010) {
+            return UCS_CPU_MODEL_NVIDIA_VERA;
+        }
+    }
+
+    if (ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_FUJITSU_ARM) {
+        if (cpuid.part == 0x001) {
+            return UCS_CPU_MODEL_FUJITSU_A64FX;
+        }
+        if (cpuid.part == 0x003) {
+            return UCS_CPU_MODEL_FUJITSU_MONAKA;
+        }
     }
 
     return UCS_CPU_MODEL_ARM_AARCH64;

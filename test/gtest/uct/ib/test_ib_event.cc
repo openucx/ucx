@@ -57,20 +57,16 @@ public:
         uct_ib_async_event_wait_t super;
         volatile bool             got;
         uct_ib_device_t           *dev;
+        uint32_t                  qp_num;
     };
 
     static unsigned last_wqe_check_cb(void *arg) {
         event_ctx *event = (event_ctx *)arg;
-        int cb_id;
-
-        ucs_spin_lock(&event->dev->async_event_lock);
-        cb_id              = event->super.cb_id;
-        event->super.cb_id = UCS_CALLBACKQ_ID_NULL;
-        ucs_spin_unlock(&event->dev->async_event_lock);
 
         EXPECT_FALSE(event->got);
         event->got = true;
-        ucs_callbackq_remove_safe(event->super.cbq, cb_id);
+        uct_ib_device_async_event_cancel(event->dev, IBV_EVENT_QP_LAST_WQE_REACHED,
+                                         event->qp_num, &event->super);
         return 1;
     }
 
@@ -89,6 +85,7 @@ public:
         m_event.super.cb  = last_wqe_check_cb;
         m_event.super.cbq = &e.worker()->progress_q;
         m_event.dev       = dev(e);
+        m_event.qp_num    = qp_num;
 
         if (before) {
             /* move QP to error state before scheduling event callback */

@@ -90,8 +90,7 @@ uct_rocm_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
     }
 
     if (ucs_get_system_id() != *((const uint64_t*)params->device_addr)) {
-        uct_iface_fill_info_str_buf(params,
-                                    "the device addr is from another machine");
+        uct_iface_fill_info_str_buf(params, "different machine");
         return 0;
     }
 
@@ -156,6 +155,15 @@ uct_rocm_ipc_iface_flush(uct_iface_h tl_iface, unsigned flags,
     return UCS_INPROGRESS;
 }
 
+static ucs_status_t
+uct_rocm_ipc_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
+{
+    uct_rocm_ipc_iface_t *iface = ucs_derived_of(tl_ep->iface,
+                                                 uct_rocm_ipc_iface_t);
+    return uct_rocm_base_ep_flush(tl_ep, &iface->signal_pool,
+                                  &iface->signal_queue, comp);
+}
+
 static unsigned uct_rocm_ipc_iface_progress(uct_iface_h tl_iface)
 {
     uct_rocm_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_rocm_ipc_iface_t);
@@ -167,7 +175,6 @@ static uct_iface_internal_ops_t uct_rocm_ipc_iface_internal_ops = {
     .iface_query_v2         = uct_iface_base_query_v2,
     .iface_estimate_perf    = uct_base_iface_estimate_perf,
     .iface_vfs_refresh      = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
-    .iface_mem_element_pack = (uct_iface_mem_element_pack_func_t)ucs_empty_function_return_unsupported,
     .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
     .ep_invalidate          = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
     .ep_connect_to_ep_v2    = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
@@ -181,7 +188,7 @@ static uct_iface_ops_t uct_rocm_ipc_iface_ops = {
     .ep_get_zcopy             = uct_rocm_ipc_ep_get_zcopy,
     .ep_pending_add           = (uct_ep_pending_add_func_t)ucs_empty_function_return_busy,
     .ep_pending_purge         = (uct_ep_pending_purge_func_t)ucs_empty_function,
-    .ep_flush                 = uct_base_ep_flush,
+    .ep_flush                 = uct_rocm_ipc_ep_flush,
     .ep_fence                 = uct_base_ep_fence,
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_rocm_ipc_ep_t),
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_rocm_ipc_ep_t),

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
  * Copyright (C) Advanced Micro Devices, Inc. 2019. ALL RIGHTS RESERVED.
  *
@@ -25,6 +25,7 @@
 #include <ucs/memory/memory_type.h>
 #include <ucs/memory/rcache.h>
 #include <ucs/type/spinlock.h>
+#include <ucs/sys/checker.h>
 #include <ucs/sys/string.h>
 #include <ucs/type/param.h>
 
@@ -51,6 +52,35 @@ enum {
 #define UCP_OP_ATTR_INDEX(_op_attr_flag) \
     (ucs_ilog2(ucp_proto_select_op_attr_pack((_op_attr_flag), \
                                              UCP_OP_ATTR_INDEX_MASK)))
+
+typedef enum {
+    UCP_REG_DEVICES_ALL,
+    UCP_REG_DEVICES_CLOSEST,
+    UCP_REG_DEVICES_LIMIT
+} ucp_reg_devices_mode_t;
+
+
+static UCS_F_ALWAYS_INLINE ucp_reg_devices_mode_t
+ucp_reg_devices_mode(unsigned long max_hca_per_gpu)
+{
+    if (max_hca_per_gpu == UCS_ULUNITS_INF) {
+        return UCP_REG_DEVICES_ALL;
+    } else if (max_hca_per_gpu == UCS_ULUNITS_AUTO) {
+        return UCP_REG_DEVICES_CLOSEST;
+    }
+    return UCP_REG_DEVICES_LIMIT;
+}
+
+
+static UCS_F_ALWAYS_INLINE unsigned
+ucp_reg_devices_count(unsigned long max_hca_per_gpu)
+{
+    if (ucp_reg_devices_mode(max_hca_per_gpu) == UCP_REG_DEVICES_LIMIT) {
+        return (unsigned)ucs_min(max_hca_per_gpu, UCP_MAX_MDS);
+    }
+    return UCP_MAX_MDS;
+}
+
 
 
 typedef struct ucp_context_config {
@@ -154,6 +184,9 @@ typedef struct ucp_context_config {
     /** Maximal number of endpoints to check on every keepalive round
      * (0 - disabled, inf - check all endpoints on every round) */
     unsigned                               keepalive_num_eps;
+    /** Maximal number of recovery rounds before the endpoint is declared
+     *  fully failed. Must be non-zero. */
+    unsigned                               recovery_retries;
     /** Time period between dynamic transport switching rounds */
     ucs_time_t                             dynamic_tl_switch_interval;
     /** Number of usage tracker rounds performed for each progress operation */
@@ -167,6 +200,9 @@ typedef struct ucp_context_config {
     uint64_t                               reg_whole_alloc_bitmap;
     /** Always use flush operation in rendezvous put */
     int                                    rndv_put_force_flush;
+    /** Allow RMA emulation protocols. When disabled, provide an explicit error
+      * if no suitable proto is found */
+    int                                    proto_emulation_enable;
     /** Maximum size of mem type direct rndv*/
     size_t                                 rndv_memtype_direct_size;
     /** UCP sockaddr private data format version */
@@ -219,6 +255,8 @@ typedef struct ucp_context_config {
     int                                    connect_all_to_all;
     /** Use only one network device for all protocols */
     int                                    proto_use_single_net_device;
+    /** Max HCAs for GPU memory registration: auto=closest, N=limit, inf=all */
+    unsigned long                          max_hca_per_gpu;
     /** Local identificator on a single node */
     unsigned long                          node_local_id;
 } ucp_context_config_t;
@@ -231,7 +269,7 @@ struct ucp_config {
     /** Array of device lists names to use.
      *  This array holds four lists - network devices, shared memory devices,
      *  acceleration devices and loop-back devices */
-    ucs_config_names_array_t               devices[UCT_DEVICE_TYPE_LAST];
+    ucs_config_allow_list_t                devices[UCT_DEVICE_TYPE_LAST];
     /** Array of transport names to use */
     ucs_config_allow_list_t                tls;
     /** Array of protocol names to use */
@@ -286,7 +324,7 @@ typedef struct ucp_tl_resource_desc {
  */
 typedef struct ucp_tl_alias {
     const char                    *alias;   /* Alias name */
-    const char*                   tls[10];   /* Transports which are selected by the alias */
+    const char*                   tls[11];  /* Transports which are selected by the alias */
 } ucp_tl_alias_t;
 
 
@@ -346,6 +384,7 @@ typedef struct ucp_context_alloc_md_index {
      * using ucp_memh_alloc(). */
     ucp_md_index_t   md_index;
     ucs_sys_device_t sys_dev;
+    uint8_t          mem_flags;
 } ucp_context_alloc_md_index_t;
 
 
@@ -394,7 +433,8 @@ typedef struct ucp_context {
        exists. */
     ucp_md_index_t                dmabuf_mds[UCS_MEMORY_TYPE_LAST];
 
-    uint64_t                      mem_type_mask;            /* Supported mem type mask */
+    /* Mask of supported memory types */
+    uint64_t                      supported_mem_type_mask;
 
     ucp_tl_resource_desc_t        *tl_rscs;   /* Array of communication resources */
     ucp_tl_bitmap_t               tl_bitmap;  /* Cached map of tl resources used by workers.
@@ -459,6 +499,9 @@ typedef struct ucp_context {
 
         /* Progress wrapper enabled */
         int                       progress_wrapper_enabled;
+
+        /* Indicate whether tracing for used protocol selections is enabled */
+        int                       trace_used_proto_selections;
 
         struct {
            unsigned               count;
@@ -623,36 +666,12 @@ double ucp_tl_iface_latency_with_priority(ucp_context_h context,
                                           int is_prioritized_ep);
 
 /**
- * Calculate a small value to overcome float imprecision
- * between two float values
- */
-static UCS_F_ALWAYS_INLINE
-double ucp_calc_epsilon(double val1, double val2)
-{
-    return (val1 + val2) * (1e-6);
-}
-
-/**
- * Compare two scores and return:
- * - `-1` if score1 < score2
- * -  `0` if score1 == score2
- * -  `1` if score1 > score2
- */
-static UCS_F_ALWAYS_INLINE
-int ucp_score_cmp(double score1, double score2)
-{
-    double diff = score1 - score2;
-    return ((fabs(diff) < ucp_calc_epsilon(score1, score2)) ?
-            0 : ucs_signum(diff));
-}
-
-/**
  * Compare two scores taking into account priorities if scores are equal
  */
 static UCS_F_ALWAYS_INLINE
 int ucp_score_prio_cmp(double score1, int prio1, double score2, int prio2)
 {
-    int score_res = ucp_score_cmp(score1, score2);
+    int score_res = ucs_fp_compare(score1, score2);
 
     return score_res ? score_res : ucs_signum(prio1 - prio2);
 }
@@ -689,6 +708,7 @@ ucp_memory_info_set_host(ucp_memory_info_t *mem_info)
 {
     mem_info->type    = UCS_MEMORY_TYPE_HOST;
     mem_info->sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+    mem_info->flags   = UCS_MEM_FLAG_REGISTRABLE;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -703,6 +723,13 @@ ucp_memory_detect_internal(ucp_context_h context, const void *address,
 
     status = ucs_memtype_cache_lookup(address, length, mem_info);
     if (ucs_likely(status == UCS_ERR_NO_ELEM)) {
+        if (ucs_unlikely(RUNNING_ON_VALGRIND)) {
+            ucs_trace_req("address %p length %zu: not found in memtype cache, "
+                          "detecting memory type under Valgrind", address, length);
+            ucp_memory_detect_slowpath(context, address, length, mem_info);
+            return;
+        }
+
         ucs_trace_req("address %p length %zu: not found in memtype cache, "
                       "assuming host memory",
                       address, length);
@@ -741,6 +768,7 @@ ucp_memory_detect(ucp_context_h context, const void *address, size_t length,
 
     mem_info->type    = mem_info_internal.type;
     mem_info->sys_dev = mem_info_internal.sys_dev;
+    mem_info->flags   = mem_info_internal.mem_flags;
 }
 
 static UCS_F_ALWAYS_INLINE int
@@ -757,7 +785,7 @@ ucp_context_rndv_is_enabled(ucp_context_h context)
 }
 
 void ucp_context_memaccess_tl_bitmap(ucp_context_h context,
-                                     ucs_memory_type_t mem_type,
+                                     uint64_t mem_type_bitmap,
                                      uint64_t md_reg_flags,
                                      ucp_tl_bitmap_t *tl_bitmap);
 
@@ -776,6 +804,14 @@ void ucp_tl_bitmap_validate(const ucp_tl_bitmap_t *tl_bitmap,
 
 
 const char* ucp_context_cm_name(ucp_context_h context, ucp_rsc_index_t cm_idx);
+
+
+ucp_md_map_t ucp_context_select_reg_mds(ucp_context_h context,
+                                        ucp_md_map_t md_map,
+                                        ucs_sys_device_t mem_sys_dev);
+
+
+ucp_md_map_t ucp_context_get_net_md_map(ucp_context_h context);
 
 
 ucs_status_t

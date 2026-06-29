@@ -73,6 +73,8 @@ enum {
 #endif
     UCT_IB_MEM_FLAG_GVA              = UCS_BIT(5), /**< The memory handle is a
                                                         GVA region */
+    UCT_IB_MEM_DIRECT_NIC            = UCS_BIT(6), /**< The memory handle was
+                                                        registered using Direct NIC */
 };
 
 enum {
@@ -110,7 +112,10 @@ typedef struct uct_ib_md_ext_config {
     unsigned long            reg_retry_cnt; /**< Memory registration retry count */
     unsigned                 smkey_block_size; /**< Mkey indexes in a symmetric block */
     int                      direct_nic; /**< Direct NIC with GPU functionality */
-    double                   gda_max_sys_latency; /**< Threshold to filter GPU<->IB distance */
+    unsigned long            gda_max_hca_per_gpu; /**< Threshold of IB per GPU */
+    int                      gda_dmabuf_enable; /**< Enable DMA-BUF in GDA */
+    /**< Retain and use an inactive CUDA primary context to query device capabilities */
+    int                      gda_retain_inactive_ctx;
 } uct_ib_md_ext_config_t;
 
 
@@ -374,7 +379,7 @@ void uct_ib_md_free(uct_ib_md_t *md);
 
 void uct_ib_md_close(uct_md_h tl_md);
 
-ucs_status_t uct_ib_reg_mr(uct_ib_md_t *md, void *address, size_t length,
+ucs_status_t uct_ib_reg_mr(const uct_ib_md_t *md, void *address, size_t length,
                            const uct_md_mem_reg_params_t *params,
                            uint64_t access_flags, struct ibv_dm *dm,
                            struct ibv_mr **mr_p);

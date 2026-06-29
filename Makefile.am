@@ -41,12 +41,7 @@ SUBDIRS = \
 	src/ucm \
 	src/ucs \
 	src/uct \
-	src/ucp \
-	stubs
-
-if HAVE_UCG
-SUBDIRS += $(UCG_SUBDIR)
-endif
+	src/ucp
 
 SUBDIRS += \
 	src/tools/vfs \

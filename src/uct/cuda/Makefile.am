@@ -1,5 +1,5 @@
 #
-# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2018. ALL RIGHTS RESERVED.
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 
@@ -17,30 +17,36 @@ libuct_cuda_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
 libuct_cuda_ladir       = $(includedir)/uct/cuda
 
 nobase_dist_libuct_cuda_la_HEADERS = \
-	cuda_ipc/cuda_ipc.cuh \
-	cuda_ipc/cuda_ipc_device.h
+	cuda_ipc/cuda_ipc.cuh
 
 noinst_HEADERS = \
+	base/cuda_ctx.h \
+	base/cuda_ctx.inl \
 	base/cuda_md.h \
 	base/cuda_iface.h \
 	base/cuda_nvml.h \
+	base/cuda_util.h \
 	cuda_copy/cuda_copy_md.h \
 	cuda_copy/cuda_copy_iface.h \
 	cuda_copy/cuda_copy_ep.h \
 	cuda_ipc/cuda_ipc_md.h \
+	cuda_ipc/cuda_ipc_iface_address.h \
 	cuda_ipc/cuda_ipc_iface.h \
 	cuda_ipc/cuda_ipc_ep.h \
 	cuda_ipc/cuda_ipc_cache.h \
 	cuda_ipc/cuda_ipc.inl
 
 libuct_cuda_la_SOURCES = \
+	base/cuda_ctx.c \
 	base/cuda_iface.c \
 	base/cuda_md.c \
 	base/cuda_nvml.c \
+	base/cuda_util.c \
 	cuda_copy/cuda_copy_md.c \
 	cuda_copy/cuda_copy_iface.c \
 	cuda_copy/cuda_copy_ep.c \
 	cuda_ipc/cuda_ipc_md.c \
+	cuda_ipc/cuda_ipc_iface_address.c \
 	cuda_ipc/cuda_ipc_iface.c \
 	cuda_ipc/cuda_ipc_ep.c \
 	cuda_ipc/cuda_ipc_cache.c

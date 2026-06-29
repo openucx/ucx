@@ -28,7 +28,6 @@ typedef struct {
     double                  bandwidth;           /* estimated bandwidth */
     double                  latency;             /* estimated latency */
     double                  overhead;            /* estimated CPU overhead */
-    int                     enable_same_process; /* enable cuda_ipc for same pid same device */
 } uct_cuda_ipc_iface_config_params_t;
 
 
@@ -50,6 +49,7 @@ typedef struct {
     uct_cuda_ipc_ep_t     *ep;
     uintptr_t             d_bptr;
     pid_t                 pid;
+    ucs_sys_ns_t          pid_ns;
     CUdevice              cuda_device;
 } uct_cuda_ipc_event_desc_t;
 

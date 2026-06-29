@@ -601,7 +601,7 @@ static ucs_status_t perftest_mad_parse_ca_and_port(const char *mad_port,
                                                    int *ca_port)
 {
     static const int default_port = 1;
-    char *sep                     = strchr(mad_port, ':');
+    const char *sep               = strchr(mad_port, ':');
     size_t len;
 
     if (sep == NULL) {

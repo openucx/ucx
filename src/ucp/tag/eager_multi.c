@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2021. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -134,6 +134,7 @@ ucp_proto_t ucp_eager_bcopy_multi_proto = {
     .name     = "egr/multi/bcopy",
     .desc     = UCP_PROTO_MULTI_FRAG_DESC " " UCP_PROTO_EAGER_BCOPY_DESC,
     .flags    = 0,
+    .dt_mask  = UCP_PROTO_DT_MASK_DEFAULT,
     .probe    = ucp_proto_eager_bcopy_multi_probe,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_eager_bcopy_multi_progress},
@@ -188,7 +189,7 @@ void ucp_proto_eager_sync_ack_handler(ucp_worker_h worker,
     }
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
+static UCS_F_INLINE_OPTIMIZED ucs_status_t
 ucp_proto_eager_sync_bcopy_request_init(ucp_request_t *req)
 {
     if (!(req->flags & UCP_REQUEST_FLAG_SYNC_REMOTE_COMPLETED)) {
@@ -217,6 +218,7 @@ ucp_proto_t ucp_eager_sync_bcopy_multi_proto = {
     .name     = "egrsnc/multi/bcopy",
     .desc     = UCP_PROTO_MULTI_FRAG_DESC " " UCP_PROTO_EAGER_BCOPY_DESC,
     .flags    = 0,
+    .dt_mask  = UCP_PROTO_DT_MASK_DEFAULT,
     .probe    = ucp_proto_eager_sync_bcopy_multi_probe,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_eager_sync_bcopy_multi_progress},
@@ -292,6 +294,7 @@ ucp_proto_t ucp_eager_zcopy_multi_proto = {
     .name     = "egr/multi/zcopy",
     .desc     = UCP_PROTO_MULTI_FRAG_DESC " " UCP_PROTO_EAGER_ZCOPY_DESC,
     .flags    = 0,
+    .dt_mask  = UCP_DT_MASK_CONTIG_IOV,
     .probe    = ucp_proto_eager_zcopy_multi_probe,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_eager_zcopy_multi_progress},

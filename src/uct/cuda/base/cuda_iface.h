@@ -9,64 +9,12 @@
 #include <uct/base/uct_iface.h>
 #include <ucs/sys/preprocessor.h>
 #include <ucs/profile/profile.h>
+#include <ucs/sys/checker.h>
 #include <ucs/async/eventfd.h>
 #include <ucs/datastruct/khash.h>
+#include <ucs/datastruct/mpool.h>
+#include <uct/cuda/base/cuda_util.h>
 
-#include <cuda.h>
-
-
-const char *uct_cuda_base_cu_get_error_string(CUresult result);
-
-
-#define UCT_CUDADRV_LOG(_func, _log_level, _result) \
-    ucs_log((_log_level), "%s failed: %s", UCS_PP_MAKE_STRING(_func), \
-            uct_cuda_base_cu_get_error_string(_result))
-
-
-#define UCT_CUDADRV_FUNC(_func, _log_level) \
-    ({ \
-        CUresult _result = (_func); \
-        ucs_status_t _status; \
-        if (ucs_likely(_result == CUDA_SUCCESS)) { \
-            _status = UCS_OK; \
-        } else { \
-            UCT_CUDADRV_LOG(_func, _log_level, _result); \
-            _status = UCS_ERR_IO_ERROR; \
-        } \
-        _status; \
-    })
-
-
-#define UCT_CUDADRV_FUNC_LOG_ERR(_func) \
-    UCT_CUDADRV_FUNC(_func, UCS_LOG_LEVEL_ERROR)
-
-
-#define UCT_CUDADRV_FUNC_LOG_WARN(_func) \
-    UCT_CUDADRV_FUNC(_func, UCS_LOG_LEVEL_WARN)
-
-
-#define UCT_CUDADRV_FUNC_LOG_DEBUG(_func) \
-    UCT_CUDADRV_FUNC(_func, UCS_LOG_LEVEL_DEBUG)
-
-
-static UCS_F_ALWAYS_INLINE int uct_cuda_base_is_context_active()
-{
-    CUcontext ctx;
-
-    return (CUDA_SUCCESS == cuCtxGetCurrent(&ctx)) && (ctx != NULL);
-}
-
-
-static UCS_F_ALWAYS_INLINE CUresult
-uct_cuda_base_ctx_get_id(CUcontext ctx, unsigned long long *ctx_id_p)
-{
-#if CUDA_VERSION >= 12000
-    return cuCtxGetId(ctx, ctx_id_p);
-#else
-    *ctx_id_p = 0;
-    return CUDA_SUCCESS;
-#endif
-}
 
 
 typedef enum uct_cuda_base_gen {
@@ -95,9 +43,43 @@ typedef struct {
 } uct_cuda_event_desc_t;
 
 
+static UCS_F_ALWAYS_INLINE void*
+uct_cuda_base_event_desc_mpool_get(ucs_mpool_t *mp)
+{
+    uct_cuda_event_desc_t *event_desc =
+            (uct_cuda_event_desc_t*)ucs_mpool_get(mp);
+
+    if (ucs_likely(event_desc != NULL)) {
+        VALGRIND_MAKE_MEM_DEFINED(&event_desc->event,
+                                  sizeof(event_desc->event));
+    }
+
+    return event_desc;
+}
+
+
+/* Base flush descriptor */
+typedef struct {
+    /* How many streams are currently active */
+    uint32_t          stream_counter;
+    uct_completion_t *comp;
+} uct_cuda_flush_desc_t;
+
+
+/* Stream Flush descriptor */
+typedef struct {
+    uct_cuda_event_desc_t  super;
+    /* Pointer to base flush descriptor */
+    uct_cuda_flush_desc_t *flush_desc;
+    uct_completion_t       comp;
+} uct_cuda_flush_stream_desc_t;
+
+
 typedef struct {
     /* CUDA context handle */
     CUcontext          ctx;
+    /* CUDA device, if @ctx is a primary context. CU_DEVICE_INVALID otherwise */
+    CUdevice           cuda_device;
     /* CUDA context id */
     unsigned long long ctx_id;
     /* pool of cuda events to check completion of memcpy operations */
@@ -130,6 +112,8 @@ typedef struct {
     /* list of queues which require progress */
     ucs_queue_head_t          active_queue;
     uct_cuda_iface_ops_t      *ops;
+    /* Pool for flush events */
+    ucs_mpool_t               flush_mpool;
 
     struct {
         unsigned              max_events;
@@ -149,15 +133,11 @@ ucs_status_t uct_cuda_base_iface_flush(uct_iface_h tl_iface, unsigned flags,
                                        uct_completion_t *comp);
 
 ucs_status_t
+uct_cuda_base_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp);
+ucs_status_t
 uct_cuda_base_query_devices_common(
         uct_md_h md, uct_device_type_t dev_type,
         uct_tl_device_resource_t **tl_devices_p, unsigned *num_tl_devices_p);
-
-void
-uct_cuda_base_get_sys_dev(CUdevice cuda_device, ucs_sys_device_t *sys_dev_p);
-
-ucs_status_t
-uct_cuda_base_get_cuda_device(ucs_sys_device_t sys_dev, CUdevice *device);
 
 ucs_status_t uct_cuda_base_ctx_rsc_create(uct_cuda_iface_t *iface,
                                           unsigned long long ctx_id,
@@ -168,7 +148,8 @@ void uct_cuda_base_queue_desc_init(uct_cuda_queue_desc_t *qdesc);
 void uct_cuda_base_queue_desc_destroy(const uct_cuda_ctx_rsc_t *ctx_rsc,
                                       uct_cuda_queue_desc_t *qdesc);
 
-void uct_cuda_base_stream_destroy(CUstream *stream);
+void uct_cuda_base_stream_destroy(const uct_cuda_ctx_rsc_t *ctx_rsc,
+                                  CUstream *stream);
 
 #if (__CUDACC_VER_MAJOR__ >= 100000)
 void CUDA_CB uct_cuda_base_iface_stream_cb_fxn(void *arg);
@@ -181,22 +162,6 @@ UCS_CLASS_INIT_FUNC(uct_cuda_iface_t, uct_iface_ops_t *tl_ops,
                     uct_iface_internal_ops_t *ops, uct_md_h md,
                     uct_worker_h worker, const uct_iface_params_t *params,
                     const uct_iface_config_t *tl_config, const char *dev_name);
-
-
-/**
- * Retain the primary context on the given CUDA device.
- *
- * @param [in]  cuda_device Device for which primary context is requested.
- * @param [in]  force       Retain the primary context regardless of its state.
- * @param [out] cuda_ctx_p  Returned context handle of the retained context.
- *
- * @return UCS_OK if the method completes successfully. UCS_ERR_NO_DEVICE if the
- *         primary device context is inactive on the given CUDA device and
- *         retaining is not forced. UCS_ERR_IO_ERROR if the CUDA driver API
- *         methods called inside failed with an error.
- */
-ucs_status_t uct_cuda_primary_ctx_retain(CUdevice cuda_device, int force,
-                                         CUcontext *cuda_ctx_p);
 
 
 static UCS_F_ALWAYS_INLINE ucs_status_t

@@ -119,23 +119,28 @@ typedef struct ucp_address               ucp_address_t;
  * Specifies error handling mode for the UCP endpoint.
  */
 typedef enum {
-    UCP_ERR_HANDLING_MODE_NONE,             /**< No guarantees about error
-                                             *   reporting, imposes minimal
-                                             *   overhead from a performance
-                                             *   perspective. @note In this
-                                             *   mode, any error reporting will
-                                             *   not generate calls to @ref
-                                             *   ucp_ep_params_t::err_handler.
-                                             */
-    UCP_ERR_HANDLING_MODE_PEER              /**< Guarantees that send requests
-                                             *   are always completed
-                                             *   (successfully or error) even in
-                                             *   case of remote failure, disables
-                                             *   protocols and APIs which may
-                                             *   cause a hang or undefined
-                                             *   behavior in case of peer failure,
-                                             *   may affect performance and
-                                             *   memory footprint */
+    /**
+     * No guarantees about error reporting, imposes minimal overhead from
+     * a performance perspective. @note In this mode, any error reporting will
+     * not generate calls to @ref ucp_ep_params_t::err_handler.
+     */
+    UCP_ERR_HANDLING_MODE_NONE,
+
+    /**
+     * Guarantees that send requests are always completed (successfully or
+     * error) even in case of remote failure, disables protocols and APIs which
+     * may cause a hang or undefined behavior in case of peer failure, may
+     * affect performance and memory footprint
+     */
+    UCP_ERR_HANDLING_MODE_PEER,
+
+    /**
+     * In case of error on transport layer, protocol layer tries to handle the
+     * error by best effort and continue operation by using the next available
+     * communication channel. If the error cannot be handled,
+     * see @ref UCP_ERR_HANDLING_MODE_PEER.
+     */
+    UCP_ERR_HANDLING_MODE_FAILOVER
 } ucp_err_handling_mode_t;
 
 
@@ -150,6 +155,28 @@ typedef enum {
  * communicated to remote peers to enable an access to the memory region.
  */
 typedef struct ucp_rkey                  *ucp_rkey_h;
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Invalid remote address sentinel.
+ *
+ * This value should be passed as the @a remote_addr parameter of
+ * @ref ucp_put_nbx when remote addresses are provided through an SGL
+ * descriptor (@ref ucp_dt_remote_sgl_t) instead.
+ */
+#define UCP_REMOTE_ADDR_INVALID  UINT64_MAX
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Invalid remote key sentinel.
+ *
+ * This value should be passed as the @a rkey parameter of
+ * @ref ucp_put_nbx when remote keys are provided through an SGL
+ * descriptor (@ref ucp_dt_remote_sgl_t) instead.
+ */
+#define UCP_RKEY_INVALID         NULL
 
 
 /**
@@ -876,6 +903,7 @@ typedef struct {
 } ucp_transports_t;
 
 
-typedef struct ucp_device_mem_list_handle *ucp_device_mem_list_handle_h;
+typedef struct ucp_device_local_mem_list *ucp_device_local_mem_list_h;
+typedef struct ucp_device_remote_mem_list *ucp_device_remote_mem_list_h;
 
 #endif

@@ -37,6 +37,7 @@ enum {
     UCP_REQUEST_FLAG_COMPLETED             = UCS_BIT(0),
     UCP_REQUEST_FLAG_RELEASED              = UCS_BIT(1),
     UCP_REQUEST_FLAG_PROTO_SEND            = UCS_BIT(2),
+    UCP_REQUEST_FLAG_MSG_ID_SET            = UCS_BIT(3),
     UCP_REQUEST_FLAG_SYNC_LOCAL_COMPLETED  = UCS_BIT(4),
     UCP_REQUEST_FLAG_SYNC_REMOTE_COMPLETED = UCS_BIT(5),
     UCP_REQUEST_FLAG_CALLBACK              = UCS_BIT(6),
@@ -55,15 +56,20 @@ enum {
     UCP_REQUEST_FLAG_USER_HEADER_COPIED    = UCS_BIT(19),
     UCP_REQUEST_FLAG_USAGE_TRACKED         = UCS_BIT(20),
     UCP_REQUEST_FLAG_FENCE_REQUIRED        = UCS_BIT(21),
+    UCP_REQUEST_FLAG_RNDV_RECV_INTERNAL    = UCS_BIT(22),
 #if UCS_ENABLE_ASSERT
-    UCP_REQUEST_FLAG_STREAM_RECV           = UCS_BIT(22),
-    UCP_REQUEST_DEBUG_FLAG_EXTERNAL        = UCS_BIT(23),
-    UCP_REQUEST_FLAG_SUPER_VALID           = UCS_BIT(24),
+    UCP_REQUEST_FLAG_STREAM_RECV           = UCS_BIT(23),
+    UCP_REQUEST_DEBUG_FLAG_EXTERNAL        = UCS_BIT(24),
+    UCP_REQUEST_FLAG_SUPER_VALID           = UCS_BIT(25),
 #else
     UCP_REQUEST_FLAG_STREAM_RECV           = 0,
     UCP_REQUEST_DEBUG_FLAG_EXTERNAL        = 0,
-    UCP_REQUEST_FLAG_SUPER_VALID           = 0
+    UCP_REQUEST_FLAG_SUPER_VALID           = 0,
 #endif
+    UCP_REQUEST_FLAG_RNDV_SEND_INTERNAL    = UCS_BIT(26),
+    UCP_REQUEST_FLAG_RNDV_GET_REQ          = UCS_BIT(27),
+    UCP_REQUEST_FLAG_RNDV_FLUSH            = UCS_BIT(28),
+    UCP_REQUEST_FLAG_RNDV_START_FLUSH      = UCS_BIT(29)
 };
 
 
@@ -74,8 +80,7 @@ enum {
     UCP_REQUEST_SEND_PROTO_BCOPY_AM = 0,
     UCP_REQUEST_SEND_PROTO_ZCOPY_AM,
     UCP_REQUEST_SEND_PROTO_RNDV_GET,
-    UCP_REQUEST_SEND_PROTO_RNDV_PUT,
-    UCP_REQUEST_SEND_PROTO_RMA
+    UCP_REQUEST_SEND_PROTO_RNDV_PUT
 };
 
 
@@ -196,7 +201,10 @@ struct ucp_request {
             } state;
 
             union {
-                ucp_wireup_msg_t  wireup;
+                struct {
+                    ucp_wireup_msg_t            msg_hdr;
+                    ucp_wireup_msg_lanes_info_t lanes_info;
+                } UCS_S_PACKED wireup;
 
                 struct {
                     /* Used to identify matching parts of a large message */
@@ -346,14 +354,22 @@ struct ucp_request {
                 } rkey_ptr;
 
                 struct {
-                    unsigned           uct_flags; /* Flags to pass to @ref uct_ep_flush */
-                    uint32_t           cmpl_sn;   /* Sequence number of the remote completion
-                                                     this request is waiting for */
+                    /* All lanes that are being flushed */
+                    ucp_lane_map_t     all_lanes;
+                    /* Which lanes flush has been started on */
+                    ucp_lane_map_t     started_lanes;
+                    /* Sequence number of the remote completion this request is
+                     * waiting for */
+                    uint32_t           cmpl_sn;
+                    /* Flags to pass to @ref uct_ep_flush */
+                    uint8_t            uct_flags;
+                    /* Originally requested UCT flush flags, used to restore
+                     * uct_flags on rewind after fast-forwarding */
+                    uint8_t            uct_flags_orig;
                     uint8_t            sw_started;
                     uint8_t            sw_done;
-                    uint8_t            num_lanes; /* How many lanes are being flushed */
-                    ucp_lane_map_t     started_lanes; /* Which lanes need were flushed */
-                    ucp_mem_flush_t    mem; /* Memory specific flushes */
+                    /* Memory specific flushes */
+                    ucp_mem_flush_t    mem;
                 } flush;
 
                 struct {
@@ -468,6 +484,13 @@ struct ucp_request {
                     size_t                         elem_size;
                     size_t                         length; /* Completion info to fill */
                 } stream;
+
+                struct {
+                    /* Remote endpoint ID used to send internal completions */
+                    uint64_t               ep_id;
+                    /* Completion callback for internal RNDV receives */
+                    ucp_request_callback_t complete_cb;
+                } rndv;
 
                  struct {
                     ucp_am_recv_data_nbx_callback_t cb;    /* Completion callback */
@@ -586,5 +609,8 @@ ucs_status_t ucp_request_recv_msg_truncated(ucp_request_t *req, size_t length,
 void ucp_request_purge_enqueue_cb(uct_pending_req_t *self, void *arg);
 
 ucs_status_t ucp_request_progress_wrapper(uct_pending_req_t *self);
+
+void ucp_request_progress_wrapper_init(ucp_worker_h worker,
+                                       ucp_proto_config_t *proto_config);
 
 #endif

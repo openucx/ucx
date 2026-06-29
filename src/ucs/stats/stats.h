@@ -39,7 +39,6 @@ typedef struct {
 void ucs_stats_init();
 void ucs_stats_cleanup();
 void ucs_stats_dump();
-int ucs_stats_is_active();
 
 /**
  * A UCX statistics API function to return the aggregate-sum of all counters
@@ -80,6 +79,17 @@ void ucs_stats_aggregate_get_counter_names(
 
 #include "libstats.h"
 
+enum {
+    UCS_STATS_FLAG_ON_EXIT       = UCS_BIT(0),
+    UCS_STATS_FLAG_ON_TIMER      = UCS_BIT(1),
+    UCS_STATS_FLAG_ON_SIGNAL     = UCS_BIT(2),
+
+    UCS_STATS_FLAG_SOCKET        = UCS_BIT(8),
+    UCS_STATS_FLAG_STREAM        = UCS_BIT(9),
+    UCS_STATS_FLAG_STREAM_CLOSE  = UCS_BIT(10),
+    UCS_STATS_FLAG_STREAM_BINARY = UCS_BIT(11)
+};
+
 /**
  * Allocate statistics node.
  *
@@ -108,22 +118,23 @@ void ucs_stats_node_free(ucs_stats_node_t *node);
 #define UCS_STATS_NODE_FREE(_node) \
     ucs_stats_node_free(_node)
 
+#define UCS_STATS_NODE_VALID(_node) (((_node) != NULL) && ucs_stats_is_active())
+
 #define UCS_STATS_UPDATE_COUNTER(_node, _index, _delta) \
-    if (((_delta) != 0) && ((_node) != NULL)) { \
+    if (((_delta) != 0) && UCS_STATS_NODE_VALID(_node)) { \
         (_node)->counters[(_index)] += (uint64_t)(_delta); \
     }
 
 #define UCS_STATS_SET_COUNTER(_node, _index, _value) \
-    if ((_node) != NULL) { \
+    if (UCS_STATS_NODE_VALID(_node)) { \
         (_node)->counters[(_index)] = (_value); \
     }
 
 #define UCS_STATS_GET_COUNTER(_node, _index) \
-    (((_node) != NULL) ?  \
-    (_node)->counters[(_index)] : 0)
+    (UCS_STATS_NODE_VALID(_node) ? (_node)->counters[(_index)] : 0)
 
 #define UCS_STATS_UPDATE_MAX(_node, _index, _value) \
-    if ((_node) != NULL) { \
+    if (UCS_STATS_NODE_VALID(_node)) { \
         if ((_node)->counters[(_index)] < (_value)) { \
             (_node)->counters[(_index)] = (_value); \
         } \
@@ -148,6 +159,14 @@ void ucs_stats_node_free(ucs_stats_node_t *node);
         UCS_STATS_SET_COUNTER(_node, _index, \
                               (long)ucs_time_to_nsec(ucs_get_time() - (_start_time))); \
    }
+
+extern volatile unsigned ucs_stats_context_flags;
+
+static UCS_F_ALWAYS_INLINE int ucs_stats_is_active(void)
+{
+    return ucs_stats_context_flags &
+           (UCS_STATS_FLAG_SOCKET | UCS_STATS_FLAG_STREAM);
+}
 
 #else
 

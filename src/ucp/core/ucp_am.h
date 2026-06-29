@@ -10,8 +10,9 @@
 
 
 #include <ucs/datastruct/array.h>
+#include <ucs/datastruct/interval_tree.h>
+#include <ucs/datastruct/mpool.h>
 #include <ucp/rndv/rndv.h>
-
 
 #define ucp_am_hdr_from_rts(_rts) \
     ({ \
@@ -50,6 +51,7 @@ typedef struct ucp_am_entry {
 typedef struct ucp_am_info {
     size_t                                alignment;
     ucs_array_s(unsigned, ucp_am_entry_t) cbs;
+    ucs_mpool_t                           frag_tree_mpool;
 } ucp_am_info_t;
 
 
@@ -79,6 +81,19 @@ typedef struct ucp_am_info {
  *  | ucp_am_mid_hdr_t | payload | ucp_am_mid_ftr_t |
  *  +------------------+---------+------------------+
  */
+
+
+/*
+ * Wire-internal flags ORed into @ref ucp_am_hdr_t::flags on the first fragment
+ * of an eager AM. Live in the upper bits to avoid overlap with the user-facing
+ * @ref ucp_send_am_flags (bits 0..3); never exposed via the public API.
+ */
+enum ucp_am_hdr_flags {
+    /* First fragment of a restarted (same msg_id) message. Receiver uses it
+     * on the single-fragment branch to evict any orphan partial first_rdesc
+     * left by the previous attempt. No-op on other restart shapes. */
+    UCP_AM_HDR_FLAG_RESEND = UCS_BIT(15)
+};
 
 
 typedef union {
@@ -117,7 +132,6 @@ typedef struct {
 
 typedef struct {
     ucs_list_link_t          list;        /* entry into list of unfinished AM's */
-    size_t                   remaining;   /* how many bytes left to receive */
 } ucp_am_first_desc_t;
 
 

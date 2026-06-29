@@ -1,5 +1,5 @@
 /*
- * Copyright (C) Advanced Micro Devices, Inc. 2019-2023. ALL RIGHTS RESERVED.
+ * Copyright (C) Advanced Micro Devices, Inc. 2019-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -8,6 +8,7 @@
 #endif
 
 #include "rocm_base.h"
+#include "rocm_signal.h"
 
 #include <ucs/sys/string.h>
 #include <ucs/sys/module.h>
@@ -193,21 +194,22 @@ ucs_status_t uct_rocm_base_query_devices(uct_md_h md,
                                       num_tl_devices_p);
 }
 
-hsa_agent_t uct_rocm_base_get_dev_agent(int dev_num)
+hsa_agent_t uct_rocm_base_get_dev_agent(int gpu_num)
 {
-    ucs_assert(dev_num < uct_rocm_base_agents.num);
-    return uct_rocm_base_agents.agents[dev_num];
+    ucs_assertv(gpu_num < uct_rocm_base_agents.num_gpu, "gpu %d, num_gpus %d",
+                gpu_num, uct_rocm_base_agents.num_gpu);
+    return uct_rocm_base_agents.gpu_agents[gpu_num];
 }
 
 int uct_rocm_base_get_dev_num(hsa_agent_t agent)
 {
     int i;
 
-    for (i = 0; i < uct_rocm_base_agents.num; i++) {
-        if (uct_rocm_base_agents.agents[i].handle == agent.handle)
+    for (i = 0; i < uct_rocm_base_agents.num_gpu; i++) {
+        if (uct_rocm_base_agents.gpu_agents[i].handle == agent.handle) {
             return i;
+        }
     }
-    ucs_assert(0);
     return -1;
 }
 
@@ -251,7 +253,14 @@ hsa_status_t uct_rocm_base_get_ptr_info(void *ptr, size_t size, void **base_ptr,
         *base_size = info.sizeInBytes;
     }
     if (dev_type != NULL) {
-        if (info.type == HSA_EXT_POINTER_TYPE_UNKNOWN) {
+        /* HSA_EXT_POINTER_TYPE_RESERVED_ADDR check is required
+         * for rocm7+ for hip managed memory
+         */
+        if ((info.type == HSA_EXT_POINTER_TYPE_UNKNOWN)
+#ifdef HAVE_ROCM_RESERVED_ADDR_TYPE
+            || (info.type == HSA_EXT_POINTER_TYPE_RESERVED_ADDR)
+#endif
+        ) {
             *dev_type = HSA_DEVICE_TYPE_CPU;
         } else {
             status = hsa_agent_get_info(info.agentOwner, HSA_AGENT_INFO_DEVICE,
@@ -362,7 +371,7 @@ static void uct_rocm_base_dmabuf_export(const void *addr, const size_t length,
 
 ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
                                      const size_t length,
-                                     uct_md_mem_attr_t *mem_attr_p)
+                                     uct_md_mem_attr_v2_t *mem_attr_p)
 {
     size_t dmabuf_offset       = 0;
     int is_exported            = 0;
@@ -387,37 +396,37 @@ ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
     if ((hsa_mem_type == HSA_EXT_POINTER_TYPE_HSA) &&
         (dev_type == HSA_DEVICE_TYPE_GPU)) {
         mem_type = UCS_MEMORY_TYPE_ROCM;
-
+        uct_rocm_base_last_device_agent_used = uct_rocm_base_get_dev_num(agent);
         ucs_status = uct_rocm_base_get_sys_dev(agent, &sys_dev);
         if (ucs_status != UCS_OK) {
             sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
         }
     }
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_MEM_TYPE) {
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE) {
         mem_attr_p->mem_type = mem_type;
     }
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_SYS_DEV) {
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_SYS_DEV) {
         mem_attr_p->sys_dev = sys_dev;
     }
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS) {
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_BASE_ADDRESS) {
         mem_attr_p->base_address = (void*) addr;
     }
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH) {
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_ALLOC_LENGTH) {
         mem_attr_p->alloc_length = length;
     }
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD) {
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD) {
         uct_rocm_base_dmabuf_export(addr, length, mem_type, &dmabuf_fd,
                                     &dmabuf_offset);
         mem_attr_p->dmabuf_fd = dmabuf_fd;
         is_exported           = 1;
     }
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET) {
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_OFFSET) {
         if (!is_exported) {
             uct_rocm_base_dmabuf_export(addr, length, mem_type, &dmabuf_fd,
                                         &dmabuf_offset);
@@ -426,7 +435,8 @@ ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
     }
 
     if (mem_type == UCS_MEMORY_TYPE_ROCM) {
-        ucs_memtype_cache_update(base_addr, base_size, mem_type, sys_dev);
+        ucs_memtype_cache_update(base_addr, base_size, mem_type, sys_dev,
+                                 UCS_MEM_FLAG_REGISTRABLE);
     }
 
     return UCS_OK;
@@ -536,6 +546,36 @@ uct_rocm_amd_gpu_product_t uct_rocm_base_get_gpu_product(void)
     }
 
     return gpu_product;
+}
+
+ucs_status_t uct_rocm_base_ep_flush(uct_ep_h tl_ep, ucs_mpool_t *signal_pool,
+                                    ucs_queue_head_t *signal_queue,
+                                    uct_completion_t *comp)
+{
+    uct_rocm_base_signal_desc_t *flush_signal;
+
+    if (ucs_queue_is_empty(signal_queue)) {
+        UCT_TL_EP_STAT_FLUSH(ucs_derived_of(tl_ep, uct_base_ep_t));
+        return UCS_OK;
+    }
+
+    if (comp == NULL) {
+        UCT_TL_EP_STAT_FLUSH_WAIT(ucs_derived_of(tl_ep, uct_base_ep_t));
+        return UCS_INPROGRESS;
+    }
+
+    flush_signal = ucs_mpool_get(signal_pool);
+    if (flush_signal == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    hsa_signal_store_screlease(flush_signal->signal, 0);
+    flush_signal->comp        = comp;
+    flush_signal->mapped_addr = NULL;
+    ucs_queue_push(signal_queue, &flush_signal->queue);
+
+    UCT_TL_EP_STAT_FLUSH_WAIT(ucs_derived_of(tl_ep, uct_base_ep_t));
+    return UCS_INPROGRESS;
 }
 
 UCS_MODULE_INIT() {

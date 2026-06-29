@@ -5,11 +5,8 @@ usage()
 	echo "Usage: autogen.sh <options>"
 	echo
 	echo "  -h|--help         Show this help message"
-	echo "  --with-ucg        Fetch UCG submodule"
 	echo
 }
-
-with_ucg="no"
 
 for key in "$@"
 do
@@ -17,9 +14,6 @@ do
 	-h|--help)
 		usage
 		exit 0
-		;;
-	--with-ucg)
-		with_ucg="yes"
 		;;
 	*)
 		usage
@@ -31,10 +25,8 @@ done
 rm -rf autom4te.cache
 mkdir -p config/m4 config/aux
 
-if [ "X$with_ucg" = "Xyes" ]
-then
-	git submodule update --init --recursive --remote
-fi
+git submodule update --init external/gpunetio ||
+    echo "WARNING: Failed to update GPUNetIO submodule, continuing..."
 
 autoreconf -v --install || exit 1
 rm -rf autom4te.cache

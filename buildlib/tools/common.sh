@@ -10,10 +10,35 @@ JDK_MODULE="dev/jdk"
 MVN_MODULE="dev/mvn"
 XPMEM_MODULE="dev/xpmem-90a95a4"
 PGI_MODULE="hpc-sdk/nvhpc/21.2"
-GCC_MODULE="dev/gcc-10.1.0"
+GCC_MODULE="${GCC_MODULE:-dev/gcc-10.1.0}"
 ARM_MODULE="arm-compiler/armcc-22.1"
 INTEL_MODULE="intel/ics-19.1.1"
 FUSE3_MODULE="dev/fuse-3.10.5"
+
+#
+# Set default parallelism for CI (can be overridden by NPROC env var)
+#
+if [ -z "${NPROC:-}" ]; then
+	# In containers, calculate based on memory limits to avoid OOM
+	if [ -f /.dockerenv ] || [ -f /run/.containerenv ] || [ -n "${KUBERNETES_SERVICE_HOST:-}" ]; then
+		one_gib=$((1024 * 1024 * 1024))
+		if [ -f /sys/fs/cgroup/memory/memory.limit_in_bytes ]; then
+			limit=$(cat /sys/fs/cgroup/memory/memory.limit_in_bytes)
+		elif [ -f /sys/fs/cgroup/memory.max ]; then
+			limit=$(cat /sys/fs/cgroup/memory.max)
+			[ "$limit" = "max" ] && limit=$((4 * one_gib))
+		else
+			limit=$((4 * one_gib))
+		fi
+		# Use 1 process per GB of memory, max 16
+		nproc=$((limit / one_gib))
+		nproc=$((nproc > 16 ? 16 : nproc))
+		nproc=$((nproc < 1 ? 1 : nproc))
+	else
+		nproc=$(nproc --all)
+	fi
+	export NPROC=$nproc
+fi
 
 #
 # Parallel build command runs with 4 tasks, or number of cores on the system,
@@ -23,7 +48,7 @@ num_cpus=$(lscpu -p | grep -v '^#' | wc -l)
 [ -z $num_cpus ] && num_cpus=1
 parallel_jobs=${parallel_jobs:-4}
 [ $parallel_jobs -gt $num_cpus ] && parallel_jobs=$num_cpus
-num_pinned_threads=$(nproc)
+num_pinned_threads=${NPROC}
 [ $parallel_jobs -gt $num_pinned_threads ] && parallel_jobs=$num_pinned_threads
 
 MAKE="make V=1"
@@ -273,7 +298,7 @@ check_machine() {
 	lscpu
 	uname -a
 	free -m
-	ofed_info -s || true
+	apt info doca-networking doca-devel 2>/dev/null || yum info doca-networking doca-devel 2>/dev/null || true
 	ibv_devinfo -v || true
 	show_gids || true
 }

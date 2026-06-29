@@ -9,6 +9,7 @@
 #endif
 
 #include "cuda_iface.h"
+#include "cuda_ctx.inl"
 #include "cuda_md.h"
 
 #include <ucs/sys/string.h>
@@ -16,20 +17,6 @@
 
 #define UCT_CUDA_DEV_NAME "cuda"
 
-
-const char *uct_cuda_base_cu_get_error_string(CUresult result)
-{
-    static __thread char buf[64];
-    const char *error_str;
-
-    if (cuGetErrorString(result, &error_str) != CUDA_SUCCESS) {
-        ucs_snprintf_safe(buf, sizeof(buf), "unrecognized error code %d",
-                          result);
-        error_str = buf;
-    }
-
-    return error_str;
-}
 
 ucs_status_t
 uct_cuda_base_query_devices_common(
@@ -40,13 +27,13 @@ uct_cuda_base_query_devices_common(
     CUdevice cuda_device;
     ucs_status_t status;
 
-    if (uct_cuda_base_is_context_active()) {
+    if (uct_cuda_ctx_is_active()) {
         status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetDevice(&cuda_device));
         if (status != UCS_OK) {
             return status;
         }
 
-        uct_cuda_base_get_sys_dev(cuda_device, &sys_device);
+        sys_device = uct_cuda_get_sys_dev(cuda_device);
     } else {
         ucs_debug("set cuda sys_device to `unknown` as no context is"
                   " currently active");
@@ -108,6 +95,12 @@ ucs_status_t uct_cuda_base_check_device_name(const uct_iface_params_t *params)
     return UCS_OK;
 }
 
+static UCS_F_ALWAYS_INLINE int
+uct_cuda_base_event_is_flush(const uct_cuda_event_desc_t *event)
+{
+    return event->event == NULL;
+}
+
 static UCS_F_ALWAYS_INLINE unsigned
 uct_cuda_base_queue_head_ready(ucs_queue_head_t *queue_head)
 {
@@ -119,7 +112,8 @@ uct_cuda_base_queue_head_ready(ucs_queue_head_t *queue_head)
 
     cuda_event = ucs_queue_head_elem_non_empty(queue_head,
                                                uct_cuda_event_desc_t, queue);
-    return (CUDA_SUCCESS == cuEventQuery(cuda_event->event));
+    return uct_cuda_base_event_is_flush(cuda_event) ||
+           (CUDA_SUCCESS == cuEventQuery(cuda_event->event));
 }
 
 ucs_status_t uct_cuda_base_iface_event_fd_arm(uct_iface_h tl_iface,
@@ -173,6 +167,87 @@ ucs_status_t uct_cuda_base_iface_event_fd_arm(uct_iface_h tl_iface,
     return UCS_OK;
 }
 
+static void uct_cuda_base_stream_flushed_cb(uct_completion_t *self)
+{
+    uct_cuda_flush_stream_desc_t *desc =
+            ucs_container_of(self, uct_cuda_flush_stream_desc_t, comp);
+
+    if (--desc->flush_desc->stream_counter == 0) {
+        uct_invoke_completion(desc->flush_desc->comp, UCS_OK);
+        ucs_free(desc->flush_desc);
+    }
+}
+
+/* Flush is done by enqueueing flush events on all active streams and wait
+ * for them to finish. On each flush event completion, we decrement a shared
+ * counter and once it hits zero, flush is completed. */
+ucs_status_t
+uct_cuda_base_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
+{
+    uct_base_ep_t UCS_V_UNUSED *ep = ucs_derived_of(tl_ep, uct_base_ep_t);
+    uct_cuda_iface_t *iface        = ucs_derived_of(tl_ep->iface,
+                                                    uct_cuda_iface_t);
+    uct_cuda_flush_desc_t *flush_desc;
+    uct_cuda_flush_stream_desc_t *flush_stream_desc;
+    uct_cuda_queue_desc_t *q_desc;
+    uct_cuda_event_desc_t *event_desc;
+    ucs_queue_head_t *event_queue;
+    ucs_queue_iter_t iter;
+    unsigned stream_index;
+
+    if (ucs_queue_is_empty(&iface->active_queue) || (comp == NULL)) {
+        UCT_TL_EP_STAT_FLUSH(ep);
+        return UCS_OK;
+    }
+
+    /* Allocate base flush descriptor */
+    flush_desc = ucs_malloc(sizeof(*flush_desc), "cuda_flush_desc");
+    if (flush_desc == NULL) {
+        ucs_error("failed to allocate cuda_flush_desc");
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    flush_desc->comp           = comp;
+    flush_desc->stream_counter = 0;
+
+    /* For each active stream, init a flush event and enqueue it on the
+     * stream */
+    ucs_queue_for_each(q_desc, &iface->active_queue, queue) {
+        flush_stream_desc = ucs_mpool_get(&iface->flush_mpool);
+        if (flush_stream_desc == NULL) {
+            goto error;
+        }
+
+        flush_stream_desc->flush_desc  = flush_desc;
+        flush_stream_desc->comp.func   = uct_cuda_base_stream_flushed_cb;
+        flush_stream_desc->comp.count  = 1;
+        flush_stream_desc->super.comp  = &flush_stream_desc->comp;
+        flush_stream_desc->super.event = NULL;
+        ucs_queue_push(&q_desc->event_queue, &flush_stream_desc->super.queue);
+        flush_desc->stream_counter++;
+    }
+
+    UCT_TL_EP_STAT_FLUSH_WAIT(ep);
+    return UCS_INPROGRESS;
+
+error:
+    /* Rollback enqueued items in case of error */
+    for (iter = ucs_queue_iter_begin(&iface->active_queue), stream_index = 0;
+         stream_index < flush_desc->stream_counter;
+         iter = ucs_queue_iter_next(iter), ++stream_index) {
+        event_queue = &ucs_queue_iter_elem(q_desc, iter, queue)->event_queue;
+        event_desc  = ucs_queue_tail_elem_non_empty(event_queue,
+                                                    uct_cuda_event_desc_t,
+                                                    queue);
+
+        ucs_queue_remove(event_queue, &event_desc->queue);
+        ucs_mpool_put(event_desc);
+    }
+
+    ucs_free(flush_desc);
+    return UCS_ERR_NO_MEMORY;
+}
+
 static UCS_F_ALWAYS_INLINE unsigned
 uct_cuda_base_progress_event_queue(uct_cuda_iface_t *iface,
                                    ucs_queue_head_t *queue_head,
@@ -183,13 +258,18 @@ uct_cuda_base_progress_event_queue(uct_cuda_iface_t *iface,
 
     ucs_queue_for_each_extract(cuda_event, queue_head, queue,
                                (count < max_events) &&
-                               (cuEventQuery(cuda_event->event) == CUDA_SUCCESS)) {
+                               ucs_unlikely(uct_cuda_base_event_is_flush(
+                                       cuda_event) ||
+                               (cuEventQuery(cuda_event->event) == CUDA_SUCCESS))) {
         ucs_trace_data("cuda event %p completed", cuda_event);
         if (cuda_event->comp != NULL) {
             uct_invoke_completion(cuda_event->comp, UCS_OK);
         }
 
-        iface->ops->complete_event(&iface->super.super, cuda_event);
+        if (ucs_likely(!uct_cuda_base_event_is_flush(cuda_event))) {
+            iface->ops->complete_event(&iface->super.super, cuda_event);
+        }
+
         ucs_mpool_put(cuda_event);
         count++;
     }
@@ -236,11 +316,59 @@ ucs_status_t uct_cuda_base_iface_flush(uct_iface_h tl_iface, unsigned flags,
     return UCS_OK;
 }
 
-void uct_cuda_base_stream_destroy(CUstream *stream)
+static ucs_status_t
+uct_cuda_base_ctx_cmp(const uct_cuda_ctx_rsc_t *ctx_rsc,
+                      CUcontext cuda_ctx)
 {
-    if (*stream != NULL) {
-        (void)UCT_CUDADRV_FUNC_LOG_WARN(cuStreamDestroy(*stream));
+#if CUDA_VERSION >= 12000
+    unsigned long long ctx_id;
+    ucs_status_t status;
+
+    status = UCT_CUDADRV_FUNC_LOG_DEBUG(
+            uct_cuda_ctx_get_id(cuda_ctx, &ctx_id));
+    if (status != UCS_OK) {
+        return status;
     }
+
+    return (ctx_id == ctx_rsc->ctx_id) ? UCS_OK : UCS_ERR_NO_DEVICE;
+#else
+    return (cuda_ctx == ctx_rsc->ctx) ? UCS_OK : UCS_ERR_NO_DEVICE;
+#endif
+}
+
+static ucs_status_t
+uct_cuda_base_ctx_rsc_check(const uct_cuda_ctx_rsc_t *ctx_rsc)
+{
+    CUcontext primary_ctx;
+    ucs_status_t status;
+
+    if (ctx_rsc->cuda_device == CU_DEVICE_INVALID) {
+        return UCS_OK;
+    }
+
+    status = uct_cuda_ctx_primary_retain(ctx_rsc->cuda_device, 0,
+                                         &primary_ctx);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = uct_cuda_base_ctx_cmp(ctx_rsc, primary_ctx);
+    UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(ctx_rsc->cuda_device));
+    return status;
+}
+
+void uct_cuda_base_stream_destroy(const uct_cuda_ctx_rsc_t *ctx_rsc,
+                                  CUstream *stream)
+{
+    if (*stream == NULL) {
+        return;
+    }
+
+    if (uct_cuda_base_ctx_rsc_check(ctx_rsc) != UCS_OK) {
+        return;
+    }
+
+    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuStreamDestroy(*stream));
 }
 
 static void
@@ -255,6 +383,12 @@ uct_cuda_base_event_desc_init(ucs_mpool_t *mp, void *obj, void *chunk)
 static void uct_cuda_base_event_desc_cleanup(ucs_mpool_t *mp, void *obj)
 {
     uct_cuda_event_desc_t *event_desc = obj;
+    uct_cuda_ctx_rsc_t *ctx_rsc       = ucs_container_of(mp, uct_cuda_ctx_rsc_t,
+                                                         event_mp);
+
+    if (uct_cuda_base_ctx_rsc_check(ctx_rsc) != UCS_OK) {
+        return;
+    }
 
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuEventDestroy(event_desc->event));
 }
@@ -274,7 +408,7 @@ void uct_cuda_base_queue_desc_destroy(const uct_cuda_ctx_rsc_t *ctx_rsc,
                  ucs_queue_length(&qdesc->event_queue));
     }
 
-    uct_cuda_base_stream_destroy(&qdesc->stream);
+    uct_cuda_base_stream_destroy(ctx_rsc, &qdesc->stream);
 }
 
 static ucs_mpool_ops_t uct_cuda_event_desc_mpool_ops = {
@@ -284,6 +418,57 @@ static ucs_mpool_ops_t uct_cuda_event_desc_mpool_ops = {
     .obj_cleanup   = uct_cuda_base_event_desc_cleanup,
     .obj_str       = NULL
 };
+
+static void uct_cuda_base_ctx_rsc_release_primary_ctx(
+        uct_cuda_ctx_rsc_t *ctx_rsc)
+{
+    if (ctx_rsc->cuda_device == CU_DEVICE_INVALID) {
+        return;
+    }
+
+    UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(ctx_rsc->cuda_device));
+    ctx_rsc->cuda_device = CU_DEVICE_INVALID;
+}
+
+static ucs_status_t
+uct_cuda_base_ctx_rsc_retain_primary_ctx(uct_cuda_ctx_rsc_t *ctx_rsc)
+{
+    CUcontext primary_ctx;
+    CUdevice cuda_device;
+    ucs_status_t status;
+
+    ctx_rsc->cuda_device = CU_DEVICE_INVALID;
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetDevice(&cuda_device));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = uct_cuda_ctx_primary_retain(cuda_device, 0, &primary_ctx);
+    if (status == UCS_ERR_NO_DEVICE) {
+        return UCS_OK;
+    } else if (status != UCS_OK) {
+        return status;
+    }
+
+    status = uct_cuda_base_ctx_cmp(ctx_rsc, primary_ctx);
+    if (status == UCS_ERR_NO_DEVICE) {
+        ucs_debug("cuda context %llu is not the primary context on device %d",
+                  ctx_rsc->ctx_id, cuda_device);
+        status = UCS_OK;
+        goto out_release_primary_ctx;
+    } else if (status != UCS_OK) {
+        goto out_release_primary_ctx;
+    }
+
+    ctx_rsc->ctx         = primary_ctx;
+    ctx_rsc->cuda_device = cuda_device;
+    return UCS_OK;
+
+out_release_primary_ctx:
+    UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(cuda_device));
+    return status;
+}
 
 ucs_status_t uct_cuda_base_ctx_rsc_create(uct_cuda_iface_t *iface,
                                           unsigned long long ctx_id,
@@ -320,6 +505,14 @@ ucs_status_t uct_cuda_base_ctx_rsc_create(uct_cuda_iface_t *iface,
         goto err_del_iter;
     }
 
+    ctx_rsc->ctx    = ctx;
+    ctx_rsc->ctx_id = ctx_id;
+
+    status = uct_cuda_base_ctx_rsc_retain_primary_ctx(ctx_rsc);
+    if (status != UCS_OK) {
+        goto err_free_ctx_rsc;
+    }
+
     ucs_mpool_params_reset(&mp_params);
     mp_params.elem_size       = iface->config.event_desc_size;
     mp_params.elems_per_chunk = 128;
@@ -329,28 +522,42 @@ ucs_status_t uct_cuda_base_ctx_rsc_create(uct_cuda_iface_t *iface,
 
     status = ucs_mpool_init(&mp_params, &ctx_rsc->event_mp);
     if (status != UCS_OK) {
-        goto err_free_ctx_rsc;
+        goto err_release_primary_ctx;
     }
 
-    ctx_rsc->ctx                     = ctx;
-    ctx_rsc->ctx_id                  = ctx_id;
     kh_value(&iface->ctx_rscs, iter) = ctx_rsc;
     *ctx_rsc_p                       = ctx_rsc;
     return UCS_OK;
 
+err_release_primary_ctx:
+    uct_cuda_base_ctx_rsc_release_primary_ctx(ctx_rsc);
 err_free_ctx_rsc:
     iface->ops->destroy_rsc(&iface->super.super, ctx_rsc);
 err_del_iter:
     kh_del(cuda_ctx_rscs, &iface->ctx_rscs, iter);
-    return UCS_ERR_NO_MEMORY;
+    return status;
 }
 
 static void uct_cuda_base_ctx_rsc_destroy(uct_cuda_iface_t *iface,
                                           uct_cuda_ctx_rsc_t *ctx_rsc)
 {
+    const CUdevice cuda_device = ctx_rsc->cuda_device;
+
     ucs_mpool_cleanup(&ctx_rsc->event_mp, 1);
     iface->ops->destroy_rsc(&iface->super.super, ctx_rsc);
+
+    if (cuda_device != CU_DEVICE_INVALID) {
+        UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(cuda_device));
+    }
 }
+
+static ucs_mpool_ops_t uct_cuda_flush_desc_mpool_ops = {
+    .chunk_alloc   = ucs_mpool_chunk_malloc,
+    .chunk_release = ucs_mpool_chunk_free,
+    .obj_init      = NULL,
+    .obj_cleanup   = NULL,
+    .obj_str       = NULL
+};
 
 UCS_CLASS_INIT_FUNC(uct_cuda_iface_t, uct_iface_ops_t *tl_ops,
                     uct_iface_internal_ops_t *ops, uct_md_h md,
@@ -358,6 +565,9 @@ UCS_CLASS_INIT_FUNC(uct_cuda_iface_t, uct_iface_ops_t *tl_ops,
                     const uct_iface_config_t *tl_config,
                     const char *dev_name)
 {
+    ucs_mpool_params_t mp_params;
+    ucs_status_t status;
+
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, tl_ops, ops, md, worker, params,
                               tl_config UCS_STATS_ARG(params->stats_root)
                               UCS_STATS_ARG(dev_name));
@@ -365,7 +575,18 @@ UCS_CLASS_INIT_FUNC(uct_cuda_iface_t, uct_iface_ops_t *tl_ops,
     self->eventfd = UCS_ASYNC_EVENTFD_INVALID_FD;
     kh_init_inplace(cuda_ctx_rscs, &self->ctx_rscs);
     ucs_queue_head_init(&self->active_queue);
-    return UCS_OK;
+
+    ucs_mpool_params_reset(&mp_params);
+    mp_params.elem_size = sizeof(uct_cuda_flush_stream_desc_t);
+    mp_params.ops       = &uct_cuda_flush_desc_mpool_ops;
+    mp_params.name      = "cuda_flush_descriptors";
+
+    status = ucs_mpool_init(&mp_params, &self->flush_mpool);
+    if (status != UCS_OK) {
+        kh_destroy_inplace(cuda_ctx_rscs, &self->ctx_rscs);
+    }
+
+    return status;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_cuda_iface_t)
@@ -381,6 +602,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cuda_iface_t)
 
     kh_destroy_inplace(cuda_ctx_rscs, &self->ctx_rscs);
     ucs_async_eventfd_destroy(self->eventfd);
+    ucs_mpool_cleanup(&self->flush_mpool, 1);
 }
 
 UCS_CLASS_DEFINE(uct_cuda_iface_t, uct_base_iface_t);

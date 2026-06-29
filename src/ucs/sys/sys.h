@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  * Copyright (c) UT-Battelle, LLC. 2014-2019. ALL RIGHTS RESERVED.
  * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
  *
@@ -50,6 +50,8 @@
 #include <net/if.h>
 #include <netdb.h>
 #include <dirent.h>
+#include <limits.h>
+#include <unistd.h>
 
 
 #include <sys/types.h>
@@ -61,6 +63,14 @@ typedef cpu_set_t ucs_sys_cpuset_t;
 typedef cpuset_t ucs_sys_cpuset_t;
 #else
 #error "Port me"
+#endif
+
+#ifdef HOST_NAME_MAX
+#define UCS_HOST_NAME_MAX HOST_NAME_MAX
+#elif defined( _POSIX_HOST_NAME_MAX)
+#define UCS_HOST_NAME_MAX _POSIX_HOST_NAME_MAX
+#else
+#define UCS_HOST_NAME_MAX 256
 #endif
 
 #define UCS_SYS_FS_SYSTEM_PATH "/sys/devices/system"
@@ -75,7 +85,7 @@ BEGIN_C_DECLS
 /** @file sys.h */
 
 
-typedef ino_t ucs_sys_ns_t;
+typedef uint32_t ucs_sys_ns_t;
 
 
 /* namespace type used in @ref ucs_sys_get_ns and @ref ucs_sys_ns_is_default */
@@ -189,7 +199,28 @@ uint32_t ucs_file_checksum(const char *filename);
 /**
  * Get interface index for a given interface name.
  */
-ucs_status_t ucs_ifname_to_index(const char *ndev_name, unsigned *ndev_index_p);
+ucs_status_t
+ucs_ifname_to_ndev_index(const char *ndev_name, unsigned *ndev_index_p);
+
+
+/**
+ * Get interface name for a given interface index.
+ * Wrapper around if_indextoname.
+ *
+ * @param [in]  ndev_index  Interface index.
+ * @param [out] ndev_name   Interface name.
+ * @param [in]  max         Maximum length of the interface name.
+ *
+ * @return Interface name.
+ */
+const char *
+ucs_ndev_index_to_ifname(unsigned ndev_index, char *ndev_name, size_t max);
+
+
+/**
+ * Get interface index for a the loopback interface.
+ */
+ucs_status_t ucs_get_loopback_ndev_index(unsigned *ndev_index_p);
 
 
 /**
@@ -582,6 +613,16 @@ void ucs_sys_cpuset_copy(ucs_cpu_set_t *dst, const ucs_sys_cpuset_t *src);
  * @return namespace value or 0 if namespaces are not supported
  */
 ucs_sys_ns_t ucs_sys_get_ns(ucs_sys_namespace_type_t name);
+
+
+/**
+ * Get default namespace value for a given namespace type.
+ *
+ * @param [in]  name        Namespace to get default value for
+ *
+ * @return default namespace value or 0 if type is not supported
+ */
+ucs_sys_ns_t ucs_sys_get_default_ns(ucs_sys_namespace_type_t name);
 
 
 /**

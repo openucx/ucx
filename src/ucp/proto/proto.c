@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -25,10 +25,13 @@
     _macro(ucp_get_am_bcopy_proto) \
     _macro(ucp_get_offload_bcopy_proto) \
     _macro(ucp_get_offload_zcopy_proto) \
+    _macro(ucp_get_rndv_proto) \
     _macro(ucp_put_am_bcopy_proto) \
     _macro(ucp_put_offload_short_proto) \
     _macro(ucp_put_offload_bcopy_proto) \
     _macro(ucp_put_offload_zcopy_proto) \
+    _macro(ucp_put_rndv_proto) \
+    _macro(ucp_put_sgl_offload_proto) \
     _macro(ucp_eager_bcopy_multi_proto) \
     _macro(ucp_eager_sync_bcopy_multi_proto) \
     _macro(ucp_eager_zcopy_multi_proto) \
@@ -61,6 +64,7 @@
     _macro(ucp_am_eager_single_zcopy_proto) \
     _macro(ucp_am_eager_multi_bcopy_proto) \
     _macro(ucp_am_eager_multi_zcopy_proto) \
+    _macro(ucp_am_eager_multi_zcopy_psn_proto) \
     _macro(ucp_am_eager_short_reply_proto) \
     _macro(ucp_am_eager_single_bcopy_reply_proto) \
     _macro(ucp_am_eager_single_zcopy_reply_proto) \

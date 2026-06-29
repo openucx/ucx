@@ -9,71 +9,135 @@ jobs:
       name: MLNX
       demands: ${{ parameters.demands }}
     container: $[ variables['CONTAINER'] ]
+    workspace:
+      clean: all
     strategy:
       # x86_64 matrix
       ${{ if contains(parameters.name, 'x86_64') }}:
         matrix:
           rhel76:
             CONTAINER: rhel76
-            long_test: yes
+            build_mode: short
           ubuntu2004:
             CONTAINER: ubuntu2004
-            long_test: yes
+            build_mode: short
             extra_modules: ""
           ubuntu1804:
             CONTAINER: ubuntu1804
+            build_mode: sanity
             extra_modules: ""
           ubuntu2204:
             CONTAINER: ubuntu2204
+            build_mode: short
           ubuntu2404:
             CONTAINER: ubuntu2404
+            build_mode: long
           ubuntu2210:
             CONTAINER: ubuntu2210
+            build_mode: sanity
           debian113:
             CONTAINER: debian113
+            build_mode: short
           debian109:
             CONTAINER: debian109
+            build_mode: sanity
           debian125:
             CONTAINER: debian125
+            build_mode: short
           debian130:
             CONTAINER: debian130
-          sles15sp6:
-            CONTAINER: sles15sp6
+            build_mode: short
+          sles15sp7:
+            CONTAINER: sles15sp7
+            build_mode: short
+          sles16sp0:
+            CONTAINER: sles16sp0
+            build_mode: short
           rhel82:
             CONTAINER: rhel82
+            build_mode: short
+          rhel82_gcc_15_2_0:
+            CONTAINER: rhel82
+            build_mode: sanity
+            GCC_MODULE: dev/gcc-15.2.0
           rhel90:
             CONTAINER: rhel90
+            build_mode: short
           rhel100:
             CONTAINER: rhel100
+            build_mode: long
           rocky89:
             CONTAINER: rocky89
+            build_mode: sanity
           rocky96:
             CONTAINER: rocky96
+            build_mode: sanity
           fedora41:
             CONTAINER: fedora41
+            build_mode: sanity
           centos7:
             CONTAINER: centos7_ib
+            build_mode: sanity
           centos10stream:
             CONTAINER: centos10stream
+            build_mode: sanity
           ubuntu2004_rocm:
             CONTAINER: ubuntu2004_rocm_5_4_0
+            build_mode: short
           ubuntu2204_rocm:
             CONTAINER: ubuntu2204_rocm_6_0_0
+            build_mode: short
           kylin10sp3:
             CONTAINER: kylin10sp3
+            build_mode: short
           euleros2sp12:
             CONTAINER: euleros2sp12
+            build_mode: short
+          ctyunos2507:
+            CONTAINER: ctyunos2507
+            build_mode: short
+          ubuntu2604:
+            CONTAINER: ubuntu2604
+            build_mode: short
+          tencentos44:
+            CONTAINER: tencentos44
+            build_mode: short
+      # ICC/PGI matrix
+      ${{ if contains(parameters.name, 'icc_pgi') }}:
+        matrix:
+          centos7_x86_64:
+            CONTAINER: centos7
+            build_mode: compilers
       # ARM matrix
       ${{ if contains(parameters.name, 'aarch64') }}:
         matrix:
           ubuntu2404_aarch64:
             CONTAINER: ubuntu2404_aarch64
+            build_mode: long
           rhel100_aarch64:
             CONTAINER: rhel100_aarch64
+            build_mode: short
+          sles15sp7_aarch64:
+            CONTAINER: sles15sp7_aarch64
+            build_mode: short
           rocky89_aarch64:
             CONTAINER: rocky89_aarch64
+            build_mode: short
           rocky96_aarch64:
             CONTAINER: rocky96_aarch64
+            build_mode: short
+          ctyunos2507_aarch64:
+            CONTAINER: ctyunos2507_aarch64
+            build_mode: short
+          sles16sp0_aarch64:
+            CONTAINER: sles16sp0_aarch64
+            build_mode: short
+          ubuntu2604_aarch64:
+            CONTAINER: ubuntu2604_aarch64
+            build_mode: short
+          tencentos44_aarch64:
+            CONTAINER: tencentos44_aarch64
+            build_mode: short
     timeoutInMinutes: 340
 
     steps:
@@ -87,5 +151,5 @@ jobs:
         displayName: ${{ parameters.displayName }}
         env:
           BUILD_ID: "$(Build.BuildId)-$(Build.BuildNumber)"
-          long_test: $(long_test)
+          build_mode: $(build_mode)
           test_static: $(test_static)

@@ -172,7 +172,7 @@ $ make -C test/gtest test
 * [RoCE](http://www.roceinitiative.org/)
 * [Cray Gemini and Aries](https://www.cray.com/)
 * [CUDA](https://developer.nvidia.com/cuda-zone)
-* [ROCm](https://rocm.github.io/)
+* [ROCm](https://rocm.docs.amd.com/)
 * Shared Memory
     * posix, sysv, [cma](https://dl.acm.org/citation.cfm?id=2616532), [knem](http://knem.gforge.inria.fr/), and [xpmem](https://github.com/openucx/xpmem)
 * TCP/IP

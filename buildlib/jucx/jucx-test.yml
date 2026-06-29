@@ -7,7 +7,7 @@ jobs:
   - job: jucx_test_${{ parameters.arch }}
     displayName: JUCX Test ${{ parameters.arch }}
     workspace:
-      clean: outputs
+      clean: all
 
     pool:
       name: MLNX

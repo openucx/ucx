@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -21,7 +21,7 @@ ucp_proto_request_complete_success(ucp_request_t *req)
     return UCS_OK;
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
+static UCS_F_INLINE_OPTIMIZED ucs_status_t
 ucp_proto_request_bcopy_complete_success(ucp_request_t *req)
 {
     ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 0, UCP_DT_MASK_ALL);
@@ -50,7 +50,12 @@ ucp_proto_msg_multi_request_init(ucp_request_t *req)
         return UCS_OK;
     }
 
+    if (req->flags & UCP_REQUEST_FLAG_MSG_ID_SET) {
+        return UCS_OK;
+    }
+
     req->send.msg_proto.message_id = req->send.ep->worker->am_message_id++;
+    req->flags |= UCP_REQUEST_FLAG_MSG_ID_SET;
     return UCS_OK;
 }
 
@@ -89,16 +94,34 @@ ucp_proto_request_zcopy_clean(ucp_request_t *req, unsigned dt_mask)
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_proto_request_zcopy_complete(ucp_request_t *req, ucs_status_t status)
+ucp_proto_request_zcopy_complete_cb(ucp_request_t *req, ucs_status_t status,
+                                    ucp_request_callback_t complete_cb)
 {
     ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 1,
-                              UCP_DT_MASK_CONTIG_IOV);
+                              UCP_DT_MASK_CONTIG_IOV |
+                              UCS_BIT(UCP_DATATYPE_SGL));
     if (ucp_proto_select_op_id(&req->send.proto_config->select_param) ==
         UCP_OP_ID_TAG_SEND) {
         UCP_EP_STAT_TAG_OP(req->send.ep, EAGER)
     }
 
-    ucp_request_complete_send(req, status);
+    if (ucs_unlikely(status != UCS_OK) &&
+        ucp_ep_err_mode_eq(req->send.ep, UCP_ERR_HANDLING_MODE_FAILOVER) &&
+        !(req->send.ep->flags & UCP_EP_FLAG_FAILED)) {
+        ucp_proto_request_restart(req);
+    } else {
+        if (complete_cb != NULL) {
+            complete_cb(req);
+        }
+
+        ucp_request_complete_send(req, status);
+    }
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_request_zcopy_complete(ucp_request_t *req, ucs_status_t status)
+{
+    ucp_proto_request_zcopy_complete_cb(req, status, NULL);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -175,11 +198,7 @@ ucp_proto_request_set_stage(ucp_request_t *req, uint8_t proto_stage)
     req->send.proto_stage = proto_stage;
 
     /* Set pointer to progress function */
-    if (req->send.ep->worker->context->config.progress_wrapper_enabled) {
-        req->send.uct.func = ucp_request_progress_wrapper;
-    } else {
-        req->send.uct.func = proto->progress[proto_stage];
-    }
+    req->send.uct.func = req->send.proto_config->progress_wrapper[proto_stage];
 }
 
 /* Select protocol for the request and initialize protocol-related fields */
@@ -304,6 +323,40 @@ ucp_proto_request_send_op(ucp_ep_h ep, ucp_proto_select_t *proto_select,
                                             &sel_param, msg_length);
 }
 
+
+static UCS_F_ALWAYS_INLINE ucs_status_ptr_t
+ucp_proto_request_send_op_rma(ucp_ep_h ep, ucp_rkey_h rkey, ucp_request_t *req,
+                              uint32_t req_flags, ucp_operation_id_t op_id,
+                              const void *buffer, size_t count,
+                              ucp_datatype_t datatype, size_t contig_length,
+                              const ucp_request_param_t *param,
+                              size_t header_length, uint8_t op_flags)
+{
+    ucp_worker_h worker = ep->worker;
+    ucp_rkey_config_t *rkey_config;
+    ucp_proto_select_t *proto_select;
+    ucs_status_t status;
+
+    rkey_config  = ucp_rkey_config(worker, rkey);
+    proto_select = &rkey_config->proto_select;
+    
+    if (ucs_unlikely((proto_select->worker_epoch != worker->epoch) ||
+                     (rkey_config->key.ep_cfg_index != ep->cfg_index))) {
+        status = ucp_ep_update_rkey_config(ep, rkey);
+        if (status != UCS_OK) {
+            ucp_request_put_param(param, req);
+            return UCS_STATUS_PTR(status);
+        }
+
+        proto_select = &ucp_rkey_config(worker, rkey)->proto_select;
+    }
+
+    return ucp_proto_request_send_op(ep, proto_select, rkey->cfg_index, req,
+                                     req_flags, op_id, buffer, count, datatype,
+                                     contig_length, param, header_length,
+                                     op_flags);
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_ptr_t ucp_proto_request_send_op_reply(
         ucp_ep_h ep, ucp_proto_select_t *proto_select,
         ucp_worker_cfg_index_t rkey_cfg_index, ucp_request_t *req,
@@ -363,8 +416,7 @@ ucp_proto_request_pack_rkey(ucp_request_t *req, ucp_md_map_t md_map,
     /* Since global VA registration doesn't support invalidation yet, and error
      * handling is enabled on this EP, we replace GVA registrations with
      * regular ones */
-    if (ucp_ep_config_err_mode_eq(req->send.ep,
-                                  UCP_ERR_HANDLING_MODE_PEER) &&
+    if (ucp_ep_config_err_handling_enabled(req->send.ep) &&
         ucs_unlikely(memh->flags & UCP_MEMH_FLAG_HAS_AUTO_GVA)) {
         ucp_memh_disable_gva(memh, md_map);
     }
@@ -421,12 +473,6 @@ ucp_proto_common_is_net_dev(const ucp_proto_init_params_t *params,
 {
     return ucp_proto_common_get_tl_rsc(params, lane)->dev_type ==
            UCT_DEVICE_TYPE_NET;
-}
-
-static UCS_F_ALWAYS_INLINE int
-ucp_proto_common_bandwidth_equal(double bw1, double bw2)
-{
-    return fabs(bw1 - bw2) <= UCP_PROTO_PERF_EPSILON;
 }
 
 static UCS_F_ALWAYS_INLINE double

@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -154,7 +154,8 @@ public:
 
         static void ep_destructor(ucp_ep_h ep, entity *e);
 
-        bool has_lane_with_caps(uint64_t caps) const;
+        bool has_lane_with_caps(uint64_t caps,
+                                uint64_t v2_caps = 0) const;
 
         bool is_rndv_put_ppln_supported() const;
 
@@ -228,7 +229,7 @@ public:
     void disable_keepalive();
 
 private:
-    static void set_ucp_config(ucp_config_t *config, const std::string& tls);
+    static void set_tls(ucp_config_t *config, const std::string &tls);
     static bool check_tls(const std::string& tls);
     ucs_status_t request_process(void *req, int worker_index, bool wait,
                                  bool wakeup = false,

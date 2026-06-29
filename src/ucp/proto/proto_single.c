@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -24,7 +24,6 @@ ucs_status_t ucp_proto_single_init(const ucp_proto_single_init_params_t *params,
 {
     const char *proto_name = ucp_proto_id_field(params->super.super.proto_id,
                                                 name);
-    ucp_proto_perf_node_t *tl_perf_node;
     ucp_proto_common_tl_perf_t tl_perf;
     ucp_lane_index_t num_lanes;
     ucp_md_map_t reg_md_map;
@@ -37,7 +36,8 @@ ucs_status_t ucp_proto_single_init(const ucp_proto_single_init_params_t *params,
 
     num_lanes = ucp_proto_common_find_lanes(
             &params->super.super, params->super.flags, params->lane_type,
-            params->tl_cap_flags, 1, params->super.exclude_map,
+            params->tl_cap_flags, params->tl_v2_cap_flags,
+            1, params->super.exclude_map,
             ucp_proto_common_filter_min_frag, &lane);
     if (num_lanes == 0) {
         ucs_trace("no lanes for %s",
@@ -57,15 +57,14 @@ ucs_status_t ucp_proto_single_init(const ucp_proto_single_init_params_t *params,
 
     ucp_proto_common_lane_priv_init(&params->super, reg_md_map, lane,
                                     &spriv->super);
-    status = ucp_proto_common_get_lane_perf(&params->super, lane, &tl_perf,
-                                            &tl_perf_node);
+    status = ucp_proto_common_get_lane_perf(&params->super, lane, &tl_perf);
     if (status != UCS_OK) {
         return status;
     }
 
-    status = ucp_proto_init_perf(&params->super, &tl_perf, tl_perf_node,
-                                 reg_md_map, proto_name, perf_p);
-    ucp_proto_perf_node_deref(&tl_perf_node);
+    status = ucp_proto_init_perf(&params->super, &tl_perf, reg_md_map,
+                                 proto_name, perf_p);
+    ucp_proto_perf_node_deref(&tl_perf.node);
 
     return status;
 }

@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -58,6 +58,11 @@ ucp_test::ucp_test() {
     ucs_status_t status;
     status = ucp_config_read(NULL, NULL, &m_ucp_config);
     ASSERT_UCS_OK(status);
+
+    status = ucp_config_modify(m_ucp_config, "WARN_INVALID_CONFIG", "n");
+    if (status != UCS_OK) {
+        UCS_TEST_ABORT("Failed to set UCX to ignore invalid configuration");
+    }
 }
 
 ucp_test::~ucp_test() {
@@ -414,17 +419,11 @@ bool ucp_test::is_proto_enabled() const
     return m_ucp_config->ctx.proto_enable;
 }
 
-void ucp_test::set_ucp_config(ucp_config_t *config, const std::string& tls)
+void ucp_test::set_tls(ucp_config_t *config, const std::string &tls)
 {
-    ucs_status_t status;
-
-    status = ucp_config_modify(config, "TLS", tls.c_str());
+    ucs_status_t status = ucp_config_modify(config, "TLS", tls.c_str());
     if (status != UCS_OK) {
         UCS_TEST_ABORT("Failed to set UCX transports");
-    }
-    status = ucp_config_modify(config, "WARN_INVALID_CONFIG", "n");
-    if (status != UCS_OK) {
-        UCS_TEST_ABORT("Failed to set UCX to ignore invalid configuration");
     }
 }
 
@@ -586,12 +585,13 @@ bool ucp_test::check_tls(const std::string& tls)
     ucs::handle<ucp_config_t*> config;
     UCS_TEST_CREATE_HANDLE(ucp_config_t*, config, ucp_config_release,
                            ucp_config_read, NULL, NULL);
-    set_ucp_config(config, tls);
+    set_tls(config, tls);
 
     ucp_context_h ucph;
     ucs_status_t status;
     {
-        scoped_log_handler slh(hide_errors_logger);
+        scoped_log_handler slh_err(hide_errors_logger);
+        scoped_log_handler slh_warn(hide_warns_logger);
         ucp_params_t ctx_params = {};
         ctx_params.field_mask   = UCP_PARAM_FIELD_FEATURES;
         ctx_params.features     = UCP_FEATURE_TAG |
@@ -665,7 +665,7 @@ ucp_test_base::entity::entity(const ucp_test_param& test_param,
     /* Set transports configuration */
     std::stringstream ss;
     ss << test_param.transports;
-    ucp_test::set_ucp_config(ucp_config, ss.str());
+    ucp_test::set_tls(ucp_config, ss.str());
 
     {
         scoped_log_handler slh(hide_errors_logger);
@@ -1170,17 +1170,32 @@ void ucp_test_base::entity::ep_destructor(ucp_ep_h ep, entity *e)
     ucp_request_release(req);
 }
 
-bool ucp_test_base::entity::has_lane_with_caps(uint64_t caps) const
+bool ucp_test_base::entity::has_lane_with_caps(uint64_t caps,
+                                               uint64_t v2_caps) const
 {
     ucp_ep_h ep         = this->ep();
     ucp_worker_h worker = this->worker();
     ucp_lane_index_t lane;
     uct_iface_attr_t *iface_attr;
+    uct_iface_attr_v2_t iface_attr_v2;
 
     for (lane = 0; lane < ucp_ep_config(ep)->key.num_lanes; lane++) {
         iface_attr = ucp_worker_iface_get_attr(worker,
                                                ucp_ep_get_rsc_index(ep, lane));
-        if (ucs_test_all_flags(iface_attr->cap.flags, caps)) {
+        if (!ucs_test_all_flags(iface_attr->cap.flags, caps)) {
+            continue;
+        }
+
+        if (v2_caps == 0) {
+            return true;
+        }
+
+        iface_attr_v2.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS;
+        ASSERT_UCS_OK(uct_iface_query_v2(
+                ucp_worker_iface(worker,
+                                 ucp_ep_get_rsc_index(ep, lane))->iface,
+                &iface_attr_v2));
+        if (ucs_test_all_flags(iface_attr_v2.cap.flags, v2_caps)) {
             return true;
         }
     }

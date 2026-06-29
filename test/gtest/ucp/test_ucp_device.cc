@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -18,8 +18,15 @@ public:
 
     virtual void init() override;
 
+private:
+    static void get_base_variants(std::vector<ucp_test_variant> &variants);
+
 protected:
     static constexpr size_t MAX_THREADS = 128;
+
+    ucs_memory_type_t rx_mem_type() const {
+        return static_cast<ucs_memory_type_t>(get_variant_value());
+    }
 
     class mem_list {
     public:
@@ -29,7 +36,7 @@ protected:
         enum mem_list_mode_t {
             MODE_DATA_ONLY,
             MODE_COUNTER_ONLY,
-            MODE_LAST_ELEM_COUNTER
+            MODE_WITH_GAP_ELEMENT
         };
 
         mem_list(test_ucp_device &test, size_t size, unsigned count,
@@ -45,39 +52,51 @@ protected:
 
         std::vector<uint64_t> dst_ptrs() const;
 
-        void dst_counter_init(unsigned index);
+        void dst_counter_init(unsigned index, size_t remote_offset = 0);
 
-        uint64_t dst_counter_read(unsigned index) const;
+        uint64_t
+        dst_counter_read(unsigned index, size_t remote_offset = 0) const;
 
-        ucp_device_mem_list_handle_h handle() const;
+        ucp_device_local_mem_list_h local_handle() const;
+
+        ucp_device_remote_mem_list_h remote_handle() const;
 
         void dst_pattern_check(unsigned index, uint64_t seed) const;
 
     private:
         std::vector<std::unique_ptr<mapped_buffer>> m_src, m_dst;
-        std::vector<ucs::handle<ucp_rkey_h>>        m_rkeys;
-        ucp_device_mem_list_handle_h                m_mem_list_h;
+        std::vector<ucs::handle<ucp_rkey_h>> m_rkeys;
+        ucp_device_local_mem_list_h m_local_mem_list_h;
+        ucp_device_remote_mem_list_h m_remote_mem_list_h;
     };
 
     size_t counter_size();
 
-    static void counter_init(const mapped_buffer &buffer);
+    static void
+    counter_init(const mapped_buffer &buffer, size_t remote_offset = 0);
 
-    static uint64_t counter_read(const mapped_buffer &buffer);
+    static uint64_t
+    counter_read(const mapped_buffer &buffer, size_t remote_offset = 0);
 
     void launch_kernel(const test_ucp_device_kernel_params_t &params);
 };
 
 
-void test_ucp_device::get_test_variants(std::vector<ucp_test_variant> &variants)
+void test_ucp_device::get_base_variants(std::vector<ucp_test_variant> &variants)
 {
     add_variant(variants,
                 UCP_FEATURE_RMA | UCP_FEATURE_AMO64 | UCP_FEATURE_DEVICE);
 }
 
+void test_ucp_device::get_test_variants(std::vector<ucp_test_variant> &variants)
+{
+    add_variant_memtypes(variants, get_base_variants,
+                         UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
+                         UCS_BIT(UCS_MEMORY_TYPE_HOST));
+}
+
 void test_ucp_device::init()
 {
-    m_env.push_back(new ucs::scoped_setenv("UCX_CUDA_IPC_ENABLE_SAME_PROCESS", "y"));
     m_env.push_back(new ucs::scoped_setenv("UCX_IB_GDA_MAX_SYS_LATENCY", "1us"));
     ucp_test::init();
     sender().connect(&receiver(), get_ep_params());
@@ -86,72 +105,105 @@ void test_ucp_device::init()
     }
 }
 
-test_ucp_device::mem_list::mem_list(test_ucp_device &test,
-                                    size_t size, unsigned count,
-                                    ucs_memory_type_t mem_type,
-                                    mem_list_mode_t mode)
+test_ucp_device::mem_list::mem_list(test_ucp_device &test, size_t size,
+                                    unsigned count, ucs_memory_type_t mem_type,
+                                    mem_list_mode_t mode) :
+    m_local_mem_list_h(nullptr),
+    m_remote_mem_list_h(nullptr)
 {
-    bool has_counter  = (mode != MODE_DATA_ONLY);
+    bool has_counter  = (mode == MODE_COUNTER_ONLY);
+    size_t gap_count  = (mode == MODE_WITH_GAP_ELEMENT) ? 1 : 0;
     size_t data_count = (has_counter) ? count - 1 : count;
     ucs_status_t status;
 
     // Prepare src and dst buffers
     for (auto i = 0; i < data_count; ++i) {
         m_src.emplace_back(new mapped_buffer(size, test.sender(), 0, mem_type));
-        m_dst.emplace_back(new mapped_buffer(size, test.receiver(), 0, mem_type));
+        m_dst.emplace_back(new mapped_buffer(size, test.receiver(), 0,
+                                             test.rx_mem_type()));
         m_rkeys.push_back(m_dst.back()->rkey(test.sender()));
         m_src.back()->pattern_fill(SEED_SRC, size);
         m_dst.back()->pattern_fill(SEED_DST, size);
     }
 
     if (has_counter) {
-        m_dst.emplace_back(new mapped_buffer(size, test.receiver(), 0, mem_type));
+        m_dst.emplace_back(new mapped_buffer(size, test.receiver(), 0,
+                                             test.rx_mem_type()));
         m_rkeys.push_back(m_dst.back()->rkey(test.sender()));
         m_dst.back()->pattern_fill(SEED_DST, size);
     }
 
-    // Initialize elements
-    std::vector<ucp_device_mem_list_elem_t> elems(count);
-    for (auto i = 0; i < data_count; ++i) {
-        elems[i].field_mask  = UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH |
-                               UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY |
-                               UCP_DEVICE_MEM_LIST_ELEM_FIELD_LOCAL_ADDR |
-                               UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR |
-                               UCP_DEVICE_MEM_LIST_ELEM_FIELD_LENGTH;
-        elems[i].memh        = m_src[i]->memh();
-        elems[i].rkey        = m_rkeys[i];
-        elems[i].local_addr  = m_src[i]->ptr();
-        elems[i].remote_addr = reinterpret_cast<uint64_t>(m_dst[i]->ptr());
-        elems[i].length      = m_src[i]->size();
+    ucp_device_mem_list_params_t params;
+
+    if (mode != MODE_COUNTER_ONLY) {
+        // Initialize local elements
+        std::vector<ucp_device_mem_list_elem_t> local_elems(data_count);
+        for (auto i = 0; i < data_count; ++i) {
+            local_elems[i].field_mask =
+                    UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH |
+                    UCP_DEVICE_MEM_LIST_ELEM_FIELD_LOCAL_ADDR;
+            local_elems[i].memh       = m_src[i]->memh();
+            local_elems[i].local_addr = m_src[i]->ptr();
+        }
+
+        // Initialize parameters
+        params.field_mask   = UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENTS |
+                              UCP_DEVICE_MEM_LIST_PARAMS_FIELD_NUM_ELEMENTS |
+                              UCP_DEVICE_MEM_LIST_PARAMS_FIELD_WORKER |
+                              UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENT_SIZE;
+        params.element_size = sizeof(local_elems[0]);
+        params.num_elements = data_count;
+        params.elements     = local_elems.data();
+        params.worker       = test.sender().worker();
+        // Create memory list (with retry on connection)
+        status = ucp_device_local_mem_list_create(&params, &m_local_mem_list_h);
+
+        ASSERT_UCS_OK(status);
+    }
+
+    // Initialize remote elements
+    size_t remote_count = count + gap_count;
+    std::vector<ucp_device_mem_list_elem_t> remote_elems(remote_count);
+    for (auto i = 0; i < gap_count; ++i) {
+        remote_elems[i].field_mask = 0;
+    }
+
+    for (auto i = gap_count; i < data_count + gap_count; ++i) {
+        auto data_index             = i - gap_count;
+        remote_elems[i].field_mask  = UCP_DEVICE_MEM_LIST_ELEM_FIELD_EP |
+                                      UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR |
+                                      UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY;
+        remote_elems[i].ep          = test.sender().ep();
+        remote_elems[i].remote_addr = reinterpret_cast<uint64_t>(
+                m_dst[data_index]->ptr());
+        remote_elems[i].rkey        = m_rkeys[data_index];
     }
 
     if (has_counter) {
-        elems[data_count].field_mask  = UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY |
-                                        UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR |
-                                        UCP_DEVICE_MEM_LIST_ELEM_FIELD_LENGTH;
-        elems[data_count].rkey        = m_rkeys[data_count];
-        elems[data_count].remote_addr = reinterpret_cast<uint64_t>(m_dst[data_count]->ptr());
-        elems[data_count].length      = m_dst[data_count]->size();
+        remote_elems[data_count + gap_count].field_mask =
+                UCP_DEVICE_MEM_LIST_ELEM_FIELD_EP |
+                UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR |
+                UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY;
+        remote_elems[data_count + gap_count].ep = test.sender().ep();
+        remote_elems[data_count + gap_count].remote_addr =
+                reinterpret_cast<uint64_t>(m_dst[data_count]->ptr());
+        remote_elems[data_count + gap_count].rkey = m_rkeys[data_count];
     }
 
     // Initialize parameters
-    ucp_device_mem_list_params_t params;
     params.field_mask   = UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENTS |
                           UCP_DEVICE_MEM_LIST_PARAMS_FIELD_NUM_ELEMENTS |
                           UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENT_SIZE;
-    params.element_size = sizeof(elems[0]);
-    params.num_elements = count;
-    params.elements     = elems.data();
+    params.element_size = sizeof(remote_elems[0]);
+    params.num_elements = remote_count;
+    params.elements     = remote_elems.data();
 
     // Create memory list (with retry on connection)
-    {
-        scoped_log_handler wrap_err(wrap_errors_logger);
-        do {
-            test.progress();
-            status = ucp_device_mem_list_create(test.sender().ep(), &params,
-                                                &m_mem_list_h);
-        } while (status == UCS_ERR_NOT_CONNECTED);
-    }
+    do {
+        test.progress();
+        status = ucp_device_remote_mem_list_create(&params,
+                                                   &m_remote_mem_list_h);
+    } while (status == UCS_ERR_NOT_CONNECTED);
 
     if (status == UCS_ERR_NO_DEVICE) {
         UCS_TEST_SKIP_R("Skipping test if no device lanes exists.");
@@ -162,7 +214,13 @@ test_ucp_device::mem_list::mem_list(test_ucp_device &test,
 
 test_ucp_device::mem_list::~mem_list()
 {
-    ucp_device_mem_list_release(m_mem_list_h);
+    if (m_local_mem_list_h) {
+        ucp_device_mem_list_release(m_local_mem_list_h);
+    }
+
+    if (m_remote_mem_list_h) {
+        ucp_device_mem_list_release(m_remote_mem_list_h);
+    }
 }
 
 void *test_ucp_device::mem_list::src_ptr(unsigned index) const
@@ -193,14 +251,16 @@ std::vector<uint64_t> test_ucp_device::mem_list::dst_ptrs() const
     return result;
 }
 
-void test_ucp_device::mem_list::dst_counter_init(unsigned index)
+void test_ucp_device::mem_list::dst_counter_init(unsigned index,
+                                                 size_t remote_offset)
 {
-    test_ucp_device::counter_init(*m_dst[index]);
+    test_ucp_device::counter_init(*m_dst[index], remote_offset);
 }
 
-uint64_t test_ucp_device::mem_list::dst_counter_read(unsigned index) const
+uint64_t test_ucp_device::mem_list::dst_counter_read(unsigned index,
+                                                     size_t remote_offset) const
 {
-    return test_ucp_device::counter_read(*m_dst[index]);
+    return test_ucp_device::counter_read(*m_dst[index], remote_offset);
 }
 
 void test_ucp_device::mem_list::dst_pattern_check(unsigned index,
@@ -209,9 +269,14 @@ void test_ucp_device::mem_list::dst_pattern_check(unsigned index,
     m_dst[index]->pattern_check(seed, m_dst[index]->size());
 }
 
-ucp_device_mem_list_handle_h test_ucp_device::mem_list::handle() const
+ucp_device_local_mem_list_h test_ucp_device::mem_list::local_handle() const
 {
-    return m_mem_list_h;
+    return m_local_mem_list_h;
+}
+
+ucp_device_remote_mem_list_h test_ucp_device::mem_list::remote_handle() const
+{
+    return m_remote_mem_list_h;
 }
 
 size_t test_ucp_device::counter_size()
@@ -222,128 +287,204 @@ size_t test_ucp_device::counter_size()
     return attr.device_counter_size;
 }
 
-void test_ucp_device::counter_init(const mapped_buffer &buffer)
+void test_ucp_device::counter_init(const mapped_buffer &buffer,
+                                   size_t remote_offset)
 {
     ucp_device_counter_params_t params;
     params.field_mask = UCP_DEVICE_COUNTER_PARAMS_FIELD_MEMH;
     params.memh       = buffer.memh();
-    ASSERT_UCS_OK(
-            ucp_device_counter_init(buffer.worker(), &params, buffer.ptr()));
+    ASSERT_UCS_OK(ucp_device_counter_init(buffer.worker(), &params,
+                                          UCS_PTR_BYTE_OFFSET(buffer.ptr(),
+                                                              remote_offset)));
 }
 
-uint64_t test_ucp_device::counter_read(const mapped_buffer &buffer)
+uint64_t
+test_ucp_device::counter_read(const mapped_buffer &buffer, size_t remote_offset)
 {
     ucp_device_counter_params_t params;
     params.field_mask = UCP_DEVICE_COUNTER_PARAMS_FIELD_MEMH;
     params.memh       = buffer.memh();
-    return ucp_device_counter_read(buffer.worker(), &params, buffer.ptr());
+    return ucp_device_counter_read(buffer.worker(), &params,
+                                   UCS_PTR_BYTE_OFFSET(buffer.ptr(),
+                                                       remote_offset));
 }
 
 UCS_TEST_P(test_ucp_device, create_success)
 {
     mem_list list(*this, 4 * UCS_MBYTE, 4);
-    EXPECT_NE(nullptr, list.handle());
+    EXPECT_NE(nullptr, list.local_handle());
+    EXPECT_NE(nullptr, list.remote_handle());
 }
 
-UCS_TEST_P(test_ucp_device, create_fail)
+UCS_TEST_P(test_ucp_device, create_local_fail)
 {
-    ucp_device_mem_list_handle_h handle = nullptr;
-    auto ep                             = sender().ep();
+    ucp_device_local_mem_list_h handle = nullptr;
 
     scoped_log_handler wrap_err(wrap_errors_logger);
 
-    // Null params
-    ASSERT_EQ(UCS_ERR_INVALID_PARAM,
-              ucp_device_mem_list_create(ep, NULL, &handle));
-
     // Empty params
-    ucp_device_mem_list_params_t empty_params = {};
+    ucp_device_mem_list_params_t empty_params;
     empty_params.field_mask = UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENTS;
     EXPECT_EQ(UCS_ERR_INVALID_PARAM,
-              ucp_device_mem_list_create(ep, &empty_params, &handle));
+              ucp_device_local_mem_list_create(&empty_params, &handle));
     EXPECT_EQ(nullptr, handle);
 
     // Empty mem list
-    ucp_device_mem_list_params_t invalid_params = {};
+    ucp_device_mem_list_params_t invalid_params{};
     invalid_params.field_mask   = UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENTS |
+                                  UCP_DEVICE_MEM_LIST_PARAMS_FIELD_WORKER |
                                   UCP_DEVICE_MEM_LIST_PARAMS_FIELD_NUM_ELEMENTS |
                                   UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENT_SIZE;
-    invalid_params.elements     = NULL;
+    invalid_params.elements     = nullptr;
+    invalid_params.worker       = sender().worker();
     invalid_params.num_elements = 0;
     invalid_params.element_size = sizeof(ucp_device_mem_list_elem_t);
     EXPECT_EQ(UCS_ERR_INVALID_PARAM,
-              ucp_device_mem_list_create(ep, &invalid_params, &handle));
+              ucp_device_local_mem_list_create(&invalid_params, &handle));
     EXPECT_EQ(nullptr, handle);
 
     // Zero element size
-    ucp_device_mem_list_elem_t dummy_elem = {};
-    invalid_params.elements               = &dummy_elem;
-    invalid_params.num_elements           = 1;
-    invalid_params.element_size           = 0;
+    ucp_device_mem_list_elem_t dummy_elem{};
+    invalid_params.elements     = &dummy_elem;
+    invalid_params.num_elements = 1;
+    invalid_params.element_size = 0;
     EXPECT_EQ(UCS_ERR_INVALID_PARAM,
-              ucp_device_mem_list_create(ep, &invalid_params, &handle));
+              ucp_device_local_mem_list_create(&invalid_params, &handle));
     EXPECT_EQ(nullptr, handle);
 
     invalid_params.element_size = sizeof(ucp_device_mem_list_elem_t);
-    mapped_buffer src(4096, sender(), 0, UCS_MEMORY_TYPE_CUDA);
     mapped_buffer src_cuda(4096, sender(), 0, UCS_MEMORY_TYPE_CUDA);
     mapped_buffer src_host(4096, sender(), 0, UCS_MEMORY_TYPE_HOST);
-    mapped_buffer dst1(4096, receiver(), 0, UCS_MEMORY_TYPE_CUDA);
-    mapped_buffer dst2(4096, receiver(), 0, UCS_MEMORY_TYPE_HOST);
-    auto rkey1 = dst1.rkey(sender());
-    auto rkey2 = dst2.rkey(sender());
 
-    ucp_device_mem_list_elem_t elems[2] = {};
+    ucp_device_mem_list_elem_t local_elems[2]{};
     for (int i = 0; i < 2; i++) {
-        elems[i].field_mask  = UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH |
-                               UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY |
-                               UCP_DEVICE_MEM_LIST_ELEM_FIELD_LOCAL_ADDR |
-                               UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR |
-                               UCP_DEVICE_MEM_LIST_ELEM_FIELD_LENGTH;
-        elems[i].memh        = src.memh();
-        elems[i].rkey        = rkey1;
-        elems[i].local_addr  = src.ptr();
-        elems[i].remote_addr = reinterpret_cast<uint64_t>(dst1.ptr());
-        elems[i].length      = 4096;
+        local_elems[i].field_mask = UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH |
+                                    UCP_DEVICE_MEM_LIST_ELEM_FIELD_LOCAL_ADDR |
+                                    UCP_DEVICE_MEM_LIST_ELEM_FIELD_LENGTH;
+        local_elems[i].memh       = src_cuda.memh();
+        local_elems[i].local_addr = src_cuda.ptr();
     }
 
-    // Missing rkey (always required)
-    elems[0].field_mask        &= ~UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY;
-    invalid_params.num_elements = 1;
-    invalid_params.elements     = elems;
+    // Missing worker
+    invalid_params.worker   = nullptr;
+    invalid_params.elements = local_elems;
     EXPECT_EQ(UCS_ERR_INVALID_PARAM,
-              ucp_device_mem_list_create(ep, &invalid_params, &handle));
-    EXPECT_EQ(nullptr, handle);
-    elems[0].field_mask |= UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY; // Restore
-
-    // Mismatched rkey config index
-    elems[1].rkey               = rkey2; // Different cfg_index
-    elems[1].remote_addr        = reinterpret_cast<uint64_t>(dst2.ptr());
-    invalid_params.num_elements = 2;
-    EXPECT_EQ(UCS_ERR_INVALID_PARAM,
-              ucp_device_mem_list_create(ep, &invalid_params, &handle));
+              ucp_device_local_mem_list_create(&invalid_params, &handle));
     EXPECT_EQ(nullptr, handle);
 
     // Mismatched local sys_dev
-    elems[0].memh               = src_cuda.memh();
-    elems[0].local_addr         = src_cuda.ptr();
-    elems[0].rkey               = rkey1;
-    elems[0].remote_addr        = reinterpret_cast<uint64_t>(dst1.ptr());
-    elems[1].memh               = src_host.memh(); // Different sys_dev
-    elems[1].local_addr         = src_host.ptr();
-    elems[1].rkey               = rkey1;
-    elems[1].remote_addr        = reinterpret_cast<uint64_t>(dst1.ptr());
+    invalid_params.worker       = sender().worker();
+    local_elems[1].memh         = src_host.memh(); // Different sys_dev
+    local_elems[1].local_addr   = src_host.ptr();
     invalid_params.num_elements = 2;
+    invalid_params.elements     = local_elems;
     EXPECT_EQ(UCS_ERR_UNSUPPORTED,
-              ucp_device_mem_list_create(ep, &invalid_params, &handle));
+              ucp_device_local_mem_list_create(&invalid_params, &handle));
     EXPECT_EQ(nullptr, handle);
 }
 
-UCS_TEST_P(test_ucp_device, get_mem_list_length)
+UCS_TEST_P(test_ucp_device, create_remote_fail)
+{
+    ucp_device_remote_mem_list_h handle = nullptr;
+
+    scoped_log_handler wrap_err(wrap_errors_logger);
+
+    // Empty params
+    ucp_device_mem_list_params_t empty_params{};
+    empty_params.field_mask = UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENTS;
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+              ucp_device_remote_mem_list_create(&empty_params, &handle));
+    EXPECT_EQ(nullptr, handle);
+
+    // Empty mem list
+    ucp_device_mem_list_params_t invalid_params{};
+    invalid_params.field_mask   = UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENTS |
+                                  UCP_DEVICE_MEM_LIST_PARAMS_FIELD_NUM_ELEMENTS |
+                                  UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENT_SIZE;
+    invalid_params.elements     = nullptr;
+    invalid_params.num_elements = 0;
+    invalid_params.element_size = sizeof(ucp_device_mem_list_elem_t);
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+              ucp_device_remote_mem_list_create(&invalid_params, &handle));
+    EXPECT_EQ(nullptr, handle);
+
+    // Zero element size
+    ucp_device_mem_list_elem_t dummy_elem{};
+    invalid_params.elements     = &dummy_elem;
+    invalid_params.num_elements = 1;
+    invalid_params.element_size = 0;
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+              ucp_device_remote_mem_list_create(&invalid_params, &handle));
+    EXPECT_EQ(nullptr, handle);
+
+    invalid_params.element_size = sizeof(ucp_device_mem_list_elem_t);
+    mapped_buffer dst1(4096, receiver(), 0, UCS_MEMORY_TYPE_CUDA);
+    mapped_buffer dst2(4096, receiver(), 0, UCS_MEMORY_TYPE_HOST);
+    auto rkey1          = dst1.rkey(sender());
+    auto rkey2          = dst2.rkey(sender());
+    ucp_rkey_h rkeys[2] = {rkey1, rkey2};
+
+    ucp_device_mem_list_elem_t remote_elems[2]{};
+    for (int i = 0; i < 2; i++) {
+        remote_elems[i].field_mask  = UCP_DEVICE_MEM_LIST_ELEM_FIELD_EP |
+                                      UCP_DEVICE_MEM_LIST_ELEM_FIELD_REMOTE_ADDR |
+                                      UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY;
+        remote_elems[i].ep          = sender().ep();
+        remote_elems[i].remote_addr = reinterpret_cast<uint64_t>(dst1.ptr());
+        remote_elems[i].rkey        = rkeys[i];
+
+        if (i == 1) {
+            remote_elems[i].field_mask = 0;
+        }
+    }
+
+    // Missing rkey (always required)
+    remote_elems[0].field_mask &= ~UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY;
+    invalid_params.num_elements = 1;
+    invalid_params.elements     = remote_elems;
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+              ucp_device_remote_mem_list_create(&invalid_params, &handle));
+    EXPECT_EQ(nullptr, handle);
+    remote_elems[0].field_mask |= UCP_DEVICE_MEM_LIST_ELEM_FIELD_RKEY; // Restore
+    remote_elems[0].rkey        = nullptr;
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+              ucp_device_remote_mem_list_create(&invalid_params, &handle));
+    EXPECT_EQ(nullptr, handle);
+    remote_elems[0].rkey = rkey1;
+
+    // Missing ep (always required)
+    remote_elems[0].field_mask &= ~UCP_DEVICE_MEM_LIST_ELEM_FIELD_EP;
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+              ucp_device_remote_mem_list_create(&invalid_params, &handle));
+    EXPECT_EQ(nullptr, handle);
+    remote_elems[0].field_mask |= UCP_DEVICE_MEM_LIST_ELEM_FIELD_EP; // Restore
+    remote_elems[0].ep          = nullptr;
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+              ucp_device_remote_mem_list_create(&invalid_params, &handle));
+    EXPECT_EQ(nullptr, handle);
+
+    // Only gap element
+    invalid_params.num_elements = 1;
+    invalid_params.elements     = remote_elems + 1;
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+              ucp_device_remote_mem_list_create(&invalid_params, &handle));
+    EXPECT_EQ(nullptr, handle);
+}
+
+UCS_TEST_P(test_ucp_device, get_local_mem_list_length)
 {
     constexpr unsigned num_elements = 8;
     mem_list list(*this, 1 * UCS_KBYTE, num_elements);
-    EXPECT_EQ(num_elements, ucp_device_get_mem_list_length(list.handle()));
+    EXPECT_EQ(num_elements,
+              ucp_device_get_mem_list_length(list.local_handle()));
+}
+
+UCS_TEST_P(test_ucp_device, get_remote_mem_list_length)
+{
+    constexpr unsigned num_elements = 8;
+    mem_list list(*this, 1 * UCS_KBYTE, num_elements);
+    EXPECT_EQ(num_elements,
+              ucp_device_get_mem_list_length(list.remote_handle()));
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_device, rc_gda, "rc,rc_gda")
@@ -365,7 +506,7 @@ public:
 protected:
     ucs_device_level_t get_device_level() const
     {
-        return static_cast<ucs_device_level_t>(get_variant_value(0));
+        return static_cast<ucs_device_level_t>(get_variant_value(1));
     }
 
     test_ucp_device_kernel_params_t init_params(unsigned num_iters = 1)
@@ -396,21 +537,6 @@ protected:
         auto result = launch_test_ucp_device_kernel(params);
         ASSERT_UCS_OK(result.status);
         return result;
-    }
-
-    void check_result(const test_ucp_device_kernel_params_t &params,
-                      const test_ucp_device_kernel_result_t &result,
-                      unsigned count)
-    {
-        unsigned num_threads = params.num_threads;
-        if (params.level == UCS_DEVICE_LEVEL_WARP) {
-            num_threads /= UCS_DEVICE_NUM_THREADS_IN_WARP;
-        }
-
-        uint64_t expected = params.num_iters * num_threads * count;
-        EXPECT_UCS_OK(result.status);
-        EXPECT_EQ(expected, result.producer_index);
-        EXPECT_EQ(expected, result.ready_index);
     }
 };
 
@@ -501,9 +627,42 @@ protected:
         return params;
     }
 
+    test_ucp_device_kernel_params_t
+    init_params_put(mem_list &list, unsigned mem_list_index, size_t size,
+                    test_ucp_device_operation_t operation =
+                            TEST_UCP_DEVICE_KERNEL_PUT)
+    {
+        auto params               = init_params();
+        params.operation          = operation;
+        params.local_mem_list     = list.local_handle();
+        params.remote_mem_list    = list.remote_handle();
+        params.put.mem_list_index = mem_list_index;
+        params.put.address        = list.src_ptr(mem_list_index);
+        params.put.remote_address = list.dst_ptr(mem_list_index);
+        params.put.length         = size;
+
+        return params;
+    }
+
+    test_ucp_device_kernel_params_t
+    init_params_counter_inc(mem_list &list, unsigned mem_list_index,
+                            size_t remote_offset = 0,
+                            test_ucp_device_operation_t operation =
+                                    TEST_UCP_DEVICE_KERNEL_COUNTER_INC)
+    {
+        auto params                       = init_params();
+        params.operation                  = operation;
+        params.remote_mem_list            = list.remote_handle();
+        params.counter_inc.mem_list_index = mem_list_index;
+        params.counter_inc.inc_value      = 1;
+        params.counter_inc.remote_address = list.dst_ptr(mem_list_index);
+        params.counter_inc.remote_offset  = remote_offset;
+        return params;
+    }
+
     send_mode_t get_send_mode() const
     {
-        return static_cast<send_mode_t>(get_variant_value(1));
+        return static_cast<send_mode_t>(get_variant_value(2));
     }
 
     virtual unsigned get_num_threads() const override
@@ -550,36 +709,35 @@ protected:
         }
     }
 
-    void wait_for_counter(const mem_list &list, unsigned counter_index)
+    void wait_for_counter(const mem_list &list, unsigned counter_index,
+                          size_t remote_offset = 0)
     {
         const size_t multiplier = get_num_ops_multiplier();
         uint64_t target_value   = get_num_iters() * multiplier;
 
         wait_for_cond(
-                [&list, counter_index, target_value]() {
-                    return list.dst_counter_read(counter_index) == target_value;
+                [&list, counter_index, target_value, remote_offset]() {
+                    return list.dst_counter_read(counter_index,
+                                                 remote_offset) == target_value;
                 },
                 [] {});
         EXPECT_EQ(get_num_iters() * multiplier,
-                  list.dst_counter_read(counter_index))
+                  list.dst_counter_read(counter_index, remote_offset))
                 << "multiplier: " << multiplier;
     }
 };
 
-UCS_TEST_P(test_ucp_device_xfer, put_single)
+UCS_TEST_P(test_ucp_device_xfer, put)
 {
     static constexpr size_t size = 32 * UCS_KBYTE;
-    mem_list list(*this, size, 6);
+    mem_list list(*this, size, 6, UCS_MEMORY_TYPE_CUDA,
+                  mem_list::MODE_WITH_GAP_ELEMENT);
 
     // Perform the transfer
     static constexpr unsigned mem_list_index = 3;
-    auto params = init_params();
-    params.operation             = TEST_UCP_DEVICE_KERNEL_PUT_SINGLE;
-    params.mem_list              = list.handle();
-    params.single.mem_list_index = mem_list_index;
-    params.single.address        = list.src_ptr(mem_list_index);
-    params.single.remote_address = list.dst_ptr(mem_list_index);
-    params.single.length         = size;
+    auto params = init_params_put(list, mem_list_index, size,
+                                  TEST_UCP_DEVICE_KERNEL_PUT);
+    params.put.remote_mem_list_index = 4;
     launch_kernel(params);
 
     // Check proper index received data
@@ -589,162 +747,47 @@ UCS_TEST_P(test_ucp_device_xfer, put_single)
 }
 
 /* TODO: Enable these tests in CI */
-UCS_TEST_SKIP_COND_P(test_ucp_device_xfer, put_single_stress_test,
+UCS_TEST_SKIP_COND_P(test_ucp_device_xfer, put_stress_test,
                      RUNNING_ON_VALGRIND)
 {
 #ifdef __SANITIZE_ADDRESS__
     UCS_TEST_SKIP_R("Skipping stress test under ASAN");
 #endif
 
-    static constexpr size_t size             = 8;
-    static constexpr unsigned mem_list_index = 0;
-    mem_list list(*this, size, 1);
+    constexpr size_t size             = 8;
+    constexpr unsigned mem_list_index = 0;
+    mem_list list(*this, size, 1, UCS_MEMORY_TYPE_CUDA,
+                  mem_list::MODE_WITH_GAP_ELEMENT);
 
     // Perform the transfer
-    auto params                  = init_params();
-    params.num_iters             = 1000;
-    params.num_blocks            = 1;
-    params.num_threads           = MAX_THREADS;
-    params.operation             = TEST_UCP_DEVICE_KERNEL_PUT_SINGLE;
-    params.mem_list              = list.handle();
-    params.single.mem_list_index = mem_list_index;
-    params.single.address        = list.src_ptr(mem_list_index);
-    params.single.remote_address = list.dst_ptr(mem_list_index);
-    params.single.length         = size;
-    auto result                  = launch_kernel(params);
+    auto params = init_params_put(list, mem_list_index, size,
+                                  TEST_UCP_DEVICE_KERNEL_PUT);
+    params.put.remote_mem_list_index = 1;
+    params.num_iters                    = 1000;
+    params.num_blocks                   = 1;
+    params.num_threads                  = MAX_THREADS;
+    launch_kernel(params);
 
     // Check proper index received data
     list.dst_pattern_check(mem_list_index, mem_list::SEED_SRC);
-    check_result(params, result, 1);
-}
-
-UCS_TEST_P(test_ucp_device_xfer, put_multi)
-{
-    static constexpr size_t size = 32 * UCS_KBYTE;
-    unsigned count               = get_multi_elem_count();
-    mem_list list(*this, size, count + 1,
-                  UCS_MEMORY_TYPE_CUDA, mem_list::MODE_LAST_ELEM_COUNTER);
-
-    const unsigned counter_index = count;
-    list.dst_counter_init(counter_index);
-
-    auto params      = init_params();
-    params.operation = TEST_UCP_DEVICE_KERNEL_PUT_MULTI;
-
-    params.mem_list                = list.handle();
-    params.multi.counter_inc_value = 1;
-    launch_kernel(params);
-
-    // Check received data
-    for (unsigned i = 0; i < count; ++i) {
-        list.dst_pattern_check(i, mem_list::SEED_SRC);
-    }
-
-    wait_for_counter(list, counter_index);
-}
-
-UCS_TEST_SKIP_COND_P(test_ucp_device_xfer, put_multi_stress_test,
-                     RUNNING_ON_VALGRIND)
-{
-#ifdef __SANITIZE_ADDRESS__
-    UCS_TEST_SKIP_R("Skipping stress test under ASAN");
-#endif
-
-    static constexpr size_t size = 8;
-    unsigned count               = get_multi_elem_count();
-    mem_list list(*this, size, count + 1);
-
-    const unsigned counter_index = count;
-    list.dst_counter_init(counter_index);
-
-    auto params                    = init_params();
-    params.operation               = TEST_UCP_DEVICE_KERNEL_PUT_MULTI;
-    params.num_iters               = 1000;
-    params.num_blocks              = 1;
-    params.num_threads             = MAX_THREADS;
-    params.mem_list                = list.handle();
-    params.multi.counter_inc_value = 1;
-    auto result                    = launch_kernel(params);
-
-    // Check received data
-    for (unsigned i = 0; i < count; ++i) {
-        list.dst_pattern_check(i, mem_list::SEED_SRC);
-    }
-
-    check_result(params, result, count + 1);
-}
-
-UCS_TEST_P(test_ucp_device_xfer, put_multi_partial)
-{
-    static constexpr size_t size = 32 * UCS_KBYTE;
-    unsigned total_count         = get_multi_elem_count() * 2;
-    mem_list list(*this, size, total_count + 1,
-                  UCS_MEMORY_TYPE_CUDA, mem_list::MODE_LAST_ELEM_COUNTER);
-
-    const unsigned counter_index = total_count;
-    list.dst_counter_init(counter_index);
-
-    // Random list of indexes
-    std::vector<unsigned> indexes_vec;
-    for (unsigned i = 0; i < total_count; ++i) {
-        if (ucs::rand() % 2) {
-            indexes_vec.push_back(i);
-        }
-    }
-
-    std::vector<size_t> local_offsets(indexes_vec.size(), 0);
-    std::vector<size_t> remote_offsets(indexes_vec.size(), 0);
-
-    auto indexes               = ucx_cuda::make_device_vector(indexes_vec);
-    auto device_local_offsets  = ucx_cuda::make_device_vector(local_offsets);
-    auto device_remote_offsets = ucx_cuda::make_device_vector(remote_offsets);
-    auto lengths               = ucx_cuda::make_device_vector(
-            std::vector<size_t>(indexes_vec.size(), size));
-    auto params                = init_params();
-    params.operation           = TEST_UCP_DEVICE_KERNEL_PUT_MULTI_PARTIAL;
-
-    params.mem_list                      = list.handle();
-    params.partial.local_offsets         = device_local_offsets.ptr();
-    params.partial.remote_offsets        = device_remote_offsets.ptr();
-    params.partial.lengths               = lengths.ptr();
-    params.partial.mem_list_indices      = indexes.ptr();
-    params.partial.mem_list_count        = indexes_vec.size();
-    params.partial.counter_index         = counter_index;
-    params.partial.counter_remote_offset = 0;
-    params.partial.counter_inc_value     = 1;
-    launch_kernel(params);
-
-    // Check received data
-    std::set<unsigned> indexes_set(indexes_vec.begin(), indexes_vec.end());
-    for (auto index : indexes_vec) {
-        uint64_t seed = (indexes_set.find(index) == indexes_set.end()) ?
-                                mem_list::SEED_DST :
-                                mem_list::SEED_SRC;
-        list.dst_pattern_check(index, seed);
-    }
-
-    wait_for_counter(list, counter_index);
 }
 
 UCS_TEST_P(test_ucp_device_xfer, counter)
 {
-    const size_t size = counter_size();
+    const size_t remote_offset = 8;
+    const size_t size          = counter_size() + remote_offset;
     mem_list list(*this, size, 1, UCS_MEMORY_TYPE_CUDA,
                   mem_list::MODE_COUNTER_ONLY);
 
-    static constexpr unsigned mem_list_index = 0;
-    list.dst_counter_init(mem_list_index);
+    constexpr unsigned mem_list_index = 0;
+    list.dst_counter_init(mem_list_index, remote_offset);
 
-    auto params                       = init_params();
-    params.operation                  = TEST_UCP_DEVICE_KERNEL_COUNTER_INC;
-    params.mem_list                   = list.handle();
-    params.counter_inc.mem_list_index = mem_list_index;
-    params.counter_inc.inc_value      = 1;
-    params.counter_inc.remote_address = list.dst_ptr(mem_list_index);
+    auto params = init_params_counter_inc(list, mem_list_index, remote_offset,
+                                          TEST_UCP_DEVICE_KERNEL_COUNTER_INC);
     launch_kernel(params);
 
     // Check destination
-    wait_for_counter(list, mem_list_index);
+    wait_for_counter(list, mem_list_index, remote_offset);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_device_xfer, rc_gda,

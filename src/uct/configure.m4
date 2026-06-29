@@ -11,6 +11,7 @@ m4_include([src/uct/rocm/configure.m4])
 m4_include([src/uct/sm/configure.m4])
 m4_include([src/uct/ugni/configure.m4])
 m4_include([src/uct/ze/configure.m4])
+m4_include([src/uct/gaudi/configure.m4])
 
 AC_DEFINE_UNQUOTED([uct_MODULES], ["${uct_modules}"], [UCT loadable modules])
 

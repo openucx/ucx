@@ -15,7 +15,7 @@ $basedir/../configure \
 	--enable-gtest \
 	--enable-examples \
 	--enable-test-apps \
-	--with-valgrind \
+	--with-valgrind=guess \
 	--enable-profiling \
 	--enable-frame-pointer \
 	--enable-stats \

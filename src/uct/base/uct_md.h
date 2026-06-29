@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -105,7 +105,7 @@ typedef ucs_status_t
 typedef ucs_status_t (*uct_md_mem_query_func_t)(uct_md_h md,
                                                 const void *address,
                                                 size_t length,
-                                                uct_md_mem_attr_t *mem_attr);
+                                                uct_md_mem_attr_v2_t *mem_attr);
 
 typedef ucs_status_t (*uct_md_mkey_pack_func_t)(
         uct_md_h md, uct_mem_h memh, void *address, size_t length,
@@ -126,6 +126,9 @@ typedef ucs_status_t (*uct_md_detect_memory_type_func_t)(uct_md_h md,
                                                          size_t length,
                                                          ucs_memory_type_t *mem_type_p);
 
+typedef ucs_status_t (*uct_md_mem_elem_pack_func_t)(
+        uct_md_h md, uct_mem_h memh, uct_rkey_t rkey,
+        uct_device_mem_elem_t *mem_elem_p);
 
 /**
  * Memory domain operations
@@ -142,6 +145,7 @@ struct uct_md_ops {
     uct_md_mkey_pack_func_t              mkey_pack;
     uct_md_mem_attach_func_t             mem_attach;
     uct_md_detect_memory_type_func_t     detect_memory_type;
+    uct_md_mem_elem_pack_func_t          mem_elem_pack;
 };
 
 

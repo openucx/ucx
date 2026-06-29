@@ -33,6 +33,7 @@
 #include "gtest-death-test.h"
 
 #include <utility>
+#include <cstdint>
 
 #include "internal/gtest-port.h"
 #include "internal/custom/gtest.h"

@@ -1,4 +1,3 @@
-[submodule "ucg"]
-	path = src/ucg
-	url = https://github.com/openucx/xucg.git
-	branch = master
+[submodule "src/uct/ib/mlx5/gdaki/gpunetio"]
+	path = external/gpunetio
+	url = https://github.com/NVIDIA-DOCA/gpunetio

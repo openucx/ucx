@@ -1,4 +1,5 @@
 Aboorva Devarajan <aboorvad@linux.ibm.com>
+Adit Ranadive <aranadive@nvidia.com>
 Akshay Venkatesh <akvenkatesh@nvidia.com>
 Alastair McKinstry <mckinstry@debian.org>
 Aleksey Senin <alekseys@nvidia.com>
@@ -15,12 +16,14 @@ Artem Ryabov <artemry@nvidia.com>
 Artemy Kovalyov <artemyko@mellanox.com>
 Arun Chandran <Arun.Chandran@amd.com>
 Aurelien Bouteiller <bouteill@icl.utk.edu>
+BatshevaBlack <bblack@nvidia.com>
 Bin Lei <binl@mellanox.com>
 Boris Karasev <boriska@nvidia.com>
 Brad Benton <bradford.benton@gmail.com>
 Changcheng Liu <jerrliu@nvidia.com>
 Colin Hirsch <chirsch@nvidia.com>
 Corey J. Nolet <cjnolet@gmail.com>
+Daniel Pressler <danielpr@nvidia.com>
 David Wootton <dwootton@us.ibm.com>
 Devendar Bureddy <devendar@mellanox.com>
 Devesh Sharma <devesh.sharma@broadcom.com>
@@ -33,16 +36,20 @@ Elad Persiko <eladpe@mellanox.com>
 Eugene Voronov <eugene@mellanox.com>
 Evgeny Leksikov <evgenylek@mellanox.com>
 Fabian Ruhland <ruhland@hhu.de>
+Fei Teng <fteng@nvidia.com>
 Gilbert Lee <gilbert.lee@amd.com>
 Gilles Gouaillardet <gilles.gouaillardet@gmail.com>
 Gonzalo Brito Gadeschi <gonzalob@nvidia.com>
 Graham Lopez <lopezmg@ornl.gov>
+Guy Ealey Morag <gealeymorag@nvidia.com>
 Guy Shattah <sguy@mellanox.com>
 Hessam Mirsadeghi <hmirsadeghi@nvidia.com>
 Hiroyuki Sato <hiroysato@gmail.com>
+Hod Badihi <hbadihi@nvidia.com>
 Howard Pritchard <howardp@lanl.gov>
 Huaxiang Fan <huaxiangf@nvidia.com>
 Hui Zhou <hzhou321@anl.gov>
+Iaroslav Sydoruk <isydoruk@nvidia.com>
 Igor Ivanov <igori@mellanox.com>
 Ilia Yastrebov <iyastrebov@nvidia.com>
 Ilya Nelkenbaum <ilyan@mellanox.com>
@@ -57,12 +64,15 @@ Jonas Zhou <JonasZhou@zhaoxin.com>
 Joseph Schuchart <schuchart@icl.utk.edu>
 Keisuke Fukuda <kfukuda@preferred.jp>
 Ken Raffenetti <raffenet@mcs.anl.gov>
+Kento Hasegawa <hasegawa.kento@fujitsu.com>
 Khaled Hamidouche <Khaled.Hamidouche@amd.com>
+Kok Pyng Liew <kokpyngl@nvidia.com>
 Konstantin Belousov <kib@freebsd.org>
 Leonid Genkin <lgenkin@nvidia.com>
 Lior Paz <liorpa@nvidia.com>
 Luis E. Pena <l31g@hotmail.com>
 Manjunath Gorentla Venkata <manjugv@gmail.com>
+Manu Shantharam <manu.shantharam@amd.com>
 Marek Schimara <Marek.Schimara@bull.net>
 Mark Allen <markalle@us.ibm.com>
 Matthew Baker <bakermb@ornl.gov>
@@ -74,10 +84,13 @@ Min Fang <minf@nvidia.com>
 Nathan Bellalou <nbellalou@nvidia.com>
 Nathan Hjelm <hjelmn@lanl.gov>
 Netanel Yosephian <netanelyo@mellanox.com>
+Nir Wolfer <nwolfer@nvidia.com>
 Ofir Farjon <ofarjon@nvidia.com>
 Olly Perks <olly.perks@arm.com>
+Or Balayla <obalayla@nvidia.com>
 Ovidiu Mara <ovidium@nvidia.com>
 Pak Lui <Pak.Lui@amd.com>
+Paul Taylor <pataylor@nvidia.com>
 Pavan Balaji <balaji@anl.gov>
 Pavel Shamis (Pasha) <pasharesearch@gmail.com>
 Peter Andreas Entschev <peter@entschev.com>
@@ -85,6 +98,7 @@ Peter Rudenko <peterr@mellanox.com>
 Peter-Jan Gootzen <pgootzen@nvidia.com>
 Qiang Yu <Qiang.Yu@amd.com>
 Raul Akhmetshin <rakhmetshin@nvidia.com>
+Rikka Göring <rikka.goering@outlook.de>
 Robert Dietrich <rdietrich@nvidia.com>
 Rohit Zambre <rzambre@uci.edu>
 Roie Danino <rdanino@nvidia.com>
@@ -104,18 +118,25 @@ Srinivasan Subramanian <srinivasan.subramanian@amd.com>
 Stephen Richmond <srichmond@dancer.icl.utk.edu>
 Swen Boehm <boehms@ornl.gov>
 Thomas Vegas <tvegas@nvidia.com>
+Tomer Gilad <tgilad@nvidia.com>
 Tony Curtis <tonycurtis32@gmail.com>
 Tzafrir Cohen <tzafrirc@nvidia.com>
 Valentin Petrov <valentinp@mellanox.com>
 Wenbin Lu <wenbin.lu@stonybrook.edu>
+William Gallagher <wgallagher@nvidia.com>
 Xin Zhao <xinz@mellanox.com>
 Xu Yifeng <yifeng.xyf@alibaba-inc.com>
+Yaser Afshar <yaser.afshar@intel.com>
+Yihua Xu <yihua.xu@intel.com>
 Yiltan Hassan Temucin <yiltan.temucin@amd.com>
 Yossi Itigin <yosefe@nvidia.com>
 Yuriy Shestakov <yuriis@mellanox.com>
+Zhenlong Ma <zhenlongm@nvidia.com>
+Zhongkai Zhang <zhzhang@habana.ai>
 Zhu Yanjun <yanjunz@mellanox.com>
 Zihao Zhao <zizhao@nvidia.com>
 lzhang2 <cherry.zhang@intel.com>
+michaelzli <michaelzli@tencent.com>
 
 In addition we would like to acknowledge the following members of UCX community
 for their participation in annual face-to-face meeting, design discussions, and

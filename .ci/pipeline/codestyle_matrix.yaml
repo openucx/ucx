@@ -1,0 +1,120 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+---
+job: ucx-codestyle
+
+failFast: false
+timeout_minutes: 90
+
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  limits: "{memory: 4Gi, cpu: 2000m}"
+  requests: "{memory: 4Gi, cpu: 2000m}"
+
+runs_on_dockers:
+  - { name: "fedora33", url: "harbor.mellanox.com/ucx/fedora33:2", arch: x86_64 }
+
+taskName: '${arch}/${name}'
+
+env:
+  BUILD_ID: "${BUILD_NUMBER}"
+
+steps:
+  - name: Commit Title
+    parallel: false
+    timeout: 10
+    run: |
+      set -euo pipefail
+      source ./buildlib/tools/codestyle.sh
+
+      # Determine PR/MR diff range (used by both GitHub and GitLab CI).
+      # GitHub: checkout is a merge commit → extract range from parents.
+      # GitLab: checkout is branch HEAD → use target branch variable.
+      if git rev-parse --verify -q HEAD^2 >/dev/null; then
+        PR_HEAD="$(git rev-parse HEAD^2)"
+        BASE="$(git merge-base HEAD^1 HEAD^2)"
+      else
+        TARGET_BRANCH="${gitlabTargetBranch:-${gitlabTargetBranchName:-}}"
+        [ -n "${TARGET_BRANCH}" ] || { echo "ERROR: PR/MR context required." >&2; exit 2; }
+        BASE="$(git merge-base HEAD "origin/${TARGET_BRANCH}")"
+        PR_HEAD="HEAD"
+      fi
+
+      range="${BASE}..${PR_HEAD}"
+
+      codestyle_check_commit_title "${range}"
+
+  - name: Format Check
+    parallel: false
+    timeout: 10
+    run: |
+      set -euox pipefail
+
+      # Determine PR/MR diff range (GitHub: merge commit parents, GitLab: target branch)
+      if git rev-parse --verify -q HEAD^2 >/dev/null; then
+        PR_HEAD="$(git rev-parse HEAD^2)"
+        BASE="$(git merge-base HEAD^1 HEAD^2)"
+      else
+        TARGET_BRANCH="${gitlabTargetBranch:-${gitlabTargetBranchName:-}}"
+        [ -n "${TARGET_BRANCH}" ] || { echo "ERROR: PR/MR context required." >&2; exit 2; }
+        BASE="$(git merge-base HEAD "origin/${TARGET_BRANCH}")"
+        PR_HEAD="HEAD"
+      fi
+
+      echo "Checking code format on diff ${BASE}..${PR_HEAD}"
+      git-clang-format --diff "${BASE}" "${PR_HEAD}" > format.patch
+      cat format.patch
+
+      if [ "$(cat format.patch)" = "no modified files to format" ] || \
+         [ "$(cat format.patch)" = "clang-format did not modify any files" ] || \
+         [ ! -s format.patch ]; then
+        echo "No files to format."
+        exit 0
+      fi
+
+      git apply format.patch
+      if ! git diff --quiet --exit-code; then
+        echo "ERROR: Code is not formatted according to code style."
+        echo "See https://github.com/openucx/ucx/wiki/Code-style-checking"
+        exit 1
+      fi
+
+  - name: Authors Check
+    parallel: false
+    timeout: 10
+    run: |
+      set -euo pipefail
+
+      # Determine PR/MR diff range (GitHub: merge commit parents, GitLab: target branch)
+      if git rev-parse --verify -q HEAD^2 >/dev/null; then
+        PR_HEAD="$(git rev-parse HEAD^2)"
+        BASE="$(git merge-base HEAD^1 HEAD^2)"
+      else
+        TARGET_BRANCH="${gitlabTargetBranch:-${gitlabTargetBranchName:-}}"
+        [ -n "${TARGET_BRANCH}" ] || { echo "ERROR: PR/MR context required." >&2; exit 2; }
+        BASE="$(git merge-base HEAD "origin/${TARGET_BRANCH}")"
+        PR_HEAD="HEAD"
+      fi
+
+      range="${BASE}..${PR_HEAD}"
+
+      echo "Looking for missing AUTHORS on commit range ${range}"
+      ./contrib/authors_update.sh "${range}"
+      git diff --exit-code
+
+  - name: Codespell
+    parallel: false
+    timeout: 10
+    run: |
+      set -euo pipefail
+      source ./buildlib/tools/codestyle.sh
+      codestyle_check_spell
+
+  - name: Ctags
+    parallel: false
+    timeout: 10
+    run: |
+      set -euo pipefail
+      ./buildlib/tools/test_ctags.sh

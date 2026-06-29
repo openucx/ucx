@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2020. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  * Copyright (C) The University of Tennessee and The University
  *               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
  *
@@ -120,10 +120,20 @@ ucs_config_field_t uct_ib_md_config_table[] = {
      "Use GPU Direct RDMA for HCA to access GPU pages directly\n",
      ucs_offsetof(uct_ib_md_config_t, enable_gpudirect_rdma), UCS_CONFIG_TYPE_TERNARY},
 
-    {"GDA_MAX_SYS_LATENCY", "300ns",
-     "Skip GPU device if the distance latency to the IB device is greater than this value.",
-     ucs_offsetof(uct_ib_md_config_t, ext.gda_max_sys_latency),
-     UCS_CONFIG_TYPE_TIME},
+    {"GDA_MAX_HCA_PER_GPU", "auto",
+     "Max number of HCA devices to use for GDA per one GPU device.",
+     ucs_offsetof(uct_ib_md_config_t, ext.gda_max_hca_per_gpu),
+     UCS_CONFIG_TYPE_ULUNITS},
+
+    {"GDA_DMABUF_ENABLE", "try",
+     "Enable DMA-BUF in GDA.",
+     ucs_offsetof(uct_ib_md_config_t, ext.gda_dmabuf_enable), UCS_CONFIG_TYPE_TERNARY},
+
+    {"GDA_RETAIN_INACTIVE_CTX", "n",
+     "Retain and use an inactive CUDA primary context to query device "
+     "capabilities.",
+     ucs_offsetof(uct_ib_md_config_t, ext.gda_retain_inactive_ctx),
+     UCS_CONFIG_TYPE_BOOL},
 
     {"PCI_BW", "",
      "Maximum effective data transfer rate of PCI bus connected to HCA\n",
@@ -254,6 +264,7 @@ ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
     md_attr->gva_mem_types             = md->gva_mem_types;
     md_attr->reg_nonblock_mem_types    = md->reg_nonblock_mem_types;
     md_attr->cache_mem_types           = UCS_MASK(UCS_MEMORY_TYPE_LAST);
+    md_attr->required_mem_flags        = UCS_MEM_FLAG_REGISTRABLE;
     md_attr->rkey_packed_size          = UCT_IB_MD_PACKED_RKEY_SIZE;
     md_attr->reg_cost                  = md->reg_cost;
     md_attr->exported_mkey_packed_size = sizeof(uct_ib_md_packed_mkey_t);
@@ -467,7 +478,7 @@ uct_ib_md_handle_mr_list_mt(uct_ib_md_t *md, void *address, size_t length,
     return status;
 }
 
-ucs_status_t uct_ib_reg_mr(uct_ib_md_t *md, void *address, size_t length,
+ucs_status_t uct_ib_reg_mr(const uct_ib_md_t *md, void *address, size_t length,
                            const uct_md_mem_reg_params_t *params,
                            uint64_t access_flags, struct ibv_dm *dm,
                            struct ibv_mr **mr_p)
@@ -1346,6 +1357,15 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
         /* check if ROCM KFD driver is loaded */
         uct_ib_check_gpudirect_driver(md, "/dev/kfd", UCS_MEMORY_TYPE_ROCM);
 
+        /* Check if Intel Xe driver is loaded */
+        uct_ib_check_gpudirect_driver(md, "/sys/module/xe/srcversion",
+                                      UCS_MEMORY_TYPE_ZE_DEVICE);
+
+        /* Check for HabanaLabs Gaudi DMABuf support */
+        uct_ib_check_gpudirect_driver(md, "/dev/accel/accel0",
+                                      UCS_MEMORY_TYPE_GAUDI);
+        uct_ib_check_gpudirect_driver(md, "/dev/hl0", UCS_MEMORY_TYPE_GAUDI);
+
         /* Check for dma-buf support */
         uct_ib_md_check_dmabuf(md);
     }
@@ -1354,8 +1374,8 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
         !(md->cap_flags & UCT_MD_FLAG_REG_DMABUF) &&
         (md_config->enable_gpudirect_rdma == UCS_YES)) {
         ucs_error("%s: Couldn't enable GPUDirect RDMA. Please make sure "
-                  "nv_peer_mem or amdgpu plugin installed correctly, or dmabuf "
-                  "is supported.",
+                  "nv_peer_mem, amdgpu plugin, or Intel Xe driver is "
+                  "installed correctly, or dmabuf is supported.",
                   uct_ib_device_name(&md->dev));
         status = UCS_ERR_UNSUPPORTED;
         goto err_cleanup_device;
@@ -1588,6 +1608,7 @@ static uct_ib_md_ops_t uct_ib_verbs_md_ops = {
         .mkey_pack          = uct_ib_verbs_mkey_pack,
         .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
         .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported,
+        .mem_elem_pack      = (uct_md_mem_elem_pack_func_t)ucs_empty_function_return_unsupported
     },
     .open = uct_ib_verbs_md_open,
 };

@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2012. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -13,7 +13,8 @@
 #include <ucs/config/global_opts.h>
 #include <ucs/config/parser.h>
 
-#include <set>
+#include <unistd.h>
+#include <sstream>
 
 extern "C" {
 // On some platforms users have to declare environ explicitly
@@ -517,6 +518,49 @@ out_close:
     return result;
 }
 
+std::set<int> get_open_fds()
+{
+    std::set<int> fds;
+    DIR *dir = opendir("/proc/self/fd");
+    if (dir == NULL) {
+        ucs_fatal("failed to open /proc/self/fd");
+    }
+
+    const int dir_fd = dirfd(dir);
+    if (dir_fd < 0) {
+        closedir(dir);
+        ucs_fatal("dirfd() failed: %s", strerror(errno));
+    }
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (entry->d_type == DT_LNK) {
+            const int fd = atoi(entry->d_name);
+            if (fd != dir_fd) {
+                fds.insert(fd);
+            }
+        }
+    }
+    closedir(dir);
+    return fds;
+}
+
+std::string readlink_proc_fd(int fd)
+{
+    char path[64], link[PATH_MAX];
+    const size_t max_len = sizeof(link) - 1;
+
+    snprintf(path, sizeof(path), "/proc/self/fd/%d", fd);
+    const ssize_t len = readlink(path, link, max_len);
+
+    if (len < 0) {
+        return "<readlink failed>";
+    }
+
+    link[len] = '\0';
+    return std::string(link);
+}
+
 static std::map<std::string, std::string> get_all_rdmacm_net_devices()
 {
     static const std::string sysfs_ib_dir  = "/sys/class/infiniband";
@@ -676,6 +720,13 @@ std::string compact_string(const std::string &str, size_t length)
     }
 
     return str.substr(0, length) + "..." + str.substr(str.length() - length);
+}
+
+
+std::string
+join(std::initializer_list<std::string> strings, const std::string &delimiter)
+{
+    return join<std::initializer_list<std::string>>(strings, delimiter);
 }
 
 std::string exit_status_info(int exit_status)

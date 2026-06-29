@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -43,9 +43,16 @@ ucp_proto_common_init_params(const ucp_proto_init_params_t *init_params)
 int ucp_proto_common_init_check_err_handling(
         const ucp_proto_common_init_params_t *init_params)
 {
-    return (init_params->flags & UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING) ||
-           (init_params->super.ep_config_key->err_mode ==
-            UCP_ERR_HANDLING_MODE_NONE);
+    switch (init_params->super.ep_config_key->err_mode) {
+    case UCP_ERR_HANDLING_MODE_NONE:
+        return 1;
+    case UCP_ERR_HANDLING_MODE_PEER:
+        return !!(init_params->flags & UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING);
+    case UCP_ERR_HANDLING_MODE_FAILOVER:
+        return !!(init_params->flags & UCP_PROTO_COMMON_INIT_FLAG_FAILOVER);
+    default:
+        return 0;
+    }
 }
 
 static size_t
@@ -60,8 +67,9 @@ ucp_memory_info_t ucp_proto_common_select_param_mem_info(
                                    const ucp_proto_select_param_t *select_param)
 {
     ucp_memory_info_t mem_info = {
-        .type = select_param->mem_type,
-        .sys_dev = select_param->sys_dev
+        .type    = select_param->mem_type,
+        .sys_dev = select_param->sys_dev,
+        .flags   = select_param->op.mem_flags
     };
 
     return mem_info;
@@ -235,7 +243,7 @@ ucp_proto_common_get_frag_size(const ucp_proto_common_init_params_t *params,
 
 /* Update 'perf' with the distance */
 static void ucp_proto_common_update_lane_perf_by_distance(
-        ucp_proto_common_tl_perf_t *perf, ucp_proto_perf_node_t *perf_node,
+        ucp_proto_common_tl_perf_t *perf,
         const ucs_sys_dev_distance_t *distance, const char *perf_name,
         const char *perf_fmt, ...)
 {
@@ -261,7 +269,7 @@ static void ucp_proto_common_update_lane_perf_by_distance(
     sys_perf_node = ucp_proto_perf_node_new_data(perf_name, "%s",
                                                  perf_node_desc);
     ucp_proto_perf_node_add_data(sys_perf_node, "", distance_func);
-    ucp_proto_perf_node_own_child(perf_node, &sys_perf_node);
+    ucp_proto_perf_node_own_child(perf->node, &sys_perf_node);
 }
 
 void ucp_proto_common_lane_perf_node(ucp_context_h context,
@@ -317,6 +325,7 @@ static void ucp_proto_common_tl_perf_reset(ucp_proto_common_tl_perf_t *tl_perf)
     tl_perf->sys_latency        = 0;
     tl_perf->min_length         = 0;
     tl_perf->max_frag           = SIZE_MAX;
+    tl_perf->node               = NULL;
 }
 
 static void ucp_proto_common_perf_attr_set_mem_type(
@@ -337,15 +346,14 @@ static void ucp_proto_common_perf_attr_set_mem_type(
 ucs_status_t
 ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
                                ucp_lane_index_t lane,
-                               ucp_proto_common_tl_perf_t *tl_perf,
-                               ucp_proto_perf_node_t **perf_node_p)
+                               ucp_proto_common_tl_perf_t *tl_perf)
 {
     ucp_worker_h worker        = params->super.worker;
     ucp_context_h context      = worker->context;
     ucp_rsc_index_t rsc_index  = ucp_proto_common_get_rsc_index(&params->super,
                                                                 lane);
     ucp_worker_iface_t *wiface = ucp_worker_iface(worker, rsc_index);
-    ucp_proto_perf_node_t *perf_node, *lane_perf_node;
+    ucp_proto_perf_node_t *lane_perf_node;
     const ucp_rkey_config_t *rkey_config;
     ucs_sys_dev_distance_t distance;
     size_t tl_min_frag, tl_max_frag;
@@ -356,7 +364,6 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
 
     if (lane == UCP_NULL_LANE) {
         ucp_proto_common_tl_perf_reset(tl_perf);
-        *perf_node_p = NULL;
         return UCS_OK;
     }
 
@@ -370,9 +377,9 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    perf_node = ucp_proto_perf_node_new_data("lane", "%u ppn %u eps",
-                                             context->config.est_num_ppn,
-                                             context->config.est_num_eps);
+    tl_perf->node = ucp_proto_perf_node_new_data("lane", "%u ppn %u eps",
+                                                 context->config.est_num_ppn,
+                                                 context->config.est_num_eps);
 
     perf_attr.field_mask        = UCT_PERF_ATTR_FIELD_OPERATION |
                                   UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD |
@@ -406,7 +413,7 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
 
     ucp_proto_common_lane_perf_node(context, rsc_index, &perf_attr,
                                     &lane_perf_node);
-    ucp_proto_perf_node_own_child(perf_node, &lane_perf_node);
+    ucp_proto_perf_node_own_child(tl_perf->node, &lane_perf_node);
 
     /* If reg_mem_info type is not unknown we assume the protocol is going to
      * send that mem type in a zero copy fashion. So, need to consider the
@@ -423,7 +430,7 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
         ucp_proto_common_get_lane_distance(&params->super, lane, sys_dev,
                                            &distance);
         ucp_proto_common_update_lane_perf_by_distance(
-                tl_perf, perf_node, &distance, "local system", "%s %s",
+                tl_perf, &distance, "local system", "%s %s",
                 ucs_topo_sys_device_get_name(sys_dev),
                 ucs_topo_sys_device_bdf_name(sys_dev, bdf_name,
                                              sizeof(bdf_name)));
@@ -431,13 +438,11 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
 
     /* For remote memory access, consider remote system topology distance */
     if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS) {
-        ucs_assertv(params->super.rkey_cfg_index < worker->rkey_config_count,
-                    "rkey_cfg_index=%d rkey_config_count=%d",
-                    params->super.rkey_cfg_index, worker->rkey_config_count);
-        rkey_config = &worker->rkey_config[params->super.rkey_cfg_index];
+        rkey_config = &ucs_array_elem(&worker->rkey_config,
+                                      params->super.rkey_cfg_index);
         distance    = rkey_config->lanes_distance[lane];
         ucp_proto_common_update_lane_perf_by_distance(
-                tl_perf, perf_node, &distance, "remote system", "sys-dev %d %s",
+                tl_perf, &distance, "remote system", "sys-dev %d %s",
                 rkey_config->key.sys_dev,
                 ucs_memory_type_names[rkey_config->key.mem_type]);
     }
@@ -451,20 +456,18 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
                 params->hdr_size);
     ucs_assert(tl_perf->sys_latency >= 0);
 
-    ucp_proto_perf_node_add_bandwidth(perf_node, "bw", tl_perf->bandwidth);
-    ucp_proto_perf_node_add_scalar(perf_node, "lat", tl_perf->latency);
-    ucp_proto_perf_node_add_scalar(perf_node, "sys-lat", tl_perf->sys_latency);
-    ucp_proto_perf_node_add_scalar(perf_node, "send-pre",
+    ucp_proto_perf_node_add_bandwidth(tl_perf->node, "bw", tl_perf->bandwidth);
+    ucp_proto_perf_node_add_scalar(tl_perf->node, "lat", tl_perf->latency);
+    ucp_proto_perf_node_add_scalar(tl_perf->node, "sys-lat", tl_perf->sys_latency);
+    ucp_proto_perf_node_add_scalar(tl_perf->node, "send-pre",
                                    tl_perf->send_pre_overhead);
-    ucp_proto_perf_node_add_scalar(perf_node, "send-post",
+    ucp_proto_perf_node_add_scalar(tl_perf->node, "send-post",
                                    tl_perf->send_post_overhead);
-    ucp_proto_perf_node_add_scalar(perf_node, "recv", tl_perf->recv_overhead);
-
-    *perf_node_p = perf_node;
+    ucp_proto_perf_node_add_scalar(tl_perf->node, "recv", tl_perf->recv_overhead);
     return UCS_OK;
 
 err_deref_perf_node:
-    ucp_proto_perf_node_deref(&perf_node);
+    ucp_proto_perf_node_deref(&tl_perf->node);
     return status;
 }
 
@@ -510,6 +513,16 @@ ucp_proto_common_filter_min_frag(const ucp_proto_init_params_t *params,
                 ucs_trace("%s: md %s cannot register %s memory", lane_desc,
                           context->tl_mds[md_index].rsc.md_name,
                           ucs_memory_type_names[reg_mem_type]);
+                return 0;
+            }
+
+            if (!ucs_test_all_flags(common_params->reg_mem_info.flags,
+                                    md_attr->required_mem_flags)) {
+                ucs_trace("%s: md %s missing required_mem_flags=0x%x for "
+                          "mem_flags=0x%x",
+                          lane_desc, context->tl_mds[md_index].rsc.md_name,
+                          md_attr->required_mem_flags,
+                          common_params->reg_mem_info.flags);
                 return 0;
             }
         } else if (!(md_attr->access_mem_types & UCS_BIT(reg_mem_type))) {
@@ -558,7 +571,8 @@ ucp_proto_common_filter_min_frag(const ucp_proto_init_params_t *params,
 ucp_lane_index_t
 ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
                             unsigned flags, ucp_lane_type_t lane_type,
-                            uint64_t tl_cap_flags, ucp_lane_index_t max_lanes,
+                            uint64_t tl_cap_flags, uint64_t tl_v2_cap_flags,
+                            ucp_lane_index_t max_lanes,
                             ucp_lane_map_t exclude_map,
                             ucp_proto_common_filter_lane_cb_t filter,
                             ucp_lane_index_t *lanes)
@@ -568,7 +582,10 @@ ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
     const ucp_ep_config_key_t *ep_config_key     = params->ep_config_key;
     const ucp_rkey_config_key_t *rkey_config_key = params->rkey_config_key;
     const ucp_proto_select_param_t *select_param = params->select_param;
+    const ucp_lane_map_t failed_lanes            =
+        ucp_ep_config_get_failed_lanes(ep_config_key);
     const uct_iface_attr_t *iface_attr;
+    uct_iface_attr_v2_t iface_attr_v2;
     ucp_lane_index_t lane, num_lanes;
     const uct_md_attr_v2_t *md_attr;
     const uct_component_attr_t *cmpt_attr;
@@ -577,6 +594,7 @@ ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
     ucp_lane_map_t lane_map;
     char lane_desc[64];
     ucs_sys_device_t lane_sys_dev;
+    ucs_status_t status;
 
     if (max_lanes == 0) {
         return 0;
@@ -602,6 +620,7 @@ ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
     }
 
     lane_map = UCS_MASK(ep_config_key->num_lanes) & ~exclude_map;
+    lane_map &= ~failed_lanes;
     ucs_for_each_bit(lane, lane_map) {
         if (num_lanes >= max_lanes) {
             break;
@@ -630,6 +649,26 @@ ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
         if (!ucs_test_all_flags(iface_attr->cap.flags, tl_cap_flags)) {
             ucs_trace("%s: no cap 0x%" PRIx64, lane_desc, tl_cap_flags);
             continue;
+        }
+
+        /* Check v2 iface capabilities */
+        if (tl_v2_cap_flags != 0) {
+            iface_attr_v2.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS;
+            status                   = uct_iface_query_v2(
+                    ucp_worker_iface(params->worker, rsc_index)->iface,
+                    &iface_attr_v2);
+            if (status != UCS_OK) {
+                ucs_trace("%s: iface_query_v2 failed: %s", lane_desc,
+                          ucs_status_string(status));
+                continue;
+            }
+
+            if (!ucs_test_all_flags(iface_attr_v2.cap.flags,
+                                    tl_v2_cap_flags)) {
+                ucs_trace("%s: no v2 cap 0x%" PRIx64, lane_desc,
+                          tl_v2_cap_flags);
+                continue;
+            }
         }
 
         md_index  = context->tl_rscs[rsc_index].md_index;
@@ -721,7 +760,9 @@ ucp_proto_common_reg_md_map(const ucp_proto_common_init_params_t *params,
            memory type, and needs a local memory handle for zero-copy
            communication */
         if ((md_attr->flags & UCT_MD_FLAG_NEED_MEMH) &&
-            (context->reg_md_map[select_param->mem_type] & UCS_BIT(md_index))) {
+            (context->reg_md_map[select_param->mem_type] & UCS_BIT(md_index)) &&
+            ucs_test_all_flags(select_param->op.mem_flags,
+                               md_attr->required_mem_flags)) {
             reg_md_map |= UCS_BIT(md_index);
         }
     }
@@ -761,7 +802,7 @@ void ucp_proto_request_select_error(ucp_request_t *req,
                                     size_t msg_length)
 {
     UCS_STRING_BUFFER_ONSTACK(sel_param_strb, UCP_PROTO_SELECT_PARAM_STR_MAX);
-    UCS_STRING_BUFFER_ONSTACK(proto_select_strb, UCP_PROTO_CONFIG_STR_MAX);
+    UCS_STRING_BUFFER_ONSTACK(proto_select_strb, UCS_ALLOCA_MAX_SIZE);
     ucp_ep_h ep = req->send.ep;
 
     ucp_proto_select_param_str(sel_param, ucp_operation_names, &sel_param_strb);
@@ -836,7 +877,9 @@ void ucp_proto_request_restart(ucp_request_t *req)
 
     status = proto_config->proto->reset(req);
     if (status != UCS_OK) {
-        ucs_assert_always(status == UCS_ERR_CANCELED);
+        ucs_assertv_always(status == UCS_ERR_CANCELED,
+                           "req %p, failed to reset: status %s", req,
+                           ucs_status_string(status));
         return;
     }
 
@@ -938,4 +981,18 @@ void ucp_proto_fatal_invalid_stage(ucp_request_t *req, const char *func_name)
     ucs_fatal("req %p: proto %s is in invalid stage %d on %s", req,
               req->send.proto_config->proto->name, req->send.proto_stage,
               func_name);
+}
+
+ucs_status_t ucp_proto_offload_zcopy_reset(ucp_request_t *req)
+{
+    ucs_status_t status;
+
+    status = ucp_proto_request_zcopy_reset(req);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ucp_datatype_iter_rewind(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
+    req->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
+    return UCS_OK;
 }

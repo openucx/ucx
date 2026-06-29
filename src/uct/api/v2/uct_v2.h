@@ -1,6 +1,6 @@
 /**
  * @file        uct_v2.h
- * @date        2021
+ * @date        2021-2026
  * @copyright   NVIDIA CORPORATION & AFFILIATES. ALL RIGHTS RESERVED.
  * @brief       Unified Communication Transport
  */
@@ -273,7 +273,11 @@ enum uct_ep_attr_field {
     /** Enables @ref uct_ep_attr::local_address */
     UCT_EP_ATTR_FIELD_LOCAL_SOCKADDR  = UCS_BIT(0),
     /** Enables @ref uct_ep_attr::remote_address */
-    UCT_EP_ATTR_FIELD_REMOTE_SOCKADDR = UCS_BIT(1)
+    UCT_EP_ATTR_FIELD_REMOTE_SOCKADDR = UCS_BIT(1),
+    /** Enables @ref uct_ep_attr::tx_token */
+    UCT_EP_ATTR_FIELD_TX_TOKEN        = UCS_BIT(2),
+    /** Enables @ref uct_ep_attr::rx_token */
+    UCT_EP_ATTR_FIELD_RX_TOKEN        = UCS_BIT(3)
 };
 
 
@@ -417,6 +421,22 @@ struct uct_ep_attr {
      * Remote sockaddr the endpoint is connected to.
      */
     struct sockaddr_storage remote_address;
+
+    /**
+     * Opaque TX token buffer.
+     * Valid when @ref UCT_EP_ATTR_FIELD_TX_TOKEN is set in @ref field_mask.
+     * Caller allocates a buffer of @ref uct_iface_attr_v2_t::tx_token_length
+     * bytes and sets this pointer; callee fills the buffer with the token.
+     */
+    void                    *tx_token;
+
+    /**
+     * Opaque RX token buffer.
+     * Valid when @ref UCT_EP_ATTR_FIELD_RX_TOKEN is set in @ref field_mask.
+     * Caller allocates a buffer of @ref uct_iface_attr_v2_t::rx_token_length
+     * bytes and sets this pointer; callee fills the buffer with the token.
+     */
+    void                    *rx_token;
 };
 
 
@@ -722,6 +742,20 @@ typedef struct uct_ep_connect_to_ep_params {
 
 
 /**
+ * @ingroup UCT_RESOURCE
+ * @brief Parameters for invalidating a UCT endpoint by @ref uct_ep_invalidate.
+ */
+ typedef struct {
+    /**
+     * Mask of valid fields in this structure. Must currently be equal to zero.
+     * Fields not specified in this mask will be ignored. Provides ABI
+     * compatibility with respect to adding new fields.
+     */
+    uint64_t                      field_mask;
+} uct_ep_invalidate_params_t;
+
+
+/**
  * @ingroup UCT_MD
  * @brief Parameters for comparing remote keys using @ref uct_rkey_compare.
  */
@@ -820,6 +854,90 @@ ucs_status_t uct_md_mem_dereg_v2(uct_md_h md,
 
 /**
  * @ingroup UCT_MD
+ * @brief UCT MD memory attributes v2 field mask.
+ *
+ * The enumeration allows specifying which fields in @ref uct_md_mem_attr_v2_t
+ * are present.
+ */
+typedef enum {
+    /** Memory type */
+    UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE      = UCS_BIT(0),
+
+    /** System device */
+    UCT_MD_MEM_ATTR_V2_FIELD_SYS_DEV       = UCS_BIT(1),
+
+    /** Base address */
+    UCT_MD_MEM_ATTR_V2_FIELD_BASE_ADDRESS  = UCS_BIT(2),
+
+    /** Allocation length */
+    UCT_MD_MEM_ATTR_V2_FIELD_ALLOC_LENGTH  = UCS_BIT(3),
+
+    /** DMABUF file descriptor */
+    UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD     = UCS_BIT(4),
+
+    /** DMABUF offset */
+    UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_OFFSET = UCS_BIT(5),
+
+    /** Per-buffer memory flags, see @ref ucs_mem_flags_t */
+    UCT_MD_MEM_ATTR_V2_FIELD_MEM_FLAGS     = UCS_BIT(6)
+} uct_md_mem_attr_v2_field_t;
+
+
+/**
+ * @ingroup UCT_MD
+ * @brief Memory pointer attributes with UCS memory flags.
+ */
+typedef struct uct_md_mem_attr_v2 {
+    /**
+     * Mask of valid fields in this structure, using
+     * @ref uct_md_mem_attr_v2_field_t.
+     */
+    uint64_t          field_mask;
+
+    /** See @ref uct_md_mem_attr_t::mem_type. */
+    ucs_memory_type_t mem_type;
+
+    /** See @ref uct_md_mem_attr_t::sys_dev. */
+    ucs_sys_device_t  sys_dev;
+
+    /** See @ref uct_md_mem_attr_t::base_address. */
+    void              *base_address;
+
+    /** See @ref uct_md_mem_attr_t::alloc_length. */
+    size_t            alloc_length;
+
+    /** See @ref uct_md_mem_attr_t::dmabuf_fd. */
+    int               dmabuf_fd;
+
+    /** See @ref uct_md_mem_attr_t::dmabuf_offset. */
+    size_t            dmabuf_offset;
+
+    /** Per-buffer memory flags, see @ref ucs_mem_flags_t. */
+    uint8_t           mem_flags;
+} uct_md_mem_attr_v2_t;
+
+
+/**
+ * @ingroup UCT_MD
+ * @brief Query v2 attributes of a given pointer.
+ *
+ * This is a superset of @ref uct_md_mem_query which can also return
+ * per-buffer memory flags.
+ *
+ * @param [in]     md          Memory domain to run the query on.
+ * @param [in]     address     Address of the pointer.
+ * @param [in]     length      Length of the memory region to examine.
+ * @param [inout]  mem_attr    If successful, filled with pointer attributes.
+ *
+ * @return UCS_OK if requested attributes are successfully queried, otherwise
+ *         an error code as defined by @ref ucs_status_t.
+ */
+ucs_status_t uct_md_mem_query_v2(uct_md_h md, const void *address,
+                                 size_t length, uct_md_mem_attr_v2_t *mem_attr);
+
+
+/**
+ * @ingroup UCT_MD
  * @brief UCT MD attributes field mask.
  *
  * The enumeration allows specifying which fields in @ref uct_md_attr_v2_t
@@ -878,7 +996,10 @@ typedef enum uct_md_attr_field {
     UCT_MD_ATTR_FIELD_REG_ALIGNMENT             = UCS_BIT(16),
 
     /** Indicate memory types that the MD can register using global VA MR. */
-    UCT_MD_ATTR_FIELD_GVA_MEM_TYPES             = UCS_BIT(17)
+    UCT_MD_ATTR_FIELD_GVA_MEM_TYPES             = UCS_BIT(17),
+
+    /** Memory flags required for registration by this MD. */
+    UCT_MD_ATTR_FIELD_REQUIRED_MEM_FLAGS        = UCS_BIT(18)
 } uct_md_attr_field_t;
 
 
@@ -994,6 +1115,11 @@ typedef struct {
      * Registration alignment.
      */
     size_t            reg_alignment;
+
+    /**
+     * Memory flags required for registration by this MD.
+     */
+    uint8_t           required_mem_flags;
 } uct_md_attr_v2_t;
 
 
@@ -1029,31 +1155,112 @@ typedef enum {
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Interface attribute fields.
+ * @brief UCT interface v2 attributes field mask.
+ *
+ * The enumeration allows specifying which fields in @ref uct_iface_attr_v2_t
+ * are present, for backward compatibility support.
  */
 enum uct_iface_attr_field {
+    /** Enables @ref uct_iface_attr_v2_t::max_put_sgl_zcopy_count */
+    UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT = UCS_BIT(0),
+
+    /** Enables @ref uct_iface_attr_v2_t::cap */
+    UCT_IFACE_ATTR_FIELD_CAP_FLAGS               = UCS_BIT(1),
+
+    /** Enables @ref uct_iface_attr_v2_t::tx_token_length. */
+    UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH         = UCS_BIT(2),
+
+    /** Enables @ref uct_iface_attr_v2_t::rx_token_length. */
+    UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH         = UCS_BIT(3),
+
     /**
-     * Enables @ref uct_iface_attr_v2_t::device_mem_element_size.
+     * Enables the RX token derivation path.
+     * Need to be set together with @ref UCT_IFACE_ATTR_FIELD_RX_TOKEN
+     * When both set, @ref uct_iface_attr_v2_t::tx_token is input (from sender),
+     * and @ref uct_iface_attr_v2_t::rx_token is output (derived by receiver).
      */
-    UCT_IFACE_ATTR_FIELD_DEVICE_MEM_ELEMENT_SIZE = UCS_BIT(0)
+    UCT_IFACE_ATTR_FIELD_TX_TOKEN                = UCS_BIT(4),
+
+    /**
+     * Enables the RX token derivation path.
+     * Need to be set together with @ref UCT_IFACE_ATTR_FIELD_TX_TOKEN,
+     * when both set, @ref uct_iface_attr_v2_t::tx_token is input (from sender),
+     * and @ref uct_iface_attr_v2_t::rx_token is output (derived by receiver).
+     */
+    UCT_IFACE_ATTR_FIELD_RX_TOKEN                = UCS_BIT(5)
 };
 
 
 /**
+ * @defgroup UCT_RESOURCE_IFACE_CAP_V2   UCT v2 interface operations and
+                                         capabilities
  * @ingroup UCT_RESOURCE
- * @brief Interface attributes.
+ *
+ * @brief  List of capabilities supported by UCX API
+ *
+ * The definition list presents interface capabilities for
+ * @ref uct_iface_attr_v2_t, reported through @ref uct_iface_query_v2.
+ * @{
+ */
+        /* PUT capabilities */
+#define UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY       UCS_BIT(0)  /**< Zero-copy SGL put */
+#define UCT_IFACE_FLAG_V2_QUERY_TOKEN         UCS_BIT(1)  /**< Interface supports token query */
+/**
+ * @}
+ */
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief UCT interface v2 attributes, used by @ref uct_iface_query_v2.
  */
 typedef struct {
     /**
      * Mask of valid fields in this structure, using bits from
-     * @ref uct_iface_attr_field_t.
+     * @ref uct_iface_attr_field.
      */
     uint64_t field_mask;
 
     /**
-     * Size of a packed device memory element.
+     * Maximal number of elements in @ref uct_ep_put_sgl_zcopy.
+     * @anchor uct_iface_attr_v2_max_put_sgl_zcopy_count
      */
-    size_t   device_mem_element_size;
+    size_t   max_put_sgl_zcopy_count;
+
+    /** Interface capabilities (v2 flags) */
+    struct {
+        uint64_t flags; /**< Flags from @ref UCT_RESOURCE_IFACE_CAP_V2 */
+    } cap;
+
+    /**
+     * Length in bytes of the opaque TX token.
+     * Valid when @ref UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH is set.
+     */
+    size_t     tx_token_length;
+
+    /**
+     * Length in bytes of the opaque RX token.
+     * Valid when @ref UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH is set.
+     */
+    size_t     rx_token_length;
+
+    /**
+     * TX token input buffer.
+     * Valid when @ref UCT_IFACE_ATTR_FIELD_TX_TOKEN is set.
+     * Caller sets this to a buffer of @ref tx_token_length bytes containing
+     * the TX token received from the sender.
+     * @ref UCT_IFACE_ATTR_FIELD_RX_TOKEN must be set together.
+     */
+    const void *tx_token;
+
+    /**
+     * RX token output buffer.
+     * Valid when @ref UCT_IFACE_ATTR_FIELD_RX_TOKEN is set.
+     * Caller sets this to a pre-allocated buffer of @ref rx_token_length
+     * bytes; callee fills it with RX token.
+     * @ref UCT_IFACE_ATTR_FIELD_TX_TOKEN must be set together.
+     */
+    void       *rx_token;
 } uct_iface_attr_v2_t;
 
 
@@ -1133,6 +1340,24 @@ ucs_status_t uct_md_mem_attach(uct_md_h md, const void *mkey_buffer,
  * @return Error code.
  */
 ucs_status_t uct_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Invalidate the endpoint.
+ *
+ * This routine invalidates the endpoint and moves it to the error state.
+ * All the incomplete and subsequent operations on the endpoint will be
+ * completed with error.
+ *
+ * @param [in]  ep         Endpoint to invalidate.
+ * @param [in]  params     Operation parameters, see @ref
+ *                         uct_ep_invalidate_params_t.
+ *
+ * @return Error code.
+*/
+ucs_status_t uct_ep_invalidate(uct_ep_h ep,
+                               const uct_ep_invalidate_params_t *params);
 
 
 /**
@@ -1220,6 +1445,48 @@ ucs_status_t uct_ep_get_device_ep(uct_ep_h ep, uct_device_ep_h *device_ep_p);
 
 
 /**
+ * @ingroup UCT_RMA
+ * @brief Scatter-gather list (SGL) zero-copy put: write multiple buffers to
+ *        multiple remote addresses while avoiding local memory copy.
+ *
+ * Each element @a i transfers @a lengths[i] bytes from local buffer
+ * @a buffers[i] (with memory handle @a memhs[i]) to remote address
+ * @a remote_addrs[i] (with remote key @a rkeys[i]).
+ *
+ * @param [in] ep           Destination endpoint handle.
+ * @param [in] buffers      Array of local buffer pointers.
+ * @param [in] lengths      Array of transfer lengths in bytes.
+ * @param [in] memhs        Array of local memory handles, obtained from
+ *                          @ref ::uct_md_mem_reg.
+ * @param [in] remote_addrs Array of remote addresses.
+ * @param [in] rkeys        Array of remote keys, obtained from
+ *                          @ref ::uct_rkey_unpack.
+ * @param [in] counts       Array of repetition counts per element, or NULL.
+ *                          When provided, element @a i represents @a counts[i]
+ *                          blocks of @a lengths[i] bytes, each separated by
+ *                          @a strides[i] bytes, starting at @a buffers[i] /
+ *                          @a remote_addrs[i]. When NULL, each element is
+ *                          transferred once (equivalent to count=1, stride=0).
+ * @param [in] strides      Array of strides in bytes per element, or NULL.
+ * @param [in] count        Number of elements in the arrays. Must not exceed
+ *                          @ref uct_iface_attr_v2_max_put_sgl_zcopy_count
+ *                          "uct_iface_attr_v2_t::max_put_sgl_zcopy_count".
+ * @param [in] comp         Completion handle as defined by
+ *                          @ref ::uct_completion_t.
+ *
+ * @return UCS_INPROGRESS   Some communication operations are still in progress.
+ *                          If non-NULL @a comp is provided, it will be updated
+ *                          upon completion of these operations.
+ */
+ucs_status_t
+uct_ep_put_sgl_zcopy(uct_ep_h ep, void * const *buffers,
+                     const size_t *lengths, uct_mem_h const *memhs,
+                     const uint64_t *remote_addrs, uct_rkey_t const *rkeys,
+                     const size_t *counts, const size_t *strides,
+                     size_t count, uct_completion_t *comp);
+
+
+/**
  * @ingroup UCT_MD
  *
  * @brief This routine compares two remote keys.
@@ -1270,19 +1537,18 @@ ucs_status_t uct_rkey_unpack_v2(uct_component_h component,
 
 
 /**
- * @ingroup UCT_RESOURCE
- * @brief Pack a memh and rkey into a single memory element structure.
+ * @ingroup UCT_MD
+ * @brief Pack a memh and rkey into a device memory element structure.
  *
- * @param [in] iface         Interface to pack the memh and rkey into.
- * @param [in] memh          Memory handle to pack.
- * @param [in] rkey          Remote key to pack.
- * @param [out] mem_element   Filled with the packed memh and rkey.
+ * @param [in]  md           Memory domain.
+ * @param [in]  memh         Memory handle to pack (can be NULL).
+ * @param [in]  rkey         Remote key to pack (can be UCT_INVALID_RKEY).
+ * @param [out] mem_elem     Filled with the packed memh and rkey.
  *
  * @return UCS_OK on success or error code in case of failure.
  */
-ucs_status_t uct_iface_mem_element_pack(uct_iface_h iface, uct_mem_h memh,
-                                        uct_rkey_t rkey,
-                                        uct_device_mem_element_t *mem_element);
+ucs_status_t uct_md_mem_elem_pack(uct_md_h md, uct_mem_h memh, uct_rkey_t rkey,
+                                  uct_device_mem_elem_t *mem_elem);
 
 END_C_DECLS
 

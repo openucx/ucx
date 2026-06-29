@@ -166,8 +166,16 @@ enum {
     UCP_EP_INIT_CREATE_AM_LANE_ONLY    = UCS_BIT(8),  /**< Endpoint requires an AM lane only */
     UCP_EP_INIT_KA_FROM_EXIST_LANES    = UCS_BIT(9),  /**< Use only existing lanes to create
                                                            keepalive lane */
-    UCP_EP_INIT_ALLOW_AM_AUX_TL        = UCS_BIT(10)  /**< Endpoint allows selecting of auxiliary
+    UCP_EP_INIT_ALLOW_AM_AUX_TL        = UCS_BIT(10), /**< Endpoint allows selecting of auxiliary
                                                            transports for AM lane */
+    UCP_EP_INIT_ERR_MODE_FAILOVER      = UCS_BIT(11), /**< Endpoint requires an
+                                                           @ref UCP_ERR_HANDLING_MODE_FAILOVER */
+
+    /**
+     * For consistency with @ref UCP_SA_DATA_MASK_ERR_MODE_FAILOVER
+     */
+    UCP_EP_INIT_ERR_MODE_FAILOVER_MASK = UCP_EP_INIT_ERR_MODE_PEER_FAILURE |
+                                         UCP_EP_INIT_ERR_MODE_FAILOVER
 };
 
 
@@ -204,6 +212,7 @@ typedef struct ucp_ep_config_key_lane {
     uint8_t              path_index; /* Device path index */
     ucp_lane_type_mask_t lane_types; /* Which types of operations this lane
                                         was selected for */
+    uint8_t              port_speed; /* Quantized port speed */
     size_t               seg_size; /* Maximal fragment size which can be
                                       received by the peer */
 } ucp_ep_config_key_lane_t;
@@ -267,21 +276,6 @@ struct ucp_ep_config_key {
     /* Indicates peer release version */
     unsigned                 dst_version;
 };
-
-
-/*
- * Configuration for RMA protocols
- */
-typedef struct ucp_ep_rma_config {
-    ssize_t                max_put_short;    /* Maximal payload of put short */
-    size_t                 max_put_bcopy;    /* Maximal total size of put_bcopy */
-    size_t                 max_put_zcopy;
-    ssize_t                max_get_short;    /* Maximal payload of get short */
-    size_t                 max_get_bcopy;    /* Maximal total size of get_bcopy */
-    size_t                 max_get_zcopy;
-    size_t                 put_zcopy_thresh;
-    size_t                 get_zcopy_thresh;
-} ucp_ep_rma_config_t;
 
 
 /*
@@ -393,12 +387,6 @@ struct ucp_ep_config {
     /* Flags which has to be used @ref uct_md_mkey_pack_v2 */
     unsigned                uct_rkey_pack_flags;
 
-    /* Configuration for each lane that provides RMA */
-    ucp_ep_rma_config_t     rma[UCP_MAX_LANES];
-
-    /* Threshold for switching from put_short to put_bcopy */
-    size_t                  bcopy_thresh;
-
     /* Configuration for AM lane */
     ucp_ep_msg_config_t     am;
 
@@ -505,6 +493,13 @@ typedef struct {
 } ucp_ep_flush_state_t;
 
 
+/* Per-EP recovery retry state. */
+typedef struct ucp_ep_recovery_arg {
+    /* number of retries left before giving up */
+    unsigned    retries_left;
+} ucp_ep_recovery_arg_t;
+
+
 /**
  * Endpoint extension
  */
@@ -516,7 +511,13 @@ typedef struct ucp_ep_ext {
     ucs_ptr_map_key_t             local_ep_id;   /* Local EP ID */
     ucs_ptr_map_key_t             remote_ep_id;  /* Remote EP ID */
     ucp_err_handler_cb_t          err_cb;        /* Error handler */
-    ucp_request_t                 *close_req;    /* Close protocol request */
+    union {
+        ucp_request_t             *close_req;    /* Close protocol request */
+        ucp_ep_recovery_arg_t     *recovery_arg; /* Lanes recovery state object.
+                                                    United with close request since:
+                                                    1) recovery is not supported for connected to sockaddr EPs
+                                                    2) it does not make sense to recover lanes during close protocol */
+    };
     khash_t(ucp_ep_peer_mem_hash) *peer_mem;     /* Hash of remote memory segments
                                                     used by 2-stage ppln rndv proto */
     /* List of requests which are waiting for remote completion */
@@ -544,6 +545,7 @@ typedef struct ucp_ep_ext {
         ucs_list_link_t           started_ams;
         ucs_queue_head_t          mid_rdesc_q;    /* Queue of middle fragments, which
                                                      arrived before the first one */
+        uint64_t                  psn;
     } am;
 
     ucp_lane_map_t                unflushed_lanes; /* Bitmap of lanes which have
@@ -571,12 +573,12 @@ typedef struct ucp_ep_ext {
 typedef struct ucp_ep {
     ucp_worker_h                  worker;        /* Worker this endpoint belongs to */
 
-    uint8_t                       refcount;      /* Reference counter: 0 - it is
-                                                    allowed to destroy EP */
     ucp_worker_cfg_index_t        cfg_index;     /* Configuration index */
     ucp_ep_match_conn_sn_t        conn_sn;       /* Sequence number for remote connection */
-    ucp_lane_index_t              am_lane;       /* Cached value */
     ucp_ep_flags_t                flags;         /* Endpoint flags */
+    uint8_t                       refcount;      /* Reference counter: 0 - it is
+                                                    allowed to destroy EP */
+    ucp_lane_index_t              am_lane;       /* Cached value */
     /* Transports for every lane */
     uct_ep_h                      uct_eps[UCP_MAX_FAST_PATH_LANES];
     ucp_ep_ext_t                  *ext;                   /* Endpoint extension */
@@ -619,8 +621,19 @@ enum {
  * ucp_wireup_sockaddr_data_base_t structure.
  */
 enum {
-    /* Indicates support of UCP_ERR_HANDLING_MODE_PEER error mode. */
-    UCP_SA_DATA_FLAG_ERR_MODE_PEER = UCS_BIT(0)
+    /* Indicates support of @ref UCP_ERR_HANDLING_MODE_PEER error mode. */
+    UCP_SA_DATA_FLAG_ERR_MODE_PEER     = UCS_BIT(0),
+    /* Indicates support of @ref UCP_ERR_HANDLING_MODE_FAILOVER error mode.
+     * NOTE: use @ref UCP_SA_DATA_MASK_ERR_MODE_FAILOVER for backward
+     *       compatibility to fallback peer failure mode to
+     *       @ref UCP_ERR_HANDLING_MODE_PEER */
+    UCP_SA_DATA_FLAG_ERR_MODE_FAILOVER = UCS_BIT(1),
+
+    /**
+     * Backward compatibility mask
+     */
+    UCP_SA_DATA_MASK_ERR_MODE_FAILOVER = UCP_SA_DATA_FLAG_ERR_MODE_PEER |
+                                         UCP_SA_DATA_FLAG_ERR_MODE_FAILOVER
 };
 
 
@@ -676,6 +689,8 @@ typedef struct ucp_conn_request {
 
 
 int ucp_is_uct_ep_failed(uct_ep_h uct_ep);
+
+uct_iface_h ucp_failed_tl_iface_get(void);
 
 void ucp_ep_config_key_reset(ucp_ep_config_key_t *key);
 
@@ -742,11 +757,11 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force);
 
 void ucp_ep_destroy_internal(ucp_ep_h ep);
 
-ucs_status_t
-ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status);
+void ucp_ep_set_lanes_failed(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
+                             ucs_status_t status);
 
-void ucp_ep_set_failed_schedule(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
-                                ucs_status_t status);
+void ucp_ep_set_lanes_failed_schedule(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
+                                      ucs_status_t status);
 
 void ucp_ep_unprogress_uct_ep(ucp_ep_h ep, uct_ep_h uct_ep,
                               ucp_rsc_index_t rsc_index);
@@ -941,8 +956,11 @@ ucs_status_t ucp_ep_realloc_lanes(ucp_ep_h ep, unsigned new_num_lanes);
  *
  * @param [in] ep         Endpoint object.
  * @param [in] cfg_index  Endpoint configuration index.
+ * @param [in] reactivate Flag indicating whether to reactivate worker
+ *                        interfaces.
  */
-void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index);
+void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index,
+                          int reactivate);
 
 
 /**
@@ -955,5 +973,69 @@ void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index);
  * @return Error code as defined by @ref ucs_status_t
  */
 ucs_status_t ucp_ep_flush_mem_progress(uct_pending_req_t *self);
+
+
+/**
+ * @brief Get the failed lanes from the endpoint configuration.
+ *
+ * @param [in] key        Endpoint configuration key.
+ *
+ * @return Bitmask of failed lanes.
+ */
+ucp_lane_map_t ucp_ep_config_get_failed_lanes(const ucp_ep_config_key_t *key);
+
+
+/**
+ * @brief Clear UCP_LANE_TYPE_FAILED for a subset of previously failed lanes
+ *        that have just been recovered and reconfigure the endpoint.
+ *
+ * @param [in] ep     Endpoint object.
+ * @param [in] lanes  Lanes to clear UCP_LANE_TYPE_FAILED for. Must be a
+ *                    subset of ucp_ep_get_failed_lanes(ep); the caller is
+ *                    responsible for intersecting with the currently-failed
+ *                    set. Passing 0 is a no-op.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_ep_reconfig_clear_failed_lanes(ucp_ep_h ep,
+                                                ucp_lane_map_t lanes);
+
+
+/**
+ * Arm (or re-arm) failed-lane recovery for an endpoint.
+ */
+ucs_status_t ucp_ep_recovery_arm(ucp_ep_h ep);
+
+
+/**
+ * Progress function for failed lanes recovery.
+ *
+ * @return 0 if the @a ep is recovered, continue normal keep alive checks,
+ *         otherwise non-zero - the @a ep is under recovery, fully failed or
+ *         other reason to skip keepalive round.
+ */
+int ucp_ep_recovery_progress(ucp_ep_h ep);
+
+
+/**
+ * Mark a subset of lanes as UCP_LANE_TYPE_FAILED and arm recovery.
+ */
+ucs_status_t ucp_ep_failover_reconfig(ucp_ep_h ucp_ep,
+                                      ucp_lane_map_t failed_lanes,
+                                      ucs_status_t discard_status);
+
+
+/**
+ * @brief Update EP configuration and rkey configuration according to the latest
+ * interfaces state.
+ *
+ * @param [in] ep      Endpoint object.
+ * @param [in] rkey    Rkey object.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_ep_update_rkey_config(ucp_ep_h ep, ucp_rkey_h rkey);
+
+ucs_status_t ucp_stub_iface_open(ucs_status_t status, uct_iface_h *iface_p);
 
 #endif

@@ -11,7 +11,7 @@ jobs:
     container: ${{ parameters.container }}
     timeoutInMinutes: 140
     workspace:
-      clean: outputs
+      clean: all
     steps:
       - checkout: self
         clean: true

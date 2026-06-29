@@ -5,7 +5,7 @@ jobs:
       name: MLNX
       demands: mad_server
     workspace:
-      clean: outputs
+      clean: all
     steps:
       - checkout: self
         clean: true
@@ -31,7 +31,7 @@ jobs:
       name: MLNX
       demands: mad_client
     workspace:
-      clean: outputs
+      clean: all
     steps:
       - checkout: self
         clean: true

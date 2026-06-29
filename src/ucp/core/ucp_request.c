@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -44,12 +44,17 @@ static const char *ucp_request_flag_names[] = {
     [ucs_ilog2(UCP_REQUEST_FLAG_RECV_TAG)]              = "rcv_tag",
     [ucs_ilog2(UCP_REQUEST_FLAG_RKEY_INUSE)]            = "rk_use",
     [ucs_ilog2(UCP_REQUEST_FLAG_USER_HEADER_COPIED)]    = "hdr_copy",
+    [ucs_ilog2(UCP_REQUEST_FLAG_RNDV_RECV_INTERNAL)]    = "rndv_rcv_int",
 
 #if UCS_ENABLE_ASSERT
     [ucs_ilog2(UCP_REQUEST_FLAG_STREAM_RECV)]           = "strm_rcv",
     [ucs_ilog2(UCP_REQUEST_DEBUG_FLAG_EXTERNAL)]        = "extrn",
     [ucs_ilog2(UCP_REQUEST_FLAG_SUPER_VALID)]           = "spr_vld",
 #endif
+    [ucs_ilog2(UCP_REQUEST_FLAG_RNDV_SEND_INTERNAL)]    = "rndv_snd_int",
+    [ucs_ilog2(UCP_REQUEST_FLAG_RNDV_GET_REQ)]          = "rndv_get_req",
+    [ucs_ilog2(UCP_REQUEST_FLAG_RNDV_FLUSH)]            = "rndv_flush",
+    [ucs_ilog2(UCP_REQUEST_FLAG_RNDV_START_FLUSH)]      = "rndv_start_flush",
 };
 
 static ucs_memory_type_t ucp_request_get_mem_type(ucp_request_t *req)
@@ -59,7 +64,8 @@ static ucs_memory_type_t ucp_request_get_mem_type(ucp_request_t *req)
     } else if (req->flags & (UCP_REQUEST_FLAG_SEND_AM | UCP_REQUEST_FLAG_SEND_TAG)) {
         return req->send.mem_type;
     } else if (req->flags &
-               (UCP_REQUEST_FLAG_RECV_AM | UCP_REQUEST_FLAG_RECV_TAG)) {
+               (UCP_REQUEST_FLAG_RECV_AM | UCP_REQUEST_FLAG_RECV_TAG |
+                UCP_REQUEST_FLAG_RNDV_RECV_INTERNAL)) {
         return req->recv.dt_iter.mem_info.type;
     } else {
         return UCS_MEMORY_TYPE_UNKNOWN;
@@ -397,14 +403,13 @@ static ucp_md_map_t ucp_request_get_invalidation_map(ucp_ep_h ep)
 
 int ucp_request_memh_invalidate(ucp_request_t *req, ucs_status_t status)
 {
-    ucp_ep_h ep                      = req->send.ep;
-    ucp_err_handling_mode_t err_mode = ucp_ep_config(ep)->key.err_mode;
-    ucp_worker_h worker              = ep->worker;
-    ucp_context_h context            = worker->context;
+    ucp_ep_h ep           = req->send.ep;
+    ucp_worker_h worker   = ep->worker;
+    ucp_context_h context = worker->context;
     ucp_mem_h *memh_p;
     ucp_md_map_t invalidate_map;
 
-    if ((err_mode != UCP_ERR_HANDLING_MODE_PEER) ||
+    if (ucp_ep_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_NONE) ||
         !(req->flags & UCP_REQUEST_FLAG_RKEY_INUSE)) {
         return 0;
     }
@@ -421,7 +426,9 @@ int ucp_request_memh_invalidate(ucp_request_t *req, ucs_status_t status)
         memh_p = &req->send.state.dt.dt.contig.memh;
     }
 
-    if ((*memh_p == NULL) || ucp_memh_is_user_memh(*memh_p)) {
+    if ((context->rcache == NULL) ||
+        (*memh_p == NULL) ||
+        ucp_memh_is_user_memh(*memh_p)) {
         return 0;
     }
 
@@ -729,10 +736,37 @@ void ucp_request_purge_enqueue_cb(uct_pending_req_t *self, void *arg)
     ucs_queue_push(queue, (ucs_queue_elem_t*)&req->send.uct.priv);
 }
 
+ucs_status_t ucp_request_progress_counter(uct_pending_req_t *self)
+{
+    ucp_request_t *req               = ucs_container_of(self, ucp_request_t, 
+                                                        send.uct);
+    ucp_proto_config_t *proto_config = ucs_const_cast(ucp_proto_config_t*,
+                                                      req->send.proto_config);
+    const ucp_proto_t *proto         = proto_config->proto;
+    ucs_status_t status;
+
+    status = proto->progress[UCP_PROTO_STAGE_START](self);
+    if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
+        /* NOTE: This function is only called when `progress_wrapper_enabled` 
+         * is `false`, which means that it won't be called when the log level 
+         * is TRACE_REQ or higher. Because of this, `ucs_trace` is used here 
+         * instead of `ucp_trace_req` */
+        ucs_trace("progress protocol %s returned: %s lane %d", proto->name,
+                  ucs_status_string(status), req->send.lane);
+        return status;
+    }
+
+    ++proto_config->selections;
+
+    return status;
+}
+
 ucs_status_t ucp_request_progress_wrapper(uct_pending_req_t *self)
 {
     ucp_request_t *req       = ucs_container_of(self, ucp_request_t, send.uct);
-    const ucp_proto_t *proto = req->send.proto_config->proto;
+    ucp_proto_config_t *conf = ucs_const_cast(ucp_proto_config_t *,
+                                              req->send.proto_config);
+    const ucp_proto_t *proto = conf->proto;
     uct_pending_callback_t progress_cb;
     ucs_status_t status;
 
@@ -740,8 +774,7 @@ ucs_status_t ucp_request_progress_wrapper(uct_pending_req_t *self)
     ucp_trace_req(req,
                   "progress %s {%s} ep_cfg[%d] rkey_cfg[%d] offset %zu/%zu",
                   proto->name, ucs_debug_get_symbol_name(progress_cb),
-                  req->send.proto_config->ep_cfg_index,
-                  req->send.proto_config->rkey_cfg_index,
+                  conf->ep_cfg_index, conf->rkey_cfg_index,
                   req->send.state.dt_iter.offset,
                   req->send.state.dt_iter.length);
 
@@ -749,13 +782,41 @@ ucs_status_t ucp_request_progress_wrapper(uct_pending_req_t *self)
 
     ucs_log_indent(1);
     status = progress_cb(self);
-    if (UCS_STATUS_IS_ERR(status)) {
+    if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
         ucp_trace_req(req, "progress protocol %s returned: %s lane %d",
                       proto->name, ucs_status_string(status), req->send.lane);
     } else {
+        if (req->send.proto_stage == UCP_PROTO_STAGE_START) {
+            ++conf->selections;
+        }
+
         ucp_trace_req(req, "progress protocol %s returned: %s", proto->name,
                       ucs_status_string(status));
     }
     ucs_log_indent(-1);
     return status;
+}
+
+void ucp_request_progress_wrapper_init(ucp_worker_h worker,
+                                       ucp_proto_config_t *proto_config)
+{
+    uint8_t stage;
+
+    if (worker->context->config.progress_wrapper_enabled) {
+        for (stage = UCP_PROTO_STAGE_START; stage < UCP_PROTO_STAGE_LAST;
+             ++stage) {
+            proto_config->progress_wrapper[stage] =
+                                                ucp_request_progress_wrapper;
+        }
+        return;
+    }
+
+    /* Set wrappers pointing to the original protocol functions */
+    memcpy(proto_config->progress_wrapper, proto_config->proto->progress,
+           sizeof(proto_config->progress_wrapper));
+
+    if (worker->context->config.trace_used_proto_selections) {
+        proto_config->progress_wrapper[UCP_PROTO_STAGE_START] =
+                                                ucp_request_progress_counter;
+    }
 }

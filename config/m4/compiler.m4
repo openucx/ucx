@@ -47,7 +47,7 @@ AC_ARG_ENABLE(debug,
 AS_IF([test "x$enable_debug" = xyes],
         [BASE_CFLAGS="-D_DEBUG $BASE_CFLAGS"
          BASE_CXXFLAGS="-D_DEBUG" $BASE_CXXFLAGS
-         BASE_NVCCFLAGS="$BASE_NVCCFLAGS -G"],
+         BASE_NVCCFLAGS="-D_DEBUG $BASE_NVCCFLAGS -G"],
         [])
 
 
@@ -79,6 +79,21 @@ AS_IF([test "x$enable_compiler_opt" = "xyes"], [BASE_CFLAGS="-O3 $BASE_CFLAGS"],
                   BASE_NVCCFLAGS="-O3 $BASE_NVCCFLAGS"])],
       [test "x$enable_compiler_opt" = "xno"], [],
       [BASE_CFLAGS="-O$enable_compiler_opt $BASE_CFLAGS"])
+
+
+#
+# Define OPTIMIZATION_LEVEL to the numeric value of the last -O flag.
+# Non-numeric levels (e.g. -Og, -Oz, -Ofast) leave OPTIMIZATION_LEVEL undefined.
+#
+opt_level=""
+for flag in $BASE_CFLAGS $CFLAGS; do
+    case $flag in -O*) opt_level=${flag#-O};; esac
+done
+case $opt_level in
+    [[0-9]])
+        AC_DEFINE_UNQUOTED([OPTIMIZATION_LEVEL], [$opt_level],
+                           [Numeric compiler optimization level]) ;;
+esac
 
 
 #

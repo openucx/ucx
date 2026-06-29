@@ -5,7 +5,7 @@ parameters:
 jobs:
   - job: ${{ parameters.name }}
     workspace:
-      clean: outputs
+      clean: all
 
     pool:
       name: MLNX

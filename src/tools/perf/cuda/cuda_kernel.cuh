@@ -88,6 +88,7 @@ ucx_perf_cuda_get_sn(const void *address, size_t length)
 UCS_F_DEVICE void ucx_perf_cuda_wait_sn(const uint64_t *sn, uint64_t value)
 {
     if (threadIdx.x == 0) {
+        /* TODO support host memory */
         while (ucs_device_atomic64_read(sn) < value);
     }
     __syncthreads();
@@ -108,14 +109,8 @@ __host__ UCS_F_DEVICE unsigned ucx_perf_cuda_thread_index(size_t tid)
 
 #define UCX_PERF_SWITCH_CMD(_cmd, _func, ...) \
     switch (_cmd) { \
-    case UCX_PERF_CMD_PUT_SINGLE: \
-        _func(UCX_PERF_CMD_PUT_SINGLE, __VA_ARGS__); \
-        break; \
-    case UCX_PERF_CMD_PUT_MULTI: \
-        _func(UCX_PERF_CMD_PUT_MULTI, __VA_ARGS__); \
-        break; \
-    case UCX_PERF_CMD_PUT_PARTIAL: \
-        _func(UCX_PERF_CMD_PUT_PARTIAL, __VA_ARGS__); \
+    case UCX_PERF_CMD_PUT: \
+        _func(UCX_PERF_CMD_PUT, __VA_ARGS__); \
         break; \
     default: \
         ucs_error("Unsupported cmd: %d", _cmd); \
@@ -227,9 +222,7 @@ template<typename Runner> ucs_status_t
 ucx_perf_cuda_dispatch(ucx_perf_context_t *perf)
 {
     Runner runner(*perf);
-    if ((perf->params.command == UCX_PERF_CMD_PUT_MULTI) ||
-        (perf->params.command == UCX_PERF_CMD_PUT_SINGLE) ||
-        (perf->params.command == UCX_PERF_CMD_PUT_PARTIAL)) {
+    if (perf->params.command == UCX_PERF_CMD_PUT) {
         if (perf->params.test_type == UCX_PERF_TEST_TYPE_PINGPONG) {
             return runner.run_pingpong();
         } else if (perf->params.test_type == UCX_PERF_TEST_TYPE_STREAM_UNI) {
