@@ -25,7 +25,7 @@
 #define UCP_WIREUP_RMA_BW_TEST_MSG_SIZE    262144
 #define UCP_WIREUP_MAX_FLAGS_STRING_SIZE   50
 #define UCP_WIREUP_PATH_INDEX_UNDEFINED    UINT_MAX
-#define UCP_WIREUP_SCORE_MAX_DIFF          0.02
+#define UCP_WIREUP_KA_SCORE_MAX_DIFF       0.02
 #define UCP_WIREUP_NO_SCORE_TIEBREAK       (-1.0)
 
 /* 6 for the string format constant length */
@@ -379,15 +379,17 @@ ucp_wireup_init_select_info(double score, double tiebreak, unsigned addr_index,
  */
 static void ucp_wireup_select_transport_tiebreak(
         const ucp_proto_select_info_array_t *candidates_array,
-        ucp_wireup_select_info_t *sinfo)
+        double max_score_diff, ucp_wireup_select_info_t *sinfo)
 {
     const double ref_score = sinfo->score;
     int found              = 0;
     const ucp_wireup_select_info_t *candidate;
 
     ucs_array_for_each(candidate, candidates_array) {
-        if (fabs(candidate->score - ref_score) >
-            (UCP_WIREUP_SCORE_MAX_DIFF * ref_score)) {
+        if ((ucs_fp_compare(candidate->score, ref_score) != 0) &&
+            ((max_score_diff == 0.0) ||
+             (fabs(candidate->score - ref_score) >
+              (max_score_diff * ref_score)))) {
             continue;
         }
 
@@ -726,7 +728,8 @@ out:
     }
 
     if (has_tiebreak) {
-        ucp_wireup_select_transport_tiebreak(&candidates_array, &sinfo);
+        ucp_wireup_select_transport_tiebreak(
+                &candidates_array, criteria->tiebreak_max_diff, &sinfo);
     }
 
     ucs_trace("ep %p: selected for %s: " UCT_TL_RESOURCE_DESC_FMT " md[%d]"
@@ -1197,6 +1200,7 @@ static void ucp_wireup_criteria_init(ucp_wireup_criteria_t *criteria)
     criteria->calc_score         = NULL;
     criteria->calc_tiebreak      = NULL;
     criteria->tiebreak_arg       = NULL;
+    criteria->tiebreak_max_diff  = 0.0;
     criteria->tl_rsc_flags       = 0;
     ucp_wireup_init_select_flags(&criteria->local_iface_flags, 0, 0);
     ucp_wireup_init_select_flags(&criteria->remote_iface_flags, 0, 0);
@@ -2533,6 +2537,7 @@ ucp_wireup_add_keepalive_lane(const ucp_wireup_select_params_t *select_params,
     criteria.is_keepalive       = 1;
     criteria.calc_score         = ucp_wireup_keepalive_score_func;
     criteria.calc_tiebreak      = ucp_wireup_tiebreak_func;
+    criteria.tiebreak_max_diff  = UCP_WIREUP_KA_SCORE_MAX_DIFF;
     /* Keepalive can also use auxiliary transports */
     criteria.tl_rsc_flags       = UCP_TL_RSC_FLAG_AUX;
     criteria.lane_type          = UCP_LANE_TYPE_KEEPALIVE;

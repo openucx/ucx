@@ -123,6 +123,10 @@ typedef struct {
     /* Custom argument of @a calc_tiebreak function */
     void                         *tiebreak_arg;
 
+    /* Maximum relative primary-score difference for tiebreak candidates.
+     * Zero allows only scores equal according to ucs_fp_compare(). */
+    double                       tiebreak_max_diff;
+
     /* Flags that describe TL specifics */
     uint8_t                      tl_rsc_flags;
 
