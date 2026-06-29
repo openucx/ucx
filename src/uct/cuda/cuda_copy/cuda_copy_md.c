@@ -749,7 +749,7 @@ static int uct_cuda_copy_md_get_dmabuf_fd(uintptr_t address, size_t length,
                                           uct_dmabuf_map_type_t *map_type_p)
 {
     uct_dmabuf_map_type_t map_type = UCT_DMABUF_MAP_TYPE_HOST;
-    
+
 #if CUDA_VERSION >= 11070
     unsigned long long flags = 0;
     PFN_cuMemGetHandleForAddressRange_v11070 get_handle_func;
@@ -791,13 +791,12 @@ static int uct_cuda_copy_md_get_dmabuf_fd(uintptr_t address, size_t length,
     if (cu_err != CUDA_SUCCESS) {
         ucs_debug("cuMemGetHandleForAddressRange(address=0x%lx length=%zu "
                   "flags=%llx DMA_BUF_FD) failed: %s",
-                  address, length, flags,
-                  uct_cuda_cu_get_error_string(cu_err));
+                  address, length, flags, uct_cuda_cu_get_error_string(cu_err));
         return UCT_DMABUF_FD_INVALID;
     }
 
     ucs_trace("dmabuf for address 0x%lx length %zu flags %llx is fd %d",
-                address, length, flags, fd);
+              address, length, flags, fd);
 
     if (map_type_p != NULL) {
         *map_type_p = map_type;
