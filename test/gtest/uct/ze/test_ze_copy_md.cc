@@ -186,10 +186,10 @@ UCS_TEST_F(test_ze_copy_md, mem_query_base_and_length) {
     }
     ASSERT_UCS_OK(status);
 
-    uct_md_mem_attr_t mem_attr = {};
-    mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE       |
-                          UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS   |
-                          UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH;
+    uct_md_mem_attr_v2_t mem_attr = {};
+    mem_attr.field_mask = UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE       |
+                          UCT_MD_MEM_ATTR_V2_FIELD_BASE_ADDRESS   |
+                          UCT_MD_MEM_ATTR_V2_FIELD_ALLOC_LENGTH;
     EXPECT_UCS_OK(md->ops->mem_query(md, addr, length, &mem_attr));
     EXPECT_EQ(UCS_MEMORY_TYPE_ZE_DEVICE, mem_attr.mem_type);
     EXPECT_TRUE(mem_attr.base_address != NULL);
