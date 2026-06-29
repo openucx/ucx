@@ -883,8 +883,9 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
     int dmabuf_queried               = 0;
     int fallback_dmabuf_queried      = 0;
     int is_async_managed             = 0;
-    uct_dmabuf_map_type_t dmabuf_map_type;
-    uct_dmabuf_map_type_t UCS_V_UNUSED fallback_dmabuf_map_type;
+    uct_dmabuf_map_type_t dmabuf_map_type = UCT_DMABUF_MAP_TYPE_HOST;
+    uct_dmabuf_map_type_t UCS_V_UNUSED fallback_dmabuf_map_type =
+            UCT_DMABUF_MAP_TYPE_HOST;
     uct_cuda_copy_md_dmabuf_t fallback_dmabuf;
     ucs_memory_info_t addr_mem_info;
     ucs_status_t status;
