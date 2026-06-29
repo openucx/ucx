@@ -85,9 +85,6 @@ TEST(test_ib_md_relaxed_order_policy, memh_mem_type)
     params.mem_type = UCS_MEMORY_TYPE_HOST;
     EXPECT_FALSE(uct_ib_memh_is_relaxed_order(&md, &params));
 
-    md.relaxed_order_mem_types      = 0;
-    md.relaxed_order_auto_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
-
     params.mem_type = UCS_MEMORY_TYPE_CUDA;
     EXPECT_TRUE(uct_ib_memh_is_relaxed_order(&md, &params));
 

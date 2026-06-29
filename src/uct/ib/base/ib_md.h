@@ -165,7 +165,6 @@ typedef struct uct_ib_md {
     double                   pci_bw;
     int                      relaxed_order;
     uint64_t                 relaxed_order_mem_types;
-    uint64_t                 relaxed_order_auto_mem_types;
     int                      fork_init;
     uint64_t                 reg_mem_types;
     uint64_t                 gva_mem_types;
@@ -363,12 +362,10 @@ uct_ib_memh_is_relaxed_order(uct_ib_md_t *md,
     mem_type = (params == NULL) ? UCS_MEMORY_TYPE_HOST :
                UCT_MD_MEM_REG_FIELD_VALUE(params, mem_type, FIELD_MEM_TYPE,
                                           UCS_MEMORY_TYPE_HOST);
-    if (mem_type >= UCS_MEMORY_TYPE_LAST) {
-        return 0;
-    }
 
-    return !!((md->relaxed_order_mem_types |
-               md->relaxed_order_auto_mem_types) & UCS_BIT(mem_type));
+    ucs_assert(mem_type < UCS_MEMORY_TYPE_LAST);
+
+    return !!(md->relaxed_order_mem_types & UCS_BIT(mem_type));
 }
 
 static UCS_F_ALWAYS_INLINE uint32_t uct_ib_memh_get_lkey(uct_mem_h memh)

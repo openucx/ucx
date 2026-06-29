@@ -172,6 +172,7 @@ static inline int ucs_cpu_model_prefer_relaxed_order(
              (cpu_model == UCS_CPU_MODEL_AMD_TURIN)));
 }
 
+
 #define UCS_CPU_VENDOR_LABEL "CPU vendor"
 #define UCS_CPU_MODEL_LABEL  "CPU model"
 

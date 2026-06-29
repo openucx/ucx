@@ -989,7 +989,8 @@ uct_ib_mlx5_devx_mem_reg(uct_md_h uct_md, void *address, size_t length,
     }
 
     relaxed_order = uct_ib_memh_is_relaxed_order(&md->super, params);
-    status = uct_ib_mlx5_devx_memh_alloc(md, length, flags, relaxed_order,
+    status        = uct_ib_mlx5_devx_memh_alloc(md, length, flags,
+                                                relaxed_order,
                                          sizeof(memh->mrs[0]), &memh);
     if (status != UCS_OK) {
         goto err;
