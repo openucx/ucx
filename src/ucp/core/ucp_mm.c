@@ -666,13 +666,10 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
                     context->reg_md_map[mem_type],
                     context->reg_block_md_map[mem_type]);
 
-        /* When adding registrations, existing access flags must be supported */
         reg_params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS;
         md_supports_dmabuf    = UCS_BIT_GET(dmabuf_reg_md_map, md_index);
         if (md_supports_dmabuf) {
-            /* Provide both the primary and host-fallback descriptors tagged
-             * with their mapping types; the MD deterministically selects the fd
-             * matching its registration path. */
+            /* If this MD can consume a dmabuf and we have it - provide it */
             reg_params.field_mask |=
                     UCT_MD_MEM_REG_FIELD_DMABUF_FD |
                     UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET |
