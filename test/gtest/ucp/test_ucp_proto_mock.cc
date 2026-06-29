@@ -94,6 +94,29 @@ public:
         FAIL() << "Transport " << tl_name << " not found";
     }
 
+    void mock_cuda_ipc_remote_pid(ucp_worker_h worker)
+    {
+        ucp_context_h context = worker->context;
+
+        for (ucp_rsc_index_t rsc_index = 0; rsc_index < context->num_tls;
+             ++rsc_index) {
+            const uct_tl_resource_desc_t *tl_rsc =
+                    &context->tl_rscs[rsc_index].tl_rsc;
+
+            if (std::string(tl_rsc->tl_name) != "cuda_ipc") {
+                continue;
+            }
+
+            if (!UCS_STATIC_BITMAP_GET(context->tl_bitmap, rsc_index)) {
+                continue;
+            }
+
+            ucp_worker_iface_t *wiface = ucp_worker_iface(worker, rsc_index);
+            m_mock.setup(&wiface->iface->ops.iface_get_address,
+                         cuda_ipc_get_address_mock);
+        }
+    }
+
 #if HAVE_IB
     void ib_event(enum ibv_event_type event_type, uint8_t port_num)
     {
@@ -237,6 +260,16 @@ private:
         return UCS_OK;
     }
 
+    static ucs_status_t
+    cuda_ipc_get_address_mock(uct_iface_h iface, uct_iface_addr_t *iface_addr)
+    {
+        UCS_MOCK_ORIG_FUNC(m_self->m_mock, &iface->ops.iface_get_address, iface,
+                           iface_addr);
+
+        *(pid_t*)iface_addr = getpid() + 1;
+        return UCS_OK;
+    }
+
     static void default_perf_mock(uct_perf_attr_t& perf_attr)
     {
         if (ucs_test_all_flags(perf_attr.field_mask,
@@ -340,6 +373,7 @@ public:
         modify_config("TOPO_PRIO", topo_prio());
 
         ucp_test::init();
+        post_ucp_init();
         connect();
     }
 
@@ -395,6 +429,10 @@ protected:
     virtual const char *topo_prio() const
     {
         return "default";
+    }
+
+    virtual void post_ucp_init()
+    {
     }
 
     static bool
@@ -1272,6 +1310,12 @@ public:
             iface_attr.latency.m         = 1e-9;
         });
         test_ucp_proto_mock::init();
+    }
+
+    virtual void post_ucp_init() override
+    {
+        mock_cuda_ipc_remote_pid(sender().worker());
+        mock_cuda_ipc_remote_pid(receiver().worker());
     }
 
     void test_cuda_rma(ucp_operation_id_t op_id,
