@@ -184,11 +184,6 @@ typedef struct ucp_context_config {
     /** Maximal number of endpoints to check on every keepalive round
      * (0 - disabled, inf - check all endpoints on every round) */
     unsigned                               keepalive_num_eps;
-    /** Time period between recovery rounds for an endpoint with lanes in
-     *  UCP_LANE_TYPE_FAILED state. Each round sends a
-     *  WIREUP_MSG_LANES_ADDR_REQUEST over the operable AM lane asking the
-     *  peer for up-to-date addresses of the failed lanes. */
-    ucs_time_t                             recovery_interval;
     /** Maximal number of recovery rounds before the endpoint is declared
      *  fully failed. Must be non-zero. */
     unsigned                               recovery_retries;
@@ -389,6 +384,7 @@ typedef struct ucp_context_alloc_md_index {
      * using ucp_memh_alloc(). */
     ucp_md_index_t   md_index;
     ucs_sys_device_t sys_dev;
+    uint8_t          mem_flags;
 } ucp_context_alloc_md_index_t;
 
 
@@ -712,6 +708,7 @@ ucp_memory_info_set_host(ucp_memory_info_t *mem_info)
 {
     mem_info->type    = UCS_MEMORY_TYPE_HOST;
     mem_info->sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+    mem_info->flags   = UCS_MEM_FLAG_REGISTRABLE;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -771,6 +768,7 @@ ucp_memory_detect(ucp_context_h context, const void *address, size_t length,
 
     mem_info->type    = mem_info_internal.type;
     mem_info->sys_dev = mem_info_internal.sys_dev;
+    mem_info->flags   = mem_info_internal.mem_flags;
 }
 
 static UCS_F_ALWAYS_INLINE int
