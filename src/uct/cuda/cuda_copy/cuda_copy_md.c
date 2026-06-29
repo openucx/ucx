@@ -748,7 +748,7 @@ static int uct_cuda_copy_md_get_dmabuf_fd(uintptr_t address, size_t length,
                                           ucs_sys_device_t sys_dev,
                                           uct_dmabuf_map_type_t *map_type_p)
 {
-    uct_dmabuf_map_type_t map_type = UCT_DMABUF_MAP_TYPE_HOST;
+    uct_dmabuf_map_type_t UCS_V_UNUSED map_type = UCT_DMABUF_MAP_TYPE_HOST;
 
 #if CUDA_VERSION >= 11070
     unsigned long long flags = 0;
