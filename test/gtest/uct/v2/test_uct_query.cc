@@ -11,8 +11,16 @@ extern "C" {
 #include <ucs/sys/topo/base/topo.h>
 #include <uct/api/uct.h>
 #include <uct/api/v2/uct_v2.h>
+#if HAVE_CUDA
+#include <uct/cuda/cuda_copy/cuda_copy_iface.h>
+#endif
 #include <uct/base/uct_iface.h>
 }
+
+#include <dirent.h>
+#include <limits.h>
+#include <unistd.h>
+#include <string>
 
 
 #define IB_SEND_OVERHEAD_BCOPY     1
@@ -106,11 +114,106 @@ UCS_TEST_P(test_uct_query, query_perf)
 
 UCT_INSTANTIATE_TEST_CASE(test_uct_query)
 
+#if HAVE_CUDA
+
+class test_uct_cuda_copy_bw : public ucs::test {
+protected:
+    static constexpr double REG_HOST_BW = 30000.0 * UCS_MBYTE;
+};
+
+UCS_TEST_F(test_uct_cuda_copy_bw, registered_host_bw_from_pci)
+{
+    EXPECT_DOUBLE_EQ(REG_HOST_BW,
+                     uct_cuda_copy_registered_host_bw(REG_HOST_BW, 0.0));
+    EXPECT_DOUBLE_EQ(REG_HOST_BW,
+                     uct_cuda_copy_registered_host_bw(REG_HOST_BW,
+                                                     UCS_INFINITY));
+    EXPECT_DOUBLE_EQ(REG_HOST_BW,
+                     uct_cuda_copy_registered_host_bw(REG_HOST_BW,
+                                                     30000.0 * UCS_MBYTE));
+    EXPECT_DOUBLE_EQ(36000.0 * UCS_MBYTE,
+                     uct_cuda_copy_registered_host_bw(REG_HOST_BW,
+                                                     40000.0 * UCS_MBYTE));
+}
+
 class test_uct_query_cuda_copy : public test_uct_query {
 protected:
     static constexpr double LEGACY_H2D_BW = 8300.0 * UCS_MBYTE;
     static constexpr double LEGACY_D2H_BW = 11660.0 * UCS_MBYTE;
-    static constexpr double REG_HOST_BW  = 30000.0 * UCS_MBYTE;
+    static constexpr double REG_HOST_BW   = 30000.0 * UCS_MBYTE;
+
+    static double sys_dev_pci_bw(ucs_sys_device_t sys_dev)
+    {
+        ucs_sys_bus_id_t bus_id;
+        char sysfs_path[PATH_MAX];
+        char bdf_name[UCS_SYS_BDF_NAME_MAX];
+        double pci_bw;
+
+        if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+            return 0.0;
+        }
+
+        if (ucs_topo_get_device_bus_id(sys_dev, &bus_id) != UCS_OK) {
+            return 0.0;
+        }
+
+        ucs_topo_sys_device_bdf_name(sys_dev, bdf_name, sizeof(bdf_name));
+        snprintf(sysfs_path, sizeof(sysfs_path), "/sys/bus/pci/devices/%s",
+                 bdf_name);
+        pci_bw = ucs_topo_get_pci_bw(bdf_name, sysfs_path);
+        return ((pci_bw <= 0.0) || (pci_bw == UCS_INFINITY)) ? 0.0 : pci_bw;
+    }
+
+    static double registered_host_bw(ucs_sys_device_t cuda_sys_dev)
+    {
+        return uct_cuda_copy_registered_host_bw(REG_HOST_BW,
+                                                sys_dev_pci_bw(cuda_sys_dev));
+    }
+
+    static ucs_status_t find_pci_sys_device(double min_pci_bw,
+                                            ucs_sys_device_t *sys_dev_p,
+                                            double *pci_bw_p)
+    {
+        static const char *root = "/sys/bus/pci/devices";
+        struct dirent *entry;
+        DIR *dir;
+
+        dir = opendir(root);
+        if (dir == nullptr) {
+            return UCS_ERR_NO_ELEM;
+        }
+
+        while ((entry = readdir(dir)) != nullptr) {
+            if (entry->d_name[0] == '.') {
+                continue;
+            }
+
+            const std::string sysfs_path =
+                    std::string(root) + "/" + entry->d_name;
+            if ((access((sysfs_path + "/current_link_width").c_str(), R_OK) !=
+                 0) ||
+                (access((sysfs_path + "/current_link_speed").c_str(), R_OK) !=
+                 0)) {
+                continue;
+            }
+
+            const double pci_bw =
+                    ucs_topo_get_pci_bw(entry->d_name, sysfs_path.c_str());
+            if ((pci_bw == UCS_INFINITY) || (pci_bw <= min_pci_bw)) {
+                continue;
+            }
+
+            if (ucs_topo_find_device_by_bdf_name(entry->d_name, sys_dev_p) ==
+                UCS_OK) {
+                *pci_bw_p = pci_bw;
+                closedir(dir);
+                return UCS_OK;
+            }
+        }
+
+        closedir(dir);
+        return UCS_ERR_NO_ELEM;
+    }
 };
 
 UCS_TEST_P(test_uct_query_cuda_copy, auto_host_device_bw_and_scope)
@@ -186,7 +289,8 @@ UCS_TEST_P(test_uct_query_cuda_copy, auto_bw_uses_host_memory_class,
     h2d_reg.local_host_memory_class  =
             UCT_PERF_ATTR_HOST_MEMORY_CLASS_REGISTERED_LOCKED;
     EXPECT_EQ(iface_estimate_perf(&h2d_reg), UCS_OK);
-    EXPECT_DOUBLE_EQ(REG_HOST_BW, h2d_reg.bandwidth.shared);
+    const double h2d_reg_bw = registered_host_bw(h2d_reg.remote_sys_device);
+    EXPECT_DOUBLE_EQ(h2d_reg_bw, h2d_reg.bandwidth.shared);
     EXPECT_DOUBLE_EQ(h2d_reg.bandwidth.shared,
                      h2d_reg.path_bandwidth.shared);
     EXPECT_EQ(0, h2d_reg.bandwidth.dedicated);
@@ -237,7 +341,8 @@ UCS_TEST_P(test_uct_query_cuda_copy, auto_bw_uses_host_memory_class,
     d2h_reg.local_host_memory_class  =
             UCT_PERF_ATTR_HOST_MEMORY_CLASS_REGISTERED_LOCKED;
     EXPECT_EQ(iface_estimate_perf(&d2h_reg), UCS_OK);
-    EXPECT_DOUBLE_EQ(REG_HOST_BW, d2h_reg.bandwidth.shared);
+    const double d2h_reg_bw = registered_host_bw(d2h_reg.remote_sys_device);
+    EXPECT_DOUBLE_EQ(d2h_reg_bw, d2h_reg.bandwidth.shared);
     EXPECT_DOUBLE_EQ(d2h_reg.bandwidth.shared,
                      d2h_reg.path_bandwidth.shared);
     EXPECT_EQ(0, d2h_reg.bandwidth.dedicated);
@@ -265,7 +370,55 @@ UCS_TEST_P(test_uct_query_cuda_copy, auto_bw_uses_host_memory_class,
     d2h_remote.remote_host_memory_class  =
             UCT_PERF_ATTR_HOST_MEMORY_CLASS_REGISTERED_LOCKED;
     EXPECT_EQ(iface_estimate_perf(&d2h_remote), UCS_OK);
-    EXPECT_DOUBLE_EQ(REG_HOST_BW, d2h_remote.bandwidth.shared);
+    EXPECT_DOUBLE_EQ(registered_host_bw(d2h_remote.local_sys_device),
+                     d2h_remote.bandwidth.shared);
+}
+
+UCS_TEST_P(test_uct_query_cuda_copy, auto_registered_host_bw_uses_pci_link,
+           "CUDA_COPY_BW=default:10000MBs,h2d:auto,d2h:auto,d2d:320GBs")
+{
+    const double min_pci_bw = REG_HOST_BW /
+                              UCT_CUDA_COPY_REG_HOST_PCI_BW_FACTOR;
+    ucs_sys_device_t sys_dev;
+    double pci_bw;
+
+    if (find_pci_sys_device(min_pci_bw, &sys_dev, &pci_bw) != UCS_OK) {
+        UCS_TEST_SKIP_R("no PCIe sysfs device above registered-host fallback");
+    }
+
+    const double expected_bw = registered_host_bw(sys_dev);
+    auto h2d_reg            = init_perf_attr();
+    auto d2h_reg            = init_perf_attr();
+
+    h2d_reg.field_mask |= UCT_PERF_ATTR_FIELD_BANDWIDTH |
+                          UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH |
+                          UCT_PERF_ATTR_FIELD_LOCAL_HOST_MEMORY_CLASS;
+    h2d_reg.operation               = UCT_EP_OP_PUT_ZCOPY;
+    h2d_reg.local_memory_type       = UCS_MEMORY_TYPE_HOST;
+    h2d_reg.remote_memory_type      = UCS_MEMORY_TYPE_CUDA;
+    h2d_reg.remote_sys_device       = sys_dev;
+    h2d_reg.local_host_memory_class =
+            UCT_PERF_ATTR_HOST_MEMORY_CLASS_REGISTERED_LOCKED;
+    EXPECT_EQ(iface_estimate_perf(&h2d_reg), UCS_OK);
+    EXPECT_DOUBLE_EQ(expected_bw, h2d_reg.bandwidth.shared);
+    EXPECT_DOUBLE_EQ(h2d_reg.bandwidth.shared,
+                     h2d_reg.path_bandwidth.shared);
+    EXPECT_EQ(0, h2d_reg.bandwidth.dedicated);
+
+    d2h_reg.field_mask |= UCT_PERF_ATTR_FIELD_BANDWIDTH |
+                          UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH |
+                          UCT_PERF_ATTR_FIELD_REMOTE_HOST_MEMORY_CLASS;
+    d2h_reg.operation                = UCT_EP_OP_PUT_ZCOPY;
+    d2h_reg.local_memory_type        = UCS_MEMORY_TYPE_CUDA;
+    d2h_reg.remote_memory_type       = UCS_MEMORY_TYPE_HOST;
+    d2h_reg.local_sys_device         = sys_dev;
+    d2h_reg.remote_host_memory_class =
+            UCT_PERF_ATTR_HOST_MEMORY_CLASS_REGISTERED_LOCKED;
+    EXPECT_EQ(iface_estimate_perf(&d2h_reg), UCS_OK);
+    EXPECT_DOUBLE_EQ(expected_bw, d2h_reg.bandwidth.shared);
+    EXPECT_DOUBLE_EQ(d2h_reg.bandwidth.shared,
+                     d2h_reg.path_bandwidth.shared);
+    EXPECT_EQ(0, d2h_reg.bandwidth.dedicated);
 }
 
 UCS_TEST_P(test_uct_query_cuda_copy, explicit_bw_overrides_host_memory_class,
@@ -298,6 +451,8 @@ UCS_TEST_P(test_uct_query_cuda_copy, explicit_bw_overrides_host_memory_class,
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_uct_query_cuda_copy, cuda_copy)
+
+#endif
 
 class test_uct_query_ib : public test_uct_query {
 public:

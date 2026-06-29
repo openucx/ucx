@@ -15,9 +15,11 @@
 #include <uct/cuda/base/cuda_md.h>
 #include <uct/cuda/base/cuda_util.h>
 #include <ucs/type/class.h>
+#include <ucs/sys/topo/base/topo.h>
 #include <ucs/sys/string.h>
 #include <ucs/async/eventfd.h>
 
+#include <limits.h>
 
 #define UCT_CUDA_COPY_IFACE_OVERHEAD 0
 #define UCT_CUDA_COPY_IFACE_LATENCY  ucs_linear_func_make(8e-6, 0)
@@ -216,15 +218,47 @@ uct_cuda_copy_set_bw_scope(uct_perf_attr_t *perf_attr,
 }
 
 static double
+uct_cuda_copy_sys_dev_pci_bw(ucs_sys_device_t sys_dev)
+{
+    ucs_sys_bus_id_t bus_id;
+    char sysfs_path[PATH_MAX];
+    char bdf_name[UCS_SYS_BDF_NAME_MAX];
+    double pci_bw;
+
+    if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        return 0.0;
+    }
+
+    if (ucs_topo_get_device_bus_id(sys_dev, &bus_id) != UCS_OK) {
+        return 0.0;
+    }
+
+    ucs_topo_sys_device_bdf_name(sys_dev, bdf_name, sizeof(bdf_name));
+    ucs_snprintf_safe(sysfs_path, sizeof(sysfs_path),
+                      "/sys/bus/pci/devices/%s", bdf_name);
+    pci_bw = ucs_topo_get_pci_bw(bdf_name, sysfs_path);
+    if ((pci_bw <= 0.0) || (pci_bw == UCS_INFINITY)) {
+        return 0.0;
+    }
+
+    return pci_bw;
+}
+
+static double
 uct_cuda_copy_auto_host_bw(uct_perf_attr_host_memory_class_t host_mem_class,
-                           double legacy_bw, double registered_bw, int zcopy)
+                           double legacy_bw, double registered_bw, int zcopy,
+                           ucs_sys_device_t cuda_sys_dev)
 {
     /* Registered/locked host memory is a property of the copy buffer itself.
-     * Keep pageable/unknown host memory conservative regardless of sysdev.
+     * Keep pageable/unknown host memory conservative regardless of sysdev. If
+     * the CUDA-side sysdev is known, PCIe link bandwidth provides a topology
+     * bound for registered host staging; unknown topology keeps the existing
+     * conservative fallback.
      */
     if (zcopy && (host_mem_class ==
          UCT_PERF_ATTR_HOST_MEMORY_CLASS_REGISTERED_LOCKED)) {
-        return registered_bw;
+        return uct_cuda_copy_registered_host_bw(
+                registered_bw, uct_cuda_copy_sys_dev_pci_bw(cuda_sys_dev));
     }
 
     return legacy_bw;
@@ -294,7 +328,7 @@ uct_cuda_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
                      uct_cuda_copy_auto_host_bw(src_host_mem_class,
                                                 UCT_CUDA_COPY_LEGACY_H2D_BW,
                                                 UCT_CUDA_COPY_REG_HOST_H2D_BW,
-                                                zcopy) :
+                                                zcopy, dst_sys_dev) :
                      iface->config.bw.h2d) * ss_factor;
         } else if ((src_mem_type == UCS_MEMORY_TYPE_CUDA) &&
                    (dst_mem_type == UCS_MEMORY_TYPE_HOST)) {
@@ -303,7 +337,7 @@ uct_cuda_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
                      uct_cuda_copy_auto_host_bw(dst_host_mem_class,
                                                 UCT_CUDA_COPY_LEGACY_D2H_BW,
                                                 UCT_CUDA_COPY_REG_HOST_D2H_BW,
-                                                zcopy) :
+                                                zcopy, src_sys_dev) :
                      iface->config.bw.d2h) * ss_factor;
         } else if ((src_mem_type == UCS_MEMORY_TYPE_CUDA) &&
                    (dst_mem_type == UCS_MEMORY_TYPE_CUDA)) {
