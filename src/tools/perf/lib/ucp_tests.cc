@@ -16,7 +16,7 @@
 
 #include <ucs/sys/preprocessor.h>
 #include <ucs/sys/string.h>
-#include "ucs/type/status.h"
+#include <ucs/type/status.h>
 #include <limits>
 
 
@@ -815,7 +815,12 @@ public:
                 wait_recv_window(m_max_outstanding);
 
                 if (validate) {
-                    memcpy(send_buffer, recv_buffer, send_length);
+                    memset(send_buffer, sn, send_length);
+                    status = validate_buffers(send_buffer, recv_buffer,
+                                              send_length);
+                    if (status != UCS_OK) {
+                        return status;
+                    }
                 }
 
                 send(ep, send_buffer, send_length, send_datatype, sn,
