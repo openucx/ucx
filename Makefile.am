@@ -128,6 +128,18 @@ install-exec-hook:
 		done; \
 	fi
 
+uninstall-hook:
+	@if test -n "$(UCX_LIBRARY_FILE_SUFFIX)"; then \
+		for dir in "$(DESTDIR)$(libdir)" "$(DESTDIR)$(moduledir)"; do \
+			if test -d "$$dir"; then \
+				for link in "$$dir"/*$(UCX_LIBRARY_FILE_SUFFIX).so; do \
+					test -L "$$link" || continue; \
+					$(RM) "$$link"; \
+				done; \
+			fi; \
+		done; \
+	fi
+
 DOCLIST = docs/doxygen/doxygen-doc/ucx.tag
 
 FORMAT = pdf
