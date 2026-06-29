@@ -555,16 +555,18 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
                            const char *alloc_name, ucs_log_level_t err_level,
                            int allow_partial_reg, int gva_enable)
 {
-    ucs_memory_type_t mem_type          = memh->mem_type;
-    ucp_md_index_t dmabuf_prov_md_index = context->dmabuf_mds[mem_type];
-    void *address                       = ucp_memh_address(memh);
-    size_t length                       = ucp_memh_length(memh);
-    ucp_md_map_t md_map_registered      = 0;
-    ucp_md_map_t dmabuf_reg_md_map      = 0;
-    int dmabuf_fd                       = UCT_DMABUF_FD_INVALID;
-    int fallback_dmabuf_fd              = UCT_DMABUF_FD_INVALID;
-    size_t dmabuf_offset                = 0;
-    size_t fallback_dmabuf_offset       = 0;
+    ucs_memory_type_t mem_type            = memh->mem_type;
+    ucp_md_index_t dmabuf_prov_md_index   = context->dmabuf_mds[mem_type];
+    void *address                         = ucp_memh_address(memh);
+    size_t length                         = ucp_memh_length(memh);
+    ucp_md_map_t md_map_registered        = 0;
+    ucp_md_map_t dmabuf_reg_md_map        = 0;
+    int dmabuf_fd                         = UCT_DMABUF_FD_INVALID;
+    int fallback_dmabuf_fd                = UCT_DMABUF_FD_INVALID;
+    size_t dmabuf_offset                  = 0;
+    size_t fallback_dmabuf_offset         = 0;
+    uct_dmabuf_map_type_t dmabuf_map_type = UCT_DMABUF_MAP_TYPE_HOST;
+    uct_dmabuf_map_type_t fallback_dmabuf_map_type = UCT_DMABUF_MAP_TYPE_HOST;
     ucp_md_map_t reg_md_map;
     uct_md_mem_reg_params_t reg_params;
     uct_md_mem_attr_v2_t mem_attr;
@@ -576,8 +578,6 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
     size_t reg_align;
     ucp_sys_dev_map_t sys_dev_map;
     int md_supports_dmabuf;
-    uct_dmabuf_map_type_t dmabuf_map_type          = UCT_DMABUF_MAP_TYPE_HOST;
-    uct_dmabuf_map_type_t fallback_dmabuf_map_type = UCT_DMABUF_MAP_TYPE_HOST;
 
     if (gva_enable) {
         status = ucp_memh_register_gva(context, memh, md_map);
