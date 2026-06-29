@@ -1435,6 +1435,102 @@ UCS_TEST_F(test_proto_perf, rndv_mtype_copy_stages_exclude_tl_factors)
     EXPECT_FALSE(found_remote_tl);
 }
 
+UCS_TEST_F(test_proto_perf, rndv_mtype_copy_stages_require_mtype_factor)
+{
+    const size_t frag_size = 1024;
+    perf_ptr_t frag_perf  = create();
+    ucp_proto_perf_stage_t stages[UCP_PROTO_PERF_FACTOR_LAST] = {};
+
+    add_funcs(frag_perf, 0, frag_size,
+              {{UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_func},
+               {UCP_PROTO_PERF_FACTOR_REMOTE_TL, remote_tl_func}});
+
+    EXPECT_EQ(0u, ucp_proto_rndv_perf_make_mtype_copy_stages(
+                          frag_perf.get(), frag_size, stages,
+                          ucs_static_array_size(stages)));
+
+    add_func(frag_perf, 1, frag_size,
+             UCP_PROTO_PERF_FACTOR_LOCAL_MTYPE_COPY, local_cpu_func);
+
+    EXPECT_EQ(1u, ucp_proto_rndv_perf_make_mtype_copy_stages(
+                          frag_perf.get(), frag_size, stages,
+                          ucs_static_array_size(stages)));
+    EXPECT_TRUE(ucs_linear_func_is_equal(
+            local_cpu_func,
+            stages[0].factors[UCP_PROTO_PERF_FACTOR_LOCAL_MTYPE_COPY], 1e-9));
+}
+
+UCS_TEST_F(test_proto_perf, rndv_mtype_attached_clears_access_tl_payload)
+{
+    const size_t frag_size = 1024;
+    perf_ptr_t frag_perf  = create();
+    perf_ptr_t staged_perf = create();
+    perf_ptr_t access_perf = create();
+    ucp_proto_perf_stage_t stages[UCP_PROTO_PERF_FACTOR_LAST] = {};
+    ucp_proto_flat_perf_t *flat_perf;
+    flat_perf_ptr_t staged_flat_perf;
+    const ucp_proto_flat_perf_range_t *range;
+    ucp_proto_perf_t *perf;
+    ucs_linear_func_t expected;
+    unsigned num_stages;
+
+    add_funcs(frag_perf, 0, frag_size,
+              {{UCP_PROTO_PERF_FACTOR_REMOTE_TL, remote_tl_func},
+               {UCP_PROTO_PERF_FACTOR_LOCAL_MTYPE_COPY, local_tl_func}});
+
+    num_stages = ucp_proto_rndv_perf_make_mtype_copy_stages(
+            frag_perf.get(), frag_size, stages,
+            ucs_static_array_size(stages));
+
+    ASSERT_EQ(1u, num_stages);
+
+    ASSERT_UCS_OK(ucp_proto_perf_add_staged_pipeline(
+            staged_perf.get(), frag_size + 1, 2 * frag_size, stages,
+            num_stages, frag_size, NULL));
+    add_funcs(access_perf, frag_size + 1, 2 * frag_size,
+              {{UCP_PROTO_PERF_FACTOR_REMOTE_TL, remote_tl_func},
+               {UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_cpu_func},
+               {UCP_PROTO_PERF_FACTOR_LOCAL_CPU, local_cpu_func}});
+    ASSERT_UCS_OK(ucp_proto_perf_aggregate2("staged+access",
+                                            staged_perf.get(),
+                                            access_perf.get(), &perf));
+    frag_perf = make_perf_ptr(perf);
+
+    ucp_proto_perf_clear_factor_slopes(
+            frag_perf.get(), UCS_BIT(UCP_PROTO_PERF_FACTOR_LOCAL_TL) |
+                             UCS_BIT(UCP_PROTO_PERF_FACTOR_REMOTE_TL));
+
+    ASSERT_UCS_OK(ucp_proto_perf_staged_pipeline_flat(
+            frag_perf.get(), stages, num_stages, &flat_perf));
+    staged_flat_perf = flat_perf_ptr_t(flat_perf,
+                                       ucp_proto_flat_perf_destroy);
+
+    range = find_lb(staged_flat_perf, frag_size + 1);
+    ASSERT_NE(nullptr, range);
+
+    expected = local_cpu_func;
+    ucs_linear_func_add_inplace(&expected,
+                                ucs_linear_func_make(local_cpu_func.c, 0));
+    ucs_linear_func_add_inplace(&expected,
+                                ucs_linear_func_make(remote_tl_func.c, 0));
+    ucs_linear_func_add_inplace(
+            &expected, ucs_linear_func_make(2 * local_tl_func.c,
+                                            local_tl_func.m));
+
+    EXPECT_TRUE(ucs_linear_func_is_equal(
+            ucs_linear_func_make(local_cpu_func.c, 0),
+            ucp_proto_perf_segment_func(find_lb(frag_perf, frag_size + 1),
+                                        UCP_PROTO_PERF_FACTOR_LOCAL_TL),
+            1e-9));
+    EXPECT_TRUE(ucs_linear_func_is_equal(
+            ucs_linear_func_make(remote_tl_func.c, 0),
+            ucp_proto_perf_segment_func(find_lb(frag_perf, frag_size + 1),
+                                        UCP_PROTO_PERF_FACTOR_REMOTE_TL),
+            1e-9));
+    EXPECT_NEAR(ucs_linear_func_apply(expected, 2 * frag_size),
+                ucs_linear_func_apply(range->value, 2 * frag_size), 1e-9);
+}
+
 UCS_TEST_F(test_proto_perf, rndv_mtype_copy_remote_stages_flip_side_resources)
 {
     const size_t frag_size = 1024;

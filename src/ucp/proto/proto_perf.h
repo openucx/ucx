@@ -222,6 +222,20 @@ void ucp_proto_perf_stages_apply_func(ucp_proto_perf_stage_t *stages,
                                       unsigned num_stages,
                                       ucs_linear_func_t func);
 
+/**
+ * Clear selected performance factor slopes from every segment of @a perf.
+ *
+ * This is for protocol-owned semantic rewrites where a raw capability query
+ * produced byte-scaling factors that are not payload movement for a specific
+ * declared data plan. Fixed overhead is preserved.
+ *
+ * @param [inout] perf        Performance data structure to update.
+ * @param [in]    factor_mask Bit mask of ucp_proto_perf_factor_id_t entries to
+ *                            clear the slope from.
+ */
+void ucp_proto_perf_clear_factor_slopes(ucp_proto_perf_t *perf,
+                                        uint64_t factor_mask);
+
 
 /**
  * Expand given perf by estimation that all messages on interval

@@ -487,6 +487,39 @@ void ucp_proto_perf_stages_apply_func(ucp_proto_perf_stage_t *stages,
     }
 }
 
+void ucp_proto_perf_clear_factor_slopes(ucp_proto_perf_t *perf,
+                                        uint64_t factor_mask)
+{
+    ucp_proto_perf_factor_id_t factor_id;
+    ucp_proto_perf_segment_t *seg;
+    ucs_linear_func_t *factor;
+
+    ucs_assert(!(factor_mask & ~UCS_MASK(UCP_PROTO_PERF_FACTOR_LAST)));
+
+    ucp_proto_perf_check(perf);
+
+    ucp_proto_perf_segment_foreach(seg, perf) {
+        for (factor_id = 0; factor_id < UCP_PROTO_PERF_FACTOR_LAST;
+             ++factor_id) {
+            if (!(factor_mask & UCS_BIT(factor_id))) {
+                continue;
+            }
+
+            factor = &seg->perf_factors[factor_id];
+            if (factor->m <= UCP_PROTO_PERF_EPSILON) {
+                continue;
+            }
+
+            factor->m = 0;
+            ucp_proto_perf_node_update_data(
+                    seg->node, ucp_proto_perf_factor_names[factor_id],
+                    *factor);
+        }
+    }
+
+    ucp_proto_perf_check(perf);
+}
+
 
 /* TODO:
  * Reconsider correctness of PPLN perf estimation logic since in case of async
