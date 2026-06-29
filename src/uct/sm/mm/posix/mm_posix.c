@@ -233,7 +233,8 @@ out:
 }
 
 ucs_status_t uct_posix_open_check_result(const char *func, const char *file_name,
-                                         int open_flags, int ret, int *fd_p)
+                                         int open_flags, int ret, int *fd_p,
+                                         ucs_log_level_t err_level)
 {
     if (ret >= 0) {
         *fd_p = ret;
@@ -241,13 +242,14 @@ ucs_status_t uct_posix_open_check_result(const char *func, const char *file_name
     } else if (errno == EEXIST) {
         return UCS_ERR_ALREADY_EXISTS;
     } else {
-        ucs_error("%s(file_name=%s flags=0x%x) failed: %m", func, file_name,
-                  open_flags);
+        ucs_log(err_level, "%s(file_name=%s flags=0x%x) failed: %m", func,
+                file_name, open_flags);
         return UCS_ERR_SHMEM_SEGMENT;
     }
 }
 
-static ucs_status_t uct_posix_shm_open(uint64_t mmid, int open_flags, int *fd_p)
+static ucs_status_t uct_posix_shm_open(uint64_t mmid, int open_flags, int *fd_p,
+                                       ucs_log_level_t err_level)
 {
     char file_name[NAME_MAX];
     int ret;
@@ -255,11 +257,12 @@ static ucs_status_t uct_posix_shm_open(uint64_t mmid, int open_flags, int *fd_p)
     ucs_snprintf_safe(file_name, sizeof(file_name), UCT_POSIX_FILE_FMT, mmid);
     ret = shm_open(file_name, open_flags | O_RDWR, UCT_POSIX_SHM_OPEN_MODE);
     return uct_posix_open_check_result("shm_open", file_name, open_flags, ret,
-                                       fd_p);
+                                       fd_p, err_level);
 }
 
 static ucs_status_t uct_posix_file_open(const char *dir, uint64_t mmid,
-                                        int open_flags, int* fd_p)
+                                        int open_flags, int* fd_p,
+                                        ucs_log_level_t err_level)
 {
     char *file_path;
     int ret;
@@ -274,13 +277,14 @@ static ucs_status_t uct_posix_file_open(const char *dir, uint64_t mmid,
 
     ret = open(file_path, open_flags | O_RDWR, UCT_POSIX_SHM_OPEN_MODE);
     status = uct_posix_open_check_result("open", file_path, open_flags, ret,
-                                         fd_p);
+                                         fd_p, err_level);
     ucs_free(file_path);
 out:
     return status;
 }
 
-static ucs_status_t uct_posix_procfs_open(int pid, int peer_fd, int* fd_p)
+static ucs_status_t uct_posix_procfs_open(int pid, int peer_fd, int* fd_p,
+                                          ucs_log_level_t err_level)
 {
     char *file_path;
     int ret;
@@ -294,7 +298,8 @@ static ucs_status_t uct_posix_procfs_open(int pid, int peer_fd, int* fd_p)
     }
 
     ret    = open(file_path, O_RDWR, UCT_POSIX_SHM_OPEN_MODE);
-    status = uct_posix_open_check_result("open", file_path, 0, ret, fd_p);
+    status = uct_posix_open_check_result("open", file_path, 0, ret, fd_p,
+                                         err_level);
     ucs_free(file_path);
 out:
     return status;
@@ -410,7 +415,8 @@ static ucs_status_t uct_posix_munmap(void *address, size_t length)
 }
 
 static ucs_status_t
-uct_posix_mem_open(uct_mm_seg_id_t seg_id, const char *dir, int *fd_p)
+uct_posix_mem_open(uct_mm_seg_id_t seg_id, const char *dir, int *fd_p,
+                   ucs_log_level_t err_level)
 {
     uint64_t mmid = seg_id & UCT_POSIX_SEG_MMID_MASK;
     ucs_status_t status;
@@ -418,12 +424,12 @@ uct_posix_mem_open(uct_mm_seg_id_t seg_id, const char *dir, int *fd_p)
 
     if (seg_id & UCT_POSIX_SEG_FLAG_PROCFS) {
         uct_posix_mmid_procfs_unpack(mmid, &pid, &peer_fd);
-        status = uct_posix_procfs_open(pid, peer_fd, fd_p);
+        status = uct_posix_procfs_open(pid, peer_fd, fd_p, err_level);
     } else if (seg_id & UCT_POSIX_SEG_FLAG_SHM_OPEN) {
-        status = uct_posix_shm_open(mmid, 0, fd_p);
+        status = uct_posix_shm_open(mmid, 0, fd_p, err_level);
     } else {
         ucs_assert(dir != NULL); /* for coverity */
-        status = uct_posix_file_open(dir, mmid, 0, fd_p);
+        status = uct_posix_file_open(dir, mmid, 0, fd_p, err_level);
     }
 
     return status;
@@ -439,7 +445,7 @@ uct_posix_mem_attach_common(uct_mm_seg_id_t seg_id, size_t length,
     ucs_assert(length > 0);
     rseg->cookie = (void*)length;
 
-    status = uct_posix_mem_open(seg_id, dir, &fd);
+    status = uct_posix_mem_open(seg_id, dir, &fd, UCS_LOG_LEVEL_ERROR);
     if (status != UCS_OK) {
         return status;
     }
@@ -472,7 +478,8 @@ uct_posix_is_reachable(uct_mm_md_t *md, uct_mm_seg_id_t seg_id,
         return 0;
     }
 
-    status = uct_posix_mem_open(seg_id, (const char*)iface_addr, &fd);
+    status = uct_posix_mem_open(seg_id, (const char*)iface_addr, &fd,
+                                UCS_LOG_LEVEL_DEBUG);
     if (status != UCS_OK) {
         return 0;
     }
@@ -503,11 +510,13 @@ uct_posix_segment_open(uct_mm_md_t *md, uct_mm_seg_id_t *seg_id_p, int *fd_p)
         ucs_assert(mmid <= UCT_POSIX_SEG_MMID_MASK);
         if (uct_posix_use_shm_open(posix_config)) {
             flags  = UCT_POSIX_SEG_FLAG_SHM_OPEN;
-            status = uct_posix_shm_open(mmid, UCT_POSIX_SHM_CREATE_FLAGS, fd_p);
+            status = uct_posix_shm_open(mmid, UCT_POSIX_SHM_CREATE_FLAGS, fd_p,
+                                        UCS_LOG_LEVEL_ERROR);
         } else {
             flags  = 0;
             status = uct_posix_file_open(posix_config->dir, mmid,
-                                         UCT_POSIX_SHM_CREATE_FLAGS, fd_p);
+                                         UCT_POSIX_SHM_CREATE_FLAGS, fd_p,
+                                         UCS_LOG_LEVEL_ERROR);
         }
         if (status == UCS_OK) {
             *seg_id_p = mmid | flags;
@@ -792,4 +801,3 @@ UCT_MM_TL_DEFINE(posix, &uct_posix_md_ops, uct_posix_rkey_unpack,
                  uct_posix_iface_config_table);
 
 UCT_SINGLE_TL_INIT(&uct_posix_component.super, posix,,,)
-
