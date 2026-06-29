@@ -818,9 +818,9 @@ uct_cuda_copy_md_get_dmabuf(const void *address, size_t length,
     base_address  = (uintptr_t)address;
     aligned_start = ucs_align_down_pow2(base_address, ucs_get_page_size());
     aligned_end = ucs_align_up_pow2(base_address + length, ucs_get_page_size());
-    dmabuf.fd     = uct_cuda_copy_md_get_dmabuf_fd(aligned_start,
-                                                   aligned_end - aligned_start,
-                                                   sys_dev, map_type_p);
+    dmabuf.fd   = uct_cuda_copy_md_get_dmabuf_fd(aligned_start,
+                                                 aligned_end - aligned_start,
+                                                 sys_dev, map_type_p);
     dmabuf.offset = base_address - aligned_start;
     return dmabuf;
 }
@@ -869,20 +869,20 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
                                         size_t length,
                                         uct_md_mem_attr_v2_t *mem_attr)
 {
-    ucs_memory_info_t default_mem_info = {
+    uct_cuda_copy_md_t *md = ucs_derived_of(tl_md, uct_cuda_copy_md_t);
+    ucs_memory_info_t default_mem_info    = {
         .type         = UCS_MEMORY_TYPE_HOST,
         .sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN,
         .base_address = (void*)address,
         .alloc_length = length
     };
-    uct_cuda_copy_md_t *md = ucs_derived_of(tl_md, uct_cuda_copy_md_t);
-    uct_cuda_copy_md_dmabuf_t dmabuf = {
+    uct_cuda_copy_md_dmabuf_t dmabuf      = {
         .fd     = UCT_DMABUF_FD_INVALID,
         .offset = 0
     };
-    int dmabuf_queried               = 0;
-    int fallback_dmabuf_queried      = 0;
-    int is_async_managed             = 0;
+    int dmabuf_queried                    = 0;
+    int fallback_dmabuf_queried           = 0;
+    int is_async_managed                  = 0;
     uct_dmabuf_map_type_t dmabuf_map_type = UCT_DMABUF_MAP_TYPE_HOST;
     uct_dmabuf_map_type_t UCS_V_UNUSED fallback_dmabuf_map_type =
             UCT_DMABUF_MAP_TYPE_HOST;
