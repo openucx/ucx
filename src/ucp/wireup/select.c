@@ -20,10 +20,13 @@
 #include <ucp/core/ucp_ep.inl>
 #include <string.h>
 #include <inttypes.h>
+#include <math.h>
 
 #define UCP_WIREUP_RMA_BW_TEST_MSG_SIZE    262144
 #define UCP_WIREUP_MAX_FLAGS_STRING_SIZE   50
 #define UCP_WIREUP_PATH_INDEX_UNDEFINED    UINT_MAX
+#define UCP_WIREUP_SCORE_MAX_DIFF          0.02
+#define UCP_WIREUP_NO_SCORE_TIEBREAK       (-1.0)
 
 /* 6 for the string format constant length */
 #define UCP_WIREUP_TLS_INFO_SIZE       (UCP_WIREUP_UCT_INFO_SIZE + \
@@ -352,9 +355,8 @@ ucp_wireup_check_keepalive(const ucp_wireup_select_params_t *select_params,
 }
 
 static void
-ucp_wireup_init_select_info(double score, unsigned addr_index,
-                            ucp_rsc_index_t rsc_index,
-                            uint8_t priority,
+ucp_wireup_init_select_info(double score, double tiebreak, unsigned addr_index,
+                            ucp_rsc_index_t rsc_index, uint8_t priority,
                             ucp_wireup_select_info_t *select_info)
 {
     /* score == 0.0 could be specified only when initializing a selection info
@@ -362,10 +364,45 @@ ucp_wireup_init_select_info(double score, unsigned addr_index,
     ucs_assert((score >= 0.0) || (rsc_index == UCP_NULL_RESOURCE));
 
     select_info->score      = score;
+    select_info->tiebreak   = tiebreak;
     select_info->addr_index = addr_index;
     select_info->path_index = UCP_WIREUP_PATH_INDEX_UNDEFINED;
     select_info->rsc_index  = rsc_index;
     select_info->priority   = priority;
+}
+
+/*
+ * Select by tiebreak only among candidates whose score is close to the best
+ * primary score. Keep the reference score fixed so later updates to *sinfo
+ * cannot change the tiebreak window and make the result depend on iteration
+ * order.
+ */
+static void ucp_wireup_select_transport_tiebreak(
+        const ucp_proto_select_info_array_t *candidates_array,
+        ucp_wireup_select_info_t *sinfo)
+{
+    const double ref_score = sinfo->score;
+    int found              = 0;
+    const ucp_wireup_select_info_t *candidate;
+
+    ucs_array_for_each(candidate, candidates_array) {
+        if (fabs(candidate->score - ref_score) >
+            (UCP_WIREUP_SCORE_MAX_DIFF * ref_score)) {
+            continue;
+        }
+
+        if (!found ||
+            (ucp_score_prio_cmp(candidate->tiebreak, candidate->priority,
+                                sinfo->tiebreak, sinfo->priority) > 0)) {
+            *sinfo = *candidate;
+            found  = 1;
+        }
+    }
+
+    ucs_assertv(found, "score=%f tiebreak=%f addr_index=%u path_index=%u "
+                "rsc_index=%d priority=%u", sinfo->score, sinfo->tiebreak,
+                sinfo->addr_index, sinfo->path_index, sinfo->rsc_index,
+                sinfo->priority);
 }
 
 static size_t
@@ -397,13 +434,20 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
 {
     UCS_STRING_BUFFER_ONSTACK(missing_flags_str,
                               UCP_WIREUP_MAX_FLAGS_STRING_SIZE);
-    const ucp_unpacked_address_t *address         = select_params->address;
-    ucp_ep_h ep                                   = select_params->ep;
-    ucp_worker_h worker                           = ep->worker;
-    ucp_context_h context                         = worker->context;
-    ucp_wireup_select_info_t sinfo                = {0};
-    int found                                     = 0;
-    ucp_wireup_select_flags_t local_iface_flags = criteria->local_iface_flags;
+    const ucp_unpacked_address_t *address          = select_params->address;
+    ucp_ep_h ep                                    = select_params->ep;
+    ucp_worker_h worker                            = ep->worker;
+    ucp_context_h context                          = worker->context;
+    const int has_tiebreak                         =
+            (criteria->calc_tiebreak != NULL);
+    ucp_proto_select_info_array_t candidates_array =
+            UCS_ARRAY_DYNAMIC_INITIALIZER;
+    ucp_wireup_select_info_t candidate_info        = {0};
+    ucp_wireup_select_info_t sinfo                 = {0};
+    int found                                      = 0;
+    ucp_wireup_select_flags_t local_iface_flags    =
+            criteria->local_iface_flags;
+    ucp_wireup_select_info_t *candidate_slot;
     int has_cm;
     uint64_t local_md_flags;
     ucp_tl_addr_bitmap_t addr_index_map, rsc_addr_index_map;
@@ -421,8 +465,9 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
     uct_iface_attr_t *iface_attr;
     uct_md_attr_v2_t *md_attr;
     const uct_component_attr_t *cmpt_attr;
+    ucs_status_t status;
     int is_reachable;
-    double score;
+    double score, tiebreak;
     uint8_t priority;
     int score_cmp;
     ucp_md_index_t md_index;
@@ -622,7 +667,12 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
             }
 
             score        = criteria->calc_score(wiface, md_attr, address, ae,
-                                                0, criteria->arg);
+                                                   0, criteria->arg);
+            tiebreak     = has_tiebreak ?
+                             criteria->calc_tiebreak(wiface, md_attr, address,
+                                                     ae, 0,
+                                                     criteria->tiebreak_arg) :
+                             UCP_WIREUP_NO_SCORE_TIEBREAK;
             priority     = iface_attr->priority + ae->iface_attr.priority;
             score_cmp    = found ?
                            ucp_score_prio_cmp(score, priority, sinfo.score,
@@ -630,12 +680,23 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
             is_reachable = 1;
 
             ucs_trace(UCT_TL_RESOURCE_DESC_FMT
-                      "->addr[%u] : %s score %.2f priority %d",
+                      "->addr[%u] : %s score %.2f tiebreak %.2f priority %d",
                       UCT_TL_RESOURCE_DESC_ARG(resource), addr_index,
-                      criteria->title, score, priority);
+                      criteria->title, score, tiebreak, priority);
+
+            ucp_wireup_init_select_info(score, tiebreak, addr_index, rsc_index,
+                                        priority, &candidate_info);
+            if (has_tiebreak) {
+                /* Save every reachable candidate so the tiebreak pass can
+                 * compare them after the best primary score is known. */
+                candidate_slot  = ucs_array_append(&candidates_array,
+                                                   status = UCS_ERR_NO_MEMORY;
+                                                   goto out_cleanup);
+                *candidate_slot = candidate_info;
+            }
+
             if (!found || (score_cmp > 0)) {
-                ucp_wireup_init_select_info(score, addr_index, rsc_index,
-                                            priority, &sinfo);
+                sinfo = candidate_info;
                 found = 1;
             }
         }
@@ -660,20 +721,30 @@ out:
                       address->name, tls_info);
         }
 
-        return UCS_ERR_UNREACHABLE;
+        status = UCS_ERR_UNREACHABLE;
+        goto out_cleanup;
+    }
+
+    if (has_tiebreak) {
+        ucp_wireup_select_transport_tiebreak(&candidates_array, &sinfo);
     }
 
     ucs_trace("ep %p: selected for %s: " UCT_TL_RESOURCE_DESC_FMT " md[%d]"
-              " -> '%s' address[%d],md[%d] score %.2f",
+              " -> '%s' address[%d],md[%d] score %.2f tiebreak %.2f",
               ep, criteria->title,
               UCT_TL_RESOURCE_DESC_ARG(
                       &context->tl_rscs[sinfo.rsc_index].tl_rsc),
               context->tl_rscs[sinfo.rsc_index].md_index, ucp_ep_peer_name(ep),
               sinfo.addr_index,
-              address->address_list[sinfo.addr_index].md_index, sinfo.score);
+              address->address_list[sinfo.addr_index].md_index, sinfo.score,
+              sinfo.tiebreak);
 
     *select_info = sinfo;
-    return UCS_OK;
+    status       = UCS_OK;
+
+out_cleanup:
+    ucs_array_cleanup_dynamic(&candidates_array);
+    return status;
 }
 
 static inline double
@@ -1020,13 +1091,11 @@ static uint64_t ucp_ep_get_context_features(const ucp_ep_h ep)
     return ep->worker->context->config.features;
 }
 
-static double ucp_wireup_rma_score_func(const ucp_worker_iface_t *wiface,
-                                        const uct_md_attr_v2_t *md_attr,
-                                        const ucp_unpacked_address_t *unpacked_addr,
-                                        const ucp_address_entry_t *remote_addr,
-                                        int is_prioritized_ep, void *arg)
+static double
+ucp_wireup_iface_score_bandwidth(const ucp_worker_iface_t *wiface,
+                                 const ucp_unpacked_address_t *unpacked_addr,
+                                 const ucp_address_entry_t *remote_addr)
 {
-    /* best for 4k messages */
     double local_bw;
 
     if (unpacked_addr->dst_version < 17) {
@@ -1036,12 +1105,30 @@ static double ucp_wireup_rma_score_func(const ucp_worker_iface_t *wiface,
         local_bw = ucp_wireup_iface_bw_distance(wiface);
     }
 
+    if (unpacked_addr->addr_version == UCP_OBJECT_VERSION_V2) {
+        /* FP8 is a lossy compression method, so in order to create a symmetric
+         * calculation we pack/unpack the local bandwidth as well */
+        local_bw = UCS_FP8_PACK_UNPACK(BANDWIDTH, local_bw);
+    }
+
+    return ucs_min(local_bw, remote_addr->iface_attr.bandwidth);
+}
+
+static double
+ucp_wireup_rma_score_func(const ucp_worker_iface_t *wiface,
+                          const uct_md_attr_v2_t *md_attr,
+                          const ucp_unpacked_address_t *unpacked_addr,
+                          const ucp_address_entry_t *remote_addr,
+                          int is_prioritized_ep, void *arg)
+{
+    /* best for 4k messages */
     return 1e-3 /
            (ucp_wireup_tl_iface_latency(
                 wiface, unpacked_addr, &remote_addr->iface_attr,
                 is_prioritized_ep) +
             wiface->attr.overhead +
-            (4096.0 / ucs_min(local_bw, remote_addr->iface_attr.bandwidth)));
+            (4096.0 / ucp_wireup_iface_score_bandwidth(wiface, unpacked_addr,
+                                                       remote_addr)));
 }
 
 static void ucp_wireup_fill_peer_err_criteria(ucp_wireup_criteria_t *criteria,
@@ -1108,6 +1195,8 @@ static void ucp_wireup_criteria_init(ucp_wireup_criteria_t *criteria)
     criteria->alloc_mem_types    = 0;
     criteria->is_keepalive       = 0;
     criteria->calc_score         = NULL;
+    criteria->calc_tiebreak      = NULL;
+    criteria->tiebreak_arg       = NULL;
     criteria->tl_rsc_flags       = 0;
     ucp_wireup_init_select_flags(&criteria->local_iface_flags, 0, 0);
     ucp_wireup_init_select_flags(&criteria->remote_iface_flags, 0, 0);
@@ -1142,7 +1231,7 @@ ucp_wireup_add_cm_lane(const ucp_wireup_select_params_t *select_params,
         return UCS_OK;
     }
 
-    ucp_wireup_init_select_info(0., UINT_MAX, UCP_NULL_RESOURCE, 0,
+    ucp_wireup_init_select_info(0., 0., UINT_MAX, UCP_NULL_RESOURCE, 0,
                                 &select_info);
 
     /* server is not a proxy because it can create all lanes connected */
@@ -1269,12 +1358,26 @@ ucp_wireup_am_score_func(const ucp_worker_iface_t *wiface,
                          const ucp_address_entry_t *remote_addr,
                          int is_prioritized_ep, void *arg)
 {
-    /* best end-to-end latency */
     return 1e-3 /
            (ucp_wireup_tl_iface_latency(
                 wiface, unpacked_addr, &remote_addr->iface_attr,
                 is_prioritized_ep) +
             wiface->attr.overhead + remote_addr->iface_attr.overhead);
+}
+
+/*
+ * AM-lane tiebreak: rank transports by bandwidth (scaled to MiB/s for a smaller,
+ * more readable value) to break ties between candidates with close scores.
+ */
+static double
+ucp_wireup_tiebreak_func(const ucp_worker_iface_t *wiface,
+                         const uct_md_attr_v2_t *md_attr,
+                         const ucp_unpacked_address_t *unpacked_addr,
+                         const ucp_address_entry_t *remote_addr,
+                         int is_prioritized_ep, void *arg)
+{
+    return ucp_wireup_iface_score_bandwidth(wiface, unpacked_addr,
+                                            remote_addr) / UCS_MBYTE;
 }
 
 static double ucp_tl_iface_bandwidth_ratio(ucp_context_h context,
@@ -1482,6 +1585,7 @@ ucp_wireup_add_am_lane(const ucp_wireup_select_params_t *select_params,
         ucp_wireup_criteria_init(&criteria);
         criteria.title              = "active messages";
         criteria.calc_score         = ucp_wireup_am_score_func;
+        criteria.calc_tiebreak      = ucp_wireup_tiebreak_func;
         criteria.lane_type          = UCP_LANE_TYPE_AM;
         criteria.tl_rsc_flags       =
                 (ep_init_flags & UCP_EP_INIT_ALLOW_AM_AUX_TL) ?
@@ -2428,6 +2532,7 @@ ucp_wireup_add_keepalive_lane(const ucp_wireup_select_params_t *select_params,
     criteria.local_md_flags     = 0;
     criteria.is_keepalive       = 1;
     criteria.calc_score         = ucp_wireup_keepalive_score_func;
+    criteria.calc_tiebreak      = ucp_wireup_tiebreak_func;
     /* Keepalive can also use auxiliary transports */
     criteria.tl_rsc_flags       = UCP_TL_RSC_FLAG_AUX;
     criteria.lane_type          = UCP_LANE_TYPE_KEEPALIVE;
@@ -2669,12 +2774,16 @@ static ucs_status_t ucp_wireup_select_set_locality_flags(
             continue;
         }
 
-        params.field_mask  = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
-                             UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR  |
-                             UCT_IFACE_IS_REACHABLE_FIELD_SCOPE;
-        params.device_addr = ae->dev_addr;
-        params.iface_addr  = ae->iface_addr;
-        params.scope       = UCT_IFACE_REACHABILITY_SCOPE_DEVICE;
+        params.field_mask         = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
+                                    UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR |
+                                    UCT_IFACE_IS_REACHABLE_FIELD_SCOPE |
+                                    UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR_LENGTH |
+                                    UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR_LENGTH;
+        params.device_addr        = ae->dev_addr;
+        params.iface_addr         = ae->iface_addr;
+        params.device_addr_length = ae->dev_addr_len;
+        params.iface_addr_length  = ae->iface_addr_len;
+        params.scope              = UCT_IFACE_REACHABILITY_SCOPE_DEVICE;
 
         if (uct_iface_is_reachable_v2(wiface->iface, &params)) {
             key->flags |= UCP_EP_CONFIG_KEY_FLAG_INTRA_NODE;
