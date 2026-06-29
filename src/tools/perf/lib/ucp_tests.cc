@@ -769,7 +769,7 @@ public:
         ep          = m_perf.ucp.ep;
         remote_addr = m_perf.ucp.remote_addr;
         rkey        = m_perf.ucp.rkey;
-        sn          = 1;
+        sn          = 0;
 
         ucp_perf_init_common_params(&length, &send_length, &send_datatype,
                                     &send_buffer, &recv_length, &recv_datatype,
