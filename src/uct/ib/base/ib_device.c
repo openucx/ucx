@@ -597,6 +597,15 @@ ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
     uct_ib_device_set_pci_id(dev, sysfs_path);
     dev->pci_bw = ucs_topo_get_pci_bw(dev_name, sysfs_path);
 
+    if ((dev->sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) &&
+        !uct_ib_device_has_active_port(dev)) {
+        ucs_debug("%s: setting sys_dev %d inactive because it has no active ports",
+                  dev_name, dev->sys_dev);
+        status = ucs_topo_sys_device_set_inactive(dev->sys_dev);
+        goto out_free_path_buffer;
+    }
+
+out_free_path_buffer:
     ucs_free(path_buffer);
 out:
     return status;
@@ -764,6 +773,20 @@ static unsigned long uct_ib_device_get_ib_gid_index(uct_ib_md_t *md)
     } else {
         return md->config.gid_index;
     }
+}
+
+int uct_ib_device_has_active_port(uct_ib_device_t *dev)
+{
+    uint8_t port_num;
+
+    for (port_num = dev->first_port;
+         port_num < dev->first_port + dev->num_ports; ++port_num) {
+        if (uct_ib_device_port_attr(dev, port_num)->state == IBV_PORT_ACTIVE) {
+            return 1;
+        }
+    }
+
+    return 0;
 }
 
 static ucs_status_t
@@ -1330,6 +1353,11 @@ ucs_status_t uct_ib_device_query_ports(uct_ib_device_t *dev, unsigned flags,
         status = UCS_ERR_NO_DEVICE;
         goto err_free;
     }
+
+    ucs_assertv(ucs_topo_device_is_active(dev->sys_dev),
+                "ib device with num_tl_devices > 0 is expected to be active; "
+                "sys_dev=%u",
+                dev->sys_dev);
 
     *num_tl_devices_p = num_tl_devices;
     *tl_devices_p     = tl_devices;

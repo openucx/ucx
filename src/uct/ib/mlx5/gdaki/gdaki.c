@@ -1512,6 +1512,13 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
         goto out;
     }
 
+    if (!ucs_topo_device_is_active(ib_md->dev.sys_dev)) {
+        ucs_debug("%s: sys_dev %d is inactive", uct_ib_device_name(&ib_md->dev),
+                  ib_md->dev.sys_dev);
+        status = UCS_ERR_NO_DEVICE;
+        goto out;
+    }
+
     UCS_INIT_ONCE(&dmat_once) {
         dmat = uct_gdaki_dev_matrix_init(ib_md, &dmat_length);
     }

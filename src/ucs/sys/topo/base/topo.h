@@ -434,6 +434,27 @@ int ucs_topo_device_has_sibling(ucs_sys_device_t sys_dev);
 
 
 /**
+ * Mark a system device as inactive.
+ *
+ * @param [in] sys_dev System device index.
+ *
+ * @return UCS_OK on success, error otherwise.
+ */
+ucs_status_t ucs_topo_sys_device_set_inactive(ucs_sys_device_t sys_dev);
+
+
+/**
+ * Check whether a system device is active.
+ *
+ * @param [in] sys_dev System device index.
+ *
+ * @return Nonzero if the device is active. UNKNOWN is treated as active;
+ *         an out-of-range device is treated as inactive.
+ */
+int ucs_topo_device_is_active(ucs_sys_device_t sys_dev);
+
+
+/**
  * Get the number of registered system devices.
  *
  * @return Number of system devices.

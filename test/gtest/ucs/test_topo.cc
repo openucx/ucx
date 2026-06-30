@@ -365,6 +365,41 @@ void test_topo::read_pcie_devices()
     closedir(dir);
 }
 
+UCS_TEST_F(test_topo, device_active) {
+    ucs_sys_bus_id_t bus_id;
+    ucs_sys_device_t dev;
+
+    bus_id.domain   = 0xffff;
+    bus_id.bus      = 0xfe;
+    bus_id.slot     = 0xfe;
+    bus_id.function = 3;
+
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, &dev));
+    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, dev);
+
+    /* Devices default to active */
+    EXPECT_TRUE(ucs_topo_device_is_active(dev));
+
+    /* UNKNOWN is treated as active*/
+    EXPECT_TRUE(ucs_topo_device_is_active(UCS_SYS_DEVICE_ID_UNKNOWN));
+
+    /* An out-of-range device id is treated as inactive */
+    EXPECT_FALSE(ucs_topo_device_is_active(ucs_topo_num_devices()));
+
+    /* set_inactive is a one-way latch */
+    ASSERT_UCS_OK(ucs_topo_sys_device_set_inactive(dev));
+    EXPECT_FALSE(ucs_topo_device_is_active(dev));
+
+    /* An UNKNOWN or out-of-range device id is rejected */
+    {
+        const scoped_log_handler slh(hide_errors_logger);
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+                  ucs_topo_sys_device_set_inactive(ucs_topo_num_devices()));
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+                  ucs_topo_sys_device_set_inactive(UCS_SYS_DEVICE_ID_UNKNOWN));
+    }
+}
+
 UCS_TEST_F(test_topo, sibling_error) {
     scoped_log_handler slh(hide_errors_logger);
     ASSERT_EQ(UCS_ERR_INVALID_PARAM, ucs_topo_sys_device_set_sys_dev_aux(1, 0));
@@ -430,4 +465,74 @@ UCS_TEST_F(test_topo, sibling) {
         ASSERT_FALSE(ucs_topo_is_sibling(hca_devs[0], gpu_dev));
         ASSERT_FALSE(ucs_topo_is_sibling(gpu_dev, hca_devs[0]));
     }
+}
+
+UCS_TEST_F(test_topo, sibling_inactive) {
+    read_pcie_devices();
+    if ((m_hcas.size() == 0) || (m_gpus.size() == 0) || (m_dmas.size() == 0)) {
+        UCS_TEST_SKIP_R("Not enough HCA, GPU and DMA PCIe device");
+    }
+
+    std::string sibling_gpu, sibling_dma;
+    get_siblings(m_hcas[0], sibling_gpu, sibling_dma);
+    if (sibling_dma.empty()) {
+        UCS_TEST_SKIP_R("No GPU/HCA sibling pair found");
+    }
+
+    auto hca_dev = register_device("hca0", m_hcas[0]);
+    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, hca_dev);
+    auto dma_dev = register_device("dma", sibling_dma);
+    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, dma_dev);
+    auto gpu_dev = register_device("gpu0", sibling_gpu);
+    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, gpu_dev);
+
+    /* Mark the NIC inactive (e.g. its port is down) before matching */
+    ASSERT_UCS_OK(ucs_topo_sys_device_set_inactive(hca_dev));
+
+    ASSERT_UCS_OK(ucs_topo_sys_device_set_sys_dev_aux(hca_dev, dma_dev));
+    ASSERT_UCS_OK(ucs_topo_sys_device_enable_aux_path(gpu_dev));
+
+    /* An inactive NIC must not be matched as a sibling */
+    EXPECT_FALSE(ucs_topo_is_sibling(hca_dev, gpu_dev));
+    EXPECT_FALSE(ucs_topo_device_has_sibling(gpu_dev));
+}
+
+UCS_TEST_F(test_topo, set_inactive_with_sibling) {
+    read_pcie_devices();
+    if ((m_hcas.size() == 0) || (m_gpus.size() == 0) || (m_dmas.size() == 0)) {
+        UCS_TEST_SKIP_R("Not enough HCA, GPU and DMA PCIe device");
+    }
+
+    std::string sibling_gpu, sibling_dma;
+    get_siblings(m_hcas[0], sibling_gpu, sibling_dma);
+    if (sibling_dma.empty()) {
+        UCS_TEST_SKIP_R("No GPU/HCA sibling pair found");
+    }
+
+    auto hca_dev = register_device("hca0", m_hcas[0]);
+    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, hca_dev);
+    auto dma_dev = register_device("dma", sibling_dma);
+    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, dma_dev);
+    auto gpu_dev = register_device("gpu0", sibling_gpu);
+    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, gpu_dev);
+
+    /* Establish the GPU/NIC sibling match first */
+    ASSERT_UCS_OK(ucs_topo_sys_device_set_sys_dev_aux(hca_dev, dma_dev));
+    ASSERT_UCS_OK(ucs_topo_sys_device_enable_aux_path(gpu_dev));
+    ASSERT_TRUE(ucs_topo_is_sibling(hca_dev, gpu_dev));
+
+    /* Deactivating a device that already has a sibling must fail and leave
+     * both the active state and the sibling link untouched */
+    {
+        const scoped_log_handler slh(hide_errors_logger);
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+                  ucs_topo_sys_device_set_inactive(hca_dev));
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+                  ucs_topo_sys_device_set_inactive(gpu_dev));
+    }
+
+    /* Nothing changes after the failure */
+    EXPECT_TRUE(ucs_topo_device_is_active(hca_dev));
+    EXPECT_TRUE(ucs_topo_device_is_active(gpu_dev));
+    EXPECT_TRUE(ucs_topo_is_sibling(hca_dev, gpu_dev));
 }

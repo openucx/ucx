@@ -60,6 +60,7 @@ typedef struct {
     unsigned                name_priority;
     ucs_numa_node_t         numa_node;
     uintptr_t               user_value;
+    int                     active;
 
     /* Secondary device for the current device */
     ucs_sys_device_t        sys_dev_aux;
@@ -378,6 +379,7 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
                 UCS_SYS_DEVICE_ID_UNKNOWN;
         ucs_topo_global_ctx.devices[*sys_dev].sys_dev_aux =
                 UCS_SYS_DEVICE_ID_UNKNOWN;
+        ucs_topo_global_ctx.devices[*sys_dev].active = 1;
 
         ucs_debug("added sys_dev %d for bus id %s", *sys_dev, name);
         status = UCS_OK;
@@ -609,10 +611,8 @@ ucs_topo_is_reachable(ucs_sys_device_t sys_dev, ucs_sys_device_t sys_dev_mem)
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
     result =
-            /*
-             * Memory device was never matched with a sibling, it does not
-             * mandate and auxiliary path.
-             */
+            /* Memory device was never matched with a sibling, it does not
+             * mandate an auxiliary path. */
             (ucs_topo_global_ctx.devices[sys_dev_mem].sibling_sys_dev ==
              UCS_SYS_DEVICE_ID_UNKNOWN) ||
             /* The device itself never uses auxiliary path */
@@ -631,6 +631,8 @@ int ucs_topo_is_sibling(ucs_sys_device_t sys_dev, ucs_sys_device_t sys_dev_mem)
     int is_sibling;
     ucs_topo_sibling_role_t UCS_V_UNUSED role_dev;
     ucs_topo_sibling_role_t UCS_V_UNUSED role_dev_mem;
+    int UCS_V_UNUSED sys_dev_active;
+    int UCS_V_UNUSED sys_dev_mem_active;
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
     is_sibling = (sys_dev < ucs_topo_global_ctx.num_devices) &&
@@ -639,13 +641,19 @@ int ucs_topo_is_sibling(ucs_sys_device_t sys_dev, ucs_sys_device_t sys_dev_mem)
                   sys_dev_mem);
 
     if (is_sibling) {
-        role_dev     = ucs_topo_global_ctx.devices[sys_dev].sibling_role;
-        role_dev_mem = ucs_topo_global_ctx.devices[sys_dev_mem].sibling_role;
+        role_dev       = ucs_topo_global_ctx.devices[sys_dev].sibling_role;
+        role_dev_mem   = ucs_topo_global_ctx.devices[sys_dev_mem].sibling_role;
+        sys_dev_active = ucs_topo_global_ctx.devices[sys_dev].active;
+        sys_dev_mem_active = ucs_topo_global_ctx.devices[sys_dev_mem].active;
         ucs_assertv((role_dev != UCS_TOPO_SIBLING_ROLE_NONE) &&
                     (role_dev_mem != UCS_TOPO_SIBLING_ROLE_NONE) &&
-                    (role_dev != role_dev_mem), "sys_dev=%u sys_dev_mem=%u"
-                    " sys_dev_role=%d sys_dev_mem_role=%d",
-                    sys_dev, sys_dev_mem, role_dev, role_dev_mem);
+                    (role_dev != role_dev_mem) && 
+                    sys_dev_active && sys_dev_mem_active,
+                    "sys_dev=%u sys_dev_mem=%u "
+                    "sys_dev_role=%d sys_dev_mem_role=%d "
+                    "sys_dev_active=%d sys_dev_mem_active=%d",
+                    sys_dev, sys_dev_mem, role_dev, role_dev_mem,
+                    sys_dev_active, sys_dev_mem_active);
     }
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
@@ -968,7 +976,9 @@ static int ucs_topo_sys_device_sibling_match(ucs_sys_device_t sys_dev,
     if ((ucs_topo_global_ctx.devices[sys_dev_mem].sibling_role !=
          UCS_TOPO_SIBLING_ROLE_MEM) ||
         (ucs_topo_global_ctx.devices[sys_dev].sibling_role !=
-         UCS_TOPO_SIBLING_ROLE_DEV)) {
+         UCS_TOPO_SIBLING_ROLE_DEV) ||
+        !ucs_topo_global_ctx.devices[sys_dev].active ||
+        !ucs_topo_global_ctx.devices[sys_dev_mem].active) {
         return 0;
     }
 
@@ -1054,6 +1064,47 @@ int ucs_topo_device_has_sibling(ucs_sys_device_t sys_dev)
     result = (sys_dev < ucs_topo_global_ctx.num_devices) &&
              (ucs_topo_global_ctx.devices[sys_dev].sibling_sys_dev !=
               UCS_SYS_DEVICE_ID_UNKNOWN);
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+
+    return result;
+}
+
+ucs_status_t ucs_topo_sys_device_set_inactive(ucs_sys_device_t sys_dev)
+{
+    ucs_status_t status = UCS_OK;
+
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+    if (sys_dev >= ucs_topo_global_ctx.num_devices) {
+        ucs_error("system device %d is invalid (max: %d)", sys_dev,
+                  ucs_topo_global_ctx.num_devices);
+        status = UCS_ERR_INVALID_PARAM;
+        goto out;
+    }
+
+    if (ucs_topo_global_ctx.devices[sys_dev].sibling_sys_dev !=
+        UCS_SYS_DEVICE_ID_UNKNOWN) {
+        ucs_error("cannot set device %d inactive: sibling %d already matched",
+                  sys_dev,
+                  ucs_topo_global_ctx.devices[sys_dev].sibling_sys_dev);
+        status = UCS_ERR_INVALID_PARAM;
+        goto out;
+    }
+
+    ucs_topo_global_ctx.devices[sys_dev].active = 0;
+
+out:
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+    return status;
+}
+
+int ucs_topo_device_is_active(ucs_sys_device_t sys_dev)
+{
+    int result;
+
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+    result = (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) ||
+             ((sys_dev < ucs_topo_global_ctx.num_devices) &&
+              ucs_topo_global_ctx.devices[sys_dev].active);
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
     return result;

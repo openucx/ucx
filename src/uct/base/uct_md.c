@@ -23,6 +23,7 @@
 #include <ucs/type/class.h>
 #include <ucs/sys/module.h>
 #include <ucs/sys/string.h>
+#include <ucs/sys/topo/base/topo.h>
 #include <ucs/time/time.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/vfs/base/vfs_obj.h>
@@ -115,6 +116,10 @@ ucs_status_t uct_md_query_tl_resources(uct_md_h md,
 
         /* add tl devices to overall list of resources */
         for (i = 0; i < num_tl_devices; ++i) {
+            ucs_assertv(ucs_topo_device_is_active(tl_devices[i].sys_device),
+                        "%s device %s sys_dev %d is inactive", tl->name,
+                        tl_devices[i].name, tl_devices[i].sys_device);
+
             ucs_strncpy_zero(tmp[num_resources + i].tl_name, tl->name,
                              sizeof(tmp[num_resources + i].tl_name));
             ucs_strncpy_zero(tmp[num_resources + i].dev_name, tl_devices[i].name,
