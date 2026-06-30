@@ -464,6 +464,8 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_rkey_unpack,
         goto err_free_rkey_handle;
     }
 
+    /* Check if peer is accessible, and if that check required mapping a memory
+     * handle, save it in the rkey handle */
     status = uct_cuda_ipc_is_peer_accessible(com, unpacked, rkey_handle,
                                              avail_cuda_device);
     if (cuda_device != avail_cuda_device) {
@@ -492,7 +494,6 @@ static void uct_cuda_ipc_rkey_release_unmap_memhandle(uct_rkey_t uct_rkey,
     uct_cuda_ipc_unpacked_rkey_t *unpacked_rkey;
     uct_cuda_ipc_extended_rkey_t *extended_rkey;
     uct_cuda_ipc_rkey_t *rkey;
-    ucs_status_t status;
 
     if ((uct_rkey == 0) || (handle == NULL)) {
         return;
@@ -507,13 +508,9 @@ static void uct_cuda_ipc_rkey_release_unmap_memhandle(uct_rkey_t uct_rkey,
     extended_rkey = &unpacked_rkey->super;
     rkey          = &extended_rkey->super;
 
-    status = uct_cuda_ipc_unmap_memhandle(
-            rkey->pid, extended_rkey->pid_ns, rkey->d_bptr,
-            rkey_handle->mapped_addr, rkey_handle->cu_dev,
-            uct_cuda_ipc_component.enable_remote_cache);
-    if (status != UCS_OK) {
-        ucs_warn("failed to unmap memhandle: %s", ucs_status_string(status));
-    }
+    uct_cuda_ipc_unmap_memhandle(rkey->pid, extended_rkey->pid_ns, rkey->d_bptr,
+                                 rkey_handle->mapped_addr, rkey_handle->cu_dev,
+                                 uct_cuda_ipc_component.enable_remote_cache);
 }
 
 static ucs_status_t uct_cuda_ipc_rkey_release(uct_component_t *component,
