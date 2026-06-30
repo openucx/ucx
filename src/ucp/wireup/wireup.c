@@ -576,12 +576,13 @@ out_unblock:
     return 0;
 }
 
-void ucp_wireup_update_flags(ucp_ep_h ucp_ep, uint32_t new_flags)
+void ucp_wireup_update_flags(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
+                             uint32_t new_flags)
 {
     ucp_lane_index_t lane;
     ucp_wireup_ep_t *wireup_ep;
 
-    for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep); ++lane) {
+    ucs_for_each_bit(lane, lanes) {
         wireup_ep = ucp_wireup_ep(ucp_ep_get_lane(ucp_ep, lane));
         if (wireup_ep == NULL) {
             continue;
@@ -610,7 +611,7 @@ void ucp_wireup_remote_connected(ucp_ep_h ep)
         ucp_ep_update_flags(ep, UCP_EP_FLAG_REMOTE_CONNECTED, 0);
     }
 
-    ucp_wireup_update_flags(ep,
+    ucp_wireup_update_flags(ep, UCS_MASK(ucp_ep_num_lanes(ep)),
                             UCP_WIREUP_EP_FLAG_REMOTE_CONNECTED |
                             UCP_WIREUP_EP_FLAG_READY);
     ucp_wireup_eps_progress_sched(ep);
@@ -1073,6 +1074,7 @@ ucp_wireup_process_lanes_addr_reply(
               rebuilt);
 
     if (rebuilt != 0) {
+        ucp_wireup_update_flags(ep, rebuilt, UCP_WIREUP_EP_FLAG_READY);
         ucp_wireup_eps_progress_sched(ep);
     }
 

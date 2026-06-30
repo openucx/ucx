@@ -221,7 +221,8 @@ void ucp_wireup_replay_pending_requests(ucp_ep_h ucp_ep,
                                         ucs_queue_head_t *tmp_pending_queue);
 
 /* add flags to all wireup_ep->flags */
-void ucp_wireup_update_flags(ucp_ep_h ep, uint32_t new_flags);
+void ucp_wireup_update_flags(ucp_ep_h ep, ucp_lane_map_t lanes,
+                             uint32_t new_flags);
 
 void ucp_wireup_remote_connected(ucp_ep_h ep);
 
