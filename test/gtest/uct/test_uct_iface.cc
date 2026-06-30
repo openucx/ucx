@@ -58,7 +58,12 @@ void test_uct_iface::test_is_reachable()
     ASSERT_UCS_OK(status);
 
     bool is_reachable = uct_iface_is_reachable_v2(iface, &params);
-    EXPECT_TRUE(is_reachable);
+    if (has_cuda_ipc()) {
+        EXPECT_FALSE(is_reachable);
+        EXPECT_EQ(std::string("same process"), std::string(info_str));
+    } else {
+        EXPECT_TRUE(is_reachable);
+    }
 
     // Allocate corrupted address buffers, make it larger than the correct
     // buffer size in case the corrupted data indicates a larger address length
@@ -93,4 +98,3 @@ UCS_TEST_P(test_uct_iface, is_reachable)
 }
 
 UCT_INSTANTIATE_TEST_CASE(test_uct_iface)
-UCT_INSTANTIATE_CUDA_IPC_TEST_CASE(test_uct_iface)
