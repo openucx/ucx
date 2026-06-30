@@ -67,12 +67,12 @@ struct ibv_device **ibv_get_device_list(int *num_devices)
         devs[i]->node_type      = IBV_NODE_UNSPECIFIED;
         devs[i]->transport_type = IBV_TRANSPORT_UNSPECIFIED;
 
-        sprintf(devs[i]->name, "rdmap%d", i);
-        sprintf(devs[i]->dev_name, "uverbs%d", i);
-        sprintf(devs[i]->dev_path, "%s/sys/class/infiniband/rdmap%d",
-                SYS_PATH, i);
-        sprintf(devs[i]->ibdev_path, "%s/sys/class/infiniband/uverbs%d",
-                SYS_PATH, i);
+        snprintf(devs[i]->name, sizeof(devs[i]->name), "rdmap%d", i);
+        snprintf(devs[i]->dev_name, sizeof(devs[i]->dev_name), "uverbs%d", i);
+        snprintf(devs[i]->dev_path, sizeof(devs[i]->dev_path),
+                 "%s/sys/class/infiniband/rdmap%d", SYS_PATH, i);
+        snprintf(devs[i]->ibdev_path, sizeof(devs[i]->ibdev_path),
+                 "%s/sys/class/infiniband/uverbs%d", SYS_PATH, i);
     }
 
     devs[i] = NULL;
@@ -149,6 +149,13 @@ static int dev_post_recv(struct ibv_qp *qp, struct ibv_recv_wr *wr,
 
     lock();
     for (; wr; wr = wr->next) {
+        if (wr->num_sge > MAX_SGE) {
+            if (bad_wr) {
+                *bad_wr = wr;
+            }
+            unlock();
+            return -1;
+        }
         recv_wr = calloc(1, sizeof(*recv_wr) +
                          ( wr->num_sge * sizeof(*recv_wr->sge)));
         if (recv_wr == NULL) {
