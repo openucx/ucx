@@ -93,6 +93,11 @@ static UCS_F_ALWAYS_INLINE ucs_memtype_cache_t *ucs_memtype_cache_get_global()
     return ucs_memtype_cache_global_instance;
 }
 
+void ucs_memtype_cache_global_create()
+{
+    ucs_memtype_cache_get_global();
+}
+
 static UCS_F_ALWAYS_INLINE void
 ucs_memory_info_set_unknown(ucs_memory_info_t *mem_info)
 {
