@@ -17,7 +17,7 @@ runs_on_dockers:
   # HCA RoCE (CX7)
   - {
       name: "hca-roce",
-      url: "harbor.mellanox.com/hpcx/x86_64/rhel10.0/builder:mofed-25.07-0.9.7.0",
+      url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:mofed-26.04-0.7.6.0",
       arch: x86_64,
       tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
       nodeSelector: "kubernetes.io/hostname=yok-t-ipp-blossom-prod-gpu-rdm-04",
