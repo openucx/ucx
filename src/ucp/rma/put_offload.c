@@ -462,10 +462,6 @@ ucp_proto_t ucp_put_sgl_offload_proto = {
 static void
 ucp_proto_put_sgl_offload_sw_probe(const ucp_proto_init_params_t *init_params)
 {
-    if (!init_params->worker->context->config.ext.proto_emulation_enable) {
-        return;
-    }
-
     ucp_proto_put_offload_zcopy_probe_param(init_params, 20, 0, 0);
 }
 
