@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -7,11 +7,14 @@
 #ifndef UCT_CUDA_IPC_CACHE_H_
 #define UCT_CUDA_IPC_CACHE_H_
 
-#include <ucs/datastruct/pgtable.h>
+#include "cuda_ipc_iface_address.h"
+#include "cuda_ipc_md.h"
+
 #include <ucs/datastruct/list.h>
+#include <ucs/datastruct/pgtable.h>
 #include <ucs/type/init_once.h>
 #include <ucs/type/spinlock.h>
-#include "cuda_ipc_md.h"
+
 #include <cuda.h>
 
 
@@ -28,7 +31,6 @@ struct uct_cuda_ipc_cache_region {
     void                    *mapped_addr; /**< Local mapped address */
     uint64_t                refcount;     /**< Track in-flight ops before unmapping*/
     CUdevice                cu_dev;       /**< CUDA device */
-    uint8_t                 in_lru;       /**< Whether region is on the LRU list */
 };
 
 
@@ -69,10 +71,9 @@ ucs_status_t uct_cuda_ipc_map_memhandle(uct_cuda_ipc_extended_rkey_t *key,
                                         ucs_log_level_t log_level);
 
 
-ucs_status_t uct_cuda_ipc_unmap_memhandle(pid_t pid, ucs_sys_ns_t pid_ns,
-                                          uintptr_t d_bptr,
-                                          const void *mapped_addr,
-                                          CUdevice cu_dev, int cache_enabled);
+void uct_cuda_ipc_unmap_memhandle(pid_t pid, ucs_sys_ns_t pid_ns,
+                                  uintptr_t d_bptr, const void *mapped_addr,
+                                  CUdevice cu_dev, int cache_enabled);
 
 
 /**
@@ -84,5 +85,11 @@ ucs_status_t uct_cuda_ipc_unmap_memhandle(pid_t pid, ucs_sys_ns_t pid_ns,
 void uct_cuda_ipc_cache_set_global_limits(unsigned long max_regions,
                                           size_t max_size);
 
+
+/**
+ * @brief Tear down all CUDA IPC remote caches for a peer process ID
+ */
+void uct_cuda_ipc_destroy_cache_by_iface_address(
+        const uct_cuda_ipc_iface_address_t *iface_address);
 
 #endif

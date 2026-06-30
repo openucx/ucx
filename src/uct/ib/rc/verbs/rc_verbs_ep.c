@@ -519,11 +519,20 @@ ucs_status_t uct_rc_verbs_ep_fence(uct_ep_h tl_ep, unsigned flags)
     return uct_rc_ep_fence(tl_ep, &ep->fi);
 }
 
-void uct_rc_verbs_ep_post_check(uct_ep_h tl_ep)
+ucs_status_t uct_rc_verbs_ep_post_check(uct_ep_h tl_ep, uct_completion_t *comp)
 {
-    uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
+    uct_rc_verbs_ep_t *ep       = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
+    uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface,
+                                                 uct_rc_verbs_iface_t);
 
-    uct_rc_verbs_ep_post_flush(ep, 0);
+    if (comp == NULL) {
+        uct_rc_verbs_ep_post_flush(ep, 0);
+        return UCS_OK;
+    }
+
+    uct_rc_verbs_ep_post_flush(ep, IBV_SEND_SIGNALED);
+    return uct_rc_txqp_add_flush_comp(&iface->super, &ep->super.super,
+                                      &ep->super.txqp, comp, ep->txcnt.pi);
 }
 
 void uct_rc_verbs_ep_vfs_populate(uct_rc_ep_t *rc_ep)

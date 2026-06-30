@@ -8,6 +8,7 @@
 #endif
 
 #include "rocm_base.h"
+#include "rocm_signal.h"
 
 #include <ucs/sys/string.h>
 #include <ucs/sys/module.h>
@@ -370,7 +371,7 @@ static void uct_rocm_base_dmabuf_export(const void *addr, const size_t length,
 
 ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
                                      const size_t length,
-                                     uct_md_mem_attr_t *mem_attr_p)
+                                     uct_md_mem_attr_v2_t *mem_attr_p)
 {
     size_t dmabuf_offset       = 0;
     int is_exported            = 0;
@@ -402,30 +403,30 @@ ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
         }
     }
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_MEM_TYPE) {
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE) {
         mem_attr_p->mem_type = mem_type;
     }
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_SYS_DEV) {
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_SYS_DEV) {
         mem_attr_p->sys_dev = sys_dev;
     }
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS) {
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_BASE_ADDRESS) {
         mem_attr_p->base_address = (void*) addr;
     }
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH) {
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_ALLOC_LENGTH) {
         mem_attr_p->alloc_length = length;
     }
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD) {
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD) {
         uct_rocm_base_dmabuf_export(addr, length, mem_type, &dmabuf_fd,
                                     &dmabuf_offset);
         mem_attr_p->dmabuf_fd = dmabuf_fd;
         is_exported           = 1;
     }
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET) {
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_OFFSET) {
         if (!is_exported) {
             uct_rocm_base_dmabuf_export(addr, length, mem_type, &dmabuf_fd,
                                         &dmabuf_offset);
@@ -434,7 +435,8 @@ ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
     }
 
     if (mem_type == UCS_MEMORY_TYPE_ROCM) {
-        ucs_memtype_cache_update(base_addr, base_size, mem_type, sys_dev);
+        ucs_memtype_cache_update(base_addr, base_size, mem_type, sys_dev,
+                                 UCS_MEM_FLAG_REGISTRABLE);
     }
 
     return UCS_OK;
@@ -544,6 +546,36 @@ uct_rocm_amd_gpu_product_t uct_rocm_base_get_gpu_product(void)
     }
 
     return gpu_product;
+}
+
+ucs_status_t uct_rocm_base_ep_flush(uct_ep_h tl_ep, ucs_mpool_t *signal_pool,
+                                    ucs_queue_head_t *signal_queue,
+                                    uct_completion_t *comp)
+{
+    uct_rocm_base_signal_desc_t *flush_signal;
+
+    if (ucs_queue_is_empty(signal_queue)) {
+        UCT_TL_EP_STAT_FLUSH(ucs_derived_of(tl_ep, uct_base_ep_t));
+        return UCS_OK;
+    }
+
+    if (comp == NULL) {
+        UCT_TL_EP_STAT_FLUSH_WAIT(ucs_derived_of(tl_ep, uct_base_ep_t));
+        return UCS_INPROGRESS;
+    }
+
+    flush_signal = ucs_mpool_get(signal_pool);
+    if (flush_signal == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    hsa_signal_store_screlease(flush_signal->signal, 0);
+    flush_signal->comp        = comp;
+    flush_signal->mapped_addr = NULL;
+    ucs_queue_push(signal_queue, &flush_signal->queue);
+
+    UCT_TL_EP_STAT_FLUSH_WAIT(ucs_derived_of(tl_ep, uct_base_ep_t));
+    return UCS_INPROGRESS;
 }
 
 UCS_MODULE_INIT() {

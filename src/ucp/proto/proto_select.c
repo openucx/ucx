@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -161,6 +161,10 @@ static ucs_status_t ucp_proto_thresholds_next_range(
     UCS_DYNAMIC_BITMAP_FOR_EACH_BIT(proto_idx, proto_mask) {
         proto = &ucs_array_elem(&proto_init->protocols, proto_idx);
         range = ucp_proto_flat_perf_find_lb(proto->flat_perf, msg_length);
+        if ((range == NULL) || (msg_length < range->start)) {
+            status = UCS_ERR_UNSUPPORTED;
+            goto out_unindent;
+        }
 
         *ucs_array_append(perf_list, status = UCS_ERR_NO_MEMORY;
                           goto out_unindent) = range->value;
@@ -217,11 +221,20 @@ ucp_proto_select_init_protocols(ucp_worker_h worker,
     ucs_array_init_dynamic(&proto_init->protocols);
     ucs_array_init_dynamic(&proto_init->priv_buf);
 
-    ucs_for_each_bit(init_params.proto_id, worker->context->proto_bitmap) {
+    UCS_STATIC_BITMAP_FOR_EACH_BIT(init_params.proto_id,
+                                   &worker->context->proto_bitmap) {
+        const ucp_proto_t *proto;
+
         ucs_assert(init_params.proto_id < ucp_protocols_count()); /* Coverity */
-        ucs_trace("probing %s", ucp_proto_id_field(init_params.proto_id, name));
+        proto = ucp_protocols[init_params.proto_id];
+        ucs_assertv(proto->dt_mask != 0, "%s: dt_mask must be set", proto->name);
+        if (!(UCS_BIT(select_param->dt_class) & proto->dt_mask)) {
+            continue;
+        }
+
+        ucs_trace("probing %s", proto->name);
         ucs_log_indent(1);
-        ucp_proto_id_call(init_params.proto_id, probe, &init_params);
+        proto->probe(&init_params);
         ucs_log_indent(-1);
     }
 
@@ -550,9 +563,20 @@ ucp_proto_select_lookup_slow(ucp_worker_h worker,
         return NULL;
     }
 
-    /* add to hash after initializing the temp element, since calling
-     * ucp_proto_select_elem_init() can recursively modify the hash
+    /* Add to hash after initializing the temp element, since calling
+     * ucp_proto_select_elem_init() can recursively modify the hash. For
+     * example, RNDV_RECV may probe RTR, which models its peer side by
+     * selecting RNDV_SEND; that RNDV_SEND may probe RTS and select the
+     * same RNDV_RECV key. Re-check the key because recursive lookup may
+     * have initialized this exact selection.
      */
+    khiter = kh_get(ucp_proto_select_hash, proto_select->hash, key.u64);
+    if (khiter != kh_end(proto_select->hash)) {
+        ucp_proto_select_elem_cleanup(&tmp_select_elem);
+        select_elem = &kh_value(proto_select->hash, khiter);
+        goto out;
+    }
+
     khiter = kh_put(ucp_proto_select_hash, proto_select->hash, key.u64,
                     &khret);
     ucs_assert_always(khret == UCS_KH_PUT_BUCKET_EMPTY);

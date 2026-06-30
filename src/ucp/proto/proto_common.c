@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -67,8 +67,9 @@ ucp_memory_info_t ucp_proto_common_select_param_mem_info(
                                    const ucp_proto_select_param_t *select_param)
 {
     ucp_memory_info_t mem_info = {
-        .type = select_param->mem_type,
-        .sys_dev = select_param->sys_dev
+        .type    = select_param->mem_type,
+        .sys_dev = select_param->sys_dev,
+        .flags   = select_param->op.mem_flags
     };
 
     return mem_info;
@@ -514,6 +515,16 @@ ucp_proto_common_filter_min_frag(const ucp_proto_init_params_t *params,
                           ucs_memory_type_names[reg_mem_type]);
                 return 0;
             }
+
+            if (!ucs_test_all_flags(common_params->reg_mem_info.flags,
+                                    md_attr->required_mem_flags)) {
+                ucs_trace("%s: md %s missing required_mem_flags=0x%x for "
+                          "mem_flags=0x%x",
+                          lane_desc, context->tl_mds[md_index].rsc.md_name,
+                          md_attr->required_mem_flags,
+                          common_params->reg_mem_info.flags);
+                return 0;
+            }
         } else if (!(md_attr->access_mem_types & UCS_BIT(reg_mem_type))) {
             /* Memory domain which does not require a registration for zero
              * copy operation must be able to access the relevant memory type */
@@ -560,7 +571,8 @@ ucp_proto_common_filter_min_frag(const ucp_proto_init_params_t *params,
 ucp_lane_index_t
 ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
                             unsigned flags, ucp_lane_type_t lane_type,
-                            uint64_t tl_cap_flags, ucp_lane_index_t max_lanes,
+                            uint64_t tl_cap_flags, uint64_t tl_v2_cap_flags,
+                            ucp_lane_index_t max_lanes,
                             ucp_lane_map_t exclude_map,
                             ucp_proto_common_filter_lane_cb_t filter,
                             ucp_lane_index_t *lanes)
@@ -573,6 +585,7 @@ ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
     const ucp_lane_map_t failed_lanes            =
         ucp_ep_config_get_failed_lanes(ep_config_key);
     const uct_iface_attr_t *iface_attr;
+    uct_iface_attr_v2_t iface_attr_v2;
     ucp_lane_index_t lane, num_lanes;
     const uct_md_attr_v2_t *md_attr;
     const uct_component_attr_t *cmpt_attr;
@@ -581,6 +594,7 @@ ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
     ucp_lane_map_t lane_map;
     char lane_desc[64];
     ucs_sys_device_t lane_sys_dev;
+    ucs_status_t status;
 
     if (max_lanes == 0) {
         return 0;
@@ -635,6 +649,26 @@ ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
         if (!ucs_test_all_flags(iface_attr->cap.flags, tl_cap_flags)) {
             ucs_trace("%s: no cap 0x%" PRIx64, lane_desc, tl_cap_flags);
             continue;
+        }
+
+        /* Check v2 iface capabilities */
+        if (tl_v2_cap_flags != 0) {
+            iface_attr_v2.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS;
+            status                   = uct_iface_query_v2(
+                    ucp_worker_iface(params->worker, rsc_index)->iface,
+                    &iface_attr_v2);
+            if (status != UCS_OK) {
+                ucs_trace("%s: iface_query_v2 failed: %s", lane_desc,
+                          ucs_status_string(status));
+                continue;
+            }
+
+            if (!ucs_test_all_flags(iface_attr_v2.cap.flags,
+                                    tl_v2_cap_flags)) {
+                ucs_trace("%s: no v2 cap 0x%" PRIx64, lane_desc,
+                          tl_v2_cap_flags);
+                continue;
+            }
         }
 
         md_index  = context->tl_rscs[rsc_index].md_index;
@@ -726,7 +760,9 @@ ucp_proto_common_reg_md_map(const ucp_proto_common_init_params_t *params,
            memory type, and needs a local memory handle for zero-copy
            communication */
         if ((md_attr->flags & UCT_MD_FLAG_NEED_MEMH) &&
-            (context->reg_md_map[select_param->mem_type] & UCS_BIT(md_index))) {
+            (context->reg_md_map[select_param->mem_type] & UCS_BIT(md_index)) &&
+            ucs_test_all_flags(select_param->op.mem_flags,
+                               md_attr->required_mem_flags)) {
             reg_md_map |= UCS_BIT(md_index);
         }
     }
@@ -766,7 +802,7 @@ void ucp_proto_request_select_error(ucp_request_t *req,
                                     size_t msg_length)
 {
     UCS_STRING_BUFFER_ONSTACK(sel_param_strb, UCP_PROTO_SELECT_PARAM_STR_MAX);
-    UCS_STRING_BUFFER_ONSTACK(proto_select_strb, UCP_PROTO_CONFIG_STR_MAX);
+    UCS_STRING_BUFFER_ONSTACK(proto_select_strb, UCS_ALLOCA_MAX_SIZE);
     ucp_ep_h ep = req->send.ep;
 
     ucp_proto_select_param_str(sel_param, ucp_operation_names, &sel_param_strb);
@@ -841,7 +877,9 @@ void ucp_proto_request_restart(ucp_request_t *req)
 
     status = proto_config->proto->reset(req);
     if (status != UCS_OK) {
-        ucs_assert_always(status == UCS_ERR_CANCELED);
+        ucs_assertv_always(status == UCS_ERR_CANCELED,
+                           "req %p, failed to reset: status %s", req,
+                           ucs_status_string(status));
         return;
     }
 

@@ -13,6 +13,7 @@
 %bcond_with    ze
 %bcond_without mlx5
 %bcond_with    efa
+%bcond_with    gda
 
 Name: ucx
 Version: @VERSION@
@@ -127,6 +128,7 @@ Provides header files and examples for developing with UCX.
            %_with_arg gdrcopy gdrcopy \
            %_with_arg ib verbs \
            %_with_arg mlx5 mlx5 \
+           %_with_arg gda gda \
            %_with_arg efa efa \
            %_with_arg knem knem \
            %_with_arg rdmacm rdmacm \
@@ -215,7 +217,7 @@ Provides static libraries required for developing with UCX.
 %if %{with vfs}
 %{_libdir}/pkgconfig/ucx-fuse.pc
 %endif
-%if %{with cuda} && %{with mlx5}
+%if %{with gda}
 %{_libdir}/pkgconfig/ucx-ib-mlx5-gda.pc
 %endif
 
@@ -436,7 +438,7 @@ Provides oneAPI Level Zero (ZE) Runtime support for UCX.
 %{_libdir}/ucx/libucm_ze.so.*
 %endif
 
-%if %{with cuda} && %{with mlx5}
+%if %{with gda}
 %package ib-mlx5-gda
 Requires: %{name}-cuda%{?_isa} = %{version}-%{release}
 Requires: %{name}-ib%{?_isa} = %{version}-%{release}
@@ -454,6 +456,8 @@ with the host CPU.
 %endif
 
 %changelog
+* Thu Jun 25 2026 Shachar Hasson <shasson@nvidia.com> 1.23.0-1
+- Bump version to 1.23.0
 * Wed Mar 18 2026 Yossi Itigin <yosefe@nvidia.com> 1.22.0-1
 - Bump version to 1.22.0
 * Mon Oct 20 2025 Leonid Genkin <lgenkin@nvidia.com> 1.21.0-1

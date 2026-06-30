@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2016. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2016-2026. ALL RIGHTS RESERVED.
  * Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
@@ -50,6 +50,7 @@ typedef struct ucp_dt_state {
 typedef struct {
     uint8_t          type;    /**< Memory type, use uint8 for compact size */
     ucs_sys_device_t sys_dev; /**< System device index */
+    uint8_t          flags;   /**< UCS memory flags */
 } ucp_memory_info_t;
 
 
@@ -58,6 +59,24 @@ extern const char *ucp_datatype_class_names[];
 size_t ucp_dt_pack(ucp_worker_h worker, ucp_datatype_t datatype,
                    ucs_memory_type_t mem_type, void *dest, const void *src,
                    ucp_dt_state_t *state, size_t length);
+
+ucs_status_t ucp_dt_mem_info_check_elem(ucp_context_h context,
+                                        const void *buffer, size_t length,
+                                        const ucp_memory_info_t *ref,
+                                        const char *dt_name, size_t index,
+                                        size_t count);
+
+ucs_status_t ucp_dt_mem_info_verify(const char *dt_name, size_t index,
+                                    const ucp_memory_info_t *cur,
+                                    const ucp_memory_info_t *ref,
+                                    size_t count);
+
+static UCS_F_ALWAYS_INLINE int
+ucp_memory_info_equal(const ucp_memory_info_t *a, const ucp_memory_info_t *b)
+{
+    return (a->type == b->type) && (a->sys_dev == b->sys_dev) &&
+           (a->flags == b->flags);
+}
 
 void ucp_mem_type_pack(ucp_worker_h worker, void *dest, const void *src,
                        size_t length, ucs_memory_type_t mem_type);

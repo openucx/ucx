@@ -11,6 +11,87 @@
 ### Features:
 ### Bugfixes:
 
+## 1.21.0 (June 24, 2026)
+### Features:
+#### UCP
+ * Added UCX_PROTO_EMULATION_ENABLE option to force zero-copy RMA protocol selection
+ * Added UCX_MAX_HCA_PER_GPU policy to limit GPU memory registrations to nearest HCAs
+ * Added device lanes that can access host memory for GPU transfer fallback
+ * Enabled gdr_copy for memtype endpoint transport
+#### UCT
+ * Added device channel pool support
+ * Added CPU memory usage as AMO local buffer for device operations
+#### RDMA CORE (IB, ROCE, etc.)
+ * Added UCX_IB_GDA_RETAIN_INACTIVE_CTX option to control inactive CUDA context retention in GDAKI
+ * Added configure option to enable or disable GGA transport
+#### Build
+ * Added --without-gda configure option
+ * Made cuRAND an optional dependency for perftest CUDA kernels
+#### CI/Testing
+ * Added dry-run package installation checks to the release package build
+### Bugfixes:
+#### Build
+ * Fixed support for -Og by disabling always-inline attributes
+#### UCP
+ * Fixed progress counter to return the actual operation status
+ * Fixed multi protocol minimum size handling for 1-byte operations
+ * Fixed endpoint finalization when no P2P or connection-manager lane is available
+#### UCT
+ * Fixed notify callback handling by adding a NULL check
+#### CUDA
+ * Fixed CUDA IPC accessibility cache separation for local and remote rkeys
+ * Fixed CUDA IPC cache/LRU invariant for referenced regions
+ * Fixed DMA-BUF offsets for interior CUDA addresses
+#### ROCM
+ * Fixed hangs in HIP MPI and OMB tests
+ * Fixed endpoint flush for in-flight ROCm operations
+#### RDMA CORE (IB, ROCE, etc.)
+ * Fixed GDA DMA-BUF offset handling
+ * Fixed GDA WQE ordering by using CAS-based readiness marking
+ * Fixed GDAKI CUDA context handling during endpoint creation
+ * Fixed GDAKI NIC/GPU mapping when CUDA_VISIBLE_DEVICES hides physical GPUs
+### TCP
+ * Fixed interface selection by skipping IPv4 link-local addresses
+#### UCS
+ * Reverted dynamically loaded external module/plugin support
+#### Packaging
+ * Fixed Debian maintainer field
+ * Fixed GDA RPM build
+ * Fixed GDA RPM/devel package layout for CUDA/GDA subpackages
+ * Fixed RPM/DEB handling when GDA is disabled
+
+## 1.20.1 (May 6, 2026)
+### Features:
+#### RDMA CORE (IB, ROCE, etc.)
+ * Added 'auto' option for UCX_IB_MLX5_DEVX_OBJECTS which disables DevX when ODP is available (for Grace)
+ * Prioritize routes with longer subnet masks for improved reachability check accuracy
+#### Documentation
+ * Clarified that user buffer can be modified after calling ucp_atomic_op_nbx
+### Bugfixes:
+#### Build
+* Fixed IB configuration const correctness for strchr() to allow compilation with GCC 15.2.1
+#### UCP
+ * Increased TLS info buffer size in transport selection to prevent potential truncation
+ * Fixed incorrect warning about valid environment variable names
+ * Fixed ucp_config_modify not reporting an error when no matching modifiable configuration exists.
+#### RDMA CORE (IB, ROCE, etc.)
+ * Fixed DevX objects flag handling
+ * Fixed device memory allocation alignment in MLX5 DevX
+ * Fixed IB memory handle flags enum order
+ * Disabled indirect atomic registration for Direct NIC
+ * Fixed stale destination endpoint ID and acks from before connection reset in UD transport
+ * Fix RoCE reachable route check when node_guuid is not unique among HCAs
+#### CUDA
+ * Fixed CUDA context handling for system device during rkey unpack
+#### ROCM
+ * Fixed HSA memory type check for newer ROCm releases
+#### UCS
+ * Fixed rcache locking for GDR copy
+#### Packaging
+ * Fix libnvidia-compute removal from ucx-cuda debian package dependencies, breaking existing installation
+ * Obsoleted KNEM sub-package
+ * Fix maintainer field in debian packaging
+
 ## 1.20.0 (December 2, 2025)
 ### Features:
 #### UCP

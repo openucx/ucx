@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -108,56 +108,6 @@ private:
     ucp_device_request_t *m_ptr;
 };
 
-UCS_F_DEVICE ucs_status_t
-ucp_test_kernel_get_state(const test_ucp_device_kernel_params_t &params,
-                          test_ucp_device_kernel_result_t &result)
-{
-    ucp_device_request_t *req_ptr = nullptr;
-    const uct_device_mem_element_t *uct_elem;
-    uct_device_ep_t *device_ep;
-    uint64_t remote_address;
-    uct_device_completion_t *comp;
-    ucs_status_t status = UCS_OK;
-
-    if (nullptr == params.remote_mem_list) {
-        return UCS_OK;
-    }
-
-    __syncthreads();
-    if (threadIdx.x == 0) {
-        for (unsigned i = 0; i < params.remote_mem_list->length; ++i) {
-            status = ucp_device_prepare_send_remote(params.remote_mem_list, i,
-                                                    remote_address, req_ptr,
-                                                    device_ep, uct_elem, comp);
-            if ((status == UCS_OK) && (device_ep != nullptr)) {
-                break;
-            }
-        }
-
-        result.producer_index = 0;
-        result.ready_index    = 0;
-#if HAVE_MLX5_DV
-        if ((status == UCS_OK) &&
-            (device_ep != nullptr) &&
-            (device_ep->uct_tl_id == UCT_DEVICE_TL_RC_MLX5_GDA)) {
-            uint16_t wqe_cnt;
-            uct_rc_gdaki_dev_ep_t *ep =
-                        reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(device_ep);
-            unsigned i;
-
-            for (i = 0; i < params.num_channels; i++) {
-                result.producer_index +=
-                        uct_rc_mlx5_gda_parse_cqe(ep, i, &wqe_cnt, nullptr) + 1;
-                result.ready_index += ep->qps[i].sq_ready_index;
-            }
-        }
-#endif
-    }
-
-    __syncthreads();
-    return status;
-}
-
 template<ucs_device_level_t level>
 UCS_F_DEVICE void
 ucp_test_kernel_job(const test_ucp_device_kernel_params_t &params,
@@ -175,11 +125,6 @@ ucp_test_kernel_job(const test_ucp_device_kernel_params_t &params,
             shared_reqs[device_request<level>::num_shared_reqs()];
     device_request<level> req(shared_reqs);
 
-    status = ucp_test_kernel_get_state(params, *result_ptr);
-    if (status != UCS_OK) {
-        return;
-    }
-
     ucp_device_request_t *req_ptr = params.with_request ? req.ptr() : nullptr;
     uint64_t flags                = params.with_no_delay ?
                                                 UCT_DEVICE_FLAG_NODELAY : 0;
@@ -196,11 +141,6 @@ ucp_test_kernel_job(const test_ucp_device_kernel_params_t &params,
     // function to the API.
     status = ucp_test_kernel_do_operation<level>(params, UCT_DEVICE_FLAG_NODELAY,
                                                  req.ptr());
-    if (status != UCS_OK) {
-        return;
-    }
-
-    status = ucp_test_kernel_get_state(params, *result_ptr);
 }
 
 template<ucs_device_level_t level>
@@ -256,8 +196,6 @@ launch_test_ucp_device_kernel(const test_ucp_device_kernel_params_t &params)
 
     ucx_cuda::device_result_ptr<test_ucp_device_kernel_result_t> result;
     result->status         = UCS_ERR_NOT_IMPLEMENTED;
-    result->producer_index = 0;
-    result->ready_index    = 0;
 
     switch (params.level) {
     case UCS_DEVICE_LEVEL_THREAD:
