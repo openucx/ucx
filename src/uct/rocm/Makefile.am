@@ -1,5 +1,6 @@
 #
 # Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2018. ALL RIGHTS RESERVED.
+# Copyright (C) Advanced Micro Devices, Inc. 2026. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 
@@ -14,6 +15,10 @@ libuct_rocm_la_LDFLAGS  = $(ROCM_LDFLAGS) $(ROCM_LIBS) -version-info $(SOVERSION
                           $(patsubst %, -Xlinker %, -L$(ROCM_ROOT)/lib -rpath $(ROCM_ROOT)/hip/lib -rpath $(ROCM_ROOT)/lib) \
                           $(patsubst %, -Xlinker %, --enable-new-dtags) \
                           $(patsubst %, -Xlinker %, -rpath $(ROCM_ROOT)/lib64)
+libuct_rocm_ladir       = $(includedir)/uct/rocm
+
+nobase_dist_libuct_rocm_la_HEADERS = \
+	ipc/rocm_ipc.h
 
 noinst_HEADERS = \
 	base/rocm_base.h \

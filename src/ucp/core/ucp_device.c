@@ -1,5 +1,6 @@
 /**
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025-2026. ALL RIGHTS RESERVED.
+ * Copyright (C) Advanced Micro Devices, Inc. 2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -106,8 +107,8 @@ static uct_allocated_memory_t ucp_device_mem_handle_hash_remove(void *handle)
 }
 
 static ucs_status_t
-ucp_device_detect_local_sys_dev(ucp_context_h context,
-                                ucs_memory_type_t mem_type,
+ucp_device_detect_local_sys_dev(const ucp_context_h context,
+                                const ucs_memory_type_t mem_type,
                                 ucs_sys_device_t *local_sys_dev)
 {
     ucs_memory_info_t mem_info;
@@ -310,7 +311,7 @@ out:
 
 static ucs_status_t ucp_device_local_mem_list_params_check(
         const ucp_device_mem_list_params_t *params, ucs_memory_type_t mem_type,
-        ucs_sys_device_t *local_sys_dev)
+        ucs_sys_device_t local_sys_dev)
 {
     const ucp_device_mem_list_elem_t *local_elements = UCS_PARAM_VALUE(
             UCP_DEVICE_MEM_LIST_PARAMS_FIELD, params, elements, ELEMENTS, NULL);
@@ -325,7 +326,6 @@ static ucs_status_t ucp_device_local_mem_list_params_check(
     const ucp_device_mem_list_elem_t *element;
     ucp_mem_h memh;
     size_t i;
-    ucs_status_t status;
 
     if ((local_elements == NULL) || (element_size == 0) ||
         (num_elements == 0) || (worker == NULL)) {
@@ -333,12 +333,6 @@ static ucs_status_t ucp_device_local_mem_list_params_check(
                   "element_size=%zu, num_elements=%zu, worker=%p",
                   local_elements, element_size, num_elements, worker);
         return UCS_ERR_INVALID_PARAM;
-    }
-
-    status = ucp_device_detect_local_sys_dev(worker->context, mem_type,
-                                             local_sys_dev);
-    if (status != UCS_OK) {
-        return status;
     }
 
     for (i = 0; i < num_elements; i++) {
@@ -351,9 +345,28 @@ static ucs_status_t ucp_device_local_mem_list_params_check(
             return UCS_ERR_INVALID_PARAM;
         }
 
-        if (memh->sys_dev != *local_sys_dev) {
+        if (memh->sys_dev != local_sys_dev) {
             ucs_error("mismatched local sys_dev for element=%zu", i);
             return UCS_ERR_UNSUPPORTED;
+        }
+    }
+
+    return UCS_OK;
+}
+
+static ucs_status_t
+ucp_device_detect_export_mem_type(const ucp_context_h context,
+                                  ucs_memory_type_t *export_mem_type_p,
+                                  ucs_sys_device_t *sys_dev_p)
+{
+    ucs_status_t status = UCS_ERR_UNSUPPORTED;
+    ucs_memory_type_t mem_type;
+
+    ucs_for_each_bit(mem_type, UCP_DEVICE_MEM_TYPES) {
+        status = ucp_device_detect_local_sys_dev(context, mem_type, sys_dev_p);
+        if (status == UCS_OK) {
+            *export_mem_type_p = mem_type;
+            break;
         }
     }
 
@@ -364,13 +377,27 @@ ucs_status_t
 ucp_device_local_mem_list_create(const ucp_device_mem_list_params_t *params,
                                  ucp_device_local_mem_list_h *mem_list_h)
 {
-    const ucs_memory_type_t export_mem_type = UCS_MEMORY_TYPE_CUDA;
-    ucs_status_t status;
-    uct_allocated_memory_t mem;
+    const ucp_worker_h worker = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_PARAMS_FIELD,
+                                               params, worker, WORKER, NULL);
+    ucs_memory_type_t export_mem_type;
     ucs_sys_device_t local_sys_dev;
+    uct_allocated_memory_t mem;
+    ucs_status_t status;
+
+    if (worker == NULL) {
+        ucs_error("missing worker in local mem list params");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    status = ucp_device_detect_export_mem_type(worker->context,
+                                               &export_mem_type,
+                                               &local_sys_dev);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     status = ucp_device_local_mem_list_params_check(params, export_mem_type,
-                                                    &local_sys_dev);
+                                                    local_sys_dev);
     if (status != UCS_OK) {
         ucs_error("failed to check local mem list params: %s",
                   ucs_status_string(status));
@@ -534,31 +561,19 @@ ucp_device_remote_mem_list_fill(const ucp_device_mem_list_elem_t *ucp_element,
 }
 
 static ucs_status_t ucp_device_remote_mem_list_create_handle(
-        const ucp_device_mem_list_params_t *params, ucs_memory_type_t mem_type,
-        uct_allocated_memory_t *mem)
+        const ucp_device_mem_list_params_t *params, const ucp_ep_h ep,
+        const ucs_memory_type_t mem_type, uct_allocated_memory_t *mem,
+        const ucs_sys_device_t local_sys_dev)
 {
-    const ucp_ep_h ep = ucp_device_remote_mem_list_get_first_ep(params);
     size_t uct_elem_size;
     size_t handle_size         = 0;
     ucp_tl_bitmap_t tl_bitmap[UCP_DEVICE_TL_TYPE_LAST] = {};
     const ucp_device_mem_list_elem_t *ucp_element;
     ucp_device_remote_mem_list_t *handle;
     uct_device_remote_mem_elem_t *uct_element;
-    ucs_sys_device_t local_sys_dev;
     size_t i, num_lanes;
     ucs_status_t status;
     int tl_type;
-
-    if (ep == NULL) {
-        ucs_error("no ep found in remote mem list");
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    status = ucp_device_detect_local_sys_dev(ep->worker->context, mem_type,
-                                             &local_sys_dev);
-    if (status != UCS_OK) {
-        return status;
-    }
 
     ucp_device_get_tl_bitmap(ep->worker, tl_bitmap, local_sys_dev);
 
@@ -582,7 +597,7 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
     uct_elem_size = sizeof(uct_device_remote_mem_elem_t) +
                     (sizeof(uct_device_remote_tl_elem_t) * num_lanes);
     handle_size   = sizeof(*handle) + (params->num_elements * uct_elem_size);
-    handle      = ucs_calloc(1, handle_size, "ucp_device_remote_mem_list_t");
+    handle        = ucs_calloc(1, handle_size, "ucp_device_remote_mem_list_t");
     if (handle == NULL) {
         ucs_error("failed to allocate ucp_device_remote_mem_list_t");
         return UCS_ERR_NO_MEMORY;
@@ -601,7 +616,7 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
 
             if (tl_type == UCP_DEVICE_TL_TYPE_LAST) {
                 ucs_error("lane not found for element %zd", i);
-                status =  UCS_ERR_INVALID_PARAM;
+                status = UCS_ERR_INVALID_PARAM;
                 goto out;
             }
 
@@ -616,10 +631,10 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
         ucp_element = UCS_PTR_BYTE_OFFSET(ucp_element, params->element_size);
     }
 
-    handle->version = UCP_DEVICE_MEM_LIST_VERSION_V1;
-    handle->length  = params->num_elements;
+    handle->version   = UCP_DEVICE_MEM_LIST_VERSION_V1;
+    handle->length    = params->num_elements;
     handle->num_lanes = num_lanes;
-    status          = ucp_device_mem_list_export_handle(
+    status            = ucp_device_mem_list_export_handle(
             ep->worker, handle, handle_size, mem_type, local_sys_dev, mem,
             "ucp_device_remote_mem_list_handle_t");
 
@@ -693,17 +708,31 @@ ucs_status_t
 ucp_device_remote_mem_list_create(const ucp_device_mem_list_params_t *params,
                                   ucp_device_remote_mem_list_h *mem_list_h)
 {
-    const ucs_memory_type_t export_mem_type = UCS_MEMORY_TYPE_CUDA;
-    ucs_status_t status;
+    const ucp_ep_h ep = ucp_device_remote_mem_list_get_first_ep(params);
+    ucs_memory_type_t export_mem_type;
+    ucs_sys_device_t sys_dev;
     uct_allocated_memory_t mem;
+    ucs_status_t status;
+
+    if (ep == NULL) {
+        ucs_error("no ep found in remote mem list params");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    status = ucp_device_detect_export_mem_type(ep->worker->context,
+                                               &export_mem_type, &sys_dev);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     status = ucp_device_remote_mem_list_params_check(params);
     if (status != UCS_OK) {
         return status;
     }
 
-    status = ucp_device_remote_mem_list_create_handle(params, export_mem_type,
-                                                      &mem);
+    status = ucp_device_remote_mem_list_create_handle(params, ep,
+                                                      export_mem_type,
+                                                      &mem, sys_dev);
     if (status != UCS_OK) {
         /*
          * Do not log error for UCS_ERR_NOT_CONNECTED because it is expected

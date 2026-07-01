@@ -29,6 +29,8 @@ typedef struct uct_rocm_ipc_cache {
 ucs_status_t uct_rocm_ipc_create_cache(uct_rocm_ipc_cache_t **cache,
                                        const char *name);
 
+ucs_status_t uct_rocm_ipc_component_init_cache(void);
+
 void uct_rocm_ipc_destroy_cache(uct_rocm_ipc_cache_t *cache);
 
 ucs_status_t uct_rocm_ipc_cache_map_memhandle(void *arg, uct_rocm_ipc_key_t *key,

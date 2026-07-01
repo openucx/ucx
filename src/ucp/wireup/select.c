@@ -1,6 +1,7 @@
 /**
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  * Copyright (C) Los Alamos National Security, LLC. 2019 ALL RIGHTS RESERVED.
+ * Copyright (C) Advanced Micro Devices, Inc. 2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -2598,7 +2599,8 @@ ucp_wireup_add_device_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_wireup_select_bw_info_t bw_info = {};
     const uint64_t mem_type_bitmaps[]   = {UCS_BIT(UCS_MEMORY_TYPE_CUDA),
                                            UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
-                                                   UCS_BIT(UCS_MEMORY_TYPE_HOST)};
+                                                   UCS_BIT(UCS_MEMORY_TYPE_HOST),
+                                           UCS_BIT(UCS_MEMORY_TYPE_ROCM)};
     int found_lane                      = 0;
     size_t i;
     ucp_tl_bitmap_t mem_type_tl_bitmap;

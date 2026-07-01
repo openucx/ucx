@@ -1,5 +1,6 @@
 /**
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025. ALL RIGHTS RESERVED.
+ * Copyright (C) Advanced Micro Devices, Inc. 2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -13,11 +14,11 @@
 /*
  * Declare GPU specific functions
  */
-#ifdef __NVCC__
+#if defined(__NVCC__) || defined(__HIPCC__)
 #define UCS_F_DEVICE __device__ __forceinline__ static
 #else
 #define UCS_F_DEVICE static inline
-#endif /* __NVCC__ */
+#endif /* __NVCC__ || __HIPCC__ */
 
 
 #ifndef UCP_DEVICE_ENABLE_PARAMS_CHECK
@@ -31,6 +32,9 @@
 
 /* Number of threads in a warp */
 #define UCS_DEVICE_NUM_THREADS_IN_WARP 32
+
+/* Check if _n is aligned to a power-of-2 boundary _p */
+#define UCS_DEVICE_IS_ALIGNED_POW2(_n, _p) (!((_n) & ((_p) - 1)))
 
 
 /* nvcc does not provide __builtin_ia32_prefetch used by GCC's x86 intrinsic headers.
