@@ -11,6 +11,96 @@
 ### Features:
 ### Bugfixes:
 
+## 1.22.0-rc1 (June 29, 2026)
+### Features:
+#### UCP
+ * Added SGL datatype support for non-blocking PUT operations
+ * Added GET and PUT rendezvous protocols for RMA operations
+ * Added fault-tolerance recovery foundation
+ * Added AM, zcopy, multi, and PSN protocol failover support
+ * Added endpoint flush failover and first-fragment retransmission support
+ * Added multi-lane support for device operations
+ * Added memory registration flags to UCP/UCT/UCS APIs
+ * Enabled v2 operations on proxy and wireup endpoints
+#### UCT
+ * Added UCT v2 capability flags for SGL zcopy operations
+ * Enhanced endpoint connectivity checks
+#### RDMA CORE (IB, ROCE, etc.)
+ * Added plugin infrastructure for IB token query and plugin-provided RC extended operations
+ * Added per-endpoint RC transmit queue reservation for resource checks
+ * Added IB/MLX5 initiator small-fence WQE control flag
+ * Applied ECE returned by ibv_query_ece by default
+#### CUDA
+ * Added GDRCopy PCIe BAR1 export option
+#### UCS
+ * Added table builder debug API
+ * Added ucs_string_buffer_vappendf utility
+ * Added numeric range support for device configuration
+ * Added Vera CPU support
+#### Tools
+ * Added software GET responder progress support in perftest
+#### Build
+ * Added PR build modes
+ * Added Ubuntu 26.04, TencentOS 4.4, and GCC 15.2 build coverage
+ * Added GB300/aarch64 DL cluster test pipeline coverage
+ * Added parallel static checks
+ * Enabled on-demand DRP testing for release pipelines
+### Bugfixes:
+#### UCP
+ * Fixed endpoint fault-tolerance discard and failover flows
+ * Fixed fallback handling when no more lanes are available
+ * Fixed AM reply endpoint lookup during initialization
+ * Fixed memory release crash in active-message path
+ * Fixed rcache validity check before memory handle invalidation
+ * Fixed context creation when only accelerator devices are available
+ * Fixed error reporting when the transport/device resource limit is exceeded
+ * Fixed RMA rendezvous rkey size assertion
+ * Fixed bandwidth formatting macros
+ * Fixed single network-device filtering to use minimum distance
+ * Fixed protocol assertions and short selection diagnostics
+ * Fixed zero-length memory handle packing in trace logging
+#### ZE
+ * Fixed ZE driver enumeration, PCI fallback, IOV bounds, and DMA-BUF memory query semantics
+ * Fixed ZE memory query system-device detection
+#### CUDA
+ * Fixed CUDA managed-memory Valgrind failures
+ * Fixed CUDA IPC remote-cache destruction during endpoint destroy
+ * Fixed CUDA cleanup for destroyed contexts
+ * Fixed CUDA IPC single-process unmap checks
+ * Fixed CUDA NVLink detection
+ * Fixed CUDA IPC remote-cache handling for GET and PUT paths
+ * Fixed CUDA IPC reachability for same-process interfaces
+#### RDMA CORE (IB, ROCE, etc.)
+ * Fixed GGA GET zcopy purge completion
+ * Fixed GDA DMA-BUF offsets and on-demand DMA-BUF checks
+ * Fixed GDAKI Direct NIC matrix selection
+ * Fixed IB DEVX handling for UARs without WC support
+ * Fixed RoCE reachability for RTN_LOCAL routes
+ * Reverted ARM Neon BlueFlame writes in IB transport
+ * Fixed MLX5 DDP PUT fencing
+ * Fixed IB port-speed query logging for unsupported devices
+#### Shared Memory
+ * Fixed POSIX reachability failure logging in containers
+#### TCP
+ * Fixed TCP negative connect-test timeout
+#### Packaging
+ * Fixed GDA RPM/DEB packaging and RPM development package builds
+#### UCS
+ * Fixed stale async file descriptor event filtering
+ * Fixed IPv6 scope formatting
+ * Fixed time initialization to be multi-thread safe
+ * Fixed namespace identifier sizing for portability
+ * Fixed portability issues for non-glibc and clang environments
+#### Tools
+ * Fixed perftest ZE allocator thread safety and device routing
+ * Fixed I/O demo data-size range parsing
+#### Build
+ * Fixed GPUNetIO update failure reporting
+ * Fixed CMake policy version for examples tests
+ * Replaced ofed_info usage with native package-manager queries
+ * Fixed CI build result reporting on exceptions
+ * Excluded .ci/ changes from PR pipeline triggers
+
 ## 1.21.0 (June 24, 2026)
 ### Features:
 #### UCP
