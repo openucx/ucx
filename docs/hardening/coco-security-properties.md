@@ -11,11 +11,11 @@ preserve object lifetime, descriptor ownership, queue bounds, slot bounds, and
 non-CoCo behavior.
 
 The device and firmware are not trusted to provide authoritative metadata for
-control-object safety. DEVX/FW output is hostile. private UCX request state is
+control-object safety. DEVX/FW output is hostile. Private UCX request state is
 the authority for descriptor identity, operation ownership, object lifetime,
 queue placement, and completion interpretation.
 
-capability queries are availability hints, not security facts. A reported
+Capability queries are availability hints, not security facts. A reported
 device capability can decide whether a feature can be attempted, but it cannot
 prove that untrusted device output is safe to consume without UCX-side checks.
 

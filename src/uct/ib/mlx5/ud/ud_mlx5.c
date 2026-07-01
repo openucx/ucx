@@ -1090,7 +1090,7 @@ uct_ud_mlx5_query_tl_devices(uct_md_h md,
         return UCS_ERR_NO_DEVICE;
     }
 
-    if (!uct_ib_md_coco_transport_allowed(ib_md, "ud_mlx5")) {
+    if (uct_ib_md_is_coco_hardened(ib_md)) {
         return UCS_ERR_NO_DEVICE;
     }
 

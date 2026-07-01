@@ -13,7 +13,6 @@
 
 #include <uct/base/uct_md.h>
 #include <ucs/stats/stats.h>
-#include <string.h>
 
 #define UCT_IB_MD_MAX_MR_SIZE        0x80000000UL
 #define UCT_IB_MD_PACKED_RKEY_SIZE   sizeof(uint64_t)

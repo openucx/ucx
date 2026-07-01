@@ -40,6 +40,9 @@ uct_ib_mlx5_md_t make_mlx5_md(int coco_hardened)
     uct_ib_mlx5_md_t md = {};
 
     md.super.cc_dma_bounce = coco_hardened;
+    if (coco_hardened) {
+        md.super.coco_pd = reinterpret_cast<struct ibv_pd*>(uintptr_t(0x1));
+    }
     return md;
 }
 
@@ -302,7 +305,7 @@ void add_valid_cq_objects(uct_ib_mlx5_md_t *md, uint32_t send_cqn,
 class test_coco_hardening : public ucs::test {
 };
 
-UCS_TEST_F(test_coco_hardening, policy_helper_requires_cc_dma_bounce)
+UCS_TEST_F(test_coco_hardening, policy_helper_requires_coco_pd)
 {
     uct_ib_md_t md = {};
 
@@ -310,26 +313,29 @@ UCS_TEST_F(test_coco_hardening, policy_helper_requires_cc_dma_bounce)
     EXPECT_FALSE(uct_ib_md_is_coco_hardened(&md));
 
     md.cc_dma_bounce = 1;
+    EXPECT_FALSE(uct_ib_md_is_coco_hardened(&md));
+
+    md.coco_pd = reinterpret_cast<struct ibv_pd*>(uintptr_t(0x1));
     EXPECT_TRUE(uct_ib_md_is_coco_hardened(&md));
+
+    md.cc_dma_bounce = 0;
+    EXPECT_FALSE(uct_ib_md_is_coco_hardened(&md));
 }
 
-UCS_TEST_F(test_coco_hardening, policy_transport_rc_mlx5_only)
+UCS_TEST_F(test_coco_hardening, control_pd_uses_coco_pd_when_hardened)
 {
     uct_ib_md_t md = {};
 
-    md.cc_dma_bounce = 0;
-    EXPECT_TRUE(uct_ib_md_coco_transport_allowed(&md, "rc_mlx5"));
-    EXPECT_TRUE(uct_ib_md_coco_transport_allowed(&md, "dc_mlx5"));
-    EXPECT_TRUE(uct_ib_md_coco_transport_allowed(&md, "ud_mlx5"));
-    EXPECT_TRUE(uct_ib_md_coco_transport_allowed(&md, "rc_verbs"));
-    EXPECT_TRUE(uct_ib_md_coco_transport_allowed(&md, "ud_verbs"));
+    md.pd      = reinterpret_cast<struct ibv_pd*>(uintptr_t(0x1));
+    md.coco_pd = reinterpret_cast<struct ibv_pd*>(uintptr_t(0x2));
+
+    EXPECT_EQ(md.pd, uct_ib_md_control_pd(&md));
 
     md.cc_dma_bounce = 1;
-    EXPECT_TRUE(uct_ib_md_coco_transport_allowed(&md, "rc_mlx5"));
-    EXPECT_FALSE(uct_ib_md_coco_transport_allowed(&md, "dc_mlx5"));
-    EXPECT_FALSE(uct_ib_md_coco_transport_allowed(&md, "ud_mlx5"));
-    EXPECT_FALSE(uct_ib_md_coco_transport_allowed(&md, "rc_verbs"));
-    EXPECT_FALSE(uct_ib_md_coco_transport_allowed(&md, "ud_verbs"));
+    EXPECT_EQ(md.coco_pd, uct_ib_md_control_pd(&md));
+
+    md.coco_pd = NULL;
+    EXPECT_EQ(md.pd, uct_ib_md_control_pd(&md));
 }
 
 UCS_TEST_F(test_coco_hardening, config_rejects_tm)

@@ -111,7 +111,7 @@ uct_ib_mlx5_coco_default_umem_reg(uct_ib_mlx5_md_t *md,
                                   struct mlx5dv_devx_umem **umem_p,
                                   void *arg)
 {
-#if HAVE_DECL_MLX5DV_DEVX_UMEM_REG_EX && HAVE_DECL_MLX5DV_UMEM_MASK_DMABUF && \
+#if HAVE_MLX5DV_DEVX_UMEM_REG_EX && HAVE_DECL_MLX5DV_UMEM_MASK_DMABUF && \
     HAVE_STRUCT_MLX5DV_DEVX_UMEM_IN
     struct mlx5dv_devx_umem_in umem_in;
 
@@ -164,6 +164,9 @@ uct_ib_mlx5_coco_shared_alloc_backend = {
     NULL
 };
 
+/* Unit tests override the process-wide backend before creating MDs and restore
+ * it after the test; production code only uses the default backend.
+ */
 void uct_ib_mlx5_coco_set_shared_alloc_ops(
         const uct_ib_mlx5_coco_shared_alloc_ops_t *ops, void *arg)
 {

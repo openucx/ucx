@@ -882,7 +882,7 @@ uct_ud_verbs_query_tl_devices(uct_md_h md,
 {
     uct_ib_md_t *ib_md = ucs_derived_of(md, uct_ib_md_t);
 
-    if (!uct_ib_md_coco_transport_allowed(ib_md, "ud_verbs")) {
+    if (uct_ib_md_is_coco_hardened(ib_md)) {
         return UCS_ERR_NO_DEVICE;
     }
 

@@ -115,6 +115,28 @@ void uct_rc_mlx5_coco_apply_effective_config(
         return;
     }
 
+    if (mlx5_config->tm.enable || (mlx5_config->tm.mp_enable != UCS_NO) ||
+        (init_attr->flags & UCT_IB_TM_SUPPORTED)) {
+        ucs_diag("CoCo hardening disables RC mlx5 tag matching support");
+    }
+
+    if ((mlx5_config->ddp_enable != UCS_NO) ||
+        (init_attr->flags & UCT_IB_DDP_SUPPORTED)) {
+        ucs_diag("CoCo hardening disables RC mlx5 DDP support");
+    }
+
+    if (mlx5_config->super.cqe_zip_enable[UCT_IB_DIR_TX] ||
+        mlx5_config->super.cqe_zip_enable[UCT_IB_DIR_RX] ||
+        init_attr->cqe_zip_sizes[UCT_IB_DIR_TX] ||
+        init_attr->cqe_zip_sizes[UCT_IB_DIR_RX]) {
+        ucs_diag("CoCo hardening disables RC mlx5 CQE zipping support");
+    }
+
+    if (rc_config->super.inl[UCT_IB_DIR_TX] ||
+        rc_config->super.inl[UCT_IB_DIR_RX]) {
+        ucs_diag("CoCo hardening disables RC mlx5 inline send support");
+    }
+
     mlx5_config->tm.enable                         = 0;
     mlx5_config->tm.mp_enable                      = UCS_NO;
     mlx5_config->ddp_enable                        = UCS_NO;
@@ -157,7 +179,7 @@ void uct_rc_mlx5_coco_mask_capabilities(const uct_ib_mlx5_md_t *md,
 static void
 uct_rc_mlx5_coco_log_policy(const uct_ib_mlx5_md_t *md, const char *profile)
 {
-    ucs_info("CoCo hardening policy: md=%s cc_dma_bounce=%d hardened=%d "
+    ucs_debug("CoCo hardening policy: md=%s cc_dma_bounce=%d hardened=%d "
              "profile=%s",
              md->super.name == NULL ? "<unknown>" : md->super.name,
              md->super.cc_dma_bounce,
@@ -1243,10 +1265,6 @@ uct_rc_mlx5_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_
     int flags;
 
     if (strcmp(ib_md->name, UCT_IB_MD_NAME(mlx5))) {
-        return UCS_ERR_NO_DEVICE;
-    }
-
-    if (!uct_ib_md_coco_transport_allowed(ib_md, "rc_mlx5")) {
         return UCS_ERR_NO_DEVICE;
     }
 
