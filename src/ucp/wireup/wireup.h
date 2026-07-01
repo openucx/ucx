@@ -125,7 +125,7 @@ typedef struct {
 
     /* Maximum relative primary-score difference for tiebreak candidates.
      * Zero allows only scores equal according to ucs_fp_compare(). */
-    double                       tiebreak_max_diff;
+    double                       score_tolerance;
 
     /* Flags that describe TL specifics */
     uint8_t                      tl_rsc_flags;
