@@ -710,6 +710,13 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_datatype_iter_mem_reg(
     }
 }
 
+static UCS_F_ALWAYS_INLINE int
+ucp_datatype_iter_sgl_owns_memhs(const ucp_datatype_iter_t *dt_iter)
+{
+    return (dt_iter->type.sgl.memhs != NULL) &&
+           !ucp_memh_is_user_memh(dt_iter->type.sgl.memhs[0]);
+}
+
 /*
  * De-register memory and update iterator state
  */
@@ -723,7 +730,7 @@ ucp_datatype_iter_mem_dereg(ucp_datatype_iter_t *dt_iter, unsigned dt_mask)
             ucp_datatype_iter_iov_mem_dereg(dt_iter);
         }
     } else if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_SGL, dt_mask)) {
-        if (dt_iter->type.sgl.memhs != NULL) {
+        if (ucp_datatype_iter_sgl_owns_memhs(dt_iter)) {
             ucp_datatype_iter_sgl_mem_dereg(dt_iter);
         }
     }
