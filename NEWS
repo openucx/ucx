@@ -58,6 +58,7 @@
  * Fixed bandwidth formatting macros
  * Fixed single network-device filtering to use minimum distance
  * Fixed protocol assertions and short selection diagnostics
+ * Fixed zero-length memory handle packing in trace logging
 #### ZE
  * Fixed ZE driver enumeration, PCI fallback, IOV bounds, and DMA-BUF memory query semantics
  * Fixed ZE memory query system-device detection
@@ -67,6 +68,8 @@
  * Fixed CUDA cleanup for destroyed contexts
  * Fixed CUDA IPC single-process unmap checks
  * Fixed CUDA NVLink detection
+ * Fixed CUDA IPC remote-cache handling for GET and PUT paths
+ * Fixed CUDA IPC reachability for same-process interfaces
 #### RDMA CORE (IB, ROCE, etc.)
  * Fixed GGA GET zcopy purge completion
  * Fixed GDA DMA-BUF offsets and on-demand DMA-BUF checks
@@ -74,6 +77,10 @@
  * Fixed IB DEVX handling for UARs without WC support
  * Fixed RoCE reachability for RTN_LOCAL routes
  * Reverted ARM Neon BlueFlame writes in IB transport
+ * Fixed MLX5 DDP PUT fencing
+ * Fixed IB port-speed query logging for unsupported devices
+#### Shared Memory
+ * Fixed POSIX reachability failure logging in containers
 #### TCP
  * Fixed TCP negative connect-test timeout
 #### Packaging
