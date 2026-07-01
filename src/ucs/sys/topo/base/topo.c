@@ -398,7 +398,6 @@ ucs_topo_bus_value_hash_add_nolock(const ucs_sys_bus_id_t *bus_id,
 
 static ucs_status_t
 ucs_topo_find_device_by_bus_id_value(const ucs_sys_bus_id_t *bus_id,
-                                     const ucs_numa_node_t *numa_node_p,
                                      uintptr_t user_value,
                                      ucs_sys_device_t *sys_dev_p)
 {
@@ -436,8 +435,7 @@ ucs_topo_find_device_by_bus_id_value(const ucs_sys_bus_id_t *bus_id,
 
         ucs_topo_bus_id_str(bus_id, 1, name, UCS_SYS_BDF_NAME_MAX);
 
-        numa_node = (numa_node_p == NULL) ?
-                    ucs_topo_read_device_numa_node(bus_id) : *numa_node_p;
+        numa_node = ucs_topo_read_device_numa_node(bus_id);
 
         *sys_dev_p = ucs_topo_global_ctx.num_devices++;
         device     = &ucs_topo_global_ctx.devices[*sys_dev_p];
@@ -477,7 +475,7 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
     ucs_status_t status;
 
     status = ucs_topo_find_device_by_bus_id_value(
-            bus_id, NULL, UCS_SYS_DEVICE_USER_VALUE_EMPTY, sys_dev);
+            bus_id, UCS_SYS_DEVICE_USER_VALUE_EMPTY, sys_dev);
 
     return status;
 }
@@ -494,7 +492,7 @@ ucs_topo_find_device_by_bus_id_and_user_value(const ucs_sys_bus_id_t *bus_id,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    status = ucs_topo_find_device_by_bus_id_value(bus_id, NULL, user_value,
+    status = ucs_topo_find_device_by_bus_id_value(bus_id, user_value,
                                                   sys_dev_p);
 
     return status;
@@ -725,18 +723,22 @@ ucs_topo_is_reachable(ucs_sys_device_t sys_dev, ucs_sys_device_t sys_dev_mem)
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
     result =
+            (sys_dev >= ucs_topo_global_ctx.num_devices) ||
+            (sys_dev_mem >= ucs_topo_global_ctx.num_devices) ||
             /*
              * Memory device was never matched with a sibling, it does not
-             * mandate and auxiliary path.
+             * mandate an auxiliary path.
              */
             (ucs_topo_global_ctx.devices[sys_dev_mem].sibling_sys_dev ==
              UCS_SYS_DEVICE_ID_UNKNOWN) ||
             /* The device itself never uses auxiliary path */
             (ucs_topo_global_ctx.devices[sys_dev].sibling_role !=
              UCS_TOPO_SIBLING_ROLE_DEV) ||
-            /* The device and memory device identified each other as siblings */
-            (ucs_topo_global_ctx.devices[sys_dev].sibling_sys_dev ==
-             sys_dev_mem) ||
+            /*
+             * MPS MLOParts create multiple MEM aliases for one DEV. Each MEM
+             * alias records its matched DEV; the DEV stores only one
+             * representative MEM sibling.
+             */
             (ucs_topo_global_ctx.devices[sys_dev_mem].sibling_sys_dev ==
              sys_dev);
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
@@ -755,10 +757,12 @@ int ucs_topo_is_sibling(ucs_sys_device_t sys_dev, ucs_sys_device_t sys_dev_mem)
                  (sys_dev < ucs_topo_global_ctx.num_devices) &&
                  (sys_dev_mem != UCS_SYS_DEVICE_ID_UNKNOWN) &&
                  (sys_dev_mem < ucs_topo_global_ctx.num_devices) &&
-                 ((ucs_topo_global_ctx.devices[sys_dev].sibling_sys_dev ==
-                   sys_dev_mem) ||
-                  (ucs_topo_global_ctx.devices[sys_dev_mem].sibling_sys_dev ==
-                   sys_dev));
+                 (ucs_topo_global_ctx.devices[sys_dev].sibling_role ==
+                  UCS_TOPO_SIBLING_ROLE_DEV) &&
+                 (ucs_topo_global_ctx.devices[sys_dev_mem].sibling_role ==
+                  UCS_TOPO_SIBLING_ROLE_MEM) &&
+                 (ucs_topo_global_ctx.devices[sys_dev_mem].sibling_sys_dev ==
+                  sys_dev);
 
     if (is_sibling) {
         role_dev     = ucs_topo_global_ctx.devices[sys_dev].sibling_role;

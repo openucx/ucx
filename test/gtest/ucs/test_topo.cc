@@ -447,6 +447,7 @@ UCS_TEST_F(test_topo, sibling_error) {
     scoped_log_handler slh(hide_errors_logger);
     ASSERT_EQ(UCS_ERR_INVALID_PARAM, ucs_topo_sys_device_set_sys_dev_aux(1, 0));
     ASSERT_EQ(UCS_ERR_INVALID_PARAM, ucs_topo_sys_device_enable_aux_path(1));
+    ASSERT_TRUE(ucs_topo_is_reachable(1, 0));
 }
 
 UCS_TEST_F(test_topo, sibling) {
@@ -500,7 +501,6 @@ UCS_TEST_F(test_topo, sibling) {
     if (!sibling_dma.empty()) {
         ASSERT_FALSE(ucs_topo_is_reachable(hca_devs[1], gpu_dev));
         ASSERT_TRUE(ucs_topo_is_sibling(hca_devs[0], gpu_dev));
-        ASSERT_TRUE(ucs_topo_is_sibling(gpu_dev, hca_devs[0]));
     } else {
         ASSERT_TRUE(ucs_topo_is_reachable(hca_devs[1], gpu_dev));
         ASSERT_FALSE(ucs_topo_is_sibling(hca_devs[0], gpu_dev));
@@ -546,7 +546,6 @@ UCS_TEST_F(test_topo, sibling_multiple_memory_devices) {
         EXPECT_TRUE(ucs_topo_device_has_sibling(gpu_dev));
         EXPECT_TRUE(ucs_topo_is_reachable(hca_dev, gpu_dev));
         EXPECT_TRUE(ucs_topo_is_sibling(hca_dev, gpu_dev));
-        EXPECT_TRUE(ucs_topo_is_sibling(gpu_dev, hca_dev));
     };
 
     expect_sibling(gpu_dev0);
