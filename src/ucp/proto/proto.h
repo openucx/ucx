@@ -25,7 +25,7 @@
 
 
 /* Maximal number of protocols in total */
-#define UCP_PROTO_MAX_COUNT         65
+#define UCP_PROTO_MAX_COUNT         128
 
 
 /* Special value for non-existent protocol */
