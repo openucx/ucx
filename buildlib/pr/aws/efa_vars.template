@@ -1,0 +1,59 @@
+{
+    "podProperties": {
+        "containers": [
+            {
+                "command": [
+                    "/bin/sh",
+                    "-c",
+                    "${AWS_CMD}"
+                ],
+                "env": [
+                    {
+                        "name": "RUN_TESTS",
+                        "value": "${RUN_TESTS}"
+                    },
+                    {
+                        "name": "TEST_PERF",
+                        "value": "${TEST_PERF}"
+                    },
+                    {
+                        "name": "PROTO_ENABLE",
+                        "value": "${PROTO_ENABLE}"
+                    },
+                    {
+                        "name": "ASAN_CHECK",
+                        "value": "${ASAN_CHECK}"
+                    },
+                    {
+                        "name": "VALGRIND_CHECK",
+                        "value": "${VALGRIND_CHECK}"
+                    },
+                    {
+                        "name": "nworkers",
+                        "value": "${nworkers}"
+                    },
+                    {
+                        "name": "BUILD_NUMBER",
+                        "value": "${BUILD_NUMBER}"
+                    },
+                    {
+                        "name": "EXECUTOR_NUMBER",
+                        "value": "${EXECUTOR_NUMBER}"
+                    },
+                    {
+                        "name": "JOB_URL",
+                        "value": "${JOB_URL}"
+                    },
+                    {
+                        "name": "PR_ID",
+                        "value": "${PR_ID}"
+                    },
+                    {
+                        "name": "RUNNING_IN_AZURE",
+                        "value": "${RUNNING_IN_AZURE}"
+                    }
+                ]
+            }
+        ]
+    }
+}
