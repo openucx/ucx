@@ -555,3 +555,85 @@ UCS_TEST_F(test_cuda_ipc_cache_lru, stale_destroy_while_in_use) {
     EXPECT_EQ(0UL, m_cache->total_size);
     EXPECT_TRUE(ucs_list_is_empty(&m_cache->lru_list));
 }
+
+
+class test_cuda_copy_md : public test_md {
+protected:
+    static void alloc_vmm(size_t num_chunks, CUdeviceptr *va_p,
+                          std::vector<CUmemGenericAllocationHandle> *handles_p,
+                          size_t *chunk_size_p)
+    {
+        CUmemAllocationProp prop = {};
+        CUmemAccessDesc access   = {};
+        CUdevice cu_device;
+        size_t granularity;
+
+        ASSERT_EQ(CUDA_SUCCESS, cuCtxGetDevice(&cu_device));
+
+        prop.type          = CU_MEM_ALLOCATION_TYPE_PINNED;
+        prop.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
+        prop.location.id   = cu_device;
+
+        ASSERT_EQ(CUDA_SUCCESS,
+                  cuMemGetAllocationGranularity(
+                          &granularity, &prop,
+                          CU_MEM_ALLOC_GRANULARITY_MINIMUM));
+
+        *chunk_size_p = granularity;
+        size_t total  = granularity * num_chunks;
+
+        ASSERT_EQ(CUDA_SUCCESS,
+                  cuMemAddressReserve(va_p, total, granularity, 0, 0));
+
+        handles_p->resize(num_chunks);
+        for (size_t i = 0; i < num_chunks; i++) {
+            ASSERT_EQ(CUDA_SUCCESS,
+                      cuMemCreate(&(*handles_p)[i], granularity, &prop, 0));
+            ASSERT_EQ(CUDA_SUCCESS,
+                      cuMemMap(*va_p + i * granularity, granularity, 0,
+                               (*handles_p)[i], 0));
+        }
+
+        access.location = prop.location;
+        access.flags    = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
+        ASSERT_EQ(CUDA_SUCCESS, cuMemSetAccess(*va_p, total, &access, 1));
+    }
+
+    static void free_vmm(CUdeviceptr va,
+                          std::vector<CUmemGenericAllocationHandle> &handles,
+                          size_t chunk_size)
+    {
+        size_t total = chunk_size * handles.size();
+        for (size_t i = 0; i < handles.size(); i++) {
+            cuMemUnmap(va + i * chunk_size, chunk_size);
+            cuMemRelease(handles[i]);
+        }
+        cuMemAddressFree(va, total);
+    }
+};
+
+UCS_TEST_P(test_cuda_copy_md, vmm_multi_handle_range) {
+    const size_t num_chunks = 3;
+    CUdeviceptr va;
+    std::vector<CUmemGenericAllocationHandle> handles;
+    size_t chunk_size;
+
+    alloc_vmm(num_chunks, &va, &handles, &chunk_size);
+
+    uct_md_mem_attr_t mem_attr;
+    mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE |
+                          UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH;
+
+    /* Query the full multi-handle range; the guard preserves the caller's
+     * requested extent instead of shrinking to the single chunk that
+     * contains the base pointer. */
+    const size_t query_len = chunk_size * num_chunks;
+    ASSERT_UCS_OK(uct_md_mem_query(md(), (void*)va, query_len, &mem_attr));
+
+    EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, mem_attr.mem_type);
+    EXPECT_GE(mem_attr.alloc_length, query_len);
+
+    free_vmm(va, handles, chunk_size);
+}
+
+_UCT_MD_INSTANTIATE_TEST_CASE(test_cuda_copy_md, cuda_cpy);
