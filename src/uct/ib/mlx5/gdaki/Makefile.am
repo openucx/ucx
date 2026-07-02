@@ -10,7 +10,8 @@ libuct_ib_mlx5_gda_la_CPPFLAGS = $(BASE_CPPFLAGS) $(IBVERBS_CPPFLAGS) \
                                  $(CUDA_CPPFLAGS)
 libuct_ib_mlx5_gda_la_CFLAGS   = $(BASE_CFLAGS) $(LT_CFLAGS) $(CUDA_CFLAGS)
 libuct_ib_mlx5_gda_la_LDFLAGS  = $(IBVERBS_LDFLAGS) $(CUDA_LDFLAGS) \
-                                 -version-info $(SOVERSION)
+                                 -version-info $(SOVERSION) \
+                                 $(UCX_LT_RELEASE)
 libuct_ib_mlx5_gda_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
                                  $(top_builddir)/src/uct/libuct.la \
                                  $(top_builddir)/src/uct/ib/libuct_ib.la \
