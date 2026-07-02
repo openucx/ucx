@@ -304,14 +304,13 @@ out:
     return status;
 }
 
-ucs_status_t
-ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
-                       const ucp_tl_bitmap_t *tl_bitmap,
-                       const ucp_lane_index_t *lanes2remote,
-                       ucp_lane_map_t requested_lane_map,
-                       ucp_lane_map_t provided_lane_map,
-                       ucp_wireup_msg_t *msg_hdr, void **payload_p,
-                       size_t *payload_length_p)
+ucs_status_t ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
+                                    const ucp_tl_bitmap_t *tl_bitmap,
+                                    const ucp_lane_index_t *lanes2remote,
+                                    ucp_lane_map_t requested_lane_map,
+                                    ucp_lane_map_t provided_lane_map,
+                                    ucp_wireup_msg_t *msg_hdr, void **payload_p,
+                                    size_t *payload_length_p)
 {
     ucp_context_h context = ep->worker->context;
     unsigned pack_flags   = ucp_worker_default_address_pack_flags(ep->worker) |
@@ -451,8 +450,8 @@ static ucs_status_t ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type,
     req->send.uct.func = ucp_wireup_msg_progress;
     req->send.datatype = ucp_dt_make_contig(1);
     ucp_request_send_state_init(req, ucp_dt_make_contig(1), 0);
-    req->send.buffer   = payload;
-    req->send.length   = payload_length;
+    req->send.buffer = payload;
+    req->send.length = payload_length;
 
     status = ucp_wireup_msg_prepare(ep, type, tl_bitmap, lanes2remote, 0, 0,
                                     &req->send.wireup.msg_hdr,
@@ -1179,14 +1178,14 @@ ucp_wireup_process_lanes_addr_reply(
 /* -------------------------------------------------------------------------- */
 
 static ucs_status_t
-ucp_wireup_lane_query_tx_tokens(ucp_ep_h ep, ucp_lane_map_t lane_map,
+ucp_wireup_query_lane_tx_tokens(ucp_ep_h ep, ucp_lane_map_t lane_map,
                                 ucp_wireup_lane_state_t **lane_state_p,
                                 size_t *payload_size_p)
 {
     ucp_lane_map_t failover_lanes = 0;
-    unsigned token_index         = 0;
-    size_t token_offset          = 0;
-    size_t payload_size          = sizeof(ucp_wireup_lane_state_t);
+    unsigned token_index          = 0;
+    size_t token_offset           = 0;
+    size_t payload_size           = sizeof(ucp_wireup_lane_state_t);
     uint8_t token_lengths[UCP_MAX_LANES];
     ucp_wireup_lane_state_t *lane_state;
     ucp_rsc_index_t rsc_index;
@@ -1212,8 +1211,7 @@ ucp_wireup_lane_query_tx_tokens(ucp_ep_h ep, ucp_lane_map_t lane_map,
         status          = uct_iface_query_v2(wiface->iface, &attr);
         if ((status != UCS_OK) ||
             !(attr.cap.flags & UCT_IFACE_FLAG_V2_QUERY_TOKEN) ||
-            (attr.tx_token_length == 0) ||
-            (attr.tx_token_length > UINT8_MAX)) {
+            (attr.tx_token_length == 0) || (attr.tx_token_length > UINT8_MAX)) {
             ucs_trace("ep %p: lane %u: skip tx token query, status %s "
                       "cap_flags 0x%" PRIx64 " tx_token_length %zu",
                       ep, lane, ucs_status_string(status),
@@ -1224,7 +1222,7 @@ ucp_wireup_lane_query_tx_tokens(ucp_ep_h ep, ucp_lane_map_t lane_map,
 
         token_lengths[token_index++] = (uint8_t)attr.tx_token_length;
         payload_size                += attr.tx_token_length + sizeof(uint8_t);
-        failover_lanes               |= UCS_BIT(lane);
+        failover_lanes              |= UCS_BIT(lane);
     }
 
     if (failover_lanes == 0) {
@@ -1272,7 +1270,7 @@ err_free:
     return status;
 }
 
-static ucs_status_t ucp_wireup_lane_query_rx_tokens(
+static ucs_status_t ucp_wireup_query_lane_rx_tokens(
         ucp_ep_h ep, const ucp_wireup_lane_state_t *query, size_t length,
         ucp_wireup_lane_state_t **lane_state_p, size_t *payload_size_p)
 {
@@ -1401,7 +1399,7 @@ ucp_wireup_send_query_lane_state(ucp_ep_h ep, ucp_lane_map_t lane_map)
         return UCS_ERR_UNSUPPORTED;
     }
 
-    status = ucp_wireup_lane_query_tx_tokens(ep, lane_map, &lane_state,
+    status = ucp_wireup_query_lane_tx_tokens(ep, lane_map, &lane_state,
                                              &payload_size);
     if (status != UCS_OK) {
         return status;
@@ -1442,7 +1440,7 @@ ucp_wireup_process_query_lane_state(ucp_ep_h ep, const ucp_wireup_msg_t *msg,
               " lane_map 0x%lx",
               ep, msg->src_ep_id, lane_map);
 
-    status = ucp_wireup_lane_query_rx_tokens(ep, query, length, &reply,
+    status = ucp_wireup_query_lane_rx_tokens(ep, query, length, &reply,
                                              &reply_size);
     if (status != UCS_OK) {
         ucs_debug("ep %p: failed to query rx tokens: %s", ep,
