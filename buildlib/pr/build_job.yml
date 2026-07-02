@@ -32,6 +32,10 @@ jobs:
           ubuntu2404:
             CONTAINER: ubuntu2404
             build_mode: long
+          ubuntu2404_ze:
+            CONTAINER: ubuntu2404_ze
+            build_mode: short
+            require_ze: yes
           ubuntu2210:
             CONTAINER: ubuntu2210
             build_mode: sanity
@@ -152,4 +156,5 @@ jobs:
         env:
           BUILD_ID: "$(Build.BuildId)-$(Build.BuildNumber)"
           build_mode: $(build_mode)
+          require_ze: $(require_ze)
           test_static: $(test_static)

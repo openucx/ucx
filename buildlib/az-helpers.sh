@@ -97,6 +97,10 @@ function add_timestamp() {
 }
 
 function az_init_modules() {
+    # Some containers (e.g. public Intel oneAPI images) do not ship the
+    # Environment Modules system.  Skip initialisation gracefully so that
+    # subsequent az_module_load calls simply return "module not found".
+    [ -f /etc/profile.d/modules.sh ] || return 0
     . /etc/profile.d/modules.sh
     export MODULEPATH="/hpc/local/etc/modulefiles:$MODULEPATH"
     # Read module files (W/A if there're some network instabilities lead to autofs issues)

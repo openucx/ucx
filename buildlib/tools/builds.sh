@@ -10,15 +10,17 @@ requested_gcc_module=${GCC_MODULE:-}
 source ${realdir}/common.sh
 source ${realdir}/../az-helpers.sh
 build_mode=${build_mode:-}
+require_ze=${require_ze:-}
 
 # Azure passes the literal template variable when a matrix row does not define
 # build_mode. Treat it as unset so the local default below still applies.
 [ "${build_mode}" = "\$(build_mode)" ] && build_mode=
+[ "${require_ze}" = "\$(require_ze)" ] && require_ze=
 
 build_mode=${build_mode:-long}
 
 case "${build_mode}" in
-long|short|sanity|compilers)
+long|short|sanity|compilers|ze)
 	;;
 *)
 	azure_log_error "Unsupported build mode: ${build_mode}"
@@ -331,6 +333,27 @@ build_rocm() {
 }
 
 #
+# Build ZE (compile-only)
+#
+build_ze() {
+	# Only the dedicated ZE lane (require_ze=yes) installs libze-dev and
+	# is expected to build with ZE. Other lanes skip this step, mirroring
+	# how build_cuda / build_rocm skip when their toolkits are absent.
+	if [ "${require_ze}" != "yes" ]; then
+		echo "==== Not building with ZE (require_ze!=yes) ===="
+		return
+	fi
+
+	echo "==== Build with ZE (compile-only, strict) ===="
+	${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst \
+		"${compile_only_config_args[@]}" --with-ze
+	$MAKEP
+
+	grep '#define HAVE_ZE 1' config.h
+	make_clean distclean
+}
+
+#
 # Build with clang compiler
 #
 build_clang() {
@@ -507,7 +530,13 @@ check_no_gga() {
 	fi
 }
 
-az_init_modules
+# The ZE lane uses a public Intel container that does not have the MLNX
+# Environment Modules system (/etc/profile.d/modules.sh). Skip module
+# initialisation entirely; build_ze does not need any modules.
+if [ "${build_mode}" != "ze" ]; then
+	az_init_modules
+fi
+
 prepare_build
 
 base_tests=('build_docs' \
@@ -515,6 +544,7 @@ base_tests=('build_docs' \
 			'build_prof' \
 			'build_cuda' \
 			'build_rocm' \
+			'build_ze' \
 			'build_no_verbs' \
 			'build_release_pkg' \
 			'build_fuse')
@@ -522,6 +552,9 @@ base_tests=('build_docs' \
 case "${build_mode}" in
 sanity)
 	tests=('build_sanity')
+	;;
+ze)
+	tests=('build_ze')
 	;;
 short)
 	tests=("${base_tests[@]}")
