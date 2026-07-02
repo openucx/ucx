@@ -1233,6 +1233,23 @@ run_configure_tests() {
 		azure_log_error "some modules were not disabled without verbs"
 		exit 1
 	fi
+
+    if [ "$(uname -m)" = "x86_64" ]
+    then
+        ../contrib/configure-release --with-mtune=generic
+        if ! grep -qE '^BASE_CFLAGS=.*-mtune=generic' config.log
+        then
+            azure_log_error "error in detecting --with-mtune"
+            exit 1
+        fi
+
+        ../contrib/configure-release --with-march=x86-64
+        if ! grep -qE '^BASE_CFLAGS=.*-march=x86-64' config.log
+        then
+            azure_log_error "error in detecting --with-march"
+            exit 1
+        fi
+    fi
 }
 
 #
