@@ -10,6 +10,7 @@
 #include "lane_type.h"
 
 #include <ucp/core/ucp_types.h>
+#include <uct/api/v2/uct_v2.h>
 #include <ucs/datastruct/linear_func.h>
 #include <ucs/datastruct/static_bitmap.h>
 #include <ucs/datastruct/string_buffer.h>
@@ -24,7 +25,7 @@
 
 
 /* Maximal number of protocols in total */
-#define UCP_PROTO_MAX_COUNT         128
+#define UCP_PROTO_MAX_COUNT         65
 
 
 /* Special value for non-existent protocol */
