@@ -347,7 +347,8 @@ uct_rc_mlx5_verbs_create_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
     qp_init_attr.srq                 = iface->rx.srq.verbs.srq;
     qp_init_attr.cap.max_send_wr     = iface->tm.cmd_qp_len;
 
-    qp = UCS_PROFILE_CALL_ALWAYS(ibv_create_qp, md->pd, &qp_init_attr);
+    qp = UCS_PROFILE_CALL_ALWAYS(ibv_create_qp, uct_ib_md_control_pd(md),
+                                 &qp_init_attr);
     if (qp == NULL) {
         ucs_error("failed to create TM control QP: %m");
         goto err_rd;
@@ -951,7 +952,7 @@ ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
     srq_attr->attr.srq_limit      = 0;
     srq_attr->srq_context         = iface;
     srq_attr->srq_type            = IBV_SRQT_TM;
-    srq_attr->pd                  = md->pd;
+    srq_attr->pd                  = uct_ib_md_control_pd(md);
     srq_attr->cq                  = iface->super.super.cq[UCT_IB_DIR_RX];
     srq_attr->tm_cap.max_num_tags = iface->tm.num_tags;
 

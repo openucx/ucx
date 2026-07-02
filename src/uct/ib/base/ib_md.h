@@ -147,6 +147,8 @@ typedef enum {
 typedef struct uct_ib_md {
     uct_md_t                 super;
     struct ibv_pd            *pd;       /**< IB memory domain */
+    struct ibv_pd            *coco_pd;  /**< CoCo parent PD for control objects */
+    int                      cc_dma_bounce; /**< Device requires CoCo DMA bounce */
     uct_ib_device_t          dev;       /**< IB device */
     ucs_linear_func_t        reg_cost;  /**< Memory registration cost */
     UCS_STATS_NODE_DECLARE(stats)
@@ -179,6 +181,48 @@ typedef struct uct_ib_md {
         uint32_t             size;
     } mkey_by_name_reserve;
 } uct_ib_md_t;
+
+
+static UCS_F_ALWAYS_INLINE int
+uct_ib_device_is_cc_dma_bounce(const uct_ib_device_t *dev)
+{
+#if HAVE_DECL_IBV_DEVICE_CC_DMA_BOUNCE && HAVE_DECL_IBV_QUERY_DEVICE_EX
+    return !!(dev->dev_attr.device_cap_flags_ex &
+              IBV_DEVICE_CC_DMA_BOUNCE);
+#else
+    return 0;
+#endif
+}
+
+static UCS_F_ALWAYS_INLINE int uct_ib_md_is_cc_dma_bounce(const uct_ib_md_t *md)
+{
+    return md->cc_dma_bounce;
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_ib_md_is_coco_hardened(const uct_ib_md_t *md)
+{
+    return md->cc_dma_bounce && (md->coco_pd != NULL);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_ib_md_check_cc_dma_bounce_supported(const uct_ib_md_t *md,
+                                        const char *transport_name)
+{
+    if (!uct_ib_md_is_cc_dma_bounce(md)) {
+        return UCS_OK;
+    }
+
+    ucs_error("%s: %s does not support CoCo control-object allocation",
+              uct_ib_device_name(&md->dev), transport_name);
+    return UCS_ERR_UNSUPPORTED;
+}
+
+static UCS_F_ALWAYS_INLINE struct ibv_pd*
+uct_ib_md_control_pd(const uct_ib_md_t *md)
+{
+    return uct_ib_md_is_coco_hardened(md) ? md->coco_pd : md->pd;
+}
 
 
 typedef struct {

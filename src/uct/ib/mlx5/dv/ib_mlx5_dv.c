@@ -141,6 +141,9 @@ ucs_status_t uct_ib_mlx5_devx_create_qp_common(uct_ib_iface_t *iface,
     uct_ib_mlx5_mmio_mode_t mmio_mode;
     uct_ib_mlx5_devx_uar_t *uar;
     ucs_status_t status;
+    uct_ib_mlx5_coco_qp_req_t coco_req;
+    uint32_t wq_umem_id;
+    uint32_t qpn;
     void *qpc;
 
     uct_ib_iface_fill_attr(iface, &attr->super);
@@ -206,10 +209,12 @@ ucs_status_t uct_ib_mlx5_devx_create_qp_common(uct_ib_iface_t *iface,
         UCT_IB_MLX5DV_SET(qpc, qpc, no_sq, true);
         UCT_IB_MLX5DV_SET(qpc, qpc, offload_type, true);
         UCT_IB_MLX5DV_SET(create_qp_in, in, wq_umem_id, md->zero_mem.mem->umem_id);
+        wq_umem_id = md->zero_mem.mem->umem_id;
     } else {
         UCT_IB_MLX5DV_SET(create_qp_in, in, wq_umem_id, qp->devx.mem.mem->umem_id);
         UCT_IB_MLX5DV_SET64(create_qp_in, in, wq_umem_offset,
                             attr->umem_offset);
+        wq_umem_id = qp->devx.mem.mem->umem_id;
     }
 
     if (md->super.ece_enable) {
@@ -217,6 +222,21 @@ ucs_status_t uct_ib_mlx5_devx_create_qp_common(uct_ib_iface_t *iface,
                           UCT_IB_MLX5_DEVX_ECE_TRIG_RESP);
     }
 
+    coco_req.qp_type      = attr->super.qp_type;
+    coco_req.send_cqn     = send_cq->cq_num;
+    coco_req.recv_cqn     = recv_cq->cq_num;
+    coco_req.rmpn         = attr->super.srq_num;
+    coco_req.wq_umem_id   = wq_umem_id;
+    coco_req.dbr_umem_id  = qp->devx.dbrec->mem_id;
+    coco_req.sq_wqe_count = (attr->max_tx == 0) ? 1 : attr->max_tx;
+    coco_req.rq_wqe_count = 0;
+    if (uct_ib_md_is_coco_hardened(&md->super) &&
+        (attr->super.qp_type != IBV_QPT_RC)) {
+        status = UCS_ERR_UNSUPPORTED;
+        goto err_uar;
+    }
+
+    qp->qp_num   = 0;
     qp->devx.obj = uct_ib_mlx5_devx_obj_create(dev->ibv_context, in,
                                                sizeof(in), out, sizeof(out),
                                                "QP", UCS_LOG_LEVEL_ERROR);
@@ -225,7 +245,16 @@ ucs_status_t uct_ib_mlx5_devx_create_qp_common(uct_ib_iface_t *iface,
         goto err_uar;
     }
 
-    qp->qp_num = UCT_IB_MLX5DV_GET(create_qp_out, out, qpn);
+    if (uct_ib_md_is_coco_hardened(&md->super)) {
+        status = uct_ib_mlx5_coco_validate_qp_output(md, &coco_req, out,
+                                                     sizeof(out), &qpn);
+        if (status != UCS_OK) {
+            goto err_free;
+        }
+    } else {
+        qpn = UCT_IB_MLX5DV_GET(create_qp_out, out, qpn);
+    }
+    qp->qp_num = qpn;
 
     if (attr->super.qp_type == IBV_QPT_RC) {
         qpc = UCT_IB_MLX5DV_ADDR_OF(rst2init_qp_in, in_2init, qpc);
@@ -269,6 +298,9 @@ ucs_status_t uct_ib_mlx5_devx_create_qp_common(uct_ib_iface_t *iface,
     return UCS_OK;
 
 err_free:
+    if (uct_ib_md_is_coco_hardened(&md->super) && (qp->qp_num != 0)) {
+        (void)uct_ib_mlx5_coco_qpn_record_remove(md->coco, qp->qp_num);
+    }
     uct_ib_mlx5_devx_obj_destroy(qp->devx.obj, "QP");
 err_uar:
     uct_worker_tl_data_put(uar, uct_ib_mlx5_devx_uar_cleanup);
@@ -420,6 +452,7 @@ void uct_ib_mlx5_devx_destroy_qp_common(uct_ib_mlx5_qp_t *qp)
 void uct_ib_mlx5_devx_destroy_qp(uct_ib_mlx5_md_t *md, uct_ib_mlx5_qp_t *qp)
 {
     uct_ib_mlx5_devx_destroy_qp_common(qp);
+    (void)uct_ib_mlx5_coco_qpn_record_remove(md->coco, qp->qp_num);
     uct_ib_mlx5_put_dbrec(qp->devx.dbrec);
     uct_ib_mlx5_md_buf_free(md, qp->devx.wq_buf, &qp->devx.mem);
 }
@@ -574,7 +607,9 @@ uct_ib_mlx5_devx_create_cq_common(uct_ib_iface_t *iface, uct_ib_dir_t dir,
     int num_comp_vectors = dev->ibv_context->num_comp_vectors;
     int log_cq_size;
     ucs_status_t status;
+    uct_ib_mlx5_coco_cq_req_t coco_req;
     uint32_t eqn;
+    uint32_t cqn;
 
     log_cq_size = ucs_ilog2(attr->cq_size);
     UCT_IB_MLX5DV_SET(create_cq_in, in, opcode, UCT_IB_MLX5_CMD_OP_CREATE_CQ);
@@ -622,6 +657,15 @@ uct_ib_mlx5_devx_create_cq_common(uct_ib_iface_t *iface, uct_ib_dir_t dir,
         UCT_IB_MLX5DV_SET(cqc, cqctx, oi, 1);
     }
 
+    coco_req.cq_len         = attr->cq_size;
+    coco_req.cqe_size       = attr->cqe_size;
+    coco_req.cq_umem_id     = cq->devx.mem.mem->umem_id;
+    coco_req.cq_umem_offset = attr->umem_offset;
+    coco_req.dbr_umem_id    = cq->devx.dbrec->mem_id;
+    coco_req.dbr_offset     = cq->devx.dbrec->offset;
+    coco_req.eqn            = eqn;
+    coco_req.uar_page       = cq->devx.uar->uar->page_id;
+
     cq->devx.obj = uct_ib_mlx5_devx_obj_create(dev->ibv_context, in,
                                                sizeof(in), out, sizeof(out),
                                                "CQ", UCS_LOG_LEVEL_ERROR);
@@ -630,9 +674,19 @@ uct_ib_mlx5_devx_create_cq_common(uct_ib_iface_t *iface, uct_ib_dir_t dir,
         goto err_uar;
     }
 
+    if (uct_ib_md_is_coco_hardened(&md->super)) {
+        status = uct_ib_mlx5_coco_validate_cq_output(md, &coco_req, out,
+                                                     sizeof(out), &cqn);
+        if (status != UCS_OK) {
+            goto err_obj;
+        }
+    } else {
+        cqn = UCT_IB_MLX5DV_GET(create_cq_out, out, cqn);
+    }
+
     uct_ib_mlx5_init_cq_common(cq, attr->cq_size, attr->cqe_size,
-                               UCT_IB_MLX5DV_GET(create_cq_out, out, cqn),
-                               cq->devx.cq_buf, cq->devx.uar->uar->base_addr,
+                               cqn, cq->devx.cq_buf,
+                               cq->devx.uar->uar->base_addr,
                                cq->devx.dbrec->db,
                                !!(attr->flags & UCT_IB_MLX5_CQ_CQE_ZIP));
 
@@ -641,6 +695,8 @@ uct_ib_mlx5_devx_create_cq_common(uct_ib_iface_t *iface, uct_ib_dir_t dir,
     cq->type                       = UCT_IB_MLX5_OBJ_TYPE_DEVX;
     return UCS_OK;
 
+err_obj:
+    uct_ib_mlx5_devx_obj_destroy(cq->devx.obj, "CQ");
 err_uar:
     uct_worker_tl_data_put(cq->devx.uar, uct_ib_mlx5_devx_uar_cleanup);
 err:
@@ -706,6 +762,7 @@ void uct_ib_mlx5_devx_destroy_cq_common(uct_ib_mlx5_cq_t *cq)
 void uct_ib_mlx5_devx_destroy_cq(uct_ib_mlx5_md_t *md, uct_ib_mlx5_cq_t *cq)
 {
     uct_ib_mlx5_devx_destroy_cq_common(cq);
+    (void)uct_ib_mlx5_coco_cqn_record_remove(md->coco, cq->cq_num);
     uct_ib_mlx5_put_dbrec(cq->devx.dbrec);
     uct_ib_mlx5_md_buf_free(md, cq->devx.cq_buf, &cq->devx.mem);
 }

@@ -13,6 +13,7 @@
 #include <uct/base/uct_worker.h>
 #include <uct/ib/base/ib_log.h>
 #include <uct/ib/base/ib_device.h>
+#include <uct/ib/mlx5/ib_mlx5_coco.h>
 #include <uct/ib/mlx5/dv/ib_mlx5_ifc.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/debug/log.h>
@@ -39,8 +40,15 @@
 
 #include <infiniband/mlx5dv.h>
 #include <netinet/in.h>
+#include <sys/mman.h>
+#include <sys/ioctl.h>
 #include <endian.h>
+#include <fcntl.h>
 #include <string.h>
+#include <unistd.h>
+#if HAVE_LINUX_DMA_HEAP_H
+#  include <linux/dma-heap.h>
+#endif
 
 
 #define UCT_IB_MLX5_WQE_SEG_SIZE         16 /* Size of a segment in a WQE */
@@ -271,6 +279,8 @@ typedef struct uct_ib_mlx5_dma_seg {
 #if HAVE_DEVX
 typedef struct {
     struct mlx5dv_devx_obj *dvmr;
+    uint32_t               lkey;
+    uint32_t               rkey;
     int                    mr_num;
     size_t                 length;
     struct ibv_mr          *mrs[];
@@ -332,9 +342,13 @@ typedef struct {
 } uct_ib_mlx5_devx_mem_t;
 
 
-typedef struct {
+typedef struct uct_ib_mlx5_devx_umem {
     struct mlx5dv_devx_umem  *mem;
     size_t                   size;
+    size_t                   mmap_size;
+    int                      dmabuf_fd;
+    int                      is_dmabuf;
+    uct_ib_mlx5_coco_shared_alloc_t *coco_shared;
 } uct_ib_mlx5_devx_umem_t;
 
 
@@ -402,6 +416,7 @@ typedef struct uct_ib_mlx5_md {
     uint32_t                  flags;
     ucs_mpool_t               dbrec_pool;
     ucs_recursive_spinlock_t  dbrec_lock;
+    uct_ib_mlx5_coco_state_t  *coco;
     uct_ib_port_select_mode_t port_select_mode;
     ucs_sys_device_t          direct_nic_sys_dev;
 #if HAVE_DEVX
@@ -485,7 +500,7 @@ typedef struct uct_ib_mlx5_iface_config {
  * MLX5 DoorBell record
  */
 typedef struct uct_ib_mlx5_dbrec {
-   volatile uint32_t  db[2];
+   volatile uint32_t  *db;
    uint32_t           mem_id;
    size_t             offset;
    uct_ib_mlx5_md_t   *md;
@@ -1090,6 +1105,35 @@ void uct_ib_mlx5_cq_calc_sizes(uct_ib_iface_t *iface, uct_ib_dir_t dir,
                                const uct_ib_iface_init_attr_t *init_attr,
                                size_t inl, uct_ib_mlx5_cq_attr_t *attr);
 
+#define UCT_IB_MLX5_CC_DMA_HEAP "/dev/dma_heap/system_cc_shared"
+#define UCT_IB_MLX5_INVALID_DMABUF_FD (-1)
+
+static UCS_F_ALWAYS_INLINE void
+uct_ib_mlx5_devx_umem_reset(uct_ib_mlx5_devx_umem_t *mem)
+{
+    mem->mem       = NULL;
+    mem->size      = 0;
+    mem->mmap_size = 0;
+    mem->dmabuf_fd = UCT_IB_MLX5_INVALID_DMABUF_FD;
+    mem->is_dmabuf = 0;
+    mem->coco_shared = NULL;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_ib_mlx5_devx_umem_reg_status(int sys_errno)
+{
+    if ((sys_errno == EOPNOTSUPP) || (sys_errno == EPROTONOSUPPORT) ||
+        (sys_errno == EINVAL)
+#ifdef ENOTSUP
+        || (sys_errno == ENOTSUP)
+#endif
+        ) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    return (sys_errno == ENOMEM) ? UCS_ERR_NO_MEMORY : UCS_ERR_IO_ERROR;
+}
+
 static inline ucs_status_t
 uct_ib_mlx5_md_buf_alloc(uct_ib_mlx5_md_t *md, size_t size, int silent,
                          void **buf_p, uct_ib_mlx5_devx_umem_t *mem,
@@ -1101,6 +1145,16 @@ uct_ib_mlx5_md_buf_alloc(uct_ib_mlx5_md_t *md, size_t size, int silent,
     ucs_status_t status;
     void *buf;
     int ret;
+
+    if (uct_ib_md_is_coco_hardened(&md->super)) {
+        return uct_ib_mlx5_coco_md_buf_alloc_shared(md, size, silent, buf_p,
+                                                    mem, access_mode, name);
+    }
+
+    uct_ib_mlx5_devx_umem_reset(mem);
+    mem->mmap_size = size;
+    mem->dmabuf_fd = UCT_IB_MLX5_INVALID_DMABUF_FD;
+    mem->is_dmabuf = 0;
 
     ret = ucs_posix_memalign(&buf, ucs_get_page_size(), size, name);
     if (ret != 0) {
@@ -1150,7 +1204,13 @@ uct_ib_mlx5_md_buf_free(uct_ib_mlx5_md_t *md, void *buf, uct_ib_mlx5_devx_umem_t
         return;
     }
 
+    if (mem->coco_shared != NULL) {
+        uct_ib_mlx5_coco_md_buf_free_shared(md, buf, mem);
+        return;
+    }
+
     mlx5dv_devx_umem_dereg(mem->mem);
+
     if (md->super.fork_init) {
         ret = madvise(buf, mem->size, MADV_DOFORK);
         if (ret != 0) {

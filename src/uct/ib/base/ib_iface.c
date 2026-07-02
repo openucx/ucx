@@ -1301,7 +1301,8 @@ void uct_ib_iface_fill_attr(uct_ib_iface_t *iface, uct_ib_qp_attr_t *attr)
 #if HAVE_DECL_IBV_CREATE_QP_EX
     if (!(attr->ibv.comp_mask & IBV_QP_INIT_ATTR_PD)) {
         attr->ibv.comp_mask       = IBV_QP_INIT_ATTR_PD;
-        attr->ibv.pd              = uct_ib_iface_md(iface)->pd;
+        attr->ibv.pd              =
+                uct_ib_md_control_pd(uct_ib_iface_md(iface));
     }
 #endif
 
@@ -1321,7 +1322,8 @@ ucs_status_t uct_ib_iface_create_qp(uct_ib_iface_t *iface,
     qp = UCS_PROFILE_CALL_ALWAYS(ibv_create_qp_ex, dev->ibv_context,
                                  &attr->ibv);
 #else
-    qp = UCS_PROFILE_CALL_ALWAYS(ibv_create_qp, uct_ib_iface_md(iface)->pd,
+    qp = UCS_PROFILE_CALL_ALWAYS(ibv_create_qp,
+                                 uct_ib_md_control_pd(uct_ib_iface_md(iface)),
                                  &attr->ibv);
 #endif
     if (qp == NULL) {
@@ -1360,10 +1362,35 @@ ucs_status_t uct_ib_verbs_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
     struct ibv_cq *cq;
 #if HAVE_DECL_IBV_CREATE_CQ_EX
     struct ibv_cq_init_attr_ex cq_attr = {};
+#endif
+#if !HAVE_DECL_IBV_CREATE_CQ_EX || \
+    !HAVE_DECL_IBV_CQ_INIT_ATTR_MASK_PD || \
+    !HAVE_STRUCT_IBV_CQ_INIT_ATTR_EX_PARENT_DOMAIN
+    if (uct_ib_md_is_cc_dma_bounce(uct_ib_iface_md(iface))) {
+        ucs_error("CoCo CQ creation requires ibv_create_cq_ex() "
+                  "parent-domain support");
+        return UCS_ERR_UNSUPPORTED;
+    }
+#endif
 
+#if HAVE_DECL_IBV_CREATE_CQ_EX
     uct_ib_fill_cq_attr(&cq_attr, init_attr, iface, preferred_cpu, cq_size);
 
     cq = ibv_cq_ex_to_cq(ibv_create_cq_ex(ibv_context, &cq_attr));
+    if ((cq == NULL) &&
+        uct_ib_md_is_cc_dma_bounce(uct_ib_iface_md(iface))) {
+        if ((errno == EOPNOTSUPP) || (errno == ENOSYS) ||
+            (errno == EINVAL)) {
+            ucs_error("CoCo CQ creation requires ibv_create_cq_ex() "
+                      "parent-domain support");
+            return UCS_ERR_UNSUPPORTED;
+        }
+
+        uct_ib_check_memlock_limit_msg(ibv_context, UCS_LOG_LEVEL_ERROR,
+                                       "ibv_create_cq_ex(cqe=%d)", cq_size);
+        return UCS_ERR_IO_ERROR;
+    }
+
     if (!cq && ((errno == EOPNOTSUPP) || (errno == ENOSYS)))
 #endif
     {
