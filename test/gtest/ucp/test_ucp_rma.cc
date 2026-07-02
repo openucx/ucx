@@ -1107,9 +1107,8 @@ protected:
                       bool expect_immediate_completion = false) {
         ASSERT_FALSE(expect_immediate_completion && use_callback);
 
-        if (!sender().has_lane_with_caps(0,
-                    UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY)) {
-            UCS_TEST_SKIP_R("put_sgl_zcopy is not supported");
+        if (!sender().has_lane_with_caps(UCT_IFACE_FLAG_PUT_ZCOPY)) {
+            UCS_TEST_SKIP_R("put_zcopy is not supported");
         }
 
         sgl_ctx ctx;
