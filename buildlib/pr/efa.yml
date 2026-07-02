@@ -18,13 +18,13 @@ jobs:
         fetchDepth: 100
         retryCountOnTaskFailure: 5
       - bash: |
-          ./contrib/test_efa.sh build_efa
+          ./contrib/test_efa.sh build
         displayName: Build rdma-core and ibmock
       - bash: |
-          ./contrib/test_efa.sh gtest_efa
+          ./contrib/test_efa.sh gtest
         displayName: Run gtests
       - bash: |
-          ./contrib/test_efa.sh install_rdma_core_efa
+          ./contrib/test_efa.sh install_rdma_core
         displayName: Setup rmda-core
       - bash: |
           ./contrib/test_efa.sh test_rpm_efa
