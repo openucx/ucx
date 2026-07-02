@@ -13,8 +13,7 @@
 #include <ucs/sys/device_code.h>
 
 #if defined(HAVE_CONFIG_H) && defined(HAVE_CUDA) && \
-    __has_include(<uct/cuda/cuda_ipc/cuda_ipc.cuh>) && \
-    __has_include(<cuda/atomic>)
+    __has_include(<uct/cuda/cuda_ipc/cuda_ipc.cuh>)
 #include <uct/cuda/cuda_ipc/cuda_ipc.cuh>
 #define UCT_CUDA_IPC_SUPPORTED 1
 #else
@@ -22,9 +21,7 @@
 #endif
 
 #if defined(HAVE_CONFIG_H) && defined(HAVE_GDA) && \
-    __has_include(<uct/ib/mlx5/gdaki/gdaki.cuh>) && \
-    __has_include(<infiniband/mlx5dv.h>) && \
-    __has_include(<uct/ib/mlx5/gdaki/gpunetio/device/doca_gpunetio_dev_verbs_qp.cuh>)
+    __has_include(<uct/ib/mlx5/gdaki/gdaki.cuh>)
 #include <uct/ib/mlx5/gdaki/gdaki.cuh>
 #define UCT_RC_MLX5_GDA_SUPPORTED 1
 #else
