@@ -16,6 +16,7 @@
 #include <ucp/proto/proto_init.h>
 #include <ucp/proto/proto_multi.inl>
 #include <ucp/proto/proto_single.inl>
+#include <ucp/wireup/wireup.h>
 
 static ucs_status_t ucp_proto_put_offload_short_progress(uct_pending_req_t *self)
 {
@@ -83,6 +84,17 @@ ucp_proto_put_offload_short_probe(const ucp_proto_init_params_t *init_params)
         .lane_type           = UCP_LANE_TYPE_RMA,
         .tl_cap_flags        = UCT_IFACE_FLAG_PUT_SHORT
     };
+
+    if (init_params->ep_config_key->err_mode ==
+        UCP_ERR_HANDLING_MODE_FAILOVER) {
+        if (init_params->ep_config_key->dst_version <
+            UCP_WIREUP_LANE_STATE_MIN_VERSION) {
+            return;
+        }
+
+        params.super.flags     |= UCP_PROTO_COMMON_INIT_FLAG_FAILOVER;
+        params.tl_v2_cap_flags = UCT_IFACE_FLAG_V2_QUERY_TOKEN;
+    }
 
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT)) ||
         !ucp_proto_is_short_supported(init_params->select_param)) {
@@ -212,7 +224,8 @@ ucp_proto_put_offload_bcopy_probe(const ucp_proto_init_params_t *init_params)
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY    |
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
-                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
+                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING  |
+                               UCP_PROTO_COMMON_INIT_FLAG_RESUME,
         .super.exclude_map   = 0,
         .super.reg_mem_info  = ucp_mem_info_unknown,
         .max_lanes           = UCP_PROTO_RMA_MAX_BCOPY_LANES,
@@ -224,6 +237,18 @@ ucp_proto_put_offload_bcopy_probe(const ucp_proto_init_params_t *init_params)
         .middle.lane_type    = UCP_LANE_TYPE_RMA_BW,
         .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID
     };
+
+    if (init_params->ep_config_key->err_mode ==
+        UCP_ERR_HANDLING_MODE_FAILOVER) {
+        if (init_params->ep_config_key->dst_version <
+            UCP_WIREUP_LANE_STATE_MIN_VERSION) {
+            return;
+        }
+
+        params.super.flags              |= UCP_PROTO_COMMON_INIT_FLAG_FAILOVER;
+        params.first.tl_v2_cap_flags     = UCT_IFACE_FLAG_V2_QUERY_TOKEN;
+        params.middle.tl_v2_cap_flags    = UCT_IFACE_FLAG_V2_QUERY_TOKEN;
+    }
 
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT))) {
         return;
