@@ -125,7 +125,7 @@ build_release_pkg() {
 	else
 		echo "==== Build RPM ===="
 		echo "$PWD"
-		${WORKSPACE}/contrib/buildrpm.sh -s -b --nodeps --define "_topdir $PWD"
+		${WORKSPACE}/contrib/buildrpm.sh -s -t -b --nodeps --define "_topdir $PWD"
 		if rpm -qp ${PWD}/rpm-dist/ucx-[0-9]*.rpm --requires | grep cuda; then
 			azure_log_error "Release build depends on CUDA while it should not"
 			exit 1
@@ -138,7 +138,7 @@ build_release_pkg() {
 			azure_complete_with_issues "Skip RPM install test: rpm db not readable as non-root"
 		fi
 		echo "==== Build debug RPM ===="
-		${WORKSPACE}/contrib/buildrpm.sh -s -b -d --nodeps --define "_topdir $PWD/debug"
+		${WORKSPACE}/contrib/buildrpm.sh -s -t -b -d --nodeps --define "_topdir $PWD/debug"
 	fi
 
 	# check that UCX version is present in spec file
