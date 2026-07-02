@@ -268,23 +268,72 @@ def test_tls_allow_list(ucx_info):
     for tls, forbidden_tls in test_cases_negative:
         test_ucx_tls_negative(tls, protocol="keepalive", forbidden_tls=forbidden_tls)
 
+# Test that gdr_copy and cuda_copy are selected for CUDA memtype endpoints
+def test_cuda_memtype_ep_tls():
+    status, _ = exec_cmd("nvidia-smi -L")
+    if status != 0:
+        print("No NVIDIA GPU found, skipping CUDA memtype EP test")
+        return
+
+    status, _ = exec_cmd("lsmod | grep gdrdrv")
+    if status != 0:
+        print("GDRCopy driver not loaded, skipping CUDA memtype EP test")
+        return
+
+    status, output = exec_cmd(f"{ucx_info} -w -u t")
+    if status != 0:
+        print("ucx_info -w failed")
+        sys.exit(1)
+
+    cuda_memtype_desc = "NVIDIA GPU memory"
+    in_cuda_section   = False
+    gdr_copy_lane     = None
+    cuda_copy_lane    = None
+
+    for line in output.splitlines():
+        if f"UCP endpoint for {cuda_memtype_desc}" in line:
+            in_cuda_section = True
+        elif in_cuda_section and "UCP endpoint" in line:
+            in_cuda_section = False
+
+        if in_cuda_section and re.search(r'lane\[', line):
+            if re.search(r'/gdr_copy', line):
+                gdr_copy_lane = line
+            if re.search(r'/cuda_cpy', line):
+                cuda_copy_lane = line
+
+    print(f"CUDA memtype EP gdr_copy lane:  {gdr_copy_lane}")
+    print(f"CUDA memtype EP cuda_copy lane: {cuda_copy_lane}")
+
+    if gdr_copy_lane is None:
+        print("ERROR: gdr_copy not found in CUDA memtype endpoint lanes")
+        sys.exit(1)
+    if cuda_copy_lane is None:
+        print("ERROR: cuda_copy not found in CUDA memtype endpoint lanes")
+        sys.exit(1)
+    if re.search(r'rma_bw#', gdr_copy_lane):
+        print("ERROR: gdr_copy is on rma_bw lane, expected rma lane")
+        sys.exit(1)
+    if not re.search(r'rma_bw#', cuda_copy_lane):
+        print("ERROR: cuda_copy is not on rma_bw lane")
+        sys.exit(1)
+
 parser = OptionParser()
-parser.add_option("-p", "--prefix", metavar="PATH", help = "root UCX directory")
+parser.add_option("-p", "--ucx-info", metavar="PATH", help = "path to ucx_info tool")
 parser.add_option("-v", "--verbose", action="store_true", \
                   help = "verbose output", default=False)
 (options, args) = parser.parse_args()
 
-if options.prefix == None:
-    bin_prefix = "./src/tools/info"
+if options.ucx_info == None:
+    ucx_info = "./src/tools/info/ucx_info"
 else:
-    bin_prefix = options.prefix + "/bin"
+    ucx_info = options.ucx_info
 
-if not (os.path.isdir(bin_prefix)):
-    print(f"directory \"{bin_prefix}\" does not exist")
+if not os.path.isfile(ucx_info):
+    print(f"ucx_info tool \"{ucx_info}\" does not exist")
     parser.print_help()
     exit(1)
 
-ucx_info = bin_prefix + "/ucx_info"
 ucx_info_args = " -e -u t -n "
 ucx_info_eh_args = " -e -u et -n "
 
@@ -346,6 +395,9 @@ for dev in sorted(dev_list):
 
 # Test UCX_TLS configuration (TL choice according to "allow" and "negate" lists)
 test_tls_allow_list(ucx_info)
+
+# Test memtype endpoints
+test_cuda_memtype_ep_tls()
 
 sys.exit(0)
 
