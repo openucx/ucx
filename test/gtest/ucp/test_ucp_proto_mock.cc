@@ -1818,9 +1818,9 @@ public:
 };
 
 UCS_TEST_P(test_ucp_proto_mock_am_tiebreak_within_window,
-           bandwidth_within_window, "IB_NUM_PATHS?=1")
+           latency_beats_bandwidth, "IB_NUM_PATHS?=1")
 {
-    check_config("rc_mlx5/mock_1:1");
+    check_config("rc_mlx5/mock_0:1");
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_am_tiebreak_within_window,
