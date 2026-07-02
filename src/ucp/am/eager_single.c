@@ -15,6 +15,7 @@
 #include <ucp/proto/proto_common.inl>
 #include <ucp/proto/proto_single.h>
 #include <ucp/proto/proto_single.inl>
+#include <ucp/wireup/wireup.h>
 
 
 static UCS_F_ALWAYS_INLINE void
@@ -27,6 +28,25 @@ static size_t ucp_am_eager_single_hdr_size(ucp_operation_id_t op_id)
 {
     return sizeof(ucp_am_hdr_t) +
            ((op_id == UCP_OP_ID_AM_SEND) ? 0 : sizeof(ucp_am_reply_ftr_t));
+}
+
+static int
+ucp_am_eager_single_enable_failover(const ucp_proto_init_params_t *init_params,
+                                    ucp_proto_single_init_params_t *params)
+{
+    if (init_params->ep_config_key->err_mode !=
+        UCP_ERR_HANDLING_MODE_FAILOVER) {
+        return 1;
+    }
+
+    if (init_params->ep_config_key->dst_version <
+        UCP_WIREUP_LANE_STATE_MIN_VERSION) {
+        return 0;
+    }
+
+    params->super.flags    |= UCP_PROTO_COMMON_INIT_FLAG_FAILOVER;
+    params->tl_v2_cap_flags = UCT_IFACE_FLAG_V2_QUERY_TOKEN;
+    return 1;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -116,7 +136,8 @@ ucp_am_eager_short_probe_common(const ucp_proto_init_params_t *init_params,
         .tl_cap_flags        = UCT_IFACE_FLAG_AM_SHORT
     };
 
-    if (!ucp_am_check_init_params(init_params, UCS_BIT(op_id),
+    if (!ucp_am_eager_single_enable_failover(init_params, &params) ||
+        !ucp_am_check_init_params(init_params, UCS_BIT(op_id),
                                   UCP_PROTO_SELECT_OP_FLAG_AM_RNDV) ||
         !ucp_proto_is_short_supported(select_param)) {
         return;
@@ -248,7 +269,8 @@ static void ucp_am_eager_single_bcopy_probe_common(
         .tl_cap_flags        = UCT_IFACE_FLAG_AM_BCOPY
     };
 
-    if (!ucp_am_check_init_params(init_params, UCS_BIT(op_id),
+    if (!ucp_am_eager_single_enable_failover(init_params, &params) ||
+        !ucp_am_check_init_params(init_params, UCS_BIT(op_id),
                                   UCP_PROTO_SELECT_OP_FLAG_AM_RNDV)) {
         return;
     }
