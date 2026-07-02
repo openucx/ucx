@@ -324,6 +324,10 @@ typedef ucs_status_t (*uct_ep_outstanding_extract_func_t)(
         uct_ep_h ep, const uct_ep_outstanding_extract_params_t *params);
 
 
+/* Defer outstanding purge on endpoint error until extract completes */
+typedef ucs_status_t (*uct_ep_failover_arm_func_t)(uct_ep_h ep);
+
+
 /* Internal operations, not exposed by the external API */
 typedef struct uct_iface_internal_ops {
     uct_iface_query_v2_func_t         iface_query_v2;
@@ -337,6 +341,7 @@ typedef struct uct_iface_internal_ops {
     uct_ep_get_device_ep_func_t       ep_get_device_ep;
     uct_ep_put_sgl_zcopy_func_t       ep_put_sgl_zcopy;
     uct_ep_outstanding_extract_func_t ep_outstanding_extract;
+    uct_ep_failover_arm_func_t        ep_failover_arm;
 } uct_iface_internal_ops_t;
 
 

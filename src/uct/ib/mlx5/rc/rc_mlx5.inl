@@ -1941,6 +1941,14 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface, int poll_flags)
     ucs_trace_poll("rc_mlx5 iface %p tx_cqe: ep %p qpn 0x%x hw_ci %d", iface,
                    ep, qp_num, hw_ci);
 
+    if (ucs_unlikely(ep->super.flags & UCT_RC_EP_FLAG_FAILOVER_ARMED)) {
+        /* Ownership is deferred to extract; only release HW/CQ resources
+         * without invoking user completions. */
+        uct_rc_mlx5_iface_update_tx_res(&iface->super, ep, hw_ci);
+        uct_ib_mlx5_update_db_cq_ci(&iface->cq[UCT_IB_DIR_TX]);
+        return 1;
+    }
+
     uct_rc_mlx5_txqp_process_tx_cqe(&ep->super.txqp, cqe, hw_ci);
     ucs_arbiter_group_schedule(&iface->super.tx.arbiter, &ep->super.arb_group);
     uct_rc_mlx5_iface_update_tx_res(&iface->super, ep, hw_ci);

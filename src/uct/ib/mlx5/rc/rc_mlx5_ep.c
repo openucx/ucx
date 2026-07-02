@@ -79,6 +79,14 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_extract(
     return uct_ib_mlx5_ext_ep_outstanding_extract(ep, params);
 }
 
+ucs_status_t uct_rc_mlx5_ep_failover_arm(uct_ep_h tl_ep)
+{
+    uct_rc_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_ep_t);
+
+    ep->flags |= UCT_RC_EP_FLAG_FAILOVER_ARMED;
+    return UCS_OK;
+}
+
 static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_base_ep_put_short_inline(
         uct_ep_h tl_ep, const void *buffer, unsigned length,
         uint64_t remote_addr, uct_rkey_t rkey)
