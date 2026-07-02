@@ -123,9 +123,9 @@ ucp_proto_put_am_bcopy_probe(const ucp_proto_init_params_t *init_params)
             return;
         }
 
-        params.super.flags              |= UCP_PROTO_COMMON_INIT_FLAG_FAILOVER;
-        params.first.tl_v2_cap_flags     = UCT_IFACE_FLAG_V2_QUERY_TOKEN;
-        params.middle.tl_v2_cap_flags    = UCT_IFACE_FLAG_V2_QUERY_TOKEN;
+        params.super.flags           |= UCP_PROTO_COMMON_INIT_FLAG_FAILOVER;
+        params.first.tl_v2_cap_flags  = UCT_IFACE_FLAG_V2_QUERY_TOKEN;
+        params.middle.tl_v2_cap_flags = UCT_IFACE_FLAG_V2_QUERY_TOKEN;
     }
 
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT))) {
