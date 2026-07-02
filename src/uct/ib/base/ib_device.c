@@ -608,6 +608,9 @@ ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
     sysfs_path   = ucs_topo_resolve_sysfs_path(dev_path, path_buffer);
     dev->sys_dev = ucs_topo_get_sysfs_dev(dev_name, sysfs_path,
                                           sys_device_priority);
+    if (dev->sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
+        ucs_topo_sys_device_set_class(dev->sys_dev, UCS_TOPO_DEVICE_CLASS_NET);
+    }
     uct_ib_device_set_pci_id(dev, sysfs_path);
     dev->pci_bw = ucs_topo_get_pci_bw(dev_name, sysfs_path);
 

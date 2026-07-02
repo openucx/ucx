@@ -215,6 +215,8 @@ uct_ze_base_set_device_sys_dev(uct_ze_device_t *device, int device_idx,
         } else {
             ucs_snprintf_safe(name, sizeof(name), "GPU%d", device_idx);
             ucs_topo_sys_device_set_name(device->sys_dev, name, 10);
+            ucs_topo_sys_device_set_class(device->sys_dev,
+                                          UCS_TOPO_DEVICE_CLASS_ACC);
 
             status = ucs_topo_sys_device_set_user_value(device->sys_dev,
                                                         device_idx);

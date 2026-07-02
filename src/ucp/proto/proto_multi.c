@@ -58,34 +58,143 @@ ucp_proto_multi_get_avail_bw(const ucp_proto_init_params_t *params,
     return lane_perf->bandwidth * ratio;
 }
 
-static ucp_lane_index_t
-ucp_proto_multi_find_max_avail_bw_lane(const ucp_proto_init_params_t *params,
-                                       const ucp_lane_index_t *lanes,
-                                       const ucp_proto_common_tl_perf_t *lanes_perf,
-                                       const ucp_proto_lane_selection_t *selection,
-                                       ucp_lane_map_t index_map)
+static ucs_bus_id_bit_rep_t
+ucp_proto_multi_sys_dev_bus_id_key(ucs_sys_device_t sys_dev)
+{
+    ucs_sys_bus_id_t bus_id;
+
+    if (ucs_topo_get_device_bus_id(sys_dev, &bus_id) != UCS_OK) {
+        ucs_fatal("failed to get device bus id for sys_dev %d", sys_dev);
+    }
+
+    return ucs_topo_get_bus_id_bit_repr(&bus_id);
+}
+
+static int ucp_proto_multi_sys_dev_cmp(const void *pa, const void *pb,
+                                       void *UCS_V_UNUSED arg)
+{
+    const ucs_sys_device_t a   = *(const ucs_sys_device_t*)pa;
+    const ucs_sys_device_t b   = *(const ucs_sys_device_t*)pb;
+    ucs_bus_id_bit_rep_t key_a = ucp_proto_multi_sys_dev_bus_id_key(a);
+    ucs_bus_id_bit_rep_t key_b = ucp_proto_multi_sys_dev_bus_id_key(b);
+    uintptr_t user_a, user_b;
+
+    if (key_a != key_b) {
+        return (key_a > key_b) - (key_a < key_b);
+    }
+
+    /* Use user value as tiebreaker when devices share the same bus id */
+    user_a = ucs_topo_sys_device_get_user_value(a);
+    user_b = ucs_topo_sys_device_get_user_value(b);
+    return (user_a > user_b) - (user_a < user_b);
+}
+
+static ucp_lane_index_t ucp_proto_multi_find_max_avail_bw_lane(
+        const ucp_proto_init_params_t *params, const ucp_lane_index_t *lanes,
+        const ucp_proto_common_tl_perf_t *lanes_perf,
+        const ucp_proto_lane_selection_t *selection, ucp_lane_map_t index_map,
+        unsigned req_sys_dev_ord)
 {
     /* Initial value is 1Bps, so we don't consider lanes with lower available
      * bandwidth. */
-    double max_avail_bw        = 1.0;
-    ucp_lane_index_t max_index = UCP_NULL_LANE;
-    double avail_bw;
+    double max_avail_bw              = 1.0;
+    ucp_lane_map_t lane_map          = 0;
+    ucp_lane_index_t num_max_bw_devs = 0;
+    ucs_sys_device_t sys_devs[UCP_PROTO_MAX_LANES];
+    ucp_lane_index_t i, index, selected_index, first_max_bw_lane;
     const ucp_proto_common_tl_perf_t *lane_perf;
-    ucp_lane_index_t lane, index;
+    ucs_sys_device_t sys_dev, selected_sys_dev;
+    unsigned seed;
+    double avail_bw;
+    int cmp;
 
     ucs_assert(index_map != 0);
+
+    ucs_log_indent(1);
+
+    /* Pass 1: find max avail_bw and the set of lanes with that bandwidth. */
     ucs_for_each_bit(index, index_map) {
-        lane      = lanes[index];
-        lane_perf = &lanes_perf[lane];
-        avail_bw  = ucp_proto_multi_get_avail_bw(params, lane, lane_perf,
-                                                 selection);
-        if (avail_bw > max_avail_bw) {
+        lane_perf = &lanes_perf[lanes[index]];
+        avail_bw = ucp_proto_multi_get_avail_bw(params, lanes[index], lane_perf,
+                                                selection);
+        cmp      = ucs_fp_compare(avail_bw, max_avail_bw);
+        if (cmp > 0) {
             max_avail_bw = avail_bw;
-            max_index    = index;
+            lane_map     = UCS_BIT(index);
+        } else if (cmp == 0) {
+            lane_map |= UCS_BIT(index);
         }
     }
 
-    return max_index;
+    ucs_log_indent(-1);
+
+    if (lane_map == 0) {
+        return UCP_NULL_LANE;
+    }
+
+    first_max_bw_lane = ucs_ffs64(lane_map);
+
+    if (ucs_popcount(lane_map) == 1) {
+        ucs_trace("only one max bw lane %d", first_max_bw_lane);
+        return first_max_bw_lane;
+    }
+
+    if (req_sys_dev_ord == UCS_SYS_DEVICE_ORDINAL_INVALID) {
+        ucs_trace("could not determine req_sys_dev %d ordinal; "
+                  "falling back to first max bw lane %d",
+                  params->select_param->sys_dev, first_max_bw_lane);
+        return first_max_bw_lane;
+    }
+
+    /* Pass 2: collect unique sys_devs among the tied lanes. */
+    ucs_for_each_bit(index, lane_map) {
+        sys_dev = ucp_proto_common_get_sys_dev(params, lanes[index]);
+        for (i = 0; i < num_max_bw_devs; ++i) {
+            if (sys_dev == sys_devs[i]) {
+                break;
+            }
+        }
+
+        if (i == num_max_bw_devs) {
+            sys_devs[num_max_bw_devs++] = sys_dev;
+        }
+    }
+
+    ucs_assert_always(num_max_bw_devs > 0);
+
+    /* Sort sys_devs by PCI bus id so every rank on the node observes the same
+     * ordering, regardless of local device discovery order. */
+    ucs_qsort_r(sys_devs, num_max_bw_devs, sizeof(sys_devs[0]),
+                ucp_proto_multi_sys_dev_cmp, NULL);
+
+    /* Use the device's BDF ordinal as seed: it is the device's rank among all
+     * devices of the same class ordered by bus id, so seeds for neighboring
+     * devices are consecutive as the algorithm requires (e.g GPU0 and GPU1). */
+    seed             = req_sys_dev_ord % num_max_bw_devs;
+    selected_sys_dev = sys_devs[seed];
+
+    /* Pass 3: return the first tied index whose lane is on selected_sys_dev. */
+    selected_index = UCP_NULL_LANE;
+    ucs_for_each_bit(index, lane_map) {
+        if (ucp_proto_common_get_sys_dev(params, lanes[index]) ==
+            selected_sys_dev) {
+            selected_index = index;
+            break;
+        }
+    }
+
+    ucs_assertv(selected_index != UCP_NULL_LANE,
+                "selected_sys_dev=%d num_max_bw_devs=%u seed=%u",
+                selected_sys_dev, num_max_bw_devs, seed);
+
+    ucs_trace("max bw lane: proto %s bdf_ord %u num_max_bw_devs %u seed %u "
+              "-> sys_dev %d index %u " UCP_PROTO_LANE_FMT,
+              ucp_proto_id_field(params->proto_id, name), req_sys_dev_ord,
+              num_max_bw_devs, seed, selected_sys_dev, selected_index,
+              UCP_PROTO_LANE_ARG(params, lanes[selected_index],
+                                 &lanes_perf[lanes[selected_index]]));
+
+    return selected_index;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -112,24 +221,37 @@ ucp_proto_multi_select_bw_lanes(const ucp_proto_init_params_t *params,
                                 int fixed_first_lane,
                                 ucp_proto_lane_selection_t *selection)
 {
+    ucs_sys_device_t req_sys_dev = params->select_param->sys_dev;
     ucp_lane_index_t i, lane_index;
     ucp_lane_map_t index_map;
+    unsigned req_sys_dev_ord;
 
     memset(selection, 0, sizeof(*selection));
 
     /* Select all available indexes */
     index_map = UCS_MASK(num_lanes);
 
+    /* The requesting device ordinal is constant across the greedy loop, so
+     * resolve it once instead of on every lane selection. */
+    req_sys_dev_ord = ucs_topo_sys_device_get_bdf_class_ordinal(req_sys_dev);
+
+    ucs_trace("select bw lanes: proto %s req_sys_dev=%d (%s) "
+              "bdf_class_ordinal=%u",
+              ucp_proto_id_field(params->proto_id, name), req_sys_dev,
+              ucs_topo_sys_device_get_name(req_sys_dev), req_sys_dev_ord);
+
     if (fixed_first_lane) {
         ucp_proto_select_add_lane(selection, params, lanes[0]);
         index_map &= ~UCS_BIT(0);
     }
 
-    for (i = fixed_first_lane? 1 : 0; i < ucs_min(max_lanes, num_lanes); ++i) {
+    for (i = fixed_first_lane ? 1 : 0; i < ucs_min(max_lanes, num_lanes); ++i) {
         /* Greedy algorithm: find the best option at every step */
         lane_index = ucp_proto_multi_find_max_avail_bw_lane(params, lanes,
-                                                            lanes_perf, selection,
-                                                            index_map);
+                                                            lanes_perf,
+                                                            selection,
+                                                            index_map,
+                                                            req_sys_dev_ord);
         if (lane_index == UCP_NULL_LANE) {
             break;
         }
@@ -158,33 +280,6 @@ static ucp_sys_dev_map_t ucp_proto_multi_init_flush_sys_dev_mask(
     }
 
     return UCS_BIT(key->sys_dev);
-}
-
-/* Pack a device's PCI bus id (BDF) into a comparable key. Devices without a
- * bus id sort last, ordered by sys_dev to keep a deterministic total order. */
-static ucs_bus_id_bit_rep_t
-ucp_proto_multi_sys_dev_bus_id_key(ucs_sys_device_t sys_dev)
-{
-    ucs_sys_bus_id_t bus_id;
-
-    if (ucs_topo_get_device_bus_id(sys_dev, &bus_id) != UCS_OK) {
-        ucs_fatal("failed to get device bus id for sys_dev %d", sys_dev);
-    }
-
-    return ucs_topo_get_bus_id_bit_repr(&bus_id);
-}
-
-static int ucp_proto_multi_sys_dev_cmp(const void *pa, const void *pb,
-                                       void *UCS_V_UNUSED arg)
-{
-    const ucs_sys_device_t a   = *(const ucs_sys_device_t*)pa;
-    const ucs_sys_device_t b   = *(const ucs_sys_device_t*)pb;
-    ucs_bus_id_bit_rep_t key_a = ucp_proto_multi_sys_dev_bus_id_key(a);
-    ucs_bus_id_bit_rep_t key_b = ucp_proto_multi_sys_dev_bus_id_key(b);
-
-    /* ascending order by PCI bus id so every rank on the node observes the
-     * same ordering regardless of local device discovery order */
-    return (key_a > key_b) - (key_a < key_b);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_sys_dev_distance_t
@@ -402,16 +497,20 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
                 lanes);
     }
 
+    ucs_log_indent(1);
+
     ucp_proto_multi_select_bw_lanes(&params->super.super, lanes, num_lanes,
                                     params->max_lanes, lanes_perf,
                                     fixed_first_lane, &selection);
 
+    ucs_log_indent(-1);
+
     ucs_trace("selected %u lanes for %s", selection.num_lanes,
               ucp_proto_id_field(params->super.super.proto_id, name));
+
     ucs_log_indent(1);
 
-    for (i = 0; i < selection.num_lanes; ++i) {
-        lane      = selection.lanes[i];
+    ucs_for_each_bit(lane, selection.lane_map) {
         lane_perf = &lanes_perf[lane];
         ucs_trace(UCP_PROTO_LANE_FMT UCP_PROTO_TIME_FMT(send_pre_overhead)
                   UCP_PROTO_TIME_FMT(send_post_overhead)

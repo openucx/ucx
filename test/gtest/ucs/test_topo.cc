@@ -297,6 +297,56 @@ UCS_TEST_F(test_topo, bdf_name_invalid) {
     EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
 }
 
+UCS_TEST_F(test_topo, device_bdf_ordinal) {
+    ucs_sys_device_t acc_hi, acc_lo, acc_mid, net_dev;
+    ucs_sys_bus_id_t bus_id;
+
+    bus_id.domain   = 0xfeed;
+    bus_id.slot     = 0x1f;
+    bus_id.function = 0;
+
+    /* Register three ACC devices in non-monotonic bus id order, so the
+     * registration/sys_dev order differs from the bus id order. */
+    bus_id.bus = 0x20;
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, &acc_hi));
+    bus_id.bus = 0x10;
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, &acc_lo));
+    bus_id.bus = 0x18;
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, &acc_mid));
+
+    /* A device of another class with the smallest bus id must not affect the
+     * ACC ordinals. */
+    bus_id.bus = 0x01;
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, &net_dev));
+
+    /* Without an assigned class, the device has no ordinal. */
+    EXPECT_EQ(UCS_SYS_DEVICE_ORDINAL_INVALID,
+              ucs_topo_sys_device_get_bdf_class_ordinal(acc_lo));
+
+    ASSERT_UCS_OK(
+            ucs_topo_sys_device_set_class(acc_hi, UCS_TOPO_DEVICE_CLASS_ACC));
+    ASSERT_UCS_OK(
+            ucs_topo_sys_device_set_class(acc_lo, UCS_TOPO_DEVICE_CLASS_ACC));
+    ASSERT_UCS_OK(
+            ucs_topo_sys_device_set_class(acc_mid, UCS_TOPO_DEVICE_CLASS_ACC));
+    ASSERT_UCS_OK(
+            ucs_topo_sys_device_set_class(net_dev, UCS_TOPO_DEVICE_CLASS_NET));
+
+    /* Ordinals follow the bus id (BDF) order within the ACC class, regardless
+     * of registration order. */
+    EXPECT_EQ(0u, ucs_topo_sys_device_get_bdf_class_ordinal(acc_lo));
+    EXPECT_EQ(1u, ucs_topo_sys_device_get_bdf_class_ordinal(acc_mid));
+    EXPECT_EQ(2u, ucs_topo_sys_device_get_bdf_class_ordinal(acc_hi));
+
+    /* The device in a different class is ranked within its own class. */
+    EXPECT_EQ(0u, ucs_topo_sys_device_get_bdf_class_ordinal(net_dev));
+
+    /* An unknown system device has no ordinal. */
+    EXPECT_EQ(UCS_SYS_DEVICE_ORDINAL_INVALID,
+              ucs_topo_sys_device_get_bdf_class_ordinal(
+                      UCS_SYS_DEVICE_ID_UNKNOWN));
+}
+
 static std::vector<ucs_numa_node_t> get_online_numa_nodes()
 {
     std::vector<ucs_numa_node_t> nodes;

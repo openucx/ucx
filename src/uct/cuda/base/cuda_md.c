@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2019. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -26,6 +26,14 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
     ucs_status_t status;
     char device_name[10];
     int i, num_gpus;
+
+    /* Register all physical GPUs in the topology, regardless of
+     * CUDA_VISIBLE_DEVICES. Done before the visible-device check below so the
+     * topology is always aware of all GPUs. */
+    status = uct_cuda_enum_gpus(NULL, NULL);
+    if (status != UCS_OK) {
+        ucs_diag("failed to enumerate all gpus: %s", ucs_status_string(status));
+    }
 
     status = UCT_CUDADRV_FUNC(cuDeviceGetCount(&num_gpus), UCS_LOG_LEVEL_DIAG);
     if ((status != UCS_OK) || (num_gpus == 0)) {

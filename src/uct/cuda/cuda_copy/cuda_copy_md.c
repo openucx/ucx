@@ -20,6 +20,7 @@
 #include <ucs/type/class.h>
 #include <ucs/sys/ptr_arith.h>
 #include <uct/cuda/base/cuda_ctx.inl>
+#include <uct/cuda/base/cuda_util.h>
 #include <uct/api/v2/uct_v2.h>
 #include <cuda.h>
 #if CUDA_VERSION >= 11070
@@ -28,7 +29,6 @@
 
 
 #define UCT_CUDA_DEV_NAME_MAX_LEN 64
-#define UCT_CUDA_MAX_DEVICES      32
 
 
 static const char *uct_cuda_pref_loc[] = {
