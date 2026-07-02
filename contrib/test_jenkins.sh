@@ -716,7 +716,7 @@ run_ucx_perftest() {
 		run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
 
 		# Run AMO tests
-		echo -e peer "4 -s 4\n8 -s 8" > "$ucx_inst_ptest/msg_atomic"
+		echo -e "4 -s 4\n8 -s 8" > "$ucx_inst_ptest/msg_atomic"
 		ucp_test_args_atomic="-b $ucx_inst_ptest/test_types_ucp_amo \
 			              -b $ucx_inst_ptest/msg_atomic \
 				      -n 1000 -w 1"
