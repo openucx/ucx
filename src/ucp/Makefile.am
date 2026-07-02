@@ -61,6 +61,7 @@ noinst_HEADERS = \
 	proto/proto_common.h \
 	proto/proto_common.inl \
 	proto/proto_debug.h \
+	proto/proto_failover.h \
 	proto/proto_multi.h \
 	proto/proto_multi.inl \
 	proto/proto_perf.h \
@@ -135,6 +136,7 @@ libucp_la_SOURCES = \
 	proto/proto_init.c \
 	proto/proto_common.c \
 	proto/proto_debug.c \
+	proto/proto_failover.c \
 	proto/proto_perf.c \
 	proto/proto_reconfig.c \
 	proto/proto_multi.c \
