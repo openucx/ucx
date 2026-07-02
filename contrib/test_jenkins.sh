@@ -29,6 +29,10 @@ source $(dirname $0)/../buildlib/tools/common.sh
 WORKSPACE=${WORKSPACE:=$PWD}
 ucx_inst=${WORKSPACE}/install
 
+# Absolute path to the source tree, captured before any 'cd' so it stays valid
+# regardless of the current directory at call time.
+ucx_src_dir=$(cd "$(dirname "$0")" && pwd)
+
 if [ -z "$BUILD_NUMBER" ]; then
 	echo "Running interactive"
 	BUILD_NUMBER=1
@@ -178,6 +182,7 @@ run_client_server_app() {
 	server_addr_arg=$3
 	kill_server=$4
 	error_emulation=$5
+	out_file=${6:-}
 
 	server_port_arg="-p $server_port"
 	step_server_port
@@ -195,10 +200,18 @@ run_client_server_app() {
 		set +Ee
 	fi
 
-	taskset -c $affinity_client ${test_exe} ${test_args} ${server_addr_arg} ${server_port_arg} &
+	if [ -n "${out_file}" ]
+	then
+		taskset -c $affinity_client ${test_exe} ${test_args} ${server_addr_arg} ${server_port_arg} > "${out_file}" 2>&1 &
+	else
+		taskset -c $affinity_client ${test_exe} ${test_args} ${server_addr_arg} ${server_port_arg} &
+	fi
 	client_pid=$!
 
 	wait ${client_pid}
+
+	# Echo captured output so it still appears in the CI log.
+	[ -n "${out_file}" ] && cat "${out_file}" || true
 
 	if [ $error_emulation -eq 1 ]
 	then
@@ -634,7 +647,53 @@ run_ucx_perftest_with_daemon() {
 }
 
 #
-# Run UCX performance cuda device test
+# Run the cuda device perftest against a given install prefix, capturing the
+# client output to a results file (when given).
+#
+run_device_perftest_at() {
+	local inst=$1
+	local out_file=${2:-}
+	# TODO: Run on all GPUs & NICs combinations
+	local ucp_test_args="-b ${inst}/share/ucx/perftest/test_types_ucp_device_cuda"
+	local ucp_client_args="-a cuda:0 $(hostname)"
+
+	# TODO: Run with cuda_ipc_tls (cuda_copy,rc,cuda_ipc)
+	export UCX_TLS="cuda_copy,rc,rc_gda"
+	run_client_server_app "${inst}/bin/ucx_perftest" "${ucp_test_args}" \
+		"${ucp_client_args}" 0 0 "${out_file}"
+	unset UCX_TLS
+}
+
+#
+# Build UCX at a specific commit into a separate prefix ($base_inst), used to
+# produce the "before" binaries for perf regression compare. Built in devel
+# mode to match the head leg's devel build (line ~1335); --enable-gtest is
+# omitted on purpose - it adds the gtest suite but does not change the
+# ucx_perftest / libucp / libuct codegen, so the comparison stays fair.
+#
+build_ucx_at_commit() {
+	local sha=$1
+	local base_src="${WORKSPACE}/base-src"
+	base_inst="${WORKSPACE}/install-base"
+
+	(cd "${WORKSPACE}" && git worktree add -f --detach "${base_src}" "${sha}") \
+		|| return 1
+
+	local rc=0
+	(
+		WORKSPACE="${base_src}"
+		ucx_inst="${base_inst}"
+		prepare
+		build devel --without-valgrind
+	) || rc=1
+
+	(cd "${WORKSPACE}" && git worktree remove --force "${base_src}") || true
+	return ${rc}
+}
+
+#
+# Run UCX performance cuda device test, and (on a PR build) compare the
+# bandwidth/latency against the PR base to catch device-API regressions.
 #
 run_ucx_perftest_cuda_device() {
 	if [ "X$have_cuda" == "Xno" ]; then
@@ -652,23 +711,50 @@ run_ucx_perftest_cuda_device() {
 		return 0
 	fi
 
-    echo "==== Running ucx_perftest with cuda kernel ===="
-	ucx_inst_ptest=$ucx_inst/share/ucx/perftest
-	ucx_perftest="$ucx_inst/bin/ucx_perftest"
-	ucp_test_args="-b $ucx_inst_ptest/test_types_ucp_device_cuda"
+	echo "==== Running ucx_perftest with cuda kernel ===="
+	local repeat="${UCX_PERFTEST_REPEAT:-3}"
+	# OSU perf (dedicated nodes) uses 5%; device perf runs on shared, noisier
+	# GPU CI nodes, so the default tolerance is higher.
+	local threshold="${UCX_PERFTEST_REGRESSION_THRESHOLD:-15}"
+	local res_dir="${WORKSPACE}/device_perf"
+	rm -rf "${res_dir}"
+	mkdir -p "${res_dir}"
 
-	# TODO: Run on all GPUs & NICs combinations
-	ucp_client_args="-a cuda:0 $(hostname)"
-	gda_tls="cuda_copy,rc,rc_gda"
-	cuda_ipc_tls="cuda_copy,rc,cuda_ipc"
+	# On a PR build the checkout is the merge ref: HEAD^1 is the target branch
+	# tip (base) and HEAD^2 is the PR head. master / non-merge builds have no
+	# HEAD^2, so there is nothing to compare against - run once for coverage.
+	if ! (cd "${WORKSPACE}" && git rev-parse --verify -q HEAD^2 >/dev/null 2>&1)
+	then
+		echo "==== Not a PR merge build; running device perftest without comparison ===="
+		run_device_perftest_at "${ucx_inst}" ""
+		return 0
+	fi
 
-	# TODO: Run with cuda_ipc_tls
-	for tls in "$gda_tls"
+	local base_sha
+	base_sha=$(cd "${WORKSPACE}" && git rev-parse HEAD^1)
+	echo "==== Building base ${base_sha} for device perftest comparison ===="
+	if ! build_ucx_at_commit "${base_sha}"
+	then
+		echo "==== Base build failed; running device perftest without comparison ===="
+		run_device_perftest_at "${ucx_inst}" ""
+		return 0
+	fi
+
+	# Interleave head/base runs so both see the same node-load window - on the
+	# shared GPU CI nodes, measuring them far apart would skew the comparison.
+	local i
+	for i in $(seq 1 "${repeat}")
 	do
-		export UCX_TLS=${tls}
-		run_client_server_app "$ucx_perftest" "$ucp_test_args" "$ucp_client_args" 0 0
+		run_device_perftest_at "${ucx_inst}"  "${res_dir}/head.${i}.txt"
+		run_device_perftest_at "${base_inst}" "${res_dir}/base.${i}.txt"
 	done
-	unset UCX_TLS
+
+	echo "==== Comparing device perftest: base vs head ===="
+	python3 "${ucx_src_dir}/../buildlib/tools/compare_ucx_perftest.py" \
+		--names "${ucx_inst}/share/ucx/perftest/test_types_ucp_device_cuda" \
+		--threshold "${threshold}" \
+		--base "${res_dir}"/base.*.txt \
+		--head "${res_dir}"/head.*.txt
 }
 
 #
