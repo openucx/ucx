@@ -141,6 +141,8 @@ void ucp_wireup_eps_pending_extract(ucp_ep_t *ucp_ep, ucs_queue_head_t *queue);
 ucs_status_t
 ucp_wireup_ep_connect_to_ep_v2(uct_ep_h tl_ep,
                                const ucp_address_entry_t *address_entry,
-                               const ucp_address_entry_ep_addr_t *ep_entry);
+                               const ucp_address_entry_ep_addr_t *ep_entry,
+                               uint8_t ep_traffic_class,
+                               ucp_ep_flags_t flags);
 
 #endif

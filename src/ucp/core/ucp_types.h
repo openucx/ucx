@@ -60,6 +60,8 @@ typedef uint16_t                     ucp_worker_cfg_index_t;
 #define UCP_WORKER_MAX_RKEY_CONFIG   UINT16_MAX
 #define UCP_WORKER_CFG_INDEX_NULL    UINT16_MAX
 
+#define UCP_EP_NO_TCLASS             ((uint8_t)-1)
+
 
 /* Forward declarations */
 typedef struct ucp_request            ucp_request_t;

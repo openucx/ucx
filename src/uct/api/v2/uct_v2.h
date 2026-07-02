@@ -374,7 +374,10 @@ typedef enum {
     UCT_EP_CONNECT_TO_EP_PARAM_FIELD_DEVICE_ADDR_LENGTH = UCS_BIT(0),
 
     /** Endpoint address length */
-    UCT_EP_CONNECT_TO_EP_PARAM_FIELD_EP_ADDR_LENGTH     = UCS_BIT(1)
+    UCT_EP_CONNECT_TO_EP_PARAM_FIELD_EP_ADDR_LENGTH     = UCS_BIT(1),
+
+    /** Endpoint traffic class */
+    UCT_EP_CONNECT_TO_EP_PARAM_FIELD_EP_TRAFFIC_CLASS   = UCS_BIT(2)
 } uct_ep_connect_to_ep_param_field_t;
 
 
@@ -730,6 +733,11 @@ typedef struct uct_ep_connect_to_ep_params {
      * default minimal length according to the address buffer contents.
      */
     size_t                        ep_addr_length;
+
+    /**
+     * Endpoint traffic class.
+     */
+    uint8_t                       ep_traffic_class;
 } uct_ep_connect_to_ep_params_t;
 
 

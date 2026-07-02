@@ -524,7 +524,7 @@ uct_gga_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
     qp_num = uct_ib_unpack_uint24(gga_ep_addr->super.qp_num);
     status = uct_rc_mlx5_iface_common_devx_connect_qp(
             iface, &ep->super.tx.wq.super, qp_num, &ah_attr, path_mtu,
-            ep->super.super.path_index, iface->super.config.max_rd_atomic);
+            ep->super.super.path_index, iface->super.config.max_rd_atomic, params);
     if (status != UCS_OK) {
         return status;
     }

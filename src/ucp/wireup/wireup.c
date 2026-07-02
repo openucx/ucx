@@ -480,7 +480,7 @@ ucp_wireup_connect_local(ucp_ep_h ep,
         }
 
         status = ucp_wireup_ep_connect_to_ep_v2(ucp_ep_get_lane(ep, lane),
-                                                address_entry, ep_entry);
+                                                address_entry, ep_entry, ep->ep_traffic_class, ep->flags);
         if (status != UCS_OK) {
             goto out;
         }

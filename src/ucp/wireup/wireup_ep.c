@@ -513,6 +513,14 @@ ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, unsigned ep_init_flags,
                                UCT_EP_PARAM_FIELD_PATH_INDEX;
     uct_ep_params.path_index = path_index;
     uct_ep_params.iface      = ucp_worker_iface(worker, rsc_index)->iface;
+
+    if (ucp_ep->flags & UCP_EP_FLAG_EP_TRAFFIC_CLASS) {
+        uct_ep_params.field_mask |= UCT_EP_PARAM_FIELD_EP_TRAFFIC_CLASS;
+        uct_ep_params.ep_traffic_class = ucp_ep->ep_traffic_class;
+    } else {
+        uct_ep_params.ep_traffic_class = UCT_EP_NO_TCLASS;
+    }
+
     status = uct_ep_create(&uct_ep_params, &next_ep);
     if (status != UCS_OK) {
         /* make Coverity happy */
@@ -695,13 +703,18 @@ void ucp_wireup_eps_pending_extract(ucp_ep_t *ucp_ep, ucs_queue_head_t *queue)
 ucs_status_t
 ucp_wireup_ep_connect_to_ep_v2(uct_ep_h tl_ep,
                                const ucp_address_entry_t *address_entry,
-                               const ucp_address_entry_ep_addr_t *ep_entry)
+                               const ucp_address_entry_ep_addr_t *ep_entry,
+                               uint8_t ep_traffic_class,
+                               ucp_ep_flags_t flags)
 {
     const uct_ep_connect_to_ep_params_t param = {
         .field_mask = UCT_EP_CONNECT_TO_EP_PARAM_FIELD_DEVICE_ADDR_LENGTH |
-                      UCT_EP_CONNECT_TO_EP_PARAM_FIELD_EP_ADDR_LENGTH,
+                      UCT_EP_CONNECT_TO_EP_PARAM_FIELD_EP_ADDR_LENGTH |
+                      ((flags & UCP_EP_FLAG_EP_TRAFFIC_CLASS) ? 
+                       UCT_EP_CONNECT_TO_EP_PARAM_FIELD_EP_TRAFFIC_CLASS : 0),
         .device_addr_length = address_entry->dev_addr_len,
-        .ep_addr_length     = ep_entry->len
+        .ep_addr_length     = ep_entry->len,
+        .ep_traffic_class   = ep_traffic_class
     };
     ucp_wireup_ep_t *wireup_ep                = ucp_wireup_ep(tl_ep);
 

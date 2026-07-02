@@ -990,7 +990,10 @@ enum uct_ep_params_field {
     UCT_EP_PARAM_FIELD_DEV_ADDR_LENGTH            = UCS_BIT(17),
 
     /** Enables @ref uct_ep_params::iface_addr_length */
-    UCT_EP_PARAM_FIELD_IFACE_ADDR_LENGTH          = UCS_BIT(18)
+    UCT_EP_PARAM_FIELD_IFACE_ADDR_LENGTH          = UCS_BIT(18),
+
+    /** Enables @ref uct_ep_params::ep_traffic_class */
+    UCT_EP_PARAM_FIELD_EP_TRAFFIC_CLASS           = UCS_BIT(19)
 };
 
 
@@ -1464,6 +1467,8 @@ struct uct_ep_params {
      * default minimum length according to the address buffer contents.
      */
     size_t                              iface_addr_length;
+
+    uint8_t                             ep_traffic_class;
 };
 
 

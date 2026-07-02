@@ -353,7 +353,8 @@ private:
 
             struct ibv_ah_attr ah = ah_attr();
             status = uct_rc_mlx5_ep_connect_qp(m_iface, &m_txwq.super,
-                                               qp_num(), &ah, path_mtu(), 0);
+                                               qp_num(), &ah, path_mtu(), 0,
+                                               NULL);
             ASSERT_UCS_OK(status);
         }
 

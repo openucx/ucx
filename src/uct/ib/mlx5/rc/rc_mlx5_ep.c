@@ -746,7 +746,7 @@ ucs_status_t
 uct_rc_mlx5_ep_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                           uct_ib_mlx5_qp_t *qp, uint32_t qp_num,
                           struct ibv_ah_attr *ah_attr, enum ibv_mtu path_mtu,
-                          uint8_t path_index)
+                          uint8_t path_index, const uct_ep_connect_to_ep_params_t *params)
 {
     uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.md, uct_ib_mlx5_md_t);
 
@@ -754,7 +754,7 @@ uct_rc_mlx5_ep_connect_qp(uct_rc_mlx5_iface_common_t *iface,
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
         return uct_rc_mlx5_iface_common_devx_connect_qp(
                 iface, qp, qp_num, ah_attr, path_mtu, path_index,
-                iface->super.config.max_rd_atomic);
+                iface->super.config.max_rd_atomic, params);
     } else {
         return uct_rc_iface_qp_connect(&iface->super, qp->verbs.qp, qp_num,
                                        ah_attr, path_mtu);
@@ -820,7 +820,7 @@ uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
          * should be posted to the send side of the QP which is owned by device. */
         status = uct_rc_mlx5_ep_connect_qp(
                 iface, &ep->tm_qp, uct_ib_unpack_uint24(rc_addr->super.qp_num),
-                &ah_attr, path_mtu, ep->super.super.path_index);
+                &ah_attr, path_mtu, ep->super.super.path_index, params);
         if (status != UCS_OK) {
             return status;
         }
@@ -834,7 +834,7 @@ uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
 
     status = uct_rc_mlx5_ep_connect_qp(iface, &ep->super.tx.wq.super, qp_num,
                                        &ah_attr, path_mtu,
-                                       ep->super.super.path_index);
+                                       ep->super.super.path_index, params);
     if (status != UCS_OK) {
         return status;
     }
