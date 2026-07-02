@@ -384,17 +384,13 @@ void ucp_datatype_iter_sgl_mem_dereg(ucp_datatype_iter_t *dt_iter)
     size_t count = dt_iter->length;
     size_t i;
 
-    ucs_assert(dt_iter->type.sgl.memhs != NULL);
+    ucs_assert(ucp_datatype_iter_sgl_owns_memhs(dt_iter));
     for (i = 0; i < count; ++i) {
         ucp_datatype_iter_mem_dereg_single(&dt_iter->type.sgl.memhs[i]);
     }
-}
 
-static UCS_F_ALWAYS_INLINE int
-ucp_datatype_iter_sgl_owns_memhs(const ucp_datatype_iter_t *dt_iter)
-{
-    return (dt_iter->type.sgl.memhs != NULL) &&
-           !ucp_memh_is_user_memh(dt_iter->type.sgl.memhs[0]);
+    ucs_free(dt_iter->type.sgl.memhs);
+    dt_iter->type.sgl.memhs = NULL;
 }
 
 void ucp_datatype_iter_sgl_cleanup(ucp_datatype_iter_t *dt_iter, int dereg)
@@ -407,13 +403,17 @@ void ucp_datatype_iter_sgl_cleanup(ucp_datatype_iter_t *dt_iter, int dereg)
 
     if (dereg) {
         ucp_datatype_iter_sgl_mem_dereg(dt_iter);
-    } else if (UCS_ENABLE_ASSERT) {
+        return;
+    }
+
+    if (UCS_ENABLE_ASSERT) {
         for (i = 0; i < dt_iter->length; ++i) {
             ucp_datatatype_iter_memh_cleanup_check(dt_iter->type.sgl.memhs[i]);
         }
     }
 
     ucs_free(dt_iter->type.sgl.memhs);
+    dt_iter->type.sgl.memhs = NULL;
 }
 
 void ucp_datatype_iter_str(const ucp_datatype_iter_t *dt_iter,

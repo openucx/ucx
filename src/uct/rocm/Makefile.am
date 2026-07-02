@@ -11,6 +11,7 @@ libuct_rocm_la_CFLAGS   = $(BASE_CFLAGS) $(LT_CFLAGS)
 libuct_rocm_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
                           $(top_builddir)/src/uct/libuct.la
 libuct_rocm_la_LDFLAGS  = $(ROCM_LDFLAGS) $(ROCM_LIBS) -version-info $(SOVERSION) \
+                          $(UCX_LT_RELEASE) \
                           $(patsubst %, -Xlinker %, -L$(ROCM_ROOT)/lib -rpath $(ROCM_ROOT)/hip/lib -rpath $(ROCM_ROOT)/lib) \
                           $(patsubst %, -Xlinker %, --enable-new-dtags) \
                           $(patsubst %, -Xlinker %, -rpath $(ROCM_ROOT)/lib64)
