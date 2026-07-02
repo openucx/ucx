@@ -184,6 +184,32 @@ ucp_proto_rndv_bulk_init(const ucp_proto_multi_init_params_t *init_params,
                          ucp_proto_rndv_bulk_priv_t *rpriv);
 
 
+unsigned
+ucp_proto_rndv_perf_make_stages(const ucp_proto_perf_t *perf,
+                                size_t frag_size,
+                                ucp_proto_perf_stage_t *stages,
+                                unsigned max_stages);
+
+
+unsigned
+ucp_proto_rndv_perf_make_mtype_copy_stages(const ucp_proto_perf_t *perf,
+                                           size_t frag_size,
+                                           ucp_proto_perf_stage_t *stages,
+                                           unsigned max_stages);
+
+
+unsigned
+ucp_proto_rndv_perf_make_remote_stages(
+        const ucp_proto_perf_stage_t *src_stages, unsigned num_src_stages,
+        ucp_proto_perf_stage_t *stages, unsigned max_stages);
+
+
+ucs_status_t
+ucp_proto_rndv_ctrl_add_perf_stages(const ucp_proto_perf_t *perf,
+                                    ucp_proto_perf_stage_t *stages,
+                                    unsigned *num_stages_p);
+
+
 ucs_status_t ucp_proto_rndv_ats_progress(uct_pending_req_t *uct_req);
 
 

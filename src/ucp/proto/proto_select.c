@@ -716,6 +716,55 @@ err_destroy_perf:
     ucp_proto_perf_destroy(perf);
 }
 
+void ucp_proto_select_add_proto_staged(
+        const ucp_proto_init_params_t *init_params, size_t cfg_thresh,
+        unsigned cfg_priority, ucp_proto_perf_t *perf, const void *priv,
+        size_t priv_size, const ucp_proto_perf_stage_t *stages,
+        unsigned num_stages)
+{
+    ucp_proto_select_init_protocols_t *proto_init = init_params->ctx;
+    ucp_proto_init_elem_t *init_elem;
+    ucp_proto_flat_perf_t *flat_perf;
+    size_t old_length;
+    size_t old_priv_length;
+    ucs_status_t status;
+
+    ucs_assert(num_stages <=
+               UCP_PROTO_INIT_ELEM_MAX_STAGED_PIPELINE_STAGES);
+
+    old_length      = ucs_array_length(&proto_init->protocols);
+    old_priv_length = ucs_array_length(&proto_init->priv_buf);
+    ucp_proto_select_add_proto(init_params, cfg_thresh, cfg_priority, perf,
+                               priv, priv_size);
+    if (ucs_array_length(&proto_init->protocols) == old_length) {
+        return;
+    }
+
+    init_elem = &ucs_array_elem(&proto_init->protocols, old_length);
+    if (num_stages == 0) {
+        return;
+    }
+
+    ucs_assert(stages != NULL);
+
+    status = ucp_proto_perf_staged_pipeline_flat(init_elem->perf, stages,
+                                                 num_stages, &flat_perf);
+    if (status != UCS_OK) {
+        ucp_proto_flat_perf_destroy(init_elem->flat_perf);
+        ucp_proto_perf_destroy(init_elem->perf);
+        ucs_array_set_length(&proto_init->protocols, old_length);
+        ucs_array_set_length(&proto_init->priv_buf, old_priv_length);
+        return;
+    }
+
+    ucp_proto_flat_perf_destroy(init_elem->flat_perf);
+    init_elem->flat_perf = flat_perf;
+
+    memcpy(init_elem->staged_pipeline, stages,
+           num_stages * sizeof(init_elem->staged_pipeline[0]));
+    init_elem->num_staged_pipeline_stages = num_stages;
+}
+
 void ucp_proto_select_short_disable(ucp_proto_select_short_t *proto_short)
 {
     proto_short->max_length_unknown_mem = -1;

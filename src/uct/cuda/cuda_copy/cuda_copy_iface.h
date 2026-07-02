@@ -9,6 +9,7 @@
 
 #include <ucs/datastruct/static_bitmap.h>
 #include <ucs/memory/memory_type.h>
+#include <ucs/sys/math.h>
 #include <uct/base/uct_iface.h>
 #include <uct/cuda/base/cuda_iface.h>
 
@@ -18,6 +19,25 @@
 #define UCT_CUDA_MEMORY_TYPES_MAP 64
 
 typedef uint64_t uct_cuda_copy_iface_addr_t;
+
+#define UCT_CUDA_COPY_REG_HOST_PCI_BW_FACTOR 0.90
+
+/*
+ * Registered/locked host memory can use PCIe link bandwidth as a topology
+ * bound, but never below the conservative registered-host fallback.
+ */
+static UCS_F_ALWAYS_INLINE double
+uct_cuda_copy_registered_host_bw(double registered_bw, double pci_bw)
+{
+    double adjusted_bw;
+
+    if ((pci_bw <= 0.0) || (pci_bw == UCS_INFINITY)) {
+        return registered_bw;
+    }
+
+    adjusted_bw = pci_bw * UCT_CUDA_COPY_REG_HOST_PCI_BW_FACTOR;
+    return (adjusted_bw > registered_bw) ? adjusted_bw : registered_bw;
+}
 
 
 /*

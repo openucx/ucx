@@ -306,6 +306,35 @@ static ucp_proto_select_param_t ucp_proto_rndv_remote_select_param_init(
     return remote_select_param;
 }
 
+ucs_status_t
+ucp_proto_rndv_ctrl_add_perf_stages(const ucp_proto_perf_t *perf,
+                                    ucp_proto_perf_stage_t *stages,
+                                    unsigned *num_stages_p)
+{
+    const ucp_proto_perf_segment_t *seg;
+    unsigned num_stages, max_stages, added_stages;
+    ucs_status_t status;
+    size_t frag_size;
+
+    num_stages = *num_stages_p;
+    max_stages = UCP_PROTO_INIT_ELEM_MAX_STAGED_PIPELINE_STAGES - num_stages;
+    seg        = ucp_proto_perf_find_segment_lb(perf, 0);
+    if (seg == NULL) {
+        return UCS_OK;
+    }
+
+    frag_size = ucp_proto_perf_segment_end(seg);
+    status    = ucp_proto_perf_segment_make_stages(seg, frag_size,
+                                                   stages + num_stages,
+                                                   max_stages, &added_stages);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    *num_stages_p += added_stages;
+    return UCS_OK;
+}
+
 static void
 ucp_proto_rndv_ctrl_init_priv(const ucp_proto_rndv_ctrl_init_params_t *params,
                               ucp_proto_rndv_ctrl_priv_t *rpriv,
@@ -361,7 +390,13 @@ static void ucp_proto_rndv_ctrl_variant_probe(
     size_t cfg_thresh, cfg_priority;
     ucs_linear_func_t overhead;
     ucp_proto_perf_t *perf;
+    ucp_proto_perf_stage_t stages[
+            UCP_PROTO_INIT_ELEM_MAX_STAGED_PIPELINE_STAGES];
+    unsigned num_stages = 0;
     ucs_status_t status;
+    ucs_status_t stage_status;
+    ucs_linear_func_t bias_func = UCS_LINEAR_FUNC_ZERO;
+    int apply_bias              = 0;
 
     ucs_string_buffer_appendf(&perf_name_buf,
                               "%s" UCP_PROTO_PERF_NODE_NEW_LINE "%s",
@@ -426,15 +461,45 @@ static void ucp_proto_rndv_ctrl_variant_probe(
         cfg_thresh = remote_proto->cfg_thresh;
     }
 
-    if (fabs(params->perf_bias) > UCP_PROTO_PERF_EPSILON) {
-        ucp_proto_perf_apply_func(perf,
-                                  ucs_linear_func_make(0.0,
-                                                       1.0 - params->perf_bias),
-                                  "bias", "%.2f %%", params->perf_bias);
+    apply_bias = fabs(params->perf_bias) > UCP_PROTO_PERF_EPSILON;
+    if (apply_bias) {
+        bias_func = ucs_linear_func_make(0.0, 1.0 - params->perf_bias);
+        ucp_proto_perf_apply_func(perf, bias_func, "bias", "%.2f %%",
+                                  params->perf_bias);
     }
 
-    ucp_proto_select_add_proto(&params->super.super, cfg_thresh, cfg_priority,
-                               perf, rpriv, priv_size);
+    if (remote_proto->num_staged_pipeline_stages > 0) {
+        num_stages = ucp_proto_rndv_perf_make_remote_stages(
+                remote_proto->staged_pipeline,
+                remote_proto->num_staged_pipeline_stages, stages,
+                ucs_static_array_size(stages));
+        if ((num_stages > 0) && (params->unpack_perf != NULL)) {
+            stage_status = ucp_proto_rndv_ctrl_add_perf_stages(
+                    params->unpack_perf, stages, &num_stages);
+            if (stage_status != UCS_OK) {
+                ucs_debug("failed to add unpack stages to %s: %s",
+                          variant_name, ucs_status_string(stage_status));
+            }
+        }
+    }
+
+    /* The aggregate perf is biased after control, remote, and unpack costs are
+     * composed. Stage descriptors only cover the remote/unpack data path, so
+     * apply the same transform to declared stage factors and leave the control
+     * term represented by the biased residual.
+     */
+    if ((num_stages > 0) && apply_bias) {
+        ucp_proto_perf_stages_apply_func(stages, num_stages, bias_func);
+    }
+
+    if (num_stages > 0) {
+        ucp_proto_select_add_proto_staged(&params->super.super, cfg_thresh,
+                                          cfg_priority, perf, rpriv, priv_size,
+                                          stages, num_stages);
+    } else {
+        ucp_proto_select_add_proto(&params->super.super, cfg_thresh,
+                                   cfg_priority, perf, rpriv, priv_size);
+    }
 
 out_destroy_remote_perf:
     ucp_proto_perf_destroy(remote_perf);
@@ -682,6 +747,162 @@ out_destroy_bulk_perf:
     ucp_proto_perf_destroy(bulk_perf);
     return status;
 }
+
+static ucp_proto_perf_factor_id_t
+ucp_proto_rndv_perf_remote_stage_factor(ucp_proto_perf_factor_id_t factor_id)
+{
+    switch (factor_id) {
+    case UCP_PROTO_PERF_FACTOR_LOCAL_CPU:
+        return UCP_PROTO_PERF_FACTOR_REMOTE_CPU;
+    case UCP_PROTO_PERF_FACTOR_REMOTE_CPU:
+        return UCP_PROTO_PERF_FACTOR_LOCAL_CPU;
+    case UCP_PROTO_PERF_FACTOR_LOCAL_TL:
+        return UCP_PROTO_PERF_FACTOR_REMOTE_TL;
+    case UCP_PROTO_PERF_FACTOR_REMOTE_TL:
+        return UCP_PROTO_PERF_FACTOR_LOCAL_TL;
+    case UCP_PROTO_PERF_FACTOR_LOCAL_MTYPE_COPY:
+        return UCP_PROTO_PERF_FACTOR_REMOTE_MTYPE_COPY;
+    case UCP_PROTO_PERF_FACTOR_REMOTE_MTYPE_COPY:
+        return UCP_PROTO_PERF_FACTOR_LOCAL_MTYPE_COPY;
+    default:
+        return factor_id;
+    }
+}
+
+static uint64_t
+ucp_proto_rndv_perf_remote_stage_resource(uint64_t resource_id)
+{
+    switch (resource_id) {
+    case UCP_PROTO_PERF_STAGE_RESOURCE_LOCAL:
+        return UCP_PROTO_PERF_STAGE_RESOURCE_REMOTE;
+    case UCP_PROTO_PERF_STAGE_RESOURCE_REMOTE:
+        return UCP_PROTO_PERF_STAGE_RESOURCE_LOCAL;
+    default:
+        return resource_id;
+    }
+}
+
+unsigned
+ucp_proto_rndv_perf_make_remote_stages(
+        const ucp_proto_perf_stage_t *src_stages, unsigned num_src_stages,
+        ucp_proto_perf_stage_t *stages, unsigned max_stages)
+{
+    ucp_proto_perf_factor_id_t src_factor, dst_factor;
+    unsigned i;
+
+    if (num_src_stages > max_stages) {
+        return 0;
+    }
+
+    for (i = 0; i < num_src_stages; ++i) {
+        stages[i] = src_stages[i];
+        memset(stages[i].factors, 0, sizeof(stages[i].factors));
+        stages[i].resource_id = ucp_proto_rndv_perf_remote_stage_resource(
+                src_stages[i].resource_id);
+
+        for (src_factor = 0; src_factor < UCP_PROTO_PERF_FACTOR_LAST;
+             ++src_factor) {
+            dst_factor = ucp_proto_rndv_perf_remote_stage_factor(src_factor);
+            stages[i].factors[dst_factor] =
+                    src_stages[i].factors[src_factor];
+        }
+    }
+
+    return num_src_stages;
+}
+
+static ucs_status_t
+ucp_proto_rndv_perf_add_mtype_copy_stage(
+        const ucp_proto_perf_segment_t *seg, size_t frag_size,
+        ucp_proto_perf_factor_id_t factor_id, const char *name,
+        uint64_t resource_id, ucp_proto_perf_stage_t *stages,
+        unsigned max_stages, unsigned *num_stages_p)
+{
+    ucp_proto_perf_stage_t *stage;
+    ucs_linear_func_t factor;
+    unsigned num_stages = *num_stages_p;
+
+    factor = ucp_proto_perf_segment_func(seg, factor_id);
+    if (ucs_linear_func_is_zero(factor, UCP_PROTO_PERF_EPSILON)) {
+        return UCS_OK;
+    }
+
+    if (num_stages == max_stages) {
+        return UCS_ERR_EXCEEDS_LIMIT;
+    }
+
+    stage = &stages[num_stages];
+    memset(stage, 0, sizeof(*stage));
+    stage->name        = name;
+    stage->role        = UCP_PROTO_PERF_STAGE_ROLE_RECURRING;
+    stage->overlap     = UCP_PROTO_PERF_STAGE_OVERLAP_RESOURCE_SERIAL;
+    stage->frag_size   = frag_size;
+    stage->resource_id = resource_id;
+    stage->factors[factor_id] = factor;
+
+    *num_stages_p = num_stages + 1;
+    return UCS_OK;
+}
+
+unsigned
+ucp_proto_rndv_perf_make_mtype_copy_stages(const ucp_proto_perf_t *perf,
+                                           size_t frag_size,
+                                           ucp_proto_perf_stage_t *stages,
+                                           unsigned max_stages)
+{
+    const ucp_proto_perf_segment_t *seg;
+    unsigned num_stages = 0;
+    ucs_status_t status;
+
+    if ((frag_size == 0) || (frag_size == SIZE_MAX)) {
+        return 0;
+    }
+
+    seg = ucp_proto_perf_find_segment_tail(perf);
+    if ((seg == NULL) || (ucp_proto_perf_segment_end(seg) != frag_size)) {
+        return 0;
+    }
+
+    status = ucp_proto_rndv_perf_add_mtype_copy_stage(
+            seg, frag_size, UCP_PROTO_PERF_FACTOR_LOCAL_MTYPE_COPY,
+            "mtcopy", UCP_PROTO_PERF_STAGE_RESOURCE_LOCAL,
+            stages, max_stages, &num_stages);
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    status = ucp_proto_rndv_perf_add_mtype_copy_stage(
+            seg, frag_size, UCP_PROTO_PERF_FACTOR_REMOTE_MTYPE_COPY,
+            "mtcopy-remote", UCP_PROTO_PERF_STAGE_RESOURCE_REMOTE,
+            stages, max_stages, &num_stages);
+
+    return (status == UCS_OK) ? num_stages : 0;
+}
+
+unsigned
+ucp_proto_rndv_perf_make_stages(const ucp_proto_perf_t *perf,
+                                size_t frag_size,
+                                ucp_proto_perf_stage_t *stages,
+                                unsigned max_stages)
+{
+    const ucp_proto_perf_segment_t *seg;
+    unsigned num_stages;
+    ucs_status_t status;
+
+    if ((frag_size == 0) || (frag_size == SIZE_MAX)) {
+        return 0;
+    }
+
+    seg = ucp_proto_perf_find_segment_tail(perf);
+    if ((seg == NULL) || (ucp_proto_perf_segment_end(seg) != frag_size)) {
+        return 0;
+    }
+
+    status = ucp_proto_perf_segment_make_stages(seg, frag_size, stages,
+                                                max_stages, &num_stages);
+    return (status == UCS_OK) ? num_stages : 0;
+}
+
 
 size_t ucp_proto_rndv_common_pack_ack(void *dest, void *arg)
 {

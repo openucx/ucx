@@ -35,7 +35,8 @@ typedef struct {
 static void ucp_proto_rndv_rkey_ptr_probe_common(
         const ucp_proto_common_init_params_t *init_params,
         ucp_proto_perf_t *rndv_op_perf, ucp_proto_rndv_rkey_ptr_priv_t *rpriv,
-        size_t priv_size)
+        size_t priv_size, const ucp_proto_perf_stage_t *stages,
+        unsigned num_stages)
 {
     const char *proto_name = ucp_proto_id_field(init_params->super.proto_id,
                                                 name);
@@ -63,9 +64,16 @@ static void ucp_proto_rndv_rkey_ptr_probe_common(
         }
     }
 
-    ucp_proto_select_add_proto(&init_params->super, init_params->cfg_thresh,
-                               init_params->cfg_priority, perf, rpriv,
-                               priv_size);
+    if (num_stages > 0) {
+        ucp_proto_select_add_proto_staged(
+                &init_params->super, init_params->cfg_thresh,
+                init_params->cfg_priority, perf, rpriv, priv_size, stages,
+                num_stages);
+    } else {
+        ucp_proto_select_add_proto(&init_params->super, init_params->cfg_thresh,
+                                   init_params->cfg_priority, perf, rpriv,
+                                   priv_size);
+    }
 }
 
 static void
@@ -114,7 +122,7 @@ ucp_proto_rndv_rkey_ptr_probe(const ucp_proto_init_params_t *init_params)
     }
 
     ucp_proto_rndv_rkey_ptr_probe_common(&params.super, perf, &rpriv,
-                                         sizeof(rpriv));
+                                         sizeof(rpriv), NULL, 0);
 }
 
 static void
@@ -249,6 +257,42 @@ ucp_proto_t ucp_rndv_rkey_ptr_proto = {
 };
 
 static void
+ucp_proto_rndv_rkey_ptr_mtype_clear_access_tl(ucp_proto_perf_t *perf)
+{
+    ucp_proto_perf_clear_factor_slopes(
+            perf, UCS_BIT(UCP_PROTO_PERF_FACTOR_LOCAL_TL) |
+                  UCS_BIT(UCP_PROTO_PERF_FACTOR_REMOTE_TL));
+}
+
+static ucs_status_t
+ucp_proto_rndv_rkey_ptr_mtype_add_copy_perf(
+        const ucp_proto_init_params_t *init_params, size_t frag_size,
+        ucp_proto_perf_t *perf)
+{
+    const ucp_proto_select_param_t *select_param = init_params->select_param;
+
+    if (UCP_MEM_IS_HOST(select_param->mem_type)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    /* rkey_ptr/mtype copies the non-host user buffer directly into an
+     * attached host staging pointer. Declare that memtype-copy stage here
+     * because generic buffer-copy modeling skips local copies for RKEY_PTR.
+     */
+    return ucp_proto_init_add_buffer_copy_time(
+            init_params->worker, "rkey_ptr mtype copy", UCS_MEMORY_TYPE_HOST,
+            select_param->mem_type, UCS_SYS_DEVICE_ID_UNKNOWN,
+            select_param->sys_dev,
+            UCT_PERF_ATTR_HOST_MEMORY_CLASS_REGISTERED_LOCKED,
+            UCT_PERF_ATTR_HOST_MEMORY_CLASS_UNKNOWN, UCT_EP_OP_GET_ZCOPY,
+            select_param->mem_type, select_param->sys_dev, UCS_MEMORY_TYPE_HOST,
+            UCS_SYS_DEVICE_ID_UNKNOWN,
+            UCP_PROTO_INIT_BUFFER_COPY_FLAG_ATTACHED_HOST_STAGING |
+            UCP_PROTO_INIT_BUFFER_COPY_FLAG_SKIP_SEND_PRE_OVERHEAD,
+            1, frag_size, 1, perf);
+}
+
+static void
 ucp_proto_rndv_rkey_ptr_mtype_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_context_t *context                = init_params->worker->context;
@@ -309,8 +353,33 @@ ucp_proto_rndv_rkey_ptr_mtype_probe(const ucp_proto_init_params_t *init_params)
                 "dst_md_index %u rkey->md_map 0x%lx", rpriv.dst_md_index,
                 init_params->rkey_config_key->md_map);
 
-    ucp_proto_rndv_rkey_ptr_probe_common(&params.super, perf, &rpriv.super,
-                                         sizeof(rpriv));
+    status = ucp_proto_rndv_rkey_ptr_mtype_add_copy_perf(
+            init_params, params.super.max_length, perf);
+    if (status != UCS_OK) {
+        goto out_destroy_perf;
+    }
+
+    {
+        ucp_proto_perf_stage_t stages[
+                UCP_PROTO_INIT_ELEM_MAX_STAGED_PIPELINE_STAGES];
+        unsigned num_stages;
+
+        num_stages = ucp_proto_rndv_perf_make_mtype_copy_stages(
+                perf, params.super.max_length, stages,
+                ucs_static_array_size(stages));
+
+        if (num_stages > 0) {
+            ucp_proto_rndv_rkey_ptr_mtype_clear_access_tl(perf);
+        }
+
+        ucp_proto_rndv_rkey_ptr_probe_common(&params.super, perf, &rpriv.super,
+                                             sizeof(rpriv), stages,
+                                             num_stages);
+    }
+
+    return;
+out_destroy_perf:
+    ucp_proto_perf_destroy(perf);
 }
 
 static ucs_status_t ucp_proto_rndv_rkey_ptr_mtype_completion(ucp_request_t *req)

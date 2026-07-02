@@ -175,7 +175,7 @@ size_t ucp_rndv_rts_pack(ucp_request_t *sreq, ucp_rndv_rts_hdr_t *rndv_rts_hdr,
         ucp_rndv_is_get_zcopy(sreq, worker->context)) {
         /* pack rkey, ask target to do get_zcopy */
         mem_info.type         = sreq->send.mem_type;
-        mem_info.sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
+        mem_info.sys_dev      = sreq->send.state.dt_iter.mem_info.sys_dev;
         mem_info.flags        = sreq->send.state.dt_iter.mem_info.flags;
         rndv_rts_hdr->address = (uintptr_t)sreq->send.buffer;
         rkey_buf              = UCS_PTR_BYTE_OFFSET(rndv_rts_hdr,
@@ -220,9 +220,7 @@ static size_t ucp_rndv_rtr_pack(void *dest, void *arg)
         rndv_rtr_hdr->address = (uintptr_t)rreq->recv.dt_iter.type.contig.buffer;
         rndv_rtr_hdr->size    = rndv_req->send.length;
         rndv_rtr_hdr->offset  = rndv_req->send.rndv.rtr.offset;
-        mem_info.type         = rreq->recv.dt_iter.mem_info.type;
-        mem_info.sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
-        mem_info.flags        = rreq->recv.dt_iter.mem_info.flags;
+        mem_info             = rreq->recv.dt_iter.mem_info;
 
         packed_rkey_size = ucp_rkey_pack_memh(
                 ep->worker->context, rndv_req->send.rndv.md_map,

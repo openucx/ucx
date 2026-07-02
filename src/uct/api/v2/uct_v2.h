@@ -99,7 +99,19 @@ enum uct_perf_attr_field {
     UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS   = UCS_BIT(11),
 
     /** Enable @ref uct_perf_attr_t::flags */
-    UCT_PERF_ATTR_FIELD_FLAGS              = UCS_BIT(12)
+    UCT_PERF_ATTR_FIELD_FLAGS              = UCS_BIT(12),
+
+    /** Enable @ref uct_perf_attr_t::bandwidth_shared_scope */
+    UCT_PERF_ATTR_FIELD_BANDWIDTH_SHARED_SCOPE = UCS_BIT(13),
+
+    /** Enable @ref uct_perf_attr_t::bandwidth_shared_sys_device */
+    UCT_PERF_ATTR_FIELD_BANDWIDTH_SHARED_SYS_DEVICE = UCS_BIT(14),
+
+    /** Enable @ref uct_perf_attr_t::local_host_memory_class */
+    UCT_PERF_ATTR_FIELD_LOCAL_HOST_MEMORY_CLASS = UCS_BIT(15),
+
+    /** Enable @ref uct_perf_attr_t::remote_host_memory_class */
+    UCT_PERF_ATTR_FIELD_REMOTE_HOST_MEMORY_CLASS = UCS_BIT(16)
 };
 
 /**
@@ -112,6 +124,41 @@ typedef enum {
     /** TX operations can depend on unrelated RX operation completion */
     UCT_PERF_ATTR_FLAGS_TX_RX_SHARED = UCS_BIT(0)
 } uct_perf_attr_flags_t;
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Sharing scope for @ref uct_perf_attr_t::bandwidth shared component.
+ */
+typedef enum {
+    /** Scope is unknown; callers should use conservative node-level sharing */
+    UCT_PERF_ATTR_BANDWIDTH_SHARED_SCOPE_UNKNOWN,
+
+    /** Shared component is contended by processes on the node */
+    UCT_PERF_ATTR_BANDWIDTH_SHARED_SCOPE_NODE,
+
+    /** Shared component is scoped to @ref bandwidth_shared_sys_device */
+    UCT_PERF_ATTR_BANDWIDTH_SHARED_SCOPE_SYS_DEVICE
+} uct_perf_attr_bandwidth_shared_scope_t;
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Host memory class for @ref uct_perf_attr_t copy estimates.
+ *
+ * The class describes properties of a host buffer only when the caller has
+ * explicit provenance. Missing or unknown class is conservative.
+ */
+typedef enum {
+    /**
+     * Host memory class is unknown or generic/pageable host memory. Transports
+     * must use conservative host-memory estimates for this class.
+     */
+    UCT_PERF_ATTR_HOST_MEMORY_CLASS_UNKNOWN,
+
+    /**
+     * Host memory is known to be registered and locked for transport access.
+     */
+    UCT_PERF_ATTR_HOST_MEMORY_CLASS_REGISTERED_LOCKED
+} uct_perf_attr_host_memory_class_t;
 
 /**
  * @ingroup UCT_RESOURCE
@@ -216,6 +263,31 @@ typedef struct {
      * Performance characteristics of the network interface.
      */
     uint64_t            flags;
+
+    /**
+     * Scope of the shared component in @ref bandwidth and @ref path_bandwidth.
+     * This field is set by the UCT layer.
+     */
+    uct_perf_attr_bandwidth_shared_scope_t bandwidth_shared_scope;
+
+    /**
+     * System device associated with @ref bandwidth_shared_scope when the scope
+     * is @ref UCT_PERF_ATTR_BANDWIDTH_SHARED_SCOPE_SYS_DEVICE.
+     * This field is set by the UCT layer.
+     */
+    ucs_sys_device_t    bandwidth_shared_sys_device;
+
+    /**
+     * Class of local host memory. Relevant only when local memory type is
+     * @ref UCS_MEMORY_TYPE_HOST. If omitted, treated as unknown.
+     * This field must be initialized by the caller when its field bit is set.
+     */
+    uct_perf_attr_host_memory_class_t local_host_memory_class;
+
+    /**
+     * Class of remote host memory. Same semantics as local_host_memory_class.
+     */
+    uct_perf_attr_host_memory_class_t remote_host_memory_class;
 } uct_perf_attr_t;
 
 
