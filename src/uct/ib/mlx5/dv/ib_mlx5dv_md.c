@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -37,11 +37,12 @@ static uint32_t uct_ib_mlx5_flush_rkey_make()
     return ((getpid() & 0xff) << 8) | UCT_IB_MD_INVALID_FLUSH_RKEY;
 }
 
-ucs_sys_device_t uct_ib_mlx5dv_check_direct_nic(struct ibv_context *ctx,
-                                                ucs_sys_device_t sys_dev_ib,
-                                                int enabled)
+ucs_sys_device_t
+uct_ib_mlx5dv_check_direct_nic(uct_ib_device_t *dev, int enabled)
 {
 #if HAVE_DECL_MLX5DV_GET_DATA_DIRECT_SYSFS_PATH
+    struct ibv_context *ctx     = dev->ibv_context;
+    ucs_sys_device_t sys_dev_ib = dev->sys_dev;
     char sys_path[PATH_MAX];
     char dev_name[64];
     int ret;
@@ -50,19 +51,24 @@ ucs_sys_device_t uct_ib_mlx5dv_check_direct_nic(struct ibv_context *ctx,
 
     if (!enabled) {
         ucs_debug("%s: direct NIC is disabled by configuration",
-                  ibv_get_device_name(ctx->device));
+                  uct_ib_device_name(dev));
+        goto out;
+    }
+
+    if (!uct_ib_device_has_active_port(dev)) {
+        ucs_debug("%s: skipping direct NIC, no active port",
+                  uct_ib_device_name(dev));
         goto out;
     }
 
     ret = mlx5dv_get_data_direct_sysfs_path(ctx, sys_path, sizeof(sys_path));
     if (ret != 0) {
         ucs_debug("%s: mlx5dv_get_data_direct_sysfs_path() failed: ret=%d",
-                  ibv_get_device_name(ctx->device), ret);
+                  uct_ib_device_name(dev), ret);
         goto out_not_supported;
     }
 
-    snprintf(dev_name, sizeof(dev_name), "%s_direct",
-             ibv_get_device_name(ctx->device));
+    snprintf(dev_name, sizeof(dev_name), "%s_direct", uct_ib_device_name(dev));
     sys_dev_dnic = ucs_topo_get_sysfs_dev(dev_name, sys_path, 0);
     status = ucs_topo_sys_device_set_sys_dev_aux(sys_dev_ib, sys_dev_dnic);
     if (status != UCS_OK) {
@@ -71,19 +77,18 @@ ucs_sys_device_t uct_ib_mlx5dv_check_direct_nic(struct ibv_context *ctx,
 
     ucs_debug("%s: Direct NIC is supported sys_path='%s%s' "
               "sys_dev=%u sys_dev_aux=%u",
-              ibv_get_device_name(ctx->device),
-              (sys_path[0] != 0) ? "/sys" : "", sys_path, sys_dev_ib,
-              sys_dev_dnic);
+              uct_ib_device_name(dev), (sys_path[0] != 0) ? "/sys" : "",
+              sys_path, sys_dev_ib, sys_dev_dnic);
 
     return sys_dev_dnic;
 out_not_supported:
     ucs_debug("%s: direct NIC is requested but not supported",
-              ibv_get_device_name(ctx->device));
+              uct_ib_device_name(dev));
 out:
 #else
     ucs_debug("%s: direct NIC is disabled because declaration of "
               "mlx5dv_get_data_direct_sysfs_path was not found",
-              ibv_get_device_name(ctx->device));
+              uct_ib_device_name(dev));
 #endif
     return UCS_SYS_DEVICE_ID_UNKNOWN;
 }
@@ -2510,8 +2515,8 @@ ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
 
     odp_version = uct_ib_mlx5_devx_check_odp(md, md_config, cap);
 
-    md->direct_nic_sys_dev = uct_ib_mlx5dv_check_direct_nic(
-            ctx, dev->sys_dev, md_config->ext.direct_nic);
+    md->direct_nic_sys_dev =
+            uct_ib_mlx5dv_check_direct_nic(dev, md_config->ext.direct_nic);
 
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, atomic)) {
         int ops = UCT_IB_MLX5_ATOMIC_OPS_CMP_SWAP |
@@ -3398,8 +3403,8 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
     uct_ib_md_parse_relaxed_order(&md->super, md_config, 0);
     uct_ib_md_ece_check(&md->super);
     uct_ib_md_check_odp(&md->super, md_config);
-    md->direct_nic_sys_dev = uct_ib_mlx5dv_check_direct_nic(
-            ctx, dev->sys_dev, md_config->ext.direct_nic);
+    md->direct_nic_sys_dev =
+            uct_ib_mlx5dv_check_direct_nic(dev, md_config->ext.direct_nic);
 
     md->super.flush_rkey = uct_ib_mlx5_flush_rkey_make();
 

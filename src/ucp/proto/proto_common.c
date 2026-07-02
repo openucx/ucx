@@ -67,8 +67,9 @@ ucp_memory_info_t ucp_proto_common_select_param_mem_info(
                                    const ucp_proto_select_param_t *select_param)
 {
     ucp_memory_info_t mem_info = {
-        .type = select_param->mem_type,
-        .sys_dev = select_param->sys_dev
+        .type    = select_param->mem_type,
+        .sys_dev = select_param->sys_dev,
+        .flags   = select_param->op.mem_flags
     };
 
     return mem_info;
@@ -514,6 +515,16 @@ ucp_proto_common_filter_min_frag(const ucp_proto_init_params_t *params,
                           ucs_memory_type_names[reg_mem_type]);
                 return 0;
             }
+
+            if (!ucs_test_all_flags(common_params->reg_mem_info.flags,
+                                    md_attr->required_mem_flags)) {
+                ucs_trace("%s: md %s missing required_mem_flags=0x%x for "
+                          "mem_flags=0x%x",
+                          lane_desc, context->tl_mds[md_index].rsc.md_name,
+                          md_attr->required_mem_flags,
+                          common_params->reg_mem_info.flags);
+                return 0;
+            }
         } else if (!(md_attr->access_mem_types & UCS_BIT(reg_mem_type))) {
             /* Memory domain which does not require a registration for zero
              * copy operation must be able to access the relevant memory type */
@@ -749,7 +760,9 @@ ucp_proto_common_reg_md_map(const ucp_proto_common_init_params_t *params,
            memory type, and needs a local memory handle for zero-copy
            communication */
         if ((md_attr->flags & UCT_MD_FLAG_NEED_MEMH) &&
-            (context->reg_md_map[select_param->mem_type] & UCS_BIT(md_index))) {
+            (context->reg_md_map[select_param->mem_type] & UCS_BIT(md_index)) &&
+            ucs_test_all_flags(select_param->op.mem_flags,
+                               md_attr->required_mem_flags)) {
             reg_md_map |= UCS_BIT(md_index);
         }
     }

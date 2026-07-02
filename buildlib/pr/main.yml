@@ -482,6 +482,32 @@ stages:
     dependsOn: [Basic_compile]
     jobs:
       - template: cuda/cuda.yml
+      - job: soname_suffix_cuda_ib
+        displayName: SONAME suffix and deepbind on CUDA/IB
+        pool:
+          name: MLNX
+          demands:
+            - ucx_gpu_test -equals yes
+        container: ubuntu2404_doca31_gpunetio
+        workspace:
+          clean: all
+        timeoutInMinutes: 120
+
+        steps:
+          - checkout: self
+            clean: true
+            fetchDepth: 100
+            retryCountOnTaskFailure: 5
+
+          - bash: |
+              ./buildlib/tools/builds.sh
+            displayName: Build SONAME suffix with CUDA/IB
+            env:
+              BUILD_ID: "$(Build.BuildId)-$(Build.BuildNumber)"
+              build_mode: soname_suffix
+              soname_suffix_check_hw: yes
+              ucx_gpu: yes
+              EXECUTOR_NUMBER: $(AZP_AGENT_ID)
 
 
   - stage: AddressSanitizer

@@ -298,20 +298,20 @@ protected:
         EXPECT_EQ(UCS_OK, status) << op_str << " operation returned status: "
                                   << ucs_status_string(status);
 
-        size_t num_lanes_to_fail = am_bw_lanes.size();
-        if (has_any_transport({"ud_v", "ud_x"}) &&
-            (failure_side == FAILURE_SIDE_INITIATOR)) {
-            /* TODO: remove this once UD ep purge assertions are fixed */
-            UCS_TEST_MESSAGE << "Keep 1 live lane for UD transports since "
-                             << "local error injection on all lanes leads to "
-                                "failed assertion in ud_ep_purge";
-            num_lanes_to_fail--;
-        }
-
         ucp_ep_h ucp_ep_for_injection = get_ucp_ep_for_err_injection(failure_side);
-        for (size_t lane_idx = 0; lane_idx < num_lanes_to_fail; ++lane_idx) {
+        for (size_t lane_idx = 0; lane_idx < am_bw_lanes.size(); ++lane_idx) {
             ucp_lane_index_t lane = am_bw_lanes[lane_idx];
             uct_ep_h uct_ep_for_injection = ucp_ep_get_lane(ucp_ep_for_injection, lane);
+            const bool last_lane = (lane_idx == (am_bw_lanes.size() - 1));
+            if (last_lane && has_any_transport({"ud_v", "ud_x"}) &&
+                (failure_side == FAILURE_SIDE_INITIATOR)) {
+                /* TODO: remove this once UD ep purge assertions are fixed */
+                UCS_TEST_MESSAGE << "Keep 1 live lane for UD transports since "
+                                 << "local error injection on all lanes leads to "
+                                 << "failed assertion in ud_ep_purge";
+                break;
+            }
+
             status = uct_ep_invalidate(uct_ep_for_injection, 0);
             if (status == UCS_ERR_UNSUPPORTED) {
                 UCS_TEST_SKIP_R("uct_ep_invalidate is not supported");
@@ -325,15 +325,15 @@ protected:
                              << size_t(lane) << '/' << am_bw_lanes.size() << "...";
 
             std::unique_ptr<scoped_log_handler> slh;
-            if (lane_idx == (am_bw_lanes.size() - 1)) {
+            if (last_lane) {
                 slh.reset(new scoped_log_handler(hide_errors_logger));
             }
 
             status = do_am_send_and_wait(sender().ep(0, INJECTED_EP_INDEX), am_msg_size(),
                                          op_mask & TEST_OP_FLUSH);
-            if (lane_idx < (am_bw_lanes.size() - 1)) {
+            if (!last_lane) {
                 EXPECT_EQ(UCS_OK, status) << op_str << " operation returned status: "
-                                        << ucs_status_string(status);
+                                          << ucs_status_string(status);
                 ASSERT_EQ(0, m_total_err_count) << "Error callback invoked " << m_total_err_count << " times";
             } else {
                 // The last lane is expected to fail

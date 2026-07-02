@@ -94,6 +94,29 @@ public:
         FAIL() << "Transport " << tl_name << " not found";
     }
 
+    void mock_cuda_ipc_remote_pid(ucp_worker_h worker)
+    {
+        ucp_context_h context = worker->context;
+
+        for (ucp_rsc_index_t rsc_index = 0; rsc_index < context->num_tls;
+             ++rsc_index) {
+            const uct_tl_resource_desc_t *tl_rsc =
+                    &context->tl_rscs[rsc_index].tl_rsc;
+
+            if (std::string(tl_rsc->tl_name) != "cuda_ipc") {
+                continue;
+            }
+
+            if (!UCS_STATIC_BITMAP_GET(context->tl_bitmap, rsc_index)) {
+                continue;
+            }
+
+            ucp_worker_iface_t *wiface = ucp_worker_iface(worker, rsc_index);
+            m_mock.setup(&wiface->iface->ops.iface_get_address,
+                         cuda_ipc_get_address_mock);
+        }
+    }
+
 #if HAVE_IB
     void ib_event(enum ibv_event_type event_type, uint8_t port_num)
     {
@@ -237,6 +260,16 @@ private:
         return UCS_OK;
     }
 
+    static ucs_status_t
+    cuda_ipc_get_address_mock(uct_iface_h iface, uct_iface_addr_t *iface_addr)
+    {
+        UCS_MOCK_ORIG_FUNC(m_self->m_mock, &iface->ops.iface_get_address, iface,
+                           iface_addr);
+
+        *(pid_t*)iface_addr = getpid() + 1;
+        return UCS_OK;
+    }
+
     static void default_perf_mock(uct_perf_attr_t& perf_attr)
     {
         if (ucs_test_all_flags(perf_attr.field_mask,
@@ -340,6 +373,7 @@ public:
         modify_config("TOPO_PRIO", topo_prio());
 
         ucp_test::init();
+        post_ucp_init();
         connect();
     }
 
@@ -395,6 +429,10 @@ protected:
     virtual const char *topo_prio() const
     {
         return "default";
+    }
+
+    virtual void post_ucp_init()
+    {
     }
 
     static bool
@@ -641,9 +679,10 @@ protected:
         return {rkey, ucp_rkey_destroy};
     }
 
-    void send_recv_rma(size_t size, ucp_operation_id_t op_id,
-                       ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST,
-                       unsigned rkey_cfg_index = 1)
+    ucp_worker_cfg_index_t
+    send_recv_rma(size_t size, ucp_operation_id_t op_id,
+                  ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST,
+                  unsigned rkey_cfg_index = 1)
     {
         mem_buffer recv_buf(size, mem_type);
         recv_buf.pattern_fill(1);
@@ -665,7 +704,8 @@ protected:
                                (uint64_t)recv_buf.ptr(), rkey, &req_param);
         } else {
             sptr = nullptr;
-            FAIL() << "Invalid operation ID: " << op_id;
+            ADD_FAILURE() << "Invalid operation ID: " << op_id;
+            return UCP_WORKER_CFG_INDEX_NULL;
         }
 
         EXPECT_EQ(UCS_OK, request_wait(sptr));
@@ -676,9 +716,12 @@ protected:
             send_buf.pattern_check(1);
         }
 
+        auto actual_rkey_cfg_index = rkey->cfg_index;
         if (mem_type == UCS_MEMORY_TYPE_HOST) {
-            EXPECT_EQ(rkey->cfg_index, rkey_cfg_index);
+            EXPECT_EQ(actual_rkey_cfg_index, rkey_cfg_index);
         }
+
+        return actual_rkey_cfg_index;
     }
 };
 
@@ -1256,6 +1299,9 @@ public:
             UCS_TEST_SKIP_R("rc_mlx5 transport is not supported");
         }
 
+        /* Keep protocol selection independent of NVLink probing. */
+        modify_config("CUDA_IPC_ENABLE_GET_ZCOPY", "on", SETENV_IF_NOT_EXIST);
+
         add_mock_iface("mock", [](uct_iface_attr_t &iface_attr) {
             iface_attr.cap.am.max_short  = 208;
             iface_attr.cap.put.max_short = 2048;
@@ -1266,59 +1312,24 @@ public:
         test_ucp_proto_mock::init();
     }
 
-    ucp_worker_cfg_index_t get_cuda_rkey_cfg()
+    virtual void post_ucp_init() override
     {
-        ucp_worker_h worker = sender().worker();
-        ucp_proto_select_key_t sel_key;
-
-        /* Find rkey config with CUDA mem_type for local and remote memory */
-        for (unsigned i = 0; i < ucs_array_length(&worker->rkey_config); ++i) {
-            auto rkey_config = &ucs_array_elem(&worker->rkey_config, i);
-
-            if (rkey_config->key.mem_type != UCS_MEMORY_TYPE_CUDA) {
-                continue;
-            }
-
-            kh_foreach_key(rkey_config->proto_select.hash, sel_key.u64, {
-                if (sel_key.param.mem_type == UCS_MEMORY_TYPE_CUDA) {
-                    return i;
-                }
-            })
-        }
-
-        return UCP_WORKER_CFG_INDEX_NULL;
-    }
-
-    bool has_cuda_ipc_get_zcopy()
-    {
-        ucp_worker_h worker = sender().worker();
-        auto context        = worker->context;
-        std::string cuda_ipc_str("cuda_ipc");
-
-        for (ucp_rsc_index_t idx = 0; idx < context->num_tls; ++idx) {
-            if (cuda_ipc_str != context->tl_rscs[idx].tl_rsc.tl_name) {
-                continue;
-            }
-
-            auto attr = ucp_worker_iface_get_attr(worker, idx);
-            return attr->cap.get.max_zcopy > 0;
-        }
-
-        return false;
+        mock_cuda_ipc_remote_pid(sender().worker());
+        mock_cuda_ipc_remote_pid(receiver().worker());
     }
 
     void test_cuda_rma(ucp_operation_id_t op_id,
                        const proto_select_data_vec_t &data_vec)
     {
-        send_recv_rma(UCS_MBYTE, op_id, UCS_MEMORY_TYPE_CUDA);
+        auto rkey_cfg_index = send_recv_rma(UCS_MBYTE, op_id,
+                                            UCS_MEMORY_TYPE_CUDA);
+        ASSERT_NE(rkey_cfg_index, UCP_WORKER_CFG_INDEX_NULL);
 
         ucp_proto_select_key_t key = any_key();
         key.param.op_id_flags      = op_id;
         key.param.op_attr          = 0;
         key.param.mem_type         = UCS_MEMORY_TYPE_CUDA;
 
-        auto rkey_cfg_index = get_cuda_rkey_cfg();
-        ASSERT_NE(rkey_cfg_index, UCP_WORKER_CFG_INDEX_NULL);
         check_rkey_config(sender(), data_vec, key, rkey_cfg_index);
     }
 };
@@ -1333,10 +1344,6 @@ UCS_TEST_P(test_ucp_proto_mock_cuda_ipc, put, "IB_NUM_PATHS?=1")
 
 UCS_TEST_P(test_ucp_proto_mock_cuda_ipc, get, "IB_NUM_PATHS?=1")
 {
-    if (!has_cuda_ipc_get_zcopy()) {
-        UCS_TEST_SKIP_R("cuda_ipc get_zcopy not supported");
-    }
-
     test_cuda_rma(UCP_OP_ID_GET, {
         {0, 0,   "copy-out",  "rc_mlx5/mock"},
         {1, INF, "zero-copy", "cuda_ipc/cuda"},

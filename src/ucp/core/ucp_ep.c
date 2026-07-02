@@ -540,6 +540,10 @@ void ucp_ep_destroy_base(ucp_ep_h ep)
     ucp_worker_keepalive_remove_ep(ep);
     ucp_ep_release_id(ep);
     ucs_list_del(&ep->ext->ep_list);
+    if (!ucp_ep_has_cm_lane(ep) && (ep->ext->recovery_arg != NULL)) {
+        ucs_free(ep->ext->recovery_arg);
+        ep->ext->recovery_arg = NULL;
+    }
 
     ucs_vfs_obj_remove(ep);
     ucs_callbackq_remove_oneshot(&worker->uct->progress_q, ep,
@@ -1622,8 +1626,9 @@ ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
 
     ++ucp_ep->worker->counters.ep_failures;
 
-    /* The EP can be closed from last completion callback */
-    ucp_ep_discard_lanes(ucp_ep, ucp_ep_get_live_lanes(ucp_ep), status,
+    /* The EP is unrecoverable - discard ALL lanes, including those already
+     * marked UCP_LANE_TYPE_FAILED. */
+    ucp_ep_discard_lanes(ucp_ep, UCS_MASK(ucp_ep_num_lanes(ucp_ep)), status,
                          ucp_ep->cfg_index);
     ucp_stream_ep_cleanup(ucp_ep, status);
 
@@ -1814,6 +1819,167 @@ ucs_status_t ucp_ep_reconfig_clear_failed_lanes(ucp_ep_h ep,
     return UCS_OK;
 }
 
+/* Prepare failed lanes for recovery; return the subset to pack into
+ * LANES_ADDR_REQUEST. */
+static ucp_lane_map_t
+ucp_ep_recovery_prepare_lanes(ucp_ep_h ep, ucp_lane_map_t lanes)
+{
+    /* TODO: lane rebuild is not implemented yet. */
+    return 0;
+}
+
+/* Send a LANES_ADDR_REQUEST for the currently failed lanes. */
+static void ucp_ep_recovery_send_request(ucp_ep_h ep)
+{
+    ucp_lane_map_t failed_lanes = ucp_ep_get_failed_lanes(ep);
+    ucp_lane_map_t recovery_lanes;
+
+    ucs_assert(ucp_ep_config(ep)->key.am_lane != UCP_NULL_LANE);
+
+    recovery_lanes = ucp_ep_recovery_prepare_lanes(ep, failed_lanes);
+    if (recovery_lanes == 0) {
+        ucs_diag("ep %p: no lanes to recover", ep);
+        return;
+    }
+
+    ucs_debug("ep %p: sending recovery request, failed=0x%" PRIx64
+              " recovery=0x%" PRIx64, ep, failed_lanes, recovery_lanes);
+
+    ucp_wireup_send_lanes_addr_msg(ep, UCP_WIREUP_MSG_LANES_ADDR_REQUEST,
+                                   failed_lanes, recovery_lanes);
+}
+
+/* A failed lane is recovered once its UCT EP is a real transport EP or a
+ * READY wireup proxy; then its FAILED bit can be cleared. */
+static int ucp_ep_recovery_lane_is_ready(ucp_ep_h ep, ucp_lane_index_t lane)
+{
+    uct_ep_h uct_ep = ucp_ep_get_lane(ep, lane);
+    ucp_wireup_ep_t *wireup_ep;
+
+    if (ucp_is_uct_ep_failed(uct_ep)) {
+        return 0;
+    }
+
+    wireup_ep = ucp_wireup_ep(uct_ep);
+    /* proxy already swapped for the real transport EP or it's ready for for that */
+    return (wireup_ep == NULL) || !!(wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY);
+}
+
+static ucp_lane_map_t
+ucp_ep_recovery_get_ready_lanes(ucp_ep_h ep, ucp_lane_map_t failed_lanes)
+{
+    ucp_lane_map_t ready_lanes = 0;
+    ucp_lane_index_t lane;
+
+    ucs_for_each_bit(lane, failed_lanes) {
+        if (ucp_ep_recovery_lane_is_ready(ep, lane)) {
+            ready_lanes |= UCS_BIT(lane);
+        }
+    }
+
+    return ready_lanes;
+}
+
+ucs_status_t ucp_ep_recovery_arm(ucp_ep_h ep)
+{
+    ucp_ep_recovery_arg_t *arg = ep->ext->recovery_arg;
+    ucp_worker_h worker        = ep->worker;
+    ucp_context_h context      = worker->context;
+
+    if (ucp_ep_config(ep)->key.dst_version < 22) {
+        ucs_diag("ep: %p: recovery support requires UCX 1.22 or later, "
+                 "remote peer version %d is not supported",
+                 ep, ucp_ep_config(ep)->key.dst_version);
+        return UCS_OK;
+    }
+
+    if (arg == NULL) {
+        /* First time failure. */
+        arg = ucs_calloc(1, sizeof(*arg), "ucp_ep_recovery_arg");
+        if (arg == NULL) {
+            ucs_error("ep %p: failed to allocate recovery argument", ep);
+            return UCS_ERR_NO_MEMORY;
+        }
+
+        ep->ext->recovery_arg = arg;
+    }
+
+    /* Reset counter by new event. */
+    arg->retries_left = context->config.ext.recovery_retries;
+    return UCS_OK;
+}
+
+int ucp_ep_recovery_progress(ucp_ep_h ep)
+{
+    ucp_worker_h worker = ep->worker;
+    int ret             = 0;
+    ucp_lane_map_t failed, recovered;
+    ucs_status_t status;
+
+    UCS_ASYNC_BLOCK(&worker->async);
+
+    if (ucp_ep_has_cm_lane(ep)) {
+        goto done;
+    }
+
+    if (ep->flags & UCP_EP_FLAG_FAILED) {
+        /* Endpoint was declared fully failed elsewhere; nothing more to do. */
+        ret = 1;
+        goto done;
+    }
+
+    failed = ucp_ep_get_failed_lanes(ep);
+    if (failed == 0) {
+        /* Recovery completed between rounds, the ep operates normally */
+        ucs_assert(ep->ext->recovery_arg == NULL);
+        goto done;
+    }
+
+    ucs_assert(ep->ext->recovery_arg != NULL);
+    ucs_assert(ep->ext->recovery_arg->retries_left > 0);
+
+    recovered = ucp_ep_recovery_get_ready_lanes(ep, failed);
+    status    = ucp_ep_reconfig_clear_failed_lanes(ep, recovered);
+    if (status != UCS_OK) {
+        ucs_error("ep %p: failed to clear FAILED states for lanes 0x%" PRIx64,
+                  ep, recovered);
+        ucp_ep_set_lanes_failed_schedule(ep, 0, status);
+        ret = 1;
+        goto done;
+    }
+
+    failed &= ~recovered;
+    if (failed == 0) {
+        goto done;
+    }
+
+    ucs_debug("ep %p: recovery round (retries_left=%u, failed=0x%" PRIx64 ")",
+              ep, ep->ext->recovery_arg->retries_left, (uint64_t)failed);
+
+    ucp_ep_recovery_send_request(ep);
+
+    if (--ep->ext->recovery_arg->retries_left > 0) {
+        ret = 1;
+        goto done;
+    }
+
+    if (ucp_ep_get_live_lanes(ep) == 0) {
+        ucs_error("ep %p: recovery retries exhausted", ep);
+        ucp_ep_set_lanes_failed_schedule(ep, 0, UCS_ERR_ENDPOINT_TIMEOUT);
+    } else {
+        ucs_diag("ep %p: recovery retries exhausted, giving up on "
+                    "failed lanes 0x%" PRIx64, ep, (uint64_t)failed);
+    }
+
+    ucs_free(ep->ext->recovery_arg);
+    ep->ext->recovery_arg = NULL;
+    ret                   = 1;
+
+done:
+    UCS_ASYNC_UNBLOCK(&worker->async);
+    return ret;
+}
+
 ucs_status_t
 ucp_ep_failover_reconfig(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,
                          ucs_status_t discard_status)
@@ -1834,7 +2000,7 @@ ucp_ep_failover_reconfig(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,
     }
 
     ucp_ep_discard_lanes(ucp_ep, failed_lanes, discard_status, old_cfg_index);
-    return UCS_OK;
+    return ucp_ep_recovery_arm(ucp_ep);
 }
 
 void ucp_ep_set_lanes_failed(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
@@ -1871,8 +2037,6 @@ void ucp_ep_set_lanes_failed_schedule(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
     ucp_worker_h worker = ucp_ep->worker;
     ucp_ep_set_lanes_failed_arg_t *set_ep_failed_arg;
 
-    UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(worker);
-
     set_ep_failed_arg = ucs_malloc(sizeof(*set_ep_failed_arg),
                                    "set_ep_failed_arg");
     if (set_ep_failed_arg == NULL) {
@@ -1884,8 +2048,10 @@ void ucp_ep_set_lanes_failed_schedule(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
     set_ep_failed_arg->lanes  = lanes;
     set_ep_failed_arg->status = status;
 
+    UCS_ASYNC_BLOCK(&worker->async);
     ucs_callbackq_add_oneshot(&worker->uct->progress_q, ucp_ep,
                               ucp_ep_set_lanes_failed_progress, set_ep_failed_arg);
+    UCS_ASYNC_UNBLOCK(&worker->async);
 
     /* If the worker supports the UCP_FEATURE_WAKEUP feature, signal the user so
      * that he can wake-up on this event */
@@ -3699,7 +3865,7 @@ ucs_status_t ucp_ep_do_uct_ep_am_keepalive(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
     UCS_STATIC_BITMAP_SET(&tl_bitmap, rsc_idx);
 
     status = ucp_wireup_msg_prepare(ucp_ep, UCP_WIREUP_MSG_EP_CHECK,
-                                    &tl_bitmap, NULL, &wireup_msg,
+                                    &tl_bitmap, NULL, 0, 0, &wireup_msg,
                                     &wireup_msg_iov[1].iov_base,
                                     &wireup_msg_iov[1].iov_len);
     if (status != UCS_OK) {
@@ -3777,6 +3943,10 @@ void ucp_ep_req_purge(ucp_ep_h ucp_ep, ucp_request_t *req,
         }
 
         ucp_request_put(req);
+    } else if (req->flags & UCP_REQUEST_FLAG_RNDV_SEND_INTERNAL) {
+        ucs_assert(req->send.ep == ucp_ep);
+
+        ucp_proto_request_abort(req, status);
     } else if (req->send.uct.func == ucp_amo_sw_proto.progress_fetch) {
         /* Currently we don't support UCP EP request purging for proto mode */
         ucs_assert(!ucp_ep->worker->context->config.ext.proto_enable);
