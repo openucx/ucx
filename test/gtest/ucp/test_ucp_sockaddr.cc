@@ -1508,6 +1508,7 @@ UCS_TEST_SKIP_COND_P(test_max_lanes, lanes_reconf, !cm_use_all_devices())
 UCP_INSTANTIATE_TEST_CASE_TLS(test_max_lanes, rc, "rc")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_max_lanes, dc, "dc")
 
+#if ENABLE_DEBUG_DATA || UCS_ENABLE_ASSERT
 class test_ucp_sockaddr_wireup_fail : public test_ucp_sockaddr_wireup {
 protected:
     typedef enum {
@@ -1803,6 +1804,7 @@ UCS_TEST_P(test_ucp_sockaddr_wireup_fail_try_next_cm,
 }
 
 UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr_wireup_fail_try_next_cm)
+#endif
 
 
 class test_ucp_sockaddr_different_tl_rsc : public test_ucp_sockaddr

@@ -724,7 +724,7 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
     }
 
     if (context->config.ext.cm_use_all_devices) {
-        ucp_ep->flags |= UCP_EP_FLAG_CONNECT_WAIT_PRE_REQ;
+        ucp_ep_update_debug_flags(ucp_ep, UCP_EP_FLAG_CONNECT_WAIT_PRE_REQ, 0);
         ucp_wireup_update_flags(ucp_ep, UCP_WIREUP_EP_FLAG_REMOTE_CONNECTED);
     } else {
         ucp_wireup_remote_connected(ucp_ep);
@@ -778,7 +778,7 @@ static void ucp_cm_client_connect_cb(uct_ep_h uct_cm_ep, void *arg,
                                           UCT_CM_EP_CLIENT_CONNECT_ARGS_FIELD_STATUS)));
     remote_data = connect_args->remote_data;
     status      = connect_args->status;
-    ucp_ep_update_flags(ucp_ep, UCP_EP_FLAG_CLIENT_CONNECT_CB, 0);
+    ucp_ep_update_debug_flags(ucp_ep, UCP_EP_FLAG_CLIENT_CONNECT_CB, 0);
 
     ucs_debug("ep %p flags 0x%x cfg_index %d: client connected status %s",
               ucp_ep, ucp_ep->flags, ucp_ep->cfg_index,
@@ -949,7 +949,7 @@ static void ucp_cm_disconnect_cb(uct_ep_h uct_cm_ep, void *arg)
     ucp_worker_h worker = ucp_ep->worker;
     uct_ep_h uct_ep;
 
-    ucp_ep_update_flags(ucp_ep, UCP_EP_FLAG_DISCONNECT_CB_CALLED, 0);
+    ucp_ep_update_debug_flags(ucp_ep, UCP_EP_FLAG_DISCONNECT_CB_CALLED, 0);
     ucs_trace("ep %p flags 0x%x: remote disconnect callback invoked", ucp_ep,
               ucp_ep->flags);
 
@@ -1393,7 +1393,7 @@ static void ucp_cm_server_conn_notify_cb(
                       UCT_CM_EP_SERVER_CONN_NOTIFY_ARGS_FIELD_STATUS);
 
     status = notify_args->status;
-    ucp_ep_update_flags(ucp_ep, UCP_EP_FLAG_SERVER_NOTIFY_CB, 0);
+    ucp_ep_update_debug_flags(ucp_ep, UCP_EP_FLAG_SERVER_NOTIFY_CB, 0);
     ucs_trace("ep %p flags 0x%x: notify callback invoked, status %s", ucp_ep,
               ucp_ep->flags, ucs_status_string(status));
 
@@ -1529,8 +1529,8 @@ void ucp_ep_cm_disconnect_cm_lane(ucp_ep_h ucp_ep)
     ucs_assert(!(ucp_ep->flags & UCP_EP_FLAG_FAILED));
     ucs_assert(ucp_ep_is_cm_local_connected(ucp_ep));
 
-    ucp_ep_update_flags(ucp_ep, UCP_EP_FLAG_DISCONNECTED_CM_LANE,
-                        UCP_EP_FLAG_LOCAL_CONNECTED);
+    ucp_ep_update_flags(ucp_ep, 0, UCP_EP_FLAG_LOCAL_CONNECTED);
+    ucp_ep_update_debug_flags(ucp_ep, UCP_EP_FLAG_DISCONNECTED_CM_LANE, 0);
 
     /* Remove the client's connect_progress or the server's connect notify
      * callbacks from the callbackq to make sure it won't be invoked after

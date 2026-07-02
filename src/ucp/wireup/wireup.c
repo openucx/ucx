@@ -208,17 +208,17 @@ ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
 
     switch (req->send.wireup.msg_hdr.type) {
     case UCP_WIREUP_MSG_PRE_REQUEST:
-        ucp_ep_update_flags(ep, UCP_EP_FLAG_CONNECT_PRE_REQ_SENT, 0);
+        ucp_ep_update_debug_flags(ep, UCP_EP_FLAG_CONNECT_PRE_REQ_SENT, 0);
         break;
     case UCP_WIREUP_MSG_REQUEST:
-        ucp_ep_update_flags(ep, UCP_EP_FLAG_CONNECT_REQ_SENT, 0);
+        ucp_ep_update_debug_flags(ep, UCP_EP_FLAG_CONNECT_REQ_SENT, 0);
         break;
     case UCP_WIREUP_MSG_REPLY:
     case UCP_WIREUP_MSG_REPLY_RECONFIG:
-        ucp_ep_update_flags(ep, UCP_EP_FLAG_CONNECT_REP_SENT, 0);
+        ucp_ep_update_debug_flags(ep, UCP_EP_FLAG_CONNECT_REP_SENT, 0);
         break;
     case UCP_WIREUP_MSG_ACK:
-        ucp_ep_update_flags(ep, UCP_EP_FLAG_CONNECT_ACK_SENT, 0);
+        ucp_ep_update_debug_flags(ep, UCP_EP_FLAG_CONNECT_ACK_SENT, 0);
         break;
     }
 
@@ -734,7 +734,7 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
         if ((ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED) &&
             (remote_uuid > worker->uuid)) {
             ucs_trace("ep %p: ignoring simultaneous connect request", ep);
-            ucp_ep_update_flags(ep, UCP_EP_FLAG_CONNECT_REQ_IGNORED, 0);
+            ucp_ep_update_debug_flags(ep, UCP_EP_FLAG_CONNECT_REQ_IGNORED, 0);
             return;
         }
     }
