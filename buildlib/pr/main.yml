@@ -2,6 +2,9 @@ variables:
   DOCKER_OPT_VOLUMES: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
   DOCKER_OPT_IB: --ulimit memlock=-1:-1 --device=/dev/infiniband/ --net=host
   DOCKER_OPT_GPU: --gpus all --device=/dev/gdrdrv --ipc=host $(DOCKER_OPT_IB)
+  # Set to e.g. "--device=/dev/dri --group-add render --group-add video"
+  # when running the ZE lane on Intel GPU hosts.
+  DOCKER_OPT_ZE_GPU: ""
   DOCKER_OPT_ARGS: --cap-add=SYS_PTRACE
 
 resources:
@@ -78,6 +81,13 @@ resources:
     - container: ubuntu2404_doca31_gpunetio
       image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/ubuntu24.04/builder:doca-3.1.0-gpunetio
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
+    # No-GPU Level Zero builder, derived from the Intel oneAPI toolkit image.
+    # Ships the ZE loader + null driver so the ze lane runs without real GPUs.
+    # TODO(ci-owner): build buildlib/dockers/ze-builder.Dockerfile and publish
+    # to the internal registry; ref below is a proposed name, adjust as needed.
+    - container: ubuntu2404_ze
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/ubuntu24.04/ze-builder:oneapi-2026.0.0-l0-1.27.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_ZE_GPU)
     - container: ubuntu2604
       image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/ubuntu26.04/builder:mofed-26.04-0.7.6.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
