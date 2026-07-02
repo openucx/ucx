@@ -428,7 +428,7 @@ ucp_wireup_match_p2p_lanes(ucp_ep_h ep,
     }
 }
 
-static ucs_status_t
+ucs_status_t
 ucp_wireup_find_remote_p2p_addr(ucp_ep_h ep, ucp_lane_index_t remote_lane,
                                 const ucp_unpacked_address_t *remote_address,
                                 const ucp_address_entry_t **address_entry_p,
@@ -576,12 +576,13 @@ out_unblock:
     return 0;
 }
 
-void ucp_wireup_update_flags(ucp_ep_h ucp_ep, uint32_t new_flags)
+void ucp_wireup_update_flags(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
+                             uint32_t new_flags)
 {
     ucp_lane_index_t lane;
     ucp_wireup_ep_t *wireup_ep;
 
-    for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep); ++lane) {
+    ucs_for_each_bit(lane, lanes) {
         wireup_ep = ucp_wireup_ep(ucp_ep_get_lane(ucp_ep, lane));
         if (wireup_ep == NULL) {
             continue;
@@ -610,7 +611,7 @@ void ucp_wireup_remote_connected(ucp_ep_h ep)
         ucp_ep_update_flags(ep, UCP_EP_FLAG_REMOTE_CONNECTED, 0);
     }
 
-    ucp_wireup_update_flags(ep,
+    ucp_wireup_update_flags(ep, UCS_MASK(ucp_ep_num_lanes(ep)),
                             UCP_WIREUP_EP_FLAG_REMOTE_CONNECTED |
                             UCP_WIREUP_EP_FLAG_READY);
     ucp_wireup_eps_progress_sched(ep);
@@ -1009,18 +1010,47 @@ ucp_wireup_process_lanes_addr_request(
 {
     const ucp_wireup_msg_lanes_info_t *lanes_info =
             (const ucp_wireup_msg_lanes_info_t *)(msg + 1);
+    ucp_lane_map_t peer_unaware, to_rebuild, peer_provided;
+    ucs_status_t status;
 
     ucp_ep_update_remote_id(ep, msg->src_ep_id);
 
-    ucs_debug("ep %p: LANES_ADDR_REQ requested=0x%" PRIx64
-              " provided=0x%" PRIx64,
-              ep, lanes_info->requested_lane_map,
-              lanes_info->provided_lane_map);
+    /* Asymmetric failure: lanes the peer declared broken but we don't yet
+     * see as failed go through local failover first, so subsequent rebuild
+     * steps encounter proper failed stubs and the reply rides the new
+     * am_lane. */
+    peer_unaware = lanes_info->provided_lane_map & ~ucp_ep_get_failed_lanes(ep);
+    if (peer_unaware != 0) {
+        ucs_debug("ep %p: LANES_ADDR_REQ triggering local failover for "
+                  "asymmetric failure on lanes 0x%" PRIx64,
+                  ep, (uint64_t)peer_unaware);
+        status = ucp_ep_failover_reconfig(ep, peer_unaware,
+                                          UCS_ERR_CONNECTION_RESET);
+        if (status != UCS_OK) {
+            ucs_diag("ep %p: local failover for LANES_ADDR_REQ failed: %s",
+                     ep, ucs_status_string(status));
+        }
+    }
 
-    /* TODO: lane rebuild is not implemented yet;
-             reply with provided_lane_map=0. */
+    to_rebuild    = lanes_info->provided_lane_map & ucp_ep_get_failed_lanes(ep);
+    peer_provided = ucp_ep_recovery_rebuild_lanes(ep, to_rebuild,
+                                                  remote_address);
+
+    ucs_debug("ep %p: LANES_ADDR_REQ requested=0x%" PRIx64
+              " provided=0x%" PRIx64 " to_rebuild=0x%" PRIx64
+              " rebuilt=0x%" PRIx64,
+              ep, lanes_info->requested_lane_map, lanes_info->provided_lane_map,
+              to_rebuild, peer_provided);
+
+    if (peer_provided != 0) {
+        ucp_wireup_eps_progress_sched(ep);
+    }
+
+    /* Always reply, even if peer_provided == 0, so the initiator knows the
+     * peer handled the request (empty provided_lane_map means "I couldn't
+     * satisfy any of the lanes you asked about"). */
     ucp_wireup_send_lanes_addr_msg(ep, UCP_WIREUP_MSG_LANES_ADDR_REPLY,
-                                   lanes_info->requested_lane_map, 0);
+                                   lanes_info->requested_lane_map, peer_provided);
 }
 
 static UCS_F_NOINLINE void
@@ -1030,16 +1060,26 @@ ucp_wireup_process_lanes_addr_reply(
 {
     const ucp_wireup_msg_lanes_info_t *lanes_info =
             (const ucp_wireup_msg_lanes_info_t *)(msg + 1);
+    ucp_lane_map_t rebuilt;
 
     ucp_ep_update_remote_id(ep, msg->src_ep_id);
 
-    ucs_debug("ep %p: LANES_ADDR_REP requested=0x%" PRIx64
-              " provided=0x%" PRIx64,
-              ep, lanes_info->requested_lane_map,
-              lanes_info->provided_lane_map);
+    rebuilt = ucp_ep_recovery_rebuild_lanes(
+            ep, lanes_info->provided_lane_map & ucp_ep_get_failed_lanes(ep),
+            remote_address);
 
-    /* TODO: lane rebuild is not implemented yet;
-             recovery_progress owns FAILED-bit clearing and retries. */
+    ucs_debug("ep %p: LANES_ADDR_REP requested=0x%" PRIx64
+              " provided=0x%" PRIx64 " rebuilt=0x%" PRIx64,
+              ep, lanes_info->requested_lane_map, lanes_info->provided_lane_map,
+              rebuilt);
+
+    if (rebuilt != 0) {
+        ucp_wireup_update_flags(ep, rebuilt, UCP_WIREUP_EP_FLAG_READY);
+        ucp_wireup_eps_progress_sched(ep);
+    }
+
+    /* ucp_ep_recovery_progress owns FAILED-bit clearing and the retry
+     * cadence; do not clear or re-send inline here. */
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1189,7 +1229,7 @@ static int ucp_wireup_should_activate_wiface(ucp_worker_iface_t *wiface,
            (ep->flags & UCP_EP_FLAG_INTERNAL);
 }
 
-static ucs_status_t
+ucs_status_t
 ucp_wireup_iface_ep_create(ucp_worker_iface_t *wiface,
                            const ucp_address_entry_t *address,
                            unsigned path_index, uct_ep_h *uct_ep_p)
