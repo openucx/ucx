@@ -14,6 +14,9 @@ typedef void (*ucp_ep_failover_lane_done_cb_t)(void *request,
                                                ucs_status_t status,
                                                void *user_data);
 
+typedef void (*ucp_ep_failover_lane_failed_cb_t)(ucs_status_t status,
+                                                 void *user_data);
+
 void ucp_ep_failover_init(ucp_ep_h ep);
 
 void ucp_ep_failover_cleanup(ucp_ep_h ep);
@@ -22,19 +25,19 @@ uct_ep_h ucp_ep_failover_get_uct_ep(ucp_ep_h ep, ucp_lane_index_t lane);
 
 ucs_status_t
 ucp_ep_failover_add_lanes(ucp_ep_h ep, ucp_lane_map_t lane_map,
-                          uct_ep_h *uct_eps, ucs_status_t discard_status,
-                          ucp_ep_failover_lane_done_cb_t cb, void *arg,
+                          uct_ep_h *uct_eps, ucp_ep_failover_lane_done_cb_t cb,
+                          ucp_ep_failover_lane_failed_cb_t failed_cb, void *arg,
                           ucp_lane_map_t *failover_lanes_p);
 
-void ucp_ep_failover_abort_lanes(ucp_ep_h ep, ucp_lane_map_t lane_map,
-                                 ucs_status_t status);
+void ucp_ep_failover_cancel_lanes(ucp_ep_h ep, ucp_lane_map_t lane_map);
 
-ucs_status_t ucp_ep_failover_query_lanes(ucp_ep_h ep, ucp_lane_map_t lane_map);
+void ucp_ep_failover_arm_lane(ucp_ep_h ep, ucp_lane_index_t lane,
+                              uct_ep_h uct_ep);
 
-/**
- * Extract outstanding zcopy requests from failed lanes and restart them
- * through their owning UCP requests.
- */
+ucs_status_t
+ucp_ep_failover_lanes_schedule(ucp_ep_h ep, ucp_lane_map_t lane_map);
+
+/** Process peer lane-state tokens and schedule outstanding operation replay. */
 ucs_status_t
 ucp_ep_failover_on_lane_state(ucp_ep_h ep,
                               const ucp_wireup_lane_state_t *lane_state);

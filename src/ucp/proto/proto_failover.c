@@ -44,9 +44,8 @@ ucp_proto_failover_replay_op_supported(const uct_ep_op_info_t *op_info)
 }
 
 ucs_status_t
-ucp_proto_failover_replay_op_create(
-        const uct_ep_op_info_t *op_info,
-        ucp_proto_failover_replay_op_t **replay_op_p)
+ucp_proto_failover_replay_op_create(const uct_ep_op_info_t *op_info,
+                                    ucp_proto_failover_replay_op_t **replay_op_p)
 {
     ucp_proto_failover_replay_op_t *op;
     size_t length;
@@ -78,8 +77,7 @@ ucp_proto_failover_replay_op_create(
     return UCS_OK;
 }
 
-void ucp_proto_failover_replay_op_destroy(
-        ucp_proto_failover_replay_op_t *op)
+void ucp_proto_failover_replay_op_destroy(ucp_proto_failover_replay_op_t *op)
 {
     if (op->req != NULL) {
         if (!(op->req->flags & UCP_REQUEST_FLAG_COMPLETED)) {
@@ -111,7 +109,7 @@ ucp_proto_failover_replay_op_id(const uct_ep_op_info_t *op_info)
 static size_t ucp_proto_failover_pack(void *dest, void *arg)
 {
     const uct_ep_op_info_t *op_info = arg;
-    size_t length = op_info->inline_data.length;
+    size_t length                   = op_info->inline_data.length;
 
     if (length > 0) {
         memcpy(dest, op_info->inline_data.buffer, length);
@@ -249,11 +247,11 @@ ucp_proto_failover_probe_common(const ucp_proto_init_params_t *init_params,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG |
                                UCP_PROTO_COMMON_INIT_FLAG_FAILOVER,
         .super.exclude_map   = ucp_proto_failover_exclude_map(init_params,
-                                                              same_md),
+                                                            same_md),
         .super.reg_mem_info  = ucp_mem_info_unknown,
         .lane_type           = lane_type,
         .tl_cap_flags        = tl_cap_flags,
-        .tl_v2_cap_flags     = 0
+        .tl_v2_cap_flags     = UCT_IFACE_FLAG_V2_QUERY_TOKEN
     };
 
     if (init_params->ep_config_key->err_mode !=
@@ -362,7 +360,7 @@ ucp_proto_failover_replay_op_request_init(ucp_ep_h ep,
         return UCS_ERR_NO_MEMORY;
     }
 
-    length = op->info.inline_data.length;
+    length                         = op->info.inline_data.length;
     req->status                    = UCS_INPROGRESS;
     req->flags                     = UCP_REQUEST_FLAG_PROTO_SEND;
     req->send.ep                   = ep;
@@ -389,8 +387,7 @@ ucp_proto_failover_replay_op_request_init(ucp_ep_h ep,
 }
 
 ucs_status_t
-ucp_proto_failover_replay_op_progress(ucp_ep_h ep,
-                                      ucp_lane_index_t failed_lane,
+ucp_proto_failover_replay_op_progress(ucp_ep_h ep, ucp_lane_index_t failed_lane,
                                       ucp_proto_failover_replay_op_t *op)
 {
     ucs_status_t status;
