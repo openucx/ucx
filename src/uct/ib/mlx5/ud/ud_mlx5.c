@@ -989,6 +989,11 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t, uct_md_h tl_md,
 
     ucs_trace_func("");
 
+    status = uct_ib_md_check_cc_dma_bounce_supported(&md->super, "ud_mlx5");
+    if (status != UCS_OK) {
+        return status;
+    }
+
     status = uct_ud_mlx5dv_calc_tx_wqe_ratio(md);
     if (status != UCS_OK) {
         return status;

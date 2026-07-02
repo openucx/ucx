@@ -1308,6 +1308,101 @@ void uct_ib_md_check_odp(uct_ib_md_t *md, const uct_ib_md_config_t *md_config)
     ucs_debug("%s: ODP is supported", device_name);
 }
 
+static int uct_ib_md_detect_cc_dma_bounce(uct_ib_md_t *md)
+{
+    return uct_ib_device_is_cc_dma_bounce(&md->dev);
+}
+
+static ucs_status_t uct_ib_md_create_coco_pd(uct_ib_md_t *md)
+{
+#if HAVE_DECL_IBV_ALLOC_PARENT_DOMAIN && \
+    HAVE_DECL_IBV_PARENT_DOMAIN_INIT_ATTR_ALLOW_CC_UNPROTECTED_ALLOC
+    struct ibv_parent_domain_init_attr attr = {};
+
+    attr.pd        = md->pd;
+    attr.td        = NULL;
+    attr.comp_mask = IBV_PARENT_DOMAIN_INIT_ATTR_ALLOW_CC_UNPROTECTED_ALLOC;
+
+    md->coco_pd = ibv_alloc_parent_domain(md->dev.ibv_context, &attr);
+    if (md->coco_pd == NULL) {
+        ucs_debug("%s: ibv_alloc_parent_domain() with CoCo unprotected allocation failed: %m",
+                  uct_ib_device_name(&md->dev));
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    ucs_debug("%s: enabled CoCo RDMA control-object shared allocation",
+              uct_ib_device_name(&md->dev));
+    return UCS_OK;
+#else
+    ucs_debug("%s: device reports IBV_DEVICE_CC_DMA_BOUNCE but rdma-core lacks CoCo parent-domain APIs",
+              uct_ib_device_name(&md->dev));
+    return UCS_ERR_UNSUPPORTED;
+#endif
+}
+
+static ucs_status_t uct_ib_md_probe_coco_control_cq(uct_ib_md_t *md)
+{
+#if HAVE_DECL_IBV_CREATE_CQ_EX && HAVE_DECL_IBV_CQ_INIT_ATTR_MASK_PD && \
+    HAVE_STRUCT_IBV_CQ_INIT_ATTR_EX_PARENT_DOMAIN
+    struct ibv_cq_init_attr_ex cq_attr = {
+        .cqe           = 1,
+        .comp_mask     = IBV_CQ_INIT_ATTR_MASK_PD,
+        .parent_domain = md->coco_pd
+    };
+    struct ibv_cq_ex *cq_ex;
+    struct ibv_cq *cq;
+    int saved_errno;
+
+    cq_ex = ibv_create_cq_ex(md->dev.ibv_context, &cq_attr);
+    if (cq_ex == NULL) {
+        saved_errno = errno;
+        if ((saved_errno == EOPNOTSUPP) || (saved_errno == ENOSYS) ||
+            (saved_errno == EINVAL)) {
+            errno = saved_errno;
+            ucs_debug("%s: CoCo control CQ probe requires ibv_create_cq_ex() "
+                      "parent-domain support: %m",
+                      uct_ib_device_name(&md->dev));
+            return UCS_ERR_UNSUPPORTED;
+        }
+
+        errno = saved_errno;
+        uct_ib_check_memlock_limit_msg(md->dev.ibv_context,
+                                       UCS_LOG_LEVEL_ERROR,
+                                       "ibv_create_cq_ex(cqe=%d)", 1);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    cq = ibv_cq_ex_to_cq(cq_ex);
+    ibv_destroy_cq(cq);
+    ucs_debug("%s: CoCo control CQ probe succeeded",
+              uct_ib_device_name(&md->dev));
+    return UCS_OK;
+#else
+    ucs_debug("%s: device reports IBV_DEVICE_CC_DMA_BOUNCE but rdma-core lacks "
+              "CoCo CQ parent-domain APIs",
+              uct_ib_device_name(&md->dev));
+    return UCS_ERR_UNSUPPORTED;
+#endif
+}
+
+static void uct_ib_md_dealloc_coco_pd(uct_ib_md_t *md)
+{
+    int ret;
+
+    if (md->coco_pd == NULL) {
+        return;
+    }
+
+    ret = ibv_dealloc_pd(md->coco_pd);
+    /* Do not print a warning if PD deallocation failed with EINVAL, because
+     * it fails from time to time on BF/ARM (TODO: investigate) */
+    if ((ret != 0) && (errno != EINVAL)) {
+        ucs_warn("ibv_dealloc_pd(coco_pd) failed: %m");
+    }
+
+    md->coco_pd = NULL;
+}
+
 ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
                                    struct ibv_device *ib_device,
                                    const uct_ib_md_config_t *md_config)
@@ -1337,12 +1432,25 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
         goto err_release_stats;
     }
 
+    md->cc_dma_bounce = uct_ib_md_detect_cc_dma_bounce(md);
+    if (md->cc_dma_bounce) {
+        status = uct_ib_md_create_coco_pd(md);
+        if (status != UCS_OK) {
+            goto err_cleanup_device;
+        }
+
+        status = uct_ib_md_probe_coco_control_cq(md);
+        if (status != UCS_OK) {
+            goto err_dealloc_coco_pd;
+        }
+    }
+
     if (strlen(md_config->subnet_prefix) > 0) {
         status = uct_ib_md_parse_subnet_prefix(md_config->subnet_prefix,
                                                &md->subnet_filter);
 
         if (status != UCS_OK) {
-            goto err_cleanup_device;
+            goto err_dealloc_coco_pd;
         }
 
         md->check_subnet_filter = 1;
@@ -1389,7 +1497,7 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
                   "installed correctly, or dmabuf is supported.",
                   uct_ib_device_name(&md->dev));
         status = UCS_ERR_UNSUPPORTED;
-        goto err_cleanup_device;
+        goto err_dealloc_coco_pd;
     }
 
     md->dev.max_zcopy_log_sge = INT_MAX;
@@ -1401,6 +1509,8 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
 
     return UCS_OK;
 
+err_dealloc_coco_pd:
+    uct_ib_md_dealloc_coco_pd(md);
 err_cleanup_device:
     uct_ib_device_cleanup(&md->dev);
 err_release_stats:
@@ -1453,6 +1563,8 @@ err:
 void uct_ib_md_free(uct_ib_md_t *md)
 {
     int ret;
+
+    uct_ib_md_dealloc_coco_pd(md);
 
     ret = ibv_dealloc_pd(md->pd);
     /* Do not print a warning if PD deallocation failed with EINVAL, because

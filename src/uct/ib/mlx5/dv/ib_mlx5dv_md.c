@@ -13,6 +13,7 @@
 #include <uct/api/device/uct_device_types.h>
 
 #include <ucs/arch/bitops.h>
+#include <ucs/datastruct/mpool.inl>
 #include <ucs/profile/profile.h>
 #include <ucs/sys/ptr_arith.h>
 #include <ucs/time/time.h>
@@ -93,6 +94,8 @@ static const char uct_ib_mkey_token[] = "uct_ib_mkey_token";
 
 typedef struct uct_ib_mlx5_dbrec_page {
     uct_ib_mlx5_devx_umem_t    mem;
+    volatile uint32_t          *db;
+    unsigned                   num_dbrecs;
 } uct_ib_mlx5_dbrec_page_t;
 
 
@@ -1697,36 +1700,58 @@ static ucs_status_t uct_ib_mlx5_add_page(ucs_mpool_t *mp, size_t *size_p, void *
 {
     uct_ib_mlx5_md_t *md = ucs_container_of(mp, uct_ib_mlx5_md_t, dbrec_pool);
     uct_ib_mlx5_dbrec_page_t *page;
-    size_t size = ucs_align_up(*size_p + sizeof(*page), ucs_get_page_size());
-    uct_ib_mlx5_devx_umem_t mem;
+    size_t private_size = *size_p;
+    size_t db_size;
+    void *db;
     ucs_status_t status;
 
-    status = uct_ib_mlx5_md_buf_alloc(md, size, 1, (void**)&page, &mem, 0,
-                                      "devx dbrec");
-    if (status != UCS_OK) {
-        return status;
+    page = ucs_calloc(1, private_size + sizeof(*page),
+                      "devx dbrec private page");
+    if (page == NULL) {
+        return UCS_ERR_NO_MEMORY;
     }
 
-    page->mem = mem;
-    *size_p   = size - sizeof(*page);
-    *page_p   = page + 1;
+    page->num_dbrecs = ucs_mpool_num_elems_per_chunk(
+            mp, (ucs_mpool_chunk_t*)(page + 1), private_size);
+    db_size          = ucs_align_up(page->num_dbrecs * 2 * sizeof(*page->db),
+                                    ucs_get_page_size());
+
+    status = uct_ib_mlx5_md_buf_alloc(md, db_size, 1, &db, &page->mem, 0,
+                                      "devx dbrec");
+    if (status != UCS_OK) {
+        goto err_free_page;
+    }
+
+    page->db = db;
+    *page_p  = page + 1;
     return UCS_OK;
+
+err_free_page:
+    ucs_free(page);
+    return status;
 }
 
 static void uct_ib_mlx5_init_dbrec(ucs_mpool_t *mp, void *obj, void *chunk)
 {
+    ucs_mpool_chunk_t *mpool_chunk = chunk;
     uct_ib_mlx5_dbrec_page_t *page = (uct_ib_mlx5_dbrec_page_t*)chunk - 1;
     uct_ib_mlx5_dbrec_t *dbrec     = obj;
+    size_t index;
 
+    index        = UCS_PTR_BYTE_DIFF(mpool_chunk->elems, obj) /
+                   ucs_mpool_elem_total_size(mp->data);
+    ucs_assert(index < page->num_dbrecs);
+    dbrec->db     = page->db + (index * 2);
     dbrec->mem_id = page->mem.mem->umem_id;
-    dbrec->offset = UCS_PTR_BYTE_DIFF(chunk, obj) + sizeof(*page);
+    dbrec->offset = index * 2 * sizeof(*page->db);
 }
 
 static void uct_ib_mlx5_free_page(ucs_mpool_t *mp, void *chunk)
 {
     uct_ib_mlx5_md_t *md = ucs_container_of(mp, uct_ib_mlx5_md_t, dbrec_pool);
     uct_ib_mlx5_dbrec_page_t *page = (uct_ib_mlx5_dbrec_page_t*)chunk - 1;
-    uct_ib_mlx5_md_buf_free(md, page, &page->mem);
+    uct_ib_mlx5_md_buf_free(md, (void*)page->db, &page->mem);
+    ucs_free(page);
 }
 
 static ucs_mpool_ops_t uct_ib_mlx5_dbrec_ops = {
@@ -1915,19 +1940,25 @@ struct ibv_context* uct_ib_mlx5_devx_open_device(struct ibv_device *ibv_device)
 }
 
 static ucs_status_t
-uct_ib_mlx5_devx_check_event_channel(struct ibv_context *ctx)
+uct_ib_mlx5_devx_check_event_channel(struct ibv_context *ctx,
+                                     int is_coco_context)
 {
     struct mlx5dv_devx_event_channel *event_channel;
     struct ibv_cq *cq;
 
-    cq = ibv_create_cq(ctx, 1, NULL, NULL, 0);
-    if (cq == NULL) {
-        uct_ib_check_memlock_limit_msg(ctx, UCS_LOG_LEVEL_DEBUG,
-                                       "ibv_create_cq()");
-        return UCS_ERR_UNSUPPORTED;
-    }
+    if (!is_coco_context) {
+        cq = ibv_create_cq(ctx, 1, NULL, NULL, 0);
+        if (cq == NULL) {
+            uct_ib_check_memlock_limit_msg(ctx, UCS_LOG_LEVEL_DEBUG,
+                                           "ibv_create_cq()");
+            return UCS_ERR_UNSUPPORTED;
+        }
 
-    ibv_destroy_cq(cq);
+        ibv_destroy_cq(cq);
+    } else {
+        ucs_debug("%s: skipping plain CQ DEVX probe in CoCo DMA-bounce mode",
+                  ibv_get_device_name(ctx->device));
+    }
 
     event_channel = mlx5dv_devx_create_event_channel(
             ctx, MLX5_IB_UAPI_DEVX_CR_EV_CH_FLAGS_OMIT_DATA);
@@ -2345,11 +2376,6 @@ ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
         goto err_free_buffer;
     }
 
-    status = uct_ib_mlx5_devx_check_event_channel(ctx);
-    if (status != UCS_OK) {
-        goto err_free_context;
-    }
-
     md = ucs_derived_of(uct_ib_md_alloc(size, name, ctx), uct_ib_mlx5_md_t);
     if (md == NULL) {
         status = UCS_ERR_NO_MEMORY;
@@ -2366,6 +2392,12 @@ ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
     uct_ib_mlx5_devx_mr_lru_init(md);
 
     status = uct_ib_device_query(dev, ibv_device);
+    if (status != UCS_OK) {
+        goto err_lru_cleanup;
+    }
+
+    status = uct_ib_mlx5_devx_check_event_channel(
+            ctx, uct_ib_device_is_cc_dma_bounce(dev));
     if (status != UCS_OK) {
         goto err_lru_cleanup;
     }

@@ -1586,6 +1586,11 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
 
     ucs_trace_func("");
 
+    status = uct_ib_md_check_cc_dma_bounce_supported(&md->super, "dc_mlx5");
+    if (status != UCS_OK) {
+        return status;
+    }
+
     self->tx.policy = config->tx_policy;
     self->tx.ndci   = uct_dc_mlx5_iface_is_hw_dcs(self) ? 1 : config->ndci;
 
