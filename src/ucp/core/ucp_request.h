@@ -24,6 +24,7 @@
 #include <ucp/wireup/wireup.h>
 #include <ucp/core/ucp_am.h>
 #include <ucp/core/ucp_worker.h>
+#include <uct/api/v2/uct_v2.h>
 
 
 #define ucp_trace_req(_sreq, _message, ...) \
@@ -405,6 +406,11 @@ struct ucp_request {
                     /* Remote request ID received from a peer */
                     ucs_ptr_map_key_t remote_req_id;
                 } get_reply;
+
+                struct {
+                    const uct_ep_op_info_t *op_info;
+                    ucp_lane_index_t       failed_lane;
+                } failover;
 
                 struct {
                     /* Remote request ID received from a peer */

@@ -581,3 +581,27 @@ UCS_TEST_P(test_ucp_fault_tolerance, target_failure, "MAX_EAGER_LANES=8")
 {
     do_test(FAILURE_SIDE_TARGET);
 }
+
+UCS_TEST_P(test_ucp_fault_tolerance, initiator_failure_bcopy,
+           "MAX_EAGER_LANES=8", "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
+{
+    do_test(FAILURE_SIDE_INITIATOR);
+}
+
+UCS_TEST_P(test_ucp_fault_tolerance, target_failure_bcopy,
+           "MAX_EAGER_LANES=8", "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
+{
+    do_test(FAILURE_SIDE_TARGET);
+}
+
+UCS_TEST_P(test_ucp_fault_tolerance, initiator_failure_zcopy,
+           "MAX_EAGER_LANES=8", "ZCOPY_THRESH=0", "RNDV_THRESH=inf")
+{
+    do_test(FAILURE_SIDE_INITIATOR);
+}
+
+UCS_TEST_P(test_ucp_fault_tolerance, target_failure_zcopy,
+           "MAX_EAGER_LANES=8", "ZCOPY_THRESH=0", "RNDV_THRESH=inf")
+{
+    do_test(FAILURE_SIDE_TARGET);
+}
