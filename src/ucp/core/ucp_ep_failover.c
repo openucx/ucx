@@ -28,20 +28,20 @@ enum ucp_ep_failover_lane_flags {
 
 /* Per failed-lane context used while failover to alternate lanes is in progress. */
 typedef struct ucp_ep_failover_lane_ctx {
-    ucp_ep_h                       ep;
-    uct_ep_h                       uct_ep;
-    ucp_lane_index_t               lane;
-    ucp_rsc_index_t                rsc_index;
-    void                           *rx_token;
-    uint8_t                        rx_token_length;
-    unsigned                       flags;
-    ucs_status_t                   status;
-    ucp_ep_failover_lane_done_cb_t done_cb;
+    ucp_ep_h                         ep;
+    uct_ep_h                         uct_ep;
+    ucp_lane_index_t                 lane;
+    ucp_rsc_index_t                  rsc_index;
+    void                             *rx_token;
+    uint8_t                          rx_token_length;
+    unsigned                         flags;
+    ucs_status_t                     status;
+    ucp_ep_failover_lane_done_cb_t   done_cb;
     ucp_ep_failover_lane_failed_cb_t failed_cb;
-    void                           *done_arg;
+    void                             *done_arg;
     /* Copied undelivered WQEs precede the extracted unposted requests. */
-    ucs_queue_head_t               replay_queue;
-    unsigned                       undelivered_count;
+    ucs_queue_head_t                 replay_queue;
+    unsigned                         undelivered_count;
 } ucp_ep_failover_lane_ctx_t;
 
 
@@ -138,8 +138,7 @@ static void ucp_ep_failover_pending_extract(ucp_ep_failover_lane_ctx_t *lane)
 }
 
 
-static void
-ucp_ep_failover_destroy_uct_ep(ucp_ep_failover_lane_ctx_t *lane)
+static void ucp_ep_failover_destroy_uct_ep(ucp_ep_failover_lane_ctx_t *lane)
 {
     if (lane->uct_ep == NULL) {
         return;
@@ -346,15 +345,15 @@ ucp_ep_failover_add_lanes(ucp_ep_h ep, ucp_lane_map_t lane_map,
             continue;
         }
 
-        lane_ctx                    = &ctx->lanes[lane];
-        lane_ctx->ep                = ep;
-        lane_ctx->uct_ep            = uct_ep;
-        lane_ctx->lane              = lane;
-        lane_ctx->rsc_index         = ucp_ep_get_rsc_index(ep, lane);
-        lane_ctx->status            = UCS_OK;
-        lane_ctx->done_cb           = cb;
-        lane_ctx->failed_cb         = failed_cb;
-        lane_ctx->done_arg          = arg;
+        lane_ctx            = &ctx->lanes[lane];
+        lane_ctx->ep        = ep;
+        lane_ctx->uct_ep    = uct_ep;
+        lane_ctx->lane      = lane;
+        lane_ctx->rsc_index = ucp_ep_get_rsc_index(ep, lane);
+        lane_ctx->status    = UCS_OK;
+        lane_ctx->done_cb   = cb;
+        lane_ctx->failed_cb = failed_cb;
+        lane_ctx->done_arg  = arg;
         ucs_queue_head_init(&lane_ctx->replay_queue);
         lane_ctx->undelivered_count = 0;
 
@@ -507,8 +506,7 @@ ucp_ep_failover_on_lane_state(ucp_ep_h ep,
             continue;
         }
 
-        memcpy(lane_ctx->rx_token,
-               UCS_PTR_BYTE_OFFSET(tokens, token_offset),
+        memcpy(lane_ctx->rx_token, UCS_PTR_BYTE_OFFSET(tokens, token_offset),
                lane_ctx->rx_token_length);
         lane_ctx->flags |= UCP_EP_FAILOVER_LANE_FLAG_RX_TOKEN;
         token_offset    += token_lengths[token_index];
@@ -561,8 +559,7 @@ ucp_ep_failover_extract_lane(ucp_ep_failover_lane_ctx_t *lane)
 
     if (extract_arg.status != UCS_OK) {
         ucs_debug("ep %p: lane %u outstanding extract callback failed: %s",
-                  lane->ep, lane->lane,
-                  ucs_status_string(extract_arg.status));
+                  lane->ep, lane->lane, ucs_status_string(extract_arg.status));
         ucp_ep_failover_lane_fallback_discard(lane->ep, lane->lane,
                                               extract_arg.status);
         return extract_arg.status;
@@ -655,7 +652,8 @@ static ucs_status_t ucp_ep_failover_lanes_extract(ucp_ep_h ep)
 }
 
 
-static ucs_status_t ucp_ep_failover_replay_lane(ucp_ep_failover_lane_ctx_t *lane)
+static ucs_status_t
+ucp_ep_failover_replay_lane(ucp_ep_failover_lane_ctx_t *lane)
 {
     ucp_proto_failover_replay_op_t *op;
     ucs_status_t status;
