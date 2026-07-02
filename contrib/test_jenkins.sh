@@ -1139,6 +1139,32 @@ run_gtest_armclang() {
 	fi
 }
 
+run_gtest_bullseye() {
+	az_module_load tools/bullseyecov-9.14.2
+	if command -v cov01 &> /dev/null; then
+		echo "=== Enable Bullseye instrumentation ==="
+		export COVFILE="$BUILD_ARTIFACTSTAGINGDIRECTORY/coverage_${SYSTEM_STAGENAME}_${SYSTEM_JOBID}.cov"
+		export COVBUILDZONE="${BUILD_NUMBER:-$$}_${worker:-0}"
+		cov01 --on
+		covselect --import "${WORKSPACE}/buildlib/BullseyeCoverageExclusions"
+	else
+		azure_log_warning "=== Skipping Bullseye: cov01 not found ==="
+	fi
+
+	# Always run Gtest
+	echo "=== Building with Bullseye instrumentation ==="
+	build devel --enable-gtest
+	run_gtest "default"
+
+	if covsrc -f "${COVFILE}"; then
+		cov01 --off
+		# Normalize workdir path to de-dup reports
+		sed -Ei 's|agent-[0-9]+|agent-00|g; s|/AZP_WORKSPACE/[0-9]+|/AZP_WORKSPACE/0|g' "${COVFILE}"
+	else
+		azure_log_error "Bullseye report validation failed!"
+	fi
+}
+
 #
 # Run the test suite (gtest) in release configuration with small subset of tests
 #
@@ -1324,6 +1350,8 @@ then
         run_asan_check
     elif [[ "$VALGRIND_CHECK" == "yes" ]]; then
         run_valgrind_check
+    elif [[ "$RUN_BULLSEYE" == "yes" ]]; then
+        run_gtest_bullseye
     else
         run_tests
     fi
