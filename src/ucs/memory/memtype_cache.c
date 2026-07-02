@@ -306,6 +306,7 @@ static void ucs_memtype_cache_event_callback(ucm_event_type_t event_type,
                                              ucm_event_t *event, void *arg)
 {
     ucs_memtype_cache_action_t action;
+    uint8_t mem_flags;
 
     if (event_type & UCM_EVENT_MEM_TYPE_ALLOC) {
         action = UCS_MEMTYPE_CACHE_ACTION_SET_MEMTYPE;
@@ -319,15 +320,17 @@ static void ucs_memtype_cache_event_callback(ucm_event_type_t event_type,
               event_type, event->mem_type.address, event->mem_type.size,
               ucs_memory_type_names[event->mem_type.mem_type]);
 
-    /* UCM allocation events carry only the memory type, not registrability.
-     * Default to "registrable": for a definite type this matches all current
-     * providers (e.g. ZE), and for UCS_MEMORY_TYPE_LAST/UNKNOWN the entry is
-     * re-detected via the MD, which overwrites this default with real flags. */
+    /* Complete CUDA managed attributes by querying the MD. */
+    mem_flags = UCS_MEM_FLAG_REGISTRABLE;
+    if (event->mem_type.mem_type == UCS_MEMORY_TYPE_CUDA_MANAGED) {
+        mem_flags |= UCS_MEM_FLAG_NEEDS_QUERY;
+    }
+
     ucs_memtype_cache_update_internal(arg, event->mem_type.address,
                                       event->mem_type.size,
                                       event->mem_type.mem_type,
                                       UCS_SYS_DEVICE_ID_UNKNOWN,
-                                      UCS_MEM_FLAG_REGISTRABLE, action);
+                                      mem_flags, action);
 }
 
 static void ucs_memtype_cache_purge(ucs_memtype_cache_t *memtype_cache)
