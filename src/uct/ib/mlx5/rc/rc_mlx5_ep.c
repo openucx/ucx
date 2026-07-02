@@ -814,8 +814,6 @@ uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
 
     ucs_assert(path_mtu != UCT_IB_ADDRESS_INVALID_PATH_MTU);
 
-    printf("[uct_rc_mlx5_ep_connect_to_ep_v2] params->ep_traffic_class: %u\n", params->ep_traffic_class);
-
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
         /* For HW TM we need 2 QPs, one of which will be used by the device for
          * RNDV offload (for issuing RDMA reads and sending RNDV ACK). No WQEs

@@ -60,7 +60,6 @@
                                                       GUID built by SM. */
 #define UCT_IB_DEFAULT_ROCEV2_DSCP        106  /* Default DSCP for RoCE v2 */
 #define UCT_IB_ROCE_UDP_SRC_PORT_BASE     0xC000
-#define UCP_EP_NO_TCLASS                  ((uint8_t)-1)
 #define UCT_IB_CQE_SL_PKTYPE_MASK         0x7 /* SL for IB or packet type
                                                  (GRH/IPv4/IPv6) for RoCE in the
                                                  CQE */

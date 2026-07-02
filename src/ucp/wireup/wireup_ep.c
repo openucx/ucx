@@ -521,8 +521,6 @@ ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, unsigned ep_init_flags,
         uct_ep_params.ep_traffic_class = UCT_EP_NO_TCLASS;
     }
 
-    printf("[ucp_wireup_ep_connect] uct_ep_params.ep_traffic_class: %u\n", uct_ep_params.ep_traffic_class);
-
     status = uct_ep_create(&uct_ep_params, &next_ep);
     if (status != UCS_OK) {
         /* make Coverity happy */
@@ -719,13 +717,6 @@ ucp_wireup_ep_connect_to_ep_v2(uct_ep_h tl_ep,
         .ep_traffic_class   = ep_traffic_class
     };
     ucp_wireup_ep_t *wireup_ep                = ucp_wireup_ep(tl_ep);
-
-     if ((flags & UCP_EP_FLAG_EP_TRAFFIC_CLASS)) {
-        printf("[ucp_wireup_ep_connect_to_ep_v2] In if statement\n");
-        printf("[ucp_wireup_ep_connect_to_ep_v2] ep_traffic_class: %u\n", ep_traffic_class);
-    } else {
-        printf("[ucp_wireup_ep_connect_to_ep_v2] ep_traffic_class: %u\n", UCP_EP_NO_TCLASS);
-    }
 
     if (wireup_ep == NULL) {
         return uct_ep_connect_to_ep_v2(tl_ep, address_entry->dev_addr,

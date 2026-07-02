@@ -269,7 +269,7 @@ enum ucp_ep_params_field {
     UCP_EP_PARAM_FIELD_CONN_REQUEST      = UCS_BIT(6),
     UCP_EP_PARAM_FIELD_NAME              = UCS_BIT(7), /**< Endpoint name */
     UCP_EP_PARAM_FIELD_LOCAL_SOCK_ADDR   = UCS_BIT(8), /**< Local socket Address */
-    UCP_TEAM_PARAM_FIELD_EP_TRAFFIC_CLASS   = UCS_BIT(9)
+    UCP_EP_PARAM_FIELD_EP_TRAFFIC_CLASS  = UCS_BIT(9)  /**< Endpoint traffic class */
 };
 
 

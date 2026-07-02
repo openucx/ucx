@@ -479,18 +479,6 @@ ucp_wireup_connect_local(ucp_ep_h ep,
             goto out;
         }
 
-        printf("[ucp_wireup_connect_local] before if ep->ep_traffic_class: %u\n", ep->ep_traffic_class);
-        if ((ep->flags & UCP_EP_FLAG_EP_TRAFFIC_CLASS)) {
-            printf("[ucp_wireup_connect_local] In if statement\n");
-            printf("[ucp_wireup_connect_local] ep_traffic_class: %u\n", ep->ep_traffic_class);
-        } else {
-            printf("[ucp_wireup_connect_local] ep_traffic_class: %u\n", UCP_EP_NO_TCLASS);
-        }
-        printf("[ucp_wireup_connect_local] ep->flags: 0x%x\n", ep->flags);
-        printf("[ucp_wireup_connect_local] UCP_EP_FLAG_EP_TRAFFIC_CLASS: 0x%x\n", UCP_EP_FLAG_EP_TRAFFIC_CLASS);
-        printf("[ucp_wireup_connect_local] ep->flags & UCP_EP_FLAG_EP_TRAFFIC_CLASS: 0x%x\n", ep->flags & UCP_EP_FLAG_EP_TRAFFIC_CLASS);
-        
-
         status = ucp_wireup_ep_connect_to_ep_v2(ucp_ep_get_lane(ep, lane),
                                                 address_entry, ep_entry, ep->ep_traffic_class, ep->flags);
         if (status != UCS_OK) {

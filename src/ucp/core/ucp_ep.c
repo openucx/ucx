@@ -667,15 +667,13 @@ ucp_ep_adjust_params(ucp_ep_h ep, const ucp_ep_params_t *params)
         ep->flags |= UCP_EP_FLAG_USER_DATA_PARAM;
     }
 
-    if (params->field_mask & UCP_TEAM_PARAM_FIELD_EP_TRAFFIC_CLASS) {
+    if (params->field_mask & UCP_EP_PARAM_FIELD_EP_TRAFFIC_CLASS) {
         ep->ep_traffic_class = params->ep_traffic_class;
         ep->flags |= UCP_EP_FLAG_EP_TRAFFIC_CLASS;
     } else {
         ep->ep_traffic_class = UCP_EP_NO_TCLASS;
     }
 
-    printf("[ucp_ep_adjust_params] ep->traffic_class set to: %u\n", ep->ep_traffic_class);
-    
     return UCS_OK;
 }
 
