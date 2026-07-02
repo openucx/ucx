@@ -13,6 +13,7 @@ libuct_ze_la_CFLAGS   = $(BASE_CFLAGS) $(LT_CFLAGS)
 libuct_ze_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
                           $(top_builddir)/src/uct/libuct.la
 libuct_ze_la_LDFLAGS  = $(ZE_LDFLAGS) $(ZE_LIBS) -version-info $(SOVERSION) \
+                          $(UCX_LT_RELEASE) \
                           $(patsubst %, -Xlinker %, -L$(ZE_ROOT)/lib -rpath $(ZE_ROOT)/hip/lib -rpath $(ZE_ROOT)/lib) \
                           $(patsubst %, -Xlinker %, --enable-new-dtags) \
                           $(patsubst %, -Xlinker %, -rpath $(ZE_ROOT)/lib64)

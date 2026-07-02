@@ -1365,22 +1365,13 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
     struct ibv_device **device_list;
     struct ibv_device *ibdev;
     uct_gdaki_dev_score_t *scores;
-    char *path_buffer;
-    const char *sysfs_path;
     uct_gdaki_dev_matrix_elem_t *ibdesc;
     struct ibv_context *context;
-    ucs_sys_device_t sys_dev_ib;
-
-    status = ucs_string_alloc_path_buffer(&path_buffer, "path_buffer");
-    if (status != UCS_OK) {
-        return NULL;
-    }
 
     /* Obtain the list of IB devices */
     device_list = ibv_get_device_list(&ibdev_count);
     if (device_list == NULL) {
-        status = UCS_ERR_IO_ERROR;
-        goto out_buff;
+        return NULL;
     }
 
     ucs_assert(ibdev_count > 0);
@@ -1398,15 +1389,13 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
         goto out_dmat;
     }
 
-    /* Initialize each IB device, retrieve its system device representation */
+    /* Query each IB device so its sys_dev is resolved and its port state is
+     * known before direct-NIC sibling matching can be triggered. */
     for (ibdev_index = 0; ibdev_index < ibdev_count; ibdev_index++) {
-        ibdesc          = &dmat[ibdev_index];
-        ibdev           = device_list[ibdev_index];
-        sysfs_path      = ucs_topo_resolve_sysfs_path(ibdev->ibdev_path,
-                                                      path_buffer);
+        uct_ib_device_t tmp_dev = {0};
 
-        sys_dev_ib = ucs_topo_get_sysfs_dev(ibv_get_device_name(ibdev),
-                                            sysfs_path, 0);
+        ibdesc  = &dmat[ibdev_index];
+        ibdev   = device_list[ibdev_index];
         context = ibv_open_device(ibdev);
         if (context == NULL) {
             ucs_error("ibv_open_device(%s) failed: %m",
@@ -1415,11 +1404,16 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
             goto out;
         }
 
-        ibdesc->direct_nic = uct_ib_mlx5dv_check_direct_nic(context, sys_dev_ib,
-                                                            1) !=
+        tmp_dev.ibv_context = context;
+        status              = uct_ib_device_query(&tmp_dev, ibdev);
+        if (status != UCS_OK) {
+            ibv_close_device(context);
+            goto out;
+        }
+
+        ibdesc->sys_dev    = tmp_dev.sys_dev;
+        ibdesc->direct_nic = uct_ib_mlx5dv_check_direct_nic(&tmp_dev, 1) !=
                              UCS_SYS_DEVICE_ID_UNKNOWN;
-        ibdesc->sys_dev = ucs_topo_get_sysfs_dev(ibv_get_device_name(ibdev),
-                                                 sysfs_path, 0);
         scores[ibdev_index].index = ibdev_index;
         ibv_close_device(context);
     }
@@ -1484,8 +1478,6 @@ out_dmat:
     }
 out_dev:
     ibv_free_device_list(device_list);
-out_buff:
-    ucs_free(path_buffer);
     return dmat;
 }
 
