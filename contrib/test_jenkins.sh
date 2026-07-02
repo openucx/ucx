@@ -867,7 +867,7 @@ test_init_mt() {
 	echo "==== Running multi-thread init ===="
 	# Each thread requires 5MB. Cap threads number by total available shared memory.
 	max_threads=$(df /dev/shm | awk '/shm/ {printf "%d", $4 / 5000}')
-	num_threads=$(($max_threads < $(nproc) ? $max_threads : $(nproc)))
+	num_threads=$(($max_threads < ${NPROC} ? $max_threads : ${NPROC}))
 	$MAKEP
 	for ((i=0;i<10;++i))
 	do
