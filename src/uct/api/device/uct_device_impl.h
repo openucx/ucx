@@ -12,16 +12,16 @@
 #include <uct/api/uct_def.h>
 #include <ucs/sys/device_code.h>
 
-#if defined(HAVE_CONFIG_H) && defined(HAVE_CUDA) && \
-    __has_include(<uct/cuda/cuda_ipc/cuda_ipc.cuh>)
+#if (defined(HAVE_CUDA) || \
+     (!defined(HAVE_CONFIG_H) && __has_include(<uct/cuda/cuda_ipc/cuda_ipc.cuh>) && __has_include(<cuda/atomic>)))
 #include <uct/cuda/cuda_ipc/cuda_ipc.cuh>
 #define UCT_CUDA_IPC_SUPPORTED 1
 #else
 #define UCT_CUDA_IPC_SUPPORTED 0
 #endif
 
-#if defined(HAVE_CONFIG_H) && defined(HAVE_GDA) && \
-    __has_include(<uct/ib/mlx5/gdaki/gdaki.cuh>)
+#if (defined(HAVE_GDA) || \
+     (!defined(HAVE_CONFIG_H) && __has_include(<uct/ib/mlx5/gdaki/gdaki.cuh>)))
 #include <uct/ib/mlx5/gdaki/gdaki.cuh>
 #define UCT_RC_MLX5_GDA_SUPPORTED 1
 #else
