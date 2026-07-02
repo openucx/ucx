@@ -199,14 +199,13 @@ const char* ucp_wireup_msg_str(uint8_t msg_type);
 
 ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self);
 
-ucs_status_t
-ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
-                       const ucp_tl_bitmap_t *tl_bitmap,
-                       const ucp_lane_index_t *lanes2remote,
-                       ucp_lane_map_t requested_lane_map,
-                       ucp_lane_map_t provided_lane_map,
-                       ucp_wireup_msg_t *msg_hdr, void **payload_p,
-                       size_t *payload_length_p);
+ucs_status_t ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
+                                    const ucp_tl_bitmap_t *tl_bitmap,
+                                    const ucp_lane_index_t *lanes2remote,
+                                    ucp_lane_map_t requested_lane_map,
+                                    ucp_lane_map_t provided_lane_map,
+                                    ucp_wireup_msg_t *msg_hdr, void **payload_p,
+                                    size_t *payload_length_p);
 
 int ucp_wireup_msg_ack_cb_pred(const ucs_callbackq_elem_t *elem, void *arg);
 
