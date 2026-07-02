@@ -86,12 +86,26 @@ static uct_cuda_ipc_dev_cache_t *uct_cuda_ipc_create_dev_cache(int dev_num)
     return cache;
 }
 
-#if HAVE_CUDA_FABRIC
+#if HAVE_DECL_CU_DEVICE_ATTRIBUTE_HANDLE_TYPE_FABRIC_SUPPORTED
+static int uct_cuda_ipc_device_supports_fabric(CUdevice cuda_device)
+{
+    int supported;
+
+    if (UCT_CUDADRV_FUNC(cuDeviceGetAttribute(
+                &supported,
+                CU_DEVICE_ATTRIBUTE_HANDLE_TYPE_FABRIC_SUPPORTED,
+                cuda_device), UCS_LOG_LEVEL_DEBUG) != UCS_OK) {
+        return 0;
+    }
+
+    return supported;
+}
+
 static ucs_status_t
 uct_cuda_ipc_md_check_imex_channel_cb(const struct dirent *entry, void *arg)
 {
     static const char channel_prefix[] = "channel";
-    int *found                         = (int*)arg;
+    int *found                         = arg;
     char path[PATH_MAX];
 
     if (strncmp(entry->d_name, channel_prefix,
@@ -111,14 +125,14 @@ uct_cuda_ipc_md_check_imex_channel_cb(const struct dirent *entry, void *arg)
 
 static int uct_cuda_ipc_md_check_fabric_support(void)
 {
-#if HAVE_CUDA_FABRIC
+#if HAVE_DECL_CU_DEVICE_ATTRIBUTE_HANDLE_TYPE_FABRIC_SUPPORTED
     int imex_channel_found = 0;
     ucs_status_t status;
     CUdevice cu_device;
 
     /* md_open can run without a current context, so query CUDA device 0. */
     status = UCT_CUDADRV_FUNC(cuDeviceGet(&cu_device, 0), UCS_LOG_LEVEL_DEBUG);
-    if ((status != UCS_OK) || !uct_cuda_base_device_supports_fabric(cu_device)) {
+    if ((status != UCS_OK) || !uct_cuda_ipc_device_supports_fabric(cu_device)) {
         return 0;
     }
 

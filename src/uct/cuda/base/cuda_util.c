@@ -26,25 +26,6 @@ const char *uct_cuda_cu_get_error_string(CUresult result)
     return error_str;
 }
 
-int uct_cuda_base_device_supports_fabric(CUdevice cuda_device)
-{
-#if HAVE_CUDA_FABRIC && \
-    HAVE_DECL_CU_DEVICE_ATTRIBUTE_HANDLE_TYPE_FABRIC_SUPPORTED
-    int supported;
-
-    if (UCT_CUDADRV_FUNC(cuDeviceGetAttribute(
-                &supported,
-                CU_DEVICE_ATTRIBUTE_HANDLE_TYPE_FABRIC_SUPPORTED,
-                cuda_device), UCS_LOG_LEVEL_DEBUG) != UCS_OK) {
-        return 0;
-    }
-
-    return supported;
-#else
-    return 0;
-#endif
-}
-
 ucs_sys_device_t uct_cuda_get_sys_dev(CUdevice cuda_device)
 {
     ucs_sys_device_t sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
