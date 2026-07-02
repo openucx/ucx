@@ -377,9 +377,12 @@ UCS_TEST_P(test_cuda_ipc_put_sgl, iface_caps_v2)
     EXPECT_EQ(flag_set, count_set);
 }
 
-UCS_TEST_SKIP_COND_P(test_cuda_ipc_put_sgl, various_counts,
-                     !is_sgl_supported())
+UCS_TEST_P(test_cuda_ipc_put_sgl, various_counts)
 {
+    if (!is_sgl_supported()) {
+        UCS_TEST_SKIP_R("put sgl zcopy is not supported");
+    }
+
     static constexpr size_t length = 2 * UCS_KBYTE;
     static const size_t counts[]   = {1, 2, 4, 10, 1024};
 
@@ -396,9 +399,12 @@ UCS_TEST_SKIP_COND_P(test_cuda_ipc_put_sgl, various_counts,
     }
 }
 
-UCS_TEST_SKIP_COND_P(test_cuda_ipc_put_sgl, various_lengths,
-                     !is_sgl_supported())
+UCS_TEST_P(test_cuda_ipc_put_sgl, various_lengths)
 {
+    if (!is_sgl_supported()) {
+        UCS_TEST_SKIP_R("put sgl zcopy is not supported");
+    }
+
     sgl_arrays sgl;
     init_sgl(sgl, {64, 256, UCS_KBYTE, 4 * UCS_KBYTE, 16 * UCS_KBYTE});
     ASSERT_UCS_OK_OR_INPROGRESS(put_sgl(sgl));
@@ -406,9 +412,12 @@ UCS_TEST_SKIP_COND_P(test_cuda_ipc_put_sgl, various_lengths,
     check_sgl(sgl);
 }
 
-UCS_TEST_SKIP_COND_P(test_cuda_ipc_put_sgl, with_callback,
-                     !is_sgl_supported())
+UCS_TEST_P(test_cuda_ipc_put_sgl, with_callback)
 {
+    if (!is_sgl_supported()) {
+        UCS_TEST_SKIP_R("put sgl zcopy is not supported");
+    }
+
     sgl_arrays sgl;
     init_sgl(sgl, std::vector<size_t>(10, UCS_KBYTE));
 
