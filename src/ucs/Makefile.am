@@ -129,6 +129,7 @@ noinst_HEADERS = \
 	stats/stats.h \
 	sys/checker.h \
 	sys/compiler.h \
+	sys/elf.h \
 	sys/lib.h \
 	sys/module.h \
 	sys/module_int.h \
@@ -204,6 +205,7 @@ libucs_la_SOURCES = \
 	profile/profile.c \
 	stats/stats.c \
 	sys/event_set.c \
+	sys/elf.c \
 	sys/init.c \
 	sys/math.c \
 	sys/module.c \
