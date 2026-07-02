@@ -246,6 +246,9 @@ AS_IF([test "x$cuda_checked" != "xyes"],
                         [AC_DEFINE([HAVE_CUDA_FABRIC], 1, [Enable CUDA fabric handle support])],
                         [], [[#include <cuda.h>]])
 
+         AC_CHECK_DECLS([CU_DEVICE_ATTRIBUTE_HANDLE_TYPE_FABRIC_SUPPORTED],
+                        [], [], [[#include <cuda.h>]])
+
          CPPFLAGS="$save_CPPFLAGS"
          LDFLAGS="$save_LDFLAGS"
          LIBS="$save_LIBS"

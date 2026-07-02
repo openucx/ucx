@@ -32,6 +32,9 @@
  * purposes. */
 #define UCT_CUDA_IPC_RKEY_FLAG_PID_NS UCS_BIT(31)
 
+#define UCT_CUDA_IPC_IMEX_CHANNELS_PATH \
+    "/dev/nvidia-caps-imex-channels"
+
 static ucs_config_field_t uct_cuda_ipc_md_config_table[] = {
     {"", "", NULL,
      ucs_offsetof(uct_cuda_ipc_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
@@ -81,6 +84,70 @@ static uct_cuda_ipc_dev_cache_t *uct_cuda_ipc_create_dev_cache(int dev_num)
     }
 
     return cache;
+}
+
+#if HAVE_DECL_CU_DEVICE_ATTRIBUTE_HANDLE_TYPE_FABRIC_SUPPORTED
+static int uct_cuda_ipc_device_supports_fabric(CUdevice cuda_device)
+{
+    int supported;
+
+    if (UCT_CUDADRV_FUNC(cuDeviceGetAttribute(
+                &supported,
+                CU_DEVICE_ATTRIBUTE_HANDLE_TYPE_FABRIC_SUPPORTED,
+                cuda_device), UCS_LOG_LEVEL_DEBUG) != UCS_OK) {
+        return 0;
+    }
+
+    return supported;
+}
+
+static ucs_status_t
+uct_cuda_ipc_md_check_imex_channel_cb(const struct dirent *entry, void *arg)
+{
+    static const char channel_prefix[] = "channel";
+    int *found                         = arg;
+    char path[PATH_MAX];
+
+    if (strncmp(entry->d_name, channel_prefix,
+                sizeof(channel_prefix) - 1) != 0) {
+        return UCS_OK;
+    }
+
+    ucs_snprintf_safe(path, sizeof(path), "%s/%s",
+                      UCT_CUDA_IPC_IMEX_CHANNELS_PATH, entry->d_name);
+    if (access(path, R_OK | W_OK) == 0) {
+        *found = 1;
+    }
+
+    return UCS_OK;
+}
+#endif
+
+static int uct_cuda_ipc_md_check_fabric_support(void)
+{
+#if HAVE_DECL_CU_DEVICE_ATTRIBUTE_HANDLE_TYPE_FABRIC_SUPPORTED
+    int imex_channel_found = 0;
+    ucs_status_t status;
+    CUdevice cu_device;
+
+    /* md_open can run without a current context, so query CUDA device 0. */
+    status = UCT_CUDADRV_FUNC(cuDeviceGet(&cu_device, 0), UCS_LOG_LEVEL_DEBUG);
+    if ((status != UCS_OK) || !uct_cuda_ipc_device_supports_fabric(cu_device)) {
+        return 0;
+    }
+
+    if (ucs_sys_readdir(UCT_CUDA_IPC_IMEX_CHANNELS_PATH,
+                        uct_cuda_ipc_md_check_imex_channel_cb,
+                        &imex_channel_found) != UCS_OK) {
+        return 0;
+    }
+
+    ucs_debug("CUDA fabric IPC support on device %d is %s", cu_device,
+              imex_channel_found ? "enabled" : "disabled");
+    return imex_channel_found;
+#else
+    return 0;
+#endif
 }
 
 static uct_cuda_ipc_dev_cache_t *
@@ -613,10 +680,11 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
         return UCS_ERR_NO_MEMORY;
     }
 
-    md->super.ops       = &md_ops;
-    md->super.component = &uct_cuda_ipc_component.super;
-    md->enable_mnnvl    = uct_cuda_ipc_md_check_fabric_info(
+    md->super.ops        = &md_ops;
+    md->super.component  = &uct_cuda_ipc_component.super;
+    md->enable_mnnvl     = uct_cuda_ipc_md_check_fabric_info(
                                                   md, ipc_config->enable_mnnvl);
+    md->fabric_supported = uct_cuda_ipc_md_check_fabric_support();
 
     uct_cuda_ipc_cache_set_global_limits(ipc_config->cache_max_regions,
                                          ipc_config->cache_max_size);
