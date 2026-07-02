@@ -5,6 +5,12 @@
 */
 
 #include <common/test.h>
+
+#include <algorithm>
+#include <cstdlib>
+#include <limits>
+#include <unistd.h>
+
 extern "C" {
 #include <ucs/memory/numa.h>
 #include <ucs/sys/sys.h>
@@ -341,12 +347,56 @@ UCS_TEST_F(test_topo, device_bdf_ordinal) {
                       UCS_SYS_DEVICE_ID_UNKNOWN));
 }
 
-UCS_TEST_F(test_topo, numa_distance) {
-    ucs_numa_node_t num_of_nodes;
+static std::vector<ucs_numa_node_t> get_online_numa_nodes()
+{
+    std::vector<ucs_numa_node_t> nodes;
+    DIR *dir = opendir(UCS_SYS_FS_SYSTEM_PATH "/node");
+    struct dirent *entry;
 
-    num_of_nodes = ucs_numa_num_configured_nodes();
-    for (auto node1 = 0; node1 < num_of_nodes; ++node1) {
-        for (auto node2 = 0; node2 < num_of_nodes; ++node2) {
+    if (dir == NULL) {
+        goto out;
+    }
+
+    while ((entry = readdir(dir)) != NULL) {
+        static const char node_prefix[] = "node";
+        char *endptr;
+        std::string distance_path;
+        long node;
+
+        if (strncmp(entry->d_name, node_prefix, sizeof(node_prefix) - 1)) {
+            continue;
+        }
+
+        node = strtol(entry->d_name + sizeof(node_prefix) - 1, &endptr, 10);
+        if ((*endptr != '\0') || (node < 0) ||
+            (node > std::numeric_limits<ucs_numa_node_t>::max())) {
+            continue;
+        }
+
+        distance_path = std::string(UCS_SYS_FS_SYSTEM_PATH "/node/") +
+                        entry->d_name + "/distance";
+        if (access(distance_path.c_str(), R_OK) == 0) {
+            nodes.push_back(static_cast<ucs_numa_node_t>(node));
+        }
+    }
+
+    closedir(dir);
+
+out:
+    if (nodes.empty()) {
+        nodes.push_back(UCS_NUMA_NODE_DEFAULT);
+    } else {
+        std::sort(nodes.begin(), nodes.end());
+    }
+
+    return nodes;
+}
+
+UCS_TEST_F(test_topo, numa_distance) {
+    auto nodes = get_online_numa_nodes();
+
+    for (auto node1 : nodes) {
+        for (auto node2 : nodes) {
             UCS_TEST_MESSAGE << "Test distance: node" << node1 << " to node"
                              << node2;
             if (node1 == node2) {
