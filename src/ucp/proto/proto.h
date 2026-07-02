@@ -11,6 +11,7 @@
 
 #include <ucp/core/ucp_types.h>
 #include <ucs/datastruct/linear_func.h>
+#include <ucs/datastruct/static_bitmap.h>
 #include <ucs/datastruct/string_buffer.h>
 
 
@@ -23,7 +24,7 @@
 
 
 /* Maximal number of protocols in total */
-#define UCP_PROTO_MAX_COUNT         64
+#define UCP_PROTO_MAX_COUNT         128
 
 
 /* Special value for non-existent protocol */
@@ -47,7 +48,7 @@ typedef unsigned ucp_proto_id_t;
 
 
 /* Bitmap of protocols */
-typedef uint64_t ucp_proto_id_mask_t;
+typedef ucs_static_bitmap_s(UCP_PROTO_MAX_COUNT) ucp_proto_id_mask_t;
 
 
 /* Performance calculation tree node */

@@ -1,10 +1,16 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
 
 #include <common/test.h>
+
+#include <algorithm>
+#include <cstdlib>
+#include <limits>
+#include <unistd.h>
+
 extern "C" {
 #include <ucs/memory/numa.h>
 #include <ucs/sys/sys.h>
@@ -20,6 +26,35 @@ static std::string get_sysfs_device_path(const std::string &bdf)
     } else {
         return ""; // Not found or invalid BDF
     }
+}
+
+static ucs_status_t topo_test_distance_a(ucs_sys_device_t, ucs_sys_device_t,
+                                         ucs_sys_dev_distance_t *distance)
+{
+    distance->latency   = 11e-9;
+    distance->bandwidth = ucs_topo_default_distance.bandwidth;
+    return UCS_OK;
+}
+
+static ucs_status_t topo_test_distance_b(ucs_sys_device_t, ucs_sys_device_t,
+                                         ucs_sys_dev_distance_t *distance)
+{
+    distance->latency   = 22e-9;
+    distance->bandwidth = ucs_topo_default_distance.bandwidth;
+    return UCS_OK;
+}
+
+static void
+topo_test_mem_dist(ucs_sys_device_t, ucs_sys_dev_distance_t *distance)
+{
+    *distance = ucs_topo_default_distance;
+}
+
+static void
+topo_test_mem_dist_cpuset(ucs_sys_device_t, const ucs_cpu_set_t *,
+                          ucs_sys_dev_distance_t *distance)
+{
+    *distance = ucs_topo_default_distance;
 }
 
 class test_topo : public ucs::test {
@@ -147,6 +182,44 @@ UCS_TEST_F(test_topo, get_distance) {
                      << ucs_topo_distance_str(&distance, buf, sizeof(buf));
 }
 
+UCS_TEST_F(test_topo, provider_push_pop) {
+    ucs_sys_dev_distance_t dist;
+    const ucs_sys_topo_ops_t ops_a = {
+        .get_distance                   = topo_test_distance_a,
+        .get_memory_distance            = topo_test_mem_dist,
+        .get_memory_distance_for_cpuset = topo_test_mem_dist_cpuset,
+    };
+    const ucs_sys_topo_ops_t ops_b = {
+        .get_distance                   = topo_test_distance_b,
+        .get_memory_distance            = topo_test_mem_dist,
+        .get_memory_distance_for_cpuset = topo_test_mem_dist_cpuset,
+    };
+
+    ASSERT_UCS_OK(ucs_sys_topo_provider_push(&ops_a));
+    ASSERT_UCS_OK(ucs_topo_get_distance(UCS_SYS_DEVICE_ID_UNKNOWN,
+                                        UCS_SYS_DEVICE_ID_UNKNOWN, &dist));
+    EXPECT_NEAR(dist.latency, 11e-9, 1e-12);
+
+    /* The most recently pushed provider takes precedence */
+    ASSERT_UCS_OK(ucs_sys_topo_provider_push(&ops_b));
+    ASSERT_UCS_OK(ucs_topo_get_distance(UCS_SYS_DEVICE_ID_UNKNOWN,
+                                        UCS_SYS_DEVICE_ID_UNKNOWN, &dist));
+    EXPECT_NEAR(dist.latency, 22e-9, 1e-12);
+
+    /* Popping restores the previously pushed provider */
+    ucs_sys_topo_provider_pop();
+    ASSERT_UCS_OK(ucs_topo_get_distance(UCS_SYS_DEVICE_ID_UNKNOWN,
+                                        UCS_SYS_DEVICE_ID_UNKNOWN, &dist));
+    EXPECT_NEAR(dist.latency, 11e-9, 1e-12);
+
+    /* After the last pop the override is gone and the configured provider
+     * (default/sysfs) returns the default distance for unknown devices */
+    ucs_sys_topo_provider_pop();
+    ASSERT_UCS_OK(ucs_topo_get_distance(UCS_SYS_DEVICE_ID_UNKNOWN,
+                                        UCS_SYS_DEVICE_ID_UNKNOWN, &dist));
+    EXPECT_NEAR(dist.latency, 0.0, 1e-12);
+}
+
 UCS_TEST_F(test_topo, print_info) {
     // Restore the state to print the info
     ucs_topo_restore_state(m_topo_state);
@@ -224,12 +297,56 @@ UCS_TEST_F(test_topo, bdf_name_invalid) {
     EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
 }
 
-UCS_TEST_F(test_topo, numa_distance) {
-    ucs_numa_node_t num_of_nodes;
+static std::vector<ucs_numa_node_t> get_online_numa_nodes()
+{
+    std::vector<ucs_numa_node_t> nodes;
+    DIR *dir = opendir(UCS_SYS_FS_SYSTEM_PATH "/node");
+    struct dirent *entry;
 
-    num_of_nodes = ucs_numa_num_configured_nodes();
-    for (auto node1 = 0; node1 < num_of_nodes; ++node1) {
-        for (auto node2 = 0; node2 < num_of_nodes; ++node2) {
+    if (dir == NULL) {
+        goto out;
+    }
+
+    while ((entry = readdir(dir)) != NULL) {
+        static const char node_prefix[] = "node";
+        char *endptr;
+        std::string distance_path;
+        long node;
+
+        if (strncmp(entry->d_name, node_prefix, sizeof(node_prefix) - 1)) {
+            continue;
+        }
+
+        node = strtol(entry->d_name + sizeof(node_prefix) - 1, &endptr, 10);
+        if ((*endptr != '\0') || (node < 0) ||
+            (node > std::numeric_limits<ucs_numa_node_t>::max())) {
+            continue;
+        }
+
+        distance_path = std::string(UCS_SYS_FS_SYSTEM_PATH "/node/") +
+                        entry->d_name + "/distance";
+        if (access(distance_path.c_str(), R_OK) == 0) {
+            nodes.push_back(static_cast<ucs_numa_node_t>(node));
+        }
+    }
+
+    closedir(dir);
+
+out:
+    if (nodes.empty()) {
+        nodes.push_back(UCS_NUMA_NODE_DEFAULT);
+    } else {
+        std::sort(nodes.begin(), nodes.end());
+    }
+
+    return nodes;
+}
+
+UCS_TEST_F(test_topo, numa_distance) {
+    auto nodes = get_online_numa_nodes();
+
+    for (auto node1 : nodes) {
+        for (auto node2 : nodes) {
             UCS_TEST_MESSAGE << "Test distance: node" << node1 << " to node"
                              << node2;
             if (node1 == node2) {

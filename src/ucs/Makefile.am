@@ -1,5 +1,5 @@
 #
-# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 # Copyright (C) UT-Battelle, LLC. 2014-2017. ALL RIGHTS RESERVED.
 # Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
 # Copyright (C) Tactical Computing Labs, LLC. 2022. ALL RIGHTS RESERVED.
@@ -16,7 +16,7 @@ libucs_la_CPPFLAGS = $(BASE_CPPFLAGS) $(BFD_CPPFLAGS) \
                      -DUCX_MODULE_DIR=\"$(moduledir)\" \
                      -DUCX_CONFIG_DIR=\"$(ucx_config_dir)\"
 libucs_la_CFLAGS   = $(BASE_CFLAGS) $(LT_CFLAGS)
-libucs_la_LDFLAGS  = -ldl $(BFD_LDFLAGS) -version-info $(SOVERSION)
+libucs_la_LDFLAGS  = -ldl $(BFD_LDFLAGS) -version-info $(SOVERSION) $(UCX_LT_RELEASE)
 libucs_ladir       = $(includedir)/ucs
 libucs_la_LIBADD   = $(LIBM) $(top_builddir)/src/ucm/libucm.la $(BFD_LIBS)
 
@@ -120,6 +120,7 @@ noinst_HEADERS = \
 	debug/debug_int.h \
 	debug/log.h \
 	debug/memtrack_int.h \
+	debug/table.h \
 	memory/numa.h \
 	memory/rcache_int.h \
 	memory/rcache.inl \
@@ -130,6 +131,7 @@ noinst_HEADERS = \
 	sys/compiler.h \
 	sys/lib.h \
 	sys/module.h \
+	sys/module_int.h \
 	sys/sys.h \
 	sys/iovec.h \
 	sys/iovec.inl \
@@ -192,6 +194,7 @@ libucs_la_SOURCES = \
 	debug/assert.c \
 	debug/debug.c \
 	debug/log.c \
+	debug/table.c \
 	debug/memtrack.c \
 	memory/memory_type.c \
 	memory/memtype_cache.c \

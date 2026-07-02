@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2020. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  * Copyright (C) The University of Tennessee and The University
  *               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
  *
@@ -264,6 +264,7 @@ ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
     md_attr->gva_mem_types             = md->gva_mem_types;
     md_attr->reg_nonblock_mem_types    = md->reg_nonblock_mem_types;
     md_attr->cache_mem_types           = UCS_MASK(UCS_MEMORY_TYPE_LAST);
+    md_attr->required_mem_flags        = UCS_MEM_FLAG_REGISTRABLE;
     md_attr->rkey_packed_size          = UCT_IB_MD_PACKED_RKEY_SIZE;
     md_attr->reg_cost                  = md->reg_cost;
     md_attr->exported_mkey_packed_size = sizeof(uct_ib_md_packed_mkey_t);
@@ -926,6 +927,18 @@ static void uct_ib_fork_warn_enable()
     }
 }
 
+static int uct_ib_is_fork_init_needed()
+{
+#if HAVE_DECL_IBV_IS_FORK_INITIALIZED && HAVE_DECL_IBV_FORK_UNNEEDED
+    if (ibv_is_fork_initialized() == IBV_FORK_UNNEEDED) {
+        ucs_debug("ibv_fork_init() is not needed");
+        return 0;
+    }
+#endif
+
+    return 1;
+}
+
 static void uct_ib_md_release_device_config(uct_ib_md_t *md)
 {
     unsigned i;
@@ -1110,6 +1123,10 @@ uct_ib_fork_init(const uct_ib_md_config_t *md_config, int *fork_init_p)
     int ret;
 
     *fork_init_p = 0;
+
+    if (!uct_ib_is_fork_init_needed()) {
+        return UCS_OK;
+    }
 
     if (md_config->fork_init == UCS_NO) {
         uct_ib_fork_warn_enable();

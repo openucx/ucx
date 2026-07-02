@@ -10,7 +10,7 @@
 AC_PREREQ([2.63])
 
 define([ucx_ver_major], 1)  # Major version. Usually does not change.
-define([ucx_ver_minor], 22) # Minor version. Increased for each release.
+define([ucx_ver_minor], 23) # Minor version. Increased for each release.
 define([ucx_ver_patch], 0)  # Patch version. Increased for a bugfix release.
 define([ucx_ver_extra], )   # Extra version string. Empty for a general release.
 
@@ -72,6 +72,43 @@ AC_SUBST(EXTRA_VERSION)
 AC_SUBST(SCM_VERSION)
 AC_SUBST(SOVERSION)
 
+UCX_LT_RELEASE=
+UCX_LIBRARY_FILE_SUFFIX=
+ucx_soname_suffix_summary="<disabled>"
+ucx_module_deepbind_summary="no"
+AC_ARG_WITH([soname-suffix],
+        AS_HELP_STRING([--with-soname-suffix=SUFFIX],
+                       [Append SUFFIX to UCX installed shared library names and SONAMEs. Disabled by default. [default=NO]]),
+        [], [with_soname_suffix=no])
+AS_IF([test "x$with_soname_suffix" != xno],
+      [AS_IF([test "x$with_soname_suffix" = xyes],
+             [AC_MSG_ERROR([--with-soname-suffix requires an explicit suffix value])])
+       case "$with_soname_suffix" in
+           @<:@A-Za-z0-9@:>@*) ;;
+           *) AC_MSG_ERROR([--with-soname-suffix must start with a letter or digit]) ;;
+       esac
+       case "$with_soname_suffix" in
+           *@<:@!A-Za-z0-9_-@:>@*)
+               AC_MSG_ERROR([--with-soname-suffix must contain only letters, digits, underscores, and dashes])
+               ;;
+       esac
+       UCX_LIBRARY_FILE_SUFFIX="-$with_soname_suffix"
+       UCX_LT_RELEASE="-release $with_soname_suffix"
+       AC_DEFINE_UNQUOTED([UCX_MODULE_FILE_SUFFIX],
+                          ["$UCX_LIBRARY_FILE_SUFFIX"],
+                          [Suffix appended to private UCX module file names])
+       ucx_soname_suffix_summary="$with_soname_suffix"])
+AC_SUBST([UCX_LT_RELEASE])
+AC_SUBST([UCX_LIBRARY_FILE_SUFFIX])
+
+AC_ARG_ENABLE([module-deepbind],
+        AS_HELP_STRING([--enable-module-deepbind],
+                       [Load UCX modules with RTLD_DEEPBIND. Intended for private UCX bundles. Disabled by default. [default=NO]]),
+        [], [enable_module_deepbind=no])
+AS_IF([test "x$enable_module_deepbind" = xyes],
+      [AS_IF([test "x$with_soname_suffix" = xno],
+             [AC_MSG_ERROR([--enable-module-deepbind requires --with-soname-suffix])])])
+
 AC_PROG_CC
 AC_PROG_CXX
 AC_OPENMP
@@ -86,6 +123,14 @@ AC_C_RESTRICT
 AC_FUNC_STRERROR_R
 
 AC_PATH_TOOL([PKG_CONFIG], [pkg-config], [pkg-config])
+
+AS_IF([test "x$enable_module_deepbind" = xyes],
+      [AC_CHECK_DECLS([RTLD_DEEPBIND],
+                      [AC_DEFINE([UCX_MODULE_DLOPEN_DEEPBIND], [1],
+                                 [Load UCX modules with RTLD_DEEPBIND])
+                       ucx_module_deepbind_summary="yes"],
+                      [AC_MSG_ERROR([--enable-module-deepbind requires RTLD_DEEPBIND support from <dlfcn.h>])],
+                      [[#include <dlfcn.h>]])])
 
 
 #
@@ -193,6 +238,7 @@ AS_IF([test "x$with_docs_only" = xyes],
      AM_CONDITIONAL([HAVE_TL_DC], [false])
      AM_CONDITIONAL([HAVE_DC_DV], [false])
      AM_CONDITIONAL([HAVE_TL_UD], [false])
+     AM_CONDITIONAL([HAVE_TL_GGA], [false])
      AM_CONDITIONAL([HAVE_CRAY_UGNI], [false])
      AM_CONDITIONAL([HAVE_CUDA], [false])
      AM_CONDITIONAL([HAVE_CUDA_STATIC], [false])
@@ -434,6 +480,8 @@ AC_MSG_NOTICE([        Multi-thread:   ${mt_enable}])
 AC_MSG_NOTICE([           MPI tests:   ${mpi_enable}])
 AC_MSG_NOTICE([         VFS support:   ${vfs_enable}])
 AC_MSG_NOTICE([       Devel headers:   ${enable_devel_headers}])
+AC_MSG_NOTICE([       SONAME suffix:   ${ucx_soname_suffix_summary}])
+AC_MSG_NOTICE([     Module deepbind:   ${ucx_module_deepbind_summary}])
 AC_MSG_NOTICE([io_demo CUDA support:   ${with_iodemo_cuda}])
 AC_MSG_NOTICE([            Bindings:   <$(echo ${build_bindings}|tr ':' ' ') >])
 AC_MSG_NOTICE([         UCS modules:   <$(echo ${ucs_modules}|tr ':' ' ') >])

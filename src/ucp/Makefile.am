@@ -10,7 +10,7 @@ lib_LTLIBRARIES     = libucp.la
 libucp_la_CFLAGS   = $(BASE_CFLAGS) $(LT_CFLAGS)
 libucp_la_LIBS     =
 libucp_la_CPPFLAGS = $(BASE_CPPFLAGS)
-libucp_la_LDFLAGS  = -ldl -version-info $(SOVERSION)
+libucp_la_LDFLAGS  = -ldl -version-info $(SOVERSION) $(UCX_LT_RELEASE)
 libucp_la_LIBADD   = ../ucs/libucs.la ../uct/libuct.la
 libucp_ladir       = $(includedir)/ucp
 
@@ -69,6 +69,7 @@ noinst_HEADERS = \
 	proto/proto.h \
 	rma/rma.h \
 	rma/rma.inl \
+	rma/rma_rndv.h \
 	rndv/proto_rndv.h \
 	rndv/proto_rndv.inl \
 	rndv/rndv_mtype.inl \
@@ -143,6 +144,7 @@ libucp_la_SOURCES = \
 	rma/get_offload.c \
 	rma/put_am.c \
 	rma/put_offload.c \
+	rma/rma_rndv.c \
 	rma/rma_send.c \
 	rma/rma_sw.c \
 	rma/flush.c \
