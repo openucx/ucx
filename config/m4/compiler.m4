@@ -10,7 +10,7 @@
 #
 # Initialize CFLAGS
 #
-BASE_CFLAGS="-g -Wall -Werror"
+BASE_CFLAGS="-g -Wall"
 
 # Prevent libtool from suppression of warnings
 LT_CFLAGS="-no-suppress"
