@@ -2790,12 +2790,11 @@ static ucs_status_t ucp_wireup_select_set_locality_flags(
             continue;
         }
 
-        params.field_mask         =
-                UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
-                UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR  |
-                UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR_LENGTH |
-                UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR_LENGTH |
-                UCT_IFACE_IS_REACHABLE_FIELD_SCOPE;
+        params.field_mask         = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
+                                    UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR |
+                                    UCT_IFACE_IS_REACHABLE_FIELD_SCOPE |
+                                    UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR_LENGTH |
+                                    UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR_LENGTH;
         params.device_addr        = ae->dev_addr;
         params.iface_addr         = ae->iface_addr;
         params.device_addr_length = ae->dev_addr_len;

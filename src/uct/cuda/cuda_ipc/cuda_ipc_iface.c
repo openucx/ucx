@@ -149,7 +149,7 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
     uct_cuda_ipc_md_t *md       = ucs_derived_of(iface->super.super.md,
                                                  uct_cuda_ipc_md_t);
     const uct_cuda_ipc_device_addr_t *dev_addr;
-    uct_cuda_ipc_iface_address_t remote_iface_addr;
+    uct_cuda_ipc_iface_address_t ipc_addr;
     size_t dev_addr_len, iface_addr_len;
     int local_fabric_supported, remote_fabric_supported;
     int same_uuid;
@@ -166,12 +166,11 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
 
     iface_addr_len    = UCS_PARAM_VALUE(UCT_IFACE_IS_REACHABLE_FIELD, params,
                                         iface_addr_length, IFACE_ADDR_LENGTH,
-                                        sizeof(remote_iface_addr.pid));
-    remote_iface_addr = uct_cuda_ipc_iface_address_unpack(params->iface_addr,
+                                        sizeof(ipc_addr.pid));
+    ipc_addr          = uct_cuda_ipc_iface_address_unpack(params->iface_addr,
                                                           iface_addr_len);
     if (same_uuid &&
-        uct_cuda_ipc_is_rkey_local(remote_iface_addr.pid,
-                                   remote_iface_addr.pid_ns)) {
+        uct_cuda_ipc_is_rkey_local(ipc_addr.pid, ipc_addr.pid_ns)) {
         uct_iface_fill_info_str_buf(params, "same process");
         return 0;
     }
@@ -186,8 +185,8 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
      * both peers must support fabric IPC handles in that case. */
     /* Older peers do not send pid_ns, so preserve legacy same-node reachability
      * and apply the cross-namespace fabric check only to extended addresses. */
-    if ((iface_addr_len >= sizeof(remote_iface_addr)) &&
-        (remote_iface_addr.pid_ns != ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID))) {
+    if ((iface_addr_len >= sizeof(ipc_addr)) &&
+        (ipc_addr.pid_ns != ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID))) {
         local_fabric_supported  = md->fabric_supported;
         remote_fabric_supported = !!(
                 uct_cuda_ipc_iface_dev_addr_flags(dev_addr, dev_addr_len) &
