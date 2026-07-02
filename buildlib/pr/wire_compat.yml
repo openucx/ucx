@@ -27,6 +27,7 @@ jobs:
       container: ${{ parameters.container }}
     steps:
       - checkout: self
+        submodules: true
         clean: true
         fetchDepth: 1
         retryCountOnTaskFailure: 5
@@ -63,6 +64,7 @@ jobs:
       test_dir: $(System.DefaultWorkingDirectory)/$(ucx_legacy)/examples
     steps:
       - checkout: self
+        submodules: true
         clean: true
         fetchDepth: 1
         retryCountOnTaskFailure: 5
