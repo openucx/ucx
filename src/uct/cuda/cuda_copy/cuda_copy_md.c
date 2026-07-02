@@ -1059,6 +1059,7 @@ uct_cuda_copy_md_open(uct_component_t *component, const char *md_name,
 
     *md_p = (uct_md_h)md;
 
+    /* Keep the global cache lazy, but install its handler before CUDA events. */
     ucs_memtype_cache_global_create();
 
     /*
