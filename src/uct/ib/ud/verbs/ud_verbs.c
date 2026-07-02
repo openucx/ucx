@@ -881,6 +881,11 @@ uct_ud_verbs_query_tl_devices(uct_md_h md,
                               unsigned *num_tl_devices_p)
 {
     uct_ib_md_t *ib_md = ucs_derived_of(md, uct_ib_md_t);
+
+    if (uct_ib_md_is_coco_hardened(ib_md)) {
+        return UCS_ERR_NO_DEVICE;
+    }
+
     return uct_ib_device_query_ports(&ib_md->dev, 0, tl_devices_p,
                                      num_tl_devices_p);
 }

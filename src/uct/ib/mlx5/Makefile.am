@@ -30,16 +30,26 @@ noinst_HEADERS = \
 	dv/ib_mlx5_dv.h \
 	dv/ib_mlx5_ifc.h
 
+if HAVE_DEVX
+noinst_HEADERS += \
+	ib_mlx5_coco.h
+
+libuct_ib_mlx5_la_SOURCES += \
+	ib_mlx5_coco.c
+endif # HAVE_DEVX
+
 if HAVE_TL_RC
 noinst_HEADERS += \
 	rc/rc_mlx5.h \
 	rc/rc_mlx5.inl \
-	rc/rc_mlx5_common.h
+	rc/rc_mlx5_common.h \
+	rc/rc_mlx5_coco.h
 
 libuct_ib_mlx5_la_SOURCES += \
 	rc/rc_mlx5_ep.c \
 	rc/rc_mlx5_iface.c \
-	rc/rc_mlx5_common.c
+	rc/rc_mlx5_common.c \
+	rc/rc_mlx5_coco.c
 
 if HAVE_DEVX
 libuct_ib_mlx5_la_SOURCES += \

@@ -18,6 +18,7 @@
 #include <ucs/arch/cpu.h>
 #include <ucs/debug/log.h>
 #include <ucs/profile/profile.h>
+#include <string.h>
 
 #include "rc_mlx5.inl"
 
@@ -45,6 +46,147 @@ ucs_config_field_t uct_rc_mlx5_iface_config_table[] = {
 };
 
 
+static int
+uct_rc_mlx5_coco_srq_topo_has(
+        const uct_rc_mlx5_iface_common_config_t *mlx5_config,
+        const char *topo_name)
+{
+    int i;
+
+    for (i = 0; i < mlx5_config->srq_topo.count; ++i) {
+        if (!strcasecmp(mlx5_config->srq_topo.types[i], topo_name)) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static ucs_status_t
+uct_rc_mlx5_coco_reject_config(const char *name)
+{
+    ucs_error("CoCo hardening does not support %s", name);
+    return UCS_ERR_UNSUPPORTED;
+}
+
+ucs_status_t
+uct_rc_mlx5_coco_check_config(
+        const uct_ib_mlx5_md_t *md,
+        const uct_rc_iface_common_config_t *rc_config,
+        const uct_rc_mlx5_iface_common_config_t *mlx5_config)
+{
+    if (!uct_ib_md_is_coco_hardened(&md->super)) {
+        return UCS_OK;
+    }
+
+    if (mlx5_config->tm.enable) {
+        return uct_rc_mlx5_coco_reject_config("TM_ENABLE=y");
+    }
+
+    if (mlx5_config->tm.mp_enable == UCS_YES) {
+        return uct_rc_mlx5_coco_reject_config("TM_MP_SRQ_ENABLE=y");
+    }
+
+    if (mlx5_config->super.cqe_zip_enable[UCT_IB_DIR_TX]) {
+        return uct_rc_mlx5_coco_reject_config("TX_CQE_ZIP_ENABLE=y");
+    }
+
+    if (mlx5_config->super.cqe_zip_enable[UCT_IB_DIR_RX]) {
+        return uct_rc_mlx5_coco_reject_config("RX_CQE_ZIP_ENABLE=y");
+    }
+
+    if (mlx5_config->ddp_enable == UCS_YES) {
+        return uct_rc_mlx5_coco_reject_config("DDP_ENABLE=y");
+    }
+
+    if (!uct_rc_mlx5_coco_srq_topo_has(mlx5_config, "cyclic")) {
+        return uct_rc_mlx5_coco_reject_config("SRQ_TOPO without cyclic");
+    }
+
+    return UCS_OK;
+}
+
+void uct_rc_mlx5_coco_apply_effective_config(
+        const uct_ib_mlx5_md_t *md, uct_rc_iface_common_config_t *rc_config,
+        uct_rc_mlx5_iface_common_config_t *mlx5_config,
+        uct_ib_iface_init_attr_t *init_attr)
+{
+    if (!uct_ib_md_is_coco_hardened(&md->super)) {
+        return;
+    }
+
+    if (mlx5_config->tm.enable || (mlx5_config->tm.mp_enable != UCS_NO) ||
+        (init_attr->flags & UCT_IB_TM_SUPPORTED)) {
+        ucs_diag("CoCo hardening disables RC mlx5 tag matching support");
+    }
+
+    if ((mlx5_config->ddp_enable != UCS_NO) ||
+        (init_attr->flags & UCT_IB_DDP_SUPPORTED)) {
+        ucs_diag("CoCo hardening disables RC mlx5 DDP support");
+    }
+
+    if (mlx5_config->super.cqe_zip_enable[UCT_IB_DIR_TX] ||
+        mlx5_config->super.cqe_zip_enable[UCT_IB_DIR_RX] ||
+        init_attr->cqe_zip_sizes[UCT_IB_DIR_TX] ||
+        init_attr->cqe_zip_sizes[UCT_IB_DIR_RX]) {
+        ucs_diag("CoCo hardening disables RC mlx5 CQE zipping support");
+    }
+
+    if (rc_config->super.inl[UCT_IB_DIR_TX] ||
+        rc_config->super.inl[UCT_IB_DIR_RX]) {
+        ucs_diag("CoCo hardening disables RC mlx5 inline send support");
+    }
+
+    mlx5_config->tm.enable                         = 0;
+    mlx5_config->tm.mp_enable                      = UCS_NO;
+    mlx5_config->ddp_enable                        = UCS_NO;
+    mlx5_config->super.cqe_zip_enable[UCT_IB_DIR_TX] = 0;
+    mlx5_config->super.cqe_zip_enable[UCT_IB_DIR_RX] = 0;
+    rc_config->super.inl[UCT_IB_DIR_TX]            = 0;
+    rc_config->super.inl[UCT_IB_DIR_RX]            = 0;
+    init_attr->flags                              &= ~(UCT_IB_DDP_SUPPORTED |
+                                                       UCT_IB_TM_SUPPORTED);
+    init_attr->cqe_zip_sizes[UCT_IB_DIR_TX]        = 0;
+    init_attr->cqe_zip_sizes[UCT_IB_DIR_RX]        = 0;
+}
+
+void uct_rc_mlx5_coco_mask_capabilities(const uct_ib_mlx5_md_t *md,
+                                        uct_iface_attr_t *iface_attr)
+{
+    const uint64_t rma_flags = UCT_IFACE_FLAG_PUT_SHORT |
+                               UCT_IFACE_FLAG_PUT_BCOPY |
+                               UCT_IFACE_FLAG_PUT_ZCOPY |
+                               UCT_IFACE_FLAG_GET_SHORT |
+                               UCT_IFACE_FLAG_GET_BCOPY |
+                               UCT_IFACE_FLAG_GET_ZCOPY;
+
+    if (!uct_ib_md_is_coco_hardened(&md->super)) {
+        return;
+    }
+
+    iface_attr->cap.flags &= ~(UCT_IFACE_FLAG_ATOMIC_CPU |
+                               UCT_IFACE_FLAG_ATOMIC_DEVICE);
+    if (md->coco == NULL) {
+        iface_attr->cap.flags &= ~rma_flags;
+        memset(&iface_attr->cap.put, 0, sizeof(iface_attr->cap.put));
+        memset(&iface_attr->cap.get, 0, sizeof(iface_attr->cap.get));
+    }
+
+    memset(&iface_attr->cap.atomic32, 0, sizeof(iface_attr->cap.atomic32));
+    memset(&iface_attr->cap.atomic64, 0, sizeof(iface_attr->cap.atomic64));
+}
+
+static void
+uct_rc_mlx5_coco_log_policy(const uct_ib_mlx5_md_t *md, const char *profile)
+{
+    ucs_debug("CoCo hardening policy: md=%s cc_dma_bounce=%d hardened=%d "
+             "profile=%s",
+             md->super.name == NULL ? "<unknown>" : md->super.name,
+             md->super.cc_dma_bounce,
+             uct_ib_md_is_coco_hardened(&md->super), profile);
+}
+
+
 static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops;
 static uct_iface_ops_t uct_rc_mlx5_iface_tl_ops;
 
@@ -68,8 +210,10 @@ uct_rc_mlx5_iface_check_rx_completion(uct_ib_iface_t   *ib_iface,
     uct_rc_mlx5_iface_common_t *iface =
             ucs_derived_of(ib_iface, uct_rc_mlx5_iface_common_t);
     struct mlx5_err_cqe *ecqe = (void*)cqe;
+    uct_rc_mlx5_coco_error_cqe_result_t coco_result;
     uct_ib_mlx5_srq_seg_t *seg;
     uint16_t wqe_ctr;
+    ucs_status_t status;
 
     if (uct_ib_mlx5_check_and_init_zipped(cq, cqe)) {
         ++cq->cq_ci;
@@ -85,8 +229,35 @@ uct_rc_mlx5_iface_check_rx_completion(uct_ib_iface_t   *ib_iface,
         UCS_STATIC_ASSERT(MLX5_CQE_INVALID & (UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK >> 4));
         ucs_assert((cqe->op_own >> 4) != MLX5_CQE_INVALID);
 
-        /* Release the aborted segment */
-        wqe_ctr = ntohs(ecqe->wqe_counter);
+        if (iface->coco.enabled) {
+            memset(&coco_result, 0, sizeof(coco_result));
+            status = uct_rc_mlx5_coco_error_cqe_validate(
+                    &iface->coco, cq, UCT_IB_DIR_RX, cqe, &coco_result);
+            if (status != UCS_OK) {
+                uct_rc_mlx5_coco_error_cqe_poison(
+                        iface, cq, UCT_IB_DIR_RX, &coco_result,
+                        "invalid rx error cqe");
+                ++cq->cq_ci;
+                uct_ib_mlx5_update_db_cq_ci(cq);
+                return NULL;
+            }
+
+            wqe_ctr = coco_result.wqe_counter;
+            status  = uct_rc_mlx5_coco_srq_shadow_consume(
+                    &iface->coco, coco_result.srq_slot->slot,
+                    coco_result.srq_slot->generation);
+            if (status != UCS_OK) {
+                uct_rc_mlx5_coco_error_cqe_poison(
+                        iface, cq, UCT_IB_DIR_RX, &coco_result,
+                        "stale rx error cqe");
+                ++cq->cq_ci;
+                uct_ib_mlx5_update_db_cq_ci(cq);
+                return NULL;
+            }
+        } else {
+            wqe_ctr = ntohs(ecqe->wqe_counter);
+        }
+
         seg     = uct_ib_mlx5_srq_get_wqe(&iface->rx.srq, wqe_ctr);
         ++cq->cq_ci;
         /* TODO: Check if ib_stride_index valid for error CQE */
@@ -181,6 +352,8 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
     iface_attr->latency.m     += 1e-9; /* 1 ns per each extra QP */
     iface_attr->ep_addr_len    = ep_addr_len;
     iface_attr->iface_addr_len = sizeof(uint8_t);
+    uct_rc_mlx5_coco_mask_capabilities(uct_ib_mlx5_iface_md(&rc_iface->super),
+                                       iface_attr);
     return UCS_OK;
 }
 
@@ -377,6 +550,23 @@ uct_rc_mlx5_iface_parse_srq_topo(uct_ib_mlx5_md_t *md,
     ucs_string_buffer_t strb  = UCS_STRING_BUFFER_INITIALIZER;
     int i;
 
+    if (uct_ib_md_is_coco_hardened(&md->super)) {
+        if (!uct_rc_mlx5_coco_srq_topo_has(config, "cyclic")) {
+            ucs_error("%s: CoCo hardening requires cyclic SRQ topology",
+                      uct_ib_device_name(&md->super.dev));
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        if (ucs_test_all_flags(md->flags, cyclic_srq_flags) && !ddp_enabled) {
+            *topo_p = UCT_RC_MLX5_SRQ_TOPO_CYCLIC;
+            return UCS_OK;
+        }
+
+        ucs_error("%s: CoCo hardening requires real cyclic SRQ support",
+                  uct_ib_device_name(&md->super.dev));
+        return UCS_ERR_UNSUPPORTED;
+    }
+
     for (i = 0; i < config->srq_topo.count; ++i) {
         if (!strcasecmp(config->srq_topo.types[i], "list")) {
             *topo_p = UCT_RC_MLX5_SRQ_TOPO_LIST;
@@ -548,6 +738,12 @@ uct_rc_mlx5_iface_init_rx(uct_rc_iface_t *rc_iface,
 
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
         if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ) {
+            status = uct_ib_md_check_cc_dma_bounce_supported(
+                    &md->super, "rc_mlx5 tag-matching DEVX");
+            if (status != UCS_OK) {
+                return status;
+            }
+
             status = uct_rc_mlx5_devx_init_rx_tm(iface, rc_config, 0,
                                                  UCT_RC_RNDV_HDR_LEN);
         } else {
@@ -795,6 +991,14 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
     uct_ib_device_t *dev;
     ucs_status_t status;
 
+    status = uct_rc_mlx5_coco_check_config(md, rc_config, mlx5_config);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    uct_rc_mlx5_coco_apply_effective_config(md, rc_config, mlx5_config,
+                                            init_attr);
+
     if (rc_config->super.seg_size > UCT_IB_MLX5_MP_RQ_BYTE_CNT_MASK) {
         ucs_error("IB segment size is too big %ld, it must not exceed %d",
                   rc_config->super.seg_size, UCT_IB_MLX5_MP_RQ_BYTE_CNT_MASK);
@@ -815,6 +1019,9 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
     if (status != UCS_OK) {
         return status;
     }
+
+    uct_rc_mlx5_coco_state_init(&self->coco,
+                                uct_ib_md_is_coco_hardened(&md->super));
 
     self->rx.srq.type                = UCT_IB_MLX5_OBJ_TYPE_LAST;
     self->tm.cmd_wq.super.super.type = UCT_IB_MLX5_OBJ_TYPE_LAST;
@@ -862,6 +1069,15 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
 
     self->super.config.fence_mode  = (uct_rc_fence_mode_t)rc_config->fence_mode;
     self->super.rx.srq.quota       = self->rx.srq.mask + 1;
+    if (self->coco.enabled) {
+        status = uct_rc_mlx5_coco_srq_shadow_init(
+                &self->coco, self, &self->cq[UCT_IB_DIR_RX],
+                self->rx.srq.mask + 1);
+        if (status != UCS_OK) {
+            goto cleanup_dm;
+        }
+    }
+
     self->super.config.exp_backoff = mlx5_config->exp_backoff;
     self->config.log_ack_req_freq  = ucs_min(mlx5_config->log_ack_req_freq,
                                              UCT_RC_MLX5_MAX_LOG_ACK_REQ_FREQ);
@@ -928,6 +1144,7 @@ cleanup_dm:
 cleanup_tm:
     uct_rc_mlx5_iface_common_tag_cleanup(self);
 cleanup_stats:
+    uct_rc_mlx5_coco_state_cleanup(&self->coco);
     UCS_STATS_NODE_FREE(self->stats);
     return status;
 }
@@ -935,6 +1152,7 @@ cleanup_stats:
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_iface_common_t)
 {
     uct_rc_iface_cleanup_qps(&self->super);
+    uct_rc_mlx5_coco_state_cleanup(&self->coco);
     uct_rc_mlx5_devx_iface_free_events(self);
     ucs_mpool_cleanup(&self->tx.atomic_desc_mp, 1);
     uct_rc_mlx5_iface_common_dm_cleanup(self);
@@ -969,10 +1187,23 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
     init_attr.tx_moderation         = config->super.tx_cq_moderation;
     init_attr.dev_name              = params->mode.device.dev_name;
 
-    if ((md->dp_ordering_cap_devx.rc == UCT_IB_MLX5_DP_ORDERING_OOO_ALL) ||
-        md->ddp_support_dv.rc) {
+    uct_rc_mlx5_coco_log_policy(md, "rc_mlx5");
+
+    status = uct_rc_mlx5_coco_check_config(md, &config->super.super,
+                                           &config->rc_mlx5_common);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (!uct_ib_md_is_coco_hardened(&md->super) &&
+        ((md->dp_ordering_cap_devx.rc == UCT_IB_MLX5_DP_ORDERING_OOO_ALL) ||
+         md->ddp_support_dv.rc)) {
         init_attr.flags |= UCT_IB_DDP_SUPPORTED;
     }
+
+    uct_rc_mlx5_coco_apply_effective_config(md, &config->super.super,
+                                            &config->rc_mlx5_common,
+                                            &init_attr);
 
     status = uct_rc_mlx5_dp_ordering_ooo_init(md, &self->super,
                                               md->dp_ordering_cap_devx.rc,
@@ -1114,6 +1345,9 @@ uct_rc_mlx5_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_
     if (strcmp(ib_md->name, UCT_IB_MD_NAME(mlx5))) {
         return UCS_ERR_NO_DEVICE;
     }
+
+    uct_rc_mlx5_coco_log_policy(ucs_derived_of(md, uct_ib_mlx5_md_t),
+                                "rc_mlx5");
 
     flags = UCT_IB_DEVICE_FLAG_SRQ | UCT_IB_DEVICE_FLAG_MLX5_PRM |
             (ib_md->config.eth_pause ? 0 : UCT_IB_DEVICE_FLAG_LINK_IB);

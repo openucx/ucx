@@ -989,6 +989,11 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t, uct_md_h tl_md,
 
     ucs_trace_func("");
 
+    status = uct_ib_md_check_cc_dma_bounce_supported(&md->super, "ud_mlx5");
+    if (status != UCS_OK) {
+        return status;
+    }
+
     status = uct_ud_mlx5dv_calc_tx_wqe_ratio(md);
     if (status != UCS_OK) {
         return status;
@@ -1082,6 +1087,10 @@ uct_ud_mlx5_query_tl_devices(uct_md_h md,
     uct_ib_md_t *ib_md = ucs_derived_of(md, uct_ib_md_t);
 
     if (strcmp(ib_md->name, UCT_IB_MD_NAME(mlx5))) {
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    if (uct_ib_md_is_coco_hardened(ib_md)) {
         return UCS_ERR_NO_DEVICE;
     }
 
