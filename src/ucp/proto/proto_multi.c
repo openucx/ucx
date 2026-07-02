@@ -450,6 +450,8 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     mpriv->min_frag     = 0;
     mpriv->max_frag_sum = 0;
     mpriv->align_thresh = 1;
+    mpriv->rr_lane_idx   = 0;
+    mpriv->rr_generation = 0;
     perf.max_frag       = 0;
     weight_sum          = 0;
     min_end_offset      = 0;
