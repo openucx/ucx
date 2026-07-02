@@ -92,9 +92,9 @@ protected:
 
     struct failover_proto_info_t {
         const char *proto_name;
-        uint64_t tl_cap;
-        size_t size;
-        unsigned flags;
+        uint64_t   tl_cap;
+        size_t     size;
+        unsigned   flags;
     };
 
     void init() override {
@@ -146,8 +146,8 @@ protected:
             reinterpret_cast<test_ucp_fault_tolerance*>(arg);
 
         EXPECT_EQ(0ul, header_length);
-        EXPECT_FALSE(param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV) <<
-                "RNDV is not covered yet";
+        EXPECT_FALSE(param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV)
+                << "RNDV is not covered yet";
         EXPECT_TRUE(param->recv_attr & UCP_AM_RECV_ATTR_FLAG_DATA);
         EXPECT_EQ(self->m_am_expect_reply,
                   !!(param->recv_attr & UCP_AM_RECV_ATTR_FIELD_REPLY_EP));
@@ -158,9 +158,9 @@ protected:
                 EXPECT_LT(msg_index, self->m_am_expected_count);
             }
             EXPECT_EQ(self->m_am_expected_size, length);
-            mem_buffer::pattern_check(data, length,
-                                      m_seed + ((self->m_am_expected_count > 1) ?
-                                                msg_index : 0));
+            mem_buffer::pattern_check(
+                    data, length,
+                    m_seed + ((self->m_am_expected_count > 1) ? msg_index : 0));
             self->m_am_rbuf.resize(length);
             memcpy(self->m_am_rbuf.data(), data, length);
             ++self->m_am_recv_count;
@@ -601,10 +601,10 @@ private:
     }
 
     ucs_status_t do_am_send_and_wait(ucp_ep_h ep, size_t size, bool flush_after) {
-        m_am_expected_size = size;
+        m_am_expected_size  = size;
         m_am_expected_count = 1;
-        m_am_recv_count    = 0;
-        m_am_expect_reply  = false;
+        m_am_recv_count     = 0;
+        m_am_expect_reply   = false;
 
         mem_buffer sbuf(size, UCS_MEMORY_TYPE_HOST);
         sbuf.pattern_fill(m_seed, size);
@@ -690,7 +690,7 @@ private:
     }
 
 protected:
-    static const failover_proto_info_t&
+    static const failover_proto_info_t &
     get_failover_proto_info(failover_proto_t proto)
     {
         static const failover_proto_info_t proto_info[] = {
@@ -698,18 +698,17 @@ protected:
              TEST_FAILOVER_PROTO_FLAG_AM | TEST_FAILOVER_PROTO_FLAG_SINGLE},
             {"am/egr/short/reply", UCT_IFACE_FLAG_AM_SHORT, 8,
              TEST_FAILOVER_PROTO_FLAG_AM | TEST_FAILOVER_PROTO_FLAG_SINGLE |
-             TEST_FAILOVER_PROTO_FLAG_REPLY},
+                     TEST_FAILOVER_PROTO_FLAG_REPLY},
             {"am/egr/single/bcopy", UCT_IFACE_FLAG_AM_BCOPY, UCS_KBYTE,
              TEST_FAILOVER_PROTO_FLAG_AM | TEST_FAILOVER_PROTO_FLAG_SINGLE},
             {"am/egr/single/bcopy/reply", UCT_IFACE_FLAG_AM_BCOPY, UCS_KBYTE,
              TEST_FAILOVER_PROTO_FLAG_AM | TEST_FAILOVER_PROTO_FLAG_SINGLE |
-             TEST_FAILOVER_PROTO_FLAG_REPLY},
+                     TEST_FAILOVER_PROTO_FLAG_REPLY},
             {"am/egr/multi/bcopy", UCT_IFACE_FLAG_AM_BCOPY, 64 * UCS_KBYTE,
              TEST_FAILOVER_PROTO_FLAG_AM},
             {"put/offload/short", UCT_IFACE_FLAG_PUT_SHORT, 8,
              TEST_FAILOVER_PROTO_FLAG_SINGLE},
-            {"put/offload/bcopy", UCT_IFACE_FLAG_PUT_BCOPY, 64 * UCS_KBYTE,
-             0},
+            {"put/offload/bcopy", UCT_IFACE_FLAG_PUT_BCOPY, 64 * UCS_KBYTE, 0},
             {"put/am/bcopy", UCT_IFACE_FLAG_AM_BCOPY, 64 * UCS_KBYTE, 0}
         };
 
@@ -729,7 +728,8 @@ protected:
             return am_proto;
         }
 
-        if ((op_mask & TEST_OP_PUT) && (put_proto != TEST_FAILOVER_PROTO_LAST)) {
+        if ((op_mask & TEST_OP_PUT) &&
+            (put_proto != TEST_FAILOVER_PROTO_LAST)) {
             return put_proto;
         }
 
@@ -738,9 +738,9 @@ protected:
 
     bool is_failover_proto_supported(ucp_ep_h ep, failover_proto_t proto) const
     {
-        const failover_proto_info_t& info = get_failover_proto_info(proto);
-        unsigned failover_lane_count = 0;
-        unsigned native_put_count = 0;
+        const failover_proto_info_t &info = get_failover_proto_info(proto);
+        unsigned failover_lane_count      = 0;
+        unsigned native_put_count         = 0;
 
         for (ucp_lane_index_t lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
             uct_ep_h uct_ep = ucp_ep_get_lane(ep, lane);
@@ -749,10 +749,10 @@ protected:
             }
 
             const uct_iface_attr_t *attr = ucp_ep_get_iface_attr(ep, lane);
-            native_put_count += !!ucs_test_flags(attr->cap.flags,
-                                                 UCT_IFACE_FLAG_PUT_SHORT,
-                                                 UCT_IFACE_FLAG_PUT_BCOPY,
-                                                 UCT_IFACE_FLAG_PUT_ZCOPY);
+            native_put_count            += !!ucs_test_flags(attr->cap.flags,
+                                                            UCT_IFACE_FLAG_PUT_SHORT,
+                                                            UCT_IFACE_FLAG_PUT_BCOPY,
+                                                            UCT_IFACE_FLAG_PUT_ZCOPY);
             if (!ucs_test_all_flags(attr->cap.flags, info.tl_cap)) {
                 continue;
             }
@@ -778,7 +778,8 @@ protected:
     static ucp_request_t *get_proto_request(void *status_ptr)
     {
         return UCS_PTR_IS_PTR(status_ptr) ?
-               reinterpret_cast<ucp_request_t*>(status_ptr) - 1 : nullptr;
+                       reinterpret_cast<ucp_request_t*>(status_ptr) - 1 :
+                       nullptr;
     }
 
     static ucp_lane_index_t get_request_lane_single(const ucp_request_t *req)
@@ -797,12 +798,12 @@ protected:
         return mpriv->lanes[0].super.lane;
     }
 
-    ucp_request_t *check_failover_request(
-            void *status_ptr, const failover_proto_info_t& info)
+    ucp_request_t *
+    check_failover_request(void *status_ptr, const failover_proto_info_t &info)
     {
         ucp_request_t *req = get_proto_request(status_ptr);
-        EXPECT_NE(nullptr, req) <<
-                "failover operation did not return a request";
+        EXPECT_NE(nullptr, req)
+                << "failover operation did not return a request";
         if (req == nullptr) {
             return nullptr;
         }
@@ -824,30 +825,32 @@ protected:
 
     void test_outstanding_am(failover_proto_t proto, ucp_ep_h ep)
     {
-        const failover_proto_info_t& info = get_failover_proto_info(proto);
+        const failover_proto_info_t &info = get_failover_proto_info(proto);
         mem_buffer sbuf(info.size, UCS_MEMORY_TYPE_HOST);
         ucp_request_param_t param;
 
         sbuf.pattern_fill(m_seed, info.size);
-        m_am_expected_size = info.size;
+        m_am_expected_size  = info.size;
         m_am_expected_count = 1;
-        m_am_recv_count    = 0;
-        m_am_expect_reply  = ucs_test_all_flags(
-                info.flags, TEST_FAILOVER_PROTO_FLAG_REPLY);
-        param.op_attr_mask = UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
+        m_am_recv_count     = 0;
+        m_am_expect_reply   = ucs_test_all_flags(info.flags,
+                                                 TEST_FAILOVER_PROTO_FLAG_REPLY);
+        param.op_attr_mask  = UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
         if (m_am_expect_reply) {
             param.op_attr_mask |= UCP_OP_ATTR_FIELD_FLAGS;
             param.flags         = UCP_AM_SEND_FLAG_REPLY;
         }
 
-        void *request = ucp_am_send_nbx(ep, AM_ID, nullptr, 0, sbuf.ptr(),
-                                        info.size, &param);
+        void *request      = ucp_am_send_nbx(ep, AM_ID, nullptr, 0, sbuf.ptr(),
+                                             info.size, &param);
         ucp_request_t *req = check_failover_request(request, info);
         ASSERT_NE(nullptr, req);
 
         ucp_lane_index_t lane =
-                ucs_test_all_flags(info.flags, TEST_FAILOVER_PROTO_FLAG_SINGLE) ?
-                get_request_lane_single(req) : get_request_lane_multi(req);
+                ucs_test_all_flags(info.flags,
+                                   TEST_FAILOVER_PROTO_FLAG_SINGLE) ?
+                        get_request_lane_single(req) :
+                        get_request_lane_multi(req);
         ucs_status_t status = uct_ep_invalidate(ucp_ep_get_lane(ep, lane), 0);
         if (status == UCS_ERR_UNSUPPORTED) {
             request_wait(request);
@@ -865,7 +868,7 @@ protected:
     void test_outstanding_queue(failover_proto_t proto)
     {
         static const size_t max_msg_count = 64;
-        const failover_proto_info_t& info = get_failover_proto_info(proto);
+        const failover_proto_info_t &info = get_failover_proto_info(proto);
         std::vector<std::unique_ptr<mem_buffer>> sbufs;
         std::vector<ucs_status_ptr_t> requests;
         ucp_lane_index_t request_lane = UCP_NULL_LANE;
@@ -886,8 +889,8 @@ protected:
         }
 
         ucs_assert(ucs_test_all_flags(info.flags,
-                                     TEST_FAILOVER_PROTO_FLAG_AM |
-                                     TEST_FAILOVER_PROTO_FLAG_SINGLE));
+                                      TEST_FAILOVER_PROTO_FLAG_AM |
+                                              TEST_FAILOVER_PROTO_FLAG_SINGLE));
         m_am_expected_size  = info.size;
         m_am_expected_count = max_msg_count;
         m_am_recv_count     = 0;
@@ -896,14 +899,13 @@ protected:
 
         while ((pending_count == 0) && (requests.size() < max_msg_count)) {
             size_t msg_index = requests.size();
-            sbufs.emplace_back(new mem_buffer(info.size,
-                                              UCS_MEMORY_TYPE_HOST));
+            sbufs.emplace_back(new mem_buffer(info.size, UCS_MEMORY_TYPE_HOST));
             sbufs.back()->pattern_fill(m_seed + msg_index, info.size);
 
-            ucs_status_ptr_t request = ucp_am_send_nbx(
-                    ep, AM_ID, nullptr, 0, sbufs.back()->ptr(), info.size,
-                    &param);
-            ucp_request_t *req = check_failover_request(request, info);
+            ucs_status_ptr_t request = ucp_am_send_nbx(ep, AM_ID, nullptr, 0,
+                                                       sbufs.back()->ptr(),
+                                                       info.size, &param);
+            ucp_request_t *req       = check_failover_request(request, info);
             ASSERT_NE(nullptr, req);
 
             ucp_lane_index_t lane = get_request_lane_single(req);
@@ -925,8 +927,9 @@ protected:
         ASSERT_GT(pending_count, 0ul);
         m_am_expected_count = requests.size();
 
-        ucs_status_t status =
-                uct_ep_invalidate(ucp_ep_get_lane(ep, request_lane), 0);
+        ucs_status_t status = uct_ep_invalidate(ucp_ep_get_lane(ep,
+                                                                request_lane),
+                                                0);
         ASSERT_UCS_OK(status);
         ASSERT_UCS_OK(requests_wait(requests));
         ASSERT_UCS_OK(request_wait(ucp_ep_flush_nbx(ep, &m_req_empty_param)));
@@ -940,7 +943,7 @@ protected:
 
     void test_outstanding_put(failover_proto_t proto, ucp_ep_h ep)
     {
-        const failover_proto_info_t& info = get_failover_proto_info(proto);
+        const failover_proto_info_t &info = get_failover_proto_info(proto);
         mem_buffer lbuf(info.size, UCS_MEMORY_TYPE_HOST);
         mapped_buffer rbuf(info.size, receiver());
         ucs::handle<ucp_rkey_h> rkey = rbuf.rkey(sender());
@@ -950,14 +953,16 @@ protected:
         rbuf.memset(0);
         param.op_attr_mask = UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
 
-        void *request = ucp_put_nbx(ep, lbuf.ptr(), info.size,
-                                    uintptr_t(rbuf.ptr()), rkey.get(), &param);
+        void *request      = ucp_put_nbx(ep, lbuf.ptr(), info.size,
+                                         uintptr_t(rbuf.ptr()), rkey.get(), &param);
         ucp_request_t *req = check_failover_request(request, info);
         ASSERT_NE(nullptr, req);
 
         ucp_lane_index_t lane =
-                ucs_test_all_flags(info.flags, TEST_FAILOVER_PROTO_FLAG_SINGLE) ?
-                get_request_lane_single(req) : get_request_lane_multi(req);
+                ucs_test_all_flags(info.flags,
+                                   TEST_FAILOVER_PROTO_FLAG_SINGLE) ?
+                        get_request_lane_single(req) :
+                        get_request_lane_multi(req);
         ucs_status_t status = uct_ep_invalidate(ucp_ep_get_lane(ep, lane), 0);
         if (status == UCS_ERR_UNSUPPORTED) {
             request_wait(request);
@@ -969,18 +974,17 @@ protected:
         rbuf.pattern_check(m_seed, info.size);
     }
 
-    void test_outstanding(failover_proto_t am_proto,
-                          failover_proto_t put_proto)
+    void test_outstanding(failover_proto_t am_proto, failover_proto_t put_proto)
     {
         if (!is_proto_enabled()) {
             UCS_TEST_SKIP_R("proto v1");
         }
 
         flush_workers();
-        ucp_ep_h ep = sender().ep(0, INJECTED_EP_INDEX);
-        const failover_proto_t proto =
-                select_failover_proto(am_proto, put_proto);
-        const failover_proto_info_t& info = get_failover_proto_info(proto);
+        ucp_ep_h ep                       = sender().ep(0, INJECTED_EP_INDEX);
+        const failover_proto_t proto      = select_failover_proto(am_proto,
+                                                                  put_proto);
+        const failover_proto_info_t &info = get_failover_proto_info(proto);
 
         if (!is_failover_proto_supported(ep, proto)) {
             UCS_TEST_SKIP_R(
@@ -1002,11 +1006,11 @@ protected:
     static constexpr uint64_t m_seed = 0x12345678;
 
     const ucp_request_param_t m_req_empty_param = { 0 };
-    std::vector<uint8_t> m_am_rbuf;
     size_t m_am_expected_size                   = am_msg_size();
     size_t m_am_expected_count                  = 0;
     volatile size_t m_am_recv_count             = 0;
     bool m_am_expect_reply                      = false;
+    std::vector<uint8_t> m_am_rbuf;
 
 private:
     size_t m_initiator_err_count = 0;
@@ -1083,8 +1087,7 @@ UCS_TEST_P(test_ucp_fault_tolerance, initiator_failure_multi_bcopy_outstanding,
                      TEST_FAILOVER_PROTO_LAST);
 }
 
-UCS_TEST_P(test_ucp_fault_tolerance,
-           initiator_failure_put_am_bcopy_outstanding,
+UCS_TEST_P(test_ucp_fault_tolerance, initiator_failure_put_am_bcopy_outstanding,
            "MAX_EAGER_LANES=8", "MAX_RMA_LANES=8", "MAX_RMA_RAILS=8",
            "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
 {
@@ -1098,8 +1101,8 @@ UCS_TEST_P(test_ucp_fault_tolerance, initiator_failure_bcopy,
     do_test(FAILURE_SIDE_INITIATOR);
 }
 
-UCS_TEST_P(test_ucp_fault_tolerance, target_failure_bcopy,
-           "MAX_EAGER_LANES=8", "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
+UCS_TEST_P(test_ucp_fault_tolerance, target_failure_bcopy, "MAX_EAGER_LANES=8",
+           "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
 {
     do_test(FAILURE_SIDE_TARGET);
 }
@@ -1110,8 +1113,8 @@ UCS_TEST_P(test_ucp_fault_tolerance, initiator_failure_zcopy,
     do_test(FAILURE_SIDE_INITIATOR);
 }
 
-UCS_TEST_P(test_ucp_fault_tolerance, target_failure_zcopy,
-           "MAX_EAGER_LANES=8", "ZCOPY_THRESH=0", "RNDV_THRESH=inf")
+UCS_TEST_P(test_ucp_fault_tolerance, target_failure_zcopy, "MAX_EAGER_LANES=8",
+           "ZCOPY_THRESH=0", "RNDV_THRESH=inf")
 {
     do_test(FAILURE_SIDE_TARGET);
 }
