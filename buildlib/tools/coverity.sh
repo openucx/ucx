@@ -4,7 +4,7 @@ realdir=$(realpath $(dirname $0))
 source ${realdir}/common.sh
 source ${realdir}/../az-helpers.sh
 
-COV_MODULE="tools/cov-2019.12"
+COV_MODULE="tools/cov-2023.12"
 
 usage() {
 	echo "Usage: $0 <release|devel> [--clean] [<configure opts>]"
