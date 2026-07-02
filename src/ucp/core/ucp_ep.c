@@ -2037,8 +2037,6 @@ void ucp_ep_set_lanes_failed_schedule(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
     ucp_worker_h worker = ucp_ep->worker;
     ucp_ep_set_lanes_failed_arg_t *set_ep_failed_arg;
 
-    UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(worker);
-
     set_ep_failed_arg = ucs_malloc(sizeof(*set_ep_failed_arg),
                                    "set_ep_failed_arg");
     if (set_ep_failed_arg == NULL) {
@@ -2050,8 +2048,10 @@ void ucp_ep_set_lanes_failed_schedule(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
     set_ep_failed_arg->lanes  = lanes;
     set_ep_failed_arg->status = status;
 
+    UCS_ASYNC_BLOCK(&worker->async);
     ucs_callbackq_add_oneshot(&worker->uct->progress_q, ucp_ep,
                               ucp_ep_set_lanes_failed_progress, set_ep_failed_arg);
+    UCS_ASYNC_UNBLOCK(&worker->async);
 
     /* If the worker supports the UCP_FEATURE_WAKEUP feature, signal the user so
      * that he can wake-up on this event */
