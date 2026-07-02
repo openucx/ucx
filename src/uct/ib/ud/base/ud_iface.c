@@ -648,59 +648,72 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_iface_t)
 
 UCS_CLASS_DEFINE(uct_ud_iface_t, uct_ib_iface_t);
 
+/* clang-format off */
 ucs_config_field_t uct_ud_iface_config_table[] = {
     {UCT_IB_CONFIG_PREFIX, "", NULL,
-     ucs_offsetof(uct_ud_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_ib_iface_config_table)},
+     ucs_offsetof(uct_ud_iface_config_t, super),
+     UCS_CONFIG_TYPE_TABLE(uct_ib_iface_config_table)},
 
     {"UD_", "", NULL,
      ucs_offsetof(uct_ud_iface_config_t, ud_common),
      UCS_CONFIG_TYPE_TABLE(uct_ud_iface_common_config_table)},
 
     {"LINGER_TIMEOUT", "5.0m",
-     "Keep the connection open internally for this amount of time after closing it",
-     ucs_offsetof(uct_ud_iface_config_t, linger_timeout), UCS_CONFIG_TYPE_TIME},
+     "Keep the connection open internally for this amount of time after closing it.",
+     ucs_offsetof(uct_ud_iface_config_t, linger_timeout),
+     UCS_CONFIG_TYPE_TIME},
 
     {"TIMEOUT", "30s",
      "Consider the remote peer as unreachable if an acknowledgment was not received\n"
-     "after this amount of time",
-     ucs_offsetof(uct_ud_iface_config_t, peer_timeout), UCS_CONFIG_TYPE_TIME},
+     "after this amount of time.",
+     ucs_offsetof(uct_ud_iface_config_t, peer_timeout),
+     UCS_CONFIG_TYPE_TIME},
 
-    {"TIMER_TICK", "10ms", "Initial timeout for retransmissions",
-     ucs_offsetof(uct_ud_iface_config_t, timer_tick), UCS_CONFIG_TYPE_TIME},
+    {"TIMER_TICK", "10ms",
+     "Initial timeout for retransmissions.",
+     ucs_offsetof(uct_ud_iface_config_t, timer_tick),
+     UCS_CONFIG_TYPE_TIME},
 
     {"TIMER_BACKOFF", "2.0",
      "Timeout multiplier for resending trigger (must be >= "
-     UCS_PP_MAKE_STRING(UCT_UD_MIN_TIMER_TIMER_BACKOFF) ")",
+     UCS_PP_MAKE_STRING(UCT_UD_MIN_TIMER_TIMER_BACKOFF) ").",
      ucs_offsetof(uct_ud_iface_config_t, timer_backoff),
-                  UCS_CONFIG_TYPE_DOUBLE},
+     UCS_CONFIG_TYPE_DOUBLE},
 
-    {"ASYNC_TIMER_TICK", "100ms", "Resolution for async timer",
-     ucs_offsetof(uct_ud_iface_config_t, event_timer_tick), UCS_CONFIG_TYPE_TIME},
+    {"ASYNC_TIMER_TICK", "100ms",
+     "Resolution for async timer.",
+     ucs_offsetof(uct_ud_iface_config_t, event_timer_tick),
+     UCS_CONFIG_TYPE_TIME},
 
     {"MIN_POKE_TIME", "250ms",
      "Minimal interval to send ACK request with solicited flag, to wake up\n"
      "the remote peer in case it is not actively calling progress.\n"
      "Smaller values may incur performance overhead, while extremely large\n"
      "values can cause delays in presence of packet drops.",
-     ucs_offsetof(uct_ud_iface_config_t, min_poke_time), UCS_CONFIG_TYPE_TIME},
+     ucs_offsetof(uct_ud_iface_config_t, min_poke_time),
+     UCS_CONFIG_TYPE_TIME},
 
     {"ETH_DGID_CHECK", "y",
      "Enable checking destination GID for incoming packets of Ethernet network.\n"
      "Mismatched packets are silently dropped.",
-     ucs_offsetof(uct_ud_iface_config_t, dgid_check), UCS_CONFIG_TYPE_BOOL},
+     ucs_offsetof(uct_ud_iface_config_t, dgid_check),
+     UCS_CONFIG_TYPE_BOOL},
 
     {"MAX_WINDOW", UCS_PP_MAKE_STRING(UCT_UD_CA_MAX_WINDOW),
      "Max congestion avoidance window. Should be >= "
       UCS_PP_MAKE_STRING(UCT_UD_CA_MIN_WINDOW) " and <= "
-      UCS_PP_MAKE_STRING(UCT_UD_CA_MAX_WINDOW),
-     ucs_offsetof(uct_ud_iface_config_t, max_window), UCS_CONFIG_TYPE_UINT},
+      UCS_PP_MAKE_STRING(UCT_UD_CA_MAX_WINDOW) ".",
+     ucs_offsetof(uct_ud_iface_config_t, max_window),
+     UCS_CONFIG_TYPE_UINT},
 
     {"RX_ASYNC_MAX_POLL", "64",
-     "Max number of receive completions to pick during asynchronous TX poll",
-     ucs_offsetof(uct_ud_iface_config_t, rx_async_max_poll), UCS_CONFIG_TYPE_UINT},
+     "Max number of receive completions to pick during asynchronous TX poll.",
+     ucs_offsetof(uct_ud_iface_config_t, rx_async_max_poll),
+     UCS_CONFIG_TYPE_UINT},
 
     {NULL}
 };
+/* clang-format on */
 
 
 ucs_status_t uct_ud_iface_query(uct_ud_iface_t *iface,

@@ -14,6 +14,7 @@
 #include <uct/api/v2/uct_v2.h>
 
 
+/* clang-format off */
 static ucs_config_field_t uct_rocm_ipc_md_config_table[] = {
     {"", "", NULL,
      ucs_offsetof(uct_rocm_ipc_md_config_t, super),
@@ -21,6 +22,7 @@ static ucs_config_field_t uct_rocm_ipc_md_config_table[] = {
 
     {NULL}
 };
+/* clang-format on */
 
 static ucs_status_t uct_rocm_ipc_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
 {

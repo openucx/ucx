@@ -23,37 +23,42 @@
 #define UCT_CUDA_COPY_IFACE_LATENCY  ucs_linear_func_make(8e-6, 0)
 
 
+/* clang-format off */
 static ucs_config_field_t uct_cuda_copy_iface_config_table[] = {
-
     {"", "", NULL,
      ucs_offsetof(uct_cuda_copy_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
     {"MAX_POLL", "16",
-     "Max number of event completions to pick during cuda events polling",
-     ucs_offsetof(uct_cuda_copy_iface_config_t, max_poll), UCS_CONFIG_TYPE_UINT},
+     "Max number of event completions to pick during cuda events polling.",
+     ucs_offsetof(uct_cuda_copy_iface_config_t, max_poll),
+     UCS_CONFIG_TYPE_UINT},
 
     {"MAX_EVENTS", "inf",
-     "Max number of cuda events. -1 is infinite",
-     ucs_offsetof(uct_cuda_copy_iface_config_t, max_cuda_events), UCS_CONFIG_TYPE_UINT},
+     "Max number of cuda events. -1 is infinite.",
+     ucs_offsetof(uct_cuda_copy_iface_config_t, max_cuda_events),
+     UCS_CONFIG_TYPE_UINT},
 
     /* TODO: 1. Add separate keys for shared and dedicated bandwidth
              2. Remove the "dflt" key (use pref_loc for managed memory) */
     {"BW", "10000MBs,h2d:8300MBs,d2h:11660MBs,d2d:320GBs",
-     "Effective memory bandwidth", 0,
+     "Effective memory bandwidth.",
+     0,
      UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_BW,
-         {"h2d", "host to device bandwidth",
-          ucs_offsetof(uct_cuda_copy_iface_config_t, bw.h2d)},
-         {"d2h", "device to host bandwidth",
-          ucs_offsetof(uct_cuda_copy_iface_config_t, bw.d2h)},
-         {"d2d", "device to device bandwidth",
-          ucs_offsetof(uct_cuda_copy_iface_config_t, bw.d2d)},
-         {"default", "any other memory types combinations bandwidth",
-          ucs_offsetof(uct_cuda_copy_iface_config_t, bw.dflt)},
-         {NULL})},
+       {"h2d", "host to device bandwidth",
+        ucs_offsetof(uct_cuda_copy_iface_config_t, bw.h2d)},
+       {"d2h", "device to host bandwidth",
+        ucs_offsetof(uct_cuda_copy_iface_config_t, bw.d2h)},
+       {"d2d", "device to device bandwidth",
+        ucs_offsetof(uct_cuda_copy_iface_config_t, bw.d2d)},
+       {"default", "any other memory types combinations bandwidth",
+        ucs_offsetof(uct_cuda_copy_iface_config_t, bw.dflt)},
+       {NULL}
+     )},
 
     {NULL}
 };
+/* clang-format on */
 
 /* Forward declaration for the delete function */
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_copy_iface_t)(uct_iface_t*);

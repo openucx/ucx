@@ -27,6 +27,7 @@
 #define UCT_MM_IFACE_OVERHEAD 10e-9
 #define UCT_MM_IFACE_LATENCY  ucs_linear_func_make(80e-9, 0)
 
+/* clang-format off */
 ucs_config_field_t uct_mm_iface_config_table[] = {
     {"SM_", "ALLOC=md,mmap,heap;BW=15360MBs", NULL,
      ucs_offsetof(uct_mm_iface_config_t, super),
@@ -34,61 +35,73 @@ ucs_config_field_t uct_mm_iface_config_table[] = {
 
     {"FIFO_SIZE", "256",
      "Size of the receive FIFO in the memory-map UCTs.",
-     ucs_offsetof(uct_mm_iface_config_t, fifo_size), UCS_CONFIG_TYPE_UINT},
+     ucs_offsetof(uct_mm_iface_config_t, fifo_size),
+     UCS_CONFIG_TYPE_UINT},
 
     {"SEG_SIZE", "8256",
      "Size of send/receive buffers for copy-out sends.",
-     ucs_offsetof(uct_mm_iface_config_t, seg_size), UCS_CONFIG_TYPE_MEMUNITS},
+     ucs_offsetof(uct_mm_iface_config_t, seg_size),
+     UCS_CONFIG_TYPE_MEMUNITS},
 
     {"FIFO_RELEASE_FACTOR", "0.5",
      "Frequency of resource releasing on the receiver's side in the MM UCT.\n"
      "This value refers to the percentage of the FIFO size. (must be >= 0 and < 1).",
-     ucs_offsetof(uct_mm_iface_config_t, release_fifo_factor), UCS_CONFIG_TYPE_DOUBLE},
+     ucs_offsetof(uct_mm_iface_config_t, release_fifo_factor),
+     UCS_CONFIG_TYPE_DOUBLE},
 
     UCT_IFACE_MPOOL_CONFIG_FIELDS("RX_", -1, 512, 128m, 1.0, "receive",
                                   ucs_offsetof(uct_mm_iface_config_t, mp), ""),
 
     {"FIFO_HUGETLB", "no",
-     "Enable using huge pages for internal shared memory buffers."
+     "Enable using huge pages for internal shared memory buffers.\n"
      "Possible values are:\n"
      " y   - Allocate memory using huge pages only.\n"
      " n   - Allocate memory using regular pages only.\n"
      " try - Try to allocate memory using huge pages and if it fails, allocate regular pages.",
-     ucs_offsetof(uct_mm_iface_config_t, hugetlb_mode), UCS_CONFIG_TYPE_TERNARY},
+     ucs_offsetof(uct_mm_iface_config_t, hugetlb_mode),
+     UCS_CONFIG_TYPE_TERNARY},
 
     {"FIFO_ELEM_SIZE", "128",
      "Size of the FIFO element size (data + header) in the MM UCTs.",
-     ucs_offsetof(uct_mm_iface_config_t, fifo_elem_size), UCS_CONFIG_TYPE_UINT},
+     ucs_offsetof(uct_mm_iface_config_t, fifo_elem_size),
+     UCS_CONFIG_TYPE_UINT},
 
     {"FIFO_MAX_POLL", UCS_PP_MAKE_STRING(UCT_MM_IFACE_FIFO_MAX_POLL),
-     "Maximal number of receive completions to pick during RX poll",
-     ucs_offsetof(uct_mm_iface_config_t, fifo_max_poll), UCS_CONFIG_TYPE_ULUNITS},
+     "Maximal number of receive completions to pick during RX poll.",
+     ucs_offsetof(uct_mm_iface_config_t, fifo_max_poll),
+     UCS_CONFIG_TYPE_ULUNITS},
 
-    {"ERROR_HANDLING", "n", "Expose error handling support capability",
-     ucs_offsetof(uct_mm_iface_config_t, error_handling), UCS_CONFIG_TYPE_BOOL},
+    {"ERROR_HANDLING", "n",
+     "Expose error handling support capability.",
+     ucs_offsetof(uct_mm_iface_config_t, error_handling),
+     UCS_CONFIG_TYPE_BOOL},
 
     {"SEND_OVERHEAD", UCS_PP_MAKE_STRING(UCT_MM_IFACE_OVERHEAD),
      "Time spent after the message request has been passed to the hardware or\n"
-     "system software layers and before operation has been finalized", 0,
+     "system software layers and before operation has been finalized.",
+     0,
      UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_TIME,
-        {"am_short", "send overhead for short Active Message operation type",
-         ucs_offsetof(uct_mm_iface_config_t, overhead.send.am_short)},
-        {"am_bcopy", "send overhead for buffered Active Message operation type",
-         ucs_offsetof(uct_mm_iface_config_t, overhead.send.am_bcopy)},
-        {NULL})},
+       {"am_short", "send overhead for short Active Message operation type",
+        ucs_offsetof(uct_mm_iface_config_t, overhead.send.am_short)},
+       {"am_bcopy", "send overhead for buffered Active Message operation type",
+        ucs_offsetof(uct_mm_iface_config_t, overhead.send.am_bcopy)},
+       {NULL}
+     )},
 
     {"RECV_OVERHEAD", UCS_PP_MAKE_STRING(UCT_MM_IFACE_OVERHEAD),
-     "Message receive overhead time", 0,
+     "Message receive overhead time.",
+     0,
      UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_TIME,
-        {"am_short", "receive overhead for short Active Message operation type",
-         ucs_offsetof(uct_mm_iface_config_t, overhead.recv.am_short)},
-        {"am_bcopy", "receive overhead for buffered Active Message operation "
-                     "type",
-         ucs_offsetof(uct_mm_iface_config_t, overhead.recv.am_bcopy)},
-        {NULL})},
+       {"am_short", "receive overhead for short Active Message operation type",
+        ucs_offsetof(uct_mm_iface_config_t, overhead.recv.am_short)},
+       {"am_bcopy", "receive overhead for buffered Active Message operation type",
+        ucs_offsetof(uct_mm_iface_config_t, overhead.recv.am_bcopy)},
+       {NULL}
+     )},
 
     {NULL}
 };
+/* clang-format on */
 
 static ucs_status_t uct_mm_iface_get_address(uct_iface_t *tl_iface,
                                              uct_iface_addr_t *addr)

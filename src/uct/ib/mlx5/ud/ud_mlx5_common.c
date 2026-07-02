@@ -11,13 +11,16 @@
 #include "ud_mlx5_common.h"
 
 
+/* clang-format off */
 ucs_config_field_t uct_ud_mlx5_iface_common_config_table[] = {
   {"COMPACT_AV", "yes",
    "Enable compact address-vector optimization.",
-   ucs_offsetof(uct_ud_mlx5_iface_common_config_t, enable_compact_av), UCS_CONFIG_TYPE_BOOL},
+   ucs_offsetof(uct_ud_mlx5_iface_common_config_t, enable_compact_av),
+   UCS_CONFIG_TYPE_BOOL},
 
   {NULL}
 };
+/* clang-format on */
 
 ucs_status_t uct_ud_mlx5_iface_common_init(uct_ib_iface_t *ib_iface,
                                            uct_ud_mlx5_iface_common_t *iface,

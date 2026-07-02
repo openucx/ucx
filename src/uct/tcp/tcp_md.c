@@ -13,19 +13,25 @@
 #include <uct/api/v2/uct_v2.h>
 
 
+/* clang-format off */
 static ucs_config_field_t uct_tcp_md_config_table[] = {
-    {"", "", NULL, ucs_offsetof(uct_tcp_md_config_t, super),
+    {"", "", NULL,
+     ucs_offsetof(uct_tcp_md_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
 
     {"AF_PRIO", "inet,inet6",
-     "Priority of address families used for socket connections",
-     ucs_offsetof(uct_tcp_md_config_t, af_prio), UCS_CONFIG_TYPE_STRING_ARRAY},
+     "Priority of address families used for socket connections.",
+     ucs_offsetof(uct_tcp_md_config_t, af_prio),
+     UCS_CONFIG_TYPE_STRING_ARRAY},
 
-    {"BRIDGE_ENABLE", "n", "Enable using bridge devices",
-     ucs_offsetof(uct_tcp_md_config_t, bridge_enable), UCS_CONFIG_TYPE_BOOL},
+    {"BRIDGE_ENABLE", "n",
+     "Enable using bridge devices.",
+     ucs_offsetof(uct_tcp_md_config_t, bridge_enable),
+     UCS_CONFIG_TYPE_BOOL},
 
     {NULL}
 };
+/* clang-format on */
 
 static ucs_status_t uct_tcp_md_query(uct_md_h md, uct_md_attr_v2_t *attr)
 {

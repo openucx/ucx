@@ -32,6 +32,7 @@ typedef struct uct_rc_mlx5_iface_config {
 } uct_rc_mlx5_iface_config_t;
 
 
+/* clang-format off */
 ucs_config_field_t uct_rc_mlx5_iface_config_table[] = {
   {"RC_", UCT_IB_SEND_OVERHEAD_DEFAULT(UCT_RC_MLX5_IFACE_OVERHEAD), NULL,
    ucs_offsetof(uct_rc_mlx5_iface_config_t, super),
@@ -43,6 +44,7 @@ ucs_config_field_t uct_rc_mlx5_iface_config_table[] = {
 
   {NULL}
 };
+/* clang-format on */
 
 
 static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops;

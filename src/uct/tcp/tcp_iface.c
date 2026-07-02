@@ -25,54 +25,65 @@
 
 extern ucs_class_t UCS_CLASS_DECL_NAME(uct_tcp_iface_t);
 
+/* clang-format off */
 static ucs_config_field_t uct_tcp_iface_config_table[] = {
   {"", "MAX_NUM_EPS=256", NULL,
    ucs_offsetof(uct_tcp_iface_config_t, super),
    UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
   {"TX_SEG_SIZE", "8kb",
-   "Size of send copy-out buffer",
-   ucs_offsetof(uct_tcp_iface_config_t, tx_seg_size), UCS_CONFIG_TYPE_MEMUNITS},
+   "Size of send copy-out buffer.",
+   ucs_offsetof(uct_tcp_iface_config_t, tx_seg_size),
+   UCS_CONFIG_TYPE_MEMUNITS},
 
   {"RX_SEG_SIZE", "64kb",
-   "Size of receive copy-out buffer",
-   ucs_offsetof(uct_tcp_iface_config_t, rx_seg_size), UCS_CONFIG_TYPE_MEMUNITS},
+   "Size of receive copy-out buffer.",
+   ucs_offsetof(uct_tcp_iface_config_t, rx_seg_size),
+   UCS_CONFIG_TYPE_MEMUNITS},
 
   {"MAX_IOV", "6",
    "Maximum IOV count that can contain user-defined payload in a single\n"
-   "call to non-blocking vector socket send",
-   ucs_offsetof(uct_tcp_iface_config_t, max_iov), UCS_CONFIG_TYPE_ULONG},
+   "call to non-blocking vector socket send.",
+   ucs_offsetof(uct_tcp_iface_config_t, max_iov),
+   UCS_CONFIG_TYPE_ULONG},
 
   {"SENDV_THRESH", "2kb",
-   "Threshold for switching from send() to sendmsg() for short active messages",
-   ucs_offsetof(uct_tcp_iface_config_t, sendv_thresh), UCS_CONFIG_TYPE_MEMUNITS},
+   "Threshold for switching from send() to sendmsg() for short active messages.",
+   ucs_offsetof(uct_tcp_iface_config_t, sendv_thresh),
+   UCS_CONFIG_TYPE_MEMUNITS},
 
   {"PREFER_DEFAULT", "y",
-   "Give higher priority to the default network interface on the host",
-   ucs_offsetof(uct_tcp_iface_config_t, prefer_default), UCS_CONFIG_TYPE_BOOL},
+   "Give higher priority to the default network interface on the host.",
+   ucs_offsetof(uct_tcp_iface_config_t, prefer_default),
+   UCS_CONFIG_TYPE_BOOL},
 
   {"PUT_ENABLE", "y",
-   "Enable PUT Zcopy support",
-   ucs_offsetof(uct_tcp_iface_config_t, put_enable), UCS_CONFIG_TYPE_BOOL},
+   "Enable PUT Zcopy support.",
+   ucs_offsetof(uct_tcp_iface_config_t, put_enable),
+   UCS_CONFIG_TYPE_BOOL},
 
   {"CONN_NB", "n",
-   "Enable non-blocking connection establishment. It may improve startup "
-   "time, but can lead to connection resets due to high load on TCP/IP stack",
-   ucs_offsetof(uct_tcp_iface_config_t, conn_nb), UCS_CONFIG_TYPE_BOOL},
+   "Enable non-blocking connection establishment. It may improve startup\n"
+   "time, but can lead to connection resets due to high load on TCP/IP stack.",
+   ucs_offsetof(uct_tcp_iface_config_t, conn_nb),
+   UCS_CONFIG_TYPE_BOOL},
 
   {"MAX_POLL", UCS_PP_MAKE_STRING(UCT_TCP_MAX_EVENTS),
-   "Number of times to poll on a ready socket. 0 - no polling, -1 - until drained",
-   ucs_offsetof(uct_tcp_iface_config_t, max_poll), UCS_CONFIG_TYPE_UINT},
+   "Number of times to poll on a ready socket. 0 - no polling, -1 - until drained.",
+   ucs_offsetof(uct_tcp_iface_config_t, max_poll),
+   UCS_CONFIG_TYPE_UINT},
 
   {UCT_TCP_CONFIG_MAX_CONN_RETRIES, "25",
-   "How many connection establishment attempts should be done if dropped "
-   "connection was detected due to lack of system resources",
-   ucs_offsetof(uct_tcp_iface_config_t, max_conn_retries), UCS_CONFIG_TYPE_UINT},
+   "How many connection establishment attempts should be done if dropped\n"
+   "connection was detected due to lack of system resources.",
+   ucs_offsetof(uct_tcp_iface_config_t, max_conn_retries),
+   UCS_CONFIG_TYPE_UINT},
 
   {"NODELAY", "y",
    "Set TCP_NODELAY socket option to disable Nagle algorithm. Setting this\n"
-   "option usually provides better performance",
-   ucs_offsetof(uct_tcp_iface_config_t, sockopt_nodelay), UCS_CONFIG_TYPE_BOOL},
+   "option usually provides better performance.",
+   ucs_offsetof(uct_tcp_iface_config_t, sockopt_nodelay),
+   UCS_CONFIG_TYPE_BOOL},
 
   UCT_TCP_SEND_RECV_BUF_FIELDS(ucs_offsetof(uct_tcp_iface_config_t, sockopt)),
 
@@ -89,40 +100,43 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
   {"PORT_RANGE", "0",
    "Generate a random TCP port number from that range. A value of zero means\n"
    "let the operating system select the port number.",
-   ucs_offsetof(uct_tcp_iface_config_t, port_range), UCS_CONFIG_TYPE_RANGE_SPEC},
+   ucs_offsetof(uct_tcp_iface_config_t, port_range),
+   UCS_CONFIG_TYPE_RANGE_SPEC},
 
    {"MAX_BW", "2200MBs",
     "Upper bound to TCP iface bandwidth. 'auto' means BW is unlimited.",
-    ucs_offsetof(uct_tcp_iface_config_t, max_bw), UCS_CONFIG_TYPE_BW},
+    ucs_offsetof(uct_tcp_iface_config_t, max_bw),
+    UCS_CONFIG_TYPE_BW},
 
 #ifdef UCT_TCP_EP_KEEPALIVE
   {"KEEPIDLE", UCS_PP_MAKE_STRING(UCT_TCP_EP_DEFAULT_KEEPALIVE_IDLE) "s",
-   "The time the connection needs to remain idle before TCP starts sending "
+   "The time the connection needs to remain idle before TCP starts sending\n"
    "keepalive probes. Specifying \"inf\" disables keepalive.",
    ucs_offsetof(uct_tcp_iface_config_t, keepalive.idle),
-                UCS_CONFIG_TYPE_TIME_UNITS},
+   UCS_CONFIG_TYPE_TIME_UNITS},
 
   {"KEEPCNT", "auto",
-   "The maximum number of keepalive probes TCP should send before "
+   "The maximum number of keepalive probes TCP should send before\n"
    "dropping the connection. Specifying \"inf\" disables keepalive.",
    ucs_offsetof(uct_tcp_iface_config_t, keepalive.cnt),
-                UCS_CONFIG_TYPE_ULUNITS},
+   UCS_CONFIG_TYPE_ULUNITS},
 
   {"KEEPINTVL", UCS_PP_MAKE_STRING(UCT_TCP_EP_DEFAULT_KEEPALIVE_INTVL) "s",
-   "The time between individual keepalive probes. Specifying \"inf\" disables"
-   " keepalive.",
+   "The time between individual keepalive probes. Specifying \"inf\" disables\n"
+   "keepalive.",
    ucs_offsetof(uct_tcp_iface_config_t, keepalive.intvl),
-                UCS_CONFIG_TYPE_TIME_UNITS},
+   UCS_CONFIG_TYPE_TIME_UNITS},
 #endif /* UCT_TCP_EP_KEEPALIVE */
 
   {"EP_BIND_SRC_ADDR", "try",
-   "Bind client socket to the local network interface before connecting to the "
-   "remote peer",
+   "Bind client socket to the local network interface before connecting to the\n" 
+   "remote peer.",
    ucs_offsetof(uct_tcp_iface_config_t, ep_bind_src_addr),
-                UCS_CONFIG_TYPE_TERNARY},
+   UCS_CONFIG_TYPE_TERNARY},
 
   {NULL}
 };
+/* clang-format on */
 
 
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_tcp_iface_t, uct_iface_t);

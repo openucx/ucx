@@ -16,6 +16,7 @@
 #include <ucs/sys/string.h>
 
 
+/* clang-format off */
 static ucs_config_field_t uct_knem_iface_config_table[] = {
     {"SCOPY_", "SM_BW=13862MBs", NULL,
      ucs_offsetof(uct_knem_iface_config_t, super),
@@ -23,6 +24,7 @@ static ucs_config_field_t uct_knem_iface_config_table[] = {
 
     {NULL}
 };
+/* clang-format on */
 
 static ucs_status_t uct_knem_iface_query(uct_iface_h tl_iface,
                                          uct_iface_attr_t *iface_attr)

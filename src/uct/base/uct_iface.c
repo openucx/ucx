@@ -910,31 +910,38 @@ UCS_CLASS_DEFINE(uct_base_ep_t, uct_ep_t);
 UCS_CONFIG_DEFINE_ARRAY(alloc_methods, sizeof(uct_alloc_method_t),
                         UCS_CONFIG_TYPE_ENUM(uct_alloc_method_names));
 
+/* clang-format off */
 ucs_config_field_t uct_iface_config_table[] = {
   {"MAX_SHORT", "",
-   "The configuration parameter replaced by: "
-   "UCX_<IB transport>_TX_MIN_INLINE for IB, UCX_MM_FIFO_SIZE for MM",
-   UCS_CONFIG_DEPRECATED_FIELD_OFFSET, UCS_CONFIG_TYPE_DEPRECATED},
+   "The configuration parameter replaced by:\n"
+   "UCX_<IB transport>_TX_MIN_INLINE for IB, UCX_MM_FIFO_SIZE for MM.",
+   UCS_CONFIG_DEPRECATED_FIELD_OFFSET,
+   UCS_CONFIG_TYPE_DEPRECATED},
 
   {"MAX_BCOPY", "",
-   "The configuration parameter replaced by: "
-   "UCX_<transport>_SEG_SIZE where <transport> is one of: IB, MM, SELF, TCP",
-   UCS_CONFIG_DEPRECATED_FIELD_OFFSET, UCS_CONFIG_TYPE_DEPRECATED},
+   "The configuration parameter replaced by:\n"
+   "UCX_<transport>_SEG_SIZE where <transport> is one of: IB, MM, SELF, TCP.",
+   UCS_CONFIG_DEPRECATED_FIELD_OFFSET,
+   UCS_CONFIG_TYPE_DEPRECATED},
 
   {"ALLOC", "huge,thp,md,mmap,heap",
-   "Priority of methods to allocate intermediate buffers for communication",
-   ucs_offsetof(uct_iface_config_t, alloc_methods), UCS_CONFIG_TYPE_ARRAY(alloc_methods)},
+   "Priority of methods to allocate intermediate buffers for communication.",
+   ucs_offsetof(uct_iface_config_t, alloc_methods),
+   UCS_CONFIG_TYPE_ARRAY(alloc_methods)},
 
   {"FAILURE", "diag",
-   "Level of network failure reporting",
-   ucs_offsetof(uct_iface_config_t, failure), UCS_CONFIG_TYPE_ENUM(ucs_log_level_names)},
+   "Level of network failure reporting.",
+   ucs_offsetof(uct_iface_config_t, failure),
+   UCS_CONFIG_TYPE_ENUM(ucs_log_level_names)},
 
   {"MAX_NUM_EPS", "inf",
-   "Maximum number of endpoints that the transport interface is able to create",
-   ucs_offsetof(uct_iface_config_t, max_num_eps), UCS_CONFIG_TYPE_ULUNITS},
+   "Maximum number of endpoints that the transport interface is able to create.",
+   ucs_offsetof(uct_iface_config_t, max_num_eps),
+   UCS_CONFIG_TYPE_ULUNITS},
 
   {NULL}
 };
+/* clang-format on */
 
 ucs_status_t uct_base_ep_stats_reset(uct_base_ep_t *ep, uct_base_iface_t *iface)
 {

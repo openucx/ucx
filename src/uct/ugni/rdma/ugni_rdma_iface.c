@@ -15,10 +15,12 @@
 #include <uct/ugni/base/ugni_device.h>
 #include <ucs/sys/math.h>
 
+/* clang-format off */
 static ucs_config_field_t uct_ugni_rdma_iface_config_table[] = {
     /* This tuning controls the allocation priorities for bouncing buffers */
     { "", "ALLOC=huge,mmap,heap", NULL,
-    ucs_offsetof(uct_ugni_rdma_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
+     ucs_offsetof(uct_ugni_rdma_iface_config_t, super),
+     UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
     UCT_IFACE_MPOOL_CONFIG_FIELDS("RDMA", -1, 0, 128m, 1.0, "rdma",
                                   ucs_offsetof(uct_ugni_rdma_iface_config_t, mpool),
@@ -27,6 +29,7 @@ static ucs_config_field_t uct_ugni_rdma_iface_config_table[] = {
 
     {NULL}
 };
+/* clang-format on */
 
 static ucs_status_t uct_ugni_rdma_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {

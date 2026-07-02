@@ -22,8 +22,10 @@
 #include <ucs/memory/memtype_cache.h>
 
 
+/* clang-format off */
 static ucs_config_field_t uct_ze_copy_md_config_table[] = {
-    {"", "", NULL, ucs_offsetof(uct_ze_copy_md_config_t, super),
+    {"", "", NULL, 
+     ucs_offsetof(uct_ze_copy_md_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
 
     {"DEVICE_ORDINAL", "0",
@@ -33,6 +35,7 @@ static ucs_config_field_t uct_ze_copy_md_config_table[] = {
 
     {NULL}
 };
+/* clang-format on */
 
 static ucs_status_t uct_ze_copy_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
 {

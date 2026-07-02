@@ -35,48 +35,55 @@ typedef struct {
 } UCS_S_PACKED uct_cuda_ipc_device_addr_t;
 
 
+/* clang-format off */
 static ucs_config_field_t uct_cuda_ipc_iface_config_table[] = {
-
     {"", "", NULL,
      ucs_offsetof(uct_cuda_ipc_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
     {"MAX_POLL", "16",
-     "Max number of event completions to pick during cuda events polling",
-      ucs_offsetof(uct_cuda_ipc_iface_config_t, params.max_poll), UCS_CONFIG_TYPE_UINT},
+     "Max number of event completions to pick during cuda events polling.",
+     ucs_offsetof(uct_cuda_ipc_iface_config_t, params.max_poll),
+     UCS_CONFIG_TYPE_UINT},
 
     {"MAX_STREAMS", UCS_PP_MAKE_STRING(UCT_CUDA_IPC_MAX_PEERS),
-     "Max number of CUDA streams to make concurrent progress on",
-      ucs_offsetof(uct_cuda_ipc_iface_config_t, params.max_streams), UCS_CONFIG_TYPE_UINT},
+     "Max number of CUDA streams to make concurrent progress on.",
+     ucs_offsetof(uct_cuda_ipc_iface_config_t, params.max_streams),
+     UCS_CONFIG_TYPE_UINT},
 
     {"CACHE", "y",
-     "Enable remote endpoint IPC memhandle mapping cache",
+     "Enable remote endpoint IPC memhandle mapping cache.",
      ucs_offsetof(uct_cuda_ipc_iface_config_t, params.enable_cache),
      UCS_CONFIG_TYPE_BOOL},
 
     {"ENABLE_GET_ZCOPY", "auto",
-     "Enable get operations except for platforms known to have slower performance",
+     "Enable get operations except for platforms known to have slower performance.",
      ucs_offsetof(uct_cuda_ipc_iface_config_t, params.enable_get_zcopy),
      UCS_CONFIG_TYPE_ON_OFF_AUTO},
 
     {"MAX_EVENTS", "inf",
-     "Max number of cuda events. -1 is infinite",
-     ucs_offsetof(uct_cuda_ipc_iface_config_t, params.max_cuda_ipc_events), UCS_CONFIG_TYPE_UINT},
+     "Max number of cuda events. -1 is infinite.",
+     ucs_offsetof(uct_cuda_ipc_iface_config_t, params.max_cuda_ipc_events),
+     UCS_CONFIG_TYPE_UINT},
 
     {"BW", "auto",
-     "Effective p2p memory bandwidth",
-     ucs_offsetof(uct_cuda_ipc_iface_config_t, params.bandwidth), UCS_CONFIG_TYPE_BW},
+     "Effective p2p memory bandwidth.",
+     ucs_offsetof(uct_cuda_ipc_iface_config_t, params.bandwidth),
+     UCS_CONFIG_TYPE_BW},
 
     {"LAT", "1.8us",
-     "Estimated latency",
-     ucs_offsetof(uct_cuda_ipc_iface_config_t, params.latency), UCS_CONFIG_TYPE_TIME},
+     "Estimated latency.",
+     ucs_offsetof(uct_cuda_ipc_iface_config_t, params.latency),
+     UCS_CONFIG_TYPE_TIME},
 
     {"OVERHEAD", "4.0us",
-     "Estimated CPU overhead for transferring GPU memory",
-     ucs_offsetof(uct_cuda_ipc_iface_config_t, params.overhead), UCS_CONFIG_TYPE_TIME},
+     "Estimated CPU overhead for transferring GPU memory.",
+     ucs_offsetof(uct_cuda_ipc_iface_config_t, params.overhead),
+     UCS_CONFIG_TYPE_TIME},
 
     {NULL}
 };
+/* clang-format on */
 
 
 /* Forward declaration for the delete function */
@@ -341,6 +348,7 @@ static void uct_cuda_ipc_complete_event(uct_iface_h tl_iface,
                                  iface->config.enable_cache);
 }
 
+/* clang-format off */
 static uct_iface_ops_t uct_cuda_ipc_iface_ops = {
     .ep_get_zcopy             = uct_cuda_ipc_ep_get_zcopy,
     .ep_put_zcopy             = uct_cuda_ipc_ep_put_zcopy,
@@ -364,6 +372,7 @@ static uct_iface_ops_t uct_cuda_ipc_iface_ops = {
     .iface_get_address        = uct_cuda_ipc_iface_get_address,
     .iface_is_reachable       = uct_base_iface_is_reachable,
 };
+/* clang-format on */
 
 static ucs_status_t
 uct_cuda_ipc_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
@@ -423,6 +432,7 @@ uct_cuda_ipc_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
     return UCS_OK;
 }
 
+/* clang-format off */
 static uct_iface_internal_ops_t uct_cuda_ipc_iface_internal_ops = {
     .iface_query_v2         = uct_iface_base_query_v2,
     .iface_estimate_perf    = uct_cuda_ipc_estimate_perf,
@@ -434,6 +444,7 @@ static uct_iface_internal_ops_t uct_cuda_ipc_iface_internal_ops = {
     .ep_is_connected        = uct_cuda_ipc_ep_is_connected,
     .ep_get_device_ep       = uct_cuda_ipc_ep_get_device_ep
 };
+/* clang-format on */
 
 static uct_cuda_ctx_rsc_t * uct_cuda_ipc_ctx_rsc_create(uct_iface_h tl_iface)
 {

@@ -63,6 +63,7 @@ static xpmem_segid_t   uct_xpmem_global_xsegid        = -1;
 static khash_t(xpmem_remote_mem) uct_xpmem_remote_mem_hash = KHASH_STATIC_INITIALIZER;
 static ucs_recursive_spinlock_t  uct_xpmem_remote_mem_lock;
 
+/* clang-format off */
 static ucs_config_field_t uct_xpmem_md_config_table[] = {
   {"MM_", "", NULL,
    ucs_offsetof(uct_xpmem_md_config_t, super),
@@ -72,10 +73,13 @@ static ucs_config_field_t uct_xpmem_md_config_table[] = {
 };
 
 static ucs_config_field_t uct_xpmem_iface_config_table[] = {
-  {"MM_", "", NULL, 0, UCS_CONFIG_TYPE_TABLE(uct_mm_iface_config_table)},
+  {"MM_", "", NULL,
+   0,
+   UCS_CONFIG_TYPE_TABLE(uct_mm_iface_config_table)},
 
   {NULL}
 };
+/* clang-format on */
 
 static ucs_status_t uct_xpmem_query(int *attach_shm_file_p)
 {

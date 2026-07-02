@@ -37,55 +37,60 @@ static const char *uct_cuda_pref_loc[] = {
     [UCT_CUDA_PREF_LOC_LAST] = NULL,
 };
 
+/* clang-format off */
 static ucs_config_field_t uct_cuda_copy_md_config_table[] = {
     {"", "", NULL,
-        ucs_offsetof(uct_cuda_copy_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
+     ucs_offsetof(uct_cuda_copy_md_config_t, super),
+     UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
 
     {"REG_WHOLE_ALLOC", "auto",
      "Allow registration of whole allocation\n"
      " auto - Let runtime decide where whole allocation registration is turned on.\n"
-     "        By default this will be turned off for limited BAR GPUs (eg. T4)\n"
+     "        By default this will be turned off for limited BAR GPUs (eg. T4).\n"
      " on   - Whole allocation registration is always turned on.\n"
      " off  - Whole allocation registration is always turned off.",
      ucs_offsetof(uct_cuda_copy_md_config_t, alloc_whole_reg),
      UCS_CONFIG_TYPE_ON_OFF_AUTO},
 
     {"MAX_REG_RATIO", "0.1",
-     "If the ratio of the length of the allocation to which the user buffer belongs to"
-     " to the total GPU memory capacity is below this ratio, then the whole allocation"
-     " is registered. Otherwise only the user specified region is registered.",
-     ucs_offsetof(uct_cuda_copy_md_config_t, max_reg_ratio), UCS_CONFIG_TYPE_DOUBLE},
+     "If the ratio of the length of the allocation to which the user buffer belongs to\n"
+     "to the total GPU memory capacity is below this ratio, then the whole allocation\n"
+     "is registered. Otherwise only the user specified region is registered.",
+     ucs_offsetof(uct_cuda_copy_md_config_t, max_reg_ratio),
+     UCS_CONFIG_TYPE_DOUBLE},
 
     {"DMABUF", "try",
-     "Enable using cross-device dmabuf file descriptor",
+     "Enable using cross-device dmabuf file descriptor.",
      ucs_offsetof(uct_cuda_copy_md_config_t, enable_dmabuf),
-                  UCS_CONFIG_TYPE_TERNARY},
+     UCS_CONFIG_TYPE_TERNARY},
 
     {"PREF_LOC", "cpu",
-     "System device designation of a CUDA managed memory buffer"
-     " whose preferred location attribute is not set.\n"
+     "System device designation of a CUDA managed memory buffer\n"
+     "whose preferred location attribute is not set.\n"
      " cpu - Assume buffer is on the CPU.\n"
      " gpu - Assume buffer is on the GPU corresponding to buffer's GPU context.",
      ucs_offsetof(uct_cuda_copy_md_config_t, pref_loc),
      UCS_CONFIG_TYPE_ENUM(uct_cuda_pref_loc)},
 
-    {"ENABLE_FABRIC", "try", "Enable fabric memory allocation",
+    {"ENABLE_FABRIC", "try",
+     "Enable fabric memory allocation.",
      ucs_offsetof(uct_cuda_copy_md_config_t, enable_fabric),
      UCS_CONFIG_TYPE_TERNARY},
 
     {"ASYNC_MEM_TYPE", "cuda-managed",
      "Memory type which is detected for asynchronously allocated cuda memory.\n"
-     "Allowed memory type is one of: cuda, cuda-managed",
+     "Allowed memory type is one of: cuda, cuda-managed.",
      ucs_offsetof(uct_cuda_copy_md_config_t, cuda_async_mem_type),
      UCS_CONFIG_TYPE_ENUM(ucs_memory_type_names)},
 
     {"RETAIN_PRIMARY_CTX", "n",
-     "Retain and use an inactive CUDA primary context for memory allocation",
+     "Retain and use an inactive CUDA primary context for memory allocation.",
      ucs_offsetof(uct_cuda_copy_md_config_t, retain_primary_ctx),
      UCS_CONFIG_TYPE_BOOL},
 
     {NULL}
 };
+/* clang-format on */
 
 static struct {} uct_cuda_dummy_memh;
 
@@ -983,6 +988,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_md_detect_memory_type,
     return UCS_OK;
 }
 
+/* clang-format off */
 static uct_md_ops_t md_ops = {
     .close              = uct_cuda_copy_md_close,
     .query              = uct_cuda_copy_md_query,
@@ -997,6 +1003,7 @@ static uct_md_ops_t md_ops = {
     .mem_elem_pack      = (uct_md_mem_elem_pack_func_t)ucs_empty_function_return_unsupported,
     .detect_memory_type = uct_cuda_copy_md_detect_memory_type
 };
+/* clang-format on */
 
 static ucs_status_t
 uct_cuda_copy_md_open(uct_component_t *component, const char *md_name,
@@ -1063,6 +1070,7 @@ err:
     return status;
 }
 
+/* clang-format off */
 uct_component_t uct_cuda_copy_component = {
     .query_md_resources = uct_cuda_base_query_md_resources,
     .md_open            = uct_cuda_copy_md_open,
@@ -1083,4 +1091,5 @@ uct_component_t uct_cuda_copy_component = {
     .flags              = 0,
     .md_vfs_init        = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
+/* clang-format on */
 UCT_COMPONENT_REGISTER(&uct_cuda_copy_component);

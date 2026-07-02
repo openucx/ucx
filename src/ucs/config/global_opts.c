@@ -76,151 +76,166 @@ static UCS_CONFIG_DEFINE_ARRAY(signo,
                                UCS_CONFIG_TYPE_SIGNO);
 
 
+/* clang-format off */
 #define UCS_DISTANCE_KEYS_DESCRIPTION(_field) \
     {"phb", \
-     "connection traversing PCIe as well as a PCIe Host Bridge (typically " \
-     "the CPU)", \
+     "connection traversing PCIe as well as a PCIe Host Bridge (typically the CPU)", \
      ucs_offsetof(ucs_global_opts_t, dist.phb._field)}, \
     {"node", \
      "connection traversing PCIe as well as the interconnect between PCIe " \
      "Host Bridges within a NUMA node", \
      ucs_offsetof(ucs_global_opts_t, dist.node._field)}, \
     {"sys", \
-     "connection traversing PCIe as well as the SMP interconnect between " \
-     "NUMA nodes", \
+     "connection traversing PCIe as well as the SMP interconnect between NUMA nodes", \
      ucs_offsetof(ucs_global_opts_t, dist.sys._field)}, \
     {NULL}
 
 
 static ucs_config_field_t ucs_global_opts_table[] = {
  {"LOG_LEVEL", "warn",
-  "UCS logging level. Messages with a level higher or equal to the selected "
-  "will be printed.\n"
+  "UCS logging level. Messages with a level higher or equal to the selected will be printed.\n"
   "Possible values are: fatal, error, warn, info, debug, trace, data, func, poll.",
   ucs_offsetof(ucs_global_opts_t, log_component.log_level),
   UCS_CONFIG_TYPE_LOG_COMP},
 
  {"LOG_FILE_FILTER", "*",
-  "Set a filter for log message according to source file path. See glob (7) for\n"
-  "pattern syntax.\n"
+  "Set a filter for log message according to source file path.\n"
+  "See glob (7) for pattern syntax.\n"
   "NOTE: The source file path must fully match the given pattern.",
   ucs_offsetof(ucs_global_opts_t, log_component.file_filter),
-               UCS_CONFIG_TYPE_STRING},
+  UCS_CONFIG_TYPE_STRING},
 
  {"LOG_BUFFER", "1024",
   "Buffer size for a single log message.",
-  ucs_offsetof(ucs_global_opts_t, log_buffer_size), UCS_CONFIG_TYPE_MEMUNITS},
+  ucs_offsetof(ucs_global_opts_t, log_buffer_size),
+  UCS_CONFIG_TYPE_MEMUNITS},
 
  {"LOG_DATA_SIZE", "0",
   "How much packet payload to print, at most, in data mode.",
-  ucs_offsetof(ucs_global_opts_t, log_data_size), UCS_CONFIG_TYPE_ULONG},
+  ucs_offsetof(ucs_global_opts_t, log_data_size),
+  UCS_CONFIG_TYPE_ULONG},
 
  {"LOG_PRINT_ENABLE", "n",
   "Enable output of ucs_print(). This option is intended for use by the library developers.",
-  ucs_offsetof(ucs_global_opts_t, log_print_enable), UCS_CONFIG_TYPE_BOOL},
+  ucs_offsetof(ucs_global_opts_t, log_print_enable),
+  UCS_CONFIG_TYPE_BOOL},
 
 #if ENABLE_DEBUG_DATA
  {"MPOOL_FIFO", "n",
-  "Enable FIFO behavior for memory pool, instead of LIFO. Useful for\n"
-  "debugging because object pointers are not recycled.",
-  ucs_offsetof(ucs_global_opts_t, mpool_fifo), UCS_CONFIG_TYPE_BOOL},
+  "Enable FIFO behavior for memory pool, instead of LIFO.\n"
+  "Useful for debugging because object pointers are not recycled.",
+  ucs_offsetof(ucs_global_opts_t, mpool_fifo),
+  UCS_CONFIG_TYPE_BOOL},
 #endif
 
- {"HANDLE_ERRORS",
-#if ENABLE_DEBUG_DATA
-  "bt,freeze",
-#else
-  "none",
-#endif
-  "Error signal handling mode. Either 'none' to disable signal interception,\n"
-  "or a combination of:\n"
-  " - 'bt'     : Print backtrace\n"
-  " - 'freeze' : Freeze and wait for a debugger\n"
-  " - 'debug'  : Attach a debugger",
+ {"HANDLE_ERRORS", ENABLE_DEBUG_DATA ? "bt,freeze" : "none",
+  "Error signal handling mode.\n"
+  "Either 'none' to disable signal interception, or a combination of:\n"
+  " 'bt'     - Print backtrace.\n"
+  " 'freeze' - Freeze and wait for a debugger.\n"
+  " 'debug'  - Attach a debugger.",
   ucs_offsetof(ucs_global_opts_t, handle_errors),
   UCS_CONFIG_TYPE_BITMAP(ucs_handle_error_modes)},
 
  {"ERROR_MAIL_TO", "",
   "If non-empty, send mail notification for fatal errors.",
-  ucs_offsetof(ucs_global_opts_t, error_mail_to), UCS_CONFIG_TYPE_STRING},
+  ucs_offsetof(ucs_global_opts_t, error_mail_to),
+  UCS_CONFIG_TYPE_STRING},
 
  {"ERROR_MAIL_FOOTER", "",
-  "Footer for error report email",
-  ucs_offsetof(ucs_global_opts_t, error_mail_footer), UCS_CONFIG_TYPE_STRING},
+  "Footer for error report email.",
+  ucs_offsetof(ucs_global_opts_t, error_mail_footer),
+  UCS_CONFIG_TYPE_STRING},
 
  {"GDB_COMMAND", "gdb -quiet",
   "If non-empty, attaches a gdb to the process in case of error, using the provided command.",
-  ucs_offsetof(ucs_global_opts_t, gdb_command), UCS_CONFIG_TYPE_STRING},
+  ucs_offsetof(ucs_global_opts_t, gdb_command),
+  UCS_CONFIG_TYPE_STRING},
 
  {"DEBUG_SIGNO", "SIGHUP",
   "Signal number which causes UCS to enter debug mode. Set to 0 to disable.",
-  ucs_offsetof(ucs_global_opts_t, debug_signo), UCS_CONFIG_TYPE_SIGNO},
+  ucs_offsetof(ucs_global_opts_t, debug_signo),
+  UCS_CONFIG_TYPE_SIGNO},
 
  {"LOG_LEVEL_TRIGGER", "fatal",
   "Log level to trigger error handling.",
-  ucs_offsetof(ucs_global_opts_t, log_level_trigger), UCS_CONFIG_TYPE_ENUM(ucs_log_level_names)},
+  ucs_offsetof(ucs_global_opts_t, log_level_trigger),
+  UCS_CONFIG_TYPE_ENUM(ucs_log_level_names)},
 
  {UCS_GLOBAL_OPTS_WARN_UNUSED_CONFIG, "yes",
   "Issue warning about UCX_ environment variables which were not used by the\n"
   "configuration parser.",
-  ucs_offsetof(ucs_global_opts_t, warn_unused_env_vars), UCS_CONFIG_TYPE_BOOL},
+  ucs_offsetof(ucs_global_opts_t, warn_unused_env_vars),
+  UCS_CONFIG_TYPE_BOOL},
 
   {"MEMTYPE_CACHE", "try",
-   "Enable memory type (cuda/rocm) cache",
-   ucs_offsetof(ucs_global_opts_t, enable_memtype_cache), UCS_CONFIG_TYPE_TERNARY},
+   "Enable memory type (cuda/rocm) cache.",
+   ucs_offsetof(ucs_global_opts_t, enable_memtype_cache),
+   UCS_CONFIG_TYPE_TERNARY},
 
  {"ASYNC_MAX_EVENTS", "1024",
   "The configuration parameter is deprecated.\n"
   "Now unlimited number of events can be handled from one context.",
-  UCS_CONFIG_DEPRECATED_FIELD_OFFSET, UCS_CONFIG_TYPE_DEPRECATED},
+  UCS_CONFIG_DEPRECATED_FIELD_OFFSET,
+  UCS_CONFIG_TYPE_DEPRECATED},
 
  {"ASYNC_SIGNO", "SIGALRM",
   "Signal number used for async signaling.",
-  ucs_offsetof(ucs_global_opts_t, async_signo), UCS_CONFIG_TYPE_SIGNO},
+  ucs_offsetof(ucs_global_opts_t, async_signo),
+  UCS_CONFIG_TYPE_SIGNO},
 
  {"MEMTRACK_LIMIT", "inf",
   "Memory limit allocated by memtrack. In case if limit is reached then\n"
   "memtrack report is generated and process is terminated.",
-  ucs_offsetof(ucs_global_opts_t, memtrack_limit), UCS_CONFIG_TYPE_MEMUNITS},
+  ucs_offsetof(ucs_global_opts_t, memtrack_limit),
+  UCS_CONFIG_TYPE_MEMUNITS},
 
  {"RCACHE_CHECK_PFN", "0",
   "Registration cache to check that the physical pages frame number of a found\n"
   "memory region were not changed since the time the region was registered.\n"
   "Number of pages to check, 0 - disable checking.",
-  ucs_offsetof(ucs_global_opts_t, rcache_check_pfn), UCS_CONFIG_TYPE_UINT},
+  ucs_offsetof(ucs_global_opts_t, rcache_check_pfn),
+  UCS_CONFIG_TYPE_UINT},
 
  {"MODULE_DIR", UCX_MODULE_DIR,
-  "Directory to search for loadable modules",
-  ucs_offsetof(ucs_global_opts_t, module_dir), UCS_CONFIG_TYPE_STRING},
+  "Directory to search for loadable modules.",
+  ucs_offsetof(ucs_global_opts_t, module_dir),
+  UCS_CONFIG_TYPE_STRING},
 
  {"MODULE_LOG_LEVEL", "debug",
-  "Logging level for module loader",
-  ucs_offsetof(ucs_global_opts_t, module_log_level), UCS_CONFIG_TYPE_ENUM(ucs_log_level_names)},
+  "Logging level for module loader.",
+  ucs_offsetof(ucs_global_opts_t, module_log_level),
+  UCS_CONFIG_TYPE_ENUM(ucs_log_level_names)},
 
  {"MODULES", "all",
   "Comma-separated list of glob patterns specifying which module to load.\n"
   "The order is not meaningful. For example:\n"
-  " *     - load all modules\n"
-  " ^cu*  - do not load modules that begin with 'cu'",
-  ucs_offsetof(ucs_global_opts_t, modules), UCS_CONFIG_TYPE_ALLOW_LIST},
+  " *    - load all modules.\n"
+  " ^cu* - do not load modules that begin with 'cu'.",
+  ucs_offsetof(ucs_global_opts_t, modules),
+  UCS_CONFIG_TYPE_ALLOW_LIST},
 
  {"PLUGIN_PATH", "",
   "Colon-separated list of additional directories to search for loadable\n"
-  "plugin modules",
-  ucs_offsetof(ucs_global_opts_t, plugin_path), UCS_CONFIG_TYPE_PATH_ARRAY},
+  "plugin modules.",
+  ucs_offsetof(ucs_global_opts_t, plugin_path),
+  UCS_CONFIG_TYPE_PATH_ARRAY},
 
  {"TOPO_PRIO", "sysfs,default",
   "Comma-separated list of providers for detecting system topology.\n"
   "The list order decides the priority of the providers.",
-  ucs_offsetof(ucs_global_opts_t, topo_prio), UCS_CONFIG_TYPE_STRING_ARRAY},
+  ucs_offsetof(ucs_global_opts_t, topo_prio),
+  UCS_CONFIG_TYPE_STRING_ARRAY},
 
  {"DISTANCE_LAT", "phb:300ns,node:300ns,sys:500ns",
-  "Estimated latency between system devices", 0,
+  "Estimated latency between system devices.",
+  0,
   UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_TIME,
                             UCS_DISTANCE_KEYS_DESCRIPTION(latency))},
 
  {"DISTANCE_BW", "auto",
-  "Estimated bandwidth between system devices", 0,
+  "Estimated bandwidth between system devices.",
+  0,
   UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_BW,
                             UCS_DISTANCE_KEYS_DESCRIPTION(bandwidth))},
 
@@ -235,32 +250,37 @@ static ucs_config_field_t ucs_global_opts_read_only_table[] = {
  {"LOG_FILE", "",
   "If not empty, UCS will print log messages to the specified file instead of stdout.\n"
   "The following substitutions are performed on this string:\n"
-  "  %p - Replaced with process ID\n"
-  "  %h - Replaced with host name",
+  " %p - Replaced with process ID.\n"
+  " %h - Replaced with host name.",
   ucs_offsetof(ucs_global_opts_t, log_file),
   UCS_CONFIG_TYPE_STRING},
 
  {"LOG_FILE_SIZE", "inf",
   "The maximal size of log file. The maximal log file size has to be >= LOG_BUFFER.",
-  ucs_offsetof(ucs_global_opts_t, log_file_size), UCS_CONFIG_TYPE_MEMUNITS},
+  ucs_offsetof(ucs_global_opts_t, log_file_size),
+  UCS_CONFIG_TYPE_MEMUNITS},
 
  {"LOG_FILE_ROTATE", "0",
   "The maximal number of backup log files that could be created to save logs\n"
   "after the previous ones (if any) are completely filled. The value has to be\n"
   "less than the maximal signed integer value.",
-  ucs_offsetof(ucs_global_opts_t, log_file_rotate), UCS_CONFIG_TYPE_UINT},
+  ucs_offsetof(ucs_global_opts_t, log_file_rotate),
+  UCS_CONFIG_TYPE_UINT},
 
  {"ERROR_SIGNALS", "SIGILL,SIGSEGV,SIGBUS,SIGFPE",
   "Signals which are considered an error indication and trigger error handling.",
-  ucs_offsetof(ucs_global_opts_t, error_signals), UCS_CONFIG_TYPE_ARRAY(signo)},
+  ucs_offsetof(ucs_global_opts_t, error_signals),
+  UCS_CONFIG_TYPE_ARRAY(signo)},
 
  {"VFS_ENABLE", "y",
-  "Enable virtual monitoring filesystem",
-  ucs_offsetof(ucs_global_opts_t, vfs_enable), UCS_CONFIG_TYPE_BOOL},
+  "Enable virtual monitoring filesystem.",
+  ucs_offsetof(ucs_global_opts_t, vfs_enable),
+  UCS_CONFIG_TYPE_BOOL},
 
   {"VFS_SOCK_PATH", UCX_VFS_SOCK_DEFAULT_PATH,
    "Listening UNIX socket path of the VFS daemon.",
-   ucs_offsetof(ucs_global_opts_t, vfs_sock_path), UCS_CONFIG_TYPE_STRING},
+   ucs_offsetof(ucs_global_opts_t, vfs_sock_path),
+   UCS_CONFIG_TYPE_STRING},
 
  {"VFS_THREAD_AFFINITY", "n",
   "Enable inheriting main process affinity for virtual monitoring filesystem\n"
@@ -273,18 +293,21 @@ static ucs_config_field_t ucs_global_opts_read_only_table[] = {
  {"STATS_DEST", "",
   "Destination to send statistics to. If the value is empty, statistics are\n"
   "not reported. Possible values are:\n"
-  "  udp:<host>[:<port>]   - send over UDP to the given host:port.\n"
-  "  stdout                - print to standard output.\n"
-  "  stderr                - print to standard error.\n"
-  "  file:<filename>[:bin] - save to a file (%h: host, %p: pid, %c: cpu, %t: time, %u: user, %e: exe)",
-  ucs_offsetof(ucs_global_opts_t, stats_dest), UCS_CONFIG_TYPE_STRING},
+  " udp:<host>[:<port>]   - send over UDP to the given host:port.\n"
+  " stdout                - print to standard output.\n"
+  " stderr                - print to standard error.\n"
+  " file:<filename>[:bin] - save to a file (%h: host, %p: pid, %c: cpu,\n"
+  "                                         %t: time, %u: user, %e: exe).",
+  ucs_offsetof(ucs_global_opts_t, stats_dest),
+  UCS_CONFIG_TYPE_STRING},
 
  {"STATS_TRIGGER", "exit",
   "Trigger to dump statistics:\n"
-  "  exit              - dump just before program exits.\n"
-  "  signal:<signo>    - dump when process is signaled.\n"
-  "  timer:<interval>  - dump in specified intervals (in seconds).",
-  ucs_offsetof(ucs_global_opts_t, stats_trigger), UCS_CONFIG_TYPE_STRING},
+  " exit             - dump just before program exits.\n"
+  " signal:<signo>   - dump when process is signaled.\n"
+  " timer:<interval> - dump in specified intervals (in seconds).",
+  ucs_offsetof(ucs_global_opts_t, stats_trigger),
+  UCS_CONFIG_TYPE_STRING},
 
  {"STATS_FILTER", "*",
   "Used for filter counters summary.\n"
@@ -292,55 +315,63 @@ static ucs_config_field_t ucs_global_opts_read_only_table[] = {
   "Statistics summary will contain only the matching counters.\n"
   "The order is not meaningful.\n"
   "Each expression in the list may contain any of the following wildcard:\n"
-  "  *     - matches any number of any characters including none.\n"
-  "  ?     - matches any single character.\n"
-  "  [abc] - matches one character given in the bracket.\n"
-  "  [a-z] - matches one character from the range given in the bracket.",
-  ucs_offsetof(ucs_global_opts_t, stats_filter), UCS_CONFIG_TYPE_STRING_ARRAY},
+  " *     - matches any number of any characters including none.\n"
+  " ?     - matches any single character.\n"
+  " [abc] - matches one character given in the bracket.\n"
+  " [a-z] - matches one character from the range given in the bracket.",
+  ucs_offsetof(ucs_global_opts_t, stats_filter),
+  UCS_CONFIG_TYPE_STRING_ARRAY},
 
  {"STATS_FORMAT", "full",
   "Statistics format parameter:\n"
-  "  full    - each counter will be displayed in a separate line \n"
-  "  agg     - like full but there will also be an aggregation between similar counters\n"
-  "  summary - all counters will be printed in the same line.",
-  ucs_offsetof(ucs_global_opts_t, stats_format), UCS_CONFIG_TYPE_ENUM(ucs_stats_formats_names)},
+  " full    - each counter will be displayed in a separate line.\n"
+  " agg     - like full but there will also be an aggregation between similar counters.\n"
+  " summary - all counters will be printed in the same line.",
+  ucs_offsetof(ucs_global_opts_t, stats_format),
+  UCS_CONFIG_TYPE_ENUM(ucs_stats_formats_names)},
 #endif
 
  {"MEMTRACK_DEST", "",
   "Destination to output memory tracking report to. If the value is empty,\n"
   "results are not reported. Possible values are:\n"
-  "  file:<filename>   - save to a file (%h: host, %p: pid, %c: cpu, %t: time, %u: user, %e: exe)\n"
-  "  stdout            - print to standard output.\n"
-  "  stderr            - print to standard error.",
-  ucs_offsetof(ucs_global_opts_t, memtrack_dest), UCS_CONFIG_TYPE_STRING},
+  " file:<filename> - save to a file (%h: host, %p: pid, %c: cpu, %t: time,\n"
+  "                                   %u: user, %e: exe).\n"
+  " stdout          - print to standard output.\n"
+  " stderr          - print to standard error.",
+  ucs_offsetof(ucs_global_opts_t, memtrack_dest),
+  UCS_CONFIG_TYPE_STRING},
 
  {"PROFILE_MODE", "",
   "Profile collection modes. If none is specified, profiling is disabled.\n"
-  " - log   - Record all timestamps.\n"
-  " - accum - Accumulate measurements per location.",
+  " log   - Record all timestamps.\n"
+  " accum - Accumulate measurements per location.",
   ucs_offsetof(ucs_global_opts_t, profile_mode),
   UCS_CONFIG_TYPE_BITMAP(ucs_profile_mode_names)},
 
  {"PROFILE_FILE", "ucx_%h_%p.prof",
   "File name to dump profiling data to.\n"
   "Substitutions: %h: host, %p: pid, %c: cpu, %t: time, %u: user, %e: exe.",
-  ucs_offsetof(ucs_global_opts_t, profile_file), UCS_CONFIG_TYPE_STRING},
+  ucs_offsetof(ucs_global_opts_t, profile_file),
+  UCS_CONFIG_TYPE_STRING},
 
  {"PROFILE_LOG_SIZE", "4m",
   "Maximal size of profiling log. New records will replace old records.",
-  ucs_offsetof(ucs_global_opts_t, profile_log_size), UCS_CONFIG_TYPE_MEMUNITS},
+  ucs_offsetof(ucs_global_opts_t, profile_log_size),
+  UCS_CONFIG_TYPE_MEMUNITS},
 
  {"RCACHE_STAT_MIN", "4k",
-  "Registration cache minimum region size, for power-of-2 size distribution "
-  "statistics.\nStatistics about smaller regions will be attributed to this "
-  "specified minimal size.\nRounded up to the next power-of-2 value.",
-  ucs_offsetof(ucs_global_opts_t, rcache_stat_min), UCS_CONFIG_TYPE_MEMUNITS},
+  "Registration cache minimum region size, for power-of-2 size distribution statistics.\n"
+  "Statistics about smaller regions will be attributed to this specified minimal size.\n"
+  "Rounded up to the next power-of-2 value.",
+  ucs_offsetof(ucs_global_opts_t, rcache_stat_min),
+  UCS_CONFIG_TYPE_MEMUNITS},
 
  {"RCACHE_STAT_MAX", "1m",
-  "Registration cache maximum region size, for power-of-2 size distribution "
-  "statistics.\nStatistics about larger regions will be attributed to 'max' "
-  "bucket.\nRounded up to the next power-of-2 value.",
-  ucs_offsetof(ucs_global_opts_t, rcache_stat_max), UCS_CONFIG_TYPE_MEMUNITS},
+  "Registration cache maximum region size, for power-of-2 size distribution statistics.\n"
+  "Statistics about larger regions will be attributed to 'max' bucket.\n"
+  "Rounded up to the next power-of-2 value.",
+  ucs_offsetof(ucs_global_opts_t, rcache_stat_max),
+  UCS_CONFIG_TYPE_MEMUNITS},
 
  {"", "", NULL,
   ucs_offsetof(ucs_global_opts_t, arch),
@@ -348,6 +379,7 @@ static ucs_config_field_t ucs_global_opts_read_only_table[] = {
 
  {NULL}
 };
+/* clang-format on */
 
 UCS_CONFIG_DECLARE_TABLE(ucs_global_opts_read_only_table,
                          "UCS global (runtime read-only)", NULL,
