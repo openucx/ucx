@@ -514,6 +514,17 @@ run_ucx_perftest() {
 
 		echo "==== Running ucx_perf with cuda memory ===="
 
+		if $ucx_perftest -h 2>&1 | grep -q "cuda-async"
+		then
+			echo "==== Running ucx_perf with cuda-async memory ===="
+			cuda_async_test_args="-t tag_lat -D contig,contig"
+			cuda_async_test_args+=" -m cuda-async,cuda-async -s 8 -n 10 -w 1"
+			run_client_server_app "$ucx_perftest" "$cuda_async_test_args" \
+					      "$(hostname)" 0 0
+		else
+			echo "==== cuda-async memory is not supported, skipping ===="
+		fi
+
 		for memtype_cache in y n
 		do
 			for gdr in $gdr_options

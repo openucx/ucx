@@ -142,29 +142,31 @@ static void* ucx_perf_rocm_memset(void *dst, int value, size_t count)
     return dst;
 }
 
-UCS_STATIC_INIT {
-    static ucx_perf_allocator_t rocm_allocator = {
-        .mem_type  = UCS_MEMORY_TYPE_ROCM,
-        .init      = ucx_perf_rocm_init,
-        .uct_alloc = uct_perf_rocm_alloc,
-        .uct_free  = uct_perf_rocm_free,
-        .memcpy    = ucx_perf_rocm_memcpy,
-        .memset    = ucx_perf_rocm_memset
-    };
-    static ucx_perf_allocator_t rocm_managed_allocator = {
-        .mem_type  = UCS_MEMORY_TYPE_ROCM_MANAGED,
-        .init      = ucx_perf_rocm_init,
-        .uct_alloc = uct_perf_rocm_managed_alloc,
-        .uct_free  = uct_perf_rocm_free,
-        .memcpy    = ucx_perf_rocm_memcpy,
-        .memset    = ucx_perf_rocm_memset
-    };
+static ucx_perf_allocator_t rocm_allocator = {
+    .name      = "rocm",
+    .mem_type  = UCS_MEMORY_TYPE_ROCM,
+    .init      = ucx_perf_rocm_init,
+    .uct_alloc = uct_perf_rocm_alloc,
+    .uct_free  = uct_perf_rocm_free,
+    .memcpy    = ucx_perf_rocm_memcpy,
+    .memset    = ucx_perf_rocm_memset
+};
 
-    ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_ROCM]         = &rocm_allocator;
-    ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_ROCM_MANAGED] = &rocm_managed_allocator;
+static ucx_perf_allocator_t rocm_managed_allocator = {
+    .name      = "rocm-managed",
+    .mem_type  = UCS_MEMORY_TYPE_ROCM_MANAGED,
+    .init      = ucx_perf_rocm_init,
+    .uct_alloc = uct_perf_rocm_managed_alloc,
+    .uct_free  = uct_perf_rocm_free,
+    .memcpy    = ucx_perf_rocm_memcpy,
+    .memset    = ucx_perf_rocm_memset
+};
+
+UCS_STATIC_INIT {
+    ucx_perf_allocator_register(&rocm_allocator);
+    ucx_perf_allocator_register(&rocm_managed_allocator);
 }
 UCS_STATIC_CLEANUP {
-    ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_ROCM]         = NULL;
-    ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_ROCM_MANAGED] = NULL;
-
+    ucx_perf_allocator_unregister(&rocm_managed_allocator);
+    ucx_perf_allocator_unregister(&rocm_allocator);
 }
