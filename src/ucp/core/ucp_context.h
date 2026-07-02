@@ -259,6 +259,9 @@ typedef struct ucp_context_config {
     unsigned long                          max_hca_per_gpu;
     /** Local identificator on a single node */
     unsigned long                          node_local_id;
+    /** Print transport/device info and lane info tables during context
+     *  and endpoint initialization */
+    int                                    print_transport_tables;
 } ucp_context_config_t;
 
 

@@ -49,10 +49,13 @@ UCS_ARRAY_DECLARE_TYPE(ucs_table_cells_t, unsigned, ucs_table_cell_t);
 
 /**
  * Table entry: a row (vector of cells) or a separator. `cells` is only
- * populated when `kind == UCS_TABLE_ENTRY_ROW`.
+ * populated when `kind == UCS_TABLE_ENTRY_ROW`; `merged_cols` is only used
+ * when `kind == UCS_TABLE_ENTRY_SEPARATOR`.
  */
 typedef struct {
     ucs_table_entry_kind_t kind;
+    unsigned               merged_cols; /**< leading columns rendered as blank
+                                             carry-over (separator only) */
     ucs_table_cells_t      cells;
 } ucs_table_entry_t;
 
@@ -120,8 +123,20 @@ ucs_status_t ucs_table_get_status(const ucs_table_t *table);
 
 
 /**
- * Append a horizontal separator. The top and bottom frame separators are
- * inserted automatically by ucs_table_render();
+ * Append a horizontal separator whose leading @a merged_cols columns render as
+ * blank "|     " carry-over segments (visually continuing the cells above into
+ * the cells below); the remaining columns render as "+----" dashed segments.
+ *
+ * @param [in,out] table        Table to append to.
+ * @param [in]     merged_cols  Number of leading columns to render as blank
+ *                              carry-over.
+ */
+void ucs_table_add_separator_with_merged_cols(ucs_table_t *table,
+                                              unsigned merged_cols);
+
+
+/**
+ * Append a horizontal separator.
  *
  * @param [in,out] table  Table to append to.
  */

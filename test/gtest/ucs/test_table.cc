@@ -431,3 +431,60 @@ UCS_TEST_F(test_table, cell_fmt_newline_2) {
                                "a%sb", "\n");
     EXPECT_EQ(UCS_ERR_INVALID_PARAM, ucs_table_get_status(table.get()));
 }
+
+UCS_TEST_F(test_table, separator_merged_1_of_2) {
+    table_t table(2);
+
+    auto row = table.add_row();
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
+                               "xx");
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
+                               "yy");
+
+    /* Carry the leftmost column over the separator. */
+    ucs_table_add_separator_with_merged_cols(table.get(), 1);
+
+    row = table.add_row();
+    ucs_table_row_add_cell_empty(table.get(), row, 1);
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
+                               "zz");
+
+    EXPECT_EQ("+----+----+\n"
+              "| xx | yy |\n"
+              "|    +----+\n"
+              "|    | zz |\n"
+              "+----+----+\n",
+              table.render());
+
+    EXPECT_EQ(UCS_OK, ucs_table_get_status(table.get()));
+}
+
+UCS_TEST_F(test_table, separator_merged_2_of_3) {
+    table_t table(3);
+
+    auto row = table.add_row();
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
+                               "aa");
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
+                               "bb");
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
+                               "cc");
+
+    /* Carry the two leftmost columns over the separator. */
+    ucs_table_add_separator_with_merged_cols(table.get(), 2);
+
+    row = table.add_row();
+    ucs_table_row_add_cell_empty(table.get(), row, 1);
+    ucs_table_row_add_cell_empty(table.get(), row, 1);
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
+                               "dd");
+
+    EXPECT_EQ("+----+----+----+\n"
+              "| aa | bb | cc |\n"
+              "|    |    +----+\n"
+              "|    |    | dd |\n"
+              "+----+----+----+\n",
+              table.render());
+
+    EXPECT_EQ(UCS_OK, ucs_table_get_status(table.get()));
+}
