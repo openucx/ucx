@@ -556,21 +556,55 @@ static UCS_F_ALWAYS_INLINE void uct_ib_mlx5_bf_copy_bb(void * restrict dst,
 #endif
 }
 
+#if defined(__aarch64__) && HAVE_AARCH64_ST64B_ASM
+static UCS_F_ALWAYS_INLINE void
+uct_ib_mlx5_bf_copy_bb_st64b(void *restrict dst, void *restrict src)
+{
+    ucs_assert(((uintptr_t)src % MLX5_SEND_WQE_BB) == 0);
+    ucs_assert(((uintptr_t)dst % MLX5_SEND_WQE_BB) == 0);
+
+    asm volatile(".arch_extension ls64\n"
+                 "ldp x8, x9, [%[src], #0]\n"
+                 "ldp x10, x11, [%[src], #16]\n"
+                 "ldp x12, x13, [%[src], #32]\n"
+                 "ldp x14, x15, [%[src], #48]\n"
+                 "st64b x8, [%[dst]]"
+                 :
+                 : [src] "r"(src), [dst] "r"(dst)
+                 : "x8", "x9", "x10", "x11", "x12", "x13", "x14",
+                   "x15", "memory");
+}
+#endif
+
+#define UCT_IB_MLX5_BF_COPY(_dst, _src, _num_bb, _wq, _copy_bb) \
+    ({ \
+        uint16_t _bb_num = (_num_bb); \
+        uint16_t _n; \
+        \
+        for (_n = 0; _n < _bb_num; ++_n) { \
+            _copy_bb(_dst, _src); \
+            (_dst) = UCS_PTR_BYTE_OFFSET(_dst, MLX5_SEND_WQE_BB); \
+            (_src) = UCS_PTR_BYTE_OFFSET(_src, MLX5_SEND_WQE_BB); \
+            if (ucs_unlikely((_src) == (_wq)->qend)) { \
+                (_src) = (_wq)->qstart; \
+            } \
+        } \
+        \
+        (_src); \
+    })
+
 static UCS_F_ALWAYS_INLINE
 void *uct_ib_mlx5_bf_copy(void *dst, void *src, uint16_t num_bb,
                           const uct_ib_mlx5_txwq_t *wq)
 {
-    uint16_t n;
-
-    for (n = 0; n < num_bb; ++n) {
-        uct_ib_mlx5_bf_copy_bb(dst, src);
-        dst = UCS_PTR_BYTE_OFFSET(dst, MLX5_SEND_WQE_BB);
-        src = UCS_PTR_BYTE_OFFSET(src, MLX5_SEND_WQE_BB);
-        if (ucs_unlikely(src == wq->qend)) {
-            src = wq->qstart;
-        }
+#if defined(__aarch64__) && HAVE_AARCH64_ST64B_ASM
+    if (wq->bf_copy_mode == UCT_IB_MLX5_BF_COPY_MODE_ST64B) {
+        return UCT_IB_MLX5_BF_COPY(dst, src, num_bb, wq,
+                                   uct_ib_mlx5_bf_copy_bb_st64b);
     }
-    return src;
+#endif
+
+    return UCT_IB_MLX5_BF_COPY(dst, src, num_bb, wq, uct_ib_mlx5_bf_copy_bb);
 }
 
 static UCS_F_ALWAYS_INLINE uint16_t

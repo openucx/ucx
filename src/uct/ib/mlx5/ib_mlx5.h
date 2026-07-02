@@ -468,6 +468,14 @@ typedef enum {
 } uct_ib_mlx5_mmio_mode_t;
 
 
+typedef enum {
+    UCT_IB_MLX5_BF_COPY_MODE_AUTO,
+    UCT_IB_MLX5_BF_COPY_MODE_GENERIC,
+    UCT_IB_MLX5_BF_COPY_MODE_ST64B,
+    UCT_IB_MLX5_BF_COPY_MODE_LAST
+} uct_ib_mlx5_bf_copy_mode_t;
+
+
 typedef struct uct_ib_mlx5_iface_config {
 #if HAVE_IBV_DM
     struct {
@@ -475,9 +483,10 @@ typedef struct uct_ib_mlx5_iface_config {
         unsigned             count;
     } dm;
 #endif
-    uct_ib_mlx5_mmio_mode_t  mmio_mode;
-    ucs_ternary_auto_value_t ar_enable;
-    int                      cqe_zip_enable[UCT_IB_DIR_LAST];
+    uct_ib_mlx5_mmio_mode_t     mmio_mode;
+    uct_ib_mlx5_bf_copy_mode_t  bf_copy_mode;
+    ucs_ternary_auto_value_t    ar_enable;
+    int                         cqe_zip_enable[UCT_IB_DIR_LAST];
 } uct_ib_mlx5_iface_config_t;
 
 
@@ -643,6 +652,7 @@ typedef struct uct_ib_mlx5_res_domain {
 typedef struct uct_ib_mlx5_qp_attr {
     uct_ib_qp_attr_t            super;
     uct_ib_mlx5_mmio_mode_t     mmio_mode;
+    uct_ib_mlx5_bf_copy_mode_t  bf_copy_mode;
     uint32_t                    uidx;
     int                         full_handshake;
     int                         rdma_wr_disabled;
@@ -673,7 +683,6 @@ typedef struct uct_ib_mlx5_qp {
     };
 } uct_ib_mlx5_qp_t;
 
-/* Send work-queue */
 typedef struct uct_ib_mlx5_txwq {
     uct_ib_mlx5_qp_t            super;
     uint16_t                    sw_pi;      /* PI for next WQE */
@@ -685,6 +694,9 @@ typedef struct uct_ib_mlx5_txwq {
     void                        *qend;
     uint16_t                    bb_max;
     uint16_t                    sig_pi;     /* PI for last signaled WQE */
+#if defined(__aarch64__)
+    uint8_t                     bf_copy_mode;
+#endif
 #if UCS_ENABLE_ASSERT
     uint16_t                    hw_ci; /* First BB index of last completed WQE */
     uint8_t                     flags; /* Debug flags */
@@ -892,7 +904,13 @@ uct_ib_mlx5_get_mmio_mode(uct_priv_worker_t *worker,
  */
 ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
                                    uct_ib_mlx5_mmio_mode_t cfg_mmio_mode,
-                                   uct_ib_mlx5_txwq_t *txwq, struct ibv_qp *verbs_qp);
+                                   uct_ib_mlx5_bf_copy_mode_t bf_copy_mode,
+                                   uct_ib_mlx5_txwq_t *txwq,
+                                   struct ibv_qp *verbs_qp);
+
+ucs_status_t
+uct_ib_mlx5_txwq_init_bf_copy(uct_ib_mlx5_txwq_t *txwq,
+                              uct_ib_mlx5_bf_copy_mode_t bf_copy_mode);
 
 /* Get pointer to a WQE by producer index */
 void *uct_ib_mlx5_txwq_get_wqe(const uct_ib_mlx5_txwq_t *txwq, uint16_t pi);
