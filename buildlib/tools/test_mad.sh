@@ -77,7 +77,7 @@ set_vars() {
 run_mad_test() {
     local ib_address="$1"
     sudo chmod 777 /dev/infiniband/umad*
-    "$PWD"/install/bin/ucx_perftest -t tag_bw -e -K "$HCA" -e "$ib_address"
+    "$PWD"/install/bin/ucx_perftest -t tag_bw -e peer -K "$HCA" "$ib_address"
 }
 
 detect_active_ib_hca() {

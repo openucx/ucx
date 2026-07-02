@@ -404,6 +404,172 @@ run_io_demo() {
 }
 
 #
+# Parse the protocol configuration info in ucx_perftest stdout to get active
+# devices 
+#
+parse_active_devices()
+{
+    file=$1
+    config_cnt=$2
+
+    while IFS= read -r line;
+	do
+        [[ $line == *"| perftest self cfg#$config_cnt "* ]] || continue
+
+        IFS= read -r line || return 1  # | remote memory write by ucp_put* from host memory to host                                            |
+        IFS= read -r line || return 1  # +--------+-------------+------------------------------------------------------------------------------+
+        IFS= read -r line || return 1  # | Range  | Description |                                    Config                                    |
+        IFS= read -r line || return 1  # +--------+-------------+------------------------------------------------------------------------------+
+        IFS= read -r line || return 1  # | 0..inf | zero-copy   | 34% on rc_mlx5/mlx5_0:1, 34% on rc_mlx5/mlx5_2:1 and 32% on rc_mlx5/mlx5_1:1 |
+        break
+    done < "$file"
+
+    for word in $line; do
+        if [[ $word == */*:* ]]; then
+            device=${word#*/}
+            device=${device%%:*}
+            echo "$device"
+        fi
+    done
+}
+
+#
+# Verify expected devices match the active device list
+#
+verify_active_devices() {
+    file=$1
+    config_cnt=$2
+    expected=$3
+
+    actual_sorted=$(parse_active_devices "$file" "$config_cnt" | sort | paste -sd' ')
+    expected_sorted=$(echo "$expected" | tr ' ' '\n' | sort | paste -sd' ')
+
+    if [[ "$actual_sorted" != "$expected_sorted" ]];
+	then
+        echo "Error: configuration ${config_cnt} device mismatch"
+        echo "  expected: ${expected_sorted}"
+        echo "  actual:   ${actual_sorted}"
+        return 1
+    fi
+
+    return 0
+}
+
+#
+# Cleanup processes running in background 
+#
+kill_background_processes() {
+    for pid in "$@"
+    do
+        kill -9 "${pid}" || true
+    done
+}
+
+#
+# Fault Tolerance Test using ucx_perftest
+#
+run_ucx_perftest_fault_tolerance() {
+
+	if [[ $(uname -m) != "x86_64" ]]; then
+		echo "==== Skip UCX Perftest Fault Tolerance Test on $(uname -m) ===="
+		return 0
+	fi
+
+	echo "==== Running UCX Perftest Fault Tolerance Test ===="
+
+	test_exe="${ucx_inst}/bin/ucx_perftest"
+	drop_tool="/hpc/scrap/fault_tolerance/ucx_drop_tool"
+	output_file=ucx_perftest.stdout
+	settle_seconds=10
+	sl=$(( EXECUTOR_NUMBER + 1 ))
+	tc=$(( EXECUTOR_NUMBER + 31 ))
+	devices=$(get_active_ib_devnames)
+	device_cnt=$(echo ${devices} | wc -w)
+	background_pids=()
+	config_cnt=0
+	affinity=$(slice_affinity 0)
+	expected_devices="${devices}"
+
+	if [[ "${devices}" == "" ]];
+	then
+		echo "No IB devices detected. Skipping Fault Tolerance test"
+		return 0 
+	fi
+
+	if [[ ! -x "${drop_tool}" ]];
+	then
+		echo "Warning: Could not find drop tool at ${drop_tool}"
+		return 0 
+	fi
+
+	export UCX_IB_SL=${sl}
+	export UCX_IB_TRAFFIC_CLASS=${tc}
+	export UCX_ZCOPY_THRESH=0
+	export UCX_MIN_RMA_CHUNK_SIZE=64
+	export UCX_PROTO_INFO=y
+	export UCX_RC_MLX5_RETRY_COUNT=2
+	export UCX_IB_NUM_PATHS=1
+	export UCX_NET_DEVICES=$(get_active_ib_devnames | paste -sd,)
+	export UCX_MAX_RMA_RAILS=${device_cnt}
+	export UCX_TLS=rc_x 
+
+	args="-t ucp_put_lat    \
+		-n 1000000000000000 \
+		-s 1048576          \
+		-e failover         \
+		-l"
+
+	taskset -c ${affinity} ${test_exe} ${args} 2>&1 | tee ${output_file} &
+	background_pids+=($!)
+
+	sleep ${settle_seconds} 
+
+	if ! verify_active_devices ${output_file} ${config_cnt} "${devices}";
+	then
+		kill_background_processes "${background_pids[@]}"
+		return 1
+	fi
+
+	echo "Baseline protocol configuration uses devices: ${devices}"
+
+	# Loop through active IB devices. Block each one in turn and verify traffic
+	for dev in $(get_active_ib_devnames)
+	do
+		echo "Blocking traffic with service level ${sl} or traffic class ${tc} on device ${dev}..."
+		${drop_tool} -d ${dev} -s ${sl} -t ${tc} &
+		background_pids+=($!)
+		config_cnt=$((config_cnt + 1))
+
+		sleep ${settle_seconds}
+
+		expected_devices=$(echo "$expected_devices" | tr ' ' '\n' | grep -vFx "$dev" | paste -sd' ')
+
+		if ! verify_active_devices ${output_file} ${config_cnt} "${expected_devices}";
+		then
+			kill_background_processes "${background_pids[@]}"
+			return 1
+		fi
+
+		echo "Reconfiguration ${config_cnt} uses devices: ${expected_devices}"
+	done
+
+	kill_background_processes "${background_pids[@]}"
+
+	unset UCX_IB_SL
+	unset UCX_IB_TRAFFIC_CLASS
+	unset UCX_ZCOPY_THRESH
+	unset UCX_MIN_RMA_CHUNK_SIZE
+	unset UCX_PROTO_INFO
+	unset UCX_RC_MLX5_RETRY_COUNT
+	unset UCX_IB_NUM_PATHS
+	unset UCX_NET_DEVICES
+	unset UCX_MAX_RMA_RAILS
+	unset UCX_TLS
+
+	return 0
+}
+
+#
 # Run UCX performance test
 # Note: If requested running with MPI, MPI has to be initialized before
 # The function accepts 0 (default value) or 1 that means launching w/ or w/o MPI
@@ -1280,6 +1446,9 @@ run_tests() {
 
 	# nt_buffer_transfer tests
 	do_distributed_task 0 4 run_nt_buffer_transfer_tests
+
+	# fault tolerance tests
+	do_distributed_task 1 4 run_ucx_perftest_fault_tolerance
 }
 
 run_asan_check() {
