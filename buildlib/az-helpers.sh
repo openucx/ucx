@@ -165,7 +165,6 @@ check_nv_peer_mem() {
 
     if ! lsmod | grep -q 'nv.*_peer.*mem'; then
         lsmod | grep 'nv.*_peer.*mem'
-        systemctl status nv_peer_mem
         azure_log_error "nv_peer_mem module not loaded on $(hostname -s)"
         exit 1
     fi
