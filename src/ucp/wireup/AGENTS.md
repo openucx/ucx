@@ -9,7 +9,8 @@ exchanged out-of-band) and connection-manager wireup (sockaddr listener).
 
 - `wireup.[ch]` — the wireup state machine. Defines the on-wire message
   types `UCP_WIREUP_MSG_{PRE_REQUEST, REQUEST, REPLY, ACK, EP_CHECK,
-  EP_REMOVED, REPLY_RECONFIG}` and drives transitions on send/recv.
+  EP_REMOVED, REPLY_RECONFIG, QUERY_LANE_STATE, LANE_STATE}` and drives
+  transitions on send/recv.
 - `address.[ch]` — packing and unpacking of `ucp_address_t`: per-device
   records, per-iface records, atomic capability bits, system-device IDs,
   and connection info. ABI-sensitive: any layout change must add a version
