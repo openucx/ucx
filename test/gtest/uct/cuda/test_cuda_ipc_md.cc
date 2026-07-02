@@ -114,6 +114,9 @@ protected:
        uct_md_mem_reg_params_t reg_params  = {};
        uct_rkey_bundle_t       rkey_bundle = {};
        uct_mem_h memh;
+
+       reg_params.field_mask = UCT_MD_MEM_REG_FIELD_MEM_TYPE;
+       reg_params.mem_type   = UCS_MEMORY_TYPE_CUDA;
        ASSERT_UCS_OK(uct_md_mem_reg_v2(md(), ptr, size, &reg_params, &memh));
 
        std::exception_ptr thread_exception;

@@ -10,6 +10,7 @@
 #define LIBPERF_INT_H_
 
 #include <tools/perf/api/libperf.h>
+#include <uct/api/v2/uct_v2.h>
 
 
 #if _OPENMP
@@ -190,6 +191,21 @@ void ucp_perf_barrier(ucx_perf_context_t *perf);
 ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf);
 void ucp_perf_test_free_mem(ucx_perf_context_t *perf);
 ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf);
+
+static inline ucs_status_t
+uct_perf_md_mem_reg(uct_md_h md, void *address, size_t length, unsigned flags,
+                    ucs_memory_type_t mem_type, uct_mem_h *memh_p)
+{
+    uct_md_mem_reg_params_t params;
+
+    params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS |
+                        UCT_MD_MEM_REG_FIELD_MEM_TYPE;
+    params.flags      = flags;
+    params.mem_type   = mem_type;
+
+    return uct_md_mem_reg_v2(md, address, length, &params, memh_p);
+}
+
 void uct_perf_test_free_mem(ucx_perf_context_t *perf);
 ucs_status_t ucx_perf_thread_spawn(ucx_perf_context_t *perf,
                                    ucx_perf_result_t* result);

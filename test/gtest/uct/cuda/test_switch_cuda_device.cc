@@ -552,7 +552,8 @@ public:
         const size_t size = UCS_MBYTE;
         mem_src_t src_buf(size, src_type);
         mem_dest_t dest_buf(size, dest_type);
-        rkey_mem_pair_t rkey_dest = rkey_unpack(sender(), dest_buf.ptr(), size);
+        rkey_mem_pair_t rkey_dest = rkey_unpack(sender(), dest_buf.ptr(),
+                                                  size, dest_type);
 
         // Set different device context and call send op
         ASSERT_EQ(cudaSetDevice((current_device + 1) % m_num_devices), cudaSuccess);
@@ -634,12 +635,15 @@ protected:
     }
 
 private:
-    rkey_mem_pair_t rkey_unpack(entity &e, void *buf, size_t size)
+    rkey_mem_pair_t rkey_unpack(entity &e, void *buf, size_t size,
+                                  ucs_memory_type_t mem_type)
     {
         uct_md_mem_reg_params_t reg_params = {};
         uct_rkey_bundle_t rkey             = {};
         uct_mem_h memh                     = NULL;
 
+        reg_params.field_mask = UCT_MD_MEM_REG_FIELD_MEM_TYPE;
+        reg_params.mem_type   = mem_type;
         ASSERT_UCS_OK(uct_md_mem_reg_v2(e.md(), buf, size, &reg_params, &memh));
 
         if (e.md_attr().rkey_packed_size == 0) {
