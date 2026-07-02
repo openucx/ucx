@@ -1,0 +1,48 @@
+parameters:
+  dependsOn: [Static_check]
+  cpu_container: ucxx_rapidsai_ci_conda
+  gpu_container: ucxx_rapidsai_ci_conda_gpu
+  slices: []
+
+stages:
+  - stage: UCXX_tests
+    dependsOn: ${{ parameters.dependsOn }}
+    variables:
+      UCX_DIR: $(Agent.BuildDirectory)/ucx
+      UCXX_DIR: $(Agent.BuildDirectory)/ucxx
+    jobs:
+      - ${{ each slice in parameters.slices }}:
+        - job: ucxx_tests_${{ slice.name }}
+          workspace:
+            clean: all
+          pool:
+            name: MLNX
+            demands: ${{ slice.demands }}
+          ${{ if eq(slice.gpu, true) }}:
+            displayName: 'UCXX GPU tests (${{ slice.name }})'
+            container: ${{ parameters.gpu_container }}
+            timeoutInMinutes: 120
+          ${{ if eq(slice.gpu, false) }}:
+            displayName: 'UCXX tests (${{ slice.name }})'
+            container: ${{ parameters.cpu_container }}
+            timeoutInMinutes: 90
+          variables:
+            IS_GPU: ${{ slice.gpu }}
+            RAPIDS_CUDA_VERSION: ${{ slice.rapids_cuda_version }}
+            RAPIDS_PY_VERSION: ${{ slice.rapids_py_version }}
+          steps:
+            - checkout: self
+              path: ucx
+              fetchDepth: 100
+              retryCountOnTaskFailure: 5
+            - checkout: ucxx
+              path: ucxx
+              retryCountOnTaskFailure: 5
+            - bash: bash $(UCX_DIR)/buildlib/tools/test_ucxx.sh build
+              displayName: Build UCXX
+            - bash: bash $(UCX_DIR)/buildlib/tools/test_ucxx.sh test_cpp
+              displayName: Run UCXX C++ tests
+            # GPU slices only: cupy variants need a real device.
+            - ${{ if eq(slice.gpu, true) }}:
+              - bash: bash $(UCX_DIR)/buildlib/tools/test_ucxx.sh test_python
+                displayName: Run UCXX Python tests

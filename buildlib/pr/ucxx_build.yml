@@ -1,0 +1,296 @@
+parameters:
+  dependsOn: [Static_check]
+  condition: succeeded()
+  conda_container: ucxx_rapidsai_ci_conda
+  conda_cpp_slices: []
+  conda_python_slices: []
+  wheel_libucxx_slices: []
+  wheel_ucxx_slices: []
+  wheel_tests_ucxx_slices: []
+  docs_slices: []
+  devcontainer_slices: []
+
+stages:
+  - stage: UCXX_build
+    displayName: 'UCXX build + publish'
+    dependsOn: ${{ parameters.dependsOn }}
+    condition: ${{ parameters.condition }}
+    variables:
+      UCX_DIR: $(Agent.BuildDirectory)/ucx
+      UCXX_DIR: $(Agent.BuildDirectory)/ucxx
+      RAPIDS_BLD_OUTPUT_DIR: $(Build.ArtifactStagingDirectory)
+    jobs:
+      - ${{ each slice in parameters.conda_cpp_slices }}:
+        - job: ucxx_conda_cpp_build_${{ slice.name }}
+          workspace:
+            clean: all
+          pool:
+            name: MLNX
+            demands: ${{ slice.demands }}
+          displayName: 'UCXX conda-cpp-build (${{ slice.name }})'
+          container: ${{ parameters.conda_container }}
+          timeoutInMinutes: 60
+          variables:
+            RAPIDS_CUDA_VERSION: ${{ slice.rapids_cuda_version }}
+            RAPIDS_PY_VERSION: ${{ slice.rapids_py_version }}
+          steps:
+            - checkout: self
+              path: ucx
+              fetchDepth: 100
+              retryCountOnTaskFailure: 5
+            - checkout: ucxx
+              path: ucxx
+              retryCountOnTaskFailure: 5
+            - bash: bash $(UCX_DIR)/buildlib/tools/build_ucxx.sh conda_cpp
+              displayName: Build UCXX conda C++ package
+            - task: PublishBuildArtifacts@1
+              displayName: Publish conda-cpp artifact
+              inputs:
+                pathToPublish: $(RAPIDS_BLD_OUTPUT_DIR)
+                artifactName: ucxx-conda-cpp-${{ slice.name }}
+            # conda packages are not published from this pipeline: per RAPIDS,
+            # ucxx conda ships via conda-forge (separate feedstock) once the
+            # codebase is officially upstream. Nightlies stay RAPIDS-side.
+
+      - ${{ each slice in parameters.conda_python_slices }}:
+        - job: ucxx_conda_python_build_${{ slice.name }}
+          workspace:
+            clean: all
+          pool:
+            name: MLNX
+            demands: ${{ slice.demands }}
+          displayName: 'UCXX conda-python-build (${{ slice.name }})'
+          container: ${{ parameters.conda_container }}
+          timeoutInMinutes: 60
+          dependsOn: ucxx_conda_cpp_build_${{ slice.name }}
+          variables:
+            RAPIDS_CUDA_VERSION: ${{ slice.rapids_cuda_version }}
+            RAPIDS_PY_VERSION: ${{ slice.rapids_py_version }}
+          steps:
+            - checkout: self
+              path: ucx
+              fetchDepth: 100
+              retryCountOnTaskFailure: 5
+            - checkout: ucxx
+              path: ucxx
+              retryCountOnTaskFailure: 5
+            - task: DownloadBuildArtifacts@1
+              displayName: Fetch conda-cpp artifact
+              inputs:
+                buildType: current
+                artifactName: ucxx-conda-cpp-${{ slice.name }}
+                downloadPath: $(System.DefaultWorkingDirectory)/_dl
+            - bash: |
+                rm -rf "$(RAPIDS_BLD_OUTPUT_DIR)"
+                mv "$(System.DefaultWorkingDirectory)/_dl/ucxx-conda-cpp-${{ slice.name }}" "$(RAPIDS_BLD_OUTPUT_DIR)"
+              displayName: Stage conda-cpp artifact
+            - bash: bash $(UCX_DIR)/buildlib/tools/build_ucxx.sh conda_python
+              displayName: Build UCXX conda Python package
+            - task: PublishBuildArtifacts@1
+              displayName: Publish conda-python artifact
+              inputs:
+                pathToPublish: $(RAPIDS_BLD_OUTPUT_DIR)
+                artifactName: ucxx-conda-python-${{ slice.name }}
+            # conda packages are not published from this pipeline: per RAPIDS,
+            # ucxx conda ships via conda-forge (separate feedstock) once the
+            # codebase is officially upstream. Nightlies stay RAPIDS-side.
+
+      - ${{ each slice in parameters.wheel_libucxx_slices }}:
+        - job: ucxx_wheel_libucxx_build_${{ slice.name }}
+          workspace:
+            clean: all
+          pool:
+            name: MLNX
+            demands: ${{ slice.demands }}
+          displayName: 'UCXX wheel-build-libucxx (${{ slice.name }})'
+          container: ${{ slice.container }}
+          timeoutInMinutes: 60
+          variables:
+            RAPIDS_CUDA_VERSION: ${{ slice.rapids_cuda_version }}
+            RAPIDS_PY_VERSION: ${{ slice.rapids_py_version }}
+          steps:
+            - checkout: self
+              path: ucx
+              fetchDepth: 100
+              retryCountOnTaskFailure: 5
+            - checkout: ucxx
+              path: ucxx
+              retryCountOnTaskFailure: 5
+            - bash: bash $(UCX_DIR)/buildlib/tools/build_ucxx.sh wheel_libucxx
+              displayName: Build libucxx wheel
+            - task: PublishBuildArtifacts@1
+              displayName: Publish libucxx wheel artifact
+              inputs:
+                pathToPublish: $(RAPIDS_BLD_OUTPUT_DIR)
+                artifactName: ucxx-wheel-libucxx-${{ slice.name }}
+            # libucxx wheel is an intermediate build input (staged into the
+            # ucxx wheel build below); it is not published.
+
+      - ${{ each slice in parameters.wheel_ucxx_slices }}:
+        - job: ucxx_wheel_ucxx_build_${{ slice.name }}
+          workspace:
+            clean: all
+          pool:
+            name: MLNX
+            demands: ${{ slice.demands }}
+          displayName: 'UCXX wheel-build-ucxx (${{ slice.name }})'
+          container: ${{ slice.container }}
+          timeoutInMinutes: 60
+          dependsOn: ucxx_wheel_libucxx_build_${{ slice.libucxx_slice }}
+          variables:
+            RAPIDS_CUDA_VERSION: ${{ slice.rapids_cuda_version }}
+            RAPIDS_PY_VERSION: ${{ slice.rapids_py_version }}
+            WHEEL_INPUT_DIR: $(Build.ArtifactStagingDirectory)/wheel-libucxx
+          steps:
+            - checkout: self
+              path: ucx
+              fetchDepth: 100
+              retryCountOnTaskFailure: 5
+            - checkout: ucxx
+              path: ucxx
+              retryCountOnTaskFailure: 5
+            - task: DownloadBuildArtifacts@1
+              displayName: Fetch libucxx wheel artifact
+              inputs:
+                buildType: current
+                artifactName: ucxx-wheel-libucxx-${{ slice.libucxx_slice }}
+                downloadPath: $(System.DefaultWorkingDirectory)/_dl
+            - bash: |
+                rm -rf "$(WHEEL_INPUT_DIR)"
+                mv "$(System.DefaultWorkingDirectory)/_dl/ucxx-wheel-libucxx-${{ slice.libucxx_slice }}" "$(WHEEL_INPUT_DIR)"
+              displayName: Stage libucxx wheel artifact
+            - bash: bash $(UCX_DIR)/buildlib/tools/build_ucxx.sh wheel_ucxx
+              displayName: Build ucxx wheel
+            - task: PublishBuildArtifacts@1
+              displayName: Publish ucxx wheel artifact
+              inputs:
+                pathToPublish: $(RAPIDS_BLD_OUTPUT_DIR)
+                artifactName: ucxx-wheel-ucxx-${{ slice.name }}
+            # TODO release: publish the ucxx wheels (ucxx-cu12 / ucxx-cu13) to
+            # PyPI on a UCX tag. Per RAPIDS the upload goes through Kitmaker
+            # (which dual-publishes PyPI + NVIDIA PyPI); the exact process and
+            # credentials are pending RAPIDS/Kitmaker. Wire it here once defined -
+            # the built wheel above is the artifact Kitmaker would consume.
+
+      - ${{ each slice in parameters.docs_slices }}:
+        - job: ucxx_docs_build_${{ slice.name }}
+          workspace:
+            clean: all
+          pool:
+            name: MLNX
+            demands: ${{ slice.demands }}
+          displayName: 'UCXX docs-build (${{ slice.name }})'
+          container: ${{ parameters.conda_container }}
+          timeoutInMinutes: 60
+          dependsOn:
+            - ucxx_conda_cpp_build_${{ slice.cpp_slice }}
+            - ucxx_conda_python_build_${{ slice.python_slice }}
+          variables:
+            RAPIDS_CUDA_VERSION: ${{ slice.rapids_cuda_version }}
+            RAPIDS_PY_VERSION: ${{ slice.rapids_py_version }}
+            DOCS_OUT_DIR: $(Build.ArtifactStagingDirectory)/docs
+          steps:
+            - checkout: self
+              path: ucx
+              fetchDepth: 100
+              retryCountOnTaskFailure: 5
+            - checkout: ucxx
+              path: ucxx
+              retryCountOnTaskFailure: 5
+            - task: DownloadBuildArtifacts@1
+              displayName: Fetch conda-cpp artifact
+              inputs:
+                buildType: current
+                artifactName: ucxx-conda-cpp-${{ slice.cpp_slice }}
+                downloadPath: $(System.DefaultWorkingDirectory)/_dl_cpp
+            - task: DownloadBuildArtifacts@1
+              displayName: Fetch conda-python artifact
+              inputs:
+                buildType: current
+                artifactName: ucxx-conda-python-${{ slice.python_slice }}
+                downloadPath: $(System.DefaultWorkingDirectory)/_dl_py
+            - bash: bash $(UCX_DIR)/buildlib/tools/build_ucxx.sh docs
+              displayName: Build UCXX docs
+              env:
+                CPP_CHANNEL_DIR: $(System.DefaultWorkingDirectory)/_dl_cpp/ucxx-conda-cpp-${{ slice.cpp_slice }}
+                PYTHON_CHANNEL_DIR: $(System.DefaultWorkingDirectory)/_dl_py/ucxx-conda-python-${{ slice.python_slice }}
+                RAPIDS_DOCS_DIR: $(DOCS_OUT_DIR)
+            - task: PublishBuildArtifacts@1
+              displayName: Publish docs artifact
+              inputs:
+                pathToPublish: $(DOCS_OUT_DIR)
+                artifactName: ucxx-docs-${{ slice.name }}
+            # docs publishing target is not defined by the current RAPIDS release
+            # plan (wheels -> Kitmaker/PyPI, conda -> conda-forge); the built docs
+            # remain a pipeline artifact for now.
+
+      - ${{ each slice in parameters.wheel_tests_ucxx_slices }}:
+        - job: ucxx_wheel_tests_ucxx_${{ slice.name }}
+          workspace:
+            clean: all
+          pool:
+            name: MLNX
+            demands: ${{ slice.demands }}
+          displayName: 'UCXX wheel-tests-ucxx (${{ slice.name }})'
+          container: ${{ slice.container }}
+          timeoutInMinutes: 90
+          dependsOn:
+            - ucxx_wheel_libucxx_build_${{ slice.libucxx_slice }}
+            - ucxx_wheel_ucxx_build_${{ slice.ucxx_slice }}
+          variables:
+            RAPIDS_CUDA_VERSION: ${{ slice.rapids_cuda_version }}
+            RAPIDS_PY_VERSION: ${{ slice.rapids_py_version }}
+            LIBUCXX_WHL_DIR: $(Build.ArtifactStagingDirectory)/libucxx_whl
+            UCXX_WHL_DIR: $(Build.ArtifactStagingDirectory)/ucxx_whl
+          steps:
+            - checkout: self
+              path: ucx
+              fetchDepth: 100
+              retryCountOnTaskFailure: 5
+            - checkout: ucxx
+              path: ucxx
+              retryCountOnTaskFailure: 5
+            - task: DownloadBuildArtifacts@1
+              displayName: Fetch libucxx wheel artifact
+              inputs:
+                buildType: current
+                artifactName: ucxx-wheel-libucxx-${{ slice.libucxx_slice }}
+                downloadPath: $(System.DefaultWorkingDirectory)/_dl_libucxx
+            - task: DownloadBuildArtifacts@1
+              displayName: Fetch ucxx wheel artifact
+              inputs:
+                buildType: current
+                artifactName: ucxx-wheel-ucxx-${{ slice.ucxx_slice }}
+                downloadPath: $(System.DefaultWorkingDirectory)/_dl_ucxx
+            - bash: |
+                rm -rf "$(LIBUCXX_WHL_DIR)" "$(UCXX_WHL_DIR)"
+                mv "$(System.DefaultWorkingDirectory)/_dl_libucxx/ucxx-wheel-libucxx-${{ slice.libucxx_slice }}" "$(LIBUCXX_WHL_DIR)"
+                mv "$(System.DefaultWorkingDirectory)/_dl_ucxx/ucxx-wheel-ucxx-${{ slice.ucxx_slice }}" "$(UCXX_WHL_DIR)"
+              displayName: Stage wheels
+            - bash: bash $(UCX_DIR)/buildlib/tools/test_ucxx.sh test_wheel_ucxx
+              displayName: Run UCXX wheel tests
+
+      - ${{ each slice in parameters.devcontainer_slices }}:
+        - job: ucxx_devcontainer_${{ slice.name }}
+          workspace:
+            clean: all
+          pool:
+            name: MLNX
+            demands: ${{ slice.demands }}
+          displayName: 'UCXX devcontainer (${{ slice.name }})'
+          container: ${{ parameters.conda_container }}
+          timeoutInMinutes: 15
+          dependsOn: []
+          variables:
+            RAPIDS_CUDA_VERSION: ${{ slice.rapids_cuda_version }}
+            RAPIDS_PY_VERSION: ${{ slice.rapids_py_version }}
+          steps:
+            - checkout: self
+              path: ucx
+              fetchDepth: 100
+              retryCountOnTaskFailure: 5
+            - checkout: ucxx
+              path: ucxx
+              retryCountOnTaskFailure: 5
+            - bash: bash $(UCX_DIR)/buildlib/tools/build_ucxx.sh devcontainer
+              displayName: Validate UCXX devcontainer configs
