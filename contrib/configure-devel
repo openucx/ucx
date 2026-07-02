@@ -11,7 +11,7 @@
 #
 
 basedir=$(cd $(dirname $0) && pwd)
-$basedir/../configure \
+"$basedir/../configure" \
 	--enable-gtest \
 	--enable-examples \
 	--enable-test-apps \

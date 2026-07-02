@@ -11,6 +11,6 @@
 #
 
 basedir=$(cd $(dirname $0) && pwd)
-$basedir/../contrib/configure-release \
+"$basedir/../contrib/configure-release" \
 	--enable-mt \
 	"$@"
