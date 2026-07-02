@@ -420,7 +420,8 @@ void uct_base_iface_progress_enable_cb(uct_base_iface_t *iface,
     UCS_ASYNC_BLOCK(worker->async);
 
     thread_safe = flags & UCT_PROGRESS_THREAD_SAFE;
-    flags      &= ~UCT_PROGRESS_THREAD_SAFE;
+    flags      &= ~(UCT_PROGRESS_THREAD_SAFE | UCT_PROGRESS_DISCARD |
+                    UCT_PROGRESS_IFACE_READY);
 
     /* Add callback only if previous flags are 0 and new flags != 0 */
     if ((!iface->progress_flags && flags) &&
