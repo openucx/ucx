@@ -94,7 +94,16 @@ struct ucp_proto_select_param {
          * except UCP_OP_ID_AMO_FETCH and UCP_OP_ID_AMO_CSWAP, which use the
          * 'reply' member above instead. */
         uint8_t             mem_flags;
-        uint8_t             padding[2]; /* Pad select key to sizeof(uint64_t) */
+
+        /* Failed lane parameters.
+         * Used for UCP_OP_ID_FAILOVER_* internal replay operations. */
+        struct {
+            uint8_t failed_lane; /* Original failed lane index */
+            uint8_t reserved;
+        } UCS_S_PACKED      failover;
+
+        /* Align struct size to uint64_t */
+        uint8_t             padding[2];
 
     } UCS_S_PACKED op;
 } UCS_S_PACKED;
