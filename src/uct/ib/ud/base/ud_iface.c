@@ -571,6 +571,8 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops,
 
     ucs_queue_head_init(&self->tx.async_comp_q);
     ucs_queue_head_init(&self->rx.pending_q);
+    ucs_queue_head_init(&self->tx.skb_pending_free);
+    self->tx.comp_sn = UINT16_MAX;
 
     status = UCS_STATS_NODE_ALLOC(&self->stats, &uct_ud_iface_stats_class,
                                   self->super.stats, "-%p", self);
@@ -623,6 +625,14 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_iface_t)
     ucs_twheel_cleanup(&self->tx.timer);
     ucs_debug("iface(%p): cep cleanup", self);
     uct_ud_iface_free_async_comps(self);
+    {
+        uct_ud_send_skb_t *skb;
+        while (!ucs_queue_is_empty(&self->tx.skb_pending_free)) {
+            skb = ucs_queue_pull_elem_non_empty(&self->tx.skb_pending_free,
+                                                uct_ud_send_skb_t, queue);
+            ucs_mpool_put(skb);
+        }
+    }
     ucs_mpool_cleanup(&self->tx.mp, 0);
     /* TODO: qp to error state and cleanup all wqes */
     uct_ud_iface_free_pending_rx(self);
@@ -866,7 +876,7 @@ uct_ud_iface_dispatch_async_comps_do(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
             ucs_trace("ep %p: dispatch async comp %p", ep, cdesc->comp);
             ucs_queue_del_iter(&iface->tx.async_comp_q, iter);
             uct_ud_iface_dispatch_comp(iface, cdesc->comp);
-            uct_ud_skb_release(skb, 0);
+            uct_ud_skb_release(iface, skb, 0);
             ++count;
         }
     }
@@ -879,7 +889,7 @@ static void uct_ud_iface_free_async_comps(uct_ud_iface_t *iface)
     uct_ud_send_skb_t *skb;
 
     ucs_queue_for_each_extract(skb, &iface->tx.async_comp_q, queue, 1) {
-        uct_ud_skb_release(skb, 0);
+        uct_ud_skb_release(iface, skb, 0);
     }
 }
 
@@ -1079,14 +1089,25 @@ void uct_ud_iface_ctl_skb_complete(uct_ud_iface_t *iface,
     }
 
     uct_ud_ep_window_release_completed(cdesc->ep, is_async);
-    uct_ud_skb_release(skb, 0);
+    uct_ud_skb_release(iface, skb, 0);
+}
 
+static void uct_ud_iface_free_pending_skbs(uct_ud_iface_t *iface, uint16_t sn)
+{
+    uct_ud_send_skb_t *skb;
+
+    iface->tx.comp_sn = sn;
+    ucs_queue_for_each_extract(skb, &iface->tx.skb_pending_free, queue,
+                               UCT_UD_PSN_COMPARE(skb->tx_sn, <=, sn)) {
+        ucs_mpool_put(skb);
+    }
 }
 
 void uct_ud_iface_send_completion_ordered(uct_ud_iface_t *iface, uint16_t sn,
                                           int is_async)
 {
     uct_ud_ctl_desc_t *cdesc;
+    uct_ud_iface_free_pending_skbs(iface, sn);
     ucs_queue_for_each_extract(cdesc, &iface->tx.outstanding.queue, queue,
                                UCS_CIRCULAR_COMPARE16(cdesc->sn, <=, sn)) {
         uct_ud_iface_ctl_skb_complete(iface, cdesc, is_async);
@@ -1100,6 +1121,7 @@ void uct_ud_iface_send_completion_unordered(uct_ud_iface_t *iface, uint16_t sn,
                              &iface->tx.outstanding.map, sn);
     uct_ud_ctl_desc_t *cdesc;
 
+    uct_ud_iface_free_pending_skbs(iface, sn);
     if (ucs_likely(khiter != kh_end(&iface->tx.outstanding.map))) {
         cdesc = kh_value(&iface->tx.outstanding.map, khiter);
         uct_ud_iface_ctl_skb_complete(iface, cdesc, is_async);

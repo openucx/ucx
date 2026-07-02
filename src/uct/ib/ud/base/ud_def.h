@@ -155,6 +155,7 @@ typedef struct uct_ud_send_skb {
     uint32_t                lkey;
     uint16_t                len;        /* data size */
     uint16_t                flags;
+    uint16_t                tx_sn;      /* Sequence number when posted to NIC */
     uct_ud_neth_t           neth[0];
 } UCS_S_PACKED UCS_V_ALIGNED(UCT_UD_SKB_ALIGN) uct_ud_send_skb_t;
 

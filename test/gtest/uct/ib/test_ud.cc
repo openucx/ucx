@@ -685,6 +685,72 @@ UCS_TEST_P(test_ud, connect_iface_single_drop_creq) {
 }
 #endif
 
+UCS_TEST_SKIP_COND_P(test_ud, skb_pending_free_gc,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT))
+{
+    uct_ud_iface_t *ud_iface = iface(m_e1);
+    uct_ud_send_skb_t *skb1, *skb2, *skb3;
+
+    skb1 = (uct_ud_send_skb_t*)ucs_mpool_get_inline(&ud_iface->tx.mp);
+    skb2 = (uct_ud_send_skb_t*)ucs_mpool_get_inline(&ud_iface->tx.mp);
+    skb3 = (uct_ud_send_skb_t*)ucs_mpool_get_inline(&ud_iface->tx.mp);
+
+    ASSERT_TRUE(skb1 != NULL);
+    ASSERT_TRUE(skb2 != NULL);
+    ASSERT_TRUE(skb3 != NULL);
+
+    skb1->flags = 0;
+    skb2->flags = 0;
+    skb3->flags = 0;
+
+    /* Assign hardware sequence numbers */
+    skb1->tx_sn = 10;
+    skb2->tx_sn = 20;
+    skb3->tx_sn = 30;
+    ud_iface->tx.comp_sn = 15;
+
+    /* skb1 (10 <= 15) immediately returns to pool. */
+    skb1->flags = UCT_UD_SEND_SKB_FLAG_INVALID;
+    if (UCT_UD_PSN_COMPARE(skb1->tx_sn, <=, ud_iface->tx.comp_sn)) {
+        ucs_mpool_put(skb1);
+    } else {
+        ucs_queue_push(&ud_iface->tx.skb_pending_free, &skb1->queue);
+    }
+
+    /* skb2 and skb3 (> 15) must be blocked and diverted to skb_pending_free. */
+    skb2->flags = UCT_UD_SEND_SKB_FLAG_INVALID;
+    if (UCT_UD_PSN_COMPARE(skb2->tx_sn, <=, ud_iface->tx.comp_sn)) {
+        ucs_mpool_put(skb2);
+    } else {
+        ucs_queue_push(&ud_iface->tx.skb_pending_free, &skb2->queue);
+    }
+
+    skb3->flags = UCT_UD_SEND_SKB_FLAG_INVALID;
+    if (UCT_UD_PSN_COMPARE(skb3->tx_sn, <=, ud_iface->tx.comp_sn)) {
+        ucs_mpool_put(skb3);
+    } else {
+        ucs_queue_push(&ud_iface->tx.skb_pending_free, &skb3->queue);
+    }
+
+    /* Check 1: Assert the queue length is exactly 2. */
+    EXPECT_EQ(2U, ucs_queue_length(&ud_iface->tx.skb_pending_free));
+    if (uct_ib_iface_device(&ud_iface->super)->ordered_send_comp) {
+        uct_ud_iface_send_completion_ordered(ud_iface, 25, 0);
+    } else {
+        uct_ud_iface_send_completion_unordered(ud_iface, 25, 0);
+    }
+
+    /* Check 2: Assert skb_pending_free length reduces to exactly 1 (skb2
+   * freed). */
+    EXPECT_EQ(1U, ucs_queue_length(&ud_iface->tx.skb_pending_free));
+    if (uct_ib_iface_device(&ud_iface->super)->ordered_send_comp) {
+        uct_ud_iface_send_completion_ordered(ud_iface, 30, 0);
+    } else {
+        uct_ud_iface_send_completion_unordered(ud_iface, 30, 0);
+    }
+    EXPECT_TRUE(ucs_queue_is_empty(&ud_iface->tx.skb_pending_free));
+}
+
 UCS_TEST_SKIP_COND_P(test_ud, connect_iface_single,
                      !check_caps(UCT_IFACE_FLAG_AM_SHORT)) {
     /* single connect */

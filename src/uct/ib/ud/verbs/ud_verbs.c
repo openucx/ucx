@@ -125,6 +125,7 @@ uct_ud_verbs_ep_tx_skb(uct_ud_verbs_iface_t *iface, uct_ud_verbs_ep_t *ep,
     iface->tx.sge[0].lkey   = skb->lkey;
     iface->tx.sge[0].length = skb->len;
     iface->tx.sge[0].addr   = (uintptr_t)skb->neth;
+    skb->tx_sn              = iface->tx.send_sn;
     uct_ud_verbs_post_send(iface, ep, &iface->tx.wr_skb, send_flags, max_log_sge);
 }
 
@@ -196,6 +197,7 @@ ucs_status_t uct_ud_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
     iface->tx.sge[0].length = sizeof(uct_ud_neth_t) + sizeof(*am_hdr);
     iface->tx.sge[0].addr   = (uintptr_t)skb->neth;
 
+    skb->tx_sn = iface->tx.send_sn;
     uct_ud_verbs_ep_tx_inlv(iface, ep, buffer, length);
 
     skb->len = iface->tx.sge[0].length;
@@ -232,6 +234,7 @@ static ucs_status_t uct_ud_verbs_ep_am_short_iov(uct_ep_h tl_ep, uint8_t id,
     iface->tx.sge[0].addr              = (uintptr_t)skb->neth;
     iface->tx.wr_inl.num_sge           = uct_ib_verbs_sge_fill_iov(iface->tx.sge + 1,
                                                                     iov, iovcnt) + 1;
+    skb->tx_sn                         = iface->tx.send_sn;
     uct_ud_verbs_post_send(iface, ep, &iface->tx.wr_inl, IBV_SEND_INLINE,
                            iface->tx.wr_inl.num_sge);
 
@@ -352,6 +355,7 @@ ucs_status_t uct_ud_verbs_ep_put_short(uct_ep_h tl_ep,
     iface->tx.sge[0].addr   = (uintptr_t)neth;
     iface->tx.sge[0].length = sizeof(*neth) + sizeof(*put_hdr);
 
+    skb->tx_sn = iface->tx.send_sn;
     uct_ud_verbs_ep_tx_inlv(iface, ep, buffer, length);
 
     skb->len = iface->tx.sge[0].length;
