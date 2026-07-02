@@ -23,6 +23,9 @@ parameters:
   - name: uptime
     type: number
     default: 180
+  - name: active_disconnect
+    type: string
+    default: 'No'
   - name: tests
     type: object
     default: []
@@ -52,6 +55,7 @@ jobs:
             test_extra_run_args: ${{ test.Value.extra_run_args }}
             initial_delay: ${{ coalesce(test.Value.initial_delay, parameters.initial_delay) }}
             test_interference: ${{ parameters.interference }}
+            test_active_disconnect: ${{ test.Value.active_disconnect }}
             test_with_ece: ${{ coalesce(test.Value.ece, parameters.ece) }}
       maxParallel: 1
 
@@ -81,6 +85,7 @@ jobs:
           iodemo_tls: $(test_ucx_tls)
           initial_delay: $(initial_delay)
           interference: $(test_interference)
+          active_disconnect: $(test_active_disconnect)
           extra_run_args: $(test_extra_run_args)
           ${{ if eq(variables['Build.Reason'], 'PullRequest') }}:
             analyzer_allow_list_args: '--allow_list $(System.PullRequest.TargetBranch)'
