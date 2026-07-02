@@ -9,6 +9,8 @@
 
 ## Current
 ### Features:
+#### UCP
+ * Added UCX_RNDV_PIPELINE_SHM_FORCE to opt in to the copy-to-attached host-staged path for intra-node CUDA-to-CUDA rendezvous.
 ### Bugfixes:
 
 ## 1.21.0 (June 24, 2026)

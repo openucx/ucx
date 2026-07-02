@@ -17,17 +17,106 @@
 #include <ucp/tag/offload.h>
 
 
-static UCS_F_ALWAYS_INLINE size_t
-ucp_proto_rndv_cfg_thresh(ucp_context_h context, uint64_t rndv_modes)
+static UCS_F_ALWAYS_INLINE int
+ucp_proto_rndv_shm_pipeline_force_scope(
+        const ucp_proto_init_params_t *init_params, ucp_operation_id_t op_id,
+        ucs_memory_type_t remote_mem_type, int allow_proto_estimation)
 {
-    ucp_rndv_mode_t mode = context->config.ext.rndv_mode;
+    const ucp_context_h context = init_params->worker->context;
+    uint8_t op_id_flags         = init_params->select_param->op_id_flags;
+
+    return context->config.ext.rndv_shm_ppln_force &&
+           context->config.ext.rndv_shm_ppln_enable &&
+           (context->config.ext.rndv_mode == UCP_RNDV_MODE_AUTO) &&
+           ucp_proto_init_check_op(init_params, UCS_BIT(op_id)) &&
+           !(op_id_flags & (UCP_PROTO_SELECT_OP_FLAG_AM_RNDV |
+                            UCP_PROTO_SELECT_OP_FLAG_RMA_RNDV)) &&
+           (init_params->ep_config_key->flags &
+            UCP_EP_CONFIG_KEY_FLAG_INTRA_NODE) &&
+           (init_params->select_param->mem_type == UCS_MEMORY_TYPE_CUDA) &&
+           (init_params->rkey_config_key != NULL) &&
+           (allow_proto_estimation ||
+            !(init_params->rkey_config_key->flags &
+              UCP_RKEY_CONFIG_FLAG_PROTO_ESTIMATION)) &&
+           (init_params->rkey_config_key->mem_type == remote_mem_type);
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_proto_rndv_shm_pipeline_force(
+        const ucp_proto_init_params_t *init_params)
+{
+    return ucp_proto_rndv_shm_pipeline_force_scope(
+            init_params, UCP_OP_ID_RNDV_RECV, UCS_MEMORY_TYPE_CUDA, 0);
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_proto_rndv_shm_pipeline_force_rkey_ptr_mtype(
+        const ucp_proto_init_params_t *init_params)
+{
+    /* The receiver-side pipeline can do nested estimation with a synthetic
+     * host rkey, while runtime RTR lookup uses the real host staging rkey.
+     */
+    return ucp_proto_rndv_shm_pipeline_force_scope(
+            init_params, UCP_OP_ID_RNDV_SEND, UCS_MEMORY_TYPE_HOST, 1);
+}
+
+static UCS_F_ALWAYS_INLINE size_t
+ucp_proto_rndv_cfg_thresh(const ucp_proto_init_params_t *init_params,
+                          uint64_t rndv_modes)
+{
+    const ucp_context_h context = init_params->worker->context;
+    ucp_rndv_mode_t mode        = context->config.ext.rndv_mode;
+
     ucs_assert(!(rndv_modes & UCS_BIT(UCP_RNDV_MODE_AUTO)));
+
+    if (ucp_proto_rndv_shm_pipeline_force(init_params)) {
+        return (rndv_modes & UCS_BIT(UCP_RNDV_MODE_PUT_PIPELINE)) ?
+               UCS_MEMUNITS_AUTO : UCS_MEMUNITS_INF;
+    }
 
     if ((mode == UCP_RNDV_MODE_AUTO) || (rndv_modes & UCS_BIT(mode))) {
         return UCS_MEMUNITS_AUTO;
     }
 
     return UCS_MEMUNITS_INF; /* used only as last resort */
+}
+
+static UCS_F_ALWAYS_INLINE unsigned
+ucp_proto_rndv_ctrl_variant_cfg_priority(
+        const ucp_proto_rndv_ctrl_init_params_t *params,
+        size_t remote_cfg_thresh, unsigned remote_cfg_priority,
+        int force_shm_pipeline)
+{
+    unsigned cfg_priority = params->super.cfg_priority;
+
+    if (force_shm_pipeline && (remote_cfg_thresh != UCS_MEMUNITS_AUTO) &&
+        (remote_cfg_thresh != UCS_MEMUNITS_INF)) {
+        cfg_priority = ucs_max(cfg_priority, remote_cfg_priority);
+    }
+
+    return cfg_priority;
+}
+
+static UCS_F_ALWAYS_INLINE size_t
+ucp_proto_rndv_ctrl_variant_cfg_thresh(
+        const ucp_proto_rndv_ctrl_init_params_t *params,
+        size_t remote_cfg_thresh, int force_shm_pipeline)
+{
+    const ucp_proto_init_params_t *init_params = &params->super.super;
+    uint8_t op_id_flags = init_params->select_param->op_id_flags;
+
+    if (force_shm_pipeline) {
+        return (((op_id_flags & (UCP_PROTO_SELECT_OP_FLAGS_BASE - 1)) ==
+                 UCP_OP_ID_RNDV_RECV) &&
+                (op_id_flags & UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG) &&
+                (params->super.reg_mem_info.type == UCS_MEMORY_TYPE_HOST) &&
+                (params->super.cfg_thresh == UCS_MEMUNITS_AUTO) &&
+                (remote_cfg_thresh != UCS_MEMUNITS_INF)) ?
+               remote_cfg_thresh : UCS_MEMUNITS_INF;
+    }
+
+    return (remote_cfg_thresh == UCS_MEMUNITS_AUTO) ?
+           params->super.cfg_thresh : remote_cfg_thresh;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t

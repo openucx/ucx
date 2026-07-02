@@ -184,6 +184,7 @@ ucp_proto_put_rndv_probe(const ucp_proto_init_params_t *init_params)
         /* For performance modeling, this control protocol is followed on the
          * peer by a regular RNDV receive flow over the final RMA address. */
         .remote_op_id        = UCP_OP_ID_RNDV_RECV,
+        .remote_op_flags     = UCP_PROTO_SELECT_OP_FLAG_RMA_RNDV,
         .lane                = ucp_proto_rndv_find_ctrl_lane(init_params),
         .unpack_perf         = NULL,
         .perf_bias           = 0,
@@ -345,7 +346,8 @@ ucp_proto_get_rndv_probe(const ucp_proto_init_params_t *init_params)
     mem_info = ucp_proto_common_select_param_mem_info(
             init_params->select_param);
     ucp_proto_select_param_init(&rndv_sel_param, UCP_OP_ID_RNDV_RECV, 0,
-                                0, UCP_DATATYPE_CONTIG, &mem_info, 1);
+                                UCP_PROTO_SELECT_OP_FLAG_RMA_RNDV,
+                                UCP_DATATYPE_CONTIG, &mem_info, 1);
 
     proto_select = ucp_proto_select_get(worker, init_params->ep_cfg_index,
                                         init_params->rkey_cfg_index,

@@ -26,6 +26,20 @@
     (UCS_BIT(UCP_OP_ID_RNDV_SEND) | UCS_BIT(UCP_OP_ID_RNDV_RECV))
 
 
+static UCS_F_ALWAYS_INLINE uint8_t
+ucp_proto_rndv_rts_op_flags(ucp_rndv_rts_opcode_t opcode)
+{
+    switch (opcode) {
+    case UCP_RNDV_RTS_AM:
+        return UCP_PROTO_SELECT_OP_FLAG_AM_RNDV;
+    case UCP_RNDV_RTS_RMA:
+        return UCP_PROTO_SELECT_OP_FLAG_RMA_RNDV;
+    default:
+        return 0;
+    }
+}
+
+
 /**
  * Rendezvous protocol which sends a control message to the remote peer, and not
  * actually transferring bulk data. The remote peer is expected to perform the
@@ -91,6 +105,9 @@ typedef struct {
 
     /* Which operation the remote peer is expected to perform */
     ucp_operation_id_t             remote_op_id;
+
+    /* Operation flags for the remote peer protocol selection */
+    uint8_t                        remote_op_flags;
 
     /* Lane to send control message */
     ucp_lane_index_t               lane;

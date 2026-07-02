@@ -231,7 +231,7 @@ static void ucp_proto_rndv_rtr_probe(const ucp_proto_init_params_t *init_params)
         .super.super         = *init_params,
         .super.latency       = 0,
         .super.overhead      = context->config.ext.proto_overhead_rndv_rtr,
-        .super.cfg_thresh    = ucp_proto_rndv_cfg_thresh(context,
+        .super.cfg_thresh    = ucp_proto_rndv_cfg_thresh(init_params,
                                UCS_BIT(UCP_RNDV_MODE_PUT_ZCOPY) |
                                UCS_BIT(UCP_RNDV_MODE_AM)),
         .super.cfg_priority  = 80,
@@ -449,7 +449,7 @@ ucp_proto_rndv_rtr_mtype_probe(const ucp_proto_init_params_t *init_params)
         .super.super         = *init_params,
         .super.latency       = 0,
         .super.overhead      = context->config.ext.proto_overhead_rndv_rtr,
-        .super.cfg_thresh    = ucp_proto_rndv_cfg_thresh(context,
+        .super.cfg_thresh    = ucp_proto_rndv_cfg_thresh(init_params,
                                UCS_BIT(UCP_RNDV_MODE_PUT_PIPELINE)),
         .super.cfg_priority  = 80,
         .super.min_length    = 1,

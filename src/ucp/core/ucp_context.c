@@ -384,6 +384,14 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "Use two stage pipeline rendezvous protocol for intra-node GPU to GPU transfers",
    ucs_offsetof(ucp_context_config_t, rndv_shm_ppln_enable), UCS_CONFIG_TYPE_BOOL},
 
+  {"RNDV_PIPELINE_SHM_FORCE", "n",
+   "Prefer the copy-to-attached host-staged path for intra-node\n"
+   "CUDA-to-CUDA rendezvous only when RNDV_SCHEME is auto and the\n"
+   "pipeline is enabled and available. Other rendezvous protocols remain\n"
+   "as fallback.",
+   ucs_offsetof(ucp_context_config_t, rndv_shm_ppln_force),
+   UCS_CONFIG_TYPE_BOOL},
+
   {"RNDV_PIPELINE_ERROR_HANDLING", "n",
    "Allow using error handling protocol in the rendezvous pipeline protocol\n"
    "even if invalidation workflow isn't supported",
