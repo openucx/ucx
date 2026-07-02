@@ -53,7 +53,8 @@ enum {
     UCP_WIREUP_MSG_REPLY_RECONFIG,
     UCP_WIREUP_MSG_LANES_ADDR_REQUEST,
     UCP_WIREUP_MSG_LANES_ADDR_REPLY,
-
+    UCP_WIREUP_MSG_QUERY_LANE_STATE,
+    UCP_WIREUP_MSG_LANE_STATE,
     UCP_WIREUP_MSG_LAST
 };
 
@@ -164,6 +165,16 @@ typedef struct {
 } ucp_wireup_select_info_t;
 
 
+typedef struct ucp_wireup_lane_state {
+    ucp_lane_map_t lane_map; /**< Lanes included in this message */
+    /* uint8_t token_lengths[] follow, one per lane in lane_map order.
+     * uint8_t tokens[] follow, each entry uses its matching token length. */
+} UCS_S_PACKED ucp_wireup_lane_state_t;
+
+
+#define UCP_WIREUP_LANE_STATE_MIN_VERSION 22
+
+
 ucs_status_t ucp_wireup_send_request(ucp_ep_h ep);
 
 ucs_status_t ucp_wireup_send_pre_request(ucp_ep_h ep);
@@ -194,8 +205,8 @@ ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
                        const ucp_lane_index_t *lanes2remote,
                        ucp_lane_map_t requested_lane_map,
                        ucp_lane_map_t provided_lane_map,
-                       ucp_wireup_msg_t *msg_hdr, void **address_p,
-                       size_t *address_length_p);
+                       ucp_wireup_msg_t *msg_hdr, void **payload_p,
+                       size_t *payload_length_p);
 
 int ucp_wireup_msg_ack_cb_pred(const ucs_callbackq_elem_t *elem, void *arg);
 
@@ -270,6 +281,26 @@ double ucp_wireup_iface_bw_distance(const ucp_worker_iface_t *wiface);
 
 int ucp_wireup_is_lane_connected(ucp_ep_h ep, ucp_lane_index_t lane,
                                  const ucp_address_entry_t *addr_entry);
+
+/**
+ * Send a @ref UCP_WIREUP_MSG_QUERY_LANE_STATE message. TX tokens are
+ * queried from the selected @a lane_map lanes and sent to the peer.
+ */
+ucs_status_t
+ucp_wireup_send_query_lane_state(ucp_ep_h ep, ucp_lane_map_t lane_map);
+
+unsigned ucp_wireup_lane_state_num_tokens(const ucp_wireup_lane_state_t *msg);
+
+const uint8_t *
+ucp_wireup_lane_state_token_lengths(const ucp_wireup_lane_state_t *lane_state);
+
+const void *
+ucp_wireup_lane_state_tokens(const ucp_wireup_lane_state_t *lane_state);
+
+ucs_status_t
+ucp_wireup_lane_state_validate(ucp_ep_h ep,
+                               const ucp_wireup_lane_state_t *lane_state,
+                               size_t length);
 
 static inline int ucp_wireup_lane_types_has_fast_path(ucp_lane_map_t lane_types)
 {

@@ -25,6 +25,8 @@
 
 #define UCP_MAX_IOV                16UL
 
+typedef struct ucp_ep_failover_ctx ucp_ep_failover_ctx_t;
+
 
 /* Endpoint flags type */
 #if ENABLE_DEBUG_DATA || UCS_ENABLE_ASSERT
@@ -563,6 +565,12 @@ typedef struct ucp_ep_ext {
      * Map of system devices that require a flush operation
      */
     ucp_sys_dev_map_t             flush_sys_dev_map;
+
+    struct {
+        ucp_lane_map_t        query_lane_map;
+        uint8_t               progress_scheduled;
+        ucp_ep_failover_ctx_t *ctx;
+    } failover;
 } ucp_ep_ext_t;
 
 

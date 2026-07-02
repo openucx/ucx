@@ -72,6 +72,7 @@
     _macro(ucp_am_rndv_proto) \
     _macro(ucp_stream_multi_bcopy_proto) \
     _macro(ucp_stream_multi_zcopy_proto) \
+    _macro(ucp_failover_replay_proto) \
     UCP_PROTO_AMO_FOR_EACH(_macro, post) \
     UCP_PROTO_AMO_FOR_EACH(_macro, fetch) \
     UCP_PROTO_AMO_FOR_EACH(_macro, cswap)
@@ -88,20 +89,23 @@ const ucp_proto_t *ucp_protocols[] = {
 };
 
 const char *ucp_operation_names[] = {
-    [UCP_OP_ID_TAG_SEND]       = "tag_send",
-    [UCP_OP_ID_TAG_SEND_SYNC]  = "tag_send_sync",
-    [UCP_OP_ID_AM_SEND]        = "am_send",
-    [UCP_OP_ID_AM_SEND_REPLY]  = "am_send_reply",
-    [UCP_OP_ID_STREAM_SEND]    = "stream",
-    [UCP_OP_ID_PUT]            = "put",
-    [UCP_OP_ID_GET]            = "get",
-    [UCP_OP_ID_AMO_POST]       = "amo_post",
-    [UCP_OP_ID_AMO_FETCH]      = "amo_fetch",
-    [UCP_OP_ID_AMO_CSWAP]      = "amo_cswap",
-    [UCP_OP_ID_RNDV_SEND]      = "rndv_send",
-    [UCP_OP_ID_RNDV_RECV]      = "rndv_recv",
-    [UCP_OP_ID_RNDV_RECV_DROP] = "rndv_recv_drop",
-    [UCP_OP_ID_LAST]           = NULL
+    [UCP_OP_ID_TAG_SEND]           = "tag_send",
+    [UCP_OP_ID_TAG_SEND_SYNC]      = "tag_send_sync",
+    [UCP_OP_ID_AM_SEND]            = "am_send",
+    [UCP_OP_ID_AM_SEND_REPLY]      = "am_send_reply",
+    [UCP_OP_ID_STREAM_SEND]        = "stream",
+    [UCP_OP_ID_PUT]                = "put",
+    [UCP_OP_ID_GET]                = "get",
+    [UCP_OP_ID_AMO_POST]           = "amo_post",
+    [UCP_OP_ID_AMO_FETCH]          = "amo_fetch",
+    [UCP_OP_ID_AMO_CSWAP]          = "amo_cswap",
+    [UCP_OP_ID_RNDV_SEND]          = "rndv_send",
+    [UCP_OP_ID_RNDV_RECV]          = "rndv_recv",
+    [UCP_OP_ID_RNDV_RECV_DROP]     = "rndv_recv_drop",
+    [UCP_OP_ID_FAILOVER_AM_BCOPY]  = "failover_am_bcopy",
+    [UCP_OP_ID_FAILOVER_PUT_SHORT] = "failover_put_short",
+    [UCP_OP_ID_FAILOVER_PUT_BCOPY] = "failover_put_bcopy",
+    [UCP_OP_ID_LAST]               = NULL
 };
 
 const char *ucp_operation_descs[] = {
@@ -119,7 +123,10 @@ const char *ucp_operation_descs[] = {
     [UCP_OP_ID_RNDV_SEND]      = "rendezvous data send",
     [UCP_OP_ID_RNDV_RECV]      = "rendezvous data fetch",
     [UCP_OP_ID_RNDV_RECV_DROP] = "rendezvous data drop",
-    [UCP_OP_ID_LAST]           = NULL
+    [UCP_OP_ID_FAILOVER_AM_BCOPY]  = "failover replay active message",
+    [UCP_OP_ID_FAILOVER_PUT_SHORT] = "failover replay short put",
+    [UCP_OP_ID_FAILOVER_PUT_BCOPY] = "failover replay buffered put",
+    [UCP_OP_ID_LAST]               = NULL
 };
 
 unsigned ucp_protocols_count(void)

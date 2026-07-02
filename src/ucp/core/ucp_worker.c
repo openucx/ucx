@@ -16,6 +16,7 @@
 #include "ucp_request.inl"
 
 #include <ucp/core/ucp_context.h>
+#include <ucp/core/ucp_ep_failover.h>
 #include <ucp/proto/proto_common.inl>
 #include <ucp/wireup/address.h>
 #include <ucp/wireup/wireup_cm.h>
@@ -464,6 +465,9 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
         uct_ep_pending_purge(uct_ep, ucp_destroyed_ep_pending_purge, ucp_ep);
         return UCS_OK;
     }
+
+    /* Defer UCT outstanding purge until extract runs on the real failed EP */
+    ucp_ep_failover_arm_lane(ucp_ep, lane, uct_ep);
 
     wireup_ep = ucp_wireup_ep(ucp_ep_get_lane(ucp_ep, lane));
     if ((wireup_ep == NULL) ||

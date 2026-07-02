@@ -15,6 +15,7 @@
 #include <ucp/dt/datatype_iter.inl>
 #include <ucp/proto/proto_init.h>
 #include <ucp/proto/proto_multi.inl>
+#include <ucp/wireup/wireup.h>
 
 
 static size_t ucp_proto_put_am_bcopy_pack(void *dest, void *arg)
@@ -114,6 +115,18 @@ ucp_proto_put_am_bcopy_probe(const ucp_proto_init_params_t *init_params)
         .middle.lane_type    = UCP_LANE_TYPE_AM,
         .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID
     };
+
+    if (init_params->ep_config_key->err_mode ==
+        UCP_ERR_HANDLING_MODE_FAILOVER) {
+        if (init_params->ep_config_key->dst_version <
+            UCP_WIREUP_LANE_STATE_MIN_VERSION) {
+            return;
+        }
+
+        params.super.flags              |= UCP_PROTO_COMMON_INIT_FLAG_FAILOVER;
+        params.first.tl_v2_cap_flags     = UCT_IFACE_FLAG_V2_QUERY_TOKEN;
+        params.middle.tl_v2_cap_flags    = UCT_IFACE_FLAG_V2_QUERY_TOKEN;
+    }
 
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT))) {
         return;
