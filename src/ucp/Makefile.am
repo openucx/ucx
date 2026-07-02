@@ -31,6 +31,7 @@ noinst_HEADERS = \
 	core/ucp_ep.h \
 	core/ucp_ep.inl \
 	core/ucp_ep_vfs.h \
+	core/ucp_ep_failover.h \
 	core/ucp_listener.h \
 	core/ucp_mm.h \
 	core/ucp_mm.inl \
@@ -111,6 +112,7 @@ libucp_la_SOURCES = \
 	core/ucp_am.c \
 	core/ucp_ep.c \
 	core/ucp_ep_vfs.c \
+	core/ucp_ep_failover.c \
 	core/ucp_listener.c \
 	core/ucp_mm.c \
 	core/ucp_proxy_ep.c \

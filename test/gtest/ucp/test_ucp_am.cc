@@ -2420,6 +2420,7 @@ public:
         EXPECT_EQ(total_msgs + num_duplicates, m_send_counter);
         EXPECT_EQ(total_msgs, m_recv_counter);
     }
+
 };
 
 UCS_TEST_P(test_ucp_am_psn, no_duplicates, "ZCOPY_THRESH=0", "RNDV_THRESH=inf", "PROTO_REQUEST_RESET=n")

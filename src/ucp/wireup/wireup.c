@@ -21,10 +21,13 @@
 #include <ucp/core/ucp_worker.h>
 #include <ucp/proto/proto_common.h>
 #include <ucs/sys/iovec.h>
+#include <ucs/sys/ptr_arith.h>
 #include <ucp/tag/eager.h>
 
 #include <ucp/core/ucp_request.inl>
 #include <ucp/proto/proto_am.inl>
+#include <ucp/core/ucp_ep_failover.h>
+#include <uct/api/v2/uct_v2.h>
 
 /*
  * Description of the protocol in UCX wiki:
@@ -71,14 +74,83 @@ const char* ucp_wireup_msg_str(uint8_t msg_type)
         return "EP_CHECK";
     case UCP_WIREUP_MSG_EP_REMOVED:
         return "EP_REMOVED";
+    case UCP_WIREUP_MSG_REPLY_RECONFIG:
+        return "REP_RECONFIG";
     case UCP_WIREUP_MSG_LANES_ADDR_REQUEST:
         return "LANES_ADDR_REQ";
     case UCP_WIREUP_MSG_LANES_ADDR_REPLY:
         return "LANES_ADDR_REP";
+    case UCP_WIREUP_MSG_QUERY_LANE_STATE:
+        return "QUERY_LANE_STATE";
+    case UCP_WIREUP_MSG_LANE_STATE:
+        return "LANE_STATE";
     default:
         return "<unknown>";
     }
 }
+
+unsigned
+ucp_wireup_lane_state_num_tokens(const ucp_wireup_lane_state_t *msg)
+{
+    return ucs_popcount(msg->lane_map);
+}
+
+
+const uint8_t *
+ucp_wireup_lane_state_token_lengths(const ucp_wireup_lane_state_t *lane_state)
+{
+    return UCS_PTR_BYTE_OFFSET(lane_state, sizeof(*lane_state));
+}
+
+
+const void *
+ucp_wireup_lane_state_tokens(const ucp_wireup_lane_state_t *lane_state)
+{
+    return UCS_PTR_BYTE_OFFSET(
+            lane_state,
+            sizeof(*lane_state) + ucp_wireup_lane_state_num_tokens(lane_state));
+}
+
+
+ucs_status_t
+ucp_wireup_lane_state_validate(ucp_ep_h ep,
+                               const ucp_wireup_lane_state_t *lane_state,
+                               size_t length)
+{
+    const uint8_t *token_lengths;
+    ucp_lane_map_t valid_lanes;
+    size_t token_offset;
+    unsigned num_tokens;
+    unsigned i;
+
+    if ((length < sizeof(*lane_state)) || (lane_state->lane_map == 0)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    valid_lanes = UCS_MASK(ucp_ep_num_lanes(ep));
+    if (lane_state->lane_map & ~valid_lanes) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    num_tokens = ucp_wireup_lane_state_num_tokens(lane_state);
+    if ((num_tokens > UCP_MAX_LANES) ||
+        (length < (sizeof(*lane_state) + num_tokens))) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    token_lengths = ucp_wireup_lane_state_token_lengths(lane_state);
+    token_offset  = sizeof(*lane_state) + num_tokens;
+    for (i = 0; i < num_tokens; ++i) {
+        if ((length - token_offset) < token_lengths[i]) {
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        token_offset += token_lengths[i];
+    }
+
+    return (length == token_offset) ? UCS_OK : UCS_ERR_INVALID_PARAM;
+}
+
 
 static ucp_lane_index_t ucp_wireup_get_msg_lane(ucp_ep_h ep, uint8_t msg_type)
 {
@@ -88,7 +160,9 @@ static ucp_lane_index_t ucp_wireup_get_msg_lane(ucp_ep_h ep, uint8_t msg_type)
 
     if ((msg_type == UCP_WIREUP_MSG_ACK) ||
         (msg_type == UCP_WIREUP_MSG_LANES_ADDR_REQUEST) ||
-        (msg_type == UCP_WIREUP_MSG_LANES_ADDR_REPLY)) {
+        (msg_type == UCP_WIREUP_MSG_LANES_ADDR_REPLY) ||
+        (msg_type == UCP_WIREUP_MSG_QUERY_LANE_STATE) ||
+        (msg_type == UCP_WIREUP_MSG_LANE_STATE)) {
         /* Post-failover, wireup_msg_lane may itself be failed - prefer the
          * re-selected operable AM lane. */
         lane          = ep_config->key.am_lane;
@@ -236,8 +310,8 @@ ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
                        const ucp_lane_index_t *lanes2remote,
                        ucp_lane_map_t requested_lane_map,
                        ucp_lane_map_t provided_lane_map,
-                       ucp_wireup_msg_t *msg_hdr, void **address_p,
-                       size_t *address_length_p)
+                       ucp_wireup_msg_t *msg_hdr, void **payload_p,
+                       size_t *payload_length_p)
 {
     ucp_context_h context = ep->worker->context;
     unsigned pack_flags   = ucp_worker_default_address_pack_flags(ep->worker) |
@@ -266,11 +340,16 @@ ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
         ucs_assert((requested_lane_map == 0) && (provided_lane_map == 0));
     }
 
+    if ((type == UCP_WIREUP_MSG_QUERY_LANE_STATE) ||
+        (type == UCP_WIREUP_MSG_LANE_STATE)) {
+        return UCS_OK;
+    }
+
     /* pack all addresses */
     status = ucp_address_pack(ep->worker, ep, tl_bitmap, pack_flags,
                               context->config.ext.worker_addr_version,
-                              lanes2remote, UINT_MAX, address_length_p,
-                              address_p);
+                              lanes2remote, UINT_MAX, payload_length_p,
+                              payload_p);
     if (status != UCS_OK) {
         ucs_error("failed to pack address: %s", ucs_status_string(status));
     }
@@ -330,11 +409,66 @@ err:
     return status;
 }
 
-static ucs_status_t
-ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type, const ucp_tl_bitmap_t *tl_bitmap,
-                    const ucp_lane_index_t *lanes2remote)
+static ucs_status_t ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type,
+                                        const ucp_tl_bitmap_t *tl_bitmap,
+                                        const ucp_lane_index_t *lanes2remote,
+                                        void *payload, size_t payload_length)
 {
-    return ucp_wireup_msg_send_full(ep, type, tl_bitmap, lanes2remote, 0, 0);
+    ucp_request_t *req;
+    ucs_status_t status;
+
+    ucs_assert(ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL);
+
+    if (ep->flags & UCP_EP_FLAG_FAILED) {
+        ucs_debug("ep %p: not sending WIREUP message (%u), because ep failed",
+                  ep, type);
+        return UCS_ERR_CONNECTION_RESET;
+    }
+
+#if UCS_ENABLE_ASSERT
+    if ((type == UCP_WIREUP_MSG_QUERY_LANE_STATE) ||
+        (type == UCP_WIREUP_MSG_LANE_STATE)) {
+        const ucp_wireup_lane_state_t *lane_state = payload;
+
+        ucs_assert(lane_state != NULL);
+        ucs_assert(ep->flags & UCP_EP_FLAG_REMOTE_ID);
+        ucs_assert(lane_state->lane_map != 0);
+    }
+#endif
+
+    /* We cannot allocate from memory pool because it's not thread safe
+     * and this function may be called from any thread
+     */
+    req = ucp_request_mem_alloc("wireup_msg_req");
+    if (req == NULL) {
+        ucs_error("failed to allocate request for sending WIREUP message");
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
+    }
+
+    req->flags         = 0;
+    req->send.ep       = ep;
+    req->send.uct.func = ucp_wireup_msg_progress;
+    req->send.datatype = ucp_dt_make_contig(1);
+    ucp_request_send_state_init(req, ucp_dt_make_contig(1), 0);
+    req->send.buffer   = payload;
+    req->send.length   = payload_length;
+
+    status = ucp_wireup_msg_prepare(ep, type, tl_bitmap, lanes2remote, 0, 0,
+                                    &req->send.wireup.msg_hdr,
+                                    &req->send.buffer, &req->send.length);
+    if (status != UCS_OK) {
+        ucp_request_mem_free(req);
+        goto err;
+    }
+
+    ucp_request_send(req);
+    /* coverity[leaked_storage] */
+    return UCS_OK;
+
+err:
+    ucp_ep_set_lanes_failed_schedule(ep, 0, status);
+    return status;
 }
 
 static ucp_tl_bitmap_t
@@ -795,7 +929,7 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
         ucp_wireup_msg_send(ep,
                             am_need_flush ? UCP_WIREUP_MSG_REPLY_RECONFIG :
                                             UCP_WIREUP_MSG_REPLY,
-                            &tl_bitmap, lanes2remote);
+                            &tl_bitmap, lanes2remote, NULL, 0);
     }
 
     return;
@@ -813,7 +947,7 @@ static unsigned ucp_wireup_send_msg_ack(void *arg)
     ucs_trace("ep %p: sending wireup ack", ep);
 
     status = ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_ACK, &ucp_tl_bitmap_min,
-                                 NULL);
+                                 NULL, NULL, 0);
     return (status == UCS_OK);
 }
 
@@ -941,7 +1075,7 @@ ucp_wireup_send_ep_removed(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
 
     ucp_ep_update_remote_id(reply_ep, msg->src_ep_id);
     status = ucp_wireup_msg_send(reply_ep, UCP_WIREUP_MSG_EP_REMOVED,
-                                 &ucp_tl_bitmap_min, NULL);
+                                 &ucp_tl_bitmap_min, NULL, NULL, 0);
     if (status != UCS_OK) {
         goto out_cleanup_lanes;
     }
@@ -1044,6 +1178,329 @@ ucp_wireup_process_lanes_addr_reply(
 
 /* -------------------------------------------------------------------------- */
 
+static ucs_status_t
+ucp_wireup_lane_query_tx_tokens(ucp_ep_h ep, ucp_lane_map_t lane_map,
+                                ucp_wireup_lane_state_t **lane_state_p,
+                                size_t *payload_size_p)
+{
+    ucp_lane_map_t failover_lanes = 0;
+    unsigned token_index         = 0;
+    size_t token_offset          = 0;
+    size_t payload_size          = sizeof(ucp_wireup_lane_state_t);
+    uint8_t token_lengths[UCP_MAX_LANES];
+    ucp_wireup_lane_state_t *lane_state;
+    ucp_rsc_index_t rsc_index;
+    ucp_worker_iface_t *wiface;
+    ucp_lane_index_t lane;
+    uct_iface_attr_v2_t attr;
+    uct_ep_attr_t ep_attr;
+    uct_ep_h uct_ep;
+    void *tokens;
+    ucs_status_t status;
+
+    ucs_for_each_bit(lane, lane_map) {
+        rsc_index = ucp_ep_get_rsc_index(ep, lane);
+        if (rsc_index == UCP_NULL_RESOURCE) {
+            ucs_trace("ep %p: lane %u: skip tx token query, no resource", ep,
+                      lane);
+            continue;
+        }
+
+        wiface          = ucp_worker_iface(ep->worker, rsc_index);
+        attr.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS |
+                          UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH;
+        status          = uct_iface_query_v2(wiface->iface, &attr);
+        if ((status != UCS_OK) ||
+            !(attr.cap.flags & UCT_IFACE_FLAG_V2_QUERY_TOKEN) ||
+            (attr.tx_token_length == 0) ||
+            (attr.tx_token_length > UINT8_MAX)) {
+            ucs_trace("ep %p: lane %u: skip tx token query, status %s "
+                      "cap_flags 0x%" PRIx64 " tx_token_length %zu",
+                      ep, lane, ucs_status_string(status),
+                      (status == UCS_OK) ? attr.cap.flags : 0,
+                      (status == UCS_OK) ? attr.tx_token_length : 0);
+            continue;
+        }
+
+        token_lengths[token_index++] = (uint8_t)attr.tx_token_length;
+        payload_size                += attr.tx_token_length + sizeof(uint8_t);
+        failover_lanes               |= UCS_BIT(lane);
+    }
+
+    if (failover_lanes == 0) {
+        return UCS_ERR_UNREACHABLE;
+    }
+
+    lane_state = ucs_malloc(payload_size, "wireup_lane_state");
+    if (lane_state == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    lane_state->lane_map = failover_lanes;
+    memcpy((void*)ucp_wireup_lane_state_token_lengths(lane_state),
+           token_lengths, token_index * sizeof(*token_lengths));
+
+    tokens      = (void*)ucp_wireup_lane_state_tokens(lane_state);
+    token_index = 0;
+    ucs_for_each_bit(lane, failover_lanes) {
+        uct_ep = ucp_ep_failover_get_uct_ep(ep, lane);
+        if (uct_ep == NULL) {
+            ucs_trace("ep %p: lane %u: skip tx token query, not connected", ep,
+                      lane);
+            status = UCS_ERR_UNREACHABLE;
+            goto err_free;
+        }
+
+        ep_attr.field_mask = UCT_EP_ATTR_FIELD_TX_TOKEN;
+        ep_attr.tx_token   = UCS_PTR_BYTE_OFFSET(tokens, token_offset);
+        status             = uct_ep_query(uct_ep, &ep_attr);
+        if (status != UCS_OK) {
+            ucs_debug("ep %p: lane %u: tx token query failed: %s", ep, lane,
+                      ucs_status_string(status));
+            goto err_free;
+        }
+
+        token_offset += token_lengths[token_index++];
+    }
+
+    *lane_state_p   = lane_state;
+    *payload_size_p = payload_size;
+    return UCS_OK;
+
+err_free:
+    ucs_free(lane_state);
+    return status;
+}
+
+static ucs_status_t ucp_wireup_lane_query_rx_tokens(
+        ucp_ep_h ep, const ucp_wireup_lane_state_t *query, size_t length,
+        ucp_wireup_lane_state_t **lane_state_p, size_t *payload_size_p)
+{
+    unsigned token_index   = 0;
+    size_t rx_token_offset = 0;
+    size_t tx_token_offset = 0;
+    size_t payload_size    = sizeof(ucp_wireup_lane_state_t);
+    uint8_t token_lengths[UCP_MAX_LANES];
+    ucp_wireup_lane_state_t *lane_state;
+    const uint8_t *tx_token_lengths;
+    const void *tx_tokens;
+    ucp_rsc_index_t rsc_index;
+    ucp_worker_iface_t *wiface;
+    ucp_lane_index_t lane;
+    uct_iface_attr_v2_t attr;
+    unsigned num_tokens;
+    ucs_status_t status;
+
+    num_tokens       = ucp_wireup_lane_state_num_tokens(query);
+    tx_token_lengths = ucp_wireup_lane_state_token_lengths(query);
+    tx_tokens        = ucp_wireup_lane_state_tokens(query);
+
+    /* collect rx token lengths */
+    ucs_for_each_bit(lane, query->lane_map) {
+        if (length < (sizeof(*query) + num_tokens + tx_token_offset +
+                      tx_token_lengths[token_index])) {
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        rsc_index = ucp_ep_get_rsc_index(ep, lane);
+        if (rsc_index == UCP_NULL_RESOURCE) {
+            ucs_trace("ep %p: lane %u: skip rx token query, no resource", ep,
+                      lane);
+            tx_token_offset             += tx_token_lengths[token_index];
+            token_lengths[token_index++] = 0;
+            payload_size                += sizeof(uint8_t);
+            continue;
+        }
+
+        wiface          = ucp_worker_iface(ep->worker, rsc_index);
+        attr.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS |
+                          UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH |
+                          UCT_IFACE_ATTR_FIELD_TX_TOKEN;
+        attr.tx_token   = UCS_PTR_BYTE_OFFSET(tx_tokens, tx_token_offset);
+        status          = uct_iface_query_v2(wiface->iface, &attr);
+        if ((status != UCS_OK) ||
+            !(attr.cap.flags & UCT_IFACE_FLAG_V2_QUERY_TOKEN) ||
+            (attr.rx_token_length == 0)) {
+            ucs_trace("ep %p: lane %u: skip rx token query, status %s "
+                      "cap_flags 0x%" PRIx64 " rx_token_length %zu",
+                      ep, lane, ucs_status_string(status),
+                      (status == UCS_OK) ? attr.cap.flags : 0,
+                      (status == UCS_OK) ? attr.rx_token_length : 0);
+            tx_token_offset             += tx_token_lengths[token_index];
+            token_lengths[token_index++] = 0;
+            payload_size                += sizeof(uint8_t);
+            continue;
+        }
+
+        ucs_assertv_always(attr.rx_token_length <= UINT8_MAX,
+                           "rx_token_length=%zu", attr.rx_token_length);
+        token_lengths[token_index++] = (uint8_t)attr.rx_token_length;
+        payload_size                += attr.rx_token_length + sizeof(uint8_t);
+        tx_token_offset             += tx_token_lengths[token_index - 1];
+    }
+
+    lane_state = ucs_malloc(payload_size, "wireup_lane_state");
+    if (lane_state == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    lane_state->lane_map = query->lane_map;
+    memcpy((void*)ucp_wireup_lane_state_token_lengths(lane_state),
+           token_lengths, token_index * sizeof(uint8_t));
+
+    token_index     = 0;
+    tx_token_offset = 0;
+    ucs_for_each_bit(lane, query->lane_map) {
+        if (token_lengths[token_index] == 0) {
+            tx_token_offset += tx_token_lengths[token_index];
+            ++token_index;
+            continue;
+        }
+
+        wiface = ucp_worker_iface(ep->worker, ucp_ep_get_rsc_index(ep, lane));
+        attr.field_mask = UCT_IFACE_ATTR_FIELD_TX_TOKEN |
+                          UCT_IFACE_ATTR_FIELD_RX_TOKEN;
+        attr.tx_token   = UCS_PTR_BYTE_OFFSET(tx_tokens, tx_token_offset);
+        attr.rx_token   = UCS_PTR_BYTE_OFFSET(ucp_wireup_lane_state_tokens(
+                                                    lane_state),
+                                              rx_token_offset);
+        status          = uct_iface_query_v2(wiface->iface, &attr);
+        if (status != UCS_OK) {
+            ucs_debug("ep %p: lane %u: rx token query failed: %s", ep, lane,
+                      ucs_status_string(status));
+            goto err_free;
+        }
+
+        tx_token_offset += tx_token_lengths[token_index];
+        rx_token_offset += token_lengths[token_index];
+        ++token_index;
+    }
+
+    *lane_state_p   = lane_state;
+    *payload_size_p = payload_size;
+    return UCS_OK;
+
+err_free:
+    ucs_free(lane_state);
+    return status;
+}
+
+ucs_status_t
+ucp_wireup_send_query_lane_state(ucp_ep_h ep, ucp_lane_map_t lane_map)
+{
+    ucp_wireup_lane_state_t *lane_state;
+    size_t payload_size;
+    ucs_status_t status;
+
+    if (lane_map == 0) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (ucp_ep_config(ep)->key.dst_version <
+        UCP_WIREUP_LANE_STATE_MIN_VERSION) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    status = ucp_wireup_lane_query_tx_tokens(ep, lane_map, &lane_state,
+                                             &payload_size);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_QUERY_LANE_STATE, NULL,
+                                 NULL, lane_state, payload_size);
+    if (status != UCS_OK) {
+        ucs_free(lane_state);
+    }
+
+    return status;
+}
+
+static UCS_F_NOINLINE void
+ucp_wireup_process_query_lane_state(ucp_ep_h ep, const ucp_wireup_msg_t *msg,
+                                    const void *data, size_t length)
+{
+    ucp_lane_map_t lane_map = 0;
+    const ucp_wireup_lane_state_t *query;
+    ucp_wireup_lane_state_t *reply;
+    size_t reply_size;
+    ucs_status_t status;
+
+    UCP_WIREUP_MSG_CHECK(msg, ep, UCP_WIREUP_MSG_QUERY_LANE_STATE);
+
+    query  = data;
+    status = ucp_wireup_lane_state_validate(ep, query, length);
+    if (status != UCS_OK) {
+        ucs_error("ep %p: invalid query_lane_state payload length %zu "
+                  "lane_map 0x%lx",
+                  ep, length, (length >= sizeof(*query)) ? query->lane_map : 0);
+        goto err;
+    }
+    lane_map = query->lane_map;
+
+    ucs_trace("ep %p: got wireup query_lane_state src_ep_id 0x%" PRIx64
+              " lane_map 0x%lx",
+              ep, msg->src_ep_id, lane_map);
+
+    status = ucp_wireup_lane_query_rx_tokens(ep, query, length, &reply,
+                                             &reply_size);
+    if (status != UCS_OK) {
+        ucs_debug("ep %p: failed to query rx tokens: %s", ep,
+                  ucs_status_string(status));
+        goto err;
+    }
+
+    status = ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_LANE_STATE, NULL, NULL,
+                                 reply, reply_size);
+    if (status != UCS_OK) {
+        ucs_debug("ep %p: failed to send lane_state: %s", ep,
+                  ucs_status_string(status));
+        ucs_free(reply);
+        goto err;
+    }
+    return;
+
+err:
+    ucp_ep_set_lanes_failed_schedule(ep, lane_map, status);
+}
+
+static UCS_F_NOINLINE void
+ucp_wireup_process_lane_state(ucp_ep_h ep, const ucp_wireup_msg_t *msg,
+                              const void *data, size_t length)
+{
+    ucp_lane_map_t lane_map = 0;
+    const ucp_wireup_lane_state_t *lane_state;
+    ucs_status_t status;
+
+    UCP_WIREUP_MSG_CHECK(msg, ep, UCP_WIREUP_MSG_LANE_STATE);
+
+    lane_state = data;
+    status     = ucp_wireup_lane_state_validate(ep, lane_state, length);
+    if (status != UCS_OK) {
+        ucs_error("ep %p: invalid lane_state payload length %zu lane_map 0x%lx",
+                  ep, length,
+                  (length >= sizeof(*lane_state)) ? lane_state->lane_map : 0);
+        goto err;
+    }
+    lane_map = lane_state->lane_map;
+
+    ucs_trace("ep %p: got wireup lane_state src_ep_id 0x%" PRIx64
+              " lane_map 0x%lx",
+              ep, msg->src_ep_id, lane_map);
+
+    status = ucp_ep_failover_on_lane_state(ep, lane_state);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    return;
+
+err:
+    ucs_debug("ep %p: failed to process lane_state: %s", ep,
+              ucs_status_string(status));
+    ucp_ep_set_lanes_failed_schedule(ep, lane_map, status);
+}
+
 static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
                                            size_t length, unsigned flags)
 {
@@ -1068,6 +1525,19 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
              * EP_CHECK message (e.g. can avoid remote address unpacking) */
             goto out;
         }
+    }
+
+    if (msg->type == UCP_WIREUP_MSG_QUERY_LANE_STATE) {
+        ucp_wireup_process_query_lane_state(ep, msg,
+                                            UCS_PTR_BYTE_OFFSET(data,
+                                                                sizeof(*msg)),
+                                            length - sizeof(*msg));
+        goto out;
+    } else if (msg->type == UCP_WIREUP_MSG_LANE_STATE) {
+        ucp_wireup_process_lane_state(ep, msg,
+                                      UCS_PTR_BYTE_OFFSET(data, sizeof(*msg)),
+                                      length - sizeof(*msg));
+        goto out;
     }
 
     address_ptr = msg + 1;
@@ -2135,7 +2605,8 @@ ucs_status_t ucp_wireup_send_request(ucp_ep_h ep)
     }
 
     ucs_debug("ep %p: send wireup request (flags=0x%x)", ep, ep->flags);
-    status = ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_REQUEST, &tl_bitmap, NULL);
+    status = ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_REQUEST, &tl_bitmap, NULL,
+                                 NULL, 0);
 
     ucp_ep_update_flags(ep, UCP_EP_FLAG_CONNECT_REQ_QUEUED, 0);
 
@@ -2151,7 +2622,7 @@ ucs_status_t ucp_wireup_send_pre_request(ucp_ep_h ep)
 
     ucs_debug("ep %p: send wireup pre-request (flags=0x%x)", ep, ep->flags);
     status = ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_PRE_REQUEST,
-                                 &ucp_tl_bitmap_max, NULL);
+                                 &ucp_tl_bitmap_max, NULL, NULL, 0);
 
     ucp_ep_update_flags(ep, UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED, 0);
 
