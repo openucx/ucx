@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -43,6 +43,39 @@ typedef struct {
 } uct_cuda_ipc_iface_config_t;
 
 
+#if CUDA_VERSION >= 13000
+typedef struct {
+    pid_t        pid;
+    ucs_sys_ns_t pid_ns;
+    uintptr_t    d_bptr;
+    void         *mapped_addr;
+} uct_cuda_ipc_sgl_entry_t;
+
+
+typedef struct {
+    size_t                   count;
+    uct_cuda_ipc_sgl_entry_t *entries;
+} uct_cuda_ipc_sgl_mapping_t;
+
+
+static UCS_F_ALWAYS_INLINE void
+uct_cuda_ipc_sgl_unmap(uct_cuda_ipc_sgl_mapping_t *mapping,
+                       size_t count, CUdevice cuda_device,
+                       int enable_cache)
+{
+    size_t i;
+
+    for (i = 0; i < count; i++) {
+        uct_cuda_ipc_unmap_memhandle(mapping->entries[i].pid,
+                                     mapping->entries[i].pid_ns,
+                                     mapping->entries[i].d_bptr,
+                                     mapping->entries[i].mapped_addr,
+                                     cuda_device, enable_cache);
+    }
+}
+#endif
+
+
 typedef struct {
     uct_cuda_event_desc_t super;
     void                  *mapped_addr;
@@ -51,6 +84,9 @@ typedef struct {
     pid_t                 pid;
     ucs_sys_ns_t          pid_ns;
     CUdevice              cuda_device;
+#if CUDA_VERSION >= 13000
+    uct_cuda_ipc_sgl_mapping_t *sgl_mapping;
+#endif
 } uct_cuda_ipc_event_desc_t;
 
 
