@@ -231,6 +231,8 @@ AS_IF([test "x$cuda_checked" != "xyes"],
                         [AC_MSG_NOTICE([nvmlDeviceGetGpuFabricInfoV function not found in libnvidia-ml. MNNVL support will be disabled.])],
                         [[#include <nvml.h>]])
 
+         AC_CHECK_DECLS([NVML_FI_DEV_C2C_LINK_COUNT], [], [],
+                        [[#include <nvml.h>]])
 
          # Check for cuda static library
          have_cuda_static="no"

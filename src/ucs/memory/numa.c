@@ -17,6 +17,7 @@
 #include <ucs/sys/sys.h>
 #include <ucs/type/spinlock.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <sched.h>
 #include <dirent.h>
 
@@ -38,6 +39,9 @@ typedef struct {
 typedef struct {
     ucs_spinlock_t         lock;
     khash_t(numa_distance) numa_distance_hash;
+    /* Column index in node<N>/distance to actual NUMA node id */
+    ucs_numa_node_t        distance_nodes[UCS_NUMA_NODE_MAX];
+    unsigned               num_distance_nodes;
 } ucs_numa_global_ctx_t;
 
 static ucs_numa_global_ctx_t ucs_numa_global_ctx;
@@ -92,6 +96,45 @@ static int ucs_numa_get_max_dirent(const char *path, const char *prefix,
     return ctx.max_index;
 }
 
+static FILE *
+ucs_numa_open_distance_file(ucs_numa_node_t node)
+{
+    return ucs_open_file("r", UCS_LOG_LEVEL_DEBUG,
+                         UCS_NUMA_NODE_DISTANCE_PATH, node);
+}
+
+static void ucs_numa_init_distance_nodes()
+{
+    unsigned num_nodes = ucs_numa_num_configured_nodes();
+    FILE *distance_fp;
+    unsigned node;
+
+    if (ucs_numa_global_ctx.num_distance_nodes != 0) {
+        return;
+    }
+
+    /*
+     * Only online NUMA nodes are listed in order in node<N>/distance, so
+     * use readable distance files to build the translation table between node
+     * ids and columns.
+     */
+    for (node = 0; node < num_nodes; ++node) {
+        distance_fp = ucs_numa_open_distance_file(node);
+        if (distance_fp == NULL) {
+            continue;
+        }
+
+        fclose(distance_fp);
+        ucs_numa_global_ctx.distance_nodes[
+                ucs_numa_global_ctx.num_distance_nodes++] = node;
+    }
+
+    if (ucs_numa_global_ctx.num_distance_nodes == 0) {
+        ucs_numa_global_ctx.distance_nodes[0]  = UCS_NUMA_NODE_DEFAULT;
+        ucs_numa_global_ctx.num_distance_nodes = 1;
+    }
+}
+
 unsigned ucs_numa_num_configured_nodes()
 {
     static unsigned num_nodes = 0;
@@ -114,7 +157,7 @@ unsigned ucs_numa_num_configured_cpus()
 
     if (num_cpus == 0) {
         max_cpu  = ucs_numa_get_max_dirent(UCS_SYS_FS_CPUS_PATH, "cpu",
-                                           __CPU_SETSIZE, 0);
+                                           UCS_CPU_SETSIZE, 0);
         num_cpus = max_cpu + 1;
     }
 
@@ -124,12 +167,13 @@ unsigned ucs_numa_num_configured_cpus()
 ucs_numa_node_t ucs_numa_node_of_cpu(int cpu)
 {
     /* Used for caching to improve performance */
-    static ucs_numa_node_t cpu_numa_node[__CPU_SETSIZE] = {0};
+    static ucs_numa_node_t cpu_numa_node[UCS_CPU_SETSIZE] = {0};
     char *core_dir_path;
     ucs_numa_node_t node;
     ucs_status_t status;
 
-    ucs_assert(cpu < __CPU_SETSIZE);
+    UCS_STATIC_ASSERT(UCS_CPU_SETSIZE >= __CPU_SETSIZE);
+    ucs_assert(cpu < UCS_CPU_SETSIZE);
 
     if (cpu_numa_node[cpu] == 0) {
         status = ucs_string_alloc_formatted_path(&core_dir_path,
@@ -183,20 +227,23 @@ static ucs_numa_distance_t
 ucs_numa_node_parse_distances(ucs_numa_node_t source, ucs_numa_node_t dest)
 {
     ucs_numa_distance_t distance_to_dest = UCS_NUMA_MIN_DISTANCE;
-    ucs_numa_node_t node                 = 0;
+    int dest_found                       = 0;
     ucs_numa_distance_t distance;
+    unsigned column;
+    ucs_numa_node_t node;
     int kh_put_status;
     khiter_t hash_it;
     FILE *distance_fp;
 
-    distance_fp = ucs_open_file("r", UCS_LOG_LEVEL_DEBUG,
-                                UCS_NUMA_NODE_DISTANCE_PATH, source);
+    ucs_numa_init_distance_nodes();
+    distance_fp = ucs_numa_open_distance_file(source);
     if (distance_fp == NULL) {
         return distance_to_dest;
     }
 
+    column = 0;
     while ((fscanf(distance_fp, "%u", &distance) > 0) &&
-           (node < UCS_NUMA_NODE_MAX)) {
+           (column < ucs_numa_global_ctx.num_distance_nodes)) {
         if (distance < UCS_NUMA_MIN_DISTANCE) {
             ucs_debug("node %u parsed NUMA distance %u is "
                       "smaller than the lower bound (%u)",
@@ -204,7 +251,9 @@ ucs_numa_node_parse_distances(ucs_numa_node_t source, ucs_numa_node_t dest)
             distance = UCS_NUMA_MIN_DISTANCE;
         }
 
+        node = ucs_numa_global_ctx.distance_nodes[column];
         if (node == dest) {
+            dest_found       = 1;
             distance_to_dest = distance;
         }
 
@@ -217,12 +266,12 @@ ucs_numa_node_parse_distances(ucs_numa_node_t source, ucs_numa_node_t dest)
                      hash_it) = distance;
         }
 
-        node++;
+        column++;
     }
 
-    if (node >= UCS_NUMA_NODE_MAX) {
-        ucs_diag("number of nodes in the system is out of range (%u)",
-                 UCS_NUMA_NODE_MAX);
+    if (!dest_found) {
+        ucs_debug("node %u NUMA distance has no column for node %u",
+                  source, dest);
     }
 
     fclose(distance_fp);
@@ -257,10 +306,12 @@ void ucs_numa_init()
 {
     ucs_spinlock_init(&ucs_numa_global_ctx.lock, 0);
     kh_init_inplace(numa_distance, &ucs_numa_global_ctx.numa_distance_hash);
+    ucs_numa_global_ctx.num_distance_nodes = 0;
 }
 
 void ucs_numa_cleanup()
 {
+    ucs_numa_global_ctx.num_distance_nodes = 0;
     kh_destroy_inplace(numa_distance, &ucs_numa_global_ctx.numa_distance_hash);
     ucs_spinlock_destroy(&ucs_numa_global_ctx.lock);
 }

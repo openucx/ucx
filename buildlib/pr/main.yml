@@ -78,6 +78,18 @@ resources:
     - container: ubuntu2404_doca31_gpunetio
       image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/ubuntu24.04/builder:doca-3.1.0-gpunetio
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
+    - container: ubuntu2604
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/ubuntu26.04/builder:mofed-26.04-0.7.6.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: ubuntu2604_aarch64
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/aarch64/ubuntu26.04/builder:mofed-26.04-0.7.6.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: tencentos44
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/tencentos4.4/builder:mofed-26.04-0.7.6.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: tencentos44_aarch64
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/aarch64/tencentos4.4/builder:mofed-26.04-0.7.6.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: debian113
       image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/debian11.3/builder:mofed-5.8-3.0.7.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
@@ -255,13 +267,18 @@ stages:
     jobs:
     - template: codestyle.yml
 
+  - stage: Basic_compile
+    dependsOn: []
+    jobs:
+    - template: basic_compile.yml
+
   - stage: Static_check
-    dependsOn: [Codestyle]
+    dependsOn: [Basic_compile]
     jobs:
     - template: static_checks.yml
 
   - stage: Build
-    dependsOn: [Static_check]
+    dependsOn: [Basic_compile]
     jobs:
       - template: build_job.yml
         parameters:
@@ -272,13 +289,20 @@ stages:
 
       - template: build_job.yml
         parameters:
+          name: build_icc_pgi
+          demands:
+            - ucx_docker
+          displayName: Build with ICC and PGI on CentOS7 x86_64
+
+      - template: build_job.yml
+        parameters:
           name: build_aarch64
           demands:
             - ucx_arm64
           displayName: Build on aarch64
 
   - stage: ucx_perftest_mad_rte
-    dependsOn: [Static_check]
+    dependsOn: [Basic_compile]
     displayName: ucx_perftest over MAD RTE
     lockBehavior: sequential
     variables:
@@ -287,7 +311,7 @@ stages:
     - template: mad_tests.yml
 
   - stage: WireCompat
-    dependsOn: [Static_check]
+    dependsOn: [Basic_compile]
     jobs:
     - template: wire_compat.yml
       parameters:
@@ -326,7 +350,7 @@ stages:
           container: coverity_rh7
 
   - stage: Tests
-    dependsOn: [Static_check]
+    dependsOn: [Basic_compile]
     jobs:
     - template: tests.yml
       parameters:
@@ -357,7 +381,7 @@ stages:
         test_perf: 0
 
   - stage: EFA_Tests
-    dependsOn: [Static_check]
+    dependsOn: [Basic_compile]
     jobs:
     - template: efa.yml
       parameters:
@@ -365,21 +389,25 @@ stages:
         demands: ucx_new -equals yes
 
   - stage: Namespace_Tests
-    dependsOn: [Static_check]
+    dependsOn: [Basic_compile]
     jobs:
     - template: namespace_tests.yml
       parameters:
         name: new_namespace
         demands: ucx_new -equals yes
+    - template: namespace_tests.yml
+      parameters:
+        name: gpu_namespace
+        demands: ucx_gpu -equals yes
 
   - stage: io_demo
-    dependsOn: [Static_check]
+    dependsOn: [Basic_compile]
     condition: false
     jobs:
     - template: io_demo/io-demo.yml
 
   - stage: jucx
-    dependsOn: [Static_check]
+    dependsOn: [Basic_compile]
     jobs:
       - template: ../jucx/jucx-test.yml
         parameters:
@@ -393,7 +421,7 @@ stages:
           demands: ucx-arm64
 
   - stage: go
-    dependsOn: [Static_check]
+    dependsOn: [Basic_compile]
     jobs:
       - template: go/go-test.yml
         parameters:
@@ -405,7 +433,7 @@ stages:
             demands: ucx_gpu -equals yes
 
   - stage: Build_Static
-    dependsOn: [Static_check]
+    dependsOn: [Basic_compile]
     jobs:
       - job: build_source
         pool:
@@ -451,9 +479,35 @@ stages:
 
 
   - stage: Cuda
-    dependsOn: [Static_check]
+    dependsOn: [Basic_compile]
     jobs:
       - template: cuda/cuda.yml
+      - job: soname_suffix_cuda_ib
+        displayName: SONAME suffix and deepbind on CUDA/IB
+        pool:
+          name: MLNX
+          demands:
+            - ucx_gpu_test -equals yes
+        container: ubuntu2404_doca31_gpunetio
+        workspace:
+          clean: all
+        timeoutInMinutes: 120
+
+        steps:
+          - checkout: self
+            clean: true
+            fetchDepth: 100
+            retryCountOnTaskFailure: 5
+
+          - bash: |
+              ./buildlib/tools/builds.sh
+            displayName: Build SONAME suffix with CUDA/IB
+            env:
+              BUILD_ID: "$(Build.BuildId)-$(Build.BuildNumber)"
+              build_mode: soname_suffix
+              soname_suffix_check_hw: yes
+              ucx_gpu: yes
+              EXECUTOR_NUMBER: $(AZP_AGENT_ID)
 
 
   - stage: AddressSanitizer
@@ -489,6 +543,6 @@ stages:
 
 
 #  - stage: Cuda_compatible
-#    dependsOn: [Static_check]
+#    dependsOn: [Basic_compile]
 #    jobs:
 #    - template: cuda/cuda_compatible.yml

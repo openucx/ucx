@@ -10,7 +10,7 @@ JDK_MODULE="dev/jdk"
 MVN_MODULE="dev/mvn"
 XPMEM_MODULE="dev/xpmem-90a95a4"
 PGI_MODULE="hpc-sdk/nvhpc/21.2"
-GCC_MODULE="dev/gcc-10.1.0"
+GCC_MODULE="${GCC_MODULE:-dev/gcc-10.1.0}"
 ARM_MODULE="arm-compiler/armcc-22.1"
 INTEL_MODULE="intel/ics-19.1.1"
 FUSE3_MODULE="dev/fuse-3.10.5"
@@ -298,7 +298,7 @@ check_machine() {
 	lscpu
 	uname -a
 	free -m
-	ofed_info -s || true
+	apt info doca-networking doca-devel 2>/dev/null || yum info doca-networking doca-devel 2>/dev/null || true
 	ibv_devinfo -v || true
 	show_gids || true
 }

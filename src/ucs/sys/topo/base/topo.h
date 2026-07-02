@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -10,6 +10,7 @@
 #include <ucs/type/status.h>
 #include <ucs/datastruct/list.h>
 #include <ucs/memory/numa.h>
+#include <ucs/type/cpu_set.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -34,6 +35,10 @@ typedef struct ucs_sys_bus_id {
     uint8_t  slot;     /* range: 0 to 1f */
     uint8_t  function; /* range: 0 to 7 */
 } ucs_sys_bus_id_t;
+
+
+/* Packed bit representation of a PCI bus id */
+typedef int64_t ucs_bus_id_bit_rep_t;
 
 
 /**
@@ -63,6 +68,7 @@ typedef struct ucs_sys_dev_distance {
 
 
 extern const ucs_sys_dev_distance_t ucs_topo_default_distance;
+extern const ucs_sys_dev_distance_t ucs_topo_max_distance;
 
 
 /*
@@ -75,14 +81,75 @@ typedef ucs_status_t
                                 ucs_sys_dev_distance_t *distance);
 
 
-/* Global list of topology detection methods */
-extern ucs_list_link_t ucs_sys_topo_providers_list;
+/*
+ * Function pointer used to refer to specific implementations of
+ * ucs_topo_get_memory_distance function by topology modules. This function
+ * estimates the distance between the device and the system memory used by the
+ * current thread according to its CPU affinity. The function must have a
+ * fallback behavior.
+ */
+typedef void (*ucs_topo_get_memory_distance_func_t)(
+        ucs_sys_device_t device, ucs_sys_dev_distance_t *distance);
+
+
+/*
+ * Function pointer used to refer to specific implementations of
+ * ucs_topo_get_memory_distance_for_cpuset function by topology modules. This
+ * function estimates the distance between the device and the system memory
+ * represented by a CPU set. The function must have a fallback behavior.
+ */
+typedef void (*ucs_topo_get_memory_distance_for_cpuset_func_t)(
+        ucs_sys_device_t device, const ucs_cpu_set_t *cpuset,
+        ucs_sys_dev_distance_t *distance);
+
+
+/*
+ * Topology provider operations, implementing the topology API for a topology
+ * module.
+ */
+typedef struct ucs_sys_topo_ops {
+    /* Provider's ucs_topo_get_distance implementation */
+    ucs_topo_get_distance_func_t        get_distance;
+
+    /* Provider's ucs_topo_get_memory_distance implementation */
+    ucs_topo_get_memory_distance_func_t get_memory_distance;
+
+    /* Provider's ucs_topo_get_memory_distance_for_cpuset implementation */
+    ucs_topo_get_memory_distance_for_cpuset_func_t
+            get_memory_distance_for_cpuset;
+} ucs_sys_topo_ops_t;
 
 
 /**
  * Reset the internal singleton system topology provider.
  */
 void ucs_sys_topo_reset_provider(void);
+
+
+/**
+ * Push a topology provider that overrides the configuration-selected provider.
+ *
+ * The pushed provider takes precedence over the provider chosen by the
+ * TOPO_PRIO configuration until it is removed with
+ * @ref ucs_sys_topo_provider_pop. Pushes nest as a stack: the most recently
+ * pushed provider is the active one. Intended primarily for tests that need
+ * deterministic topology behavior.
+ *
+ * @param [in] ops  Topology operations. The contents are copied, so the
+ *                  pointer does not need to remain valid after the call.
+ *
+ * @return UCS_OK on success, or UCS_ERR_NO_MEMORY on allocation failure.
+ */
+ucs_status_t ucs_sys_topo_provider_push(const ucs_sys_topo_ops_t *ops);
+
+
+/**
+ * Pop the topology provider most recently pushed with
+ * @ref ucs_sys_topo_provider_push, restoring the previously active provider.
+ *
+ * Must be balanced with a prior @ref ucs_sys_topo_provider_push call.
+ */
+void ucs_sys_topo_provider_pop(void);
 
 
 /**
@@ -107,6 +174,17 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
  */
 ucs_status_t ucs_topo_get_device_bus_id(ucs_sys_device_t sys_dev,
                                         ucs_sys_bus_id_t *bus_id);
+
+
+/**
+ * Pack a PCI bus id into its bit representation.
+ *
+ * @param [in] bus_id  Bus id to pack.
+ *
+ * @return Packed bit representation of the bus id.
+ */
+ucs_bus_id_bit_rep_t
+ucs_topo_get_bus_id_bit_repr(const ucs_sys_bus_id_t *bus_id);
 
 
 /**
@@ -137,6 +215,18 @@ void ucs_topo_get_memory_distance(ucs_sys_device_t device,
 
 
 /**
+ * Find the memory distance of the device according to a CPU set.
+ *
+ * @param [in]  device   System device index.
+ * @param [in]  cpuset   CPU set representing the memory locality.
+ * @param [out] distance Result populated with the device memory distance.
+ */
+void ucs_topo_get_memory_distance_for_cpuset(ucs_sys_device_t device,
+                                             const ucs_cpu_set_t *cpuset,
+                                             ucs_sys_dev_distance_t *distance);
+
+
+/**
  * Convert the distance to a human-readable string.
  *
  * @param [in]  distance   Distance between two devices.
@@ -147,6 +237,22 @@ void ucs_topo_get_memory_distance(ucs_sys_device_t device,
  */
 const char *ucs_topo_distance_str(const ucs_sys_dev_distance_t *distance,
                                   char *buffer, size_t max);
+
+/**
+ * Compare two distances.
+ *
+ * First compares by latency (lower is better), then by bandwidth (higher is
+ * better) as a tiebreaker.
+ *
+ * @param [in] distance1  First distance to compare.
+ * @param [in] distance2  Second distance to compare.
+ *
+ * @return Negative if distance1 is better, positive if distance2 is better,
+ *         0 if equal.
+ */
+int ucs_topo_distance_cmp(const ucs_sys_dev_distance_t *distance1,
+                          const ucs_sys_dev_distance_t *distance2);
+
 
 /**
  * Gets a system device. If the device doesn't exist, it will be added.
@@ -246,6 +352,18 @@ const char *ucs_topo_sys_device_get_name(ucs_sys_device_t sys_dev);
  * @return The number of NUMA node closest to given device.
  */
 ucs_numa_node_t ucs_topo_sys_device_get_numa_node(ucs_sys_device_t sys_dev);
+
+
+/**
+ * Set the closest NUMA node for a given system device.
+ *
+ * @param [in] sys_dev   System device index.
+ * @param [in] numa_node NUMA node to set.
+ *
+ * @return UCS_OK on success, error otherwise.
+ */
+ucs_status_t ucs_topo_sys_device_set_numa_node(ucs_sys_device_t sys_dev,
+                                               ucs_numa_node_t numa_node);
 
 
 /**

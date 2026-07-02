@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2020. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  * Copyright (C) Advanced Micro Devices, Inc. 2019.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
@@ -196,6 +196,39 @@ void mem_buffer::set_device_context()
     device_set = true;
 }
 
+int mem_buffer::get_device_count()
+{
+#if HAVE_CUDA
+    int num_gpus = 0;
+    if (cudaGetDeviceCount(&num_gpus) != cudaSuccess) {
+        return -1;
+    }
+    return num_gpus;
+#else
+    return -1;
+#endif
+}
+
+int mem_buffer::get_device()
+{
+#if HAVE_CUDA
+    int device = -1;
+    CUDA_CALL(cudaGetDevice(&device), "");
+    return device;
+#else
+    return -1;
+#endif
+}
+
+void mem_buffer::set_device(int device)
+{
+#if HAVE_CUDA
+    CUDA_CALL(cudaSetDevice(device), ": device=" << device);
+#else
+    (void)device;
+#endif
+}
+
 size_t mem_buffer::m_bar1_free_size = SIZE_MAX;
 
 void mem_buffer::get_bar1_free_size_nvml()
@@ -218,6 +251,37 @@ void mem_buffer::get_bar1_free_size_nvml()
     }
 
     NVML_CALL(nvmlShutdown());
+#endif
+}
+
+bool mem_buffer::cuda_gpu_has_c2c(unsigned gpu_index)
+{
+#if HAVE_CUDA && HAVE_DECL_NVML_FI_DEV_C2C_LINK_COUNT
+    bool has_c2c;
+    nvmlDevice_t device;
+    nvmlFieldValue_t value = {0};
+
+    if (NVML_CALL(nvmlInit_v2()) != UCS_OK) {
+        return false;
+    }
+
+    if (NVML_CALL(nvmlDeviceGetHandleByIndex(gpu_index, &device)) != UCS_OK) {
+        NVML_CALL(nvmlShutdown());
+        return false;
+    }
+
+    value.fieldId = NVML_FI_DEV_C2C_LINK_COUNT;
+    if (NVML_CALL(nvmlDeviceGetFieldValues(device, 1, &value)) != UCS_OK) {
+        NVML_CALL(nvmlShutdown());
+        return false;
+    }
+
+    has_c2c = (value.nvmlReturn == NVML_SUCCESS) && (value.value.uiVal > 0);
+    NVML_CALL(nvmlShutdown());
+    return has_c2c;
+#else
+    (void)gpu_index;
+    return false;
 #endif
 }
 
@@ -543,6 +607,9 @@ std::string mem_buffer::mem_type_name(ucs_memory_type_t mem_type)
 bool mem_buffer::is_async_supported(ucs_memory_type_t mem_type)
 {
 #if CUDART_VERSION >= 11020
+    if (!is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
+        return false;
+    }
     return mem_type == UCS_MEMORY_TYPE_CUDA;
 #else
     return false;
@@ -550,16 +617,25 @@ bool mem_buffer::is_async_supported(ucs_memory_type_t mem_type)
 }
 
 mem_buffer::mem_buffer(size_t size, ucs_memory_type_t mem_type) :
-    m_mem_type(mem_type), m_ptr(allocate(size, mem_type)), m_size(size) {
+    m_mem_type(mem_type), m_ptr(allocate(size, mem_type)), m_size(size),
+    m_async(false) {
 }
 
 mem_buffer::mem_buffer(size_t size, ucs_memory_type_t mem_type, uint64_t seed) :
-    m_mem_type(mem_type), m_ptr(allocate(size, mem_type)), m_size(size) {
+    m_mem_type(mem_type), m_ptr(allocate(size, mem_type)), m_size(size),
+    m_async(false) {
     pattern_fill(seed);
 }
 
+mem_buffer::mem_buffer(size_t size, ucs_memory_type_t mem_type,
+                       alloc_mode mode) :
+    m_mem_type(mem_type),
+    m_ptr(allocate(size, mem_type, mode == alloc_mode::ASYNC)), m_size(size),
+    m_async(mode == alloc_mode::ASYNC) {
+}
+
 mem_buffer::~mem_buffer() {
-    release(ptr(), mem_type());
+    release(ptr(), mem_type(), m_async);
 }
 
 ucs_memory_type_t mem_buffer::mem_type() const {

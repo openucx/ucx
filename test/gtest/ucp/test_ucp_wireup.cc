@@ -12,10 +12,14 @@
 #include "ucp/ucp_test.h"
 
 #include <algorithm>
+#include <memory>
 #include <set>
 
 extern "C" {
 #include <ucp/wireup/address.h>
+#include <ucp/wireup/wireup.h>
+#include <ucp/wireup/wireup_cm.h>
+#include <ucp/wireup/wireup_ep.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucs/sys/math.h>
 }
@@ -1871,3 +1875,566 @@ UCS_TEST_SKIP_COND_P(test_ucp_address_v2, diff_seg_sizes,
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_address_v2)
+
+
+class unpacked_address {
+public:
+    unpacked_address(ucp_worker_h remote_worker) :
+        address(), m_remote_worker(remote_worker), m_address(NULL)
+    {
+    }
+
+    ~unpacked_address()
+    {
+        if (m_address != NULL) {
+            ucp_worker_release_address(m_remote_worker, m_address);
+        }
+        ucs_free(address.address_list);
+    }
+
+    void unpack(ucp_worker_h local_worker)
+    {
+        size_t address_length;
+        ucs_status_t status;
+
+        status = ucp_worker_get_address(m_remote_worker, &m_address,
+                                        &address_length);
+        ASSERT_UCS_OK(status);
+        ASSERT_GT(address_length, 0ul);
+
+        status = ucp_address_unpack(
+                local_worker, m_address,
+                ucp_worker_default_address_pack_flags(m_remote_worker),
+                &address);
+        ASSERT_UCS_OK(status);
+    }
+
+    ucp_unpacked_address_t address;
+
+private:
+    unpacked_address(const unpacked_address&);
+    unpacked_address& operator=(const unpacked_address&);
+
+    ucp_worker_h m_remote_worker;
+    ucp_address_t *m_address;
+};
+
+
+static uint64_t wireup_aux_local_iface_flags(int has_cm, int err_mode_peer)
+{
+    uint64_t flags = UCT_IFACE_FLAG_AM_BCOPY |
+                     UCT_IFACE_FLAG_PENDING;
+
+    if (!has_cm) {
+        flags |= UCT_IFACE_FLAG_CONNECT_TO_IFACE;
+    }
+
+    if (err_mode_peer) {
+        flags |= UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
+    }
+
+    return flags;
+}
+
+static uint64_t wireup_aux_remote_iface_flags(int has_cm, int require_cb_async)
+{
+    uint64_t flags = UCP_ADDR_IFACE_FLAG_AM_SYNC;
+
+    if (!has_cm) {
+        flags |= UCP_ADDR_IFACE_FLAG_CONNECT_TO_IFACE;
+        if (require_cb_async) {
+            flags |= UCP_ADDR_IFACE_FLAG_CB_ASYNC;
+        }
+    }
+
+    return flags;
+}
+
+
+class wireup_lane {
+public:
+    wireup_lane(ucp_worker_h worker, ucp_ep_h ep, ucp_lane_index_t lane,
+                ucp_rsc_index_t rsc_index,
+                const ucp_ep_config_key_t *key,
+                const ucp_unpacked_address_t *remote_address,
+                uct_ep_h uct_ep = NULL) :
+        m_worker(worker), m_ep(ep), m_lane(lane), m_rsc_index(rsc_index),
+        m_key(key), m_uct_ep(uct_ep), m_tl_rsc(NULL), m_attrs(NULL),
+        m_address_entry(NULL)
+    {
+        if (m_rsc_index == UCP_NULL_RESOURCE) {
+            return;
+        }
+
+        m_tl_rsc = &m_worker->context->tl_rscs[m_rsc_index];
+        m_attrs  = ucp_worker_iface_get_attr(m_worker, m_rsc_index);
+        m_address_entry = get_connected_address_entry(remote_address);
+    }
+
+    int is_valid() const
+    {
+        return m_rsc_index != UCP_NULL_RESOURCE;
+    }
+
+    operator int() const
+    {
+        return (int)m_lane;
+    }
+
+    const char* tl_name() const
+    {
+        return m_tl_rsc->tl_rsc.tl_name;
+    }
+
+    ucp_rsc_index_t rsc_index() const
+    {
+        return m_rsc_index;
+    }
+
+    size_t seg_size() const
+    {
+        return ucs_min(ucp_address_iface_seg_size(m_attrs),
+                       (m_address_entry == NULL) ?
+                       0 : m_address_entry->iface_attr.seg_size);
+    }
+
+    int is_local_aux_capable() const
+    {
+        uint64_t flags = wireup_aux_local_iface_flags(
+                ucp_ep_config_key_has_cm_lane(m_key),
+                m_key->err_mode == UCP_ERR_HANDLING_MODE_PEER);
+
+        return ucs_test_all_flags(m_attrs->cap.flags, flags);
+    }
+
+    int is_remote_aux_capable(int require_cb_async = 1) const
+    {
+        uint64_t flags = wireup_aux_remote_iface_flags(
+                ucp_ep_config_key_has_cm_lane(m_key), require_cb_async);
+
+        return (m_address_entry != NULL) &&
+               ucs_test_all_flags(m_address_entry->iface_attr.flags,
+                                  flags);
+    }
+
+    int is_p2p() const
+    {
+        return ucp_ep_is_lane_p2p(m_ep, m_lane);
+    }
+
+    int is_p2p_transport() const
+    {
+        return ucp_worker_is_tl_p2p(m_worker, m_rsc_index) &&
+               !ucp_worker_is_tl_device(m_worker, m_rsc_index);
+    }
+
+private:
+    wireup_lane(const wireup_lane&);
+    wireup_lane& operator=(const wireup_lane&);
+
+    const ucp_address_entry_t*
+    get_connected_address_entry(const ucp_unpacked_address_t *remote_address) const
+    {
+        const ucp_address_entry_t *address_entry;
+        const ucp_address_entry_t *matched_address_entry = NULL;
+        const ucp_ep_config_key_lane_t *key_lane = &m_key->lanes[m_lane];
+
+        ucp_unpacked_address_for_each(address_entry, remote_address) {
+            if (m_tl_rsc->tl_name_csum != address_entry->tl_name_csum) {
+                continue;
+            }
+
+            if ((m_uct_ep != NULL) &&
+                is_uct_ep_connected(m_uct_ep, address_entry)) {
+                return address_entry;
+            }
+
+            if ((m_uct_ep == NULL) &&
+                ucp_wireup_is_lane_connected(m_ep, m_lane, address_entry)) {
+                return address_entry;
+            }
+
+            if (m_uct_ep != NULL) {
+                continue;
+            }
+
+            if ((key_lane->dst_md_index == address_entry->md_index) &&
+                (key_lane->dst_sys_dev == address_entry->sys_dev)) {
+                matched_address_entry = address_entry;
+            }
+        }
+
+        return matched_address_entry;
+    }
+
+    static int is_uct_ep_connected(uct_ep_h uct_ep,
+                                   const ucp_address_entry_t *address_entry)
+    {
+        uct_ep_is_connected_params_t params = {};
+        uint64_t field_mask;
+
+        if ((address_entry->dev_addr == NULL) ||
+            (address_entry->iface_addr == NULL)) {
+            return 0;
+        }
+
+        params.device_addr = address_entry->dev_addr;
+        params.iface_addr  = address_entry->iface_addr;
+        params.field_mask  = UCT_EP_IS_CONNECTED_FIELD_DEVICE_ADDR |
+                             UCT_EP_IS_CONNECTED_FIELD_IFACE_ADDR;
+
+        if (address_entry->num_ep_addrs == 0) {
+            /* coverity[var_deref_model] */
+            return uct_ep_is_connected(uct_ep, &params);
+        }
+
+        field_mask = params.field_mask | UCT_EP_IS_CONNECTED_FIELD_EP_ADDR;
+        for (unsigned i = 0; i < address_entry->num_ep_addrs; ++i) {
+            if (address_entry->ep_addrs[i].addr == NULL) {
+                continue;
+            }
+
+            params.field_mask = field_mask;
+            params.ep_addr    = address_entry->ep_addrs[i].addr;
+
+            if (uct_ep_is_connected(uct_ep, &params)) {
+                return 1;
+            }
+        }
+
+        return 0;
+    }
+
+    ucp_worker_h m_worker;
+    ucp_ep_h m_ep;
+    ucp_lane_index_t m_lane;
+    ucp_rsc_index_t m_rsc_index;
+    const ucp_ep_config_key_t *m_key;
+    uct_ep_h m_uct_ep;
+    const ucp_tl_resource_desc_t *m_tl_rsc;
+    uct_iface_attr_t *m_attrs;
+    const ucp_address_entry_t *m_address_entry;
+};
+
+
+static std::ostream& operator<<(std::ostream& os, const wireup_lane& lane)
+{
+    return os << lane.tl_name() << " (lane " << (int)lane
+              << ", rsc_index " << (int)lane.rsc_index()
+              << ", seg_size=" << lane.seg_size()
+              << ", local_aux=" << lane.is_local_aux_capable()
+              << ", remote_aux_async=" << lane.is_remote_aux_capable(1)
+              << ", remote_aux=" << lane.is_remote_aux_capable(0)
+              << ", p2p_transport=" << lane.is_p2p_transport()
+              << ", p2p=" << lane.is_p2p() << ")";
+}
+
+
+class test_ucp_wireup_msg_lane : public test_ucp_wireup {
+public:
+    struct aux_candidate_info {
+        aux_candidate_info(int require_cb_async = 0) :
+            max_seg_size(0), max_rsc_index(UCP_NULL_RESOURCE),
+            max_addr_index(0), require_cb_async(require_cb_async)
+        {
+        }
+
+        int is_found() const
+        {
+            return max_rsc_index != UCP_NULL_RESOURCE;
+        }
+
+        size_t max_seg_size;
+        ucp_rsc_index_t max_rsc_index;
+        unsigned max_addr_index;
+        int require_cb_async;
+    };
+
+    test_ucp_wireup_msg_lane()
+    {
+        modify_config("ADDRESS_VERSION", "v2");
+    }
+
+    static void get_test_variants(std::vector<ucp_test_variant>& variants)
+    {
+        test_ucp_wireup::get_test_variants(variants,
+                                           UCP_FEATURE_TAG    |
+                                           UCP_FEATURE_RMA    |
+                                           UCP_FEATURE_STREAM |
+                                           UCP_FEATURE_AM     |
+                                           UCP_FEATURE_AMO32  |
+                                           UCP_FEATURE_AMO64,
+                                           true);
+    }
+
+    static uct_ep_h get_wireup_msg_ep(ucp_ep_h ep, ucp_lane_index_t lane)
+    {
+        uct_ep_h uct_ep             = ucp_ep_get_lane(ep, lane);
+        ucp_wireup_ep_t *wireup_ep = (uct_ep == NULL) ? NULL :
+                                     ucp_wireup_ep(uct_ep);
+
+        return (wireup_ep == NULL) ? uct_ep :
+                                     ucp_wireup_ep_get_msg_ep(wireup_ep);
+    }
+
+    static ucp_rsc_index_t get_wireup_msg_rsc_index(
+            ucp_ep_h ep, ucp_lane_index_t lane, const ucp_ep_config_key_t *key)
+    {
+        uct_ep_h uct_ep             = ucp_ep_get_lane(ep, lane);
+        ucp_wireup_ep_t *wireup_ep = (uct_ep == NULL) ? NULL :
+                                     ucp_wireup_ep(uct_ep);
+
+        return (wireup_ep == NULL) ? key->lanes[lane].rsc_index :
+                                     ucp_wireup_ep_get_msg_rsc_index(wireup_ep);
+    }
+
+    static int is_aux_candidate(ucp_worker_h worker, ucp_ep_h ep,
+                                unsigned ep_init_flags,
+                                ucp_rsc_index_t rsc_index,
+                                const ucp_address_entry_t *address_entry,
+                                int require_cb_async, size_t *seg_size)
+    {
+        ucp_context_h context = worker->context;
+        const ucp_tl_resource_desc_t *tl_rsc;
+        const uct_md_attr_v2_t *md_attr;
+        const uct_iface_attr_t *attrs;
+        int has_cm;
+
+        tl_rsc  = &context->tl_rscs[rsc_index];
+        md_attr = &context->tl_mds[tl_rsc->md_index].attr;
+        attrs   = ucp_worker_iface_get_attr(worker, rsc_index);
+        has_cm  = ucp_ep_init_flags_has_cm(ep_init_flags);
+
+        if (!context->config.ext.memtype_copy_enable &&
+            (md_attr->flags & UCT_MD_FLAG_MEMTYPE_COPY) &&
+            (md_attr->access_mem_types & ~UCS_BIT(UCS_MEMORY_TYPE_HOST))) {
+            return 0;
+        }
+
+        if (!ucs_test_all_flags(attrs->cap.flags,
+                                wireup_aux_local_iface_flags(
+                                        has_cm,
+                                        ep_init_flags &
+                                        UCP_EP_INIT_ERR_MODE_PEER_FAILURE))) {
+            return 0;
+        }
+
+        if (!ucs_test_all_flags(address_entry->iface_attr.flags,
+                                wireup_aux_remote_iface_flags(
+                                        has_cm, require_cb_async))) {
+            return 0;
+        }
+
+        if (!ucp_wireup_is_reachable(ep, ep_init_flags, rsc_index,
+                                     address_entry, NULL, 0)) {
+            return 0;
+        }
+
+        *seg_size = ucs_min(ucp_address_iface_seg_size(attrs),
+                            address_entry->iface_attr.seg_size);
+        return *seg_size > 0;
+    }
+
+    static aux_candidate_info find_max_aux_candidate(
+            ucp_worker_h worker, ucp_ep_h ep, unsigned ep_init_flags,
+            const ucp_unpacked_address_t *remote_address,
+            int require_cb_async)
+    {
+        aux_candidate_info result(require_cb_async);
+        const ucp_address_entry_t *address_entry;
+        ucp_context_h context = worker->context;
+        ucp_rsc_index_t rsc_index;
+        unsigned addr_index;
+        size_t seg_size;
+
+        UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
+            ucp_unpacked_address_for_each(address_entry, remote_address) {
+                addr_index = ucp_unpacked_address_index(remote_address,
+                                                        address_entry);
+                if (!is_aux_candidate(worker, ep, ep_init_flags, rsc_index,
+                                      address_entry, require_cb_async,
+                                      &seg_size)) {
+                    continue;
+                }
+
+                UCS_TEST_MESSAGE << "  Wireup AUX candidate: "
+                                 << context->tl_rscs[rsc_index].tl_rsc.tl_name
+                                 << " (rsc_index " << (int)rsc_index
+                                 << ", addr_index " << addr_index
+                                 << ", seg_size=" << seg_size
+                                 << ", require_cb_async="
+                                 << require_cb_async << ")";
+
+                if (!result.is_found() || (seg_size > result.max_seg_size)) {
+                    result.max_seg_size   = seg_size;
+                    result.max_rsc_index  = rsc_index;
+                    result.max_addr_index = addr_index;
+                }
+            }
+        }
+
+        return result;
+    }
+
+};
+
+/* Test that AUX transport selection picks the highest non-zero effective
+ * seg_size among reachable candidates. */
+UCS_TEST_P(test_ucp_wireup_msg_lane, select_aux_transport_highest_seg_size) {
+    entity *e = create_entity(true);
+    ucp_ep_params_t ep_params = get_ep_params();
+    unsigned ep_init_flags    = ucp_ep_init_flags(e->worker(), &ep_params);
+    e->connect(&receiver(), ep_params);
+
+    unpacked_address remote_address(receiver().worker());
+    remote_address.unpack(e->worker());
+
+    aux_candidate_info aux_info = find_max_aux_candidate(
+            e->worker(), e->ep(), ep_init_flags, &remote_address.address, 1);
+    if (!aux_info.is_found()) {
+        aux_info = find_max_aux_candidate(e->worker(), e->ep(), ep_init_flags,
+                                          &remote_address.address, 0);
+    }
+
+    if (!aux_info.is_found()) {
+        UCS_TEST_SKIP_R("No AUX candidate");
+    }
+
+    const uct_iface_attr_t *attrs = ucp_worker_iface_get_attr(
+            e->worker(), aux_info.max_rsc_index);
+    size_t local_seg_size = ucp_address_iface_seg_size(attrs);
+    ASSERT_GT(local_seg_size, 1ul);
+    ASSERT_LT(aux_info.max_addr_index, remote_address.address.address_count);
+
+    ucp_address_entry_t address_list[2];
+    address_list[0] = remote_address.address.address_list[
+            aux_info.max_addr_index];
+    address_list[1] = address_list[0];
+    address_list[0].iface_attr.seg_size = local_seg_size / 2;
+    address_list[1].iface_attr.seg_size = local_seg_size;
+
+    ucp_unpacked_address_t test_address = remote_address.address;
+    test_address.address_count = ucs_static_array_size(address_list);
+    test_address.address_list  = address_list;
+
+    ucp_tl_bitmap_t tl_bitmap;
+    UCS_STATIC_BITMAP_RESET_ALL(&tl_bitmap);
+    UCS_STATIC_BITMAP_SET(&tl_bitmap, aux_info.max_rsc_index);
+
+    ucp_wireup_select_info_t select_info = {};
+    ucs_status_t status = ucp_wireup_select_aux_transport(
+            e->ep(), ep_init_flags, tl_bitmap, &test_address, &select_info);
+    ASSERT_UCS_OK(status);
+
+    EXPECT_EQ(aux_info.max_rsc_index, select_info.rsc_index);
+    EXPECT_EQ(1u, select_info.addr_index);
+    EXPECT_EQ((double)local_seg_size, select_info.score);
+}
+
+/* Test that wireup msg transport selects the highest seg_size among eligible
+ * transports */
+UCS_TEST_P(test_ucp_wireup_msg_lane, select_highest_seg_size_lane) {
+    entity *e = create_entity(true);
+    ucp_ep_params_t ep_params = get_ep_params();
+    unsigned ep_init_flags    = ucp_ep_init_flags(e->worker(), &ep_params);
+    e->connect(&receiver(), ep_params);
+
+    const ucp_ep_config_t *config = ucp_ep_config(e->ep());
+    if (config->key.wireup_msg_lane == UCP_NULL_LANE) {
+        UCS_TEST_SKIP_R("No wireup_msg_lane selected");
+    }
+
+    ucp_lane_index_t wireup_msg_lane = config->key.wireup_msg_lane;
+    uct_ep_h wireup_msg_ep = get_wireup_msg_ep(e->ep(), wireup_msg_lane);
+    ucp_rsc_index_t wireup_rsc_index =
+            get_wireup_msg_rsc_index(e->ep(), wireup_msg_lane, &config->key);
+    unpacked_address remote_address(receiver().worker());
+    remote_address.unpack(e->worker());
+    wireup_lane wireup_info(e->worker(), e->ep(), wireup_msg_lane,
+                            wireup_rsc_index, &config->key,
+                            &remote_address.address, wireup_msg_ep);
+
+    UCS_TEST_MESSAGE << "Selected wireup message transport: " << wireup_info;
+
+    /* Find the transport with maximum seg_size that satisfies the same AUX
+     * wireup criteria as ucp_wireup_select_aux_transport(). */
+    aux_candidate_info aux_info = find_max_aux_candidate(
+            e->worker(), e->ep(), ep_init_flags, &remote_address.address, 1);
+    if (!aux_info.is_found()) {
+        aux_info = find_max_aux_candidate(e->worker(), e->ep(), ep_init_flags,
+                                          &remote_address.address, 0);
+    }
+
+    if (aux_info.is_found()) {
+        EXPECT_TRUE(wireup_info.is_local_aux_capable())
+            << "Wireup transport " << wireup_info.tl_name()
+            << " does not satisfy local AUX criteria";
+        EXPECT_TRUE(wireup_info.is_remote_aux_capable(
+                            aux_info.require_cb_async))
+            << "Wireup transport " << wireup_info.tl_name()
+            << " does not satisfy remote AUX criteria";
+        EXPECT_EQ(wireup_info.seg_size(), aux_info.max_seg_size)
+            << "Wireup transport " << wireup_info.tl_name()
+            << " (seg_size=" << wireup_info.seg_size()
+            << ") has lower seg_size than the maximum available AUX transport ("
+            << aux_info.max_seg_size << ")";
+    } else {
+        /* ucp_wireup_select_wireup_msg_lane() falls back to a p2p-capable
+         * transport, which is distinct from the final p2p lane bitmap. */
+        EXPECT_TRUE(wireup_info.is_p2p_transport())
+            << "Expected wireup transport " << wireup_info.tl_name()
+            << " to fallback to a p2p-capable transport when no AUX transport "
+               "is available";
+    }
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_msg_lane, all, "^sm")
+
+class test_ucp_reconfig_connect_remote : public ucp_test {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant(variants, UCP_FEATURE_RMA);
+    }
+
+    void init() override
+    {
+        if (!is_proto_enabled()) {
+            UCS_TEST_SKIP_R("Proto v2 is disabled");
+        }
+
+        modify_config("PROTOS", "^put*");
+        ucp_test::init();
+    }
+};
+
+/*
+ * This test excludes all put protocols to force proto_reconfig for put
+ * operations and verifies the request completes with UCS_ERR_CANCELED rather
+ * than hanging.
+ */
+UCS_TEST_P(test_ucp_reconfig_connect_remote, put_canceled)
+{
+    ucs::watchdog_set(ucs::WATCHDOG_TEST, 30.0);
+    scoped_log_handler slh(wrap_errors_logger);
+
+    sender().connect(&receiver(), get_ep_params());
+    if (!is_loopback()) {
+        receiver().connect(&sender(), get_ep_params());
+    }
+
+    static const size_t size = 4096;
+    std::vector<uint8_t> sendbuf(size, 0xab);
+    mapped_buffer recvbuf(size, receiver());
+    ucs::handle<ucp_rkey_h> rkey;
+    recvbuf.rkey(sender(), rkey);
+
+    ucp_request_param_t param = {};
+    auto sreq                 = ucp_put_nbx(sender().ep(), sendbuf.data(), size,
+                                            (uintptr_t)recvbuf.ptr(),
+                                            rkey.get(), &param);
+    ucs_status_t status       = request_wait(sreq);
+    EXPECT_EQ(UCS_ERR_CANCELED, status);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_reconfig_connect_remote, tcp, "tcp")

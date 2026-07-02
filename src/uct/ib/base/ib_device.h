@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) Huawei Technologies Co., Ltd. 2020.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -292,6 +292,11 @@ ucs_status_t uct_ib_device_query_ports(uct_ib_device_t *dev, unsigned flags,
 ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
                                  struct ibv_device *ibv_device);
 
+/**
+ * @return Nonzero if the device has at least one active (IBV_PORT_ACTIVE) port.
+ */
+int uct_ib_device_has_active_port(uct_ib_device_t *dev);
+
 ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
                                 struct ibv_device *ibv_device, int async_events
                                 UCS_STATS_ARG(ucs_stats_node_t *stats_parent));
@@ -325,7 +330,7 @@ uct_ib_device_select_gid(uct_ib_device_t *dev, uint8_t port_num,
 /**
  * @return device name.
  */
-const char *uct_ib_device_name(uct_ib_device_t *dev);
+const char *uct_ib_device_name(const uct_ib_device_t *dev);
 
 
 /**

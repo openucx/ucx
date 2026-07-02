@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -10,6 +10,7 @@
 #include <ucp/api/ucp.h>
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_ep.h>
+#include <ucp/wireup/address.h>
 #include <uct/api/uct.h>
 #include <ucs/arch/bitops.h>
 
@@ -50,8 +51,31 @@ enum {
     UCP_WIREUP_MSG_EP_CHECK,
     UCP_WIREUP_MSG_EP_REMOVED,
     UCP_WIREUP_MSG_REPLY_RECONFIG,
+    UCP_WIREUP_MSG_LANES_ADDR_REQUEST,
+    UCP_WIREUP_MSG_LANES_ADDR_REPLY,
+
     UCP_WIREUP_MSG_LAST
 };
+
+
+/**
+ * Calculates a score of a potential transport. Used both for the primary
+ * selection score and for the tiebreak score.
+ *
+ * @param [in]  wiface            UCP worker iface.
+ * @param [in]  md_attr           Local MD attributes.
+ * @param [in]  unpacked_addr     The whole remote address unpacked.
+ * @param [in]  remote_addr       Remote transport address info and attributes.
+ * @param [in]  is_prioritized_ep Endpoint is prioritized.
+ * @param [in]  arg               Custom argument.
+ *
+ * @return Transport score, the higher the better.
+ */
+typedef double (*ucp_wireup_calc_score_func_t)(
+        const ucp_worker_iface_t *wiface, const uct_md_attr_v2_t *md_attr,
+        const ucp_unpacked_address_t *unpacked_addr,
+        const ucp_address_entry_t *remote_addr, int is_prioritized_ep,
+        void *arg);
 
 
 /**
@@ -59,62 +83,53 @@ enum {
  */
 typedef struct {
     /* Name of the criteria for debugging */
-    const char                 *title;
+    const char                   *title;
 
     /* Required local MD flags */
-    uint64_t                    local_md_flags;
+    uint64_t                     local_md_flags;
 
     /* Required local component flags */
-    uint64_t                    local_cmpt_flags;
+    uint64_t                     local_cmpt_flags;
 
     /* Required local interface flags */
-    ucp_wireup_select_flags_t   local_iface_flags;
+    ucp_wireup_select_flags_t    local_iface_flags;
 
     /* Required remote interface flags */
-    ucp_wireup_select_flags_t   remote_iface_flags;
+    ucp_wireup_select_flags_t    remote_iface_flags;
 
     /* Required local event flags */
-    uint64_t                    local_event_flags;
+    uint64_t                     local_event_flags;
 
     /* Required remote event flags */
-    uint64_t                    remote_event_flags;
+    uint64_t                     remote_event_flags;
 
     /* Mandatory memory types for allocation */
-    uint64_t                    alloc_mem_types;
+    uint64_t                     alloc_mem_types;
 
     /* Required support of keepalive mechanism */
-    int                         is_keepalive;
+    int                          is_keepalive;
 
-    /**
-     * Calculates score of a potential transport.
-     *
-     * @param [in]  wiface            UCP worker iface.
-     * @param [in]  md_attr           Local MD attributes.
-     * @param [in]  unpacked_addr     The whole remote address unpacked.
-     * @param [in]  remote_addr       Remote transport address info and
-     *                                attributes.
-     * @param [in]  is_prioritized_ep Endpoint is prioritized.
-     * @param [in]  arg               Custom argument.
-     *
-     * @return Transport score, the higher the better.
-     */
-    double                      (*calc_score)(const ucp_worker_iface_t *wiface,
-                                              const uct_md_attr_v2_t *md_attr,
-                                              const ucp_unpacked_address_t *unpacked_addr,
-                                              const ucp_address_entry_t *remote_addr,
-                                              int is_prioritized_ep,
-                                              void *arg);
+    /* Calculates the primary selection score of a potential transport. */
+    ucp_wireup_calc_score_func_t calc_score;
+
+    /* Calculates the tiebreak score, used to choose between candidates whose
+     * @ref calc_score values are close. May be NULL, which disables
+     * tiebreaking (single-score selection). */
+    ucp_wireup_calc_score_func_t calc_tiebreak;
 
     /* Custom argument of @a calc_score function */
-    void                       *arg;
+    void                         *arg;
+
+    /* Custom argument of @a calc_tiebreak function */
+    void                         *tiebreak_arg;
 
     /* Flags that describe TL specifics */
-    uint8_t                     tl_rsc_flags;
+    uint8_t                      tl_rsc_flags;
 
-    ucp_tl_iface_atomic_flags_t local_atomic_flags;
+    ucp_tl_iface_atomic_flags_t  local_atomic_flags;
 
-    ucp_tl_iface_atomic_flags_t remote_atomic_flags;
-    ucp_lane_type_t             lane_type;
+    ucp_tl_iface_atomic_flags_t  remote_atomic_flags;
+    ucp_lane_type_t              lane_type;
 } ucp_wireup_criteria_t;
 
 
@@ -129,12 +144,19 @@ typedef struct ucp_wireup_msg {
     uint64_t               src_ep_id; /* Endpoint ID of source */
     uint64_t               dst_ep_id; /* Endpoint ID of destination, can be
                                          UCS_PTR_MAP_KEY_INVALID */
-    /* packed addresses follow */
+    /* packed addresses or @ref ucp_wireup_msg_lanes_addrs_t follow */
 } UCS_S_PACKED ucp_wireup_msg_t;
 
 
+typedef struct ucp_wireup_msg_lanes_info_t {
+    ucp_lane_map_t         requested_lane_map; /* lanes the sender asked about */
+    ucp_lane_map_t         provided_lane_map;  /* lanes actually carried here */
+    /* packed addresses follow */
+} UCS_S_PACKED ucp_wireup_msg_lanes_info_t;
+
 typedef struct {
     double          score;
+    double          tiebreak;
     unsigned        addr_index;
     unsigned        path_index;
     ucp_rsc_index_t rsc_index;
@@ -170,6 +192,8 @@ ucs_status_t
 ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
                        const ucp_tl_bitmap_t *tl_bitmap,
                        const ucp_lane_index_t *lanes2remote,
+                       ucp_lane_map_t requested_lane_map,
+                       ucp_lane_map_t provided_lane_map,
                        ucp_wireup_msg_t *msg_hdr, void **address_p,
                        size_t *address_length_p);
 
@@ -226,6 +250,16 @@ ucp_wireup_connect_local(ucp_ep_h ep,
 uct_ep_h ucp_wireup_extract_lane(ucp_ep_h ep, ucp_lane_index_t lane);
 
 unsigned ucp_wireup_eps_progress(void *arg);
+
+
+/**
+ * Send a LANES_ADDR_REQUEST/REPLY wireup message over the AM lane, packing
+ * addresses for the lanes in @a provided_lane_map.
+ */
+void ucp_wireup_send_lanes_addr_msg(ucp_ep_h ep, uint8_t msg_type,
+                                    ucp_lane_map_t requested_lane_map,
+                                    ucp_lane_map_t provided_lane_map);
+
 
 double ucp_wireup_iface_lat_distance_v1(const ucp_worker_iface_t *wiface);
 
