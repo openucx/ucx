@@ -22,17 +22,6 @@
     } while (0)
 
 
-#define LIB_CHECK(_err_t, _func, _success_code, _lib_error_string) \
-    do { \
-        _err_t _err = (_func); \
-        if (_err != _success_code) { \
-            fprintf(stderr, "%s failed: %d (%s)\n", UCS_PP_MAKE_STRING(_func), \
-                    _err, _lib_error_string(_err)); \
-            exit(_err); \
-        } \
-    } while (0)
-
-
 typedef struct init_params *init_params_h;
 
 
