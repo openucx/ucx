@@ -1829,14 +1829,15 @@ ucp_ep_recovery_install_wireup_ep(ucp_ep_h ep, ucp_lane_index_t lane)
     uct_ep_h wireup_ep_uct;
     ucs_status_t status;
 
-    if ((old_uct_ep != NULL) && ucp_wireup_ep_test(old_uct_ep)) {
+    ucs_assert(old_uct_ep != NULL);
+    if (ucp_wireup_ep_test(old_uct_ep)) {
         return UCS_OK;
     }
 
-    ucs_assertv((old_uct_ep == NULL) || ucp_is_uct_ep_failed(old_uct_ep),
-                "ep %p lane %d: unexpected live uct_ep=%p - recovery path "
-                "must be preceded by ucp_ep_failover_reconfig()",
-                ep, lane, old_uct_ep);
+    if (!ucp_is_uct_ep_failed(old_uct_ep)) {
+        /* The lane has been already recovered */
+        return UCS_ERR_NO_PROGRESS;
+    }
 
     status = ucp_wireup_ep_create(ep, &wireup_ep_uct);
     if (status != UCS_OK) {
@@ -1846,11 +1847,7 @@ ucp_ep_recovery_install_wireup_ep(ucp_ep_h ep, ucp_lane_index_t lane)
     ucs_trace("ep %p: recovery lane[%d] %p -> wireup_ep %p", ep, lane,
               old_uct_ep, wireup_ep_uct);
     ucp_ep_set_lane(ep, lane, wireup_ep_uct);
-
-    if (old_uct_ep != NULL) {
-        uct_ep_destroy(old_uct_ep);
-    }
-
+    uct_ep_destroy(old_uct_ep);
     return UCS_OK;
 }
 
@@ -1887,22 +1884,6 @@ ucp_ep_recovery_set_next_ep(ucp_ep_h ep, ucp_lane_index_t lane,
 
     ucp_wireup_ep_set_next_ep(proxy, next_ep, rsc_index);
     return UCS_OK;
-}
-
-/* Mark the lane's wireup proxy as ready+remote-connected. Called once the
- * inner EP reaches a connected state (iface: immediately after
- * ucp_ep_recovery_set_next_ep() with a non-NULL address; p2p: after
- * ucp_wireup_ep_connect_to_ep_v2() succeeds). */
-static void
-ucp_ep_recovery_mark_ready(ucp_ep_h ep, ucp_lane_index_t lane)
-{
-    ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(ucp_ep_get_lane(ep, lane));
-
-    ucs_assert(wireup_ep != NULL);
-    ucs_assert(wireup_ep->super.uct_ep != NULL);
-
-    wireup_ep->flags |= UCP_WIREUP_EP_FLAG_READY |
-                        UCP_WIREUP_EP_FLAG_REMOTE_CONNECTED;
 }
 
 /**
@@ -1962,7 +1943,9 @@ ucp_ep_recovery_rebuild_iface_lane(
         return status;
     }
 
-    ucp_ep_recovery_mark_ready(ep, lane);
+    ucp_wireup_update_flags(ep, UCS_BIT(lane),
+                            UCP_WIREUP_EP_FLAG_READY |
+                            UCP_WIREUP_EP_FLAG_REMOTE_CONNECTED);
     ucs_debug("ep %p: recovered iface-lane[%d] via rsc[%d]", ep, lane,
               ucp_ep_get_rsc_index(ep, lane));
     return UCS_OK;
@@ -2011,7 +1994,9 @@ ucp_ep_recovery_rebuild_p2p_lane(
         return status;
     }
 
-    ucp_ep_recovery_mark_ready(ep, lane);
+    ucp_wireup_update_flags(ep, UCS_BIT(lane),
+                            UCP_WIREUP_EP_FLAG_READY |
+                            UCP_WIREUP_EP_FLAG_REMOTE_CONNECTED);
     ucs_debug("ep %p: recovered p2p-lane[%d] via rsc[%d]", ep, lane,
               ucp_ep_get_rsc_index(ep, lane));
     return UCS_OK;
@@ -2025,16 +2010,11 @@ ucp_lane_map_t
 ucp_ep_recovery_rebuild_lanes(ucp_ep_h ep, ucp_lane_map_t lanes_to_rebuild,
                               const ucp_unpacked_address_t *remote_address)
 {
-    const ucp_ep_config_key_t *k = &ucp_ep_config(ep)->key;
-    ucp_lane_map_t rebuilt       = 0;
+    ucp_lane_map_t rebuilt = 0;
     ucp_lane_index_t lane;
     ucs_status_t status;
 
     ucs_for_each_bit(lane, lanes_to_rebuild) {
-        if (lane >= k->num_lanes) {
-            continue;
-        }
-
         if (ucp_ep_is_lane_p2p(ep, lane)) {
             status = ucp_ep_recovery_rebuild_p2p_lane(ep, lane,
                                                       remote_address);
@@ -2061,15 +2041,10 @@ ucp_ep_recovery_rebuild_lanes(ucp_ep_h ep, ucp_lane_map_t lanes_to_rebuild,
 static ucp_lane_map_t
 ucp_ep_recovery_prepare_lanes(ucp_ep_h ep, ucp_lane_map_t lanes)
 {
-    const ucp_ep_config_key_t *cfg_key = &ucp_ep_config(ep)->key;
     ucp_lane_map_t lane_map            = 0;
     ucp_lane_index_t lane;
 
     ucs_for_each_bit(lane, lanes) {
-        if (lane >= cfg_key->num_lanes) {
-            continue;
-        }
-
         if (ucp_ep_recovery_install_wireup_ep(ep, lane) != UCS_OK) {
             continue;
         }

@@ -552,13 +552,12 @@ unsigned ucp_wireup_eps_progress(void *arg)
     ucp_wireup_eps_pending_extract(ucp_ep, &tmp_pending_queue);
     for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep); ++lane) {
         wireup_ep = ucp_wireup_ep(ucp_ep_get_lane(ucp_ep, lane));
-        if (wireup_ep == NULL) {
+        if ((wireup_ep == NULL) ||
+            (!(wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY))) {
             continue;
         }
 
-        ucs_assert(wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY);
         ucs_assert(wireup_ep->super.uct_ep != NULL);
-
         ucs_trace("ep %p: switching wireup_ep %p to ready state", ucp_ep,
                   wireup_ep);
 
@@ -1074,7 +1073,6 @@ ucp_wireup_process_lanes_addr_reply(
               rebuilt);
 
     if (rebuilt != 0) {
-        ucp_wireup_update_flags(ep, rebuilt, UCP_WIREUP_EP_FLAG_READY);
         ucp_wireup_eps_progress_sched(ep);
     }
 

@@ -5,8 +5,8 @@
 */
 
 #include "test_ucp_memheap.h"
+#include <common/test_helpers.h>
 #include <algorithm>
-#include <random>
 #include <string>
 
 extern "C" {
@@ -171,11 +171,7 @@ protected:
                             " available");
         }
 
-        /* Allocate randomizer on heap to avoid exceeding stack frame size limits. */
-        std::unique_ptr<std::random_device> rnd_device(new std::random_device);
-        std::unique_ptr<std::mt19937> rng(new std::mt19937((*rnd_device)()));
-        std::shuffle(lanes.begin(), lanes.end(), *rng);
-
+        std::random_shuffle(lanes.begin(), lanes.end(), ucs::rand_range);
         for (ucp_lane_index_t lane : lanes) {
             UCS_TEST_MESSAGE << lane_type << ": " << size_t(lane) << "/" << lanes.size();
         }
