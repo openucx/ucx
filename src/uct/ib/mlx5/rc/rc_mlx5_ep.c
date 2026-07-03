@@ -40,6 +40,11 @@ uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep, uct_ep_attr_t *ep_attr)
         return UCS_ERR_UNSUPPORTED;
     }
 
+    if (!(ep_attr->field_mask &
+          (UCT_EP_ATTR_FIELD_TX_TOKEN | UCT_EP_ATTR_FIELD_RX_TOKEN))) {
+        return UCS_OK;
+    }
+
     if (ep_attr->field_mask & UCT_EP_ATTR_FIELD_TX_TOKEN) {
         attr.field_mask |= UCT_IB_MLX5_EXT_QP_QUERY_ATTR_FIELD_TX_TOKEN;
         attr.tx_token    = ep_attr->tx_token;
@@ -50,10 +55,6 @@ uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep, uct_ep_attr_t *ep_attr)
         attr.rx_token    = ep_attr->rx_token;
     }
 
-    if (attr.field_mask == 0) {
-        return UCS_OK;
-    }
-
     if (ep->tx.wq.super.type == UCT_IB_MLX5_OBJ_TYPE_VERBS) {
         qp = ep->tx.wq.super.verbs.qp;
 #if HAVE_DEVX
@@ -62,6 +63,8 @@ uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep, uct_ep_attr_t *ep_attr)
         attr.field_mask |= UCT_IB_MLX5_EXT_QP_QUERY_ATTR_FIELD_QP_NUM;
         attr.qp_num      = ep->tx.wq.super.qp_num;
 #endif
+    } else {
+        return UCS_ERR_INVALID_PARAM;
     }
 
     return uct_ib_mlx5_ext_qp_query(qp,

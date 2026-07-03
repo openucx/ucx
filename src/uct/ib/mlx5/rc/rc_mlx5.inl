@@ -490,15 +490,9 @@ uct_rc_mlx5_common_post_send(uct_rc_mlx5_iface_common_t *iface, int qp_type,
                        uct_rc_mlx5_common_packet_dump : NULL);
 
     res_count = uct_ib_mlx5_post_send(txwq, ctrl, wqe_size, 1);
-    num_bb    = txwq->sw_pi - pi;
-
-    if (txwq->msn != NULL) {
-        if (opcode != MLX5_OPCODE_NOP) {
-            uct_rc_mlx5_txwq_set_msn(txwq, pi, num_bb);
-        } else {
-            uct_rc_mlx5_txwq_set_msn(txwq, pi, 0);
-        }
-    }
+    num_bb    = ucs_likely(opcode != MLX5_OPCODE_NOP) ?
+                (txwq->sw_pi - pi) : 0;
+    uct_rc_mlx5_txwq_set_msn(txwq, pi, num_bb);
 
     if (fm_ce_se & MLX5_WQE_CTRL_CQ_UPDATE) {
         txwq->sig_pi = txwq->prev_sw_pi;

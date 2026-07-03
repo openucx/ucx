@@ -1551,15 +1551,31 @@ ucs_status_t uct_md_mem_elem_pack(uct_md_h md, uct_mem_h memh, uct_rkey_t rkey,
  * The enumeration allows specifying which fields in @ref uct_ep_op_info_t are
  * present, for backward compatibility support.
  */
-enum uct_ep_op_info_field {
-    UCT_EP_OP_INFO_FIELD_AM     = UCS_BIT(0), /**< am_id, am_hdr* fields */
-    UCT_EP_OP_INFO_FIELD_DATA   = UCS_BIT(1), /**< data/length (short/bcopy) */
-    UCT_EP_OP_INFO_FIELD_IOV    = UCS_BIT(2), /**< iov/iovcnt (zcopy) */
-    UCT_EP_OP_INFO_FIELD_RMA    = UCS_BIT(3), /**< remote_addr, rkey */
-    UCT_EP_OP_INFO_FIELD_ATOMIC = UCS_BIT(4), /**< atomic_op, value, compare */
-    UCT_EP_OP_INFO_FIELD_COMP   = UCS_BIT(5), /**< Original uct_completion_t */
-    UCT_EP_OP_INFO_FIELD_FLAGS  = UCS_BIT(6), /**< Original flags */
-};
+typedef enum uct_ep_op_info_field {
+    /** Enables @ref uct_ep_op_info_t::operation. */
+    UCT_EP_OP_INFO_FIELD_OPERATION   = UCS_BIT(0),
+
+    /** Enables @ref uct_ep_op_info_t::comp. */
+    UCT_EP_OP_INFO_FIELD_COMP        = UCS_BIT(1),
+
+    /** Enables @ref uct_ep_op_info_t::flags. */
+    UCT_EP_OP_INFO_FIELD_FLAGS       = UCS_BIT(2),
+
+    /** Enables @ref uct_ep_op_info_t::am. */
+    UCT_EP_OP_INFO_FIELD_AM          = UCS_BIT(3),
+
+    /** Enables RMA fields in @ref uct_ep_op_info_t::rma. */
+    UCT_EP_OP_INFO_FIELD_RMA         = UCS_BIT(4),
+
+    /** Enables atomic fields in @ref uct_ep_op_info_t::rma. */
+    UCT_EP_OP_INFO_FIELD_ATOMIC      = UCS_BIT(5),
+
+    /** Enables @ref uct_ep_op_info_t::inline_data. */
+    UCT_EP_OP_INFO_FIELD_INLINE_DATA = UCS_BIT(6),
+
+    /** Enables @ref uct_ep_op_info_t::zcopy. */
+    UCT_EP_OP_INFO_FIELD_ZCOPY       = UCS_BIT(7),
+} uct_ep_op_info_field_t;
 
 
 /**
@@ -1575,7 +1591,7 @@ enum uct_ep_op_info_field {
 typedef struct uct_ep_op_info {
     /**
      * Mask of valid field groups in this structure, using bits from
-     * @ref uct_ep_op_info_field. Fields not specified by this mask
+     * @ref uct_ep_op_info_field_t. Fields not specified by this mask
      * will be ignored.
      */
     uint64_t           field_mask;
@@ -1586,16 +1602,14 @@ typedef struct uct_ep_op_info {
      */
     uct_ep_operation_t operation;
 
-    /** Original completion (UCT_EP_OP_INFO_FIELD_COMP). */
+    /* Original completion. */
     uct_completion_t   *comp;
 
-    /** Original flags (UCT_EP_OP_INFO_FIELD_FLAGS). */
+    /* Original flags. */
     unsigned           flags;
 
-    /* Operation-class specific parameters (UCT_EP_OP_INFO_FIELD_AM /
-     * UCT_EP_OP_INFO_FIELD_RMA / UCT_EP_OP_INFO_FIELD_ATOMIC) */
     union {
-        /* AM operations (UCT_EP_OP_INFO_FIELD_AM) */
+        /* AM operation parameters. */
         struct {
             uint8_t    am_id; /**< AM handler ID */
             uint64_t   am_hdr; /**< am_short 64-bit header word */
@@ -1603,8 +1617,7 @@ typedef struct uct_ep_op_info {
             size_t     am_hdr_length; /**< am_zcopy header length */
         } am;
 
-        /* PUT / GET / ATOMIC (UCT_EP_OP_INFO_FIELD_RMA,
-         * UCT_EP_OP_INFO_FIELD_ATOMIC) */
+        /* PUT, GET, and atomic operation parameters. */
         struct {
             uint64_t        remote_addr;
             uct_rkey_t      rkey;
@@ -1614,15 +1627,14 @@ typedef struct uct_ep_op_info {
         } rma;
     };
 
-    /* Data payload (UCT_EP_OP_INFO_FIELD_DATA / UCT_EP_OP_INFO_FIELD_IOV) */
     union {
-        /* short/bcopy inline data -- valid ONLY inside the callback */
+        /* Short/bcopy inline data, valid only inside the callback. */
         struct {
             const void *buffer;
             size_t     length;
         } inline_data;
 
-        /* zcopy IOV -- points to user's original registered buffers */
+        /* Zcopy IOV, pointing to user's original registered buffers. */
         struct {
             const uct_iov_t *iov;
             size_t          iovcnt;
