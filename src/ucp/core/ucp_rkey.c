@@ -16,6 +16,7 @@
 #include <ucp/rma/rma.h>
 #include <ucp/proto/proto_debug.h>
 #include <ucs/datastruct/mpool.inl>
+#include <ucs/arch/atomic.h>
 #include <ucs/profile/profile.h>
 #include <ucs/type/float8.h>
 #include <ucs/type/serialize.h>
@@ -970,6 +971,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
     rkey->md_map   = md_map;
     rkey->mem_type = *ucs_serialize_next(&p, const uint8_t);
     rkey->flags    = flags;
+    rkey->refcount = 1;
 #if ENABLE_PARAMS_CHECK
     rkey->ep       = ep;
 #endif
@@ -1131,7 +1133,7 @@ ucs_status_t ucp_rkey_ptr(ucp_rkey_h rkey, uint64_t raddr, void **addr_p)
     return UCS_ERR_UNREACHABLE;
 }
 
-void ucp_rkey_destroy(ucp_rkey_h rkey)
+static void ucp_rkey_destroy_internal(ucp_rkey_h rkey)
 {
     unsigned remote_md_index, rkey_index;
     ucp_worker_h UCS_V_UNUSED worker;
@@ -1154,6 +1156,28 @@ void ucp_rkey_destroy(ucp_rkey_h rkey)
     } else {
         ucs_free(rkey);
     }
+}
+
+void ucp_rkey_retain(ucp_rkey_h rkey)
+{
+    uint32_t old_refcount = ucs_atomic_fadd32(&rkey->refcount, 1);
+
+    ucs_assertv(old_refcount > 0, "rkey %p refcount %u", rkey, old_refcount);
+}
+
+void ucp_rkey_release(ucp_rkey_h rkey)
+{
+    uint32_t old_refcount = ucs_atomic_fadd32(&rkey->refcount, (uint32_t)-1);
+
+    ucs_assertv(old_refcount > 0, "rkey %p refcount %u", rkey, old_refcount);
+    if (old_refcount == 1) {
+        ucp_rkey_destroy_internal(rkey);
+    }
+}
+
+void ucp_rkey_destroy(ucp_rkey_h rkey)
+{
+    ucp_rkey_release(rkey);
 }
 
 ucp_lane_index_t ucp_rkey_find_rma_lane(ucp_context_h context,
