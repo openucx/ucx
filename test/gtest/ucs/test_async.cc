@@ -10,6 +10,7 @@
 extern "C" {
 #include <ucs/arch/atomic.h>
 #include <ucs/async/async.h>
+#include <ucs/async/async_int.h>
 #include <ucs/async/pipe.h>
 #include <ucs/sys/sys.h>
 }
@@ -639,6 +640,35 @@ UCS_TEST_P(test_async, ctx_event_block_two_miss) {
 
     le.check_miss();
     EXPECT_GT(le.count(), prev_count);
+}
+
+UCS_TEST_SKIP_COND_P(test_async, modify_missed_event,
+                     GetParam() == UCS_ASYNC_MODE_POLL)
+{
+    local_event le(GetParam());
+    const int event_id = le.event_id();
+    ucs_status_t status;
+    int count;
+
+    ASSERT_UCS_OK(ucs_async_modify_handler(event_id, UCS_EVENT_SET_EVREAD |
+                                                     UCS_EVENT_SET_EVWRITE));
+    le.block();
+    count = le.count();
+
+    std::thread([event_id, &status]() {
+        int handler_id = event_id;
+
+        status = ucs_async_dispatch_handlers(&handler_id, 1,
+                                             UCS_EVENT_SET_EVWRITE);
+    }).join();
+
+    EXPECT_EQ(UCS_ERR_NO_PROGRESS, status);
+    EXPECT_EQ(count, le.count());
+    le.unblock();
+
+    ASSERT_UCS_OK(ucs_async_modify_handler(event_id, UCS_EVENT_SET_EVREAD));
+    le.check_miss();
+    EXPECT_EQ(count, le.count());
 }
 
 UCS_TEST_P(test_async, ctx_timer_block) {

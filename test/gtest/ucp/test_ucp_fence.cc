@@ -9,6 +9,17 @@
 
 class test_ucp_fence : public ucp_test {
 public:
+    virtual void init() {
+        if (get_variant_value() & EP_BASED_FENCE) {
+            if (!is_proto_enabled()) {
+                UCS_TEST_SKIP_R("Proto v2 is disabled");
+            }
+            modify_config("FENCE_MODE", "ep_based");
+        }
+
+        ucp_test::init();
+    }
+
     typedef void (test_ucp_fence::* send_func_t)(entity *e, uint64_t *initial_buf,
                                                  uint64_t *result_buf, void *memheap_addr,
                                                  ucp_rkey_h rkey);
@@ -149,12 +160,18 @@ protected:
         disconnect(sender());
         disconnect(receiver());
     }
+
+    enum {
+        EP_BASED_FENCE = UCS_BIT(0)
+    };
 };
 
 class test_ucp_fence32 : public test_ucp_fence {
 public:
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
-        add_variant(variants, UCP_FEATURE_AMO32);
+        add_variant_with_value(variants, UCP_FEATURE_AMO32, 0, "");
+        add_variant_with_value(variants, UCP_FEATURE_AMO32, EP_BASED_FENCE,
+                               "ep_based");
     }
 };
 
@@ -168,7 +185,9 @@ UCP_INSTANTIATE_TEST_CASE(test_ucp_fence32)
 class test_ucp_fence64 : public test_ucp_fence {
 public:
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
-        add_variant(variants, UCP_FEATURE_AMO64);
+        add_variant_with_value(variants, UCP_FEATURE_AMO64, 0, "");
+        add_variant_with_value(variants, UCP_FEATURE_AMO64, EP_BASED_FENCE,
+                               "ep_based");
     }
 };
 

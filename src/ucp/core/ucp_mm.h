@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  * Copyright (C) Intel Corporation, 2023. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
@@ -36,14 +36,21 @@ enum {
     /*
      * Memory handle was imported and points to some peer's memory buffer.
      */
-    UCP_MEMH_FLAG_IMPORTED     = UCS_BIT(0),
-    UCP_MEMH_FLAG_MLOCKED      = UCS_BIT(1),
-    UCP_MEMH_FLAG_HAS_AUTO_GVA = UCS_BIT(2),
+    UCP_MEMH_FLAG_IMPORTED           = UCS_BIT(0),
+    UCP_MEMH_FLAG_MLOCKED            = UCS_BIT(1),
+    UCP_MEMH_FLAG_HAS_AUTO_GVA       = UCS_BIT(2),
 
     /**
      * Avoid using registration cache for the particular memory region.
      */
-    UCP_MEMH_FLAG_NO_RCACHE    = UCS_BIT(3)
+    UCP_MEMH_FLAG_NO_RCACHE          = UCS_BIT(3),
+
+    /**
+     * Track if sender-side flush is needed, check is only done when needed
+     * and cached.
+     */
+    UCP_MEMH_FLAG_SEND_FLUSH_CHECKED = UCS_BIT(4),
+    UCP_MEMH_FLAG_SEND_FLUSH_NEEDED  = UCS_BIT(5)
 };
 
 
@@ -69,6 +76,7 @@ typedef struct ucp_mem {
     uct_alloc_method_t  alloc_method;   /* Method used to allocate the memory */
     ucs_sys_device_t    sys_dev;        /* System device index */
     ucs_memory_type_t   mem_type;       /* Type of allocated or registered memory */
+    uint8_t             mem_flags;      /* UCS memory flags */
     ucp_md_index_t      alloc_md_index; /* Index of MD used to allocate the memory */
     uint64_t            remote_uuid;    /* Remote UUID */
     ucp_md_map_t        md_map;         /* Which MDs have valid memory handles */
@@ -108,6 +116,7 @@ typedef struct ucp_rndv_frag_mp_chunk_hdr {
 typedef struct ucp_rndv_mpool_priv {
     ucp_worker_h        worker;
     ucs_memory_type_t   mem_type;
+    ucs_sys_device_t    sys_dev;
 } ucp_rndv_mpool_priv_t;
 
 
@@ -211,19 +220,27 @@ void ucp_memh_disable_gva(ucp_mem_h memh, ucp_md_map_t md_map);
  *
  * @param [in]  context        UCP context containing memory domain indexes to
  *                             use for the memory allocation.
- * @param [in]  alloc_mem_type Memory type to get allocation index and sys
- *                             device for.
- * @param [out] md_idx         Index of the memory domain that is used to
+ * @param [in]  alloc_mem_type Memory type to get allocation index and memory
+ *                             information for.
+ * @param [in]  alloc_sys_dev  System device to get allocation index and memory
+ *                             information for.
+ * @param [out] md_idx_p       Index of the memory domain that is used to
  *                             allocate memory.
- * @param [out] sys_dev        Device id on which the memory was allocated.
+ * @param [out] mem_info_p     Information about the allocated memory.
  *
  * @return Error code as defined by @ref ucs_status_t.
  */
-ucs_status_t
-ucp_mm_get_alloc_md_index(ucp_context_h context,
-                          ucs_memory_type_t alloc_mem_type,
-                          ucp_md_index_t *md_idx,
-                          ucs_sys_device_t *sys_dev);
+ucs_status_t ucp_mm_get_alloc_md_index(ucp_context_h context,
+                                       ucs_memory_type_t alloc_mem_type,
+                                       ucs_sys_device_t alloc_sys_dev,
+                                       ucp_md_index_t *md_idx_p,
+                                       ucp_memory_info_t *mem_info_p);
+
+ucs_status_t ucp_mem_do_alloc(ucp_context_h context, void *address,
+                              size_t length, unsigned uct_flags,
+                              ucs_memory_type_t mem_type,
+                              ucs_sys_device_t sys_dev, const char *name,
+                              uct_allocated_memory_t *mem);
 
 static UCS_F_ALWAYS_INLINE ucp_md_map_t
 ucp_rkey_packed_md_map(const void *rkey_buffer)
@@ -235,16 +252,6 @@ static UCS_F_ALWAYS_INLINE ucs_memory_type_t
 ucp_rkey_packed_mem_type(const void *rkey_buffer)
 {
     return (ucs_memory_type_t)(*(uint8_t *)((const ucp_md_map_t*)rkey_buffer + 1));
-}
-
-static UCS_F_ALWAYS_INLINE uct_mem_h
-ucp_memh_map2uct(const uct_mem_h *uct, ucp_md_map_t md_map, ucp_md_index_t md_idx)
-{
-    if (!(md_map & UCS_BIT(md_idx))) {
-        return UCT_MEM_HANDLE_NULL;
-    }
-
-    return uct[ucs_bitmap2idx(md_map, md_idx)];
 }
 
 static UCS_F_ALWAYS_INLINE void *ucp_memh_address(const ucp_mem_h memh)

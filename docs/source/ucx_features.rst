@@ -34,6 +34,7 @@ Fabrics support
 - TCP sockets
 - Shared memory (CMA, knem, xpmem, SysV, mmap)
 - Cray Gemini / Aries (ugni)
+- NVLink / Multi-Node NVLink
 
 Platforms support
 *****************

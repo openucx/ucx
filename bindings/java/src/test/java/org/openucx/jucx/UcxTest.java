@@ -37,11 +37,15 @@ abstract class UcxTest {
 
         public void setData(String data) throws Exception {
             if (memory.getMemType() == UcsConstants.MEMORY_TYPE.UCS_MEMORY_TYPE_CUDA) {
-                ByteBuffer srcBuffer = ByteBuffer.allocateDirect(data.length() * 2);
+                ByteBuffer srcBuffer = ByteBuffer.allocateDirect((int)memory.getLength());
+                while (srcBuffer.hasRemaining()) {
+                    srcBuffer.put((byte) 0);
+                }
+                srcBuffer.clear();
                 srcBuffer.asCharBuffer().put(data);
                 UcpRequest send = selfEp.sendTaggedNonBlocking(srcBuffer, 0, null);
                 worker.progressRequest(worker.recvTaggedNonBlocking(memory.getAddress(),
-                        data.length() * 2L, 0, 0, null));
+                        memory.getLength(), 0, 0, null));
                 worker.progressRequest(send);
             } else {
                 buffer.asCharBuffer().put(data);

@@ -1,7 +1,7 @@
 Source: @PACKAGE@
 Section: libs
 Priority: extra
-Maintainer: ucx-group@elist.ornl.gov
+Maintainer: UCX Team <ucx-group@elist.ornl.gov>
 Build-Depends: debhelper (>= 9.0),
  libibverbs-dev,
  librdmacm-dev,
@@ -21,6 +21,7 @@ Depends: libc6, libgomp1
 Architecture: any
 Conflicts: libucx0 (<< ${binary:Version}), libucx-dev (<< ${binary:Version}), ucx-utils (<< ${binary:Version})
 Replaces:  libucx0 (<< ${binary:Version}), libucx-dev (<< ${binary:Version}), ucx-utils (<< ${binary:Version})
+Provides:  libucx0 (= ${binary:Version}), libucx-dev (= ${binary:Version}), ucx-utils (= ${binary:Version})
 Description: Unified Communication X
  UCX is a communication library implementing high-performance messaging.
  .
@@ -41,6 +42,7 @@ Description: Unified Communication X - XPMEM support
 Package: ucx-cuda
 Section: libs
 Depends: ${misc:Depends}, ${shlibs:Depends}
+Recommends: ${shlibs:Recommends}
 Architecture: any
 Build-Profiles: <cuda>
 Description: Unified Communication X - CUDA support

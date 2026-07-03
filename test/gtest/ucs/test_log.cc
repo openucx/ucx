@@ -1,11 +1,12 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2017. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
 #include <common/test.h>
 #include <fstream>
 #include <set>
+#include <vector>
 #include <dirent.h>
 
 extern "C" {
@@ -350,6 +351,114 @@ class log_test_backtrace : public log_test {
 
 UCS_TEST_F(log_test_backtrace, backtrace) {
     ucs_log_print_backtrace(UCS_LOG_LEVEL_INFO);
+}
+
+class log_test_compact : public log_test {
+protected:
+    virtual void check_log_file()
+    {
+        /* Verification is performed in the test body, where each test
+         * defines its own assertions on the multi-line output. */
+    }
+
+    struct log_line_parts {
+        std::string prefix;
+        std::string content;
+    };
+
+    /* Split a compact-format log line into its prefix and content portion. 
+     * Fails the test on a malformed line. */
+    static log_line_parts extract_parts(const std::string &log_line)
+    {
+        static const std::string separator = "]   ";
+
+        const size_t pos = log_line.find(separator);
+        EXPECT_NE(std::string::npos, pos)
+                << "malformed compact log line: '" << log_line << "'";
+        if (pos == std::string::npos) {
+            return {};
+        }
+
+        const size_t content_pos = pos + separator.size();
+
+        return {
+            .prefix = log_line.substr(0, content_pos),
+            .content = log_line.substr(content_pos),
+        };
+    }
+
+    void check_compact_log(const std::vector<std::string> &log_lines)
+    {
+        std::string input;
+        std::string prefix, line;
+        size_t idx = 0;
+
+        for (size_t i = 0; i < log_lines.size(); ++i) {
+            if (i > 0) {
+                input += '\n';
+            }
+            input += log_lines[i];
+        }
+
+        ucs_log_print_compact(input.c_str());
+        ucs_log_flush();
+
+        std::stringstream content(read_logfile());
+
+        /* Discard the "<filename>:" header that read_logfile() prepends. */
+        std::getline(content, line);
+
+        while ((idx < log_lines.size()) && std::getline(content, line)) {
+            log_line_parts parts = extract_parts(line);
+            if (prefix.empty()) {
+                ASSERT_FALSE(parts.prefix.empty());
+                prefix = parts.prefix;
+            } else {
+                ASSERT_EQ(prefix, parts.prefix);
+            }
+
+            EXPECT_EQ(log_lines[idx], parts.content);
+            ++idx;
+        }
+
+        EXPECT_EQ(log_lines.size(), idx);
+
+        std::getline(content, line);
+        EXPECT_TRUE(line.empty())
+                << "unexpected extra log line: '" << line << "'";
+    }
+};
+
+UCS_TEST_F(log_test_compact, empty) {
+    check_compact_log({""});
+}
+
+UCS_TEST_F(log_test_compact, single_line) {
+    check_compact_log({"single line"});
+}
+
+UCS_TEST_F(log_test_compact, multiline) {
+    check_compact_log({
+            "log_a",
+            "log_b",
+            "log_c",
+    });
+}
+
+UCS_TEST_F(log_test_compact, blank_at_start) {
+    check_compact_log({"", "log1"});
+}
+
+UCS_TEST_F(log_test_compact, blank_at_end) {
+    check_compact_log({"log1", ""});
+}
+
+UCS_TEST_F(log_test_compact, blank_in_middle) {
+    check_compact_log({"log1", "", "log2"});
+}
+
+UCS_TEST_F(log_test_compact, blank_lines) {
+    check_compact_log({"", "log1", "", "", "", "log2", ""});
 }
 
 class log_demo : public ucs::test {

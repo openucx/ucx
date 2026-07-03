@@ -56,6 +56,9 @@ void test_ucp_tag::init()
 
 void test_ucp_tag::enable_tag_mp_offload()
 {
+    if (ucs::skip_hw_tm_offload()) {
+        test_skip();
+    }
     m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_ENABLE", "y"));
     m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_MP_SRQ_ENABLE", "try"));
     m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_MP_NUM_STRIDES", "8"));
@@ -425,6 +428,9 @@ public:
     test_ucp_tag_limits() {
         m_test_offload = get_variant_value();
         if (m_test_offload) {
+            if (ucs::skip_hw_tm_offload()) {
+                test_skip();
+            }
             m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_ENABLE", "y"));
         }
         m_tag_min_rndv = 0;
@@ -511,7 +517,7 @@ protected:
 
         /* Skip proto_select hash map check for HWTM since eager has certain
            max_frag threshold in that case and there is no reliable way
-           on UCP side to obtain that value. So RNDV can be used instead 
+           on UCP side to obtain that value. So RNDV can be used instead
            of eager even if RNDV_THRESH is set to higher value. */
         if (m_test_offload) {
             UCS_TEST_SKIP_R("Skip EP RNDV_THRESH check for HWTM");
@@ -680,16 +686,11 @@ public:
         if (disable_proto()) {
             modify_config("PROTO_ENABLE", "n");
         }
-    }
-
-    void init() {
         stats_activate();
-        test_ucp_tag::init();
     }
 
-    virtual void cleanup()
+    ~test_ucp_tag_nbx()
     {
-        test_ucp_tag::cleanup();
         stats_restore();
     }
 

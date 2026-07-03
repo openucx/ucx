@@ -6,6 +6,8 @@ jobs:
       demands:
       - ucx_docker -equals yes
     container: fedora
+    workspace:
+      clean: all
     steps:
       - checkout: self
         clean: true

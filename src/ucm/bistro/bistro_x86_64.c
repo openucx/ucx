@@ -82,6 +82,9 @@ typedef struct {
 /* Immediate Grp 1(1A), Ev, Iz */
 #define UCM_BISTRO_X86_IMM_GRP1_EV_IZ 0x81
 
+/* Immediate Grp 1(1A), Ev, Ib - 8-bit immediate */
+#define UCM_BISTRO_X86_IMM_GRP1_EV_IB 0x83
+
 /* MOV Ev,Gv */
 #define UCM_BISTRO_X86_MOV_EV_GV 0x89
 
@@ -156,11 +159,18 @@ ucs_status_t ucm_bistro_relocate_one(ucm_bistro_relocate_context_t *ctx)
         /* push reg */
         goto out_copy_src;
     } else if ((rex == UCM_BISTRO_X86_REX_W) &&
-               (opcode == UCM_BISTRO_X86_IMM_GRP1_EV_IZ)) {
+               ((opcode == UCM_BISTRO_X86_IMM_GRP1_EV_IZ) ||  /* sub $imm32, r/m64 */
+                (opcode == UCM_BISTRO_X86_IMM_GRP1_EV_IB))) { /* sub $imm8, r/m64 */
         modrm = *ucs_serialize_next(&ctx->src_p, const uint8_t);
         if (modrm == UCM_BISTRO_X86_MODRM_SUB_SP) {
-            /* sub $imm32, %rsp */
-            ucs_serialize_next(&ctx->src_p, const uint32_t);
+            if (opcode == UCM_BISTRO_X86_IMM_GRP1_EV_IB) {
+                /* sub $imm8, %rsp */
+                ucs_serialize_next(&ctx->src_p, const uint8_t);
+            } else {
+                /* sub $imm32, %rsp */
+                ucs_serialize_next(&ctx->src_p, const uint32_t);
+            }
+
             goto out_copy_src;
         }
     } else if ((rex == UCM_BISTRO_X86_REX_W) &&

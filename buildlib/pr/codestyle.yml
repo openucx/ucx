@@ -6,6 +6,8 @@ jobs:
       name: MLNX
       demands:
       - ucx_docker -equals yes
+    workspace:
+      clean: all
     steps:
       - checkout: self
         clean: true
@@ -36,6 +38,8 @@ jobs:
       demands:
       - ucx_docker -equals yes
     container: fedora
+    workspace:
+      clean: all
     steps:
       - checkout: self
         clean: true
@@ -70,6 +74,8 @@ jobs:
       demands:
       - ucx_docker -equals yes
     container: fedora
+    workspace:
+      clean: all
     steps:
       - checkout: self
         clean: true
@@ -95,6 +101,8 @@ jobs:
       demands:
       - ucx_docker -equals yes
     container: fedora
+    workspace:
+      clean: all
     steps:
       - checkout: self
         clean: true
@@ -102,7 +110,7 @@ jobs:
         retryCountOnTaskFailure: 5
 
       - bash: |
-          set -eE
+          set -eEx
           source ./buildlib/tools/codestyle.sh
           codestyle_check_spell
         displayName: codespell test
@@ -114,6 +122,8 @@ jobs:
       demands:
       - ucx_docker -equals yes
     container: fedora
+    workspace:
+      clean: all
     steps:
       - checkout: self
         clean: true

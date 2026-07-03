@@ -56,6 +56,7 @@ ucs_global_opts_t ucs_global_opts = {
     .module_dir            = UCX_MODULE_DIR, /* defined in Makefile.am */
     .module_log_level      = UCS_LOG_LEVEL_TRACE,
     .modules               = { {NULL, 0}, UCS_CONFIG_ALLOW_LIST_ALLOW_ALL },
+    .plugin_path           = { NULL, 0 },
     .arch                  = UCS_ARCH_GLOBAL_OPTS_INITALIZER,
     .rcache_stat_min       = 0,
     .rcache_stat_max       = 0
@@ -129,7 +130,7 @@ static ucs_config_field_t ucs_global_opts_table[] = {
 #if ENABLE_DEBUG_DATA
   "bt,freeze",
 #else
-  "bt",
+  "none",
 #endif
   "Error signal handling mode. Either 'none' to disable signal interception,\n"
   "or a combination of:\n"
@@ -192,7 +193,7 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   "Directory to search for loadable modules",
   ucs_offsetof(ucs_global_opts_t, module_dir), UCS_CONFIG_TYPE_STRING},
 
- {"MODULE_LOG_LEVEL", "trace",
+ {"MODULE_LOG_LEVEL", "debug",
   "Logging level for module loader",
   ucs_offsetof(ucs_global_opts_t, module_log_level), UCS_CONFIG_TYPE_ENUM(ucs_log_level_names)},
 
@@ -202,6 +203,11 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   " *     - load all modules\n"
   " ^cu*  - do not load modules that begin with 'cu'",
   ucs_offsetof(ucs_global_opts_t, modules), UCS_CONFIG_TYPE_ALLOW_LIST},
+
+ {"PLUGIN_PATH", "",
+  "Colon-separated list of additional directories to search for loadable\n"
+  "plugin modules",
+  ucs_offsetof(ucs_global_opts_t, plugin_path), UCS_CONFIG_TYPE_PATH_ARRAY},
 
  {"TOPO_PRIO", "sysfs,default",
   "Comma-separated list of providers for detecting system topology.\n"
@@ -347,11 +353,11 @@ UCS_CONFIG_DECLARE_TABLE(ucs_global_opts_read_only_table,
                          "UCS global (runtime read-only)", NULL,
                          ucs_global_opts_t)
 
-
 ucs_status_t ucs_global_opts_set_value(const char *name, const char *value)
 {
-    ucs_status_t status = ucs_global_opts_set_value_modifiable(name, value);
-
+    ucs_status_t status = ucs_config_parser_set_value(&ucs_global_opts,
+                                                      ucs_global_opts_table,
+                                                      NULL, name, value);
     if (status != UCS_ERR_NO_ELEM) {
         return status;
     }
@@ -361,11 +367,10 @@ ucs_status_t ucs_global_opts_set_value(const char *name, const char *value)
                                        name, value);
 }
 
-ucs_status_t ucs_global_opts_set_value_modifiable(const char *name,
-                                                  const char *value)
+int ucs_global_opts_is_read_only(const char *name)
 {
-    return ucs_config_parser_set_value(&ucs_global_opts, ucs_global_opts_table,
-                                       NULL, name, value);
+    return ucs_config_parser_has_field(ucs_global_opts_read_only_table, NULL,
+                                       name);
 }
 
 ucs_status_t ucs_global_opts_get_value(const char *name, char *value,
@@ -413,12 +418,12 @@ void ucs_global_opts_print(FILE *stream, ucs_config_print_flags_t print_flags)
 {
     ucs_config_parser_print_opts(stream, "Global configuration",
                                  &ucs_global_opts, ucs_global_opts_table, NULL,
-                                 UCS_DEFAULT_ENV_PREFIX, print_flags);
+                                 UCS_DEFAULT_ENV_PREFIX, print_flags, NULL);
     ucs_config_parser_print_opts(stream,
                                  "Global configuration (runtime read-only)",
                                  &ucs_global_opts,
                                  ucs_global_opts_read_only_table, NULL,
-                                 UCS_DEFAULT_ENV_PREFIX, print_flags);
+                                 UCS_DEFAULT_ENV_PREFIX, print_flags, NULL);
 }
 
 static void ucs_vfs_read_log_level(void *obj, ucs_string_buffer_t *strb,

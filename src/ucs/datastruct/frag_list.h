@@ -124,6 +124,7 @@ ucs_status_t ucs_frag_list_init(ucs_frag_list_sn_t initial_sn, ucs_frag_list_t *
                                int max_holes
                                UCS_STATS_ARG(ucs_stats_node_t *stats_parent));
 
+
 /**
  * Cleanup the frag_list.
  */
@@ -140,7 +141,8 @@ ucs_frag_list_ooo_type_t ucs_frag_list_insert_slow(ucs_frag_list_t *head,
  * pull element from the list
  * @return  NULL if list is empty or it is impossible to pull anything
  */
-ucs_frag_list_elem_t *ucs_frag_list_pull_slow(ucs_frag_list_t *head);
+ucs_frag_list_elem_t *ucs_frag_list_pull_slow(ucs_frag_list_t *head,
+                                              int force);
 
 
 /**
@@ -205,16 +207,23 @@ ucs_frag_list_insert(ucs_frag_list_t *head, ucs_frag_list_elem_t *elem,
 #endif
 }
 
-static inline ucs_frag_list_elem_t *ucs_frag_list_pull(ucs_frag_list_t *head)
+static inline ucs_frag_list_elem_t *ucs_frag_list_remove(ucs_frag_list_t *head,
+                                                         int force)
 {
     if (!ucs_queue_is_empty(&head->ready_list)) {
         --head->elem_count;
-        return ucs_queue_pull_elem_non_empty(&head->ready_list, ucs_frag_list_elem_t, list);
+        return ucs_queue_pull_elem_non_empty(&head->ready_list,
+                                             ucs_frag_list_elem_t, list);
     } else if (!ucs_queue_is_empty(&head->list)) {
-        return ucs_frag_list_pull_slow(head);
+        return ucs_frag_list_pull_slow(head, force);
     } else {
         return NULL;
     }
+}
+
+static inline ucs_frag_list_elem_t *ucs_frag_list_pull(ucs_frag_list_t *head)
+{
+    return ucs_frag_list_remove(head, 0);
 }
 
 #endif

@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) Shanghai Zhaoxin Semiconductor Co., Ltd. 2020. ALL RIGHTS RESERVED.
 * Copyright (C) Tactical Computing Labs, LLC. 2022. ALL RIGHTS RESERVED.
 * Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
@@ -13,7 +13,8 @@
 
 #include "ucx_info.h"
 
-#include <ucs/sys/string.h>
+#include <ucs/debug/table.h>
+#include <ucs/debug/log.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/math.h>
 #include <ucs/time/time.h>
@@ -61,129 +62,147 @@ out:
     return result;
 }
 
-static void print_repeat_char(int ch, int count)
+/* Add an empty row used as vertical padding around content rows */
+static void print_sys_topo_add_padding(ucs_table_t *table)
 {
-    int i;
+    ucs_table_row_h row;
+    unsigned i;
 
-    for (i = 0; i < count; ++i) {
-        putchar(ch);
+    ucs_table_add_row(table, &row);
+
+    for (i = 0; i < table->config.n_cols; ++i) {
+        ucs_table_row_add_cell_empty(table, row, 1);
     }
 }
 
-static void print_row_separator(int column_width, int first_column_width,
-                                int num_columns, int fill_char,
-                                int separator_char)
+/* Add a header row of the shape "<label> | dev0 | dev1 | ...", surrounded
+ * by empty padding rows and followed by a separator. */
+static void print_sys_topo_add_devices_header(ucs_table_t *table,
+                                              const char *first_col_label,
+                                              unsigned num_devices)
 {
-    int i;
+    ucs_table_row_h row;
+    ucs_sys_device_t sys_dev;
 
-    printf("# %c", separator_char);
-    print_repeat_char(fill_char, first_column_width);
-    for (i = 0; i < num_columns; ++i) {
-        putchar(separator_char);
-        print_repeat_char(fill_char, column_width);
+    print_sys_topo_add_padding(table);
+
+    ucs_table_add_row(table, &row);
+    ucs_table_row_add_cell_fmt(table, row, 1, UCS_TABLE_ALIGN_RIGHT, "%s",
+                               first_col_label);
+
+    for (sys_dev = 0; sys_dev < num_devices; ++sys_dev) {
+        ucs_table_row_add_cell_fmt(table, row, 1, UCS_TABLE_ALIGN_RIGHT, "%s",
+                                   ucs_topo_sys_device_get_name(sys_dev));
     }
-    printf("%c\n", separator_char);
+
+    print_sys_topo_add_padding(table);
+    ucs_table_add_separator(table);
 }
 
-static void print_table_header(const char *title, const char *distance_unit,
-                               int column_width, int first_column_width,
-                               int num_columns)
+static void print_sys_topo_distances(unsigned num_devices)
 {
-    int column;
+    ucs_table_config_t cfg = {
+        .n_cols       = 1 + num_devices,
+        .row_prefix   = "# ",
+        .equal_widths = 1,
+    };
+    ucs_sys_device_t sys_dev1, sys_dev2;
+    ucs_sys_dev_distance_t distance;
+    ucs_status_t dist_status;
+    ucs_table_row_h row;
+    ucs_table_t table;
 
-    printf("#\n");
-    printf("# %s\n", title);
-    printf("#\n");
-    print_row_separator(column_width, first_column_width, num_columns, '-',
-                        '+');
-    print_row_separator(column_width, first_column_width, num_columns, ' ',
-                        '|');
-    printf("# |%*s ", first_column_width - 1, distance_unit);
-    for (column = 0; column < num_columns; ++column) {
-        printf("|%*s ", column_width - 1,
-               ucs_topo_sys_device_get_name((ucs_sys_device_t)column));
+    printf("#\n# System topology\n#\n");
+
+    ucs_table_init(&table, &cfg);
+
+    print_sys_topo_add_devices_header(&table, "MB/s", num_devices);
+
+    for (sys_dev1 = 0; sys_dev1 < num_devices; ++sys_dev1) {
+        if (sys_dev1 > 0) {
+            ucs_table_add_separator(&table);
+        }
+
+        print_sys_topo_add_padding(&table);
+
+        ucs_table_add_row(&table, &row);
+        ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_RIGHT, "%s",
+                                   ucs_topo_sys_device_get_name(sys_dev1));
+
+        for (sys_dev2 = 0; sys_dev2 < num_devices; ++sys_dev2) {
+            if (sys_dev1 == sys_dev2) {
+                /* Do not print distance of device to itself */
+                ucs_table_row_add_cell_fmt(&table, row, 1,
+                                           UCS_TABLE_ALIGN_CENTER, "%s", "-");
+                continue;
+            }
+
+            dist_status = ucs_topo_get_distance(sys_dev1, sys_dev2, &distance);
+            if (dist_status != UCS_OK) {
+                ucs_table_row_add_cell_fmt(&table, row, 1,
+                                           UCS_TABLE_ALIGN_RIGHT, "<%s>",
+                                           ucs_status_string(dist_status));
+            } else if (distance.bandwidth > UCS_PBYTE) {
+                ucs_table_row_add_cell_fmt(&table, row, 1,
+                                           UCS_TABLE_ALIGN_RIGHT, "%s", "inf");
+            } else {
+                ucs_table_row_add_cell_fmt(&table, row, 1,
+                                           UCS_TABLE_ALIGN_RIGHT, "%.1f",
+                                           distance.bandwidth / UCS_MBYTE);
+            }
+        }
+
+        print_sys_topo_add_padding(&table);
     }
 
-    printf("|\n");
-    print_row_separator(column_width, first_column_width, num_columns, ' ',
-                        '|');
-    print_row_separator(column_width, first_column_width, num_columns, '-',
-                        '+');
+    ucs_table_print(&table);
+    ucs_table_cleanup(&table);
+}
+
+static void print_sys_topo_memory_latency(unsigned num_devices)
+{
+    ucs_table_config_t cfg = {
+        .n_cols       = 1 + num_devices,
+        .row_prefix   = "# ",
+        .equal_widths = 1,
+    };
+    ucs_sys_dev_distance_t distance;
+    ucs_sys_device_t sys_dev;
+    ucs_table_row_h row;
+    ucs_table_t table;
+
+    printf("#\n# NUMA memory latency\n#\n");
+
+    ucs_table_init(&table, &cfg);
+
+    print_sys_topo_add_devices_header(&table, "device", num_devices);
+    print_sys_topo_add_padding(&table);
+
+    ucs_table_add_row(&table, &row);
+    ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_RIGHT, "%s",
+                               "nsec");
+
+    for (sys_dev = 0; sys_dev < num_devices; ++sys_dev) {
+        ucs_topo_get_memory_distance(sys_dev, &distance);
+        ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_RIGHT,
+                                   "%.1f", distance.latency * UCS_NSEC_PER_SEC);
+    }
+
+    print_sys_topo_add_padding(&table);
+
+    ucs_table_print(&table);
+
+    printf("# Memory latency is calculated according to the CPU affinity\n");
+
+    ucs_table_cleanup(&table);
 }
 
 static void print_sys_topo()
 {
-    const unsigned num_devices              = ucs_topo_num_devices();
-    static const int distance_width         = 10;
-    static const char *system_topo_title    = "System topology";
-    static const char *distance_unit        = "MB/s";
-    static const char *memory_latency_title = "NUMA memory latency";
-    static const char *numa_distance_unit   = "nsec";
-    ucs_sys_device_t sys_dev1, sys_dev2;
-    ucs_sys_dev_distance_t distance;
-    char distance_str[20];
-    ucs_status_t status;
-    int name_width;
+    const unsigned num_devices = ucs_topo_num_devices();
 
-    /* Get maximal width of device name */
-    name_width = 2 + strlen(distance_unit);
-    for (sys_dev1 = 0; sys_dev1 < num_devices; ++sys_dev1) {
-        name_width = ucs_max(
-                name_width, 2 + strlen(ucs_topo_sys_device_get_name(sys_dev1)));
-    }
-
-    print_table_header(system_topo_title, distance_unit, distance_width,
-                       name_width, num_devices);
-
-    /* Print table content */
-    for (sys_dev1 = 0; sys_dev1 < num_devices; ++sys_dev1) {
-        print_row_separator(distance_width, name_width, num_devices, ' ', '|');
-
-        printf("# |%*s ", name_width - 1,
-               ucs_topo_sys_device_get_name(sys_dev1));
-        for (sys_dev2 = 0; sys_dev2 < num_devices; ++sys_dev2) {
-            if (sys_dev1 == sys_dev2) {
-                /* Do not print distance of device to itself */
-                strncpy(distance_str, "-", sizeof(distance_str));
-            } else {
-                status = ucs_topo_get_distance(sys_dev1, sys_dev2, &distance);
-                if (status != UCS_OK) {
-                    ucs_snprintf_safe(distance_str, sizeof(distance_str),
-                                      "<%s>", ucs_status_string(status));
-                } else if (distance.bandwidth > UCS_PBYTE) {
-                    ucs_snprintf_safe(distance_str, sizeof(distance_str),
-                                      "inf");
-                } else {
-                    ucs_snprintf_safe(distance_str, sizeof(distance_str),
-                                      "%.1f", distance.bandwidth / UCS_MBYTE);
-                }
-            }
-            printf("|%*s ", distance_width - 1, distance_str);
-        }
-        printf("|\n");
-
-        print_row_separator(distance_width, name_width, num_devices, ' ', '|');
-        print_row_separator(distance_width, name_width, num_devices, '-', '+');
-    }
-
-    print_table_header(memory_latency_title, "device", distance_width,
-                       name_width, num_devices);
-    print_row_separator(distance_width, name_width, num_devices, ' ', '|');
-
-    printf("# |%*s ", name_width - 1, numa_distance_unit);
-    printf("|");
-    for (sys_dev1 = 0; sys_dev1 < num_devices; ++sys_dev1) {
-        ucs_topo_get_memory_distance(sys_dev1, &distance);
-        ucs_snprintf_safe(distance_str, sizeof(distance_str), "%.1f",
-                          distance.latency * UCS_NSEC_PER_SEC);
-        printf("%*s |", distance_width - 1, distance_str);
-    }
-
-    printf("\n");
-    print_row_separator(distance_width, name_width, num_devices, ' ', '|');
-    print_row_separator(distance_width, name_width, num_devices, '-', '+');
-
-    printf("# Memory latency is calculated according to the CPU affinity\n");
+    print_sys_topo_distances(num_devices);
+    print_sys_topo_memory_latency(num_devices);
 }
 
 static double measure_timer_accuracy()

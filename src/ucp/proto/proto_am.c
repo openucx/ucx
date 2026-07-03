@@ -114,28 +114,3 @@ void ucp_proto_am_zcopy_completion(uct_completion_t *self)
 
     ucp_proto_am_zcopy_req_complete(req, self->status);
 }
-
-ucs_status_t ucp_proto_am_req_copy_header(ucp_request_t *req)
-{
-    void *user_header;
-
-    if ((req->flags & UCP_REQUEST_FLAG_USER_HEADER_COPIED) ||
-        (req->send.msg_proto.am.header.length == 0)) {
-        return UCS_OK;
-    }
-
-    ucs_assert(req->send.msg_proto.am.flags & UCP_AM_SEND_FLAG_COPY_HEADER);
-    user_header = ucs_mpool_set_get_inline(&req->send.ep->worker->am_mps,
-                                           req->send.msg_proto.am.header.length);
-    if (ucs_unlikely(user_header == NULL)) {
-        ucs_error("failed to allocate active message user header copy");
-        return UCS_ERR_NO_MEMORY;
-    }
-
-    memcpy(user_header, req->send.msg_proto.am.header.ptr,
-           req->send.msg_proto.am.header.length);
-    req->flags                       |= UCP_REQUEST_FLAG_USER_HEADER_COPIED;
-    req->send.msg_proto.am.header.ptr = user_header;
-
-    return UCS_OK;
-}

@@ -5,7 +5,6 @@
 #include <ucm/api/ucm.h>
 #include <ucs/debug/assert.h>
 #include <ucs/sys/ptr_arith.h>
-#include <common/cuda_context.h>
 #include <common/test.h>
 #include <cuda.h>
 #include <cuda_runtime.h>
@@ -65,11 +64,6 @@ protected:
     void check_mem_free_events(void *ptr, size_t size) const
     {
         check_event_present(m_free_events, "free", ptr, size);
-    }
-
-    CUdevice device() const
-    {
-        return cuda_ctx.cuda_device();
     }
 
 private:
@@ -152,7 +146,6 @@ private:
         self->mem_free_event(event->mem_type.address, event->mem_type.size);
     }
 
-    cuda_context    cuda_ctx;
     mem_event_vec_t m_alloc_events;
     mem_event_vec_t m_free_events;
 };
@@ -252,9 +245,12 @@ UCS_TEST_F(cuda_hooks, test_cuMemMapUnmap) {
     ASSERT_EQ(ret, CUDA_SUCCESS);
     size = ucs_align_up(256 * UCS_KBYTE, granularity);
 
+    CUdevice device;
+    ret = cuCtxGetDevice(&device);
+    ASSERT_EQ(ret, CUDA_SUCCESS);
     prop.type          = CU_MEM_ALLOCATION_TYPE_PINNED;
     prop.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
-    prop.location.id   = device();
+    prop.location.id   = device;
     ret                = cuMemCreate(&handle, size, &prop, 0);
     ASSERT_EQ(ret, CUDA_SUCCESS);
 

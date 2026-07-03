@@ -10,7 +10,7 @@
 AC_PREREQ([2.63])
 
 define([ucx_ver_major], 1)  # Major version. Usually does not change.
-define([ucx_ver_minor], 19) # Minor version. Increased for each release.
+define([ucx_ver_minor], 23) # Minor version. Increased for each release.
 define([ucx_ver_patch], 0)  # Patch version. Increased for a bugfix release.
 define([ucx_ver_extra], )   # Extra version string. Empty for a general release.
 
@@ -72,6 +72,43 @@ AC_SUBST(EXTRA_VERSION)
 AC_SUBST(SCM_VERSION)
 AC_SUBST(SOVERSION)
 
+UCX_LT_RELEASE=
+UCX_LIBRARY_FILE_SUFFIX=
+ucx_soname_suffix_summary="<disabled>"
+ucx_module_deepbind_summary="no"
+AC_ARG_WITH([soname-suffix],
+        AS_HELP_STRING([--with-soname-suffix=SUFFIX],
+                       [Append SUFFIX to UCX installed shared library names and SONAMEs. Disabled by default. [default=NO]]),
+        [], [with_soname_suffix=no])
+AS_IF([test "x$with_soname_suffix" != xno],
+      [AS_IF([test "x$with_soname_suffix" = xyes],
+             [AC_MSG_ERROR([--with-soname-suffix requires an explicit suffix value])])
+       case "$with_soname_suffix" in
+           @<:@A-Za-z0-9@:>@*) ;;
+           *) AC_MSG_ERROR([--with-soname-suffix must start with a letter or digit]) ;;
+       esac
+       case "$with_soname_suffix" in
+           *@<:@!A-Za-z0-9_-@:>@*)
+               AC_MSG_ERROR([--with-soname-suffix must contain only letters, digits, underscores, and dashes])
+               ;;
+       esac
+       UCX_LIBRARY_FILE_SUFFIX="-$with_soname_suffix"
+       UCX_LT_RELEASE="-release $with_soname_suffix"
+       AC_DEFINE_UNQUOTED([UCX_MODULE_FILE_SUFFIX],
+                          ["$UCX_LIBRARY_FILE_SUFFIX"],
+                          [Suffix appended to private UCX module file names])
+       ucx_soname_suffix_summary="$with_soname_suffix"])
+AC_SUBST([UCX_LT_RELEASE])
+AC_SUBST([UCX_LIBRARY_FILE_SUFFIX])
+
+AC_ARG_ENABLE([module-deepbind],
+        AS_HELP_STRING([--enable-module-deepbind],
+                       [Load UCX modules with RTLD_DEEPBIND. Intended for private UCX bundles. Disabled by default. [default=NO]]),
+        [], [enable_module_deepbind=no])
+AS_IF([test "x$enable_module_deepbind" = xyes],
+      [AS_IF([test "x$with_soname_suffix" = xno],
+             [AC_MSG_ERROR([--enable-module-deepbind requires --with-soname-suffix])])])
+
 AC_PROG_CC
 AC_PROG_CXX
 AC_OPENMP
@@ -86,6 +123,14 @@ AC_C_RESTRICT
 AC_FUNC_STRERROR_R
 
 AC_PATH_TOOL([PKG_CONFIG], [pkg-config], [pkg-config])
+
+AS_IF([test "x$enable_module_deepbind" = xyes],
+      [AC_CHECK_DECLS([RTLD_DEEPBIND],
+                      [AC_DEFINE([UCX_MODULE_DLOPEN_DEEPBIND], [1],
+                                 [Load UCX modules with RTLD_DEEPBIND])
+                       ucx_module_deepbind_summary="yes"],
+                      [AC_MSG_ERROR([--enable-module-deepbind requires RTLD_DEEPBIND support from <dlfcn.h>])],
+                      [[#include <dlfcn.h>]])])
 
 
 #
@@ -148,7 +193,6 @@ AC_DEFINE_UNQUOTED([UCX_MODULE_SUBDIR], ["${modulesubdir}"], [UCX module sub-dir
 #
 m4_include([config/m4/ax_prog_doxygen.m4])
 m4_include([config/m4/graphviz.m4])
-m4_include([config/m4/ucg.m4])
 
 AC_ARG_WITH([docs_only],
         AS_HELP_STRING([--with-docs-only],
@@ -194,6 +238,7 @@ AS_IF([test "x$with_docs_only" = xyes],
      AM_CONDITIONAL([HAVE_TL_DC], [false])
      AM_CONDITIONAL([HAVE_DC_DV], [false])
      AM_CONDITIONAL([HAVE_TL_UD], [false])
+     AM_CONDITIONAL([HAVE_TL_GGA], [false])
      AM_CONDITIONAL([HAVE_CRAY_UGNI], [false])
      AM_CONDITIONAL([HAVE_CUDA], [false])
      AM_CONDITIONAL([HAVE_CUDA_STATIC], [false])
@@ -220,6 +265,7 @@ AS_IF([test "x$with_docs_only" = xyes],
      AM_CONDITIONAL([ENABLE_EXPERIMENTAL_API], [false])
      AM_CONDITIONAL([INSTALL_DEVEL_HEADERS], [false])
      AM_CONDITIONAL([HAVE_EXAMPLES], [false])
+     AM_CONDITIONAL([HAVE_TEST_APPS], [false])
      AM_CONDITIONAL([HAVE_AARCH64_THUNDERX2], [false])
      AM_CONDITIONAL([HAVE_AARCH64_THUNDERX1], [false])
      AM_CONDITIONAL([HAVE_AARCH64_HI1620], [false])
@@ -229,6 +275,8 @@ AS_IF([test "x$with_docs_only" = xyes],
      AM_CONDITIONAL([HAVE_GCOV], [false])
      AM_CONDITIONAL([HAVE_LCOV], [false])
      AM_CONDITIONAL([HAVE_ZE], [false])
+     AM_CONDITIONAL([HAVE_GAUDI], [false])
+     AM_CONDITIONAL([HAVE_GDA], [false])
     ],
     [
      AM_CONDITIONAL([DOCS_ONLY], [false])
@@ -245,6 +293,7 @@ AS_IF([test "x$with_docs_only" = xyes],
      m4_include([config/m4/gdrcopy.m4])
      m4_include([config/m4/mad.m4])
      m4_include([config/m4/lcov.m4])
+     m4_include([config/m4/gaudi.m4])
      m4_include([src/ucm/configure.m4])
      m4_include([src/ucs/configure.m4])
      m4_include([src/uct/configure.m4])
@@ -334,6 +383,16 @@ AS_IF([test "x$with_docs_only" = xyes],
                    [],
                    [enable_examples=no])
     AM_CONDITIONAL([HAVE_EXAMPLES], [test "x$enable_examples" = "xyes"])
+
+     #
+     # Enable test apps build
+     #
+     AC_ARG_ENABLE([test-apps],
+                   AS_HELP_STRING([--enable-test-apps],
+                                  [Enable test apps build, default: NO]),
+                   [],
+                   [enable_test_apps=no])
+    AM_CONDITIONAL([HAVE_TEST_APPS], [test "x$enable_test_apps" = "xyes"])
     ]) # Docs only
 
 #
@@ -342,11 +401,11 @@ AS_IF([test "x$with_docs_only" = xyes],
 build_modules="${uct_modules}"
 build_modules="${build_modules}${ucs_modules}"
 build_modules="${build_modules}${uct_ib_modules}"
+build_modules="${build_modules}${uct_ib_mlx5_modules}"
 build_modules="${build_modules}${uct_cuda_modules}"
 build_modules="${build_modules}${ucm_modules}"
 build_modules="${build_modules}${ucx_perftest_modules}"
 build_modules="${build_modules}${uct_rocm_modules}"
-build_modules="${build_modules}${ucg_modules}"
 AC_SUBST([build_modules], [${build_modules}])
 AC_SUBST([build_bindings], [${build_bindings}])
 
@@ -412,11 +471,17 @@ AC_MSG_NOTICE([                 CXX:   ${CXX}])
 AC_MSG_NOTICE([            CPPFLAGS:   ${BASE_CPPFLAGS} ${CPPFLAGS}])
 AC_MSG_NOTICE([              CFLAGS:   ${BASE_CFLAGS} ${CFLAGS}])
 AC_MSG_NOTICE([            CXXFLAGS:   ${BASE_CXXFLAGS} ${CXXFLAGS}])
+AS_IF([test "x$NVCC" != "x"], [
+    AC_MSG_NOTICE([                NVCC:   ${NVCC}])
+    AC_MSG_NOTICE([           NVCCFLAGS:   ${BASE_NVCCFLAGS} ${NVCCFLAGS}])
+])
 AC_MSG_NOTICE([          ASAN check:   ${enable_asan}])
 AC_MSG_NOTICE([        Multi-thread:   ${mt_enable}])
 AC_MSG_NOTICE([           MPI tests:   ${mpi_enable}])
 AC_MSG_NOTICE([         VFS support:   ${vfs_enable}])
 AC_MSG_NOTICE([       Devel headers:   ${enable_devel_headers}])
+AC_MSG_NOTICE([       SONAME suffix:   ${ucx_soname_suffix_summary}])
+AC_MSG_NOTICE([     Module deepbind:   ${ucx_module_deepbind_summary}])
 AC_MSG_NOTICE([io_demo CUDA support:   ${with_iodemo_cuda}])
 AC_MSG_NOTICE([            Bindings:   <$(echo ${build_bindings}|tr ':' ' ') >])
 AC_MSG_NOTICE([         UCS modules:   <$(echo ${ucs_modules}|tr ':' ' ') >])
@@ -424,9 +489,8 @@ AC_MSG_NOTICE([         UCT modules:   <$(echo ${uct_modules}|tr ':' ' ') >])
 AC_MSG_NOTICE([        CUDA modules:   <$(echo ${uct_cuda_modules}|tr ':' ' ') >])
 AC_MSG_NOTICE([        ROCM modules:   <$(echo ${uct_rocm_modules}|tr ':' ' ') >])
 AC_MSG_NOTICE([          IB modules:   <$(echo ${uct_ib_modules}|tr ':' ' ') >])
+AC_MSG_NOTICE([        MLX5 modules:   <$(echo ${uct_ib_mlx5_modules}|tr ':' ' ') >])
 AC_MSG_NOTICE([         UCM modules:   <$(echo ${ucm_modules}|tr ':' ' ') >])
 AC_MSG_NOTICE([        Perf modules:   <$(echo ${ucx_perftest_modules}|tr ':' ' ') >])
-AS_IF([test "x$enable_ucg" != "xno"], [
-    AC_MSG_NOTICE([       UCG modules:   <$(echo ${ucg_modules}|tr ':' ' ') >])])
 ])
 AC_MSG_NOTICE([=========================================================])

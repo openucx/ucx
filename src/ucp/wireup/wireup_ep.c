@@ -94,6 +94,23 @@ uct_ep_h ucp_wireup_ep_get_msg_ep(ucp_wireup_ep_t *wireup_ep)
     return wireup_msg_ep;
 }
 
+
+ucp_rsc_index_t ucp_wireup_ep_get_msg_rsc_index(ucp_wireup_ep_t *wireup_ep)
+{
+    ucp_rsc_index_t rsc_index;
+
+    if (ucp_wireup_ep_is_next_ep_active(wireup_ep)) {
+        rsc_index = wireup_ep->super.rsc_index;
+    } else {
+        rsc_index = wireup_ep->aux_rsc_index;
+    }
+
+    ucs_assertv(rsc_index != UCP_NULL_RESOURCE,
+                "ucp_ep=%p wireup_ep=%p aux_ep=%p",
+                wireup_ep->super.ucp_ep, wireup_ep, wireup_ep->aux_ep);
+    return rsc_index;
+}
+
 ucs_status_t ucp_wireup_ep_progress_pending(uct_pending_req_t *self)
 {
     ucp_request_t *proxy_req = ucs_container_of(self, ucp_request_t, send.uct);

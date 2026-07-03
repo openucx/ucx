@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2016. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -145,6 +145,7 @@ struct ucp_address_entry {
     const uct_device_addr_t     *dev_addr;      /* Points to device address */
     size_t                      dev_addr_len;   /* Device address length */
     const uct_iface_addr_t      *iface_addr;    /* Interface address, NULL if not available */
+    size_t                      iface_addr_len; /* Interface address length */
     unsigned                    num_ep_addrs;   /* How many endpoint address are in ep_addrs */
     ucp_address_entry_ep_addr_t ep_addrs[UCP_MAX_LANES]; /* Endpoint addresses */
     ucp_address_iface_attr_t    iface_attr;     /* Interface attributes information */

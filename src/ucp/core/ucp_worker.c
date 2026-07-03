@@ -15,6 +15,7 @@
 #include "ucp_rkey.h"
 #include "ucp_request.inl"
 
+#include <ucp/core/ucp_context.h>
 #include <ucp/proto/proto_common.inl>
 #include <ucp/wireup/address.h>
 #include <ucp/wireup/wireup_cm.h>
@@ -337,8 +338,7 @@ static ucs_status_t ucp_worker_wakeup_init(ucp_worker_h worker,
      */
     if ((events & UCP_WAKEUP_TAG_SEND) ||
         ((events & UCP_WAKEUP_TAG_RECV) &&
-         ((context->config.ext.rndv_intra_thresh != UCS_MEMUNITS_INF) ||
-          (context->config.ext.rndv_inter_thresh != UCS_MEMUNITS_INF))))
+         ucp_context_rndv_is_enabled(context)))
     {
         worker->uct_events |= UCT_EVENT_SEND_COMP;
     }
@@ -471,7 +471,8 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
         !ucp_ep_is_local_connected(ucp_ep)) {
         /* Failure on NON-AUX EP or failure on AUX EP before it sent its address
          * means failure on the UCP EP */
-        return ucp_ep_set_failed(ucp_ep, lane, status);
+        ucp_ep_set_lanes_failed(ucp_ep, UCS_BIT(lane), status);
+        return UCS_OK;
     }
 
     if (wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY) {
@@ -787,6 +788,70 @@ void ucp_worker_iface_unprogress_ep(ucp_worker_iface_t *wiface)
     UCS_ASYNC_UNBLOCK(&wiface->worker->async);
 }
 
+/*
+ * Calculate port speed based on the actual bandwidth and the maximum bandwidth.
+ * The resulting value is a quantized value of the ratio between the actual and
+ * maximum bandwidth within 4 bits range [0, 15].
+ */
+static uint8_t ucp_worker_iface_port_speed(const ucp_worker_iface_t *wiface)
+{
+    uct_perf_attr_t perf_attr;
+    ucs_status_t status;
+    double ratio;
+
+    perf_attr.field_mask = UCT_PERF_ATTR_FIELD_BANDWIDTH;
+    status = uct_iface_estimate_perf(wiface->iface, &perf_attr);
+    if (status != UCS_OK) {
+        /* If iface fails to estimate a bandwidth, return 0 as a port speed,
+         * which should essentially exclude the lanes of this iface from the
+         * protocol selection even if lane is not marked as failed. */
+        return 0;
+    }
+
+    ratio = perf_attr.bandwidth.shared / wiface->attr.bandwidth.shared;
+    ratio = ucs_min(ucs_max(ratio, 0.0), 0.99);
+    /* 4 bits range [0, 15] */
+    return (uint8_t)(ratio * 16.0);
+}
+
+static void ucp_worker_iface_handle_port_speed_event(ucp_worker_iface_t *wiface)
+{
+    ucp_worker_h worker     = wiface->worker;
+    ucp_context_h context   = worker->context;
+    unsigned progress_count = 0;
+    ucp_worker_iface_t *wiface_iter;
+    ucp_rsc_index_t iface_id;
+    uint8_t port_speed;
+
+    UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(worker);
+
+    /* PORT_SPEED change event is received on IB device that can span over
+     * multiple interfaces. We iterate all ifaces with the same resource id, and
+     * check for port speed changes. Subsequent PORT_SPEED change events from
+     * other interfaces on the same device are essentially no-ops.
+     */
+    for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
+        wiface_iter = worker->ifaces[iface_id];
+        if (context->tl_rscs[wiface_iter->rsc_index].dev_index !=
+            context->tl_rscs[wiface->rsc_index].dev_index) {
+            continue;
+        }
+
+        port_speed = ucp_worker_iface_port_speed(wiface_iter);
+        if (port_speed != wiface_iter->port_speed) {
+            ucs_debug(UCP_WIFACE_FMT " port speed changed from %u to %u",
+                      UCP_WIFACE_ARG(wiface_iter), wiface_iter->port_speed,
+                      port_speed);
+            wiface_iter->port_speed = port_speed;
+            ++progress_count;
+        }
+    }
+
+    if (progress_count > 0) {
+        ++worker->epoch;
+    }
+}
+
 static UCS_F_ALWAYS_INLINE void
 ucp_worker_iface_event_common(ucp_worker_iface_t *wiface)
 {
@@ -803,8 +868,14 @@ static void ucp_worker_iface_async_cb_event(void *arg, unsigned flags)
 {
     ucp_worker_iface_t *wiface = arg;
 
+    ucs_trace_func("async_cb for iface=%p flags=%u", wiface->iface, flags);
+
+    if (flags & UCT_EVENT_SPEED_CHANGE) {
+        ucp_worker_iface_handle_port_speed_event(wiface);
+        return;
+    }
+
     ucs_assert(wiface->attr.cap.event_flags & UCT_IFACE_FLAG_EVENT_ASYNC_CB);
-    ucs_trace_func("async_cb for iface=%p", wiface->iface);
 
     ucp_worker_iface_event_common(wiface);
 }
@@ -1219,6 +1290,7 @@ static void ucp_worker_iface_set_sys_device_distance(ucp_worker_iface_t *wiface)
     ucp_rsc_index_t i;
     ucp_tl_resource_desc_t *cmp_rsc;
     char buf[128];
+    ucs_status_t status;
 
     *distance = ucs_topo_default_distance;
 
@@ -1232,7 +1304,9 @@ static void ucp_worker_iface_set_sys_device_distance(ucp_worker_iface_t *wiface)
         device     = ucp_worker_iface_get_sys_device(wiface);
         cmp_device = cmp_rsc->tl_rsc.sys_device;
 
-        ucs_topo_get_distance(device, cmp_device, distance);
+        status = ucs_topo_get_distance(device, cmp_device, distance);
+        ucs_assertv_always(status == UCS_OK, "device=%u cmp_device=%u", device,
+                           cmp_device);
 
         ucs_trace("distance between %s/%s and %s/%s is %s",
                   context->tl_rscs[wiface->rsc_index].tl_rsc.tl_name,
@@ -1261,7 +1335,12 @@ ucp_worker_iface_get_memory_distance(const ucp_worker_iface_t *wiface,
 
     if ((md_attr->access_mem_types | md_attr->reg_mem_types) &
         UCS_BIT(UCS_MEMORY_TYPE_HOST)) {
-        ucs_topo_get_memory_distance(sys_dev, distance);
+        if (ucs_cpu_set_is_empty(&wiface->worker->cpu_mask)) {
+            ucs_topo_get_memory_distance(sys_dev, distance);
+        } else {
+            ucs_topo_get_memory_distance_for_cpuset(
+                    sys_dev, &wiface->worker->cpu_mask, distance);
+        }
     } else {
         *distance = ucs_topo_default_distance;
     }
@@ -1429,6 +1508,8 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
 
     ucp_worker_iface_get_memory_distance(wiface, &distance);
     ucp_worker_iface_add_distance(&wiface->attr, &distance);
+
+    wiface->port_speed = ucp_worker_iface_port_speed(wiface);
 
     ucs_debug("created interface[%d]=%p using "UCT_TL_RESOURCE_DESC_FMT" on worker %p",
               tl_id, wiface->iface, UCT_TL_RESOURCE_DESC_ARG(&resource->tl_rsc),
@@ -1818,6 +1899,7 @@ ucp_worker_print_used_tls(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index)
     ucp_lane_map_t tag_lanes_map    = 0;
     ucp_lane_map_t rma_lanes_map    = 0;
     ucp_lane_map_t amo_lanes_map    = 0;
+    ucp_lane_map_t device_lanes_map = 0;
     ucp_lane_map_t stream_lanes_map = 0;
     ucp_lane_map_t am_lanes_map     = 0;
     ucp_lane_map_t ka_lanes_map     = 0;
@@ -1864,6 +1946,10 @@ ucp_worker_print_used_tls(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index)
             ka_lanes_map |= UCS_BIT(lane);
         }
 
+        if (key->lanes[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_DEVICE)) {
+            device_lanes_map |= UCS_BIT(lane);
+        }
+
         if ((ucp_ep_config_get_multi_lane_prio(key->rma_lanes, lane) >= 0)) {
             rma_lanes_map |= UCS_BIT(lane);
         }
@@ -1894,6 +1980,7 @@ ucp_worker_print_used_tls(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index)
                                !rma_emul ? "rma" : "rma_am", &strb);
     ucp_worker_add_feature_rsc(context, key, amo_lanes_map,
                                !amo_emul ? "amo" : "amo_am", &strb);
+    ucp_worker_add_feature_rsc(context, key, device_lanes_map, "device", &strb);
     ucp_worker_add_feature_rsc(context, key, am_lanes_map, "am", &strb);
     ucp_worker_add_feature_rsc(context, key, stream_lanes_map, "stream", &strb);
     ucp_worker_add_feature_rsc(context, key, ka_lanes_map, "ka", &strb);
@@ -2045,22 +2132,51 @@ static void ucp_worker_destroy_mpools(ucp_worker_h worker)
                       !(worker->flags & UCP_WORKER_FLAG_IGNORE_REQUEST_LEAK));
 }
 
-static unsigned ucp_worker_ep_config_free_cb(void *arg)
+static unsigned ucp_worker_config_free_cb(void *arg)
 {
     ucs_free(arg);
     return 1;
 }
 
-static int
-ucp_worker_ep_config_filter(const ucs_callbackq_elem_t *elem, void *arg)
+static int ucp_worker_config_filter(const ucs_callbackq_elem_t *elem, void *arg)
 {
-    if (elem->cb == ucp_worker_ep_config_free_cb) {
-        ucp_worker_ep_config_free_cb(elem->arg);
+    if (elem->cb == ucp_worker_config_free_cb) {
+        ucp_worker_config_free_cb(elem->arg);
         return 1;
     }
 
     return 0;
 }
+
+static void
+ucp_worker_config_array_release_old(ucp_worker_h worker, void *old_buffer,
+                                    void *new_buffer, size_t copy_size)
+{
+    if (old_buffer != NULL) {
+        memcpy(new_buffer, old_buffer, copy_size);
+        /* Schedule release of old configs array backing buffer on the main
+         * thread (this func can be called by async thread).
+         * So the main thread can still access the old configuration buffer
+         * if it's modified by async thread.
+         */
+        ucs_callbackq_add_oneshot(&worker->uct->progress_q, worker,
+                                  ucp_worker_config_free_cb, old_buffer);
+    }
+}
+
+#define ucp_worker_config_array_append(_worker, _config_array, _failed_actions) \
+    ({ \
+        void *_old_buffer_p = NULL; \
+        ucs_typeof(ucs_array_begin(_config_array)) _config; \
+        \
+        _config = ucs_array_append_safe(_config_array, &_old_buffer_p, \
+                                        _failed_actions); \
+        ucp_worker_config_array_release_old( \
+                _worker, _old_buffer_p, ucs_array_begin(_config_array), \
+                sizeof(*ucs_array_begin(_config_array)) * \
+                        (ucs_array_length(_config_array) - 1)); \
+        _config; \
+    })
 
 /* All the ucp endpoints will share the configurations. No need for every ep to
  * have its own configuration (to save memory footprint). Same config can be used
@@ -2075,7 +2191,6 @@ ucs_status_t ucp_worker_get_ep_config(ucp_worker_h worker,
 {
     ucp_worker_cfg_index_t ep_cfg_index;
     ucp_ep_config_t *ep_config;
-    void *old_ep_cfg_buf;
     ucs_status_t status;
 
     ucs_assertv_always(key->num_lanes > 0,
@@ -2097,20 +2212,8 @@ ucs_status_t ucp_worker_get_ep_config(ucp_worker_h worker,
         return UCS_ERR_EXCEEDS_LIMIT;
     }
 
-    old_ep_cfg_buf = NULL;
-    ep_config      = ucs_array_append_safe(&worker->ep_config, &old_ep_cfg_buf,
-                                           return UCS_ERR_NO_MEMORY);
-    if (old_ep_cfg_buf != NULL) {
-        memcpy(worker->ep_config.buffer, old_ep_cfg_buf,
-               sizeof(ucp_ep_config_t) * ucs_array_length(&worker->ep_config));
-        /* Schedule release of old ep configs array backing buffer on the main
-         * thread (this func can be called by async thread).
-         * So the main thread can still access the old configuration buffer
-         * if it's modified by async thread.
-         */
-        ucs_callbackq_add_oneshot(&worker->uct->progress_q, worker,
-                                  ucp_worker_ep_config_free_cb, old_ep_cfg_buf);
-    }
+    ep_config = ucp_worker_config_array_append(worker, &worker->ep_config,
+                                               return UCS_ERR_NO_MEMORY);
 
     status = ucp_ep_config_init(worker, ep_config, key);
     if (status != UCS_OK) {
@@ -2133,6 +2236,18 @@ out:
     return UCS_OK;
 }
 
+static void
+ucp_worker_dump_rkey_config_key(ucs_string_buffer_t *log_strb,
+                                ucp_rkey_config_key_t *key)
+{
+    ucs_string_buffer_appendf(
+            log_strb,
+            "md_map %" PRIx64
+            " cfg_index %d sys_dev %d mem_type %s unrch_md_map %" PRIx64 "\n",
+            key->md_map, key->ep_cfg_index, key->sys_dev,
+            ucs_memory_type_names[key->mem_type], key->unreachable_md_map);
+}
+
 ucs_status_t
 ucp_worker_add_rkey_config(ucp_worker_h worker,
                            const ucp_rkey_config_key_t *key,
@@ -2148,12 +2263,31 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
     khiter_t khiter;
     char buf[128];
     int khret;
+    ucs_string_buffer_t log_strb;
 
     ucs_assert(worker->context->config.ext.proto_enable);
 
-    if (worker->rkey_config_count >= UCP_WORKER_MAX_RKEY_CONFIG) {
+    if (ucs_array_length(&worker->rkey_config) >= UCP_WORKER_MAX_RKEY_CONFIG) {
         ucs_error("too many rkey configurations: %d (max: %d)",
-                  worker->rkey_config_count, UCP_WORKER_MAX_RKEY_CONFIG);
+                  ucs_array_length(&worker->rkey_config),
+                  UCP_WORKER_MAX_RKEY_CONFIG);
+
+        /* Dump all rkey config keys */
+        ucs_string_buffer_init(&log_strb);
+
+        ucs_array_for_each(rkey_config, &worker->rkey_config) {
+            ucs_string_buffer_appendf(
+                    &log_strb, "rkey [%ld]: ",
+                    rkey_config - ucs_array_begin(&worker->rkey_config));
+            ucp_worker_dump_rkey_config_key(&log_strb, &rkey_config->key);
+        }
+
+        ucs_string_buffer_appendf(&log_strb, "rkey key new: ");
+        ucp_worker_dump_rkey_config_key(&log_strb, &rkey_config->key);
+
+        ucs_debug("%s", ucs_string_buffer_cstr(&log_strb));
+        ucs_string_buffer_cleanup(&log_strb);
+
         status = UCS_ERR_EXCEEDS_LIMIT;
         goto err;
     }
@@ -2162,8 +2296,12 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
                (lanes_distance != NULL));
 
     /* Initialize rkey configuration */
-    rkey_cfg_index   = worker->rkey_config_count;
-    rkey_config      = &worker->rkey_config[rkey_cfg_index];
+    rkey_cfg_index      = ucs_array_length(&worker->rkey_config);
+    rkey_config         = ucp_worker_config_array_append(
+                                  worker, &worker->rkey_config,
+                                  status = UCS_ERR_NO_MEMORY;
+                                  goto err;);
+
     rkey_config->key = *key;
 
     /* Copy remote-memory distance of each lane to rkey config */
@@ -2183,7 +2321,7 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
                     &khret);
     if (khret == UCS_KH_PUT_FAILED) {
         status = UCS_ERR_NO_MEMORY;
-        goto err;
+        goto err_pop_rkey_config;
     }
 
     /* We should not get into this function if key already exists */
@@ -2191,12 +2329,11 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
     kh_value(&worker->rkey_config_hash, khiter) = rkey_cfg_index;
 
     /* Initialize protocol selection */
-    status = ucp_proto_select_init(&rkey_config->proto_select);
+    status = ucp_proto_select_init(&rkey_config->proto_select, worker->epoch);
     if (status != UCS_OK) {
         goto err_kh_del;
     }
 
-    ++worker->rkey_config_count;
     *cfg_index_p = rkey_cfg_index;
 
     /* Set threshold for short put */
@@ -2213,6 +2350,8 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
 
 err_kh_del:
     kh_del(ucp_worker_rkey_config, &worker->rkey_config_hash, khiter);
+err_pop_rkey_config:
+    ucs_array_pop_back(&worker->rkey_config);
 err:
     return status;
 }
@@ -2228,6 +2367,20 @@ static void ucp_worker_keepalive_reset(ucp_worker_h worker)
     worker->keepalive.round_count = 0;
 }
 
+static void ucp_worker_trace_configs(ucp_worker_h worker)
+{
+    ucp_ep_config_t *ep_config;
+    ucp_rkey_config_t *rkey_config;
+
+    ucs_array_for_each(ep_config, &worker->ep_config) {
+        ucp_proto_select_trace(worker, &ep_config->proto_select);
+    }
+
+    ucs_array_for_each(rkey_config, &worker->rkey_config) {
+        ucp_proto_select_trace(worker, &rkey_config->proto_select);
+    }
+}
+
 static void ucp_worker_destroy_configs(ucp_worker_h worker)
 {
     ucp_ep_config_t *ep_config;
@@ -2238,11 +2391,10 @@ static void ucp_worker_destroy_configs(ucp_worker_h worker)
     }
     ucs_array_cleanup_dynamic(&worker->ep_config);
 
-    ucs_carray_for_each(rkey_config, worker->rkey_config,
-                        worker->rkey_config_count) {
+    ucs_array_for_each(rkey_config, &worker->rkey_config) {
         ucp_proto_select_cleanup(&rkey_config->proto_select);
     }
-    worker->rkey_config_count = 0;
+    ucs_array_cleanup_dynamic(&worker->rkey_config);
 }
 
 ucs_thread_mode_t ucp_worker_get_thread_mode(uint64_t worker_flags)
@@ -2273,9 +2425,9 @@ static void ucp_warn_unused_uct_config(ucp_context_h context)
 
     if (num_unused_cached_kv > 0) {
         ucs_string_buffer_rtrim(&unused_cached_uct_cfg , ",");
-        ucs_warn("invalid configuration%s: %s",
-                 (num_unused_cached_kv > 1) ? "s" : "",
-                 ucs_string_buffer_cstr(&unused_cached_uct_cfg));
+        ucs_debug("configuration%s not applied due to missing resource: %s",
+                  (num_unused_cached_kv > 1) ? "s" : "",
+                  ucs_string_buffer_cstr(&unused_cached_uct_cfg));
     }
 
     ucs_string_buffer_cleanup(&unused_cached_uct_cfg);
@@ -2347,7 +2499,7 @@ static void ucp_worker_set_max_am_header(ucp_worker_h worker)
     max_am_header  = SIZE_MAX;
     max_rts_size   = sizeof(ucp_rndv_rts_hdr_t) +
                      ucp_rkey_packed_size(context, UCS_MASK(context->num_mds),
-                                          UCS_SYS_DEVICE_ID_UNKNOWN, 0);
+                                          UCS_SYS_DEVICE_ID_UNKNOWN, 0, 0);
     max_ucp_header = ucs_max(max_rts_size, UCP_AM_FIRST_FRAG_META_LEN);
 
     /* Make sure maximal AM header can fit into one bcopy fragment
@@ -2458,8 +2610,8 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     worker->context              = context;
     worker->uuid                 = ucs_generate_uuid((uintptr_t)worker);
     worker->flush_ops_count      = 0;
+    worker->fence_seq            = 0;
     worker->inprogress           = 0;
-    worker->rkey_config_count    = 0;
     worker->num_active_ifaces    = 0;
     worker->num_ifaces           = 0;
     worker->am_message_id        = ucs_generate_uuid(0);
@@ -2473,6 +2625,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     ucs_list_head_init(&worker->internal_eps);
     kh_init_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
     kh_init_inplace(ucp_worker_discard_uct_ep_hash, &worker->discard_uct_ep_hash);
+    kh_init_inplace(ucp_worker_remote_flush, &worker->remote_flush_hash);
     worker->counters.ep_creations         = 0;
     worker->counters.ep_creation_failures = 0;
     worker->counters.ep_closures          = 0;
@@ -2547,6 +2700,12 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     /* Reserve 32 elements for ep configs, which should be enough for most
      * of the use-cases. Will be extended automatically otherwise. */
     ucs_array_reserve(&worker->ep_config, 32);
+
+    ucs_array_init_dynamic(&worker->rkey_config);
+
+    /* Reserve 32 elements for rkey configs.
+     * Will be extended automatically if needed in rkey_config addition. */
+    ucs_array_reserve(&worker->rkey_config, 32);
 
     /* Create statistics */
     status = UCS_STATS_NODE_ALLOC(&worker->stats, &ucp_worker_stats_class,
@@ -2643,6 +2802,8 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
 
     ucp_worker_create_vfs(context, worker);
 
+    worker->epoch = 0;
+
     status = ucp_worker_usage_tracker_create(worker);
     if (status != UCS_OK) {
         goto err_am_cleanup;
@@ -2683,6 +2844,7 @@ err_free:
     kh_destroy_inplace(ucp_worker_discard_uct_ep_hash,
                        &worker->discard_uct_ep_hash);
     kh_destroy_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
+    kh_destroy_inplace(ucp_worker_remote_flush, &worker->remote_flush_hash);
     ucp_worker_destroy_configs(worker);
     ucs_free(worker);
     return status;
@@ -2879,6 +3041,9 @@ static void ucp_worker_destroy_eps(ucp_worker_h worker,
 void ucp_worker_destroy(ucp_worker_h worker)
 {
     ucs_debug("destroy worker %p", worker);
+    if (worker->context->config.trace_used_proto_selections) {
+        ucp_worker_trace_configs(worker);
+    }
 
     UCS_ASYNC_BLOCK(&worker->async);
     uct_worker_progress_unregister_safe(worker->uct, &worker->keepalive.cb_id);
@@ -2914,7 +3079,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     }
 
     ucs_callbackq_remove_oneshot(&worker->uct->progress_q, worker,
-                                 ucp_worker_ep_config_filter, NULL);
+                                 ucp_worker_config_filter, NULL);
 
     ucs_vfs_obj_remove(worker);
     ucp_tag_match_cleanup(&worker->tm);
@@ -2932,6 +3097,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_strided_alloc_cleanup(&worker->ep_alloc);
     kh_destroy_inplace(ucp_worker_discard_uct_ep_hash,
                        &worker->discard_uct_ep_hash);
+    kh_destroy_inplace(ucp_worker_remote_flush, &worker->remote_flush_hash);
     kh_destroy_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
     ucp_worker_destroy_configs(worker);
     ucs_free(worker);
@@ -3318,7 +3484,8 @@ void ucp_worker_print_info(ucp_worker_h worker, FILE *stream)
 
     if (context->config.ext.proto_enable) {
         ucs_string_buffer_init(&strb);
-        for (rkey_cfg_index = 0; rkey_cfg_index < worker->rkey_config_count;
+        for (rkey_cfg_index = 0;
+             rkey_cfg_index < ucs_array_length(&worker->rkey_config);
              ++rkey_cfg_index) {
             ucp_rkey_proto_select_dump(worker, rkey_cfg_index, &strb);
             ucs_string_buffer_appendf(&strb, "\n");
@@ -3404,8 +3571,15 @@ static int ucp_worker_do_ep_keepalive(ucp_worker_h worker, ucs_time_t now)
 
     ep = ucs_container_of(worker->keepalive.iter, ucp_ep_ext_t, ep_list)->ep;
     if ((ep->cfg_index == UCP_WORKER_CFG_INDEX_NULL) ||
-        (ep->flags & UCP_EP_FLAG_FAILED) ||
-        (ucp_ep_config(ep)->key.keepalive_lane == UCP_NULL_LANE)) {
+        (ep->flags & UCP_EP_FLAG_FAILED)) {
+        goto out_done;
+    }
+
+    if (ucp_ep_recovery_progress(ep)) {
+        goto out_done;
+    }
+
+    if (ucp_ep_config(ep)->key.keepalive_lane == UCP_NULL_LANE) {
         goto out_done;
     }
 
@@ -3429,7 +3603,7 @@ static int ucp_worker_do_ep_keepalive(ucp_worker_h worker, ucs_time_t now)
 
     if (status == UCS_ERR_NO_RESOURCE) {
         return 0;
-    } else if (status != UCS_OK) {
+    } else if (UCS_STATUS_IS_ERR(status)) {
         ucs_diag("worker %p: keepalive failed on ep %p lane[%d]=%p: %s", worker,
                  ep, lane, uct_ep, ucs_status_string(status));
     } else {
@@ -3583,8 +3757,9 @@ ucp_worker_discard_tl_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
     khiter_t iter;
 
     if (ucp_is_uct_ep_failed(uct_ep)) {
-        /* No need to discard failed TL EP, because it may lead to adding the
-         * same UCT EP to the hash of discarded UCT EPs */
+        /* Failed TL EPs do not enter the worker discard hash; destroy
+         * directly to take ownership of uct_ep from the caller. */
+        uct_ep_destroy(uct_ep);
         return UCS_OK;
     }
 

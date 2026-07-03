@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2017. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2017-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -25,7 +25,6 @@ typedef enum {
  */
 typedef struct uct_cuda_copy_md {
     struct uct_md                super;           /* Domain info */
-    int                          sync_memops_set;
     size_t                       granularity;     /* allocation granularity */
     struct {
         ucs_on_off_auto_value_t  alloc_whole_reg; /* force return of allocation
@@ -36,6 +35,7 @@ typedef struct uct_cuda_copy_md {
         ucs_ternary_auto_value_t enable_fabric;
         uct_cuda_pref_loc_t      pref_loc;
         int                      cuda_async_managed;
+        int                      retain_primary_ctx;
     } config;
 } uct_cuda_copy_md_t;
 
@@ -50,6 +50,7 @@ typedef struct uct_cuda_copy_md_config {
     ucs_ternary_auto_value_t    enable_fabric;
     uct_cuda_pref_loc_t         pref_loc;
     ucs_memory_type_t           cuda_async_mem_type;
+    int                         retain_primary_ctx;
 } uct_cuda_copy_md_config_t;
 
 /**
@@ -65,9 +66,42 @@ typedef struct uct_cuda_copy_alloc_handle {
 } uct_cuda_copy_alloc_handle_t;
 
 
+typedef struct {
+    int    fd;
+    size_t offset;
+} uct_cuda_copy_md_dmabuf_t;
+
+
 ucs_status_t uct_cuda_copy_md_detect_memory_type(uct_md_h md,
                                                  const void *address,
                                                  size_t length,
                                                  ucs_memory_type_t *mem_type_p);
+
+
+ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
+                                        size_t length,
+                                        uct_md_mem_attr_v2_t *mem_attr);
+
+/**
+ * @brief Check if dmabuf is supported on the 0th device.
+ * @return 1 if dmabuf is supported, 0 otherwise
+ */
+int uct_cuda_copy_md_is_dmabuf_supported();
+
+
+/**
+ * @brief Get dmabuf file descriptor and offset for a given memory region (MR)
+ *
+ * @param address [in] Starting address of the MR
+ * @param length  [in] Size of the MR
+ * @param sys_dev [in] System device ID of the MR. The ID is used to check if
+                       file descriptor can be used by a Direct NIC. If sys_dev
+                       is UCS_SYS_DEVICE_ID_UNKNOWN, the file descriptor can
+                       be used by any device.
+ * @return The dmabuf file descriptor and offset
+ */
+uct_cuda_copy_md_dmabuf_t uct_cuda_copy_md_get_dmabuf(const void *address,
+                                                      size_t length,
+                                                      ucs_sys_device_t sys_dev);
 
 #endif

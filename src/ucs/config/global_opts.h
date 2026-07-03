@@ -140,6 +140,9 @@ typedef struct {
     /* which modules to load */
     ucs_config_allow_list_t    modules;
 
+    /* additional directories to search for loadable plugin modules */
+    ucs_config_names_array_t   plugin_path;
+
     /* arch-specific global options */
     ucs_arch_global_opts_t     arch;
 
@@ -172,13 +175,19 @@ extern ucs_global_opts_t ucs_global_opts;
 void ucs_global_opts_init(void);
 void ucs_global_opts_cleanup(void);
 ucs_status_t ucs_global_opts_set_value(const char *name, const char *value);
-ucs_status_t ucs_global_opts_set_value_modifiable(const char *name,
-                                                  const char *value);
 ucs_status_t ucs_global_opts_get_value(const char *name, char *value,
                                        size_t max);
 ucs_status_t ucs_global_opts_clone(void *dst);
 void ucs_global_opts_release(void);
 void ucs_global_opts_print(FILE *stream, ucs_config_print_flags_t print_flags);
+
+/**
+ * Check if a field is read-only.
+ *
+ * @param name Field name to check.
+ * @return     1 if the field is read-only, 0 otherwise.
+ */
+int ucs_global_opts_is_read_only(const char *name);
 
 END_C_DECLS
 

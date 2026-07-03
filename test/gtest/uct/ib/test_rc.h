@@ -153,13 +153,13 @@ protected:
 #ifdef ENABLE_STATS
 class test_rc_flow_control_stats : public test_rc_flow_control {
 public:
-    void init() {
+    test_rc_flow_control_stats()
+    {
         stats_activate();
-        test_rc_flow_control::init();
     }
 
-    void cleanup() {
-        test_rc_flow_control::cleanup();
+    ~test_rc_flow_control_stats()
+    {
         stats_restore();
     }
 

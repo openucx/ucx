@@ -54,6 +54,9 @@ public:
 
     void init()
     {
+        if (ucs::skip_hw_tm_offload()) {
+            test_skip();
+        }
         ucs_status_t status = uct_config_modify(m_iface_config,
                                                 "RC_TM_ENABLE", "y");
         ASSERT_TRUE((status == UCS_OK) || (status == UCS_ERR_NO_ELEM));
@@ -767,13 +770,13 @@ extern "C" {
 
 class test_tag_stats : public test_tag {
 public:
-    void init() {
+    test_tag_stats()
+    {
         stats_activate();
-        test_tag::init();
     }
 
-    void cleanup() {
-        test_tag::cleanup();
+    ~test_tag_stats()
+    {
         stats_restore();
     }
 
@@ -1015,6 +1018,9 @@ void test_tag_mp_xrq::set_env_var_or_skip(void *config, const char *var,
 
 void test_tag_mp_xrq::init()
 {
+    if (ucs::skip_hw_tm_offload()) {
+        test_skip();
+    }
     set_env_var_or_skip(m_iface_config, "RC_TM_ENABLE", "y");
     set_env_var_or_skip(m_iface_config, "RC_TM_MP_SRQ_ENABLE", "try");
     set_env_var_or_skip(m_iface_config, "RC_TM_MP_NUM_STRIDES", "8");

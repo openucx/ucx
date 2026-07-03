@@ -31,6 +31,8 @@ stages:
           name: MLNX
           demands:
           - ucx_perf_master
+        workspace:
+          clean: all
 
         steps:
           - checkout: self

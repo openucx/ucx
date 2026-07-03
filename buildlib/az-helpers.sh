@@ -140,11 +140,16 @@ function az_module_unload() {
     module unload "${module}" || true
 }
 
+get_num_gpus() {
+    num_gpus=$(nvidia-smi -L | grep GPU | wc -l)
+    echo "$num_gpus"
+}
+
 # Ensure that GPU is present
 check_gpu() {
     name=$1
     if [ "$name" == "gpu" ]; then
-        if ! nvidia-smi -L |& grep -q GPU; then
+        if [ "$(get_num_gpus)" -eq 0 ]; then
             azure_log_error "No GPU device found on $(hostname -s)"
             exit 1
         fi
@@ -158,8 +163,8 @@ check_nv_peer_mem() {
         return 0
     fi
 
-    if ! lsmod | grep -q nv_peer_mem; then
-        lsmod | grep nv_peer_mem
+    if ! lsmod | grep -q 'nv.*_peer.*mem'; then
+        lsmod | grep 'nv.*_peer.*mem'
         systemctl status nv_peer_mem
         azure_log_error "nv_peer_mem module not loaded on $(hostname -s)"
         exit 1
@@ -175,7 +180,7 @@ try_load_cuda_env() {
     have_gdrcopy=no
 
     # List relevant modules
-    lsmod | grep -P "^(nvidia|nv_peer_mem|gdrdrv)\W" || true
+    lsmod | grep -P "^(nvidia|nv.*_peer.*mem|gdrdrv)\W" || true
 
     # Check nvidia driver
     [ -f "/proc/driver/nvidia/version" ] || return 0
@@ -185,29 +190,29 @@ try_load_cuda_env() {
 
     # Check number of available GPUs
     nvidia-smi -a || true
-    num_gpus=$(nvidia-smi -L | grep GPU | wc -l)
+    num_gpus=$(get_num_gpus)
     [ "${num_gpus}" -gt 0 ] || return 0
 
-    # Check cuda env module
-    az_module_load dev/cuda12.5.1 || return 0
-    have_cuda=yes
+    # Prefer local CUDA if available
+    cuda_local_dir="/usr/local/cuda"
+    if find ${cuda_local_dir}/ -name 'libcudart.so.1[2-9]*' | grep -q .; then
+        have_cuda="${cuda_local_dir}"
+    else
+        # Fallback to env module
+        az_module_load dev/cuda13.0.2 || return 0
+        have_cuda=yes
+    fi
 
     # Check gdrcopy
     if [ -w "/dev/gdrdrv" ]
     then
-        az_module_load dev/gdrcopy2.4.1_cuda12.5.1 && have_gdrcopy=yes
-    fi
-
-    # Set CUDA_VISIBLE_DEVICES
-    if [ -n "${worker}" ]
-    then
-        export CUDA_VISIBLE_DEVICES=$((worker % num_gpus))
+        az_module_load dev/gdrcopy2.5.1_cuda13.0.2 && have_gdrcopy=yes
     fi
 }
 
 load_cuda_env() {
     try_load_cuda_env
-    if [ "${have_cuda}" != "yes" ] ; then
+    if [ "${have_cuda}" == "no" ] ; then
         if [ "${ucx_gpu}" = "yes" ] ; then
             azure_log_error "CUDA load failed on GPU node $(hostname -s)"
             exit 1
@@ -222,8 +227,13 @@ check_release_build() {
     title_mask=$3
     launch=False
 
+    # Manual trigger for DRP testing
+    if [[ ${build_reason} == "Manual" && $BUILD_DEFINITIONNAME == *"DRP" ]]
+    then
+        launch=True
+
     # DRP release scheduled testing
-    if [[ $build_reason = "Schedule" && $BUILD_DEFINITIONNAME = *"DRP" ]]
+    elif [[ $build_reason = "Schedule" && $BUILD_DEFINITIONNAME = *"DRP" ]]
     then
         launch=True
 

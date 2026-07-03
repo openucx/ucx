@@ -250,7 +250,8 @@ private:
                     continue;
                 }
 
-                static const std::string tls[] = { "ud_v", "ud_x", "rc_v", "tcp" };
+                static const std::string tls[] = {"ud_v", "ud_x", "rc_v", "tcp",
+                                                  "srd"};
                 /* Target memory type atomics emulation not supported yet */
                 if (((atomic_mode == UCP_ATOMIC_MODE_CPU) ||
                      has_any_transport(tls, ucs_static_array_size(tls))) &&

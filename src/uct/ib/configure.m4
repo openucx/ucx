@@ -57,6 +57,14 @@ AC_ARG_WITH([dc],
             [],
             [with_dc=yes])
 
+#
+# GGA Support
+#
+AC_ARG_WITH([gga],
+            [AS_HELP_STRING([--with-gga], [Compile with GGA DPU transport support])],
+            [],
+            [with_gga=guess])
+
 
 #
 # TM (IB Tag Matching) Support
@@ -169,9 +177,9 @@ AS_IF([test "x$with_ib" = "xyes"],
                            MLX5DV_CQ_INIT_ATTR_MASK_COMPRESSED_CQE,
                            MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE,
                            MLX5DV_QP_CREATE_ALLOW_SCATTER_TO_CQE,
+                           MLX5DV_UMEM_MASK_DMABUF,
                            MLX5DV_UAR_ALLOC_TYPE_BF,
-                           MLX5DV_UAR_ALLOC_TYPE_NC_DEDICATED,
-                           mlx5dv_devx_umem_reg_ex],
+                           MLX5DV_UAR_ALLOC_TYPE_NC_DEDICATED],
                                   [], [], [[#include <infiniband/mlx5dv.h>]])
                        AC_CHECK_MEMBERS([struct mlx5dv_cq.cq_uar],
                                   [], [], [[#include <infiniband/mlx5dv.h>]])
@@ -205,16 +213,30 @@ AS_IF([test "x$with_ib" = "xyes"],
        AS_IF([test x$with_devx = xyes -a x$have_devx != xyes], [
                AC_MSG_ERROR([devx requested but not found])])
 
+       AS_IF([test "x$with_gga" != xno], [
+               AS_IF([test "x$have_mlx5" = xyes -a "x$has_mlx5_mmo" = xyes -a "x$have_devx" = xyes -a "x$with_rc" != xno],
+                     [have_gga=yes
+                      AC_DEFINE([HAVE_TL_GGA], 1, [GGA transport support])],
+                     [AS_IF([test "x$with_gga" = xyes],
+                            [AC_MSG_ERROR([GGA requested but MLX5, MLX5 MMO, DEVX, or RC support is not available])])
+                      have_gga=no])
+             ],
+             [have_gga=no])
+
        AC_CHECK_DECLS([IBV_LINK_LAYER_INFINIBAND,
                        IBV_LINK_LAYER_ETHERNET,
                        IBV_EVENT_GID_CHANGE,
+                       IBV_EVENT_PORT_SPEED_CHANGE,
+                       IBV_FORK_UNNEEDED,
                        IBV_TRANSPORT_USNIC,
                        IBV_TRANSPORT_USNIC_UDP,
                        IBV_TRANSPORT_UNSPECIFIED,
                        ibv_create_qp_ex,
                        ibv_create_cq_ex,
                        ibv_create_srq_ex,
-                       ibv_reg_dmabuf_mr],
+                       ibv_reg_dmabuf_mr,
+                       ibv_query_port_speed,
+                       ibv_is_fork_initialized],
                       [], [], [[#include <infiniband/verbs.h>]])
 
        # Check ECE operation APIs are supported by rdma-core package
@@ -232,6 +254,9 @@ AS_IF([test "x$with_ib" = "xyes"],
 
        AC_CHECK_MEMBERS([struct ibv_device_attr_ex.pci_atomic_caps,
                          struct ibv_device_attr_ex.odp_caps],
+                        [], [], [[#include <infiniband/verbs.h>]])
+
+       AC_CHECK_MEMBERS([struct ibv_port_attr.active_speed_ex],
                         [], [], [[#include <infiniband/verbs.h>]])
 
        AC_CHECK_DECLS([IBV_ACCESS_RELAXED_ORDERING,
@@ -282,12 +307,40 @@ AS_IF([test "x$with_ib" = "xyes"],
            AC_CHECK_DECLS([ibv_alloc_dm],
                [AC_DEFINE([HAVE_IBV_DM], 1, [Device Memory support])],
                [], [[#include <infiniband/verbs.h>]])])
-        
-        # DDP support
+
         AS_IF([test "x$have_mlx5" = xyes], [
+           # DDP support
            AC_CHECK_DECLS([MLX5DV_CONTEXT_MASK_OOO_RECV_WRS],
                [AC_DEFINE([HAVE_OOO_RECV_WRS], 1, [Have DDP support])],
-               [], [[#include <infiniband/mlx5dv.h>]])])
+               [], [[#include <infiniband/mlx5dv.h>]])
+
+           # Direct NIC support, from IB side
+           AC_CHECK_DECLS([mlx5dv_get_data_direct_sysfs_path,
+                           mlx5dv_reg_dmabuf_mr], [], [],
+                          [[#include <infiniband/mlx5dv.h>]])
+              ])
+
+       # RDMA netlink support requires defines from rdma_netlink.h and the
+       # ability to get netlink index from ibv_device struct.
+       have_netlink_rdma=yes
+       AC_CHECK_DECL([NETLINK_RDMA], [], [have_netlink_rdma=no],
+                     [[#include <linux/netlink.h>]])
+       AC_CHECK_DECL([RDMA_NL_NLDEV], [], [have_netlink_rdma=no],
+                     [[#include <rdma/rdma_netlink.h>]])
+       AC_CHECK_DECL([ibv_get_device_index], [], [have_netlink_rdma=no],
+                     [[#include <infiniband/verbs.h>]])
+       AS_IF([test "x$have_netlink_rdma" = xyes],
+             [AC_DEFINE([HAVE_NETLINK_RDMA], [1], [RDMA netlink support])
+              # Define replacement constants if not present in header files
+              AC_CHECK_DECL(RDMA_NLDEV_ATTR_DEV_TYPE, [],
+                            [AC_DEFINE([RDMA_NLDEV_ATTR_DEV_TYPE], 99,
+                                       [RDMA netlink device type attribute])],
+                            [[#include <rdma/rdma_netlink.h>]])
+              AC_CHECK_DECL(RDMA_DEVICE_TYPE_SMI, [],
+                            [AC_DEFINE([RDMA_DEVICE_TYPE_SMI], 1,
+                                       [RDMA netlink SMI device type])],
+                            [[#include <rdma/rdma_netlink.h>]])
+             ])
 
        mlnx_valg_libdir=$with_verbs/lib${libsuff}/mlnx_ofed/valgrind
        AC_MSG_NOTICE([Checking OFED valgrind libs $mlnx_valg_libdir])
@@ -302,9 +355,13 @@ AS_IF([test "x$with_ib" = "xyes"],
        uct_modules="${uct_modules}:ib"
     ],
     [
+        AS_IF([test "x$with_gga" = xyes],
+              [AC_MSG_ERROR([GGA requested but IB/verbs support is not available])])
         with_dc=no
         with_rc=no
         with_ud=no
+        with_gga=no
+        have_gga=no
         with_mlx5=no
     ])
 
@@ -318,6 +375,7 @@ AM_CONDITIONAL([HAVE_TL_DC],   [test "x$with_dc" != xno])
 AM_CONDITIONAL([HAVE_DC_DV],   [test -n "$have_dc_dv"])
 AM_CONDITIONAL([HAVE_TL_UD],   [test "x$with_ud" != xno])
 AM_CONDITIONAL([HAVE_DEVX],    [test -n "$have_devx"])
+AM_CONDITIONAL([HAVE_TL_GGA],  [test "x$have_gga" = xyes])
 AM_CONDITIONAL([HAVE_MLX5_HW_UD], [test "x$have_mlx5" = xyes -a "x$has_get_av" != xno])
 AM_CONDITIONAL([HAVE_MLX5_MMO],   [test -n "$has_mlx5_mmo"])
 

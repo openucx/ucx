@@ -157,6 +157,76 @@ UCS_TEST_F(test_string, split) {
     }
 }
 
+UCS_TEST_F(test_string, to_memunits) {
+    size_t value;
+
+    // Just a number
+    {
+        EXPECT_EQ(UCS_OK, ucs_str_to_memunits("123", &value));
+        EXPECT_EQ(123, value);
+
+        EXPECT_EQ(UCS_OK, ucs_str_to_memunits("0", &value));
+        EXPECT_EQ(0, value);
+    }
+    // Invalid values
+    {
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM, ucs_str_to_memunits("abc", &value));
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM, ucs_str_to_memunits("", &value));
+    }
+
+    // Number and 'b'
+    {
+        EXPECT_EQ(UCS_OK, ucs_str_to_memunits("123B", &value));
+        EXPECT_EQ(123, value);
+
+        EXPECT_EQ(UCS_OK, ucs_str_to_memunits("123b", &value));
+        EXPECT_EQ(123, value);
+    }
+    // Invalid values
+    {
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM, ucs_str_to_memunits("123!", &value));
+    }
+
+    // Number and multiplier
+    {
+        EXPECT_EQ(UCS_OK, ucs_str_to_memunits("2k", &value));
+        EXPECT_EQ(2 * UCS_KBYTE, value);
+
+        EXPECT_EQ(UCS_OK, ucs_str_to_memunits("2M", &value));
+        EXPECT_EQ(2 * UCS_MBYTE, value);
+
+        EXPECT_EQ(UCS_OK, ucs_str_to_memunits("1G", &value));
+        EXPECT_EQ(1 * UCS_GBYTE, value);
+    }
+
+    // Number and multiplier and 'b'
+    {
+        EXPECT_EQ(UCS_OK, ucs_str_to_memunits("2kb", &value));
+        EXPECT_EQ(2 * UCS_KBYTE, value);
+
+        EXPECT_EQ(UCS_OK, ucs_str_to_memunits("2KB", &value));
+        EXPECT_EQ(2 * UCS_KBYTE, value);
+
+        EXPECT_EQ(UCS_OK, ucs_str_to_memunits("2kB", &value));
+        EXPECT_EQ(2 * UCS_KBYTE, value);
+
+        EXPECT_EQ(UCS_OK, ucs_str_to_memunits("2MB", &value));
+        EXPECT_EQ(2 * UCS_MBYTE, value);
+
+        EXPECT_EQ(UCS_OK, ucs_str_to_memunits("1GB", &value));
+        EXPECT_EQ(1 * UCS_GBYTE, value);
+    }
+
+    // Special values
+    {
+        EXPECT_EQ(UCS_OK, ucs_str_to_memunits("inf", &value));
+        EXPECT_EQ(UCS_MEMUNITS_INF, value);
+
+        EXPECT_EQ(UCS_OK, ucs_str_to_memunits("auto", &value));
+        EXPECT_EQ(UCS_MEMUNITS_AUTO, value);
+    }
+}
+
 class test_string_buffer : public ucs::test {
 protected:
     void test_fixed(ucs_string_buffer_t *strb, size_t capacity);

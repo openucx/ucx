@@ -1,4 +1,5 @@
 leak:libcuda
+leak:dlopen
 leak:dlsym
 leak:nvmlInitWithFlags
 leak:bfd_map_over_sections

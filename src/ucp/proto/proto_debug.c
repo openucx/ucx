@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022, NVIDIA CORPORATION & AFFILIATES. ALL RIGHTS RESERVED.
+ * Copyright (C) 2022-2026, NVIDIA CORPORATION & AFFILIATES. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -14,6 +14,7 @@
 #include <ucp/am/ucp_am.inl>
 #include <ucp/rndv/proto_rndv.h>
 #include <ucs/arch/atomic.h>
+#include <ucs/debug/table.h>
 #include <fnmatch.h>
 #include <ctype.h>
 
@@ -61,15 +62,6 @@ struct ucp_proto_perf_node {
         ucs_array_s(unsigned, ucp_proto_perf_node_data_t) data;
     };
 };
-
-/* Protocol information table */
-typedef struct {
-    char range_str[32];
-    char desc[UCP_PROTO_DESC_STR_MAX];
-    char config[UCP_PROTO_CONFIG_STR_MAX];
-} ucp_proto_info_row_t;
-UCS_ARRAY_DECLARE_TYPE(ucp_proto_info_table_t, unsigned, ucp_proto_info_row_t);
-
 
 void ucp_proto_select_perf_str(const ucs_linear_func_t *perf, char *time_str,
                                size_t time_str_max, char *bw_str,
@@ -141,65 +133,113 @@ ucp_proto_select_param_dump(ucp_worker_h worker,
                               operation_names, select_param_strb);
 }
 
-static void ucp_proto_table_row_separator(ucs_string_buffer_t *strb,
-                                          const int *column_width,
-                                          unsigned num_columns)
-{
-    unsigned i;
-
-    ucs_string_buffer_appendc(strb, '+', 1);
-    for (i = 0; i < num_columns; ++i) {
-        ucs_string_buffer_appendc(strb, '-', column_width[i] + 2);
-        ucs_string_buffer_appendc(strb, '+', 1);
-    }
-    ucs_string_buffer_appendc(strb, '\n', 1);
-}
-
 static int ucp_proto_debug_is_info_enabled(ucp_context_h context,
-                                           const char *select_param_str)
+                                           const char *select_param_str,
+                                           int show_used)
 {
     const char *proto_info_config = context->config.ext.proto_info;
     int bool_value;
 
+    if (show_used) {
+        return context->config.trace_used_proto_selections;
+    }
+
+    /* Handle "auto" - enable when log level is DEBUG or higher */
+    if (!strcasecmp(proto_info_config, "auto")) {
+        return ucs_log_is_enabled(UCS_LOG_LEVEL_DEBUG);
+    }
+
+    /* Handle boolean */
     if (ucs_config_sscanf_bool(proto_info_config, &bool_value, NULL)) {
         return bool_value;
     }
 
+    /* Handle glob pattern */
     return fnmatch(proto_info_config, select_param_str, FNM_CASEFOLD) == 0;
 }
 
-void ucp_proto_select_elem_info(ucp_worker_h worker,
-                                ucp_worker_cfg_index_t ep_cfg_index,
-                                ucp_worker_cfg_index_t rkey_cfg_index,
-                                const ucp_proto_select_param_t *select_param,
-                                const ucp_proto_select_elem_t *select_elem,
-                                int show_all, ucs_string_buffer_t *strb)
+static inline int
+ucp_proto_select_elem_has_selections(const ucp_proto_select_elem_t *select_elem)
+{
+    const ucp_proto_threshold_elem_t *thresh_elem = select_elem->thresholds;
+
+    do {
+        if (thresh_elem->proto_config.selections > 0) {
+            return 1;
+        }
+    } while ((thresh_elem++)->max_msg_length < SIZE_MAX);
+
+    return 0;
+}
+
+
+void
+ucp_proto_select_elem_info(ucp_worker_h worker,
+                           ucp_worker_cfg_index_t ep_cfg_index,
+                           ucp_worker_cfg_index_t rkey_cfg_index,
+                           const ucp_proto_select_param_t *select_param,
+                           const ucp_proto_select_elem_t *select_elem,
+                           int show_all, int show_used, ucs_string_buffer_t *strb)
 {
     UCS_STRING_BUFFER_ONSTACK(ep_cfg_strb, UCP_PROTO_CONFIG_STR_MAX);
     UCS_STRING_BUFFER_ONSTACK(sel_param_strb, UCP_PROTO_CONFIG_STR_MAX);
-    static const char *info_row_fmt = "| %*s | %-*s | %-*s |\n";
-    ucp_proto_info_table_t table;
-    int hdr_col_width[2], col_width[3];
+    const unsigned n_cols         = show_used ? 4 : 3;
+    const ucs_table_config_t tcfg = {
+        .n_cols = n_cols
+    };
     ucp_proto_query_attr_t proto_attr;
-    ucp_proto_info_row_t *row_elem;
+    ucs_table_t table;
+    ucs_table_row_h row;
     size_t range_start, range_end;
+    char range_str[32];
     int proto_valid;
+
+    if (show_used && !ucp_proto_select_elem_has_selections(select_elem)) {
+        return;
+    }
 
     ucp_proto_select_param_dump(worker, ep_cfg_index, rkey_cfg_index,
                                 select_param, ucp_operation_descs, &ep_cfg_strb,
                                 &sel_param_strb);
     if (!show_all &&
         !ucp_proto_debug_is_info_enabled(
-                worker->context, ucs_string_buffer_cstr(&sel_param_strb))) {
+                worker->context, ucs_string_buffer_cstr(&sel_param_strb),
+                show_used)) {
         return;
     }
 
-    /* Populate the table and column widths */
-    ucs_array_init_dynamic(&table);
-    col_width[0] = ucs_string_buffer_length(&ep_cfg_strb);
-    col_width[1] = 0;
-    col_width[2] = 0;
-    range_end    = -1;
+    ucs_table_init(&table, &tcfg);
+    /* Title: two full-width rows (ep_cfg, sel_param) without a separator
+     * between them, terminated by a single separator before the headers. */
+    ucs_table_add_row(&table, &row);
+    ucs_table_row_add_cell_fmt(&table, row, n_cols, UCS_TABLE_ALIGN_LEFT, "%s",
+                               ucs_string_buffer_cstr(&ep_cfg_strb));
+
+    ucs_table_add_row(&table, &row);
+    ucs_table_row_add_cell_fmt(&table, row, n_cols, UCS_TABLE_ALIGN_LEFT, "%s",
+                               ucs_string_buffer_cstr(&sel_param_strb));
+
+    ucs_table_add_separator(&table);
+
+    /* Column headers */
+    ucs_table_add_row(&table, &row);
+    if (show_used) {
+        ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_CENTER,
+                                   "Count");
+    }
+
+    ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_CENTER, "Range");
+
+    ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_CENTER,
+                               "Description");
+
+    ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_CENTER,
+                               "Config");
+
+    ucs_table_add_separator(&table);
+
+    /* One body row per valid protocol range. */
+    range_end = -1;
     do {
         range_start = range_end + 1;
         proto_valid = ucp_proto_select_elem_query(worker, select_elem,
@@ -210,47 +250,31 @@ void ucp_proto_select_elem_info(ucp_worker_h worker,
             continue;
         }
 
-        row_elem = ucs_array_append(&table, break);
+        ucs_table_add_row(&table, &row);
+        ucs_memunits_range_str(range_start, range_end, range_str,
+                               sizeof(range_str));
+        if (show_used) {
+            ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_RIGHT,
+                                       "%u", proto_attr.selections);
+        }
 
-        ucs_snprintf_safe(row_elem->desc, sizeof(row_elem->desc), "%s%s",
-                          proto_attr.is_estimation ? "(?) " : "",
-                          proto_attr.desc);
-        ucs_strncpy_safe(row_elem->config, proto_attr.config,
-                         sizeof(row_elem->config));
+        ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_RIGHT, "%s",
+                                   range_str);
 
-        ucs_memunits_range_str(range_start, range_end, row_elem->range_str,
-                               sizeof(row_elem->range_str));
+        ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_LEFT, "%s%s",
+                                   proto_attr.is_estimation ? "(?) " : "",
+                                   proto_attr.desc);
 
-        col_width[0] = ucs_max(col_width[0], strlen(row_elem->range_str));
-        col_width[1] = ucs_max(col_width[1], strlen(row_elem->desc));
-        col_width[2] = ucs_max(col_width[2], strlen(row_elem->config));
+        ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
+                                   proto_attr.config);
     } while (range_end != SIZE_MAX);
 
-    /* Resize column[1] to match longest row including header */
-    col_width[1] = ucs_max(col_width[1],
-                           (int)ucs_string_buffer_length(&sel_param_strb) -
-                                   col_width[2]);
+    ucs_table_render(&table, strb);
 
-    /* Print header */
-    hdr_col_width[0] = col_width[0];
-    hdr_col_width[1] = col_width[1] + 3 + col_width[2];
-    ucp_proto_table_row_separator(strb, hdr_col_width, 2);
-    ucs_string_buffer_appendf(strb, "| %*s | %-*s |\n", hdr_col_width[0],
-                              ucs_string_buffer_cstr(&ep_cfg_strb),
-                              hdr_col_width[1],
-                              ucs_string_buffer_cstr(&sel_param_strb));
+    /* remove trailing newline */
+    ucs_string_buffer_rtrim(strb, "\n");
 
-    /* Print contents */
-    ucp_proto_table_row_separator(strb, col_width, 3);
-    ucs_array_for_each(row_elem, &table) {
-        ucs_string_buffer_appendf(strb, info_row_fmt, col_width[0],
-                                  row_elem->range_str, col_width[1],
-                                  row_elem->desc, col_width[2],
-                                  row_elem->config);
-    }
-    ucp_proto_table_row_separator(strb, col_width, 3);
-
-    ucs_array_cleanup_dynamic(&table);
+    ucs_table_cleanup(&table);
 }
 
 void ucp_proto_select_info(ucp_worker_h worker,
@@ -262,11 +286,11 @@ void ucp_proto_select_info(ucp_worker_h worker,
     ucp_proto_select_elem_t select_elem;
     ucp_proto_select_key_t key;
 
-    kh_foreach(proto_select->hash, key.u64, select_elem,
-               ucp_proto_select_elem_info(worker, ep_cfg_index, rkey_cfg_index,
-                                          &key.param, &select_elem, show_all,
-                                          strb);
-               ucs_string_buffer_appendf(strb, "\n"))
+    kh_foreach(proto_select->hash, key.u64, select_elem, {
+        ucp_proto_select_elem_info(worker, ep_cfg_index, rkey_cfg_index,
+                                   &key.param, &select_elem, show_all, 0, strb);
+        ucs_string_buffer_appendf(strb, "\n");
+    })
 }
 
 void ucp_proto_select_dump_short(const ucp_proto_select_short_t *select_short,
@@ -459,8 +483,9 @@ void ucp_proto_select_info_str(ucp_worker_h worker,
             ucs_string_buffer_appendf(strb, " to ");
         }
 
-        ucp_rkey_config_dump_brief(&worker->rkey_config[rkey_cfg_index].key,
-                                   strb);
+        ucp_rkey_config_dump_brief(
+                &ucs_array_elem(&worker->rkey_config, rkey_cfg_index).key,
+                strb);
     }
 
     if (ucp_proto_select_is_atomic_op(select_param)) {
@@ -966,7 +991,7 @@ ucp_proto_select_write_info(ucp_worker_h worker,
                                 ucp_operation_names, &ep_cfg_strb,
                                 &sel_param_strb);
     if (!ucp_proto_debug_is_info_enabled(
-                worker->context, ucs_string_buffer_cstr(&sel_param_strb))) {
+                worker->context, ucs_string_buffer_cstr(&sel_param_strb), 0)) {
         goto out;
     }
 
@@ -1031,19 +1056,21 @@ out:
 }
 
 void ucp_proto_select_elem_trace(ucp_worker_h worker,
-                                 ucp_worker_cfg_index_t ep_cfg_index,
-                                 ucp_worker_cfg_index_t rkey_cfg_index,
                                  const ucp_proto_select_param_t *select_param,
-                                 ucp_proto_select_elem_t *select_elem)
+                                 const ucp_proto_select_elem_t *select_elem,
+                                 int show_used)
 {
-    ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
-    char *line;
+    const ucp_proto_config_t *proto_config = &select_elem->thresholds[0].proto_config;
+    ucp_worker_cfg_index_t ep_cfg_index    = proto_config->ep_cfg_index;
+    ucp_worker_cfg_index_t rkey_cfg_index  = proto_config->rkey_cfg_index;
+    ucs_string_buffer_t strb               = UCS_STRING_BUFFER_INITIALIZER;
 
     /* Print human-readable protocol selection table to the log */
     ucp_proto_select_elem_info(worker, ep_cfg_index, rkey_cfg_index,
-                               select_param, select_elem, 0, &strb);
-    ucs_string_buffer_for_each_token(line, &strb, "\n") {
-        ucs_log_print_compact(line);
+                               select_param, select_elem, 0, show_used, &strb);
+
+    if (ucs_string_buffer_length(&strb) > 0) {
+        ucs_log_print_compact(ucs_string_buffer_cstr(&strb));
     }
 
     ucs_string_buffer_cleanup(&strb);

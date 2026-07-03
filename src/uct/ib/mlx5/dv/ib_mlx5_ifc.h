@@ -1563,7 +1563,7 @@ struct uct_ib_mlx5_create_qp_in_bits {
 
     struct uct_ib_mlx5_qpc_bits qpc;
 
-    uint8_t         reserved_at_800[0x40];
+    uint8_t         wq_umem_offset[0x40];
 
     uint8_t         wq_umem_id[0x20];
 

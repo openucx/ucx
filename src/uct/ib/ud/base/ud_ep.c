@@ -728,6 +728,15 @@ uct_ud_ep_process_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
         return;
     }
 
+    /* Ignore stale ACKs for unsent packets (e.g., after endpoint reset).
+     * Valid ACK PSN must be in (acked_psn, psn). */
+    if (ucs_unlikely(UCT_UD_PSN_COMPARE(ep->tx.psn, <=, ack_psn))) {
+        ucs_debug("ep %p: ignoring invalid ack_psn=%u (tx.psn=%u acked_psn=%u)"
+                  " - possibly stale from previous connection",
+                  ep, ack_psn, ep->tx.psn, ep->tx.acked_psn);
+        return;
+    }
+
     ep->tx.acked_psn = ack_psn;
     ucs_assertv(UCT_UD_PSN_COMPARE(ep->tx.acked_psn, <, ep->tx.psn),
                 "ep %p: flags=0x%x acked_psn=%u must be smaller than"
@@ -829,21 +838,30 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
         ep->rx.ooo_pkts.head_sn = neth->psn;
         uct_ud_peer_copy(&ep->peer, ucs_unaligned_ptr(&ctl->peer));
         uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_CREP);
-    } else if (ep->dest_ep_id == UCT_UD_EP_NULL_ID) {
-        /* simultaneous CREQ */
+    } else if (uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id) != ep->dest_ep_id) {
+        if (ep->dest_ep_id == UCT_UD_EP_NULL_ID) {
+            /* simultaneous CREQ */
+            ucs_debug("simultaneous CREQ ep=%p"
+                      "(iface=%p conn_sn=%d ep_id=%d, dest_ep_id=%d rx_psn=%u)",
+                      ep, iface, ep->conn_sn, ep->ep_id,
+                      ep->dest_ep_id, ep->rx.ooo_pkts.head_sn);
+            if (UCT_UD_PSN_COMPARE(ep->tx.psn, >, UCT_UD_INITIAL_PSN)) {
+                /* our own creq was sent, treat incoming creq as ack and remove our
+                 * own from tx window
+                 */
+                uct_ud_ep_process_ack(iface, ep, UCT_UD_INITIAL_PSN, 0);
+            }
+        } else {
+            /* stale EP reuse */
+            ucs_debug("iface=%p: detected stale EP reuse (ep=%p conn_sn=%d "
+                      "old_dest_ep_id=%d new_ep_id=%d), updating dest_ep_id",
+                      iface, ep, ep->conn_sn, ep->dest_ep_id,
+                      uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id));
+        }
+        /* Update dest_ep_id */
         uct_ud_ep_set_dest_ep_id(ep, uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id));
         ep->rx.ooo_pkts.head_sn = neth->psn;
         uct_ud_peer_copy(&ep->peer, ucs_unaligned_ptr(&ctl->peer));
-        ucs_debug("simultaneous CREQ ep=%p"
-                  "(iface=%p conn_sn=%d ep_id=%d, dest_ep_id=%d rx_psn=%u)",
-                  ep, iface, ep->conn_sn, ep->ep_id,
-                  ep->dest_ep_id, ep->rx.ooo_pkts.head_sn);
-        if (UCT_UD_PSN_COMPARE(ep->tx.psn, >, UCT_UD_INITIAL_PSN)) {
-            /* our own creq was sent, treat incoming creq as ack and remove our
-             * own from tx window
-             */
-            uct_ud_ep_process_ack(iface, ep, UCT_UD_INITIAL_PSN, 0);
-        }
         uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_CREP);
     }
 
@@ -1251,20 +1269,43 @@ ucs_status_t uct_ud_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *c
     uct_ud_ep_t *ep       = ucs_derived_of(tl_ep, uct_ud_ep_t);
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
     char dummy            = 0;
+    ucs_status_t status;
 
-    UCT_EP_KEEPALIVE_CHECK_PARAM(flags, comp);
+    UCT_EP_KEEPALIVE_CHECK_PARAM(flags);
 
     uct_ud_enter(iface);
-    if (/* check that no TX resources are available (i.e. there is signaled
-         * operation which provides actual peer status) */
-        !uct_ud_ep_is_connected(ep) ||
-        !uct_ud_ep_is_last_ack_received(ep)) {
-        uct_ud_leave(iface);
-        return UCS_OK;
-    }
-    uct_ud_leave(iface);
 
-    return uct_ep_put_short(tl_ep, &dummy, 0, 0, 0);
+    if (!uct_ud_ep_is_connected(ep)) {
+        /* Wireup pending - nudge the CREQ out if it isn't on the wire yet. */
+        if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_CREQ)) {
+            uct_ud_ep_do_pending_ctl(ep, iface);
+            if (ucs_queue_is_empty(&ep->tx.window)) {
+                /* CREQ couldn't be posted - caller retries. */
+                status = UCS_ERR_NO_RESOURCE;
+                goto out;
+            }
+        }
+    } else if (uct_ud_ep_is_last_ack_received(ep)) {
+        /* Connected and idle - emit a probe for the peer to ACK
+         * (uct_ud_enter is recursive so put_short is safe under the lock). */
+        status = uct_ep_put_short(tl_ep, &dummy, 0, 0, 0);
+        if (UCS_STATUS_IS_ERR(status) || (comp == NULL)) {
+            goto out;
+        }
+    }
+
+    if (comp == NULL) {
+        status = UCS_OK;
+    } else {
+        /* Chain @c comp onto the last skb in tx.window (CREQ, in-flight op, or
+        * the probe we just posted); fires UCS_OK on peer ACK or an error from
+        * the reliability layer purge if peer becomes unreachable. */
+        status = uct_ud_ep_comp_skb_add(iface, ep, comp);
+    }
+
+out:
+    uct_ud_leave(iface);
+    return status;
 }
 
 static uct_ud_send_skb_t *uct_ud_ep_prepare_crep(uct_ud_ep_t *ep)
@@ -1823,7 +1864,8 @@ void uct_ud_ep_disconnect(uct_ep_h tl_ep)
     uct_ud_leave(iface);
 }
 
-ucs_status_t uct_ud_ep_invalidate(uct_ep_h tl_ep, unsigned flags)
+ucs_status_t uct_ud_ep_invalidate(uct_ep_h tl_ep,
+                                  const uct_ep_invalidate_params_t *params)
 {
     uct_ud_ep_t *ep       = ucs_derived_of(tl_ep, uct_ud_ep_t);
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface,

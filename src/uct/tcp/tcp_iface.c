@@ -11,7 +11,9 @@
 #include "tcp.h"
 
 #include <ucs/async/async.h>
+#include <ucs/sys/netlink.h>
 #include <ucs/sys/string.h>
+#include <ucs/sys/sys.h>
 #include <ucs/config/types.h>
 #include <sys/socket.h>
 #include <sys/poll.h>
@@ -75,6 +77,8 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
   UCT_TCP_SEND_RECV_BUF_FIELDS(ucs_offsetof(uct_tcp_iface_config_t, sockopt)),
 
   UCT_TCP_SYN_CNT(ucs_offsetof(uct_tcp_iface_config_t, syn_cnt)),
+
+  UCT_TCP_USER_TIMEOUT(ucs_offsetof(uct_tcp_iface_config_t, user_timeout)),
 
   UCT_IFACE_MPOOL_CONFIG_FIELDS("TX_", -1, 8, 128m, 1.0, "send",
                                 ucs_offsetof(uct_tcp_iface_config_t, tx_mpool), ""),
@@ -201,6 +205,10 @@ uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
     uct_iface_local_addr_ns_t *local_addr_ns;
     uct_tcp_device_addr_t *tcp_dev_addr;
     int is_local_loopback, is_remote_loopback;
+    struct sockaddr_storage remote_addr;
+    char remote_addr_str[UCS_SOCKADDR_STRING_LEN];
+    unsigned ndev_index;
+    ucs_status_t status;
 
     if (!uct_iface_is_reachable_params_valid(
                 params, UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR)) {
@@ -210,8 +218,9 @@ uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
     tcp_dev_addr = (uct_tcp_device_addr_t*)params->device_addr;
     if (iface->config.ifaddr.ss_family != tcp_dev_addr->sa_family) {
         uct_iface_fill_info_str_buf(
-                params, "different address family %d vs %d",
-                iface->config.ifaddr.ss_family, tcp_dev_addr->sa_family);
+                params, "local %s remote %s",
+                ucs_sockaddr_address_family_str(iface->config.ifaddr.ss_family),
+                ucs_sockaddr_address_family_str(tcp_dev_addr->sa_family));
         return 0;
     }
 
@@ -222,23 +231,56 @@ uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
             (const struct sockaddr*)&iface->config.ifaddr);
     if (is_remote_loopback != is_local_loopback) {
         uct_iface_fill_info_str_buf(params,
-                                    "incompatible loopback flags, "
-                                    "%d (local) vs %d (remote)",
-                                    is_local_loopback, is_remote_loopback);
+                                    "local %sloopback remote %sloopback",
+                                    is_local_loopback ? "" : "non-",
+                                    is_remote_loopback ? "" : "non-");
         return 0;
     }
 
     if (is_remote_loopback) {
+        /* Loopback device address contains local_addr_ns, not an inet address */
         local_addr_ns = (uct_iface_local_addr_ns_t*)(tcp_dev_addr + 1);
-        if (!uct_iface_local_is_reachable(local_addr_ns, UCS_SYS_NS_TYPE_NET,
-                                          params)) {
-            return 0;
-        }
+        return uct_iface_local_is_reachable(local_addr_ns, UCS_SYS_NS_TYPE_NET,
+                                            params);
     }
 
-    /* Later connect() call can still fail if the peer is actually unreachable
-     * at UCT/TCP EP creation time */
-    return uct_iface_scope_is_reachable(tl_iface, params);
+    if ((params->field_mask & UCT_IFACE_IS_REACHABLE_FIELD_SCOPE) &&
+        (params->scope == UCT_IFACE_REACHABILITY_SCOPE_DEVICE)) {
+        return uct_iface_scope_is_reachable(tl_iface, params);
+    }
+
+    /* Check if the remote address is routable */
+    status = ucs_ifname_to_ndev_index(iface->if_name, &ndev_index);
+    if (status != UCS_OK) {
+        uct_iface_fill_info_str_buf(
+                    params, "failed to get interface index");
+        return 0;
+    }
+
+    remote_addr.ss_family = tcp_dev_addr->sa_family;
+    status = ucs_sockaddr_set_inet_addr((struct sockaddr *)&remote_addr,
+                                        tcp_dev_addr + 1);
+    if (status != UCS_OK) {
+        uct_iface_fill_info_str_buf(
+                    params, "failed to set inet address");
+        return 0;
+    }
+
+    if (!ucs_netlink_is_best_route(ndev_index,
+                                   (const struct sockaddr*)&remote_addr)) {
+        uct_iface_fill_info_str_buf(
+                    params, "no route to %s",
+                    ucs_sockaddr_str((const struct sockaddr *)&remote_addr,
+                                     remote_addr_str, UCS_SOCKADDR_STRING_LEN));
+        return 0;
+    }
+
+    /* This interface has the best route */
+    ucs_trace("tcp_iface %p (%s): this interface has the best route to %s",
+              iface, iface->if_name,
+              ucs_sockaddr_str((const struct sockaddr*)&remote_addr,
+                               remote_addr_str, UCS_SOCKADDR_STRING_LEN));
+    return 1;
 }
 
 static const char *
@@ -493,7 +535,12 @@ ucs_status_t uct_tcp_iface_set_sockopt(uct_tcp_iface_t *iface, int fd,
         return status;
     }
 
-    return ucs_tcp_base_set_syn_cnt(fd, iface->config.syn_cnt);
+    status = ucs_tcp_base_set_syn_cnt(fd, iface->config.syn_cnt);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return ucs_tcp_base_set_user_timeout(fd, iface->config.user_timeout);
 }
 
 static uct_iface_ops_t uct_tcp_iface_ops = {
@@ -632,13 +679,15 @@ static ucs_mpool_ops_t uct_tcp_mpool_ops = {
 };
 
 static uct_iface_internal_ops_t uct_tcp_iface_internal_ops = {
-    .iface_estimate_perf   = uct_base_iface_estimate_perf,
-    .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
-    .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
-    .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
-    .ep_connect_to_ep_v2   = uct_tcp_ep_connect_to_ep_v2,
-    .iface_is_reachable_v2 = uct_tcp_iface_is_reachable_v2,
-    .ep_is_connected       = uct_tcp_ep_is_connected
+    .iface_query_v2         = uct_iface_base_query_v2,
+    .iface_estimate_perf    = uct_base_iface_estimate_perf,
+    .iface_vfs_refresh      = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+    .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+    .ep_invalidate          = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
+    .ep_connect_to_ep_v2    = uct_tcp_ep_connect_to_ep_v2,
+    .iface_is_reachable_v2  = uct_tcp_iface_is_reachable_v2,
+    .ep_is_connected        = uct_tcp_ep_is_connected,
+    .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported
 };
 
 static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
@@ -720,6 +769,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     self->config.max_poll          = config->max_poll;
     self->config.max_conn_retries  = config->max_conn_retries;
     self->config.syn_cnt           = config->syn_cnt;
+    self->config.user_timeout      = config->user_timeout;
     self->sockopt.nodelay          = config->sockopt_nodelay;
     self->sockopt.sndbuf           = config->sockopt.sndbuf;
     self->sockopt.rcvbuf           = config->sockopt.rcvbuf;

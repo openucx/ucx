@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2021. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2021-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -47,7 +47,8 @@ ucp_proto_rndv_put_common_complete(ucp_request_t *req)
     UCS_STATS_UPDATE_COUNTER(req->send.ep->worker->stats, rpriv->stat_counter,
                              +1);
     ucp_proto_rndv_rkey_destroy(req);
-    ucp_proto_request_zcopy_complete(req, req->send.state.uct_comp.status);
+    ucp_proto_rndv_request_zcopy_complete(req,
+                                          req->send.state.uct_comp.status);
 }
 
 static void ucp_proto_rndv_put_zcopy_completion(uct_completion_t *uct_comp)
@@ -91,7 +92,7 @@ ucp_proto_rndv_put_common_flush_completion_send_atp(uct_completion_t *uct_comp)
     ucp_request_send(req);
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
+static UCS_F_INLINE_OPTIMIZED ucs_status_t
 ucp_proto_rndv_put_common_flush_send(ucp_request_t *req, ucp_lane_index_t lane)
 {
     ucp_ep_h ep = req->send.ep;
@@ -208,7 +209,7 @@ ucp_proto_rndv_put_common_fenced_atp_progress(uct_pending_req_t *uct_req)
             ucp_proto_rndv_put_common_fenced_atp_send);
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
+static UCS_F_INLINE_OPTIMIZED ucs_status_t
 ucp_proto_rndv_put_common_data_sent(ucp_request_t *req)
 {
     const ucp_proto_rndv_put_priv_t *rpriv = req->send.proto_config->priv;
@@ -218,7 +219,7 @@ ucp_proto_rndv_put_common_data_sent(ucp_request_t *req)
     return UCS_INPROGRESS;
 }
 
-static UCS_F_ALWAYS_INLINE void
+static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_rndv_put_common_request_init(ucp_request_t *req)
 {
     const ucp_proto_rndv_put_priv_t *rpriv = req->send.proto_config->priv;
@@ -226,7 +227,8 @@ ucp_proto_rndv_put_common_request_init(ucp_request_t *req)
     req->send.rndv.put.flush_lane = 0;
     req->send.rndv.put.atp_lane   = 0;
     req->send.rndv.put.atp_count  = 0;
-    ucp_proto_rndv_bulk_request_init(req, &rpriv->bulk);
+
+    return ucp_proto_rndv_bulk_request_init(req, &rpriv->bulk);
 }
 
 static void
@@ -280,8 +282,7 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
     ucs_status_t status;
     unsigned atp_map;
 
-    if ((init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
-        !ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_SEND,
+    if (!ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_SEND,
                                  support_ppln) ||
         !ucp_proto_common_init_check_err_handling(&params.super)) {
         return;
@@ -425,7 +426,8 @@ ucp_proto_rndv_put_zcopy_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_memory_info_t reg_mem_info = {
         .type    = init_params->select_param->mem_type,
-        .sys_dev = init_params->select_param->sys_dev
+        .sys_dev = init_params->select_param->sys_dev,
+        .flags   = init_params->select_param->op.mem_flags
     };
 
     ucp_proto_rndv_put_common_probe(
@@ -474,6 +476,7 @@ ucp_proto_t ucp_rndv_put_zcopy_proto = {
     .name     = "rndv/put/zcopy",
     .desc     = NULL,
     .flags    = 0,
+    .dt_mask  = UCS_BIT(UCP_DATATYPE_CONTIG),
     .probe    = ucp_proto_rndv_put_zcopy_probe,
     .query    = ucp_proto_rndv_put_zcopy_query,
     .progress = {
@@ -501,7 +504,7 @@ static void ucp_proto_rndv_put_mtype_pack_completion(uct_completion_t *uct_comp)
     ucp_request_send(req);
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_put_mtype_send_func(
+static UCS_F_INLINE_OPTIMIZED ucs_status_t ucp_proto_rndv_put_mtype_send_func(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
         ucp_datatype_iter_t *next_iter, ucp_lane_index_t *lane_shift)
 {
@@ -524,7 +527,8 @@ ucp_proto_rndv_put_mtype_copy_progress(uct_pending_req_t *uct_req)
 
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED));
 
-    status = ucp_proto_rndv_mtype_request_init(req, rpriv->bulk.frag_mem_type);
+    status = ucp_proto_rndv_mtype_request_init(req, rpriv->bulk.frag_mem_type,
+                                               rpriv->bulk.frag_sys_dev);
     if (status != UCS_OK) {
         ucp_proto_request_abort(req, status);
         return UCS_OK;
@@ -593,6 +597,7 @@ static void
 ucp_proto_rndv_put_mtype_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_context_t *context = init_params->worker->context;
+    ucs_memory_type_t frag_mem_type;
     uct_completion_callback_t comp_cb;
     ucp_md_map_t mdesc_md_map;
     ucs_status_t status;
@@ -610,19 +615,19 @@ ucp_proto_rndv_put_mtype_probe(const ucp_proto_init_params_t *init_params)
      * because pipeline protocols assume that both peers use the same
      * fragment sizes (and they are different for different memory types by
      * default). */
-    frag_mem_info.type = ucp_proto_rndv_put_mtype_frag_mem_type(
+    frag_mem_type = ucp_proto_rndv_put_mtype_frag_mem_type(
             context->config.ext.rndv_frag_mem_types,
             init_params->rkey_config_key->mem_type);
 
-    status = ucp_proto_rndv_mtype_init(init_params, frag_mem_info.type,
+    status = ucp_proto_rndv_mtype_init(init_params, frag_mem_type,
                                        &mdesc_md_map, &frag_size);
     if (status != UCS_OK) {
         return;
     }
 
-    status = ucp_mm_get_alloc_md_index(context, frag_mem_info.type,
-                                       &dummy_md_id,
-                                       &frag_mem_info.sys_dev);
+    status = ucp_mm_get_alloc_md_index(context, frag_mem_type,
+                                       init_params->select_param->sys_dev,
+                                       &dummy_md_id, &frag_mem_info);
     if (status != UCS_OK) {
         return;
     }
@@ -658,6 +663,7 @@ ucp_proto_t ucp_rndv_put_mtype_proto = {
     .name     = "rndv/put/mtype",
     .desc     = NULL,
     .flags    = 0,
+    .dt_mask  = UCS_BIT(UCP_DATATYPE_CONTIG),
     .probe    = ucp_proto_rndv_put_mtype_probe,
     .query    = ucp_proto_rndv_put_mtype_query,
     .progress = {

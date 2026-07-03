@@ -131,26 +131,6 @@ out:
     uct_rc_iface_arbiter_dispatch(iface);
 }
 
-static ucs_status_t uct_rc_verbs_wc_to_ucs_status(enum ibv_wc_status status)
-{
-    switch (status)
-    {
-    case IBV_WC_SUCCESS:
-        return UCS_OK;
-    case IBV_WC_REM_ACCESS_ERR:
-    case IBV_WC_REM_OP_ERR:
-        return UCS_ERR_CONNECTION_RESET;
-    case IBV_WC_RETRY_EXC_ERR:
-    case IBV_WC_RNR_RETRY_EXC_ERR:
-    case IBV_WC_REM_ABORT_ERR:
-        return UCS_ERR_ENDPOINT_TIMEOUT;
-    case IBV_WC_WR_FLUSH_ERR:
-        return UCS_ERR_CANCELED;
-    default:
-        return UCS_ERR_IO_ERROR;
-    }
-}
-
 static UCS_F_ALWAYS_INLINE unsigned
 uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
 {
@@ -165,7 +145,7 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
         ep = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, wc[i].qp_num),
                             uct_rc_verbs_ep_t);
         if (ucs_unlikely((wc[i].status != IBV_WC_SUCCESS) || (ep == NULL))) {
-            status = uct_rc_verbs_wc_to_ucs_status(wc[i].status);
+            status = uct_ib_wc_to_ucs_status(wc[i].status);
             iface->super.super.ops->handle_failure(&iface->super.super, &wc[i],
                                                    status);
             continue;
@@ -291,8 +271,10 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
     init_attr.cq_len[UCT_IB_DIR_RX] = ib_config->rx.queue_len;
     init_attr.cq_len[UCT_IB_DIR_TX] = config->super.tx_cq_len;
     init_attr.seg_size              = ib_config->seg_size;
+    init_attr.xport_hdr_len         = ucs_max(sizeof(uct_rc_hdr_t), UCT_IB_RETH_LEN);
     init_attr.max_rd_atomic         = IBV_DEV_ATTR(&ib_md->dev, max_qp_rd_atom);
     init_attr.tx_moderation         = config->super.tx_cq_moderation;
+    init_attr.dev_name              = params->mode.device.dev_name;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_verbs_iface_tl_ops,
                               &uct_rc_verbs_iface_ops, tl_md, worker, params,
@@ -513,13 +495,15 @@ static uct_iface_ops_t uct_rc_verbs_iface_tl_ops = {
 static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .super = {
         .super = {
-            .iface_estimate_perf   = uct_rc_iface_estimate_perf,
-            .iface_vfs_refresh     = uct_rc_iface_vfs_refresh,
-            .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
-            .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
-            .ep_connect_to_ep_v2   = uct_rc_verbs_ep_connect_to_ep_v2,
-            .iface_is_reachable_v2 = uct_ib_iface_is_reachable_v2,
-            .ep_is_connected       = uct_rc_verbs_ep_is_connected
+            .iface_query_v2         = uct_iface_base_query_v2,
+            .iface_estimate_perf    = uct_rc_iface_estimate_perf,
+            .iface_vfs_refresh      = uct_rc_iface_vfs_refresh,
+            .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+            .ep_invalidate          = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
+            .ep_connect_to_ep_v2    = uct_rc_verbs_ep_connect_to_ep_v2,
+            .iface_is_reachable_v2  = uct_ib_iface_is_reachable_v2,
+            .ep_is_connected        = uct_rc_verbs_ep_is_connected,
+            .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported
         },
         .create_cq      = uct_ib_verbs_create_cq,
         .destroy_cq     = uct_ib_verbs_destroy_cq,

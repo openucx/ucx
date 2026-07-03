@@ -46,7 +46,8 @@ AC_ARG_ENABLE(debug,
         [enable_debug=no])
 AS_IF([test "x$enable_debug" = xyes],
         [BASE_CFLAGS="-D_DEBUG $BASE_CFLAGS"
-         BASE_CXXFLAGS="-D_DEBUG" $BASE_CXXFLAGS],
+         BASE_CXXFLAGS="-D_DEBUG" $BASE_CXXFLAGS
+         BASE_NVCCFLAGS="-D_DEBUG $BASE_NVCCFLAGS -G"],
         [])
 
 
@@ -71,11 +72,28 @@ AS_IF([test "x$enable_compiler_opt" = "xyes"], [BASE_CFLAGS="-O3 $BASE_CFLAGS"],
       [test "x$enable_compiler_opt" = "xnone"],
           [AS_IF([test "x$enable_debug" = xyes -o "x$enable_gcov" = xyes],
                  [BASE_CFLAGS="-O0 $BASE_CFLAGS"
-                  BASE_CXXFLAGS="-O0 $BASE_CXXFLAGS"],
+                  BASE_CXXFLAGS="-O0 $BASE_CXXFLAGS"
+                  BASE_NVCCFLAGS="-O0 $BASE_NVCCFLAGS"],
                  [BASE_CFLAGS="-O3 $BASE_CFLAGS"
-                  BASE_CXXFLAGS="-O0 $BASE_CXXFLAGS"])],
+                  BASE_CXXFLAGS="-O0 $BASE_CXXFLAGS"
+                  BASE_NVCCFLAGS="-O3 $BASE_NVCCFLAGS"])],
       [test "x$enable_compiler_opt" = "xno"], [],
       [BASE_CFLAGS="-O$enable_compiler_opt $BASE_CFLAGS"])
+
+
+#
+# Define OPTIMIZATION_LEVEL to the numeric value of the last -O flag.
+# Non-numeric levels (e.g. -Og, -Oz, -Ofast) leave OPTIMIZATION_LEVEL undefined.
+#
+opt_level=""
+for flag in $BASE_CFLAGS $CFLAGS; do
+    case $flag in -O*) opt_level=${flag#-O};; esac
+done
+case $opt_level in
+    [[0-9]])
+        AC_DEFINE_UNQUOTED([OPTIMIZATION_LEVEL], [$opt_level],
+                           [Numeric compiler optimization level]) ;;
+esac
 
 
 #
@@ -629,8 +647,13 @@ AC_SUBST([LDFLAGS_DYNAMIC_LIST_DATA])
 #
 # Set common C preprocessor flags
 #
+SRC_INCLUDES="-I\${abs_top_srcdir}/src -I\${abs_top_builddir} -I\${abs_top_builddir}/src"
+
 BASE_CPPFLAGS="-DCPU_FLAGS=\"$OPT_CFLAGS\""
-BASE_CPPFLAGS="$BASE_CPPFLAGS -I\${abs_top_srcdir}/src"
-BASE_CPPFLAGS="$BASE_CPPFLAGS -I\${abs_top_builddir}"
-BASE_CPPFLAGS="$BASE_CPPFLAGS -I\${abs_top_builddir}/src"
+BASE_CPPFLAGS="$BASE_CPPFLAGS $SRC_INCLUDES"
+BASE_NVCCFLAGS="$BASE_NVCCFLAGS $SRC_INCLUDES"
+NVCC_WRAP="\$(abs_top_srcdir)/config/nvcc_wrap.sh"
+
 AC_SUBST([BASE_CPPFLAGS], [$BASE_CPPFLAGS])
+AC_SUBST([BASE_NVCCFLAGS], [$BASE_NVCCFLAGS])
+AC_SUBST([NVCC_WRAP], [$NVCC_WRAP])

@@ -58,12 +58,20 @@ htmlhelp_basename  = 'OpenUCXdoc'
 cached_version = ''
 
 def getLatestVersion():
-    import requests
+    import re
+    import os
 
     global cached_version
     if cached_version == '':
-        request = requests.get('https://api.github.com/repos/openucx/ucx/releases/latest')
-        cached_version = request.json()["name"]
+        try:
+            with open(os.path.join(os.path.dirname(__file__), '../../configure.ac'), "r") as f:
+                content = f.read()
+                major = re.search(r'define\(\[ucx_ver_major\],\s*(\d+)\)', content).group(1)
+                minor = re.search(r'define\(\[ucx_ver_minor\],\s*(\d+)\)', content).group(1)
+                patch = re.search(r'define\(\[ucx_ver_patch\],\s*(\d+)\)', content).group(1)
+                cached_version = "v{}.{}.{}".format(major, minor, patch)
+        except Exception as e:
+            raise RuntimeError("Failed to retrieve the version from configure.ac: " + str(e))
 
     return cached_version
 

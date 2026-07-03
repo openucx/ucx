@@ -107,6 +107,7 @@ ucs_status_t ucs_netif_get_addr(const char *if_name, sa_family_t af,
     ucs_status_t status = UCS_ERR_NO_DEVICE;
     struct ifaddrs *ifa;
     struct ifaddrs *ifaddrs;
+    const struct sockaddr_in *saddr4;
     const struct sockaddr_in6 *saddr6;
     size_t addrlen;
 
@@ -131,7 +132,13 @@ ucs_status_t ucs_netif_get_addr(const char *if_name, sa_family_t af,
             continue;
         }
 
-        if (ifa->ifa_addr->sa_family == AF_INET6) {
+        if (ifa->ifa_addr->sa_family == AF_INET) {
+            saddr4 = (const struct sockaddr_in*)ifa->ifa_addr;
+            if ((ntohl(saddr4->sin_addr.s_addr) & 0xFFFF0000) == 0xA9FE0000) {
+                /* Skip IPv4 link-local addresses (169.254.0.0/16) */
+                continue;
+            }
+        } else if (ifa->ifa_addr->sa_family == AF_INET6) {
             saddr6 = (const struct sockaddr_in6*)ifa->ifa_addr;
             if (IN6_IS_ADDR_LINKLOCAL(&saddr6->sin6_addr)) {
                 continue;
@@ -801,7 +808,7 @@ const char* ucs_sockaddr_str(const struct sockaddr *sock_addr,
 
     if (sock_addr->sa_family == AF_INET6) {
         str_len = strlen(str);
-        ucs_snprintf_zero(str + str_len, max_size - str_len, "%%%d",
+        ucs_snprintf_zero(str + str_len, max_size - str_len, "%%%x",
                           ((struct sockaddr_in6*)sock_addr)->sin6_scope_id);
     }
 
@@ -973,9 +980,6 @@ int ucs_sockaddr_is_same_subnet(const struct sockaddr *sa1,
     size_t addr_size, addr_size_bits;
 
     if (sa1->sa_family != sa2->sa_family) {
-        ucs_debug("different addr_family: s1 %s s2 %s",
-                  ucs_sockaddr_address_family_str(sa1->sa_family),
-                  ucs_sockaddr_address_family_str(sa2->sa_family));
         return 0;
     }
 

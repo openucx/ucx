@@ -101,7 +101,7 @@ uct_rc_verbs_iface_poll_rx_common(uct_rc_verbs_iface_t *iface)
             if (wc[i].status == IBV_WC_WR_FLUSH_ERR) {
                 continue;
             }
-            UCT_IB_IFACE_VERBS_COMPLETION_ERR("receive", &iface->super.super, i, wc);
+            UCT_IB_IFACE_VERBS_COMPLETION_FATAL("receive", &iface->super.super, i, wc);
         }
         VALGRIND_MAKE_MEM_DEFINED(hdr, wc[i].byte_len);
 

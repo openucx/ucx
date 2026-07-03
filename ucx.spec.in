@@ -13,6 +13,7 @@
 %bcond_with    ze
 %bcond_without mlx5
 %bcond_with    efa
+%bcond_with    gda
 
 Name: ucx
 Version: @VERSION@
@@ -33,6 +34,10 @@ ExclusiveArch: aarch64 ppc64le x86_64
 %if %{defined extra_deps}
 Requires: %{?extra_deps}
 %endif
+
+# Legacy package cleanup
+Conflicts: ucx-knem < %{version}-%{release}
+Obsoletes: ucx-knem < %{version}-%{release}
 
 BuildRequires: automake autoconf libtool gcc-c++
 %if %{with cma}
@@ -87,7 +92,7 @@ The acronym UCX stands for "Unified Communication X".
 
 This package was built from '@SCM_BRANCH@' branch, commit @SCM_VERSION@.
 
-%if "%{_vendor}" == "suse"
+%if "%{_vendor}" == "suse" && 0%{?suse_version} < 1600
 %debug_package
 %endif
 
@@ -123,6 +128,7 @@ Provides header files and examples for developing with UCX.
            %_with_arg gdrcopy gdrcopy \
            %_with_arg ib verbs \
            %_with_arg mlx5 mlx5 \
+           %_with_arg gda gda \
            %_with_arg efa efa \
            %_with_arg knem knem \
            %_with_arg rdmacm rdmacm \
@@ -160,7 +166,10 @@ rm -f %{buildroot}%{_libdir}/ucx/lib*.so
 %{_sysconfdir}/ucx/ucx.conf
 
 %files devel
-%{_includedir}/uc*
+%{_includedir}/ucs
+%{_includedir}/ucm/api
+%{_includedir}/ucp/api
+%{_includedir}/uct/api
 %{_libdir}/lib*.so
 %{_libdir}/pkgconfig/ucx.pc
 %{_libdir}/pkgconfig/ucx-uct.pc
@@ -208,6 +217,9 @@ Provides static libraries required for developing with UCX.
 %if %{with vfs}
 %{_libdir}/pkgconfig/ucx-fuse.pc
 %endif
+%if %{with gda}
+%{_libdir}/pkgconfig/ucx-ib-mlx5-gda.pc
+%endif
 
 %if %{with cma}
 %package cma
@@ -239,6 +251,7 @@ technology for direct data transfer between GPU and RDMA devices.
 %{_libdir}/ucx/libucx_perftest_cuda.so.*
 %{_libdir}/ucx/libucm_cuda.so.*
 %{_libdir}/ucx/libuct_cuda.so.*
+%{_includedir}/uct/cuda/*
 %endif
 
 %if %{with gdrcopy}
@@ -425,7 +438,32 @@ Provides oneAPI Level Zero (ZE) Runtime support for UCX.
 %{_libdir}/ucx/libucm_ze.so.*
 %endif
 
+%if %{with gda}
+%package ib-mlx5-gda
+Requires: %{name}-cuda%{?_isa} = %{version}-%{release}
+Requires: %{name}-ib%{?_isa} = %{version}-%{release}
+Summary: UCX GPU Direct Async support
+Group: System Environment/Libraries
+
+%description ib-mlx5-gda
+Provide GPU Direct Async support for UCX. GPU Direct Async allows GPU kernels
+to initiate network communications directly without explicit synchronization
+with the host CPU.
+
+%files ib-mlx5-gda
+%{_libdir}/ucx/libuct_ib_mlx5_gda.*
+%{_includedir}/uct/ib/mlx5/gdaki/*
+%endif
+
 %changelog
+* Thu Jun 25 2026 Shachar Hasson <shasson@nvidia.com> 1.23.0-1
+- Bump version to 1.23.0
+* Wed Mar 18 2026 Yossi Itigin <yosefe@nvidia.com> 1.22.0-1
+- Bump version to 1.22.0
+* Mon Oct 20 2025 Leonid Genkin <lgenkin@nvidia.com> 1.21.0-1
+- Bump version to 1.21.0
+* Fri Apr 11 2025 Yossi Itigin <yosefe@nvidia.com> 1.20.0-1
+- Bump version to 1.20.0
 * Sat Oct 12 2024 Yossi Itigin <yosefe@nvidia.com> 1.19.0-1
 - Bump version to 1.19.0
 * Fri Apr 19 2024 Yossi Itigin <yosefe@nvidia.com> 1.18.0-1

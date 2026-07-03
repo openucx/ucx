@@ -62,6 +62,47 @@ ucp_worker_mpool_key_is_equal(ucp_worker_mpool_key_t mpool_key1,
 KHASH_IMPL(ucp_worker_mpool_hash, ucp_worker_mpool_key_t, ucs_mpool_t,
            1, ucp_worker_mpool_hash_func, ucp_worker_mpool_key_is_equal);
 
+static UCS_F_ALWAYS_INLINE khint_t
+ucp_worker_remote_flush_hash_func(ucp_worker_remote_flush_key_t key)
+{
+    return kh_int64_hash_func((uint64_t)key.ep ^ (key.sys_dev << 8));
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_worker_remote_flush_key_is_equal(ucp_worker_remote_flush_key_t key1,
+                                     ucp_worker_remote_flush_key_t key2)
+{
+    return (key1.ep == key2.ep) && (key1.sys_dev == key2.sys_dev);
+}
+
+KHASH_IMPL(ucp_worker_remote_flush, ucp_worker_remote_flush_key_t,
+           ucp_mem_area_t, 1, ucp_worker_remote_flush_hash_func,
+           ucp_worker_remote_flush_key_is_equal);
+
+
+static UCS_F_ALWAYS_INLINE void
+ucp_worker_remote_flush_hash_put(kh_ucp_worker_remote_flush_t *hash,
+                                 ucp_ep_h ep, ucs_sys_device_t sys_dev,
+                                 uct_rkey_t tl_rkey, uct_ep_h uct_ep,
+                                 uint64_t address)
+{
+    const ucp_worker_remote_flush_key_t key = {
+        .ep = ep,
+        .sys_dev = sys_dev
+    };
+    int ret;
+    khiter_t hash_it;
+    ucp_mem_area_t *value;
+
+    hash_it = kh_put(ucp_worker_remote_flush, hash, key, &ret);
+    ucs_assert(ret != UCS_KH_PUT_FAILED);
+
+    value           = &kh_value(hash, hash_it);
+    value->uct_rkey = tl_rkey;
+    value->uct_ep   = uct_ep;
+    value->address  = address;
+}
+
 
 /**
  * @return Worker name
@@ -184,6 +225,35 @@ ucp_worker_is_tl_p2p(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
 {
     return ucp_worker_iface_is_tl_p2p(ucp_worker_iface_get_attr(worker,
                                                                 rsc_index));
+}
+
+/**
+ * Check if interface with @a iface_attr supports device-operated
+ * communications.
+ *
+ * @param [in]  iface_attr   iface attributes.
+ *
+ * @return 1 if iface supports device operations connections, otherwise 0.
+ */
+static UCS_F_ALWAYS_INLINE int
+ucp_worker_iface_is_tl_device(const uct_iface_attr_t *iface_attr)
+{
+    return !!(iface_attr->cap.flags & UCT_IFACE_FLAG_DEVICE_EP);
+}
+
+/**
+ * Check if TL supports device-operated communications.
+ *
+ * @param [in]  worker       UCP worker.
+ * @param [in]  rsc_index    resource index.
+ *
+ * @return 1 if TL supports device-operated connections, otherwise 0.
+ */
+static UCS_F_ALWAYS_INLINE int
+ucp_worker_is_tl_device(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
+{
+    return ucp_worker_iface_is_tl_device(
+            ucp_worker_iface_get_attr(worker, rsc_index));
 }
 
 /**

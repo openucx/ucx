@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -32,7 +32,6 @@
  * Relevant for UCP_OP_ID_RNDV_SEND and UCP_OP_ID_RNDV_RECV. */
 #define UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG (UCP_PROTO_SELECT_OP_FLAGS_BASE << 1)
 
-
 /* Select eager/rendezvous protocol for Active Message sends.
  * Relevant for UCP_OP_ID_AM_SEND and UCP_OP_ID_AM_SEND_REPLY. */
 #define UCP_PROTO_SELECT_OP_FLAG_AM_EAGER (UCP_PROTO_SELECT_OP_FLAGS_BASE << 1)
@@ -47,6 +46,8 @@
 #define ucp_proto_select_op_attr_pack(_op_attr, _mask) \
     (((_op_attr) & (_mask)) / UCP_PROTO_SELECT_OP_ATTR_BASE)
 
+/* Invalid private offset */
+#define UCP_PROTO_INIT_ELEM_PRIV_OFFSET_INVALID SIZE_MAX
 
 typedef struct {
     ucp_proto_id_t        proto_id;
@@ -89,8 +90,11 @@ struct ucp_proto_select_param {
             uint8_t         sys_dev;    /* Reply buffer system device */
         } UCS_S_PACKED reply;
 
-        /* Align struct size to uint64_t */
-        uint8_t             padding[2];
+        /* UCS memory flags of the operation buffer. Used for all operations
+         * except UCP_OP_ID_AMO_FETCH and UCP_OP_ID_AMO_CSWAP, which use the
+         * 'reply' member above instead. */
+        uint8_t             mem_flags;
+        uint8_t             padding[2]; /* Pad select key to sizeof(uint64_t) */
 
     } UCS_S_PACKED op;
 } UCS_S_PACKED;
@@ -121,6 +125,12 @@ typedef struct {
 
     /* Pointer to the corresponding initialization data */
     const ucp_proto_init_elem_t *init_elem;
+
+    /* Number of times this protocol was selected */
+    unsigned                    selections;
+
+    /* Progress wrapper callbacks */
+    uct_pending_callback_t      progress_wrapper[UCP_PROTO_STAGE_LAST];
 } ucp_proto_config_t;
 
 
@@ -161,6 +171,9 @@ typedef struct {
         uint64_t                      key;
         const ucp_proto_select_elem_t *value;
     } cache;
+
+    /* Epoch (generation) counter. @see ucp_worker::epoch */
+    uint64_t                          worker_epoch;
 } ucp_proto_select_t;
 
 
@@ -177,10 +190,15 @@ typedef struct {
 } ucp_proto_select_short_t;
 
 
-ucs_status_t ucp_proto_select_init(ucp_proto_select_t *proto_select);
+ucs_status_t ucp_proto_select_init(ucp_proto_select_t *proto_select,
+                                   uint64_t epoch);
 
 
 void ucp_proto_select_cleanup(ucp_proto_select_t *proto_select);
+
+
+void ucp_proto_select_trace(ucp_worker_h worker,
+                            const ucp_proto_select_t *proto_select);
 
 
 void ucp_proto_select_add_proto(const ucp_proto_init_params_t *init_params,

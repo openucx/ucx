@@ -516,14 +516,23 @@ ucs_status_t uct_rc_verbs_ep_fence(uct_ep_h tl_ep, unsigned flags)
 {
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
 
-    return uct_rc_ep_fence(tl_ep, &ep->fi, 1);
+    return uct_rc_ep_fence(tl_ep, &ep->fi);
 }
 
-void uct_rc_verbs_ep_post_check(uct_ep_h tl_ep)
+ucs_status_t uct_rc_verbs_ep_post_check(uct_ep_h tl_ep, uct_completion_t *comp)
 {
-    uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
+    uct_rc_verbs_ep_t *ep       = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
+    uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface,
+                                                 uct_rc_verbs_iface_t);
 
-    uct_rc_verbs_ep_post_flush(ep, 0);
+    if (comp == NULL) {
+        uct_rc_verbs_ep_post_flush(ep, 0);
+        return UCS_OK;
+    }
+
+    uct_rc_verbs_ep_post_flush(ep, IBV_SEND_SIGNALED);
+    return uct_rc_txqp_add_flush_comp(&iface->super, &ep->super.super,
+                                      &ep->super.txqp, comp, ep->txcnt.pi);
 }
 
 void uct_rc_verbs_ep_vfs_populate(uct_rc_ep_t *rc_ep)
@@ -643,9 +652,13 @@ uct_rc_verbs_ep_connect_to_ep_v2(uct_ep_h tl_ep,
     struct ibv_ah_attr ah_attr;
     enum ibv_mtu path_mtu;
 
-    uct_ib_iface_fill_ah_attr_from_addr(&iface->super, ib_addr,
-                                        ep->super.path_index, &ah_attr,
-                                        &path_mtu);
+    status = uct_ib_iface_fill_ah_attr_from_addr(&iface->super, ib_addr,
+                                                 ep->super.path_index, &ah_attr,
+                                                 &path_mtu);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     ucs_assert(path_mtu != UCT_IB_ADDRESS_INVALID_PATH_MTU);
 
     qp_num = uct_ib_unpack_uint24(rc_addr->super.qp_num);

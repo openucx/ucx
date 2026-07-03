@@ -27,14 +27,20 @@ extern "C" {
 
 class test_uct_stats : public uct_p2p_test {
 public:
-    test_uct_stats() : uct_p2p_test(0), lbuf(NULL), rbuf(NULL) {
+    test_uct_stats() : uct_p2p_test(0), lbuf(NULL), rbuf(NULL)
+    {
         m_comp.func   = NULL;
         m_comp.count  = 0;
         m_comp.status = UCS_OK;
+        stats_activate();
+    }
+
+    ~test_uct_stats()
+    {
+        stats_restore();
     }
 
     virtual void init() {
-        stats_activate();
         uct_p2p_test::init();
 
         // Sender EP
@@ -106,7 +112,6 @@ public:
         delete lbuf;
         delete rbuf;
         uct_p2p_test::cleanup();
-        stats_restore();
     }
 
     uct_base_ep_t *uct_ep(const entity &e)
@@ -619,16 +624,14 @@ UCS_TEST_SKIP_COND_P(test_uct_stats, pending_add,
     EXPECT_EQ(UCS_ERR_BUSY, uct_ep_pending_add(sender().ep(0), &p_reqs[0], 0));
     EXPECT_STAT(sender, uct_ep, UCT_EP_STAT_PENDING, 0UL);
 
-    // Check that counter gets increased on every successful pending_add returns NOT_OK
+    // Make sure there is no TX resource
     fill_tx_q(0);
-
-    UCT_TEST_CALL_AND_TRY_AGAIN(
-        uct_ep_am_bcopy(sender_ep(), 0, mapped_buffer::pack,
-                        lbuf, 0), len);
+    len = uct_ep_am_bcopy(sender_ep(), 0, mapped_buffer::pack, lbuf, 0);
     if (len == (ssize_t)lbuf->length()) {
         UCS_TEST_SKIP_R("Can't add to pending");
     }
 
+    // Check that counter gets increased on every successful pending_add
     for (size_t i = 0; i < num_reqs; ++i) {
         p_reqs[i].func = NULL;
         EXPECT_UCS_OK(uct_ep_pending_add(sender().ep(0), &p_reqs[i], 0));

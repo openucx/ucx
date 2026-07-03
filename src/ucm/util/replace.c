@@ -55,30 +55,35 @@ UCM_DEFINE_REPLACE_FUNC(mremap, void*, MAP_FAILED, void*, size_t, size_t, int,
 #endif
 UCM_DEFINE_REPLACE_FUNC(shmat,   void*, MAP_FAILED, int, const void*, int)
 UCM_DEFINE_REPLACE_FUNC(shmdt,   int,   -1,         const void*)
+#if HAVE_SBRK
 UCM_DEFINE_REPLACE_FUNC(sbrk,    void*, MAP_FAILED, intptr_t)
+#endif
+#if HAVE_BRK
 UCM_DEFINE_REPLACE_FUNC(brk,     int,   -1,         void*)
+#endif
 UCM_DEFINE_REPLACE_FUNC(madvise, int,   -1,         void*, size_t, int)
 
-UCM_DEFINE_SELECT_FUNC(mmap, void*, MAP_FAILED, SYS_mmap, void*, size_t, int, int, int, off_t)
-UCM_DEFINE_SELECT_FUNC(munmap, int, -1, SYS_munmap, void*, size_t)
+UCM_DEFINE_SELECT_FUNC(mmap, void*, SYS_mmap, void*, size_t, int, int, int,
+                       off_t)
+UCM_DEFINE_SELECT_FUNC(munmap, int, SYS_munmap, void*, size_t)
 #if HAVE_MREMAP
-UCM_DEFINE_SELECT_FUNC(mremap, void*, MAP_FAILED, SYS_mremap, void*, size_t,
-                       size_t, int, void*)
+UCM_DEFINE_SELECT_FUNC(mremap, void*, SYS_mremap, void*, size_t, size_t, int,
+                       void*)
 #endif
-UCM_DEFINE_SELECT_FUNC(madvise, int, -1, SYS_madvise, void*, size_t, int)
+UCM_DEFINE_SELECT_FUNC(madvise, int, SYS_madvise, void*, size_t, int)
 
 #if UCM_BISTRO_HOOKS
 #if HAVE_DECL_SYS_SHMAT
 
-UCM_DEFINE_SELECT_FUNC(shmat, void*, MAP_FAILED, SYS_shmat, int, const void*, int)
+UCM_DEFINE_SELECT_FUNC(shmat, void*, SYS_shmat, int, const void*, int)
 
 #elif HAVE_DECL_SYS_IPC
 #  ifndef IPCOP_shmat
 #    define IPCOP_shmat 21
 #  endif
 
-_UCM_DEFINE_DLSYM_FUNC(shmat, ucm_orig_dlsym_shmat, ucm_override_shmat,
-                       void*, MAP_FAILED, int, const void*, int)
+_UCM_DEFINE_DLSYM_FUNC(shmat, ucm_orig_dlsym_shmat, ucm_override_shmat, void*,
+                       int, const void*, int)
 
 void *ucm_orig_shmat(int shmid, const void *shmaddr, int shmflg)
 {
@@ -99,15 +104,15 @@ void *ucm_orig_shmat(int shmid, const void *shmaddr, int shmflg)
 
 #if HAVE_DECL_SYS_SHMDT
 
-UCM_DEFINE_SELECT_FUNC(shmdt, int, -1, SYS_shmdt, const void*)
+UCM_DEFINE_SELECT_FUNC(shmdt, int, SYS_shmdt, const void*)
 
 #elif HAVE_DECL_SYS_IPC
 #  ifndef IPCOP_shmdt
 #    define IPCOP_shmdt 22
 #  endif
 
-_UCM_DEFINE_DLSYM_FUNC(shmdt, ucm_orig_dlsym_shmdt, ucm_override_shmdt,
-                       int, -1, const void*)
+_UCM_DEFINE_DLSYM_FUNC(shmdt, ucm_orig_dlsym_shmdt, ucm_override_shmdt, int,
+                       const void*)
 
 int ucm_orig_shmdt(const void *shmaddr)
 {
@@ -121,7 +126,9 @@ int ucm_orig_shmdt(const void *shmaddr)
 
 #endif
 
-_UCM_DEFINE_DLSYM_FUNC(brk, ucm_orig_dlsym_brk, ucm_override_brk, int, -1, void*)
+#if HAVE_BRK
+_UCM_DEFINE_DLSYM_FUNC(brk, ucm_orig_dlsym_brk, ucm_override_brk, int, void*)
+#endif
 
 int ucm_orig_brk(void *addr)
 {
@@ -140,8 +147,10 @@ int ucm_orig_brk(void *addr)
     }
 }
 
-_UCM_DEFINE_DLSYM_FUNC(sbrk, ucm_orig_dlsym_sbrk, ucm_override_sbrk,
-                       void*, MAP_FAILED, intptr_t)
+#if HAVE_SBRK
+_UCM_DEFINE_DLSYM_FUNC(sbrk, ucm_orig_dlsym_sbrk, ucm_override_sbrk, void*,
+                       intptr_t)
+#endif
 
 void *ucm_orig_sbrk(intptr_t increment)
 {
@@ -158,10 +167,10 @@ void *ucm_orig_sbrk(intptr_t increment)
 
 #else /* UCM_BISTRO_HOOKS */
 
-UCM_DEFINE_DLSYM_FUNC(brk, int, -1, void*)
-UCM_DEFINE_DLSYM_FUNC(sbrk, void*, MAP_FAILED, intptr_t)
-UCM_DEFINE_DLSYM_FUNC(shmat, void*, MAP_FAILED, int, const void*, int)
-UCM_DEFINE_DLSYM_FUNC(shmdt, int, -1, const void*)
+UCM_DEFINE_DLSYM_FUNC(brk, int, void*)
+UCM_DEFINE_DLSYM_FUNC(sbrk, void*, intptr_t)
+UCM_DEFINE_DLSYM_FUNC(shmat, void*, int, const void*, int)
+UCM_DEFINE_DLSYM_FUNC(shmdt, int, const void*)
 
 #endif /* UCM_BISTRO_HOOKS */
 

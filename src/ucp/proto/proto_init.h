@@ -68,7 +68,6 @@ ucp_proto_init_add_buffer_copy_time(ucp_worker_h worker, const char *title,
 
 ucs_status_t ucp_proto_init_perf(const ucp_proto_common_init_params_t *params,
                                  const ucp_proto_common_tl_perf_t *tl_perf,
-                                 ucp_proto_perf_node_t *const tl_perf_node,
                                  ucp_md_map_t reg_md_map, const char *perf_name,
                                  ucp_proto_perf_t **perf_p);
 
@@ -84,5 +83,8 @@ ucs_status_t ucp_proto_init_perf(const ucp_proto_common_init_params_t *params,
  */
 int ucp_proto_init_check_op(const ucp_proto_init_params_t *init_params,
                             uint64_t op_id_mask);
+
+int ucp_proto_common_check_memtype_copy(
+    const ucp_proto_common_init_params_t *params);
 
 #endif

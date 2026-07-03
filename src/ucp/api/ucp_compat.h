@@ -56,6 +56,18 @@ ucs_status_ptr_t ucp_disconnect_nb(ucp_ep_h ep);
 
 
 /**
+ * @ingroup UCP_COMM
+ * @deprecated User should allocate requests using standard methods such as
+ *             malloc() or alloca().
+ *
+ * @param [in]  worker       UCP worker.
+ *
+ * @return This function is not implemented and always returns NULL.
+ */
+void *ucp_request_alloc(ucp_worker_h worker);
+
+
+/**
  * @ingroup UCP_ENDPOINT
  * @deprecated Replaced by @ref ucp_tag_recv_request_test and
  *             @ref ucp_request_check_status depends on use case.

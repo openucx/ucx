@@ -12,6 +12,7 @@
 #include <ucs/type/status.h>
 #include <ucs/sys/sock.h>
 #include <ucs/debug/log.h>
+#include <ucs/time/time.h>
 
 
 /**
@@ -43,6 +44,14 @@ typedef struct uct_tcp_send_recv_buf_config {
      (_offset) , UCS_CONFIG_TYPE_ULUNITS}
 
 
+#define UCT_TCP_USER_TIMEOUT(_offset) \
+    {"USER_TIMEOUT", "auto", \
+     "Maximum time that transmitted data may remain unacknowledged before TCP\n" \
+     "forcibly closes the socket. auto means to use the system default.", \
+     (_offset), UCS_CONFIG_TYPE_TIME_UNITS}
+
+
 ucs_status_t ucs_tcp_base_set_syn_cnt(int fd, int tcp_syn_cnt);
+ucs_status_t ucs_tcp_base_set_user_timeout(int fd, ucs_time_t user_timeout);
 
 #endif /* UCT_TCP_BASE_H */

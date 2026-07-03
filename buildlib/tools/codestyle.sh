@@ -23,9 +23,15 @@ codestyle_check_commit_title() {
     return $err
 }
 
+codespell_skip_args() {
+    git config --file .gitmodules --get-regexp path | \
+        cut -f2 -d' ' | \
+        xargs -L 1 printf "--skip ./%s"
+}
+
 codestyle_check_spell() {
     python3 -m venv /tmp/codespell_env
     source /tmp/codespell_env/bin/activate
     pip3 install codespell
-    codespell "$@"
+    codespell $(codespell_skip_args) "$@"
 }

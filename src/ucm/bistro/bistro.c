@@ -70,8 +70,7 @@ void ucm_bistro_modify_code(void *dst, const ucm_bistro_lock_t *bytes)
 ucs_status_t
 ucm_bistro_apply_patch_atomic(void *dst, const void *patch, size_t len)
 {
-    size_t skip           = sizeof(ucm_bistro_lock_t);
-    double grace_duration = 5e-3;
+    size_t skip = sizeof(ucm_bistro_lock_t);
     double deadline;
     ucs_status_t status;
 
@@ -84,7 +83,7 @@ ucm_bistro_apply_patch_atomic(void *dst, const void *patch, size_t len)
     ucm_bistro_patch_lock(dst);
     ucs_clear_cache(dst, UCS_PTR_BYTE_OFFSET(dst, len));
 
-    deadline = ucm_get_time() + grace_duration;
+    deadline = ucm_get_time() + ucm_global_opts.bistro_grace_duration;
     while (ucm_get_time() < deadline) {
         sched_yield();
     }

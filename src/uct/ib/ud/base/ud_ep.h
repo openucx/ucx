@@ -442,4 +442,5 @@ uct_ud_neth_ack_req(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
 
 #endif
 
-ucs_status_t uct_ud_ep_invalidate(uct_ep_h tl_ep, unsigned flags);
+ucs_status_t uct_ud_ep_invalidate(uct_ep_h tl_ep,
+                                  const uct_ep_invalidate_params_t *params);

@@ -10,9 +10,11 @@ extern "C" {
 }
 #include <list>
 
-#if HAVE_MLX5_DV
+#if HAVE_IB
 #include <uct/ib/base/ib_md.h>
+#if HAVE_MLX5_DV
 #include <uct/ib/mlx5/ib_mlx5.h>
+#endif
 #endif
 
 class uct_flush_test : public uct_test {
@@ -153,15 +155,20 @@ public:
     }
 
     void check_skip_test_flush_remote() {
-#ifdef HAVE_MLX4_DV
+#if HAVE_IB
         auto md = sender().md();
         if (std::string(md->component->name) == "ib") {
             auto ib_md = ucs_derived_of(md, uct_ib_md_t);
-            if (ib_md->dev.flags & UCT_IB_DEVICE_FLAG_MLX5_PRM) {
-                auto mlx5_md = ucs_derived_of(ib_md, uct_ib_mlx5_md_t);
-                if (!(mlx5_md->flags & UCT_IB_MLX5_MD_FLAG_KSM)) {
-                    UCS_TEST_SKIP_R("not supported");
-                }
+            if (!(ib_md->dev.flags & UCT_IB_DEVICE_FLAG_MLX5_PRM)) {
+                UCS_TEST_SKIP_R("mlx5 PRM not supported");
+            }
+
+#if HAVE_MLX5_DV
+            auto mlx5_md = ucs_derived_of(ib_md, uct_ib_mlx5_md_t);
+            if (!(mlx5_md->flags & UCT_IB_MLX5_MD_FLAG_KSM))
+#endif
+            {
+                UCS_TEST_SKIP_R("mlx5 KSM not supported");
             }
         }
 #endif
@@ -244,10 +251,16 @@ public:
     }
 
     void test_flush_put_zcopy(flush_func_t flush) {
+        const auto access_mem_types = sender().md_attr().access_mem_types;
+
+        ASSERT_NE(access_mem_types, 0);
+        ucs_memory_type_t mem_type = (ucs_memory_type_t)ucs_ffs64(
+                access_mem_types);
+
         const size_t length = ucs_min(10 * UCS_MBYTE,
                                       sender().iface_attr().cap.put.max_zcopy);
-        mapped_buffer sendbuf(length, SEED1, sender());
-        mapped_buffer recvbuf(length, SEED2, receiver());
+        mapped_buffer sendbuf(length, SEED1, sender(), 0, mem_type);
+        mapped_buffer recvbuf(length, SEED2, receiver(), 0, mem_type);
 
         uct_completion_t zcomp;
         zcomp.count  = 2;
@@ -848,7 +861,9 @@ protected:
     void check_skip_test_tl() {
         if ((GetParam()->tl_name != "dc_mlx5") &&
             (GetParam()->tl_name != "rc_verbs") &&
-            (GetParam()->tl_name != "rc_mlx5")) {
+            (GetParam()->tl_name != "rc_mlx5") &&
+            (GetParam()->tl_name != "srd")) {
+
             UCS_TEST_SKIP_R("not supported yet");
         }
 

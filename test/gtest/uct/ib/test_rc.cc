@@ -145,10 +145,12 @@ UCS_TEST_SKIP_COND_P(test_rc_max_wr, send_limit,
 UCT_INSTANTIATE_RC_TEST_CASE(test_rc_max_wr)
 
 
-class test_rc_iface_address : public uct_test {
+class test_rc_iface_flush_remote : public uct_test {
 protected:
-    entity *m_entity;
+    entity *m_e1;
+    entity *m_e2;
     entity *m_entity_flush_rkey;
+    int m_err_count;
 
 public:
     int rc_iface_flush_rkey_enabled(entity *e)
@@ -164,15 +166,23 @@ public:
         return uct_ib_md_get_atomic_mr_id(md);
     }
 
-    static uct_iface_params_t iface_params()
+    uct_iface_params_t iface_params()
     {
         uct_iface_params_t params = {};
 
-        params.field_mask |= UCT_IFACE_PARAM_FIELD_OPEN_MODE;
-        params.field_mask |= UCT_IFACE_PARAM_FIELD_FEATURES;
+        params.field_mask      = UCT_IFACE_PARAM_FIELD_ERR_HANDLER       |
+                                 UCT_IFACE_PARAM_FIELD_ERR_HANDLER_ARG   |
+                                 UCT_IFACE_PARAM_FIELD_OPEN_MODE         |
+                                 UCT_IFACE_PARAM_FIELD_FEATURES;
+        params.open_mode       = UCT_IFACE_OPEN_MODE_DEVICE;
+        params.err_handler_arg = &m_err_count,
+        params.err_handler     =
+            [](void *arg, uct_ep_h ep, ucs_status_t status) {
+                (*reinterpret_cast<int*>(arg))++;
+                return UCS_OK;
+        };
+        params.features        = UCT_IFACE_FEATURE_PUT;
 
-        params.features  = UCT_IFACE_FEATURE_PUT;
-        params.open_mode = UCT_IFACE_OPEN_MODE_DEVICE;
         return params;
     }
 
@@ -180,13 +190,19 @@ public:
     {
         uct_test::init();
 
+        m_err_count               = 0;
         uct_iface_params_t params = iface_params();
-        m_entity                  = uct_test::create_entity(params);
+        m_e1                      = uct_test::create_entity(params);
+        params                    = iface_params();
+        m_e2                      = uct_test::create_entity(params);
+        m_e1->connect(0, *m_e2, 0);
+        m_e2->connect(0, *m_e1, 0);
 
         params.features    |= UCT_IFACE_FEATURE_FLUSH_REMOTE;
         m_entity_flush_rkey = uct_test::create_entity(params);
 
-        m_entities.push_back(m_entity);
+        m_entities.push_back(m_e1);
+        m_entities.push_back(m_e2);
         m_entities.push_back(m_entity_flush_rkey);
     }
 
@@ -202,7 +218,7 @@ public:
     }
 };
 
-UCS_TEST_P(test_rc_iface_address, size_no_flush_remote)
+UCS_TEST_P(test_rc_iface_flush_remote, size_no_flush_remote)
 {
     map_size_t sizes = {
         {"rc_mlx5", {7, 1}},
@@ -210,10 +226,10 @@ UCS_TEST_P(test_rc_iface_address, size_no_flush_remote)
         {"rc_verbs", {7, 0}},
         {"gga_mlx5", {7, 8}},
     };
-    check_sizes(m_entity, sizes);
+    check_sizes(m_e1, sizes);
 }
 
-UCS_TEST_P(test_rc_iface_address, size_flush_remote)
+UCS_TEST_P(test_rc_iface_flush_remote, size_flush_remote)
 {
     int flush_rkey_enabled = rc_iface_flush_rkey_enabled(m_entity_flush_rkey);
     int mr_id              = rc_iface_mr_id(m_entity_flush_rkey);
@@ -226,7 +242,31 @@ UCS_TEST_P(test_rc_iface_address, size_flush_remote)
     check_sizes(m_entity_flush_rkey, sizes);
 }
 
-UCT_INSTANTIATE_RC_DC_GGA_TEST_CASE(test_rc_iface_address)
+UCS_TEST_SKIP_COND_P(test_rc_iface_flush_remote, put_fence_no_flush_remote,
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY),
+                     "IB_PCI_RELAXED_ORDERING?=try")
+{
+    mapped_buffer sendbuf(64, 0ul, *m_e1);
+    mapped_buffer recvbuf(64, 0ul, *m_e2);
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), 64, sendbuf.memh(),
+                            1);
+
+    uct_completion_t comp;
+    comp.func   = [](uct_completion_t*) {};
+    comp.count  = 1;
+    comp.status = UCS_OK;
+
+    // Trigger the use of atomic key, PUT fails with invalid atomic_mr_offset
+    ASSERT_UCS_OK(uct_ep_fence(m_e1->ep(0), 0));
+    EXPECT_EQ(UCS_INPROGRESS,
+              uct_ep_put_zcopy(m_e1->ep(0), iov, iovcnt, recvbuf.addr(),
+                               recvbuf.rkey(), &comp));
+    wait_for_value(&comp.count, 0, true);
+    EXPECT_EQ(0, comp.count);
+    EXPECT_EQ(0, m_err_count);
+}
+
+UCT_INSTANTIATE_RC_DC_GGA_TEST_CASE(test_rc_iface_flush_remote)
 
 
 class test_rc_get_limit : public test_rc {
@@ -249,20 +289,19 @@ public:
             modify_config("RC_TX_QUEUE_LEN", "32");
         }
 
-        modify_config("RC_TM_ENABLE", "y", SETENV_IF_NOT_EXIST);
+        if (!ucs::skip_hw_tm_offload()) {
+            modify_config("RC_TM_ENABLE", "y", SETENV_IF_NOT_EXIST);
+        }
 
         m_comp.func   = NULL;
         m_comp.count  = 300000; // some big value to avoid func invocation
         m_comp.status = UCS_OK;
-    }
 
-    void init() {
         stats_activate();
-        test_rc::init();
     }
 
-    void cleanup() {
-        uct_test::cleanup();
+    ~test_rc_get_limit()
+    {
         stats_restore();
     }
 
@@ -638,12 +677,42 @@ UCS_TEST_SKIP_COND_P(test_rc_get_limit, ordering_comp_cb,
 
 UCT_INSTANTIATE_RC_DC_GGA_TEST_CASE(test_rc_get_limit)
 
-class test_rc_ece_auto : public test_rc {
+
+class test_gga_get_zcopy_purge : public test_rc {
+};
+
+UCS_TEST_SKIP_COND_P(test_gga_get_zcopy_purge, get_zcopy_purge,
+                     !check_caps(UCT_IFACE_FLAG_GET_ZCOPY))
+{
+    mapped_buffer localbuf(64, 0ul, *m_e1);
+    mapped_buffer remotebuf(64, 0ul, *m_e2);
+
+    uct_completion_t comp;
+    comp.func   = [](uct_completion_t*) {};
+    comp.count  = 2;
+    comp.status = UCS_OK;
+
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, localbuf.ptr(), localbuf.length(),
+                            localbuf.memh(), m_e1->iface_attr().cap.get.max_iov);
+    ASSERT_UCS_OK_OR_INPROGRESS(uct_ep_get_zcopy(m_e1->ep(0), iov, iovcnt,
+                                                 remotebuf.addr(),
+                                                 remotebuf.rkey(), &comp));
+
+    scoped_log_handler hide_warn(hide_warns_logger);
+    m_e1->destroy_eps();
+
+    EXPECT_EQ(1, comp.count);
+    EXPECT_EQ(UCS_ERR_CANCELED, comp.status);
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_gga_get_zcopy_purge, gga_mlx5)
+
+
+class test_rc_ece : public test_rc {
 public:
     void init()
     {
         m_recv_count = 0;
-        modify_config("RC_ECE", "auto");
         test_rc::init();
     }
 
@@ -662,15 +731,13 @@ public:
         return UCS_OK;
     }
 
-    void send_recv(uct_ep_h ep, entity *ent, size_t length)
+    void send_recv(uct_ep_h ep, entity *ent, size_t length, uint64_t ece)
     {
-        /* set a callback for the uct to invoke for receiving the data */
-        uct_iface_set_am_handler(ent->iface(), 0, recv_handler, &length, 0);
+        EXPECT_EQ(ece, rc_iface(m_e1)->config.ece);
 
-        /* send the data */
+        uct_iface_set_am_handler(ent->iface(), 0, recv_handler, &length, 0);
         ssize_t packed_size = uct_ep_am_bcopy(ep, 0, send_pack_cb, &length, 0);
         ASSERT_EQ(length, packed_size);
-
         wait_for_value(&m_recv_count, (size_t)1, true);
     }
 
@@ -678,15 +745,35 @@ protected:
     static size_t m_recv_count;
 };
 
-size_t test_rc_ece_auto::m_recv_count = 0;
+size_t test_rc_ece::m_recv_count = 0;
 
-UCS_TEST_SKIP_COND_P(test_rc_ece_auto, send_recv,
-                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY))
+UCS_TEST_SKIP_COND_P(test_rc_ece, ece_0, !check_caps(UCT_IFACE_FLAG_AM_BCOPY),
+                     "RC_ECE=0")
 {
-    send_recv(m_e1->ep(0), m_e2, m_e1->iface_attr().cap.am.max_bcopy);
+    send_recv(m_e1->ep(0), m_e2, m_e1->iface_attr().cap.am.max_bcopy, 0);
 }
 
-UCT_INSTANTIATE_RC_DC_TEST_CASE(test_rc_ece_auto)
+UCS_TEST_SKIP_COND_P(test_rc_ece, ece_custom,
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY), "RC_ECE=43223")
+{
+    send_recv(m_e1->ep(0), m_e2, m_e1->iface_attr().cap.am.max_bcopy, 43223);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_ece, ece_auto,
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY), "RC_ECE=auto")
+{
+    send_recv(m_e1->ep(0), m_e2, m_e1->iface_attr().cap.am.max_bcopy,
+              UCS_ULUNITS_AUTO);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_ece, ece_inf, !check_caps(UCT_IFACE_FLAG_AM_BCOPY),
+                     "RC_ECE=inf")
+{
+    send_recv(m_e1->ep(0), m_e2, m_e1->iface_attr().cap.am.max_bcopy,
+              UCS_ULUNITS_INF);
+}
+
+UCT_INSTANTIATE_RC_DC_TEST_CASE(test_rc_ece)
 
 uint32_t test_rc_flow_control::m_am_rx_count = 0;
 

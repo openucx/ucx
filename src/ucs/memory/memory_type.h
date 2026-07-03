@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019-2026. ALL RIGHTS RESERVED.
  * Copyright (C) Intel Corporation, 2023. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
@@ -45,9 +45,15 @@ typedef enum ucs_memory_type {
     UCS_MEMORY_TYPE_ZE_HOST,       /**< Intel ZE memory (USM host) */
     UCS_MEMORY_TYPE_ZE_DEVICE,     /**< Intel ZE memory (USM device) */
     UCS_MEMORY_TYPE_ZE_MANAGED,    /**< Intel ZE managed memory (USM shared) */
+    UCS_MEMORY_TYPE_GAUDI,         /**< HabanaLabs Gaudi memory */
     UCS_MEMORY_TYPE_LAST,
     UCS_MEMORY_TYPE_UNKNOWN = UCS_MEMORY_TYPE_LAST
 } ucs_memory_type_t;
+
+
+typedef enum ucs_mem_flags {
+    UCS_MEM_FLAG_REGISTRABLE = UCS_BIT(0) /**< Memory is registrable by MDs */
+} ucs_mem_flags_t;
 
 
 /**

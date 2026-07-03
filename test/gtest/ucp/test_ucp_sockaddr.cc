@@ -984,7 +984,7 @@ protected:
 
         if (fail_send_ep) {
             UCS_ASYNC_BLOCK(&ep->worker->async);
-            ucp_ep_set_failed(ep, UCP_NULL_LANE, UCS_ERR_CONNECTION_RESET);
+            ucp_ep_set_lanes_failed(ep, 0, UCS_ERR_CONNECTION_RESET);
             UCS_ASYNC_UNBLOCK(&ep->worker->async);
         }
         void *close_req = ep_close_nbx(ep, UCP_EP_CLOSE_FLAG_FORCE);
@@ -1578,7 +1578,7 @@ protected:
             /* Emulate failure of the endpoint by invoking error handling
              * procedure */
             ++m_num_fail_injections;
-            ucp_ep_set_failed(e.ep(), UCP_NULL_LANE, UCS_ERR_ENDPOINT_TIMEOUT);
+            ucp_ep_set_lanes_failed(e.ep(), 0, UCS_ERR_ENDPOINT_TIMEOUT);
         } else {
             /* Make sure that stub WIREUP_EP is updated */
             for (auto lane = 0; lane < ucp_ep_num_lanes(e.ep()); ++lane) {
@@ -2837,6 +2837,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_protocols, am_rndv_reset,
     UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, udx, "ud_x") \
     UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, rc, "rc_v") \
     UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, rcx, "rc_x") \
+    UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, srd, "srd") \
     UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, ib, "ib") \
     UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, tcp, "tcp") \
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, all, "all")

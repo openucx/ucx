@@ -12,7 +12,32 @@
 #include <ucs/config/global_opts.h>
 #include <ucs/sys/checker.h>
 #include <ucs/sys/sys.h>
+#include <ucs/sys/ptr_arith.h>
 
+
+static inline size_t ucs_mpool_elem_total_size(ucs_mpool_data_t *data)
+{
+    return ucs_align_up_pow2(data->elem_size, data->alignment);
+}
+
+static inline void *
+ucs_mpool_chunk_obj(ucs_mpool_t *mp, void *elems, unsigned elem_index)
+{
+    ucs_mpool_elem_t *elem = (ucs_mpool_elem_t*)UCS_PTR_BYTE_OFFSET(
+            elems, elem_index * ucs_mpool_elem_total_size(mp->data));
+    return elem + 1;
+}
+
+static inline void *
+ucs_mpool_chunk_elems(ucs_mpool_t *mp, ucs_mpool_chunk_t *chunk)
+{
+    ucs_mpool_data_t *data = mp->data;
+    size_t chunk_padding;
+
+    chunk_padding = ucs_padding((uintptr_t)(chunk + 1) + data->align_offset,
+                                data->alignment);
+    return UCS_PTR_BYTE_OFFSET(chunk + 1, chunk_padding);
+}
 
 static inline void *ucs_mpool_get_inline(ucs_mpool_t *mp)
 {

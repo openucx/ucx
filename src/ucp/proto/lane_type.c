@@ -41,6 +41,12 @@ const ucp_lane_type_info_t ucp_lane_type_info[] = {
     [UCP_LANE_TYPE_KEEPALIVE] = {
         .short_name = "keepalive"
     },
+    [UCP_LANE_TYPE_DEVICE] = {
+        .short_name = "device"
+    },
+    [UCP_LANE_TYPE_FAILED] = {
+        .short_name = "failed"
+    },
     [UCP_LANE_TYPE_LAST] = {
         .short_name = NULL
     }

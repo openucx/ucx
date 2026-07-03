@@ -1,9 +1,9 @@
 #
-# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 # Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 # Copyright (C) The University of Tennessee and the University of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
 # Copyright (C) Los Alamos National Security, LLC. 2018 ALL RIGHTS RESERVED.
-# Copyright (C) Advanced Micro Devices, Inc. 2019. ALL RIGHTS RESERVED.
+# Copyright (C) Advanced Micro Devices, Inc. 2025. ALL RIGHTS RESERVED.
 # Copyright (C) ARM Ltd. 2020.  ALL RIGHTS RESERVED.
 # Copyright (C) NextSilicon Ltd. 2021.  ALL RIGHTS RESERVED.
 #
@@ -118,6 +118,7 @@ gtest_SOURCES = \
 	uct/test_many2one_am.cc \
 	uct/test_md.cc \
 	uct/test_mm.cc \
+	uct/sm/mm/test_mm_fifo_room.cc \
 	uct/test_mem.cc \
 	uct/test_p2p_am.cc \
 	uct/test_p2p_err.cc \
@@ -126,6 +127,7 @@ gtest_SOURCES = \
 	uct/test_pending.cc \
 	uct/test_progress.cc \
 	uct/test_uct_ep.cc \
+	uct/test_uct_iface.cc \
 	uct/test_uct_perf.cc \
 	uct/v2/test_uct_query.cc \
 	uct/test_zcopy_comp.cc \
@@ -143,6 +145,7 @@ gtest_SOURCES = \
 	ucp/test_ucp_ep.cc \
 	ucp/test_ucp_stream.cc \
 	ucp/test_ucp_peer_failure.cc \
+	ucp/test_ucp_fault_tolerance.cc \
 	ucp/test_ucp_atomic.cc \
 	ucp/test_ucp_dt.cc \
 	ucp/test_ucp_tls.cc \
@@ -185,7 +188,8 @@ gtest_SOURCES = \
 	ucs/test_datatype.cc \
 	ucs/test_bitops.cc \
 	ucs/test_debug.cc \
-        ucs/test_lru.cc \
+	ucs/test_interval_tree.cc \
+    ucs/test_lru.cc \
 	ucs/test_memtrack.cc \
 	ucs/test_math.cc \
 	ucs/test_mpmc.cc \
@@ -208,6 +212,7 @@ gtest_SOURCES = \
 	ucs/test_frag_list.cc \
 	ucs/test_type.cc \
 	ucs/test_log.cc \
+	ucs/test_table.cc \
 	ucs/test_iov.cc \
 	ucs/test_vfs.cc \
 	ucs/arch/test_x86_64.cc
@@ -227,7 +232,8 @@ gtest_LDADD += \
 	$(top_builddir)/src/uct/ib/libuct_ib.la
 if HAVE_MLX5_DV
 gtest_LDADD += \
-	$(top_builddir)/src/uct/ib/mlx5/libuct_ib_mlx5.la
+	$(top_builddir)/src/uct/ib/mlx5/libuct_ib_mlx5.la \
+	$(LIB_MLX5)
 endif
 
 if HAVE_DEVX
@@ -254,13 +260,37 @@ if HAVE_MLX5_DV
 gtest_SOURCES += \
 	uct/ib/test_cqe_zipping.cc
 endif
+if HAVE_EFA
+gtest_SOURCES += \
+    uct/ib/test_srd.cc
+endif
 endif # HAVE_IB
 
 if HAVE_CUDA
 gtest_SOURCES += \
-	common/cuda_context.cc \
 	ucm/cuda_hooks.cc \
-	uct/cuda/test_cuda_ipc_md.cc
+	uct/cuda/test_cuda_ctx_cleanup.cc \
+	uct/cuda/test_switch_cuda_device.cc \
+	uct/cuda/test_cuda_ipc_md.cc \
+	uct/cuda/test_cuda_nvml.cc
+
+if HAVE_NVCC
+NVCC_EXTRA_FLAGS = \
+	$(CUDA_CPPFLAGS) \
+	-I$(top_srcdir)/test \
+	-I$(top_srcdir)/test/gtest
+include $(top_srcdir)/config/cuda.am
+
+gtest_SOURCES += \
+	uct/cuda/test_kernels_uct.cu \
+	uct/cuda/test_cuda_ipc_device.cc \
+	uct/test_device.cc \
+	ucp/test_ucp_device.cc \
+	uct/cuda/test_kernels.cu \
+	ucp/cuda/test_kernels.cu
+
+endif
+
 gtest_CPPFLAGS += \
 	$(CUDA_CPPFLAGS)
 gtest_LDFLAGS += \

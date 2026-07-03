@@ -21,11 +21,21 @@ static ucs_config_field_t uct_rocm_ipc_iface_config_table[] = {
      UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
     {"MIN_ZCOPY", "128", "Minimum data size for ROCm/IPC zcopy protocols",
-     ucs_offsetof(uct_rocm_ipc_iface_config_t, min_zcopy),
+     ucs_offsetof(uct_rocm_ipc_iface_config_t, params.min_zcopy),
      UCS_CONFIG_TYPE_MEMUNITS},
 
     {"LAT", "1e-7", "Latency",
-     ucs_offsetof(uct_rocm_ipc_iface_config_t, latency), UCS_CONFIG_TYPE_TIME},
+     ucs_offsetof(uct_rocm_ipc_iface_config_t, params.latency),
+     UCS_CONFIG_TYPE_TIME},
+
+    {"CACHE_IPC_HANDLES", "y", "Enable caching IPC handles",
+     ucs_offsetof(uct_rocm_ipc_iface_config_t, params.enable_ipc_handle_cache),
+     UCS_CONFIG_TYPE_BOOL},
+
+    {"SIGPOOL_MAX_ELEMS", "1024",
+      "Maximum number of elements in signal pool",
+      ucs_offsetof(uct_rocm_ipc_iface_config_t, params.sigpool_max_elems),
+      UCS_CONFIG_TYPE_UINT},
 
     {NULL}
 };
@@ -80,8 +90,7 @@ uct_rocm_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
     }
 
     if (ucs_get_system_id() != *((const uint64_t*)params->device_addr)) {
-        uct_iface_fill_info_str_buf(params,
-                                    "the device addr is from another machine");
+        uct_iface_fill_info_str_buf(params, "different machine");
         return 0;
     }
 
@@ -146,6 +155,15 @@ uct_rocm_ipc_iface_flush(uct_iface_h tl_iface, unsigned flags,
     return UCS_INPROGRESS;
 }
 
+static ucs_status_t
+uct_rocm_ipc_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
+{
+    uct_rocm_ipc_iface_t *iface = ucs_derived_of(tl_ep->iface,
+                                                 uct_rocm_ipc_iface_t);
+    return uct_rocm_base_ep_flush(tl_ep, &iface->signal_pool,
+                                  &iface->signal_queue, comp);
+}
+
 static unsigned uct_rocm_ipc_iface_progress(uct_iface_h tl_iface)
 {
     uct_rocm_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_rocm_ipc_iface_t);
@@ -154,12 +172,15 @@ static unsigned uct_rocm_ipc_iface_progress(uct_iface_h tl_iface)
 }
 
 static uct_iface_internal_ops_t uct_rocm_ipc_iface_internal_ops = {
-    .iface_estimate_perf   = uct_base_iface_estimate_perf,
-    .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
-    .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
-    .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
-    .ep_connect_to_ep_v2   = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
-    .iface_is_reachable_v2 = uct_rocm_ipc_iface_is_reachable_v2
+    .iface_query_v2         = uct_iface_base_query_v2,
+    .iface_estimate_perf    = uct_base_iface_estimate_perf,
+    .iface_vfs_refresh      = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+    .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+    .ep_invalidate          = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
+    .ep_connect_to_ep_v2    = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
+    .iface_is_reachable_v2  = uct_rocm_ipc_iface_is_reachable_v2,
+    .ep_is_connected        = uct_base_ep_is_connected,
+    .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported
 };
 
 static uct_iface_ops_t uct_rocm_ipc_iface_ops = {
@@ -167,7 +188,7 @@ static uct_iface_ops_t uct_rocm_ipc_iface_ops = {
     .ep_get_zcopy             = uct_rocm_ipc_ep_get_zcopy,
     .ep_pending_add           = (uct_ep_pending_add_func_t)ucs_empty_function_return_busy,
     .ep_pending_purge         = (uct_ep_pending_purge_func_t)ucs_empty_function,
-    .ep_flush                 = uct_base_ep_flush,
+    .ep_flush                 = uct_rocm_ipc_ep_flush,
     .ep_fence                 = uct_base_ep_fence,
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_rocm_ipc_ep_t),
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_rocm_ipc_ep_t),
@@ -199,13 +220,12 @@ static UCS_CLASS_INIT_FUNC(uct_rocm_ipc_iface_t, uct_md_h md, uct_worker_h worke
                               tl_config UCS_STATS_ARG(params->stats_root)
                               UCS_STATS_ARG(UCT_ROCM_IPC_TL_NAME));
 
-    self->config.min_zcopy = config->min_zcopy;
-    self->config.latency   = config->latency;
+    self->config = config->params;
 
     ucs_mpool_params_reset(&mp_params);
     mp_params.elem_size       = sizeof(uct_rocm_base_signal_desc_t);
     mp_params.elems_per_chunk = 128;
-    mp_params.max_elems       = 1024;
+    mp_params.max_elems       = config->params.sigpool_max_elems;
     mp_params.ops             = &uct_rocm_base_signal_desc_mpool_ops;
     mp_params.name            = "ROCM_IPC signal objects";
     status = ucs_mpool_init(&mp_params, &self->signal_pool);

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2021. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2021-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -10,7 +10,9 @@
 
 #include "proto_rndv.inl"
 #include "rndv_mtype.inl"
+
 #include <ucp/proto/proto_debug.h>
+#include <ucp/rma/rma_rndv.h>
 
 
 #define UCP_PROTO_RNDV_GET_DESC "read from remote"
@@ -60,8 +62,7 @@ ucp_proto_rndv_get_common_probe(const ucp_proto_init_params_t *init_params,
     ucp_proto_perf_t *perf;
     ucs_status_t status;
 
-    if ((init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
-        !ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_RECV,
+    if (!ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_RECV,
                                  support_ppln)) {
         return;
     }
@@ -78,23 +79,31 @@ ucp_proto_rndv_get_common_probe(const ucp_proto_init_params_t *init_params,
                                                                   mpriv));
 }
 
-static UCS_F_ALWAYS_INLINE void
+static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_rndv_get_common_request_init(ucp_request_t *req)
 {
     /* coverity[tainted_data_downcast] */
-    ucp_proto_rndv_bulk_request_init(req, req->send.proto_config->priv);
+    return ucp_proto_rndv_bulk_request_init(req, req->send.proto_config->priv);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_get_common_send(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
         const uct_iov_t *iov, size_t offset, uct_completion_t *comp)
 {
-    uct_rkey_t tl_rkey      = ucp_rkey_get_tl_rkey(req->send.rndv.rkey,
-                                                   lpriv->super.rkey_index);
-    uint64_t remote_address = req->send.rndv.remote_address + offset;
+    ucp_ep_h ep              = req->send.ep;
+    uct_ep_h uct_ep          = ucp_ep_get_lane(ep, lpriv->super.lane);
+    uct_rkey_t tl_rkey       = ucp_rkey_get_tl_rkey(req->send.rndv.rkey,
+                                                    lpriv->super.rkey_index);
+    uint64_t remote_address  = req->send.rndv.remote_address + offset;
+    ucp_request_t *recv_req;
+    ucs_status_t status;
 
-    return uct_ep_get_zcopy(ucp_ep_get_lane(req->send.ep, lpriv->super.lane),
-                            iov, 1, remote_address, tl_rkey, comp);
+    recv_req = ucp_rma_rndv_flush_open(req);
+    status   = uct_ep_get_zcopy(uct_ep, iov, 1, remote_address, tl_rkey,
+                                comp);
+    ucp_rma_rndv_flush_close(recv_req, ep, status);
+
+    return status;
 }
 
 static void
@@ -120,7 +129,8 @@ ucp_proto_rndv_get_zcopy_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_memory_info_t reg_mem_info = {
         .type    = init_params->select_param->mem_type,
-        .sys_dev = init_params->select_param->sys_dev
+        .sys_dev = init_params->select_param->sys_dev,
+        .flags   = init_params->select_param->op.mem_flags
     };
 
     ucp_proto_rndv_get_common_probe(
@@ -227,6 +237,7 @@ ucp_proto_t ucp_rndv_get_zcopy_proto = {
     .name     = "rndv/get/zcopy",
     .desc     = UCP_PROTO_ZCOPY_DESC " " UCP_PROTO_RNDV_GET_DESC,
     .flags    = 0,
+    .dt_mask  = UCS_BIT(UCP_DATATYPE_CONTIG),
     .probe    = ucp_proto_rndv_get_zcopy_probe,
     .query    = ucp_proto_rndv_get_zcopy_query,
     .progress = {
@@ -292,7 +303,8 @@ ucp_proto_rndv_get_mtype_fetch_progress(uct_pending_req_t *uct_req)
     rpriv = req->send.proto_config->priv;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
-        status = ucp_proto_rndv_mtype_request_init(req, rpriv->frag_mem_type);
+        status = ucp_proto_rndv_mtype_request_init(req, rpriv->frag_mem_type,
+                                                   rpriv->frag_sys_dev);
         if (status != UCS_OK) {
             ucp_proto_request_abort(req, status);
             return UCS_OK;
@@ -314,27 +326,26 @@ static void
 ucp_proto_rndv_get_mtype_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_context_t *context = init_params->worker->context;
+    ucs_memory_type_t frag_mem_type;
     ucp_md_map_t mdesc_md_map;
     ucs_status_t status;
     size_t frag_size;
     ucp_md_index_t UCS_V_UNUSED dummy_md_id;
     ucp_memory_info_t frag_mem_info;
 
-    ucs_for_each_bit(frag_mem_info.type,
-                     context->config.ext.rndv_frag_mem_types) {
-        status = ucp_proto_rndv_mtype_init(init_params, frag_mem_info.type,
+    ucs_for_each_bit(frag_mem_type, context->config.ext.rndv_frag_mem_types) {
+        status = ucp_proto_rndv_mtype_init(init_params, frag_mem_type,
                                            &mdesc_md_map, &frag_size);
         if (status != UCS_OK) {
             continue;
         }
 
-        status = ucp_mm_get_alloc_md_index(context, frag_mem_info.type,
-                                           &dummy_md_id,
-                                           &frag_mem_info.sys_dev);
+        status = ucp_mm_get_alloc_md_index(context, frag_mem_type,
+                                           init_params->select_param->sys_dev,
+                                           &dummy_md_id, &frag_mem_info);
         if (status != UCS_OK) {
             continue;
         }
-
 
         ucp_proto_rndv_get_common_probe(init_params,
                                         UCS_BIT(UCP_RNDV_MODE_GET_PIPELINE),
@@ -376,6 +387,7 @@ ucp_proto_t ucp_rndv_get_mtype_proto = {
     .name     = "rndv/get/mtype",
     .desc     = NULL,
     .flags    = 0,
+    .dt_mask  = UCS_BIT(UCP_DATATYPE_CONTIG),
     .probe    = ucp_proto_rndv_get_mtype_probe,
     .query    = ucp_proto_rndv_get_mtype_query,
     .progress = {

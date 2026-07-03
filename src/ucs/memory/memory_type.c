@@ -24,6 +24,7 @@ const char *ucs_memory_type_names[] = {
     [UCS_MEMORY_TYPE_ZE_HOST]      = "ze-host",
     [UCS_MEMORY_TYPE_ZE_DEVICE]    = "ze-device",
     [UCS_MEMORY_TYPE_ZE_MANAGED]   = "ze-managed",
+    [UCS_MEMORY_TYPE_GAUDI]        = "gaudi",
     [UCS_MEMORY_TYPE_LAST]         = "unknown",
     [UCS_MEMORY_TYPE_LAST + 1]     = NULL
 };
@@ -38,5 +39,6 @@ const char *ucs_memory_type_descs[] = {
     [UCS_MEMORY_TYPE_ZE_HOST]      = "Intel/Ze USM host memory",
     [UCS_MEMORY_TYPE_ZE_DEVICE]    = "Intel/Ze GPU memory",
     [UCS_MEMORY_TYPE_ZE_MANAGED]   = "Intel/Ze GPU managed memory",
+    [UCS_MEMORY_TYPE_GAUDI]        = "HabanaLabs Gaudi memory",
     [UCS_MEMORY_TYPE_LAST]         = "unknown"
 };

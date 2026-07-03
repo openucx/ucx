@@ -7,4 +7,4 @@
 conf_filesdir = $(ucx_config_dir)
 conf_files_DATA = ucx.conf
 
-EXTRA_DIST = $(conf_files_DATA)
+EXTRA_DIST = $(conf_files_DATA) nvcc_wrap.sh

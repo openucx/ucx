@@ -293,7 +293,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nbx,
         req->send.msg_proto.tag = tag;
 
         ret = ucp_proto_request_send_op(ep, &ucp_ep_config(ep)->proto_select,
-                                        UCP_WORKER_CFG_INDEX_NULL, req,
+                                        UCP_WORKER_CFG_INDEX_NULL, req, 0,
                                         UCP_OP_ID_TAG_SEND, buffer, count,
                                         datatype, contig_length, param, 0, 0);
     } else {
@@ -344,7 +344,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nbx,
             contig_length = ucp_contig_dt_length(datatype, count);
         }
         ret = ucp_proto_request_send_op(ep, &ucp_ep_config(ep)->proto_select,
-                                        UCP_WORKER_CFG_INDEX_NULL, req,
+                                        UCP_WORKER_CFG_INDEX_NULL, req, 0,
                                         UCP_OP_ID_TAG_SEND_SYNC, buffer, count,
                                         datatype, contig_length, param, 0, 0);
     } else {

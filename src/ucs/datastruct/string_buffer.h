@@ -12,6 +12,7 @@
 #include <ucs/datastruct/array.h>
 #include <sys/socket.h>
 #include <sys/uio.h>
+#include <stdarg.h>
 #include <stdint.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -151,6 +152,17 @@ size_t ucs_string_buffer_length(ucs_string_buffer_t *strb);
  */
 void ucs_string_buffer_appendf(ucs_string_buffer_t *strb, const char *fmt, ...)
     UCS_F_PRINTF(2, 3);
+
+
+/**
+ * va_list counterpart of @ref ucs_string_buffer_appendf.
+ *
+ * @param [inout] strb   String buffer to append to.
+ * @param [in]    fmt    Format string.
+ * @param [in]    ap     Variadic argument list. Caller must va_end() it.
+ */
+void ucs_string_buffer_vappendf(ucs_string_buffer_t *strb, const char *fmt,
+                                va_list ap);
 
 
 /**

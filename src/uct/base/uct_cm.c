@@ -124,6 +124,10 @@ void uct_cm_ep_server_conn_notify_cb(uct_cm_base_ep_t *cep, ucs_status_t status)
 {
     uct_cm_ep_server_conn_notify_args_t notify_args;
 
+    if (cep->server.notify_cb == NULL) {
+        return;
+    }
+
     notify_args.field_mask = UCT_CM_EP_SERVER_CONN_NOTIFY_ARGS_FIELD_STATUS;
     notify_args.status     = status;
 

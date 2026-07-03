@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2023, NVIDIA CORPORATION & AFFILIATES. ALL RIGHTS RESERVED.
+ * Copyright (C) 2023-2026, NVIDIA CORPORATION & AFFILIATES. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -51,8 +51,7 @@ ucp_tag_rndv_offload_proto_probe(const ucp_proto_init_params_t *init_params)
        .tl_cap_flags        = UCT_IFACE_FLAG_TAG_RNDV_ZCOPY
     };
 
-    if (!ucp_tag_rndv_check_op_id(init_params) ||
-        (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG)) {
+    if (!ucp_tag_rndv_check_op_id(init_params)) {
         return;
     }
 
@@ -139,6 +138,7 @@ ucp_proto_t ucp_tag_rndv_offload_proto = {
     .name     = "tag/rndv/offload",
     .desc     = "rendezvous tag offload",
     .flags    = 0,
+    .dt_mask  = UCS_BIT(UCP_DATATYPE_CONTIG),
     .probe    = ucp_tag_rndv_offload_proto_probe,
     .query    = ucp_proto_single_query,
     .progress = {ucp_tag_rndv_offload_proto_progress},
@@ -231,6 +231,7 @@ ucp_proto_t ucp_tag_rndv_offload_sw_proto = {
     .name     = "tag/rndv/offload_sw",
     .desc     = NULL,
     .flags    = 0,
+    .dt_mask  = UCP_PROTO_DT_MASK_DEFAULT,
     .probe    = ucp_tag_rndv_offload_sw_proto_probe,
     .query    = ucp_proto_rndv_rts_query,
     .progress = {ucp_tag_rndv_offload_sw_proto_progress},

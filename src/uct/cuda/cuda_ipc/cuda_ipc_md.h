@@ -14,12 +14,13 @@
 #include <ucs/config/types.h>
 
 
-#if HAVE_CUDA_FABRIC
-typedef enum uct_cuda_ipc_key_handle {
-    UCT_CUDA_IPC_KEY_HANDLE_TYPE_ERROR = 0,
+typedef enum {
+    UCT_CUDA_IPC_KEY_HANDLE_TYPE_NO_IPC = 0,
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY, /* cudaMalloc memory */
+#if HAVE_CUDA_FABRIC
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM, /* cuMemCreate memory */
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL /* cudaMallocAsync memory */
+#endif
 } uct_cuda_ipc_key_handle_t;
 
 
@@ -27,28 +28,30 @@ typedef struct uct_cuda_ipc_md_handle {
     uct_cuda_ipc_key_handle_t handle_type;
     union {
         CUipcMemHandle        legacy;        /* Legacy IPC handle */
+#if HAVE_CUDA_FABRIC
         CUmemFabricHandle     fabric_handle; /* VMM/Mallocasync export handle */
+#endif
     } handle;
+#if HAVE_CUDA_FABRIC
     CUmemPoolPtrExportData    ptr;
     CUmemoryPool              pool;
-} uct_cuda_ipc_md_handle_t;
-#else
-typedef CUipcMemHandle uct_cuda_ipc_md_handle_t;
 #endif
-
+    unsigned long long        buffer_id;
+} uct_cuda_ipc_md_handle_t;
 
 /**
  * @brief cuda ipc MD descriptor
  */
 typedef struct uct_cuda_ipc_md {
-    uct_md_t                 super;   /**< Domain info */
-    int                      enable_mnnvl; /**< Multi-node NVLINK support status */
+    uct_md_t                 super;             /**< Domain info */
+    int                      enable_mnnvl;      /**< Multi-node NVLINK support status */
 } uct_cuda_ipc_md_t;
 
 
-typedef struct uct_cuda_ipc_uuid_hash_key {
-    int     type;
-    CUuuid  uuid;
+typedef struct {
+    uint8_t type;     /**< uct_cuda_ipc_key_handle_t */
+    uint8_t is_local; /**< 1 if the key is local (PID+PID_NS), 0 otherwise */
+    CUuuid  uuid;     /**< GPU Device UUID */
 } uct_cuda_ipc_uuid_hash_key_t;
 
 
@@ -67,7 +70,8 @@ uct_cuda_ipc_uuid_equals(uct_cuda_ipc_uuid_hash_key_t key1,
     int64_t *a64 = (int64_t *)key1.uuid.bytes;
     int64_t *b64 = (int64_t *)key2.uuid.bytes;
 
-    return (key1.type == key2.type) && (a64[0] == b64[0]) && (a64[1] == b64[1]);
+    return (key1.type == key2.type) && (key1.is_local == key2.is_local) &&
+           (a64[0] == b64[0]) && (a64[1] == b64[1]);
 }
 
 
@@ -75,7 +79,7 @@ static UCS_F_ALWAYS_INLINE khint32_t
 uct_cuda_ipc_uuid_hash_func(uct_cuda_ipc_uuid_hash_key_t key)
 {
     int64_t *i64 = (int64_t *)key.uuid.bytes;
-    return kh_int64_hash_func(i64[0] ^ i64[1] ^ key.type);
+    return kh_int64_hash_func(i64[0] ^ i64[1] ^ (key.type << 1) ^ key.is_local);
 }
 
 
@@ -101,6 +105,8 @@ extern uct_cuda_ipc_component_t uct_cuda_ipc_component;
 typedef struct uct_cuda_ipc_md_config {
     uct_md_config_t          super;
     ucs_ternary_auto_value_t enable_mnnvl;
+    unsigned long            cache_max_regions; /**< Max cached IPC regions per peer */
+    size_t                   cache_max_size;    /**< Max total cached IPC mapping size */
 } uct_cuda_ipc_md_config_t;
 
 
@@ -109,6 +115,7 @@ typedef struct uct_cuda_ipc_md_config {
  */
 typedef struct {
     pid_t           pid;     /* PID as key to resolve peer_map hash */
+    ucs_sys_ns_t    pid_ns;  /* PID namespace */
     int             dev_num; /* GPU Device number */
     ucs_list_link_t list;
 } uct_cuda_ipc_memh_t;
@@ -133,26 +140,22 @@ typedef struct {
     pid_t                     pid;     /* PID as key to resolve peer_map hash */
     CUdeviceptr               d_bptr;  /* Allocation base address */
     size_t                    b_len;   /* Allocation size */
-    int                       dev_num; /* GPU Device number */
     CUuuid                    uuid;    /* GPU Device UUID */
 } uct_cuda_ipc_rkey_t;
 
 
-#define UCT_CUDA_IPC_GET_DEVICE(_cu_device)                          \
-    do {                                                             \
-        if (UCS_OK !=                                                \
-            UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetDevice(&_cu_device))) { \
-            return UCS_ERR_IO_ERROR;                                 \
-        }                                                            \
-    } while(0);
+/**
+ * @brief cuda ipc extended remote key
+ */
+typedef struct {
+    uct_cuda_ipc_rkey_t super;
+    ucs_sys_ns_t        pid_ns; /* PID namespace */
+} uct_cuda_ipc_extended_rkey_t;
 
 
-#define UCT_CUDA_IPC_DEVICE_GET_COUNT(_num_device)                      \
-    do {                                                                \
-        if (UCS_OK !=                                                   \
-            UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetCount(&_num_device))) { \
-            return UCS_ERR_IO_ERROR;                                    \
-        }                                                               \
-    } while(0);
+typedef struct {
+    uct_cuda_ipc_extended_rkey_t super;
+    int                          stream_id;
+} uct_cuda_ipc_unpacked_rkey_t;
 
 #endif

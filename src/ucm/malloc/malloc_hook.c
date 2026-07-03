@@ -836,11 +836,29 @@ ucs_status_t ucm_malloc_install(int events)
 #endif
     }
 
+#if !HAVE_BRK
+    if (events & UCM_EVENT_BRK) {
+        ucm_debug("brk event requested, but brk() is not available");
+        events &= ~UCM_EVENT_BRK;
+    }
+#endif
+
+#if !HAVE_SBRK
+    if (events & UCM_EVENT_SBRK) {
+        ucm_debug("sbrk event requested, but sbrk() is not available");
+        events &= ~UCM_EVENT_SBRK;
+    }
+#endif
+
+#if HAVE_SBRK
     if (!(ucm_malloc_hook_state.install_state & UCM_MALLOC_INSTALLED_SBRK_EVH)) {
         ucm_debug("installing malloc-sbrk event handler");
         ucm_event_handler_add(&sbrk_handler);
         ucm_malloc_hook_state.install_state |= UCM_MALLOC_INSTALLED_SBRK_EVH;
     }
+#else
+    (void)sbrk_handler;
+#endif
 
     /* When running on valgrind, don't even try malloc hooks.
      * We want to release original blocks to silence the leak check, so we must

@@ -31,10 +31,10 @@ void ucs_string_buffer_init(ucs_string_buffer_t *strb)
 void ucs_string_buffer_init_fixed(ucs_string_buffer_t *strb, char *buffer,
                                   size_t capacity)
 {
-    ucs_array_init_fixed(strb, buffer, capacity);
     if (capacity > 0) {
-        ucs_array_elem(strb, 0) = '\0';
+        buffer[0] = '\0';
     }
+    ucs_array_init_fixed(strb, buffer, capacity);
 }
 
 void ucs_string_buffer_cleanup(ucs_string_buffer_t *strb)
@@ -58,21 +58,23 @@ static void ucs_string_buffer_add_null_terminator(ucs_string_buffer_t *strb)
     *ucs_array_end(strb) = '\0';
 }
 
-void ucs_string_buffer_appendf(ucs_string_buffer_t *strb, const char *fmt, ...)
+void ucs_string_buffer_vappendf(ucs_string_buffer_t *strb, const char *fmt,
+                                va_list ap)
 {
     ucs_status_t status;
     size_t max_print;
-    va_list ap;
+    va_list ap_retry;
     int ret;
 
     ucs_array_reserve(strb, ucs_array_length(strb) + UCS_STRING_BUFFER_RESERVE);
     ucs_assert(ucs_array_begin(strb) != NULL); /* For coverity */
 
+    /* Keep a copy of `ap` for the grow-and-retry path */
+    va_copy(ap_retry, ap);
+
     /* try to write to existing buffer */
-    va_start(ap, fmt);
     max_print = ucs_array_available_length(strb);
     ret       = vsnprintf(ucs_array_end(strb), max_print, fmt, ap);
-    va_end(ap);
 
     /* if failed, grow the buffer accommodate for the expected extra length */
     if (ret >= max_print) {
@@ -86,10 +88,8 @@ void ucs_string_buffer_appendf(ucs_string_buffer_t *strb, const char *fmt, ...)
             goto out;
         }
 
-        va_start(ap, fmt);
         max_print = ucs_array_available_length(strb);
-        ret       = vsnprintf(ucs_array_end(strb), max_print, fmt, ap);
-        va_end(ap);
+        ret       = vsnprintf(ucs_array_end(strb), max_print, fmt, ap_retry);
 
         /* since we've grown the buffer, it should be sufficient now */
         ucs_assertv(ret < max_print, "ret=%d max_print=%zu", ret, max_print);
@@ -100,8 +100,18 @@ void ucs_string_buffer_appendf(ucs_string_buffer_t *strb, const char *fmt, ...)
 
     /* \0 should be written by vsnprintf */
 out:
+    va_end(ap_retry);
     ucs_assert(ucs_array_available_length(strb) >= 1);
     ucs_assert(*ucs_array_end(strb) == '\0');
+}
+
+void ucs_string_buffer_appendf(ucs_string_buffer_t *strb, const char *fmt, ...)
+{
+    va_list ap;
+
+    va_start(ap, fmt);
+    ucs_string_buffer_vappendf(strb, fmt, ap);
+    va_end(ap);
 }
 
 void ucs_string_buffer_append_hex(ucs_string_buffer_t *strb, const void *data,

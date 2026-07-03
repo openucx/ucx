@@ -25,6 +25,8 @@ stages:
           name: MLNX
           demands:
           - ucx_docker -equals yes
+        workspace:
+          clean: all
         steps:
           - checkout: self
             clean: true

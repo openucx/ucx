@@ -7,7 +7,7 @@ jobs:
   - job: jucx_test_${{ parameters.arch }}
     displayName: JUCX Test ${{ parameters.arch }}
     workspace:
-      clean: outputs
+      clean: all
 
     pool:
       name: MLNX
@@ -22,7 +22,6 @@ jobs:
 
     steps:
       - checkout: self
-        fetchDepth: 200
         clean: true
         retryCountOnTaskFailure: 5
         displayName: Checkout

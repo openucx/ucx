@@ -534,12 +534,10 @@ static kh_inline khint_t __ac_Wang_hash(khint_t key)
  */
 #define kh_put(name, h, k, r) kh_put_##name(h, k, r)
 
-typedef enum ucs_kh_put {
-    UCS_KH_PUT_FAILED       = -1,
-    UCS_KH_PUT_KEY_PRESENT  = 0,
-    UCS_KH_PUT_BUCKET_EMPTY = 1,
-    UCS_KH_PUT_BUCKET_CLEAR = 2
-} ucs_kh_put_t;
+#define UCS_KH_PUT_FAILED       -1
+#define UCS_KH_PUT_KEY_PRESENT  0
+#define UCS_KH_PUT_BUCKET_EMPTY 1
+#define UCS_KH_PUT_BUCKET_CLEAR 2
 
 /*! @function
   @abstract     Retrieve a key from the hash table.

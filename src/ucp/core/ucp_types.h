@@ -55,10 +55,10 @@ UCP_UINT_TYPE(UCP_MAX_SYS_DEVICES)   ucp_sys_dev_map_t;
 
 
 /* Worker configuration index for endpoint and rkey */
-typedef uint8_t                      ucp_worker_cfg_index_t;
+typedef uint16_t                     ucp_worker_cfg_index_t;
 #define UCP_WORKER_MAX_EP_CONFIG     UINT8_MAX
-#define UCP_WORKER_MAX_RKEY_CONFIG   128
-#define UCP_WORKER_CFG_INDEX_NULL    UINT8_MAX
+#define UCP_WORKER_MAX_RKEY_CONFIG   UINT16_MAX
+#define UCP_WORKER_CFG_INDEX_NULL    UINT16_MAX
 
 
 /* Forward declarations */
@@ -71,7 +71,6 @@ typedef struct ucp_wireup_ep          ucp_wireup_ep_t;
 typedef struct ucp_request_send_proto ucp_request_send_proto_t;
 typedef struct ucp_worker_iface       ucp_worker_iface_t;
 typedef struct ucp_worker_cm          ucp_worker_cm_t;
-typedef struct ucp_rma_proto          ucp_rma_proto_t;
 typedef struct ucp_amo_proto          ucp_amo_proto_t;
 typedef struct ucp_ep_config          ucp_ep_config_t;
 typedef struct ucp_ep_config_key      ucp_ep_config_key_t;
@@ -201,6 +200,10 @@ typedef enum {
                                           defined AM */
     UCP_AM_ID_AM_SINGLE_REPLY   =  26, /* Single fragment user defined AM
                                           carrying remote ep for reply */
+    UCP_AM_ID_AM_FIRST_PSN      =  27, /* First fragment user defined AM
+                                          carrying remote ep and PSN for
+                                          tracking */
+    UCP_AM_ID_AM_MIDDLE_PSN     =  28,
     UCP_AM_ID_LAST
 } ucp_am_id_t;
 
@@ -221,9 +224,10 @@ typedef enum {
  * Fence mode.
  */
 typedef enum {
-    UCP_FENCE_MODE_WEAK,   /* Use weak fence mode */
-    UCP_FENCE_MODE_STRONG, /* Use strong fence mode */
-    UCP_FENCE_MODE_AUTO,   /* Automatically detect fence mode */
+    UCP_FENCE_MODE_WEAK,     /* Use weak fence mode */
+    UCP_FENCE_MODE_STRONG,   /* Use strong fence mode */
+    UCP_FENCE_MODE_AUTO,     /* Automatically detect fence mode */
+    UCP_FENCE_MODE_EP_BASED, /* Use EP-based fence mode */
     UCP_FENCE_MODE_LAST
 } ucp_fence_mode_t;
 

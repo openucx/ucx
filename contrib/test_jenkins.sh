@@ -2,7 +2,7 @@
 #
 # Testing script for OpenUCX, to run from Jenkins CI
 #
-# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2023. ALL RIGHTS RESERVED.
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 # Copyright (C) ARM Ltd. 2016-2018.  ALL RIGHTS RESERVED.
 #
 # See file LICENSE for terms.
@@ -247,7 +247,6 @@ run_hello() {
 		unset UCX_RC_TIMEOUT
 		unset UCX_RC_RETRY_COUNT
 	fi
-	unset UCX_PROTO_ENABLE
 }
 
 #
@@ -261,7 +260,7 @@ run_ucp_hello() {
 
 	mem_types_list="host "
 
-	if [ "X$have_cuda" == "Xyes" ]
+	if [ "X$have_cuda" != "Xno" ]
 	then
 		mem_types_list+="cuda cuda-managed "
 	fi
@@ -298,7 +297,7 @@ run_ucp_hello() {
 run_uct_hello() {
 	mem_types_list="host "
 
-	if [ "X$have_cuda" == "Xyes" ] && [ -f "/sys/kernel/mm/memory_peers/nv_mem/version" ]
+	if [ "X$have_cuda" != "Xno" ] && [ -f "/sys/kernel/mm/memory_peers/nv_mem/version" ]
 	then
 		mem_types_list+="cuda-managed "
 		if [ -f "/sys/kernel/mm/memory_peers/nv_mem/version" ]
@@ -334,7 +333,7 @@ run_client_server() {
 	msg_size_list="1 16 256 4096 65534"
 	api_list="am tag stream"
 
-	if [ "X$have_cuda" == "Xyes" ]
+	if [ "X$have_cuda" != "Xno" ]
 	then
 		mem_types_list+=" cuda cuda-managed "
 	fi
@@ -375,7 +374,7 @@ run_io_demo() {
 	server_nonrdma_addr=$(get_non_rdma_ip_addr)
 	mem_types_list="host "
 
-	if [ "X$have_cuda" == "Xyes" ]
+	if [ "X$have_cuda" != "Xno" ]
 	then
 		mem_types_list+="cuda cuda-managed "
 	fi
@@ -450,7 +449,7 @@ run_ucx_perftest() {
 			opt_transports="-x posix"
 			tls="shm"
 			dev="all"
-		elif [[ " ${ip_ifaces[*]} " == *" ${ucx_dev} "* ]]; then
+		elif printf '%s\n' "$ip_ifaces" | grep -qxF "$ucx_dev"; then
 			opt_transports="-x tcp"
 			tls="tcp"
 			dev=$ucx_dev
@@ -497,12 +496,12 @@ run_ucx_perftest() {
 
 	# run cuda tests if cuda module was loaded and GPU is found, and only in
 	# client/server mode, to reduce testing time
-	if [ "X$have_cuda" == "Xyes" ] && [ $with_mpi -ne 1 ]
+	if [ "X$have_cuda" != "Xno" ] && [ $with_mpi -ne 1 ]
 	then
 		gdr_options="n "
-		if (lsmod | grep -q "nv_peer_mem")
+		if (lsmod | grep -q 'nv.*_peer.*mem')
 		then
-			echo "GPUDirectRDMA module (nv_peer_mem) is present.."
+			echo "GPUDirectRDMA module (nv_peer_mem/nvidia_peermem) is present"
 			gdr_options+="y "
 		fi
 
@@ -635,6 +634,44 @@ run_ucx_perftest_with_daemon() {
 }
 
 #
+# Run UCX performance cuda device test
+#
+run_ucx_perftest_cuda_device() {
+	if [ "X$have_cuda" == "Xno" ]; then
+		echo "==== CUDA not available, skipping CUDA device tests ===="
+		return 0
+	fi
+
+	if ! has_gpunetio_devel; then
+		echo "==== DOCA not available, skipping CUDA device tests ===="
+		return 0
+	fi
+
+	if [ "$(get_num_gpus)" -eq 0 ]; then
+		echo "==== No NVIDIA GPUs found, skipping CUDA device tests ===="
+		return 0
+	fi
+
+    echo "==== Running ucx_perftest with cuda kernel ===="
+	ucx_inst_ptest=$ucx_inst/share/ucx/perftest
+	ucx_perftest="$ucx_inst/bin/ucx_perftest"
+	ucp_test_args="-b $ucx_inst_ptest/test_types_ucp_device_cuda"
+
+	# TODO: Run on all GPUs & NICs combinations
+	ucp_client_args="-a cuda:0 $(hostname)"
+	gda_tls="cuda_copy,rc,rc_gda"
+	cuda_ipc_tls="cuda_copy,rc,cuda_ipc"
+
+	# TODO: Run with cuda_ipc_tls
+	for tls in "$gda_tls"
+	do
+		export UCX_TLS=${tls}
+		run_client_server_app "$ucx_perftest" "$ucp_test_args" "$ucp_client_args" 0 0
+	done
+	unset UCX_TLS
+}
+
+#
 # Test malloc hooks with mpi
 #
 test_malloc_hooks_mpi() {
@@ -672,26 +709,48 @@ run_mpi_tests() {
 			save_LD_LIBRARY_PATH=${LD_LIBRARY_PATH}
 			export LD_LIBRARY_PATH=${ucx_inst}/lib:${MPI_HOME}/lib:${prev_LD_LIBRARY_PATH}
 
-			build release --disable-gtest --with-mpi
+			build release-mt --with-mpi --enable-assertions
 
 			# check whether installation is valid (it compiles examples at least)
 			$MAKEP installcheck
 
-			MPIRUN="mpirun \
+			MPIRUN_COMMON="mpirun \
 					--allow-run-as-root \
 					--bind-to none \
 					-x UCX_ERROR_SIGNALS \
-					-x UCX_HANDLE_ERRORS \
+					-x UCX_HANDLE_ERRORS"
+
+			MPIRUN="${MPIRUN_COMMON} \
 					-mca pml ob1 \
 					-mca osc ^ucx \
 					-mca btl tcp,self \
 					-mca btl_tcp_if_include lo \
 					-mca orte_allowed_exit_without_sync 1 \
-					-mca coll ^hcoll,ml"
+					-mca coll ^hcoll,ml,ucc"
 
 			run_ucx_perftest 1
 
 			test_malloc_hooks_mpi
+
+			if [ "X$have_cuda" != "Xno" ] && [ -x ./test/mpi/test_mpi_cuda ]
+			then
+				echo "==== Running MPI CUDA tests ===="
+				${MPIRUN_COMMON} -np 2 ./test/mpi/test_mpi_cuda
+
+				echo "==== Running MPI CUDA tests without cuda_ipc ===="
+				${MPIRUN_COMMON} -np 2  -x UCX_TLS=^cuda_ipc \
+						./test/mpi/test_mpi_cuda
+
+				echo "==== Running MPI CUDA tests with put_ppln ===="
+				${MPIRUN_COMMON} -np 2  -x UCX_RNDV_SCHEME=put_ppln \
+						./test/mpi/test_mpi_cuda
+			fi
+
+			if [ "X$have_cuda" != "Xno" ] && [ -x ./test/mpi/test_rma_cuda ]
+			then
+				echo "==== Running RMA CUDA tests ===="
+				${MPIRUN_COMMON} -np 2 ./test/mpi/test_rma_cuda
+			fi
 
 			# Restore LD_LIBRARY_PATH so subsequent tests will not take UCX libs
 			# from installation directory
@@ -789,7 +848,7 @@ test_ucm_hooks() {
     total=30
     echo "==== Running UCM Bistro hook test ===="
     for i in $(seq 1 $total); do
-        threads=$(((RANDOM % (2 * `nproc`)) + 1))
+        threads=$(((RANDOM % (2 * ${NPROC})) + 1))
 
         echo "iteration $i/$total: $threads threads"
         timeout 10 ./test/apps/test_hooks -n $threads >test_hooks.log 2>&1 || \
@@ -882,7 +941,7 @@ test_malloc_hook() {
 
 test_no_cuda_context() {
 	echo "==== Running no CUDA context test ===="
-	if [ "X$have_cuda" == "Xyes" ] && [ -x ./test/apps/test_no_cuda_ctx ]
+	if [ "X$have_cuda" != "Xno" ] && [ -x ./test/apps/test_no_cuda_ctx ]
 	then
 		./test/apps/test_no_cuda_ctx
 	fi
@@ -925,6 +984,14 @@ run_gtest_watchdog_test() {
 			"is greater than expected $expected_runtime seconds"
 		exit 1
 	fi
+}
+
+run_cuda_usr_ctx_gtest() {
+	echo "==== Running cuda user context test ===="
+	$TIMEOUT env \
+		GTEST_CLEAR_CUDA_CTX_=y \
+		GTEST_FILTER='*test_p2p_create_destroy_ctx*' \
+		make -C test/gtest test
 }
 
 run_malloc_hook_gtest() {
@@ -998,6 +1065,7 @@ run_specific_tests() {
 	set_gtest_common_test_flags
 
 	# Run specific tests
+	do_distributed_task 0 4 run_cuda_usr_ctx_gtest
 	do_distributed_task 1 4 run_malloc_hook_gtest
 	do_distributed_task 2 4 run_gtest_watchdog_test 5 60 300
 	do_distributed_task 3 4 test_memtrack
@@ -1056,7 +1124,8 @@ run_gtest_armclang() {
 				CC=armclang \
 				CXX=armclang++ \
 				CFLAGS="${ARMCLANG_CFLAGS}" \
-				--without-go
+				--without-go \
+				--without-valgrind
 
 			run_gtest "armclang"
 		else
@@ -1128,12 +1197,9 @@ run_release_mode_tests() {
 # Run nt_buffer_transfer tests
 #
 run_nt_buffer_transfer_tests() {
-    if lscpu | grep -q 'AuthenticAMD'
-    then
-	    build release --enable-gtest --enable-optimizations
-	    echo "==== Running nt_buffer_transfer tests ===="
-	    ./test/gtest/gtest --gtest_filter="test_arch.nt_buffer_transfer_*"
-    fi
+    build release --enable-gtest --enable-optimizations
+    echo "==== Running test_arch tests with optimizations ===="
+    ./test/gtest/gtest --gtest_filter="test_arch.*"
 }
 
 set_ucx_common_test_env() {
@@ -1182,7 +1248,7 @@ run_tests() {
 	run_configure_tests
 
 	# build for devel tests and gtest
-	build devel --enable-gtest
+	build devel --enable-gtest --without-valgrind
 
 	# devel mode tests
 	do_distributed_task 0 4 test_unused_env_var
@@ -1195,6 +1261,7 @@ run_tests() {
 	do_distributed_task 3 4 run_ucp_client_server
 	do_distributed_task 0 4 test_no_cuda_context
 	do_distributed_task 1 4 run_ucx_perftest_with_daemon
+	do_distributed_task 1 4 run_ucx_perftest_cuda_device
 
 	# long devel tests
 	do_distributed_task 0 4 run_ucp_hello
@@ -1213,16 +1280,6 @@ run_tests() {
 
 	# nt_buffer_transfer tests
 	do_distributed_task 0 4 run_nt_buffer_transfer_tests
-}
-
-run_test_proto_disable() {
-	# build for devel tests and gtest
-	build devel --enable-gtest
-
-	export UCX_PROTO_ENABLE=n
-
-	# all are running gtest
-	run_gtest "default"
 }
 
 run_asan_check() {
@@ -1263,9 +1320,7 @@ then
     check_machine
     set_ucx_common_test_env
 
-    if [[ "$PROTO_ENABLE" == "no" ]]; then
-        run_test_proto_disable
-    elif [[ "$ASAN_CHECK" == "yes" ]]; then
+    if [[ "$ASAN_CHECK" == "yes" ]]; then
         run_asan_check
     elif [[ "$VALGRIND_CHECK" == "yes" ]]; then
         run_valgrind_check

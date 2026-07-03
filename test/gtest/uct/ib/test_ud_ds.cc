@@ -107,8 +107,8 @@ unsigned test_ud_ds::N = 1000;
 UCS_TEST_P(test_ud_ds, if_addr) {
     uct_ib_address_pack_params_t unpack_params1, unpack_params2;
 
-    uct_ib_address_unpack(ib_adr1, &unpack_params1);
-    uct_ib_address_unpack(ib_adr2, &unpack_params2);
+    ASSERT_UCS_OK(uct_ib_address_unpack(ib_adr1, &unpack_params1));
+    ASSERT_UCS_OK(uct_ib_address_unpack(ib_adr2, &unpack_params2));
     EXPECT_EQ(unpack_params1.lid, unpack_params2.lid);
     EXPECT_EQ(unpack_params1.gid.global.subnet_prefix,
               unpack_params2.gid.global.subnet_prefix);

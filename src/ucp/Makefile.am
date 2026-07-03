@@ -1,5 +1,5 @@
 #
-# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2021. ALL RIGHTS RESERVED.
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 # Copyright (c) UT-Battelle, LLC. 2017. ALL RIGHTS RESERVED.
 # Copyright (C) Los Alamos National Security, LLC. 2019. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
@@ -10,7 +10,7 @@ lib_LTLIBRARIES     = libucp.la
 libucp_la_CFLAGS   = $(BASE_CFLAGS) $(LT_CFLAGS)
 libucp_la_LIBS     =
 libucp_la_CPPFLAGS = $(BASE_CPPFLAGS)
-libucp_la_LDFLAGS  = -ldl -version-info $(SOVERSION)
+libucp_la_LDFLAGS  = -ldl -version-info $(SOVERSION) $(UCX_LT_RELEASE)
 libucp_la_LIBADD   = ../ucs/libucs.la ../uct/libuct.la
 libucp_ladir       = $(includedir)/ucp
 
@@ -18,7 +18,10 @@ nobase_dist_libucp_la_HEADERS = \
 	api/ucp_compat.h \
 	api/ucp_def.h \
 	api/ucp_version.h \
-	api/ucp.h
+	api/ucp.h \
+	api/device/ucp_device_impl.h \
+	api/device/ucp_device_types.h \
+	api/device/ucp_host.h
 
 noinst_HEADERS = \
 	am/eager.inl \
@@ -47,6 +50,7 @@ noinst_HEADERS = \
 	dt/dt.inl \
 	dt/dt_contig.h \
 	dt/dt_iov.h \
+	dt/dt_sgl.h \
 	dt/dt_generic.h \
 	proto/lane_type.h \
 	proto/proto_am.h \
@@ -65,6 +69,7 @@ noinst_HEADERS = \
 	proto/proto.h \
 	rma/rma.h \
 	rma/rma.inl \
+	rma/rma_rndv.h \
 	rndv/proto_rndv.h \
 	rndv/proto_rndv.inl \
 	rndv/rndv_mtype.inl \
@@ -114,8 +119,10 @@ libucp_la_SOURCES = \
 	core/ucp_version.c \
 	core/ucp_vfs.c \
 	core/ucp_worker.c \
+	core/ucp_device.c \
 	dt/datatype_iter.c \
 	dt/dt_iov.c \
+	dt/dt_sgl.c \
 	dt/dt_generic.c \
 	dt/dt.c \
 	proto/lane_type.c \
@@ -137,7 +144,7 @@ libucp_la_SOURCES = \
 	rma/get_offload.c \
 	rma/put_am.c \
 	rma/put_offload.c \
-	rma/rma_basic.c \
+	rma/rma_rndv.c \
 	rma/rma_send.c \
 	rma/rma_sw.c \
 	rma/flush.c \

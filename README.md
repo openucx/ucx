@@ -145,6 +145,10 @@ $ make -C test/gtest test
   See [ucx issue 5749](https://github.com/openucx/ucx/issues/5749) for more
   details.
 
+* If network routing is incorrectly recognized, leading to peers reported as
+  "unreachable", change the default reachability check mode by setting:
+  UCX_IB_ROCE_REACHABILITY_MODE=all.
+
 <hr>
 
 
@@ -168,7 +172,7 @@ $ make -C test/gtest test
 * [RoCE](http://www.roceinitiative.org/)
 * [Cray Gemini and Aries](https://www.cray.com/)
 * [CUDA](https://developer.nvidia.com/cuda-zone)
-* [ROCm](https://rocm.github.io/)
+* [ROCm](https://rocm.docs.amd.com/)
 * Shared Memory
     * posix, sysv, [cma](https://dl.acm.org/citation.cfm?id=2616532), [knem](http://knem.gforge.inria.fr/), and [xpmem](https://github.com/openucx/xpmem)
 * TCP/IP

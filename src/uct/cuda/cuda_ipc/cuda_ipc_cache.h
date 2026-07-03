@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -7,11 +7,14 @@
 #ifndef UCT_CUDA_IPC_CACHE_H_
 #define UCT_CUDA_IPC_CACHE_H_
 
-#include <ucs/datastruct/pgtable.h>
+#include "cuda_ipc_iface_address.h"
+#include "cuda_ipc_md.h"
+
 #include <ucs/datastruct/list.h>
+#include <ucs/datastruct/pgtable.h>
 #include <ucs/type/init_once.h>
 #include <ucs/type/spinlock.h>
-#include "cuda_ipc_md.h"
+
 #include <cuda.h>
 
 
@@ -23,16 +26,21 @@ typedef struct uct_cuda_ipc_rem_memh     uct_cuda_ipc_rem_memh_t;
 struct uct_cuda_ipc_cache_region {
     ucs_pgt_region_t        super;        /**< Base class - page table region */
     ucs_list_link_t         list;         /**< List element */
+    ucs_list_link_t         lru_list;     /**< LRU list element */
     uct_cuda_ipc_rkey_t     key;          /**< Remote memory key */
     void                    *mapped_addr; /**< Local mapped address */
     uint64_t                refcount;     /**< Track in-flight ops before unmapping*/
+    CUdevice                cu_dev;       /**< CUDA device */
 };
 
 
 struct uct_cuda_ipc_cache {
-    pthread_rwlock_t      lock;       /**< protests the page table */
-    ucs_pgtable_t         pgtable;    /**< Page table to hold the regions */
-    char                  *name;      /**< Name */
+    pthread_rwlock_t      lock;         /**< Protects the page table */
+    ucs_pgtable_t         pgtable;      /**< Page table to hold the regions */
+    char                  *name;        /**< Name */
+    ucs_list_link_t       lru_list;     /**< LRU list of all cached regions */
+    unsigned long         num_regions;  /**< Current number of cached regions */
+    size_t                total_size;   /**< Current total size of cached regions */
 };
 
 
@@ -43,8 +51,45 @@ ucs_status_t uct_cuda_ipc_create_cache(uct_cuda_ipc_cache_t **cache,
 void uct_cuda_ipc_destroy_cache(uct_cuda_ipc_cache_t *cache);
 
 
-ucs_status_t
-uct_cuda_ipc_map_memhandle(uct_cuda_ipc_rkey_t *key, void **mapped_addr);
-ucs_status_t uct_cuda_ipc_unmap_memhandle(pid_t pid, uintptr_t d_bptr,
-                                          void *mapped_addr, int cache_enabled);
+/**
+ * @brief Map an interprocess memory handle to a local address
+ * 
+ * This function maps an interprocess memory handle exported from another
+ * process to a local virtual address that can be accessed by the current
+ * process.
+ * 
+ * @param key          Pointer to the CUDA IPC remote memory key containing
+ *                     the memory handle and other metadata needed for mapping
+ * @param cu_dev       CUDA device handle where the memory should be mapped
+ * @param mapped_addr  Pointer to store the resulting mapped local address
+ * @param log_level    Log level for reporting failures during mapping operation
+ * 
+ * @return UCS_OK on success, or error status on failure
+ */
+ucs_status_t uct_cuda_ipc_map_memhandle(uct_cuda_ipc_extended_rkey_t *key,
+                                        CUdevice cu_dev, void **mapped_addr,
+                                        ucs_log_level_t log_level);
+
+
+void uct_cuda_ipc_unmap_memhandle(pid_t pid, ucs_sys_ns_t pid_ns,
+                                  uintptr_t d_bptr, const void *mapped_addr,
+                                  CUdevice cu_dev, int cache_enabled);
+
+
+/**
+ * @brief Set global cache limits for newly created CUDA IPC remote caches
+ *
+ * @param max_regions  Max regions per cache (ULONG_MAX = unlimited)
+ * @param max_size     Max total size per cache (SIZE_MAX = unlimited)
+ */
+void uct_cuda_ipc_cache_set_global_limits(unsigned long max_regions,
+                                          size_t max_size);
+
+
+/**
+ * @brief Tear down all CUDA IPC remote caches for a peer process ID
+ */
+void uct_cuda_ipc_destroy_cache_by_iface_address(
+        const uct_cuda_ipc_iface_address_t *iface_address);
+
 #endif

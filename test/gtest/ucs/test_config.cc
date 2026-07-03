@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
@@ -12,9 +12,10 @@ extern "C" {
 #include <ucs/time/time.h>
 }
 
-#define TEST_CONFIG_DIR  TOP_SRCDIR "/test/gtest/ucs"
-#define TEST_CONFIG_FILE "ucx_test.conf"
-#define TEST_ENV_PREFIX  "UCXGTEST_"
+#define TEST_CONFIG_DIR                 TOP_SRCDIR "/test/gtest/ucs"
+#define TEST_CONFIG_FILE                "ucx_test.conf"
+#define TEST_ENV_PREFIX                 "UCXGTEST_"
+#define ALLOW_LIST_WITH_RANGES_OPT_NAME "ALLOW_LIST_WITH_RANGES"
 
 
 typedef enum {
@@ -97,6 +98,7 @@ typedef struct {
     ucs_time_t      time_auto;
     ucs_time_t      time_inf;
     ucs_config_allow_list_t allow_list;
+    ucs_config_allow_list_t allow_list_with_ranges;
 
     int             temp_front;
     int             temp_rear;
@@ -235,6 +237,11 @@ ucs_config_field_t car_opts_table[] = {
   {"ALLOW_LIST", "all", "Allow-list: \"all\" OR \"val1,val2\" OR \"^val1,val2\"",
    ucs_offsetof(car_opts_t, allow_list), UCS_CONFIG_TYPE_ALLOW_LIST},
 
+  {ALLOW_LIST_WITH_RANGES_OPT_NAME, "all",
+   "Allow-list with ranges: supports prefix[start-end]suffix syntax",
+   ucs_offsetof(car_opts_t, allow_list_with_ranges),
+   UCS_CONFIG_TYPE_ALLOW_LIST_WITH_RANGES},
+
   {"TEMP", "20", "Temperature", 0,
     UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_UINT,
         {"front", "front temperature", ucs_offsetof(car_opts_t, temp_front)},
@@ -362,15 +369,18 @@ protected:
             return &m_opts;
         }
 
-        std::string dump(ucs_config_print_flags_t flags) const {
-            char *dump_data = NULL;
+        std::string
+        dump(ucs_config_print_flags_t flags, const char *filter = nullptr) const
+        {
+            char *dump_data = nullptr;
             size_t dump_size;
             char line_buf[1024];
             std::string res;
 
             FILE *file = open_memstream(&dump_data, &dump_size);
             ucs_config_parser_print_opts(file, "", &m_opts, car_opts_table,
-                                         NULL, UCS_DEFAULT_ENV_PREFIX, flags);
+                                         nullptr, UCS_DEFAULT_ENV_PREFIX, flags,
+                                         filter);
             fseek(file, 0, SEEK_SET);
 
             while (fgets(line_buf, sizeof(line_buf), file)) {
@@ -426,9 +436,9 @@ protected:
         /* Dump configuration to a memory buffer */
         dump_data = NULL;
         FILE *file = open_memstream(&dump_data, &dump_size);
-        ucs_config_parser_print_opts(file, "", *opts, car_opts_table,
-                                     prefix, UCS_DEFAULT_ENV_PREFIX,
-                                     (ucs_config_print_flags_t)flags);
+        ucs_config_parser_print_opts(file, "", *opts, car_opts_table, prefix,
+                                     UCS_DEFAULT_ENV_PREFIX,
+                                     (ucs_config_print_flags_t)flags, nullptr);
 
         /* Sanity check - all lines begin with UCS_ */
         unsigned num_lines = 0;
@@ -472,6 +482,94 @@ protected:
 
         fclose(file);
         free(dump_data);
+    }
+
+    void verify_allow_list_with_ranges_inner(
+            const char *input, const std::vector<std::string> &expected,
+            ucs_config_allow_list_mode_t expected_mode)
+    {
+        const ucs::scoped_setenv env("UCX_ALLOW_LIST_WITH_RANGES", input);
+        car_opts opts(UCS_DEFAULT_ENV_PREFIX, NULL);
+
+        EXPECT_EQ(expected_mode, opts->allow_list_with_ranges.mode);
+        ASSERT_EQ(expected.size(), opts->allow_list_with_ranges.array.count);
+        for (size_t i = 0; i < expected.size(); ++i) {
+            EXPECT_EQ(expected[i], opts->allow_list_with_ranges.array.names[i]);
+        }
+    }
+
+    void verify_allow_list_with_ranges(const char *input,
+                                       const std::vector<std::string> &expected)
+    {
+        verify_allow_list_with_ranges_inner(input, expected,
+                                            UCS_CONFIG_ALLOW_LIST_ALLOW);
+
+        const std::string negated = std::string("^") + input;
+        verify_allow_list_with_ranges_inner(negated.c_str(), expected,
+                                            UCS_CONFIG_ALLOW_LIST_NEGATE);
+    }
+
+    void verify_clone_allow_list_with_ranges(
+            const char *input, ucs_config_allow_list_mode_t expected_mode,
+            const std::vector<std::string> &expected_names,
+            bool expect_truncated)
+    {
+        std::unique_ptr<car_opts> opts_clone_ptr;
+
+        {
+            /* Suppress the truncation warning. */
+            const scoped_log_handler slh(hide_warns_logger);
+
+            /* coverity[tainted_string_argument] */
+            ucs::scoped_setenv env("UCX_" ALLOW_LIST_WITH_RANGES_OPT_NAME,
+                                   input);
+
+            car_opts opts(UCS_DEFAULT_ENV_PREFIX, NULL);
+            opts_clone_ptr.reset(new car_opts(opts));
+        }
+
+        const ucs_config_allow_list_t &cloned =
+                (*opts_clone_ptr)->allow_list_with_ranges;
+        EXPECT_EQ(expected_mode, cloned.mode);
+        ASSERT_EQ(expected_names.size(), cloned.array.count);
+        for (size_t i = 0; i < expected_names.size(); ++i) {
+            EXPECT_EQ(expected_names[i], cloned.array.names[i])
+                    << "mismatch at index " << i;
+        }
+        EXPECT_EQ(expect_truncated ? 1u : 0u, cloned.array.truncated);
+    }
+
+    void verify_allow_list_with_ranges_truncation(
+            const char *input, const std::vector<std::string> &expected)
+    {
+        ASSERT_EQ(expected.size(), UCS_CONFIG_ARRAY_MAX);
+
+        size_t warn_count;
+        {
+            const scoped_log_handler slh(hide_warns_logger);
+            warn_count = m_warnings.size();
+            verify_allow_list_with_ranges(input, expected);
+        }
+
+        /* verify_allow_list_with_ranges parses both the un-prefixed and the
+         * '^'-prefixed forms, so the truncation warning must fire twice. */
+        ASSERT_EQ(m_warnings.size() - warn_count, 2u)
+                << "Unexpected truncation warning count for field '"
+                << ALLOW_LIST_WITH_RANGES_OPT_NAME << "' (input='" << input
+                << "')";
+
+        const std::string expected_msg = std::string("value of ") +
+                                         ALLOW_LIST_WITH_RANGES_OPT_NAME +
+                                         " was truncated to " +
+                                         std::to_string(UCS_CONFIG_ARRAY_MAX) +
+                                         " entries: " + expected.front() +
+                                         "..." + expected.back();
+        for (size_t i = warn_count; i < m_warnings.size(); ++i) {
+            const std::string &msg = m_warnings[i];
+            EXPECT_NE(msg.find(expected_msg), std::string::npos)
+                    << "Unexpected truncation warning: " << msg
+                    << " (expected to contain: " << expected_msg << ")";
+        }
     }
 };
 
@@ -557,6 +655,33 @@ UCS_TEST_F(test_config, clone) {
     EXPECT_STREQ("Unknown", (*opts_clone_ptr)->passengers[1]);
     EXPECT_STREQ("3", (*opts_clone_ptr)->passengers[2]);
     delete opts_clone_ptr;
+}
+
+UCS_TEST_F(test_config, clone_array) {
+    /* without truncation */
+    verify_clone_allow_list_with_ranges("^dev[0-2],foo",
+                                        UCS_CONFIG_ALLOW_LIST_NEGATE,
+                                        {"dev0", "dev1", "dev2", "foo"}, false);
+
+    /* with truncation */
+    const std::string truncated_input =
+            "a[0-" + std::to_string(UCS_CONFIG_ARRAY_MAX + 1) + "]";
+    std::vector<std::string> expected_truncated_names;
+    expected_truncated_names.reserve(UCS_CONFIG_ARRAY_MAX);
+    for (unsigned i = 0; i < UCS_CONFIG_ARRAY_MAX; ++i) {
+        expected_truncated_names.push_back("a" + std::to_string(i));
+    }
+    verify_clone_allow_list_with_ranges(truncated_input.c_str(),
+                                        UCS_CONFIG_ALLOW_LIST_ALLOW,
+                                        expected_truncated_names, true);
+
+    /* all */
+    verify_clone_allow_list_with_ranges("all", UCS_CONFIG_ALLOW_LIST_ALLOW_ALL,
+                                        {}, false);
+
+    /* empty */
+    verify_clone_allow_list_with_ranges("", UCS_CONFIG_ALLOW_LIST_ALLOW, {},
+                                        false);
 }
 
 UCS_TEST_F(test_config, set_get) {
@@ -710,23 +835,24 @@ UCS_TEST_F(test_config, unused) {
 
 UCS_TEST_F(test_config, dump) {
     /* aliases must not be counted here */
-    test_config_print_opts(UCS_CONFIG_PRINT_CONFIG, 35u);
+    test_config_print_opts(UCS_CONFIG_PRINT_CONFIG, 36u);
 }
 
 UCS_TEST_F(test_config, dump_hidden) {
     /* aliases must be counted here */
-    test_config_print_opts(UCS_CONFIG_PRINT_CONFIG | UCS_CONFIG_PRINT_HIDDEN, 42u);
+    test_config_print_opts(UCS_CONFIG_PRINT_CONFIG | UCS_CONFIG_PRINT_HIDDEN,
+                           43u);
 }
 
 UCS_TEST_F(test_config, dump_hidden_check_alias_name) {
     /* aliases must be counted here */
     test_config_print_opts(UCS_CONFIG_PRINT_CONFIG | UCS_CONFIG_PRINT_HIDDEN |
                                    UCS_CONFIG_PRINT_DOC,
-                           42u);
+                           43u);
 
     test_config_print_opts(UCS_CONFIG_PRINT_CONFIG | UCS_CONFIG_PRINT_HIDDEN |
                                    UCS_CONFIG_PRINT_DOC,
-                           42u, TEST_ENV_PREFIX);
+                           43u, TEST_ENV_PREFIX);
 }
 
 UCS_TEST_F(test_config, deprecated) {
@@ -793,6 +919,133 @@ UCS_TEST_F(test_config, test_allow_list_negative)
 
     EXPECT_EQ(ucs_config_sscanf_allow_list("all,all", &field,
                                            &ucs_config_array_string), 0);
+}
+
+UCS_TEST_F(test_config, test_allow_list_with_ranges) {
+    // empty range
+    verify_allow_list_with_ranges("", {});
+
+    // only prefix
+    verify_allow_list_with_ranges("prefix[2-4]",
+                                  {"prefix2", "prefix3", "prefix4"});
+
+    // prefix and suffix
+    verify_allow_list_with_ranges("prefix[0-2]suffix",
+                                  {"prefix0suffix", "prefix1suffix",
+                                   "prefix2suffix"});
+
+    // only suffix
+    verify_allow_list_with_ranges("[3-5]suffix",
+                                  {"3suffix", "4suffix", "5suffix"});
+
+    // only range
+    verify_allow_list_with_ranges("[0-2]", {"0", "1", "2"});
+
+    // range with a single value
+    verify_allow_list_with_ranges("dev[99-99]", {"dev99"});
+
+    // multi-digit range
+    verify_allow_list_with_ranges("dev[98-101]",
+                                  {"dev98", "dev99", "dev100", "dev101"});
+
+    // range with leading zeros
+    verify_allow_list_with_ranges("dev[01-03]", {"dev1", "dev2", "dev3"});
+
+    // single literal
+    verify_allow_list_with_ranges("a", {"a"});
+
+    // multiple literals
+    verify_allow_list_with_ranges("a,b,c", {"a", "b", "c"});
+
+    // mixed ranges and literals
+    verify_allow_list_with_ranges("a0b,a[2-4]b,a6b",
+                                  {"a0b", "a2b", "a3b", "a4b", "a6b"});
+
+    // long prefix and suffix
+    const std::string long_prefix(200, 'p');
+    const std::string long_suffix(200, 's');
+    verify_allow_list_with_ranges((long_prefix + "[0-2]" + long_suffix).c_str(),
+                                  {long_prefix + "0" + long_suffix,
+                                   long_prefix + "1" + long_suffix,
+                                   long_prefix + "2" + long_suffix});
+
+    // consecutive delimiters
+    verify_allow_list_with_ranges(",,a,,b[1-3],,,c,,,,",
+                                  {"a", "b1", "b2", "b3", "c"});
+}
+
+UCS_TEST_F(test_config, test_allow_list_with_ranges_malformed) {
+    std::vector<std::string> malformed = {
+        "no_bracket", "prefix2-]", "prefix]abc",
+        "hello]]",    "]]-",       "]--",        
+        "a[-1-2]b",   "a[-2-]b",   "a[2-3-]b",
+        "a[-2-3-]b",  "a[4]b",     "a[[]b",
+        "a[[2-4]b",   "a[2-]b",    "a[2-3-4]b",
+        "a[b-c]d",    "a[0-A]b",   "a[-]b",
+        "[]",         "[-1-2-]",   "[--]",
+        "[1-2][3-4]", "[4-8][",    "[5-6]]",
+        "][4-5]",     "[[0-4]]",   "a[0-4]b[6-8]c",
+        "a[5-2]b",    "[10-0]",    "ab[100-1]suffix",
+        "a[-4]",      "[-4]",      "foo[]]",
+        "[]]",        "a-]",       "a[-",
+        "a[4-]",      "a[4-6"
+    };
+
+    std::string input;
+    for (size_t i = 0; i < malformed.size(); ++i) {
+        if (i > 0) {
+            input += ",";
+        }
+        input += malformed[i];
+    }
+
+    verify_allow_list_with_ranges(input.c_str(), malformed);
+}
+
+UCS_TEST_F(test_config, test_allow_list_with_ranges_all) {
+    ucs::scoped_setenv env("UCX_ALLOW_LIST_WITH_RANGES", "all");
+    car_opts opts(UCS_DEFAULT_ENV_PREFIX, NULL);
+
+    EXPECT_EQ(UCS_CONFIG_ALLOW_LIST_ALLOW_ALL,
+              opts->allow_list_with_ranges.mode);
+    EXPECT_EQ(0u, opts->allow_list_with_ranges.array.count);
+}
+
+UCS_TEST_F(test_config, test_allow_list_with_ranges_max_elements) {
+    const char *input = "a[0-127]";
+
+    std::vector<std::string> expected;
+    for (unsigned i = 0; i < UCS_CONFIG_ARRAY_MAX; ++i) {
+        expected.push_back("a" + std::to_string(i));
+    }
+
+    verify_allow_list_with_ranges(input, expected);
+}
+
+UCS_TEST_F(test_config, test_allow_list_with_ranges_truncated_single_range) {
+    const char *input = "a[0-200]";
+
+    std::vector<std::string> expected;
+    for (unsigned i = 0; i < UCS_CONFIG_ARRAY_MAX; ++i) {
+        expected.push_back("a" + std::to_string(i));
+    }
+
+    verify_allow_list_with_ranges_truncation(input, expected);
+}
+
+UCS_TEST_F(test_config, test_allow_list_with_ranges_truncated_multiple_ranges) {
+    const char *input = "a[0-99],b,c[0-99]";
+
+    std::vector<std::string> expected;
+    for (unsigned i = 0; i < 100; ++i) {
+        expected.push_back("a" + std::to_string(i));
+    }
+    expected.push_back("b");
+    for (unsigned i = 0; i < UCS_CONFIG_ARRAY_MAX - 101; ++i) {
+        expected.push_back("c" + std::to_string(i));
+    }
+
+    verify_allow_list_with_ranges_truncation(input, expected);
 }
 
 UCS_TEST_F(test_config, test_key_value_generic_value) {
@@ -932,6 +1185,20 @@ UCS_TEST_F(test_config, test_key_value_dump_full) {
     EXPECT_NE(it, std::string::npos);
 }
 
+UCS_TEST_F(test_config, test_config_dump_filtered) {
+    car_opts opts(UCS_DEFAULT_ENV_PREFIX, nullptr);
+
+    const std::string dump1 = opts.dump(UCS_CONFIG_PRINT_CONFIG);
+    const char filter[]     = "TIME_";
+    const std::string dump2 = opts.dump(UCS_CONFIG_PRINT_CONFIG, filter);
+
+    EXPECT_NE(dump1.size(), dump2.size());
+    EXPECT_NE(dump1.find("TIME_"), std::string::npos);
+    EXPECT_NE(dump2.find("TIME_"), std::string::npos);
+    EXPECT_NE(dump1.find("TRANSMISSION"), std::string::npos);
+    EXPECT_EQ(dump2.find("TRANSMISSION"), std::string::npos);
+}
+
 UCS_TEST_F(test_config, test_config_file) {
     /* coverity[tainted_string_argument] */
     ucs::scoped_setenv env1("UCX_BRAND", "Ford");
@@ -976,4 +1243,70 @@ UCS_TEST_F(test_config, test_config_file_parse_files) {
     /* Verify ucs_config_parse_config_files() overrides config */
     EXPECT_EQ(100, opts.price);
     ucs_config_parser_release_opts(&opts, car_opts_table);
+}
+
+UCS_TEST_F(test_config, global_opts) {
+    EXPECT_TRUE(ucs_global_opts_is_read_only("LOG_FILE"));
+    EXPECT_TRUE(ucs_global_opts_is_read_only("LOG_FILE_SIZE"));
+    EXPECT_TRUE(ucs_global_opts_is_read_only("LOG_FILE_ROTATE"));
+    EXPECT_TRUE(ucs_global_opts_is_read_only("ERROR_SIGNALS"));
+    EXPECT_TRUE(ucs_global_opts_is_read_only("VFS_ENABLE"));
+    EXPECT_TRUE(ucs_global_opts_is_read_only("VFS_SOCK_PATH"));
+    EXPECT_TRUE(ucs_global_opts_is_read_only("VFS_THREAD_AFFINITY"));
+#ifdef ENABLE_STATS
+    EXPECT_TRUE(ucs_global_opts_is_read_only("STATS_DEST"));
+    EXPECT_TRUE(ucs_global_opts_is_read_only("STATS_TRIGGER"));
+    EXPECT_TRUE(ucs_global_opts_is_read_only("STATS_FILTER"));
+    EXPECT_TRUE(ucs_global_opts_is_read_only("STATS_FORMAT"));
+#endif
+    EXPECT_TRUE(ucs_global_opts_is_read_only("MEMTRACK_DEST"));
+    EXPECT_TRUE(ucs_global_opts_is_read_only("PROFILE_MODE"));
+    EXPECT_TRUE(ucs_global_opts_is_read_only("PROFILE_FILE"));
+    EXPECT_TRUE(ucs_global_opts_is_read_only("PROFILE_LOG_SIZE"));
+    EXPECT_TRUE(ucs_global_opts_is_read_only("RCACHE_STAT_MIN"));
+
+    for (auto field = ucs_arch_global_opts_table; field->name != nullptr;
+         ++field) {
+        EXPECT_TRUE(ucs_global_opts_is_read_only(field->name));
+    }
+
+    EXPECT_FALSE(ucs_global_opts_is_read_only("LOG_LEVEL"));
+    EXPECT_FALSE(ucs_global_opts_is_read_only(""));
+    EXPECT_FALSE(ucs_global_opts_is_read_only(nullptr));
+}
+
+UCS_TEST_F(test_config, has_field) {
+    std::pair<const char*, const char*> dummy_names[] = {{nullptr, nullptr},
+                                                         {"PREFIX_", nullptr},
+                                                         {nullptr, "NAME"},
+                                                         {"PREFIX_", "NAME"}};
+
+    for (const auto &name : dummy_names) {
+        EXPECT_FALSE(
+                ucs_config_parser_has_field(nullptr, name.first, name.second));
+        EXPECT_FALSE(ucs_config_parser_has_field(seat_opts_table, name.first,
+                                                 name.second));
+    }
+
+    for (auto field = seat_opts_table; field->name != nullptr; ++field) {
+        EXPECT_TRUE(
+                ucs_config_parser_has_field(seat_opts_table, "", field->name));
+        EXPECT_TRUE(ucs_config_parser_has_field(seat_opts_table, nullptr,
+                                                field->name));
+        EXPECT_FALSE(ucs_config_parser_has_field(seat_opts_table, "PREFIX_",
+                                                 field->name));
+    }
+
+    for (auto field = coach_opts_table; field->name != nullptr; ++field) {
+        const std::string prefix{field->name};
+        for (auto sub_field = seat_opts_table; sub_field->name != nullptr;
+             ++sub_field) {
+            const std::string name{prefix + std::string(sub_field->name)};
+            EXPECT_TRUE(ucs_config_parser_has_field(coach_opts_table, "",
+                                                    name.c_str()));
+        }
+    }
+
+    EXPECT_FALSE(
+            ucs_config_parser_has_field(engine_opts_table, "", "FUEL_LEVEL"));
 }

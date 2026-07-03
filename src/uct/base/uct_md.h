@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -80,6 +80,7 @@ typedef ucs_status_t (*uct_md_mem_alloc_func_t)(uct_md_h md,
                                                 size_t *length_p,
                                                 void **address_p,
                                                 ucs_memory_type_t mem_type,
+                                                ucs_sys_device_t sys_dev,
                                                 unsigned flags,
                                                 const char *alloc_name,
                                                 uct_mem_h *memh_p);
@@ -104,7 +105,7 @@ typedef ucs_status_t
 typedef ucs_status_t (*uct_md_mem_query_func_t)(uct_md_h md,
                                                 const void *address,
                                                 size_t length,
-                                                uct_md_mem_attr_t *mem_attr);
+                                                uct_md_mem_attr_v2_t *mem_attr);
 
 typedef ucs_status_t (*uct_md_mkey_pack_func_t)(
         uct_md_h md, uct_mem_h memh, void *address, size_t length,
@@ -125,6 +126,9 @@ typedef ucs_status_t (*uct_md_detect_memory_type_func_t)(uct_md_h md,
                                                          size_t length,
                                                          ucs_memory_type_t *mem_type_p);
 
+typedef ucs_status_t (*uct_md_mem_elem_pack_func_t)(
+        uct_md_h md, uct_mem_h memh, uct_rkey_t rkey,
+        uct_device_mem_elem_t *mem_elem_p);
 
 /**
  * Memory domain operations
@@ -141,6 +145,7 @@ struct uct_md_ops {
     uct_md_mkey_pack_func_t              mkey_pack;
     uct_md_mem_attach_func_t             mem_attach;
     uct_md_detect_memory_type_func_t     detect_memory_type;
+    uct_md_mem_elem_pack_func_t          mem_elem_pack;
 };
 
 
@@ -189,13 +194,15 @@ uct_md_query_empty_md_resource(uct_md_resource_desc_t **resources_p,
  *                             which may be larger than the one requested. Must be >0.
  * @param [in,out] address_p   The address
  * @param [in]     mem_type    Memory type of the allocation
+ * @param [in]     sys_dev     System device for the allocation.
  * @param [in]     flags       Memory allocation flags, see @ref uct_md_mem_flags.
  * @param [in]     name        Name of the allocated region, used to track memory
  *                             usage for debugging and profiling.
  * @param [out]    memh_p      Filled with handle for allocated region.
  */
 ucs_status_t uct_md_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
-                              ucs_memory_type_t mem_type, unsigned flags,
+                              ucs_memory_type_t mem_type,
+                              ucs_sys_device_t sys_dev, unsigned flags,
                               const char *alloc_name, uct_mem_h *memh_p);
 
 /**
@@ -214,8 +221,9 @@ ucs_status_t uct_md_mem_free(uct_md_h md, uct_mem_h memh);
  *
  */
 ucs_status_t uct_md_stub_rkey_unpack(uct_component_t *component,
-                                     const void *rkey_buffer, uct_rkey_t *rkey_p,
-                                     void **handle_p);
+                                     const void *rkey_buffer,
+                                     const uct_rkey_unpack_params_t *params,
+                                     uct_rkey_t *rkey_p, void **handle_p);
 
 ucs_status_t uct_base_rkey_compare(uct_component_t *component, uct_rkey_t rkey1,
                                    uct_rkey_t rkey2,

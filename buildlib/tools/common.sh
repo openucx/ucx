@@ -4,16 +4,41 @@ WORKSPACE=${WORKSPACE:=$PWD}
 # build in local directory which goes away when docker exits
 ucx_build_dir=$HOME/${BUILD_ID}/build
 ucx_inst=$ucx_build_dir/install
-CUDA_MODULE="dev/cuda12.2.2"
-GDRCOPY_MODULE="dev/gdrcopy2.3.1-1_cuda12.2.2"
+CUDA_MODULE="dev/cuda13.0.2"
+GDRCOPY_MODULE="dev/gdrcopy2.5.1_cuda13.0.2"
 JDK_MODULE="dev/jdk"
 MVN_MODULE="dev/mvn"
 XPMEM_MODULE="dev/xpmem-90a95a4"
 PGI_MODULE="hpc-sdk/nvhpc/21.2"
-GCC_MODULE="dev/gcc-10.1.0"
+GCC_MODULE="${GCC_MODULE:-dev/gcc-10.1.0}"
 ARM_MODULE="arm-compiler/armcc-22.1"
 INTEL_MODULE="intel/ics-19.1.1"
 FUSE3_MODULE="dev/fuse-3.10.5"
+
+#
+# Set default parallelism for CI (can be overridden by NPROC env var)
+#
+if [ -z "${NPROC:-}" ]; then
+	# In containers, calculate based on memory limits to avoid OOM
+	if [ -f /.dockerenv ] || [ -f /run/.containerenv ] || [ -n "${KUBERNETES_SERVICE_HOST:-}" ]; then
+		one_gib=$((1024 * 1024 * 1024))
+		if [ -f /sys/fs/cgroup/memory/memory.limit_in_bytes ]; then
+			limit=$(cat /sys/fs/cgroup/memory/memory.limit_in_bytes)
+		elif [ -f /sys/fs/cgroup/memory.max ]; then
+			limit=$(cat /sys/fs/cgroup/memory.max)
+			[ "$limit" = "max" ] && limit=$((4 * one_gib))
+		else
+			limit=$((4 * one_gib))
+		fi
+		# Use 1 process per GB of memory, max 16
+		nproc=$((limit / one_gib))
+		nproc=$((nproc > 16 ? 16 : nproc))
+		nproc=$((nproc < 1 ? 1 : nproc))
+	else
+		nproc=$(nproc --all)
+	fi
+	export NPROC=$nproc
+fi
 
 #
 # Parallel build command runs with 4 tasks, or number of cores on the system,
@@ -23,7 +48,7 @@ num_cpus=$(lscpu -p | grep -v '^#' | wc -l)
 [ -z $num_cpus ] && num_cpus=1
 parallel_jobs=${parallel_jobs:-4}
 [ $parallel_jobs -gt $num_cpus ] && parallel_jobs=$num_cpus
-num_pinned_threads=$(nproc)
+num_pinned_threads=${NPROC}
 [ $parallel_jobs -gt $num_pinned_threads ] && parallel_jobs=$num_pinned_threads
 
 MAKE="make V=1"
@@ -70,6 +95,10 @@ make_clean() {
 	$MAKEP ${1:-clean}
 }
 
+has_gpunetio_devel() {
+    [ -d "/opt/mellanox/doca" ]
+}
+
 #
 # Configure and build
 #   $1 - mode (devel|release)
@@ -79,9 +108,14 @@ build() {
 	shift
 
 	config_args="--prefix=$ucx_inst --without-java"
-	if [ "X$have_cuda" == "Xyes" ]
+	if [ -n "$have_cuda" ] && [ "X$have_cuda" != "Xno" ]
 	then
-		config_args+=" --with-iodemo-cuda"
+		config_args+=" --with-cuda=$have_cuda --with-iodemo-cuda"
+
+		if has_gpunetio_devel
+		then
+			config_args+=" --with-doca-gpunetio=/opt/mellanox/doca"
+		fi
 	fi
 
 	../contrib/configure-${mode} ${config_args} "$@"
@@ -145,6 +179,7 @@ get_ib_devices() {
 	set +x
 	for ibdev in $device_list
 	do
+		[[ "$device" =~ ^smi[0-9]*:.$ ]] && continue
 		num_ports=$(ibv_devinfo -d $ibdev| awk '/phys_port_cnt:/ {print $2}')
 		for port in $(seq 1 $num_ports)
 		do
@@ -263,7 +298,7 @@ check_machine() {
 	lscpu
 	uname -a
 	free -m
-	ofed_info -s || true
+	apt info doca-networking doca-devel 2>/dev/null || yum info doca-networking doca-devel 2>/dev/null || true
 	ibv_devinfo -v || true
 	show_gids || true
 }

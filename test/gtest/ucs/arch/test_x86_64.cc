@@ -64,17 +64,25 @@ protected:
         return result;
     }
 
-    void nt_buffer_transfer_test(ucs_arch_memcpy_hint_t hint) {
+    void nt_buffer_transfer_test(ucs_arch_memcpy_hint_t hint)
+    {
 #ifndef __AVX__
         UCS_TEST_SKIP_R("Built without AVX support");
 #else
-        int i, j, result, ret = 0;
-        char *test_window_src, *test_window_dst, *src, *dst, *dup;
+        int i, j;
+        char *src, *dst;
         size_t len, total_size, test_window_size, hole_size, align;
 
         align            = 64;
         test_window_size = 8 * 1024;
         hole_size        = 2 * align;
+
+        auto msg = [&]() {
+            std::stringstream ss;
+            ss << "using length=" << len << " src_align=" << i
+               << " dst_align=" << j;
+            return ss.str();
+        };
 
         /*
          * Allocate a hole above and below the test_window_size
@@ -82,28 +90,27 @@ protected:
          */
         total_size = test_window_size + (2 * hole_size);
 
-        ret = posix_memalign((void**)&test_window_src, align, total_size);
-        if (ret) {
-            goto src_fail;
-        }
+        auto alloc_aligned = [&align, &total_size]() {
+            void *ptr;
+            return std::unique_ptr<char>(reinterpret_cast<char*>(
+                    !posix_memalign(&ptr, align, total_size) ? ptr : nullptr));
+        };
 
-        ret = posix_memalign((void**)&test_window_dst, align, total_size);
-        if (ret) {
-            goto dst_fail;
-        }
+        auto test_window_src = alloc_aligned();
+        auto test_window_dst = alloc_aligned();
+        auto dup             = alloc_aligned();
 
-        ret = posix_memalign((void**)&dup, align, total_size);
-        if (ret) {
-            goto dup_fail;
-        }
+        ASSERT_TRUE(test_window_src);
+        ASSERT_TRUE(test_window_dst);
+        ASSERT_TRUE(dup);
 
-        src = test_window_src + hole_size;
-        dst = test_window_dst + hole_size;
+        src = test_window_src.get() + hole_size;
+        dst = test_window_dst.get() + hole_size;
 
         /* Initialize the regions with known patterns */
-        memset(dup, 0x0, total_size);
-        memset(test_window_src, 0xdeaddead, total_size);
-        memset(test_window_dst, 0x0, total_size);
+        memset(dup.get(), 0x0, total_size);
+        memset(test_window_src.get(), 0xdeaddead, total_size);
+        memset(test_window_dst.get(), 0x0, total_size);
 
         len = 0;
 
@@ -111,16 +118,16 @@ protected:
             for (i = 0; i < align; i++) {
                 for (j = 0; j < align; j++) {
                     /* Perform the transfer */
-                    ucs_x86_nt_buffer_transfer(dst + i, src + j, len, hint, len);
-                    result = memcmp(src + j, dst + i, len);
-                    EXPECT_EQ(0, result);
+                    ucs_x86_nt_buffer_transfer(dst + i, src + j, len, hint,
+                                               len);
+                    ASSERT_EQ(0, memcmp(src + j, dst + i, len)) << msg();
 
                     /* reset the copied region back to zero */
                     memset(dst + i, 0x0, len);
 
                     /* check for any modifications in the holes */
-                    result = memcmp(test_window_dst, dup, total_size);
-                    EXPECT_EQ(0, result);
+                    ASSERT_EQ(0, memcmp(test_window_dst.get(), dup.get(),
+                                        total_size));
                 }
             }
             /* Check for each len for less than 1k sizes
@@ -131,17 +138,6 @@ protected:
             } else {
                 len += 53;
             }
-        }
-
-        free(dup);
-
-    dup_fail:
-        free(test_window_dst);
-    dst_fail:
-        free(test_window_src);
-    src_fail:
-        if (ret) {
-            UCS_TEST_ABORT("Failed to allocate memory: " << strerror(ret));
         }
 #endif
     }
@@ -157,7 +153,6 @@ UCS_TEST_SKIP_COND_F(test_arch, memcpy, RUNNING_ON_VALGRIND || !ucs::perf_retry_
     char memunits_str[256];
     char thresh_min_str[16];
     char thresh_max_str[16];
-    int i;
 
     ucs_memunits_to_str(ucs_global_opts.arch.builtin_memcpy_min,
                         thresh_min_str, sizeof(thresh_min_str));
@@ -167,20 +162,25 @@ UCS_TEST_SKIP_COND_F(test_arch, memcpy, RUNNING_ON_VALGRIND || !ucs::perf_retry_
                         thresh_min_str << ".." <<
                         thresh_max_str;
     for (size = 4096; size <= 256 * UCS_MBYTE; size *= 2) {
-        secs = ucs_get_accurate_time();
-        for (i = 0; ucs_get_accurate_time() - secs < timeout; i++) {
-            memcpy_bw       = measure_memcpy_bandwidth<memcpy>(size);
-            memcpy_relax_bw = measure_memcpy_bandwidth<memcpy_relaxed>(size);
-            if (memcpy_relax_bw / memcpy_bw >= diff) {
+        for (int retry = 0; retry < (ucs::perf_retry_count + 1); ++retry) {
+            secs = ucs_get_accurate_time();
+            do {
+                memcpy_bw       = measure_memcpy_bandwidth<memcpy>(size);
+                memcpy_relax_bw = measure_memcpy_bandwidth<memcpy_relaxed>(size);
+                if (memcpy_relax_bw / memcpy_bw >= diff) {
+                    break;
+                }
+                usleep(1000); /* allow other tasks to complete */
+            } while ((ucs_get_accurate_time() - secs) < timeout);
+            ucs_memunits_to_str(size, memunits_str, sizeof(memunits_str));
+            UCS_TEST_MESSAGE << memunits_str <<
+                                " memcpy: "             << (memcpy_bw / UCS_GBYTE) <<
+                                "GB/s memcpy relaxed: " << (memcpy_relax_bw / UCS_GBYTE) <<
+                                " (attempt " << (retry + 1) << "/" << ucs::perf_retry_count << ")";
+            if ((memcpy_relax_bw / memcpy_bw)>= diff) {
                 break;
             }
-            usleep(1000); /* allow other tasks to complete */
         }
-        ucs_memunits_to_str(size, memunits_str, sizeof(memunits_str));
-        UCS_TEST_MESSAGE << memunits_str <<
-                            " memcpy: "             << (memcpy_bw / UCS_GBYTE) <<
-                            "GB/s memcpy relaxed: " << (memcpy_relax_bw / UCS_GBYTE) <<
-                            "GB/s iterations: "     << i + 1;
         EXPECT_GE(memcpy_relax_bw / memcpy_bw, diff);
     }
 }

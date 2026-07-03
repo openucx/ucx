@@ -25,7 +25,6 @@ static ucs_status_t uct_ib_efa_md_open(struct ibv_device *ibv_device,
     struct efadv_device_attr attr;
     ucs_status_t status;
     int ret;
-    uint64_t access_flags;
 
     ctx = ibv_open_device(ibv_device);
     if (ctx == NULL) {
@@ -57,21 +56,30 @@ static ucs_status_t uct_ib_efa_md_open(struct ibv_device *ibv_device,
         goto err_md_free;
     }
 
-    if (uct_ib_efadv_has_rdma_read(&attr)) {
-        access_flags = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ;
-    } else {
-        access_flags = IBV_ACCESS_LOCAL_WRITE;
-    }
-
     dev                        = &md->super.dev;
-    dev->mr_access_flags       = access_flags;
+    dev->mr_access_flags       = IBV_ACCESS_LOCAL_WRITE;
     dev->max_inline_data       = attr.inline_buf_size;
     dev->ordered_send_comp     = 0;
+
+    if (uct_ib_efadv_has_rdma_read(&attr)) {
+        dev->mr_access_flags |= IBV_ACCESS_REMOTE_READ;
+    }
+
+    if (uct_ib_efadv_has_rdma_write(&attr)) {
+        dev->mr_access_flags |= IBV_ACCESS_REMOTE_WRITE;
+    }
+
     /*
      * FIXME: Always disabling channel completion because of leak (gtest):
      * - https://github.com/amzn/amzn-drivers/issues/306
      */
     dev->req_notify_cq_support = 0;
+
+    if (md_config->enable_gpudirect_rdma != UCS_NO) {
+        uct_ib_check_gpudirect_driver(
+                &md->super, "/sys/module/efa_nv_peermem/version",
+                UCS_MEMORY_TYPE_CUDA);
+    }
 
     status = uct_ib_md_open_common(&md->super, ibv_device, md_config);
     if (status != UCS_OK) {
@@ -101,6 +109,7 @@ static uct_ib_md_ops_t uct_ib_efa_md_ops = {
         .mkey_pack          = uct_ib_verbs_mkey_pack,
         .mem_attach         =(uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
         .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported,
+        .mem_elem_pack      = (uct_md_mem_elem_pack_func_t)ucs_empty_function_return_unsupported
     },
     .open = uct_ib_efa_md_open,
 };

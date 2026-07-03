@@ -14,7 +14,9 @@ extern "C" {
 #include <ucp/core/ucp_rkey.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/dt/dt.h>
+#include <ucs/sys/math.h>
 #include <ucs/type/float8.h>
+#include <ucs/type/serialize.h>
 }
 
 #include <cmath>
@@ -174,14 +176,20 @@ public:
     ucp_mem_h import_memh(ucp_mem_h exported_memh);
 
 protected:
-    bool resolve_rma(entity *e, ucp_rkey_h rkey);
     bool resolve_amo(entity *e, ucp_rkey_h rkey);
     bool resolve_rma_bw_get_zcopy(entity *e, ucp_rkey_h rkey);
     bool resolve_rma_bw_put_zcopy(entity *e, ucp_rkey_h rkey);
     void test_length0(unsigned flags);
     void test_rereg(unsigned map_flags = 0, bool import_mem = false);
-    void test_rkey_management(ucp_mem_h memh, bool is_dummy,
-                              bool expect_rma_offload);
+    void
+    test_rkey_management(ucp_mem_h memh, bool is_dummy,
+                         ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST);
+    void check_rkey_lanes_distance(ucp_rkey_h rkey,
+                                   const ucp_memory_info_t &mem_info,
+                                   const std::vector<ucs_sys_dev_distance_t>
+                                   &sys_distance);
+    std::vector<ucs_sys_dev_distance_t> collect_sys_distances(
+                                             const ucp_memory_info_t &mem_info);
 
 private:
     void check_distance_precision(double rkey_value, double topo_value,
@@ -236,32 +244,14 @@ ucp_rkey_h test_ucp_mmap::mem_chunk::unpack(ucp_ep_h ep, ucp_md_map_t md_map)
     } else {
         // Different MD map means different config index on proto v2
         ASSERT_UCS_OK(ucp_ep_rkey_unpack_internal(ep, rkey_buffer, rkey_size,
-                                                  md_map, 0, &rkey));
+                                                  md_map, 0,
+                                                  UCS_SYS_DEVICE_ID_UNKNOWN,
+                                                  &rkey));
     }
 
     ucp_rkey_buffer_release(rkey_buffer);
     rkeys.push_back(rkey);
     return rkey;
-}
-
-bool test_ucp_mmap::resolve_rma(entity *e, ucp_rkey_h rkey)
-{
-    ucs_status_t status;
-
-    {
-        scoped_log_handler slh(hide_errors_logger);
-        status = UCP_RKEY_RESOLVE(rkey, e->ep(), rma);
-    }
-
-    if (status == UCS_OK) {
-        EXPECT_NE(UCP_NULL_LANE, rkey->cache.rma_lane);
-        return true;
-    } else if (status == UCS_ERR_UNREACHABLE) {
-        EXPECT_EQ(UCP_NULL_LANE, rkey->cache.rma_lane);
-        return false;
-    } else {
-        UCS_TEST_ABORT("Invalid status from UCP_RKEY_RESOLVE");
-    }
 }
 
 bool test_ucp_mmap::resolve_amo(entity *e, ucp_rkey_h rkey)
@@ -317,7 +307,7 @@ bool test_ucp_mmap::resolve_rma_bw_put_zcopy(entity *e, ucp_rkey_h rkey)
 }
 
 void test_ucp_mmap::test_rkey_management(ucp_mem_h memh, bool is_dummy,
-                                         bool expect_rma_offload)
+                                         ucs_memory_type_t mem_type)
 {
     size_t rkey_size;
     void *rkey_buffer;
@@ -332,8 +322,9 @@ void test_ucp_mmap::test_rkey_management(ucp_mem_h memh, bool is_dummy,
     }
     ASSERT_UCS_OK(status);
 
-    EXPECT_EQ(ucp_rkey_packed_size(sender().ucph(), memh->md_map,
-                                   UCS_SYS_DEVICE_ID_UNKNOWN, 0),
+    ucp_sys_dev_map_t sys_dev_map = ucp_memh_sys_dev_map(memh);
+    EXPECT_EQ(ucp_rkey_packed_size(sender().ucph(), memh->md_map, memh->sys_dev,
+                                   sys_dev_map, 1),
               rkey_size);
 
     /* Unpack remote key buffer */
@@ -355,7 +346,6 @@ void test_ucp_mmap::test_rkey_management(ucp_mem_h memh, bool is_dummy,
     if (is_proto_enabled()) {
         test_rkey_proto(memh);
     } else {
-        bool have_rma              = resolve_rma(&receiver(), rkey);
         bool have_amo              = resolve_amo(&receiver(), rkey);
         bool have_rma_bw_get_zcopy = resolve_rma_bw_get_zcopy(&receiver(),
                                                               rkey);
@@ -364,44 +354,32 @@ void test_ucp_mmap::test_rkey_management(ucp_mem_h memh, bool is_dummy,
 
         /* Test that lane resolution on the remote key returns consistent results */
         for (int i = 0; i < 10; ++i) {
-            switch (ucs::rand() % 4) {
+            switch (ucs::rand() % 3) {
             case 0:
-                EXPECT_EQ(have_rma, resolve_rma(&receiver(), rkey));
-                break;
-            case 1:
                 EXPECT_EQ(have_amo, resolve_amo(&receiver(), rkey));
                 break;
-            case 2:
+            case 1:
                 EXPECT_EQ(have_rma_bw_get_zcopy,
                           resolve_rma_bw_get_zcopy(&receiver(), rkey));
                 break;
-            case 3:
+            case 2:
                 EXPECT_EQ(have_rma_bw_put_zcopy,
                           resolve_rma_bw_put_zcopy(&receiver(), rkey));
                 break;
             }
         }
-
-        if (expect_rma_offload) {
-            if (is_dummy) {
-                EXPECT_EQ(&ucp_rma_sw_proto,
-                          UCP_RKEY_RMA_PROTO(rkey->cache.rma_proto_index));
-            } else {
-                ucs_assert(&ucp_rma_basic_proto ==
-                           UCP_RKEY_RMA_PROTO(rkey->cache.rma_proto_index));
-                EXPECT_EQ(&ucp_rma_basic_proto,
-                          UCP_RKEY_RMA_PROTO(rkey->cache.rma_proto_index));
-            }
-        }
     }
 
-    /* Test obtaining direct-access pointer */
-    void *ptr;
-    status = ucp_rkey_ptr(rkey, (uint64_t)ucp_memh_address(memh), &ptr);
-    if (status == UCS_OK) {
-        EXPECT_EQ(0, memcmp(ucp_memh_address(memh), ptr, ucp_memh_length(memh)));
-    } else {
-        EXPECT_EQ(UCS_ERR_UNREACHABLE, status);
+    if (mem_type == UCS_MEMORY_TYPE_HOST) {
+        /* Test obtaining direct-access pointer */
+        void *ptr;
+        status = ucp_rkey_ptr(rkey, (uint64_t)ucp_memh_address(memh), &ptr);
+        if (status == UCS_OK) {
+            EXPECT_EQ(0, memcmp(ucp_memh_address(memh), ptr,
+                                ucp_memh_length(memh)));
+        } else {
+            EXPECT_EQ(UCS_ERR_UNREACHABLE, status);
+        }
     }
 
     ucp_rkey_destroy(rkey);
@@ -424,7 +402,7 @@ void test_ucp_mmap::check_distance_precision(double rkey_value,
     } else if (rkey_value == pack_max) {
         /* Capped by pack_max, no cache entry */
         EXPECT_GE(std::lround(topo_value), pack_max);
-    } else if (topo_value == INFINITY) {
+    } else if (topo_value == UCS_INFINITY) {
         /* Infinity values can be packed without loss */
         EXPECT_EQ(topo_value, rkey_value);
     } else {
@@ -433,21 +411,48 @@ void test_ucp_mmap::check_distance_precision(double rkey_value,
     }
 }
 
-void test_ucp_mmap::test_rkey_proto(ucp_mem_h memh)
+void test_ucp_mmap::check_rkey_lanes_distance(
+                     ucp_rkey_h rkey, const ucp_memory_info_t &mem_info,
+                     const std::vector<ucs_sys_dev_distance_t> &sys_distance)
 {
+    if (!is_proto_enabled()) {
+        return;
+    }
+    ucp_rkey_config_t *rkey_config = ucp_rkey_config(receiver().worker(),
+                                                     rkey);
+    if (rkey_config->key.md_map == 0) {
+        return;
+    }
+
+    ucp_ep_config_t *ep_config = ucp_ep_config(receiver().ep());
     ucs_sys_dev_distance_t rkey_dist, topo_dist;
     ucs_sys_device_t sys_dev;
-    ucs_status_t status;
 
-    /* Detect system device of the allocated memory */
-    ucp_memory_info_t mem_info;
-    ucp_memory_detect(sender().ucph(), ucp_memh_address(memh),
-                      ucp_memh_length(memh), &mem_info);
-    EXPECT_EQ(memh->mem_type, mem_info.type);
+    EXPECT_EQ(receiver().ep()->cfg_index, rkey_config->key.ep_cfg_index);
+    EXPECT_EQ(mem_info.sys_dev, rkey_config->key.sys_dev);
+    EXPECT_EQ(mem_info.type, rkey_config->key.mem_type);
+
+    /* Compare original system distance and unpacked rkey system distance */
+    for (ucp_lane_index_t lane = 0; lane < ep_config->key.num_lanes; ++lane) {
+        sys_dev   = ep_config->key.lanes[lane].dst_sys_dev;
+        rkey_dist = rkey_config->lanes_distance[lane];
+        topo_dist = (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) ?
+            ucs_topo_default_distance : sys_distance[sys_dev];
+
+        check_distance_precision(rkey_dist.bandwidth, topo_dist.bandwidth,
+                UCS_FP8_MIN_BW, UCS_FP8_MAX_BW);
+        check_distance_precision(rkey_dist.latency, topo_dist.latency,
+                UCS_FP8_MIN_LAT, UCS_FP8_MAX_LAT);
+    }
+}
+
+std::vector<ucs_sys_dev_distance_t>
+test_ucp_mmap::collect_sys_distances(const ucp_memory_info_t &mem_info)
+{
+    ucs_status_t status;
+    std::vector<ucs_sys_dev_distance_t> sys_distance(ucs_topo_num_devices());
 
     /* Collect distances from all devices in the system */
-    ucp_sys_dev_map_t sys_dev_map = UCS_MASK(ucs_topo_num_devices());
-    std::vector<ucs_sys_dev_distance_t> sys_distance(ucs_topo_num_devices());
     for (unsigned i = 0; i < sys_distance.size(); ++i) {
         if (std::string(ucs_topo_sys_device_get_name(i)).find("test") == 0) {
             /* Dummy device created by test */
@@ -458,9 +463,27 @@ void test_ucp_mmap::test_rkey_proto(ucp_mem_h memh)
         ASSERT_UCS_OK(status);
     }
 
+    return sys_distance;
+}
+
+void test_ucp_mmap::test_rkey_proto(ucp_mem_h memh)
+{
+    ucs_status_t status;
+
+    /* Detect system device of the allocated memory */
+    ucp_memory_info_t mem_info;
+    ucp_memory_detect(sender().ucph(), ucp_memh_address(memh),
+                      ucp_memh_length(memh), &mem_info);
+    EXPECT_EQ(memh->mem_type, mem_info.type);
+
+    /* Collect distances from all devices in the system */
+    ucp_sys_dev_map_t sys_dev_map = UCS_MASK(ucs_topo_num_devices());
+    std::vector<ucs_sys_dev_distance_t> sys_distance =
+                                            collect_sys_distances(mem_info);
+
     /* Allocate buffer for packed rkey */
     size_t rkey_size = ucp_rkey_packed_size(sender().ucph(), memh->md_map,
-                                            mem_info.sys_dev, sys_dev_map);
+                                            mem_info.sys_dev, sys_dev_map, 1);
     std::string rkey_buffer(rkey_size, '0');
 
     /* Pack the rkey and validate packed size */
@@ -468,7 +491,7 @@ void test_ucp_mmap::test_rkey_proto(ucp_mem_h memh)
                                              memh, ucp_memh_address(memh),
                                              ucp_memh_length(memh), &mem_info,
                                              sys_dev_map, &sys_distance[0], 0,
-                                             &rkey_buffer[0]);
+                                             1, &rkey_buffer[0]);
     ASSERT_EQ((ssize_t)rkey_size, packed_size);
 
     /* Unpack remote key buffer */
@@ -477,30 +500,8 @@ void test_ucp_mmap::test_rkey_proto(ucp_mem_h memh)
                                           rkey_size, &rkey);
     ASSERT_UCS_OK(status);
 
-    /* Check rkey configuration */
-    if (is_proto_enabled()) {
-        ucp_rkey_config_t *rkey_config = ucp_rkey_config(receiver().worker(),
-                                                         rkey);
-        ucp_ep_config_t *ep_config     = ucp_ep_config(receiver().ep());
-
-        EXPECT_EQ(receiver().ep()->cfg_index, rkey_config->key.ep_cfg_index);
-        EXPECT_EQ(mem_info.sys_dev, rkey_config->key.sys_dev);
-        EXPECT_EQ(mem_info.type, rkey_config->key.mem_type);
-
-        /* Compare original system distance and unpacked rkey system distance */
-        for (ucp_lane_index_t lane = 0; lane < ep_config->key.num_lanes;
-             ++lane) {
-            sys_dev   = ep_config->key.lanes[lane].dst_sys_dev;
-            rkey_dist = rkey_config->lanes_distance[lane];
-            topo_dist = (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) ?
-                        ucs_topo_default_distance : sys_distance[sys_dev];
-
-            check_distance_precision(rkey_dist.bandwidth, topo_dist.bandwidth,
-                                     UCS_FP8_MIN_BW, UCS_FP8_MAX_BW);
-            check_distance_precision(rkey_dist.latency, topo_dist.latency,
-                                     UCS_FP8_MIN_LAT, UCS_FP8_MAX_LAT);
-        }
-    }
+    /* Check rkey configuration and lanes distances */
+    check_rkey_lanes_distance(rkey, mem_info, sys_distance);
 
     ucp_rkey_destroy(rkey);
 }
@@ -510,7 +511,6 @@ UCS_TEST_P(test_ucp_mmap, alloc_mem_type) {
             mem_buffer::supported_mem_types();
     ucs_status_t status;
     bool is_dummy;
-    bool expect_rma_offload;
 
     for (auto mem_type : mem_types) {
         for (int i = 0; i < (100 / ucs::test_time_multiplier()); ++i) {
@@ -532,10 +532,8 @@ UCS_TEST_P(test_ucp_mmap, alloc_mem_type) {
             ASSERT_UCS_OK(status);
 
             is_dummy           = (size == 0);
-            expect_rma_offload = (is_tl_rdma() || is_tl_shm()) &&
-                                 check_reg_mem_types(sender(), mem_type);
 
-            test_rkey_management(memh, is_dummy, expect_rma_offload);
+            test_rkey_management(memh, is_dummy, mem_type);
 
             status = ucp_mem_unmap(sender().ucph(), memh);
             ASSERT_UCS_OK(status);
@@ -548,7 +546,6 @@ UCS_TEST_P(test_ucp_mmap, reg_mem_type) {
             mem_buffer::supported_mem_types();
     ucs_status_t status;
     bool is_dummy;
-    bool expect_rma_offload;
     ucs_memory_type_t alloc_mem_type;
 
     for (int i = 0; i < 1000 / ucs::test_time_multiplier(); ++i) {
@@ -581,10 +578,7 @@ UCS_TEST_P(test_ucp_mmap, reg_mem_type) {
             EXPECT_EQ(alloc_mem_type, memh->mem_type);
         }
 
-        expect_rma_offload = !UCP_MEM_IS_ROCM_MANAGED(alloc_mem_type) &&
-                             is_tl_rdma() &&
-                             check_reg_mem_types(sender(), alloc_mem_type);
-        test_rkey_management(memh, is_dummy, expect_rma_offload);
+        test_rkey_management(memh, is_dummy, alloc_mem_type);
 
         status = ucp_mem_unmap(sender().ucph(), memh);
         ASSERT_UCS_OK(status);
@@ -800,12 +794,8 @@ void test_ucp_mmap::test_length0(unsigned flags)
     status = ucp_mem_map(sender().ucph(), &params, &memh[1]);
     ASSERT_UCS_OK(status);
 
-    bool expect_rma_offload = is_tl_rdma() ||
-                              ((flags & UCP_MEM_MAP_ALLOCATE) &&
-                               is_tl_shm());
-
     for (i = 0; i < buf_num; i++) {
-        test_rkey_management(memh[i], true, expect_rma_offload);
+        test_rkey_management(memh[i], true);
         test_rkey_proto(memh[i]);
         status = ucp_mem_unmap(sender().ucph(), memh[i]);
         ASSERT_UCS_OK(status);
@@ -859,7 +849,7 @@ UCS_TEST_P(test_ucp_mmap, alloc_advise) {
     ASSERT_UCS_OK(status);
 
     is_dummy = (size == 0);
-    test_rkey_management(memh, is_dummy, is_tl_rdma() || is_tl_shm());
+    test_rkey_management(memh, is_dummy);
 
     status = ucp_mem_unmap(sender().ucph(), memh);
     ASSERT_UCS_OK(status);
@@ -902,7 +892,7 @@ UCS_TEST_P(test_ucp_mmap, reg_advise) {
     status = ucp_mem_advise(sender().ucph(), memh, &advise_params);
     ASSERT_UCS_OK(status);
     is_dummy = (size == 0);
-    test_rkey_management(memh, is_dummy, is_tl_rdma());
+    test_rkey_management(memh, is_dummy);
 
     status = ucp_mem_unmap(sender().ucph(), memh);
     ASSERT_UCS_OK(status);
@@ -945,7 +935,7 @@ UCS_TEST_P(test_ucp_mmap, fixed) {
         EXPECT_GE(ucp_memh_length(memh), size);
 
         is_dummy = (size == 0);
-        test_rkey_management(memh, is_dummy, is_tl_rdma());
+        test_rkey_management(memh, is_dummy);
 
         ptr.detach();
         status = ucp_mem_unmap(sender().ucph(), memh);
@@ -1031,6 +1021,119 @@ UCS_TEST_P(test_ucp_mmap, rndv_mpool_mdesc_no_rcache)
                                                    UCS_SYS_DEVICE_ID_UNKNOWN);
         EXPECT_EQ(mdesc->memh, mdesc->memh->parent);
         ucs_mpool_put(mdesc);
+    }
+}
+
+UCS_TEST_P(test_ucp_mmap, no_sys_dev_with_zero_md_map)
+{
+    const std::vector<ucs_memory_type_t> &mem_types =
+            mem_buffer::supported_mem_types();
+
+    for (auto mem_type : mem_types) {
+        const size_t buffer_size = 4096;
+        mem_buffer buf(buffer_size, mem_type);
+
+        ucp_mem_h memh;
+        ucp_mem_map_params_t params;
+        params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                            UCP_MEM_MAP_PARAM_FIELD_LENGTH;
+        params.address    = buf.ptr();
+        params.length     = buffer_size;
+
+        ASSERT_UCS_OK(ucp_mem_map(sender().ucph(), &params, &memh));
+
+        // Detect system device of the allocated memory
+        ucp_memory_info_t mem_info;
+        ucp_memory_detect(sender().ucph(), ucp_memh_address(memh),
+                          ucp_memh_length(memh), &mem_info);
+        EXPECT_EQ(memh->mem_type, mem_info.type);
+
+        // Force md_map to 0 by using empty md_map
+        ucp_md_map_t zero_md_map      = 0;
+        ucp_sys_dev_map_t sys_dev_map = ucp_memh_sys_dev_map(memh);
+        std::vector<ucs_sys_dev_distance_t> sys_distance(ucs_topo_num_devices());
+
+        size_t required_size = ucp_rkey_packed_size(
+                                  sender().ucph(), zero_md_map,
+                                  mem_info.sys_dev, sys_dev_map, 1);
+        std::vector<char> rkey_buf(required_size);
+        ssize_t packed_size = ucp_rkey_pack_memh(sender().ucph(), zero_md_map,
+                memh, buf.ptr(), buffer_size,
+                &mem_info, sys_dev_map, &sys_distance[0],
+                0, 1, &rkey_buf[0]);
+
+        EXPECT_EQ(packed_size, required_size);
+
+        const void *p = &rkey_buf[0];
+        ucp_md_map_t packed_md_map = *ucs_serialize_next(&p, const ucp_md_map_t);
+        EXPECT_EQ(0UL, packed_md_map);
+
+        // When md_map is 0, sys_device should not be packed
+        // The buffer should end after memory type
+        uint8_t packed_mem_type = *ucs_serialize_next(&p, const uint8_t);
+        EXPECT_EQ(mem_type, packed_mem_type);
+
+        // No additional data (sys_device, distances) should be present
+        EXPECT_EQ(UCS_PTR_BYTE_DIFF(&rkey_buf[0], p), packed_size);
+
+        ASSERT_UCS_OK(ucp_mem_unmap(sender().ucph(), memh));
+    }
+}
+
+UCS_TEST_P(test_ucp_mmap, rkey_api_lanes_distance)
+{
+    const std::vector<ucs_memory_type_t> &mem_types =
+            mem_buffer::supported_mem_types();
+    ucs_status_t status;
+
+    for (auto mem_type : mem_types) {
+        const size_t buffer_size = 4096;
+        mem_buffer buf(buffer_size, mem_type);
+
+        /* Map memory using standard API */
+        ucp_mem_map_params_t params;
+        params.field_mask  = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                             UCP_MEM_MAP_PARAM_FIELD_LENGTH |
+                             UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE;
+        params.address     = buf.ptr();
+        params.length      = buffer_size;
+        params.memory_type = mem_type;
+
+        ucp_mem_h memh;
+        status = ucp_mem_map(sender().ucph(), &params, &memh);
+        ASSERT_UCS_OK(status);
+
+        /* Detect system device of the allocated memory */
+        ucp_memory_info_t mem_info;
+        ucp_memory_detect(sender().ucph(), ucp_memh_address(memh),
+                          ucp_memh_length(memh), &mem_info);
+        EXPECT_EQ(memh->mem_type, mem_info.type);
+        EXPECT_EQ(mem_type, mem_info.type);
+
+        /* Collect distances from all devices in the system */
+        std::vector<ucs_sys_dev_distance_t> sys_distance =
+                                                collect_sys_distances(mem_info);
+
+        /* Pack rkey using pure API calls */
+        void *rkey_buffer;
+        size_t rkey_size;
+        ucp_rkey_h rkey;
+
+        status = ucp_rkey_pack(sender().ucph(), memh, &rkey_buffer, &rkey_size);
+        ASSERT_UCS_OK(status);
+
+        /* Unpack remote key using pure API calls */
+        status = ucp_ep_rkey_unpack(receiver().ep(), rkey_buffer, &rkey);
+        ASSERT_UCS_OK(status);
+
+        /* Check rkey configuration and lanes distances using common function */
+        check_rkey_lanes_distance(rkey, mem_info, sys_distance);
+
+        /* Cleanup */
+        ucp_rkey_destroy(rkey);
+        ucp_rkey_buffer_release(rkey_buffer);
+        status = ucp_mem_unmap(sender().ucph(), memh);
+        ASSERT_UCS_OK(status);
     }
 }
 
@@ -1246,3 +1349,120 @@ UCS_TEST_P(test_ucp_mmap_export, export_import) {
 }
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_mmap_export)
+
+
+class test_ucp_mmap_max_hca : public ucp_test {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant(variants, UCP_FEATURE_TAG);
+    }
+};
+
+UCS_TEST_P(test_ucp_mmap_max_hca, limits_memh_md_map)
+{
+    if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
+        UCS_TEST_SKIP_R("CUDA is not supported");
+    }
+
+    modify_config("MAX_HCA_PER_GPU", "inf");
+    entity *e_all         = create_entity();
+    ucp_context_h ctx_all = e_all->ucph();
+
+    ucp_md_map_t net_md_map = ucp_context_get_net_md_map(ctx_all);
+
+    if (ucs_popcount(net_md_map) < 2) {
+        UCS_TEST_SKIP_R("need at least 2 network MDs");
+    }
+
+    const size_t size = 4096;
+    void *ptr         = mem_buffer::allocate(size, UCS_MEMORY_TYPE_CUDA);
+
+    ucp_mem_map_params_t params;
+    params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                        UCP_MEM_MAP_PARAM_FIELD_LENGTH;
+    params.address    = ptr;
+    params.length     = size;
+
+    ucp_mem_h memh;
+    ASSERT_UCS_OK(ucp_mem_map(ctx_all, &params, &memh));
+    ucp_md_map_t net_all     = memh->md_map & net_md_map;
+    ucp_md_map_t non_net_all = memh->md_map & ~net_md_map;
+    ASSERT_UCS_OK(ucp_mem_unmap(ctx_all, memh));
+
+    /* LIMIT=1: at most 1 network MD */
+    modify_config("MAX_HCA_PER_GPU", "1");
+    entity *e_lim         = create_entity();
+    ucp_context_h ctx_lim = e_lim->ucph();
+
+    ASSERT_UCS_OK(ucp_mem_map(ctx_lim, &params, &memh));
+    ucp_md_map_t net_lim     = memh->md_map & net_md_map;
+    ucp_md_map_t non_net_lim = memh->md_map & ~net_md_map;
+    ASSERT_UCS_OK(ucp_mem_unmap(ctx_lim, memh));
+
+    /* CLOSEST: subset of all */
+    modify_config("MAX_HCA_PER_GPU", "auto");
+    entity *e_close         = create_entity();
+    ucp_context_h ctx_close = e_close->ucph();
+
+    ASSERT_UCS_OK(ucp_mem_map(ctx_close, &params, &memh));
+    ucp_md_map_t net_close = memh->md_map & net_md_map;
+    ASSERT_UCS_OK(ucp_mem_unmap(ctx_close, memh));
+
+    mem_buffer::release(ptr, UCS_MEMORY_TYPE_CUDA);
+
+    EXPECT_GT(ucs_popcount(net_all), 0);
+    EXPECT_LE(ucs_popcount(net_lim), 1);
+    EXPECT_GT(ucs_popcount(net_close), 0);
+    EXPECT_LE(ucs_popcount(net_close), ucs_popcount(net_all));
+    EXPECT_EQ(non_net_all, non_net_lim);
+}
+
+UCS_TEST_P(test_ucp_mmap_max_hca, limits_per_gpu)
+{
+    if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
+        UCS_TEST_SKIP_R("CUDA is not supported");
+    }
+
+    int num_gpus = mem_buffer::get_device_count();
+    if (num_gpus < 2) {
+        UCS_TEST_SKIP_R("need at least 2 CUDA devices");
+    }
+
+    modify_config("MAX_HCA_PER_GPU", "1");
+    entity *e         = create_entity();
+    ucp_context_h ctx = e->ucph();
+
+    ucp_md_map_t net_md_map = ucp_context_get_net_md_map(ctx);
+
+    if (ucs_popcount(net_md_map) < 2) {
+        UCS_TEST_SKIP_R("need at least 2 network MDs");
+    }
+
+    int orig_dev = mem_buffer::get_device();
+
+    const size_t size = 4096;
+    ucp_mem_map_params_t params;
+    params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                        UCP_MEM_MAP_PARAM_FIELD_LENGTH;
+
+    for (int gpu = 0; gpu < ucs_min(num_gpus, 4); gpu++) {
+        mem_buffer::set_device(gpu);
+
+        void *ptr      = mem_buffer::allocate(size, UCS_MEMORY_TYPE_CUDA);
+        params.address = ptr;
+        params.length  = size;
+
+        ucp_mem_h memh;
+        ASSERT_UCS_OK(ucp_mem_map(ctx, &params, &memh));
+        ucp_md_map_t net_map = memh->md_map & net_md_map;
+        EXPECT_LE(ucs_popcount(net_map), 1)
+                << "GPU " << gpu << " should have at most 1 network MD";
+        ASSERT_UCS_OK(ucp_mem_unmap(ctx, memh));
+        mem_buffer::release(ptr, UCS_MEMORY_TYPE_CUDA);
+    }
+
+    mem_buffer::set_device(orig_dev);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_mmap_max_hca, all, "all")

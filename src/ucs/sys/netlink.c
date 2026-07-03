@@ -10,15 +10,17 @@
 
 #include "netlink.h"
 
+#include <ucs/datastruct/khash.h>
 #include <ucs/debug/log.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/sock.h>
 #include <ucs/type/status.h>
-#include <ucs/debug/memtrack_int.h>
+#include <ucs/type/init_once.h>
 
 #include <errno.h>
-#include <linux/netlink.h>
 #include <linux/rtnetlink.h>
+#include <pthread.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -26,22 +28,27 @@
 typedef struct {
     const struct sockaddr *sa_remote;
     int                    if_index;
-    int                    found;
+    int                    netmask_len;
 } ucs_netlink_route_info_t;
 
 
-/**
- * Callback function for parsing individual netlink messages.
- *
- * @param [in] nlh    Pointer to the netlink message header.
- * @param [in] nl_msg Pointer to the netlink message payload.
- * @param [in] arg    User-provided argument passed through from the caller.
- *
- * @return UCS_OK if parsing is complete, UCS_INPROGRESS if there are more
- *         messages to be parsed, or error code otherwise.
- */
-typedef ucs_status_t (*ucs_netlink_parse_cb_t)(const struct nlmsghdr *nlh,
-                                               const void *nl_msg, void *arg);
+typedef struct {
+    struct sockaddr_storage dest;
+    uint8_t                 subnet_prefix_len;
+    uint8_t                 route_type;
+} ucs_netlink_route_entry_t;
+
+UCS_ARRAY_DECLARE_TYPE(ucs_netlink_rt_rules_t, unsigned,
+                       ucs_netlink_route_entry_t);
+
+KHASH_INIT(ucs_netlink_rt_cache, khint32_t, ucs_netlink_rt_rules_t, 1,
+           kh_int_hash_func, kh_int_hash_equal);
+static khash_t(ucs_netlink_rt_cache) ucs_netlink_routing_table_cache;
+
+static inline int ucs_netlink_is_msg_done(const struct nlmsghdr *nlh)
+{
+    return (nlh->nlmsg_type == NLMSG_DONE);
+}
 
 static ucs_status_t ucs_netlink_socket_init(int *fd_p, int protocol)
 {
@@ -77,7 +84,7 @@ ucs_netlink_parse_msg(const void *msg, size_t msg_len,
     const struct nlmsghdr *nlh = (const struct nlmsghdr *)msg;
 
     while ((status == UCS_INPROGRESS) && NLMSG_OK(nlh, msg_len) &&
-           (nlh->nlmsg_type != NLMSG_DONE)) {
+           !ucs_netlink_is_msg_done(nlh)) {
         if (nlh->nlmsg_type == NLMSG_ERROR) {
             struct nlmsgerr *err = (struct nlmsgerr *)NLMSG_DATA(nlh);
             ucs_error("received error response from netlink err=%d: %s\n",
@@ -85,22 +92,24 @@ ucs_netlink_parse_msg(const void *msg, size_t msg_len,
             return UCS_ERR_IO_ERROR;
         }
 
-        status = parse_cb(nlh, NLMSG_DATA(nlh), arg);
+        status = parse_cb(nlh, arg);
         nlh    = NLMSG_NEXT(nlh, msg_len);
     }
 
     return UCS_OK;
 }
 
-static ucs_status_t
+ucs_status_t
 ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
+                         unsigned short nlmsg_flags,
                          const void *protocol_header, size_t header_length,
                          ucs_netlink_parse_cb_t parse_cb, void *arg)
 {
     struct nlmsghdr nlh = {0};
-    char *recv_msg      = NULL;
-    size_t recv_msg_len = 0;
     int netlink_fd      = -1;
+    size_t recv_msg_len;
+    char *recv_msg;
+    int msg_done;
     ucs_status_t status;
     struct iovec iov[2];
     size_t bytes_sent;
@@ -112,7 +121,7 @@ ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
 
     nlh.nlmsg_len   = NLMSG_LENGTH(header_length);
     nlh.nlmsg_type  = nlmsg_type;
-    nlh.nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP;
+    nlh.nlmsg_flags = NLM_F_REQUEST | nlmsg_flags;
     iov[0].iov_base = &nlh;
     iov[0].iov_len  = sizeof(nlh);
     iov[1].iov_base = (void *)protocol_header;
@@ -129,39 +138,44 @@ ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
     }
 
     /* get message size */
-    status = ucs_socket_recv_nb(netlink_fd, NULL, MSG_PEEK | MSG_TRUNC,
-                                &recv_msg_len);
-    if (status != UCS_OK) {
-        ucs_error("failed to get netlink message size %d (%s)",
-                  status, ucs_status_string(status));
-        goto out;
-    }
+    do {
+        recv_msg_len = 0;
+        status = ucs_socket_recv_nb(netlink_fd, NULL, MSG_PEEK | MSG_TRUNC,
+                                    &recv_msg_len);
+        if (status != UCS_OK) {
+            ucs_error("failed to get netlink message size %d (%s)",
+                    status, ucs_status_string(status));
+            goto out;
+        }
 
-    recv_msg = ucs_malloc(recv_msg_len, "netlink recv message");
-    if (recv_msg == NULL) {
-        ucs_error("failed to allocate a buffer for netlink receive message of"
-                  " size %zu", recv_msg_len);
-        goto out;
-    }
+        recv_msg = ucs_malloc(recv_msg_len, "netlink recv message");
+        if (recv_msg == NULL) {
+            ucs_error("failed to allocate a buffer for netlink receive message"
+                      " of size %zu", recv_msg_len);
+            goto out;
+        }
 
-    status = ucs_socket_recv(netlink_fd, recv_msg, recv_msg_len);
-    if (status != UCS_OK) {
-        ucs_error("failed to receive netlink message on fd=%d: %s",
-                  netlink_fd, ucs_status_string(status));
-        goto out;
-    }
+        status = ucs_socket_recv(netlink_fd, recv_msg, recv_msg_len);
+        if (status != UCS_OK) {
+            ucs_error("failed to receive netlink message on fd=%d: %s",
+                    netlink_fd, ucs_status_string(status));
+            ucs_free(recv_msg);
+            goto out;
+        }
 
-    status = ucs_netlink_parse_msg(recv_msg, recv_msg_len, parse_cb, arg);
+        status   = ucs_netlink_parse_msg(recv_msg, recv_msg_len, parse_cb, arg);
+        msg_done = ucs_netlink_is_msg_done((const struct nlmsghdr *)recv_msg);
+        ucs_free(recv_msg);
+    } while ((nlmsg_flags & NLM_F_DUMP) && !msg_done);
 
 out:
     ucs_close_fd(&netlink_fd);
-    ucs_free(recv_msg);
     return status;
 }
 
 static ucs_status_t
 ucs_netlink_get_route_info(const struct rtattr *rta, int len, int *if_index_p,
-                           const void **dst_in_addr)
+                           const void **dst_in_addr, size_t rtm_dst_len)
 {
     *if_index_p  = -1;
     *dst_in_addr = NULL;
@@ -174,8 +188,10 @@ ucs_netlink_get_route_info(const struct rtattr *rta, int len, int *if_index_p,
         }
     }
 
-    if ((*if_index_p == -1) || (*dst_in_addr == NULL)) {
-        ucs_diag("invalid routing table entry");
+    if (/* Network interface index is not valid */
+        (*if_index_p == -1) ||
+        /* dst_in_addr required but not present */
+        ((rtm_dst_len != 0) && (*dst_in_addr == NULL))) {
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -183,55 +199,188 @@ ucs_netlink_get_route_info(const struct rtattr *rta, int len, int *if_index_p,
 }
 
 static ucs_status_t
-ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, const void *nl_msg,
-                              void *arg)
+ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, void *arg)
 {
-    ucs_netlink_route_info_t *info = (ucs_netlink_route_info_t *)arg;
-    int rule_iface;
+    const struct rtmsg *rt_msg = NLMSG_DATA(nlh);
     const void *dst_in_addr;
+    ucs_netlink_route_entry_t *new_rule;
+    ucs_netlink_rt_rules_t *iface_rules;
+    int iface_index;
+    khiter_t iter;
+    int khret;
 
-    if (ucs_netlink_get_route_info(RTM_RTA((const struct rtmsg *)nl_msg),
-                                   RTM_PAYLOAD(nlh), &rule_iface,
-                                   &dst_in_addr) != UCS_OK) {
+    if (ucs_netlink_get_route_info(RTM_RTA(rt_msg), RTM_PAYLOAD(nlh),
+                                   &iface_index, &dst_in_addr,
+                                   rt_msg->rtm_dst_len) != UCS_OK) {
         return UCS_INPROGRESS;
     }
 
-    if (rule_iface != info->if_index) {
-        return UCS_INPROGRESS;
+    iter = kh_put(ucs_netlink_rt_cache, &ucs_netlink_routing_table_cache,
+                  iface_index, &khret);
+    if (khret == UCS_KH_PUT_FAILED) {
+        ucs_error("failed to put net iface index (%d) in the cache", iface_index);
+        return UCS_ERR_IO_ERROR;
     }
 
-    if (ucs_bitwise_is_equal(ucs_sockaddr_get_inet_addr(info->sa_remote),
-                             dst_in_addr,
-                             ((const struct rtmsg *)nl_msg)->rtm_dst_len)) {
-        info->found = 1;
-        return UCS_OK;
+    /* if the iface was not present in the hash table before, initialize the
+       array of rules */
+    iface_rules = &kh_val(&ucs_netlink_routing_table_cache, iter);
+    if (khret != UCS_KH_PUT_KEY_PRESENT) {
+        ucs_array_init_dynamic(iface_rules);
     }
+
+    new_rule = ucs_array_append(iface_rules,
+                                ucs_error("could not allocate route entry");
+                                return UCS_ERR_NO_MEMORY);
+
+    memset(&new_rule->dest, 0, sizeof(new_rule->dest));
+    new_rule->dest.ss_family = rt_msg->rtm_family;
+    if (dst_in_addr != NULL) {
+        if (ucs_sockaddr_set_inet_addr((struct sockaddr *)&new_rule->dest,
+                                       dst_in_addr) != UCS_OK) {
+            ucs_array_pop_back(iface_rules);
+            return UCS_ERR_IO_ERROR;
+        }
+    }
+
+    new_rule->subnet_prefix_len = rt_msg->rtm_dst_len;
+    new_rule->route_type        = rt_msg->rtm_type;
 
     return UCS_INPROGRESS;
 }
 
-int ucs_netlink_route_exists(const char *if_name,
-                             const struct sockaddr *sa_remote)
+static int
+ucs_netlink_lookup_in_iface_rules_by_type(const struct sockaddr *sa_remote,
+                                          ucs_netlink_rt_rules_t *iface_rules,
+                                          uint8_t route_type)
 {
-    ucs_netlink_route_info_t info = {0};
-    struct rtmsg rtm              = {0};
-    int iface_index;
+    int found_netmask_len = -1;
+    ucs_netlink_route_entry_t *curr_entry;
 
-    iface_index = if_nametoindex(if_name);
-    if (iface_index == 0) {
-        ucs_error("failed to get interface index (errno %d)", errno);
-        goto out;
+    ucs_array_for_each(curr_entry, iface_rules) {
+        if ((route_type != RTN_UNSPEC) &&
+            (curr_entry->route_type != route_type)) {
+            continue;
+        }
+
+        if ((curr_entry->subnet_prefix_len > found_netmask_len) &&
+            ucs_sockaddr_is_same_subnet(
+                    sa_remote, (const struct sockaddr*)&curr_entry->dest,
+                    curr_entry->subnet_prefix_len)) {
+            found_netmask_len = curr_entry->subnet_prefix_len;
+        }
     }
 
-    rtm.rtm_family = sa_remote->sa_family;
-    rtm.rtm_table  = RT_TABLE_MAIN;
+    return found_netmask_len;
+}
 
-    info.if_index  = iface_index;
-    info.sa_remote = sa_remote;
+static int
+ucs_netlink_lookup_in_iface_rules(const struct sockaddr *sa_remote,
+                                  ucs_netlink_rt_rules_t *iface_rules)
+{
+    return ucs_netlink_lookup_in_iface_rules_by_type(sa_remote, iface_rules,
+                                                     RTN_UNSPEC);
+}
 
-    ucs_netlink_send_request(NETLINK_ROUTE, RTM_GETROUTE, &rtm, sizeof(rtm),
-                             ucs_netlink_parse_rt_entry_cb, &info);
+static void ucs_netlink_init_routing_table_cache(void)
+{
+    static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
+    struct rtmsg rtm                 = {0};
 
-out:
-    return info.found;
+    UCS_INIT_ONCE(&init_once) {
+        rtm.rtm_table  = RT_TABLE_UNSPEC; /* fetch all the tables */
+        rtm.rtm_family = AF_INET;
+        ucs_netlink_send_request(NETLINK_ROUTE, RTM_GETROUTE, NLM_F_DUMP, &rtm,
+                                 sizeof(rtm), ucs_netlink_parse_rt_entry_cb,
+                                 NULL);
+
+        rtm.rtm_family = AF_INET6;
+        ucs_netlink_send_request(NETLINK_ROUTE, RTM_GETROUTE, NLM_F_DUMP, &rtm,
+                                 sizeof(rtm), ucs_netlink_parse_rt_entry_cb,
+                                 NULL);
+    }
+}
+
+static void ucs_netlink_lookup_route(ucs_netlink_route_info_t *info)
+{
+    ucs_netlink_rt_rules_t *iface_rules;
+    khiter_t iter;
+
+    ucs_netlink_init_routing_table_cache();
+
+    iter = kh_get(ucs_netlink_rt_cache, &ucs_netlink_routing_table_cache,
+                  info->if_index);
+    if (iter == kh_end(&ucs_netlink_routing_table_cache)) {
+        return;
+    }
+
+    iface_rules       = &kh_val(&ucs_netlink_routing_table_cache, iter);
+    info->netmask_len = ucs_netlink_lookup_in_iface_rules(info->sa_remote,
+                                                          iface_rules);
+}
+
+static int ucs_netlink_max_netmask_len(const struct sockaddr *sa_remote)
+{
+    int max_netmask_len = -1;
+    ucs_netlink_rt_rules_t iface_rules;
+
+    kh_foreach_value(&ucs_netlink_routing_table_cache, iface_rules, {
+        int curr_netmask_len = ucs_netlink_lookup_in_iface_rules(sa_remote,
+                                                                 &iface_rules);
+        if (curr_netmask_len > max_netmask_len) {
+            max_netmask_len = curr_netmask_len;
+        }
+    })
+
+    return max_netmask_len;
+}
+
+int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote,
+                             int *netmask_len_p)
+{
+    ucs_netlink_route_info_t info = {
+        .if_index    = if_index,
+        .sa_remote   = sa_remote,
+        .netmask_len = -1
+    };
+
+    ucs_netlink_lookup_route(&info);
+
+    if (netmask_len_p != NULL) {
+        *netmask_len_p = info.netmask_len;
+    }
+
+    return (info.netmask_len > -1);
+}
+
+int ucs_netlink_get_local_route_ndev_index(const struct sockaddr *sa_remote)
+{
+    int best_netmask_len = -1;
+    int best_if_index    = -1;
+    ucs_netlink_rt_rules_t iface_rules;
+    khint32_t if_index;
+
+    ucs_netlink_init_routing_table_cache();
+
+    kh_foreach(&ucs_netlink_routing_table_cache, if_index, iface_rules, {
+        int curr_netmask_len = ucs_netlink_lookup_in_iface_rules_by_type(
+                sa_remote, &iface_rules, RTN_LOCAL);
+        if (curr_netmask_len > best_netmask_len) {
+            best_netmask_len = curr_netmask_len;
+            best_if_index    = if_index;
+        }
+    })
+
+    return best_if_index;
+}
+
+int ucs_netlink_is_best_route(int if_index, const struct sockaddr *sa_remote)
+{
+    int netmask_len;
+
+    if (!ucs_netlink_route_exists(if_index, sa_remote, &netmask_len)) {
+        return 0;
+    }
+
+    return (ucs_netlink_max_netmask_len(sa_remote) == netmask_len);
 }

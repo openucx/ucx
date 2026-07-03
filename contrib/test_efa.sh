@@ -103,9 +103,18 @@ run_gtests() {
         ./install/bin/ucx_perftest -l -t tag_bw
     ./install/bin/ucx_info -d
 
+    # TODO: Add when ibmock supports missing pre-posted RX buffers
+    IBMOCK_FILTER="srd/uct_p2p_am_misc.no_rx_buffs*:srd/test_uct_peer_failure.purge_failed_peer*"
+    IBMOCK_FILTER="$IBMOCK_FILTER:srd/test_ucp_stream_many2one.send_worker_poll*"
+    IBMOCK_FILTER="$IBMOCK_FILTER:srd/test_ucp_peer_failure.*"
+    IBMOCK_FILTER="$IBMOCK_FILTER:srd/test_ucp_perf.envelope/*"
+    IBMOCK_FILTER="$IBMOCK_FILTER:*test_ucp_am_psn*:*test_ucp_fault_tolerance*"
+
     # Try the faster approach before valgrind
-    ./contrib/test/gtest/gtest --gtest_filter=*ud*
-    make -C contrib/test/gtest test_valgrind GTEST_FILTER=*ud*:-*test_uct_perf.envelope*
+    make -C contrib/test/gtest test \
+        GTEST_FILTER=*ud*:srd/*-$IBMOCK_FILTER
+    make -C contrib/test/gtest test_valgrind \
+        GTEST_FILTER=*ud*:srd/*:-*test_uct_perf.envelope*:*test_ucp*:$IBMOCK_FILTER
 }
 
 test_ucx_rpm() {

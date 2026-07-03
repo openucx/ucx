@@ -27,6 +27,12 @@ BEGIN_C_DECLS
 #define UCS_TBYTE    (1ull << 40)
 #define UCS_PBYTE    (1ull << 50)
 
+#if defined(__FINITE_MATH_ONLY__) && __FINITE_MATH_ONLY__
+#define UCS_INFINITY (DBL_MAX)
+#else
+#define UCS_INFINITY (INFINITY)
+#endif
+
 #define ucs_min(_a, _b) \
 ({ \
     ucs_typeof(_a) _min_a = (_a); \
@@ -52,6 +58,33 @@ BEGIN_C_DECLS
 
 #define ucs_div_round_up(_n, _d) \
     (((_n) + (_d) - 1) / (_d))
+
+
+/**
+ * Calculate a small value to overcome float imprecision
+ * between two float values
+ */
+static UCS_F_ALWAYS_INLINE double
+ucs_fp_compare_thresh(double val1, double val2)
+{
+    return (val1 + val2) * (1e-6);
+}
+
+
+/**
+ * Compare two values and return:
+ * - `-1` if value1 < value2
+ * -  `0` if value1 == value2
+ * -  `1` if value1 > value2
+ */
+static UCS_F_ALWAYS_INLINE int ucs_fp_compare(double val1, double val2)
+{
+    double diff = val1 - val2;
+    return ((fabs(diff) < ucs_fp_compare_thresh(val1, val2)) ?
+                    0 :
+                    ucs_signum(diff));
+}
+
 
 static inline double ucs_log2(double x)
 {
