@@ -166,6 +166,7 @@ typedef struct {
 
 
 typedef struct ucp_wireup_lane_state {
+    uint64_t       request_id; /**< Query identifier, echoed by the reply */
     ucp_lane_map_t lane_map; /**< Lanes included in this message */
     /* uint8_t token_lengths[] follow, one per lane in lane_map order.
      * uint8_t tokens[] follow, each entry uses its matching token length. */
@@ -285,8 +286,8 @@ int ucp_wireup_is_lane_connected(ucp_ep_h ep, ucp_lane_index_t lane,
  * Send a @ref UCP_WIREUP_MSG_QUERY_LANE_STATE message. TX tokens are
  * queried from the selected @a lane_map lanes and sent to the peer.
  */
-ucs_status_t
-ucp_wireup_send_query_lane_state(ucp_ep_h ep, ucp_lane_map_t lane_map);
+ucs_status_t ucp_wireup_send_query_lane_state(ucp_ep_h ep, uint64_t request_id,
+                                              ucp_lane_map_t lane_map);
 
 unsigned ucp_wireup_lane_state_num_tokens(const ucp_wireup_lane_state_t *msg);
 

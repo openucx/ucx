@@ -349,7 +349,7 @@ typedef struct ucp_worker {
     uct_worker_cb_id_t               rkey_ptr_cb_id;      /* RKEY PTR worker callback queue ID */
     ucp_tag_match_t                  tm;                  /* Tag-matching queues and offload info */
     ucp_am_info_t                    am;                  /* Array of AM callbacks and their data */
-    uint64_t                         am_message_id;       /* For matching long AMs */
+    uint64_t                         am_message_id;       /* AM/failover message ID generator */
     size_t                           max_am_header;       /* Maximum allowed
                                                              header size used by
                                                              UCP AM */
