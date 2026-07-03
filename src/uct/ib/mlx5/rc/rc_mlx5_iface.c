@@ -1091,6 +1091,7 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
 static uct_iface_ops_t uct_rc_mlx5_iface_tl_ops = {
     .ep_put_short             = uct_rc_mlx5_base_ep_put_short,
     .ep_put_bcopy             = uct_rc_mlx5_base_ep_put_bcopy,
+    .ep_put_bcopy_comp        = uct_rc_mlx5_base_ep_put_bcopy_comp,
     .ep_put_zcopy             = uct_rc_mlx5_base_ep_put_zcopy,
     .ep_get_bcopy             = uct_rc_mlx5_base_ep_get_bcopy,
     .ep_get_zcopy             = uct_rc_mlx5_base_ep_get_zcopy,

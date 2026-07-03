@@ -248,6 +248,8 @@ void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op, const void *resp);
 void uct_rc_ep_get_bcopy_handler_no_completion(uct_rc_iface_send_op_t *op,
                                                const void *resp);
 
+void uct_rc_ep_put_bcopy_handler(uct_rc_iface_send_op_t *op, const void *resp);
+
 void uct_rc_ep_flush_remote_handler(uct_rc_iface_send_op_t *op,
                                     const void *resp);
 
