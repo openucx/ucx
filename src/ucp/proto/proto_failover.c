@@ -26,7 +26,7 @@
 static int
 ucp_proto_failover_replay_op_supported(const uct_ep_op_info_t *op_info)
 {
-    const uint64_t data_mask = UCT_EP_OP_INFO_FIELD_DATA;
+    const uint64_t data_mask = UCT_EP_OP_INFO_FIELD_INLINE_DATA;
 
     switch (op_info->operation) {
     case UCT_EP_OP_AM_BCOPY:
@@ -376,14 +376,24 @@ ucp_proto_failover_replay_op_request_init(ucp_ep_h ep,
                                             rkey_cfg_index, &select_param,
                                             length);
     if (status != UCS_OK) {
-        ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 0,
-                                  UCS_BIT(UCP_DATATYPE_CONTIG));
-        ucp_request_put(req);
-        return status;
+        goto err_cleanup;
+    }
+
+    if (req->send.proto_config->proto->flags & UCP_PROTO_FLAG_INVALID) {
+        ucs_debug("ep %p: no protocol to replay failover op %d from lane %u",
+                  ep, (int)op->info.operation, failed_lane);
+        status = UCS_ERR_UNREACHABLE;
+        goto err_cleanup;
     }
 
     op->req = req;
     return UCS_OK;
+
+err_cleanup:
+    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 0,
+                              UCS_BIT(UCP_DATATYPE_CONTIG));
+    ucp_request_put(req);
+    return status;
 }
 
 ucs_status_t
