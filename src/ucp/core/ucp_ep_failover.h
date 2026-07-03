@@ -23,6 +23,9 @@ void ucp_ep_failover_cleanup(ucp_ep_h ep);
 
 uct_ep_h ucp_ep_failover_get_uct_ep(ucp_ep_h ep, ucp_lane_index_t lane);
 
+int ucp_ep_failover_is_uct_ep(ucp_ep_h ep, ucp_lane_index_t lane,
+                              uct_ep_h uct_ep);
+
 ucs_status_t
 ucp_ep_failover_add_lanes(ucp_ep_h ep, ucp_lane_map_t lane_map,
                           uct_ep_h *uct_eps, ucp_ep_failover_lane_done_cb_t cb,
@@ -34,13 +37,17 @@ void ucp_ep_failover_cancel_lanes(ucp_ep_h ep, ucp_lane_map_t lane_map);
 void ucp_ep_failover_arm_lane(ucp_ep_h ep, ucp_lane_index_t lane,
                               uct_ep_h uct_ep);
 
-ucs_status_t
-ucp_ep_failover_lanes_schedule(ucp_ep_h ep, ucp_lane_map_t lane_map);
+/** Send a lane-state query for lanes waiting for tokens. */
+ucs_status_t ucp_ep_failover_query_lane_state(ucp_ep_h ep);
+
+/** Retry a pending lane-state query, if any. */
+void ucp_ep_failover_retry_lane_state(ucp_ep_h ep);
 
 /** Process peer lane-state tokens and schedule outstanding operation replay. */
 ucs_status_t
 ucp_ep_failover_on_lane_state(ucp_ep_h ep,
-                              const ucp_wireup_lane_state_t *lane_state);
+                              const ucp_wireup_lane_state_t *lane_state,
+                              size_t length);
 
 ucp_lane_map_t ucp_ep_failover_test_query_lane_map(ucp_ep_h ep);
 

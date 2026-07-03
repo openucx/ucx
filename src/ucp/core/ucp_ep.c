@@ -1616,19 +1616,10 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
                       lanes, ucs_status_string(status));
         }
 
-        /* A partially accepted failover could purge requests already moved
-         * from another lane. Keep lane ownership transactional: either all
-         * failed lanes enter failover, or all of them use ordinary discard. */
-        if (*failover_lanes_p != lanes) {
-            ucp_ep_failover_cancel_lanes(ep, *failover_lanes_p);
-            *failover_lanes_p = 0;
-        }
+        ucs_assert((*failover_lanes_p == 0) || (*failover_lanes_p == lanes));
 
         if (*failover_lanes_p != 0) {
-            status = ucp_wireup_send_query_lane_state(ep, *failover_lanes_p);
-            if (status == UCS_ERR_NO_RESOURCE) {
-                status = ucp_ep_failover_lanes_schedule(ep, *failover_lanes_p);
-            }
+            status = ucp_ep_failover_query_lane_state(ep);
 
             if (status == UCS_OK) {
                 discard_arg->discard_counter += ucs_popcount(*failover_lanes_p);
@@ -2269,6 +2260,7 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
     ucs_debug("ep %p: recovery round (retries_left=%u, failed=0x%" PRIx64 ")",
               ep, ep->ext->recovery_arg->retries_left, (uint64_t)failed);
 
+    ucp_ep_failover_retry_lane_state(ep);
     ucp_ep_recovery_send_request(ep);
 
     if (--ep->ext->recovery_arg->retries_left > 0) {
@@ -2614,6 +2606,7 @@ ucp_lane_index_t ucp_ep_lookup_lane(ucp_ep_h ucp_ep, uct_ep_h uct_ep)
 
     for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep); ++lane) {
         if ((uct_ep == ucp_ep_get_lane(ucp_ep, lane)) ||
+            ucp_ep_failover_is_uct_ep(ucp_ep, lane, uct_ep) ||
             ucp_wireup_ep_is_owner(ucp_ep_get_lane(ucp_ep, lane), uct_ep)) {
             return lane;
         }

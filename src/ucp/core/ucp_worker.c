@@ -466,6 +466,13 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
         return UCS_OK;
     }
 
+    if (ucp_ep_failover_is_uct_ep(ucp_ep, lane, uct_ep)) {
+        ucs_debug("ep %p: ignoring duplicate error for failover lane %u "
+                  "uct_ep %p",
+                  ucp_ep, lane, uct_ep);
+        return UCS_OK;
+    }
+
     /* Defer UCT outstanding purge until extract runs on the real failed EP */
     ucp_ep_failover_arm_lane(ucp_ep, lane, uct_ep);
 

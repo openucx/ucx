@@ -1019,6 +1019,8 @@ private:
 };
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_fault_tolerance)
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_fault_tolerance, rc_mlx5,
+                              "rc_mlx5,ud_mlx5")
 
 UCS_TEST_P(test_ucp_fault_tolerance, initiator_failure, "MAX_EAGER_LANES=8",
            "RECOVERY_RETRIES=100")

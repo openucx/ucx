@@ -123,7 +123,8 @@ ucp_wireup_lane_state_validate(ucp_ep_h ep,
     unsigned num_tokens;
     unsigned i;
 
-    if ((length < sizeof(*lane_state)) || (lane_state->lane_map == 0)) {
+    if ((length < sizeof(*lane_state)) || (lane_state->request_id == 0) ||
+        (lane_state->lane_map == 0)) {
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -1217,6 +1218,7 @@ ucp_wireup_process_lanes_addr_reply(
 
 static ucs_status_t
 ucp_wireup_query_lane_tx_tokens(ucp_ep_h ep, ucp_lane_map_t lane_map,
+                                uint64_t request_id,
                                 ucp_wireup_lane_state_t **lane_state_p,
                                 size_t *payload_size_p)
 {
@@ -1263,8 +1265,8 @@ ucp_wireup_query_lane_tx_tokens(ucp_ep_h ep, ucp_lane_map_t lane_map,
         failover_lanes              |= UCS_BIT(lane);
     }
 
-    if (failover_lanes == 0) {
-        return UCS_ERR_UNREACHABLE;
+    if (failover_lanes != lane_map) {
+        return UCS_ERR_UNSUPPORTED;
     }
 
     lane_state = ucs_malloc(payload_size, "wireup_lane_state");
@@ -1272,7 +1274,8 @@ ucp_wireup_query_lane_tx_tokens(ucp_ep_h ep, ucp_lane_map_t lane_map,
         return UCS_ERR_NO_MEMORY;
     }
 
-    lane_state->lane_map = failover_lanes;
+    lane_state->request_id = request_id;
+    lane_state->lane_map   = failover_lanes;
     memcpy((void*)ucp_wireup_lane_state_token_lengths(lane_state),
            token_lengths, token_index * sizeof(*token_lengths));
 
@@ -1350,9 +1353,7 @@ static ucs_status_t ucp_wireup_query_lane_rx_tokens(
 
         wiface          = ucp_worker_iface(ep->worker, rsc_index);
         attr.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS |
-                          UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH |
-                          UCT_IFACE_ATTR_FIELD_TX_TOKEN;
-        attr.tx_token   = UCS_PTR_BYTE_OFFSET(tx_tokens, tx_token_offset);
+                          UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH;
         status          = uct_iface_query_v2(wiface->iface, &attr);
         if ((status != UCS_OK) ||
             !(attr.cap.flags & UCT_IFACE_FLAG_V2_QUERY_TOKEN) ||
@@ -1380,7 +1381,8 @@ static ucs_status_t ucp_wireup_query_lane_rx_tokens(
         return UCS_ERR_NO_MEMORY;
     }
 
-    lane_state->lane_map = query->lane_map;
+    lane_state->request_id = query->request_id;
+    lane_state->lane_map   = query->lane_map;
     memcpy((void*)ucp_wireup_lane_state_token_lengths(lane_state),
            token_lengths, token_index * sizeof(uint8_t));
 
@@ -1421,14 +1423,14 @@ err_free:
     return status;
 }
 
-ucs_status_t
-ucp_wireup_send_query_lane_state(ucp_ep_h ep, ucp_lane_map_t lane_map)
+ucs_status_t ucp_wireup_send_query_lane_state(ucp_ep_h ep, uint64_t request_id,
+                                              ucp_lane_map_t lane_map)
 {
     ucp_wireup_lane_state_t *lane_state;
     size_t payload_size;
     ucs_status_t status;
 
-    if (lane_map == 0) {
+    if ((request_id == 0) || (lane_map == 0)) {
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -1437,8 +1439,8 @@ ucp_wireup_send_query_lane_state(ucp_ep_h ep, ucp_lane_map_t lane_map)
         return UCS_ERR_UNSUPPORTED;
     }
 
-    status = ucp_wireup_query_lane_tx_tokens(ep, lane_map, &lane_state,
-                                             &payload_size);
+    status = ucp_wireup_query_lane_tx_tokens(ep, lane_map, request_id,
+                                             &lane_state, &payload_size);
     if (status != UCS_OK) {
         return status;
     }
@@ -1447,6 +1449,10 @@ ucp_wireup_send_query_lane_state(ucp_ep_h ep, ucp_lane_map_t lane_map)
                                  NULL, lane_state, payload_size);
     if (status != UCS_OK) {
         ucs_free(lane_state);
+    } else {
+        ucs_debug("ep %p: sent failover lane state query id 0x%" PRIx64
+                  " for lanes 0x%" PRIx64,
+                  ep, request_id, (uint64_t)lane_map);
     }
 
     return status;
@@ -1467,23 +1473,23 @@ ucp_wireup_process_query_lane_state(ucp_ep_h ep, const ucp_wireup_msg_t *msg,
     query  = data;
     status = ucp_wireup_lane_state_validate(ep, query, length);
     if (status != UCS_OK) {
-        ucs_error("ep %p: invalid query_lane_state payload length %zu "
-                  "lane_map 0x%lx",
-                  ep, length, (length >= sizeof(*query)) ? query->lane_map : 0);
-        goto err;
+        ucs_warn("ep %p: dropping invalid failover lane state query length %zu "
+                 "lane map 0x%lx",
+                 ep, length, (length >= sizeof(*query)) ? query->lane_map : 0);
+        return;
     }
     lane_map = query->lane_map;
 
-    ucs_trace("ep %p: got wireup query_lane_state src_ep_id 0x%" PRIx64
-              " lane_map 0x%lx",
-              ep, msg->src_ep_id, lane_map);
+    ucs_debug("ep %p: received failover lane state query id 0x%" PRIx64
+              " from ep id 0x%" PRIx64 " for lanes 0x%" PRIx64,
+              ep, query->request_id, msg->src_ep_id, (uint64_t)lane_map);
 
     status = ucp_wireup_query_lane_rx_tokens(ep, query, length, &reply,
                                              &reply_size);
     if (status != UCS_OK) {
         ucs_debug("ep %p: failed to query rx tokens: %s", ep,
                   ucs_status_string(status));
-        goto err;
+        return;
     }
 
     status = ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_LANE_STATE, NULL, NULL,
@@ -1492,12 +1498,13 @@ ucp_wireup_process_query_lane_state(ucp_ep_h ep, const ucp_wireup_msg_t *msg,
         ucs_debug("ep %p: failed to send lane_state: %s", ep,
                   ucs_status_string(status));
         ucs_free(reply);
-        goto err;
+        return;
     }
-    return;
 
-err:
-    ucp_ep_set_lanes_failed_schedule(ep, lane_map, status);
+    ucs_debug("ep %p: sent failover lane state id 0x%" PRIx64
+              " for lanes 0x%" PRIx64,
+              ep, query->request_id, (uint64_t)lane_map);
+    return;
 }
 
 static UCS_F_NOINLINE void
@@ -1510,31 +1517,24 @@ ucp_wireup_process_lane_state(ucp_ep_h ep, const ucp_wireup_msg_t *msg,
 
     UCP_WIREUP_MSG_CHECK(msg, ep, UCP_WIREUP_MSG_LANE_STATE);
 
-    lane_state = data;
-    status     = ucp_wireup_lane_state_validate(ep, lane_state, length);
-    if (status != UCS_OK) {
-        ucs_error("ep %p: invalid lane_state payload length %zu lane_map 0x%lx",
-                  ep, length,
-                  (length >= sizeof(*lane_state)) ? lane_state->lane_map : 0);
-        goto err;
+    if (length < sizeof(*lane_state)) {
+        ucs_warn("ep %p: dropping short failover lane state length %zu", ep,
+                 length);
+        return;
     }
+
+    lane_state = data;
     lane_map = lane_state->lane_map;
 
-    ucs_trace("ep %p: got wireup lane_state src_ep_id 0x%" PRIx64
-              " lane_map 0x%lx",
-              ep, msg->src_ep_id, lane_map);
+    ucs_debug("ep %p: received failover lane state id 0x%" PRIx64
+              " from ep id 0x%" PRIx64 " for lanes 0x%" PRIx64,
+              ep, lane_state->request_id, msg->src_ep_id, (uint64_t)lane_map);
 
-    status = ucp_ep_failover_on_lane_state(ep, lane_state);
+    status = ucp_ep_failover_on_lane_state(ep, lane_state, length);
     if (status != UCS_OK) {
-        goto err;
+        ucs_warn("ep %p: dropping failover lane state id 0x%" PRIx64 ": %s", ep,
+                 lane_state->request_id, ucs_status_string(status));
     }
-
-    return;
-
-err:
-    ucs_debug("ep %p: failed to process lane_state: %s", ep,
-              ucs_status_string(status));
-    ucp_ep_set_lanes_failed_schedule(ep, lane_map, status);
 }
 
 static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,

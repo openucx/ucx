@@ -567,7 +567,6 @@ typedef struct ucp_ep_ext {
     ucp_sys_dev_map_t             flush_sys_dev_map;
 
     struct {
-        ucp_lane_map_t        query_lane_map;
         uint8_t               progress_scheduled;
         ucp_ep_failover_ctx_t *ctx;
     } failover;
