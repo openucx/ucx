@@ -84,9 +84,15 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_extract(
 
 ucs_status_t uct_rc_mlx5_ep_failover_arm(uct_ep_h tl_ep)
 {
-    uct_rc_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_ep_t);
+    uct_rc_mlx5_base_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_base_ep_t);
+    uct_ib_mlx5_txwq_t *txwq  = &ep->tx.wq;
+    uct_rc_txqp_t *txqp       = &ep->super.txqp;
 
-    ep->flags |= UCT_RC_EP_FLAG_FAILOVER_ARMED;
+    txwq->failover_ci = txwq->sw_pi -
+                        (txwq->bb_max - uct_rc_txqp_available(txqp));
+    ep->super.flags  |= UCT_RC_EP_FLAG_FAILOVER_ARMED;
+    ucs_debug("ep %p: armed failover WQE range [%u, %u), available %d", ep,
+              txwq->failover_ci, txwq->sw_pi, uct_rc_txqp_available(txqp));
     return UCS_OK;
 }
 

@@ -1938,7 +1938,13 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface, int poll_flags)
     if (ucs_unlikely(ep->super.flags & UCT_RC_EP_FLAG_FAILOVER_ARMED)) {
         /* Ownership is deferred to extract; only release HW/CQ resources
          * without invoking user completions. */
+        ucs_debug("ep %p: deferring tx completions for failover, hw ci %u "
+                  "sw pi %u available %d",
+                  ep, hw_ci, ep->tx.wq.sw_pi,
+                  uct_rc_txqp_available(&ep->super.txqp));
         uct_rc_mlx5_iface_update_tx_res(&iface->super, ep, hw_ci);
+        ucs_debug("ep %p: released failover tx resources, available %d", ep,
+                  uct_rc_txqp_available(&ep->super.txqp));
         uct_ib_mlx5_update_db_cq_ci(&iface->cq[UCT_IB_DIR_TX]);
         return 1;
     }

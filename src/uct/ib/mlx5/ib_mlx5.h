@@ -684,6 +684,7 @@ typedef struct uct_ib_mlx5_txwq {
     uct_ib_mlx5_qp_t            super;
     uint16_t                    sw_pi;      /* PI for next WQE */
     uint16_t                    prev_sw_pi; /* PI where last WQE *started*  */
+    uint16_t                    failover_ci; /* First WQE owned by failover */
     uct_ib_mlx5_mmio_reg_t      *reg;
     void                        *curr;
     volatile uint32_t           *dbrec;

@@ -576,7 +576,7 @@ uct_iface_base_query_v2(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr)
     uint64_t tx_token_mask = iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_TX_TOKEN;
     uint64_t rx_token_mask = iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_RX_TOKEN;
     int token_pair_set = 0;
-    if (tx_token_mask ^ rx_token_mask) {
+    if (!!tx_token_mask != !!rx_token_mask) {
         ucs_error("invalid field_mask: TX/RX token fields must be set together");
         return UCS_ERR_INVALID_PARAM;
     } else if (tx_token_mask && rx_token_mask) {
