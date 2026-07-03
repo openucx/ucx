@@ -14,6 +14,7 @@
 #include <ucp/core/ucp_request.inl>
 #include <ucp/dt/datatype_iter.inl>
 #include <ucp/proto/proto_init.h>
+#include <ucp/proto/proto_failover.h>
 #include <ucp/proto/proto_multi.inl>
 #include <ucp/proto/proto_single.inl>
 #include <ucp/wireup/wireup.h>
@@ -176,7 +177,49 @@ ucp_proto_put_offload_bcopy_send_func(ucp_request_t *req,
     return status;
 }
 
-static ucs_status_t ucp_proto_put_offload_bcopy_progress(uct_pending_req_t *self)
+static UCS_F_INLINE_OPTIMIZED ucs_status_t
+ucp_proto_put_offload_bcopy_ft_send_func(
+        ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
+        ucp_datatype_iter_t *next_iter, ucp_lane_index_t *lane_shift)
+{
+    ucp_ep_h ep        = req->send.ep;
+    uct_ep_h uct_ep    = ucp_ep_get_lane(ep, lpriv->super.lane);
+    uint64_t address   = req->send.rma.remote_addr +
+                         req->send.state.dt_iter.offset;
+    uct_rkey_t tl_rkey = ucp_rkey_get_tl_rkey(req->send.rma.rkey,
+                                              lpriv->super.rkey_index);
+    ucp_proto_failover_rma_op_t *rma_op;
+    ucp_proto_multi_pack_ctx_t pack_ctx = {
+        .req         = req,
+        .max_payload = ucp_proto_multi_max_payload(req, lpriv, 0),
+        .next_iter   = next_iter
+    };
+    ssize_t packed_size;
+    ucs_status_t status;
+
+    rma_op = ucp_proto_failover_rma_op_create(req->send.rma.rkey, address);
+    if (rma_op == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    packed_size = uct_ep_put_bcopy_comp(uct_ep,
+                                        ucp_proto_put_offload_bcopy_pack,
+                                        &pack_ctx, address, tl_rkey,
+                                        &rma_op->comp);
+    status      = ucp_proto_bcopy_send_func_status(packed_size);
+    if (packed_size <= 0) {
+        ucp_proto_failover_rma_op_complete(rma_op, status);
+    } else {
+        ucp_proto_put_offload_update_remote_flush(ep, lpriv->flush_sys_dev_mask,
+                                                  tl_rkey, uct_ep, address);
+    }
+
+    return status;
+}
+
+static ucs_status_t
+ucp_proto_put_offload_bcopy_progress_common(uct_pending_req_t *self,
+                                            ucp_proto_send_multi_cb_t send_func)
 {
     ucp_request_t *req                  = ucs_container_of(self, ucp_request_t,
                                                            send.uct);
@@ -197,13 +240,35 @@ static ucs_status_t ucp_proto_put_offload_bcopy_progress(uct_pending_req_t *self
 
     /* coverity[tainted_data_downcast] */
     return ucp_proto_multi_progress(req, req->send.proto_config->priv,
-                                    ucp_proto_put_offload_bcopy_send_func,
+                                    send_func,
                                     ucp_proto_request_bcopy_complete_success,
                                     UCP_DT_MASK_ALL);
 }
 
-static void
-ucp_proto_put_offload_bcopy_probe(const ucp_proto_init_params_t *init_params)
+static ucs_status_t
+ucp_proto_put_offload_bcopy_progress(uct_pending_req_t *self)
+{
+    return ucp_proto_put_offload_bcopy_progress_common(
+            self, ucp_proto_put_offload_bcopy_send_func);
+}
+
+static ucs_status_t
+ucp_proto_put_offload_bcopy_ft_progress(uct_pending_req_t *self)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+
+    if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) &&
+        (req->flags & UCP_REQUEST_FLAG_FENCE_REQUIRED)) {
+        ucp_proto_request_abort(req, UCS_ERR_UNSUPPORTED);
+        return UCS_OK;
+    }
+
+    return ucp_proto_put_offload_bcopy_progress_common(
+            self, ucp_proto_put_offload_bcopy_ft_send_func);
+}
+
+static void ucp_proto_put_offload_bcopy_probe_common(
+        const ucp_proto_init_params_t *init_params, int failover)
 {
     ucp_context_t *context               = init_params->worker->context;
     ucp_proto_multi_init_params_t params = {
@@ -238,23 +303,48 @@ ucp_proto_put_offload_bcopy_probe(const ucp_proto_init_params_t *init_params)
         .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID
     };
 
-    if (init_params->ep_config_key->err_mode ==
-        UCP_ERR_HANDLING_MODE_FAILOVER) {
+    if (failover) {
+        if (init_params->ep_config_key->err_mode !=
+            UCP_ERR_HANDLING_MODE_FAILOVER) {
+            return;
+        }
+
         if (init_params->ep_config_key->dst_version <
             UCP_WIREUP_LANE_STATE_MIN_VERSION) {
             return;
         }
 
         params.super.flags           |= UCP_PROTO_COMMON_INIT_FLAG_FAILOVER;
-        params.first.tl_v2_cap_flags  = UCT_IFACE_FLAG_V2_QUERY_TOKEN;
-        params.middle.tl_v2_cap_flags = UCT_IFACE_FLAG_V2_QUERY_TOKEN;
+        params.first.tl_v2_cap_flags  = UCT_IFACE_FLAG_V2_QUERY_TOKEN |
+                                        UCT_IFACE_FLAG_V2_PUT_BCOPY_COMP;
+        params.middle.tl_v2_cap_flags = params.first.tl_v2_cap_flags;
+    } else if (init_params->ep_config_key->err_mode ==
+               UCP_ERR_HANDLING_MODE_FAILOVER) {
+        return;
     }
 
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT))) {
         return;
     }
 
+    if (failover && (init_params->rkey_config_key != NULL) &&
+        ucp_rkey_need_remote_flush(init_params->rkey_config_key)) {
+        return;
+    }
+
     ucp_proto_multi_probe(&params);
+}
+
+static void
+ucp_proto_put_offload_bcopy_probe(const ucp_proto_init_params_t *init_params)
+{
+    ucp_proto_put_offload_bcopy_probe_common(init_params, 0);
+}
+
+static void
+ucp_proto_put_offload_bcopy_ft_probe(const ucp_proto_init_params_t *init_params)
+{
+    ucp_proto_put_offload_bcopy_probe_common(init_params, 1);
 }
 
 ucp_proto_t ucp_put_offload_bcopy_proto = {
@@ -265,6 +355,18 @@ ucp_proto_t ucp_put_offload_bcopy_proto = {
     .probe    = ucp_proto_put_offload_bcopy_probe,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_put_offload_bcopy_progress},
+    .abort    = ucp_proto_request_bcopy_abort,
+    .reset    = ucp_proto_request_bcopy_reset
+};
+
+ucp_proto_t ucp_put_offload_bcopy_ft_proto = {
+    .name     = "put/offload/bcopy/ft",
+    .desc     = UCP_PROTO_COPY_IN_DESC,
+    .flags    = 0,
+    .dt_mask  = UCP_PROTO_DT_MASK_DEFAULT,
+    .probe    = ucp_proto_put_offload_bcopy_ft_probe,
+    .query    = ucp_proto_multi_query,
+    .progress = {ucp_proto_put_offload_bcopy_ft_progress},
     .abort    = ucp_proto_request_bcopy_abort,
     .reset    = ucp_proto_request_bcopy_reset
 };
