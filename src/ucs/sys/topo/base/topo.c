@@ -757,19 +757,19 @@ int ucs_topo_is_sibling(ucs_sys_device_t sys_dev, ucs_sys_device_t sys_dev_mem)
                  (sys_dev < ucs_topo_global_ctx.num_devices) &&
                  (sys_dev_mem != UCS_SYS_DEVICE_ID_UNKNOWN) &&
                  (sys_dev_mem < ucs_topo_global_ctx.num_devices) &&
-                 (ucs_topo_global_ctx.devices[sys_dev].sibling_role ==
-                  UCS_TOPO_SIBLING_ROLE_DEV) &&
-                 (ucs_topo_global_ctx.devices[sys_dev_mem].sibling_role ==
-                  UCS_TOPO_SIBLING_ROLE_MEM) &&
+                 /*
+                  * MLOPart allows multiple MEM devices to point at one DEV, so
+                  * the MEM-side sibling is the canonical relationship.
+                  */
                  (ucs_topo_global_ctx.devices[sys_dev_mem].sibling_sys_dev ==
                   sys_dev);
 
     if (is_sibling) {
         role_dev     = ucs_topo_global_ctx.devices[sys_dev].sibling_role;
         role_dev_mem = ucs_topo_global_ctx.devices[sys_dev_mem].sibling_role;
-        ucs_assertv((role_dev != UCS_TOPO_SIBLING_ROLE_NONE) &&
-                    (role_dev_mem != UCS_TOPO_SIBLING_ROLE_NONE) &&
-                    (role_dev != role_dev_mem), "sys_dev=%u sys_dev_mem=%u"
+        ucs_assertv((role_dev == UCS_TOPO_SIBLING_ROLE_DEV) &&
+                    (role_dev_mem == UCS_TOPO_SIBLING_ROLE_MEM),
+                    "sys_dev=%u sys_dev_mem=%u"
                     " sys_dev_role=%d sys_dev_mem_role=%d",
                     sys_dev, sys_dev_mem, role_dev, role_dev_mem);
     }
