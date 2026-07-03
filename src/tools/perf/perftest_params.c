@@ -30,7 +30,8 @@ static void print_memory_allocator_usage(void)
     for (i = 0; i < ucx_perf_num_allocators; ++i) {
         allocator = ucx_perf_allocators[i];
         printf("                        %s - %s\n",
-               allocator->name, ucs_memory_type_descs[allocator->mem_type]);
+               allocator->name,
+               ucs_memory_type_descs[allocator->default_mem_type]);
     }
 }
 
@@ -256,7 +257,7 @@ static ucs_status_t parse_perf_mem_allocator(const char *opt_arg,
 
     allocator = ucx_perf_allocator_by_name(opt_arg);
     if (allocator != NULL) {
-        *mem_type = allocator->mem_type;
+        *mem_type = allocator->default_mem_type;
         ucs_strncpy_safe(alloc_name, opt_arg, UCX_PERF_ALLOC_NAME_MAX);
         return UCS_OK;
     }

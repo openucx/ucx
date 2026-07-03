@@ -286,33 +286,33 @@ static void *ucx_perf_ze_memset(void *dst, int value, size_t count)
 }
 
 static ucx_perf_allocator_t ze_host_allocator = {
-    .name      = "ze-host",
-    .mem_type  = UCS_MEMORY_TYPE_ZE_HOST,
-    .init      = ucx_perf_ze_init,
-    .uct_alloc = uct_perf_ze_host_alloc,
-    .uct_free  = uct_perf_ze_free,
-    .memcpy    = ucx_perf_ze_memcpy,
-    .memset    = ucx_perf_ze_memset
+    .name             = "ze-host",
+    .default_mem_type = UCS_MEMORY_TYPE_ZE_HOST,
+    .init             = ucx_perf_ze_init,
+    .uct_alloc        = uct_perf_ze_host_alloc,
+    .uct_free         = uct_perf_ze_free,
+    .memcpy           = ucx_perf_ze_memcpy,
+    .memset           = ucx_perf_ze_memset
 };
 
 static ucx_perf_allocator_t ze_device_allocator = {
-    .name      = "ze-device",
-    .mem_type  = UCS_MEMORY_TYPE_ZE_DEVICE,
-    .init      = ucx_perf_ze_init,
-    .uct_alloc = uct_perf_ze_device_alloc,
-    .uct_free  = uct_perf_ze_free,
-    .memcpy    = ucx_perf_ze_memcpy,
-    .memset    = ucx_perf_ze_memset
+    .name             = "ze-device",
+    .default_mem_type = UCS_MEMORY_TYPE_ZE_DEVICE,
+    .init             = ucx_perf_ze_init,
+    .uct_alloc        = uct_perf_ze_device_alloc,
+    .uct_free         = uct_perf_ze_free,
+    .memcpy           = ucx_perf_ze_memcpy,
+    .memset           = ucx_perf_ze_memset
 };
 
 static ucx_perf_allocator_t ze_managed_allocator = {
-    .name      = "ze-managed",
-    .mem_type  = UCS_MEMORY_TYPE_ZE_MANAGED,
-    .init      = ucx_perf_ze_init,
-    .uct_alloc = uct_perf_ze_managed_alloc,
-    .uct_free  = uct_perf_ze_free,
-    .memcpy    = ucx_perf_ze_memcpy,
-    .memset    = ucx_perf_ze_memset
+    .name             = "ze-managed",
+    .default_mem_type = UCS_MEMORY_TYPE_ZE_MANAGED,
+    .init             = ucx_perf_ze_init,
+    .uct_alloc        = uct_perf_ze_managed_alloc,
+    .uct_free         = uct_perf_ze_free,
+    .memcpy           = ucx_perf_ze_memcpy,
+    .memset           = ucx_perf_ze_memset
 };
 
 UCS_STATIC_INIT

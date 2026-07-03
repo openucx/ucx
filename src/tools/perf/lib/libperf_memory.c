@@ -55,12 +55,15 @@ static ucs_status_t ucp_perf_mem_alloc(const ucx_perf_context_t *perf,
     ucs_assert((allocator->mem_alloc == NULL) == (allocator->mem_free == NULL));
     params.field_mask  = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
                          UCP_MEM_MAP_PARAM_FIELD_LENGTH |
-                         UCP_MEM_MAP_PARAM_FIELD_FLAGS |
-                         UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE;
+                         UCP_MEM_MAP_PARAM_FIELD_FLAGS;
     params.address     = NULL;
-    params.memory_type = allocator->mem_type;
+    params.memory_type = allocator->default_mem_type;
     params.length      = length;
     params.flags       = external_alloc ? 0 : UCP_MEM_MAP_ALLOCATE;
+    if (!external_alloc || (allocator->detect_mem_type == NULL)) {
+        params.field_mask |= UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE;
+    }
+
     if (perf->params.flags & UCX_PERF_TEST_FLAG_MAP_NONBLOCK) {
         params.flags |= UCP_MEM_MAP_NONBLOCK;
     }
@@ -71,7 +74,12 @@ static ucs_status_t ucp_perf_mem_alloc(const ucx_perf_context_t *perf,
             return status;
         }
 
-        params.address = address;
+        params.address     = address;
+        params.memory_type = ucx_perf_allocator_mem_type(perf, allocator,
+                                                         address, length);
+        if (params.memory_type != UCS_MEMORY_TYPE_LAST) {
+            params.field_mask |= UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE;
+        }
     }
 
     status = ucp_mem_map(perf->ucp.context, &params, memh_p);
@@ -376,22 +384,28 @@ void uct_perf_test_free_mem(ucx_perf_context_t *perf)
 void ucx_perf_global_init()
 {
     static ucx_perf_allocator_t host_allocator = {
-        .name      = "host",
-        .mem_type  = UCS_MEMORY_TYPE_HOST,
-        .init      = (ucx_perf_init_func_t)ucs_empty_function_return_success,
-        .uct_alloc = uct_perf_test_alloc_host,
-        .uct_free  = uct_perf_test_free_host,
-        .memcpy    = ucx_perf_test_memcpy_host,
-        .memset    = memset
+        .name             = "host",
+        .default_mem_type = UCS_MEMORY_TYPE_HOST,
+        .init             = (ucx_perf_init_func_t)
+                             ucs_empty_function_return_success,
+        .uct_alloc        = uct_perf_test_alloc_host,
+        .uct_free         = uct_perf_test_free_host,
+        .memcpy           = ucx_perf_test_memcpy_host,
+        .memset           = memset
     };
     static ucx_perf_allocator_t rdma_allocator = {
-        .name      = "rdma",
-        .mem_type  = UCS_MEMORY_TYPE_RDMA,
-        .init      = (ucx_perf_init_func_t)ucs_empty_function_return_success,
-        .uct_alloc = (ucx_perf_uct_alloc_func_t)ucs_empty_function_do_assert,
-        .uct_free  = (ucx_perf_uct_free_func_t)ucs_empty_function_do_assert,
-        .memcpy    = (ucx_perf_memcpy_func_t)ucs_empty_function_do_assert,
-        .memset    = (ucx_perf_memset_func_t)ucs_empty_function_do_assert
+        .name             = "rdma",
+        .default_mem_type = UCS_MEMORY_TYPE_RDMA,
+        .init             = (ucx_perf_init_func_t)
+                             ucs_empty_function_return_success,
+        .uct_alloc        = (ucx_perf_uct_alloc_func_t)
+                             ucs_empty_function_do_assert,
+        .uct_free         = (ucx_perf_uct_free_func_t)
+                             ucs_empty_function_do_assert,
+        .memcpy           = (ucx_perf_memcpy_func_t)
+                             ucs_empty_function_do_assert,
+        .memset           = (ucx_perf_memset_func_t)
+                             ucs_empty_function_do_assert
     };
 
     UCS_MODULE_FRAMEWORK_DECLARE(ucx_perftest);
