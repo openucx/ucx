@@ -125,7 +125,7 @@ static void ucp_ep_failover_replay_purge(ucp_ep_failover_lane_ctx_t *lane,
         op = ucs_queue_pull_elem_non_empty(&lane->replay_queue,
                                            ucp_proto_failover_replay_op_t,
                                            queue);
-        ucp_proto_failover_replay_op_destroy(op);
+        ucp_proto_failover_replay_op_destroy(op, status);
         --lane->undelivered_count;
     }
 
@@ -166,11 +166,23 @@ ucp_ep_failover_extract_cb(const uct_ep_op_info_t *op_info, void *arg)
     ucp_proto_failover_replay_op_t *op;
     ucs_status_t status;
 
+    if (extract_arg->status != UCS_OK) {
+        if ((op_info->field_mask & UCT_EP_OP_INFO_FIELD_COMP) &&
+            (op_info->comp != NULL)) {
+            uct_invoke_completion(op_info->comp, extract_arg->status);
+        }
+        return;
+    }
+
     status = ucp_proto_failover_replay_op_create(op_info, &op);
     if (status != UCS_OK) {
         ucs_debug("ep %p: failed to save extracted failover op %d: %s",
                   extract_arg->lane->ep, (int)op_info->operation,
                   ucs_status_string(status));
+        if ((op_info->field_mask & UCT_EP_OP_INFO_FIELD_COMP) &&
+            (op_info->comp != NULL)) {
+            uct_invoke_completion(op_info->comp, status);
+        }
         extract_arg->status = status;
         return;
     }
@@ -822,7 +834,7 @@ static ucs_status_t
 ucp_ep_failover_replay_lane(ucp_ep_failover_lane_ctx_t *lane)
 {
     ucp_proto_failover_replay_op_t *op;
-    unsigned replay_count = lane->undelivered_count;
+    unsigned batch_count = lane->undelivered_count;
     ucs_status_t status;
 
     while (lane->undelivered_count > 0) {
@@ -832,6 +844,12 @@ ucp_ep_failover_replay_lane(ucp_ep_failover_lane_ctx_t *lane)
         status = ucp_proto_failover_replay_op_progress(lane->ep, lane->lane,
                                                        op);
         if (status == UCS_ERR_NO_RESOURCE) {
+            if (batch_count > lane->undelivered_count) {
+                ucs_debug("ep %p: replayed batch of %u outstanding "
+                          "operations from failed lane %u, %u remain",
+                          lane->ep, batch_count - lane->undelivered_count,
+                          lane->lane, lane->undelivered_count);
+            }
             ucp_ep_failover_schedule(lane->ep);
             return UCS_OK;
         } else if (status != UCS_OK) {
@@ -846,7 +864,7 @@ ucp_ep_failover_replay_lane(ucp_ep_failover_lane_ctx_t *lane)
         op = ucs_queue_pull_elem_non_empty(&lane->replay_queue,
                                            ucp_proto_failover_replay_op_t,
                                            queue);
-        ucp_proto_failover_replay_op_destroy(op);
+        ucp_proto_failover_replay_op_destroy(op, UCS_OK);
         --lane->undelivered_count;
     }
 
@@ -854,8 +872,9 @@ ucp_ep_failover_replay_lane(ucp_ep_failover_lane_ctx_t *lane)
         ucp_wireup_replay_pending_requests(lane->ep, &lane->replay_queue);
     }
 
-    ucs_debug("ep %p: replayed %u outstanding operations from failed lane %u",
-              lane->ep, replay_count, lane->lane);
+    ucs_debug("ep %p: completed outstanding replay from failed lane %u, "
+              "final batch %u operations",
+              lane->ep, lane->lane, batch_count);
 
     return UCS_OK;
 }

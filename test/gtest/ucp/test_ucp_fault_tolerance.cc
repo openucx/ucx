@@ -623,7 +623,8 @@ protected:
              TEST_FAILOVER_PROTO_FLAG_AM},
             {"put/offload/short", UCT_IFACE_FLAG_PUT_SHORT, 8,
              TEST_FAILOVER_PROTO_FLAG_SINGLE},
-            {"put/offload/bcopy", UCT_IFACE_FLAG_PUT_BCOPY, 64 * UCS_KBYTE, 0},
+            {"put/offload/bcopy/ft", UCT_IFACE_FLAG_PUT_BCOPY,
+             64 * UCS_KBYTE, 0},
             {"put/am/bcopy", UCT_IFACE_FLAG_AM_BCOPY, 64 * UCS_KBYTE, 0}
         };
 
@@ -654,8 +655,13 @@ protected:
     bool is_failover_proto_supported(ucp_ep_h ep, failover_proto_t proto) const
     {
         const failover_proto_info_t &info = get_failover_proto_info(proto);
+        uint64_t required_v2_caps         = UCT_IFACE_FLAG_V2_QUERY_TOKEN;
         unsigned failover_lane_count      = 0;
         unsigned native_put_count         = 0;
+
+        if (proto == TEST_FAILOVER_PROTO_PUT_BCOPY) {
+            required_v2_caps |= UCT_IFACE_FLAG_V2_PUT_BCOPY_COMP;
+        }
 
         for (ucp_lane_index_t lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
             uct_ep_h uct_ep = ucp_ep_get_lane(ep, lane);
@@ -675,8 +681,7 @@ protected:
             uct_iface_attr_v2_t attr_v2;
             attr_v2.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS;
             if ((uct_iface_query_v2(uct_ep->iface, &attr_v2) == UCS_OK) &&
-                ucs_test_all_flags(attr_v2.cap.flags,
-                                   UCT_IFACE_FLAG_V2_QUERY_TOKEN)) {
+                ucs_test_all_flags(attr_v2.cap.flags, required_v2_caps)) {
                 ++failover_lane_count;
             }
         }

@@ -12,6 +12,7 @@
 
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_ep.inl>
+#include <ucp/core/ucp_rkey.inl>
 #include <ucp/proto/proto_common.inl>
 #include <ucp/proto/proto_init.h>
 #include <ucp/proto/proto_single.h>
@@ -77,7 +78,42 @@ ucp_proto_failover_replay_op_create(const uct_ep_op_info_t *op_info,
     return UCS_OK;
 }
 
-void ucp_proto_failover_replay_op_destroy(ucp_proto_failover_replay_op_t *op)
+static void ucp_proto_failover_rma_completion(uct_completion_t *comp)
+{
+    ucp_proto_failover_rma_op_t *op =
+            ucs_container_of(comp, ucp_proto_failover_rma_op_t, comp);
+
+    ucp_rkey_release(op->rkey);
+    ucs_free(op);
+}
+
+ucp_proto_failover_rma_op_t *
+ucp_proto_failover_rma_op_create(ucp_rkey_h rkey, uint64_t remote_addr)
+{
+    ucp_proto_failover_rma_op_t *op;
+
+    op = ucs_malloc(sizeof(*op), "failover_rma_op");
+    if (op == NULL) {
+        return NULL;
+    }
+
+    ucp_rkey_retain(rkey);
+    op->comp.func   = ucp_proto_failover_rma_completion;
+    op->comp.count  = 1;
+    op->comp.status = UCS_OK;
+    op->rkey        = rkey;
+    op->remote_addr = remote_addr;
+    return op;
+}
+
+void ucp_proto_failover_rma_op_complete(ucp_proto_failover_rma_op_t *op,
+                                        ucs_status_t status)
+{
+    uct_invoke_completion(&op->comp, status);
+}
+
+void ucp_proto_failover_replay_op_destroy(ucp_proto_failover_replay_op_t *op,
+                                          ucs_status_t status)
 {
     if (op->req != NULL) {
         if (!(op->req->flags & UCP_REQUEST_FLAG_COMPLETED)) {
@@ -86,6 +122,11 @@ void ucp_proto_failover_replay_op_destroy(ucp_proto_failover_replay_op_t *op)
         }
 
         ucp_request_put(op->req);
+    }
+
+    if ((op->info.field_mask & UCT_EP_OP_INFO_FIELD_COMP) &&
+        (op->info.comp != NULL)) {
+        uct_invoke_completion(op->info.comp, status);
     }
 
     ucs_free(op);
@@ -169,12 +210,29 @@ ucp_proto_failover_put_bcopy_progress(uct_pending_req_t *self)
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     const ucp_proto_single_priv_t *spriv = req->send.proto_config->priv;
     const uct_ep_op_info_t *op_info      = req->send.failover.op_info;
+    ucp_proto_failover_rma_op_t *rma_op;
+    uct_rkey_t rkey;
+    uint64_t remote_addr;
     ssize_t packed_size;
 
-    packed_size = uct_ep_put_bcopy(ucp_ep_get_lane(req->send.ep,
-                                                   spriv->super.lane),
-                                   ucp_proto_failover_pack, (void*)op_info,
-                                   op_info->rma.remote_addr, op_info->rma.rkey);
+    if ((op_info->field_mask & UCT_EP_OP_INFO_FIELD_COMP) &&
+        (op_info->comp != NULL)) {
+        rma_op = ucs_container_of(op_info->comp, ucp_proto_failover_rma_op_t,
+                                  comp);
+        rkey   = ucp_rkey_get_tl_rkey(rma_op->rkey, spriv->super.rkey_index);
+        remote_addr = rma_op->remote_addr;
+        packed_size = uct_ep_put_bcopy_comp(ucp_ep_get_lane(req->send.ep,
+                                                            spriv->super.lane),
+                                            ucp_proto_failover_pack,
+                                            (void*)op_info, remote_addr, rkey,
+                                            op_info->comp);
+    } else {
+        packed_size = uct_ep_put_bcopy(ucp_ep_get_lane(req->send.ep,
+                                                       spriv->super.lane),
+                                       ucp_proto_failover_pack, (void*)op_info,
+                                       op_info->rma.remote_addr,
+                                       op_info->rma.rkey);
+    }
 
     return ucp_proto_failover_bcopy_status(packed_size);
 }
@@ -184,13 +242,10 @@ ucp_proto_failover_exclude_map(const ucp_proto_init_params_t *init_params,
                                int same_md)
 {
     const ucp_ep_config_key_t *key = init_params->ep_config_key;
-    ucp_context_h context          = init_params->worker->context;
     ucp_lane_index_t failed_lane =
             init_params->select_param->op.failover.failed_lane;
-    ucp_rsc_index_t failed_rsc;
     ucp_md_index_t failed_md;
     ucp_lane_map_t exclude_map = 0;
-    ucp_rsc_index_t rsc_index;
     ucp_lane_index_t lane;
 
     if (failed_lane >= key->num_lanes) {
@@ -205,16 +260,13 @@ ucp_proto_failover_exclude_map(const ucp_proto_init_params_t *init_params,
     /* RMA replay stores the UCT rkey extracted from the failed WQE. Since UCP
      * does not have a ucp_rkey_h here to repack per-lane keys, only lanes on the
      * same MD can use that rkey safely. */
-    failed_rsc = key->lanes[failed_lane].rsc_index;
-    if (failed_rsc == UCP_NULL_RESOURCE) {
+    failed_md = key->lanes[failed_lane].dst_md_index;
+    if (failed_md == UCP_NULL_RESOURCE) {
         return UCS_MASK(UCP_MAX_LANES);
     }
 
-    failed_md = context->tl_rscs[failed_rsc].md_index;
     for (lane = 0; lane < key->num_lanes; ++lane) {
-        rsc_index = key->lanes[lane].rsc_index;
-        if ((rsc_index == UCP_NULL_RESOURCE) ||
-            (context->tl_rscs[rsc_index].md_index != failed_md)) {
+        if (key->lanes[lane].dst_md_index != failed_md) {
             exclude_map |= UCS_BIT(lane);
         }
     }
@@ -226,7 +278,8 @@ static void
 ucp_proto_failover_probe_common(const ucp_proto_init_params_t *init_params,
                                 ucp_operation_id_t op_id,
                                 ucp_lane_type_t lane_type,
-                                uint64_t tl_cap_flags, ptrdiff_t max_frag_offs,
+                                uint64_t tl_cap_flags, uint64_t tl_v2_cap_flags,
+                                ptrdiff_t max_frag_offs,
                                 uct_ep_operation_t send_op, int same_md)
 {
     ucp_proto_single_init_params_t params = {
@@ -251,7 +304,7 @@ ucp_proto_failover_probe_common(const ucp_proto_init_params_t *init_params,
         .super.reg_mem_info  = ucp_mem_info_unknown,
         .lane_type           = lane_type,
         .tl_cap_flags        = tl_cap_flags,
-        .tl_v2_cap_flags     = UCT_IFACE_FLAG_V2_QUERY_TOKEN
+        .tl_v2_cap_flags     = tl_v2_cap_flags
     };
 
     if (init_params->ep_config_key->err_mode !=
@@ -272,6 +325,7 @@ ucp_proto_failover_am_bcopy_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_proto_failover_probe_common(init_params, UCP_OP_ID_FAILOVER_AM_BCOPY,
                                     UCP_LANE_TYPE_AM, UCT_IFACE_FLAG_AM_BCOPY,
+                                    UCT_IFACE_FLAG_V2_QUERY_TOKEN,
                                     ucs_offsetof(uct_iface_attr_t,
                                                  cap.am.max_bcopy),
                                     UCT_EP_OP_AM_BCOPY, 0);
@@ -282,6 +336,7 @@ ucp_proto_failover_put_short_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_proto_failover_probe_common(init_params, UCP_OP_ID_FAILOVER_PUT_SHORT,
                                     UCP_LANE_TYPE_RMA, UCT_IFACE_FLAG_PUT_SHORT,
+                                    UCT_IFACE_FLAG_V2_QUERY_TOKEN,
                                     ucs_offsetof(uct_iface_attr_t,
                                                  cap.put.max_short),
                                     UCT_EP_OP_PUT_SHORT, 1);
@@ -290,11 +345,20 @@ ucp_proto_failover_put_short_probe(const ucp_proto_init_params_t *init_params)
 static void
 ucp_proto_failover_put_bcopy_probe(const ucp_proto_init_params_t *init_params)
 {
+    uint64_t tl_v2_cap_flags = UCT_IFACE_FLAG_V2_QUERY_TOKEN;
+    int same_md              = 1;
+
+    if (init_params->rkey_config_key != NULL) {
+        tl_v2_cap_flags |= UCT_IFACE_FLAG_V2_PUT_BCOPY_COMP;
+        same_md          = 0;
+    }
+
     ucp_proto_failover_probe_common(init_params, UCP_OP_ID_FAILOVER_PUT_BCOPY,
-                                    UCP_LANE_TYPE_RMA, UCT_IFACE_FLAG_PUT_BCOPY,
+                                    UCP_LANE_TYPE_RMA_BW,
+                                    UCT_IFACE_FLAG_PUT_BCOPY, tl_v2_cap_flags,
                                     ucs_offsetof(uct_iface_attr_t,
                                                  cap.put.max_bcopy),
-                                    UCT_EP_OP_PUT_BCOPY, 1);
+                                    UCT_EP_OP_PUT_BCOPY, same_md);
 }
 
 static void
@@ -337,6 +401,7 @@ ucp_proto_failover_replay_op_request_init(ucp_ep_h ep,
     ucp_operation_id_t op_id;
     ucp_proto_select_param_t select_param;
     ucp_worker_cfg_index_t rkey_cfg_index;
+    ucp_proto_failover_rma_op_t *rma_op = NULL;
     ucp_proto_select_t *proto_select;
     ucp_memory_info_t mem_info;
     ucp_request_t *req;
@@ -348,8 +413,16 @@ ucp_proto_failover_replay_op_request_init(ucp_ep_h ep,
         return UCS_ERR_UNSUPPORTED;
     }
 
+    if ((op->info.field_mask & UCT_EP_OP_INFO_FIELD_COMP) &&
+        (op->info.comp != NULL)) {
+        rma_op = ucs_container_of(op->info.comp, ucp_proto_failover_rma_op_t,
+                                  comp);
+    }
+
     proto_select = ucp_proto_select_get(ep->worker, ep->cfg_index,
-                                        UCP_WORKER_CFG_INDEX_NULL,
+                                        (rma_op == NULL) ?
+                                                UCP_WORKER_CFG_INDEX_NULL :
+                                                rma_op->rkey->cfg_index,
                                         &rkey_cfg_index);
     if (proto_select == NULL) {
         return UCS_ERR_UNSUPPORTED;
@@ -380,8 +453,13 @@ ucp_proto_failover_replay_op_request_init(ucp_ep_h ep,
     }
 
     if (req->send.proto_config->proto->flags & UCP_PROTO_FLAG_INVALID) {
-        ucs_debug("ep %p: no protocol to replay failover op %d from lane %u",
-                  ep, (int)op->info.operation, failed_lane);
+        ucs_debug("ep %p: no protocol to replay failover op %d from lane %u "
+                  "fields 0x%" PRIx64 " comp %p ep_cfg %u rkey_cfg %u "
+                  "failed_lanes 0x%" PRIx64,
+                  ep, (int)op->info.operation, failed_lane,
+                  op->info.field_mask, op->info.comp, ep->cfg_index,
+                  rkey_cfg_index,
+                  ucp_ep_config_get_failed_lanes(&ucp_ep_config(ep)->key));
         status = UCS_ERR_UNREACHABLE;
         goto err_cleanup;
     }
@@ -418,6 +496,11 @@ ucp_proto_failover_replay_op_progress(ucp_ep_h ep, ucp_lane_index_t failed_lane,
                               UCS_BIT(UCP_DATATYPE_CONTIG));
     ucp_request_complete_send(op->req, status);
     if (status == UCS_OK) {
+        if ((op->info.operation == UCT_EP_OP_PUT_BCOPY) &&
+            (op->info.field_mask & UCT_EP_OP_INFO_FIELD_COMP)) {
+            op->info.comp = NULL;
+        }
+
         ucs_trace("ep %p: replayed failover op %d on lane %u", ep,
                   (int)op->info.operation,
                   ((const ucp_proto_single_priv_t*)
