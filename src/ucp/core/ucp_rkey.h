@@ -125,12 +125,18 @@ typedef struct ucp_rkey {
             ucp_worker_cfg_index_t    cfg_index;       /* Rkey configuration index */
         };
     };
+    uint32_t refcount; /* User and internal references */
 #if ENABLE_PARAMS_CHECK
     ucp_ep_h                          ep;
 #endif
     ucp_md_map_t                      md_map;          /* Which *remote* MDs have valid memory handles */
     ucp_tl_rkey_t                     tl_rkey[0];      /* UCT rkey for every remote MD */
 } ucp_rkey_t;
+
+
+void ucp_rkey_retain(ucp_rkey_h rkey);
+
+void ucp_rkey_release(ucp_rkey_h rkey);
 
 
 typedef struct ucp_unpacked_exported_tl_mkey {
