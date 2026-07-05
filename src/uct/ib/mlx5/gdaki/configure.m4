@@ -9,7 +9,8 @@ AC_ARG_WITH([gda],
             [AS_HELP_STRING([--without-gda], [Disable GDA-KI])],
             [], [with_gda=yes])
 
-AS_IF([test "x$with_gda" = "xyes"] && [test "x$cuda_happy" = "xyes"],
+AS_IF([test "x$with_gda" = "xyes"] && [test "x$cuda_happy" = "xyes"] &&
+      [test "x$have_mlx5" = "xyes"],
       [gda_happy=yes], [gda_happy=no])
 
 AS_IF([test "x$gda_happy" = "xyes"],

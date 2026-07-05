@@ -20,9 +20,10 @@
 #define UCT_CUDA_IPC_SUPPORTED 0
 #endif
 
-#if (defined(HAVE_GDA) || !defined(HAVE_CONFIG_H)) && \
-    __has_include(<uct/ib/mlx5/gdaki/gdaki.cuh>) && \
-    __has_include(<infiniband/mlx5dv.h>)
+#if (defined(HAVE_GDA) || \
+    (!defined(HAVE_CONFIG_H) && \
+     __has_include(<uct/ib/mlx5/gdaki/gdaki.cuh>) && \
+     __has_include(<infiniband/mlx5dv.h>)))
 #include <uct/ib/mlx5/gdaki/gdaki.cuh>
 #define UCT_RC_MLX5_GDA_SUPPORTED 1
 #else
