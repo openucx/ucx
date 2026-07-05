@@ -539,6 +539,20 @@ uct_ib_device_set_pci_id(uct_ib_device_t *dev, const char *sysfs_path)
               dev->pci_id.vendor, dev->pci_id.device);
 }
 
+int uct_ib_device_has_active_port(uct_ib_device_t *dev)
+{
+    uint8_t port_num;
+
+    for (port_num = dev->first_port;
+         port_num < dev->first_port + dev->num_ports; ++port_num) {
+        if (uct_ib_device_port_attr(dev, port_num)->state == IBV_PORT_ACTIVE) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
 ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
                                  struct ibv_device *ibv_device)
 {
