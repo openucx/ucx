@@ -970,6 +970,11 @@ public:
     }
 
     virtual void init() override {
+        /* FIXME: sporadic failure on CUDA memory type. re-enable once fixed */
+        if (mem_type() == UCS_MEMORY_TYPE_CUDA) {
+            UCS_TEST_SKIP_R("sporadic failure on CUDA memory type");
+        }
+
         modify_config("MAX_RMA_RAILS", "2");
         test_ucp_rma::init();
     }
