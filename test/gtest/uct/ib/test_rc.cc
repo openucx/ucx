@@ -1116,7 +1116,7 @@ protected:
     }
 
 private:
-    entity                    *m_entity;
+    entity                    *m_entity = NULL;
     ucs::handle<uct_iface_h> m_iface;
 };
 
