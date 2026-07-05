@@ -491,6 +491,11 @@ ucs_status_t uct_ib_reg_mr(const uct_ib_md_t *md, void *address, size_t length,
     uint64_t flags;
     int dmabuf_fd;
 
+    ucs_info("inside uct_ib_reg_mr");
+    ucs_info("start time : %lu", start_time);
+    ucs_log(UCS_LOG_LEVEL_INFO, "inside uct_ib_reg_mr");
+    ucs_log(UCS_LOG_LEVEL_INFO, "start time : %lu", start_time);
+
     flags         = UCT_MD_MEM_REG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0);
     dmabuf_fd     = UCS_PARAM_VALUE(UCT_MD_MEM_REG_FIELD, params, dmabuf_fd,
                                     DMABUF_FD, UCT_DMABUF_FD_INVALID);

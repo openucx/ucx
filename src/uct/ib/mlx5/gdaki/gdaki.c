@@ -851,7 +851,8 @@ uct_rc_gdaki_ep_connect_to_ep_v2(uct_ep_h tl_ep,
                 *ucs_serialize_next(&ep_addr, uct_ib_uint24_t));
         status      = uct_rc_mlx5_iface_common_devx_connect_qp(
                 &iface->super, &channels[i].qp.super, dest_qp_num, &ah_attr,
-                path_mtu, path_index, iface->super.super.config.max_rd_atomic);
+                path_mtu, path_index, iface->super.super.config.max_rd_atomic,
+                params);
         if (status != UCS_OK) {
             return status;
         }
