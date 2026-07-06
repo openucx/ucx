@@ -1558,23 +1558,29 @@ typedef enum uct_ep_op_info_field {
     /** Enables @ref uct_ep_op_info_t::comp. */
     UCT_EP_OP_INFO_FIELD_COMP        = UCS_BIT(1),
 
-    /** Enables @ref uct_ep_op_info_t::flags. */
-    UCT_EP_OP_INFO_FIELD_FLAGS       = UCS_BIT(2),
-
     /** Enables @ref uct_ep_op_info_t::am. */
-    UCT_EP_OP_INFO_FIELD_AM          = UCS_BIT(3),
+    UCT_EP_OP_INFO_FIELD_AM          = UCS_BIT(2),
+
+    /** Enables AM flags in @ref uct_ep_op_info_t::am. */
+    UCT_EP_OP_INFO_FIELD_AM_FLAGS    = UCS_BIT(3),
 
     /** Enables RMA fields in @ref uct_ep_op_info_t::rma. */
     UCT_EP_OP_INFO_FIELD_RMA         = UCS_BIT(4),
 
-    /** Enables atomic fields in @ref uct_ep_op_info_t::rma. */
-    UCT_EP_OP_INFO_FIELD_ATOMIC      = UCS_BIT(5),
+    /** Enables @ref uct_ep_op_info_t::flush. */
+    UCT_EP_OP_INFO_FIELD_FLUSH       = UCS_BIT(5),
 
-    /** Enables @ref uct_ep_op_info_t::inline_data. */
-    UCT_EP_OP_INFO_FIELD_INLINE_DATA = UCS_BIT(6),
+    /** Enables @ref uct_ep_op_info_t::data. */
+    UCT_EP_OP_INFO_FIELD_DATA        = UCS_BIT(6),
 
     /** Enables @ref uct_ep_op_info_t::zcopy. */
     UCT_EP_OP_INFO_FIELD_ZCOPY       = UCS_BIT(7),
+
+    /** Enables @ref uct_ep_op_info_t::unpack. */
+    UCT_EP_OP_INFO_FIELD_UNPACK      = UCS_BIT(8),
+
+    /** Enables @ref uct_ep_op_info_t::atomic. */
+    UCT_EP_OP_INFO_FIELD_ATOMIC      = UCS_BIT(9),
 } uct_ep_op_info_field_t;
 
 
@@ -1583,10 +1589,18 @@ typedef enum uct_ep_op_info_field {
  * @brief Descriptor for a single outstanding (undelivered) operation.
  *
  * Passed to the callback registered with @ref uct_ep_outstanding_extract.
- * For SHORT and BCOPY operations, the @c inline_data pointer is only valid
- * for the duration of the callback invocation -- the caller must copy it.
- * For ZCOPY operations, the @c iov array points to the user's original
- * registered buffers, which remain valid.
+ * @ref UCT_EP_OP_INFO_FIELD_OPERATION is required for every operation. The
+ * following operation-specific field groups are also required:
+ *
+ * - AM_SHORT: AM and DATA.
+ * - AM_BCOPY: AM and DATA.
+ * - AM_ZCOPY: AM and ZCOPY.
+ * - PUT_SHORT and PUT_BCOPY: RMA and DATA.
+ * - PUT_ZCOPY and GET_ZCOPY: RMA and ZCOPY.
+ * - GET_SHORT: RMA and DATA.
+ * - GET_BCOPY: RMA and UNPACK.
+ * - ATOMIC_POST and ATOMIC_FETCH: RMA and ATOMIC.
+ * - FLUSH: FLUSH.
  */
 typedef struct uct_ep_op_info {
     /**
@@ -1605,40 +1619,58 @@ typedef struct uct_ep_op_info {
     /* Original completion. */
     uct_completion_t   *comp;
 
-    /* Original flags. */
-    unsigned           flags;
-
     union {
         /* AM operation parameters. */
         struct {
-            uint8_t    am_id; /**< AM handler ID */
-            uint64_t   am_hdr; /**< am_short 64-bit header word */
-            const void *am_hdr_data; /**< am_zcopy header buffer */
-            size_t     am_hdr_length; /**< am_zcopy header length */
+            uint8_t  am_id;         /**< AM handler ID */
+            unsigned flags;         /**< Flags passed to the AM operation */
+            union {
+                uint64_t   header;        /**< AM short 64-bit header word */
+                const void *header_buffer; /**< AM zcopy header buffer */
+            };
+            size_t header_length;  /**< AM zcopy header length */
         } am;
 
-        /* PUT, GET, and atomic operation parameters. */
+        /* Remote target for PUT, GET, and atomic operations. */
         struct {
-            uint64_t        remote_addr;
-            uct_rkey_t      rkey;
-            uct_atomic_op_t atomic_op; /**< Atomic operation type */
-            uint64_t        atomic_value; /**< value / swap operand */
-            uint64_t        atomic_compare; /**< compare operand (cswap) */
+            uint64_t   remote_addr;
+            uct_rkey_t rkey;
         } rma;
+
+        /* Flush operation parameters. */
+        struct {
+            unsigned flags;
+        } flush;
     };
 
     union {
-        /* Short/bcopy inline data, valid only inside the callback. */
+        /* Contiguous operation data, valid only inside the callback. */
         struct {
-            const void *buffer;
-            size_t     length;
-        } inline_data;
+            void   *buffer;
+            size_t length;
+        } data;
 
         /* Zcopy IOV, pointing to user's original registered buffers. */
         struct {
             const uct_iov_t *iov;
             size_t          iovcnt;
         } zcopy;
+
+        /* GET bcopy destination callback. */
+        struct {
+            uct_unpack_callback_t unpack_cb;
+            void                  *arg;
+            size_t                length;
+        } unpack;
+
+        /* Atomic operation parameters. */
+        struct {
+            uct_atomic_op_t op;      /**< Atomic operation type */
+            uint64_t        value;   /**< Value or swap operand */
+            uint64_t        compare; /**< Compare operand for CSWAP */
+            void            *result; /**< Fetch result destination */
+            size_t          size;    /**< Operand size */
+        } atomic;
     };
 } uct_ep_op_info_t;
 

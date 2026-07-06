@@ -1187,8 +1187,8 @@ static uct_iface_internal_ops_t uct_stub_internal_ops = {
     .ep_is_connected        = (uct_ep_is_connected_func_t)ucs_empty_function_return_zero,
     .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)uct_stub_ep_return_status,
     .ep_put_sgl_zcopy       = (uct_ep_put_sgl_zcopy_func_t)uct_stub_ep_return_status,
-    .ep_outstanding_extract  = (uct_ep_outstanding_extract_func_t)uct_stub_ep_return_status,
-    .ep_failover_arm         = (uct_ep_failover_arm_func_t)uct_stub_ep_return_status,
+    .ep_outstanding_extract = (uct_ep_outstanding_extract_func_t)uct_stub_ep_return_status,
+    .ep_failover_arm        = (uct_ep_failover_arm_func_t)uct_stub_ep_return_status,
 };
 
 ucs_status_t uct_stub_iface_open(ucs_status_t status, uct_iface_h *iface_p)
