@@ -461,7 +461,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, dynamic_tl_progress_factor),
    UCS_CONFIG_TYPE_TIME_UNITS},
 
-  {"RESOLVE_REMOTE_EP_ID", "n",
+  {"RESOLVE_REMOTE_EP_ID", "auto",
    "Defines whether resolving remote endpoint ID is required or not when\n"
    "creating a local endpoint. 'auto' means resolving remote endpoint ID only\n"
    "in case of error handling and keepalive enabled.",
