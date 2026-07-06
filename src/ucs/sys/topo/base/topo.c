@@ -982,8 +982,8 @@ ucs_status_t ucs_topo_sys_device_set_name(ucs_sys_device_t sys_dev,
 
     if (priority > ucs_topo_global_ctx.devices[sys_dev].name_priority) {
         ucs_free(ucs_topo_global_ctx.devices[sys_dev].name);
-        ucs_topo_global_ctx.devices[sys_dev].name          = ucs_strdup(name,
-                                                                        "sys_dev_name");
+        ucs_topo_global_ctx.devices[sys_dev].name = ucs_strdup(name,
+                                                               "sys_dev_name");
         ucs_topo_global_ctx.devices[sys_dev].name_priority = priority;
     }
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
