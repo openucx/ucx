@@ -815,7 +815,8 @@ static ucs_status_t uct_ud_mlx5_iface_create_qp(uct_ib_iface_t *ib_iface,
     }
 
     status = uct_ib_mlx5_txwq_init(iface->super.super.super.worker,
-                                   iface->tx.mmio_mode, &iface->tx.wq,
+                                   iface->tx.mmio_mode,
+                                   iface->tx.bf_copy_mode, &iface->tx.wq,
                                    qp->verbs.qp);
     if (status != UCS_OK) {
         goto err_destroy_qp;
@@ -1002,8 +1003,9 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t, uct_md_h tl_md,
 
     uct_ib_mlx5_parse_cqe_zipping(md, &config->mlx5_common, &init_attr);
 
-    self->tx.mmio_mode     = config->mlx5_common.mmio_mode;
-    self->tx.wq.super.type = UCT_IB_MLX5_OBJ_TYPE_LAST;
+    self->tx.mmio_mode        = config->mlx5_common.mmio_mode;
+    self->tx.bf_copy_mode     = config->mlx5_common.bf_copy_mode;
+    self->tx.wq.super.type    = UCT_IB_MLX5_OBJ_TYPE_LAST;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ud_iface_t, &uct_ud_mlx5_iface_ops,
                               &uct_ud_mlx5_iface_tl_ops, tl_md, worker, params,

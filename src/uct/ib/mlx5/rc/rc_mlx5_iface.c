@@ -316,7 +316,8 @@ ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
 
     if (attr->super.cap.max_send_wr) {
         status = uct_ib_mlx5_txwq_init(iface->super.super.super.worker,
-                                       iface->tx.mmio_mode, txwq,
+                                       iface->tx.mmio_mode,
+                                       iface->tx.bf_copy_mode, txwq,
                                        qp->verbs.qp);
         if (status != UCS_OK) {
             ucs_error("Failed to get mlx5 QP information");
@@ -828,6 +829,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
 
     dev                       = uct_ib_iface_device(&self->super.super);
     self->tx.mmio_mode        = mlx5_config->super.mmio_mode;
+    self->tx.bf_copy_mode     = mlx5_config->super.bf_copy_mode;
     self->tx.bb_max           = ucs_min(mlx5_config->tx_max_bb, UINT16_MAX);
     self->tm.am_desc.super.cb = uct_rc_mlx5_release_desc;
 

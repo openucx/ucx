@@ -155,6 +155,13 @@ ucs_status_t uct_ib_mlx5_devx_create_qp_common(uct_ib_iface_t *iface,
         goto err;
     }
 
+    if (tx != NULL) {
+        status = uct_ib_mlx5_txwq_init_bf_copy(tx, attr->bf_copy_mode);
+        if (status != UCS_OK) {
+            goto err;
+        }
+    }
+
     uar = uct_worker_tl_data_get(iface->super.worker,
                                  UCT_IB_MLX5_DEVX_UAR_KEY,
                                  uct_ib_mlx5_devx_uar_t,
