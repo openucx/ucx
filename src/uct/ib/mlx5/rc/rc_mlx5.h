@@ -278,7 +278,9 @@ ucs_status_t uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep, uct_ep_attr_t *ep_attr);
 
 void uct_rc_mlx5_ep_update_tx_res(uct_ep_h tl_ep);
 
-ucs_status_t uct_rc_mlx5_ep_failover_arm(uct_ep_h ep);
+ucs_status_t uct_rc_mlx5_ep_failover_enable(uct_ep_h ep);
+
+void uct_rc_mlx5_ep_failover_arm(uct_ep_h ep);
 
 unsigned uct_rc_mlx5_ep_cleanup_qp(void *arg);
 
