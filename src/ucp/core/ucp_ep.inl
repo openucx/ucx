@@ -178,6 +178,16 @@ static UCS_F_ALWAYS_INLINE void ucp_ep_update_flags(
     ep->flags = (ep->flags | ep_flags_add) & ~ep_flags_remove;
 }
 
+#if ENABLE_DEBUG_DATA || UCS_ENABLE_ASSERT
+#define ucp_ep_update_debug_flags(_ep, _flags_add, _flags_remove) \
+    ucp_ep_update_flags(_ep, _flags_add, _flags_remove)
+#else
+#define ucp_ep_update_debug_flags(_ep, _flags_add, _flags_remove) \
+    do { \
+        (void)(_ep); \
+    } while (0)
+#endif
+
 static UCS_F_ALWAYS_INLINE ucs_ptr_map_key_t ucp_ep_remote_id(ucp_ep_h ep)
 {
 #if UCS_ENABLE_ASSERT

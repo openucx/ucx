@@ -115,6 +115,7 @@ enum {
     UCP_EP_FLAG_USER_DATA_PARAM        = UCS_BIT(15),/* EP's user_data was passed via
                                                         @ref ucp_ep_params_t::user_data */
 
+#if ENABLE_DEBUG_DATA || UCS_ENABLE_ASSERT
     /* DEBUG bits */
     UCP_EP_FLAG_CONNECT_REQ_SENT       = UCS_BIT(16),/* DEBUG: Connection request was sent */
     UCP_EP_FLAG_CONNECT_REP_SENT       = UCS_BIT(17),/* DEBUG: Connection reply was sent */
@@ -129,6 +130,7 @@ enum {
     UCP_EP_FLAG_DISCONNECT_CB_CALLED   = UCS_BIT(25),/* DEBUG: Got disconnect notification */
     UCP_EP_FLAG_CONNECT_WAIT_PRE_REQ   = UCS_BIT(26) /* DEBUG: Connection pre-request needs to be
                                                         received from a peer */
+#endif
 };
 
 
