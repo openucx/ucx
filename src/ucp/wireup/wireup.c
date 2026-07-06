@@ -2437,6 +2437,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     ucp_ep_config_key_t key;
     ucp_worker_cfg_index_t new_cfg_index;
     ucp_lane_index_t lane;
+    uct_pending_req_t *uct_req;
     ucs_status_t status;
     char str[32];
     ucs_queue_head_t replay_pending_queue;
@@ -2584,9 +2585,18 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
 out:
     if (status == UCS_OK) {
         status = ucp_ep_failover_enable_lanes(ep);
+        if (status != UCS_OK) {
+            ucs_queue_for_each_extract(uct_req, &replay_pending_queue, priv,
+                                       1) {
+                ucp_ep_err_pending_purge(uct_req, UCS_STATUS_PTR(status));
+            }
+            goto out_log;
+        }
     }
 
     ucp_wireup_replay_pending_requests(ep, &replay_pending_queue);
+
+out_log:
     ucs_log_indent(-1);
     return status;
 }
