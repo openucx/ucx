@@ -1757,14 +1757,14 @@ uct_ep_outstanding_extract(uct_ep_h ep,
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Defer outstanding purge on endpoint error until extract completes.
+ * @brief Enable outstanding extraction on endpoint failure.
  *
- * When armed, a transport error does not purge the outstanding send queue
+ * This function must be called before posting operations that may need replay.
+ * After it succeeds, a transport error preserves the outstanding send queue
  * until the caller finishes @ref uct_ep_outstanding_extract. After a successful
- * extract, the endpoint can be destroyed immediately. Endpoint destruction
- * moves the QP to error and reclaims it asynchronously after the last WQE.
+ * extract, the endpoint can be destroyed immediately.
  */
-ucs_status_t uct_ep_failover_arm(uct_ep_h ep);
+ucs_status_t uct_ep_failover_enable(uct_ep_h ep);
 
 
 END_C_DECLS

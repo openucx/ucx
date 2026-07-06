@@ -1938,7 +1938,8 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface, int poll_flags)
     ucs_trace_poll("rc_mlx5 iface %p tx_cqe: ep %p qpn 0x%x hw_ci %d", iface,
                    ep, qp_num, hw_ci);
 
-    if (ucs_unlikely(ep->super.flags & UCT_RC_EP_FLAG_FAILOVER_ARMED)) {
+    if (ucs_unlikely(ep->super.failover_flags &
+                     UCT_RC_EP_FAILOVER_FLAG_ARMED)) {
         /* Ownership is deferred to extract; only release HW/CQ resources
          * without invoking user completions. */
         ucs_debug("ep %p: deferring tx completions for failover, hw ci %u "

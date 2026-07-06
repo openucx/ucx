@@ -56,9 +56,6 @@ enum {
     /* Flush remote needs to be executed on the EP */
     UCT_RC_EP_FLAG_FLUSH_REMOTE        = UCS_BIT(4),
 
-    /* Failover armed: defer outstanding purge until extract completes */
-    UCT_RC_EP_FLAG_FAILOVER_ARMED      = UCS_BIT(5),
-
     /* Soft Credit Request: indicates that peer needs to piggy-back credits
      * grant to counter AM (if any). Can be bundled with
      * UCT_RC_EP_FLAG_FC_GRANT  */
@@ -80,6 +77,14 @@ enum {
     UCT_RC_EP_FC_PURE_GRANT            = (UCT_RC_EP_FLAG_FC_HARD_REQ |
                                           UCT_RC_EP_FLAG_FC_SOFT_REQ |
                                           UCT_RC_EP_FLAG_FC_GRANT)
+};
+
+enum {
+    /* Failover enabled on this endpoint */
+    UCT_RC_EP_FAILOVER_FLAG_ENABLED = UCS_BIT(0),
+
+    /* Defer outstanding purge until extract completes */
+    UCT_RC_EP_FAILOVER_FLAG_ARMED   = UCS_BIT(1)
 };
 
 /*
@@ -230,6 +235,7 @@ struct uct_rc_ep {
     uint16_t            txqp_reserve;
     uint8_t             path_index;
     uint8_t             flags;
+    uint8_t             failover_flags;
 };
 
 

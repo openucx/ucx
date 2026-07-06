@@ -853,15 +853,15 @@ uct_ep_outstanding_extract(uct_ep_h ep,
     return iface->internal_ops->ep_outstanding_extract(ep, params);
 }
 
-ucs_status_t uct_ep_failover_arm(uct_ep_h ep)
+ucs_status_t uct_ep_failover_enable(uct_ep_h ep)
 {
     const uct_base_iface_t *iface = ucs_derived_of(ep->iface, uct_base_iface_t);
 
-    if (iface->internal_ops->ep_failover_arm == NULL) {
+    if (iface->internal_ops->ep_failover_enable == NULL) {
         return UCS_ERR_UNSUPPORTED;
     }
 
-    return iface->internal_ops->ep_failover_arm(ep);
+    return iface->internal_ops->ep_failover_enable(ep);
 }
 
 void uct_ep_set_iface(uct_ep_h ep, uct_iface_t *iface)
@@ -1188,7 +1188,7 @@ static uct_iface_internal_ops_t uct_stub_internal_ops = {
     .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)uct_stub_ep_return_status,
     .ep_put_sgl_zcopy       = (uct_ep_put_sgl_zcopy_func_t)uct_stub_ep_return_status,
     .ep_outstanding_extract = (uct_ep_outstanding_extract_func_t)uct_stub_ep_return_status,
-    .ep_failover_arm        = (uct_ep_failover_arm_func_t)uct_stub_ep_return_status,
+    .ep_failover_enable     = (uct_ep_failover_enable_func_t)uct_stub_ep_return_status,
 };
 
 ucs_status_t uct_stub_iface_open(ucs_status_t status, uct_iface_h *iface_p)

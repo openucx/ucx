@@ -82,7 +82,15 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_extract(
     return uct_ib_mlx5_ext_ep_outstanding_extract(ep, params);
 }
 
-ucs_status_t uct_rc_mlx5_ep_failover_arm(uct_ep_h tl_ep)
+ucs_status_t uct_rc_mlx5_ep_failover_enable(uct_ep_h tl_ep)
+{
+    uct_rc_mlx5_base_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_base_ep_t);
+
+    ep->super.failover_flags |= UCT_RC_EP_FAILOVER_FLAG_ENABLED;
+    return UCS_OK;
+}
+
+void uct_rc_mlx5_ep_failover_arm(uct_ep_h tl_ep)
 {
     uct_rc_mlx5_base_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_base_ep_t);
     uct_ib_mlx5_txwq_t *txwq  = &ep->tx.wq;
@@ -90,10 +98,9 @@ ucs_status_t uct_rc_mlx5_ep_failover_arm(uct_ep_h tl_ep)
 
     txwq->failover_ci = txwq->sw_pi -
                         (txwq->bb_max - uct_rc_txqp_available(txqp));
-    ep->super.flags  |= UCT_RC_EP_FLAG_FAILOVER_ARMED;
+    ep->super.failover_flags |= UCT_RC_EP_FAILOVER_FLAG_ARMED;
     ucs_debug("ep %p: armed failover WQE range [%u, %u), available %d", ep,
               txwq->failover_ci, txwq->sw_pi, uct_rc_txqp_available(txqp));
-    return UCS_OK;
 }
 
 static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_base_ep_put_short_inline(

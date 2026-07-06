@@ -147,9 +147,10 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface, uint32_t qp_num,
         return status;
     }
 
-    self->path_index   = UCT_EP_PARAMS_GET_PATH_INDEX(params);
-    self->flags        = 0;
-    self->txqp_reserve = 0;
+    self->path_index     = UCT_EP_PARAMS_GET_PATH_INDEX(params);
+    self->flags          = 0;
+    self->failover_flags = 0;
+    self->txqp_reserve   = 0;
 
     status = uct_rc_fc_init(&self->fc, iface UCS_STATS_ARG(self->super.stats));
     if (status != UCS_OK) {
