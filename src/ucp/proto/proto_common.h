@@ -41,7 +41,7 @@
 
 
 typedef enum {
-    /* Send buffer is used by zero-copy operations */
+    /* Local buffer is used by zero-copy operations */
     UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY    = UCS_BIT(0),
 
     /* Receive side is not doing memory copy */
