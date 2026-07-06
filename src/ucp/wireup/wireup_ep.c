@@ -704,6 +704,7 @@ ucp_wireup_ep_connect_to_ep_v2(uct_ep_h tl_ep,
         .ep_addr_length     = ep_entry->len
     };
     ucp_wireup_ep_t *wireup_ep                = ucp_wireup_ep(tl_ep);
+    ucs_status_t status;
 
     if (wireup_ep == NULL) {
         return uct_ep_connect_to_ep_v2(tl_ep, address_entry->dev_addr,
@@ -714,8 +715,13 @@ ucp_wireup_ep_connect_to_ep_v2(uct_ep_h tl_ep,
         return UCS_OK;
     }
 
+    status = uct_ep_connect_to_ep_v2(wireup_ep->super.uct_ep,
+                                     address_entry->dev_addr, ep_entry->addr,
+                                     &param);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     wireup_ep->flags |= UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED;
-    return uct_ep_connect_to_ep_v2(wireup_ep->super.uct_ep,
-                                   address_entry->dev_addr, ep_entry->addr,
-                                   &param);
+    return UCS_OK;
 }

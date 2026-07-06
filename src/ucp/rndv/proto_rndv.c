@@ -141,6 +141,44 @@ ucp_proto_rndv_md_map_to_remote(const ucp_proto_rndv_ctrl_init_params_t *params,
 }
 
 /*
+ * Estimate remote buffer flags from the packed rkey MD map. This is used only
+ * for protocol estimation and assumes local and remote MDs have the same
+ * required memory flags.
+ */
+static uint8_t
+ucp_proto_rndv_rkey_mem_flags_estimate(const ucp_proto_init_params_t *params)
+{
+    ucp_context_h context = params->worker->context;
+    const ucp_rkey_config_key_t *rkey_config_key = params->rkey_config_key;
+    const ucp_ep_config_key_lane_t *lane_cfg;
+    ucp_md_index_t md_index;
+    uint8_t mem_flags = 0;
+
+    ucs_assert(rkey_config_key != NULL);
+
+    ucs_carray_for_each(lane_cfg, params->ep_config_key->lanes,
+                        params->ep_config_key->num_lanes) {
+        if ((lane_cfg->rsc_index == UCP_NULL_RESOURCE) ||
+            (lane_cfg->dst_md_index == UCP_NULL_RESOURCE)) {
+            continue;
+        }
+
+        if (!(rkey_config_key->md_map & UCS_BIT(lane_cfg->dst_md_index))) {
+            continue;
+        }
+
+        /*
+         * Derive UCS_MEM_FLAG_REGISTRABLE from matching local MDs which
+         * require it and whose remote MDs are present in the rkey.
+         */
+        md_index   = context->tl_rscs[lane_cfg->rsc_index].md_index;
+        mem_flags |= context->tl_mds[md_index].attr.required_mem_flags;
+    }
+
+    return mem_flags;
+}
+
+/*
  * Init protocols that can be used by the remote peer
  * (assuming peer has the same configuration)
  */
@@ -297,7 +335,7 @@ static ucp_proto_select_param_t ucp_proto_rndv_remote_select_param_init(
          */
         mem_info.sys_dev = init_params->rkey_config_key->sys_dev;
         mem_info.type    = init_params->rkey_config_key->mem_type;
-        mem_info.flags   = UCS_MEM_FLAG_REGISTRABLE;
+        mem_info.flags   = ucp_proto_rndv_rkey_mem_flags_estimate(init_params);
         ucp_proto_select_param_init(&remote_select_param, params->remote_op_id,
                                     op_attr_mask, 0, UCP_DATATYPE_CONTIG,
                                     &mem_info, 1);
