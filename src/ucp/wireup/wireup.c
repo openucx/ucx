@@ -2582,6 +2582,10 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     status = UCS_OK;
 
 out:
+    if (status == UCS_OK) {
+        status = ucp_ep_failover_enable_lanes(ep);
+    }
+
     ucp_wireup_replay_pending_requests(ep, &replay_pending_queue);
     ucs_log_indent(-1);
     return status;

@@ -85,34 +85,51 @@ static int ucp_ep_failover_lane_token_supported(ucp_ep_h ep, uct_ep_h uct_ep,
 }
 
 
-void ucp_ep_failover_arm_lane(ucp_ep_h ep, ucp_lane_index_t lane,
-                              uct_ep_h uct_ep)
+ucs_status_t ucp_ep_failover_enable_lanes(ucp_ep_h ep)
 {
+    ucp_wireup_ep_t *wireup_ep;
+    ucp_lane_index_t lane;
+    uct_ep_h uct_ep;
     ucs_status_t status;
 
     if ((ep->ext == NULL) ||
         !ucp_ep_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_FAILOVER) ||
         (ucp_ep_config(ep)->key.dst_version <
-         UCP_WIREUP_LANE_STATE_MIN_VERSION) ||
-        (uct_ep == NULL) || ucp_wireup_ep_test(uct_ep)) {
-        return;
+         UCP_WIREUP_LANE_STATE_MIN_VERSION)) {
+        return UCS_OK;
     }
 
-    if (!ucp_ep_failover_lane_token_supported(ep, uct_ep, lane)) {
-        ucs_debug("ep %p: lane %u uct_ep %p does not support failover tokens",
+    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+        uct_ep = ucp_ep_get_lane(ep, lane);
+        if ((uct_ep != NULL) && ucp_wireup_ep_test(uct_ep)) {
+            wireup_ep = ucp_wireup_ep(uct_ep);
+            if (!ucp_wireup_ep_has_next_ep(wireup_ep)) {
+                continue;
+            }
+
+            uct_ep = wireup_ep->super.uct_ep;
+        }
+
+        if (!ucp_ep_failover_lane_token_supported(ep, uct_ep, lane)) {
+            ucs_debug("ep %p: lane %u uct_ep %p does not support failover "
+                      "tokens",
+                      ep, lane, uct_ep);
+            continue;
+        }
+
+        status = uct_ep_failover_enable(uct_ep);
+        if (status != UCS_OK) {
+            ucs_debug("ep %p: failed to enable lane %u uct_ep %p for "
+                      "failover: %s",
+                      ep, lane, uct_ep, ucs_status_string(status));
+            return status;
+        }
+
+        ucs_debug("ep %p: enabled lane %u uct_ep %p for failover extraction",
                   ep, lane, uct_ep);
-        return;
     }
 
-    status = uct_ep_failover_arm(uct_ep);
-    if (status != UCS_OK) {
-        ucs_debug("ep %p: failed to arm lane %u uct_ep %p for failover: %s",
-                  ep, lane, uct_ep, ucs_status_string(status));
-        return;
-    }
-
-    ucs_debug("ep %p: armed lane %u uct_ep %p for failover extraction", ep,
-              lane, uct_ep);
+    return UCS_OK;
 }
 
 static void ucp_ep_failover_replay_purge(ucp_ep_failover_lane_ctx_t *lane,
