@@ -1498,6 +1498,88 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_twins_put, use_single_net_device_rank_2,
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_twins_put, rcx, "rc_x")
 
+class test_ucp_proto_mock_rcx_same_bdf_put : public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_rcx_same_bdf_put() :
+        m_low_user_value_sys_dev(UCS_SYS_DEVICE_ID_UNKNOWN),
+        m_high_user_value_sys_dev(UCS_SYS_DEVICE_ID_UNKNOWN)
+    {
+        mock_transport("rc_mlx5");
+    }
+
+    virtual void init() override
+    {
+        auto iface_attr_func = [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.put.max_short = 2048;
+            iface_attr.bandwidth.shared  = 28e9;
+            iface_attr.latency.c         = 500e-9;
+            iface_attr.latency.m         = 1e-9;
+        };
+
+        setup_same_bdf_topology();
+        add_mock_iface_on_sys_device("mock_0:1", m_high_user_value_sys_dev,
+                                     iface_attr_func);
+        add_mock_iface_on_sys_device("mock_1:1", m_low_user_value_sys_dev,
+                                     iface_attr_func);
+        test_ucp_proto_mock::init();
+    }
+
+protected:
+    void check_config(const proto_select_data_vec_t &data_vec)
+    {
+        ucp_proto_select_key_t key = any_key();
+        key.param.op_id_flags      = UCP_OP_ID_PUT;
+        key.param.op_attr          = 0;
+
+        check_rkey_config(sender(), data_vec, key, 0);
+    }
+
+private:
+    void setup_same_bdf_topology()
+    {
+        ucs_sys_bus_id_t bus_id;
+
+        bus_id.domain   = 0xfffd;
+        bus_id.bus      = 0xfd;
+        bus_id.slot     = 0x1f;
+        bus_id.function = 0;
+
+        /* Do not extract/restore topology here: UCP init still probes real
+         * transports, and clearing global topology can break hardware caches. */
+        ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id_and_user_value(
+                &bus_id, 2, &m_high_user_value_sys_dev));
+        ASSERT_UCS_OK(ucs_topo_sys_device_set_name(
+                m_high_user_value_sys_dev, "mock_high_user_value", 10));
+
+        ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id_and_user_value(
+                &bus_id, 1, &m_low_user_value_sys_dev));
+        ASSERT_UCS_OK(ucs_topo_sys_device_set_name(
+                m_low_user_value_sys_dev, "mock_low_user_value", 10));
+    }
+
+    ucs_sys_device_t m_low_user_value_sys_dev;
+    ucs_sys_device_t m_high_user_value_sys_dev;
+};
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_same_bdf_put,
+           single_net_device_orders_same_bdf_by_user_value_0,
+           "IB_NUM_PATHS?=2", "SINGLE_NET_DEVICE=y", "NODE_LOCAL_ID=0")
+{
+    check_config({{0, 2048, "short", "rc_mlx5/mock_0:1/path0"},
+                  {2049, INF, "zero-copy", "rc_mlx5/mock_1:1/path0"}});
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_same_bdf_put,
+           single_net_device_orders_same_bdf_by_user_value_1,
+           "IB_NUM_PATHS?=2", "SINGLE_NET_DEVICE=y", "NODE_LOCAL_ID=1")
+{
+    check_config({{0, 2048, "short", "rc_mlx5/mock_0:1/path0"},
+                  {2049, INF, "zero-copy", "rc_mlx5/mock_0:1/path0"}});
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_same_bdf_put, rcx,
+                              "rc_x")
+
 class test_ucp_proto_mock_rcx_twins_get : public test_ucp_proto_mock_rcx_twins {
 protected:
     void check_config(const proto_select_data_vec_t &data_vec);
@@ -1578,12 +1660,10 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_twins_get_inline_0, rcx,
  * lane-index insertion order (mock_1:1 first) differ from the
  * deterministic bus-id sorted order [mock_0:1, mock_1:1, mock_2:1].
  *
- * Installs a "proto_mock" topology provider that gives any sys_dev 
- * pair a 100ns latency penalty unless their indices differ by 1, and 
- * forces the local memory onto mock_1:1's sys_dev. 
- * Because the three mock devices get consecutive sys_devs, mock_0:1 and 
- * mock_2:1 are adjacent to the buffer while mock_1:1 (the buffer's own device) 
- * is "far".
+ * Installs a "proto_mock" topology provider that gives any known sys_dev
+ * pair a 100ns latency penalty unless it is one of the explicit adjacent
+ * pairs with mock_1:1. This makes mock_0:1 and mock_2:1 adjacent to the
+ * buffer while mock_1:1 (the buffer's own device) is "far".
  *
  * Each test asserts two ranges in the proto cache:
  *   - 0..64 (get/bcopy "copy-out"): reg_mem_info unknown, so all NICs
@@ -1624,6 +1704,10 @@ public:
         add_mock_iface("mock_2:1", iface_attr_slow); /* bus 2 */
         test_ucp_proto_mock::init();
 
+        s_low_adjacent_sys_dev  = get_mock_sys_dev_by_name("mock_0:1");
+        s_local_sys_dev         = get_mock_sys_dev_by_name("mock_1:1");
+        s_high_adjacent_sys_dev = get_mock_sys_dev_by_name("mock_2:1");
+
         const ucs_sys_topo_ops_t topo_ops = {
             .get_distance                   = get_distance,
             .get_memory_distance            = get_memory_distance,
@@ -1635,6 +1719,9 @@ public:
     virtual void cleanup() override
     {
         ucs_sys_topo_provider_pop();
+        s_low_adjacent_sys_dev  = UCS_SYS_DEVICE_ID_UNKNOWN;
+        s_local_sys_dev         = UCS_SYS_DEVICE_ID_UNKNOWN;
+        s_high_adjacent_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
         test_ucp_proto_mock::cleanup();
     }
 
@@ -1672,6 +1759,22 @@ protected:
                           key, rkey->cfg_index);
     }
 
+    static int is_adjacent_to_local(ucs_sys_device_t device1,
+                                    ucs_sys_device_t device2)
+    {
+        if (device1 == s_local_sys_dev) {
+            return (device2 == s_low_adjacent_sys_dev) ||
+                   (device2 == s_high_adjacent_sys_dev);
+        }
+
+        if (device2 == s_local_sys_dev) {
+            return (device1 == s_low_adjacent_sys_dev) ||
+                   (device1 == s_high_adjacent_sys_dev);
+        }
+
+        return 0;
+    }
+
     static ucs_status_t get_distance(ucs_sys_device_t device1,
                                      ucs_sys_device_t device2,
                                      ucs_sys_dev_distance_t *distance)
@@ -1679,7 +1782,7 @@ protected:
         *distance = ucs_topo_default_distance;
         if ((device1 != UCS_SYS_DEVICE_ID_UNKNOWN) &&
             (device2 != UCS_SYS_DEVICE_ID_UNKNOWN) &&
-            (sys_dev_delta(device1, device2) != 1)) {
+            !is_adjacent_to_local(device1, device2)) {
             distance->latency = 100e-9;
         }
         return UCS_OK;
@@ -1699,12 +1802,20 @@ protected:
     }
 
 private:
-    static unsigned
-    sys_dev_delta(ucs_sys_device_t device1, ucs_sys_device_t device2)
-    {
-        return (device1 > device2) ? (device1 - device2) : (device2 - device1);
-    }
+    static ucs_sys_device_t s_low_adjacent_sys_dev;
+    static ucs_sys_device_t s_local_sys_dev;
+    static ucs_sys_device_t s_high_adjacent_sys_dev;
 };
+
+ucs_sys_device_t
+test_ucp_proto_mock_rcx_trio_local_distance_get::s_low_adjacent_sys_dev =
+        UCS_SYS_DEVICE_ID_UNKNOWN;
+ucs_sys_device_t
+test_ucp_proto_mock_rcx_trio_local_distance_get::s_local_sys_dev =
+        UCS_SYS_DEVICE_ID_UNKNOWN;
+ucs_sys_device_t
+test_ucp_proto_mock_rcx_trio_local_distance_get::s_high_adjacent_sys_dev =
+        UCS_SYS_DEVICE_ID_UNKNOWN;
 
 UCS_TEST_P(test_ucp_proto_mock_rcx_trio_local_distance_get,
            single_net_dev_local_id_0_picks_lowest_adjacent_sys_dev,

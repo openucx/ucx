@@ -25,6 +25,9 @@ BEGIN_C_DECLS
  * e.g. virtual devices like CMA/knem */
 #define UCS_SYS_DEVICE_ID_UNKNOWN UINT8_MAX
 
+/* User-defined system device value is not set */
+#define UCS_SYS_DEVICE_USER_VALUE_EMPTY UINTPTR_MAX
+
 /* Maximal size of BDF string */
 #define UCS_SYS_BDF_NAME_MAX 16
 
@@ -162,6 +165,27 @@ void ucs_sys_topo_provider_pop(void);
  */
 ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
                                             ucs_sys_device_t *sys_dev);
+
+
+/**
+ * Find system device by pci bus id and user-defined value.
+ *
+ * This is used for logical devices which share the same PCI bus id but still
+ * need different system device indexes. The lookup key is a combination of the
+ * bus id and the user value. BDF-only lookup uses an implicit empty user value.
+ * If an existing system device with the same bus id and user value exists, it is
+ * returned. Otherwise, a system device for this key is registered and returned.
+ *
+ * @param [in]  bus_id      pointer to bus id of the device of interest.
+ * @param [in]  user_value  user-defined value identifying the logical device.
+ * @param [out] sys_dev_p   system device index associated with the value.
+ *
+ * @return UCS_OK or error in case device cannot be found.
+ */
+ucs_status_t
+ucs_topo_find_device_by_bus_id_and_user_value(const ucs_sys_bus_id_t *bus_id,
+                                              uintptr_t user_value,
+                                              ucs_sys_device_t *sys_dev_p);
 
 
 /**
@@ -367,24 +391,12 @@ ucs_status_t ucs_topo_sys_device_set_numa_node(ucs_sys_device_t sys_dev,
 
 
 /**
- * Set a user-defined value for a given system device.
- *
- * @param [in] sys_dev System device index.
- * @param [in] value   User-defined value to set.
- *
- * @return UCS_OK on success, error otherwise.
- */
-ucs_status_t
-ucs_topo_sys_device_set_user_value(ucs_sys_device_t sys_dev, uintptr_t value);
-
-
-/**
  * Retrieve the user-defined value of a system device.
  *
  * @param [in] sys_dev System device index.
  *
- * @return User-defined value, or UINTPTR_MAX if no value is set or the device
- *         does not exist.
+ * @return User-defined value, or UCS_SYS_DEVICE_USER_VALUE_EMPTY if no value is
+ *         set or the device does not exist.
  */
 uintptr_t ucs_topo_sys_device_get_user_value(ucs_sys_device_t sys_dev);
 
