@@ -1084,12 +1084,6 @@ protected:
         return status;
     }
 
-    uint8_t dp_ordering_cap()
-    {
-        return ucs_derived_of(m_entity->md(),
-                              uct_ib_mlx5_md_t)->dp_ordering_cap_devx.rc;
-    }
-
     uct_rc_mlx5_iface_common_t *rc_iface()
     {
         return ucs_derived_of(m_iface.get(), uct_rc_mlx5_iface_common_t);
@@ -1146,10 +1140,6 @@ UCS_TEST_P(test_gga_fence_flags, none_ibta,
 UCS_TEST_P(test_gga_fence_flags, auto_ooo,
            "GGA_MLX5_AR_ENABLE=auto", "GGA_MLX5_FENCE=auto")
 {
-    if (dp_ordering_cap() < UCT_IB_MLX5_DP_ORDERING_OOO_RW) {
-        UCS_TEST_SKIP_R("OOO_RW data placement ordering is not supported");
-    }
-
     ASSERT_UCS_OK(open_iface(UCT_IB_MLX5_DP_ORDERING_OOO_RW, false, false));
     check_enabled(UCT_IB_MLX5_DP_ORDERING_OOO_RW,
                   UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER);
@@ -1158,10 +1148,6 @@ UCS_TEST_P(test_gga_fence_flags, auto_ooo,
 UCS_TEST_P(test_gga_fence_flags, none_ooo,
            "GGA_MLX5_AR_ENABLE=auto", "GGA_MLX5_FENCE=none")
 {
-    if (dp_ordering_cap() < UCT_IB_MLX5_DP_ORDERING_OOO_RW) {
-        UCS_TEST_SKIP_R("OOO_RW data placement ordering is not supported");
-    }
-
     ASSERT_UCS_OK(open_iface(UCT_IB_MLX5_DP_ORDERING_OOO_RW, false, false));
     check_disabled(UCT_IB_MLX5_DP_ORDERING_OOO_RW);
 }

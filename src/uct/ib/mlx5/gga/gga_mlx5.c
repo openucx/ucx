@@ -796,13 +796,7 @@ static UCS_CLASS_INIT_FUNC(uct_gga_mlx5_iface_t,
 
     uct_gga_mlx5_iface_disable_rx(&self->super);
 
-    /*
-     * GGA PUT uses the MMO opcode, whose DMA ordering is independent of the
-     * RC QP data placement ordering. Therefore, a PUT posted after a fence
-     * must always request strong ordering unless fencing is disabled. GGA GET
-     * also requires at least the fence flag, while preserving strong ordering
-     * selected by the common policy.
-     */
+    /* MMO DMA ordering is independent of QP data placement ordering. */
     if (config->super.super.fence_mode == UCT_RC_FENCE_MODE_NONE) {
         self->super.super.config.fence_mode  = UCT_RC_FENCE_MODE_NONE;
         self->super.config.put_fence_flag    = 0;
