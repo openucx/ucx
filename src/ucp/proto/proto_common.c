@@ -584,6 +584,9 @@ ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
     const ucp_proto_select_param_t *select_param = params->select_param;
     const ucp_lane_map_t failed_lanes            =
         ucp_ep_config_get_failed_lanes(ep_config_key);
+    const int is_failover = ep_config_key->err_mode ==
+                            UCP_ERR_HANDLING_MODE_FAILOVER;
+    const int is_zcopy    = flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY;
     const uct_iface_attr_t *iface_attr;
     uct_iface_attr_v2_t iface_attr_v2;
     ucp_lane_index_t lane, num_lanes;
@@ -652,7 +655,7 @@ ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
         }
 
         /* Check v2 iface capabilities */
-        if (tl_v2_cap_flags != 0) {
+        if ((tl_v2_cap_flags != 0) || (is_failover && is_zcopy)) {
             iface_attr_v2.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS;
             status                   = uct_iface_query_v2(
                     ucp_worker_iface(params->worker, rsc_index)->iface,
@@ -660,13 +663,19 @@ ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
             if (status != UCS_OK) {
                 ucs_trace("%s: iface_query_v2 failed: %s", lane_desc,
                           ucs_status_string(status));
-                continue;
-            }
-
-            if (!ucs_test_all_flags(iface_attr_v2.cap.flags,
-                                    tl_v2_cap_flags)) {
+                if (tl_v2_cap_flags != 0) {
+                    continue;
+                }
+            } else if (!ucs_test_all_flags(iface_attr_v2.cap.flags,
+                                           tl_v2_cap_flags)) {
                 ucs_trace("%s: no v2 cap 0x%" PRIx64, lane_desc,
                           tl_v2_cap_flags);
+                continue;
+            } else if (is_failover && is_zcopy &&
+                       (iface_attr_v2.cap.flags &
+                        UCT_IFACE_FLAG_V2_QUERY_TOKEN)) {
+                ucs_trace("%s: zcopy is disabled on a failover token lane",
+                          lane_desc);
                 continue;
             }
         }
