@@ -118,10 +118,10 @@ ssize_t uct_rc_mlx5_base_ep_put_bcopy(uct_ep_h tl_ep,
                                       uct_pack_callback_t pack_cb, void *arg,
                                       uint64_t remote_addr, uct_rkey_t rkey);
 
-ssize_t
-uct_rc_mlx5_base_ep_put_bcopy_comp(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
-                                   void *arg, uint64_t remote_addr,
-                                   uct_rkey_t rkey, uct_completion_t *comp);
+ssize_t uct_rc_mlx5_base_ep_put_bcopy_ft(uct_ep_h tl_ep,
+                                         uct_pack_callback_t pack_cb, void *arg,
+                                         uint64_t remote_addr, uct_rkey_t rkey,
+                                         uct_completion_t *comp);
 
 ucs_status_t uct_rc_mlx5_base_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
                                            size_t iovcnt, uint64_t remote_addr,

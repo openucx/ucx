@@ -2939,15 +2939,18 @@ UCT_INLINE_API ssize_t uct_ep_put_bcopy(uct_ep_h ep, uct_pack_callback_t pack_cb
  * This internal extension has the same local-buffer semantics as
  * @ref uct_ep_put_bcopy. The completion is invoked when the transport no
  * longer owns the posted operation.
+ *
+ * @note This operation is available on interfaces that report
+ *       @ref UCT_IFACE_FLAG_V2_QUERY_TOKEN.
  */
-UCT_INLINE_API ssize_t uct_ep_put_bcopy_comp(uct_ep_h ep,
-                                             uct_pack_callback_t pack_cb,
-                                             void *arg, uint64_t remote_addr,
-                                             uct_rkey_t rkey,
-                                             uct_completion_t *comp)
+UCT_INLINE_API ssize_t uct_ep_put_bcopy_ft(uct_ep_h ep,
+                                           uct_pack_callback_t pack_cb,
+                                           void *arg, uint64_t remote_addr,
+                                           uct_rkey_t rkey,
+                                           uct_completion_t *comp)
 {
-    return ep->iface->ops.ep_put_bcopy_comp(ep, pack_cb, arg, remote_addr, rkey,
-                                            comp);
+    return ep->iface->ops.ep_put_bcopy_ft(ep, pack_cb, arg, remote_addr, rkey,
+                                          comp);
 }
 
 
