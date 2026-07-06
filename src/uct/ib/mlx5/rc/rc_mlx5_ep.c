@@ -76,12 +76,6 @@ uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep, uct_ep_attr_t *ep_attr)
                                     &attr);
 }
 
-ucs_status_t uct_rc_mlx5_ep_outstanding_extract(
-        uct_ep_h ep, const uct_ep_outstanding_extract_params_t *params)
-{
-    return uct_ib_mlx5_ext_ep_outstanding_extract(ep, params);
-}
-
 ucs_status_t uct_rc_mlx5_ep_failover_enable(uct_ep_h tl_ep)
 {
     uct_rc_mlx5_base_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_base_ep_t);
