@@ -71,6 +71,14 @@ typedef struct {
 } UCS_S_PACKED ucp_rma_rep_hdr_t;
 
 
+/* Per-operation state retained while an RMA operation can be recovered. */
+typedef struct {
+    uct_completion_t comp;
+    ucp_rkey_h       rkey;
+    uint64_t         remote_addr;
+} ucp_rma_op_t;
+
+
 typedef struct {
     uint64_t                  address;
     ucp_request_hdr_t         req; /* invalid req_id if no reply */

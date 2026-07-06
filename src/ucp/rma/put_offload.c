@@ -14,10 +14,10 @@
 #include <ucp/core/ucp_request.inl>
 #include <ucp/dt/datatype_iter.inl>
 #include <ucp/proto/proto_init.h>
-#include <ucp/proto/proto_failover.h>
 #include <ucp/proto/proto_multi.inl>
 #include <ucp/proto/proto_single.inl>
 #include <ucp/wireup/wireup.h>
+#include <uct/base/uct_iface.h>
 
 static ucs_status_t ucp_proto_put_offload_short_progress(uct_pending_req_t *self)
 {
@@ -129,6 +129,32 @@ static size_t ucp_proto_put_offload_bcopy_pack(void *dest, void *arg)
     return ucp_proto_multi_data_pack(pack_ctx, dest);
 }
 
+static void ucp_proto_put_offload_bcopy_ft_completion(uct_completion_t *comp)
+{
+    ucp_rma_op_t *op = ucs_container_of(comp, ucp_rma_op_t, comp);
+
+    ucp_rkey_release(op->rkey);
+    ucs_free(op);
+}
+
+static ucp_rma_op_t *
+ucp_proto_put_offload_bcopy_ft_op_create(ucp_rkey_h rkey, uint64_t remote_addr)
+{
+    ucp_rma_op_t *op = ucs_malloc(sizeof(*op), "rma_op");
+
+    if (op == NULL) {
+        return NULL;
+    }
+
+    ucp_rkey_retain(rkey);
+    op->comp.func   = ucp_proto_put_offload_bcopy_ft_completion;
+    op->comp.count  = 1;
+    op->comp.status = UCS_OK;
+    op->rkey        = rkey;
+    op->remote_addr = remote_addr;
+    return op;
+}
+
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_put_offload_update_remote_flush(ucp_ep_h ep,
                                           ucp_sys_dev_map_t flush_sys_dev_mask,
@@ -188,7 +214,7 @@ ucp_proto_put_offload_bcopy_ft_send_func(
                          req->send.state.dt_iter.offset;
     uct_rkey_t tl_rkey = ucp_rkey_get_tl_rkey(req->send.rma.rkey,
                                               lpriv->super.rkey_index);
-    ucp_proto_failover_rma_op_t *rma_op;
+    ucp_rma_op_t *rma_op;
     ucp_proto_multi_pack_ctx_t pack_ctx = {
         .req         = req,
         .max_payload = ucp_proto_multi_max_payload(req, lpriv, 0),
@@ -197,18 +223,18 @@ ucp_proto_put_offload_bcopy_ft_send_func(
     ssize_t packed_size;
     ucs_status_t status;
 
-    rma_op = ucp_proto_failover_rma_op_create(req->send.rma.rkey, address);
+    rma_op = ucp_proto_put_offload_bcopy_ft_op_create(req->send.rma.rkey,
+                                                      address);
     if (rma_op == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
 
-    packed_size = uct_ep_put_bcopy_comp(uct_ep,
-                                        ucp_proto_put_offload_bcopy_pack,
-                                        &pack_ctx, address, tl_rkey,
-                                        &rma_op->comp);
+    packed_size = uct_ep_put_bcopy_ft(uct_ep, ucp_proto_put_offload_bcopy_pack,
+                                      &pack_ctx, address, tl_rkey,
+                                      &rma_op->comp);
     status      = ucp_proto_bcopy_send_func_status(packed_size);
     if (packed_size <= 0) {
-        ucp_proto_failover_rma_op_complete(rma_op, status);
+        uct_invoke_completion(&rma_op->comp, status);
     } else {
         ucp_proto_put_offload_update_remote_flush(ep, lpriv->flush_sys_dev_mask,
                                                   tl_rkey, uct_ep, address);
@@ -315,8 +341,7 @@ static void ucp_proto_put_offload_bcopy_probe_common(
         }
 
         params.super.flags           |= UCP_PROTO_COMMON_INIT_FLAG_FAILOVER;
-        params.first.tl_v2_cap_flags  = UCT_IFACE_FLAG_V2_QUERY_TOKEN |
-                                        UCT_IFACE_FLAG_V2_PUT_BCOPY_COMP;
+        params.first.tl_v2_cap_flags  = UCT_IFACE_FLAG_V2_QUERY_TOKEN;
         params.middle.tl_v2_cap_flags = params.first.tl_v2_cap_flags;
     } else if (init_params->ep_config_key->err_mode ==
                UCP_ERR_HANDLING_MODE_FAILOVER) {
