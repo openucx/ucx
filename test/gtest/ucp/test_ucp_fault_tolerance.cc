@@ -659,10 +659,6 @@ protected:
         unsigned failover_lane_count      = 0;
         unsigned native_put_count         = 0;
 
-        if (proto == TEST_FAILOVER_PROTO_PUT_BCOPY) {
-            required_v2_caps |= UCT_IFACE_FLAG_V2_PUT_BCOPY_COMP;
-        }
-
         for (ucp_lane_index_t lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
             uct_ep_h uct_ep = ucp_ep_get_lane(ep, lane);
             if (uct_ep == nullptr) {
