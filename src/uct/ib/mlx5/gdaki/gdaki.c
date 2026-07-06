@@ -11,6 +11,7 @@
 #include "gdaki.h"
 
 #include <ucs/sys/sock.h>
+#include <ucs/sys/topo/base/topo.h>
 #include <ucs/time/time.h>
 #include <ucs/datastruct/string_buffer.h>
 #include <ucs/algorithm/qsort_r.h>
@@ -21,10 +22,13 @@
 #include <uct/cuda/cuda_copy/cuda_copy_md.h>
 #include <uct/cuda/base/cuda_util.h>
 #include <uct/cuda/base/cuda_ctx.h>
+#include <uct/cuda/base/cuda_nvml.h>
+
+#include <string.h>
 
 #include "gpunetio/common/doca_gpunetio_verbs_def.h"
 
-#define UCT_CUDA_MAX_DEVICES 64
+#define UCT_GDAKI_MAX_CUDA_DEVICES 64
 
 #define UCT_GDAKI_CQ_PAGE_OFFSET_SHIFT 6
 #define UCT_GDAKI_DEV_EP_SIZE          64
@@ -1239,8 +1243,26 @@ typedef struct {
 
 typedef struct {
     ucs_sys_device_t sys_dev;
+    ucs_sys_bus_id_t bus_id;
     int              cuda_idx; /* CUDA driver index, -1 if not CUDA-visible */
 } uct_gdaki_gpu_info_t;
+
+static const uct_gdaki_gpu_info_t *
+uct_gdaki_gpu_bus_id_lookup(const uct_gdaki_gpu_info_t *gpus, unsigned count,
+                            const ucs_sys_bus_id_t *bus_id)
+{
+    ucs_bus_id_bit_rep_t bus_id_key = ucs_topo_get_bus_id_bit_repr(bus_id);
+    unsigned gpu_idx;
+
+    for (gpu_idx = 0; gpu_idx < count; gpu_idx++) {
+        if (bus_id_key ==
+            ucs_topo_get_bus_id_bit_repr(&gpus[gpu_idx].bus_id)) {
+            return &gpus[gpu_idx];
+        }
+    }
+
+    return NULL;
+}
 
 static int uct_gdaki_dev_matrix_score(const void *pa, const void *pb, void *arg)
 {
@@ -1249,7 +1271,7 @@ static int uct_gdaki_dev_matrix_score(const void *pa, const void *pb, void *arg)
 
     /* Prefer lower latency device, and if same latency prefer the less utilized */
     return (ucs_fp_compare(a->dist.latency, b->dist.latency) *
-            UCT_CUDA_MAX_DEVICES) +
+            UCT_GDAKI_MAX_CUDA_DEVICES) +
            ucs_signum(a->usecount - b->usecount);
 }
 
@@ -1271,42 +1293,104 @@ uct_gdaki_get_cuda_sys_dev(int cuda_idx, ucs_sys_device_t *sys_dev_p)
 static ucs_status_t
 uct_gdaki_enum_gpus(uct_gdaki_gpu_info_t *gpus, unsigned *count_p)
 {
-    const ucs_sys_device_t *gpu_sys_devs;
-    ucs_sys_device_t cuda_sys_dev;
-    unsigned gpu_count, gpu_idx;
+    uct_gdaki_gpu_info_t cuda_gpus[UCT_GDAKI_MAX_CUDA_DEVICES];
+    const uct_gdaki_gpu_info_t *gpu_info;
+    unsigned nvml_dev_count, nvml_idx, gpu_count, cuda_gpu_count;
     int cuda_dev_count, cuda_idx;
+    ucs_sys_bus_id_t bus_id;
+    nvmlDevice_t nvml_dev;
+    nvmlPciInfo_t nvml_pci;
+    ucs_sys_device_t sys_dev;
     ucs_status_t status;
 
-    /* Enumerate all physical GPUs so that CUDA_VISIBLE_DEVICES does not hide
-     * GPUs from the topology calculation. */
-    status = uct_cuda_enum_gpus(&gpu_sys_devs, &gpu_count);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    for (gpu_idx = 0; gpu_idx < gpu_count; gpu_idx++) {
-        gpus[gpu_idx].sys_dev  = gpu_sys_devs[gpu_idx];
-        gpus[gpu_idx].cuda_idx = -1;
-    }
-
-    /* Map CUDA-visible devices back to their physical entry via sys_dev. */
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetCount(&cuda_dev_count));
     if (status != UCS_OK) {
         return status;
     }
 
+    ucs_assert_always(cuda_dev_count <= UCT_GDAKI_MAX_CUDA_DEVICES);
+
+    cuda_gpu_count = 0;
     for (cuda_idx = 0; cuda_idx < cuda_dev_count; cuda_idx++) {
-        status = uct_gdaki_get_cuda_sys_dev(cuda_idx, &cuda_sys_dev);
+        status = uct_gdaki_get_cuda_sys_dev(cuda_idx, &sys_dev);
         if (status != UCS_OK) {
             return status;
         }
 
-        for (gpu_idx = 0; gpu_idx < gpu_count; gpu_idx++) {
-            if (gpus[gpu_idx].sys_dev == cuda_sys_dev) {
-                gpus[gpu_idx].cuda_idx = cuda_idx;
-                break;
-            }
+        status = ucs_topo_get_device_bus_id(sys_dev, &bus_id);
+        if (status != UCS_OK) {
+            return status;
         }
+
+        if (uct_gdaki_gpu_bus_id_lookup(cuda_gpus, cuda_gpu_count,
+                                        &bus_id) != NULL) {
+            ucs_debug("skip cuda device %d with duplicate bdf "
+                      "%04x:%02x:%02x.%u", cuda_idx,
+                      (unsigned)bus_id.domain, (unsigned)bus_id.bus,
+                      (unsigned)bus_id.slot, (unsigned)bus_id.function);
+            /* Same BDF. TODO: support MLOPart. */
+            continue;
+        }
+
+        cuda_gpus[cuda_gpu_count].sys_dev  = sys_dev;
+        cuda_gpus[cuda_gpu_count].bus_id   = bus_id;
+        cuda_gpus[cuda_gpu_count].cuda_idx = cuda_idx;
+        cuda_gpu_count++;
+    }
+
+    status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetCount_v2, &nvml_dev_count);
+    if (status != UCS_OK) {
+        ucs_diag("NVML unavailable: using legacy CUDA-only enumeration");
+        memcpy(gpus, cuda_gpus, cuda_gpu_count * sizeof(*gpus));
+        *count_p = cuda_gpu_count;
+        return UCS_OK;
+    }
+
+    ucs_assert_always(nvml_dev_count <= UCT_GDAKI_MAX_CUDA_DEVICES);
+
+    /* Add non-CUDA-visible devices from NVML. TODO: support MLOPart. */
+    gpu_count = 0;
+    for (nvml_idx = 0; nvml_idx < nvml_dev_count; nvml_idx++) {
+        status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetHandleByIndex, nvml_idx,
+                                         &nvml_dev);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetPciInfo_v3, nvml_dev,
+                                         &nvml_pci);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        bus_id.domain   = nvml_pci.domain;
+        bus_id.bus      = nvml_pci.bus;
+        bus_id.slot     = nvml_pci.device;
+        bus_id.function = 0;
+
+        gpu_info = uct_gdaki_gpu_bus_id_lookup(cuda_gpus, cuda_gpu_count,
+                                               &bus_id);
+        if (gpu_info != NULL) {
+            gpus[gpu_count++] = *gpu_info;
+            /* Already added as CUDA-visible. */
+            continue;
+        }
+
+        status = ucs_topo_find_device_by_bus_id(&bus_id, &sys_dev);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        if (gpu_count == UCT_GDAKI_MAX_CUDA_DEVICES) {
+            ucs_error("exceeded maximal number of GDAKI CUDA devices (%u)",
+                      UCT_GDAKI_MAX_CUDA_DEVICES);
+            return UCS_ERR_EXCEEDS_LIMIT;
+        }
+
+        gpus[gpu_count].sys_dev  = sys_dev;
+        gpus[gpu_count].bus_id   = bus_id;
+        gpus[gpu_count].cuda_idx = -1;
+        gpu_count++;
     }
 
     *count_p = gpu_count;
@@ -1318,7 +1402,7 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
 {
     unsigned long ib_per_cuda         = ib_md->config.gda_max_hca_per_gpu;
     uct_gdaki_dev_matrix_elem_t *dmat = NULL;
-    uct_gdaki_gpu_info_t gpus[UCT_CUDA_MAX_DEVICES];
+    uct_gdaki_gpu_info_t gpus[UCT_GDAKI_MAX_CUDA_DEVICES];
     ucs_status_t status;
     int ibdev_index, ibdev_count;
     unsigned gpu_count, gpu_index;
