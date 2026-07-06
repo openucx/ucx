@@ -407,10 +407,10 @@ run_io_demo() {
 # Parse the protocol configuration info in ucx_perftest stdout to get active
 # devices 
 #
-parse_active_devices()
-{
+parse_active_devices() {
     file=$1
     config_cnt=$2
+    found=0
 
     while IFS= read -r line;
 	do
@@ -424,8 +424,16 @@ parse_active_devices()
         break
     done < "$file"
 
-    for word in $line; do
-        if [[ $word == */*:* ]]; then
+    if [[ $found -ne 1 ]];
+	then
+        echo "Error: Failed to find protocol configuration count $config_cnt in standard out" >&2 
+        return 1
+    fi
+
+    for word in $line;
+	do
+        if [[ $word == */*:* ]];
+		then
             device=${word#*/}
             device=${device%%:*}
             echo "$device"
@@ -441,7 +449,8 @@ verify_active_devices() {
     config_cnt=$2
     expected=$3
 
-    actual_sorted=$(parse_active_devices "$file" "$config_cnt" | sort | paste -sd' ')
+    actual=$(parse_active_devices "$file" "$config_cnt") || return 1
+    actual_sorted=$(echo "$actual" | sort | paste -sd' ')
     expected_sorted=$(echo "$expected" | tr ' ' '\n' | sort | paste -sd' ')
 
     if [[ "$actual_sorted" != "$expected_sorted" ]];
@@ -519,7 +528,7 @@ run_ucx_perftest_fault_tolerance() {
 		-e failover         \
 		-l"
 
-	taskset -c ${affinity} ${test_exe} ${args} 2>&1 | tee ${output_file} &
+	taskset -c ${affinity} ${test_exe} ${args} > ${output_file} 2>&1 &
 	background_pids+=($!)
 
 	sleep ${settle_seconds} 
