@@ -28,7 +28,11 @@
 static int
 ucp_proto_failover_replay_op_supported(const uct_ep_op_info_t *op_info)
 {
-    const uint64_t data_mask = UCT_EP_OP_INFO_FIELD_INLINE_DATA;
+    const uint64_t data_mask = UCT_EP_OP_INFO_FIELD_DATA;
+
+    if (!(op_info->field_mask & UCT_EP_OP_INFO_FIELD_OPERATION)) {
+        return 0;
+    }
 
     switch (op_info->operation) {
     case UCT_EP_OP_AM_BCOPY:
@@ -56,8 +60,8 @@ ucp_proto_failover_replay_op_create(const uct_ep_op_info_t *op_info,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    length = op_info->inline_data.length;
-    if ((length > 0) && (op_info->inline_data.buffer == NULL)) {
+    length = op_info->data.length;
+    if ((length > 0) && (op_info->data.buffer == NULL)) {
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -69,10 +73,10 @@ ucp_proto_failover_replay_op_create(const uct_ep_op_info_t *op_info,
     op->req  = NULL;
     op->info = *op_info;
     if (length > 0) {
-        memcpy(op->data, op_info->inline_data.buffer, length);
-        op->info.inline_data.buffer = op->data;
+        memcpy(op->data, op_info->data.buffer, length);
+        op->info.data.buffer = op->data;
     } else {
-        op->info.inline_data.buffer = NULL;
+        op->info.data.buffer = NULL;
     }
 
     *replay_op_p = op;
@@ -117,10 +121,10 @@ ucp_proto_failover_replay_op_id(const uct_ep_op_info_t *op_info)
 static size_t ucp_proto_failover_pack(void *dest, void *arg)
 {
     const uct_ep_op_info_t *op_info = arg;
-    size_t length                   = op_info->inline_data.length;
+    size_t length                   = op_info->data.length;
 
     if (length > 0) {
-        memcpy(dest, op_info->inline_data.buffer, length);
+        memcpy(dest, op_info->data.buffer, length);
     }
 
     return length;
@@ -135,10 +139,10 @@ static ucs_status_t ucp_proto_failover_bcopy_status(ssize_t packed_size)
     return UCS_OK;
 }
 
-static unsigned ucp_proto_failover_uct_flags(const uct_ep_op_info_t *op_info)
+static unsigned ucp_proto_failover_am_flags(const uct_ep_op_info_t *op_info)
 {
-    return (op_info->field_mask & UCT_EP_OP_INFO_FIELD_FLAGS) ? op_info->flags :
-                                                                0;
+    return (op_info->field_mask & UCT_EP_OP_INFO_FIELD_AM_FLAGS) ?
+           op_info->am.flags : 0;
 }
 
 static ucs_status_t
@@ -153,7 +157,7 @@ ucp_proto_failover_am_bcopy_progress(uct_pending_req_t *self)
                                                   spriv->super.lane),
                                   op_info->am.am_id, ucp_proto_failover_pack,
                                   (void*)op_info,
-                                  ucp_proto_failover_uct_flags(op_info));
+                                  ucp_proto_failover_am_flags(op_info));
 
     return ucp_proto_failover_bcopy_status(packed_size);
 }
@@ -166,8 +170,7 @@ ucp_proto_failover_put_short_progress(uct_pending_req_t *self)
     const uct_ep_op_info_t *op_info      = req->send.failover.op_info;
 
     return uct_ep_put_short(ucp_ep_get_lane(req->send.ep, spriv->super.lane),
-                            op_info->inline_data.buffer,
-                            op_info->inline_data.length,
+                            op_info->data.buffer, op_info->data.length,
                             op_info->rma.remote_addr, op_info->rma.rkey);
 }
 
@@ -397,7 +400,7 @@ ucp_proto_failover_replay_op_request_init(ucp_ep_h ep,
         return UCS_ERR_NO_MEMORY;
     }
 
-    length                         = op->info.inline_data.length;
+    length                         = op->info.data.length;
     req->status                    = UCS_INPROGRESS;
     req->flags                     = UCP_REQUEST_FLAG_PROTO_SEND;
     req->send.ep                   = ep;
