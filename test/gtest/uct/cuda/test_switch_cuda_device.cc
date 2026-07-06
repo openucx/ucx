@@ -8,9 +8,9 @@
 #include <uct/test_p2p_rma.h>
 
 extern "C" {
+#include <ucs/memory/memtype_cache.h>
 #include <ucs/sys/ptr_arith.h>
 #include <uct/base/uct_md.h>
-#include <ucs/memory/memtype_cache.h>
 }
 
 #include <cuda.h>
@@ -485,7 +485,7 @@ UCS_TEST_P(test_mem_alloc_device, no_current_context_cuda_registrable,
     CUcontext cuda_ctx         = nullptr;
 
     /* UCP initializes the cache before allocating rendezvous fragments. */
-    ucs_memory_info_t init_mem_info;
+    ucs_memory_info_t init_mem_info = {};
     (void)ucs_memtype_cache_lookup(&init_mem_info, sizeof(init_mem_info),
                                    &init_mem_info);
 

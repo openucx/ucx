@@ -427,14 +427,17 @@ uct_cuda_copy_mem_alloc(uct_md_h uct_md, size_t *length_p, void **address_p,
 allocated:
     uct_cuda_copy_sync_memops(alloc_handle->ptr, alloc_handle->is_vmm);
 
-    /* Cache attributes before restoring the CUDA context. */
-    mem_attr.field_mask = UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE |
-                          UCT_MD_MEM_ATTR_V2_FIELD_SYS_DEV |
+    /* Cache memory flags as part of uct_cuda_copy_md_mem_query() before
+     * restoring the CUDA context.
+     */
+    mem_attr.field_mask = UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE     |
+                          UCT_MD_MEM_ATTR_V2_FIELD_SYS_DEV      |
                           UCT_MD_MEM_ATTR_V2_FIELD_BASE_ADDRESS |
                           UCT_MD_MEM_ATTR_V2_FIELD_ALLOC_LENGTH |
                           UCT_MD_MEM_ATTR_V2_FIELD_MEM_FLAGS;
+
     status = uct_cuda_copy_md_mem_query(uct_md, (void*)alloc_handle->ptr,
-                                         alloc_handle->length, &mem_attr);
+                                        alloc_handle->length, &mem_attr);
     if (status != UCS_OK) {
         (void)uct_md_mem_free(uct_md, alloc_handle);
         goto out;
