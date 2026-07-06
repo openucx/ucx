@@ -803,7 +803,7 @@ static UCS_CLASS_INIT_FUNC(uct_gga_mlx5_iface_t,
         self->super.config.atomic_fence_flag = 0;
     } else {
         self->super.super.config.fence_mode = UCT_RC_FENCE_MODE_WEAK;
-        self->super.config.put_fence_flag   =
+        self->super.config.put_fence_flag =
                 UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER;
         if (self->super.config.atomic_fence_flag !=
             UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER) {

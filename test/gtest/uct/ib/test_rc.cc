@@ -1052,9 +1052,8 @@ protected:
     ucs_status_t open_iface(uct_ib_mlx5_dp_ordering_t dp_ordering,
                             bool relaxed_order, bool pci_atomics)
     {
-        uct_ib_mlx5_md_t *md = ucs_derived_of(m_entity->md(),
-                                               uct_ib_mlx5_md_t);
-        uct_ib_device_t *dev = &md->super.dev;
+        uct_ib_mlx5_md_t *md = ucs_derived_of(m_entity->md(), uct_ib_mlx5_md_t);
+        uct_ib_device_t *dev      = &md->super.dev;
         uint8_t saved_dp_ordering = md->dp_ordering_cap_devx.rc;
         uint8_t saved_pci_fadd    = dev->pci_fadd_arg_sizes;
         uint8_t saved_pci_cswap   = dev->pci_cswap_arg_sizes;
@@ -1072,10 +1071,10 @@ protected:
                                 &m_entity->iface_params(), m_iface_config,
                                 &tl_iface);
 
-        dev->pci_cswap_arg_sizes      = saved_pci_cswap;
-        dev->pci_fadd_arg_sizes       = saved_pci_fadd;
-        md->super.relaxed_order       = saved_relaxed_order;
-        md->dp_ordering_cap_devx.rc   = saved_dp_ordering;
+        dev->pci_cswap_arg_sizes    = saved_pci_cswap;
+        dev->pci_fadd_arg_sizes     = saved_pci_fadd;
+        md->super.relaxed_order     = saved_relaxed_order;
+        md->dp_ordering_cap_devx.rc = saved_dp_ordering;
 
         if (status == UCS_OK) {
             m_iface.reset(tl_iface, uct_iface_close);
@@ -1089,12 +1088,11 @@ protected:
         return ucs_derived_of(m_iface.get(), uct_rc_mlx5_iface_common_t);
     }
 
-    void check_enabled(uct_ib_mlx5_dp_ordering_t dp_ordering,
-                       uint8_t get_fence_flag)
+    void
+    check_enabled(uct_ib_mlx5_dp_ordering_t dp_ordering, uint8_t get_fence_flag)
     {
         EXPECT_EQ(dp_ordering, rc_iface()->config.dp_ordering_devx);
-        EXPECT_NE(UCT_RC_FENCE_MODE_NONE,
-                  rc_iface()->super.config.fence_mode);
+        EXPECT_NE(UCT_RC_FENCE_MODE_NONE, rc_iface()->super.config.fence_mode);
         EXPECT_EQ(UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER,
                   rc_iface()->config.put_fence_flag);
         EXPECT_EQ(get_fence_flag, rc_iface()->config.atomic_fence_flag);
@@ -1103,65 +1101,64 @@ protected:
     void check_disabled(uct_ib_mlx5_dp_ordering_t dp_ordering)
     {
         EXPECT_EQ(dp_ordering, rc_iface()->config.dp_ordering_devx);
-        EXPECT_EQ(UCT_RC_FENCE_MODE_NONE,
-                  rc_iface()->super.config.fence_mode);
+        EXPECT_EQ(UCT_RC_FENCE_MODE_NONE, rc_iface()->super.config.fence_mode);
         EXPECT_EQ(0, rc_iface()->config.put_fence_flag);
         EXPECT_EQ(0, rc_iface()->config.atomic_fence_flag);
     }
 
 private:
-    entity                    *m_entity = NULL;
+    entity *m_entity = NULL;
     ucs::handle<uct_iface_h> m_iface;
 };
 
-UCS_TEST_P(test_gga_fence_flags, auto_ibta,
-           "GGA_MLX5_AR_ENABLE=auto", "GGA_MLX5_FENCE=auto")
+UCS_TEST_P(test_gga_fence_flags, auto_ibta, "GGA_MLX5_AR_ENABLE=auto",
+           "GGA_MLX5_FENCE=auto")
 {
     ASSERT_UCS_OK(open_iface(UCT_IB_MLX5_DP_ORDERING_IBTA, false, false));
     check_enabled(UCT_IB_MLX5_DP_ORDERING_IBTA,
                   UCT_IB_MLX5_WQE_CTRL_FLAG_FENCE);
 }
 
-UCS_TEST_P(test_gga_fence_flags, weak_ibta,
-           "GGA_MLX5_AR_ENABLE=auto", "GGA_MLX5_FENCE=weak")
+UCS_TEST_P(test_gga_fence_flags, weak_ibta, "GGA_MLX5_AR_ENABLE=auto",
+           "GGA_MLX5_FENCE=weak")
 {
     ASSERT_UCS_OK(open_iface(UCT_IB_MLX5_DP_ORDERING_IBTA, false, false));
     check_enabled(UCT_IB_MLX5_DP_ORDERING_IBTA,
                   UCT_IB_MLX5_WQE_CTRL_FLAG_FENCE);
 }
 
-UCS_TEST_P(test_gga_fence_flags, none_ibta,
-           "GGA_MLX5_AR_ENABLE=auto", "GGA_MLX5_FENCE=none")
+UCS_TEST_P(test_gga_fence_flags, none_ibta, "GGA_MLX5_AR_ENABLE=auto",
+           "GGA_MLX5_FENCE=none")
 {
     ASSERT_UCS_OK(open_iface(UCT_IB_MLX5_DP_ORDERING_IBTA, false, false));
     check_disabled(UCT_IB_MLX5_DP_ORDERING_IBTA);
 }
 
-UCS_TEST_P(test_gga_fence_flags, auto_ooo,
-           "GGA_MLX5_AR_ENABLE=auto", "GGA_MLX5_FENCE=auto")
+UCS_TEST_P(test_gga_fence_flags, auto_ooo, "GGA_MLX5_AR_ENABLE=auto",
+           "GGA_MLX5_FENCE=auto")
 {
     ASSERT_UCS_OK(open_iface(UCT_IB_MLX5_DP_ORDERING_OOO_RW, false, false));
     check_enabled(UCT_IB_MLX5_DP_ORDERING_OOO_RW,
                   UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER);
 }
 
-UCS_TEST_P(test_gga_fence_flags, none_ooo,
-           "GGA_MLX5_AR_ENABLE=auto", "GGA_MLX5_FENCE=none")
+UCS_TEST_P(test_gga_fence_flags, none_ooo, "GGA_MLX5_AR_ENABLE=auto",
+           "GGA_MLX5_FENCE=none")
 {
     ASSERT_UCS_OK(open_iface(UCT_IB_MLX5_DP_ORDERING_OOO_RW, false, false));
     check_disabled(UCT_IB_MLX5_DP_ORDERING_OOO_RW);
 }
 
-UCS_TEST_P(test_gga_fence_flags, auto_relaxed_order,
-           "GGA_MLX5_AR_ENABLE=auto", "GGA_MLX5_FENCE=auto")
+UCS_TEST_P(test_gga_fence_flags, auto_relaxed_order, "GGA_MLX5_AR_ENABLE=auto",
+           "GGA_MLX5_FENCE=auto")
 {
     ASSERT_UCS_OK(open_iface(UCT_IB_MLX5_DP_ORDERING_IBTA, true, false));
     check_enabled(UCT_IB_MLX5_DP_ORDERING_IBTA,
                   UCT_IB_MLX5_WQE_CTRL_FLAG_FENCE);
 }
 
-UCS_TEST_P(test_gga_fence_flags, auto_pci_atomics,
-           "GGA_MLX5_AR_ENABLE=auto", "GGA_MLX5_FENCE=auto")
+UCS_TEST_P(test_gga_fence_flags, auto_pci_atomics, "GGA_MLX5_AR_ENABLE=auto",
+           "GGA_MLX5_FENCE=auto")
 {
     ASSERT_UCS_OK(open_iface(UCT_IB_MLX5_DP_ORDERING_IBTA, false, true));
     check_enabled(UCT_IB_MLX5_DP_ORDERING_IBTA,
