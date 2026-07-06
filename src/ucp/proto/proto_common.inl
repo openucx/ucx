@@ -337,6 +337,16 @@ ucp_proto_request_send_op_rma(ucp_ep_h ep, ucp_rkey_h rkey, ucp_request_t *req,
     ucp_proto_select_t *proto_select;
     ucs_status_t status;
 
+    /* The peer may have failed and the endpoint's lanes been discarded before
+     * the user error callback fired (the caller can still see the EP as
+     * connected). Bail out before touching the endpoint/rkey configuration,
+     * which protocol selection below would otherwise dereference after it has
+     * been torn down. */
+    if (ucs_unlikely(ep->flags & UCP_EP_FLAG_FAILED)) {
+        ucp_request_put_param(param, req);
+        return UCS_STATUS_PTR(UCS_ERR_CANCELED);
+    }
+
     rkey_config  = ucp_rkey_config(worker, rkey);
     proto_select = &rkey_config->proto_select;
     
