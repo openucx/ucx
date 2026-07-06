@@ -164,31 +164,28 @@ ucp_ep_failover_extract_cb(const uct_ep_op_info_t *op_info, void *arg)
 {
     ucp_ep_failover_extract_arg_t *extract_arg = arg;
     ucp_proto_failover_replay_op_t *op;
-    ucs_status_t status;
 
     if (extract_arg->status != UCS_OK) {
-        if ((op_info->field_mask & UCT_EP_OP_INFO_FIELD_COMP) &&
-            (op_info->comp != NULL)) {
-            uct_invoke_completion(op_info->comp, extract_arg->status);
-        }
-        return;
+        goto err;
     }
 
-    status = ucp_proto_failover_replay_op_create(op_info, &op);
-    if (status != UCS_OK) {
+    extract_arg->status = ucp_proto_failover_replay_op_create(op_info, &op);
+    if (extract_arg->status != UCS_OK) {
         ucs_debug("ep %p: failed to save extracted failover op %d: %s",
                   extract_arg->lane->ep, (int)op_info->operation,
-                  ucs_status_string(status));
-        if ((op_info->field_mask & UCT_EP_OP_INFO_FIELD_COMP) &&
-            (op_info->comp != NULL)) {
-            uct_invoke_completion(op_info->comp, status);
-        }
-        extract_arg->status = status;
-        return;
+                  ucs_status_string(extract_arg->status));
+        goto err;
     }
 
     ucs_queue_push(&extract_arg->lane->replay_queue, &op->queue);
     ++extract_arg->lane->undelivered_count;
+    return;
+
+err:
+    if ((op_info->field_mask & UCT_EP_OP_INFO_FIELD_COMP) &&
+        (op_info->comp != NULL)) {
+        uct_invoke_completion(op_info->comp, extract_arg->status);
+    }
 }
 
 
