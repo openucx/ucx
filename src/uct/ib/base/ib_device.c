@@ -161,6 +161,12 @@ static uct_ib_device_spec_t uct_ib_builtin_device_specs[] = {
   {"ConnectX-9", {0x15b3, 4133},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V2, 90},
+  {"ConnectX-10", {0x15b3, 4135},
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
+   UCT_IB_DEVICE_FLAG_DC_V2, 100},
+  {"ConnectX-10 GRS", {0x15b3, 0x2101},
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
+   UCT_IB_DEVICE_FLAG_DC_V2, 100},
   {"BlueField", {0x15b3, 0xa2d2},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V2, 41},
@@ -537,6 +543,20 @@ uct_ib_device_set_pci_id(uct_ib_device_t *dev, const char *sysfs_path)
 
     ucs_debug("%s: vendor_id 0x%x device_id %d", uct_ib_device_name(dev),
               dev->pci_id.vendor, dev->pci_id.device);
+}
+
+int uct_ib_device_has_active_port(uct_ib_device_t *dev)
+{
+    uint8_t port_num;
+
+    for (port_num = dev->first_port;
+         port_num < dev->first_port + dev->num_ports; ++port_num) {
+        if (uct_ib_device_port_attr(dev, port_num)->state == IBV_PORT_ACTIVE) {
+            return 1;
+        }
+    }
+
+    return 0;
 }
 
 ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,

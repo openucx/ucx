@@ -5,6 +5,12 @@
 */
 
 #include <common/test.h>
+
+#include <algorithm>
+#include <cstdlib>
+#include <limits>
+#include <unistd.h>
+
 extern "C" {
 #include <ucs/memory/numa.h>
 #include <ucs/sys/sys.h>
@@ -162,6 +168,93 @@ UCS_TEST_F(test_topo, find_device_by_bus_id) {
     EXPECT_GE(ucs_topo_num_devices(), 2);
 }
 
+UCS_TEST_F(test_topo, find_device_by_bus_id_and_user_value) {
+    static const uintptr_t user_value1 = 17;
+    static const uintptr_t user_value2 = 42;
+    ucs_global_state_t *state;
+    ucs_sys_device_t dev1, dev2, dev1_again, dev2_again;
+    ucs_sys_device_t bdf_dev, bdf_dev_again;
+    ucs_sys_bus_id_t dummy_bus_id;
+    ucs_sys_bus_id_t bus_id1;
+    ucs_sys_bus_id_t bus_id2;
+    ucs_sys_dev_distance_t distance;
+    ucs_status_t status;
+
+    dummy_bus_id.domain   = 0x0001;
+    dummy_bus_id.bus      = 0x23;
+    dummy_bus_id.slot     = 0x04;
+    dummy_bus_id.function = 0;
+
+    status = ucs_topo_find_device_by_bus_id_and_user_value(&dummy_bus_id,
+                                                           user_value1, &dev1);
+    ASSERT_UCS_OK(status);
+    EXPECT_LT(dev1, UCS_SYS_DEVICE_ID_MAX);
+
+    status = ucs_topo_find_device_by_bus_id_and_user_value(&dummy_bus_id,
+                                                           user_value1,
+                                                           &dev1_again);
+    ASSERT_UCS_OK(status);
+    EXPECT_EQ(dev1, dev1_again);
+
+    status = ucs_topo_find_device_by_bus_id_and_user_value(&dummy_bus_id,
+                                                           user_value2, &dev2);
+    ASSERT_UCS_OK(status);
+    EXPECT_NE(dev1, dev2);
+
+    status = ucs_topo_find_device_by_bus_id(&dummy_bus_id, &bdf_dev);
+    ASSERT_UCS_OK(status);
+    EXPECT_NE(dev1, bdf_dev);
+    EXPECT_NE(dev2, bdf_dev);
+
+    EXPECT_EQ(user_value1, ucs_topo_sys_device_get_user_value(dev1));
+    EXPECT_EQ(user_value2, ucs_topo_sys_device_get_user_value(dev2));
+    EXPECT_EQ(UCS_SYS_DEVICE_USER_VALUE_EMPTY,
+              ucs_topo_sys_device_get_user_value(bdf_dev));
+
+    status = ucs_topo_get_device_bus_id(dev1, &bus_id1);
+    ASSERT_UCS_OK(status);
+    status = ucs_topo_get_device_bus_id(dev2, &bus_id2);
+    ASSERT_UCS_OK(status);
+    EXPECT_EQ(bus_id1.domain, bus_id2.domain);
+    EXPECT_EQ(bus_id1.bus, bus_id2.bus);
+    EXPECT_EQ(bus_id1.slot, bus_id2.slot);
+    EXPECT_EQ(bus_id1.function, bus_id2.function);
+
+    status = ucs_topo_get_distance(dev1, dev2, &distance);
+    ASSERT_UCS_OK(status);
+    EXPECT_NEAR(distance.latency, 0.0, 1e-9);
+
+    state = ucs_topo_extract_state();
+    ASSERT_TRUE(state != NULL);
+    ucs_topo_restore_state(state);
+
+    status = ucs_topo_find_device_by_bus_id(&dummy_bus_id, &bdf_dev_again);
+    ASSERT_UCS_OK(status);
+    EXPECT_EQ(bdf_dev, bdf_dev_again);
+    EXPECT_NE(dev1, bdf_dev_again);
+    EXPECT_NE(dev2, bdf_dev_again);
+
+    status = ucs_topo_find_device_by_bus_id_and_user_value(&dummy_bus_id,
+                                                           user_value1,
+                                                           &dev1_again);
+    ASSERT_UCS_OK(status);
+    EXPECT_EQ(dev1, dev1_again);
+
+    status = ucs_topo_find_device_by_bus_id_and_user_value(&dummy_bus_id,
+                                                           user_value2,
+                                                           &dev2_again);
+    ASSERT_UCS_OK(status);
+    EXPECT_EQ(dev2, dev2_again);
+
+    {
+        scoped_log_handler slh(hide_errors_logger);
+
+        status = ucs_topo_find_device_by_bus_id_and_user_value(
+                &dummy_bus_id, UCS_SYS_DEVICE_USER_VALUE_EMPTY, &dev2_again);
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+    }
+}
+
 UCS_TEST_F(test_topo, get_distance) {
     ucs_status_t status;
     ucs_sys_dev_distance_t distance;
@@ -225,7 +318,6 @@ UCS_TEST_F(test_topo, print_info) {
 UCS_TEST_F(test_topo, bdf_name) {
     static const char *bdf_name = "0002:8f:5c.0";
     static const char *dev_name = "test_bdf_name";
-    static const uintptr_t user_value = 1337;
 
     ucs_sys_device_t sys_dev    = UCS_SYS_DEVICE_ID_UNKNOWN;
 
@@ -236,18 +328,10 @@ UCS_TEST_F(test_topo, bdf_name) {
     status = ucs_topo_sys_device_set_name(sys_dev, dev_name, 10);
     ASSERT_UCS_OK(status);
 
-    status = ucs_topo_sys_device_set_user_value(sys_dev, user_value);
-    ASSERT_UCS_OK(status);
-
     const char *result_name = ucs_topo_sys_device_get_name(sys_dev);
     ASSERT_UCS_OK(status);
     EXPECT_EQ(std::string(dev_name), std::string(result_name));
     UCS_TEST_MESSAGE << "name: " << result_name;
-
-    uintptr_t result_user_value = ucs_topo_sys_device_get_user_value(sys_dev);
-    ASSERT_UCS_OK(status);
-    EXPECT_EQ(user_value, result_user_value);
-    UCS_TEST_MESSAGE << "user value: " << result_user_value;
 
     char name_buffer[UCS_SYS_BDF_NAME_MAX];
     const char *found_name = ucs_topo_sys_device_bdf_name(sys_dev, name_buffer,
@@ -291,12 +375,56 @@ UCS_TEST_F(test_topo, bdf_name_invalid) {
     EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
 }
 
-UCS_TEST_F(test_topo, numa_distance) {
-    ucs_numa_node_t num_of_nodes;
+static std::vector<ucs_numa_node_t> get_online_numa_nodes()
+{
+    std::vector<ucs_numa_node_t> nodes;
+    DIR *dir = opendir(UCS_SYS_FS_SYSTEM_PATH "/node");
+    struct dirent *entry;
 
-    num_of_nodes = ucs_numa_num_configured_nodes();
-    for (auto node1 = 0; node1 < num_of_nodes; ++node1) {
-        for (auto node2 = 0; node2 < num_of_nodes; ++node2) {
+    if (dir == NULL) {
+        goto out;
+    }
+
+    while ((entry = readdir(dir)) != NULL) {
+        static const char node_prefix[] = "node";
+        char *endptr;
+        std::string distance_path;
+        long node;
+
+        if (strncmp(entry->d_name, node_prefix, sizeof(node_prefix) - 1)) {
+            continue;
+        }
+
+        node = strtol(entry->d_name + sizeof(node_prefix) - 1, &endptr, 10);
+        if ((*endptr != '\0') || (node < 0) ||
+            (node > std::numeric_limits<ucs_numa_node_t>::max())) {
+            continue;
+        }
+
+        distance_path = std::string(UCS_SYS_FS_SYSTEM_PATH "/node/") +
+                        entry->d_name + "/distance";
+        if (access(distance_path.c_str(), R_OK) == 0) {
+            nodes.push_back(static_cast<ucs_numa_node_t>(node));
+        }
+    }
+
+    closedir(dir);
+
+out:
+    if (nodes.empty()) {
+        nodes.push_back(UCS_NUMA_NODE_DEFAULT);
+    } else {
+        std::sort(nodes.begin(), nodes.end());
+    }
+
+    return nodes;
+}
+
+UCS_TEST_F(test_topo, numa_distance) {
+    auto nodes = get_online_numa_nodes();
+
+    for (auto node1 : nodes) {
+        for (auto node2 : nodes) {
             UCS_TEST_MESSAGE << "Test distance: node" << node1 << " to node"
                              << node2;
             if (node1 == node2) {
@@ -369,6 +497,7 @@ UCS_TEST_F(test_topo, sibling_error) {
     scoped_log_handler slh(hide_errors_logger);
     ASSERT_EQ(UCS_ERR_INVALID_PARAM, ucs_topo_sys_device_set_sys_dev_aux(1, 0));
     ASSERT_EQ(UCS_ERR_INVALID_PARAM, ucs_topo_sys_device_enable_aux_path(1));
+    ASSERT_TRUE(ucs_topo_is_reachable(1, 0));
 }
 
 UCS_TEST_F(test_topo, sibling) {
@@ -419,15 +548,64 @@ UCS_TEST_F(test_topo, sibling) {
     ASSERT_FALSE(ucs_topo_is_sibling(hca_devs[1], gpu_dev));
     ASSERT_FALSE(ucs_topo_is_sibling(hca_devs[2], gpu_dev));
 
-    ASSERT_TRUE(ucs_topo_is_reachable(hca_devs[1], gpu_dev));
-
     if (!sibling_dma.empty()) {
         ASSERT_FALSE(ucs_topo_is_reachable(hca_devs[1], gpu_dev));
         ASSERT_TRUE(ucs_topo_is_sibling(hca_devs[0], gpu_dev));
-        ASSERT_TRUE(ucs_topo_is_sibling(gpu_dev, hca_devs[0]));
     } else {
         ASSERT_TRUE(ucs_topo_is_reachable(hca_devs[1], gpu_dev));
         ASSERT_FALSE(ucs_topo_is_sibling(hca_devs[0], gpu_dev));
         ASSERT_FALSE(ucs_topo_is_sibling(gpu_dev, hca_devs[0]));
     }
+}
+
+// Multiple GPUs with same HCA sibling can be seen with MPS MLOPart
+UCS_TEST_F(test_topo, sibling_multiple_memory_devices) {
+    static const uintptr_t user_value1 = 1;
+    static const uintptr_t user_value2 = 2;
+
+    read_pcie_devices();
+    if ((m_hcas.empty()) || (m_gpus.empty()) || (m_dmas.empty())) {
+        UCS_TEST_SKIP_R("Not enough HCA, GPU and DMA PCIe device");
+    }
+
+    std::string sibling_gpu, sibling_dma;
+    get_siblings(m_hcas[0], sibling_gpu, sibling_dma);
+    if (sibling_dma.empty()) {
+        UCS_TEST_SKIP_R("No sibling DMA device found");
+    }
+
+    auto hca_dev = register_device("hca0", m_hcas[0]);
+    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, hca_dev);
+    auto dma_dev = register_device("dma", sibling_dma);
+    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, dma_dev);
+    auto gpu_dev0 = register_device("gpu0", sibling_gpu);
+    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, gpu_dev0);
+
+    ucs_sys_bus_id_t gpu_bus_id;
+    ASSERT_UCS_OK(ucs_topo_get_device_bus_id(gpu_dev0, &gpu_bus_id));
+
+    ucs_sys_device_t gpu_dev1, gpu_dev2;
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id_and_user_value(
+            &gpu_bus_id, user_value1, &gpu_dev1));
+
+    ASSERT_UCS_OK(ucs_topo_sys_device_enable_aux_path(gpu_dev0));
+    ASSERT_UCS_OK(ucs_topo_sys_device_enable_aux_path(gpu_dev1));
+    ASSERT_UCS_OK(ucs_topo_sys_device_set_sys_dev_aux(hca_dev, dma_dev));
+
+    auto expect_sibling = [hca_dev](ucs_sys_device_t gpu_dev) {
+        EXPECT_TRUE(ucs_topo_device_has_sibling(gpu_dev));
+        EXPECT_TRUE(ucs_topo_is_reachable(hca_dev, gpu_dev));
+        EXPECT_TRUE(ucs_topo_is_sibling(hca_dev, gpu_dev));
+    };
+
+    expect_sibling(gpu_dev0);
+    expect_sibling(gpu_dev1);
+
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id_and_user_value(
+            &gpu_bus_id, user_value2, &gpu_dev2));
+    ASSERT_UCS_OK(ucs_topo_sys_device_enable_aux_path(gpu_dev2));
+
+    expect_sibling(gpu_dev0);
+    expect_sibling(gpu_dev1);
+    expect_sibling(gpu_dev2);
 }
