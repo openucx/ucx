@@ -2941,7 +2941,7 @@ UCT_INLINE_API ssize_t uct_ep_put_bcopy(uct_ep_h ep, uct_pack_callback_t pack_cb
  * longer owns the posted operation.
  *
  * @note This operation is available on interfaces that report
- *       @ref UCT_IFACE_FLAG_V2_QUERY_TOKEN.
+ *       @c UCT_IFACE_FLAG_V2_QUERY_TOKEN.
  */
 UCT_INLINE_API ssize_t uct_ep_put_bcopy_ft(uct_ep_h ep,
                                            uct_pack_callback_t pack_cb,
