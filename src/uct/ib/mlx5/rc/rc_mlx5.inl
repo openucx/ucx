@@ -1752,7 +1752,8 @@ static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_common_ep_short_iov_dm(
         uct_rc_mlx5_dm_copy_data_t *cache, size_t hdr_len, const uct_iov_t *iov,
         size_t iovcnt, size_t iov_length, unsigned opcode, uint8_t fm_ce_se,
         uint16_t dci_channel, uint64_t rdma_raddr, uct_rkey_t rdma_rkey,
-        uct_rc_txqp_t *txqp, uct_ib_mlx5_txwq_t *txwq, size_t av_size)
+        uct_rc_txqp_t *txqp, uct_ib_mlx5_txwq_t *txwq, size_t av_size,
+        uct_completion_t *comp)
 {
     uct_rc_iface_send_desc_t *desc = NULL;
     void *buffer;
@@ -1763,6 +1764,11 @@ static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_common_ep_short_iov_dm(
                                              &desc, &buffer, &log_sge);
     if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
         return status;
+    }
+
+    if (comp != NULL) {
+        desc->super.handler   = uct_rc_ep_put_bcopy_handler;
+        desc->super.user_comp = comp;
     }
 
     uct_rc_mlx5_common_txqp_bcopy_post(iface, qp_type, txqp, txwq, opcode,
@@ -1779,7 +1785,8 @@ static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_common_ep_short_dm(
         uct_rc_mlx5_dm_copy_data_t *cache, size_t hdr_len, const void *payload,
         unsigned length, unsigned opcode, uint8_t fm_ce_se,
         uint16_t dci_channel, uint64_t rdma_raddr, uct_rkey_t rdma_rkey,
-        uct_rc_txqp_t *txqp, uct_ib_mlx5_txwq_t *txwq, size_t av_size)
+        uct_rc_txqp_t *txqp, uct_ib_mlx5_txwq_t *txwq, size_t av_size,
+        uct_completion_t *comp)
 {
     uct_iov_t iov;
 
@@ -1790,7 +1797,8 @@ static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_common_ep_short_dm(
     return uct_rc_mlx5_common_ep_short_iov_dm(iface, qp_type, cache, hdr_len,
                                               &iov, 1, length, opcode, fm_ce_se,
                                               dci_channel, rdma_raddr,
-                                              rdma_rkey, txqp, txwq, av_size);
+                                              rdma_rkey, txqp, txwq, av_size,
+                                              comp);
 }
 
 static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_common_ep_am_short_iov_dm(
@@ -1810,7 +1818,7 @@ static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_common_ep_am_short_iov_dm(
             iface, qp_type, &cache, sizeof(cache.am_hdr.rc_hdr), iov, iovcnt,
             iov_length, MLX5_OPCODE_SEND,
             MLX5_WQE_CTRL_SOLICITED | MLX5_WQE_CTRL_CQ_UPDATE, dci_channel, 0,
-            0, txqp, txwq, av_size);
+            0, txqp, txwq, av_size, NULL);
     if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
         return status;
     }

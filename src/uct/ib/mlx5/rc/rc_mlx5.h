@@ -114,6 +114,11 @@ ucs_status_t uct_rc_mlx5_base_ep_put_short(uct_ep_h tl_ep, const void *buffer,
                                            uint64_t remote_addr,
                                            uct_rkey_t rkey);
 
+ucs_status_t
+uct_rc_mlx5_base_ep_put_short_ft(uct_ep_h tl_ep, const void *buffer,
+                                 unsigned length, uint64_t remote_addr,
+                                 uct_rkey_t rkey, uct_completion_t *comp);
+
 ssize_t uct_rc_mlx5_base_ep_put_bcopy(uct_ep_h tl_ep,
                                       uct_pack_callback_t pack_cb, void *arg,
                                       uint64_t remote_addr, uct_rkey_t rkey);

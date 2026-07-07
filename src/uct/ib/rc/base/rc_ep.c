@@ -289,6 +289,11 @@ void uct_rc_ep_put_bcopy_handler(uct_rc_iface_send_op_t *op, const void *resp)
     ucs_mpool_put(desc);
 }
 
+void uct_rc_ep_put_short_handler(uct_rc_iface_send_op_t *op, const void *resp)
+{
+    uct_rc_ep_send_op_completion_handler(op, resp);
+}
+
 void uct_rc_ep_flush_remote_handler(uct_rc_iface_send_op_t *op,
                                     const void *resp)
 {
@@ -477,7 +482,8 @@ void uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
             }
 
             if (op->user_comp != NULL) {
-                /* This must be uct_rc_ep_get_bcopy_handler,
+                /* This must be uct_rc_ep_put_short_handler,
+                 * uct_rc_ep_get_bcopy_handler,
                  * uct_rc_ep_get_bcopy_handler_no_completion,
                  * uct_rc_ep_get_zcopy_completion_handler,
                  * uct_rc_ep_flush_op_completion_handler or
@@ -500,7 +506,8 @@ void uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
         op->flags &= ~(UCT_RC_IFACE_SEND_OP_FLAG_INUSE |
                        UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY);
 
-        if ((op->handler == uct_rc_ep_send_op_completion_handler) ||
+        if ((op->handler == uct_rc_ep_put_short_handler) ||
+            (op->handler == uct_rc_ep_send_op_completion_handler) ||
             (op->handler == uct_rc_ep_get_zcopy_completion_handler)) {
             uct_rc_iface_put_send_op(op);
         } else if (op->handler == uct_rc_ep_flush_op_completion_handler) {
