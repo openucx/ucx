@@ -623,6 +623,69 @@ UCS_TEST_P(test_ucp_peer_failure, force_close, "RC_FC_ENABLE?=n",
             false /* must_fail */);
 }
 
+/* Peer failure tests instantiated for the RMA variant only. */
+class test_ucp_peer_failure_rma : public test_ucp_peer_failure {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_with_value(variants,
+                               UCP_FEATURE_RMA | UCP_FEATURE_AMO32 |
+                                       UCP_FEATURE_AMO64 | UCP_FEATURE_AM,
+                               TEST_RMA, "rma");
+    }
+};
+
+/* An RMA GET issued on an already-failed endpoint must be rejected, not crash
+ * in protocol selection. See the guard in ucp_proto_request_send_op_rma(). */
+UCS_TEST_P(test_ucp_peer_failure_rma, rma_get_on_failed_ep,
+           "RNDV_THRESH=inf", "MAX_RMA_RAILS=2")
+{
+    skip_loopback();
+    init_buffers(UCS_KBYTE);
+
+    create_entity();
+    sender().connect(&stable_receiver(),  get_ep_params(), STABLE_EP_INDEX);
+    sender().connect(&failing_receiver(), get_ep_params(), FAILING_EP_INDEX);
+    set_rkeys();
+
+    /* Short UD peer timeout so teardown drains the dead peer quickly. */
+    sender().set_ib_ud_peer_timeout(3.);
+    scoped_log_handler slh(wrap_errors_logger);
+
+    /* Kill the peer and drive the sender EP into the failed state. */
+    fail_receiver();
+    request_wait(send_nb(failing_sender(), m_failing_rkey));
+    flush_ep(sender(), 0, FAILING_EP_INDEX);
+    while (!m_err_count) {
+        progress();
+    }
+    ASSERT_TRUE(failing_sender()->flags & UCP_EP_FLAG_FAILED);
+
+    /* Mark the sender failed so teardown force-closes instead of flushing the
+     * dead peer, which would block. */
+    sender().add_err(m_err_status);
+
+    /* The guard must reject the GET inline with UCS_ERR_CANCELED. */
+    ucp_request_param_t param;
+    param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK;
+    param.cb.send      = send_cb;
+    void *rreq = ucp_get_nbx(failing_sender(), m_sbuf->ptr(), m_sbuf->size(),
+                             (uintptr_t)m_rbuf->ptr(), m_failing_rkey, &param);
+    if (UCS_PTR_IS_PTR(rreq)) {
+        ADD_FAILURE() << "ucp_get_nbx on a failed endpoint was submitted "
+                         "instead of being rejected";
+        request_cancel(sender(), rreq);
+    } else {
+        EXPECT_EQ(UCS_ERR_CANCELED, UCS_PTR_STATUS(rreq))
+                << "ucp_get_nbx on a failed endpoint returned "
+                << ucs_status_string(UCS_PTR_STATUS(rreq));
+    }
+
+    m_failing_rkey.reset();
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_peer_failure_rma)
+
 class test_ucp_peer_failure_keepalive : public test_ucp_peer_failure
 {
 public:
