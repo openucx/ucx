@@ -2050,15 +2050,15 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_keepalive_tiebreak, rcx,
 
 
 /*
- * Verify the transport scope split introduced by extra_features. The data
+ * Verify the transport scope split introduced by ctrl_features. The data
  * feature (RMA) is confined to the transports allowed by UCX_TLS (the mocked
- * rc_mlx5 device), while a feature requested only via extra_features (AM) uses
- * the unrestricted "extra" scope, which opens every device-enabled transport
+ * rc_mlx5 device), while a feature requested only via ctrl_features (AM) uses
+ * the unrestricted "control" scope, which opens every device-enabled transport
  * regardless of UCX_TLS.
  */
-class test_ucp_proto_mock_extra_features : public test_ucp_proto_mock {
+class test_ucp_proto_mock_ctrl_features : public test_ucp_proto_mock {
 public:
-    test_ucp_proto_mock_extra_features()
+    test_ucp_proto_mock_ctrl_features()
     {
         mock_transport("rc_mlx5");
     }
@@ -2067,9 +2067,9 @@ public:
     {
         ucp_params_t params   = {};
         params.field_mask     = UCP_PARAM_FIELD_FEATURES |
-                                UCP_PARAM_FIELD_EXTRA_FEATURES;
+                                UCP_PARAM_FIELD_CTRL_FEATURES;
         params.features       = UCP_FEATURE_RMA;
-        params.extra_features = UCP_FEATURE_AM;
+        params.ctrl_features  = UCP_FEATURE_AM;
         add_variant(variants, params);
     }
 
@@ -2089,7 +2089,7 @@ public:
     }
 };
 
-UCS_TEST_P(test_ucp_proto_mock_extra_features, extra_feature_tl_scope,
+UCS_TEST_P(test_ucp_proto_mock_ctrl_features, ctrl_feature_tl_scope,
            "IB_NUM_PATHS?=1")
 {
     ucp_context_h context      = sender().ucph();
@@ -2097,39 +2097,39 @@ UCS_TEST_P(test_ucp_proto_mock_extra_features, extra_feature_tl_scope,
                                                        ep_config_index(sender()));
     ucp_rsc_index_t rsc_index;
 
-    /* AM is enabled even though it is not a data feature, because extra
+    /* AM is enabled even though it is not a data feature, because control
      * features are merged into all_features. */
     EXPECT_EQ(uint64_t(UCP_FEATURE_RMA), context->config.features);
-    EXPECT_EQ(uint64_t(UCP_FEATURE_AM), context->config.extra_features);
+    EXPECT_EQ(uint64_t(UCP_FEATURE_AM), context->config.ctrl_features);
     EXPECT_EQ(uint64_t(UCP_FEATURE_RMA | UCP_FEATURE_AM),
               context->config.all_features);
 
     /* UCX_TLS=rc_x restricts the data scope to the mocked rc_mlx5 device, while
-     * the extra scope is unrestricted (every device-enabled transport). The
-     * extra bitmap is therefore a strict superset of the data bitmap. */
-    size_t num_data_tls  = UCS_STATIC_BITMAP_POPCOUNT(context->data_tl_bitmap);
-    size_t num_extra_tls = UCS_STATIC_BITMAP_POPCOUNT(context->extra_tl_bitmap);
+     * the control scope is unrestricted (every device-enabled transport). The
+     * control bitmap is therefore a strict superset of the data bitmap. */
+    size_t num_data_tls = UCS_STATIC_BITMAP_POPCOUNT(context->data_tl_bitmap);
+    size_t num_ctrl_tls = UCS_STATIC_BITMAP_POPCOUNT(context->ctrl_tl_bitmap);
     EXPECT_GE(num_data_tls, 1u);
-    EXPECT_GT(num_extra_tls, num_data_tls);
+    EXPECT_GT(num_ctrl_tls, num_data_tls);
 
-    /* Every data transport is also an extra transport, and at least one
-     * extra-only transport exists - precisely the device-enabled transports
+    /* Every data transport is also a control transport, and at least one
+     * control-only transport exists - precisely the device-enabled transports
      * that UCX_TLS=rc_x excludes from the data scope. */
-    bool has_extra_only = false;
+    bool has_ctrl_only = false;
     for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
         bool in_data  = UCS_STATIC_BITMAP_GET(context->data_tl_bitmap,
                                               rsc_index);
-        bool in_extra = UCS_STATIC_BITMAP_GET(context->extra_tl_bitmap,
+        bool in_ctrl  = UCS_STATIC_BITMAP_GET(context->ctrl_tl_bitmap,
                                               rsc_index);
         if (in_data) {
-            EXPECT_TRUE(in_extra); /* data is a subset of extra */
-        } else if (in_extra) {
-            has_extra_only = true;
+            EXPECT_TRUE(in_ctrl); /* data is a subset of control */
+        } else if (in_ctrl) {
+            has_ctrl_only = true;
             EXPECT_STRNE("rc_mlx5",
                          context->tl_rscs[rsc_index].tl_rsc.tl_name);
         }
     }
-    EXPECT_TRUE(has_extra_only);
+    EXPECT_TRUE(has_ctrl_only);
 
     /* The RMA data lane is confined to the UCX_TLS-allowed mocked rc_mlx5. */
     ucp_lane_index_t rma_lane = ep_config->key.rma_lanes[0];
@@ -2140,20 +2140,20 @@ UCS_TEST_P(test_ucp_proto_mock_extra_features, extra_feature_tl_scope,
                  ucp_ep_get_tl_rsc(sender().ep(), rma_lane)->tl_name);
     EXPECT_STREQ("mock", ucp_ep_get_tl_rsc(sender().ep(), rma_lane)->dev_name);
 
-    /* AM is an extra-only feature, so its lane is selected with the extra
-     * (unrestricted) TL scope and may use any extra transport. Here the best
-     * reachable transport is the mocked rc_mlx5, which is part of the extra
+    /* AM is a control-only feature, so its lane is selected with the control
+     * (unrestricted) TL scope and may use any control transport. Here the best
+     * reachable transport is the mocked rc_mlx5, which is part of the control
      * scope. */
     ucp_lane_index_t am_lane = ep_config->key.am_lane;
     ASSERT_NE(UCP_NULL_LANE, am_lane);
     ucp_rsc_index_t am_rsc = ep_config->key.lanes[am_lane].rsc_index;
-    EXPECT_TRUE(UCS_STATIC_BITMAP_GET(context->extra_tl_bitmap, am_rsc));
+    EXPECT_TRUE(UCS_STATIC_BITMAP_GET(context->ctrl_tl_bitmap, am_rsc));
 }
 
 /*
  * Verify that AM bandwidth lanes follow the same TL scope as the AM lane.
  */
-UCS_TEST_P(test_ucp_proto_mock_extra_features, am_bw_lane_extra_scope,
+UCS_TEST_P(test_ucp_proto_mock_ctrl_features, am_bw_lane_ctrl_scope,
            "MAX_EAGER_LANES=2")
 {
     ucp_context_h context      = sender().ucph();
@@ -2171,18 +2171,18 @@ UCS_TEST_P(test_ucp_proto_mock_extra_features, am_bw_lane_extra_scope,
             break;
         }
         ucp_rsc_index_t rsc = ep_config->key.lanes[lane].rsc_index;
-        EXPECT_TRUE(UCS_STATIC_BITMAP_GET(context->extra_tl_bitmap, rsc))
-                << "am_bw_lanes[" << (int)i << "] TL not in extra_tl_bitmap";
+        EXPECT_TRUE(UCS_STATIC_BITMAP_GET(context->ctrl_tl_bitmap, rsc))
+                << "am_bw_lanes[" << (int)i << "] TL not in ctrl_tl_bitmap";
     }
 }
 
 /*
- * Verify that the wireup message lane comes from extra_tl_bitmap. When
- * extra_features != 0, ucp_wireup_select_aux_transport() sets the aux
- * criteria scope to EXTRA so that wireup handshake is not blocked by
+ * Verify that the wireup message lane comes from ctrl_tl_bitmap. When
+ * ctrl_features != 0, ucp_wireup_select_aux_transport() sets the aux
+ * criteria scope to CTRL so that wireup handshake is not blocked by
  * UCX_TLS restrictions.
  */
-UCS_TEST_P(test_ucp_proto_mock_extra_features, wireup_msg_lane_extra_scope,
+UCS_TEST_P(test_ucp_proto_mock_ctrl_features, wireup_msg_lane_ctrl_scope,
            "IB_NUM_PATHS?=1")
 {
     ucp_context_h context      = sender().ucph();
@@ -2198,21 +2198,21 @@ UCS_TEST_P(test_ucp_proto_mock_extra_features, wireup_msg_lane_extra_scope,
 
     ASSERT_NE(UCP_NULL_LANE, wireup_lane);
     ucp_rsc_index_t wireup_rsc = ep_config->key.lanes[wireup_lane].rsc_index;
-    EXPECT_TRUE(UCS_STATIC_BITMAP_GET(context->extra_tl_bitmap, wireup_rsc))
-            << "wireup msg lane TL not in extra_tl_bitmap";
+    EXPECT_TRUE(UCS_STATIC_BITMAP_GET(context->ctrl_tl_bitmap, wireup_rsc))
+            << "wireup msg lane TL not in ctrl_tl_bitmap";
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_extra_features, rcx, "rc_x")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_ctrl_features, rcx, "rc_x")
 
 /*
- * When the same feature appears in both features and extra_features,
+ * When the same feature appears in both features and ctrl_features,
  * ucp_wireup_feature_tl_scope() returns DATA (the data-features check takes
  * precedence). Verify that the AM lane is therefore confined to data_tl_bitmap
  * (i.e., restricted to UCX_TLS=rc_x / the mocked rc_mlx5 device).
  */
-class test_ucp_proto_mock_extra_features_overlap : public test_ucp_proto_mock {
+class test_ucp_proto_mock_ctrl_features_overlap : public test_ucp_proto_mock {
 public:
-    test_ucp_proto_mock_extra_features_overlap()
+    test_ucp_proto_mock_ctrl_features_overlap()
     {
         mock_transport("rc_mlx5");
     }
@@ -2221,9 +2221,9 @@ public:
     {
         ucp_params_t params   = {};
         params.field_mask     = UCP_PARAM_FIELD_FEATURES |
-                                UCP_PARAM_FIELD_EXTRA_FEATURES;
+                                UCP_PARAM_FIELD_CTRL_FEATURES;
         params.features       = UCP_FEATURE_AM | UCP_FEATURE_RMA;
-        params.extra_features = UCP_FEATURE_AM;
+        params.ctrl_features  = UCP_FEATURE_AM;
         add_variant(variants, params);
     }
 
@@ -2240,17 +2240,17 @@ public:
     }
 };
 
-UCS_TEST_P(test_ucp_proto_mock_extra_features_overlap, feature_overlap_uses_data_scope,
+UCS_TEST_P(test_ucp_proto_mock_ctrl_features_overlap, feature_overlap_uses_data_scope,
            "IB_NUM_PATHS?=1")
 {
     ucp_context_h context      = sender().ucph();
     ucp_ep_config_t *ep_config = ucp_worker_ep_config(sender().worker(),
                                                        ep_config_index(sender()));
 
-    /* AM appears in both features and extra_features. */
+    /* AM appears in both features and ctrl_features. */
     EXPECT_EQ(uint64_t(UCP_FEATURE_AM | UCP_FEATURE_RMA),
               context->config.features);
-    EXPECT_EQ(uint64_t(UCP_FEATURE_AM), context->config.extra_features);
+    EXPECT_EQ(uint64_t(UCP_FEATURE_AM), context->config.ctrl_features);
     EXPECT_EQ(uint64_t(UCP_FEATURE_AM | UCP_FEATURE_RMA),
               context->config.all_features);
 
@@ -2266,19 +2266,19 @@ UCS_TEST_P(test_ucp_proto_mock_extra_features_overlap, feature_overlap_uses_data
                  ucp_ep_get_tl_rsc(sender().ep(), am_lane)->tl_name);
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_extra_features_overlap, rcx,
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_ctrl_features_overlap, rcx,
                                "rc_x")
 
 
 /*
- * Verify the path where features == 0 and only extra_features is set. In this
+ * Verify the path where features == 0 and only ctrl_features is set. In this
  * case the "no usable data transports" guard is intentionally skipped, and the
- * context initializes successfully. The AM lane uses the extra TL scope (AM is
- * extra-only), and no RMA lanes are present (RMA is not requested at all).
+ * context initializes successfully. The AM lane uses the control TL scope (AM is
+ * control-only), and no RMA lanes are present (RMA is not requested at all).
  */
-class test_ucp_proto_mock_extra_only : public test_ucp_proto_mock {
+class test_ucp_proto_mock_ctrl_only : public test_ucp_proto_mock {
 public:
-    test_ucp_proto_mock_extra_only()
+    test_ucp_proto_mock_ctrl_only()
     {
         mock_transport("rc_mlx5");
     }
@@ -2287,9 +2287,9 @@ public:
     {
         ucp_params_t params   = {};
         params.field_mask     = UCP_PARAM_FIELD_FEATURES |
-                                UCP_PARAM_FIELD_EXTRA_FEATURES;
+                                UCP_PARAM_FIELD_CTRL_FEATURES;
         params.features       = 0;
-        params.extra_features = UCP_FEATURE_AM;
+        params.ctrl_features  = UCP_FEATURE_AM;
         add_variant(variants, params);
     }
 
@@ -2306,47 +2306,47 @@ public:
     }
 };
 
-UCS_TEST_P(test_ucp_proto_mock_extra_only, extra_only_am_lane, "IB_NUM_PATHS?=1")
+UCS_TEST_P(test_ucp_proto_mock_ctrl_only, ctrl_only_am_lane, "IB_NUM_PATHS?=1")
 {
     ucp_context_h context      = sender().ucph();
     ucp_ep_config_t *ep_config = ucp_worker_ep_config(sender().worker(),
                                                        ep_config_index(sender()));
 
-    /* features == 0: the data-TL count check is bypassed. extra_features
+    /* features == 0: the data-TL count check is bypassed. ctrl_features
      * carries the only workload. */
     EXPECT_EQ(uint64_t(0), context->config.features);
-    EXPECT_EQ(uint64_t(UCP_FEATURE_AM), context->config.extra_features);
+    EXPECT_EQ(uint64_t(UCP_FEATURE_AM), context->config.ctrl_features);
     EXPECT_EQ(uint64_t(UCP_FEATURE_AM), context->config.all_features);
 
-    /* extra_tl_bitmap must be non-empty: at least one transport is
-     * device-enabled and thus available for extra scope. */
-    EXPECT_GE(UCS_STATIC_BITMAP_POPCOUNT(context->extra_tl_bitmap), 1u);
+    /* ctrl_tl_bitmap must be non-empty: at least one transport is
+     * device-enabled and thus available for control scope. */
+    EXPECT_GE(UCS_STATIC_BITMAP_POPCOUNT(context->ctrl_tl_bitmap), 1u);
 
-    /* AM is the only feature and it is extra-only, so the AM lane must come
-     * from extra_tl_bitmap. */
+    /* AM is the only feature and it is control-only, so the AM lane must come
+     * from ctrl_tl_bitmap. */
     ucp_lane_index_t am_lane = ep_config->key.am_lane;
     ASSERT_NE(UCP_NULL_LANE, am_lane);
     ucp_rsc_index_t am_rsc = ep_config->key.lanes[am_lane].rsc_index;
-    EXPECT_TRUE(UCS_STATIC_BITMAP_GET(context->extra_tl_bitmap, am_rsc))
-            << "AM lane TL not in extra_tl_bitmap";
+    EXPECT_TRUE(UCS_STATIC_BITMAP_GET(context->ctrl_tl_bitmap, am_rsc))
+            << "AM lane TL not in ctrl_tl_bitmap";
 
     /* No RMA was requested, so no RMA lanes should be present. */
     EXPECT_EQ(UCP_NULL_LANE, ep_config->key.rma_lanes[0]);
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_extra_only, rcx, "rc_x")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_ctrl_only, rcx, "rc_x")
 
 
 /*
- * Verify that when TAG is an extra-only feature, ucp_wireup_add_tag_lane()
- * uses the EXTRA TL scope, so the tag lane (if the hardware supports tag
- * offload) is selected from extra_tl_bitmap rather than data_tl_bitmap.
+ * Verify that when TAG is a control-only feature, ucp_wireup_add_tag_lane()
+ * uses the CTRL TL scope, so the tag lane (if the hardware supports tag
+ * offload) is selected from ctrl_tl_bitmap rather than data_tl_bitmap.
  * On hardware without tag offload the tag_lane check is skipped, but the
  * config-field and bitmap-relationship assertions still run.
  */
-class test_ucp_proto_mock_extra_features_tag : public test_ucp_proto_mock {
+class test_ucp_proto_mock_ctrl_features_tag : public test_ucp_proto_mock {
 public:
-    test_ucp_proto_mock_extra_features_tag()
+    test_ucp_proto_mock_ctrl_features_tag()
     {
         mock_transport("rc_mlx5");
     }
@@ -2355,9 +2355,9 @@ public:
     {
         ucp_params_t params   = {};
         params.field_mask     = UCP_PARAM_FIELD_FEATURES |
-                                UCP_PARAM_FIELD_EXTRA_FEATURES;
+                                UCP_PARAM_FIELD_CTRL_FEATURES;
         params.features       = UCP_FEATURE_AM | UCP_FEATURE_RMA;
-        params.extra_features = UCP_FEATURE_TAG;
+        params.ctrl_features  = UCP_FEATURE_TAG;
         add_variant(variants, params);
     }
 
@@ -2374,62 +2374,62 @@ public:
     }
 };
 
-UCS_TEST_P(test_ucp_proto_mock_extra_features_tag, tag_lane_extra_scope,
+UCS_TEST_P(test_ucp_proto_mock_ctrl_features_tag, tag_lane_ctrl_scope,
            "IB_NUM_PATHS?=1")
 {
     ucp_context_h context      = sender().ucph();
     ucp_ep_config_t *ep_config = ucp_worker_ep_config(sender().worker(),
                                                        ep_config_index(sender()));
 
-    /* TAG is not a data feature; it is extra-only. */
+    /* TAG is not a data feature; it is control-only. */
     EXPECT_EQ(uint64_t(UCP_FEATURE_AM | UCP_FEATURE_RMA),
               context->config.features);
-    EXPECT_EQ(uint64_t(UCP_FEATURE_TAG), context->config.extra_features);
+    EXPECT_EQ(uint64_t(UCP_FEATURE_TAG), context->config.ctrl_features);
     EXPECT_EQ(uint64_t(UCP_FEATURE_AM | UCP_FEATURE_RMA | UCP_FEATURE_TAG),
               context->config.all_features);
 
-    /* Scope separation: extra bitmap is a superset of data bitmap. */
+    /* Scope separation: control bitmap is a superset of data bitmap. */
     size_t num_data_tls  = UCS_STATIC_BITMAP_POPCOUNT(context->data_tl_bitmap);
-    size_t num_extra_tls = UCS_STATIC_BITMAP_POPCOUNT(context->extra_tl_bitmap);
+    size_t num_ctrl_tls = UCS_STATIC_BITMAP_POPCOUNT(context->ctrl_tl_bitmap);
     EXPECT_GE(num_data_tls, 1u);
-    EXPECT_GE(num_extra_tls, num_data_tls);
+    EXPECT_GE(num_ctrl_tls, num_data_tls);
 
-    /* Every data TL is also in the extra bitmap. */
+    /* Every data TL is also in the control bitmap. */
     for (ucp_rsc_index_t i = 0; i < context->num_tls; ++i) {
         if (UCS_STATIC_BITMAP_GET(context->data_tl_bitmap, i)) {
-            EXPECT_TRUE(UCS_STATIC_BITMAP_GET(context->extra_tl_bitmap, i))
-                    << "data TL " << (int)i << " not in extra_tl_bitmap";
+            EXPECT_TRUE(UCS_STATIC_BITMAP_GET(context->ctrl_tl_bitmap, i))
+                    << "data TL " << (int)i << " not in ctrl_tl_bitmap";
         }
     }
 
-    /* When tag offload is available the tag lane must be in extra_tl_bitmap,
-     * because ucp_wireup_feature_tl_scope() returns EXTRA for TAG here
+    /* When tag offload is available the tag lane must be in ctrl_tl_bitmap,
+     * because ucp_wireup_feature_tl_scope() returns CTRL for TAG here
      * (TAG is not in config.features). On hardware without tag offload this
      * check is skipped; the scope invariants above are still verified. */
     ucp_lane_index_t tag_lane = ep_config->key.tag_lane;
     if (tag_lane != UCP_NULL_LANE) {
         ucp_rsc_index_t tag_rsc = ep_config->key.lanes[tag_lane].rsc_index;
-        EXPECT_TRUE(UCS_STATIC_BITMAP_GET(context->extra_tl_bitmap, tag_rsc))
-                << "tag lane TL not in extra_tl_bitmap";
+        EXPECT_TRUE(UCS_STATIC_BITMAP_GET(context->ctrl_tl_bitmap, tag_rsc))
+                << "tag lane TL not in ctrl_tl_bitmap";
         EXPECT_FALSE(UCS_STATIC_BITMAP_GET(context->data_tl_bitmap, tag_rsc) &&
-                     !UCS_STATIC_BITMAP_GET(context->extra_tl_bitmap, tag_rsc))
-                << "tag lane TL in data only (impossible: data ⊆ extra)";
+                     !UCS_STATIC_BITMAP_GET(context->ctrl_tl_bitmap, tag_rsc))
+                << "tag lane TL in data only (impossible: data ⊆ control)";
     }
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_extra_features_tag, rcx,
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_ctrl_features_tag, rcx,
                                "rc_x")
 
 
 /*
  * This block was added in this change on 2026-06-23 18:34:46 IDT.
- * Verify the baseline path where no extra_features are requested. This guards
- * the compatibility case: the new data/extra bitmap split must not expand the
- * transport scope unless UCP_PARAM_FIELD_EXTRA_FEATURES is explicitly used.
+ * Verify the baseline path where no ctrl_features are requested. This guards
+ * the compatibility case: the new data/control bitmap split must not expand the
+ * transport scope unless UCP_PARAM_FIELD_CTRL_FEATURES is explicitly used.
  */
-class test_ucp_proto_mock_no_extra_features : public test_ucp_proto_mock {
+class test_ucp_proto_mock_no_ctrl_features : public test_ucp_proto_mock {
 public:
-    test_ucp_proto_mock_no_extra_features()
+    test_ucp_proto_mock_no_ctrl_features()
     {
         mock_transport("rc_mlx5");
     }
@@ -2455,7 +2455,7 @@ public:
     }
 };
 
-UCS_TEST_P(test_ucp_proto_mock_no_extra_features, data_scope_only,
+UCS_TEST_P(test_ucp_proto_mock_no_ctrl_features, data_scope_only,
            "IB_NUM_PATHS?=1")
 {
     ucp_context_h context      = sender().ucph();
@@ -2464,18 +2464,18 @@ UCS_TEST_P(test_ucp_proto_mock_no_extra_features, data_scope_only,
 
     EXPECT_EQ(uint64_t(UCP_FEATURE_RMA | UCP_FEATURE_AM),
               context->config.features);
-    EXPECT_EQ(uint64_t(0), context->config.extra_features);
+    EXPECT_EQ(uint64_t(0), context->config.ctrl_features);
     EXPECT_EQ(uint64_t(UCP_FEATURE_RMA | UCP_FEATURE_AM),
               context->config.all_features);
 
     EXPECT_FALSE(UCS_STATIC_BITMAP_IS_ZERO(context->data_tl_bitmap));
-    EXPECT_TRUE(UCS_STATIC_BITMAP_IS_ZERO(context->extra_tl_bitmap));
+    EXPECT_TRUE(UCS_STATIC_BITMAP_IS_ZERO(context->ctrl_tl_bitmap));
     EXPECT_TRUE(UCS_STATIC_BITMAP_IS_ZERO(
             UCS_STATIC_BITMAP_XOR(context->tl_bitmap,
                                   context->data_tl_bitmap)));
 
     for (ucp_rsc_index_t i = 0; i < context->num_tls; ++i) {
-        EXPECT_FALSE(UCS_STATIC_BITMAP_GET(context->extra_tl_bitmap, i));
+        EXPECT_FALSE(UCS_STATIC_BITMAP_GET(context->ctrl_tl_bitmap, i));
     }
 
     ucp_lane_index_t rma_lane = ep_config->key.rma_lanes[0];
@@ -2486,21 +2486,21 @@ UCS_TEST_P(test_ucp_proto_mock_no_extra_features, data_scope_only,
                  ucp_ep_get_tl_rsc(sender().ep(), rma_lane)->tl_name);
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_no_extra_features, rcx,
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_no_ctrl_features, rcx,
                               "rc_x")
 
 
 /*
  * This block was added in this follow-up change on 2026-06-23 18:52:00 IDT.
  * Exercise two recommendations that are separate from the basic AM/RMA scope
- * split: AM API enablement through all_features, and DEVICE as an extra-only
+ * split: AM API enablement through all_features, and DEVICE as a control-only
  * feature. DEVICE lane creation depends on CUDA-capable memory access support,
  * so the lane assertion is conditional while the configuration and scope
  * invariants are always checked.
  */
-class test_ucp_proto_mock_extra_only_am_api : public test_ucp_proto_mock {
+class test_ucp_proto_mock_ctrl_only_am_api : public test_ucp_proto_mock {
 public:
-    test_ucp_proto_mock_extra_only_am_api()
+    test_ucp_proto_mock_ctrl_only_am_api()
     {
         mock_transport("rc_mlx5");
     }
@@ -2509,9 +2509,9 @@ public:
     {
         ucp_params_t params   = {};
         params.field_mask     = UCP_PARAM_FIELD_FEATURES |
-                                UCP_PARAM_FIELD_EXTRA_FEATURES;
+                                UCP_PARAM_FIELD_CTRL_FEATURES;
         params.features       = 0;
-        params.extra_features = UCP_FEATURE_AM;
+        params.ctrl_features  = UCP_FEATURE_AM;
         add_variant(variants, params);
     }
 
@@ -2527,24 +2527,24 @@ public:
     }
 };
 
-UCS_TEST_P(test_ucp_proto_mock_extra_only_am_api, am_api_uses_all_features,
+UCS_TEST_P(test_ucp_proto_mock_ctrl_only_am_api, am_api_uses_all_features,
            "IB_NUM_PATHS?=1")
 {
     ucp_context_h context = sender().ucph();
 
     EXPECT_EQ(uint64_t(0), context->config.features);
-    EXPECT_EQ(uint64_t(UCP_FEATURE_AM), context->config.extra_features);
+    EXPECT_EQ(uint64_t(UCP_FEATURE_AM), context->config.ctrl_features);
     EXPECT_EQ(uint64_t(UCP_FEATURE_AM), context->config.all_features);
 
     send_recv_am(1);
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_extra_only_am_api, rcx,
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_ctrl_only_am_api, rcx,
                               "rc_x")
 
-class test_ucp_proto_mock_extra_features_device : public test_ucp_proto_mock {
+class test_ucp_proto_mock_ctrl_features_device : public test_ucp_proto_mock {
 public:
-    test_ucp_proto_mock_extra_features_device()
+    test_ucp_proto_mock_ctrl_features_device()
     {
         mock_transport("rc_mlx5");
     }
@@ -2553,9 +2553,9 @@ public:
     {
         ucp_params_t params   = {};
         params.field_mask     = UCP_PARAM_FIELD_FEATURES |
-                                UCP_PARAM_FIELD_EXTRA_FEATURES;
+                                UCP_PARAM_FIELD_CTRL_FEATURES;
         params.features       = UCP_FEATURE_RMA | UCP_FEATURE_AM;
-        params.extra_features = UCP_FEATURE_DEVICE;
+        params.ctrl_features  = UCP_FEATURE_DEVICE;
         add_variant(variants, params);
     }
 
@@ -2573,7 +2573,7 @@ public:
     }
 };
 
-UCS_TEST_P(test_ucp_proto_mock_extra_features_device, device_extra_scope,
+UCS_TEST_P(test_ucp_proto_mock_ctrl_features_device, device_ctrl_scope,
            "IB_NUM_PATHS?=1")
 {
     ucp_context_h context      = sender().ucph();
@@ -2583,11 +2583,11 @@ UCS_TEST_P(test_ucp_proto_mock_extra_features_device, device_extra_scope,
 
     EXPECT_EQ(uint64_t(UCP_FEATURE_RMA | UCP_FEATURE_AM),
               context->config.features);
-    EXPECT_EQ(uint64_t(UCP_FEATURE_DEVICE), context->config.extra_features);
+    EXPECT_EQ(uint64_t(UCP_FEATURE_DEVICE), context->config.ctrl_features);
     EXPECT_EQ(uint64_t(UCP_FEATURE_RMA | UCP_FEATURE_AM | UCP_FEATURE_DEVICE),
               context->config.all_features);
     EXPECT_FALSE(context->config.features & UCP_FEATURE_DEVICE);
-    EXPECT_FALSE(UCS_STATIC_BITMAP_IS_ZERO(context->extra_tl_bitmap));
+    EXPECT_FALSE(UCS_STATIC_BITMAP_IS_ZERO(context->ctrl_tl_bitmap));
 
     for (ucp_lane_index_t lane = 0; lane < ep_config->key.num_lanes; ++lane) {
         if (!(ep_config->key.lanes[lane].lane_types &
@@ -2597,8 +2597,8 @@ UCS_TEST_P(test_ucp_proto_mock_extra_features_device, device_extra_scope,
 
         has_device_lane       = true;
         ucp_rsc_index_t rsc   = ep_config->key.lanes[lane].rsc_index;
-        EXPECT_TRUE(UCS_STATIC_BITMAP_GET(context->extra_tl_bitmap, rsc))
-                << "device lane TL not in extra_tl_bitmap";
+        EXPECT_TRUE(UCS_STATIC_BITMAP_GET(context->ctrl_tl_bitmap, rsc))
+                << "device lane TL not in ctrl_tl_bitmap";
     }
 
     if (!has_device_lane) {
@@ -2607,7 +2607,7 @@ UCS_TEST_P(test_ucp_proto_mock_extra_features_device, device_extra_scope,
     }
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_extra_features_device, rcx,
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_ctrl_features_device, rcx,
                               "rc_x")
 
 

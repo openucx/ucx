@@ -60,7 +60,7 @@ enum {
 
 typedef enum {
     UCP_WIREUP_TL_SCOPE_DATA,
-    UCP_WIREUP_TL_SCOPE_EXTRA
+    UCP_WIREUP_TL_SCOPE_CTRL
 } ucp_wireup_tl_scope_t;
 
 

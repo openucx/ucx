@@ -635,15 +635,16 @@ static ucs_config_field_t ucp_context_config_table[] = {
    " 'auto' : Print the tables when UCX_LOG_LEVEL is 'debug' or higher",
    ucs_offsetof(ucp_context_config_t, print_transport_tables),
    UCS_CONFIG_TYPE_ON_OFF_AUTO},
-  {"EXTRA_FEATURES", "auto",
-   "Features that use the extra transport selection policy (all device-enabled\n"
+   
+  {"CTRL_FEATURES", "auto",
+   "Features that use the control transport selection policy (all device-enabled\n"
    "transports) instead of the UCX_TLS data policy. When set, this overrides\n"
-   "the value passed by the application via ucp_params_t::extra_features.\n"
+   "the value passed by the application via ucp_params_t::ctrl_features.\n"
    " - auto : keep the application-provided value (default).\n"
    " - <list> : comma-separated list of: tag, rma, amo32, amo64, wakeup,\n"
    "            stream, am, exported_memh, device. An empty value disables all\n"
-   "            extra features.",
-   ucs_offsetof(ucp_context_config_t, extra_features), UCS_CONFIG_TYPE_STRING},
+   "            control features.",
+   ucs_offsetof(ucp_context_config_t, ctrl_features), UCS_CONFIG_TYPE_STRING},
 
   {NULL}
 };
@@ -793,7 +794,7 @@ const char *ucp_feature_str[] = {
 };
 
 
-/* Short feature names used for parsing the UCX_EXTRA_FEATURES config value.
+/* Short feature names used for parsing the UCX_CTRL_FEATURES config value.
  * Must be indexed by feature bit position with no gaps up to the terminator. */
 static const char *ucp_feature_names[] = {
     [ucs_ilog2(UCP_FEATURE_TAG)]           = "tag",
@@ -1379,7 +1380,7 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
     uint8_t data_rsc_flags, rsc_flags;
     ucp_rsc_index_t rsc_index;
     ucs_status_t status;
-    int data_enabled, extra_enabled, device_enabled;
+    int data_enabled, ctrl_enabled, device_enabled;
     unsigned i;
 
     *num_resources_p = 0;
@@ -1447,18 +1448,18 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
                                  &data_rsc_flags, tl_cfg_mask);
         rsc_flags      = data_rsc_flags & UCP_TL_RSC_FLAG_AUX;
 
-        /* Extra features use all device-enabled transports by default. Keep
+        /* Ctrl features use all device-enabled transports by default. Keep
          * this policy separate from UCX_TLS, which applies to data features. */
-        extra_enabled = device_enabled &&
-                        (context->config.extra_features != 0);
+        ctrl_enabled = device_enabled &&
+                        (context->config.ctrl_features != 0);
 
         ucs_trace(UCT_TL_RESOURCE_DESC_FMT
-                  " is %sabled for data, %sabled for extra",
+                  " is %sabled for data, %sabled for ctrl",
                   UCT_TL_RESOURCE_DESC_ARG(&tl_resources[i]),
                   data_enabled ? "en" : "dis",
-                  extra_enabled ? "en" : "dis");
+                  ctrl_enabled ? "en" : "dis");
 
-        if (!data_enabled && !extra_enabled) {
+        if (!data_enabled && !ctrl_enabled) {
             continue;
         }
 
@@ -1473,8 +1474,8 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
             UCS_STATIC_BITMAP_SET(&context->data_tl_bitmap, rsc_index);
         }
 
-        if (extra_enabled) {
-            UCS_STATIC_BITMAP_SET(&context->extra_tl_bitmap, rsc_index);
+        if (ctrl_enabled) {
+            UCS_STATIC_BITMAP_SET(&context->ctrl_tl_bitmap, rsc_index);
         }
 
         ++(*num_resources_p);
@@ -1789,7 +1790,7 @@ static ucs_status_t ucp_check_resources(ucp_context_h context,
     char info_str[128];
     ucp_rsc_index_t tl_id;
     ucp_tl_resource_desc_t *resource;
-    unsigned num_usable_data_tls, num_extra_tls;
+    unsigned num_usable_data_tls, num_ctrl_tls;
 
     /* Error check: Make sure there is at least one transport that is not
      * auxiliary */
@@ -1809,9 +1810,9 @@ static ucs_status_t ucp_check_resources(ucp_context_h context,
         return UCS_ERR_NO_DEVICE;
     }
 
-    num_extra_tls = UCS_STATIC_BITMAP_POPCOUNT(context->extra_tl_bitmap);
-    if ((context->config.extra_features != 0) && (num_extra_tls == 0)) {
-        ucs_error("no usable extra transports/devices");
+    num_ctrl_tls = UCS_STATIC_BITMAP_POPCOUNT(context->ctrl_tl_bitmap);
+    if ((context->config.ctrl_features != 0) && (num_ctrl_tls == 0)) {
+        ucs_error("no usable control transports/devices");
         return UCS_ERR_NO_DEVICE;
     }
 
@@ -2242,7 +2243,7 @@ ucp_fill_resources(ucp_context_h context, const ucp_config_t *config)
     context->export_md_map            = 0;
     UCS_STATIC_BITMAP_RESET_ALL(&context->tl_bitmap);
     UCS_STATIC_BITMAP_RESET_ALL(&context->data_tl_bitmap);
-    UCS_STATIC_BITMAP_RESET_ALL(&context->extra_tl_bitmap);
+    UCS_STATIC_BITMAP_RESET_ALL(&context->ctrl_tl_bitmap);
 
     ucs_memory_type_for_each(mem_type) {
         context->reg_md_map[mem_type]           = 0;
@@ -2341,7 +2342,7 @@ ucp_fill_resources(ucp_context_h context, const ucp_config_t *config)
      * select only the best ones for each particular device.
      */
     context->tl_bitmap = UCS_STATIC_BITMAP_OR(context->data_tl_bitmap,
-                                              context->extra_tl_bitmap);
+                                              context->ctrl_tl_bitmap);
     if (config->ctx.unified_mode) {
         UCS_STATIC_BITMAP_RESET_ALL(&context->tl_bitmap);
     }
@@ -2400,10 +2401,10 @@ static void ucp_apply_params(ucp_context_h context, const ucp_params_t *params,
 
     context->config.features = UCP_PARAM_FIELD_VALUE(params, features, FEATURES,
                                                      0);
-    context->config.extra_features =
-            UCP_PARAM_FIELD_VALUE(params, extra_features, EXTRA_FEATURES, 0);
+    context->config.ctrl_features =
+            UCP_PARAM_FIELD_VALUE(params, ctrl_features, CTRL_FEATURES, 0);
     context->config.all_features = context->config.features |
-                                   context->config.extra_features;
+                                   context->config.ctrl_features;
 
     if (!context->config.all_features) {
         ucs_warn("empty features set passed to ucp context create");
@@ -2529,20 +2530,20 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
         goto err;
     }
 
-    if (strcmp(context->config.ext.extra_features, "auto") != 0) {
-        /* Extra features were set via the env variable. Override the value
-         * passed via ucp_params_t::extra_features */
-        if (!ucs_config_sscanf_bitmap(context->config.ext.extra_features,
-                                      &context->config.extra_features,
+    if (strcmp(context->config.ext.ctrl_features, "auto") != 0) {
+        /* Control features were set via the env variable. Override the value
+         * passed via ucp_params_t::ctrl_features */
+        if (!ucs_config_sscanf_bitmap(context->config.ext.ctrl_features,
+                                      &context->config.ctrl_features,
                                       ucp_feature_names)) {
-            ucs_error("invalid value for UCX_EXTRA_FEATURES: '%s'",
-                      context->config.ext.extra_features);
+            ucs_error("invalid value for UCX_CTRL_FEATURES: '%s'",
+                      context->config.ext.ctrl_features);
             status = UCS_ERR_INVALID_PARAM;
             goto err_free_config_ext;
         }
 
         context->config.all_features = context->config.features |
-                                       context->config.extra_features;
+                                       context->config.ctrl_features;
     }
 
     if (context->config.ext.estimated_num_eps != UCS_ULUNITS_AUTO) {
@@ -2898,10 +2899,10 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
     ucp_context_create_vfs(context);
 
     ucs_debug("created ucp context %s %p [%d mds %d tls] features 0x%" PRIx64
-              " extra_features 0x%" PRIx64 " all_features 0x%" PRIx64
+              " ctrl_features 0x%" PRIx64 " all_features 0x%" PRIx64
               " tl bitmap " UCT_TL_BITMAP_FMT,
               context->name, context, context->num_mds, context->num_tls,
-              context->config.features, context->config.extra_features,
+              context->config.features, context->config.ctrl_features,
               context->config.all_features,
               UCT_TL_BITMAP_ARG(&context->tl_bitmap));
 
@@ -3050,8 +3051,8 @@ void ucp_context_print_info(ucp_context_h context, FILE *stream)
                 rsc_index, rsc->md_index, rsc->dev_index,
                 UCS_STATIC_BITMAP_GET(context->data_tl_bitmap, rsc_index) ?
                 'd' : '-',
-                UCS_STATIC_BITMAP_GET(context->extra_tl_bitmap, rsc_index) ?
-                'e' : '-',
+                UCS_STATIC_BITMAP_GET(context->ctrl_tl_bitmap, rsc_index) ?
+                'c' : '-',
                 (rsc->flags & UCP_TL_RSC_FLAG_AUX) ? 'a' : '-',
                 UCT_TL_RESOURCE_DESC_ARG(&rsc->tl_rsc));
     }

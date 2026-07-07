@@ -1005,7 +1005,7 @@ static uint8_t ucp_worker_tl_usage_flags(ucp_context_h context,
 {
     return (UCS_STATIC_BITMAP_GET(context->data_tl_bitmap, rsc_index) ?
                     UCS_BIT(0) : 0) |
-           (UCS_STATIC_BITMAP_GET(context->extra_tl_bitmap, rsc_index) ?
+           (UCS_STATIC_BITMAP_GET(context->ctrl_tl_bitmap, rsc_index) ?
                     UCS_BIT(1) : 0);
 }
 

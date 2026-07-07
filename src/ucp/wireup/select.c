@@ -427,19 +427,19 @@ static ucp_wireup_tl_scope_t
 ucp_wireup_feature_tl_scope(ucp_context_h context, uint64_t features)
 {
     if ((context->config.features & features) ||
-        !(context->config.extra_features & features)) {
+        !(context->config.ctrl_features & features)) {
         return UCP_WIREUP_TL_SCOPE_DATA;
     }
 
-    return UCP_WIREUP_TL_SCOPE_EXTRA;
+    return UCP_WIREUP_TL_SCOPE_CTRL;
 }
 
 static const ucp_tl_bitmap_t*
 ucp_wireup_tl_scope_bitmap(ucp_context_h context,
                            const ucp_wireup_criteria_t *criteria)
 {
-    return (criteria->tl_scope == UCP_WIREUP_TL_SCOPE_EXTRA) ?
-                   &context->extra_tl_bitmap :
+    return (criteria->tl_scope == UCP_WIREUP_TL_SCOPE_CTRL) ?
+                   &context->ctrl_tl_bitmap :
                    &context->data_tl_bitmap;
 }
 
@@ -573,8 +573,8 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
         cmpt_attr      = ucp_cmpt_attr_by_md_index(context, md_index);
 
         if ((context->tl_rscs[rsc_index].flags &
-             ((criteria->tl_scope == UCP_WIREUP_TL_SCOPE_EXTRA) ?
-                      UCP_TL_RSC_FLAG_EXTRA_AUX : UCP_TL_RSC_FLAG_AUX)) &&
+             ((criteria->tl_scope == UCP_WIREUP_TL_SCOPE_CTRL) ?
+                      UCP_TL_RSC_FLAG_CTRL_AUX : UCP_TL_RSC_FLAG_AUX)) &&
             !(criteria->tl_rsc_flags & UCP_TL_RSC_FLAG_AUX)) {
             continue;
         }
@@ -3121,8 +3121,8 @@ ucp_wireup_select_aux_transport(ucp_ep_h ep, unsigned ep_init_flags,
     /* Select auxiliary transport that supports async active message callback */
     ucp_wireup_fill_aux_criteria(&criteria, ep_init_flags,
                                  UCP_ADDR_IFACE_FLAG_CB_ASYNC);
-    if (ep->worker->context->config.extra_features != 0) {
-        criteria.tl_scope = UCP_WIREUP_TL_SCOPE_EXTRA;
+    if (ep->worker->context->config.ctrl_features != 0) {
+        criteria.tl_scope = UCP_WIREUP_TL_SCOPE_CTRL;
     }
 
     status = ucp_wireup_select_aux_transport_by_seg_size(&select_ctx,
@@ -3136,8 +3136,8 @@ ucp_wireup_select_aux_transport(ucp_ep_h ep, unsigned ep_init_flags,
     /* Fallback to an auxiliary transport without async active message callback
      * requirement */
     ucp_wireup_fill_aux_criteria(&criteria, ep_init_flags, 0);
-    if (ep->worker->context->config.extra_features != 0) {
-        criteria.tl_scope = UCP_WIREUP_TL_SCOPE_EXTRA;
+    if (ep->worker->context->config.ctrl_features != 0) {
+        criteria.tl_scope = UCP_WIREUP_TL_SCOPE_CTRL;
     }
 
     return ucp_wireup_select_aux_transport_by_seg_size(&select_ctx,
