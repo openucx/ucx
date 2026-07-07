@@ -1222,9 +1222,9 @@ ucp_wireup_query_lane_tx_tokens(ucp_ep_h ep, ucp_lane_map_t lane_map,
                                 ucp_wireup_lane_state_t **lane_state_p,
                                 size_t *payload_size_p)
 {
-    unsigned token_index          = 0;
-    size_t token_offset           = 0;
-    size_t payload_size           = sizeof(ucp_wireup_lane_state_t);
+    unsigned token_index = 0;
+    size_t token_offset  = 0;
+    size_t payload_size  = sizeof(ucp_wireup_lane_state_t);
     uint8_t token_lengths[UCP_MAX_LANES];
     ucp_wireup_lane_state_t *lane_state;
     ucp_rsc_index_t rsc_index;
@@ -1512,7 +1512,7 @@ ucp_wireup_process_lane_state(ucp_ep_h ep, const ucp_wireup_msg_t *msg,
     }
 
     lane_state = data;
-    lane_map = lane_state->lane_map;
+    lane_map   = lane_state->lane_map;
 
     ucs_debug("ep %p: received failover lane state id 0x%" PRIx64
               " from ep id 0x%" PRIx64 " for lanes 0x%" PRIx64,

@@ -1006,7 +1006,7 @@ protected:
         }
 
         flush_workers();
-        ucp_ep_h ep                       = sender().ep(0, INJECTED_EP_INDEX);
+        ucp_ep_h ep = sender().ep(0, INJECTED_EP_INDEX);
 
         if (!is_failover_proto_supported(ep, proto)) {
             UCS_TEST_SKIP_R(

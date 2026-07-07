@@ -400,7 +400,7 @@ ucp_ep_failover_add_lanes(ucp_ep_h ep, ucp_lane_map_t lane_map,
     ctx->query_id      = 0;
     ctx->query_retries = 0;
     ucs_for_each_bit(lane, lane_map) {
-        uct_ep = uct_eps[lane];
+        uct_ep              = uct_eps[lane];
         lane_ctx            = &ctx->lanes[lane];
         lane_ctx->ep        = ep;
         lane_ctx->uct_ep    = uct_ep;
@@ -610,18 +610,18 @@ ucp_ep_failover_on_lane_state(ucp_ep_h ep,
                               const ucp_wireup_lane_state_t *lane_state,
                               size_t length)
 {
-    ucp_ep_failover_ctx_t *ctx;
-    ucp_ep_failover_lane_ctx_t *lane_ctx;
     void *rx_tokens[UCP_MAX_LANES]          = {NULL};
     uint8_t rx_token_lengths[UCP_MAX_LANES] = {0};
+    unsigned token_index                    = 0;
+    size_t token_offset                     = 0;
+    ucp_lane_map_t fallback_lanes           = 0;
+    ucp_ep_failover_ctx_t *ctx;
+    ucp_ep_failover_lane_ctx_t *lane_ctx;
     ucs_status_t fallback_status[UCP_MAX_LANES];
     const uint8_t *token_lengths;
     const void *tokens;
     ucp_lane_map_t expected_lanes;
-    ucp_lane_map_t fallback_lanes = 0;
     ucp_lane_index_t lane;
-    unsigned token_index = 0;
-    size_t token_offset  = 0;
     unsigned num_tokens;
     ucs_status_t status;
 
@@ -686,7 +686,7 @@ ucp_ep_failover_on_lane_state(ucp_ep_h ep,
             }
         }
 
-        token_offset    += token_lengths[token_index];
+        token_offset += token_lengths[token_index];
         ++token_index;
     }
 
@@ -796,7 +796,7 @@ static void ucp_ep_failover_abort_all(ucp_ep_h ep, ucs_status_t status)
         lane_ctx = &ctx->lanes[lane];
         if (lane_ctx->flags & UCP_EP_FAILOVER_LANE_FLAG_EXTRACTED) {
             lane_ctx->status = status;
-            lane_ctx->flags  |= UCP_EP_FAILOVER_LANE_FLAG_RX_TOKEN;
+            lane_ctx->flags |= UCP_EP_FAILOVER_LANE_FLAG_RX_TOKEN;
             ucp_ep_failover_replay_purge(lane_ctx, status);
             complete_lanes = 1;
         } else {

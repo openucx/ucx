@@ -142,7 +142,8 @@ static ucs_status_t ucp_proto_failover_bcopy_status(ssize_t packed_size)
 static unsigned ucp_proto_failover_am_flags(const uct_ep_op_info_t *op_info)
 {
     return (op_info->field_mask & UCT_EP_OP_INFO_FIELD_AM_FLAGS) ?
-           op_info->am.flags : 0;
+                   op_info->am.flags :
+                   0;
 }
 
 static ucs_status_t
@@ -423,9 +424,8 @@ ucp_proto_failover_replay_op_request_init(ucp_ep_h ep,
         ucs_debug("ep %p: no protocol to replay failover op %d from lane %u "
                   "fields 0x%" PRIx64 " comp %p ep_cfg %u rkey_cfg %u "
                   "failed_lanes 0x%" PRIx64,
-                  ep, (int)op->info.operation, failed_lane,
-                  op->info.field_mask, op->info.comp, ep->cfg_index,
-                  rkey_cfg_index,
+                  ep, (int)op->info.operation, failed_lane, op->info.field_mask,
+                  op->info.comp, ep->cfg_index, rkey_cfg_index,
                   ucp_ep_config_get_failed_lanes(&ucp_ep_config(ep)->key));
         status = UCS_ERR_UNREACHABLE;
         goto err_cleanup;
@@ -471,7 +471,8 @@ ucp_proto_failover_replay_op_progress(ucp_ep_h ep, ucp_lane_index_t failed_lane,
         ucs_trace("ep %p: replayed failover op %d on lane %u", ep,
                   (int)op->info.operation,
                   ((const ucp_proto_single_priv_t*)
-                   op->req->send.proto_config->priv)->super.lane);
+                           op->req->send.proto_config->priv)
+                          ->super.lane);
     }
 
     return status;

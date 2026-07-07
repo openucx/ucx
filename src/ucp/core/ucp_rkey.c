@@ -1160,9 +1160,7 @@ static void ucp_rkey_destroy_internal(ucp_rkey_h rkey)
 
 void ucp_rkey_retain(ucp_rkey_h rkey)
 {
-    uint32_t old_refcount = ucs_atomic_fadd32(&rkey->refcount, 1);
-
-    ucs_assertv(old_refcount > 0, "rkey %p refcount %u", rkey, old_refcount);
+    ucs_atomic_fadd32(&rkey->refcount, 1);
 }
 
 void ucp_rkey_release(ucp_rkey_h rkey)
