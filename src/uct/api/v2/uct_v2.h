@@ -1553,34 +1553,34 @@ ucs_status_t uct_md_mem_elem_pack(uct_md_h md, uct_mem_h memh, uct_rkey_t rkey,
  */
 typedef enum uct_ep_op_info_field {
     /** Enables @ref uct_ep_op_info_t::operation. */
-    UCT_EP_OP_INFO_FIELD_OPERATION   = UCS_BIT(0),
+    UCT_EP_OP_INFO_FIELD_OPERATION = UCS_BIT(0),
 
     /** Enables @ref uct_ep_op_info_t::comp. */
-    UCT_EP_OP_INFO_FIELD_COMP        = UCS_BIT(1),
+    UCT_EP_OP_INFO_FIELD_COMP      = UCS_BIT(1),
 
     /** Enables @ref uct_ep_op_info_t::am. */
-    UCT_EP_OP_INFO_FIELD_AM          = UCS_BIT(2),
+    UCT_EP_OP_INFO_FIELD_AM        = UCS_BIT(2),
 
     /** Enables AM flags in @ref uct_ep_op_info_t::am. */
-    UCT_EP_OP_INFO_FIELD_AM_FLAGS    = UCS_BIT(3),
+    UCT_EP_OP_INFO_FIELD_AM_FLAGS  = UCS_BIT(3),
 
     /** Enables RMA fields in @ref uct_ep_op_info_t::rma. */
-    UCT_EP_OP_INFO_FIELD_RMA         = UCS_BIT(4),
+    UCT_EP_OP_INFO_FIELD_RMA       = UCS_BIT(4),
 
     /** Enables @ref uct_ep_op_info_t::flush. */
-    UCT_EP_OP_INFO_FIELD_FLUSH       = UCS_BIT(5),
+    UCT_EP_OP_INFO_FIELD_FLUSH     = UCS_BIT(5),
 
     /** Enables @ref uct_ep_op_info_t::data. */
-    UCT_EP_OP_INFO_FIELD_DATA        = UCS_BIT(6),
+    UCT_EP_OP_INFO_FIELD_DATA      = UCS_BIT(6),
 
     /** Enables @ref uct_ep_op_info_t::zcopy. */
-    UCT_EP_OP_INFO_FIELD_ZCOPY       = UCS_BIT(7),
+    UCT_EP_OP_INFO_FIELD_ZCOPY     = UCS_BIT(7),
 
     /** Enables @ref uct_ep_op_info_t::unpack. */
-    UCT_EP_OP_INFO_FIELD_UNPACK      = UCS_BIT(8),
+    UCT_EP_OP_INFO_FIELD_UNPACK    = UCS_BIT(8),
 
     /** Enables @ref uct_ep_op_info_t::atomic. */
-    UCT_EP_OP_INFO_FIELD_ATOMIC      = UCS_BIT(9),
+    UCT_EP_OP_INFO_FIELD_ATOMIC    = UCS_BIT(9),
 } uct_ep_op_info_field_t;
 
 
@@ -1622,13 +1622,13 @@ typedef struct uct_ep_op_info {
     union {
         /* AM operation parameters. */
         struct {
-            uint8_t  am_id;         /**< AM handler ID */
-            unsigned flags;         /**< Flags passed to the AM operation */
+            uint8_t  am_id;       /**< AM handler ID */
+            unsigned flags;       /**< Flags passed to the AM operation */
             union {
-                uint64_t   header;        /**< AM short 64-bit header word */
+                uint64_t   header;         /**< AM short 64-bit header word */
                 const void *header_buffer; /**< AM zcopy header buffer */
             };
-            size_t header_length;  /**< AM zcopy header length */
+            size_t header_length; /**< AM zcopy header length */
         } am;
 
         /* Remote target for PUT, GET, and atomic operations. */

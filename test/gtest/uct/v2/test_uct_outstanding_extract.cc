@@ -28,7 +28,7 @@ public:
 UCS_TEST_P(test_uct_outstanding_extract, unsupported_on_self)
 {
     uct_ep_outstanding_extract_params_t params = {};
-    uint64_t rx_token = 0;
+    uint64_t rx_token                          = 0;
     ucs_status_t status;
 
     params.field_mask = UCT_EP_OUTSTANDING_FIELD_RX_TOKEN |
@@ -53,7 +53,7 @@ public:
 
 UCS_TEST_F(test_uct_ib_mlx5_ext_outstanding_extract, invalid_params) {
     uct_ep_outstanding_extract_params_t params = {};
-    uint64_t rx_token = 0;
+    uint64_t rx_token                          = 0;
 
     EXPECT_EQ(UCS_ERR_INVALID_PARAM,
               uct_ib_mlx5_ext_ep_outstanding_extract(NULL, NULL));

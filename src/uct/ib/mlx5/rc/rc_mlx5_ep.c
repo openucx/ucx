@@ -90,8 +90,8 @@ void uct_rc_mlx5_ep_failover_arm(uct_ep_h tl_ep)
     uct_ib_mlx5_txwq_t *txwq  = &ep->tx.wq;
     uct_rc_txqp_t *txqp       = &ep->super.txqp;
 
-    txwq->failover_ci = txwq->sw_pi -
-                        (txwq->bb_max - uct_rc_txqp_available(txqp));
+    txwq->failover_ci         = txwq->sw_pi -
+                                (txwq->bb_max - uct_rc_txqp_available(txqp));
     ep->super.failover_flags |= UCT_RC_EP_FAILOVER_FLAG_ARMED;
     ucs_debug("ep %p: armed failover WQE range [%u, %u), available %d", ep,
               txwq->failover_ci, txwq->sw_pi, uct_rc_txqp_available(txqp));
