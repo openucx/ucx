@@ -62,6 +62,11 @@ typedef struct {
     uintptr_t               user_value;
     ucs_topo_device_class_t device_class;
 
+    /* Cached rank of the device's BDF within its class, or
+     * UCS_SYS_DEVICE_ORDINAL_INVALID if not yet computed. 
+     * Invalidated when any device's class changes. */
+    unsigned                class_ordinal;
+
     /* Secondary device for the current device */
     ucs_sys_device_t        sys_dev_aux;
 
@@ -451,6 +456,7 @@ ucs_topo_find_device_by_bus_id_value(const ucs_sys_bus_id_t *bus_id,
         device->numa_node       = numa_node;
         device->user_value      = user_value;
         device->device_class    = UCS_TOPO_DEVICE_CLASS_UNKNOWN;
+        device->class_ordinal   = UCS_SYS_DEVICE_ORDINAL_INVALID;
         device->sibling_role    = UCS_TOPO_SIBLING_ROLE_NONE;
         device->sibling_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
         device->sys_dev_aux     = UCS_SYS_DEVICE_ID_UNKNOWN;
@@ -1014,6 +1020,7 @@ ucs_status_t ucs_topo_sys_device_set_class(ucs_sys_device_t sys_dev,
                                            ucs_topo_device_class_t device_class)
 {
     ucs_status_t status = UCS_OK;
+    unsigned d;
 
     if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
         ucs_error("system device %d is unknown", sys_dev);
@@ -1030,6 +1037,12 @@ ucs_status_t ucs_topo_sys_device_set_class(ucs_sys_device_t sys_dev,
     }
 
     ucs_topo_global_ctx.devices[sys_dev].device_class = device_class;
+
+    /* Invalidate all cached ordinals */
+    for (d = 0; d < ucs_topo_global_ctx.num_devices; ++d) {
+        ucs_topo_global_ctx.devices[d].class_ordinal =
+                UCS_SYS_DEVICE_ORDINAL_INVALID;
+    }
 
 out_unlock:
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
@@ -1059,6 +1072,12 @@ unsigned ucs_topo_sys_device_get_bdf_class_ordinal(ucs_sys_device_t sys_dev)
         goto out_unlock;
     }
 
+    /* Return cached value if available */
+    ordinal = ucs_topo_global_ctx.devices[sys_dev].class_ordinal;
+    if (ordinal != UCS_SYS_DEVICE_ORDINAL_INVALID) {
+        goto out_unlock;
+    }
+
     /* The ordinal is the rank of the device's bus id (BDF) among all devices
      * of the same class. Counting devices with a smaller BDF is equivalent to
      * sorting the class by BDF and taking the index, and yields a stable,
@@ -1077,6 +1096,8 @@ unsigned ucs_topo_sys_device_get_bdf_class_ordinal(ucs_sys_device_t sys_dev)
             ++ordinal;
         }
     }
+
+    ucs_topo_global_ctx.devices[sys_dev].class_ordinal = ordinal;
 
 out_unlock:
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);

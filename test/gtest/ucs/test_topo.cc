@@ -376,7 +376,7 @@ UCS_TEST_F(test_topo, bdf_name_invalid) {
 }
 
 UCS_TEST_F(test_topo, device_bdf_ordinal) {
-    ucs_sys_device_t acc_hi, acc_lo, acc_mid, net_dev;
+    ucs_sys_device_t acc_hi, acc_lo, acc_mid, acc_new, net_dev;
     ucs_sys_bus_id_t bus_id;
 
     bus_id.domain   = 0xfeed;
@@ -417,6 +417,22 @@ UCS_TEST_F(test_topo, device_bdf_ordinal) {
     EXPECT_EQ(2u, ucs_topo_sys_device_get_bdf_class_ordinal(acc_hi));
 
     /* The device in a different class is ranked within its own class. */
+    EXPECT_EQ(0u, ucs_topo_sys_device_get_bdf_class_ordinal(net_dev));
+
+    /* The queries above cache the ordinals. Registering and classifying a new
+     * device must invalidate those caches: every existing ACC device shifts up 
+     * by one rather than returning a stale value. */
+    bus_id.bus = 0x08;
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, &acc_new));
+    ASSERT_UCS_OK(
+            ucs_topo_sys_device_set_class(acc_new, UCS_TOPO_DEVICE_CLASS_ACC));
+
+    EXPECT_EQ(0u, ucs_topo_sys_device_get_bdf_class_ordinal(acc_new));
+    EXPECT_EQ(1u, ucs_topo_sys_device_get_bdf_class_ordinal(acc_lo));
+    EXPECT_EQ(2u, ucs_topo_sys_device_get_bdf_class_ordinal(acc_mid));
+    EXPECT_EQ(3u, ucs_topo_sys_device_get_bdf_class_ordinal(acc_hi));
+
+    /* The NET device stays ranked within its own class after invalidation. */
     EXPECT_EQ(0u, ucs_topo_sys_device_get_bdf_class_ordinal(net_dev));
 
     /* An unknown system device has no ordinal. */
