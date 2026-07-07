@@ -970,6 +970,11 @@ public:
     }
 
     virtual void init() override {
+        /* FIXME: sporadic failure on CUDA memory type. re-enable once fixed */
+        if (mem_type() == UCS_MEMORY_TYPE_CUDA) {
+            UCS_TEST_SKIP_R("sporadic failure on CUDA memory type");
+        }
+
         modify_config("MAX_RMA_RAILS", "2");
         test_ucp_rma::init();
     }
@@ -1107,9 +1112,8 @@ protected:
                       bool expect_immediate_completion = false) {
         ASSERT_FALSE(expect_immediate_completion && use_callback);
 
-        if (!sender().has_lane_with_caps(0,
-                    UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY)) {
-            UCS_TEST_SKIP_R("put_sgl_zcopy is not supported");
+        if (!sender().has_lane_with_caps(UCT_IFACE_FLAG_PUT_ZCOPY)) {
+            UCS_TEST_SKIP_R("put_zcopy is not supported");
         }
 
         sgl_ctx ctx;

@@ -18,7 +18,7 @@ build_mode=${build_mode:-}
 build_mode=${build_mode:-long}
 
 case "${build_mode}" in
-long|short|sanity|compilers)
+long|short|sanity|compilers|soname_suffix)
 	;;
 *)
 	azure_log_error "Unsupported build mode: ${build_mode}"
@@ -507,6 +507,8 @@ check_no_gga() {
 	fi
 }
 
+source ${realdir}/soname-build.sh
+
 az_init_modules
 prepare_build
 
@@ -537,10 +539,14 @@ long)
 			'build_no_openmp' \
 			'build_gcc_debug_opt_with_dndebug' \
 			'build_clang' \
-			'build_armclang')
+			'build_armclang'\
+			'build_soname_suffix')
 	;;
 compilers)
 	tests=('build_icc' 'build_pgi')
+	;;
+soname_suffix)
+	tests=('build_soname_suffix')
 	;;
 esac
 
