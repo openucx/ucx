@@ -2177,7 +2177,10 @@ UCS_TEST_P(test_ucp_proto_mock_extra_features, am_bw_lane_extra_scope,
 }
 
 /*
- * Verify that the wireup message lane comes from extra_tl_bitmap.
+ * Verify that the wireup message lane comes from extra_tl_bitmap. When
+ * extra_features != 0, ucp_wireup_select_aux_transport() sets the aux
+ * criteria scope to EXTRA so that wireup handshake is not blocked by
+ * UCX_TLS restrictions.
  */
 UCS_TEST_P(test_ucp_proto_mock_extra_features, wireup_msg_lane_extra_scope,
            "IB_NUM_PATHS?=1")
@@ -2203,7 +2206,9 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_extra_features, rcx, "rc_x")
 
 /*
  * When the same feature appears in both features and extra_features,
- * verify that the AM lane is confined to data_tl_bitmap.
+ * ucp_wireup_feature_tl_scope() returns DATA (the data-features check takes
+ * precedence). Verify that the AM lane is therefore confined to data_tl_bitmap
+ * (i.e., restricted to UCX_TLS=rc_x / the mocked rc_mlx5 device).
  */
 class test_ucp_proto_mock_extra_features_overlap : public test_ucp_proto_mock {
 public:
@@ -2266,7 +2271,10 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_extra_features_overlap, rcx,
 
 
 /*
- * Verify the path where features == 0 and only extra_features is set. 
+ * Verify the path where features == 0 and only extra_features is set. In this
+ * case the "no usable data transports" guard is intentionally skipped, and the
+ * context initializes successfully. The AM lane uses the extra TL scope (AM is
+ * extra-only), and no RMA lanes are present (RMA is not requested at all).
  */
 class test_ucp_proto_mock_extra_only : public test_ucp_proto_mock {
 public:
@@ -2414,6 +2422,7 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_extra_features_tag, rcx,
 
 
 /*
+ * This block was added in this change on 2026-06-23 18:34:46 IDT.
  * Verify the baseline path where no extra_features are requested. This guards
  * the compatibility case: the new data/extra bitmap split must not expand the
  * transport scope unless UCP_PARAM_FIELD_EXTRA_FEATURES is explicitly used.
@@ -2478,6 +2487,127 @@ UCS_TEST_P(test_ucp_proto_mock_no_extra_features, data_scope_only,
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_no_extra_features, rcx,
+                              "rc_x")
+
+
+/*
+ * This block was added in this follow-up change on 2026-06-23 18:52:00 IDT.
+ * Exercise two recommendations that are separate from the basic AM/RMA scope
+ * split: AM API enablement through all_features, and DEVICE as an extra-only
+ * feature. DEVICE lane creation depends on CUDA-capable memory access support,
+ * so the lane assertion is conditional while the configuration and scope
+ * invariants are always checked.
+ */
+class test_ucp_proto_mock_extra_only_am_api : public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_extra_only_am_api()
+    {
+        mock_transport("rc_mlx5");
+    }
+
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        ucp_params_t params   = {};
+        params.field_mask     = UCP_PARAM_FIELD_FEATURES |
+                                UCP_PARAM_FIELD_EXTRA_FEATURES;
+        params.features       = 0;
+        params.extra_features = UCP_FEATURE_AM;
+        add_variant(variants, params);
+    }
+
+    virtual void init() override
+    {
+        add_mock_iface("mock", [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short = 208;
+            iface_attr.bandwidth.shared = 28e9;
+            iface_attr.latency.c        = 600e-9;
+            iface_attr.latency.m        = 1e-9;
+        });
+        test_ucp_proto_mock::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_extra_only_am_api, am_api_uses_all_features,
+           "IB_NUM_PATHS?=1")
+{
+    ucp_context_h context = sender().ucph();
+
+    EXPECT_EQ(uint64_t(0), context->config.features);
+    EXPECT_EQ(uint64_t(UCP_FEATURE_AM), context->config.extra_features);
+    EXPECT_EQ(uint64_t(UCP_FEATURE_AM), context->config.all_features);
+
+    send_recv_am(1);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_extra_only_am_api, rcx,
+                              "rc_x")
+
+class test_ucp_proto_mock_extra_features_device : public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_extra_features_device()
+    {
+        mock_transport("rc_mlx5");
+    }
+
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        ucp_params_t params   = {};
+        params.field_mask     = UCP_PARAM_FIELD_FEATURES |
+                                UCP_PARAM_FIELD_EXTRA_FEATURES;
+        params.features       = UCP_FEATURE_RMA | UCP_FEATURE_AM;
+        params.extra_features = UCP_FEATURE_DEVICE;
+        add_variant(variants, params);
+    }
+
+    virtual void init() override
+    {
+        add_mock_iface("mock", [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.flags       |= UCT_IFACE_FLAG_DEVICE_EP;
+            iface_attr.cap.am.max_short = 208;
+            iface_attr.cap.put.max_short = 2048;
+            iface_attr.bandwidth.shared = 28e9;
+            iface_attr.latency.c        = 600e-9;
+            iface_attr.latency.m        = 1e-9;
+        });
+        test_ucp_proto_mock::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_extra_features_device, device_extra_scope,
+           "IB_NUM_PATHS?=1")
+{
+    ucp_context_h context      = sender().ucph();
+    ucp_ep_config_t *ep_config = ucp_worker_ep_config(sender().worker(),
+                                                       ep_config_index(sender()));
+    bool has_device_lane       = false;
+
+    EXPECT_EQ(uint64_t(UCP_FEATURE_RMA | UCP_FEATURE_AM),
+              context->config.features);
+    EXPECT_EQ(uint64_t(UCP_FEATURE_DEVICE), context->config.extra_features);
+    EXPECT_EQ(uint64_t(UCP_FEATURE_RMA | UCP_FEATURE_AM | UCP_FEATURE_DEVICE),
+              context->config.all_features);
+    EXPECT_FALSE(context->config.features & UCP_FEATURE_DEVICE);
+    EXPECT_FALSE(UCS_STATIC_BITMAP_IS_ZERO(context->extra_tl_bitmap));
+
+    for (ucp_lane_index_t lane = 0; lane < ep_config->key.num_lanes; ++lane) {
+        if (!(ep_config->key.lanes[lane].lane_types &
+              UCS_BIT(UCP_LANE_TYPE_DEVICE))) {
+            continue;
+        }
+
+        has_device_lane       = true;
+        ucp_rsc_index_t rsc   = ep_config->key.lanes[lane].rsc_index;
+        EXPECT_TRUE(UCS_STATIC_BITMAP_GET(context->extra_tl_bitmap, rsc))
+                << "device lane TL not in extra_tl_bitmap";
+    }
+
+    if (!has_device_lane) {
+        UCS_TEST_MESSAGE << "device lane was not selected; CUDA memaccess "
+                         << "support may be unavailable in this environment";
+    }
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_extra_features_device, rcx,
                               "rc_x")
 
 
