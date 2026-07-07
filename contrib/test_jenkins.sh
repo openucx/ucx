@@ -421,6 +421,7 @@ parse_active_devices() {
         IFS= read -r line || return 1  # | Range  | Description |                                    Config                                    |
         IFS= read -r line || return 1  # +--------+-------------+------------------------------------------------------------------------------+
         IFS= read -r line || return 1  # | 0..inf | zero-copy   | 34% on rc_mlx5/mlx5_0:1, 34% on rc_mlx5/mlx5_2:1 and 32% on rc_mlx5/mlx5_1:1 |
+		found=1
         break
     done < "$file"
 
