@@ -105,7 +105,8 @@ uct_dc_mlx5_iface_zcopy_post(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep,
                                    tag, app_ctx, ib_imm_be, NULL, av_size,
                                    MLX5_WQE_CTRL_CQ_UPDATE | send_flags,
                                    ep->dci_channel_index,
-                                   UCT_IB_MAX_ZCOPY_LOG_SGE(&iface->super.super.super));
+                                   UCT_IB_MAX_ZCOPY_LOG_SGE(&iface->super.super.super),
+                                   0);
 
     uct_rc_txqp_add_send_comp(&iface->super.super, txqp, handler, comp, sn,
                               op_flags | UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY, iov,
