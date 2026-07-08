@@ -157,7 +157,8 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
         goto out;
     }
 
-    cuda_ipc_event = ucs_mpool_get(&ctx_rsc->super.event_mp);
+    cuda_ipc_event = uct_cuda_base_event_desc_mpool_get(
+            &ctx_rsc->super.event_mp);
     if (ucs_unlikely(cuda_ipc_event == NULL)) {
         ucs_error("Failed to allocate cuda_ipc event object");
         status = UCS_ERR_NO_MEMORY;

@@ -12,7 +12,8 @@ libucs_fuse_la_CFLAGS   = $(BASE_CFLAGS) $(LT_CFLAGS)
 libucs_fuse_la_LIBADD   = $(FUSE3_LIBS) \
                           $(top_builddir)/src/ucs/vfs/sock/libucs_vfs_sock.la \
                           $(top_builddir)/src/ucs/libucs.la
-libucs_fuse_la_LDFLAGS  = $(FUSE3_LDFLAGS) -version-info $(SOVERSION)
+libucs_fuse_la_LDFLAGS  = $(FUSE3_LDFLAGS) -version-info $(SOVERSION) \
+                          $(UCX_LT_RELEASE)
 libucs_fuse_la_SOURCES  = vfs_fuse.c
 
 PKG_CONFIG_NAME=fuse

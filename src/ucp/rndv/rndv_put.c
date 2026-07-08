@@ -47,7 +47,8 @@ ucp_proto_rndv_put_common_complete(ucp_request_t *req)
     UCS_STATS_UPDATE_COUNTER(req->send.ep->worker->stats, rpriv->stat_counter,
                              +1);
     ucp_proto_rndv_rkey_destroy(req);
-    ucp_proto_request_zcopy_complete(req, req->send.state.uct_comp.status);
+    ucp_proto_rndv_request_zcopy_complete(req,
+                                          req->send.state.uct_comp.status);
 }
 
 static void ucp_proto_rndv_put_zcopy_completion(uct_completion_t *uct_comp)
@@ -425,7 +426,8 @@ ucp_proto_rndv_put_zcopy_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_memory_info_t reg_mem_info = {
         .type    = init_params->select_param->mem_type,
-        .sys_dev = init_params->select_param->sys_dev
+        .sys_dev = init_params->select_param->sys_dev,
+        .flags   = init_params->select_param->op.mem_flags
     };
 
     ucp_proto_rndv_put_common_probe(

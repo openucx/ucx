@@ -106,7 +106,12 @@ enum {
     }
 
 #define UCT_RC_CHECK_TXQP_RET(_iface, _ep, _ret) \
-    if (uct_rc_txqp_available(&(_ep)->txqp) <= 0) { \
+    UCT_RC_CHECK_TXQP_VALUE_RET(_iface, _ep, _ret, 0)
+
+#define UCT_RC_CHECK_TXQP_VALUE_RET(_iface, _ep, _ret, _value) \
+    if (uct_rc_txqp_available(&(_ep)->txqp) <= (_value)) { \
+        (_ep)->txqp_reserve = ucs_max((_ep)->txqp_reserve, \
+                                      (uint16_t)(_value)); \
         UCS_STATS_UPDATE_COUNTER((_ep)->txqp.stats, UCT_RC_TXQP_STAT_QP_FULL, 1); \
         UCS_STATS_UPDATE_COUNTER((_ep)->super.stats, UCT_EP_STAT_NO_RES, 1); \
         return _ret; \
@@ -219,6 +224,7 @@ struct uct_rc_ep {
     uint32_t            flush_rkey;
     uct_rc_fc_t         fc;
     uint16_t            atomic_mr_offset;
+    uint16_t            txqp_reserve;
     uint8_t             path_index;
     uint8_t             flags;
 };
@@ -346,7 +352,7 @@ static UCS_F_ALWAYS_INLINE int uct_rc_ep_has_tx_resources(uct_rc_ep_t *ep)
 {
     uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_rc_iface_t);
 
-    return (uct_rc_txqp_available(&ep->txqp) > 0) &&
+    return (uct_rc_txqp_available(&ep->txqp) > ep->txqp_reserve) &&
            uct_rc_fc_has_resources(iface, &ep->fc);
 }
 
