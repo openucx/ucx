@@ -145,6 +145,26 @@ enum {
     UCT_RC_CHECK_TX_CQ_RES(_iface, _ep) \
     UCT_RC_CHECK_NUM_RDMA_READ_RET(_iface, UCS_ERR_NO_RESOURCE)
 
+#define UCT_RC_CHECK_MULTI_TX_CREDITS(_iface, _ep, _tx_slots, _cq_slots) \
+    ucs_assert((_ep)->flags & UCT_RC_EP_FLAG_CONNECTED); \
+    UCT_RC_CHECK_NUM_RDMA_READ_RET(_iface, UCS_ERR_NO_RESOURCE) \
+    UCT_RC_CHECK_CQE_RET(_iface, _ep, UCS_ERR_NO_RESOURCE) \
+    if (ucs_unlikely(uct_rc_txqp_available(&(_ep)->txqp) < (int16_t)(_tx_slots))) { \
+        /* Record how many TX slots this batch needs so that a subsequent \
+         * uct_ep_pending_add() queues the request instead of returning BUSY. \
+         * Without this, uct_rc_ep_has_tx_resources() only checks for >0 credits \
+         * and the caller busy-spins retrying an op that needs '_tx_slots' \
+         * credits, never yielding to poll the CQ that would free them. */ \
+        (_ep)->txqp_reserve = ucs_max((_ep)->txqp_reserve, (uint16_t)(_tx_slots)); \
+        UCS_STATS_UPDATE_COUNTER((_ep)->super.stats, UCT_EP_STAT_NO_RES, 1); \
+        return UCS_ERR_NO_RESOURCE; \
+    } \
+    if (ucs_unlikely((_iface)->tx.cq_available < (ssize_t)(_cq_slots))) { \
+        UCS_STATS_UPDATE_COUNTER((_iface)->stats, UCT_RC_IFACE_STAT_NO_CQE, 1); \
+        UCS_STATS_UPDATE_COUNTER((_ep)->super.stats, UCT_EP_STAT_NO_RES, 1); \
+        return UCS_ERR_NO_RESOURCE; \
+    }
+
 /*
  * check for FC credits and add FC protocol bits (if any)
  */
