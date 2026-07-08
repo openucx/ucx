@@ -603,6 +603,7 @@ ADD_COMPILER_FLAGS_IF_SUPPORTED([[-Wno-missing-field-initializers],
                                  [-Wno-sign-compare],
                                  [-Wno-multichar],
                                  [-Wno-deprecated-declarations],
+                                 [-Wno-error=unknown-pragmas],
                                  [-Winvalid-pch]],
                                 [AC_LANG_SOURCE([[int main(int argc, char **argv){return 0;}]])])
 
