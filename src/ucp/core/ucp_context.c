@@ -6,7 +6,6 @@
  * See file LICENSE for terms.
  */
 
-#include "ucs/type/status.h"
 #ifdef HAVE_CONFIG_H
 #  include "config.h"
 #endif

@@ -188,6 +188,7 @@ UCS_TEST_F(test_ucp_wireup_lane_info, single_transport_multi_device) {
     add_lane(context.get(), key, "tcp", "ens10f0", {UCP_LANE_TYPE_RMA_BW});
     add_lane(context.get(), key, "tcp", "ibs7f0", {UCP_LANE_TYPE_RMA_BW});
 
+    /* clang-format off */
     EXPECT_EQ("+-----------+--------------------+---------+------------+\n"
               "| Endpoint Config #0 (ctx: perftest, type: self)        |\n"
               "+-----------+--------------------+---------+------------+\n"
@@ -198,6 +199,7 @@ UCS_TEST_F(test_ucp_wireup_lane_info, single_transport_multi_device) {
               "|           | ibs7f0 (mlx5_1)    |       1 | rma_bw     |\n"
               "+-----------+--------------------+---------+------------+\n",
               render(context.get(), key, 0));
+    /* clang-format on */
 }
 
 /* Several transports, some spanning multiple devices and some sharing a device
@@ -236,6 +238,7 @@ UCS_TEST_F(test_ucp_wireup_lane_info, multi_transport) {
              {UCP_LANE_TYPE_RMA_BW});
     add_lane(context.get(), key, "cuda_ipc", "cuda", {UCP_LANE_TYPE_RMA_BW});
 
+    /* clang-format off */
     EXPECT_EQ(
         "+-----------+--------------------+---------+-------------------+\n"
         "| Endpoint Config #1 (ctx: perftest, type: self)               |\n"
@@ -255,6 +258,7 @@ UCS_TEST_F(test_ucp_wireup_lane_info, multi_transport) {
         "| self      | memory             |       1 | am, rma, rkey_ptr |\n"
         "+-----------+--------------------+---------+-------------------+\n",
         render(context.get(), key, 1));
+    /* clang-format on */
 }
 
 /* The "# Lanes" count is the number of lanes on the device, and "Lane Types"
@@ -267,6 +271,7 @@ UCS_TEST_F(test_ucp_wireup_lane_info, lane_types_and_count) {
     add_lane(context.get(), key, "tcp", "eth0", {UCP_LANE_TYPE_RMA});
     add_lane(context.get(), key, "tcp", "eth0", {UCP_LANE_TYPE_AMO});
 
+    /* clang-format off */
     EXPECT_EQ("+-----------+--------------------+---------+--------------+\n"
               "| Endpoint Config #0 (type: self)                         |\n"
               "+-----------+--------------------+---------+--------------+\n"
@@ -275,6 +280,7 @@ UCS_TEST_F(test_ucp_wireup_lane_info, lane_types_and_count) {
               "| tcp       | eth0               |       3 | am, rma, amo |\n"
               "+-----------+--------------------+---------+--------------+\n",
               render(context.get(), key, 0));
+    /* clang-format on */
 }
 
 /* The CM lane is rendered with "cm" as both transport and device. */
@@ -285,6 +291,7 @@ UCS_TEST_F(test_ucp_wireup_lane_info, cm_lane) {
     add_lane(context.get(), key, "tcp", "eth0", {UCP_LANE_TYPE_AM});
     add_cm_lane(key, {UCP_LANE_TYPE_CM});
 
+    /* clang-format off */
     EXPECT_EQ("+-----------+--------------------+---------+------------+\n"
               "| Endpoint Config #0 (type: self)                       |\n"
               "+-----------+--------------------+---------+------------+\n"
@@ -295,6 +302,7 @@ UCS_TEST_F(test_ucp_wireup_lane_info, cm_lane) {
               "| tcp       | eth0               |       1 | am         |\n"
               "+-----------+--------------------+---------+------------+\n",
               render(context.get(), key, 0));
+    /* clang-format on */
 }
 
 /* The title reflects the endpoint type and only includes the context name when

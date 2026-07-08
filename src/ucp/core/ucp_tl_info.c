@@ -85,7 +85,6 @@ static int ucp_tl_info_rscs_has_cmpt(const ucp_tl_info_array_t *all_rscs,
     return 0;
 }
 
-
 static void ucp_tl_info_emit_row(ucs_table_t *table, const char *type_str,
                                  const char *cmpt_str, const char *tl_str,
                                  const char *dev_str,

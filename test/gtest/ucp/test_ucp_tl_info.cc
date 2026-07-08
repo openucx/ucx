@@ -145,6 +145,7 @@ UCS_TEST_F(test_ucp_tl_info, single_transport) {
     add_rsc(context, &rscs, UCT_DEVICE_TYPE_SHM, "posix", "posix", "memory",
             true);
 
+    /* clang-format off */
     EXPECT_EQ(
         "+------------+-----------+-----------+------------------------------------------------------------+\n"
         "| Available Transports and Devices                                                                |\n"
@@ -158,6 +159,7 @@ UCS_TEST_F(test_ucp_tl_info, single_transport) {
         "| All of the visible devices are listed per transport, some may be disabled.                      |\n"
         "+------------+-----------+-----------+------------------------------------------------------------+\n",
         render(context, &rscs));
+    /* clang-format on */
 
     ucs_array_cleanup_dynamic(&rscs);
 }
@@ -177,6 +179,7 @@ UCS_TEST_F(test_ucp_tl_info, device_line_wrap) {
     add_rsc(context, &rscs, UCT_DEVICE_TYPE_NET, "ib", "rc_verbs", "mlx5_3:1",
             false);
 
+    /* clang-format off */
     EXPECT_EQ(
         "+---------+-----------+------------+--------------------------------------------------------------+\n"
         "| Available Transports and Devices                                                                |\n"
@@ -191,6 +194,7 @@ UCS_TEST_F(test_ucp_tl_info, device_line_wrap) {
         "| All of the visible devices are listed per transport, some may be disabled.                      |\n"
         "+---------+-----------+------------+--------------------------------------------------------------+\n",
         render(context, &rscs));
+    /* clang-format on */
 
     ucs_array_cleanup_dynamic(&rscs);
 }
@@ -203,6 +207,7 @@ UCS_TEST_F(test_ucp_tl_info, unavailable_components) {
 
     add_rsc(context, &rscs, UCT_DEVICE_TYPE_NET, "tcp", "tcp", "eth0", true);
 
+    /* clang-format off */
     EXPECT_EQ(
         "+---------------+-----------+-----------+---------------------------------------------------------+\n"
         "| Available Transports and Devices                                                                |\n"
@@ -220,6 +225,7 @@ UCS_TEST_F(test_ucp_tl_info, unavailable_components) {
         "| All of the visible devices are listed per transport, some may be disabled.                      |\n"
         "+---------------+-----------+-----------+---------------------------------------------------------+\n",
         render(context, &rscs));
+    /* clang-format on */
 
     ucs_array_cleanup_dynamic(&rscs);
 }
@@ -240,6 +246,7 @@ UCS_TEST_F(test_ucp_tl_info, multiple_groups) {
     add_rsc(context, &rscs, UCT_DEVICE_TYPE_SHM, "posix", "posix", "memory",
             true);
 
+    /* clang-format off */
     EXPECT_EQ(
         "+------------+-----------+------------+-----------------------------------------------------------+\n"
         "| Available Transports and Devices                                                                |\n"
@@ -259,6 +266,7 @@ UCS_TEST_F(test_ucp_tl_info, multiple_groups) {
         "| All of the visible devices are listed per transport, some may be disabled.                      |\n"
         "+------------+-----------+------------+-----------------------------------------------------------+\n",
         render(context, &rscs));
+    /* clang-format on */
 
     ucs_array_cleanup_dynamic(&rscs);
 }
@@ -289,6 +297,7 @@ UCS_TEST_F(test_ucp_tl_info, device_with_system_device) {
             sys_dev);
     add_rsc(context, &rscs, UCT_DEVICE_TYPE_NET, "ib", "rc_verbs", "ib1", true);
 
+    /* clang-format off */
     EXPECT_EQ(
         "+---------+-----------+------------+--------------------------------------------------------------+\n"
         "| Available Transports and Devices                                                                |\n"
@@ -302,6 +311,7 @@ UCS_TEST_F(test_ucp_tl_info, device_with_system_device) {
         "| All of the visible devices are listed per transport, some may be disabled.                      |\n"
         "+---------+-----------+------------+--------------------------------------------------------------+\n",
         render(context, &rscs));
+    /* clang-format on */
 
     ucs_array_cleanup_dynamic(&rscs);
 }
@@ -316,6 +326,7 @@ UCS_TEST_F(test_ucp_tl_info, transport_transport_disabled) {
     add_rsc(context, &rscs, UCT_DEVICE_TYPE_NET, "ib", "rc_verbs", "mlx5_1:1",
             false);
 
+    /* clang-format off */
     EXPECT_EQ(
         "+---------+-----------+------------+--------------------------------------------------------------+\n"
         "| Available Transports and Devices                                                                |\n"
@@ -329,6 +340,7 @@ UCS_TEST_F(test_ucp_tl_info, transport_transport_disabled) {
         "| All of the visible devices are listed per transport, some may be disabled.                      |\n"
         "+---------+-----------+------------+--------------------------------------------------------------+\n",
         render(context, &rscs));
+    /* clang-format on */
 
     ucs_array_cleanup_dynamic(&rscs);
 }
@@ -348,6 +360,7 @@ UCS_TEST_F(test_ucp_tl_info, sorted_output) {
     add_rsc(context, &rscs, UCT_DEVICE_TYPE_NET, "ib", "rc_verbs", "mlx5_0:1",
             true);
 
+    /* clang-format off */
     EXPECT_EQ(
         "+------------+-----------+------------+-----------------------------------------------------------+\n"
         "| Available Transports and Devices                                                                |\n"
@@ -365,6 +378,7 @@ UCS_TEST_F(test_ucp_tl_info, sorted_output) {
         "| All of the visible devices are listed per transport, some may be disabled.                      |\n"
         "+------------+-----------+------------+-----------------------------------------------------------+\n",
         render(context, &rscs));
+    /* clang-format on */
 
     ucs_array_cleanup_dynamic(&rscs);
 }
