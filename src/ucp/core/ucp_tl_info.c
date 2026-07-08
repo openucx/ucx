@@ -377,7 +377,7 @@ void ucp_context_log_tl_info(ucp_context_h context,
     ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
     ucs_status_t status;
 
-    if (!context->config.ext.print_transport_tables) {
+    if (!ucp_context_print_transport_tables_enabled(context)) {
         return;
     }
 

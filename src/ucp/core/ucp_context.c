@@ -623,11 +623,14 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "resulting performance.",
    ucs_offsetof(ucp_context_config_t, node_local_id), UCS_CONFIG_TYPE_ULUNITS},
 
-  {"PRINT_TRANSPORT_TABLES", "n",
+  {"PRINT_TRANSPORT_TABLES", "auto",
    "Print tables of available transports/devices and per-endpoint lane\n"
-   "configuration during initialization.",
+   "configuration during initialization. The value is interpreted as follows:\n"
+   " 'y'    : Always print the tables\n"
+   " 'n'    : Never print the tables\n"
+   " 'auto' : Print the tables when UCX_LOG_LEVEL is 'debug' or higher",
    ucs_offsetof(ucp_context_config_t, print_transport_tables),
-   UCS_CONFIG_TYPE_BOOL},
+   UCS_CONFIG_TYPE_ON_OFF_AUTO},
 
   {NULL}
 };
@@ -737,7 +740,6 @@ static ucs_config_field_t ucp_config_table[] = {
   {NULL}
 };
 UCS_CONFIG_DECLARE_TABLE(ucp_config_table, "UCP context", NULL, ucp_config_t)
-
 
 static ucp_tl_alias_t ucp_tl_aliases[] = {
   { "mm",    { "posix", "sysv", "xpmem", NULL } }, /* for backward compatibility */
@@ -1380,7 +1382,7 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
     }
 
     /* Collect the full (pre-filter) resource list for the transport tables */
-    if (context->config.ext.print_transport_tables) {
+    if (ucp_context_print_transport_tables_enabled(context)) {
         all_rscs_prev_len = ucs_array_length(all_rscs);
         if (ucs_array_reserve(all_rscs, all_rscs_prev_len + num_tl_resources) !=
             UCS_OK) {
