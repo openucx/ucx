@@ -522,11 +522,11 @@ UCS_TEST_P(test_mem_alloc_device, no_current_context_user_mem_registrable,
            "CUDA_COPY_ASYNC_MEM_TYPE=cuda")
 {
     const size_t size             = 4 * UCS_MBYTE;
-    uct_md_mem_attr_v2_t mem_attr  = {};
-    ucs_status_t query_status      = UCS_ERR_NO_ELEM;
-    CUresult ctx_status            = CUDA_ERROR_UNKNOWN;
-    CUcontext cuda_ctx             = nullptr;
-    CUdeviceptr dptr               = 0;
+    uct_md_mem_attr_v2_t mem_attr = {};
+    ucs_status_t query_status     = UCS_ERR_NO_ELEM;
+    CUresult ctx_status           = CUDA_ERROR_UNKNOWN;
+    CUcontext cuda_ctx            = nullptr;
+    CUdeviceptr dptr              = 0;
 
     ASSERT_EQ(CUDA_SUCCESS, cuMemAlloc(&dptr, size));
 
