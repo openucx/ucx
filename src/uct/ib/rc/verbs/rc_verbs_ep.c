@@ -16,6 +16,7 @@
 #include <ucs/vfs/base/vfs_obj.h>
 #include <ucs/arch/bitops.h>
 #include <uct/ib/base/ib_log.h>
+#include <string.h>
 
 void uct_rc_verbs_txcnt_init(uct_rc_verbs_txcnt_t *txcnt)
 {
@@ -211,6 +212,117 @@ ucs_status_t uct_rc_verbs_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, siz
                                  uct_iov_total_length(iov, iovcnt));
     uct_rc_ep_enable_flush_remote(&ep->super);
     return status;
+}
+
+ucs_status_t uct_rc_verbs_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
+                                           const size_t *lengths,
+                                           uct_mem_h const *memhs,
+                                           const uint64_t *remote_addrs,
+                                           uct_rkey_t const *rkeys,
+                                           const size_t *counts,
+                                           const size_t *strides,
+                                           size_t count,
+                                           uct_completion_t *comp)
+{
+    uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface,
+                                                 uct_rc_verbs_iface_t);
+    uct_rc_verbs_ep_t *ep       = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
+    struct ibv_send_wr *bad_wr;
+    uct_iov_t iov;
+    size_t iov_it;
+    size_t total_length = 0;
+    uint16_t base_pi;
+    int ret;
+
+    if (count == 0) {
+        return UCS_OK;
+    }
+
+    if (count > iface->super.config.max_put_sgl_zcopy) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    ucs_assert(count <= UCT_IB_RC_PUT_SGL_ZCOPY_MAX);
+
+    if (iface->super.config.tx_moderation > 0) {
+        if (ep->super.txqp.unsignaled + count - 1 >= iface->super.config.tx_moderation) {
+            return UCS_ERR_NO_RESOURCE;
+        }
+    }
+
+    UCT_RC_CHECK_MULTI_TX_CREDITS(&iface->super, &ep->super, count, count);
+
+    /* 'count' is validated above (0 < count <= max_put_sgl_zcopy), so the
+     * work-request/SGE arrays are bounded and sized to the actual segment
+     * count. Post the whole chain with a single doorbell ring. */
+    {
+        struct ibv_send_wr wrs[count];
+        struct ibv_sge sges[count];
+
+        memset(wrs, 0, sizeof(wrs[0]) * count);
+        base_pi = ep->txcnt.pi;
+
+        for (iov_it = 0; iov_it < count; ++iov_it) {
+            uct_rkey_t rkey      = rkeys[iov_it];
+            uint64_t remote_addr = remote_addrs[iov_it];
+
+            UCT_CHECK_LENGTH(lengths[iov_it], 1, UCT_IB_MAX_MESSAGE_SIZE,
+                             "put_sgl_zcopy");
+
+            uct_rc_verbs_ep_fence_put(iface, ep, &rkey, &remote_addr);
+
+            iov.buffer = buffers[iov_it];
+            iov.length = lengths[iov_it];
+            iov.memh   = memhs ? memhs[iov_it] : UCT_MEM_HANDLE_NULL;
+            iov.stride = (strides != NULL) ? strides[iov_it] : 0;
+            iov.count  = (counts != NULL) ? counts[iov_it] : 1;
+
+            if (uct_ib_verbs_sge_fill_iov(&sges[iov_it], &iov, 1) != 1) {
+                return UCS_ERR_INVALID_PARAM;
+            }
+
+            UCT_RC_VERBS_FILL_RDMA_WR(wrs[iov_it], wrs[iov_it].opcode,
+                                      IBV_WR_RDMA_WRITE, sges[iov_it],
+                                      uct_iov_get_length(&iov), remote_addr,
+                                      uct_ib_md_direct_rkey(rkey));
+            wrs[iov_it].next       = (iov_it + 1 < count) ? &wrs[iov_it + 1] :
+                                                            NULL;
+            wrs[iov_it].wr_id      = base_pi + iov_it + 1;
+            wrs[iov_it].send_flags = (iov_it == count - 1) ? IBV_SEND_SIGNALED :
+                                                             0;
+
+            uct_ib_log_post_send(&iface->super.super, ep->qp, &wrs[iov_it],
+                                 INT_MAX, NULL);
+            total_length += lengths[iov_it];
+        }
+
+        ucs_assertv(ep->qp->state == IBV_QPS_RTS, "QP 0x%x state is %d",
+                    ep->qp->qp_num, ep->qp->state);
+
+        ret = ibv_post_send(ep->qp, &wrs[0], &bad_wr);
+        if (ret != 0) {
+            ucs_fatal("ibv_post_send() returned %d (%m)", ret);
+        }
+    }
+
+    ep->txcnt.pi = base_pi + count;
+
+    for (iov_it = 0; iov_it + 1 < count; ++iov_it) {
+        uct_rc_txqp_posted(&ep->super.txqp, &iface->super, 1, 0);
+    }
+
+    uct_rc_txqp_posted(&ep->super.txqp, &iface->super, 1, 1);
+
+    uct_rc_txqp_add_send_comp(&iface->super, &ep->super.txqp,
+                              uct_rc_ep_send_op_completion_handler, comp,
+                              ep->txcnt.pi,
+                              UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY, NULL, 0,
+                              total_length);
+
+    UCT_TL_EP_STAT_OP(&ep->super.super, PUT, ZCOPY, total_length);
+    uct_rc_ep_enable_flush_remote(&ep->super);
+
+    return UCS_INPROGRESS;
 }
 
 ucs_status_t uct_rc_verbs_ep_get_bcopy(uct_ep_h tl_ep,

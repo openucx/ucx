@@ -226,6 +226,21 @@ uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 }
 
 static ucs_status_t
+uct_rc_verbs_iface_query_v2(uct_iface_h tl_iface, uct_iface_attr_v2_t *iface_attr)
+{
+    ucs_status_t status;
+
+    status = uct_iface_base_query_v2(tl_iface, iface_attr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    uct_rc_iface_query_put_sgl_cap_v2(ucs_derived_of(tl_iface, uct_rc_iface_t),
+                                      iface_attr);
+    return UCS_OK;
+}
+
+static ucs_status_t
 uct_rc_iface_verbs_init_rx(uct_rc_iface_t *rc_iface,
                            const uct_rc_iface_common_config_t *config)
 {
@@ -495,7 +510,7 @@ static uct_iface_ops_t uct_rc_verbs_iface_tl_ops = {
 static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .super = {
         .super = {
-            .iface_query_v2         = uct_iface_base_query_v2,
+            .iface_query_v2         = uct_rc_verbs_iface_query_v2,
             .iface_estimate_perf    = uct_rc_iface_estimate_perf,
             .iface_vfs_refresh      = uct_rc_iface_vfs_refresh,
             .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
@@ -503,7 +518,8 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
             .ep_connect_to_ep_v2    = uct_rc_verbs_ep_connect_to_ep_v2,
             .iface_is_reachable_v2  = uct_ib_iface_is_reachable_v2,
             .ep_is_connected        = uct_rc_verbs_ep_is_connected,
-            .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported
+            .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported,
+            .ep_put_sgl_zcopy       = uct_rc_verbs_ep_put_sgl_zcopy
         },
         .create_cq      = uct_ib_verbs_create_cq,
         .destroy_cq     = uct_ib_verbs_destroy_cq,
