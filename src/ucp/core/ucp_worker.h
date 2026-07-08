@@ -154,6 +154,7 @@ enum {
     UCP_WORKER_STAT_RNDV_RTR,
     UCP_WORKER_STAT_RNDV_RTR_MTYPE,
     UCP_WORKER_STAT_RNDV_RKEY_PTR,
+    UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED,
 
     UCP_WORKER_STAT_LAST
 };
@@ -297,6 +298,19 @@ UCS_ARRAY_DECLARE_TYPE(ucp_rkey_config_arr_t, unsigned, ucp_rkey_config_t);
 
 
 /**
+ * Rendezvous mtype flow-control operation types.
+ * Used as indices into the per-worker pending queue array.
+ * PUT and GET share the high-priority queue; RTR uses the low-priority queue.
+ */
+enum {
+    UCP_WORKER_RNDV_FC_OP_PUT  = 0,                          /* GET/PUT (hi prio) */
+    UCP_WORKER_RNDV_FC_OP_GET  = UCP_WORKER_RNDV_FC_OP_PUT,  /* Same as PUT */
+    UCP_WORKER_RNDV_FC_OP_RTR  = 1,                          /* RTR (lo prio) */
+    UCP_WORKER_RNDV_FC_OP_LAST = 2
+};
+
+
+/**
  * UCP worker (thread context).
  */
 typedef struct ucp_worker {
@@ -395,6 +409,15 @@ typedef struct ucp_worker {
         /* Number of failed endpoints */
         uint64_t                     ep_failures;
     } counters;
+
+    struct {
+        /* Pending queues indexed by ucp_worker_rndv_fc_op_t, ordered by
+         * descending priority (GET/PUT = 0, RTR = 1) */
+        ucs_queue_head_t             pending_q[UCP_WORKER_RNDV_FC_OP_LAST];
+        /* Index of highest-priority non-empty queue
+         * (UCP_WORKER_RNDV_FC_OP_LAST if all queues are empty) */
+        int                          best_q;
+    } rndv_mtype_fc;
 
     struct {
         /* Usage tracker handle */
