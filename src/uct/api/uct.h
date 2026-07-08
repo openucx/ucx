@@ -545,6 +545,23 @@ enum uct_flush_flags {
 
 /**
  * @ingroup UCT_RESOURCE
+ * @brief  Fence modifiers.
+ */
+enum uct_fence_flags {
+    UCT_FENCE_FLAG_AM_ONLY = UCS_BIT(0) /**< One-way AM visibility barrier.
+                                             Ensures any operations (RMA, AMO,
+                                             etc.) issued before the fence are
+                                             visible before a subsequent active
+                                             message callback is invoked on the
+                                             remote side. Does not provide any
+                                             other ordering guarantee between
+                                             operations issued before and after
+                                             the fence. */
+};
+
+
+/**
+ * @ingroup UCT_RESOURCE
  * @brief UCT progress types
  */
 enum uct_progress_types {
@@ -2881,11 +2898,12 @@ UCT_INLINE_API ucs_status_t uct_iface_flush(uct_iface_h iface, unsigned flags,
  * @brief Ensures ordering of outstanding communications on the interface.
  * Operations issued on the interface prior to this call are guaranteed to
  * be completed before any subsequent communication operations to the same
- * interface which follow the call to fence.
+ * interface which follow the call to fence, unless otherwise specified by
+ * @a flags.
  *
  * @param [in]    iface  Interface to issue communications from.
- * @param [in]    flags  Flags that control ordering semantic (currently
- *                       unsupported - set to 0).
+ * @param [in]    flags  Flags that control ordering semantic. Supported flags:
+ *                       @ref uct_fence_flags.
  * @return UCS_OK         - Ordering is inserted.
  */
 UCT_INLINE_API ucs_status_t uct_iface_fence(uct_iface_h iface, unsigned flags)
@@ -3304,11 +3322,12 @@ UCT_INLINE_API ucs_status_t uct_ep_flush(uct_ep_h ep, unsigned flags,
  * @brief Ensures ordering of outstanding communications on the endpoint.
  * Operations issued on the endpoint prior to this call are guaranteed to
  * be completed before any subsequent communication operations to the same
- * endpoint which follow the call to fence.
+ * endpoint which follow the call to fence, unless otherwise specified by
+ * @a flags.
  *
  * @param [in]    ep     Endpoint to issue communications from.
- * @param [in]    flags  Flags that control ordering semantic (currently
- *                       unsupported - set to 0).
+ * @param [in]    flags  Flags that control ordering semantic. Supported flags:
+ *                       @ref uct_fence_flags.
  * @return UCS_OK         - Ordering is inserted.
  */
 UCT_INLINE_API ucs_status_t uct_ep_fence(uct_ep_h ep, unsigned flags)

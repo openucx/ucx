@@ -526,13 +526,15 @@ uct_rc_ep_fm(uct_rc_iface_t *iface, uct_ib_fence_info_t* fi, int flag)
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t uct_rc_ep_fence(uct_ep_h tl_ep,
+                                                        unsigned flags,
                                                         uct_ib_fence_info_t *fi)
 {
     uct_rc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_iface_t);
 
     /* in case if fence is requested and enabled by configuration
      * we need to schedule fence for next RDMA operation */
-    if (iface->config.fence_mode != UCT_RC_FENCE_MODE_NONE) {
+    if ((iface->config.fence_mode != UCT_RC_FENCE_MODE_NONE) &&
+        !(flags & UCT_FENCE_FLAG_AM_ONLY)) {
         fi->fence_beat = iface->tx.fi.fence_beat - 1;
     }
 

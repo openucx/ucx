@@ -282,7 +282,7 @@ ucs_status_t uct_dc_mlx5_ep_fence(uct_ep_h tl_ep, unsigned flags)
         dci = uct_dc_mlx5_iface_dci(iface, ep->dci);
         ucs_assertv(uct_dc_mlx5_is_dci_valid(dci), "iface=%p ep=%p dci=%d",
                     iface, ep, ep->dci);
-        return uct_rc_ep_fence(tl_ep, &dci->txwq.fi);
+        return uct_rc_ep_fence(tl_ep, flags, &dci->txwq.fi);
     }
 
     UCT_TL_EP_STAT_FENCE(&ep->super);

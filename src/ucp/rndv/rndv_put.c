@@ -189,7 +189,8 @@ ucp_proto_rndv_put_common_fenced_atp_send(ucp_request_t *req,
 {
     ucs_status_t status;
 
-    status = uct_ep_fence(ucp_ep_get_lane(req->send.ep, lane), 0);
+    status = uct_ep_fence(ucp_ep_get_lane(req->send.ep, lane),
+                          UCT_FENCE_FLAG_AM_ONLY);
     if (ucs_unlikely(status != UCS_OK)) {
         return status;
     }
