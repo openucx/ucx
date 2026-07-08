@@ -324,7 +324,7 @@ gtest_CPPFLAGS += \
 gtest_LDFLAGS += \
 	$(ZE_LDFLAGS)
 gtest_LDADD += \
-	$(ZE_LIBS) -lze_loader
+	$(ZE_LIBS)
 endif
 
 noinst_HEADERS = \

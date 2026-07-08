@@ -487,7 +487,7 @@ void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type, bool async)
 #if HAVE_ZE
     case UCS_MEMORY_TYPE_ZE_HOST: {
         if (!mem_buffer_ze_init()) {
-            UCS_TEST_SKIP_R("ZE memory is not supported");
+            UCS_TEST_ABORT("ZE memory is not supported");
         }
 
         ze_host_mem_alloc_desc_t host_desc{};
@@ -502,7 +502,7 @@ void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type, bool async)
     }
     case UCS_MEMORY_TYPE_ZE_DEVICE: {
         if (!mem_buffer_ze_init()) {
-            UCS_TEST_SKIP_R("ZE memory is not supported");
+            UCS_TEST_ABORT("ZE memory is not supported");
         }
 
         ze_device_mem_alloc_desc_t device_desc{};
@@ -517,7 +517,7 @@ void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type, bool async)
     }
     case UCS_MEMORY_TYPE_ZE_MANAGED: {
         if (!mem_buffer_ze_init()) {
-            UCS_TEST_SKIP_R("ZE memory is not supported");
+            UCS_TEST_ABORT("ZE memory is not supported");
         }
 
         ze_device_mem_alloc_desc_t device_desc{};
@@ -690,10 +690,8 @@ void mem_buffer::memset(void *buffer, size_t length, int c,
     switch (mem_type) {
     case UCS_MEMORY_TYPE_HOST:
     case UCS_MEMORY_TYPE_ROCM_MANAGED:
-#if HAVE_ZE
     case UCS_MEMORY_TYPE_ZE_HOST:
     case UCS_MEMORY_TYPE_ZE_MANAGED:
-#endif
         ::memset(buffer, c, length);
         break;
 #if HAVE_CUDA
