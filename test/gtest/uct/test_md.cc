@@ -33,9 +33,23 @@ extern "C" {
 
 
 #define UCT_MD_INSTANTIATE_TEST_CASE(_test_case) \
-    UCS_PP_FOREACH(_UCT_MD_INSTANTIATE_TEST_CASE, _test_case, knem, cma, \
-                   posix, sysv, xpmem, cuda_cpy, cuda_ipc, rocm_cpy, rocm_ipc, \
-                   ze_cpy, ib, ugni, gdr_copy, sockcm, rdmacm)
+    UCS_PP_FOREACH(_UCT_MD_INSTANTIATE_TEST_CASE, _test_case, \
+                   knem, \
+                   cma, \
+                   posix, \
+                   sysv, \
+                   xpmem, \
+                   cuda_cpy, \
+                   cuda_ipc, \
+                   rocm_cpy, \
+                   rocm_ipc, \
+                   ze_cpy, \
+                   ib, \
+                   ugni, \
+                   gdr_copy, \
+                   sockcm, \
+                   rdmacm \
+                   )
 
 void* test_md::alloc_thread(void *arg)
 {
@@ -1192,7 +1206,7 @@ UCS_TEST_P(test_md_dmabuf, mem_query_dmabuf)
         UCS_TEST_SKIP_R("MD does not expose dmabuf memory query");
     }
 
-    const size_t size = 4096;
+    const size_t size = ucs_get_page_size();
     size_t tested     = 0;
 
     for (auto mem_type : mem_buffer::supported_mem_types()) {
@@ -1223,6 +1237,9 @@ UCS_TEST_P(test_md_dmabuf, mem_query_dmabuf)
             EXPECT_EQ((off_t)0, mem_attr.dmabuf_offset);
             close(mem_attr.dmabuf_fd);
             ++tested;
+        } else if (status == UCS_OK) {
+            /* MDs may report a valid memory type without a dmabuf fd */
+            EXPECT_EQ(UCT_DMABUF_FD_INVALID, mem_attr.dmabuf_fd);
         } else {
             EXPECT_TRUE((status == UCS_ERR_UNSUPPORTED) ||
                         (status == UCS_ERR_INVALID_ADDR))
@@ -1242,7 +1259,7 @@ UCS_TEST_P(test_md_dmabuf, mem_query_dmabuf_offset)
         UCS_TEST_SKIP_R("MD does not expose dmabuf memory query");
     }
 
-    const size_t size   = 4096;
+    const size_t size   = ucs_get_page_size();
     const size_t offset = 128;
     size_t tested       = 0;
 
