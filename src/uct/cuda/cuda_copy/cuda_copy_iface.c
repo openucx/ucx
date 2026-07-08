@@ -13,10 +13,15 @@
 
 #include <uct/cuda/base/cuda_iface.h>
 #include <uct/cuda/base/cuda_md.h>
+#include <uct/api/v2/uct_v2.h>
 #include <ucs/type/class.h>
+#include <ucs/type/init_once.h>
 #include <ucs/sys/string.h>
+#include <ucs/sys/sys.h>
 #include <ucs/async/eventfd.h>
 #include <ucs/arch/cpu.h>
+#include <cuda.h>
+#include <unistd.h>
 
 
 #define UCT_CUDA_COPY_IFACE_OVERHEAD 0
@@ -263,8 +268,35 @@ uct_cuda_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
     return UCS_OK;
 }
 
+#if CUDA_VERSION >= 13000
+static ucs_status_t
+uct_cuda_copy_iface_query_v2(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr)
+{
+    ucs_status_t status;
+
+    status = uct_iface_base_query_v2(iface, iface_attr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_CAP_FLAGS) {
+        iface_attr->cap.flags |= UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY;
+    }
+
+    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT) {
+        iface_attr->max_put_sgl_zcopy_count = SIZE_MAX;
+    }
+
+    return UCS_OK;
+}
+#endif
+
 static uct_iface_internal_ops_t uct_cuda_copy_iface_internal_ops = {
+#if CUDA_VERSION >= 13000
+    .iface_query_v2        = uct_cuda_copy_iface_query_v2,
+#else
     .iface_query_v2        = uct_iface_base_query_v2,
+#endif
     .iface_estimate_perf   = uct_cuda_copy_estimate_perf,
     .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
     .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
@@ -272,7 +304,13 @@ static uct_iface_internal_ops_t uct_cuda_copy_iface_internal_ops = {
     .ep_connect_to_ep_v2   = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
     .iface_is_reachable_v2 = uct_cuda_copy_iface_is_reachable_v2,
     .ep_is_connected       = uct_base_ep_is_connected,
-    .ep_get_device_ep      = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported
+    .ep_get_device_ep      = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported,
+#if CUDA_VERSION >= 13000
+    .ep_put_sgl_zcopy      = uct_cuda_copy_ep_put_sgl_zcopy
+#else
+    .ep_put_sgl_zcopy      =
+            (uct_ep_put_sgl_zcopy_func_t)ucs_empty_function_return_unsupported
+#endif
 };
 
 static uct_cuda_ctx_rsc_t * uct_cuda_copy_ctx_rsc_create(uct_iface_h tl_iface)
@@ -320,6 +358,26 @@ static uct_cuda_iface_ops_t uct_cuda_iface_ops = {
     .complete_event = (uct_cuda_complete_event_fn_t)ucs_empty_function
 };
 
+/*
+ * cuda_copy performs transfers directly on process virtual addresses, so an
+ * endpoint is only usable when the peer lives in the same address space. All
+ * cuda_copy ifaces in a process therefore share a single id, making ifaces of
+ * different workers within the same process mutually reachable. Different
+ * processes obtain different ids and stay unreachable (cuda_ipc handles the
+ * inter-process case).
+ */
+static uct_cuda_copy_iface_addr_t uct_cuda_copy_iface_get_process_id(void)
+{
+    static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
+    static uct_cuda_copy_iface_addr_t process_id;
+
+    UCS_INIT_ONCE(&init_once) {
+        process_id = ucs_generate_uuid((uintptr_t)getpid());
+    }
+
+    return process_id;
+}
+
 static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
@@ -337,7 +395,7 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
         return status;
     }
 
-    self->id                           = ucs_generate_uuid((uintptr_t)self);
+    self->id                           = uct_cuda_copy_iface_get_process_id();
     self->config.bw                    = config->bw;
     self->super.ops                    = &uct_cuda_iface_ops;
     self->super.config.max_events      = config->max_cuda_events;
