@@ -1,0 +1,44 @@
+# Multi-arch (amd64 + arm64) build of the UCXX rapidsai CI wrapper images.
+#
+# Driven by build-rapidsai-images.sh (sets up a 2-node buildx builder, then
+# `docker buildx bake --push` against this file -> native multi-arch manifests).
+# Manual equivalent:
+#   RAPIDS_VER=26.08 docker buildx bake --builder <multi> -f docker-compose-rapidsai.yml --push
+#
+# Bumping RAPIDS: set RAPIDS_VER. If RAPIDS moves the wheel CUDA/py tag
+# (e.g. cuda13.3.0 -> 13.3.0, or py3.11 -> py3.12), update the two wheel
+# BASE_IMAGE args below AND the matching rapids_cuda_version/py in
+# pr/main.yml + azure-pipelines-release.yml.
+services:
+  rapidsai-ci-conda:
+    image: harbor.mellanox.com/ucx/rapidsai-ci-conda:${RAPIDS_VER}-azp-1
+    build:
+      context: .
+      dockerfile: rapidsai-ci-conda.Dockerfile
+      platforms:
+        - linux/amd64
+        - linux/arm64
+      args:
+        BASE_IMAGE: rapidsai/ci-conda:${RAPIDS_VER}-latest
+
+  rapidsai-ci-wheel-cuda13:
+    image: harbor.mellanox.com/ucx/rapidsai-ci-wheel:${RAPIDS_VER}-cuda13-azp-1
+    build:
+      context: .
+      dockerfile: rapidsai-ci-wheel.Dockerfile
+      platforms:
+        - linux/amd64
+        - linux/arm64
+      args:
+        BASE_IMAGE: rapidsai/ci-wheel:${RAPIDS_VER}-cuda13.3.0-rockylinux8-py3.11
+
+  rapidsai-ci-wheel-cuda12:
+    image: harbor.mellanox.com/ucx/rapidsai-ci-wheel:${RAPIDS_VER}-cuda12-azp-1
+    build:
+      context: .
+      dockerfile: rapidsai-ci-wheel.Dockerfile
+      platforms:
+        - linux/amd64
+        - linux/arm64
+      args:
+        BASE_IMAGE: rapidsai/ci-wheel:${RAPIDS_VER}-cuda12.9.2-rockylinux8-py3.11
