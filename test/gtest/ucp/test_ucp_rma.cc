@@ -970,11 +970,6 @@ public:
     }
 
     virtual void init() override {
-        /* FIXME: sporadic failure on CUDA memory type. re-enable once fixed */
-        if (mem_type() == UCS_MEMORY_TYPE_CUDA) {
-            UCS_TEST_SKIP_R("sporadic failure on CUDA memory type");
-        }
-
         modify_config("MAX_RMA_RAILS", "2");
         test_ucp_rma::init();
     }
@@ -1066,6 +1061,46 @@ protected:
         }
 
         ctx.remote_lengths = ctx.lengths;
+    }
+
+    /*
+     * Whether the sender context can *detect* that a buffer is of the given
+     * memory type. UCP only builds a mem-type detection MD list from memory
+     * domains that survived transport selection: ucp_fill_tl_md() closes any MD
+     * with no selected transport resources *before* adding it to
+     * context->mem_type_detect_mds. So an allow-list like UCX_TLS=rc drops the
+     * cuda_copy MD and, with it, CUDA detection - even though an IB MD can still
+     * *register* CUDA memory via GPUDirect. Registration therefore does not
+     * imply detection, and only detection is checked here.
+     */
+    static bool check_detect_mem_type(const entity &e,
+                                      ucs_memory_type_t mem_type) {
+        ucp_context_h context = e.ucph();
+        for (ucp_md_index_t i = 0; i < context->num_mem_type_detect_mds; ++i) {
+            ucp_md_index_t md_index = context->mem_type_detect_mds[i];
+            if (context->tl_mds[md_index].attr.detect_mem_types &
+                UCS_BIT(mem_type)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /*
+     * The mixed/inconsistent mem-type negative tests expect UCP to reject an SGL
+     * whose segments span different memory types. That rejection is best-effort:
+     * ucp_dt_sgl_check_same_mem_info() compares the per-segment memory type
+     * returned by ucp_memory_detect(), so it can only fire when CUDA is
+     * detectable. When it is not (e.g. UCX_TLS=rc dropped the cuda_copy detect
+     * MD), a real CUDA buffer is reported as HOST, the SGL looks homogeneous,
+     * and the put is (correctly, given the available information) accepted.
+     * Skip the negative test in that configuration since its premise cannot
+     * hold. Note: registrability of CUDA is not sufficient - detection is.
+     */
+    void skip_if_cuda_detect_unsupported() {
+        if (!check_detect_mem_type(sender(), UCS_MEMORY_TYPE_CUDA)) {
+            UCS_TEST_SKIP_R("selected transports cannot detect CUDA memory");
+        }
     }
 
     static ucp_dt_local_sgl_t
@@ -1211,6 +1246,11 @@ protected:
             UCP_DT_REMOTE_SGL_FIELD_LENGTHS |
             UCP_DT_REMOTE_SGL_FIELD_RKEYS;
 
+    /* Element size used by the negative/param-check cases. gdrcopy rounds
+     * registrations up to a GPU page, so use a full 64K page to test whether
+     * tiny buffers are behind the sporadic gdr_copy pin failures. */
+    static constexpr size_t SGL_SMALL_ELEM_SIZE = 64 * UCS_KBYTE;
+
     void expect_sgl_put_status_ctx(
             sgl_ctx &ctx, uint64_t local_mask, uint64_t remote_mask,
             size_t count, ucs_status_t expected_status,
@@ -1260,7 +1300,7 @@ protected:
                                       size_t remote_count = 0)
     {
         sgl_ctx ctx;
-        init_sgl_ctx(ctx, count, 64);
+        init_sgl_ctx(ctx, count, SGL_SMALL_ELEM_SIZE);
         expect_sgl_put_invalid_param_ctx(ctx, local_mask, remote_mask, count,
                                          remote_addr, rkey, clear_param_mask,
                                          null_remote, remote_count);
@@ -1344,7 +1384,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_invalid_remote_addr,
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_invalid_rkey,
                      !ENABLE_PARAMS_CHECK) {
     sgl_ctx ctx;
-    init_sgl_ctx(ctx, 2, 64);
+    init_sgl_ctx(ctx, 2, SGL_SMALL_ELEM_SIZE);
     expect_sgl_put_invalid_param_ctx(ctx, LOCAL_MASK_DEFAULT,
                                      REMOTE_MASK_DEFAULT, 2,
                                      UCP_REMOTE_ADDR_INVALID, ctx.rkeys[0]);
@@ -1408,6 +1448,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_mixed_mem_types,
                      !ENABLE_PARAMS_CHECK ||
                              !mem_buffer::is_mem_type_supported(
                                      UCS_MEMORY_TYPE_CUDA)) {
+    skip_if_cuda_detect_unsupported();
     sgl_ctx ctx;
     init_sgl_ctx_mixed_mem_types(ctx);
     expect_sgl_put_invalid_param_ctx(ctx, LOCAL_MASK_DEFAULT,
@@ -1417,7 +1458,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_mixed_mem_types,
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_memhs_null_memh,
                      !ENABLE_PARAMS_CHECK) {
     sgl_ctx ctx;
-    init_sgl_ctx(ctx, 2, 64);
+    init_sgl_ctx(ctx, 2, SGL_SMALL_ELEM_SIZE);
     ctx.memhs[1] = NULL;
     expect_sgl_put_invalid_param_ctx(
             ctx, LOCAL_MASK_DEFAULT | UCP_DT_LOCAL_SGL_FIELD_MEMHS,
@@ -1427,7 +1468,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_memhs_null_memh,
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_memhs_buffer_out_of_range,
                      !ENABLE_PARAMS_CHECK) {
     sgl_ctx ctx;
-    init_sgl_ctx(ctx, 2, 64);
+    init_sgl_ctx(ctx, 2, SGL_SMALL_ELEM_SIZE);
     ctx.buffers[1] = reinterpret_cast<void*>(0xdeadbeefUL);
     expect_sgl_put_invalid_param_ctx(
             ctx, LOCAL_MASK_DEFAULT | UCP_DT_LOCAL_SGL_FIELD_MEMHS,
@@ -1438,6 +1479,14 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_memhs_inconsistent_mem_info,
                      !ENABLE_PARAMS_CHECK ||
                              !mem_buffer::is_mem_type_supported(
                                      UCS_MEMORY_TYPE_CUDA)) {
+    /*
+     * User memhs carry the memory type recorded at ucp_mem_map() time, and the
+     * consistency check runs via ucp_datatype_iter_is_user_memh_valid(). But
+     * that recorded type is itself the result of ucp_memory_detect(): without
+     * CUDA detection the CUDA buffer is registered as HOST, so memhs[1] matches
+     * memhs[0] and the mismatch cannot be observed. Gate on detection too.
+     */
+    skip_if_cuda_detect_unsupported();
     sgl_ctx ctx;
     init_sgl_ctx_mixed_mem_types(ctx);
     expect_sgl_put_invalid_param_ctx(
@@ -1448,7 +1497,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_memhs_inconsistent_mem_info,
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_rkeys_null,
                      !ENABLE_PARAMS_CHECK) {
     sgl_ctx ctx;
-    init_sgl_ctx(ctx, 2, 64);
+    init_sgl_ctx(ctx, 2, SGL_SMALL_ELEM_SIZE);
     ctx.rkeys[1] = NULL;
     expect_sgl_put_invalid_param_ctx(ctx, LOCAL_MASK_DEFAULT,
                                      REMOTE_MASK_DEFAULT, 2);
@@ -1457,7 +1506,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_rkeys_null,
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_rkeys_mismatched_cfg,
                      !ENABLE_PARAMS_CHECK) {
     sgl_ctx ctx;
-    init_sgl_ctx(ctx, 2, 64);
+    init_sgl_ctx(ctx, 2, SGL_SMALL_ELEM_SIZE);
 
     ucp_worker_cfg_index_t saved_cfg_index = ctx.rkeys[1]->cfg_index;
     ctx.rkeys[1]->cfg_index = saved_cfg_index + 1;
@@ -1474,10 +1523,11 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_without_proto,
                      !ENABLE_PARAMS_CHECK, "PROTO_ENABLE=n")
 {
     sgl_ctx ctx;
-    init_sgl_ctx(ctx, 2, 64);
+    init_sgl_ctx(ctx, 2, SGL_SMALL_ELEM_SIZE);
     expect_sgl_put_status_ctx(
             ctx, LOCAL_MASK_DEFAULT | UCP_DT_LOCAL_SGL_FIELD_MEMHS,
             REMOTE_MASK_DEFAULT, 2, UCS_ERR_UNSUPPORTED);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_sgl, all, "all")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_sgl, rc, "rc")
