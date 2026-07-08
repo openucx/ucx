@@ -56,6 +56,7 @@ typedef enum {
 typedef enum {
     UCP_PERF_DATATYPE_CONTIG,
     UCP_PERF_DATATYPE_IOV,
+    UCP_PERF_DATATYPE_SGL,
 } ucp_perf_datatype_t;
 
 
@@ -318,6 +319,9 @@ typedef struct ucx_perf_params {
     struct {
         ucp_perf_datatype_t     send_datatype;
         ucp_perf_datatype_t     recv_datatype;
+        size_t                  sgl_cnt;     /* Number of equal-length segments to
+                                                split the message into when the SGL
+                                                datatype is selected */
         size_t                  am_hdr_size; /* UCP Active Message header size
                                                 (not included in message size) */
         int                     is_daemon_mode;  /* Whether DPU offloading daemon

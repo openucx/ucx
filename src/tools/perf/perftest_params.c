@@ -159,6 +159,9 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("                    data layout for sender and receiver side (contig)\n");
     printf("                        contig - Continuous datatype\n");
     printf("                        iov    - Scatter-gather list\n");
+    printf("                        sgl[/N]- SGL put: split the message into N\n");
+    printf("                                 equal-length segments (only for\n");
+    printf("                                 ucp_put_bw), default N is 1\n");
     printf("     -C             use wild-card tag for tag tests\n");
     printf("     -U             force unexpected flow by using tag probe\n");
     printf("     -r <mode>      receive mode for stream tests (recv)\n");
@@ -476,17 +479,39 @@ static ucs_status_t parse_device_level(const char *opt_arg,
 }
 
 static ucs_status_t parse_ucp_datatype_params(const char *opt_arg,
-                                              ucp_perf_datatype_t *datatype)
+                                              ucp_perf_datatype_t *datatype,
+                                              size_t *sgl_cnt)
 {
     const char  *iov_type         = "iov";
     const size_t iov_type_size    = strlen("iov");
     const char  *contig_type      = "contig";
     const size_t contig_type_size = strlen("contig");
+    const char  *sgl_type         = "sgl";
+    const size_t sgl_type_size    = strlen("sgl");
+    char *endptr;
+    long count;
 
     if (0 == strncmp(opt_arg, iov_type, iov_type_size)) {
         *datatype = UCP_PERF_DATATYPE_IOV;
     } else if (0 == strncmp(opt_arg, contig_type, contig_type_size)) {
         *datatype = UCP_PERF_DATATYPE_CONTIG;
+    } else if (0 == strncmp(opt_arg, sgl_type, sgl_type_size)) {
+        *datatype = UCP_PERF_DATATYPE_SGL;
+        /* Optional "/N" suffix selects the number of equal-length segments */
+        if (opt_arg[sgl_type_size] == '/') {
+            count = strtol(opt_arg + sgl_type_size + 1, &endptr, 10);
+            if ((*endptr != '\0') && (*endptr != ',')) {
+                ucs_error("failed to parse SGL segment count: %s", opt_arg);
+                return UCS_ERR_INVALID_PARAM;
+            }
+            if (count < 1) {
+                ucs_error("SGL segment count must be at least 1: %s", opt_arg);
+                return UCS_ERR_INVALID_PARAM;
+            }
+            *sgl_cnt = (size_t)count;
+        } else {
+            *sgl_cnt = 1;
+        }
     } else {
         return UCS_ERR_INVALID_PARAM;
     }
@@ -633,11 +658,13 @@ ucs_status_t parse_test_params(perftest_params_t *params, char opt,
         } else if (!strcmp(opt_arg, "zcopy")) {
             params->super.uct.data_layout   = UCT_PERF_DATA_LAYOUT_ZCOPY;
         } else if (UCS_OK == parse_ucp_datatype_params(opt_arg,
-                                                       &params->super.ucp.send_datatype)) {
+                                                       &params->super.ucp.send_datatype,
+                                                       &params->super.ucp.sgl_cnt)) {
             optarg2 = strchr(opt_arg, ',');
             if (optarg2) {
                 if (UCS_OK != parse_ucp_datatype_params(optarg2 + 1,
-                                                       &params->super.ucp.recv_datatype)) {
+                                                       &params->super.ucp.recv_datatype,
+                                                       &params->super.ucp.sgl_cnt)) {
                     return UCS_ERR_INVALID_PARAM;
                 }
             }
@@ -819,11 +846,45 @@ ucs_status_t clone_params(perftest_params_t *dest,
     return UCS_OK;
 }
 
+static ucs_status_t check_sgl_params(const ucx_perf_params_t *params)
+{
+    if (params->ucp.send_datatype != UCP_PERF_DATATYPE_SGL) {
+        return UCS_OK;
+    }
+
+    /* SGL put is currently wired only into the UCP put bandwidth path */
+    if ((params->api != UCX_PERF_API_UCP) ||
+        (params->command != UCX_PERF_CMD_PUT) ||
+        (params->test_type != UCX_PERF_TEST_TYPE_STREAM_UNI)) {
+        ucs_error("the sgl datatype is only supported by the ucp_put_bw test");
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    if (params->ucp.sgl_cnt < 1) {
+        ucs_error("sgl segment count must be at least 1");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (ucx_perf_get_message_size(params) < params->ucp.sgl_cnt) {
+        ucs_error("message size (%zu) must be at least the number of sgl "
+                  "segments (%zu)",
+                  ucx_perf_get_message_size(params), params->ucp.sgl_cnt);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return UCS_OK;
+}
+
 ucs_status_t check_params(const perftest_params_t *params)
 {
     ucs_status_t status;
 
     status = check_daemon_params(&params->super);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = check_sgl_params(&params->super);
     if (status != UCS_OK) {
         return status;
     }
