@@ -20,7 +20,7 @@ jobs:
           fetchDepth: 100
           retryCountOnTaskFailure: 5
         - bash: |
-            ./buildlib/tools/coverity.sh ${{ mode }} --clean --with-cuda --with-gdrcopy --with-java
+            ./buildlib/tools/coverity.sh ${{ mode }} --clean --with-cuda --with-nvcc-arch=native --with-gdrcopy --with-java
             res=$?
             reportExists=False
             set -x

@@ -5,25 +5,6 @@
 
 NVCC_CUDA_MIN_REQUIRED=12.2
 
-ARCH9_CODE="-gencode=arch=compute_70,code=sm_70"
-ARCH10_CODE="-gencode=arch=compute_75,code=sm_75"
-ARCH110_CODE="-gencode=arch=compute_80,code=sm_80"
-ARCH111_CODE="-gencode=arch=compute_86,code=sm_86"
-ARCH120_CODE="-gencode=arch=compute_90,code=sm_90"
-ARCH124_CODE="-gencode=arch=compute_89,code=sm_89"
-ARCH128_CODE="-gencode=arch=compute_100,code=sm_100 -gencode=arch=compute_120,code=sm_120"
-ARCH130_CODE="-gencode=arch=compute_110,code=sm_110"
-
-
-ARCH9_PTX="-gencode=arch=compute_70,code=compute_70"
-ARCH10_PTX=""
-ARCH110_PTX="-gencode=arch=compute_80,code=compute_80"
-ARCH111_PTX="-gencode=arch=compute_86,code=compute_86"
-ARCH120_PTX="-gencode=arch=compute_90,code=compute_90"
-ARCH124_PTX="-gencode=arch=compute_90,code=compute_90"
-ARCH128_PTX="-gencode=arch=compute_120,code=compute_120"
-ARCH130_PTX="-gencode=arch=compute_120,code=compute_120"
-
 # Define CUDA language
 AC_LANG_DEFINE([CUDA], [cuda], [NVCC], [NVCC], [C++], [
     ac_ext=cu
@@ -36,12 +17,36 @@ AC_LANG_DEFINE([CUDA], [cuda], [NVCC], [NVCC], [C++], [
 AC_DEFUN([AC_LANG_COMPILER(CUDA)], [
     AC_ARG_VAR([NVCC], [nvcc compiler path])
     AC_ARG_VAR([NVCCFLAGS], [nvcc compiler flags])
-    BASE_NVCCFLAGS="$BASE_NVCCFLAGS -g $with_nvcc_gencode"
+    BASE_NVCCFLAGS="$BASE_NVCCFLAGS -g"
     AS_IF([test ! -z "$with_cuda" -a -d "$with_cuda/bin"],
           [CUDA_BIN_PATH="$with_cuda/bin"],
           [CUDA_BIN_PATH=""])
     AC_PATH_PROG([NVCC], [nvcc], [], [$CUDA_BIN_PATH:$PATH])
     AC_SUBST([NVCC], [$NVCC])
+])
+
+AC_DEFUN([UCX_CUDA_CHECK_NVCC_GENCODE], [
+    pattern=$1
+    min_version=$2
+    AC_MSG_CHECKING([NVCC code generation options])
+    NVCC_GENCODE=""
+    for codegen in $($NVCC --list-gpu-code)
+    do
+        case "$codegen" in
+        $pattern)
+            version=${codegen#sm_}
+            if test $version -ge ${min_version}
+            then
+                 NVCC_GENCODE="$NVCC_GENCODE -gencode=arch=compute_${version},code=${codegen}"
+            fi
+            ;;
+        esac
+    done
+    NVCC_GENCODE=${NVCC_GENCODE# }
+    AS_IF([test "x$NVCC_GENCODE" = "x"],
+          [AC_MSG_ERROR([No NVCC code generation options found for pattern: $pattern and min_version: $min_version])],
+          [AC_MSG_RESULT([$NVCC_GENCODE])
+           BASE_NVCCFLAGS="$BASE_NVCCFLAGS $NVCC_GENCODE"])
 ])
 
 # Check for nvcc compiler support
@@ -67,36 +72,21 @@ AC_DEFUN([UCX_CUDA_CHECK_NVCC], [
               [NVCCFLAGS="$NVCCFLAGS -D_LIBCUDACXX_ATOMIC_UNSAFE_AUTOMATIC_STORAGE"])
 
         AS_IF([test "x$NVCC" != "x"], [
-                AC_ARG_WITH([nvcc-gencode],
-                            [AS_HELP_STRING([--with-nvcc-gencode=(OPTS)], [Build for specific GPU architectures])],
+                AC_ARG_WITH([nvcc-arch],
+                            [AS_HELP_STRING([--with-nvcc-arch=(ARCH)],
+                             [Build for specific GPU architecture, for example: 'sm_80'.
+                              Use 'all' to build for all supported architectures.
+                              Use 'all-major' to build for all supported major architectures.])],
                             [],
-                            [with_nvcc_gencode=default])
+                            [with_nvcc_gencode=all-major])
 
-                AS_IF([test "x$with_nvcc_gencode" = "xdefault"],
-                        [AS_CASE([$CUDA_MAJOR_VERSION],
-                                 [13],
-                                     [# offline compilation support for architectures before '<compute/sm/lto>_75' is discontinued
-                                      NVCC_ARCH="${ARCH10_CODE} ${ARCH110_CODE} ${ARCH111_CODE} ${ARCH120_CODE} ${ARCH124_CODE} ${ARCH128_CODE} ${ARCH130_CODE} ${ARCH130_PTX}"],
-                                 [12],
-                                     [AS_CASE([$CUDA_MINOR_VERSION],
-                                              [0|1|2|3],
-                                                  [NVCC_ARCH="${ARCH9_CODE} ${ARCH10_CODE} ${ARCH110_CODE} ${ARCH111_CODE} ${ARCH120_CODE} ${ARCH120_PTX}"],
-                                              [4|5|6|7],
-                                                  [NVCC_ARCH="${ARCH9_CODE} ${ARCH10_CODE} ${ARCH110_CODE} ${ARCH111_CODE} ${ARCH120_CODE} ${ARCH124_CODE} ${ARCH124_PTX}"],
-                                              [*],
-                                                  [NVCC_ARCH="${ARCH9_CODE} ${ARCH10_CODE} ${ARCH110_CODE} ${ARCH111_CODE} ${ARCH120_CODE} ${ARCH124_CODE} ${ARCH128_CODE} ${ARCH128_PTX}"])],
+                nvcc_min_arch=80
+                AS_CASE([$with_nvcc_gencode],
+                        [all],        [UCX_CUDA_CHECK_NVCC_GENCODE([sm_*], [$nvcc_min_arch])],
+                        [all-major],  [UCX_CUDA_CHECK_NVCC_GENCODE([sm_*0], [$nvcc_min_arch])],
+                        [yes|native], [BASE_NVCCFLAGS="$BASE_NVCCFLAGS -arch=native"],
+                        [*],          [BASE_NVCCFLAGS="$BASE_NVCCFLAGS -arch=$with_nvcc_arch"])
 
-                                 [11],
-                                     [AS_CASE([$CUDA_MINOR_VERSION],
-                                              [0],
-                                                  [NVCC_ARCH="${ARCH9_CODE} ${ARCH10_CODE} ${ARCH110_CODE} ${ARCH110_PTX}"],
-                                              [*],
-                                                  [NVCC_ARCH="${ARCH9_CODE} ${ARCH10_CODE} ${ARCH110_CODE} ${ARCH111_CODE} ${ARCH111_PTX}"])],
-                                 [*],
-                                     [NVCC_ARCH="${ARCH9_CODE} ${ARCH9_PTX}"])],
-                        [NVCC_ARCH="$with_nvcc_gencode"])
-
-                BASE_NVCCFLAGS="$BASE_NVCCFLAGS $NVCC_ARCH"
                 AC_MSG_CHECKING([$NVCC needs explicit $NVCC_CXX_DIALECT option])
                 AC_LANG_PUSH([CUDA])
                 AC_COMPILE_IFELSE([AC_LANG_SOURCE([[

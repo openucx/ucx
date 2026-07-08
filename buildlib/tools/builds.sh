@@ -287,7 +287,8 @@ build_cuda() {
 	if az_module_load $GDRCOPY_MODULE
 	then
 		echo "==== Build with enable cuda, gdr_copy ===="
-		${WORKSPACE}/contrib/configure-release --prefix=$ucx_inst --with-cuda --with-gdrcopy
+		${WORKSPACE}/contrib/configure-release --prefix=$ucx_inst \
+			--with-cuda=$have_cuda --with-nvcc-arch=native --with-gdrcopy
 		$MAKEP
 		make_clean distclean
 
@@ -296,7 +297,8 @@ build_cuda() {
 		# GDRCopy subcomponent does not include CUDA headers
 		cuda_path=$(dirname $(dirname $(which nvcc)))
 		az_module_unload $CUDA_MODULE
-		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --with-cuda=$cuda_path --with-gdrcopy
+		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst \
+			--with-cuda=$cuda_path --with-nvcc-arch=native --with-gdrcopy
 		$MAKEP
 		make_clean distclean
 		az_module_load $CUDA_MODULE
@@ -306,7 +308,7 @@ build_cuda() {
 
 	echo "==== Build with enable cuda, w/o gdr_copy and w/o GDA-KI ===="
 	${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst \
-		--with-cuda --without-gdrcopy --without-gda --disable-gtest
+		--with-cuda --with-nvcc-arch=native --without-gdrcopy --without-gda --disable-gtest
 	$MAKEP
 	check_no_gda
 

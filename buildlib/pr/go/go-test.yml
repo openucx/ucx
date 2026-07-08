@@ -46,7 +46,7 @@ jobs:
         mkdir build
         cd build
         ../contrib/configure-devel --prefix=$(Agent.TempDirectory)/ucx-$(Build.BuildId) \
-          --with-go --enable-gtest=no --with-cuda=$have_cuda
+          --with-go --enable-gtest=no --with-cuda=$have_cuda --with-nvcc-arch=native
         make -j`nproc`
         make install
       displayName: Build UCX
