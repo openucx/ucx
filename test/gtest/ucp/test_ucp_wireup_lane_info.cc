@@ -195,7 +195,7 @@ UCS_TEST_F(test_ucp_wireup_lane_info, single_transport_multi_device) {
               "| Transport | Device (Sys. dev.) | # Lanes | Lane Types |\n"
               "+-----------+--------------------+---------+------------+\n"
               "| tcp       | ibs2 (mlx5_0)      |       1 | am, rma_bw |\n"
-              "|           | ens10f0 (ens10f0)  |       1 | rma_bw     |\n"
+              "|           | ens10f0            |       1 | rma_bw     |\n"
               "|           | ibs7f0 (mlx5_1)    |       1 | rma_bw     |\n"
               "+-----------+--------------------+---------+------------+\n",
               render(context.get(), key, 0));
@@ -248,12 +248,12 @@ UCS_TEST_F(test_ucp_wireup_lane_info, multi_transport) {
         "| cma       | memory             |       1 | rma_bw            |\n"
         "+-----------+--------------------+---------+-------------------+\n"
         "| cuda_copy | cuda (GPU0)        |       1 | rma_bw            |\n"
-        "|           | mlx5_0:1 (mlx5_0)  |       2 | rma_bw            |\n"
+        "|           | mlx5_0:1           |       2 | rma_bw            |\n"
         "+-----------+--------------------+---------+-------------------+\n"
         "| cuda_ipc  | cuda (GPU0)        |       1 | rma_bw            |\n"
         "+-----------+--------------------+---------+-------------------+\n"
-        "| rc_mlx5   | mlx5_2:1 (mlx5_2)  |       2 | rma, rma_bw       |\n"
-        "|           | mlx5_1:1 (mlx5_1)  |       2 | rma_bw            |\n"
+        "| rc_mlx5   | mlx5_2:1           |       2 | rma, rma_bw       |\n"
+        "|           | mlx5_1:1           |       2 | rma_bw            |\n"
         "+-----------+--------------------+---------+-------------------+\n"
         "| self      | memory             |       1 | am, rma, rkey_ptr |\n"
         "+-----------+--------------------+---------+-------------------+\n",

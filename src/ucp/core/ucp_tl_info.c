@@ -189,6 +189,8 @@ static void ucp_tl_info_add_tl_group(ucs_table_t *table,
     ucp_tl_info_tl_group_state_t group_state;
     const ucp_tl_info_entry_t *entry;
     unsigned i, dev_count;
+    const char *sysdev_name;
+    const char *mark;
 
     group_state.is_first_type =
             (group_start == 0) ||
@@ -223,7 +225,7 @@ static void ucp_tl_info_add_tl_group(ucs_table_t *table,
                               first_entry->rsc.tl_name);
 
     for (i = group_start; i < group_end; ++i) {
-        entry   = &ucs_array_elem(all_rscs, i);
+        entry     = &ucs_array_elem(all_rscs, i);
         dev_count = i - group_start + 1;
 
         /* Add space between devices on the same line. */
@@ -231,19 +233,21 @@ static void ucp_tl_info_add_tl_group(ucs_table_t *table,
             ucs_string_buffer_appendf(&dev_strb, "  ");
         }
 
-        if (entry->rsc.sys_device != UCS_SYS_DEVICE_ID_UNKNOWN) {
-            ucs_string_buffer_appendf(&dev_strb, "%s %s (%s)",
-                                      entry->enabled ?
-                                              UCP_TL_INFO_MARK_ENABLED :
-                                              UCP_TL_INFO_MARK_DISABLED,
-                                      entry->rsc.dev_name,
-                                      ucs_topo_sys_device_get_name(
-                                              entry->rsc.sys_device));
+        mark = entry->enabled ? UCP_TL_INFO_MARK_ENABLED :
+                                UCP_TL_INFO_MARK_DISABLED;
+
+        sysdev_name = (entry->rsc.sys_device != UCS_SYS_DEVICE_ID_UNKNOWN) ?
+                      ucs_topo_sys_device_get_name(entry->rsc.sys_device) :
+                      NULL;
+
+        /* Show the system device only when it adds information: skip it
+         * when the device name already starts with the system device name. */
+        if ((sysdev_name != NULL) && (strncmp(entry->rsc.dev_name, sysdev_name,
+                                              strlen(sysdev_name)) != 0)) {
+            ucs_string_buffer_appendf(&dev_strb, "%s %s (%s)", mark,
+                                      entry->rsc.dev_name, sysdev_name);
         } else {
-            ucs_string_buffer_appendf(&dev_strb, "%s %s",
-                                      entry->enabled ?
-                                              UCP_TL_INFO_MARK_ENABLED :
-                                              UCP_TL_INFO_MARK_DISABLED,
+            ucs_string_buffer_appendf(&dev_strb, "%s %s", mark,
                                       entry->rsc.dev_name);
         }
 

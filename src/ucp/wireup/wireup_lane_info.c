@@ -98,7 +98,10 @@ ucp_wireup_format_lane_dev(const ucp_ep_config_key_t *key,
         }
     }
 
-    if (sysdev_name != NULL) {
+    /* Show the system device only when it adds information: skip it when the
+     * device name already starts with the system device name. */
+    if ((sysdev_name != NULL) &&
+        (strncmp(dev_name, sysdev_name, strlen(sysdev_name)) != 0)) {
         ucs_string_buffer_appendf(strb, "%s (%s)", dev_name, sysdev_name);
     } else {
         ucs_string_buffer_appendf(strb, "%s", dev_name);

@@ -316,6 +316,44 @@ UCS_TEST_F(test_ucp_tl_info, device_with_system_device) {
     ucs_array_cleanup_dynamic(&rscs);
 }
 
+/* The redundant system-device suffix is omitted when the device name already
+ * starts with the system-device name, and kept otherwise. */
+UCS_TEST_F(test_ucp_tl_info, device_name_matches_system_device) {
+    dummy_context context({"ib"});
+    ucp_tl_info_array_t rscs    = UCS_ARRAY_DYNAMIC_INITIALIZER;
+    ucs_sys_device_t sd_mlx5_2  = add_sys_device(0x01, "mlx5_2");
+    ucs_sys_device_t sd_ens10f0 = add_sys_device(0x02, "ens10f0");
+    ucs_sys_device_t sd_mlx5_0  = add_sys_device(0x03, "mlx5_0");
+
+    /* dev_name starts with the system-device name -> suffix dropped. */
+    add_rsc(context, &rscs, UCT_DEVICE_TYPE_NET, "ib", "rc_verbs", "mlx5_2:1",
+            true, sd_mlx5_2);
+    /* dev_name equals the system-device name -> suffix dropped. */
+    add_rsc(context, &rscs, UCT_DEVICE_TYPE_NET, "ib", "rc_verbs", "ens10f0",
+            true, sd_ens10f0);
+    /* dev_name does not start with the system-device name -> suffix kept. */
+    add_rsc(context, &rscs, UCT_DEVICE_TYPE_NET, "ib", "rc_verbs", "ibs2", true,
+            sd_mlx5_0);
+
+    /* clang-format off */
+    EXPECT_EQ(
+        "+---------+-----------+------------+--------------------------------------------------------------+\n"
+        "| Available Transports and Devices                                                                |\n"
+        "+---------+-----------+------------+--------------------------------------------------------------+\n"
+        "| Type    | Component | Transport  | Device (System device)                                       |\n"
+        "+---------+-----------+------------+--------------------------------------------------------------+\n"
+        "| network | ib        | + rc_verbs | + mlx5_2:1  + ens10f0  + ibs2 (mlx5_0)                       |\n"
+        "+---------+-----------+------------+--------------------------------------------------------------+\n"
+        "| Legend: + = enabled, - = disabled                                                               |\n"
+        "| All of the available transports are listed, some may be disabled or unsupported on your system. |\n"
+        "| All of the visible devices are listed per transport, some may be disabled.                      |\n"
+        "+---------+-----------+------------+--------------------------------------------------------------+\n",
+        render(context, &rscs));
+    /* clang-format on */
+
+    ucs_array_cleanup_dynamic(&rscs);
+}
+
 /* A transport whose devices are all disabled is itself marked disabled ('-'). */
 UCS_TEST_F(test_ucp_tl_info, transport_transport_disabled) {
     dummy_context context({"ib"});
