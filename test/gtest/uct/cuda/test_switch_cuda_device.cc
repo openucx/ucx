@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -138,7 +138,7 @@ err_address_free:
 err_mem_release:
     cuMemRelease(m_alloc_handle);
 err:
-    UCS_TEST_SKIP_R("failed to allocate CUDA fabric memory");
+    UCS_TEST_SKIP_R("failed to allocate CUDA VMM memory");
 }
 
 #if HAVE_CUDA_FABRIC
@@ -168,6 +168,90 @@ UCS_TEST_P(test_switch_cuda_device, detect_mem_type_cuda_vmm)
 {
     detect_mem_type<cuda_vmm_mem_buffer>(UCS_MEMORY_TYPE_CUDA);
 }
+
+#ifdef HAVE_CUMEMRETAINALLOCATIONHANDLE
+UCS_TEST_P(test_switch_cuda_device, vmm_mem_reg_dereg_restores_flags)
+{
+    constexpr size_t size              = 4096;
+    CUmemLocation location             = {};
+    uct_md_mem_reg_params_t reg_params = {};
+    uct_md_mem_dereg_params_t dereg_params;
+    CUdevice current_device;
+    CUdeviceptr base_ptr;
+    size_t base_size;
+    uct_mem_h memh;
+
+    if (m_num_devices < 2) {
+        UCS_TEST_SKIP_R("less than two cuda devices available");
+    }
+
+    cuda_vmm_mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
+    ASSERT_EQ(CUDA_SUCCESS, cuCtxGetDevice(&current_device));
+    ASSERT_EQ(CUDA_SUCCESS, cuMemGetAddressRange(&base_ptr, &base_size,
+                                                 (CUdeviceptr)buffer.ptr()));
+
+    std::vector<int> peer_devices;
+    for (int dev = 0; dev < m_num_devices; dev++) {
+        if (dev == current_device) {
+            continue;
+        }
+
+        int can_access = 0;
+        ASSERT_EQ(CUDA_SUCCESS,
+                  cuDeviceCanAccessPeer(&can_access, dev, current_device));
+        if (!can_access) {
+            continue;
+        }
+
+        CUmemAccessDesc access_desc = {};
+        access_desc.location.type   = CU_MEM_LOCATION_TYPE_DEVICE;
+        access_desc.location.id     = dev;
+        access_desc.flags           = CU_MEM_ACCESS_FLAGS_PROT_NONE;
+        ASSERT_EQ(CUDA_SUCCESS,
+                  cuMemSetAccess(base_ptr, base_size, &access_desc, 1));
+        peer_devices.push_back(dev);
+    }
+
+    if (peer_devices.empty()) {
+        UCS_TEST_SKIP_R("no P2P-capable peer devices");
+    }
+
+    std::vector<unsigned long long> initial_flags(peer_devices.size());
+    for (size_t i = 0; i < peer_devices.size(); i++) {
+        location.type = CU_MEM_LOCATION_TYPE_DEVICE;
+        location.id   = peer_devices[i];
+        ASSERT_EQ(CUDA_SUCCESS,
+                  cuMemGetAccess(&initial_flags[i], &location, base_ptr));
+    }
+
+    ASSERT_UCS_OK(uct_md_mem_reg_v2(md(), buffer.ptr(), size, &reg_params,
+                                    &memh));
+
+    /* set READWRITE access for all peers */
+    for (size_t i = 0; i < peer_devices.size(); i++) {
+        CUmemAccessDesc access_desc = {};
+        access_desc.location.type   = CU_MEM_LOCATION_TYPE_DEVICE;
+        access_desc.location.id     = peer_devices[i];
+        access_desc.flags           = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
+        ASSERT_EQ(CUDA_SUCCESS,
+                  cuMemSetAccess(base_ptr, base_size, &access_desc, 1));
+    }
+
+    /* Deregistration should restore all flags */
+    dereg_params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
+    dereg_params.memh       = memh;
+    ASSERT_UCS_OK(uct_md_mem_dereg_v2(md(), &dereg_params));
+
+    for (size_t i = 0; i < peer_devices.size(); i++) {
+        unsigned long long flags;
+        location.type = CU_MEM_LOCATION_TYPE_DEVICE;
+        location.id   = peer_devices[i];
+        ASSERT_EQ(CUDA_SUCCESS,
+                  cuMemGetAccess(&flags, &location, base_ptr));
+        EXPECT_EQ(initial_flags[i], flags);
+    }
+}
+#endif
 
 #if HAVE_CUDA_FABRIC
 UCS_TEST_P(test_switch_cuda_device, detect_mem_type_cuda_fabric)
@@ -670,6 +754,112 @@ private:
 
     int                          m_num_devices;
 };
+
+#ifdef HAVE_CUMEMRETAINALLOCATIONHANDLE
+UCS_TEST_P(test_p2p_send_on_diff_device, vmm_cross_device_copy)
+{
+    constexpr size_t size = 4096;
+    int current_device, num_devices;
+
+    ASSERT_EQ(cudaGetDevice(&current_device), cudaSuccess);
+    ASSERT_EQ(cudaGetDeviceCount(&num_devices), cudaSuccess);
+
+    int peer_device = (current_device + 1) % num_devices;
+    int can_access  = 0;
+    ASSERT_EQ(CUDA_SUCCESS,
+              cuDeviceCanAccessPeer(&can_access, current_device, peer_device));
+    if (!can_access) {
+        UCS_TEST_SKIP_R("peer device does not support P2P access");
+    }
+
+    cuda_vmm_mem_buffer src_vmm(size, UCS_MEMORY_TYPE_CUDA);
+
+    std::vector<uint8_t> pattern(size, 0xAB);
+    ASSERT_EQ(cudaMemcpy(src_vmm.ptr(), pattern.data(), size,
+                         cudaMemcpyHostToDevice),
+              cudaSuccess);
+
+    ASSERT_EQ(cudaSetDevice(peer_device), cudaSuccess);
+    cuda_vmm_mem_buffer dst_vmm(size, UCS_MEMORY_TYPE_CUDA);
+    ASSERT_EQ(cudaMemset(dst_vmm.ptr(), 0, size), cudaSuccess);
+    ASSERT_EQ(cudaSetDevice(current_device), cudaSuccess);
+
+    ASSERT_UCS_OK(uct_ep_put_short(sender_ep(), src_vmm.ptr(), size,
+                                   (uint64_t)dst_vmm.ptr(), 0));
+    sender().flush();
+
+    std::vector<uint8_t> verify(size, 0);
+    ASSERT_EQ(cudaSetDevice(peer_device), cudaSuccess);
+    ASSERT_EQ(cudaMemcpy(verify.data(), dst_vmm.ptr(), size,
+                         cudaMemcpyDeviceToHost),
+              cudaSuccess);
+    EXPECT_EQ(pattern, verify);
+    EXPECT_EQ(cudaSetDevice(current_device), cudaSuccess);
+}
+
+UCS_TEST_P(test_p2p_send_on_diff_device, vmm_copy_restores_flags)
+{
+    constexpr size_t size              = 4096;
+    CUmemLocation location             = {};
+    uct_md_mem_reg_params_t reg_params = {};
+    CUdevice current_device;
+    CUdeviceptr base_ptr;
+    size_t base_size;
+    uct_md_mem_dereg_params_t dereg_params;
+    unsigned long long initial_flags, current_flags;
+    uct_mem_h memh;
+    int num_devices;
+
+    ASSERT_EQ(CUDA_SUCCESS, cuCtxGetDevice(&current_device));
+    ASSERT_EQ(cudaGetDeviceCount(&num_devices), cudaSuccess);
+
+    cuda_vmm_mem_buffer vmm_buf(size, UCS_MEMORY_TYPE_CUDA);
+    mem_buffer host_buf(size, UCS_MEMORY_TYPE_HOST);
+
+    ASSERT_EQ(CUDA_SUCCESS, cuMemGetAddressRange(&base_ptr, &base_size,
+                                                 (CUdeviceptr)vmm_buf.ptr()));
+
+    int peer_device = (current_device + 1) % num_devices;
+    int can_access  = 0;
+    ASSERT_EQ(CUDA_SUCCESS,
+              cuDeviceCanAccessPeer(&can_access, peer_device, current_device));
+    if (!can_access) {
+        UCS_TEST_SKIP_R("peer device cannot access current device");
+    }
+
+    CUmemAccessDesc access_desc = {};
+    access_desc.location.type   = CU_MEM_LOCATION_TYPE_DEVICE;
+    access_desc.location.id     = peer_device;
+    access_desc.flags           = CU_MEM_ACCESS_FLAGS_PROT_NONE;
+    ASSERT_EQ(CUDA_SUCCESS,
+              cuMemSetAccess(base_ptr, base_size, &access_desc, 1));
+
+    location.type = CU_MEM_LOCATION_TYPE_DEVICE;
+    location.id   = peer_device;
+    ASSERT_EQ(CUDA_SUCCESS,
+              cuMemGetAccess(&initial_flags, &location, base_ptr));
+
+    ASSERT_UCS_OK(uct_md_mem_reg_v2(sender().md(), vmm_buf.ptr(), size,
+                                    &reg_params, &memh));
+
+    /* Perform a real VMM-to-host copy to exercise the buffer during the
+     * registration lifetime */
+    ASSERT_EQ(cudaSetDevice(peer_device), cudaSuccess);
+
+    ASSERT_UCS_OK(uct_ep_put_short(sender_ep(), vmm_buf.ptr(), size,
+                                   (uint64_t)host_buf.ptr(), 0));
+
+    EXPECT_EQ(cudaSetDevice(current_device), cudaSuccess);
+
+    dereg_params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
+    dereg_params.memh       = memh;
+    ASSERT_UCS_OK(uct_md_mem_dereg_v2(sender().md(), &dereg_params));
+
+    ASSERT_EQ(CUDA_SUCCESS,
+              cuMemGetAccess(&current_flags, &location, base_ptr));
+    EXPECT_EQ(initial_flags, current_flags);
+}
+#endif
 
 UCS_TEST_P(test_p2p_send_on_diff_device, vmm_short)
 {
