@@ -586,26 +586,40 @@ err:
     return 1; /* return 1 byte to avoid division by zero */
 }
 
+static ucs_status_t
+uct_cuda_copy_md_push_ctx(CUcontext cuda_ctx, CUdevice cuda_device)
+{
+    if (cuda_ctx == NULL) {
+        return uct_cuda_ctx_primary_push(cuda_device, 0, UCS_LOG_LEVEL_ERROR);
+    }
+
+    return UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(cuda_ctx));
+}
+
+static void
+uct_cuda_copy_md_pop_ctx(CUcontext cuda_ctx, CUdevice cuda_device)
+{
+    CUcontext tmp_ctx;
+
+    UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(&tmp_ctx));
+    if (cuda_ctx == NULL) {
+        UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(cuda_device));
+    }
+}
+
 static void uct_cuda_copy_md_sync_memops_get_address_range(
         const uct_cuda_copy_md_t *md, CUdeviceptr address, size_t length,
         CUcontext cuda_ctx, CUdevice cuda_device, int is_vmm,
         ucs_memory_info_t *mem_info)
 {
-    CUcontext tmp_ctx;
     CUdeviceptr base_address;
     size_t alloc_length;
     size_t total_bytes;
-    ucs_status_t status;
 
     mem_info->base_address = (void*)address;
     mem_info->alloc_length = length;
 
-    if (cuda_ctx == NULL) {
-        status = uct_cuda_ctx_primary_push(cuda_device, 0, UCS_LOG_LEVEL_ERROR);
-    } else {
-        status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(cuda_ctx));
-    }
-    if (status != UCS_OK) {
+    if (uct_cuda_copy_md_push_ctx(cuda_ctx, cuda_device) != UCS_OK) {
         return;
     }
 
@@ -640,17 +654,15 @@ static void uct_cuda_copy_md_sync_memops_get_address_range(
     mem_info->alloc_length = alloc_length;
 
 out_ctx_pop:
-    UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(&tmp_ctx));
-    if (cuda_ctx == NULL) {
-        UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(cuda_device));
-    }
+    uct_cuda_copy_md_pop_ctx(cuda_ctx, cuda_device);
 }
 
 static ucs_status_t
 uct_cuda_copy_md_query_attributes(const uct_cuda_copy_md_t *md,
                                   const void *address, size_t length,
                                   ucs_memory_info_t *mem_info,
-                                  int *is_async_managed)
+                                  int *is_async_managed, CUcontext *cuda_ctx_p,
+                                  CUdevice *cuda_device_p)
 {
 #define UCT_CUDA_MEM_QUERY_NUM_ATTRS 4
     CUmemorytype cuda_mem_type = CU_MEMORYTYPE_HOST;
@@ -665,12 +677,16 @@ uct_cuda_copy_md_query_attributes(const uct_cuda_copy_md_t *md,
     ucs_status_t status;
 
     *is_async_managed = 0;
+    *cuda_ctx_p       = NULL;
+    *cuda_device_p    = CU_DEVICE_INVALID;
 
     is_vmm = uct_cuda_copy_detect_vmm(address, &mem_info->type, &cuda_device);
     if (is_vmm) {
         if (mem_info->type == UCS_MEMORY_TYPE_UNKNOWN) {
             return UCS_ERR_INVALID_ADDR;
         }
+
+        *cuda_device_p = cuda_device;
     } else {
         attr_type[0] = CU_POINTER_ATTRIBUTE_MEMORY_TYPE;
         attr_data[0] = &cuda_mem_type;
@@ -694,6 +710,9 @@ uct_cuda_copy_md_query_attributes(const uct_cuda_copy_md_t *md,
             /* pointer not recognized */
             return UCS_ERR_INVALID_ADDR;
         }
+
+        *cuda_ctx_p    = cuda_mem_ctx;
+        *cuda_device_p = cuda_device;
 
         if (is_managed) {
             /* cuMemGetAddress range does not support managed memory so use
@@ -897,6 +916,9 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
     };
     int dmabuf_queried    = 0;
     int is_async_managed  = 0;
+    CUcontext cuda_ctx    = NULL;
+    CUdevice cuda_device  = CU_DEVICE_INVALID;
+    int ctx_pushed        = 0;
     ucs_memory_info_t cached_mem_info;
     ucs_memory_info_t addr_mem_info;
     ucs_status_t cache_status;
@@ -918,7 +940,8 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
                                                 &cached_mem_info);
         status = uct_cuda_copy_md_query_attributes(md, address, length,
                                                    &addr_mem_info,
-                                                   &is_async_managed);
+                                                   &is_async_managed, &cuda_ctx,
+                                                   &cuda_device);
         if (status != UCS_OK) {
             return status;
         }
@@ -947,6 +970,15 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
 
     if (mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_ALLOC_LENGTH) {
         mem_attr->alloc_length = addr_mem_info.alloc_length;
+    }
+
+    /* mem_flags detection requires a current context; push one if needed */
+    if ((cuda_device != CU_DEVICE_INVALID) &&
+        ((mem_attr->field_mask & (UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD |
+                                  UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_OFFSET)) ||
+         !is_async_managed)) {
+        ctx_pushed = (uct_cuda_copy_md_push_ctx(cuda_ctx, cuda_device) ==
+                      UCS_OK);
     }
 
     if ((mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD) ||
@@ -987,6 +1019,10 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
     if (dmabuf_queried &&
         !(mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD)) {
         ucs_close_fd(&dmabuf.fd);
+    }
+
+    if (ctx_pushed) {
+        uct_cuda_copy_md_pop_ctx(cuda_ctx, cuda_device);
     }
 
     return UCS_OK;

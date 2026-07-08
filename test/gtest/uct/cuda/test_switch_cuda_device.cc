@@ -10,9 +10,7 @@
 extern "C" {
 #include <ucs/memory/memtype_cache.h>
 #include <ucs/sys/ptr_arith.h>
-#include <ucs/memory/memory_type.h>
 #include <uct/base/uct_md.h>
-#include <uct/api/v2/uct_v2.h>
 }
 
 #include <cuda.h>
@@ -520,22 +518,6 @@ UCS_TEST_P(test_mem_alloc_device, no_current_context_cuda_registrable,
     EXPECT_UCS_OK(free_status);
 }
 
-/*
- * Registrability mis-detection for memory the *application* allocated
- * directly via the CUDA driver API (cuMemAlloc) rather than through UCX. Such
- * buffers never pass through uct_cuda_copy_mem_alloc, so the alloc-time caching
- * fix (#11621) does not populate their flags. When the memory type/flags are
- * detected on a thread with no current CUDA context, the dmabuf export fails
- * with "invalid device context" and the buffer is mis-classified as
- * non-registrable - reproducing the underlying issue for user memory.
- *
- * On a build that only has the alloc-time cache fix this test FAILS (the flags
- * come back without UCS_MEM_FLAG_REGISTRABLE). It passes only if the query path
- * itself establishes a context.
- *
- * Note: only meaningful on dmabuf-capable GPUs; where dmabuf is unsupported the
- * detection reports REGISTRABLE unconditionally and the test passes trivially.
- */
 UCS_TEST_P(test_mem_alloc_device, no_current_context_user_mem_registrable,
            "CUDA_COPY_ASYNC_MEM_TYPE=cuda")
 {
@@ -546,12 +528,9 @@ UCS_TEST_P(test_mem_alloc_device, no_current_context_user_mem_registrable,
     CUcontext cuda_ctx             = nullptr;
     CUdeviceptr dptr               = 0;
 
-    /* Application allocation: performed on the main thread, which has a current
-     * CUDA context (established by the fixture). This does not go through UCX. */
     ASSERT_EQ(CUDA_SUCCESS, cuMemAlloc(&dptr, size));
 
     std::thread([&]() {
-        /* Progress-thread scenario: no current CUDA context. */
         ctx_status = cuCtxGetCurrent(&cuda_ctx);
         if ((ctx_status != CUDA_SUCCESS) || (cuda_ctx != nullptr)) {
             return;
