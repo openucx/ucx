@@ -594,7 +594,8 @@ struct uct_cuda_copy_md_query_ctx {
 };
 
 static ucs_status_t
-uct_cuda_copy_md_ensure_ctx_pushed(uct_cuda_copy_md_query_ctx_t *query_ctx)
+uct_cuda_copy_md_ensure_ctx_pushed(uct_cuda_copy_md_query_ctx_t *query_ctx,
+                                   ucs_log_level_t log_level)
 {
     ucs_status_t status;
 
@@ -611,13 +612,13 @@ uct_cuda_copy_md_ensure_ctx_pushed(uct_cuda_copy_md_query_ctx_t *query_ctx)
 
     if (query_ctx->cuda_ctx == NULL) {
         status = uct_cuda_ctx_primary_push(query_ctx->cuda_device, 0,
-                                           UCS_LOG_LEVEL_ERROR);
+                                           log_level);
         if (status == UCS_OK) {
             query_ctx->pushed_cuda_device = query_ctx->cuda_device;
         }
     } else {
-        status = UCT_CUDADRV_FUNC_LOG_ERR(
-                cuCtxPushCurrent(query_ctx->cuda_ctx));
+        status = UCT_CUDADRV_FUNC(cuCtxPushCurrent(query_ctx->cuda_ctx),
+                                  log_level);
         if (status == UCS_OK) {
             query_ctx->pushed_cuda_ctx = query_ctx->cuda_ctx;
         }
@@ -648,7 +649,8 @@ static void uct_cuda_copy_md_sync_memops_get_address_range(
     mem_info->alloc_length = length;
 
     /* sync memops and cuMemGetAddressRange below need a current context */
-    if (uct_cuda_copy_md_ensure_ctx_pushed(query_ctx) != UCS_OK) {
+    if (uct_cuda_copy_md_ensure_ctx_pushed(query_ctx, UCS_LOG_LEVEL_ERROR) !=
+        UCS_OK) {
         return;
     }
 
@@ -849,9 +851,9 @@ static int uct_cuda_copy_md_get_dmabuf_fd(
     }
 #endif
 
-    if (uct_cuda_copy_md_ensure_ctx_pushed(query_ctx) != UCS_OK) {
-        return UCT_DMABUF_FD_INVALID;
-    }
+    /* Best-effort. If the push fails, still attempt the export with
+     * whatever context is current. */
+    (void)uct_cuda_copy_md_ensure_ctx_pushed(query_ctx, UCS_LOG_LEVEL_DEBUG);
 
     cu_err = get_handle_func((void*)&fd, address, length,
                              CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD, flags);
