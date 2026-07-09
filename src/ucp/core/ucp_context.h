@@ -737,8 +737,8 @@ ucp_memory_detect_internal(ucp_context_h context, const void *address,
     } else if (ucs_likely(status == UCS_OK)) {
         if (ucs_unlikely(
                     (mem_info->type == UCS_MEMORY_TYPE_UNKNOWN) ||
-                    (mem_info->mem_flags &
-                     UCS_MEM_FLAG_NEEDS_QUERY))) {
+                    ((mem_info->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) &&
+                     (mem_info->mem_flags == 0)))) {
             ucs_trace_req("address %p length %zu: querying memory attributes",
                     address, length);
             ucp_memory_detect_slowpath(context, address, length, mem_info);
