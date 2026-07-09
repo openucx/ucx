@@ -212,11 +212,13 @@ uct_dc_mlx5_ep_create_connected(const uct_ep_params_t *params, uct_ep_h* ep_p)
 
 /*
  * Decide whether DCIs must use the full handshake (FHS) connection flow:
- * - RoCE or SLs without OOO support can use reduced handshake.
- * - Non-DevX DCIs: ordering follows the SL, so use FHS for OOO SLs.
- * - DevX DCIs on OOO SLs: force FHS if explicitly requested or for OOO_ALL
- *   (DDP); use the reduced handshake for strict IBTA ordering; otherwise FHS
- *   is needed unless RDMA-write-disabled is supported and PUT is disabled.
+ * - RoCE: always use the reduced handshake.
+ * - Non-DevX DCIs: ordering follows the SL, so use FHS for OOO SLs and the
+ *   reduced handshake otherwise.
+ * - DevX DCIs: force FHS if explicitly requested; use the reduced handshake
+ *   for strict IBTA ordering or SLs without OOO support; otherwise (OOO SL,
+ *   non-IBTA ordering) FHS is needed for OOO_ALL (DDP) or unless
+ *   RDMA-write-disabled is supported and PUT is disabled.
  */
 static int uct_dc_mlx5_iface_is_full_handshake(uct_dc_mlx5_iface_t *iface)
 {
@@ -231,26 +233,27 @@ static int uct_dc_mlx5_iface_is_full_handshake(uct_dc_mlx5_iface_t *iface)
     }
 #endif
 
-    if (uct_ib_iface_is_roce(ib_iface) ||
-        !(UCS_BIT(ib_iface->config.sl) & ooo_sl_mask)) {
+    if (uct_ib_iface_is_roce(ib_iface)) {
         return 0;
     }
 
     if (!(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_DCI)) {
+        return !!(UCS_BIT(ib_iface->config.sl) & ooo_sl_mask);
+    }
+
+    if (iface->flags & UCT_DC_MLX5_IFACE_FLAG_DCI_FULL_HANDSHAKE) {
         return 1;
     }
 
-    if ((iface->flags & UCT_DC_MLX5_IFACE_FLAG_DCI_FULL_HANDSHAKE) ||
-        (iface->super.config.dp_ordering_devx ==
-         UCT_IB_MLX5_DP_ORDERING_OOO_ALL)) {
-        return 1;
-    }
-
-    if (iface->super.config.dp_ordering_devx == UCT_IB_MLX5_DP_ORDERING_IBTA) {
+    if ((iface->super.config.dp_ordering_devx ==
+         UCT_IB_MLX5_DP_ORDERING_IBTA) ||
+        !(UCS_BIT(ib_iface->config.sl) & ooo_sl_mask)) {
         return 0;
     }
 
-    return !(md->flags & UCT_IB_MLX5_MD_FLAG_NO_RDMA_WR_OPTIMIZED) ||
+    return (iface->super.config.dp_ordering_devx ==
+            UCT_IB_MLX5_DP_ORDERING_OOO_ALL) ||
+           !(md->flags & UCT_IB_MLX5_MD_FLAG_NO_RDMA_WR_OPTIMIZED) ||
            !(iface->flags & UCT_DC_MLX5_IFACE_FLAG_DISABLE_PUT);
 }
 
