@@ -301,11 +301,6 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_ep_put_sgl_zcopy,
     ucs_status_t status;
     int is_ctx_pushed;
 
-    if (ucs_unlikely(count == 0)) {
-        ucs_trace_data("Zero count put_sgl_zcopy: skip it");
-        return UCS_OK;
-    }
-
     /* TODO: add strided elements support */
     if (ucs_unlikely((counts != NULL) || (strides != NULL))) {
         ucs_error("cuda_ipc put_sgl_zcopy does not support strided elements");
