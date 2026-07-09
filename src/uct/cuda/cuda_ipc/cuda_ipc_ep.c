@@ -348,10 +348,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_ep_put_sgl_zcopy,
                                                  cuda_device, &mapped_rem_addr,
                                                  &mapped_addr);
         if (ucs_unlikely(status != UCS_OK)) {
-            uct_cuda_ipc_sgl_unmap(mapping, i, cuda_device,
-                                   iface->config.enable_cache);
-            ucs_free(mapping);
-            goto out_ctx;
+            goto out_unmap;
         }
 
         mapping->entries[i].pid         = key->super.super.pid;
@@ -402,7 +399,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_ep_put_sgl_zcopy,
     goto out_ctx;
 
 out_unmap:
-    uct_cuda_ipc_sgl_unmap(mapping, count, cuda_device,
+    uct_cuda_ipc_sgl_unmap(mapping, i, cuda_device,
                            iface->config.enable_cache);
     ucs_free(mapping);
 
