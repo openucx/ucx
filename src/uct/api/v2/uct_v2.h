@@ -1164,23 +1164,7 @@ enum uct_iface_attr_field {
     UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH         = UCS_BIT(2),
 
     /** Enables @ref uct_iface_attr_v2_t::rx_token_length. */
-    UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH         = UCS_BIT(3),
-
-    /**
-     * Enables the RX token derivation path.
-     * Need to be set together with @ref UCT_IFACE_ATTR_FIELD_RX_TOKEN
-     * When both set, @ref uct_iface_attr_v2_t::tx_token is input (from sender),
-     * and @ref uct_iface_attr_v2_t::rx_token is output (derived by receiver).
-     */
-    UCT_IFACE_ATTR_FIELD_TX_TOKEN                = UCS_BIT(4),
-
-    /**
-     * Enables the RX token derivation path.
-     * Need to be set together with @ref UCT_IFACE_ATTR_FIELD_TX_TOKEN,
-     * when both set, @ref uct_iface_attr_v2_t::tx_token is input (from sender),
-     * and @ref uct_iface_attr_v2_t::rx_token is output (derived by receiver).
-     */
-    UCT_IFACE_ATTR_FIELD_RX_TOKEN                = UCS_BIT(5)
+    UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH         = UCS_BIT(3)
 };
 
 
@@ -1236,24 +1220,6 @@ typedef struct {
      * Valid when @ref UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH is set.
      */
     size_t     rx_token_length;
-
-    /**
-     * TX token input buffer.
-     * Valid when @ref UCT_IFACE_ATTR_FIELD_TX_TOKEN is set.
-     * Caller sets this to a buffer of @ref tx_token_length bytes containing
-     * the TX token received from the sender.
-     * @ref UCT_IFACE_ATTR_FIELD_RX_TOKEN must be set together.
-     */
-    const void *tx_token;
-
-    /**
-     * RX token output buffer.
-     * Valid when @ref UCT_IFACE_ATTR_FIELD_RX_TOKEN is set.
-     * Caller sets this to a pre-allocated buffer of @ref rx_token_length
-     * bytes; callee fills it with RX token.
-     * @ref UCT_IFACE_ATTR_FIELD_TX_TOKEN must be set together.
-     */
-    void       *rx_token;
 } uct_iface_attr_v2_t;
 
 
@@ -1588,7 +1554,7 @@ typedef enum uct_ep_op_info_field {
  * @ingroup UCT_RESOURCE
  * @brief Descriptor for a single outstanding (undelivered) operation.
  *
- * Passed to the callback registered with @ref uct_ep_outstanding_extract.
+ * Passed to the callback registered with @ref uct_ep_outstanding_purge.
  * @ref UCT_EP_OP_INFO_FIELD_OPERATION is required for every operation. The
  * following operation-specific field groups are also required:
  *
@@ -1685,86 +1651,54 @@ typedef void (*uct_ep_outstanding_cb_t)(const uct_ep_op_info_t *op_info,
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Field mask for @ref uct_ep_outstanding_extract_params_t. Fields not
+ * @brief Field mask for @ref uct_ep_outstanding_purge_params_t. Fields not
  * specified by this mask are ignored, unless documented as required.
  */
 typedef enum {
     UCT_EP_OUTSTANDING_FIELD_RX_TOKEN = UCS_BIT(0),
     UCT_EP_OUTSTANDING_FIELD_CB       = UCS_BIT(1),
-    UCT_EP_OUTSTANDING_FIELD_FLAGS    = UCS_BIT(2)
-} uct_ep_outstanding_extract_field_t;
+    UCT_EP_OUTSTANDING_FIELD_ARG      = UCS_BIT(2)
+} uct_ep_outstanding_purge_field_t;
 
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Flags for @ref uct_ep_outstanding_extract.
- */
-typedef enum {
-    /**
-     * For operations confirmed as delivered by the RX token, invoke
-     * their @ref uct_completion_t callback with @ref UCS_OK before
-     * extracting the remaining undelivered operations.
-     */
-    UCT_EP_OUTSTANDING_FLAG_COMPLETE_DELIVERED = UCS_BIT(0)
-} uct_ep_outstanding_extract_flags_t;
-
-
-/**
- * @ingroup UCT_RESOURCE
- * @brief Parameters for @ref uct_ep_outstanding_extract.
+ * @brief Parameters for @ref uct_ep_outstanding_purge.
  */
 typedef struct {
     /** Mask of valid fields, using bits from @ref
-     *  uct_ep_outstanding_extract_field_t. @ref
+     *  uct_ep_outstanding_purge_field_t. @ref
      *  UCT_EP_OUTSTANDING_FIELD_RX_TOKEN and @ref
-     *  UCT_EP_OUTSTANDING_FIELD_CB are required. @ref
-     *  UCT_EP_OUTSTANDING_FIELD_FLAGS is optional; if it is not set,
-     *  @ref uct_ep_outstanding_extract_params_t::flags is ignored and treated
-     *  as 0. */
+     *  UCT_EP_OUTSTANDING_FIELD_CB are required. */
     uint64_t                field_mask;
 
     /**
-     * Opaque RX token received from the remote peer (derived via
-     * @ref uct_iface_query_v2 with @ref UCT_IFACE_ATTR_FIELD_RX_TOKEN).
+     * Opaque RX token received from the remote peer.
      */
     const void              *rx_token;
 
     /** Callback invoked once per undelivered outstanding operation. */
     uct_ep_outstanding_cb_t cb;
 
-    /** Opaque argument passed to @ref cb. */
+    /**
+     * Opaque argument passed to @ref cb.
+     * Valid when @ref UCT_EP_OUTSTANDING_FIELD_ARG is set.
+     */
     void                    *arg;
-
-    /** Flags from @ref uct_ep_outstanding_extract_flags_t. */
-    unsigned                flags;
-} uct_ep_outstanding_extract_params_t;
+} uct_ep_outstanding_purge_params_t;
 
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Extract outstanding (undelivered) operations from an endpoint.
+ * @brief Purge outstanding (undelivered) operations from an endpoint.
  *
  * @note On success, this function takes ownership of classified outstanding
- *       operations: delivered operations may be completed when
- *       @ref UCT_EP_OUTSTANDING_FLAG_COMPLETE_DELIVERED is set, and
- *       undelivered operations are reported through the callback for replay by the
- *       caller.
+ *       operations and reports undelivered operations through the callback for
+ *       replay by the caller.
  */
 ucs_status_t
-uct_ep_outstanding_extract(uct_ep_h ep,
-                           const uct_ep_outstanding_extract_params_t *params);
-
-
-/**
- * @ingroup UCT_RESOURCE
- * @brief Enable outstanding extraction on endpoint failure.
- *
- * This function must be called before posting operations that may need replay.
- * After it succeeds, a transport error preserves the outstanding send queue
- * until the caller finishes @ref uct_ep_outstanding_extract. After a successful
- * extract, the endpoint can be destroyed immediately.
- */
-ucs_status_t uct_ep_failover_enable(uct_ep_h ep);
+uct_ep_outstanding_purge(uct_ep_h ep,
+                         const uct_ep_outstanding_purge_params_t *params);
 
 
 END_C_DECLS

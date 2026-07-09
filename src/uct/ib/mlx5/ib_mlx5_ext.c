@@ -26,17 +26,15 @@ UCS_LIST_HEAD(uct_ib_mlx5_ext_plugins);
 static ucs_status_t
 uct_ib_mlx5_ext_iface_query_default(uct_ib_mlx5_ext_iface_query_attr_t *attr)
 {
-    const uint64_t token_mask =
+    const uint64_t token_len_mask =
             UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_TX_TOKEN_LEN |
-            UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_RX_TOKEN_LEN |
-            UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_TX_TOKEN     |
-            UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_RX_TOKEN;
+            UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_RX_TOKEN_LEN;
 
     if (attr->field_mask & UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_CAP_FLAGS) {
         attr->cap.flags = 0;
     }
 
-    if (attr->field_mask & token_mask) {
+    if (attr->field_mask & token_len_mask) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -48,23 +46,6 @@ static int uct_ib_mlx5_ext_is_unsupported_op(const void *op)
     return (op == NULL) ||
            (op == (const void*)ucs_empty_function_return_unsupported);
 }
-
-static ucs_status_t uct_ib_mlx5_ext_iface_query_check_param(
-        const uct_ib_mlx5_ext_iface_query_attr_t *attr)
-{
-    if ((attr->field_mask & UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_TX_TOKEN) &&
-        (attr->tx_token == NULL)) {
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    if ((attr->field_mask & UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_RX_TOKEN) &&
-        (attr->rx_token == NULL)) {
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    return UCS_OK;
-}
-
 
 static ucs_status_t uct_ib_mlx5_ext_qp_query_check_param(
         struct ibv_qp *qp, struct mlx5dv_devx_obj *devx_obj,
@@ -106,11 +87,6 @@ uct_ib_mlx5_ext_iface_query(uct_iface_h iface,
     uct_ib_mlx5_ext_plugin_t *plugin;
 
     if (ucs_unlikely(attr == NULL)) {
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    if (ucs_unlikely(uct_ib_mlx5_ext_iface_query_check_param(attr) !=
-                     UCS_OK)) {
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -194,8 +170,8 @@ uct_ib_mlx5_ext_ep_put_sgl_zcopy(uct_ep_h ep, void * const *buffers,
     return UCS_ERR_UNSUPPORTED;
 }
 
-static ucs_status_t uct_ib_mlx5_ext_ep_outstanding_extract_check_param(
-        const uct_ep_outstanding_extract_params_t *params)
+static ucs_status_t uct_ib_mlx5_ext_ep_outstanding_purge_check_param(
+        const uct_ep_outstanding_purge_params_t *params)
 {
     if (params == NULL) {
         return UCS_ERR_INVALID_PARAM;
@@ -207,31 +183,26 @@ static ucs_status_t uct_ib_mlx5_ext_ep_outstanding_extract_check_param(
         return UCS_ERR_INVALID_PARAM;
     }
 
-    if ((params->field_mask & UCT_EP_OUTSTANDING_FIELD_FLAGS) &&
-        (params->flags & ~UCT_EP_OUTSTANDING_FLAG_COMPLETE_DELIVERED)) {
-        return UCS_ERR_INVALID_PARAM;
-    }
-
     return UCS_OK;
 }
 
-ucs_status_t uct_ib_mlx5_ext_ep_outstanding_extract(
-        uct_ep_h ep, const uct_ep_outstanding_extract_params_t *params)
+ucs_status_t uct_ib_mlx5_ext_ep_outstanding_purge(
+        uct_ep_h ep, const uct_ep_outstanding_purge_params_t *params)
 {
     uct_ib_mlx5_ext_plugin_t *plugin;
 
-    if (ucs_unlikely(uct_ib_mlx5_ext_ep_outstanding_extract_check_param(
-                             params) != UCS_OK)) {
+    if (ucs_unlikely(uct_ib_mlx5_ext_ep_outstanding_purge_check_param(params) !=
+                     UCS_OK)) {
         return UCS_ERR_INVALID_PARAM;
     }
 
     ucs_list_for_each(plugin, &uct_ib_mlx5_ext_plugins, list) {
         if (ucs_unlikely(uct_ib_mlx5_ext_is_unsupported_op(
-                    (const void*)plugin->ops.ep_outstanding_extract))) {
+                    (const void*)plugin->ops.ep_outstanding_purge))) {
             continue;
         }
 
-        return plugin->ops.ep_outstanding_extract(ep, params);
+        return plugin->ops.ep_outstanding_purge(ep, params);
     }
 
     return UCS_ERR_UNSUPPORTED;
@@ -271,7 +242,7 @@ ucs_status_t uct_ib_mlx5_ext_register(const uct_ib_mlx5_ext_ops_t *ops)
     num_plugins = ucs_list_length(&uct_ib_mlx5_ext_plugins);
 
     ucs_debug("ib mlx5 ext: registered plugin name=%s iface_query=%s "
-              "qp_query=%s put_sgl_zcopy=%s outstanding_extract=%s "
+              "qp_query=%s put_sgl_zcopy=%s outstanding_purge=%s "
               "(total=%u)",
               plugin->ops.name,
               uct_ib_mlx5_ext_is_unsupported_op(
@@ -287,7 +258,7 @@ ucs_status_t uct_ib_mlx5_ext_register(const uct_ib_mlx5_ext_ops_t *ops)
                       "unsupported" :
                       "supported",
               uct_ib_mlx5_ext_is_unsupported_op(
-                      (const void*)plugin->ops.ep_outstanding_extract) ?
+                      (const void*)plugin->ops.ep_outstanding_purge) ?
                       "unsupported" :
                       "supported",
               num_plugins);

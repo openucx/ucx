@@ -114,19 +114,9 @@ ucs_status_t uct_rc_mlx5_base_ep_put_short(uct_ep_h tl_ep, const void *buffer,
                                            uint64_t remote_addr,
                                            uct_rkey_t rkey);
 
-ucs_status_t
-uct_rc_mlx5_base_ep_put_short_ft(uct_ep_h tl_ep, const void *buffer,
-                                 unsigned length, uint64_t remote_addr,
-                                 uct_rkey_t rkey, uct_completion_t *comp);
-
 ssize_t uct_rc_mlx5_base_ep_put_bcopy(uct_ep_h tl_ep,
                                       uct_pack_callback_t pack_cb, void *arg,
                                       uint64_t remote_addr, uct_rkey_t rkey);
-
-ssize_t uct_rc_mlx5_base_ep_put_bcopy_ft(uct_ep_h tl_ep,
-                                         uct_pack_callback_t pack_cb, void *arg,
-                                         uint64_t remote_addr, uct_rkey_t rkey,
-                                         uct_completion_t *comp);
 
 ucs_status_t uct_rc_mlx5_base_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
                                            size_t iovcnt, uint64_t remote_addr,
@@ -259,10 +249,6 @@ ucs_status_t uct_rc_mlx5_ep_tag_rndv_request(uct_ep_h tl_ep, uct_tag_t tag,
 ucs_status_t uct_rc_mlx5_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr);
 
 ucs_status_t uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep, uct_ep_attr_t *ep_attr);
-
-ucs_status_t uct_rc_mlx5_ep_failover_enable(uct_ep_h ep);
-
-void uct_rc_mlx5_ep_failover_arm(uct_ep_h ep);
 
 unsigned uct_rc_mlx5_ep_cleanup_qp(void *arg);
 
