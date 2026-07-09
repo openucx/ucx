@@ -328,7 +328,9 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_ep_put_sgl_zcopy,
         return status;
     }
 
-    mapping = ucs_malloc(sizeof(*mapping) + count * sizeof(*mapping->entries),
+    mapping = ucs_malloc(sizeof(*mapping) +
+                         count * (sizeof(*mapping->entries) +
+                                  sizeof(CUdeviceptr)),
                          "cuda_ipc_sgl_mapping");
     if (ucs_unlikely(mapping == NULL)) {
         ucs_error("Failed to allocate cuda_ipc sgl mapping");
@@ -338,14 +340,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_ep_put_sgl_zcopy,
 
     mapping->count   = count;
     mapping->entries = (uct_cuda_ipc_sgl_entry_t *)(mapping + 1);
-
-    cuda_dsts = ucs_malloc(count * sizeof(CUdeviceptr), "cuda_ipc_sgl_dsts");
-    if (ucs_unlikely(cuda_dsts == NULL)) {
-        ucs_error("Failed to allocate cuda_ipc sgl dsts");
-        ucs_free(mapping);
-        status = UCS_ERR_NO_MEMORY;
-        goto out_ctx;
-    }
+    cuda_dsts        = (CUdeviceptr *)(mapping->entries + count);
 
     memset(&attr, 0, sizeof(attr));
     attr.srcAccessOrder = CU_MEMCPY_SRC_ACCESS_ORDER_STREAM;
@@ -360,7 +355,6 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_ep_put_sgl_zcopy,
         if (ucs_unlikely(status != UCS_OK)) {
             uct_cuda_ipc_sgl_unmap(mapping, i, cuda_device,
                                    iface->config.enable_cache);
-            ucs_free(cuda_dsts);
             ucs_free(mapping);
             goto out_ctx;
         }
@@ -377,7 +371,6 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_ep_put_sgl_zcopy,
                                                &q_desc, &stream,
                                                &cuda_ipc_event);
     if (ucs_unlikely(status != UCS_OK)) {
-        ucs_free(cuda_dsts);
         goto out_unmap;
     }
 
@@ -385,7 +378,6 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_ep_put_sgl_zcopy,
             cuMemcpyBatchAsync(cuda_dsts, (CUdeviceptr *)buffers,
                                (size_t *)lengths, count, &attr, &attrs_idx, 1,
                                *stream));
-    ucs_free(cuda_dsts);
     if (ucs_unlikely(status != UCS_OK)) {
         ucs_mpool_put(cuda_ipc_event);
         goto out_unmap;
