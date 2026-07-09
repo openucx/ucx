@@ -18,6 +18,18 @@
 #include <ucs/sys/string.h>
 #include <limits>
 
+typedef struct {
+    ucp_request_param_t send_params;
+    ucp_request_param_t send_get_info_params;
+    ucp_dt_local_sgl_t  local_sgl;
+    ucp_dt_remote_sgl_t remote_sgl;
+    void                **buffers;
+    size_t              *lengths;
+    ucp_mem_h           *memhs;
+    uint64_t            *remote_addrs;
+    ucp_rkey_h          *rkeys;
+} ucp_sgl_state_t;
+
 
 template <ucx_perf_cmd_t CMD, ucx_perf_test_type_t TYPE, unsigned FLAGS>
 class ucp_perf_test_runner : public ucp_perf_test_runner_base<uint8_t> {
@@ -38,7 +50,8 @@ public:
         m_sends_outstanding(0),
         m_max_outstanding(m_perf.params.max_outstanding),
         m_am_rx_buffer(NULL),
-        m_am_rx_length(0ul)
+        m_am_rx_length(0ul),
+        m_sgl(NULL)
     {
         memset(&m_am_rx_params, 0, sizeof(m_am_rx_params));
         memset(&m_send_params, 0, sizeof(m_send_params));
@@ -71,6 +84,14 @@ public:
         set_am_handler(UCP_PERF_DAEMON_AM_ID_RECV_CMPL, NULL, NULL, 0);
         set_am_handler(UCP_PERF_DAEMON_AM_ID_SEND_CMPL, NULL, NULL, 0);
         set_am_handler(AM_ID, NULL, NULL, 0);
+        if (m_sgl != NULL) {
+            free(m_sgl->buffers);
+            free(m_sgl->lengths);
+            free(m_sgl->memhs);
+            free(m_sgl->remote_addrs);
+            free(m_sgl->rkeys);
+            free(m_sgl);
+        }
     }
 
     void set_am_handler(unsigned id, ucp_am_recv_callback_t cb, void *arg,
@@ -145,6 +166,80 @@ public:
         }
     }
 
+    inline bool is_sgl_put() const
+    {
+        return (CMD == UCX_PERF_CMD_PUT) &&
+               (UCP_PERF_DATATYPE_SGL == m_perf.params.ucp.send_datatype);
+    }
+
+    void prepare_sgl()
+    {
+        const size_t count = m_perf.params.msg_size_cnt;
+        size_t offset      = 0;
+        size_t i;
+
+        ucs_assert(NULL != m_perf.params.msg_size_list);
+        ucs_assert(count > 0);
+
+        m_sgl = (ucp_sgl_state_t*)calloc(1, sizeof(*m_sgl));
+        ucs_assert_always(m_sgl != NULL);
+
+        m_sgl->buffers      = (void**)malloc(count * sizeof(*m_sgl->buffers));
+        m_sgl->lengths      = (size_t*)malloc(count * sizeof(*m_sgl->lengths));
+        m_sgl->memhs        = (ucp_mem_h*)malloc(count * sizeof(*m_sgl->memhs));
+        m_sgl->remote_addrs = (uint64_t*)malloc(count *
+                                                sizeof(*m_sgl->remote_addrs));
+        m_sgl->rkeys        = (ucp_rkey_h*)malloc(count * sizeof(*m_sgl->rkeys));
+        ucs_assert_always((m_sgl->buffers != NULL) &&
+                          (m_sgl->lengths != NULL) && (m_sgl->memhs != NULL) &&
+                          (m_sgl->remote_addrs != NULL) &&
+                          (m_sgl->rkeys != NULL));
+
+        for (i = 0; i < count; ++i) {
+            m_sgl->buffers[i]      = UCS_PTR_BYTE_OFFSET(m_perf.send_buffer,
+                                                         offset);
+            m_sgl->lengths[i]      = m_perf.params.msg_size_list[i];
+            m_sgl->memhs[i]        = m_perf.ucp.send_memh;
+            m_sgl->remote_addrs[i] = m_perf.ucp.remote_addr + offset;
+            m_sgl->rkeys[i]        = m_perf.ucp.rkey;
+
+            offset += m_perf.params.iov_stride ? m_perf.params.iov_stride :
+                                                 m_perf.params.msg_size_list[i];
+        }
+
+        m_sgl->local_sgl.field_mask = UCP_DT_LOCAL_SGL_FIELD_BUFFERS |
+                                      UCP_DT_LOCAL_SGL_FIELD_LENGTHS;
+        m_sgl->local_sgl.buffers    = m_sgl->buffers;
+        m_sgl->local_sgl.lengths    = m_sgl->lengths;
+        m_sgl->local_sgl.memhs      = NULL;
+        m_sgl->local_sgl.counts     = NULL;
+        m_sgl->local_sgl.strides    = NULL;
+        if (m_perf.params.flags & UCX_PERF_TEST_FLAG_PREREG) {
+            m_sgl->local_sgl.field_mask |= UCP_DT_LOCAL_SGL_FIELD_MEMHS;
+            m_sgl->local_sgl.memhs       = m_sgl->memhs;
+        }
+
+        m_sgl->remote_sgl.field_mask   = UCP_DT_REMOTE_SGL_FIELD_REMOTE_ADDRS |
+                                         UCP_DT_REMOTE_SGL_FIELD_LENGTHS |
+                                         UCP_DT_REMOTE_SGL_FIELD_RKEYS;
+        m_sgl->remote_sgl.remote_addrs = m_sgl->remote_addrs;
+        m_sgl->remote_sgl.lengths      = m_sgl->lengths;
+        m_sgl->remote_sgl.rkeys        = m_sgl->rkeys;
+    }
+
+    void add_sgl_params(ucp_request_param_t &params)
+    {
+        params.op_attr_mask &= ~UCP_OP_ATTR_FIELD_MEMH;
+        params.op_attr_mask |= UCP_OP_ATTR_FIELD_DATATYPE |
+                               UCP_OP_ATTR_FIELD_REMOTE_DATATYPE |
+                               UCP_OP_ATTR_FIELD_REMOTE |
+                               UCP_OP_ATTR_FIELD_REMOTE_COUNT;
+        params.datatype        = ucp_dt_make_sgl();
+        params.remote_datatype = ucp_dt_make_sgl();
+        params.remote          = &m_sgl->remote_sgl;
+        params.remote_count    = m_perf.params.msg_size_cnt;
+    }
+
     void ucp_perf_init_common_params(size_t *total_length, size_t *send_length,
                                      ucp_datatype_t *send_dt,
                                      void **send_buffer, size_t *recv_length,
@@ -192,6 +287,14 @@ public:
         m_recv_params.cb.recv      = tag_recv_cb;
         m_recv_params.user_data    = this;
         fill_common_params(m_recv_params, m_perf.ucp.recv_memh);
+
+        if (is_sgl_put()) {
+            prepare_sgl();
+            m_sgl->send_params          = m_send_params;
+            m_sgl->send_get_info_params = m_send_get_info_params;
+            add_sgl_params(m_sgl->send_params);
+            add_sgl_params(m_sgl->send_get_info_params);
+        }
     }
 
     void fill_send_params(ucp_request_param_t &params, void *reply_buffer,
@@ -434,11 +537,17 @@ public:
     send(ucp_ep_h ep, void *buffer, size_t length, ucp_datatype_t datatype,
          psn_t sn, uint64_t remote_addr, ucp_rkey_h rkey, bool get_info = false)
     {
-        ucp_request_param_t *param = get_info ? &m_send_get_info_params :
-                                                &m_send_params;
+        ucp_request_param_t *param;
         uint64_t value             = 0;
         void *request;
         ucs_status_t status;
+
+        if (is_sgl_put()) {
+            param = get_info ? &m_sgl->send_get_info_params :
+                               &m_sgl->send_params;
+        } else {
+            param = get_info ? &m_send_get_info_params : &m_send_params;
+        }
 
         wait_send_window(1);
 
@@ -476,7 +585,15 @@ public:
             default:
                 return UCS_ERR_INVALID_PARAM;
             }
-            request = ucp_put_nbx(ep, buffer, length, remote_addr, rkey, param);
+            if (is_sgl_put()) {
+                request = ucp_put_nbx(ep, &m_sgl->local_sgl,
+                                      m_perf.params.msg_size_cnt,
+                                      UCP_REMOTE_ADDR_INVALID, UCP_RKEY_INVALID,
+                                      param);
+            } else {
+                request = ucp_put_nbx(ep, buffer, length, remote_addr, rkey,
+                                      param);
+            }
             break;
         case UCX_PERF_CMD_GET:
             request = ucp_get_nbx(ep, buffer, length, remote_addr, rkey, param);
@@ -628,8 +745,15 @@ public:
         /* coverity[switch_selector_expr_is_constant] */
         switch (CMD) {
         case UCX_PERF_CMD_PUT:
-            status_p = ucp_put_nbx(ep, buffer, size, remote_addr, rkey,
-                                   &m_send_params);
+            if (is_sgl_put()) {
+                status_p = ucp_put_nbx(ep, &m_sgl->local_sgl,
+                                       m_perf.params.msg_size_cnt,
+                                       UCP_REMOTE_ADDR_INVALID,
+                                       UCP_RKEY_INVALID, &m_sgl->send_params);
+            } else {
+                status_p = ucp_put_nbx(ep, buffer, size, remote_addr, rkey,
+                                       &m_send_params);
+            }
             break;
         case UCX_PERF_CMD_ADD:
             status_p = ucp_atomic_op_nbx(ep, m_atomic_op, &atomic_value, 1,
@@ -972,6 +1096,7 @@ private:
     ucp_request_param_t m_send_get_info_params;
     ucp_request_param_t m_recv_params;
     ucp_atomic_op_t     m_atomic_op;
+    ucp_sgl_state_t     *m_sgl;
 };
 
 #define TEST_CASE(_perf, _cmd, _type, _flags, _mask) \

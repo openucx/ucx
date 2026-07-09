@@ -159,6 +159,7 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("                    data layout for sender and receiver side (contig)\n");
     printf("                        contig - Continuous datatype\n");
     printf("                        iov    - Scatter-gather list\n");
+    printf("                        sgl    - Scatter-gather list datatype\n");
     printf("     -C             use wild-card tag for tag tests\n");
     printf("     -U             force unexpected flow by using tag probe\n");
     printf("     -r <mode>      receive mode for stream tests (recv)\n");
@@ -480,11 +481,15 @@ static ucs_status_t parse_ucp_datatype_params(const char *opt_arg,
 {
     const char  *iov_type         = "iov";
     const size_t iov_type_size    = strlen("iov");
+    const char  *sgl_type         = "sgl";
+    const size_t sgl_type_size    = strlen("sgl");
     const char  *contig_type      = "contig";
     const size_t contig_type_size = strlen("contig");
 
     if (0 == strncmp(opt_arg, iov_type, iov_type_size)) {
         *datatype = UCP_PERF_DATATYPE_IOV;
+    } else if (0 == strncmp(opt_arg, sgl_type, sgl_type_size)) {
+        *datatype = UCP_PERF_DATATYPE_SGL;
     } else if (0 == strncmp(opt_arg, contig_type, contig_type_size)) {
         *datatype = UCP_PERF_DATATYPE_CONTIG;
     } else {

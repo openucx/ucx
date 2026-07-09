@@ -339,6 +339,19 @@ static ucs_status_t ucx_perf_test_check_params(ucx_perf_params_t *params)
         return UCS_ERR_INVALID_PARAM;
     }
 
+    if (params->api == UCX_PERF_API_UCP) {
+        if (params->ucp.recv_datatype == UCP_PERF_DATATYPE_SGL) {
+            ucs_error("SGL datatype is only supported on the sender side");
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        if ((params->ucp.send_datatype == UCP_PERF_DATATYPE_SGL) &&
+            (params->command != UCX_PERF_CMD_PUT)) {
+            ucs_error("SGL datatype is only supported for the put command");
+            return UCS_ERR_INVALID_PARAM;
+        }
+    }
+
     return UCS_OK;
 }
 
