@@ -42,7 +42,13 @@ enum uct_ib_mlx5_ext_iface_query_attr_field {
     UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_TX_TOKEN_LEN = UCS_BIT(1),
 
     /** Enables @ref uct_ib_mlx5_ext_iface_query_attr_t::rx_token_len */
-    UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_RX_TOKEN_LEN = UCS_BIT(2)
+    UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_RX_TOKEN_LEN = UCS_BIT(2),
+
+    /** Enables @ref uct_ib_mlx5_ext_iface_query_attr_t::tx_token */
+    UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_TX_TOKEN     = UCS_BIT(3),
+
+    /** Enables @ref uct_ib_mlx5_ext_iface_query_attr_t::rx_token */
+    UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_RX_TOKEN     = UCS_BIT(4)
 };
 
 /**
@@ -66,6 +72,12 @@ typedef struct uct_ib_mlx5_ext_iface_query_attr {
 
     /** RX token length in bytes. */
     size_t rx_token_len;
+
+    /** TX token input buffer, used to derive an RX token. */
+    const void *tx_token;
+
+    /** RX token output buffer derived from @ref tx_token. */
+    void       *rx_token;
 } uct_ib_mlx5_ext_iface_query_attr_t;
 
 /**
@@ -162,6 +174,7 @@ typedef struct uct_ib_mlx5_ext_ops {
     uct_ib_mlx5_ext_qp_query_func_t                qp_query;                     /**< QP query callback */
     uct_ib_mlx5_ext_max_put_sgl_zcopy_count_func_t max_put_sgl_zcopy_count;      /**< Maximum PUT SGL zero-copy entry count callback */
     uct_ep_put_sgl_zcopy_func_t                    ep_put_sgl_zcopy;             /**< PUT SGL zero-copy callback */
+    uct_ep_outstanding_extract_func_t              ep_outstanding_extract;       /**< Outstanding operation extract callback */
 } uct_ib_mlx5_ext_ops_t;
 
 /**
@@ -198,6 +211,9 @@ ucs_status_t uct_ib_mlx5_ext_ep_put_sgl_zcopy(uct_ep_h ep,
                                               const size_t *strides,
                                               size_t count,
                                               uct_completion_t *comp);
+
+ucs_status_t uct_ib_mlx5_ext_ep_outstanding_extract(
+        uct_ep_h ep, const uct_ep_outstanding_extract_params_t *params);
 
 END_C_DECLS
 

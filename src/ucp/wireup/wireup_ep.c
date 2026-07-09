@@ -407,6 +407,7 @@ UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep)
         .ep_pending_purge    = ucp_wireup_ep_pending_purge,
         .ep_put_short        = (uct_ep_put_short_func_t)ucs_empty_function_return_no_resource,
         .ep_put_bcopy        = (uct_ep_put_bcopy_func_t)ucp_wireup_ep_bcopy_send_func,
+        .ep_put_bcopy_ft     = (uct_ep_put_bcopy_ft_func_t)ucs_empty_function_return_no_resource,
         .ep_put_zcopy        = (uct_ep_put_zcopy_func_t)ucs_empty_function_return_no_resource,
         .ep_get_short        = (uct_ep_get_short_func_t)ucs_empty_function_return_no_resource,
         .ep_get_bcopy        = (uct_ep_get_bcopy_func_t)ucs_empty_function_return_no_resource,

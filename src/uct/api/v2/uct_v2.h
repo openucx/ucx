@@ -50,6 +50,7 @@ typedef enum uct_ep_operation {
     UCT_EP_OP_RNDV_ZCOPY,   /**< Tag matching rendezvous */
     UCT_EP_OP_ATOMIC_POST,  /**< Atomic post */
     UCT_EP_OP_ATOMIC_FETCH, /**< Atomic fetch */
+    UCT_EP_OP_FLUSH,        /**< Flush */
     UCT_EP_OP_LAST
 } uct_ep_operation_t;
 
@@ -1541,6 +1542,230 @@ ucs_status_t uct_rkey_unpack_v2(uct_component_h component,
  */
 ucs_status_t uct_md_mem_elem_pack(uct_md_h md, uct_mem_h memh, uct_rkey_t rkey,
                                   uct_device_mem_elem_t *mem_elem);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief UCT outstanding operation info field mask.
+ *
+ * The enumeration allows specifying which fields in @ref uct_ep_op_info_t are
+ * present, for backward compatibility support.
+ */
+typedef enum uct_ep_op_info_field {
+    /** Enables @ref uct_ep_op_info_t::operation. */
+    UCT_EP_OP_INFO_FIELD_OPERATION = UCS_BIT(0),
+
+    /** Enables @ref uct_ep_op_info_t::comp. */
+    UCT_EP_OP_INFO_FIELD_COMP      = UCS_BIT(1),
+
+    /** Enables @ref uct_ep_op_info_t::am. */
+    UCT_EP_OP_INFO_FIELD_AM        = UCS_BIT(2),
+
+    /** Enables AM flags in @ref uct_ep_op_info_t::am. */
+    UCT_EP_OP_INFO_FIELD_AM_FLAGS  = UCS_BIT(3),
+
+    /** Enables RMA fields in @ref uct_ep_op_info_t::rma. */
+    UCT_EP_OP_INFO_FIELD_RMA       = UCS_BIT(4),
+
+    /** Enables @ref uct_ep_op_info_t::flush. */
+    UCT_EP_OP_INFO_FIELD_FLUSH     = UCS_BIT(5),
+
+    /** Enables @ref uct_ep_op_info_t::data. */
+    UCT_EP_OP_INFO_FIELD_DATA      = UCS_BIT(6),
+
+    /** Enables @ref uct_ep_op_info_t::zcopy. */
+    UCT_EP_OP_INFO_FIELD_ZCOPY     = UCS_BIT(7),
+
+    /** Enables @ref uct_ep_op_info_t::unpack. */
+    UCT_EP_OP_INFO_FIELD_UNPACK    = UCS_BIT(8),
+
+    /** Enables @ref uct_ep_op_info_t::atomic. */
+    UCT_EP_OP_INFO_FIELD_ATOMIC    = UCS_BIT(9),
+} uct_ep_op_info_field_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Descriptor for a single outstanding (undelivered) operation.
+ *
+ * Passed to the callback registered with @ref uct_ep_outstanding_extract.
+ * @ref UCT_EP_OP_INFO_FIELD_OPERATION is required for every operation. The
+ * following operation-specific field groups are also required:
+ *
+ * - AM_SHORT: AM and DATA.
+ * - AM_BCOPY: AM and DATA.
+ * - AM_ZCOPY: AM and ZCOPY.
+ * - PUT_SHORT and PUT_BCOPY: RMA and DATA.
+ * - PUT_ZCOPY and GET_ZCOPY: RMA and ZCOPY.
+ * - GET_SHORT: RMA and DATA.
+ * - GET_BCOPY: RMA and UNPACK.
+ * - ATOMIC_POST and ATOMIC_FETCH: RMA and ATOMIC.
+ * - FLUSH: FLUSH.
+ */
+typedef struct uct_ep_op_info {
+    /**
+     * Mask of valid field groups in this structure, using bits from
+     * @ref uct_ep_op_info_field_t. Fields not specified by this mask
+     * will be ignored.
+     */
+    uint64_t           field_mask;
+
+    /**
+     * Operation type from @ref uct_ep_operation_t (e.g. UCT_EP_OP_AM_SHORT,
+     * UCT_EP_OP_PUT_ZCOPY, UCT_EP_OP_FLUSH, etc.).
+     */
+    uct_ep_operation_t operation;
+
+    /* Original completion. */
+    uct_completion_t   *comp;
+
+    union {
+        /* AM operation parameters. */
+        struct {
+            uint8_t  am_id;       /**< AM handler ID */
+            unsigned flags;       /**< Flags passed to the AM operation */
+            union {
+                uint64_t   header;         /**< AM short 64-bit header word */
+                const void *header_buffer; /**< AM zcopy header buffer */
+            };
+            size_t header_length; /**< AM zcopy header length */
+        } am;
+
+        /* Remote target for PUT, GET, and atomic operations. */
+        struct {
+            uint64_t   remote_addr;
+            uct_rkey_t rkey;
+        } rma;
+
+        /* Flush operation parameters. */
+        struct {
+            unsigned flags;
+        } flush;
+    };
+
+    union {
+        /* Contiguous operation data, valid only inside the callback. */
+        struct {
+            void   *buffer;
+            size_t length;
+        } data;
+
+        /* Zcopy IOV, pointing to user's original registered buffers. */
+        struct {
+            const uct_iov_t *iov;
+            size_t          iovcnt;
+        } zcopy;
+
+        /* GET bcopy destination callback. */
+        struct {
+            uct_unpack_callback_t unpack_cb;
+            void                  *arg;
+            size_t                length;
+        } unpack;
+
+        /* Atomic operation parameters. */
+        struct {
+            uct_atomic_op_t op;      /**< Atomic operation type */
+            uint64_t        value;   /**< Value or swap operand */
+            uint64_t        compare; /**< Compare operand for CSWAP */
+            void            *result; /**< Fetch result destination */
+            size_t          size;    /**< Operand size */
+        } atomic;
+    };
+} uct_ep_op_info_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Callback invoked for each undelivered outstanding operation.
+ */
+typedef void (*uct_ep_outstanding_cb_t)(const uct_ep_op_info_t *op_info,
+                                        void *arg);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Field mask for @ref uct_ep_outstanding_extract_params_t. Fields not
+ * specified by this mask are ignored, unless documented as required.
+ */
+typedef enum {
+    UCT_EP_OUTSTANDING_FIELD_RX_TOKEN = UCS_BIT(0),
+    UCT_EP_OUTSTANDING_FIELD_CB       = UCS_BIT(1),
+    UCT_EP_OUTSTANDING_FIELD_FLAGS    = UCS_BIT(2)
+} uct_ep_outstanding_extract_field_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Flags for @ref uct_ep_outstanding_extract.
+ */
+typedef enum {
+    /**
+     * For operations confirmed as delivered by the RX token, invoke
+     * their @ref uct_completion_t callback with @ref UCS_OK before
+     * extracting the remaining undelivered operations.
+     */
+    UCT_EP_OUTSTANDING_FLAG_COMPLETE_DELIVERED = UCS_BIT(0)
+} uct_ep_outstanding_extract_flags_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Parameters for @ref uct_ep_outstanding_extract.
+ */
+typedef struct {
+    /** Mask of valid fields, using bits from @ref
+     *  uct_ep_outstanding_extract_field_t. @ref
+     *  UCT_EP_OUTSTANDING_FIELD_RX_TOKEN and @ref
+     *  UCT_EP_OUTSTANDING_FIELD_CB are required. @ref
+     *  UCT_EP_OUTSTANDING_FIELD_FLAGS is optional; if it is not set,
+     *  @ref uct_ep_outstanding_extract_params_t::flags is ignored and treated
+     *  as 0. */
+    uint64_t                field_mask;
+
+    /**
+     * Opaque RX token received from the remote peer (derived via
+     * @ref uct_iface_query_v2 with @ref UCT_IFACE_ATTR_FIELD_RX_TOKEN).
+     */
+    const void              *rx_token;
+
+    /** Callback invoked once per undelivered outstanding operation. */
+    uct_ep_outstanding_cb_t cb;
+
+    /** Opaque argument passed to @ref cb. */
+    void                    *arg;
+
+    /** Flags from @ref uct_ep_outstanding_extract_flags_t. */
+    unsigned                flags;
+} uct_ep_outstanding_extract_params_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Extract outstanding (undelivered) operations from an endpoint.
+ *
+ * @note On success, this function takes ownership of classified outstanding
+ *       operations: delivered operations may be completed when
+ *       @ref UCT_EP_OUTSTANDING_FLAG_COMPLETE_DELIVERED is set, and
+ *       undelivered operations are reported through the callback for replay by the
+ *       caller.
+ */
+ucs_status_t
+uct_ep_outstanding_extract(uct_ep_h ep,
+                           const uct_ep_outstanding_extract_params_t *params);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Enable outstanding extraction on endpoint failure.
+ *
+ * This function must be called before posting operations that may need replay.
+ * After it succeeds, a transport error preserves the outstanding send queue
+ * until the caller finishes @ref uct_ep_outstanding_extract. After a successful
+ * extract, the endpoint can be destroyed immediately.
+ */
+ucs_status_t uct_ep_failover_enable(uct_ep_h ep);
+
 
 END_C_DECLS
 

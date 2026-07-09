@@ -147,9 +147,10 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface, uint32_t qp_num,
         return status;
     }
 
-    self->path_index   = UCT_EP_PARAMS_GET_PATH_INDEX(params);
-    self->flags        = 0;
-    self->txqp_reserve = 0;
+    self->path_index     = UCT_EP_PARAMS_GET_PATH_INDEX(params);
+    self->flags          = 0;
+    self->failover_flags = 0;
+    self->txqp_reserve   = 0;
 
     status = uct_rc_fc_init(&self->fc, iface UCS_STATS_ARG(self->super.stats));
     if (status != UCS_OK) {
@@ -276,6 +277,15 @@ void uct_rc_ep_get_bcopy_handler_no_completion(uct_rc_iface_send_op_t *op,
 
     desc->unpack_cb(desc->super.unpack_arg, resp, desc->super.length);
     uct_rc_op_release_get_bcopy(op);
+    ucs_mpool_put(desc);
+}
+
+void uct_rc_ep_put_bcopy_handler(uct_rc_iface_send_op_t *op, const void *resp)
+{
+    uct_rc_iface_send_desc_t *desc = ucs_derived_of(op,
+                                                    uct_rc_iface_send_desc_t);
+
+    uct_invoke_completion(desc->super.user_comp, UCS_OK);
     ucs_mpool_put(desc);
 }
 

@@ -16,6 +16,7 @@
 #include "ucp_request.inl"
 
 #include <ucp/core/ucp_context.h>
+#include <ucp/core/ucp_ep_failover.h>
 #include <ucp/proto/proto_common.inl>
 #include <ucp/wireup/address.h>
 #include <ucp/wireup/wireup_cm.h>
@@ -462,6 +463,13 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
     if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
         /* No pending operations should be scheduled */
         uct_ep_pending_purge(uct_ep, ucp_destroyed_ep_pending_purge, ucp_ep);
+        return UCS_OK;
+    }
+
+    if (ucp_ep_failover_is_uct_ep(ucp_ep, lane, uct_ep)) {
+        ucs_debug("ep %p: ignoring duplicate error for failover lane %u "
+                  "uct_ep %p",
+                  ucp_ep, lane, uct_ep);
         return UCS_OK;
     }
 

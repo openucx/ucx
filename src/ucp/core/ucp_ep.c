@@ -18,6 +18,7 @@
 
 #include <ucp/wireup/wireup_ep.h>
 #include <ucp/wireup/wireup.h>
+#include <ucp/core/ucp_ep_failover.h>
 #include <ucp/wireup/wireup_cm.h>
 #include <ucp/tag/eager.h>
 #include <ucp/tag/offload.h>
@@ -66,6 +67,11 @@ typedef struct {
 /**
  * Argument for discarding UCP endpoint's lanes
  */
+enum ucp_ep_discard_lanes_flags {
+    UCP_EP_DISCARD_LANES_FLAG_PURGE = UCS_BIT(0)
+};
+
+
 typedef struct ucp_ep_discard_lanes_arg {
     uct_ep_t               failed_ep;
     /* How many discarding operations on UCT lanes are in-progress if purging of
@@ -79,6 +85,7 @@ typedef struct ucp_ep_discard_lanes_arg {
     ucp_worker_cfg_index_t deactivate_cfg_index;
     /* Completion status of operations after discarding is * done */
     ucs_status_t           status;
+    unsigned               flags;
 } ucp_ep_discard_lanes_arg_t;
 
 
@@ -108,6 +115,7 @@ static ucs_init_once_t ucp_failed_tl_iface_once = UCS_INIT_ONCE_INITIALIZER;
 static const uct_iface_ops_t ucp_failed_tl_iface_ops = {
     .ep_put_short        = (uct_ep_put_short_func_t)ucp_ep_failed_op,
     .ep_put_bcopy        = (uct_ep_put_bcopy_func_t)ucp_ep_failed_bc_op,
+    .ep_put_bcopy_ft     = (uct_ep_put_bcopy_ft_func_t)ucp_ep_failed_bc_op,
     .ep_put_zcopy        = (uct_ep_put_zcopy_func_t)ucp_ep_failed_op,
     .ep_get_short        = (uct_ep_get_short_func_t)ucp_ep_failed_op,
     .ep_get_bcopy        = (uct_ep_get_bcopy_func_t)ucp_ep_failed_op,
@@ -214,6 +222,7 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
 
 static void ucp_ep_deallocate(ucp_ep_h ep)
 {
+    ucp_ep_failover_cleanup(ep);
     UCS_STATS_NODE_FREE(ep->stats);
     ucs_free(ep->ext->uct_eps);
     ucs_free(ep->ext);
@@ -270,6 +279,7 @@ static ucp_ep_h ucp_ep_allocate(ucp_worker_h worker, const char *peer_name)
     memset(&ep->ext->ep_match, 0, sizeof(ep->ext->ep_match));
 
     ucs_hlist_head_init(&ep->ext->proto_reqs);
+    ucp_ep_failover_init(ep);
 
     for (lane = 0; lane < UCP_MAX_FAST_PATH_LANES; ++lane) {
         ucp_ep_set_lane(ep, lane, NULL);
@@ -1492,15 +1502,30 @@ static void ucp_ep_discard_lanes_callback(void *request, ucs_status_t status,
     ucs_assert(arg != NULL);
     ucs_assert(arg->discard_counter > 0);
 
+    if (status != UCS_OK) {
+        arg->flags |= UCP_EP_DISCARD_LANES_FLAG_PURGE;
+    }
+
     if (--arg->discard_counter > 0) {
         return;
     }
 
     ucs_trace("ep %p: discard lanes completed", arg->ucp_ep);
-    ucp_ep_reqs_purge(arg->ucp_ep, arg->status);
+    if (arg->flags & UCP_EP_DISCARD_LANES_FLAG_PURGE) {
+        ucp_ep_reqs_purge(arg->ucp_ep, arg->status);
+    }
     ucp_ep_config_deactivate_worker_ifaces(arg->ucp_ep->worker,
                                            arg->deactivate_cfg_index);
     ucp_ep_release_discard_arg(arg);
+}
+
+static void
+ucp_ep_discard_lanes_failover_failed(ucs_status_t status, void *user_data)
+{
+    ucp_ep_discard_lanes_arg_t *arg = user_data;
+
+    ucs_assert(status != UCS_OK);
+    arg->flags |= UCP_EP_DISCARD_LANES_FLAG_PURGE;
 }
 
 static ucs_status_t ucp_ep_failed_op(uct_ep_h ep)
@@ -1528,12 +1553,14 @@ static void ucp_ep_failed_destroy(uct_ep_h ep)
 
 static void ucp_ep_discard_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
                                  ucs_status_t discard_status,
-                                 ucp_worker_cfg_index_t old_cfg_index)
+                                 ucp_worker_cfg_index_t old_cfg_index,
+                                 ucp_lane_map_t *failover_lanes_p)
 {
     unsigned ep_flush_flags         = ucp_ep_config_err_handling_enabled(ep) ?
                                       UCT_FLUSH_FLAG_CANCEL :
                                       UCT_FLUSH_FLAG_LOCAL;
     uct_ep_h uct_eps[UCP_MAX_LANES] = { NULL };
+    ucp_lane_map_t discard_lanes    = lanes;
     ucp_ep_discard_lanes_arg_t *discard_arg;
     ucs_status_t status;
     ucp_lane_index_t lane;
@@ -1563,6 +1590,9 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
     discard_arg->discard_counter      = 1;
     discard_arg->destroy_counter      = ucs_popcount(lanes);
     discard_arg->status               = discard_status;
+    discard_arg->flags                = (failover_lanes_p == NULL) ?
+                                                               UCP_EP_DISCARD_LANES_FLAG_PURGE :
+                                                               0;
 
     /* Activate ifaces for the new configuration upfront before discard callback
      * completion to avoid race condition which leads to negative EP reference
@@ -1576,7 +1606,40 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
 
     ucs_debug("ep %p: discarding lanes", ep);
     ucp_ep_extract_failed_lanes(ep, lanes, &discard_arg->failed_ep, uct_eps);
-    ucs_for_each_bit(lane, lanes) {
+
+    if (failover_lanes_p != NULL) {
+        status = ucp_ep_failover_add_lanes(ep, lanes, uct_eps,
+                                           ucp_ep_discard_lanes_callback,
+                                           ucp_ep_discard_lanes_failover_failed,
+                                           discard_arg, failover_lanes_p);
+        if ((status != UCS_OK) && (status != UCS_ERR_UNSUPPORTED)) {
+            ucs_debug("ep %p: failed to start failover for lanes 0x%lx: %s", ep,
+                      lanes, ucs_status_string(status));
+        }
+
+        ucs_assert((*failover_lanes_p == 0) || (*failover_lanes_p == lanes));
+
+        if (*failover_lanes_p != 0) {
+            status = ucp_ep_failover_query_lane_state(ep);
+
+            if (status == UCS_OK) {
+                discard_arg->discard_counter += ucs_popcount(*failover_lanes_p);
+                discard_lanes                ^= *failover_lanes_p;
+            } else {
+                ucs_debug("ep %p: failed to query failover lane state for "
+                          "lanes 0x%lx: %s, falling back to discard",
+                          ep, *failover_lanes_p, ucs_status_string(status));
+                ucp_ep_failover_cancel_lanes(ep, *failover_lanes_p);
+                *failover_lanes_p = 0;
+            }
+        }
+    }
+
+    if (discard_lanes != 0) {
+        discard_arg->flags |= UCP_EP_DISCARD_LANES_FLAG_PURGE;
+    }
+
+    ucs_for_each_bit(lane, discard_lanes) {
         uct_ep = uct_eps[lane];
         if (uct_ep == NULL) {
             continue;
@@ -1629,7 +1692,7 @@ ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
     /* The EP is unrecoverable - discard ALL lanes, including those already
      * marked UCP_LANE_TYPE_FAILED. */
     ucp_ep_discard_lanes(ucp_ep, UCS_MASK(ucp_ep_num_lanes(ucp_ep)), status,
-                         ucp_ep->cfg_index);
+                         ucp_ep->cfg_index, NULL);
     ucp_stream_ep_cleanup(ucp_ep, status);
 
     if (ucp_ep->flags & UCP_EP_FLAG_USED) {
@@ -2198,6 +2261,7 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
     ucs_debug("ep %p: recovery round (retries_left=%u, failed=0x%" PRIx64 ")",
               ep, ep->ext->recovery_arg->retries_left, (uint64_t)failed);
 
+    ucp_ep_failover_retry_lane_state(ep);
     ucp_ep_recovery_send_request(ep);
 
     if (--ep->ext->recovery_arg->retries_left > 0) {
@@ -2227,6 +2291,7 @@ ucp_ep_failover_reconfig(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,
                          ucs_status_t discard_status)
 {
     ucp_worker_cfg_index_t old_cfg_index = ucp_ep->cfg_index;
+    ucp_lane_map_t failover_lanes        = 0;
     ucs_status_t status;
 
     ucs_diag("ep %p: failover reconfig, failed_lanes 0x%lx", ucp_ep,
@@ -2241,7 +2306,9 @@ ucp_ep_failover_reconfig(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,
         return status;
     }
 
-    ucp_ep_discard_lanes(ucp_ep, failed_lanes, discard_status, old_cfg_index);
+    ucp_ep_discard_lanes(ucp_ep, failed_lanes, discard_status, old_cfg_index,
+                         &failover_lanes);
+
     return ucp_ep_recovery_arm(ucp_ep);
 }
 
@@ -2470,7 +2537,7 @@ ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
 
     if (ucp_request_param_flags(param) & UCP_EP_CLOSE_FLAG_FORCE) {
         ucp_ep_discard_lanes(ep, UCS_MASK(ucp_ep_num_lanes(ep)),
-                             UCS_ERR_CANCELED, ep->cfg_index);
+                             UCS_ERR_CANCELED, ep->cfg_index, NULL);
         ucp_ep_disconnected(ep, 1);
     } else {
         request = ucp_ep_flush_internal(ep, 0, param, NULL,
@@ -2540,6 +2607,7 @@ ucp_lane_index_t ucp_ep_lookup_lane(ucp_ep_h ucp_ep, uct_ep_h uct_ep)
 
     for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep); ++lane) {
         if ((uct_ep == ucp_ep_get_lane(ucp_ep, lane)) ||
+            ucp_ep_failover_is_uct_ep(ucp_ep, lane, uct_ep) ||
             ucp_wireup_ep_is_owner(ucp_ep_get_lane(ucp_ep, lane), uct_ep)) {
             return lane;
         }
