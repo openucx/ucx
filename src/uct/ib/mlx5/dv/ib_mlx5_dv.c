@@ -202,6 +202,8 @@ ucs_status_t uct_ib_mlx5_devx_create_qp_common(uct_ib_iface_t *iface,
         UCT_IB_MLX5DV_SET(qpc, qpc, send_dbr_mode,
                           UCT_IB_MLX5_QPC_SQ_NO_DBR_INT);
     } else {
+        UCT_IB_MLX5DV_SET(qpc, qpc, send_dbr_mode,
+                          UCT_IB_MLX5_QPC_SQ_DBR_VALID);
         UCT_IB_MLX5DV_SET64(qpc, qpc, dbr_addr, qp->devx.dbrec->offset);
         UCT_IB_MLX5DV_SET(qpc, qpc, dbr_umem_id, qp->devx.dbrec->mem_id);
     }

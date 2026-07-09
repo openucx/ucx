@@ -1379,7 +1379,6 @@ enum {
 
 enum {
     UCT_IB_MLX5_QPC_SQ_DBR_VALID  = 0x0,
-    UCT_IB_MLX5_QPC_SQ_NO_DBR_EXT = 0x1,
     UCT_IB_MLX5_QPC_SQ_NO_DBR_INT = 0x2
 };
 
