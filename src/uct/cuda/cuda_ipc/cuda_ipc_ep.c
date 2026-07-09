@@ -333,7 +333,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_ep_put_sgl_zcopy,
         goto out_ctx;
     }
 
-    mapping->count   = count;
+    mapping->count   = 0;
     mapping->entries = (uct_cuda_ipc_sgl_entry_t *)(mapping + 1);
     cuda_dsts        = (CUdeviceptr *)(mapping->entries + count);
 
@@ -356,6 +356,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_ep_put_sgl_zcopy,
         mapping->entries[i].d_bptr      = (uintptr_t)key->super.super.d_bptr;
         mapping->entries[i].mapped_addr = mapped_addr;
         cuda_dsts[i]                    = (CUdeviceptr)mapped_rem_addr;
+        mapping->count++;
     }
 
     key    = (uct_cuda_ipc_unpacked_rkey_t *)rkeys[0];
@@ -399,9 +400,8 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_ep_put_sgl_zcopy,
     goto out_ctx;
 
 out_unmap:
-    uct_cuda_ipc_sgl_unmap(mapping, i, cuda_device,
-                           iface->config.enable_cache);
-    ucs_free(mapping);
+    uct_cuda_ipc_sgl_mapping_destroy(mapping, cuda_device,
+                                     iface->config.enable_cache);
 
 out_ctx:
     uct_cuda_ipc_check_and_pop_ctx(is_ctx_pushed);

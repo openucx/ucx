@@ -59,19 +59,20 @@ typedef struct {
 
 
 static UCS_F_ALWAYS_INLINE void
-uct_cuda_ipc_sgl_unmap(uct_cuda_ipc_sgl_mapping_t *mapping,
-                       size_t count, CUdevice cuda_device,
-                       int enable_cache)
+uct_cuda_ipc_sgl_mapping_destroy(uct_cuda_ipc_sgl_mapping_t *mapping,
+                                 CUdevice cuda_device, int enable_cache)
 {
     size_t i;
 
-    for (i = 0; i < count; i++) {
+    for (i = 0; i < mapping->count; i++) {
         uct_cuda_ipc_unmap_memhandle(mapping->entries[i].pid,
                                      mapping->entries[i].pid_ns,
                                      mapping->entries[i].d_bptr,
                                      mapping->entries[i].mapped_addr,
                                      cuda_device, enable_cache);
     }
+
+    ucs_free(mapping);
 }
 #endif
 

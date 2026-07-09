@@ -336,12 +336,9 @@ static void uct_cuda_ipc_complete_event(uct_iface_h tl_iface,
 
 #if CUDA_VERSION >= 13000
     if (cuda_ipc_event->sgl_mapping != NULL) {
-        uct_cuda_ipc_sgl_mapping_t *mapping = cuda_ipc_event->sgl_mapping;
-
-        uct_cuda_ipc_sgl_unmap(mapping, mapping->count,
-                               cuda_ipc_event->cuda_device,
-                               iface->config.enable_cache);
-        ucs_free(mapping);
+        uct_cuda_ipc_sgl_mapping_destroy(cuda_ipc_event->sgl_mapping,
+                                         cuda_ipc_event->cuda_device,
+                                         iface->config.enable_cache);
         return;
     }
 #endif
