@@ -209,9 +209,6 @@ UCS_TEST_SKIP_COND_P(test_ze_copy_rma, ze_caps_and_mem_types,
                      !check_caps(UCT_IFACE_FLAG_GET_ZCOPY |
                                  UCT_IFACE_FLAG_PUT_ZCOPY))
 {
-    EXPECT_TRUE(check_caps(UCT_IFACE_FLAG_GET_ZCOPY));
-    EXPECT_TRUE(check_caps(UCT_IFACE_FLAG_PUT_ZCOPY));
-
     EXPECT_TRUE(sender().md_attr().access_mem_types &
                 UCS_BIT(UCS_MEMORY_TYPE_ZE_DEVICE));
     EXPECT_TRUE(sender().md_attr().reg_mem_types &

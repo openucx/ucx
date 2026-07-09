@@ -1206,8 +1206,9 @@ UCS_TEST_P(test_md_dmabuf, mem_query_dmabuf)
         UCS_TEST_SKIP_R("MD does not expose dmabuf memory query");
     }
 
-    const size_t size = ucs_get_page_size();
-    size_t tested     = 0;
+    const size_t size      = ucs_get_page_size();
+    const size_t offsets[] = {0, 128};
+    size_t tested          = 0;
 
     for (auto mem_type : mem_buffer::supported_mem_types()) {
         const bool dmabuf_expected = !!(md_attr().dmabuf_mem_types &
@@ -1221,82 +1222,55 @@ UCS_TEST_P(test_md_dmabuf, mem_query_dmabuf)
         }
 
         mem_buffer mem_buf(size, mem_type);
-        uct_md_mem_attr_t mem_attr = {};
 
-        mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE |
-                              UCT_MD_MEM_ATTR_FIELD_DMABUF_FD |
-                              UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET;
+        if (!dmabuf_expected) {
+            /* Memory type without dmabuf export: verify the negative and
+             * error paths at offset 0. */
+            uct_md_mem_attr_t mem_attr = {};
 
-        ucs_status_t status = uct_md_mem_query(md(), mem_buf.ptr(),
-                                               mem_buf.size(), &mem_attr);
+            mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE |
+                                  UCT_MD_MEM_ATTR_FIELD_DMABUF_FD |
+                                  UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET;
 
-        if (dmabuf_expected) {
-            ASSERT_UCS_OK(status);
-            EXPECT_EQ(mem_type, mem_attr.mem_type);
-            EXPECT_GE(mem_attr.dmabuf_fd, 0);
-            EXPECT_EQ((off_t)0, mem_attr.dmabuf_offset);
-            close(mem_attr.dmabuf_fd);
-            ++tested;
-        } else if (status == UCS_OK) {
-            /* MDs may report a valid memory type without a dmabuf fd */
-            EXPECT_EQ(UCT_DMABUF_FD_INVALID, mem_attr.dmabuf_fd);
-        } else {
-            EXPECT_TRUE((status == UCS_ERR_UNSUPPORTED) ||
-                        (status == UCS_ERR_INVALID_ADDR))
-                    << "status=" << ucs_status_string(status);
+            ucs_status_t status = uct_md_mem_query(md(), mem_buf.ptr(),
+                                                   mem_buf.size(), &mem_attr);
+            if (status == UCS_OK) {
+                /* MDs may report a valid memory type without a dmabuf fd */
+                EXPECT_EQ(UCT_DMABUF_FD_INVALID, mem_attr.dmabuf_fd);
+            } else {
+                EXPECT_TRUE((status == UCS_ERR_UNSUPPORTED) ||
+                            (status == UCS_ERR_INVALID_ADDR))
+                        << "status=" << ucs_status_string(status);
+            }
+            continue;
         }
+
+        for (size_t offset : offsets) {
+            uct_md_mem_attr_t mem_attr = {};
+            void *query_ptr = UCS_PTR_BYTE_OFFSET(mem_buf.ptr(), offset);
+
+            mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE |
+                                  UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS |
+                                  UCT_MD_MEM_ATTR_FIELD_DMABUF_FD |
+                                  UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET;
+
+            ucs_status_t status = uct_md_mem_query(md(), query_ptr,
+                                                   size - offset, &mem_attr);
+            ASSERT_UCS_OK(status);
+
+            EXPECT_EQ(mem_type, mem_attr.mem_type);
+            EXPECT_EQ(mem_buf.ptr(), mem_attr.base_address);
+            EXPECT_EQ((off_t)offset, mem_attr.dmabuf_offset);
+            EXPECT_GE(mem_attr.dmabuf_fd, 0);
+            close(mem_attr.dmabuf_fd);
+        }
+
+        ++tested;
     }
 
     if (tested == 0) {
         UCS_TEST_SKIP_R("MD does not expose dmabuf for any supported memory "
                         "type");
-    }
-}
-
-UCS_TEST_P(test_md_dmabuf, mem_query_dmabuf_offset)
-{
-    if ((md_attr().dmabuf_mem_types & md_attr().access_mem_types) == 0) {
-        UCS_TEST_SKIP_R("MD does not expose dmabuf memory query");
-    }
-
-    const size_t size   = ucs_get_page_size();
-    const size_t offset = 128;
-    size_t tested       = 0;
-
-    for (auto mem_type : mem_buffer::supported_mem_types()) {
-        if (!mem_buffer::is_mem_type_supported(mem_type) ||
-            !(md_attr().access_mem_types & UCS_BIT(mem_type)) ||
-            !(md_attr().dmabuf_mem_types & UCS_BIT(mem_type))) {
-            UCS_TEST_MESSAGE
-                    << "skipping " << ucs_memory_type_names[mem_type]
-                    << " (unsupported on system/MD or no dmabuf export)";
-            continue;
-        }
-
-        mem_buffer mem_buf(size, mem_type);
-        uct_md_mem_attr_t mem_attr = {};
-        void *query_ptr = UCS_PTR_BYTE_OFFSET(mem_buf.ptr(), offset);
-
-        mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE |
-                              UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS |
-                              UCT_MD_MEM_ATTR_FIELD_DMABUF_FD |
-                              UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET;
-
-        ucs_status_t status = uct_md_mem_query(md(), query_ptr, size - offset,
-                                               &mem_attr);
-        ASSERT_UCS_OK(status);
-
-        EXPECT_EQ(mem_type, mem_attr.mem_type);
-        EXPECT_EQ(mem_buf.ptr(), mem_attr.base_address);
-        EXPECT_EQ((off_t)offset, mem_attr.dmabuf_offset);
-        EXPECT_GE(mem_attr.dmabuf_fd, 0);
-        close(mem_attr.dmabuf_fd);
-        ++tested;
-    }
-
-    if (tested == 0) {
-        UCS_TEST_SKIP_R("MD does not expose dmabuf offset for any supported "
-                        "memory type");
     }
 }
 
