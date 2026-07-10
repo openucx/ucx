@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -61,7 +61,8 @@ public:
     void *ptr() const;
 
 protected:
-    void init(size_t size, unsigned handle_type);
+    void init(size_t size, unsigned handle_type,
+              CUmemLocationType location_type = CU_MEM_LOCATION_TYPE_DEVICE);
 
 private:
     size_t m_size                               = 0;
@@ -87,20 +88,23 @@ void *cuda_vmm_mem_buffer::ptr() const
     return (void*)m_ptr;
 }
 
-void cuda_vmm_mem_buffer::init(size_t size, unsigned handle_type)
+void cuda_vmm_mem_buffer::init(size_t size, unsigned handle_type,
+                               CUmemLocationType location_type)
 {
-    size_t granularity          = 0;
-    CUmemAllocationProp prop    = {};
-    CUmemAccessDesc access_desc = {};
+    size_t granularity             = 0;
+    CUmemAllocationProp prop       = {};
+    CUmemAccessDesc access_desc[2] = {};
+    unsigned num_access            = 1;
+    bool host_located = (location_type != CU_MEM_LOCATION_TYPE_DEVICE);
     CUdevice device;
     if (cuCtxGetDevice(&device) != CUDA_SUCCESS) {
         UCS_TEST_ABORT("failed to get the device handle for the current "
                        "context");
     }
 
-    prop.type                 = CU_MEM_ALLOCATION_TYPE_PINNED;
-    prop.location.type        = CU_MEM_LOCATION_TYPE_DEVICE;
-    prop.location.id          = device;
+    prop.type          = CU_MEM_ALLOCATION_TYPE_PINNED;
+    prop.location.type = location_type;
+    prop.location.id   = host_located ? 0 : device;
     if (handle_type != 0) {
         prop.requestedHandleTypes = (CUmemAllocationHandleType)handle_type;
     }
@@ -123,10 +127,16 @@ void cuda_vmm_mem_buffer::init(size_t size, unsigned handle_type)
         goto err_address_free;
     }
 
-    access_desc.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
-    access_desc.location.id   = device;
-    access_desc.flags         = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
-    if (cuMemSetAccess(m_ptr, m_size, &access_desc, 1) != CUDA_SUCCESS) {
+    access_desc[0].location.type = CU_MEM_LOCATION_TYPE_DEVICE;
+    access_desc[0].location.id   = device;
+    access_desc[0].flags         = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
+    if (host_located) {
+        access_desc[1].location.type = location_type;
+        access_desc[1].location.id   = 0;
+        access_desc[1].flags         = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
+        num_access                   = 2;
+    }
+    if (cuMemSetAccess(m_ptr, m_size, access_desc, num_access) != CUDA_SUCCESS) {
         goto err_mem_unmap;
     }
 
@@ -139,7 +149,7 @@ err_address_free:
 err_mem_release:
     cuMemRelease(m_alloc_handle);
 err:
-    UCS_TEST_SKIP_R("failed to allocate CUDA fabric memory");
+    UCS_TEST_SKIP_R("failed to allocate CUDA VMM memory");
 }
 
 #if HAVE_CUDA_FABRIC
@@ -153,6 +163,16 @@ cuda_fabric_mem_buffer::cuda_fabric_mem_buffer(size_t size,
 {
     init(size, CU_MEM_HANDLE_TYPE_FABRIC);
 }
+#endif
+
+#if CUDA_VERSION >= 12020
+class cuda_host_vmm_mem_buffer : public cuda_vmm_mem_buffer {
+public:
+    cuda_host_vmm_mem_buffer(size_t size, ucs_memory_type_t mem_type)
+    {
+        init(size, 0, CU_MEM_LOCATION_TYPE_HOST_NUMA);
+    }
+};
 #endif
 
 UCS_TEST_P(test_switch_cuda_device, detect_mem_type_cuda)
@@ -432,6 +452,22 @@ protected:
 #endif
     }
 
+    void query_registrable_no_current_context(void *address, size_t size)
+    {
+        uct_md_mem_attr_v2_t mem_attr = {};
+        ucs_status_t query_status     = UCS_ERR_NO_ELEM;
+
+        std::thread([&]() {
+            mem_attr.field_mask = UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE |
+                                  UCT_MD_MEM_ATTR_V2_FIELD_MEM_FLAGS;
+            query_status = uct_md_mem_query_v2(md(), address, size, &mem_attr);
+        }).join();
+
+        ASSERT_UCS_OK(query_status);
+        EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, mem_attr.mem_type);
+        EXPECT_TRUE(mem_attr.mem_flags & UCS_MEM_FLAG_REGISTRABLE);
+    }
+
 private:
     std::vector<ucs_sys_device_t> m_sys_dev;
 
@@ -517,6 +553,44 @@ UCS_TEST_P(test_mem_alloc_device, no_current_context_cuda_registrable,
     }
     EXPECT_UCS_OK(free_status);
 }
+
+UCS_TEST_P(test_mem_alloc_device, no_current_context_user_mem_registrable,
+           "CUDA_COPY_ASYNC_MEM_TYPE=cuda")
+{
+    constexpr size_t size = 4 * UCS_MBYTE;
+    CUdeviceptr dptr      = 0;
+
+    ASSERT_EQ(CUDA_SUCCESS, cuMemAlloc(&dptr, size));
+
+    query_registrable_no_current_context(reinterpret_cast<void*>(dptr), size);
+
+    EXPECT_EQ(CUDA_SUCCESS, cuMemFree(dptr));
+}
+
+UCS_TEST_P(test_mem_alloc_device, no_current_context_vmm_mem_registrable,
+           "CUDA_COPY_ASYNC_MEM_TYPE=cuda")
+{
+    constexpr size_t size = 4 * UCS_MBYTE;
+    cuda_vmm_mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
+
+    query_registrable_no_current_context(buffer.ptr(), size);
+}
+
+#if CUDA_VERSION >= 12020
+/* Host-located VMM is not dmabuf-exportable but is registrable by IB.
+ *
+ * TODO: REG_WHOLE_ALLOC=off is needed because of an existing issue with
+ * base_address being set to 0, causing cache pollution with this type of memory
+ */
+UCS_TEST_P(test_mem_alloc_device, host_vmm_mem_registrable,
+           "CUDA_COPY_REG_WHOLE_ALLOC=off")
+{
+    constexpr size_t size = 4 * UCS_MBYTE;
+    cuda_host_vmm_mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
+
+    query_registrable_no_current_context(buffer.ptr(), size);
+}
+#endif
 
 _UCT_MD_INSTANTIATE_TEST_CASE(test_mem_alloc_device, cuda_cpy);
 
