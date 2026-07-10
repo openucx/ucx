@@ -127,12 +127,12 @@ protected:
     }
     void register_plugin()
     {
-        uct_ib_mlx5_ext_ops_t ops = {
-            .name                 = "stub_plugin",
-            .iface_query          = iface_query,
-            .ep_query             = ep_query,
-            .ep_outstanding_purge = ep_outstanding_purge,
-        };
+        uct_ib_mlx5_ext_ops_t ops = {};
+
+        ucs_strncpy_zero(ops.name, "stub_plugin", sizeof(ops.name));
+        ops.iface_query          = iface_query;
+        ops.ep_query             = ep_query;
+        ops.ep_outstanding_purge = ep_outstanding_purge;
 
         ASSERT_UCS_OK(uct_ib_mlx5_ext_register(&ops));
     }
