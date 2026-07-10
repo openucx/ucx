@@ -357,6 +357,7 @@ uct_cuda_copy_mem_alloc(uct_md_h uct_md, size_t *length_p, void **address_p,
                         uct_mem_h *memh_p)
 {
     uct_cuda_copy_md_t *md = ucs_derived_of(uct_md, uct_cuda_copy_md_t);
+    uct_md_mem_attr_v2_t mem_attr;
     ucs_status_t status;
     uct_cuda_copy_alloc_handle_t *alloc_handle;
     ucs_log_level_t log_level;
@@ -430,6 +431,22 @@ uct_cuda_copy_mem_alloc(uct_md_h uct_md, size_t *length_p, void **address_p,
 
 allocated:
     uct_cuda_copy_sync_memops(alloc_handle->ptr, alloc_handle->is_vmm);
+
+    /* Cache memory flags as part of uct_cuda_copy_md_mem_query() before
+     * restoring the CUDA context.
+     */
+    mem_attr.field_mask = UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE     |
+                          UCT_MD_MEM_ATTR_V2_FIELD_SYS_DEV      |
+                          UCT_MD_MEM_ATTR_V2_FIELD_BASE_ADDRESS |
+                          UCT_MD_MEM_ATTR_V2_FIELD_ALLOC_LENGTH |
+                          UCT_MD_MEM_ATTR_V2_FIELD_MEM_FLAGS;
+
+    status = uct_cuda_copy_md_mem_query(uct_md, (void*)alloc_handle->ptr,
+                                        alloc_handle->length, &mem_attr);
+    if (status != UCS_OK) {
+        (void)uct_md_mem_free(uct_md, alloc_handle);
+        goto out;
+    }
 
     *memh_p    = alloc_handle;
     *address_p = (void*)alloc_handle->ptr;
@@ -885,7 +902,9 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
     };
     int dmabuf_queried    = 0;
     int is_async_managed  = 0;
+    ucs_memory_info_t cached_mem_info;
     ucs_memory_info_t addr_mem_info;
+    ucs_status_t cache_status;
     ucs_status_t status;
 
     if (!(mem_attr->field_mask &
@@ -900,11 +919,20 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
     }
 
     if (address != NULL) {
+        cache_status = ucs_memtype_cache_lookup(address, length,
+                                                &cached_mem_info);
         status = uct_cuda_copy_md_query_attributes(md, address, length,
                                                    &addr_mem_info,
                                                    &is_async_managed);
         if (status != UCS_OK) {
             return status;
+        }
+
+        /* CUDA reports device symbols as device memory, so preserve the type
+         * explicitly provided by the UCM allocation event. */
+        if ((cache_status == UCS_OK) &&
+            (cached_mem_info.type == UCS_MEMORY_TYPE_CUDA_MANAGED)) {
+            addr_mem_info.type = cached_mem_info.type;
         }
     } else {
         addr_mem_info = default_mem_info;
@@ -988,7 +1016,6 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_md_detect_memory_type,
     return UCS_OK;
 }
 
-/* clang-format off */
 static uct_md_ops_t md_ops = {
     .close              = uct_cuda_copy_md_close,
     .query              = uct_cuda_copy_md_query,
@@ -1003,7 +1030,6 @@ static uct_md_ops_t md_ops = {
     .mem_elem_pack      = (uct_md_mem_elem_pack_func_t)ucs_empty_function_return_unsupported,
     .detect_memory_type = uct_cuda_copy_md_detect_memory_type
 };
-/* clang-format on */
 
 static ucs_status_t
 uct_cuda_copy_md_open(uct_component_t *component, const char *md_name,
@@ -1055,6 +1081,9 @@ uct_cuda_copy_md_open(uct_component_t *component, const char *md_name,
 
     *md_p = (uct_md_h)md;
 
+    /* Keep the global cache lazy, but install its handler before CUDA events. */
+    ucs_memtype_cache_global_create();
+
     /*
      * Setting sync memops flag for the first time during memory detection can
      * cause a deadlock if other CUDA operations are performed in parallel.
@@ -1070,7 +1099,6 @@ err:
     return status;
 }
 
-/* clang-format off */
 uct_component_t uct_cuda_copy_component = {
     .query_md_resources = uct_cuda_base_query_md_resources,
     .md_open            = uct_cuda_copy_md_open,
@@ -1091,5 +1119,4 @@ uct_component_t uct_cuda_copy_component = {
     .flags              = 0,
     .md_vfs_init        = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
-/* clang-format on */
 UCT_COMPONENT_REGISTER(&uct_cuda_copy_component);
