@@ -72,12 +72,6 @@ typedef struct {
 } uct_cuda_copy_md_dmabuf_t;
 
 
-/**
- * CUDA context state for a single memory query
- */
-typedef struct uct_cuda_copy_md_query_ctx uct_cuda_copy_md_query_ctx_t;
-
-
 ucs_status_t uct_cuda_copy_md_detect_memory_type(uct_md_h md,
                                                  const void *address,
                                                  size_t length,
@@ -104,14 +98,10 @@ int uct_cuda_copy_md_is_dmabuf_supported();
                        file descriptor can be used by a Direct NIC. If sys_dev
                        is UCS_SYS_DEVICE_ID_UNKNOWN, the file descriptor can
                        be used by any device.
- * @param query_ctx [inout] Optional context state (see
- *                          uct_cuda_copy_md_query_ctx_t); NULL relies on the
- *                          caller's current context.
  * @return The dmabuf file descriptor and offset
  */
-uct_cuda_copy_md_dmabuf_t
-uct_cuda_copy_md_get_dmabuf(const void *address, size_t length,
-                            ucs_sys_device_t sys_dev,
-                            uct_cuda_copy_md_query_ctx_t *query_ctx);
+uct_cuda_copy_md_dmabuf_t uct_cuda_copy_md_get_dmabuf(const void *address,
+                                                      size_t length,
+                                                      ucs_sys_device_t sys_dev);
 
 #endif
