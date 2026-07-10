@@ -227,7 +227,7 @@ UCS_TEST_P(test_uct_ib_mlx5_ext_rc, ep_query)
 
     attr.field_mask      = UCT_EP_ATTR_FIELD_TX_TOKEN |
                            UCT_EP_ATTR_FIELD_TX_TOKEN_LENGTH;
-    attr.tx_token   = &tx_token;
+    attr.tx_token        = &tx_token;
     attr.tx_token_length = sizeof(tx_token);
     EXPECT_UCS_OK(uct_ep_query(m_e1->ep(0), &attr));
     EXPECT_EQ(tx_token, m_state.tx_token_count);
@@ -265,8 +265,8 @@ UCS_TEST_P(test_uct_ib_mlx5_ext_rc, ep_outstanding_purge)
 
     params.field_mask = UCT_EP_OUTSTANDING_FIELD_RX_TOKEN |
                         UCT_EP_OUTSTANDING_FIELD_CB;
-    params.rx_token = &rx_token;
-    params.cb       = NULL;
+    params.rx_token   = &rx_token;
+    params.cb         = NULL;
     EXPECT_EQ(UCS_ERR_INVALID_PARAM,
               uct_ep_outstanding_purge(m_e1->ep(0), &params));
 
@@ -278,12 +278,12 @@ UCS_TEST_P(test_uct_ib_mlx5_ext_rc, ep_outstanding_purge)
     EXPECT_UCS_OK(uct_ep_query(m_e1->ep(0), &attr));
     EXPECT_EQ(rx_token, m_state.rx_token_count);
 
-    params.field_mask      = UCT_EP_OUTSTANDING_FIELD_RX_TOKEN |
-                             UCT_EP_OUTSTANDING_FIELD_CB |
-                             UCT_EP_OUTSTANDING_FIELD_ARG;
-    params.cb              = purge_cb;
-    params.arg             = &purge_count;
-    m_state.purge_params   = &params;
+    params.field_mask    = UCT_EP_OUTSTANDING_FIELD_RX_TOKEN |
+                           UCT_EP_OUTSTANDING_FIELD_CB |
+                           UCT_EP_OUTSTANDING_FIELD_ARG;
+    params.cb            = purge_cb;
+    params.arg           = &purge_count;
+    m_state.purge_params = &params;
     EXPECT_UCS_OK(uct_ep_outstanding_purge(m_e1->ep(0), &params));
     EXPECT_EQ(purge_count, m_state.purge_count);
 }
