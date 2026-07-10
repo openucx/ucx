@@ -22,10 +22,16 @@
 
 #if __has_include(<uct/ib/mlx5/gdaki/gdaki.cuh>) && \
     __has_include(<infiniband/mlx5dv.h>)
-#include <uct/ib/mlx5/gdaki/gdaki.cuh>
 #define UCT_RC_MLX5_GDA_SUPPORTED 1
 #else
 #define UCT_RC_MLX5_GDA_SUPPORTED 0
+#endif
+
+/* Define uct_device_completion before including gdaki.cuh, whose device templates
+ * reference this union. Including gdaki.cuh first leaves the union incomplete at those
+ * template definitions, which Clang-based CUDA compilers reject. */
+#if UCT_RC_MLX5_GDA_SUPPORTED
+#include <uct/ib/mlx5/gdaki/gdaki_dev.h>
 #endif
 
 union uct_device_completion {
@@ -36,6 +42,10 @@ union uct_device_completion {
     uct_cuda_ipc_completion_t cuda_ipc;
 #endif
 };
+
+#if UCT_RC_MLX5_GDA_SUPPORTED
+#include <uct/ib/mlx5/gdaki/gdaki.cuh>
+#endif
 
 
 /**
