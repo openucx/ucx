@@ -1084,10 +1084,21 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_base_ep_t, const uct_ep_params_t *params)
     }
 
     self->tx.wq.bb_max = ucs_min(self->tx.wq.bb_max, iface->tx.bb_max);
+    self->tx.wq.next_tx_id = 0;
+    self->tx.wq.wqe_priv   = ucs_calloc(self->tx.wq.bb_max,
+                                        sizeof(*self->tx.wq.wqe_priv),
+                                        "rc_mlx5_txwq_priv");
+    if (self->tx.wq.wqe_priv == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err_remove_qp;
+    }
+
     uct_rc_txqp_available_set(&self->super.txqp, self->tx.wq.bb_max);
     uct_rc_mlx5_iface_common_prepost_recvs(iface);
     return UCS_OK;
 
+err_remove_qp:
+    uct_rc_iface_remove_qp(&iface->super, self->tx.wq.super.qp_num);
 err_event_unreg:
     if (iface->rx.srq.type != UCT_IB_MLX5_OBJ_TYPE_NULL) {
         uct_ib_device_async_event_unregister(&md->super.dev,
@@ -1101,7 +1112,7 @@ err_destroy_txwq_qp:
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_base_ep_t)
 {
-    /* No op, cleanup context is implemented in derived class */
+    ucs_free(self->tx.wq.wqe_priv);
 }
 
 
