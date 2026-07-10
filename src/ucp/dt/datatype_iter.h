@@ -79,7 +79,7 @@ typedef struct {
             ucp_mem_h        *memhs;
             const uint64_t   *remote_addrs;
             ucp_rkey_h const *rkeys;
-            /* length = element count, offset = current element index */
+            size_t           elem_offset;
         } sgl;
     } type;
 } ucp_datatype_iter_t;
