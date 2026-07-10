@@ -259,6 +259,9 @@ typedef struct ucp_context_config {
     unsigned long                          max_hca_per_gpu;
     /** Local identificator on a single node */
     unsigned long                          node_local_id;
+    /** Print transport/device info and lane info tables during context
+     *  and endpoint initialization */
+    ucs_on_off_auto_value_t                print_transport_tables;
 } ucp_context_config_t;
 
 
@@ -644,8 +647,6 @@ extern const char       *ucp_feature_str[];
 void ucp_dump_payload(ucp_context_h context, char *buffer, size_t max,
                       const void *data, size_t length);
 
-void ucp_context_tag_offload_enable(ucp_context_h context);
-
 void ucp_context_uct_atomic_iface_flags(ucp_context_h context,
                                         ucp_tl_iface_atomic_flags_t *atomic);
 
@@ -784,6 +785,18 @@ ucp_context_rndv_is_enabled(ucp_context_h context)
 {
     return (context->config.ext.rndv_intra_thresh != UCS_MEMUNITS_INF) ||
            (context->config.ext.rndv_inter_thresh != UCS_MEMUNITS_INF);
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_context_print_transport_tables_enabled(ucp_context_h context)
+{
+    ucs_on_off_auto_value_t value = context->config.ext.print_transport_tables;
+
+    if (value == UCS_CONFIG_AUTO) {
+        return ucs_log_is_enabled(UCS_LOG_LEVEL_DEBUG);
+    }
+
+    return value == UCS_CONFIG_ON;
 }
 
 void ucp_context_memaccess_tl_bitmap(ucp_context_h context,
