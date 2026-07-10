@@ -577,8 +577,13 @@ UCS_TEST_P(test_mem_alloc_device, no_current_context_vmm_mem_registrable,
 }
 
 #if CUDA_VERSION >= 12020
-/* Host-located VMM is not dmabuf-exportable but is registrable by IB */
-UCS_TEST_P(test_mem_alloc_device, host_vmm_mem_registrable)
+/* Host-located VMM is not dmabuf-exportable but is registrable by IB.
+ *
+ * TODO: REG_WHOLE_ALLOC=off is needed because of an existing issue with
+ * base_address being set to 0, causing cache pollution with this type of memory
+ */
+UCS_TEST_P(test_mem_alloc_device, host_vmm_mem_registrable,
+           "CUDA_COPY_REG_WHOLE_ALLOC=off")
 {
     constexpr size_t size = 4 * UCS_MBYTE;
     cuda_host_vmm_mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
