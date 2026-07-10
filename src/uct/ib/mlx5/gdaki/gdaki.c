@@ -414,16 +414,14 @@ uct_rc_gdaki_channel_block(uct_rc_gdaki_iface_t *iface, ucs_mpool_t *mp,
     }
 }
 
-static ucs_status_t
+static void
 uct_rc_gdaki_channel_block_reset_qps(uct_rc_gdaki_iface_t *iface,
                                      uct_rc_gdaki_channel_block_t *block)
 {
     uct_ib_iface_t *ib_iface = &iface->super.super.super;
     uct_rc_gdaki_channel_t *channel;
-    ucs_status_t status, first_status;
+    ucs_status_t status;
     unsigned i;
-
-    first_status = UCS_OK;
 
     for (i = 0; i < iface->num_channels; i++) {
         channel = &block->channels[i];
@@ -434,28 +432,20 @@ uct_rc_gdaki_channel_block_reset_qps(uct_rc_gdaki_iface_t *iface,
         status = uct_ib_mlx5_modify_qp_state(ib_iface, &channel->qp.super,
                                              IBV_QPS_RESET);
         if (status != UCS_OK) {
-            ucs_warn("failed to reset gdaki qp 0x%x: %s",
-                     channel->qp.super.qp_num, ucs_status_string(status));
-            if (first_status == UCS_OK) {
-                first_status = status;
-            }
-            continue;
+            ucs_fatal("failed to reset gdaki qp 0x%x: %s",
+                      channel->qp.super.qp_num, ucs_status_string(status));
+            return;
         }
 
         uct_ib_mlx5_txwq_reset(&channel->qp);
 
         status = uct_ib_mlx5_devx_qp_rst2init(ib_iface, &channel->qp.super);
         if (status != UCS_OK) {
-            ucs_warn("failed to move gdaki qp 0x%x to init: %s",
-                     channel->qp.super.qp_num, ucs_status_string(status));
-            if (first_status == UCS_OK) {
-                first_status = status;
-            }
-            continue;
+            ucs_fatal("failed to move gdaki qp 0x%x to init: %s",
+                      channel->qp.super.qp_num, ucs_status_string(status));
+            return;
         }
     }
-
-    return first_status;
 }
 
 static void uct_rc_gdaki_chunk_channels_destroy(uct_rc_gdaki_iface_t *iface,
@@ -482,8 +472,7 @@ static void uct_rc_gdaki_chunk_channels_destroy(uct_rc_gdaki_iface_t *iface,
 static ucs_status_t
 uct_rc_gdaki_init_channel_chunk(uct_rc_gdaki_iface_t *iface,
                                 uct_rc_gdaki_channel_block_mem_t *mem,
-                                size_t dev_ep_size, ucs_mpool_t *mp,
-                                ucs_mpool_chunk_t *mp_chunk, void *elems,
+                                size_t dev_ep_size, ucs_mpool_t *mp, void *elems,
                                 unsigned num_elems)
 {
     uct_ib_iface_init_attr_t init_attr = {};
@@ -522,7 +511,6 @@ uct_rc_gdaki_init_channel_chunk(uct_rc_gdaki_iface_t *iface,
                                                        ep_index);
             channel       = &channel_block->channels[channel_index];
             if (channel_index == 0) {
-                channel_block->chunk   = mp_chunk;
                 channel_block->gpu_ptr = (uintptr_t)
                         UCS_PTR_BYTE_OFFSET(mem->gpu_mem, ep_offset);
             }
@@ -565,57 +553,6 @@ err_cleanup:
     return status;
 }
 
-static void uct_rc_gdaki_channel_chunk_rebuild(uct_rc_gdaki_iface_t *iface,
-                                               ucs_mpool_t *mp,
-                                               ucs_mpool_chunk_t *chunk)
-{
-    uct_rc_gdaki_pool_priv_t *priv = ucs_mpool_priv(mp);
-    uct_rc_gdaki_channel_block_mem_t *hdr =
-            (uct_rc_gdaki_channel_block_mem_t*)chunk - 1;
-    uct_rc_gdaki_channel_block_t *block;
-    ucs_status_t status;
-
-    uct_rc_gdaki_chunk_channels_destroy(iface, mp, chunk->elems,
-                                        chunk->num_elems, chunk->num_elems,
-                                        iface->num_channels - 1);
-
-    status = uct_rc_gdaki_init_channel_chunk(iface, hdr, priv->dev_ep_size, mp,
-                                             chunk, chunk->elems,
-                                             chunk->num_elems);
-    if (status != UCS_OK) {
-        ucs_fatal("failed to rebuild gdaki channel chunk %p: %s", chunk,
-                  ucs_status_string(status));
-    }
-
-    while (!ucs_list_is_empty(&hdr->err_list)) {
-        block = ucs_list_extract_head(&hdr->err_list,
-                                      uct_rc_gdaki_channel_block_t, err_list);
-        ucs_list_head_init(&block->err_list);
-        ucs_mpool_put(block);
-    }
-}
-
-static void
-uct_rc_gdaki_channel_block_try_rebuild(uct_rc_gdaki_iface_t *iface,
-                                       uct_rc_gdaki_channel_block_t *block)
-{
-    ucs_mpool_t *mp = &iface->channel_pool;
-    ucs_mpool_chunk_t *chunk;
-    uct_rc_gdaki_channel_block_mem_t *hdr;
-
-    chunk = block->chunk;
-    ucs_assert(chunk != NULL);
-
-    hdr = (uct_rc_gdaki_channel_block_mem_t*)chunk - 1;
-    ucs_list_add_tail(&hdr->err_list, &block->err_list);
-    ++hdr->err_count;
-
-    if (hdr->err_count == chunk->num_elems) {
-        uct_rc_gdaki_channel_chunk_rebuild(iface, mp, chunk);
-        hdr->err_count = 0;
-    }
-}
-
 static ucs_status_t
 uct_rc_gdaki_pool_chunk_alloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
 {
@@ -640,9 +577,6 @@ uct_rc_gdaki_pool_chunk_alloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
         goto err_free_hdr;
     }
 
-    ucs_list_head_init(&hdr->err_list);
-    hdr->err_count = 0;
-
     gpu_alloc_size = num_elems * priv->dev_ep_size;
     status = uct_rc_gdaki_init_umem(iface, priv->pgsz_bitmap, gpu_alloc_size,
                                     hdr);
@@ -651,7 +585,7 @@ uct_rc_gdaki_pool_chunk_alloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
     }
 
     status = uct_rc_gdaki_init_channel_chunk(
-            iface, hdr, priv->dev_ep_size, mp, (ucs_mpool_chunk_t*)(hdr + 1),
+            iface, hdr, priv->dev_ep_size, mp,
             ucs_mpool_chunk_elems(mp, (void*)(hdr + 1)), num_elems);
     if (status != UCS_OK) {
         goto err_umem;
@@ -764,18 +698,12 @@ uct_rc_gdaki_ep_reset_channels(uct_rc_gdaki_ep_t *ep)
 static void uct_rc_gdaki_cleanup_channels_pooled(uct_rc_gdaki_iface_t *iface,
                                                  uct_rc_gdaki_ep_t *ep)
 {
-    ucs_status_t status;
-
     if (ep->channel_block == NULL) {
         return;
     }
 
-    status = uct_rc_gdaki_channel_block_reset_qps(iface, ep->channel_block);
-    if (status == UCS_OK) {
-        ucs_mpool_put(ep->channel_block);
-    } else {
-        uct_rc_gdaki_channel_block_try_rebuild(iface, ep->channel_block);
-    }
+    uct_rc_gdaki_channel_block_reset_qps(iface, ep->channel_block);
+    ucs_mpool_put(ep->channel_block);
     uct_rc_gdaki_ep_reset_channels(ep);
 }
 
@@ -810,7 +738,7 @@ uct_rc_gdaki_ep_init_channels_direct(uct_rc_gdaki_iface_t *iface,
     ep->channel_block->gpu_ptr = (uintptr_t)ep->mem.gpu_mem;
 
     status = uct_rc_gdaki_init_channel_chunk(iface, &ep->mem, dev_ep_size, NULL,
-                                             NULL, ep->channel_block, 1);
+                                             ep->channel_block, 1);
     if (status != UCS_OK) {
         goto err_umem;
     }
