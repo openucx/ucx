@@ -209,8 +209,8 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
     uct_rc_mlx5_iface_update_tx_res(iface, ep, pi);
     uct_ib_mlx5_txwq_update_flags(&ep->tx.wq, UCT_IB_MLX5_TXWQ_FLAG_FAILED, 0);
 
-    if (ep->super.flags &
-        (UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED | UCT_RC_EP_FLAG_FLUSH_CANCEL)) {
+    if (ep->super.flags & (UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED |
+                           UCT_RC_EP_FLAG_FLUSH_CANCEL)) {
         goto out;
     }
 
@@ -1010,6 +1010,78 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_rc_mlx5_iface_t, uct_iface_t, uct_md_h,
 
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_mlx5_iface_t, uct_iface_t);
 
+static ucs_status_t
+uct_rc_mlx5_ep_query_check_param(const uct_ep_attr_t *ep_attr)
+{
+    if (ep_attr == NULL) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (ep_attr->field_mask & (UCT_EP_ATTR_FIELD_LOCAL_SOCKADDR |
+                               UCT_EP_ATTR_FIELD_REMOTE_SOCKADDR)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    if ((ep_attr->field_mask & UCT_EP_ATTR_FIELD_TX_TOKEN) &&
+        (!(ep_attr->field_mask & UCT_EP_ATTR_FIELD_TX_TOKEN_LENGTH) ||
+         (ep_attr->tx_token == NULL) || (ep_attr->tx_token_length == 0))) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if ((ep_attr->field_mask & UCT_EP_ATTR_FIELD_RX_TOKEN) &&
+        (!(ep_attr->field_mask & UCT_EP_ATTR_FIELD_RX_TOKEN_LENGTH) ||
+         (ep_attr->rx_token == NULL) || (ep_attr->rx_token_length == 0))) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return UCS_OK;
+}
+
+static ucs_status_t uct_rc_mlx5_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr)
+{
+    uct_ib_mlx5_ext_ep_query_attr_t ext_attr = {};
+    ucs_status_t status;
+
+    status = uct_rc_mlx5_ep_query_check_param(ep_attr);
+    if (ucs_unlikely(status != UCS_OK)) {
+        return status;
+    }
+
+    if (!(ep_attr->field_mask &
+          (UCT_EP_ATTR_FIELD_TX_TOKEN | UCT_EP_ATTR_FIELD_RX_TOKEN))) {
+        return UCS_OK;
+    }
+
+    if (ep_attr->field_mask & UCT_EP_ATTR_FIELD_TX_TOKEN) {
+        ext_attr.field_mask  |= UCT_IB_MLX5_EXT_EP_QUERY_ATTR_FIELD_TX_TOKEN |
+                                UCT_IB_MLX5_EXT_EP_QUERY_ATTR_FIELD_TX_TOKEN_LEN;
+        ext_attr.tx_token     = ep_attr->tx_token;
+        ext_attr.tx_token_len = ep_attr->tx_token_length;
+    }
+
+    if (ep_attr->field_mask & UCT_EP_ATTR_FIELD_RX_TOKEN) {
+        ext_attr.field_mask  |= UCT_IB_MLX5_EXT_EP_QUERY_ATTR_FIELD_RX_TOKEN |
+                                UCT_IB_MLX5_EXT_EP_QUERY_ATTR_FIELD_RX_TOKEN_LEN;
+        ext_attr.rx_token     = ep_attr->rx_token;
+        ext_attr.rx_token_len = ep_attr->rx_token_length;
+    }
+
+    status = uct_ib_mlx5_ext_ep_query(ep, &ext_attr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (ext_attr.field_mask & UCT_IB_MLX5_EXT_EP_QUERY_ATTR_FIELD_TX_TOKEN) {
+        ep_attr->tx_token = ext_attr.tx_token;
+    }
+
+    if (ext_attr.field_mask & UCT_IB_MLX5_EXT_EP_QUERY_ATTR_FIELD_RX_TOKEN) {
+        ep_attr->rx_token = ext_attr.rx_token;
+    }
+
+    return UCS_OK;
+}
+
 static ucs_status_t uct_rc_mlx5_iface_query_v2(uct_iface_h tl_iface,
                                                uct_iface_attr_v2_t *iface_attr)
 {
@@ -1081,7 +1153,7 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
             .iface_query_v2        = uct_rc_mlx5_iface_query_v2,
             .iface_estimate_perf   = uct_rc_iface_estimate_perf,
             .iface_vfs_refresh     = uct_rc_iface_vfs_refresh,
-            .ep_query              = uct_rc_mlx5_base_ep_query,
+            .ep_query              = uct_rc_mlx5_ep_query,
             .ep_invalidate         = uct_rc_mlx5_base_ep_invalidate,
             .ep_connect_to_ep_v2   = uct_rc_mlx5_ep_connect_to_ep_v2,
             .iface_is_reachable_v2 = uct_rc_mlx5_iface_is_reachable_v2,

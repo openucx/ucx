@@ -278,7 +278,11 @@ enum uct_ep_attr_field {
     /** Enables @ref uct_ep_attr::tx_token */
     UCT_EP_ATTR_FIELD_TX_TOKEN        = UCS_BIT(2),
     /** Enables @ref uct_ep_attr::rx_token */
-    UCT_EP_ATTR_FIELD_RX_TOKEN        = UCS_BIT(3)
+    UCT_EP_ATTR_FIELD_RX_TOKEN        = UCS_BIT(3),
+    /** Enables @ref uct_ep_attr::tx_token_length */
+    UCT_EP_ATTR_FIELD_TX_TOKEN_LENGTH = UCS_BIT(4),
+    /** Enables @ref uct_ep_attr::rx_token_length */
+    UCT_EP_ATTR_FIELD_RX_TOKEN_LENGTH = UCS_BIT(5)
 };
 
 
@@ -423,18 +427,34 @@ struct uct_ep_attr {
     /**
      * Opaque TX token buffer.
      * Valid when @ref UCT_EP_ATTR_FIELD_TX_TOKEN is set in @ref field_mask.
-     * Caller allocates a buffer of @ref uct_iface_attr_v2_t::tx_token_length
-     * bytes and sets this pointer; callee fills the buffer with the token.
+     * Caller sets this to a buffer of @ref tx_token_length bytes; callee fills
+     * the buffer with the token.
      */
     void                    *tx_token;
 
     /**
      * Opaque RX token buffer.
      * Valid when @ref UCT_EP_ATTR_FIELD_RX_TOKEN is set in @ref field_mask.
-     * Caller allocates a buffer of @ref uct_iface_attr_v2_t::rx_token_length
-     * bytes and sets this pointer; callee fills the buffer with the token.
+     * Caller sets this to a buffer of @ref rx_token_length bytes; callee fills
+     * the buffer with the token.
      */
     void                    *rx_token;
+
+    /**
+     * TX token buffer length in bytes.
+     * Valid when @ref UCT_EP_ATTR_FIELD_TX_TOKEN_LENGTH is set in
+     * @ref field_mask.
+     * Caller sets this to the size of @ref tx_token.
+     */
+    size_t                  tx_token_length;
+
+    /**
+     * RX token buffer length in bytes.
+     * Valid when @ref UCT_EP_ATTR_FIELD_RX_TOKEN_LENGTH is set in
+     * @ref field_mask.
+     * Caller sets this to the size of @ref rx_token.
+     */
+    size_t                  rx_token_length;
 };
 
 
