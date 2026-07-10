@@ -33,6 +33,17 @@ ucs_status_t uct_cuda_ipc_ep_put_zcopy(uct_ep_h tl_ep,
                                        uint64_t remote_addr, uct_rkey_t rkey,
                                        uct_completion_t *comp);
 
+ucs_status_t uct_cuda_ipc_ep_put_sgl_zcopy(uct_ep_h tl_ep,
+                                           void * const *buffers,
+                                           const size_t *lengths,
+                                           uct_mem_h const *memhs,
+                                           const uint64_t *remote_addrs,
+                                           uct_rkey_t const *rkeys,
+                                           const size_t *counts,
+                                           const size_t *strides,
+                                           size_t count,
+                                           uct_completion_t *comp);
+
 int uct_cuda_ipc_ep_is_connected(const uct_ep_h tl_ep,
                                  const uct_ep_is_connected_params_t *params);
 
