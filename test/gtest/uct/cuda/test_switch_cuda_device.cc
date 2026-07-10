@@ -8,6 +8,7 @@
 #include <uct/test_p2p_rma.h>
 
 extern "C" {
+#include <ucs/memory/memtype_cache.h>
 #include <ucs/sys/ptr_arith.h>
 #include <uct/base/uct_md.h>
 }
@@ -472,6 +473,49 @@ UCS_TEST_P(test_mem_alloc_device, same_device_cuda_fabric_implicit,
 {
     skip_if_no_fabric(UCS_MEMORY_TYPE_CUDA);
     test_same_device_alloc(UCS_MEMORY_TYPE_CUDA, false);
+}
+
+UCS_TEST_P(test_mem_alloc_device, no_current_context_cuda_registrable,
+           "CUDA_COPY_ASYNC_MEM_TYPE=cuda")
+{
+    ucs_memory_info_t mem_info = {};
+    ucs_status_t lookup_status = UCS_ERR_NO_ELEM;
+    ucs_status_t alloc_status  = UCS_ERR_NO_MEMORY;
+    CUresult ctx_status        = CUDA_ERROR_UNKNOWN;
+    CUcontext cuda_ctx         = nullptr;
+
+    /* UCP initializes the cache before allocating rendezvous fragments. */
+    ucs_memory_info_t init_mem_info = {};
+    (void)ucs_memtype_cache_lookup(&init_mem_info, sizeof(init_mem_info),
+                                   &init_mem_info);
+
+    std::thread([&]() {
+        ctx_status = cuCtxGetCurrent(&cuda_ctx);
+        if ((ctx_status != CUDA_SUCCESS) || (cuda_ctx != nullptr)) {
+            return;
+        }
+
+        alloc_status = allocate(UCS_MEMORY_TYPE_CUDA);
+        if (alloc_status != UCS_OK) {
+            return;
+        }
+
+        lookup_status = ucs_memtype_cache_lookup(mem.address, mem.length,
+                                                 &mem_info);
+    }).join();
+
+    EXPECT_EQ(CUDA_SUCCESS, ctx_status);
+    EXPECT_EQ(nullptr, cuda_ctx);
+    ASSERT_UCS_OK(alloc_status);
+
+    ucs_status_t free_status = uct_mem_free(&mem);
+
+    EXPECT_UCS_OK(lookup_status);
+    if (lookup_status == UCS_OK) {
+        EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, mem_info.type);
+        EXPECT_TRUE(mem_info.mem_flags & UCS_MEM_FLAG_REGISTRABLE);
+    }
+    EXPECT_UCS_OK(free_status);
 }
 
 _UCT_MD_INSTANTIATE_TEST_CASE(test_mem_alloc_device, cuda_cpy);
