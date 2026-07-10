@@ -452,21 +452,6 @@ protected:
 #endif
     }
 
-    void skip_if_no_host_numa_vmm()
-    {
-#if CUDA_VERSION >= 12040
-        CUdevice device;
-        int supported = 0;
-
-        ASSERT_EQ(cuCtxGetDevice(&device), CUDA_SUCCESS);
-        if ((cuDeviceGetAttribute(&supported,
-                 CU_DEVICE_ATTRIBUTE_HOST_NUMA_VIRTUAL_MEMORY_MANAGEMENT_SUPPORTED,
-                 device) != CUDA_SUCCESS) || !supported) {
-            UCS_TEST_SKIP_R("host-NUMA VMM is not supported on this device");
-        }
-#endif
-    }
-
     void query_registrable_no_current_context(void *address, size_t size)
     {
         uct_md_mem_attr_v2_t mem_attr = {};
@@ -596,10 +581,8 @@ UCS_TEST_P(test_mem_alloc_device, no_current_context_vmm_mem_registrable,
 UCS_TEST_P(test_mem_alloc_device, host_vmm_mem_registrable)
 {
     constexpr size_t size = 4 * UCS_MBYTE;
-
-    skip_if_no_host_numa_vmm();
-
     cuda_host_vmm_mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
+
     query_registrable_no_current_context(buffer.ptr(), size);
 }
 #endif
