@@ -60,7 +60,9 @@ UCS_F_DEVICE ucs_status_t uct_ib_d2p_post_desc(uct_ib_d2p_gpu_ep_t *ep,
             desc->raddr  = raddr;
             desc->add    = add;
             desc->flags  = flags;
-            desc->owner = (pi >> ep->log_depth) & 0x1;
+            const uint32_t owner = (pi >> ep->log_depth) & 0x1;
+            asm volatile("st.release.sys.global.u8 [%0], %1;" ::
+                         "l"(&desc->owner), "r"(owner) : "memory");
         }
     }
 
