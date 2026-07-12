@@ -106,7 +106,7 @@ ucp_proto_rndv_ctrl_variant_cfg_thresh(
     uint8_t op_id_flags = init_params->select_param->op_id_flags;
 
     if (force_shm_pipeline) {
-        return (((op_id_flags & (UCP_PROTO_SELECT_OP_FLAGS_BASE - 1)) ==
+        return ((ucp_proto_select_op_id(init_params->select_param) ==
                  UCP_OP_ID_RNDV_RECV) &&
                 (op_id_flags & UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG) &&
                 (params->super.reg_mem_info.type == UCS_MEMORY_TYPE_HOST) &&

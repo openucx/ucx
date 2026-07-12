@@ -406,8 +406,9 @@ static void ucp_proto_rndv_ctrl_variant_probe(
         const ucp_proto_select_param_t *remote_select_param,
         ucp_proto_init_elem_t *remote_proto, const void *remote_priv)
 {
-    const char *variant_name = ucp_proto_id_field(remote_proto->proto_id, name);
-    size_t num_elems         = 0;
+    const ucp_context_h context = params->super.super.worker->context;
+    const char *variant_name    = ucp_proto_id_field(remote_proto->proto_id, name);
+    size_t num_elems            = 0;
     const ucp_proto_perf_t *perf_elems[3];
     ucp_proto_perf_t *ctrl_perf, *remote_perf;
     UCS_STRING_BUFFER_ONSTACK(perf_name_buf, 256);
@@ -472,8 +473,8 @@ static void ucp_proto_rndv_ctrl_variant_probe(
     /* Set priority and threshold for this variant */
     force_shm_pipeline =
             ucp_proto_rndv_shm_pipeline_force(&params->super.super);
-    if ((remote_proto->cfg_thresh != UCS_MEMUNITS_AUTO) &&
-        !force_shm_pipeline) {
+    if ((context->config.ext.rndv_mode != UCP_RNDV_MODE_AUTO) &&
+        (remote_proto->cfg_thresh != UCS_MEMUNITS_AUTO)) {
         /* If RNDV_SCHEME is set, all protocols except forced one report INF */
         ucs_assertv(remote_proto->cfg_thresh == UCS_MEMUNITS_INF,
                     "variant_name=%s remote_proto->cfg_thresh=%zu",

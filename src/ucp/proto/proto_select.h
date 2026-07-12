@@ -22,7 +22,8 @@
 #define UCP_PROTO_SELECT_OP_ATTR_MASK   (UCP_OP_ATTR_FLAG_FAST_CMPL | \
                                          UCP_OP_ATTR_FLAG_MULTI_SEND)
 
-/* Operation flags start bit */
+/* Operation flags start bit. The uint8_t op_id_flags field is full; adding
+ * another operation flag requires widening the field first. */
 #define UCP_PROTO_SELECT_OP_FLAGS_BASE UCS_BIT(4)
 
 /* Select protocol which supports resume request after reset. */

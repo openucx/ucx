@@ -76,7 +76,7 @@ protected:
         ucp_worker_cfg_index_t ep_cfg_index = sender().ep()->cfg_index;
         ucp_proto_select_param_t select_param;
         ucp_memory_info_t mem_info = {
-            .type    = mem_type,
+            .type    = static_cast<uint8_t>(mem_type),
             .sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN,
             .flags   = UCS_MEM_FLAG_REGISTRABLE
         };
@@ -119,7 +119,7 @@ protected:
         ucp_proto_select_key_t legacy_frag_key;
         ucp_proto_select_key_t unrelated_frag_key;
         ucp_memory_info_t mem_info = {
-            .type    = mem_type,
+            .type    = static_cast<uint8_t>(mem_type),
             .sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN,
             .flags   = UCS_MEM_FLAG_REGISTRABLE
         };
@@ -519,6 +519,7 @@ UCS_TEST_P(test_ucp_proto, rndv_ppln_preserves_rndv_op_flags)
     check_rndv_ppln_preserves_op_flag(UCP_PROTO_SELECT_OP_FLAG_RMA_RNDV);
     check_rndv_ppln_preserves_op_flag(UCP_PROTO_SELECT_OP_FLAG_AM_RNDV);
 }
+
 UCS_TEST_P(test_ucp_proto, worker_print_info_rkey)
 {
     ucp_rkey_config_key_t rkey_config_key = create_rkey_config_key(0);
