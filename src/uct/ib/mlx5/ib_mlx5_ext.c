@@ -143,7 +143,7 @@ static ucs_status_t uct_ib_mlx5_ext_ep_outstanding_purge_check_param(
         return UCS_ERR_INVALID_PARAM;
     }
 
-    return UCS_OK;
+    return UCS_ERR_UNSUPPORTED;
 }
 
 ucs_status_t uct_ib_mlx5_ext_ep_outstanding_purge(
