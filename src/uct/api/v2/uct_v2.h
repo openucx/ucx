@@ -1688,11 +1688,11 @@ typedef enum {
  *   @ref UCT_EP_OP_INFO_AM_FIELD_ID | @ref UCT_EP_OP_INFO_AM_FIELD_FLAGS |
  *   @ref UCT_EP_OP_INFO_AM_FIELD_HEADER_BUFFER |
  *   @ref UCT_EP_OP_INFO_AM_FIELD_ZCOPY.
- * - PUT_SHORT and PUT_BCOPY: @ref UCT_EP_OP_INFO_FIELD_RMA with
- *   @a rma.field_mask = @ref UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
+ * - PUT_SHORT and PUT_BCOPY: @ref UCT_EP_OP_INFO_FIELD_RMA with @a rma.field_mask =
+ *   @ref UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
  *   @ref UCT_EP_OP_INFO_RMA_FIELD_RKEY | @ref UCT_EP_OP_INFO_RMA_FIELD_DATA.
- * - PUT_ZCOPY and GET_ZCOPY: @ref UCT_EP_OP_INFO_FIELD_RMA with
- *   @a rma.field_mask = @ref UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
+ * - PUT_ZCOPY and GET_ZCOPY: @ref UCT_EP_OP_INFO_FIELD_RMA with @a rma.field_mask =
+ *   @ref UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
  *   @ref UCT_EP_OP_INFO_RMA_FIELD_RKEY | @ref UCT_EP_OP_INFO_RMA_FIELD_ZCOPY.
  * - GET_SHORT: @ref UCT_EP_OP_INFO_FIELD_RMA with @a rma.field_mask =
  *   @ref UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
@@ -1700,23 +1700,22 @@ typedef enum {
  * - GET_BCOPY: @ref UCT_EP_OP_INFO_FIELD_RMA with @a rma.field_mask =
  *   @ref UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
  *   @ref UCT_EP_OP_INFO_RMA_FIELD_RKEY | @ref UCT_EP_OP_INFO_RMA_FIELD_UNPACK.
- * - ATOMIC_POST: @ref UCT_EP_OP_INFO_FIELD_ATOMIC with
- *   @a atomic.field_mask = @ref UCT_EP_OP_INFO_ATOMIC_FIELD_REMOTE_ADDR |
+ * - ATOMIC_POST: @ref UCT_EP_OP_INFO_FIELD_ATOMIC with @a atomic.field_mask =
+ *   @ref UCT_EP_OP_INFO_ATOMIC_FIELD_REMOTE_ADDR |
  *   @ref UCT_EP_OP_INFO_ATOMIC_FIELD_RKEY | @ref UCT_EP_OP_INFO_ATOMIC_FIELD_OP |
  *   @ref UCT_EP_OP_INFO_ATOMIC_FIELD_VALUE | @ref UCT_EP_OP_INFO_ATOMIC_FIELD_SIZE.
- * - ATOMIC_FETCH: @ref UCT_EP_OP_INFO_FIELD_ATOMIC with
- *   @a atomic.field_mask = @ref UCT_EP_OP_INFO_ATOMIC_FIELD_REMOTE_ADDR |
+ * - ATOMIC_FETCH: @ref UCT_EP_OP_INFO_FIELD_ATOMIC with @a atomic.field_mask =
+ *   @ref UCT_EP_OP_INFO_ATOMIC_FIELD_REMOTE_ADDR |
  *   @ref UCT_EP_OP_INFO_ATOMIC_FIELD_RKEY | @ref UCT_EP_OP_INFO_ATOMIC_FIELD_OP |
- *   @ref UCT_EP_OP_INFO_ATOMIC_FIELD_VALUE |
- *   @ref UCT_EP_OP_INFO_ATOMIC_FIELD_RESULT |
+ *   @ref UCT_EP_OP_INFO_ATOMIC_FIELD_VALUE | @ref UCT_EP_OP_INFO_ATOMIC_FIELD_RESULT |
  *   @ref UCT_EP_OP_INFO_ATOMIC_FIELD_SIZE. If @a atomic.op is
  *   @ref UCT_ATOMIC_OP_CSWAP, @ref UCT_EP_OP_INFO_ATOMIC_FIELD_COMPARE is
  *   required as well.
  * - FLUSH: @ref UCT_EP_OP_INFO_FIELD_FLUSH with @a flush.field_mask =
  *   @ref UCT_EP_OP_INFO_FLUSH_FIELD_FLAGS.
  *
- * Operation-specific groups live in a single tail union so future fields can
- * be appended inside the active group without shifting the fixed header fields.
+ * Operation-specific groups live in a single tail union so future fields can be
+ * appended inside the active group without shifting the fixed header fields.
  */
 typedef struct uct_ep_op_info {
     /**

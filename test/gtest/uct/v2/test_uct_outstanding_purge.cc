@@ -15,7 +15,8 @@ extern "C" {
 
 class test_uct_outstanding_purge : public uct_p2p_test {
 public:
-    test_uct_outstanding_purge() : uct_p2p_test(0) {
+    test_uct_outstanding_purge() : uct_p2p_test(0)
+    {
     }
 
     static void purge_cb(const uct_ep_op_info_t *op_info, void *arg)
@@ -28,7 +29,7 @@ public:
 UCS_TEST_P(test_uct_outstanding_purge, unsupported_on_self)
 {
     uct_ep_outstanding_purge_params_t params = {};
-    uint64_t rx_token = 0;
+    uint64_t rx_token                        = 0;
     ucs_status_t status;
 
     params.field_mask = UCT_EP_OUTSTANDING_FIELD_RX_TOKEN |
@@ -53,7 +54,7 @@ public:
 
 UCS_TEST_F(test_uct_ib_mlx5_ext_outstanding_purge, invalid_params) {
     uct_ep_outstanding_purge_params_t params = {};
-    uint64_t rx_token = 0;
+    uint64_t rx_token                        = 0;
 
     EXPECT_EQ(UCS_ERR_INVALID_PARAM,
               uct_ib_mlx5_ext_ep_outstanding_purge(NULL, NULL));
