@@ -281,6 +281,8 @@ struct ucp_config {
     ucs_config_allow_list_t                devices[UCT_DEVICE_TYPE_LAST];
     /** Array of transport names to use */
     ucs_config_allow_list_t                tls;
+    /** Array of transport names available to control features */
+    ucs_config_allow_list_t                ctrl_features_tls;
     /** Array of protocol names to use */
     ucs_config_allow_list_t                protos;
     /** Array of memory allocation methods */

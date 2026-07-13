@@ -1273,8 +1273,8 @@ typedef struct ucp_params {
      * UCP @ref ucp_feature "features" that are used by the context for
      * internal/control operations. When this field is specified,
      * @ref ucp_params_t::features describes data-path features, and this field
-     * describes control features that may use a separate transport policy.
-     * This field defaults to 0 if not specified.
+     * describes control features that use the transport policy configured by
+     * UCX_CTRL_FEATURES_TLS. This field defaults to 0 if not specified.
      */
     uint64_t                           ctrl_features;
 } ucp_params_t;

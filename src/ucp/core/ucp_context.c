@@ -637,9 +637,9 @@ static ucs_config_field_t ucp_context_config_table[] = {
    UCS_CONFIG_TYPE_ON_OFF_AUTO},
    
   {"CTRL_FEATURES", "auto",
-   "Features that use the control transport selection policy (all device-enabled\n"
-   "transports) instead of the UCX_TLS data policy. When set, this overrides\n"
-   "the value passed by the application via ucp_params_t::ctrl_features.\n"
+   "Features that use the UCX_CTRL_FEATURES_TLS transport selection policy\n"
+   "instead of the UCX_TLS data policy. When set, this overrides the value\n"
+   "passed by the application via ucp_params_t::ctrl_features.\n"
    " - auto : keep the application-provided value (default).\n"
    " - <list> : comma-separated list of: tag, rma, amo32, amo64, wakeup,\n"
    "            stream, am, exported_memh, device. An empty value disables all\n"
@@ -688,6 +688,12 @@ static ucs_config_field_t ucp_config_table[] = {
    " Using a \\ prefix before a transport name treats it as an explicit transport name\n"
    " and disables aliasing.",
    ucs_offsetof(ucp_config_t, tls), UCS_CONFIG_TYPE_ALLOW_LIST},
+
+  {"CTRL_FEATURES_TLS", UCP_RSC_CONFIG_ALL,
+   "Comma-separated list of transports available to control features.\n"
+   "The syntax and transport aliases are the same as for UCX_TLS. This setting\n"
+   "does not affect data-path transport selection.",
+   ucs_offsetof(ucp_config_t, ctrl_features_tls), UCS_CONFIG_TYPE_ALLOW_LIST},
 
   {"PROTOS", UCP_RSC_CONFIG_ALL,
    "Comma-separated list of glob patterns specifying protocols to use.\n"
@@ -1370,14 +1376,15 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
                      const ucs_string_set_t *aux_tls, unsigned *num_resources_p,
                      ucs_string_set_t avail_devices[],
                      ucs_string_set_t *avail_tls, uint64_t dev_cfg_masks[],
-                     uint64_t *tl_cfg_mask, ucp_tl_info_array_t *all_rscs)
+                     uint64_t *tl_cfg_mask, uint64_t *ctrl_tl_cfg_mask, 
+                     ucp_tl_info_array_t *all_rscs)
 {
     ucp_tl_md_t *md                 = &context->tl_mds[md_index];
     ucp_tl_info_entry_t *added_rscs = NULL;
     unsigned num_tl_resources, all_rscs_prev_len;
     uct_tl_resource_desc_t *tl_resources;
     ucp_tl_resource_desc_t *tmp;
-    uint8_t data_rsc_flags, rsc_flags;
+    uint8_t data_rsc_flags, ctrl_rsc_flags, rsc_flags;
     ucp_rsc_index_t rsc_index;
     ucs_status_t status;
     int data_enabled, ctrl_enabled, device_enabled;
@@ -1448,10 +1455,19 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
                                  &data_rsc_flags, tl_cfg_mask);
         rsc_flags      = data_rsc_flags & UCP_TL_RSC_FLAG_AUX;
 
-        /* Ctrl features use all device-enabled transports by default. Keep
-         * this policy separate from UCX_TLS, which applies to data features. */
-        ctrl_enabled = device_enabled &&
-                        (context->config.ctrl_features != 0);
+         /* Control features use the transport selection policy configured by
+          * UCX_CTRL_FEATURES_TLS, independently of UCX_TLS data selection. */
+        ctrl_rsc_flags = 0;
+        ctrl_enabled   = device_enabled &&
+                         (context->config.ctrl_features != 0) &&
+                         ucp_is_resource_in_transports_list(
+                                 tl_resources[i].tl_name,
+                                 &config->ctrl_features_tls, aux_tls,
+                                 &ctrl_rsc_flags, ctrl_tl_cfg_mask);
+
+        if (ctrl_rsc_flags & UCP_TL_RSC_FLAG_AUX) {
+            rsc_flags |= UCP_TL_RSC_FLAG_CTRL_AUX;
+        }
 
         ucs_trace(UCT_TL_RESOURCE_DESC_FMT
                   " is %sabled for data, %sabled for ctrl",
@@ -1632,6 +1648,13 @@ static ucs_status_t ucp_check_resource_config(const ucp_config_t *config)
         ucs_error("The TLs list is empty. Please specify the transports you "
                   "would like to allow/forbid "
                   "or omit the UCX_TLS so that the default will be used.");
+        return UCS_ERR_NO_ELEM;
+    }
+
+    if (ucs_config_is_allow_list_empty(&config->ctrl_features_tls)) {
+        ucs_error("The control features TLs list is empty. Please specify the "
+                  "transports you would like to allow/forbid or omit the "
+                  "UCX_CTRL_FEATURES_TLS so that the default will be used.");
         return UCS_ERR_NO_ELEM;
     }
 
@@ -1824,6 +1847,7 @@ ucp_add_component_resources(ucp_context_h context, ucp_rsc_index_t cmpt_index,
                             ucs_string_set_t avail_devices[],
                             ucs_string_set_t *avail_tls,
                             uint64_t dev_cfg_masks[], uint64_t *tl_cfg_mask,
+                            uint64_t *ctrl_tl_cfg_mask,
                             const ucp_config_t *config,
                             const ucs_string_set_t *aux_tls,
                             ucp_tl_info_array_t *all_rscs)
@@ -1876,7 +1900,7 @@ ucp_add_component_resources(ucp_context_h context, ucp_rsc_index_t cmpt_index,
         status = ucp_add_tl_resources(context, md_index, config, aux_tls,
                                       &num_tl_resources, avail_devices,
                                       avail_tls, dev_cfg_masks, tl_cfg_mask,
-                                      all_rscs);
+                                      ctrl_tl_cfg_mask, all_rscs);
         if (status != UCS_OK) {
             uct_md_close(context->tl_mds[md_index].md);
             goto out;
@@ -2222,6 +2246,7 @@ ucp_fill_resources(ucp_context_h context, const ucp_config_t *config)
     ucp_tl_info_array_t all_rscs = UCS_ARRAY_DYNAMIC_INITIALIZER;
     uint64_t dev_cfg_masks[UCT_DEVICE_TYPE_LAST] = {};
     uint64_t tl_cfg_mask                         = 0;
+    uint64_t ctrl_tl_cfg_mask                    = 0;
     ucs_string_set_t avail_devices[UCT_DEVICE_TYPE_LAST];
     ucs_string_set_t avail_tls;
     uct_component_h *uct_components;
@@ -2328,8 +2353,8 @@ ucp_fill_resources(ucp_context_h context, const ucp_config_t *config)
     for (i = 0; i < context->num_cmpts; ++i) {
         status = ucp_add_component_resources(context, i, avail_devices,
                                              &avail_tls, dev_cfg_masks,
-                                             &tl_cfg_mask, config, &aux_tls,
-                                             &all_rscs);
+                                             &tl_cfg_mask, &ctrl_tl_cfg_mask,
+                                             config, &aux_tls, &all_rscs);
         if (status != UCS_OK) {
             goto err_free_resources;
         }
@@ -2364,6 +2389,13 @@ ucp_fill_resources(ucp_context_h context, const ucp_config_t *config)
         if (config->tls.mode == UCS_CONFIG_ALLOW_LIST_ALLOW) {
             ucp_report_unavailable(&config->tls.array, tl_cfg_mask, "", "transport",
                                    &avail_tls);
+        }
+
+        if ((context->config.ctrl_features != 0) &&
+            (config->ctrl_features_tls.mode == UCS_CONFIG_ALLOW_LIST_ALLOW)) {
+            ucp_report_unavailable(&config->ctrl_features_tls.array,
+                                   ctrl_tl_cfg_mask, "control ",
+                                   "transport", &avail_tls);
         }
     }
 
