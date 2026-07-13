@@ -529,8 +529,6 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
 
     ucs_log_indent(-1);
 
-    ucs_log_indent(-1);
-
     ucs_trace("selected %u lanes for %s", selection.num_lanes,
               ucp_proto_id_field(params->super.super.proto_id, name));
 
