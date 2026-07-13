@@ -165,7 +165,8 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("                        recv       : Use ucp_stream_recv_nb\n");
     printf("                        recv_data  : Use ucp_stream_recv_data_nb\n");
     printf("     -I             create context with wakeup feature enabled\n");
-    printf("     -e <mode>      create endpoints with error handling mode:\n");
+    printf("     -e [<mode>]    create endpoints with error handling mode (peer):\n");
+    printf("                        none     - no error handling\n");
     printf("                        peer     - peer failure error handling\n");
     printf("                        failover - lane failover error handling\n");
     printf("     -E <mode>      wait mode for tests\n");
@@ -478,24 +479,29 @@ static ucs_status_t parse_device_level(const char *opt_arg,
 }
 
 static ucs_status_t
-parse_ucp_err_handling_mode(const char *opt_arg,
-                            ucp_err_handling_mode_t *err_mode)
+parse_ucp_err_handling_params(perftest_params_t *params, const char *opt_arg)
 {
     if (opt_arg == NULL) {
-        ucs_error("error handling mode string is NULL");
-        return UCS_ERR_INVALID_PARAM;
+        params->super.flags |= UCX_PERF_TEST_FLAG_ERR_HANDLING;
+        params->super.ucp.err_mode = UCP_ERR_HANDLING_MODE_PEER;
+        return UCS_OK;
     }
 
     if (!strcmp(opt_arg, "peer")) {
-        *err_mode = UCP_ERR_HANDLING_MODE_PEER;
-        return UCS_OK;
+        params->super.flags |= UCX_PERF_TEST_FLAG_ERR_HANDLING;
+        params->super.ucp.err_mode = UCP_ERR_HANDLING_MODE_PEER;
     } else if (!strcmp(opt_arg, "failover")) {
-        *err_mode = UCP_ERR_HANDLING_MODE_FAILOVER;
-        return UCS_OK;
+        params->super.flags |= UCX_PERF_TEST_FLAG_ERR_HANDLING;
+        params->super.ucp.err_mode = UCP_ERR_HANDLING_MODE_FAILOVER;
+    } else if (!strcmp(opt_arg, "none")) {
+        params->super.flags &= ~UCX_PERF_TEST_FLAG_ERR_HANDLING;
+        params->super.ucp.err_mode = UCP_ERR_HANDLING_MODE_NONE;
+    } else {
+        ucs_error("Invalid option argument for -e: %s", opt_arg);
+        return UCS_ERR_INVALID_PARAM;
     }
 
-    ucs_error("Invalid option argument for error handling mode: %s", opt_arg);
-    return UCS_ERR_INVALID_PARAM;
+    return UCS_OK;
 }
 
 static ucs_status_t parse_ucp_datatype_params(const char *opt_arg,
@@ -724,9 +730,7 @@ ucs_status_t parse_test_params(perftest_params_t *params, char opt,
         params->super.flags |= UCX_PERF_TEST_FLAG_WAKEUP;
         return UCS_OK;
     case 'e':
-        params->super.flags |= UCX_PERF_TEST_FLAG_ERR_HANDLING;
-        return parse_ucp_err_handling_mode(opt_arg,
-                                           &params->super.ucp.err_mode);
+        return parse_ucp_err_handling_params(params, opt_arg);
     case 'M':
         if (!strcmp(opt_arg, "single")) {
             params->super.thread_mode = UCS_THREAD_MODE_SINGLE;

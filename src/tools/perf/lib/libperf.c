@@ -8,11 +8,11 @@
 * See file LICENSE for terms.
 */
 
-#include "ucp/api/ucp_def.h"
 #ifdef HAVE_CONFIG_H
 #  include "config.h"
 #endif
 
+#include <ucp/api/ucp_def.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/datastruct/string_buffer.h>
 #include <ucs/datastruct/string_set.h>
