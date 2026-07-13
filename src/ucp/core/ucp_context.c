@@ -161,6 +161,7 @@ const char *ucp_extra_op_attr_flags_names[] = {
 static UCS_CONFIG_DEFINE_ARRAY(memunit_sizes, sizeof(size_t),
                                UCS_CONFIG_TYPE_MEMUNITS);
 
+/* clang-format off */
 static ucs_config_field_t ucp_context_config_table[] = {
   {"SELECT_DISTANCE_MD", "cuda_cpy",
    "MD whose distance is queried when evaluating transport selection score",
@@ -604,7 +605,10 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, connect_all_to_all),
    UCS_CONFIG_TYPE_BOOL},
 
-  {"SINGLE_NET_DEVICE", "n", "Use only one network device for all protocols.",
+  {"SINGLE_NET_DEVICE", "n",
+   "Restrict each protocol's lanes to one network device.\n"
+   "The device is picked among the closest eligible network devices using \n"
+   "the NODE_LOCAL_ID hint.",
    ucs_offsetof(ucp_context_config_t, proto_use_single_net_device),
    UCS_CONFIG_TYPE_BOOL},
 
@@ -617,13 +621,17 @@ static ucs_config_field_t ucp_context_config_table[] = {
    UCS_CONFIG_TYPE_ULUNITS},
 
   {"NODE_LOCAL_ID", "auto",
-   "An optimization hint for the local identificator on a single node. Does \n"
-   "not affect semantics, only transport selection criteria and the \n"
-   "resulting performance.",
+   "An optimization hint for the local identifier on a single node.\n"
+   " 'auto' : derive the id from the requesting device's ordinal among the\n"
+   "          devices of its class (e.g. the local GPU index). Devices with no\n"
+   "          such ordinal (e.g. host memory) fall back to 0.\n"
+   " <N>    : use the given id for all selections, overrides the value passed \n"
+   "          through ucp_params_t.node_local_id\n",
    ucs_offsetof(ucp_context_config_t, node_local_id), UCS_CONFIG_TYPE_ULUNITS},
 
   {NULL}
 };
+/* clang-format on */
 
 static ucs_config_field_t ucp_config_table[] = {
   {"NET_DEVICES", UCP_RSC_CONFIG_ALL,
@@ -2307,7 +2315,8 @@ static void ucp_apply_params(ucp_context_h context, const ucp_params_t *params,
                                                         ESTIMATED_NUM_PPN, 1);
 
     context->config.node_local_id = UCP_PARAM_FIELD_VALUE(params, node_local_id,
-                                                          NODE_LOCAL_ID, 0);
+                                                          NODE_LOCAL_ID,
+                                                          UCS_ULUNITS_AUTO);
 
     if ((params->field_mask & UCP_PARAM_FIELD_MT_WORKERS_SHARED) &&
         params->mt_workers_shared) {
@@ -2422,7 +2431,12 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
         /* node_local_id was set via the env variable. Override current value */
         context->config.node_local_id = context->config.ext.node_local_id;
     }
-    ucs_debug("node local id is %lu", context->config.node_local_id);
+
+    if (context->config.node_local_id == UCS_ULUNITS_AUTO) {
+        ucs_debug("node local id is auto");
+    } else {
+        ucs_debug("node local id is %lu", context->config.node_local_id);
+    }
 
     if (UCS_CONFIG_DBL_IS_AUTO(context->config.ext.bcopy_bw)) {
         /* bcopy_bw wasn't set via the env variable. Calculate the value */
