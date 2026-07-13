@@ -220,7 +220,6 @@ static void ucp_proto_multi_select_bw_lanes(
         const ucp_proto_common_tl_perf_t *lanes_perf, int fixed_first_lane,
         unsigned req_sys_dev_ord, ucp_proto_lane_selection_t *selection)
 {
-    ucs_sys_device_t req_sys_dev = params->select_param->sys_dev;
     ucp_lane_index_t i, lane_index;
     ucp_lane_map_t index_map;
 
@@ -228,11 +227,6 @@ static void ucp_proto_multi_select_bw_lanes(
 
     /* Select all available indexes */
     index_map = UCS_MASK(num_lanes);
-
-    ucs_trace("select bw lanes: proto %s req_sys_dev=%d (%s) "
-              "bdf_class_ordinal=%u",
-              ucp_proto_id_field(params->proto_id, name), req_sys_dev,
-              ucs_topo_sys_device_get_name(req_sys_dev), req_sys_dev_ord);
 
     if (fixed_first_lane) {
         ucp_proto_select_add_lane(selection, params, lanes[0]);
@@ -311,10 +305,10 @@ static ucp_lane_index_t ucp_proto_multi_filter_single_net_device(
         ucp_proto_common_tl_perf_t *tl_perfs, int fixed_first_lane,
         unsigned req_sys_dev_ord, ucp_lane_index_t *lanes)
 {
-    ucp_context_h context               = params->worker->context;
-    ucp_lane_index_t num_min_dist_devs  = 0;
-    ucs_sys_dev_distance_t min_distance = ucs_topo_max_distance;
-    char node_local_id_str[24]          = "";
+    ucp_context_h context                   = params->worker->context;
+    ucp_lane_index_t num_min_dist_devs      = 0;
+    ucs_sys_dev_distance_t min_distance     = ucs_topo_max_distance;
+    char UCS_V_UNUSED node_local_id_str[24] = "";
     ucs_sys_dev_distance_t lane_dist;
     ucs_sys_device_t sys_devs[UCP_PROTO_MAX_LANES];
     ucp_lane_index_t i, lane, seed, num_filtered_lanes;
@@ -414,8 +408,9 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
                                   ucp_proto_perf_t **perf_p,
                                   ucp_proto_multi_priv_t *mpriv)
 {
-    ucp_context_h context     = params->super.super.worker->context;
-    const double max_bw_ratio = context->config.ext.multi_lane_max_ratio;
+    ucp_context_h context        = params->super.super.worker->context;
+    const double max_bw_ratio    = context->config.ext.multi_lane_max_ratio;
+    ucs_sys_device_t req_sys_dev = params->super.super.select_param->sys_dev;
     ucp_proto_common_tl_perf_t lanes_perf[UCP_PROTO_MAX_LANES];
     ucp_proto_common_tl_perf_t *lane_perf, perf;
     ucp_lane_index_t lanes[UCP_PROTO_MAX_LANES];
@@ -511,8 +506,12 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
         }
     }
 
-    req_sys_dev_ord = ucs_topo_sys_device_get_bdf_class_ordinal(
-            params->super.super.select_param->sys_dev);
+    req_sys_dev_ord = ucs_topo_sys_device_get_bdf_class_ordinal(req_sys_dev);
+
+    ucs_trace(
+            "select bw lanes: proto %s req_sys_dev=%d (%s) req_sys_dev_ord=%u",
+            ucp_proto_id_field(params->super.super.proto_id, name), req_sys_dev,
+            ucs_topo_sys_device_get_name(req_sys_dev), req_sys_dev_ord);
 
     num_lanes = num_fast_lanes;
     if (context->config.ext.proto_use_single_net_device) {
