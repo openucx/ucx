@@ -162,7 +162,6 @@ const char *ucp_extra_op_attr_flags_names[] = {
 static UCS_CONFIG_DEFINE_ARRAY(memunit_sizes, sizeof(size_t),
                                UCS_CONFIG_TYPE_MEMUNITS);
 
-/* clang-format off */
 static ucs_config_field_t ucp_context_config_table[] = {
   {"SELECT_DISTANCE_MD", "cuda_cpy",
    "MD whose distance is queried when evaluating transport selection score",
@@ -641,7 +640,6 @@ static ucs_config_field_t ucp_context_config_table[] = {
 
   {NULL}
 };
-/* clang-format on */
 
 static ucs_config_field_t ucp_config_table[] = {
   {"NET_DEVICES", UCP_RSC_CONFIG_ALL,
