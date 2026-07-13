@@ -188,15 +188,18 @@ void test_ib_md::ib_md_umr_check(void *rkey_buffer, bool amo_access,
         EXPECT_FALSE(ib_memh->flags & UCT_IB_MEM_ACCESS_REMOTE_ATOMIC);
     }
 
-    check_mlx5_mr(ib_memh, false, ib_md().relaxed_order);
+    check_mlx5_mr(ib_memh, false,
+                  uct_ib_md_is_relaxed_order(&ib_md()));
 
     status = uct_md_mkey_pack(md(), memh, rkey_buffer);
     EXPECT_UCS_OK(status);
 
     status = uct_md_mkey_pack(md(), memh, rkey_buffer);
     EXPECT_UCS_OK(status);
-    check_mlx5_mr(ib_memh, (amo_access && has_ksm()) || ib_md().relaxed_order,
-                  ib_md().relaxed_order);
+    check_mlx5_mr(ib_memh,
+                  (amo_access && has_ksm()) ||
+                          uct_ib_md_is_relaxed_order(&ib_md()),
+                  uct_ib_md_is_relaxed_order(&ib_md()));
 
     status = uct_md_mem_dereg(md(), memh);
     EXPECT_UCS_OK(status);

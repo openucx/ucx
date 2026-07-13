@@ -163,7 +163,6 @@ typedef struct uct_ib_md {
     int                      check_subnet_filter;
     uint64_t                 subnet_filter;
     double                   pci_bw;
-    int                      relaxed_order;
     uint64_t                 relaxed_order_mem_types;
     int                      fork_init;
     uint64_t                 reg_mem_types;
@@ -351,6 +350,12 @@ uct_ib_md_relaxed_order_auto_mem_types(ucs_cpu_vendor_t cpu_vendor,
     }
 
     return 0;
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_ib_md_is_relaxed_order(const uct_ib_md_t *md)
+{
+    return md->relaxed_order_mem_types != 0;
 }
 
 static UCS_F_ALWAYS_INLINE int
