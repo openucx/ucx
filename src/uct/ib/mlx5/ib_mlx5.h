@@ -673,12 +673,6 @@ typedef struct uct_ib_mlx5_qp {
     };
 } uct_ib_mlx5_qp_t;
 
-typedef struct uct_ib_mlx5_txwq_priv {
-    uint32_t tx_id;
-    uint16_t pi; /* Start PI of WQEBB */
-    uint16_t num_bb; /* Num of WQEBBs for this WQE; 0 means invalid */
-} uct_ib_mlx5_txwq_priv_t;
-
 /* Send work-queue */
 typedef struct uct_ib_mlx5_txwq {
     uct_ib_mlx5_qp_t            super;
@@ -691,8 +685,6 @@ typedef struct uct_ib_mlx5_txwq {
     void                        *qend;
     uint16_t                    bb_max;
     uint16_t                    sig_pi;     /* PI for last signaled WQE */
-    uint32_t                    next_tx_id;
-    uct_ib_mlx5_txwq_priv_t     *wqe_priv;
 #if UCS_ENABLE_ASSERT
     uint16_t                    hw_ci; /* First BB index of last completed WQE */
     uint8_t                     flags; /* Debug flags */
