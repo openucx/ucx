@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -326,6 +326,22 @@ protected:
 #endif
     }
 
+    void query_registrable_no_current_context(void *address, size_t size)
+    {
+        uct_md_mem_attr_v2_t mem_attr = {};
+        ucs_status_t query_status     = UCS_ERR_NO_ELEM;
+
+        std::thread([&]() {
+            mem_attr.field_mask = UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE |
+                                  UCT_MD_MEM_ATTR_V2_FIELD_MEM_FLAGS;
+            query_status = uct_md_mem_query_v2(md(), address, size, &mem_attr);
+        }).join();
+
+        ASSERT_UCS_OK(query_status);
+        EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, mem_attr.mem_type);
+        EXPECT_TRUE(mem_attr.mem_flags & UCS_MEM_FLAG_REGISTRABLE);
+    }
+
 private:
     std::vector<ucs_sys_device_t> m_sys_dev;
 
@@ -411,6 +427,44 @@ UCS_TEST_P(test_mem_alloc_device, no_current_context_cuda_registrable,
     }
     EXPECT_UCS_OK(free_status);
 }
+
+UCS_TEST_P(test_mem_alloc_device, no_current_context_user_mem_registrable,
+           "CUDA_COPY_ASYNC_MEM_TYPE=cuda")
+{
+    constexpr size_t size = 4 * UCS_MBYTE;
+    CUdeviceptr dptr      = 0;
+
+    ASSERT_EQ(CUDA_SUCCESS, cuMemAlloc(&dptr, size));
+
+    query_registrable_no_current_context(reinterpret_cast<void*>(dptr), size);
+
+    EXPECT_EQ(CUDA_SUCCESS, cuMemFree(dptr));
+}
+
+UCS_TEST_P(test_mem_alloc_device, no_current_context_vmm_mem_registrable,
+           "CUDA_COPY_ASYNC_MEM_TYPE=cuda")
+{
+    constexpr size_t size = 4 * UCS_MBYTE;
+    cuda_vmm_mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
+
+    query_registrable_no_current_context(buffer.ptr(), size);
+}
+
+#if CUDA_VERSION >= 12020
+/* Host-located VMM is not dmabuf-exportable but is registrable by IB.
+ *
+ * TODO: REG_WHOLE_ALLOC=off is needed because of an existing issue with
+ * base_address being set to 0, causing cache pollution with this type of memory
+ */
+UCS_TEST_P(test_mem_alloc_device, host_vmm_mem_registrable,
+           "CUDA_COPY_REG_WHOLE_ALLOC=off")
+{
+    constexpr size_t size = 4 * UCS_MBYTE;
+    cuda_host_vmm_mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
+
+    query_registrable_no_current_context(buffer.ptr(), size);
+}
+#endif
 
 _UCT_MD_INSTANTIATE_TEST_CASE(test_mem_alloc_device, cuda_cpy);
 

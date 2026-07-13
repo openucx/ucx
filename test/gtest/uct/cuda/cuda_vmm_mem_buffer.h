@@ -53,11 +53,14 @@ public:
     }
 
 protected:
-    void init(size_t size, unsigned handle_type)
+    void init(size_t size, unsigned handle_type,
+              CUmemLocationType location_type = CU_MEM_LOCATION_TYPE_DEVICE)
     {
-        size_t granularity          = 0;
-        CUmemAllocationProp prop    = {};
-        CUmemAccessDesc access_desc = {};
+        size_t granularity             = 0;
+        CUmemAllocationProp prop       = {};
+        CUmemAccessDesc access_desc[2] = {};
+        unsigned num_access            = 1;
+        bool host_located = (location_type != CU_MEM_LOCATION_TYPE_DEVICE);
         CUdevice device;
         if (cuCtxGetDevice(&device) != CUDA_SUCCESS) {
             UCS_TEST_ABORT("failed to get the device handle for the current "
@@ -65,8 +68,8 @@ protected:
         }
 
         prop.type          = CU_MEM_ALLOCATION_TYPE_PINNED;
-        prop.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
-        prop.location.id   = device;
+        prop.location.type = location_type;
+        prop.location.id   = host_located ? 0 : device;
         if (handle_type != 0) {
             prop.requestedHandleTypes = (CUmemAllocationHandleType)handle_type;
         }
@@ -89,10 +92,17 @@ protected:
             goto err_address_free;
         }
 
-        access_desc.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
-        access_desc.location.id   = device;
-        access_desc.flags         = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
-        if (cuMemSetAccess(m_ptr, m_size, &access_desc, 1) != CUDA_SUCCESS) {
+        access_desc[0].location.type = CU_MEM_LOCATION_TYPE_DEVICE;
+        access_desc[0].location.id   = device;
+        access_desc[0].flags         = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
+        if (host_located) {
+            access_desc[1].location.type = location_type;
+            access_desc[1].location.id   = 0;
+            access_desc[1].flags         = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
+            num_access                   = 2;
+        }
+        if (cuMemSetAccess(m_ptr, m_size, access_desc, num_access) !=
+            CUDA_SUCCESS) {
             goto err_mem_unmap;
         }
 
@@ -131,5 +141,15 @@ public:
         init(size, CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR);
     }
 };
+
+#if CUDA_VERSION >= 12020
+class cuda_host_vmm_mem_buffer : public cuda_vmm_mem_buffer {
+public:
+    cuda_host_vmm_mem_buffer(size_t size, ucs_memory_type_t mem_type)
+    {
+        init(size, 0, CU_MEM_LOCATION_TYPE_HOST_NUMA);
+    }
+};
+#endif
 
 #endif
