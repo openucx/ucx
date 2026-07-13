@@ -223,6 +223,7 @@ static void ucp_proto_multi_select_bw_lanes(
     ucs_sys_device_t req_sys_dev = params->select_param->sys_dev;
     ucp_lane_index_t i, lane_index;
     ucp_lane_map_t index_map;
+    unsigned req_sys_dev_ord;
 
     memset(selection, 0, sizeof(*selection));
 
@@ -527,6 +528,8 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
                                     params->max_lanes, lanes_perf,
                                     fixed_first_lane, req_sys_dev_ord,
                                     &selection);
+
+    ucs_log_indent(-1);
 
     ucs_log_indent(-1);
 

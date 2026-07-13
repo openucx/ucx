@@ -26,6 +26,10 @@ libuct_ib_mlx5_gda_la_SOURCES = \
 nobase_dist_libuct_ib_mlx5_gda_la_HEADERS = \
 	gdaki.cuh \
 	gdaki_dev.h \
+	common.cuh \
+	d2p.cuh \
+	d2p.h \
+	d2p_proto.h \
 	gpunetio/common/doca_gpunetio_verbs_def.h \
 	gpunetio/common/doca_gpunetio_verbs_dev.h \
 	gpunetio/device/doca_gpunetio_dev_verbs_common.cuh \

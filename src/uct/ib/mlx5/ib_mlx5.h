@@ -650,6 +650,14 @@ typedef struct uct_ib_mlx5_qp_attr {
     unsigned                    max_tx;
     unsigned                    len;
     size_t                      umem_offset;
+    /* Configure the SQ with NO_DBR_INT so the NIC does not read the send
+     * doorbell record (needed when the dbr lives in DPA memory, which the NIC
+     * cannot read). Caller must ensure the device supports it. */
+    uint8_t                     sq_no_dbr;
+    /* Override the QPC uar_page (0 = use the worker's UAR). Needed when the
+     * doorbell is rung from a different context than the host worker, e.g. a
+     * DPA thread whose outbox maps the FlexIO process UAR. */
+    uint32_t                    uar_page_id;
 } uct_ib_mlx5_qp_attr_t;
 
 
