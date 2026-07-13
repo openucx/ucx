@@ -689,7 +689,6 @@ UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops,
     ucs_assert(internal_ops->iface_vfs_refresh != NULL);
     ucs_assert(internal_ops->ep_query != NULL);
     ucs_assert(internal_ops->ep_invalidate != NULL);
-    ucs_assert(internal_ops->ep_outstanding_purge != NULL);
 
     UCS_STATIC_ASSERT(ucs_offsetof(uct_base_iface_t, internal_ops) ==
                       sizeof(uct_iface_t));
@@ -838,6 +837,10 @@ uct_ep_outstanding_purge(uct_ep_h ep,
                          const uct_ep_outstanding_purge_params_t *params)
 {
     const uct_base_iface_t *iface = ucs_derived_of(ep->iface, uct_base_iface_t);
+
+    if (iface->internal_ops->ep_outstanding_purge == NULL) {
+        return UCS_ERR_UNSUPPORTED;
+    }
 
     return iface->internal_ops->ep_outstanding_purge(ep, params);
 }

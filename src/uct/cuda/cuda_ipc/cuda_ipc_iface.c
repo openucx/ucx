@@ -456,21 +456,20 @@ uct_cuda_ipc_iface_query_v2(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr)
 }
 
 static uct_iface_internal_ops_t uct_cuda_ipc_iface_internal_ops = {
-    .iface_query_v2        = uct_cuda_ipc_iface_query_v2,
-    .iface_estimate_perf   = uct_cuda_ipc_estimate_perf,
-    .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
-    .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
-    .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
-    .ep_connect_to_ep_v2   = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
-    .iface_is_reachable_v2 = uct_cuda_ipc_iface_is_reachable_v2,
-    .ep_is_connected       = uct_cuda_ipc_ep_is_connected,
-    .ep_get_device_ep      = uct_cuda_ipc_ep_get_device_ep,
+    .iface_query_v2         = uct_cuda_ipc_iface_query_v2,
+    .iface_estimate_perf    = uct_cuda_ipc_estimate_perf,
+    .iface_vfs_refresh      = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+    .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+    .ep_invalidate          = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
+    .ep_connect_to_ep_v2    = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
+    .iface_is_reachable_v2  = uct_cuda_ipc_iface_is_reachable_v2,
+    .ep_is_connected        = uct_cuda_ipc_ep_is_connected,
+    .ep_get_device_ep       = uct_cuda_ipc_ep_get_device_ep,
 #if CUDA_VERSION >= 13000
-    .ep_put_sgl_zcopy      = uct_cuda_ipc_ep_put_sgl_zcopy,
+    .ep_put_sgl_zcopy       = uct_cuda_ipc_ep_put_sgl_zcopy
 #else
-    .ep_put_sgl_zcopy      = (uct_ep_put_sgl_zcopy_func_t)ucs_empty_function_return_unsupported,
+    .ep_put_sgl_zcopy       = (uct_ep_put_sgl_zcopy_func_t)ucs_empty_function_return_unsupported
 #endif
-    .ep_outstanding_purge  = (uct_ep_outstanding_purge_func_t)ucs_empty_function_return_unsupported
 };
 
 static uct_cuda_ctx_rsc_t * uct_cuda_ipc_ctx_rsc_create(uct_iface_h tl_iface)

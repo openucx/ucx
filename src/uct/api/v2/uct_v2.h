@@ -1547,27 +1547,127 @@ typedef enum uct_ep_op_info_field {
     /** Enables @ref uct_ep_op_info_t::am. */
     UCT_EP_OP_INFO_FIELD_AM        = UCS_BIT(2),
 
-    /** Enables AM flags in @ref uct_ep_op_info_t::am. */
-    UCT_EP_OP_INFO_FIELD_AM_FLAGS  = UCS_BIT(3),
-
-    /** Enables RMA fields in @ref uct_ep_op_info_t::rma. */
-    UCT_EP_OP_INFO_FIELD_RMA       = UCS_BIT(4),
+    /** Enables @ref uct_ep_op_info_t::rma. */
+    UCT_EP_OP_INFO_FIELD_RMA       = UCS_BIT(3),
 
     /** Enables @ref uct_ep_op_info_t::flush. */
-    UCT_EP_OP_INFO_FIELD_FLUSH     = UCS_BIT(5),
-
-    /** Enables @ref uct_ep_op_info_t::data. */
-    UCT_EP_OP_INFO_FIELD_DATA      = UCS_BIT(6),
-
-    /** Enables @ref uct_ep_op_info_t::zcopy. */
-    UCT_EP_OP_INFO_FIELD_ZCOPY     = UCS_BIT(7),
-
-    /** Enables @ref uct_ep_op_info_t::unpack. */
-    UCT_EP_OP_INFO_FIELD_UNPACK    = UCS_BIT(8),
+    UCT_EP_OP_INFO_FIELD_FLUSH     = UCS_BIT(4),
 
     /** Enables @ref uct_ep_op_info_t::atomic. */
-    UCT_EP_OP_INFO_FIELD_ATOMIC    = UCS_BIT(9),
+    UCT_EP_OP_INFO_FIELD_ATOMIC    = UCS_BIT(5),
 } uct_ep_op_info_field_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Field mask for @ref uct_ep_op_info_t::am.
+ *
+ * The enumeration allows specifying which fields in the @c am group are
+ * present, for backward compatibility support.
+ */
+typedef enum {
+    /** Enables @ref uct_ep_op_info_t::am::am_id. */
+    UCT_EP_OP_INFO_AM_FIELD_ID            = UCS_BIT(0),
+
+    /** Enables @ref uct_ep_op_info_t::am::flags. */
+    UCT_EP_OP_INFO_AM_FIELD_FLAGS         = UCS_BIT(1),
+
+    /** Enables @ref uct_ep_op_info_t::am::header. */
+    UCT_EP_OP_INFO_AM_FIELD_HEADER        = UCS_BIT(2),
+
+    /**
+     * Enables @ref uct_ep_op_info_t::am::header_buffer and
+     * @ref uct_ep_op_info_t::am::header_length.
+     */
+    UCT_EP_OP_INFO_AM_FIELD_HEADER_BUFFER = UCS_BIT(3),
+
+    /** Enables @ref uct_ep_op_info_t::am::payload::data. */
+    UCT_EP_OP_INFO_AM_FIELD_DATA          = UCS_BIT(4),
+
+    /** Enables @ref uct_ep_op_info_t::am::payload::zcopy. */
+    UCT_EP_OP_INFO_AM_FIELD_ZCOPY         = UCS_BIT(5),
+} uct_ep_op_info_am_field_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Field mask for @ref uct_ep_op_info_t::rma.
+ *
+ * The enumeration allows specifying which fields in the @c rma group are
+ * present, for backward compatibility support.
+ */
+typedef enum {
+    /**
+     * Enables @ref uct_ep_op_info_t::rma::remote_addr.
+     * Must be set together with @ref UCT_EP_OP_INFO_RMA_FIELD_RKEY.
+     */
+    UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR = UCS_BIT(0),
+
+    /**
+     * Enables @ref uct_ep_op_info_t::rma::rkey.
+     * Must be set together with @ref UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR.
+     */
+    UCT_EP_OP_INFO_RMA_FIELD_RKEY        = UCS_BIT(1),
+
+    /** Enables @ref uct_ep_op_info_t::rma::payload::data. */
+    UCT_EP_OP_INFO_RMA_FIELD_DATA        = UCS_BIT(2),
+
+    /** Enables @ref uct_ep_op_info_t::rma::payload::zcopy. */
+    UCT_EP_OP_INFO_RMA_FIELD_ZCOPY       = UCS_BIT(3),
+
+    /** Enables @ref uct_ep_op_info_t::rma::payload::unpack. */
+    UCT_EP_OP_INFO_RMA_FIELD_UNPACK      = UCS_BIT(4),
+} uct_ep_op_info_rma_field_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Field mask for @ref uct_ep_op_info_t::flush.
+ *
+ * The enumeration allows specifying which fields in the @c flush group are
+ * present, for backward compatibility support.
+ */
+typedef enum {
+    /** Enables @ref uct_ep_op_info_t::flush::flags. */
+    UCT_EP_OP_INFO_FLUSH_FIELD_FLAGS = UCS_BIT(0),
+} uct_ep_op_info_flush_field_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Field mask for @ref uct_ep_op_info_t::atomic.
+ *
+ * The enumeration allows specifying which fields in the @c atomic group are
+ * present, for backward compatibility support.
+ */
+typedef enum {
+    /**
+     * Enables @ref uct_ep_op_info_t::atomic::remote_addr.
+     * Must be set together with @ref UCT_EP_OP_INFO_ATOMIC_FIELD_RKEY.
+     */
+    UCT_EP_OP_INFO_ATOMIC_FIELD_REMOTE_ADDR = UCS_BIT(0),
+
+    /**
+     * Enables @ref uct_ep_op_info_t::atomic::rkey.
+     * Must be set together with @ref UCT_EP_OP_INFO_ATOMIC_FIELD_REMOTE_ADDR.
+     */
+    UCT_EP_OP_INFO_ATOMIC_FIELD_RKEY        = UCS_BIT(1),
+
+    /** Enables @ref uct_ep_op_info_t::atomic::op. */
+    UCT_EP_OP_INFO_ATOMIC_FIELD_OP          = UCS_BIT(2),
+
+    /** Enables @ref uct_ep_op_info_t::atomic::value. */
+    UCT_EP_OP_INFO_ATOMIC_FIELD_VALUE       = UCS_BIT(3),
+
+    /** Enables @ref uct_ep_op_info_t::atomic::compare. */
+    UCT_EP_OP_INFO_ATOMIC_FIELD_COMPARE     = UCS_BIT(4),
+
+    /** Enables @ref uct_ep_op_info_t::atomic::result. */
+    UCT_EP_OP_INFO_ATOMIC_FIELD_RESULT      = UCS_BIT(5),
+
+    /** Enables @ref uct_ep_op_info_t::atomic::size. */
+    UCT_EP_OP_INFO_ATOMIC_FIELD_SIZE        = UCS_BIT(6),
+} uct_ep_op_info_atomic_field_t;
 
 
 /**
@@ -1578,15 +1678,45 @@ typedef enum uct_ep_op_info_field {
  * @ref UCT_EP_OP_INFO_FIELD_OPERATION is required for every operation. The
  * following operation-specific field groups are also required:
  *
- * - AM_SHORT: AM and DATA.
- * - AM_BCOPY: AM and DATA.
- * - AM_ZCOPY: AM and ZCOPY.
- * - PUT_SHORT and PUT_BCOPY: RMA and DATA.
- * - PUT_ZCOPY and GET_ZCOPY: RMA and ZCOPY.
- * - GET_SHORT: RMA and DATA.
- * - GET_BCOPY: RMA and UNPACK.
- * - ATOMIC_POST and ATOMIC_FETCH: RMA and ATOMIC.
- * - FLUSH: FLUSH.
+ * - AM_SHORT: @ref UCT_EP_OP_INFO_FIELD_AM with @a am.field_mask =
+ *   @ref UCT_EP_OP_INFO_AM_FIELD_ID | @ref UCT_EP_OP_INFO_AM_FIELD_HEADER |
+ *   @ref UCT_EP_OP_INFO_AM_FIELD_DATA.
+ * - AM_BCOPY: @ref UCT_EP_OP_INFO_FIELD_AM with @a am.field_mask =
+ *   @ref UCT_EP_OP_INFO_AM_FIELD_ID | @ref UCT_EP_OP_INFO_AM_FIELD_FLAGS |
+ *   @ref UCT_EP_OP_INFO_AM_FIELD_DATA.
+ * - AM_ZCOPY: @ref UCT_EP_OP_INFO_FIELD_AM with @a am.field_mask =
+ *   @ref UCT_EP_OP_INFO_AM_FIELD_ID | @ref UCT_EP_OP_INFO_AM_FIELD_FLAGS |
+ *   @ref UCT_EP_OP_INFO_AM_FIELD_HEADER_BUFFER |
+ *   @ref UCT_EP_OP_INFO_AM_FIELD_ZCOPY.
+ * - PUT_SHORT and PUT_BCOPY: @ref UCT_EP_OP_INFO_FIELD_RMA with
+ *   @a rma.field_mask = @ref UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
+ *   @ref UCT_EP_OP_INFO_RMA_FIELD_RKEY | @ref UCT_EP_OP_INFO_RMA_FIELD_DATA.
+ * - PUT_ZCOPY and GET_ZCOPY: @ref UCT_EP_OP_INFO_FIELD_RMA with
+ *   @a rma.field_mask = @ref UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
+ *   @ref UCT_EP_OP_INFO_RMA_FIELD_RKEY | @ref UCT_EP_OP_INFO_RMA_FIELD_ZCOPY.
+ * - GET_SHORT: @ref UCT_EP_OP_INFO_FIELD_RMA with @a rma.field_mask =
+ *   @ref UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
+ *   @ref UCT_EP_OP_INFO_RMA_FIELD_RKEY | @ref UCT_EP_OP_INFO_RMA_FIELD_DATA.
+ * - GET_BCOPY: @ref UCT_EP_OP_INFO_FIELD_RMA with @a rma.field_mask =
+ *   @ref UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
+ *   @ref UCT_EP_OP_INFO_RMA_FIELD_RKEY | @ref UCT_EP_OP_INFO_RMA_FIELD_UNPACK.
+ * - ATOMIC_POST: @ref UCT_EP_OP_INFO_FIELD_ATOMIC with
+ *   @a atomic.field_mask = @ref UCT_EP_OP_INFO_ATOMIC_FIELD_REMOTE_ADDR |
+ *   @ref UCT_EP_OP_INFO_ATOMIC_FIELD_RKEY | @ref UCT_EP_OP_INFO_ATOMIC_FIELD_OP |
+ *   @ref UCT_EP_OP_INFO_ATOMIC_FIELD_VALUE | @ref UCT_EP_OP_INFO_ATOMIC_FIELD_SIZE.
+ * - ATOMIC_FETCH: @ref UCT_EP_OP_INFO_FIELD_ATOMIC with
+ *   @a atomic.field_mask = @ref UCT_EP_OP_INFO_ATOMIC_FIELD_REMOTE_ADDR |
+ *   @ref UCT_EP_OP_INFO_ATOMIC_FIELD_RKEY | @ref UCT_EP_OP_INFO_ATOMIC_FIELD_OP |
+ *   @ref UCT_EP_OP_INFO_ATOMIC_FIELD_VALUE |
+ *   @ref UCT_EP_OP_INFO_ATOMIC_FIELD_RESULT |
+ *   @ref UCT_EP_OP_INFO_ATOMIC_FIELD_SIZE. If @a atomic.op is
+ *   @ref UCT_ATOMIC_OP_CSWAP, @ref UCT_EP_OP_INFO_ATOMIC_FIELD_COMPARE is
+ *   required as well.
+ * - FLUSH: @ref UCT_EP_OP_INFO_FIELD_FLUSH with @a flush.field_mask =
+ *   @ref UCT_EP_OP_INFO_FLUSH_FIELD_FLAGS.
+ *
+ * Operation-specific groups live in a single tail union so future fields can
+ * be appended inside the active group without shifting the fixed header fields.
  */
 typedef struct uct_ep_op_info {
     /**
@@ -1608,54 +1738,91 @@ typedef struct uct_ep_op_info {
     union {
         /* AM operation parameters. */
         struct {
-            uint8_t  am_id;       /**< AM handler ID */
-            unsigned flags;       /**< Flags passed to the AM operation */
+            /**< Bits from @ref uct_ep_op_info_am_field_t */
+            uint8_t  field_mask;
+            /* AM handler ID. */
+            uint8_t  am_id;
+            /* Flags passed to the AM operation. */
+            unsigned flags;
             union {
-                uint64_t   header;         /**< AM short 64-bit header word */
-                const void *header_buffer; /**< AM zcopy header buffer */
+                /* AM short 64-bit header word. */
+                uint64_t   header;
+                /* AM zcopy header buffer. */
+                const void *header_buffer;
             };
-            size_t header_length; /**< AM zcopy header length */
+            /* AM zcopy header length. */
+            size_t header_length;
+            union {
+                /* Contiguous AM payload, valid only inside the callback. */
+                struct {
+                    void   *buffer;
+                    size_t length;
+                } data;
+
+                /* Zcopy AM IOV, pointing to user's original registered buffers. */
+                struct {
+                    const uct_iov_t *iov;
+                    size_t          iovcnt;
+                } zcopy;
+            } payload;
         } am;
 
-        /* Remote target for PUT, GET, and atomic operations. */
+        /* Remote target for PUT and GET operations. */
         struct {
+            /**< Bits from @ref uct_ep_op_info_rma_field_t */
+            uint8_t    field_mask;
+            /* Remote address. */
             uint64_t   remote_addr;
+            /* Remote key. */
             uct_rkey_t rkey;
+            union {
+                /* Contiguous RMA payload, valid only inside the callback. */
+                struct {
+                    void   *buffer;
+                    size_t length;
+                } data;
+
+                /* Zcopy RMA IOV, pointing to user's original registered buffers. */
+                struct {
+                    const uct_iov_t *iov;
+                    size_t          iovcnt;
+                } zcopy;
+
+                /* GET bcopy destination callback. */
+                struct {
+                    uct_unpack_callback_t unpack_cb;
+                    void                  *arg;
+                    size_t                length;
+                } unpack;
+            } payload;
         } rma;
 
         /* Flush operation parameters. */
         struct {
+            /**< Bits from @ref uct_ep_op_info_flush_field_t */
+            uint8_t  field_mask;
+            /* Flush flags. */
             unsigned flags;
         } flush;
-    };
-
-    union {
-        /* Contiguous operation data, valid only inside the callback. */
-        struct {
-            void   *buffer;
-            size_t length;
-        } data;
-
-        /* Zcopy IOV, pointing to user's original registered buffers. */
-        struct {
-            const uct_iov_t *iov;
-            size_t          iovcnt;
-        } zcopy;
-
-        /* GET bcopy destination callback. */
-        struct {
-            uct_unpack_callback_t unpack_cb;
-            void                  *arg;
-            size_t                length;
-        } unpack;
 
         /* Atomic operation parameters. */
         struct {
-            uct_atomic_op_t op;      /**< Atomic operation type */
-            uint64_t        value;   /**< Value or swap operand */
-            uint64_t        compare; /**< Compare operand for CSWAP */
-            void            *result; /**< Fetch result destination */
-            size_t          size;    /**< Operand size */
+            /**< Bits from @ref uct_ep_op_info_atomic_field_t */
+            uint8_t         field_mask;
+            /* Remote address. */
+            uint64_t        remote_addr;
+            /* Remote key. */
+            uct_rkey_t      rkey;
+            /* Atomic operation type. */
+            uct_atomic_op_t op;
+            /* Value or swap operand. */
+            uint64_t        value;
+            /* Compare operand for CSWAP. */
+            uint64_t        compare;
+            /* Fetch result destination. */
+            void            *result;
+            /* Operand size. */
+            size_t          size;
         } atomic;
     };
 } uct_ep_op_info_t;

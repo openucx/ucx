@@ -261,7 +261,6 @@ gtest_SOURCES += \
 endif
 if HAVE_MLX5_DV
 gtest_SOURCES += \
-	uct/ib/test_ib_mlx5_ext.cc \
 	uct/ib/test_cqe_zipping.cc
 endif
 if HAVE_EFA
