@@ -526,7 +526,7 @@ run_ucx_perftest_fault_tolerance() {
 	args="-t ucp_put_lat    \
 		-n 1000000000000000 \
 		-s 1048576          \
-		-e failover         \
+		-efailover          \
 		-l"
 
 	taskset -c ${affinity} ${test_exe} ${args} > ${output_file} 2>&1 &
