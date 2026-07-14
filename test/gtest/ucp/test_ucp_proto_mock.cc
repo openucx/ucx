@@ -10,6 +10,7 @@ extern "C" {
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_mm.h>
 #include <ucp/core/ucp_types.h>
+#include <ucp/rndv/proto_rndv.h>
 #include <uct/base/uct_iface.h>
 #include <ucp/proto/proto_debug.h>
 #include <ucp/proto/proto_select.inl>
@@ -1928,7 +1929,7 @@ protected:
         return ordinal;
     }
 
-    ucp_proto_query_attr_t select_am_attr(ucs_sys_device_t sys_dev)
+    ucp_proto_query_attr_t select_am_rndv_data_attr(ucs_sys_device_t sys_dev)
     {
         const size_t msg_length     = UCS_MBYTE;
         ucp_ep_config_t *ep_config  = ucp_worker_ep_config(sender().worker(),
@@ -1942,6 +1943,7 @@ protected:
         ucp_proto_query_attr_t attr = {};
         ucp_proto_select_param_t select_param;
         const ucp_proto_threshold_elem_t *threshold;
+        const ucp_proto_rndv_ctrl_priv_t *rpriv;
 
         ucp_proto_select_param_init(&select_param, UCP_OP_ID_AM_SEND, 0, 0,
                                     UCP_DATATYPE_CONTIG, &mem_info, 1);
@@ -1955,14 +1957,22 @@ protected:
             return attr;
         }
 
-        ucp_proto_config_query(sender().worker(), &threshold->proto_config,
+        if (strcmp(threshold->proto_config.proto->name, "am/rndv") != 0) {
+            ADD_FAILURE() << "expected am/rndv protocol, got "
+                          << threshold->proto_config.proto->name;
+            return attr;
+        }
+
+        rpriv = static_cast<const ucp_proto_rndv_ctrl_priv_t*>(
+                threshold->proto_config.priv);
+        ucp_proto_config_query(sender().worker(), &rpriv->remote_proto_config,
                                msg_length, &attr);
         return attr;
     }
 
     void expect_selected_device(ucs_sys_device_t sys_dev, unsigned selection_id)
     {
-        const ucp_proto_query_attr_t attr = select_am_attr(sys_dev);
+        const ucp_proto_query_attr_t attr = select_am_rndv_data_attr(sys_dev);
         ucp_context_h context             = sender().worker()->context;
         ucp_ep_config_t *ep_config = ucp_worker_ep_config(sender().worker(),
                                                           ep_config_index(
