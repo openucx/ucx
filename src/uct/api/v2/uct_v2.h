@@ -1164,7 +1164,23 @@ enum uct_iface_attr_field {
     UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH         = UCS_BIT(2),
 
     /** Enables @ref uct_iface_attr_v2_t::rx_token_length. */
-    UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH         = UCS_BIT(3)
+    UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH         = UCS_BIT(3),
+
+    /**
+     * Enables the RX token derivation path.
+     * Need to be set together with @ref UCT_IFACE_ATTR_FIELD_RX_TOKEN
+     * When both set, @ref uct_iface_attr_v2_t::tx_token is input (from sender),
+     * and @ref uct_iface_attr_v2_t::rx_token is output (derived by receiver).
+     */
+    UCT_IFACE_ATTR_FIELD_TX_TOKEN                = UCS_BIT(4),
+
+    /**
+     * Enables the RX token derivation path.
+     * Need to be set together with @ref UCT_IFACE_ATTR_FIELD_TX_TOKEN,
+     * when both set, @ref uct_iface_attr_v2_t::tx_token is input (from sender),
+     * and @ref uct_iface_attr_v2_t::rx_token is output (derived by receiver).
+     */
+    UCT_IFACE_ATTR_FIELD_RX_TOKEN                = UCS_BIT(5)
 };
 
 
@@ -1220,6 +1236,24 @@ typedef struct {
      * Valid when @ref UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH is set.
      */
     size_t     rx_token_length;
+
+    /**
+     * TX token input buffer.
+     * Valid when @ref UCT_IFACE_ATTR_FIELD_TX_TOKEN is set.
+     * Caller sets this to a buffer of @ref tx_token_length bytes containing
+     * the TX token received from the sender.
+     * @ref UCT_IFACE_ATTR_FIELD_RX_TOKEN must be set together.
+     */
+    const void *tx_token;
+
+    /**
+     * RX token output buffer.
+     * Valid when @ref UCT_IFACE_ATTR_FIELD_RX_TOKEN is set.
+     * Caller sets this to a pre-allocated buffer of @ref rx_token_length
+     * bytes; callee fills it with RX token.
+     * @ref UCT_IFACE_ATTR_FIELD_TX_TOKEN must be set together.
+     */
+    void       *rx_token;
 } uct_iface_attr_v2_t;
 
 
@@ -1717,7 +1751,7 @@ typedef struct uct_ep_op_info {
     union {
         /* AM operation parameters. */
         struct {
-            /**< Bits from @ref uct_ep_op_info_am_field_t */
+            /* Bits from @ref uct_ep_op_info_am_field_t */
             uint16_t field_mask;
             /* AM handler ID. */
             uint8_t  am_id;
@@ -1748,7 +1782,7 @@ typedef struct uct_ep_op_info {
 
         /* Remote target for PUT and GET operations. */
         struct {
-            /**< Bits from @ref uct_ep_op_info_rma_field_t */
+            /* Bits from @ref uct_ep_op_info_rma_field_t */
             uint16_t   field_mask;
             /* Remote address. */
             uint64_t   remote_addr;
@@ -1778,7 +1812,7 @@ typedef struct uct_ep_op_info {
 
         /* Flush operation parameters. */
         struct {
-            /**< Bits from @ref uct_ep_op_info_flush_field_t */
+            /* Bits from @ref uct_ep_op_info_flush_field_t */
             uint16_t field_mask;
             /* Flush flags. */
             unsigned flags;
@@ -1786,7 +1820,7 @@ typedef struct uct_ep_op_info {
 
         /* Atomic operation parameters. */
         struct {
-            /**< Bits from @ref uct_ep_op_info_atomic_field_t */
+            /* Bits from @ref uct_ep_op_info_atomic_field_t */
             uint16_t        field_mask;
             /* Remote address. */
             uint64_t        remote_addr;

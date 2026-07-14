@@ -582,11 +582,13 @@ uct_iface_base_query_v2(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr)
         iface_attr->max_put_sgl_zcopy_count = 0;
     }
 
-    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH) {
+    if (!(iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_TX_TOKEN) &&
+        (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH)) {
         iface_attr->tx_token_length = 0;
     }
 
-    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH) {
+    if (!(iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_RX_TOKEN) &&
+        (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH)) {
         iface_attr->rx_token_length = 0;
     }
 

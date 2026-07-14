@@ -47,25 +47,38 @@ static int uct_ib_mlx5_ext_is_unsupported_op(const void *op)
            (op == (const void*)ucs_empty_function_return_unsupported);
 }
 
-ucs_status_t
-uct_ib_mlx5_ext_ep_query(uct_ep_h ep, uct_ib_mlx5_ext_ep_query_attr_t *attr)
+static ucs_status_t
+uct_ib_mlx5_ext_iface_query_check_param(uct_ib_mlx5_ext_iface_query_attr_t *attr)
 {
-    uct_ib_mlx5_ext_plugin_t *plugin;
-
-    if (ucs_unlikely(attr == NULL)) {
+    if (attr == NULL) {
+        ucs_error("ib mlx5 ext: iface query attribute is NULL");
         return UCS_ERR_INVALID_PARAM;
     }
 
-    ucs_list_for_each(plugin, &uct_ib_mlx5_ext_plugins, list) {
-        if (ucs_unlikely(uct_ib_mlx5_ext_is_unsupported_op(
-                    (const void*)plugin->ops.ep_query))) {
-            continue;
-        }
+    return UCS_OK;
+}
 
-        return plugin->ops.ep_query(ep, attr);
+static ucs_status_t
+uct_ib_mlx5_ext_ep_query_check_param(uct_ib_mlx5_ext_ep_query_attr_t *attr)
+{
+    if (attr == NULL) {
+        ucs_error("ib mlx5 ext: ep query attribute is NULL");
+        return UCS_ERR_INVALID_PARAM;
     }
 
-    return UCS_ERR_UNSUPPORTED;
+    if ((attr->field_mask & UCT_IB_MLX5_EXT_EP_QUERY_ATTR_FIELD_TX_TOKEN) &&
+        (attr->tx_token == NULL)) {
+        ucs_error("ib mlx5 ext: tx token is NULL");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if ((attr->field_mask & UCT_IB_MLX5_EXT_EP_QUERY_ATTR_FIELD_RX_TOKEN) &&
+        (attr->rx_token == NULL)) {
+        ucs_error("ib mlx5 ext: rx token is NULL");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return UCS_OK;
 }
 
 ucs_status_t
@@ -74,7 +87,7 @@ uct_ib_mlx5_ext_iface_query(uct_iface_h iface,
 {
     uct_ib_mlx5_ext_plugin_t *plugin;
 
-    if (ucs_unlikely(attr == NULL)) {
+    if (ucs_unlikely(uct_ib_mlx5_ext_iface_query_check_param(attr) != UCS_OK)) {
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -88,6 +101,27 @@ uct_ib_mlx5_ext_iface_query(uct_iface_h iface,
     }
 
     return uct_ib_mlx5_ext_iface_query_default(attr);
+}
+
+ucs_status_t
+uct_ib_mlx5_ext_ep_query(uct_ep_h ep, uct_ib_mlx5_ext_ep_query_attr_t *attr)
+{
+    uct_ib_mlx5_ext_plugin_t *plugin;
+
+    if (ucs_unlikely(uct_ib_mlx5_ext_ep_query_check_param(attr) != UCS_OK)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    ucs_list_for_each(plugin, &uct_ib_mlx5_ext_plugins, list) {
+        if (ucs_unlikely(uct_ib_mlx5_ext_is_unsupported_op(
+                    (const void*)plugin->ops.ep_query))) {
+            continue;
+        }
+
+        return plugin->ops.ep_query(ep, attr);
+    }
+
+    return UCS_ERR_UNSUPPORTED;
 }
 
 size_t uct_ib_mlx5_ext_max_put_sgl_zcopy_count(void)

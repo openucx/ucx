@@ -61,18 +61,6 @@ typedef struct uct_ib_mlx5_ext_iface_query_attr {
 } uct_ib_mlx5_ext_iface_query_attr_t;
 
 /**
- * @brief External plugin iface query callback.
- *
- * @param [in]     iface Interface to query.
- * @param [in,out] attr  Query parameters. Only fields selected by
- *                       @a attr->field_mask should be accessed.
- *
- * @return UCS_OK on success, or an error if the operation failed.
- */
-typedef ucs_status_t (*uct_ib_mlx5_ext_iface_query_func_t)(
-        uct_iface_h iface, uct_ib_mlx5_ext_iface_query_attr_t *attr);
-
-/**
  * @brief EP query attributes field mask.
  *
  * The enumeration allows specifying which fields in
@@ -83,13 +71,7 @@ enum uct_ib_mlx5_ext_ep_query_attr_field {
     UCT_IB_MLX5_EXT_EP_QUERY_ATTR_FIELD_TX_TOKEN     = UCS_BIT(0),
 
     /** Enables @ref uct_ib_mlx5_ext_ep_query_attr_t::rx_token */
-    UCT_IB_MLX5_EXT_EP_QUERY_ATTR_FIELD_RX_TOKEN     = UCS_BIT(1),
-
-    /** Enables @ref uct_ib_mlx5_ext_ep_query_attr_t::tx_token_len */
-    UCT_IB_MLX5_EXT_EP_QUERY_ATTR_FIELD_TX_TOKEN_LEN = UCS_BIT(2),
-
-    /** Enables @ref uct_ib_mlx5_ext_ep_query_attr_t::rx_token_len */
-    UCT_IB_MLX5_EXT_EP_QUERY_ATTR_FIELD_RX_TOKEN_LEN = UCS_BIT(3)
+    UCT_IB_MLX5_EXT_EP_QUERY_ATTR_FIELD_RX_TOKEN     = UCS_BIT(1)
 };
 
 /**
@@ -98,23 +80,37 @@ enum uct_ib_mlx5_ext_ep_query_attr_field {
 typedef struct uct_ib_mlx5_ext_ep_query_attr {
     /**
      * Mask of valid fields in this structure, using bits from
-     * @ref uct_ib_mlx5_ext_ep_query_attr_field. Fields not specified in
-     * this mask will be ignored.
+     * @ref uct_ib_mlx5_ext_ep_query_attr_field. Fields not specified in this
+     * mask will be ignored.
      */
     uint64_t field_mask;
 
-    /** Opaque TX token buffer. */
+    /**
+     * Pointer to a caller-allocated buffer for TX token data. The buffer size
+     * must be at least the TX token length returned by
+     * @ref uct_ib_mlx5_ext_iface_query.
+     */
     void     *tx_token;
 
-    /** TX token buffer length in bytes. */
-    size_t   tx_token_len;
-
-    /** Opaque RX token buffer. */
+    /**
+     * Pointer to a caller-allocated buffer for RX token data. The buffer size
+     * must be at least the RX token length returned by
+     * @ref uct_ib_mlx5_ext_iface_query.
+     */
     void     *rx_token;
-
-    /** RX token buffer length in bytes. */
-    size_t   rx_token_len;
 } uct_ib_mlx5_ext_ep_query_attr_t;
+
+/**
+ * @brief External plugin iface query callback.
+ *
+ * @param [in]     iface Interface to query.
+ * @param [in,out] attr  Query parameters. Only fields selected by
+ *                       @a attr->field_mask should be accessed.
+ *
+ * @return UCS_OK on success, or an error if the operation failed.
+ */
+typedef ucs_status_t (*uct_ib_mlx5_ext_iface_query_func_t)(
+        uct_iface_h iface, uct_ib_mlx5_ext_iface_query_attr_t *attr);
 
 /**
  * @brief External plugin EP query callback.
