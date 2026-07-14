@@ -62,7 +62,7 @@ static ucs_config_field_t uct_self_md_config_table[] = {
     {"NUM_DEVICES", "1",
      "Number of \"self\" devices to create.",
      ucs_offsetof(uct_self_md_config_t, num_devices),
-     UCS_CONFIG_TYPE_INT},
+     UCS_CONFIG_TYPE_ULONG},
 
     {NULL}
 };
