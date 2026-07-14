@@ -1250,7 +1250,7 @@ run_tests() {
 	# build for devel tests and gtest
 	build devel --enable-gtest --without-valgrind
 
-	sleep 14400 
+	sleep 3600 
 
 	# devel mode tests
 	do_distributed_task 0 4 test_unused_env_var
