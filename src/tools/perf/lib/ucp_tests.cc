@@ -734,45 +734,6 @@ public:
                  m_perf.ucp.self_recv_rkey);
     }
 
-    ucs_status_t validate_recv_buffer(void *recv_buffer, size_t length,
-                                      psn_t sn, void *host_buffer)
-    {
-        if (CMD == UCX_PERF_CMD_PUT) {
-            fence();
-        }
-
-        return validate_sn(recv_buffer, m_perf.params.ucp.recv_datatype,
-                            m_perf.params.recv_mem_type, m_perf.recv_allocator,
-                            length, sn, host_buffer);
-    }
-
-    /* Allocate a host staging buffer for validation. For IOV datatypes the
-     * buffer is sized to the longest element; otherwise to recv_length. */
-    void *alloc_validate_buffer(void *recv_buffer, size_t recv_length)
-    {
-        size_t buflen;
-
-        if (m_perf.params.ucp.recv_datatype == UCP_PERF_DATATYPE_IOV) {
-            const ucp_dt_iov_t *iov =
-                    reinterpret_cast<const ucp_dt_iov_t*>(recv_buffer);
-
-            buflen = 0;
-            for (size_t i = 0; i < recv_length; ++i) {
-                buflen = ucs_max(buflen, iov[i].length);
-            }
-        } else {
-            buflen = recv_length;
-        }
-
-        void *buffer = malloc(buflen);
-        if (buffer == NULL) {
-            ucs_error("failed to allocate validation buffer of %zu bytes",
-                      buflen);
-        }
-
-        return buffer;
-    }
-
     ucs_status_t run_pingpong()
     {
         unsigned my_index;
@@ -785,7 +746,7 @@ public:
         size_t length, send_length, recv_length;
         psn_t sn;
         bool validate;
-        void *validate_buffer = NULL;
+        void *validate_buffer;
         ucs_status_t status;
 
         send_buffer = m_perf.send_buffer;
@@ -806,10 +767,14 @@ public:
         status   = UCS_OK;
 
         if (validate) {
-            validate_buffer = alloc_validate_buffer(recv_buffer, recv_length);
+            if (m_perf.params.ucp.recv_datatype == UCP_PERF_DATATYPE_IOV) {
+                validate_buffer = alloc_validate_buffer(
+                    reinterpret_cast<ucp_dt_iov_t*>(recv_buffer), recv_length);
+            } else {
+                validate_buffer = alloc_validate_buffer(recv_length);
+            }
             if (validate_buffer == NULL) {
-                status = UCS_ERR_NO_MEMORY;
-                goto out;
+                return UCS_ERR_NO_MEMORY;
             }
         }
 
@@ -1039,6 +1004,48 @@ private:
                               "<failed to query: %s>",
                               ucs_status_string(status));
         }
+    }
+
+    ucs_status_t validate_recv_buffer(void *recv_buffer, size_t length,
+                                      psn_t sn, void *host_buffer)
+    {
+        if (CMD == UCX_PERF_CMD_PUT) {
+            fence();
+        }
+
+        return validate_sn(recv_buffer, m_perf.params.ucp.recv_datatype,
+                            m_perf.params.recv_mem_type, m_perf.recv_allocator,
+                            length, sn, host_buffer);
+    }
+
+
+    void *alloc_validate_common(size_t buffer_length)
+    {
+        void *buffer = NULL;
+
+        buffer = malloc(buffer_length);
+        if (buffer == NULL) {
+            ucs_error("failed to allocate validation buffer of %zu bytes",
+                      buffer_length);
+        }
+
+        return buffer;
+    }
+
+    void *alloc_validate_buffer(size_t recv_length)
+    {
+        return alloc_validate_common(recv_length);
+    }
+
+    void *alloc_validate_buffer(ucp_dt_iov_t *iov, size_t iov_cnt)
+    {
+        size_t buffer_length = 0;
+
+        for (size_t i = 0; i < iov_cnt; ++i) {
+            buffer_length = ucs_max(buffer_length, iov[i].length);
+        }
+
+        return alloc_validate_common(buffer_length);
     }
 
     int                m_recvs_outstanding;
