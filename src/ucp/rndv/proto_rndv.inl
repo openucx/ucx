@@ -25,20 +25,53 @@ ucp_proto_rndv_shm_pipeline_force_scope(
     const ucp_context_h context = init_params->worker->context;
     uint8_t op_id_flags         = init_params->select_param->op_id_flags;
 
-    return context->config.ext.rndv_shm_ppln_force &&
-           context->config.ext.rndv_shm_ppln_enable &&
-           (context->config.ext.rndv_mode == UCP_RNDV_MODE_AUTO) &&
-           ucp_proto_init_check_op(init_params, UCS_BIT(op_id)) &&
-           !(op_id_flags & (UCP_PROTO_SELECT_OP_FLAG_AM_RNDV |
-                            UCP_PROTO_SELECT_OP_FLAG_RMA_RNDV)) &&
-           (init_params->ep_config_key->flags &
-            UCP_EP_CONFIG_KEY_FLAG_INTRA_NODE) &&
-           (init_params->select_param->mem_type == UCS_MEMORY_TYPE_CUDA) &&
-           (init_params->rkey_config_key != NULL) &&
-           (allow_proto_estimation ||
-            !(init_params->rkey_config_key->flags &
-              UCP_RKEY_CONFIG_FLAG_PROTO_ESTIMATION)) &&
-           (init_params->rkey_config_key->mem_type == remote_mem_type);
+    /* Check that both relevant configuration params are enabled, with correct value */
+    if (!context->config.ext.rndv_shm_cuda_staging_force ||
+        !context->config.ext.rndv_shm_ppln_enable ||
+        context->config.ext.rndv_mode != UCP_RNDV_MODE_AUTO) {
+        return 0;
+    }
+
+    /* Check that the requested rendezvous operation is supported. */
+    if (!ucp_proto_init_check_op(init_params, UCS_BIT(op_id))) {
+        return 0;
+    }
+
+    /* Check that AM and RMA rendezvous flows are excluded. */
+    if (op_id_flags & (UCP_PROTO_SELECT_OP_FLAG_AM_RNDV |
+                       UCP_PROTO_SELECT_OP_FLAG_RMA_RNDV)) {
+        return 0;
+    }
+
+    /* Check that the endpoint is intra-node. */
+    if (!(init_params->ep_config_key->flags &
+          UCP_EP_CONFIG_KEY_FLAG_INTRA_NODE)) {
+        return 0;
+    }
+
+    /* Check that the selected local memory type is CUDA. */
+    if (init_params->select_param->mem_type != UCS_MEMORY_TYPE_CUDA) {
+        return 0;
+    }
+
+    /* Check that remote-key information is available. */
+    if (init_params->rkey_config_key == NULL) {
+        return 0;
+    }
+
+    /* Check that synthetic protocol-estimation keys are allowed or absent. */
+    if (!allow_proto_estimation &&
+        (init_params->rkey_config_key->flags &
+         UCP_RKEY_CONFIG_FLAG_PROTO_ESTIMATION)) {
+        return 0;
+    }
+
+    /* Check that the remote-key memory type matches the required type. */
+    if (init_params->rkey_config_key->mem_type != remote_mem_type) {
+        return 0;
+    }
+
+    return 1;
 }
 
 static UCS_F_ALWAYS_INLINE int

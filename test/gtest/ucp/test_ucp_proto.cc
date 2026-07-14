@@ -453,7 +453,7 @@ UCS_TEST_P(test_ucp_proto_rndv_force_cuda,
         UCS_TEST_SKIP_R("CUDA memory is not supported");
     }
 
-    context()->config.ext.rndv_shm_ppln_force = 1;
+    context()->config.ext.rndv_shm_cuda_staging_force = 1;
 
     threshold = select_tag_send_protocol(UCS_MEMORY_TYPE_CUDA, UCS_MBYTE);
     ASSERT_NE(nullptr, threshold);
@@ -499,7 +499,7 @@ UCS_TEST_P(test_ucp_proto_rndv_force_cuda,
         UCS_TEST_SKIP_R("CUDA memory is not supported");
     }
 
-    context()->config.ext.rndv_shm_ppln_force = 1;
+    context()->config.ext.rndv_shm_cuda_staging_force = 1;
 
     threshold = select_rndv_ppln_frag_protocol(
             UCP_PROTO_SELECT_OP_FLAG_AM_RNDV, UCS_MEMORY_TYPE_CUDA);
@@ -541,7 +541,7 @@ UCS_TEST_P(test_ucp_proto_rndv_force_cuda,
         UCS_TEST_SKIP_R("CUDA memory is not supported");
     }
 
-    context()->config.ext.rndv_shm_ppln_force = 1;
+    context()->config.ext.rndv_shm_cuda_staging_force = 1;
     context()->config.ext.rndv_mode           = UCP_RNDV_MODE_GET_ZCOPY;
 
     EXPECT_EQ(0, count_rkey_configs_with_flag(
@@ -560,7 +560,7 @@ UCS_TEST_P(test_ucp_proto_rma_rndv,
         UCS_TEST_SKIP_R("CUDA memory is not supported");
     }
 
-    context()->config.ext.rndv_shm_ppln_force = 1;
+    context()->config.ext.rndv_shm_cuda_staging_force = 1;
 
     check_rma_rndv_remote_proto_config(UCP_OP_ID_PUT);
     check_rma_rndv_remote_proto_config(UCP_OP_ID_GET);

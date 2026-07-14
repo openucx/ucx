@@ -127,7 +127,7 @@ typedef struct ucp_context_config {
     /** Enabling 2-stage pipeline rndv protocol */
     int                                    rndv_shm_ppln_enable;
     /** Force intra-node CUDA staging when rendezvous scheme is automatic */
-    int                                    rndv_shm_ppln_force;
+    int                                    rndv_shm_cuda_staging_force;
     /** Enable error handling for rndv pipeline protocol */
     int                                    rndv_errh_ppln_enable;
     /** Threshold for using tag matching offload capabilities. Smaller buffers
