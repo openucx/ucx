@@ -1571,25 +1571,25 @@ typedef enum uct_ep_op_info_field {
  */
 typedef enum {
     /** Enables @ref uct_ep_op_info_t::am::am_id. */
-    UCT_EP_OP_INFO_AM_FIELD_ID            = UCS_BIT(0),
+    UCT_EP_OP_INFO_AM_FIELD_AM_ID         = UCS_BIT(0),
 
     /** Enables @ref uct_ep_op_info_t::am::flags. */
     UCT_EP_OP_INFO_AM_FIELD_FLAGS         = UCS_BIT(1),
 
-    /** Enables @ref uct_ep_op_info_t::am::header. */
-    UCT_EP_OP_INFO_AM_FIELD_HEADER        = UCS_BIT(2),
+    /** Enables @ref uct_ep_op_info_t::am::header.value. */
+    UCT_EP_OP_INFO_AM_FIELD_HEADER_VALUE  = UCS_BIT(2),
 
     /**
-     * Enables @ref uct_ep_op_info_t::am::header_buffer and
-     * @ref uct_ep_op_info_t::am::header_length.
+     * Enables @ref uct_ep_op_info_t::am::header.zcopy.buffer and
+     * @ref uct_ep_op_info_t::am::header.zcopy.length.
      */
-    UCT_EP_OP_INFO_AM_FIELD_HEADER_BUFFER = UCS_BIT(3),
+    UCT_EP_OP_INFO_AM_FIELD_HEADER_ZCOPY  = UCS_BIT(3),
 
     /** Enables @ref uct_ep_op_info_t::am::payload::data. */
-    UCT_EP_OP_INFO_AM_FIELD_DATA          = UCS_BIT(4),
+    UCT_EP_OP_INFO_AM_FIELD_PAYLOAD_DATA  = UCS_BIT(4),
 
     /** Enables @ref uct_ep_op_info_t::am::payload::zcopy. */
-    UCT_EP_OP_INFO_AM_FIELD_ZCOPY         = UCS_BIT(5),
+    UCT_EP_OP_INFO_AM_FIELD_PAYLOAD_ZCOPY = UCS_BIT(5),
 } uct_ep_op_info_am_field_t;
 
 
@@ -1605,22 +1605,22 @@ typedef enum {
      * Enables @ref uct_ep_op_info_t::rma::remote_addr.
      * Must be set together with @ref UCT_EP_OP_INFO_RMA_FIELD_RKEY.
      */
-    UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR = UCS_BIT(0),
+    UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR    = UCS_BIT(0),
 
     /**
      * Enables @ref uct_ep_op_info_t::rma::rkey.
      * Must be set together with @ref UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR.
      */
-    UCT_EP_OP_INFO_RMA_FIELD_RKEY        = UCS_BIT(1),
+    UCT_EP_OP_INFO_RMA_FIELD_RKEY           = UCS_BIT(1),
 
     /** Enables @ref uct_ep_op_info_t::rma::payload::data. */
-    UCT_EP_OP_INFO_RMA_FIELD_DATA        = UCS_BIT(2),
+    UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_DATA   = UCS_BIT(2),
 
     /** Enables @ref uct_ep_op_info_t::rma::payload::zcopy. */
-    UCT_EP_OP_INFO_RMA_FIELD_ZCOPY       = UCS_BIT(3),
+    UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_ZCOPY  = UCS_BIT(3),
 
     /** Enables @ref uct_ep_op_info_t::rma::payload::unpack. */
-    UCT_EP_OP_INFO_RMA_FIELD_UNPACK      = UCS_BIT(4),
+    UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_UNPACK = UCS_BIT(4),
 } uct_ep_op_info_rma_field_t;
 
 
@@ -1645,20 +1645,20 @@ typedef enum {
  * present, for backward compatibility support.
  */
 typedef enum {
+    /** Enables @ref uct_ep_op_info_t::atomic::op. */
+    UCT_EP_OP_INFO_ATOMIC_FIELD_OP          = UCS_BIT(0),
+
     /**
      * Enables @ref uct_ep_op_info_t::atomic::remote_addr.
      * Must be set together with @ref UCT_EP_OP_INFO_ATOMIC_FIELD_RKEY.
      */
-    UCT_EP_OP_INFO_ATOMIC_FIELD_REMOTE_ADDR = UCS_BIT(0),
+    UCT_EP_OP_INFO_ATOMIC_FIELD_REMOTE_ADDR = UCS_BIT(1),
 
     /**
      * Enables @ref uct_ep_op_info_t::atomic::rkey.
      * Must be set together with @ref UCT_EP_OP_INFO_ATOMIC_FIELD_REMOTE_ADDR.
      */
-    UCT_EP_OP_INFO_ATOMIC_FIELD_RKEY        = UCS_BIT(1),
-
-    /** Enables @ref uct_ep_op_info_t::atomic::op. */
-    UCT_EP_OP_INFO_ATOMIC_FIELD_OP          = UCS_BIT(2),
+    UCT_EP_OP_INFO_ATOMIC_FIELD_RKEY        = UCS_BIT(2),
 
     /** Enables @ref uct_ep_op_info_t::atomic::value. */
     UCT_EP_OP_INFO_ATOMIC_FIELD_VALUE       = UCS_BIT(3),
@@ -1683,27 +1683,27 @@ typedef enum {
  * following operation-specific field groups are also required:
  *
  * - AM_SHORT: @ref UCT_EP_OP_INFO_FIELD_AM with @a am.field_mask =
- *   @ref UCT_EP_OP_INFO_AM_FIELD_ID | @ref UCT_EP_OP_INFO_AM_FIELD_HEADER |
- *   @ref UCT_EP_OP_INFO_AM_FIELD_DATA.
+ *   @ref UCT_EP_OP_INFO_AM_FIELD_AM_ID | @ref UCT_EP_OP_INFO_AM_FIELD_HEADER_VALUE |
+ *   @ref UCT_EP_OP_INFO_AM_FIELD_PAYLOAD_DATA.
  * - AM_BCOPY: @ref UCT_EP_OP_INFO_FIELD_AM with @a am.field_mask =
- *   @ref UCT_EP_OP_INFO_AM_FIELD_ID | @ref UCT_EP_OP_INFO_AM_FIELD_FLAGS |
- *   @ref UCT_EP_OP_INFO_AM_FIELD_DATA.
+ *   @ref UCT_EP_OP_INFO_AM_FIELD_AM_ID | @ref UCT_EP_OP_INFO_AM_FIELD_FLAGS |
+ *   @ref UCT_EP_OP_INFO_AM_FIELD_PAYLOAD_DATA.
  * - AM_ZCOPY: @ref UCT_EP_OP_INFO_FIELD_AM with @a am.field_mask =
- *   @ref UCT_EP_OP_INFO_AM_FIELD_ID | @ref UCT_EP_OP_INFO_AM_FIELD_FLAGS |
- *   @ref UCT_EP_OP_INFO_AM_FIELD_HEADER_BUFFER |
- *   @ref UCT_EP_OP_INFO_AM_FIELD_ZCOPY.
+ *   @ref UCT_EP_OP_INFO_AM_FIELD_AM_ID | @ref UCT_EP_OP_INFO_AM_FIELD_FLAGS |
+ *   @ref UCT_EP_OP_INFO_AM_FIELD_HEADER_ZCOPY |
+ *   @ref UCT_EP_OP_INFO_AM_FIELD_PAYLOAD_ZCOPY.
  * - PUT_SHORT and PUT_BCOPY: @ref UCT_EP_OP_INFO_FIELD_RMA with @a rma.field_mask =
  *   @ref UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
- *   @ref UCT_EP_OP_INFO_RMA_FIELD_RKEY | @ref UCT_EP_OP_INFO_RMA_FIELD_DATA.
+ *   @ref UCT_EP_OP_INFO_RMA_FIELD_RKEY | @ref UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_DATA.
  * - PUT_ZCOPY and GET_ZCOPY: @ref UCT_EP_OP_INFO_FIELD_RMA with @a rma.field_mask =
  *   @ref UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
- *   @ref UCT_EP_OP_INFO_RMA_FIELD_RKEY | @ref UCT_EP_OP_INFO_RMA_FIELD_ZCOPY.
+ *   @ref UCT_EP_OP_INFO_RMA_FIELD_RKEY | @ref UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_ZCOPY.
  * - GET_SHORT: @ref UCT_EP_OP_INFO_FIELD_RMA with @a rma.field_mask =
  *   @ref UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
- *   @ref UCT_EP_OP_INFO_RMA_FIELD_RKEY | @ref UCT_EP_OP_INFO_RMA_FIELD_DATA.
+ *   @ref UCT_EP_OP_INFO_RMA_FIELD_RKEY | @ref UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_DATA.
  * - GET_BCOPY: @ref UCT_EP_OP_INFO_FIELD_RMA with @a rma.field_mask =
  *   @ref UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
- *   @ref UCT_EP_OP_INFO_RMA_FIELD_RKEY | @ref UCT_EP_OP_INFO_RMA_FIELD_UNPACK.
+ *   @ref UCT_EP_OP_INFO_RMA_FIELD_RKEY | @ref UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_UNPACK.
  * - ATOMIC_POST: @ref UCT_EP_OP_INFO_FIELD_ATOMIC with @a atomic.field_mask =
  *   @ref UCT_EP_OP_INFO_ATOMIC_FIELD_REMOTE_ADDR |
  *   @ref UCT_EP_OP_INFO_ATOMIC_FIELD_RKEY | @ref UCT_EP_OP_INFO_ATOMIC_FIELD_OP |
@@ -1748,13 +1748,15 @@ typedef struct uct_ep_op_info {
             /* Flags passed to the AM operation. */
             unsigned flags;
             union {
-                /* AM short 64-bit header word. */
-                uint64_t   header;
-                /* AM zcopy header buffer. */
-                const void *header_buffer;
-            };
-            /* AM zcopy header length. */
-            size_t header_length;
+                /* AM short: 64-bit inline header word. */
+                uint64_t value;
+
+                /* AM zcopy: header buffer and its length. */
+                struct {
+                    const void *buffer;
+                    size_t     length;
+                } zcopy;
+            } header;
             union {
                 /* Contiguous AM payload, valid only inside the callback. */
                 struct {
