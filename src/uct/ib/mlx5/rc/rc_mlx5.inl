@@ -26,17 +26,25 @@
 
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_ep_fence_put(uct_rc_mlx5_iface_common_t *iface, uct_ib_mlx5_txwq_t *txwq,
-                         uct_rkey_t *rkey, uint64_t *addr, uint16_t offset)
+                         uct_rkey_t *rkey, uint64_t *addr, uint16_t offset,
+                         uint8_t *fm_ce_se)
 {
-    uct_rc_ep_fence_put(&iface->super, &txwq->fi, rkey, addr, offset);
+    if (uct_rc_ep_fm(&iface->super, &txwq->fi, 1)) {
+        *fm_ce_se = iface->config.put_fence_flag;
+        *rkey     = uct_ib_resolve_atomic_rkey(*rkey, offset, addr);
+    } else {
+        *fm_ce_se = 0;
+        *rkey     = uct_ib_md_direct_rkey(*rkey);
+    }
 }
 
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_ep_fence_get(uct_rc_mlx5_iface_common_t *iface, uct_ib_mlx5_txwq_t *txwq,
                          uct_rkey_t *rkey, uint8_t *fm_ce_se)
 {
-    *rkey      = uct_ib_md_direct_rkey(*rkey);
-    *fm_ce_se |= uct_rc_ep_fm(&iface->super, &txwq->fi, iface->config.atomic_fence_flag);
+    *rkey     = uct_ib_md_direct_rkey(*rkey);
+    *fm_ce_se = uct_rc_ep_fm(&iface->super, &txwq->fi,
+                             iface->config.atomic_fence_flag);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -691,8 +699,6 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
 
     case MLX5_OPCODE_ATOMIC_FA:
     case MLX5_OPCODE_ATOMIC_CS:
-        fm_ce_se |= uct_rc_mlx5_ep_fm_cq_update(iface, txwq,
-                                                iface->config.atomic_fence_flag);
         ucs_assert(length == sizeof(uint64_t));
         raddr = next_seg;
         uct_ib_mlx5_ep_set_rdma_seg(raddr, remote_addr, rkey);
@@ -711,8 +717,6 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
         break;
 
     case MLX5_OPCODE_ATOMIC_MASKED_CS:
-        fm_ce_se |= uct_rc_mlx5_ep_fm_cq_update(iface, txwq,
-                                                iface->config.atomic_fence_flag);
         raddr     = next_seg;
         uct_ib_mlx5_ep_set_rdma_seg(raddr, remote_addr, rkey);
 
@@ -750,7 +754,6 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
         break;
 
      case MLX5_OPCODE_ATOMIC_MASKED_FA:
-        fm_ce_se |= uct_rc_mlx5_ep_fm_cq_update(iface, txwq, iface->config.atomic_fence_flag);
         raddr     = next_seg;
         uct_ib_mlx5_ep_set_rdma_seg(raddr, remote_addr, rkey);
 

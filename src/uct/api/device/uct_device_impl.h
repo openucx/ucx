@@ -28,6 +28,14 @@
 #define UCT_RC_MLX5_GDA_SUPPORTED 0
 #endif
 
+#if __has_include(<uct/ib/mlx5/gdaki/d2p.cuh>) && \
+    __has_include(<infiniband/mlx5dv.h>)
+#include <uct/ib/mlx5/gdaki/d2p.cuh>
+#define UCT_D2P_SUPPORTED 1
+#else
+#define UCT_D2P_SUPPORTED 0
+#endif
+
 union uct_device_completion {
 #if UCT_RC_MLX5_GDA_SUPPORTED
     uct_rc_gda_completion_t   rc_gda;
@@ -88,6 +96,12 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put(
                                           remote_address, length, flags, comp);
     }
 #endif
+#if UCT_D2P_SUPPORTED
+    if (device_ep->uct_tl_id == UCT_DEVICE_TL_D2P) {
+        return uct_ib_d2p_ep_put<level>(device_ep, src_uct_elem, mem_elem, address,
+                                        remote_address, length, flags, comp);
+    }
+#endif
 
     return UCS_ERR_UNSUPPORTED;
 }
@@ -137,6 +151,12 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_atomic_add(
     if (device_ep->uct_tl_id == UCT_DEVICE_TL_CUDA_IPC) {
         return uct_cuda_ipc_ep_atomic_add<level>(device_ep, mem_elem, inc_value,
                                                  remote_address, flags, comp);
+    }
+#endif
+#if UCT_D2P_SUPPORTED
+    if (device_ep->uct_tl_id == UCT_DEVICE_TL_D2P) {
+        return uct_ib_d2p_ep_atomic_add<level>(device_ep, mem_elem, inc_value,
+                                               remote_address, flags, comp);
     }
 #endif
 
@@ -208,6 +228,11 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_check_completion(
 #if UCT_RC_MLX5_GDA_SUPPORTED
     if (device_ep->uct_tl_id == UCT_DEVICE_TL_RC_MLX5_GDA) {
         return uct_rc_mlx5_gda_ep_check_completion<level>(device_ep, comp);
+    }
+#endif
+#if UCT_D2P_SUPPORTED
+    if (device_ep->uct_tl_id == UCT_DEVICE_TL_D2P) {
+        return uct_ib_d2p_ep_check_completion<level>(device_ep, comp);
     }
 #endif
 

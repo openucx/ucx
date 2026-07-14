@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2021. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -20,6 +20,7 @@
 #include <ucp/wireup/address.h>
 #include <ucp/wireup/wireup_cm.h>
 #include <ucp/wireup/wireup_ep.h>
+#include <ucp/wireup/wireup_lane_info.h>
 #include <ucp/tag/eager.h>
 #include <ucp/tag/offload.h>
 #include <ucp/stream/stream.h>
@@ -2230,6 +2231,7 @@ ucs_status_t ucp_worker_get_ep_config(ucp_worker_h worker,
     }
 
     ucp_worker_print_used_tls(worker, ep_cfg_index);
+    ucp_wireup_log_ep_lanes(worker, key, ep_cfg_index);
 
 out:
     *cfg_index_p = ep_cfg_index;
@@ -3571,8 +3573,15 @@ static int ucp_worker_do_ep_keepalive(ucp_worker_h worker, ucs_time_t now)
 
     ep = ucs_container_of(worker->keepalive.iter, ucp_ep_ext_t, ep_list)->ep;
     if ((ep->cfg_index == UCP_WORKER_CFG_INDEX_NULL) ||
-        (ep->flags & UCP_EP_FLAG_FAILED) ||
-        (ucp_ep_config(ep)->key.keepalive_lane == UCP_NULL_LANE)) {
+        (ep->flags & UCP_EP_FLAG_FAILED)) {
+        goto out_done;
+    }
+
+    if (ucp_ep_recovery_progress(ep)) {
+        goto out_done;
+    }
+
+    if (ucp_ep_config(ep)->key.keepalive_lane == UCP_NULL_LANE) {
         goto out_done;
     }
 

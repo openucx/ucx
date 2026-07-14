@@ -120,6 +120,7 @@ ucp_memory_info_from_memh(ucp_mem_h memh)
 
     mem_info.type    = memh->mem_type;
     mem_info.sys_dev = memh->sys_dev;
+    mem_info.flags   = memh->mem_flags;
     return mem_info;
 }
 
@@ -179,8 +180,11 @@ ucp_memh_get_or_update(ucp_context_h context, void *address, size_t length,
     }
 
     ucs_assert((*memh_p)->parent == NULL);
-    ucs_assert((context->rcache == NULL) ||
-               ucs_test_all_flags(context->cache_md_map[mem_type], md_map));
+    ucs_assertv((context->rcache == NULL) ||
+                ucs_test_all_flags(context->cache_md_map[mem_type], md_map),
+                "mem_type=%s cache_md_map=0x%" PRIx64 " md_map=0x%" PRIx64,
+                ucs_memory_type_names[mem_type],
+                context->cache_md_map[mem_type], md_map);
 
     status = ucp_memh_register(context, *memh_p, md_map, uct_flags, alloc_name);
 out:

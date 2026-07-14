@@ -22,7 +22,7 @@ A clear and concise description of what the bug is.
 - For RDMA/IB/RoCE related issues:
     - Driver version:
         - `rpm -q rdma-core` or `rpm -q libibverbs`
-        - or: MLNX_OFED version `ofed_info -s`
+        - or: DOCA version `apt info doca-networking` / `yum info doca-networking`
    - HW information from `ibstat` or `ibv_devinfo -vv` command
 - For GPU related issues:
   - GPU type

@@ -25,11 +25,14 @@
     _macro(ucp_get_am_bcopy_proto) \
     _macro(ucp_get_offload_bcopy_proto) \
     _macro(ucp_get_offload_zcopy_proto) \
+    _macro(ucp_get_rndv_proto) \
     _macro(ucp_put_am_bcopy_proto) \
     _macro(ucp_put_offload_short_proto) \
     _macro(ucp_put_offload_bcopy_proto) \
     _macro(ucp_put_offload_zcopy_proto) \
+    _macro(ucp_put_rndv_proto) \
     _macro(ucp_put_sgl_offload_proto) \
+    _macro(ucp_put_sgl_offload_sw_proto) \
     _macro(ucp_eager_bcopy_multi_proto) \
     _macro(ucp_eager_sync_bcopy_multi_proto) \
     _macro(ucp_eager_zcopy_multi_proto) \
