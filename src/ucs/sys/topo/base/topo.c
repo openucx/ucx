@@ -60,6 +60,12 @@ typedef struct {
     unsigned                name_priority;
     ucs_numa_node_t         numa_node;
     uintptr_t               user_value;
+    ucs_topo_device_class_t device_class;
+
+    /* Cached rank of the device's BDF within its class, or
+     * UCS_SYS_DEVICE_ORDINAL_INVALID if not yet computed. 
+     * Invalidated when any device's class changes. */
+    unsigned                class_ordinal;
 
     /* Secondary device for the current device */
     ucs_sys_device_t        sys_dev_aux;
@@ -263,10 +269,14 @@ void ucs_topo_get_memory_distance_for_cpuset(ucs_sys_device_t device,
 ucs_bus_id_bit_rep_t
 ucs_topo_get_bus_id_bit_repr(const ucs_sys_bus_id_t *bus_id)
 {
-    return (((uint64_t)bus_id->domain << 24) |
-            ((uint64_t)bus_id->bus << 16)    |
-            ((uint64_t)bus_id->slot << 8)    |
-            (bus_id->function));
+    ucs_bus_id_bit_rep_t bit_repr = (ucs_bus_id_bit_rep_t)(
+            ((uint64_t)bus_id->domain << 24) | ((uint64_t)bus_id->bus << 16) |
+            ((uint64_t)bus_id->slot << 8) | (bus_id->function));
+
+    /* The bit representation is signed, but we expect it to be non-negative */
+    ucs_assert(bit_repr >= 0);
+
+    return bit_repr;
 }
 
 static ucs_topo_bus_value_key_t
@@ -445,6 +455,8 @@ ucs_topo_find_device_by_bus_id_value(const ucs_sys_bus_id_t *bus_id,
         device->name_priority   = 0;
         device->numa_node       = numa_node;
         device->user_value      = user_value;
+        device->device_class    = UCS_TOPO_DEVICE_CLASS_UNKNOWN;
+        device->class_ordinal   = UCS_SYS_DEVICE_ORDINAL_INVALID;
         device->sibling_role    = UCS_TOPO_SIBLING_ROLE_NONE;
         device->sibling_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
         device->sys_dev_aux     = UCS_SYS_DEVICE_ID_UNKNOWN;
@@ -1002,6 +1014,94 @@ const char *ucs_topo_sys_device_get_name(ucs_sys_device_t sys_dev)
     }
 
     return name;
+}
+
+ucs_status_t ucs_topo_sys_device_set_class(ucs_sys_device_t sys_dev,
+                                           ucs_topo_device_class_t device_class)
+{
+    ucs_status_t status = UCS_OK;
+    unsigned d;
+
+    if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        ucs_error("system device %d is unknown", sys_dev);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+
+    if (sys_dev >= ucs_topo_global_ctx.num_devices) {
+        ucs_error("system device %d is invalid (max: %u)", sys_dev,
+                  ucs_topo_global_ctx.num_devices);
+        status = UCS_ERR_INVALID_PARAM;
+        goto out_unlock;
+    }
+
+    ucs_topo_global_ctx.devices[sys_dev].device_class = device_class;
+
+    /* Invalidate all cached ordinals */
+    for (d = 0; d < ucs_topo_global_ctx.num_devices; ++d) {
+        ucs_topo_global_ctx.devices[d].class_ordinal =
+                UCS_SYS_DEVICE_ORDINAL_INVALID;
+    }
+
+out_unlock:
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+    return status;
+}
+
+unsigned ucs_topo_sys_device_get_bdf_class_ordinal(ucs_sys_device_t sys_dev)
+{
+    ucs_topo_device_class_t device_class;
+    ucs_bus_id_bit_rep_t ref_key, key;
+    unsigned ordinal, d;
+
+    if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        return UCS_SYS_DEVICE_ORDINAL_INVALID;
+    }
+
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+
+    if (sys_dev >= ucs_topo_global_ctx.num_devices) {
+        ordinal = UCS_SYS_DEVICE_ORDINAL_INVALID;
+        goto out_unlock;
+    }
+
+    device_class = ucs_topo_global_ctx.devices[sys_dev].device_class;
+    if (device_class == UCS_TOPO_DEVICE_CLASS_UNKNOWN) {
+        ordinal = UCS_SYS_DEVICE_ORDINAL_INVALID;
+        goto out_unlock;
+    }
+
+    /* Return cached value if available */
+    ordinal = ucs_topo_global_ctx.devices[sys_dev].class_ordinal;
+    if (ordinal != UCS_SYS_DEVICE_ORDINAL_INVALID) {
+        goto out_unlock;
+    }
+
+    /* The ordinal is the rank of the device's bus id (BDF) among all devices
+     * of the same class. Counting devices with a smaller BDF is equivalent to
+     * sorting the class by BDF and taking the index, and yields a stable,
+     * name-independent ordering. */
+    ref_key = ucs_topo_get_bus_id_bit_repr(
+            &ucs_topo_global_ctx.devices[sys_dev].bus_id);
+    ordinal = 0;
+    for (d = 0; d < ucs_topo_global_ctx.num_devices; ++d) {
+        if (ucs_topo_global_ctx.devices[d].device_class != device_class) {
+            continue;
+        }
+
+        key = ucs_topo_get_bus_id_bit_repr(
+                &ucs_topo_global_ctx.devices[d].bus_id);
+        if (key < ref_key) {
+            ++ordinal;
+        }
+    }
+
+    ucs_topo_global_ctx.devices[sys_dev].class_ordinal = ordinal;
+
+out_unlock:
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+    return ordinal;
 }
 
 ucs_numa_node_t ucs_topo_sys_device_get_numa_node(ucs_sys_device_t sys_dev)
