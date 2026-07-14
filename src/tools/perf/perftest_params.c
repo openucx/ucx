@@ -825,7 +825,7 @@ ucs_status_t clone_params(perftest_params_t *dest,
     return UCS_OK;
 }
 
-ucs_status_t check_validation_params(const ucx_perf_params_t *params)
+ucs_status_t check_validation_params(ucx_perf_params_t *params)
 {
     if (!(params->flags & UCX_PERF_TEST_FLAG_VALIDATE)) {
         return UCS_OK;
@@ -841,16 +841,14 @@ ucs_status_t check_validation_params(const ucx_perf_params_t *params)
         return UCS_ERR_INVALID_PARAM;
     }
 
-    if ((params->send_mem_type != UCS_MEMORY_TYPE_HOST) || 
-        (params->recv_mem_type != UCS_MEMORY_TYPE_HOST)) {
-        ucs_error("validation mode requires send and recv buffers to use host memory");
-        return UCS_ERR_INVALID_PARAM;
+    if (params->command == UCX_PERF_CMD_AM) {
+        params->flags |= UCX_PERF_TEST_FLAG_AM_RECV_COPY;
     }
 
     return UCS_OK;
 }
 
-ucs_status_t check_params(const perftest_params_t *params)
+ucs_status_t check_params(perftest_params_t *params)
 {
     ucs_status_t status;
 
@@ -952,7 +950,7 @@ ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized,
 
     optind = 1;
     while ((c = getopt_long(argc, argv,
-                            "p:b:6NfvXc:P:hK:g:G:kV" TEST_PARAMS_ARGS,
+                            "p:b:6NfvXc:P:hK:g:G:k" TEST_PARAMS_ARGS,
                             TEST_PARAMS_ARGS_LONG, NULL)) != -1) {
         switch (c) {
         case 'p':

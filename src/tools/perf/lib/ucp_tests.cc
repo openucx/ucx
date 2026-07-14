@@ -734,19 +734,43 @@ public:
                  m_perf.ucp.self_recv_rkey);
     }
 
-    ucs_status_t validate_buffers(void *send_buffer, void *recv_buffer,
-                                  size_t length)
+    ucs_status_t validate_recv_buffer(void *recv_buffer, size_t length,
+                                      psn_t sn, void *host_buffer)
     {
         if (CMD == UCX_PERF_CMD_PUT) {
             fence();
         }
 
-        if (memcmp(send_buffer, recv_buffer, length)) {
-            ucs_error("data mismatch between send and receive buffers");
-            return UCS_ERR_IO_ERROR;
+        return validate_sn(recv_buffer, m_perf.params.ucp.recv_datatype,
+                            m_perf.params.recv_mem_type, m_perf.recv_allocator,
+                            length, sn, host_buffer);
+    }
+
+    /* Allocate a host staging buffer for validation. For IOV datatypes the
+     * buffer is sized to the longest element; otherwise to recv_length. */
+    void *alloc_validate_buffer(void *recv_buffer, size_t recv_length)
+    {
+        size_t buflen;
+
+        if (m_perf.params.ucp.recv_datatype == UCP_PERF_DATATYPE_IOV) {
+            const ucp_dt_iov_t *iov =
+                    reinterpret_cast<const ucp_dt_iov_t*>(recv_buffer);
+
+            buflen = 0;
+            for (size_t i = 0; i < recv_length; ++i) {
+                buflen = ucs_max(buflen, iov[i].length);
+            }
+        } else {
+            buflen = recv_length;
         }
 
-        return UCS_OK;
+        void *buffer = malloc(buflen);
+        if (buffer == NULL) {
+            ucs_error("failed to allocate validation buffer of %zu bytes",
+                      buflen);
+        }
+
+        return buffer;
     }
 
     ucs_status_t run_pingpong()
@@ -761,6 +785,7 @@ public:
         size_t length, send_length, recv_length;
         psn_t sn;
         bool validate;
+        void *validate_buffer = NULL;
         ucs_status_t status;
 
         send_buffer = m_perf.send_buffer;
@@ -778,6 +803,15 @@ public:
         reset_buffers(length, UNKNOWN_SN);
 
         validate = m_perf.params.flags & UCX_PERF_TEST_FLAG_VALIDATE;
+        status   = UCS_OK;
+
+        if (validate) {
+            validate_buffer = alloc_validate_buffer(recv_buffer, recv_length);
+            if (validate_buffer == NULL) {
+                status = UCS_ERR_NO_MEMORY;
+                goto out;
+            }
+        }
 
         ucp_perf_barrier(&m_perf);
 
@@ -791,7 +825,8 @@ public:
             UCX_PERF_TEST_FOREACH(&m_perf) {
 
                 if (validate) {
-                    memset(send_buffer, sn, send_length);
+                    fill_sn(send_buffer, m_perf.params.ucp.send_datatype,
+                            m_perf.send_allocator, send_length, sn);
                 }
 
                 send(ep, send_buffer, send_length, send_datatype, sn, remote_addr, rkey);
@@ -799,10 +834,10 @@ public:
                 wait_recv_window(m_max_outstanding);
 
                 if (validate) {
-                    status = validate_buffers(send_buffer, recv_buffer,
-                                              send_length);
+                    status = validate_recv_buffer(recv_buffer, recv_length, sn,
+                                                  validate_buffer);
                     if (status != UCS_OK) {
-                        return status;
+                        goto out;
                     }
                 }
 
@@ -815,12 +850,13 @@ public:
                 wait_recv_window(m_max_outstanding);
 
                 if (validate) {
-                    memset(send_buffer, sn, send_length);
-                    status = validate_buffers(send_buffer, recv_buffer,
-                                              send_length);
+                    status = validate_recv_buffer(recv_buffer, recv_length, sn,
+                                                  validate_buffer);
                     if (status != UCS_OK) {
-                        return status;
+                        goto out;
                     }
+                    fill_sn(send_buffer, m_perf.params.ucp.send_datatype,
+                            m_perf.send_allocator, send_length, sn);
                 }
 
                 send(ep, send_buffer, send_length, send_datatype, sn,
@@ -838,7 +874,10 @@ public:
 
         ucx_perf_get_time(&m_perf);
         ucp_perf_barrier(&m_perf);
-        return UCS_OK;
+
+out:
+        free(validate_buffer);
+        return status;
     }
 
     ucs_status_t run_stream_uni()
