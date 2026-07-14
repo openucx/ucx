@@ -483,7 +483,7 @@ UCS_TEST_P(test_memtype_cache, event_attributes) {
     const size_t size          = ucs_get_page_size();
     void *address              = reinterpret_cast<void*>(0xdead0000ul);
     const ucs_sys_device_t dev = 0;
-    ucm_event_t event          = {};
+    ucm_event_t event;
     ucs_memory_info_t mem_info;
 
     event.mem_type.address   = address;
