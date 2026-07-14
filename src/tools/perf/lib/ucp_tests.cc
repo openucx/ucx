@@ -746,7 +746,7 @@ public:
         size_t length, send_length, recv_length;
         psn_t sn;
         bool validate;
-        void *validate_buffer;
+        void *validate_buffer = NULL;
         ucs_status_t status;
 
         send_buffer = m_perf.send_buffer;
@@ -1017,7 +1017,6 @@ private:
                             m_perf.params.recv_mem_type, m_perf.recv_allocator,
                             length, sn, host_buffer);
     }
-
 
     void *alloc_validate_common(size_t buffer_length)
     {
