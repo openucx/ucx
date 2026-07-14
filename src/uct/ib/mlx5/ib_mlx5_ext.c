@@ -55,6 +55,26 @@ uct_ib_mlx5_ext_iface_query_check_param(uct_ib_mlx5_ext_iface_query_attr_t *attr
         return UCS_ERR_INVALID_PARAM;
     }
 
+    if ((attr->field_mask & UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_TX_TOKEN) &&
+        (attr->tx_token == NULL)) {
+        ucs_error("ib mlx5 ext: tx token is NULL");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if ((attr->field_mask & UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_RX_TOKEN) &&
+        (attr->rx_token == NULL)) {
+        ucs_error("ib mlx5 ext: rx token is NULL");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (!!(attr->field_mask &
+           UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_TX_TOKEN) !=
+        !!(attr->field_mask &
+           UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_RX_TOKEN)) {
+        ucs_error("ib mlx5 ext: tx token and rx token must be set together");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
     return UCS_OK;
 }
 
@@ -69,12 +89,6 @@ uct_ib_mlx5_ext_ep_query_check_param(uct_ib_mlx5_ext_ep_query_attr_t *attr)
     if ((attr->field_mask & UCT_IB_MLX5_EXT_EP_QUERY_ATTR_FIELD_TX_TOKEN) &&
         (attr->tx_token == NULL)) {
         ucs_error("ib mlx5 ext: tx token is NULL");
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    if ((attr->field_mask & UCT_IB_MLX5_EXT_EP_QUERY_ATTR_FIELD_RX_TOKEN) &&
-        (attr->rx_token == NULL)) {
-        ucs_error("ib mlx5 ext: rx token is NULL");
         return UCS_ERR_INVALID_PARAM;
     }
 

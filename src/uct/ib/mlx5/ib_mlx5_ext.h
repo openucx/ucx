@@ -34,7 +34,13 @@ enum uct_ib_mlx5_ext_iface_query_attr_field {
     UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_TX_TOKEN_LEN = UCS_BIT(1),
 
     /** Enables @ref uct_ib_mlx5_ext_iface_query_attr_t::rx_token_len */
-    UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_RX_TOKEN_LEN = UCS_BIT(2)
+    UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_RX_TOKEN_LEN = UCS_BIT(2),
+
+    /** Enables @ref uct_ib_mlx5_ext_iface_query_attr_t::tx_token */
+    UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_TX_TOKEN     = UCS_BIT(3),
+
+    /** Enables @ref uct_ib_mlx5_ext_iface_query_attr_t::rx_token */
+    UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_RX_TOKEN     = UCS_BIT(4)
 };
 
 /**
@@ -58,6 +64,12 @@ typedef struct uct_ib_mlx5_ext_iface_query_attr {
 
     /** RX token length in bytes. */
     size_t rx_token_len;
+
+    /** TX token buffer. */
+    void   *tx_token;
+
+    /** RX token buffer. */
+    void   *rx_token;
 } uct_ib_mlx5_ext_iface_query_attr_t;
 
 /**
@@ -68,10 +80,7 @@ typedef struct uct_ib_mlx5_ext_iface_query_attr {
  */
 enum uct_ib_mlx5_ext_ep_query_attr_field {
     /** Enables @ref uct_ib_mlx5_ext_ep_query_attr_t::tx_token */
-    UCT_IB_MLX5_EXT_EP_QUERY_ATTR_FIELD_TX_TOKEN     = UCS_BIT(0),
-
-    /** Enables @ref uct_ib_mlx5_ext_ep_query_attr_t::rx_token */
-    UCT_IB_MLX5_EXT_EP_QUERY_ATTR_FIELD_RX_TOKEN     = UCS_BIT(1)
+    UCT_IB_MLX5_EXT_EP_QUERY_ATTR_FIELD_TX_TOKEN = UCS_BIT(0)
 };
 
 /**
@@ -91,13 +100,6 @@ typedef struct uct_ib_mlx5_ext_ep_query_attr {
      * @ref uct_ib_mlx5_ext_iface_query.
      */
     void     *tx_token;
-
-    /**
-     * Pointer to a caller-allocated buffer for RX token data. The buffer size
-     * must be at least the RX token length returned by
-     * @ref uct_ib_mlx5_ext_iface_query.
-     */
-    void     *rx_token;
 } uct_ib_mlx5_ext_ep_query_attr_t;
 
 /**

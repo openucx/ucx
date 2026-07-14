@@ -276,9 +276,7 @@ enum uct_ep_attr_field {
     /** Enables @ref uct_ep_attr::remote_address */
     UCT_EP_ATTR_FIELD_REMOTE_SOCKADDR = UCS_BIT(1),
     /** Enables @ref uct_ep_attr::tx_token */
-    UCT_EP_ATTR_FIELD_TX_TOKEN        = UCS_BIT(2),
-    /** Enables @ref uct_ep_attr::rx_token */
-    UCT_EP_ATTR_FIELD_RX_TOKEN        = UCS_BIT(3)
+    UCT_EP_ATTR_FIELD_TX_TOKEN        = UCS_BIT(2)
 };
 
 
@@ -427,14 +425,6 @@ struct uct_ep_attr {
      * bytes and sets this pointer; callee fills the buffer with the token.
      */
     void                    *tx_token;
-
-    /**
-     * Opaque RX token buffer.
-     * Valid when @ref UCT_EP_ATTR_FIELD_RX_TOKEN is set in @ref field_mask.
-     * Caller allocates a buffer of @ref uct_iface_attr_v2_t::rx_token_length
-     * bytes and sets this pointer; callee fills the buffer with the token.
-     */
-    void                    *rx_token;
 };
 
 
@@ -1822,12 +1812,12 @@ typedef struct uct_ep_op_info {
         struct {
             /* Bits from @ref uct_ep_op_info_atomic_field_t */
             uint16_t        field_mask;
+            /* Atomic operation type. */
+            uct_atomic_op_t op;
             /* Remote address. */
             uint64_t        remote_addr;
             /* Remote key. */
             uct_rkey_t      rkey;
-            /* Atomic operation type. */
-            uct_atomic_op_t op;
             /* Value or swap operand. */
             uint64_t        value;
             /* Compare operand for CSWAP. */
