@@ -183,9 +183,6 @@ ucs_status_t uct_ib_mlx5_ext_ep_put_sgl_zcopy(uct_ep_h ep,
                                               size_t count,
                                               uct_completion_t *comp);
 
-ucs_status_t uct_ib_mlx5_ext_ep_outstanding_purge(
-        uct_ep_h ep, const uct_ep_outstanding_purge_params_t *params);
-
 END_C_DECLS
 
 #endif /* UCT_IB_MLX5_EXT_H_ */

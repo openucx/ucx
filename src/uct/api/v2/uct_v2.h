@@ -278,11 +278,7 @@ enum uct_ep_attr_field {
     /** Enables @ref uct_ep_attr::tx_token */
     UCT_EP_ATTR_FIELD_TX_TOKEN        = UCS_BIT(2),
     /** Enables @ref uct_ep_attr::rx_token */
-    UCT_EP_ATTR_FIELD_RX_TOKEN        = UCS_BIT(3),
-    /** Enables @ref uct_ep_attr::tx_token_length */
-    UCT_EP_ATTR_FIELD_TX_TOKEN_LENGTH = UCS_BIT(4),
-    /** Enables @ref uct_ep_attr::rx_token_length */
-    UCT_EP_ATTR_FIELD_RX_TOKEN_LENGTH = UCS_BIT(5)
+    UCT_EP_ATTR_FIELD_RX_TOKEN        = UCS_BIT(3)
 };
 
 
@@ -427,34 +423,18 @@ struct uct_ep_attr {
     /**
      * Opaque TX token buffer.
      * Valid when @ref UCT_EP_ATTR_FIELD_TX_TOKEN is set in @ref field_mask.
-     * Caller sets this to a buffer of @ref tx_token_length bytes; callee fills
-     * the buffer with the token.
+     * Caller allocates a buffer of @ref uct_iface_attr_v2_t::tx_token_length
+     * bytes and sets this pointer; callee fills the buffer with the token.
      */
     void                    *tx_token;
 
     /**
      * Opaque RX token buffer.
      * Valid when @ref UCT_EP_ATTR_FIELD_RX_TOKEN is set in @ref field_mask.
-     * Caller sets this to a buffer of @ref rx_token_length bytes; callee fills
-     * the buffer with the token.
+     * Caller allocates a buffer of @ref uct_iface_attr_v2_t::rx_token_length
+     * bytes and sets this pointer; callee fills the buffer with the token.
      */
     void                    *rx_token;
-
-    /**
-     * TX token buffer length in bytes.
-     * Valid when @ref UCT_EP_ATTR_FIELD_TX_TOKEN_LENGTH is set in
-     * @ref field_mask.
-     * Caller sets this to the size of @ref tx_token.
-     */
-    size_t                  tx_token_length;
-
-    /**
-     * RX token buffer length in bytes.
-     * Valid when @ref UCT_EP_ATTR_FIELD_RX_TOKEN_LENGTH is set in
-     * @ref field_mask.
-     * Caller sets this to the size of @ref rx_token.
-     */
-    size_t                  rx_token_length;
 };
 
 
@@ -1738,7 +1718,7 @@ typedef struct uct_ep_op_info {
         /* AM operation parameters. */
         struct {
             /**< Bits from @ref uct_ep_op_info_am_field_t */
-            uint8_t  field_mask;
+            uint16_t field_mask;
             /* AM handler ID. */
             uint8_t  am_id;
             /* Flags passed to the AM operation. */
@@ -1769,7 +1749,7 @@ typedef struct uct_ep_op_info {
         /* Remote target for PUT and GET operations. */
         struct {
             /**< Bits from @ref uct_ep_op_info_rma_field_t */
-            uint8_t    field_mask;
+            uint16_t   field_mask;
             /* Remote address. */
             uint64_t   remote_addr;
             /* Remote key. */
@@ -1799,7 +1779,7 @@ typedef struct uct_ep_op_info {
         /* Flush operation parameters. */
         struct {
             /**< Bits from @ref uct_ep_op_info_flush_field_t */
-            uint8_t  field_mask;
+            uint16_t field_mask;
             /* Flush flags. */
             unsigned flags;
         } flush;
@@ -1807,7 +1787,7 @@ typedef struct uct_ep_op_info {
         /* Atomic operation parameters. */
         struct {
             /**< Bits from @ref uct_ep_op_info_atomic_field_t */
-            uint8_t         field_mask;
+            uint16_t        field_mask;
             /* Remote address. */
             uint64_t        remote_addr;
             /* Remote key. */
@@ -1831,8 +1811,8 @@ typedef struct uct_ep_op_info {
  * @ingroup UCT_RESOURCE
  * @brief Callback invoked for each undelivered outstanding operation.
  */
-typedef void (*uct_ep_outstanding_cb_t)(const uct_ep_op_info_t *op_info,
-                                        void *arg);
+typedef void (*uct_ep_outstanding_purge_callback_t)(
+        const uct_ep_op_info_t *op_info, void *arg);
 
 
 /**
@@ -1856,21 +1836,21 @@ typedef struct {
      *  uct_ep_outstanding_purge_field_t. @ref
      *  UCT_EP_OUTSTANDING_FIELD_RX_TOKEN and @ref
      *  UCT_EP_OUTSTANDING_FIELD_CB are required. */
-    uint64_t                field_mask;
+    uint64_t                            field_mask;
 
     /**
      * Opaque RX token received from the remote peer.
      */
-    const void              *rx_token;
+    const void                          *rx_token;
 
     /** Callback invoked once per undelivered outstanding operation. */
-    uct_ep_outstanding_cb_t cb;
+    uct_ep_outstanding_purge_callback_t cb;
 
     /**
      * Opaque argument passed to @ref cb.
      * Valid when @ref UCT_EP_OUTSTANDING_FIELD_ARG is set.
      */
-    void                    *arg;
+    void                                *arg;
 } uct_ep_outstanding_purge_params_t;
 
 
