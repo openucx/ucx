@@ -1057,13 +1057,15 @@ protected:
         uint8_t saved_dp_ordering = md->dp_ordering_cap_devx.rc;
         uint8_t saved_pci_fadd    = dev->pci_fadd_arg_sizes;
         uint8_t saved_pci_cswap   = dev->pci_cswap_arg_sizes;
-        int saved_relaxed_order   = md->super.relaxed_order;
+        uint64_t saved_relaxed_order_mem_types =
+                md->super.relaxed_order_mem_types;
         uct_iface_h tl_iface      = NULL;
         ucs_status_t status;
 
         m_iface.reset();
         md->dp_ordering_cap_devx.rc = dp_ordering;
-        md->super.relaxed_order     = relaxed_order;
+        md->super.relaxed_order_mem_types =
+                relaxed_order ? UCS_BIT(UCS_MEMORY_TYPE_HOST) : 0;
         dev->pci_fadd_arg_sizes     = pci_atomics ? sizeof(uint64_t) : 0;
         dev->pci_cswap_arg_sizes    = pci_atomics ? sizeof(uint64_t) : 0;
 
@@ -1073,7 +1075,8 @@ protected:
 
         dev->pci_cswap_arg_sizes    = saved_pci_cswap;
         dev->pci_fadd_arg_sizes     = saved_pci_fadd;
-        md->super.relaxed_order     = saved_relaxed_order;
+        md->super.relaxed_order_mem_types =
+                saved_relaxed_order_mem_types;
         md->dp_ordering_cap_devx.rc = saved_dp_ordering;
 
         if (status == UCS_OK) {
