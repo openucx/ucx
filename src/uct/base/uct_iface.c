@@ -834,19 +834,6 @@ ucs_status_t uct_ep_invalidate(uct_ep_h ep,
     return iface->internal_ops->ep_invalidate(ep, params);
 }
 
-ucs_status_t
-uct_ep_outstanding_purge(uct_ep_h ep,
-                         const uct_ep_outstanding_purge_params_t *params)
-{
-    const uct_base_iface_t *iface = ucs_derived_of(ep->iface, uct_base_iface_t);
-
-    if (iface->internal_ops->ep_outstanding_purge == NULL) {
-        return UCS_ERR_UNSUPPORTED;
-    }
-
-    return iface->internal_ops->ep_outstanding_purge(ep, params);
-}
-
 void uct_ep_set_iface(uct_ep_h ep, uct_iface_t *iface)
 {
     ep->iface = iface;
