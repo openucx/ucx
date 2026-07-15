@@ -35,6 +35,7 @@ static const char *uct_rc_verbs_flush_mode_names[] = {
     [UCT_RC_VERBS_FLUSH_MODE_LAST]         = NULL
 };
 
+/* clang-format off */
 static ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
   {"RC_", UCT_IB_SEND_OVERHEAD_DEFAULT(UCT_RC_VERBS_IFACE_OVERHEAD), NULL,
    ucs_offsetof(uct_rc_verbs_iface_config_t, super),
@@ -43,23 +44,26 @@ static ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
   {"MAX_AM_HDR", "128",
    "Buffer size to reserve for active message headers. If set to 0, the transport will\n"
    "not support zero-copy active messages.",
-   ucs_offsetof(uct_rc_verbs_iface_config_t, max_am_hdr), UCS_CONFIG_TYPE_MEMUNITS},
+   ucs_offsetof(uct_rc_verbs_iface_config_t, max_am_hdr),
+   UCS_CONFIG_TYPE_MEMUNITS},
 
   {"TX_MAX_WR", "-1",
    "Limits the number of outstanding posted work requests. The actual limit is\n"
    "a minimum between this value and the TX queue length. -1 means no limit.",
-   ucs_offsetof(uct_rc_verbs_iface_config_t, tx_max_wr), UCS_CONFIG_TYPE_UINT},
+   ucs_offsetof(uct_rc_verbs_iface_config_t, tx_max_wr),
+   UCS_CONFIG_TYPE_UINT},
 
   {"FLUSH_MODE", "auto",
    "Method to use for posting flush operation:\n"
-   " - write0 : Post empty RDMA_WRITE\n"
-   " - fc     : Send flow control message\n"
-   " - auto   : Select automatically based on device support",
+   " write0 - Post empty RDMA_WRITE.\n"
+   " fc     - Send flow control message.\n"
+   " auto   - Select automatically based on device support.",
    ucs_offsetof(uct_rc_verbs_iface_config_t, flush_mode),
    UCS_CONFIG_TYPE_ENUM(uct_rc_verbs_flush_mode_names)},
 
   {NULL}
 };
+/* clang-format on */
 
 static unsigned uct_rc_verbs_get_tx_res_count(uct_rc_verbs_ep_t *ep,
                                               struct ibv_wc *wc)

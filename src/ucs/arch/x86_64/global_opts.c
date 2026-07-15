@@ -14,6 +14,7 @@
 #include <ucs/arch/global_opts.h>
 #include <ucs/config/parser.h>
 
+/* clang-format off */
 ucs_config_field_t ucs_arch_global_opts_table[] = {
 #if ENABLE_BUILTIN_MEMCPY
   {"BUILTIN_MEMCPY_MIN", "auto",
@@ -32,6 +33,7 @@ ucs_config_field_t ucs_arch_global_opts_table[] = {
    UCS_CONFIG_TYPE_MEMUNITS},
   {NULL}
 };
+/* clang-format on */
 
 
 void ucs_arch_print_memcpy_limits(ucs_arch_global_opts_t *config)

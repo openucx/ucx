@@ -24,6 +24,7 @@
 #define UCT_SCOPY_IFACE_OVERHEAD 500e-9
 
 
+/* clang-format off */
 ucs_config_field_t uct_scopy_iface_config_table[] = {
     {"SM_", "", NULL,
      ucs_offsetof(uct_scopy_iface_config_t, super),
@@ -31,13 +32,15 @@ ucs_config_field_t uct_scopy_iface_config_table[] = {
 
     {"MAX_IOV", "16",
      "Maximum IOV count that can contain user-defined payload in a single\n"
-     "call to GET/PUT Zcopy operation",
-     ucs_offsetof(uct_scopy_iface_config_t, max_iov), UCS_CONFIG_TYPE_ULONG},
+     "call to GET/PUT Zcopy operation.",
+     ucs_offsetof(uct_scopy_iface_config_t, max_iov),
+     UCS_CONFIG_TYPE_ULONG},
 
     {"SEG_SIZE", "512k",
      "Segment size that is used to perform data transfer when doing progress\n"
-     "of GET/PUT Zcopy operations",
-     ucs_offsetof(uct_scopy_iface_config_t, seg_size), UCS_CONFIG_TYPE_MEMUNITS},
+     "of GET/PUT Zcopy operations.",
+     ucs_offsetof(uct_scopy_iface_config_t, seg_size),
+     UCS_CONFIG_TYPE_MEMUNITS},
 
     /* TX_QUOTA=1 is used by default in order to make iface progress more
      * lightweight and not be blocked for a long time (CMA/KNEM write/read
@@ -45,14 +48,16 @@ ucs_config_field_t uct_scopy_iface_config_table[] = {
      * is harmful for the many-to-one (GET operation) and one-to-many (PUT
      * operation) patterns. */
     {"TX_QUOTA", "1",
-     "How many TX segments can be dispatched during iface progress",
-     ucs_offsetof(uct_scopy_iface_config_t, tx_quota), UCS_CONFIG_TYPE_UINT},
+     "How many TX segments can be dispatched during iface progress.",
+     ucs_offsetof(uct_scopy_iface_config_t, tx_quota),
+     UCS_CONFIG_TYPE_UINT},
 
     UCT_IFACE_MPOOL_CONFIG_FIELDS("TX_", -1, 8, 128m, 1.0, "send",
                                   ucs_offsetof(uct_scopy_iface_config_t, tx_mpool), ""),
 
     {NULL}
 };
+/* clang-format on */
 
 static ucs_mpool_ops_t uct_scopy_mpool_ops = {
     .chunk_alloc   = ucs_mpool_chunk_malloc,

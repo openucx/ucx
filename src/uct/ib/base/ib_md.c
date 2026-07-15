@@ -49,23 +49,31 @@ static const char *uct_ib_devx_objs[] = {
     NULL
 };
 
+/* clang-format off */
 ucs_config_field_t uct_ib_md_config_table[] = {
     {"", "", NULL,
-     ucs_offsetof(uct_ib_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
+     ucs_offsetof(uct_ib_md_config_t, super),
+     UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
 
-    {"MEM_REG_OVERHEAD", "16us", "Memory registration overhead", /* TODO take default from device */
-     ucs_offsetof(uct_ib_md_config_t, reg_cost.c), UCS_CONFIG_TYPE_TIME},
+    {"MEM_REG_OVERHEAD", "16us", /* TODO: take default from device */
+     "Memory registration overhead.",
+     ucs_offsetof(uct_ib_md_config_t, reg_cost.c),
+     UCS_CONFIG_TYPE_TIME},
 
-    {"MEM_REG_GROWTH", "0.06ns", "Memory registration growth rate", /* TODO take default from device */
-     ucs_offsetof(uct_ib_md_config_t, reg_cost.m), UCS_CONFIG_TYPE_TIME},
+    {"MEM_REG_GROWTH", "0.06ns", /* TODO: take default from device */
+     "Memory registration growth rate.",
+     ucs_offsetof(uct_ib_md_config_t, reg_cost.m),
+     UCS_CONFIG_TYPE_TIME},
 
     {"FORK_INIT", "try",
      "Initialize a fork-safe IB library with ibv_fork_init().",
-     ucs_offsetof(uct_ib_md_config_t, fork_init), UCS_CONFIG_TYPE_TERNARY},
+     ucs_offsetof(uct_ib_md_config_t, fork_init),
+     UCS_CONFIG_TYPE_TERNARY},
 
     {"ASYNC_EVENTS", "y",
-     "Enable listening for async events on the device",
-     ucs_offsetof(uct_ib_md_config_t, async_events), UCS_CONFIG_TYPE_BOOL},
+     "Enable listening for async events on the device.",
+     ucs_offsetof(uct_ib_md_config_t, async_events),
+     UCS_CONFIG_TYPE_BOOL},
 
     {"ETH_PAUSE_ON", "y",
      "Whether or not 'Pause Frame' is enabled on an Ethernet network.\n"
@@ -73,52 +81,60 @@ ucs_config_field_t uct_ib_md_config_table[] = {
      "ensure zero loss under congestion on Ethernet family computer networks.\n"
      "This parameter, if set to 'no', will disqualify IB transports that may not perform\n"
      "well on a lossy fabric when working with RoCE.",
-     ucs_offsetof(uct_ib_md_config_t, ext.eth_pause), UCS_CONFIG_TYPE_BOOL},
+     ucs_offsetof(uct_ib_md_config_t, ext.eth_pause),
+     UCS_CONFIG_TYPE_BOOL},
 
     {"ODP_PREFETCH", "n",
-     "Force prefetch of memory regions created with ODP.\n",
-     ucs_offsetof(uct_ib_md_config_t, ext.odp.prefetch), UCS_CONFIG_TYPE_BOOL},
+     "Force prefetch of memory regions created with ODP.",
+     ucs_offsetof(uct_ib_md_config_t, ext.odp.prefetch),
+     UCS_CONFIG_TYPE_BOOL},
 
     {"DEVICE_SPECS", "",
      "Array of custom device specification. Each element is a string of the following format:\n"
-     "  <vendor-id>:<device-id>[:name[:<flags>[:<priority>]]]\n"
+     " <vendor-id>:<device-id>[:name[:<flags>[:<priority>]]]\n"
      "where:\n"
-     "  <vendor-id> - (mandatory) pci vendor id, integer or hexadecimal.\n"
-     "  <device-id> - (mandatory) pci device id, integer or hexadecimal.\n"
-     "  <name>      - (optional) device name.\n"
-     "  <flags>     - (optional) empty, or a combination of:\n"
-     "                             '4' - mlx4 device\n"
-     "                             '5' - mlx5 device\n"
-     "                             'd' - DC version 1 (Connect-IB, ConnectX-4)\n"
-     "                             'D' - DC version 2 (ConnectX-5 and above)\n"
-     "                             'a' - Compact address vector support\n"
-     "  <priority>  - (optional) device priority, integer.\n"
+     " <vendor-id> - (mandatory) pci vendor id, integer or hexadecimal.\n"
+     " <device-id> - (mandatory) pci device id, integer or hexadecimal.\n"
+     " <name>      - (optional) device name.\n"
+     " <flags>     - (optional) empty, or a combination of:\n"
+     "                           '4' - mlx4 device\n"
+     "                           '5' - mlx5 device\n"
+     "                           'd' - DC version 1 (Connect-IB, ConnectX-4)\n"
+     "                           'D' - DC version 2 (ConnectX-5 and above)\n"
+     "                           'a' - Compact address vector support\n"
+     " <priority>  - (optional) device priority, integer.\n"
      "\n"
      "Example: The value '0x02c9:4115:ConnectX4:5d' would specify a device named ConnectX-4\n"
      "to match vendor id 0x2c9, device id 4115, with DC version 1 support.",
-     ucs_offsetof(uct_ib_md_config_t, custom_devices), UCS_CONFIG_TYPE_STRING_ARRAY},
+     ucs_offsetof(uct_ib_md_config_t, custom_devices),
+     UCS_CONFIG_TYPE_STRING_ARRAY},
 
     {"PREFER_NEAREST_DEVICE", "y",
-     "Prefer nearest device to cpu when selecting a device from NET_DEVICES list.\n",
-     ucs_offsetof(uct_ib_md_config_t, ext.prefer_nearest_device), UCS_CONFIG_TYPE_BOOL},
+     "Prefer nearest device to cpu when selecting a device from NET_DEVICES list.",
+     ucs_offsetof(uct_ib_md_config_t, ext.prefer_nearest_device),
+     UCS_CONFIG_TYPE_BOOL},
 
     {"INDIRECT_ATOMIC", "y",
-     "Use indirect atomic\n",
-     ucs_offsetof(uct_ib_md_config_t, ext.enable_indirect_atomic), UCS_CONFIG_TYPE_BOOL},
+     "Use indirect atomic.",
+     ucs_offsetof(uct_ib_md_config_t, ext.enable_indirect_atomic),
+     UCS_CONFIG_TYPE_BOOL},
 
     {"GID_INDEX", "auto",
      "Port GID index to use.",
-     ucs_offsetof(uct_ib_md_config_t, ext.gid_index), UCS_CONFIG_TYPE_ULUNITS},
+     ucs_offsetof(uct_ib_md_config_t, ext.gid_index),
+     UCS_CONFIG_TYPE_ULUNITS},
 
     {"SUBNET_PREFIX", "",
-     "Infiniband subnet prefix to filter ports by, empty means no filter. "
-     "Relevant for IB link layer only\n"
+     "Infiniband subnet prefix to filter ports by, empty means no filter.\n"
+     "Relevant for IB link layer only.\n"
      "For example a filter for the default subnet prefix can be specified as: fe80:0:0:0",
-     ucs_offsetof(uct_ib_md_config_t, subnet_prefix), UCS_CONFIG_TYPE_STRING},
+     ucs_offsetof(uct_ib_md_config_t, subnet_prefix),
+     UCS_CONFIG_TYPE_STRING},
 
     {"GPU_DIRECT_RDMA", "try",
-     "Use GPU Direct RDMA for HCA to access GPU pages directly\n",
-     ucs_offsetof(uct_ib_md_config_t, enable_gpudirect_rdma), UCS_CONFIG_TYPE_TERNARY},
+     "Use GPU Direct RDMA for HCA to access GPU pages directly.",
+     ucs_offsetof(uct_ib_md_config_t, enable_gpudirect_rdma),
+     UCS_CONFIG_TYPE_TERNARY},
 
     {"GDA_MAX_HCA_PER_GPU", "auto",
      "Max number of HCA devices to use for GDA per one GPU device.",
@@ -127,77 +143,90 @@ ucs_config_field_t uct_ib_md_config_table[] = {
 
     {"GDA_DMABUF_ENABLE", "try",
      "Enable DMA-BUF in GDA.",
-     ucs_offsetof(uct_ib_md_config_t, ext.gda_dmabuf_enable), UCS_CONFIG_TYPE_TERNARY},
+     ucs_offsetof(uct_ib_md_config_t, ext.gda_dmabuf_enable),
+     UCS_CONFIG_TYPE_TERNARY},
 
     {"GDA_RETAIN_INACTIVE_CTX", "n",
-     "Retain and use an inactive CUDA primary context to query device "
-     "capabilities.",
+     "Retain and use an inactive CUDA primary context to query device capabilities.",
      ucs_offsetof(uct_ib_md_config_t, ext.gda_retain_inactive_ctx),
      UCS_CONFIG_TYPE_BOOL},
 
     {"PCI_BW", "",
-     "Maximum effective data transfer rate of PCI bus connected to HCA\n",
-     ucs_offsetof(uct_ib_md_config_t, pci_bw), UCS_CONFIG_TYPE_ARRAY(pci_bw)},
+     "Maximum effective data transfer rate of PCI bus connected to HCA.",
+     ucs_offsetof(uct_ib_md_config_t, pci_bw),
+     UCS_CONFIG_TYPE_ARRAY(pci_bw)},
 
     {"MLX5_DV", "try",
-     "MLX5 support\n",
-     ucs_offsetof(uct_ib_md_config_t, mlx5dv), UCS_CONFIG_TYPE_TERNARY},
+     "MLX5 support.",
+     ucs_offsetof(uct_ib_md_config_t, mlx5dv),
+     UCS_CONFIG_TYPE_TERNARY},
 
     {"MLX5_DEVX", "try",
-     "DEVX support\n",
-     ucs_offsetof(uct_ib_md_config_t, devx), UCS_CONFIG_TYPE_TERNARY},
+     "DEVX support.",
+     ucs_offsetof(uct_ib_md_config_t, devx),
+     UCS_CONFIG_TYPE_TERNARY},
 
     {"MLX5_DEVX_OBJECTS", "rcqp,rcsrq,dct,dcsrq,dci,cq",
-     "Objects to be created by DEVX\n",
+     "Objects to be created by DEVX.",
      ucs_offsetof(uct_ib_md_config_t, devx_objs),
      UCS_CONFIG_TYPE_BITMAP(uct_ib_devx_objs)},
 
     {"REG_MT_THRESH", "4G",
      "Minimal MR size to be register using multiple parallel threads.\n"
-     "Number of threads used will be determined by number of CPUs which "
+     "Number of threads used will be determined by number of CPUs which\n"
      "registering thread is bound to by hard affinity.",
-     ucs_offsetof(uct_ib_md_config_t, ext.min_mt_reg), UCS_CONFIG_TYPE_MEMUNITS},
+     ucs_offsetof(uct_ib_md_config_t, ext.min_mt_reg),
+     UCS_CONFIG_TYPE_MEMUNITS},
 
     {"REG_MT_CHUNK", "2G",
      "Size of single chunk used in multithreaded registration.\n"
      "Must be power of 2.",
-     ucs_offsetof(uct_ib_md_config_t, ext.mt_reg_chunk), UCS_CONFIG_TYPE_MEMUNITS},
+     ucs_offsetof(uct_ib_md_config_t, ext.mt_reg_chunk),
+     UCS_CONFIG_TYPE_MEMUNITS},
 
     {"REG_MT_BIND", "n",
      "Enable setting CPU affinity of memory registration threads.",
-     ucs_offsetof(uct_ib_md_config_t, ext.mt_reg_bind), UCS_CONFIG_TYPE_BOOL},
+     ucs_offsetof(uct_ib_md_config_t, ext.mt_reg_bind),
+     UCS_CONFIG_TYPE_BOOL},
 
     {"PCI_RELAXED_ORDERING", "auto",
      "Enable relaxed ordering for PCIe transactions to improve performance on some systems.",
-     ucs_offsetof(uct_ib_md_config_t, mr_relaxed_order), UCS_CONFIG_TYPE_TERNARY_AUTO},
+     ucs_offsetof(uct_ib_md_config_t, mr_relaxed_order),
+     UCS_CONFIG_TYPE_TERNARY_AUTO},
 
     {"MAX_IDLE_RKEY_COUNT", "16",
      "Maximal number of invalidated memory keys that are kept idle before reuse.",
-     ucs_offsetof(uct_ib_md_config_t, ext.max_idle_rkey_count), UCS_CONFIG_TYPE_UINT},
+     ucs_offsetof(uct_ib_md_config_t, ext.max_idle_rkey_count),
+     UCS_CONFIG_TYPE_UINT},
 
     {"REG_RETRY_CNT", "inf",
      "Number of memory registration attempts.",
-     ucs_offsetof(uct_ib_md_config_t, ext.reg_retry_cnt), UCS_CONFIG_TYPE_ULUNITS},
+     ucs_offsetof(uct_ib_md_config_t, ext.reg_retry_cnt),
+     UCS_CONFIG_TYPE_ULUNITS},
 
     {"SMKEY_BLOCK_SIZE", "8",
      "Number of indexes in a symmetric block. More can lead to less contention.",
-     ucs_offsetof(uct_ib_md_config_t, ext.smkey_block_size), UCS_CONFIG_TYPE_UINT},
+     ucs_offsetof(uct_ib_md_config_t, ext.smkey_block_size),
+     UCS_CONFIG_TYPE_UINT},
 
     {"XGVMI_UMR_ENABLE", "y",
      "Enable UMR optimization for XGVMI mkeys export/import.",
-     ucs_offsetof(uct_ib_md_config_t, xgvmi_umr_enable), UCS_CONFIG_TYPE_BOOL},
+     ucs_offsetof(uct_ib_md_config_t, xgvmi_umr_enable),
+     UCS_CONFIG_TYPE_BOOL},
 
     {"ODP_MEM_TYPES", "host",
-     "Advertise non-blocking registration for these memory types, when ODP is "
-     "enabled.\n",
+     "Advertise non-blocking registration for these memory types, when ODP is enabled.",
      ucs_offsetof(uct_ib_md_config_t, ext.odp.mem_types),
      UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
 
-    {"DIRECT_NIC", "y", "Use Direct NIC functionality for GPU memory access",
-     ucs_offsetof(uct_ib_md_config_t, ext.direct_nic), UCS_CONFIG_TYPE_BOOL},
+    {"DIRECT_NIC", "y",
+     "Use Direct NIC functionality for GPU memory access.",
+     ucs_offsetof(uct_ib_md_config_t, ext.direct_nic),
+     UCS_CONFIG_TYPE_BOOL},
 
     {NULL}
 };
+/* clang-format on */
 
 #ifdef ENABLE_STATS
 static ucs_stats_class_t uct_ib_md_stats_class = {

@@ -17,34 +17,40 @@
 #include <ucs/sys/string.h>
 
 
+/* clang-format off */
 static ucs_config_field_t uct_rocm_copy_iface_config_table[] = {
-
-    {"", "", NULL, ucs_offsetof(uct_rocm_copy_iface_config_t, super),
+    {"", "", NULL,
+     ucs_offsetof(uct_rocm_copy_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
     {"D2H_THRESH", "256",
-     "Threshold for switching to hsa memcpy for device-to-host copies",
+     "Threshold for switching to hsa memcpy for device-to-host copies.",
      ucs_offsetof(uct_rocm_copy_iface_config_t, d2h_thresh),
      UCS_CONFIG_TYPE_MEMUNITS},
 
     {"H2D_THRESH", "1m",
-     "Threshold for switching to hsa memcpy for host-to-device copies",
+     "Threshold for switching to hsa memcpy for host-to-device copies.",
      ucs_offsetof(uct_rocm_copy_iface_config_t, h2d_thresh),
      UCS_CONFIG_TYPE_MEMUNITS},
 
-    {"ENABLE_ASYNC_ZCOPY", "y", "Enable asynchronous zcopy operations",
+    {"ENABLE_ASYNC_ZCOPY", "y",
+     "Enable asynchronous zcopy operations.",
      ucs_offsetof(uct_rocm_copy_iface_config_t, enable_async_zcopy),
      UCS_CONFIG_TYPE_BOOL},
 
-    {"LAT", "1e-7", "Latency",
-     ucs_offsetof(uct_rocm_copy_iface_config_t, latency), UCS_CONFIG_TYPE_TIME},
+    {"LAT", "1e-7",
+     "Latency.",
+     ucs_offsetof(uct_rocm_copy_iface_config_t, latency),
+     UCS_CONFIG_TYPE_TIME},
 
-    {"SIGPOOL_MAX_ELEMS", "1024", "Maximum number of elements in signal pool",
+    {"SIGPOOL_MAX_ELEMS", "1024",
+     "Maximum number of elements in signal pool.",
      ucs_offsetof(uct_rocm_copy_iface_config_t, sigpool_max_elems),
      UCS_CONFIG_TYPE_UINT},
 
     {NULL}
 };
+/* clang-format on */
 
 /* Forward declaration for the delete function */
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_rocm_copy_iface_t)(uct_iface_t*);

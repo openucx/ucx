@@ -70,6 +70,7 @@ typedef struct {
 
 extern ucs_config_field_t uct_ib_md_config_table[];
 
+/* clang-format off */
 ucs_config_field_t uct_gga_mlx5_iface_config_table[] = {
   {"GGA_", "", NULL,
    ucs_offsetof(uct_gga_mlx5_iface_config_t, super),
@@ -81,6 +82,7 @@ ucs_config_field_t uct_gga_mlx5_iface_config_table[] = {
 
   {NULL}
 };
+/* clang-format on */
 
 static ucs_status_t
 uct_ib_mlx5_gga_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)

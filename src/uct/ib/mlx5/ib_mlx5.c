@@ -32,14 +32,17 @@ static const char *uct_ib_mlx5_mmio_modes[] = {
     [UCT_IB_MLX5_MMIO_MODE_LAST]       = NULL
 };
 
+/* clang-format off */
 ucs_config_field_t uct_ib_mlx5_iface_config_table[] = {
 #if HAVE_IBV_DM
     {"DM_SIZE", "2k",
-     "Device Memory segment size (0 - disabled)",
-     ucs_offsetof(uct_ib_mlx5_iface_config_t, dm.seg_len), UCS_CONFIG_TYPE_MEMUNITS},
+     "Device Memory segment size (0 - disabled).",
+     ucs_offsetof(uct_ib_mlx5_iface_config_t, dm.seg_len),
+     UCS_CONFIG_TYPE_MEMUNITS},
     {"DM_COUNT", "1",
-     "Device Memory segments count (0 - disabled)",
-     ucs_offsetof(uct_ib_mlx5_iface_config_t, dm.count), UCS_CONFIG_TYPE_UINT},
+     "Device Memory segments count (0 - disabled).",
+     ucs_offsetof(uct_ib_mlx5_iface_config_t, dm.count),
+     UCS_CONFIG_TYPE_UINT},
 #endif
 
     {"MMIO_MODE", "auto",
@@ -67,8 +70,9 @@ ucs_config_field_t uct_ib_mlx5_iface_config_table[] = {
      "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n"
      "+ UCX_IB_SL=<sl> + AR enabled on <sl>     + Use SL=<sl>           + Failure               + Use SL=<sl>           + Use SL=<sl>           +\n"
      "+                + AR disabled on <sl>    + Failure               + Use SL=<sl>           + Use SL=<sl>           + Use SL=<sl>           +\n"
-     "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n",
-     ucs_offsetof(uct_ib_mlx5_iface_config_t, ar_enable), UCS_CONFIG_TYPE_TERNARY_AUTO},
+     "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++",
+     ucs_offsetof(uct_ib_mlx5_iface_config_t, ar_enable),
+     UCS_CONFIG_TYPE_TERNARY_AUTO},
 
     {"TX_CQE_ZIP_ENABLE", "no",
      "Enable CQE zipping feature for sender side. CQE zipping reduces PCI utilization by\n"
@@ -84,6 +88,7 @@ ucs_config_field_t uct_ib_mlx5_iface_config_table[] = {
 
     {NULL}
 };
+/* clang-format on */
 
 void uct_ib_mlx5_parse_cqe_zipping(uct_ib_mlx5_md_t *md,
                                    const uct_ib_mlx5_iface_config_t *mlx5_config,

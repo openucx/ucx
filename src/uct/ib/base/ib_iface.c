@@ -93,64 +93,77 @@ static const char *uct_ib_iface_addr_types[] = {
    [UCT_IB_IFACE_ADDRESS_TYPE_LAST] = NULL
 };
 
+/* clang-format off */
 ucs_config_field_t uct_ib_iface_config_table[] = {
   {"", "ALLOC=thp,mmap,heap", NULL,
-   ucs_offsetof(uct_ib_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
+   ucs_offsetof(uct_ib_iface_config_t, super),
+   UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
   {"SEG_SIZE", "8192",
    "Size of bounce buffers used for post_send and post_recv.",
-   ucs_offsetof(uct_ib_iface_config_t, seg_size), UCS_CONFIG_TYPE_MEMUNITS},
+   ucs_offsetof(uct_ib_iface_config_t, seg_size),
+   UCS_CONFIG_TYPE_MEMUNITS},
 
   {"TX_QUEUE_LEN", "256",
    "Length of send queue in the QP.",
-   ucs_offsetof(uct_ib_iface_config_t, tx.queue_len), UCS_CONFIG_TYPE_UINT},
+   ucs_offsetof(uct_ib_iface_config_t, tx.queue_len),
+   UCS_CONFIG_TYPE_UINT},
 
   {"TX_MAX_BATCH", "16",
    "Number of send WQEs to batch in one post-send list. Larger values reduce\n"
    "the CPU usage, but increase the latency and pipelining between sender and\n"
    "receiver.",
-   ucs_offsetof(uct_ib_iface_config_t, tx.max_batch), UCS_CONFIG_TYPE_UINT},
+   ucs_offsetof(uct_ib_iface_config_t, tx.max_batch),
+   UCS_CONFIG_TYPE_UINT},
 
   {"TX_MAX_POLL", "16",
-   "Max number of receive completions to pick during TX poll",
-   ucs_offsetof(uct_ib_iface_config_t, tx.max_poll), UCS_CONFIG_TYPE_UINT},
+   "Max number of receive completions to pick during TX poll.",
+   ucs_offsetof(uct_ib_iface_config_t, tx.max_poll),
+   UCS_CONFIG_TYPE_UINT},
 
   {"TX_MIN_INLINE", "64",
    "Bytes to reserve in send WQE for inline data. Messages which are small\n"
    "enough will be sent inline.",
-   ucs_offsetof(uct_ib_iface_config_t, tx.min_inline), UCS_CONFIG_TYPE_MEMUNITS},
+   ucs_offsetof(uct_ib_iface_config_t, tx.min_inline),
+   UCS_CONFIG_TYPE_MEMUNITS},
 
   {"TX_INLINE_RESP", "0",
    "Bytes to reserve in send WQE for inline response. Responses which are small\n"
    "enough, such as of atomic operations and small reads, will be received inline.",
-   ucs_offsetof(uct_ib_iface_config_t, inl[UCT_IB_DIR_TX]), UCS_CONFIG_TYPE_MEMUNITS},
+   ucs_offsetof(uct_ib_iface_config_t, inl[UCT_IB_DIR_TX]),
+   UCS_CONFIG_TYPE_MEMUNITS},
 
   {"TX_MIN_SGE", "5",
    "Number of SG entries to reserve in the send WQE.",
-   ucs_offsetof(uct_ib_iface_config_t, tx.min_sge), UCS_CONFIG_TYPE_UINT},
+   ucs_offsetof(uct_ib_iface_config_t, tx.min_sge),
+   UCS_CONFIG_TYPE_UINT},
 
   UCT_IFACE_MPOOL_CONFIG_FIELDS("TX_", -1, 1024, 128m, 1.0, "send",
                                 ucs_offsetof(uct_ib_iface_config_t, tx.mp),
-      "\nAttention: Setting this param with value != -1 is a dangerous thing\n"
-      "in RC/DC and could cause deadlock or performance degradation."),
+                                "\nAttention: Setting this param with value != -1 is a dangerous thing\n"
+                                "in RC/DC and could cause deadlock or performance degradation."),
 
   {"RX_QUEUE_LEN", "4096",
    "Length of receive queue in the QPs.",
-   ucs_offsetof(uct_ib_iface_config_t, rx.queue_len), UCS_CONFIG_TYPE_UINT},
+   ucs_offsetof(uct_ib_iface_config_t, rx.queue_len),
+   UCS_CONFIG_TYPE_UINT},
 
   {"RX_MAX_BATCH", "16",
    "How many post-receives to perform in one batch.",
-   ucs_offsetof(uct_ib_iface_config_t, rx.max_batch), UCS_CONFIG_TYPE_UINT},
+   ucs_offsetof(uct_ib_iface_config_t, rx.max_batch),
+   UCS_CONFIG_TYPE_UINT},
 
   {"RX_MAX_POLL", "16",
-   "Max number of receive completions to pick during RX poll",
-   ucs_offsetof(uct_ib_iface_config_t, rx.max_poll), UCS_CONFIG_TYPE_UINT},
+   "Max number of receive completions to pick during RX poll.",
+   ucs_offsetof(uct_ib_iface_config_t, rx.max_poll),
+   UCS_CONFIG_TYPE_UINT},
 
   {"RX_INLINE", "0",
    "Number of bytes to request for inline receive. If the maximal supported size\n"
    "is smaller, it will be used instead. If it is possible to support a larger\n"
    "size than requested with the same hardware resources, it will be used instead.",
-   ucs_offsetof(uct_ib_iface_config_t, inl[UCT_IB_DIR_RX]), UCS_CONFIG_TYPE_MEMUNITS},
+   ucs_offsetof(uct_ib_iface_config_t, inl[UCT_IB_DIR_RX]),
+   UCS_CONFIG_TYPE_MEMUNITS},
 
   UCT_IFACE_MPOOL_CONFIG_FIELDS("RX_", -1, 0, 128m, 1.0, "receive",
                                 ucs_offsetof(uct_ib_iface_config_t, rx.mp), ""),
@@ -164,26 +177,31 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
 
   {"IS_GLOBAL", "n",
    "Force interface to use global routing.",
-   ucs_offsetof(uct_ib_iface_config_t, is_global), UCS_CONFIG_TYPE_BOOL},
+   ucs_offsetof(uct_ib_iface_config_t, is_global),
+   UCS_CONFIG_TYPE_BOOL},
 
   {"FLID_ROUTE", "y",
    "Enable FLID based routing with site-local GIDs.",
-   ucs_offsetof(uct_ib_iface_config_t, flid_enabled), UCS_CONFIG_TYPE_BOOL},
+   ucs_offsetof(uct_ib_iface_config_t, flid_enabled),
+   UCS_CONFIG_TYPE_BOOL},
 
   {"SL", "auto",
-   "InfiniBand: Service level. 'auto' will select a value matching UCX_IB_AR configuration.\n"
-   "RoCEv2: Ethernet Priority. 'auto' will select 0 by default.",
-   ucs_offsetof(uct_ib_iface_config_t, sl), UCS_CONFIG_TYPE_ULUNITS},
+   "InfiniBand: Service level, 'auto' will select a value matching UCX_IB_AR configuration.\n"
+   "RoCEv2: Ethernet Priority, 'auto' will select 0 by default.",
+   ucs_offsetof(uct_ib_iface_config_t, sl),
+   UCS_CONFIG_TYPE_ULUNITS},
 
   {"TRAFFIC_CLASS", "auto",
    "IB Traffic Class / RoCEv2 Differentiated Services Code Point (DSCP).\n"
-   "\"auto\" option uses the port’s global traffic class for RoCEv2 if any, otherwise\n"
+   "\"auto\" option uses the port's global traffic class for RoCEv2 if any, otherwise\n"
    "defaults to 106. IB uses class 0.",
-   ucs_offsetof(uct_ib_iface_config_t, traffic_class), UCS_CONFIG_TYPE_ULUNITS},
+   ucs_offsetof(uct_ib_iface_config_t, traffic_class),
+   UCS_CONFIG_TYPE_ULUNITS},
 
   {"HOP_LIMIT", "255",
-   "IB Hop limit / RoCEv2 Time to Live. Should be between 0 and 255.\n",
-   ucs_offsetof(uct_ib_iface_config_t, hop_limit), UCS_CONFIG_TYPE_UINT},
+   "IB Hop limit / RoCEv2 Time to Live. Should be between 0 and 255.",
+   ucs_offsetof(uct_ib_iface_config_t, hop_limit),
+   UCS_CONFIG_TYPE_UINT},
 
   {"NUM_PATHS", "auto",
    "Number of connections that should be created between a pair of communicating\n"
@@ -192,83 +210,96 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    " RoCE       - "UCS_PP_MAKE_STRING(UCT_IB_DEV_MAX_PORTS) " for LAG port, otherwise - 1.\n"
    " InfiniBand - As the number of path bits enabled by fabric's LMC value and selected\n"
    "              by "UCS_DEFAULT_ENV_PREFIX UCT_IB_CONFIG_PREFIX"LID_PATH_BITS configuration.",
-   ucs_offsetof(uct_ib_iface_config_t, num_paths), UCS_CONFIG_TYPE_ULUNITS},
+   ucs_offsetof(uct_ib_iface_config_t, num_paths),
+   UCS_CONFIG_TYPE_ULUNITS},
 
   {"ROCE_LOCAL_SUBNET", "n",
    "Use the local IP address and subnet mask of each network device to route RoCEv2 packets.\n"
    "If set to 'y', only addresses within the interface's subnet will be assumed as reachable.\n"
    "If set to 'n', every remote RoCEv2 IP address is assumed to be reachable from any port.",
-   ucs_offsetof(uct_ib_iface_config_t, rocev2_local_subnet), UCS_CONFIG_TYPE_BOOL},
+   ucs_offsetof(uct_ib_iface_config_t, rocev2_local_subnet),
+   UCS_CONFIG_TYPE_BOOL},
 
   {"ROCE_SUBNET_PREFIX_LEN", "auto",
    "Length, in bits, of the subnet prefix to be used for reachability check\n"
    "when UCX_IB_ROCE_LOCAL_SUBNET is enabled.\n"
-   " - auto  - Detect the subnet prefix length automatically from device address\n"
-   " - inf   - Allow connections only within the same machine and same device\n"
-   " - <num> - Specify a numeric bit-length value for the subnet prefix",
-   ucs_offsetof(uct_ib_iface_config_t, rocev2_subnet_pfx_len), UCS_CONFIG_TYPE_ULUNITS},
+   " auto  - Detect the subnet prefix length automatically from device address.\n"
+   " inf   - Allow connections only within the same machine and same device.\n"
+   " <num> - Specify a numeric bit-length value for the subnet prefix.",
+   ucs_offsetof(uct_ib_iface_config_t, rocev2_subnet_pfx_len),
+   UCS_CONFIG_TYPE_ULUNITS},
 
   {"ROCE_SUBNETS", UCS_CONFIG_PARSER_ALL,
-   "List of included/excluded subnets to filter RoCE GID entries by. Each subnet contains an\n"
-   "address and a netmask in the form x.x.x.x/y.\n"
+   "List of included/excluded subnets to filter RoCE GID entries by.\n"
+   "Each subnet contains an address and a netmask in the form x.x.x.x/y.\n"
    "It must not be used together with UCX_IB_GID_INDEX.",
-   ucs_offsetof(uct_ib_iface_config_t, rocev2_subnet_filter), UCS_CONFIG_TYPE_ALLOW_LIST},
+   ucs_offsetof(uct_ib_iface_config_t, rocev2_subnet_filter),
+   UCS_CONFIG_TYPE_ALLOW_LIST},
 
   {"ROCE_REACHABILITY_MODE", "route",
-   "The mode used for performing the reachability check\n"
-   " - route        - all routable addresses are assumed as reachable\n"
-   " - local_subnet - only addresses within the interface's subnet are assumed as reachable.\n"
-   " - all          - all addresses are assumed as reachable, without any check",
-   ucs_offsetof(uct_ib_iface_config_t, reachability_mode), UCS_CONFIG_TYPE_ENUM(uct_ib_reachability_modes)},
+   "The mode used for performing the reachability check.\n"
+   " route        - all routable addresses are assumed as reachable.\n"
+   " local_subnet - only addresses within the interface's subnet are assumed as reachable.\n"
+   " all          - all addresses are assumed as reachable, without any check.",
+   ucs_offsetof(uct_ib_iface_config_t, reachability_mode),
+   UCS_CONFIG_TYPE_ENUM(uct_ib_reachability_modes)},
 
   {"ROCE_PATH_FACTOR", "1",
    "Multiplier for RoCE LAG UDP source port calculation. The UDP source port\n"
    "is typically used by switches and network adapters to select a different\n"
    "path for the same pair of endpoints.",
-   ucs_offsetof(uct_ib_iface_config_t, roce_path_factor), UCS_CONFIG_TYPE_UINT},
+   ucs_offsetof(uct_ib_iface_config_t, roce_path_factor),
+   UCS_CONFIG_TYPE_UINT},
 
   {"LID_PATH_BITS", "0",
-   "List of IB Path bits separated by comma (a,b,c) "
-   "which will be the low portion of the LID, according to the LMC in the fabric.",
-   ucs_offsetof(uct_ib_iface_config_t, lid_path_bits), UCS_CONFIG_TYPE_ARRAY(path_bits_spec)},
+   "List of IB Path bits separated by comma (a,b,c) which will be the low\n"
+   "portion of the LID, according to the LMC in the fabric.",
+   ucs_offsetof(uct_ib_iface_config_t, lid_path_bits),
+   UCS_CONFIG_TYPE_ARRAY(path_bits_spec)},
 
   {"PKEY", "auto",
    "Which pkey value to use. Should be between 0 and 0x7fff.\n"
    "\"auto\" option selects a first valid pkey value with full membership.",
-   ucs_offsetof(uct_ib_iface_config_t, pkey), UCS_CONFIG_TYPE_HEX},
+   ucs_offsetof(uct_ib_iface_config_t, pkey),
+   UCS_CONFIG_TYPE_HEX},
 
   {"PATH_MTU", "default",
    "Path MTU. \"default\" will select the best MTU for the device.",
    ucs_offsetof(uct_ib_iface_config_t, path_mtu),
-                UCS_CONFIG_TYPE_ENUM(uct_ib_mtu_values)},
+   UCS_CONFIG_TYPE_ENUM(uct_ib_mtu_values)},
 
   {"COUNTER_SET_ID", "auto",
    "Counter set ID to use for performance counters. A value of 'auto' will try to\n"
    "detect the default value by creating a dummy QP." ,
-   ucs_offsetof(uct_ib_iface_config_t, counter_set_id), UCS_CONFIG_TYPE_ULUNITS},
+   ucs_offsetof(uct_ib_iface_config_t, counter_set_id),
+   UCS_CONFIG_TYPE_ULUNITS},
 
   {"REVERSE_SL", "auto",
-   "Reverse Service level. 'auto' will set the same value of sl\n",
-   ucs_offsetof(uct_ib_iface_config_t, reverse_sl), UCS_CONFIG_TYPE_ULUNITS},
+   "Reverse Service level. 'auto' will set the same value of sl.",
+   ucs_offsetof(uct_ib_iface_config_t, reverse_sl),
+   UCS_CONFIG_TYPE_ULUNITS},
 
   {"SEND_OVERHEAD", UCT_IB_SEND_OVERHEAD_VALUE(0),
    "Estimated overhead of preparing a work request, posting it to the NIC,\n"
-   "and finalizing an operation",
-   0, UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_TIME,
-    {"bcopy", "estimated overhead of allocating a tx buffer",
-     ucs_offsetof(uct_ib_iface_config_t, send_overhead.bcopy)},
-    {"cqe", "estimated overhead of processing a work request completion",
-     ucs_offsetof(uct_ib_iface_config_t, send_overhead.cqe)},
-    {"db", "estimated overhead of writing a doorbell to PCI",
-     ucs_offsetof(uct_ib_iface_config_t, send_overhead.db)},
-    {"wqe_fetch", "estimated overhead of fetching a wqe",
-     ucs_offsetof(uct_ib_iface_config_t, send_overhead.wqe_fetch)},
-    {"wqe_post", "estimated overhead of posting a wqe",
-     ucs_offsetof(uct_ib_iface_config_t, send_overhead.wqe_post)},
-    {NULL})},
+   "and finalizing an operation.",
+   0,
+   UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_TIME,
+     {"bcopy", "estimated overhead of allocating a tx buffer",
+      ucs_offsetof(uct_ib_iface_config_t, send_overhead.bcopy)},
+     {"cqe", "estimated overhead of processing a work request completion",
+      ucs_offsetof(uct_ib_iface_config_t, send_overhead.cqe)},
+     {"db", "estimated overhead of writing a doorbell to PCI",
+      ucs_offsetof(uct_ib_iface_config_t, send_overhead.db)},
+     {"wqe_fetch", "estimated overhead of fetching a wqe",
+      ucs_offsetof(uct_ib_iface_config_t, send_overhead.wqe_fetch)},
+     {"wqe_post", "estimated overhead of posting a wqe",
+      ucs_offsetof(uct_ib_iface_config_t, send_overhead.wqe_post)},
+     {NULL}
+   )},
 
   {NULL}
 };
+/* clang-format on */
 
 #ifdef ENABLE_STATS
 static ucs_stats_class_t uct_ib_iface_stats_class = {

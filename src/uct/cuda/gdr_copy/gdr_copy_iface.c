@@ -18,36 +18,41 @@
 
 #define UCT_GDR_COPY_IFACE_OVERHEAD 0
 
+/* clang-format off */
 static ucs_config_field_t uct_gdr_copy_iface_config_table[] = {
-
     {"", "", NULL,
      ucs_offsetof(uct_gdr_copy_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
     {"BW", "0MBs,get_dedicated:250MBs,put_shared:6911MBs",
-     "Estimated memory copy bandwidth", 0,
+     "Estimated memory copy bandwidth.",
+     0,
      UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_BW,
-        {"get_dedicated", "dedicated get bandwidth",
-         ucs_offsetof(uct_gdr_copy_iface_config_t, get_bw.dedicated)},
-        {"get_shared", "shared get bandwidth",
-         ucs_offsetof(uct_gdr_copy_iface_config_t, get_bw.shared)},
-        {"put_dedicated", "dedicated put bandwidth",
-         ucs_offsetof(uct_gdr_copy_iface_config_t, put_bw.dedicated)},
-        {"put_shared", "shared put bandwidth",
-         ucs_offsetof(uct_gdr_copy_iface_config_t, put_bw.shared)},
-        {NULL})},
+       {"get_dedicated", "dedicated get bandwidth",
+        ucs_offsetof(uct_gdr_copy_iface_config_t, get_bw.dedicated)},
+       {"get_shared", "shared get bandwidth",
+        ucs_offsetof(uct_gdr_copy_iface_config_t, get_bw.shared)},
+       {"put_dedicated", "dedicated put bandwidth",
+        ucs_offsetof(uct_gdr_copy_iface_config_t, put_bw.dedicated)},
+       {"put_shared", "shared put bandwidth",
+        ucs_offsetof(uct_gdr_copy_iface_config_t, put_bw.shared)},
+       {NULL}
+     )},
 
     {"LAT", "get:1.4e-6,put:0.4e-6",
-     "Estimated latency", 0,
+     "Estimated latency.",
+     0,
      UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_TIME,
-        {"get", "get latency",
-         ucs_offsetof(uct_gdr_copy_iface_config_t, get_latency)},
-        {"put", "put latency",
-         ucs_offsetof(uct_gdr_copy_iface_config_t, put_latency)},
-        {NULL})},
+       {"get", "get latency",
+        ucs_offsetof(uct_gdr_copy_iface_config_t, get_latency)},
+       {"put", "put latency",
+        ucs_offsetof(uct_gdr_copy_iface_config_t, put_latency)},
+       {NULL}
+     )},
 
     {NULL}
 };
+/* clang-format on */
 
 /* Forward declaration for the delete function */
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_gdr_copy_iface_t)(uct_iface_t*);

@@ -37,6 +37,7 @@
 #define UCT_UD_MLX5_IFACE_OVERHEAD 80e-9
 
 
+/* clang-format off */
 static ucs_config_field_t uct_ud_mlx5_iface_config_table[] = {
   {"UD_", UCT_IB_SEND_OVERHEAD_DEFAULT(UCT_UD_MLX5_IFACE_OVERHEAD), NULL,
    ucs_offsetof(uct_ud_mlx5_iface_config_t, super),
@@ -52,6 +53,7 @@ static ucs_config_field_t uct_ud_mlx5_iface_config_table[] = {
 
   {NULL}
 };
+/* clang-format on */
 
 static UCS_F_ALWAYS_INLINE size_t
 uct_ud_mlx5_ep_ctrl_av_size(uct_ud_mlx5_ep_t *ep)

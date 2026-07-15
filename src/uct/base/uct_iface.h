@@ -576,7 +576,7 @@ typedef struct uct_iface_mpool_config {
     double            grow_factor; /* Increase each new allocated chunk by this factor */
 } uct_iface_mpool_config_t;
 
-
+/* clang-format off */
 /**
  * Define configuration fields for memory pool parameters.
  */
@@ -586,22 +586,26 @@ typedef struct uct_iface_mpool_config {
     {_prefix "MAX_BUFS", UCS_PP_QUOTE(_dfl_max), \
      "Maximal number of " _mp_name " buffers for the interface. -1 is infinite." \
      _desc, \
-     (_offset) + ucs_offsetof(uct_iface_mpool_config_t, max_bufs), UCS_CONFIG_TYPE_INT}, \
+     (_offset) + ucs_offsetof(uct_iface_mpool_config_t, max_bufs), \
+     UCS_CONFIG_TYPE_INT}, \
     \
     {_prefix "BUFS_GROW", UCS_PP_QUOTE(_dfl_grow), \
      "The initial number of buffers in " _mp_name " memory pool.\n" \
      "0 means the value is chosen by the transport.", \
-     (_offset) + ucs_offsetof(uct_iface_mpool_config_t, bufs_grow), UCS_CONFIG_TYPE_UINT}, \
+     (_offset) + ucs_offsetof(uct_iface_mpool_config_t, bufs_grow), \
+     UCS_CONFIG_TYPE_UINT}, \
     \
     {_prefix "MAX_CHUNK_SIZE", UCS_PP_QUOTE(_dfl_max_chunk_size), \
      "Maximal chunk size for " _mp_name " memory pool.\n", \
-     (_offset) + ucs_offsetof(uct_iface_mpool_config_t, max_chunk_size), UCS_CONFIG_TYPE_MEMUNITS}, \
+     (_offset) + ucs_offsetof(uct_iface_mpool_config_t, max_chunk_size), \
+     UCS_CONFIG_TYPE_MEMUNITS}, \
     \
     {_prefix "GROW_FACTOR", UCS_PP_QUOTE(_dfl_grow_factor), \
      "Growth factor for new chunks in " _mp_name ". Each time a new chunk is allocated,\n" \
      "its size is the multiple of the previous chunk size by this number.",\
-     (_offset) + ucs_offsetof(uct_iface_mpool_config_t, grow_factor), UCS_CONFIG_TYPE_DOUBLE}
-
+     (_offset) + ucs_offsetof(uct_iface_mpool_config_t, grow_factor), \
+     UCS_CONFIG_TYPE_DOUBLE}
+/* clang-format on */
 
 void uct_iface_mpool_config_copy(ucs_mpool_params_t *mp_params,
                                  const uct_iface_mpool_config_t *cfg);
