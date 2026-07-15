@@ -23,6 +23,8 @@ typedef struct ucm_bistro_restore_point ucm_bistro_restore_point_t;
 #  include "bistro_x86_64.h"
 #elif defined(__riscv)
 #  include "bistro_rv64.h"
+#elif defined(__s390x__)
+#  include "bistro_s390x.h"
 #else
 #  error "Unsupported architecture"
 #endif

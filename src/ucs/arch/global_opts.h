@@ -18,6 +18,8 @@
 #  include "aarch64/global_opts.h"
 #elif defined(__riscv)
 #  include "rv64/global_opts.h"
+#elif defined(__s390x__)
+#  include "s390x/global_opts.h"
 #else
 #  error "Unsupported architecture"
 #endif

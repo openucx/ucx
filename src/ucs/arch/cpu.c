@@ -65,6 +65,10 @@ const ucs_cpu_builtin_memcpy_t ucs_cpu_builtin_memcpy[UCS_CPU_VENDOR_LAST] = {
         .min = UCS_MEMUNITS_INF,
         .max = UCS_MEMUNITS_INF
     },
+    [UCS_CPU_VENDOR_GENERIC_IBM] = {
+        .min = UCS_MEMUNITS_INF,
+        .max = UCS_MEMUNITS_INF
+    },
     [UCS_CPU_VENDOR_FUJITSU_ARM] = {
         .min = UCS_MEMUNITS_INF,
         .max = UCS_MEMUNITS_INF
@@ -82,7 +86,6 @@ const ucs_cpu_builtin_memcpy_t ucs_cpu_builtin_memcpy[UCS_CPU_VENDOR_LAST] = {
         .max = UCS_MEMUNITS_INF
     }
 };
-
 
 static void ucs_sysfs_get_cache_size()
 {
@@ -168,6 +171,7 @@ const char *ucs_cpu_vendor_name()
         [UCS_CPU_VENDOR_GENERIC_ARM]   = "Generic ARM",
         [UCS_CPU_VENDOR_GENERIC_PPC]   = "Generic PPC",
         [UCS_CPU_VENDOR_GENERIC_RV64G] = "Generic RV64G",
+	[UCS_CPU_VENDOR_GENERIC_IBM]   = "Generic IBM",
         [UCS_CPU_VENDOR_FUJITSU_ARM]   = "Fujitsu ARM",
         [UCS_CPU_VENDOR_ZHAOXIN]       = "Zhaoxin",
         [UCS_CPU_VENDOR_NVIDIA]        = "Nvidia"
@@ -199,6 +203,7 @@ const char *ucs_cpu_model_name()
         [UCS_CPU_MODEL_ZHAOXIN_WUDAOKOU]     = "Wudaokou",
         [UCS_CPU_MODEL_ZHAOXIN_LUJIAZUI]     = "Lujiazui",
         [UCS_CPU_MODEL_RV64G]                = "RV64G",
+        [UCS_CPU_MODEL_S390X]              = "S390x",
         [UCS_CPU_MODEL_NVIDIA_GRACE]         = "Grace",
         [UCS_CPU_MODEL_NVIDIA_VERA]          = "Vera",
         [UCS_CPU_MODEL_FUJITSU_A64FX]        = "FUJITSU-A64FX",

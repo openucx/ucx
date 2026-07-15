@@ -18,6 +18,8 @@
 #  include "generic/atomic.h"
 #elif defined(__riscv)
 #  include "generic/atomic.h"
+#elif defined(__s390x__)
+#  include "generic/atomic.h"
 #else
 #  error "Unsupported architecture"
 #endif

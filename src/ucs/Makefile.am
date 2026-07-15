@@ -24,6 +24,7 @@ nobase_dist_libucs_la_HEADERS = \
 	arch/aarch64/bitops.h \
 	arch/ppc64/bitops.h \
 	arch/rv64/bitops.h \
+	arch/s390x/bitops.h \
 	arch/x86_64/bitops.h \
 	arch/bitops.h \
 	algorithm/crc.h \
@@ -88,6 +89,7 @@ nobase_dist_libucs_la_HEADERS = \
 	arch/generic/atomic.h \
 	arch/ppc64/global_opts.h \
 	arch/rv64/global_opts.h \
+	arch/s390x/global_opts.h \
 	arch/global_opts.h
 
 noinst_HEADERS = \
@@ -95,6 +97,7 @@ noinst_HEADERS = \
 	arch/generic/cpu.h \
 	arch/ppc64/cpu.h \
 	arch/rv64/cpu.h \
+	arch/s390x/cpu.h \
 	arch/x86_64/cpu.h \
 	arch/cpu.h \
 	config/ucm_opts.h \
@@ -160,6 +163,7 @@ libucs_la_SOURCES = \
 	arch/ppc64/global_opts.c \
 	arch/rv64/cpu.c \
 	arch/rv64/global_opts.c \
+	arch/s390x/global_opts.c \
 	arch/x86_64/cpu.c \
 	arch/x86_64/global_opts.c \
 	arch/cpu.c \

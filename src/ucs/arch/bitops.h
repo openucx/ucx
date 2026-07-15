@@ -23,6 +23,8 @@ BEGIN_C_DECLS
 #  include "aarch64/bitops.h"
 #elif defined(__riscv)
 #  include "rv64/bitops.h"
+#elif defined(__s390x__)
+#  include "s390x/bitops.h"
 #else
 #  error "Unsupported architecture"
 #endif

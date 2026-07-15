@@ -1319,8 +1319,19 @@ void *ucs_sys_realloc(void *old_ptr, size_t old_length, size_t new_length)
     if (old_ptr == NULL) {
         /* Note: Must pass the 0 offset as "long", otherwise it will be
          * partially undefined when converted to syscall arguments */
+#if defined(__s390x__)
+		long int _args[6] = {
+			(long int) NULL,
+			(long int) new_length,
+			(long int) PROT_READ|PROT_WRITE,
+			(long int) MAP_PRIVATE|MAP_ANONYMOUS,
+			(long int) -1,
+			(long int) 0ul};
+        ptr = (void*)syscall(__NR_mmap, _args);
+#else
         ptr = (void*)syscall(__NR_mmap, NULL, new_length, PROT_READ|PROT_WRITE,
                              MAP_PRIVATE|MAP_ANONYMOUS, -1, 0ul);
+#endif
         if (ptr == MAP_FAILED) {
             ucs_log_fatal_error("mmap(NULL, %zu, READ|WRITE, PRIVATE|ANON) failed: %m",
                                 new_length);
