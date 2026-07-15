@@ -1880,19 +1880,6 @@ typedef struct {
 } uct_ep_outstanding_purge_params_t;
 
 
-/**
- * @ingroup UCT_RESOURCE
- * @brief Purge outstanding (undelivered) operations from an endpoint.
- *
- * @note On success, this function takes ownership of classified outstanding
- *       operations and reports undelivered operations through the callback for
- *       replay by the caller.
- */
-ucs_status_t
-uct_ep_outstanding_purge(uct_ep_h ep,
-                         const uct_ep_outstanding_purge_params_t *params);
-
-
 END_C_DECLS
 
 #endif
