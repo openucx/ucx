@@ -65,10 +65,22 @@ typedef struct uct_ib_mlx5_ext_iface_query_attr {
     /** RX token length in bytes. */
     size_t rx_token_len;
 
-    /** TX token buffer. */
+    /** 
+      * TX token input buffer.
+      * Valid when @ref UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_TX_TOKEN is set.
+      * Caller sets this to a buffer of @ref tx_token_len bytes containing
+      * the TX token received from the sender.
+      * @ref UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_RX_TOKEN must be set together.
+      */
     void   *tx_token;
 
-    /** RX token buffer. */
+    /**
+      * RX token output buffer.
+      * Valid when @ref UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_RX_TOKEN is set.
+      * Caller sets this to a pre-allocated buffer of @ref rx_token_len
+      * bytes; callee fills it with RX token.
+      * @ref UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_TX_TOKEN must be set together.
+      */
     void   *rx_token;
 } uct_ib_mlx5_ext_iface_query_attr_t;
 
