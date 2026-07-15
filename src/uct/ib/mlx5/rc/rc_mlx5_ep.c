@@ -14,6 +14,7 @@
 #endif
 
 #include <uct/ib/mlx5/ib_mlx5_log.h>
+#include <uct/ib/mlx5/ib_mlx5_ext.h>
 #include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <ucs/arch/cpu.h>
@@ -24,9 +25,50 @@
 #include "rc_mlx5.inl"
 
 
+ucs_status_t
+uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep, uct_ep_attr_t *ep_attr)
+{
+    uct_ib_mlx5_ext_ep_query_attr_t attr = {};
+
+    if (ep_attr->field_mask & (UCT_EP_ATTR_FIELD_LOCAL_SOCKADDR |
+                               UCT_EP_ATTR_FIELD_REMOTE_SOCKADDR)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    if (!(ep_attr->field_mask & UCT_EP_ATTR_FIELD_TX_TOKEN)) {
+        return UCS_OK;
+    }
+
+    attr.field_mask |= UCT_IB_MLX5_EXT_EP_QUERY_ATTR_FIELD_TX_TOKEN;
+    attr.tx_token    = ep_attr->tx_token;
+
+    return uct_ib_mlx5_ext_ep_query(tl_ep, &attr);
+}
+
+ucs_status_t uct_rc_mlx5_ep_failover_enable(uct_ep_h tl_ep)
+{
+    uct_rc_mlx5_base_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_base_ep_t);
+
+    ep->super.failover_flags |= UCT_RC_EP_FAILOVER_FLAG_ENABLED;
+    return UCS_OK;
+}
+
+void uct_rc_mlx5_ep_failover_arm(uct_ep_h tl_ep)
+{
+    uct_rc_mlx5_base_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_base_ep_t);
+    uct_ib_mlx5_txwq_t *txwq  = &ep->tx.wq;
+    uct_rc_txqp_t *txqp       = &ep->super.txqp;
+
+    txwq->failover_ci         = txwq->sw_pi -
+                                (txwq->bb_max - uct_rc_txqp_available(txqp));
+    ep->super.failover_flags |= UCT_RC_EP_FAILOVER_FLAG_ARMED;
+    ucs_debug("ep %p: armed failover WQE range [%u, %u), available %d", ep,
+              txwq->failover_ci, txwq->sw_pi, uct_rc_txqp_available(txqp));
+}
+
 static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_base_ep_put_short_inline(
         uct_ep_h tl_ep, const void *buffer, unsigned length,
-        uint64_t remote_addr, uct_rkey_t rkey)
+        uint64_t remote_addr, uct_rkey_t rkey, uct_completion_t *comp)
 {
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
     uint8_t fm_ce_se;
@@ -36,11 +78,21 @@ static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_base_ep_put_short_inline(
 
     uct_rc_mlx5_ep_fence_put(iface, &ep->tx.wq, &rkey, &remote_addr,
                              ep->super.atomic_mr_offset, &fm_ce_se);
+    if (comp != NULL) {
+        fm_ce_se |= MLX5_WQE_CTRL_CQ_UPDATE;
+    }
     uct_rc_mlx5_txqp_inline_post(iface, IBV_QPT_RC,
                                  &ep->super.txqp, &ep->tx.wq,
                                  MLX5_OPCODE_RDMA_WRITE,
                                  buffer, length, 0, 0, 0, remote_addr, rkey,
                                  0, fm_ce_se, 0, INT_MAX);
+    if (comp != NULL) {
+        /* Inline WQEs have no descriptor from which failover extraction can
+         * recover the completion. Associate one through a lightweight op. */
+        uct_rc_txqp_add_send_comp(&iface->super, &ep->super.txqp,
+                                  uct_rc_ep_put_short_handler, comp,
+                                  ep->tx.wq.sig_pi, 0, NULL, 0, 0);
+    }
     uct_rc_ep_enable_flush_remote(&ep->super);
     UCT_TL_EP_STAT_OP(&ep->super.super, PUT, SHORT, length);
     return UCS_OK;
@@ -84,10 +136,10 @@ static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_base_ep_am_short_iov_inline(
     return UCS_OK;
 }
 
-ucs_status_t uct_rc_mlx5_base_ep_put_short(uct_ep_h tl_ep, const void *buffer,
-                                           unsigned length,
-                                           uint64_t remote_addr,
-                                           uct_rkey_t rkey)
+static ucs_status_t
+uct_rc_mlx5_base_ep_put_short_common(uct_ep_h tl_ep, const void *buffer,
+                                     unsigned length, uint64_t remote_addr,
+                                     uct_rkey_t rkey, uct_completion_t *comp)
 {
 #if HAVE_IBV_DM
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
@@ -98,7 +150,7 @@ ucs_status_t uct_rc_mlx5_base_ep_put_short(uct_ep_h tl_ep, const void *buffer,
     if (ucs_likely((length <= UCT_IB_MLX5_PUT_MAX_SHORT(0)) || !iface->dm.dm)) {
 #endif
         return uct_rc_mlx5_base_ep_put_short_inline(tl_ep, buffer, length,
-                                                    remote_addr, rkey);
+                                                    remote_addr, rkey, comp);
 #if HAVE_IBV_DM
     }
 
@@ -110,7 +162,8 @@ ucs_status_t uct_rc_mlx5_base_ep_put_short(uct_ep_h tl_ep, const void *buffer,
                                             length, MLX5_OPCODE_RDMA_WRITE,
                                             fm_ce_se | MLX5_WQE_CTRL_CQ_UPDATE,
                                             0, remote_addr, rkey,
-                                            &ep->super.txqp, &ep->tx.wq, 0);
+                                            &ep->super.txqp, &ep->tx.wq, 0,
+                                            comp);
     if (UCS_STATUS_IS_ERR(status)) {
         return status;
     }
@@ -121,9 +174,30 @@ ucs_status_t uct_rc_mlx5_base_ep_put_short(uct_ep_h tl_ep, const void *buffer,
 #endif
 }
 
-ssize_t uct_rc_mlx5_base_ep_put_bcopy(uct_ep_h tl_ep,
-                                      uct_pack_callback_t pack_cb, void *arg,
-                                      uint64_t remote_addr, uct_rkey_t rkey)
+ucs_status_t uct_rc_mlx5_base_ep_put_short(uct_ep_h tl_ep, const void *buffer,
+                                           unsigned length,
+                                           uint64_t remote_addr,
+                                           uct_rkey_t rkey)
+{
+    return uct_rc_mlx5_base_ep_put_short_common(tl_ep, buffer, length,
+                                                remote_addr, rkey, NULL);
+}
+
+ucs_status_t
+uct_rc_mlx5_base_ep_put_short_ft(uct_ep_h tl_ep, const void *buffer,
+                                 unsigned length, uint64_t remote_addr,
+                                 uct_rkey_t rkey, uct_completion_t *comp)
+{
+    ucs_assert(comp != NULL);
+    return uct_rc_mlx5_base_ep_put_short_common(tl_ep, buffer, length,
+                                                remote_addr, rkey, comp);
+}
+
+static ssize_t
+uct_rc_mlx5_base_ep_put_bcopy_common(uct_ep_h tl_ep,
+                                     uct_pack_callback_t pack_cb, void *arg,
+                                     uint64_t remote_addr, uct_rkey_t rkey,
+                                     uct_completion_t *comp)
 {
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
     uct_rc_iface_send_desc_t *desc;
@@ -133,6 +207,10 @@ ssize_t uct_rc_mlx5_base_ep_put_bcopy(uct_ep_h tl_ep,
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_IFACE_GET_TX_PUT_BCOPY_DESC(&iface->super, &iface->super.tx.mp,
                                        desc, pack_cb, arg, length);
+    if (comp != NULL) {
+        desc->super.handler   = uct_rc_ep_put_bcopy_handler;
+        desc->super.user_comp = comp;
+    }
     uct_rc_mlx5_ep_fence_put(iface, &ep->tx.wq, &rkey, &remote_addr,
                              ep->super.atomic_mr_offset, &fm_ce_se);
     uct_rc_mlx5_common_txqp_bcopy_post(iface, IBV_QPT_RC, &ep->super.txqp,
@@ -144,6 +222,24 @@ ssize_t uct_rc_mlx5_base_ep_put_bcopy(uct_ep_h tl_ep,
     UCT_TL_EP_STAT_OP(&ep->super.super, PUT, BCOPY, length);
 
     return length;
+}
+
+ssize_t uct_rc_mlx5_base_ep_put_bcopy(uct_ep_h tl_ep,
+                                      uct_pack_callback_t pack_cb, void *arg,
+                                      uint64_t remote_addr, uct_rkey_t rkey)
+{
+    return uct_rc_mlx5_base_ep_put_bcopy_common(tl_ep, pack_cb, arg,
+                                                remote_addr, rkey, NULL);
+}
+
+ssize_t uct_rc_mlx5_base_ep_put_bcopy_ft(uct_ep_h tl_ep,
+                                         uct_pack_callback_t pack_cb, void *arg,
+                                         uint64_t remote_addr, uct_rkey_t rkey,
+                                         uct_completion_t *comp)
+{
+    ucs_assert(comp != NULL);
+    return uct_rc_mlx5_base_ep_put_bcopy_common(tl_ep, pack_cb, arg,
+                                                remote_addr, rkey, comp);
 }
 
 ucs_status_t uct_rc_mlx5_base_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
@@ -260,7 +356,7 @@ ucs_status_t uct_rc_mlx5_base_ep_am_short(uct_ep_h tl_ep, uint8_t id,
     status = uct_rc_mlx5_common_ep_short_dm(
             iface, IBV_QPT_RC, &cache, sizeof(cache.am_hdr), payload, length,
             MLX5_OPCODE_SEND, MLX5_WQE_CTRL_SOLICITED | MLX5_WQE_CTRL_CQ_UPDATE,
-            0, 0, 0, &ep->super.txqp, &ep->tx.wq, 0);
+            0, 0, 0, &ep->super.txqp, &ep->tx.wq, 0, NULL);
     if (UCS_STATUS_IS_ERR(status)) {
         return status;
     }
@@ -924,7 +1020,7 @@ ucs_status_t uct_rc_mlx5_ep_tag_eager_short(uct_ep_h tl_ep, uct_tag_t tag,
     status = uct_rc_mlx5_common_ep_short_dm(
             iface, IBV_QPT_RC, &cache, sizeof(cache.tm_hdr), data, length,
             MLX5_OPCODE_SEND, MLX5_WQE_CTRL_SOLICITED | MLX5_WQE_CTRL_CQ_UPDATE,
-            0, 0, 0, &ep->super.super.txqp, &ep->super.tx.wq, 0);
+            0, 0, 0, &ep->super.super.txqp, &ep->super.tx.wq, 0, NULL);
     if (!UCS_STATUS_IS_ERR(status)) {
         UCT_TL_EP_STAT_OP(&ep->super.super.super, TAG, SHORT, length);
     }
@@ -1084,10 +1180,20 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_base_ep_t, const uct_ep_params_t *params)
     }
 
     self->tx.wq.bb_max = ucs_min(self->tx.wq.bb_max, iface->tx.bb_max);
+    self->tx.wq.next_msn = 0;
+    self->tx.wq.msn = ucs_calloc(self->tx.wq.bb_max, sizeof(*self->tx.wq.msn),
+                                 "rc_mlx5_txwq_msn");
+    if (self->tx.wq.msn == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err_remove_qp;
+    }
+
     uct_rc_txqp_available_set(&self->super.txqp, self->tx.wq.bb_max);
     uct_rc_mlx5_iface_common_prepost_recvs(iface);
     return UCS_OK;
 
+err_remove_qp:
+    uct_rc_iface_remove_qp(&iface->super, self->tx.wq.super.qp_num);
 err_event_unreg:
     if (iface->rx.srq.type != UCT_IB_MLX5_OBJ_TYPE_NULL) {
         uct_ib_device_async_event_unregister(&md->super.dev,
@@ -1101,7 +1207,7 @@ err_destroy_txwq_qp:
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_base_ep_t)
 {
-    /* No op, cleanup context is implemented in derived class */
+    ucs_free(self->tx.wq.msn);
 }
 
 

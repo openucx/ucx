@@ -130,6 +130,7 @@ gtest_SOURCES = \
 	uct/test_uct_iface.cc \
 	uct/test_uct_perf.cc \
 	uct/v2/test_uct_query.cc \
+	uct/v2/test_uct_outstanding_purge.cc \
 	uct/test_zcopy_comp.cc \
 	uct/uct_p2p_test.cc \
 	uct/uct_test.cc \
@@ -260,6 +261,7 @@ gtest_SOURCES += \
 endif
 if HAVE_MLX5_DV
 gtest_SOURCES += \
+	uct/ib/test_ib_mlx5_ext.cc \
 	uct/ib/test_cqe_zipping.cc
 endif
 if HAVE_EFA

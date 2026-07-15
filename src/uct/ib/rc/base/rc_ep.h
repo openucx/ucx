@@ -79,6 +79,14 @@ enum {
                                           UCT_RC_EP_FLAG_FC_GRANT)
 };
 
+enum {
+    /* Failover enabled on this endpoint */
+    UCT_RC_EP_FAILOVER_FLAG_ENABLED = UCS_BIT(0),
+
+    /* Defer outstanding purge until extract completes */
+    UCT_RC_EP_FAILOVER_FLAG_ARMED   = UCS_BIT(1)
+};
+
 /*
  * FC protocol header mask
  */
@@ -227,6 +235,7 @@ struct uct_rc_ep {
     uint16_t            txqp_reserve;
     uint8_t             path_index;
     uint8_t             flags;
+    uint8_t             failover_flags;
 };
 
 
@@ -244,6 +253,10 @@ void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op, const void *resp);
 
 void uct_rc_ep_get_bcopy_handler_no_completion(uct_rc_iface_send_op_t *op,
                                                const void *resp);
+
+void uct_rc_ep_put_bcopy_handler(uct_rc_iface_send_op_t *op, const void *resp);
+
+void uct_rc_ep_put_short_handler(uct_rc_iface_send_op_t *op, const void *resp);
 
 void uct_rc_ep_flush_remote_handler(uct_rc_iface_send_op_t *op,
                                     const void *resp);

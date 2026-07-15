@@ -2919,6 +2919,23 @@ UCT_INLINE_API ucs_status_t uct_ep_put_short(uct_ep_h ep, const void *buffer, un
     return ep->iface->ops.ep_put_short(ep, buffer, length, remote_addr, rkey);
 }
 
+/**
+ * @brief Write short data to remote memory with completion tracking.
+ *
+ * This operation has the same data semantics as @ref uct_ep_put_short, and
+ * invokes @a comp when the operation is completed or extracted for failover.
+ * The interface must support @c UCT_IFACE_FLAG_V2_QUERY_TOKEN.
+ */
+UCT_INLINE_API ucs_status_t uct_ep_put_short_ft(uct_ep_h ep, const void *buffer,
+                                                unsigned length,
+                                                uint64_t remote_addr,
+                                                uct_rkey_t rkey,
+                                                uct_completion_t *comp)
+{
+    return ep->iface->ops.ep_put_short_ft(ep, buffer, length, remote_addr, rkey,
+                                          comp);
+}
+
 
 /**
  * @ingroup UCT_RMA
@@ -2929,6 +2946,28 @@ UCT_INLINE_API ssize_t uct_ep_put_bcopy(uct_ep_h ep, uct_pack_callback_t pack_cb
                                         uct_rkey_t rkey)
 {
     return ep->iface->ops.ep_put_bcopy(ep, pack_cb, arg, remote_addr, rkey);
+}
+
+
+/**
+ * @ingroup UCT_RMA
+ * @brief Buffered remote put with transport completion notification.
+ *
+ * This internal extension has the same local-buffer semantics as
+ * @ref uct_ep_put_bcopy. The completion is invoked when the transport no
+ * longer owns the posted operation.
+ *
+ * @note This operation is available on interfaces that report
+ *       @c UCT_IFACE_FLAG_V2_QUERY_TOKEN.
+ */
+UCT_INLINE_API ssize_t uct_ep_put_bcopy_ft(uct_ep_h ep,
+                                           uct_pack_callback_t pack_cb,
+                                           void *arg, uint64_t remote_addr,
+                                           uct_rkey_t rkey,
+                                           uct_completion_t *comp)
+{
+    return ep->iface->ops.ep_put_bcopy_ft(ep, pack_cb, arg, remote_addr, rkey,
+                                          comp);
 }
 
 

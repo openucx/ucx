@@ -691,6 +691,7 @@ UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops,
     ucs_assert(internal_ops->iface_vfs_refresh != NULL);
     ucs_assert(internal_ops->ep_query != NULL);
     ucs_assert(internal_ops->ep_invalidate != NULL);
+    ucs_assert(internal_ops->ep_outstanding_purge != NULL);
 
     UCS_STATIC_ASSERT(ucs_offsetof(uct_base_iface_t, internal_ops) ==
                       sizeof(uct_iface_t));
@@ -832,6 +833,26 @@ ucs_status_t uct_ep_invalidate(uct_ep_h ep,
     const uct_base_iface_t *iface = ucs_derived_of(ep->iface, uct_base_iface_t);
 
     return iface->internal_ops->ep_invalidate(ep, params);
+}
+
+ucs_status_t
+uct_ep_outstanding_purge(uct_ep_h ep,
+                           const uct_ep_outstanding_purge_params_t *params)
+{
+    const uct_base_iface_t *iface = ucs_derived_of(ep->iface, uct_base_iface_t);
+
+    return iface->internal_ops->ep_outstanding_purge(ep, params);
+}
+
+ucs_status_t uct_ep_failover_enable(uct_ep_h ep)
+{
+    const uct_base_iface_t *iface = ucs_derived_of(ep->iface, uct_base_iface_t);
+
+    if (iface->internal_ops->ep_failover_enable == NULL) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    return iface->internal_ops->ep_failover_enable(ep);
 }
 
 void uct_ep_set_iface(uct_ep_h ep, uct_iface_t *iface)
@@ -1147,17 +1168,18 @@ static void uct_stub_iface_close(uct_iface_h iface)
 }
 
 static uct_iface_internal_ops_t uct_stub_internal_ops = {
-    .iface_query_v2        = uct_iface_base_query_v2,
-    .iface_estimate_perf   = (uct_iface_estimate_perf_func_t)uct_stub_iface_return_status,
-    .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
-    .ep_query              = (uct_ep_query_func_t)uct_stub_ep_return_status,
-    .ep_invalidate         = (uct_ep_invalidate_func_t)uct_stub_ep_return_status,
-    .ep_connect_to_ep_v2   = (uct_ep_connect_to_ep_v2_func_t)uct_stub_ep_return_status,
-    .iface_is_reachable_v2 = (uct_iface_is_reachable_v2_func_t)ucs_empty_function_return_zero,
-    .ep_is_connected       = (uct_ep_is_connected_func_t)ucs_empty_function_return_zero,
-    .ep_get_device_ep      = (uct_ep_get_device_ep_func_t)uct_stub_ep_return_status,
-    .ep_put_sgl_zcopy      = (uct_ep_put_sgl_zcopy_func_t)uct_stub_ep_return_status,
-    .ep_outstanding_purge  = (uct_ep_outstanding_purge_func_t)uct_stub_ep_return_status,
+    .iface_query_v2         = uct_iface_base_query_v2,
+    .iface_estimate_perf    = (uct_iface_estimate_perf_func_t)uct_stub_iface_return_status,
+    .iface_vfs_refresh      = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+    .ep_query               = (uct_ep_query_func_t)uct_stub_ep_return_status,
+    .ep_invalidate          = (uct_ep_invalidate_func_t)uct_stub_ep_return_status,
+    .ep_connect_to_ep_v2    = (uct_ep_connect_to_ep_v2_func_t)uct_stub_ep_return_status,
+    .iface_is_reachable_v2  = (uct_iface_is_reachable_v2_func_t)ucs_empty_function_return_zero,
+    .ep_is_connected        = (uct_ep_is_connected_func_t)ucs_empty_function_return_zero,
+    .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)uct_stub_ep_return_status,
+    .ep_put_sgl_zcopy       = (uct_ep_put_sgl_zcopy_func_t)uct_stub_ep_return_status,
+    .ep_outstanding_purge = (uct_ep_outstanding_purge_func_t)uct_stub_ep_return_status,
+    .ep_failover_enable     = (uct_ep_failover_enable_func_t)uct_stub_ep_return_status,
 };
 
 ucs_status_t uct_stub_iface_open(ucs_status_t status, uct_iface_h *iface_p)

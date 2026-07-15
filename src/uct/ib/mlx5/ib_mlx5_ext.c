@@ -178,6 +178,44 @@ uct_ib_mlx5_ext_ep_put_sgl_zcopy(uct_ep_h ep, void * const *buffers,
     return UCS_ERR_UNSUPPORTED;
 }
 
+static ucs_status_t uct_ib_mlx5_ext_ep_outstanding_purge_check_param(
+        const uct_ep_outstanding_purge_params_t *params)
+{
+    if (params == NULL) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (!(params->field_mask & UCT_EP_OUTSTANDING_FIELD_RX_TOKEN) ||
+        !(params->field_mask & UCT_EP_OUTSTANDING_FIELD_CB) ||
+        (params->rx_token == NULL) || (params->cb == NULL)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return UCS_OK;
+}
+
+ucs_status_t uct_ib_mlx5_ext_ep_outstanding_purge(
+        uct_ep_h ep, const uct_ep_outstanding_purge_params_t *params)
+{
+    uct_ib_mlx5_ext_plugin_t *plugin;
+
+    if (ucs_unlikely(uct_ib_mlx5_ext_ep_outstanding_purge_check_param(
+                             params) != UCS_OK)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    ucs_list_for_each(plugin, &uct_ib_mlx5_ext_plugins, list) {
+        if (ucs_unlikely(uct_ib_mlx5_ext_is_unsupported_op(
+                    (const void*)plugin->ops.ep_outstanding_purge))) {
+            continue;
+        }
+
+        return plugin->ops.ep_outstanding_purge(ep, params);
+    }
+
+    return UCS_ERR_UNSUPPORTED;
+}
+
 void uct_ib_mlx5_ext_cleanup(void)
 {
     uct_ib_mlx5_ext_plugin_t *plugin, *tmp;
