@@ -16,9 +16,15 @@
 __device__ int device_int;
 
 
+typedef struct test_ctx {
+    int num_events;
+    int num_errors;
+} test_ctx_t;
+
+
 static void event_cb(ucm_event_type_t event_type, ucm_event_t *event, void *arg)
 {
-    int *count_p = (int *)arg;
+    test_ctx_t *ctx = (test_ctx_t *)arg;
     const char *title;
 
     if (event_type == UCM_EVENT_MEM_TYPE_ALLOC) {
@@ -33,7 +39,29 @@ static void event_cb(ucm_event_type_t event_type, ucm_event_t *event, void *arg)
     printf("%s %s address %p size %zu\n", title,
            ucs_memory_type_names[event->mem_type.mem_type],
            event->mem_type.address, event->mem_type.size);
-    ++(*count_p);
+    ++ctx->num_events;
+
+    if ((event_type == UCM_EVENT_MEM_TYPE_ALLOC) &&
+        (event->mem_type.mem_type != UCS_MEMORY_TYPE_CUDA_MANAGED)) {
+        printf("unexpected symbol memory type %s, expected %s\n",
+               ucs_memory_type_names[event->mem_type.mem_type],
+               ucs_memory_type_names[UCS_MEMORY_TYPE_CUDA_MANAGED]);
+        ++ctx->num_errors;
+    }
+
+    if ((event_type == UCM_EVENT_MEM_TYPE_ALLOC) &&
+        (event->mem_type.sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN)) {
+        printf("unexpected symbol system device %u, expected unknown\n",
+               event->mem_type.sys_dev);
+        ++ctx->num_errors;
+    }
+
+    if ((event_type == UCM_EVENT_MEM_TYPE_ALLOC) &&
+        (event->mem_type.mem_flags != 0)) {
+        printf("unexpected symbol memory flags 0x%x, expected 0\n",
+               event->mem_type.mem_flags);
+        ++ctx->num_errors;
+    }
 }
 
 int main(int argc, char **argv)
@@ -44,7 +72,7 @@ int main(int argc, char **argv)
     ucp_context_h context;
     ucs_status_t status;
     ucp_params_t params;
-    int num_events;
+    test_ctx_t ctx;
     void *dptr;
     cudaError_t res;
 
@@ -56,15 +84,17 @@ int main(int argc, char **argv)
         return -1;
     }
 
-    num_events = 0;
-    ucm_set_event_handler(memtype_events, 1000, event_cb, &num_events);
+    ctx.num_events = 0;
+    ctx.num_errors = 0;
+    ucm_set_event_handler(memtype_events, 1000, event_cb, &ctx);
 
     res = cudaGetSymbolAddress(&dptr, device_int);
     printf("cudaGetSymbolAddress() returned %p result %d\n", dptr, res);
 
-    ucm_unset_event_handler(memtype_events, event_cb, &num_events);
-    printf("got %d/%d memory events\n", num_events, num_expected_events);
+    ucm_unset_event_handler(memtype_events, event_cb, &ctx);
+    printf("got %d/%d memory events\n", ctx.num_events, num_expected_events);
 
     ucp_cleanup(context);
-    return (num_events == num_expected_events) ? 0 : -1;
+    return ((ctx.num_events == num_expected_events) &&
+            (ctx.num_errors == 0)) ? 0 : -1;
 }

@@ -479,6 +479,30 @@ UCS_TEST_P(test_memtype_cache, diff_mem_types_diff_bufs_keep_mem) {
     test_memtype_cache_alloc_diff_mem_types(true, false);
 }
 
+UCS_TEST_P(test_memtype_cache, event_attributes) {
+    const size_t size          = ucs_get_page_size();
+    void *address              = reinterpret_cast<void*>(0xdead0000ul);
+    const ucs_sys_device_t dev = 0;
+    ucm_event_t event;
+    ucs_memory_info_t mem_info;
+
+    event.mem_type.address   = address;
+    event.mem_type.size      = size;
+    event.mem_type.mem_type  = UCS_MEMORY_TYPE_CUDA_MANAGED;
+    event.mem_type.sys_dev   = dev;
+    event.mem_type.mem_flags = 0;
+    ucm_event_dispatch(UCM_EVENT_MEM_TYPE_ALLOC, &event);
+
+    ASSERT_UCS_OK(ucs_memtype_cache_lookup(address, size, &mem_info));
+    EXPECT_EQ(event.mem_type.mem_type, mem_info.type);
+    EXPECT_EQ(dev, mem_info.sys_dev);
+    EXPECT_EQ(0, mem_info.mem_flags);
+
+    ucm_event_dispatch(UCM_EVENT_MEM_TYPE_FREE, &event);
+    EXPECT_EQ(UCS_ERR_NO_ELEM,
+              ucs_memtype_cache_lookup(address, size, &mem_info));
+}
+
 INSTANTIATE_TEST_SUITE_P(mem_type, test_memtype_cache,
                         ::testing::ValuesIn(mem_buffer::supported_mem_types()));
 
