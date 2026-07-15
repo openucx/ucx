@@ -193,6 +193,7 @@ protected:
         void revoke_ep(unsigned index);
         void destroy_eps();
         void connect(unsigned index, entity& other, unsigned other_index);
+        void connect_p2p_ep(uct_ep_h from, uct_ep_h to);
         void connect_to_iface(unsigned index, entity &other,
                               unsigned path_index = 0);
         void connect_to_ep(unsigned index, entity &other, unsigned other_index,
@@ -225,9 +226,6 @@ protected:
         private:
             async_wrapper(const async_wrapper &);
         };
-
-
-        void connect_p2p_ep(uct_ep_h from, uct_ep_h to);
 
         const resource              m_resource;
         ucs::handle<uct_md_h>       m_md;
