@@ -87,9 +87,20 @@ AC_CHECK_DECLS([SYS_ipc],
                [ipc_hooks_happy=no],
                [#include <sys/syscall.h>])
 
+
+SAVE_CFLAGS=$CFLAGS
+CFLAGS="$CLAGS -Isrc/"
+bistro_arch_happy=yes
+AC_CHECK_DECLS([ucm_bistro_patch],
+               [],
+               [bistro_arch_happy=no],
+               [#include <ucm/bistro/bistro.h>])
+CFLAGS=$SAVE_CFLAGS
+
 AS_IF([test "x$mmap_hooks_happy" = "xyes"],
       AS_IF([test "x$ipc_hooks_happy" = "xyes" -o "x$shm_hooks_happy" = "xyes"],
-            [bistro_hooks_happy=yes]))
+	       AS_IF([test "x$bistro_arch_happy" == "xyes"],
+                [bistro_hooks_happy=yes])))
 
 AS_IF([test "x$bistro_hooks_happy" = "xyes"],
       [AC_DEFINE([UCM_BISTRO_HOOKS], [1], [Enable BISTRO hooks])],
