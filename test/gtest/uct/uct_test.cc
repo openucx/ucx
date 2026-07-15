@@ -1016,8 +1016,10 @@ void uct_test::entity::mem_type_reg(uct_allocated_memory_t *mem,
         ucs_align_ptr_range(&reg_address, &reg_length, md_attr().reg_alignment);
 
         uct_md_mem_reg_params_t reg_params;
-        reg_params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS;
+        reg_params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS |
+                                UCT_MD_MEM_REG_FIELD_MEM_TYPE;
         reg_params.flags      = mem_flags;
+        reg_params.mem_type   = mem->mem_type;
 
         ucs_status_t status = uct_md_mem_reg_v2(m_md, reg_address, reg_length,
                                                 &reg_params, &mem->memh);
