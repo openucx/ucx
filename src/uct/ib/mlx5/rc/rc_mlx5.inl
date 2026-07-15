@@ -115,6 +115,20 @@ uct_rc_mlx5_iface_hold_srq_desc(uct_rc_mlx5_iface_common_t *iface,
 }
 
 static UCS_F_ALWAYS_INLINE void
+uct_rc_mlx5_iface_hold_srq_desc_coco(uct_ib_mlx5_srq_seg_t *seg,
+                                     uct_ib_iface_recv_desc_t *desc,
+                                     unsigned offset,
+                                     uct_recv_desc_t *release_desc)
+{
+    void *udesc;
+
+    udesc                = UCS_PTR_BYTE_OFFSET(desc, offset);
+    uct_recv_desc(udesc) = release_desc;
+    seg->srq.ptr_mask   &= ~1;
+    seg->srq.desc        = NULL;
+}
+
+static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_iface_release_srq_seg(uct_rc_mlx5_iface_common_t *iface,
                                   uct_ib_mlx5_srq_seg_t *seg,
                                   struct mlx5_cqe64 *cqe, uint16_t wqe_ctr,
@@ -327,6 +341,24 @@ uct_rc_mlx5_iface_common_data(uct_rc_mlx5_iface_common_t *iface,
     return hdr;
 }
 
+static UCS_F_ALWAYS_INLINE void*
+uct_rc_mlx5_iface_common_data_coco(uct_rc_mlx5_iface_common_t *iface,
+                                   const uct_rc_mlx5_coco_rx_cqe_result_t *result,
+                                   unsigned *flags)
+{
+    void *hdr;
+
+    hdr = uct_ib_iface_recv_desc_hdr(&iface->super.super, result->desc);
+    VALGRIND_MAKE_MEM_DEFINED(hdr, result->length);
+    *flags            = UCT_CB_PARAM_FLAG_DESC;
+    /* CoCo RX validates and uses a private descriptor from the SRQ shadow.
+     * Keep the next prefetch on UCX-owned state instead of a NIC-controlled
+     * SRQ descriptor.
+     */
+    iface->rx.pref_ptr = &iface->coco;
+    return hdr;
+}
+
 static UCS_F_ALWAYS_INLINE uct_rc_mlx5_mp_context_t*
 uct_rc_mlx5_iface_single_frag_context(uct_rc_mlx5_iface_common_t *iface,
                                       unsigned *flags)
@@ -394,7 +426,8 @@ static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_iface_common_am_handler(uct_rc_mlx5_iface_common_t *iface,
                                     struct mlx5_cqe64 *cqe,
                                     uct_rc_mlx5_hdr_t *hdr, unsigned flags,
-                                    unsigned byte_len, int poll_flags)
+                                    unsigned byte_len, int poll_flags,
+                                    uct_rc_mlx5_coco_rx_cqe_result_t *coco_result)
 {
     uint16_t wqe_ctr;
     uct_rc_iface_ops_t *rc_ops;
@@ -402,14 +435,20 @@ uct_rc_mlx5_iface_common_am_handler(uct_rc_mlx5_iface_common_t *iface,
     uint32_t qp_num;
     ucs_status_t status;
 
-    wqe_ctr = ntohs(cqe->wqe_counter);
+    if (coco_result != NULL) {
+        wqe_ctr  = coco_result->slot->slot;
+        byte_len = coco_result->length;
+    } else {
+        wqe_ctr = ntohs(cqe->wqe_counter);
+    }
     seg     = uct_ib_mlx5_srq_get_wqe(&iface->rx.srq, wqe_ctr);
 
     uct_ib_mlx5_log_rx(&iface->super.super, cqe, hdr,
                        uct_rc_mlx5_common_packet_dump);
 
     if (ucs_unlikely(hdr->rc_hdr.am_id & UCT_RC_EP_FC_MASK)) {
-        qp_num = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
+        qp_num = (coco_result != NULL) ? coco_result->qp_record->qpn :
+                 (ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER));
         rc_ops = ucs_derived_of(iface->super.super.ops, uct_rc_iface_ops_t);
 
         /* coverity[overrun-buffer-val] */
@@ -420,6 +459,26 @@ uct_rc_mlx5_iface_common_am_handler(uct_rc_mlx5_iface_common_t *iface,
         status = uct_iface_invoke_am(&iface->super.super.super, hdr->rc_hdr.am_id,
                                      hdr + 1, byte_len - sizeof(*hdr),
                                      flags);
+    }
+
+    if (coco_result != NULL) {
+        if (status == UCS_INPROGRESS) {
+            uct_rc_mlx5_iface_hold_srq_desc_coco(seg, coco_result->desc,
+                                                 iface->tm.am_desc.offset,
+                                                 &iface->tm.am_desc.super);
+            status = UCS_OK;
+        }
+
+        if (uct_rc_mlx5_coco_srq_shadow_consume(
+                    &iface->coco, coco_result->slot->slot,
+                    coco_result->slot->generation) != UCS_OK) {
+            uct_rc_mlx5_coco_poison(
+                    iface, coco_result->qp_record, &iface->cq[UCT_IB_DIR_RX],
+                    UCT_RC_MLX5_COCO_POISON_RX_CQ |
+                    UCT_RC_MLX5_COCO_POISON_IFACE_RX |
+                    UCT_RC_MLX5_COCO_POISON_QP,
+                    "invalid rx srq consume");
+        }
     }
 
     uct_rc_mlx5_iface_release_srq_seg(iface, seg, cqe, wqe_ctr, status,
@@ -447,6 +506,9 @@ uct_rc_mlx5_common_post_send(uct_rc_mlx5_iface_common_t *iface, int qp_type,
                              uct_ib_log_sge_t *log_sge)
 {
     struct mlx5_wqe_ctrl_seg *ctrl;
+    uct_rc_mlx5_coco_qp_record_t *coco_record;
+    uct_rc_mlx5_coco_tx_op_t coco_op;
+    ucs_status_t status;
     uint16_t res_count;
 
     if (opcode != MLX5_OPCODE_NOP) {
@@ -473,6 +535,35 @@ uct_rc_mlx5_common_post_send(uct_rc_mlx5_iface_common_t *iface, int qp_type,
                        max_log_sge, log_sge,
                        ((opcode == MLX5_OPCODE_SEND) || (opcode == MLX5_OPCODE_SEND_IMM)) ?
                        uct_rc_mlx5_common_packet_dump : NULL);
+
+    if (iface->coco.enabled && (qp_type == IBV_QPT_RC)) {
+        coco_record = uct_rc_mlx5_coco_qp_record_lookup(
+                &iface->coco, txwq->super.qp_num);
+        coco_op     = uct_rc_mlx5_coco_tx_op_from_opcode(opcode);
+        if ((coco_record == NULL) || (coco_op == UCT_RC_MLX5_COCO_TX_LAST)) {
+            uct_rc_mlx5_coco_poison(
+                    iface, coco_record, &iface->cq[UCT_IB_DIR_TX],
+                    UCT_RC_MLX5_COCO_POISON_TX_CQ |
+                    UCT_RC_MLX5_COCO_POISON_IFACE_TX |
+                    UCT_RC_MLX5_COCO_POISON_QP,
+                    "tx shadow metadata mismatch");
+            ucs_fatal("CoCo RC mlx5 TX shadow metadata mismatch");
+        }
+
+        status = uct_rc_mlx5_coco_tx_shadow_record(
+                coco_record, txwq->sw_pi, coco_op,
+                fm_ce_se & MLX5_WQE_CTRL_CQ_UPDATE, wqe_size, NULL, NULL);
+        if (status != UCS_OK) {
+            uct_rc_mlx5_coco_poison(
+                    iface, coco_record, &iface->cq[UCT_IB_DIR_TX],
+                    UCT_RC_MLX5_COCO_POISON_TX_CQ |
+                    UCT_RC_MLX5_COCO_POISON_IFACE_TX |
+                    UCT_RC_MLX5_COCO_POISON_QP,
+                    "tx shadow record failed");
+            ucs_fatal("CoCo RC mlx5 TX shadow record failed: %s",
+                      ucs_status_string(status));
+        }
+    }
 
     res_count = uct_ib_mlx5_post_send(txwq, ctrl, wqe_size, 1);
     if (fm_ce_se & MLX5_WQE_CTRL_CQ_UPDATE) {
@@ -1453,7 +1544,9 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
                                  int poll_flags)
 {
     struct mlx5_cqe64 *cqe;
+    uct_rc_mlx5_coco_rx_cqe_result_t coco_result;
     unsigned byte_len;
+    ucs_status_t status;
     uint16_t max_batch;
     unsigned count;
     void *rc_hdr;
@@ -1491,9 +1584,32 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
     count    = 1;
 
     if (!(poll_flags & UCT_IB_MLX5_POLL_FLAG_TM)) {
+        if (iface->coco.enabled) {
+            status = uct_rc_mlx5_coco_rx_cqe_validate(
+                    &iface->coco, &iface->cq[UCT_IB_DIR_RX], cqe,
+                    &coco_result);
+            if (status != UCS_OK) {
+                uct_rc_mlx5_coco_poison(
+                        iface, coco_result.qp_record, &iface->cq[UCT_IB_DIR_RX],
+                        UCT_RC_MLX5_COCO_POISON_RX_CQ |
+                        UCT_RC_MLX5_COCO_POISON_IFACE_RX |
+                        UCT_RC_MLX5_COCO_POISON_QP,
+                        "invalid rx cqe");
+                goto out_update_db;
+            }
+
+            rc_hdr   = uct_rc_mlx5_iface_common_data_coco(iface, &coco_result,
+                                                          &flags);
+            byte_len = coco_result.length;
+            uct_rc_mlx5_iface_common_am_handler(iface, cqe, rc_hdr, flags,
+                                                byte_len, poll_flags,
+                                                &coco_result);
+            goto out_update_db;
+        }
+
         rc_hdr = uct_rc_mlx5_iface_common_data(iface, cqe, byte_len, &flags);
         uct_rc_mlx5_iface_common_am_handler(iface, cqe, rc_hdr, flags,
-                                            byte_len, poll_flags);
+                                            byte_len, poll_flags, NULL);
         goto out_update_db;
     }
 
@@ -1537,7 +1653,8 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
         if (tmh->opcode == IBV_TMH_NO_TAG) {
             uct_rc_mlx5_iface_common_am_handler(iface, cqe,
                                                 (uct_rc_mlx5_hdr_t*)tmh,
-                                                flags, byte_len, poll_flags);
+                                                flags, byte_len, poll_flags,
+                                                NULL);
         } else {
             ucs_assert(tmh->opcode == IBV_TMH_FIN);
             uct_rc_mlx5_handle_rndv_fin(iface, tmh->app_ctx);
@@ -1887,8 +2004,10 @@ static UCS_F_ALWAYS_INLINE unsigned
 uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface, int poll_flags)
 {
     struct mlx5_cqe64 *cqe;
+    uct_rc_mlx5_coco_tx_cqe_result_t coco_result;
     uct_rc_mlx5_base_ep_t *ep;
-    unsigned qp_num;
+    ucs_status_t status;
+    unsigned UCS_V_UNUSED qp_num;
     uint16_t hw_ci;
 
     cqe = uct_ib_mlx5_poll_cq(&iface->super.super, &iface->cq[UCT_IB_DIR_TX],
@@ -1902,12 +2021,31 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface, int poll_flags)
 
     ucs_memory_cpu_load_fence();
 
-    qp_num = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
-    ep     = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, qp_num),
-                            uct_rc_mlx5_base_ep_t);
-    ucs_assert(ep != NULL);
+    if (iface->coco.enabled) {
+        status = uct_rc_mlx5_coco_tx_cqe_validate(
+                &iface->coco, &iface->cq[UCT_IB_DIR_TX], cqe, &coco_result);
+        if (status != UCS_OK) {
+            uct_rc_mlx5_coco_poison(
+                    iface, coco_result.qp_record, &iface->cq[UCT_IB_DIR_TX],
+                    UCT_RC_MLX5_COCO_POISON_TX_CQ |
+                    UCT_RC_MLX5_COCO_POISON_IFACE_TX |
+                    UCT_RC_MLX5_COCO_POISON_QP,
+                    "invalid tx cqe");
+            uct_ib_mlx5_update_db_cq_ci(&iface->cq[UCT_IB_DIR_TX]);
+            return 1;
+        }
 
-    hw_ci = ntohs(cqe->wqe_counter);
+        ep     = coco_result.qp_record->ep;
+        qp_num = coco_result.qp_record->qpn;
+        hw_ci  = coco_result.hw_ci;
+    } else {
+        qp_num = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
+        ep     = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, qp_num),
+                                uct_rc_mlx5_base_ep_t);
+        ucs_assert(ep != NULL);
+        hw_ci = ntohs(cqe->wqe_counter);
+    }
+
     ucs_trace_poll("rc_mlx5 iface %p tx_cqe: ep %p qpn 0x%x hw_ci %d", iface,
                    ep, qp_num, hw_ci);
 

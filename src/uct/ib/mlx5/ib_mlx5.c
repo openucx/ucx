@@ -273,13 +273,19 @@ uct_ib_mlx5_res_domain_init(uct_ib_mlx5_res_domain_t *res_domain,
     if (res_domain->td == NULL) {
         ucs_debug("ibv_alloc_td() on %s failed: %m",
                   uct_ib_device_name(&md->dev));
-        res_domain->pd = md->pd;
+        res_domain->pd = uct_ib_md_control_pd(md);
         return UCS_OK;
     }
 
-    attr.td = res_domain->td;
-    attr.pd = md->pd;
+    attr.td        = res_domain->td;
+    attr.pd        = md->pd;
     attr.comp_mask = 0;
+#if HAVE_DECL_IBV_PARENT_DOMAIN_INIT_ATTR_ALLOW_CC_UNPROTECTED_ALLOC
+    if (uct_ib_md_is_cc_dma_bounce(md)) {
+        attr.comp_mask |=
+            IBV_PARENT_DOMAIN_INIT_ATTR_ALLOW_CC_UNPROTECTED_ALLOC;
+    }
+#endif
     res_domain->pd = ibv_alloc_parent_domain(md->dev.ibv_context, &attr);
     if (res_domain->pd == NULL) {
         ucs_error("ibv_alloc_parent_domain() on %s failed: %m",

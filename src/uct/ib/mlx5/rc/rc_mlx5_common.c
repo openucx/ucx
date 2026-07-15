@@ -94,9 +94,10 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_mlx5_iface_srq_set_seg(uct_rc_mlx5_iface_common_t *iface,
-                              uct_ib_mlx5_srq_seg_t *seg)
+                              uct_ib_mlx5_srq_seg_t *seg, uint16_t wqe_index)
 {
     uct_ib_iface_recv_desc_t *desc;
+    ucs_status_t status;
     uint64_t desc_map;
     void *hdr;
     int i;
@@ -109,6 +110,16 @@ uct_rc_mlx5_iface_srq_set_seg(uct_rc_mlx5_iface_common_t *iface,
         /* Set receive data segment pointer. Length is pre-initialized. */
         hdr                = uct_ib_iface_recv_desc_hdr(&iface->super.super,
                                                         desc);
+        if (iface->coco.enabled) {
+            status = uct_rc_mlx5_coco_srq_shadow_post(
+                    &iface->coco, wqe_index, iface->super.super.config.seg_size,
+                    desc, NULL);
+            if (status != UCS_OK) {
+                ucs_mpool_put_inline(desc);
+                return status;
+            }
+        }
+
         seg->srq.ptr_mask |= UCS_BIT(i);
         seg->srq.desc      = desc; /* Optimization for non-MP case (1 stride) */
         seg->dptr[i].lkey  = htonl(desc->lkey);
@@ -167,7 +178,7 @@ unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_mlx5_iface_common_t *iface)
             srq->free_idx  = next_index;
         }
 
-        if (uct_rc_mlx5_iface_srq_set_seg(iface, seg) != UCS_OK) {
+        if (uct_rc_mlx5_iface_srq_set_seg(iface, seg, next_index) != UCS_OK) {
             break;
         }
 
@@ -200,7 +211,7 @@ unsigned uct_rc_mlx5_iface_srq_post_recv_ll(uct_rc_mlx5_iface_common_t *iface)
         }
         seg = uct_ib_mlx5_srq_get_wqe(srq, next_index);
 
-        if (uct_rc_mlx5_iface_srq_set_seg(iface, seg) != UCS_OK) {
+        if (uct_rc_mlx5_iface_srq_set_seg(iface, seg, next_index) != UCS_OK) {
             break;
         }
 
@@ -347,7 +358,8 @@ uct_rc_mlx5_verbs_create_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
     qp_init_attr.srq                 = iface->rx.srq.verbs.srq;
     qp_init_attr.cap.max_send_wr     = iface->tm.cmd_qp_len;
 
-    qp = UCS_PROFILE_CALL_ALWAYS(ibv_create_qp, md->pd, &qp_init_attr);
+    qp = UCS_PROFILE_CALL_ALWAYS(ibv_create_qp, uct_ib_md_control_pd(md),
+                                 &qp_init_attr);
     if (qp == NULL) {
         ucs_error("failed to create TM control QP: %m");
         goto err_rd;
@@ -951,7 +963,7 @@ ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
     srq_attr->attr.srq_limit      = 0;
     srq_attr->srq_context         = iface;
     srq_attr->srq_type            = IBV_SRQT_TM;
-    srq_attr->pd                  = md->pd;
+    srq_attr->pd                  = uct_ib_md_control_pd(md);
     srq_attr->cq                  = iface->super.super.cq[UCT_IB_DIR_RX];
     srq_attr->tm_cap.max_num_tags = iface->tm.num_tags;
 
