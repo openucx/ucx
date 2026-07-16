@@ -11,6 +11,33 @@
 ### Features:
 ### Bugfixes:
 
+## 1.22.0-rc2 (July 16, 2026)
+### Features:
+#### UCP
+ * Added transport and wireup debugging table dumps during context and endpoint creation
+ * Set four rails by default for Vera platforms
+#### CUDA
+ * Added POSIX file descriptor handle support for same-machine CUDA VMM IPC
+ * Added support for CUDA device aliasing with MPS MLOPart
+#### RDMA CORE (IB, ROCE, etc.)
+ * Enabled relaxed ordering by default for Vera CPU platforms
+#### UCM
+ * Propagated memory attributes in allocation events
+#### Build
+ * Added configure option to append a SONAME suffix
+### Bugfixes:
+#### UCP
+ * Fixed rendezvous remote-memory flag estimation from rkey memory-domain maps
+ * Disabled RMA rendezvous protocols on non-Vera platforms
+ * Fixed active-message lane selection to preserve latency priority
+#### CUDA
+ * Fixed CUDA copy memory-flag detection with active CUDA contexts
+#### RDMA CORE (IB, ROCE, etc.)
+ * Fixed Direct NIC sibling matching when HCAs have no active ports
+ * Fixed DONT_FORK handling for kernels that support RDMA copy-on-fork
+ * Fixed GGA MMO fence ordering
+ * Restricted EMR relaxed ordering to device memory
+
 ## 1.22.0-rc1 (June 29, 2026)
 ### Features:
 #### UCP
