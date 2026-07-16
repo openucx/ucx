@@ -10,6 +10,7 @@
 #include "rc_def.h"
 
 #include <uct/base/uct_iface.h>
+#include <uct/api/v2/uct_v2.h>
 #include <uct/ib/base/ib_log.h>
 #include <uct/ib/base/ib_iface.h>
 #include <ucs/datastruct/arbiter.h>
@@ -22,6 +23,9 @@
 #define UCT_RC_QP_TABLE_SIZE        UCS_BIT(UCT_RC_QP_TABLE_ORDER)
 #define UCT_RC_QP_TABLE_MEMB_ORDER  (UCT_IB_QPN_ORDER - UCT_RC_QP_TABLE_ORDER)
 #define UCT_RC_QP_MAX_RETRY_COUNT   7
+
+/** Upper bound on segments per @ref uct_ep_put_sgl_zcopy on RC IB transports. */
+#define UCT_IB_RC_PUT_SGL_ZCOPY_MAX   64
 
 #define UCT_RC_CHECK_AM_SHORT(_am_id, _length, _header_t, _max_inline) \
      UCT_CHECK_AM_ID(_am_id); \
@@ -308,6 +312,7 @@ struct uct_rc_iface {
         unsigned             exp_backoff;
         unsigned long        ece;
         size_t               max_get_zcopy;
+        size_t               max_put_sgl_zcopy;
 
         /* Atomic callbacks */
         uct_rc_send_handler_t  atomic64_handler;      /* 64bit ib-spec */
@@ -385,6 +390,9 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
                                 size_t put_max_short, size_t max_inline,
                                 size_t am_max_hdr, size_t am_max_iov,
                                 size_t am_min_hdr, size_t rma_max_iov);
+
+void uct_rc_iface_query_put_sgl_cap_v2(uct_rc_iface_t *iface,
+                                       uct_iface_attr_v2_t *iface_attr);
 
 ucs_status_t
 uct_rc_iface_add_qp(uct_rc_iface_t *iface, uct_rc_ep_t *ep, unsigned qp_num);

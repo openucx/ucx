@@ -176,6 +176,95 @@ ucs_status_t uct_rc_mlx5_base_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
 }
 
 ucs_status_t
+uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
+                                  const size_t *lengths, uct_mem_h const *memhs,
+                                  const uint64_t *remote_addrs,
+                                  uct_rkey_t const *rkeys, const size_t *counts,
+                                  const size_t *strides, size_t count,
+                                  uct_completion_t *comp)
+{
+    UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
+    uct_iov_t iov;
+    size_t iov_it;
+    size_t total_length = 0;
+    uint16_t sn;
+    unsigned skip_flag;
+    uint8_t fm_ce_se;
+
+    if (count == 0) {
+        return UCS_OK;
+    }
+
+    if (count > iface->super.config.max_put_sgl_zcopy) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    ucs_assert(count <= UCT_IB_RC_PUT_SGL_ZCOPY_MAX);
+
+    if (iface->super.config.tx_moderation > 0) {
+        if (ep->super.txqp.unsignaled + count - 1 >= iface->super.config.tx_moderation) {
+            return UCS_ERR_NO_RESOURCE;
+        }
+    }
+
+    /* Each segment posts one single-SGE RDMA_WRITE WQE, which always occupies
+     * exactly one WQE building block (BB), so the chain consumes 'count' BBs
+     * (and, since only the last WQE is signaled, one CQE whose completion
+     * releases all of them). Reserving UCT_IB_MLX5_MAX_BB per segment would
+     * over-reserve 4x and, for large counts, exceed the QP/CQ credit pools,
+     * making the check impossible to satisfy (permanent NO_RESOURCE). */
+    UCT_RC_CHECK_MULTI_TX_CREDITS(&iface->super, &ep->super, count, count);
+
+    sn = ep->tx.wq.sw_pi;
+
+    for (iov_it = 0; iov_it < count; ++iov_it) {
+        uct_rkey_t rkey      = rkeys[iov_it];
+        uint64_t remote_addr = remote_addrs[iov_it];
+
+        UCT_CHECK_LENGTH(lengths[iov_it], 1, UCT_IB_MAX_MESSAGE_SIZE,
+                         "put_sgl_zcopy");
+
+        uct_rc_mlx5_ep_fence_put(iface, &ep->tx.wq, &rkey, &remote_addr,
+                                 ep->super.atomic_mr_offset, &fm_ce_se);
+
+        iov.buffer = buffers[iov_it];
+        iov.length = lengths[iov_it];
+        iov.memh   = memhs ? memhs[iov_it] : UCT_MEM_HANDLE_NULL;
+        iov.stride = (strides != NULL) ? strides[iov_it] : 0;
+        iov.count  = (counts != NULL) ? counts[iov_it] : 1;
+
+        /* Signal completion only on the last segment of the chain */
+        if (iov_it == count - 1) {
+            fm_ce_se |= MLX5_WQE_CTRL_CQ_UPDATE;
+        }
+        skip_flag = (iov_it + 1 < count) ?
+                    UCT_RC_MLX5_IOV_POST_FLAG_SKIP_TX_MODERATION : 0;
+
+        uct_rc_mlx5_txqp_dptr_post_iov(iface, IBV_QPT_RC,
+                                       &ep->super.txqp, &ep->tx.wq,
+                                       MLX5_OPCODE_RDMA_WRITE,
+                                       &iov, 1,
+                                       0, NULL, 0,
+                                       remote_addr, rkey,
+                                       0ul, 0, 0, NULL,
+                                       0, fm_ce_se, 0,
+                                       UCT_IB_MAX_ZCOPY_LOG_SGE(&iface->super.super),
+                                       skip_flag);
+        total_length += lengths[iov_it];
+    }
+
+    uct_rc_txqp_add_send_comp(&iface->super, &ep->super.txqp,
+                              uct_rc_ep_send_op_completion_handler, comp, sn,
+                              UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY, NULL, 0,
+                              total_length);
+
+    UCT_TL_EP_STAT_OP(&ep->super.super, PUT, ZCOPY, total_length);
+    uct_rc_ep_enable_flush_remote(&ep->super);
+
+    return UCS_INPROGRESS;
+}
+
+ucs_status_t
 uct_rc_mlx5_base_ep_get_bcopy(uct_ep_h tl_ep, uct_unpack_callback_t unpack_cb,
                               void *arg, size_t length, uint64_t remote_addr,
                               uct_rkey_t rkey, uct_completion_t *comp)

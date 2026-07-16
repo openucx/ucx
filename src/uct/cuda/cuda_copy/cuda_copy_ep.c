@@ -21,6 +21,9 @@
 #include <ucs/type/class.h>
 #include <ucs/memory/memtype_cache.h>
 
+#include <cuda.h>
+#include <string.h>
+
 typedef struct {
     ucs_memory_type_t       src_type;
     ucs_memory_type_t       dst_type;
@@ -402,6 +405,185 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_put_zcopy,
     uct_cuda_copy_trace_data("PUT_ZCOPY", remote_addr, iov, iovcnt);
     return status;
 }
+
+#if CUDA_VERSION >= 13000
+static ucs_status_t
+uct_cuda_copy_ep_put_sgl_check_homogeneous(
+        uct_cuda_copy_iface_t *iface, void * const *buffers,
+        const uint64_t *remote_addrs, const size_t *lengths, size_t count)
+{
+    ucs_memory_type_t src0, dst0, src_i, dst_i;
+    ucs_sys_device_t UCS_V_UNUSED sys0;
+    ucs_sys_device_t UCS_V_UNUSED sys_i;
+    CUdeviceptr cuda_deviceptr;
+    size_t i;
+
+    ucs_assert(count > 0u);
+
+    uct_cuda_copy_get_mem_types(iface->super.super.md, buffers[0],
+                                (void *)(uintptr_t)remote_addrs[0], lengths[0],
+                                &src0, &dst0, &sys0, &cuda_deviceptr);
+
+    for (i = 1; i < count; i++) {
+        uct_cuda_copy_get_mem_types(iface->super.super.md, buffers[i],
+                                    (void *)(uintptr_t)remote_addrs[i],
+                                    lengths[i], &src_i, &dst_i, &sys_i,
+                                    &cuda_deviceptr);
+        if ((src_i != src0) || (dst_i != dst0)) {
+            ucs_error("cuda_copy put_sgl_zcopy requires homogeneous segments "
+                      "(segment %zu is %s->%s, expected %s->%s)",
+                      i, ucs_memory_type_names[src_i],
+                      ucs_memory_type_names[dst_i],
+                      ucs_memory_type_names[src0],
+                      ucs_memory_type_names[dst0]);
+            return UCS_ERR_INVALID_PARAM;
+        }
+    }
+
+    return UCS_OK;
+}
+
+UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_put_sgl_zcopy,
+                 (tl_ep, buffers, lengths, memhs, remote_addrs, rkeys, counts,
+                  strides, count, comp),
+                 uct_ep_h tl_ep, void * const *buffers, const size_t *lengths,
+                 uct_mem_h const *memhs UCS_V_UNUSED,
+                 const uint64_t *remote_addrs, uct_rkey_t const *rkeys UCS_V_UNUSED,
+                 const size_t *counts, const size_t *strides,
+                 size_t count, uct_completion_t *comp)
+{
+    uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface,
+                                                  uct_cuda_copy_iface_t);
+    uct_cuda_copy_ep_ctx_t ctx;
+    ucs_status_t status;
+    uct_cuda_queue_desc_t *q_desc;
+    ucs_queue_head_t *event_q;
+    CUstream *stream;
+    uct_cuda_event_desc_t *cuda_event;
+    CUdeviceptr *cuda_dsts;
+    CUdeviceptr *cuda_srcs;
+    CUmemcpyAttributes attr;
+    size_t attrs_idxs[1];
+    CUresult cu_err;
+    size_t i;
+    size_t total_length;
+
+    if (count == 0) {
+        return UCS_OK;
+    }
+
+    if ((buffers == NULL) || (lengths == NULL) || (remote_addrs == NULL)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    /* Strided repetition (counts/strides) is not implemented by this transport */
+    if ((counts != NULL) || (strides != NULL)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    status = uct_cuda_copy_ep_put_sgl_check_homogeneous(iface, buffers,
+                                                        remote_addrs, lengths,
+                                                        count);
+    if (ucs_unlikely(status != UCS_OK)) {
+        return status;
+    }
+
+    status = uct_cuda_copy_ep_get_ctx(iface, buffers[0],
+                                      (void *)(uintptr_t)remote_addrs[0],
+                                      lengths[0], &ctx);
+    if (ucs_unlikely(status != UCS_OK)) {
+        return status;
+    }
+
+    q_desc  = &ctx.ctx_rsc->queue_desc[ctx.src_type][ctx.dst_type];
+    event_q = &q_desc->event_queue;
+    stream  = uct_cuda_copy_get_stream(ctx.ctx_rsc, ctx.src_type, ctx.dst_type);
+    if (ucs_unlikely(stream == NULL)) {
+        ucs_error("stream for src %s dst %s not available",
+                  ucs_memory_type_names[ctx.src_type],
+                  ucs_memory_type_names[ctx.dst_type]);
+        status = UCS_ERR_IO_ERROR;
+        goto out_pop_and_release;
+    }
+
+    cuda_event = ucs_mpool_get(&ctx.ctx_rsc->super.event_mp);
+    if (ucs_unlikely(cuda_event == NULL)) {
+        ucs_error("failed to allocate cuda event object");
+        status = UCS_ERR_NO_MEMORY;
+        goto out_pop_and_release;
+    }
+
+    cuda_dsts = ucs_malloc(count * sizeof(*cuda_dsts), "cuda_copy_sgl_dsts");
+    if (cuda_dsts == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err_mpool_put;
+    }
+
+    cuda_srcs = ucs_malloc(count * sizeof(*cuda_srcs), "cuda_copy_sgl_srcs");
+    if (cuda_srcs == NULL) {
+        ucs_free(cuda_dsts);
+        status = UCS_ERR_NO_MEMORY;
+        goto err_mpool_put;
+    }
+
+    total_length = 0;
+    for (i = 0; i < count; i++) {
+        cuda_dsts[i] = (CUdeviceptr)(uintptr_t)remote_addrs[i];
+        cuda_srcs[i] = (CUdeviceptr)(uintptr_t)buffers[i];
+        total_length += lengths[i];
+    }
+
+    memset(&attr, 0, sizeof(attr));
+    attr.srcAccessOrder                = CU_MEMCPY_SRC_ACCESS_ORDER_STREAM;
+    attrs_idxs[0]                      = 0;
+
+    cu_err = cuMemcpyBatchAsync(cuda_dsts, cuda_srcs, (size_t *)lengths, count,
+                                &attr, attrs_idxs, 1, *stream);
+    if (ucs_unlikely(cu_err != CUDA_SUCCESS)) {
+        UCT_CUDADRV_LOG(cuMemcpyBatchAsync, UCS_LOG_LEVEL_ERROR, cu_err);
+        ucs_free(cuda_srcs);
+        ucs_free(cuda_dsts);
+        status = UCS_ERR_IO_ERROR;
+        goto err_mpool_put;
+    }
+
+    ucs_free(cuda_srcs);
+    ucs_free(cuda_dsts);
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuEventRecord(cuda_event->event, *stream));
+    if (ucs_unlikely(status != UCS_OK)) {
+        goto err_mpool_put;
+    }
+
+    if (ucs_queue_is_empty(event_q)) {
+        ucs_queue_push(&iface->super.active_queue, &q_desc->queue);
+    }
+
+    ucs_queue_push(event_q, &cuda_event->queue);
+    cuda_event->comp = comp;
+
+    UCS_STATIC_BITMAP_SET(&iface->streams_to_sync,
+                          uct_cuda_copy_flush_bitmap_idx(ctx.src_type,
+                                                         ctx.dst_type));
+
+    ucs_trace("cuda_copy put_sgl_zcopy: count=%zu total_length=%zu", count,
+              total_length);
+
+    UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), PUT, ZCOPY,
+                      total_length);
+
+    status = UCS_INPROGRESS;
+
+out_pop_and_release:
+    uct_cuda_ctx_pop_and_release(ctx.cuda_device, ctx.cuda_context);
+    return status;
+
+err_mpool_put:
+    ucs_mpool_put(cuda_event);
+    goto out_pop_and_release;
+}
+#endif /* CUDA_VERSION >= 13000 */
 
 static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_copy_ep_rma_short(
         uct_ep_h tl_ep, CUdeviceptr dst, CUdeviceptr src, unsigned length)

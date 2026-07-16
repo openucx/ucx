@@ -46,6 +46,12 @@
 #define UCT_RC_MLX5_SINGLE_FRAG_MSG(_flags) \
     (((_flags) & UCT_CB_PARAM_FLAG_FIRST) && !((_flags) & UCT_CB_PARAM_FLAG_MORE))
 
+/** Flags for @ref uct_rc_mlx5_txqp_dptr_post_iov */
+enum {
+    /** Do not force CQ update via TX moderation for inner batched WRs */
+    UCT_RC_MLX5_IOV_POST_FLAG_SKIP_TX_MODERATION = UCS_BIT(0)
+};
+
 #define UCT_RC_MLX5_CHECK_AM_ZCOPY(_id, _header_length, _length, _seg_size, _av_size) \
     UCT_CHECK_AM_ID(_id); \
     UCT_RC_CHECK_ZCOPY_DATA(_header_length, _length, _seg_size) \

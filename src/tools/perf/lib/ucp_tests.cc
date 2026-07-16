@@ -17,6 +17,31 @@
 #include <ucs/sys/preprocessor.h>
 #include <ucs/sys/string.h>
 #include <limits>
+#include <stdlib.h>
+
+
+/*
+ * SGL put state. Kept on the heap and referenced by a single pointer from the
+ * runner, so it does not inflate the stack frame of the dispatch functions,
+ * which instantiate many runner objects in one frame. The message is split into
+ * 'count' equal-length segments, all sharing the send buffer's memory handle and
+ * the peer's rkey (the whole buffer is registered as one region). The arrays are
+ * managed with malloc/free rather than STL containers, since the perftest binary
+ * is linked without the C++ runtime.
+ */
+struct ucp_perf_sgl_state {
+    void                **buffers;
+    size_t               *lengths;
+    ucp_mem_h            *memhs;
+    uint64_t             *remote_addrs;
+    ucp_rkey_h           *rkeys;
+    ucp_dt_local_sgl_t    local;
+    ucp_dt_remote_sgl_t   remote;
+    ucp_request_param_t   send_params;
+    ucp_request_param_t   send_get_info_params;
+    size_t                count;
+    size_t                total_length;
+};
 
 
 template <ucx_perf_cmd_t CMD, ucx_perf_test_type_t TYPE, unsigned FLAGS>
@@ -38,7 +63,8 @@ public:
         m_sends_outstanding(0),
         m_max_outstanding(m_perf.params.max_outstanding),
         m_am_rx_buffer(NULL),
-        m_am_rx_length(0ul)
+        m_am_rx_length(0ul),
+        m_sgl(NULL)
     {
         memset(&m_am_rx_params, 0, sizeof(m_am_rx_params));
         memset(&m_send_params, 0, sizeof(m_send_params));
@@ -71,6 +97,15 @@ public:
         set_am_handler(UCP_PERF_DAEMON_AM_ID_RECV_CMPL, NULL, NULL, 0);
         set_am_handler(UCP_PERF_DAEMON_AM_ID_SEND_CMPL, NULL, NULL, 0);
         set_am_handler(AM_ID, NULL, NULL, 0);
+
+        if (m_sgl != NULL) {
+            free(m_sgl->buffers);
+            free(m_sgl->lengths);
+            free(m_sgl->memhs);
+            free(m_sgl->remote_addrs);
+            free(m_sgl->rkeys);
+            free(m_sgl);
+        }
     }
 
     void set_am_handler(unsigned id, ucp_am_recv_callback_t cb, void *arg,
@@ -145,6 +180,108 @@ public:
         }
     }
 
+    inline bool sgl_enabled() const
+    {
+        return (CMD == UCX_PERF_CMD_PUT) &&
+               (m_perf.params.ucp.send_datatype == UCP_PERF_DATATYPE_SGL);
+    }
+
+    /*
+     * Split the message into 'sgl_cnt' equal-length segments (the last segment
+     * absorbs any remainder) and build the local/remote SGL descriptors plus the
+     * request parameters used by the put bandwidth loop. All segments share the
+     * send buffer memory handle and the peer's rkey, since the whole buffer is
+     * registered as a single region.
+     */
+    void init_sgl(size_t total_length)
+    {
+        const size_t count   = m_perf.params.ucp.sgl_cnt;
+        const size_t base    = total_length / count;
+        const size_t rem     = total_length % count;
+        uintptr_t local_base = (uintptr_t)m_perf.send_buffer;
+        uint64_t remote_base = m_perf.ucp.remote_addr;
+        size_t offset        = 0;
+        ucp_perf_sgl_state *sgl;
+        size_t i;
+
+        if (m_sgl == NULL) {
+            m_sgl = (ucp_perf_sgl_state*)calloc(1, sizeof(*m_sgl));
+            ucs_assert_always(m_sgl != NULL);
+        }
+        sgl = m_sgl;
+
+        sgl->count        = count;
+        sgl->total_length = total_length;
+
+        free(sgl->buffers);
+        free(sgl->lengths);
+        free(sgl->memhs);
+        free(sgl->remote_addrs);
+        free(sgl->rkeys);
+        sgl->buffers      = (void**)malloc(count * sizeof(*sgl->buffers));
+        sgl->lengths      = (size_t*)malloc(count * sizeof(*sgl->lengths));
+        sgl->memhs        = (ucp_mem_h*)malloc(count * sizeof(*sgl->memhs));
+        sgl->remote_addrs = (uint64_t*)malloc(count *
+                                              sizeof(*sgl->remote_addrs));
+        sgl->rkeys        = (ucp_rkey_h*)malloc(count * sizeof(*sgl->rkeys));
+        ucs_assert_always((sgl->buffers != NULL) && (sgl->lengths != NULL) &&
+                          (sgl->memhs != NULL) &&
+                          (sgl->remote_addrs != NULL) &&
+                          (sgl->rkeys != NULL));
+
+        for (i = 0; i < count; ++i) {
+            size_t len           = base + ((i < rem) ? 1 : 0);
+            sgl->buffers[i]      = (void*)(local_base + offset);
+            sgl->lengths[i]      = len;
+            sgl->memhs[i]        = m_perf.ucp.send_memh;
+            sgl->remote_addrs[i] = remote_base + offset;
+            sgl->rkeys[i]        = m_perf.ucp.rkey;
+            offset              += len;
+        }
+
+        memset(&sgl->local, 0, sizeof(sgl->local));
+        sgl->local.field_mask = UCP_DT_LOCAL_SGL_FIELD_BUFFERS |
+                                UCP_DT_LOCAL_SGL_FIELD_LENGTHS |
+                                UCP_DT_LOCAL_SGL_FIELD_MEMHS;
+        sgl->local.buffers    = sgl->buffers;
+        sgl->local.lengths    = sgl->lengths;
+        sgl->local.memhs      = sgl->memhs;
+
+        memset(&sgl->remote, 0, sizeof(sgl->remote));
+        sgl->remote.field_mask   = UCP_DT_REMOTE_SGL_FIELD_REMOTE_ADDRS |
+                                   UCP_DT_REMOTE_SGL_FIELD_LENGTHS |
+                                   UCP_DT_REMOTE_SGL_FIELD_RKEYS;
+        sgl->remote.remote_addrs = sgl->remote_addrs;
+        sgl->remote.lengths      = sgl->lengths;
+        sgl->remote.rkeys        = sgl->rkeys;
+
+        fill_sgl_send_params(sgl->send_params, send_cb, 0);
+        /* The get-info variant forces a request handle (NO_IMM_CMPL) and uses a
+         * callback that does not free the request, so send() can safely query it
+         * and release it afterwards - mirroring the contiguous get-info path. */
+        fill_sgl_send_params(sgl->send_get_info_params, send_get_info_cb,
+                             UCP_OP_ATTR_FLAG_NO_IMM_CMPL);
+    }
+
+    void fill_sgl_send_params(ucp_request_param_t &params,
+                             ucp_send_nbx_callback_t cb, uint32_t op_attr_mask)
+    {
+        memset(&params, 0, sizeof(params));
+        params.op_attr_mask    = UCP_OP_ATTR_FIELD_DATATYPE |
+                                 UCP_OP_ATTR_FIELD_REMOTE_DATATYPE |
+                                 UCP_OP_ATTR_FIELD_REMOTE |
+                                 UCP_OP_ATTR_FIELD_REMOTE_COUNT |
+                                 UCP_OP_ATTR_FIELD_CALLBACK |
+                                 UCP_OP_ATTR_FIELD_USER_DATA |
+                                 UCP_OP_ATTR_FLAG_MULTI_SEND | op_attr_mask;
+        params.datatype        = ucp_dt_make_sgl();
+        params.remote_datatype = ucp_dt_make_sgl();
+        params.remote          = &m_sgl->remote;
+        params.remote_count    = m_sgl->count;
+        params.cb.send         = cb;
+        params.user_data       = this;
+    }
+
     void ucp_perf_init_common_params(size_t *total_length, size_t *send_length,
                                      ucp_datatype_t *send_dt,
                                      void **send_buffer, size_t *recv_length,
@@ -158,6 +295,10 @@ public:
         }
 
         ucp_perf_test_prepare_iov_buffers();
+
+        if (sgl_enabled()) {
+            init_sgl(*total_length);
+        }
 
         *send_length = *recv_length = *total_length;
 
@@ -476,7 +617,17 @@ public:
             default:
                 return UCS_ERR_INVALID_PARAM;
             }
-            request = ucp_put_nbx(ep, buffer, length, remote_addr, rkey, param);
+            /* Route the full-size data transfer through the SGL API; the tiny
+             * flow-control ack (length 1) keeps using the contiguous path. */
+            if (sgl_enabled() && (length == m_sgl->total_length)) {
+                request = ucp_put_nbx(ep, &m_sgl->local, m_sgl->count,
+                                      UCP_REMOTE_ADDR_INVALID, UCP_RKEY_INVALID,
+                                      get_info ? &m_sgl->send_get_info_params :
+                                                 &m_sgl->send_params);
+            } else {
+                request = ucp_put_nbx(ep, buffer, length, remote_addr, rkey,
+                                      param);
+            }
             break;
         case UCX_PERF_CMD_GET:
             request = ucp_get_nbx(ep, buffer, length, remote_addr, rkey, param);
@@ -972,6 +1123,10 @@ private:
     ucp_request_param_t m_send_get_info_params;
     ucp_request_param_t m_recv_params;
     ucp_atomic_op_t     m_atomic_op;
+
+    /* Heap-allocated SGL put state (see ucp_perf_sgl_state); NULL unless the SGL
+     * datatype is selected for a put bandwidth test. */
+    ucp_perf_sgl_state      *m_sgl;
 };
 
 #define TEST_CASE(_perf, _cmd, _type, _flags, _mask) \

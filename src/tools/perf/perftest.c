@@ -202,6 +202,7 @@ ucs_status_t init_test_params(perftest_params_t *params)
     params->super.iov_stride          = 0;
     params->super.ucp.send_datatype   = UCP_PERF_DATATYPE_CONTIG;
     params->super.ucp.recv_datatype   = UCP_PERF_DATATYPE_CONTIG;
+    params->super.ucp.sgl_cnt         = 1;
     params->super.ucp.am_hdr_size     = 0;
     params->super.device_channel_mode = UCX_PERF_CHANNEL_MODE_SINGLE;
     params->super.channel_rand_seed   = ucs_generate_uuid((uintptr_t)params);

@@ -14,6 +14,7 @@
 #include <uct/ib/mlx5/ib_mlx5_ext.h>
 #include <uct/ib/mlx5/dv/ib_mlx5_dv.h>
 #include <uct/ib/base/ib_device.h>
+#include <uct/base/uct_iface.h>
 #include <uct/base/uct_md.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/debug/log.h>
@@ -1012,19 +1013,17 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_rc_mlx5_iface_t, uct_iface_t, uct_md_h,
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_mlx5_iface_t, uct_iface_t);
 
 static ucs_status_t
-uct_rc_mlx5_iface_query_v2(uct_iface_h UCS_V_UNUSED iface,
-                           uct_iface_attr_v2_t *iface_attr)
+uct_rc_mlx5_iface_query_v2(uct_iface_h tl_iface, uct_iface_attr_v2_t *iface_attr)
 {
-    size_t max_sgl = uct_ib_mlx5_ext_max_put_sgl_zcopy_count();
+    ucs_status_t status;
 
-    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_CAP_FLAGS) {
-        iface_attr->cap.flags = (max_sgl > 0) ? UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY : 0;
+    status = uct_iface_base_query_v2(tl_iface, iface_attr);
+    if (status != UCS_OK) {
+        return status;
     }
 
-    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT) {
-        iface_attr->max_put_sgl_zcopy_count = max_sgl;
-    }
-
+    uct_rc_iface_query_put_sgl_cap_v2(ucs_derived_of(tl_iface, uct_rc_iface_t),
+                                      iface_attr);
     return UCS_OK;
 }
 
@@ -1040,7 +1039,7 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
             .iface_is_reachable_v2  = uct_rc_mlx5_iface_is_reachable_v2,
             .ep_is_connected        = uct_rc_mlx5_base_ep_is_connected,
             .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported,
-            .ep_put_sgl_zcopy       = uct_ib_mlx5_ext_ep_put_sgl_zcopy
+            .ep_put_sgl_zcopy       = uct_rc_mlx5_base_ep_put_sgl_zcopy
         },
         .create_cq      = uct_rc_mlx5_iface_common_create_cq,
         .destroy_cq     = uct_rc_mlx5_iface_common_destroy_cq,

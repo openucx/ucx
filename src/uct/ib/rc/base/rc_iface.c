@@ -580,6 +580,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
     ucs_status_t status;
     unsigned tx_cq_size;
     ucs_mpool_params_t mp_params;
+    size_t max_put_sgl_zcopy;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, tl_ops, &ops->super, tl_md,
                               worker, params, &config->super, init_attr);
@@ -594,6 +595,20 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
     self->config.tx_min_sge     = config->super.tx.min_sge;
     self->config.tx_min_inline  = config->super.tx.min_inline;
     self->config.tx_moderation  = init_attr->tx_moderation;
+    /* A put_sgl_zcopy call posts the whole SGL as one atomic batch of WQEs and
+     * must reserve TX credits for all of them up front. The batch therefore
+     * cannot exceed what the QP can ever hold at once: mlx5's usable depth is
+     * bb_max = qp_len - 2*MAX_BB (one WQE/BB per segment), and verbs is bounded
+     * by qp_len send WRs. Bound the advertised count by half the QP depth so a
+     * full batch is always postable (with headroom for other traffic); large
+     * QPs keep the previous min(tx_moderation, MAX) behavior. */
+    max_put_sgl_zcopy              = ucs_min((size_t)self->config.tx_qp_len / 2,
+                                             (size_t)UCT_IB_RC_PUT_SGL_ZCOPY_MAX);
+    self->config.max_put_sgl_zcopy =
+            (self->config.tx_moderation == 0) ?
+                    1 :
+                    ucs_min((size_t)self->config.tx_moderation,
+                            max_put_sgl_zcopy);
     self->config.tx_poll_always = config->tx.poll_always;
     self->config.tx_cq_len      = tx_cq_size;
     self->config.min_rnr_timer  = uct_ib_to_rnr_fabric_time(config->tx.rnr_timeout);
@@ -1088,6 +1103,22 @@ void uct_rc_iface_vfs_refresh(uct_iface_h iface)
     /* Add objects for EPs */
     ucs_list_for_each(ep, &rc_iface->ep_list, list) {
         rc_iface_ops->ep_vfs_populate(ep);
+    }
+}
+
+void uct_rc_iface_query_put_sgl_cap_v2(uct_rc_iface_t *iface,
+                                       uct_iface_attr_v2_t *iface_attr)
+{
+    if (iface->config.max_put_sgl_zcopy == 0) {
+        return;
+    }
+
+    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_CAP_FLAGS) {
+        iface_attr->cap.flags |= UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY;
+    }
+
+    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT) {
+        iface_attr->max_put_sgl_zcopy_count = iface->config.max_put_sgl_zcopy;
     }
 }
 
