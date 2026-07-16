@@ -369,7 +369,8 @@ void ucp_proto_select_param_str(const ucp_proto_select_param_t *select_param,
     };
     static const char *rndv_flag_names[] = {
         [ucs_ilog2(UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG)] = "frag",
-        [ucs_ilog2(UCP_PROTO_SELECT_OP_FLAG_RMA_RNDV)]  = "rma-rndv"
+        [ucs_ilog2(UCP_PROTO_SELECT_OP_FLAG_RMA_RNDV)]  = "rma-rndv",
+        [ucs_ilog2(UCP_PROTO_SELECT_OP_FLAG_AM_RNDV)]   = "am-rndv"
     };
     static const char *am_flag_names[]   = {
         [ucs_ilog2(UCP_PROTO_SELECT_OP_FLAG_AM_EAGER)] = "egr",

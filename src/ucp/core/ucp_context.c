@@ -386,9 +386,10 @@ static ucs_config_field_t ucp_context_config_table[] = {
 
   {"RNDV_PIPELINE_SHM_CUDA_STAGING_FORCE", "n",
    "Prefer the copy-to-attached host-staged path for intra-node\n"
-   "CUDA-to-CUDA rendezvous only when RNDV_SCHEME is auto and the\n"
-   "pipeline is enabled and available. This parameter is a temporary\n"
-   "workaround and may be removed in future releases.\n"
+   "CUDA-to-CUDA tag rendezvous only when RNDV_SCHEME is auto\n"
+   "and the pipeline is enabled and available. AM rdnv and RMA rdnv\n"
+   "are not forced. This parameter is a temporary workaround\n"
+   "and may be removed in future releases.\n"
    "Other rendezvous protocols remain as fallback.",
    ucs_offsetof(ucp_context_config_t, rndv_shm_cuda_staging_force),
    UCS_CONFIG_TYPE_BOOL},

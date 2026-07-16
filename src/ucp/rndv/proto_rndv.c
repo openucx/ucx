@@ -217,7 +217,7 @@ static ucs_status_t ucp_proto_rndv_ctrl_select_remote_proto(
     if (ucp_proto_rndv_shm_pipeline_force(&remote_init_params) ||
         ucp_proto_rndv_shm_pipeline_force_rkey_ptr_mtype(
                 &remote_init_params)) {
-        rkey_config_key.flags = UCP_RKEY_CONFIG_FLAG_PROTO_ESTIMATION;
+        rkey_config_key.flags |= UCP_RKEY_CONFIG_FLAG_PROTO_ESTIMATION;
     }
 
     for (lane = 0; lane < ep_config->key.num_lanes; ++lane) {
@@ -480,6 +480,7 @@ static void ucp_proto_rndv_ctrl_variant_probe(
                     "variant_name=%s remote_proto->cfg_thresh=%zu",
                     variant_name, remote_proto->cfg_thresh);
     }
+
     cfg_priority = ucp_proto_rndv_ctrl_variant_cfg_priority(
             params, remote_proto->cfg_thresh, remote_proto->cfg_priority,
             force_shm_pipeline);
@@ -602,6 +603,10 @@ ucp_proto_rndv_find_ctrl_lane(const ucp_proto_init_params_t *params)
 void ucp_proto_rndv_rts_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_context_h context                    = init_params->worker->context;
+    uint8_t remote_op_flags                  =
+            context->config.ext.rndv_shm_cuda_staging_force ?
+            (ucp_proto_select_op_flags(init_params->select_param) &
+             UCP_PROTO_SELECT_OP_FLAG_AM_RNDV) : 0;
     ucp_proto_rndv_ctrl_init_params_t params = {
         .super.super         = *init_params,
         .super.latency       = 0,
@@ -622,7 +627,7 @@ void ucp_proto_rndv_rts_probe(const ucp_proto_init_params_t *init_params)
         .super.reg_mem_info  = ucp_proto_common_select_param_mem_info(
                                                      init_params->select_param),
         .remote_op_id        = UCP_OP_ID_RNDV_RECV,
-        .remote_op_flags     = 0,
+        .remote_op_flags     = remote_op_flags,
         .lane                = ucp_proto_rndv_find_ctrl_lane(init_params),
         .perf_bias           = context->config.ext.rndv_perf_diff / 100.0,
         .ctrl_msg_name       = UCP_PROTO_RNDV_RTS_NAME,
@@ -930,7 +935,8 @@ UCS_PROFILE_FUNC_VOID(ucp_proto_rndv_receive_start,
                                     &sg_count);
     }
 
-    op_flags = ucp_proto_rndv_rts_op_flags(rts->opcode);
+    op_flags = worker->context->config.ext.rndv_shm_cuda_staging_force ?
+               ucp_proto_rndv_rts_op_flags(rts->opcode) : 0;
     status   = ucp_proto_rndv_send_reply(
             worker, req, op_id, recv_req->recv.op_attr, op_flags, rts->size,
             rkey_buffer, rkey_length, sg_count);

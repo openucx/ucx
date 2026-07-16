@@ -59,7 +59,7 @@ ucp_proto_rndv_shm_pipeline_force_scope(
         return 0;
     }
 
-    /* Check that synthetic protocol-estimation keys are allowed or absent. */
+    /* Synthetic estimation keys are allowed only for sender-side modeling. */
     if (!allow_proto_estimation &&
         (init_params->rkey_config_key->flags &
          UCP_RKEY_CONFIG_FLAG_PROTO_ESTIMATION)) {
@@ -78,16 +78,19 @@ static UCS_F_ALWAYS_INLINE int
 ucp_proto_rndv_shm_pipeline_force(
         const ucp_proto_init_params_t *init_params)
 {
+    /* Sender-side modeling uses a synthetic CUDA rkey to estimate the peer
+     * receiver; keep it separate but still apply the explicit force policy.
+     */
     return ucp_proto_rndv_shm_pipeline_force_scope(
-            init_params, UCP_OP_ID_RNDV_RECV, UCS_MEMORY_TYPE_CUDA, 0);
+            init_params, UCP_OP_ID_RNDV_RECV, UCS_MEMORY_TYPE_CUDA, 1);
 }
 
 static UCS_F_ALWAYS_INLINE int
 ucp_proto_rndv_shm_pipeline_force_rkey_ptr_mtype(
         const ucp_proto_init_params_t *init_params)
 {
-    /* The receiver-side pipeline can do nested estimation with a synthetic
-     * host rkey, while runtime RTR lookup uses the real host staging rkey.
+    /* The attached staging child models a temporary host buffer, so its nested
+     * lookup may use the synthetic estimation rkey created for that buffer.
      */
     return ucp_proto_rndv_shm_pipeline_force_scope(
             init_params, UCP_OP_ID_RNDV_SEND, UCS_MEMORY_TYPE_HOST, 1);

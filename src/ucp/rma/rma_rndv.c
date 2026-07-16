@@ -159,6 +159,9 @@ static void
 ucp_proto_put_rndv_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_context_h context                    = init_params->worker->context;
+    uint8_t remote_op_flags                  =
+            context->config.ext.rndv_shm_cuda_staging_force ?
+            UCP_PROTO_SELECT_OP_FLAG_RMA_RNDV : 0;
     ucp_proto_rndv_ctrl_init_params_t params = {
         .super.super         = *init_params,
         .super.latency       = 0,
@@ -184,7 +187,7 @@ ucp_proto_put_rndv_probe(const ucp_proto_init_params_t *init_params)
         /* For performance modeling, this control protocol is followed on the
          * peer by a regular RNDV receive flow over the final RMA address. */
         .remote_op_id        = UCP_OP_ID_RNDV_RECV,
-        .remote_op_flags     = UCP_PROTO_SELECT_OP_FLAG_RMA_RNDV,
+        .remote_op_flags     = remote_op_flags,
         .lane                = ucp_proto_rndv_find_ctrl_lane(init_params),
         .unpack_perf         = NULL,
         .perf_bias           = 0,
@@ -332,6 +335,7 @@ ucp_proto_get_rndv_probe(const ucp_proto_init_params_t *init_params)
     ucp_proto_init_elem_t *proto;
     ucp_memory_info_t mem_info;
     ucp_lane_index_t lane;
+    uint8_t rndv_op_flags;
     const void *priv;
 
     if (!ucp_proto_rma_rndv_probe_check(init_params, UCP_OP_ID_GET)) {
@@ -345,9 +349,11 @@ ucp_proto_get_rndv_probe(const ucp_proto_init_params_t *init_params)
 
     mem_info = ucp_proto_common_select_param_mem_info(
             init_params->select_param);
+    rndv_op_flags = worker->context->config.ext.rndv_shm_cuda_staging_force ?
+                    UCP_PROTO_SELECT_OP_FLAG_RMA_RNDV : 0;
     ucp_proto_select_param_init(&rndv_sel_param, UCP_OP_ID_RNDV_RECV, 0,
-                                UCP_PROTO_SELECT_OP_FLAG_RMA_RNDV,
-                                UCP_DATATYPE_CONTIG, &mem_info, 1);
+                                rndv_op_flags, UCP_DATATYPE_CONTIG,
+                                &mem_info, 1);
 
     proto_select = ucp_proto_select_get(worker, init_params->ep_cfg_index,
                                         init_params->rkey_cfg_index,
