@@ -23,6 +23,7 @@ extern "C" {
 #include <ucs/datastruct/linear_func.h>
 #include <ucp/proto/proto_select.inl>
 #include <ucp/core/ucp_worker.inl>
+#include <ucs/arch/cpu.h>
 #include <uct/api/v2/uct_v2.h>
 }
 
@@ -400,6 +401,13 @@ UCS_TEST_P(test_ucp_proto_cuda_async_non_reg,
     uint8_t sg_count;
     const ucp_proto_config_t *no_flag_remote_proto_config;
     const ucp_proto_config_t *can_reg_remote_proto_config;
+
+    /* RMA rndv get/put is gated to NVIDIA Vera CPUs in
+     * ucp_proto_rma_rndv_probe_check(), so get/rndv is not selected on other
+     * CPUs. */
+    if (ucs_arch_get_cpu_model() != UCS_CPU_MODEL_NVIDIA_VERA) {
+        UCS_TEST_SKIP_R("RMA rndv put/get is only enabled on NVIDIA Vera");
+    }
 
     if (!mem_buffer::is_async_supported(UCS_MEMORY_TYPE_CUDA)) {
         UCS_TEST_SKIP_R("CUDA async allocation is not supported");

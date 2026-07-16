@@ -12,6 +12,7 @@ extern "C" {
 #include <ucp/core/ucp_mm.h> /* for UCP_MEM_IS_ACCESSIBLE_FROM_CPU */
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_rkey.h>
+#include <ucs/arch/cpu.h>
 #include <ucs/sys/sys.h>
 #include <uct/api/v2/uct_v2.h>
 }
@@ -407,12 +408,23 @@ public:
 
     void init() override
     {
+        skip_if_rma_rndv_disabled();
         m_env.push_back(
                 new ucs::scoped_setenv("UCX_IB_GPU_DIRECT_RDMA", "n"));
         test_ucp_rma::init();
     }
 
 protected:
+    /* The RMA rendezvous put/get protocols are gated to NVIDIA Vera CPUs in
+     * ucp_proto_rma_rndv_probe_check(); on any other CPU they are never
+     * offered, so the forced-rndv tests cannot run. */
+    static void skip_if_rma_rndv_disabled()
+    {
+        if (ucs_arch_get_cpu_model() != UCS_CPU_MODEL_NVIDIA_VERA) {
+            UCS_TEST_SKIP_R("RMA rndv put/get is only enabled on NVIDIA Vera");
+        }
+    }
+
     static bool is_rndv_mem_type_pair(ucs_memory_type_t local_mem_type,
                                       ucs_memory_type_t remote_mem_type)
     {
@@ -470,6 +482,7 @@ class test_ucp_rma_rndv_cuda_async : public test_ucp_rma_rndv {
 public:
     void init() override
     {
+        skip_if_rma_rndv_disabled();
         if (!mem_buffer::is_async_supported(UCS_MEMORY_TYPE_CUDA)) {
             UCS_TEST_SKIP_R("asynchronous CUDA memory is not supported");
         }
