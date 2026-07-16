@@ -215,16 +215,26 @@ uct_dc_mlx5_ep_create_connected(const uct_ep_params_t *params, uct_ep_h* ep_p)
  * - RoCE: always use the reduced handshake.
  * - Non-DevX DCIs: ordering follows the SL, so use FHS for OOO SLs and the
  *   reduced handshake otherwise.
- * - DevX DCIs: force FHS if explicitly requested; use the reduced handshake
- *   for strict IBTA ordering or SLs without OOO support; otherwise (OOO SL,
- *   non-IBTA ordering) FHS is needed for OOO_ALL (DDP) or unless
- *   RDMA-write-disabled is supported and PUT is disabled.
+ * - DevX DCIs: force FHS if explicitly requested before querying SL OOO
+ *   support; use the reduced handshake for strict IBTA ordering or SLs without
+ *   OOO support; otherwise (OOO SL, non-IBTA ordering) FHS is needed for
+ *   OOO_ALL (DDP) or unless RDMA-write-disabled is supported and PUT is
+ *   disabled.
  */
 static int uct_dc_mlx5_iface_is_full_handshake(uct_dc_mlx5_iface_t *iface)
 {
     uct_ib_iface_t *ib_iface = &iface->super.super.super;
     uct_ib_mlx5_md_t *md     = uct_ib_mlx5_iface_md(ib_iface);
     uint16_t ooo_sl_mask     = 0;
+
+    if (uct_ib_iface_is_roce(ib_iface)) {
+        return 0;
+    }
+
+    if ((md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_DCI) &&
+        (iface->flags & UCT_DC_MLX5_IFACE_FLAG_DCI_FULL_HANDSHAKE)) {
+        return 1;
+    }
 
 #if HAVE_DEVX
     if (uct_ib_mlx5_devx_query_ooo_sl_mask(md, ib_iface->config.port_num,
@@ -233,16 +243,8 @@ static int uct_dc_mlx5_iface_is_full_handshake(uct_dc_mlx5_iface_t *iface)
     }
 #endif
 
-    if (uct_ib_iface_is_roce(ib_iface)) {
-        return 0;
-    }
-
     if (!(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_DCI)) {
         return !!(UCS_BIT(ib_iface->config.sl) & ooo_sl_mask);
-    }
-
-    if (iface->flags & UCT_DC_MLX5_IFACE_FLAG_DCI_FULL_HANDSHAKE) {
-        return 1;
     }
 
     if ((iface->super.config.dp_ordering_devx ==
