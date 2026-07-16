@@ -100,32 +100,15 @@ ucs_status_t uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
 {
     uct_rc_iface_t *rc_iface = &iface->super.super;
     uct_ib_mlx5_md_t *md     = uct_ib_mlx5_iface_md(&rc_iface->super);
-    char in_2init[UCT_IB_MLX5DV_ST_SZ_BYTES(rst2init_qp_in)]   = {};
-    char out_2init[UCT_IB_MLX5DV_ST_SZ_BYTES(rst2init_qp_out)] = {};
-    char in_2rtr[UCT_IB_MLX5DV_ST_SZ_BYTES(init2rtr_qp_in)]    = {};
-    char out_2rtr[UCT_IB_MLX5DV_ST_SZ_BYTES(init2rtr_qp_out)]  = {};
-    char in_2rts[UCT_IB_MLX5DV_ST_SZ_BYTES(rtr2rts_qp_in)]     = {};
-    char out_2rts[UCT_IB_MLX5DV_ST_SZ_BYTES(rtr2rts_qp_out)]   = {};
+    char in_2rtr[UCT_IB_MLX5DV_ST_SZ_BYTES(init2rtr_qp_in)]   = {};
+    char out_2rtr[UCT_IB_MLX5DV_ST_SZ_BYTES(init2rtr_qp_out)] = {};
+    char in_2rts[UCT_IB_MLX5DV_ST_SZ_BYTES(rtr2rts_qp_in)]    = {};
+    char out_2rts[UCT_IB_MLX5DV_ST_SZ_BYTES(rtr2rts_qp_out)]  = {};
     uint32_t opt_param_mask = UCT_IB_MLX5_QP_OPTPAR_RAE;
     ucs_status_t status;
     void *qpc;
 
-    UCT_IB_MLX5DV_SET(rst2init_qp_in, in_2init, opcode, UCT_IB_MLX5_CMD_OP_RST2INIT_QP);
-    UCT_IB_MLX5DV_SET(rst2init_qp_in, in_2init, qpn, qp->qp_num);
-
-    qpc = UCT_IB_MLX5DV_ADDR_OF(rst2init_qp_in, in_2init, qpc);
-    UCT_IB_MLX5DV_SET(qpc, qpc, pm_state, UCT_IB_MLX5_QPC_PM_STATE_MIGRATED);
-    UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.vhca_port_num,
-                      rc_iface->super.config.port_num);
-    if (!uct_ib_iface_is_roce(&rc_iface->super)) {
-        UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.pkey_index,
-                          rc_iface->super.pkey_index);
-    }
-    UCT_IB_MLX5DV_SET(qpc, qpc, counter_set_id,
-                      uct_ib_mlx5_iface_get_counter_set_id(&rc_iface->super));
-
-    status = uct_ib_mlx5_devx_modify_qp(qp, in_2init, sizeof(in_2init),
-                                        out_2init, sizeof(out_2init));
+    status = uct_ib_mlx5_devx_qp_rst2init(&rc_iface->super, qp);
     if (status != UCS_OK) {
         return status;
     }

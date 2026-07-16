@@ -11,6 +11,7 @@
 #include "gdaki.h"
 
 #include <ucs/sys/sock.h>
+#include <ucs/sys/topo/base/topo.h>
 #include <ucs/time/time.h>
 #include <ucs/datastruct/string_buffer.h>
 #include <ucs/algorithm/qsort_r.h>
@@ -22,6 +23,8 @@
 #include <uct/cuda/base/cuda_util.h>
 #include <uct/cuda/base/cuda_ctx.h>
 #include <uct/cuda/base/cuda_nvml.h>
+
+#include <string.h>
 
 #include "gpunetio/common/doca_gpunetio_verbs_def.h"
 
@@ -414,6 +417,40 @@ uct_rc_gdaki_channel_block(uct_rc_gdaki_iface_t *iface, ucs_mpool_t *mp,
     }
 }
 
+static void
+uct_rc_gdaki_channel_block_reset_qps(uct_rc_gdaki_iface_t *iface,
+                                     uct_rc_gdaki_channel_block_t *block)
+{
+    uct_ib_iface_t *ib_iface = &iface->super.super.super;
+    uct_rc_gdaki_channel_t *channel;
+    ucs_status_t status;
+    unsigned i;
+
+    for (i = 0; i < iface->num_channels; i++) {
+        channel = &block->channels[i];
+
+        (void)uct_ib_mlx5_modify_qp_state(ib_iface, &channel->qp.super,
+                                          IBV_QPS_ERR);
+
+        status = uct_ib_mlx5_modify_qp_state(ib_iface, &channel->qp.super,
+                                             IBV_QPS_RESET);
+        if (status != UCS_OK) {
+            ucs_fatal("failed to reset gdaki qp 0x%x: %s",
+                      channel->qp.super.qp_num, ucs_status_string(status));
+            return;
+        }
+
+        uct_ib_mlx5_txwq_reset(&channel->qp);
+
+        status = uct_ib_mlx5_devx_qp_rst2init(ib_iface, &channel->qp.super);
+        if (status != UCS_OK) {
+            ucs_fatal("failed to move gdaki qp 0x%x to init: %s",
+                      channel->qp.super.qp_num, ucs_status_string(status));
+            return;
+        }
+    }
+}
+
 static void uct_rc_gdaki_chunk_channels_destroy(uct_rc_gdaki_iface_t *iface,
                                                 ucs_mpool_t *mp, void *elems,
                                                 unsigned num_elems,
@@ -438,8 +475,8 @@ static void uct_rc_gdaki_chunk_channels_destroy(uct_rc_gdaki_iface_t *iface,
 static ucs_status_t
 uct_rc_gdaki_init_channel_chunk(uct_rc_gdaki_iface_t *iface,
                                 uct_rc_gdaki_channel_block_mem_t *mem,
-                                size_t dev_ep_size, ucs_mpool_t *mp,
-                                void *elems, unsigned num_elems)
+                                size_t dev_ep_size, ucs_mpool_t *mp, void *elems,
+                                unsigned num_elems)
 {
     uct_ib_iface_init_attr_t init_attr = {};
     uct_ib_mlx5_cq_attr_t cq_attr      = {};
@@ -661,12 +698,14 @@ uct_rc_gdaki_ep_reset_channels(uct_rc_gdaki_ep_t *ep)
     ep->channel_block = NULL;
 }
 
-static void uct_rc_gdaki_cleanup_channels_pooled(uct_rc_gdaki_ep_t *ep)
+static void uct_rc_gdaki_cleanup_channels_pooled(uct_rc_gdaki_iface_t *iface,
+                                                 uct_rc_gdaki_ep_t *ep)
 {
     if (ep->channel_block == NULL) {
         return;
     }
 
+    uct_rc_gdaki_channel_block_reset_qps(iface, ep->channel_block);
     ucs_mpool_put(ep->channel_block);
     uct_rc_gdaki_ep_reset_channels(ep);
 }
@@ -747,7 +786,7 @@ static void uct_rc_gdaki_ep_cleanup_channels(uct_rc_gdaki_iface_t *iface,
                                              uct_rc_gdaki_ep_t *ep)
 {
     if (iface->ep_alloc_mode == UCT_RC_GDAKI_EP_ALLOC_MODE_POOL) {
-        uct_rc_gdaki_cleanup_channels_pooled(ep);
+        uct_rc_gdaki_cleanup_channels_pooled(iface, ep);
         return;
     }
 
@@ -1240,8 +1279,26 @@ typedef struct {
 
 typedef struct {
     ucs_sys_device_t sys_dev;
+    ucs_sys_bus_id_t bus_id;
     int              cuda_idx; /* CUDA driver index, -1 if not CUDA-visible */
 } uct_gdaki_gpu_info_t;
+
+static const uct_gdaki_gpu_info_t *
+uct_gdaki_gpu_bus_id_lookup(const uct_gdaki_gpu_info_t *gpus, unsigned count,
+                            const ucs_sys_bus_id_t *bus_id)
+{
+    ucs_bus_id_bit_rep_t bus_id_key = ucs_topo_get_bus_id_bit_repr(bus_id);
+    unsigned gpu_idx;
+
+    for (gpu_idx = 0; gpu_idx < count; gpu_idx++) {
+        if (bus_id_key ==
+            ucs_topo_get_bus_id_bit_repr(&gpus[gpu_idx].bus_id)) {
+            return &gpus[gpu_idx];
+        }
+    }
+
+    return NULL;
+}
 
 static int uct_gdaki_dev_matrix_score(const void *pa, const void *pb, void *arg)
 {
@@ -1272,12 +1329,14 @@ uct_gdaki_get_cuda_sys_dev(int cuda_idx, ucs_sys_device_t *sys_dev_p)
 static ucs_status_t
 uct_gdaki_enum_gpus(uct_gdaki_gpu_info_t *gpus, unsigned *count_p)
 {
-    unsigned nvml_dev_count, nvml_idx;
+    uct_gdaki_gpu_info_t cuda_gpus[UCT_GDAKI_MAX_CUDA_DEVICES];
+    const uct_gdaki_gpu_info_t *gpu_info;
+    unsigned nvml_dev_count, nvml_idx, gpu_count, cuda_gpu_count;
     int cuda_dev_count, cuda_idx;
     ucs_sys_bus_id_t bus_id;
     nvmlDevice_t nvml_dev;
     nvmlPciInfo_t nvml_pci;
-    ucs_sys_device_t cuda_sys_dev;
+    ucs_sys_device_t sys_dev;
     ucs_status_t status;
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetCount(&cuda_dev_count));
@@ -1287,25 +1346,46 @@ uct_gdaki_enum_gpus(uct_gdaki_gpu_info_t *gpus, unsigned *count_p)
 
     ucs_assert_always(cuda_dev_count <= UCT_GDAKI_MAX_CUDA_DEVICES);
 
+    cuda_gpu_count = 0;
+    for (cuda_idx = 0; cuda_idx < cuda_dev_count; cuda_idx++) {
+        status = uct_gdaki_get_cuda_sys_dev(cuda_idx, &sys_dev);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        status = ucs_topo_get_device_bus_id(sys_dev, &bus_id);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        if (uct_gdaki_gpu_bus_id_lookup(cuda_gpus, cuda_gpu_count,
+                                        &bus_id) != NULL) {
+            ucs_debug("skip cuda device %d with duplicate bdf "
+                      "%04x:%02x:%02x.%u", cuda_idx,
+                      (unsigned)bus_id.domain, (unsigned)bus_id.bus,
+                      (unsigned)bus_id.slot, (unsigned)bus_id.function);
+            /* Same BDF. TODO: support MLOPart. */
+            continue;
+        }
+
+        cuda_gpus[cuda_gpu_count].sys_dev  = sys_dev;
+        cuda_gpus[cuda_gpu_count].bus_id   = bus_id;
+        cuda_gpus[cuda_gpu_count].cuda_idx = cuda_idx;
+        cuda_gpu_count++;
+    }
+
     status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetCount_v2, &nvml_dev_count);
     if (status != UCS_OK) {
         ucs_diag("NVML unavailable: using legacy CUDA-only enumeration");
-
-        for (cuda_idx = 0; cuda_idx < cuda_dev_count; cuda_idx++) {
-            status = uct_gdaki_get_cuda_sys_dev(cuda_idx,
-                                                &gpus[cuda_idx].sys_dev);
-            if (status != UCS_OK) {
-                return status;
-            }
-
-            gpus[cuda_idx].cuda_idx = cuda_idx;
-        }
-
-        *count_p = cuda_dev_count;
+        memcpy(gpus, cuda_gpus, cuda_gpu_count * sizeof(*gpus));
+        *count_p = cuda_gpu_count;
         return UCS_OK;
     }
 
     ucs_assert_always(nvml_dev_count <= UCT_GDAKI_MAX_CUDA_DEVICES);
+
+    /* Add non-CUDA-visible devices from NVML. TODO: support MLOPart. */
+    gpu_count = 0;
     for (nvml_idx = 0; nvml_idx < nvml_dev_count; nvml_idx++) {
         status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetHandleByIndex, nvml_idx,
                                          &nvml_dev);
@@ -1324,31 +1404,32 @@ uct_gdaki_enum_gpus(uct_gdaki_gpu_info_t *gpus, unsigned *count_p)
         bus_id.slot     = nvml_pci.device;
         bus_id.function = 0;
 
-        status = ucs_topo_find_device_by_bus_id(&bus_id,
-                                                &gpus[nvml_idx].sys_dev);
+        gpu_info = uct_gdaki_gpu_bus_id_lookup(cuda_gpus, cuda_gpu_count,
+                                               &bus_id);
+        if (gpu_info != NULL) {
+            gpus[gpu_count++] = *gpu_info;
+            /* Already added as CUDA-visible. */
+            continue;
+        }
+
+        status = ucs_topo_find_device_by_bus_id(&bus_id, &sys_dev);
         if (status != UCS_OK) {
             return status;
         }
 
-        gpus[nvml_idx].cuda_idx = -1;
-    }
-
-    /* Map CUDA-visible devices back to their NVML entry via sys_dev. */
-    for (cuda_idx = 0; cuda_idx < cuda_dev_count; cuda_idx++) {
-        status = uct_gdaki_get_cuda_sys_dev(cuda_idx, &cuda_sys_dev);
-        if (status != UCS_OK) {
-            return status;
+        if (gpu_count == UCT_GDAKI_MAX_CUDA_DEVICES) {
+            ucs_error("exceeded maximal number of GDAKI CUDA devices (%u)",
+                      UCT_GDAKI_MAX_CUDA_DEVICES);
+            return UCS_ERR_EXCEEDS_LIMIT;
         }
 
-        for (nvml_idx = 0; nvml_idx < nvml_dev_count; nvml_idx++) {
-            if (gpus[nvml_idx].sys_dev == cuda_sys_dev) {
-                gpus[nvml_idx].cuda_idx = cuda_idx;
-                break;
-            }
-        }
+        gpus[gpu_count].sys_dev  = sys_dev;
+        gpus[gpu_count].bus_id   = bus_id;
+        gpus[gpu_count].cuda_idx = -1;
+        gpu_count++;
     }
 
-    *count_p = nvml_dev_count;
+    *count_p = gpu_count;
     return UCS_OK;
 }
 
@@ -1364,22 +1445,13 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
     struct ibv_device **device_list;
     struct ibv_device *ibdev;
     uct_gdaki_dev_score_t *scores;
-    char *path_buffer;
-    const char *sysfs_path;
     uct_gdaki_dev_matrix_elem_t *ibdesc;
     struct ibv_context *context;
-    ucs_sys_device_t sys_dev_ib;
-
-    status = ucs_string_alloc_path_buffer(&path_buffer, "path_buffer");
-    if (status != UCS_OK) {
-        return NULL;
-    }
 
     /* Obtain the list of IB devices */
     device_list = ibv_get_device_list(&ibdev_count);
     if (device_list == NULL) {
-        status = UCS_ERR_IO_ERROR;
-        goto out_buff;
+        return NULL;
     }
 
     ucs_assert(ibdev_count > 0);
@@ -1397,15 +1469,13 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
         goto out_dmat;
     }
 
-    /* Initialize each IB device, retrieve its system device representation */
+    /* Query each IB device so its sys_dev is resolved and its port state is
+     * known before direct-NIC sibling matching can be triggered. */
     for (ibdev_index = 0; ibdev_index < ibdev_count; ibdev_index++) {
-        ibdesc          = &dmat[ibdev_index];
-        ibdev           = device_list[ibdev_index];
-        sysfs_path      = ucs_topo_resolve_sysfs_path(ibdev->ibdev_path,
-                                                      path_buffer);
+        uct_ib_device_t tmp_dev = {0};
 
-        sys_dev_ib = ucs_topo_get_sysfs_dev(ibv_get_device_name(ibdev),
-                                            sysfs_path, 0);
+        ibdesc  = &dmat[ibdev_index];
+        ibdev   = device_list[ibdev_index];
         context = ibv_open_device(ibdev);
         if (context == NULL) {
             ucs_error("ibv_open_device(%s) failed: %m",
@@ -1414,11 +1484,16 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
             goto out;
         }
 
-        ibdesc->direct_nic = uct_ib_mlx5dv_check_direct_nic(context, sys_dev_ib,
-                                                            1) !=
+        tmp_dev.ibv_context = context;
+        status              = uct_ib_device_query(&tmp_dev, ibdev);
+        if (status != UCS_OK) {
+            ibv_close_device(context);
+            goto out;
+        }
+
+        ibdesc->sys_dev    = tmp_dev.sys_dev;
+        ibdesc->direct_nic = uct_ib_mlx5dv_check_direct_nic(&tmp_dev, 1) !=
                              UCS_SYS_DEVICE_ID_UNKNOWN;
-        ibdesc->sys_dev = ucs_topo_get_sysfs_dev(ibv_get_device_name(ibdev),
-                                                 sysfs_path, 0);
         scores[ibdev_index].index = ibdev_index;
         ibv_close_device(context);
     }
@@ -1483,8 +1558,6 @@ out_dmat:
     }
 out_dev:
     ibv_free_device_list(device_list);
-out_buff:
-    ucs_free(path_buffer);
     return dmat;
 }
 

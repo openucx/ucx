@@ -650,6 +650,14 @@ typedef struct uct_ib_mlx5_qp_attr {
     unsigned                    max_tx;
     unsigned                    len;
     size_t                      umem_offset;
+    /* Configure the SQ with NO_DBR_INT so the NIC does not read the send
+     * doorbell record (needed when the dbr lives in DPA memory, which the NIC
+     * cannot read). Caller must ensure the device supports it. */
+    uint8_t                     sq_no_dbr;
+    /* Override the QPC uar_page (0 = use the worker's UAR). Needed when the
+     * doorbell is rung from a different context than the host worker, e.g. a
+     * DPA thread whose outbox maps the FlexIO process UAR. */
+    uint32_t                    uar_page_id;
 } uct_ib_mlx5_qp_attr_t;
 
 
@@ -991,6 +999,9 @@ ucs_status_t uct_ib_mlx5_devx_modify_qp(uct_ib_mlx5_qp_t *qp,
 ucs_status_t uct_ib_mlx5_devx_modify_qp_state(uct_ib_mlx5_qp_t *qp,
                                               enum ibv_qp_state state);
 
+ucs_status_t
+uct_ib_mlx5_devx_qp_rst2init(uct_ib_iface_t *iface, uct_ib_mlx5_qp_t *qp);
+
 void uct_ib_mlx5_devx_destroy_qp(uct_ib_mlx5_md_t *md, uct_ib_mlx5_qp_t *qp);
 
 void uct_ib_mlx5_devx_destroy_qp_common(uct_ib_mlx5_qp_t *qp);
@@ -1187,6 +1198,12 @@ uct_ib_mlx5_devx_modify_qp_state(uct_ib_mlx5_qp_t *qp, enum ibv_qp_state state)
 }
 
 static inline ucs_status_t
+uct_ib_mlx5_devx_qp_rst2init(uct_ib_iface_t *iface, uct_ib_mlx5_qp_t *qp)
+{
+    return UCS_ERR_UNSUPPORTED;
+}
+
+static inline ucs_status_t
 uct_ib_mlx5_devx_query_qp_peer_info(uct_ib_iface_t *iface, uct_ib_mlx5_qp_t *qp,
                                     struct ibv_ah_attr *ah_attr,
                                     uint32_t *dest_qpn)
@@ -1322,8 +1339,7 @@ static inline const char *uct_ib_mlx5_dev_name(uct_ib_mlx5_md_t *md)
     return uct_ib_device_name(&md->super.dev);
 }
 
-ucs_sys_device_t uct_ib_mlx5dv_check_direct_nic(struct ibv_context *ctx,
-                                                ucs_sys_device_t sys_dev_ib,
-                                                int direct_nic);
+ucs_sys_device_t
+uct_ib_mlx5dv_check_direct_nic(uct_ib_device_t *dev, int enabled);
 
 #endif

@@ -20,7 +20,7 @@ require_ze=${require_ze:-}
 build_mode=${build_mode:-long}
 
 case "${build_mode}" in
-long|short|sanity|compilers|ze)
+long|short|sanity|compilers|ze|soname_suffix)
 	;;
 *)
 	azure_log_error "Unsupported build mode: ${build_mode}"
@@ -530,6 +530,8 @@ check_no_gga() {
 	fi
 }
 
+source ${realdir}/soname-build.sh
+
 # The ZE lane uses a public Intel container that does not have the MLNX
 # Environment Modules system (/etc/profile.d/modules.sh). Skip module
 # initialisation entirely; build_ze does not need any modules.
@@ -570,10 +572,14 @@ long)
 			'build_no_openmp' \
 			'build_gcc_debug_opt_with_dndebug' \
 			'build_clang' \
-			'build_armclang')
+			'build_armclang'\
+			'build_soname_suffix')
 	;;
 compilers)
 	tests=('build_icc' 'build_pgi')
+	;;
+soname_suffix)
+	tests=('build_soname_suffix')
 	;;
 esac
 
