@@ -635,16 +635,6 @@ static ucs_config_field_t ucp_context_config_table[] = {
    " 'auto' : Print the tables when UCX_LOG_LEVEL is 'debug' or higher",
    ucs_offsetof(ucp_context_config_t, print_transport_tables),
    UCS_CONFIG_TYPE_ON_OFF_AUTO},
-   
-  {"CTRL_FEATURES", "auto",
-   "Features that use the UCX_CTRL_FEATURES_TLS transport selection policy\n"
-   "instead of the UCX_TLS data policy. When set, this overrides the value\n"
-   "passed by the application via ucp_params_t::ctrl_features.\n"
-   " - auto : keep the application-provided value (default).\n"
-   " - <list> : comma-separated list of: tag, rma, amo32, amo64, wakeup,\n"
-   "            stream, am, exported_memh, device. An empty value disables all\n"
-   "            control features.",
-   ucs_offsetof(ucp_context_config_t, ctrl_features), UCS_CONFIG_TYPE_STRING},
 
   {NULL}
 };
@@ -796,22 +786,6 @@ const char *ucp_feature_str[] = {
     [ucs_ilog2(UCP_FEATURE_STREAM)] = "UCP_FEATURE_STREAM",
     [ucs_ilog2(UCP_FEATURE_AM)]     = "UCP_FEATURE_AM",
     [ucs_ilog2(UCP_FEATURE_DEVICE)] = "UCP_FEATURE_DEVICE",
-    NULL
-};
-
-
-/* Short feature names used for parsing the UCX_CTRL_FEATURES config value.
- * Must be indexed by feature bit position with no gaps up to the terminator. */
-static const char *ucp_feature_names[] = {
-    [ucs_ilog2(UCP_FEATURE_TAG)]           = "tag",
-    [ucs_ilog2(UCP_FEATURE_RMA)]           = "rma",
-    [ucs_ilog2(UCP_FEATURE_AMO32)]         = "amo32",
-    [ucs_ilog2(UCP_FEATURE_AMO64)]         = "amo64",
-    [ucs_ilog2(UCP_FEATURE_WAKEUP)]        = "wakeup",
-    [ucs_ilog2(UCP_FEATURE_STREAM)]        = "stream",
-    [ucs_ilog2(UCP_FEATURE_AM)]            = "am",
-    [ucs_ilog2(UCP_FEATURE_EXPORTED_MEMH)] = "exported_memh",
-    [ucs_ilog2(UCP_FEATURE_DEVICE)]        = "device",
     NULL
 };
 
@@ -1376,7 +1350,7 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
                      const ucs_string_set_t *aux_tls, unsigned *num_resources_p,
                      ucs_string_set_t avail_devices[],
                      ucs_string_set_t *avail_tls, uint64_t dev_cfg_masks[],
-                     uint64_t *tl_cfg_mask, uint64_t *ctrl_tl_cfg_mask, 
+                     uint64_t *tl_cfg_mask, uint64_t *ctrl_tl_cfg_mask,
                      ucp_tl_info_array_t *all_rscs)
 {
     ucp_tl_md_t *md                 = &context->tl_mds[md_index];
@@ -1455,8 +1429,8 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
                                  &data_rsc_flags, tl_cfg_mask);
         rsc_flags      = data_rsc_flags & UCP_TL_RSC_FLAG_AUX;
 
-         /* Control features use the transport selection policy configured by
-          * UCX_CTRL_FEATURES_TLS, independently of UCX_TLS data selection. */
+        /* Control features use the transport selection policy configured by
+         * UCX_CTRL_FEATURES_TLS, independently of UCX_TLS data selection. */
         ctrl_rsc_flags = 0;
         ctrl_enabled   = device_enabled &&
                          (context->config.ctrl_features != 0) &&
@@ -2560,22 +2534,6 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
                                           ucp_context_config_table);
     if (status != UCS_OK) {
         goto err;
-    }
-
-    if (strcmp(context->config.ext.ctrl_features, "auto") != 0) {
-        /* Control features were set via the env variable. Override the value
-         * passed via ucp_params_t::ctrl_features */
-        if (!ucs_config_sscanf_bitmap(context->config.ext.ctrl_features,
-                                      &context->config.ctrl_features,
-                                      ucp_feature_names)) {
-            ucs_error("invalid value for UCX_CTRL_FEATURES: '%s'",
-                      context->config.ext.ctrl_features);
-            status = UCS_ERR_INVALID_PARAM;
-            goto err_free_config_ext;
-        }
-
-        context->config.all_features = context->config.features |
-                                       context->config.ctrl_features;
     }
 
     if (context->config.ext.estimated_num_eps != UCS_ULUNITS_AUTO) {

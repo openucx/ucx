@@ -265,9 +265,6 @@ typedef struct ucp_context_config {
     /** Print transport/device info and lane info tables during context
      *  and endpoint initialization */
     ucs_on_off_auto_value_t                print_transport_tables;
-    /** Features that use the control transport selection policy. When not
-     *  "auto", overrides the value passed via ucp_params_t::ctrl_features */
-    char                                   *ctrl_features;
 } ucp_context_config_t;
 
 
