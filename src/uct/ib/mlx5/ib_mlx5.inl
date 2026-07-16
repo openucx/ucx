@@ -636,7 +636,6 @@ uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq, struct mlx5_wqe_ctrl_seg *ctrl,
     uint16_t sw_pi, num_bb, res_count;
     void *src;
 
-    ucs_assert(((unsigned long)ctrl % UCT_IB_MLX5_WQE_SEG_SIZE) == 0);
     num_bb  = ucs_div_round_up(wqe_size, MLX5_SEND_WQE_BB);
     sw_pi   = wq->sw_pi;
 
@@ -644,7 +643,8 @@ uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq, struct mlx5_wqe_ctrl_seg *ctrl,
 
     ucs_assert(wqe_size <= UCT_IB_MLX5_BF_REG_SIZE);
 
-    src = uct_ib_mlx5_txwq_ring_doorbell(wq, ctrl, sw_pi + num_bb, num_bb);
+    sw_pi += num_bb;
+    src    = uct_ib_mlx5_txwq_ring_doorbell(wq, ctrl, sw_pi, num_bb);
 
     /*
      * Advance queue pointer.
@@ -657,7 +657,7 @@ uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq, struct mlx5_wqe_ctrl_seg *ctrl,
     wq->curr        = src;
     wq->prev_sw_pi += res_count;
     ucs_assert(wq->prev_sw_pi == wq->sw_pi);
-    wq->sw_pi       = sw_pi + num_bb;
+    wq->sw_pi       = sw_pi;
 
     return res_count;
 }
