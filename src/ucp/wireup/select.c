@@ -1066,7 +1066,6 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_add_memaccess_lanes(
         }
 
         select_ctx->ucp_ep_init_flags |= UCP_EP_INIT_CREATE_AM_LANE;
-        select_ctx->am_tl_scope        = UCP_WIREUP_TL_SCOPE_DATA;
     }
 
     if (!(ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) &&
