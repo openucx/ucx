@@ -402,6 +402,10 @@ public:
 
     test_ucp_rma_rndv()
     {
+        /* The RMA rendezvous put/get protocols are gated to NVIDIA Vera CPUs in
+         * ucp_proto_rma_rndv_probe_check(); force-enable them so the tests can
+         * run on any CPU. */
+        modify_config("RMA_PPLN_ENABLE", "y");
         modify_config("PROTOS", "put/rndv,get/rndv,rndv/*");
     }
 
