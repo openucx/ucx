@@ -16,9 +16,10 @@ jobs:
 
       - bash: |
           set -eE
+          source ./buildlib/az-helpers.sh
           source ./buildlib/tools/codestyle.sh
 
-          BASE_SOURCEVERSION=$(git rev-parse HEAD^)
+          BASE_SOURCEVERSION=$(azure_pr_base_sha)
           range="$BASE_SOURCEVERSION..$(Build.SourceVersion)"
 
           codestyle_check_commit_title "$range"
@@ -51,7 +52,7 @@ jobs:
           set -x
           git log -1 HEAD
           git log -1 HEAD^
-          BASE_SOURCEVERSION=$(git rev-parse HEAD^)
+          BASE_SOURCEVERSION=$(azure_pr_base_sha)
           echo "Checking code format on diff ${BASE_SOURCEVERSION}..${BUILD_SOURCEVERSION}"
           git-clang-format --diff ${BASE_SOURCEVERSION} ${BUILD_SOURCEVERSION} > format.patch
           echo "Generated patch file:"
@@ -84,8 +85,9 @@ jobs:
 
       - bash: |
           set -eEx
+          source ./buildlib/az-helpers.sh
 
-          BASE_SOURCEVERSION=$(git rev-parse HEAD^)
+          BASE_SOURCEVERSION=$(azure_pr_base_sha)
           range="$BASE_SOURCEVERSION..$(Build.SourceVersion)"
 
           echo "Looking for missing AUTHORS on commit range ${range}"
