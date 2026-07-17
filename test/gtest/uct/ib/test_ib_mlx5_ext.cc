@@ -31,7 +31,7 @@ protected:
         uct_iface_h                             iface = nullptr;
         uct_ep_h                                ep = nullptr;
         uint64_t                                tx_token_count = 0;
-        uint64_t                                rx_token = 0;
+        uint64_t                                rx_token_count = 0;
         uint64_t                                purge_count = 0;
         const uct_ep_outstanding_purge_params_t *purge_params = nullptr;
     } state_t;
@@ -71,8 +71,8 @@ protected:
              UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_TX_TOKEN) &&
             (attr->field_mask &
              UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_RX_TOKEN)) {
-            m_state.rx_token = *static_cast<const uint64_t*>(attr->tx_token);
-            *static_cast<uint64_t*>(attr->rx_token) = m_state.rx_token;
+            ++m_state.rx_token_count;
+            *static_cast<uint64_t*>(attr->rx_token) = m_state.rx_token_count;
         }
 
         return UCS_OK;
@@ -109,7 +109,7 @@ protected:
 
         EXPECT_EQ(m_state.ep, ep);
         EXPECT_EQ(m_state.purge_params, params);
-        EXPECT_EQ(m_state.rx_token, rx_token);
+        EXPECT_EQ(m_state.rx_token_count, rx_token);
 
         ++m_state.purge_count;
 
@@ -185,7 +185,7 @@ UCS_TEST_P(test_uct_ib_mlx5_ext_rc, iface_query)
     attr.tx_token    = &tx_token;
     attr.rx_token    = &rx_token;
     EXPECT_UCS_OK(uct_iface_query_v2(m_e1->iface(), &attr));
-    EXPECT_EQ(tx_token, rx_token);
+    EXPECT_EQ(rx_token, m_state.rx_token_count);
 }
 
 UCS_TEST_P(test_uct_ib_mlx5_ext_rc, ep_query)

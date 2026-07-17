@@ -204,7 +204,7 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
     }
 
     if (!(ep->super.failover_flags & UCT_RC_EP_FAILOVER_FLAG_ARMED)) {
-        if ((ep->super.failover_flags & UCT_RC_EP_FAILOVER_FLAG_ENABLED) &&
+        if ((ep->super.failover_flags & UCT_RC_EP_FAILOVER_FLAG_STARTED) &&
             !(ep->super.flags & (UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED |
                                  UCT_RC_EP_FLAG_FLUSH_CANCEL))) {
             uct_rc_mlx5_ep_failover_arm(&ep->super.super.super);
@@ -219,8 +219,8 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
     uct_rc_mlx5_iface_update_tx_res(iface, ep, pi);
     uct_ib_mlx5_txwq_update_flags(&ep->tx.wq, UCT_IB_MLX5_TXWQ_FLAG_FAILED, 0);
 
-    if (ep->super.flags &
-        (UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED | UCT_RC_EP_FLAG_FLUSH_CANCEL)) {
+    if (ep->super.flags & (UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED |
+                           UCT_RC_EP_FLAG_FLUSH_CANCEL)) {
         goto out;
     }
 
@@ -1115,7 +1115,7 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
             .ep_is_connected        = uct_rc_mlx5_base_ep_is_connected,
             .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported,
             .ep_put_sgl_zcopy       = uct_ib_mlx5_ext_ep_put_sgl_zcopy,
-            .ep_outstanding_purge = uct_ib_mlx5_ext_ep_outstanding_purge,
+            .ep_outstanding_purge   = uct_ib_mlx5_ext_ep_outstanding_purge,
             .ep_failover_enable     = uct_rc_mlx5_ep_failover_enable
         },
         .create_cq      = uct_rc_mlx5_iface_common_create_cq,

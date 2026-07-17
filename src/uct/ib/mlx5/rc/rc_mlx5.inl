@@ -23,26 +23,26 @@
     uct_rc_mlx5_iface_common_t *_iface = ucs_derived_of(_tl_ep->iface, \
                                                         uct_rc_mlx5_iface_common_t)
 
-#define UCT_RC_MLX5_MSN_BITS 24
-#define UCT_RC_MLX5_MSN_MASK UCS_MASK(UCT_RC_MLX5_MSN_BITS)
+#define UCT_RC_MLX5_token_BITS 24
+#define UCT_RC_MLX5_token_MASK UCS_MASK(UCT_RC_MLX5_token_BITS)
 
 
 static UCS_F_ALWAYS_INLINE void
-uct_rc_mlx5_txwq_set_msn(uct_ib_mlx5_txwq_t *txwq, uint16_t pi, uint16_t num_bb)
+uct_rc_mlx5_txwq_set_token(uct_ib_mlx5_txwq_t *txwq, uint16_t pi, uint16_t num_bb)
 {
     unsigned index                = pi % txwq->bb_max;
-    uct_ib_mlx5_txwq_msn_t *entry = &txwq->msn[index];
+    uct_ib_mlx5_txwq_priv_t *priv = &txwq->token[index];
 
     if (num_bb == 0) {
-        entry->num_bb = 0;
+        priv->num_bb = 0;
         return;
     }
 
-    entry->msn    = txwq->next_msn & UCT_RC_MLX5_MSN_MASK;
-    entry->pi     = pi;
-    entry->num_bb = num_bb;
+    priv->token  = txwq->next_token & UCT_RC_MLX5_token_MASK;
+    priv->pi     = pi;
+    priv->num_bb = num_bb;
 
-    txwq->next_msn = (txwq->next_msn + 1) & UCT_RC_MLX5_MSN_MASK;
+    txwq->next_token = (txwq->next_token + 1) & UCT_RC_MLX5_token_MASK;
 }
 
 
@@ -501,8 +501,8 @@ uct_rc_mlx5_common_post_send(uct_rc_mlx5_iface_common_t *iface, int qp_type,
     num_bb    = ucs_likely(opcode != MLX5_OPCODE_NOP) ?
                 (txwq->sw_pi - pi) : 0;
 
-    if (txwq->msn != NULL) {
-        uct_rc_mlx5_txwq_set_msn(txwq, pi, num_bb);
+    if (txwq->token != NULL) {
+        uct_rc_mlx5_txwq_set_token(txwq, pi, num_bb);
     }
 
     if (fm_ce_se & MLX5_WQE_CTRL_CQ_UPDATE) {
@@ -1951,17 +1951,7 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface, int poll_flags)
 
     if (ucs_unlikely(ep->super.failover_flags &
                      UCT_RC_EP_FAILOVER_FLAG_ARMED)) {
-        /* Ownership is deferred to extract; only release HW/CQ resources
-         * without invoking user completions. */
-        ucs_debug("ep %p: deferring tx completions for failover, hw ci %u "
-                  "sw pi %u available %d",
-                  ep, hw_ci, ep->tx.wq.sw_pi,
-                  uct_rc_txqp_available(&ep->super.txqp));
-        uct_rc_mlx5_iface_update_tx_res(&iface->super, ep, hw_ci);
-        ucs_debug("ep %p: released failover tx resources, available %d", ep,
-                  uct_rc_txqp_available(&ep->super.txqp));
-        uct_ib_mlx5_update_db_cq_ci(&iface->cq[UCT_IB_DIR_TX]);
-        return 1;
+        return 0;
     }
 
     uct_rc_mlx5_txqp_process_tx_cqe(&ep->super.txqp, cqe, hw_ci);

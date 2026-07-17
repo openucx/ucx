@@ -865,7 +865,8 @@ static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
             .iface_is_reachable_v2  = uct_ib_iface_is_reachable_v2,
             .ep_is_connected        = uct_ud_mlx5_ep_is_connected,
             .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported,
-            .ep_outstanding_purge = (uct_ep_outstanding_purge_func_t)ucs_empty_function_return_unsupported
+            .ep_outstanding_purge  = (uct_ep_outstanding_purge_func_t)ucs_empty_function_return_unsupported,
+            .ep_failover_enable    = uct_ep_failover_enable
         },
         .create_cq      = uct_ud_mlx5_create_cq,
         .destroy_cq     = uct_ib_verbs_destroy_cq,

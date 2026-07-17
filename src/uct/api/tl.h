@@ -31,15 +31,15 @@ typedef ucs_status_t (*uct_ep_put_short_func_t)(uct_ep_h ep,
                                                 uint64_t remote_addr,
                                                 uct_rkey_t rkey);
 
-typedef ucs_status_t (*uct_ep_put_short_ft_func_t)(
-        uct_ep_h ep, const void *buffer, unsigned length, uint64_t remote_addr,
-        uct_rkey_t rkey, uct_completion_t *comp);
-
 typedef ssize_t      (*uct_ep_put_bcopy_func_t)(uct_ep_h ep,
                                                 uct_pack_callback_t pack_cb,
                                                 void *arg,
                                                 uint64_t remote_addr,
                                                 uct_rkey_t rkey);
+
+typedef ucs_status_t (*uct_ep_put_short_ft_func_t)(
+        uct_ep_h ep, const void *buffer, unsigned length, uint64_t remote_addr,
+        uct_rkey_t rkey, uct_completion_t *comp);
 
 typedef ssize_t (*uct_ep_put_bcopy_ft_func_t)(uct_ep_h ep,
                                               uct_pack_callback_t pack_cb,

@@ -238,6 +238,8 @@ static uct_ib_iface_ops_t uct_srd_iface_ops = {
         .ep_get_device_ep      = (uct_ep_get_device_ep_func_t)
             ucs_empty_function_return_unsupported,
         .ep_outstanding_purge = (uct_ep_outstanding_purge_func_t)
+            ucs_empty_function_return_unsupported,
+        .ep_failover_enable    = (uct_ep_failover_enable_func_t)
             ucs_empty_function_return_unsupported
     },
     .create_cq      = uct_ib_verbs_create_cq,

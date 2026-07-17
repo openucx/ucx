@@ -199,8 +199,8 @@ ucs_status_t uct_ib_mlx5_ext_ep_outstanding_purge(
 {
     uct_ib_mlx5_ext_plugin_t *plugin;
 
-    if (ucs_unlikely(uct_ib_mlx5_ext_ep_outstanding_purge_check_param(
-                             params) != UCS_OK)) {
+    if (ucs_unlikely(uct_ib_mlx5_ext_ep_outstanding_purge_check_param(params) !=
+                     UCS_OK)) {
         return UCS_ERR_INVALID_PARAM;
     }
 

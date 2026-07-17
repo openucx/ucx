@@ -1873,8 +1873,7 @@ typedef struct {
     uint64_t                            field_mask;
 
     /**
-     * Opaque RX token received from the remote peer (derived via
-     * @ref uct_iface_query_v2 with @ref UCT_IFACE_ATTR_FIELD_RX_TOKEN).
+     * Opaque RX token received from the remote peer.
      */
     const void                          *rx_token;
 

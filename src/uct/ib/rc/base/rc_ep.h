@@ -80,8 +80,8 @@ enum {
 };
 
 enum {
-    /* Failover enabled on this endpoint */
-    UCT_RC_EP_FAILOVER_FLAG_ENABLED = UCS_BIT(0),
+    /* Failover started on this endpoint */
+    UCT_RC_EP_FAILOVER_FLAG_STARTED = UCS_BIT(0),
 
     /* Defer outstanding purge until extract completes */
     UCT_RC_EP_FAILOVER_FLAG_ARMED   = UCS_BIT(1)

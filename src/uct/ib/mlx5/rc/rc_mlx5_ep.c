@@ -49,7 +49,7 @@ ucs_status_t uct_rc_mlx5_ep_failover_enable(uct_ep_h tl_ep)
 {
     uct_rc_mlx5_base_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_base_ep_t);
 
-    ep->super.failover_flags |= UCT_RC_EP_FAILOVER_FLAG_ENABLED;
+    ep->super.failover_flags |= UCT_RC_EP_FAILOVER_FLAG_STARTED;
     return UCS_OK;
 }
 
@@ -1180,10 +1180,11 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_base_ep_t, const uct_ep_params_t *params)
     }
 
     self->tx.wq.bb_max = ucs_min(self->tx.wq.bb_max, iface->tx.bb_max);
-    self->tx.wq.next_msn = 0;
-    self->tx.wq.msn = ucs_calloc(self->tx.wq.bb_max, sizeof(*self->tx.wq.msn),
-                                 "rc_mlx5_txwq_msn");
-    if (self->tx.wq.msn == NULL) {
+    self->tx.wq.next_token = 0;
+    self->tx.wq.token      = ucs_calloc(self->tx.wq.bb_max,
+                                        sizeof(*self->tx.wq.token),
+                                        "rc_mlx5_txwq_priv");
+    if (self->tx.wq.token == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err_remove_qp;
     }
@@ -1207,7 +1208,7 @@ err_destroy_txwq_qp:
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_base_ep_t)
 {
-    ucs_free(self->tx.wq.msn);
+    ucs_free(self->tx.wq.token);
 }
 
 

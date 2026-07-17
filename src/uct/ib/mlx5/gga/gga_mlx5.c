@@ -738,7 +738,8 @@ static uct_rc_iface_ops_t uct_gga_mlx5_iface_ops = {
             .iface_is_reachable_v2  = uct_gga_mlx5_iface_is_reachable_v2,
             .ep_is_connected        = uct_gga_mlx5_ep_is_connected,
             .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported,
-            .ep_outstanding_purge = (uct_ep_outstanding_purge_func_t)ucs_empty_function_return_unsupported
+            .ep_outstanding_purge   = (uct_ep_outstanding_purge_func_t)ucs_empty_function_return_unsupported,
+            .ep_failover_enable     = (uct_ep_failover_enable_func_t)ucs_empty_function_return_unsupported
         },
         .create_cq      = uct_rc_mlx5_iface_common_create_cq,
         .destroy_cq     = uct_rc_mlx5_iface_common_destroy_cq,
@@ -796,6 +797,22 @@ static UCS_CLASS_INIT_FUNC(uct_gga_mlx5_iface_t,
                               &init_attr);
 
     uct_gga_mlx5_iface_disable_rx(&self->super);
+
+    /* MMO DMA ordering is independent of QP data placement ordering. */
+    if (config->super.super.fence_mode == UCT_RC_FENCE_MODE_NONE) {
+        self->super.super.config.fence_mode  = UCT_RC_FENCE_MODE_NONE;
+        self->super.config.put_fence_flag    = 0;
+        self->super.config.atomic_fence_flag = 0;
+    } else {
+        self->super.super.config.fence_mode = UCT_RC_FENCE_MODE_WEAK;
+        self->super.config.put_fence_flag =
+                UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER;
+        if (self->super.config.atomic_fence_flag !=
+            UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER) {
+            self->super.config.atomic_fence_flag =
+                    UCT_IB_MLX5_WQE_CTRL_FLAG_FENCE;
+        }
+    }
 
     config->super.super.fc.enable = 0; /* FC requires AM capability */
 
