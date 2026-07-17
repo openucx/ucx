@@ -1901,18 +1901,6 @@ uct_ep_outstanding_purge(uct_ep_h ep,
                          const uct_ep_outstanding_purge_params_t *params);
 
 
-/**
- * @ingroup UCT_RESOURCE
- * @brief Enable outstanding purge on endpoint failure.
- *
- * This function must be called before posting operations that may need replay.
- * After it succeeds, a transport error preserves the outstanding send queue
- * until the caller finishes @ref uct_ep_outstanding_purge. After a successful
- * purge, the endpoint can be destroyed immediately.
- */
-ucs_status_t uct_ep_failover_enable(uct_ep_h ep);
-
-
 END_C_DECLS
 
 #endif

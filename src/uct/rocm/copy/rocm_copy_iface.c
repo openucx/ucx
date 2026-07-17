@@ -312,8 +312,7 @@ static uct_iface_internal_ops_t uct_rocm_copy_iface_internal_ops = {
     .iface_is_reachable_v2  = uct_rocm_copy_iface_is_reachable_v2,
     .ep_is_connected        = uct_base_ep_is_connected,
     .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported,
-    .ep_outstanding_purge   = (uct_ep_outstanding_purge_func_t)ucs_empty_function_return_unsupported,
-    .ep_failover_enable     = (uct_ep_failover_enable_func_t)ucs_empty_function_return_unsupported,
+    .ep_outstanding_purge   = (uct_ep_outstanding_purge_func_t)ucs_empty_function_return_unsupported
 };
 
 static UCS_CLASS_INIT_FUNC(uct_rocm_copy_iface_t, uct_md_h md, uct_worker_h worker,

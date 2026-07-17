@@ -23,28 +23,6 @@
     uct_rc_mlx5_iface_common_t *_iface = ucs_derived_of(_tl_ep->iface, \
                                                         uct_rc_mlx5_iface_common_t)
 
-#define UCT_RC_MLX5_token_BITS 24
-#define UCT_RC_MLX5_token_MASK UCS_MASK(UCT_RC_MLX5_token_BITS)
-
-
-static UCS_F_ALWAYS_INLINE void
-uct_rc_mlx5_txwq_set_token(uct_ib_mlx5_txwq_t *txwq, uint16_t pi, uint16_t num_bb)
-{
-    unsigned index                = pi % txwq->bb_max;
-    uct_ib_mlx5_txwq_priv_t *priv = &txwq->token[index];
-
-    if (num_bb == 0) {
-        priv->num_bb = 0;
-        return;
-    }
-
-    priv->token  = txwq->next_token & UCT_RC_MLX5_token_MASK;
-    priv->pi     = pi;
-    priv->num_bb = num_bb;
-
-    txwq->next_token = (txwq->next_token + 1) & UCT_RC_MLX5_token_MASK;
-}
-
 
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_ep_fence_put(uct_rc_mlx5_iface_common_t *iface, uct_ib_mlx5_txwq_t *txwq,
@@ -469,7 +447,7 @@ uct_rc_mlx5_common_post_send(uct_rc_mlx5_iface_common_t *iface, int qp_type,
                              uct_ib_log_sge_t *log_sge)
 {
     struct mlx5_wqe_ctrl_seg *ctrl;
-    uint16_t pi, num_bb, res_count;
+    uint16_t res_count;
 
     if (opcode != MLX5_OPCODE_NOP) {
         /* If FAILED, allow only NOP sends to be posted (used by endpoint
@@ -478,14 +456,13 @@ uct_rc_mlx5_common_post_send(uct_rc_mlx5_iface_common_t *iface, int qp_type,
     }
 
     ctrl = txwq->curr;
-    pi   = txwq->sw_pi;
 
     if (opcode == MLX5_OPCODE_SEND_IMM) {
-        uct_ib_mlx5_set_ctrl_seg_with_imm(ctrl, pi, opcode, opmod,
+        uct_ib_mlx5_set_ctrl_seg_with_imm(ctrl, txwq->sw_pi, opcode, opmod,
                                           txwq->super.qp_num, fm_ce_se,
                                           dci_channel, wqe_size, imm);
     } else {
-        uct_ib_mlx5_set_ctrl_seg(ctrl, pi, opcode, opmod,
+        uct_ib_mlx5_set_ctrl_seg(ctrl, txwq->sw_pi, opcode, opmod,
                                  txwq->super.qp_num, fm_ce_se, dci_channel,
                                  wqe_size);
     }
@@ -498,13 +475,6 @@ uct_rc_mlx5_common_post_send(uct_rc_mlx5_iface_common_t *iface, int qp_type,
                        uct_rc_mlx5_common_packet_dump : NULL);
 
     res_count = uct_ib_mlx5_post_send(txwq, ctrl, wqe_size, 1);
-    num_bb    = ucs_likely(opcode != MLX5_OPCODE_NOP) ?
-                (txwq->sw_pi - pi) : 0;
-
-    if (txwq->token != NULL) {
-        uct_rc_mlx5_txwq_set_token(txwq, pi, num_bb);
-    }
-
     if (fm_ce_se & MLX5_WQE_CTRL_CQ_UPDATE) {
         txwq->sig_pi = txwq->prev_sw_pi;
     }
@@ -1752,8 +1722,7 @@ static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_common_ep_short_iov_dm(
         uct_rc_mlx5_dm_copy_data_t *cache, size_t hdr_len, const uct_iov_t *iov,
         size_t iovcnt, size_t iov_length, unsigned opcode, uint8_t fm_ce_se,
         uint16_t dci_channel, uint64_t rdma_raddr, uct_rkey_t rdma_rkey,
-        uct_rc_txqp_t *txqp, uct_ib_mlx5_txwq_t *txwq, size_t av_size,
-        uct_completion_t *comp)
+        uct_rc_txqp_t *txqp, uct_ib_mlx5_txwq_t *txwq, size_t av_size)
 {
     uct_rc_iface_send_desc_t *desc = NULL;
     void *buffer;
@@ -1764,11 +1733,6 @@ static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_common_ep_short_iov_dm(
                                              &desc, &buffer, &log_sge);
     if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
         return status;
-    }
-
-    if (comp != NULL) {
-        desc->super.handler   = uct_rc_ep_put_bcopy_handler;
-        desc->super.user_comp = comp;
     }
 
     uct_rc_mlx5_common_txqp_bcopy_post(iface, qp_type, txqp, txwq, opcode,
@@ -1785,8 +1749,7 @@ static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_common_ep_short_dm(
         uct_rc_mlx5_dm_copy_data_t *cache, size_t hdr_len, const void *payload,
         unsigned length, unsigned opcode, uint8_t fm_ce_se,
         uint16_t dci_channel, uint64_t rdma_raddr, uct_rkey_t rdma_rkey,
-        uct_rc_txqp_t *txqp, uct_ib_mlx5_txwq_t *txwq, size_t av_size,
-        uct_completion_t *comp)
+        uct_rc_txqp_t *txqp, uct_ib_mlx5_txwq_t *txwq, size_t av_size)
 {
     uct_iov_t iov;
 
@@ -1797,8 +1760,7 @@ static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_common_ep_short_dm(
     return uct_rc_mlx5_common_ep_short_iov_dm(iface, qp_type, cache, hdr_len,
                                               &iov, 1, length, opcode, fm_ce_se,
                                               dci_channel, rdma_raddr,
-                                              rdma_rkey, txqp, txwq, av_size,
-                                              comp);
+                                              rdma_rkey, txqp, txwq, av_size);
 }
 
 static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_common_ep_am_short_iov_dm(
@@ -1818,7 +1780,7 @@ static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_common_ep_am_short_iov_dm(
             iface, qp_type, &cache, sizeof(cache.am_hdr.rc_hdr), iov, iovcnt,
             iov_length, MLX5_OPCODE_SEND,
             MLX5_WQE_CTRL_SOLICITED | MLX5_WQE_CTRL_CQ_UPDATE, dci_channel, 0,
-            0, txqp, txwq, av_size, NULL);
+            0, txqp, txwq, av_size);
     if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
         return status;
     }
@@ -1948,11 +1910,6 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface, int poll_flags)
     hw_ci = ntohs(cqe->wqe_counter);
     ucs_trace_poll("rc_mlx5 iface %p tx_cqe: ep %p qpn 0x%x hw_ci %d", iface,
                    ep, qp_num, hw_ci);
-
-    if (ucs_unlikely(ep->super.failover_flags &
-                     UCT_RC_EP_FAILOVER_FLAG_ARMED)) {
-        return 0;
-    }
 
     uct_rc_mlx5_txqp_process_tx_cqe(&ep->super.txqp, cqe, hw_ci);
     ucs_arbiter_group_schedule(&iface->super.tx.arbiter, &ep->super.arb_group);

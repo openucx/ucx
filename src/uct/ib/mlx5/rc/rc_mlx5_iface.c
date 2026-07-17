@@ -203,17 +203,7 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
         goto out;
     }
 
-    if (!(ep->super.failover_flags & UCT_RC_EP_FAILOVER_FLAG_ARMED)) {
-        if ((ep->super.failover_flags & UCT_RC_EP_FAILOVER_FLAG_STARTED) &&
-            !(ep->super.flags & (UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED |
-                                 UCT_RC_EP_FLAG_FLUSH_CANCEL))) {
-            uct_rc_mlx5_ep_failover_arm(&ep->super.super.super);
-        } else {
-            uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status, pi,
-                                          0);
-        }
-    }
-
+    uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status, pi, 0);
     ucs_arbiter_group_purge(&iface->tx.arbiter, &ep->super.arb_group,
                             uct_rc_ep_arbiter_purge_internal_cb, NULL);
     uct_rc_mlx5_iface_update_tx_res(iface, ep, pi);
@@ -1115,8 +1105,7 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
             .ep_is_connected        = uct_rc_mlx5_base_ep_is_connected,
             .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported,
             .ep_put_sgl_zcopy       = uct_ib_mlx5_ext_ep_put_sgl_zcopy,
-            .ep_outstanding_purge   = uct_ib_mlx5_ext_ep_outstanding_purge,
-            .ep_failover_enable     = uct_rc_mlx5_ep_failover_enable
+            .ep_outstanding_purge   = uct_ib_mlx5_ext_ep_outstanding_purge
         },
         .create_cq      = uct_rc_mlx5_iface_common_create_cq,
         .destroy_cq     = uct_rc_mlx5_iface_common_destroy_cq,
@@ -1134,9 +1123,7 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
 
 static uct_iface_ops_t uct_rc_mlx5_iface_tl_ops = {
     .ep_put_short             = uct_rc_mlx5_base_ep_put_short,
-    .ep_put_short_ft          = uct_rc_mlx5_base_ep_put_short_ft,
     .ep_put_bcopy             = uct_rc_mlx5_base_ep_put_bcopy,
-    .ep_put_bcopy_ft          = uct_rc_mlx5_base_ep_put_bcopy_ft,
     .ep_put_zcopy             = uct_rc_mlx5_base_ep_put_zcopy,
     .ep_get_bcopy             = uct_rc_mlx5_base_ep_get_bcopy,
     .ep_get_zcopy             = uct_rc_mlx5_base_ep_get_zcopy,

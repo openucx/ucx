@@ -99,8 +99,6 @@ static uct_iface_internal_ops_t uct_gaudi_gdr_iface_internal_ops = {
     .ep_is_connected       = (uct_ep_is_connected_func_t)
             ucs_empty_function_return_zero_int,
     .ep_outstanding_purge  = (uct_ep_outstanding_purge_func_t)
-            ucs_empty_function_return_unsupported,
-    .ep_failover_enable    = (uct_ep_failover_enable_func_t)
             ucs_empty_function_return_unsupported
 };
 

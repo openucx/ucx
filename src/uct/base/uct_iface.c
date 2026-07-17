@@ -844,13 +844,6 @@ uct_ep_outstanding_purge(uct_ep_h ep,
     return iface->internal_ops->ep_outstanding_purge(ep, params);
 }
 
-ucs_status_t uct_ep_failover_enable(uct_ep_h ep)
-{
-    const uct_base_iface_t *iface = ucs_derived_of(ep->iface, uct_base_iface_t);
-
-    return iface->internal_ops->ep_failover_enable(ep);
-}
-
 void uct_ep_set_iface(uct_ep_h ep, uct_iface_t *iface)
 {
     ep->iface = iface;
@@ -1175,7 +1168,6 @@ static uct_iface_internal_ops_t uct_stub_internal_ops = {
     .ep_get_device_ep      = (uct_ep_get_device_ep_func_t)uct_stub_ep_return_status,
     .ep_put_sgl_zcopy      = (uct_ep_put_sgl_zcopy_func_t)uct_stub_ep_return_status,
     .ep_outstanding_purge  = (uct_ep_outstanding_purge_func_t)uct_stub_ep_return_status,
-    .ep_failover_enable    = (uct_ep_failover_enable_func_t)uct_stub_ep_return_status,
 };
 
 ucs_status_t uct_stub_iface_open(ucs_status_t status, uct_iface_h *iface_p)

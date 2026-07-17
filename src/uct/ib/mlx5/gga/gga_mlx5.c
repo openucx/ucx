@@ -738,8 +738,7 @@ static uct_rc_iface_ops_t uct_gga_mlx5_iface_ops = {
             .iface_is_reachable_v2  = uct_gga_mlx5_iface_is_reachable_v2,
             .ep_is_connected        = uct_gga_mlx5_ep_is_connected,
             .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported,
-            .ep_outstanding_purge   = (uct_ep_outstanding_purge_func_t)ucs_empty_function_return_unsupported,
-            .ep_failover_enable     = (uct_ep_failover_enable_func_t)ucs_empty_function_return_unsupported
+            .ep_outstanding_purge   = (uct_ep_outstanding_purge_func_t)ucs_empty_function_return_unsupported
         },
         .create_cq      = uct_rc_mlx5_iface_common_create_cq,
         .destroy_cq     = uct_rc_mlx5_iface_common_destroy_cq,
