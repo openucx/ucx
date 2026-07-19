@@ -5,6 +5,9 @@
 
 UCX_CHECK_CUDA
 
+AC_CHECK_DECLS([SYS_pidfd_getfd], [], [],
+               [[#include <sys/syscall.h>]])
+
 AS_IF([test "x$cuda_happy" = "xyes"], [uct_modules="${uct_modules}:cuda"])
 uct_cuda_modules=""
 m4_include([src/uct/cuda/gdr_copy/configure.m4])

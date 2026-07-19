@@ -73,8 +73,8 @@ uct_perf_rocm_alloc_reg_mem(const ucx_perf_context_t *perf,
         return status;
     }
 
-    status = uct_md_mem_reg(perf->uct.md, alloc_mem->address,
-                            length, flags, &alloc_mem->memh);
+    status = uct_perf_md_mem_reg(perf->uct.md, alloc_mem->address, length,
+                                 flags, mem_type, &alloc_mem->memh);
     if (status != UCS_OK) {
         hipFree(alloc_mem->address);
         ucs_error("failed to register memory");
