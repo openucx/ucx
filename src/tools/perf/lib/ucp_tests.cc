@@ -18,7 +18,7 @@
 #include <ucs/sys/string.h>
 #include <limits>
 
-typedef struct {
+struct ucp_sgl_state_t {
     ucp_request_param_t send_params;
     ucp_request_param_t send_get_info_params;
     ucp_dt_local_sgl_t  local_sgl;
@@ -28,7 +28,7 @@ typedef struct {
     ucp_mem_h           *memhs;
     uint64_t            *remote_addrs;
     ucp_rkey_h          *rkeys;
-} ucp_sgl_state_t;
+};
 
 
 template <ucx_perf_cmd_t CMD, ucx_perf_test_type_t TYPE, unsigned FLAGS>
