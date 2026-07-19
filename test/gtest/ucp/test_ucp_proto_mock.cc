@@ -2063,17 +2063,17 @@ public:
     {
         // One EP & rkey config created during connection establishment
         ucp_worker_h worker = sender().worker();
-        EXPECT_EQ(worker->rkey_config_count, 1);
+        EXPECT_EQ(ucs_array_length(&worker->rkey_config), 1);
         EXPECT_EQ(worker->ep_config.length, 1);
 
         // New rkey config created during first operation
         send(1);
-        EXPECT_EQ(worker->rkey_config_count, 2);
+        EXPECT_EQ(ucs_array_length(&worker->rkey_config), 2);
         EXPECT_EQ(worker->ep_config.length, 1);
 
         // Existing rkey config is used during second operation
         send(1);
-        EXPECT_EQ(worker->rkey_config_count, 2);
+        EXPECT_EQ(ucs_array_length(&worker->rkey_config), 2);
         EXPECT_EQ(worker->ep_config.length, 1);
 
         ucp_proto_select_key_t key = any_key();
@@ -2087,14 +2087,14 @@ public:
         // Reduce port_speed of mock_0:1 by 50%, new EP & rkey configs are created
         set_port_speed("mock_0:1", 14e9);
         send(2);
-        EXPECT_EQ(worker->rkey_config_count, 3);
+        EXPECT_EQ(ucs_array_length(&worker->rkey_config), 3);
         EXPECT_EQ(worker->ep_config.length, 2);
 
         // Slightly change port_speed, so that quantized value remains the same
         // This shouldn't affect EP or rkey config
         set_port_speed("mock_0:1", 14.5e9);
         send(2);
-        EXPECT_EQ(worker->rkey_config_count, 3);
+        EXPECT_EQ(ucs_array_length(&worker->rkey_config), 3);
         EXPECT_EQ(worker->ep_config.length, 2);
 
         check_rkey_config(sender(), {
@@ -2105,7 +2105,7 @@ public:
         // new EP & rkey configs are created
         set_port_speed("mock_1:1", 14e9);
         send(3);
-        EXPECT_EQ(worker->rkey_config_count, 4);
+        EXPECT_EQ(ucs_array_length(&worker->rkey_config), 4);
         EXPECT_EQ(worker->ep_config.length, 3);
 
         check_rkey_config(sender(), {
