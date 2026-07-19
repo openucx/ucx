@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -133,6 +133,9 @@ enum {
     UCT_RC_MLX5_CQE_APP_OP_TM_REMOVE         = 0x6,
     UCT_RC_MLX5_CQE_APP_OP_TM_CONSUMED_MSG   = 0xA
 };
+
+#define UCT_RC_MLX5_PUT_SGL_ZCOPY_MAX_COUNT 128
+
 
 #define UCT_RC_MLX5_RMA_MAX_IOV(_av_size) \
     ((UCT_IB_MLX5_MAX_SEND_WQE_SIZE - ((_av_size) + \
