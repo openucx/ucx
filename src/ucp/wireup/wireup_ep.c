@@ -277,6 +277,7 @@ ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep, unsigned ep_init_flags,
      */
     status = ucp_wireup_select_aux_transport(ucp_ep, ep_init_flags,
                                              ucp_tl_bitmap_max, remote_address,
+                                             UINT64_MAX, UINT64_MAX,
                                              &select_info);
     if (status != UCS_OK) {
         return status;

@@ -174,6 +174,8 @@ ucs_status_t
 ucp_wireup_select_aux_transport(ucp_ep_h ep, unsigned ep_init_flags,
                                 ucp_tl_bitmap_t tl_bitmap,
                                 const ucp_unpacked_address_t *remote_address,
+                                uint64_t local_dev_bitmap,
+                                uint64_t remote_dev_bitmap,
                                 ucp_wireup_select_info_t *select_info);
 
 double ucp_wireup_amo_score_func(const ucp_worker_iface_t *wiface,
