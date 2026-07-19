@@ -772,10 +772,7 @@ uct_rc_mlx5_iface_init_fence_flags(uct_rc_mlx5_iface_common_t *iface,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    if (strong_order) {
-        iface->config.atomic_fence_flag =
-                UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER;
-    } else if (pci_atomics) {
+    if (pci_atomics) {
         iface->config.atomic_fence_flag = UCT_IB_MLX5_WQE_CTRL_FLAG_FENCE;
     } else {
         iface->config.atomic_fence_flag = 0;

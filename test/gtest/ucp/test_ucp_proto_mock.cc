@@ -765,7 +765,7 @@ UCS_TEST_P(test_ucp_proto_mock_rcx, memtype_copy_enable,
 
     check_ep_config(sender(), {
         {0,       0, "rendezvous no data fetch", ""},
-        {1,      64, "rendezvous zero-copy fenced write to remote",
+        {1,      64, "rendezvous zero-copy write to remote",
                      "rc_mlx5/mock_0:1"},
         {21992, INF, "rendezvous zero-copy read from remote",
                      "rc_mlx5/mock_0:1"},
@@ -846,7 +846,7 @@ UCS_TEST_P(test_ucp_proto_mock_rcx, rndv_4_paths,
         {3814,    283699, "rendezvous zero-copy read from remote",
          "12% on rc_mlx5/mock_1:1/path0, 14% on rc_mlx5/mock_0:1/path0, "
          "14% on rc_mlx5/mock_0:1/path1, 12% on rc_mlx5/mock_1:1/path1, 14%"},
-        {283700,  INF,    "rendezvous zero-copy fenced write to remote",
+        {283700,  INF,    "rendezvous zero-copy write to remote",
          "12% on rc_mlx5/mock_1:1/path0, 14% on rc_mlx5/mock_0:1/path0, "
          "14% on rc_mlx5/mock_0:1/path1, 12% on rc_mlx5/mock_1:1/path1, 14%"},
     }, key);
@@ -956,7 +956,7 @@ UCS_TEST_P(test_ucp_proto_mock_rcx3, single_lane_no_zcopy,
     check_ep_config(sender(), {
         {1,    94,    "rendezvous fragmented copy-in copy-out", "rc_mlx5/mock_0:1"},
         {95,   53753, "rendezvous zero-copy read from remote",  "rc_mlx5/mock_1:1"},
-        {53754, INF,  "rendezvous zero-copy fenced write to remote",
+        {53754, INF,  "rendezvous zero-copy write to remote",
          "54% on rc_mlx5/mock_0:1 and 46% on rc_mlx5/mock_1:1"},
     }, key);
 }
@@ -1202,7 +1202,7 @@ UCS_TEST_P(test_ucp_proto_mock_tcp, am_send_1_lane)
         {0,      0,      "short",                                       "tcp/mock"},
         {1,      65528,  "zero-copy",                                   "tcp/mock"},
         {65529,  367108, "multi-frag zero-copy",                        "tcp/mock"},
-        {367109, INF,    "rendezvous zero-copy fenced write to remote", "tcp/mock"},
+        {367109, INF,    "rendezvous zero-copy write to remote", "tcp/mock"},
     }, key);
 }
 
@@ -1269,10 +1269,10 @@ UCS_TEST_P(test_ucp_proto_mock_gpu, cuda_managed_ppln_host_frag,
         {0, 0,    "short",   "rc_mlx5/mock"},
         {1, 8246, "copy-in", "rc_mlx5/mock"},
         {8247, 512 * UCS_KBYTE,
-         "rendezvous cuda_copy, fenced write to remote, frag host, cuda_copy, frag host",
+         "rendezvous cuda_copy, write to remote, frag host, cuda_copy, frag host",
          "rc_mlx5/mock"},
         {(512 * UCS_KBYTE) + 1, INF,
-         "rendezvous pipeline cuda_copy, fenced write to remote, frag host, cuda_copy, frag host",
+         "rendezvous pipeline cuda_copy, write to remote, frag host, cuda_copy, frag host",
          "rc_mlx5/mock"},
         }, key);
 }

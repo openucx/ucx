@@ -738,14 +738,12 @@ protected:
             ucp_request_t *req = (ucp_request_t*)ureq - 1;
             return (req->flags & UCP_REQUEST_FLAG_PROTO_SEND) &&
                    (req->send.proto_stage ==
-                    UCP_PROTO_RNDV_PUT_STAGE_FENCED_ATP);
+                    UCP_PROTO_RNDV_PUT_STAGE_ATP);
         });
 
-
-       /*
-        * Restore the pending_add callbacks, as some transport need to be able
-        * to add ep flush request to the pending queue. For instance RDNV put
-        * and fence scheme will block ep_flush on SRD transport.
+        /*
+        * Restore the pending_add callbacks, as some transports need to be able
+        * to add endpoint flush requests to the pending queue.
         *
         * Purge must be done with test callbacks first.
         */
