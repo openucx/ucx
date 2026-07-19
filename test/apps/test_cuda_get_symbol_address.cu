@@ -48,6 +48,20 @@ static void event_cb(ucm_event_type_t event_type, ucm_event_t *event, void *arg)
                ucs_memory_type_names[UCS_MEMORY_TYPE_CUDA_MANAGED]);
         ++ctx->num_errors;
     }
+
+    if ((event_type == UCM_EVENT_MEM_TYPE_ALLOC) &&
+        (event->mem_type.sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN)) {
+        printf("unexpected symbol system device %u, expected unknown\n",
+               event->mem_type.sys_dev);
+        ++ctx->num_errors;
+    }
+
+    if ((event_type == UCM_EVENT_MEM_TYPE_ALLOC) &&
+        (event->mem_type.mem_flags != 0)) {
+        printf("unexpected symbol memory flags 0x%x, expected 0\n",
+               event->mem_type.mem_flags);
+        ++ctx->num_errors;
+    }
 }
 
 static int check_symbol_memory_type(ucp_context_h context, void *address)
