@@ -12,6 +12,7 @@ extern "C" {
 #include <ucp/core/ucp_worker.h>
 #include <ucp/core/ucp_worker.inl>
 #include <ucp/core/ucp_request.h>
+#include <ucp/proto/proto_select.h>
 #include <ucp/wireup/address.h>
 #include <ucp/wireup/wireup_ep.h>
 #include <uct/base/uct_iface.h>
@@ -1065,3 +1066,37 @@ UCS_TEST_P(test_worker_cpu_mask, all_cpus)
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_worker_cpu_mask, all, "all")
+
+class test_ucp_worker_rkey_config : public ucp_test {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant(variants, UCP_FEATURE_RMA);
+    }
+};
+
+UCS_TEST_P(test_ucp_worker_rkey_config, stable_after_array_growth)
+{
+    ucp_worker_h worker             = sender().worker();
+    const size_t initial_capacity   = ucs_array_capacity(
+                                              &worker->rkey_config);
+    ucp_rkey_config_t *first_config = NULL;
+
+    ASSERT_GT(initial_capacity, 0);
+    while (ucs_array_length(&worker->rkey_config) <= initial_capacity) {
+        ucp_rkey_config_t *config = static_cast<ucp_rkey_config_t *>(
+                ucs_calloc(1, sizeof(*config), "test_rkey_config"));
+
+        ASSERT_TRUE(config != NULL);
+        ASSERT_UCS_OK(ucp_proto_select_init(&config->proto_select,
+                                            worker->epoch));
+        *ucs_array_append(&worker->rkey_config, FAIL()) = config;
+        if (first_config == NULL) {
+            first_config = config;
+        }
+    }
+
+    EXPECT_EQ(first_config, ucs_array_elem(&worker->rkey_config, 0));
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_worker_rkey_config, self, "self")

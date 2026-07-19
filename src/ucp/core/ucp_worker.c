@@ -2240,7 +2240,7 @@ out:
 
 static void
 ucp_worker_dump_rkey_config_key(ucs_string_buffer_t *log_strb,
-                                ucp_rkey_config_key_t *key)
+                                const ucp_rkey_config_key_t *key)
 {
     ucs_string_buffer_appendf(
             log_strb,
@@ -2259,6 +2259,7 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
     const ucp_ep_config_t *ep_config = &ucs_array_elem(&worker->ep_config,
                                                        key->ep_cfg_index);
     ucp_worker_cfg_index_t rkey_cfg_index;
+    ucp_rkey_config_t **rkey_config_p;
     ucp_rkey_config_t *rkey_config;
     ucp_lane_index_t lane;
     ucs_status_t status;
@@ -2277,15 +2278,16 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
         /* Dump all rkey config keys */
         ucs_string_buffer_init(&log_strb);
 
-        ucs_array_for_each(rkey_config, &worker->rkey_config) {
+        ucs_array_for_each(rkey_config_p, &worker->rkey_config) {
             ucs_string_buffer_appendf(
                     &log_strb, "rkey [%ld]: ",
-                    rkey_config - ucs_array_begin(&worker->rkey_config));
+                    rkey_config_p - ucs_array_begin(&worker->rkey_config));
+            rkey_config = *rkey_config_p;
             ucp_worker_dump_rkey_config_key(&log_strb, &rkey_config->key);
         }
 
         ucs_string_buffer_appendf(&log_strb, "rkey key new: ");
-        ucp_worker_dump_rkey_config_key(&log_strb, &rkey_config->key);
+        ucp_worker_dump_rkey_config_key(&log_strb, key);
 
         ucs_debug("%s", ucs_string_buffer_cstr(&log_strb));
         ucs_string_buffer_cleanup(&log_strb);
@@ -2298,11 +2300,12 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
                (lanes_distance != NULL));
 
     /* Initialize rkey configuration */
-    rkey_cfg_index      = ucs_array_length(&worker->rkey_config);
-    rkey_config         = ucp_worker_config_array_append(
-                                  worker, &worker->rkey_config,
-                                  status = UCS_ERR_NO_MEMORY;
-                                  goto err;);
+    rkey_cfg_index = ucs_array_length(&worker->rkey_config);
+    rkey_config    = ucs_malloc(sizeof(*rkey_config), "rkey_config");
+    if (rkey_config == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
+    }
 
     rkey_config->key = *key;
 
@@ -2318,6 +2321,17 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
                                         sizeof(buf)));
     }
 
+    status = ucp_proto_select_init(&rkey_config->proto_select, worker->epoch);
+    if (status != UCS_OK) {
+        goto err_free_rkey_config;
+    }
+
+    rkey_config_p  = ucp_worker_config_array_append(
+                             worker, &worker->rkey_config,
+                             status = UCS_ERR_NO_MEMORY;
+                             goto err_proto_select_cleanup;);
+    *rkey_config_p = rkey_config;
+
     /* Save key-to-index lookup */
     khiter = kh_put(ucp_worker_rkey_config, &worker->rkey_config_hash, *key,
                     &khret);
@@ -2329,12 +2343,6 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
     /* We should not get into this function if key already exists */
     ucs_assert_always(khret != UCS_KH_PUT_KEY_PRESENT);
     kh_value(&worker->rkey_config_hash, khiter) = rkey_cfg_index;
-
-    /* Initialize protocol selection */
-    status = ucp_proto_select_init(&rkey_config->proto_select, worker->epoch);
-    if (status != UCS_OK) {
-        goto err_kh_del;
-    }
 
     *cfg_index_p = rkey_cfg_index;
 
@@ -2350,10 +2358,12 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
 
     return UCS_OK;
 
-err_kh_del:
-    kh_del(ucp_worker_rkey_config, &worker->rkey_config_hash, khiter);
 err_pop_rkey_config:
     ucs_array_pop_back(&worker->rkey_config);
+err_proto_select_cleanup:
+    ucp_proto_select_cleanup(&rkey_config->proto_select);
+err_free_rkey_config:
+    ucs_free(rkey_config);
 err:
     return status;
 }
@@ -2372,13 +2382,15 @@ static void ucp_worker_keepalive_reset(ucp_worker_h worker)
 static void ucp_worker_trace_configs(ucp_worker_h worker)
 {
     ucp_ep_config_t *ep_config;
+    ucp_rkey_config_t **rkey_config_p;
     ucp_rkey_config_t *rkey_config;
 
     ucs_array_for_each(ep_config, &worker->ep_config) {
         ucp_proto_select_trace(worker, &ep_config->proto_select);
     }
 
-    ucs_array_for_each(rkey_config, &worker->rkey_config) {
+    ucs_array_for_each(rkey_config_p, &worker->rkey_config) {
+        rkey_config = *rkey_config_p;
         ucp_proto_select_trace(worker, &rkey_config->proto_select);
     }
 }
@@ -2386,6 +2398,7 @@ static void ucp_worker_trace_configs(ucp_worker_h worker)
 static void ucp_worker_destroy_configs(ucp_worker_h worker)
 {
     ucp_ep_config_t *ep_config;
+    ucp_rkey_config_t **rkey_config_p;
     ucp_rkey_config_t *rkey_config;
 
     ucs_array_for_each(ep_config, &worker->ep_config) {
@@ -2393,8 +2406,10 @@ static void ucp_worker_destroy_configs(ucp_worker_h worker)
     }
     ucs_array_cleanup_dynamic(&worker->ep_config);
 
-    ucs_array_for_each(rkey_config, &worker->rkey_config) {
+    ucs_array_for_each(rkey_config_p, &worker->rkey_config) {
+        rkey_config = *rkey_config_p;
         ucp_proto_select_cleanup(&rkey_config->proto_select);
+        ucs_free(rkey_config);
     }
     ucs_array_cleanup_dynamic(&worker->rkey_config);
 }

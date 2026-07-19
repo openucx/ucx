@@ -897,18 +897,21 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
         buffer_end = (void*)UINTPTR_MAX;
     }
 
+    UCS_ASYNC_BLOCK(&worker->async);
     khiter = kh_get(ucp_worker_rkey_config, &worker->rkey_config_hash,
                     rkey_config_key);
     if (ucs_likely(khiter != kh_end(&worker->rkey_config_hash))) {
         /* Found existing configuration in hash */
         rkey->cfg_index = kh_val(&worker->rkey_config_hash, khiter);
+        UCS_ASYNC_UNBLOCK(&worker->async);
         return UCS_OK;
     }
+    UCS_ASYNC_UNBLOCK(&worker->async);
 
     lanes_distance = ucs_alloca(sizeof(*lanes_distance) * UCP_MAX_LANES);
     ucp_rkey_unpack_lanes_distance(&ucp_ep_config(ep)->key, lanes_distance, p,
                                    buffer_end);
-    return ucp_worker_add_rkey_config(worker, &rkey_config_key, lanes_distance,
+    return ucp_worker_rkey_config_get(worker, &rkey_config_key, lanes_distance,
                                       &rkey->cfg_index);
 }
 
@@ -1278,8 +1281,8 @@ void ucp_rkey_proto_select_dump(ucp_worker_h worker,
                                 ucp_worker_cfg_index_t rkey_cfg_index,
                                 ucs_string_buffer_t *strb)
 {
-    const ucp_rkey_config_t *rkey_config = &ucs_array_elem(&worker->rkey_config,
-                                                           rkey_cfg_index);
+    const ucp_rkey_config_t *rkey_config = ucs_array_elem(&worker->rkey_config,
+                                                          rkey_cfg_index);
 
     ucp_proto_select_dump_short(&rkey_config->put_short, "put_short", strb);
     ucp_proto_select_info(worker, rkey_config->key.ep_cfg_index, rkey_cfg_index,
