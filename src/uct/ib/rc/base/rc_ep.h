@@ -79,6 +79,14 @@ enum {
                                           UCT_RC_EP_FLAG_FC_GRANT)
 };
 
+enum {
+    /* Endpoint can preserve outstanding WQEs for plugin-driven failover. */
+    UCT_RC_EP_EXT_FLAG_FAILOVER_ENABLED = UCS_BIT(0),
+
+    /* Failover owns this EP's WQE/CQE state until the EP is destroyed. */
+    UCT_RC_EP_EXT_FLAG_FAILOVER_ARMED   = UCS_BIT(1)
+};
+
 /*
  * FC protocol header mask
  */
@@ -233,6 +241,7 @@ struct uct_rc_ep {
     uint16_t            cq_reserve;
     uint8_t             path_index;
     uint8_t             flags;
+    uint8_t             ext_flags;
 };
 
 

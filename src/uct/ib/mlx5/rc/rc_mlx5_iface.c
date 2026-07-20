@@ -194,6 +194,7 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
                                                                       qp_num),
                                                uct_rc_mlx5_base_ep_t);
     uint16_t pi               = ntohs(cqe->wqe_counter);
+    int failover_armed        = 0;
     ucs_log_level_t log_lvl;
     ucs_status_t status;
 
@@ -203,10 +204,26 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
         goto out;
     }
 
-    uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status, pi, 0);
-    ucs_arbiter_group_purge(&iface->tx.arbiter, &ep->super.arb_group,
-                            uct_rc_ep_arbiter_purge_internal_cb, NULL);
-    uct_rc_mlx5_iface_update_tx_res(iface, ep, pi);
+    failover_armed = ep->super.ext_flags & UCT_RC_EP_EXT_FLAG_FAILOVER_ARMED;
+    if (ep->super.ext_flags & UCT_RC_EP_EXT_FLAG_FAILOVER_ENABLED) {
+        if (!failover_armed &&
+            !(ep->super.flags & (UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED |
+                                 UCT_RC_EP_FLAG_FLUSH_CANCEL))) {
+            uct_rc_mlx5_ep_failover_arm(&ep->super.super.super);
+            failover_armed = 1;
+        } else if (!failover_armed) {
+            uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status, pi,
+                                          0);
+        }
+    } else {
+        uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status, pi, 0);
+    }
+
+    if (!failover_armed) {
+        ucs_arbiter_group_purge(&iface->tx.arbiter, &ep->super.arb_group,
+                                uct_rc_ep_arbiter_purge_internal_cb, NULL);
+        uct_rc_mlx5_iface_update_tx_res(iface, ep, pi);
+    }
     uct_ib_mlx5_txwq_update_flags(&ep->tx.wq, UCT_IB_MLX5_TXWQ_FLAG_FAILED, 0);
 
     if (ep->super.flags & (UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED |
@@ -225,7 +242,9 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
     uct_ib_mlx5_completion_with_err(ib_iface, arg, &ep->tx.wq, log_lvl);
 
 out:
-    uct_rc_iface_arbiter_dispatch(iface);
+    if (!failover_armed) {
+        uct_rc_iface_arbiter_dispatch(iface);
+    }
 }
 
 static void uct_rc_mlx5_iface_progress_enable(uct_iface_h tl_iface, unsigned flags)

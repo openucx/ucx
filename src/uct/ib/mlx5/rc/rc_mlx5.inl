@@ -23,6 +23,28 @@
     uct_rc_mlx5_iface_common_t *_iface = ucs_derived_of(_tl_ep->iface, \
                                                         uct_rc_mlx5_iface_common_t)
 
+#define UCT_RC_MLX5_TOKEN_BITS 24
+#define UCT_RC_MLX5_TOKEN_MASK UCS_MASK(UCT_RC_MLX5_TOKEN_BITS)
+
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_mlx5_txwq_set_token(uct_ib_mlx5_txwq_t *txwq, uint16_t pi, uint16_t num_bb)
+{
+    unsigned index                = pi % txwq->bb_max;
+    uct_ib_mlx5_txwq_priv_t *priv = &txwq->token[index];
+
+    if (num_bb == 0) {
+        priv->num_bb = 0;
+        return;
+    }
+
+    priv->token  = txwq->next_token & UCT_RC_MLX5_TOKEN_MASK;
+    priv->pi     = pi;
+    priv->num_bb = num_bb;
+
+    txwq->next_token = (txwq->next_token + 1) & UCT_RC_MLX5_TOKEN_MASK;
+}
+
 
 static UCS_F_ALWAYS_INLINE size_t
 uct_rc_mlx5_base_put_sgl_zcopy_max_count(uct_rc_mlx5_iface_common_t *iface)
@@ -461,7 +483,7 @@ uct_rc_mlx5_common_post_send(uct_rc_mlx5_iface_common_t *iface, int qp_type,
                              uct_ib_log_sge_t *log_sge)
 {
     struct mlx5_wqe_ctrl_seg *ctrl;
-    uint16_t res_count;
+    uint16_t pi, num_bb, res_count;
 
     if (opcode != MLX5_OPCODE_NOP) {
         /* If FAILED, allow only NOP sends to be posted (used by endpoint
@@ -474,15 +496,15 @@ uct_rc_mlx5_common_post_send(uct_rc_mlx5_iface_common_t *iface, int qp_type,
     }
 
     ctrl = txwq->curr;
+    pi   = txwq->sw_pi;
 
     if (opcode == MLX5_OPCODE_SEND_IMM) {
-        uct_ib_mlx5_set_ctrl_seg_with_imm(ctrl, txwq->sw_pi, opcode, opmod,
+        uct_ib_mlx5_set_ctrl_seg_with_imm(ctrl, pi, opcode, opmod,
                                           txwq->super.qp_num, fm_ce_se,
                                           dci_channel, wqe_size, imm);
     } else {
-        uct_ib_mlx5_set_ctrl_seg(ctrl, txwq->sw_pi, opcode, opmod,
-                                 txwq->super.qp_num, fm_ce_se, dci_channel,
-                                 wqe_size);
+        uct_ib_mlx5_set_ctrl_seg(ctrl, pi, opcode, opmod, txwq->super.qp_num,
+                                 fm_ce_se, dci_channel, wqe_size);
     }
 
     ucs_assert(qp_type == iface->super.super.config.qp_type);
@@ -493,6 +515,12 @@ uct_rc_mlx5_common_post_send(uct_rc_mlx5_iface_common_t *iface, int qp_type,
                        uct_rc_mlx5_common_packet_dump : NULL);
 
     res_count = uct_ib_mlx5_post_send(txwq, ctrl, wqe_size, 1);
+    num_bb    = ucs_likely(opcode != MLX5_OPCODE_NOP) ? (txwq->sw_pi - pi) : 0;
+
+    if (txwq->token != NULL) {
+        uct_rc_mlx5_txwq_set_token(txwq, pi, num_bb);
+    }
+
     if (fm_ce_se & MLX5_WQE_CTRL_CQ_UPDATE) {
         txwq->sig_pi = txwq->prev_sw_pi;
     }
@@ -1928,6 +1956,21 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface, int poll_flags)
     hw_ci = ntohs(cqe->wqe_counter);
     ucs_trace_poll("rc_mlx5 iface %p tx_cqe: ep %p qpn 0x%x hw_ci %d", iface,
                    ep, qp_num, hw_ci);
+
+    if (ucs_unlikely(ep->super.ext_flags & UCT_RC_EP_EXT_FLAG_FAILOVER_ARMED)) {
+        if (!UCS_CIRCULAR_COMPARE16(hw_ci, <, ep->tx.wq.failover_ci)) {
+            ucs_trace_poll("ep %p: block failover tx_cqe hw_ci %u "
+                           "failover_ci %u sw_pi %u",
+                           ep, hw_ci, ep->tx.wq.failover_ci,
+                           ep->tx.wq.sw_pi);
+            return 0;
+        }
+
+        uct_rc_mlx5_txqp_process_tx_cqe(&ep->super.txqp, cqe, hw_ci);
+        uct_rc_mlx5_iface_update_tx_res(&iface->super, ep, hw_ci);
+        uct_ib_mlx5_update_db_cq_ci(&iface->cq[UCT_IB_DIR_TX]);
+        return 1;
+    }
 
     uct_rc_mlx5_txqp_process_tx_cqe(&ep->super.txqp, cqe, hw_ci);
     ucs_arbiter_group_schedule(&iface->super.tx.arbiter, &ep->super.arb_group);

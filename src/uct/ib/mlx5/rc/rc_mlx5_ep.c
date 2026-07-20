@@ -48,6 +48,51 @@ ucs_status_t uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep, uct_ep_attr_t *ep_attr)
     return UCS_OK;
 }
 
+static ucs_status_t
+uct_rc_mlx5_base_ep_failover_init(uct_rc_mlx5_base_ep_t *ep,
+                                  const uct_ep_params_t *params)
+{
+    uct_ib_mlx5_ext_iface_query_attr_t attr = {
+        .field_mask = UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_CAP_FLAGS
+    };
+    ucs_status_t status;
+
+    if (!(params->field_mask & UCT_EP_PARAM_FIELD_FLAGS) ||
+        !(params->flags & UCT_EP_PARAM_FLAG_FAILOVER)) {
+        return UCS_OK;
+    }
+
+    status = uct_ib_mlx5_ext_iface_query(ep->super.super.super.iface, &attr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (!(attr.cap.flags & UCT_IFACE_FLAG_V2_QUERY_TOKEN)) {
+        return UCS_OK;
+    }
+
+    ep->tx.wq.token = ucs_calloc(ep->tx.wq.bb_max, sizeof(*ep->tx.wq.token),
+                                 "rc_mlx5_txwq_priv");
+    if (ep->tx.wq.token == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    ep->super.ext_flags |= UCT_RC_EP_EXT_FLAG_FAILOVER_ENABLED;
+    return UCS_OK;
+}
+
+void uct_rc_mlx5_ep_failover_arm(uct_ep_h tl_ep)
+{
+    uct_rc_mlx5_base_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_base_ep_t);
+    uct_ib_mlx5_txwq_t *txwq  = &ep->tx.wq;
+    uct_rc_txqp_t *txqp       = &ep->super.txqp;
+
+    txwq->failover_ci    = txwq->sw_pi -
+                           (txwq->bb_max - uct_rc_txqp_available(txqp));
+    ep->super.ext_flags |= UCT_RC_EP_EXT_FLAG_FAILOVER_ARMED;
+    ucs_debug("ep %p: armed failover WQE range [%u, %u), available %d", ep,
+               txwq->failover_ci, txwq->sw_pi, uct_rc_txqp_available(txqp));
+}
 
 static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_base_ep_put_short_inline(
         uct_ep_h tl_ep, const void *buffer, unsigned length,
@@ -1219,10 +1264,20 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_base_ep_t, const uct_ep_params_t *params)
     }
 
     self->tx.wq.bb_max = ucs_min(self->tx.wq.bb_max, iface->tx.bb_max);
+    self->tx.wq.next_token = 0;
+    self->tx.wq.token      = NULL;
+
+    status = uct_rc_mlx5_base_ep_failover_init(self, params);
+    if (status != UCS_OK) {
+        goto err_remove_qp;
+    }
+
     uct_rc_txqp_available_set(&self->super.txqp, self->tx.wq.bb_max);
     uct_rc_mlx5_iface_common_prepost_recvs(iface);
     return UCS_OK;
 
+err_remove_qp:
+    uct_rc_iface_remove_qp(&iface->super, self->tx.wq.super.qp_num);
 err_event_unreg:
     if (iface->rx.srq.type != UCT_IB_MLX5_OBJ_TYPE_NULL) {
         uct_ib_device_async_event_unregister(&md->super.dev,
@@ -1236,7 +1291,7 @@ err_destroy_txwq_qp:
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_base_ep_t)
 {
-    /* No op, cleanup context is implemented in derived class */
+    ucs_free(self->tx.wq.token);
 }
 
 
