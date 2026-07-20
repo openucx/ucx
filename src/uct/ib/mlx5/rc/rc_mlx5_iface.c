@@ -1011,8 +1011,9 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_rc_mlx5_iface_t, uct_iface_t, uct_md_h,
 
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_mlx5_iface_t, uct_iface_t);
 
-static ucs_status_t uct_rc_mlx5_iface_query_v2(uct_iface_h tl_iface,
-                                               uct_iface_attr_v2_t *iface_attr)
+static ucs_status_t
+uct_rc_mlx5_iface_query_v2(uct_iface_h UCS_V_UNUSED iface,
+                           uct_iface_attr_v2_t *iface_attr)
 {
     uct_ib_mlx5_ext_iface_query_attr_t ext_attr = {};
     const uint64_t base_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS |
@@ -1025,7 +1026,7 @@ static ucs_status_t uct_rc_mlx5_iface_query_v2(uct_iface_h tl_iface,
     ucs_status_t status;
 
     if (iface_attr->field_mask & base_mask) {
-        status = uct_iface_base_query_v2(tl_iface, iface_attr);
+        status = uct_iface_base_query_v2(iface, iface_attr);
         if (status != UCS_OK) {
             return status;
         }
@@ -1071,7 +1072,7 @@ static ucs_status_t uct_rc_mlx5_iface_query_v2(uct_iface_h tl_iface,
     }
 
     if (ext_attr.field_mask != 0) {
-        status = uct_ib_mlx5_ext_iface_query(tl_iface, &ext_attr);
+        status = uct_ib_mlx5_ext_iface_query(iface, &ext_attr);
         if (status != UCS_OK) {
             return status;
         }
