@@ -1016,20 +1016,14 @@ uct_rc_mlx5_iface_query_v2(uct_iface_h UCS_V_UNUSED iface,
                            uct_iface_attr_v2_t *iface_attr)
 {
     uct_ib_mlx5_ext_iface_query_attr_t ext_attr = {};
-    const uint64_t base_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS |
-                               UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT |
-                               UCT_IFACE_ATTR_FIELD_TX_TOKEN |
-                               UCT_IFACE_ATTR_FIELD_RX_TOKEN;
     const uint64_t sgl_mask  = UCT_IFACE_ATTR_FIELD_CAP_FLAGS |
                                UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT;
     size_t max_sgl;
     ucs_status_t status;
 
-    if (iface_attr->field_mask & base_mask) {
-        status = uct_iface_base_query_v2(iface, iface_attr);
-        if (status != UCS_OK) {
-            return status;
-        }
+    status = uct_iface_base_query_v2(iface, iface_attr);
+    if (status != UCS_OK) {
+        return status;
     }
 
     if (iface_attr->field_mask & sgl_mask) {
@@ -1047,8 +1041,7 @@ uct_rc_mlx5_iface_query_v2(uct_iface_h UCS_V_UNUSED iface,
     }
 
     if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_CAP_FLAGS) {
-        ext_attr.field_mask |=
-                UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_CAP_FLAGS;
+        ext_attr.field_mask |= UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_CAP_FLAGS;
     }
 
     if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH) {

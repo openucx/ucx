@@ -71,6 +71,8 @@ protected:
              UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_TX_TOKEN) &&
             (attr->field_mask &
              UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_RX_TOKEN)) {
+            ucs_assert(attr->tx_token != NULL); /* For coverity */
+            ucs_assert(attr->rx_token != NULL); /* For coverity */
             ++m_state.rx_token_count;
             *static_cast<uint64_t*>(attr->rx_token) = m_state.rx_token_count;
         }
@@ -84,6 +86,7 @@ protected:
         EXPECT_EQ(m_state.ep, ep);
 
         if (attr->field_mask & UCT_IB_MLX5_EXT_EP_QUERY_ATTR_FIELD_TX_TOKEN) {
+            ucs_assert(attr->tx_token != NULL); /* For coverity */
             ++m_state.tx_token_count;
             *static_cast<uint64_t*>(attr->tx_token) = m_state.tx_token_count;
         }
@@ -105,7 +108,10 @@ protected:
                          const uct_ep_outstanding_purge_params_t *params)
     {
         uct_ep_op_info_t op_info = {};
-        uint64_t rx_token = *static_cast<const uint64_t*>(params->rx_token);
+        uint64_t rx_token;
+
+        ucs_assert(params->rx_token != NULL); /* For coverity */
+        rx_token = *static_cast<const uint64_t*>(params->rx_token);
 
         EXPECT_EQ(m_state.ep, ep);
         EXPECT_EQ(m_state.purge_params, params);
@@ -171,19 +177,19 @@ UCS_TEST_P(test_uct_ib_mlx5_ext_rc, iface_query)
     /* TX and RX tokens must be requested together. */
     {
         scoped_log_handler wrap_err(wrap_errors_logger);
-        attr             = uct_iface_attr_v2_t();
-        attr.field_mask  = UCT_IFACE_ATTR_FIELD_TX_TOKEN;
-        attr.tx_token    = &tx_token;
+        attr            = uct_iface_attr_v2_t();
+        attr.field_mask = UCT_IFACE_ATTR_FIELD_TX_TOKEN;
+        attr.tx_token   = &tx_token;
         EXPECT_EQ(UCS_ERR_INVALID_PARAM,
                   uct_iface_query_v2(m_e1->iface(), &attr));
     }
 
     /* Derive an RX token from the TX token. */
-    attr             = uct_iface_attr_v2_t();
-    attr.field_mask  = UCT_IFACE_ATTR_FIELD_TX_TOKEN |
-                       UCT_IFACE_ATTR_FIELD_RX_TOKEN;
-    attr.tx_token    = &tx_token;
-    attr.rx_token    = &rx_token;
+    attr            = uct_iface_attr_v2_t();
+    attr.field_mask = UCT_IFACE_ATTR_FIELD_TX_TOKEN |
+                      UCT_IFACE_ATTR_FIELD_RX_TOKEN;
+    attr.tx_token   = &tx_token;
+    attr.rx_token   = &rx_token;
     EXPECT_UCS_OK(uct_iface_query_v2(m_e1->iface(), &attr));
     EXPECT_EQ(rx_token, m_state.rx_token_count);
 }
@@ -213,7 +219,7 @@ UCS_TEST_P(test_uct_ib_mlx5_ext_rc, ep_query)
     }
 
     /* No token requested is a no-op success. */
-    attr            = uct_ep_attr_t();
+    attr = uct_ep_attr_t();
     EXPECT_UCS_OK(uct_ep_query(m_e1->ep(0), &attr));
 
     /* Query the TX token. */
