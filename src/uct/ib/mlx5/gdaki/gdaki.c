@@ -417,40 +417,6 @@ uct_rc_gdaki_channel_block(uct_rc_gdaki_iface_t *iface, ucs_mpool_t *mp,
     }
 }
 
-static void
-uct_rc_gdaki_channel_block_reset_qps(uct_rc_gdaki_iface_t *iface,
-                                     uct_rc_gdaki_channel_block_t *block)
-{
-    uct_ib_iface_t *ib_iface = &iface->super.super.super;
-    uct_rc_gdaki_channel_t *channel;
-    ucs_status_t status;
-    unsigned i;
-
-    for (i = 0; i < iface->num_channels; i++) {
-        channel = &block->channels[i];
-
-        (void)uct_ib_mlx5_modify_qp_state(ib_iface, &channel->qp.super,
-                                          IBV_QPS_ERR);
-
-        status = uct_ib_mlx5_modify_qp_state(ib_iface, &channel->qp.super,
-                                             IBV_QPS_RESET);
-        if (status != UCS_OK) {
-            ucs_fatal("failed to reset gdaki qp 0x%x: %s",
-                      channel->qp.super.qp_num, ucs_status_string(status));
-            return;
-        }
-
-        uct_ib_mlx5_txwq_reset(&channel->qp);
-
-        status = uct_ib_mlx5_devx_qp_rst2init(ib_iface, &channel->qp.super);
-        if (status != UCS_OK) {
-            ucs_fatal("failed to move gdaki qp 0x%x to init: %s",
-                      channel->qp.super.qp_num, ucs_status_string(status));
-            return;
-        }
-    }
-}
-
 static void uct_rc_gdaki_chunk_channels_destroy(uct_rc_gdaki_iface_t *iface,
                                                 ucs_mpool_t *mp, void *elems,
                                                 unsigned num_elems,
@@ -475,8 +441,8 @@ static void uct_rc_gdaki_chunk_channels_destroy(uct_rc_gdaki_iface_t *iface,
 static ucs_status_t
 uct_rc_gdaki_init_channel_chunk(uct_rc_gdaki_iface_t *iface,
                                 uct_rc_gdaki_channel_block_mem_t *mem,
-                                size_t dev_ep_size, ucs_mpool_t *mp, void *elems,
-                                unsigned num_elems)
+                                size_t dev_ep_size, ucs_mpool_t *mp,
+                                void *elems, unsigned num_elems)
 {
     uct_ib_iface_init_attr_t init_attr = {};
     uct_ib_mlx5_cq_attr_t cq_attr      = {};
@@ -698,14 +664,12 @@ uct_rc_gdaki_ep_reset_channels(uct_rc_gdaki_ep_t *ep)
     ep->channel_block = NULL;
 }
 
-static void uct_rc_gdaki_cleanup_channels_pooled(uct_rc_gdaki_iface_t *iface,
-                                                 uct_rc_gdaki_ep_t *ep)
+static void uct_rc_gdaki_cleanup_channels_pooled(uct_rc_gdaki_ep_t *ep)
 {
     if (ep->channel_block == NULL) {
         return;
     }
 
-    uct_rc_gdaki_channel_block_reset_qps(iface, ep->channel_block);
     ucs_mpool_put(ep->channel_block);
     uct_rc_gdaki_ep_reset_channels(ep);
 }
@@ -786,7 +750,7 @@ static void uct_rc_gdaki_ep_cleanup_channels(uct_rc_gdaki_iface_t *iface,
                                              uct_rc_gdaki_ep_t *ep)
 {
     if (iface->ep_alloc_mode == UCT_RC_GDAKI_EP_ALLOC_MODE_POOL) {
-        uct_rc_gdaki_cleanup_channels_pooled(iface, ep);
+        uct_rc_gdaki_cleanup_channels_pooled(ep);
         return;
     }
 
