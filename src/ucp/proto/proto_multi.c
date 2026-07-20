@@ -452,8 +452,8 @@ ucp_proto_multi_query_lanes(const ucp_proto_multi_init_params_t *params,
                             ucp_lane_map_t *queried_lane_map_p,
                             double *max_bandwidth_p)
 {
-    ucp_proto_common_tl_perf_t *lane_perf;
     double max_bandwidth = 0;
+    ucp_proto_common_tl_perf_t *lane_perf;
     ucp_lane_index_t i, lane;
     ucs_status_t status;
 
@@ -524,6 +524,10 @@ ucp_proto_multi_select_lanes(const ucp_proto_multi_init_params_t *params,
                                     params->max_lanes, lanes_perf,
                                     fixed_first_lane, selection);
 
+    ucs_assertv(ucs_ilog2(selection->lane_map) < UCP_MAX_LANES,
+                "lane_map exceeds max number of lanes: lane_map=0x%" PRIx64,
+                (uint64_t)selection->lane_map);
+
     ucs_log_indent(-1);
 
     ucs_trace("selected %u lanes for %s", selection->num_lanes,
@@ -539,9 +543,9 @@ ucp_proto_multi_aggregate_perf(const ucp_proto_multi_init_params_t *params,
                                double *max_frag_ratio_p,
                                double *min_bandwidth_p)
 {
-    const ucp_proto_common_tl_perf_t *lane_perf;
     double max_frag_ratio = 0;
     double min_bandwidth  = DBL_MAX;
+    const ucp_proto_common_tl_perf_t *lane_perf;
     ucp_lane_index_t lane;
 
     ucs_log_indent(1);
@@ -621,8 +625,6 @@ ucp_proto_multi_init_priv(const ucp_proto_multi_init_params_t *params,
     min_end_offset      = 0;
 
     ucs_for_each_bit(lane, selection->lane_map) {
-        ucs_assert(lane < UCP_MAX_LANES);
-
         lpriv     = &mpriv->lanes[mpriv->num_lanes++];
         lane_perf = &lanes_perf[lane];
 
@@ -749,7 +751,6 @@ static ucs_status_t ucp_proto_multi_init_perf(
         perf->node = ucp_proto_perf_node_new_data("multi", "%u lanes",
                                                   mpriv->num_lanes);
         ucs_for_each_bit(lane, selection->lane_map) {
-            ucs_assert(lane < UCP_MAX_LANES);
             ucp_proto_perf_node_add_child(perf->node, lanes_perf[lane].node);
         }
     }
