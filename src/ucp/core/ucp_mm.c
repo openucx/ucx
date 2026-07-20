@@ -847,6 +847,15 @@ ucp_memh_create_from_mem(ucp_context_h context,
 
     memh->alloc_md_index = ucp_mem_get_md_index(context, mem->md, mem->method);
     if (memh->alloc_md_index != UCP_NULL_RESOURCE) {
+        /* Pointer detection may depend on a thread-local CUDA context.
+         * UCX-owned allocations from the cached allocation MD should have the
+         * same properties as the allocation used to initialize that cache. */
+        if (context->alloc_md[mem->mem_type].initialized &&
+            (context->alloc_md[mem->mem_type].md_index ==
+             memh->alloc_md_index)) {
+            memh->mem_flags |= context->alloc_md[mem->mem_type].mem_flags;
+        }
+
         memh->uct[memh->alloc_md_index] = mem->memh;
         memh->md_map                   |= UCS_BIT(memh->alloc_md_index);
         ucs_trace("allocated address %p length %zu on md[%d]=%s %p",
