@@ -688,6 +688,17 @@ protected:
         }
     }
 
+    static void mock_invoke_completion(ucs_status_t status)
+    {
+        uct_completion_t *comp = m_held_probe_comp;
+        m_held_probe_comp      = NULL;
+        if (comp == NULL) {
+            UCS_TEST_ABORT("hold mock did not capture the in-flight probe completion");
+        }
+
+        uct_invoke_completion(comp, status);
+    }
+
     bool wait_for_recovery_probe_in_flight(ucp_ep_h ep, ucs_time_t deadline)
     {
         ucp_ep_recovery_arg_t *arg;
@@ -803,9 +814,7 @@ UCS_TEST_P(test_ucp_fault_tolerance, teardown_with_outstanding_probe,
 
     void *creq = sender().disconnect_nb(0, INJECTED_EP_INDEX,
                                         UCP_EP_CLOSE_FLAG_FORCE);
-    uct_completion_t *comp = m_held_probe_comp;
-    m_held_probe_comp      = NULL;
-    uct_invoke_completion(comp, UCS_ERR_CANCELED);
+    mock_invoke_completion(UCS_ERR_CANCELED);
     if (UCS_PTR_IS_PTR(creq)) {
         EXPECT_EQ(UCS_OK, request_wait(creq));
     }
