@@ -169,7 +169,7 @@ public:
 
     inline bool is_sgl_put() const
     {
-        return (CMD == UCX_PERF_CMD_PUT) &&
+        return (UCX_PERF_CMD_PUT == CMD) &&
                (UCP_PERF_DATATYPE_SGL == m_perf.params.ucp.send_datatype);
     }
 
