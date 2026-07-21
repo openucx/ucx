@@ -500,10 +500,18 @@ typedef struct ucp_ep_recovery_probe {
 } ucp_ep_recovery_probe_t;
 
 
+enum {
+    UCP_EP_RECOVERY_STATE_IDLE,
+    UCP_EP_RECOVERY_STATE_WAIT_REPLY,
+    UCP_EP_RECOVERY_STATE_PROBING
+};
+
+
 /* Per-EP recovery retry state. */
 typedef struct ucp_ep_recovery_arg {
     /* number of retries left before giving up */
     unsigned                retries_left;
+    uint8_t                 state;
     ucp_ep_recovery_probe_t probe[UCP_MAX_LANES];
 } ucp_ep_recovery_arg_t;
 
@@ -1014,6 +1022,12 @@ ucs_status_t ucp_ep_reconfig_clear_failed_lanes(ucp_ep_h ep,
  * Arm (or re-arm) failed-lane recovery for an endpoint.
  */
 ucs_status_t ucp_ep_recovery_arm(ucp_ep_h ep);
+
+
+/**
+ * Notify recovery progress that a lanes-address reply was received.
+ */
+void ucp_ep_recovery_on_reply_received(ucp_ep_h ep);
 
 
 /**

@@ -2014,7 +2014,6 @@ ucp_ep_recovery_create_aux(ucp_ep_h ep, ucp_lane_index_t lane,
     }
 
     *aux_rsc_index_p = select_info.rsc_index;
-    ucp_worker_iface_progress_ep(wiface);
     return UCS_OK;
 }
 
@@ -2031,6 +2030,13 @@ ucp_ep_recovery_probe_status(const ucp_ep_recovery_probe_t *probe)
     }
 
     return probe->comp.status;
+}
+
+static void ucp_ep_recovery_reset_probe(ucp_ep_recovery_probe_t *probe)
+{
+    ucs_assert(probe->comp.count == 0);
+    probe->comp.func   = NULL;
+    probe->comp.status = UCS_OK;
 }
 
 static void ucp_ep_recovery_probe_comp(uct_completion_t *self)
@@ -2126,13 +2132,13 @@ ucp_ep_recovery_rebuild_p2p_lane(
         return UCS_INPROGRESS;
     }
 
-    if (status != UCS_OK) {
-        if (wireup_ep->aux_ep != NULL) {
-            uct_ep_destroy(wireup_ep->aux_ep);
-            wireup_ep->aux_ep        = NULL;
-            wireup_ep->aux_rsc_index = UCP_NULL_RESOURCE;
+    if ((status == UCS_ERR_NO_RESOURCE) && (wireup_ep->aux_ep != NULL)) {
+        status = ucp_ep_recovery_arm_probe(ep, lane, wireup_ep->aux_ep);
+        if (status != UCS_OK) {
+            return UCS_INPROGRESS;
         }
-
+    } else if (status != UCS_OK) {
+        ucp_wireup_ep_destroy_aux_ep(wireup_ep);
         status = ucp_ep_recovery_create_aux(ep, lane, remote_address,
                                             UCS_BIT(address_entry->dev_index),
                                             &aux_ep, &aux_rsc_index);
@@ -2142,8 +2148,7 @@ ucp_ep_recovery_rebuild_p2p_lane(
             return UCS_INPROGRESS;
         }
 
-        wireup_ep->aux_ep        = aux_ep;
-        wireup_ep->aux_rsc_index = aux_rsc_index;
+        ucp_wireup_ep_set_aux(wireup_ep, aux_ep, aux_rsc_index, 1);
 
         status = ucp_ep_recovery_arm_probe(ep, lane, aux_ep);
         if (status != UCS_OK) {
@@ -2156,16 +2161,12 @@ ucp_ep_recovery_rebuild_p2p_lane(
     if (status != UCS_OK) {
         ucs_diag("ep %p: connect_to_ep_v2 failed for recovery p2p lane %d: %s",
                  ep, lane, ucs_status_string(status));
-        probe->comp.func = NULL;
+        ucp_ep_recovery_reset_probe(probe);
         return status;
     }
 
-    if (wireup_ep->aux_ep != NULL) {
-        uct_ep_destroy(wireup_ep->aux_ep);
-        wireup_ep->aux_ep        = NULL;
-        wireup_ep->aux_rsc_index = UCP_NULL_RESOURCE;
-    }
-
+    ucp_wireup_ep_destroy_aux_ep(wireup_ep);
+    ucp_ep_recovery_reset_probe(probe);
     ucp_wireup_update_flags(ep, UCS_BIT(lane),
                             UCP_WIREUP_EP_FLAG_READY |
                             UCP_WIREUP_EP_FLAG_REMOTE_CONNECTED);
@@ -2238,7 +2239,7 @@ ucp_ep_recovery_prepare_lanes(ucp_ep_h ep, ucp_lane_map_t lanes)
 }
 
 /* Send a LANES_ADDR_REQUEST for the currently failed lanes. */
-static void ucp_ep_recovery_send_request(ucp_ep_h ep)
+static int ucp_ep_recovery_send_request(ucp_ep_h ep)
 {
     ucp_lane_map_t failed_lanes = ucp_ep_get_failed_lanes(ep);
     ucp_lane_map_t recovery_lanes;
@@ -2248,7 +2249,7 @@ static void ucp_ep_recovery_send_request(ucp_ep_h ep)
     recovery_lanes = ucp_ep_recovery_prepare_lanes(ep, failed_lanes);
     if (recovery_lanes == 0) {
         ucs_diag("ep %p: no lanes to recover", ep);
-        return;
+        return 0;
     }
 
     ucs_debug("ep %p: sending recovery request, failed=0x%" PRIx64
@@ -2256,6 +2257,7 @@ static void ucp_ep_recovery_send_request(ucp_ep_h ep)
 
     ucp_wireup_send_lanes_addr_msg(ep, UCP_WIREUP_MSG_LANES_ADDR_REQUEST,
                                    failed_lanes, recovery_lanes);
+    return 1;
 }
 
 /* A failed lane is recovered once its UCT EP is a real transport EP or a
@@ -2317,15 +2319,30 @@ ucs_status_t ucp_ep_recovery_arm(ucp_ep_h ep)
 
     /* Reset counter by new event. */
     arg->retries_left = context->config.ext.recovery_retries;
+    arg->state        = UCP_EP_RECOVERY_STATE_IDLE;
     return UCS_OK;
+}
+
+void ucp_ep_recovery_on_reply_received(ucp_ep_h ep)
+{
+    ucp_ep_recovery_arg_t *arg = ep->ext->recovery_arg;
+
+    if ((arg == NULL) ||
+        (arg->state != UCP_EP_RECOVERY_STATE_WAIT_REPLY)) {
+        return;
+    }
+
+    arg->state = UCP_EP_RECOVERY_STATE_PROBING;
 }
 
 int ucp_ep_recovery_progress(ucp_ep_h ep)
 {
     ucp_worker_h worker = ep->worker;
+    int probe_retried   = 0;
     int ret             = 0;
     ucp_lane_map_t failed, recovered;
     ucp_lane_index_t lane;
+    ucp_wireup_ep_t *wireup_ep;
     ucs_status_t status;
 
     UCS_ASYNC_BLOCK(&worker->async);
@@ -2375,24 +2392,73 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
         goto done;
     }
 
-    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        if (ucp_ep_recovery_probe_status(
-                &ep->ext->recovery_arg->probe[lane]) == UCS_INPROGRESS) {
-            ret = 1;
+    if (ep->ext->recovery_arg->state == UCP_EP_RECOVERY_STATE_WAIT_REPLY) {
+        /* No reply within a keepalive interval - count as a failed round. */
+        ep->ext->recovery_arg->state = UCP_EP_RECOVERY_STATE_IDLE;
+        if (--ep->ext->recovery_arg->retries_left == 0) {
+            goto exhausted;
+        }
+
+        ret = 1;
+        goto done;
+    }
+
+    if (ep->ext->recovery_arg->state == UCP_EP_RECOVERY_STATE_PROBING) {
+        for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+            status = ucp_ep_recovery_probe_status(
+                    &ep->ext->recovery_arg->probe[lane]);
+            if (status == UCS_INPROGRESS) {
+                ret = 1;
+                goto done;
+            }
+
+            if (status != UCS_ERR_NO_RESOURCE) {
+                continue;
+            }
+
+            wireup_ep = ucp_wireup_ep(ucp_ep_get_lane(ep, lane));
+            ucs_assert((wireup_ep != NULL) && (wireup_ep->aux_ep != NULL));
+            status = ucp_ep_recovery_arm_probe(ep, lane, wireup_ep->aux_ep);
+            if ((status == UCS_INPROGRESS) ||
+                (status == UCS_ERR_NO_RESOURCE)) {
+                ret = 1;
+                goto done;
+            }
+
+            probe_retried |= (status == UCS_OK);
+        }
+
+        if (probe_retried) {
+            /* Re-enter address exchange on the next KA round after the
+             * transient probe-post failure has cleared. */
+            ep->ext->recovery_arg->state = UCP_EP_RECOVERY_STATE_IDLE;
+            ret                          = 1;
             goto done;
         }
+
+        ep->ext->recovery_arg->state = UCP_EP_RECOVERY_STATE_IDLE;
+        if (--ep->ext->recovery_arg->retries_left == 0) {
+            goto exhausted;
+        }
+
+        ret = 1;
+        goto done;
     }
 
     ucs_debug("ep %p: recovery round (retries_left=%u, failed=0x%" PRIx64 ")",
               ep, ep->ext->recovery_arg->retries_left, (uint64_t)failed);
 
-    ucp_ep_recovery_send_request(ep);
-
-    if (--ep->ext->recovery_arg->retries_left > 0) {
+    ucs_assert(ep->ext->recovery_arg->state == UCP_EP_RECOVERY_STATE_IDLE);
+    ep->ext->recovery_arg->state = UCP_EP_RECOVERY_STATE_WAIT_REPLY;
+    if (ucp_ep_recovery_send_request(ep)) {
         ret = 1;
-        goto done;
+    } else {
+        ep->ext->recovery_arg->state = UCP_EP_RECOVERY_STATE_IDLE;
     }
 
+    goto done;
+
+exhausted:
     if (ucp_ep_get_live_lanes(ep) == 0) {
         ucs_error("ep %p: recovery retries exhausted", ep);
         ucp_ep_set_lanes_failed_schedule(ep, 0, UCS_ERR_ENDPOINT_TIMEOUT);

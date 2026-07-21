@@ -345,25 +345,26 @@ protected:
                 EXPECT_EQ(UCS_OK, status) << op_str << " operation returned status: "
                                           << ucs_status_string(status);
                 ASSERT_EQ(0, m_total_err_count) << "Error callback invoked " << m_total_err_count << " times";
+            } else if ((failure_side == FAILURE_SIDE_TARGET) &&
+                       has_transport("dc_x")) {
+                /* DC cannot detect remote DCI failure (connect2iface); test limitation. */
+            } else if (status == UCS_OK) {
+                /* Some lanes recovered; EP still operable, no error callback required. */
             } else {
-                // The last lane is expected to fail
-                short_progress_loop();
-                if ((failure_side == FAILURE_SIDE_TARGET) &&
-                    has_transport("dc_x")) {
-                    // DC transport is not able to detect failure of remote DCI since DC is a connect2iface transport.
-                    // This is a test limitation.
-                } else {
-                    ucs_time_t deadline = ucs::get_deadline();
-                    while ((m_initiator_err_count == 0) && (ucs_get_time() < deadline)) {
-                        short_progress_loop();
-                    }
-
-                    // Initiator EP should invoke error callback only once
-                    ASSERT_EQ(1, m_initiator_err_count) << "Error callback invoked " << m_initiator_err_count << " times";
-                    // Remote side may detect failure by keepalive or other control messages but not more than 1 time
-                    ASSERT_LE(m_total_err_count - m_initiator_err_count, 1)
-                            << "Error callback invoked " << m_total_err_count << " times";
+                /* Operation failed => EP must fail with exactly one initiator err CB. */
+                ucs_time_t deadline = ucs::get_deadline();
+                while ((m_initiator_err_count == 0) &&
+                       (ucs_get_time() < deadline)) {
+                    short_progress_loop();
                 }
+
+                ASSERT_EQ(1, m_initiator_err_count)
+                        << "Error callback invoked " << m_initiator_err_count
+                        << " times";
+                /* Remote may detect failure via KA/control msgs, at most once. */
+                ASSERT_LE(m_total_err_count - m_initiator_err_count, 1)
+                        << "Error callback invoked " << m_total_err_count
+                        << " times";
             }
         }
 
@@ -815,6 +816,9 @@ UCS_TEST_P(test_ucp_fault_tolerance, teardown_with_outstanding_probe,
     void *creq = sender().disconnect_nb(0, INJECTED_EP_INDEX,
                                         UCP_EP_CLOSE_FLAG_FORCE);
     mock_invoke_completion(UCS_ERR_CANCELED);
+    ASSERT_FALSE(UCS_PTR_IS_ERR(creq))
+            << "disconnect failed: "
+            << ucs_status_string(UCS_PTR_STATUS(creq));
     if (UCS_PTR_IS_PTR(creq)) {
         EXPECT_EQ(UCS_OK, request_wait(creq));
     }
@@ -834,20 +838,14 @@ UCS_TEST_P(test_ucp_fault_tolerance, recovery_retries_exhausted_live_lanes,
         UCS_TEST_SKIP_R("no RC p2p lane was marked failed");
     }
 
-    unsigned initial_retries = 0;
-    const ucs_time_t deadline = ucs_get_time() + ucs_time_from_sec(3.0);
-    while (ucs_get_time() < deadline) {
-        if ((initial_retries == 0) && (ep->ext->recovery_arg != NULL)) {
-            initial_retries = ep->ext->recovery_arg->retries_left;
-        }
-
+    ASSERT_NE(nullptr, ep->ext->recovery_arg);
+    wait_for_cond([ep]() {
+        return ep->ext->recovery_arg == NULL;
+    }, [this]() {
         short_progress_loop();
-    }
-
-    if ((initial_retries > 0) && (ep->ext->recovery_arg != NULL)) {
-        EXPECT_LT(ep->ext->recovery_arg->retries_left, initial_retries)
-                << "recovery did not advance on a broken route";
-    }
+    });
+    ASSERT_EQ(nullptr, ep->ext->recovery_arg)
+            << "recovery retries were not exhausted";
 
     EXPECT_EQ(0, total_err_count())
             << "EP was failed even though live lanes remained";

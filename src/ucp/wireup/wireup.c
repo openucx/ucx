@@ -1103,6 +1103,7 @@ ucp_wireup_process_lanes_addr_reply(
     rebuilt = ucp_ep_recovery_rebuild_lanes(
             ep, lanes_info->provided_lane_map & ucp_ep_get_failed_lanes(ep),
             remote_address);
+    ucp_ep_recovery_on_reply_received(ep);
 
     ucs_debug("ep %p: LANES_ADDR_REP requested=0x%" PRIx64
               " provided=0x%" PRIx64 " rebuilt=0x%" PRIx64,
