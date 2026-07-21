@@ -71,8 +71,8 @@ protected:
              UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_TX_TOKEN) &&
             (attr->field_mask &
              UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_RX_TOKEN)) {
-            ucs_assert(attr->tx_token != NULL); /* For coverity */
-            ucs_assert(attr->rx_token != NULL); /* For coverity */
+            ASSERT_NE(NULL, attr->tx_token); /* For coverity */
+            ASSERT_NE(NULL, attr->rx_token); /* For coverity */
             ++m_state.rx_token_count;
             *static_cast<uint64_t*>(attr->rx_token) = m_state.rx_token_count;
         }
@@ -86,7 +86,7 @@ protected:
         EXPECT_EQ(m_state.ep, ep);
 
         if (attr->field_mask & UCT_IB_MLX5_EXT_EP_QUERY_ATTR_FIELD_TX_TOKEN) {
-            ucs_assert(attr->tx_token != NULL); /* For coverity */
+            ASSERT_NE(NULL, attr->tx_token); /* For coverity */
             ++m_state.tx_token_count;
             *static_cast<uint64_t*>(attr->tx_token) = m_state.tx_token_count;
         }
@@ -110,7 +110,7 @@ protected:
         uct_ep_op_info_t op_info = {};
         uint64_t rx_token;
 
-        ucs_assert(params->rx_token != NULL); /* For coverity */
+        ASSERT_NE(NULL, params->rx_token); /* For coverity */
         rx_token = *static_cast<const uint64_t*>(params->rx_token);
 
         EXPECT_EQ(m_state.ep, ep);
