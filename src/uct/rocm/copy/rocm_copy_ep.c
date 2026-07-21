@@ -196,6 +196,14 @@ ucs_status_t uct_rocm_copy_ep_zcopy(uct_ep_h tl_ep, uint64_t remote_addr,
 
     rocm_copy_signal = ucs_mpool_get(&iface->signal_pool);
     if (rocm_copy_signal == NULL) {
+        /* The regular progress path intentionally limits completion handling
+         * to keep a single call bounded. On pool exhaustion, however, scan the
+         * whole queue before treating signals as genuinely in flight. */
+        uct_rocm_base_progress_all(&iface->signal_queue);
+        rocm_copy_signal = ucs_mpool_get(&iface->signal_pool);
+    }
+
+    if (rocm_copy_signal == NULL) {
         ucs_error("increase the maximum number of signal pool elements with "
                   "UCX_ROCM_COPY_SIGPOOL_MAX_ELEMS");
         return UCS_ERR_IO_ERROR;

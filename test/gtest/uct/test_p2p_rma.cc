@@ -8,6 +8,14 @@
 
 #include <functional>
 
+#if HAVE_ROCM
+extern "C" {
+#include <uct/rocm/base/rocm_base.h>
+#include <uct/rocm/base/rocm_signal.h>
+#include <uct/rocm/copy/rocm_copy_iface.h>
+}
+#endif
+
 
 uct_p2p_rma_test::uct_p2p_rma_test() : uct_p2p_test(0) {
 }
@@ -141,6 +149,66 @@ UCS_TEST_SKIP_COND_P(uct_p2p_rma_test, get_zcopy,
 }
 
 UCT_INSTANTIATE_TEST_CASE(uct_p2p_rma_test)
+
+#if HAVE_ROCM
+class uct_rocm_copy_rma_test : public uct_p2p_rma_test {
+public:
+    void init() override
+    {
+        modify_config("ROCM_COPY_SIGPOOL_MAX_ELEMS", "128");
+        uct_p2p_rma_test::init();
+    }
+
+protected:
+    struct completion {
+        uct_completion_t uct;
+        volatile bool    completed;
+    };
+
+    static void completion_cb(uct_completion_t *uct)
+    {
+        completion *comp = ucs_container_of(uct, completion, uct);
+        comp->completed   = true;
+    }
+};
+
+UCS_TEST_P(uct_rocm_copy_rma_test, completed_signal_reclaim)
+{
+    uct_rocm_copy_iface_t *iface = ucs_derived_of(sender().iface(),
+                                                  uct_rocm_copy_iface_t);
+    mapped_buffer sendbuf(2 * UCS_MBYTE, SEED1, sender(), 0,
+                          UCS_MEMORY_TYPE_ROCM);
+    mapped_buffer recvbuf(2 * UCS_MBYTE, SEED2, receiver(), 0,
+                          UCS_MEMORY_TYPE_ROCM);
+    const uct_iov_t iov = {sendbuf.ptr(), sendbuf.length(), sendbuf.memh(),
+                           0, 1};
+    completion comp = {{completion_cb, 1, UCS_OK}, false};
+    uct_rocm_base_signal_desc_t *signal;
+    ucs_status_t status;
+
+    /* Model a full pool of completed but unreaped operations. */
+    for (unsigned i = 0; i < 128; ++i) {
+        signal = static_cast<uct_rocm_base_signal_desc_t *>(
+                ucs_mpool_get(&iface->signal_pool));
+        ASSERT_NE(nullptr, signal);
+        signal->comp        = nullptr;
+        signal->mapped_addr = nullptr;
+        hsa_signal_store_screlease(signal->signal, 0);
+        ucs_queue_push(&iface->signal_queue, &signal->queue);
+    }
+
+    status = uct_ep_put_zcopy(sender_ep(), &iov, 1, recvbuf.addr(),
+                              recvbuf.rkey(), &comp.uct);
+
+    ASSERT_UCS_STATUS_EQ(UCS_INPROGRESS, status);
+    EXPECT_EQ(1u, ucs_queue_length(&iface->signal_queue));
+    wait_for_flag(&comp.completed);
+    EXPECT_EQ(UCS_OK, comp.uct.status);
+    recvbuf.pattern_check(SEED1);
+}
+
+_UCT_INSTANTIATE_TEST_CASE(uct_rocm_copy_rma_test, rocm_copy)
+#endif
 
 class test_p2p_rma_madvise : private ucs::clear_dontcopy_regions,
                              public uct_p2p_rma_test

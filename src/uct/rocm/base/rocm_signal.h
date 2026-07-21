@@ -17,3 +17,5 @@ typedef struct uct_rocm_base_signal_desc {
 extern ucs_mpool_ops_t uct_rocm_base_signal_desc_mpool_ops;
 
 unsigned uct_rocm_base_progress(ucs_queue_head_t *signal_queue);
+
+unsigned uct_rocm_base_progress_all(ucs_queue_head_t *signal_queue);

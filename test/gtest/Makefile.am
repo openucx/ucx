@@ -307,12 +307,13 @@ if HAVE_GNUXX11
 gtest_SOURCES += \
 	ucm/rocm_hooks.cc
 gtest_CPPFLAGS += \
-	$(HIP_CPPFLAGS)
+	$(HIP_CPPFLAGS) \
+	$(ROCM_CPPFLAGS)
 gtest_CXXFLAGS += \
 	$(HIP_CXXFLAGS)
 gtest_LDADD += \
 	$(HIP_LDFLAGS) \
-	$(HIP_LIBS) \
+	$(HIP_LIBS) $(ROCM_LIBS) \
 	$(top_builddir)/src/uct/rocm/libuct_rocm.la
 endif
 endif

@@ -40,10 +40,11 @@ ucs_mpool_ops_t uct_rocm_base_signal_desc_mpool_ops = {
     .obj_str       = NULL
 };
 
-unsigned uct_rocm_base_progress(ucs_queue_head_t *signal_queue)
+static unsigned
+uct_rocm_base_progress_limit(ucs_queue_head_t *signal_queue,
+                             unsigned max_signals)
 {
-    static const unsigned max_signals = 16;
-    unsigned count                    = 0;
+    unsigned count = 0;
     uct_rocm_base_signal_desc_t *rocm_signal;
     hsa_status_t status;
 
@@ -70,3 +71,12 @@ unsigned uct_rocm_base_progress(ucs_queue_head_t *signal_queue)
     return count;
 }
 
+unsigned uct_rocm_base_progress(ucs_queue_head_t *signal_queue)
+{
+    return uct_rocm_base_progress_limit(signal_queue, 16);
+}
+
+unsigned uct_rocm_base_progress_all(ucs_queue_head_t *signal_queue)
+{
+    return uct_rocm_base_progress_limit(signal_queue, UINT_MAX);
+}
