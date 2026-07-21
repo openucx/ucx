@@ -500,14 +500,16 @@ public:
 
     ucs_status_t UCS_F_ALWAYS_INLINE
     send(ucp_ep_h ep, void *buffer, size_t length, ucp_datatype_t datatype,
-         psn_t sn, uint64_t remote_addr, ucp_rkey_h rkey, bool get_info = false)
+         psn_t sn, uint64_t remote_addr, ucp_rkey_h rkey, bool get_info = false,
+         bool force_contig = false)
     {
-        ucp_request_param_t *param;
+        const bool use_sgl         = is_sgl_put() && !force_contig;
         uint64_t value             = 0;
+        ucp_request_param_t *param;
         void *request;
         ucs_status_t status;
 
-        if (is_sgl_put()) {
+        if (use_sgl) {
             param = get_info ? &m_perf.ucp.sgl.send_get_info_params :
                                &m_perf.ucp.sgl.send_params;
         } else {
@@ -550,7 +552,7 @@ public:
             default:
                 return UCS_ERR_INVALID_PARAM;
             }
-            if (is_sgl_put()) {
+            if (use_sgl) {
                 request = ucp_put_nbx(ep, &m_perf.ucp.sgl.local_sgl,
                                       m_perf.params.msg_size_cnt,
                                       UCP_REMOTE_ADDR_INVALID, UCP_RKEY_INVALID,
@@ -771,7 +773,7 @@ public:
         }
 
         send(m_perf.ucp.ep, buffer, 1, datatype, 0, m_perf.ucp.remote_addr,
-             m_perf.ucp.rkey, false);
+             m_perf.ucp.rkey, false, true);
         wait_send_window(m_max_outstanding);
     }
 
