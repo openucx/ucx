@@ -197,11 +197,12 @@ static ucs_status_t uct_ib_mlx5_ext_ep_outstanding_purge_check_param(
 ucs_status_t uct_ib_mlx5_ext_ep_outstanding_purge(
         uct_ep_h ep, const uct_ep_outstanding_purge_params_t *params)
 {
+    ucs_status_t status;
     uct_ib_mlx5_ext_plugin_t *plugin;
 
-    if (ucs_unlikely(uct_ib_mlx5_ext_ep_outstanding_purge_check_param(params) !=
-                     UCS_OK)) {
-        return UCS_ERR_INVALID_PARAM;
+    status = uct_ib_mlx5_ext_ep_outstanding_purge_check_param(params);
+    if (status != UCS_OK) {
+        return status;
     }
 
     ucs_list_for_each(plugin, &uct_ib_mlx5_ext_plugins, list) {
