@@ -182,12 +182,14 @@ static ucs_status_t uct_ib_mlx5_ext_ep_outstanding_purge_check_param(
         const uct_ep_outstanding_purge_params_t *params)
 {
     if (params == NULL) {
+        ucs_error("ib mlx5 ext: outstanding purge parameters are NULL");
         return UCS_ERR_INVALID_PARAM;
     }
 
     if (!(params->field_mask & UCT_EP_OUTSTANDING_FIELD_RX_TOKEN) ||
         !(params->field_mask & UCT_EP_OUTSTANDING_FIELD_CB) ||
         (params->rx_token == NULL) || (params->cb == NULL)) {
+        ucs_error("ib mlx5 ext: rx token or callback is not set or is NULL");
         return UCS_ERR_INVALID_PARAM;
     }
 

@@ -1012,8 +1012,7 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_rc_mlx5_iface_t, uct_iface_t, uct_md_h,
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_mlx5_iface_t, uct_iface_t);
 
 static ucs_status_t
-uct_rc_mlx5_iface_query_v2(uct_iface_h UCS_V_UNUSED iface,
-                           uct_iface_attr_v2_t *iface_attr)
+uct_rc_mlx5_iface_query_v2(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr)
 {
     uct_ib_mlx5_ext_iface_query_attr_t ext_attr = {};
     const uint64_t sgl_mask  = UCT_IFACE_ATTR_FIELD_CAP_FLAGS |
