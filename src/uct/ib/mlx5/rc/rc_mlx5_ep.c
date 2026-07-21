@@ -23,6 +23,7 @@
 #include <arpa/inet.h> /* For htonl */
 
 #include "rc_mlx5.inl"
+#include "ib_mlx5_ext.h"
 
 
 ucs_status_t uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep, uct_ep_attr_t *ep_attr)
