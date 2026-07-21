@@ -327,6 +327,12 @@ struct ucp_request {
                                 struct {
                                     /* Size to send in ack message */
                                     ssize_t ack_data_size;
+                                    /* Number of in-flight fragments */
+                                    unsigned inflight;
+                                    /* Whether a refill callback is scheduled */
+                                    uint8_t refill_scheduled;
+                                    /* Whether fragments are being posted */
+                                    uint8_t posting;
                                 } ppln;
 
                                 /* Used by rndv/rkey_ptr */

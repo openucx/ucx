@@ -128,6 +128,8 @@ typedef struct ucp_context_config {
     int                                    rndv_shm_ppln_enable;
     /** Enable error handling for rndv pipeline protocol */
     int                                    rndv_errh_ppln_enable;
+    /** Maximal number of in-flight fragments per RNDV pipeline request */
+    unsigned                               rndv_ppln_max_inflight;
     /** Force-enable the RMA rendezvous put/get protocols */
     int                                    rma_ppln_enable;
     /** Threshold for using tag matching offload capabilities. Smaller buffers

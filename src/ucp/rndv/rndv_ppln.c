@@ -32,6 +32,15 @@ typedef struct {
     size_t                    frag_proto_min_length; /* Frag proto min length */
 } ucp_proto_rndv_ppln_priv_t;
 
+static unsigned ucp_proto_rndv_ppln_refill(void *arg);
+
+static int
+ucp_proto_rndv_ppln_refill_remove_filter(const ucs_callbackq_elem_t *elem,
+                                          void *arg)
+{
+    return (elem->cb == ucp_proto_rndv_ppln_refill) && (elem->arg == arg);
+}
+
 static ucs_status_t
 ucp_proto_rndv_ppln_add_overhead(ucp_proto_perf_t *ppln_perf, size_t frag_size)
 {
@@ -208,14 +217,43 @@ ucp_proto_rndv_ppln_frag_complete(ucp_request_t *freq, int send_ack, int abort,
                                   const char *title)
 {
     ucp_request_t *req = ucp_request_get_super(freq);
+    size_t unposted;
 
     if (send_ack) {
         req->send.rndv.ppln.ack_data_size += freq->send.state.dt_iter.length;
     }
 
+    if (abort) {
+        if (req->send.rndv.ppln.refill_scheduled) {
+            ucs_callbackq_remove_oneshot(
+                    &req->send.ep->worker->uct->progress_q,
+                    req->send.ep->worker,
+                    ucp_proto_rndv_ppln_refill_remove_filter, req);
+            req->send.rndv.ppln.refill_scheduled = 0;
+        }
+
+        if (!ucp_datatype_iter_is_end(&req->send.state.dt_iter)) {
+            unposted = req->send.state.dt_iter.length -
+                       req->send.state.dt_iter.offset;
+            req->send.state.completed_size += unposted;
+            req->send.state.dt_iter.offset = req->send.state.dt_iter.length;
+        }
+    }
+
+    ucs_assert(req->send.rndv.ppln.inflight > 0);
+    --req->send.rndv.ppln.inflight;
+
     /* In case of abort we don't destroy super request until all fragments are
      * completed */
     if (!ucp_proto_rndv_frag_complete(req, freq, title)) {
+        if (!abort && !req->send.rndv.ppln.posting &&
+            !ucp_datatype_iter_is_end(&req->send.state.dt_iter) &&
+            !req->send.rndv.ppln.refill_scheduled) {
+            req->send.rndv.ppln.refill_scheduled = 1;
+            ucs_callbackq_add_oneshot(&req->send.ep->worker->uct->progress_q,
+                                      req->send.ep->worker,
+                                      ucp_proto_rndv_ppln_refill, req);
+        }
         return NULL;
     }
 
@@ -232,6 +270,16 @@ ucp_proto_rndv_ppln_frag_complete(ucp_request_t *freq, int send_ack, int abort,
     } else {
         return req;
     }
+}
+
+static unsigned ucp_proto_rndv_ppln_refill(void *arg)
+{
+    ucp_request_t *req = arg;
+
+    ucs_assert(req->send.rndv.ppln.refill_scheduled);
+    req->send.rndv.ppln.refill_scheduled = 0;
+    ucp_request_send(req);
+    return 1;
 }
 
 void ucp_proto_rndv_ppln_send_frag_complete(ucp_request_t *freq, int send_ack)
@@ -266,6 +314,7 @@ static ucs_status_t ucp_proto_rndv_ppln_progress(uct_pending_req_t *uct_req)
     ucs_status_t status;
     ucp_request_t *freq;
     size_t overlap;
+    unsigned max_inflight;
 
     /* Nested pipeline is prevented during protocol selection */
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_RNDV_FRAG));
@@ -273,13 +322,25 @@ static ucs_status_t ucp_proto_rndv_ppln_progress(uct_pending_req_t *uct_req)
     /* Zero-length is not supported */
     ucs_assert(req->send.state.dt_iter.length > 0);
 
-    req->send.state.completed_size    = 0;
-    req->send.rndv.ppln.ack_data_size = 0;
-    rpriv                             = req->send.proto_config->priv;
+    if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
+        req->send.state.completed_size             = 0;
+        req->send.rndv.ppln.ack_data_size          = 0;
+        req->send.rndv.ppln.inflight               = 0;
+        req->send.rndv.ppln.refill_scheduled       = 0;
+        req->send.rndv.ppln.posting                = 0;
+        req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
+    }
 
-    while (!ucp_datatype_iter_is_end(&req->send.state.dt_iter)) {
+    rpriv        = req->send.proto_config->priv;
+    max_inflight = ucs_max(1u,
+                           worker->context->config.ext.rndv_ppln_max_inflight);
+
+    req->send.rndv.ppln.posting = 1;
+    while ((req->send.rndv.ppln.inflight < max_inflight) &&
+           !ucp_datatype_iter_is_end(&req->send.state.dt_iter)) {
         status = ucp_proto_rndv_frag_request_alloc(worker, req, &freq);
         if (status != UCS_OK) {
+            req->send.rndv.ppln.posting = 0;
             ucp_proto_request_abort(req, status);
             return UCS_OK;
         }
@@ -308,11 +369,12 @@ static ucs_status_t ucp_proto_rndv_ppln_progress(uct_pending_req_t *uct_req)
 
         ucp_trace_req(req, "send freq %p offset %zu size %zu", freq,
                       freq->send.rndv.offset, freq->send.state.dt_iter.length);
-        UCS_PROFILE_CALL_VOID_ALWAYS(ucp_request_send, freq);
-
         ucp_datatype_iter_copy_position(&req->send.state.dt_iter, &next_iter,
                                         UCS_BIT(UCP_DATATYPE_CONTIG));
+        ++req->send.rndv.ppln.inflight;
+        UCS_PROFILE_CALL_VOID_ALWAYS(ucp_request_send, freq);
     }
+    req->send.rndv.ppln.posting = 0;
 
     return UCS_OK;
 }

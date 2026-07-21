@@ -390,6 +390,12 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "even if invalidation workflow isn't supported",
    ucs_offsetof(ucp_context_config_t, rndv_errh_ppln_enable), UCS_CONFIG_TYPE_BOOL},
 
+  {"RNDV_PIPELINE_MAX_INFLIGHT", "16",
+   "Maximum number of fragments that one rendezvous pipeline request may have\n"
+   "in flight at a time.",
+   ucs_offsetof(ucp_context_config_t, rndv_ppln_max_inflight),
+   UCS_CONFIG_TYPE_UINT},
+
   {"RMA_PPLN_ENABLE", "n",
    "Force-enable the RMA rendezvous put/get protocols.",
    ucs_offsetof(ucp_context_config_t, rma_ppln_enable), UCS_CONFIG_TYPE_BOOL},

@@ -406,6 +406,7 @@ public:
          * ucp_proto_rma_rndv_probe_check(); force-enable them so the tests can
          * run on any CPU. */
         modify_config("RMA_PPLN_ENABLE", "y");
+        modify_config("RNDV_PIPELINE_MAX_INFLIGHT", "1");
         modify_config("PROTOS", "put/rndv,get/rndv,rndv/*");
     }
 
