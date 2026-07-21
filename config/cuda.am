@@ -11,7 +11,7 @@ NVCC_CMD = $(NVCC_WRAP) $(NVCC) -DHAVE_CONFIG_H \
 NVCC_LT_CMD = $(LIBTOOL) --tag=CXX --mode=compile $(NVCC_CMD)
 
 define nvcc-build
-	@$(MKDIR_P) $(shell dirname $(DEPDIR)/cuda/$@)
+	@$(MKDIR_P) $(@D) $(shell dirname $(DEPDIR)/cuda/$@)
 	@$(if $(filter false,$(AM_V_P)),echo "  NVCC     $@")
 	@$(if $(filter .o,$(suffix $@)),$(NVCC_CMD),$(NVCC_LT_CMD)) $($(1)) $(if $(filter false,$(AM_V_P)), >/dev/null)
 endef

@@ -52,6 +52,51 @@ private:
                        bool is_expected_to_have_auxiliary_key);
 };
 
+TEST(test_ib_md_relaxed_order_policy, auto_mem_types)
+{
+    uint64_t all_mem_types  = UCS_MASK(UCS_MEMORY_TYPE_LAST);
+    uint64_t cuda_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
+                              UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
+
+    EXPECT_EQ(all_mem_types,
+              uct_ib_md_relaxed_order_auto_mem_types(UCS_CPU_VENDOR_AMD,
+                                                     UCS_CPU_MODEL_AMD_ROME));
+    EXPECT_EQ(cuda_mem_types,
+              uct_ib_md_relaxed_order_auto_mem_types(
+                      UCS_CPU_VENDOR_INTEL,
+                      UCS_CPU_MODEL_INTEL_EMERALD_RAPIDS));
+    EXPECT_EQ(0ul,
+              uct_ib_md_relaxed_order_auto_mem_types(
+                      UCS_CPU_VENDOR_INTEL, UCS_CPU_MODEL_INTEL_ICELAKE));
+}
+
+TEST(test_ib_md_relaxed_order_policy, memh_mem_type)
+{
+    uct_md_mem_reg_params_t params = {};
+    uct_ib_md_t md                 = {};
+
+    md.relaxed_order_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
+
+    EXPECT_FALSE(uct_ib_memh_is_relaxed_order(&md, NULL));
+    EXPECT_FALSE(uct_ib_memh_is_relaxed_order(&md, &params));
+
+    params.field_mask = UCT_MD_MEM_REG_FIELD_MEM_TYPE;
+    params.mem_type   = UCS_MEMORY_TYPE_CUDA;
+    EXPECT_TRUE(uct_ib_memh_is_relaxed_order(&md, &params));
+
+    params.mem_type = UCS_MEMORY_TYPE_HOST;
+    EXPECT_FALSE(uct_ib_memh_is_relaxed_order(&md, &params));
+
+    params.mem_type = UCS_MEMORY_TYPE_CUDA;
+    EXPECT_TRUE(uct_ib_memh_is_relaxed_order(&md, &params));
+
+    params.mem_type = UCS_MEMORY_TYPE_RDMA;
+    EXPECT_FALSE(uct_ib_memh_is_relaxed_order(&md, &params));
+
+    params.mem_type = UCS_MEMORY_TYPE_HOST;
+    EXPECT_FALSE(uct_ib_memh_is_relaxed_order(&md, &params));
+}
+
 void test_ib_md::init() {
     test_md::init();
 
@@ -143,15 +188,18 @@ void test_ib_md::ib_md_umr_check(void *rkey_buffer, bool amo_access,
         EXPECT_FALSE(ib_memh->flags & UCT_IB_MEM_ACCESS_REMOTE_ATOMIC);
     }
 
-    check_mlx5_mr(ib_memh, false, ib_md().relaxed_order);
+    check_mlx5_mr(ib_memh, false,
+                  uct_ib_md_is_relaxed_order(&ib_md()));
 
     status = uct_md_mkey_pack(md(), memh, rkey_buffer);
     EXPECT_UCS_OK(status);
 
     status = uct_md_mkey_pack(md(), memh, rkey_buffer);
     EXPECT_UCS_OK(status);
-    check_mlx5_mr(ib_memh, (amo_access && has_ksm()) || ib_md().relaxed_order,
-                  ib_md().relaxed_order);
+    check_mlx5_mr(ib_memh,
+                  (amo_access && has_ksm()) ||
+                          uct_ib_md_is_relaxed_order(&ib_md()),
+                  uct_ib_md_is_relaxed_order(&ib_md()));
 
     status = uct_md_mem_dereg(md(), memh);
     EXPECT_UCS_OK(status);

@@ -591,7 +591,7 @@ uct_rc_iface_fence_relaxed_order(uct_iface_h tl_iface)
 
     ucs_assert(tl_iface->ops.iface_fence == uct_rc_iface_fence);
 
-    if (!md->relaxed_order) {
+    if (!uct_ib_md_is_relaxed_order(md)) {
         return UCS_OK;
     }
 

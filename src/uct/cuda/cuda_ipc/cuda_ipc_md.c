@@ -16,6 +16,7 @@
 #include <ucs/profile/profile.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
+#include <ucs/sys/uid.h>
 #include <ucs/type/class.h>
 #include <uct/api/v2/uct_v2.h>
 #include <uct/cuda/base/cuda_nvml.h>
@@ -31,6 +32,9 @@
  * Wire compatibility isn't broken because PID is used only for caching
  * purposes. */
 #define UCT_CUDA_IPC_RKEY_FLAG_PID_NS UCS_BIT(31)
+
+#define UCT_CUDA_IPC_IMEX_CHANNELS_PATH \
+    "/dev/nvidia-caps-imex-channels"
 
 static ucs_config_field_t uct_cuda_ipc_md_config_table[] = {
     {"", "", NULL,
@@ -81,6 +85,70 @@ static uct_cuda_ipc_dev_cache_t *uct_cuda_ipc_create_dev_cache(int dev_num)
     }
 
     return cache;
+}
+
+#if HAVE_DECL_CU_DEVICE_ATTRIBUTE_HANDLE_TYPE_FABRIC_SUPPORTED
+static int uct_cuda_ipc_device_supports_fabric(CUdevice cuda_device)
+{
+    int supported;
+
+    if (UCT_CUDADRV_FUNC(cuDeviceGetAttribute(
+                &supported,
+                CU_DEVICE_ATTRIBUTE_HANDLE_TYPE_FABRIC_SUPPORTED,
+                cuda_device), UCS_LOG_LEVEL_DEBUG) != UCS_OK) {
+        return 0;
+    }
+
+    return supported;
+}
+
+static ucs_status_t
+uct_cuda_ipc_md_check_imex_channel_cb(const struct dirent *entry, void *arg)
+{
+    static const char channel_prefix[] = "channel";
+    int *found                         = arg;
+    char path[PATH_MAX];
+
+    if (strncmp(entry->d_name, channel_prefix,
+                sizeof(channel_prefix) - 1) != 0) {
+        return UCS_OK;
+    }
+
+    ucs_snprintf_safe(path, sizeof(path), "%s/%s",
+                      UCT_CUDA_IPC_IMEX_CHANNELS_PATH, entry->d_name);
+    if (access(path, R_OK | W_OK) == 0) {
+        *found = 1;
+    }
+
+    return UCS_OK;
+}
+#endif
+
+static int uct_cuda_ipc_md_check_fabric_support(void)
+{
+#if HAVE_DECL_CU_DEVICE_ATTRIBUTE_HANDLE_TYPE_FABRIC_SUPPORTED
+    int imex_channel_found = 0;
+    ucs_status_t status;
+    CUdevice cu_device;
+
+    /* md_open can run without a current context, so query CUDA device 0. */
+    status = UCT_CUDADRV_FUNC(cuDeviceGet(&cu_device, 0), UCS_LOG_LEVEL_DEBUG);
+    if ((status != UCS_OK) || !uct_cuda_ipc_device_supports_fabric(cu_device)) {
+        return 0;
+    }
+
+    if (ucs_sys_readdir(UCT_CUDA_IPC_IMEX_CHANNELS_PATH,
+                        uct_cuda_ipc_md_check_imex_channel_cb,
+                        &imex_channel_found) != UCS_OK) {
+        return 0;
+    }
+
+    ucs_debug("CUDA fabric IPC support on device %d is %s", cu_device,
+              imex_channel_found ? "enabled" : "disabled");
+    return imex_channel_found;
+#else
+    return 0;
+#endif
 }
 
 static uct_cuda_ipc_dev_cache_t *
@@ -134,6 +202,98 @@ uct_cuda_ipc_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
     return UCS_OK;
 }
 
+#if HAVE_DECL_SYS_PIDFD_GETFD
+static ucs_status_t
+uct_cuda_ipc_mem_export_posix_fd(void *addr, uct_cuda_ipc_lkey_t *key)
+{
+    CUmemGenericAllocationHandle alloc_handle;
+    ucs_status_t status;
+
+    status = UCT_CUDADRV_FUNC(cuMemRetainAllocationHandle(&alloc_handle, addr),
+                              UCS_LOG_LEVEL_DIAG);
+    if (status != UCS_OK) {
+        ucs_debug("unable to export POSIX FD handle for ptr: %p", addr);
+        return status;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemExportToShareableHandle(
+            &key->ph.handle.posix_fd.fd, alloc_handle,
+            CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR, 0));
+    UCT_CUDADRV_FUNC_LOG_WARN(cuMemRelease(alloc_handle));
+    if (status != UCS_OK) {
+        ucs_debug("unable to export POSIX FD handle for ptr: %p", addr);
+        return status;
+    }
+
+    key->ph.handle_type               = UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD;
+    key->ph.handle.posix_fd.system_id = ucs_get_system_id();
+    ucs_trace("posix_fd export: addr=%p fd=%d pid=%d system_id=0x%" PRIx64,
+              addr, key->ph.handle.posix_fd.fd, getpid(),
+              key->ph.handle.posix_fd.system_id);
+    return UCS_OK;
+}
+#endif
+
+#if HAVE_CUDA_FABRIC
+static ucs_status_t
+uct_cuda_ipc_mem_export_fabric_mempool(const void *addr,
+                                       uct_cuda_ipc_lkey_t *key,
+                                       CUmemoryPool mempool)
+{
+    ucs_status_t status;
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemPoolExportToShareableHandle(
+            (void*)&key->ph.handle.fabric_handle, mempool,
+            CU_MEM_HANDLE_TYPE_FABRIC, 0));
+    if (status != UCS_OK) {
+        ucs_debug("unable to export handle for mempool ptr: %p", addr);
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuMemPoolExportPointer(&key->ph.ptr, (CUdeviceptr)key->d_bptr));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL;
+    ucs_trace("packed mempool handle and export pointer for %p", addr);
+    return UCS_OK;
+}
+
+static ucs_status_t uct_cuda_ipc_mem_export_fabric(void *addr,
+                                                   uct_cuda_ipc_lkey_t *key,
+                                                   CUmemoryPool mempool)
+{
+    CUmemGenericAllocationHandle handle;
+    ucs_status_t status;
+
+    status = UCT_CUDADRV_FUNC(cuMemRetainAllocationHandle(&handle, addr),
+                              UCS_LOG_LEVEL_DIAG);
+    if (status == UCS_OK) {
+        status = UCT_CUDADRV_FUNC_LOG_ERR(
+                cuMemExportToShareableHandle(&key->ph.handle.fabric_handle,
+                                             handle, CU_MEM_HANDLE_TYPE_FABRIC,
+                                             0));
+        UCT_CUDADRV_FUNC_LOG_WARN(cuMemRelease(handle));
+        if (status != UCS_OK) {
+            ucs_debug("unable to export handle for VMM ptr: %p", addr);
+            return UCS_ERR_UNSUPPORTED;
+        }
+
+        key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM;
+        ucs_trace("packed vmm fabric handle for %p", addr);
+        return UCS_OK;
+    }
+
+    if (mempool == NULL) {
+        return UCS_ERR_INVALID_ADDR;
+    }
+
+    return uct_cuda_ipc_mem_export_fabric_mempool(addr, key, mempool);
+}
+#endif /* HAVE_CUDA_FABRIC */
+
 static ucs_status_t
 uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
                          uct_cuda_ipc_lkey_t **key_p)
@@ -142,9 +302,8 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
     ucs_status_t status;
     int is_ctx_pushed;
     CUdevice cuda_device;
-#if HAVE_CUDA_FABRIC
+#if HAVE_CUDA_FABRIC || HAVE_DECL_SYS_PIDFD_GETFD
 #define UCT_CUDA_IPC_QUERY_NUM_ATTRS 3
-    CUmemGenericAllocationHandle handle;
     CUmemoryPool mempool;
     CUpointer_attribute attr_type[UCT_CUDA_IPC_QUERY_NUM_ATTRS];
     void *attr_data[UCT_CUDA_IPC_QUERY_NUM_ATTRS];
@@ -176,7 +335,7 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
         goto out_pop_ctx;
     }
 
-#if HAVE_CUDA_FABRIC
+#if HAVE_CUDA_FABRIC || HAVE_DECL_SYS_PIDFD_GETFD
     /* cuda_ipc can handle VMM, mallocasync, and legacy pinned device so need to
      * pack appropriate handle */
 
@@ -198,59 +357,30 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
         goto legacy_path;
     }
 
-    if (!(allowed_handle_types & CU_MEM_HANDLE_TYPE_FABRIC)) {
-        goto non_ipc;
-    }
-
-    status =
-        UCT_CUDADRV_FUNC(cuMemRetainAllocationHandle(&handle, addr),
-                UCS_LOG_LEVEL_DIAG);
-    if (status == UCS_OK) {
-        status =
-            UCT_CUDADRV_FUNC_LOG_ERR(cuMemExportToShareableHandle(
-                        &key->ph.handle.fabric_handle, handle,
-                        CU_MEM_HANDLE_TYPE_FABRIC, 0));
-        UCT_CUDADRV_FUNC_LOG_WARN(cuMemRelease(handle));
-        if (status != UCS_OK) {
-            ucs_debug("unable to export handle for VMM ptr: %p", addr);
-            goto non_ipc;
+#if HAVE_CUDA_FABRIC
+    if (allowed_handle_types & CU_MEM_HANDLE_TYPE_FABRIC) {
+        status = uct_cuda_ipc_mem_export_fabric(addr, key, mempool);
+        if (status == UCS_OK) {
+            goto common_path;
         }
-
-        key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM;
-        ucs_trace("packed vmm fabric handle for %p", addr);
-        goto common_path;
+        if (status != UCS_ERR_UNSUPPORTED) {
+            goto out_pop_ctx;
+        }
     }
+#endif /* HAVE_CUDA_FABRIC */
 
-    if (mempool == 0) {
-        /* cuda_ipc can only handle UCS_MEMORY_TYPE_CUDA, which has to be either
-         * legacy type, or VMM type, or mempool type. Return error if memory
-         * does not belong to any of the three types */
-        status = UCS_ERR_INVALID_ADDR;
-        goto out_pop_ctx;
+#if HAVE_DECL_SYS_PIDFD_GETFD
+    if (allowed_handle_types & CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR) {
+        status = uct_cuda_ipc_mem_export_posix_fd(addr, key);
+        if (status == UCS_OK) {
+            goto common_path;
+        }
     }
+#endif /* HAVE_DECL_SYS_PIDFD_GETFD */
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemPoolExportToShareableHandle(
-                (void *)&key->ph.handle.fabric_handle, mempool,
-                CU_MEM_HANDLE_TYPE_FABRIC, 0));
-    if (status != UCS_OK) {
-        ucs_debug("unable to export handle for mempool ptr: %p", addr);
-        goto non_ipc;
-    }
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemPoolExportPointer(&key->ph.ptr,
-                (CUdeviceptr)key->d_bptr));
-    if (status != UCS_OK) {
-        goto out_pop_ctx;
-    }
-
-    key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL;
-    ucs_trace("packed mempool handle and export pointer for %p", addr);
-    goto common_path;
-
-non_ipc:
     key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_NO_IPC;
     goto common_path;
-#endif
+#endif /* HAVE_CUDA_FABRIC || HAVE_DECL_SYS_PIDFD_GETFD */
 legacy_path:
     key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY;
     status              = UCT_CUDADRV_FUNC_LOG_ERR(
@@ -484,6 +614,9 @@ uct_cuda_ipc_mem_dereg(uct_md_h md, const uct_md_mem_dereg_params_t *params)
     UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
 
     ucs_list_for_each_safe(key, tmp, &memh->list, link) {
+        if (key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD) {
+            close(key->ph.handle.posix_fd.fd);
+        }
         ucs_free(key);
     }
 
@@ -613,10 +746,11 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
         return UCS_ERR_NO_MEMORY;
     }
 
-    md->super.ops       = &md_ops;
-    md->super.component = &uct_cuda_ipc_component.super;
-    md->enable_mnnvl    = uct_cuda_ipc_md_check_fabric_info(
+    md->super.ops        = &md_ops;
+    md->super.component  = &uct_cuda_ipc_component.super;
+    md->enable_mnnvl     = uct_cuda_ipc_md_check_fabric_info(
                                                   md, ipc_config->enable_mnnvl);
+    md->fabric_supported = uct_cuda_ipc_md_check_fabric_support();
 
     uct_cuda_ipc_cache_set_global_limits(ipc_config->cache_max_regions,
                                          ipc_config->cache_max_size);
