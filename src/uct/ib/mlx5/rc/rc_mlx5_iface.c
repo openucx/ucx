@@ -757,7 +757,8 @@ uct_rc_mlx5_iface_init_fence_flags(uct_rc_mlx5_iface_common_t *iface,
     case UCT_RC_FENCE_MODE_WEAK:
         break;
     case UCT_RC_FENCE_MODE_AUTO:
-        if (strong_order || pci_atomics || md->super.relaxed_order) {
+        if (strong_order || pci_atomics ||
+            uct_ib_md_is_relaxed_order(&md->super)) {
             break;
         }
 

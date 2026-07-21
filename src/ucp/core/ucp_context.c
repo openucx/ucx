@@ -390,6 +390,10 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "even if invalidation workflow isn't supported",
    ucs_offsetof(ucp_context_config_t, rndv_errh_ppln_enable), UCS_CONFIG_TYPE_BOOL},
 
+  {"RMA_PPLN_ENABLE", "n",
+   "Force-enable the RMA rendezvous put/get protocols.",
+   ucs_offsetof(ucp_context_config_t, rma_ppln_enable), UCS_CONFIG_TYPE_BOOL},
+
   {"FLUSH_WORKER_EPS", "y",
    "Enable flushing the worker by flushing its endpoints. Allows completing\n"
    "the flush operation in a bounded time even if there are new requests on\n"

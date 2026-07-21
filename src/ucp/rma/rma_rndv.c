@@ -19,6 +19,7 @@
 #include <ucp/proto/proto_init.h>
 #include <ucp/proto/proto_single.inl>
 #include <ucp/rndv/proto_rndv.inl>
+#include <ucs/arch/cpu.h>
 
 
 #define UCP_PROTO_RMA_RNDV_RTS_NAME             "RMA_RTS"
@@ -33,6 +34,14 @@ ucp_proto_rma_rndv_probe_check(const ucp_proto_init_params_t *init_params,
                                ucp_operation_id_t op_id)
 {
     const ucp_proto_select_param_t *sel_param = init_params->select_param;
+    const ucp_context_h context               = init_params->worker->context;
+
+    /* TODO: We prefer to use direct zcopy when possible, remove this check when
+     * prioritization of protocols is implemented. */
+    if (!context->config.ext.rma_ppln_enable &&
+        (ucs_arch_get_cpu_model() != UCS_CPU_MODEL_NVIDIA_VERA)) {
+        return 0;
+    }
 
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(op_id)) ||
         ucp_proto_rndv_init_params_is_ppln_frag(init_params) ||
