@@ -179,10 +179,9 @@ ucs_status_t
 uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
                                   const size_t *lengths, uct_mem_h const *memhs,
                                   const uint64_t *remote_addrs,
-                                  uct_rkey_t const *rkeys,
-                                  const size_t UCS_V_UNUSED *counts,
-                                  const size_t UCS_V_UNUSED *strides,
-                                  size_t count, uct_completion_t *comp)
+                                  uct_rkey_t const *rkeys, const size_t *counts,
+                                  const size_t *strides, size_t count,
+                                  uct_completion_t *comp)
 {
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
     uct_ib_mlx5_txwq_t *txwq       = &ep->tx.wq;
@@ -202,6 +201,12 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
                     count, (size_t)UCT_RC_MLX5_PUT_SGL_ZCOPY_MAX_COUNT);
     ucs_assert(ep->super.flags & UCT_RC_EP_FLAG_CONNECTED);
     ucs_assert(count > 0);
+
+    /* TODO: add strided elements support */
+    if (ucs_unlikely((counts != NULL) || (strides != NULL))) {
+        ucs_error("put_sgl_zcopy does not support strided elements");
+        return UCS_ERR_UNSUPPORTED;
+    }
 
     if (iface->super.tx.cq_available < (int)count) {
         UCS_STATS_UPDATE_COUNTER(iface->super.stats,
