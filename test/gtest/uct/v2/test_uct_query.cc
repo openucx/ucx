@@ -31,6 +31,7 @@ public:
     void init() override;
     ucs_status_t iface_estimate_perf(uct_perf_attr_t *perf_attr) const;
     const uct_iface_attr &get_iface_attr() const;
+    uct_iface_h get_iface() const;
     static uct_perf_attr_t init_perf_attr();
 
 private:
@@ -52,6 +53,11 @@ test_uct_query::iface_estimate_perf(uct_perf_attr_t *perf_attr) const
 const uct_iface_attr &test_uct_query::get_iface_attr() const
 {
     return m_e->iface_attr();
+}
+
+uct_iface_h test_uct_query::get_iface() const
+{
+    return m_e->iface();
 }
 
 uct_perf_attr_t test_uct_query::init_perf_attr()
@@ -102,6 +108,17 @@ UCS_TEST_P(test_uct_query, query_perf)
            and gdr_copy transports */
         EXPECT_NE(perf_attr.bandwidth.shared, perf_attr_get.bandwidth.shared);
     }
+}
+
+UCS_TEST_P(test_uct_query, query_token_support)
+{
+    uct_iface_attr_v2_t attr = {};
+
+    attr.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS;
+    attr.cap.flags  = UINT64_MAX;
+
+    ASSERT_UCS_OK(uct_iface_query_v2(get_iface(), &attr));
+    EXPECT_EQ(0ul, attr.cap.flags & UCT_IFACE_FLAG_V2_QUERY_TOKEN);
 }
 
 UCT_INSTANTIATE_TEST_CASE(test_uct_query)
