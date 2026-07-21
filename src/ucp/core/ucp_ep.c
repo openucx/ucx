@@ -2000,12 +2000,14 @@ ucp_ep_recovery_create_aux(ucp_ep_h ep, ucp_lane_index_t lane,
     peer_ae                  = &remote_address->address_list[
                                        select_info.addr_index];
     wiface                   = ucp_worker_iface(worker, select_info.rsc_index);
-    uct_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE    |
-                               UCT_EP_PARAM_FIELD_DEV_ADDR |
-                               UCT_EP_PARAM_FIELD_IFACE_ADDR;
-    uct_ep_params.iface      = wiface->iface;
-    uct_ep_params.dev_addr   = peer_ae->dev_addr;
-    uct_ep_params.iface_addr = peer_ae->iface_addr;
+    uct_ep_params.field_mask        = UCT_EP_PARAM_FIELD_IFACE |
+                                      UCT_EP_PARAM_FIELD_DEV_ADDR |
+                                      UCT_EP_PARAM_FIELD_IFACE_ADDR |
+                                      UCT_EP_PARAM_FIELD_IFACE_ADDR_LENGTH;
+    uct_ep_params.iface             = wiface->iface;
+    uct_ep_params.dev_addr          = peer_ae->dev_addr;
+    uct_ep_params.iface_addr        = peer_ae->iface_addr;
+    uct_ep_params.iface_addr_length = peer_ae->iface_addr_len;
     status = uct_ep_create(&uct_ep_params, aux_ep_p);
     if (status != UCS_OK) {
         ucs_debug("ep %p lane %d: aux ep_create rsc=%d failed: %s", ep, lane,
@@ -2462,6 +2464,7 @@ exhausted:
     if (ucp_ep_get_live_lanes(ep) == 0) {
         ucs_error("ep %p: recovery retries exhausted", ep);
         ucp_ep_set_lanes_failed_schedule(ep, 0, UCS_ERR_ENDPOINT_TIMEOUT);
+        ret = 1;
     } else {
         ucs_diag("ep %p: recovery retries exhausted, giving up on "
                     "failed lanes 0x%" PRIx64, ep, (uint64_t)failed);
