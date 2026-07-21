@@ -331,9 +331,13 @@ static ucp_proto_select_param_t ucp_proto_rndv_remote_select_param_init(
                                     &mem_info, select_param->sg_count);
     } else {
         /* If we know the remote buffer parameters, these are actually the local
-         * parameters for the remote protocol
+         * parameters for the remote protocol. The rkey system device belongs
+         * to the remote topology namespace, so it cannot represent a local
+         * device while estimating the protocol that the peer will select.
+         * The peer will use its actual local system device when selecting the
+         * protocol.
          */
-        mem_info.sys_dev = init_params->rkey_config_key->sys_dev;
+        mem_info.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
         mem_info.type    = init_params->rkey_config_key->mem_type;
         mem_info.flags   = ucp_proto_rndv_rkey_mem_flags_estimate(init_params);
         ucp_proto_select_param_init(&remote_select_param, params->remote_op_id,
