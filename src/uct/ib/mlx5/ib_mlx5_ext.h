@@ -165,6 +165,13 @@ typedef struct uct_ib_mlx5_ext_ops {
 void uct_ib_mlx5_ext_cleanup(void);
 
 /**
+ * @brief Unregister the first external plugin matching a name.
+ *
+ * @param [in] name Plugin name.
+ */
+void uct_ib_mlx5_ext_unregister(const char *name);
+
+/**
  * @brief Register an external plugin.
  *
  * @param [in] ops Plugin operations.

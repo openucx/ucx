@@ -1020,21 +1020,17 @@ uct_rc_mlx5_iface_query_v2(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr)
     size_t max_sgl;
     ucs_status_t status;
 
-    status = uct_iface_base_query_v2(iface, iface_attr);
-    if (status != UCS_OK) {
-        return status;
-    }
+    uct_iface_query_v2_init(iface, iface_attr);
 
     if (iface_attr->field_mask & sgl_mask) {
         max_sgl = uct_ib_mlx5_ext_max_put_sgl_zcopy_count();
-        if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_CAP_FLAGS) {
-            iface_attr->cap.flags |= (max_sgl > 0) ?
-                                             UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY :
-                                             0;
+        if ((iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_CAP_FLAGS) &&
+            (max_sgl > 0)) {
+            iface_attr->cap.flags |= UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY;
         }
 
-        if (iface_attr->field_mask &
-            UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT) {
+        if ((iface_attr->field_mask &
+             UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT)) {
             iface_attr->max_put_sgl_zcopy_count = max_sgl;
         }
     }

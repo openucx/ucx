@@ -571,8 +571,7 @@ ucs_status_t uct_single_device_resource(uct_md_h md, const char *dev_name,
     return UCS_OK;
 }
 
-ucs_status_t
-uct_iface_base_query_v2(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr)
+void uct_iface_query_v2_init(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr)
 {
     if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_CAP_FLAGS) {
         iface_attr->cap.flags = 0;
@@ -588,6 +587,21 @@ uct_iface_base_query_v2(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr)
 
     if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH) {
         iface_attr->rx_token_length = 0;
+    }
+}
+
+ucs_status_t
+uct_iface_base_query_v2(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr)
+{
+    const uint64_t token_mask = UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH |
+                                UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH |
+                                UCT_IFACE_ATTR_FIELD_TX_TOKEN |
+                                UCT_IFACE_ATTR_FIELD_RX_TOKEN;
+
+    uct_iface_query_v2_init(iface, iface_attr);
+
+    if (ucs_test_flags(iface_attr->field_mask, token_mask)) {
+        return UCS_ERR_UNSUPPORTED;
     }
 
     return UCS_OK;
