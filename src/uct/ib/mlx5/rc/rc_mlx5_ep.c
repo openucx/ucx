@@ -189,16 +189,17 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
     struct mlx5_wqe_ctrl_seg *ctrl = NULL;
     struct mlx5_wqe_raddr_seg *raddr;
     struct mlx5_wqe_data_seg *dptr;
-    size_t wqe_size, i;
+    size_t wqe_size, i, max_count;
     uint8_t fm_ce_se, fence_flag;
     uint16_t sn, pi, res_count;
     uint64_t addr;
     uct_rkey_t rkey;
     void *curr;
 
-    UCT_CHECK_PARAM(count <= UCT_RC_MLX5_PUT_SGL_ZCOPY_MAX_COUNT,
-                    "put_sgl_zcopy count(%zu) should be limited by %zu",
-                    count, (size_t)UCT_RC_MLX5_PUT_SGL_ZCOPY_MAX_COUNT);
+    max_count = uct_rc_mlx5_base_put_sgl_zcopy_max_count(&iface->super);
+    UCT_CHECK_PARAM(count <= max_count,
+                    "put_sgl_zcopy count(%zu) should be limited by %zu", count,
+                    max_count);
     ucs_assert(ep->super.flags & UCT_RC_EP_FLAG_CONNECTED);
     ucs_assert(count > 0);
 

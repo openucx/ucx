@@ -24,6 +24,14 @@
                                                         uct_rc_mlx5_iface_common_t)
 
 
+static UCS_F_ALWAYS_INLINE size_t
+uct_rc_mlx5_base_put_sgl_zcopy_max_count(uct_rc_iface_t *iface)
+{
+    return ucs_min((size_t)UCT_RC_MLX5_PUT_SGL_ZCOPY_MAX_COUNT,
+                   iface->config.tx_qp_len);
+}
+
+
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_ep_fence_put(uct_rc_mlx5_iface_common_t *iface, uct_ib_mlx5_txwq_t *txwq,
                          uct_rkey_t *rkey, uint64_t *addr, uint16_t offset,
