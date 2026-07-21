@@ -1037,8 +1037,9 @@ static ucs_status_t
 uct_rc_mlx5_iface_query_v2(uct_iface_h tl_iface,
                            uct_iface_attr_v2_t *iface_attr)
 {
-    uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
-    size_t max_sgl        = uct_ib_mlx5_ext_max_put_sgl_zcopy_count();
+    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(tl_iface,
+                                                       uct_rc_mlx5_iface_common_t);
+    size_t max_sgl                    = uct_ib_mlx5_ext_max_put_sgl_zcopy_count();
 
     if (max_sgl == 0) {
         max_sgl = uct_rc_mlx5_base_put_sgl_zcopy_max_count(iface);

@@ -196,7 +196,7 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
     uct_rkey_t rkey;
     void *curr;
 
-    max_count = uct_rc_mlx5_base_put_sgl_zcopy_max_count(&iface->super);
+    max_count = uct_rc_mlx5_base_put_sgl_zcopy_max_count(iface);
     UCT_CHECK_PARAM(count <= max_count,
                     "put_sgl_zcopy count(%zu) should be limited by %zu", count,
                     max_count);
