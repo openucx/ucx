@@ -220,6 +220,12 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
     UCT_RC_CHECK_TXQP_VALUE_RET(&iface->super, &ep->super,
                                 UCS_ERR_NO_RESOURCE, count - 1);
 
+    /* Validate all lengths before consuming the fence state */
+    for (i = 0; i < count; i++) {
+        UCT_CHECK_LENGTH(lengths[i], 0, UCT_IB_MAX_MESSAGE_SIZE,
+                         "put_sgl_zcopy");
+    }
+
     wqe_size = sizeof(*ctrl) + sizeof(*raddr) + sizeof(*dptr);
     sn       = txwq->sw_pi;
 
@@ -233,9 +239,6 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
                  iface->config.put_fence_flag : 0;
 
     for (i = 0; i < count; i++) {
-        UCT_CHECK_LENGTH(lengths[i], 0, UCT_IB_MAX_MESSAGE_SIZE,
-                         "put_sgl_zcopy");
-
         fm_ce_se = ((i == 0) ? fence_flag : 0) |
                    ((i == count - 1) ? MLX5_WQE_CTRL_CQ_UPDATE : 0);
         ctrl     = curr;
