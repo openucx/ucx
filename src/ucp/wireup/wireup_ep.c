@@ -286,12 +286,14 @@ ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep, unsigned ep_init_flags,
     wiface   = ucp_worker_iface(worker, select_info.rsc_index);
 
     /* create auxiliary endpoint connected to the remote iface. */
-    uct_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE    |
-                               UCT_EP_PARAM_FIELD_DEV_ADDR |
-                               UCT_EP_PARAM_FIELD_IFACE_ADDR;
-    uct_ep_params.iface      = wiface->iface;
-    uct_ep_params.dev_addr   = aux_addr->dev_addr;
-    uct_ep_params.iface_addr = aux_addr->iface_addr;
+    uct_ep_params.field_mask        = UCT_EP_PARAM_FIELD_IFACE |
+                                      UCT_EP_PARAM_FIELD_DEV_ADDR |
+                                      UCT_EP_PARAM_FIELD_IFACE_ADDR |
+                                      UCT_EP_PARAM_FIELD_IFACE_ADDR_LENGTH;
+    uct_ep_params.iface             = wiface->iface;
+    uct_ep_params.dev_addr          = aux_addr->dev_addr;
+    uct_ep_params.iface_addr        = aux_addr->iface_addr;
+    uct_ep_params.iface_addr_length = aux_addr->iface_addr_len;
     status = uct_ep_create(&uct_ep_params, &uct_ep);
     if (status != UCS_OK) {
         /* coverity[leaked_storage] */
@@ -704,6 +706,7 @@ ucp_wireup_ep_connect_to_ep_v2(uct_ep_h tl_ep,
         .ep_addr_length     = ep_entry->len
     };
     ucp_wireup_ep_t *wireup_ep                = ucp_wireup_ep(tl_ep);
+    ucs_status_t status;
 
     if (wireup_ep == NULL) {
         return uct_ep_connect_to_ep_v2(tl_ep, address_entry->dev_addr,
@@ -714,8 +717,13 @@ ucp_wireup_ep_connect_to_ep_v2(uct_ep_h tl_ep,
         return UCS_OK;
     }
 
+    status = uct_ep_connect_to_ep_v2(wireup_ep->super.uct_ep,
+                                     address_entry->dev_addr, ep_entry->addr,
+                                     &param);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     wireup_ep->flags |= UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED;
-    return uct_ep_connect_to_ep_v2(wireup_ep->super.uct_ep,
-                                   address_entry->dev_addr, ep_entry->addr,
-                                   &param);
+    return UCS_OK;
 }

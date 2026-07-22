@@ -15,6 +15,7 @@
 
 #include <ucs/async/eventfd.h>
 #include <ucs/debug/assert.h>
+#include <ucs/sys/sys.h>
 #include <ucs/sys/string.h>
 #include <ucs/type/class.h>
 #include <uct/api/device/uct_device_types.h>
@@ -25,7 +26,8 @@
 #include <pthread.h>
 
 typedef enum {
-    UCT_CUDA_IPC_DEVICE_ADDR_FLAG_MNNVL = UCS_BIT(0)
+    UCT_CUDA_IPC_DEVICE_ADDR_FLAG_MNNVL  = UCS_BIT(0),
+    UCT_CUDA_IPC_DEVICE_ADDR_FLAG_FABRIC = UCS_BIT(1)
 } uct_cuda_ipc_device_addr_flags_t;
 
 
@@ -91,8 +93,15 @@ ucs_status_t uct_cuda_ipc_iface_get_device_address(uct_iface_t *tl_iface,
     uct_cuda_ipc_md_t *md                = ucs_derived_of(iface->super.super.md,
                                                            uct_cuda_ipc_md_t);
 
-    if (md->enable_mnnvl) {
-        dev_addr->flags = UCT_CUDA_IPC_DEVICE_ADDR_FLAG_MNNVL;
+    if (md->enable_mnnvl || md->fabric_supported) {
+        dev_addr->flags = 0;
+        if (md->enable_mnnvl) {
+            dev_addr->flags |= UCT_CUDA_IPC_DEVICE_ADDR_FLAG_MNNVL;
+        }
+
+        if (md->fabric_supported) {
+            dev_addr->flags |= UCT_CUDA_IPC_DEVICE_ADDR_FLAG_FABRIC;
+        }
     }
 
     dev_addr->system_uuid = ucs_get_system_id();
@@ -107,18 +116,29 @@ static ucs_status_t uct_cuda_ipc_iface_get_address(uct_iface_h tl_iface,
     return UCS_OK;
 }
 
+/* Extract the flags byte from a device address, handling addresses produced by
+ * older peers (which only contained the system UUID and no trailing flags). */
+static uint8_t
+uct_cuda_ipc_iface_dev_addr_flags(const uct_cuda_ipc_device_addr_t *dev_addr,
+                                  size_t dev_addr_len)
+{
+    if (dev_addr_len == sizeof(uint64_t)) {
+        return 0;
+    }
+
+    ucs_assertv(dev_addr_len >= sizeof(uct_cuda_ipc_device_addr_t),
+                "dev_addr_len=%zu", dev_addr_len);
+    return dev_addr->flags;
+}
+
 static int
 uct_cuda_ipc_iface_mnnvl_supported(uct_cuda_ipc_md_t *md,
                                    const uct_cuda_ipc_device_addr_t *dev_addr,
                                    size_t dev_addr_len)
 {
-    if (md->enable_mnnvl && (dev_addr_len != sizeof(uint64_t))) {
-        ucs_assertv(dev_addr_len >= sizeof(uct_cuda_ipc_device_addr_t),
-                    "dev_addr_len=%zu", dev_addr_len);
-        return (dev_addr->flags & UCT_CUDA_IPC_DEVICE_ADDR_FLAG_MNNVL);
-    }
-
-    return 0;
+    return md->enable_mnnvl &&
+           (uct_cuda_ipc_iface_dev_addr_flags(dev_addr, dev_addr_len) &
+            UCT_CUDA_IPC_DEVICE_ADDR_FLAG_MNNVL);
 }
 
 static int
@@ -131,6 +151,7 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
     const uct_cuda_ipc_device_addr_t *dev_addr;
     uct_cuda_ipc_iface_address_t ipc_addr;
     size_t dev_addr_len, iface_addr_len;
+    int local_fabric_supported, remote_fabric_supported;
     int same_uuid;
 
     if (!uct_iface_is_reachable_params_addrs_valid(params)) {
@@ -154,13 +175,32 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
         return 0;
     }
 
-    if (same_uuid ||
-        uct_cuda_ipc_iface_mnnvl_supported(md, dev_addr, dev_addr_len)) {
-        return uct_iface_scope_is_reachable(tl_iface, params);
+    if (!same_uuid &&
+        !uct_cuda_ipc_iface_mnnvl_supported(md, dev_addr, dev_addr_len)) {
+        uct_iface_fill_info_str_buf(params, "different machine and no MNNVL");
+        return 0;
     }
 
-    uct_iface_fill_info_str_buf(params, "different machine and no MNNVL");
-    return 0;
+    /* Legacy CUDA IPC handles cannot be exchanged across PID namespaces;
+     * both peers must support fabric IPC handles in that case. */
+    /* Older peers do not send pid_ns, so preserve legacy same-node reachability
+     * and apply the cross-namespace fabric check only to extended addresses. */
+    if ((iface_addr_len >= sizeof(ipc_addr)) &&
+        (ipc_addr.pid_ns != ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID))) {
+        local_fabric_supported  = md->fabric_supported;
+        remote_fabric_supported = !!(
+                uct_cuda_ipc_iface_dev_addr_flags(dev_addr, dev_addr_len) &
+                UCT_CUDA_IPC_DEVICE_ADDR_FLAG_FABRIC);
+        if (!local_fabric_supported || !remote_fabric_supported) {
+            uct_iface_fill_info_str_buf(
+                    params,
+                    "different PID namespace and FABRIC support local=%d remote=%d",
+                    local_fabric_supported, remote_fabric_supported);
+            return 0;
+        }
+    }
+
+    return uct_iface_scope_is_reachable(tl_iface, params);
 }
 
 static double uct_cuda_ipc_iface_get_bw()
@@ -278,7 +318,8 @@ static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
     uct_base_iface_query(&iface->super.super, iface_attr);
 
     iface_attr->iface_addr_len          = uct_cuda_ipc_iface_address_length();
-    iface_attr->device_addr_len         = md->enable_mnnvl ?
+    iface_attr->device_addr_len         = (md->enable_mnnvl ||
+                                           md->fabric_supported) ?
                                           sizeof(uct_cuda_ipc_device_addr_t) :
                                           sizeof(uint64_t);
     iface_attr->ep_addr_len             = 0;
@@ -333,6 +374,15 @@ static void uct_cuda_ipc_complete_event(uct_iface_h tl_iface,
                                                                uct_cuda_ipc_iface_t);
     uct_cuda_ipc_event_desc_t *cuda_ipc_event = ucs_derived_of(cuda_event,
                                                                uct_cuda_ipc_event_desc_t);
+
+#if CUDA_VERSION >= 13000
+    if (cuda_ipc_event->sgl_mapping != NULL) {
+        uct_cuda_ipc_sgl_mapping_destroy(cuda_ipc_event->sgl_mapping,
+                                         cuda_ipc_event->cuda_device,
+                                         iface->config.enable_cache);
+        return;
+    }
+#endif
 
     uct_cuda_ipc_unmap_memhandle(cuda_ipc_event->pid, cuda_ipc_event->pid_ns,
                                  cuda_ipc_event->d_bptr,
@@ -423,8 +473,31 @@ uct_cuda_ipc_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
     return UCS_OK;
 }
 
+static ucs_status_t
+uct_cuda_ipc_iface_query_v2(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr)
+{
+    ucs_status_t status;
+
+    status = uct_iface_base_query_v2(iface, iface_attr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+#if CUDA_VERSION >= 13000
+    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_CAP_FLAGS) {
+        iface_attr->cap.flags |= UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY;
+    }
+
+    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT) {
+        iface_attr->max_put_sgl_zcopy_count = SIZE_MAX;
+    }
+#endif
+
+    return UCS_OK;
+}
+
 static uct_iface_internal_ops_t uct_cuda_ipc_iface_internal_ops = {
-    .iface_query_v2         = uct_iface_base_query_v2,
+    .iface_query_v2         = uct_cuda_ipc_iface_query_v2,
     .iface_estimate_perf    = uct_cuda_ipc_estimate_perf,
     .iface_vfs_refresh      = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
     .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
@@ -432,7 +505,12 @@ static uct_iface_internal_ops_t uct_cuda_ipc_iface_internal_ops = {
     .ep_connect_to_ep_v2    = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
     .iface_is_reachable_v2  = uct_cuda_ipc_iface_is_reachable_v2,
     .ep_is_connected        = uct_cuda_ipc_ep_is_connected,
-    .ep_get_device_ep       = uct_cuda_ipc_ep_get_device_ep
+    .ep_get_device_ep       = uct_cuda_ipc_ep_get_device_ep,
+#if CUDA_VERSION >= 13000
+    .ep_put_sgl_zcopy       = uct_cuda_ipc_ep_put_sgl_zcopy
+#else
+    .ep_put_sgl_zcopy       = (uct_ep_put_sgl_zcopy_func_t)ucs_empty_function_return_unsupported
+#endif
 };
 
 static uct_cuda_ctx_rsc_t * uct_cuda_ipc_ctx_rsc_create(uct_iface_h tl_iface)

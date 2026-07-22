@@ -2276,6 +2276,34 @@ public:
         return result;
     }
 
+    static size_t find_max_aux_lane_seg_size(
+            ucp_worker_h worker, ucp_ep_h ep,
+            const ucp_ep_config_key_t *key,
+            const ucp_unpacked_address_t *remote_address)
+    {
+        size_t max_seg_size = 0;
+        ucp_lane_index_t lane;
+
+        for (lane = 0; lane < key->num_lanes; ++lane) {
+            ucp_rsc_index_t rsc_index = key->lanes[lane].rsc_index;
+            if (rsc_index == UCP_NULL_RESOURCE) {
+                continue;
+            }
+
+            wireup_lane lane_info(worker, ep, lane, rsc_index, key,
+                                  remote_address);
+            if (!lane_info.is_local_aux_capable() ||
+                !lane_info.is_remote_aux_capable()) {
+                continue;
+            }
+
+            UCS_TEST_MESSAGE << "  Wireup AUX lane candidate: " << lane_info;
+            max_seg_size = ucs_max(max_seg_size, lane_info.seg_size());
+        }
+
+        return max_seg_size;
+    }
+
 };
 
 /* Test that AUX transport selection picks the highest non-zero effective
@@ -2332,11 +2360,10 @@ UCS_TEST_P(test_ucp_wireup_msg_lane, select_aux_transport_highest_seg_size) {
 }
 
 /* Test that wireup msg transport selects the highest seg_size among eligible
- * transports */
+ * endpoint lanes. */
 UCS_TEST_P(test_ucp_wireup_msg_lane, select_highest_seg_size_lane) {
     entity *e = create_entity(true);
     ucp_ep_params_t ep_params = get_ep_params();
-    unsigned ep_init_flags    = ucp_ep_init_flags(e->worker(), &ep_params);
     e->connect(&receiver(), ep_params);
 
     const ucp_ep_config_t *config = ucp_ep_config(e->ep());
@@ -2356,35 +2383,28 @@ UCS_TEST_P(test_ucp_wireup_msg_lane, select_highest_seg_size_lane) {
 
     UCS_TEST_MESSAGE << "Selected wireup message transport: " << wireup_info;
 
-    /* Find the transport with maximum seg_size that satisfies the same AUX
-     * wireup criteria as ucp_wireup_select_aux_transport(). */
-    aux_candidate_info aux_info = find_max_aux_candidate(
-            e->worker(), e->ep(), ep_init_flags, &remote_address.address, 1);
-    if (!aux_info.is_found()) {
-        aux_info = find_max_aux_candidate(e->worker(), e->ep(), ep_init_flags,
-                                          &remote_address.address, 0);
-    }
+    size_t max_aux_seg_size = find_max_aux_lane_seg_size(
+            e->worker(), e->ep(), &config->key, &remote_address.address);
 
-    if (aux_info.is_found()) {
+    if (max_aux_seg_size > 0) {
         EXPECT_TRUE(wireup_info.is_local_aux_capable())
             << "Wireup transport " << wireup_info.tl_name()
             << " does not satisfy local AUX criteria";
-        EXPECT_TRUE(wireup_info.is_remote_aux_capable(
-                            aux_info.require_cb_async))
+        EXPECT_TRUE(wireup_info.is_remote_aux_capable())
             << "Wireup transport " << wireup_info.tl_name()
             << " does not satisfy remote AUX criteria";
-        EXPECT_EQ(wireup_info.seg_size(), aux_info.max_seg_size)
+        EXPECT_EQ(wireup_info.seg_size(), max_aux_seg_size)
             << "Wireup transport " << wireup_info.tl_name()
             << " (seg_size=" << wireup_info.seg_size()
-            << ") has lower seg_size than the maximum available AUX transport ("
-            << aux_info.max_seg_size << ")";
+            << ") does not have the maximum available AUX lane seg_size ("
+            << max_aux_seg_size << ")";
     } else {
         /* ucp_wireup_select_wireup_msg_lane() falls back to a p2p-capable
          * transport, which is distinct from the final p2p lane bitmap. */
         EXPECT_TRUE(wireup_info.is_p2p_transport())
             << "Expected wireup transport " << wireup_info.tl_name()
-            << " to fallback to a p2p-capable transport when no AUX transport "
-               "is available";
+            << " to fallback to a p2p-capable transport when no endpoint lane "
+               "satisfies the AUX criteria";
     }
 }
 
