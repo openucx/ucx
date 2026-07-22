@@ -1142,7 +1142,7 @@ UCS_TEST_P(test_gga_fence_flags, auto_ooo, "GGA_MLX5_AR_ENABLE=auto",
 {
     ASSERT_UCS_OK(open_iface(UCT_IB_MLX5_DP_ORDERING_OOO_RW, false, false));
     check_enabled(UCT_IB_MLX5_DP_ORDERING_OOO_RW,
-                  UCT_IB_MLX5_WQE_CTRL_FLAG_FENCE);
+                  UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER);
 }
 
 UCS_TEST_P(test_gga_fence_flags, none_ooo, "GGA_MLX5_AR_ENABLE=auto",
