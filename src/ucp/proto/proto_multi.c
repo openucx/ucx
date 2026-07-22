@@ -729,7 +729,7 @@ ucp_proto_multi_init_priv(const ucp_proto_multi_init_params_t *params,
     }
     ucs_assert(mpriv->num_lanes == ucs_popcount(selection->lane_map));
 
-    if (params->single_lane_min_length) {
+    if (params->use_single_lane_min_length) {
         perf->min_length = mpriv->min_frag;
     }
     *reg_md_map_p    = reg_md_map;
