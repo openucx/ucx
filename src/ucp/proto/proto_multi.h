@@ -123,6 +123,10 @@ typedef struct {
      * several parts. The goal is to not split below this limit */
     size_t                         min_chunk;
 
+    /* Use the largest per-lane minimum as the protocol minimum, allowing short
+     * messages that do not use all selected lanes */
+    size_t                         single_lane_min_length;
+
     /* MDs on which the buffer is expected to be already registered, so no need
        to account for the overhead of registering on them */
     ucp_md_map_t                   initial_reg_md_map;

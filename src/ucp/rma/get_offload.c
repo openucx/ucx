@@ -219,14 +219,15 @@ ucp_proto_get_offload_zcopy_probe(const ucp_proto_init_params_t *init_params)
         .super.exclude_map   = 0,
         .super.reg_mem_info  = ucp_proto_common_select_param_mem_info(
                                                      init_params->select_param),
-        .max_lanes           = context->config.ext.max_rma_lanes,
-        .min_chunk           = context->config.ext.min_rma_chunk_size,
-        .initial_reg_md_map  = 0,
-        .first.tl_cap_flags  = UCT_IFACE_FLAG_GET_ZCOPY,
-        .first.lane_type     = UCP_LANE_TYPE_RMA_BW,
-        .middle.tl_cap_flags = UCT_IFACE_FLAG_GET_ZCOPY,
-        .middle.lane_type    = UCP_LANE_TYPE_RMA_BW,
-        .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID
+        .max_lanes              = context->config.ext.max_rma_lanes,
+        .min_chunk              = context->config.ext.min_rma_chunk_size,
+        .single_lane_min_length = 1,
+        .initial_reg_md_map     = 0,
+        .first.tl_cap_flags     = UCT_IFACE_FLAG_GET_ZCOPY,
+        .first.lane_type        = UCP_LANE_TYPE_RMA_BW,
+        .middle.tl_cap_flags    = UCT_IFACE_FLAG_GET_ZCOPY,
+        .middle.lane_type       = UCP_LANE_TYPE_RMA_BW,
+        .opt_align_offs         = UCP_PROTO_COMMON_OFFSET_INVALID
     };
 
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_GET))) {
