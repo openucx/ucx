@@ -8,6 +8,8 @@
 
 extern "C" {
 #include <uct/ib/mlx5/ib_mlx5_ext.h>
+
+extern ucs_list_link_t uct_ib_mlx5_ext_plugins;
 }
 
 
@@ -15,7 +17,7 @@ class test_uct_ib_mlx5_ext_rc : public test_rc {
 public:
     void init() override
     {
-        uct_ib_mlx5_ext_cleanup();
+        save_plugins();
         reset_state();
         test_rc::init();
     }
@@ -25,9 +27,28 @@ public:
         uct_ib_mlx5_ext_cleanup();
 
         uct_test::cleanup();
+        restore_plugins();
     }
 
 protected:
+    void save_plugins()
+    {
+        if (ucs_list_is_empty(&uct_ib_mlx5_ext_plugins)) {
+            ucs_list_head_init(&m_saved_plugins);
+        } else {
+            ucs_list_replace(&uct_ib_mlx5_ext_plugins, &m_saved_plugins);
+            ucs_list_head_init(&uct_ib_mlx5_ext_plugins);
+        }
+    }
+
+    void restore_plugins()
+    {
+        if (!ucs_list_is_empty(&m_saved_plugins)) {
+            ucs_list_replace(&m_saved_plugins, &uct_ib_mlx5_ext_plugins);
+            ucs_list_head_init(&m_saved_plugins);
+        }
+    }
+
     typedef struct {
         uct_iface_h                             iface = nullptr;
         uct_ep_h                                ep = nullptr;
@@ -39,6 +60,8 @@ protected:
         uint64_t                                failed_iface_query_count = 0;
         const uct_ep_outstanding_purge_params_t *purge_params = nullptr;
     } state_t;
+
+    ucs_list_link_t m_saved_plugins;
 
     static const char *failing_plugin_name()
     {
