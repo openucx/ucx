@@ -641,8 +641,6 @@ uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq, struct mlx5_wqe_ctrl_seg *ctrl,
 
     uct_ib_mlx5_txwq_validate(wq, num_bb, hw_ci_updated);
 
-    ucs_assert(wqe_size <= UCT_IB_MLX5_BF_REG_SIZE);
-
     sw_pi += num_bb;
     src    = uct_ib_mlx5_txwq_ring_doorbell(wq, ctrl, sw_pi, num_bb);
 
