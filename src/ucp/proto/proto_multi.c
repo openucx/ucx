@@ -570,6 +570,7 @@ ucp_proto_multi_aggregate_perf(const ucp_proto_multi_init_params_t *params,
     perf->recv_overhead      = 0;
     perf->latency            = 0;
     perf->sys_latency        = 0;
+    perf->min_length         = 0;
 
     ucs_for_each_bit(lane, selection->lane_map) {
         lane_perf = &lanes_perf[lane];
@@ -595,7 +596,8 @@ ucp_proto_multi_aggregate_perf(const ucp_proto_multi_init_params_t *params,
         perf->send_post_overhead += lane_perf->send_post_overhead;
         perf->recv_overhead      += lane_perf->recv_overhead;
         perf->latency             = ucs_max(perf->latency, lane_perf->latency);
-        perf->sys_latency = ucs_max(perf->sys_latency, lane_perf->sys_latency);
+        perf->sys_latency         = ucs_max(perf->sys_latency,
+                                            lane_perf->sys_latency);
     }
 
     ucs_log_indent(-1);
@@ -617,7 +619,7 @@ ucp_proto_multi_init_priv(const ucp_proto_multi_init_params_t *params,
     const ucp_proto_common_tl_perf_t *lane_perf;
     ucp_proto_multi_lane_priv_t *lpriv;
     uct_iface_attr_v2_t iface_attr_v2;
-    size_t UCS_V_UNUSED min_length;
+    size_t min_length;
     size_t max_frag, min_end_offset, min_chunk;
     uint32_t weight_sum;
     ucp_rsc_index_t rsc_index;
@@ -707,6 +709,7 @@ ucp_proto_multi_init_priv(const ucp_proto_multi_init_params_t *params,
                    lane_perf->min_length);
 
         weight_sum           += lpriv->weight;
+        perf->min_length      = ucs_max(perf->min_length, min_length);
         min_end_offset       += min_chunk;
         mpriv->min_frag       = ucs_max(mpriv->min_frag, lane_perf->min_length);
         mpriv->max_frag_sum  += lpriv->max_frag;
@@ -740,8 +743,9 @@ ucp_proto_multi_init_priv(const ucp_proto_multi_init_params_t *params,
     }
     ucs_assert(mpriv->num_lanes == ucs_popcount(selection->lane_map));
 
-    /* Multi-lane protocols with non-zero min_frag pad length if needed */
-    perf->min_length = mpriv->min_frag;
+    if (params->single_lane_min_length) {
+        perf->min_length = mpriv->min_frag;
+    }
     *reg_md_map_p    = reg_md_map;
     return UCS_OK;
 }
