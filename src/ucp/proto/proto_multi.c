@@ -314,7 +314,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     ucp_lane_index_t i, lane, num_lanes, num_fast_lanes;
     ucp_proto_multi_lane_priv_t *lpriv;
     size_t max_frag, min_end_offset, min_chunk;
-    size_t UCS_V_UNUSED min_length;
+    size_t min_length;
     ucp_proto_lane_selection_t selection;
     ucp_md_map_t reg_md_map;
     uint32_t weight_sum;
@@ -380,6 +380,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     perf.recv_overhead      = 0;
     perf.latency            = 0;
     perf.sys_latency        = 0;
+    perf.min_length         = 0;
     max_frag_ratio          = 0;
     min_bandwidth           = DBL_MAX;
 
@@ -532,6 +533,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
                    lane_perf->min_length);
 
         weight_sum           += lpriv->weight;
+        perf.min_length       = ucs_max(perf.min_length, min_length);
         min_end_offset       += min_chunk;
         mpriv->min_frag       = ucs_max(mpriv->min_frag, lane_perf->min_length);
         mpriv->max_frag_sum  += lpriv->max_frag;
@@ -565,8 +567,9 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     }
     ucs_assert(mpriv->num_lanes == ucs_popcount(selection.lane_map));
 
-    /* Multi-lane protocols with non-zero min_frag pad length if needed */
-    perf.min_length = mpriv->min_frag;
+    if (params->use_single_lane_min_length) {
+        perf.min_length = mpriv->min_frag;
+    }
 
     if (mpriv->num_lanes == 1) {
         perf.node = lanes_perf[ucs_ffs64(selection.lane_map)].node;
