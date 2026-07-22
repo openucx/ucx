@@ -125,7 +125,7 @@ typedef struct {
 
     /* Use the largest per-lane minimum as the protocol minimum, allowing short
      * messages that do not use all selected lanes */
-    int                            single_lane_min_length;
+    size_t                         single_lane_min_length;
 
     /* MDs on which the buffer is expected to be already registered, so no need
        to account for the overhead of registering on them */
