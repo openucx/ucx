@@ -119,6 +119,12 @@ typedef struct {
     /* Maximal number of lanes to select */
     ucp_lane_index_t               max_lanes;
 
+    /* Select the lane count according to the transport path recommendation */
+    int                            select_uct_num_paths;
+
+    /* Maximal total lane count for the current automatic candidate */
+    ucp_lane_index_t               max_total_lanes;
+
     /* Minimal chunk size. It defines the minimal size of the fragment to split into
      * several parts. The goal is to not split below this limit */
     size_t                         min_chunk;

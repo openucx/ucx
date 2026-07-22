@@ -49,6 +49,8 @@ ucp_proto_rndv_get_common_probe(const ucp_proto_init_params_t *init_params,
         .super.exclude_map   = 0,
         .super.reg_mem_info  = *reg_mem_info,
         .max_lanes           = context->config.ext.max_rndv_lanes,
+        .select_uct_num_paths = context->config.ext.max_rndv_lanes_config ==
+                                UCS_ULUNITS_AUTO,
         .min_chunk           = context->config.ext.min_rndv_chunk_size,
         .initial_reg_md_map  = initial_reg_md_map,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_GET_ZCOPY,
@@ -58,6 +60,8 @@ ucp_proto_rndv_get_common_probe(const ucp_proto_init_params_t *init_params,
         .opt_align_offs      = ucs_offsetof(uct_iface_attr_t,
                                             cap.get.opt_zcopy_align),
     };
+    ucp_lane_index_t max_total_lanes = params.max_lanes;
+    int allow_short_baseline         = 1;
     ucp_proto_rndv_bulk_priv_t rpriv;
     ucp_proto_perf_t *perf;
     ucs_status_t status;
@@ -67,16 +71,35 @@ ucp_proto_rndv_get_common_probe(const ucp_proto_init_params_t *init_params,
         return;
     }
 
-    status = ucp_proto_rndv_bulk_init(&params, UCP_PROTO_RNDV_GET_DESC,
-                                      UCP_PROTO_RNDV_ATS_NAME, &perf, &rpriv);
-    if (status != UCS_OK) {
-        return;
-    }
+    do {
+        params.max_total_lanes = max_total_lanes;
+        status = ucp_proto_rndv_bulk_init(&params, UCP_PROTO_RNDV_GET_DESC,
+                                          UCP_PROTO_RNDV_ATS_NAME, &perf,
+                                          &rpriv);
+        if (status != UCS_OK) {
+            return;
+        }
 
-    ucp_proto_select_add_proto(&params.super.super, params.super.cfg_thresh,
-                               params.super.cfg_priority, perf, &rpriv,
-                               UCP_PROTO_MULTI_EXTENDED_PRIV_SIZE(&rpriv,
-                                                                  mpriv));
+        if (params.select_uct_num_paths &&
+            (rpriv.mpriv.num_lanes < max_total_lanes)) {
+            if (!allow_short_baseline) {
+                ucp_proto_perf_destroy(perf);
+                return;
+            }
+            max_total_lanes = rpriv.mpriv.num_lanes;
+        }
+
+        ucp_proto_select_add_proto(
+                &params.super.super, params.super.cfg_thresh,
+                params.super.cfg_priority, perf, &rpriv,
+                UCP_PROTO_MULTI_EXTENDED_PRIV_SIZE(&rpriv, mpriv));
+        allow_short_baseline = 0;
+
+        if (!params.select_uct_num_paths ||
+            (rpriv.mpriv.num_lanes > max_total_lanes)) {
+            return;
+        }
+    } while (++max_total_lanes <= UCP_PROTO_MAX_LANES);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t

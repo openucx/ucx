@@ -168,6 +168,12 @@ typedef struct {
     /* Single path ratio of the full bandwidth */
     double path_ratio;
 
+    /* Number of paths recommended for the operation */
+    unsigned num_paths;
+
+    /* Whether the number of paths was set explicitly */
+    int num_paths_fixed;
+
     /* Network latency */
     double latency;
 

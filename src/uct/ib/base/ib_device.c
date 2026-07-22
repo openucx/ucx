@@ -160,7 +160,8 @@ static uct_ib_device_spec_t uct_ib_builtin_device_specs[] = {
    UCT_IB_DEVICE_FLAG_DC_V2, 80},
   {"ConnectX-9", {0x15b3, 4133},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V2, 90},
+   UCT_IB_DEVICE_FLAG_DC_V2 |
+   UCT_IB_DEVICE_FLAG_XDR_READ_4_PATHS, 90},
   {"ConnectX-10", {0x15b3, 4135},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V2, 100},
@@ -182,6 +183,9 @@ static uct_ib_device_spec_t uct_ib_builtin_device_specs[] = {
   {"Generic HCA", {0, 0}, 0, 0},
   {NULL}
 };
+
+static const uct_ib_device_spec_t*
+uct_ib_device_builtin_spec(uct_ib_device_t *dev);
 
 static void
 uct_ib_device_get_locality(const char *dev_name, ucs_sys_cpuset_t *cpu_mask)
@@ -618,6 +622,8 @@ ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
         ucs_topo_sys_device_set_class(dev->sys_dev, UCS_TOPO_DEVICE_CLASS_NET);
     }
     uct_ib_device_set_pci_id(dev, sysfs_path);
+    dev->flags |= uct_ib_device_builtin_spec(dev)->flags &
+                  UCT_IB_DEVICE_FLAG_XDR_READ_4_PATHS;
     dev->pci_bw = ucs_topo_get_pci_bw(dev_name, sysfs_path);
 
     ucs_free(path_buffer);
@@ -758,6 +764,19 @@ static inline int uct_ib_device_spec_match(uct_ib_device_t *dev,
            (spec->pci_id.device == dev->pci_id.device);
 }
 
+static const uct_ib_device_spec_t*
+uct_ib_device_builtin_spec(uct_ib_device_t *dev)
+{
+    uct_ib_device_spec_t *spec = uct_ib_builtin_device_specs;
+
+    while ((spec->name != NULL) && !uct_ib_device_spec_match(dev, spec)) {
+        ++spec;
+    }
+
+    return spec; /* If no match is found, return the last entry, which contains
+                    default settings for unknown devices. */
+}
+
 const uct_ib_device_spec_t* uct_ib_device_spec(uct_ib_device_t *dev)
 {
     uct_ib_md_t *md = ucs_container_of(dev, uct_ib_md_t, dev);
@@ -772,12 +791,7 @@ const uct_ib_device_spec_t* uct_ib_device_spec(uct_ib_device_t *dev)
     }
 
     /* search through built-in list of device specifications */
-    spec = uct_ib_builtin_device_specs;
-    while ((spec->name != NULL) && !uct_ib_device_spec_match(dev, spec)) {
-        ++spec;
-    }
-    return spec; /* if no match is found, return the last entry, which contains
-                    default settings for unknown devices */
+    return uct_ib_device_builtin_spec(dev);
 }
 
 static unsigned long uct_ib_device_get_ib_gid_index(uct_ib_md_t *md)

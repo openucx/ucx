@@ -321,6 +321,8 @@ static void ucp_proto_common_tl_perf_reset(ucp_proto_common_tl_perf_t *tl_perf)
     tl_perf->send_post_overhead = 0;
     tl_perf->recv_overhead      = 0;
     tl_perf->bandwidth          = 0;
+    tl_perf->num_paths          = 1;
+    tl_perf->num_paths_fixed    = 0;
     tl_perf->latency            = 0;
     tl_perf->sys_latency        = 0;
     tl_perf->min_length         = 0;
@@ -387,7 +389,9 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
                                   UCT_PERF_ATTR_FIELD_RECV_OVERHEAD |
                                   UCT_PERF_ATTR_FIELD_BANDWIDTH |
                                   UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH |
-                                  UCT_PERF_ATTR_FIELD_LATENCY;
+                                  UCT_PERF_ATTR_FIELD_LATENCY |
+                                  UCT_PERF_ATTR_FIELD_NUM_PATHS |
+                                  UCT_PERF_ATTR_FIELD_FLAGS;
     perf_attr.operation         = params->send_op;
     ucp_proto_common_perf_attr_set_mem_type(params, &perf_attr);
 
@@ -404,6 +408,9 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
     tl_perf->path_ratio         = ucp_proto_common_iface_bandwidth(
                                       context, &perf_attr.path_bandwidth) /
                                   tl_perf->bandwidth;
+    tl_perf->num_paths          = perf_attr.num_paths;
+    tl_perf->num_paths_fixed    = !!(perf_attr.flags &
+                                    UCT_PERF_ATTR_FLAGS_NUM_PATHS_FIXED);
     tl_perf->latency            = ucp_tl_iface_latency(context,
                                                        &perf_attr.latency) +
                                   params->latency;

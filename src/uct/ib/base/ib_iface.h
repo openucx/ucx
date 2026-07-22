@@ -343,6 +343,8 @@ struct uct_ib_iface {
     uint8_t                   *path_bits;
     unsigned                  path_bits_count;
     unsigned                  num_paths;
+    unsigned                  get_num_paths;
+    int                       num_paths_is_auto;
     uint16_t                  pkey_index;
     uint16_t                  pkey;
     uint8_t                   addr_size;

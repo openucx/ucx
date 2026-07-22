@@ -80,6 +80,29 @@ void test_uct_ib::send_recv_short() {
 
 size_t test_uct_ib::m_ib_am_handler_counter = 0;
 
+class test_uct_ib_num_paths : public test_uct_ib {};
+
+UCS_TEST_P(test_uct_ib_num_paths, estimate_perf_configured_limit,
+           "IB_NUM_PATHS=2")
+{
+    uct_perf_attr_t perf_attr = {};
+
+    perf_attr.field_mask = UCT_PERF_ATTR_FIELD_OPERATION |
+                           UCT_PERF_ATTR_FIELD_NUM_PATHS |
+                           UCT_PERF_ATTR_FIELD_FLAGS;
+    perf_attr.operation  = UCT_EP_OP_GET_ZCOPY;
+    ASSERT_UCS_OK(uct_iface_estimate_perf(m_e1->iface(), &perf_attr));
+    EXPECT_EQ(2u, perf_attr.num_paths);
+    EXPECT_TRUE(perf_attr.flags & UCT_PERF_ATTR_FLAGS_NUM_PATHS_FIXED);
+
+    perf_attr.operation = UCT_EP_OP_PUT_ZCOPY;
+    ASSERT_UCS_OK(uct_iface_estimate_perf(m_e1->iface(), &perf_attr));
+    EXPECT_EQ(1u, perf_attr.num_paths);
+    EXPECT_FALSE(perf_attr.flags & UCT_PERF_ATTR_FLAGS_NUM_PATHS_FIXED);
+}
+
+UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib_num_paths);
+
 class test_uct_ib_addr : public test_uct_ib {
 public:
     uct_ib_iface_config_t *ib_config() {
