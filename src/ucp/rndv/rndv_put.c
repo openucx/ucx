@@ -280,7 +280,7 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
     int send_atp, use_atp_lanes;
     ucp_proto_perf_t *perf;
     ucs_status_t status;
-    unsigned atp_map, ordered_atp_map;
+    ucp_lane_map_t atp_map, ordered_atp_map;
 
     if (!ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_SEND,
                                  support_ppln) ||

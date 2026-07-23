@@ -869,6 +869,49 @@ UCS_TEST_P(test_ucp_proto_mock_rcx, rma_put_2_lanes,
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx, rcx, "rc_x")
 
+class test_ucp_proto_mock_rcx_unordered : public test_ucp_proto_mock_rcx {
+public:
+    virtual void init() override
+    {
+        /* Device with higher BW and latency */
+        add_mock_iface("mock_0:1", [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short  = 2000;
+            iface_attr.cap.put.max_short = 2048;
+            iface_attr.bandwidth.shared  = 28e9;
+            iface_attr.latency.c         = 600e-9;
+            iface_attr.latency.m         = 1e-9;
+            iface_attr.cap.get.max_zcopy = 16384;
+        });
+        /* Device with smaller BW but lower latency and unordered PUT-to-AM */
+        add_mock_iface("mock_1:1", [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short  = 208;
+            iface_attr.cap.put.max_short = 2048;
+            iface_attr.bandwidth.shared  = 24e9;
+            iface_attr.latency.c         = 500e-9;
+            iface_attr.latency.m         = 1e-9;
+            iface_attr.cap.flags &= ~UCT_IFACE_FLAG_PUT_AM_ORDER;
+        });
+        test_ucp_proto_mock::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_unordered, rndv_put_mixed_ordering,
+           "IB_NUM_PATHS?=1", "MAX_RNDV_LANES=2", "RNDV_THRESH=0",
+           "RNDV_SCHEME=put_zcopy")
+{
+    ucp_proto_select_key_t key = any_key();
+    key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
+    key.param.op_attr          = 0;
+
+    check_ep_config(sender(), {
+        {1, INF, "rendezvous zero-copy fenced write to remote",
+         "47% on rc_mlx5/mock_1:1 and 53% on rc_mlx5/mock_0:1"},
+    }, key);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_unordered,
+                              rcx_unordered, "rc_x")
+
 class test_ucp_proto_mock_rcx2 : public test_ucp_proto_mock {
 public:
     test_ucp_proto_mock_rcx2()

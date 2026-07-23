@@ -737,8 +737,10 @@ protected:
 
             ucp_request_t *req = (ucp_request_t*)ureq - 1;
             return (req->flags & UCP_REQUEST_FLAG_PROTO_SEND) &&
-                   (req->send.proto_stage ==
-                    UCP_PROTO_RNDV_PUT_STAGE_ATP);
+                   ((req->send.proto_stage ==
+                     UCP_PROTO_RNDV_PUT_STAGE_ATP) ||
+                    (req->send.proto_stage ==
+                     UCP_PROTO_RNDV_PUT_STAGE_FENCED_ATP));
         });
 
 
