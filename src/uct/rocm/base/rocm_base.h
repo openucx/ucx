@@ -42,7 +42,7 @@ ucs_status_t uct_rocm_base_detect_memory_type(uct_md_h md, const void *addr,
                                               ucs_memory_type_t *mem_type_p);
 ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
                                      const size_t length,
-                                     uct_md_mem_attr_t *mem_attr_p);
+                                     uct_md_mem_attr_v2_t *mem_attr_p);
 ucs_status_t uct_rocm_base_get_link_type(hsa_amd_link_info_type_t *type);
 uct_rocm_amd_gpu_product_t uct_rocm_base_get_gpu_product(void);
 int uct_rocm_base_is_dmabuf_supported();

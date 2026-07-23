@@ -129,6 +129,8 @@ typedef struct ucp_context_config {
     int                                    rndv_shm_ppln_enable;
     /** Enable error handling for rndv pipeline protocol */
     int                                    rndv_errh_ppln_enable;
+    /** Force-enable the RMA rendezvous put/get protocols */
+    int                                    rma_ppln_enable;
     /** Threshold for using tag matching offload capabilities. Smaller buffers
      *  will not be posted to the transport. */
     size_t                                 tm_thresh;
@@ -185,11 +187,6 @@ typedef struct ucp_context_config {
     /** Maximal number of endpoints to check on every keepalive round
      * (0 - disabled, inf - check all endpoints on every round) */
     unsigned                               keepalive_num_eps;
-    /** Time period between recovery rounds for an endpoint with lanes in
-     *  UCP_LANE_TYPE_FAILED state. Each round sends a
-     *  WIREUP_MSG_LANES_ADDR_REQUEST over the operable AM lane asking the
-     *  peer for up-to-date addresses of the failed lanes. */
-    ucs_time_t                             recovery_interval;
     /** Maximal number of recovery rounds before the endpoint is declared
      *  fully failed. Must be non-zero. */
     unsigned                               recovery_retries;
@@ -265,6 +262,9 @@ typedef struct ucp_context_config {
     unsigned long                          max_hca_per_gpu;
     /** Local identificator on a single node */
     unsigned long                          node_local_id;
+    /** Print transport/device info and lane info tables during context
+     *  and endpoint initialization */
+    ucs_on_off_auto_value_t                print_transport_tables;
 } ucp_context_config_t;
 
 
@@ -390,6 +390,7 @@ typedef struct ucp_context_alloc_md_index {
      * using ucp_memh_alloc(). */
     ucp_md_index_t   md_index;
     ucs_sys_device_t sys_dev;
+    uint8_t          mem_flags;
 } ucp_context_alloc_md_index_t;
 
 
@@ -655,8 +656,6 @@ extern const char       *ucp_feature_str[];
 void ucp_dump_payload(ucp_context_h context, char *buffer, size_t max,
                       const void *data, size_t length);
 
-void ucp_context_tag_offload_enable(ucp_context_h context);
-
 void ucp_context_uct_atomic_iface_flags(ucp_context_h context,
                                         ucp_tl_iface_atomic_flags_t *atomic);
 
@@ -719,6 +718,7 @@ ucp_memory_info_set_host(ucp_memory_info_t *mem_info)
 {
     mem_info->type    = UCS_MEMORY_TYPE_HOST;
     mem_info->sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+    mem_info->flags   = UCS_MEM_FLAG_REGISTRABLE;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -745,9 +745,11 @@ ucp_memory_detect_internal(ucp_context_h context, const void *address,
                       address, length);
         goto out_host_mem;
     } else if (ucs_likely(status == UCS_OK)) {
-        if (ucs_unlikely(mem_info->type == UCS_MEMORY_TYPE_UNKNOWN)) {
-            ucs_trace_req(
-                    "address %p length %zu: memtype cache returned 'unknown'",
+        if (ucs_unlikely(
+                    (mem_info->type == UCS_MEMORY_TYPE_UNKNOWN) ||
+                    ((mem_info->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) &&
+                     (mem_info->mem_flags == 0)))) {
+            ucs_trace_req("address %p length %zu: querying memory attributes",
                     address, length);
             ucp_memory_detect_slowpath(context, address, length, mem_info);
         } else {
@@ -778,6 +780,7 @@ ucp_memory_detect(ucp_context_h context, const void *address, size_t length,
 
     mem_info->type    = mem_info_internal.type;
     mem_info->sys_dev = mem_info_internal.sys_dev;
+    mem_info->flags   = mem_info_internal.mem_flags;
 }
 
 static UCS_F_ALWAYS_INLINE int
@@ -791,6 +794,18 @@ ucp_context_rndv_is_enabled(ucp_context_h context)
 {
     return (context->config.ext.rndv_intra_thresh != UCS_MEMUNITS_INF) ||
            (context->config.ext.rndv_inter_thresh != UCS_MEMUNITS_INF);
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_context_print_transport_tables_enabled(ucp_context_h context)
+{
+    ucs_on_off_auto_value_t value = context->config.ext.print_transport_tables;
+
+    if (value == UCS_CONFIG_AUTO) {
+        return ucs_log_is_enabled(UCS_LOG_LEVEL_DEBUG);
+    }
+
+    return value == UCS_CONFIG_ON;
 }
 
 void ucp_context_memaccess_tl_bitmap(ucp_context_h context,

@@ -62,6 +62,19 @@ ucp_datatype_iter_detect_mem_info(ucp_context_h context, void *buffer,
     ucp_memory_detect(context, buffer, length, &dt_iter->mem_info);
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucp_datatype_iter_init_contig(ucp_datatype_iter_t *dt_iter, void *buffer,
+                              size_t length,
+                              const ucp_memory_info_t *mem_info)
+{
+    dt_iter->dt_class           = UCP_DATATYPE_CONTIG;
+    dt_iter->mem_info           = *mem_info;
+    dt_iter->length             = length;
+    dt_iter->offset             = 0;
+    dt_iter->type.contig.buffer = buffer;
+    dt_iter->type.contig.memh   = NULL;
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_datatype_contig_iter_init(ucp_context_h context, void *buffer,
                               size_t length, ucp_datatype_iter_t *dt_iter,
@@ -200,13 +213,11 @@ static UCS_F_ALWAYS_INLINE void
 ucp_datatype_iter_init_null(ucp_datatype_iter_t *dt_iter, size_t length,
                             uint8_t *sg_count)
 {
-    dt_iter->dt_class               = UCP_DATATYPE_CONTIG;
-    dt_iter->length                 = length;
-    dt_iter->offset                 = 0;
-    dt_iter->type.contig.buffer     = NULL;
-    dt_iter->type.contig.memh       = NULL;
-    *sg_count                       = 1;
-    ucp_memory_info_set_host(&dt_iter->mem_info);
+    ucp_memory_info_t mem_info;
+
+    ucp_memory_info_set_host(&mem_info);
+    ucp_datatype_iter_init_contig(dt_iter, NULL, length, &mem_info);
+    *sg_count = 1;
 }
 
 /* Move the datatype iterator state from 'src' to 'dst', reset 'src', and
@@ -699,6 +710,13 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_datatype_iter_mem_reg(
     }
 }
 
+static UCS_F_ALWAYS_INLINE int
+ucp_datatype_iter_sgl_owns_memhs(const ucp_datatype_iter_t *dt_iter)
+{
+    return (dt_iter->type.sgl.memhs != NULL) &&
+           !ucp_memh_is_user_memh(dt_iter->type.sgl.memhs[0]);
+}
+
 /*
  * De-register memory and update iterator state
  */
@@ -712,7 +730,7 @@ ucp_datatype_iter_mem_dereg(ucp_datatype_iter_t *dt_iter, unsigned dt_mask)
             ucp_datatype_iter_iov_mem_dereg(dt_iter);
         }
     } else if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_SGL, dt_mask)) {
-        if (dt_iter->type.sgl.memhs != NULL) {
+        if (ucp_datatype_iter_sgl_owns_memhs(dt_iter)) {
             ucp_datatype_iter_sgl_mem_dereg(dt_iter);
         }
     }

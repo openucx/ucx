@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2020. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -121,8 +121,15 @@ public:
      */
     static bool is_async_supported(ucs_memory_type_t mem_type);
 
+    /* Allocation mode. */
+    enum class alloc_mode {
+        DEFAULT, /* Default allocation mode, using cudaMalloc */
+        ASYNC    /* Asynchronous allocation mode, using cudaMallocAsync */
+    };
+
     mem_buffer(size_t size, ucs_memory_type_t mem_type);
     mem_buffer(size_t size, ucs_memory_type_t mem_type, uint64_t seed);
+    mem_buffer(size_t size, ucs_memory_type_t mem_type, alloc_mode mode);
     virtual ~mem_buffer();
 
     ucs_memory_type_t mem_type() const;
@@ -173,6 +180,29 @@ private:
     const ucs_memory_type_t m_mem_type;
     void * const            m_ptr;
     const size_t            m_size;
+    const bool              m_async;
+};
+
+
+class scoped_async_cuda_buffer {
+public:
+    explicit scoped_async_cuda_buffer(size_t size) :
+        m_ptr(mem_buffer::allocate(size, UCS_MEMORY_TYPE_CUDA, true))
+    {
+    }
+
+    ~scoped_async_cuda_buffer()
+    {
+        mem_buffer::release(m_ptr, UCS_MEMORY_TYPE_CUDA, true);
+    }
+
+    void *ptr() const
+    {
+        return m_ptr;
+    }
+
+private:
+    void *m_ptr;
 };
 
 

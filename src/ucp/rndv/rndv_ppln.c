@@ -203,9 +203,8 @@ static void ucp_proto_rndv_ppln_query(const ucp_proto_query_params_t *params,
     attr->lane_map |= UCS_BIT(rpriv->ack.lane);
 }
 
-static void
+static ucp_request_t *
 ucp_proto_rndv_ppln_frag_complete(ucp_request_t *freq, int send_ack, int abort,
-                                  ucp_proto_complete_cb_t complete_func,
                                   const char *title)
 {
     ucp_request_t *req = ucp_request_get_super(freq);
@@ -217,7 +216,7 @@ ucp_proto_rndv_ppln_frag_complete(ucp_request_t *freq, int send_ack, int abort,
     /* In case of abort we don't destroy super request until all fragments are
      * completed */
     if (!ucp_proto_rndv_frag_complete(req, freq, title)) {
-        return;
+        return NULL;
     }
 
     if (req->send.rndv.rkey != NULL) {
@@ -229,24 +228,33 @@ ucp_proto_rndv_ppln_frag_complete(ucp_request_t *freq, int send_ack, int abort,
     if (!abort && (req->send.rndv.ppln.ack_data_size > 0)) {
         ucp_proto_request_set_stage(req, UCP_PROTO_RNDV_PPLN_STAGE_ACK);
         ucp_request_send(req);
+        return NULL;
     } else {
-        complete_func(req);
+        return req;
     }
 }
 
 void ucp_proto_rndv_ppln_send_frag_complete(ucp_request_t *freq, int send_ack)
 {
-    ucp_proto_rndv_ppln_frag_complete(freq, send_ack, 0,
-                                      ucp_proto_request_complete_success,
-                                      "ppln_send");
+    ucp_request_t *req;
+
+    req = ucp_proto_rndv_ppln_frag_complete(freq, send_ack, 0, "ppln_send");
+    if (req != NULL) {
+        ucp_request_rndv_flush_complete(req);
+        ucp_proto_request_complete_success(req);
+    }
 }
 
 void ucp_proto_rndv_ppln_recv_frag_complete(ucp_request_t *freq, int send_ack,
                                             int abort)
 {
-    ucp_proto_rndv_ppln_frag_complete(freq, send_ack, abort,
-                                      ucp_proto_rndv_recv_complete,
-                                      "ppln_recv");
+    ucp_request_t *req;
+
+    req = ucp_proto_rndv_ppln_frag_complete(freq, send_ack, abort, "ppln_recv");
+    if (req != NULL) {
+        ucp_request_rndv_flush_complete(req);
+        ucp_proto_rndv_recv_complete(req);
+    }
 }
 
 static ucs_status_t ucp_proto_rndv_ppln_progress(uct_pending_req_t *uct_req)
@@ -336,7 +344,7 @@ ucp_proto_rndv_send_ppln_atp_progress(uct_pending_req_t *uct_req)
 
     return ucp_proto_rndv_ack_progress(req, &rpriv->ack, UCP_AM_ID_RNDV_ATP,
                                        ucp_proto_rndv_ppln_pack_ack,
-                                       ucp_proto_request_zcopy_complete_success);
+                                       ucp_proto_rndv_request_zcopy_complete_success);
 }
 
 ucp_proto_t ucp_rndv_send_ppln_proto = {
@@ -369,6 +377,11 @@ ucp_proto_rndv_recv_ppln_ats_progress(uct_pending_req_t *uct_req)
 {
     ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);
     const ucp_proto_rndv_ppln_priv_t *rpriv;
+
+    if (req->flags & UCP_REQUEST_FLAG_RNDV_GET_REQ) {
+        /* RMA GET/RNDV has no peer RTS request to acknowledge. */
+        return ucp_proto_rndv_recv_complete(req);
+    }
 
     rpriv = req->send.proto_config->priv;
     return ucp_proto_rndv_ack_progress(req, &rpriv->ack, UCP_AM_ID_RNDV_ATS,

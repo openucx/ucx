@@ -10,7 +10,9 @@
 
 #include "proto_rndv.inl"
 #include "rndv_mtype.inl"
+
 #include <ucp/proto/proto_debug.h>
+#include <ucp/rma/rma_rndv.h>
 
 
 #define UCP_PROTO_RNDV_GET_DESC "read from remote"
@@ -88,12 +90,20 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_get_common_send(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
         const uct_iov_t *iov, size_t offset, uct_completion_t *comp)
 {
-    uct_rkey_t tl_rkey      = ucp_rkey_get_tl_rkey(req->send.rndv.rkey,
-                                                   lpriv->super.rkey_index);
-    uint64_t remote_address = req->send.rndv.remote_address + offset;
+    ucp_ep_h ep              = req->send.ep;
+    uct_ep_h uct_ep          = ucp_ep_get_lane(ep, lpriv->super.lane);
+    uct_rkey_t tl_rkey       = ucp_rkey_get_tl_rkey(req->send.rndv.rkey,
+                                                    lpriv->super.rkey_index);
+    uint64_t remote_address  = req->send.rndv.remote_address + offset;
+    ucp_request_t *recv_req;
+    ucs_status_t status;
 
-    return uct_ep_get_zcopy(ucp_ep_get_lane(req->send.ep, lpriv->super.lane),
-                            iov, 1, remote_address, tl_rkey, comp);
+    recv_req = ucp_rma_rndv_flush_open(req);
+    status   = uct_ep_get_zcopy(uct_ep, iov, 1, remote_address, tl_rkey,
+                                comp);
+    ucp_rma_rndv_flush_close(recv_req, ep, status);
+
+    return status;
 }
 
 static void
@@ -119,7 +129,8 @@ ucp_proto_rndv_get_zcopy_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_memory_info_t reg_mem_info = {
         .type    = init_params->select_param->mem_type,
-        .sys_dev = init_params->select_param->sys_dev
+        .sys_dev = init_params->select_param->sys_dev,
+        .flags   = init_params->select_param->op.mem_flags
     };
 
     ucp_proto_rndv_get_common_probe(

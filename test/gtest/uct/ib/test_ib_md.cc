@@ -1,10 +1,11 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2016. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) Advanced Micro Devices, Inc. 2016 - 2017. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
 #include <uct/api/uct.h>
+#include <uct/api/v2/uct_v2.h>
 #include <ucs/time/time.h>
 #include <uct/ib/base/ib_md.h>
 #ifdef HAVE_MLX5_DV
@@ -12,6 +13,7 @@
 #endif
 
 #include <common/test.h>
+#include <common/mem_buffer.h>
 #include <uct/test_md.h>
 
 class test_ib_md : public test_md
@@ -49,6 +51,51 @@ private:
     void check_mlx5_mr(uct_ib_mem_t *ib_memh, bool is_expected_to_have_atomic,
                        bool is_expected_to_have_auxiliary_key);
 };
+
+TEST(test_ib_md_relaxed_order_policy, auto_mem_types)
+{
+    uint64_t all_mem_types  = UCS_MASK(UCS_MEMORY_TYPE_LAST);
+    uint64_t cuda_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
+                              UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
+
+    EXPECT_EQ(all_mem_types,
+              uct_ib_md_relaxed_order_auto_mem_types(UCS_CPU_VENDOR_AMD,
+                                                     UCS_CPU_MODEL_AMD_ROME));
+    EXPECT_EQ(cuda_mem_types,
+              uct_ib_md_relaxed_order_auto_mem_types(
+                      UCS_CPU_VENDOR_INTEL,
+                      UCS_CPU_MODEL_INTEL_EMERALD_RAPIDS));
+    EXPECT_EQ(0ul,
+              uct_ib_md_relaxed_order_auto_mem_types(
+                      UCS_CPU_VENDOR_INTEL, UCS_CPU_MODEL_INTEL_ICELAKE));
+}
+
+TEST(test_ib_md_relaxed_order_policy, memh_mem_type)
+{
+    uct_md_mem_reg_params_t params = {};
+    uct_ib_md_t md                 = {};
+
+    md.relaxed_order_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
+
+    EXPECT_FALSE(uct_ib_memh_is_relaxed_order(&md, NULL));
+    EXPECT_FALSE(uct_ib_memh_is_relaxed_order(&md, &params));
+
+    params.field_mask = UCT_MD_MEM_REG_FIELD_MEM_TYPE;
+    params.mem_type   = UCS_MEMORY_TYPE_CUDA;
+    EXPECT_TRUE(uct_ib_memh_is_relaxed_order(&md, &params));
+
+    params.mem_type = UCS_MEMORY_TYPE_HOST;
+    EXPECT_FALSE(uct_ib_memh_is_relaxed_order(&md, &params));
+
+    params.mem_type = UCS_MEMORY_TYPE_CUDA;
+    EXPECT_TRUE(uct_ib_memh_is_relaxed_order(&md, &params));
+
+    params.mem_type = UCS_MEMORY_TYPE_RDMA;
+    EXPECT_FALSE(uct_ib_memh_is_relaxed_order(&md, &params));
+
+    params.mem_type = UCS_MEMORY_TYPE_HOST;
+    EXPECT_FALSE(uct_ib_memh_is_relaxed_order(&md, &params));
+}
 
 void test_ib_md::init() {
     test_md::init();
@@ -141,15 +188,18 @@ void test_ib_md::ib_md_umr_check(void *rkey_buffer, bool amo_access,
         EXPECT_FALSE(ib_memh->flags & UCT_IB_MEM_ACCESS_REMOTE_ATOMIC);
     }
 
-    check_mlx5_mr(ib_memh, false, ib_md().relaxed_order);
+    check_mlx5_mr(ib_memh, false,
+                  uct_ib_md_is_relaxed_order(&ib_md()));
 
     status = uct_md_mkey_pack(md(), memh, rkey_buffer);
     EXPECT_UCS_OK(status);
 
     status = uct_md_mkey_pack(md(), memh, rkey_buffer);
     EXPECT_UCS_OK(status);
-    check_mlx5_mr(ib_memh, (amo_access && has_ksm()) || ib_md().relaxed_order,
-                  ib_md().relaxed_order);
+    check_mlx5_mr(ib_memh,
+                  (amo_access && has_ksm()) ||
+                          uct_ib_md_is_relaxed_order(&ib_md()),
+                  uct_ib_md_is_relaxed_order(&ib_md()));
 
     status = uct_md_mem_dereg(md(), memh);
     EXPECT_UCS_OK(status);
@@ -331,6 +381,62 @@ UCS_TEST_P(test_ib_md, smkey_reg_atomic_mt, "IB_REG_MT_THRESH=1k",
            "IB_REG_MT_CHUNK=1k")
 {
     test_smkey_reg_atomic();
+}
+
+UCS_TEST_P(test_ib_md, cuda_async_mem_reg_fails)
+{
+    constexpr size_t size              = 8192;
+    uct_md_mem_attr_v2_t mem_attr      = {};
+    uct_md_mem_reg_params_t reg_params = {};
+    std::vector<test_md_param> cuda_mds;
+    ucs::handle<uct_md_config_t*> cuda_md_config;
+    ucs::handle<uct_md_h> cuda_md;
+    uct_mem_h memh;
+    ucs_status_t status;
+
+    if (!mem_buffer::is_async_supported(UCS_MEMORY_TYPE_CUDA)) {
+        UCS_TEST_SKIP_R("CUDA async allocation is not supported");
+    }
+
+    if (md_attr().reg_nonblock_mem_types &
+        (UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
+         UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED))) {
+        UCS_TEST_SKIP_R("IB MD supports ODP registration for CUDA memory");
+    }
+
+    cuda_mds = enum_mds("cuda_cpy");
+    if (cuda_mds.empty()) {
+        UCS_TEST_SKIP_R("cuda_cpy MD is not available");
+    }
+
+    scoped_async_cuda_buffer buffer(size);
+
+    UCS_TEST_CREATE_HANDLE(uct_md_config_t*, cuda_md_config,
+                           (void (*)(uct_md_config_t*))uct_config_release,
+                           uct_md_config_read, cuda_mds[0].component, NULL,
+                           NULL);
+    UCS_TEST_CREATE_HANDLE(uct_md_h, cuda_md, uct_md_close, uct_md_open,
+                           cuda_mds[0].component, cuda_mds[0].md_name.c_str(),
+                           cuda_md_config);
+
+    mem_attr.field_mask = UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE |
+                          UCT_MD_MEM_ATTR_V2_FIELD_MEM_FLAGS;
+    ASSERT_UCS_OK(uct_md_mem_query_v2(cuda_md, buffer.ptr(), size, &mem_attr));
+    if (mem_attr.mem_type != UCS_MEMORY_TYPE_CUDA_MANAGED) {
+        UCS_TEST_SKIP_R("CUDA async memory is not classified as CUDA managed");
+    }
+
+    ASSERT_EQ(0, mem_attr.mem_flags & UCS_MEM_FLAG_REGISTRABLE);
+
+    reg_params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS;
+    reg_params.flags = UCT_MD_MEM_ACCESS_RMA | UCT_MD_MEM_FLAG_HIDE_ERRORS;
+
+    status = uct_md_mem_reg_v2(md(), buffer.ptr(), size, &reg_params, &memh);
+    if (status == UCS_OK) {
+        EXPECT_UCS_OK(uct_md_mem_dereg(md(), memh));
+    }
+
+    ASSERT_NE(UCS_OK, status);
 }
 
 UCS_TEST_P(test_ib_md, mt_fail, "IB_REG_MT_THRESH=128K", "IB_REG_MT_CHUNK=16K")
