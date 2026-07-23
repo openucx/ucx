@@ -102,6 +102,7 @@ static ucs_stats_class_t ucp_ep_stats_class = {
 static ucs_status_t ucp_ep_failed_op(uct_ep_h ep);
 static ssize_t ucp_ep_failed_bc_op(uct_ep_h ep);
 static void ucp_ep_failed_destroy(uct_ep_h ep);
+static void ucp_ep_recovery_arg_free(ucp_ep_h ep);
 static uct_iface_h ucp_failed_tl_iface;
 static ucs_init_once_t ucp_failed_tl_iface_once = UCS_INIT_ONCE_INITIALIZER;
 
@@ -551,8 +552,7 @@ void ucp_ep_destroy_base(ucp_ep_h ep)
     ucp_ep_release_id(ep);
     ucs_list_del(&ep->ext->ep_list);
     if (!ucp_ep_has_cm_lane(ep) && (ep->ext->recovery_arg != NULL)) {
-        ucs_free(ep->ext->recovery_arg);
-        ep->ext->recovery_arg = NULL;
+        ucp_ep_recovery_arg_free(ep);
     }
 
     ucs_vfs_obj_remove(ep);
@@ -2041,6 +2041,21 @@ static void ucp_ep_recovery_reset_probe(ucp_ep_recovery_probe_t *probe)
     probe->comp.status = UCS_OK;
 }
 
+static void ucp_ep_recovery_arg_free(ucp_ep_h ep)
+{
+    ucs_assert(ep->ext->recovery_arg != NULL);
+    ucp_ep_refcount_assert(ep, probe, ==, 0);
+    ucs_free(ep->ext->recovery_arg);
+    ep->ext->recovery_arg = NULL;
+}
+
+static void ucp_ep_recovery_probe_complete(ucp_ep_h ep, ucs_status_t status)
+{
+    if ((status == UCS_OK) && (ep->ext->recovery_arg != NULL)) {
+        ep->ext->recovery_arg->state = UCP_EP_RECOVERY_STATE_PROBE_OK;
+    }
+}
+
 static void ucp_ep_recovery_probe_comp(uct_completion_t *self)
 {
     ucp_ep_recovery_probe_t *probe = ucs_container_of(self,
@@ -2050,6 +2065,7 @@ static void ucp_ep_recovery_probe_comp(uct_completion_t *self)
 
     ucs_debug("ep %p: recovery probe lane %d done: %s", ep, probe->lane,
               ucs_status_string(self->status));
+    ucp_ep_recovery_probe_complete(ep, self->status);
     ucp_ep_refcount_remove(ep, probe); /* may destroy the EP */
 }
 
@@ -2073,6 +2089,7 @@ ucp_ep_recovery_arm_probe(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h aux_ep)
     if (status != UCS_INPROGRESS) {
         probe->comp.status = status;
         probe->comp.count  = 0;
+        ucp_ep_recovery_probe_complete(ep, status);
         ucp_ep_refcount_remove(ep, probe);
     }
 
@@ -2329,18 +2346,18 @@ void ucp_ep_recovery_on_reply_received(ucp_ep_h ep)
 {
     ucp_ep_recovery_arg_t *arg = ep->ext->recovery_arg;
 
-    if ((arg == NULL) ||
-        (arg->state != UCP_EP_RECOVERY_STATE_WAIT_REPLY)) {
+    if (arg == NULL) {
         return;
     }
 
-    arg->state = UCP_EP_RECOVERY_STATE_PROBING;
+    if (arg->state == UCP_EP_RECOVERY_STATE_WAIT_REPLY) {
+        arg->state = UCP_EP_RECOVERY_STATE_PROBING;
+    }
 }
 
 int ucp_ep_recovery_progress(ucp_ep_h ep)
 {
     ucp_worker_h worker = ep->worker;
-    int probe_retried   = 0;
     int ret             = 0;
     ucp_lane_map_t failed, recovered;
     ucp_lane_index_t lane;
@@ -2389,8 +2406,7 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
         /* All failed lanes recovered - drop the retry state so a later
          * round (failed == 0) does not trip the recovery_arg == NULL
          * assertion. */
-        ucs_free(ep->ext->recovery_arg);
-        ep->ext->recovery_arg = NULL;
+        ucp_ep_recovery_arg_free(ep);
         goto done;
     }
 
@@ -2405,7 +2421,8 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
         goto done;
     }
 
-    if (ep->ext->recovery_arg->state == UCP_EP_RECOVERY_STATE_PROBING) {
+    if ((ep->ext->recovery_arg->state == UCP_EP_RECOVERY_STATE_PROBING) ||
+        (ep->ext->recovery_arg->state == UCP_EP_RECOVERY_STATE_PROBE_OK)) {
         for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
             status = ucp_ep_recovery_probe_status(
                     &ep->ext->recovery_arg->probe[lane]);
@@ -2426,13 +2443,11 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
                 ret = 1;
                 goto done;
             }
-
-            probe_retried |= (status == UCS_OK);
         }
 
-        if (probe_retried) {
-            /* Re-enter address exchange on the next KA round after the
-             * transient probe-post failure has cleared. */
+        if (ep->ext->recovery_arg->state == UCP_EP_RECOVERY_STATE_PROBE_OK) {
+            /* Consume a successful probe without burning a retry. The next
+             * IDLE round re-enters address exchange so rebuild can connect. */
             ep->ext->recovery_arg->state = UCP_EP_RECOVERY_STATE_IDLE;
             ret                          = 1;
             goto done;
@@ -2470,9 +2485,8 @@ exhausted:
                     "failed lanes 0x%" PRIx64, ep, (uint64_t)failed);
         ucp_ep_discard_lanes(ep, failed, UCS_ERR_ENDPOINT_TIMEOUT,
                              ep->cfg_index);
-        ucs_free(ep->ext->recovery_arg);
-        ep->ext->recovery_arg = NULL;
-        ret                   = 1;
+        ucp_ep_recovery_arg_free(ep);
+        ret = 1;
     }
 
 done:
