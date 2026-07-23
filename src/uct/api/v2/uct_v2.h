@@ -100,7 +100,10 @@ enum uct_perf_attr_field {
     UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS   = UCS_BIT(11),
 
     /** Enable @ref uct_perf_attr_t::flags */
-    UCT_PERF_ATTR_FIELD_FLAGS              = UCS_BIT(12)
+    UCT_PERF_ATTR_FIELD_FLAGS              = UCS_BIT(12),
+
+    /** Enable @ref uct_perf_attr_t::num_paths */
+    UCT_PERF_ATTR_FIELD_NUM_PATHS          = UCS_BIT(13)
 };
 
 /**
@@ -111,7 +114,10 @@ enum uct_perf_attr_field {
  */
 typedef enum {
     /** TX operations can depend on unrelated RX operation completion */
-    UCT_PERF_ATTR_FLAGS_TX_RX_SHARED = UCS_BIT(0)
+    UCT_PERF_ATTR_FLAGS_TX_RX_SHARED = UCS_BIT(0),
+
+    /** Number of paths was set by explicit transport configuration */
+    UCT_PERF_ATTR_FLAGS_NUM_PATHS_FIXED = UCS_BIT(1)
 } uct_perf_attr_flags_t;
 
 /**
@@ -217,6 +223,14 @@ typedef struct {
      * Performance characteristics of the network interface.
      */
     uint64_t            flags;
+
+    /**
+     * Recommended number of interface paths for the requested operation. This
+     * value does not exceed @ref uct_iface_attr_t::dev_num_paths. An explicit
+     * transport path configuration may override the automatic recommendation.
+     * This field is set by the UCT layer.
+     */
+    unsigned            num_paths;
 } uct_perf_attr_t;
 
 
