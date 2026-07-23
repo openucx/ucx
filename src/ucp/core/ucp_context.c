@@ -483,8 +483,8 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "When using rendezvous put protocol, force using a flush operation to ensure\n"
    "remote data delivery before sending ATP message.\n"
    "If flush mode is not forced, and the underlying transport supports both active\n"
-   "messages and put operations, the protocol will do {put,fence,ATP} on the same\n"
-   "lane without waiting for remote completion.",
+   "messages and put operations, the protocol sends ATP on the same lanes. A fence\n"
+   "is used unless the transport guarantees that ATP is ordered after prior puts.",
    ucs_offsetof(ucp_context_config_t, rndv_put_force_flush), UCS_CONFIG_TYPE_BOOL},
 
   {"PROTO_EMULATION_ENABLE", "y",
