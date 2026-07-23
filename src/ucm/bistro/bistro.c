@@ -17,6 +17,7 @@
 #include <ucm/bistro/bistro.h>
 #include <ucm/bistro/bistro_int.h>
 #include <ucs/type/serialize.h>
+#include <ucs/sys/checker.h>
 #include <ucs/sys/ptr_arith.h>
 #include <ucs/time/time.h>
 #include <ucs/arch/atomic.h>
@@ -47,6 +48,12 @@ static ucs_status_t ucm_bistro_protect(void *addr, size_t len, int prot)
     }
 
     return UCS_OK;
+}
+
+static void ucm_bistro_clear_cache(void *addr, size_t len)
+{
+    ucs_clear_cache(addr, UCS_PTR_BYTE_OFFSET(addr, len));
+    VALGRIND_DISCARD_TRANSLATIONS(addr, len);
 }
 
 void ucm_bistro_modify_code(void *dst, const ucm_bistro_lock_t *bytes)
@@ -81,7 +88,7 @@ ucm_bistro_apply_patch_atomic(void *dst, const void *patch, size_t len)
 
     /* Lock the codepatch and wait for existing flows to complete */
     ucm_bistro_patch_lock(dst);
-    ucs_clear_cache(dst, UCS_PTR_BYTE_OFFSET(dst, len));
+    ucm_bistro_clear_cache(dst, len);
 
     deadline = ucm_get_time() + ucm_global_opts.bistro_grace_duration;
     while (ucm_get_time() < deadline) {
@@ -91,13 +98,13 @@ ucm_bistro_apply_patch_atomic(void *dst, const void *patch, size_t len)
     /* Copy the payload behind the lock */
     memcpy(UCS_PTR_BYTE_OFFSET(dst, skip), UCS_PTR_BYTE_OFFSET(patch, skip),
            len - skip);
-    ucs_clear_cache(dst, UCS_PTR_BYTE_OFFSET(dst, len));
+    ucm_bistro_clear_cache(dst, len);
 
     /* Unlock the codepath */
     ucm_bistro_modify_code(dst, patch);
 
     status = ucm_bistro_protect(dst, len, UCM_PROT_READ_EXEC);
-    ucs_clear_cache(dst, UCS_PTR_BYTE_OFFSET(dst, len));
+    ucm_bistro_clear_cache(dst, len);
 
     return status;
 }
@@ -115,7 +122,7 @@ ucs_status_t ucm_bistro_apply_patch(void *dst, void *patch, size_t len)
 
     status = ucm_bistro_protect(dst, len, UCM_PROT_READ_EXEC);
     if (!UCS_STATUS_IS_ERR(status)) {
-        ucs_clear_cache(dst, UCS_PTR_BYTE_OFFSET(dst, len));
+        ucm_bistro_clear_cache(dst, len);
     }
     return status;
 }

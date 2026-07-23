@@ -35,6 +35,7 @@
 #  define VALGRIND_CHECK_MEM_IS_DEFINED(p, n) ({(uintptr_t)0;})
 #  define VALGRIND_COUNT_ERRORS              0
 #  define VALGRIND_COUNT_LEAKS(a,b,c,d)      { a = b = c = d = 0; }
+#  define VALGRIND_DISCARD_TRANSLATIONS(a, n)
 #  define RUNNING_ON_VALGRIND                0
 #  define VALGRIND_PRINTF(...)
 #endif

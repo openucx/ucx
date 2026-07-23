@@ -1074,7 +1074,7 @@ UCS_TEST_F(malloc_hook_cplusplus, remap_override_multi_threads) {
 
 typedef int (munmap_f_t)(void *addr, size_t len);
 
-UCS_TEST_SKIP_COND_F(malloc_hook, bistro_patch, RUNNING_ON_VALGRIND) {
+UCS_TEST_F(malloc_hook, bistro_patch) {
     const size_t max_patch_size = 32;
     std::vector<uint8_t> patched(max_patch_size, 0);
     std::vector<uint8_t> origin(max_patch_size, 0);
