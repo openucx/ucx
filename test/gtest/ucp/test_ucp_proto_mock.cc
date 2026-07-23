@@ -13,6 +13,7 @@ extern "C" {
 #include <uct/base/uct_iface.h>
 #include <ucp/proto/proto_debug.h>
 #include <ucp/proto/proto_select.inl>
+#include <ucp/rndv/proto_rndv.h>
 #include <ucs/memory/numa.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/topo/base/topo.h>
@@ -22,6 +23,8 @@ extern "C" {
 #include <uct/ib/base/ib_md.h>
 #endif
 }
+
+#include <cstring>
 
 class mock_iface {
 public:
@@ -230,13 +233,37 @@ private:
 
     static ucs_status_t perf_mock(uct_iface_h iface, uct_perf_attr_t *perf_attr)
     {
-        uct_base_iface_t *base = ucs_derived_of(iface, uct_base_iface_t);
+        uct_base_iface_t *base        = ucs_derived_of(iface, uct_base_iface_t);
+        uct_perf_attr_t put_perf_attr = {};
         uct_iface_attr_t iface_attr;
         ucs_status_t status;
 
         UCS_MOCK_ORIG_FUNC(m_self->m_mock,
                            &base->internal_ops->iface_estimate_perf, iface,
                            perf_attr);
+
+        if (ucs_test_all_flags(perf_attr->field_mask,
+                               UCT_PERF_ATTR_FIELD_OPERATION |
+                               UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD) &&
+            (std::strcmp(m_self->m_tl->name, "rc_mlx5") == 0) &&
+            (perf_attr->operation == UCT_EP_OP_GET_ZCOPY)) {
+            put_perf_attr.field_mask = UCT_PERF_ATTR_FIELD_OPERATION |
+                                       UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD;
+            put_perf_attr.operation  = UCT_EP_OP_PUT_ZCOPY;
+            UCS_MOCK_ORIG_FUNC(
+                    m_self->m_mock,
+                    &base->internal_ops->iface_estimate_perf, iface,
+                    &put_perf_attr);
+            perf_attr->send_pre_overhead = put_perf_attr.send_pre_overhead;
+        }
+
+        if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_NUM_PATHS) {
+            perf_attr->num_paths = 1;
+        }
+
+        if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_FLAGS) {
+            perf_attr->flags &= ~UCT_PERF_ATTR_FLAGS_NUM_PATHS_FIXED;
+        }
 
         if (perf_attr->field_mask & (UCT_PERF_ATTR_FIELD_BANDWIDTH |
                                      UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH)) {
@@ -460,6 +487,39 @@ protected:
         }
 
         return proto_select_data();
+    }
+
+    static const ucp_proto_select_elem_t *
+    lookup_proto_select_elem(const entity &e, ucp_proto_select_t *proto_select,
+                             ucp_worker_cfg_index_t rkey_cfg_index,
+                             ucp_operation_id_t op_id)
+    {
+        ucp_proto_select_param_t select_param;
+        ucp_memory_info_t mem_info;
+
+        ucp_memory_info_set_host(&mem_info);
+        ucp_proto_select_param_init(&select_param, op_id, 0, 0,
+                                    UCP_DATATYPE_CONTIG, &mem_info, 1);
+        return ucp_proto_select_lookup_slow(
+                e.worker(), proto_select, 0, ep_config_index(e),
+                rkey_cfg_index, &select_param);
+    }
+
+    static unsigned
+    get_selected_path_count(const entity &e,
+                            const ucp_proto_select_elem_t *select_elem,
+                            size_t msg_length)
+    {
+        ucp_proto_query_attr_t attr = {};
+
+        EXPECT_NE(nullptr, select_elem);
+        if ((select_elem == nullptr) ||
+            !ucp_proto_select_elem_query(e.worker(), select_elem, msg_length,
+                                         &attr)) {
+            return 0;
+        }
+
+        return ucs_popcount(attr.lane_map);
     }
 
     static void dump_select_info(const entity &e,
@@ -868,6 +928,170 @@ UCS_TEST_P(test_ucp_proto_mock_rcx, rma_put_2_lanes,
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx, rcx, "rc_x")
+
+class test_ucp_proto_mock_rcx_op_paths : public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_rcx_op_paths()
+    {
+        mock_transport("rc_mlx5");
+    }
+
+    virtual void init() override
+    {
+        iface_attr_func_t iface_attr_func = [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short  = 208;
+            iface_attr.cap.put.max_short = 2048;
+            iface_attr.cap.get.max_zcopy = UCS_MBYTE;
+            iface_attr.bandwidth.shared  = 92e9;
+            iface_attr.latency.c         = 500e-9;
+            iface_attr.latency.m         = 1e-9;
+            iface_attr.dev_num_paths     = 4;
+        };
+        perf_attr_func_t perf_attr_func = [](uct_perf_attr_t &perf_attr) {
+            if (perf_attr.field_mask & UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH) {
+                perf_attr.path_bandwidth.shared = 0.4 * 92e9;
+            }
+
+            if (ucs_test_all_flags(perf_attr.field_mask,
+                                   UCT_PERF_ATTR_FIELD_OPERATION |
+                                   UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD) &&
+                (perf_attr.operation == UCT_EP_OP_GET_ZCOPY)) {
+                perf_attr.send_pre_overhead += 375e-9;
+            }
+
+            if (perf_attr.field_mask & UCT_PERF_ATTR_FIELD_NUM_PATHS) {
+                perf_attr.num_paths =
+                        uct_ep_op_is_get(perf_attr.operation) ? 4 : 1;
+            }
+        };
+        iface_attr_func_t fixed_paths_iface_attr_func =
+                [iface_attr_func](uct_iface_attr_t &iface_attr) {
+                    iface_attr_func(iface_attr);
+                    iface_attr.dev_num_paths = 2;
+                };
+        iface_attr_func_t single_path_iface_attr_func =
+                [iface_attr_func](uct_iface_attr_t &iface_attr) {
+                    iface_attr_func(iface_attr);
+                    iface_attr.dev_num_paths = 1;
+                };
+        perf_attr_func_t fixed_paths_perf_attr_func =
+                [](uct_perf_attr_t &perf_attr) {
+                    if (perf_attr.field_mask & UCT_PERF_ATTR_FIELD_NUM_PATHS) {
+                        perf_attr.num_paths =
+                                uct_ep_op_is_get(perf_attr.operation) ? 2 : 1;
+                    }
+
+                    if ((perf_attr.field_mask & UCT_PERF_ATTR_FIELD_FLAGS) &&
+                        uct_ep_op_is_get(perf_attr.operation)) {
+                        perf_attr.flags |=
+                                UCT_PERF_ATTR_FLAGS_NUM_PATHS_FIXED;
+                    }
+                };
+        add_mock_iface("mock_0:1", iface_attr_func, perf_attr_func);
+        add_mock_iface("mock_1:1", fixed_paths_iface_attr_func,
+                       fixed_paths_perf_attr_func);
+        add_mock_iface("mock_2:1", single_path_iface_attr_func);
+        test_ucp_proto_mock::init();
+    }
+
+protected:
+    unsigned get_rndv_path_count(size_t msg_length)
+    {
+        const ucp_proto_threshold_elem_t *thresh;
+        const ucp_proto_rndv_ctrl_priv_t *rpriv;
+        const ucp_proto_select_elem_t *select_elem;
+        ucp_ep_config_t *config;
+        ucp_proto_query_attr_t attr = {};
+
+        send_recv_am(UCS_MBYTE);
+
+        config = ucp_worker_ep_config(sender().worker(),
+                                      ep_config_index(sender()));
+        select_elem = lookup_proto_select_elem(
+                sender(), &config->proto_select, UCP_WORKER_CFG_INDEX_NULL,
+                UCP_OP_ID_AM_SEND);
+        EXPECT_NE(nullptr, select_elem);
+        if (select_elem == nullptr) {
+            return 0;
+        }
+
+        thresh = ucp_proto_thresholds_search_slow(select_elem->thresholds,
+                                                  msg_length);
+        EXPECT_STREQ("am/rndv", thresh->proto_config.proto->name);
+        if (std::strcmp("am/rndv", thresh->proto_config.proto->name) != 0) {
+            return 0;
+        }
+
+        rpriv = static_cast<const ucp_proto_rndv_ctrl_priv_t *>(
+                thresh->proto_config.priv);
+        EXPECT_STREQ("rndv/get/zcopy", rpriv->remote_proto_config.proto->name);
+        if (std::strcmp("rndv/get/zcopy",
+                        rpriv->remote_proto_config.proto->name) != 0) {
+            return 0;
+        }
+
+        ucp_proto_config_query(sender().worker(), &rpriv->remote_proto_config,
+                               msg_length, &attr);
+        return ucs_popcount(attr.lane_map);
+    }
+
+    unsigned get_rma_path_count(ucp_operation_id_t op_id, size_t msg_length)
+    {
+        const ucp_worker_cfg_index_t rkey_cfg_index =
+                send_recv_rma(UCS_MBYTE, op_id);
+
+        ucp_rkey_config_t *config = &ucs_array_elem(
+                &sender().worker()->rkey_config, rkey_cfg_index);
+        return get_selected_path_count(
+                sender(), lookup_proto_select_elem(
+                                  sender(), &config->proto_select,
+                                  rkey_cfg_index, op_id),
+                msg_length);
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_op_paths, get_auto_path_selection,
+           "NET_DEVICES=^mock_1:1,mock_2:1", "MAX_RMA_RAILS=auto",
+           "MAX_RNDV_RAILS=auto",
+           "RNDV_SCHEME=get_zcopy", "RNDV_THRESH=0", "ZCOPY_THRESH=0")
+{
+    EXPECT_EQ(1u, get_rma_path_count(UCP_OP_ID_GET, 32 * UCS_KBYTE));
+    EXPECT_EQ(2u, get_rma_path_count(UCP_OP_ID_GET, 64 * UCS_KBYTE));
+    EXPECT_EQ(2u, get_rma_path_count(UCP_OP_ID_GET, 96 * UCS_KBYTE));
+    EXPECT_EQ(3u, get_rma_path_count(UCP_OP_ID_GET, 128 * UCS_KBYTE));
+    EXPECT_EQ(4u, get_rma_path_count(UCP_OP_ID_GET, 256 * UCS_KBYTE));
+    EXPECT_EQ(4u, get_rndv_path_count(UCS_MBYTE));
+    EXPECT_EQ(1u, get_rma_path_count(UCP_OP_ID_PUT, UCS_MBYTE));
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_op_paths, get_fixed_ib_num_paths,
+           "NET_DEVICES=^mock_0:1,mock_2:1", "MAX_RMA_RAILS=auto",
+           "MAX_RNDV_RAILS=auto",
+           "RNDV_SCHEME=get_zcopy", "RNDV_THRESH=0", "ZCOPY_THRESH=0")
+{
+    EXPECT_EQ(2u, get_rma_path_count(UCP_OP_ID_GET, 64 * UCS_KBYTE));
+    EXPECT_EQ(2u, get_rndv_path_count(64 * UCS_KBYTE));
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_op_paths, get_explicit_ucp_path_caps,
+           "NET_DEVICES=^mock_1:1,mock_2:1", "MAX_RMA_RAILS=2",
+           "MAX_RNDV_LANES=2",
+           "RNDV_SCHEME=get_zcopy", "RNDV_THRESH=0", "ZCOPY_THRESH=0")
+{
+    EXPECT_EQ(2u, get_rma_path_count(UCP_OP_ID_GET, UCS_MBYTE));
+    EXPECT_EQ(2u, get_rndv_path_count(UCS_MBYTE));
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_op_paths, get_single_path_fallback,
+           "NET_DEVICES=^mock_0:1,mock_1:1", "MAX_RMA_RAILS=auto",
+           "MAX_RNDV_RAILS=auto", "RNDV_SCHEME=get_zcopy",
+           "RNDV_THRESH=0", "ZCOPY_THRESH=0")
+{
+    EXPECT_EQ(1u, get_rma_path_count(UCP_OP_ID_GET, UCS_MBYTE));
+    EXPECT_EQ(1u, get_rndv_path_count(UCS_MBYTE));
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_op_paths, rcx, "rc_x")
 
 class test_ucp_proto_mock_rcx2 : public test_ucp_proto_mock {
 public:

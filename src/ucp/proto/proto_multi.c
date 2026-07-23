@@ -95,7 +95,7 @@ static ucp_lane_index_t ucp_proto_multi_find_max_avail_bw_lane(
         const ucp_proto_init_params_t *params, const ucp_lane_index_t *lanes,
         const ucp_proto_common_tl_perf_t *lanes_perf,
         const ucp_proto_lane_selection_t *selection, ucp_lane_map_t index_map,
-        unsigned req_sys_dev_ord)
+        unsigned req_sys_dev_ord, int enforce_num_paths)
 {
     /* Initial value is 1Bps, so we don't consider lanes with lower available
      * bandwidth. */
@@ -106,6 +106,7 @@ static ucp_lane_index_t ucp_proto_multi_find_max_avail_bw_lane(
     ucp_lane_index_t i, index, selected_index, first_max_bw_lane;
     const ucp_proto_common_tl_perf_t *lane_perf;
     ucs_sys_device_t sys_dev, selected_sys_dev;
+    ucp_rsc_index_t dev_index;
     unsigned seed;
     double avail_bw;
     int cmp;
@@ -117,6 +118,12 @@ static ucp_lane_index_t ucp_proto_multi_find_max_avail_bw_lane(
     /* Pass 1: find max avail_bw and the set of lanes with that bandwidth. */
     ucs_for_each_bit(index, index_map) {
         lane_perf = &lanes_perf[lanes[index]];
+        dev_index = ucp_proto_common_get_dev_index(params, lanes[index]);
+        if (enforce_num_paths &&
+            (selection->dev_count[dev_index] >= lane_perf->num_paths)) {
+            continue;
+        }
+
         avail_bw = ucp_proto_multi_get_avail_bw(params, lanes[index], lane_perf,
                                                 selection);
         cmp      = ucs_fp_compare(avail_bw, max_avail_bw);
@@ -221,26 +228,23 @@ ucp_proto_multi_select_bw_lanes(const ucp_proto_init_params_t *params,
                                 ucp_lane_index_t max_lanes,
                                 const ucp_proto_common_tl_perf_t *lanes_perf,
                                 int fixed_first_lane,
+                                unsigned req_sys_dev_ord,
                                 ucp_proto_lane_selection_t *selection)
 {
-    ucs_sys_device_t req_sys_dev = params->select_param->sys_dev;
     ucp_lane_index_t i, lane_index;
     ucp_lane_map_t index_map;
-    unsigned req_sys_dev_ord;
 
     memset(selection, 0, sizeof(*selection));
 
     /* Select all available indexes */
     index_map = UCS_MASK(num_lanes);
 
-    /* The requesting device ordinal is constant across the greedy loop, so
-     * resolve it once instead of on every lane selection. */
-    req_sys_dev_ord = ucs_topo_sys_device_get_bdf_class_ordinal(req_sys_dev);
-
     ucs_trace("select bw lanes: proto %s req_sys_dev=%d (%s) "
               "bdf_class_ordinal=%u",
-              ucp_proto_id_field(params->proto_id, name), req_sys_dev,
-              ucs_topo_sys_device_get_name(req_sys_dev), req_sys_dev_ord);
+              ucp_proto_id_field(params->proto_id, name),
+              params->select_param->sys_dev,
+              ucs_topo_sys_device_get_name(params->select_param->sys_dev),
+              req_sys_dev_ord);
 
     if (fixed_first_lane) {
         ucp_proto_select_add_lane(selection, params, lanes[0]);
@@ -253,7 +257,8 @@ ucp_proto_multi_select_bw_lanes(const ucp_proto_init_params_t *params,
                                                             lanes_perf,
                                                             selection,
                                                             index_map,
-                                                            req_sys_dev_ord);
+                                                            req_sys_dev_ord,
+                                                            0);
         if (lane_index == UCP_NULL_LANE) {
             break;
         }
@@ -514,15 +519,85 @@ static void
 ucp_proto_multi_select_lanes(const ucp_proto_multi_init_params_t *params,
                              const ucp_lane_index_t *lanes,
                              ucp_lane_index_t num_lanes,
-                             const ucp_proto_common_tl_perf_t *lanes_perf,
+                             ucp_proto_common_tl_perf_t *lanes_perf,
                              int fixed_first_lane,
                              ucp_proto_lane_selection_t *selection)
 {
+    ucp_proto_common_tl_perf_t *lane_perf;
+    ucp_lane_index_t i, lane, lane_index, max_total_lanes;
+    ucp_rsc_index_t dev_index;
+    ucp_lane_map_t index_map;
+    unsigned req_sys_dev_ord;
+    int num_paths_fixed;
+    double path_ratio, total_ratio;
+
+    req_sys_dev_ord = ucs_topo_sys_device_get_bdf_class_ordinal(
+            params->super.super.select_param->sys_dev);
     ucs_log_indent(1);
 
-    ucp_proto_multi_select_bw_lanes(&params->super.super, lanes, num_lanes,
-                                    params->max_lanes, lanes_perf,
-                                    fixed_first_lane, selection);
+    max_total_lanes = params->select_uct_num_paths ?
+                      params->max_total_lanes : params->max_lanes;
+
+    ucp_proto_multi_select_bw_lanes(
+            &params->super.super, lanes, num_lanes, params->max_lanes,
+            lanes_perf, fixed_first_lane, req_sys_dev_ord, selection);
+
+    if (params->select_uct_num_paths) {
+        num_paths_fixed = 0;
+        for (i = 0; i < selection->num_lanes; ++i) {
+            num_paths_fixed |=
+                    lanes_perf[selection->lanes[i]].num_paths_fixed;
+        }
+
+        if (num_paths_fixed) {
+            max_total_lanes = UCP_PROTO_MAX_LANES;
+        }
+
+        index_map = 0;
+        for (i = 0; i < num_lanes; ++i) {
+            lane      = lanes[i];
+            dev_index = ucp_proto_common_get_dev_index(&params->super.super,
+                                                        lane);
+            if ((selection->dev_count[dev_index] > 0) &&
+                !(selection->lane_map & UCS_BIT(lane))) {
+                index_map |= UCS_BIT(i);
+            }
+        }
+
+        while ((selection->num_lanes < max_total_lanes) &&
+               (index_map != 0)) {
+            lane_index = ucp_proto_multi_find_max_avail_bw_lane(
+                    &params->super.super, lanes, lanes_perf, selection,
+                    index_map, req_sys_dev_ord, 1);
+            if (lane_index == UCP_NULL_LANE) {
+                break;
+            }
+
+            ucp_proto_select_add_lane(selection, &params->super.super,
+                                      lanes[lane_index]);
+            index_map &= ~UCS_BIT(lane_index);
+        }
+    }
+
+    for (i = 0; i < selection->num_lanes; ++i) {
+        lane      = selection->lanes[i];
+        lane_perf = &lanes_perf[lane];
+        dev_index = ucp_proto_common_get_dev_index(&params->super.super, lane);
+        if ((!lane_perf->num_paths_fixed && (lane_perf->num_paths == 1)) ||
+            (selection->dev_count[dev_index] > lane_perf->num_paths)) {
+            continue;
+        }
+
+        /* Preserve the calibrated first-path bandwidth and distribute the
+         * residual interface bandwidth among additional paths. */
+        path_ratio  = ucs_min(lane_perf->path_ratio, 1.0);
+        total_ratio = (lane_perf->num_paths == 1) ? path_ratio :
+                path_ratio + ((selection->dev_count[dev_index] - 1) *
+                              (1.0 - path_ratio) /
+                              (lane_perf->num_paths - 1));
+        lane_perf->bandwidth *= ucs_min(total_ratio, 1.0) /
+                                selection->dev_count[dev_index];
+    }
 
     ucs_assertv(ucs_ilog2(selection->lane_map) < UCP_MAX_LANES,
                 "lane_map exceeds max number of lanes: lane_map=0x%" PRIx64,
@@ -857,18 +932,41 @@ void ucp_proto_multi_probe(const ucp_proto_multi_init_params_t *params)
 {
     const char *proto_name = ucp_proto_id_field(params->super.super.proto_id,
                                                 name);
+    ucp_proto_multi_init_params_t init_params = *params;
+    ucp_lane_index_t max_total_lanes          = params->max_lanes;
+    int allow_short_baseline                  = 1;
     ucp_proto_multi_priv_t mpriv;
     ucp_proto_perf_t *perf;
     ucs_status_t status;
 
-    status = ucp_proto_multi_init(params, proto_name, &perf, &mpriv);
-    if (status != UCS_OK) {
-        return;
-    }
+    do {
+        init_params.max_total_lanes = max_total_lanes;
+        status = ucp_proto_multi_init(&init_params, proto_name, &perf, &mpriv);
+        if (status != UCS_OK) {
+            return;
+        }
 
-    ucp_proto_select_add_proto(&params->super.super, params->super.cfg_thresh,
-                               params->super.cfg_priority, perf, &mpriv,
-                               ucp_proto_multi_priv_size(&mpriv));
+        if (params->select_uct_num_paths &&
+            (mpriv.num_lanes < max_total_lanes)) {
+            if (!allow_short_baseline) {
+                ucp_proto_perf_destroy(perf);
+                return;
+            }
+
+            max_total_lanes = mpriv.num_lanes;
+        }
+
+        ucp_proto_select_add_proto(&params->super.super,
+                                   params->super.cfg_thresh,
+                                   params->super.cfg_priority, perf, &mpriv,
+                                   ucp_proto_multi_priv_size(&mpriv));
+        allow_short_baseline = 0;
+
+        if (!params->select_uct_num_paths ||
+            (mpriv.num_lanes > max_total_lanes)) {
+            return;
+        }
+    } while (++max_total_lanes <= UCP_PROTO_MAX_LANES);
 }
 
 static const ucp_ep_config_key_lane_t *
