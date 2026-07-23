@@ -23,7 +23,6 @@
 #include <arpa/inet.h> /* For htonl */
 
 #include "rc_mlx5.inl"
-#include "ib_mlx5_ext.h"
 
 
 ucs_status_t uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep, uct_ep_attr_t *ep_attr)
@@ -69,30 +68,44 @@ uct_rc_mlx5_base_ep_failover_init(uct_rc_mlx5_base_ep_t *ep,
     }
 
     if (!(attr.cap.flags & UCT_IFACE_FLAG_V2_QUERY_TOKEN)) {
-        return UCS_OK;
-    }
-
-    ep->tx.wq.token = ucs_calloc(ep->tx.wq.bb_max, sizeof(*ep->tx.wq.token),
-                                 "rc_mlx5_txwq_priv");
-    if (ep->tx.wq.token == NULL) {
-        return UCS_ERR_NO_MEMORY;
+        return UCS_ERR_UNSUPPORTED;
     }
 
     ep->super.ext_flags |= UCT_RC_EP_EXT_FLAG_FAILOVER_ENABLED;
     return UCS_OK;
 }
 
-void uct_rc_mlx5_ep_failover_arm(uct_ep_h tl_ep)
+ucs_status_t uct_rc_mlx5_ep_failover_arm(uct_ep_h tl_ep, uint16_t error_ci)
 {
     uct_rc_mlx5_base_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_base_ep_t);
     uct_ib_mlx5_txwq_t *txwq  = &ep->tx.wq;
-    uct_rc_txqp_t *txqp       = &ep->super.txqp;
+    uint16_t ft_ci, outstanding;
 
-    txwq->failover_ci    = txwq->sw_pi -
-                           (txwq->bb_max - uct_rc_txqp_available(txqp));
+    if (!(ep->super.ext_flags & UCT_RC_EP_EXT_FLAG_FAILOVER_ENABLED)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    if (ep->super.ext_flags & UCT_RC_EP_EXT_FLAG_FAILOVER_ARMED) {
+        return UCS_OK;
+    }
+
+    outstanding = txwq->bb_max - uct_rc_txqp_available(&ep->super.txqp);
+    ft_ci       = txwq->prev_sw_pi - outstanding;
+    ucs_assert(ft_ci == txwq->hw_ci);
+    if (!UCS_CIRCULAR_COMPARE16(error_ci, >, ft_ci) ||
+        !UCS_CIRCULAR_COMPARE16(error_ci, <, txwq->sw_pi)) {
+        ucs_error("error ci %u is outside WQE range (%u, %u)", error_ci, ft_ci,
+                  txwq->sw_pi);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    txwq->ft_ci          = ft_ci;
     ep->super.ext_flags |= UCT_RC_EP_EXT_FLAG_FAILOVER_ARMED;
-    ucs_debug("ep %p: armed failover WQE range [%u, %u), available %d", ep,
-               txwq->failover_ci, txwq->sw_pi, uct_rc_txqp_available(txqp));
+
+    ucs_debug("ep %p armed failover WQE range (%u, %u) error ci %u "
+               "posted index %u",
+               ep, txwq->ft_ci, txwq->sw_pi, error_ci, txwq->hw_wqe_pi);
+    return UCS_OK;
 }
 
 static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_base_ep_put_short_inline(
@@ -1265,10 +1278,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_base_ep_t, const uct_ep_params_t *params)
     }
 
     self->tx.wq.bb_max = ucs_min(self->tx.wq.bb_max, iface->tx.bb_max);
-    self->tx.wq.next_token = 0;
-    self->tx.wq.token      = NULL;
-
-    status = uct_rc_mlx5_base_ep_failover_init(self, params);
+    status             = uct_rc_mlx5_base_ep_failover_init(self, params);
     if (status != UCS_OK) {
         goto err_remove_qp;
     }
@@ -1292,7 +1302,7 @@ err_destroy_txwq_qp:
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_base_ep_t)
 {
-    ucs_free(self->tx.wq.token);
+    /* No op, cleanup context is implemented in derived class */
 }
 
 
