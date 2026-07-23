@@ -1460,6 +1460,40 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_twins_tag, use_single_net_device_2,
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_twins_tag, rcx, "rc_x")
 
+class test_ucp_proto_mock_rcx_twins_rndv_min :
+    public test_ucp_proto_mock_rcx_twins_tag {
+public:
+    virtual void init() override
+    {
+        auto iface_attr_func = [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short  = 208;
+            iface_attr.cap.get.min_zcopy = 65;
+            iface_attr.bandwidth.shared  = 28e9;
+            iface_attr.latency.c         = 500e-9;
+            iface_attr.latency.m         = 1e-9;
+        };
+
+        add_mock_iface("mock_0:1", iface_attr_func);
+        add_mock_iface("mock_1:1", iface_attr_func);
+        add_mock_iface("mock_2:1", iface_attr_func);
+        test_ucp_proto_mock::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_twins_rndv_min,
+           rndv_respects_lane_min_length,
+           "IB_NUM_PATHS?=1", "RNDV_THRESH=1", "RNDV_SCHEME=get_zcopy",
+           "MAX_RNDV_LANES=2")
+{
+    check_config(
+            {{0, 129, "eager short", "rc_mlx5/mock_0:1"},
+             {130, INF, "rendezvous zero-copy read from remote",
+              "50% on rc_mlx5/mock_0:1 and 50% on rc_mlx5/mock_1:1"}});
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_twins_rndv_min, rcx,
+                              "rc_x")
+
 class test_ucp_proto_mock_rcx_twins_put : public test_ucp_proto_mock_rcx_twins {
 protected:
     void check_config(const proto_select_data_vec_t &data_vec);
