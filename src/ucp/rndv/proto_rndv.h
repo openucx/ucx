@@ -123,8 +123,11 @@ enum {
     /* Flush all lanes to ensure remote delivery */
     UCP_PROTO_RNDV_PUT_STAGE_FLUSH,
 
-    /* Send ATP directly or after a flush */
+    /* Send ATP without fence (could be done after a flush) */
     UCP_PROTO_RNDV_PUT_STAGE_ATP,
+
+    /* Send ATP with fence (could be done if using send lanes for ATP) */
+    UCP_PROTO_RNDV_PUT_STAGE_FENCED_ATP,
 
     /* Memtype only: send the fragment to the remote side */
     UCP_PROTO_RNDV_PUT_MTYPE_STAGE_SEND

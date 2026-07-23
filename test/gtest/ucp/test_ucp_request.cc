@@ -741,9 +741,11 @@ protected:
                     UCP_PROTO_RNDV_PUT_STAGE_ATP);
         });
 
-        /*
-        * Restore the pending_add callbacks, as some transports need to be able
-        * to add endpoint flush requests to the pending queue.
+
+       /*
+        * Restore the pending_add callbacks, as some transport need to be able
+        * to add ep flush request to the pending queue. For instance RDNV put
+        * and fence scheme will block ep_flush on SRD transport.
         *
         * Purge must be done with test callbacks first.
         */

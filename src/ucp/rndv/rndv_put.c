@@ -183,6 +183,32 @@ ucp_proto_rndv_put_common_atp_progress(uct_pending_req_t *uct_req)
                                              ucp_proto_rndv_put_common_atp_send);
 }
 
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_rndv_put_common_fenced_atp_send(ucp_request_t *req,
+                                          ucp_lane_index_t lane)
+{
+    ucs_status_t status;
+
+    status = uct_ep_fence(ucp_ep_get_lane(req->send.ep, lane), 0);
+    if (ucs_unlikely(status != UCS_OK)) {
+        return status;
+    }
+
+    return ucp_proto_rndv_put_common_atp_send(req, lane);
+}
+
+static ucs_status_t
+ucp_proto_rndv_put_common_fenced_atp_progress(uct_pending_req_t *uct_req)
+{
+    ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);
+    const ucp_proto_rndv_put_priv_t *rpriv;
+
+    rpriv = req->send.proto_config->priv;
+    return ucp_proto_multi_lane_map_progress(
+            req, &req->send.rndv.put.atp_lane, rpriv->atp_map,
+            ucp_proto_rndv_put_common_fenced_atp_send);
+}
+
 static UCS_F_INLINE_OPTIMIZED ucs_status_t
 ucp_proto_rndv_put_common_data_sent(ucp_request_t *req)
 {
@@ -251,10 +277,10 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
     const uct_iface_attr_t *iface_attr;
     ucp_lane_index_t lane_idx, lane;
     ucp_proto_rndv_put_priv_t rpriv;
-    int send_atp, direct_atp;
+    int send_atp, use_atp_lanes;
     ucp_proto_perf_t *perf;
     ucs_status_t status;
-    unsigned atp_map;
+    unsigned atp_map, ordered_atp_map;
 
     if (!ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_SEND,
                                  support_ppln) ||
@@ -272,7 +298,8 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
     send_atp = !ucp_proto_rndv_init_params_is_ppln_frag(init_params);
 
     /* Check which lanes support sending ATP */
-    atp_map = 0;
+    atp_map         = 0;
+    ordered_atp_map = 0;
     for (lane_idx = 0; lane_idx < rpriv.bulk.mpriv.num_lanes; ++lane_idx) {
         lane       = rpriv.bulk.mpriv.lanes[lane_idx].super.lane;
         iface_attr = ucp_proto_common_get_iface_attr(init_params, lane);
@@ -281,13 +308,16 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
             ((iface_attr->cap.flags & UCT_IFACE_FLAG_AM_BCOPY) &&
              (iface_attr->cap.am.max_bcopy >= atp_size))) {
             atp_map |= UCS_BIT(lane);
+            if (iface_attr->cap.flags & UCT_IFACE_FLAG_PUT_AM_ORDER) {
+                ordered_atp_map |= UCS_BIT(lane);
+            }
         }
     }
 
-    /* Send ATP directly only if all data lanes support it and flush is not
-     * forced. Receive completion preserves PUT/ATP ordering on the same lane. */
-    direct_atp = send_atp && !context->config.ext.rndv_put_force_flush &&
-                 (rpriv.bulk.mpriv.lane_map == atp_map);
+    /* Use data lanes if all lanes support sending ATP and flush is not forced
+     */
+    use_atp_lanes = send_atp && !context->config.ext.rndv_put_force_flush &&
+                    (rpriv.bulk.mpriv.lane_map == atp_map);
 
     /* All lanes can send ATP - invalidate am_lane, to use mpriv->lanes.
      * Otherwise, would need to flush all lanes and send ATP on:
@@ -300,12 +330,15 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
      *   size is not an issue anymore.
      * - Control lane if none of the lanes support sending ATP
      */
-    if (direct_atp) {
-        /* Send ATP on all data lanes */
+    if (use_atp_lanes) {
+        /* Send ATP on all lanes, using a fence if ordering is not guaranteed */
         rpriv.bulk.super.lane = UCP_NULL_LANE;
         rpriv.put_comp_cb     = comp_cb;
         rpriv.atp_comp_cb     = NULL;
-        rpriv.stage_after_put = UCP_PROTO_RNDV_PUT_STAGE_ATP;
+        rpriv.stage_after_put =
+                (rpriv.bulk.mpriv.lane_map == ordered_atp_map) ?
+                UCP_PROTO_RNDV_PUT_STAGE_ATP :
+                UCP_PROTO_RNDV_PUT_STAGE_FENCED_ATP;
         rpriv.flush_map       = 0;
         rpriv.atp_map         = rpriv.bulk.mpriv.lane_map;
     } else {
@@ -355,11 +388,16 @@ ucp_proto_rndv_put_common_query(const ucp_proto_query_params_t *params,
 
     ucp_proto_rndv_bulk_query(&bulk_query_params, attr);
 
-    if ((rpriv->atp_map != 0) && (rpriv->flush_map != 0)) {
+    if (rpriv->atp_map == 0) {
+        return UCP_PROTO_RNDV_PUT_DESC;
+    } else if (rpriv->flush_map != 0) {
         return "flushed " UCP_PROTO_RNDV_PUT_DESC;
+    } else if (rpriv->stage_after_put ==
+               UCP_PROTO_RNDV_PUT_STAGE_FENCED_ATP) {
+        return "fenced " UCP_PROTO_RNDV_PUT_DESC;
+    } else {
+        return UCP_PROTO_RNDV_PUT_DESC;
     }
-
-    return UCP_PROTO_RNDV_PUT_DESC;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_put_zcopy_send_func(
@@ -455,6 +493,7 @@ ucp_proto_t ucp_rndv_put_zcopy_proto = {
         [UCP_PROTO_RNDV_PUT_ZCOPY_STAGE_SEND] = ucp_proto_rndv_put_zcopy_send_progress,
         [UCP_PROTO_RNDV_PUT_STAGE_FLUSH]      = ucp_proto_rndv_put_common_flush_progress,
         [UCP_PROTO_RNDV_PUT_STAGE_ATP]        = ucp_proto_rndv_put_common_atp_progress,
+        [UCP_PROTO_RNDV_PUT_STAGE_FENCED_ATP] = ucp_proto_rndv_put_common_fenced_atp_progress,
     },
     .abort    = ucp_proto_request_zcopy_abort,
     .reset    = ucp_proto_rndv_put_zcopy_reset
@@ -642,6 +681,7 @@ ucp_proto_t ucp_rndv_put_mtype_proto = {
         [UCP_PROTO_RNDV_PUT_MTYPE_STAGE_SEND] = ucp_proto_rndv_put_mtype_send_progress,
         [UCP_PROTO_RNDV_PUT_STAGE_FLUSH]      = ucp_proto_rndv_put_common_flush_progress,
         [UCP_PROTO_RNDV_PUT_STAGE_ATP]        = ucp_proto_rndv_put_common_atp_progress,
+        [UCP_PROTO_RNDV_PUT_STAGE_FENCED_ATP] = ucp_proto_rndv_put_common_fenced_atp_progress,
     },
     .abort    = ucp_proto_rndv_stub_abort,
     .reset    = (ucp_request_reset_func_t)ucp_proto_reset_fatal_not_implemented

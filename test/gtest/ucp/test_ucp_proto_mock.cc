@@ -1202,7 +1202,7 @@ UCS_TEST_P(test_ucp_proto_mock_tcp, am_send_1_lane)
         {0,      0,      "short",                                       "tcp/mock"},
         {1,      65528,  "zero-copy",                                   "tcp/mock"},
         {65529,  367108, "multi-frag zero-copy",                        "tcp/mock"},
-        {367109, INF,    "rendezvous zero-copy write to remote", "tcp/mock"},
+        {367109, INF,    "rendezvous zero-copy fenced write to remote", "tcp/mock"},
     }, key);
 }
 
