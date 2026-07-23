@@ -38,6 +38,8 @@
  */
 #define UCT_IB_NDR_READ_PATH_BANDWIDTH 38e9
 #define UCT_IB_XDR_READ_PATH_BANDWIDTH 35e9
+/* XDR RDMA READ posting overhead per path. */
+#define UCT_IB_XDR_READ_PATH_OVERHEAD  375e-9
 
 /**
  * Minimal NDR single path ratio.
@@ -1400,7 +1402,10 @@ static unsigned uct_ib_iface_roce_lag_level(uct_ib_iface_t *iface)
 static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
                                        const uct_ib_iface_config_t *config)
 {
-    if (config->num_paths == UCS_ULUNITS_AUTO) {
+    uct_ib_device_t *dev = uct_ib_iface_device(iface);
+
+    iface->num_paths_is_auto = config->num_paths == UCS_ULUNITS_AUTO;
+    if (iface->num_paths_is_auto) {
         if (uct_ib_iface_is_roce(iface)) {
             /* RoCE - number of paths is RoCE LAG level */
             iface->num_paths = uct_ib_iface_roce_lag_level(iface);
@@ -1410,12 +1415,22 @@ static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
             iface->num_paths = iface->path_bits_count;
         }
 
+        if (uct_ib_iface_port_is_xdr(iface) &&
+            (dev->xdr_read_num_paths > 0)) {
+            iface->get_num_paths = dev->xdr_read_num_paths;
+            iface->num_paths     = ucs_max(iface->num_paths,
+                                           iface->get_num_paths);
+        } else {
+            iface->get_num_paths = 1;
+        }
+
         if ((iface->num_paths == 1) &&
             (uct_ib_iface_port_active_speed(iface) >= UCT_IB_SPEED_NDR)) {
             iface->num_paths = 2;
         }
     } else {
-        iface->num_paths = config->num_paths;
+        iface->num_paths     = config->num_paths;
+        iface->get_num_paths = config->num_paths;
     }
 }
 
@@ -2140,6 +2155,13 @@ uct_ib_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
         if (uct_ep_op_is_bcopy(op)) {
             perf_attr->send_pre_overhead += send_overhead->bcopy;
         }
+
+        if ((op == UCT_EP_OP_GET_ZCOPY) &&
+            uct_ib_iface_port_is_xdr(ib_iface) &&
+            (uct_ib_iface_device(ib_iface)->xdr_read_num_paths > 0)) {
+            perf_attr->send_pre_overhead +=
+                    UCT_IB_XDR_READ_PATH_OVERHEAD;
+        }
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_POST_OVERHEAD) {
@@ -2183,6 +2205,14 @@ uct_ib_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_FLAGS) {
         perf_attr->flags = 0;
+        if (!ib_iface->num_paths_is_auto && uct_ep_op_is_get(op)) {
+            perf_attr->flags |= UCT_PERF_ATTR_FLAGS_NUM_PATHS_FIXED;
+        }
+    }
+
+    if ((perf_attr->field_mask & UCT_PERF_ATTR_FIELD_NUM_PATHS) &&
+        uct_ep_op_is_get(op)) {
+        perf_attr->num_paths = ib_iface->get_num_paths;
     }
 
     return UCS_OK;

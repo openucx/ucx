@@ -170,6 +170,7 @@ typedef struct uct_ib_device_spec {
     uct_ib_pci_id_t             pci_id;
     unsigned                    flags;
     uint8_t                     priority;
+    uint8_t                     xdr_read_num_paths;
 } uct_ib_device_spec_t;
 
 
@@ -231,6 +232,7 @@ typedef struct uct_ib_device {
     ucs_sys_device_t            sys_dev;         /* System device id */
     double                      pci_bw;          /* Supported PCI bandwidth */
     unsigned                    flags;
+    uint8_t                     xdr_read_num_paths;
     uint8_t                     atomic_arg_sizes;
     uint8_t                     atomic_arg_sizes_be;
     uint8_t                     ext_atomic_arg_sizes;
