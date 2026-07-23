@@ -15,6 +15,24 @@
 #include <ucp/proto/proto_common.inl>
 #include <uct/api/v2/uct_v2.h>
 
+static int
+ucp_proto_rndv_ctrl_skip_inter_node_cuda_rkey_ptr_md(
+        const ucp_proto_rndv_ctrl_init_params_t *params,
+        const uct_md_attr_v2_t *md_attr)
+{
+    const ucp_ep_config_key_t *ep_config_key =
+            params->super.super.ep_config_key;
+
+    /*
+     * A CUDA IPC lane may be reachable at endpoint level on MNNVL-capable
+     * systems, but an individual CUDA allocation may not be usable inter-node.
+     */
+    return (params->super.reg_mem_info.type == UCS_MEMORY_TYPE_CUDA) &&
+           !ucs_test_all_flags(params->super.reg_mem_info.flags,
+                               UCS_MEM_FLAG_FABRIC) &&
+           ucp_ep_config_is_inter_node(ep_config_key) &&
+           (md_attr->flags & UCT_MD_FLAG_RKEY_PTR);
+}
 
 static void
 ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
@@ -85,6 +103,11 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
                           lane, context->tl_mds[md_index].rsc.md_name,
                           md_attr->required_mem_flags,
                           params->super.reg_mem_info.flags);
+            continue;
+        }
+
+        if (ucp_proto_rndv_ctrl_skip_inter_node_cuda_rkey_ptr_md(params,
+                                                                 md_attr)) {
             continue;
         }
 
@@ -189,27 +212,34 @@ static ucs_status_t ucp_proto_rndv_ctrl_select_remote_proto(
 {
     ucp_worker_h worker                 = params->super.super.worker;
     ucp_worker_cfg_index_t ep_cfg_index = params->super.super.ep_cfg_index;
+    const ucp_rkey_config_key_t *key    = params->super.super.rkey_config_key;
     const ucp_ep_config_t *ep_config    = &ucs_array_elem(&worker->ep_config,
                                                           ep_cfg_index);
     ucs_sys_dev_distance_t lanes_distance[UCP_MAX_LANES];
     ucp_rkey_config_key_t rkey_config_key;
     ucp_worker_cfg_index_t rkey_cfg_index;
     ucp_rkey_config_t *rkey_config;
+    ucp_md_map_t remote_md_map;
+    ucp_md_map_t unreachable_md_map;
     ucs_status_t status;
     ucp_lane_index_t lane;
+
+    remote_md_map      = ucp_proto_rndv_md_map_to_remote(params, md_map);
+    unreachable_md_map = (key == NULL) ? 0 : key->unreachable_md_map;
+    if (unreachable_md_map != 0) {
+        remote_md_map &= ~unreachable_md_map;
+    }
 
     /* Construct remote key for remote protocol lookup according to the local
      * buffer properties (since remote side is expected to access the local
      * buffer)
      */
-    rkey_config_key.md_map       = ucp_proto_rndv_md_map_to_remote(params,
-                                                                   md_map);
-    rkey_config_key.ep_cfg_index = ep_cfg_index;
-    rkey_config_key.sys_dev      = params->super.reg_mem_info.sys_dev;
-    rkey_config_key.mem_type     = params->super.reg_mem_info.type;
-    rkey_config_key.flags        = 0;
-
-    rkey_config_key.unreachable_md_map = 0;
+    rkey_config_key.md_map             = remote_md_map;
+    rkey_config_key.ep_cfg_index       = ep_cfg_index;
+    rkey_config_key.sys_dev            = params->super.reg_mem_info.sys_dev;
+    rkey_config_key.mem_type           = params->super.reg_mem_info.type;
+    rkey_config_key.flags              = 0;
+    rkey_config_key.unreachable_md_map = unreachable_md_map;
 
     for (lane = 0; lane < ep_config->key.num_lanes; ++lane) {
         ucp_proto_common_get_lane_distance(&params->super.super, lane,

@@ -851,24 +851,35 @@ uct_cuda_copy_md_detect_mem_flags(uct_cuda_copy_md_t *md,
                                   int is_async_managed, int is_host_located,
                                   const uct_cuda_copy_md_dmabuf_t *dmabuf)
 {
+    uint8_t mem_flags = 0;
     int close_dmabuf = 0;
     uct_cuda_copy_md_dmabuf_t local_dmabuf;
+#if HAVE_CUDA_FABRIC
+    CUpointer_attribute attr_type[2];
+    void *attr_data[2];
+    uint64_t allowed_handle_types;
+    int legacy_capable;
+    ucs_status_t status;
+#endif
 
     if (is_async_managed) {
-        return 0;
+        goto out_fabric;
     }
 
     /* Host-located CUDA VMM is registerable even if dmabuf export fails. */
     if (is_host_located) {
-        return UCS_MEM_FLAG_REGISTRABLE;
+        mem_flags |= UCS_MEM_FLAG_REGISTRABLE;
+        goto out_fabric;
     }
 
     if (mem_info->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
-        return UCS_MEM_FLAG_REGISTRABLE;
+        mem_flags |= UCS_MEM_FLAG_REGISTRABLE;
+        goto out_fabric;
     }
 
     if (!md->config.dmabuf_supported) {
-        return UCS_MEM_FLAG_REGISTRABLE;
+        mem_flags |= UCS_MEM_FLAG_REGISTRABLE;
+        goto out_fabric;
     }
 
     if (dmabuf == NULL) {
@@ -879,15 +890,33 @@ uct_cuda_copy_md_detect_mem_flags(uct_cuda_copy_md_t *md,
         close_dmabuf = 1;
     }
 
-    if (dmabuf->fd == UCT_DMABUF_FD_INVALID) {
-        return 0;
+    if (dmabuf->fd != UCT_DMABUF_FD_INVALID) {
+        mem_flags |= UCS_MEM_FLAG_REGISTRABLE;
     }
 
     if (close_dmabuf) {
         ucs_close_fd(&local_dmabuf.fd);
     }
 
-    return UCS_MEM_FLAG_REGISTRABLE;
+out_fabric:
+#if HAVE_CUDA_FABRIC
+    attr_type[0] = CU_POINTER_ATTRIBUTE_IS_LEGACY_CUDA_IPC_CAPABLE;
+    attr_data[0] = &legacy_capable;
+    attr_type[1] = CU_POINTER_ATTRIBUTE_ALLOWED_HANDLE_TYPES;
+    attr_data[1] = &allowed_handle_types;
+
+    status = UCT_CUDADRV_FUNC(cuPointerGetAttributes(
+                                      ucs_static_array_size(attr_data),
+                                      attr_type, attr_data,
+                                      (CUdeviceptr)mem_info->base_address),
+                              UCS_LOG_LEVEL_DEBUG);
+    if ((status == UCS_OK) && !legacy_capable &&
+        (allowed_handle_types & CU_MEM_HANDLE_TYPE_FABRIC)) {
+        mem_flags |= UCS_MEM_FLAG_FABRIC;
+    }
+#endif
+
+    return mem_flags;
 }
 
 ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
