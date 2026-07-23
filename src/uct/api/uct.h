@@ -429,6 +429,10 @@ typedef enum uct_atomic_op {
                                                        channel with remote peer is broken, even if there
                                                        are no outstanding send operations */
 
+        /* Operation ordering */
+#define UCT_IFACE_FLAG_PUT_AM_ORDER    UCS_BIT(47) /**< Active messages are delivered only after
+                                                       prior PUT operations on the same endpoint */
+
         /* Tag matching operations */
 #define UCT_IFACE_FLAG_TAG_EAGER_SHORT UCS_BIT(50) /**< Hardware tag matching short eager support */
 #define UCT_IFACE_FLAG_TAG_EAGER_BCOPY UCS_BIT(51) /**< Hardware tag matching bcopy eager support */
