@@ -104,7 +104,7 @@ ucs_status_t uct_rc_mlx5_ep_failover_arm(uct_ep_h tl_ep, uint16_t error_ci)
 
     ucs_debug("ep %p armed failover WQE range (%u, %u) error ci %u "
                "posted index %u",
-               ep, txwq->ft_ci, txwq->sw_pi, error_ci, txwq->hw_wqe_pi);
+               ep, txwq->ft_ci, txwq->sw_pi, error_ci, txwq->nnop_pi);
     return UCS_OK;
 }
 

@@ -494,7 +494,7 @@ uct_rc_mlx5_common_post_send(uct_rc_mlx5_iface_common_t *iface, int qp_type,
 
     res_count = uct_ib_mlx5_post_send(txwq, ctrl, wqe_size, 1);
     if ((qp_type == IBV_QPT_RC) && (opcode != MLX5_OPCODE_NOP)) {
-        txwq->hw_wqe_pi = (txwq->hw_wqe_pi + 1) & UCS_MASK(24);
+        txwq->nnop_pi = (txwq->nnop_pi + 1) & UCS_MASK(24);
     }
 
     if (fm_ce_se & MLX5_WQE_CTRL_CQ_UPDATE) {
