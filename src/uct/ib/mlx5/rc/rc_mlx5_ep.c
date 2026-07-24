@@ -196,6 +196,7 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
     uct_rkey_t rkey;
     void *curr;
     size_t UCS_V_UNUSED max_count;
+    int fence;
 
     max_count = uct_rc_mlx5_base_put_sgl_zcopy_max_count(iface);
     UCT_CHECK_PARAM(count <= max_count,
@@ -237,8 +238,8 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
     pi   = sn;
     curr = txwq->curr;
 
-    fence_flag = uct_rc_ep_fm(&iface->super, &txwq->fi, 1) ?
-                 iface->config.put_fence_flag : 0;
+    fence      = uct_rc_ep_fm(&iface->super, &txwq->fi, 1);
+    fence_flag = fence ? iface->config.put_fence_flag : 0;
 
     for (i = 0; i < count; i++) {
         fm_ce_se = ((i == 0) ? fence_flag : 0) |
@@ -249,7 +250,7 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
                                  txwq->super.qp_num, fm_ce_se, 0, wqe_size);
 
         addr = remote_addrs[i];
-        if (fence_flag != 0) {
+        if (fence) {
             rkey = uct_ib_resolve_atomic_rkey(
                     rkeys[i], ep->super.atomic_mr_offset, &addr);
         } else {
