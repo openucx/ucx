@@ -210,6 +210,12 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
         return UCS_ERR_UNSUPPORTED;
     }
 
+    /* Validate all lengths before resource checks and fence state */
+    for (i = 0; i < count; i++) {
+        UCT_CHECK_LENGTH(lengths[i], 0, UCT_IB_MAX_MESSAGE_SIZE,
+                         "put_sgl_zcopy");
+    }
+
     if (iface->super.tx.cq_available < (int)count) {
         UCS_STATS_UPDATE_COUNTER(iface->super.stats,
                                  UCT_RC_IFACE_STAT_NO_CQE, 1);
@@ -221,12 +227,6 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
     UCT_RC_CHECK_NUM_RDMA_READ_RET(&iface->super, UCS_ERR_NO_RESOURCE);
     UCT_RC_CHECK_TXQP_VALUE_RET(&iface->super, &ep->super,
                                 UCS_ERR_NO_RESOURCE, count - 1);
-
-    /* Validate all lengths before consuming the fence state */
-    for (i = 0; i < count; i++) {
-        UCT_CHECK_LENGTH(lengths[i], 0, UCT_IB_MAX_MESSAGE_SIZE,
-                         "put_sgl_zcopy");
-    }
 
     wqe_size = sizeof(*ctrl) + sizeof(*raddr) + sizeof(*dptr);
     sn       = txwq->sw_pi;
