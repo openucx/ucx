@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2021. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -587,7 +587,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
     tx_cq_size                  = uct_ib_cq_size(&self->super, init_attr,
                                                  UCT_IB_DIR_TX);
     /* Prevent title CQE overwriting */
-    self->tx.cq_available       = tx_cq_size - 2;
+    self->tx.cq_available       = uct_rc_iface_tx_cq_capacity(tx_cq_size);
     self->rx.srq.available      = 0;
     self->rx.srq.quota          = 0;
     self->config.tx_qp_len      = config->super.tx.queue_len;
