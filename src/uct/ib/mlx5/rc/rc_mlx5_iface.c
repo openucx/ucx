@@ -1051,7 +1051,7 @@ uct_rc_mlx5_iface_query_v2(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr)
 
     if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_TX_TOKEN) {
         ext_attr.field_mask |= UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_TX_TOKEN;
-        ext_attr.tx_token    = (void*)iface_attr->tx_token;
+        ext_attr.tx_token    = iface_attr->tx_token;
     }
 
     if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_RX_TOKEN) {
