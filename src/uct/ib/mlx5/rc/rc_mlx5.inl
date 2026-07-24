@@ -27,10 +27,8 @@
 static UCS_F_ALWAYS_INLINE size_t
 uct_rc_mlx5_base_put_sgl_zcopy_max_count(uct_rc_mlx5_iface_common_t *iface)
 {
-    size_t max_count = ucs_min((size_t)UCT_RC_MLX5_PUT_SGL_ZCOPY_MAX_COUNT,
-                               iface->super.config.tx_qp_len);
-
-    return ucs_min(max_count, iface->tx.bb_max);
+    /* Cap at half the QP so one SGL cannot monopolize the send queue. */
+    return ucs_min(iface->super.config.tx_qp_len / 2, iface->tx.bb_max);
 }
 
 
