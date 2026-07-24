@@ -1174,17 +1174,31 @@ static ucs_status_t uct_ib_mlx5_devx_umr_create_qp(uct_ib_mlx5_md_t *md)
 
 static ucs_status_t uct_ib_mlx5_devx_umr_modify_qp(uct_ib_mlx5_md_t *md)
 {
-    uct_ib_device_t *ibdev     = &md->super.dev;
-    struct ibv_qp_attr qp_attr = {};
-    uint8_t port_num;
+    uct_ib_device_t *ibdev                                     = &md->super.dev;
+    struct ibv_qp_attr qp_attr                                 = {};
+    char in_2rtr[UCT_IB_MLX5DV_ST_SZ_BYTES(init2rtr_qp_in)]   = {};
+    char out_2rtr[UCT_IB_MLX5DV_ST_SZ_BYTES(init2rtr_qp_out)] = {};
+    char in_2rts[UCT_IB_MLX5DV_ST_SZ_BYTES(rtr2rts_qp_in)]    = {};
+    char out_2rts[UCT_IB_MLX5DV_ST_SZ_BYTES(rtr2rts_qp_out)]  = {};
     struct ibv_port_attr *port_attr;
+    uct_ib_mlx5_qp_t umr_qp;
+    uint32_t opt_param_mask;
+    ucs_status_t status;
+    union ibv_gid gid;
+    uint8_t port_num;
+    void *qpc;
     int attr_mask;
     int ret;
 
     port_num  = ibdev->first_port;
     port_attr = uct_ib_device_port_attr(ibdev, port_num);
 
-    /* Modify QP to INIT state */
+    umr_qp.type     = UCT_IB_MLX5_OBJ_TYPE_VERBS;
+    umr_qp.qp_num   = md->umr.qp->qp_num;
+    umr_qp.verbs.qp = md->umr.qp;
+    umr_qp.verbs.rd = NULL;
+
+    /* RST -> INIT via ibv_modify_qp (LAG affinity not needed here) */
     attr_mask               = IBV_QP_STATE |
                               IBV_QP_PKEY_INDEX |
                               IBV_QP_PORT |
@@ -1201,57 +1215,117 @@ static ucs_status_t uct_ib_mlx5_devx_umr_modify_qp(uct_ib_mlx5_md_t *md)
         return UCS_ERR_IO_ERROR;
     }
 
-    /* Modify to RTR */
-    attr_mask                  = IBV_QP_STATE |
-                                 IBV_QP_DEST_QPN |
-                                 IBV_QP_PATH_MTU |
-                                 IBV_QP_RQ_PSN |
-                                 IBV_QP_MIN_RNR_TIMER |
-                                 IBV_QP_MAX_DEST_RD_ATOMIC |
-                                 IBV_QP_AV;
-    qp_attr.qp_state           = IBV_QPS_RTR;
-    qp_attr.dest_qp_num        = md->umr.qp->qp_num;
-    qp_attr.path_mtu           = IBV_MTU_512;
-    qp_attr.rq_psn             = 0;
-    qp_attr.min_rnr_timer      = 7;
-    qp_attr.max_dest_rd_atomic = 1;
-    qp_attr.ah_attr.port_num   = port_num;
-    qp_attr.ah_attr.dlid       = port_attr->lid;
-    qp_attr.ah_attr.is_global  = 1;
+    if (md->flags & UCT_IB_MLX5_MD_FLAG_LAG) {
+        /* INIT -> RTR via DevX to set LAG port affinity on bonded devices */
+        UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, opcode,
+                          UCT_IB_MLX5_CMD_OP_INIT2RTR_QP);
+        UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, qpn, umr_qp.qp_num);
 
-    if (UCS_OK != uct_ib_device_query_gid(ibdev, port_num,
-                                          UCT_IB_DEVICE_DEFAULT_GID_INDEX,
-                                          &qp_attr.ah_attr.grh.dgid,
-                                          UCS_LOG_LEVEL_ERROR)) {
-        return UCS_ERR_IO_ERROR;
-    }
+        opt_param_mask = 0;
+        qpc = UCT_IB_MLX5DV_ADDR_OF(init2rtr_qp_in, in_2rtr, qpc);
+        UCT_IB_MLX5DV_SET(qpc, qpc, mtu, IBV_MTU_512);
+        UCT_IB_MLX5DV_SET(qpc, qpc, log_msg_max, UCT_IB_MLX5_LOG_MAX_MSG_SIZE);
+        UCT_IB_MLX5DV_SET(qpc, qpc, remote_qpn, umr_qp.qp_num);
+        UCT_IB_MLX5DV_SET(qpc, qpc, min_rnr_nak, 7);
+        UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.vhca_port_num,
+                          port_num);
+        UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.grh, 1);
+        UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.rlid,
+                          port_attr->lid);
 
-    ret = ibv_modify_qp(md->umr.qp, &qp_attr, attr_mask);
-    if (ret) {
-        ucs_error("%s: ibv_modify_qp(UMR QP 0x%x) failed to modify to RTR: %m",
-                  uct_ib_device_name(ibdev), md->umr.qp->qp_num);
-        return UCS_ERR_IO_ERROR;
-    }
+        status = uct_ib_device_query_gid(ibdev, port_num,
+                                         UCT_IB_DEVICE_DEFAULT_GID_INDEX, &gid,
+                                         UCS_LOG_LEVEL_ERROR);
+        if (status != UCS_OK) {
+            return status;
+        }
 
-    /* Modify to RTS */
-    attr_mask             = IBV_QP_STATE |
-                            IBV_QP_SQ_PSN |
-                            IBV_QP_TIMEOUT |
-                            IBV_QP_RNR_RETRY |
-                            IBV_QP_RETRY_CNT |
-                            IBV_QP_MAX_QP_RD_ATOMIC;
-    qp_attr.qp_state      = IBV_QPS_RTS;
-    qp_attr.sq_psn        = 0;
-    qp_attr.timeout       = 7;
-    qp_attr.rnr_retry     = 7;
-    qp_attr.retry_cnt     = 7;
-    qp_attr.max_rd_atomic = 1;
+        memcpy(UCT_IB_MLX5DV_ADDR_OF(qpc, qpc,
+                                      primary_address_path.rgid_rip),
+               &gid,
+               UCT_IB_MLX5DV_FLD_SZ_BYTES(qpc,
+                                           primary_address_path.rgid_rip));
 
-    ret = ibv_modify_qp(md->umr.qp, &qp_attr, attr_mask);
-    if (ret) {
-        ucs_error("%s: ibv_modify_qp(UMR QP 0x%x) failed to modify to RTS: %m",
-                  uct_ib_device_name(ibdev), md->umr.qp->qp_num);
-        return UCS_ERR_IO_ERROR;
+        uct_ib_mlx5_devx_set_qpc_port_affinity(md, 0, qpc, &opt_param_mask);
+
+        UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, opt_param_mask,
+                          opt_param_mask);
+
+        status = uct_ib_mlx5_devx_modify_qp(&umr_qp, in_2rtr, sizeof(in_2rtr),
+                                            out_2rtr, sizeof(out_2rtr));
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        /* RTR -> RTS via DevX */
+        UCT_IB_MLX5DV_SET(rtr2rts_qp_in, in_2rts, opcode,
+                          UCT_IB_MLX5_CMD_OP_RTR2RTS_QP);
+        UCT_IB_MLX5DV_SET(rtr2rts_qp_in, in_2rts, qpn, umr_qp.qp_num);
+
+        qpc = UCT_IB_MLX5DV_ADDR_OF(rtr2rts_qp_in, in_2rts, qpc);
+        UCT_IB_MLX5DV_SET(qpc, qpc, retry_count, 7);
+        UCT_IB_MLX5DV_SET(qpc, qpc, rnr_retry, 7);
+        UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.ack_timeout, 7);
+
+        status = uct_ib_mlx5_devx_modify_qp(&umr_qp, in_2rts, sizeof(in_2rts),
+                                            out_2rts, sizeof(out_2rts));
+        if (status != UCS_OK) {
+            return status;
+        }
+    } else {
+        /* Non-LAG: use ibv_modify_qp for INIT -> RTR -> RTS */
+        attr_mask                  = IBV_QP_STATE |
+                                     IBV_QP_DEST_QPN |
+                                     IBV_QP_PATH_MTU |
+                                     IBV_QP_RQ_PSN |
+                                     IBV_QP_MIN_RNR_TIMER |
+                                     IBV_QP_MAX_DEST_RD_ATOMIC |
+                                     IBV_QP_AV;
+        qp_attr.qp_state           = IBV_QPS_RTR;
+        qp_attr.dest_qp_num        = md->umr.qp->qp_num;
+        qp_attr.path_mtu           = IBV_MTU_512;
+        qp_attr.rq_psn             = 0;
+        qp_attr.min_rnr_timer      = 7;
+        qp_attr.max_dest_rd_atomic = 1;
+        qp_attr.ah_attr.port_num   = port_num;
+        qp_attr.ah_attr.dlid       = port_attr->lid;
+        qp_attr.ah_attr.is_global  = 1;
+
+        if (UCS_OK != uct_ib_device_query_gid(ibdev, port_num,
+                                              UCT_IB_DEVICE_DEFAULT_GID_INDEX,
+                                              &qp_attr.ah_attr.grh.dgid,
+                                              UCS_LOG_LEVEL_ERROR)) {
+            return UCS_ERR_IO_ERROR;
+        }
+
+        ret = ibv_modify_qp(md->umr.qp, &qp_attr, attr_mask);
+        if (ret) {
+            ucs_error("%s: ibv_modify_qp(UMR QP 0x%x) to RTR failed: %m",
+                      uct_ib_device_name(ibdev), md->umr.qp->qp_num);
+            return UCS_ERR_IO_ERROR;
+        }
+
+        /* RTR -> RTS */
+        memset(&qp_attr, 0, sizeof(qp_attr));
+        attr_mask            = IBV_QP_STATE |
+                               IBV_QP_SQ_PSN |
+                               IBV_QP_TIMEOUT |
+                               IBV_QP_RETRY_CNT |
+                               IBV_QP_RNR_RETRY |
+                               IBV_QP_MAX_QP_RD_ATOMIC;
+        qp_attr.qp_state     = IBV_QPS_RTS;
+        qp_attr.sq_psn       = 0;
+        qp_attr.timeout       = 7;
+        qp_attr.retry_cnt     = 7;
+        qp_attr.rnr_retry     = 7;
+        qp_attr.max_rd_atomic = 1;
+
+        ret = ibv_modify_qp(md->umr.qp, &qp_attr, attr_mask);
+        if (ret) {
+            ucs_error("%s: ibv_modify_qp(UMR QP 0x%x) to RTS failed: %m",
+                      uct_ib_device_name(ibdev), md->umr.qp->qp_num);
+            return UCS_ERR_IO_ERROR;
+        }
     }
 
     ucs_trace("%s: initialized UMR QP 0x%x", uct_ib_device_name(ibdev),
