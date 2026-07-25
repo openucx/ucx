@@ -243,7 +243,11 @@ static void sock_rte_barrier(void *rte_group, void (*progress)(void *arg),
 {
 #if _OPENMP
 #  pragma omp barrier
-#  pragma omp master
+#  if _OPENMP >= 202011
+#    pragma omp masked
+#  else
+#    pragma omp master
+#  endif
 #endif
   {
     sock_rte_group_t *group = rte_group;
