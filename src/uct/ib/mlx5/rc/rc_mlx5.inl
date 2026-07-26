@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -32,8 +32,9 @@ uct_rc_mlx5_base_put_sgl_zcopy_max_count(uct_rc_mlx5_iface_common_t *iface)
     /* Cap at half the QP so one SGL cannot monopolize the send queue. */
     max_count = ucs_min(iface->super.config.tx_qp_len / 2, iface->tx.bb_max);
 
-    return ucs_min(max_count,
-                   uct_rc_iface_tx_cq_capacity(iface->super.config.tx_cq_len));
+    max_count = ucs_min(max_count,
+                        uct_rc_iface_tx_cq_capacity(iface->super.config.tx_cq_len));
+    return max_count;
 }
 
 
