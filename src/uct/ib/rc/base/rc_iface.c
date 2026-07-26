@@ -186,7 +186,6 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
                                   UCT_IFACE_FLAG_PUT_ZCOPY       |
                                   UCT_IFACE_FLAG_GET_BCOPY       |
                                   UCT_IFACE_FLAG_GET_ZCOPY       |
-                                  UCT_IFACE_FLAG_PUT_AM_ORDER    |
                                   UCT_IFACE_FLAG_PENDING         |
                                   UCT_IFACE_FLAG_CONNECT_TO_EP   |
                                   UCT_IFACE_FLAG_CB_SYNC         |
@@ -1133,4 +1132,3 @@ static void ucp_send_op_mpool_obj_str(ucs_mpool_t *mp, void *obj,
     ucs_string_buffer_appendf(strb, " name:%s", op->name);
 #endif
 }
-

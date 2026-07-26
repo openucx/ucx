@@ -455,6 +455,10 @@ uct_rc_mlx5_common_post_send(uct_rc_mlx5_iface_common_t *iface, int qp_type,
         ucs_assert(!(txwq->flags & UCT_IB_MLX5_TXWQ_FLAG_FAILED));
     }
 
+    if ((opcode == MLX5_OPCODE_SEND) || (opcode == MLX5_OPCODE_SEND_IMM)) {
+        uct_rc_ep_fm(&iface->super, &txwq->fi, 0);
+    }
+
     ctrl = txwq->curr;
 
     if (opcode == MLX5_OPCODE_SEND_IMM) {
