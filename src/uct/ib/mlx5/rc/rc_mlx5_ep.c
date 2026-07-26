@@ -203,13 +203,14 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
                     "put_sgl_zcopy count(%zu) should be limited by %zu", count,
                     max_count);
     ucs_assert(ep->super.flags & UCT_RC_EP_FLAG_CONNECTED);
-    ucs_assert(count > 0);
 
     /* TODO: add strided elements support */
     if (ucs_unlikely((counts != NULL) || (strides != NULL))) {
         ucs_error("put_sgl_zcopy does not support strided elements");
         return UCS_ERR_UNSUPPORTED;
     }
+
+    UCT_SKIP_ZERO_LENGTH(count);
 
     /* Validate all lengths before resource checks and fence state */
     for (i = 0; i < count; i++) {
