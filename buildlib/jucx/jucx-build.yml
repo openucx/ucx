@@ -91,9 +91,19 @@ jobs:
           echo "allow-loopback-pinentry" > $GNUPGHOME/gpg-agent.conf
           gpg-connect-agent reloadagent /bye || true
 
+          # JDK 1.8 cacerts predates ISRG Root X2, the trust anchor of the
+          # Sonatype Central TLS chain; import it into a local truststore copy
+          truststore=$(gpg_dir)/../truststore.jks
+          cp $JAVA_HOME/jre/lib/security/cacerts $truststore ||
+              cp $JAVA_HOME/lib/security/cacerts $truststore
+          chmod u+w $truststore
+          curl -sSf https://letsencrypt.org/certs/isrg-root-x2.pem -o isrg-root-x2.pem
+          keytool -importcert -noprompt -keystore $truststore \
+              -storepass changeit -alias isrg-root-x2 -file isrg-root-x2.pem
+
           MAVEN_VERSION=$(grep '^VERSION = ' Makefile | cut -d= -f2 | tr -d ' ')
           make -C bindings/java/src/main/native/ ${{ parameters.target }} \
-              ARGS="--settings $(temp_cfg)" \
+              ARGS="--settings $(temp_cfg) -Djavax.net.ssl.trustStore=$truststore" \
               JUCX_VERSION=${MAVEN_VERSION}${SUFFIX}
         displayName: Publish-Maven
         condition: eq(variables['Build.Reason'], 'IndividualCI')
