@@ -13,6 +13,9 @@ stages:
     jobs:
       - ${{ each slice in parameters.slices }}:
         - job: ucxx_tests_${{ slice.name }}
+          # UCXX results are informational: failures surface as warnings and
+          # never block the UCX PR.
+          continueOnError: true
           workspace:
             clean: all
           pool:

@@ -9,6 +9,11 @@
 #   RAPIDS_PY_VERSION, RAPIDS_BLD_OUTPUT_DIR.
 # wheel_ucxx phase also requires WHEEL_INPUT_DIR (libucxx wheel artifact dir)
 # Docs phase env: CPP_CHANNEL_DIR, PYTHON_CHANNEL_DIR, RAPIDS_DOCS_DIR
+#
+# All packages build against the UCX built from this checkout (the PR under
+# test) - see ucxx_ucx_pr.sh.
+
+set -o pipefail
 
 phase=${1:?phase required}
 : "${UCXX_DIR:?UCXX_DIR required}"
@@ -37,6 +42,10 @@ esac
 : "${RAPIDS_PY_VERSION:?RAPIDS_PY_VERSION required}"
 : "${RAPIDS_BLD_OUTPUT_DIR:?RAPIDS_BLD_OUTPUT_DIR required}"
 
+ucx_dir=$(cd "$(dirname "$0")/../.." && pwd)
+export ucx_dir UCX_PR_PREFIX=/tmp/ucx-pr
+source "$ucx_dir/buildlib/tools/ucxx_ucx_pr.sh"
+
 export RAPIDS_CUDA_VERSION RAPIDS_PY_VERSION
 mkdir -p "$RAPIDS_BLD_OUTPUT_DIR"
 
@@ -55,10 +64,17 @@ for tool in rapids-download-conda-from-github rapids-download-from-github; do
   printf '#!/bin/bash\necho "%s"\n' "$RAPIDS_BLD_OUTPUT_DIR" > "$HOME/.local/bin/$tool"
   chmod +x "$HOME/.local/bin/$tool"
 done
-# Docs phase: override shims to point at the staged conda channels.
+# Docs phase: build_docs.sh fetches both channels via rapids-download-from-github
+# with per-package artifact names - dispatch on the name to the staged channel.
 if [ "$phase" = "docs" ]; then
-  printf '#!/bin/bash\necho "%s"\n' "$CPP_CHANNEL_DIR"    > "$HOME/.local/bin/rapids-download-conda-from-github"
-  printf '#!/bin/bash\necho "%s"\n' "$PYTHON_CHANNEL_DIR" > "$HOME/.local/bin/rapids-download-from-github"
+  cat > "$HOME/.local/bin/rapids-download-from-github" <<EOF
+#!/bin/bash
+case "\$1" in
+  *cpp*) echo "$CPP_CHANNEL_DIR" ;;
+  *)     echo "$PYTHON_CHANNEL_DIR" ;;
+esac
+EOF
+  chmod +x "$HOME/.local/bin/rapids-download-from-github"
 fi
 
 # Point the wheel-download helpers at the staged libucxx wheelhouse so the
@@ -74,6 +90,9 @@ export PATH="$HOME/.local/bin:$PATH"
 
 cd "$UCXX_DIR"
 
+# Point every ucxx build at the PR's UCX instead of released ucx.
+use_pr_ucx
+
 # Wheel builds otherwise pick system gcc 8.5 (too old for libucxx's C++20);
 # point CC/CXX at gcc-toolset-14.
 if [[ "$phase" == wheel_* ]]; then
@@ -82,6 +101,15 @@ if [[ "$phase" == wheel_* ]]; then
     || { echo "ERROR: gcc-toolset-14 not found at $toolset (needed for libucxx C++20)" >&2; exit 1; }
   export CC="$toolset/gcc" CXX="$toolset/g++"
 fi
+
+# The PR's UCX: conda image builds it via a conda-forge toolchain env, the
+# wheel image with its system toolchain.
+case "$phase" in
+  conda_*|docs) build_ucx_pr_conda ;;
+  wheel_*)      build_ucx_pr ;;
+esac
+echo "== UCX under test =="
+"$UCX_PR_PREFIX/bin/ucx_info" -v | head -3
 
 case "$phase" in
   conda_cpp)              bash ci/build_cpp.sh ;;
@@ -96,6 +124,11 @@ case "$phase" in
     sed -i 's|RAPIDS_DOCS_DIR="$(mktemp -d)"|: "${RAPIDS_DOCS_DIR:=$(mktemp -d)}"|' ci/build_docs.sh
     grep -q 'RAPIDS_DOCS_DIR:=' ci/build_docs.sh \
       || { echo "ERROR: docs patch did not apply to ci/build_docs.sh" >&2; exit 1; }
+    # The docs env carries no ucx package; provide the PR's UCX libraries.
+    grep -q "ucx-pr" ci/build_docs.sh \
+      || sed -i 's#^conda activate docs$#conda activate docs\ncp -a /tmp/ucx-pr/lib/. "$CONDA_PREFIX/lib/"\ncp -a /tmp/ucx-pr/bin/. "$CONDA_PREFIX/bin/"\necho "UCX-PR overlaid into docs env"#' ci/build_docs.sh
+    grep -q "ucx-pr" ci/build_docs.sh \
+      || { echo "ERROR: UCX-PR overlay patch did not apply to ci/build_docs.sh" >&2; exit 1; }
     bash ci/build_docs.sh ;;
   *) echo "Unknown phase: $phase" >&2; exit 1 ;;
 esac
