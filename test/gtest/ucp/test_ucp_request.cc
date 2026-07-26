@@ -737,8 +737,10 @@ protected:
 
             ucp_request_t *req = (ucp_request_t*)ureq - 1;
             return (req->flags & UCP_REQUEST_FLAG_PROTO_SEND) &&
-                   (req->send.proto_stage ==
-                    UCP_PROTO_RNDV_PUT_STAGE_FENCED_ATP);
+                   ((req->send.proto_stage ==
+                     UCP_PROTO_RNDV_PUT_STAGE_ATP) ||
+                    (req->send.proto_stage ==
+                     UCP_PROTO_RNDV_PUT_STAGE_FENCED_ATP));
         });
 
 
@@ -775,5 +777,6 @@ UCS_TEST_P(test_proto_reset_atp, rndv_put, "RNDV_THRESH=0",
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_proto_reset_atp, ib, "ib")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_proto_reset_atp, srd, "srd")
 
 #endif
