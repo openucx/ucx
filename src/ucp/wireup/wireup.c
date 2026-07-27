@@ -996,7 +996,7 @@ ucp_wireup_augment_aux_tls(ucp_ep_h ep, ucp_lane_map_t lane_map,
             continue;
         }
 
-        for (aux_rsc = 0; aux_rsc < context->num_tls; ++aux_rsc) {
+        UCS_STATIC_BITMAP_FOR_EACH_BIT(aux_rsc, &context->tl_bitmap) {
             if (UCS_STATIC_BITMAP_GET(*tl_bitmap, aux_rsc)) {
                 continue;
             }

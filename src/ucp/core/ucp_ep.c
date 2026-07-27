@@ -1997,9 +1997,9 @@ ucp_ep_recovery_create_aux(ucp_ep_h ep, ucp_lane_index_t lane,
         return status;
     }
 
-    peer_ae                  = &remote_address->address_list[
-                                       select_info.addr_index];
-    wiface                   = ucp_worker_iface(worker, select_info.rsc_index);
+    peer_ae = &remote_address->address_list[select_info.addr_index];
+    wiface  = ucp_worker_iface(worker, select_info.rsc_index);
+
     uct_ep_params.field_mask        = UCT_EP_PARAM_FIELD_IFACE |
                                       UCT_EP_PARAM_FIELD_DEV_ADDR |
                                       UCT_EP_PARAM_FIELD_IFACE_ADDR |

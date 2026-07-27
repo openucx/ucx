@@ -364,8 +364,6 @@ static int ucp_address_pack_v1_extra_info(ucp_object_version_t addr_version,
            (pack_flags & UCP_ADDRESS_PACK_FLAG_RELEASE_VER_V1);
 }
 
-/* Failed stubs cannot produce ep addresses. Check UCT EP state because a
- * recovering lane keeps its FAILED bit while holding a packable wireup proxy. */
 static ucs_status_t
 ucp_address_gather_devices(ucp_worker_h worker, ucp_ep_h ep,
                            const ucp_ep_config_key_t *key,
@@ -407,6 +405,9 @@ ucp_address_gather_devices(ucp_worker_h worker, ucp_ep_h ep,
             for (lane = 0; lane < key->num_lanes; ++lane) {
                 if ((key->lanes[lane].rsc_index == rsc_index) &&
                     ucp_ep_config_connect_p2p(worker, key, rsc_index) &&
+                    /* Failed stubs cannot produce ep addresses.
+                     * Check UCT EP state because a recovering lane keeps its
+                     * FAILED bit while holding a packable wireup proxy. */
                     !((ep != NULL) && ucp_ep_is_lane_failed_stub(ep, lane))) {
                     dev->tl_addrs_size += !ucp_worker_is_unified_mode(worker);
                     dev->tl_addrs_size += iface_attr->ep_addr_len;
