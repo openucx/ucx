@@ -1004,7 +1004,7 @@ enum uct_ep_params_field {
 enum uct_ep_params_flags {
     /**
      * Preserve outstanding operations after endpoint failure for
-     * @ref uct_ep_outstanding_purge.
+     * @c uct_ep_outstanding_purge().
      */
     UCT_EP_PARAM_FLAG_FAILOVER = UCS_BIT(0)
 };
