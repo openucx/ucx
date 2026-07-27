@@ -25,6 +25,7 @@ static const uct_vfs_flag_info_t uct_iface_vfs_cap_infos[] = {
     {UCT_IFACE_FLAG_PUT_SHORT, "put_short"},
     {UCT_IFACE_FLAG_PUT_BCOPY, "put_bcopy"},
     {UCT_IFACE_FLAG_PUT_ZCOPY, "put_zcopy"},
+    {UCT_IFACE_FLAG_PUT_AM_ORDER, "put_am_order"},
     {UCT_IFACE_FLAG_GET_SHORT, "get_short"},
     {UCT_IFACE_FLAG_GET_BCOPY, "get_bcopy"},
     {UCT_IFACE_FLAG_GET_ZCOPY, "get_zcopy"},
