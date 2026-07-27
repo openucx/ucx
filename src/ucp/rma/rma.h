@@ -75,7 +75,6 @@ typedef struct {
 typedef struct {
     uct_completion_t comp;
     ucp_rkey_h       rkey;
-    uint64_t         remote_addr;
 } ucp_rma_op_t;
 
 

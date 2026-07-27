@@ -29,7 +29,6 @@
     _macro(ucp_put_am_bcopy_proto) \
     _macro(ucp_put_offload_short_proto) \
     _macro(ucp_put_offload_bcopy_proto) \
-    _macro(ucp_put_offload_bcopy_ft_proto) \
     _macro(ucp_put_offload_zcopy_proto) \
     _macro(ucp_put_rndv_proto) \
     _macro(ucp_put_sgl_offload_proto) \
@@ -72,7 +71,6 @@
     _macro(ucp_am_rndv_proto) \
     _macro(ucp_stream_multi_bcopy_proto) \
     _macro(ucp_stream_multi_zcopy_proto) \
-    _macro(ucp_failover_replay_proto) \
     UCP_PROTO_AMO_FOR_EACH(_macro, post) \
     UCP_PROTO_AMO_FOR_EACH(_macro, fetch) \
     UCP_PROTO_AMO_FOR_EACH(_macro, cswap)

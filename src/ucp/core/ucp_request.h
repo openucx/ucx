@@ -410,6 +410,7 @@ struct ucp_request {
                 struct {
                     const uct_ep_op_info_t *op_info;
                     ucp_lane_index_t       failed_lane;
+                    uct_rkey_t             tl_rkey;
                 } failover;
 
                 struct {

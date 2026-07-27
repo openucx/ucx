@@ -29,6 +29,7 @@ void ucp_proto_failover_replay_op_destroy(ucp_proto_failover_replay_op_t *op,
 
 ucs_status_t
 ucp_proto_failover_replay_op_progress(ucp_ep_h ep, ucp_lane_index_t failed_lane,
+                                      ucp_request_t *super_req,
                                       ucp_proto_failover_replay_op_t *op);
 
 #endif
