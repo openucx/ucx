@@ -1262,12 +1262,18 @@ ucs_status_t uct_ib_md_parse_relaxed_order(uct_ib_md_t *md,
     md->relaxed_order_required = relaxed_order_required;
     if (relaxed_order_required) {
         if (!have_relaxed_order) {
-            ucs_error("%s: relaxed-only memory keys required by %s, but "
-                      "IBV_ACCESS_RELAXED_ORDERING is unavailable",
-                      uct_ib_device_name(&md->dev),
-                      is_required ? "firmware" :
-                                    "IB_PCI_RELAXED_ORDERING=yes");
-            return is_required ? UCS_ERR_IO_ERROR : UCS_ERR_UNSUPPORTED;
+            if (is_required) {
+                ucs_error("%s: firmware requires relaxed-only memory keys, "
+                          "but IBV_ACCESS_RELAXED_ORDERING is unavailable",
+                          uct_ib_device_name(&md->dev));
+                return UCS_ERR_IO_ERROR;
+            }
+
+            ucs_error("%s: IB_PCI_RELAXED_ORDERING=yes requires relaxed-only "
+                      "memory keys, but IBV_ACCESS_RELAXED_ORDERING is "
+                      "unavailable",
+                      uct_ib_device_name(&md->dev));
+            return UCS_ERR_UNSUPPORTED;
         }
 
         if (md_config->mr_relaxed_order == UCS_NO) {
