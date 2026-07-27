@@ -35,6 +35,8 @@ source "$ucx_dir/buildlib/tools/ucxx_ucx_pr.sh"
 export RAPIDS_CUDA_VERSION RAPIDS_PY_VERSION
 # upstream test-env matrices select the dependency set via this key
 export RAPIDS_DEPENDENCIES=${RAPIDS_DEPENDENCIES:-latest}
+# persistent pip cache (host volume); pip disables caching itself if unwritable
+[ -d /pip-cache ] && export PIP_CACHE_DIR=/pip-cache
 export RAPIDS_CONDA_BLD_OUTPUT_DIR=/tmp/conda-bld-output
 mkdir -p "$RAPIDS_CONDA_BLD_OUTPUT_DIR" "$HOME/.local/bin"
 
