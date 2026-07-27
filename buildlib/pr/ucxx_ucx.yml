@@ -1,5 +1,5 @@
 parameters:
-  dependsOn: [Static_check]
+  dependsOn: [Basic_compile]
   conda_container: ucxx_rapidsai_ci_conda
   slices: []
 
@@ -7,7 +7,7 @@ stages:
   # Builds the PR's UCX once per arch/cuda pair and publishes it; the UCXX
   # build and test jobs consume the artifact instead of each building UCX.
   - stage: UCXX_ucx
-    displayName: 'UCXX: PR UCX build'
+    displayName: 'UCXX: UCX build'
     dependsOn: ${{ parameters.dependsOn }}
     variables:
       UCX_DIR: $(Agent.BuildDirectory)/ucx
