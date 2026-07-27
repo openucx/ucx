@@ -41,6 +41,7 @@ stages:
             - checkout: ucxx
               path: ucxx
               retryCountOnTaskFailure: 5
+            - template: ucxx_ucx_fetch.yml
             - bash: bash $(UCX_DIR)/buildlib/tools/test_ucxx.sh build
               displayName: Build UCXX
             - bash: bash $(UCX_DIR)/buildlib/tools/test_ucxx.sh test_cpp

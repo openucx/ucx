@@ -41,6 +41,7 @@ stages:
             - checkout: ucxx
               path: ucxx
               retryCountOnTaskFailure: 5
+            - template: ucxx_ucx_fetch.yml
             - bash: bash $(UCX_DIR)/buildlib/tools/build_ucxx.sh conda_cpp
               displayName: Build UCXX conda C++ package
             - task: PublishBuildArtifacts@1
@@ -72,6 +73,7 @@ stages:
             - checkout: ucxx
               path: ucxx
               retryCountOnTaskFailure: 5
+            - template: ucxx_ucx_fetch.yml
             - task: DownloadBuildArtifacts@1
               displayName: Fetch conda-cpp artifact
               inputs:
@@ -112,6 +114,7 @@ stages:
             - checkout: ucxx
               path: ucxx
               retryCountOnTaskFailure: 5
+            - template: ucxx_ucx_fetch.yml
             - bash: bash $(UCX_DIR)/buildlib/tools/build_ucxx.sh wheel_libucxx
               displayName: Build libucxx wheel
             - task: PublishBuildArtifacts@1
@@ -144,6 +147,7 @@ stages:
             - checkout: ucxx
               path: ucxx
               retryCountOnTaskFailure: 5
+            - template: ucxx_ucx_fetch.yml
             - task: DownloadBuildArtifacts@1
               displayName: Fetch libucxx wheel artifact
               inputs:
@@ -188,6 +192,7 @@ stages:
             - checkout: ucxx
               path: ucxx
               retryCountOnTaskFailure: 5
+            - template: ucxx_ucx_fetch.yml
             - task: DownloadBuildArtifacts@1
               displayName: Fetch conda-cpp artifact
               inputs:
@@ -239,6 +244,7 @@ stages:
             - checkout: ucxx
               path: ucxx
               retryCountOnTaskFailure: 5
+            - template: ucxx_ucx_fetch.yml
             - task: DownloadBuildArtifacts@1
               displayName: Fetch libucxx wheel artifact
               inputs:

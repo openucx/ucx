@@ -370,9 +370,18 @@ stages:
           demands: ucx_docker -equals yes
           container: coverity_rh7
 
-  - template: ucxx_build.yml
+  - template: ucxx_ucx.yml
     parameters:
       dependsOn: [Static_check]
+      slices:
+        - { name: x86_64_cuda12,  demands: ucx_docker, rapids_cuda_version: '12.9.2' }
+        - { name: x86_64_cuda13,  demands: ucx_docker, rapids_cuda_version: '13.3.0' }
+        - { name: aarch64_cuda12, demands: ucx_arm64,  rapids_cuda_version: '12.9.2' }
+        - { name: aarch64_cuda13, demands: ucx_arm64,  rapids_cuda_version: '13.3.0' }
+
+  - template: ucxx_build.yml
+    parameters:
+      dependsOn: [Static_check, UCXX_ucx]
       # Wheel GPU tests run on x86 only (no arm64 GPU runner); cuda12 + cuda13.
       wheel_tests_ucxx_slices:
         - { name: x86_64_cuda12_py311, container: ucxx_rapidsai_ci_wheel_cuda12_gpu, libucxx_slice: x86_64_cuda12_py311, ucxx_slice: x86_64_cuda12_py311,
@@ -408,7 +417,7 @@ stages:
 
   - template: ucxx_tests.yml
     parameters:
-      dependsOn: [Static_check]
+      dependsOn: [Static_check, UCXX_ucx]
       slices:
         - { name: x86_64_cuda13_py313,  gpu: true,  demands: ucx_gpu,    rapids_cuda_version: '13.3.0', rapids_py_version: '3.13' }
         - { name: x86_64_cuda12_py311,  gpu: false, demands: ucx_docker, rapids_cuda_version: '12.9.2', rapids_py_version: '3.11' }

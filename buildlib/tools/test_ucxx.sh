@@ -27,6 +27,11 @@ ucx_dir=$(cd "$(dirname "$0")/../.." && pwd)
 export ucx_dir UCX_PR_PREFIX=/tmp/ucx-pr
 source "$ucx_dir/buildlib/tools/ucxx_ucx_pr.sh"
 
+# The PR's UCX was built once by the UCXX_ucx stage and staged at
+# UCX_PR_PREFIX by the fetch step; every build and test consumes it.
+[ -x "$UCX_PR_PREFIX/bin/ucx_info" ] \
+  || { echo "ERROR: UCX (PR) not staged at $UCX_PR_PREFIX - UCXX_ucx artifact missing?" >&2; exit 1; }
+
 export RAPIDS_CUDA_VERSION RAPIDS_PY_VERSION
 # upstream test-env matrices select the dependency set via this key
 export RAPIDS_DEPENDENCIES=${RAPIDS_DEPENDENCIES:-latest}
@@ -83,9 +88,6 @@ export CMAKE_C_COMPILER_LAUNCHER= CMAKE_CXX_COMPILER_LAUNCHER= CMAKE_CUDA_COMPIL
 EOF
       chmod +x "$HOME/.local/bin/rapids-configure-sccache"
     fi
-    build_ucx_pr_conda
-    echo "== UCX under test =="
-    "$UCX_PR_PREFIX/bin/ucx_info" -v | head -3
     bash ci/build_cpp.sh
     bash ci/build_python.sh
     ;;
@@ -109,13 +111,9 @@ EOF
   test_wheel_ucxx)
     : "${LIBUCXX_WHL_DIR:?LIBUCXX_WHL_DIR required}"
     : "${UCXX_WHL_DIR:?UCXX_WHL_DIR required}"
-    # The wheel image ships a system toolchain; build the PR's UCX directly.
     # The ucxx wheel carries no libucx dependency - the loader resolves the
     # UCX libraries from UCX_PR_PREFIX via LD_LIBRARY_PATH, and the injected
     # check asserts the runtime UCX version is the PR's.
-    build_ucx_pr
-    echo "== UCX under test =="
-    "$UCX_PR_PREFIX/bin/ucx_info" -v | head -3
     grep -q "ucx-pr" ci/test_wheel_ucxx.sh \
       || sed -i '/^print_system_stats$/i want=$(/tmp/ucx-pr/bin/ucx_info -v | sed -n "s/^# Library version: //p")\ngot=$(python -c "import ucxx; print(*ucxx.get_ucx_version(), sep=chr(46))")\n[ "$got" = "$want" ] || { echo "ERROR: UCX version mismatch: $got != $want" >\&2; exit 1; }\necho "UCXX runs UCX-PR $got"' ci/test_wheel_ucxx.sh
     grep -q "ucx-pr" ci/test_wheel_ucxx.sh \

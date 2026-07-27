@@ -2,26 +2,22 @@
 # See file LICENSE for terms.
 #
 # Sourced by build_ucxx.sh / test_ucxx.sh. Provides:
-#   build_ucx_pr        - build the PR's UCX into UCX_PR_PREFIX (system toolchain)
-#   build_ucx_pr_conda  - same, via a conda-forge toolchain env (conda image)
+#   build_ucx_pr_conda  - build the PR's UCX into UCX_PR_PREFIX via a
+#                         conda-forge toolchain env
 #   use_pr_ucx          - patch the ucxx tree (cwd) so every package build and
 #                         test consumes the PR's UCX instead of released ucx
 # Requires: ucx_dir, UCX_PR_PREFIX exported by the caller; cwd = UCXX_DIR for
 # use_pr_ucx.
 
-# Builds the PR's UCX into UCX_PR_PREFIX (idempotent - the container, and thus
-# /tmp, is shared by all steps of a job).
+# Runs inside the toolchain env created by build_ucx_pr_conda (invoked there by
+# name through conda run). Idempotent - the container, and thus /tmp, is shared
+# by all steps of a job.
 build_ucx_pr() {
   [ -x "$UCX_PR_PREFIX/bin/ucx_info" ] && return 0
-  # CUDA headers: full CTK at /usr/local/cuda (wheel image) or conda-forge
-  # cuda dev packages in the toolchain env (conda image; headers+stubs live
-  # under targets/<arch>-linux).
+  # CUDA comes from the env's conda-forge cuda dev packages, pinned to
+  # RAPIDS_CUDA_VERSION; headers and stubs live under targets/<arch>-linux.
   local cuda_opt="" conda_cuda="${CONDA_PREFIX:-}/targets/$(uname -m)-linux"
-  if [ -e /usr/local/cuda/include/cuda.h ]; then
-    cuda_opt="--with-cuda=/usr/local/cuda"
-  elif [ -e "$conda_cuda/include/cuda.h" ]; then
-    cuda_opt="--with-cuda=$conda_cuda"
-  fi
+  [ -e "$conda_cuda/include/cuda.h" ] && cuda_opt="--with-cuda=$conda_cuda"
   echo "UCX-PR configure cuda: ${cuda_opt:-NONE (no cuda headers found)}"
   (cd "$ucx_dir" \
    && ./autogen.sh \

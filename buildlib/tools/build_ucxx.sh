@@ -4,18 +4,35 @@
 #
 # See file LICENSE for terms.
 #
-# Usage: build_ucxx.sh <conda_cpp|conda_python|wheel_libucxx|wheel_ucxx|docs|devcontainer>
-# Env: UCXX_DIR (all phases). Build phases also need RAPIDS_CUDA_VERSION,
-#   RAPIDS_PY_VERSION, RAPIDS_BLD_OUTPUT_DIR.
+# Usage: build_ucxx.sh <ucx_pr|conda_cpp|conda_python|wheel_libucxx|wheel_ucxx|docs|devcontainer>
+# Env: UCXX_DIR (all phases except ucx_pr). Build phases also need
+#   RAPIDS_CUDA_VERSION, RAPIDS_PY_VERSION, RAPIDS_BLD_OUTPUT_DIR.
 # wheel_ucxx phase also requires WHEEL_INPUT_DIR (libucxx wheel artifact dir)
 # Docs phase env: CPP_CHANNEL_DIR, PYTHON_CHANNEL_DIR, RAPIDS_DOCS_DIR
 #
 # All packages build against the UCX built from this checkout (the PR under
-# test) - see ucxx_ucx_pr.sh.
+# test) - see ucxx_ucx_pr.sh. The ucx_pr phase builds it once and tars it for
+# the other jobs, which fetch the artifact instead of rebuilding.
 
 set -o pipefail
 
 phase=${1:?phase required}
+
+if [ "$phase" = "ucx_pr" ]; then
+  : "${RAPIDS_CUDA_VERSION:?RAPIDS_CUDA_VERSION required}"
+  export RAPIDS_CUDA_VERSION
+  ucx_dir=$(cd "$(dirname "$0")/../.." && pwd)
+  export ucx_dir UCX_PR_PREFIX=/tmp/ucx-pr
+  source "$ucx_dir/buildlib/tools/ucxx_ucx_pr.sh"
+  build_ucx_pr_conda
+  echo "== UCX under test =="
+  "$UCX_PR_PREFIX/bin/ucx_info" -v | head -3
+  # The tarball must land on an agent-mapped path (UCX_PR_TARBALL) - the
+  # artifact upload runs on the host, which cannot see the container's /tmp.
+  tar -C /tmp -czf "${UCX_PR_TARBALL:?UCX_PR_TARBALL required}" ucx-pr
+  exit 0
+fi
+
 : "${UCXX_DIR:?UCXX_DIR required}"
 
 case "$phase" in
@@ -105,14 +122,10 @@ if [[ "$phase" == wheel_* ]]; then
   export CC="$toolset/gcc" CXX="$toolset/g++"
 fi
 
-# The PR's UCX: conda image builds it via a conda-forge toolchain env, the
-# wheel image with its system toolchain.
-case "$phase" in
-  conda_*|docs) build_ucx_pr_conda ;;
-  wheel_*)      build_ucx_pr ;;
-esac
-echo "== UCX under test =="
-"$UCX_PR_PREFIX/bin/ucx_info" -v | head -3
+# The PR's UCX was built once by the UCXX_ucx stage and staged at
+# UCX_PR_PREFIX by the fetch step; the package builds link against it.
+[ -x "$UCX_PR_PREFIX/bin/ucx_info" ] \
+  || { echo "ERROR: UCX (PR) not staged at $UCX_PR_PREFIX - UCXX_ucx artifact missing?" >&2; exit 1; }
 
 case "$phase" in
   conda_cpp)              bash ci/build_cpp.sh ;;

@@ -1,0 +1,43 @@
+parameters:
+  dependsOn: [Static_check]
+  conda_container: ucxx_rapidsai_ci_conda
+  slices: []
+
+stages:
+  # Builds the PR's UCX once per arch/cuda pair and publishes it; the UCXX
+  # build and test jobs consume the artifact instead of each building UCX.
+  - stage: UCXX_ucx
+    displayName: 'UCXX: PR UCX build'
+    dependsOn: ${{ parameters.dependsOn }}
+    variables:
+      UCX_DIR: $(Agent.BuildDirectory)/ucx
+    jobs:
+      - ${{ each slice in parameters.slices }}:
+        - job: ucxx_ucx_pr_${{ slice.name }}
+          continueOnError: true
+          workspace:
+            clean: all
+          pool:
+            name: MLNX
+            demands: ${{ slice.demands }}
+          displayName: 'UCX PR build (${{ slice.name }})'
+          container: ${{ parameters.conda_container }}
+          timeoutInMinutes: 40
+          variables:
+            RAPIDS_CUDA_VERSION: ${{ slice.rapids_cuda_version }}
+          steps:
+            - checkout: self
+              path: ucx
+              fetchDepth: 100
+              retryCountOnTaskFailure: 5
+            - bash: bash $(UCX_DIR)/buildlib/tools/build_ucxx.sh ucx_pr
+              displayName: Build UCX (PR)
+              env:
+                # host-mapped path - the artifact upload runs on the host,
+                # which cannot see the container's /tmp
+                UCX_PR_TARBALL: $(Build.ArtifactStagingDirectory)/ucx-pr.tar.gz
+            - task: PublishBuildArtifacts@1
+              displayName: Publish UCX (PR) artifact
+              inputs:
+                pathToPublish: $(Build.ArtifactStagingDirectory)/ucx-pr.tar.gz
+                artifactName: ucx-pr-${{ slice.name }}
