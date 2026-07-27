@@ -278,7 +278,7 @@ static ucs_status_t read_batch_file(FILE *batch_file, const char *file_name,
 }
 
 static ucs_status_t run_test_recurs(struct perftest_context *ctx,
-                                    const perftest_params_t *parent_params,
+                                    perftest_params_t *parent_params,
                                     unsigned depth)
 {
     perftest_params_t params;
