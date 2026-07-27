@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (c) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
 *
@@ -150,6 +150,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface, uint32_t qp_num,
     self->path_index   = UCT_EP_PARAMS_GET_PATH_INDEX(params);
     self->flags        = 0;
     self->txqp_reserve = 0;
+    self->cq_reserve   = 0;
 
     status = uct_rc_fc_init(&self->fc, iface UCS_STATS_ARG(self->super.stats));
     if (status != UCS_OK) {
@@ -315,7 +316,8 @@ ucs_status_t uct_rc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n,
     uct_rc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_iface_t);
     uct_rc_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_ep_t);
 
-    if (uct_rc_ep_has_tx_resources(ep) &&
+    if (uct_rc_ep_have_tx_cqe_avail(ep) &&
+        uct_rc_ep_has_tx_resources(ep) &&
         uct_rc_iface_has_tx_resources(iface)) {
         return UCS_ERR_BUSY;
     }
@@ -346,10 +348,12 @@ ucs_arbiter_cb_result_t uct_rc_ep_process_pending(ucs_arbiter_t *arbiter,
     status = uct_rc_iface_invoke_pending_cb(iface, req);
     if (status == UCS_OK) {
         ep->txqp_reserve = 0;
+        ep->cq_reserve   = 0;
         return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
     } else if (status == UCS_INPROGRESS) {
         return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
-    } else if (!uct_rc_iface_has_tx_resources(iface)) {
+    } else if (!uct_rc_iface_has_tx_resources(iface) ||
+               !uct_rc_ep_have_tx_cqe_avail(ep)) {
         /* No iface resources */
         return UCS_ARBITER_CB_RESULT_STOP;
     }
