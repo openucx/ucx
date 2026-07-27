@@ -620,7 +620,7 @@ protected:
             {"am/egr/single/bcopy/reply", UCT_IFACE_FLAG_AM_BCOPY, UCS_KBYTE},
             {"am/egr/multi/bcopy", UCT_IFACE_FLAG_AM_BCOPY, 64 * UCS_KBYTE},
             {"put/offload/short", UCT_IFACE_FLAG_PUT_SHORT, 8},
-            {"put/offload/bcopy/ft", UCT_IFACE_FLAG_PUT_BCOPY, 64 * UCS_KBYTE},
+            {"put/offload/bcopy", UCT_IFACE_FLAG_PUT_BCOPY, 64 * UCS_KBYTE},
             {"put/am/bcopy", UCT_IFACE_FLAG_AM_BCOPY, 64 * UCS_KBYTE}
         };
 
