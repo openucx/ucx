@@ -551,14 +551,24 @@ private:
                                                         rkey, &m_req_empty_param);
         ucs_status_ptr_t flush_status_ptr = flush ? ucp_ep_flush_nbx(ep, &m_req_empty_param) : NULL;
         ucs_status_t status               = request_wait(put_status_ptr);
-        if (status == UCS_OK) {
-            rbuf.pattern_check(m_seed, size);
-        }
 
         EXPECT_EQ(UCS_OK, status) << "put operation returned status: " << ucs_status_string(status);
         if (flush) {
             status = request_wait(flush_status_ptr);
-            EXPECT_EQ(UCS_OK, status) << "flush operation returned status: " << ucs_status_string(status);
+            EXPECT_EQ(UCS_OK, status) << "flush operation returned status: "
+                                     << ucs_status_string(status);
+        } else if (status == UCS_OK) {
+            wait_for_cond(
+                    [&]() {
+                        return mem_buffer::compare(
+                                lbuf.ptr(), rbuf.ptr(), size,
+                                UCS_MEMORY_TYPE_HOST);
+                    },
+                    [this]() { short_progress_loop(); });
+        }
+
+        if (status == UCS_OK) {
+            rbuf.pattern_check(m_seed, size);
         }
 
         return status;
