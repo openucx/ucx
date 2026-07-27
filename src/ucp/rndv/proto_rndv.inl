@@ -18,28 +18,37 @@
 
 
 static UCS_F_ALWAYS_INLINE int
+ucp_proto_rndv_shm_pipeline_force_enabled(ucp_context_h context)
+{
+    const ucp_context_config_t *cfg = &context->config.ext;
+
+    return cfg->rndv_shm_cuda_staging_force &&
+           cfg->rndv_shm_ppln_enable &&
+           cfg->rndv_mode == UCP_RNDV_MODE_AUTO;
+}
+
+static UCS_F_ALWAYS_INLINE int
 ucp_proto_rndv_shm_pipeline_force_scope(
         const ucp_proto_init_params_t *init_params, ucp_operation_id_t op_id,
-        ucs_memory_type_t remote_mem_type, int allow_proto_estimation)
+        ucs_memory_type_t remote_mem_type)
 {
-    const ucp_context_h context = init_params->worker->context;
-    uint8_t op_id_flags         = init_params->select_param->op_id_flags;
+    uint8_t op_flags;
 
-    /* Check that both relevant configuration params are enabled, with correct value */
-    if (!context->config.ext.rndv_shm_cuda_staging_force ||
-        !context->config.ext.rndv_shm_ppln_enable ||
-        context->config.ext.rndv_mode != UCP_RNDV_MODE_AUTO) {
+    /* Check that the force policy is effectively enabled. */
+    if (!ucp_proto_rndv_shm_pipeline_force_enabled(
+                init_params->worker->context)) {
+        return 0;
+    }
+
+    op_flags = ucp_proto_select_op_flags(init_params->select_param);
+
+    /* Check that this is explicitly tagged rendezvous traffic. */
+    if (!(op_flags & UCP_PROTO_SELECT_OP_FLAG_TAG_RNDV)) {
         return 0;
     }
 
     /* Check that the requested rendezvous operation is supported. */
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(op_id))) {
-        return 0;
-    }
-
-    /* Check that AM and RMA rendezvous flows are excluded. */
-    if (op_id_flags & (UCP_PROTO_SELECT_OP_FLAG_AM_RNDV |
-                       UCP_PROTO_SELECT_OP_FLAG_RMA_RNDV)) {
         return 0;
     }
 
@@ -59,13 +68,6 @@ ucp_proto_rndv_shm_pipeline_force_scope(
         return 0;
     }
 
-    /* Synthetic estimation keys are allowed only for sender-side modeling. */
-    if (!allow_proto_estimation &&
-        (init_params->rkey_config_key->flags &
-         UCP_RKEY_CONFIG_FLAG_PROTO_ESTIMATION)) {
-        return 0;
-    }
-
     /* Check that the remote-key memory type matches the required type. */
     if (init_params->rkey_config_key->mem_type != remote_mem_type) {
         return 0;
@@ -78,22 +80,52 @@ static UCS_F_ALWAYS_INLINE int
 ucp_proto_rndv_shm_pipeline_force(
         const ucp_proto_init_params_t *init_params)
 {
-    /* Sender-side modeling uses a synthetic CUDA rkey to estimate the peer
-     * receiver; keep it separate but still apply the explicit force policy.
-     */
     return ucp_proto_rndv_shm_pipeline_force_scope(
-            init_params, UCP_OP_ID_RNDV_RECV, UCS_MEMORY_TYPE_CUDA, 1);
+            init_params, UCP_OP_ID_RNDV_RECV, UCS_MEMORY_TYPE_CUDA);
 }
 
 static UCS_F_ALWAYS_INLINE int
 ucp_proto_rndv_shm_pipeline_force_rkey_ptr_mtype(
         const ucp_proto_init_params_t *init_params)
 {
-    /* The attached staging child models a temporary host buffer, so its nested
-     * lookup may use the synthetic estimation rkey created for that buffer.
-     */
     return ucp_proto_rndv_shm_pipeline_force_scope(
-            init_params, UCP_OP_ID_RNDV_SEND, UCS_MEMORY_TYPE_HOST, 1);
+            init_params, UCP_OP_ID_RNDV_SEND, UCS_MEMORY_TYPE_HOST);
+}
+
+static UCS_F_ALWAYS_INLINE unsigned
+ucp_proto_rndv_ctrl_init_flags(
+        const ucp_proto_rndv_ctrl_init_params_t *params)
+{
+    const ucp_proto_init_params_t *init_params = &params->super.super;
+
+    /* Check that the force policy applies to this control protocol. */
+    if (!ucp_proto_rndv_shm_pipeline_force(init_params)) {
+        return 0;
+    }
+
+    /* Check that this control protocol selects a pipeline fragment. */
+    if (!(ucp_proto_select_op_flags(init_params->select_param) &
+          UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG)) {
+        return 0;
+    }
+
+    /* Check that this is the receiver-side rendezvous operation. */
+    if (ucp_proto_select_op_id(init_params->select_param) !=
+        UCP_OP_ID_RNDV_RECV) {
+        return 0;
+    }
+
+    /* Check that the child uses host memory staging. */
+    if (params->super.reg_mem_info.type != UCS_MEMORY_TYPE_HOST) {
+        return 0;
+    }
+
+    /* Check that the protocol threshold is selected automatically. */
+    if (params->super.cfg_thresh != UCS_MEMUNITS_AUTO) {
+        return 0;
+    }
+
+    return UCP_PROTO_RNDV_CTRL_FLAG_FORCE_SHM_PIPELINE_CHILD;
 }
 
 static UCS_F_ALWAYS_INLINE size_t
@@ -138,15 +170,9 @@ ucp_proto_rndv_ctrl_variant_cfg_thresh(
         const ucp_proto_rndv_ctrl_init_params_t *params,
         size_t remote_cfg_thresh, int force_shm_pipeline)
 {
-    const ucp_proto_init_params_t *init_params = &params->super.super;
-    uint8_t op_id_flags = init_params->select_param->op_id_flags;
-
     if (force_shm_pipeline) {
-        return ((ucp_proto_select_op_id(init_params->select_param) ==
-                 UCP_OP_ID_RNDV_RECV) &&
-                (op_id_flags & UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG) &&
-                (params->super.reg_mem_info.type == UCS_MEMORY_TYPE_HOST) &&
-                (params->super.cfg_thresh == UCS_MEMUNITS_AUTO) &&
+        return ((params->flags &
+                 UCP_PROTO_RNDV_CTRL_FLAG_FORCE_SHM_PIPELINE_CHILD) &&
                 (remote_cfg_thresh != UCS_MEMUNITS_INF)) ?
                remote_cfg_thresh : UCS_MEMUNITS_INF;
     }

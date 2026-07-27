@@ -378,6 +378,7 @@ ucp_proto_rndv_ctrl_init_priv(const ucp_proto_rndv_ctrl_init_params_t *params,
     }
 
     rpriv->lane             = lane;
+    rpriv->remote_op_flags  = params->remote_op_flags;
     rpriv->packed_rkey_size = ucp_rkey_packed_size(
             init_params->worker->context, rpriv->md_map,
             params->super.reg_mem_info.sys_dev, rpriv->sys_dev_map, 0);
@@ -471,11 +472,11 @@ static void ucp_proto_rndv_ctrl_variant_probe(
                                       &rpriv->remote_proto_config);
 
     /* Set priority and threshold for this variant */
-    force_shm_pipeline =
-            ucp_proto_rndv_shm_pipeline_force(&params->super.super);
+    force_shm_pipeline = ucp_proto_rndv_shm_pipeline_force(&params->super.super);
     if ((context->config.ext.rndv_mode != UCP_RNDV_MODE_AUTO) &&
+        !(params->flags & UCP_PROTO_RNDV_CTRL_FLAG_FORCE_SHM_PIPELINE_CHILD) &&
         (remote_proto->cfg_thresh != UCS_MEMUNITS_AUTO)) {
-        /* If RNDV_SCHEME is set, all protocols except forced one report INF */
+        /* If RNDV_SCHEME is set, all protocols except forced one report INF. */
         ucs_assertv(remote_proto->cfg_thresh == UCS_MEMUNITS_INF,
                     "variant_name=%s remote_proto->cfg_thresh=%zu",
                     variant_name, remote_proto->cfg_thresh);
@@ -600,13 +601,10 @@ ucp_proto_rndv_find_ctrl_lane(const ucp_proto_init_params_t *params)
     return lane;
 }
 
-void ucp_proto_rndv_rts_probe(const ucp_proto_init_params_t *init_params)
+void ucp_proto_rndv_rts_probe(const ucp_proto_init_params_t *init_params,
+                              uint8_t remote_op_flags)
 {
     ucp_context_h context                    = init_params->worker->context;
-    uint8_t remote_op_flags                  =
-            context->config.ext.rndv_shm_cuda_staging_force ?
-            (ucp_proto_select_op_flags(init_params->select_param) &
-             UCP_PROTO_SELECT_OP_FLAG_AM_RNDV) : 0;
     ucp_proto_rndv_ctrl_init_params_t params = {
         .super.super         = *init_params,
         .super.latency       = 0,
@@ -628,6 +626,7 @@ void ucp_proto_rndv_rts_probe(const ucp_proto_init_params_t *init_params)
                                                      init_params->select_param),
         .remote_op_id        = UCP_OP_ID_RNDV_RECV,
         .remote_op_flags     = remote_op_flags,
+        .flags               = 0,
         .lane                = ucp_proto_rndv_find_ctrl_lane(init_params),
         .perf_bias           = context->config.ext.rndv_perf_diff / 100.0,
         .ctrl_msg_name       = UCP_PROTO_RNDV_RTS_NAME,
@@ -635,6 +634,7 @@ void ucp_proto_rndv_rts_probe(const ucp_proto_init_params_t *init_params)
     };
     ucp_proto_rndv_ctrl_priv_t rpriv;
 
+    params.flags = ucp_proto_rndv_ctrl_init_flags(&params);
     ucp_proto_rndv_ctrl_probe(&params, &rpriv, sizeof(rpriv));
 }
 
@@ -935,8 +935,8 @@ UCS_PROFILE_FUNC_VOID(ucp_proto_rndv_receive_start,
                                     &sg_count);
     }
 
-    op_flags = worker->context->config.ext.rndv_shm_cuda_staging_force ?
-               ucp_proto_rndv_rts_op_flags(rts->opcode) : 0;
+    op_flags = ucp_proto_rndv_shm_pipeline_force_enabled(worker->context) ?
+               ucp_proto_rndv_rts_tag_op_flags(rts->opcode) : 0;
     status   = ucp_proto_rndv_send_reply(
             worker, req, op_id, recv_req->recv.op_attr, op_flags, rts->size,
             rkey_buffer, rkey_length, sg_count);
@@ -956,11 +956,11 @@ UCS_PROFILE_FUNC_VOID(ucp_proto_rndv_receive_start,
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_rndv_send_start,
-                 (worker, req, op_attr_mask, rtr, rkey_buffer, rkey_length,
-                  sg_count),
+                 (worker, req, op_attr_mask, op_flags, rtr, rkey_buffer,
+                  rkey_length, sg_count),
                  ucp_worker_h worker, ucp_request_t *req, uint32_t op_attr_mask,
-                 const ucp_rndv_rtr_hdr_t *rtr, const void *rkey_buffer,
-                 size_t rkey_length, uint8_t sg_count)
+                 uint8_t op_flags, const ucp_rndv_rtr_hdr_t *rtr,
+                 const void *rkey_buffer, size_t rkey_length, uint8_t sg_count)
 {
     ucs_status_t status;
 
@@ -971,7 +971,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_rndv_send_start,
 
     ucs_assert(rtr->size == req->send.state.dt_iter.length);
     status = ucp_proto_rndv_send_reply(
-            worker, req, UCP_OP_ID_RNDV_SEND, op_attr_mask, 0, rtr->size,
+            worker, req, UCP_OP_ID_RNDV_SEND, op_attr_mask, op_flags, rtr->size,
             rkey_buffer, rkey_length, sg_count);
     if (status != UCS_OK) {
         return status;
@@ -1081,7 +1081,7 @@ ucp_proto_rndv_handle_rtr_req(ucp_worker_h worker, void *data, size_t length)
 
     rkey_buffer = rtr_req + 1;
     ucp_proto_rndv_rtr_req_sreq_init(ep, req, rtr_req);
-    status = ucp_proto_rndv_send_start(worker, req, 0, &rtr_req->super,
+    status = ucp_proto_rndv_send_start(worker, req, 0, 0, &rtr_req->super,
                                        rkey_buffer,
                                        length - sizeof(*rtr_req), 1);
     if (status != UCS_OK) {
@@ -1103,6 +1103,8 @@ ucp_proto_rndv_handle_rtr(void *arg, void *data, size_t length, unsigned flags)
     const ucp_proto_select_param_t *select_param;
     ucp_request_t *req, *freq;
     uint32_t op_attr_mask;
+    uint8_t op_flags;
+    int is_offloaded;
     ucs_status_t status;
     uint8_t sg_count;
 
@@ -1120,7 +1122,8 @@ ucp_proto_rndv_handle_rtr(void *arg, void *data, size_t length, unsigned flags)
     ucp_trace_req(req, "recv RTR offset %zu length %zu/%zu req %p", rtr->offset,
                   rtr->size, req->send.state.dt_iter.length, req);
 
-    if (req->flags & UCP_REQUEST_FLAG_OFFLOADED) {
+    is_offloaded = req->flags & UCP_REQUEST_FLAG_OFFLOADED;
+    if (is_offloaded) {
         ucp_tag_offload_cancel_rndv(req);
         ucs_assert(!ucp_ep_use_indirect_id(req->send.ep));
     }
@@ -1130,6 +1133,14 @@ ucp_proto_rndv_handle_rtr(void *arg, void *data, size_t length, unsigned flags)
 
     select_param = &req->send.proto_config->select_param;
     op_attr_mask = ucp_proto_select_op_attr_unpack(select_param->op_attr);
+    if (is_offloaded) {
+        op_flags = ucp_proto_rndv_shm_pipeline_force_enabled(worker->context) ?
+                   UCP_PROTO_SELECT_OP_FLAG_TAG_RNDV : 0;
+    } else {
+        const ucp_proto_rndv_ctrl_priv_t *rpriv = req->send.proto_config->priv;
+
+        op_flags = rpriv->remote_op_flags;
+    }
 
     if (rtr->size == req->send.state.dt_iter.length) {
         /* RTR covers the whole send request - use the send request directly */
@@ -1140,9 +1151,9 @@ ucp_proto_rndv_handle_rtr(void *arg, void *data, size_t length, unsigned flags)
         req->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
 
         sg_count = select_param->sg_count;
-        status   = ucp_proto_rndv_send_start(worker, req, op_attr_mask, rtr,
-                                             rtr + 1, length - sizeof(*rtr),
-                                             sg_count);
+        status   = ucp_proto_rndv_send_start(worker, req, op_attr_mask,
+                                             op_flags, rtr, rtr + 1,
+                                             length - sizeof(*rtr), sg_count);
         if (status != UCS_OK) {
             goto err_request_fail;
         }
@@ -1172,7 +1183,7 @@ ucp_proto_rndv_handle_rtr(void *arg, void *data, size_t length, unsigned flags)
         status = ucp_proto_rndv_send_start(worker, freq,
                                            op_attr_mask |
                                            UCP_OP_ATTR_FLAG_MULTI_SEND,
-                                           rtr, rtr + 1,
+                                           op_flags, rtr, rtr + 1,
                                            length - sizeof(*rtr), 1);
         if (status != UCS_OK) {
             goto err_put_freq;

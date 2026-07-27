@@ -61,24 +61,12 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_rndv_proto_progress, (self),
 
 static void ucp_am_rndv_rts_probe(const ucp_proto_init_params_t *init_params)
 {
-    ucp_proto_init_params_t rndv_init_params;
-    ucp_proto_select_param_t select_param;
-
     if (!ucp_am_check_init_params(init_params, UCP_PROTO_AM_OP_ID_MASK,
                                   UCP_PROTO_SELECT_OP_FLAG_AM_EAGER)) {
         return;
     }
 
-    /* When forced staging is enabled, preserve AM RNDV provenance for the nested remote receive model. */
-    if (init_params->worker->context->config.ext.rndv_shm_cuda_staging_force) {
-        rndv_init_params              = *init_params;
-        select_param                  = *init_params->select_param;
-        select_param.op_id_flags     |= UCP_PROTO_SELECT_OP_FLAG_AM_RNDV;
-        rndv_init_params.select_param = &select_param;
-        init_params                   = &rndv_init_params;
-    }
-
-    ucp_proto_rndv_rts_probe(init_params);
+    ucp_proto_rndv_rts_probe(init_params, 0);
 }
 
 ucp_proto_t ucp_am_rndv_proto = {

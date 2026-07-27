@@ -193,6 +193,50 @@ protected:
                 kh_value(proto_select->hash, khiter).thresholds, UCS_MBYTE);
     }
 
+    const ucp_proto_threshold_elem_t *
+    select_rndv_send_protocol(uint8_t rndv_op_flag,
+                              ucs_memory_type_t local_mem_type,
+                              ucs_memory_type_t remote_mem_type)
+    {
+        ucp_worker_cfg_index_t ep_cfg_index = sender().ep()->cfg_index;
+        ucp_rkey_config_key_t rkey_config_key = create_rkey_config_key(0);
+        ucp_worker_cfg_index_t rkey_cfg_index;
+        ucp_proto_select_param_t select_param;
+        ucp_memory_info_t mem_info = {
+            .type    = static_cast<uint8_t>(local_mem_type),
+            .sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN,
+            .flags   = UCS_MEM_FLAG_REGISTRABLE
+        };
+        const ucp_proto_select_elem_t *select_elem;
+        ucp_proto_select_t *proto_select;
+        ucs_status_t status;
+
+        rkey_config_key.ep_cfg_index = ep_cfg_index;
+        rkey_config_key.mem_type     = remote_mem_type;
+        status = ucp_worker_rkey_config_get(worker(), &rkey_config_key, NULL,
+                                            &rkey_cfg_index);
+        EXPECT_UCS_OK(status);
+        if (status != UCS_OK) {
+            return nullptr;
+        }
+
+        proto_select = &ucs_array_elem(&worker()->rkey_config,
+                                       rkey_cfg_index).proto_select;
+        ucp_proto_select_param_init(&select_param, UCP_OP_ID_RNDV_SEND, 0,
+                                    rndv_op_flag, UCP_DATATYPE_CONTIG,
+                                    &mem_info, 1);
+        select_elem = ucp_proto_select_lookup_slow(
+                worker(), proto_select, 1, ep_cfg_index, rkey_cfg_index,
+                &select_param);
+        if (select_elem == nullptr) {
+            ADD_FAILURE() << "rndv send protocol was not selected";
+            return nullptr;
+        }
+
+        return ucp_proto_thresholds_search_slow(select_elem->thresholds,
+                                                UCS_MBYTE);
+    }
+
     void check_rndv_ppln_preserves_op_flag(
             uint8_t rndv_op_flag,
             ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST)
@@ -312,9 +356,8 @@ protected:
         EXPECT_EQ(UCP_OP_ID_RNDV_RECV | expected_flags,
                   remote_proto_config->select_param.op_id_flags);
 
-        EXPECT_EQ(0, ucs_array_elem(&worker()->rkey_config,
-                                    remote_proto_config->rkey_cfg_index).key.flags &
-                         UCP_RKEY_CONFIG_FLAG_PROTO_ESTIMATION);
+        EXPECT_EQ(0, count_rkey_configs_with_flag(
+                             worker(), UCP_RKEY_CONFIG_FLAG_PROTO_ESTIMATION));
         if (op_id == UCP_OP_ID_PUT) {
             return;
         }
@@ -388,6 +431,8 @@ protected:
         ASSERT_NE(nullptr, remote_proto_config);
         EXPECT_EQ(UCP_OP_ID_RNDV_RECV | expected_flags,
                   remote_proto_config->select_param.op_id_flags);
+        EXPECT_EQ(0, count_rkey_configs_with_flag(
+                             worker(), UCP_RKEY_CONFIG_FLAG_PROTO_ESTIMATION));
     }
 };
 
@@ -545,6 +590,9 @@ UCS_TEST_P(test_ucp_proto_rndv_force_cuda,
     threshold = select_tag_send_protocol(UCS_MEMORY_TYPE_CUDA, UCS_MBYTE);
     ASSERT_NE(nullptr, threshold);
     ASSERT_STREQ("tag/rndv", threshold->proto_config.proto->name);
+    EXPECT_EQ(UCP_PROTO_SELECT_OP_FLAG_TAG_RNDV,
+              static_cast<const ucp_proto_rndv_ctrl_priv_t*>(
+                      threshold->proto_config.priv)->remote_op_flags);
     EXPECT_GT(count_rkey_configs_with_flag(
                       worker(), UCP_RKEY_CONFIG_FLAG_PROTO_ESTIMATION),
               0);
@@ -571,13 +619,15 @@ UCS_TEST_P(test_ucp_proto_rndv_force_cuda,
     threshold = select_tag_send_protocol(UCS_MEMORY_TYPE_CUDA, UCS_MBYTE);
     ASSERT_NE(nullptr, threshold);
     ASSERT_STREQ("tag/rndv", threshold->proto_config.proto->name);
+    EXPECT_EQ(0, static_cast<const ucp_proto_rndv_ctrl_priv_t*>(
+                         threshold->proto_config.priv)->remote_op_flags);
 
     EXPECT_EQ(0, count_rkey_configs_with_flag(
                          worker(), UCP_RKEY_CONFIG_FLAG_PROTO_ESTIMATION));
 }
 
 UCS_TEST_P(test_ucp_proto_rndv_force_cuda,
-           rndv_force_cuda_preserves_am_rma_fragments,
+           rndv_force_cuda_skips_untagged_fragment,
            "RNDV_PIPELINE_SHM_CUDA_STAGING_FORCE=y")
 {
     const ucp_proto_threshold_elem_t *threshold;
@@ -587,23 +637,54 @@ UCS_TEST_P(test_ucp_proto_rndv_force_cuda,
         UCS_TEST_SKIP_R("CUDA memory is not supported");
     }
 
-    threshold = select_rndv_ppln_frag_protocol(
-            UCP_PROTO_SELECT_OP_FLAG_AM_RNDV, UCS_MEMORY_TYPE_CUDA);
-    ASSERT_NE(nullptr, threshold);
-    info = threshold_protocol_info(threshold, UCS_MBYTE);
-    EXPECT_EQ(std::string::npos, info.find("copy to attached")) << info;
-
-    threshold = select_rndv_ppln_frag_protocol(
-            UCP_PROTO_SELECT_OP_FLAG_RMA_RNDV, UCS_MEMORY_TYPE_CUDA);
+    threshold = select_rndv_ppln_frag_protocol(0, UCS_MEMORY_TYPE_CUDA);
     ASSERT_NE(nullptr, threshold);
     info = threshold_protocol_info(threshold, UCS_MBYTE);
     EXPECT_EQ(std::string::npos, info.find("copy to attached")) << info;
 }
 
-UCS_TEST_P(test_ucp_proto, rndv_ppln_preserves_rndv_op_flags)
+UCS_TEST_P(test_ucp_proto_rndv_force_cuda,
+           rndv_force_cuda_send_child_uses_tag_provenance,
+           "RNDV_PIPELINE_SHM_CUDA_STAGING_FORCE=y")
 {
-    check_rndv_ppln_preserves_op_flag(UCP_PROTO_SELECT_OP_FLAG_RMA_RNDV);
-    check_rndv_ppln_preserves_op_flag(UCP_PROTO_SELECT_OP_FLAG_AM_RNDV);
+    const ucp_proto_threshold_elem_t *threshold;
+    std::string info;
+
+    if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
+        UCS_TEST_SKIP_R("CUDA memory is not supported");
+    }
+
+    if (!has_cuda_net_md()) {
+        UCS_TEST_SKIP_R("No network memory domain can register CUDA memory");
+    }
+
+    threshold = select_rndv_send_protocol(UCP_PROTO_SELECT_OP_FLAG_TAG_RNDV,
+                                          UCS_MEMORY_TYPE_CUDA,
+                                          UCS_MEMORY_TYPE_HOST);
+    ASSERT_NE(nullptr, threshold);
+    info = threshold_protocol_info(threshold, UCS_MBYTE);
+    EXPECT_NE(std::string::npos, info.find("rndv_send(tag-rndv)")) << info;
+    EXPECT_NE(std::string::npos, info.find("pipeline cuda_copy")) << info;
+    EXPECT_NE(std::string::npos, info.find("frag host")) << info;
+
+    threshold = select_rndv_send_protocol(0, UCS_MEMORY_TYPE_CUDA,
+                                          UCS_MEMORY_TYPE_HOST);
+    ASSERT_NE(nullptr, threshold);
+    info = threshold_protocol_info(threshold, UCS_MBYTE);
+    EXPECT_EQ(std::string::npos, info.find("rndv_send(tag-rndv)")) << info;
+}
+
+UCS_TEST_P(test_ucp_proto, rndv_ppln_preserves_tag_rndv_op_flag)
+{
+    check_rndv_ppln_preserves_op_flag(UCP_PROTO_SELECT_OP_FLAG_TAG_RNDV);
+}
+
+UCS_TEST_P(test_ucp_proto, rndv_rts_opcode_maps_to_tag_rndv_op_flags)
+{
+    EXPECT_EQ(UCP_PROTO_SELECT_OP_FLAG_TAG_RNDV,
+              ucp_proto_rndv_rts_tag_op_flags(UCP_RNDV_RTS_TAG_OK));
+    EXPECT_EQ(0, ucp_proto_rndv_rts_tag_op_flags(UCP_RNDV_RTS_AM));
+    EXPECT_EQ(0, ucp_proto_rndv_rts_tag_op_flags(UCP_RNDV_RTS_RMA));
 }
 
 UCS_TEST_P(test_ucp_proto, worker_print_info_rkey)
@@ -650,17 +731,28 @@ UCS_TEST_P(test_ucp_proto_rma_rndv,
 }
 
 UCS_TEST_P(test_ucp_proto_rma_rndv,
-           rma_force_remote_model_preserves_rndv_provenance,
+           rma_force_remote_model_remains_untagged,
            "RNDV_PIPELINE_SHM_CUDA_STAGING_FORCE=y")
 {
     if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
         UCS_TEST_SKIP_R("CUDA memory is not supported");
     }
 
-    check_rma_rndv_remote_proto_config(UCP_OP_ID_PUT,
-                                       UCP_PROTO_SELECT_OP_FLAG_RMA_RNDV);
-    check_rma_rndv_remote_proto_config(UCP_OP_ID_GET,
-                                       UCP_PROTO_SELECT_OP_FLAG_RMA_RNDV);
+    check_rma_rndv_remote_proto_config(UCP_OP_ID_PUT, 0);
+    check_rma_rndv_remote_proto_config(UCP_OP_ID_GET, 0);
+}
+
+UCS_TEST_P(test_ucp_proto_rma_rndv,
+           rma_explicit_scheme_disables_force_provenance,
+           "RNDV_PIPELINE_SHM_CUDA_STAGING_FORCE=y",
+           "RNDV_SCHEME=get_zcopy")
+{
+    if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
+        UCS_TEST_SKIP_R("CUDA memory is not supported");
+    }
+
+    check_rma_rndv_remote_proto_config(UCP_OP_ID_PUT, 0);
+    check_rma_rndv_remote_proto_config(UCP_OP_ID_GET, 0);
 }
 
 UCS_TEST_P(test_ucp_proto_am_rndv,
@@ -674,14 +766,26 @@ UCS_TEST_P(test_ucp_proto_am_rndv,
 }
 
 UCS_TEST_P(test_ucp_proto_am_rndv,
-           am_force_remote_model_preserves_rndv_provenance,
+           am_force_remote_model_remains_untagged,
            "RNDV_PIPELINE_SHM_CUDA_STAGING_FORCE=y")
 {
     if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
         UCS_TEST_SKIP_R("CUDA memory is not supported");
     }
 
-    check_am_rndv_remote_proto_config(0, UCP_PROTO_SELECT_OP_FLAG_AM_RNDV);
+    check_am_rndv_remote_proto_config(0, 0);
+}
+
+UCS_TEST_P(test_ucp_proto_am_rndv,
+           am_explicit_scheme_disables_force_provenance,
+           "RNDV_PIPELINE_SHM_CUDA_STAGING_FORCE=y",
+           "RNDV_SCHEME=get_zcopy")
+{
+    if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
+        UCS_TEST_SKIP_R("CUDA memory is not supported");
+    }
+
+    check_am_rndv_remote_proto_config(0, 0);
 }
 
 UCS_TEST_P(test_ucp_proto, dt_iter_mem_reg)

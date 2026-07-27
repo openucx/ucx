@@ -86,8 +86,7 @@ ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
     sel_param.op_id_flags =
             ucp_proto_select_op_id(select_param) |
             UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG |
-            (select_param->op_id_flags & (UCP_PROTO_SELECT_OP_FLAG_AM_RNDV |
-                                          UCP_PROTO_SELECT_OP_FLAG_RMA_RNDV));
+            (select_param->op_id_flags & UCP_PROTO_SELECT_OP_FLAG_TAG_RNDV);
     sel_param.op_attr     = ucp_proto_select_op_attr_pack(
         UCP_OP_ATTR_FLAG_MULTI_SEND, UCP_PROTO_SELECT_OP_ATTR_MASK);
 
