@@ -532,9 +532,9 @@ uct_rc_ep_fm(uct_rc_iface_t *iface, uct_ib_fence_info_t* fi, int flag)
 {
     int fence;
 
-    /* a call to iface_fence increases beat, so if endpoint beat is not in
-     * sync with iface beat it means the endpoint did not post any WQE with
-     * fence flag yet */
+    /* A call to iface_fence increases the beat, so an endpoint beat that is
+     * not in sync with the iface beat indicates a pending fence. Consume it
+     * on this operation, using a hardware fence flag when one is required. */
     fence          = (fi->fence_beat != iface->tx.fi.fence_beat) ? flag : 0;
     fi->fence_beat = iface->tx.fi.fence_beat;
     return fence;
@@ -545,8 +545,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_rc_ep_fence(uct_ep_h tl_ep,
 {
     uct_rc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_iface_t);
 
-    /* in case if fence is requested and enabled by configuration
-     * we need to schedule fence for next RDMA operation */
+    /* If fence is enabled by configuration, mark it pending until an
+     * operation that provides the required ordering consumes it. */
     if (iface->config.fence_mode != UCT_RC_FENCE_MODE_NONE) {
         fi->fence_beat = iface->tx.fi.fence_beat - 1;
     }
