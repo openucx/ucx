@@ -28,7 +28,6 @@
 ucs_status_t uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep, uct_ep_attr_t *ep_attr)
 {
     uct_ib_mlx5_ext_ep_query_attr_t attr = {};
-    const uint64_t ext_mask              = UCT_EP_ATTR_FIELD_TX_TOKEN;
     ucs_status_t status;
 
     if (ep_attr->field_mask & (UCT_EP_ATTR_FIELD_LOCAL_SOCKADDR |
@@ -36,11 +35,9 @@ ucs_status_t uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep, uct_ep_attr_t *ep_attr)
         return UCS_ERR_UNSUPPORTED;
     }
 
-    if (ep_attr->field_mask & ext_mask) {
-        if (ep_attr->field_mask & UCT_EP_ATTR_FIELD_TX_TOKEN) {
-            attr.field_mask |= UCT_IB_MLX5_EXT_EP_QUERY_ATTR_FIELD_TX_TOKEN;
-            attr.tx_token    = ep_attr->tx_token;
-        }
+    if (ep_attr->field_mask & UCT_EP_ATTR_FIELD_TX_TOKEN) {
+        attr.field_mask |= UCT_IB_MLX5_EXT_EP_QUERY_ATTR_FIELD_TX_TOKEN;
+        attr.tx_token    = ep_attr->tx_token;
 
         status = uct_ib_mlx5_ext_ep_query(tl_ep, &attr);
         if (status != UCS_OK) {

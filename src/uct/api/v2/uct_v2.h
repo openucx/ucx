@@ -1195,11 +1195,11 @@ enum uct_iface_attr_field {
  */
         /* PUT capabilities */
 #define UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY       UCS_BIT(0)  /**< Zero-copy SGL put */
-#define UCT_IFACE_FLAG_V2_QUERY_TOKEN         UCS_BIT(1)  /**< Interface supports TX/RX token
-                                                               length query, RX token derivation
-                                                               from a peer TX token, endpoint TX
-                                                               token query, and outstanding
-                                                               operation purge. */
+#define UCT_IFACE_FLAG_V2_QUERY_TOKEN         UCS_BIT(1)  /**< @ref uct_iface_query_v2
+                                                               and @ref uct_ep_query
+                                                               support token query, and
+                                                               @ref uct_ep_outstanding_purge
+                                                               is supported. */
 /**
  * @}
  */
@@ -1896,18 +1896,8 @@ typedef struct {
  * @ingroup UCT_RESOURCE
  * @brief Purge outstanding (undelivered) operations from an endpoint.
  *
- * The endpoint must be quiesced by the caller: no new operations may be posted
- * on @a ep while this function is running, and ownership of the endpoint's
- * outstanding-operation state is transferred to this routine until it returns.
- *
- * On success, callbacks are invoked in the original endpoint posting order for
- * operations classified as undelivered. A callback may replay the operation
- * immediately, including before this function returns.
- *
- * If this function returns an error, callbacks might already have been invoked
- * for some operations. Those callbacks remain owned by the caller; the provider
- * reports failure for the first operation whose state could not be classified or
- * replayed.
+ * @ref uct_ep_outstanding_purge_params_t::cb is invoked once for each
+ * undelivered outstanding operation, in the original endpoint posting order.
  */
 ucs_status_t
 uct_ep_outstanding_purge(uct_ep_h ep,

@@ -81,10 +81,8 @@ uct_ib_mlx5_ext_ep_query_check_param(uct_ib_mlx5_ext_ep_query_attr_t *attr)
 
 static uint64_t uct_ib_mlx5_ext_iface_query_cap_flags(uct_iface_h iface)
 {
-    uct_ib_mlx5_ext_iface_query_attr_t attr = {
-        .field_mask = UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_CAP_FLAGS
-    };
-    uint64_t cap_flags                      = 0;
+    uint64_t cap_flags = 0;
+    uct_ib_mlx5_ext_iface_query_attr_t attr;
     uct_ib_mlx5_ext_plugin_t *plugin;
     ucs_status_t status;
 
@@ -94,6 +92,8 @@ static uint64_t uct_ib_mlx5_ext_iface_query_cap_flags(uct_iface_h iface)
             continue;
         }
 
+        memset(&attr, 0, sizeof(attr));
+        attr.field_mask = UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_CAP_FLAGS;
         status = plugin->ops.iface_query(iface, &attr);
         if (status != UCS_OK) {
             continue;
@@ -192,10 +192,12 @@ uct_ib_mlx5_ext_ep_query(uct_ep_h ep, uct_ib_mlx5_ext_ep_query_attr_t *attr)
     if (ucs_test_flags(attr->field_mask, token_mask)) {
         plugin = uct_ib_mlx5_ext_find_plugin(ep->iface,
                                              UCT_IFACE_FLAG_V2_QUERY_TOKEN);
-        if ((plugin == NULL) || (uct_ib_mlx5_ext_is_unsupported_op(
-                                        (const void*)plugin->ops.ep_query))) {
+        if (plugin == NULL) {
             return UCS_ERR_UNSUPPORTED;
         }
+
+        ucs_assert(!uct_ib_mlx5_ext_is_unsupported_op(
+                (const void*)plugin->ops.ep_query));
 
         status = plugin->ops.ep_query(ep, attr);
         if (status != UCS_OK) {
@@ -277,22 +279,24 @@ ucs_status_t uct_ib_mlx5_ext_ep_outstanding_purge(
         return status;
     }
 
-    plugin = uct_ib_mlx5_ext_find_plugin(ep->iface,
-                                         UCT_IFACE_FLAG_V2_QUERY_TOKEN);
-    if ((plugin == NULL) ||
-        (uct_ib_mlx5_ext_is_unsupported_op(
-                (const void*)plugin->ops.ep_outstanding_purge))) {
-        return UCS_ERR_UNSUPPORTED;
+    ucs_list_for_each(plugin, &uct_ib_mlx5_ext_plugins, list) {
+        if (ucs_unlikely(uct_ib_mlx5_ext_is_unsupported_op(
+                    (const void*)plugin->ops.ep_outstanding_purge))) {
+            continue;
+        }
+
+        /* The provider validates parameters and token signatures itself, and
+         * returns an error if it should not handle this request. */
+        status = plugin->ops.ep_outstanding_purge(ep, params);
+        if (status != UCS_OK) {
+            continue;
+        }
+
+        return UCS_OK;
     }
 
-    status = plugin->ops.ep_outstanding_purge(ep, params);
-    if (status != UCS_OK) {
-        ucs_error("ib mlx5 ext: ep outstanding purge failed: %s",
-                  ucs_status_string(status));
-        return status;
-    }
-
-    return UCS_OK;
+    ucs_error("ib mlx5 ext: ep outstanding purge is not supported");
+    return UCS_ERR_UNSUPPORTED;
 }
 
 void uct_ib_mlx5_ext_cleanup(void)
