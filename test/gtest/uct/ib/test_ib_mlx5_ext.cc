@@ -78,6 +78,8 @@ protected:
 
         if (attr->field_mask &
             UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_RX_TOKEN) {
+            ASSERT_NE(NULL, attr->tx_token);
+            ASSERT_NE(NULL, attr->rx_token);
             *static_cast<uint64_t*>(attr->rx_token) =
                     *static_cast<const uint64_t*>(attr->tx_token) + 1;
         }
@@ -129,7 +131,8 @@ protected:
     }
 
 private:
-    ucs_list_link_t m_saved_plugins;
+    ucs_list_link_t m_saved_plugins = UCS_LIST_INITIALIZER(&m_saved_plugins,
+                                                           &m_saved_plugins);
 };
 
 
