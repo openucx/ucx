@@ -38,8 +38,7 @@
  */
 #define UCT_IB_NDR_READ_PATH_BANDWIDTH 38e9
 #define UCT_IB_XDR_READ_PATH_BANDWIDTH 35e9
-#define UCT_IB_XDR_READ_NUM_PATHS      4
-/* CX9 XDR RDMA READ posting overhead per path. */
+/* XDR RDMA READ posting overhead per path. */
 #define UCT_IB_XDR_READ_PATH_OVERHEAD  375e-9
 
 /**
@@ -1403,6 +1402,8 @@ static unsigned uct_ib_iface_roce_lag_level(uct_ib_iface_t *iface)
 static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
                                        const uct_ib_iface_config_t *config)
 {
+    uct_ib_device_t *dev = uct_ib_iface_device(iface);
+
     iface->num_paths_is_auto = config->num_paths == UCS_ULUNITS_AUTO;
     if (iface->num_paths_is_auto) {
         if (uct_ib_iface_is_roce(iface)) {
@@ -1415,9 +1416,8 @@ static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
         }
 
         if (uct_ib_iface_port_is_xdr(iface) &&
-            (uct_ib_iface_device(iface)->flags &
-             UCT_IB_DEVICE_FLAG_XDR_READ_4_PATHS)) {
-            iface->get_num_paths = UCT_IB_XDR_READ_NUM_PATHS;
+            (dev->xdr_read_num_paths > 0)) {
+            iface->get_num_paths = dev->xdr_read_num_paths;
             iface->num_paths     = ucs_max(iface->num_paths,
                                            iface->get_num_paths);
         } else {
@@ -2158,8 +2158,7 @@ uct_ib_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
 
         if ((op == UCT_EP_OP_GET_ZCOPY) &&
             uct_ib_iface_port_is_xdr(ib_iface) &&
-            (uct_ib_iface_device(ib_iface)->flags &
-             UCT_IB_DEVICE_FLAG_XDR_READ_4_PATHS)) {
+            (uct_ib_iface_device(ib_iface)->xdr_read_num_paths > 0)) {
             perf_attr->send_pre_overhead +=
                     UCT_IB_XDR_READ_PATH_OVERHEAD;
         }
@@ -2181,7 +2180,8 @@ uct_ib_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
                                                                &iface_attr);
         if (uct_ep_op_is_get(op) && uct_ib_iface_port_is_xdr(ib_iface)) {
             max_bandwidth = perf_attr->bandwidth.shared *
-                            iface_attr.dev_num_paths * UCT_IB_XDR_READ_PATH_RATIO;
+                            ib_iface->get_num_paths *
+                            UCT_IB_XDR_READ_PATH_RATIO;
             perf_attr->bandwidth.shared = ucs_min(perf_attr->bandwidth.shared,
                                                   max_bandwidth);
         }

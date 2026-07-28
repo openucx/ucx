@@ -157,11 +157,10 @@ static uct_ib_device_spec_t uct_ib_builtin_device_specs[] = {
    UCT_IB_DEVICE_FLAG_DC_V2, 70},
   {"ConnectX-8", {0x15b3, 4131},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V2, 80},
+   UCT_IB_DEVICE_FLAG_DC_V2, 80, 4},
   {"ConnectX-9", {0x15b3, 4133},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V2 |
-   UCT_IB_DEVICE_FLAG_XDR_READ_4_PATHS, 90},
+   UCT_IB_DEVICE_FLAG_DC_V2, 90, 4},
   {"ConnectX-10", {0x15b3, 4135},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V2, 100},
@@ -570,6 +569,7 @@ ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
     const char *dev_path               = dev->ibv_context->device->ibdev_path;
     const unsigned sys_device_priority = 20;
     ucs_status_t status;
+    const uct_ib_device_spec_t *dev_spec;
     char *path_buffer;
     const char *sysfs_path;
     uint8_t i;
@@ -622,9 +622,9 @@ ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
         ucs_topo_sys_device_set_class(dev->sys_dev, UCS_TOPO_DEVICE_CLASS_NET);
     }
     uct_ib_device_set_pci_id(dev, sysfs_path);
-    dev->flags |= uct_ib_device_builtin_spec(dev)->flags &
-                  UCT_IB_DEVICE_FLAG_XDR_READ_4_PATHS;
-    dev->pci_bw = ucs_topo_get_pci_bw(dev_name, sysfs_path);
+    dev_spec                = uct_ib_device_builtin_spec(dev);
+    dev->xdr_read_num_paths = dev_spec->xdr_read_num_paths;
+    dev->pci_bw             = ucs_topo_get_pci_bw(dev_name, sysfs_path);
 
     ucs_free(path_buffer);
 out:
