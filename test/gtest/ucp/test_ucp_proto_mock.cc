@@ -1013,6 +1013,11 @@ public:
                     iface_attr_func(iface_attr);
                     iface_attr.dev_num_paths = 1;
                 };
+        iface_attr_func_t low_bandwidth_iface_attr_func =
+                [iface_attr_func](uct_iface_attr_t &iface_attr) {
+                    iface_attr_func(iface_attr);
+                    iface_attr.bandwidth.shared = 20e9;
+                };
         perf_attr_func_t fixed_paths_perf_attr_func =
                 [](uct_perf_attr_t &perf_attr) {
                     if (perf_attr.field_mask & UCT_PERF_ATTR_FIELD_NUM_PATHS) {
@@ -1034,6 +1039,14 @@ public:
                         perf_attr.num_paths = 1;
                     }
                 };
+        perf_attr_func_t low_single_get_path_perf_attr_func =
+                [single_get_path_perf_attr_func](uct_perf_attr_t &perf_attr) {
+                    single_get_path_perf_attr_func(perf_attr);
+                    if (perf_attr.field_mask &
+                        UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH) {
+                        perf_attr.path_bandwidth.shared = 20e9;
+                    }
+                };
         add_mock_iface("mock_0:1", iface_attr_func, perf_attr_func);
         add_mock_iface("mock_1:1", fixed_paths_iface_attr_func,
                        fixed_paths_perf_attr_func);
@@ -1046,8 +1059,8 @@ public:
                        fixed_paths_perf_attr_func);
         add_mock_iface("mock_8:1", iface_attr_func,
                        single_get_path_perf_attr_func);
-        add_mock_iface("mock_9:1", iface_attr_func,
-                       single_get_path_perf_attr_func);
+        add_mock_iface("mock_9:1", low_bandwidth_iface_attr_func,
+                       low_single_get_path_perf_attr_func);
         test_ucp_proto_mock::init();
     }
 
@@ -1152,7 +1165,8 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_op_paths, get_fixed_ib_num_paths,
 {
     EXPECT_EQ(2u, get_rma_path_count(UCP_OP_ID_GET, 64 * UCS_KBYTE));
     EXPECT_EQ(1u, get_rma_device_count(UCP_OP_ID_GET, 64 * UCS_KBYTE));
-    EXPECT_EQ(2u, get_rndv_path_count(64 * UCS_KBYTE));
+    EXPECT_EQ(4u, get_rndv_path_count(64 * UCS_KBYTE));
+    EXPECT_EQ(2u, get_rndv_device_count(64 * UCS_KBYTE));
 }
 
 UCS_TEST_P(test_ucp_proto_mock_rcx_op_paths, get_explicit_ucp_path_caps,
