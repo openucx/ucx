@@ -1357,7 +1357,10 @@ ucp_wireup_query_lane_rx_tokens(ucp_ep_h ep,
         if (status != UCS_OK) {
             ucs_debug("ep %p: lane %u: rx token query failed: %s", ep, lane,
                       ucs_status_string(status));
-            goto err_free;
+            token_lengths[token_index] = 0;
+            tx_token_offset           += tx_token_lengths[token_index];
+            ++token_index;
+            continue;
         }
 
         tx_token_offset += tx_token_lengths[token_index];
@@ -1365,13 +1368,11 @@ ucp_wireup_query_lane_rx_tokens(ucp_ep_h ep,
         ++token_index;
     }
 
+    payload_size    = sizeof(*lane_state) + token_index * sizeof(uint8_t) +
+                      rx_token_offset;
     *lane_state_p   = lane_state;
     *payload_size_p = payload_size;
     return UCS_OK;
-
-err_free:
-    ucs_free(lane_state);
-    return status;
 }
 
 ucs_status_t ucp_wireup_send_query_lane_state(ucp_ep_h ep, uint64_t request_id,
