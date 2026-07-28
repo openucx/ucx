@@ -103,8 +103,7 @@ protected:
     {
         uct_ep_op_info_t op_info = {};
 
-        EXPECT_EQ(rx_token(),
-                  *static_cast<const uint64_t*>(params->rx_token));
+        EXPECT_EQ(rx_token(), *static_cast<const uint64_t*>(params->rx_token));
         params->cb(&op_info, params->arg);
         return UCS_OK;
     }
@@ -129,17 +128,6 @@ protected:
         ASSERT_UCS_OK(uct_ib_mlx5_ext_register(&ops));
     }
 
-    static void register_stub_plugin()
-    {
-        register_plugin(
-                "stub",
-                (uct_ib_mlx5_ext_iface_query_func_t)
-                        ucs_empty_function_return_unsupported,
-                NULL,
-                (uct_ep_outstanding_purge_func_t)
-                        ucs_empty_function_return_unsupported);
-    }
-
 private:
     ucs_list_link_t m_saved_plugins;
 };
@@ -151,7 +139,10 @@ UCS_TEST_P(test_uct_ib_mlx5_ext_rc, iface_query)
     uint64_t rx_token_value  = 0;
     uct_iface_attr_v2_t attr = {};
 
-    register_stub_plugin();
+    register_plugin("unsupported",
+                    (uct_ib_mlx5_ext_iface_query_func_t)
+                            ucs_empty_function_return_unsupported,
+                    NULL, NULL);
     register_plugin("token", iface_query, ep_query, purge);
 
     {
@@ -197,8 +188,8 @@ UCS_TEST_P(test_uct_ib_mlx5_ext_rc, ep_query)
 
 UCS_TEST_P(test_uct_ib_mlx5_ext_rc, ep_outstanding_purge)
 {
-    uint64_t rx_token_value                 = rx_token();
-    bool callback_invoked                   = false;
+    uint64_t rx_token_value                  = rx_token();
+    bool callback_invoked                    = false;
     uct_ep_outstanding_purge_params_t params = {};
 
     {
@@ -207,7 +198,10 @@ UCS_TEST_P(test_uct_ib_mlx5_ext_rc, ep_outstanding_purge)
                   uct_ep_outstanding_purge(m_e1->ep(0), &params));
     }
 
-    register_stub_plugin();
+    register_plugin("stub",
+                    (uct_ib_mlx5_ext_iface_query_func_t)
+                            ucs_empty_function_return_unsupported,
+                    NULL, NULL);
     register_plugin("fail", NULL, NULL, purge_fail);
     register_plugin("token", iface_query, ep_query, purge);
 
