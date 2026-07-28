@@ -381,7 +381,8 @@ ucp_proto_failover_replay_op_request_init(ucp_ep_h ep,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    if ((op->info.field_mask & UCT_EP_OP_INFO_FIELD_COMP) &&
+    if ((op->info.operation == UCT_EP_OP_PUT_BCOPY) &&
+        (op->info.field_mask & UCT_EP_OP_INFO_FIELD_COMP) &&
         (op->info.comp != NULL)) {
         rma_op = ucs_container_of(op->info.comp, ucp_rma_op_t, comp);
     }
