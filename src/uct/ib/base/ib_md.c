@@ -1644,13 +1644,15 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
     uct_ib_md_ece_check(md);
     status = uct_ib_md_parse_relaxed_order(md, md_config, 0, 0);
     if (status != UCS_OK) {
-        goto err_device_config_release;
+        goto err_md_close;
     }
     uct_ib_md_check_odp(md, md_config);
 
     *p_md = md;
     return UCS_OK;
 
+err_md_close:
+    uct_ib_md_close_common(md);
 err_device_config_release:
     uct_ib_md_release_device_config(md);
 err_md_free:

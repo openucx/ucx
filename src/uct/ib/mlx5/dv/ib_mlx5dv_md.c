@@ -3431,7 +3431,7 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
 
     status = uct_ib_md_parse_relaxed_order(&md->super, md_config, 0, 0);
     if (status != UCS_OK) {
-        goto err_md_free;
+        goto err_md_close;
     }
     uct_ib_md_ece_check(&md->super);
     uct_ib_md_check_odp(&md->super, md_config);
@@ -3444,6 +3444,8 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
     *p_md = &md->super;
     return UCS_OK;
 
+err_md_close:
+    uct_ib_md_close_common(&md->super);
 err_md_free:
     uct_ib_md_free(&md->super);
 err_free_context:
