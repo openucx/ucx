@@ -608,7 +608,7 @@ ucp_proto_multi_select_lanes(const ucp_proto_multi_init_params_t *params,
         lane      = selection->lanes[i];
         lane_perf = &lanes_perf[lane];
         dev_index = ucp_proto_common_get_dev_index(&params->super.super, lane);
-        if (!params->select_uct_num_paths ||
+        if ((!lane_perf->num_paths_fixed && (lane_perf->num_paths == 1)) ||
             (selection->dev_count[dev_index] > lane_perf->num_paths)) {
             continue;
         }
