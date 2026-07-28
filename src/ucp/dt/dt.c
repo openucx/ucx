@@ -60,6 +60,52 @@ ucs_status_t ucp_dt_mem_info_verify(const char *dt_name, size_t index,
 }
 
 
+static ucp_lane_index_t
+ucp_mem_type_select_lane(ucp_worker_h worker, ucp_ep_h ep, const void *buffer,
+                         size_t length, ucs_memory_type_t mem_type)
+{
+    const ucp_ep_config_t *ep_config = ucp_ep_config(ep);
+    ucp_memory_info_t mem_info;
+    ucp_lane_index_t lane;
+    ucp_md_index_t md_index;
+    uint8_t required_mem_flags;
+    unsigned lane_index;
+
+    lane = ep_config->key.rma_lanes[0];
+    ucs_assert(lane != UCP_NULL_LANE);
+    md_index = ucp_ep_md_index(ep, lane);
+    required_mem_flags =
+            worker->context->tl_mds[md_index].attr.required_mem_flags;
+    if (required_mem_flags == 0) {
+        return lane;
+    }
+
+    ucp_memory_detect(worker->context, buffer, length, &mem_info);
+    for (lane_index = 0; lane_index < UCP_MAX_LANES; ++lane_index) {
+        lane = ep_config->key.rma_lanes[lane_index];
+        if (lane == UCP_NULL_LANE) {
+            break;
+        }
+
+        md_index = ucp_ep_md_index(ep, lane);
+        required_mem_flags =
+                worker->context->tl_mds[md_index].attr.required_mem_flags;
+        if (ucs_test_all_flags(mem_info.flags, required_mem_flags)) {
+            return lane;
+        }
+
+        ucs_trace("mem type %s lane[%d] md[%d]=%s skipped: mem_flags=0x%x "
+                  "do not include required_mem_flags=0x%x",
+                  ucs_memory_type_names[mem_type], lane, md_index,
+                  worker->context->tl_mds[md_index].rsc.md_name, mem_info.flags,
+                  required_mem_flags);
+    }
+
+    ucs_fatal("no compatible RMA lane for %s memory",
+              ucs_memory_type_names[mem_type]);
+}
+
+
 UCS_PROFILE_FUNC_VOID(ucp_mem_type_unpack,
                       (worker, buffer, recv_data, recv_length, mem_type),
                       ucp_worker_h worker, void *buffer, const void *recv_data,
@@ -75,7 +121,8 @@ UCS_PROFILE_FUNC_VOID(ucp_mem_type_unpack,
         return;
     }
 
-    lane     = ucp_ep_config(ep)->key.rma_lanes[0];
+    lane     = ucp_mem_type_select_lane(worker, ep, buffer, recv_length,
+                                        mem_type);
     md_index = ucp_ep_md_index(ep, lane);
 
     status = ucp_mem_type_reg_buffers(worker, buffer, recv_length, mem_type,
@@ -110,7 +157,7 @@ UCS_PROFILE_FUNC_VOID(ucp_mem_type_pack,
         return;
     }
 
-    lane     = ucp_ep_config(ep)->key.rma_lanes[0];
+    lane     = ucp_mem_type_select_lane(worker, ep, src, length, mem_type);
     md_index = ucp_ep_md_index(ep, lane);
 
     status = ucp_mem_type_reg_buffers(worker, (void *)src, length, mem_type,

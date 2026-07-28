@@ -8,19 +8,23 @@
 
 #include <common/test.h>
 #include <common/mem_buffer.h>
+#include <algorithm>
 #include <cstring>
 #include <unordered_map>
 #include <memory>
 
 extern "C" {
+#include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_rkey.h>
 #include <ucp/dt/datatype_iter.inl>
+#include <ucp/dt/dt.h>
 #include <ucp/proto/proto.h>
 #include <ucp/proto/proto_debug.h>
 #include <ucp/proto/proto_perf.h>
 #include <ucp/proto/proto_init.h>
 #include <ucp/rndv/proto_rndv.h>
 #include <ucs/datastruct/linear_func.h>
+#include <ucs/memory/memtype_cache.h>
 #include <ucp/proto/proto_select.inl>
 #include <ucp/core/ucp_worker.inl>
 #include <uct/api/v2/uct_v2.h>
@@ -481,6 +485,86 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_cuda_async_non_reg, rcx,
                               "rc_x,cuda_copy")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_cuda_async_non_reg, rcv,
                               "rc_v,cuda_copy")
+
+class test_ucp_proto_gdr_copy : public test_ucp_proto {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant>& variants)
+    {
+        add_variant(variants, UCP_FEATURE_RMA);
+    }
+
+protected:
+    void init() override
+    {
+        modify_config("PROTO_ENABLE", "y");
+        ucp_test::init();
+        sender().connect(&sender(), get_ep_params());
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_gdr_copy, mem_type_pack_non_reg,
+           "GDR_COPY_BW?=1000GBs")
+{
+    constexpr size_t buffer_size = 65536;
+    std::vector<uint8_t> expected(buffer_size);
+    std::vector<uint8_t> actual(buffer_size);
+    ucp_ep_h mem_type_ep;
+    const ucp_ep_config_t *ep_config;
+    ucp_memory_info_t detected_mem_info;
+    ucs_memory_info_t cache_mem_info;
+    ucp_lane_index_t lane;
+    ucp_md_index_t md_index;
+
+    if (!mem_buffer::is_async_supported(UCS_MEMORY_TYPE_CUDA)) {
+        UCS_TEST_SKIP_R("CUDA async allocation is not supported");
+    }
+
+    scoped_async_cuda_buffer buffer(buffer_size);
+    ucp_memory_detect(context(), buffer.ptr(), buffer_size, &detected_mem_info);
+    if (detected_mem_info.sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        UCS_TEST_SKIP_R("CUDA system device is unknown");
+    }
+
+    ucs_memtype_cache_update(buffer.ptr(), buffer_size, UCS_MEMORY_TYPE_CUDA,
+                             detected_mem_info.sys_dev, 0);
+    ucs::handle<const void*, size_t> cache_entry(
+            buffer.ptr(), ucs_memtype_cache_remove, buffer_size);
+
+    ASSERT_UCS_OK(ucs_memtype_cache_lookup(buffer.ptr(), buffer_size,
+                                           &cache_mem_info));
+    ASSERT_EQ(0, cache_mem_info.mem_flags & UCS_MEM_FLAG_REGISTRABLE);
+
+    mem_type_ep = worker()->mem_type_ep[UCS_MEMORY_TYPE_CUDA];
+    ASSERT_NE(nullptr, mem_type_ep);
+    ep_config = ucp_ep_config(mem_type_ep);
+
+    lane     = ep_config->key.rma_lanes[0];
+    ASSERT_NE(UCP_NULL_LANE, lane);
+    md_index = ucp_ep_md_index(mem_type_ep, lane);
+    ASSERT_STREQ("gdr_copy", context()->tl_mds[md_index].rsc.md_name);
+    ASSERT_FALSE(ucs_test_all_flags(
+            cache_mem_info.mem_flags,
+            context()->tl_mds[md_index].attr.required_mem_flags));
+
+    for (size_t i = 0; i < buffer_size; ++i) {
+        expected[i] = static_cast<uint8_t>(i);
+    }
+
+    mem_buffer::copy_to(buffer.ptr(), expected.data(), buffer_size,
+                        UCS_MEMORY_TYPE_CUDA);
+    ucp_mem_type_pack(worker(), actual.data(), buffer.ptr(), buffer_size,
+                      UCS_MEMORY_TYPE_CUDA);
+    EXPECT_EQ(0, std::memcmp(expected.data(), actual.data(), buffer_size));
+
+    std::fill(expected.begin(), expected.end(), 0xa5);
+    ucp_mem_type_unpack(worker(), buffer.ptr(), expected.data(), buffer_size,
+                        UCS_MEMORY_TYPE_CUDA);
+    EXPECT_TRUE(mem_buffer::compare(expected.data(), buffer.ptr(), buffer_size,
+                                    UCS_MEMORY_TYPE_CUDA));
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_gdr_copy, gdr_copy,
+                              "self,gdr_copy,cuda_copy")
 
 class test_perf_node : public test_ucp_proto {
 };

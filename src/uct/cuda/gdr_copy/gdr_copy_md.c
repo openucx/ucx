@@ -116,11 +116,12 @@ uct_gdr_copy_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
     uct_gdr_copy_md_t *md = ucs_derived_of(uct_md, uct_gdr_copy_md_t);
 
     uct_md_base_md_query(md_attr);
-    md_attr->flags            = UCT_MD_FLAG_REG | UCT_MD_FLAG_NEED_RKEY;
-    md_attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
-    md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
-    md_attr->rkey_packed_size = sizeof(uct_gdr_copy_key_t);
-    md_attr->reg_cost         = md->reg_cost;
+    md_attr->flags              = UCT_MD_FLAG_REG | UCT_MD_FLAG_NEED_RKEY;
+    md_attr->reg_mem_types      = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
+    md_attr->access_mem_types   = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
+    md_attr->required_mem_flags = UCS_MEM_FLAG_REGISTRABLE;
+    md_attr->rkey_packed_size   = sizeof(uct_gdr_copy_key_t);
+    md_attr->reg_cost           = md->reg_cost;
 
     /* In absence of own cache require proper alignment from the global cache */
     if (md->rcache == NULL) {
@@ -667,4 +668,3 @@ uct_component_t uct_gdr_copy_component = {
     .md_vfs_init        = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
 UCT_COMPONENT_REGISTER(&uct_gdr_copy_component);
-
