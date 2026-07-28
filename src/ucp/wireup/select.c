@@ -2456,6 +2456,7 @@ ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
     ucp_lane_index_t lane;
     unsigned addr_index;
     size_t seg_size;
+    const ucp_tl_bitmap_t *scope_bitmap;
 
     if (context->config.ext.wireup_via_am_lane) {
         ucs_assert(am_lane != UCP_NULL_LANE);
@@ -2464,6 +2465,9 @@ ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
 
     ucp_wireup_fill_aux_criteria(&criteria, ep_init_flags,
                                  UCP_ADDR_IFACE_FLAG_CB_ASYNC);
+
+    criteria.tl_scope = ucp_wireup_feature_tl_scope(context, UCP_FEATURE_AM);
+    scope_bitmap = ucp_wireup_tl_scope_bitmap(context, &criteria);
     for (lane = 0; lane < num_lanes; ++lane) {
         if (lane_descs[lane].rsc_index == UCP_NULL_RESOURCE) {
             continue;
@@ -2474,6 +2478,10 @@ ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
         resource   = &context->tl_rscs[rsc_index].tl_rsc;
         attrs      = ucp_worker_iface_get_attr(worker, rsc_index);
         seg_size   = ucp_wireup_aux_seg_size(attrs, &address_list[addr_index]);
+
+        if (!UCS_STATIC_BITMAP_GET(*scope_bitmap, rsc_index)) {
+            continue;
+        }
 
         /* Select a lane which satisfies the wireup criteria and with the
          * highest effective seg_size and use it for wireup.

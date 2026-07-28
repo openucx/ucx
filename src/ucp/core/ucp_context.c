@@ -2530,6 +2530,14 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
                      config->ctx.use_mt_mutex ? UCP_MT_TYPE_MUTEX
                                               : UCP_MT_TYPE_SPINLOCK);
 
+    /* Make sure control feature is legal */
+    if (context->config.ctrl_features & ~((uint64_t)UCP_FEATURE_AM)) {
+        ucs_error("unsupported control features 0x%" PRIx64
+                  ": only UCP_FEATURE_AM is supported",
+                   context->config.ctrl_features);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
     status = ucs_config_parser_clone_opts(&config->ctx, &context->config.ext,
                                           ucp_context_config_table);
     if (status != UCS_OK) {
