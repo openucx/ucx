@@ -2180,7 +2180,8 @@ uct_ib_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
                                                                &iface_attr);
         if (uct_ep_op_is_get(op) && uct_ib_iface_port_is_xdr(ib_iface)) {
             max_bandwidth = perf_attr->bandwidth.shared *
-                            iface_attr.dev_num_paths * UCT_IB_XDR_READ_PATH_RATIO;
+                            ib_iface->get_num_paths *
+                            UCT_IB_XDR_READ_PATH_RATIO;
             perf_attr->bandwidth.shared = ucs_min(perf_attr->bandwidth.shared,
                                                   max_bandwidth);
         }
