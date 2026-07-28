@@ -2538,6 +2538,13 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
         return UCS_ERR_INVALID_PARAM;
     }
 
+    if (context->config.features & context->config.ctrl_features) {
+        ucs_error("features 0x%" PRIx64
+                  " cannot be enabled as both data and control features",
+                  context->config.features & context->config.ctrl_features);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
     status = ucs_config_parser_clone_opts(&config->ctx, &context->config.ext,
                                           ucp_context_config_table);
     if (status != UCS_OK) {
