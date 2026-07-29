@@ -14,7 +14,9 @@
 # test) - see ucxx_ucx_pr.sh. The ucx_pr phase builds it once and tars it for
 # the other jobs, which fetch the artifact instead of rebuilding.
 
-set -o pipefail
+# The pipeline runs this as `bash <path>`, which ignores the shebang options,
+# so the shell flags have to be set here for the fail-loud guards to bite.
+set -eE -o pipefail
 
 phase=${1:?phase required}
 
@@ -26,7 +28,9 @@ if [ "$phase" = "ucx_pr" ]; then
   source "$ucx_dir/buildlib/tools/ucxx_ucx_pr.sh"
   build_ucx_pr_conda
   echo "== UCX under test =="
-  "$UCX_PR_PREFIX/bin/ucx_info" -v | head -3
+  # sed, not head: head closes the pipe early, which under pipefail can turn a
+  # healthy ucx_info into a SIGPIPE failure.
+  "$UCX_PR_PREFIX/bin/ucx_info" -v | sed -n '1,3p'
   # The tarball must land on an agent-mapped path (UCX_PR_TARBALL) - the
   # artifact upload runs on the host, which cannot see the container's /tmp.
   tar -C /tmp -czf "${UCX_PR_TARBALL:?UCX_PR_TARBALL required}" ucx-pr

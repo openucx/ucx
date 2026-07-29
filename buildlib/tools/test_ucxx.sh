@@ -13,7 +13,9 @@
 # (see ucxx_ucx_pr.sh), the packages build against UCX_PR_PREFIX, and the
 # tests load its libraries.
 
-set -o pipefail
+# The pipeline runs this as `bash <path>`, which ignores the shebang options,
+# so the shell flags have to be set here for the fail-loud guards to bite.
+set -eE -o pipefail
 
 phase=${1:?phase required}
 case "$phase" in
@@ -78,6 +80,9 @@ export_host_driver_override() {
   for hostlib in "/usr/lib/$arch-linux-gnu" /usr/lib64; do
     [ -d "$hostlib" ] && export LD_LIBRARY_PATH="$hostlib:${LD_LIBRARY_PATH:-}"
   done
+  # arm64 images carry no /usr/lib64, so the loop ends non-zero there; the
+  # caller runs under errexit and must not treat that as a failure.
+  return 0
 }
 
 case "$phase" in
