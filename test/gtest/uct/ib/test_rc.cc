@@ -12,6 +12,7 @@
 #ifdef HAVE_MLX5_DV
 extern "C" {
 #include <uct/ib/mlx5/rc/rc_mlx5_common.h>
+#include <uct/ib/mlx5/rc/rc_mlx5.h>
 }
 #endif
 
@@ -116,6 +117,29 @@ UCS_TEST_P(test_rc, flush_fc, "FLUSH_MODE?=fc") {
             ASSERT_UCS_OK_OR_INPROGRESS(status);
         }
     } while (status != UCS_OK);
+}
+
+UCS_TEST_P(test_rc, fence_am_short_consumed, "RC_FENCE=weak")
+{
+    uct_ib_fence_info_t *fence_info;
+
+    if (GetParam()->tl_name == "rc_verbs") {
+        fence_info = &ucs_derived_of(m_e1->ep(0), uct_rc_verbs_ep_t)->fi;
+    } else {
+#ifdef HAVE_MLX5_DV
+        fence_info =
+                &ucs_derived_of(m_e1->ep(0),
+                                uct_rc_mlx5_ep_t)->super.tx.wq.fi;
+#else
+        UCS_TEST_ABORT("rc_mlx5 transport requires mlx5 DV support");
+#endif
+    }
+
+    ASSERT_UCS_OK(uct_ep_fence(m_e1->ep(0), 0));
+    EXPECT_NE(rc_iface(m_e1)->tx.fi.fence_beat, fence_info->fence_beat);
+
+    ASSERT_UCS_OK(uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
+    EXPECT_EQ(rc_iface(m_e1)->tx.fi.fence_beat, fence_info->fence_beat);
 }
 
 UCT_INSTANTIATE_RC_TEST_CASE(test_rc)
