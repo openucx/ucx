@@ -2407,10 +2407,7 @@ ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
 
     relaxed_order_required = UCT_IB_MLX5DV_GET(
             cmd_hca_cap, cap, mkc_order_write_after_write_ro_only);
-    ucs_debug("%s: mkey ordering: read-after-write=%d relaxed-only=%d",
-              uct_ib_device_name(dev),
-              UCT_IB_MLX5DV_GET(cmd_hca_cap, cap,
-                                mkc_order_read_after_write),
+    ucs_debug("%s: relaxed-only memory keys %d", uct_ib_device_name(dev),
               relaxed_order_required);
 
     UCS_STATIC_ASSERT(UCS_MASK(UCT_IB_MLX5_MD_MAX_DCI_CHANNELS) <= UINT8_MAX);
