@@ -29,15 +29,17 @@ build_ucx_pr() {
 export -f build_ucx_pr
 
 # The conda image has no system toolchain; build the PR's UCX with a
-# conda-forge one. Pins: libtool (newer releases break UCX's autogen) and
-# sysroot 2.17 (newer sysroots stamp x86-64-v3 ISA notes into the binaries
-# and the loader refuses them on the pre-v3 CPUs of the GPU nodes).
+# conda-forge one. Everything version-sensitive is pinned, because the env is
+# solved fresh on every run and conda-forge moves under it: gcc 15+ turns the
+# OpenMP 'master' deprecation into an error under UCX's -Werror, newer libtool
+# releases break UCX's autogen, and sysroots past 2.17 stamp x86-64-v3 ISA
+# notes that the pre-v3 CPUs of the GPU nodes refuse to load.
 build_ucx_pr_conda() {
   [ -x "$UCX_PR_PREFIX/bin/ucx_info" ] && return 0
   local sysroot_pkg="sysroot_linux-64"
   [ "$(uname -m)" = "aarch64" ] && sysroot_pkg="sysroot_linux-aarch64"
   rapids-mamba-retry create -y -n ucx-build -c conda-forge \
-    gcc gxx binutils make autoconf automake libtool=2.4.7 "$sysroot_pkg=2.17" \
+    gcc=14 gxx=14 binutils make autoconf automake libtool=2.4.7 "$sysroot_pkg=2.17" \
     cuda-cudart-dev cuda-driver-dev cuda-nvml-dev cuda-crt cuda-cccl \
     "cuda-version=${RAPIDS_CUDA_VERSION%.*}" \
     > /tmp/ucx-toolchain.log 2>&1 \
