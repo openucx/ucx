@@ -15,6 +15,7 @@
 #include <ucs/memory/memtype_cache.h>
 #include <sys/utsname.h>
 #include <pthread.h>
+#include <zlib.h>
 
 #define MAX_AGENTS 127
 static struct agents {
@@ -297,29 +298,27 @@ ucs_status_t uct_rocm_base_detect_memory_type(uct_md_h md, const void *addr,
     return UCS_OK;
 }
 
-FILE* uct_rocm_base_load_prod_config_file() 
+gzFile* uct_rocm_base_load_prod_config_file() 
 {
-    /* Skip if zcat is unavailable or /proc/config.gz does not exist.
-     * popen() succeeds even when the file is missing, producing an empty
-     * stream that falsely triggers the "not found" error path.
-     * Check if zcat is available in the system */
-    int has_zcat = 0;
     int has_config_file = 0;
     char kernel_conf_file[128];
     const char path[] = "/proc/config.gz";
-    char popen_cmd[256];
+    gzFile* zfp = NULL;
 
     ucs_snprintf_safe(kernel_conf_file, sizeof(kernel_conf_file), path);
-    has_zcat = (system("which zcat > /dev/null 2>&1") == 0);
     has_config_file = (access(path, R_OK) == 0);
-    if (!has_zcat || !has_config_file) {
-        ucs_trace("Skipping %s (zcat %s, file %s)", kernel_conf_file,
-            has_zcat ? "available" : "unavailable",
-            has_config_file ? "exists" : "not found");
+    if (!has_config_file) {
+        ucs_trace("Skipping %s (file not found)", kernel_conf_file);
         return NULL;
     }
-    ucs_snprintf_safe(popen_cmd, sizeof(popen_cmd), "zcat %s 2>/dev/null", path);
-    return popen(popen_cmd, "r");
+
+    zfp = gzopen(path, "rb");
+    if (zfp == NULL) {
+        ucs_trace("Skipping %s (not present or unreadable)", kernel_conf_file);
+        return NULL;
+    }
+
+    return zfp;
 }
 
 FILE* uct_rocm_base_load_kernel_config_file()
@@ -329,7 +328,6 @@ FILE* uct_rocm_base_load_kernel_config_file()
         "/usr/src/linux-%s/.config",
         "/usr/src/linux/.config",
         "/usr/lib/modules/%s/config",
-        "/usr/lib/ostree-boot/config-%s",
         "/usr/lib/kernel/config-%s",
         "/usr/src/linux-headers-%s/.config",
         "/lib/modules/%s/build/.config"
@@ -377,18 +375,40 @@ int uct_rocm_base_file_contains_dmabuf_support(FILE* fp, const char kernel_opt1[
     return dmabuf_supported;
 }
 
+int uct_rocm_base_gzfile_contains_dmabuf_support(gzFile* zfp, const char kernel_opt1[], const char kernel_opt2[])
+{
+    int dmabuf_supported = 0;
+    int found_opt1           = 0;
+    int found_opt2           = 0;
+    char buf[256];
+
+    while (gzgets(zfp, buf, sizeof(buf)) != NULL) {
+        if (!found_opt1 && (strstr(buf, kernel_opt1) != NULL)) {
+            found_opt1 = 1;
+        }
+        if (!found_opt2 && (strstr(buf, kernel_opt2) != NULL)) {
+            found_opt2 = 1;
+        }
+        if (found_opt1 && found_opt2) {
+            dmabuf_supported = 1;
+        }
+    }
+    return dmabuf_supported;
+}
+
 int uct_rocm_base_kernel_config_supports_dmabuf()
 {
     int dmabuf_supported = 0;
     FILE* fp = NULL;
+    gzFile* zfp = NULL;
     const char kernel_opt1[] = "CONFIG_DMABUF_MOVE_NOTIFY=y";
     const char kernel_opt2[] = "CONFIG_PCI_P2PDMA=y";
 
     /* Special handling for /proc/config.gz */
-    fp = uct_rocm_base_load_prod_config_file();
-    if (fp != NULL) {
-        dmabuf_supported = uct_rocm_base_file_contains_dmabuf_support(fp, kernel_opt1, kernel_opt2);
-        pclose(fp);
+    zfp = uct_rocm_base_load_prod_config_file();
+    if (zfp != NULL) {
+        dmabuf_supported = uct_rocm_base_gzfile_contains_dmabuf_support(zfp, kernel_opt1, kernel_opt2);
+        gzclose(zfp);
         if (dmabuf_supported == 1) {
             return dmabuf_supported;
         }
