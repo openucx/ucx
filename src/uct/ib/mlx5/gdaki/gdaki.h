@@ -54,13 +54,9 @@ typedef struct uct_rc_gdaki_ep {
     uct_rc_gdaki_channel_block_t     *channel_block;
 } uct_rc_gdaki_ep_t;
 
-typedef struct {
-    ucs_sys_device_t sys_dev;
-    uint64_t         cuda_map;
-    int              direct_nic;
-} uct_gdaki_dev_matrix_elem_t;
-
-const uct_gdaki_dev_matrix_elem_t *
-uct_gdaki_dev_matrix_get(const uct_ib_md_t *ib_md, size_t *dmat_length_p);
+ucs_status_t
+uct_gdaki_fill_cuda_tl_devices(const uct_ib_md_t *ib_md,
+                               uct_tl_device_resource_t **tl_devices_p,
+                               unsigned *num_tl_devices_p);
 
 #endif /* UCT_GDAKI_H */
