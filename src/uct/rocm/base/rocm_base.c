@@ -298,12 +298,12 @@ ucs_status_t uct_rocm_base_detect_memory_type(uct_md_h md, const void *addr,
     return UCS_OK;
 }
 
-gzFile* uct_rocm_base_load_prod_config_file() 
+gzFile uct_rocm_base_load_prod_config_file() 
 {
     int has_config_file = 0;
     char kernel_conf_file[128];
     const char path[] = "/proc/config.gz";
-    gzFile* zfp = NULL;
+    gzFile zfp = NULL;
 
     ucs_snprintf_safe(kernel_conf_file, sizeof(kernel_conf_file), path);
     has_config_file = (access(path, R_OK) == 0);
@@ -375,7 +375,7 @@ int uct_rocm_base_file_contains_dmabuf_support(FILE* fp, const char kernel_opt1[
     return dmabuf_supported;
 }
 
-int uct_rocm_base_gzfile_contains_dmabuf_support(gzFile* zfp, const char kernel_opt1[], const char kernel_opt2[])
+int uct_rocm_base_gzfile_contains_dmabuf_support(gzFile zfp, const char kernel_opt1[], const char kernel_opt2[])
 {
     int dmabuf_supported = 0;
     int found_opt1           = 0;
@@ -400,7 +400,7 @@ int uct_rocm_base_kernel_config_supports_dmabuf()
 {
     int dmabuf_supported = 0;
     FILE* fp = NULL;
-    gzFile* zfp = NULL;
+    gzFile zfp = NULL;
     const char kernel_opt1[] = "CONFIG_DMABUF_MOVE_NOTIFY=y";
     const char kernel_opt2[] = "CONFIG_PCI_P2PDMA=y";
 
