@@ -1066,8 +1066,8 @@ static ucs_status_t
 uct_rc_mlx5_iface_query_v2(uct_iface_h tl_iface,
                            uct_iface_attr_v2_t *iface_attr)
 {
+    uct_ib_mlx5_ext_iface_query_attr_t ext_attr = {0};
     uct_rc_mlx5_iface_common_t *mlx5_iface;
-    uct_ib_mlx5_ext_iface_query_attr_t ext_attr = {};
     size_t max_sgl;
     ucs_status_t status;
 
@@ -1094,23 +1094,26 @@ uct_rc_mlx5_iface_query_v2(uct_iface_h tl_iface,
     }
 
     uct_rc_mlx5_iface_fill_ext_query_attr(iface_attr, &ext_attr);
-    if (ext_attr.field_mask != 0) {
-        status = uct_ib_mlx5_ext_iface_query(tl_iface, &ext_attr);
-        if (status != UCS_OK) {
-            return status;
-        }
 
-        if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_CAP_FLAGS) {
-            iface_attr->cap.flags |= ext_attr.cap.flags;
-        }
+    if (ext_attr.field_mask == 0) {
+        return UCS_OK;
+    }
 
-        if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH) {
-            iface_attr->tx_token_length = ext_attr.tx_token_len;
-        }
+    status = uct_ib_mlx5_ext_iface_query(tl_iface, &ext_attr);
+    if (status != UCS_OK) {
+        return status;
+    }
 
-        if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH) {
-            iface_attr->rx_token_length = ext_attr.rx_token_len;
-        }
+    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_CAP_FLAGS) {
+        iface_attr->cap.flags |= ext_attr.cap.flags;
+    }
+
+    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH) {
+        iface_attr->tx_token_length = ext_attr.tx_token_len;
+    }
+
+    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH) {
+        iface_attr->rx_token_length = ext_attr.rx_token_len;
     }
 
     return UCS_OK;

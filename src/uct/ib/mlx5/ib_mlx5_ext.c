@@ -112,15 +112,14 @@ uct_ib_mlx5_ext_find_plugin(uct_iface_h iface, uint64_t cap_flags)
     uct_ib_mlx5_ext_iface_query_attr_t attr = {
         .field_mask = UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_CAP_FLAGS
     };
+
     uct_ib_mlx5_ext_plugin_t *plugin;
     ucs_status_t status;
 
     ucs_list_for_each(plugin, &uct_ib_mlx5_ext_plugins, list) {
-        if (ucs_unlikely(uct_ib_mlx5_ext_is_unsupported_op(
-                    (const void*)plugin->ops.iface_query))) {
-            continue;
-        }
-
+        /* Each plugin must support iface query. */
+        ucs_assert(!(uct_ib_mlx5_ext_is_unsupported_op(
+                (const void*)plugin->ops.iface_query)));
         status = plugin->ops.iface_query(iface, &attr);
         if (status != UCS_OK) {
             continue;
