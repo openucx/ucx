@@ -365,7 +365,8 @@ static int ucp_address_pack_v1_extra_info(ucp_object_version_t addr_version,
 }
 
 static ucs_status_t
-ucp_address_gather_devices(ucp_worker_h worker, const ucp_ep_config_key_t *key,
+ucp_address_gather_devices(ucp_worker_h worker, ucp_ep_h ep,
+                           const ucp_ep_config_key_t *key,
                            const ucp_tl_bitmap_t *tl_bitmap, uint64_t flags,
                            ucp_object_version_t addr_version,
                            unsigned max_num_paths,
@@ -403,7 +404,11 @@ ucp_address_gather_devices(ucp_worker_h worker, const ucp_ep_config_key_t *key,
              */
             for (lane = 0; lane < key->num_lanes; ++lane) {
                 if ((key->lanes[lane].rsc_index == rsc_index) &&
-                    ucp_ep_config_connect_p2p(worker, key, rsc_index)) {
+                    ucp_ep_config_connect_p2p(worker, key, rsc_index) &&
+                    /* Failed stubs cannot produce ep addresses.
+                     * Check UCT EP state because a recovering lane keeps its
+                     * FAILED bit while holding a packable wireup proxy. */
+                    !((ep != NULL) && ucp_ep_is_lane_failed_stub(ep, lane))) {
                     dev->tl_addrs_size += !ucp_worker_is_unified_mode(worker);
                     dev->tl_addrs_size += iface_attr->ep_addr_len;
                     dev->tl_addrs_size += sizeof(uint8_t); /* lane index */
@@ -1386,7 +1391,8 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
 
                 ucs_for_each_bit(lane, ucp_ep_config(ep)->p2p_lanes) {
                     ucs_assert(lane < UCP_MAX_LANES);
-                    if (ucp_ep_get_rsc_index(ep, lane) != rsc_index) {
+                    if ((ucp_ep_get_rsc_index(ep, lane) != rsc_index) ||
+                        ucp_ep_is_lane_failed_stub(ep, lane)) {
                         continue;
                     }
 
@@ -1514,7 +1520,7 @@ ucp_address_length(ucp_worker_h worker, const ucp_ep_config_key_t *key,
     ssize_t size;
 
     /* Collect all devices required to pack their address */
-    status = ucp_address_gather_devices(worker, key, tl_bitmap, pack_flags,
+    status = ucp_address_gather_devices(worker, NULL, key, tl_bitmap, pack_flags,
                                         addr_version, UINT_MAX, &devices,
                                         &num_devices);
     if (status != UCS_OK) {
@@ -1559,7 +1565,7 @@ ucs_status_t ucp_address_pack(ucp_worker_h worker, ucp_ep_h ep,
     }
 
     /* Collect all devices we want to pack */
-    status = ucp_address_gather_devices(worker, key, tl_bitmap, pack_flags,
+    status = ucp_address_gather_devices(worker, ep, key, tl_bitmap, pack_flags,
                                         addr_version, max_num_paths, &devices,
                                         &num_devices);
     if (status != UCS_OK) {
