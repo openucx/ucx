@@ -277,6 +277,7 @@ ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep, unsigned ep_init_flags,
      */
     status = ucp_wireup_select_aux_transport(ucp_ep, ep_init_flags,
                                              ucp_tl_bitmap_max, remote_address,
+                                             UINT64_MAX, UINT64_MAX,
                                              &select_info);
     if (status != UCS_OK) {
         return status;
@@ -286,12 +287,14 @@ ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep, unsigned ep_init_flags,
     wiface   = ucp_worker_iface(worker, select_info.rsc_index);
 
     /* create auxiliary endpoint connected to the remote iface. */
-    uct_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE    |
-                               UCT_EP_PARAM_FIELD_DEV_ADDR |
-                               UCT_EP_PARAM_FIELD_IFACE_ADDR;
-    uct_ep_params.iface      = wiface->iface;
-    uct_ep_params.dev_addr   = aux_addr->dev_addr;
-    uct_ep_params.iface_addr = aux_addr->iface_addr;
+    uct_ep_params.field_mask        = UCT_EP_PARAM_FIELD_IFACE |
+                                      UCT_EP_PARAM_FIELD_DEV_ADDR |
+                                      UCT_EP_PARAM_FIELD_IFACE_ADDR |
+                                      UCT_EP_PARAM_FIELD_IFACE_ADDR_LENGTH;
+    uct_ep_params.iface             = wiface->iface;
+    uct_ep_params.dev_addr          = aux_addr->dev_addr;
+    uct_ep_params.iface_addr        = aux_addr->iface_addr;
+    uct_ep_params.iface_addr_length = aux_addr->iface_addr_len;
     status = uct_ep_create(&uct_ep_params, &uct_ep);
     if (status != UCS_OK) {
         /* coverity[leaked_storage] */
@@ -331,6 +334,30 @@ void ucp_wireup_ep_discard_aux_ep(ucp_wireup_ep_t *wireup_ep,
     if (worker->context->config.ext.proto_enable) {
         ucp_worker_iface_unprogress_ep(ucp_worker_iface(worker, rsc_index));
     }
+}
+
+void ucp_wireup_ep_destroy_aux_ep(ucp_wireup_ep_t *wireup_ep)
+{
+    ucp_ep_h ucp_ep     = wireup_ep->super.ucp_ep;
+    ucp_worker_h worker = ucp_ep->worker;
+    uct_ep_h aux_ep     = wireup_ep->aux_ep;
+    ucp_rsc_index_t rsc_index;
+
+    if (aux_ep == NULL) {
+        return;
+    }
+
+    rsc_index                = wireup_ep->aux_rsc_index;
+    wireup_ep->aux_ep        = NULL;
+    wireup_ep->aux_rsc_index = UCP_NULL_RESOURCE;
+    wireup_ep->flags        &= ~UCP_WIREUP_EP_FLAG_AUX_P2P;
+
+    ucp_ep_unprogress_uct_ep(ucp_ep, aux_ep, rsc_index);
+    if (worker->context->config.ext.proto_enable) {
+        ucp_worker_iface_unprogress_ep(ucp_worker_iface(worker, rsc_index));
+    }
+
+    uct_ep_destroy(aux_ep);
 }
 
 static ucs_status_t ucp_wireup_ep_flush(uct_ep_h uct_ep, unsigned flags,
@@ -704,6 +731,7 @@ ucp_wireup_ep_connect_to_ep_v2(uct_ep_h tl_ep,
         .ep_addr_length     = ep_entry->len
     };
     ucp_wireup_ep_t *wireup_ep                = ucp_wireup_ep(tl_ep);
+    ucs_status_t status;
 
     if (wireup_ep == NULL) {
         return uct_ep_connect_to_ep_v2(tl_ep, address_entry->dev_addr,
@@ -714,8 +742,13 @@ ucp_wireup_ep_connect_to_ep_v2(uct_ep_h tl_ep,
         return UCS_OK;
     }
 
+    status = uct_ep_connect_to_ep_v2(wireup_ep->super.uct_ep,
+                                     address_entry->dev_addr, ep_entry->addr,
+                                     &param);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     wireup_ep->flags |= UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED;
-    return uct_ep_connect_to_ep_v2(wireup_ep->super.uct_ep,
-                                   address_entry->dev_addr, ep_entry->addr,
-                                   &param);
+    return UCS_OK;
 }

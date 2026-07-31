@@ -775,5 +775,6 @@ UCS_TEST_P(test_proto_reset_atp, rndv_put, "RNDV_THRESH=0",
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_proto_reset_atp, ib, "ib")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_proto_reset_atp, srd, "srd")
 
 #endif
