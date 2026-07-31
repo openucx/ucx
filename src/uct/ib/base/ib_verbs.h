@@ -66,6 +66,27 @@ static inline ucs_status_t uct_ib_query_device(struct ibv_context *ctx,
 
 #endif
 
+#if HAVE_DECL_IBV_EVENT_DEVICE_SPEED_CHANGE
+#  define UCT_IB_HAVE_SPEED_CHANGE_EVENT                1
+#  define UCT_IB_SPEED_CHANGE_EVENT                     \
+               IBV_EVENT_DEVICE_SPEED_CHANGE
+#  define UCT_IB_SPEED_CHANGE_EVENT_DEVICE_SCOPE        1
+#  define UCT_IB_SPEED_CHANGE_EVENT_NUM_RESOURCES(_n)   1
+#  define UCT_IB_SPEED_CHANGE_EVENT_RESOURCE_ID(_port)  0
+#elif HAVE_DECL_IBV_EVENT_PORT_SPEED_CHANGE
+#  define UCT_IB_HAVE_SPEED_CHANGE_EVENT                1
+#  define UCT_IB_SPEED_CHANGE_EVENT                     \
+               IBV_EVENT_PORT_SPEED_CHANGE
+#  define UCT_IB_SPEED_CHANGE_EVENT_DEVICE_SCOPE        0
+#  define UCT_IB_SPEED_CHANGE_EVENT_NUM_RESOURCES(_n)   (_n)
+#  define UCT_IB_SPEED_CHANGE_EVENT_RESOURCE_ID(_port)  (_port)
+#else
+#  define UCT_IB_HAVE_SPEED_CHANGE_EVENT                0
+#  define UCT_IB_SPEED_CHANGE_EVENT_DEVICE_SCOPE        0
+#  define UCT_IB_SPEED_CHANGE_EVENT_NUM_RESOURCES(_n)   0
+#  define UCT_IB_SPEED_CHANGE_EVENT_RESOURCE_ID(_port)  0
+#endif
+
 
 #if !HAVE_DECL_IBV_ACCESS_RELAXED_ORDERING
 #  define IBV_ACCESS_RELAXED_ORDERING               0
