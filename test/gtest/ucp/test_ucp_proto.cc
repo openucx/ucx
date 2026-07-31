@@ -496,7 +496,6 @@ public:
 protected:
     void init() override
     {
-        modify_config("PROTO_ENABLE", "y");
         ucp_test::init();
         sender().connect(&sender(), get_ep_params());
     }
@@ -508,12 +507,8 @@ UCS_TEST_P(test_ucp_proto_gdr_copy, mem_type_pack_non_reg,
     constexpr size_t buffer_size = 65536;
     std::vector<uint8_t> expected(buffer_size);
     std::vector<uint8_t> actual(buffer_size);
-    ucp_ep_h mem_type_ep;
-    const ucp_ep_config_t *ep_config;
     ucp_memory_info_t detected_mem_info;
     ucs_memory_info_t cache_mem_info;
-    ucp_lane_index_t lane;
-    ucp_md_index_t md_index;
 
     if (!mem_buffer::is_async_supported(UCS_MEMORY_TYPE_CUDA)) {
         UCS_TEST_SKIP_R("CUDA async allocation is not supported");
@@ -534,13 +529,14 @@ UCS_TEST_P(test_ucp_proto_gdr_copy, mem_type_pack_non_reg,
                                            &cache_mem_info));
     ASSERT_EQ(0, cache_mem_info.mem_flags & UCS_MEM_FLAG_REGISTRABLE);
 
-    mem_type_ep = worker()->mem_type_ep[UCS_MEMORY_TYPE_CUDA];
+    const ucp_ep_h mem_type_ep =
+            worker()->mem_type_ep[UCS_MEMORY_TYPE_CUDA];
     ASSERT_NE(nullptr, mem_type_ep);
-    ep_config = ucp_ep_config(mem_type_ep);
+    const ucp_ep_config_t *ep_config = ucp_ep_config(mem_type_ep);
 
-    lane     = ep_config->key.rma_lanes[0];
+    const ucp_lane_index_t lane = ep_config->key.rma_lanes[0];
     ASSERT_NE(UCP_NULL_LANE, lane);
-    md_index = ucp_ep_md_index(mem_type_ep, lane);
+    const ucp_md_index_t md_index = ucp_ep_md_index(mem_type_ep, lane);
     ASSERT_STREQ("gdr_copy", context()->tl_mds[md_index].rsc.md_name);
     ASSERT_FALSE(ucs_test_all_flags(
             cache_mem_info.mem_flags,

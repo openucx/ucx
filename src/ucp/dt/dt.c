@@ -72,7 +72,6 @@ ucp_mem_type_select_lane(ucp_worker_h worker, ucp_ep_h ep, const void *buffer,
     unsigned lane_index;
 
     lane = ep_config->key.rma_lanes[0];
-    ucs_assert(lane != UCP_NULL_LANE);
     md_index = ucp_ep_md_index(ep, lane);
     required_mem_flags =
             worker->context->tl_mds[md_index].attr.required_mem_flags;
