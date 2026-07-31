@@ -529,8 +529,7 @@ UCS_TEST_P(test_ucp_proto_gdr_copy, mem_type_pack_non_reg,
                                            &cache_mem_info));
     ASSERT_EQ(0, cache_mem_info.mem_flags & UCS_MEM_FLAG_REGISTRABLE);
 
-    const ucp_ep_h mem_type_ep =
-            worker()->mem_type_ep[UCS_MEMORY_TYPE_CUDA];
+    const ucp_ep_h mem_type_ep = worker()->mem_type_ep[UCS_MEMORY_TYPE_CUDA];
     ASSERT_NE(nullptr, mem_type_ep);
     const ucp_ep_config_t *ep_config = ucp_ep_config(mem_type_ep);
 
