@@ -488,7 +488,7 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_cuda_async_non_reg, rcv,
 
 class test_ucp_proto_gdr_copy : public test_ucp_proto {
 public:
-    static void get_test_variants(std::vector<ucp_test_variant>& variants)
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
         add_variant(variants, UCP_FEATURE_RMA);
     }
@@ -522,8 +522,9 @@ UCS_TEST_P(test_ucp_proto_gdr_copy, mem_type_pack_non_reg,
 
     ucs_memtype_cache_update(buffer.ptr(), buffer_size, UCS_MEMORY_TYPE_CUDA,
                              detected_mem_info.sys_dev, 0);
-    ucs::handle<const void*, size_t> cache_entry(
-            buffer.ptr(), ucs_memtype_cache_remove, buffer_size);
+    ucs::handle<const void*, size_t> cache_entry(buffer.ptr(),
+                                                 ucs_memtype_cache_remove,
+                                                 buffer_size);
 
     ASSERT_UCS_OK(ucs_memtype_cache_lookup(buffer.ptr(), buffer_size,
                                            &cache_mem_info));
