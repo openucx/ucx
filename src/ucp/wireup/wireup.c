@@ -981,6 +981,42 @@ void ucp_wireup_process_ack(ucp_worker_h worker, ucp_ep_h ep,
     ucp_wireup_remote_connected(ep);
 }
 
+static void
+ucp_wireup_augment_aux_tls(ucp_ep_h ep, ucp_lane_map_t lane_map,
+                           ucp_tl_bitmap_t *tl_bitmap)
+{
+    ucp_context_h context = ep->worker->context;
+    ucp_rsc_index_t lane_rsc, aux_rsc;
+    ucp_lane_index_t lane;
+    uint64_t iface_flags;
+
+    ucs_for_each_bit(lane, lane_map) {
+        lane_rsc = ucp_ep_get_rsc_index(ep, lane);
+        if (lane_rsc == UCP_NULL_RESOURCE) {
+            continue;
+        }
+
+        UCS_STATIC_BITMAP_FOR_EACH_BIT(aux_rsc, &context->tl_bitmap) {
+            if (UCS_STATIC_BITMAP_GET(*tl_bitmap, aux_rsc)) {
+                continue;
+            }
+
+            if (context->tl_rscs[aux_rsc].dev_index !=
+                context->tl_rscs[lane_rsc].dev_index) {
+                continue;
+            }
+
+            iface_flags = ucp_worker_iface_get_attr(ep->worker,
+                                                    aux_rsc)->cap.flags;
+            if (ucs_test_all_flags(iface_flags,
+                                   UCT_IFACE_FLAG_CONNECT_TO_IFACE |
+                                   UCT_IFACE_FLAG_EP_CHECK)) {
+                UCS_STATIC_BITMAP_SET(tl_bitmap, aux_rsc);
+            }
+        }
+    }
+}
+
 void ucp_wireup_send_lanes_addr_msg(ucp_ep_h ep, uint8_t msg_type,
                                     ucp_lane_map_t requested_lane_map,
                                     ucp_lane_map_t provided_lane_map)
@@ -989,6 +1025,7 @@ void ucp_wireup_send_lanes_addr_msg(ucp_ep_h ep, uint8_t msg_type,
     ucs_status_t status;
 
     tl_bitmap = ucp_wireup_get_ep_tl_bitmap(ep, provided_lane_map);
+    ucp_wireup_augment_aux_tls(ep, provided_lane_map, &tl_bitmap);
 
     ucs_debug("ep %p: send %s requested=0x%" PRIx64 " provided=0x%" PRIx64, ep,
               ucp_wireup_msg_str(msg_type), (uint64_t)requested_lane_map,
@@ -1066,6 +1103,7 @@ ucp_wireup_process_lanes_addr_reply(
     rebuilt = ucp_ep_recovery_rebuild_lanes(
             ep, lanes_info->provided_lane_map & ucp_ep_get_failed_lanes(ep),
             remote_address);
+    ucp_ep_recovery_on_reply_received(ep);
 
     ucs_debug("ep %p: LANES_ADDR_REP requested=0x%" PRIx64
               " provided=0x%" PRIx64 " rebuilt=0x%" PRIx64,
