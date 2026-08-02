@@ -11,40 +11,7 @@
 ### Features:
 ### Bugfixes:
 
-## 1.22.0-rc3 (July 26, 2026)
-### Bugfixes:
-#### UCP
- * Fixed rendezvous multi-lane protocol selection to preserve combined minimum sizes
- * Fixed unnecessary rendezvous PUT fences on ordered transports
-
-## 1.22.0-rc2 (July 16, 2026)
-### Features:
-#### UCP
- * Added transport and wireup debugging table dumps during context and endpoint creation
- * Set four rails by default for Vera platforms
-#### CUDA
- * Added POSIX file descriptor handle support for same-machine CUDA VMM IPC
- * Added support for CUDA device aliasing with MPS MLOPart
-#### RDMA CORE (IB, ROCE, etc.)
- * Enabled relaxed ordering by default for Vera CPU platforms
-#### UCM
- * Propagated memory attributes in allocation events
-#### Build
- * Added configure option to append a SONAME suffix
-### Bugfixes:
-#### UCP
- * Fixed rendezvous remote-memory flag estimation from rkey memory-domain maps
- * Disabled RMA rendezvous protocols on non-Vera platforms
- * Fixed active-message lane selection to preserve latency priority
-#### CUDA
- * Fixed CUDA copy memory-flag detection with active CUDA contexts
-#### RDMA CORE (IB, ROCE, etc.)
- * Fixed Direct NIC sibling matching when HCAs have no active ports
- * Fixed DONT_FORK handling for kernels that support RDMA copy-on-fork
- * Fixed GGA MMO fence ordering
- * Restricted EMR relaxed ordering to device memory
-
-## 1.22.0-rc1 (June 29, 2026)
+## 1.22.0 (August 2, 2026)
 ### Features:
 #### UCP
  * Added SGL datatype support for non-blocking PUT operations
@@ -55,6 +22,8 @@
  * Added multi-lane support for device operations
  * Added memory registration flags to UCP/UCT/UCS APIs
  * Enabled v2 operations on proxy and wireup endpoints
+ * Added transport and wireup debugging table dumps during context and endpoint creation
+ * Set four rails by default for Vera platforms
 #### UCT
  * Added UCT v2 capability flags for SGL zcopy operations
  * Enhanced endpoint connectivity checks
@@ -63,13 +32,18 @@
  * Added per-endpoint RC transmit queue reservation for resource checks
  * Added IB/MLX5 initiator small-fence WQE control flag
  * Applied ECE returned by ibv_query_ece by default
+ * Enabled relaxed ordering by default for Vera CPU platforms
 #### CUDA
  * Added GDRCopy PCIe BAR1 export option
+ * Added POSIX file descriptor handle support for same-machine CUDA VMM IPC
+ * Added support for CUDA device aliasing with MPS MLOPart
 #### UCS
  * Added table builder debug API
  * Added ucs_string_buffer_vappendf utility
  * Added numeric range support for device configuration
  * Added Vera CPU support
+#### UCM
+ * Propagated memory attributes in allocation events
 #### Tools
  * Added software GET responder progress support in perftest
 #### Build
@@ -78,6 +52,7 @@
  * Added GB300/aarch64 DL cluster test pipeline coverage
  * Added parallel static checks
  * Enabled on-demand DRP testing for release pipelines
+ * Added configure option to append a SONAME suffix
 ### Bugfixes:
 #### UCP
  * Fixed endpoint fault-tolerance discard and failover flows
@@ -92,6 +67,11 @@
  * Fixed single network-device filtering to use minimum distance
  * Fixed protocol assertions and short selection diagnostics
  * Fixed zero-length memory handle packing in trace logging
+ * Fixed rendezvous remote-memory flag estimation from rkey memory-domain maps
+ * Disabled RMA rendezvous protocols on non-Vera platforms
+ * Fixed active-message lane selection to preserve latency priority
+ * Fixed rendezvous multi-lane protocol selection to preserve combined minimum sizes
+ * Fixed unnecessary rendezvous PUT fences on ordered transports
 #### ZE
  * Fixed ZE driver enumeration, PCI fallback, IOV bounds, and DMA-BUF memory query semantics
  * Fixed ZE memory query system-device detection
@@ -103,6 +83,7 @@
  * Fixed CUDA NVLink detection
  * Fixed CUDA IPC remote-cache handling for GET and PUT paths
  * Fixed CUDA IPC reachability for same-process interfaces
+ * Fixed CUDA copy memory-flag detection with active CUDA contexts
 #### RDMA CORE (IB, ROCE, etc.)
  * Fixed GGA GET zcopy purge completion
  * Fixed GDA DMA-BUF offsets and on-demand DMA-BUF checks
@@ -112,6 +93,10 @@
  * Reverted ARM Neon BlueFlame writes in IB transport
  * Fixed MLX5 DDP PUT fencing
  * Fixed IB port-speed query logging for unsupported devices
+ * Fixed Direct NIC sibling matching when HCAs have no active ports
+ * Fixed DONT_FORK handling for kernels that support RDMA copy-on-fork
+ * Fixed GGA MMO fence ordering
+ * Restricted EMR relaxed ordering to device memory
 #### Shared Memory
  * Fixed POSIX reachability failure logging in containers
 #### TCP
