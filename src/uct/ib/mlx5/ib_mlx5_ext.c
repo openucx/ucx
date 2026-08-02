@@ -211,6 +211,7 @@ ucs_status_t uct_ib_mlx5_ext_register(const uct_ib_mlx5_ext_ops_t *ops)
     ucs_list_add_tail(&uct_ib_mlx5_ext_plugins, &plugin->list);
     num_plugins = ucs_list_length(&uct_ib_mlx5_ext_plugins);
 
+    ucs_warn("ucx-ext-pr-smoke: registered plugin %s", plugin->ops.name);
     ucs_debug("ib mlx5 ext: registered plugin name=%s iface_query=%s "
               "ep_query=%s put_sgl_zcopy=%s outstanding_purge=%s "
               "(total=%u)",
