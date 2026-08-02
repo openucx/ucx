@@ -1566,8 +1566,12 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
         }
     }
 
-    ucs_assertv(ibdesc - dmat < dmat_length, "dev %s",
-                uct_ib_device_name(&ib_md->dev));
+    if ((ibdesc - dmat) == dmat_length) {
+        ucs_debug("%s: unknown sys_dev %d", uct_ib_device_name(&ib_md->dev),
+                  ib_md->dev.sys_dev);
+        status = UCS_ERR_NO_DEVICE;
+        goto out;
+    }
 
     if (ibdesc->cuda_map == 0) {
         ucs_debug("%s: no assigned gpu found", uct_ib_device_name(&ib_md->dev));
