@@ -395,6 +395,7 @@ UCS_TEST_P(test_ucp_perf_cuda, am_recv_copy)
     ss << GetParam().transports;
     /* coverity[tainted_string_argument] */
     ucs::scoped_setenv tls("UCX_TLS", ss.str().c_str());
+    ucs::scoped_setenv warn_invalid("UCX_WARN_INVALID_CONFIG", "no");
 
     test_spec test = {"am cuda receive copy", "Mpps",
                       UCX_PERF_API_UCP, UCX_PERF_CMD_AM,
@@ -412,7 +413,7 @@ UCS_TEST_P(test_ucp_perf_cuda, am_recv_copy)
     run_test(test, 0, false, "", "");
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_perf_cuda, tcp, "tcp,cuda_copy")
+UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_perf_cuda)
 
 class test_ucp_loopback : public test_ucp_perf {};
 
