@@ -118,6 +118,9 @@
  * Replaced ofed_info usage with native package-manager queries
  * Fixed CI build result reporting on exceptions
  * Excluded .ci/ changes from PR pipeline triggers
+### Known issues:
+ * JUCX package for this release was renamed to
+   `1.22.0-1`, please avoid using `1.22.0`.
 
 ## 1.21.0 (June 24, 2026)
 ### Features:
