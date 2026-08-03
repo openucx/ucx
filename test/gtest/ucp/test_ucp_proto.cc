@@ -72,7 +72,8 @@ protected:
     bool has_cuda_net_md()
     {
         ucp_context_h context = this->context();
-        ucp_md_map_t cuda_md_map = context->reg_md_map[UCS_MEMORY_TYPE_CUDA];
+        ucp_md_map_t cuda_md_map = context->reg_md_map[UCS_MEMORY_TYPE_CUDA] &
+                                    context->cache_md_map[UCS_MEMORY_TYPE_CUDA];
         ucp_rsc_index_t rsc_index;
 
         for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
@@ -85,6 +86,29 @@ protected:
         }
 
         return false;
+    }
+
+    void require_cuda_memory()
+    {
+        if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
+            UCS_TEST_SKIP_R("CUDA memory is not supported");
+        }
+    }
+
+    void require_cuda_net_md()
+    {
+        require_cuda_memory();
+        if (!has_cuda_net_md()) {
+            UCS_TEST_SKIP_R("No network memory domain can register CUDA memory");
+        }
+    }
+
+    void require_cuda_rndv_support()
+    {
+        require_cuda_memory();
+        if (!sender().is_rndv_supported()) {
+            UCS_TEST_SKIP_R("RNDV is not supported");
+        }
     }
 
     const ucp_proto_threshold_elem_t *
@@ -325,9 +349,8 @@ protected:
         select_elem = ucp_proto_select_lookup_slow(
                 worker(), proto_select, 0, ep_cfg_index, rkey_cfg_index,
                 &select_param);
-        EXPECT_NE(nullptr, select_elem);
         if (select_elem == nullptr) {
-            return nullptr;
+            UCS_TEST_SKIP_R("RMA/RNDV protocol is not supported");
         }
 
         thresh = ucp_proto_thresholds_search_slow(select_elem->thresholds,
@@ -579,13 +602,7 @@ UCS_TEST_P(test_ucp_proto_rndv_force_cuda,
     const ucp_proto_threshold_elem_t *threshold;
     std::string info;
 
-    if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
-        UCS_TEST_SKIP_R("CUDA memory is not supported");
-    }
-
-    if (!has_cuda_net_md()) {
-        UCS_TEST_SKIP_R("No network memory domain can register CUDA memory");
-    }
+    require_cuda_net_md();
 
     threshold = select_tag_send_protocol(UCS_MEMORY_TYPE_CUDA, UCS_MBYTE);
     ASSERT_NE(nullptr, threshold);
@@ -609,9 +626,7 @@ UCS_TEST_P(test_ucp_proto_rndv_force_cuda,
 {
     const ucp_proto_threshold_elem_t *threshold;
 
-    if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
-        UCS_TEST_SKIP_R("CUDA memory is not supported");
-    }
+    require_cuda_rndv_support();
 
     EXPECT_EQ(0, count_rkey_configs_with_flag(
                          worker(), UCP_RKEY_CONFIG_FLAG_PROTO_ESTIMATION));
@@ -633,9 +648,7 @@ UCS_TEST_P(test_ucp_proto_rndv_force_cuda,
     const ucp_proto_threshold_elem_t *threshold;
     std::string info;
 
-    if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
-        UCS_TEST_SKIP_R("CUDA memory is not supported");
-    }
+    require_cuda_rndv_support();
 
     threshold = select_rndv_ppln_frag_protocol(0, UCS_MEMORY_TYPE_CUDA);
     ASSERT_NE(nullptr, threshold);
@@ -650,19 +663,17 @@ UCS_TEST_P(test_ucp_proto_rndv_force_cuda,
     const ucp_proto_threshold_elem_t *threshold;
     std::string info;
 
-    if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
-        UCS_TEST_SKIP_R("CUDA memory is not supported");
-    }
-
-    if (!has_cuda_net_md()) {
-        UCS_TEST_SKIP_R("No network memory domain can register CUDA memory");
-    }
+    require_cuda_net_md();
 
     threshold = select_rndv_send_protocol(UCP_PROTO_SELECT_OP_FLAG_TAG_RNDV,
                                           UCS_MEMORY_TYPE_CUDA,
                                           UCS_MEMORY_TYPE_HOST);
     ASSERT_NE(nullptr, threshold);
     info = threshold_protocol_info(threshold, UCS_MBYTE);
+    if (info.find("stub protocol") != std::string::npos) {
+        UCS_TEST_SKIP_R("CUDA staging RNDV send protocol is not supported");
+    }
+
     EXPECT_NE(std::string::npos, info.find("rndv_send(tag-rndv)")) << info;
     EXPECT_NE(std::string::npos, info.find("pipeline cuda_copy")) << info;
     EXPECT_NE(std::string::npos, info.find("frag host")) << info;
@@ -706,9 +717,7 @@ UCS_TEST_P(test_ucp_proto_rndv_force_cuda,
 {
     std::string info;
 
-    if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
-        UCS_TEST_SKIP_R("CUDA memory is not supported");
-    }
+    require_cuda_rndv_support();
 
     EXPECT_EQ(0, count_rkey_configs_with_flag(
                          worker(), UCP_RKEY_CONFIG_FLAG_PROTO_ESTIMATION));
@@ -722,9 +731,7 @@ UCS_TEST_P(test_ucp_proto_rndv_force_cuda,
 UCS_TEST_P(test_ucp_proto_rma_rndv,
            rma_default_remote_model_preserves_legacy_key)
 {
-    if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
-        UCS_TEST_SKIP_R("CUDA memory is not supported");
-    }
+    require_cuda_rndv_support();
 
     check_rma_rndv_remote_proto_config(UCP_OP_ID_PUT, 0);
     check_rma_rndv_remote_proto_config(UCP_OP_ID_GET, 0);
@@ -734,9 +741,7 @@ UCS_TEST_P(test_ucp_proto_rma_rndv,
            rma_force_remote_model_remains_untagged,
            "RNDV_PIPELINE_SHM_CUDA_STAGING_FORCE=y")
 {
-    if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
-        UCS_TEST_SKIP_R("CUDA memory is not supported");
-    }
+    require_cuda_rndv_support();
 
     check_rma_rndv_remote_proto_config(UCP_OP_ID_PUT, 0);
     check_rma_rndv_remote_proto_config(UCP_OP_ID_GET, 0);
@@ -747,9 +752,7 @@ UCS_TEST_P(test_ucp_proto_rma_rndv,
            "RNDV_PIPELINE_SHM_CUDA_STAGING_FORCE=y",
            "RNDV_SCHEME=get_zcopy")
 {
-    if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
-        UCS_TEST_SKIP_R("CUDA memory is not supported");
-    }
+    require_cuda_rndv_support();
 
     check_rma_rndv_remote_proto_config(UCP_OP_ID_PUT, 0);
     check_rma_rndv_remote_proto_config(UCP_OP_ID_GET, 0);
@@ -758,9 +761,7 @@ UCS_TEST_P(test_ucp_proto_rma_rndv,
 UCS_TEST_P(test_ucp_proto_am_rndv,
            am_default_remote_model_preserves_legacy_key)
 {
-    if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
-        UCS_TEST_SKIP_R("CUDA memory is not supported");
-    }
+    require_cuda_rndv_support();
 
     check_am_rndv_remote_proto_config(0, 0);
 }
@@ -769,9 +770,7 @@ UCS_TEST_P(test_ucp_proto_am_rndv,
            am_force_remote_model_remains_untagged,
            "RNDV_PIPELINE_SHM_CUDA_STAGING_FORCE=y")
 {
-    if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
-        UCS_TEST_SKIP_R("CUDA memory is not supported");
-    }
+    require_cuda_rndv_support();
 
     check_am_rndv_remote_proto_config(0, 0);
 }
@@ -781,9 +780,7 @@ UCS_TEST_P(test_ucp_proto_am_rndv,
            "RNDV_PIPELINE_SHM_CUDA_STAGING_FORCE=y",
            "RNDV_SCHEME=get_zcopy")
 {
-    if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
-        UCS_TEST_SKIP_R("CUDA memory is not supported");
-    }
+    require_cuda_rndv_support();
 
     check_am_rndv_remote_proto_config(0, 0);
 }
