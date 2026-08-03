@@ -399,6 +399,7 @@ static UCS_CLASS_INIT_FUNC(uct_gga_mlx5_ep_t, const uct_ep_params_t *params)
     uct_iface_t *tl_iface   = UCT_EP_PARAM_VALUE(params, iface, IFACE, NULL);
     uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
     uct_ib_mlx5_md_t *md    = ucs_derived_of(iface->md, uct_ib_mlx5_md_t);
+    uint64_t access_flags;
     int ret;
     ucs_status_t status;
 
@@ -413,15 +414,17 @@ static UCS_CLASS_INIT_FUNC(uct_gga_mlx5_ep_t, const uct_ep_params_t *params)
         goto err;
     }
 
+    access_flags        = uct_ib_md_access_flags(&md->super,
+                                                 IBV_ACCESS_LOCAL_WRITE);
     self->dma_opaque.mr = ibv_reg_mr(md->super.pd, self->dma_opaque.buf,
                                      UCT_GGA_MLX5_OPAQUE_BUF_LEN,
-                                     IBV_ACCESS_LOCAL_WRITE);
+                                     access_flags);
 
     if (self->dma_opaque.mr == NULL) {
-        ucs_error("ibv_reg_mr(pd=%p, buf=%p, len=%d, 0x%x) failed to register "
-                  "DMA/MMO opaque buffer: %m", md->super.pd,
+        ucs_error("ibv_reg_mr(pd=%p, buf=%p, len=%d, 0x%" PRIx64 ") failed "
+                  "to register DMA/MMO opaque buffer: %m", md->super.pd,
                   self->dma_opaque.buf, UCT_GGA_MLX5_OPAQUE_BUF_LEN,
-                  IBV_ACCESS_LOCAL_WRITE);
+                  access_flags);
         status = UCS_ERR_IO_ERROR;
         goto err_free_buf;
     }
