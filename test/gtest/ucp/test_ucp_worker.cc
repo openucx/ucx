@@ -834,6 +834,12 @@ public:
         }
     }
 
+    static uint64_t iface_can_connect(const uct_iface_attr_t *attrs)
+    {
+        return attrs->cap.flags &
+               (UCT_IFACE_FLAG_CONNECT_TO_IFACE | UCT_IFACE_FLAG_CONNECT_TO_EP);
+    }
+
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
         add_variant_with_value(variants, UCP_FEATURE_TAG, 0, "");
@@ -869,8 +875,8 @@ UCS_TEST_P(test_ucp_worker_address_query, query_address_by_device)
     ucp_rsc_index_t tl_id;
 
     UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &context->tl_bitmap) {
-        if (ucp_worker_iface_can_connect(
-                    ucp_worker_iface_get_attr(sender().worker(), tl_id))) {
+        if (iface_can_connect(ucp_worker_iface_get_attr(sender().worker(),
+                                                        tl_id))) {
             address_device_name = context->tl_rscs[tl_id].tl_rsc.dev_name;
             break;
         }
@@ -881,8 +887,8 @@ UCS_TEST_P(test_ucp_worker_address_query, query_address_by_device)
     ASSERT_FALSE(UCS_STATIC_BITMAP_IS_ZERO(tl_bitmap));
 
     UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &tl_bitmap) {
-        if (ucp_worker_iface_can_connect(
-                    ucp_worker_iface_get_attr(sender().worker(), tl_id))) {
+        if (iface_can_connect(ucp_worker_iface_get_attr(sender().worker(),
+                                                        tl_id))) {
             ++expected_count;
         }
     }
