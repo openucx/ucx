@@ -3111,12 +3111,13 @@ void ucp_worker_destroy(ucp_worker_h worker)
 
 static ucs_status_t ucp_worker_address_pack(ucp_worker_h worker,
                                             uint32_t address_flags,
+                                            const char *address_device_name,
                                             size_t *address_length_p,
                                             void **address_p)
 {
     ucp_context_h context = worker->context;
     unsigned flags        = ucp_worker_default_address_pack_flags(worker);
-    ucp_tl_bitmap_t tl_bitmap;
+    ucp_tl_bitmap_t tl_bitmap, net_tl_bitmap;
     ucp_rsc_index_t tl_id;
     const uct_iface_attr_t *iface_attr;
 
@@ -3126,16 +3127,28 @@ static ucs_status_t ucp_worker_address_pack(ucp_worker_h worker,
      */
     ucs_assert(flags & UCP_ADDRESS_PACK_FLAG_WORKER_UUID);
 
-    if (address_flags & UCP_WORKER_ADDRESS_FLAG_NET_ONLY) {
-        UCS_STATIC_BITMAP_RESET_ALL(&tl_bitmap);
-        UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &worker->context->tl_bitmap) {
-            iface_attr = ucp_worker_iface_get_attr(worker, tl_id);
-            if (iface_attr->cap.flags & UCT_IFACE_FLAG_INTER_NODE) {
-                UCS_STATIC_BITMAP_SET(&tl_bitmap, tl_id);
-            }
-        }
+    if (address_device_name != NULL) {
+        ucp_context_dev_tl_bitmap(context, address_device_name, &tl_bitmap);
     } else {
         UCS_STATIC_BITMAP_SET_ALL(&tl_bitmap);
+    }
+
+    if (address_flags & UCP_WORKER_ADDRESS_FLAG_NET_ONLY) {
+        UCS_STATIC_BITMAP_RESET_ALL(&net_tl_bitmap);
+        UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &context->tl_bitmap) {
+            iface_attr = ucp_worker_iface_get_attr(worker, tl_id);
+            if (iface_attr->cap.flags & UCT_IFACE_FLAG_INTER_NODE) {
+                UCS_STATIC_BITMAP_SET(&net_tl_bitmap, tl_id);
+            }
+        }
+
+        UCS_STATIC_BITMAP_AND_INPLACE(&tl_bitmap, &net_tl_bitmap);
+    }
+
+    if ((address_device_name != NULL) && UCS_STATIC_BITMAP_IS_ZERO(tl_bitmap)) {
+        ucs_debug("worker %p: device %s has no addressable resources", worker,
+                  address_device_name);
+        return UCS_ERR_NO_DEVICE;
     }
 
     return ucp_address_pack(worker, NULL, &tl_bitmap, flags,
@@ -3146,6 +3159,7 @@ static ucs_status_t ucp_worker_address_pack(ucp_worker_h worker,
 ucs_status_t ucp_worker_query(ucp_worker_h worker,
                               ucp_worker_attr_t *attr)
 {
+    const char *address_device_name;
     ucs_status_t status = UCS_OK;
     uint32_t address_flags;
 
@@ -3156,7 +3170,10 @@ ucs_status_t ucp_worker_query(ucp_worker_h worker,
     if (attr->field_mask & UCP_WORKER_ATTR_FIELD_ADDRESS) {
         address_flags = UCP_ATTR_VALUE(WORKER, attr, address_flags,
                                        ADDRESS_FLAGS, 0);
+        address_device_name = UCP_ATTR_VALUE(WORKER, attr, address_device_name,
+                                             ADDRESS_DEVICE_NAME, NULL);
         status        = ucp_worker_address_pack(worker, address_flags,
+                                                address_device_name,
                                                 &attr->address_length,
                                                 (void**)&attr->address);
     }
@@ -3432,7 +3449,7 @@ ucs_status_t ucp_worker_get_address(ucp_worker_h worker,
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
-    status = ucp_worker_address_pack(worker, 0, address_length_p,
+    status = ucp_worker_address_pack(worker, 0, NULL, address_length_p,
                                      (void**)address_p);
 
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);

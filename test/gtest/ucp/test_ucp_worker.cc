@@ -860,6 +860,86 @@ UCS_TEST_P(test_ucp_worker_address_query, query)
     ucp_worker_release_address(sender().worker(), worker_attr.address);
 }
 
+UCS_TEST_P(test_ucp_worker_address_query, query_address_by_device)
+{
+    ucp_context_h context             = sender().worker()->context;
+    const char *address_device_name   = NULL;
+    unsigned expected_count          = 0;
+    ucp_tl_bitmap_t tl_bitmap;
+    ucp_rsc_index_t tl_id;
+
+    UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &context->tl_bitmap) {
+        if (ucp_worker_iface_can_connect(
+                    ucp_worker_iface_get_attr(sender().worker(), tl_id))) {
+            address_device_name = context->tl_rscs[tl_id].tl_rsc.dev_name;
+            break;
+        }
+    }
+
+    ASSERT_TRUE(address_device_name != NULL);
+    ucp_context_dev_tl_bitmap(context, address_device_name, &tl_bitmap);
+    ASSERT_FALSE(UCS_STATIC_BITMAP_IS_ZERO(tl_bitmap));
+
+    UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &tl_bitmap) {
+        if (ucp_worker_iface_can_connect(
+                    ucp_worker_iface_get_attr(sender().worker(), tl_id))) {
+            ++expected_count;
+        }
+    }
+
+    ASSERT_GT(expected_count, 0u);
+
+    ucp_worker_attr_t worker_attr = {};
+    worker_attr.field_mask          = UCP_WORKER_ATTR_FIELD_ADDRESS |
+                                      UCP_WORKER_ATTR_FIELD_ADDRESS_DEVICE_NAME;
+    worker_attr.address_device_name = address_device_name;
+    ucs_status_t status             = ucp_worker_query(sender().worker(),
+                                                       &worker_attr);
+    ASSERT_UCS_OK(status);
+    ASSERT_TRUE(worker_attr.address != NULL);
+
+    ucp_unpacked_address_t unpacked_address;
+    status = ucp_address_unpack(sender().worker(), worker_attr.address,
+                                ucp_worker_default_address_pack_flags(
+                                        sender().worker()),
+                                &unpacked_address);
+    ASSERT_UCS_OK(status);
+    EXPECT_EQ(expected_count, unpacked_address.address_count);
+
+    const ucp_address_entry_t *ae;
+    ucp_unpacked_address_for_each(ae, &unpacked_address) {
+        bool found = false;
+
+        UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &tl_bitmap) {
+            const ucp_tl_resource_desc_t *resource =
+                    &context->tl_rscs[tl_id];
+
+            if ((resource->md_index == ae->md_index) &&
+                (resource->tl_name_csum == ae->tl_name_csum)) {
+                found = true;
+                break;
+            }
+        }
+
+        EXPECT_TRUE(found);
+    }
+
+    ucs_free(unpacked_address.address_list);
+    ucp_worker_release_address(sender().worker(), worker_attr.address);
+}
+
+UCS_TEST_P(test_ucp_worker_address_query, query_address_unknown_device)
+{
+    ucp_worker_attr_t worker_attr = {};
+    worker_attr.field_mask          = UCP_WORKER_ATTR_FIELD_ADDRESS |
+                                      UCP_WORKER_ATTR_FIELD_ADDRESS_DEVICE_NAME;
+    worker_attr.address_device_name = "no-such-ucx-device";
+    ucs_status_t status             = ucp_worker_query(sender().worker(),
+                                                       &worker_attr);
+
+    EXPECT_EQ(UCS_ERR_NO_DEVICE, status);
+}
+
 UCP_INSTANTIATE_TEST_CASE(test_ucp_worker_address_query)
 
 class test_ucp_worker_address_version : public ucp_test {
