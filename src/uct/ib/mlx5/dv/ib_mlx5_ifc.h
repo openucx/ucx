@@ -361,7 +361,9 @@ struct uct_ib_mlx5_cmd_hca_cap_bits {
     uint8_t    ext_stride_num_range[0x1];
     uint8_t    reserved_at_3a1[0x2];
     uint8_t    log_max_stride_sz_rq[0x5];
-    uint8_t    reserved_at_3a8[0x3];
+    uint8_t    reserved_at_3a8[0x1];
+    uint8_t    mkc_order_write_after_write_ro_only[0x1];
+    uint8_t    reserved_at_3aa[0x1];
     uint8_t    log_min_stride_sz_rq[0x5];
     uint8_t    reserved_at_3b0[0x3];
     uint8_t    log_max_stride_sz_sq[0x5];
@@ -1377,6 +1379,11 @@ enum {
     UCT_IB_MLX5_QPC_TS_FORMAT_REAL_TIME    = 0x2
 };
 
+enum {
+    UCT_IB_MLX5_QPC_SQ_DBR_VALID  = 0x0,
+    UCT_IB_MLX5_QPC_SQ_NO_DBR_INT = 0x2
+};
+
 struct uct_ib_mlx5_qpc_bits {
     uint8_t         state[0x4];
     uint8_t         lag_tx_port_affinity[0x4];
@@ -1415,7 +1422,8 @@ struct uct_ib_mlx5_qpc_bits {
     uint8_t         counter_set_id[0x8];
     uint8_t         uar_page[0x18];
 
-    uint8_t         reserved_at_80[0x3];
+    uint8_t         send_dbr_mode[0x2];
+    uint8_t         reserved_at_82[0x1];
     uint8_t         full_handshake[0x1];
     uint8_t         cnak_reverse_sl[0x4];
     uint8_t         user_index[0x18];

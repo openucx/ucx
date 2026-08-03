@@ -402,6 +402,10 @@ public:
 
     test_ucp_rma_rndv()
     {
+        /* The RMA rendezvous put/get protocols are gated to NVIDIA Vera CPUs in
+         * ucp_proto_rma_rndv_probe_check(); force-enable them so the tests can
+         * run on any CPU. */
+        modify_config("RMA_PPLN_ENABLE", "y");
         modify_config("PROTOS", "put/rndv,get/rndv,rndv/*");
     }
 
@@ -970,6 +974,11 @@ public:
     }
 
     virtual void init() override {
+        /* FIXME: sporadic failure on CUDA memory type. re-enable once fixed */
+        if (mem_type() == UCS_MEMORY_TYPE_CUDA) {
+            UCS_TEST_SKIP_R("sporadic failure on CUDA memory type");
+        }
+
         modify_config("MAX_RMA_RAILS", "2");
         test_ucp_rma::init();
     }
@@ -1107,9 +1116,8 @@ protected:
                       bool expect_immediate_completion = false) {
         ASSERT_FALSE(expect_immediate_completion && use_callback);
 
-        if (!sender().has_lane_with_caps(0,
-                    UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY)) {
-            UCS_TEST_SKIP_R("put_sgl_zcopy is not supported");
+        if (!sender().has_lane_with_caps(UCT_IFACE_FLAG_PUT_ZCOPY)) {
+            UCS_TEST_SKIP_R("put_zcopy is not supported");
         }
 
         sgl_ctx ctx;

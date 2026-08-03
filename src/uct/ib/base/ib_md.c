@@ -168,8 +168,16 @@ ucs_config_field_t uct_ib_md_config_table[] = {
      ucs_offsetof(uct_ib_md_config_t, ext.mt_reg_bind), UCS_CONFIG_TYPE_BOOL},
 
     {"PCI_RELAXED_ORDERING", "auto",
-     "Enable relaxed ordering for PCIe transactions to improve performance on some systems.",
-     ucs_offsetof(uct_ib_md_config_t, mr_relaxed_order), UCS_CONFIG_TYPE_TERNARY_AUTO},
+     "Control relaxed ordering for PCIe transactions:\n"
+     "  no    - disable relaxed ordering\n"
+     "  yes   - require all memory keys to use relaxed ordering, fail if "
+     "unsupported, and do not create strict-order companion keys\n"
+     "  try   - enable relaxed ordering when supported, retain strict-order "
+     "companion keys when available, and silently continue if unsupported\n"
+     "  auto  - honor a firmware relaxed-only requirement, otherwise use "
+     "the CPU preference\n",
+     ucs_offsetof(uct_ib_md_config_t, mr_relaxed_order),
+     UCS_CONFIG_TYPE_TERNARY_AUTO},
 
     {"MAX_IDLE_RKEY_COUNT", "16",
      "Maximal number of invalidated memory keys that are kept idle before reuse.",
@@ -496,6 +504,7 @@ ucs_status_t uct_ib_reg_mr(const uct_ib_md_t *md, void *address, size_t length,
                                     DMABUF_FD, UCT_DMABUF_FD_INVALID);
     dmabuf_offset = UCS_PARAM_VALUE(UCT_MD_MEM_REG_FIELD, params, dmabuf_offset,
                                     DMABUF_OFFSET, 0);
+    access_flags  = uct_ib_md_access_flags(md, access_flags);
 
     if (dm != NULL) {
 #if HAVE_IBV_DM
@@ -602,10 +611,11 @@ ucs_status_t uct_ib_mem_advise(uct_md_h uct_md, uct_mem_h memh, void *addr,
 }
 
 ucs_status_t uct_ib_memh_alloc(uct_ib_md_t *md, size_t length,
-                               unsigned mem_flags, size_t memh_base_size,
-                               size_t mr_size, uct_ib_mem_t **memh_p)
+                               unsigned mem_flags, int strict_order_mr,
+                               size_t memh_base_size, size_t mr_size,
+                               uct_ib_mem_t **memh_p)
 {
-    int num_mrs = md->relaxed_order ?
+    int num_mrs = strict_order_mr ?
                           2 /* UCT_IB_MR_DEFAULT and UCT_IB_MR_STRICT_ORDER */ :
                           1 /* UCT_IB_MR_DEFAULT */;
     uct_ib_mem_t *memh;
@@ -639,6 +649,10 @@ ucs_status_t uct_ib_memh_alloc(uct_ib_md_t *md, size_t length,
         memh->flags |= UCT_IB_MEM_FLAG_GVA;
     }
 
+    if (strict_order_mr) {
+        memh->flags |= UCT_IB_MEM_STRICT_ORDER_MR;
+    }
+
     *memh_p = memh;
     return UCS_OK;
 }
@@ -661,7 +675,9 @@ ucs_status_t uct_ib_verbs_mem_reg(uct_md_h uct_md, void *address, size_t length,
                                   const uct_md_mem_reg_params_t *params,
                                   uct_mem_h *memh_p)
 {
-    uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
+    uct_ib_md_t *md     = ucs_derived_of(uct_md, uct_ib_md_t);
+    int strict_order_mr =
+            uct_ib_md_is_strict_order_mr_required(md, params);
     struct ibv_mr *mr_default;
     uct_ib_verbs_mem_t *memh;
     uct_ib_mem_t *ib_memh;
@@ -671,13 +687,14 @@ ucs_status_t uct_ib_verbs_mem_reg(uct_md_h uct_md, void *address, size_t length,
     status = uct_ib_memh_alloc(md, length,
                                UCT_MD_MEM_REG_FIELD_VALUE(params, flags,
                                                           FIELD_FLAGS, 0),
-                               sizeof(*memh), sizeof(memh->mrs[0]), &ib_memh);
+                               strict_order_mr, sizeof(*memh),
+                               sizeof(memh->mrs[0]), &ib_memh);
     if (status != UCS_OK) {
         goto err;
     }
 
     memh         = ucs_derived_of(ib_memh, uct_ib_verbs_mem_t);
-    access_flags = uct_ib_memh_access_flags(&memh->super, md->relaxed_order,
+    access_flags = uct_ib_memh_access_flags(&memh->super, strict_order_mr,
                                             md->dev.mr_access_flags);
 
     status = uct_ib_reg_mr(md, address, length, params, access_flags, NULL,
@@ -690,7 +707,7 @@ ucs_status_t uct_ib_verbs_mem_reg(uct_md_h uct_md, void *address, size_t length,
     memh->super.rkey                = mr_default->rkey;
     memh->mrs[UCT_IB_MR_DEFAULT].ib = mr_default;
 
-    if (md->relaxed_order) {
+    if (strict_order_mr) {
         status = uct_ib_reg_mr(md, address, length, params,
                                access_flags & ~IBV_ACCESS_RELAXED_ORDERING,
                                NULL, &memh->mrs[UCT_IB_MR_STRICT_ORDER].ib);
@@ -717,7 +734,6 @@ err:
 ucs_status_t
 uct_ib_verbs_mem_dereg(uct_md_h uct_md, const uct_md_mem_dereg_params_t *params)
 {
-    uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
     uct_ib_verbs_mem_t *memh;
     ucs_status_t status;
 
@@ -725,7 +741,7 @@ uct_ib_verbs_mem_dereg(uct_md_h uct_md, const uct_md_mem_dereg_params_t *params)
 
     memh = params->memh;
 
-    if (md->relaxed_order) {
+    if (uct_ib_memh_uses_strict_order_mr(&memh->super)) {
         status = uct_ib_dereg_mr(memh->mrs[UCT_IB_MR_STRICT_ORDER].ib);
         if (status != UCS_OK) {
             return status;
@@ -746,9 +762,9 @@ ucs_status_t uct_ib_verbs_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
                                     const uct_md_mkey_pack_params_t *params,
                                     void *mkey_buffer)
 {
-    uct_ib_md_t *md                 = ucs_derived_of(uct_md, uct_ib_md_t);
     uct_ib_verbs_mem_t *memh        = uct_memh;
-    uct_ib_mr_type_t atomic_mr_type = uct_ib_md_get_atomic_mr_type(md);
+    uct_ib_mr_type_t atomic_mr_type = uct_ib_memh_get_atomic_mr_type(
+                                              &memh->super);
     unsigned flags;
 
     flags = UCS_PARAM_VALUE(UCT_MD_MKEY_PACK_FIELD, params, flags, FLAGS, 0);
@@ -925,6 +941,18 @@ static void uct_ib_fork_warn_enable()
     if (ret) {
         ucs_warn("registering fork() warning failed: %m");
     }
+}
+
+static int uct_ib_is_fork_init_needed()
+{
+#if HAVE_DECL_IBV_IS_FORK_INITIALIZED && HAVE_DECL_IBV_FORK_UNNEEDED
+    if (ibv_is_fork_initialized() == IBV_FORK_UNNEEDED) {
+        ucs_debug("ibv_fork_init() is not needed");
+        return 0;
+    }
+#endif
+
+    return 1;
 }
 
 static void uct_ib_md_release_device_config(uct_ib_md_t *md)
@@ -1112,6 +1140,10 @@ uct_ib_fork_init(const uct_ib_md_config_t *md_config, int *fork_init_p)
 
     *fork_init_p = 0;
 
+    if (!uct_ib_is_fork_init_needed()) {
+        return UCS_OK;
+    }
+
     if (md_config->fork_init == UCS_NO) {
         uct_ib_fork_warn_enable();
         return UCS_OK;
@@ -1194,30 +1226,75 @@ out:
     return status;
 }
 
-void uct_ib_md_parse_relaxed_order(uct_ib_md_t *md,
-                                   const uct_ib_md_config_t *md_config,
-                                   int is_supported)
+static void uct_ib_md_log_relaxed_order(uct_ib_md_t *md)
 {
-    int have_relaxed_order = (IBV_ACCESS_RELAXED_ORDERING != 0) && is_supported;
+    UCS_STRING_BUFFER_ONSTACK(strb, 128);
 
-    if (md_config->mr_relaxed_order == UCS_YES) {
-        if (have_relaxed_order) {
-            md->relaxed_order = 1;
-        } else {
-            ucs_warn("%s: relaxed order memory access requested, but "
-                     "unsupported",
-                     uct_ib_device_name(&md->dev));
-            return;
-        }
-    } else if (md_config->mr_relaxed_order == UCS_TRY) {
-        md->relaxed_order = have_relaxed_order;
-    } else if (md_config->mr_relaxed_order == UCS_AUTO) {
-        md->relaxed_order = have_relaxed_order &&
-                            ucs_cpu_prefer_relaxed_order();
+    if (md->relaxed_order_required) {
+        ucs_debug("%s: relaxed order memory access is required for all MRs",
+                  uct_ib_device_name(&md->dev));
+        return;
     }
 
-    ucs_debug("%s: relaxed order memory access is %sabled",
-              uct_ib_device_name(&md->dev), md->relaxed_order ? "en" : "dis");
+    if (!uct_ib_md_is_relaxed_order(md)) {
+        ucs_debug("%s: relaxed order memory access is disabled",
+                  uct_ib_device_name(&md->dev));
+        return;
+    }
+
+    ucs_string_buffer_append_flags(&strb, md->relaxed_order_mem_types,
+                                   ucs_memory_type_names);
+    ucs_debug("%s: relaxed order memory access is enabled for %s",
+              uct_ib_device_name(&md->dev), ucs_string_buffer_cstr(&strb));
+}
+
+ucs_status_t uct_ib_md_parse_relaxed_order(uct_ib_md_t *md,
+                                           const uct_ib_md_config_t *md_config,
+                                           int is_supported, int is_required)
+{
+    int relaxed_order_required =
+            uct_ib_md_is_relaxed_order_required(md_config, is_required);
+    int have_relaxed_order = (IBV_ACCESS_RELAXED_ORDERING != 0) &&
+                             (is_supported || relaxed_order_required);
+    uint64_t all_mem_types = UCS_MASK(UCS_MEMORY_TYPE_LAST);
+    uint64_t mem_types     = 0;
+
+    md->relaxed_order_required = relaxed_order_required;
+    if (relaxed_order_required) {
+        if (!have_relaxed_order) {
+            if (is_required) {
+                ucs_error("%s: firmware requires relaxed-only memory keys, "
+                          "but IBV_ACCESS_RELAXED_ORDERING is unavailable",
+                          uct_ib_device_name(&md->dev));
+                return UCS_ERR_IO_ERROR;
+            }
+
+            ucs_error("%s: IB_PCI_RELAXED_ORDERING=yes requires relaxed-only "
+                      "memory keys, but IBV_ACCESS_RELAXED_ORDERING is "
+                      "unavailable",
+                      uct_ib_device_name(&md->dev));
+            return UCS_ERR_UNSUPPORTED;
+        }
+
+        if (md_config->mr_relaxed_order == UCS_NO) {
+            ucs_error("%s: strong-order memory keys are not supported; "
+                      "IB_PCI_RELAXED_ORDERING=n is invalid",
+                      uct_ib_device_name(&md->dev));
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+    } else if (md_config->mr_relaxed_order == UCS_TRY) {
+        mem_types = have_relaxed_order ? all_mem_types : 0;
+    } else if (md_config->mr_relaxed_order == UCS_AUTO) {
+        mem_types = have_relaxed_order ?
+                    uct_ib_md_relaxed_order_auto_mem_types(
+                            ucs_arch_get_cpu_vendor(), ucs_arch_get_cpu_model()) :
+                    0;
+    }
+
+    md->relaxed_order_mem_types = mem_types;
+    uct_ib_md_log_relaxed_order(md);
+    return UCS_OK;
 }
 
 void uct_ib_check_gpudirect_driver(uct_ib_md_t *md, const char *file,
@@ -1304,8 +1381,9 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
                           UCT_MD_FLAG_NEED_MEMH |
                           UCT_MD_FLAG_NEED_RKEY |
                           UCT_MD_FLAG_ADVISE;
-    md->reg_cost        = md_config->reg_cost;
-    md->relaxed_order   = 0;
+    md->reg_cost                = md_config->reg_cost;
+    md->relaxed_order_mem_types = 0;
+    md->relaxed_order_required  = 0;
 
     /* Create statistics */
     status = UCS_STATS_NODE_ALLOC(&md->stats, &uct_ib_md_stats_class,
@@ -1564,12 +1642,17 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
     md->flush_rkey = UCT_IB_MD_INVALID_FLUSH_RKEY;
 
     uct_ib_md_ece_check(md);
-    uct_ib_md_parse_relaxed_order(md, md_config, 0);
+    status = uct_ib_md_parse_relaxed_order(md, md_config, 0, 0);
+    if (status != UCS_OK) {
+        goto err_md_close;
+    }
     uct_ib_md_check_odp(md, md_config);
 
     *p_md = md;
     return UCS_OK;
 
+err_md_close:
+    uct_ib_md_close_common(md);
 err_device_config_release:
     uct_ib_md_release_device_config(md);
 err_md_free:
