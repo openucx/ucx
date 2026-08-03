@@ -11,6 +11,7 @@
 
 #include <ucp/api/ucp.h>
 #include <ucp/core/ucp_request.inl>
+#include <ucp/proto/proto_common.h>
 #include <ucs/debug/log.h>
 #include <ucs/time/time.h>
 
@@ -101,6 +102,28 @@ static inline void ucp_ep_rma_remote_request_completed(ucp_ep_h ep)
     }
 }
 
+static inline void ucp_ep_rma_rndv_remote_request_sent(ucp_ep_h ep)
+{
+    ++ucp_ep_flush_state(ep)->rma_rndv_ops;
+    ucp_ep_rma_remote_request_sent(ep);
+}
+
+static inline void ucp_ep_rma_rndv_remote_request_completed(ucp_ep_h ep)
+{
+    ucp_ep_flush_state_t *flush_state = ucp_ep_flush_state(ep);
+
+    ucs_assert(flush_state->rma_rndv_ops > 0);
+    --flush_state->rma_rndv_ops;
+    ucp_ep_rma_remote_request_completed(ep);
+}
+
+static UCS_F_ALWAYS_INLINE uint32_t ucp_ep_rma_rndv_ops(ucp_ep_h ep)
+{
+    return (ep->flags & UCP_EP_FLAG_FLUSH_STATE_VALID) ?
+           ucp_ep_flush_state(ep)->rma_rndv_ops : 0;
+}
+
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_rma_sw_do_am_bcopy(ucp_request_t *req, uint8_t id, ucp_lane_index_t lane,
                        uct_pack_callback_t pack_cb, void *pack_arg,
@@ -161,6 +184,16 @@ ucp_ep_rma_get_fence_flag(ucp_ep_h ep)
     return 0;
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucp_ep_fence_normalize_lanes(ucp_ep_h ep)
+{
+    ep->ext->unflushed_lanes = ucp_ep_fence_lane_map_normalize(
+            ep->ext->unflushed_lanes, ucp_ep_get_live_lanes(ep),
+            ep->ext->fence_lanes_dirty);
+
+    ep->ext->fence_lanes_dirty = 0;
+}
+
 /**
  * Clear the fence-required flag on @a req and mark @a lane_map as unflushed.
  * Called after an epoch transition succeeds to let the request proceed.
@@ -170,6 +203,7 @@ ucp_ep_fence_admit_request(ucp_ep_h ep, ucp_request_t *req,
                            ucp_lane_map_t lane_map)
 {
     req->flags &= ~UCP_REQUEST_FLAG_FENCE_REQUIRED;
+    ucp_ep_fence_normalize_lanes(ep);
     ep->ext->unflushed_lanes |= lane_map;
 }
 
@@ -218,15 +252,14 @@ ucp_ep_rma_handle_fence(ucp_ep_h ep, ucp_request_t *req,
     ucs_status_t status;
     uint64_t fence_seq;
 
+    ucp_ep_fence_normalize_lanes(ep);
+
     if (ucs_likely(!(req->flags & UCP_REQUEST_FLAG_FENCE_REQUIRED))) {
         ep->ext->unflushed_lanes |= lane_map;
         return UCS_OK;
     }
 
-    if (req->send.fenced_req.fence_seq == 0) {
-        req->send.fenced_req.fence_seq = ep->worker->fence_seq;
-    }
-
+    ucs_assert(req->send.fenced_req.fence_seq > 0);
     fence_seq = req->send.fenced_req.fence_seq;
 
     /* Fence already satisfied by a previous epoch transition */
@@ -236,14 +269,16 @@ ucp_ep_rma_handle_fence(ucp_ep_h ep, ucp_request_t *req,
     }
 
     /* No pre-fence operations on this EP — fast-forward the epoch */
-    if (ucs_unlikely(ep->ext->unflushed_lanes == 0)) {
+    if (ucs_unlikely((ep->ext->unflushed_lanes == 0) &&
+                     (ucp_ep_rma_rndv_ops(ep) == 0))) {
         ep->ext->fence_seq = fence_seq;
         ucp_ep_fence_admit_request(ep, req, lane_map);
         return UCS_OK;
     }
 
     /* Single-lane: use cheap weak fence */
-    if (ucs_likely(ucs_is_pow2(ep->ext->unflushed_lanes) &&
+    if (ucs_likely((ucp_ep_rma_rndv_ops(ep) == 0) &&
+                   ucs_is_pow2(ep->ext->unflushed_lanes) &&
                    ((lane_map & ep->ext->unflushed_lanes) == lane_map))) {
         status = ucp_ep_fence_weak(ep);
         if (ucs_likely(status == UCS_OK)) {
@@ -260,14 +295,58 @@ ucp_ep_rma_handle_fence(ucp_ep_h ep, ucp_request_t *req,
         if (ucs_likely(status == UCS_OK)) {
             if ((ep->ext->fence_inflight_req == NULL) ||
                 ucp_ep_fence_try_spin(ep)) {
+                status = ep->ext->fence_status;
+                if (ucs_unlikely(status != UCS_OK)) {
+                    return status;
+                }
+
+                ucs_assert(ep->ext->fence_seq >= fence_seq);
                 ucp_ep_fence_admit_request(ep, req, lane_map);
                 return UCS_OK;
             }
+        } else {
+            return status;
         }
     }
 
     req->flags |= UCP_REQUEST_FLAG_FENCE_BLOCKED;
     return UCP_STATUS_FENCE_DEFER;
+}
+
+/**
+ * Run fence admission before protocol-specific initialization which may pend.
+ *
+ * @return 1 when the caller may continue initializing the request, 0 when the
+ * request was queued, must retry, or was aborted. In the latter case,
+ * @a status_p is the status the progress callback must return.
+ */
+static UCS_F_ALWAYS_INLINE int
+ucp_proto_rma_fence_progress(ucp_request_t *req, ucp_lane_map_t lane_map,
+                             ucs_status_t *status_p)
+{
+    ucs_status_t status;
+
+    status = ucp_ep_rma_handle_fence(req->send.ep, req, lane_map);
+    if (status == UCP_STATUS_FENCE_DEFER) {
+        if (req->send.pending_lane != UCP_NULL_LANE) {
+            ucp_ep_fence_pending_add(req->send.ep, &req->send.uct);
+            req->send.pending_lane = UCP_NULL_LANE;
+            *status_p              = UCS_OK;
+        } else {
+            *status_p = status;
+        }
+        return 0;
+    } else if (status == UCS_ERR_NO_RESOURCE) {
+        *status_p = status;
+        return 0;
+    } else if (status != UCS_OK) {
+        ucp_proto_request_abort(req, status);
+        *status_p = UCS_OK;
+        return 0;
+    }
+
+    *status_p = UCS_OK;
+    return 1;
 }
 
 #endif

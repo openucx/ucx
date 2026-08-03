@@ -244,13 +244,17 @@ struct ucp_request {
                     };
                 } msg_proto;
 
-                struct{
-                    uint64_t           fence_seq;          /* Fence epoch snapshot */
-                    ucs_queue_elem_t   fence_pending_elem; /* Element in per-EP fence pending FIFO */
-                    union{
+                struct {
+                    /* Fence epoch snapshot */
+                    uint64_t         fence_seq;
+
+                    /* Element in the per-EP fence pending queue */
+                    ucs_queue_elem_t fence_pending_elem;
+
+                    union {
                         struct {
                             uint64_t   remote_addr; /* Remote address */
-                            ucp_rkey_h rkey; /* Remote memory key */
+                            ucp_rkey_h rkey;        /* Remote memory key */
 
                             struct {
                                 const uint64_t   *remote_addrs;
@@ -259,15 +263,14 @@ struct ucp_request {
                         } rma;
 
                         struct {
-                            uint64_t              remote_addr; /* Remote address */
-                            ucp_rkey_h            rkey;        /* Remote memory key */
-                            uint64_t              value;       /* Atomic argument */
-                            uint64_t              result;      /* Atomic result */
-                            void                  *reply_buffer;
-                            uct_atomic_op_t       uct_op;      /* Requested UCT AMO */
+                            uint64_t        remote_addr; /* Remote address */
+                            ucp_rkey_h      rkey;        /* Remote memory key */
+                            uint64_t        value;       /* Atomic argument */
+                            uint64_t        result;      /* Atomic result */
+                            void           *reply_buffer;
+                            uct_atomic_op_t uct_op;      /* Requested UCT AMO */
                         } amo;
                     };
-
                 } fenced_req;
 
                 struct {
@@ -380,6 +383,8 @@ struct ucp_request {
                 struct {
                     /* Fence epoch associated with this flush */
                     uint64_t           fence_seq;
+                    /* Snapshot used to detect same-index lane replacement */
+                    uint64_t           lane_generation;
                     /* All lanes that are being flushed */
                     ucp_lane_map_t     all_lanes;
                     /* Which lanes flush has been started on */
@@ -521,9 +526,9 @@ struct ucp_request {
 
         struct {
             ucp_worker_h            worker;       /* Worker to flush */
-            uint64_t                fence_seq_th; /* Fence sequence threshold: worker flush
-                                                     waits only for EP-based fence work with
-                                                     fence_seq <= this value */
+            /* Worker flush waits only for EP-based fence work with a fence
+             * sequence up to this threshold. */
+            uint64_t                fence_seq_th;
             ucp_send_nbx_callback_t cb;           /* Completion callback */
             uct_worker_cb_id_t      prog_id;      /* Progress callback ID */
             ucp_ep_ext_t            *next_ep_ext; /* Extension of the next endpoint to flush */

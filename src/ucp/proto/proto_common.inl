@@ -255,8 +255,12 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_request_lookup_proto(
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_request_send_init(ucp_request_t *req, ucp_ep_h ep, uint32_t flags)
 {
-    req->flags   = UCP_REQUEST_FLAG_PROTO_SEND | flags;
-    req->send.ep = ep;
+    req->flags                      = UCP_REQUEST_FLAG_PROTO_SEND | flags;
+    req->send.ep                    = ep;
+    req->send.pending_lane          = UCP_NULL_LANE;
+    req->send.fenced_req.fence_seq =
+            (flags & UCP_REQUEST_FLAG_FENCE_REQUIRED) ?
+            ep->worker->fence_seq : 0;
 }
 
 

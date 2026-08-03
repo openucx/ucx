@@ -489,6 +489,8 @@ typedef struct {
                               are waiting for remote completion */
     uint32_t         send_sn; /* Sequence number of sent operations */
     uint32_t         cmpl_sn; /* Sequence number of completions */
+    uint32_t         rma_rndv_ops; /* RMA RNDV operations whose nested remote
+                                      data movement is not complete */
     uint32_t         mem_in_progress; /* Track ongoing memory flushes for this endpoint */
 } ucp_ep_flush_state_t;
 
@@ -567,6 +569,8 @@ typedef struct ucp_ep_ext {
 
     ucp_lane_map_t                unflushed_lanes; /* Bitmap of lanes which have
                                                       unflushed operations */
+    uint64_t                      lane_generation; /* Incremented whenever a lane
+                                                      is updated */
     uint64_t                      fence_seq;       /* Sequence number for fence
                                                       detection */
 
@@ -574,8 +578,12 @@ typedef struct ucp_ep_ext {
      * per-UCP-EP (not per lane) to preserve EP-wide ordering.
      */
     ucs_queue_head_t              fence_pending_q;
-    uint8_t                       fence_pending_scheduled;
     ucp_request_t                 *fence_inflight_req;
+    ucs_status_t                  fence_status;
+    uint8_t                       fence_lanes_dirty; /* Lane topology changed since
+                                                        fence lane tracking was
+                                                        normalized */
+    uint8_t                       fence_pending_scheduled;
 
     /**
      * UCT endpoints for every slow-path lane that has no room in the base endpoint
@@ -964,8 +972,11 @@ void ucp_ep_fence_pending_resume(ucp_ep_h ep);
  * @param [in]     ucp_ep           Endpoint object on which requests should be
  *                                  purged.
  * @param [in]     status           Completion status.
+ * @param [in]     purge_fence_pending Whether to abort requests waiting in the
+ *                                  endpoint fence queue.
  */
-void ucp_ep_reqs_purge(ucp_ep_h ucp_ep, ucs_status_t status);
+void ucp_ep_reqs_purge(ucp_ep_h ucp_ep, ucs_status_t status,
+                       int purge_fence_pending);
 
 
 /**

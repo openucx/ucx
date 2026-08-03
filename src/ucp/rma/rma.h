@@ -29,6 +29,42 @@
 #define UCP_EP_FENCE_SPIN_TIMEOUT_US  20   /* max microseconds to spin */
 
 /**
+ * Reconcile the lanes carrying pre-fence operations with the endpoint's
+ * current live lanes. If a recorded lane disappeared, its replacement cannot
+ * be identified by lane index alone, so conservatively flush every live lane.
+ * Otherwise, keep the recorded subset to avoid flushing unrelated lanes.
+ */
+static UCS_F_ALWAYS_INLINE ucp_lane_map_t
+ucp_ep_fence_lane_map_update(ucp_lane_map_t unflushed_lanes,
+                             ucp_lane_map_t live_lanes)
+{
+    if (unflushed_lanes & ~live_lanes) {
+        return live_lanes;
+    }
+
+    return unflushed_lanes;
+}
+
+/**
+ * Normalize fence lane tracking after the endpoint topology changed.
+ *
+ * A dirty topology is handled conservatively because a replacement may use
+ * the same lane index as the endpoint it replaced. Otherwise, preserve the
+ * current lane subset unless one of its lanes disappeared.
+ */
+static UCS_F_ALWAYS_INLINE ucp_lane_map_t
+ucp_ep_fence_lane_map_normalize(ucp_lane_map_t unflushed_lanes,
+                                ucp_lane_map_t live_lanes, int lanes_dirty)
+{
+    if ((unflushed_lanes != 0) && lanes_dirty) {
+        return live_lanes;
+    }
+
+    return ucp_ep_fence_lane_map_update(unflushed_lanes, live_lanes);
+}
+
+
+/**
  * Update an in-progress flush after the endpoint's live lanes changed.
  *
  * Lanes that disappeared before their flush started no longer need a
@@ -41,18 +77,41 @@
  */
 static UCS_F_ALWAYS_INLINE int
 ucp_ep_flush_lane_state_update(ucp_lane_map_t live_lanes,
-                               ucp_lane_map_t started_lanes,
+                               int lane_generation_changed,
+                               ucp_lane_map_t *started_lanes_p,
                                ucp_lane_map_t *all_lanes_p,
                                ucp_lane_map_t *lane_mask_p)
 {
-    ucp_lane_map_t destroyed_lanes = *all_lanes_p & ~live_lanes &
-                                     ~started_lanes;
-    ucp_lane_map_t new_lanes       = live_lanes & ~*all_lanes_p;
+    ucp_lane_map_t unstarted_lanes;
+    ucp_lane_map_t destroyed_lanes;
+    ucp_lane_map_t new_lanes;
+
+    if (lane_generation_changed) {
+        unstarted_lanes  = *all_lanes_p & ~*started_lanes_p;
+        *all_lanes_p     = live_lanes;
+        *lane_mask_p    |= live_lanes;
+        *started_lanes_p = 0;
+        return ucs_popcount(live_lanes) - ucs_popcount(unstarted_lanes);
+    }
+
+    destroyed_lanes = *all_lanes_p & ~live_lanes & ~*started_lanes_p;
+    new_lanes       = live_lanes & ~*all_lanes_p;
 
     *all_lanes_p = live_lanes;
     *lane_mask_p |= new_lanes;
 
     return ucs_popcount(new_lanes) - ucs_popcount(destroyed_lanes);
+}
+
+/**
+ * Return whether an in-progress flush has not started on every live lane.
+ * Historical started bits for lanes destroyed after starting are ignored.
+ */
+static UCS_F_ALWAYS_INLINE int
+ucp_ep_flush_has_unstarted_lanes(ucp_lane_map_t live_lanes,
+                                 ucp_lane_map_t started_lanes)
+{
+    return !!(live_lanes & ~started_lanes);
 }
 
 /**
@@ -81,8 +140,13 @@ typedef struct {
 } UCS_S_PACKED ucp_put_hdr_t;
 
 
+enum {
+    UCP_CMPL_FLAG_RMA_RNDV = UCS_BIT(0)
+};
+
 typedef struct {
     uint64_t                  ep_id;
+    uint8_t                   flags;
 } UCS_S_PACKED ucp_cmpl_hdr_t;
 
 
@@ -116,7 +180,7 @@ extern const ucp_amo_proto_t *ucp_amo_proto_list[];
 
 void ucp_ep_flush_remote_completed(ucp_request_t *req);
 
-void ucp_rma_sw_send_cmpl(ucp_ep_h ep);
+void ucp_rma_sw_send_cmpl(ucp_ep_h ep, uint8_t flags);
 
 ucs_status_t ucp_ep_fence_weak(ucp_ep_h ep);
 

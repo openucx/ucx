@@ -388,16 +388,4 @@ ucp_proto_am_zcopy_multi_common_send_func(
                            &req->send.state.uct_comp);
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_proto_multi_rma_init_func(ucp_request_t *req)
-{
-    const ucp_proto_multi_priv_t *mpriv = req->send.proto_config->priv;
-
-    /* reset fence_seq of new requests only */
-    if (!(req->flags & UCP_REQUEST_FLAG_FENCE_BLOCKED)) {
-        req->send.fenced_req.fence_seq = 0;
-    }
-    return ucp_ep_rma_handle_fence(req->send.ep, req, mpriv->lane_map);
-}
-
 #endif

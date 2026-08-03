@@ -48,6 +48,11 @@ static ucs_status_t ucp_proto_get_am_bcopy_progress(uct_pending_req_t *self)
     ucs_status_t status;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
+        if (!ucp_proto_rma_fence_progress(
+                    req, UCS_BIT(spriv->super.lane), &status)) {
+            return status;
+        }
+
         status = ucp_ep_resolve_remote_id(ep, spriv->super.lane);
         if (status != UCS_OK) {
             return status;
@@ -57,26 +62,8 @@ static ucs_status_t ucp_proto_get_am_bcopy_progress(uct_pending_req_t *self)
          * processing */
         req->send.buffer = req->send.state.dt_iter.type.contig.buffer;
         req->send.length = req->send.state.dt_iter.length;
-        req->flags      |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
         ucp_send_request_id_alloc(req);
-
-        req->send.fenced_req.fence_seq = 0;
-
-        status = ucp_ep_rma_handle_fence(ep, req, UCS_BIT(spriv->super.lane));
-        if (status == UCP_STATUS_FENCE_DEFER) {
-            if (req->send.pending_lane != UCP_NULL_LANE) {
-                ucp_ep_fence_pending_add(ep, &req->send.uct);
-                req->send.pending_lane = UCP_NULL_LANE;
-                return UCS_OK;
-            }
-
-            return status;
-        } else if (status == UCS_ERR_NO_RESOURCE) {
-            return status;
-        } else if (status != UCS_OK) {
-            ucp_proto_request_abort(req, status);
-            return UCS_OK;
-        }
+        req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     }
 
     ucp_worker_flush_ops_count_add(worker, +1);

@@ -2618,7 +2618,8 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     worker->context              = context;
     worker->uuid                 = ucs_generate_uuid((uintptr_t)worker);
     worker->flush_ops_count      = 0;
-    worker->fence_seq            = 1; /* Start at 1; 0 is sentinel for "fence_seq not yet snapshotted" */
+    /* Fence sequence 0 means that no fence epoch was captured. */
+    worker->fence_seq            = 1;
     worker->inprogress           = 0;
     worker->num_active_ifaces    = 0;
     worker->num_ifaces           = 0;

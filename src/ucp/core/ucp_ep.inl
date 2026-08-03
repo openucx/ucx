@@ -46,6 +46,9 @@ static UCS_F_ALWAYS_INLINE void ucp_ep_set_lane(ucp_ep_h ep, size_t lane_index,
 {
     ucs_assert(lane_index != UCP_NULL_LANE);
 
+    ++ep->ext->lane_generation;
+    ep->ext->fence_lanes_dirty = 1;
+
     if (lane_index < UCP_MAX_FAST_PATH_LANES) {
         ep->uct_eps[lane_index] = uct_ep;
     } else {

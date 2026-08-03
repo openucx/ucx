@@ -27,21 +27,9 @@ static ucs_status_t ucp_proto_put_offload_short_progress(uct_pending_req_t *self
     uct_rkey_t tl_rkey;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
-        req->send.fenced_req.fence_seq = 0;
-        status = ucp_ep_rma_handle_fence(ep, req, UCS_BIT(spriv->super.lane));
-        if (status == UCP_STATUS_FENCE_DEFER) {
-            if (req->send.pending_lane != UCP_NULL_LANE) {
-                ucp_ep_fence_pending_add(ep, &req->send.uct);
-                req->send.pending_lane = UCP_NULL_LANE;
-                return UCS_OK;
-            }
-
+        if (!ucp_proto_rma_fence_progress(
+                    req, UCS_BIT(spriv->super.lane), &status)) {
             return status;
-        } else if (status == UCS_ERR_NO_RESOURCE) {
-            return status;
-        } else if (status != UCS_OK) {
-            ucp_proto_request_abort(req, status);
-            return UCS_OK;
         }
 
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
@@ -186,27 +174,8 @@ static ucs_status_t ucp_proto_put_offload_bcopy_progress(uct_pending_req_t *self
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
         ucp_proto_multi_request_init(req);
 
-        /* Reset fence_seq for fresh requests (stale mpool value) but not for
-         * requests retried from the fence pending queue, whose fence_seq is
-         * already valid and must be preserved to maintain queue invariants.
-         */
-        if (!(req->flags & UCP_REQUEST_FLAG_FENCE_BLOCKED)) {
-            req->send.fenced_req.fence_seq = 0;
-        }
-        status = ucp_ep_rma_handle_fence(req->send.ep, req, mpriv->lane_map);
-        if (status == UCP_STATUS_FENCE_DEFER) {
-            if (req->send.pending_lane != UCP_NULL_LANE) {
-                ucp_ep_fence_pending_add(req->send.ep, &req->send.uct);
-                req->send.pending_lane = UCP_NULL_LANE;
-                return UCS_OK;
-            }
-
+        if (!ucp_proto_rma_fence_progress(req, mpriv->lane_map, &status)) {
             return status;
-        } else if (status == UCS_ERR_NO_RESOURCE) {
-            return status;
-        } else if (status != UCS_OK) {
-            ucp_proto_request_abort(req, status);
-            return UCS_OK;
         }
 
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
@@ -306,11 +275,18 @@ static ucs_status_t
 ucp_proto_put_offload_zcopy_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    const ucp_proto_multi_priv_t *mpriv = req->send.proto_config->priv;
+    ucs_status_t status;
+
+    if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) &&
+        !ucp_proto_rma_fence_progress(req, mpriv->lane_map, &status)) {
+        return status;
+    }
 
     /* coverity[tainted_data_downcast] */
     return ucp_proto_multi_zcopy_progress(
-            req, req->send.proto_config->priv, ucp_proto_multi_rma_init_func,
-            UCT_MD_MEM_ACCESS_LOCAL_READ, UCP_DT_MASK_CONTIG_IOV,
+            req, mpriv, NULL, UCT_MD_MEM_ACCESS_LOCAL_READ,
+            UCP_DT_MASK_CONTIG_IOV,
             ucp_proto_put_offload_zcopy_send_func,
             ucp_request_invoke_uct_completion_success,
             ucp_proto_request_zcopy_completion);
@@ -440,8 +416,8 @@ ucp_proto_put_sgl_offload_send_frag(ucp_request_t *req,
     uct_mem_h uct_memh;
     uct_rkey_t uct_rkey;
 
-    if (ucp_datatype_iter_next_sgl_frags(dt_iter,
-                                         req->send.fenced_req.rma.sgl.remote_addrs, 1,
+    if (ucp_datatype_iter_next_sgl_frags(
+            dt_iter, req->send.fenced_req.rma.sgl.remote_addrs, 1,
                                          max_frag_length, next_iter, &buffer,
                                          &length, &remote_addr,
                                          &elem_index) == 0) {
@@ -450,8 +426,9 @@ ucp_proto_put_sgl_offload_send_frag(ucp_request_t *req,
 
     uct_memh = (sgl_memhs != NULL) ? sgl_memhs[elem_index]->uct[md_index] :
                                      UCT_MEM_HANDLE_NULL;
-    uct_rkey = ucp_rkey_get_tl_rkey(req->send.fenced_req.rma.sgl.rkeys[elem_index],
-                                    lpriv->super.rkey_index);
+    uct_rkey = ucp_rkey_get_tl_rkey(
+            req->send.fenced_req.rma.sgl.rkeys[elem_index],
+            lpriv->super.rkey_index);
 
     return ucp_proto_put_sgl_offload_post(req, lpriv, &buffer, &length,
                                           &uct_memh, &remote_addr, &uct_rkey,
@@ -540,11 +517,18 @@ static ucs_status_t
 ucp_proto_put_sgl_offload_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    const ucp_proto_multi_priv_t *mpriv = req->send.proto_config->priv;
+    ucs_status_t status;
+
+    if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) &&
+        !ucp_proto_rma_fence_progress(req, mpriv->lane_map, &status)) {
+        return status;
+    }
 
     /* coverity[tainted_data_downcast] */
     return ucp_proto_multi_zcopy_progress(
-            req, req->send.proto_config->priv, ucp_proto_multi_rma_init_func,
-            UCT_MD_MEM_ACCESS_LOCAL_READ, UCS_BIT(UCP_DATATYPE_SGL),
+            req, mpriv, NULL, UCT_MD_MEM_ACCESS_LOCAL_READ,
+            UCS_BIT(UCP_DATATYPE_SGL),
             ucp_proto_put_sgl_offload_send_func,
             ucp_request_invoke_uct_completion_success,
             ucp_proto_request_zcopy_completion);
@@ -595,8 +579,9 @@ ucp_proto_put_sgl_offload_sw_send_func(ucp_request_t *req,
     ucs_assert(max_frag_length > 0);
 
     desc_count = ucp_datatype_iter_next_sgl_frags(
-            dt_iter, req->send.fenced_req.rma.sgl.remote_addrs, 1, max_frag_length,
-            next_iter, &buffer, &length, &remote_addr, &elem_index);
+            dt_iter, req->send.fenced_req.rma.sgl.remote_addrs, 1,
+            max_frag_length, next_iter, &buffer, &length, &remote_addr,
+            &elem_index);
     if (desc_count == 0) {
         return UCS_OK;
     }
@@ -629,11 +614,18 @@ static ucs_status_t
 ucp_proto_put_sgl_offload_sw_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    const ucp_proto_multi_priv_t *mpriv = req->send.proto_config->priv;
+    ucs_status_t status;
+
+    if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) &&
+        !ucp_proto_rma_fence_progress(req, mpriv->lane_map, &status)) {
+        return status;
+    }
 
     /* coverity[tainted_data_downcast] */
     return ucp_proto_multi_zcopy_progress(
-            req, req->send.proto_config->priv, ucp_proto_multi_rma_init_func,
-            UCT_MD_MEM_ACCESS_LOCAL_READ, UCS_BIT(UCP_DATATYPE_SGL),
+            req, mpriv, NULL, UCT_MD_MEM_ACCESS_LOCAL_READ,
+            UCS_BIT(UCP_DATATYPE_SGL),
             ucp_proto_put_sgl_offload_sw_send_func,
             ucp_request_invoke_uct_completion_success,
             ucp_proto_request_zcopy_completion);

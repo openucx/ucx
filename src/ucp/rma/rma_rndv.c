@@ -104,16 +104,9 @@ static size_t ucp_proto_put_rndv_rts_pack(void *dest, void *arg)
 static ucs_status_t ucp_proto_put_rndv_init(ucp_request_t *req)
 {
     const ucp_proto_rndv_ctrl_priv_t *rpriv = req->send.proto_config->priv;
-    ucs_status_t status;
 
-    status = ucp_proto_rndv_rts_request_init(req);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    /* Nested RNDV data protocols are not RMA protocols, so the wrapper handles
-     * RMA fence ordering before exposing the operation to the peer. */
-    return ucp_ep_rma_handle_fence(req->send.ep, req, UCS_BIT(rpriv->lane));
+    req->send.lane = rpriv->lane;
+    return ucp_proto_rndv_rts_request_init(req);
 }
 
 static ucs_status_t ucp_proto_put_rndv_progress(uct_pending_req_t *self)
@@ -124,16 +117,21 @@ static ucs_status_t ucp_proto_put_rndv_progress(uct_pending_req_t *self)
     ucs_status_t status;
     ucp_ep_h ep;
 
-    if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
-        status = ucp_proto_put_rndv_init(req);
-        if (status != UCS_OK) {
-            ucp_proto_request_abort(req, status);
-            return UCS_OK;
-        }
+    rpriv          = req->send.proto_config->priv;
+    req->send.lane = rpriv->lane;
+    if (!ucp_proto_rma_fence_progress(req, UCS_BIT(rpriv->lane), &status)) {
+        return status;
+    }
+
+    status = ucp_proto_put_rndv_init(req);
+    if ((status != UCS_OK) && (status != UCS_ERR_NO_RESOURCE)) {
+        ucp_proto_request_abort(req, status);
+        return UCS_OK;
+    } else if (status != UCS_OK) {
+        return status;
     }
 
     ep           = req->send.ep;
-    rpriv        = req->send.proto_config->priv;
     max_rts_size = sizeof(ucp_rma_rndv_rts_hdr_t) + rpriv->packed_rkey_size;
 
     /* Both the RNDV request and the remote completion must complete to unblock
@@ -151,7 +149,7 @@ static ucs_status_t ucp_proto_put_rndv_progress(uct_pending_req_t *self)
         goto err_flush_count;
     }
 
-    ucp_ep_rma_remote_request_sent(ep);
+    ucp_ep_rma_rndv_remote_request_sent(ep);
     return UCS_OK;
 
 err_flush_count:
@@ -452,7 +450,7 @@ void ucp_rma_rndv_flush_close(ucp_request_t *recv_req, ucp_ep_h ep,
     if (recv_req != NULL) {
         if (!UCS_STATUS_IS_ERR(status)) {
             /* recv_req may complete inline, so only touch ep on success. */
-            ucp_ep_rma_remote_request_sent(ep);
+            ucp_ep_rma_rndv_remote_request_sent(ep);
         } else {
             ucp_worker_flush_ops_count_add(ep->worker, -1);
             recv_req->flags |= UCP_REQUEST_FLAG_RNDV_START_FLUSH;
@@ -469,7 +467,7 @@ static void ucp_rma_rndv_get_recv_complete(ucp_request_t *recv_req)
     start_flush = recv_req->flags & UCP_REQUEST_FLAG_RNDV_START_FLUSH;
     ucp_request_complete_send(get_req, recv_req->status);
     if (!start_flush) {
-        ucp_ep_rma_remote_request_completed(ep);
+        ucp_ep_rma_rndv_remote_request_completed(ep);
     }
     ucp_request_put(recv_req);
 }
@@ -482,15 +480,8 @@ static ucs_status_t ucp_proto_get_rndv_init(ucp_request_t *get_req,
     ucp_request_t *recv_req;
     ucp_request_t *rndv_req;
     uint8_t UCS_V_UNUSED sg_count;
-    ucs_status_t status;
     uint64_t address;
     size_t length;
-
-    status = ucp_ep_rma_handle_fence(get_req->send.ep, get_req,
-                                     UCS_BIT(rpriv->lane));
-    if (status != UCS_OK) {
-        return status;
-    }
 
     address              = get_req->send.fenced_req.rma.remote_addr;
     length               = get_req->send.state.dt_iter.length;
@@ -552,6 +543,11 @@ static ucs_status_t ucp_proto_get_rndv_progress(uct_pending_req_t *self)
 
     rpriv              = get_req->send.proto_config->priv;
     get_req->send.lane = rpriv->lane;
+    if (!ucp_proto_rma_fence_progress(
+                get_req, UCS_BIT(rpriv->lane), &status)) {
+        return status;
+    }
+
     status             = ucp_ep_resolve_remote_id(get_req->send.ep,
                                                   rpriv->lane);
     if (status == UCS_ERR_NO_RESOURCE) {
@@ -581,7 +577,7 @@ static void ucp_rma_rndv_put_recv_complete(ucp_request_t *recv_req)
         return;
     }, "RMA RNDV PUT completion");
 
-    ucp_rma_sw_send_cmpl(ep);
+    ucp_rma_sw_send_cmpl(ep, UCP_CMPL_FLAG_RMA_RNDV);
     if (recv_req->status != UCS_OK) {
         ucp_rma_rndv_send_ats_err(ep, recv_req->recv.remote_req_id,
                                   recv_req->status);
@@ -608,7 +604,7 @@ ucs_status_t ucp_rma_rndv_process_rts(ucp_worker_h worker,
         ucs_error("failed to allocate RMA RNDV PUT receive request");
         UCP_WORKER_GET_EP_BY_ID(&ep, worker, rts->super.sreq.ep_id,
                                 return UCS_OK, "RMA RNDV PUT error");
-        ucp_rma_sw_send_cmpl(ep);
+        ucp_rma_sw_send_cmpl(ep, UCP_CMPL_FLAG_RMA_RNDV);
         ucp_rma_rndv_send_ats_err(ep, rts->super.sreq.req_id,
                                   UCS_ERR_NO_MEMORY);
         return UCS_OK;

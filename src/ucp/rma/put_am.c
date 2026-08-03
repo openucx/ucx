@@ -57,35 +57,15 @@ static ucs_status_t ucp_proto_put_am_bcopy_progress(uct_pending_req_t *self)
     ucs_status_t status;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
+        ucp_proto_multi_request_init(req);
+        if (!ucp_proto_rma_fence_progress(req, mpriv->lane_map, &status)) {
+            return status;
+        }
+
         status = ucp_ep_resolve_remote_id(req->send.ep,
                                           mpriv->lanes[0].super.lane);
         if (status != UCS_OK) {
             return status;
-        }
-
-        ucp_proto_multi_request_init(req);
-
-        /* Reset fence_seq for fresh requests (stale mpool value) but not for
-         * requests retried from the fence pending queue, whose fence_seq is
-         * already valid and must be preserved to maintain queue invariants.
-         */
-        if (!(req->flags & UCP_REQUEST_FLAG_FENCE_BLOCKED)) {
-            req->send.fenced_req.fence_seq = 0;
-        }
-        status = ucp_ep_rma_handle_fence(req->send.ep, req, mpriv->lane_map);
-        if (status == UCP_STATUS_FENCE_DEFER) {
-            if (req->send.pending_lane != UCP_NULL_LANE) {
-                ucp_ep_fence_pending_add(req->send.ep, &req->send.uct);
-                req->send.pending_lane = UCP_NULL_LANE;
-                return UCS_OK;
-            }
-
-            return status;
-        } else if (status == UCS_ERR_NO_RESOURCE) {
-            return status;
-        } else if (status != UCS_OK) {
-            ucp_proto_request_abort(req, status);
-            return UCS_OK;
         }
 
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
