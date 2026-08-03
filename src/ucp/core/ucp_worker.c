@@ -3142,7 +3142,7 @@ static ucs_status_t ucp_worker_address_pack(ucp_worker_h worker,
             }
         }
 
-        UCS_STATIC_BITMAP_AND_INPLACE(&tl_bitmap, &net_tl_bitmap);
+        UCS_STATIC_BITMAP_AND_INPLACE(&tl_bitmap, net_tl_bitmap);
     }
 
     if ((address_device_name != NULL) && UCS_STATIC_BITMAP_IS_ZERO(tl_bitmap)) {
