@@ -24,6 +24,7 @@
 #include <ucm/api/ucm.h>
 #include <string.h>
 #include <inttypes.h>
+#include <unistd.h>
 
 /* Context for rcache memory registration callback */
 typedef struct {
@@ -532,11 +533,13 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
     ucp_md_map_t dmabuf_md_map          = 0;
     ucp_md_map_t reg_md_map;
     uct_md_mem_reg_params_t reg_params;
+    uct_md_mem_reg_params_t md_reg_params;
     uct_md_mem_attr_t mem_attr;
     ucp_md_index_t md_index;
     ucs_status_t status;
     void *reg_address;
     size_t reg_length;
+    size_t reg_offset;
     size_t reg_align;
 
     if (gva_enable) {
@@ -561,7 +564,18 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
     reg_params.dmabuf_fd     = UCT_DMABUF_FD_INVALID;
     reg_params.dmabuf_offset = 0;
 
-    if ((dmabuf_prov_md_index != UCP_NULL_RESOURCE) &&
+    if ((memh->dmabuf_fd != UCT_DMABUF_FD_INVALID) &&
+        (reg_md_map & context->dmabuf_reg_md_map)) {
+        dmabuf_md_map            = context->dmabuf_reg_md_map;
+        reg_params.dmabuf_fd     = dup(memh->dmabuf_fd);
+        reg_params.dmabuf_offset = memh->dmabuf_offset;
+        if (reg_params.dmabuf_fd == -1) {
+            ucs_log(err_level, "failed to duplicate dmabuf fd %d: %m",
+                    memh->dmabuf_fd);
+            status = UCS_ERR_IO_ERROR;
+            goto out_close_dmabuf_fd;
+        }
+    } else if ((dmabuf_prov_md_index != UCP_NULL_RESOURCE) &&
         (reg_md_map & context->dmabuf_reg_md_map)) {
         /* Query dmabuf file descriptor and offset */
         mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_DMABUF_FD |
@@ -585,7 +599,9 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
 
     ucs_for_each_bit(md_index, reg_md_map) {
         ucs_assertv((context->reg_md_map[mem_type] |
-                     context->reg_block_md_map[mem_type]) & UCS_BIT(md_index),
+                     context->reg_block_md_map[mem_type] |
+                     ((memh->dmabuf_fd != UCT_DMABUF_FD_INVALID) ?
+                      context->dmabuf_reg_md_map : 0)) & UCS_BIT(md_index),
                     "mem_type=%s md[%d]=%s reg_md_map=0x%" PRIx64
                     " reg_block_md_map=0x%" PRIx64,
                     ucs_memory_type_names[mem_type], md_index,
@@ -593,13 +609,8 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
                     context->reg_md_map[mem_type],
                     context->reg_block_md_map[mem_type]);
 
-        reg_params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS;
-        if (dmabuf_md_map & UCS_BIT(md_index)) {
-            /* If this MD can consume a dmabuf and we have it - provide it */
-            reg_params.field_mask |= UCT_MD_MEM_REG_FIELD_DMABUF_FD |
-                                     UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET;
-        }
-
+        md_reg_params            = reg_params;
+        md_reg_params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS;
         reg_address = address;
         reg_length  = length;
 
@@ -608,12 +619,29 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
             ucs_align_ptr_range(&reg_address, &reg_length, reg_align);
         }
 
+        if (dmabuf_md_map & UCS_BIT(md_index)) {
+            /* If this MD can consume a dmabuf and we have it - provide it */
+            md_reg_params.field_mask |= UCT_MD_MEM_REG_FIELD_DMABUF_FD |
+                                        UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET;
+            reg_offset = UCS_PTR_BYTE_DIFF(reg_address, address);
+            if (md_reg_params.dmabuf_offset < reg_offset) {
+                ucs_log(err_level,
+                        "dmabuf offset %zu does not cover aligned address %p",
+                        md_reg_params.dmabuf_offset, reg_address);
+                status = UCS_ERR_INVALID_PARAM;
+                goto out_close_dmabuf_fd;
+            }
+
+            md_reg_params.dmabuf_offset -= reg_offset;
+        }
+
         status = uct_md_mem_reg_v2(context->tl_mds[md_index].md, reg_address,
-                                   reg_length, &reg_params, &memh->uct[md_index]);
+                                   reg_length, &md_reg_params,
+                                   &memh->uct[md_index]);
         if (ucs_unlikely(status != UCS_OK)) {
             ucp_memh_register_log_fail(err_level, reg_address, reg_length,
-                                       mem_type, reg_params.dmabuf_fd, md_index,
-                                       context, status);
+                                       mem_type, md_reg_params.dmabuf_fd,
+                                       md_index, context, status);
             if (allow_partial_reg &&
                 (uct_flags & UCT_MD_MEM_FLAG_HIDE_ERRORS)) {
                 continue;
@@ -626,9 +654,10 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
         ucs_trace("register address %p length %zu dmabuf-fd %d flags %ld "
                   "on md[%d]=%s %p",
                   reg_address, reg_length,
-                  (dmabuf_md_map & UCS_BIT(md_index)) ? reg_params.dmabuf_fd :
+                  (dmabuf_md_map & UCS_BIT(md_index)) ?
+                  md_reg_params.dmabuf_fd :
                                                         UCT_DMABUF_FD_INVALID,
-                  reg_params.flags,
+                  md_reg_params.flags,
                   md_index, context->tl_mds[md_index].rsc.md_name,
                   memh->uct[md_index]);
         md_map_registered |= UCS_BIT(md_index);
@@ -673,7 +702,8 @@ void ucp_memh_disable_gva(ucp_mem_h memh, ucp_md_map_t md_map)
 
 static void ucp_memh_init(ucp_mem_h memh, ucp_context_h context,
                           uint8_t memh_flags, unsigned uct_flags,
-                          uct_alloc_method_t method, ucs_memory_type_t mem_type)
+                          uct_alloc_method_t method, ucs_memory_type_t mem_type,
+                          ucs_sys_device_t sys_dev)
 {
     memh->md_map         = 0;
     memh->inv_md_map     = 0;
@@ -683,12 +713,16 @@ static void ucp_memh_init(ucp_mem_h memh, ucp_context_h context,
     memh->alloc_md_index = UCP_NULL_RESOURCE;
     memh->alloc_method   = method;
     memh->mem_type       = mem_type;
+    memh->sys_dev        = sys_dev;
+    memh->dmabuf_fd      = UCT_DMABUF_FD_INVALID;
+    memh->dmabuf_offset  = 0;
 }
 
 static ucs_status_t
 ucp_memh_create(ucp_context_h context, void *address, size_t length,
                 ucs_memory_type_t mem_type, uct_alloc_method_t method,
-                uint8_t memh_flags, unsigned uct_flags, ucp_mem_h *memh_p)
+                ucs_sys_device_t sys_dev, uint8_t memh_flags,
+                unsigned uct_flags, ucp_mem_h *memh_p)
 {
     ucp_memory_info_t info;
     ucp_mem_h memh;
@@ -700,11 +734,14 @@ ucp_memh_create(ucp_context_h context, void *address, size_t length,
 
     memh->super.super.start = (uintptr_t)address;
     memh->super.super.end   = (uintptr_t)address + length;
-    ucp_memh_init(memh, context, memh_flags, uct_flags, method, mem_type);
+    ucp_memh_init(memh, context, memh_flags, uct_flags, method, mem_type,
+                  sys_dev);
 
-    ucp_memory_detect(context, ucp_memh_address(memh), ucp_memh_length(memh),
-                      &info);
-    memh->sys_dev = info.sys_dev;
+    if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        ucp_memory_detect(context, ucp_memh_address(memh), ucp_memh_length(memh),
+                          &info);
+        memh->sys_dev = info.sys_dev;
+    }
 
     *memh_p = memh;
     return UCS_OK;
@@ -764,7 +801,8 @@ ucp_memh_create_from_mem(ucp_context_h context,
     ucp_mem_h memh;
 
     status = ucp_memh_create(context, mem->address, mem->length, mem->mem_type,
-                             mem->method, memh_flags, uct_flags, &memh);
+                             mem->method, UCS_SYS_DEVICE_ID_UNKNOWN,
+                             memh_flags, uct_flags, &memh);
     if (status != UCS_OK) {
         return status;
     }
@@ -814,6 +852,10 @@ static ucs_status_t ucp_memh_init_uct_reg(ucp_context_h context, ucp_mem_h memh,
 
     if (uct_flags & UCT_MD_MEM_FLAG_LOCK) {
         reg_md_map |= context->reg_block_md_map[mem_type];
+    }
+
+    if (memh->dmabuf_fd != UCT_DMABUF_FD_INVALID) {
+        reg_md_map |= context->dmabuf_reg_md_map;
     }
 
     reg_md_map  &= ~memh->md_map;
@@ -880,7 +922,8 @@ ucp_memh_find_slow(ucp_context_h context, void *address, size_t length,
 
     if (context->rcache == NULL) {
         return ucp_memh_create(context, address, length, mem_type,
-                               UCT_ALLOC_METHOD_LAST, 0, uct_flags, memh_p);
+                               UCT_ALLOC_METHOD_LAST,
+                               UCS_SYS_DEVICE_ID_UNKNOWN, 0, uct_flags, memh_p);
     }
 
     for (;;) {
@@ -1038,10 +1081,13 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
     ucs_memory_type_t mem_type;
     ucp_memory_info_t mem_info;
     ucs_status_t status;
+    ucs_sys_device_t sys_dev;
     unsigned uct_flags;
     unsigned flags;
+    int dmabuf_fd;
     void *address;
     const void *exported_memh_buffer;
+    size_t dmabuf_offset;
     size_t length;
 
     if (!(params->field_mask &
@@ -1061,6 +1107,51 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
                                            EXPORTED_MEMH_BUFFER, NULL);
     mem_type             = UCP_PARAM_VALUE(MEM_MAP, params, memory_type,
                                            MEMORY_TYPE, UCS_MEMORY_TYPE_LAST);
+    sys_dev              = UCP_PARAM_VALUE(MEM_MAP, params, sys_device,
+                                           SYS_DEVICE,
+                                           UCS_SYS_DEVICE_ID_UNKNOWN);
+    dmabuf_fd            = UCP_PARAM_VALUE(MEM_MAP, params, dmabuf_fd,
+                                           DMABUF_FD, UCT_DMABUF_FD_INVALID);
+    dmabuf_offset        = UCP_PARAM_VALUE(MEM_MAP, params, dmabuf_offset,
+                                           DMABUF_OFFSET, 0);
+
+    if ((params->field_mask & UCP_MEM_MAP_PARAM_FIELD_DMABUF_OFFSET) &&
+        !(params->field_mask & UCP_MEM_MAP_PARAM_FIELD_DMABUF_FD)) {
+        ucs_error("dmabuf_offset requires dmabuf_fd");
+        status = UCS_ERR_INVALID_PARAM;
+        goto out;
+    }
+
+    if (params->field_mask & UCP_MEM_MAP_PARAM_FIELD_DMABUF_FD) {
+        if (dmabuf_fd == UCT_DMABUF_FD_INVALID) {
+            ucs_error("invalid dmabuf_fd");
+            status = UCS_ERR_INVALID_PARAM;
+            goto out;
+        }
+
+        if (!(params->field_mask & UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE) ||
+            (mem_type == UCS_MEMORY_TYPE_UNKNOWN)) {
+            ucs_error("dmabuf_fd requires explicit memory_type");
+            status = UCS_ERR_INVALID_PARAM;
+            goto out;
+        }
+
+        if ((flags & UCP_MEM_MAP_ALLOCATE) || (exported_memh_buffer != NULL)) {
+            ucs_error("dmabuf_fd is supported only for local memory "
+                      "registration");
+            status = UCS_ERR_INVALID_PARAM;
+            goto out;
+        }
+
+        if (context->dmabuf_reg_md_map == 0) {
+            ucs_error("dmabuf_fd was provided, but no memory domain supports "
+                      "dmabuf registration");
+            status = UCS_ERR_UNSUPPORTED;
+            goto out;
+        }
+
+        memh_flags |= UCP_MEMH_FLAG_NO_RCACHE;
+    }
 
     if ((flags & UCP_MEM_MAP_FIXED) &&
         ((uintptr_t)address % ucs_get_page_size())) {
@@ -1123,14 +1214,17 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
         status = ucp_memh_import(context, exported_memh_buffer, &memh);
     } else if (flags & UCP_MEM_MAP_ALLOCATE) {
         status = ucp_memh_alloc(context, address, length, mem_type,
-                                UCS_SYS_DEVICE_ID_UNKNOWN, 0, uct_flags,
-                                alloc_name, &memh);
+                                sys_dev, 0, uct_flags, alloc_name, &memh);
     } else {
         status = ucp_memh_create(context, address, length, mem_type,
-                                 UCT_ALLOC_METHOD_LAST, 0, uct_flags, &memh);
+                                 UCT_ALLOC_METHOD_LAST, sys_dev, memh_flags,
+                                 uct_flags, &memh);
         if (status != UCS_OK) {
             goto out;
         }
+
+        memh->dmabuf_fd     = dmabuf_fd;
+        memh->dmabuf_offset = dmabuf_offset;
 
         status = ucp_memh_init_uct_reg(context, memh, uct_flags, alloc_name);
         if (status != UCS_OK) {
@@ -1596,7 +1690,7 @@ ucp_mem_rcache_mem_reg_cb(void *ctx, ucs_rcache_t *rcache, void *arg,
     ucp_mem_h memh                    = ucs_derived_of(rregion, ucp_mem_t);
 
     ucp_memh_init(memh, context, 0, reg_ctx->uct_flags, UCT_ALLOC_METHOD_LAST,
-                  reg_ctx->mem_type);
+                  reg_ctx->mem_type, UCS_SYS_DEVICE_ID_UNKNOWN);
     memh->reg_id = context->next_memh_reg_id++;
 
     if (rcache_mem_reg_flags & UCS_RCACHE_MEM_REG_HIDE_ERRORS) {
@@ -1951,7 +2045,8 @@ ucp_memh_import(ucp_context_h context, const void *export_mkey_buffer,
 
     status = ucp_memh_create(context, unpacked_memh.address,
                              unpacked_memh.length, unpacked_memh.mem_type,
-                             UCT_ALLOC_METHOD_LAST, 0, 0, &memh);
+                             UCT_ALLOC_METHOD_LAST, UCS_SYS_DEVICE_ID_UNKNOWN,
+                             0, 0, &memh);
     if (status != UCS_OK) {
         goto out;
     }

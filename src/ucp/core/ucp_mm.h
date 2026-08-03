@@ -69,6 +69,8 @@ typedef struct ucp_mem {
     uct_alloc_method_t  alloc_method;   /* Method used to allocate the memory */
     ucs_sys_device_t    sys_dev;        /* System device index */
     ucs_memory_type_t   mem_type;       /* Type of allocated or registered memory */
+    int                 dmabuf_fd;      /* User-provided dmabuf fd, or -1 */
+    size_t              dmabuf_offset;  /* User-provided dmabuf offset */
     ucp_md_index_t      alloc_md_index; /* Index of MD used to allocate the memory */
     uint64_t            remote_uuid;    /* Remote UUID */
     ucp_md_map_t        md_map;         /* Which MDs have valid memory handles */
