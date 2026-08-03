@@ -9,6 +9,8 @@
 
 ## Current
 ### Features:
+#### RDMA CORE (IB, ROCE, etc.)
+ * UCX_IB_PCI_RELAXED_ORDERING=yes now requires all memory keys to use relaxed ordering and omits strict-order companion keys; the former "only" value is removed
 ### Bugfixes:
 
 ## 1.21.0 (June 24, 2026)
