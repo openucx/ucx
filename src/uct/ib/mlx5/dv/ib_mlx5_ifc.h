@@ -361,7 +361,7 @@ struct uct_ib_mlx5_cmd_hca_cap_bits {
     uint8_t    ext_stride_num_range[0x1];
     uint8_t    reserved_at_3a1[0x2];
     uint8_t    log_max_stride_sz_rq[0x5];
-    uint8_t    reserved_at_3a8[0x1];
+    uint8_t    mkc_order_read_after_write[0x1];
     uint8_t    mkc_order_write_after_write_ro_only[0x1];
     uint8_t    reserved_at_3aa[0x1];
     uint8_t    log_min_stride_sz_rq[0x5];
@@ -800,7 +800,9 @@ struct uct_ib_mlx5_mkc_bits {
         uint8_t crossing_target_mkey[0x20];
     };
 
-    uint8_t    reserved_at_1c0[0x1b];
+    uint8_t    reserved_at_1c0[0x16];
+    uint8_t    order_read_after_write[0x2];
+    uint8_t    reserved_at_1d8[0x3];
     uint8_t    log_entity_size[0x5];
 
     uint8_t    reserved_at_1e0[0x20];
