@@ -16,6 +16,7 @@
 #include <ucs/type/cpu_set.h>
 #include <ucs/config/types.h>
 #include <ucs/sys/compiler_def.h>
+#include <ucs/sys/topo/base/topo.h>
 #include <ucs/memory/memory_type.h>
 #include <stdio.h>
 #include <sys/types.h>
@@ -392,7 +393,16 @@ enum ucp_mem_map_params_field {
     UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE          = UCS_BIT(4),
 
     /** Exported memory handle buffer. */
-    UCP_MEM_MAP_PARAM_FIELD_EXPORTED_MEMH_BUFFER = UCS_BIT(5)
+    UCP_MEM_MAP_PARAM_FIELD_EXPORTED_MEMH_BUFFER = UCS_BIT(5),
+
+    /** System device backing the mapped memory. */
+    UCP_MEM_MAP_PARAM_FIELD_SYS_DEVICE           = UCS_BIT(6),
+
+    /** dmabuf file descriptor backing the mapped memory. */
+    UCP_MEM_MAP_PARAM_FIELD_DMABUF_FD            = UCS_BIT(7),
+
+    /** Offset of the mapped memory in the provided dmabuf. */
+    UCP_MEM_MAP_PARAM_FIELD_DMABUF_OFFSET        = UCS_BIT(8)
 };
 
 /**
@@ -1684,6 +1694,40 @@ typedef struct ucp_mem_map_params {
       * set to NULL by default.
       */
     const void              *exported_memh_buffer;
+
+     /**
+      * System device that backs the memory pointed by
+      * @ref ucp_mem_map_params.address. If it's not set (along with its
+      * corresponding bit in the field_mask -
+      * @ref UCP_MEM_MAP_PARAM_FIELD_SYS_DEVICE),
+      * @ref UCS_SYS_DEVICE_ID_UNKNOWN will be assumed by default.
+      *
+      * This field is intended for externally detected memory, for example GPU
+      * memory described by an application when UCX was built without the
+      * corresponding memory-type detection component.
+      */
+     ucs_sys_device_t       sys_device;
+
+     /**
+      * dmabuf file descriptor backing the memory pointed by
+      * @ref ucp_mem_map_params.address. If it's set (along with its
+      * corresponding bit in the field_mask -
+      * @ref UCP_MEM_MAP_PARAM_FIELD_DMABUF_FD), UCX may use dmabuf-capable
+      * memory domains to register the memory, for example for GPUDirect RDMA.
+      *
+      * The descriptor remains owned by the caller and must stay valid until
+      * @ref ucp_mem_map returns. UCX duplicates it internally when needed.
+      */
+     int                    dmabuf_fd;
+
+     /**
+      * Offset of @ref ucp_mem_map_params.address relative to the beginning of
+      * the dmabuf region identified by @ref ucp_mem_map_params.dmabuf_fd.
+      * If it's not set (along with its corresponding bit in the field_mask -
+      * @ref UCP_MEM_MAP_PARAM_FIELD_DMABUF_OFFSET), the offset is assumed to
+      * be 0.
+      */
+     size_t                 dmabuf_offset;
 } ucp_mem_map_params_t;
 
 
