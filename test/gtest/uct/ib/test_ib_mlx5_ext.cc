@@ -144,10 +144,6 @@ UCS_TEST_P(test_uct_ib_mlx5_ext_rc, iface_query)
     uint64_t rx_token_value  = 0;
     uct_iface_attr_v2_t attr = {};
 
-    register_plugin("unsupported",
-                    (uct_ib_mlx5_ext_iface_query_func_t)
-                            ucs_empty_function_return_unsupported,
-                    NULL, NULL);
     register_plugin("token", iface_query, ep_query, purge);
 
     {
