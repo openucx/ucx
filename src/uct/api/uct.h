@@ -990,23 +990,7 @@ enum uct_ep_params_field {
     UCT_EP_PARAM_FIELD_DEV_ADDR_LENGTH            = UCS_BIT(17),
 
     /** Enables @ref uct_ep_params::iface_addr_length */
-    UCT_EP_PARAM_FIELD_IFACE_ADDR_LENGTH          = UCS_BIT(18),
-
-    /** Enables @ref uct_ep_params::flags */
-    UCT_EP_PARAM_FIELD_FLAGS                      = UCS_BIT(19)
-};
-
-
-/**
- * @ingroup UCT_RESOURCE
- * @brief UCT endpoint creation flags.
- */
-enum uct_ep_params_flags {
-    /**
-     * Preserve outstanding operations after endpoint failure for
-     * @c uct_ep_outstanding_purge().
-     */
-    UCT_EP_PARAM_FLAG_FAILOVER = UCS_BIT(0)
+    UCT_EP_PARAM_FIELD_IFACE_ADDR_LENGTH          = UCS_BIT(18)
 };
 
 
@@ -1480,11 +1464,6 @@ struct uct_ep_params {
      * default minimum length according to the address buffer contents.
      */
     size_t                              iface_addr_length;
-
-    /**
-     * Endpoint creation flags from @ref uct_ep_params_flags.
-     */
-    uint64_t                            flags;
 };
 
 

@@ -209,7 +209,7 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
         (ep->super.ext_flags & UCT_RC_EP_EXT_FLAG_FAILOVER_ENABLED) &&
         !(ep->super.flags &
           (UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED | UCT_RC_EP_FLAG_FLUSH_CANCEL))) {
-        status = uct_rc_mlx5_ep_failover_arm(&ep->super.super.super, pi);
+        status = uct_ep_invalidate(&ep->super.super.super, NULL);
         failover_owned = (status == UCS_OK);
     }
 
