@@ -38,6 +38,7 @@
  */
 #define UCT_IB_NDR_READ_PATH_BANDWIDTH 38e9
 #define UCT_IB_XDR_READ_PATH_BANDWIDTH 35e9
+#define UCT_IB_HIGH_SPEED_NUM_PATHS    2
 
 /**
  * Minimal NDR single path ratio.
@@ -1404,6 +1405,9 @@ static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
         if (uct_ib_iface_is_roce(iface)) {
             /* RoCE - number of paths is RoCE LAG level */
             iface->num_paths = uct_ib_iface_roce_lag_level(iface);
+            if (uct_ib_iface_port_is_xdr(iface)) {
+                iface->num_paths = UCT_IB_HIGH_SPEED_NUM_PATHS;
+            }
         } else {
             /* IB - number of paths is LMC level */
             ucs_assert(iface->path_bits_count > 0);
@@ -1412,7 +1416,7 @@ static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
 
         if ((iface->num_paths == 1) &&
             (uct_ib_iface_port_active_speed(iface) >= UCT_IB_SPEED_NDR)) {
-            iface->num_paths = 2;
+            iface->num_paths = UCT_IB_HIGH_SPEED_NUM_PATHS;
         }
     } else {
         iface->num_paths = config->num_paths;
@@ -1953,35 +1957,40 @@ uct_ib_iface_get_bandwidth(uct_ib_iface_t *iface, double wire_speed)
     return bandwidth;
 }
 
-ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface,
-                                uct_iface_attr_t *iface_attr)
+uint8_t uct_ib_iface_port_active_width(uct_ib_iface_t *iface)
 {
     static const uint8_t ib_port_widths[] =
             {[1] = 1, [2] = 4, [4] = 8, [8] = 12, [16] = 2};
+    uint8_t active_width = uct_ib_iface_port_attr(iface)->active_width;
+
+    /*
+     * Parse active width.
+     * See IBTA section 14.2.5.6 "PortInfo", Table 164, field
+     * "LinkWidthEnabled".
+     */
+    if ((active_width >= ucs_static_array_size(ib_port_widths)) ||
+        (ib_port_widths[active_width] == 0)) {
+        ucs_warn("invalid active width on " UCT_IB_IFACE_FMT ": %d, "
+                 "assuming 1x", UCT_IB_IFACE_ARG(iface), active_width);
+        return 1;
+    }
+
+    return ib_port_widths[active_width];
+}
+
+ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface,
+                                uct_iface_attr_t *iface_attr)
+{
     uct_ib_device_t *dev                 = uct_ib_iface_device(iface);
-    uint8_t active_width, width;
+    uint8_t width;
     uint32_t active_speed;
     double encoding, signal_rate, wire_speed;
     unsigned num_path;
 
     uct_base_iface_query(&iface->super, iface_attr);
 
-    active_width = uct_ib_iface_port_attr(iface)->active_width;
     active_speed = uct_ib_iface_port_active_speed(iface);
-
-    /*
-     * Parse active width.
-     * See IBTA section 14.2.5.6 "PortInfo", Table 164, field "LinkWidthEnabled"
-     */
-    if ((active_width >= ucs_static_array_size(ib_port_widths)) ||
-        (ib_port_widths[active_width] == 0)) {
-        ucs_warn("invalid active width on " UCT_IB_IFACE_FMT ": %d, "
-                 "assuming 1x",
-                 UCT_IB_IFACE_ARG(iface), active_width);
-        width = 1;
-    } else {
-        width = ib_port_widths[active_width];
-    }
+    width        = uct_ib_iface_port_active_width(iface);
 
     iface_attr->device_addr_len = iface->addr_size;
     iface_attr->dev_num_paths   = iface->num_paths;
@@ -2070,17 +2079,15 @@ uct_ib_iface_estimate_path_bw(uct_ib_iface_t *iface,
     uct_ep_operation_t op     = UCT_ATTR_VALUE(PERF, perf_attr, operation,
                                                OPERATION, UCT_EP_OP_LAST);
 
-    if (uct_ib_iface_is_roce(iface) &&
-        (uct_ib_iface_roce_lag_level(iface) > 1)) {
+    if (uct_ep_op_is_get(op) && uct_ib_iface_port_is_xdr(iface)) {
+        max_path_bandwidth = UCT_IB_XDR_READ_PATH_BANDWIDTH;
+        path_ratio         = UCT_IB_XDR_READ_PATH_RATIO;
+    } else if (uct_ib_iface_is_roce(iface) &&
+               (uct_ib_iface_roce_lag_level(iface) > 1)) {
         path_ratio = 1.0 / iface_attr->dev_num_paths;
-    } else if (uct_ep_op_is_get(op)) {
-        if (uct_ib_iface_port_is_ndr(iface)) {
-            max_path_bandwidth = UCT_IB_NDR_READ_PATH_BANDWIDTH;
-            path_ratio         = UCT_IB_NDR_READ_PATH_RATIO;
-        } else if (uct_ib_iface_port_is_xdr(iface)) {
-            max_path_bandwidth = UCT_IB_XDR_READ_PATH_BANDWIDTH;
-            path_ratio         = UCT_IB_XDR_READ_PATH_RATIO;
-        }
+    } else if (uct_ep_op_is_get(op) && uct_ib_iface_port_is_ndr(iface)) {
+        max_path_bandwidth = UCT_IB_NDR_READ_PATH_BANDWIDTH;
+        path_ratio         = UCT_IB_NDR_READ_PATH_RATIO;
     }
 
     return ucs_min(iface_attr->bandwidth.shared * path_ratio, max_path_bandwidth);
