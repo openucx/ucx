@@ -1222,9 +1222,28 @@ extern uct_tl_t UCT_TL_NAME(ud_mlx5);
 extern uct_ib_md_ops_entry_t UCT_IB_MD_OPS_NAME(devx);
 extern uct_ib_md_ops_entry_t UCT_IB_MD_OPS_NAME(dv);
 
+static int uct_mlx5_initialized;
+
 void UCS_F_CTOR uct_mlx5_init(void)
 {
 #if defined (HAVE_MLX5_DV)
+    uct_ib_dlopen_status_t dlopen_status;
+    const char *library_name, *symbol_name, *error_msg;
+
+    dlopen_status = uct_ib_mlx5_dlopen_check(&library_name, &symbol_name,
+                                             &error_msg);
+    if (dlopen_status != UCT_IB_DLOPEN_STATUS_OK) {
+        if (dlopen_status == UCT_IB_DLOPEN_STATUS_MISSING_SYM) {
+            ucs_diag("mlx5 transports are disabled: %s is missing symbol %s: %s",
+                     library_name, symbol_name, error_msg);
+        } else {
+            ucs_diag("mlx5 transports are disabled: %s: %s: %s",
+                     library_name,
+                     uct_ib_dlopen_status_string(dlopen_status), error_msg);
+        }
+        return;
+    }
+
     ucs_list_add_head(&uct_ib_ops, &UCT_IB_MD_OPS_NAME(dv).list);
 #endif
 #if defined (HAVE_DEVX)
@@ -1240,10 +1259,15 @@ void UCS_F_CTOR uct_mlx5_init(void)
 #if defined (HAVE_TL_UD) && defined (HAVE_MLX5_HW_UD)
     uct_tl_register(&uct_ib_component, &UCT_TL_NAME(ud_mlx5));
 #endif
+    uct_mlx5_initialized = 1;
 }
 
 void UCS_F_DTOR uct_mlx5_cleanup(void)
 {
+    if (!uct_mlx5_initialized) {
+        return;
+    }
+
 #if defined (HAVE_TL_UD) && defined (HAVE_MLX5_HW_UD)
     uct_tl_unregister(&UCT_TL_NAME(ud_mlx5));
 #endif

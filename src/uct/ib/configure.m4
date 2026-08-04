@@ -101,14 +101,19 @@ AS_IF([test "x$with_ib" = "xyes"],
         CPPFLAGS="$verbs_incl $CPPFLAGS"
         AC_CHECK_HEADER([infiniband/verbs.h], [],
                         [AC_MSG_WARN([ibverbs header files not found]); with_ib=no])
-        AC_CHECK_LIB([ibverbs], [ibv_get_device_list],
+        # NVIDIA: do NOT link libibverbs. ibv_* symbols are provided at runtime
+        # via uct/ib/base/ib_verbs_dlopen.c (dlopen libibverbs.so.1). We only
+        # need the vendored headers at compile time and libdl at link time. The
+        # stock AC_CHECK_LIB([ibverbs], ...) link probe is intentionally removed
+        # so the build has no build- or link-time dependency on rdma-core
+        # libraries.
+        AS_IF([test "x$with_ib" = "xyes"],
             [
-            AC_SUBST(IBVERBS_LDFLAGS,  ["$verbs_libs -libverbs"])
+            AC_SUBST(IBVERBS_LDFLAGS,  ["-ldl"])
             AC_SUBST(IBVERBS_DIR,      ["$with_verbs"])
             AC_SUBST(IBVERBS_CPPFLAGS, ["$verbs_incl"])
             AC_SUBST(IBVERBS_CFLAGS,   ["$verbs_incl"])
-            ],
-            [AC_MSG_WARN([libibverbs not found]); with_ib=no])
+            ])
 
         have_ib_funcs=yes
         LDFLAGS="$LDFLAGS $IBVERBS_LDFLAGS"
@@ -148,9 +153,9 @@ AS_IF([test "x$with_ib" = "xyes"],
               AC_MSG_NOTICE([Checking for DV bare-metal support])
 
               AC_CHECK_LIB([mlx5-rdmav2], [mlx5dv_query_device],
-                                    [AC_SUBST(LIB_MLX5, [-lmlx5-rdmav2])],[
+                                    [AC_SUBST(LIB_MLX5, [])],[
               AC_CHECK_LIB([mlx5], [mlx5dv_query_device],
-                                    [AC_SUBST(LIB_MLX5, [-lmlx5])],
+                                    [AC_SUBST(LIB_MLX5, [])],
                                     [have_mlx5=no], [-libverbs])], [-libverbs])
 
               AS_IF([test "x$have_mlx5" = xyes], [

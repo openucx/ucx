@@ -35,6 +35,18 @@ ucx_perftest_LDADD    = \
 	$(abs_top_builddir)/src/ucs/libucs.la \
 	lib/libucxperf.la
 
+if HAVE_IB
+ucx_perftest_LDFLAGS += -Wl,-u,uct_ib_init
+ucx_perftest_LDADD   += \
+	$(abs_top_builddir)/src/uct/ib/libuct_ib.la
+
+if HAVE_MLX5_DV
+ucx_perftest_LDFLAGS += -Wl,-u,uct_mlx5_init
+ucx_perftest_LDADD   += \
+	$(abs_top_builddir)/src/uct/ib/mlx5/libuct_ib_mlx5.la
+endif
+endif # HAVE_IB
+
 perftestdir = $(pkgdatadir)/perftest
 dist_perftest_DATA = \
 	$(top_srcdir)/contrib/ucx_perftest_config/msg_pow2 \

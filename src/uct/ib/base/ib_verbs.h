@@ -22,6 +22,24 @@
 #include <ucs/type/status.h>
 #include <ucs/debug/log.h>
 
+typedef enum {
+    UCT_IB_DLOPEN_STATUS_OK,
+    UCT_IB_DLOPEN_STATUS_NO_LIB,
+    UCT_IB_DLOPEN_STATUS_MISSING_SYM
+} uct_ib_dlopen_status_t;
+
+const char *uct_ib_dlopen_status_string(uct_ib_dlopen_status_t status);
+
+uct_ib_dlopen_status_t
+uct_ib_verbs_dlopen_check(const char **library_name, const char **symbol_name,
+                          const char **error_msg);
+
+#if defined(HAVE_MLX5_DV)
+uct_ib_dlopen_status_t
+uct_ib_mlx5_dlopen_check(const char **library_name, const char **symbol_name,
+                         const char **error_msg);
+#endif
+
 /* Read device properties */
 #if HAVE_DECL_IBV_QUERY_DEVICE_EX
 

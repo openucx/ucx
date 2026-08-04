@@ -9,6 +9,10 @@
 
 #include <ucs/type/status.h>
 
+/* <sys/socket.h> must precede <linux/netlink.h>: the latter (notably with old
+ * kernel headers such as linux-libc-headers-2.6.32) uses sa_family_t without
+ * pulling in its definition. */
+#include <sys/socket.h>
 #include <linux/netlink.h>
 #include <netinet/in.h>
 

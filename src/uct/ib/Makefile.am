@@ -15,6 +15,7 @@ libuct_ib_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
 libuct_ib_la_LDFLAGS  = $(IBVERBS_LDFLAGS) -version-info $(SOVERSION)
 
 noinst_HEADERS = \
+	base/ib_dlopen.h \
 	base/ib_device.h \
 	base/ib_iface.h \
 	base/ib_log.h \
@@ -60,6 +61,8 @@ libuct_ib_la_SOURCES += \
 	ud/verbs/ud_verbs.c
 
 endif # HAVE_TL_UD
+
+libuct_ib_la_SOURCES += base/ib_verbs_dlopen.c
 
 PKG_CONFIG_NAME=ib
 

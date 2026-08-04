@@ -1585,6 +1585,8 @@ static uct_ib_md_ops_t uct_ib_verbs_md_ops = {
 
 static UCT_IB_MD_DEFINE_ENTRY(verbs, uct_ib_verbs_md_ops);
 
+static int uct_ib_component_initialized;
+
 uct_component_t uct_ib_component = {
     .query_md_resources = uct_ib_query_md_resources,
     .md_open            = uct_ib_md_open,
@@ -1609,10 +1611,26 @@ uct_component_t uct_ib_component = {
 void UCS_F_CTOR uct_ib_init()
 {
     UCS_MODULE_FRAMEWORK_DECLARE(uct_ib);
+    uct_ib_dlopen_status_t dlopen_status;
+    const char *library_name, *symbol_name, *error_msg;
     ssize_t i;
+
+    dlopen_status = uct_ib_verbs_dlopen_check(&library_name, &symbol_name,
+                                              &error_msg);
+    if (dlopen_status != UCT_IB_DLOPEN_STATUS_OK) {
+        if (dlopen_status == UCT_IB_DLOPEN_STATUS_MISSING_SYM) {
+            ucs_diag("IB component is disabled: %s is missing symbol %s: %s",
+                     library_name, symbol_name, error_msg);
+        } else {
+            ucs_diag("IB component is disabled: %s: %s: %s", library_name,
+                     uct_ib_dlopen_status_string(dlopen_status), error_msg);
+        }
+        return;
+    }
 
     ucs_list_add_head(&uct_ib_ops, &UCT_IB_MD_OPS_NAME(verbs).list);
     uct_component_register(&uct_ib_component);
+    uct_ib_component_initialized = 1;
 
     for (i = 0; i < ucs_static_array_size(uct_ib_tls); i++) {
         uct_tl_register(&uct_ib_component, uct_ib_tls[i]);
@@ -1624,6 +1642,10 @@ void UCS_F_CTOR uct_ib_init()
 void UCS_F_DTOR uct_ib_cleanup()
 {
     ssize_t i;
+
+    if (!uct_ib_component_initialized) {
+        return;
+    }
 
     for (i = ucs_static_array_size(uct_ib_tls) - 1; i >= 0; i--) {
         uct_tl_unregister(uct_ib_tls[i]);

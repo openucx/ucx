@@ -81,6 +81,8 @@ AC_PROG_MKDIR_P
 AC_PROG_SED
 AC_PROG_INSTALL
 LT_INIT
+AS_IF([test "x$enable_shared" = xno -a "x$enable_static" = xyes],
+      [LDFLAGS="$LDFLAGS -Wl,-u,ucs_init"])
 LT_LIB_M
 AC_C_RESTRICT
 AC_FUNC_STRERROR_R

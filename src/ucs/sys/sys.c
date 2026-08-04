@@ -1539,7 +1539,13 @@ ucs_status_t ucs_pthread_create(pthread_t *thread_id_p,
     ucs_vsnprintf_safe(thread_name, sizeof(thread_name), fmt, ap);
     va_end(ap);
 
+    /* pthread_setname_np() was added in glibc 2.12; on older glibc (e.g. the
+     * 2.11.3 sysroot used for some hermetic builds) the thread is simply left
+     * unnamed. Thread naming is cosmetic, so this is safe to skip. */
+#if !defined(__GLIBC__) || (__GLIBC__ > 2) || \
+    (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 12)
     pthread_setname_np(thread_id, thread_name);
+#endif
     *thread_id_p = thread_id;
     return UCS_OK;
 }

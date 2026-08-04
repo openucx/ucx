@@ -15,6 +15,7 @@ libuct_ib_mlx5_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
 
 libuct_ib_mlx5_la_SOURCES = \
 	ib_mlx5_log.c \
+	ib_mlx5_dlopen.c \
 	ib_mlx5.c \
 	dv/ib_mlx5_dv.c \
 	dv/ib_mlx5dv_md.c
