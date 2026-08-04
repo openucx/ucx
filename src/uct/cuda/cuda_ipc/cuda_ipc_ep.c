@@ -110,7 +110,7 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
     CUdevice cuda_device;
     int is_ctx_pushed;
     void *mapped_rem_addr;
-    void *mapped_addr;
+    const void *mapped_addr;
     uct_cuda_ipc_event_desc_t *cuda_ipc_event;
     uct_cuda_ipc_ctx_rsc_t *ctx_rsc;
     uct_cuda_queue_desc_t *q_desc;

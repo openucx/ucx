@@ -49,11 +49,6 @@ static ucs_config_field_t uct_cuda_ipc_iface_config_table[] = {
      "Max number of CUDA streams to make concurrent progress on",
       ucs_offsetof(uct_cuda_ipc_iface_config_t, params.max_streams), UCS_CONFIG_TYPE_UINT},
 
-    {"CACHE", "y",
-     "Enable remote endpoint IPC memhandle mapping cache",
-     ucs_offsetof(uct_cuda_ipc_iface_config_t, params.enable_cache),
-     UCS_CONFIG_TYPE_BOOL},
-
     {"ENABLE_GET_ZCOPY", "auto",
      "Enable get operations except for platforms known to have slower performance",
      ucs_offsetof(uct_cuda_ipc_iface_config_t, params.enable_get_zcopy),
@@ -329,8 +324,6 @@ static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
 static void uct_cuda_ipc_complete_event(uct_iface_h tl_iface,
                                         uct_cuda_event_desc_t *cuda_event)
 {
-    uct_cuda_ipc_iface_t *iface               = ucs_derived_of(tl_iface,
-                                                               uct_cuda_ipc_iface_t);
     uct_cuda_ipc_event_desc_t *cuda_ipc_event = ucs_derived_of(cuda_event,
                                                                uct_cuda_ipc_event_desc_t);
 
@@ -338,7 +331,7 @@ static void uct_cuda_ipc_complete_event(uct_iface_h tl_iface,
                                  cuda_ipc_event->d_bptr,
                                  cuda_ipc_event->mapped_addr,
                                  cuda_ipc_event->cuda_device,
-                                 iface->config.enable_cache);
+                                 uct_cuda_ipc_component.enable_remote_cache);
 }
 
 static uct_iface_ops_t uct_cuda_ipc_iface_ops = {
