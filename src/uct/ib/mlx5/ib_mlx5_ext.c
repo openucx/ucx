@@ -116,7 +116,7 @@ uct_ib_mlx5_ext_find_plugin(uct_iface_h iface, uint64_t cap_flags)
                 (const void*)plugin->ops.iface_query)));
 
         attr.field_mask = UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_CAP_FLAGS;
-        status = plugin->ops.iface_query(iface, &attr);
+        status          = plugin->ops.iface_query(iface, &attr);
         if (status != UCS_OK) {
             continue;
         }
