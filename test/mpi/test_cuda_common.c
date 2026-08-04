@@ -8,6 +8,7 @@
 #include "config.h"
 #endif
 
+#include "test_cuda_check_def.h"
 #include "test_cuda_common.h"
 
 #include <ucs/debug/log_def.h>
@@ -25,16 +26,6 @@
 
 #define TEST_NAME_FMT      "TEST[%zi:%-17s:%-17s:*       ]"
 #define TEST_NAME_SIZE_FMT "TEST[%zi:%-17s:%-17s:%-8zi]"
-
-#define _CUDA_ERROR_STRING(_err) \
-    ({ \
-        const char *_err_str; \
-        cuGetErrorString(_err, &_err_str); \
-        _err_str; \
-    })
-
-#define CUDA_CHECK(_func) \
-    LIB_CHECK(CUresult, _func, CUDA_SUCCESS, _CUDA_ERROR_STRING)
 
 typedef struct {
     CUcontext primary;
