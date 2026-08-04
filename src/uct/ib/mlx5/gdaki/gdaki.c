@@ -1233,6 +1233,7 @@ typedef struct {
     unsigned               index;
     ucs_sys_dev_distance_t dist;
     int                    usecount;
+    int                    reachable;
 } uct_gdaki_dev_score_t;
 
 typedef struct {
@@ -1268,6 +1269,11 @@ static int uct_gdaki_dev_matrix_score(const void *pa, const void *pb, void *arg)
 {
     const uct_gdaki_dev_score_t *a = pa;
     const uct_gdaki_dev_score_t *b = pb;
+
+    /* Sort reachable devices before unreachable ones */
+    if (a->reachable != b->reachable) {
+        return b->reachable - a->reachable;
+    }
 
     /* Prefer lower latency device, and if same latency prefer the less utilized */
     return (ucs_fp_compare(a->dist.latency, b->dist.latency) *
@@ -1402,9 +1408,11 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
 {
     unsigned long ib_per_cuda         = ib_md->config.gda_max_hca_per_gpu;
     uct_gdaki_dev_matrix_elem_t *dmat = NULL;
+    int num_active_ibdevs             = 0;
     uct_gdaki_gpu_info_t gpus[UCT_GDAKI_MAX_CUDA_DEVICES];
     ucs_status_t status;
     int ibdev_index, ibdev_count;
+    int num_reachable_ibdevs, num_selected_ibdevs;
     unsigned gpu_count, gpu_index;
     struct ibv_device **device_list;
     struct ibv_device *ibdev;
@@ -1455,11 +1463,25 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
             goto out;
         }
 
-        ibdesc->sys_dev    = tmp_dev.sys_dev;
+        ibdesc->sys_dev = tmp_dev.sys_dev;
+        if (uct_ib_device_port_attr(&tmp_dev, tmp_dev.first_port)->state !=
+            IBV_PORT_ACTIVE) {
+            ucs_debug("%s:%u: skipping GDA device, port is not active",
+                      uct_ib_device_name(&tmp_dev), tmp_dev.first_port);
+            ibv_close_device(context);
+            continue;
+        }
+
         ibdesc->direct_nic = uct_ib_mlx5dv_check_direct_nic(&tmp_dev, 1) !=
                              UCS_SYS_DEVICE_ID_UNKNOWN;
-        scores[ibdev_index].index = ibdev_index;
+        scores[num_active_ibdevs++].index = ibdev_index;
         ibv_close_device(context);
+    }
+
+    if (num_active_ibdevs == 0) {
+        ucs_debug("no active IB devices found for GDA");
+        status = UCS_ERR_NO_DEVICE;
+        goto out;
     }
 
     /* Enumerate physical GPUs via NVML (or CUDA fallback). NVML is used here
@@ -1475,14 +1497,25 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
     }
 
     if (ib_per_cuda == UCS_ULUNITS_AUTO) {
-        ib_per_cuda = ibdev_count / gpu_count;
+        ib_per_cuda = ucs_max(1ul,
+                              (unsigned long)num_active_ibdevs / gpu_count);
     }
 
     /* Map each GPU to the best suited IB devices */
     for (gpu_index = 0; gpu_index < gpu_count; gpu_index++) {
         /* Update PCI distance in IB device scores */
-        for (ibdev_index = 0; ibdev_index < ibdev_count; ibdev_index++) {
+        num_reachable_ibdevs = 0;
+        for (ibdev_index = 0; ibdev_index < num_active_ibdevs;
+             ibdev_index++) {
             ibdesc = &dmat[scores[ibdev_index].index];
+            scores[ibdev_index].reachable =
+                    ucs_topo_is_reachable(ibdesc->sys_dev,
+                                          gpus[gpu_index].sys_dev);
+            if (!scores[ibdev_index].reachable) {
+                continue;
+            }
+
+            num_reachable_ibdevs++;
             status = ucs_topo_get_distance(gpus[gpu_index].sys_dev,
                                            ibdesc->sys_dev,
                                            &scores[ibdev_index].dist);
@@ -1492,10 +1525,13 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
         }
 
         /* Sort and select the best suited IB devices for this GPU */
-        ucs_qsort_r(scores, ibdev_count, sizeof(*scores),
+        ucs_qsort_r(scores, num_active_ibdevs, sizeof(*scores),
                     uct_gdaki_dev_matrix_score, NULL);
 
-        for (ibdev_index = 0; ibdev_index < ib_per_cuda; ibdev_index++) {
+        num_selected_ibdevs = (int)ucs_min(
+                ib_per_cuda, (unsigned long)num_reachable_ibdevs);
+        for (ibdev_index = 0; ibdev_index < num_selected_ibdevs;
+             ibdev_index++) {
             ibdesc = &dmat[scores[ibdev_index].index];
             if (gpus[gpu_index].cuda_idx >= 0) {
                 ibdesc->cuda_map |= UCS_BIT(gpus[gpu_index].cuda_idx);
