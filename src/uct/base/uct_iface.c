@@ -580,14 +580,6 @@ void uct_iface_query_v2_init(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr)
     if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT) {
         iface_attr->max_put_sgl_zcopy_count = 0;
     }
-
-    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH) {
-        iface_attr->tx_token_length = 0;
-    }
-
-    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH) {
-        iface_attr->rx_token_length = 0;
-    }
 }
 
 ucs_status_t
@@ -598,11 +590,11 @@ uct_iface_base_query_v2(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr)
                                 UCT_IFACE_ATTR_FIELD_TX_TOKEN |
                                 UCT_IFACE_ATTR_FIELD_RX_TOKEN;
 
-    uct_iface_query_v2_init(iface, iface_attr);
-
     if (ucs_test_flags(iface_attr->field_mask, token_mask)) {
         return UCS_ERR_UNSUPPORTED;
     }
+
+    uct_iface_query_v2_init(iface, iface_attr);
 
     return UCS_OK;
 }

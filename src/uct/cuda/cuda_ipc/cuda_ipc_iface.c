@@ -511,7 +511,7 @@ static uct_iface_internal_ops_t uct_cuda_ipc_iface_internal_ops = {
 #else
     .ep_put_sgl_zcopy       = (uct_ep_put_sgl_zcopy_func_t)ucs_empty_function_return_unsupported,
 #endif
-    .ep_outstanding_purge = (uct_ep_outstanding_purge_func_t)ucs_empty_function_return_unsupported
+    .ep_outstanding_purge   = (uct_ep_outstanding_purge_func_t)ucs_empty_function_return_unsupported
 };
 
 static uct_cuda_ctx_rsc_t * uct_cuda_ipc_ctx_rsc_create(uct_iface_h tl_iface)

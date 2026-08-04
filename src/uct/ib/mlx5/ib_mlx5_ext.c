@@ -16,8 +16,6 @@
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/stubs.h>
 
-#include <string.h>
-
 typedef struct uct_ib_mlx5_ext_plugin {
     ucs_list_link_t       list;
     uct_ib_mlx5_ext_ops_t ops;
@@ -92,7 +90,6 @@ static uint64_t uct_ib_mlx5_ext_iface_query_cap_flags(uct_iface_h iface)
             continue;
         }
 
-        memset(&attr, 0, sizeof(attr));
         attr.field_mask = UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_CAP_FLAGS;
         status = plugin->ops.iface_query(iface, &attr);
         if (status != UCS_OK) {
@@ -109,10 +106,7 @@ static uint64_t uct_ib_mlx5_ext_iface_query_cap_flags(uct_iface_h iface)
 static uct_ib_mlx5_ext_plugin_t *
 uct_ib_mlx5_ext_find_plugin(uct_iface_h iface, uint64_t cap_flags)
 {
-    uct_ib_mlx5_ext_iface_query_attr_t attr = {
-        .field_mask = UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_CAP_FLAGS
-    };
-
+    uct_ib_mlx5_ext_iface_query_attr_t attr;
     uct_ib_mlx5_ext_plugin_t *plugin;
     ucs_status_t status;
 
@@ -120,6 +114,8 @@ uct_ib_mlx5_ext_find_plugin(uct_iface_h iface, uint64_t cap_flags)
         /* Each plugin must support iface query. */
         ucs_assert(!(uct_ib_mlx5_ext_is_unsupported_op(
                 (const void*)plugin->ops.iface_query)));
+
+        attr.field_mask = UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_CAP_FLAGS;
         status = plugin->ops.iface_query(iface, &attr);
         if (status != UCS_OK) {
             continue;
@@ -179,7 +175,6 @@ uct_ib_mlx5_ext_iface_query(uct_iface_h iface,
 ucs_status_t
 uct_ib_mlx5_ext_ep_query(uct_ep_h ep, uct_ib_mlx5_ext_ep_query_attr_t *attr)
 {
-    const uint64_t token_mask = UCT_IB_MLX5_EXT_EP_QUERY_ATTR_FIELD_TX_TOKEN;
     uct_ib_mlx5_ext_plugin_t *plugin;
     ucs_status_t status;
 
@@ -188,7 +183,7 @@ uct_ib_mlx5_ext_ep_query(uct_ep_h ep, uct_ib_mlx5_ext_ep_query_attr_t *attr)
         return status;
     }
 
-    if (ucs_test_flags(attr->field_mask, token_mask)) {
+    if (attr->field_mask & UCT_IB_MLX5_EXT_EP_QUERY_ATTR_FIELD_TX_TOKEN) {
         plugin = uct_ib_mlx5_ext_find_plugin(ep->iface,
                                              UCT_IFACE_FLAG_V2_QUERY_TOKEN);
         if (plugin == NULL) {
