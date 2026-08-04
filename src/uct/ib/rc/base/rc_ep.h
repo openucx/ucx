@@ -80,11 +80,8 @@ enum {
 };
 
 enum {
-    /* Endpoint can preserve outstanding WQEs for plugin-driven failover. */
-    UCT_RC_EP_EXT_FLAG_FAILOVER_ENABLED = UCS_BIT(0),
-
     /* Failover owns this endpoint's outstanding WQEs and send operations. */
-    UCT_RC_EP_EXT_FLAG_FAILOVER_ARMED   = UCS_BIT(1)
+    UCT_RC_EP_EXT_FLAG_FAILOVER_ARMED = UCS_BIT(0)
 };
 
 /*

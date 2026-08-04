@@ -14,7 +14,6 @@
 #endif
 
 #include <uct/ib/mlx5/ib_mlx5_log.h>
-#include <uct/ib/mlx5/ib_mlx5_ext.h>
 #include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <ucs/arch/cpu.h>
@@ -45,27 +44,6 @@ ucs_status_t uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep, uct_ep_attr_t *ep_attr)
         }
     }
 
-    return UCS_OK;
-}
-
-static ucs_status_t
-uct_rc_mlx5_base_ep_failover_init(uct_rc_mlx5_base_ep_t *ep)
-{
-    uct_ib_mlx5_ext_iface_query_attr_t attr = {
-        .field_mask = UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_CAP_FLAGS
-    };
-    ucs_status_t status;
-
-    status = uct_ib_mlx5_ext_iface_query(ep->super.super.super.iface, &attr);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    if (!(attr.cap.flags & UCT_IFACE_FLAG_V2_QUERY_TOKEN)) {
-        return UCS_OK;
-    }
-
-    ep->super.ext_flags |= UCT_RC_EP_EXT_FLAG_FAILOVER_ENABLED;
     return UCS_OK;
 }
 
@@ -799,13 +777,12 @@ ucs_status_t uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
 {
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
     uct_ib_mlx5_txwq_t *txwq = &ep->tx.wq;
-    uint16_t ft_ci, outstanding;
+    uint16_t ft_ci = txwq->ft_ci;
+    uint16_t outstanding;
     int failover_arm;
     ucs_status_t status;
 
-    failover_arm = (ep->super.ext_flags &
-                    UCT_RC_EP_EXT_FLAG_FAILOVER_ENABLED) &&
-                   !(ep->super.ext_flags &
+    failover_arm = !(ep->super.ext_flags &
                      UCT_RC_EP_EXT_FLAG_FAILOVER_ARMED);
     if (failover_arm) {
         outstanding = txwq->bb_max - uct_rc_txqp_available(&ep->super.txqp);
@@ -1263,17 +1240,10 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_base_ep_t, const uct_ep_params_t *params)
     }
 
     self->tx.wq.bb_max = ucs_min(self->tx.wq.bb_max, iface->tx.bb_max);
-    status             = uct_rc_mlx5_base_ep_failover_init(self);
-    if (status != UCS_OK) {
-        goto err_remove_qp;
-    }
-
     uct_rc_txqp_available_set(&self->super.txqp, self->tx.wq.bb_max);
     uct_rc_mlx5_iface_common_prepost_recvs(iface);
     return UCS_OK;
 
-err_remove_qp:
-    uct_rc_iface_remove_qp(&iface->super, self->tx.wq.super.qp_num);
 err_event_unreg:
     if (iface->rx.srq.type != UCT_IB_MLX5_OBJ_TYPE_NULL) {
         uct_ib_device_async_event_unregister(&md->super.dev,
