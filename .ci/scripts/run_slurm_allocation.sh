@@ -149,8 +149,10 @@ readonly SLURM_GET_JOB_ID_CMD="squeue --noheader --name=${slurm_job_name} --form
 case "${slurm_head_node}" in
     scctl)
         echo "INFO: Using scctl client to connect and allocate Slurm resources"
+        set +x
         export SCCTL_USER=${SERVICE_USER_USERNAME}
         export SCCTL_PASSWORD=${SERVICE_USER_PASSWORD}
+        set -x
         scctl -v
         scctl --raw-errors upgrade
         scctl --raw-errors login
