@@ -117,6 +117,27 @@ protected:
         *static_cast<bool*>(arg) = true;
     }
 
+    static size_t am_pack_cb(void *dest, void*)
+    {
+        *static_cast<uint8_t*>(dest) = 0;
+        return sizeof(uint8_t);
+    }
+
+    static void completion_cb(uct_completion_t*)
+    {
+    }
+
+    void post_am_and_flush(uct_completion_t *comp)
+    {
+        ASSERT_EQ(static_cast<ssize_t>(sizeof(uint8_t)),
+                  uct_ep_am_bcopy(m_e1->ep(0), 0, am_pack_cb, NULL, 0));
+
+        comp->func   = completion_cb;
+        comp->count  = 2;
+        comp->status = UCS_OK;
+        ASSERT_EQ(UCS_INPROGRESS, uct_ep_flush(m_e1->ep(0), 0, comp));
+    }
+
     static void
     register_plugin(const char *name,
                     uct_ib_mlx5_ext_iface_query_func_t iface_query_cb = NULL,
@@ -192,12 +213,20 @@ UCS_TEST_P(test_uct_ib_mlx5_ext_rc, ep_outstanding_purge)
     uint64_t rx_token_value                  = rx_token();
     bool callback_invoked                    = false;
     uct_ep_outstanding_purge_params_t params = {};
+    uct_completion_t comp;
 
     {
         scoped_log_handler wrap_err(wrap_errors_logger);
         EXPECT_EQ(UCS_ERR_INVALID_PARAM,
                   uct_ep_outstanding_purge(m_e1->ep(0), &params));
     }
+
+    params.field_mask = UCT_EP_OUTSTANDING_FIELD_STATUS;
+    params.status     = UCS_ERR_ENDPOINT_TIMEOUT;
+    post_am_and_flush(&comp);
+    ASSERT_UCS_OK(uct_ep_outstanding_purge(m_e1->ep(0), &params));
+    EXPECT_EQ(1, comp.count);
+    EXPECT_EQ(UCS_ERR_ENDPOINT_TIMEOUT, comp.status);
 
     register_plugin("stub",
                     (uct_ib_mlx5_ext_iface_query_func_t)
@@ -213,8 +242,11 @@ UCS_TEST_P(test_uct_ib_mlx5_ext_rc, ep_outstanding_purge)
     params.cb         = purge_cb;
     params.arg        = &callback_invoked;
 
+    post_am_and_flush(&comp);
     ASSERT_UCS_OK(uct_ep_outstanding_purge(m_e1->ep(0), &params));
     EXPECT_TRUE(callback_invoked);
+    EXPECT_EQ(1, comp.count);
+    EXPECT_EQ(UCS_ERR_CANCELED, comp.status);
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_uct_ib_mlx5_ext_rc, rc_mlx5)
