@@ -4,6 +4,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "test_kernels.h"
 
 #include <uct/api/device/uct_device_impl.h>
@@ -13,9 +17,8 @@
 namespace ucx_cuda {
 
 static __global__ void
-uct_put_kernel(uct_device_ep_h ep,
-               const uct_device_local_mem_list_elem_t *src_elem,
-               const uct_device_mem_element_t *mem_elem, const void *va,
+uct_put_kernel(uct_device_ep_h ep, const uct_device_mem_elem_t *src_elem,
+               const uct_device_mem_elem_t *mem_elem, const void *va,
                uint64_t rva, size_t length, ucs_status_t *status_p)
 {
     uct_device_completion_t comp;
@@ -39,8 +42,8 @@ uct_put_kernel(uct_device_ep_h ep,
  * Basic single element put operation.
  */
 ucs_status_t launch_uct_put(uct_device_ep_h ep,
-                            const uct_device_local_mem_list_elem_t *src_elem,
-                            const uct_device_mem_element_t *mem_elem,
+                            const uct_device_mem_elem_t *src_elem,
+                            const uct_device_mem_elem_t *mem_elem,
                             const void *va, uint64_t rva, size_t length)
 {
     device_result_ptr<ucs_status_t> status = UCS_ERR_NOT_IMPLEMENTED;
@@ -52,7 +55,7 @@ ucs_status_t launch_uct_put(uct_device_ep_h ep,
 }
 
 static __global__ void
-uct_atomic_kernel(uct_device_ep_h ep, uct_device_mem_element_t *mem_elem,
+uct_atomic_kernel(uct_device_ep_h ep, uct_device_mem_elem_t *mem_elem,
                   uint64_t rva, uint64_t add, ucs_status_t *status_p)
 {
     uct_device_completion_t comp;
@@ -75,7 +78,7 @@ uct_atomic_kernel(uct_device_ep_h ep, uct_device_mem_element_t *mem_elem,
  * Atomic operation.
  */
 ucs_status_t launch_uct_atomic(uct_device_ep_h ep,
-                               uct_device_mem_element_t *mem_elem, uint64_t rva,
+                               uct_device_mem_elem_t *mem_elem, uint64_t rva,
                                uint64_t add)
 {
     device_result_ptr<ucs_status_t> status = UCS_ERR_NOT_IMPLEMENTED;

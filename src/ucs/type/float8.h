@@ -7,7 +7,30 @@
 #ifndef UCS_TYPE_FLOAT_H
 #define UCS_TYPE_FLOAT_H
 
+#ifdef HAVE_IEEE754_H
 #include <ieee754.h>
+#else
+/* Portable fallback for systems without <ieee754.h> (non-glibc, e.g. musl, FreeBSD libc) */
+union ieee754_double {
+    double d;
+    struct {
+#if  __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+        unsigned int negative:1;
+        unsigned int exponent:11;
+        unsigned int mantissa0:20;
+        unsigned int mantissa1:32;
+#elif __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+        unsigned int mantissa1:32;
+        unsigned int mantissa0:20;
+        unsigned int exponent:11;
+        unsigned int negative:1;
+#else
+# error "Unsupported byte order"
+#endif
+    } ieee;
+};
+#define IEEE754_DOUBLE_BIAS 0x3ff
+#endif
 
 #include <ucs/sys/preprocessor.h>
 #include <ucs/debug/assert.h>

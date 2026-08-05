@@ -57,6 +57,7 @@ typedef enum {
 typedef enum {
     UCT_DEVICE_TL_RC_MLX5_GDA,
     UCT_DEVICE_TL_CUDA_IPC,
+    UCT_DEVICE_TL_D2P,
     UCT_DEVICE_TL_LAST
 } uct_device_tl_id_t;
 
@@ -72,22 +73,26 @@ typedef union uct_device_completion uct_device_completion_t;
 
 
 /* Union structure of all device memory elements types */
-union uct_device_mem_element {
+union uct_device_mem_elem {
     uct_ib_md_device_mem_element_t       ib_md_mem_element;
     uct_cuda_ipc_md_device_mem_element_t cuda_ipc_md_mem_element;
 };
 
 
-struct uct_device_local_mem_list_elem {
-    void                     *addr;
-    uct_device_mem_element_t uct_mem_element;
+struct uct_device_local_mem_elem {
+    void                  *addr;
+    uct_device_mem_elem_t tl[0];
 };
 
 
-struct uct_device_remote_mem_list_elem {
-    uct_device_ep_h          device_ep;
-    uint64_t                 addr;
-    uct_device_mem_element_t uct_mem_element;
+struct uct_device_remote_tl_elem {
+    uct_device_ep_h       ep;
+    uct_device_mem_elem_t uct;
+};
+
+struct uct_device_remote_mem_elem {
+    uint64_t                    addr;
+    uct_device_remote_tl_elem_t tl[0];
 };
 
 #endif

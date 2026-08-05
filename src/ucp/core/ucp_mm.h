@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  * Copyright (C) Intel Corporation, 2023. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
@@ -76,6 +76,7 @@ typedef struct ucp_mem {
     uct_alloc_method_t  alloc_method;   /* Method used to allocate the memory */
     ucs_sys_device_t    sys_dev;        /* System device index */
     ucs_memory_type_t   mem_type;       /* Type of allocated or registered memory */
+    uint8_t             mem_flags;      /* UCS memory flags */
     ucp_md_index_t      alloc_md_index; /* Index of MD used to allocate the memory */
     uint64_t            remote_uuid;    /* Remote UUID */
     ucp_md_map_t        md_map;         /* Which MDs have valid memory handles */

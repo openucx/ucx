@@ -1,5 +1,5 @@
 #
-# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2022. ALL RIGHTS RESERVED.
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 # Copyright (C) The University of Tennessee and the University of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
 #
 # See file LICENSE for terms.
@@ -24,6 +24,9 @@ ucx_info_CPPFLAGS += $(IBVERBS_CPPFLAGS)
 endif
 if HAVE_CRAY_UGNI
 ucx_info_CFLAGS   += $(CRAY_UGNI_CFLAGS)
+endif
+if HAVE_CUDA
+ucx_info_CPPFLAGS += $(CUDA_CPPFLAGS)
 endif
 
 ucx_info_SOURCES  = \

@@ -19,7 +19,7 @@
 #endif
 
 #define TL_RESOURCE_NAME_NONE   "<none>"
-#define TEST_PARAMS_ARGS        "t:n:s:W:O:w:D:i:H:oSCIqM:r:E:T:d:x:A:BUem:a:R:lyzL:F:Y:"
+#define TEST_PARAMS_ARGS        "t:n:s:W:O:w:D:i:H:oSCIqM:r:E:T:d:x:A:BUem:a:R:lyzL:F:Y:V"
 #define TEST_ID_UNDEFINED       -1
 
 #define DEFAULT_DAEMON_PORT     1338
@@ -41,7 +41,7 @@ extern test_type_t tests[];
 ucs_status_t run_test(struct perftest_context *ctx);
 ucs_status_t clone_params(perftest_params_t *dest,
                           const perftest_params_t *src);
-ucs_status_t check_params(const perftest_params_t *params);
+ucs_status_t check_params(perftest_params_t *params);
 ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized,
                         int argc, char **argv);
 ucs_status_t init_test_params(perftest_params_t *params);

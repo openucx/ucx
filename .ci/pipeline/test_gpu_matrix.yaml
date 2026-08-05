@@ -14,8 +14,8 @@ registry_path: /ucx/ci
 kubernetes:
   cloud: il-ipp-blossom-prod-nbu-swx-ucx
   namespace: nbu-swx-ucx
-  limits: "{memory: 16Gi, cpu: 16000m}"
-  requests: "{memory: 8Gi, cpu: 8000m}"
+  limits: "{memory: 8Gi, cpu: 4000m}"
+  requests: "{memory: 8Gi, cpu: 4000m}"
   privileged: true
 
 credentials:

@@ -9,8 +9,10 @@
 #include <uct/base/uct_iface.h>
 #include <ucs/sys/preprocessor.h>
 #include <ucs/profile/profile.h>
+#include <ucs/sys/checker.h>
 #include <ucs/async/eventfd.h>
 #include <ucs/datastruct/khash.h>
+#include <ucs/datastruct/mpool.h>
 #include <uct/cuda/base/cuda_util.h>
 
 
@@ -41,6 +43,21 @@ typedef struct {
 } uct_cuda_event_desc_t;
 
 
+static UCS_F_ALWAYS_INLINE void*
+uct_cuda_base_event_desc_mpool_get(ucs_mpool_t *mp)
+{
+    uct_cuda_event_desc_t *event_desc =
+            (uct_cuda_event_desc_t*)ucs_mpool_get(mp);
+
+    if (ucs_likely(event_desc != NULL)) {
+        VALGRIND_MAKE_MEM_DEFINED(&event_desc->event,
+                                  sizeof(event_desc->event));
+    }
+
+    return event_desc;
+}
+
+
 /* Base flush descriptor */
 typedef struct {
     /* How many streams are currently active */
@@ -61,6 +78,8 @@ typedef struct {
 typedef struct {
     /* CUDA context handle */
     CUcontext          ctx;
+    /* CUDA device, if @ctx is a primary context. CU_DEVICE_INVALID otherwise */
+    CUdevice           cuda_device;
     /* CUDA context id */
     unsigned long long ctx_id;
     /* pool of cuda events to check completion of memcpy operations */
@@ -129,7 +148,8 @@ void uct_cuda_base_queue_desc_init(uct_cuda_queue_desc_t *qdesc);
 void uct_cuda_base_queue_desc_destroy(const uct_cuda_ctx_rsc_t *ctx_rsc,
                                       uct_cuda_queue_desc_t *qdesc);
 
-void uct_cuda_base_stream_destroy(CUstream *stream);
+void uct_cuda_base_stream_destroy(const uct_cuda_ctx_rsc_t *ctx_rsc,
+                                  CUstream *stream);
 
 #if (__CUDACC_VER_MAJOR__ >= 100000)
 void CUDA_CB uct_cuda_base_iface_stream_cb_fxn(void *arg);

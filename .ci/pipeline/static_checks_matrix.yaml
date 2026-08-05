@@ -10,8 +10,8 @@ timeout_minutes: 90
 kubernetes:
   cloud: il-ipp-blossom-prod-nbu-swx-ucx
   namespace: nbu-swx-ucx
-  limits: "{memory: 8Gi, cpu: 8000m}"
-  requests: "{memory: 8Gi, cpu: 8000m}"
+  limits: "{memory: 8Gi, cpu: 4000m}"
+  requests: "{memory: 8Gi, cpu: 4000m}"
 
 runs_on_dockers:
   - { name: "fedora33", url: "harbor.mellanox.com/ucx/fedora33:2", arch: x86_64 }

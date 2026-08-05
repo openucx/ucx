@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -26,6 +26,14 @@
  */
 #define UCP_DT_MASK_CONTIG_IOV \
     (UCS_BIT(UCP_DATATYPE_CONTIG) | UCS_BIT(UCP_DATATYPE_IOV))
+
+/*
+ * dt_mask argument which contains contiguous, iov and generic datatypes
+ */
+#define UCP_PROTO_DT_MASK_DEFAULT \
+    (UCS_BIT(UCP_DATATYPE_CONTIG) | \
+     UCS_BIT(UCP_DATATYPE_IOV)    | \
+     UCS_BIT(UCP_DATATYPE_GENERIC))
 
 
 /*
@@ -65,6 +73,14 @@ typedef struct {
              *   iov_offset = iter.length - iter.iov[iter.iov_index].start_offset
              */
         } iov;
+        struct {
+            void * const     *buffers;
+            const size_t     *lengths;
+            ucp_mem_h        *memhs;
+            const uint64_t   *remote_addrs;
+            ucp_rkey_h const *rkeys;
+            /* length = element count, offset = current element index */
+        } sgl;
     } type;
 } ucp_datatype_iter_t;
 
@@ -98,5 +114,21 @@ void ucp_datatype_iter_str(const ucp_datatype_iter_t *dt_iter,
 
 int ucp_datatype_iter_is_user_memh_valid(const ucp_datatype_iter_t *dt_iter,
                                          const ucp_mem_h memh);
+
+ucs_status_t ucp_datatype_iter_sgl_init(ucp_context_h context,
+                                        ucp_datatype_iter_t *dt_iter,
+                                        const ucp_dt_local_sgl_t *local,
+                                        const ucp_dt_remote_sgl_t *remote,
+                                        size_t count,
+                                        const ucp_request_param_t *param);
+
+ucs_status_t ucp_datatype_iter_sgl_mem_reg(ucp_context_h context,
+                                           ucp_datatype_iter_t *dt_iter,
+                                           ucp_md_map_t md_map,
+                                           unsigned uct_flags);
+
+void ucp_datatype_iter_sgl_mem_dereg(ucp_datatype_iter_t *dt_iter);
+
+void ucp_datatype_iter_sgl_cleanup(ucp_datatype_iter_t *dt_iter, int dereg);
 
 #endif

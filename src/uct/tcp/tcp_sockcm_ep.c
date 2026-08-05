@@ -549,7 +549,6 @@ ucs_status_t uct_tcp_sockcm_ep_send(uct_tcp_sockcm_ep_t *cep)
     }
 
     if (uct_tcp_sockcm_ep_send_skip_event(cep)) {
-        ucs_assert(!(cep->state & UCT_TCP_SOCKCM_EP_DISCONNECTING));
         return UCS_OK;
     }
 
@@ -849,7 +848,12 @@ ucs_status_t uct_tcp_sockcm_ep_set_sockopt(uct_tcp_sockcm_ep_t *ep)
         return status;
     }
 
-    return ucs_tcp_base_set_syn_cnt(ep->fd, tcp_sockcm->syn_cnt);
+    status = ucs_tcp_base_set_syn_cnt(ep->fd, tcp_sockcm->syn_cnt);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return ucs_tcp_base_set_user_timeout(ep->fd, tcp_sockcm->user_timeout);
 }
 
 static ucs_status_t uct_tcp_sockcm_ep_client_init(uct_tcp_sockcm_ep_t *cep,

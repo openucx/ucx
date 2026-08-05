@@ -95,6 +95,9 @@ static alloc_mem_t alloc_vmm_fabric(size_t);
 static alloc_mem_t alloc_vmm_fabric_multi(size_t);
 static void free_vmm_fabric_multi(alloc_mem_t*);
 #endif
+#if HAVE_DECL_SYS_PIDFD_GETFD
+static alloc_mem_t alloc_vmm_posix_fd(size_t);
+#endif
 
 static int test_alloc_prim_send_prim(const test_params_t*);
 static int test_alloc_prim_send_no(const test_params_t*);
@@ -112,7 +115,10 @@ const allocator_t allocators[] = {
 #if HAVE_CUDA_FABRIC
     {"mempool", alloc_mempool, free_mempool},
     {"VMM_Fabric", alloc_vmm_fabric, free_vmm},
-    {"VMM_Multi", alloc_vmm_fabric_multi, free_vmm_fabric_multi}
+    {"VMM_Multi", alloc_vmm_fabric_multi, free_vmm_fabric_multi},
+#endif
+#if HAVE_DECL_SYS_PIDFD_GETFD
+    {"VMM_PosixFD", alloc_vmm_posix_fd, free_vmm},
 #endif
 };
 
@@ -297,6 +303,13 @@ static void free_vmm(alloc_mem_t *alloc_mem)
     CUDA_CHECK(cuMemAddressFree(alloc_mem->ptr, alloc_mem->size));
     CUDA_CHECK(cuMemRelease((CUmemGenericAllocationHandle)alloc_mem->obj));
 }
+
+#if HAVE_DECL_SYS_PIDFD_GETFD
+static alloc_mem_t alloc_vmm_posix_fd(size_t size)
+{
+    return alloc_vmm_type(size, CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR);
+}
+#endif
 
 #if HAVE_CUDA_FABRIC
 static alloc_mem_t alloc_vmm_fabric(size_t size)

@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -10,6 +10,7 @@
 #include <ucs/type/status.h>
 #include <ucs/datastruct/list.h>
 #include <ucs/memory/numa.h>
+#include <ucs/type/cpu_set.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -24,6 +25,12 @@ BEGIN_C_DECLS
  * e.g. virtual devices like CMA/knem */
 #define UCS_SYS_DEVICE_ID_UNKNOWN UINT8_MAX
 
+/* Indicate that the ordinal of a given system device is invalid */
+#define UCS_SYS_DEVICE_ORDINAL_INVALID UINT_MAX
+
+/* User-defined system device value is not set */
+#define UCS_SYS_DEVICE_USER_VALUE_EMPTY UINTPTR_MAX
+
 /* Maximal size of BDF string */
 #define UCS_SYS_BDF_NAME_MAX 16
 
@@ -36,6 +43,10 @@ typedef struct ucs_sys_bus_id {
 } ucs_sys_bus_id_t;
 
 
+/* Packed bit representation of a PCI bus id */
+typedef int64_t ucs_bus_id_bit_rep_t;
+
+
 /**
  * @ingroup UCS_RESOURCE
  * System Device Index
@@ -43,6 +54,20 @@ typedef struct ucs_sys_bus_id {
  * Refer ucs_topo_find_device_by_bus_id()
  */
 typedef uint8_t ucs_sys_device_t;
+
+
+/**
+ * @ingroup UCS_RESOURCE
+ * Classification of a system device, used to group devices of the same kind
+ * (for example when computing a per-class device ordinal). The class is set by
+ * the owning transport, which maps its UCT device type onto one of these
+ * values.
+ */
+typedef enum {
+    UCS_TOPO_DEVICE_CLASS_UNKNOWN = 0, /**< Unclassified device */
+    UCS_TOPO_DEVICE_CLASS_NET, /**< Network device */
+    UCS_TOPO_DEVICE_CLASS_ACC /**< Acceleration device (e.g. GPU) */
+} ucs_topo_device_class_t;
 
 
 /**
@@ -63,6 +88,7 @@ typedef struct ucs_sys_dev_distance {
 
 
 extern const ucs_sys_dev_distance_t ucs_topo_default_distance;
+extern const ucs_sys_dev_distance_t ucs_topo_max_distance;
 
 
 /*
@@ -75,14 +101,75 @@ typedef ucs_status_t
                                 ucs_sys_dev_distance_t *distance);
 
 
-/* Global list of topology detection methods */
-extern ucs_list_link_t ucs_sys_topo_providers_list;
+/*
+ * Function pointer used to refer to specific implementations of
+ * ucs_topo_get_memory_distance function by topology modules. This function
+ * estimates the distance between the device and the system memory used by the
+ * current thread according to its CPU affinity. The function must have a
+ * fallback behavior.
+ */
+typedef void (*ucs_topo_get_memory_distance_func_t)(
+        ucs_sys_device_t device, ucs_sys_dev_distance_t *distance);
+
+
+/*
+ * Function pointer used to refer to specific implementations of
+ * ucs_topo_get_memory_distance_for_cpuset function by topology modules. This
+ * function estimates the distance between the device and the system memory
+ * represented by a CPU set. The function must have a fallback behavior.
+ */
+typedef void (*ucs_topo_get_memory_distance_for_cpuset_func_t)(
+        ucs_sys_device_t device, const ucs_cpu_set_t *cpuset,
+        ucs_sys_dev_distance_t *distance);
+
+
+/*
+ * Topology provider operations, implementing the topology API for a topology
+ * module.
+ */
+typedef struct ucs_sys_topo_ops {
+    /* Provider's ucs_topo_get_distance implementation */
+    ucs_topo_get_distance_func_t        get_distance;
+
+    /* Provider's ucs_topo_get_memory_distance implementation */
+    ucs_topo_get_memory_distance_func_t get_memory_distance;
+
+    /* Provider's ucs_topo_get_memory_distance_for_cpuset implementation */
+    ucs_topo_get_memory_distance_for_cpuset_func_t
+            get_memory_distance_for_cpuset;
+} ucs_sys_topo_ops_t;
 
 
 /**
  * Reset the internal singleton system topology provider.
  */
 void ucs_sys_topo_reset_provider(void);
+
+
+/**
+ * Push a topology provider that overrides the configuration-selected provider.
+ *
+ * The pushed provider takes precedence over the provider chosen by the
+ * TOPO_PRIO configuration until it is removed with
+ * @ref ucs_sys_topo_provider_pop. Pushes nest as a stack: the most recently
+ * pushed provider is the active one. Intended primarily for tests that need
+ * deterministic topology behavior.
+ *
+ * @param [in] ops  Topology operations. The contents are copied, so the
+ *                  pointer does not need to remain valid after the call.
+ *
+ * @return UCS_OK on success, or UCS_ERR_NO_MEMORY on allocation failure.
+ */
+ucs_status_t ucs_sys_topo_provider_push(const ucs_sys_topo_ops_t *ops);
+
+
+/**
+ * Pop the topology provider most recently pushed with
+ * @ref ucs_sys_topo_provider_push, restoring the previously active provider.
+ *
+ * Must be balanced with a prior @ref ucs_sys_topo_provider_push call.
+ */
+void ucs_sys_topo_provider_pop(void);
 
 
 /**
@@ -98,6 +185,27 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
 
 
 /**
+ * Find system device by pci bus id and user-defined value.
+ *
+ * This is used for logical devices which share the same PCI bus id but still
+ * need different system device indexes. The lookup key is a combination of the
+ * bus id and the user value. BDF-only lookup uses an implicit empty user value.
+ * If an existing system device with the same bus id and user value exists, it is
+ * returned. Otherwise, a system device for this key is registered and returned.
+ *
+ * @param [in]  bus_id      pointer to bus id of the device of interest.
+ * @param [in]  user_value  user-defined value identifying the logical device.
+ * @param [out] sys_dev_p   system device index associated with the value.
+ *
+ * @return UCS_OK or error in case device cannot be found.
+ */
+ucs_status_t
+ucs_topo_find_device_by_bus_id_and_user_value(const ucs_sys_bus_id_t *bus_id,
+                                              uintptr_t user_value,
+                                              ucs_sys_device_t *sys_dev_p);
+
+
+/**
  * Find pci bus id of the given system device.
  *
  * @param [in]  sys_dev system device index.
@@ -107,6 +215,17 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
  */
 ucs_status_t ucs_topo_get_device_bus_id(ucs_sys_device_t sys_dev,
                                         ucs_sys_bus_id_t *bus_id);
+
+
+/**
+ * Pack a PCI bus id into its bit representation.
+ *
+ * @param [in] bus_id  Bus id to pack.
+ *
+ * @return Packed bit representation of the bus id.
+ */
+ucs_bus_id_bit_rep_t
+ucs_topo_get_bus_id_bit_repr(const ucs_sys_bus_id_t *bus_id);
 
 
 /**
@@ -137,6 +256,18 @@ void ucs_topo_get_memory_distance(ucs_sys_device_t device,
 
 
 /**
+ * Find the memory distance of the device according to a CPU set.
+ *
+ * @param [in]  device   System device index.
+ * @param [in]  cpuset   CPU set representing the memory locality.
+ * @param [out] distance Result populated with the device memory distance.
+ */
+void ucs_topo_get_memory_distance_for_cpuset(ucs_sys_device_t device,
+                                             const ucs_cpu_set_t *cpuset,
+                                             ucs_sys_dev_distance_t *distance);
+
+
+/**
  * Convert the distance to a human-readable string.
  *
  * @param [in]  distance   Distance between two devices.
@@ -147,6 +278,22 @@ void ucs_topo_get_memory_distance(ucs_sys_device_t device,
  */
 const char *ucs_topo_distance_str(const ucs_sys_dev_distance_t *distance,
                                   char *buffer, size_t max);
+
+/**
+ * Compare two distances.
+ *
+ * First compares by latency (lower is better), then by bandwidth (higher is
+ * better) as a tiebreaker.
+ *
+ * @param [in] distance1  First distance to compare.
+ * @param [in] distance2  Second distance to compare.
+ *
+ * @return Negative if distance1 is better, positive if distance2 is better,
+ *         0 if equal.
+ */
+int ucs_topo_distance_cmp(const ucs_sys_dev_distance_t *distance1,
+                          const ucs_sys_dev_distance_t *distance2);
+
 
 /**
  * Gets a system device. If the device doesn't exist, it will be added.
@@ -239,6 +386,34 @@ ucs_topo_resolve_sysfs_path(const char *dev_path, char *path_buffer);
 const char *ucs_topo_sys_device_get_name(ucs_sys_device_t sys_dev);
 
 /**
+ * Set the device class of a given system device.
+ *
+ * @param [in]  sys_dev       System device index.
+ * @param [in]  device_class  Class to assign to the device.
+ *
+ * @return UCS_OK on success, error otherwise.
+ */
+ucs_status_t
+ucs_topo_sys_device_set_class(ucs_sys_device_t sys_dev,
+                              ucs_topo_device_class_t device_class);
+
+/**
+ * Get the ordinal of a given system device: its rank among all system devices
+ * of the same class, ordered by PCI bus id (BDF).
+ *
+ * For example, with GPUs (class @ref UCS_TOPO_DEVICE_CLASS_ACC) registered, the
+ * device with the smallest BDF returns 0, the next returns 1, and so on. The
+ * ordering depends only on the bus id, not on the device name or discovery
+ * order.
+ *
+ * @param [in]  sys_dev System device to query.
+ *
+ * @return The ordinal of the system device, or UCS_SYS_DEVICE_ORDINAL_INVALID
+ *         if the system device is unknown/invalid or has no assigned class.
+ */
+unsigned ucs_topo_sys_device_get_bdf_class_ordinal(ucs_sys_device_t sys_dev);
+
+/**
  * Get the closest NUMA node for a given system device.
  *
  * @param [in] sys_dev input system device.
@@ -249,15 +424,15 @@ ucs_numa_node_t ucs_topo_sys_device_get_numa_node(ucs_sys_device_t sys_dev);
 
 
 /**
- * Set a user-defined value for a given system device.
+ * Set the closest NUMA node for a given system device.
  *
- * @param [in] sys_dev System device index.
- * @param [in] value   User-defined value to set.
+ * @param [in] sys_dev   System device index.
+ * @param [in] numa_node NUMA node to set.
  *
  * @return UCS_OK on success, error otherwise.
  */
-ucs_status_t
-ucs_topo_sys_device_set_user_value(ucs_sys_device_t sys_dev, uintptr_t value);
+ucs_status_t ucs_topo_sys_device_set_numa_node(ucs_sys_device_t sys_dev,
+                                               ucs_numa_node_t numa_node);
 
 
 /**
@@ -265,8 +440,8 @@ ucs_topo_sys_device_set_user_value(ucs_sys_device_t sys_dev, uintptr_t value);
  *
  * @param [in] sys_dev System device index.
  *
- * @return User-defined value, or UINTPTR_MAX if no value is set or the device
- *         does not exist.
+ * @return User-defined value, or UCS_SYS_DEVICE_USER_VALUE_EMPTY if no value is
+ *         set or the device does not exist.
  */
 uintptr_t ucs_topo_sys_device_get_user_value(ucs_sys_device_t sys_dev);
 

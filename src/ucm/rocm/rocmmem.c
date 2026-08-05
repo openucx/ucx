@@ -36,9 +36,11 @@ ucm_dispatch_mem_type_alloc(void *addr, size_t length, ucs_memory_type_t mem_typ
 {
     ucm_event_t event;
 
-    event.mem_type.address  = addr;
-    event.mem_type.size     = length;
-    event.mem_type.mem_type = mem_type;
+    event.mem_type.address   = addr;
+    event.mem_type.size      = length;
+    event.mem_type.mem_type  = mem_type;
+    event.mem_type.sys_dev   = UCS_SYS_DEVICE_ID_UNKNOWN;
+    event.mem_type.mem_flags = UCS_MEM_FLAG_REGISTRABLE;
     ucm_event_dispatch(UCM_EVENT_MEM_TYPE_ALLOC, &event);
 }
 
@@ -47,9 +49,11 @@ ucm_dispatch_mem_type_free(void *addr, size_t length, ucs_memory_type_t mem_type
 {
     ucm_event_t event;
 
-    event.mem_type.address  = addr;
-    event.mem_type.size     = length;
-    event.mem_type.mem_type = mem_type;
+    event.mem_type.address   = addr;
+    event.mem_type.size      = length;
+    event.mem_type.mem_type  = mem_type;
+    event.mem_type.sys_dev   = UCS_SYS_DEVICE_ID_UNKNOWN;
+    event.mem_type.mem_flags = UCS_MEM_FLAG_REGISTRABLE;
     ucm_event_dispatch(UCM_EVENT_MEM_TYPE_FREE, &event);
 }
 
@@ -183,9 +187,11 @@ static int ucm_rocm_scan_regions_cb(void *arg, void *addr, size_t length,
     ucm_debug("dispatching initial memtype allocation for %p..%p %s", addr,
               UCS_PTR_BYTE_OFFSET(addr, length), path);
 
-    event.mem_type.address  = addr;
-    event.mem_type.size     = length;
-    event.mem_type.mem_type = UCS_MEMORY_TYPE_LAST; /* unknown memory type */
+    event.mem_type.address   = addr;
+    event.mem_type.size      = length;
+    event.mem_type.mem_type  = UCS_MEMORY_TYPE_LAST; /* unknown memory type */
+    event.mem_type.sys_dev   = UCS_SYS_DEVICE_ID_UNKNOWN;
+    event.mem_type.mem_flags = UCS_MEM_FLAG_REGISTRABLE;
 
     ucm_event_enter();
     handler->cb(UCM_EVENT_MEM_TYPE_ALLOC, &event, handler->arg);

@@ -17,11 +17,10 @@
 typedef enum {
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_NO_IPC = 0,
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY, /* cudaMalloc memory */
-#if HAVE_CUDA_FABRIC
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM, /* cuMemCreate memory */
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL, /* cudaMallocAsync memory */
-    UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM_MULTI /* Multi-chunk VMM with metadata fetch */
-#endif
+    UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD, /* POSIX file descriptor */
+    UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM_MULTI, /* Multi-chunk VMM memory */
 } uct_cuda_ipc_key_handle_t;
 
 
@@ -32,6 +31,11 @@ typedef struct uct_cuda_ipc_md_handle {
 #if HAVE_CUDA_FABRIC
         CUmemFabricHandle     fabric_handle; /* VMM/Mallocasync export handle */
 #endif
+        struct {
+            int               fd;            /* POSIX file descriptor */
+            uint64_t          system_id;     /* Machine identifier for
+                                                same-machine verification */
+        } posix_fd;
     } handle;
 #if HAVE_CUDA_FABRIC
     CUmemPoolPtrExportData    ptr;
@@ -46,6 +50,7 @@ typedef struct uct_cuda_ipc_md_handle {
 typedef struct uct_cuda_ipc_md {
     uct_md_t                 super;             /**< Domain info */
     int                      enable_mnnvl;      /**< Multi-node NVLINK support status */
+    int                      fabric_supported;  /**< CUDA fabric support status */
 } uct_cuda_ipc_md_t;
 
 
@@ -136,7 +141,10 @@ typedef struct {
     size_t            chunks_alloc_size;    /* Chunks buffer alloc size */
     uint16_t          num_chunks;           /* Chunk count */
 } uct_cuda_ipc_vmm_multi_meta_t;
+#endif
 
+
+#if HAVE_CUDA_FABRIC || HAVE_DECL_SYS_PIDFD_GETFD
 static UCS_F_ALWAYS_INLINE void
 uct_cuda_ipc_init_access_desc(CUmemAccessDesc *access_desc, CUdevice cu_dev)
 {

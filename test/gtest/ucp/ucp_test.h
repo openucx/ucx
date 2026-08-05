@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -154,7 +154,8 @@ public:
 
         static void ep_destructor(ucp_ep_h ep, entity *e);
 
-        bool has_lane_with_caps(uint64_t caps) const;
+        bool has_lane_with_caps(uint64_t caps,
+                                uint64_t v2_caps = 0) const;
 
         bool is_rndv_put_ppln_supported() const;
 

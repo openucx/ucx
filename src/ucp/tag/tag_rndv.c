@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -167,6 +167,7 @@ ucp_proto_t ucp_tag_rndv_proto = {
     .name     = "tag/rndv",
     .desc     = NULL,
     .flags    = 0,
+    .dt_mask  = UCP_PROTO_DT_MASK_DEFAULT,
     .probe    = ucp_tag_rndv_rts_probe,
     .query    = ucp_proto_rndv_rts_query,
     .progress = {ucp_tag_rndv_rts_progress},

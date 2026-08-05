@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2021. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -19,8 +19,9 @@ typedef struct {
 
 typedef struct {
     ucp_proto_common_init_params_t super;
-    ucp_lane_type_t                lane_type;    /* Type of lane to select */
-    uint64_t                       tl_cap_flags; /* Required iface capabilities */
+    ucp_lane_type_t                lane_type;       /* Type of lane to select */
+    uint64_t                       tl_cap_flags;    /* Required iface capabilities */
+    uint64_t                       tl_v2_cap_flags; /* Required v2 iface capabilities */
 } ucp_proto_single_init_params_t;
 
 

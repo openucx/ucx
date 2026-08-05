@@ -78,7 +78,9 @@
         if (ret == CUDA_SUCCESS) { \
             ucm_trace("%s(size_ptr=%p, obj=%p, name=%s) returned dptr=%p", \
                       __func__, bytes, obj, name, (void*)(*dptr)); \
-            ucm_cuda_dispatch_mem_alloc(*dptr, *size_ptr); \
+            ucm_cuda_dispatch_mem_type_alloc(*dptr, *size_ptr, \
+                                             UCS_MEMORY_TYPE_CUDA_MANAGED, \
+                                             0); \
         } \
         ucm_event_leave(); \
         return ret; \
@@ -153,16 +155,25 @@ UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cudaMallocPitch, cudaError_t, -1, void**,
 UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cudaGetSymbolAddress, cudaError_t, -1, void**,
                                   const void*)
 
-static void ucm_cuda_dispatch_mem_alloc(CUdeviceptr ptr, size_t length)
+static void ucm_cuda_dispatch_mem_type_alloc(CUdeviceptr ptr, size_t length,
+                                             ucs_memory_type_t mem_type,
+                                             uint8_t mem_flags)
 {
     ucm_event_t event;
 
-    event.mem_type.address  = (void*)ptr;
-    event.mem_type.size     = length;
-    event.mem_type.mem_type = UCS_MEMORY_TYPE_LAST; /* indicate unknown type
-                                                       and let cuda_md detect
-                                                       attributes */
+    event.mem_type.address   = (void*)ptr;
+    event.mem_type.size      = length;
+    event.mem_type.mem_type  = mem_type;
+    event.mem_type.sys_dev   = UCS_SYS_DEVICE_ID_UNKNOWN;
+    event.mem_type.mem_flags = mem_flags;
     ucm_event_dispatch(UCM_EVENT_MEM_TYPE_ALLOC, &event);
+}
+
+static void ucm_cuda_dispatch_mem_alloc(CUdeviceptr ptr, size_t length)
+{
+    /* Indicate unknown type and let cuda_md detect attributes. */
+    ucm_cuda_dispatch_mem_type_alloc(ptr, length, UCS_MEMORY_TYPE_LAST,
+                                     UCS_MEM_FLAG_REGISTRABLE);
 }
 
 static void ucm_cuda_dispatch_mem_free(CUdeviceptr ptr, size_t length,
@@ -191,9 +202,11 @@ static void ucm_cuda_dispatch_mem_free(CUdeviceptr ptr, size_t length,
         }
     }
 
-    event.mem_type.address  = (void*)ptr;
-    event.mem_type.size     = length;
-    event.mem_type.mem_type = mem_type;
+    event.mem_type.address   = (void*)ptr;
+    event.mem_type.size      = length;
+    event.mem_type.mem_type  = mem_type;
+    event.mem_type.sys_dev   = UCS_SYS_DEVICE_ID_UNKNOWN;
+    event.mem_type.mem_flags = UCS_MEM_FLAG_REGISTRABLE;
     ucm_event_dispatch(UCM_EVENT_MEM_TYPE_FREE, &event);
 }
 
@@ -279,6 +292,22 @@ static size_t ucm_cuda_get_symbol_size(const void *symbol)
     return size;
 }
 
+cudaError_t ucm_cudaGetSymbolAddress(void **devPtr, const void *symbol)
+{
+    cudaError_t ret;
+
+    ucm_event_enter();
+    ret = ucm_orig_cudaGetSymbolAddress(devPtr, symbol);
+    if (ret == cudaSuccess) {
+        ucm_trace("%s(symbol=%p) allocated %p", __func__, symbol, *devPtr);
+        ucm_cuda_dispatch_mem_type_alloc((CUdeviceptr)*devPtr,
+                                         ucm_cuda_get_symbol_size(symbol),
+                                         UCS_MEMORY_TYPE_CUDA_MANAGED, 0);
+    }
+    ucm_event_leave();
+    return ret;
+}
+
 /* Runtime API replacements */
 UCM_CUDA_ALLOC_FUNC(cudaMalloc, cudaError_t, cudaSuccess, arg0, void*, *,
                     "size=%zu", size_t)
@@ -294,9 +323,6 @@ UCM_CUDA_ALLOC_FUNC(cudaMallocFromPoolAsync, cudaError_t, cudaSuccess, arg0,
                     void*, *, "size=%zu pool=%p stream=%p", size_t,
                     cudaMemPool_t, cudaStream_t)
 #endif
-UCM_CUDA_ALLOC_FUNC(cudaGetSymbolAddress, cudaError_t, cudaSuccess,
-                    ucm_cuda_get_symbol_size(arg0), void*, *, "symbol=%p",
-                    const void*)
 UCM_CUDA_FREE_FUNC(cudaFree, UCS_MEMORY_TYPE_CUDA, cudaError_t, arg0, 0,
                    "devPtr=%p", void*)
 UCM_CUDA_FREE_FUNC(cudaFreeHost, UCS_MEMORY_TYPE_HOST, cudaError_t, arg0, 0,
@@ -438,9 +464,11 @@ static int ucm_cudamem_scan_regions_cb(void *arg, void *addr, size_t length,
     ucm_debug("dispatching initial memtype allocation for %p..%p %s", addr,
               UCS_PTR_BYTE_OFFSET(addr, length), path);
 
-    event.mem_type.address  = addr;
-    event.mem_type.size     = length;
-    event.mem_type.mem_type = UCS_MEMORY_TYPE_LAST; /* unknown memory type */
+    event.mem_type.address   = addr;
+    event.mem_type.size      = length;
+    event.mem_type.mem_type  = UCS_MEMORY_TYPE_LAST; /* unknown memory type */
+    event.mem_type.sys_dev   = UCS_SYS_DEVICE_ID_UNKNOWN;
+    event.mem_type.mem_flags = UCS_MEM_FLAG_REGISTRABLE;
 
     ucm_event_enter();
     handler->cb(UCM_EVENT_MEM_TYPE_ALLOC, &event, handler->arg);

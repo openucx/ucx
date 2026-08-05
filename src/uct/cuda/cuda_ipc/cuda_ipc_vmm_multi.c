@@ -25,16 +25,16 @@ void uct_cuda_ipc_vmm_multi_meta_cleanup(uct_cuda_ipc_lkey_t *key)
     if (meta->chunks_dev_ptr != 0) {
         UCT_CUDADRV_FUNC_LOG_WARN(
                 cuMemUnmap(meta->chunks_dev_ptr, meta->chunks_alloc_size));
-        UCT_CUDADRV_FUNC_LOG_WARN(
-                cuMemAddressFree(meta->chunks_dev_ptr, meta->chunks_alloc_size));
+        UCT_CUDADRV_FUNC_LOG_WARN(cuMemAddressFree(meta->chunks_dev_ptr,
+                                                   meta->chunks_alloc_size));
         meta->chunks_dev_ptr = 0;
     }
 
     if (meta->header_dev_ptr != 0) {
         UCT_CUDADRV_FUNC_LOG_WARN(
                 cuMemUnmap(meta->header_dev_ptr, meta->header_alloc_size));
-        UCT_CUDADRV_FUNC_LOG_WARN(
-                cuMemAddressFree(meta->header_dev_ptr, meta->header_alloc_size));
+        UCT_CUDADRV_FUNC_LOG_WARN(cuMemAddressFree(meta->header_dev_ptr,
+                                                   meta->header_alloc_size));
         meta->header_dev_ptr = 0;
     }
 }
