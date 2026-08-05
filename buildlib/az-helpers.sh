@@ -288,6 +288,30 @@ get_arch() {
     fi
 }
 
+# Print the merge-base sha between the current HEAD and the target branch of
+# the PR (defaults to 'master') to be used as the base for PR-scoped checks.
+#
+# The naive '$(git rev-parse HEAD^)' snapshots the target branch at PR-open
+# time. On long-lived PRs, every 'Merge branch <target>' commit pulls in
+# newer target-side commits that are reachable from HEAD but not from that
+# frozen HEAD^, causing target-side commits (and their authors, titles,
+# formatting) to leak into PR checks. Comparing against the *current* target
+# tip via merge-base avoids that.
+azure_pr_base_sha() {
+    local target_branch
+    target_branch="${SYSTEM_PULLREQUEST_TARGETBRANCH#refs/heads/}"
+    target_branch="${target_branch:-master}"
+
+    # 'checkout: self' uses a shallow clone; deepen so merge-base can reach
+    # the common ancestor of long-lived PRs.
+    git fetch --no-tags --deepen=500 origin "$target_branch" \
+        >/dev/null 2>&1 \
+        || git fetch --no-tags origin "$target_branch" >/dev/null 2>&1 \
+        || return 1
+
+    git merge-base HEAD FETCH_HEAD
+}
+
 git_clone_with_retry() {
     local branch="$1"
     local target_dir="$2"
