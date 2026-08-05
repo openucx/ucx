@@ -454,6 +454,7 @@ found:
             packed->ph.handle_type          =
                     UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM_MULTI;
             packed->ph.handle.fabric_handle = meta->header_fabric_handle;
+            packed->ph.buffer_id            = meta->buffer_id;
             packed->d_bptr                  = meta->d_bptr;
             packed->b_len                   = meta->b_len;
         } else if (status != UCS_ERR_UNSUPPORTED) {

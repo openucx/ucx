@@ -17,6 +17,8 @@ typedef struct {
     uct_cuda_ipc_key_handle_t handle_type;
     union {
         CUmemFabricHandle fabric;
+        /* Pin the alignment to 8 */
+        uint64_t          reserved_align;
     } handle;
 } uct_cuda_ipc_vmm_handle_t;
 
@@ -28,7 +30,6 @@ typedef struct uct_cuda_ipc_vmm_chunk_desc {
     uct_cuda_ipc_vmm_handle_t vmm_handle;
     CUdeviceptr               d_bptr;
     size_t                    b_len;
-    unsigned long long        buffer_id;
 } uct_cuda_ipc_vmm_chunk_desc_t;
 
 

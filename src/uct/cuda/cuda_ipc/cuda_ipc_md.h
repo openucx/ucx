@@ -140,6 +140,7 @@ typedef struct {
     CUdeviceptr       chunks_dev_ptr;       /* GPU chunks buffer VA */
     size_t            chunks_alloc_size;    /* Chunks buffer alloc size */
     uint16_t          num_chunks;           /* Chunk count */
+    uint64_t          buffer_id;            /* Buffer ID used in cache map */
 } uct_cuda_ipc_vmm_multi_meta_t;
 #endif
 

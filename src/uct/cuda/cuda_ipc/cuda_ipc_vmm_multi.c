@@ -51,7 +51,6 @@ uct_cuda_ipc_vmm_multi_discover_chunks(CUdeviceptr va_base, size_t va_len,
     uct_cuda_ipc_vmm_chunk_desc_t *elem;
     CUmemGenericAllocationHandle handle;
     CUdeviceptr pos, chunk_base;
-    unsigned long long buffer_id;
     size_t chunk_size;
     ucs_status_t status;
 
@@ -86,17 +85,9 @@ uct_cuda_ipc_vmm_multi_discover_chunks(CUdeviceptr va_base, size_t va_len,
             goto err;
         }
 
-        status = UCT_CUDADRV_FUNC_LOG_ERR(
-                cuPointerGetAttribute(&buffer_id,
-                                      CU_POINTER_ATTRIBUTE_BUFFER_ID, pos));
-        if (status != UCS_OK) {
-            goto err;
-        }
-
         elem->vmm_handle.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM;
         elem->d_bptr                 = chunk_base;
         elem->b_len                  = chunk_size;
-        elem->buffer_id              = buffer_id;
     }
 
     if (ucs_array_length(&chunks) > UINT16_MAX) {
@@ -188,6 +179,7 @@ uct_cuda_ipc_vmm_multi_create_meta_buffer(uct_cuda_ipc_lkey_t *key, int dev_num)
     uct_cuda_ipc_vmm_handle_t chunks_vmm_handle;
     CUdeviceptr chunks_dev_ptr, header_dev_ptr;
     size_t chunks_alloc_size, header_alloc_size;
+    unsigned long long buffer_id;
     ucs_status_t status;
     size_t chunks_data_size, alloc_granularity;
 
@@ -195,6 +187,13 @@ uct_cuda_ipc_vmm_multi_create_meta_buffer(uct_cuda_ipc_lkey_t *key, int dev_num)
                                                     &host_chunks, &num_chunks);
     if (status != UCS_OK) {
         return status;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuPointerGetAttribute(&buffer_id, CU_POINTER_ATTRIBUTE_BUFFER_ID,
+                                  meta->d_bptr));
+    if (status != UCS_OK) {
+        goto err_free_host;
     }
 
     chunks_data_size = num_chunks * sizeof(uct_cuda_ipc_vmm_chunk_desc_t);
@@ -247,6 +246,7 @@ uct_cuda_ipc_vmm_multi_create_meta_buffer(uct_cuda_ipc_lkey_t *key, int dev_num)
     meta->chunks_dev_ptr    = chunks_dev_ptr;
     meta->chunks_alloc_size = chunks_alloc_size;
     meta->num_chunks        = num_chunks;
+    meta->buffer_id         = buffer_id;
 
     ucs_trace("created VMM metadata: %u chunks, chunks_alloc=%zu "
               "header_alloc=%zu on GPU",
@@ -287,6 +287,11 @@ ucs_status_t uct_cuda_ipc_mkey_pack_vmm_multi_chunk(uct_cuda_ipc_memh_t *memh,
         }
 
         uct_cuda_ipc_vmm_multi_meta_cleanup(key);
+    }
+
+    /* Contained in the lkey's own allocation, so it cannot span chunks */
+    if (((CUdeviceptr)address + length) <= (key->d_bptr + key->b_len)) {
+        return UCS_ERR_UNSUPPORTED;
     }
 
     status = uct_cuda_ipc_check_and_push_ctx((CUdeviceptr)address, &cuda_device,
