@@ -488,7 +488,7 @@ run_ucx_perftest_fault_tolerance() {
 	echo "==== Running UCX Perftest Fault Tolerance Test ===="
 
 	test_exe="${ucx_inst}/bin/ucx_perftest"
-	drop_tool="/hpc/scrap/fault_tolerance/ucx_drop_tool"
+	drop_tool="/hpc/local/oss/ucx/fault_tolerance/ucx_drop_tool"
 	output_file=ucx_perftest.stdout
 	settle_seconds=10
 	sl=$(( EXECUTOR_NUMBER + 1 ))
