@@ -32,13 +32,13 @@
 #endif
 
 #if HAVE_DECL_IBV_SET_ECE
-#define UCT_IB_VERBS_OPTIONAL_ECE_OPS(_op, _module, _ops) \
+#define UCT_IB_VERBS_ECE_OPS(_op, _module, _ops) \
     _op(_module, _ops, int, -1, ibv_query_ece, \
         (struct ibv_qp *qp, struct ibv_ece *ece), (qp, ece)) \
     _op(_module, _ops, int, -1, ibv_set_ece, \
         (struct ibv_qp *qp, struct ibv_ece *ece), (qp, ece))
 #else
-#define UCT_IB_VERBS_OPTIONAL_ECE_OPS(_op, _module, _ops)
+#define UCT_IB_VERBS_ECE_OPS(_op, _module, _ops)
 #endif
 
 #if HAVE_DECL_IBV_QUERY_DEVICE_EX
@@ -193,7 +193,7 @@
 #define UCT_IB_VERBS_OPTIONAL_OPS(_op, _void_op, _module, _ops) \
     UCT_IB_VERBS_OPTIONAL_NETLINK_OPS(_op, _module, _ops) \
     UCT_IB_VERBS_OPTIONAL_DMABUF_OPS(_op, _module, _ops) \
-    UCT_IB_VERBS_OPTIONAL_ECE_OPS(_op, _module, _ops) \
+    UCT_IB_VERBS_ECE_OPS(_op, _module, _ops) \
     UCT_IB_VERBS_OPTIONAL_QUERY_DEVICE_EX_OPS(_op, _module, _ops) \
     UCT_IB_VERBS_OPTIONAL_CREATE_QP_EX_OPS(_op, _module, _ops) \
     UCT_IB_VERBS_OPTIONAL_CREATE_CQ_EX_OPS(_op, _module, _ops) \
