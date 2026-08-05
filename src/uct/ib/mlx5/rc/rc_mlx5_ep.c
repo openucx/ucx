@@ -13,6 +13,7 @@
 #  include <infiniband/driver.h>
 #endif
 
+#include <uct/ib/mlx5/ib_mlx5_ext.h>
 #include <uct/ib/mlx5/ib_mlx5_log.h>
 #include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
@@ -46,6 +47,35 @@ ucs_status_t uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep, uct_ep_attr_t *ep_attr)
 
     return UCS_OK;
 }
+
+
+ucs_status_t uct_rc_mlx5_base_ep_outstanding_purge(
+        uct_ep_h tl_ep, const uct_ep_outstanding_purge_params_t *params)
+{
+    UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
+    ucs_status_t purge_status;
+    ucs_status_t status;
+
+    if ((params != NULL) &&
+        (params->field_mask & UCT_EP_OUTSTANDING_FIELD_STATUS)) {
+        status = uct_ep_outstanding_purge_get_status(params, &purge_status);
+        if (status != UCS_OK) {
+            return status;
+        }
+    } else {
+        status = uct_ib_mlx5_ext_ep_outstanding_purge(tl_ep, params);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        purge_status = UCS_ERR_CANCELED;
+    }
+
+    uct_rc_txqp_purge_outstanding(&iface->super, &ep->super.txqp, purge_status,
+                                  ep->tx.wq.sw_pi, 0);
+    return UCS_OK;
+}
+
 
 static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_base_ep_put_short_inline(
         uct_ep_h tl_ep, const void *buffer, unsigned length,
