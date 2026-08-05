@@ -412,10 +412,10 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
     uct_memhs    = UCS_PTR_BYTE_OFFSET(uct_rkeys,
                                        max_sgl_count * sizeof(*uct_rkeys));
 
-    desc_count = ucp_datatype_iter_next_sgl_frag(dt_iter, max_sgl_count,
-                                                 max_frag, next_iter, buffers,
-                                                 lengths, remote_addrs,
-                                                 elem_indices);
+    desc_count = ucp_datatype_iter_next_sgl_frags(dt_iter, max_sgl_count,
+                                                  max_frag, next_iter, buffers,
+                                                  lengths, remote_addrs,
+                                                  elem_indices);
     if (desc_count == 0) {
         status = UCS_OK;
         goto out;
@@ -499,9 +499,9 @@ ucp_proto_put_sgl_offload_sw_send_func(ucp_request_t *req,
     uct_iov_t iov;
     ucs_status_t status;
 
-    desc_count = ucp_datatype_iter_next_sgl_frag(dt_iter, 1, max_frag,
-                                                 next_iter, &buffer, &length,
-                                                 &remote_addr, &elem_index);
+    desc_count = ucp_datatype_iter_next_sgl_frags(dt_iter, 1, max_frag,
+                                                  next_iter, &buffer, &length,
+                                                  &remote_addr, &elem_index);
     if (desc_count == 0) {
         return UCS_OK;
     }

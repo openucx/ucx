@@ -637,12 +637,12 @@ ucp_datatype_iter_next_iov(const ucp_datatype_iter_t *dt_iter,
 }
 
 static UCS_F_ALWAYS_INLINE size_t
-ucp_datatype_iter_next_sgl_frag(const ucp_datatype_iter_t *dt_iter,
-                                size_t max_count, size_t max_frag,
-                                ucp_datatype_iter_t *next_iter,
-                                void **out_buffers, size_t *out_lengths,
-                                uint64_t *out_remote_addrs,
-                                size_t *out_elem_indices)
+ucp_datatype_iter_next_sgl_frags(const ucp_datatype_iter_t *dt_iter,
+                                 size_t max_count, size_t max_frag,
+                                 ucp_datatype_iter_t *next_iter,
+                                 void **out_buffers, size_t *out_lengths,
+                                 uint64_t *out_remote_addrs,
+                                 size_t *out_elem_indices)
 {
     size_t elem_index  = dt_iter->offset;
     size_t elem_offset = dt_iter->type.sgl.elem_offset;
@@ -694,7 +694,7 @@ ucp_datatype_iter_next_sgl_frag(const ucp_datatype_iter_t *dt_iter,
  * 'src_dt_iter' must be initialized from the same datatype object as 'dt_iter',
  * or returned as 'next_iter' from @ref ucp_datatype_iter_next_pack
  * @ref ucp_datatype_iter_next_unpack, @ref ucp_datatype_iter_next_iov or
- * @ref ucp_datatype_iter_next_sgl_frag that were used on 'dt_iter'.
+ * @ref ucp_datatype_iter_next_sgl_frags that were used on 'dt_iter'.
  */
 static UCS_F_ALWAYS_INLINE void
 ucp_datatype_iter_copy_position(ucp_datatype_iter_t *dt_iter,
