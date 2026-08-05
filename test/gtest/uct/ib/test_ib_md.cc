@@ -24,6 +24,7 @@ protected:
     void ib_md_umr_check(void *rkey_buffer, bool amo_access,
                          size_t size = 8192, bool aligned = false);
     bool has_ksm() const;
+    bool has_atomic_ksm() const;
 
     bool has_devx() const
     {
@@ -70,31 +71,35 @@ TEST(test_ib_md_relaxed_order_policy, auto_mem_types)
                       UCS_CPU_VENDOR_INTEL, UCS_CPU_MODEL_INTEL_ICELAKE));
 }
 
-TEST(test_ib_md_relaxed_order_policy, memh_mem_type)
+TEST(test_ib_md_relaxed_order_policy, strict_order_mr_mem_type)
 {
     uct_md_mem_reg_params_t params = {};
     uct_ib_md_t md                 = {};
 
     md.relaxed_order_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
 
-    EXPECT_FALSE(uct_ib_memh_is_relaxed_order(&md, NULL));
-    EXPECT_FALSE(uct_ib_memh_is_relaxed_order(&md, &params));
+    EXPECT_FALSE(uct_ib_md_is_strict_order_mr_required(&md, NULL));
+    EXPECT_FALSE(uct_ib_md_is_strict_order_mr_required(&md, &params));
 
     params.field_mask = UCT_MD_MEM_REG_FIELD_MEM_TYPE;
     params.mem_type   = UCS_MEMORY_TYPE_CUDA;
-    EXPECT_TRUE(uct_ib_memh_is_relaxed_order(&md, &params));
+    EXPECT_TRUE(uct_ib_md_is_strict_order_mr_required(&md, &params));
 
     params.mem_type = UCS_MEMORY_TYPE_HOST;
-    EXPECT_FALSE(uct_ib_memh_is_relaxed_order(&md, &params));
+    EXPECT_FALSE(uct_ib_md_is_strict_order_mr_required(&md, &params));
 
     params.mem_type = UCS_MEMORY_TYPE_CUDA;
-    EXPECT_TRUE(uct_ib_memh_is_relaxed_order(&md, &params));
+    EXPECT_TRUE(uct_ib_md_is_strict_order_mr_required(&md, &params));
 
     params.mem_type = UCS_MEMORY_TYPE_RDMA;
-    EXPECT_FALSE(uct_ib_memh_is_relaxed_order(&md, &params));
+    EXPECT_FALSE(uct_ib_md_is_strict_order_mr_required(&md, &params));
 
     params.mem_type = UCS_MEMORY_TYPE_HOST;
-    EXPECT_FALSE(uct_ib_memh_is_relaxed_order(&md, &params));
+    EXPECT_FALSE(uct_ib_md_is_strict_order_mr_required(&md, &params));
+
+    md.relaxed_order_required = 1;
+    params.mem_type           = UCS_MEMORY_TYPE_CUDA;
+    EXPECT_FALSE(uct_ib_md_is_strict_order_mr_required(&md, &params));
 }
 
 void test_ib_md::init() {
@@ -148,6 +153,7 @@ void test_ib_md::ib_md_umr_check(void *rkey_buffer, bool amo_access,
 {
     ucs_status_t status;
     size_t alloc_size;
+    bool has_strict_mr;
     void *buffer;
     int ret;
 
@@ -188,18 +194,17 @@ void test_ib_md::ib_md_umr_check(void *rkey_buffer, bool amo_access,
         EXPECT_FALSE(ib_memh->flags & UCT_IB_MEM_ACCESS_REMOTE_ATOMIC);
     }
 
-    check_mlx5_mr(ib_memh, false,
-                  uct_ib_md_is_relaxed_order(&ib_md()));
+    has_strict_mr = uct_ib_md_is_relaxed_order(&ib_md()) &&
+                    !ib_md().relaxed_order_required;
+    check_mlx5_mr(ib_memh, false, has_strict_mr);
 
     status = uct_md_mkey_pack(md(), memh, rkey_buffer);
     EXPECT_UCS_OK(status);
 
     status = uct_md_mkey_pack(md(), memh, rkey_buffer);
     EXPECT_UCS_OK(status);
-    check_mlx5_mr(ib_memh,
-                  (amo_access && has_ksm()) ||
-                          uct_ib_md_is_relaxed_order(&ib_md()),
-                  uct_ib_md_is_relaxed_order(&ib_md()));
+    check_mlx5_mr(ib_memh, (amo_access && has_atomic_ksm()) || has_strict_mr,
+                  has_strict_mr);
 
     status = uct_md_mem_dereg(md(), memh);
     EXPECT_UCS_OK(status);
@@ -219,9 +224,20 @@ bool test_ib_md::has_ksm() const {
 #endif
 }
 
+bool test_ib_md::has_atomic_ksm() const {
+#if HAVE_DEVX
+    return has_ksm() &&
+           (m_mlx5_flags & UCT_IB_MLX5_MD_FLAG_INDIRECT_ATOMICS) &&
+           ib_md().config.enable_indirect_atomic;
+#else
+    return false;
+#endif
+}
+
 UCS_TEST_P(test_ib_md, ib_md_umr_ksm) {
     std::string rkey_buffer(md_attr().rkey_packed_size, '\0');
-    ib_md_umr_check(&rkey_buffer[0], has_ksm(), UCT_IB_MD_MAX_MR_SIZE + 0x1000);
+    ib_md_umr_check(&rkey_buffer[0], has_atomic_ksm(),
+                    UCT_IB_MD_MAX_MR_SIZE + 0x1000);
 }
 
 UCS_TEST_P(test_ib_md, relaxed_order, "IB_PCI_RELAXED_ORDERING=try") {
@@ -229,6 +245,44 @@ UCS_TEST_P(test_ib_md, relaxed_order, "IB_PCI_RELAXED_ORDERING=try") {
 
     ib_md_umr_check(&rkey_buffer[0], false);
     ib_md_umr_check(&rkey_buffer[0], true);
+}
+
+UCS_TEST_P(test_ib_md, relaxed_order_yes,
+           "IB_PCI_RELAXED_ORDERING=yes")
+{
+    if (!has_atomic_ksm()) {
+        UCS_TEST_SKIP_R("atomic KSM is required");
+    }
+
+    EXPECT_TRUE(ib_md().relaxed_order_required);
+
+    std::string rkey_buffer(md_attr().rkey_packed_size, '\0');
+    ib_md_umr_check(&rkey_buffer[0], false);
+    ib_md_umr_check(&rkey_buffer[0], true);
+}
+
+UCS_TEST_P(test_ib_md, relaxed_order_required_config) {
+    uct_ib_md_config_t *md_config;
+
+    ASSERT_UCS_OK(uct_config_modify(m_md_config, "IB_PCI_RELAXED_ORDERING",
+                                    "yes"));
+    md_config = ucs_derived_of((uct_md_config_t*)m_md_config,
+                               uct_ib_md_config_t);
+    EXPECT_EQ(UCS_YES, md_config->mr_relaxed_order);
+    EXPECT_TRUE(uct_ib_md_is_relaxed_order_required(md_config, 0));
+
+    ASSERT_UCS_OK(uct_config_modify(m_md_config, "IB_PCI_RELAXED_ORDERING",
+                                    "auto"));
+    EXPECT_EQ(UCS_AUTO, md_config->mr_relaxed_order);
+    EXPECT_FALSE(uct_ib_md_is_relaxed_order_required(md_config, 0));
+    EXPECT_TRUE(uct_ib_md_is_relaxed_order_required(md_config, 1));
+
+    {
+        scoped_log_handler slh(hide_errors_logger);
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+                  uct_config_modify(m_md_config, "IB_PCI_RELAXED_ORDERING",
+                                    "only"));
+    }
 }
 
 UCS_TEST_P(test_ib_md, aligned) {

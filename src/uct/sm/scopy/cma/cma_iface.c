@@ -62,7 +62,7 @@ uct_cma_iface_is_reachable_v2(const uct_iface_h tl_iface,
                               const uct_iface_is_reachable_params_t *params)
 {
     struct iovec iov = {
-        .iov_base = &iov,
+        .iov_base = NULL,
         .iov_len  = sizeof(iov),
     };
     ucs_cma_iface_ext_device_addr_t *iface_addr;
