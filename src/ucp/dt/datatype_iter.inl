@@ -387,10 +387,10 @@ ucp_datatype_iter_sgl_check(const ucp_datatype_iter_t *dt_iter)
     if (dt_iter->offset < dt_iter->length) {
         elem_length = dt_iter->type.sgl.lengths[dt_iter->offset];
         ucs_assertv((elem_length > 0) ?
-                    (dt_iter->type.sgl.elem_offset < elem_length) :
-                    (dt_iter->type.sgl.elem_offset == 0),
-                    "offset=%zu elem_offset=%zu elem_length=%zu",
-                    dt_iter->offset, dt_iter->type.sgl.elem_offset,
+                    (dt_iter->type.sgl.frag_offset < elem_length) :
+                    (dt_iter->type.sgl.frag_offset == 0),
+                    "offset=%zu frag_offset=%zu elem_length=%zu",
+                    dt_iter->offset, dt_iter->type.sgl.frag_offset,
                     elem_length);
     }
 }
@@ -646,7 +646,7 @@ ucp_datatype_iter_next_sgl_frags(const ucp_datatype_iter_t *dt_iter,
                                  size_t *out_elem_indices)
 {
     size_t elem_index  = dt_iter->offset;
-    size_t elem_offset = dt_iter->type.sgl.elem_offset;
+    size_t frag_offset = dt_iter->type.sgl.frag_offset;
     size_t desc_count  = 0;
     size_t elem_length, frag_length;
 
@@ -658,35 +658,35 @@ ucp_datatype_iter_next_sgl_frags(const ucp_datatype_iter_t *dt_iter,
     while ((desc_count < max_frag_count) && (elem_index < dt_iter->length)) {
         elem_length = dt_iter->type.sgl.lengths[elem_index];
         if (elem_length > 0) {
-            ucs_assert(elem_length > elem_offset);
-            frag_length = ucs_min(elem_length - elem_offset, max_frag_length);
+            ucs_assert(elem_length > frag_offset);
+            frag_length = ucs_min(elem_length - frag_offset, max_frag_length);
 
             out_buffers[desc_count]      = UCS_PTR_BYTE_OFFSET(
-                    dt_iter->type.sgl.buffers[elem_index], elem_offset);
+                    dt_iter->type.sgl.buffers[elem_index], frag_offset);
             out_lengths[desc_count]      = frag_length;
             out_remote_addrs[desc_count] =
-                    dt_iter->type.sgl.remote_addrs[elem_index] + elem_offset;
+                    dt_iter->type.sgl.remote_addrs[elem_index] + frag_offset;
             out_elem_indices[desc_count] = elem_index;
             ++desc_count;
 
-            elem_offset += frag_length;
-            if (elem_offset < elem_length) {
+            frag_offset += frag_length;
+            if (frag_offset < elem_length) {
                 continue;
             }
         }
 
         ++elem_index;
-        elem_offset = 0;
+        frag_offset = 0;
     }
 
     ucs_assertv((elem_index == dt_iter->length) || (desc_count > 0),
-                "dt_iter=%p offset=%zu length=%zu elem_offset=%zu "
+                "dt_iter=%p offset=%zu length=%zu frag_offset=%zu "
                 "desc_count=%zu",
                 dt_iter, dt_iter->offset, dt_iter->length,
-                dt_iter->type.sgl.elem_offset, desc_count);
+                dt_iter->type.sgl.frag_offset, desc_count);
 
     next_iter->offset               = elem_index;
-    next_iter->type.sgl.elem_offset = elem_offset;
+    next_iter->type.sgl.frag_offset = frag_offset;
 
     return desc_count;
 }
@@ -708,7 +708,7 @@ ucp_datatype_iter_copy_position(ucp_datatype_iter_t *dt_iter,
         dt_iter->type.iov.iov_index  = src_dt_iter->type.iov.iov_index;
         dt_iter->type.iov.iov_offset = src_dt_iter->type.iov.iov_offset;
     } else if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_SGL, dt_mask)) {
-        dt_iter->type.sgl.elem_offset = src_dt_iter->type.sgl.elem_offset;
+        dt_iter->type.sgl.frag_offset = src_dt_iter->type.sgl.frag_offset;
     }
 }
 
@@ -733,7 +733,7 @@ ucp_datatype_iter_rewind(ucp_datatype_iter_t *dt_iter, unsigned dt_mask)
         dt_iter->type.iov.iov_index  = 0;
         dt_iter->type.iov.iov_offset = 0;
     } else if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_SGL, dt_mask)) {
-        dt_iter->type.sgl.elem_offset = 0;
+        dt_iter->type.sgl.frag_offset = 0;
     }
 }
 
@@ -748,7 +748,7 @@ ucp_datatype_iter_seek(ucp_datatype_iter_t *dt_iter, size_t offset,
         ucp_datatype_iter_iov_seek(dt_iter, offset);
     } else {
         if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_SGL, dt_mask)) {
-            dt_iter->type.sgl.elem_offset = 0;
+            dt_iter->type.sgl.frag_offset = 0;
         }
         dt_iter->offset = offset;
     }

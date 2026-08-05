@@ -302,7 +302,7 @@ ucs_status_t ucp_datatype_iter_sgl_init(ucp_context_h context,
     dt_iter->type.sgl.lengths      = local->lengths;
     dt_iter->type.sgl.remote_addrs = remote->remote_addrs;
     dt_iter->type.sgl.rkeys        = remote->rkeys;
-    dt_iter->type.sgl.elem_offset  = 0;
+    dt_iter->type.sgl.frag_offset  = 0;
 
     if (ucs_unlikely(count == 0)) {
         dt_iter->type.sgl.memhs = NULL;

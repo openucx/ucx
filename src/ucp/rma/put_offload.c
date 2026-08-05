@@ -393,7 +393,7 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
     size_t desc_count, i, idx;
 
     next_iter->offset               = dt_iter->offset;
-    next_iter->type.sgl.elem_offset = dt_iter->type.sgl.elem_offset;
+    next_iter->type.sgl.frag_offset = dt_iter->type.sgl.frag_offset;
 
     storage = ucs_alloc_on_stack(total_size, "uct_sgl_desc");
     if (storage == NULL) {
@@ -507,10 +507,10 @@ ucp_proto_put_sgl_offload_sw_send_func(ucp_request_t *req,
     }
 
     ucs_assertv(desc_count == 1,
-                "dt_iter=%p offset=%zu length=%zu elem_offset=%zu "
+                "dt_iter=%p offset=%zu length=%zu frag_offset=%zu "
                 "max_frag_length=%zu",
                 dt_iter, dt_iter->offset, dt_iter->length,
-                dt_iter->type.sgl.elem_offset, max_frag_length);
+                dt_iter->type.sgl.frag_offset, max_frag_length);
 
     tl_rkey    = ucp_rkey_get_tl_rkey(dt_iter->type.sgl.rkeys[elem_index],
                                       rkey_index);

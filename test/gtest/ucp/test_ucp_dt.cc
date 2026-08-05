@@ -425,10 +425,10 @@ UCS_TEST_F(test_ucp_dt_sgl, iter_next_one_by_one) {
         EXPECT_EQ(m_lengths[i], length);
         EXPECT_EQ(m_remote_addrs[i], remote_addr);
         EXPECT_EQ(i + 1, next_iter.offset);
-        EXPECT_EQ(0u, next_iter.type.sgl.elem_offset);
+        EXPECT_EQ(0u, next_iter.type.sgl.frag_offset);
         ucp_datatype_iter_copy_position(&m_dt_iter, &next_iter,
                                         UCS_BIT(UCP_DATATYPE_SGL));
-        EXPECT_EQ(0u, m_dt_iter.type.sgl.elem_offset);
+        EXPECT_EQ(0u, m_dt_iter.type.sgl.frag_offset);
     }
 
     EXPECT_TRUE(ucp_datatype_iter_is_end(&m_dt_iter));
@@ -464,10 +464,10 @@ UCS_TEST_F(test_ucp_dt_sgl, iter_next_frag) {
             EXPECT_LE(desc_lengths[n], MAX_FRAG);
             EXPECT_GT(desc_lengths[n], 0u);
 
-            size_t elem_offset = elem_progress[idx];
-            EXPECT_EQ(UCS_PTR_BYTE_OFFSET(m_buffers[idx], elem_offset),
+            size_t frag_offset = elem_progress[idx];
+            EXPECT_EQ(UCS_PTR_BYTE_OFFSET(m_buffers[idx], frag_offset),
                       desc_buffers[n]);
-            EXPECT_EQ(m_remote_addrs[idx] + elem_offset, desc_remote_addrs[n]);
+            EXPECT_EQ(m_remote_addrs[idx] + frag_offset, desc_remote_addrs[n]);
 
             elem_progress[idx] += desc_lengths[n];
             EXPECT_LE(elem_progress[idx], m_lengths[idx]);
@@ -484,7 +484,7 @@ UCS_TEST_F(test_ucp_dt_sgl, iter_next_frag) {
     }
 }
 
-UCS_TEST_F(test_ucp_dt_sgl, iter_next_frag_elem_offset) {
+UCS_TEST_F(test_ucp_dt_sgl, iter_next_frag_offset) {
     static constexpr size_t MAX_FRAG = 32;
 
     init_sgl_iter(1, {96});
@@ -504,12 +504,12 @@ UCS_TEST_F(test_ucp_dt_sgl, iter_next_frag_elem_offset) {
     EXPECT_EQ(m_buffers[0], buffer);
     EXPECT_EQ(m_remote_addrs[0], remote_addr);
     EXPECT_EQ(0u, next_iter.offset);
-    EXPECT_EQ(MAX_FRAG, next_iter.type.sgl.elem_offset);
+    EXPECT_EQ(MAX_FRAG, next_iter.type.sgl.frag_offset);
 
     ucp_datatype_iter_copy_position(&m_dt_iter, &next_iter,
                                     UCS_BIT(UCP_DATATYPE_SGL));
     EXPECT_EQ(0u, m_dt_iter.offset);
-    EXPECT_EQ(MAX_FRAG, m_dt_iter.type.sgl.elem_offset);
+    EXPECT_EQ(MAX_FRAG, m_dt_iter.type.sgl.frag_offset);
 
     next_iter  = {};
     desc_count = ucp_datatype_iter_next_sgl_frags(
@@ -521,7 +521,7 @@ UCS_TEST_F(test_ucp_dt_sgl, iter_next_frag_elem_offset) {
     EXPECT_EQ(UCS_PTR_BYTE_OFFSET(m_buffers[0], MAX_FRAG), buffer);
     EXPECT_EQ(m_remote_addrs[0] + MAX_FRAG, remote_addr);
     EXPECT_EQ(0u, next_iter.offset);
-    EXPECT_EQ(2 * MAX_FRAG, next_iter.type.sgl.elem_offset);
+    EXPECT_EQ(2 * MAX_FRAG, next_iter.type.sgl.frag_offset);
 
     ucp_datatype_iter_copy_position(&m_dt_iter, &next_iter,
                                     UCS_BIT(UCP_DATATYPE_SGL));
@@ -535,12 +535,12 @@ UCS_TEST_F(test_ucp_dt_sgl, iter_next_frag_elem_offset) {
     EXPECT_EQ(MAX_FRAG, length);
     EXPECT_EQ(UCS_PTR_BYTE_OFFSET(m_buffers[0], 2 * MAX_FRAG), buffer);
     EXPECT_EQ(1u, next_iter.offset);
-    EXPECT_EQ(0u, next_iter.type.sgl.elem_offset);
+    EXPECT_EQ(0u, next_iter.type.sgl.frag_offset);
 
     ucp_datatype_iter_copy_position(&m_dt_iter, &next_iter,
                                     UCS_BIT(UCP_DATATYPE_SGL));
     EXPECT_TRUE(ucp_datatype_iter_is_end(&m_dt_iter));
-    EXPECT_EQ(0u, m_dt_iter.type.sgl.elem_offset);
+    EXPECT_EQ(0u, m_dt_iter.type.sgl.frag_offset);
 }
 
 UCS_TEST_F(test_ucp_dt_sgl, iter_next_skip_zero_length) {
@@ -560,7 +560,7 @@ UCS_TEST_F(test_ucp_dt_sgl, iter_next_skip_zero_length) {
     EXPECT_EQ(m_buffers[0], buffer);
     EXPECT_EQ(64u, length);
     EXPECT_EQ(1u, next_iter.offset);
-    EXPECT_EQ(0u, next_iter.type.sgl.elem_offset);
+    EXPECT_EQ(0u, next_iter.type.sgl.frag_offset);
     ucp_datatype_iter_copy_position(&m_dt_iter, &next_iter,
                                     UCS_BIT(UCP_DATATYPE_SGL));
 
@@ -574,7 +574,7 @@ UCS_TEST_F(test_ucp_dt_sgl, iter_next_skip_zero_length) {
     EXPECT_EQ(32u, length);
     EXPECT_EQ(m_remote_addrs[2], remote_addr);
     EXPECT_EQ(3u, next_iter.offset);
-    EXPECT_EQ(0u, next_iter.type.sgl.elem_offset);
+    EXPECT_EQ(0u, next_iter.type.sgl.frag_offset);
     ucp_datatype_iter_copy_position(&m_dt_iter, &next_iter,
                                     UCS_BIT(UCP_DATATYPE_SGL));
     EXPECT_TRUE(ucp_datatype_iter_is_end(&m_dt_iter));
@@ -598,11 +598,11 @@ UCS_TEST_F(test_ucp_dt_sgl, iter_seek) {
     ucp_datatype_iter_copy_position(&m_dt_iter, &next_iter,
                                     UCS_BIT(UCP_DATATYPE_SGL));
     EXPECT_EQ(0u, m_dt_iter.offset);
-    EXPECT_EQ(MAX_FRAG, m_dt_iter.type.sgl.elem_offset);
+    EXPECT_EQ(MAX_FRAG, m_dt_iter.type.sgl.frag_offset);
 
     ucp_datatype_iter_seek(&m_dt_iter, 1, UCS_BIT(UCP_DATATYPE_SGL));
     EXPECT_EQ(1u, m_dt_iter.offset);
-    EXPECT_EQ(0u, m_dt_iter.type.sgl.elem_offset);
+    EXPECT_EQ(0u, m_dt_iter.type.sgl.frag_offset);
     EXPECT_FALSE(ucp_datatype_iter_is_end(&m_dt_iter));
 
     next_iter  = {};
@@ -617,7 +617,7 @@ UCS_TEST_F(test_ucp_dt_sgl, iter_seek) {
 
     ucp_datatype_iter_seek(&m_dt_iter, 2, UCS_BIT(UCP_DATATYPE_SGL));
     EXPECT_EQ(2u, m_dt_iter.offset);
-    EXPECT_EQ(0u, m_dt_iter.type.sgl.elem_offset);
+    EXPECT_EQ(0u, m_dt_iter.type.sgl.frag_offset);
     EXPECT_TRUE(ucp_datatype_iter_is_end(&m_dt_iter));
 }
 
@@ -639,11 +639,11 @@ UCS_TEST_F(test_ucp_dt_sgl, iter_rewind) {
     ucp_datatype_iter_copy_position(&m_dt_iter, &next_iter,
                                     UCS_BIT(UCP_DATATYPE_SGL));
     EXPECT_EQ(0u, m_dt_iter.offset);
-    EXPECT_EQ(MAX_FRAG, m_dt_iter.type.sgl.elem_offset);
+    EXPECT_EQ(MAX_FRAG, m_dt_iter.type.sgl.frag_offset);
 
     ucp_datatype_iter_rewind(&m_dt_iter, UCS_BIT(UCP_DATATYPE_SGL));
     EXPECT_EQ(0u, m_dt_iter.offset);
-    EXPECT_EQ(0u, m_dt_iter.type.sgl.elem_offset);
+    EXPECT_EQ(0u, m_dt_iter.type.sgl.frag_offset);
     EXPECT_FALSE(ucp_datatype_iter_is_end(&m_dt_iter));
 
     std::vector<size_t> elem_progress(2, 0);
