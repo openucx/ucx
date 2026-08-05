@@ -61,6 +61,12 @@ libuct_ib_la_SOURCES += \
 
 endif # HAVE_TL_UD
 
+if HAVE_IB_SHIM
+noinst_HEADERS += \
+	base/ib_dlopen.h
+libuct_ib_la_SOURCES += base/ib_verbs_dlopen.c
+endif
+
 PKG_CONFIG_NAME=ib
 
 include $(top_srcdir)/config/module.am

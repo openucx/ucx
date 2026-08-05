@@ -13,9 +13,22 @@ AC_ARG_WITH([verbs],
         [],
         [with_verbs=/usr])
 
+AC_ARG_ENABLE([ib-shim],
+              [AS_HELP_STRING([--enable-ib-shim],
+                              [Load libibverbs and libmlx5 at runtime
+                               instead of linking them directly])],
+              [],
+              [enable_ib_shim=no])
+
 AS_IF([test "x$with_verbs" = "xyes"], [with_verbs=/usr])
 AS_IF([test -d "$with_verbs"], [with_ib=yes; str="with verbs support from $with_verbs"], [with_ib=no; str="without verbs support"])
 AS_IF([test -d "$with_verbs/lib64"],[libsuff="64"],[libsuff=""])
+
+AS_IF([test "x$enable_ib_shim" = xyes -a \
+            "x$with_ib" = xyes -a \
+            "x$enable_shared" = xno -a \
+            "x$enable_static" = xyes],
+      [LDFLAGS="$LDFLAGS -Wl,-u,ucs_init"])
 
 AC_MSG_NOTICE([Compiling $str])
 
@@ -101,14 +114,27 @@ AS_IF([test "x$with_ib" = "xyes"],
         CPPFLAGS="$verbs_incl $CPPFLAGS"
         AC_CHECK_HEADER([infiniband/verbs.h], [],
                         [AC_MSG_WARN([ibverbs header files not found]); with_ib=no])
-        AC_CHECK_LIB([ibverbs], [ibv_get_device_list],
-            [
-            AC_SUBST(IBVERBS_LDFLAGS,  ["$verbs_libs -libverbs"])
-            AC_SUBST(IBVERBS_DIR,      ["$with_verbs"])
-            AC_SUBST(IBVERBS_CPPFLAGS, ["$verbs_incl"])
-            AC_SUBST(IBVERBS_CFLAGS,   ["$verbs_incl"])
-            ],
-            [AC_MSG_WARN([libibverbs not found]); with_ib=no])
+        AS_IF([test "x$enable_ib_shim" = "xyes"],
+              [AS_IF([test "x$with_ib" = "xyes"],
+                     [
+                     AC_DEFINE([HAVE_IB_SHIM], 1, [IB shim support])
+                     AC_SUBST(IBVERBS_LDFLAGS,  ["-ldl"])
+                     AC_SUBST(IBVERBS_DIR,      ["$with_verbs"])
+                     AC_SUBST(IBVERBS_CPPFLAGS, ["$verbs_incl"])
+                     AC_SUBST(IBVERBS_CFLAGS,   ["$verbs_incl"])
+                     AC_SUBST(IBVERBS_REQUIRES, [""])
+                     AC_SUBST(MLX5_REQUIRES,    [""])
+                     ])],
+              [AC_CHECK_LIB([ibverbs], [ibv_get_device_list],
+                   [
+                   AC_SUBST(IBVERBS_LDFLAGS,  ["$verbs_libs -libverbs"])
+                   AC_SUBST(IBVERBS_DIR,      ["$with_verbs"])
+                   AC_SUBST(IBVERBS_CPPFLAGS, ["$verbs_incl"])
+                   AC_SUBST(IBVERBS_CFLAGS,   ["$verbs_incl"])
+                   AC_SUBST(IBVERBS_REQUIRES, ["libibverbs"])
+                   AC_SUBST(MLX5_REQUIRES,    ["libmlx5"])
+                   ],
+                   [AC_MSG_WARN([libibverbs not found]); with_ib=no])])
 
         have_ib_funcs=yes
         LDFLAGS="$LDFLAGS $IBVERBS_LDFLAGS"
@@ -147,11 +173,14 @@ AS_IF([test "x$with_ib" = "xyes"],
 
               AC_MSG_NOTICE([Checking for DV bare-metal support])
 
-              AC_CHECK_LIB([mlx5-rdmav2], [mlx5dv_query_device],
-                                    [AC_SUBST(LIB_MLX5, [-lmlx5-rdmav2])],[
-              AC_CHECK_LIB([mlx5], [mlx5dv_query_device],
-                                    [AC_SUBST(LIB_MLX5, [-lmlx5])],
-                                    [have_mlx5=no], [-libverbs])], [-libverbs])
+              AS_IF([test "x$enable_ib_shim" = "xyes"],
+                    [AC_SUBST(LIB_MLX5, [])],
+                    [AC_CHECK_LIB([mlx5-rdmav2], [mlx5dv_query_device],
+                                       [AC_SUBST(LIB_MLX5, [-lmlx5-rdmav2])],[
+                     AC_CHECK_LIB([mlx5], [mlx5dv_query_device],
+                                       [AC_SUBST(LIB_MLX5, [-lmlx5])],
+                                       [have_mlx5=no],
+                                       [-libverbs])], [-libverbs])])
 
               AS_IF([test "x$have_mlx5" = xyes], [
                        AC_CHECK_HEADERS([infiniband/mlx5dv.h],
@@ -286,7 +315,13 @@ AS_IF([test "x$with_ib" = "xyes"],
         AS_IF([test "x$have_mlx5" = xyes], [
            AC_CHECK_DECLS([MLX5DV_CONTEXT_MASK_OOO_RECV_WRS],
                [AC_DEFINE([HAVE_OOO_RECV_WRS], 1, [Have DDP support])],
-               [], [[#include <infiniband/mlx5dv.h>]])])
+               [], [[#include <infiniband/mlx5dv.h>]])
+
+           # Direct NIC support, from IB side
+           AC_CHECK_DECLS([mlx5dv_get_data_direct_sysfs_path,
+                           mlx5dv_reg_dmabuf_mr], [], [],
+                          [[#include <infiniband/mlx5dv.h>]])
+        ])
 
        # RDMA netlink support requires defines from rdma_netlink.h and the
        # ability to get netlink index from ibv_device struct.
@@ -333,6 +368,8 @@ AS_IF([test "x$with_ib" = "xyes"],
 # For automake
 #
 AM_CONDITIONAL([HAVE_IB],      [test "x$with_ib" != xno])
+AM_CONDITIONAL([HAVE_IB_SHIM],
+               [test "x$enable_ib_shim" = xyes -a "x$with_ib" != xno])
 AM_CONDITIONAL([HAVE_MLX5_DV], [test "x$have_mlx5" = xyes])
 AM_CONDITIONAL([HAVE_TL_RC],   [test "x$with_rc" != xno])
 AM_CONDITIONAL([HAVE_TL_DC],   [test "x$with_dc" != xno])
