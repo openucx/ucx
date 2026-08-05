@@ -15,20 +15,20 @@
 #define UCT_IB_VERBS_LIB_NAME  "libibverbs.so.1"
 
 #ifdef HAVE_NETLINK_RDMA
-#define UCT_IB_VERBS_OPTIONAL_NETLINK_OPS(_op, _module, _ops) \
+#define UCT_IB_VERBS_NETLINK_OPS(_op, _module, _ops) \
     _op(_module, _ops, int, -1, ibv_get_device_index, \
         (struct ibv_device *device), (device))
 #else
-#define UCT_IB_VERBS_OPTIONAL_NETLINK_OPS(_op, _module, _ops)
+#define UCT_IB_VERBS_NETLINK_OPS(_op, _module, _ops)
 #endif
 
 #if HAVE_DECL_IBV_REG_DMABUF_MR
-#define UCT_IB_VERBS_OPTIONAL_DMABUF_OPS(_op, _module, _ops) \
+#define UCT_IB_VERBS_DMABUF_OPS(_op, _module, _ops) \
     _op(_module, _ops, struct ibv_mr *, NULL, ibv_reg_dmabuf_mr, \
         (struct ibv_pd *pd, uint64_t offset, size_t length, uint64_t iova, \
          int fd, int access), (pd, offset, length, iova, fd, access))
 #else
-#define UCT_IB_VERBS_OPTIONAL_DMABUF_OPS(_op, _module, _ops)
+#define UCT_IB_VERBS_DMABUF_OPS(_op, _module, _ops)
 #endif
 
 #if HAVE_DECL_IBV_SET_ECE
@@ -191,8 +191,8 @@
         (enum ibv_node_type node_type), (node_type))
 
 #define UCT_IB_VERBS_OPTIONAL_OPS(_op, _void_op, _module, _ops) \
-    UCT_IB_VERBS_OPTIONAL_NETLINK_OPS(_op, _module, _ops) \
-    UCT_IB_VERBS_OPTIONAL_DMABUF_OPS(_op, _module, _ops) \
+    UCT_IB_VERBS_NETLINK_OPS(_op, _module, _ops) \
+    UCT_IB_VERBS_DMABUF_OPS(_op, _module, _ops) \
     UCT_IB_VERBS_ECE_OPS(_op, _module, _ops) \
     UCT_IB_VERBS_OPTIONAL_QUERY_DEVICE_EX_OPS(_op, _module, _ops) \
     UCT_IB_VERBS_OPTIONAL_CREATE_QP_EX_OPS(_op, _module, _ops) \
