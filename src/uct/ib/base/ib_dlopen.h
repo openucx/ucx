@@ -3,6 +3,8 @@
 
 #include "ib_verbs.h"
 
+#include <ucs/debug/assert.h>
+
 #include <dlfcn.h>
 #include <errno.h>
 #include <pthread.h>
@@ -153,10 +155,7 @@ static inline int uct_ib_dlopen_errno(uct_ib_dlopen_status_t status)
         if (_module##_init() != 0) { \
             return (_fail); \
         } \
-        if ((_ops)._name == NULL) { \
-            errno = ENOSYS; \
-            return (_fail); \
-        } \
+        ucs_assert((_ops)._name != NULL); \
         return (_ops)._name _call; \
     }
 
@@ -164,9 +163,8 @@ static inline int uct_ib_dlopen_errno(uct_ib_dlopen_status_t status)
     void _name _proto \
     { \
         if (_module##_init() == 0) { \
-            if ((_ops)._name != NULL) { \
-                (_ops)._name _call; \
-            } \
+            ucs_assert((_ops)._name != NULL); \
+            (_ops)._name _call; \
         } \
     }
 
