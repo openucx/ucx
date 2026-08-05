@@ -24,14 +24,28 @@
     _op(_module, _ops, mlx5dv_devx_destroy_event_channel, \
         (struct mlx5dv_devx_event_channel *event_channel), (event_channel))
 
-#define UCT_IB_MLX5_OPTIONAL_OPS(_op, _void_op, _module, _ops) \
+#if HAVE_DECL_MLX5DV_REG_DMABUF_MR
+#define UCT_IB_MLX5_DMABUF_OPS(_op, _module, _ops) \
     _op(_module, _ops, struct ibv_mr *, NULL, mlx5dv_reg_dmabuf_mr, \
         (struct ibv_pd *pd, uint64_t offset, size_t length, uint64_t iova, \
          int fd, int access, int mlx5_access), \
-        (pd, offset, length, iova, fd, access, mlx5_access)) \
+        (pd, offset, length, iova, fd, access, mlx5_access))
+#else
+#define UCT_IB_MLX5_DMABUF_OPS(_op, _module, _ops)
+#endif
+
+#if HAVE_DECL_MLX5DV_GET_DATA_DIRECT_SYSFS_PATH
+#define UCT_IB_MLX5_DATA_DIRECT_OPS(_op, _module, _ops) \
     _op(_module, _ops, int, -1, mlx5dv_get_data_direct_sysfs_path, \
         (struct ibv_context *context, char *buf, size_t buf_len), \
         (context, buf, buf_len))
+#else
+#define UCT_IB_MLX5_DATA_DIRECT_OPS(_op, _module, _ops)
+#endif
+
+#define UCT_IB_MLX5_OPTIONAL_OPS(_op, _void_op, _module, _ops) \
+    UCT_IB_MLX5_DMABUF_OPS(_op, _module, _ops) \
+    UCT_IB_MLX5_DATA_DIRECT_OPS(_op, _module, _ops)
 
 #define UCT_IB_MLX5_FWD_OPS(_op, _module, _ops) \
     _op(_module, _ops, bool, false, mlx5dv_is_supported, \
