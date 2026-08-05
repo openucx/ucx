@@ -61,7 +61,7 @@ libuct_ib_la_SOURCES += \
 
 endif # HAVE_TL_UD
 
-if HAVE_IB_DLOPEN_SHIM
+if HAVE_IB_SHIM
 noinst_HEADERS += \
 	base/ib_dlopen.h
 libuct_ib_la_SOURCES += base/ib_verbs_dlopen.c

@@ -22,7 +22,7 @@
 #include <ucs/type/status.h>
 #include <ucs/debug/log.h>
 
-#if defined(HAVE_IB_DLOPEN_SHIM)
+#if defined(HAVE_IB_SHIM)
 typedef enum {
     UCT_IB_DLOPEN_STATUS_OK,
     UCT_IB_DLOPEN_STATUS_NO_LIB,

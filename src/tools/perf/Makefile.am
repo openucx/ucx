@@ -35,7 +35,7 @@ ucx_perftest_LDADD    = \
 	$(abs_top_builddir)/src/ucs/libucs.la \
 	lib/libucxperf.la
 
-if HAVE_IB_DLOPEN_SHIM
+if HAVE_IB_SHIM
 ucx_perftest_LDFLAGS += -Wl,-u,uct_ib_init
 ucx_perftest_LDADD   += \
 	$(abs_top_builddir)/src/uct/ib/libuct_ib.la
@@ -45,7 +45,7 @@ ucx_perftest_LDFLAGS += -Wl,-u,uct_mlx5_init
 ucx_perftest_LDADD   += \
 	$(abs_top_builddir)/src/uct/ib/mlx5/libuct_ib_mlx5.la
 endif
-endif # HAVE_IB_DLOPEN_SHIM
+endif # HAVE_IB_SHIM
 
 perftestdir = $(pkgdatadir)/perftest
 dist_perftest_DATA = \
