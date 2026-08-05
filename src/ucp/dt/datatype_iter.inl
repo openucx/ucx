@@ -652,13 +652,14 @@ ucp_datatype_iter_next_sgl_frags(const ucp_datatype_iter_t *dt_iter,
 
     ucs_assert(dt_iter->dt_class == UCP_DATATYPE_SGL);
     ucs_assert(max_frag_count >= 1);
+    ucs_assert(max_frag_length > 0);
     ucp_datatype_iter_sgl_check(dt_iter);
 
     while ((desc_count < max_frag_count) && (elem_index < dt_iter->length)) {
         elem_length = dt_iter->type.sgl.lengths[elem_index];
         if (elem_length > 0) {
+            ucs_assert(elem_length > elem_offset);
             frag_length = ucs_min(elem_length - elem_offset, max_frag_length);
-            ucs_assert(frag_length > 0);
 
             out_buffers[desc_count]      = UCS_PTR_BYTE_OFFSET(
                     dt_iter->type.sgl.buffers[elem_index], elem_offset);
