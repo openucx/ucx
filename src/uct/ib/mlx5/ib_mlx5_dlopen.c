@@ -24,6 +24,15 @@
     _op(_module, _ops, mlx5dv_devx_destroy_event_channel, \
         (struct mlx5dv_devx_event_channel *event_channel), (event_channel))
 
+#define UCT_IB_MLX5_OPTIONAL_OPS(_op, _void_op, _module, _ops) \
+    _op(_module, _ops, struct ibv_mr *, NULL, mlx5dv_reg_dmabuf_mr, \
+        (struct ibv_pd *pd, uint64_t offset, size_t length, uint64_t iova, \
+         int fd, int access, int mlx5_access), \
+        (pd, offset, length, iova, fd, access, mlx5_access)) \
+    _op(_module, _ops, int, -1, mlx5dv_get_data_direct_sysfs_path, \
+        (struct ibv_context *context, char *buf, size_t buf_len), \
+        (context, buf, buf_len))
+
 #define UCT_IB_MLX5_FWD_OPS(_op, _module, _ops) \
     _op(_module, _ops, bool, false, mlx5dv_is_supported, \
         (struct ibv_device *device), (device)) \
@@ -47,13 +56,6 @@
         (struct mlx5dv_mkey_init_attr *mkey_init_attr), (mkey_init_attr)) \
     _op(_module, _ops, int, -1, mlx5dv_destroy_mkey, \
         (struct mlx5dv_mkey *mkey), (mkey)) \
-    _op(_module, _ops, struct ibv_mr *, NULL, mlx5dv_reg_dmabuf_mr, \
-        (struct ibv_pd *pd, uint64_t offset, size_t length, uint64_t iova, \
-         int fd, int access, int mlx5_access), \
-        (pd, offset, length, iova, fd, access, mlx5_access)) \
-    _op(_module, _ops, int, -1, mlx5dv_get_data_direct_sysfs_path, \
-        (struct ibv_context *context, char *buf, size_t buf_len), \
-        (context, buf, buf_len)) \
     _op(_module, _ops, struct mlx5dv_devx_obj *, NULL, \
         mlx5dv_devx_obj_create, \
         (struct ibv_context *context, const void *in, size_t inlen, \
@@ -106,9 +108,13 @@
          struct mlx5dv_devx_async_event_hdr *event_data, \
          size_t event_resp_len), (event_channel, event_data, event_resp_len))
 
-#define UCT_IB_MLX5_OPS(_op, _void_op, _module, _ops) \
+#define UCT_IB_MLX5_MANDATORY_OPS(_op, _void_op, _module, _ops) \
     UCT_IB_MLX5_FWD_OPS(_op, _module, _ops) \
     UCT_IB_MLX5_VOID_OPS(_void_op, _module, _ops)
+
+#define UCT_IB_MLX5_OPS(_op, _void_op, _module, _ops) \
+    UCT_IB_MLX5_MANDATORY_OPS(_op, _void_op, _module, _ops) \
+    UCT_IB_MLX5_OPTIONAL_OPS(_op, _void_op, _module, _ops)
 
 typedef struct uct_ib_mlx5_ops {
     UCT_IB_MLX5_OPS(UCT_IB_DLOPEN_OP_FIELD, UCT_IB_DLOPEN_VOID_OP_FIELD,
@@ -116,8 +122,11 @@ typedef struct uct_ib_mlx5_ops {
 } uct_ib_mlx5_ops_t;
 
 UCT_IB_DLOPEN_DEFINE_MODULE(uct_ib_mlx5, UCT_IB_MLX5_LIB_NAME,
-                            uct_ib_mlx5_ops_t, UCT_IB_MLX5_OPS,
+                            uct_ib_mlx5_ops_t, UCT_IB_MLX5_MANDATORY_OPS,
+                            UCT_IB_MLX5_OPTIONAL_OPS,
                             uct_ib_mlx5_dlopen_check)
 
 UCT_IB_MLX5_FWD_OPS(UCT_IB_DLOPEN_FWD_OP, uct_ib_mlx5, uct_ib_mlx5_ops)
 UCT_IB_MLX5_VOID_OPS(UCT_IB_DLOPEN_FWD_VOID_OP, uct_ib_mlx5, uct_ib_mlx5_ops)
+UCT_IB_MLX5_OPTIONAL_OPS(UCT_IB_DLOPEN_FWD_OP, UCT_IB_DLOPEN_FWD_VOID_OP,
+                         uct_ib_mlx5, uct_ib_mlx5_ops)
