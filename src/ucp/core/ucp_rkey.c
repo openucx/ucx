@@ -234,10 +234,15 @@ UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_memh,
     }
 
     if (md_map != 0) {
-        /* Since UCX 1.20: always pack sys_dev for non-empty rkeys. */
+        /* Since UCX 1.20: always pack sys_dev for non-empty rkeys. Prefer
+         * the current buffer detection result when it is more specific than
+         * the cached/registered memory handle, so protocol selection can use
+         * the actual remote buffer placement.
+         */
         ucs_assert(memh != NULL);
 
-        sys_dev = memh->sys_dev;
+        sys_dev = (mem_info->sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) ?
+                          mem_info->sys_dev : memh->sys_dev;
         if (ucp_memh_send_flush_is_needed(memh)) {
             sys_dev |= UCP_SYS_DEVICE_FLUSH_BIT;
         }

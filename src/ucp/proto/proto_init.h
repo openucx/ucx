@@ -57,12 +57,80 @@ ucp_proto_init_add_memreg_time(const ucp_proto_common_init_params_t *params,
                                size_t range_end, ucp_proto_perf_t *perf);
 
 
+typedef struct {
+    ucp_proto_perf_factors_t       perf_factors;
+    uct_perf_attr_t                perf_attr;
+    ucp_proto_perf_factor_id_t     factor_id;
+    ucp_rsc_index_t                rsc_index;
+    ucp_md_map_t                   md_map;
+    ucs_memory_type_t              src_mem_type;
+    ucs_memory_type_t              dst_mem_type;
+} ucp_proto_init_buffer_copy_perf_t;
+
+
+typedef enum {
+    UCP_PROTO_INIT_BUFFER_COPY_FLAG_NONE = 0,
+    UCP_PROTO_INIT_BUFFER_COPY_FLAG_ATTACHED_HOST_STAGING  = UCS_BIT(0),
+    UCP_PROTO_INIT_BUFFER_COPY_FLAG_SKIP_SEND_PRE_OVERHEAD = UCS_BIT(1)
+} ucp_proto_init_buffer_copy_flags_t;
+
+
+unsigned
+ucp_proto_init_memtype_copy_shared_divisor(ucp_worker_h worker,
+                                           const uct_perf_attr_t *perf_attr,
+                                           ucs_memory_type_t mem_type1,
+                                           ucs_sys_device_t sys_dev1,
+                                           ucs_memory_type_t mem_type2,
+                                           ucs_sys_device_t sys_dev2,
+                                           unsigned flags);
+
+uct_perf_attr_host_memory_class_t
+ucp_proto_init_buffer_copy_host_memory_class(
+        const ucp_proto_common_init_params_t *params,
+        ucs_memory_type_t buffer_mem_type);
+
+unsigned
+ucp_proto_init_buffer_copy_flags(
+        ucs_memory_type_t local_mem_type,
+        uct_perf_attr_host_memory_class_t local_host_mem_class,
+        ucs_memory_type_t remote_mem_type,
+        uct_perf_attr_host_memory_class_t remote_host_mem_class, unsigned flags);
+
+ucs_status_t
+ucp_proto_init_buffer_copy_perf(ucp_worker_h worker,
+                                ucs_memory_type_t local_mem_type,
+                                ucs_memory_type_t remote_mem_type,
+                                ucs_sys_device_t local_sys_dev,
+                                ucs_sys_device_t remote_sys_dev,
+                                uct_ep_operation_t memtype_op,
+                                uct_perf_attr_host_memory_class_t
+                                        local_host_mem_class,
+                                uct_perf_attr_host_memory_class_t
+                                        remote_host_mem_class,
+                                ucs_memory_type_t scope_mem_type1,
+                                ucs_sys_device_t scope_sys_dev1,
+                                ucs_memory_type_t scope_mem_type2,
+                                ucs_sys_device_t scope_sys_dev2,
+                                unsigned flags, int local,
+                                ucp_proto_init_buffer_copy_perf_t *copy_perf);
+
 ucs_status_t
 ucp_proto_init_add_buffer_copy_time(ucp_worker_h worker, const char *title,
                                     ucs_memory_type_t local_mem_type,
                                     ucs_memory_type_t remote_mem_type,
+                                    ucs_sys_device_t local_sys_dev,
+                                    ucs_sys_device_t remote_sys_dev,
+                                    uct_perf_attr_host_memory_class_t
+                                            local_host_mem_class,
+                                    uct_perf_attr_host_memory_class_t
+                                            remote_host_mem_class,
                                     uct_ep_operation_t memtype_op,
-                                    size_t range_start, size_t range_end,
+                                    ucs_memory_type_t scope_mem_type1,
+                                    ucs_sys_device_t scope_sys_dev1,
+                                    ucs_memory_type_t scope_mem_type2,
+                                    ucs_sys_device_t scope_sys_dev2,
+                                    unsigned flags, size_t range_start,
+                                    size_t range_end,
                                     int local, ucp_proto_perf_t *perf);
 
 

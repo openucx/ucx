@@ -119,7 +119,9 @@ ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
             continue;
         }
 
-        frag_seg = ucp_proto_perf_add_ppln(proto->perf, ppln_perf, SIZE_MAX);
+        frag_seg = ucp_proto_perf_add_ppln_staged(
+                proto->perf, ppln_perf, SIZE_MAX, proto->staged_pipeline,
+                proto->num_staged_pipeline_stages);
         if (frag_seg == NULL) {
             goto out_destroy_ppln_perf;
         }
