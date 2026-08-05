@@ -142,12 +142,66 @@ ucp_device_detect_local_sys_dev(ucp_context_h context,
     return UCS_OK;
 }
 
+static int ucp_device_md_is_reachable(ucp_context_h context,
+                                      ucp_md_index_t md_index,
+                                      ucs_sys_device_t local_sys_dev)
+{
+    ucp_sys_dev_map_t sys_dev_map = context->tl_mds[md_index].sys_dev_map;
+    ucs_sys_device_t sys_dev;
+
+    ucs_for_each_bit(sys_dev, sys_dev_map) {
+        if (!ucs_topo_is_reachable(sys_dev, local_sys_dev)) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+/* Select the MDs on which a memory handle for local_sys_dev is expected to be
+ * registered. Local and remote device lists must use the same map to keep
+ * their lane indices aligned. */
+static ucp_md_map_t
+ucp_device_get_reg_md_map(ucp_context_h context, ucs_memory_type_t mem_type,
+                          ucs_sys_device_t local_sys_dev)
+{
+    ucp_md_map_t reg_md_map = context->reg_md_map[mem_type];
+    ucp_md_map_t net_md_map;
+    ucp_md_index_t md_index;
+
+    if ((mem_type == UCS_MEMORY_TYPE_CUDA) &&
+        (local_sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN)) {
+        net_md_map = ucp_context_get_net_md_map(context);
+        reg_md_map = (reg_md_map & ~net_md_map) |
+                     ucp_context_select_reg_mds(context,
+                                                reg_md_map & net_md_map,
+                                                local_sys_dev);
+    }
+
+    /* Mirror DMA-BUF reachability filtering in memory registration. */
+    if (context->dmabuf_mds[mem_type] != UCP_NULL_RESOURCE) {
+        ucs_for_each_bit(md_index, reg_md_map & context->dmabuf_reg_md_map) {
+            if (!ucp_device_md_is_reachable(context, md_index,
+                                             local_sys_dev)) {
+                reg_md_map &= ~UCS_BIT(md_index);
+            }
+        }
+    }
+
+    return reg_md_map;
+}
+
 static void
 ucp_device_get_tl_bitmap(const ucp_worker_h worker,
                          ucp_tl_bitmap_t tl_bitmap[UCP_DEVICE_TL_TYPE_LAST],
+                         ucs_memory_type_t mem_type,
                          ucs_sys_device_t local_sys_dev)
 {
+    ucp_context_h context   = worker->context;
+    ucp_md_map_t reg_md_map = ucp_device_get_reg_md_map(
+            context, mem_type, local_sys_dev);
     const ucp_worker_iface_t *wiface;
+    ucp_md_index_t md_index;
     ucp_rsc_index_t tl_id;
     int tl_type;
 
@@ -157,7 +211,7 @@ ucp_device_get_tl_bitmap(const ucp_worker_h worker,
         UCS_STATIC_BITMAP_RESET_ALL(&tl_bitmap[tl_type]);
     }
 
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &worker->context->tl_bitmap) {
+    UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &context->tl_bitmap) {
         wiface = ucp_worker_iface(worker, tl_id);
 
         if (!(wiface->attr.cap.flags & UCT_IFACE_FLAG_DEVICE_EP)) {
@@ -170,6 +224,11 @@ ucp_device_get_tl_bitmap(const ucp_worker_h worker,
         }
 
         if (wiface->attr.cap.flags & UCT_IFACE_FLAG_DEVICE_LKEY) {
+            md_index = context->tl_rscs[tl_id].md_index;
+            if (!(reg_md_map & UCS_BIT(md_index))) {
+                continue;
+            }
+
             tl_type = UCP_DEVICE_TL_TYPE_LKEY;
         } else {
             tl_type = UCP_DEVICE_TL_TYPE_NOLKEY;
@@ -257,7 +316,7 @@ static ucs_status_t ucp_device_local_mem_list_create_handle(
     ucp_rsc_index_t tl_id;
     void *local_addr;
 
-    ucp_device_get_tl_bitmap(worker, tl_bitmap, local_sys_dev);
+    ucp_device_get_tl_bitmap(worker, tl_bitmap, mem_type, local_sys_dev);
     num_lanes = UCS_STATIC_BITMAP_POPCOUNT(tl_bitmap[tl_type]);
 
     uct_elem_size = sizeof(uct_device_local_mem_elem_t) +
@@ -409,9 +468,11 @@ static ucp_lane_index_t ucp_device_ep_find_lane(const ucp_ep_h ep, ucp_rsc_index
     return UCP_NULL_LANE;
 }
 
-static int
-ucp_device_ep_check_lanes(const ucp_ep_h ep, ucp_tl_bitmap_t *tl_bitmap)
+static int ucp_device_ep_check_lanes(const ucp_ep_h ep, const ucp_rkey_h rkey,
+                                     ucp_tl_bitmap_t *tl_bitmap)
 {
+    const ucp_ep_config_t *ep_config = ucp_ep_config(ep);
+    ucp_md_index_t dst_md_index;
     ucp_lane_index_t lane;
     ucp_rsc_index_t tl_id;
 
@@ -422,6 +483,12 @@ ucp_device_ep_check_lanes(const ucp_ep_h ep, ucp_tl_bitmap_t *tl_bitmap)
     UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, tl_bitmap) {
         lane = ucp_device_ep_find_lane(ep, tl_id);
         if (lane == UCP_NULL_LANE) {
+            return 0;
+        }
+
+        dst_md_index = ep_config->key.lanes[lane].dst_md_index;
+        if ((dst_md_index == UCP_NULL_RESOURCE) ||
+            !(rkey->md_map & UCS_BIT(dst_md_index))) {
             return 0;
         }
     }
@@ -560,7 +627,7 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
         return status;
     }
 
-    ucp_device_get_tl_bitmap(ep->worker, tl_bitmap, local_sys_dev);
+    ucp_device_get_tl_bitmap(ep->worker, tl_bitmap, mem_type, local_sys_dev);
 
     /* handle->num_lanes is the least common multiple of both lane types, so:
      * - each lane is replicated num_lanes / popcount(tl_bitmap) times
@@ -569,8 +636,8 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
     num_lanes = UCS_STATIC_BITMAP_POPCOUNT(tl_bitmap[UCP_DEVICE_TL_TYPE_LKEY]);
     if (!num_lanes) {
         if (!UCS_STATIC_BITMAP_POPCOUNT(tl_bitmap[UCP_DEVICE_TL_TYPE_NOLKEY])) {
-            ucs_error("failed to pack uct memory element for first element");
-            return UCS_ERR_INVALID_PARAM;
+            ucs_debug("no device transports available");
+            return UCS_ERR_NO_DEVICE;
         }
 
         ucs_assert(UCS_STATIC_BITMAP_POPCOUNT(
@@ -594,14 +661,15 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
             for (tl_type = UCP_DEVICE_TL_TYPE_FIRST;
                  tl_type < UCP_DEVICE_TL_TYPE_LAST; tl_type++) {
                 if (ucp_device_ep_check_lanes(ucp_element->ep,
+                                              ucp_element->rkey,
                                               &tl_bitmap[tl_type])) {
                     break;
                 }
             }
 
             if (tl_type == UCP_DEVICE_TL_TYPE_LAST) {
-                ucs_error("lane not found for element %zd", i);
-                status =  UCS_ERR_INVALID_PARAM;
+                ucs_debug("no device lanes found for element %zu", i);
+                status = UCS_ERR_NO_DEVICE;
                 goto out;
             }
 
