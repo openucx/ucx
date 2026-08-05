@@ -638,7 +638,8 @@ ucp_datatype_iter_next_iov(const ucp_datatype_iter_t *dt_iter,
 
 static UCS_F_ALWAYS_INLINE size_t
 ucp_datatype_iter_next_sgl_frags(const ucp_datatype_iter_t *dt_iter,
-                                 size_t max_count, size_t max_frag_length,
+                                 size_t max_frag_count,
+                                 size_t max_frag_length,
                                  ucp_datatype_iter_t *next_iter,
                                  void **out_buffers, size_t *out_lengths,
                                  uint64_t *out_remote_addrs,
@@ -650,10 +651,10 @@ ucp_datatype_iter_next_sgl_frags(const ucp_datatype_iter_t *dt_iter,
     size_t elem_length, frag_length;
 
     ucs_assert(dt_iter->dt_class == UCP_DATATYPE_SGL);
-    ucs_assert(max_count >= 1);
+    ucs_assert(max_frag_count >= 1);
     ucp_datatype_iter_sgl_check(dt_iter);
 
-    while ((desc_count < max_count) && (elem_index < dt_iter->length)) {
+    while ((desc_count < max_frag_count) && (elem_index < dt_iter->length)) {
         elem_length = dt_iter->type.sgl.lengths[elem_index];
         if (elem_length > 0) {
             frag_length = ucs_min(elem_length - elem_offset, max_frag_length);
