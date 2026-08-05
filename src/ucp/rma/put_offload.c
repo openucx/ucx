@@ -377,7 +377,7 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
     ucp_md_index_t md_index      = ucp_ep_md_index(ep, lane);
     ucp_rsc_index_t rkey_index   = lpriv->super.rkey_index;
     size_t max_sgl_count         = lpriv->max_put_sgl_zcopy_count;
-    size_t max_frag              = ucs_max(lpriv->max_frag, 1);
+    size_t max_frag_length       = ucs_max(lpriv->max_frag, 1);
     ucp_mem_h *sgl_memhs         = dt_iter->type.sgl.memhs;
     size_t total_size            = max_sgl_count *
                                    (sizeof(void*) + sizeof(size_t) +
@@ -413,9 +413,9 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
                                        max_sgl_count * sizeof(*uct_rkeys));
 
     desc_count = ucp_datatype_iter_next_sgl_frags(dt_iter, max_sgl_count,
-                                                  max_frag, next_iter, buffers,
-                                                  lengths, remote_addrs,
-                                                  elem_indices);
+                                                  max_frag_length, next_iter,
+                                                  buffers, lengths,
+                                                  remote_addrs, elem_indices);
     if (desc_count == 0) {
         status = UCS_OK;
         goto out;
@@ -488,7 +488,7 @@ ucp_proto_put_sgl_offload_sw_send_func(ucp_request_t *req,
     uct_ep_h uct_ep              = ucp_ep_get_lane(ep, lane);
     ucp_md_index_t md_index      = ucp_ep_md_index(ep, lane);
     ucp_rsc_index_t rkey_index   = lpriv->super.rkey_index;
-    size_t max_frag              = ucs_max(lpriv->max_frag, 1);
+    size_t max_frag_length       = ucs_max(lpriv->max_frag, 1);
     ucp_mem_h *sgl_memhs         = dt_iter->type.sgl.memhs;
     void *buffer                 = NULL;
     size_t length                = 0;
@@ -499,7 +499,7 @@ ucp_proto_put_sgl_offload_sw_send_func(ucp_request_t *req,
     uct_iov_t iov;
     ucs_status_t status;
 
-    desc_count = ucp_datatype_iter_next_sgl_frags(dt_iter, 1, max_frag,
+    desc_count = ucp_datatype_iter_next_sgl_frags(dt_iter, 1, max_frag_length,
                                                   next_iter, &buffer, &length,
                                                   &remote_addr, &elem_index);
     if (desc_count == 0) {
@@ -507,9 +507,10 @@ ucp_proto_put_sgl_offload_sw_send_func(ucp_request_t *req,
     }
 
     ucs_assertv(desc_count == 1,
-                "dt_iter=%p offset=%zu length=%zu elem_offset=%zu max_frag=%zu",
+                "dt_iter=%p offset=%zu length=%zu elem_offset=%zu "
+                "max_frag_length=%zu",
                 dt_iter, dt_iter->offset, dt_iter->length,
-                dt_iter->type.sgl.elem_offset, max_frag);
+                dt_iter->type.sgl.elem_offset, max_frag_length);
 
     tl_rkey    = ucp_rkey_get_tl_rkey(dt_iter->type.sgl.rkeys[elem_index],
                                       rkey_index);
