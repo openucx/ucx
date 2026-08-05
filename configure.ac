@@ -81,8 +81,6 @@ AC_PROG_MKDIR_P
 AC_PROG_SED
 AC_PROG_INSTALL
 LT_INIT
-AS_IF([test "x$enable_shared" = xno -a "x$enable_static" = xyes],
-      [LDFLAGS="$LDFLAGS -Wl,-u,ucs_init"])
 LT_LIB_M
 AC_C_RESTRICT
 AC_FUNC_STRERROR_R
@@ -187,6 +185,7 @@ AS_IF([test "x$with_docs_only" = xyes],
      AM_CONDITIONAL([HAVE_STATS], [false])
      AM_CONDITIONAL([HAVE_TUNING], [false])
      AM_CONDITIONAL([HAVE_IB], [false])
+     AM_CONDITIONAL([HAVE_IB_DLOPEN_SHIM], [false])
      AM_CONDITIONAL([HAVE_EFA], [false])
      AM_CONDITIONAL([HAVE_MLX5_HW_UD], [false])
      AM_CONDITIONAL([HAVE_MLX5_DV], [false])

@@ -1222,11 +1222,13 @@ extern uct_tl_t UCT_TL_NAME(ud_mlx5);
 extern uct_ib_md_ops_entry_t UCT_IB_MD_OPS_NAME(devx);
 extern uct_ib_md_ops_entry_t UCT_IB_MD_OPS_NAME(dv);
 
+#if defined(HAVE_IB_DLOPEN_SHIM)
 static int uct_mlx5_initialized;
+#endif
 
 void UCS_F_CTOR uct_mlx5_init(void)
 {
-#if defined (HAVE_MLX5_DV)
+#if defined(HAVE_IB_DLOPEN_SHIM) && defined(HAVE_MLX5_DV)
     uct_ib_dlopen_status_t dlopen_status;
     const char *library_name, *symbol_name, *error_msg;
 
@@ -1243,7 +1245,9 @@ void UCS_F_CTOR uct_mlx5_init(void)
         }
         return;
     }
+#endif
 
+#if defined (HAVE_MLX5_DV)
     ucs_list_add_head(&uct_ib_ops, &UCT_IB_MD_OPS_NAME(dv).list);
 #endif
 #if defined (HAVE_DEVX)
@@ -1259,14 +1263,18 @@ void UCS_F_CTOR uct_mlx5_init(void)
 #if defined (HAVE_TL_UD) && defined (HAVE_MLX5_HW_UD)
     uct_tl_register(&uct_ib_component, &UCT_TL_NAME(ud_mlx5));
 #endif
+#if defined(HAVE_IB_DLOPEN_SHIM)
     uct_mlx5_initialized = 1;
+#endif
 }
 
 void UCS_F_DTOR uct_mlx5_cleanup(void)
 {
+#if defined(HAVE_IB_DLOPEN_SHIM)
     if (!uct_mlx5_initialized) {
         return;
     }
+#endif
 
 #if defined (HAVE_TL_UD) && defined (HAVE_MLX5_HW_UD)
     uct_tl_unregister(&UCT_TL_NAME(ud_mlx5));

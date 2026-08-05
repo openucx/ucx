@@ -1585,7 +1585,9 @@ static uct_ib_md_ops_t uct_ib_verbs_md_ops = {
 
 static UCT_IB_MD_DEFINE_ENTRY(verbs, uct_ib_verbs_md_ops);
 
+#if defined(HAVE_IB_DLOPEN_SHIM)
 static int uct_ib_component_initialized;
+#endif
 
 uct_component_t uct_ib_component = {
     .query_md_resources = uct_ib_query_md_resources,
@@ -1611,10 +1613,13 @@ uct_component_t uct_ib_component = {
 void UCS_F_CTOR uct_ib_init()
 {
     UCS_MODULE_FRAMEWORK_DECLARE(uct_ib);
+#if defined(HAVE_IB_DLOPEN_SHIM)
     uct_ib_dlopen_status_t dlopen_status;
     const char *library_name, *symbol_name, *error_msg;
+#endif
     ssize_t i;
 
+#if defined(HAVE_IB_DLOPEN_SHIM)
     dlopen_status = uct_ib_verbs_dlopen_check(&library_name, &symbol_name,
                                               &error_msg);
     if (dlopen_status != UCT_IB_DLOPEN_STATUS_OK) {
@@ -1627,10 +1632,13 @@ void UCS_F_CTOR uct_ib_init()
         }
         return;
     }
+#endif
 
     ucs_list_add_head(&uct_ib_ops, &UCT_IB_MD_OPS_NAME(verbs).list);
     uct_component_register(&uct_ib_component);
+#if defined(HAVE_IB_DLOPEN_SHIM)
     uct_ib_component_initialized = 1;
+#endif
 
     for (i = 0; i < ucs_static_array_size(uct_ib_tls); i++) {
         uct_tl_register(&uct_ib_component, uct_ib_tls[i]);
@@ -1643,9 +1651,11 @@ void UCS_F_DTOR uct_ib_cleanup()
 {
     ssize_t i;
 
+#if defined(HAVE_IB_DLOPEN_SHIM)
     if (!uct_ib_component_initialized) {
         return;
     }
+#endif
 
     for (i = ucs_static_array_size(uct_ib_tls) - 1; i >= 0; i--) {
         uct_tl_unregister(uct_ib_tls[i]);

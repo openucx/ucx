@@ -22,6 +22,7 @@
 #include <ucs/type/status.h>
 #include <ucs/debug/log.h>
 
+#if defined(HAVE_IB_DLOPEN_SHIM)
 typedef enum {
     UCT_IB_DLOPEN_STATUS_OK,
     UCT_IB_DLOPEN_STATUS_NO_LIB,
@@ -38,6 +39,7 @@ uct_ib_verbs_dlopen_check(const char **library_name, const char **symbol_name,
 uct_ib_dlopen_status_t
 uct_ib_mlx5_dlopen_check(const char **library_name, const char **symbol_name,
                          const char **error_msg);
+#endif
 #endif
 
 /* Read device properties */
