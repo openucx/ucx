@@ -41,66 +41,6 @@
 #define UCT_IB_VERBS_ECE_OPS(_op, _module, _ops)
 #endif
 
-#if HAVE_DECL_IBV_QUERY_DEVICE_EX
-#define UCT_IB_VERBS_OPTIONAL_QUERY_DEVICE_EX_OPS(_op, _module, _ops) \
-    _op(_module, _ops, int, -1, ibv_query_device_ex, \
-        (struct ibv_context *context, \
-         const struct ibv_query_device_ex_input *input, \
-         struct ibv_device_attr_ex *attr), (context, input, attr))
-#else
-#define UCT_IB_VERBS_OPTIONAL_QUERY_DEVICE_EX_OPS(_op, _module, _ops)
-#endif
-
-#if HAVE_DECL_IBV_CREATE_QP_EX
-#define UCT_IB_VERBS_OPTIONAL_CREATE_QP_EX_OPS(_op, _module, _ops) \
-    _op(_module, _ops, struct ibv_qp *, NULL, ibv_create_qp_ex, \
-        (struct ibv_context *context, \
-         struct ibv_qp_init_attr_ex *qp_init_attr), \
-        (context, qp_init_attr))
-#else
-#define UCT_IB_VERBS_OPTIONAL_CREATE_QP_EX_OPS(_op, _module, _ops)
-#endif
-
-#if HAVE_DECL_IBV_CREATE_CQ_EX
-#define UCT_IB_VERBS_OPTIONAL_CREATE_CQ_EX_OPS(_op, _module, _ops) \
-    _op(_module, _ops, struct ibv_cq_ex *, NULL, ibv_create_cq_ex, \
-        (struct ibv_context *context, \
-         struct ibv_cq_init_attr_ex *cq_init_attr), \
-        (context, cq_init_attr))
-#else
-#define UCT_IB_VERBS_OPTIONAL_CREATE_CQ_EX_OPS(_op, _module, _ops)
-#endif
-
-#if HAVE_DECL_IBV_CREATE_SRQ_EX
-#define UCT_IB_VERBS_OPTIONAL_CREATE_SRQ_EX_OPS(_op, _module, _ops) \
-    _op(_module, _ops, struct ibv_srq *, NULL, ibv_create_srq_ex, \
-        (struct ibv_context *context, \
-         struct ibv_srq_init_attr_ex *srq_init_attr), \
-        (context, srq_init_attr))
-#else
-#define UCT_IB_VERBS_OPTIONAL_CREATE_SRQ_EX_OPS(_op, _module, _ops)
-#endif
-
-#if HAVE_DECL_IBV_ADVISE_MR
-#define UCT_IB_VERBS_OPTIONAL_ADVISE_MR_OPS(_op, _module, _ops) \
-    _op(_module, _ops, int, -1, ibv_advise_mr, \
-        (struct ibv_pd *pd, enum ibv_advise_mr_advice advice, \
-         uint32_t flags, struct ibv_sge *sg_list, uint32_t num_sge), \
-        (pd, advice, flags, sg_list, num_sge))
-#else
-#define UCT_IB_VERBS_OPTIONAL_ADVISE_MR_OPS(_op, _module, _ops)
-#endif
-
-#if HAVE_IBV_DM
-#define UCT_IB_VERBS_OPTIONAL_DM_OPS(_op, _module, _ops) \
-    _op(_module, _ops, struct ibv_dm *, NULL, ibv_alloc_dm, \
-        (struct ibv_context *context, struct ibv_alloc_dm_attr *attr), \
-        (context, attr)) \
-    _op(_module, _ops, int, -1, ibv_free_dm, (struct ibv_dm *dm), (dm))
-#else
-#define UCT_IB_VERBS_OPTIONAL_DM_OPS(_op, _module, _ops)
-#endif
-
 #define UCT_IB_VERBS_DEVICE_LIST_OP(_op, _module, _ops) \
     _op(_module, _ops, struct ibv_device **, NULL, ibv_get_device_list, \
         (int *num_devices), (num_devices))
@@ -193,13 +133,7 @@
 #define UCT_IB_VERBS_OPTIONAL_OPS(_op, _void_op, _module, _ops) \
     UCT_IB_VERBS_NETLINK_OPS(_op, _module, _ops) \
     UCT_IB_VERBS_DMABUF_OPS(_op, _module, _ops) \
-    UCT_IB_VERBS_ECE_OPS(_op, _module, _ops) \
-    UCT_IB_VERBS_OPTIONAL_QUERY_DEVICE_EX_OPS(_op, _module, _ops) \
-    UCT_IB_VERBS_OPTIONAL_CREATE_QP_EX_OPS(_op, _module, _ops) \
-    UCT_IB_VERBS_OPTIONAL_CREATE_CQ_EX_OPS(_op, _module, _ops) \
-    UCT_IB_VERBS_OPTIONAL_CREATE_SRQ_EX_OPS(_op, _module, _ops) \
-    UCT_IB_VERBS_OPTIONAL_ADVISE_MR_OPS(_op, _module, _ops) \
-    UCT_IB_VERBS_OPTIONAL_DM_OPS(_op, _module, _ops)
+    UCT_IB_VERBS_ECE_OPS(_op, _module, _ops)
 
 #define UCT_IB_VERBS_MANDATORY_OPS(_op, _void_op, _module, _ops) \
     UCT_IB_VERBS_DEVICE_LIST_OP(_op, _module, _ops) \
