@@ -194,8 +194,10 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
                                                                       qp_num),
                                                uct_rc_mlx5_base_ep_t);
     uint16_t pi               = ntohs(cqe->wqe_counter);
+    uct_base_iface_t *base_iface;
     ucs_log_level_t log_lvl;
     ucs_status_t status;
+    int is_flush_cancel;
 
     if (ep == NULL) {
         ucs_diag("ignoring failure on removed qpn 0x%x wqe[%d]", qp_num, pi);
@@ -203,22 +205,34 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
         goto out;
     }
 
-    uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status, pi, 0);
+    base_iface = ucs_derived_of(&iface->super.super.super, uct_base_iface_t);
+    if (base_iface->err_handler == NULL) {
+        uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status, pi, 0);
+    }
+
     ucs_arbiter_group_purge(&iface->tx.arbiter, &ep->super.arb_group,
                             uct_rc_ep_arbiter_purge_internal_cb, NULL);
     uct_rc_mlx5_iface_update_tx_res(iface, ep, pi);
     uct_ib_mlx5_txwq_update_flags(&ep->tx.wq, UCT_IB_MLX5_TXWQ_FLAG_FAILED, 0);
 
-    if (ep->super.flags & (UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED |
-                           UCT_RC_EP_FLAG_FLUSH_CANCEL)) {
+    if (ep->super.flags & UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED) {
         goto out;
     }
 
+    is_flush_cancel  = ep->super.flags & UCT_RC_EP_FLAG_FLUSH_CANCEL;
     ep->super.flags |= UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED;
     uct_rc_fc_restore_wnd(iface, &ep->super.fc);
 
-    status  = uct_iface_handle_ep_err(&iface->super.super.super,
-                                      &ep->super.super.super, ep_status);
+    if (is_flush_cancel && (base_iface->err_handler == NULL)) {
+        goto out;
+    }
+
+    status = uct_iface_handle_ep_err(&iface->super.super.super,
+                                     &ep->super.super.super, ep_status);
+    if (is_flush_cancel) {
+        goto out;
+    }
+
     log_lvl = uct_base_iface_failure_log_level(&ib_iface->super, status,
                                                ep_status);
 
@@ -1182,7 +1196,7 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
             .ep_is_connected        = uct_rc_mlx5_base_ep_is_connected,
             .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported,
             .ep_put_sgl_zcopy       = uct_rc_mlx5_ep_put_sgl_zcopy,
-            .ep_outstanding_purge   = uct_ib_mlx5_ext_ep_outstanding_purge
+            .ep_outstanding_purge   = uct_rc_mlx5_base_ep_outstanding_purge
         },
         .create_cq      = uct_rc_mlx5_iface_common_create_cq,
         .destroy_cq     = uct_rc_mlx5_iface_common_destroy_cq,
