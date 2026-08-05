@@ -376,14 +376,16 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
     uct_ep_h uct_ep              = ucp_ep_get_lane(ep, lane);
     ucp_md_index_t md_index      = ucp_ep_md_index(ep, lane);
     ucp_rsc_index_t rkey_index   = lpriv->super.rkey_index;
-    size_t max_sgl_count         = lpriv->max_put_sgl_zcopy_count;
     size_t max_frag_length       = ucs_max(lpriv->max_frag, 1);
     ucp_mem_h *sgl_memhs         = dt_iter->type.sgl.memhs;
-    size_t total_size            = max_sgl_count *
-                                   (sizeof(void*) + sizeof(size_t) +
-                                    sizeof(uint64_t) + sizeof(size_t) +
-                                    sizeof(uct_rkey_t) + sizeof(uct_mem_h));
-    void *storage;
+    size_t elem_count            = ucs_min(lpriv->max_put_sgl_zcopy_count,
+                                           dt_iter->length - dt_iter->offset);
+    size_t remote_addrs_size     = elem_count * sizeof(uint64_t);
+    size_t buffers_size          = elem_count * sizeof(void*);
+    size_t lengths_size          = elem_count * sizeof(size_t);
+    size_t elem_indices_size     = elem_count * sizeof(size_t);
+    size_t uct_rkeys_size        = elem_count * sizeof(uct_rkey_t);
+    size_t uct_memhs_size        = elem_count * sizeof(uct_mem_h);
     void **buffers;
     size_t *lengths, *elem_indices;
     uint64_t *remote_addrs;
@@ -395,30 +397,50 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
     next_iter->offset               = dt_iter->offset;
     next_iter->type.sgl.frag_offset = dt_iter->type.sgl.frag_offset;
 
-    storage = ucs_alloc_on_stack(total_size, "uct_sgl_desc");
-    if (storage == NULL) {
+    remote_addrs = ucs_alloc_on_stack(remote_addrs_size,
+                                      "uct_sgl_remote_addrs");
+    if (remote_addrs == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
 
-    remote_addrs = storage;
-    buffers      = UCS_PTR_BYTE_OFFSET(remote_addrs,
-                                       max_sgl_count * sizeof(*remote_addrs));
-    lengths      = UCS_PTR_BYTE_OFFSET(buffers,
-                                       max_sgl_count * sizeof(*buffers));
-    elem_indices = UCS_PTR_BYTE_OFFSET(lengths,
-                                       max_sgl_count * sizeof(*lengths));
-    uct_rkeys    = UCS_PTR_BYTE_OFFSET(elem_indices,
-                                       max_sgl_count * sizeof(*elem_indices));
-    uct_memhs    = UCS_PTR_BYTE_OFFSET(uct_rkeys,
-                                       max_sgl_count * sizeof(*uct_rkeys));
+    buffers = ucs_alloc_on_stack(buffers_size, "uct_sgl_buffers");
+    if (buffers == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto out_free_remote_addrs;
+    }
 
-    desc_count = ucp_datatype_iter_next_sgl_frags(dt_iter, max_sgl_count,
+    lengths = ucs_alloc_on_stack(lengths_size, "uct_sgl_lengths");
+    if (lengths == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto out_free_buffers;
+    }
+
+    elem_indices = ucs_alloc_on_stack(elem_indices_size,
+                                      "uct_sgl_elem_indices");
+    if (elem_indices == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto out_free_lengths;
+    }
+
+    uct_rkeys = ucs_alloc_on_stack(uct_rkeys_size, "uct_sgl_rkeys");
+    if (uct_rkeys == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto out_free_elem_indices;
+    }
+
+    uct_memhs = ucs_alloc_on_stack(uct_memhs_size, "uct_sgl_memhs");
+    if (uct_memhs == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto out_free_uct_rkeys;
+    }
+
+    desc_count = ucp_datatype_iter_next_sgl_frags(dt_iter, elem_count,
                                                   max_frag_length, next_iter,
                                                   buffers, lengths,
                                                   remote_addrs, elem_indices);
     if (desc_count == 0) {
         status = UCS_OK;
-        goto out;
+        goto out_free_uct_memhs;
     }
 
     for (i = 0; i < desc_count; i++) {
@@ -439,8 +461,18 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
                                                   remote_addrs[0]);
     }
 
-out:
-    ucs_free_on_stack(storage, total_size);
+out_free_uct_memhs:
+    ucs_free_on_stack(uct_memhs, uct_memhs_size);
+out_free_uct_rkeys:
+    ucs_free_on_stack(uct_rkeys, uct_rkeys_size);
+out_free_elem_indices:
+    ucs_free_on_stack(elem_indices, elem_indices_size);
+out_free_lengths:
+    ucs_free_on_stack(lengths, lengths_size);
+out_free_buffers:
+    ucs_free_on_stack(buffers, buffers_size);
+out_free_remote_addrs:
+    ucs_free_on_stack(remote_addrs, remote_addrs_size);
     return status;
 }
 
