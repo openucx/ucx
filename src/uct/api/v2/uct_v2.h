@@ -1929,7 +1929,8 @@ typedef void (*uct_ep_outstanding_purge_callback_t)(
 typedef enum {
     UCT_EP_OUTSTANDING_FIELD_RX_TOKEN = UCS_BIT(0),
     UCT_EP_OUTSTANDING_FIELD_CB       = UCS_BIT(1),
-    UCT_EP_OUTSTANDING_FIELD_ARG      = UCS_BIT(2)
+    UCT_EP_OUTSTANDING_FIELD_ARG      = UCS_BIT(2),
+    UCT_EP_OUTSTANDING_FIELD_STATUS   = UCS_BIT(3)
 } uct_ep_outstanding_purge_field_t;
 
 
@@ -1941,7 +1942,7 @@ typedef struct {
     /** Mask of valid fields, using bits from @ref
      *  uct_ep_outstanding_purge_field_t. @ref
      *  UCT_EP_OUTSTANDING_FIELD_RX_TOKEN and @ref
-     *  UCT_EP_OUTSTANDING_FIELD_CB are required. */
+     *  UCT_EP_OUTSTANDING_FIELD_CB are required for token-based purging. */
     uint64_t                            field_mask;
 
     /**
@@ -1957,6 +1958,9 @@ typedef struct {
      * Valid when @ref UCT_EP_OUTSTANDING_FIELD_ARG is set.
      */
     void                                *arg;
+
+    /** Completion status for purging all outstanding operations. */
+    ucs_status_t                        status;
 } uct_ep_outstanding_purge_params_t;
 
 
@@ -1964,6 +1968,8 @@ typedef struct {
  * @ingroup UCT_RESOURCE
  * @brief Purge outstanding (undelivered) operations from an endpoint.
  *
+ * If only @ref UCT_EP_OUTSTANDING_FIELD_STATUS is specified, all outstanding
+ * operations are completed with the supplied error status. Otherwise,
  * @ref uct_ep_outstanding_purge_params_t::cb is invoked once for each
  * undelivered outstanding operation, in the original endpoint posting order.
  */
