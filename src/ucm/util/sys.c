@@ -349,28 +349,31 @@ char *ucm_concat_path(char *buffer, size_t max, const char *dir, const char *fil
 {
     size_t len;
 
+    if (max == 0) {
+        return buffer;
+    }
+
     len = strlen(dir);
     while (len && (dir[len - 1] == '/')) {
         len--; /* trim closing '/' */
     }
 
-    len = ucs_min(len, max);
+    len = ucs_min(len, max - 1);
     memcpy(buffer, dir, len);
-    max -= len;
-    if (max < 2) { /* buffer is shorter than dir - copy dir only */
-        buffer[len - 1] = '\0';
+    buffer[len] = '\0';
+    if (len == (max - 1)) { /* buffer is shorter than dir - copy dir only */
         return buffer;
     }
 
-    buffer[len] = '/';
-    max--;
+    buffer[len++] = '/';
+    max          -= len;
 
     while (file[0] == '/') {
         file++; /* trim beginning '/' */
     }
 
-    strncpy(buffer + len + 1, file, max);
-    buffer[max + len] = '\0'; /* force close string */
+    strncpy(buffer + len, file, max);
+    buffer[max + len - 1] = '\0'; /* force close string */
 
     return buffer;
 }
@@ -399,4 +402,3 @@ void UCS_F_CTOR ucm_init()
     ucm_init_log();
     ucm_init_malloc_hook();
 }
-

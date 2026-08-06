@@ -661,8 +661,8 @@ void ucs_cpu_init()
 ucs_status_t ucs_arch_get_cache_size(size_t *cache_sizes)
 {
     ucs_x86_cpu_registers reg = {}; /* Silence static checker */
-    ucs_x86_cache_line_reg_info_t cache_info;
-    ucs_x86_cache_line_reg_info_t line_info;
+    ucs_x86_cache_line_reg_info_t cache_info = {0};
+    ucs_x86_cache_line_reg_info_t line_info  = {0};
     uint32_t sets;
     uint32_t i, t, r, l4;
     uint32_t max_iter;

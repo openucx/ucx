@@ -978,8 +978,9 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
 {
     uct_tcp_md_t *tcp_md               = ucs_derived_of(md, uct_tcp_md_t);
     const unsigned sys_device_priority = 10;
+    struct dirent **entries            = NULL;
     uct_tl_device_resource_t *devices, *tmp;
-    struct dirent **entries, **entry;
+    struct dirent **entry;
     unsigned num_devices;
     int is_active, i, n;
     ucs_status_t status;
