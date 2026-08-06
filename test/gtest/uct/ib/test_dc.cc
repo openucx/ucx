@@ -172,11 +172,58 @@ int test_dc::n_warnings         = 0;
 int test_dc::m_purge_count      = 0;
 uint32_t test_dc::m_am_rx_count = 0;
 
+
+UCS_TEST_P(test_dc, legacy_iface_address_requires_flush_rkey)
+{
+    std::vector<char> device_addr(m_e2->iface_attr().device_addr_len);
+    std::vector<char> iface_addr(sizeof(uct_dc_mlx5_iface_order_addr_t));
+    uct_iface_is_reachable_params_t params = {
+        .field_mask = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
+                      UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR |
+                      UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR_LENGTH,
+        .device_addr       = (uct_device_addr_t*)device_addr.data(),
+        .iface_addr        = (uct_iface_addr_t*)iface_addr.data(),
+        .iface_addr_length = sizeof(uct_dc_mlx5_iface_addr_t)
+    };
+    ASSERT_UCS_OK(uct_iface_get_device_address(
+            m_e2->iface(), (uct_device_addr_t*)device_addr.data()));
+    ASSERT_UCS_OK(uct_iface_get_address(
+            m_e2->iface(), (uct_iface_addr_t*)iface_addr.data()));
+    auto *dc_addr = (uct_dc_mlx5_iface_addr_t*)iface_addr.data();
+    auto *order_addr = (uct_dc_mlx5_iface_order_addr_t*)iface_addr.data();
+
+    dc_addr->flags &= ~(UCT_DC_MLX5_IFACE_ADDR_ORDERING_CAP |
+                        UCT_DC_MLX5_IFACE_ADDR_RELAXED_ORDER |
+                        UCT_DC_MLX5_IFACE_ADDR_DC_VERS |
+                        UCT_DC_MLX5_IFACE_ADDR_FLUSH_RKEY);
+    dc_addr->flags |= dc_iface(m_e2)->version_flag;
+    EXPECT_FALSE(uct_iface_is_reachable_v2(m_e1->iface(), &params));
+
+    dc_addr->flags |= UCT_DC_MLX5_IFACE_ADDR_FLUSH_RKEY;
+    params.iface_addr_length = sizeof(uct_dc_mlx5_iface_flush_addr_t);
+    EXPECT_TRUE(uct_iface_is_reachable_v2(m_e1->iface(), &params));
+
+    dc_addr->flags |= UCT_DC_MLX5_IFACE_ADDR_RELAXED_ORDER;
+    params.iface_addr_length = sizeof(uct_dc_mlx5_iface_order_addr_t);
+    EXPECT_FALSE(uct_iface_is_reachable_v2(m_e1->iface(), &params));
+
+    dc_addr->flags |= UCT_DC_MLX5_IFACE_ADDR_ORDERING_CAP |
+                      UCT_DC_MLX5_IFACE_ADDR_DC_VERS;
+    order_addr->dc_version = dc_iface(m_e2)->version_flag;
+    EXPECT_TRUE(uct_iface_is_reachable_v2(m_e1->iface(), &params));
+
+    dc_addr->flags &= ~UCT_DC_MLX5_IFACE_ADDR_FLUSH_RKEY;
+    EXPECT_FALSE(uct_iface_is_reachable_v2(m_e1->iface(), &params));
+}
+
+
 UCS_TEST_P(test_dc, fence_am_short_consumed, "RC_FENCE=weak")
 {
     uct_dc_mlx5_iface_t *iface = dc_iface(m_e1);
     uct_dc_mlx5_ep_t *ep;
     uct_dc_dci_t *dci;
+    ucs_status_t status;
+    ucs_time_t deadline;
 
     m_e1->connect_to_iface(0, *m_e2);
     ASSERT_UCS_OK(uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
@@ -186,10 +233,109 @@ UCS_TEST_P(test_dc, fence_am_short_consumed, "RC_FENCE=weak")
     dci = uct_dc_mlx5_iface_dci(iface, ep->dci);
 
     ASSERT_UCS_OK(uct_ep_fence(m_e1->ep(0), 0));
-    EXPECT_NE(rc_iface(m_e1)->tx.fi.fence_beat, dci->txwq.fi.fence_beat);
+    if (ep->flags & UCT_DC_MLX5_EP_FLAG_FENCE_FLUSH) {
+        EXPECT_NE(rc_iface(m_e1)->tx.fi.fence_beat, ep->fi.fence_beat);
+    } else {
+        EXPECT_NE(rc_iface(m_e1)->tx.fi.fence_beat,
+                  dci->txwq.fi.fence_beat);
+    }
 
+    status = uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0);
+    if (ep->flags & UCT_DC_MLX5_EP_FLAG_FENCE_FLUSH) {
+        EXPECT_EQ(UCS_ERR_NO_RESOURCE, status);
+        deadline = ucs::get_deadline(DEFAULT_TIMEOUT_SEC);
+        while ((dci->flags & UCT_DC_DCI_FLAG_FENCE_PENDING) &&
+               (ucs_get_time() < deadline)) {
+            progress();
+        }
+        ASSERT_FALSE(dci->flags & UCT_DC_DCI_FLAG_FENCE_PENDING);
+        ASSERT_UCS_OK(uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
+    } else {
+        ASSERT_UCS_OK(status);
+    }
+
+    if (ep->flags & UCT_DC_MLX5_EP_FLAG_FENCE_FLUSH) {
+        EXPECT_EQ(rc_iface(m_e1)->tx.fi.fence_beat, ep->fi.fence_beat);
+    } else {
+        EXPECT_EQ(rc_iface(m_e1)->tx.fi.fence_beat,
+                  dci->txwq.fi.fence_beat);
+    }
+}
+
+UCS_TEST_P(test_dc, fence_flush_without_dci,
+           "IB_PCI_RELAXED_ORDERING=yes", "RC_FENCE=weak")
+{
+    uct_dc_mlx5_ep_t *ep;
+    uct_dc_dci_t *dci;
+    ucs_time_t deadline;
+
+    m_e1->connect_to_iface(0, *m_e2);
+    ep = dc_ep(m_e1, 0);
+    ASSERT_TRUE(ep->flags & UCT_DC_MLX5_EP_FLAG_FENCE_FLUSH);
+    ASSERT_EQ(UCT_DC_MLX5_EP_NO_DCI, ep->dci);
+
+    ASSERT_UCS_OK(uct_ep_fence(m_e1->ep(0), 0));
+    EXPECT_NE(rc_iface(m_e1)->tx.fi.fence_beat, ep->fi.fence_beat);
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE,
+              uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
+
+    ASSERT_NE(UCT_DC_MLX5_EP_NO_DCI, ep->dci);
+    dci      = uct_dc_mlx5_iface_dci(dc_iface(m_e1), ep->dci);
+    deadline = ucs::get_deadline(DEFAULT_TIMEOUT_SEC);
+    while ((dci->flags & UCT_DC_DCI_FLAG_FENCE_PENDING) &&
+           (ucs_get_time() < deadline)) {
+        progress();
+    }
+
+    ASSERT_FALSE(dci->flags & UCT_DC_DCI_FLAG_FENCE_PENDING);
     ASSERT_UCS_OK(uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
-    EXPECT_EQ(rc_iface(m_e1)->tx.fi.fence_beat, dci->txwq.fi.fence_beat);
+}
+
+UCS_TEST_P(test_dc, fence_flush_ep_destroy,
+           "IB_PCI_RELAXED_ORDERING=yes", "DC_TX_POLICY=rand")
+{
+    uct_dc_mlx5_ep_t *ep;
+    uct_dc_dci_t *dci;
+    ucs_time_t deadline;
+
+    m_e1->connect_to_iface(0, *m_e2);
+    ep = dc_ep(m_e1, 0);
+    ASSERT_TRUE(ep->flags & UCT_DC_MLX5_EP_FLAG_FENCE_FLUSH);
+    ASSERT_UCS_OK(uct_iface_fence(m_e1->iface(), 0));
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE,
+              uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
+
+    ASSERT_NE(UCT_DC_MLX5_EP_NO_DCI, ep->dci);
+    dci = uct_dc_mlx5_iface_dci(dc_iface(m_e1), ep->dci);
+    ASSERT_TRUE(dci->flags & UCT_DC_DCI_FLAG_FENCE_PENDING);
+    m_e1->destroy_eps();
+
+    deadline = ucs::get_deadline(DEFAULT_TIMEOUT_SEC);
+    while ((dci->flags & UCT_DC_DCI_FLAG_FENCE_PENDING) &&
+           (ucs_get_time() < deadline)) {
+        progress();
+    }
+    EXPECT_FALSE(dci->flags & UCT_DC_DCI_FLAG_FENCE_PENDING);
+}
+
+UCS_TEST_P(test_dc, fence_pending_blocks_hybrid_dci,
+           "DC_TX_POLICY=dcs_hybrid")
+{
+    uct_dc_mlx5_iface_t *iface = dc_iface(m_e1);
+    uct_dc_mlx5_ep_t *ep;
+    uct_dc_dci_t *dci;
+
+    if (!uct_dc_mlx5_iface_is_hybrid(iface)) {
+        UCS_TEST_SKIP_R("hybrid DCI policy is not available");
+    }
+
+    m_e1->connect_to_iface(0, *m_e2);
+    ep  = dc_ep(m_e1, 0);
+    dci = uct_dc_mlx5_iface_dci(iface, UCT_DC_MLX5_HW_DCI_INDEX);
+    dci->flags |= UCT_DC_DCI_FLAG_FENCE_PENDING;
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE, uct_dc_mlx5_set_ep_to_hw_dcs(iface, ep));
+    EXPECT_EQ(UCT_DC_MLX5_EP_NO_DCI, ep->dci);
+    dci->flags &= ~UCT_DC_DCI_FLAG_FENCE_PENDING;
 }
 
 UCS_TEST_P(test_dc, dcs_single) {

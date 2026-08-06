@@ -265,6 +265,10 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
     struct ibv_qp *qp;
     uct_rc_hdr_t *hdr;
 
+    if (ib_md->relaxed_order_required) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
     init_attr.fc_req_size           = sizeof(uct_rc_pending_req_t);
     init_attr.rx_hdr_len            = sizeof(uct_rc_hdr_t);
     init_attr.qp_type               = IBV_QPT_RC;
@@ -570,6 +574,12 @@ uct_rc_verbs_query_tl_devices(uct_md_h md,
 {
     uct_ib_md_t *ib_md = ucs_derived_of(md, uct_ib_md_t);
     ucs_status_t status;
+
+    if (ib_md->relaxed_order_required) {
+        *tl_devices_p     = NULL;
+        *num_tl_devices_p = 0;
+        return UCS_OK;
+    }
 
     /* device does not support RC if we cannot create an RC QP */
     status = uct_rc_verbs_can_create_qp(ib_md->pd);

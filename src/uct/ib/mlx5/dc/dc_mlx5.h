@@ -79,6 +79,8 @@ typedef enum {
     UCT_DC_MLX5_IFACE_ADDR_FLUSH_RKEY       = UCS_BIT(3),
     UCT_DC_MLX5_IFACE_ADDR_MAX_RD_ATOMIC_16 = UCS_BIT(4),
     UCT_DC_MLX5_IFACE_ADDR_NO_ATOMIC_OFFSET = UCS_BIT(5),
+    UCT_DC_MLX5_IFACE_ADDR_RELAXED_ORDER    = UCS_BIT(6),
+    UCT_DC_MLX5_IFACE_ADDR_ORDERING_CAP     = UCS_BIT(7),
     UCT_DC_MLX5_IFACE_ADDR_DC_VERS          = UCT_DC_MLX5_IFACE_ADDR_DC_V1 |
                                               UCT_DC_MLX5_IFACE_ADDR_DC_V2
 } uct_dc_mlx5_iface_addr_flags_t;
@@ -116,6 +118,24 @@ typedef struct uct_dc_mlx5_iface_flush_addr {
      * structure, the lowest 8 bit must be 0 (not stored) */
     uint16_t                 flush_rkey_hi;
 } UCS_S_PACKED uct_dc_mlx5_iface_flush_addr_t;
+
+
+typedef struct uct_dc_mlx5_iface_order_addr {
+    uct_dc_mlx5_iface_flush_addr_t super;
+    uint8_t                        dc_version;
+} UCS_S_PACKED uct_dc_mlx5_iface_order_addr_t;
+
+
+static UCS_F_ALWAYS_INLINE uint8_t
+uct_dc_mlx5_iface_addr_version(const uct_dc_mlx5_iface_addr_t *addr)
+{
+    if (addr->flags & UCT_DC_MLX5_IFACE_ADDR_RELAXED_ORDER) {
+        return ucs_derived_of(addr,
+                              uct_dc_mlx5_iface_order_addr_t)->dc_version;
+    }
+
+    return addr->flags & UCT_DC_MLX5_IFACE_ADDR_DC_VERS;
+}
 
 
 /**
@@ -206,6 +226,8 @@ typedef void (*uct_dc_dci_handle_failure_func_t)(uct_dc_mlx5_iface_t *iface,
 typedef enum {
     /* Indicates that this specific dci is shared, regardless of policy */
     UCT_DC_DCI_FLAG_SHARED = UCS_BIT(0),
+
+    UCT_DC_DCI_FLAG_FENCE_PENDING = UCS_BIT(1)
 } uct_dc_dci_flags_t;
 
 

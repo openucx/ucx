@@ -172,7 +172,7 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
     if (uct_rc_iface_flush_rkey_enabled(&iface->super)) {
         ep_addr_len = sizeof(uct_rc_mlx5_ep_ext_address_t) + sizeof(uint16_t);
     } else {
-        ep_addr_len = sizeof(uct_rc_mlx5_ep_address_t);
+        ep_addr_len = sizeof(uct_rc_mlx5_ep_ext_address_t);
     }
 
     uct_rc_mlx5_iface_common_query(&rc_iface->super, iface_attr, max_am_inline,
@@ -630,13 +630,19 @@ static uint8_t uct_rc_mlx5_iface_get_address_type(uct_iface_h tl_iface)
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(tl_iface,
                                                        uct_rc_mlx5_iface_common_t);
+    uct_ib_md_t *md = uct_ib_iface_md(&iface->super.super);
+    uint8_t type;
 
-    return UCT_RC_MLX5_TM_ENABLED(iface) ?  UCT_RC_MLX5_IFACE_ADDR_TYPE_TM :
-                                            UCT_RC_MLX5_IFACE_ADDR_TYPE_BASIC;
+    type = UCT_RC_MLX5_TM_ENABLED(iface) ? UCT_RC_MLX5_IFACE_ADDR_TYPE_TM :
+                                           UCT_RC_MLX5_IFACE_ADDR_TYPE_BASIC;
+    return type | (md->relaxed_order_required ?
+                   UCT_RC_MLX5_IFACE_ADDR_FLAG_RELAXED_ORDER : 0);
 }
 
 static const char *uct_rc_mlx5_iface_tm_type_str(uint8_t tm_type)
 {
+    tm_type &= ~UCT_RC_MLX5_IFACE_ADDR_FLAG_RELAXED_ORDER;
+
     if (tm_type == UCT_RC_MLX5_IFACE_ADDR_TYPE_BASIC) {
         return "basic";
     } else if (tm_type == UCT_RC_MLX5_IFACE_ADDR_TYPE_TM) {
@@ -667,7 +673,9 @@ uct_rc_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
 
     /* Check hardware tag matching compatibility */
     if ((iface_addr != NULL) &&
-        ((remote_type = *(uint8_t*)iface_addr) != my_type)) {
+        (((remote_type = *(uint8_t*)iface_addr) &
+          ~UCT_RC_MLX5_IFACE_ADDR_FLAG_RELAXED_ORDER) !=
+         (my_type & ~UCT_RC_MLX5_IFACE_ADDR_FLAG_RELAXED_ORDER))) {
         uct_iface_fill_info_str_buf(params, "local %s remote %s",
                                     uct_rc_mlx5_iface_tm_type_str(my_type),
                                     uct_rc_mlx5_iface_tm_type_str(remote_type));
@@ -750,6 +758,7 @@ uct_rc_mlx5_iface_init_fence_flags(uct_rc_mlx5_iface_common_t *iface,
     int strong_order = uct_rc_mlx5_iface_need_strong_order(iface);
     int pci_atomics  = uct_ib_device_has_pci_atomics(dev);
 
+    iface->config.send_fence_flag = 0;
     iface->config.put_fence_flag =
             strong_order ? UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER : 0;
 
@@ -866,6 +875,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
     self->super.config.exp_backoff = mlx5_config->exp_backoff;
     self->config.log_ack_req_freq  = ucs_min(mlx5_config->log_ack_req_freq,
                                              UCT_RC_MLX5_MAX_LOG_ACK_REQ_FREQ);
+    self->config.fence_mode_auto =
+            (rc_config->fence_mode == UCT_RC_FENCE_MODE_AUTO);
 
     status = uct_rc_mlx5_iface_init_fence_flags(self, rc_config, md, dev);
     if (status != UCS_OK) {
