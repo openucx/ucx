@@ -1493,6 +1493,8 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
     }
 
     if (gpu_count == 0) {
+        ucs_debug("no GPU devices found for GDA");
+        status = UCS_ERR_NO_DEVICE;
         goto out;
     }
 
@@ -1524,6 +1526,16 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
             }
         }
 
+        if (num_reachable_ibdevs == 0) {
+            ucs_debug("GPU %04x:%02x:%02x.%u has no reachable active IB "
+                      "devices for GDA",
+                      (unsigned)gpus[gpu_index].bus_id.domain,
+                      (unsigned)gpus[gpu_index].bus_id.bus,
+                      (unsigned)gpus[gpu_index].bus_id.slot,
+                      (unsigned)gpus[gpu_index].bus_id.function);
+            continue;
+        }
+
         /* Sort and select the best suited IB devices for this GPU */
         ucs_qsort_r(scores, num_active_ibdevs, sizeof(*scores),
                     uct_gdaki_dev_matrix_score, NULL);
@@ -1538,7 +1550,7 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
             }
             scores[ibdev_index].usecount++;
 
-            /* direct NIC is closest and can be only one */
+            /* Direct NIC is closest and can be only one */
             if (ibdesc->direct_nic) {
                 ucs_assert_always(ibdev_index == 0);
                 break;
