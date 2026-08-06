@@ -21,9 +21,6 @@ resources:
     - container: fedora41
       image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/fedora41/builder:inbox
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: coverity_rh7
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/coverity:mofed-5.1-2.3.8.0
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: rhel76
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/rhel7.6/builder:mofed-5.0-1.0.0.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
@@ -347,7 +344,7 @@ stages:
       - template: coverity.yml
         parameters:
           demands: ucx_docker -equals yes
-          container: coverity_rh7
+          container: rhel90
 
   - stage: Tests
     dependsOn: [Basic_compile]
