@@ -484,7 +484,7 @@ void ucp_proto_select_info_str(ucp_worker_h worker,
         }
 
         ucp_rkey_config_dump_brief(
-                &ucs_array_elem(&worker->rkey_config, rkey_cfg_index).key,
+                &ucs_array_elem(&worker->rkey_config, rkey_cfg_index)->key,
                 strb);
     }
 

@@ -788,8 +788,9 @@ protected:
             setup_progress_mock(ep_config->proto_select, mock);
         }
 
-        ucp_rkey_config_t *rkey_config;
-        ucs_array_for_each(rkey_config, &worker->rkey_config) {
+        ucp_rkey_config_t **rkey_config_p;
+        ucs_array_for_each(rkey_config_p, &worker->rkey_config) {
+            ucp_rkey_config_t *rkey_config = *rkey_config_p;
             setup_progress_mock(rkey_config->proto_select, mock);
         }
     }
