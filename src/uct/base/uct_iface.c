@@ -582,6 +582,10 @@ uct_iface_base_query_v2(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr)
         iface_attr->max_put_sgl_zcopy_count = 0;
     }
 
+    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_MAX_GET_SGL_ZCOPY_COUNT) {
+        iface_attr->max_get_sgl_zcopy_count = 0;
+    }
+
     if (!(iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_TX_TOKEN) &&
         (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH)) {
         iface_attr->tx_token_length = 0;
@@ -1125,6 +1129,20 @@ uct_ep_put_sgl_zcopy(uct_ep_h ep, void * const *buffers,
                                                  strides, count, comp);
 }
 
+ucs_status_t
+uct_ep_get_sgl_zcopy(uct_ep_h ep, void * const *buffers,
+                     const size_t *lengths, uct_mem_h const *memhs,
+                     const uint64_t *remote_addrs, uct_rkey_t const *rkeys,
+                     const size_t *counts, const size_t *strides,
+                     size_t count, uct_completion_t *comp)
+{
+    const uct_base_iface_t *iface = ucs_derived_of(ep->iface, uct_base_iface_t);
+
+    return iface->internal_ops->ep_get_sgl_zcopy(ep, buffers, lengths, memhs,
+                                                 remote_addrs, rkeys, counts,
+                                                 strides, count, comp);
+}
+
 typedef struct uct_stub_iface {
     uct_iface_t              super;
     uct_iface_internal_ops_t *internal_ops;
@@ -1157,6 +1175,7 @@ static uct_iface_internal_ops_t uct_stub_internal_ops = {
     .ep_is_connected       = (uct_ep_is_connected_func_t)ucs_empty_function_return_zero,
     .ep_get_device_ep      = (uct_ep_get_device_ep_func_t)uct_stub_ep_return_status,
     .ep_put_sgl_zcopy      = (uct_ep_put_sgl_zcopy_func_t)uct_stub_ep_return_status,
+    .ep_get_sgl_zcopy      = (uct_ep_get_sgl_zcopy_func_t)uct_stub_ep_return_status,
     .ep_outstanding_purge  = (uct_ep_outstanding_purge_func_t)uct_stub_ep_return_status,
 };
 
