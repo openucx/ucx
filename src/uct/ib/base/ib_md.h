@@ -77,8 +77,9 @@ enum {
                                                         GVA region */
     UCT_IB_MEM_DIRECT_NIC            = UCS_BIT(6), /**< The memory handle was
                                                         registered using Direct NIC */
-    UCT_IB_MEM_RELAXED_ORDER         = UCS_BIT(7), /**< Relaxed ordering is enabled
-                                                        for this memory handle */
+    UCT_IB_MEM_STRICT_ORDER_MR       = UCS_BIT(7), /**< A strict-order MR is
+                                                        allocated alongside the
+                                                        relaxed-order default MR */
 };
 
 enum {
@@ -138,8 +139,9 @@ typedef struct {
 typedef enum {
     /* Default memory region with either strict or relaxed order */
     UCT_IB_MR_DEFAULT,
-    /* Additional memory region with strict order,
-     * if the default region is relaxed order */
+    /* Additional strict-order memory region allocated alongside the default
+     * relaxed-order MR, only when relaxed_order is set and
+     * relaxed_order_required is not (i.e. the policy allows both modes) */
     UCT_IB_MR_STRICT_ORDER,
     UCT_IB_MR_LAST
 } uct_ib_mr_type_t;
@@ -164,6 +166,7 @@ typedef struct uct_ib_md {
     uint64_t                 subnet_filter;
     double                   pci_bw;
     uint64_t                 relaxed_order_mem_types;
+    int                      relaxed_order_required; /**< Relaxed-only mode */
     int                      fork_init;
     uint64_t                 reg_mem_types;
     uint64_t                 gva_mem_types;
@@ -213,7 +216,7 @@ typedef struct uct_ib_md_config {
     int                      mlx5dv; /**< mlx5 support */
     int                      devx; /**< DEVX support */
     uint64_t                 devx_objs;    /**< Objects to be created by DevX */
-    ucs_ternary_auto_value_t mr_relaxed_order; /**< Allow reorder memory accesses */
+    ucs_ternary_auto_value_t mr_relaxed_order; /**< Relaxed-ordering mode */
     int                      enable_gpudirect_rdma; /**< Enable GPUDirect RDMA */
     int                      xgvmi_umr_enable; /**< Enable UMR workflow for XGVMI */
 } uct_ib_md_config_t;
@@ -327,11 +330,25 @@ static inline uint16_t uct_ib_md_atomic_offset(uint8_t atomic_mr_id)
     return 8 * atomic_mr_id;
 }
 
+static UCS_F_ALWAYS_INLINE int
+uct_ib_memh_uses_strict_order_mr(const uct_ib_mem_t *memh)
+{
+    return !!(memh->flags & UCT_IB_MEM_STRICT_ORDER_MR);
+}
 
+
+/**
+ * Return the MR type to use for atomic operations on @a memh.
+ *
+ * When relaxed ordering is enabled but NOT required, the memory domain has a
+ * relaxed-order default MR and a companion strict-order MR. Atomics must use
+ * the strict-order MR (@c UCT_IB_MR_STRICT_ORDER). In all other cases, relaxed
+ * ordering is either disabled or required, and the default MR is used.
+ */
 static UCS_F_ALWAYS_INLINE uct_ib_mr_type_t
 uct_ib_memh_get_atomic_mr_type(const uct_ib_mem_t *memh)
 {
-    return (memh->flags & UCT_IB_MEM_RELAXED_ORDER) ?
+    return uct_ib_memh_uses_strict_order_mr(memh) ?
            UCT_IB_MR_STRICT_ORDER : UCT_IB_MR_DEFAULT;
 }
 
@@ -359,10 +376,14 @@ uct_ib_md_is_relaxed_order(const uct_ib_md_t *md)
 }
 
 static UCS_F_ALWAYS_INLINE int
-uct_ib_memh_is_relaxed_order(uct_ib_md_t *md,
-                             const uct_md_mem_reg_params_t *params)
+uct_ib_md_is_strict_order_mr_required(
+        const uct_ib_md_t *md, const uct_md_mem_reg_params_t *params)
 {
     ucs_memory_type_t mem_type;
+
+    if (md->relaxed_order_required) {
+        return 0;
+    }
 
     mem_type = (params == NULL) ? UCS_MEMORY_TYPE_HOST :
                UCT_MD_MEM_REG_FIELD_VALUE(params, mem_type, FIELD_MEM_TYPE,
@@ -371,6 +392,18 @@ uct_ib_memh_is_relaxed_order(uct_ib_md_t *md,
     ucs_assert(mem_type < UCS_MEMORY_TYPE_LAST);
 
     return !!(md->relaxed_order_mem_types & UCS_BIT(mem_type));
+}
+
+/**
+ * Augment @a access_flags with IBV_ACCESS_RELAXED_ORDERING when the memory
+ * domain requires relaxed-only memory keys (relaxed_order_required is set).
+ */
+static UCS_F_ALWAYS_INLINE uint64_t
+uct_ib_md_access_flags(const uct_ib_md_t *md, uint64_t access_flags)
+{
+    return md->relaxed_order_required ?
+                   (access_flags | IBV_ACCESS_RELAXED_ORDERING) :
+                   access_flags;
 }
 
 static UCS_F_ALWAYS_INLINE uint32_t uct_ib_memh_get_lkey(uct_mem_h memh)
@@ -396,9 +429,33 @@ static UCS_F_ALWAYS_INLINE uint8_t uct_ib_md_get_atomic_mr_id(uct_ib_md_t *md)
     return md->flush_rkey >> 8;
 }
 
-void uct_ib_md_parse_relaxed_order(uct_ib_md_t *md,
-                                   const uct_ib_md_config_t *md_config,
-                                   int is_supported);
+/**
+ * Return non-zero when relaxed-only memory keys are required, either because
+ * the firmware capability @a fw_required is set or the user selected
+ * UCS_YES via configuration.
+ */
+static UCS_F_ALWAYS_INLINE int uct_ib_md_is_relaxed_order_required(
+        const uct_ib_md_config_t *md_config, int fw_required)
+{
+    return fw_required || (md_config->mr_relaxed_order == UCS_YES);
+}
+
+/**
+ * Apply the relaxed-ordering configuration to @a md.
+ *
+ * @param md           IB memory domain being initialised.
+ * @param md_config    User configuration for the MD.
+ * @param is_supported Non-zero when the hardware/driver supports relaxed
+ *                     ordering (e.g. KSM indirect key can be created).
+ * @param is_required  Non-zero when the firmware requires relaxed-only keys
+ *                     (mkc_order_write_after_write_ro_only capability).
+ *
+ * @return UCS_OK on success, or an error if the requested mode is incompatible
+ *         with hardware capabilities.
+ */
+ucs_status_t uct_ib_md_parse_relaxed_order(uct_ib_md_t *md,
+                                           const uct_ib_md_config_t *md_config,
+                                           int is_supported, int is_required);
 
 ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr);
 
@@ -482,7 +539,7 @@ ucs_status_t uct_ib_fork_init(const uct_ib_md_config_t *md_config,
                               int *fork_init_p);
 
 ucs_status_t uct_ib_memh_alloc(uct_ib_md_t *md, size_t length,
-                               unsigned mem_flags, int relaxed_order,
+                               unsigned mem_flags, int strict_order_mr,
                                size_t memh_base_size, size_t mr_size,
                                uct_ib_mem_t **memh_p);
 

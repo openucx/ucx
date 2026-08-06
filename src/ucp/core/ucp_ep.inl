@@ -142,6 +142,15 @@ static inline int ucp_ep_is_lane_p2p(ucp_ep_h ep, ucp_lane_index_t lane)
     return !!(ucp_ep_config(ep)->p2p_lanes & UCS_BIT(lane));
 }
 
+/* NULL-safe check whether the lane currently holds a failed-stub UCT EP. */
+static UCS_F_ALWAYS_INLINE int
+ucp_ep_is_lane_failed_stub(ucp_ep_h ep, ucp_lane_index_t lane)
+{
+    uct_ep_h uct_ep = ucp_ep_get_lane(ep, lane);
+
+    return (uct_ep != NULL) && ucp_is_uct_ep_failed(uct_ep);
+}
+
 static inline ucp_md_index_t ucp_ep_md_index(ucp_ep_h ep, ucp_lane_index_t lane)
 {
     return ucp_ep_config(ep)->md_index[lane];

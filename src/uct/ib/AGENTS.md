@@ -50,6 +50,10 @@ at runtime.
   (`uct_ib_reg_mr` / `uct_ib_dereg_mr` in `ib_md.c`) — they handle ODP,
   multi-MR, and DMABUF correctly. Recent fixes around DMABUF offsets live
   in `ib_md.c`.
+- When building `access_flags` for a direct `ibv_reg_mr` call (bypassing
+  `uct_ib_reg_mr`), wrap the flags with `uct_ib_md_access_flags()` so that
+  `IBV_ACCESS_RELAXED_ORDERING` is automatically set in relaxed-only mode
+  (`relaxed_order_required`).
 - DMABUF FD ownership: when `mem_reg`/`mem_advise` accepts a DMABUF FD, the
   caller retains ownership. Register paths must compute the offset from
   the original mapping base, not the registration base.
