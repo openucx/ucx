@@ -255,11 +255,11 @@ typedef struct ucp_context_config {
     /** Extend endpoint lanes connections of each local device to all remote
      *  devices */
     int                                    connect_all_to_all;
-    /** Use only one network device for all protocols */
+    /** Restrict lanes to one network device per protocol */
     int                                    proto_use_single_net_device;
     /** Max HCAs for GPU memory registration: auto=closest, N=limit, inf=all */
     unsigned long                          max_hca_per_gpu;
-    /** Local identificator on a single node */
+    /** Local identifier on a single node or UCS_ULUNITS_AUTO */
     unsigned long                          node_local_id;
     /** Print transport/device info and lane info tables during context
      *  and endpoint initialization */
@@ -466,7 +466,7 @@ typedef struct ucp_context {
         /* How many endpoints are expected to be created on single node */
         int                       est_num_ppn;
 
-        /* Local identificator on a single node */
+        /* Local identifier on a single node */
         unsigned long             node_local_id;
 
         struct {
