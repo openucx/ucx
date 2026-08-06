@@ -469,8 +469,7 @@ public:
             switch (TYPE) {
             case UCX_PERF_TEST_TYPE_PINGPONG:
             case UCX_PERF_TEST_TYPE_PINGPONG_WAIT_MEM:
-                write_sn(buffer, m_perf.params.send_mem_type, length, sn,
-                         m_perf.ucp.self_send_rkey);
+                write_payload_sn(buffer, length, sn);
                 break;
             case UCX_PERF_TEST_TYPE_STREAM_UNI:
                 break;
@@ -612,8 +611,7 @@ public:
         /* Make sure that doing the last opetarion will write 1 to the end of
            the remote buffer */
         if (CMD == UCX_PERF_CMD_PUT) {
-            write_sn(buffer, m_perf.params.send_mem_type, size, LAST_ITER_SN,
-                     m_perf.ucp.self_send_rkey);
+            write_payload_sn(buffer, size, LAST_ITER_SN);
         } else if (is_atomic()) {
             atomic_value = 0;
             write_sn(&atomic_value, UCS_MEMORY_TYPE_HOST, size, LAST_ITER_SN,
@@ -732,6 +730,23 @@ public:
                  m_perf.ucp.self_send_rkey);
         write_sn(m_perf.recv_buffer, m_perf.params.recv_mem_type, length, sn,
                  m_perf.ucp.self_recv_rkey);
+    }
+
+    UCS_F_ALWAYS_INLINE void write_payload_sn(void *buffer, size_t length,
+                                              psn_t sn)
+    {
+        void *sn_buffer = buffer;
+        size_t sn_len   = length;
+
+        if (m_perf.params.ucp.send_datatype == UCP_PERF_DATATYPE_IOV) {
+            ucp_dt_iov_t *iov = reinterpret_cast<ucp_dt_iov_t*>(buffer);
+            size_t last       = m_perf.params.msg_size_cnt - 1;
+            sn_buffer         = iov[last].buffer;
+            sn_len            = iov[last].length;
+        }
+
+        write_sn(sn_buffer, m_perf.params.send_mem_type, sn_len, sn,
+                 m_perf.ucp.self_send_rkey);
     }
 
     ucs_status_t run_pingpong()
@@ -897,7 +912,7 @@ out:
                 ++sn;
             }
 
-            wait_last_iter(recv_buffer, send_length);
+            wait_last_iter(recv_buffer, length);
             wait_recv_window(m_max_outstanding);
             send_ack(send_buffer, send_datatype);
         } else if (my_index == 1) {
