@@ -206,7 +206,8 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
     }
 
     base_iface = ucs_derived_of(&iface->super.super.super, uct_base_iface_t);
-    if (base_iface->err_handler == NULL) {
+    is_flush_cancel = ep->super.flags & UCT_RC_EP_FLAG_FLUSH_CANCEL;
+    if ((base_iface->err_handler == NULL) || is_flush_cancel) {
         uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status, pi, 0);
     }
 
@@ -219,20 +220,14 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
         goto out;
     }
 
-    is_flush_cancel  = ep->super.flags & UCT_RC_EP_FLAG_FLUSH_CANCEL;
     ep->super.flags |= UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED;
-    uct_rc_fc_restore_wnd(iface, &ep->super.fc);
-
-    if (is_flush_cancel && (base_iface->err_handler == NULL)) {
-        goto out;
-    }
-
-    status = uct_iface_handle_ep_err(&iface->super.super.super,
-                                     &ep->super.super.super, ep_status);
     if (is_flush_cancel) {
         goto out;
     }
 
+    uct_rc_fc_restore_wnd(iface, &ep->super.fc);
+    status = uct_iface_handle_ep_err(&iface->super.super.super,
+                                     &ep->super.super.super, ep_status);
     log_lvl = uct_base_iface_failure_log_level(&ib_iface->super, status,
                                                ep_status);
 
