@@ -492,28 +492,26 @@ static ucs_status_t
 ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
                                        uct_ep_h uct_ep, ucs_status_t ep_status)
 {
-    ucp_wireup_ep_t *wireup_ep;
     ucs_status_t status = UCS_OK;
+    ucp_wireup_ep_t *wireup_ep;
     int ft_available;
 
     ft_available = ucp_worker_iface_ft_available(ucp_ep, uct_ep);
-    if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
-        if (!ft_available) {
-            status = ucp_worker_uct_ep_outstanding_purge(uct_ep, ep_status);
-        }
-
-        /* No pending operations should be scheduled */
-        uct_ep_pending_purge(uct_ep, ucp_destroyed_ep_pending_purge, ucp_ep);
-        return status;
-    }
-
-    if (ft_available) {
+    if (!ft_available) {
+        status = ucp_worker_uct_ep_outstanding_purge(uct_ep, ep_status);
+    } else {
         status = uct_ep_invalidate(uct_ep, NULL);
         if (status != UCS_OK) {
             ucs_error("failed to invalidate UCT EP %p: %s", uct_ep,
                       ucs_status_string(status));
-            return status;
+            status = ucp_worker_uct_ep_outstanding_purge(uct_ep, ep_status);
         }
+    }
+
+    if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
+        /* No pending operations should be scheduled */
+        uct_ep_pending_purge(uct_ep, ucp_destroyed_ep_pending_purge, ucp_ep);
+        return status;
     }
 
     wireup_ep = ucp_wireup_ep(ucp_ep_get_lane(ucp_ep, lane));
@@ -523,13 +521,13 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
         /* Failure on NON-AUX EP or failure on AUX EP before it sent its address
          * means failure on the UCP EP */
         ucp_ep_set_lanes_failed(ucp_ep, UCS_BIT(lane), ep_status);
-        goto out;
+        return status;
     }
 
     if (wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY) {
         /* @ref ucp_wireup_ep_progress was scheduled, wireup ep and its
          * pending requests have to be handled there */
-        goto out;
+        return status;
     }
 
     /**
@@ -541,12 +539,6 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
     ucp_wireup_ep_discard_aux_ep(wireup_ep, UCT_FLUSH_FLAG_CANCEL,
                                  ucp_destroyed_ep_pending_purge, ucp_ep);
     ucp_wireup_remote_connected(ucp_ep);
-
-out:
-    if (!ft_available) {
-        status = ucp_worker_uct_ep_outstanding_purge(uct_ep, ep_status);
-    }
-
     return status;
 }
 
@@ -606,8 +598,9 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
     if (ucp_worker_is_uct_ep_discarding(worker, uct_ep)) {
         ucs_debug("UCT EP %p is being discarded on UCP Worker %p",
                   uct_ep, worker);
-        status = ucp_worker_uct_ep_outstanding_purge(uct_ep, status);
+        (void)ucp_worker_uct_ep_outstanding_purge(uct_ep, status);
         ucp_discard_lane_ff(uct_ep);
+        status = UCS_OK;
         goto out;
     }
 
