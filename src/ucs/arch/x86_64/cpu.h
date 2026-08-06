@@ -1,7 +1,7 @@
 /**
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2013. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
-* Copyright (C) Advanced Micro Devices, Inc. 2023. ALL RIGHTS RESERVED.
+* Copyright (C) Advanced Micro Devices, Inc. 2023-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -100,6 +100,21 @@ static inline void ucs_arch_clear_cache(void *start, void *end)
 }
 #endif
 
+/* ERMS (rep movsb) copy; returns dst advanced by len. */
+static UCS_F_ALWAYS_INLINE void *
+ucs_x86_memcpy_erms(void *dst, const void *src, size_t len)
+{
+    asm volatile ("rep movsb"
+                  : "=D" (dst),
+                  "=S" (src),
+                  "=c" (len)
+                  : "0" (dst),
+                  "1" (src),
+                  "2" (len)
+                  : "memory");
+    return dst;
+}
+
 static inline void *ucs_memcpy_relaxed(void *dst, const void *src, size_t len,
                                        ucs_arch_memcpy_hint_t hint,
                                        size_t total_len)
@@ -107,15 +122,7 @@ static inline void *ucs_memcpy_relaxed(void *dst, const void *src, size_t len,
 #if ENABLE_BUILTIN_MEMCPY
     if (ucs_unlikely((len > ucs_global_opts.arch.builtin_memcpy_min) &&
                      (len < ucs_global_opts.arch.builtin_memcpy_max))) {
-        asm volatile ("rep movsb"
-                      : "=D" (dst),
-                      "=S" (src),
-                      "=c" (len)
-                      : "0" (dst),
-                      "1" (src),
-                      "2" (len)
-                      : "memory");
-        return dst;
+        return ucs_x86_memcpy_erms(dst, src, len);
     }
 #endif
 
