@@ -933,7 +933,7 @@ bool UcxConnection::recv_data(void *buffer, size_t length, ucp_mem_h memh,
     ucp_tag_t tag      = make_data_tag(_conn_id, sn);
     ucp_tag_t tag_mask = std::numeric_limits<ucp_tag_t>::max();
 
-    ucp_request_param_t param;
+    ucp_request_param_t param = {};
     param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
                          UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
     param.cb.recv      = (ucp_tag_recv_nbx_callback_t)data_recv_callback;
@@ -957,7 +957,7 @@ bool UcxConnection::send_am(const void *meta, size_t meta_length,
         return false;
     }
 
-    ucp_request_param_t param;
+    ucp_request_param_t param = {};
     param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK  |
                          UCP_OP_ATTR_FIELD_FLAGS;
     param.cb.send      = (ucp_send_nbx_callback_t)common_request_callback;
@@ -1106,7 +1106,7 @@ void UcxConnection::set_log_prefix(const struct sockaddr* saddr,
 
 void UcxConnection::connect_tag(UcxCallback *callback)
 {
-    ucp_request_param_t param;
+    ucp_request_param_t param = {};
     size_t recv_len;
 
     param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE |
@@ -1242,7 +1242,7 @@ bool UcxConnection::send_common(const void *buffer, size_t length,
 
     assert(_ucx_status == UCS_OK);
 
-    ucp_request_param_t param;
+    ucp_request_param_t param = {};
     param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK;
     param.datatype     = 0; // make coverity happy
     param.cb.send      = (ucp_send_nbx_callback_t)common_request_callback;

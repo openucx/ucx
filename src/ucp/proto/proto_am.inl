@@ -724,7 +724,7 @@ ucp_am_bcopy_handle_status_from_pending(uct_pending_req_t *self, int multi,
 static UCS_F_ALWAYS_INLINE void
 ucp_am_pack_user_header(void *buffer, ucp_request_t *req)
 {
-    ucp_dt_state_t hdr_state;
+    ucp_dt_state_t hdr_state = {0};
 
     hdr_state.offset = 0ul;
 

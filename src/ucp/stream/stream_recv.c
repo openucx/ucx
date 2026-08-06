@@ -464,7 +464,7 @@ ucp_stream_am_data_process(ucp_worker_t *worker, ucp_ep_ext_t *ep_ext,
                            ucp_stream_am_data_t *am_data, size_t length,
                            unsigned am_flags)
 {
-    ucp_recv_desc_t  rdesc_tmp;
+    ucp_recv_desc_t  rdesc_tmp = {0};
     void            *payload;
     ucp_recv_desc_t *rdesc;
     ucp_request_t   *req;

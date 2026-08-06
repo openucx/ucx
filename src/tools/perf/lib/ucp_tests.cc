@@ -602,8 +602,8 @@ public:
     {
         psn_t last_sn         = LAST_ITER_SN;
         uint64_t atomic_value = 0;
+        ucp_request_param_t atomic_param = {};
         ucs_status_ptr_t status_p;
-        ucp_request_param_t atomic_param;
 
         if (use_psn()) {
             fence();

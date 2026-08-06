@@ -569,8 +569,8 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
     size_t length                       = ucp_memh_length(memh);
     ucp_md_map_t md_map_registered      = 0;
     ucp_md_map_t dmabuf_md_map          = 0;
+    uct_md_mem_reg_params_t reg_params  = {0};
     ucp_md_map_t reg_md_map;
-    uct_md_mem_reg_params_t reg_params;
     uct_md_mem_reg_params_t md_reg_params;
     uct_md_mem_attr_t mem_attr;
     ucp_md_index_t md_index;
