@@ -963,7 +963,7 @@ uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
             return UCS_ERR_UNSUPPORTED;
         }
         peer_needs_strong_fence |=
-                ext_addr->flags & UCT_RC_MLX5_EP_ADDR_FLAG_RELAXED_ORDER;
+                !!(ext_addr->flags & UCT_RC_MLX5_EP_ADDR_FLAG_RELAXED_ORDER);
     }
 
     status = uct_ib_iface_fill_ah_attr_from_addr(&iface->super.super, ib_addr,
