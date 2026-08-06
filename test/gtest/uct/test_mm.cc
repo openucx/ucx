@@ -6,6 +6,8 @@
 
 extern "C" {
 #include <uct/api/uct.h>
+#include <uct/api/v2/uct_v2.h>
+#include <uct/base/uct_md.h>
 #include <uct/sm/mm/base/mm_md.h>
 #include <ucs/time/time.h>
 }
@@ -268,6 +270,37 @@ UCS_TEST_SKIP_COND_P(test_uct_mm, reg,
 
     status = uct_md_mem_dereg(m_e1->md(), memh);
     ASSERT_UCS_OK(status);
+}
+
+static ucs::mock *mm_md_query_mock = NULL;
+
+static ucs_status_t mm_md_query_no_memh(uct_md_h md, uct_md_attr_v2_t *attr)
+{
+    ucs::mock &mck = *mm_md_query_mock;
+    UCS_MOCK_ORIG_FUNC(mck, &md->ops->query, md, attr);
+    attr->flags &= ~((uint64_t)(UCT_MD_FLAG_ALLOC | UCT_MD_FLAG_REG));
+    attr->flags |= UCT_MD_FLAG_NEED_MEMH;
+    return UCS_OK;
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_mm, iface_mem_alloc_no_memh,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT)) {
+    ucs::mock m;
+    uct_md_h md = m_e1->md();
+    uct_allocated_memory_t mem;
+    ucs_status_t status;
+
+    mm_md_query_mock = &m;
+    m.setup(&md->ops->query, mm_md_query_no_memh);
+
+    status = uct_iface_mem_alloc(m_e1->iface(), 8192, UCT_MD_MEM_ACCESS_ALL,
+                                 "test", &mem);
+    mm_md_query_mock = NULL;
+
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, status);
+    if (status == UCS_OK) {
+        uct_iface_mem_free(&mem);
+    }
 }
 
 UCT_INSTANTIATE_MM_TEST_CASE(test_uct_mm)

@@ -421,7 +421,17 @@ ucs_status_t uct_iface_mem_alloc(uct_iface_h tl_iface, size_t length, unsigned f
 
     /* If the memory was not allocated using MD, register it if needed */
     if (mem->method != UCT_ALLOC_METHOD_MD) {
-        if (need_mem_reg && support_mem_reg) {
+        if (need_mem_reg) {
+            if (!support_mem_reg) {
+                ucs_diag("%s: allocated %zu bytes via %s but md %s cannot "
+                         "provide a memory handle (md flags 0x%llx)", name,
+                         mem->length, uct_alloc_method_names[mem->method],
+                         iface->md->component->name,
+                         (unsigned long long)md_attr.cap.flags);
+                status = UCS_ERR_UNSUPPORTED;
+                goto err_free;
+            }
+
             status = uct_md_mem_reg(iface->md, mem->address, mem->length, flags,
                                     &mem->memh);
             if (status != UCS_OK) {
