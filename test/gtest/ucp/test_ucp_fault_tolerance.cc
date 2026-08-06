@@ -954,19 +954,13 @@ protected:
 
     void test_outstanding_am(failover_proto_t proto)
     {
-        if (!(get_variant_value() & TEST_OP_AM)) {
-            UCS_TEST_SKIP_R("AM operation variant is required");
-        }
-
+        ASSERT_TRUE(get_variant_value() & TEST_OP_AM);
         test_outstanding_proto(proto);
     }
 
     void test_outstanding_put(failover_proto_t proto)
     {
-        if (!(get_variant_value() & TEST_OP_PUT)) {
-            UCS_TEST_SKIP_R("PUT operation variant is required");
-        }
-
+        ASSERT_TRUE(get_variant_value() & TEST_OP_PUT);
         test_outstanding_proto(proto);
     }
 
@@ -999,120 +993,112 @@ UCS_TEST_P(test_ucp_fault_tolerance, target_failure, "MAX_EAGER_LANES=8")
     do_test(FAILURE_SIDE_TARGET);
 }
 
-UCS_TEST_P(test_ucp_fault_tolerance, initiator_failure_am_egr_short_outstanding,
-           "MAX_EAGER_LANES=8", "BCOPY_THRESH=inf", "ZCOPY_THRESH=inf",
-           "RNDV_THRESH=inf")
+UCS_TEST_SKIP_COND_P(test_ucp_fault_tolerance,
+                     initiator_failure_am_egr_short_outstanding,
+                     !(get_variant_value() & TEST_OP_AM), "MAX_EAGER_LANES=8",
+                     "BCOPY_THRESH=inf", "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
 {
     test_outstanding_am(TEST_FAILOVER_PROTO_AM_EGR_SHORT);
 }
 
-UCS_TEST_P(test_ucp_fault_tolerance,
-           initiator_failure_put_offload_short_outstanding, "MAX_EAGER_LANES=8",
-           "MAX_RMA_LANES=8", "MAX_RMA_RAILS=8", "BCOPY_THRESH=inf",
-           "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
+UCS_TEST_SKIP_COND_P(test_ucp_fault_tolerance,
+                     initiator_failure_put_offload_short_outstanding,
+                     !(get_variant_value() & TEST_OP_PUT),
+                     "MAX_EAGER_LANES=8", "MAX_RMA_LANES=8", "MAX_RMA_RAILS=8",
+                     "BCOPY_THRESH=inf", "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
 {
     test_outstanding_put(TEST_FAILOVER_PROTO_PUT_OFFLOAD_SHORT);
 }
 
-UCS_TEST_P(test_ucp_fault_tolerance,
+UCS_TEST_SKIP_COND_P(test_ucp_fault_tolerance,
            initiator_failure_am_egr_short_reply_outstanding,
+           !(get_variant_value() & TEST_OP_AM),
            "MAX_EAGER_LANES=8", "BCOPY_THRESH=inf", "ZCOPY_THRESH=inf",
            "RNDV_THRESH=inf")
 {
     test_outstanding_am(TEST_FAILOVER_PROTO_AM_EGR_SHORT_REPLY);
 }
 
-UCS_TEST_P(test_ucp_fault_tolerance,
+UCS_TEST_SKIP_COND_P(test_ucp_fault_tolerance,
            initiator_failure_am_egr_single_bcopy_outstanding,
+           !(get_variant_value() & TEST_OP_AM),
            "MAX_EAGER_LANES=8", "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
 {
     test_outstanding_am(TEST_FAILOVER_PROTO_AM_EGR_SINGLE_BCOPY);
 }
 
-UCS_TEST_P(test_ucp_fault_tolerance,
+UCS_TEST_SKIP_COND_P(test_ucp_fault_tolerance,
            initiator_failure_put_offload_bcopy_ft_outstanding,
+           !(get_variant_value() & TEST_OP_PUT),
            "MAX_EAGER_LANES=8", "MAX_RMA_LANES=8", "MAX_RMA_RAILS=8",
            "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
 {
     test_outstanding_put(TEST_FAILOVER_PROTO_PUT_OFFLOAD_BCOPY_FT);
 }
 
-UCS_TEST_P(test_ucp_fault_tolerance,
+UCS_TEST_SKIP_COND_P(test_ucp_fault_tolerance,
            initiator_failure_am_egr_single_bcopy_reply_outstanding,
+           !(get_variant_value() & TEST_OP_AM),
            "MAX_EAGER_LANES=8", "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
 {
     test_outstanding_am(TEST_FAILOVER_PROTO_AM_EGR_SINGLE_BCOPY_REPLY);
 }
 
-UCS_TEST_P(test_ucp_fault_tolerance,
+UCS_TEST_SKIP_COND_P(test_ucp_fault_tolerance,
            initiator_failure_am_egr_single_bcopy_queue_outstanding,
+           !((get_variant_value() & TEST_OP_AM) && !(get_variant_value() & TEST_OP_PUT)),
            "MAX_EAGER_LANES=8", "ZCOPY_THRESH=inf", "RNDV_THRESH=inf",
            "RC_TX_QUEUE_LEN?=8", "RC_TX_MAX_BB?=4")
 {
-    if ((get_variant_value() & TEST_OP_AM) &&
-        !(get_variant_value() & TEST_OP_PUT)) {
-        test_outstanding_queue(TEST_FAILOVER_PROTO_AM_EGR_SINGLE_BCOPY);
-    } else {
-        UCS_TEST_SKIP_R("AM operation variant is required");
-    }
+    test_outstanding_queue(TEST_FAILOVER_PROTO_AM_EGR_SINGLE_BCOPY);
 }
 
-UCS_TEST_P(test_ucp_fault_tolerance,
+UCS_TEST_SKIP_COND_P(test_ucp_fault_tolerance,
            initiator_failure_am_egr_multi_bcopy_outstanding,
+           !(get_variant_value() & TEST_OP_AM),
            "MAX_EAGER_LANES=8", "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
 {
     test_outstanding_am(TEST_FAILOVER_PROTO_AM_EGR_MULTI_BCOPY);
 }
 
-UCS_TEST_P(test_ucp_fault_tolerance, initiator_failure_put_am_bcopy_outstanding,
+UCS_TEST_SKIP_COND_P(test_ucp_fault_tolerance, initiator_failure_put_am_bcopy_outstanding,
+                     !(get_variant_value() & TEST_OP_PUT),
            "MAX_EAGER_LANES=8", "MAX_RMA_LANES=8", "MAX_RMA_RAILS=8",
            "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
 {
     test_outstanding_put(TEST_FAILOVER_PROTO_PUT_AM_BCOPY);
 }
 
-UCS_TEST_P(test_ucp_fault_tolerance, initiator_failure_am_egr_bcopy,
+UCS_TEST_SKIP_COND_P(test_ucp_fault_tolerance, initiator_failure_am_egr_bcopy,
+                !((get_variant_value() & TEST_OP_AM) &&
+                  !(get_variant_value() & TEST_OP_PUT)),
            "MAX_EAGER_LANES=8", "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
 {
-    if ((get_variant_value() & TEST_OP_AM) &&
-        !(get_variant_value() & TEST_OP_PUT)) {
-        do_test(FAILURE_SIDE_INITIATOR);
-    } else {
-        UCS_TEST_SKIP_R("AM operation variant is required");
-    }
+    do_test(FAILURE_SIDE_INITIATOR);
 }
 
-UCS_TEST_P(test_ucp_fault_tolerance, target_failure_am_egr_bcopy,
-           "MAX_EAGER_LANES=8", "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
+UCS_TEST_SKIP_COND_P(test_ucp_fault_tolerance, target_failure_am_egr_bcopy,
+                !((get_variant_value() & TEST_OP_AM) &&
+                  !(get_variant_value() & TEST_OP_PUT)),
+                "MAX_EAGER_LANES=8", "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
 {
-    if ((get_variant_value() & TEST_OP_AM) &&
-        !(get_variant_value() & TEST_OP_PUT)) {
-        do_test(FAILURE_SIDE_TARGET);
-    } else {
-        UCS_TEST_SKIP_R("AM operation variant is required");
-    }
+    do_test(FAILURE_SIDE_TARGET);
 }
 
-UCS_TEST_P(test_ucp_fault_tolerance, initiator_failure_put_offload_bcopy_ft,
+UCS_TEST_SKIP_COND_P(test_ucp_fault_tolerance, initiator_failure_put_offload_bcopy_ft,
+                !((get_variant_value() & TEST_OP_PUT) &&
+                  !(get_variant_value() & (TEST_OP_AM | TEST_OP_GET))),
            "MAX_EAGER_LANES=8", "MAX_RMA_LANES=8", "MAX_RMA_RAILS=8",
            "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
 {
-    if ((get_variant_value() & TEST_OP_PUT) &&
-        !(get_variant_value() & (TEST_OP_AM | TEST_OP_GET))) {
-        do_test(FAILURE_SIDE_INITIATOR);
-    } else {
-        UCS_TEST_SKIP_R("PUT operation variant is required");
-    }
+    do_test(FAILURE_SIDE_INITIATOR);
 }
 
-UCS_TEST_P(test_ucp_fault_tolerance, target_failure_put_offload_bcopy_ft,
+UCS_TEST_SKIP_COND_P(test_ucp_fault_tolerance, target_failure_put_offload_bcopy_ft,
+                !((get_variant_value() & TEST_OP_PUT) &&
+                  !(get_variant_value() & (TEST_OP_AM | TEST_OP_GET))),
            "MAX_EAGER_LANES=8", "MAX_RMA_LANES=8", "MAX_RMA_RAILS=8",
            "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
 {
-    if ((get_variant_value() & TEST_OP_PUT) &&
-        !(get_variant_value() & (TEST_OP_AM | TEST_OP_GET))) {
-        do_test(FAILURE_SIDE_TARGET);
-    } else {
-        UCS_TEST_SKIP_R("PUT operation variant is required");
-    }
+    do_test(FAILURE_SIDE_TARGET);
 }
