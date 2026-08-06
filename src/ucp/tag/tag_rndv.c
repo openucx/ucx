@@ -155,12 +155,18 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_rndv_rts_progress, (self),
 
 static void ucp_tag_rndv_rts_probe(const ucp_proto_init_params_t *init_params)
 {
+    ucp_context_h context;
+    uint8_t remote_op_flags;
+
     if (!ucp_tag_rndv_check_op_id(init_params) ||
         ucp_ep_config_key_has_tag_lane(init_params->ep_config_key)) {
         return;
     }
 
-    ucp_proto_rndv_rts_probe(init_params);
+    context         = init_params->worker->context;
+    remote_op_flags = ucp_proto_rndv_shm_pipeline_force_enabled(context) ?
+                      UCP_PROTO_SELECT_OP_FLAG_TAG_RNDV : 0;
+    ucp_proto_rndv_rts_probe(init_params, remote_op_flags);
 }
 
 ucp_proto_t ucp_tag_rndv_proto = {
