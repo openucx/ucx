@@ -13,6 +13,7 @@ extern "C" {
 #include <uct/base/uct_iface.h>
 #include <ucp/proto/proto_debug.h>
 #include <ucp/proto/proto_select.inl>
+#include <ucp/rndv/proto_rndv.h>
 #include <ucs/memory/numa.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/topo/base/topo.h>
@@ -1332,6 +1333,95 @@ public:
 
         check_rkey_config(sender(), data_vec, key, rkey_cfg_index);
     }
+
+protected:
+    struct cuda_ipc_lane_info {
+        ucp_lane_index_t lane;
+        ucp_md_index_t md_index;
+        ucp_rsc_index_t cmpt_index;
+    };
+
+    template <typename value_t>
+    class scoped_value {
+    public:
+        scoped_value(value_t &value, value_t new_value) :
+            m_value(value), m_orig_value(value)
+        {
+            m_value = new_value;
+        }
+
+        ~scoped_value()
+        {
+            m_value = m_orig_value;
+        }
+
+    private:
+        value_t &m_value;
+        value_t m_orig_value;
+    };
+
+    bool find_cuda_ipc_lane(const entity &e, ucp_ep_config_t *config,
+                            cuda_ipc_lane_info *lane_info)
+    {
+        ucp_context_h context = e.ucph();
+        ucp_lane_index_t lane;
+
+        for (lane = 0; lane < config->key.num_lanes; ++lane) {
+            ucp_rsc_index_t rsc_index = config->key.lanes[lane].rsc_index;
+            ucp_md_index_t md_index;
+
+            if ((rsc_index == UCP_NULL_RESOURCE) ||
+                (std::string(context->tl_rscs[rsc_index].tl_rsc.tl_name) !=
+                 "cuda_ipc")) {
+                continue;
+            }
+
+            md_index = context->tl_rscs[rsc_index].md_index;
+            lane_info->lane       = lane;
+            lane_info->md_index   = md_index;
+            lane_info->cmpt_index = context->tl_mds[md_index].cmpt_index;
+            return true;
+        }
+
+        return false;
+    }
+
+    const ucp_proto_config_t *
+    select_cuda_proto(const entity &e, ucp_operation_id_t op_id,
+                      ucp_md_map_t md_map, ucp_md_map_t unreachable_md_map,
+                      uint8_t mem_flags)
+    {
+        ucp_rkey_config_key_t rkey_config_key = {
+            md_map, ep_config_index(e), UCS_SYS_DEVICE_ID_UNKNOWN, 0,
+            UCS_MEMORY_TYPE_CUDA, unreachable_md_map
+        };
+        ucp_worker_cfg_index_t rkey_cfg_index;
+        ucp_rkey_config_t *rkey_config;
+        ucp_proto_select_param_t select_param;
+        ucp_proto_select_elem_t *select_elem;
+        ucp_memory_info_t mem_info;
+
+        mem_info.type    = UCS_MEMORY_TYPE_CUDA;
+        mem_info.sys_dev = e.ucph()->alloc_md[UCS_MEMORY_TYPE_CUDA].sys_dev;
+        mem_info.flags   = mem_flags;
+
+        ASSERT_UCS_OK(ucp_worker_rkey_config_get(e.worker(), &rkey_config_key,
+                                                 nullptr, &rkey_cfg_index));
+        rkey_config = &ucs_array_elem(&e.worker()->rkey_config,
+                                      rkey_cfg_index);
+
+        ucp_proto_select_param_init(&select_param, op_id, 0, 0,
+                                    UCP_DATATYPE_CONTIG, &mem_info, 1);
+        select_elem = ucp_proto_select_lookup_slow(
+                e.worker(), &rkey_config->proto_select, 0, ep_config_index(e),
+                rkey_cfg_index, &select_param);
+        if (select_elem == nullptr) {
+            UCS_TEST_ABORT("failed to select CUDA protocol");
+        }
+
+        return &ucp_proto_thresholds_search_slow(
+                select_elem->thresholds, 64 * UCS_MBYTE)->proto_config;
+    }
 };
 
 UCS_TEST_P(test_ucp_proto_mock_cuda_ipc, put, "IB_NUM_PATHS?=1")
@@ -1348,6 +1438,96 @@ UCS_TEST_P(test_ucp_proto_mock_cuda_ipc, get, "IB_NUM_PATHS?=1")
         {0, 0,   "copy-out",  "rc_mlx5/mock"},
         {1, INF, "zero-copy", "cuda_ipc/cuda"},
     });
+}
+
+UCS_TEST_P(test_ucp_proto_mock_cuda_ipc, put_unreachable_cuda_ipc,
+           "IB_NUM_PATHS?=1", "MAX_RNDV_LANES=1",
+           "RMA_PPLN_ENABLE=y", "RNDV_THRESH=0",
+           "RNDV_FRAG_MEM_TYPES=cuda")
+{
+    ucp_ep_config_t *config        = ucp_worker_ep_config(
+            sender().worker(), ep_config_index(sender()));
+    ucp_md_index_t remote_cuda_md_index;
+    cuda_ipc_lane_info cuda_lane;
+    const ucp_proto_rndv_ctrl_priv_t *rpriv;
+    ucp_md_map_t new_reachable_md_map;
+    std::vector<ucp_rsc_index_t> dst_md_cmpts;
+
+    if (!find_cuda_ipc_lane(sender(), config, &cuda_lane)) {
+        UCS_TEST_SKIP_R("cuda_ipc lane is not available");
+    }
+
+    remote_cuda_md_index = ucs_ffs64_safe(
+            ~(config->key.reachable_md_map | UCS_BIT(cuda_lane.md_index)) &
+            UCS_MASK(UCP_MAX_MDS));
+    if (remote_cuda_md_index >= UCP_MAX_MDS) {
+        UCS_TEST_SKIP_R("no unused remote MD index is available");
+    }
+
+    new_reachable_md_map = config->key.reachable_md_map |
+                           UCS_BIT(remote_cuda_md_index);
+    dst_md_cmpts.assign(config->key.dst_md_cmpts,
+                        config->key.dst_md_cmpts +
+                        ucs_popcount(config->key.reachable_md_map));
+    dst_md_cmpts.insert(
+            dst_md_cmpts.begin() +
+            ucs_bitmap2idx(new_reachable_md_map, remote_cuda_md_index),
+            cuda_lane.cmpt_index);
+    scoped_value<ucp_md_map_t> reachable_md_map(config->key.reachable_md_map,
+                                                new_reachable_md_map);
+    scoped_value<ucp_rsc_index_t*> remote_md_cmpts(config->key.dst_md_cmpts,
+                                                   dst_md_cmpts.data());
+    scoped_value<ucp_md_index_t> dst_md_index(
+            config->key.lanes[cuda_lane.lane].dst_md_index,
+            remote_cuda_md_index);
+
+    auto proto_config = select_cuda_proto(
+            sender(), UCP_OP_ID_PUT,
+            config->key.reachable_md_map & ~UCS_BIT(remote_cuda_md_index),
+            UCS_BIT(remote_cuda_md_index), 0);
+
+    ASSERT_STREQ("put/rndv", proto_config->proto->name);
+    rpriv = static_cast<const ucp_proto_rndv_ctrl_priv_t*>(proto_config->priv);
+    EXPECT_STREQ("rndv/rtr/mtype", rpriv->remote_proto_config.proto->name);
+}
+
+UCS_TEST_P(test_ucp_proto_mock_cuda_ipc, rndv_recv_legacy_cuda,
+           "IB_NUM_PATHS?=1", "MAX_RNDV_LANES=1",
+           "RMA_PPLN_ENABLE=y", "RNDV_THRESH=0",
+           "RNDV_FRAG_MEM_TYPES=cuda")
+{
+    ucp_ep_config_t *config        = ucp_worker_ep_config(
+            receiver().worker(), ep_config_index(receiver()));
+    cuda_ipc_lane_info cuda_lane;
+    ucp_context_alloc_md_index_t *alloc_md;
+    ucp_md_index_t alloc_md_index;
+    ucp_memory_info_t mem_info;
+
+    if (!find_cuda_ipc_lane(receiver(), config, &cuda_lane)) {
+        UCS_TEST_SKIP_R("cuda_ipc lane is not available");
+    }
+
+    if (ucp_mm_get_alloc_md_index(receiver().ucph(), UCS_MEMORY_TYPE_CUDA,
+                                  UCS_SYS_DEVICE_ID_UNKNOWN, &alloc_md_index,
+                                  &mem_info) != UCS_OK) {
+        UCS_TEST_SKIP_R("CUDA allocation MD is not available");
+    }
+
+    alloc_md = &receiver().ucph()->alloc_md[UCS_MEMORY_TYPE_CUDA];
+    scoped_value<unsigned> ep_flags(
+            config->key.flags,
+            config->key.flags & ~(UCP_EP_CONFIG_KEY_FLAG_SELF |
+                                  UCP_EP_CONFIG_KEY_FLAG_INTRA_NODE));
+
+    scoped_value<uint8_t> alloc_md_flags(
+            alloc_md->mem_flags, alloc_md->mem_flags | UCS_MEM_FLAG_FABRIC);
+
+    auto proto_config = select_cuda_proto(receiver(), UCP_OP_ID_RNDV_RECV,
+                                          0, 0, UCS_MEM_FLAG_FABRIC);
+    EXPECT_STREQ("rndv/rtr", proto_config->proto->name);
+
+    proto_config = select_cuda_proto(receiver(), UCP_OP_ID_RNDV_RECV, 0, 0, 0);
+    EXPECT_STREQ("rndv/rtr/mtype", proto_config->proto->name);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_proto_mock_cuda_ipc,
