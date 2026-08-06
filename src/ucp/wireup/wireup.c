@@ -192,6 +192,7 @@ ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
                                  UCP_AM_ID_WIREUP, ucp_wireup_msg_pack,
                                  wireup_msg_iov, am_flags);
     if (ucs_unlikely(packed_len < 0)) {
+        /* coverity[cast_overflow] */
         status = (ucs_status_t)packed_len;
         if (ucs_likely(status == UCS_ERR_NO_RESOURCE)) {
             goto out;
@@ -227,6 +228,7 @@ out_free_req:
     ucp_request_mem_free(req);
 out:
     UCS_ASYNC_UNBLOCK(&ep->worker->async);
+    /* coverity[return_overflow] */
     return status;
 }
 
