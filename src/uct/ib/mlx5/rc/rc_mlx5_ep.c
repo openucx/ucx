@@ -807,31 +807,18 @@ ucs_status_t uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
 {
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
     uct_ib_mlx5_txwq_t *txwq = &ep->tx.wq;
-    uint16_t ft_ci = txwq->ft_ci;
+    uint16_t ft_ci           = txwq->ft_ci;
     uint16_t outstanding;
-    int failover_arm;
-    ucs_status_t status;
 
-    failover_arm = !(ep->super.ext_flags &
-                     UCT_RC_EP_EXT_FLAG_FAILOVER_ARMED);
-    if (failover_arm) {
+    if (!(ep->super.ext_flags & UCT_RC_EP_EXT_FLAG_FAILOVER_ARMED)) {
         outstanding = txwq->bb_max - uct_rc_txqp_available(&ep->super.txqp);
-        ft_ci       = txwq->prev_sw_pi - outstanding;
+        txwq->ft_ci = txwq->prev_sw_pi - outstanding;
+        ep->super.ext_flags |= UCT_RC_EP_EXT_FLAG_FAILOVER_ARMED;
         ucs_assert(ft_ci == txwq->hw_ci);
     }
 
-    status = uct_ib_mlx5_modify_qp_state(&iface->super.super, &txwq->super,
-                                         IBV_QPS_ERR);
-    if ((status != UCS_OK) || !failover_arm) {
-        return status;
-    }
-
-    txwq->ft_ci          = ft_ci;
-    ep->super.ext_flags |= UCT_RC_EP_EXT_FLAG_FAILOVER_ARMED;
-
-    ucs_debug("ep %p armed failover WQE range (%u, %u) posted index %u", ep,
-              txwq->ft_ci, txwq->sw_pi, txwq->nnop_pi);
-    return UCS_OK;
+    return uct_ib_mlx5_modify_qp_state(&iface->super.super, &txwq->super,
+                                       IBV_QPS_ERR);
 }
 
 ucs_status_t uct_rc_mlx5_base_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
