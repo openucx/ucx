@@ -5,6 +5,7 @@
 */
 
 #include <uct/ib/test_ib.h>
+#include <uct/api/v2/uct_v2.h>
 #ifdef HAVE_MLX5_DV
 extern "C" {
 #include <uct/ib/mlx5/ib_mlx5.h>
@@ -79,6 +80,60 @@ void test_uct_ib::send_recv_short() {
 }
 
 size_t test_uct_ib::m_ib_am_handler_counter = 0;
+
+class test_uct_ib_perf : public test_uct_ib {
+protected:
+    void create_connected_entities() override
+    {
+        m_e1 = uct_test::create_entity(0);
+        m_entities.push_back(m_e1);
+    }
+
+    static uct_perf_attr_t init_perf_attr(uct_ep_operation_t op)
+    {
+        uct_perf_attr_t perf_attr = {};
+
+        perf_attr.field_mask         = UCT_PERF_ATTR_FIELD_OPERATION |
+                                       UCT_PERF_ATTR_FIELD_LOCAL_MEMORY_TYPE |
+                                       UCT_PERF_ATTR_FIELD_REMOTE_MEMORY_TYPE |
+                                       UCT_PERF_ATTR_FIELD_LOCAL_SYS_DEVICE |
+                                       UCT_PERF_ATTR_FIELD_REMOTE_SYS_DEVICE |
+                                       UCT_PERF_ATTR_FIELD_BANDWIDTH |
+                                       UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH;
+        perf_attr.operation          = op;
+        perf_attr.local_memory_type  = UCS_MEMORY_TYPE_HOST;
+        perf_attr.remote_memory_type = UCS_MEMORY_TYPE_HOST;
+        perf_attr.local_sys_device   = UCS_SYS_DEVICE_ID_UNKNOWN;
+        perf_attr.remote_sys_device  = UCS_SYS_DEVICE_ID_UNKNOWN;
+
+        return perf_attr;
+    }
+};
+
+UCS_TEST_P(test_uct_ib_perf, get_path_bandwidth, "IB_NUM_PATHS?=auto")
+{
+    uct_ib_iface_t *iface    = ucs_derived_of(m_e1->iface(), uct_ib_iface_t);
+    uct_perf_attr_t get_perf = init_perf_attr(UCT_EP_OP_GET_ZCOPY);
+    uct_perf_attr_t put_perf = init_perf_attr(UCT_EP_OP_PUT_ZCOPY);
+
+    if (!(m_e1->iface_attr().cap.flags & UCT_IFACE_FLAG_GET_ZCOPY) ||
+        !(m_e1->iface_attr().cap.flags & UCT_IFACE_FLAG_PUT_ZCOPY)) {
+        UCS_TEST_SKIP_R("requires PUT and GET zcopy");
+    }
+
+    ASSERT_UCS_OK(uct_iface_estimate_perf(m_e1->iface(), &get_perf));
+    ASSERT_UCS_OK(uct_iface_estimate_perf(m_e1->iface(), &put_perf));
+
+    if (uct_ib_iface_port_is_xdr(iface)) {
+        EXPECT_GT(put_perf.bandwidth.shared, get_perf.bandwidth.shared);
+        EXPECT_GT(put_perf.path_bandwidth.shared,
+                  get_perf.path_bandwidth.shared);
+    } else {
+        EXPECT_DOUBLE_EQ(put_perf.bandwidth.shared, get_perf.bandwidth.shared);
+    }
+}
+
+UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib_perf);
 
 class test_uct_ib_addr : public test_uct_ib {
 public:

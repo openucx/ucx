@@ -814,6 +814,8 @@ uct_ib_wc_to_ucs_status(enum ibv_wc_status status)
     }
 }
 
+uint8_t uct_ib_iface_port_active_width(uct_ib_iface_t *iface);
+
 static UCS_F_ALWAYS_INLINE uint32_t
 uct_ib_iface_port_active_speed(uct_ib_iface_t *iface)
 {
@@ -834,7 +836,11 @@ uct_ib_iface_port_is_ndr(uct_ib_iface_t *iface)
 static UCS_F_ALWAYS_INLINE int
 uct_ib_iface_port_is_xdr(uct_ib_iface_t *iface)
 {
-    return uct_ib_iface_port_active_speed(iface) == UCT_IB_SPEED_XDR;
+    uint32_t active_speed = uct_ib_iface_port_active_speed(iface);
+    uint8_t active_width  = uct_ib_iface_is_roce(iface) ?
+                            uct_ib_iface_port_active_width(iface) : 1;
+
+    return (active_width * active_speed) == UCT_IB_SPEED_XDR;
 }
 
 #endif
