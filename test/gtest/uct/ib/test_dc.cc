@@ -173,32 +173,31 @@ int test_dc::m_purge_count      = 0;
 uint32_t test_dc::m_am_rx_count = 0;
 
 
-UCS_TEST_P(test_dc, legacy_iface_address_reachable)
+UCS_TEST_P(test_dc, legacy_iface_address_requires_flush_rkey)
 {
-    const uct_iface_attr_t &attr = m_e2->iface_attr();
-    std::vector<char> device_addr(attr.device_addr_len);
-    std::vector<char> iface_addr(attr.iface_addr_len);
-    uct_dc_mlx5_iface_addr_t *dc_addr;
-    uct_iface_is_reachable_params_t params = {};
-
+    std::vector<char> device_addr(m_e2->iface_attr().device_addr_len);
+    std::vector<char> iface_addr(sizeof(uct_dc_mlx5_iface_order_addr_t));
+    uct_iface_is_reachable_params_t params = {
+        .field_mask = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
+                      UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR,
+        .device_addr = (uct_device_addr_t*)device_addr.data(),
+        .iface_addr  = (uct_iface_addr_t*)iface_addr.data()
+    };
     ASSERT_UCS_OK(uct_iface_get_device_address(
             m_e2->iface(), (uct_device_addr_t*)device_addr.data()));
     ASSERT_UCS_OK(uct_iface_get_address(
             m_e2->iface(), (uct_iface_addr_t*)iface_addr.data()));
-
-    dc_addr = (uct_dc_mlx5_iface_addr_t*)iface_addr.data();
-    dc_addr->flags &= ~UCT_DC_MLX5_IFACE_ADDR_ORDERING_CAP;
-
-    params.field_mask = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
-                        UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR |
-                        UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR_LENGTH |
-                        UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR_LENGTH;
-    params.device_addr        = (uct_device_addr_t*)device_addr.data();
-    params.device_addr_length = device_addr.size();
-    params.iface_addr         = (uct_iface_addr_t*)dc_addr;
-    params.iface_addr_length  = sizeof(*dc_addr);
-
+    auto *dc_addr = (uct_dc_mlx5_iface_addr_t*)iface_addr.data();
+    dc_addr->flags &= ~(UCT_DC_MLX5_IFACE_ADDR_ORDERING_CAP |
+                        UCT_DC_MLX5_IFACE_ADDR_RELAXED_ORDER |
+                        UCT_DC_MLX5_IFACE_ADDR_DC_VERS |
+                        UCT_DC_MLX5_IFACE_ADDR_FLUSH_RKEY);
+    dc_addr->flags |= dc_iface(m_e2)->version_flag;
+    EXPECT_FALSE(uct_iface_is_reachable_v2(m_e1->iface(), &params));
+    dc_addr->flags |= UCT_DC_MLX5_IFACE_ADDR_FLUSH_RKEY;
     EXPECT_TRUE(uct_iface_is_reachable_v2(m_e1->iface(), &params));
+    dc_addr->flags |= UCT_DC_MLX5_IFACE_ADDR_RELAXED_ORDER;
+    EXPECT_FALSE(uct_iface_is_reachable_v2(m_e1->iface(), &params));
 }
 
 

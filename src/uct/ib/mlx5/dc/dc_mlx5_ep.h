@@ -63,10 +63,8 @@ enum uct_dc_mlx5_ep_flags {
     UCT_DC_MLX5_EP_FLAG_INVALIDATED         = 0,
 #endif
 
-    /* Peer memory keys require a remote-read fence */
     UCT_DC_MLX5_EP_FLAG_FENCE_FLUSH         = UCS_BIT(13),
 
-    /* A remote-read fence is pending on this EP */
     UCT_DC_MLX5_EP_FLAG_FENCE_PENDING       = UCS_BIT(14)
 };
 
@@ -776,7 +774,7 @@ uct_dc_mlx5_iface_dci_get(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
 
     dci  = uct_dc_mlx5_iface_dci(iface, ep->dci);
 
-    if (dci->flags & UCT_DC_DCI_FLAG_FENCE_PENDING) {
+    if (ucs_unlikely(dci->flags & UCT_DC_DCI_FLAG_FENCE_PENDING)) {
         goto out_no_res;
     }
 

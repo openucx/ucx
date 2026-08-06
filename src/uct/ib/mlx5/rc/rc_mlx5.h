@@ -43,9 +43,7 @@ enum {
     UCT_RC_MLX5_EP_ADDR_FLAG_FLUSH_RKEY       = UCS_BIT(0),
     /* atomic key has no offset */
     UCT_RC_MLX5_EP_ADDR_FLAG_NO_ATOMIC_OFFSET = UCS_BIT(1),
-    /* peer supports only relaxed-order memory keys */
     UCT_RC_MLX5_EP_ADDR_FLAG_RELAXED_ORDER     = UCS_BIT(2),
-    /* peer understands the relaxed-only ordering contract */
     UCT_RC_MLX5_EP_ADDR_FLAG_ORDERING_CAP      = UCS_BIT(3)
 };
 

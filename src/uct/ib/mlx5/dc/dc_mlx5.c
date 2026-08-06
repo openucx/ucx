@@ -1079,24 +1079,26 @@ uct_dc_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
             UCT_IFACE_IS_REACHABLE_FIELD, params, iface_addr, IFACE_ADDR, NULL);
     if (addr != NULL) {
         if (addr->flags & UCT_DC_MLX5_IFACE_ADDR_RELAXED_ORDER) {
-            if (!(addr->flags & UCT_DC_MLX5_IFACE_ADDR_ORDERING_CAP)) {
-                return 0;
-            }
-
-            if ((addr->flags & UCT_DC_MLX5_IFACE_ADDR_DC_VERS) !=
-                UCT_DC_MLX5_IFACE_ADDR_DC_VERS) {
-                return 0;
-            }
-
             addr_length = UCS_PARAM_VALUE(
                     UCT_IFACE_IS_REACHABLE_FIELD, params, iface_addr_length,
                     IFACE_ADDR_LENGTH,
                     sizeof(uct_dc_mlx5_iface_order_addr_t));
-            if (addr_length < sizeof(uct_dc_mlx5_iface_order_addr_t)) {
+            if (!(addr->flags & UCT_DC_MLX5_IFACE_ADDR_ORDERING_CAP) ||
+                ((addr->flags & UCT_DC_MLX5_IFACE_ADDR_DC_VERS) !=
+                 UCT_DC_MLX5_IFACE_ADDR_DC_VERS) ||
+                (addr_length < sizeof(uct_dc_mlx5_iface_order_addr_t))) {
+                return 0;
+            }
+        } else if (!(addr->flags & UCT_DC_MLX5_IFACE_ADDR_ORDERING_CAP)) {
+            addr_length = UCS_PARAM_VALUE(
+                    UCT_IFACE_IS_REACHABLE_FIELD, params, iface_addr_length,
+                    IFACE_ADDR_LENGTH,
+                    sizeof(uct_dc_mlx5_iface_flush_addr_t));
+            if (!(addr->flags & UCT_DC_MLX5_IFACE_ADDR_FLUSH_RKEY) ||
+                (addr_length < sizeof(uct_dc_mlx5_iface_flush_addr_t))) {
                 return 0;
             }
         }
-
         remote_version = uct_dc_mlx5_iface_addr_version(addr);
         same_tm      = (UCT_DC_MLX5_IFACE_ADDR_TM_ENABLED(addr) ==
                         UCT_RC_MLX5_TM_ENABLED(&iface->super));
@@ -1690,6 +1692,11 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     size_t max_capacity;
 
     ucs_trace_func("");
+
+    if (md->super.relaxed_order_required &&
+        !uct_ib_md_is_flush_rkey_valid(md->super.flush_rkey)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
 
     self->tx.policy = config->tx_policy;
     self->tx.ndci   = uct_dc_mlx5_iface_is_hw_dcs(self) ? 1 : config->ndci;

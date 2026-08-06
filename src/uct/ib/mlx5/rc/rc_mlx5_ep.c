@@ -948,17 +948,23 @@ uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
     const void *ptr;
     uint32_t flush_rkey_hi;
     ucs_status_t status;
-    int peer_ordering_cap;
     int peer_needs_strong_fence;
 
     addr_length = UCS_PARAM_VALUE(UCT_EP_CONNECT_TO_EP_PARAM_FIELD, params,
                                   ep_addr_length, EP_ADDR_LENGTH,
                                   sizeof(uct_rc_mlx5_ep_address_t));
     ext_addr    = ucs_derived_of(rc_addr, uct_rc_mlx5_ep_ext_address_t);
-    peer_ordering_cap =
-            (addr_length > sizeof(uct_rc_mlx5_ep_address_t)) &&
-            (ext_addr->flags & UCT_RC_MLX5_EP_ADDR_FLAG_ORDERING_CAP);
-    peer_needs_strong_fence = 0;
+    peer_needs_strong_fence = 1;
+    if (addr_length > sizeof(uct_rc_mlx5_ep_address_t)) {
+        peer_needs_strong_fence =
+                !(ext_addr->flags & UCT_RC_MLX5_EP_ADDR_FLAG_ORDERING_CAP);
+        if ((ext_addr->flags & UCT_RC_MLX5_EP_ADDR_FLAG_RELAXED_ORDER) &&
+            peer_needs_strong_fence) {
+            return UCS_ERR_UNSUPPORTED;
+        }
+        peer_needs_strong_fence |=
+                ext_addr->flags & UCT_RC_MLX5_EP_ADDR_FLAG_RELAXED_ORDER;
+    }
 
     status = uct_ib_iface_fill_ah_attr_from_addr(&iface->super.super, ib_addr,
                                                  ep->super.super.path_index,
@@ -1015,13 +1021,6 @@ uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
     if (ext_addr->flags & UCT_RC_MLX5_EP_ADDR_FLAG_NO_ATOMIC_OFFSET) {
         /* override super.super.atomic_mr_offset that was set previously */
         ep->super.super.atomic_mr_offset = 0;
-    }
-
-    if (ext_addr->flags & UCT_RC_MLX5_EP_ADDR_FLAG_RELAXED_ORDER) {
-        if (!peer_ordering_cap) {
-            return UCS_ERR_UNSUPPORTED;
-        }
-        peer_needs_strong_fence = 1;
     }
 
 out_fence:

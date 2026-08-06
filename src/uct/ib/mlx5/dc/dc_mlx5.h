@@ -227,7 +227,6 @@ typedef enum {
     /* Indicates that this specific dci is shared, regardless of policy */
     UCT_DC_DCI_FLAG_SHARED = UCS_BIT(0),
 
-    /* A remote flush is ordering the DCI after a fence */
     UCT_DC_DCI_FLAG_FENCE_PENDING = UCS_BIT(1)
 } uct_dc_dci_flags_t;
 

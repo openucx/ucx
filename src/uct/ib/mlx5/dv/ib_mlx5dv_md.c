@@ -161,7 +161,6 @@ uct_ib_mlx5_devx_reg_ksm(uct_ib_mlx5_md_t *md, uint64_t address, size_t length,
     UCT_IB_MLX5DV_SET(mkc, mkc, lr, 1);
     UCT_IB_MLX5DV_SET(mkc, mkc, relaxed_ordering_write,
                       md->super.relaxed_order_required);
-    /* Keep reads ordered after writes so remote reads can flush data. */
     UCT_IB_MLX5DV_SET(mkc, mkc, order_read_after_write, 0);
     UCT_IB_MLX5DV_SET(mkc, mkc, pd, uct_ib_mlx5_devx_md_get_pdn(md));
     UCT_IB_MLX5DV_SET(mkc, mkc, translations_octword_size, list_size);
