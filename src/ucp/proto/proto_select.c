@@ -435,8 +435,9 @@ ucp_proto_select_get_lane_map(ucp_worker_h worker,
     size_t range_start, range_end;
     ucp_proto_query_attr_t query_attr;
 
-    range_end = -1;
+    range_end = SIZE_MAX;
     do {
+        /* coverity[overflow_const] */
         range_start = range_end + 1;
         /* coverity[check_return] */
         ucp_proto_select_elem_query(worker, select_elem, range_start,

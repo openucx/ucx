@@ -353,6 +353,7 @@ static size_t ucp_proto_rndv_rtr_mtype_pack(void *dest, void *arg)
         packed_rkey_size = 0;
     }
 
+    /* coverity[overflow] */
     return sizeof(*rtr) + packed_rkey_size;
 }
 

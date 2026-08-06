@@ -348,6 +348,7 @@ uint64_t ucs_generate_uuid(uint64_t seed)
     }
 
     gettimeofday(&tv, NULL);
+    /* coverity[overflow] */
     return seed +
            ucs_get_prime(0) * ucs_get_tid() +
            ucs_get_prime(1) * ucs_get_time() +

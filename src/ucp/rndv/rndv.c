@@ -198,6 +198,7 @@ size_t ucp_rndv_rts_pack(ucp_request_t *sreq, ucp_rndv_rts_hdr_t *rndv_rts_hdr,
         packed_rkey_size      = 0;
     }
 
+    /* coverity[overflow] */
     return sizeof(*rndv_rts_hdr) + packed_rkey_size;
 }
 
