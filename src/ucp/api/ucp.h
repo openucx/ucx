@@ -456,8 +456,10 @@ enum ucp_worker_attr_field {
     UCP_WORKER_ATTR_FIELD_MAX_AM_HEADER   = UCS_BIT(3), /**< Maximum header size
                                                              used by UCP AM API */
     UCP_WORKER_ATTR_FIELD_NAME            = UCS_BIT(4), /**< UCP worker name */
-    UCP_WORKER_ATTR_FIELD_MAX_INFO_STRING = UCS_BIT(5)  /**< Maximum size of
+    UCP_WORKER_ATTR_FIELD_MAX_INFO_STRING = UCS_BIT(5), /**< Maximum size of
                                                              info string */
+    UCP_WORKER_ATTR_FIELD_ADDRESS_DEVICE_NAME =
+            UCS_BIT(6)  /**< UCP address device name */
 };
 
 
@@ -1400,6 +1402,14 @@ typedef struct ucp_worker_attr {
      * Maximum debug string size that can be filled with @ref ucp_request_query.
      */
     size_t                max_debug_string;
+
+    /**
+     * Device name whose resources should be included in the worker address.
+     * If @ref UCP_WORKER_ATTR_FIELD_ADDRESS_DEVICE_NAME bit is set in
+     * @ref field_mask, this value should point to a valid device name from the
+     * worker's context. @note This is an input attribute.
+     */
+    const char            *address_device_name;
 } ucp_worker_attr_t;
 
 
