@@ -15,6 +15,7 @@
 
 
 #define REVERSE_SL_MASK   UCS_MASK(4)
+#define UCT_DC_MLX5_FENCE_DCI_SHIFT 16
 
 
 static UCS_F_ALWAYS_INLINE void
@@ -751,7 +752,9 @@ uct_dc_mlx5_ep_flush_remote_post(uct_dc_mlx5_ep_t *ep,
 
     if (fence_ep != NULL) {
         desc->super.ep     = (uct_ep_h)fence_ep;
-        desc->super.length = ((uint32_t)ep->dci << 16) | fence_beat;
+        /* Save the DCI and fence beat for the completion handler. */
+        desc->super.length = ((uint32_t)ep->dci <<
+                              UCT_DC_MLX5_FENCE_DCI_SHIFT) | fence_beat;
     }
 
     UCT_DC_MLX5_IFACE_TXQP_GET(iface, ep, txqp, txwq);
@@ -775,13 +778,14 @@ static void uct_dc_mlx5_ep_fence_flush_handler(uct_rc_iface_send_op_t *op,
                                                  uct_rc_iface_t, tx.mp);
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(rc_iface,
                                                 uct_dc_mlx5_iface_t);
-    uct_dc_dci_t *dci = uct_dc_mlx5_iface_dci(iface, op->length >> 16);
+    uct_dc_dci_t *dci = uct_dc_mlx5_iface_dci(
+            iface, op->length >> UCT_DC_MLX5_FENCE_DCI_SHIFT);
     uct_dc_mlx5_ep_t *ep;
 
     if (op->ep != NULL) {
         ep = ucs_derived_of(op->ep, uct_dc_mlx5_ep_t);
         if (!(op->flags & UCT_RC_IFACE_SEND_OP_STATUS)) {
-            ep->fi.fence_beat = op->length & UINT16_MAX;
+            ep->fi.fence_beat = (uint16_t)op->length;
         }
         ep->flags &= ~UCT_DC_MLX5_EP_FLAG_FENCE_PENDING;
     }

@@ -414,7 +414,6 @@ typedef struct uct_rc_mlx5_iface_common {
         uint8_t                        dp_ordering_devx;
         uint8_t                        dp_ordering_force;
         uint8_t                        ddp_enabled_dv;
-        uint8_t                        relaxed_order_required;
         uint8_t                        fence_mode_auto;
     } config;
     UCS_STATS_NODE_DECLARE(stats)

@@ -840,7 +840,7 @@ ucs_status_t uct_rc_mlx5_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
         }
     }
 
-    if (iface->config.relaxed_order_required) {
+    if (md->relaxed_order_required) {
         ext_addr->flags |= UCT_RC_MLX5_EP_ADDR_FLAG_RELAXED_ORDER;
     }
 

@@ -266,12 +266,13 @@ uct_dc_mlx5_iface_flush_rkey_enabled(uct_dc_mlx5_iface_t *iface)
 
     return uct_ib_md_is_flush_rkey_valid(md->flush_rkey) &&
            (iface->super.super.config.flush_remote ||
-            iface->super.config.relaxed_order_required);
+            md->relaxed_order_required);
 }
 
 static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
+    uct_ib_md_t *md             = uct_ib_iface_md(&iface->super.super.super);
     size_t max_am_inline       = UCT_IB_MLX5_AM_MAX_SHORT(UCT_IB_MLX5_AV_FULL_SIZE);
     size_t max_put_inline      = UCT_IB_MLX5_PUT_MAX_SHORT(UCT_IB_MLX5_AV_FULL_SIZE);
     ucs_status_t status;
@@ -301,7 +302,7 @@ static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
     iface_attr->cap.flags     |= UCT_IFACE_FLAG_CONNECT_TO_IFACE;
     iface_attr->ep_addr_len    = 0;
     iface_attr->max_conn_priv  = 0;
-    if (iface->super.config.relaxed_order_required) {
+    if (md->relaxed_order_required) {
         iface_attr->iface_addr_len =
                 sizeof(uct_dc_mlx5_iface_order_addr_t);
     } else if (uct_dc_mlx5_iface_flush_rkey_enabled(iface)) {
@@ -1084,6 +1085,7 @@ uct_dc_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
                     IFACE_ADDR_LENGTH,
                     sizeof(uct_dc_mlx5_iface_order_addr_t));
             if (!(addr->flags & UCT_DC_MLX5_IFACE_ADDR_ORDERING_CAP) ||
+                !(addr->flags & UCT_DC_MLX5_IFACE_ADDR_FLUSH_RKEY) ||
                 ((addr->flags & UCT_DC_MLX5_IFACE_ADDR_DC_VERS) !=
                  UCT_DC_MLX5_IFACE_ADDR_DC_VERS) ||
                 (addr_length < sizeof(uct_dc_mlx5_iface_order_addr_t))) {
@@ -1147,7 +1149,7 @@ uct_dc_mlx5_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr
         addr->super.flags  |= UCT_DC_MLX5_IFACE_ADDR_FLUSH_RKEY;
     }
 
-    if (iface->super.config.relaxed_order_required) {
+    if (md->relaxed_order_required) {
         order_addr->dc_version = iface->version_flag;
         addr->super.flags |= UCT_DC_MLX5_IFACE_ADDR_RELAXED_ORDER |
                              UCT_DC_MLX5_IFACE_ADDR_DC_VERS;

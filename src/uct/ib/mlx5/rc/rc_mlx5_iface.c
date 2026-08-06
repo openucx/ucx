@@ -630,11 +630,12 @@ static uint8_t uct_rc_mlx5_iface_get_address_type(uct_iface_h tl_iface)
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(tl_iface,
                                                        uct_rc_mlx5_iface_common_t);
+    uct_ib_md_t *md = uct_ib_iface_md(&iface->super.super);
     uint8_t type;
 
     type = UCT_RC_MLX5_TM_ENABLED(iface) ? UCT_RC_MLX5_IFACE_ADDR_TYPE_TM :
                                            UCT_RC_MLX5_IFACE_ADDR_TYPE_BASIC;
-    return type | (iface->config.relaxed_order_required ?
+    return type | (md->relaxed_order_required ?
                    UCT_RC_MLX5_IFACE_ADDR_FLAG_RELAXED_ORDER : 0);
 }
 
@@ -874,7 +875,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
     self->super.config.exp_backoff = mlx5_config->exp_backoff;
     self->config.log_ack_req_freq  = ucs_min(mlx5_config->log_ack_req_freq,
                                              UCT_RC_MLX5_MAX_LOG_ACK_REQ_FREQ);
-    self->config.relaxed_order_required = md->super.relaxed_order_required;
     self->config.fence_mode_auto =
             (rc_config->fence_mode == UCT_RC_FENCE_MODE_AUTO);
 
