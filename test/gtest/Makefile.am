@@ -321,7 +321,8 @@ endif
 
 if HAVE_ZE
 gtest_SOURCES += \
-	ucm/ze_hooks.cc
+	ucm/ze_hooks.cc \
+	uct/ze/test_ze.cc
 gtest_CPPFLAGS += \
 	$(ZE_CPPFLAGS)
 gtest_LDFLAGS += \
