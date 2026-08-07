@@ -82,8 +82,10 @@ echo "INFO: Stopping SLURM job: ${slurm_job_id}"
 case "${slurm_head_node}" in
     scctl)
         echo "INFO: Using scctl client to stop Slurm resources"
+        set +x
         export SCCTL_USER=${SERVICE_USER_USERNAME}
         export SCCTL_PASSWORD=${SERVICE_USER_PASSWORD}
+        set -x
         scctl -v
         scctl --raw-errors upgrade
         scctl --raw-errors login
