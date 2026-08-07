@@ -508,7 +508,7 @@ ucs_status_t uct_rc_iface_init_rx(uct_rc_iface_t *iface,
                                   struct ibv_srq **srq_p)
 {
     struct ibv_srq_init_attr srq_init_attr;
-    struct ibv_pd *pd = uct_ib_iface_md(&iface->super)->pd;
+    struct ibv_pd *pd = uct_ib_md_control_pd(uct_ib_iface_md(&iface->super));
     struct ibv_srq *srq;
 
     srq_init_attr.attr.max_sge   = 1;

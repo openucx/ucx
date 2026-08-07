@@ -150,6 +150,17 @@ AS_IF([test "x$with_ib" = "xyes"],
        AC_CHECK_DECLS([IBV_CREATE_CQ_ATTR_IGNORE_OVERRUN],
                       [have_cq_io=yes], [], [[#include <infiniband/verbs.h>]])
 
+       AC_CHECK_HEADERS([linux/dma-heap.h])
+
+       AC_CHECK_DECLS([IBV_DEVICE_CC_DMA_BOUNCE,
+                       IBV_PARENT_DOMAIN_INIT_ATTR_ALLOW_CC_UNPROTECTED_ALLOC,
+                       IBV_CQ_INIT_ATTR_MASK_PD,
+                       ibv_alloc_parent_domain],
+                      [], [], [[#include <infiniband/verbs.h>]])
+
+       AC_CHECK_MEMBERS([struct ibv_cq_init_attr_ex.parent_domain],
+                        [], [], [[#include <infiniband/verbs.h>]])
+
        AS_IF([test "x$with_mlx5" != xno], [
               have_mlx5=yes
 
@@ -178,8 +189,11 @@ AS_IF([test "x$with_ib" = "xyes"],
                            MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE,
                            MLX5DV_QP_CREATE_ALLOW_SCATTER_TO_CQE,
                            MLX5DV_UMEM_MASK_DMABUF,
+                           mlx5dv_devx_umem_reg_ex,
                            MLX5DV_UAR_ALLOC_TYPE_BF,
                            MLX5DV_UAR_ALLOC_TYPE_NC_DEDICATED],
+                                  [], [], [[#include <infiniband/mlx5dv.h>]])
+                       AC_CHECK_TYPES([struct mlx5dv_devx_umem_in],
                                   [], [], [[#include <infiniband/mlx5dv.h>]])
                        AC_CHECK_MEMBERS([struct mlx5dv_cq.cq_uar],
                                   [], [], [[#include <infiniband/mlx5dv.h>]])
