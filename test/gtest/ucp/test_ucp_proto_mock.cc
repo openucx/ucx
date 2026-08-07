@@ -2097,17 +2097,17 @@ public:
     {
         // One EP & rkey config created during connection establishment
         ucp_worker_h worker = sender().worker();
-        EXPECT_EQ(worker->rkey_config_count, 1);
+        EXPECT_EQ(kh_size(&worker->rkey_config_hash), 1);
         EXPECT_EQ(worker->ep_config.length, 1);
 
         // New rkey config created during first operation
         send(1);
-        EXPECT_EQ(worker->rkey_config_count, 2);
+        EXPECT_EQ(kh_size(&worker->rkey_config_hash), 2);
         EXPECT_EQ(worker->ep_config.length, 1);
 
         // Existing rkey config is used during second operation
         send(1);
-        EXPECT_EQ(worker->rkey_config_count, 2);
+        EXPECT_EQ(kh_size(&worker->rkey_config_hash), 2);
         EXPECT_EQ(worker->ep_config.length, 1);
 
         ucp_proto_select_key_t key = any_key();
@@ -2121,14 +2121,14 @@ public:
         // Reduce port_speed of mock_0:1 by 50%, new EP & rkey configs are created
         set_port_speed("mock_0:1", 14e9);
         send(2);
-        EXPECT_EQ(worker->rkey_config_count, 3);
+        EXPECT_EQ(kh_size(&worker->rkey_config_hash), 3);
         EXPECT_EQ(worker->ep_config.length, 2);
 
         // Slightly change port_speed, so that quantized value remains the same
         // This shouldn't affect EP or rkey config
         set_port_speed("mock_0:1", 14.5e9);
         send(2);
-        EXPECT_EQ(worker->rkey_config_count, 3);
+        EXPECT_EQ(kh_size(&worker->rkey_config_hash), 3);
         EXPECT_EQ(worker->ep_config.length, 2);
 
         check_rkey_config(sender(), {
@@ -2139,7 +2139,7 @@ public:
         // new EP & rkey configs are created
         set_port_speed("mock_1:1", 14e9);
         send(3);
-        EXPECT_EQ(worker->rkey_config_count, 4);
+        EXPECT_EQ(kh_size(&worker->rkey_config_hash), 4);
         EXPECT_EQ(worker->ep_config.length, 3);
 
         check_rkey_config(sender(), {
@@ -2150,7 +2150,7 @@ public:
         set_port_speed("mock_0:1", 28e9);
         set_port_speed("mock_1:1", 24e9);
         send(1);
-        EXPECT_EQ(worker->rkey_config_count, 4);
+        EXPECT_EQ(kh_size(&worker->rkey_config_hash), 4);
         EXPECT_EQ(worker->ep_config.length, 3);
     }
 
