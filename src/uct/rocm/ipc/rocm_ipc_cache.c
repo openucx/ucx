@@ -105,7 +105,10 @@ ucs_status_t uct_rocm_ipc_cache_map_memhandle(void *arg, uct_rocm_ipc_key_t *key
     hsa_status_t hsa_status;
     int ret;
 
-    pthread_rwlock_rdlock(&cache->lock);
+    /* Take the write lock unconditionally: the page table may be mutated below
+     * (remove a stale region, attach and insert a new region), so a shared read
+     * lock would allow concurrent mutation and corrupt the table. */
+    pthread_rwlock_wrlock(&cache->lock);
     pgt_region = UCS_PROFILE_CALL(ucs_pgtable_lookup,
                                   &cache->pgtable, key->address);
     if (ucs_likely(pgt_region != NULL)) {
