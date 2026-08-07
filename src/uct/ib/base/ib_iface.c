@@ -1847,10 +1847,9 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
     if (self->async_ctx.cb != NULL) {
         self->async_ctx.super.cbq = &self->super.worker->super.progress_q;
         self->async_ctx.super.cb  = uct_ib_iface_port_speed_change_progress;
-        status = uct_ib_device_async_event_wait(
-                dev, IBV_EVENT_DEVICE_SPEED_CHANGE,
-                0,
-                &self->async_ctx.super);
+        status = uct_ib_device_async_event_wait(dev, IBV_EVENT_DEVICE_SPEED_CHANGE,
+                                                0,
+                                                &self->async_ctx.super);
         if (status != UCS_OK) {
             goto err_destroy_send_cq;
         }

@@ -234,7 +234,6 @@ uct_ib_device_async_event_schedule_callback(uct_ib_device_t *dev,
                                              wait_ctx);
 }
 
-
 static void
 uct_ib_device_async_event_dispatch_nolock(uct_ib_device_t *dev,
                                           const uct_ib_async_event_t *event)
