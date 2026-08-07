@@ -12,6 +12,11 @@
 #include <common/cuda.h>
 #include "cuda/test_kernels.h"
 
+extern "C" {
+#include <ucp/core/ucp_mm.h>
+#include <ucp/core/ucp_worker.inl>
+}
+
 class test_ucp_device : public ucp_test {
 public:
     static void get_test_variants(std::vector<ucp_test_variant> &variants);
@@ -23,6 +28,10 @@ private:
 
 protected:
     static constexpr size_t MAX_THREADS = 128;
+
+    virtual void post_ucp_init()
+    {
+    }
 
     ucs_memory_type_t rx_mem_type() const {
         return static_cast<ucs_memory_type_t>(get_variant_value());
@@ -99,6 +108,7 @@ void test_ucp_device::init()
 {
     m_env.push_back(new ucs::scoped_setenv("UCX_IB_GDA_MAX_SYS_LATENCY", "1us"));
     ucp_test::init();
+    post_ucp_init();
     sender().connect(&receiver(), get_ep_params());
     if (!is_loopback()) {
         receiver().connect(&sender(), get_ep_params());
@@ -158,7 +168,11 @@ test_ucp_device::mem_list::mem_list(test_ucp_device &test, size_t size,
         // Create memory list (with retry on connection)
         status = ucp_device_local_mem_list_create(&params, &m_local_mem_list_h);
 
-        ASSERT_UCS_OK(status);
+        if (status == UCS_ERR_NO_DEVICE) {
+            UCS_TEST_SKIP_R("Skipping test if no device lanes exists.");
+        } else {
+            ASSERT_UCS_OK(status);
+        }
     }
 
     // Initialize remote elements
@@ -488,6 +502,239 @@ UCS_TEST_P(test_ucp_device, get_remote_mem_list_length)
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_device, rc_gda, "rc,rc_gda")
+
+
+class test_ucp_device_cuda : public test_ucp_device {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_with_value(
+                variants,
+                UCP_FEATURE_RMA | UCP_FEATURE_AMO64 | UCP_FEATURE_DEVICE,
+                UCS_MEMORY_TYPE_CUDA, "cuda");
+    }
+};
+
+
+class test_ucp_device_lkey : public test_ucp_device_cuda {
+};
+
+
+UCS_TEST_P(test_ucp_device_lkey, missing_local_registration)
+{
+    mapped_buffer src(1 * UCS_KBYTE, sender(), 0, UCS_MEMORY_TYPE_CUDA);
+    ucp_worker_h worker      = sender().worker();
+    ucp_context_h context    = worker->context;
+    ucp_mem_h memh           = src.memh();
+    ucp_md_map_t lkey_md_map = 0;
+    ucp_md_map_t reg_md_map;
+    ucp_md_map_t saved_md_map;
+    ucp_device_mem_list_elem_t element = {};
+    ucp_device_mem_list_params_t params = {};
+    ucp_device_local_mem_list_h handle  = nullptr;
+    const ucp_worker_iface_t *wiface;
+    ucp_md_index_t md_index;
+    ucp_rsc_index_t tl_id;
+    ucs_status_t status;
+
+    UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &context->tl_bitmap) {
+        wiface = ucp_worker_iface(worker, tl_id);
+        if (ucs_test_all_flags(wiface->attr.cap.flags,
+                               UCT_IFACE_FLAG_DEVICE_EP |
+                                       UCT_IFACE_FLAG_DEVICE_LKEY) &&
+            ((wiface->attr.ctl_device == UCS_SYS_DEVICE_ID_UNKNOWN) ||
+             (wiface->attr.ctl_device == memh->sys_dev))) {
+            lkey_md_map |= UCS_BIT(context->tl_rscs[tl_id].md_index);
+        }
+    }
+
+    reg_md_map = ucp_memh_apply_reg_policy(
+            context, UCS_MEMORY_TYPE_CUDA, memh->sys_dev,
+            context->reg_md_map[UCS_MEMORY_TYPE_CUDA]);
+    if (context->dmabuf_mds[UCS_MEMORY_TYPE_CUDA] != UCP_NULL_RESOURCE) {
+        reg_md_map = ucp_memh_filter_dmabuf_reg_mds(
+                context, memh->sys_dev, reg_md_map);
+    }
+
+    reg_md_map &= lkey_md_map & memh->md_map;
+    if (!reg_md_map) {
+        UCS_TEST_SKIP_R("No selected LKEY registration to remove");
+    }
+
+    md_index      = ucs_ffs64(reg_md_map);
+    saved_md_map  = memh->md_map;
+    memh->md_map &= ~UCS_BIT(md_index);
+
+    element.field_mask = UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH |
+                         UCP_DEVICE_MEM_LIST_ELEM_FIELD_LOCAL_ADDR;
+    element.memh       = memh;
+    element.local_addr = src.ptr();
+
+    params.field_mask   = UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENTS |
+                          UCP_DEVICE_MEM_LIST_PARAMS_FIELD_NUM_ELEMENTS |
+                          UCP_DEVICE_MEM_LIST_PARAMS_FIELD_WORKER |
+                          UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENT_SIZE;
+    params.element_size = sizeof(element);
+    params.num_elements = 1;
+    params.elements     = &element;
+    params.worker       = worker;
+
+    status = ucp_device_local_mem_list_create(&params, &handle);
+
+    memh->md_map = saved_md_map;
+    if (status == UCS_OK) {
+        ucp_device_mem_list_release(handle);
+    }
+
+    EXPECT_EQ(UCS_ERR_NO_DEVICE, status);
+    EXPECT_EQ(nullptr, handle);
+}
+
+
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_device_lkey, missing_reg,
+                                        "rc,rc_gda")
+
+
+class test_ucp_device_nolkey : public test_ucp_device_cuda {
+public:
+    test_ucp_device_nolkey()
+    {
+        ucs_assert(m_self == nullptr);
+        m_self = this;
+    }
+
+    virtual ~test_ucp_device_nolkey()
+    {
+        m_self = nullptr;
+    }
+
+    virtual void cleanup() override
+    {
+        m_mock.cleanup();
+        test_ucp_device_cuda::cleanup();
+    }
+
+protected:
+    virtual void post_ucp_init() override
+    {
+        mock_cuda_ipc_remote_pid(sender().worker());
+        mock_cuda_ipc_remote_pid(receiver().worker());
+    }
+
+private:
+    void mock_cuda_ipc_remote_pid(ucp_worker_h worker)
+    {
+        ucp_context_h context = worker->context;
+        ucp_rsc_index_t rsc_index;
+
+        for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
+            const uct_tl_resource_desc_t *tl_rsc =
+                    &context->tl_rscs[rsc_index].tl_rsc;
+
+            if (strcmp(tl_rsc->tl_name, "cuda_ipc") != 0) {
+                continue;
+            }
+
+            if (!UCS_STATIC_BITMAP_GET(context->tl_bitmap, rsc_index)) {
+                continue;
+            }
+
+            ucp_worker_iface_t *wiface = ucp_worker_iface(worker, rsc_index);
+            m_mock.setup(&wiface->iface->ops.iface_get_address,
+                         cuda_ipc_get_address_mock);
+        }
+    }
+
+    static ucs_status_t
+    cuda_ipc_get_address_mock(uct_iface_h iface, uct_iface_addr_t *iface_addr)
+    {
+        UCS_MOCK_ORIG_FUNC(m_self->m_mock, &iface->ops.iface_get_address, iface,
+                           iface_addr);
+
+        *(pid_t*)iface_addr = getpid() + 1;
+        return UCS_OK;
+    }
+
+    static test_ucp_device_nolkey *m_self;
+    ucs::mock m_mock;
+};
+
+test_ucp_device_nolkey *test_ucp_device_nolkey::m_self = nullptr;
+
+
+UCS_TEST_P(test_ucp_device_nolkey, mem_list_layout)
+{
+    static constexpr unsigned num_elements = 4;
+    static constexpr size_t buffer_size     = 1 * UCS_KBYTE;
+    ucp_device_local_mem_list_t local_header;
+    ucp_device_remote_mem_list_t remote_header;
+    mem_list list(*this, buffer_size, num_elements);
+    std::vector<void*> src_ptrs = list.src_ptrs();
+    size_t uct_elem_size;
+    const void *uct_element;
+    void *local_addr;
+    unsigned i;
+
+    mem_buffer::copy_from(&local_header, list.local_handle(),
+                          sizeof(local_header), UCS_MEMORY_TYPE_CUDA);
+    mem_buffer::copy_from(&remote_header, list.remote_handle(),
+                          sizeof(remote_header), UCS_MEMORY_TYPE_CUDA);
+
+    ASSERT_EQ(1, local_header.num_lanes);
+    ASSERT_EQ(1, remote_header.num_lanes);
+    ASSERT_EQ(num_elements, local_header.length);
+    ASSERT_EQ(num_elements, src_ptrs.size());
+
+    uct_elem_size = sizeof(uct_device_local_mem_elem_t) +
+                    sizeof(uct_device_mem_elem_t);
+    for (i = 0; i < num_elements; i++) {
+        uct_element = UCS_PTR_BYTE_OFFSET(
+                list.local_handle(),
+                sizeof(local_header) + (i * uct_elem_size));
+        mem_buffer::copy_from(&local_addr, uct_element, sizeof(local_addr),
+                              UCS_MEMORY_TYPE_CUDA);
+        EXPECT_EQ(src_ptrs[i], local_addr);
+    }
+}
+
+
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_device_nolkey, cuda_ipc,
+                                        "cuda_ipc")
+
+
+class test_ucp_device_no_device : public test_ucp_device_cuda {
+};
+
+
+UCS_TEST_P(test_ucp_device_no_device, create_local)
+{
+    mapped_buffer src(1 * UCS_KBYTE, sender(), 0, UCS_MEMORY_TYPE_CUDA);
+    ucp_device_mem_list_elem_t element = {};
+    ucp_device_mem_list_params_t params = {};
+    ucp_device_local_mem_list_h handle  = nullptr;
+
+    element.field_mask = UCP_DEVICE_MEM_LIST_ELEM_FIELD_MEMH |
+                         UCP_DEVICE_MEM_LIST_ELEM_FIELD_LOCAL_ADDR;
+    element.memh       = src.memh();
+    element.local_addr = src.ptr();
+
+    params.field_mask   = UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENTS |
+                          UCP_DEVICE_MEM_LIST_PARAMS_FIELD_NUM_ELEMENTS |
+                          UCP_DEVICE_MEM_LIST_PARAMS_FIELD_WORKER |
+                          UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENT_SIZE;
+    params.element_size = sizeof(element);
+    params.num_elements = 1;
+    params.elements     = &element;
+    params.worker       = sender().worker();
+
+    EXPECT_EQ(UCS_ERR_NO_DEVICE,
+              ucp_device_local_mem_list_create(&params, &handle));
+    EXPECT_EQ(nullptr, handle);
+}
+
+
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_device_no_device, no_device,
+                                        "tcp")
 
 
 class test_ucp_device_kernel : public test_ucp_device {
