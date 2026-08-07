@@ -17,11 +17,28 @@
 #include <ucp/proto/proto_multi.inl>
 
 
+typedef struct {
+    ucp_request_t *req;
+    void          *dest;
+} ucp_proto_get_bcopy_unpack_ctx_t;
+
+
 static void ucp_proto_get_offload_bcopy_unpack(void *arg, const void *data,
                                                size_t length)
 {
-    void *dest = arg;
-    ucs_memcpy_relaxed(dest, data, length, UCS_ARCH_MEMCPY_NT_SOURCE, length);
+    ucp_proto_get_bcopy_unpack_ctx_t *unpack_ctx = arg;
+    ucp_request_t *req                           = unpack_ctx->req;
+
+    ucp_dt_contig_unpack(req->send.ep->worker, unpack_ctx->dest, data, length,
+                         (ucs_memory_type_t)req->send.state.dt_iter.mem_info.type,
+                         req->send.state.dt_iter.length);
+}
+
+static UCS_F_ALWAYS_INLINE size_t
+ucp_proto_get_offload_bcopy_num_frags(const ucp_request_t *req,
+                                      size_t max_frag)
+{
+    return ucs_div_round_up(req->send.state.dt_iter.length, max_frag);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -30,16 +47,35 @@ ucp_proto_get_offload_bcopy_send_func(ucp_request_t *req,
                                       ucp_datatype_iter_t *next_iter,
                                       ucp_lane_index_t *lane_shift)
 {
+    size_t max_frag    = lpriv->max_frag;
     uct_rkey_t tl_rkey = ucp_rkey_get_tl_rkey(req->send.rma.rkey,
                                               lpriv->super.rkey_index);
+    ucp_proto_get_bcopy_unpack_ctx_t *unpack_ctx;
     size_t max_length, length;
+    size_t frag_idx;
     void *dest;
+
+    if (ucs_unlikely(max_frag == 0)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
 
     max_length = ucp_proto_multi_max_payload(req, lpriv, 0);
     length     = ucp_datatype_iter_next_ptr(&req->send.state.dt_iter,
                                             max_length, next_iter, &dest);
+    frag_idx   = req->send.state.dt_iter.offset / max_frag;
+    ucs_assertv(frag_idx < ucp_proto_get_offload_bcopy_num_frags(req, max_frag),
+                "frag_idx=%zu offset=%zu max_frag=%zu length=%zu", frag_idx,
+                req->send.state.dt_iter.offset, max_frag,
+                req->send.state.dt_iter.length);
+
+    unpack_ctx                = req->send.buffer;
+    unpack_ctx[frag_idx].req  = req;
+    unpack_ctx[frag_idx].dest = dest;
+
     return uct_ep_get_bcopy(ucp_ep_get_lane(req->send.ep, lpriv->super.lane),
-                            ucp_proto_get_offload_bcopy_unpack, dest, length,
+                            ucp_proto_get_offload_bcopy_unpack,
+                            &unpack_ctx[frag_idx],
+                            length,
                             req->send.rma.remote_addr +
                                     req->send.state.dt_iter.offset,
                             tl_rkey, &req->send.state.uct_comp);
@@ -49,6 +85,8 @@ static void ucp_proto_get_offload_bcopy_completion(uct_completion_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t,
                                           send.state.uct_comp);
+    ucs_free(req->send.buffer);
+    req->send.buffer = NULL;
     ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 0,
                               UCS_BIT(UCP_DATATYPE_CONTIG));
     ucp_request_complete_send(req, req->send.state.uct_comp.status);
@@ -59,6 +97,9 @@ static ucs_status_t ucp_proto_get_offload_bcopy_progress(uct_pending_req_t *self
     ucp_request_t *req                  = ucs_container_of(self, ucp_request_t,
                                                            send.uct);
     const ucp_proto_multi_priv_t *mpriv = req->send.proto_config->priv;
+    size_t ctx_count;
+    size_t max_frag;
+    size_t num_frags;
     ucs_status_t status;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
@@ -67,6 +108,25 @@ static ucs_status_t ucp_proto_get_offload_bcopy_progress(uct_pending_req_t *self
         status = ucp_ep_rma_handle_fence(req->send.ep, req, mpriv->lane_map);
         if (status != UCS_OK) {
             ucp_proto_request_abort(req, status);
+            return UCS_OK;
+        }
+
+        UCS_STATIC_ASSERT(UCP_PROTO_RMA_MAX_BCOPY_LANES == 1);
+        ucs_assertv(mpriv->num_lanes == 1, "num_lanes=%u", mpriv->num_lanes);
+
+        max_frag = mpriv->lanes[0].max_frag;
+        if (ucs_unlikely(max_frag == 0)) {
+            ucp_proto_request_abort(req, UCS_ERR_INVALID_PARAM);
+            return UCS_OK;
+        }
+
+        num_frags        = ucp_proto_get_offload_bcopy_num_frags(req, max_frag);
+        ctx_count        = ucs_max(num_frags, (size_t)1);
+        req->send.buffer = ucs_malloc(ctx_count *
+                                      sizeof(ucp_proto_get_bcopy_unpack_ctx_t),
+                                      "get_bcopy_unpack_ctx");
+        if (req->send.buffer == NULL) {
+            ucp_proto_request_abort(req, UCS_ERR_NO_MEMORY);
             return UCS_OK;
         }
 
@@ -101,7 +161,7 @@ ucp_proto_get_offload_bcopy_probe(const ucp_proto_init_params_t *init_params)
         .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = 0,
         .super.send_op       = UCT_EP_OP_GET_BCOPY,
-        .super.memtype_op    = UCT_EP_OP_LAST,
+        .super.memtype_op    = UCT_EP_OP_PUT_SHORT,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
                                UCP_PROTO_COMMON_INIT_FLAG_RESPONSE |
@@ -132,8 +192,24 @@ static void ucp_proto_get_offload_reset(ucp_request_t *req)
     req->send.state.completed_size = 0;
 }
 
+static void ucp_proto_get_offload_bcopy_abort(ucp_request_t *req,
+                                              ucs_status_t status)
+{
+    if (req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) {
+        ucs_free(req->send.buffer);
+        req->send.buffer = NULL;
+    }
+
+    ucp_proto_request_bcopy_abort(req, status);
+}
+
 static ucs_status_t ucp_proto_get_offload_bcopy_reset(ucp_request_t *req)
 {
+    if (req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) {
+        ucs_free(req->send.buffer);
+        req->send.buffer = NULL;
+    }
+
     ucp_proto_get_offload_reset(req);
     return ucp_proto_request_bcopy_reset(req);
 }
@@ -146,7 +222,7 @@ ucp_proto_t ucp_get_offload_bcopy_proto = {
     .probe    = ucp_proto_get_offload_bcopy_probe,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_get_offload_bcopy_progress},
-    .abort    = ucp_proto_request_bcopy_abort,
+    .abort    = ucp_proto_get_offload_bcopy_abort,
     .reset    = ucp_proto_get_offload_bcopy_reset
 };
 
