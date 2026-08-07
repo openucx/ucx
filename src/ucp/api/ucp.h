@@ -126,7 +126,8 @@ enum ucp_params_field {
     UCP_PARAM_FIELD_ESTIMATED_NUM_EPS = UCS_BIT(6), /**< estimated_num_eps */
     UCP_PARAM_FIELD_ESTIMATED_NUM_PPN = UCS_BIT(7), /**< estimated_num_ppn */
     UCP_PARAM_FIELD_NAME              = UCS_BIT(8), /**< name */
-    UCP_PARAM_FIELD_NODE_LOCAL_ID     = UCS_BIT(9)
+    UCP_PARAM_FIELD_NODE_LOCAL_ID     = UCS_BIT(9), /**< node_local_id */
+    UCP_PARAM_FIELD_EXTRA_FEATURES    = UCS_BIT(10) /**< extra_features */
 };
 
 
@@ -1267,6 +1268,15 @@ typedef struct ucp_params {
      * which will override the id set by @e node_local_id
      */
     size_t                             node_local_id;
+
+    /**
+     * UCP @ref ucp_feature "features" that are used by the context for
+     * internal/control operations. When this field is specified,
+     * @ref ucp_params_t::features describes data-path features, and this field
+     * describes extra features that may use a separate transport policy.
+     * This field defaults to 0 if not specified.
+     */
+    uint64_t                           extra_features;
 } ucp_params_t;
 
 
