@@ -28,7 +28,8 @@ ucp_proto_rndv_get_common_probe(const ucp_proto_init_params_t *init_params,
     ucp_context_t *context               = init_params->worker->context;
     ucp_proto_multi_init_params_t params = {
         .super.super         = *init_params,
-        .super.cfg_thresh    = ucp_proto_rndv_cfg_thresh(context, rndv_modes),
+        .super.cfg_thresh    = ucp_proto_rndv_cfg_thresh(init_params,
+                                                        rndv_modes),
         .super.cfg_priority  = 80,
         .super.overhead      = 0,
         .super.latency       = 0,
