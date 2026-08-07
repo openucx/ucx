@@ -696,11 +696,37 @@ void uct_ib_mlx5_txwq_reset(uct_ib_mlx5_txwq_t *txwq)
     txwq->curr       = txwq->qstart;
     txwq->sw_pi      = 0;
     txwq->prev_sw_pi = UINT16_MAX;
+    txwq->ft_ci      = UINT16_MAX;
+    txwq->next_psn   = 0;
 #if UCS_ENABLE_ASSERT
     txwq->hw_ci      = 0xFFFF;
     txwq->flags      = 0;
 #endif
     uct_ib_fence_info_init(&txwq->fi);
+}
+
+ucs_status_t uct_ib_mlx5_txwq_psn_init(uct_ib_mlx5_txwq_t *txwq)
+{
+    size_t num_bb = UCS_PTR_BYTE_DIFF(txwq->qstart, txwq->qend) /
+                    MLX5_SEND_WQE_BB;
+
+    ucs_assert(ucs_is_pow2(num_bb));
+    ucs_assert(num_bb <= UINT16_MAX + 1ul);
+
+    txwq->first_psn = ucs_calloc(num_bb, sizeof(*txwq->first_psn),
+                                 "mlx5_first_psn");
+    if (txwq->first_psn == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    txwq->psn_mask = num_bb - 1;
+    return UCS_OK;
+}
+
+void uct_ib_mlx5_txwq_psn_cleanup(uct_ib_mlx5_txwq_t *txwq)
+{
+    ucs_free(txwq->first_psn);
+    txwq->first_psn = NULL;
 }
 
 void uct_ib_mlx5_init_wq_buf(uct_ib_mlx5_txwq_t *txwq)
@@ -729,10 +755,14 @@ void uct_ib_mlx5_txwq_vfs_populate(uct_ib_mlx5_txwq_t *txwq, void *parent_obj)
                             UCS_VFS_TYPE_U16, "bb_max");
     ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive, &txwq->sig_pi,
                             UCS_VFS_TYPE_U16, "sig_pi");
+    ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive, &txwq->ft_ci,
+                            UCS_VFS_TYPE_U16, "ft_ci");
 #if UCS_ENABLE_ASSERT
     ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive, &txwq->hw_ci,
                             UCS_VFS_TYPE_U16, "hw_ci");
 #endif
+    ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive, &txwq->next_psn,
+                            UCS_VFS_TYPE_U32, "next_psn");
 }
 
 ucs_status_t

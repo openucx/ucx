@@ -13,8 +13,8 @@
 #  include <infiniband/driver.h>
 #endif
 
-#include <uct/ib/mlx5/ib_mlx5_log.h>
 #include <uct/ib/mlx5/ib_mlx5_ext.h>
+#include <uct/ib/mlx5/ib_mlx5_log.h>
 #include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <ucs/arch/cpu.h>
@@ -45,6 +45,34 @@ ucs_status_t uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep, uct_ep_attr_t *ep_attr)
         }
     }
 
+    return UCS_OK;
+}
+
+
+ucs_status_t uct_rc_mlx5_base_ep_outstanding_purge(
+        uct_ep_h tl_ep, const uct_ep_outstanding_purge_params_t *params)
+{
+    UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
+    ucs_status_t purge_status;
+    ucs_status_t status;
+
+    if ((params != NULL) &&
+        (params->field_mask & UCT_EP_OUTSTANDING_FIELD_STATUS)) {
+        status = uct_ep_outstanding_purge_get_status(params, &purge_status);
+        if (status != UCS_OK) {
+            return status;
+        }
+    } else {
+        status = uct_ib_mlx5_ext_ep_outstanding_purge(tl_ep, params);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        purge_status = UCS_ERR_CANCELED;
+    }
+
+    uct_rc_txqp_purge_outstanding(&iface->super, &ep->super.txqp, purge_status,
+                                  ep->tx.wq.sw_pi, 0);
     return UCS_OK;
 }
 
@@ -299,6 +327,11 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
 
     uct_rc_txqp_posted(&ep->super.txqp, &iface->super, res_count, 1);
     uct_ib_mlx5_txwq_ring_doorbell(txwq, ctrl, txwq->sw_pi, 1);
+
+    for (i = 0; i < count; i++) {
+        uct_rc_mlx5_txwq_record_psn(iface, txwq, sn + i, MLX5_OPCODE_RDMA_WRITE,
+                                    lengths[i]);
+    }
 
     uct_rc_txqp_add_send_comp(&iface->super, &ep->super.txqp,
                               uct_rc_ep_send_op_completion_handler, comp, sn,
@@ -778,8 +811,19 @@ ucs_status_t uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
                                             const uct_ep_invalidate_params_t *params)
 {
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
+    uct_ib_mlx5_txwq_t *txwq = &ep->tx.wq;
+    uint16_t outstanding;
 
-    return uct_ib_mlx5_modify_qp_state(&iface->super.super, &ep->tx.wq.super,
+    if (!(ep->super.ext_flags & UCT_RC_EP_EXT_FLAG_FAILOVER_ARMED)) {
+        outstanding = txwq->bb_max - uct_rc_txqp_available(&ep->super.txqp);
+        txwq->ft_ci = txwq->prev_sw_pi - outstanding;
+        ep->super.ext_flags |= UCT_RC_EP_EXT_FLAG_FAILOVER_ARMED;
+        ucs_assert(txwq->ft_ci == txwq->hw_ci);
+        ucs_debug("ep %p armed failover WQE range (%u, %u) next PSN %u", ep,
+                  txwq->ft_ci, txwq->sw_pi, txwq->next_psn);
+    }
+
+    return uct_ib_mlx5_modify_qp_state(&iface->super.super, &txwq->super,
                                        IBV_QPS_ERR);
 }
 
@@ -1192,6 +1236,11 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_base_ep_t, const uct_ep_params_t *params)
         return status;
     }
 
+    status = uct_ib_mlx5_txwq_psn_init(&self->tx.wq);
+    if (status != UCS_OK) {
+        goto err_destroy_txwq_qp;
+    }
+
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_ep_t, &iface->super,
                               self->tx.wq.super.qp_num, params);
 
@@ -1199,7 +1248,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_base_ep_t, const uct_ep_params_t *params)
         status = uct_rc_iface_qp_init(&iface->super,
                                       self->tx.wq.super.verbs.qp);
         if (status != UCS_OK) {
-            goto err_destroy_txwq_qp;
+            goto err_psn_cleanup;
         }
     }
 
@@ -1208,7 +1257,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_base_ep_t, const uct_ep_params_t *params)
                 &md->super.dev, IBV_EVENT_QP_LAST_WQE_REACHED,
                 self->tx.wq.super.qp_num);
         if (status != UCS_OK) {
-            goto err_destroy_txwq_qp;
+            goto err_psn_cleanup;
         }
     }
 
@@ -1229,6 +1278,8 @@ err_event_unreg:
                                              IBV_EVENT_QP_LAST_WQE_REACHED,
                                              self->tx.wq.super.qp_num);
     }
+err_psn_cleanup:
+    uct_ib_mlx5_txwq_psn_cleanup(&self->tx.wq);
 err_destroy_txwq_qp:
     uct_ib_mlx5_destroy_qp(md, &self->tx.wq.super);
     return status;
@@ -1291,6 +1342,8 @@ UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
     cleanup_ctx->qp    = self->super.tx.wq.super;
     cleanup_ctx->tm_qp = self->tm_qp;
     cleanup_ctx->reg   = self->super.tx.wq.reg;
+
+    uct_ib_mlx5_txwq_psn_cleanup(&self->super.tx.wq);
 
     uct_rc_txqp_purge_outstanding(&iface->super, &self->super.super.txqp,
                                   UCS_ERR_CANCELED, self->super.tx.wq.sw_pi, 1);
