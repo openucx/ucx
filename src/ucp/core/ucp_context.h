@@ -126,6 +126,8 @@ typedef struct ucp_context_config {
     size_t                                 rndv_pipeline_send_thresh;
     /** Enabling 2-stage pipeline rndv protocol */
     int                                    rndv_shm_ppln_enable;
+    /** Force intra-node CUDA staging when rendezvous scheme is automatic */
+    int                                    rndv_shm_cuda_staging_force;
     /** Enable error handling for rndv pipeline protocol */
     int                                    rndv_errh_ppln_enable;
     /** Force-enable the RMA rendezvous put/get protocols */

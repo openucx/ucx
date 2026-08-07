@@ -914,6 +914,9 @@ void uct_base_iface_progress_enable_cb(uct_base_iface_t *iface,
 
 void uct_base_iface_progress_disable(uct_iface_h tl_iface, unsigned flags);
 
+void uct_iface_query_v2_init(uct_iface_h iface,
+                             uct_iface_attr_v2_t *iface_attr);
+
 ucs_status_t
 uct_iface_base_query_v2(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr);
 
