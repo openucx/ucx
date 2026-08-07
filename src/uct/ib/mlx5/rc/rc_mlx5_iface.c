@@ -828,7 +828,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
 
     if ((rc_config->fence_mode == UCT_RC_FENCE_MODE_WEAK) ||
         ((rc_config->fence_mode == UCT_RC_FENCE_MODE_AUTO) &&
-         (uct_ib_device_has_pci_atomics(dev) || md->super.relaxed_order))) {
+         (uct_ib_device_has_pci_atomics(dev) ||
+          uct_ib_md_is_relaxed_order(&md->super)))) {
         if (uct_ib_device_has_pci_atomics(dev)) {
             self->config.atomic_fence_flag = UCT_IB_MLX5_WQE_CTRL_FLAG_FENCE;
         } else {
@@ -985,6 +986,29 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_rc_mlx5_iface_t, uct_iface_t, uct_md_h,
 
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_mlx5_iface_t, uct_iface_t);
 
+
+static ucs_status_t
+uct_rc_mlx5_ep_put_sgl_zcopy(uct_ep_h ep, void * const *buffers,
+                             const size_t *lengths, uct_mem_h const *memhs,
+                             const uint64_t *remote_addrs,
+                             uct_rkey_t const *rkeys, const size_t *counts,
+                             const size_t *strides, size_t count,
+                             uct_completion_t *comp)
+{
+    ucs_status_t status;
+
+    status = uct_ib_mlx5_ext_ep_put_sgl_zcopy(ep, buffers, lengths, memhs,
+                                              remote_addrs, rkeys, counts,
+                                              strides, count, comp);
+    if (status == UCS_ERR_UNSUPPORTED) {
+        status = uct_rc_mlx5_base_ep_put_sgl_zcopy(ep, buffers, lengths, memhs,
+                                                   remote_addrs, rkeys, counts,
+                                                   strides, count, comp);
+    }
+
+    return status;
+}
+
 static ucs_status_t uct_rc_mlx5_iface_query_v2(uct_iface_h tl_iface,
                                                uct_iface_attr_v2_t *iface_attr)
 {
@@ -1006,7 +1030,14 @@ static ucs_status_t uct_rc_mlx5_iface_query_v2(uct_iface_h tl_iface,
     }
 
     if (iface_attr->field_mask & sgl_mask) {
+        uct_rc_mlx5_iface_common_t *mlx5_iface =
+                ucs_derived_of(tl_iface, uct_rc_mlx5_iface_common_t);
+
         max_sgl = uct_ib_mlx5_ext_max_put_sgl_zcopy_count();
+        if (max_sgl == 0) {
+            max_sgl = uct_rc_mlx5_base_put_sgl_zcopy_max_count(mlx5_iface);
+        }
+
         if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_CAP_FLAGS) {
             iface_attr->cap.flags |= (max_sgl > 0) ?
                                              UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY :
@@ -1078,7 +1109,7 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
             .iface_is_reachable_v2  = uct_rc_mlx5_iface_is_reachable_v2,
             .ep_is_connected        = uct_rc_mlx5_base_ep_is_connected,
             .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported,
-            .ep_put_sgl_zcopy       = uct_ib_mlx5_ext_ep_put_sgl_zcopy,
+            .ep_put_sgl_zcopy       = uct_rc_mlx5_ep_put_sgl_zcopy,
             .ep_outstanding_extract = uct_ib_mlx5_ext_ep_outstanding_extract,
             .ep_failover_enable     = uct_rc_mlx5_ep_failover_enable
         },

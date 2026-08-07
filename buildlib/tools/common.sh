@@ -179,7 +179,7 @@ get_ib_devices() {
 	set +x
 	for ibdev in $device_list
 	do
-		[[ "$device" =~ ^smi[0-9]*:.$ ]] && continue
+		[[ "$ibdev" =~ ^smi[0-9]*$ ]] && continue
 		num_ports=$(ibv_devinfo -d $ibdev| awk '/phys_port_cnt:/ {print $2}')
 		for port in $(seq 1 $num_ports)
 		do
@@ -264,6 +264,16 @@ get_non_rdma_ip_addr() {
 #
 get_active_ib_devices() {
 	get_ib_devices PORT_ACTIVE
+}
+
+#
+# Get active IB device names without port suffix
+#
+get_active_ib_devnames() {
+	for ibdev_port in $(get_active_ib_devices)
+	do
+		echo "${ibdev_port%:*}"
+	done | sort -u
 }
 
 #

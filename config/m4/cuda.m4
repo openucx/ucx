@@ -1,28 +1,6 @@
 #
-# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2017. ALL RIGHTS RESERVED.
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
-#
-
-NVCC_CUDA_MIN_REQUIRED=12.2
-
-ARCH9_CODE="-gencode=arch=compute_70,code=sm_70"
-ARCH10_CODE="-gencode=arch=compute_75,code=sm_75"
-ARCH110_CODE="-gencode=arch=compute_80,code=sm_80"
-ARCH111_CODE="-gencode=arch=compute_86,code=sm_86"
-ARCH120_CODE="-gencode=arch=compute_90,code=sm_90"
-ARCH124_CODE="-gencode=arch=compute_89,code=sm_89"
-ARCH128_CODE="-gencode=arch=compute_100,code=sm_100 -gencode=arch=compute_120,code=sm_120"
-ARCH130_CODE="-gencode=arch=compute_110,code=sm_110"
-
-
-ARCH9_PTX="-gencode=arch=compute_70,code=compute_70"
-ARCH10_PTX=""
-ARCH110_PTX="-gencode=arch=compute_80,code=compute_80"
-ARCH111_PTX="-gencode=arch=compute_86,code=compute_86"
-ARCH120_PTX="-gencode=arch=compute_90,code=compute_90"
-ARCH124_PTX="-gencode=arch=compute_90,code=compute_90"
-ARCH128_PTX="-gencode=arch=compute_120,code=compute_120"
-ARCH130_PTX="-gencode=arch=compute_120,code=compute_120"
 
 # Define CUDA language
 AC_LANG_DEFINE([CUDA], [cuda], [NVCC], [NVCC], [C++], [
@@ -46,6 +24,27 @@ AC_DEFUN([AC_LANG_COMPILER(CUDA)], [
 
 # Check for nvcc compiler support
 AC_DEFUN([UCX_CUDA_CHECK_NVCC], [
+    NVCC_CUDA_MIN_REQUIRED=12.2
+
+    ARCH9_CODE="-gencode=arch=compute_70,code=sm_70"
+    ARCH10_CODE="-gencode=arch=compute_75,code=sm_75"
+    ARCH110_CODE="-gencode=arch=compute_80,code=sm_80"
+    ARCH111_CODE="-gencode=arch=compute_86,code=sm_86"
+    ARCH120_CODE="-gencode=arch=compute_90,code=sm_90"
+    ARCH124_CODE="-gencode=arch=compute_89,code=sm_89"
+    ARCH128_CODE="-gencode=arch=compute_100,code=sm_100 -gencode=arch=compute_120,code=sm_120"
+    ARCH130_CODE="-gencode=arch=compute_110,code=sm_110"
+
+
+    ARCH9_PTX="-gencode=arch=compute_70,code=compute_70"
+    ARCH10_PTX=""
+    ARCH110_PTX="-gencode=arch=compute_80,code=compute_80"
+    ARCH111_PTX="-gencode=arch=compute_86,code=compute_86"
+    ARCH120_PTX="-gencode=arch=compute_90,code=compute_90"
+    ARCH124_PTX="-gencode=arch=compute_90,code=compute_90"
+    ARCH128_PTX="-gencode=arch=compute_120,code=compute_120"
+    ARCH130_PTX="-gencode=arch=compute_120,code=compute_120"
+
     AS_IF([test "x$NVCC" != "x"], [
         CUDA_VERSION=$($NVCC --version | grep release | sed 's/.*release //' | sed 's/\,.*//')
         CUDA_MAJOR_VERSION=$(echo $CUDA_VERSION | cut -d "." -f 1)
@@ -245,6 +244,9 @@ AS_IF([test "x$cuda_checked" != "xyes"],
          AC_CHECK_DECLS([CU_MEM_HANDLE_TYPE_FABRIC],
                         [AC_DEFINE([HAVE_CUDA_FABRIC], 1, [Enable CUDA fabric handle support])],
                         [], [[#include <cuda.h>]])
+
+         AC_CHECK_DECLS([CU_DEVICE_ATTRIBUTE_HANDLE_TYPE_FABRIC_SUPPORTED],
+                        [], [], [[#include <cuda.h>]])
 
          CPPFLAGS="$save_CPPFLAGS"
          LDFLAGS="$save_LDFLAGS"

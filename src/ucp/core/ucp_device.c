@@ -643,9 +643,6 @@ static ucs_status_t ucp_device_remote_mem_list_params_check(
     ucp_rkey_h rkey;
     ucp_ep_h ep;
     size_t i;
-    ucs_status_t status;
-    void *addr_ptr;
-    uint64_t remote_addr;
 
     if (remote_elements == NULL || element_size == 0 || num_elements == 0) {
         ucs_error("invalid remote mem list params: remote_elements=%p, "
@@ -668,20 +665,13 @@ static ucs_status_t ucp_device_remote_mem_list_params_check(
             return UCS_ERR_INVALID_PARAM;
         }
 
-        remote_addr = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD,
-                                      remote_element, remote_addr, REMOTE_ADDR,
-                                      0);
-        status      = ucp_rkey_ptr(rkey, remote_addr, &addr_ptr);
-        /* Check if ep is connected only in case cuda_ipc can't be used for transfer */
-        if (status != UCS_OK) {
-            if (!(ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED)) {
-                /*
-                 * Do not log error here because UCS_ERR_NOT_CONNECTED is expected
-                 * during connection establishment. Applications are expected to retry
-                 * with progress.
-                 */
-                return UCS_ERR_NOT_CONNECTED;
-            }
+        if (!(ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED)) {
+            /*
+             * Do not log error here because UCS_ERR_NOT_CONNECTED is expected
+             * during connection establishment. Applications are expected to retry
+             * with progress.
+             */
+            return UCS_ERR_NOT_CONNECTED;
         }
     }
 

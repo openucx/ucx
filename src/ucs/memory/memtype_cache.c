@@ -93,6 +93,11 @@ static UCS_F_ALWAYS_INLINE ucs_memtype_cache_t *ucs_memtype_cache_get_global()
     return ucs_memtype_cache_global_instance;
 }
 
+void ucs_memtype_cache_global_create()
+{
+    ucs_memtype_cache_get_global();
+}
+
 static UCS_F_ALWAYS_INLINE void
 ucs_memory_info_set_unknown(ucs_memory_info_t *mem_info)
 {
@@ -310,19 +315,17 @@ static void ucs_memtype_cache_event_callback(ucm_event_type_t event_type,
         return;
     }
 
-    ucs_trace("dispatching mem event %d address %p length %zu mem_type %s",
+    ucs_trace("dispatching mem event %d address %p length %zu mem_type %s "
+              "sys_dev %u flags 0x%x",
               event_type, event->mem_type.address, event->mem_type.size,
-              ucs_memory_type_names[event->mem_type.mem_type]);
+              ucs_memory_type_names[event->mem_type.mem_type],
+              event->mem_type.sys_dev, event->mem_type.mem_flags);
 
-    /* UCM allocation events carry only the memory type, not registrability.
-     * Default to "registrable": for a definite type this matches all current
-     * providers (e.g. ZE), and for UCS_MEMORY_TYPE_LAST/UNKNOWN the entry is
-     * re-detected via the MD, which overwrites this default with real flags. */
     ucs_memtype_cache_update_internal(arg, event->mem_type.address,
                                       event->mem_type.size,
                                       event->mem_type.mem_type,
-                                      UCS_SYS_DEVICE_ID_UNKNOWN,
-                                      UCS_MEM_FLAG_REGISTRABLE, action);
+                                      event->mem_type.sys_dev,
+                                      event->mem_type.mem_flags, action);
 }
 
 static void ucs_memtype_cache_purge(ucs_memtype_cache_t *memtype_cache)

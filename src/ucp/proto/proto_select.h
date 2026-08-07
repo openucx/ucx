@@ -22,7 +22,8 @@
 #define UCP_PROTO_SELECT_OP_ATTR_MASK   (UCP_OP_ATTR_FLAG_FAST_CMPL | \
                                          UCP_OP_ATTR_FLAG_MULTI_SEND)
 
-/* Operation flags start bit */
+/* Operation flags start bit. The uint8_t op_id_flags field is full; adding
+ * another operation flag requires widening the field first. */
 #define UCP_PROTO_SELECT_OP_FLAGS_BASE UCS_BIT(4)
 
 /* Select protocol which supports resume request after reset. */
@@ -36,6 +37,10 @@
  * Relevant for UCP_OP_ID_AM_SEND and UCP_OP_ID_AM_SEND_REPLY. */
 #define UCP_PROTO_SELECT_OP_FLAG_AM_EAGER (UCP_PROTO_SELECT_OP_FLAGS_BASE << 1)
 #define UCP_PROTO_SELECT_OP_FLAG_AM_RNDV  (UCP_PROTO_SELECT_OP_FLAGS_BASE << 2)
+
+/* Mark internal tag rendezvous protocol selections.
+ * Relevant for UCP_OP_ID_RNDV_RECV and UCP_OP_ID_RNDV_SEND. */
+#define UCP_PROTO_SELECT_OP_FLAG_TAG_RNDV (UCP_PROTO_SELECT_OP_FLAGS_BASE << 3)
 
 
 /** Maximal length of ucp_proto_select_param_str() */

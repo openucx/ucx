@@ -57,6 +57,7 @@ typedef enum {
 typedef enum {
     UCT_DEVICE_TL_RC_MLX5_GDA,
     UCT_DEVICE_TL_CUDA_IPC,
+    UCT_DEVICE_TL_D2P,
     UCT_DEVICE_TL_LAST
 } uct_device_tl_id_t;
 

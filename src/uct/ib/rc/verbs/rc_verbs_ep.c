@@ -44,7 +44,10 @@ uct_rc_verbs_ep_post_send(uct_rc_verbs_iface_t* iface, uct_rc_verbs_ep_t* ep,
         send_flags |= uct_rc_iface_tx_moderation(&iface->super, &ep->super.txqp,
                                                  IBV_SEND_SIGNALED);
     }
-    if (wr->opcode == IBV_WR_RDMA_READ) {
+
+    if (wr->opcode == IBV_WR_SEND) {
+        uct_rc_ep_fm(&iface->super, &ep->fi, 0);
+    } else if (wr->opcode == IBV_WR_RDMA_READ) {
         send_flags |= uct_rc_ep_fm(&iface->super, &ep->fi, IBV_SEND_FENCE);
     }
 
