@@ -2049,7 +2049,7 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_keepalive_tiebreak, rcx,
                               "rc_x")
 
 
-#if HAVE_DECL_IBV_EVENT_PORT_SPEED_CHANGE
+#if HAVE_DECL_IBV_EVENT_DEVICE_SPEED_CHANGE
 
 class test_ucp_proto_mock_rcx_speed_change : public test_ucp_proto_mock {
 public:
@@ -2088,7 +2088,7 @@ public:
     {
         m_port_speed[iface_name] = port_speed;
 
-        ib_event(IBV_EVENT_PORT_SPEED_CHANGE, 1);
+        ib_event(IBV_EVENT_DEVICE_SPEED_CHANGE, 0);
         while (progress());
     }
 
@@ -2178,4 +2178,4 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_speed_change, rma_get,
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_speed_change, rcx, "rc_x")
 
-#endif // HAVE_DECL_IBV_EVENT_PORT_SPEED_CHANGE
+#endif // HAVE_DECL_IBV_EVENT_DEVICE_SPEED_CHANGE
