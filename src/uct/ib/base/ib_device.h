@@ -128,7 +128,10 @@ enum {
     /* Used for IB link layer. */
     UCT_IB_ADDRESS_FLAG_SUBNET64       = UCS_BIT(5),
     /* Used for IB link layer. */
-    UCT_IB_ADDRESS_FLAG_IF_ID          = UCS_BIT(6)
+    UCT_IB_ADDRESS_FLAG_IF_ID          = UCS_BIT(6),
+
+    /* Traffic class value, used for both ETH or IB link layer. */
+    UCT_IB_ADDRESS_FLAG_TRAFFIC_CLASS  = UCS_BIT(7)
 };
 
 
