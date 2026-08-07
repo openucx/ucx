@@ -166,8 +166,8 @@ ucp_device_get_tl_bitmap(const ucp_worker_h worker,
                          ucs_memory_type_t mem_type,
                          ucs_sys_device_t local_sys_dev)
 {
-    ucp_context_h context   = worker->context;
-    ucp_md_map_t reg_md_map = ucp_device_get_reg_md_map(
+    ucp_context_h context         = worker->context;
+    const ucp_md_map_t reg_md_map = ucp_device_get_reg_md_map(
             context, mem_type, local_sys_dev);
     const ucp_worker_iface_t *wiface;
     ucp_md_index_t md_index;
@@ -224,7 +224,7 @@ static size_t ucp_device_get_num_lanes(
 }
 
 static ucs_status_t ucp_device_local_mem_list_validate_reg_mds(
-        const ucp_worker_h worker,
+        ucp_worker_h worker,
         const ucp_device_mem_list_params_t *params,
         const ucp_tl_bitmap_t *tl_bitmap)
 {
@@ -513,7 +513,7 @@ static ucp_lane_index_t ucp_device_ep_find_lane(const ucp_ep_h ep, ucp_rsc_index
     return UCP_NULL_LANE;
 }
 
-static int ucp_device_ep_check_lanes(const ucp_ep_h ep, const ucp_rkey_h rkey,
+static int ucp_device_ep_check_lanes(ucp_ep_h ep, ucp_rkey_h rkey,
                                      const ucp_tl_bitmap_t *tl_bitmap)
 {
     const ucp_ep_config_t *ep_config = ucp_ep_config(ep);
@@ -707,6 +707,7 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
             }
 
             if (tl_type == UCP_DEVICE_TL_TYPE_LAST) {
+                /* An endpoint or rkey may legitimately lack device lanes. */
                 ucs_debug("no device lanes found for element %zu", i);
                 status = UCS_ERR_NO_DEVICE;
                 goto out;
