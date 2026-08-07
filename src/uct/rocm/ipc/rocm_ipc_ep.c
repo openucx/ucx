@@ -86,16 +86,7 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
     }
 
     if (iface->config.enable_ipc_handle_cache) {
-        /* Ensure component cache is initialized */
-        ret = uct_rocm_ipc_component_init_cache();
-        if (ucs_unlikely(ret != UCS_OK)) {
-            ucs_error("failed to initialize rocm_ipc component cache\n");
-            return ret;
-        }
-
-        ret = uct_rocm_ipc_cache_map_memhandle(
-                (void*)uct_rocm_ipc_component.ipc_cache, key,
-                &remote_base_addr);
+        ret = uct_rocm_ipc_cache_map_memhandle(key, &remote_base_addr);
         if (ucs_unlikely(ret != UCS_OK)) {
             ucs_error("fail to attach ipc mem %p %d\n", (void*)key->address,
                       ret);
