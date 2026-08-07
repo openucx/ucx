@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2021. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2021-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -36,6 +36,51 @@ static ucs_status_t ucp_perf_test_alloc_iov_mem(ucp_perf_datatype_t datatype,
             return UCS_ERR_NO_MEMORY;
         }
         *iov_p = iov;
+    }
+
+    return UCS_OK;
+}
+
+static void ucp_perf_test_free_sgl_mem(ucx_perf_context_t *perf)
+{
+    free(perf->ucp.sgl.buffers);
+    free(perf->ucp.sgl.lengths);
+    free(perf->ucp.sgl.memhs);
+    free(perf->ucp.sgl.remote_addrs);
+    free(perf->ucp.sgl.rkeys);
+}
+
+static ucs_status_t ucp_perf_test_alloc_sgl_mem(ucx_perf_context_t *perf)
+{
+    const ucx_perf_params_t *params = &perf->params;
+    size_t count                    = params->msg_size_cnt;
+    size_t total;
+
+    perf->ucp.sgl.buffers      = NULL;
+    perf->ucp.sgl.lengths      = NULL;
+    perf->ucp.sgl.memhs        = NULL;
+    perf->ucp.sgl.remote_addrs = NULL;
+    perf->ucp.sgl.rkeys        = NULL;
+
+    if (UCP_PERF_DATATYPE_SGL != params->ucp.send_datatype) {
+        return UCS_OK;
+    }
+
+    total                      = count * params->thread_count;
+    perf->ucp.sgl.buffers      = malloc(total *
+                                        sizeof(*perf->ucp.sgl.buffers));
+    perf->ucp.sgl.lengths      = malloc(total *
+                                        sizeof(*perf->ucp.sgl.lengths));
+    perf->ucp.sgl.memhs        = malloc(total * sizeof(*perf->ucp.sgl.memhs));
+    perf->ucp.sgl.remote_addrs = malloc(total *
+                                        sizeof(*perf->ucp.sgl.remote_addrs));
+    perf->ucp.sgl.rkeys        = malloc(total * sizeof(*perf->ucp.sgl.rkeys));
+    if ((perf->ucp.sgl.buffers == NULL) || (perf->ucp.sgl.lengths == NULL) ||
+        (perf->ucp.sgl.memhs == NULL) || (perf->ucp.sgl.remote_addrs == NULL) ||
+        (perf->ucp.sgl.rkeys == NULL)) {
+        ucs_error("Failed allocate SGL buffers with count=%zu", count);
+        ucp_perf_test_free_sgl_mem(perf);
+        return UCS_ERR_NO_MEMORY;
     }
 
     return UCS_OK;
@@ -182,8 +227,16 @@ ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf)
         goto err_free_send_iov_buffers;
     }
 
+    /* Allocate SGL datatype memory */
+    status = ucp_perf_test_alloc_sgl_mem(perf);
+    if (UCS_OK != status) {
+        goto err_free_recv_iov_buffers;
+    }
+
     return UCS_OK;
 
+err_free_recv_iov_buffers:
+    free(perf->ucp.recv_iov);
 err_free_send_iov_buffers:
     free(perf->ucp.send_iov);
 err_free_am_hdr:
@@ -200,6 +253,7 @@ err:
 
 void ucp_perf_test_free_mem(ucx_perf_context_t *perf)
 {
+    ucp_perf_test_free_sgl_mem(perf);
     free(perf->ucp.recv_iov);
     free(perf->ucp.send_iov);
     free(perf->ucp.am_hdr);
