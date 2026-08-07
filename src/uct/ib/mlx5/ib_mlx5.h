@@ -694,7 +694,9 @@ typedef struct uct_ib_mlx5_txwq {
     void                        *qend;
     uint16_t                    bb_max;
     uint16_t                    sig_pi;     /* PI for last signaled WQE */
-    uint32_t                    nnop_pi;    /* Last posted non-NOP WQE index */
+    uint32_t                    next_psn;   /* PSN assigned to the next packet */
+    uint32_t                    *first_psn; /* First PSN indexed by WQEBB */
+    uint16_t                    psn_mask;   /* Mask for first_psn array */
 #if UCS_ENABLE_ASSERT
     uint16_t                    hw_ci; /* First BB index of last completed WQE */
     uint8_t                     flags; /* Debug flags */
@@ -918,6 +920,10 @@ void uct_ib_mlx5_qp_mmio_cleanup(uct_ib_mlx5_qp_t *qp,
  * Reset txwq contents and posting indices.
  */
 void uct_ib_mlx5_txwq_reset(uct_ib_mlx5_txwq_t *txwq);
+
+ucs_status_t uct_ib_mlx5_txwq_psn_init(uct_ib_mlx5_txwq_t *txwq);
+
+void uct_ib_mlx5_txwq_psn_cleanup(uct_ib_mlx5_txwq_t *txwq);
 
 void uct_ib_mlx5_init_wq_buf(uct_ib_mlx5_txwq_t *txwq);
 
