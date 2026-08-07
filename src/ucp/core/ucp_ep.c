@@ -1828,7 +1828,7 @@ ucs_status_t ucp_ep_reconfig_clear_failed_lanes(ucp_ep_h ep,
 }
 
 /* Install an empty wireup proxy on the lane, replacing any failed-stub UCT
- * EP left by a preceding ucp_ep_failover_reconfig(). The inner UCT EP is
+ * EP left by a preceding ucp_ep_failover(). The inner UCT EP is
  * attached separately by ucp_ep_recovery_set_next_ep(). */
 static ucs_status_t
 ucp_ep_recovery_install_wireup_ep(ucp_ep_h ep, ucp_lane_index_t lane)
@@ -2494,11 +2494,10 @@ done:
     return ret;
 }
 
-ucs_status_t
+static ucs_status_t
 ucp_ep_failover_reconfig(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,
-                         ucs_status_t discard_status)
+                         ucp_worker_cfg_index_t *old_cfg_index_p)
 {
-    ucp_worker_cfg_index_t old_cfg_index = ucp_ep->cfg_index;
     ucs_status_t status;
 
     if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
@@ -2509,14 +2508,28 @@ ucp_ep_failover_reconfig(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,
     ucs_diag("ep %p: failover reconfig, failed_lanes 0x%lx", ucp_ep,
              failed_lanes);
 
+    *old_cfg_index_p = ucp_ep->cfg_index;
     status = ucp_ep_reconfig_internal(ucp_ep, failed_lanes);
     if (status != UCS_OK) {
-        ucs_assertv(ucp_ep->cfg_index == old_cfg_index,
+        ucs_assertv(ucp_ep->cfg_index == *old_cfg_index_p,
                     "ep %p: cfg_index %u -> %u after reconfiguration error %s",
-                    ucp_ep, old_cfg_index, ucp_ep->cfg_index,
+                    ucp_ep, *old_cfg_index_p, ucp_ep->cfg_index,
                     ucs_status_string(status));
         /* No AM lane (or other reconfig failure): fail the whole EP so all
          * lanes are discarded and flush can complete. Do not arm recovery. */
+    }
+
+    return status;
+}
+
+ucs_status_t ucp_ep_failover(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,
+                             ucs_status_t discard_status)
+{
+    ucp_worker_cfg_index_t old_cfg_index;
+    ucs_status_t status;
+
+    status = ucp_ep_failover_reconfig(ucp_ep, failed_lanes, &old_cfg_index);
+    if (status != UCS_OK) {
         return status;
     }
 
@@ -2524,11 +2537,26 @@ ucp_ep_failover_reconfig(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,
     return ucp_ep_recovery_arm(ucp_ep);
 }
 
-void ucp_ep_set_lanes_failed(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
-                                     ucs_status_t status)
+ucs_status_t
+ucp_ep_uct_ep_outstanding_purge(uct_ep_h uct_ep, ucs_status_t status)
+{
+    uct_ep_outstanding_purge_params_t params = {
+        .field_mask = UCT_EP_OUTSTANDING_FIELD_STATUS,
+        .status     = status
+    };
+    ucs_status_t purge_status;
+
+    purge_status = uct_ep_outstanding_purge(uct_ep, &params);
+    return (purge_status == UCS_ERR_UNSUPPORTED) ? UCS_OK : purge_status;
+}
+
+static void ucp_ep_set_lanes_failed_common(ucp_ep_h ucp_ep,
+                                           ucp_lane_map_t lanes,
+                                           ucs_status_t status, uct_ep_h uct_ep)
 {
     const ucp_lane_index_t cm_lane = ucp_ep_get_cm_lane(ucp_ep);
-    ucs_status_t reconfig_status;
+    ucp_worker_cfg_index_t old_cfg_index;
+    ucs_status_t t_status;
 
     UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(ucp_ep->worker);
     ucs_assert(UCS_STATUS_IS_ERR(status));
@@ -2543,17 +2571,62 @@ void ucp_ep_set_lanes_failed(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
         (lanes != 0) &&
          /* sockaddr is not supported for failover mode */
         cm_lane == UCP_NULL_LANE) {
-        reconfig_status = ucp_ep_failover_reconfig(ucp_ep, lanes, status);
-        if (reconfig_status == UCS_OK) {
-            return;
+        t_status = ucp_ep_failover_reconfig(ucp_ep, lanes, &old_cfg_index);
+        if (t_status != UCS_OK) {
+            ucs_diag("ep %p: failover reconfig failed: %s", ucp_ep,
+                     ucs_status_string(t_status));
+            goto err_set_failed;
         }
+
+        if (uct_ep != NULL) {
+            t_status = ucp_ep_uct_ep_outstanding_purge(uct_ep, status);
+            if (t_status != UCS_OK) {
+                ucs_diag("ep %p: outstanding purge failed on uct_ep %p: %s",
+                         ucp_ep, uct_ep, ucs_status_string(t_status));
+                /* Retire the old lane so its CANCEL path can take ownership
+                 * of any operation not resolved by the explicit purge. */
+                ucp_ep_discard_lanes(ucp_ep, lanes, status, old_cfg_index);
+                (void)ucp_ep_recovery_arm(ucp_ep);
+                goto err_set_failed;
+            }
+        }
+
+        ucp_ep_discard_lanes(ucp_ep, lanes, status, old_cfg_index);
+        t_status = ucp_ep_recovery_arm(ucp_ep);
+        if (t_status != UCS_OK) {
+            ucs_diag("ep %p: failed to arm recovery: %s", ucp_ep,
+                     ucs_status_string(t_status));
+            goto err_set_failed;
+        }
+
+        return;
+    } else if (uct_ep != NULL) {
+        /* Non-failover requests cannot restart from the error completion, so
+         * resolve transport ownership before failing the whole endpoint. */
+        (void)ucp_ep_uct_ep_outstanding_purge(uct_ep, status);
     }
 
+err_set_failed:
     /* else: unrecoverable error, mark the endpoint as failed. */
     ucp_ep_set_failed(ucp_ep,
                       ((cm_lane != UCP_NULL_LANE) &&
-                       (lanes == UCS_BIT(cm_lane)) ?
-                      cm_lane : UCP_NULL_LANE), status);
+                       (lanes == UCS_BIT(cm_lane))) ?
+                              cm_lane :
+                              UCP_NULL_LANE,
+                      status);
+}
+
+void ucp_ep_set_lanes_failed(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
+                             ucs_status_t status)
+{
+    (void)ucp_ep_set_lanes_failed_common(ucp_ep, lanes, status, NULL);
+}
+
+void ucp_ep_set_lane_failed_and_purge(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
+                                      ucs_status_t status, uct_ep_h uct_ep)
+{
+    ucs_assert(uct_ep != NULL);
+    return ucp_ep_set_lanes_failed_common(ucp_ep, lanes, status, uct_ep);
 }
 
 void ucp_ep_set_lanes_failed_schedule(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
