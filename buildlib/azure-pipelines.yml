@@ -29,6 +29,7 @@ stages:
           clean: all
         steps:
           - checkout: self
+            submodules: true
             clean: true
             retryCountOnTaskFailure: 5
           - bash: |
