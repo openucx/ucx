@@ -8,10 +8,10 @@ codestyle_check_commit_title() {
     local range="$1"
     local err=0
 
-    for sha1 in `git log "$range" --format="%h"`
+    for sha1 in $(git log --first-parent --no-merges "$range" --format="%h")
     do
-        title=`git log -1 --format="%s" $sha1`
-        if echo $title | grep -qP '^Merge |^[0-9A-Z/_\-]*: \w'
+        title=$(git log -1 --format="%s" $sha1)
+        if [[ $title =~ ^[0-9A-Z/_-]*:\ [[:alnum:]_] ]]
         then
             echo "Good commit title: '$title'"
         else
