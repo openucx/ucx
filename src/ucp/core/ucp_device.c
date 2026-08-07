@@ -142,12 +142,35 @@ ucp_device_detect_local_sys_dev(ucp_context_h context,
     return UCS_OK;
 }
 
+/* Select the MDs on which a memory handle for local_sys_dev is expected to be
+ * registered. Local and remote device lists must use the same map to keep
+ * their lane indices aligned. */
+static ucp_md_map_t
+ucp_device_get_reg_md_map(ucp_context_h context, ucs_memory_type_t mem_type,
+                          ucs_sys_device_t local_sys_dev)
+{
+    ucp_md_map_t reg_md_map = ucp_memh_apply_reg_policy(
+            context, mem_type, local_sys_dev, context->reg_md_map[mem_type]);
+
+    if (context->dmabuf_mds[mem_type] != UCP_NULL_RESOURCE) {
+        reg_md_map = ucp_memh_filter_dmabuf_reg_mds(
+                context, local_sys_dev, reg_md_map);
+    }
+
+    return reg_md_map;
+}
+
 static void
 ucp_device_get_tl_bitmap(const ucp_worker_h worker,
                          ucp_tl_bitmap_t tl_bitmap[UCP_DEVICE_TL_TYPE_LAST],
+                         ucs_memory_type_t mem_type,
                          ucs_sys_device_t local_sys_dev)
 {
+    ucp_context_h context         = worker->context;
+    const ucp_md_map_t reg_md_map = ucp_device_get_reg_md_map(
+            context, mem_type, local_sys_dev);
     const ucp_worker_iface_t *wiface;
+    ucp_md_index_t md_index;
     ucp_rsc_index_t tl_id;
     int tl_type;
 
@@ -157,7 +180,7 @@ ucp_device_get_tl_bitmap(const ucp_worker_h worker,
         UCS_STATIC_BITMAP_RESET_ALL(&tl_bitmap[tl_type]);
     }
 
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &worker->context->tl_bitmap) {
+    UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &context->tl_bitmap) {
         wiface = ucp_worker_iface(worker, tl_id);
 
         if (!(wiface->attr.cap.flags & UCT_IFACE_FLAG_DEVICE_EP)) {
@@ -170,12 +193,76 @@ ucp_device_get_tl_bitmap(const ucp_worker_h worker,
         }
 
         if (wiface->attr.cap.flags & UCT_IFACE_FLAG_DEVICE_LKEY) {
+            md_index = context->tl_rscs[tl_id].md_index;
+            if (!(reg_md_map & UCS_BIT(md_index))) {
+                continue;
+            }
+
             tl_type = UCP_DEVICE_TL_TYPE_LKEY;
         } else {
             tl_type = UCP_DEVICE_TL_TYPE_NOLKEY;
         }
         UCS_STATIC_BITMAP_SET(&tl_bitmap[tl_type], tl_id);
     }
+}
+
+static size_t ucp_device_get_num_lanes(
+        const ucp_tl_bitmap_t tl_bitmap[UCP_DEVICE_TL_TYPE_LAST])
+{
+    size_t nolkey_num_lanes;
+    size_t num_lanes;
+
+    num_lanes = UCS_STATIC_BITMAP_POPCOUNT(
+            tl_bitmap[UCP_DEVICE_TL_TYPE_LKEY]);
+    /* NOLKEY transports do not use the local memory element, but device code
+     * still indexes lane 0 in both local and remote list layouts. */
+    nolkey_num_lanes = UCS_STATIC_BITMAP_POPCOUNT(
+            tl_bitmap[UCP_DEVICE_TL_TYPE_NOLKEY]);
+    ucs_assert(nolkey_num_lanes <= 1);
+
+    return num_lanes ? num_lanes : nolkey_num_lanes;
+}
+
+static ucs_status_t ucp_device_local_mem_list_validate_reg_mds(
+        ucp_worker_h worker,
+        const ucp_device_mem_list_params_t *params,
+        const ucp_tl_bitmap_t *tl_bitmap)
+{
+    const ucp_device_mem_list_elem_t *element = params->elements;
+    ucp_md_map_t required_md_map              = 0;
+    ucp_md_map_t missing_md_map;
+    ucp_md_index_t md_index;
+    ucp_rsc_index_t tl_id;
+    ucp_mem_h memh;
+    size_t i;
+
+    UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, tl_bitmap) {
+        required_md_map |=
+                UCS_BIT(worker->context->tl_rscs[tl_id].md_index);
+    }
+
+    for (i = 0; i < params->num_elements; i++) {
+        memh = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, element, memh,
+                               MEMH, NULL);
+        missing_md_map = required_md_map & ~memh->md_map;
+        ucs_for_each_bit(md_index, required_md_map & memh->md_map) {
+            if (memh->uct[md_index] == UCT_MEM_HANDLE_NULL) {
+                missing_md_map |= UCS_BIT(md_index);
+            }
+        }
+
+        if (missing_md_map) {
+            ucs_debug("element=%zu memh=%p is missing registrations: "
+                      "required_md_map=0x%" PRIx64 " "
+                      "missing_md_map=0x%" PRIx64,
+                      i, memh, required_md_map, missing_md_map);
+            return UCS_ERR_NO_DEVICE;
+        }
+
+        element = UCS_PTR_BYTE_OFFSET(element, params->element_size);
+    }
+
+    return UCS_OK;
 }
 
 static ucs_status_t ucp_device_local_mem_list_element_pack(
@@ -199,10 +286,13 @@ static ucs_status_t ucp_device_local_mem_list_element_pack(
     ucp_md   = &worker->context->tl_mds[md_index];
     memh = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, element, memh, MEMH,
                            NULL);
+    if (!(memh->md_map & UCS_BIT(md_index))) {
+        return UCS_ERR_NO_DEVICE;
+    }
+
     uct_memh = memh->uct[md_index];
     if (uct_memh == UCT_MEM_HANDLE_NULL) {
-        ucs_error("invalid memh for md_index=%u", md_index);
-        return UCS_ERR_INVALID_PARAM;
+        return UCS_ERR_NO_DEVICE;
     }
 
     status = uct_md_mem_elem_pack(ucp_md->md, uct_memh, UCT_INVALID_RKEY,
@@ -257,8 +347,18 @@ static ucs_status_t ucp_device_local_mem_list_create_handle(
     ucp_rsc_index_t tl_id;
     void *local_addr;
 
-    ucp_device_get_tl_bitmap(worker, tl_bitmap, local_sys_dev);
-    num_lanes = UCS_STATIC_BITMAP_POPCOUNT(tl_bitmap[tl_type]);
+    ucp_device_get_tl_bitmap(worker, tl_bitmap, mem_type, local_sys_dev);
+    num_lanes = ucp_device_get_num_lanes(tl_bitmap);
+    if (!num_lanes) {
+        ucs_debug("no device transports available");
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    status = ucp_device_local_mem_list_validate_reg_mds(
+            worker, params, &tl_bitmap[UCP_DEVICE_TL_TYPE_LKEY]);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     uct_elem_size = sizeof(uct_device_local_mem_elem_t) +
                     (sizeof(uct_device_mem_elem_t) * num_lanes);
@@ -284,15 +384,17 @@ static ucs_status_t ucp_device_local_mem_list_create_handle(
                                                             mem_type,
                                                             tl_element);
             if (status != UCS_OK) {
-                ucs_error("failed to pack local mem list element for "
-                          "element=%zu",
-                          i);
+                if (status != UCS_ERR_NO_DEVICE) {
+                    ucs_error("failed to pack local mem list element for "
+                              "element=%zu",
+                              i);
+                }
                 goto out;
             }
 
             tl_element = UCS_PTR_TYPE_OFFSET(tl_element, *tl_element);
         }
-        uct_element = (void*)tl_element;
+        uct_element = UCS_PTR_BYTE_OFFSET(uct_element, uct_elem_size);
         ucp_element = UCS_PTR_BYTE_OFFSET(ucp_element, params->element_size);
     }
 
@@ -380,8 +482,10 @@ ucp_device_local_mem_list_create(const ucp_device_mem_list_params_t *params,
     status = ucp_device_local_mem_list_create_handle(params, export_mem_type,
                                                      &mem, local_sys_dev);
     if (status != UCS_OK) {
-        ucs_error("failed to create local mem list handle: %s",
-                  ucs_status_string(status));
+        if (status != UCS_ERR_NO_DEVICE) {
+            ucs_error("failed to create local mem list handle: %s",
+                      ucs_status_string(status));
+        }
         return status;
     }
 
@@ -409,9 +513,11 @@ static ucp_lane_index_t ucp_device_ep_find_lane(const ucp_ep_h ep, ucp_rsc_index
     return UCP_NULL_LANE;
 }
 
-static int
-ucp_device_ep_check_lanes(const ucp_ep_h ep, ucp_tl_bitmap_t *tl_bitmap)
+static int ucp_device_ep_check_lanes(ucp_ep_h ep, ucp_rkey_h rkey,
+                                     const ucp_tl_bitmap_t *tl_bitmap)
 {
+    const ucp_ep_config_t *ep_config = ucp_ep_config(ep);
+    ucp_md_index_t dst_md_index;
     ucp_lane_index_t lane;
     ucp_rsc_index_t tl_id;
 
@@ -422,6 +528,12 @@ ucp_device_ep_check_lanes(const ucp_ep_h ep, ucp_tl_bitmap_t *tl_bitmap)
     UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, tl_bitmap) {
         lane = ucp_device_ep_find_lane(ep, tl_id);
         if (lane == UCP_NULL_LANE) {
+            return 0;
+        }
+
+        dst_md_index = ep_config->key.lanes[lane].dst_md_index;
+        if ((dst_md_index == UCP_NULL_RESOURCE) ||
+            !(rkey->md_map & UCS_BIT(dst_md_index))) {
             return 0;
         }
     }
@@ -560,22 +672,16 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
         return status;
     }
 
-    ucp_device_get_tl_bitmap(ep->worker, tl_bitmap, local_sys_dev);
+    ucp_device_get_tl_bitmap(ep->worker, tl_bitmap, mem_type, local_sys_dev);
 
     /* handle->num_lanes is the least common multiple of both lane types, so:
      * - each lane is replicated num_lanes / popcount(tl_bitmap) times
      * - channel_id % num_lanes maps to the correct lane, regardless of lane type
      */
-    num_lanes = UCS_STATIC_BITMAP_POPCOUNT(tl_bitmap[UCP_DEVICE_TL_TYPE_LKEY]);
+    num_lanes = ucp_device_get_num_lanes(tl_bitmap);
     if (!num_lanes) {
-        if (!UCS_STATIC_BITMAP_POPCOUNT(tl_bitmap[UCP_DEVICE_TL_TYPE_NOLKEY])) {
-            ucs_error("failed to pack uct memory element for first element");
-            return UCS_ERR_INVALID_PARAM;
-        }
-
-        ucs_assert(UCS_STATIC_BITMAP_POPCOUNT(
-                           tl_bitmap[UCP_DEVICE_TL_TYPE_NOLKEY]) == 1);
-        num_lanes = 1;
+        ucs_debug("no device transports available");
+        return UCS_ERR_NO_DEVICE;
     }
 
     ucp_element   = params->elements;
@@ -594,14 +700,16 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
             for (tl_type = UCP_DEVICE_TL_TYPE_FIRST;
                  tl_type < UCP_DEVICE_TL_TYPE_LAST; tl_type++) {
                 if (ucp_device_ep_check_lanes(ucp_element->ep,
+                                              ucp_element->rkey,
                                               &tl_bitmap[tl_type])) {
                     break;
                 }
             }
 
             if (tl_type == UCP_DEVICE_TL_TYPE_LAST) {
-                ucs_error("lane not found for element %zd", i);
-                status =  UCS_ERR_INVALID_PARAM;
+                /* An endpoint or rkey may legitimately lack device lanes. */
+                ucs_debug("no device lanes found for element %zu", i);
+                status = UCS_ERR_NO_DEVICE;
                 goto out;
             }
 
@@ -695,12 +803,10 @@ ucp_device_remote_mem_list_create(const ucp_device_mem_list_params_t *params,
     status = ucp_device_remote_mem_list_create_handle(params, export_mem_type,
                                                       &mem);
     if (status != UCS_OK) {
-        /*
-         * Do not log error for UCS_ERR_NOT_CONNECTED because it is expected
-         * during connection establishment. Applications are expected to retry
-         * with progress.
-         */
-        if (status != UCS_ERR_NOT_CONNECTED) {
+        /* Do not log errors when a device transport is unavailable or while
+         * the connection is being established. */
+        if ((status != UCS_ERR_NO_DEVICE) &&
+            (status != UCS_ERR_NOT_CONNECTED)) {
             ucs_error("failed to create handle: %s", ucs_status_string(status));
         }
         return status;
