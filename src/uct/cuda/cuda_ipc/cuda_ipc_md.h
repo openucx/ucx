@@ -20,6 +20,7 @@ typedef enum {
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM, /* cuMemCreate memory */
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL, /* cudaMallocAsync memory */
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD, /* POSIX file descriptor */
+    UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM_MULTI, /* Multi-chunk VMM memory */
 } uct_cuda_ipc_key_handle_t;
 
 
@@ -130,14 +131,46 @@ typedef struct {
 } uct_cuda_ipc_memh_t;
 
 
+#if HAVE_CUDA_FABRIC
 /**
- * @brief cudar ipc region registered for exposure
+ * @brief multi-chunk VMM registration metadata
  */
 typedef struct {
-    uct_cuda_ipc_md_handle_t  ph;     /* Memory handle of GPU memory */
-    CUdeviceptr               d_bptr; /* Allocation base address */
-    size_t                    b_len;  /* Allocation size */
-    ucs_list_link_t           link;
+    CUdeviceptr       d_bptr;               /* Expanded base, all chunks */
+    size_t            b_len;                /* Expanded length, all chunks */
+    CUdeviceptr       header_dev_ptr;       /* GPU header buffer VA */
+    size_t            header_alloc_size;    /* Header buffer alloc size */
+    CUmemFabricHandle header_fabric_handle; /* Fabric handle to header buf */
+    CUdeviceptr       chunks_dev_ptr;       /* GPU chunks buffer VA */
+    size_t            chunks_alloc_size;    /* Chunks buffer alloc size */
+    uint16_t          num_chunks;           /* Chunk count */
+    uint64_t          buffer_id;            /* Buffer ID used in cache map */
+} uct_cuda_ipc_vmm_multi_meta_t;
+#endif
+
+
+#if HAVE_CUDA_FABRIC || HAVE_DECL_SYS_PIDFD_GETFD
+static UCS_F_ALWAYS_INLINE void
+uct_cuda_ipc_init_access_desc(CUmemAccessDesc *access_desc, CUdevice cu_dev)
+{
+    access_desc->location.type = CU_MEM_LOCATION_TYPE_DEVICE;
+    access_desc->flags         = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
+    access_desc->location.id   = cu_dev;
+}
+#endif
+
+
+/**
+ * @brief cuda ipc region registered for exposure
+ */
+typedef struct {
+    uct_cuda_ipc_md_handle_t      ph;     /* Memory handle of GPU memory */
+    CUdeviceptr                   d_bptr; /* Allocation base address */
+    size_t                        b_len;  /* Allocation size */
+    ucs_list_link_t               link;
+#if HAVE_CUDA_FABRIC
+    uct_cuda_ipc_vmm_multi_meta_t vmm_multi; /* Multi-chunk VMM metadata */
+#endif
 } uct_cuda_ipc_lkey_t;
 
 
@@ -163,8 +196,13 @@ typedef struct {
 
 
 typedef struct {
-    uct_cuda_ipc_extended_rkey_t super;
-    int                          stream_id;
+    uct_cuda_ipc_extended_rkey_t        super;
+    int                                 stream_id;
+#if HAVE_CUDA_FABRIC
+    /* Forward decl, defined in cuda_ipc_vmm_multi.h */
+    struct uct_cuda_ipc_vmm_chunk_desc *chunks;
+    uint16_t                            num_chunks;
+#endif
 } uct_cuda_ipc_unpacked_rkey_t;
 
 #endif
