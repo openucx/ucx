@@ -45,13 +45,25 @@ unsigned uct_rocm_base_progress(ucs_queue_head_t *signal_queue)
     static const unsigned max_signals = 16;
     unsigned count                    = 0;
     uct_rocm_base_signal_desc_t *rocm_signal;
+    hsa_signal_value_t signal_value;
     hsa_status_t status;
+    ucs_status_t completion_status;
 
     ucs_queue_for_each_extract(rocm_signal, signal_queue, queue,
-			       (hsa_signal_load_scacquire(rocm_signal->signal) == 0) &&
-			       (count < max_signals)) {
+                               (hsa_signal_load_scacquire(
+                                        rocm_signal->signal) <= 0) &&
+                               (count < max_signals)) {
+        signal_value = hsa_signal_load_scacquire(rocm_signal->signal);
+        if (signal_value < 0) {
+            ucs_error("rocm async copy failed with signal value %ld",
+                      (long)signal_value);
+            completion_status = UCS_ERR_IO_ERROR;
+        } else {
+            completion_status = UCS_OK;
+        }
+
         if (rocm_signal->comp != NULL) {
-            uct_invoke_completion(rocm_signal->comp, UCS_OK);
+            uct_invoke_completion(rocm_signal->comp, completion_status);
         }
 
         if (rocm_signal->mapped_addr != NULL) {
@@ -62,11 +74,11 @@ unsigned uct_rocm_base_progress(ucs_queue_head_t *signal_queue)
             rocm_signal->mapped_addr = NULL;
         }
 
-        ucs_trace_poll("rocm signal done :%p", rocm_signal);
+        ucs_trace_poll("rocm signal done :%p status:%s", rocm_signal,
+                       ucs_status_string(completion_status));
         ucs_mpool_put(rocm_signal);
         count++;
     }
 
     return count;
 }
-
