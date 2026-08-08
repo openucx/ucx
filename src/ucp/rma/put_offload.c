@@ -376,60 +376,103 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
     uct_ep_h uct_ep              = ucp_ep_get_lane(ep, lane);
     ucp_md_index_t md_index      = ucp_ep_md_index(ep, lane);
     ucp_rsc_index_t rkey_index   = lpriv->super.rkey_index;
-    size_t start_index           = dt_iter->offset;
-    size_t max_sgl_count         = lpriv->max_put_sgl_zcopy_count;
-    size_t elem_count            = ucp_datatype_iter_next_sgl(dt_iter,
-                                                              max_sgl_count,
-                                                              next_iter);
-    size_t rkeys_size            = elem_count * sizeof(uct_rkey_t);
-    size_t memhs_size            = elem_count * sizeof(uct_mem_h);
+    size_t max_frag_length       = ucs_max(lpriv->max_frag, 1);
     ucp_mem_h *sgl_memhs         = dt_iter->type.sgl.memhs;
-    uct_mem_h *uct_memhs;
+    size_t elem_count            = ucs_min(lpriv->max_put_sgl_zcopy_count,
+                                           dt_iter->length - dt_iter->offset);
+    size_t remote_addrs_size     = elem_count * sizeof(uint64_t);
+    size_t buffers_size          = elem_count * sizeof(void*);
+    size_t lengths_size          = elem_count * sizeof(size_t);
+    size_t elem_indices_size     = elem_count * sizeof(size_t);
+    size_t uct_rkeys_size        = elem_count * sizeof(uct_rkey_t);
+    size_t uct_memhs_size        = elem_count * sizeof(uct_mem_h);
+    void **buffers;
+    size_t *lengths, *elem_indices;
+    uint64_t *remote_addrs;
     uct_rkey_t *uct_rkeys;
+    uct_mem_h *uct_memhs;
     ucs_status_t status;
-    size_t i;
+    size_t desc_count, i, idx;
 
-    uct_rkeys = ucs_alloc_on_stack(rkeys_size, "uct_sgl_rkeys");
+    next_iter->offset               = dt_iter->offset;
+    next_iter->type.sgl.frag_offset = dt_iter->type.sgl.frag_offset;
+
+    remote_addrs = ucs_alloc_on_stack(remote_addrs_size,
+                                      "uct_sgl_remote_addrs");
+    if (remote_addrs == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    buffers = ucs_alloc_on_stack(buffers_size, "uct_sgl_buffers");
+    if (buffers == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto out_free_remote_addrs;
+    }
+
+    lengths = ucs_alloc_on_stack(lengths_size, "uct_sgl_lengths");
+    if (lengths == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto out_free_buffers;
+    }
+
+    elem_indices = ucs_alloc_on_stack(elem_indices_size,
+                                      "uct_sgl_elem_indices");
+    if (elem_indices == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto out_free_lengths;
+    }
+
+    uct_rkeys = ucs_alloc_on_stack(uct_rkeys_size, "uct_sgl_rkeys");
     if (uct_rkeys == NULL) {
-        return UCS_ERR_NO_MEMORY;
+        status = UCS_ERR_NO_MEMORY;
+        goto out_free_elem_indices;
     }
 
-    uct_memhs = ucs_alloc_on_stack(memhs_size, "uct_sgl_memhs");
+    uct_memhs = ucs_alloc_on_stack(uct_memhs_size, "uct_sgl_memhs");
     if (uct_memhs == NULL) {
-        ucs_free_on_stack(uct_rkeys, rkeys_size);
-        return UCS_ERR_NO_MEMORY;
+        status = UCS_ERR_NO_MEMORY;
+        goto out_free_uct_rkeys;
     }
 
-    for (i = 0; i < elem_count; i++) {
+    desc_count = ucp_datatype_iter_next_sgl_frags(dt_iter, elem_count,
+                                                  max_frag_length, next_iter,
+                                                  buffers, lengths,
+                                                  remote_addrs, elem_indices);
+    if (desc_count == 0) {
+        status = UCS_OK;
+        goto out_free_uct_memhs;
+    }
+
+    for (i = 0; i < desc_count; i++) {
+        idx          = elem_indices[i];
         uct_memhs[i] = (sgl_memhs != NULL) ?
-                       sgl_memhs[start_index + i]->uct[md_index] :
-                       UCT_MEM_HANDLE_NULL;
-        uct_rkeys[i] = ucp_rkey_get_tl_rkey(
-                           dt_iter->type.sgl.rkeys[start_index + i], rkey_index);
+                       sgl_memhs[idx]->uct[md_index] : UCT_MEM_HANDLE_NULL;
+        uct_rkeys[i] = ucp_rkey_get_tl_rkey(dt_iter->type.sgl.rkeys[idx],
+                                            rkey_index);
     }
 
-    status = uct_ep_put_sgl_zcopy(
-                 uct_ep,
-                 &dt_iter->type.sgl.buffers[start_index],
-                 &dt_iter->type.sgl.lengths[start_index],
-                 uct_memhs,
-                 &dt_iter->type.sgl.remote_addrs[start_index],
-                 uct_rkeys,
-                 NULL, NULL,
-                 elem_count, &req->send.state.uct_comp);
-
-    ucs_free_on_stack(uct_memhs, memhs_size);
-    ucs_free_on_stack(uct_rkeys, rkeys_size);
+    status = uct_ep_put_sgl_zcopy(uct_ep, buffers, lengths, uct_memhs,
+                                  remote_addrs, uct_rkeys, NULL, NULL,
+                                  desc_count, &req->send.state.uct_comp);
 
     if (!UCS_STATUS_IS_ERR(status)) {
-        ucp_proto_put_offload_update_remote_flush(
-                ep, lpriv->flush_sys_dev_mask,
-                ucp_rkey_get_tl_rkey(dt_iter->type.sgl.rkeys[start_index],
-                                     rkey_index),
-                uct_ep,
-                dt_iter->type.sgl.remote_addrs[start_index]);
+        ucp_proto_put_offload_update_remote_flush(ep, lpriv->flush_sys_dev_mask,
+                                                  uct_rkeys[0], uct_ep,
+                                                  remote_addrs[0]);
     }
 
+out_free_uct_memhs:
+    ucs_free_on_stack(uct_memhs, uct_memhs_size);
+out_free_uct_rkeys:
+    ucs_free_on_stack(uct_rkeys, uct_rkeys_size);
+out_free_elem_indices:
+    ucs_free_on_stack(elem_indices, elem_indices_size);
+out_free_lengths:
+    ucs_free_on_stack(lengths, lengths_size);
+out_free_buffers:
+    ucs_free_on_stack(buffers, buffers_size);
+out_free_remote_addrs:
+    ucs_free_on_stack(remote_addrs, remote_addrs_size);
     return status;
 }
 
@@ -477,24 +520,38 @@ ucp_proto_put_sgl_offload_sw_send_func(ucp_request_t *req,
     uct_ep_h uct_ep              = ucp_ep_get_lane(ep, lane);
     ucp_md_index_t md_index      = ucp_ep_md_index(ep, lane);
     ucp_rsc_index_t rkey_index   = lpriv->super.rkey_index;
-    size_t index                 = dt_iter->offset;
+    size_t max_frag_length       = ucs_max(lpriv->max_frag, 1);
     ucp_mem_h *sgl_memhs         = dt_iter->type.sgl.memhs;
-    uint64_t remote_addr         = dt_iter->type.sgl.remote_addrs[index];
+    void *buffer                 = NULL;
+    size_t length                = 0;
+    size_t elem_index            = 0;
+    uint64_t remote_addr         = 0;
+    size_t UCS_V_UNUSED desc_count;
     uct_rkey_t tl_rkey;
     uct_iov_t iov;
     ucs_status_t status;
 
-    /* TODO: fragment elements larger than cap.put.max_zcopy */
-    ucp_datatype_iter_next_sgl(dt_iter, 1, next_iter);
+    desc_count = ucp_datatype_iter_next_sgl_frags(dt_iter, 1, max_frag_length,
+                                                  next_iter, &buffer, &length,
+                                                  &remote_addr, &elem_index);
+    if (desc_count == 0) {
+        return UCS_OK;
+    }
 
-    tl_rkey     = ucp_rkey_get_tl_rkey(dt_iter->type.sgl.rkeys[index],
-                                       rkey_index);
-    iov.buffer  = dt_iter->type.sgl.buffers[index];
-    iov.length  = dt_iter->type.sgl.lengths[index];
-    iov.memh    = (sgl_memhs != NULL) ? sgl_memhs[index]->uct[md_index] :
-                                        UCT_MEM_HANDLE_NULL;
-    iov.stride  = 0;
-    iov.count   = 1;
+    ucs_assertv(desc_count == 1,
+                "dt_iter=%p offset=%zu length=%zu frag_offset=%zu "
+                "max_frag_length=%zu",
+                dt_iter, dt_iter->offset, dt_iter->length,
+                dt_iter->type.sgl.frag_offset, max_frag_length);
+
+    tl_rkey    = ucp_rkey_get_tl_rkey(dt_iter->type.sgl.rkeys[elem_index],
+                                      rkey_index);
+    iov.buffer = buffer;
+    iov.length = length;
+    iov.memh   = (sgl_memhs != NULL) ? sgl_memhs[elem_index]->uct[md_index] :
+                                       UCT_MEM_HANDLE_NULL;
+    iov.stride = 0;
+    iov.count  = 1;
 
     status = uct_ep_put_zcopy(uct_ep, &iov, 1, remote_addr, tl_rkey,
                               &req->send.state.uct_comp);
