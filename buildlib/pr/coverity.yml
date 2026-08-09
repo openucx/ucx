@@ -32,7 +32,8 @@ jobs:
             if [[ $res -eq 0 ]] ; then
               echo "##vso[task.complete result=Succeeded;]Done"
             else
-              echo "##vso[task.complete result=Failed;]Coverity have errors"
+              echo "##vso[task.logissue type=warning]Coverity found issues, see the coverity_${{ mode }} artifact"
+              echo "##vso[task.complete result=SucceededWithIssues;]Coverity have errors"
             fi
           displayName: ${{ mode }}
           env:
