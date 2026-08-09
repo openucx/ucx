@@ -24,12 +24,6 @@ AS_IF([test "x$with_verbs" = "xyes"], [with_verbs=/usr])
 AS_IF([test -d "$with_verbs"], [with_ib=yes; str="with verbs support from $with_verbs"], [with_ib=no; str="without verbs support"])
 AS_IF([test -d "$with_verbs/lib64"],[libsuff="64"],[libsuff=""])
 
-AS_IF([test "x$enable_ib_shim" = xyes -a \
-            "x$with_ib" = xyes -a \
-            "x$enable_shared" = xno -a \
-            "x$enable_static" = xyes],
-      [LDFLAGS="$LDFLAGS -Wl,-u,ucs_init"])
-
 AC_MSG_NOTICE([Compiling $str])
 
 
