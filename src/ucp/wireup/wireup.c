@@ -1060,7 +1060,8 @@ ucp_wireup_process_lanes_addr_request(
         ucs_debug("ep %p: LANES_ADDR_REQ triggering local failover for "
                   "asymmetric failure on lanes 0x%" PRIx64,
                   ep, (uint64_t)peer_unaware);
-        status = ucp_ep_failover(ep, peer_unaware, UCS_ERR_CONNECTION_RESET);
+        status = ucp_ep_failover_reconfig(ep, peer_unaware,
+                                          UCS_ERR_CONNECTION_RESET);
         if (status != UCS_OK) {
             ucs_diag("ep %p: local failover for LANES_ADDR_REQ failed: %s",
                      ep, ucs_status_string(status));
