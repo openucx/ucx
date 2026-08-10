@@ -279,6 +279,8 @@ ucs_status_t uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep, uct_ep_attr_t *ep_attr);
 ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
         uct_ep_h tl_ep, const uct_ep_outstanding_purge_params_t *params);
 
+void uct_rc_mlx5_ep_update_tx_res(uct_ep_h tl_ep);
+
 unsigned uct_rc_mlx5_ep_cleanup_qp(void *arg);
 
 ucs_status_t uct_rc_mlx5_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p);
