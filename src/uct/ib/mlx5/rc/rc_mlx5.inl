@@ -454,19 +454,18 @@ uct_rc_mlx5_ep_fm_cq_update(uct_rc_mlx5_iface_common_t *iface,
 
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_txwq_record_token(uct_rc_mlx5_iface_common_t *iface,
-                              uct_ib_mlx5_txwq_t *txwq,
-                              uint16_t nnop_pi, uint8_t opcode,
+                              uct_ib_mlx5_txwq_t *txwq, uint8_t opcode,
                               size_t message_length)
 {
     size_t mtu;
     uint32_t num_packets;
 
-    txwq->nnop_pi = nnop_pi;
     if (opcode == MLX5_OPCODE_NOP) {
         return;
     } else if ((opcode == MLX5_OPCODE_SEND) ||
                (opcode == MLX5_OPCODE_SEND_IMM) ||
-               (opcode == MLX5_OPCODE_RDMA_WRITE)) {
+               (opcode == MLX5_OPCODE_RDMA_WRITE) ||
+               (opcode == MLX5_OPCODE_RDMA_READ)) {
         mtu         = uct_ib_mtu_value(iface->super.super.config.path_mtu);
         num_packets = ucs_max(1ul, ucs_div_round_up(message_length, mtu));
     } else {
@@ -520,8 +519,7 @@ uct_rc_mlx5_common_post_send(uct_rc_mlx5_iface_common_t *iface, int qp_type,
     res_count = uct_ib_mlx5_post_send(txwq, ctrl, wqe_size, 1);
 
     if (qp_type == IBV_QPT_RC) {
-        uct_rc_mlx5_txwq_record_token(iface, txwq, txwq->sw_pi, opcode,
-                                      message_length);
+        uct_rc_mlx5_txwq_record_token(iface, txwq, opcode, message_length);
     }
 
     if (fm_ce_se & MLX5_WQE_CTRL_CQ_UPDATE) {
@@ -749,9 +747,7 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
             wqe_size     = ctrl_av_size + sizeof(*raddr) + sizeof(*dptr);
             uct_ib_mlx5_set_data_seg(dptr, buffer, length, *lkey_p);
         }
-        if (opcode_flags == MLX5_OPCODE_RDMA_WRITE) {
-            message_length = length;
-        }
+        message_length = length;
         break;
 
     case MLX5_OPCODE_ATOMIC_FA:
@@ -948,10 +944,8 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_mlx5_iface_common_t *iface, int qp_ty
         wqe_size         = ctrl_av_size + sizeof(*raddr) +
                            uct_ib_mlx5_set_data_seg_iov(txwq, (void*)(raddr + 1),
                                                         iov, iovcnt);
-        opmod            = 0;
-        if (opcode_flags == MLX5_OPCODE_RDMA_WRITE) {
-            message_length = iov_length;
-        }
+        opmod          = 0;
+        message_length = iov_length;
         break;
 
 #if HAVE_MLX5_MMO

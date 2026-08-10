@@ -399,6 +399,29 @@ typedef enum {
 
 /**
  * @ingroup UCT_RESOURCE
+ * @brief Field mask of @ref uct_ep_invalidate_params_t.
+ */
+typedef enum {
+    /** Endpoint invalidation flags */
+    UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS = UCS_BIT(0)
+} uct_ep_invalidate_param_field_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Flags used by @ref uct_ep_invalidate.
+ */
+typedef enum {
+    /**
+     * Do not complete outstanding operations when the endpoint transitions to
+     * the error state. The caller is responsible for completing them.
+     */
+    UCT_EP_INVALIDATE_FLAG_SUPPRESS_COMPLETIONS = UCS_BIT(0)
+} uct_ep_invalidate_flags_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
  * @brief Endpoint attributes, capabilities and limitations.
  */
 struct uct_ep_attr {
@@ -736,13 +759,21 @@ typedef struct uct_ep_connect_to_ep_params {
  * @ingroup UCT_RESOURCE
  * @brief Parameters for invalidating a UCT endpoint by @ref uct_ep_invalidate.
  */
- typedef struct {
+typedef struct {
     /**
-     * Mask of valid fields in this structure. Must currently be equal to zero.
-     * Fields not specified in this mask will be ignored. Provides ABI
-     * compatibility with respect to adding new fields.
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_ep_invalidate_param_field_t. Fields not specified in this mask
+     * will be ignored. Provides ABI compatibility with respect to adding new
+     * fields.
      */
     uint64_t                      field_mask;
+
+    /**
+     * Invalidation flags, see @ref uct_ep_invalidate_flags_t. This field is
+     * valid only when @ref UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS is set in
+     * @ref field_mask.
+     */
+    unsigned                      flags;
 } uct_ep_invalidate_params_t;
 
 
@@ -1343,7 +1374,8 @@ ucs_status_t uct_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr);
  *
  * This routine invalidates the endpoint and moves it to the error state.
  * All the incomplete and subsequent operations on the endpoint will be
- * completed with error.
+ * completed with error, unless
+ * @ref UCT_EP_INVALIDATE_FLAG_SUPPRESS_COMPLETIONS is specified.
  *
  * @param [in]  ep         Endpoint to invalidate.
  * @param [in]  params     Operation parameters, see @ref
