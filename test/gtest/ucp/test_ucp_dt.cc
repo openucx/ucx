@@ -475,7 +475,7 @@ UCS_TEST_F(test_ucp_dt_sgl, iter_next_frag) {
     std::vector<size_t> desc_lengths(MAX_COUNT);
     std::vector<uint64_t> desc_remote_addrs(MAX_COUNT);
     std::vector<size_t> desc_elem_indices(MAX_COUNT);
-    std::vector<size_t> elem_progress(NUM_ELEMS, 0);
+    std::vector<size_t> elem_progress(NUM_ELEMS);
 
     while (!ucp_datatype_iter_is_end(&m_dt_iter)) {
         size_t desc_count = next_frags(MAX_COUNT, MAX_FRAG,
@@ -590,7 +590,7 @@ UCS_TEST_F(test_ucp_dt_sgl, iter_rewind) {
     EXPECT_EQ(0u, m_dt_iter.type.sgl.frag_offset);
     EXPECT_FALSE(ucp_datatype_iter_is_end(&m_dt_iter));
 
-    std::vector<size_t> elem_progress(2, 0);
+    std::vector<size_t> elem_progress(2);
     while (!ucp_datatype_iter_is_end(&m_dt_iter)) {
         ASSERT_EQ(1u, next_frag(MAX_FRAG));
         ASSERT_LT(m_elem_index, m_buffers.size());
