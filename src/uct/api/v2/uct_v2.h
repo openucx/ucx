@@ -1195,7 +1195,11 @@ enum uct_iface_attr_field {
  */
         /* PUT capabilities */
 #define UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY       UCS_BIT(0)  /**< Zero-copy SGL put */
-#define UCT_IFACE_FLAG_V2_QUERY_TOKEN         UCS_BIT(1)  /**< Interface supports token query */
+#define UCT_IFACE_FLAG_V2_QUERY_TOKEN         UCS_BIT(1)  /**< @ref uct_iface_query_v2
+                                                               and @ref uct_ep_query
+                                                               support token query, and
+                                                               @ref uct_ep_outstanding_purge
+                                                               is supported. */
 /**
  * @}
  */
@@ -1886,6 +1890,18 @@ typedef struct {
      */
     void                                *arg;
 } uct_ep_outstanding_purge_params_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Purge outstanding (undelivered) operations from an endpoint.
+ *
+ * @ref uct_ep_outstanding_purge_params_t::cb is invoked once for each
+ * undelivered outstanding operation, in the original endpoint posting order.
+ */
+ucs_status_t
+uct_ep_outstanding_purge(uct_ep_h ep,
+                         const uct_ep_outstanding_purge_params_t *params);
 
 
 END_C_DECLS
