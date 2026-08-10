@@ -2189,6 +2189,9 @@ static const ucx_perf_allocator_t *ucx_perf_params_allocator(
 ucs_status_t ucx_perf_allocators_init(ucx_perf_context_t *perf,
                                       const ucx_perf_params_t *params)
 {
+    ucs_memory_type_t send_mem_type;
+    ucs_memory_type_t recv_mem_type;
+
     perf->send_allocator = ucx_perf_params_allocator(params, 1);
     perf->recv_allocator = ucx_perf_params_allocator(params, 0);
 
@@ -2203,19 +2206,22 @@ ucs_status_t ucx_perf_allocators_init(ucx_perf_context_t *perf,
     ucs_debug("set recv allocator %s", perf->recv_allocator->name);
 
     if (perf->params.api == UCX_PERF_API_UCT) {
-        if (perf->send_allocator->default_mem_type != UCS_MEMORY_TYPE_HOST) {
+        send_mem_type = perf->send_allocator->resolve_mem_type(
+                perf->send_allocator);
+        recv_mem_type = perf->recv_allocator->resolve_mem_type(
+                perf->recv_allocator);
+
+        if (send_mem_type != UCS_MEMORY_TYPE_HOST) {
             ucs_diag("UCT tests also copy one-byte value from %s memory to "
                      "%s send memory, which may impact performance results",
                      ucs_memory_type_names[UCS_MEMORY_TYPE_HOST],
-                     ucs_memory_type_names[
-                             perf->send_allocator->default_mem_type]);
+                     ucs_memory_type_names[send_mem_type]);
         }
 
-        if (perf->recv_allocator->default_mem_type != UCS_MEMORY_TYPE_HOST) {
+        if (recv_mem_type != UCS_MEMORY_TYPE_HOST) {
             ucs_diag("UCT tests also copy one-byte value from %s recv memory "
                      "to %s memory, which may impact performance results",
-                     ucs_memory_type_names[
-                             perf->recv_allocator->default_mem_type],
+                     ucs_memory_type_names[recv_mem_type],
                      ucs_memory_type_names[UCS_MEMORY_TYPE_HOST]);
         }
     }

@@ -57,7 +57,7 @@ static ucs_status_t ucp_perf_mem_alloc(const ucx_perf_context_t *perf,
                          UCP_MEM_MAP_PARAM_FIELD_LENGTH |
                          UCP_MEM_MAP_PARAM_FIELD_FLAGS;
     params.address     = NULL;
-    params.memory_type = allocator->default_mem_type;
+    params.memory_type = allocator->resolve_mem_type(allocator);
     params.length      = length;
     params.flags       = external_alloc ? 0 : UCP_MEM_MAP_ALLOCATE;
     if (!external_alloc || (allocator->detect_mem_type == NULL)) {

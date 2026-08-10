@@ -31,7 +31,7 @@ static void print_memory_allocator_usage(void)
         allocator = ucx_perf_allocators[i];
         printf("                        %s - %s\n",
                allocator->name,
-               ucs_memory_type_descs[allocator->default_mem_type]);
+               ucs_memory_type_descs[allocator->resolve_mem_type(allocator)]);
     }
 }
 
