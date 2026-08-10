@@ -205,7 +205,9 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
 
     ucs_arbiter_group_purge(&iface->tx.arbiter, &ep->super.arb_group,
                             uct_rc_ep_arbiter_purge_internal_cb, NULL);
-    uct_rc_mlx5_iface_update_tx_res(iface, ep, pi);
+    /* Persist the CQE completion boundary before invoking the error handler.
+     * In suppress-completions mode, the plugin owns resource release. */
+    uct_ib_mlx5_txwq_update_bb(&ep->tx.wq, pi);
     uct_ib_mlx5_txwq_update_flags(&ep->tx.wq, UCT_IB_MLX5_TXWQ_FLAG_FAILED, 0);
 
     if ((ep->super.flags & UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED) ||
@@ -226,6 +228,7 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
 purge:
     if ((ep->super.flags & UCT_RC_EP_FLAG_FLUSH_CANCEL) ||
         !(ep->flags & UCT_RC_MLX5_EP_FLAG_SUPPRESS_COMPLETIONS)) {
+        uct_rc_mlx5_iface_update_tx_res(iface, ep, pi);
         uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status, pi, 0);
     }
 

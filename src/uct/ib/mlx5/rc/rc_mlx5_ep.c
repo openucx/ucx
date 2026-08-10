@@ -81,6 +81,21 @@ ucs_status_t uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep, uct_ep_attr_t *ep_attr)
 }
 
 
+void uct_rc_mlx5_ep_update_tx_res(uct_ep_h tl_ep)
+{
+    UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
+    uct_ib_mlx5_txwq_t *txwq = &ep->tx.wq;
+    uint16_t available;
+
+    ucs_assert(ep->flags & UCT_RC_MLX5_EP_FLAG_SUPPRESS_COMPLETIONS);
+    available = txwq->bb_max - (txwq->prev_sw_pi - txwq->hw_ci);
+    ucs_assert(available >= uct_rc_txqp_available(&ep->super.txqp));
+    if (available > uct_rc_txqp_available(&ep->super.txqp)) {
+        uct_rc_mlx5_iface_update_tx_res(&iface->super, ep, txwq->hw_ci);
+    }
+}
+
+
 ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
         uct_ep_h tl_ep, const uct_ep_outstanding_purge_params_t *params)
 {
@@ -93,6 +108,11 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
         status = uct_ep_outstanding_purge_get_status(params, &purge_status);
         if (status != UCS_OK) {
             return status;
+        }
+
+        if (ep->flags & UCT_RC_MLX5_EP_FLAG_SUPPRESS_COMPLETIONS) {
+            uct_rc_mlx5_ep_update_tx_res(tl_ep);
+            ep->flags &= ~UCT_RC_MLX5_EP_FLAG_SUPPRESS_COMPLETIONS;
         }
     } else {
         status = uct_ib_mlx5_ext_ep_outstanding_purge(tl_ep, params);
@@ -848,6 +868,9 @@ uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
     status = uct_rc_mlx5_base_ep_flush(tl_ep, flags, comp);
     if (flags & UCT_FLUSH_FLAG_CANCEL) {
         /* Cancel owns completions even when the flush has to be retried. */
+        if (ep->super.flags & UCT_RC_MLX5_EP_FLAG_SUPPRESS_COMPLETIONS) {
+            uct_rc_mlx5_ep_update_tx_res(tl_ep);
+        }
         ep->super.flags &= ~UCT_RC_MLX5_EP_FLAG_SUPPRESS_COMPLETIONS;
     }
 
