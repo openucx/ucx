@@ -227,6 +227,7 @@ out_free_req:
     ucp_request_mem_free(req);
 out:
     UCS_ASYNC_UNBLOCK(&ep->worker->async);
+    /* coverity[return_overflow] */
     return status;
 }
 
