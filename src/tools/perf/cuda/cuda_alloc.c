@@ -251,7 +251,8 @@ static ucs_memory_type_t ucx_perf_cuda_async_configured_mem_type(void)
                 result = mem_type;
             } else {
                 ucs_warn("wrong memory type for async memory allocations: "
-                         "\"%s\"; cuda-managed will be used instead", value);
+                         "\"%s\"; cuda-managed will be used instead",
+                         value);
             }
             break;
         }
@@ -266,8 +267,9 @@ out:
     return result;
 }
 
-static ucs_memory_type_t ucx_perf_cuda_async_mem_type(
-        const ucx_perf_context_t *perf, const void *address, size_t length)
+static ucs_memory_type_t
+ucx_perf_cuda_async_mem_type(const ucx_perf_context_t *perf,
+                             const void *address, size_t length)
 {
     ucs_memory_type_t mem_type;
     ucs_status_t status;

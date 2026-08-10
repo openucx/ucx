@@ -83,8 +83,7 @@ typedef struct {
 } ucp_perf_flush_context_t;
 
 
-const ucx_perf_allocator_t*
-        ucx_perf_allocators[UCX_PERF_ALLOCATOR_MAX];
+const ucx_perf_allocator_t *ucx_perf_allocators[UCX_PERF_ALLOCATOR_MAX];
 unsigned ucx_perf_num_allocators;
 
 const ucx_perf_device_dispatcher_t*
