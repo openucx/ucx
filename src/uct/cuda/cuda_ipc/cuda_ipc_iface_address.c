@@ -38,20 +38,14 @@ void uct_cuda_ipc_iface_address_pack(uct_iface_addr_t *iface_addr)
 {
     uct_cuda_ipc_iface_address_t *cuda_ipc_iface_address;
 
-    *(pid_t*)iface_addr = getpid();
-    if (ucs_sys_ns_is_default(UCS_SYS_NS_TYPE_PID)) {
-        return;
-    }
-
     cuda_ipc_iface_address         = (uct_cuda_ipc_iface_address_t*)iface_addr;
+    cuda_ipc_iface_address->pid    = getpid();
     cuda_ipc_iface_address->pid_ns = ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID);
 }
 
 size_t uct_cuda_ipc_iface_address_length(void)
 {
-    return ucs_sys_ns_is_default(UCS_SYS_NS_TYPE_PID) ?
-                   sizeof(pid_t) :
-                   sizeof(uct_cuda_ipc_iface_address_t);
+    return sizeof(uct_cuda_ipc_iface_address_t);
 }
 
 uct_cuda_ipc_iface_address_t

@@ -20,6 +20,7 @@
 #include <ucs/type/class.h>
 #include <ucs/sys/ptr_arith.h>
 #include <uct/cuda/base/cuda_ctx.inl>
+#include <uct/cuda/base/cuda_util.h>
 #include <uct/api/v2/uct_v2.h>
 #include <cuda.h>
 #if CUDA_VERSION >= 11070
@@ -28,7 +29,6 @@
 
 
 #define UCT_CUDA_DEV_NAME_MAX_LEN 64
-#define UCT_CUDA_MAX_DEVICES      32
 
 
 static const char *uct_cuda_pref_loc[] = {
@@ -352,6 +352,7 @@ uct_cuda_copy_mem_alloc(uct_md_h uct_md, size_t *length_p, void **address_p,
                         uct_mem_h *memh_p)
 {
     uct_cuda_copy_md_t *md = ucs_derived_of(uct_md, uct_cuda_copy_md_t);
+    uct_md_mem_attr_v2_t mem_attr;
     ucs_status_t status;
     uct_cuda_copy_alloc_handle_t *alloc_handle;
     ucs_log_level_t log_level;
@@ -426,6 +427,22 @@ uct_cuda_copy_mem_alloc(uct_md_h uct_md, size_t *length_p, void **address_p,
 allocated:
     uct_cuda_copy_sync_memops(alloc_handle->ptr, alloc_handle->is_vmm);
 
+    /* Cache memory flags as part of uct_cuda_copy_md_mem_query() before
+     * restoring the CUDA context.
+     */
+    mem_attr.field_mask = UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE     |
+                          UCT_MD_MEM_ATTR_V2_FIELD_SYS_DEV      |
+                          UCT_MD_MEM_ATTR_V2_FIELD_BASE_ADDRESS |
+                          UCT_MD_MEM_ATTR_V2_FIELD_ALLOC_LENGTH |
+                          UCT_MD_MEM_ATTR_V2_FIELD_MEM_FLAGS;
+
+    status = uct_cuda_copy_md_mem_query(uct_md, (void*)alloc_handle->ptr,
+                                        alloc_handle->length, &mem_attr);
+    if (status != UCS_OK) {
+        (void)uct_md_mem_free(uct_md, alloc_handle);
+        goto out;
+    }
+
     *memh_p    = alloc_handle;
     *address_p = (void*)alloc_handle->ptr;
     *length_p  = alloc_handle->length;
@@ -465,7 +482,8 @@ uct_cuda_copy_mem_release_fabric(uct_cuda_copy_alloc_handle_t *alloc_handle)
 
 static int uct_cuda_copy_detect_vmm(const void *address,
                                     ucs_memory_type_t *vmm_mem_type,
-                                    CUdevice *cuda_device)
+                                    CUdevice *cuda_device,
+                                    int *is_host_located)
 {
 #ifdef HAVE_CUMEMRETAINALLOCATIONHANDLE
     CUmemGenericAllocationHandle alloc_handle;
@@ -480,8 +498,9 @@ static int uct_cuda_copy_detect_vmm(const void *address,
         return 0;
     }
 
-    *vmm_mem_type = UCS_MEMORY_TYPE_UNKNOWN;
-    *cuda_device  = CU_DEVICE_INVALID;
+    *vmm_mem_type    = UCS_MEMORY_TYPE_UNKNOWN;
+    *cuda_device     = CU_DEVICE_INVALID;
+    *is_host_located = 0;
 
     status = UCT_CUDADRV_FUNC_LOG_DEBUG(
             cuMemGetAllocationPropertiesFromHandle(&prop, alloc_handle));
@@ -495,7 +514,8 @@ static int uct_cuda_copy_detect_vmm(const void *address,
         (prop.location.type == CU_MEM_LOCATION_TYPE_HOST_NUMA) ||
         (prop.location.type == CU_MEM_LOCATION_TYPE_HOST_NUMA_CURRENT)) {
         /* TODO: Marking as CUDA to allow cuda_ipc access vmm for now */
-        *vmm_mem_type = UCS_MEMORY_TYPE_CUDA;
+        *vmm_mem_type    = UCS_MEMORY_TYPE_CUDA;
+        *is_host_located = 1;
     } else
 #endif
     if (prop.location.type == CU_MEM_LOCATION_TYPE_DEVICE) {
@@ -633,7 +653,7 @@ static ucs_status_t
 uct_cuda_copy_md_query_attributes(const uct_cuda_copy_md_t *md,
                                   const void *address, size_t length,
                                   ucs_memory_info_t *mem_info,
-                                  int *is_async_managed)
+                                  int *is_async_managed, int *is_host_located)
 {
 #define UCT_CUDA_MEM_QUERY_NUM_ATTRS 4
     CUmemorytype cuda_mem_type = CU_MEMORYTYPE_HOST;
@@ -648,8 +668,10 @@ uct_cuda_copy_md_query_attributes(const uct_cuda_copy_md_t *md,
     ucs_status_t status;
 
     *is_async_managed = 0;
+    *is_host_located  = 0;
 
-    is_vmm = uct_cuda_copy_detect_vmm(address, &mem_info->type, &cuda_device);
+    is_vmm = uct_cuda_copy_detect_vmm(address, &mem_info->type, &cuda_device,
+                                      is_host_located);
     if (is_vmm) {
         if (mem_info->type == UCS_MEMORY_TYPE_UNKNOWN) {
             return UCS_ERR_INVALID_ADDR;
@@ -826,7 +848,7 @@ uct_cuda_copy_md_dmabuf_t uct_cuda_copy_md_get_dmabuf(const void *address,
 static uint8_t
 uct_cuda_copy_md_detect_mem_flags(uct_cuda_copy_md_t *md,
                                   const ucs_memory_info_t *mem_info,
-                                  int is_async_managed,
+                                  int is_async_managed, int is_host_located,
                                   const uct_cuda_copy_md_dmabuf_t *dmabuf)
 {
     int close_dmabuf = 0;
@@ -834,6 +856,11 @@ uct_cuda_copy_md_detect_mem_flags(uct_cuda_copy_md_t *md,
 
     if (is_async_managed) {
         return 0;
+    }
+
+    /* Host-located CUDA VMM is registerable even if dmabuf export fails. */
+    if (is_host_located) {
+        return UCS_MEM_FLAG_REGISTRABLE;
     }
 
     if (mem_info->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
@@ -878,9 +905,14 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
         .fd     = UCT_DMABUF_FD_INVALID,
         .offset = 0
     };
-    int dmabuf_queried    = 0;
-    int is_async_managed  = 0;
+    int dmabuf_queried         = 0;
+    int is_async_managed       = 0;
+    int is_host_located        = 0;
+    CUdevice cur_cuda_device   = CU_DEVICE_INVALID;
+    CUdevice avail_cuda_device = CU_DEVICE_INVALID;
+    ucs_memory_info_t cached_mem_info;
     ucs_memory_info_t addr_mem_info;
+    ucs_status_t cache_status;
     ucs_status_t status;
 
     if (!(mem_attr->field_mask &
@@ -895,11 +927,21 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
     }
 
     if (address != NULL) {
+        cache_status = ucs_memtype_cache_lookup(address, length,
+                                                &cached_mem_info);
         status = uct_cuda_copy_md_query_attributes(md, address, length,
                                                    &addr_mem_info,
-                                                   &is_async_managed);
+                                                   &is_async_managed,
+                                                   &is_host_located);
         if (status != UCS_OK) {
             return status;
+        }
+
+        /* CUDA reports device symbols as device memory, so preserve the type
+         * explicitly provided by the UCM allocation event. */
+        if ((cache_status == UCS_OK) &&
+            (cached_mem_info.type == UCS_MEMORY_TYPE_CUDA_MANAGED)) {
+            addr_mem_info.type = cached_mem_info.type;
         }
     } else {
         addr_mem_info = default_mem_info;
@@ -921,6 +963,17 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
         mem_attr->alloc_length = addr_mem_info.alloc_length;
     }
 
+    /* dmabuf export and mem_flags detection require a current context on the
+     * memory's device; reuse the current one if suitable, otherwise push it */
+    if (addr_mem_info.sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
+        if (uct_cuda_ctx_primary_push_avail(0, addr_mem_info.sys_dev,
+                                            &cur_cuda_device, &avail_cuda_device,
+                                            UCS_LOG_LEVEL_DEBUG) != UCS_OK) {
+            /* best-effort: continue with whatever context is current */
+            avail_cuda_device = cur_cuda_device;
+        }
+    }
+
     if ((mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD) ||
         (mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_OFFSET)) {
         dmabuf = uct_cuda_copy_md_get_dmabuf(addr_mem_info.base_address,
@@ -939,7 +992,7 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
 
     if (address != NULL) {
         addr_mem_info.mem_flags = uct_cuda_copy_md_detect_mem_flags(
-                md, &addr_mem_info, is_async_managed,
+                md, &addr_mem_info, is_async_managed, is_host_located,
                 dmabuf_queried ? &dmabuf : NULL);
         ucs_memtype_cache_update(addr_mem_info.base_address,
                                  addr_mem_info.alloc_length, addr_mem_info.type,
@@ -959,6 +1012,10 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
     if (dmabuf_queried &&
         !(mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD)) {
         ucs_close_fd(&dmabuf.fd);
+    }
+
+    if (cur_cuda_device != avail_cuda_device) {
+        uct_cuda_ctx_primary_pop_and_release(avail_cuda_device);
     }
 
     return UCS_OK;
@@ -1047,6 +1104,9 @@ uct_cuda_copy_md_open(uct_component_t *component, const char *md_name,
     }
 
     *md_p = (uct_md_h)md;
+
+    /* Keep the global cache lazy, but install its handler before CUDA events. */
+    ucs_memtype_cache_global_create();
 
     /*
      * Setting sync memops flag for the first time during memory detection can
