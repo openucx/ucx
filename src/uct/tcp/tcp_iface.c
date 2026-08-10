@@ -1002,6 +1002,7 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
         goto out;
     }
 
+    /* coverity[uninit_use] */
     ucs_carray_for_each(entry, entries, n) {
         /* According to the sysfs(5) manual page, all of entries
          * has to be a symbolic link representing one of the real
