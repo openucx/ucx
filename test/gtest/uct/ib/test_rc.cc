@@ -142,7 +142,7 @@ UCS_TEST_P(test_rc, fence_am_short_consumed, "RC_FENCE=weak")
     EXPECT_EQ(rc_iface(m_e1)->tx.fi.fence_beat, fence_info->fence_beat);
 }
 
-UCS_TEST_SKIP_COND_P(test_rc, relaxed_order_peer_strong_fence,
+UCS_TEST_SKIP_COND_P(test_rc, relaxed_order_required_strong_fence,
                      GetParam()->tl_name != "rc_mlx5",
                      "IB_PCI_RELAXED_ORDERING=yes")
 {

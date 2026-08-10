@@ -414,7 +414,6 @@ typedef struct uct_rc_mlx5_iface_common {
         uint8_t                        dp_ordering_devx;
         uint8_t                        dp_ordering_force;
         uint8_t                        ddp_enabled_dv;
-        uint8_t                        fence_mode_auto;
     } config;
     UCS_STATS_NODE_DECLARE(stats)
 } uct_rc_mlx5_iface_common_t;
@@ -438,15 +437,6 @@ typedef struct uct_rc_mlx5_iface_common_config {
     UCS_CONFIG_STRING_ARRAY_FIELD(types) srq_topo;
 } uct_rc_mlx5_iface_common_config_t;
 
-
-static UCS_F_ALWAYS_INLINE void
-uct_rc_mlx5_iface_enable_peer_fence(uct_rc_mlx5_iface_common_t *iface)
-{
-    if (iface->config.fence_mode_auto &&
-        (iface->super.config.fence_mode == UCT_RC_FENCE_MODE_NONE)) {
-        iface->super.config.fence_mode = UCT_RC_FENCE_MODE_WEAK;
-    }
-}
 
 UCS_CLASS_DECLARE(uct_rc_mlx5_iface_common_t, uct_iface_ops_t*,
                   uct_rc_iface_ops_t*, uct_md_h, uct_worker_h,

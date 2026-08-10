@@ -1351,10 +1351,10 @@ UCS_CLASS_INIT_FUNC(uct_dc_mlx5_ep_t, uct_dc_mlx5_iface_t *iface,
 {
     const uct_dc_mlx5_iface_flush_addr_t *flush_addr =
             ucs_derived_of(if_addr, uct_dc_mlx5_iface_flush_addr_t);
+    uct_ib_md_t *md = uct_ib_iface_md(&iface->super.super.super);
     uint32_t remote_dctn;
     uint8_t pool_index;
     ucs_status_t status;
-    int peer_needs_flush;
 
     ucs_trace_func("");
 
@@ -1366,12 +1366,11 @@ UCS_CLASS_INIT_FUNC(uct_dc_mlx5_ep_t, uct_dc_mlx5_iface_t *iface,
     self->av.dqp_dct      = av->dqp_dct | htonl(remote_dctn);
     self->av.rlid         = av->rlid;
 
-    peer_needs_flush = (if_addr->flags & UCT_DC_MLX5_IFACE_ADDR_RELAXED_ORDER) ||
-                       !(if_addr->flags & UCT_DC_MLX5_IFACE_ADDR_ORDERING_CAP);
-    if (peer_needs_flush &&
+    if (md->relaxed_order_required &&
         !(if_addr->flags & UCT_DC_MLX5_IFACE_ADDR_FLUSH_RKEY)) {
         return UCS_ERR_UNSUPPORTED;
     }
+
     status = uct_dc_mlx5_dci_pool_get_or_create(iface, dci_config, &pool_index);
     if (status != UCS_OK) {
         return status;
@@ -1379,9 +1378,8 @@ UCS_CLASS_INIT_FUNC(uct_dc_mlx5_ep_t, uct_dc_mlx5_iface_t *iface,
 
     self->flags = pool_index % UCT_DC_MLX5_IFACE_MAX_DCI_POOLS;
 
-    if (peer_needs_flush) {
+    if (md->relaxed_order_required) {
         self->flags |= UCT_DC_MLX5_EP_FLAG_FENCE_FLUSH;
-        uct_rc_mlx5_iface_enable_peer_fence(&iface->super);
     }
 
     if (if_addr->flags & UCT_DC_MLX5_IFACE_ADDR_FLUSH_RKEY) {
@@ -1949,7 +1947,8 @@ int uct_dc_mlx5_ep_is_connected(const uct_ep_h tl_ep,
     dc_addr = (const uct_dc_mlx5_iface_addr_t*)params->iface_addr;
     iface   = ucs_derived_of(tl_ep->iface, uct_dc_mlx5_iface_t);
 
-    if ((uct_dc_mlx5_iface_addr_version(dc_addr) != iface->version_flag) ||
+    if (((dc_addr->flags & UCT_DC_MLX5_IFACE_ADDR_DC_VERS) !=
+         iface->version_flag) ||
         (UCT_DC_MLX5_IFACE_ADDR_TM_ENABLED(dc_addr) !=
          UCT_RC_MLX5_TM_ENABLED(&iface->super))) {
         return 0;

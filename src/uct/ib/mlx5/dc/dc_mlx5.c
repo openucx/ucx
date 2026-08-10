@@ -272,7 +272,6 @@ uct_dc_mlx5_iface_flush_rkey_enabled(uct_dc_mlx5_iface_t *iface)
 static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
-    uct_ib_md_t *md             = uct_ib_iface_md(&iface->super.super.super);
     size_t max_am_inline       = UCT_IB_MLX5_AM_MAX_SHORT(UCT_IB_MLX5_AV_FULL_SIZE);
     size_t max_put_inline      = UCT_IB_MLX5_PUT_MAX_SHORT(UCT_IB_MLX5_AV_FULL_SIZE);
     ucs_status_t status;
@@ -302,10 +301,7 @@ static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
     iface_attr->cap.flags     |= UCT_IFACE_FLAG_CONNECT_TO_IFACE;
     iface_attr->ep_addr_len    = 0;
     iface_attr->max_conn_priv  = 0;
-    if (md->relaxed_order_required) {
-        iface_attr->iface_addr_len =
-                sizeof(uct_dc_mlx5_iface_order_addr_t);
-    } else if (uct_dc_mlx5_iface_flush_rkey_enabled(iface)) {
+    if (uct_dc_mlx5_iface_flush_rkey_enabled(iface)) {
         iface_attr->iface_addr_len =
                 sizeof(uct_dc_mlx5_iface_flush_addr_t);
     } else {
@@ -1072,43 +1068,20 @@ uct_dc_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
     const uct_dc_mlx5_iface_addr_t *addr;
-    size_t addr_length;
-    uint8_t remote_version;
     int same_tm, same_version;
 
     addr = (const uct_dc_mlx5_iface_addr_t*)UCS_PARAM_VALUE(
             UCT_IFACE_IS_REACHABLE_FIELD, params, iface_addr, IFACE_ADDR, NULL);
     if (addr != NULL) {
-        if (addr->flags & UCT_DC_MLX5_IFACE_ADDR_RELAXED_ORDER) {
-            addr_length = UCS_PARAM_VALUE(
-                    UCT_IFACE_IS_REACHABLE_FIELD, params, iface_addr_length,
-                    IFACE_ADDR_LENGTH,
-                    sizeof(uct_dc_mlx5_iface_order_addr_t));
-            if (!(addr->flags & UCT_DC_MLX5_IFACE_ADDR_ORDERING_CAP) ||
-                !(addr->flags & UCT_DC_MLX5_IFACE_ADDR_FLUSH_RKEY) ||
-                ((addr->flags & UCT_DC_MLX5_IFACE_ADDR_DC_VERS) !=
-                 UCT_DC_MLX5_IFACE_ADDR_DC_VERS) ||
-                (addr_length < sizeof(uct_dc_mlx5_iface_order_addr_t))) {
-                return 0;
-            }
-        } else if (!(addr->flags & UCT_DC_MLX5_IFACE_ADDR_ORDERING_CAP)) {
-            addr_length = UCS_PARAM_VALUE(
-                    UCT_IFACE_IS_REACHABLE_FIELD, params, iface_addr_length,
-                    IFACE_ADDR_LENGTH,
-                    sizeof(uct_dc_mlx5_iface_flush_addr_t));
-            if (!(addr->flags & UCT_DC_MLX5_IFACE_ADDR_FLUSH_RKEY) ||
-                (addr_length < sizeof(uct_dc_mlx5_iface_flush_addr_t))) {
-                return 0;
-            }
-        }
-        remote_version = uct_dc_mlx5_iface_addr_version(addr);
         same_tm      = (UCT_DC_MLX5_IFACE_ADDR_TM_ENABLED(addr) ==
                         UCT_RC_MLX5_TM_ENABLED(&iface->super));
-        same_version = (remote_version == iface->version_flag);
+        same_version = ((addr->flags & UCT_DC_MLX5_IFACE_ADDR_DC_VERS) ==
+                        iface->version_flag);
         if (!same_version) {
             uct_iface_fill_info_str_buf(params, "local DCv%u remote DCv%u",
                                         iface->version_flag,
-                                        remote_version);
+                                        addr->flags &
+                                                UCT_DC_MLX5_IFACE_ADDR_DC_VERS);
             return 0;
         }
 
@@ -1130,14 +1103,11 @@ uct_dc_mlx5_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr
 {
     uct_dc_mlx5_iface_t *iface           = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
     uct_dc_mlx5_iface_flush_addr_t *addr = (uct_dc_mlx5_iface_flush_addr_t *)iface_addr;
-    uct_dc_mlx5_iface_order_addr_t *order_addr =
-            (uct_dc_mlx5_iface_order_addr_t*)iface_addr;
     uct_ib_md_t *md                      = ucs_derived_of(iface->super.super.super.super.md,
                                                           uct_ib_md_t);
 
     uct_ib_pack_uint24(addr->super.qp_num, iface->rx.dct.qp_num);
-    addr->super.flags        = iface->version_flag |
-                               UCT_DC_MLX5_IFACE_ADDR_ORDERING_CAP;
+    addr->super.flags        = iface->version_flag;
     addr->super.atomic_mr_id = uct_ib_md_get_atomic_mr_id(md);
 
     if (UCT_RC_MLX5_TM_ENABLED(&iface->super)) {
@@ -1147,12 +1117,6 @@ uct_dc_mlx5_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr
     if (uct_dc_mlx5_iface_flush_rkey_enabled(iface)) {
         addr->flush_rkey_hi = md->flush_rkey >> 16;
         addr->super.flags  |= UCT_DC_MLX5_IFACE_ADDR_FLUSH_RKEY;
-    }
-
-    if (md->relaxed_order_required) {
-        order_addr->dc_version = iface->version_flag;
-        addr->super.flags |= UCT_DC_MLX5_IFACE_ADDR_RELAXED_ORDER |
-                             UCT_DC_MLX5_IFACE_ADDR_DC_VERS;
     }
 
     if (iface->super.super.config.max_rd_atomic == 16) {

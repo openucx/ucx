@@ -829,19 +829,13 @@ ucs_status_t uct_rc_mlx5_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
     }
 
     ext_addr = ucs_derived_of(rc_addr, uct_rc_mlx5_ep_ext_address_t);
-    ext_addr->flags = UCT_RC_MLX5_EP_ADDR_FLAG_ORDERING_CAP;
-
     if (uct_rc_iface_flush_rkey_enabled(&iface->super)) {
-        ext_addr->flags                    |= UCT_RC_MLX5_EP_ADDR_FLAG_FLUSH_RKEY;
+        ext_addr->flags                     = UCT_RC_MLX5_EP_ADDR_FLAG_FLUSH_RKEY;
         ptr                                 = ext_addr + 1;
         *ucs_serialize_next(&ptr, uint16_t) = md->flush_rkey >> 16;
         if (!md->config.enable_indirect_atomic) {
             ext_addr->flags |= UCT_RC_MLX5_EP_ADDR_FLAG_NO_ATOMIC_OFFSET;
         }
-    }
-
-    if (md->relaxed_order_required) {
-        ext_addr->flags |= UCT_RC_MLX5_EP_ADDR_FLAG_RELAXED_ORDER;
     }
 
     return UCS_OK;
@@ -948,23 +942,6 @@ uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
     const void *ptr;
     uint32_t flush_rkey_hi;
     ucs_status_t status;
-    int peer_needs_strong_fence;
-
-    addr_length = UCS_PARAM_VALUE(UCT_EP_CONNECT_TO_EP_PARAM_FIELD, params,
-                                  ep_addr_length, EP_ADDR_LENGTH,
-                                  sizeof(uct_rc_mlx5_ep_address_t));
-    ext_addr    = ucs_derived_of(rc_addr, uct_rc_mlx5_ep_ext_address_t);
-    peer_needs_strong_fence = 1;
-    if (addr_length > sizeof(uct_rc_mlx5_ep_address_t)) {
-        peer_needs_strong_fence =
-                !(ext_addr->flags & UCT_RC_MLX5_EP_ADDR_FLAG_ORDERING_CAP);
-        if ((ext_addr->flags & UCT_RC_MLX5_EP_ADDR_FLAG_RELAXED_ORDER) &&
-            peer_needs_strong_fence) {
-            return UCS_ERR_UNSUPPORTED;
-        }
-        peer_needs_strong_fence |=
-                !!(ext_addr->flags & UCT_RC_MLX5_EP_ADDR_FLAG_RELAXED_ORDER);
-    }
 
     status = uct_ib_iface_fill_ah_attr_from_addr(&iface->super.super, ib_addr,
                                                  ep->super.super.path_index,
@@ -1004,11 +981,15 @@ uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
             rc_addr->atomic_mr_id);
     ep->super.super.flags           |= UCT_RC_EP_FLAG_CONNECTED;
 
+    addr_length = UCS_PARAM_VALUE(UCT_EP_CONNECT_TO_EP_PARAM_FIELD, params,
+                                  ep_addr_length, EP_ADDR_LENGTH,
+                                  sizeof(uct_rc_mlx5_ep_address_t));
     if (addr_length <= sizeof(uct_rc_mlx5_ep_address_t)) {
         ep->super.super.flush_rkey = UCT_IB_MD_INVALID_FLUSH_RKEY;
-        goto out_fence;
+        return UCS_OK;
     }
 
+    ext_addr = ucs_derived_of(rc_addr, uct_rc_mlx5_ep_ext_address_t);
     if (ext_addr->flags & UCT_RC_MLX5_EP_ADDR_FLAG_FLUSH_RKEY) {
         ptr                        = ext_addr + 1;
         flush_rkey_hi              = *ucs_serialize_next(&ptr, uint16_t);
@@ -1021,17 +1002,6 @@ uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
     if (ext_addr->flags & UCT_RC_MLX5_EP_ADDR_FLAG_NO_ATOMIC_OFFSET) {
         /* override super.super.atomic_mr_offset that was set previously */
         ep->super.super.atomic_mr_offset = 0;
-    }
-
-out_fence:
-    if (peer_needs_strong_fence) {
-        iface->config.put_fence_flag    =
-                UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER;
-        iface->config.atomic_fence_flag =
-                UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER;
-        iface->config.send_fence_flag   =
-                UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER;
-        uct_rc_mlx5_iface_enable_peer_fence(iface);
     }
 
     return UCS_OK;
