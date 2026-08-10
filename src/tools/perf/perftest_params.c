@@ -257,7 +257,7 @@ static ucs_status_t parse_perf_mem_allocator(const char *opt_arg,
 
     allocator = ucx_perf_allocator_by_name(opt_arg);
     if (allocator != NULL) {
-        *mem_type = allocator->default_mem_type;
+        *mem_type = allocator->resolve_mem_type(allocator);
         ucs_strncpy_safe(alloc_name, opt_arg, UCX_PERF_ALLOC_NAME_MAX);
         return UCS_OK;
     }

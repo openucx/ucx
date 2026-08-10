@@ -16,6 +16,8 @@
 #include <ucs/sys/ptr_arith.h>
 #include <uct/api/v2/uct_v2.h>
 
+#include <string.h>
+
 
 static ucs_status_t ucx_perf_cuda_init(ucx_perf_context_t *perf)
 {
@@ -190,6 +192,80 @@ static ucs_status_t ucx_perf_cuda_managed_uct_alloc(
 }
 
 #if CUDART_VERSION >= 11020
+/* Resolve async allocation memory type from UCX_CUDA_COPY_ASYNC_MEM_TYPE. */
+static ucs_memory_type_t ucx_perf_cuda_async_configured_mem_type(void)
+{
+    static int initialized                   = 0;
+    static ucs_memory_type_t cached_mem_type = UCS_MEMORY_TYPE_CUDA_MANAGED;
+    uct_component_h *components              = NULL;
+    unsigned num_components                  = 0;
+    ucs_memory_type_t result                 = UCS_MEMORY_TYPE_CUDA_MANAGED;
+    uct_component_attr_t component_attr;
+    uct_md_config_t *md_config;
+    char value[64];
+    ucs_memory_type_t mem_type;
+    ucs_status_t status;
+    unsigned i;
+
+    if (initialized) {
+        return cached_mem_type;
+    }
+
+    status = uct_query_components(&components, &num_components);
+    if (status != UCS_OK) {
+        ucs_debug("failed to query UCT components: %s",
+                  ucs_status_string(status));
+        goto out;
+    }
+
+    for (i = 0; i < num_components; ++i) {
+        component_attr.field_mask = UCT_COMPONENT_ATTR_FIELD_NAME;
+        status = uct_component_query(components[i], &component_attr);
+        if ((status != UCS_OK) || strcmp(component_attr.name, "cuda_cpy")) {
+            continue;
+        }
+
+        status = uct_md_config_read(components[i], NULL, NULL, &md_config);
+        if (status != UCS_OK) {
+            ucs_debug("failed to read cuda_cpy MD config: %s",
+                      ucs_status_string(status));
+            break;
+        }
+
+        status = uct_config_get(md_config, "ASYNC_MEM_TYPE", value,
+                                sizeof(value));
+        uct_config_release(md_config);
+        if (status != UCS_OK) {
+            ucs_debug("failed to get ASYNC_MEM_TYPE: %s",
+                      ucs_status_string(status));
+            break;
+        }
+
+        for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; ++mem_type) {
+            if (strcmp(value, ucs_memory_type_names[mem_type])) {
+                continue;
+            }
+
+            if ((mem_type == UCS_MEMORY_TYPE_CUDA) ||
+                (mem_type == UCS_MEMORY_TYPE_CUDA_MANAGED)) {
+                result = mem_type;
+            } else {
+                ucs_warn("wrong memory type for async memory allocations: "
+                         "\"%s\"; cuda-managed will be used instead", value);
+            }
+            break;
+        }
+        break;
+    }
+
+    uct_release_component_list(components);
+
+out:
+    cached_mem_type = result;
+    initialized     = 1;
+    return result;
+}
+
 static ucs_memory_type_t ucx_perf_cuda_async_mem_type(
         const ucx_perf_context_t *perf, const void *address, size_t length)
 {
@@ -206,10 +282,17 @@ static ucs_memory_type_t ucx_perf_cuda_async_mem_type(
         return mem_type;
     }
 
+    mem_type = ucx_perf_cuda_async_configured_mem_type();
     ucs_debug("failed to detect cuda async memory type: %s, using %s",
-              ucs_status_string(status),
-              ucs_memory_type_names[UCS_MEMORY_TYPE_CUDA_MANAGED]);
-    return UCS_MEMORY_TYPE_CUDA_MANAGED;
+              ucs_status_string(status), ucs_memory_type_names[mem_type]);
+    return mem_type;
+}
+
+static ucs_memory_type_t
+ucx_perf_cuda_async_resolve_mem_type(const ucx_perf_allocator_t *allocator)
+{
+    (void)allocator;
+    return ucx_perf_cuda_async_configured_mem_type();
 }
 
 static ucs_status_t ucx_perf_cuda_async_uct_alloc(
@@ -290,6 +373,7 @@ static ucx_perf_allocator_t cuda_async_allocator = {
     .mem_alloc        = ucx_perf_cuda_async_mem_alloc,
     .mem_free         = ucx_perf_cuda_async_mem_free,
     .detect_mem_type  = ucx_perf_cuda_async_mem_type,
+    .resolve_mem_type = ucx_perf_cuda_async_resolve_mem_type,
     .memcpy           = ucx_perf_cuda_memcpy,
     .memset           = ucx_perf_cuda_memset
 };
@@ -301,6 +385,7 @@ static ucx_perf_allocator_t cuda_ucp_allocator = {
     .init             = ucx_perf_cuda_init,
     .uct_alloc        = ucx_perf_cuda_uct_alloc,
     .uct_free         = ucx_perf_cuda_uct_free,
+    .resolve_mem_type = ucx_perf_allocator_default_resolve_mem_type,
     .memcpy           = ucx_perf_cuda_memcpy,
     .memset           = ucx_perf_cuda_memset
 };
@@ -313,6 +398,7 @@ static ucx_perf_allocator_t cuda_alloc_allocator = {
     .uct_free         = ucx_perf_cuda_uct_free,
     .mem_alloc        = ucx_perf_cuda_alloc_mem_alloc,
     .mem_free         = ucx_perf_cuda_alloc_mem_free,
+    .resolve_mem_type = ucx_perf_allocator_default_resolve_mem_type,
     .memcpy           = ucx_perf_cuda_memcpy,
     .memset           = ucx_perf_cuda_memset
 };
@@ -323,6 +409,7 @@ static ucx_perf_allocator_t cuda_managed_allocator = {
     .init             = ucx_perf_cuda_init,
     .uct_alloc        = ucx_perf_cuda_managed_uct_alloc,
     .uct_free         = ucx_perf_cuda_uct_free,
+    .resolve_mem_type = ucx_perf_allocator_default_resolve_mem_type,
     .memcpy           = ucx_perf_cuda_memcpy,
     .memset           = ucx_perf_cuda_memset
 };

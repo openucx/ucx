@@ -291,6 +291,7 @@ static ucx_perf_allocator_t ze_host_allocator = {
     .init             = ucx_perf_ze_init,
     .uct_alloc        = uct_perf_ze_host_alloc,
     .uct_free         = uct_perf_ze_free,
+    .resolve_mem_type = ucx_perf_allocator_default_resolve_mem_type,
     .memcpy           = ucx_perf_ze_memcpy,
     .memset           = ucx_perf_ze_memset
 };
@@ -301,6 +302,7 @@ static ucx_perf_allocator_t ze_device_allocator = {
     .init             = ucx_perf_ze_init,
     .uct_alloc        = uct_perf_ze_device_alloc,
     .uct_free         = uct_perf_ze_free,
+    .resolve_mem_type = ucx_perf_allocator_default_resolve_mem_type,
     .memcpy           = ucx_perf_ze_memcpy,
     .memset           = ucx_perf_ze_memset
 };
@@ -311,6 +313,7 @@ static ucx_perf_allocator_t ze_managed_allocator = {
     .init             = ucx_perf_ze_init,
     .uct_alloc        = uct_perf_ze_managed_alloc,
     .uct_free         = uct_perf_ze_free,
+    .resolve_mem_type = ucx_perf_allocator_default_resolve_mem_type,
     .memcpy           = ucx_perf_ze_memcpy,
     .memset           = ucx_perf_ze_memset
 };

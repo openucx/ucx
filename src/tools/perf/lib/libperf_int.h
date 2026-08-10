@@ -67,6 +67,9 @@ typedef void (*ucx_perf_mem_free_func_t)(const ucx_perf_context_t *perf,
 typedef ucs_memory_type_t (*ucx_perf_mem_type_func_t)(
         const ucx_perf_context_t *perf, const void *address, size_t length);
 
+typedef ucs_memory_type_t (*ucx_perf_resolve_mem_type_func_t)(
+        const ucx_perf_allocator_t *allocator);
+
 typedef void (*ucx_perf_memcpy_func_t)(void *dst,
                                        ucs_memory_type_t dst_mem_type,
                                        const void *src,
@@ -76,16 +79,17 @@ typedef void (*ucx_perf_memcpy_func_t)(void *dst,
 typedef void *(*ucx_perf_memset_func_t)(void *dst, int value, size_t count);
 
 struct ucx_perf_allocator {
-    const char                *name;
-    ucs_memory_type_t         default_mem_type;
-    ucx_perf_init_func_t      init;
-    ucx_perf_uct_alloc_func_t uct_alloc;
-    ucx_perf_uct_free_func_t  uct_free;
-    ucx_perf_mem_alloc_func_t mem_alloc;
-    ucx_perf_mem_free_func_t  mem_free;
-    ucx_perf_mem_type_func_t  detect_mem_type;
-    ucx_perf_memcpy_func_t    memcpy;
-    ucx_perf_memset_func_t    memset;
+    const char                        *name;
+    ucs_memory_type_t                 default_mem_type;
+    ucx_perf_init_func_t              init;
+    ucx_perf_uct_alloc_func_t         uct_alloc;
+    ucx_perf_uct_free_func_t          uct_free;
+    ucx_perf_mem_alloc_func_t         mem_alloc;
+    ucx_perf_mem_free_func_t          mem_free;
+    ucx_perf_mem_type_func_t          detect_mem_type;
+    ucx_perf_resolve_mem_type_func_t  resolve_mem_type;
+    ucx_perf_memcpy_func_t            memcpy;
+    ucx_perf_memset_func_t            memset;
 };
 
 extern const ucx_perf_allocator_t *ucx_perf_allocators[UCX_PERF_ALLOCATOR_MAX];
@@ -99,6 +103,11 @@ ucx_perf_allocator_register(const ucx_perf_allocator_t *allocator)
 
     if (name == NULL) {
         ucs_error("perftest memory allocator name is not set");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (allocator->resolve_mem_type == NULL) {
+        ucs_error("perftest memory allocator resolve_mem_type is not set");
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -277,6 +286,14 @@ ucs_status_t ucx_perf_allocators_init_thread(ucx_perf_context_t *perf);
 
 const ucx_perf_allocator_t *ucx_perf_allocator_by_name(const char *name);
 
+
+static UCS_F_ALWAYS_INLINE ucs_memory_type_t
+ucx_perf_allocator_default_resolve_mem_type(
+        const ucx_perf_allocator_t *allocator)
+{
+    return allocator->default_mem_type;
+}
+
 static UCS_F_ALWAYS_INLINE ucs_memory_type_t
 ucx_perf_allocator_mem_type(const ucx_perf_context_t *perf,
                             const ucx_perf_allocator_t *allocator,
@@ -286,7 +303,7 @@ ucx_perf_allocator_mem_type(const ucx_perf_context_t *perf,
         return allocator->detect_mem_type(perf, address, length);
     }
 
-    return allocator->default_mem_type;
+    return allocator->resolve_mem_type(allocator);
 }
 
 static UCS_F_ALWAYS_INLINE const char *

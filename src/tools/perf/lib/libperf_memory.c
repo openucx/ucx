@@ -390,6 +390,7 @@ void ucx_perf_global_init()
                              ucs_empty_function_return_success,
         .uct_alloc        = uct_perf_test_alloc_host,
         .uct_free         = uct_perf_test_free_host,
+        .resolve_mem_type = ucx_perf_allocator_default_resolve_mem_type,
         .memcpy           = ucx_perf_test_memcpy_host,
         .memset           = memset
     };
@@ -402,6 +403,7 @@ void ucx_perf_global_init()
                              ucs_empty_function_do_assert,
         .uct_free         = (ucx_perf_uct_free_func_t)
                              ucs_empty_function_do_assert,
+        .resolve_mem_type = ucx_perf_allocator_default_resolve_mem_type,
         .memcpy           = (ucx_perf_memcpy_func_t)
                              ucs_empty_function_do_assert,
         .memset           = (ucx_perf_memset_func_t)

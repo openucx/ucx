@@ -148,6 +148,7 @@ static ucx_perf_allocator_t rocm_allocator = {
     .init             = ucx_perf_rocm_init,
     .uct_alloc        = uct_perf_rocm_alloc,
     .uct_free         = uct_perf_rocm_free,
+    .resolve_mem_type = ucx_perf_allocator_default_resolve_mem_type,
     .memcpy           = ucx_perf_rocm_memcpy,
     .memset           = ucx_perf_rocm_memset
 };
@@ -158,6 +159,7 @@ static ucx_perf_allocator_t rocm_managed_allocator = {
     .init             = ucx_perf_rocm_init,
     .uct_alloc        = uct_perf_rocm_managed_alloc,
     .uct_free         = uct_perf_rocm_free,
+    .resolve_mem_type = ucx_perf_allocator_default_resolve_mem_type,
     .memcpy           = ucx_perf_rocm_memcpy,
     .memset           = ucx_perf_rocm_memset
 };
