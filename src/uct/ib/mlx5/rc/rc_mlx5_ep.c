@@ -359,7 +359,7 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
     uct_ib_mlx5_txwq_ring_doorbell(txwq, ctrl, txwq->sw_pi, 1);
 
     for (i = 0; i < count; i++) {
-        uct_rc_mlx5_txwq_record_token(iface, txwq, sn + i,
+        uct_rc_mlx5_txwq_record_token(iface, txwq, sn + i + 1,
                                       MLX5_OPCODE_RDMA_WRITE, lengths[i]);
     }
 
@@ -850,7 +850,7 @@ ucs_status_t uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
         ep->super.ext_flags |= UCT_RC_EP_EXT_FLAG_FAILOVER_ARMED;
         ucs_assert(txwq->ft_ci == txwq->hw_ci);
         ucs_debug("ep %p armed failover WQE range (%u, %u) next token %u", ep,
-                  txwq->ft_ci, txwq->sw_pi, txwq->next_token);
+                  txwq->ft_ci, txwq->nnop_pi, txwq->next_token);
     }
 
     return uct_ib_mlx5_modify_qp_state(&iface->super.super, &txwq->super,
@@ -1266,11 +1266,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_base_ep_t, const uct_ep_params_t *params)
         return status;
     }
 
-    status = uct_ib_mlx5_txwq_tokens_init(&self->tx.wq);
-    if (status != UCS_OK) {
-        goto err_destroy_txwq_qp;
-    }
-
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_ep_t, &iface->super,
                               self->tx.wq.super.qp_num, params);
 
@@ -1278,7 +1273,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_base_ep_t, const uct_ep_params_t *params)
         status = uct_rc_iface_qp_init(&iface->super,
                                       self->tx.wq.super.verbs.qp);
         if (status != UCS_OK) {
-            goto err_tokens_cleanup;
+            goto err_destroy_txwq_qp;
         }
     }
 
@@ -1287,7 +1282,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_base_ep_t, const uct_ep_params_t *params)
                 &md->super.dev, IBV_EVENT_QP_LAST_WQE_REACHED,
                 self->tx.wq.super.qp_num);
         if (status != UCS_OK) {
-            goto err_tokens_cleanup;
+            goto err_destroy_txwq_qp;
         }
     }
 
@@ -1308,8 +1303,6 @@ err_event_unreg:
                                              IBV_EVENT_QP_LAST_WQE_REACHED,
                                              self->tx.wq.super.qp_num);
     }
-err_tokens_cleanup:
-    uct_ib_mlx5_txwq_tokens_cleanup(&self->tx.wq);
 err_destroy_txwq_qp:
     uct_ib_mlx5_destroy_qp(md, &self->tx.wq.super);
     return status;
@@ -1372,8 +1365,6 @@ UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
     cleanup_ctx->qp    = self->super.tx.wq.super;
     cleanup_ctx->tm_qp = self->tm_qp;
     cleanup_ctx->reg   = self->super.tx.wq.reg;
-
-    uct_ib_mlx5_txwq_tokens_cleanup(&self->super.tx.wq);
 
     uct_rc_txqp_purge_outstanding(&iface->super, &self->super.super.txqp,
                                   UCS_ERR_CANCELED, self->super.tx.wq.sw_pi, 1);

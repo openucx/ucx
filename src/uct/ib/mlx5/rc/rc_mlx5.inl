@@ -454,17 +454,16 @@ uct_rc_mlx5_ep_fm_cq_update(uct_rc_mlx5_iface_common_t *iface,
 
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_txwq_record_token(uct_rc_mlx5_iface_common_t *iface,
-                            uct_ib_mlx5_txwq_t *txwq, uint16_t wqe_pi,
-                            uint8_t opcode, size_t message_length)
+                              uct_ib_mlx5_txwq_t *txwq,
+                              uint16_t nnop_pi, uint8_t opcode,
+                              size_t message_length)
 {
     size_t mtu;
     uint32_t num_packets;
 
-    ucs_assert(txwq->tokens != NULL);
-
-    txwq->tokens[wqe_pi & txwq->token_mask] = txwq->next_token;
+    txwq->nnop_pi = nnop_pi;
     if (opcode == MLX5_OPCODE_NOP) {
-        num_packets = 0;
+        return;
     } else if ((opcode == MLX5_OPCODE_SEND) ||
                (opcode == MLX5_OPCODE_SEND_IMM) ||
                (opcode == MLX5_OPCODE_RDMA_WRITE)) {
@@ -487,7 +486,7 @@ uct_rc_mlx5_common_post_send(uct_rc_mlx5_iface_common_t *iface, int qp_type,
                              uct_ib_log_sge_t *log_sge)
 {
     struct mlx5_wqe_ctrl_seg *ctrl;
-    uint16_t res_count, wqe_pi;
+    uint16_t res_count;
 
     if (opcode != MLX5_OPCODE_NOP) {
         /* If FAILED, allow only NOP sends to be posted (used by endpoint
@@ -518,12 +517,11 @@ uct_rc_mlx5_common_post_send(uct_rc_mlx5_iface_common_t *iface, int qp_type,
                        ((opcode == MLX5_OPCODE_SEND) || (opcode == MLX5_OPCODE_SEND_IMM)) ?
                        uct_rc_mlx5_common_packet_dump : NULL);
 
-    wqe_pi   = txwq->sw_pi;
     res_count = uct_ib_mlx5_post_send(txwq, ctrl, wqe_size, 1);
 
     if (qp_type == IBV_QPT_RC) {
-        uct_rc_mlx5_txwq_record_token(iface, txwq, wqe_pi, opcode,
-                                    message_length);
+        uct_rc_mlx5_txwq_record_token(iface, txwq, txwq->sw_pi, opcode,
+                                      message_length);
     }
 
     if (fm_ce_se & MLX5_WQE_CTRL_CQ_UPDATE) {
