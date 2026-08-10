@@ -686,6 +686,7 @@ typedef struct uct_ib_mlx5_txwq {
     uct_ib_mlx5_qp_t            super;
     uint16_t                    sw_pi;      /* PI for next WQE */
     uint16_t                    prev_sw_pi; /* PI where last WQE *started*  */
+    uint16_t                    ft_ci;      /* Last completed/recovered WQE start */
     uct_ib_mlx5_mmio_reg_t      *reg;
     void                        *curr;
     volatile uint32_t           *dbrec;
@@ -693,6 +694,9 @@ typedef struct uct_ib_mlx5_txwq {
     void                        *qend;
     uint16_t                    bb_max;
     uint16_t                    sig_pi;     /* PI for last signaled WQE */
+    uint32_t                    next_token; /* Token assigned to the next packet */
+    uint32_t                    *tokens;    /* Token indexed by WQEBB */
+    uint16_t                    token_mask; /* Mask for token array */
 #if UCS_ENABLE_ASSERT
     uint16_t                    hw_ci; /* First BB index of last completed WQE */
     uint8_t                     flags; /* Debug flags */
@@ -916,6 +920,10 @@ void uct_ib_mlx5_qp_mmio_cleanup(uct_ib_mlx5_qp_t *qp,
  * Reset txwq contents and posting indices.
  */
 void uct_ib_mlx5_txwq_reset(uct_ib_mlx5_txwq_t *txwq);
+
+ucs_status_t uct_ib_mlx5_txwq_tokens_init(uct_ib_mlx5_txwq_t *txwq);
+
+void uct_ib_mlx5_txwq_tokens_cleanup(uct_ib_mlx5_txwq_t *txwq);
 
 void uct_ib_mlx5_init_wq_buf(uct_ib_mlx5_txwq_t *txwq);
 
