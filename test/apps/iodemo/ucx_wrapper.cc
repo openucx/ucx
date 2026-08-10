@@ -968,6 +968,7 @@ bool UcxConnection::send_am(const void *meta, size_t meta_length,
         param.memh          = memh;
     }
 
+    /* coverity[uninit_use_in_call] */
     ucs_status_ptr_t sptr = ucp_am_send_nbx(_ep, AM_MSG_ID, meta, meta_length,
                                             buffer, length, &param);
     return process_request("ucp_am_send_nbx", sptr, callback);
@@ -1139,6 +1140,7 @@ void UcxConnection::connect_tag(UcxCallback *callback)
     param.cb.send = (ucp_send_nbx_callback_t)common_request_callback;
     param.flags   = 0;
 
+    /* coverity[uninit_use_in_call] */
     void *sreq = ucp_stream_send_nbx(_ep, &_conn_id, 1, &param);
 
     // we do not have to check the status here, in case if the endpoint is
@@ -1252,6 +1254,7 @@ bool UcxConnection::send_common(const void *buffer, size_t length,
         param.memh          = memh;
     }
 
+    /* coverity[uninit_use_in_call] */
     ucs_status_ptr_t status_ptr = ucp_tag_send_nbx(_ep, buffer, length, tag,
                                                    &param);
     return process_request("ucp_tag_send_nbx", status_ptr, callback);
