@@ -433,18 +433,14 @@ void ucp_ep_flush_completion(uct_completion_t *self)
          * the flush guarantees ordering. */
         if (ucp_ep_err_mode_eq(req->send.ep, UCP_ERR_HANDLING_MODE_FAILOVER) &&
             !(req->send.flush.uct_flags_orig & UCT_FLUSH_FLAG_CANCEL) &&
-            !(req->send.ep->flags & UCP_EP_FLAG_FAILED) &&
             !(req->send.ep->flags & UCP_EP_FLAG_CLOSED) &&
             (ucp_ep_get_live_lanes(req->send.ep) != 0)) {
-            ucp_trace_req(req,
-                          "flush completion error: %s, scheduling failover and "
-                          "restart",
-                          ucs_status_string(status));
-            ucs_callbackq_add_oneshot(&req->send.ep->worker->uct->progress_q,
-                                      req, ucp_ep_flush_failover_oneshot_cb,
-                                      req);
-            ucp_worker_signal_internal(req->send.ep->worker);
-            return;
+                ucp_trace_req(req, "flush completion error: %s, scheduling failover and restart",
+                              ucs_status_string(status));
+                ucs_callbackq_add_oneshot(&req->send.ep->worker->uct->progress_q,
+                                          req, ucp_ep_flush_failover_oneshot_cb, req);
+                ucp_worker_signal_internal(req->send.ep->worker);
+                return;
         }
 
         /* force flush completion in case of error */
