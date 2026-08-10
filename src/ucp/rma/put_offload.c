@@ -378,6 +378,7 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
     ucp_rsc_index_t rkey_index   = lpriv->super.rkey_index;
     size_t max_frag_length       = ucs_max(lpriv->max_frag, 1);
     ucp_mem_h *sgl_memhs         = dt_iter->type.sgl.memhs;
+    ucp_rkey_h const *sgl_rkeys  = req->send.rma.sgl.rkeys;
     size_t elem_count            = ucs_min(lpriv->max_put_sgl_zcopy_count,
                                            dt_iter->length - dt_iter->offset);
     size_t remote_addrs_size     = elem_count * sizeof(uint64_t);
@@ -434,10 +435,9 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
         goto out_free_uct_rkeys;
     }
 
-    desc_count = ucp_datatype_iter_next_sgl_frags(dt_iter, elem_count,
-                                                  max_frag_length, next_iter,
-                                                  buffers, lengths,
-                                                  remote_addrs, elem_indices);
+    desc_count = ucp_datatype_iter_next_sgl_frags(
+            dt_iter, req->send.rma.sgl.remote_addrs, elem_count, max_frag_length,
+            next_iter, buffers, lengths, remote_addrs, elem_indices);
     if (desc_count == 0) {
         status = UCS_OK;
         goto out_free_uct_memhs;
@@ -447,8 +447,7 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
         idx          = elem_indices[i];
         uct_memhs[i] = (sgl_memhs != NULL) ?
                        sgl_memhs[idx]->uct[md_index] : UCT_MEM_HANDLE_NULL;
-        uct_rkeys[i] = ucp_rkey_get_tl_rkey(dt_iter->type.sgl.rkeys[idx],
-                                            rkey_index);
+        uct_rkeys[i] = ucp_rkey_get_tl_rkey(sgl_rkeys[idx], rkey_index);
     }
 
     status = uct_ep_put_sgl_zcopy(uct_ep, buffers, lengths, uct_memhs,
@@ -522,6 +521,7 @@ ucp_proto_put_sgl_offload_sw_send_func(ucp_request_t *req,
     ucp_rsc_index_t rkey_index   = lpriv->super.rkey_index;
     size_t max_frag_length       = ucs_max(lpriv->max_frag, 1);
     ucp_mem_h *sgl_memhs         = dt_iter->type.sgl.memhs;
+    ucp_rkey_h const *sgl_rkeys  = req->send.rma.sgl.rkeys;
     void *buffer                 = NULL;
     size_t length                = 0;
     size_t elem_index            = 0;
@@ -531,9 +531,9 @@ ucp_proto_put_sgl_offload_sw_send_func(ucp_request_t *req,
     uct_iov_t iov;
     ucs_status_t status;
 
-    desc_count = ucp_datatype_iter_next_sgl_frags(dt_iter, 1, max_frag_length,
-                                                  next_iter, &buffer, &length,
-                                                  &remote_addr, &elem_index);
+    desc_count = ucp_datatype_iter_next_sgl_frags(
+            dt_iter, req->send.rma.sgl.remote_addrs, 1, max_frag_length, next_iter,
+            &buffer, &length, &remote_addr, &elem_index);
     if (desc_count == 0) {
         return UCS_OK;
     }
@@ -544,8 +544,7 @@ ucp_proto_put_sgl_offload_sw_send_func(ucp_request_t *req,
                 dt_iter, dt_iter->offset, dt_iter->length,
                 dt_iter->type.sgl.frag_offset, max_frag_length);
 
-    tl_rkey    = ucp_rkey_get_tl_rkey(dt_iter->type.sgl.rkeys[elem_index],
-                                      rkey_index);
+    tl_rkey    = ucp_rkey_get_tl_rkey(sgl_rkeys[elem_index], rkey_index);
     iov.buffer = buffer;
     iov.length = length;
     iov.memh   = (sgl_memhs != NULL) ? sgl_memhs[elem_index]->uct[md_index] :

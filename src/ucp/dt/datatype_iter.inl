@@ -638,6 +638,7 @@ ucp_datatype_iter_next_iov(const ucp_datatype_iter_t *dt_iter,
 
 static UCS_F_ALWAYS_INLINE size_t
 ucp_datatype_iter_next_sgl_frags(const ucp_datatype_iter_t *dt_iter,
+                                 const uint64_t *remote_addrs,
                                  size_t max_frag_count,
                                  size_t max_frag_length,
                                  ucp_datatype_iter_t *next_iter,
@@ -664,8 +665,8 @@ ucp_datatype_iter_next_sgl_frags(const ucp_datatype_iter_t *dt_iter,
             out_buffers[desc_count]      = UCS_PTR_BYTE_OFFSET(
                     dt_iter->type.sgl.buffers[elem_index], frag_offset);
             out_lengths[desc_count]      = frag_length;
-            out_remote_addrs[desc_count] =
-                    dt_iter->type.sgl.remote_addrs[elem_index] + frag_offset;
+            out_remote_addrs[desc_count] = remote_addrs[elem_index] +
+                                           frag_offset;
             out_elem_indices[desc_count] = elem_index;
             ++desc_count;
 
