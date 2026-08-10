@@ -698,34 +698,12 @@ void uct_ib_mlx5_txwq_reset(uct_ib_mlx5_txwq_t *txwq)
     txwq->prev_sw_pi = UINT16_MAX;
     txwq->ft_ci      = UINT16_MAX;
     txwq->next_token = 0;
+    txwq->nnop_pi    = 0;
 #if UCS_ENABLE_ASSERT
     txwq->hw_ci      = 0xFFFF;
     txwq->flags      = 0;
 #endif
     uct_ib_fence_info_init(&txwq->fi);
-}
-
-ucs_status_t uct_ib_mlx5_txwq_tokens_init(uct_ib_mlx5_txwq_t *txwq)
-{
-    size_t num_bb = UCS_PTR_BYTE_DIFF(txwq->qstart, txwq->qend) /
-                    MLX5_SEND_WQE_BB;
-
-    ucs_assert(ucs_is_pow2(num_bb));
-    ucs_assert(num_bb <= UINT16_MAX + 1ul);
-
-    txwq->tokens = ucs_calloc(num_bb, sizeof(*txwq->tokens), "mlx5_token");
-    if (txwq->tokens == NULL) {
-        return UCS_ERR_NO_MEMORY;
-    }
-
-    txwq->token_mask = num_bb - 1;
-    return UCS_OK;
-}
-
-void uct_ib_mlx5_txwq_tokens_cleanup(uct_ib_mlx5_txwq_t *txwq)
-{
-    ucs_free(txwq->tokens);
-    txwq->tokens = NULL;
 }
 
 void uct_ib_mlx5_init_wq_buf(uct_ib_mlx5_txwq_t *txwq)
@@ -762,6 +740,8 @@ void uct_ib_mlx5_txwq_vfs_populate(uct_ib_mlx5_txwq_t *txwq, void *parent_obj)
 #endif
     ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive,
                             &txwq->next_token, UCS_VFS_TYPE_U32, "next_token");
+    ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive, &txwq->nnop_pi,
+                            UCS_VFS_TYPE_U16, "nnop_pi");
 }
 
 ucs_status_t
