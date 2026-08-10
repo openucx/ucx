@@ -408,7 +408,6 @@ typedef struct uct_rc_mlx5_iface_common {
     struct {
         uint8_t                        atomic_fence_flag;
         uint8_t                        put_fence_flag;
-        uint8_t                        send_fence_flag;
         uct_rc_mlx5_srq_topo_t         srq_topo;
         uint8_t                        log_ack_req_freq;
         uint8_t                        dp_ordering_devx;

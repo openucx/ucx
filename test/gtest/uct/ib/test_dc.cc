@@ -247,24 +247,39 @@ UCS_TEST_P(test_dc, fence_flush_without_dci,
     ASSERT_UCS_OK(uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
 }
 
-UCS_TEST_P(test_dc, fence_flush_ep_destroy,
-           "IB_PCI_RELAXED_ORDERING=yes", "DC_TX_POLICY=rand")
+UCS_TEST_P(test_dc, fence_flush_hybrid_ep_destroy,
+           "IB_PCI_RELAXED_ORDERING=yes", "DC_TX_POLICY=dcs_hybrid",
+           "DC_NUM_DCI=1")
 {
+    uct_dc_mlx5_iface_t *iface = dc_iface(m_e1);
     uct_dc_mlx5_ep_t *ep;
     uct_dc_dci_t *dci;
+    uct_rc_iface_send_op_t *op;
     ucs_time_t deadline;
 
+    if (!uct_dc_mlx5_iface_is_hybrid(iface)) {
+        UCS_TEST_SKIP_R("hybrid DCI policy is not available");
+    }
+
     m_e1->connect_to_iface(0, *m_e2);
-    ep = dc_ep(m_e1, 0);
+    m_e1->connect_to_iface(1, *m_e2);
+    ASSERT_UCS_OK(uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
+
+    ep = dc_ep(m_e1, 1);
     ASSERT_TRUE(ep->flags & UCT_DC_MLX5_EP_FLAG_FENCE_FLUSH);
     ASSERT_UCS_OK(uct_iface_fence(m_e1->iface(), 0));
     EXPECT_EQ(UCS_ERR_NO_RESOURCE,
-              uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
+              uct_ep_am_short(m_e1->ep(1), 0, 0, NULL, 0));
 
-    ASSERT_NE(UCT_DC_MLX5_EP_NO_DCI, ep->dci);
-    dci = uct_dc_mlx5_iface_dci(dc_iface(m_e1), ep->dci);
+    ASSERT_EQ(UCT_DC_MLX5_HW_DCI_INDEX, ep->dci);
+    dci = uct_dc_mlx5_iface_dci(iface, ep->dci);
     ASSERT_TRUE(dci->flags & UCT_DC_DCI_FLAG_FENCE_PENDING);
+    ASSERT_FALSE(ucs_queue_is_empty(&dci->txqp.outstanding));
+    op = ucs_queue_head_elem_non_empty(&dci->txqp.outstanding,
+                                       uct_rc_iface_send_op_t, queue);
+    ASSERT_EQ((uct_ep_h)ep, op->ep);
     m_e1->destroy_eps();
+    EXPECT_EQ(nullptr, op->ep);
 
     deadline = ucs::get_deadline(DEFAULT_TIMEOUT_SEC);
     while ((dci->flags & UCT_DC_DCI_FLAG_FENCE_PENDING) &&

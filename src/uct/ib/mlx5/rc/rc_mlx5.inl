@@ -472,7 +472,7 @@ uct_rc_mlx5_common_post_send(uct_rc_mlx5_iface_common_t *iface, int qp_type,
     if ((opcode == MLX5_OPCODE_SEND) || (opcode == MLX5_OPCODE_SEND_IMM)) {
         fm_ce_se |= uct_rc_ep_fm(
                 &iface->super, &txwq->fi,
-                (qp_type == IBV_QPT_RC) ? iface->config.send_fence_flag : 0);
+                (qp_type == IBV_QPT_RC) ? iface->config.put_fence_flag : 0);
     }
 
     ctrl = txwq->curr;

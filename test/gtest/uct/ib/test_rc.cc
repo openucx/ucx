@@ -154,8 +154,6 @@ UCS_TEST_SKIP_COND_P(test_rc, relaxed_order_required_strong_fence,
               iface->config.put_fence_flag);
     EXPECT_EQ(UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER,
               iface->config.atomic_fence_flag);
-    EXPECT_EQ(UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER,
-              iface->config.send_fence_flag);
 #endif
 }
 

@@ -84,7 +84,7 @@ struct uct_dc_mlx5_ep {
     uct_dc_mlx5_base_av_t av;
     uint8_t               atomic_mr_id;
     uint8_t               dci_channel_index;
-    uct_ib_fence_info_t    fi;
+    uct_ib_fence_info_t   fi;
 };
 
 typedef struct {
@@ -742,11 +742,9 @@ int uct_dc_mlx5_ep_is_connected(const uct_ep_h tl_ep,
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_dc_mlx5_set_ep_to_hw_dcs(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
 {
-    uct_dc_dci_t *dci = uct_dc_mlx5_iface_dci(iface,
-                                               UCT_DC_MLX5_HW_DCI_INDEX);
-
     if (!uct_dc_mlx5_iface_is_hybrid(iface) ||
-        (dci->flags & UCT_DC_DCI_FLAG_FENCE_PENDING) ||
+        (uct_dc_mlx5_iface_dci(iface, UCT_DC_MLX5_HW_DCI_INDEX)->flags &
+         UCT_DC_DCI_FLAG_FENCE_PENDING) ||
         !uct_dc_mlx5_iface_dci_has_tx_resources(iface,
                                                 UCT_DC_MLX5_HW_DCI_INDEX)) {
         UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_EP_STAT_NO_RES, 1);

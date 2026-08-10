@@ -631,8 +631,8 @@ static uint8_t uct_rc_mlx5_iface_get_address_type(uct_iface_h tl_iface)
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(tl_iface,
                                                        uct_rc_mlx5_iface_common_t);
 
-    return UCT_RC_MLX5_TM_ENABLED(iface) ? UCT_RC_MLX5_IFACE_ADDR_TYPE_TM :
-                                           UCT_RC_MLX5_IFACE_ADDR_TYPE_BASIC;
+    return UCT_RC_MLX5_TM_ENABLED(iface) ?  UCT_RC_MLX5_IFACE_ADDR_TYPE_TM :
+                                            UCT_RC_MLX5_IFACE_ADDR_TYPE_BASIC;
 }
 
 static const char *uct_rc_mlx5_iface_tm_type_str(uint8_t tm_type)
@@ -752,9 +752,7 @@ uct_rc_mlx5_iface_init_fence_flags(uct_rc_mlx5_iface_common_t *iface,
                        relaxed_order_required;
     int pci_atomics  = uct_ib_device_has_pci_atomics(dev);
 
-    iface->config.send_fence_flag =
-            strong_order ? UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER : 0;
-    iface->config.put_fence_flag  =
+    iface->config.put_fence_flag =
             strong_order ? UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER : 0;
 
     switch (rc_config->fence_mode) {

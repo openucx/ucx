@@ -831,9 +831,7 @@ ucs_status_t uct_dc_mlx5_ep_check_fence(uct_dc_mlx5_iface_t *iface,
         return UCS_ERR_NO_RESOURCE;
     }
 
-    if (!(ep->flags & UCT_DC_MLX5_EP_FLAG_FLUSH_RKEY)) {
-        return UCS_ERR_UNSUPPORTED;
-    }
+    ucs_assert(ep->flags & UCT_DC_MLX5_EP_FLAG_FLUSH_RKEY);
 
     status = uct_dc_mlx5_ep_flush_remote_post(
             ep, uct_dc_mlx5_ep_fence_flush_handler, NULL, ep,
@@ -1425,16 +1423,18 @@ UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_ep_t)
                                                 uct_dc_mlx5_iface_t);
     uct_dc_dci_t *dci;
 
+    if (self->flags & UCT_DC_MLX5_EP_FLAG_FENCE_PENDING) {
+        ucs_assert(self->dci != UCT_DC_MLX5_EP_NO_DCI);
+        dci = uct_dc_mlx5_iface_dci(iface, self->dci);
+        uct_dc_mlx5_ep_detach_fence_flush(self, dci);
+    }
+
     uct_dc_mlx5_ep_pending_purge(&self->super.super,
                                  uct_rc_ep_pending_purge_warn_cb, self);
     uct_dc_mlx5_ep_fc_cleanup(self);
 
     if ((self->dci == UCT_DC_MLX5_EP_NO_DCI) ||
         uct_dc_mlx5_is_dci_shared(iface, self->dci)) {
-        if (self->dci != UCT_DC_MLX5_EP_NO_DCI) {
-            dci = uct_dc_mlx5_iface_dci(iface, self->dci);
-            uct_dc_mlx5_ep_detach_fence_flush(self, dci);
-        }
         return;
     }
 

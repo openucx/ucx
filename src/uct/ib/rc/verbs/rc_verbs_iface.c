@@ -576,6 +576,9 @@ uct_rc_verbs_query_tl_devices(uct_md_h md,
     ucs_status_t status;
 
     if (ib_md->relaxed_order_required) {
+        /* Unlike rc_mlx5, rc_verbs cannot set the strong-ordering WQE flag. */
+        ucs_debug("%s: rc_verbs does not support relaxed-only memory keys",
+                  uct_ib_device_name(&ib_md->dev));
         *tl_devices_p     = NULL;
         *num_tl_devices_p = 0;
         return UCS_OK;
