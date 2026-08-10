@@ -53,15 +53,6 @@ public:
 protected:
     static constexpr uint16_t AM_ID = 0;
 
-    static ucs_status_t invalidate_ep(uct_ep_h ep)
-    {
-        uct_ep_invalidate_params_t params =
-                {UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS,
-                 UCT_EP_INVALIDATE_FLAG_SUPPRESS_COMPLETIONS};
-
-        return uct_ep_invalidate(ep, &params);
-    }
-
     enum {
         GOOD_EP_INDEX = 0,      /* Index for good endpoint */
         INJECTED_EP_INDEX = 1   /* Index for failure-injected endpoint */
@@ -257,7 +248,7 @@ protected:
             std::vector<ucs_status_ptr_t> status_ptrs;
             ucp_lane_index_t lane = lanes[lane_idx];
             uct_ep_h uct_ep_for_injection = ucp_ep_get_lane(ucp_ep_for_injection, lane);
-            ucs_status_t status = invalidate_ep(uct_ep_for_injection);
+            ucs_status_t status = uct_ep_invalidate(uct_ep_for_injection, 0);
             if (status == UCS_ERR_UNSUPPORTED) {
                 UCS_TEST_SKIP_R("uct_ep_invalidate is not supported");
             }
@@ -331,7 +322,7 @@ protected:
                 break;
             }
 
-            status = invalidate_ep(uct_ep_for_injection);
+            status = uct_ep_invalidate(uct_ep_for_injection, 0);
             if (status == UCS_ERR_UNSUPPORTED) {
                 UCS_TEST_SKIP_R("uct_ep_invalidate is not supported");
             }
@@ -413,7 +404,7 @@ protected:
         for (size_t lane_idx = 0; lane_idx < rma_bw_lanes.size() - 1; ++lane_idx) {
             ucp_lane_index_t lane = rma_bw_lanes[lane_idx];
             uct_ep_h uct_ep_for_injection = ucp_ep_get_lane(ucp_ep_for_injection, lane);
-            status = invalidate_ep(uct_ep_for_injection);
+            status = uct_ep_invalidate(uct_ep_for_injection, 0);
             if (status == UCS_ERR_UNSUPPORTED) {
                 UCS_TEST_SKIP_R("uct_ep_invalidate is not supported");
             }

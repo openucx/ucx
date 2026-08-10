@@ -695,8 +695,8 @@ typedef struct uct_ib_mlx5_txwq {
     uint16_t                    bb_max;
     uint16_t                    sig_pi;     /* PI for last signaled WQE */
     uint32_t                    next_token; /* Token assigned to the next packet */
-#if UCS_ENABLE_ASSERT
     uint16_t                    hw_ci; /* First BB index of last completed WQE */
+#if UCS_ENABLE_ASSERT
     uint8_t                     flags; /* Debug flags */
 #endif
     uct_ib_fence_info_t         fi;
