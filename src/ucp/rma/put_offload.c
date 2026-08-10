@@ -395,6 +395,7 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
     ucs_status_t status;
     size_t desc_count, i, idx;
 
+    /* Silence compiler warning, in case of an early return below */
     next_iter->offset               = dt_iter->offset;
     next_iter->type.sgl.frag_offset = dt_iter->type.sgl.frag_offset;
 
