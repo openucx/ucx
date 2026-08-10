@@ -226,8 +226,8 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
     }
 
     uct_rc_fc_restore_wnd(iface, &ep->super.fc);
-    status = uct_iface_handle_ep_err(&iface->super.super.super,
-                                     &ep->super.super.super, ep_status);
+    status  = uct_iface_handle_ep_err(&iface->super.super.super,
+                                      &ep->super.super.super, ep_status);
     log_lvl = uct_base_iface_failure_log_level(&ib_iface->super, status,
                                                ep_status);
 
