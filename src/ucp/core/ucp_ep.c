@@ -2518,6 +2518,7 @@ static ucs_status_t
 ucp_ep_failover_reconfig(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,
                          ucp_worker_cfg_index_t *old_cfg_index_p)
 {
+    ucp_worker_cfg_index_t old_cfg_index = ucp_ep->cfg_index;
     ucs_status_t status;
 
     if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
@@ -2528,18 +2529,19 @@ ucp_ep_failover_reconfig(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,
     ucs_diag("ep %p: failover reconfig, failed_lanes 0x%lx", ucp_ep,
              failed_lanes);
 
-    *old_cfg_index_p = ucp_ep->cfg_index;
     status = ucp_ep_reconfig_internal(ucp_ep, failed_lanes);
     if (status != UCS_OK) {
-        ucs_assertv(ucp_ep->cfg_index == *old_cfg_index_p,
+        ucs_assertv(ucp_ep->cfg_index == old_cfg_index,
                     "ep %p: cfg_index %u -> %u after reconfiguration error %s",
-                    ucp_ep, *old_cfg_index_p, ucp_ep->cfg_index,
+                    ucp_ep, old_cfg_index, ucp_ep->cfg_index,
                     ucs_status_string(status));
         /* No AM lane (or other reconfig failure): fail the whole EP so all
          * lanes are discarded and flush can complete. Do not arm recovery. */
+        return status;
     }
 
-    return status;
+    *old_cfg_index_p = old_cfg_index;
+    return UCS_OK;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t ucp_ep_failover_discard_and_arm(
