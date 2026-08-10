@@ -457,7 +457,7 @@ void ucp_worker_signal_internal(ucp_worker_h worker)
 
 static int ucp_worker_iface_ft_available(ucp_ep_h ucp_ep, uct_ep_h uct_ep)
 {
-    uct_iface_attr_v2_t iface_attr = {0};
+    uct_iface_attr_v2_t iface_attr;
     ucs_status_t status;
 
     if (!ucp_ep_err_mode_eq(ucp_ep, UCP_ERR_HANDLING_MODE_FAILOVER)) {
