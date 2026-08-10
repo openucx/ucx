@@ -221,7 +221,8 @@ ucp_proto_select_init_protocols(ucp_worker_h worker,
     ucs_array_init_dynamic(&proto_init->protocols);
     ucs_array_init_dynamic(&proto_init->priv_buf);
 
-    ucs_for_each_bit(init_params.proto_id, worker->context->proto_bitmap) {
+    UCS_STATIC_BITMAP_FOR_EACH_BIT(init_params.proto_id,
+                                   &worker->context->proto_bitmap) {
         const ucp_proto_t *proto;
 
         ucs_assert(init_params.proto_id < ucp_protocols_count()); /* Coverity */
@@ -359,6 +360,7 @@ ucp_proto_select_elem_init_thresh(ucp_worker_h worker,
      * possible message sizes until SIZE_MAX.
      */
     msg_length = 0;
+    max_length = SIZE_MAX;
     do {
         ucs_array_init_dynamic(&perf_list);
         ucs_array_init_dynamic(&envelope);

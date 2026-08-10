@@ -7,6 +7,7 @@
 #include "ucp_test.h"
 #include <uct/api/uct.h>
 #include <uct/api/tl.h>
+#include <fenv.h>
 
 extern "C" {
 #include <ucp/core/ucp_worker.h>
@@ -879,6 +880,23 @@ UCS_TEST_P(test_ucp_worker_address_version, pack_unpack)
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_worker_address_version, self, "self")
+
+class test_ucp_worker_port_speed : public test_ucp_context {
+};
+
+UCS_TEST_P(test_ucp_worker_port_speed, no_fp_exceptions)
+{
+    fenv_t env;
+    int exceptions;
+
+    ASSERT_EQ(0, feholdexcept(&env));
+    create_entity();
+    exceptions = fetestexcept(FE_DIVBYZERO | FE_INVALID);
+    EXPECT_EQ(0, fesetenv(&env));
+    EXPECT_EQ(0, exceptions);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_worker_port_speed, self, "self")
 
 class test_ucp_modify_uct_cfg : public test_ucp_context {
 public:

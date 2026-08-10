@@ -8,7 +8,8 @@
   * Indent function arguments on column
   * Indent structure fields on column
   * Scope: open on same line, except function body, which is on a new line.
-  * Indent multiple consecutive assignments on the column
+  * Indent multiple consecutive assignments on the column; the longest
+    left-hand side gets one space before `=`, others align to it.
   * 2 space lines between types and prototypes (header files)
   * 1 space line between functions (source files) 
   * Prefer `sizeof(*ptr)` or `sizeof(variable)` over `sizeof(type)`.

@@ -12,7 +12,9 @@ libuct_gaudi_la_CPPFLAGS = $(BASE_CPPFLAGS) $(GAUDI_CPPFLAGS)
 libuct_gaudi_la_CFLAGS   = $(BASE_CFLAGS) $(LT_CFLAGS)
 libuct_gaudi_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
                            $(top_builddir)/src/uct/libuct.la
-libuct_gaudi_la_LDFLAGS  = $(GAUDI_LDFLAGS) $(GAUDI_LIBS) -version-info $(SOVERSION)
+libuct_gaudi_la_LDFLAGS  = $(GAUDI_LDFLAGS) $(GAUDI_LIBS) \
+                           -version-info $(SOVERSION) \
+                           $(UCX_LT_RELEASE)
 
 noinst_HEADERS = \
     base/scal.h \
