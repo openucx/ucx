@@ -1540,9 +1540,9 @@ static void ucp_ep_failed_destroy(uct_ep_h ep)
     ucp_ep_release_discard_arg(arg);
 }
 
-static void ucp_ep_discard_lanes_inner(ucp_ep_h ep, ucp_lane_map_t lanes,
-                                       ucs_status_t discard_status,
-                                       ucp_worker_cfg_index_t old_cfg_index)
+static void ucp_ep_discard_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
+                                 ucs_status_t discard_status,
+                                 ucp_worker_cfg_index_t old_cfg_index)
 {
     unsigned ep_flush_flags         = ucp_ep_config_err_handling_enabled(ep) ?
                                       UCT_FLUSH_FLAG_CANCEL :
@@ -1602,9 +1602,9 @@ static void ucp_ep_discard_lanes_inner(ucp_ep_h ep, ucp_lane_map_t lanes,
     ucp_ep_discard_lanes_callback(NULL, UCS_OK, discard_arg);
 }
 
-static void ucp_ep_discard_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
-                                 ucs_status_t discard_status,
-                                 ucp_worker_cfg_index_t old_cfg_index)
+static void ucp_ep_try_discard_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
+                                     ucs_status_t discard_status,
+                                     ucp_worker_cfg_index_t old_cfg_index)
 {
     if (ep->flags & UCP_EP_FLAG_FAILED) {
         /* Avoid calling ucp_ep_discard_lanes_callback() that will purge UCP
@@ -1616,7 +1616,7 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
         return;
     }
 
-    ucp_ep_discard_lanes_inner(ep, lanes, discard_status, old_cfg_index);
+    ucp_ep_discard_lanes(ep, lanes, discard_status, old_cfg_index);
 }
 
 static ucs_status_t ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
@@ -1656,8 +1656,8 @@ static ucs_status_t ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
 
     /* The EP is unrecoverable - discard ALL lanes, including those already
      * marked UCP_LANE_TYPE_FAILED. */
-    ucp_ep_discard_lanes_inner(ucp_ep, UCS_MASK(ucp_ep_num_lanes(ucp_ep)),
-                               status, ucp_ep->cfg_index);
+    ucp_ep_discard_lanes(ucp_ep, UCS_MASK(ucp_ep_num_lanes(ucp_ep)), status,
+                         ucp_ep->cfg_index);
     ucp_stream_ep_cleanup(ucp_ep, status);
 
     if (ucp_ep->flags & UCP_EP_FLAG_USED) {
@@ -2503,8 +2503,8 @@ exhausted:
     } else {
         ucs_diag("ep %p: recovery retries exhausted, giving up on "
                     "failed lanes 0x%" PRIx64, ep, (uint64_t)failed);
-        ucp_ep_discard_lanes(ep, failed, UCS_ERR_ENDPOINT_TIMEOUT,
-                             ep->cfg_index);
+        ucp_ep_try_discard_lanes(ep, failed, UCS_ERR_ENDPOINT_TIMEOUT,
+                                 ep->cfg_index);
         ucp_ep_recovery_arg_free(ep);
         ret = 1;
     }
@@ -2542,6 +2542,15 @@ ucp_ep_failover_reconfig(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,
     return status;
 }
 
+static UCS_F_ALWAYS_INLINE ucs_status_t ucp_ep_failover_discard_and_arm(
+        ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,
+        ucs_status_t discard_status, ucp_worker_cfg_index_t old_cfg_index)
+{
+    ucp_ep_try_discard_lanes(ucp_ep, failed_lanes, discard_status,
+                             old_cfg_index);
+    return ucp_ep_recovery_arm(ucp_ep);
+}
+
 ucs_status_t ucp_ep_failover(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,
                              ucs_status_t discard_status)
 {
@@ -2553,14 +2562,14 @@ ucs_status_t ucp_ep_failover(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,
         return status;
     }
 
-    ucp_ep_discard_lanes(ucp_ep, failed_lanes, discard_status, old_cfg_index);
-    return ucp_ep_recovery_arm(ucp_ep);
+    return ucp_ep_failover_discard_and_arm(ucp_ep, failed_lanes, discard_status,
+                                           old_cfg_index);
 }
 
 ucs_status_t
 ucp_ep_uct_ep_outstanding_purge(uct_ep_h uct_ep, ucs_status_t status)
 {
-    uct_ep_outstanding_purge_params_t params = {
+    const uct_ep_outstanding_purge_params_t params = {
         .field_mask = UCT_EP_OUTSTANDING_FIELD_STATUS,
         .status     = status
     };
@@ -2572,10 +2581,33 @@ ucp_ep_uct_ep_outstanding_purge(uct_ep_h uct_ep, ucs_status_t status)
     return (purge_status == UCS_ERR_UNSUPPORTED) ? UCS_OK : purge_status;
 }
 
-static void ucp_ep_set_lanes_failed_inner(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
-                                          ucs_status_t status, uct_ep_h uct_ep)
+static UCS_F_ALWAYS_INLINE int
+ucp_ep_failover_is_supported(ucp_ep_h ucp_ep, ucp_lane_map_t lanes)
+{
+    return ucp_ep_err_mode_eq(ucp_ep, UCP_ERR_HANDLING_MODE_FAILOVER) &&
+           /* TODO refactor this to mark all lanes as failed */
+           (lanes != 0) &&
+           /* sockaddr is not supported for failover mode */
+           (ucp_ep_get_cm_lane(ucp_ep) == UCP_NULL_LANE);
+}
+
+static void ucp_ep_set_failed_from_lanes(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
+                                         ucs_status_t status,
+                                         uct_ep_h failed_uct_ep)
 {
     const ucp_lane_index_t cm_lane = ucp_ep_get_cm_lane(ucp_ep);
+
+    ucp_ep_set_failed(ucp_ep,
+                      ((cm_lane != UCP_NULL_LANE) &&
+                       (lanes == UCS_BIT(cm_lane))) ?
+                              cm_lane :
+                              UCP_NULL_LANE,
+                      status, failed_uct_ep);
+}
+
+void ucp_ep_set_lanes_failed(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
+                             ucs_status_t status)
+{
     ucp_worker_cfg_index_t old_cfg_index;
     ucs_status_t t_status;
 
@@ -2587,11 +2619,7 @@ static void ucp_ep_set_lanes_failed_inner(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
         return;
     }
 
-    if (ucp_ep_err_mode_eq(ucp_ep, UCP_ERR_HANDLING_MODE_FAILOVER) &&
-        /* TODO refactor this to mark all lanes as failed */
-        (lanes != 0) &&
-         /* sockaddr is not supported for failover mode */
-        cm_lane == UCP_NULL_LANE) {
+    if (ucp_ep_failover_is_supported(ucp_ep, lanes)) {
         t_status = ucp_ep_failover_reconfig(ucp_ep, lanes, &old_cfg_index);
         if (t_status != UCS_OK) {
             ucs_diag("ep %p: failover reconfig failed: %s", ucp_ep,
@@ -2599,19 +2627,8 @@ static void ucp_ep_set_lanes_failed_inner(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
             goto err_set_failed;
         }
 
-        if (uct_ep != NULL) {
-            t_status = ucp_ep_uct_ep_outstanding_purge(uct_ep, status);
-            /* Set uct_ep to NULL to avoid double purge. */
-            uct_ep   = NULL;
-            if (t_status != UCS_OK) {
-                ucs_diag("ep %p: outstanding purge failed: %s", ucp_ep,
-                         ucs_status_string(t_status));
-                goto err_set_failed;
-            }
-        }
-
-        ucp_ep_discard_lanes(ucp_ep, lanes, status, old_cfg_index);
-        t_status = ucp_ep_recovery_arm(ucp_ep);
+        t_status = ucp_ep_failover_discard_and_arm(ucp_ep, lanes, status,
+                                                   old_cfg_index);
         if (t_status != UCS_OK) {
             ucs_diag("ep %p: failed to arm recovery: %s", ucp_ep,
                      ucs_status_string(t_status));
@@ -2622,26 +2639,54 @@ static void ucp_ep_set_lanes_failed_inner(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
     }
 
 err_set_failed:
-    /* else: unrecoverable error, mark the endpoint as failed. */
-    ucp_ep_set_failed(ucp_ep,
-                      ((cm_lane != UCP_NULL_LANE) &&
-                       (lanes == UCS_BIT(cm_lane))) ?
-                              cm_lane :
-                              UCP_NULL_LANE,
-                      status, uct_ep);
-}
-
-void ucp_ep_set_lanes_failed(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
-                             ucs_status_t status)
-{
-    (void)ucp_ep_set_lanes_failed_inner(ucp_ep, lanes, status, NULL);
+    ucp_ep_set_failed_from_lanes(ucp_ep, lanes, status, NULL);
 }
 
 void ucp_ep_set_lane_failed_and_purge(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
                                       ucs_status_t status, uct_ep_h uct_ep)
 {
+    ucp_worker_cfg_index_t old_cfg_index;
+    ucs_status_t t_status;
+
+    UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(ucp_ep->worker);
+    ucs_assert(UCS_STATUS_IS_ERR(status));
+    ucs_assert(!ucs_async_is_from_async(&ucp_ep->worker->async));
     ucs_assert(uct_ep != NULL);
-    return ucp_ep_set_lanes_failed_inner(ucp_ep, lanes, status, uct_ep);
+
+    if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
+        return;
+    }
+
+    if (ucp_ep_failover_is_supported(ucp_ep, lanes)) {
+        t_status = ucp_ep_failover_reconfig(ucp_ep, lanes, &old_cfg_index);
+        if (t_status != UCS_OK) {
+            ucs_diag("ep %p: failover reconfig failed: %s", ucp_ep,
+                     ucs_status_string(t_status));
+            goto err_set_failed;
+        }
+
+        t_status = ucp_ep_uct_ep_outstanding_purge(uct_ep, status);
+        /* Avoid double purge in the terminal path. */
+        uct_ep   = NULL;
+        if (t_status != UCS_OK) {
+            ucs_diag("ep %p: outstanding purge failed: %s", ucp_ep,
+                     ucs_status_string(t_status));
+            goto err_set_failed;
+        }
+
+        t_status = ucp_ep_failover_discard_and_arm(ucp_ep, lanes, status,
+                                                   old_cfg_index);
+        if (t_status != UCS_OK) {
+            ucs_diag("ep %p: failed to arm recovery: %s", ucp_ep,
+                     ucs_status_string(t_status));
+            goto err_set_failed;
+        }
+
+        return;
+    }
+
+err_set_failed:
+    ucp_ep_set_failed_from_lanes(ucp_ep, lanes, status, uct_ep);
 }
 
 void ucp_ep_set_lanes_failed_schedule(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
@@ -2840,8 +2885,8 @@ ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
     ucp_ep_update_flags(ep, UCP_EP_FLAG_CLOSED, 0);
 
     if (ucp_request_param_flags(param) & UCP_EP_CLOSE_FLAG_FORCE) {
-        ucp_ep_discard_lanes(ep, UCS_MASK(ucp_ep_num_lanes(ep)),
-                             UCS_ERR_CANCELED, ep->cfg_index);
+        ucp_ep_try_discard_lanes(ep, UCS_MASK(ucp_ep_num_lanes(ep)),
+                                 UCS_ERR_CANCELED, ep->cfg_index);
         ucp_ep_disconnected(ep, 1);
     } else {
         request = ucp_ep_flush_internal(ep, 0, param, NULL,
