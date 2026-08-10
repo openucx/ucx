@@ -72,6 +72,16 @@ uct_ib_dlopen_module_check(const uct_ib_dlopen_module_t *module,
         } \
     } while (0)
 
+#define UCT_IB_DLOPEN_RESOLVE_OPTIONAL(_module, _ops, _field) \
+    do { \
+        dlerror(); \
+        (_ops)._field = \
+                (__typeof__((_ops)._field))dlsym((_module).library, #_field); \
+        if (dlerror() != NULL) { \
+            (_ops)._field = NULL; \
+        } \
+    } while (0)
+
 static inline int uct_ib_dlopen_errno(uct_ib_dlopen_status_t status)
 {
     switch (status) {
@@ -97,9 +107,16 @@ static inline int uct_ib_dlopen_errno(uct_ib_dlopen_status_t status)
     UCT_IB_DLOPEN_RESOLVE(_module, _ops, _name);
 #define UCT_IB_DLOPEN_RESOLVE_VOID_OP(_module, _ops, _name, _args, _call) \
     UCT_IB_DLOPEN_RESOLVE(_module, _ops, _name);
+#define UCT_IB_DLOPEN_RESOLVE_OPTIONAL_OP(_module, _ops, _ret, _fail, _name, \
+                                          _args, _call) \
+    UCT_IB_DLOPEN_RESOLVE_OPTIONAL(_module, _ops, _name);
+#define UCT_IB_DLOPEN_RESOLVE_OPTIONAL_VOID_OP(_module, _ops, _name, _args, \
+                                               _call) \
+    UCT_IB_DLOPEN_RESOLVE_OPTIONAL(_module, _ops, _name);
 
 #define UCT_IB_DLOPEN_DEFINE_MODULE(_module, _library_name, _ops_type, \
-                                    _ops_list, _check_func) \
+                                    _required_ops_list, _optional_ops_list, \
+                                    _check_func) \
     static uct_ib_dlopen_module_t _module##_module = \
             UCT_IB_DLOPEN_MODULE_INITIALIZER(_library_name); \
     static _ops_type _module##_ops; \
@@ -109,8 +126,12 @@ static inline int uct_ib_dlopen_errno(uct_ib_dlopen_status_t status)
         if (_module##_module.status != UCT_IB_DLOPEN_STATUS_OK) { \
             return; \
         } \
-        _ops_list(UCT_IB_DLOPEN_RESOLVE_OP, UCT_IB_DLOPEN_RESOLVE_VOID_OP, \
-                  _module##_module, _module##_ops); \
+        _required_ops_list(UCT_IB_DLOPEN_RESOLVE_OP, \
+                           UCT_IB_DLOPEN_RESOLVE_VOID_OP, _module##_module, \
+                           _module##_ops); \
+        _optional_ops_list(UCT_IB_DLOPEN_RESOLVE_OPTIONAL_OP, \
+                           UCT_IB_DLOPEN_RESOLVE_OPTIONAL_VOID_OP, \
+                           _module##_module, _module##_ops); \
     } \
     uct_ib_dlopen_status_t \
     _check_func(const char **library_name, const char **symbol_name, \
@@ -148,6 +169,38 @@ static inline int uct_ib_dlopen_errno(uct_ib_dlopen_status_t status)
             ucs_assert((_ops)._name != NULL); \
             (_ops)._name _call; \
         } \
+    }
+
+#define UCT_IB_DLOPEN_FWD_OPTIONAL_OP(_module, _ops, _ret, _fail, _name, \
+                                      _proto, _call) \
+    _ret _name _proto \
+    { \
+        if (_module##_init() != 0) { \
+            return (_fail); \
+        } \
+        \
+        if ((_ops)._name == NULL) { \
+            errno = ENOSYS; \
+            return (_fail); \
+        } \
+        \
+        return (_ops)._name _call; \
+    }
+
+#define UCT_IB_DLOPEN_FWD_OPTIONAL_VOID_OP(_module, _ops, _name, _proto, \
+                                           _call) \
+    void _name _proto \
+    { \
+        if (_module##_init() != 0) { \
+            return; \
+        } \
+        \
+        if ((_ops)._name == NULL) { \
+            errno = ENOSYS; \
+            return; \
+        } \
+        \
+        (_ops)._name _call; \
     }
 
 #endif

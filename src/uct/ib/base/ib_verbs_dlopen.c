@@ -147,23 +147,26 @@
     _op(_module, _ops, const char *, NULL, ibv_node_type_str, \
         (enum ibv_node_type node_type), (node_type))
 
-#define UCT_IB_VERBS_FEATURE_OPS(_op, _void_op, _module, _ops) \
+/* Symbols not available in the minimum supported rdma-core v28. */
+#define UCT_IB_VERBS_OPTIONAL_OPS(_op, _void_op, _module, _ops) \
     UCT_IB_VERBS_NETLINK_OPS(_op, _module, _ops) \
     UCT_IB_VERBS_DMABUF_OPS(_op, _module, _ops) \
     UCT_IB_VERBS_ECE_OPS(_op, _module, _ops) \
     UCT_IB_VERBS_FORK_STATUS_OPS(_op, _module, _ops) \
     UCT_IB_VERBS_PORT_SPEED_OPS(_op, _module, _ops)
 
-#define UCT_IB_VERBS_OPS(_op, _void_op, _module, _ops) \
+#define UCT_IB_VERBS_REQUIRED_OPS(_op, _void_op, _module, _ops) \
     UCT_IB_VERBS_DEVICE_LIST_OP(_op, _module, _ops) \
     UCT_IB_VERBS_VOID_OPS(_void_op, _module, _ops) \
-    UCT_IB_VERBS_FWD_OPS(_op, _module, _ops) \
-    UCT_IB_VERBS_FEATURE_OPS(_op, _void_op, _module, _ops)
+    UCT_IB_VERBS_FWD_OPS(_op, _module, _ops)
 
 typedef struct uct_ib_verbs_ops {
-    UCT_IB_VERBS_OPS(UCT_IB_DLOPEN_OP_FIELD,
-                     UCT_IB_DLOPEN_VOID_OP_FIELD, uct_ib_verbs,
-                     uct_ib_verbs_ops)
+    UCT_IB_VERBS_REQUIRED_OPS(UCT_IB_DLOPEN_OP_FIELD,
+                              UCT_IB_DLOPEN_VOID_OP_FIELD, uct_ib_verbs,
+                              uct_ib_verbs_ops)
+    UCT_IB_VERBS_OPTIONAL_OPS(UCT_IB_DLOPEN_OP_FIELD,
+                              UCT_IB_DLOPEN_VOID_OP_FIELD, uct_ib_verbs,
+                              uct_ib_verbs_ops)
 } uct_ib_verbs_ops_t;
 
 const char *uct_ib_dlopen_status_string(uct_ib_dlopen_status_t status)
@@ -181,7 +184,8 @@ const char *uct_ib_dlopen_status_string(uct_ib_dlopen_status_t status)
 }
 
 UCT_IB_DLOPEN_DEFINE_MODULE(uct_ib_verbs, UCT_IB_VERBS_LIB_NAME,
-                            uct_ib_verbs_ops_t, UCT_IB_VERBS_OPS,
+                            uct_ib_verbs_ops_t, UCT_IB_VERBS_REQUIRED_OPS,
+                            UCT_IB_VERBS_OPTIONAL_OPS,
                             uct_ib_verbs_dlopen_check)
 
 struct ibv_device **ibv_get_device_list(int *num_devices)
@@ -203,5 +207,6 @@ struct ibv_device **ibv_get_device_list(int *num_devices)
 UCT_IB_VERBS_VOID_OPS(UCT_IB_DLOPEN_FWD_VOID_OP, uct_ib_verbs,
                       uct_ib_verbs_ops)
 UCT_IB_VERBS_FWD_OPS(UCT_IB_DLOPEN_FWD_OP, uct_ib_verbs, uct_ib_verbs_ops)
-UCT_IB_VERBS_FEATURE_OPS(UCT_IB_DLOPEN_FWD_OP, UCT_IB_DLOPEN_FWD_VOID_OP,
-                         uct_ib_verbs, uct_ib_verbs_ops)
+UCT_IB_VERBS_OPTIONAL_OPS(UCT_IB_DLOPEN_FWD_OPTIONAL_OP,
+                          UCT_IB_DLOPEN_FWD_OPTIONAL_VOID_OP, uct_ib_verbs,
+                          uct_ib_verbs_ops)

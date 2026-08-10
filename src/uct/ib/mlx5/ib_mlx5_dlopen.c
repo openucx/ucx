@@ -131,22 +131,33 @@
 #define UCT_IB_MLX5_DEVX_UMEM_EX_OPS(_op, _module, _ops)
 #endif
 
-#define UCT_IB_MLX5_OPS(_op, _void_op, _module, _ops) \
+#define UCT_IB_MLX5_REQUIRED_OPS(_op, _void_op, _module, _ops) \
     UCT_IB_MLX5_BASE_OPS(_op, _module, _ops) \
     UCT_IB_MLX5_DEVX_OPS(_op, _module, _ops) \
-    UCT_IB_MLX5_DEVX_VOID_OPS(_void_op, _module, _ops) \
+    UCT_IB_MLX5_DEVX_VOID_OPS(_void_op, _module, _ops)
+
+/* Symbols not available in the minimum supported rdma-core v28. */
+#define UCT_IB_MLX5_OPTIONAL_OPS(_op, _void_op, _module, _ops) \
     UCT_IB_MLX5_DEVX_UMEM_EX_OPS(_op, _module, _ops) \
     UCT_IB_MLX5_DMABUF_OPS(_op, _module, _ops) \
     UCT_IB_MLX5_DATA_DIRECT_OPS(_op, _module, _ops)
 
 typedef struct uct_ib_mlx5_ops {
-    UCT_IB_MLX5_OPS(UCT_IB_DLOPEN_OP_FIELD, UCT_IB_DLOPEN_VOID_OP_FIELD,
-                    uct_ib_mlx5, uct_ib_mlx5_ops)
+    UCT_IB_MLX5_REQUIRED_OPS(UCT_IB_DLOPEN_OP_FIELD,
+                             UCT_IB_DLOPEN_VOID_OP_FIELD, uct_ib_mlx5,
+                             uct_ib_mlx5_ops)
+    UCT_IB_MLX5_OPTIONAL_OPS(UCT_IB_DLOPEN_OP_FIELD,
+                             UCT_IB_DLOPEN_VOID_OP_FIELD, uct_ib_mlx5,
+                             uct_ib_mlx5_ops)
 } uct_ib_mlx5_ops_t;
 
 UCT_IB_DLOPEN_DEFINE_MODULE(uct_ib_mlx5, UCT_IB_MLX5_LIB_NAME,
-                            uct_ib_mlx5_ops_t, UCT_IB_MLX5_OPS,
+                            uct_ib_mlx5_ops_t, UCT_IB_MLX5_REQUIRED_OPS,
+                            UCT_IB_MLX5_OPTIONAL_OPS,
                             uct_ib_mlx5_dlopen_check)
 
-UCT_IB_MLX5_OPS(UCT_IB_DLOPEN_FWD_OP, UCT_IB_DLOPEN_FWD_VOID_OP,
-                uct_ib_mlx5, uct_ib_mlx5_ops)
+UCT_IB_MLX5_REQUIRED_OPS(UCT_IB_DLOPEN_FWD_OP, UCT_IB_DLOPEN_FWD_VOID_OP,
+                         uct_ib_mlx5, uct_ib_mlx5_ops)
+UCT_IB_MLX5_OPTIONAL_OPS(UCT_IB_DLOPEN_FWD_OPTIONAL_OP,
+                         UCT_IB_DLOPEN_FWD_OPTIONAL_VOID_OP, uct_ib_mlx5,
+                         uct_ib_mlx5_ops)
