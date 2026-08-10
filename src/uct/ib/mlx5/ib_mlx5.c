@@ -698,7 +698,6 @@ void uct_ib_mlx5_txwq_reset(uct_ib_mlx5_txwq_t *txwq)
     txwq->prev_sw_pi = UINT16_MAX;
     txwq->ft_ci      = UINT16_MAX;
     txwq->next_token = 0;
-    txwq->nnop_pi    = 0;
 #if UCS_ENABLE_ASSERT
     txwq->hw_ci      = 0xFFFF;
     txwq->flags      = 0;
@@ -740,8 +739,6 @@ void uct_ib_mlx5_txwq_vfs_populate(uct_ib_mlx5_txwq_t *txwq, void *parent_obj)
 #endif
     ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive,
                             &txwq->next_token, UCS_VFS_TYPE_U32, "next_token");
-    ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive, &txwq->nnop_pi,
-                            UCS_VFS_TYPE_U16, "nnop_pi");
 }
 
 ucs_status_t

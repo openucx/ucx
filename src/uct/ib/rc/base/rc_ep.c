@@ -149,7 +149,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface, uint32_t qp_num,
 
     self->path_index   = UCT_EP_PARAMS_GET_PATH_INDEX(params);
     self->flags        = 0;
-    self->ext_flags    = 0;
     self->txqp_reserve = 0;
     self->cq_reserve   = 0;
 

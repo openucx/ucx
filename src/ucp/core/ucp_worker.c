@@ -479,6 +479,7 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
                                        uct_ep_h uct_ep, ucs_status_t ep_status)
 {
     ucp_wireup_ep_t *wireup_ep;
+    uct_ep_invalidate_params_t invalidate_params;
     ucs_status_t status;
 
     if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
@@ -495,7 +496,10 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
         /* Failure on NON-AUX EP or failure on AUX EP before it sent its address
          * means failure on the UCP EP */
         if (ucp_worker_iface_ft_available(ucp_ep, uct_ep)) {
-            status = uct_ep_invalidate(uct_ep, NULL);
+            invalidate_params.field_mask = UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS;
+            invalidate_params.flags =
+                    UCT_EP_INVALIDATE_FLAG_SUPPRESS_COMPLETIONS;
+            status = uct_ep_invalidate(uct_ep, &invalidate_params);
             if (status == UCS_OK) {
                 return UCS_OK;
             }
