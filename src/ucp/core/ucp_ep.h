@@ -778,13 +778,6 @@ void ucp_ep_destroy_internal(ucp_ep_h ep);
 void ucp_ep_set_lanes_failed(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
                              ucs_status_t status);
 
-void ucp_ep_set_lane_failed_and_purge(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
-                                      ucs_status_t status,
-                                      uct_ep_h failed_uct_ep);
-
-ucs_status_t
-ucp_ep_uct_ep_outstanding_purge(uct_ep_h uct_ep, ucs_status_t status);
-
 void ucp_ep_set_lanes_failed_schedule(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
                                       ucs_status_t status);
 
@@ -1060,8 +1053,9 @@ ucp_ep_recovery_rebuild_lanes(ucp_ep_h ep, ucp_lane_map_t lanes_to_rebuild,
 /**
  * Mark a subset of lanes as UCP_LANE_TYPE_FAILED and arm recovery.
  */
-ucs_status_t ucp_ep_failover(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,
-                             ucs_status_t discard_status);
+ucs_status_t ucp_ep_failover_reconfig(ucp_ep_h ucp_ep,
+                                      ucp_lane_map_t failed_lanes,
+                                      ucs_status_t discard_status);
 
 
 /**
