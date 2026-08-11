@@ -745,10 +745,10 @@ static ucs_status_t
 uct_rc_mlx5_iface_init_fence_flags(uct_rc_mlx5_iface_common_t *iface,
                                    uct_rc_iface_common_config_t *rc_config,
                                    uct_ib_mlx5_md_t *md, uct_ib_device_t *dev,
-                                   int relaxed_order_required)
+                                   int strong_order_required)
 {
     int strong_order = uct_rc_mlx5_iface_need_strong_order(iface) ||
-                       relaxed_order_required;
+                       strong_order_required;
     int pci_atomics  = uct_ib_device_has_pci_atomics(dev);
 
     iface->config.put_fence_flag =
@@ -759,7 +759,8 @@ uct_rc_mlx5_iface_init_fence_flags(uct_rc_mlx5_iface_common_t *iface,
         break;
     case UCT_RC_FENCE_MODE_AUTO:
         if (strong_order || pci_atomics ||
-            uct_ib_md_is_relaxed_order(&md->super)) {
+            uct_ib_md_is_relaxed_order(&md->super) ||
+            md->super.relaxed_order_required) {
             break;
         }
 
@@ -866,8 +867,9 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
     self->super.rx.srq.quota       = self->rx.srq.mask + 1;
     self->super.config.exp_backoff = mlx5_config->exp_backoff;
     self->config.log_ack_req_freq  = ucs_min(mlx5_config->log_ack_req_freq,
-                                             UCT_RC_MLX5_MAX_LOG_ACK_REQ_FREQ);
-    status                         = uct_rc_mlx5_iface_init_fence_flags(
+                                              UCT_RC_MLX5_MAX_LOG_ACK_REQ_FREQ);
+
+    status = uct_rc_mlx5_iface_init_fence_flags(
             self, rc_config, md, dev,
             (init_attr->qp_type == IBV_QPT_RC) &&
                     md->super.relaxed_order_required);

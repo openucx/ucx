@@ -117,7 +117,6 @@ ucs_status_t uct_rc_mlx5_base_ep_put_short(uct_ep_h tl_ep, const void *buffer,
 #if HAVE_IBV_DM
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
     uct_rc_iface_t *rc_iface = &iface->super;
-    uct_ib_fence_info_t fence_info;
     ucs_status_t status;
     uint8_t fm_ce_se;
 
@@ -130,7 +129,6 @@ ucs_status_t uct_rc_mlx5_base_ep_put_short(uct_ep_h tl_ep, const void *buffer,
 
     UCT_CHECK_LENGTH(length, 0, iface->dm.seg_len, "put_short");
     UCT_RC_CHECK_RES(rc_iface, &ep->super);
-    fence_info = ep->tx.wq.fi;
     uct_rc_mlx5_ep_fence_put(iface, &ep->tx.wq, &rkey, &remote_addr,
                              ep->super.atomic_mr_offset, &fm_ce_se);
     status = uct_rc_mlx5_common_ep_short_dm(iface, IBV_QPT_RC, NULL, 0, buffer,
@@ -139,7 +137,6 @@ ucs_status_t uct_rc_mlx5_base_ep_put_short(uct_ep_h tl_ep, const void *buffer,
                                             0, remote_addr, rkey,
                                             &ep->super.txqp, &ep->tx.wq, 0);
     if (UCS_STATUS_IS_ERR(status)) {
-        ep->tx.wq.fi = fence_info;
         return status;
     }
 

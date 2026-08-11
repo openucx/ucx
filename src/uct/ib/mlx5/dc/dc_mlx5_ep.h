@@ -548,10 +548,9 @@ uct_dc_mlx5_iface_progress_pending(uct_dc_mlx5_iface_t *iface,
 static inline int uct_dc_mlx5_iface_dci_ep_can_send(uct_dc_mlx5_ep_t *ep)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_dc_mlx5_iface_t);
-    uct_dc_dci_t *dci = uct_dc_mlx5_iface_dci(iface, ep->dci);
 
     return (!(ep->flags & UCT_DC_MLX5_EP_FLAG_TX_WAIT)) &&
-           !(dci->flags & UCT_DC_DCI_FLAG_FENCE_PENDING) &&
+           !(ep->flags & UCT_DC_MLX5_EP_FLAG_FENCE_PENDING) &&
            uct_rc_fc_has_resources(&iface->super.super, &ep->fc) &&
            uct_dc_mlx5_iface_dci_has_tx_resources(iface, ep->dci);
 }
@@ -743,8 +742,6 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_dc_mlx5_set_ep_to_hw_dcs(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
 {
     if (!uct_dc_mlx5_iface_is_hybrid(iface) ||
-        (uct_dc_mlx5_iface_dci(iface, UCT_DC_MLX5_HW_DCI_INDEX)->flags &
-         UCT_DC_DCI_FLAG_FENCE_PENDING) ||
         !uct_dc_mlx5_iface_dci_has_tx_resources(iface,
                                                 UCT_DC_MLX5_HW_DCI_INDEX)) {
         UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_EP_STAT_NO_RES, 1);
@@ -771,10 +768,6 @@ uct_dc_mlx5_iface_dci_get(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
     }
 
     dci  = uct_dc_mlx5_iface_dci(iface, ep->dci);
-
-    if (ucs_unlikely(dci->flags & UCT_DC_DCI_FLAG_FENCE_PENDING)) {
-        goto out_no_res;
-    }
 
     if (uct_dc_mlx5_is_dci_shared(iface, ep->dci)) {
         if (uct_dc_mlx5_iface_dci_has_tx_resources(iface, ep->dci)) {

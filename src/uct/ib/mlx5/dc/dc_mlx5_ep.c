@@ -14,8 +14,7 @@
 #include <ucs/time/time.h>
 
 
-#define REVERSE_SL_MASK   UCS_MASK(4)
-#define UCT_DC_MLX5_FENCE_DCI_SHIFT 16
+#define REVERSE_SL_MASK UCS_MASK(4)
 
 
 static UCS_F_ALWAYS_INLINE void
@@ -749,10 +748,7 @@ static ucs_status_t uct_dc_mlx5_ep_flush_remote_post(
 
     if (fence_ep != NULL) {
         desc->super.ep     = (uct_ep_h)fence_ep;
-        /* Save the DCI and fence beat for the completion handler. */
-        desc->super.length = ((uint32_t)ep->dci
-                              << UCT_DC_MLX5_FENCE_DCI_SHIFT) |
-                             fence_beat;
+        desc->super.length = fence_beat;
     }
 
     UCT_DC_MLX5_IFACE_TXQP_GET(iface, ep, txqp, txwq);
@@ -772,11 +768,6 @@ uct_dc_mlx5_ep_fence_flush_handler(uct_rc_iface_send_op_t *op, const void *resp)
 {
     uct_rc_iface_send_desc_t *desc = ucs_derived_of(op,
                                                     uct_rc_iface_send_desc_t);
-    uct_rc_iface_t *rc_iface   = ucs_container_of(ucs_mpool_obj_owner(desc),
-                                                  uct_rc_iface_t, tx.mp);
-    uct_dc_mlx5_iface_t *iface = ucs_derived_of(rc_iface, uct_dc_mlx5_iface_t);
-    uct_dc_dci_t *dci          = uct_dc_mlx5_iface_dci(
-            iface, op->length >> UCT_DC_MLX5_FENCE_DCI_SHIFT);
     uct_dc_mlx5_ep_t *ep;
 
     if (op->ep != NULL) {
@@ -786,7 +777,6 @@ uct_dc_mlx5_ep_fence_flush_handler(uct_rc_iface_send_op_t *op, const void *resp)
         }
         ep->flags &= ~UCT_DC_MLX5_EP_FLAG_FENCE_PENDING;
     }
-    dci->flags &= ~UCT_DC_DCI_FLAG_FENCE_PENDING;
     ucs_mpool_put(desc);
 }
 
@@ -817,7 +807,6 @@ uct_dc_mlx5_ep_detach_fence_flush(uct_dc_mlx5_ep_t *ep, uct_dc_dci_t *dci)
 ucs_status_t
 uct_dc_mlx5_ep_check_fence(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
 {
-    uct_dc_dci_t *dci = uct_dc_mlx5_iface_dci(iface, ep->dci);
     ucs_status_t status;
 
     if (ep->fi.fence_beat == iface->super.super.tx.fi.fence_beat) {
@@ -834,8 +823,7 @@ uct_dc_mlx5_ep_check_fence(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
             ep, uct_dc_mlx5_ep_fence_flush_handler, NULL, ep,
             iface->super.super.tx.fi.fence_beat);
     if (status == UCS_INPROGRESS) {
-        ep->flags  |= UCT_DC_MLX5_EP_FLAG_FENCE_PENDING;
-        dci->flags |= UCT_DC_DCI_FLAG_FENCE_PENDING;
+        ep->flags |= UCT_DC_MLX5_EP_FLAG_FENCE_PENDING;
         return UCS_ERR_NO_RESOURCE;
     }
 
