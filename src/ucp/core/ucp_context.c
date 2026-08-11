@@ -683,7 +683,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
 
   {"NODE_LOCAL_ID", "auto",
    "An optimization hint for the local identificator on a single node.\n"
-   "Does not affect semantics, only transport selection criteria and the \n"
+   "Does not affect semantics, only transport selection criteria and the\n"
    "resulting performance.",
    ucs_offsetof(ucp_context_config_t, node_local_id),
    UCS_CONFIG_TYPE_ULUNITS},
@@ -691,9 +691,9 @@ static ucs_config_field_t ucp_context_config_table[] = {
   {"PRINT_TRANSPORT_TABLES", "auto",
    "Print tables of available transports/devices and per-endpoint lane\n"
    "configuration during initialization. The value is interpreted as follows:\n"
-   " 'y'    : Always print the tables\n"
-   " 'n'    : Never print the tables\n"
-   " 'auto' : Print the tables when UCX_LOG_LEVEL is 'debug' or higher",
+   " 'y'    - Always print the tables.\n"
+   " 'n'    - Never print the tables.\n"
+   " 'auto' - Print the tables when UCX_LOG_LEVEL is 'debug' or higher.",
    ucs_offsetof(ucp_context_config_t, print_transport_tables),
    UCS_CONFIG_TYPE_ON_OFF_AUTO},
 

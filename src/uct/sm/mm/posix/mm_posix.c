@@ -72,7 +72,7 @@ static ucs_config_field_t uct_posix_md_config_table[] = {
      UCS_CONFIG_TYPE_TABLE(uct_mm_md_config_table)},
 
     {"DIR", UCT_POSIX_SHM_OPEN_DIR,
-     "The path to the backing file. If it's equal to " UCT_POSIX_SHM_OPEN_DIR " then \n"
+     "The path to the backing file. If it's equal to " UCT_POSIX_SHM_OPEN_DIR " then\n"
      "shm_open() is used. Otherwise, open() is used.",
      ucs_offsetof(uct_posix_md_config_t, dir),
      UCS_CONFIG_TYPE_STRING},

@@ -127,7 +127,7 @@ ucs_config_field_t uct_ib_md_config_table[] = {
     {"SUBNET_PREFIX", "",
      "Infiniband subnet prefix to filter ports by, empty means no filter.\n"
      "Relevant for IB link layer only.\n"
-     "For example a filter for the default subnet prefix can be specified as: fe80:0:0:0",
+     "For example, the default subnet prefix can be specified as 'fe80:0:0:0'.",
      ucs_offsetof(uct_ib_md_config_t, subnet_prefix),
      UCS_CONFIG_TYPE_STRING},
 
@@ -191,13 +191,13 @@ ucs_config_field_t uct_ib_md_config_table[] = {
 
     {"PCI_RELAXED_ORDERING", "auto",
      "Control relaxed ordering for PCIe transactions:\n"
-     " no   - disable relaxed ordering\n"
-     " yes  - require all memory keys to use relaxed ordering, fail if "
-     "        unsupported, and do not create strict-order companion keys\n"
-     " try  - enable relaxed ordering when supported, retain strict-order "
-     "         companion keys when available, silently continue if unsupported\n"
-     " auto - honor a firmware relaxed-only requirement, otherwise use "
-     "          the CPU preference\n",
+     " no   - disable relaxed ordering.\n"
+     " yes  - require all memory keys to use relaxed ordering, fail if\n"
+     "        unsupported, and do not create strict-order companion keys.\n"
+     " try  - enable relaxed ordering when supported, retain strict-order\n"
+     "        companion keys when available, silently continue if unsupported.\n"
+     " auto - honor a firmware relaxed-only requirement, otherwise use\n"
+     "        the CPU preference.",
      ucs_offsetof(uct_ib_md_config_t, mr_relaxed_order),
      UCS_CONFIG_TYPE_TERNARY_AUTO},
 

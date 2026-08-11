@@ -143,7 +143,7 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
      UCS_CONFIG_TYPE_ULUNITS},
 
     {"FULL_HANDSHAKE_LATENCY", "140ns",
-     "DC Full Handshake extra latency",
+     "DC Full Handshake extra latency.",
      ucs_offsetof(uct_dc_mlx5_iface_config_t, fhs_latency),
      UCS_CONFIG_TYPE_TIME},
 

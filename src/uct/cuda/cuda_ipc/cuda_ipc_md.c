@@ -65,7 +65,8 @@ static ucs_config_field_t uct_cuda_ipc_md_config_table[] = {
      ucs_offsetof(uct_cuda_ipc_md_config_t, cache_max_size),
      UCS_CONFIG_TYPE_MEMUNITS},
 
-    {"CACHE", "y", "Enable remote IPC memory handle mapping cache",
+    {"CACHE", "y",
+     "Enable remote IPC memory handle mapping cache.",
      ucs_offsetof(uct_cuda_ipc_md_config_t, enable_remote_cache),
      UCS_CONFIG_TYPE_BOOL},
 

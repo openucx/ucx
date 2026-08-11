@@ -63,7 +63,7 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
    UCS_CONFIG_TYPE_MEMUNITS},
 
   {"EXP_BACKOFF", "0",
-   "Exponential Backoff Timeout Multiplier. ACK timeout will be multiplied \n"
+   "Exponential Backoff Timeout Multiplier. ACK timeout will be multiplied\n"
    "by 2^EXP_BACKOFF every consecutive retry.",
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, exp_backoff),
    UCS_CONFIG_TYPE_UINT},

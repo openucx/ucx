@@ -33,12 +33,12 @@ static ucs_config_field_t uct_rocm_ipc_iface_config_table[] = {
 
     {"CACHE_IPC_HANDLES", "y",
      "Enable caching IPC handles.\n"
-     "(Note: caching is always enabled for device initiated communication)",
+     "Note: caching is always enabled for device-initiated communication.",
      ucs_offsetof(uct_rocm_ipc_iface_config_t, params.enable_ipc_handle_cache),
      UCS_CONFIG_TYPE_BOOL},
 
     {"SIGPOOL_MAX_ELEMS", "1024",
-     "Maximum number of elements in signal pool",
+     "Maximum number of elements in signal pool.",
      ucs_offsetof(uct_rocm_ipc_iface_config_t, params.sigpool_max_elems),
      UCS_CONFIG_TYPE_UINT},
 
