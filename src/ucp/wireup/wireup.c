@@ -541,7 +541,7 @@ unsigned ucp_wireup_eps_progress(void *arg)
      * ep state, and let the error handler take care of cleanup.
      */
     if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
-        ucs_trace("ep %p: not switching wireup eps to ready state because of "
+        ucs_debug("ep %p: not switching wireup eps to ready state because of "
                   "error", ucp_ep);
         goto out_unblock;
     }
@@ -558,7 +558,7 @@ unsigned ucp_wireup_eps_progress(void *arg)
         }
 
         ucs_assert(wireup_ep->super.uct_ep != NULL);
-        ucs_trace("ep %p: switching wireup_ep %p to ready state", ucp_ep,
+        ucs_debug("ep %p: switching wireup_ep %p to ready state", ucp_ep,
                   wireup_ep);
 
         /* Switch to real transport and destroy proxy endpoint (aux_ep as well) */
@@ -599,7 +599,7 @@ void ucp_wireup_remote_connected(ucp_ep_h ep)
         return;
     }
 
-    ucs_trace("ep %p: remote connected, ep_cfg[%u]", ep, ep->cfg_index);
+    ucs_debug("ep %p: remote connected, ep_cfg[%u]", ep, ep->cfg_index);
     if (!(ep->flags & UCP_EP_FLAG_CLOSED)) {
         /* set REMOTE_CONNECTED flag if an EP is not closed, otherwise -
          * just make UCT EPs remote connected to remove WIREUP_EP for them

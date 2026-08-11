@@ -371,6 +371,13 @@ static ucs_status_t ucp_wireup_ep_flush(uct_ep_h uct_ep, unsigned flags,
         }
         return UCS_OK;
     }
+
+    ucs_debug("ep %p: flush blocked on wireup_ep %p flush_flags 0x%x "
+              "wireup_flags 0x%x wireup_pending_count %u "
+              "next_ep %p aux_ep %p",
+              wireup_ep->super.ucp_ep, wireup_ep, flags, wireup_ep->flags,
+              wireup_ep->pending_count, wireup_ep->super.uct_ep,
+              wireup_ep->aux_ep);
     return UCS_ERR_NO_RESOURCE;
 }
 
