@@ -30,12 +30,12 @@ typedef struct uct_tcp_send_recv_buf_config {
  */
 #define UCT_TCP_SEND_RECV_BUF_FIELDS(_offset) \
     {"SNDBUF", "auto", \
-     "Socket send buffer size", \
+     "Socket send buffer size.", \
      (_offset) + ucs_offsetof(uct_tcp_send_recv_buf_config_t, sndbuf), \
      UCS_CONFIG_TYPE_MEMUNITS}, \
     \
     {"RCVBUF", "auto", \
-     "Socket receive buffer size", \
+     "Socket receive buffer size.", \
      (_offset) + ucs_offsetof(uct_tcp_send_recv_buf_config_t, rcvbuf), \
      UCS_CONFIG_TYPE_MEMUNITS}
 
@@ -43,7 +43,7 @@ typedef struct uct_tcp_send_recv_buf_config {
 #define UCT_TCP_SYN_CNT(_offset) \
     {"SYN_CNT", "auto", \
      "Number of SYN retransmits that TCP should send before aborting the attempt\n" \
-     "to connect. It cannot exceed 255. auto means to use the system default.", \
+     "to connect. It cannot exceed 255. 'auto' means to use the system default.", \
      (_offset), \
      UCS_CONFIG_TYPE_ULUNITS}
 
@@ -51,7 +51,7 @@ typedef struct uct_tcp_send_recv_buf_config {
 #define UCT_TCP_USER_TIMEOUT(_offset) \
     {"USER_TIMEOUT", "auto", \
      "Maximum time that transmitted data may remain unacknowledged before TCP\n" \
-     "forcibly closes the socket. auto means to use the system default.", \
+     "forcibly closes the socket. 'auto' means to use the system default.", \
      (_offset), \
      UCS_CONFIG_TYPE_TIME_UNITS}
 /* clang-format on */

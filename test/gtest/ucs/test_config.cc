@@ -109,12 +109,11 @@ typedef struct {
 
 /* clang-format off */
 ucs_config_field_t seat_opts_table[] = {
-  {"COLOR", "black",
-   "Seat color.",
+  {"COLOR_ALIAS", NULL, "",
    ucs_offsetof(seat_opts_t, color),
    UCS_CONFIG_TYPE_ENUM(color_names)},
 
-  {"COLOR_ALIAS", NULL,
+  {"COLOR", "black",
    "Seat color.",
    ucs_offsetof(seat_opts_t, color),
    UCS_CONFIG_TYPE_ENUM(color_names)},
@@ -128,18 +127,15 @@ ucs_config_field_t seat_opts_table[] = {
 };
 
 ucs_config_field_t coach_opts_table[] = {
-  {"DRIVER_", "COLOR=red",
-   "Driver seat options.",
+  {"DRIVER_", "COLOR=red", NULL,
    ucs_offsetof(coach_opts_t, driver_seat),
    UCS_CONFIG_TYPE_TABLE(seat_opts_table)},
 
-  {"PASSENGER_", "",
-   "Passenger seat options.",
+  {"PASSENGER_", "", NULL,
    ucs_offsetof(coach_opts_t, passenger_seat),
    UCS_CONFIG_TYPE_TABLE(seat_opts_table)},
 
-  {"REAR_", "",
-   "Rear seat options.",
+  {"REAR_", "", NULL,
    ucs_offsetof(coach_opts_t, rear_seat),
    UCS_CONFIG_TYPE_TABLE(seat_opts_table)},
 
@@ -157,12 +153,11 @@ ucs_config_field_t engine_opts_table[] = {
    ucs_offsetof(engine_opts_t, volume),
    UCS_CONFIG_TYPE_UINT},
 
-  {"POWER", "200",
-   "Engine power.",
+  {"POWER_ALIAS", NULL, "",
    ucs_offsetof(engine_opts_t, power),
    UCS_CONFIG_TYPE_ULUNITS},
 
-  {"POWER_ALIAS", NULL,
+  {"POWER", "200",
    "Engine power.",
    ucs_offsetof(engine_opts_t, power),
    UCS_CONFIG_TYPE_ULUNITS},
@@ -176,22 +171,19 @@ ucs_config_field_t engine_opts_table[] = {
 };
 
 ucs_config_field_t car_opts_table[] = {
-  {"ENGINE_", "",
-   "Engine options.",
+  {"ENGINE_", "", NULL,
    ucs_offsetof(car_opts_t, engine),
    UCS_CONFIG_TYPE_TABLE(engine_opts_table)},
 
-  {"COACH_", "PASSENGER_COLOR=blue",
-   "Seats options.",
+  {"COACH_", "PASSENGER_COLOR=blue", NULL,
    ucs_offsetof(car_opts_t, coach),
    UCS_CONFIG_TYPE_TABLE(coach_opts_table)},
 
-  {"PRICE", "999",
-   "Price.",
+  {"PRICE_ALIAS", NULL, "",
    ucs_offsetof(car_opts_t, price),
    UCS_CONFIG_TYPE_UINT},
 
-  {"PRICE_ALIAS", NULL,
+  {"PRICE", "999",
    "Price.",
    ucs_offsetof(car_opts_t, price),
    UCS_CONFIG_TYPE_UINT},
@@ -297,22 +289,22 @@ ucs_config_field_t car_opts_table[] = {
    UCS_CONFIG_TYPE_ON_OFF_AUTO},
 
   {"TIME_VAL", "1s",
-   "Time value 1 sec.",
+   "Time value '1s'.",
    ucs_offsetof(car_opts_t, time_value),
    UCS_CONFIG_TYPE_TIME_UNITS},
 
   {"TIME_AUTO", "auto",
-   "Time value \"auto\".",
+   "Time value 'auto'.",
    ucs_offsetof(car_opts_t, time_auto),
    UCS_CONFIG_TYPE_TIME_UNITS},
 
   {"TIME_INF", "inf",
-   "Time value \"inf\".",
+   "Time value 'inf'.",
    ucs_offsetof(car_opts_t, time_inf),
    UCS_CONFIG_TYPE_TIME_UNITS},
 
   {"ALLOW_LIST", "all",
-   "Allow-list: \"all\" OR \"val1,val2\" OR \"^val1,val2\".",
+   "Allow-list: 'all' OR 'val1,val2' OR '^val1,val2'.",
    ucs_offsetof(car_opts_t, allow_list),
    UCS_CONFIG_TYPE_ALLOW_LIST},
 
@@ -325,8 +317,8 @@ ucs_config_field_t car_opts_table[] = {
    "Temperature.",
    0,
    UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_UINT,
-     {"front", "front temperature", ucs_offsetof(car_opts_t, temp_front)},
-     {"rear",  "rear temperature",  ucs_offsetof(car_opts_t, temp_rear)},
+     {"front", "Front temperature.", ucs_offsetof(car_opts_t, temp_front)},
+     {"rear",  "Rear temperature.",  ucs_offsetof(car_opts_t, temp_rear)},
      {NULL}
    )},
 
@@ -334,9 +326,9 @@ ucs_config_field_t car_opts_table[] = {
    "Passengers.",
    0,
    UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_STRING,
-     {"first",  "First passenger",  ucs_offsetof(car_opts_t, passengers[0])},
-     {"second", "Second passenger", ucs_offsetof(car_opts_t, passengers[1])},
-     {"third",  "Third passenger",  ucs_offsetof(car_opts_t, passengers[2])},
+     {"first",  "First passenger.",  ucs_offsetof(car_opts_t, passengers[0])},
+     {"second", "Second passenger.", ucs_offsetof(car_opts_t, passengers[1])},
+     {"third",  "Third passenger.",  ucs_offsetof(car_opts_t, passengers[2])},
      {NULL}
    )},
 
@@ -721,7 +713,8 @@ UCS_TEST_F(test_config, clone) {
 
         car_opts opts(UCS_DEFAULT_ENV_PREFIX, NULL);
         EXPECT_EQ(COLOR_WHITE, opts->color);
-        EXPECT_EQ(0U, opts->price);
+        /* The canonical config-file value overrides its alias. */
+        EXPECT_EQ(100U, opts->price);
         EXPECT_EQ(30, opts->temp_front);
         EXPECT_EQ(30, opts->temp_rear);
         EXPECT_EQ(UCS_OK, opts.set("PASSENGERS", "Unknown,third:3"));
@@ -1257,8 +1250,8 @@ UCS_TEST_F(test_config, test_key_value_dump_full) {
     std::string dump = opts.dump((ucs_config_print_flags_t)flags);
 
     size_t it = dump.find("# Temperature.\n"
-                          "#  front     - front temperature\n"
-                          "#  rear      - rear temperature\n"
+                          "#  front - Front temperature.\n"
+                          "#  rear  - Rear temperature.\n"
                           "#\n"
                           "# syntax:    comma-separated list of value or key:"
                           "value pairs, where key is one of [front,rear] and "

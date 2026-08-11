@@ -79,14 +79,13 @@ static UCS_CONFIG_DEFINE_ARRAY(signo,
 /* clang-format off */
 #define UCS_DISTANCE_KEYS_DESCRIPTION(_field) \
     {"phb", \
-     "connection traversing PCIe as well as a PCIe Host Bridge (typically the CPU)", \
+     "Connection traversing PCIe as well as a PCIe Host Bridge (typically the CPU).", \
      ucs_offsetof(ucs_global_opts_t, dist.phb._field)}, \
     {"node", \
-     "connection traversing PCIe as well as the interconnect between PCIe " \
-     "Host Bridges within a NUMA node", \
+     "Connection traversing PCIe as well as the interconnect between PCIe Host Bridges within a NUMA node.", \
      ucs_offsetof(ucs_global_opts_t, dist.node._field)}, \
     {"sys", \
-     "connection traversing PCIe as well as the SMP interconnect between NUMA nodes", \
+     "Connection traversing PCIe as well as the SMP interconnect between NUMA nodes.", \
      ucs_offsetof(ucs_global_opts_t, dist.sys._field)}, \
     {NULL}
 
@@ -131,9 +130,9 @@ static ucs_config_field_t ucs_global_opts_table[] = {
  {"HANDLE_ERRORS", ENABLE_DEBUG_DATA ? "bt,freeze" : "none",
   "Error signal handling mode.\n"
   "Either 'none' to disable signal interception, or a combination of:\n"
-  " 'bt'     - Print backtrace.\n"
-  " 'freeze' - Freeze and wait for a debugger.\n"
-  " 'debug'  - Attach a debugger.",
+  " bt     - Print backtrace.\n"
+  " freeze - Freeze and wait for a debugger.\n"
+  " debug  - Attach a debugger.",
   ucs_offsetof(ucs_global_opts_t, handle_errors),
   UCS_CONFIG_TYPE_BITMAP(ucs_handle_error_modes)},
 
@@ -153,7 +152,7 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   UCS_CONFIG_TYPE_STRING},
 
  {"DEBUG_SIGNO", "SIGHUP",
-  "Signal number which causes UCS to enter debug mode. Set to 0 to disable.",
+  "Signal number which causes UCS to enter debug mode. Set to '0' to disable.",
   ucs_offsetof(ucs_global_opts_t, debug_signo),
   UCS_CONFIG_TYPE_SIGNO},
 
@@ -168,10 +167,10 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   ucs_offsetof(ucs_global_opts_t, warn_unused_env_vars),
   UCS_CONFIG_TYPE_BOOL},
 
-  {"MEMTYPE_CACHE", "try",
-   "Enable memory type (cuda/rocm) cache.",
-   ucs_offsetof(ucs_global_opts_t, enable_memtype_cache),
-   UCS_CONFIG_TYPE_TERNARY},
+ {"MEMTYPE_CACHE", "try",
+  "Enable memory type (cuda/rocm) cache.",
+  ucs_offsetof(ucs_global_opts_t, enable_memtype_cache),
+  UCS_CONFIG_TYPE_TERNARY},
 
  {"ASYNC_MAX_EVENTS", "1024",
   "The configuration parameter is deprecated.\n"
@@ -210,8 +209,8 @@ static ucs_config_field_t ucs_global_opts_table[] = {
  {"MODULES", "all",
   "Comma-separated list of glob patterns specifying which module to load.\n"
   "The order is not meaningful. For example:\n"
-  " *    - load all modules.\n"
-  " ^cu* - do not load modules that begin with 'cu'.",
+  " *    - Load all modules.\n"
+  " ^cu* - Do not load modules that begin with \"cu\".",
   ucs_offsetof(ucs_global_opts_t, modules),
   UCS_CONFIG_TYPE_ALLOW_LIST},
 
@@ -277,10 +276,10 @@ static ucs_config_field_t ucs_global_opts_read_only_table[] = {
   ucs_offsetof(ucs_global_opts_t, vfs_enable),
   UCS_CONFIG_TYPE_BOOL},
 
-  {"VFS_SOCK_PATH", UCX_VFS_SOCK_DEFAULT_PATH,
-   "Listening UNIX socket path of the VFS daemon.",
-   ucs_offsetof(ucs_global_opts_t, vfs_sock_path),
-   UCS_CONFIG_TYPE_STRING},
+ {"VFS_SOCK_PATH", UCX_VFS_SOCK_DEFAULT_PATH,
+  "Listening UNIX socket path of the VFS daemon.",
+  ucs_offsetof(ucs_global_opts_t, vfs_sock_path),
+  UCS_CONFIG_TYPE_STRING},
 
  {"VFS_THREAD_AFFINITY", "n",
   "Enable inheriting main process affinity for virtual monitoring filesystem\n"
@@ -293,19 +292,19 @@ static ucs_config_field_t ucs_global_opts_read_only_table[] = {
  {"STATS_DEST", "",
   "Destination to send statistics to. If the value is empty, statistics are\n"
   "not reported. Possible values are:\n"
-  " udp:<host>[:<port>]   - send over UDP to the given host:port.\n"
-  " stdout                - print to standard output.\n"
-  " stderr                - print to standard error.\n"
-  " file:<filename>[:bin] - save to a file (%h: host, %p: pid, %c: cpu,\n"
+  " udp:<host>[:<port>]   - Send over UDP to the given host:port.\n"
+  " stdout                - Print to standard output.\n"
+  " stderr                - Print to standard error.\n"
+  " file:<filename>[:bin] - Save to a file (%h: host, %p: pid, %c: cpu,\n"
   "                                         %t: time, %u: user, %e: exe).",
   ucs_offsetof(ucs_global_opts_t, stats_dest),
   UCS_CONFIG_TYPE_STRING},
 
  {"STATS_TRIGGER", "exit",
   "Trigger to dump statistics:\n"
-  " exit             - dump just before program exits.\n"
-  " signal:<signo>   - dump when process is signaled.\n"
-  " timer:<interval> - dump in specified intervals (in seconds).",
+  " exit             - Dump just before program exits.\n"
+  " signal:<signo>   - Dump when process is signaled.\n"
+  " timer:<interval> - Dump in specified intervals (in seconds).",
   ucs_offsetof(ucs_global_opts_t, stats_trigger),
   UCS_CONFIG_TYPE_STRING},
 
@@ -315,18 +314,18 @@ static ucs_config_field_t ucs_global_opts_read_only_table[] = {
   "Statistics summary will contain only the matching counters.\n"
   "The order is not meaningful.\n"
   "Each expression in the list may contain any of the following wildcard:\n"
-  " *     - matches any number of any characters including none.\n"
-  " ?     - matches any single character.\n"
-  " [abc] - matches one character given in the bracket.\n"
-  " [a-z] - matches one character from the range given in the bracket.",
+  " *     - Matches any number of any characters including none.\n"
+  " ?     - Matches any single character.\n"
+  " [abc] - Matches one character given in the bracket.\n"
+  " [a-z] - Matches one character from the range given in the bracket.",
   ucs_offsetof(ucs_global_opts_t, stats_filter),
   UCS_CONFIG_TYPE_STRING_ARRAY},
 
  {"STATS_FORMAT", "full",
   "Statistics format parameter:\n"
-  " full    - each counter will be displayed in a separate line.\n"
-  " agg     - like full but there will also be an aggregation between similar counters.\n"
-  " summary - all counters will be printed in the same line.",
+  " full    - Each counter will be displayed in a separate line.\n"
+  " agg     - Like full but there will also be an aggregation between similar counters.\n"
+  " summary - All counters will be printed in the same line.",
   ucs_offsetof(ucs_global_opts_t, stats_format),
   UCS_CONFIG_TYPE_ENUM(ucs_stats_formats_names)},
 #endif
@@ -334,15 +333,15 @@ static ucs_config_field_t ucs_global_opts_read_only_table[] = {
  {"MEMTRACK_DEST", "",
   "Destination to output memory tracking report to. If the value is empty,\n"
   "results are not reported. Possible values are:\n"
-  " file:<filename> - save to a file (%h: host, %p: pid, %c: cpu, %t: time,\n"
+  " file:<filename> - Save to a file (%h: host, %p: pid, %c: cpu, %t: time,\n"
   "                                   %u: user, %e: exe).\n"
-  " stdout          - print to standard output.\n"
-  " stderr          - print to standard error.",
+  " stdout          - Print to standard output.\n"
+  " stderr          - Print to standard error.",
   ucs_offsetof(ucs_global_opts_t, memtrack_dest),
   UCS_CONFIG_TYPE_STRING},
 
  {"PROFILE_MODE", "",
-  "Profile collection modes. If none is specified, profiling is disabled.\n"
+  "Profile collection modes. If 'none' is specified, profiling is disabled.\n"
   " log   - Record all timestamps.\n"
   " accum - Accumulate measurements per location.",
   ucs_offsetof(ucs_global_opts_t, profile_mode),

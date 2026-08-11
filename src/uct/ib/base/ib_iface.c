@@ -140,8 +140,8 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
 
   UCT_IFACE_MPOOL_CONFIG_FIELDS("TX_", -1, 1024, 128m, 1.0, "send",
                                 ucs_offsetof(uct_ib_iface_config_t, tx.mp),
-                                "\nAttention: Setting this param with value != -1 is a dangerous thing\n"
-                                "in RC/DC and could cause deadlock or performance degradation."),
+                                "\nAttention: Setting this param with a value other than '-1' is a dangerous\n"
+                                "thing in RC/DC and could cause deadlock or performance degradation."),
 
   {"RX_QUEUE_LEN", "4096",
    "Length of receive queue in the QPs.",
@@ -169,7 +169,7 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
                                 ucs_offsetof(uct_ib_iface_config_t, rx.mp), ""),
 
   {"ADDR_TYPE", "auto",
-   "Set the interface address type. \"auto\" mode detects the type according to\n"
+   "Set the interface address type. The 'auto' mode detects the type according to\n"
    "link layer type and IB subnet prefix.\n"
    "Deprecated. To force use of global routing use IS_GLOBAL.",
    ucs_offsetof(uct_ib_iface_config_t, addr_type),
@@ -193,7 +193,7 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
 
   {"TRAFFIC_CLASS", "auto",
    "IB Traffic Class / RoCEv2 Differentiated Services Code Point (DSCP).\n"
-   "\"auto\" option uses the port's global traffic class for RoCEv2 if any, otherwise\n"
+   "The 'auto' option uses the port's global traffic class for RoCEv2 if any, otherwise\n"
    "defaults to 106. IB uses class 0.",
    ucs_offsetof(uct_ib_iface_config_t, traffic_class),
    UCS_CONFIG_TYPE_ULUNITS},
@@ -238,9 +238,9 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
 
   {"ROCE_REACHABILITY_MODE", "route",
    "The mode used for performing the reachability check.\n"
-   " route        - all routable addresses are assumed as reachable.\n"
-   " local_subnet - only addresses within the interface's subnet are assumed as reachable.\n"
-   " all          - all addresses are assumed as reachable, without any check.",
+   " route        - All routable addresses are assumed as reachable.\n"
+   " local_subnet - Only addresses within the interface's subnet are assumed as reachable.\n"
+   " all          - All addresses are assumed as reachable, without any check.",
    ucs_offsetof(uct_ib_iface_config_t, reachability_mode),
    UCS_CONFIG_TYPE_ENUM(uct_ib_reachability_modes)},
 
@@ -259,23 +259,23 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
 
   {"PKEY", "auto",
    "Which pkey value to use. Should be between 0 and 0x7fff.\n"
-   "\"auto\" option selects a first valid pkey value with full membership.",
+   "The 'auto' option selects a first valid pkey value with full membership.",
    ucs_offsetof(uct_ib_iface_config_t, pkey),
    UCS_CONFIG_TYPE_HEX},
 
   {"PATH_MTU", "default",
-   "Path MTU. \"default\" will select the best MTU for the device.",
+   "Path MTU. The 'default' value selects the best MTU for the device.",
    ucs_offsetof(uct_ib_iface_config_t, path_mtu),
    UCS_CONFIG_TYPE_ENUM(uct_ib_mtu_values)},
 
   {"COUNTER_SET_ID", "auto",
    "Counter set ID to use for performance counters. A value of 'auto' will try to\n"
-   "detect the default value by creating a dummy QP." ,
+   "detect the default value by creating a dummy QP.",
    ucs_offsetof(uct_ib_iface_config_t, counter_set_id),
    UCS_CONFIG_TYPE_ULUNITS},
 
   {"REVERSE_SL", "auto",
-   "Reverse Service level. 'auto' will set the same value of sl.",
+   "Reverse Service Level. 'auto' sets the same value of SL.",
    ucs_offsetof(uct_ib_iface_config_t, reverse_sl),
    UCS_CONFIG_TYPE_ULUNITS},
 
@@ -284,15 +284,15 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "and finalizing an operation.",
    0,
    UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_TIME,
-     {"bcopy", "estimated overhead of allocating a tx buffer",
+     {"bcopy", "Estimated overhead of allocating a TX buffer.",
       ucs_offsetof(uct_ib_iface_config_t, send_overhead.bcopy)},
-     {"cqe", "estimated overhead of processing a work request completion",
+     {"cqe", "Estimated overhead of processing a work request completion.",
       ucs_offsetof(uct_ib_iface_config_t, send_overhead.cqe)},
-     {"db", "estimated overhead of writing a doorbell to PCI",
+     {"db", "Estimated overhead of writing a doorbell to PCI.",
       ucs_offsetof(uct_ib_iface_config_t, send_overhead.db)},
-     {"wqe_fetch", "estimated overhead of fetching a wqe",
+     {"wqe_fetch", "Estimated overhead of fetching a WQE.",
       ucs_offsetof(uct_ib_iface_config_t, send_overhead.wqe_fetch)},
-     {"wqe_post", "estimated overhead of posting a wqe",
+     {"wqe_post", "Estimated overhead of posting a WQE.",
       ucs_offsetof(uct_ib_iface_config_t, send_overhead.wqe_post)},
      {NULL}
    )},

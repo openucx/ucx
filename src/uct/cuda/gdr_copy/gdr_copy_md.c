@@ -105,9 +105,9 @@ static ucs_config_field_t uct_gdr_copy_md_config_table[] = {
 
     {"USE_PCIE", "auto",
      "Mapping type for CPU access:\n"
-     " auto - default, driver chooses C2C or PCIe.\n"
+     " auto - Default, driver chooses C2C or PCIe.\n"
      " yes  - Force PCIe (BAR1); may fail at registration.\n"
-     " no   - default, driver chooses C2C or PCIe.\n"
+     " no   - Default, driver chooses C2C or PCIe.\n"
      " try  - Try PCIe first, fall back to default in case of failure.",
      ucs_offsetof(uct_gdr_copy_md_config_t, use_pcie),
      UCS_CONFIG_TYPE_TERNARY_AUTO},

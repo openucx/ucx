@@ -69,7 +69,7 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
    UCS_CONFIG_TYPE_BOOL},
 
   {"MAX_POLL", UCS_PP_MAKE_STRING(UCT_TCP_MAX_EVENTS),
-   "Number of times to poll on a ready socket. 0 - no polling, -1 - until drained.",
+   "Number of times to poll on a ready socket. '0' means no polling; '-1' means until drained.",
    ucs_offsetof(uct_tcp_iface_config_t, max_poll),
    UCS_CONFIG_TYPE_UINT},
 
@@ -103,26 +103,26 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
    ucs_offsetof(uct_tcp_iface_config_t, port_range),
    UCS_CONFIG_TYPE_RANGE_SPEC},
 
-   {"MAX_BW", "2200MBs",
-    "Upper bound to TCP iface bandwidth. 'auto' means BW is unlimited.",
-    ucs_offsetof(uct_tcp_iface_config_t, max_bw),
-    UCS_CONFIG_TYPE_BW},
+  {"MAX_BW", "2200MBs",
+   "Upper bound to TCP iface bandwidth. 'auto' means BW is unlimited.",
+   ucs_offsetof(uct_tcp_iface_config_t, max_bw),
+   UCS_CONFIG_TYPE_BW},
 
 #ifdef UCT_TCP_EP_KEEPALIVE
   {"KEEPIDLE", UCS_PP_MAKE_STRING(UCT_TCP_EP_DEFAULT_KEEPALIVE_IDLE) "s",
    "The time the connection needs to remain idle before TCP starts sending\n"
-   "keepalive probes. Specifying \"inf\" disables keepalive.",
+   "keepalive probes. Specifying 'inf' disables keepalive.",
    ucs_offsetof(uct_tcp_iface_config_t, keepalive.idle),
    UCS_CONFIG_TYPE_TIME_UNITS},
 
   {"KEEPCNT", "auto",
    "The maximum number of keepalive probes TCP should send before\n"
-   "dropping the connection. Specifying \"inf\" disables keepalive.",
+   "dropping the connection. Specifying 'inf' disables keepalive.",
    ucs_offsetof(uct_tcp_iface_config_t, keepalive.cnt),
    UCS_CONFIG_TYPE_ULUNITS},
 
   {"KEEPINTVL", UCS_PP_MAKE_STRING(UCT_TCP_EP_DEFAULT_KEEPALIVE_INTVL) "s",
-   "The time between individual keepalive probes. Specifying \"inf\" disables\n"
+   "The time between individual keepalive probes. Specifying 'inf' disables\n"
    "keepalive.",
    ucs_offsetof(uct_tcp_iface_config_t, keepalive.intvl),
    UCS_CONFIG_TYPE_TIME_UNITS},

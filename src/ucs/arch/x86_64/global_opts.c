@@ -27,10 +27,12 @@ ucs_config_field_t ucs_arch_global_opts_table[] = {
    ucs_offsetof(ucs_arch_global_opts_t, builtin_memcpy_max),
    UCS_CONFIG_TYPE_MEMUNITS},
 #endif
+
   {"NT_BUFFER_TRANSFER_MIN", "auto",
    "Minimal threshold of buffer length for using non-temporal buffer transfer.",
    ucs_offsetof(ucs_arch_global_opts_t, nt_buffer_transfer_min),
    UCS_CONFIG_TYPE_MEMUNITS},
+
   {NULL}
 };
 /* clang-format on */

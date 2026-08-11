@@ -189,22 +189,22 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "Threshold for switching from eager to rendezvous protocol.",
    0,
    UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_MEMUNITS,
-     {"intra", "threshold for intra-node communication",
+     {"intra", "Threshold for intra-node communication.",
       ucs_offsetof(ucp_context_config_t, rndv_intra_thresh)},
-     {"inter", "threshold for inter-node communication",
+     {"inter", "Threshold for inter-node communication.",
       ucs_offsetof(ucp_context_config_t, rndv_inter_thresh)},
      {NULL}
    )},
 
   {"RNDV_SEND_NBR_THRESH", "256k",
    "Threshold for switching from eager to rendezvous protocol in ucp_tag_send_nbr().\n"
-   "Relevant only if UCX_RNDV_THRESH is set to \"auto\".",
+   "Relevant only if UCX_RNDV_THRESH is set to 'auto'.",
    ucs_offsetof(ucp_context_config_t, rndv_send_nbr_thresh),
    UCS_CONFIG_TYPE_MEMUNITS},
 
   {"RNDV_THRESH_FALLBACK", "inf",
-   "Message size to start using the rendezvous protocol in case the calculated threshold\n"
-   "is zero or negative.",
+   "Message size to start using the rendezvous protocol in case the calculated\n"
+   "threshold is zero or negative.",
    ucs_offsetof(ucp_context_config_t, rndv_thresh_fallback),
    UCS_CONFIG_TYPE_MEMUNITS},
 
@@ -237,7 +237,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, max_eager_lanes),
    UCS_CONFIG_TYPE_UINT},
 
-  {"MAX_RNDV_LANES", NULL,"",
+  {"MAX_RNDV_LANES", NULL, "",
    ucs_offsetof(ucp_context_config_t, max_rndv_lanes),
    UCS_CONFIG_TYPE_UINT},
 
@@ -274,13 +274,13 @@ static ucs_config_field_t ucp_context_config_table[] = {
 
   {"RNDV_SCHEME", "auto",
    "Communication scheme in RNDV protocol.\n"
-   " get_zcopy - use get_zcopy scheme in RNDV protocol.\n"
-   " put_zcopy - use put_zcopy scheme in RNDV protocol.\n"
-   " get_ppln  - use pipelined get_zcopy scheme in RNDV protocol.\n"
-   " put_ppln  - use pipelined put_zcopy scheme in RNDV protocol.\n"
-   " rkey_ptr  - use rkey_ptr in RNDV protocol.\n"
-   " am        - use active message scheme in RNDV protocol.\n"
-   " auto      - runtime automatically chooses optimal scheme to use.",
+   " get_zcopy - Use get_zcopy scheme in RNDV protocol.\n"
+   " put_zcopy - Use put_zcopy scheme in RNDV protocol.\n"
+   " get_ppln  - Use pipelined get_zcopy scheme in RNDV protocol.\n"
+   " put_ppln  - Use pipelined put_zcopy scheme in RNDV protocol.\n"
+   " rkey_ptr  - Use rkey_ptr in RNDV protocol.\n"
+   " am        - Use active message scheme in RNDV protocol.\n"
+   " auto      - Runtime automatically chooses optimal scheme to use.",
    ucs_offsetof(ucp_context_config_t, rndv_mode),
    UCS_CONFIG_TYPE_ENUM(ucp_rndv_modes)},
 
@@ -301,10 +301,10 @@ static ucs_config_field_t ucp_context_config_table[] = {
 
   {"ATOMIC_MODE", "guess",
    "Atomic operations synchronization mode.\n"
-   " cpu    - atomic operations are consistent with respect to the CPU.\n"
-   " device - atomic operations are performed on one of the transport devices,\n"
+   " cpu    - Atomic operations are consistent with respect to the CPU.\n"
+   " device - Atomic operations are performed on one of the transport devices,\n"
    "          and there is guarantee of consistency with respect to the CPU.\n"
-   " guess  - atomic operations mode is configured based on underlying\n"
+   " guess  - Atomic operations mode is configured based on underlying\n"
    "          transport capabilities. If one of active transports supports\n"
    "          the DEVICE atomic mode, the DEVICE mode is selected.\n"
    "          Otherwise the CPU mode is selected.",
@@ -328,8 +328,8 @@ static ucs_config_field_t ucp_context_config_table[] = {
 
   {"USE_MT_MUTEX", "n",
    "Use mutex for multithreading support in UCP.\n"
-   "n      - Not use mutex for multithreading support in UCP (use spinlock by default).\n"
-   "y      - Use mutex for multithreading support in UCP.",
+   " n - Do not use a mutex for multithreading support in UCP (use a spinlock by default).\n"
+   " y - Use a mutex for multithreading support in UCP.",
    ucs_offsetof(ucp_context_config_t, use_mt_mutex),
    UCS_CONFIG_TYPE_BOOL},
 
@@ -370,7 +370,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
   {"TM_SW_RNDV", "n",
    "Use software rendezvous protocol even when tag matching offload is enabled.\n"
    "In this case tag matching offload will be used for messages sent with eager\n"
-   "protocol only. If the value is set to \"try\", the rendezvous protocol is\n"
+   "protocol only. If the value is set to 'try', the rendezvous protocol is\n"
    "selected automatically according to the performance characteristics.",
    ucs_offsetof(ucp_context_config_t, tm_sw_rndv),
    UCS_CONFIG_TYPE_TERNARY},
@@ -379,7 +379,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "An optimization hint of how many endpoints would be created on this context.\n"
    "Does not affect semantics, but only transport selection criteria and the\n"
    "resulting performance.\n"
-   "If set to a value different from \"auto\" it will override the value passed\n"
+   "If set to a value different from 'auto' it will override the value passed\n"
    "to ucp_init().",
    ucs_offsetof(ucp_context_config_t, estimated_num_eps),
    UCS_CONFIG_TYPE_ULUNITS},
@@ -418,7 +418,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
 
   {"RNDV_PIPELINE_SHM_CUDA_STAGING_FORCE", "n",
    "Prefer the copy-to-attached host-staged path for intra-node\n"
-   "CUDA-to-CUDA tag rendezvous only when RNDV_SCHEME is auto\n"
+   "CUDA-to-CUDA tag rendezvous only when RNDV_SCHEME is 'auto'\n"
    "and the pipeline is enabled and available. AM rdnv and RMA rdnv\n"
    "are not forced. This parameter is a temporary workaround\n"
    "and may be removed in future releases.\n"
@@ -434,7 +434,8 @@ static ucs_config_field_t ucp_context_config_table[] = {
 
   {"RMA_PPLN_ENABLE", "n",
    "Force-enable the RMA rendezvous put/get protocols.",
-   ucs_offsetof(ucp_context_config_t, rma_ppln_enable), UCS_CONFIG_TYPE_BOOL},
+   ucs_offsetof(ucp_context_config_t, rma_ppln_enable),
+   UCS_CONFIG_TYPE_BOOL},
 
   {"FLUSH_WORKER_EPS", "y",
    "Enable flushing the worker by flushing its endpoints. Allows completing\n"
@@ -445,10 +446,10 @@ static ucs_config_field_t ucp_context_config_table[] = {
 
   {"FENCE_MODE", "auto",
    "Fence mode used in ucp_worker_fence routine.\n"
-   " weak     - use weak fence mode.\n"
-   " strong   - use strong fence mode.\n"
-   " auto     - automatically detect fence mode.\n"
-   " ep_based - use endpoint-based fence mode.",
+   " weak     - Use weak fence mode.\n"
+   " strong   - Use strong fence mode.\n"
+   " auto     - Automatically detect fence mode.\n"
+   " ep_based - Use endpoint-based fence mode.",
    ucs_offsetof(ucp_context_config_t, fence_mode),
    UCS_CONFIG_TYPE_ENUM(ucp_fence_modes)},
 
@@ -491,13 +492,13 @@ static ucs_config_field_t ucp_context_config_table[] = {
 
   {"KEEPALIVE_NUM_EPS", "128",
    "Maximal number of endpoints to check on every keepalive round\n"
-   "(inf - check all endpoints on every round, must be greater than 0).",
+   "('inf' checks all endpoints on every round; must be greater than 0).",
    ucs_offsetof(ucp_context_config_t, keepalive_num_eps),
    UCS_CONFIG_TYPE_UINT},
 
   {"RECOVERY_RETRIES", "inf",
    "Maximum number of recovery rounds before a partially failed endpoint\n"
-   "is declared fully failed (inf - retry indefinitely, must be greater\n"
+   "is declared fully failed ('inf' retries indefinitely; must be greater\n"
    "than 0). Each round occurs after UCX_KEEPALIVE_INTERVAL.\n"
    "Applies only to endpoints created with UCP_ERR_HANDLING_MODE_FAILOVER.",
    ucs_offsetof(ucp_context_config_t, recovery_retries),
@@ -505,7 +506,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
 
   {"DYNAMIC_TL_SWITCH_INTERVAL", "inf",
    "Time interval between dynamic transport switching rounds.\n"
-   " Must be non-zero value. use 'inf' to disable this feature.",
+   "Must be a non-zero value. Use 'inf' to disable this feature.",
    ucs_offsetof(ucp_context_config_t, dynamic_tl_switch_interval),
    UCS_CONFIG_TYPE_TIME_UNITS},
 
@@ -518,7 +519,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
   {"RESOLVE_REMOTE_EP_ID", "auto",
    "Defines whether resolving remote endpoint ID is required or not when\n"
    "creating a local endpoint. 'auto' means resolving remote endpoint ID only\n"
-   "in case of error handling and keepalive enabled.",
+   "when error handling and keepalive are enabled.",
    ucs_offsetof(ucp_context_config_t, resolve_remote_ep_id),
    UCS_CONFIG_TYPE_ON_OFF_AUTO},
 
@@ -564,12 +565,12 @@ static ucs_config_field_t ucp_context_config_table[] = {
 
   {"PROTO_INFO", "auto",
    "Enable printing protocols information. The value is interpreted as follows:\n"
-   " 'y'          - Print information for all protocols.\n"
-   " 'n'          - Do not print any protocol information.\n"
-   " 'auto'       - Print information when UCX_LOG_LEVEL is 'debug' or higher.\n"
-   " 'used'       - Print information for used protocols.\n"
-   " glob_pattern - Print information for operations matching the glob pattern.\n"
-   "                For example: '*tag*gpu*', '*put*fast*host*'.",
+   " y              - Print information for all protocols.\n"
+   " n              - Do not print any protocol information.\n"
+   " auto           - Print information when UCX_LOG_LEVEL is debug or higher.\n"
+   " used           - Print information for used protocols.\n"
+   " <glob_pattern> - Print information for operations matching the glob pattern.\n"
+   "                  For example: *tag*gpu*, *put*fast*host*.",
    ucs_offsetof(ucp_context_config_t, proto_info),
    UCS_CONFIG_TYPE_STRING},
 
@@ -601,8 +602,8 @@ static ucs_config_field_t ucp_context_config_table[] = {
   {"PREFER_OFFLOAD", "y",
    "Prefer transports capable of remote memory access for RMA and AMO operations.\n"
    "The value is interpreted as follows:\n"
-   " 'y' - Prefer transports with native RMA/AMO support (if available)\n"
-   " 'n' - Select RMA/AMO lanes according to performance charasteristics.",
+   " y - Prefer transports with native RMA/AMO support (if available).\n"
+   " n - Select RMA/AMO lanes according to performance characteristics.",
    ucs_offsetof(ucp_context_config_t, prefer_offload),
    UCS_CONFIG_TYPE_BOOL},
 
@@ -611,19 +612,19 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "Protocol overhead.",
    0,
    UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_TIME,
-     {"single", "overhead of single-lane protocol",
+     {"single", "Overhead of single-lane protocol.",
       ucs_offsetof(ucp_context_config_t, proto_overhead_single)},
-     {"multi", "overhead of managing multiple lanes",
+     {"multi", "Overhead of managing multiple lanes.",
       ucs_offsetof(ucp_context_config_t, proto_overhead_multi)},
-     {"rndv_offload", "overhead of rendezvous offload protocol",
+     {"rndv_offload", "Overhead of rendezvous offload protocol.",
       ucs_offsetof(ucp_context_config_t, proto_overhead_rndv_offload)},
-     {"rndv_rtr", "overhead of rendezvous RTR protocol",
+     {"rndv_rtr", "Overhead of rendezvous RTR protocol.",
       ucs_offsetof(ucp_context_config_t, proto_overhead_rndv_rtr)},
-     {"rndv_rts", "overhead of rendezvous RTS protocol",
+     {"rndv_rts", "Overhead of rendezvous RTS protocol.",
       ucs_offsetof(ucp_context_config_t, proto_overhead_rndv_rts)},
-     {"sw", "overhead of software emulation protocol",
+     {"sw", "Overhead of software emulation protocol.",
       ucs_offsetof(ucp_context_config_t, proto_overhead_sw)},
-     {"rkey_ptr", "overhead of the protocol copying from mapped remote memory",
+     {"rkey_ptr", "Overhead of the protocol copying from mapped remote memory.",
       ucs_offsetof(ucp_context_config_t, proto_overhead_rkey_ptr)},
      {NULL}
   )},
@@ -675,9 +676,9 @@ static ucs_config_field_t ucp_context_config_table[] = {
 
   {"MAX_HCA_PER_GPU", "inf",
    "Maximum number of HCAs to register GPU memory on.\n"
-   " inf  - register on all HCAs (default).\n"
-   " auto - register only on HCAs closest to the GPU.\n"
-   " <N>  - register on up to N closest HCAs.",
+   " inf  - Register on all HCAs (default).\n"
+   " auto - Register only on HCAs closest to the GPU.\n"
+   " <N>  - Register on up to N closest HCAs.",
    ucs_offsetof(ucp_context_config_t, max_hca_per_gpu),
    UCS_CONFIG_TYPE_ULUNITS},
 
@@ -691,9 +692,9 @@ static ucs_config_field_t ucp_context_config_table[] = {
   {"PRINT_TRANSPORT_TABLES", "auto",
    "Print tables of available transports/devices and per-endpoint lane\n"
    "configuration during initialization. The value is interpreted as follows:\n"
-   " 'y'    - Always print the tables.\n"
-   " 'n'    - Never print the tables.\n"
-   " 'auto' - Print the tables when UCX_LOG_LEVEL is 'debug' or higher.",
+   " y    - Always print the tables.\n"
+   " n    - Never print the tables.\n"
+   " auto - Print the tables when UCX_LOG_LEVEL is debug or higher.",
    ucs_offsetof(ucp_context_config_t, print_transport_tables),
    UCS_CONFIG_TYPE_ON_OFF_AUTO},
 
@@ -723,11 +724,11 @@ static ucs_config_field_t ucp_config_table[] = {
 
   {"TLS", UCP_RSC_CONFIG_ALL,
    "Comma-separated list of transports to use. The order is not meaningful.\n"
-   " all     - use all the available transports.\n"
-   " sm/shm  - all shared memory transports (mm, cma, knem).\n"
-   " mm      - shared memory transports - only memory mappers.\n"
+   " all     - Use all the available transports.\n"
+   " sm/shm  - All shared memory transports (mm, cma, knem).\n"
+   " mm      - Shared memory transports - only memory mappers.\n"
    " ugni    - ugni_smsg and ugni_rdma (uses ugni_udt for bootstrap).\n"
-   " ib      - all infiniband transports (rc/rc_mlx5, ud/ud_mlx5, dc_mlx5, srd).\n"
+   " ib      - All infiniband transports (rc/rc_mlx5, ud/ud_mlx5, dc_mlx5, srd).\n"
    " rc_v    - rc verbs (uses ud for bootstrap).\n"
    " rc_x    - rc with accelerated verbs (uses ud_mlx5 for bootstrap).\n"
    " rc      - rc_v and rc_x (preferably if available).\n"
@@ -736,12 +737,12 @@ static ucs_config_field_t ucp_config_table[] = {
    " ud      - ud_v and ud_x (preferably if available).\n"
    " srd     - EFA srd reliable transport.\n"
    " dc/dc_x - dc with accelerated verbs.\n"
-   " tcp     - sockets over TCP/IP.\n"
+   " tcp     - Sockets over TCP/IP.\n"
    " cuda    - CUDA (NVIDIA GPU) memory support.\n"
    " rocm    - ROCm (AMD GPU) memory support.\n"
    " ze      - ZE (Intel GPU) memory support.\n"
-   " Using a \\ prefix before a transport name treats it as an explicit transport name\n"
-   " and disables aliasing.",
+   "Using a \\ prefix before a transport name treats it as an explicit transport\n"
+   " name and disables aliasing.",
    ucs_offsetof(ucp_config_t, tls),
    UCS_CONFIG_TYPE_ALLOW_LIST},
 
@@ -749,18 +750,18 @@ static ucs_config_field_t ucp_config_table[] = {
    "Comma-separated list of glob patterns specifying protocols to use.\n"
    "The order is not meaningful.\n"
    "Each expression in the list may contain any of the following wildcard:\n"
-   " *     - matches any number of any characters including none.\n"
-   " ?     - matches any single character.\n"
-   " [abc] - matches one character given in the bracket.\n"
-   " [a-z] - matches one character from the range given in the bracket.",
+   " *     - Matches any number of any characters including none.\n"
+   " ?     - Matches any single character.\n"
+   " [abc] - Matches one character given in the bracket.\n"
+   " [a-z] - Matches one character from the range given in the bracket.",
    ucs_offsetof(ucp_config_t, protos),
    UCS_CONFIG_TYPE_ALLOW_LIST},
 
   {"ALLOC_PRIO", "md:sysv,md:posix,thp,md:*,mmap,heap",
    "Priority of memory allocation methods. Each item in the list can be either\n"
-   "an allocation method (huge, thp, mmap, libc) or md:<NAME> which means to use the\n"
-   "specified memory domain for allocation. NAME can be either a UCT component\n"
-   "name, or a wildcard - '*' - which is equivalent to all UCT components.",
+   "an allocation method ('huge', 'thp', 'mmap', 'libc') or md:<name> which means\n"
+   " to use the specified memory domain for allocation. <name> can be either a UCT\n"
+   " component name, or the '*' wildcard, which is equivalent to all UCT components.",
    ucs_offsetof(ucp_config_t, alloc_prio),
    UCS_CONFIG_TYPE_STRING_ARRAY},
 
@@ -793,7 +794,7 @@ static ucs_config_field_t ucp_config_table[] = {
    UCS_CONFIG_TYPE_BOOL},
 
   {"RX_MPOOL_SIZES", "64,1kb",
-   "List of worker mpool sizes separated by comma. The values must be power of 2\n"
+   "List of worker mpool sizes separated by comma. The values must be power of 2.\n"
    "Values larger than the maximum UCT transport segment size will be ignored.\n"
    "These pools are used for UCP AM and unexpected TAG messages. When assigning\n"
    "pool sizes, note that the data may be stored with some header.",

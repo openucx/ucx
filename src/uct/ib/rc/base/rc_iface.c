@@ -34,8 +34,8 @@ ucs_config_field_t uct_rc_iface_common_config_table[] = {
    UCS_CONFIG_TYPE_TABLE(uct_ib_iface_config_table)},
 
   {"MAX_RD_ATOMIC", "auto",
-   "Maximal number of outstanding read or atomic replies. Auto means using the\n"
-   "maximum value supported by the hardware.",
+   "Maximal number of outstanding read or atomic replies.\n"
+   "The 'auto' value uses the maximum value supported by the hardware.",
    ucs_offsetof(uct_rc_iface_common_config_t, max_rd_atomic),
    UCS_CONFIG_TYPE_ULUNITS},
 
@@ -66,7 +66,7 @@ ucs_config_field_t uct_rc_iface_common_config_table[] = {
    UCS_CONFIG_TYPE_BOOL},
 
   {"FC_WND_SIZE", "512",
-   "The size of flow control window per endpoint. limits the number of AM\n"
+   "The size of flow control window per endpoint. It limits the number of AM\n"
    "which can be sent w/o acknowledgment.",
    ucs_offsetof(uct_rc_iface_common_config_t, fc.wnd_size),
    UCS_CONFIG_TYPE_UINT},
@@ -79,9 +79,9 @@ ucs_config_field_t uct_rc_iface_common_config_table[] = {
 
   {"FENCE", "auto",
    "IB fence type when API fence requested:\n"
-   " none - fence is a no-op.\n"
-   " weak - fence makes sure remote reads are ordered with respect to remote writes.\n"
-   " auto - select fence mode based on hardware capabilities.",
+   " none - Fence is a no-op.\n"
+   " weak - Fence makes sure remote reads are ordered with respect to remote writes.\n"
+   " auto - Select fence mode based on hardware capabilities.",
    ucs_offsetof(uct_rc_iface_common_config_t, fence_mode),
    UCS_CONFIG_TYPE_ENUM(uct_rc_fence_mode_values)},
 
@@ -107,12 +107,12 @@ ucs_config_field_t uct_rc_iface_common_config_table[] = {
    UCS_CONFIG_TYPE_BOOL},
 
   {"ECE", "auto",
-   "config Enhanced Connection Establishment to establish connection.\n"
-   " 'auto'    - Use default ECE.\n"
-   " 'inf'     - Use maximal supported ECE.\n"
-   " otherwise - Set the ECE to the given numeric 32-bit value.\n"
-   "             This value is used as best-effort and can be adjusted by\n"
-   "             the transport implementation.",
+   "Config Enhanced Connection Establishment to establish connection.\n"
+   " auto    - Use default ECE.\n"
+   " inf     - Use maximal supported ECE.\n"
+   " <value> - Set the ECE to the given numeric 32-bit value.\n"
+   "           This value is used as best-effort and can be adjusted by\n"
+   "           the transport implementation.",
    ucs_offsetof(uct_rc_iface_common_config_t, ece),
    UCS_CONFIG_TYPE_ULUNITS},
 

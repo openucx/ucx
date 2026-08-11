@@ -44,9 +44,9 @@ static ucs_config_field_t uct_cuda_copy_md_config_table[] = {
      UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
 
     {"REG_WHOLE_ALLOC", "auto",
-     "Allow registration of whole allocation\n"
+     "Allow registration of whole allocation.\n"
      " auto - Let runtime decide where whole allocation registration is turned on.\n"
-     "        By default this will be turned off for limited BAR GPUs (eg. T4).\n"
+     "        By default this will be turned off for limited BAR GPUs (e.g. T4).\n"
      " on   - Whole allocation registration is always turned on.\n"
      " off  - Whole allocation registration is always turned off.",
      ucs_offsetof(uct_cuda_copy_md_config_t, alloc_whole_reg),
@@ -78,7 +78,7 @@ static ucs_config_field_t uct_cuda_copy_md_config_table[] = {
      UCS_CONFIG_TYPE_TERNARY},
 
     {"ASYNC_MEM_TYPE", "cuda-managed",
-     "Memory type which is detected for asynchronously allocated cuda memory.\n"
+     "Memory type which is detected for asynchronously allocated CUDA memory.\n"
      "Allowed memory type is one of: cuda, cuda-managed.",
      ucs_offsetof(uct_cuda_copy_md_config_t, cuda_async_mem_type),
      UCS_CONFIG_TYPE_ENUM(ucs_memory_type_names)},

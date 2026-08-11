@@ -44,14 +44,15 @@ static ucs_config_field_t ucm_global_config_table[] = {
    UCS_CONFIG_TYPE_BOOL},
 
   {"MMAP_HOOK_MODE", UCM_DEFAULT_HOOK_MODE_STR,
-   "MMAP hook mode\n"
+   "MMAP hook mode.\n"
    " none   - Don't set mmap hooks.\n"
    " reloc  - Use ELF relocation table to set hooks."
 #if UCM_BISTRO_HOOKS
    "\n"
    " bistro - Use binary instrumentation to set hooks."
 #endif
-   ,ucs_offsetof(ucm_global_config_t, mmap_hook_mode),
+   ,
+   ucs_offsetof(ucm_global_config_t, mmap_hook_mode),
    UCS_CONFIG_TYPE_ENUM(ucm_mmap_hook_modes)},
 
   {"MALLOC_HOOKS", "yes",
@@ -73,19 +74,20 @@ static ucs_config_field_t ucm_global_config_table[] = {
 #else
    UCM_MMAP_HOOK_RELOC_STR,
 #endif
-   "Cuda memory hook modes. A combination of:\n"
-   " none   - Don't set Cuda hooks.\n"
+   "CUDA memory hook modes.\n"
+   " none   - Don't set CUDA hooks.\n"
    " reloc  - Use ELF relocation table to set hooks. In this mode, if any\n"
-   "          part of the application is linked with Cuda runtime statically,\n"
+   "          part of the application is linked with CUDA runtime statically,\n"
    "          some memory events may be missed and not reported."
 #if UCM_BISTRO_HOOKS
    "\n"
    " bistro - Use binary instrumentation to set hooks. In this mode, it's\n"
-   "          possible to intercept calls from the Cuda runtime library to\n"
-   "          Cuda driver APIs, so memory events are reported properly even\n"
+   "          possible to intercept calls from the CUDA runtime library to\n"
+   "          CUDA driver APIs, so memory events are reported properly even\n"
    "          for statically-linked applications."
 #endif
-   ,ucs_offsetof(ucm_global_config_t, cuda_hook_modes),
+   ,
+   ucs_offsetof(ucm_global_config_t, cuda_hook_modes),
    UCS_CONFIG_TYPE_BITMAP(ucm_mmap_hook_modes)},
 
   {"CUDA_RELOC", "yes",
@@ -108,10 +110,10 @@ static ucs_config_field_t ucm_global_config_table[] = {
    UCS_CONFIG_TYPE_BOOL},
 
   {"MODULE_UNLOAD_PREVENT_MODE", "lazy",
-   "Module unload prevention mode\n"
-   " lazy - use RTLD_LAZY flag to add reference to module.\n"
-   " now  - use RTLD_NOW flag to add reference to module.\n"
-   " none - don't prevent module unload, use it for debug purposes only.",
+   "Module unload prevention mode.\n"
+   " lazy - Use RTLD_LAZY flag to add reference to module.\n"
+   " now  - Use RTLD_NOW flag to add reference to module.\n"
+   " none - Don't prevent module unload; use it for debug purposes only.",
    ucs_offsetof(ucm_global_config_t, module_unload_prevent_mode),
    UCS_CONFIG_TYPE_ENUM(ucm_module_unload_prevent_modes)},
 

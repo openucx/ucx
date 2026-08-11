@@ -82,8 +82,8 @@ ucs_config_field_t uct_rc_gdaki_iface_config_table[] = {
 
     {"EP_ALLOC_MODE", "pool",
      "Endpoint channel allocation mode.\n"
-     " pool   - allocate channels from pooled chunks.\n"
-     " direct - allocate channels per endpoint directly.",
+     " pool   - Allocate channels from pooled chunks.\n"
+     " direct - Allocate channels per endpoint directly.",
      ucs_offsetof(uct_rc_gdaki_iface_config_t, ep_alloc_mode),
      UCS_CONFIG_TYPE_ENUM(uct_rc_gdaki_ep_alloc_mode_names)},
 

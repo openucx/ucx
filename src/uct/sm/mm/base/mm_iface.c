@@ -81,9 +81,9 @@ ucs_config_field_t uct_mm_iface_config_table[] = {
      "system software layers and before operation has been finalized.",
      0,
      UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_TIME,
-       {"am_short", "send overhead for short Active Message operation type",
+       {"am_short", "Send overhead for short Active Message operation type.",
         ucs_offsetof(uct_mm_iface_config_t, overhead.send.am_short)},
-       {"am_bcopy", "send overhead for buffered Active Message operation type",
+       {"am_bcopy", "Send overhead for buffered Active Message operation type.",
         ucs_offsetof(uct_mm_iface_config_t, overhead.send.am_bcopy)},
        {NULL}
      )},
@@ -92,9 +92,9 @@ ucs_config_field_t uct_mm_iface_config_table[] = {
      "Message receive overhead time.",
      0,
      UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_TIME,
-       {"am_short", "receive overhead for short Active Message operation type",
+       {"am_short", "Receive overhead for short Active Message operation type.",
         ucs_offsetof(uct_mm_iface_config_t, overhead.recv.am_short)},
-       {"am_bcopy", "receive overhead for buffered Active Message operation type",
+       {"am_bcopy", "Receive overhead for buffered Active Message operation type.",
         ucs_offsetof(uct_mm_iface_config_t, overhead.recv.am_bcopy)},
        {NULL}
      )},

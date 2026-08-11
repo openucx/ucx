@@ -919,7 +919,7 @@ UCS_CONFIG_DEFINE_ARRAY(alloc_methods, sizeof(uct_alloc_method_t),
 ucs_config_field_t uct_iface_config_table[] = {
   {"MAX_SHORT", "",
    "The configuration parameter replaced by:\n"
-   "UCX_<IB transport>_TX_MIN_INLINE for IB, UCX_MM_FIFO_SIZE for MM.",
+   "UCX_<IB transport>_TX_MIN_INLINE for 'IB', UCX_MM_FIFO_SIZE for 'MM'.",
    UCS_CONFIG_DEPRECATED_FIELD_OFFSET,
    UCS_CONFIG_TYPE_DEPRECATED},
 

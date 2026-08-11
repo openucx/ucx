@@ -30,12 +30,12 @@ static ucs_config_field_t uct_cuda_copy_iface_config_table[] = {
      UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
     {"MAX_POLL", "16",
-     "Max number of event completions to pick during cuda events polling.",
+     "Max number of event completions to pick during CUDA events polling.",
      ucs_offsetof(uct_cuda_copy_iface_config_t, max_poll),
      UCS_CONFIG_TYPE_UINT},
 
     {"MAX_EVENTS", "inf",
-     "Max number of cuda events. -1 is infinite.",
+     "Max number of CUDA events. '-1' is infinite.",
      ucs_offsetof(uct_cuda_copy_iface_config_t, max_cuda_events),
      UCS_CONFIG_TYPE_UINT},
 
@@ -45,13 +45,13 @@ static ucs_config_field_t uct_cuda_copy_iface_config_table[] = {
      "Effective memory bandwidth.",
      0,
      UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_BW,
-       {"h2d", "host to device bandwidth",
+       {"h2d", "Host to device bandwidth.",
         ucs_offsetof(uct_cuda_copy_iface_config_t, bw.h2d)},
-       {"d2h", "device to host bandwidth",
+       {"d2h", "Device to host bandwidth.",
         ucs_offsetof(uct_cuda_copy_iface_config_t, bw.d2h)},
-       {"d2d", "device to device bandwidth",
+       {"d2d", "Device to device bandwidth.",
         ucs_offsetof(uct_cuda_copy_iface_config_t, bw.d2d)},
-       {"default", "any other memory types combinations bandwidth",
+       {"default", "Any other memory types combinations bandwidth.",
         ucs_offsetof(uct_cuda_copy_iface_config_t, bw.dflt)},
        {NULL}
      )},

@@ -42,14 +42,14 @@ static ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
    UCS_CONFIG_TYPE_TABLE(uct_rc_iface_config_table)},
 
   {"MAX_AM_HDR", "128",
-   "Buffer size to reserve for active message headers. If set to 0, the transport will\n"
-   "not support zero-copy active messages.",
+   "Buffer size to reserve for active message headers.\n"
+   "If set to '0', the transport will not support zero-copy active messages.",
    ucs_offsetof(uct_rc_verbs_iface_config_t, max_am_hdr),
    UCS_CONFIG_TYPE_MEMUNITS},
 
   {"TX_MAX_WR", "-1",
    "Limits the number of outstanding posted work requests. The actual limit is\n"
-   "a minimum between this value and the TX queue length. -1 means no limit.",
+   "a minimum between this value and the TX queue length. '-1' means no limit.",
    ucs_offsetof(uct_rc_verbs_iface_config_t, tx_max_wr),
    UCS_CONFIG_TYPE_UINT},
 

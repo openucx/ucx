@@ -92,18 +92,17 @@ ucs_config_field_t uct_ib_md_config_table[] = {
     {"DEVICE_SPECS", "",
      "Array of custom device specification. Each element is a string of the following format:\n"
      " <vendor-id>:<device-id>[:name[:<flags>[:<priority>]]]\n"
-     "where:\n"
-     " <vendor-id> - (mandatory) pci vendor id, integer or hexadecimal.\n"
-     " <device-id> - (mandatory) pci device id, integer or hexadecimal.\n"
-     " <name>      - (optional) device name.\n"
-     " <flags>     - (optional) empty, or a combination of:\n"
-     "                           '4' - mlx4 device\n"
-     "                           '5' - mlx5 device\n"
-     "                           'd' - DC version 1 (Connect-IB, ConnectX-4)\n"
-     "                           'D' - DC version 2 (ConnectX-5 and above)\n"
-     "                           'a' - Compact address vector support\n"
+     "Where:\n"
+     " <vendor-id> - (mandatory) PCI vendor ID, integer or hexadecimal.\n"
+     " <device-id> - (mandatory) PCI device ID, integer or hexadecimal.\n"
+     " <name>      - (optional) Device name.\n"
+     " <flags>     - (optional) Empty, or a combination of:\n"
+     "                           4 - Mlx4 device.\n"
+     "                           5 - Mlx5 device.\n"
+     "                           d - DC version 1 (Connect-IB, ConnectX-4).\n"
+     "                           D - DC version 2 (ConnectX-5 and above).\n"
+     "                           a - Compact address vector support.\n"
      " <priority>  - (optional) device priority, integer.\n"
-     "\n"
      "Example: The value '0x02c9:4115:ConnectX4:5d' would specify a device named ConnectX-4\n"
      "to match vendor id 0x2c9, device id 4115, with DC version 1 support.",
      ucs_offsetof(uct_ib_md_config_t, custom_devices),
@@ -191,12 +190,12 @@ ucs_config_field_t uct_ib_md_config_table[] = {
 
     {"PCI_RELAXED_ORDERING", "auto",
      "Control relaxed ordering for PCIe transactions:\n"
-     " no   - disable relaxed ordering.\n"
-     " yes  - require all memory keys to use relaxed ordering, fail if\n"
+     " no   - Disable relaxed ordering.\n"
+     " yes  - Require all memory keys to use relaxed ordering, fail if\n"
      "        unsupported, and do not create strict-order companion keys.\n"
-     " try  - enable relaxed ordering when supported, retain strict-order\n"
+     " try  - Enable relaxed ordering when supported, retain strict-order\n"
      "        companion keys when available, silently continue if unsupported.\n"
-     " auto - honor a firmware relaxed-only requirement, otherwise use\n"
+     " auto - Honor a firmware relaxed-only requirement, otherwise use\n"
      "        the CPU preference.",
      ucs_offsetof(uct_ib_md_config_t, mr_relaxed_order),
      UCS_CONFIG_TYPE_TERNARY_AUTO},

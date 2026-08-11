@@ -25,8 +25,8 @@ static ucs_config_field_t uct_ugni_udt_iface_config_table[] = {
 
     UCT_IFACE_MPOOL_CONFIG_FIELDS("UDT", -1, 0, 128m, 1.0, "udt",
                                   ucs_offsetof(uct_ugni_iface_config_t, mpool),
-                                  "\nAttention: Setting this param with value != -1 is a dangerous thing\n"
-                                  "and could cause deadlock or performance degradation."),
+                                  "\nAttention: Setting this param with a value other than '-1' is a\n"
+                                  "dangerous thing and could cause deadlock or performance degradation."),
 
     {NULL}
 };

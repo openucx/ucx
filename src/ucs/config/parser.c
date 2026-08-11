@@ -1440,11 +1440,15 @@ void ucs_config_help_key_value(char *buf, size_t max, const void *arg)
 void ucs_config_doc_key_value(ucs_string_buffer_t *strb, const void *arg)
 {
     const ucs_config_key_value_param_t *param = arg;
+    size_t key_width                          = 0;
     const ucs_config_key_field_t *cfg_key;
 
     for (cfg_key = param->keys; NULL != cfg_key->name; ++cfg_key) {
-        ucs_string_buffer_appendf(strb, " %-*s- %s\n",
-                                  UCS_CONFIG_PARSER_DOCSTR_WIDTH,
+        key_width = ucs_max(key_width, strlen(cfg_key->name));
+    }
+
+    for (cfg_key = param->keys; NULL != cfg_key->name; ++cfg_key) {
+        ucs_string_buffer_appendf(strb, " %-*s - %s\n", (int)key_width,
                                   cfg_key->name, cfg_key->doc);
     }
     ucs_string_buffer_rtrim(strb, "\n");
