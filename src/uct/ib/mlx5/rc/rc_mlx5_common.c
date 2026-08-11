@@ -74,7 +74,7 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
    " cyclic          - SRQ is organized as a continuous array of WQEs. Requires DEVX.\n"
    "                   Cannot be used with DDP enabled.\n"
    " cyclic_emulated - SRQ is organized as a continuous array of WQEs, but HW\n"
-   "                   treats it as a linked list. Doesn`t require DEVX.",
+   "                   treats it as a linked list. Doesn't require DEVX.",
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, srq_topo),
    UCS_CONFIG_TYPE_STRING_ARRAY},
 

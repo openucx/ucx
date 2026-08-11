@@ -50,7 +50,8 @@ Use this form only to compose/inherit a table or supply its default overrides.
 
 - Keep source lines at or below 80 columns when practical. A modest overrun is
   acceptable to prioritize readability.
-- Start sentences with a capital letter unless they start with a quoted value.
+- Start sentences with a capital letter unless they start with a quoted value
+  or with a name that is all lowercase by convention.
 - End sentences with a period.
 - Keep each rendered documentation line in one C string literal. End non-final
   lines with `\n`; do not append `\n` to the final.
@@ -58,7 +59,7 @@ Use this form only to compose/inherit a table or supply its default overrides.
 - Put punctuation after macro-expanded text in an adjacent literal, for example
   `UCS_PP_MAKE_STRING(<value>) "."`.
 - Document behavior, units, limits, and special values such as `auto` or `inf`.
-- Wrap literal values (with the exception of list items before the first `-`) 
+- Wrap literal values (with the exception of list items before the first `-`)
   in single quotes, for example `'auto'` or `'inf'`, with the exception of
   comma separated lists of values followed by a colon.
 - When explaining what specific values mean, prefer the pattern: `'value' means...`

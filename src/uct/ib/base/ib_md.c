@@ -124,7 +124,7 @@ ucs_config_field_t uct_ib_md_config_table[] = {
      UCS_CONFIG_TYPE_ULUNITS},
 
     {"SUBNET_PREFIX", "",
-     "Infiniband subnet prefix to filter ports by. empty value means no filter.\n"
+     "Infiniband subnet prefix to filter ports by. Empty value means no filter.\n"
      "Relevant for IB link layer only.\n"
      "For example, 'fe80:0:0:0' means the default subnet prefix.",
      ucs_offsetof(uct_ib_md_config_t, subnet_prefix),
