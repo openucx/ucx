@@ -126,8 +126,12 @@ typedef struct ucp_context_config {
     size_t                                 rndv_pipeline_send_thresh;
     /** Enabling 2-stage pipeline rndv protocol */
     int                                    rndv_shm_ppln_enable;
+    /** Force intra-node CUDA staging when rendezvous scheme is automatic */
+    int                                    rndv_shm_cuda_staging_force;
     /** Enable error handling for rndv pipeline protocol */
     int                                    rndv_errh_ppln_enable;
+    /** Force-enable the RMA rendezvous put/get protocols */
+    int                                    rma_ppln_enable;
     /** Threshold for using tag matching offload capabilities. Smaller buffers
      *  will not be posted to the transport. */
     size_t                                 tm_thresh;
@@ -738,8 +742,8 @@ ucp_memory_detect_internal(ucp_context_h context, const void *address,
     } else if (ucs_likely(status == UCS_OK)) {
         if (ucs_unlikely(
                     (mem_info->type == UCS_MEMORY_TYPE_UNKNOWN) ||
-                    (mem_info->mem_flags &
-                     UCS_MEM_FLAG_NEEDS_QUERY))) {
+                    ((mem_info->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) &&
+                     (mem_info->mem_flags == 0)))) {
             ucs_trace_req("address %p length %zu: querying memory attributes",
                     address, length);
             ucp_memory_detect_slowpath(context, address, length, mem_info);

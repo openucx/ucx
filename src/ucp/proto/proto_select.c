@@ -360,6 +360,7 @@ ucp_proto_select_elem_init_thresh(ucp_worker_h worker,
      * possible message sizes until SIZE_MAX.
      */
     msg_length = 0;
+    max_length = SIZE_MAX;
     do {
         ucs_array_init_dynamic(&perf_list);
         ucs_array_init_dynamic(&envelope);

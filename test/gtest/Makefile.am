@@ -6,6 +6,7 @@
 # Copyright (C) Advanced Micro Devices, Inc. 2025. ALL RIGHTS RESERVED.
 # Copyright (C) ARM Ltd. 2020.  ALL RIGHTS RESERVED.
 # Copyright (C) NextSilicon Ltd. 2021.  ALL RIGHTS RESERVED.
+# Copyright (C) Intel Corporation, 2026. ALL RIGHTS RESERVED.
 #
 # See file LICENSE for terms.
 #
@@ -260,6 +261,7 @@ gtest_SOURCES += \
 endif
 if HAVE_MLX5_DV
 gtest_SOURCES += \
+	uct/ib/test_ib_mlx5_ext.cc \
 	uct/ib/test_cqe_zipping.cc
 endif
 if HAVE_EFA
@@ -304,8 +306,19 @@ endif
 
 if HAVE_HIP
 if HAVE_GNUXX11
+HIPCC_EXTRA_FLAGS = \
+	$(HIP_CPPFLAGS) \
+	-DHAVE_ROCM=1 \
+	-I$(top_builddir) \
+	-I$(top_srcdir)/test \
+	-I$(top_srcdir)/test/gtest
+include $(top_srcdir)/config/hip.am
+
 gtest_SOURCES += \
-	ucm/rocm_hooks.cc
+	ucm/rocm_hooks.cc \
+	uct/rocm/test_kernels_uct.hip \
+	uct/rocm/test_rocm_ipc_device.hip
+
 gtest_CPPFLAGS += \
 	$(HIP_CPPFLAGS)
 gtest_CXXFLAGS += \
@@ -314,7 +327,18 @@ gtest_LDADD += \
 	$(HIP_LDFLAGS) \
 	$(HIP_LIBS) \
 	$(top_builddir)/src/uct/rocm/libuct_rocm.la
-endif
+endif # HAVE_GNUXX11
+endif # HAVE_HIP
+
+if HAVE_ZE
+gtest_SOURCES += \
+	ucm/ze_hooks.cc
+gtest_CPPFLAGS += \
+	$(ZE_CPPFLAGS)
+gtest_LDFLAGS += \
+	$(ZE_LDFLAGS)
+gtest_LDADD += \
+	$(ZE_LIBS)
 endif
 
 noinst_HEADERS = \

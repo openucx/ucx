@@ -800,6 +800,10 @@ static uint8_t ucp_worker_iface_port_speed(const ucp_worker_iface_t *wiface)
     ucs_status_t status;
     double ratio;
 
+    if (wiface->attr.bandwidth.shared == 0.0) {
+        return 0;
+    }
+
     perf_attr.field_mask = UCT_PERF_ATTR_FIELD_BANDWIDTH;
     status = uct_iface_estimate_perf(wiface->iface, &perf_attr);
     if (status != UCS_OK) {

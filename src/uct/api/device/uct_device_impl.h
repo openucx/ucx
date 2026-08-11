@@ -1,5 +1,6 @@
 /**
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025-2026. ALL RIGHTS RESERVED.
+ * Copyright (C) Advanced Micro Devices, Inc. 2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -12,24 +13,36 @@
 #include <uct/api/uct_def.h>
 #include <ucs/sys/device_code.h>
 
-#if __has_include(<uct/cuda/cuda_ipc/cuda_ipc.cuh>) && \
-    __has_include(<cuda/atomic>)
+#if (defined(HAVE_CUDA) || \
+     (!defined(HAVE_CONFIG_H) && __has_include(<uct/cuda/cuda_ipc/cuda_ipc.cuh>) && __has_include(<cuda/atomic>)))
 #include <uct/cuda/cuda_ipc/cuda_ipc.cuh>
 #define UCT_CUDA_IPC_SUPPORTED 1
 #else
 #define UCT_CUDA_IPC_SUPPORTED 0
 #endif
 
-#if __has_include(<uct/ib/mlx5/gdaki/gdaki.cuh>) && \
-    __has_include(<infiniband/mlx5dv.h>)
+#if (defined(HAVE_ROCM) || \
+    (!defined(HAVE_CONFIG_H) && __has_include(<uct/rocm/ipc/rocm_ipc.h>)))
+#include <uct/rocm/ipc/rocm_ipc.h>
+#define UCT_ROCM_IPC_SUPPORTED 1
+#else
+#define UCT_ROCM_IPC_SUPPORTED 0
+#endif
+
+#if (defined(HAVE_GDA) || \
+    (!defined(HAVE_CONFIG_H) && \
+     __has_include(<uct/ib/mlx5/gdaki/gdaki.cuh>) && \
+     __has_include(<infiniband/mlx5dv.h>)))
 #include <uct/ib/mlx5/gdaki/gdaki.cuh>
 #define UCT_RC_MLX5_GDA_SUPPORTED 1
 #else
 #define UCT_RC_MLX5_GDA_SUPPORTED 0
 #endif
 
-#if __has_include(<uct/ib/mlx5/gdaki/d2p.cuh>) && \
-    __has_include(<infiniband/mlx5dv.h>)
+#if (defined(HAVE_GDA) || \
+    (!defined(HAVE_CONFIG_H) && \
+     __has_include(<uct/ib/mlx5/gdaki/d2p.cuh>) && \
+     __has_include(<infiniband/mlx5dv.h>)))
 #include <uct/ib/mlx5/gdaki/d2p.cuh>
 #define UCT_D2P_SUPPORTED 1
 #else
@@ -42,6 +55,9 @@ union uct_device_completion {
 #endif
 #if UCT_CUDA_IPC_SUPPORTED
     uct_cuda_ipc_completion_t cuda_ipc;
+#endif
+#if UCT_ROCM_IPC_SUPPORTED
+    uct_rocm_ipc_completion_t rocm_ipc;
 #endif
 };
 
@@ -98,8 +114,15 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put(
 #endif
 #if UCT_D2P_SUPPORTED
     if (device_ep->uct_tl_id == UCT_DEVICE_TL_D2P) {
-        return uct_ib_d2p_ep_put<level>(device_ep, src_uct_elem, mem_elem, address,
-                                        remote_address, length, flags, comp);
+        return uct_ib_d2p_ep_put<level>(device_ep, src_uct_elem, mem_elem,
+                                        address, remote_address, length,
+                                        channel_id, flags, comp);
+    }
+#endif
+#if UCT_ROCM_IPC_SUPPORTED
+    if (device_ep->uct_tl_id == UCT_DEVICE_TL_ROCM_IPC) {
+        return uct_rocm_ipc_ep_put<level>(device_ep, mem_elem, address,
+                                          remote_address, length, flags, comp);
     }
 #endif
 
@@ -156,7 +179,14 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_atomic_add(
 #if UCT_D2P_SUPPORTED
     if (device_ep->uct_tl_id == UCT_DEVICE_TL_D2P) {
         return uct_ib_d2p_ep_atomic_add<level>(device_ep, mem_elem, inc_value,
-                                               remote_address, flags, comp);
+                                               remote_address, channel_id,
+                                               flags, comp);
+    }
+#endif
+#if UCT_ROCM_IPC_SUPPORTED
+    if (device_ep->uct_tl_id == UCT_DEVICE_TL_ROCM_IPC) {
+        return uct_rocm_ipc_ep_atomic_add<level>(device_ep, mem_elem, inc_value,
+                                                 remote_address, flags, comp);
     }
 #endif
 
@@ -185,6 +215,11 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_get_ptr(
 #if UCT_CUDA_IPC_SUPPORTED
     if (device_ep->uct_tl_id == UCT_DEVICE_TL_CUDA_IPC) {
         return uct_cuda_ipc_ep_get_ptr(device_ep, mem_elem, address, addr_p);
+    }
+#endif
+#if UCT_ROCM_IPC_SUPPORTED
+    if (device_ep->uct_tl_id == UCT_DEVICE_TL_ROCM_IPC) {
+        return uct_rocm_ipc_ep_get_ptr(device_ep, mem_elem, address, addr_p);
     }
 #endif
 

@@ -306,7 +306,6 @@ static void ucs_memtype_cache_event_callback(ucm_event_type_t event_type,
                                              ucm_event_t *event, void *arg)
 {
     ucs_memtype_cache_action_t action;
-    uint8_t mem_flags;
 
     if (event_type & UCM_EVENT_MEM_TYPE_ALLOC) {
         action = UCS_MEMTYPE_CACHE_ACTION_SET_MEMTYPE;
@@ -316,21 +315,17 @@ static void ucs_memtype_cache_event_callback(ucm_event_type_t event_type,
         return;
     }
 
-    ucs_trace("dispatching mem event %d address %p length %zu mem_type %s",
+    ucs_trace("dispatching mem event %d address %p length %zu mem_type %s "
+              "sys_dev %u flags 0x%x",
               event_type, event->mem_type.address, event->mem_type.size,
-              ucs_memory_type_names[event->mem_type.mem_type]);
-
-    /* Complete CUDA managed attributes by querying the MD. */
-    mem_flags = UCS_MEM_FLAG_REGISTRABLE;
-    if (event->mem_type.mem_type == UCS_MEMORY_TYPE_CUDA_MANAGED) {
-        mem_flags |= UCS_MEM_FLAG_NEEDS_QUERY;
-    }
+              ucs_memory_type_names[event->mem_type.mem_type],
+              event->mem_type.sys_dev, event->mem_type.mem_flags);
 
     ucs_memtype_cache_update_internal(arg, event->mem_type.address,
                                       event->mem_type.size,
                                       event->mem_type.mem_type,
-                                      UCS_SYS_DEVICE_ID_UNKNOWN,
-                                      mem_flags, action);
+                                      event->mem_type.sys_dev,
+                                      event->mem_type.mem_flags, action);
 }
 
 static void ucs_memtype_cache_purge(ucs_memtype_cache_t *memtype_cache)

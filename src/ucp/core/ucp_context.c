@@ -416,11 +416,25 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, rndv_shm_ppln_enable),
    UCS_CONFIG_TYPE_BOOL},
 
+  {"RNDV_PIPELINE_SHM_CUDA_STAGING_FORCE", "n",
+   "Prefer the copy-to-attached host-staged path for intra-node\n"
+   "CUDA-to-CUDA tag rendezvous only when RNDV_SCHEME is auto\n"
+   "and the pipeline is enabled and available. AM rdnv and RMA rdnv\n"
+   "are not forced. This parameter is a temporary workaround\n"
+   "and may be removed in future releases.\n"
+   "Other rendezvous protocols remain as fallback.",
+   ucs_offsetof(ucp_context_config_t, rndv_shm_cuda_staging_force),
+   UCS_CONFIG_TYPE_BOOL},
+
   {"RNDV_PIPELINE_ERROR_HANDLING", "n",
    "Allow using error handling protocol in the rendezvous pipeline protocol\n"
    "even if invalidation workflow isn't supported.",
    ucs_offsetof(ucp_context_config_t, rndv_errh_ppln_enable),
    UCS_CONFIG_TYPE_BOOL},
+
+  {"RMA_PPLN_ENABLE", "n",
+   "Force-enable the RMA rendezvous put/get protocols.",
+   ucs_offsetof(ucp_context_config_t, rma_ppln_enable), UCS_CONFIG_TYPE_BOOL},
 
   {"FLUSH_WORKER_EPS", "y",
    "Enable flushing the worker by flushing its endpoints. Allows completing\n"

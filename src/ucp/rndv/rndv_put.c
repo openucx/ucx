@@ -246,7 +246,8 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
         .super.super         = *init_params,
         .super.overhead      = 0,
         .super.latency       = 0,
-        .super.cfg_thresh    = ucp_proto_rndv_cfg_thresh(context, rndv_modes),
+        .super.cfg_thresh    = ucp_proto_rndv_cfg_thresh(init_params,
+                                                        rndv_modes),
         .super.cfg_priority  = 80,
         .super.min_length    = 0,
         .super.max_length    = max_length,
@@ -280,7 +281,7 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
     int send_atp, use_fence;
     ucp_proto_perf_t *perf;
     ucs_status_t status;
-    unsigned atp_map;
+    ucp_lane_map_t atp_map;
 
     if (!ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_SEND,
                                  support_ppln) ||
