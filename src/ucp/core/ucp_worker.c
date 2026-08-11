@@ -454,13 +454,36 @@ void ucp_worker_signal_internal(ucp_worker_h worker)
     }
 }
 
+
+static int ucp_worker_iface_ft_available(ucp_ep_h ucp_ep, uct_ep_h uct_ep)
+{
+    uct_iface_attr_v2_t iface_attr;
+    ucs_status_t status;
+
+    if (!ucp_ep_err_mode_eq(ucp_ep, UCP_ERR_HANDLING_MODE_FAILOVER)) {
+        return 0;
+    }
+
+    iface_attr.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS;
+    status                = uct_iface_query_v2(uct_ep->iface, &iface_attr);
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    return iface_attr.cap.flags & UCT_IFACE_FLAG_V2_QUERY_TOKEN;
+}
+
+
 static ucs_status_t
 ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
-                                       uct_ep_h uct_ep, ucs_status_t status)
+                                       uct_ep_h uct_ep, ucs_status_t ep_status)
 {
     ucp_wireup_ep_t *wireup_ep;
+    uct_ep_invalidate_params_t invalidate_params;
+    ucs_status_t status;
 
     if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
+        (void)ucp_ep_uct_ep_outstanding_purge(uct_ep, ep_status);
         /* No pending operations should be scheduled */
         uct_ep_pending_purge(uct_ep, ucp_destroyed_ep_pending_purge, ucp_ep);
         return UCS_OK;
@@ -472,9 +495,25 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
         !ucp_ep_is_local_connected(ucp_ep)) {
         /* Failure on NON-AUX EP or failure on AUX EP before it sent its address
          * means failure on the UCP EP */
-        ucp_ep_set_lanes_failed(ucp_ep, UCS_BIT(lane), status);
+        if (ucp_worker_iface_ft_available(ucp_ep, uct_ep)) {
+            invalidate_params.field_mask = UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS;
+            invalidate_params.flags =
+                    UCT_EP_INVALIDATE_FLAG_SUPPRESS_COMPLETIONS;
+            status = uct_ep_invalidate(uct_ep, &invalidate_params);
+            if (status == UCS_OK) {
+                return UCS_OK;
+            }
+
+            ucs_error("failed to invalidate UCT EP %p: %s", uct_ep,
+                      ucs_status_string(status));
+        }
+
+        ucp_ep_set_lane_failed_and_purge(ucp_ep, UCS_BIT(lane), ep_status,
+                                         uct_ep);
         return UCS_OK;
     }
+
+    (void)ucp_ep_uct_ep_outstanding_purge(uct_ep, ep_status);
 
     if (wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY) {
         /* @ref ucp_wireup_ep_progress was scheduled, wireup ep and its
@@ -550,6 +589,7 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
     if (ucp_worker_is_uct_ep_discarding(worker, uct_ep)) {
         ucs_debug("UCT EP %p is being discarded on UCP Worker %p",
                   uct_ep, worker);
+        (void)ucp_ep_uct_ep_outstanding_purge(uct_ep, status);
         ucp_discard_lane_ff(uct_ep);
         status = UCS_OK;
         goto out;
@@ -562,6 +602,7 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
             ucs_error("worker %p: uct_ep %p isn't associated with any UCP"
                       " endpoint and was not scheduled to be discarded",
                       worker, uct_ep);
+            (void)ucp_ep_uct_ep_outstanding_purge(uct_ep, status);
             status = UCS_ERR_NO_ELEM;
             goto out;
         }
