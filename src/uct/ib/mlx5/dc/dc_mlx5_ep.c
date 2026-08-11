@@ -733,12 +733,9 @@ static uint32_t uct_dc_mlx5_flush_remote_rkey(uct_dc_mlx5_ep_t *ep)
 
 /* ep_flush_remote generates RDMA GET operation over special indirect rkey by
  * address NULL */
-static ucs_status_t
-uct_dc_mlx5_ep_flush_remote_post(uct_dc_mlx5_ep_t *ep,
-                                 uct_rc_send_handler_t handler,
-                                 uct_completion_t *comp,
-                                 uct_dc_mlx5_ep_t *fence_ep,
-                                 uint16_t fence_beat)
+static ucs_status_t uct_dc_mlx5_ep_flush_remote_post(
+        uct_dc_mlx5_ep_t *ep, uct_rc_send_handler_t handler,
+        uct_completion_t *comp, uct_dc_mlx5_ep_t *fence_ep, uint16_t fence_beat)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                                 uct_dc_mlx5_iface_t);
@@ -753,8 +750,9 @@ uct_dc_mlx5_ep_flush_remote_post(uct_dc_mlx5_ep_t *ep,
     if (fence_ep != NULL) {
         desc->super.ep     = (uct_ep_h)fence_ep;
         /* Save the DCI and fence beat for the completion handler. */
-        desc->super.length = ((uint32_t)ep->dci <<
-                              UCT_DC_MLX5_FENCE_DCI_SHIFT) | fence_beat;
+        desc->super.length = ((uint32_t)ep->dci
+                              << UCT_DC_MLX5_FENCE_DCI_SHIFT) |
+                             fence_beat;
     }
 
     UCT_DC_MLX5_IFACE_TXQP_GET(iface, ep, txqp, txwq);
@@ -769,16 +767,15 @@ uct_dc_mlx5_ep_flush_remote_post(uct_dc_mlx5_ep_t *ep,
     return UCS_INPROGRESS;
 }
 
-static void uct_dc_mlx5_ep_fence_flush_handler(uct_rc_iface_send_op_t *op,
-                                                const void *resp)
+static void
+uct_dc_mlx5_ep_fence_flush_handler(uct_rc_iface_send_op_t *op, const void *resp)
 {
-    uct_rc_iface_send_desc_t *desc =
-            ucs_derived_of(op, uct_rc_iface_send_desc_t);
-    uct_rc_iface_t *rc_iface = ucs_container_of(ucs_mpool_obj_owner(desc),
-                                                 uct_rc_iface_t, tx.mp);
-    uct_dc_mlx5_iface_t *iface = ucs_derived_of(rc_iface,
-                                                uct_dc_mlx5_iface_t);
-    uct_dc_dci_t *dci = uct_dc_mlx5_iface_dci(
+    uct_rc_iface_send_desc_t *desc = ucs_derived_of(op,
+                                                    uct_rc_iface_send_desc_t);
+    uct_rc_iface_t *rc_iface   = ucs_container_of(ucs_mpool_obj_owner(desc),
+                                                  uct_rc_iface_t, tx.mp);
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(rc_iface, uct_dc_mlx5_iface_t);
+    uct_dc_dci_t *dci          = uct_dc_mlx5_iface_dci(
             iface, op->length >> UCT_DC_MLX5_FENCE_DCI_SHIFT);
     uct_dc_mlx5_ep_t *ep;
 
@@ -793,8 +790,8 @@ static void uct_dc_mlx5_ep_fence_flush_handler(uct_rc_iface_send_op_t *op,
     ucs_mpool_put(desc);
 }
 
-static void uct_dc_mlx5_ep_detach_fence_flush(uct_dc_mlx5_ep_t *ep,
-                                               uct_dc_dci_t *dci)
+static void
+uct_dc_mlx5_ep_detach_fence_flush(uct_dc_mlx5_ep_t *ep, uct_dc_dci_t *dci)
 {
     uct_rc_iface_send_op_t *op;
 
@@ -808,7 +805,7 @@ static void uct_dc_mlx5_ep_detach_fence_flush(uct_dc_mlx5_ep_t *ep,
         }
 
         if (op->ep == (uct_ep_h)ep) {
-            op->ep    = NULL;
+            op->ep     = NULL;
             ep->flags &= ~UCT_DC_MLX5_EP_FLAG_FENCE_PENDING;
             return;
         }
@@ -817,8 +814,8 @@ static void uct_dc_mlx5_ep_detach_fence_flush(uct_dc_mlx5_ep_t *ep,
     ucs_fatal("fence flush operation for endpoint %p was not found", ep);
 }
 
-ucs_status_t uct_dc_mlx5_ep_check_fence(uct_dc_mlx5_iface_t *iface,
-                                        uct_dc_mlx5_ep_t *ep)
+ucs_status_t
+uct_dc_mlx5_ep_check_fence(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
 {
     uct_dc_dci_t *dci = uct_dc_mlx5_iface_dci(iface, ep->dci);
     ucs_status_t status;
@@ -853,8 +850,8 @@ uct_dc_mlx5_ep_flush_remote(uct_dc_mlx5_ep_t *ep, uct_completion_t *comp)
 
     UCT_DC_MLX5_CHECK_RES(iface, ep);
 
-    return uct_dc_mlx5_ep_flush_remote_post(
-            ep, uct_rc_ep_flush_remote_handler, comp, NULL, 0);
+    return uct_dc_mlx5_ep_flush_remote_post(ep, uct_rc_ep_flush_remote_handler,
+                                            comp, NULL, 0);
 }
 
 ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,

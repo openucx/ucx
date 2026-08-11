@@ -160,14 +160,14 @@ UCS_TEST_SKIP_COND_P(test_rc, relaxed_order_required_strong_fence,
 UCS_TEST_SKIP_COND_P(test_rc, relaxed_order_required_rejects_verbs,
                      GetParam()->tl_name != "rc_verbs")
 {
-    uct_ib_md_t *md = uct_ib_iface_md(&rc_iface(m_e1)->super);
+    uct_ib_md_t *md                  = uct_ib_iface_md(&rc_iface(m_e1)->super);
     int saved_relaxed_order_required = md->relaxed_order_required;
     uct_iface_h iface                = NULL;
     ucs_status_t status;
 
     md->relaxed_order_required = 1;
-    status = uct_iface_open(m_e1->md(), m_e1->worker(),
-                            &m_e1->iface_params(), m_iface_config, &iface);
+    status = uct_iface_open(m_e1->md(), m_e1->worker(), &m_e1->iface_params(),
+                            m_iface_config, &iface);
     md->relaxed_order_required = saved_relaxed_order_required;
 
     if (status == UCS_OK) {

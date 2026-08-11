@@ -259,8 +259,7 @@ static int uct_dc_mlx5_iface_is_full_handshake(uct_dc_mlx5_iface_t *iface)
            !(iface->flags & UCT_DC_MLX5_IFACE_FLAG_DISABLE_PUT);
 }
 
-static int
-uct_dc_mlx5_iface_flush_rkey_enabled(uct_dc_mlx5_iface_t *iface)
+static int uct_dc_mlx5_iface_flush_rkey_enabled(uct_dc_mlx5_iface_t *iface)
 {
     uct_ib_md_t *md = uct_ib_iface_md(&iface->super.super.super);
 
@@ -302,8 +301,7 @@ static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
     iface_attr->ep_addr_len    = 0;
     iface_attr->max_conn_priv  = 0;
     if (uct_dc_mlx5_iface_flush_rkey_enabled(iface)) {
-        iface_attr->iface_addr_len =
-                sizeof(uct_dc_mlx5_iface_flush_addr_t);
+        iface_attr->iface_addr_len = sizeof(uct_dc_mlx5_iface_flush_addr_t);
     } else {
         iface_attr->iface_addr_len = sizeof(uct_dc_mlx5_iface_addr_t);
     }

@@ -744,8 +744,7 @@ uct_rc_mlx5_iface_need_strong_order(uct_rc_mlx5_iface_common_t *iface)
 static ucs_status_t
 uct_rc_mlx5_iface_init_fence_flags(uct_rc_mlx5_iface_common_t *iface,
                                    uct_rc_iface_common_config_t *rc_config,
-                                   uct_ib_mlx5_md_t *md,
-                                   uct_ib_device_t *dev,
+                                   uct_ib_mlx5_md_t *md, uct_ib_device_t *dev,
                                    int relaxed_order_required)
 {
     int strong_order = uct_rc_mlx5_iface_need_strong_order(iface) ||
@@ -868,10 +867,10 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
     self->super.config.exp_backoff = mlx5_config->exp_backoff;
     self->config.log_ack_req_freq  = ucs_min(mlx5_config->log_ack_req_freq,
                                              UCT_RC_MLX5_MAX_LOG_ACK_REQ_FREQ);
-    status = uct_rc_mlx5_iface_init_fence_flags(
+    status                         = uct_rc_mlx5_iface_init_fence_flags(
             self, rc_config, md, dev,
             (init_attr->qp_type == IBV_QPT_RC) &&
-            md->super.relaxed_order_required);
+                    md->super.relaxed_order_required);
     if (status != UCS_OK) {
         goto cleanup_dm;
     }

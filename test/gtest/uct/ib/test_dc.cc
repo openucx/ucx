@@ -192,8 +192,7 @@ UCS_TEST_P(test_dc, fence_am_short_consumed, "RC_FENCE=weak")
     if (ep->flags & UCT_DC_MLX5_EP_FLAG_FENCE_FLUSH) {
         EXPECT_NE(rc_iface(m_e1)->tx.fi.fence_beat, ep->fi.fence_beat);
     } else {
-        EXPECT_NE(rc_iface(m_e1)->tx.fi.fence_beat,
-                  dci->txwq.fi.fence_beat);
+        EXPECT_NE(rc_iface(m_e1)->tx.fi.fence_beat, dci->txwq.fi.fence_beat);
     }
 
     status = uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0);
@@ -213,13 +212,12 @@ UCS_TEST_P(test_dc, fence_am_short_consumed, "RC_FENCE=weak")
     if (ep->flags & UCT_DC_MLX5_EP_FLAG_FENCE_FLUSH) {
         EXPECT_EQ(rc_iface(m_e1)->tx.fi.fence_beat, ep->fi.fence_beat);
     } else {
-        EXPECT_EQ(rc_iface(m_e1)->tx.fi.fence_beat,
-                  dci->txwq.fi.fence_beat);
+        EXPECT_EQ(rc_iface(m_e1)->tx.fi.fence_beat, dci->txwq.fi.fence_beat);
     }
 }
 
-UCS_TEST_P(test_dc, fence_flush_without_dci,
-           "IB_PCI_RELAXED_ORDERING=yes", "RC_FENCE=weak")
+UCS_TEST_P(test_dc, fence_flush_without_dci, "IB_PCI_RELAXED_ORDERING=yes",
+           "RC_FENCE=weak")
 {
     uct_dc_mlx5_ep_t *ep;
     uct_dc_dci_t *dci;
@@ -232,8 +230,7 @@ UCS_TEST_P(test_dc, fence_flush_without_dci,
 
     ASSERT_UCS_OK(uct_ep_fence(m_e1->ep(0), 0));
     EXPECT_NE(rc_iface(m_e1)->tx.fi.fence_beat, ep->fi.fence_beat);
-    EXPECT_EQ(UCS_ERR_NO_RESOURCE,
-              uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE, uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
 
     ASSERT_NE(UCT_DC_MLX5_EP_NO_DCI, ep->dci);
     dci      = uct_dc_mlx5_iface_dci(dc_iface(m_e1), ep->dci);
@@ -272,8 +269,7 @@ UCS_TEST_P(test_dc, fence_flush_hybrid_ep_destroy,
     ASSERT_EQ(UCT_DC_MLX5_HW_DCI_INDEX, ep->dci);
 
     ASSERT_UCS_OK(uct_iface_fence(m_e1->iface(), 0));
-    EXPECT_EQ(UCS_ERR_NO_RESOURCE,
-              uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE, uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
 
     dci = uct_dc_mlx5_iface_dci(iface, ep->dci);
     ASSERT_TRUE(dci->flags & UCT_DC_DCI_FLAG_FENCE_PENDING);
@@ -292,8 +288,7 @@ UCS_TEST_P(test_dc, fence_flush_hybrid_ep_destroy,
     EXPECT_FALSE(dci->flags & UCT_DC_DCI_FLAG_FENCE_PENDING);
 }
 
-UCS_TEST_P(test_dc, fence_pending_blocks_hybrid_dci,
-           "DC_TX_POLICY=dcs_hybrid")
+UCS_TEST_P(test_dc, fence_pending_blocks_hybrid_dci, "DC_TX_POLICY=dcs_hybrid")
 {
     uct_dc_mlx5_iface_t *iface = dc_iface(m_e1);
     uct_dc_mlx5_ep_t *ep;
@@ -304,8 +299,8 @@ UCS_TEST_P(test_dc, fence_pending_blocks_hybrid_dci,
     }
 
     m_e1->connect_to_iface(0, *m_e2);
-    ep  = dc_ep(m_e1, 0);
-    dci = uct_dc_mlx5_iface_dci(iface, UCT_DC_MLX5_HW_DCI_INDEX);
+    ep          = dc_ep(m_e1, 0);
+    dci         = uct_dc_mlx5_iface_dci(iface, UCT_DC_MLX5_HW_DCI_INDEX);
     dci->flags |= UCT_DC_DCI_FLAG_FENCE_PENDING;
     EXPECT_EQ(UCS_ERR_NO_RESOURCE, uct_dc_mlx5_set_ep_to_hw_dcs(iface, ep));
     EXPECT_EQ(UCT_DC_MLX5_EP_NO_DCI, ep->dci);
