@@ -131,7 +131,7 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
      UCS_CONFIG_TYPE_TIME_UNITS},
 
     {"NUM_DCI_CHANNELS", "32",
-     "Number of stream channels per DCI to be used.\n" 
+     "Number of stream channels per DCI to be used.\n"
      "A value of 1 disables DCI multi-channel support.\n"
      "Relevant only for hw_dcs policy.",
      ucs_offsetof(uct_dc_mlx5_iface_config_t, num_dci_channels),

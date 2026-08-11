@@ -129,7 +129,7 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
 #endif /* UCT_TCP_EP_KEEPALIVE */
 
   {"EP_BIND_SRC_ADDR", "try",
-   "Bind client socket to the local network interface before connecting to the\n" 
+   "Bind client socket to the local network interface before connecting to the\n"
    "remote peer.",
    ucs_offsetof(uct_tcp_iface_config_t, ep_bind_src_addr),
    UCS_CONFIG_TYPE_TERNARY},
