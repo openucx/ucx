@@ -324,23 +324,6 @@ typedef ucs_status_t (*uct_ep_outstanding_purge_func_t)(
         uct_ep_h ep, const uct_ep_outstanding_purge_params_t *params);
 
 
-static UCS_F_ALWAYS_INLINE ucs_status_t uct_ep_outstanding_purge_get_status(
-        const uct_ep_outstanding_purge_params_t *params, ucs_status_t *status_p)
-{
-    if (params == NULL) {
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    if ((params->field_mask != UCT_EP_OUTSTANDING_FIELD_STATUS) ||
-        !UCS_STATUS_IS_ERR(params->status)) {
-        return UCS_ERR_UNSUPPORTED;
-    }
-
-    *status_p = params->status;
-    return UCS_OK;
-}
-
-
 /* Internal operations, not exposed by the external API */
 typedef struct uct_iface_internal_ops {
     uct_iface_query_v2_func_t        iface_query_v2;
