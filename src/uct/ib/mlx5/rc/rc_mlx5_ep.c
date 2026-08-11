@@ -379,8 +379,7 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
     uct_ib_mlx5_txwq_ring_doorbell(txwq, ctrl, txwq->sw_pi, 1);
 
     for (i = 0; i < count; i++) {
-        uct_rc_mlx5_txwq_record_token(iface, txwq, MLX5_OPCODE_RDMA_WRITE,
-                                      lengths[i]);
+        uct_rc_mlx5_txwq_record_token(iface, txwq, lengths[i]);
     }
 
     uct_rc_txqp_add_send_comp(&iface->super, &ep->super.txqp,
