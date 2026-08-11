@@ -441,6 +441,56 @@ UCS_TEST_F(test_topo, device_bdf_ordinal) {
                       UCS_SYS_DEVICE_ID_UNKNOWN));
 }
 
+UCS_TEST_F(test_topo, device_bdf_ordinal_aliases) {
+    static const uintptr_t user_value1 = 17;
+    static const uintptr_t user_value2 = 42;
+    ucs_sys_device_t acc_lo_alias1, acc_lo_alias2, acc_lo_bdf, acc_hi_alias;
+    ucs_sys_bus_id_t bus_id;
+
+    bus_id.domain   = 0xfefd;
+    bus_id.bus      = 0x10;
+    bus_id.slot     = 0x1f;
+    bus_id.function = 0;
+
+    ASSERT_UCS_OK(
+            ucs_topo_find_device_by_bus_id_and_user_value(&bus_id, user_value1,
+                                                          &acc_lo_alias1));
+    ASSERT_UCS_OK(
+            ucs_topo_find_device_by_bus_id_and_user_value(&bus_id, user_value2,
+                                                          &acc_lo_alias2));
+
+    bus_id.bus = 0x20;
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id_and_user_value(&bus_id,
+                                                                user_value1,
+                                                                &acc_hi_alias));
+
+    ASSERT_UCS_OK(ucs_topo_sys_device_set_class(acc_lo_alias1,
+                                                UCS_TOPO_DEVICE_CLASS_ACC));
+    ASSERT_UCS_OK(ucs_topo_sys_device_set_class(acc_lo_alias2,
+                                                UCS_TOPO_DEVICE_CLASS_ACC));
+    ASSERT_UCS_OK(ucs_topo_sys_device_set_class(acc_hi_alias,
+                                                UCS_TOPO_DEVICE_CLASS_ACC));
+
+    EXPECT_NE(acc_lo_alias1, acc_lo_alias2);
+    EXPECT_EQ(0u, ucs_topo_sys_device_get_bdf_class_ordinal(acc_lo_alias1));
+    EXPECT_EQ(0u, ucs_topo_sys_device_get_bdf_class_ordinal(acc_lo_alias2));
+    EXPECT_EQ(1u, ucs_topo_sys_device_get_bdf_class_ordinal(acc_hi_alias));
+
+    /* Adding a BDF-only record invalidates the cached ordinal, but does not
+     * add another physical device. */
+    bus_id.bus = 0x10;
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, &acc_lo_bdf));
+    ASSERT_UCS_OK(ucs_topo_sys_device_set_class(acc_lo_bdf,
+                                                UCS_TOPO_DEVICE_CLASS_ACC));
+
+    EXPECT_NE(acc_lo_alias1, acc_lo_bdf);
+    EXPECT_NE(acc_lo_alias2, acc_lo_bdf);
+    EXPECT_EQ(0u, ucs_topo_sys_device_get_bdf_class_ordinal(acc_lo_bdf));
+    EXPECT_EQ(0u, ucs_topo_sys_device_get_bdf_class_ordinal(acc_lo_alias1));
+    EXPECT_EQ(0u, ucs_topo_sys_device_get_bdf_class_ordinal(acc_lo_alias2));
+    EXPECT_EQ(1u, ucs_topo_sys_device_get_bdf_class_ordinal(acc_hi_alias));
+}
+
 static std::vector<ucs_numa_node_t> get_online_numa_nodes()
 {
     std::vector<ucs_numa_node_t> nodes;
