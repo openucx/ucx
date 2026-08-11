@@ -1386,6 +1386,7 @@ ucs_status_t uct_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr);
  * @ingroup UCT_RESOURCE
  * @brief Invalidate the endpoint.
  *
+ * This routine invalidates the endpoint and moves it to the error state.
  * Incomplete operations are completed with error unless
  * @ref UCT_EP_INVALIDATE_FLAG_DEFER_COMPLETIONS transfers their ownership to
  * the caller.
