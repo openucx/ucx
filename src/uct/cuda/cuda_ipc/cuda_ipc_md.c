@@ -33,8 +33,7 @@
  * purposes. */
 #define UCT_CUDA_IPC_RKEY_FLAG_PID_NS UCS_BIT(31)
 
-#define UCT_CUDA_IPC_IMEX_CHANNELS_PATH \
-"/dev/nvidia-caps-imex-channels"
+#define UCT_CUDA_IPC_IMEX_CHANNELS_PATH "/dev/nvidia-caps-imex-channels"
 
 typedef struct {
     const void *mapped_addr;
