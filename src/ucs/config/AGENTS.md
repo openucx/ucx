@@ -58,13 +58,15 @@ Use this form only to compose/inherit a table or supply its default overrides.
 - Put punctuation after macro-expanded text in an adjacent literal, for example
   `UCS_PP_MAKE_STRING(<value>) "."`.
 - Document behavior, units, limits, and special values such as `auto` or `inf`.
-- Wrap literal values mentioned in text outside a list in single quotes, for
-  example `'auto'` or `'inf'`, with the exception of comma separated lists of values.
+- Wrap literal values (with the exception of list items before the first `-`) 
+  in single quotes, for example `'auto'` or `'inf'`, with the exception of
+  comma separated lists of values followed by a colon.
+- When explaining what specific values mean, use the pattern: `'value' means...`
 
 ### Lists
 
 - End every list item with a period.
-- Text introducing a list may end with a colon or period.
+- Text introducing a list may end with either a period or a colon.
 - Start every list-item description with a capital letter.
 - Write literal values without quotes. Wrap nonliteral values in `<>`, for
   example `<glob_pattern>` or `file:<filename>`.
