@@ -46,7 +46,7 @@ enum {
 
 enum {
     /* The caller owns outstanding operations after EP invalidation. */
-    UCT_RC_MLX5_EP_FLAG_SUPPRESS_COMPLETIONS = UCS_BIT(0)
+    UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS = UCS_BIT(0)
 };
 
 
@@ -212,8 +212,8 @@ ucs_status_t
 uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp);
 
 ucs_status_t
-uct_rc_mlx5_ep_invalidate(uct_ep_h tl_ep,
-                          const uct_ep_invalidate_params_t *params);
+uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
+                               const uct_ep_invalidate_params_t *params);
 
 ucs_status_t uct_rc_mlx5_base_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
                                          uct_rc_pending_req_t *req);
