@@ -1521,7 +1521,7 @@ double ucs_topo_get_pci_bw(const char *dev_name, const char *sysfs_path)
         goto out_max_bw;
     }
 
-    if ((sscanf(pci_speed_str, "%lf%s", &bw_gbps, gts) < 2) ||
+    if ((sscanf(pci_speed_str, "%lf%15s", &bw_gbps, gts) < 2) ||
         strcasecmp("GT/s", ucs_strtrim(gts))) {
         ucs_debug("%s: incorrect format of %s file: expected: <double> GT/s, "
                   "actual: %s\n",

@@ -254,7 +254,7 @@ static double ucs_arch_x86_tsc_freq_from_cpu_model()
     warn = 0;
     max_ghz = 0.0;
     while (fgets(buf, sizeof(buf), f)) {
-        rc = sscanf(buf, "model name : %s", model);
+        rc = sscanf(buf, "model name : %255s", model);
         if (rc != 1) {
             continue;
         }
@@ -264,7 +264,7 @@ static double ucs_arch_x86_tsc_freq_from_cpu_model()
             continue;
         }
 
-        rc = sscanf(rate, "@ %lfGHz%[\n]", &ghz, newline);
+        rc = sscanf(rate, "@ %lfGHz%1[\n]", &ghz, newline);
         if (rc != 2) {
             continue;
         }
