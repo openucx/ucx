@@ -59,4 +59,5 @@ Follow these project docs instead of duplicating their contents:
 - `docs/CodeStyle.md` for C/C++ formatting and naming.
 - `docs/LoggingStyle.md` for log levels and message style.
 - `docs/OptimizationStyle.md` for performance-sensitive changes.
+- `src/ucs/config/AGENTS.md` for `ucs_config_field_t` table formatting.
 - `REVIEW.md` for UCX pull-request review checks and comment style.

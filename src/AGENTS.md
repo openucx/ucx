@@ -49,8 +49,8 @@ layer boundaries below.
   before changing concurrency behavior.
 - For UCX object-style code, keep `super` as the first member, call the super
   constructor first, clean up in reverse order, and use `ucs_derived_of`.
-- Config tables should use string defaults, descriptive help strings, and
-  `ucs_offsetof`. User-facing config environment names use the `UCX_` prefix.
+- Follow `ucs/config/AGENTS.md` for config table formatting. 
+- User-facing config environment names use the `UCX_` prefix.
 - Preserve symmetry: create/destroy, init/cleanup, pack/unpack, and
   enable/disable pairs should be named and implemented consistently.
 - Keep memory-type handling explicit; do not assume host memory in data paths.
