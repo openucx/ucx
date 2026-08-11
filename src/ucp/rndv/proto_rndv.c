@@ -88,6 +88,25 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
             continue;
         }
 
+        /* A remote key of a memory domain which accesses memory by rkey_ptr
+         * (for example cuda_ipc) can be opened by a peer on a different node
+         * only if the memory is exportable to that node. Do not advertise a
+         * remote key which the peer would fail to open. Both the deprecated MD
+         * flag and the component flag are checked, since cuda_ipc reports only
+         * the former.
+         */
+        if (((md_attr->flags & UCT_MD_FLAG_RKEY_PTR) ||
+             (cmpt_attr->flags & UCT_COMPONENT_FLAG_RKEY_PTR)) &&
+            ucp_ep_config_is_inter_node(ep_config_key) &&
+            !(params->super.reg_mem_info.flags &
+              UCS_MEM_FLAG_RKEY_PTR_INTER_NODE)) {
+            ucs_trace_req("lane[%d]: md %s rkey_ptr is not usable inter-node, "
+                          "mem_flags 0x%x",
+                          lane, context->tl_mds[md_index].rsc.md_name,
+                          params->super.reg_mem_info.flags);
+            continue;
+        }
+
         /* Check reachability between mem_sys_dev and current lane's sys_dev */
         if (!ucs_topo_is_reachable(ep_sys_dev, mem_sys_dev)) {
             continue;
@@ -170,6 +189,14 @@ ucp_proto_rndv_rkey_mem_flags_estimate(const ucp_proto_init_params_t *params)
         /*
          * Derive UCS_MEM_FLAG_REGISTRABLE from matching local MDs which
          * require it and whose remote MDs are present in the rkey.
+         *
+         * UCS_MEM_FLAG_RKEY_PTR_INTER_NODE is intentionally not inferred
+         * here: unlike REGISTRABLE it is not an MD required_mem_flags bit,
+         * and is checked only when packing keys in
+         * ucp_proto_rndv_ctrl_get_md_map(). Runtime packing uses the real
+         * local buffer flags; omitting it from this estimate can only make
+         * nested ctrl modeling (e.g. peer rndv/rtr) slightly pessimistic
+         * for fabric-exportable remotes, not incorrect.
          */
         md_index   = context->tl_rscs[lane_cfg->rsc_index].md_index;
         mem_flags |= context->tl_mds[md_index].attr.required_mem_flags;

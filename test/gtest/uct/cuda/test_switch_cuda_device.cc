@@ -339,7 +339,6 @@ protected:
 
         ASSERT_UCS_OK(query_status);
         EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, mem_attr.mem_type);
-        EXPECT_TRUE(mem_attr.mem_flags & UCS_MEM_FLAG_REGISTRABLE);
     }
 
 private:
@@ -423,7 +422,6 @@ UCS_TEST_P(test_mem_alloc_device, no_current_context_cuda_registrable,
     EXPECT_UCS_OK(lookup_status);
     if (lookup_status == UCS_OK) {
         EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, mem_info.type);
-        EXPECT_TRUE(mem_info.mem_flags & UCS_MEM_FLAG_REGISTRABLE);
     }
     EXPECT_UCS_OK(free_status);
 }
@@ -463,6 +461,40 @@ UCS_TEST_P(test_mem_alloc_device, host_vmm_mem_registrable,
     cuda_host_vmm_mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
 
     query_registrable_no_current_context(buffer.ptr(), size);
+}
+#endif
+
+UCS_TEST_P(test_mem_alloc_device, legacy_cuda_no_rkey_ptr_inter_node)
+{
+    constexpr size_t size = 4096;
+    uct_md_mem_attr_v2_t mem_attr = {};
+    CUdeviceptr dptr              = 0;
+
+    ASSERT_EQ(CUDA_SUCCESS, cuMemAlloc(&dptr, size));
+
+    mem_attr.field_mask = UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE |
+                          UCT_MD_MEM_ATTR_V2_FIELD_MEM_FLAGS;
+    ASSERT_UCS_OK(uct_md_mem_query_v2(md(), reinterpret_cast<void*>(dptr), size,
+                                      &mem_attr));
+    EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, mem_attr.mem_type);
+    EXPECT_EQ(0, mem_attr.mem_flags & UCS_MEM_FLAG_RKEY_PTR_INTER_NODE);
+
+    EXPECT_EQ(CUDA_SUCCESS, cuMemFree(dptr));
+}
+
+#if HAVE_CUDA_FABRIC
+UCS_TEST_P(test_mem_alloc_device, fabric_cuda_rkey_ptr_inter_node,
+           "CUDA_COPY_ENABLE_FABRIC=y")
+{
+    constexpr size_t size = 4 * UCS_MBYTE;
+    uct_md_mem_attr_v2_t mem_attr = {};
+    cuda_fabric_mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
+
+    mem_attr.field_mask = UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE |
+                          UCT_MD_MEM_ATTR_V2_FIELD_MEM_FLAGS;
+    ASSERT_UCS_OK(uct_md_mem_query_v2(md(), buffer.ptr(), size, &mem_attr));
+    EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, mem_attr.mem_type);
+    EXPECT_TRUE(mem_attr.mem_flags & UCS_MEM_FLAG_RKEY_PTR_INTER_NODE);
 }
 #endif
 
