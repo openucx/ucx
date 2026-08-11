@@ -1539,8 +1539,7 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
         ucs_qsort_r(scores, num_sys_active_ibdevs, sizeof(*scores),
                     uct_gdaki_dev_matrix_score, NULL);
 
-        num_gpu_selected_ibdevs = (int)ucs_min(ib_per_cuda,
-                                               (unsigned long)num_gpu_reachable_ibdevs);
+        num_gpu_selected_ibdevs = ucs_min((int)ib_per_cuda, num_gpu_reachable_ibdevs);
 
         /* At this point there are num_gpu_reachable_ibdevs reachable
            IB devices for this GPU, num_gpu_selected_ibdevs is clamped
