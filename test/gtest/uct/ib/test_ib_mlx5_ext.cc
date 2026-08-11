@@ -136,7 +136,7 @@ protected:
         ++self->m_err_handler_count;
 
         invalidate_params.field_mask = UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS;
-        invalidate_params.flags = UCT_EP_INVALIDATE_FLAG_SUPPRESS_COMPLETIONS;
+        invalidate_params.flags = UCT_EP_INVALIDATE_FLAG_DEFER_COMPLETIONS;
         status                  = uct_ep_invalidate(ep, &invalidate_params);
         if (status != UCS_OK) {
             return status;
@@ -213,20 +213,17 @@ UCS_TEST_P(test_uct_ib_mlx5_ext_rc, ep_outstanding_purge)
 UCS_TEST_P(test_uct_ib_mlx5_ext_rc, err_handler_outstanding_purge)
 {
     uct_rc_mlx5_ep_t *ep = ucs_derived_of(m_e1->ep(0), uct_rc_mlx5_ep_t);
-    uct_ep_invalidate_params_t params = {};
 
     register_plugin("token", iface_query, ep_query, purge);
 
-    params.field_mask = UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS;
-    params.flags      = UCT_EP_INVALIDATE_FLAG_MODIFY_QP_TO_ERR;
-    ASSERT_UCS_OK(uct_ep_invalidate(m_e1->ep(0), &params));
+    ASSERT_UCS_OK(uct_ep_invalidate(m_e1->ep(0), 0));
     ASSERT_EQ(static_cast<ssize_t>(sizeof(uint8_t)),
               uct_ep_am_bcopy(m_e1->ep(0), 0, am_pack_cb, NULL, 0));
     wait_for_value(&m_err_handler_count, 1, true);
 
     EXPECT_EQ(1, m_err_handler_count);
     EXPECT_TRUE(m_purge_cb_invoked);
-    EXPECT_TRUE(ep->super.flags & UCT_RC_MLX5_EP_FLAG_SUPPRESS_COMPLETIONS);
+    EXPECT_TRUE(ep->super.flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS);
 
     ASSERT_UCS_OK_OR_INPROGRESS(
             uct_ep_flush(m_e1->ep(0), UCT_FLUSH_FLAG_CANCEL, NULL));
