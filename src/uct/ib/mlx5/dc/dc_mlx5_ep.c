@@ -847,6 +847,19 @@ ucs_status_t uct_dc_mlx5_ep_invalidate(uct_ep_h tl_ep,
 {
     uct_dc_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
 
+    if ((params == NULL) ||
+        !(params->field_mask & UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if ((params->flags & UCT_EP_INVALIDATE_FLAG_SUPPRESS_COMPLETIONS)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    if (!(params->flags & UCT_EP_INVALIDATE_FLAG_MODIFY_QP_TO_ERR)) {
+        return UCS_OK;
+    }
+
     if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
         ep->flags |= UCT_DC_MLX5_EP_FLAG_INVALIDATED;
         return UCS_OK;
