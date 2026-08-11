@@ -248,7 +248,8 @@ UCS_TEST_P(test_dc, fence_flush_without_dci,
 }
 
 UCS_TEST_P(test_dc, fence_flush_hybrid_ep_destroy,
-           "IB_PCI_RELAXED_ORDERING=yes", "DC_TX_POLICY=dcs_hybrid")
+           "IB_PCI_RELAXED_ORDERING=yes", "DC_TX_POLICY=dcs_hybrid",
+           "RC_FENCE=weak")
 {
     uct_dc_mlx5_iface_t *iface = dc_iface(m_e1);
     uct_dc_mlx5_ep_t *ep;
