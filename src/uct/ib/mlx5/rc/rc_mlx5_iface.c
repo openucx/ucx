@@ -867,7 +867,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
     self->super.rx.srq.quota       = self->rx.srq.mask + 1;
     self->super.config.exp_backoff = mlx5_config->exp_backoff;
     self->config.log_ack_req_freq  = ucs_min(mlx5_config->log_ack_req_freq,
-                                              UCT_RC_MLX5_MAX_LOG_ACK_REQ_FREQ);
+                                             UCT_RC_MLX5_MAX_LOG_ACK_REQ_FREQ);
 
     status = uct_rc_mlx5_iface_init_fence_flags(
             self, rc_config, md, dev,

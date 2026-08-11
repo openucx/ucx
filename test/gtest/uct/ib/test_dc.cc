@@ -250,8 +250,7 @@ UCS_TEST_P(test_dc, fence_flush_without_dci, "IB_PCI_RELAXED_ORDERING=yes")
     ep = dc_ep(m_e1, 0);
     ASSERT_TRUE(ep->flags & UCT_DC_MLX5_EP_FLAG_FENCE_FLUSH);
     ASSERT_EQ(UCT_DC_MLX5_EP_NO_DCI, ep->dci);
-    ASSERT_EQ(UCT_RC_FENCE_MODE_WEAK,
-              rc_iface(m_e1)->config.fence_mode);
+    ASSERT_EQ(UCT_RC_FENCE_MODE_WEAK, rc_iface(m_e1)->config.fence_mode);
 
     ASSERT_UCS_OK(uct_ep_fence(m_e1->ep(0), 0));
     EXPECT_NE(rc_iface(m_e1)->tx.fi.fence_beat, ep->fi.fence_beat);
@@ -313,8 +312,7 @@ UCS_TEST_P(test_dc, fence_flush_hybrid_ep_destroy,
 }
 
 UCS_TEST_P(test_dc, fence_flush_shared_dci_parallel,
-           "IB_PCI_RELAXED_ORDERING=yes", "DC_TX_POLICY=rand",
-           "DC_NUM_DCI=1")
+           "IB_PCI_RELAXED_ORDERING=yes", "DC_TX_POLICY=rand", "DC_NUM_DCI=1")
 {
     uct_dc_mlx5_ep_t *ep1;
     uct_dc_mlx5_ep_t *ep2;
@@ -330,16 +328,13 @@ UCS_TEST_P(test_dc, fence_flush_shared_dci_parallel,
     ASSERT_TRUE(ep2->flags & UCT_DC_MLX5_EP_FLAG_FENCE_FLUSH);
 
     ASSERT_UCS_OK(uct_iface_fence(m_e1->iface(), 0));
-    EXPECT_EQ(UCS_ERR_NO_RESOURCE,
-              uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE, uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
     ASSERT_TRUE(ep1->flags & UCT_DC_MLX5_EP_FLAG_FENCE_PENDING);
-    EXPECT_EQ(UCS_ERR_NO_RESOURCE,
-              uct_ep_am_short(m_e1->ep(1), 0, 0, NULL, 0));
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE, uct_ep_am_short(m_e1->ep(1), 0, 0, NULL, 0));
     ASSERT_TRUE(ep2->flags & UCT_DC_MLX5_EP_FLAG_FENCE_PENDING);
 
     deadline = ucs::get_deadline(DEFAULT_TIMEOUT_SEC);
-    while (((ep1->flags | ep2->flags) &
-            UCT_DC_MLX5_EP_FLAG_FENCE_PENDING) &&
+    while (((ep1->flags | ep2->flags) & UCT_DC_MLX5_EP_FLAG_FENCE_PENDING) &&
            (ucs_get_time() < deadline)) {
         progress();
     }

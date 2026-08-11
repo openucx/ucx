@@ -1065,7 +1065,7 @@ uct_dc_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                   const uct_iface_is_reachable_params_t *params)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
-    uct_ib_md_t *md             = uct_ib_iface_md(&iface->super.super.super);
+    uct_ib_md_t *md            = uct_ib_iface_md(&iface->super.super.super);
     const uct_dc_mlx5_iface_addr_t *addr;
     int same_tm, same_version;
 
