@@ -12,6 +12,7 @@
 #  include "config.h"
 #endif
 
+#include <ucp/api/ucp_def.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/datastruct/string_buffer.h>
 #include <ucs/datastruct/string_set.h>
@@ -1194,7 +1195,7 @@ static ucs_status_t ucp_perf_test_receive_remote_data(ucx_perf_context_t *perf,
                                         UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
             ep_params.err_handler.cb  = ucp_perf_test_err_handler;
             ep_params.err_handler.arg = NULL;
-            ep_params.err_mode        = UCP_ERR_HANDLING_MODE_PEER;
+            ep_params.err_mode        = perf->params.ucp.err_mode;
         }
 
         status = UCX_PERF_VERBOSE(error, &perf->params, ucp_ep_create,

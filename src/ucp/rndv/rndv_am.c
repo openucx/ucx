@@ -21,7 +21,8 @@ static void ucp_rndv_am_probe_common(ucp_proto_multi_init_params_t *params)
     }
 
     params->super.cfg_thresh   = ucp_proto_rndv_cfg_thresh(
-                                         context, UCS_BIT(UCP_RNDV_MODE_AM)),
+                                         &params->super.super,
+                                         UCS_BIT(UCP_RNDV_MODE_AM)),
     params->super.cfg_priority = 80;
     params->super.exclude_map  = 0;
     params->super.min_length   = 0;
