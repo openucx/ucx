@@ -412,11 +412,17 @@ typedef enum {
  * @brief Flags used by @ref uct_ep_invalidate.
  */
 typedef enum {
+    /** Move the endpoint QP to the error state. */
+    UCT_EP_INVALIDATE_FLAG_MODIFY_QP_TO_ERR     = UCS_BIT(0),
+
     /**
-     * Do not complete outstanding operations when the endpoint transitions to
-     * the error state. The caller is responsible for completing them.
+     * Suppress completion of outstanding operations by the normal endpoint
+     * error path. The caller transfers outstanding-operation ownership to an
+     * external provider and is responsible for completing them. This state
+     * remains active until endpoint cancellation or destruction. This flag
+     * does not modify QP state.
      */
-    UCT_EP_INVALIDATE_FLAG_SUPPRESS_COMPLETIONS = UCS_BIT(0)
+    UCT_EP_INVALIDATE_FLAG_SUPPRESS_COMPLETIONS = UCS_BIT(1)
 } uct_ep_invalidate_flags_t;
 
 
@@ -1384,10 +1390,11 @@ ucs_status_t uct_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr);
  * @ingroup UCT_RESOURCE
  * @brief Invalidate the endpoint.
  *
- * This routine invalidates the endpoint and moves it to the error state.
- * All the incomplete and subsequent operations on the endpoint will be
- * completed with error, unless
- * @ref UCT_EP_INVALIDATE_FLAG_SUPPRESS_COMPLETIONS is specified.
+ * This routine invalidates the endpoint according to the requested flags.
+ * @ref UCT_EP_INVALIDATE_FLAG_MODIFY_QP_TO_ERR moves a QP-based endpoint to
+ * the error state. Incomplete operations are completed with error unless
+ * @ref UCT_EP_INVALIDATE_FLAG_SUPPRESS_COMPLETIONS transfers their ownership
+ * to the caller.
  *
  * @param [in]  ep         Endpoint to invalidate.
  * @param [in]  params     Operation parameters, see @ref
@@ -1961,8 +1968,7 @@ typedef void (*uct_ep_outstanding_purge_callback_t)(
 typedef enum {
     UCT_EP_OUTSTANDING_FIELD_RX_TOKEN = UCS_BIT(0),
     UCT_EP_OUTSTANDING_FIELD_CB       = UCS_BIT(1),
-    UCT_EP_OUTSTANDING_FIELD_ARG      = UCS_BIT(2),
-    UCT_EP_OUTSTANDING_FIELD_STATUS   = UCS_BIT(3)
+    UCT_EP_OUTSTANDING_FIELD_ARG      = UCS_BIT(2)
 } uct_ep_outstanding_purge_field_t;
 
 
@@ -1990,9 +1996,6 @@ typedef struct {
      * Valid when @ref UCT_EP_OUTSTANDING_FIELD_ARG is set.
      */
     void                                *arg;
-
-    /** Completion status for purging all outstanding operations. */
-    ucs_status_t                        status;
 } uct_ep_outstanding_purge_params_t;
 
 
@@ -2000,10 +2003,11 @@ typedef struct {
  * @ingroup UCT_RESOURCE
  * @brief Purge outstanding (undelivered) operations from an endpoint.
  *
- * If only @ref UCT_EP_OUTSTANDING_FIELD_STATUS is specified, all outstanding
- * operations are completed with the supplied error status. Otherwise,
- * @ref uct_ep_outstanding_purge_params_t::cb is invoked once for each
- * undelivered outstanding operation, in the original endpoint posting order.
+ * The transport delegates outstanding-operation classification to its
+ * external provider. The provider invokes @ref
+ * uct_ep_outstanding_purge_params_t::cb once for each undelivered operation,
+ * in the original endpoint posting order. No transport-local status purge is
+ * provided by this API.
  */
 ucs_status_t
 uct_ep_outstanding_purge(uct_ep_h ep,

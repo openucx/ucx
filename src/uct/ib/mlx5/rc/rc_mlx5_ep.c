@@ -94,39 +94,6 @@ void uct_rc_mlx5_ep_update_tx_res(uct_ep_h tl_ep)
 }
 
 
-ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
-        uct_ep_h tl_ep, const uct_ep_outstanding_purge_params_t *params)
-{
-    UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
-    ucs_status_t purge_status;
-    ucs_status_t status;
-
-    if ((params != NULL) &&
-        (params->field_mask & UCT_EP_OUTSTANDING_FIELD_STATUS)) {
-        status = uct_ep_outstanding_purge_get_status(params, &purge_status);
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        if (ep->flags & UCT_RC_MLX5_EP_FLAG_SUPPRESS_COMPLETIONS) {
-            uct_rc_mlx5_ep_update_tx_res(tl_ep);
-            ep->flags &= ~UCT_RC_MLX5_EP_FLAG_SUPPRESS_COMPLETIONS;
-        }
-    } else {
-        status = uct_ib_mlx5_ext_ep_outstanding_purge(tl_ep, params);
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        purge_status = UCS_ERR_CANCELED;
-    }
-
-    uct_rc_txqp_purge_outstanding(&iface->super, &ep->super.txqp, purge_status,
-                                  ep->tx.wq.sw_pi, 0);
-    return UCS_OK;
-}
-
-
 static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_base_ep_put_short_inline(
         uct_ep_h tl_ep, const void *buffer, unsigned length,
         uint64_t remote_addr, uct_rkey_t rkey)
@@ -879,24 +846,31 @@ ucs_status_t uct_rc_mlx5_ep_invalidate(uct_ep_h tl_ep,
 {
     UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
     uct_ib_mlx5_txwq_t *txwq = &ep->super.tx.wq;
+    ucs_status_t status;
 
-    if ((params != NULL) &&
-        (params->field_mask & UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS) &&
-        (params->flags & UCT_EP_INVALIDATE_FLAG_SUPPRESS_COMPLETIONS) &&
+    if ((params == NULL) ||
+        !(params->field_mask & UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (params->flags & UCT_EP_INVALIDATE_FLAG_MODIFY_QP_TO_ERR) {
+        status = uct_ib_mlx5_modify_qp_state(&iface->super.super, &txwq->super,
+                                             IBV_QPS_ERR);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    if ((params->flags & UCT_EP_INVALIDATE_FLAG_SUPPRESS_COMPLETIONS) &&
         !(ep->super.super.flags & UCT_RC_EP_FLAG_FLUSH_CANCEL) &&
         !(ep->super.flags & UCT_RC_MLX5_EP_FLAG_SUPPRESS_COMPLETIONS)) {
         ep->super.flags |= UCT_RC_MLX5_EP_FLAG_SUPPRESS_COMPLETIONS;
         txwq->ft_ci      = txwq->hw_ci;
-        ucs_assert(txwq->ft_ci ==
-                   (txwq->prev_sw_pi -
-                    (txwq->bb_max -
-                     uct_rc_txqp_available(&ep->super.super.txqp))));
         ucs_debug("ep %p suppress completions WQE range (%u, %u) next token %u",
                   ep, txwq->ft_ci, txwq->sw_pi, txwq->next_token);
     }
 
-    return uct_ib_mlx5_modify_qp_state(&iface->super.super, &txwq->super,
-                                       IBV_QPS_ERR);
+    return UCS_OK;
 }
 
 ucs_status_t uct_rc_mlx5_base_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
