@@ -1,0 +1,31 @@
+#
+# UCP one-sided tests with IOV datatype
+#
+
+# host -> host
+put_lat_iov_HH          -t ucp_put_lat -D iov,contig -s 1024,1024,1024,1024 -n 1000
+put_bw_iov_HH           -t ucp_put_bw  -D iov,contig -s 1024,1024,1024,1024 -n 1000
+get_iov_HH              -t ucp_get     -D iov,contig -s 1024,1024,1024,1024 -n 1000
+put_lat_iov_iov_HH      -t ucp_put_lat -D iov,iov    -s 1024,1024,1024,1024 -n 1000
+put_bw_iov_iov_HH       -t ucp_put_bw  -D iov,iov    -s 1024,1024,1024,1024 -n 1000
+get_iov_iov_HH          -t ucp_get     -D iov,iov    -s 1024,1024,1024,1024 -n 1000
+
+# host -> host, strided iov
+put_lat_iov_stride_HH   -t ucp_put_lat -D iov,iov -s 1024,1024,1024,1024 -i 2048 -n 1000
+put_bw_iov_stride_HH    -t ucp_put_bw  -D iov,iov -s 1024,1024,1024,1024 -i 2048 -n 1000
+get_iov_stride_HH       -t ucp_get     -D iov,iov -s 1024,1024,1024,1024 -i 2048 -n 1000
+
+# cuda -> cuda
+put_lat_iov_iov_DD      -t ucp_put_lat -D iov,iov -m cuda,cuda -s 1024,1024,1024,1024 -n 1000
+put_bw_iov_iov_DD       -t ucp_put_bw  -D iov,iov -m cuda,cuda -s 1024,1024,1024,1024 -n 1000
+get_iov_iov_DD          -t ucp_get     -D iov,iov -m cuda,cuda -s 1024,1024,1024,1024 -n 1000
+
+# host -> cuda
+put_lat_iov_iov_HD      -t ucp_put_lat -D iov,iov -m host,cuda -s 1024,1024,1024,1024 -n 1000
+put_bw_iov_iov_HD       -t ucp_put_bw  -D iov,iov -m host,cuda -s 1024,1024,1024,1024 -n 1000
+get_iov_iov_HD          -t ucp_get     -D iov,iov -m host,cuda -s 1024,1024,1024,1024 -n 1000
+
+# cuda -> host
+put_lat_iov_iov_DH      -t ucp_put_lat -D iov,iov -m cuda,host -s 1024,1024,1024,1024 -n 1000
+put_bw_iov_iov_DH       -t ucp_put_bw  -D iov,iov -m cuda,host -s 1024,1024,1024,1024 -n 1000
+get_iov_iov_DH          -t ucp_get     -D iov,iov -m cuda,host -s 1024,1024,1024,1024 -n 1000
