@@ -119,7 +119,12 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_createEndpointNative(JNIEnv *env, jobject 
         env->ReleaseStringChars(name, (const jchar*)ep_params.name);
     }
     if (status != UCS_OK) {
+        if (ep_params.field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLER) {
+            env->DeleteWeakGlobalRef(
+                    reinterpret_cast<jweak>(ep_params.err_handler.arg));
+        }
         JNU_ThrowExceptionByStatus(env, status);
+        return 0;
     }
 
     return (native_ptr)endpoint;
@@ -161,6 +166,7 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_queryLocalAddressNative(JNIEnv *env,
     ucs_status_t status = ucp_ep_query((ucp_ep_h)ep_ptr, &ep_attr);
     if (status != UCS_OK) {
         JNU_ThrowExceptionByStatus(env, status);
+        return NULL;
     }
 
     return c2jInetSockAddr(env, &ep_attr.local_sockaddr);
@@ -177,6 +183,7 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_queryRemoteAddressNative(JNIEnv *env,
     ucs_status_t status = ucp_ep_query((ucp_ep_h)ep_ptr, &ep_attr);
     if (status != UCS_OK) {
         JNU_ThrowExceptionByStatus(env, status);
+        return NULL;
     }
 
     return c2jInetSockAddr(env, &ep_attr.remote_sockaddr);
@@ -191,6 +198,7 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_unpackRemoteKey(JNIEnv *env, jclass cls,
     ucs_status_t status = ucp_ep_rkey_unpack((ucp_ep_h)ep_ptr, (void *)addr, &rkey);
     if (status != UCS_OK) {
         JNU_ThrowExceptionByStatus(env, status);
+        return NULL;
     }
 
     jobject result = new_rkey_instance(env, rkey);
