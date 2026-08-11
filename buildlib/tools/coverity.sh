@@ -146,7 +146,7 @@ fi
 
 run_coverity "$mode" || {
 	set +x
-	azure_log_warning "Coverity found $nerrors issues:"
+	azure_log_error "Coverity found $nerrors issues:"
 	cat "$WORKSPACE/cov_error_log.txt"
 	rm -f "$WORKSPACE/cov_error_log.txt"
 	exit 1
