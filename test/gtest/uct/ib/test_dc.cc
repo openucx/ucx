@@ -248,8 +248,7 @@ UCS_TEST_P(test_dc, fence_flush_without_dci,
 }
 
 UCS_TEST_P(test_dc, fence_flush_hybrid_ep_destroy,
-           "IB_PCI_RELAXED_ORDERING=yes", "DC_TX_POLICY=dcs_hybrid",
-           "DC_NUM_DCI=1")
+           "IB_PCI_RELAXED_ORDERING=yes", "DC_TX_POLICY=dcs_hybrid")
 {
     uct_dc_mlx5_iface_t *iface = dc_iface(m_e1);
     uct_dc_mlx5_ep_t *ep;
@@ -262,16 +261,19 @@ UCS_TEST_P(test_dc, fence_flush_hybrid_ep_destroy,
     }
 
     m_e1->connect_to_iface(0, *m_e2);
-    m_e1->connect_to_iface(1, *m_e2);
-    ASSERT_UCS_OK(uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
-
-    ep = dc_ep(m_e1, 1);
+    ep = dc_ep(m_e1, 0);
     ASSERT_TRUE(ep->flags & UCT_DC_MLX5_EP_FLAG_FENCE_FLUSH);
+    ASSERT_EQ(UCT_DC_MLX5_EP_NO_DCI, ep->dci);
+
+    /* Avoid relying on another endpoint holding a software DCI long enough to
+     * force this endpoint to use the shared hardware DCI. */
+    ASSERT_UCS_OK(uct_dc_mlx5_set_ep_to_hw_dcs(iface, ep));
+    ASSERT_EQ(UCT_DC_MLX5_HW_DCI_INDEX, ep->dci);
+
     ASSERT_UCS_OK(uct_iface_fence(m_e1->iface(), 0));
     EXPECT_EQ(UCS_ERR_NO_RESOURCE,
-              uct_ep_am_short(m_e1->ep(1), 0, 0, NULL, 0));
+              uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
 
-    ASSERT_EQ(UCT_DC_MLX5_HW_DCI_INDEX, ep->dci);
     dci = uct_dc_mlx5_iface_dci(iface, ep->dci);
     ASSERT_TRUE(dci->flags & UCT_DC_DCI_FLAG_FENCE_PENDING);
     ASSERT_FALSE(ucs_queue_is_empty(&dci->txqp.outstanding));

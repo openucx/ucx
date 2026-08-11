@@ -70,7 +70,7 @@ UCS_TEST_F(test_obj_size, size) {
     EXPECTED_SIZE(uct_rc_verbs_ep_t, 88);
 #  endif
 #  if HAVE_TL_DC
-    EXPECTED_SIZE(uct_dc_mlx5_ep_t, 32);
+    EXPECTED_SIZE(uct_dc_mlx5_ep_t, 40);
 #  endif
 #  if HAVE_TL_UD
     EXPECTED_SIZE(uct_ud_ep_t, 248);
