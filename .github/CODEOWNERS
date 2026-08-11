@@ -13,6 +13,7 @@
 #
 # TODO: maintainers, please replace @openucx/MAINTAINERS-TEAM with the correct
 # team slug, and add per-subsystem reviewers where you want narrower routing.
+# The individual owners below are self-nominations, not confirmed assignments.
 #
 # See https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
 
@@ -66,10 +67,10 @@
 /src/tools/perf/cuda/ @openucx/MAINTAINERS-TEAM
 
 # ROCm
-/config/m4/rocm.m4    @openucx/MAINTAINERS-TEAM
-/src/ucm/rocm/        @openucx/MAINTAINERS-TEAM
-/src/uct/rocm/        @openucx/MAINTAINERS-TEAM
-/src/tools/perf/rocm/ @openucx/MAINTAINERS-TEAM
+/config/m4/rocm.m4    @edgargabriel @mshanthagit @openucx/MAINTAINERS-TEAM
+/src/ucm/rocm/        @edgargabriel @mshanthagit @openucx/MAINTAINERS-TEAM
+/src/uct/rocm/        @edgargabriel @mshanthagit @openucx/MAINTAINERS-TEAM
+/src/tools/perf/rocm/ @edgargabriel @mshanthagit @openucx/MAINTAINERS-TEAM
 
 # Level Zero (ZE)
 /config/m4/ze.m4            @yafshar @j-xiong @openucx/MAINTAINERS-TEAM
