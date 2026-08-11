@@ -152,7 +152,8 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   UCS_CONFIG_TYPE_STRING},
 
  {"DEBUG_SIGNO", "SIGHUP",
-  "Signal number which causes UCS to enter debug mode. Set to '0' to disable.",
+  "Signal number which causes UCS to enter debug mode.\n"
+  "'0' means debug mode is disabled.",
   ucs_offsetof(ucs_global_opts_t, debug_signo),
   UCS_CONFIG_TYPE_SIGNO},
 
@@ -283,8 +284,7 @@ static ucs_config_field_t ucs_global_opts_read_only_table[] = {
 
  {"VFS_THREAD_AFFINITY", "n",
   "Enable inheriting main process affinity for virtual monitoring filesystem\n"
-  "service thread. Setting this value to 'n' will allow the service thread to\n"
-  "run on any CPU core.",
+  "service thread. 'n' means the service thread may run on any CPU core.",
   ucs_offsetof(ucs_global_opts_t, vfs_thread_affinity),
   UCS_CONFIG_TYPE_BOOL},
 
@@ -341,7 +341,7 @@ static ucs_config_field_t ucs_global_opts_read_only_table[] = {
   UCS_CONFIG_TYPE_STRING},
 
  {"PROFILE_MODE", "",
-  "Profile collection modes. If 'none' is specified, profiling is disabled.\n"
+  "Profile collection modes. 'none' means profiling is disabled.\n"
   " log   - Record all timestamps.\n"
   " accum - Accumulate measurements per location.",
   ucs_offsetof(ucs_global_opts_t, profile_mode),

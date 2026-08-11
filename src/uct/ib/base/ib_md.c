@@ -79,8 +79,8 @@ ucs_config_field_t uct_ib_md_config_table[] = {
      "Whether or not 'Pause Frame' is enabled on an Ethernet network.\n"
      "Pause frame is a mechanism for temporarily stopping the transmission of data to\n"
      "ensure zero loss under congestion on Ethernet family computer networks.\n"
-     "This parameter, if set to 'no', will disqualify IB transports that may not perform\n"
-     "well on a lossy fabric when working with RoCE.",
+     "'no' means IB transports that may not perform well on a lossy fabric are\n"
+     "disqualified when working with RoCE.",
      ucs_offsetof(uct_ib_md_config_t, ext.eth_pause),
      UCS_CONFIG_TYPE_BOOL},
 
@@ -103,8 +103,8 @@ ucs_config_field_t uct_ib_md_config_table[] = {
      "                           D - DC version 2 (ConnectX-5 and above).\n"
      "                           a - Compact address vector support.\n"
      " <priority>  - (optional) device priority, integer.\n"
-     "Example: The value '0x02c9:4115:ConnectX4:5d' would specify a device named ConnectX-4\n"
-     "to match vendor id 0x2c9, device id 4115, with DC version 1 support.",
+     "Example: '0x02c9:4115:ConnectX4:5d' means match a device named ConnectX-4 with\n"
+     "         vendor ID '0x2c9', device ID '4115', and DC version 1 support.",
      ucs_offsetof(uct_ib_md_config_t, custom_devices),
      UCS_CONFIG_TYPE_STRING_ARRAY},
 
@@ -124,9 +124,9 @@ ucs_config_field_t uct_ib_md_config_table[] = {
      UCS_CONFIG_TYPE_ULUNITS},
 
     {"SUBNET_PREFIX", "",
-     "Infiniband subnet prefix to filter ports by, empty means no filter.\n"
+     "Infiniband subnet prefix to filter ports by. empty value means no filter.\n"
      "Relevant for IB link layer only.\n"
-     "For example, the default subnet prefix can be specified as 'fe80:0:0:0'.",
+     "For example, 'fe80:0:0:0' means the default subnet prefix.",
      ucs_offsetof(uct_ib_md_config_t, subnet_prefix),
      UCS_CONFIG_TYPE_STRING},
 

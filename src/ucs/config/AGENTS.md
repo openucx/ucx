@@ -61,7 +61,8 @@ Use this form only to compose/inherit a table or supply its default overrides.
 - Wrap literal values (with the exception of list items before the first `-`) 
   in single quotes, for example `'auto'` or `'inf'`, with the exception of
   comma separated lists of values followed by a colon.
-- When explaining what specific values mean, use the pattern: `'value' means...`
+- When explaining what specific values mean, prefer the pattern: `'value' means...`
+  For the value '*' prefer the pattern: `The '*' wildcard...`
 
 ### Lists
 

@@ -97,7 +97,7 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
     {"DCI_FULL_HANDSHAKE", "no",
      "Force full-handshake protocol for DC initiator. Enabling this mode\n"
      "increases network latency, but is more resilient to packet drops.\n"
-     "Setting it to 'auto' applies full-handshake on AR SLs.",
+     "'auto' means applying full-handshake on AR SLs.",
      ucs_offsetof(uct_dc_mlx5_iface_config_t, dci_full_handshake),
      UCS_CONFIG_TYPE_TERNARY},
 
@@ -116,7 +116,8 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
      UCS_CONFIG_TYPE_TERNARY},
 
     {"RAND_DCI_SEED", "0",
-     "Seed for DCI allocation when the 'rand' DCI policy is used ('0' uses the default).",
+     "Seed for DCI allocation when the 'rand' DCI policy is used.\n"
+     "'0' means using the default seed.",
      ucs_offsetof(uct_dc_mlx5_iface_config_t, rand_seed),
      UCS_CONFIG_TYPE_UINT},
 
@@ -133,7 +134,7 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
 
     {"NUM_DCI_CHANNELS", "32",
      "Number of stream channels per DCI to be used.\n"
-     "A value of '1' disables DCI multi-channel support.\n"
+     "'1' means DCI multi-channel support is disabled.\n"
      "Relevant only for the 'hw_dcs' policy.",
      ucs_offsetof(uct_dc_mlx5_iface_config_t, num_dci_channels),
      UCS_CONFIG_TYPE_UINT},

@@ -169,7 +169,7 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
                                 ucs_offsetof(uct_ib_iface_config_t, rx.mp), ""),
 
   {"ADDR_TYPE", "auto",
-   "Set the interface address type. The 'auto' mode detects the type according to\n"
+   "Set the interface address type. 'auto' means detecting the type according to\n"
    "link layer type and IB subnet prefix.\n"
    "Deprecated. To force use of global routing use IS_GLOBAL.",
    ucs_offsetof(uct_ib_iface_config_t, addr_type),
@@ -186,14 +186,14 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    UCS_CONFIG_TYPE_BOOL},
 
   {"SL", "auto",
-   "InfiniBand: Service level, 'auto' will select a value matching UCX_IB_AR configuration.\n"
-   "RoCEv2: Ethernet Priority, 'auto' will select 0 by default.",
+   "InfiniBand: 'auto' means selecting a service level matching UCX_IB_AR configuration.\n"
+   "RoCEv2: 'auto' means selecting Ethernet Priority 0 by default.",
    ucs_offsetof(uct_ib_iface_config_t, sl),
    UCS_CONFIG_TYPE_ULUNITS},
 
   {"TRAFFIC_CLASS", "auto",
    "IB Traffic Class / RoCEv2 Differentiated Services Code Point (DSCP).\n"
-   "The 'auto' option uses the port's global traffic class for RoCEv2 if any, otherwise\n"
+   "'auto' means using the port's global traffic class for RoCEv2 if any; otherwise\n"
    "defaults to 106. IB uses class 0.",
    ucs_offsetof(uct_ib_iface_config_t, traffic_class),
    UCS_CONFIG_TYPE_ULUNITS},
@@ -205,8 +205,8 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
 
   {"NUM_PATHS", "auto",
    "Number of connections that should be created between a pair of communicating\n"
-   "endpoints for optimal performance. The default value 'auto' behaves according\n"
-   "to the port link layer:\n"
+   "endpoints for optimal performance. 'auto' means the number of paths depends\n"
+   "on the port link layer:\n"
    " RoCE       - "UCS_PP_MAKE_STRING(UCT_IB_DEV_MAX_PORTS) " for LAG port, otherwise - 1.\n"
    " InfiniBand - As the number of path bits enabled by fabric's LMC value and selected\n"
    "              by "UCS_DEFAULT_ENV_PREFIX UCT_IB_CONFIG_PREFIX"LID_PATH_BITS configuration.",
@@ -215,8 +215,8 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
 
   {"ROCE_LOCAL_SUBNET", "n",
    "Use the local IP address and subnet mask of each network device to route RoCEv2 packets.\n"
-   "If set to 'y', only addresses within the interface's subnet will be assumed as reachable.\n"
-   "If set to 'n', every remote RoCEv2 IP address is assumed to be reachable from any port.",
+   "'y' means only addresses within the interface's subnet are assumed as reachable.\n"
+   "'n' means every remote RoCEv2 IP address is assumed to be reachable from any port.",
    ucs_offsetof(uct_ib_iface_config_t, rocev2_local_subnet),
    UCS_CONFIG_TYPE_BOOL},
 
@@ -259,23 +259,23 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
 
   {"PKEY", "auto",
    "Which pkey value to use. Should be between 0 and 0x7fff.\n"
-   "The 'auto' option selects a first valid pkey value with full membership.",
+   "'auto' means selecting the first valid pkey value with full membership.",
    ucs_offsetof(uct_ib_iface_config_t, pkey),
    UCS_CONFIG_TYPE_HEX},
 
   {"PATH_MTU", "default",
-   "Path MTU. The 'default' value selects the best MTU for the device.",
+   "Path MTU. 'default' means selecting the best MTU for the device.",
    ucs_offsetof(uct_ib_iface_config_t, path_mtu),
    UCS_CONFIG_TYPE_ENUM(uct_ib_mtu_values)},
 
   {"COUNTER_SET_ID", "auto",
-   "Counter set ID to use for performance counters. A value of 'auto' will try to\n"
+   "Counter set ID to use for performance counters. 'auto' means trying to\n"
    "detect the default value by creating a dummy QP.",
    ucs_offsetof(uct_ib_iface_config_t, counter_set_id),
    UCS_CONFIG_TYPE_ULUNITS},
 
   {"REVERSE_SL", "auto",
-   "Reverse Service Level. 'auto' sets the same value of SL.",
+   "Reverse Service Level. 'auto' means using the same value as SL.",
    ucs_offsetof(uct_ib_iface_config_t, reverse_sl),
    UCS_CONFIG_TYPE_ULUNITS},
 

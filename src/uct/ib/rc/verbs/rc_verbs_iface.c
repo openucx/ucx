@@ -43,7 +43,7 @@ static ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
 
   {"MAX_AM_HDR", "128",
    "Buffer size to reserve for active message headers.\n"
-   "If set to '0', the transport will not support zero-copy active messages.",
+   "'0' means the transport does not support zero-copy active messages.",
    ucs_offsetof(uct_rc_verbs_iface_config_t, max_am_hdr),
    UCS_CONFIG_TYPE_MEMUNITS},
 

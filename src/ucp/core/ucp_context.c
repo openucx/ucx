@@ -223,8 +223,8 @@ static ucs_config_field_t ucp_context_config_table[] = {
   {"MULTI_PATH_RATIO", "auto",
    "Bandwidth efficiency ratio when more than one path per device is used.\n"
    "This value represents the fraction of bandwidth taken by each connection\n"
-   "on the same device. A value of 'auto' means that fraction is calculated\n"
-   "based on the maximal number of paths supported by the device.",
+   "on the same device. 'auto' means that fraction is calculated based on the\n"
+   "maximal number of paths supported by the device.",
    ucs_offsetof(ucp_context_config_t, multi_path_ratio),
    UCS_CONFIG_TYPE_POS_DOUBLE},
 
@@ -370,8 +370,8 @@ static ucs_config_field_t ucp_context_config_table[] = {
   {"TM_SW_RNDV", "n",
    "Use software rendezvous protocol even when tag matching offload is enabled.\n"
    "In this case tag matching offload will be used for messages sent with eager\n"
-   "protocol only. If the value is set to 'try', the rendezvous protocol is\n"
-   "selected automatically according to the performance characteristics.",
+   "protocol only. 'try' means the rendezvous protocol is selected automatically\n"
+   "according to the performance characteristics.",
    ucs_offsetof(ucp_context_config_t, tm_sw_rndv),
    UCS_CONFIG_TYPE_TERNARY},
 
@@ -492,13 +492,13 @@ static ucs_config_field_t ucp_context_config_table[] = {
 
   {"KEEPALIVE_NUM_EPS", "128",
    "Maximal number of endpoints to check on every keepalive round\n"
-   "('inf' checks all endpoints on every round; must be greater than 0).",
+   "('inf' means all endpoints are checked on every round; must be greater than 0).",
    ucs_offsetof(ucp_context_config_t, keepalive_num_eps),
    UCS_CONFIG_TYPE_UINT},
 
   {"RECOVERY_RETRIES", "inf",
    "Maximum number of recovery rounds before a partially failed endpoint\n"
-   "is declared fully failed ('inf' retries indefinitely; must be greater\n"
+   "is declared fully failed ('inf' means retry indefinitely; must be greater\n"
    "than 0). Each round occurs after UCX_KEEPALIVE_INTERVAL.\n"
    "Applies only to endpoints created with UCP_ERR_HANDLING_MODE_FAILOVER.",
    ucs_offsetof(ucp_context_config_t, recovery_retries),
@@ -506,7 +506,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
 
   {"DYNAMIC_TL_SWITCH_INTERVAL", "inf",
    "Time interval between dynamic transport switching rounds.\n"
-   "Must be a non-zero value. Use 'inf' to disable this feature.",
+   "Must be a non-zero value. 'inf' means this feature is disabled.",
    ucs_offsetof(ucp_context_config_t, dynamic_tl_switch_interval),
    UCS_CONFIG_TYPE_TIME_UNITS},
 
@@ -525,7 +525,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
 
   {"PROTO_INDIRECT_ID", "auto",
    "Enable indirect IDs to object pointers (endpoint, request) in wire protocols.\n"
-   "A value of 'auto' means to enable only if error handling is enabled on the endpoint.",
+   "'auto' means enable only if error handling is enabled on the endpoint.",
    ucs_offsetof(ucp_context_config_t, proto_indirect_id),
    UCS_CONFIG_TYPE_ON_OFF_AUTO},
 
@@ -539,7 +539,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
    UCS_CONFIG_TYPE_BOOL},
 
   {"PROTO_EMULATION_ENABLE", "y",
-   "When set to 'no', emulation protocols for put and get are disabled. If no native\n"
+   "'no' means emulation protocols for put and get are disabled. If no native\n"
    "zero-copy RMA protocol exist for the memory type pair, RMA requests will be cancelled.",
    ucs_offsetof(ucp_context_config_t, proto_emulation_enable),
    UCS_CONFIG_TYPE_BOOL},
@@ -630,8 +630,8 @@ static ucs_config_field_t ucp_context_config_table[] = {
   )},
 
   {"GVA_ENABLE", "off",
-   "Enable Global VA infrastructure. Setting to 'auto' will try to enable,\n"
-   "but if error handling enabled will disable.",
+   "Enable Global VA infrastructure. 'auto' means UCX tries to enable it, but\n"
+   "error handling disables it.",
    ucs_offsetof(ucp_context_config_t, gva_enable),
    UCS_CONFIG_TYPE_ON_OFF_AUTO},
 
@@ -759,9 +759,9 @@ static ucs_config_field_t ucp_config_table[] = {
 
   {"ALLOC_PRIO", "md:sysv,md:posix,thp,md:*,mmap,heap",
    "Priority of memory allocation methods. Each item in the list can be either\n"
-   "an allocation method ('huge', 'thp', 'mmap', 'libc') or md:<name> which means\n"
-   " to use the specified memory domain for allocation. <name> can be either a UCT\n"
-   " component name, or the '*' wildcard, which is equivalent to all UCT components.",
+   "an allocation method ('huge', 'thp', 'mmap', 'libc') or md:<name>.\n"
+   "Use md:<name> to select the specified memory domain. <name> may be a UCT\n"
+   "component name, or the '*' wildcard, which is equivalent to all UCT components.",
    ucs_offsetof(ucp_config_t, alloc_prio),
    UCS_CONFIG_TYPE_STRING_ARRAY},
 

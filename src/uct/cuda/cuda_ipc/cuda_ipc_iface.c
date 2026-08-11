@@ -59,7 +59,7 @@ static ucs_config_field_t uct_cuda_ipc_iface_config_table[] = {
      UCS_CONFIG_TYPE_ON_OFF_AUTO},
 
     {"MAX_EVENTS", "inf",
-     "Max number of CUDA events. '-1' is infinite.",
+     "Max number of CUDA events. '-1' means infinite.",
      ucs_offsetof(uct_cuda_ipc_iface_config_t, params.max_cuda_ipc_events),
      UCS_CONFIG_TYPE_UINT},
 

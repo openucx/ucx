@@ -98,8 +98,8 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
                                 ucs_offsetof(uct_tcp_iface_config_t, rx_mpool), ""),
 
   {"PORT_RANGE", "0",
-   "Generate a random TCP port number from that range. A value of zero means\n"
-   "let the operating system select the port number.",
+   "Generate a random TCP port number from that range.\n"
+   "'0' means the operating system selects the port number.",
    ucs_offsetof(uct_tcp_iface_config_t, port_range),
    UCS_CONFIG_TYPE_RANGE_SPEC},
 
@@ -111,19 +111,19 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
 #ifdef UCT_TCP_EP_KEEPALIVE
   {"KEEPIDLE", UCS_PP_MAKE_STRING(UCT_TCP_EP_DEFAULT_KEEPALIVE_IDLE) "s",
    "The time the connection needs to remain idle before TCP starts sending\n"
-   "keepalive probes. Specifying 'inf' disables keepalive.",
+   "keepalive probes. 'inf' means keepalive is disabled.",
    ucs_offsetof(uct_tcp_iface_config_t, keepalive.idle),
    UCS_CONFIG_TYPE_TIME_UNITS},
 
   {"KEEPCNT", "auto",
    "The maximum number of keepalive probes TCP should send before\n"
-   "dropping the connection. Specifying 'inf' disables keepalive.",
+   "dropping the connection. 'inf' means keepalive is disabled.",
    ucs_offsetof(uct_tcp_iface_config_t, keepalive.cnt),
    UCS_CONFIG_TYPE_ULUNITS},
 
   {"KEEPINTVL", UCS_PP_MAKE_STRING(UCT_TCP_EP_DEFAULT_KEEPALIVE_INTVL) "s",
-   "The time between individual keepalive probes. Specifying 'inf' disables\n"
-   "keepalive.",
+   "The time between individual keepalive probes.\n"
+   "'inf' means keepalive is disabled.",
    ucs_offsetof(uct_tcp_iface_config_t, keepalive.intvl),
    UCS_CONFIG_TYPE_TIME_UNITS},
 #endif /* UCT_TCP_EP_KEEPALIVE */

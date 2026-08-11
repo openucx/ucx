@@ -591,7 +591,7 @@ typedef struct uct_iface_mpool_config {
                                       _dfl_max_chunk_size, _dfl_grow_factor, \
                                       _mp_name, _offset, _desc) \
     {_prefix "MAX_BUFS", UCS_PP_QUOTE(_dfl_max), \
-     "Maximal number of " _mp_name " buffers for the interface. '-1' is infinite." \
+     "Maximal number of " _mp_name " buffers for the interface. '-1' means infinite." \
      _desc, \
      (_offset) + ucs_offsetof(uct_iface_mpool_config_t, max_bufs), \
      UCS_CONFIG_TYPE_INT}, \

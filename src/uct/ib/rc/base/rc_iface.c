@@ -35,7 +35,7 @@ ucs_config_field_t uct_rc_iface_common_config_table[] = {
 
   {"MAX_RD_ATOMIC", "auto",
    "Maximal number of outstanding read or atomic replies.\n"
-   "The 'auto' value uses the maximum value supported by the hardware.",
+   "'auto' means using the maximum value supported by the hardware.",
    ucs_offsetof(uct_rc_iface_common_config_t, max_rd_atomic),
    UCS_CONFIG_TYPE_ULUNITS},
 
