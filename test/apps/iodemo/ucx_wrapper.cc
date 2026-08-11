@@ -283,6 +283,7 @@ void UcxContext::connect_callback(ucp_conn_request_h conn_req, void *arg)
                                UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ID;
     ucs_status_t status = ucp_conn_request_query(conn_req, &conn_req_attr);
     if (status == UCS_OK) {
+        /* coverity[uninit_use_in_call] */
         UCX_LOG << "got new connection request " << conn_req << " from client "
                 << UcxContext::sockaddr_str(
                            (const struct sockaddr*)&conn_req_attr.client_address,
@@ -846,6 +847,7 @@ void UcxConnection::accept(ucp_conn_request_h conn_req, UcxCallback *callback)
 
     ucs_status_t status = ucp_conn_request_query(conn_req, &conn_req_attr);
     if (status == UCS_OK) {
+        /* coverity[uninit_use_in_call] */
         set_log_prefix((const struct sockaddr*)&conn_req_attr.client_address,
                        sizeof(conn_req_attr.client_address));
     } else {
@@ -1207,9 +1209,11 @@ void UcxConnection::established(ucs_status_t status)
             UCX_CONN_LOG << "ucp_ep_query() failed: "
                          << ucs_status_string(status);
         } else {
+            /* coverity[uninit_use_in_call] */
             local_address  = UcxContext::sockaddr_str(
                                  (const struct sockaddr*)&ep_attr.local_sockaddr,
                                  sizeof(ep_attr.local_sockaddr));
+            /* coverity[uninit_use_in_call] */
             remote_address = UcxContext::sockaddr_str(
                                  (const struct sockaddr*)&ep_attr.remote_sockaddr,
                                  sizeof(ep_attr.remote_sockaddr));

@@ -490,6 +490,7 @@ uct_tcp_iface_connect_handler(int listen_fd, ucs_event_set_types_t events,
 
     for (;;) {
         addrlen = sizeof(peer_addr);
+        /* coverity[uninit_use_in_call] */
         status  = ucs_socket_accept(iface->listen_fd, (struct sockaddr*)&peer_addr,
                                     &addrlen, &fd);
         if (status != UCS_OK) {
