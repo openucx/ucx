@@ -743,10 +743,15 @@ public:
         m_send_sn_length = total_length;
 
         if (m_perf.params.ucp.send_datatype == UCP_PERF_DATATYPE_IOV) {
-            size_t last = m_perf.params.msg_size_cnt - 1;
+            const ucp_dt_iov_t *iov = m_perf.ucp.send_iov;
+            size_t last             = m_perf.params.msg_size_cnt - 1;
 
-            m_send_sn_buffer = m_perf.ucp.send_iov[last].buffer;
-            m_send_sn_length = m_perf.ucp.send_iov[last].length;
+            while ((last > 0) && (iov[last].length == 0)) {
+                --last;
+            }
+
+            m_send_sn_buffer = iov[last].buffer;
+            m_send_sn_length = iov[last].length;
         }
 
         if ((CMD == UCX_PERF_CMD_PUT) || (CMD == UCX_PERF_CMD_GET)) {
