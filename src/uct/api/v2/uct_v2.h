@@ -415,8 +415,8 @@ typedef enum {
     /**
      * Defer completion of outstanding operations to the caller. The normal
      * endpoint error path will not complete these operations; the caller must
-     * purge them with @ref uct_ep_outstanding_purge. This state remains active
-     * until endpoint cancellation or destruction.
+     * purge them with @ref uct_ep_outstanding_purge. A successful purge returns
+     * ownership of subsequent operations to UCT.
      */
     UCT_EP_INVALIDATE_FLAG_DEFER_COMPLETIONS = UCS_BIT(0)
 } uct_ep_invalidate_flags_t;

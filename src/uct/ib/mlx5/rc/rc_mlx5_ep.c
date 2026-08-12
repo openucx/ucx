@@ -779,6 +779,12 @@ ucs_status_t uct_rc_mlx5_base_ep_flush(uct_ep_h tl_ep, unsigned flags,
     int already_canceled = ep->super.flags & UCT_RC_EP_FLAG_FLUSH_CANCEL;
     ucs_status_t status;
 
+    if (ep->flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS) {
+        ucs_diag("ep %p flush while completions are deferred; outstanding "
+                 "operations must be purged first",
+                 ep);
+    }
+
     UCT_CHECK_PARAM(!ucs_test_all_flags(flags, UCT_FLUSH_FLAG_CANCEL |
                                                UCT_FLUSH_FLAG_REMOTE),
                     "flush flags CANCEL and REMOTE are mutually exclusive");
@@ -824,24 +830,6 @@ ucs_status_t uct_rc_mlx5_base_ep_flush(uct_ep_h tl_ep, unsigned flags,
 }
 
 ucs_status_t
-uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
-{
-    uct_rc_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_ep_t);
-    ucs_status_t status;
-
-    status = uct_rc_mlx5_base_ep_flush(tl_ep, flags, comp);
-    if (flags & UCT_FLUSH_FLAG_CANCEL) {
-        /* Cancel owns completions even when the flush has to be retried. */
-        if (ep->super.flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS) {
-            uct_rc_mlx5_ep_update_tx_res(tl_ep);
-        }
-        ep->super.flags &= ~UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS;
-    }
-
-    return status;
-}
-
-ucs_status_t
 uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
                                const uct_ep_invalidate_params_t *params)
 {
@@ -858,7 +846,6 @@ uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
     if ((params != NULL) &&
         (params->field_mask & UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS) &&
         (params->flags & UCT_EP_INVALIDATE_FLAG_DEFER_COMPLETIONS) &&
-        !(ep->super.super.flags & UCT_RC_EP_FLAG_FLUSH_CANCEL) &&
         !(ep->super.flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS)) {
         ep->super.flags |= UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS;
         txwq->ft_ci      = txwq->hw_ci;
@@ -867,6 +854,20 @@ uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
     }
 
     return UCS_OK;
+}
+
+ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
+        uct_ep_h tl_ep, const uct_ep_outstanding_purge_params_t *params)
+{
+    uct_rc_mlx5_base_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_base_ep_t);
+    ucs_status_t status;
+
+    status = uct_ib_mlx5_ext_ep_outstanding_purge(tl_ep, params);
+    if (status == UCS_OK) {
+        ep->flags &= ~UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS;
+    }
+
+    return status;
 }
 
 ucs_status_t uct_rc_mlx5_base_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
