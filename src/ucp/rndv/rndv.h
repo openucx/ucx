@@ -114,9 +114,9 @@ ucs_status_t ucp_proto_progress_rndv_rtr(uct_pending_req_t *self);
 ucs_status_t
 ucp_rndv_reg_send_buffer(ucp_request_t *sreq, const ucp_request_param_t *param);
 
-ucp_mem_desc_t *
+ucs_status_t
 ucp_rndv_mpool_get(ucp_worker_h worker, ucs_memory_type_t mem_type,
-                   ucs_sys_device_t sys_dev);
+                   ucs_sys_device_t sys_dev, ucp_mem_desc_t **mdesc_p);
 
 void ucp_rndv_receive(ucp_worker_h worker, ucp_request_t *rreq,
                       const ucp_rndv_rts_hdr_t *rndv_rts_hdr,

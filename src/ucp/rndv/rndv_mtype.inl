@@ -52,27 +52,28 @@ ucp_proto_rndv_mtype_request_init(ucp_request_t *req,
                                   unsigned fc_op)
 {
     ucp_worker_h worker = req->send.ep->worker;
+    ucs_status_t status;
 
-    req->send.rndv.mdesc = ucp_rndv_mpool_get(worker, frag_mem_type,
-                                              frag_sys_dev);
-    if (req->send.rndv.mdesc == NULL) {
-        /* Mpool quota exhausted - throttle by queuing the request in the
-         * appropriate pending queue ordered by priority. */
-        ucp_trace_req(req,
-                      "mtype_fc: mpool exhausted, queue %s mem_type %s "
-                      "sys_dev %s",
-                      (fc_op == UCP_WORKER_RNDV_FC_OP_RTR) ? "rtr" : "put/get",
-                      ucs_memory_type_names[frag_mem_type],
-                      ucs_topo_sys_device_get_name(frag_sys_dev));
-        UCS_STATS_UPDATE_COUNTER(worker->stats,
-                                 UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED, 1);
-        ucs_queue_push(&worker->rndv_mtype_fc.pending_q[fc_op],
-                       &req->send.rndv.ppln.queue_elem);
-
-        return UCS_ERR_NO_RESOURCE;
+    status = ucp_rndv_mpool_get(worker, frag_mem_type, frag_sys_dev,
+                                &req->send.rndv.mdesc);
+    if (status != UCS_ERR_NO_RESOURCE) {
+        return status;
     }
 
-    return UCS_OK;
+    /* Mpool quota exhausted - throttle by queuing the request in the
+     * appropriate pending queue ordered by priority. */
+    ucp_trace_req(req,
+                  "mtype_fc: mpool exhausted, queue %s mem_type %s "
+                  "sys_dev %s",
+                  (fc_op == UCP_WORKER_RNDV_FC_OP_RTR) ? "rtr" : "put/get",
+                  ucs_memory_type_names[frag_mem_type],
+                  ucs_topo_sys_device_get_name(frag_sys_dev));
+    UCS_STATS_UPDATE_COUNTER(worker->stats,
+                             UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED, 1);
+    ucs_queue_push(&worker->rndv_mtype_fc.pending_q[fc_op],
+                   &req->send.rndv.ppln.queue_elem);
+
+    return UCS_ERR_NO_RESOURCE;
 }
 
 static UCS_F_ALWAYS_INLINE uct_mem_h

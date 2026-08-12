@@ -1136,9 +1136,9 @@ ucs_mpool_ops_t ucp_frag_mpool_ops = {
     .obj_cleanup   = (ucs_mpool_obj_cleanup_func_t)ucs_empty_function
 };
 
-ucp_mem_desc_t *
+ucs_status_t
 ucp_rndv_mpool_get(ucp_worker_h worker, ucs_memory_type_t mem_type,
-                   ucs_sys_device_t sys_dev)
+                   ucs_sys_device_t sys_dev, ucp_mem_desc_t **mdesc_p)
 {
     ucp_rndv_mpool_priv_t *mpriv;
     ucp_worker_mpool_key_t key;
@@ -1160,7 +1160,8 @@ ucp_rndv_mpool_get(ucp_worker_h worker, ucs_memory_type_t mem_type,
 
     khiter = kh_put(ucp_worker_mpool_hash, &worker->mpool_hash, key, &khret);
     if (khret == UCS_KH_PUT_FAILED) {
-        return NULL;
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
     }
 
     ucs_assert_always(khret != UCS_KH_PUT_KEY_PRESENT);
@@ -1179,16 +1180,29 @@ ucp_rndv_mpool_get(ucp_worker_h worker, ucs_memory_type_t mem_type,
     mp_params.name            = "ucp_rndv_frags";
     status = ucs_mpool_init(&mp_params, mpool);
     if (status != UCS_OK) {
-        return NULL;
+        kh_del(ucp_worker_mpool_hash, &worker->mpool_hash, khiter);
+        goto err;
     }
 
-    mpriv            = ucs_mpool_priv(mpool);
-    mpriv->worker    = worker;
-    mpriv->mem_type  = key.mem_type;
-    mpriv->sys_dev   = sys_dev;
+    mpriv           = ucs_mpool_priv(mpool);
+    mpriv->worker   = worker;
+    mpriv->mem_type = key.mem_type;
+    mpriv->sys_dev  = sys_dev;
 
 out_mp_get:
-    return ucp_worker_mpool_get(mpool);
+    *mdesc_p = ucp_worker_mpool_get(mpool);
+    if (*mdesc_p != NULL) {
+        return UCS_OK;
+    }
+
+    /* Quota exhaustion can be retried later. Any other NULL means that
+     * allocation or setup failed. */
+    return ucs_mpool_is_empty(mpool) ? UCS_ERR_NO_RESOURCE :
+                                       UCS_ERR_NO_MEMORY;
+
+err:
+    *mdesc_p = NULL;
+    return status;
 }
 
 static void ucp_rndv_send_frag_get_mem_type(ucp_request_t *sreq, size_t length,
@@ -1203,6 +1217,7 @@ static void ucp_rndv_send_frag_get_mem_type(ucp_request_t *sreq, size_t length,
     ucs_memory_type_t frag_mem_type = ucp_rndv_frag_mem_type(worker->context);
     ucp_request_t *freq;
     ucp_mem_desc_t *mdesc;
+    ucs_status_t status;
 
     /* GET fragment to stage buffer */
 
@@ -1211,10 +1226,11 @@ static void ucp_rndv_send_frag_get_mem_type(ucp_request_t *sreq, size_t length,
         ucs_fatal("failed to allocate fragment receive request");
     }
 
-    mdesc = ucp_rndv_mpool_get(worker, frag_mem_type,
-                               UCS_SYS_DEVICE_ID_UNKNOWN);
-    if (ucs_unlikely(mdesc == NULL)) {
-        ucs_fatal("failed to allocate fragment memory desc");
+    status = ucp_rndv_mpool_get(worker, frag_mem_type,
+                                UCS_SYS_DEVICE_ID_UNKNOWN, &mdesc);
+    if (ucs_unlikely(status != UCS_OK)) {
+        ucs_fatal("failed to allocate fragment memory desc: %s",
+                  ucs_status_string(status));
     }
 
     freq->send.ep         = sreq->send.ep;
@@ -1363,6 +1379,7 @@ static void ucp_rndv_send_frag_rtr(ucp_worker_h worker, ucp_request_t *rndv_req,
     ucp_request_t *freq;
     ucp_request_t *frndv_req;
     ucp_md_map_t md_map;
+    ucs_status_t status;
 
     ucp_trace_req(rreq, "using rndv pipeline protocol rndv_req %p", rndv_req);
 
@@ -1388,10 +1405,11 @@ static void ucp_rndv_send_frag_rtr(ucp_worker_h worker, ucp_request_t *rndv_req,
         }
 
         /* allocate fragment recv buffer desc*/
-        mdesc = ucp_rndv_mpool_get(worker, frag_mem_type,
-                                   UCS_SYS_DEVICE_ID_UNKNOWN);
-        if (mdesc == NULL) {
-            ucs_fatal("failed to allocate fragment memory buffer");
+        status = ucp_rndv_mpool_get(worker, frag_mem_type,
+                                    UCS_SYS_DEVICE_ID_UNKNOWN, &mdesc);
+        if (status != UCS_OK) {
+            ucs_fatal("failed to allocate fragment memory buffer: %s",
+                      ucs_status_string(status));
         }
 
         /* Pass datatype to avoid Coverity warning */
