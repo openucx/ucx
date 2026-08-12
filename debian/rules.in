@@ -36,9 +36,7 @@ override_dh_auto_install:
 override_dh_shlibdeps:
 	dh_shlibdeps --dpkg-shlibdeps-params=--ignore-missing-info
 	if [ -e $(CUDA_SUBSTVARS) ]; then \
-		sed -i -e 's/libnvidia-compute-[0-9]\+\( ([^)]*)\)\?, //g' \
-			-e 's/, libnvidia-compute-[0-9]\+\( ([^)]*)\)\?//g' \
-			$(CUDA_SUBSTVARS); \
+		sed -i -e 's/, libnvidia-compute-[0-9]\+[^,]*//g' $(CUDA_SUBSTVARS); \
 		echo "shlibs:Recommends=libnvidia-compute | libnvidia-ml1" >> \
 			$(CUDA_SUBSTVARS); \
 	fi
