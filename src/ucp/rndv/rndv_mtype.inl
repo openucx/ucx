@@ -10,6 +10,7 @@
 #include "rndv.h"
 
 #include <ucp/core/ucp_worker.h>
+#include <ucs/sys/topo/base/topo.h>
 
 
 static ucp_ep_h ucp_proto_rndv_mtype_ep(ucp_worker_t *worker,
@@ -57,14 +58,16 @@ ucp_proto_rndv_mtype_request_init(ucp_request_t *req,
     if (req->send.rndv.mdesc == NULL) {
         /* Mpool quota exhausted - throttle by queuing the request in the
          * appropriate pending queue ordered by priority. */
-        ucs_trace_req("mtype_fc: frag mpool exhausted, throttling request");
+        ucp_trace_req(req,
+                      "mtype_fc: mpool exhausted, queue %s mem_type %s "
+                      "sys_dev %s",
+                      (fc_op == UCP_WORKER_RNDV_FC_OP_RTR) ? "rtr" : "put/get",
+                      ucs_memory_type_names[frag_mem_type],
+                      ucs_topo_sys_device_get_name(frag_sys_dev));
         UCS_STATS_UPDATE_COUNTER(worker->stats,
                                  UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED, 1);
         ucs_queue_push(&worker->rndv_mtype_fc.pending_q[fc_op],
                        &req->send.rndv.ppln.queue_elem);
-        if (fc_op < worker->rndv_mtype_fc.best_q) {
-            worker->rndv_mtype_fc.best_q = fc_op;
-        }
 
         return UCS_ERR_NO_RESOURCE;
     }
@@ -205,27 +208,24 @@ ucp_proto_rndv_mtype_fc_reschedule_pending(ucp_request_t *req)
     ucp_worker_h worker = req->send.ep->worker;
     ucs_queue_elem_t *elem;
     ucp_request_t *pending_req;
+    unsigned q_index;
 
-    /* Dequeue from highest-priority non-empty queue */
-    if (worker->rndv_mtype_fc.best_q >= UCP_WORKER_RNDV_FC_OP_LAST) {
+    /* Dequeue from highest-priority non-empty queue (PUT/GET before RTR) */
+    for (q_index = 0; q_index < UCP_WORKER_RNDV_FC_OP_LAST; q_index++) {
+        if (ucs_queue_is_empty(&worker->rndv_mtype_fc.pending_q[q_index])) {
+            continue;
+        }
+
+        elem = ucs_queue_pull(&worker->rndv_mtype_fc.pending_q[q_index]);
+        ucs_assert(elem != NULL);
+
+        pending_req = ucs_container_of(elem, ucp_request_t,
+                                       send.rndv.ppln.queue_elem);
+        ucs_callbackq_add_oneshot(&worker->uct->progress_q, pending_req,
+                                  ucp_proto_rndv_mtype_fc_reschedule_cb,
+                                  pending_req);
         return;
     }
-
-    elem = ucs_queue_pull(
-            &worker->rndv_mtype_fc.pending_q[worker->rndv_mtype_fc.best_q]);
-
-    /* Advance best_q past empty queues */
-    while ((worker->rndv_mtype_fc.best_q < UCP_WORKER_RNDV_FC_OP_LAST) &&
-        ucs_queue_is_empty(
-              &worker->rndv_mtype_fc.pending_q[worker->rndv_mtype_fc.best_q])) {
-        worker->rndv_mtype_fc.best_q++;
-    }
-
-    pending_req = ucs_container_of(elem, ucp_request_t,
-                                   send.rndv.ppln.queue_elem);
-    ucs_callbackq_add_oneshot(&worker->uct->progress_q, pending_req,
-                              ucp_proto_rndv_mtype_fc_reschedule_cb,
-                              pending_req);
 }
 
 /**
