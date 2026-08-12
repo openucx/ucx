@@ -339,6 +339,7 @@ protected:
 
         ASSERT_UCS_OK(query_status);
         EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, mem_attr.mem_type);
+        EXPECT_TRUE(mem_attr.mem_flags & UCS_MEM_FLAG_REGISTRABLE);
     }
 
 private:
@@ -422,6 +423,7 @@ UCS_TEST_P(test_mem_alloc_device, no_current_context_cuda_registrable,
     EXPECT_UCS_OK(lookup_status);
     if (lookup_status == UCS_OK) {
         EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, mem_info.type);
+        EXPECT_TRUE(mem_info.mem_flags & UCS_MEM_FLAG_REGISTRABLE);
     }
     EXPECT_UCS_OK(free_status);
 }

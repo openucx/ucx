@@ -11,8 +11,10 @@ extern "C" {
 #include <ucp/core/ucp_mm.h>
 #include <ucp/core/ucp_types.h>
 #include <uct/base/uct_iface.h>
+#include <ucp/proto/proto.h>
 #include <ucp/proto/proto_debug.h>
 #include <ucp/proto/proto_select.inl>
+#include <ucp/rndv/proto_rndv.h>
 #include <ucs/memory/numa.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/topo/base/topo.h>
@@ -1351,6 +1353,127 @@ UCS_TEST_P(test_ucp_proto_mock_cuda_ipc, get, "IB_NUM_PATHS?=1")
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_proto_mock_cuda_ipc,
+                                        shm_rc_ipc, "rc_x,cuda_ipc,rocm_ipc")
+
+/*
+ * cuda_ipc accesses remote memory by rkey_ptr, which a peer on a different node
+ * can open only if the memory is exportable to that node. Force the endpoint
+ * config to be inter-node and check that the RTR protocol advertises the
+ * cuda_ipc memory domain only for buffers which have
+ * UCS_MEM_FLAG_RKEY_PTR_INTER_NODE.
+ */
+class test_ucp_proto_mock_cuda_ipc_inter_node :
+        public test_ucp_proto_mock_cuda_ipc {
+public:
+    test_ucp_proto_mock_cuda_ipc_inter_node() :
+        m_ep_config(nullptr), m_ep_config_flags(0)
+    {
+    }
+
+    virtual void init() override
+    {
+        test_ucp_proto_mock_cuda_ipc::init();
+
+        m_ep_config       = ucp_worker_ep_config(sender().worker(),
+                                                 ep_config_index(sender()));
+        m_ep_config_flags = m_ep_config->key.flags;
+        m_ep_config->key.flags &= ~(UCP_EP_CONFIG_KEY_FLAG_SELF |
+                                    UCP_EP_CONFIG_KEY_FLAG_INTRA_NODE);
+    }
+
+    virtual void cleanup() override
+    {
+        if (m_ep_config != nullptr) {
+            m_ep_config->key.flags = m_ep_config_flags;
+        }
+
+        test_ucp_proto_mock_cuda_ipc::cleanup();
+    }
+
+protected:
+    ucp_md_index_t cuda_ipc_md_index()
+    {
+        ucp_context_h context = sender().ucph();
+        ucp_lane_index_t lane;
+        ucp_rsc_index_t rsc_index;
+
+        for (lane = 0; lane < m_ep_config->key.num_lanes; ++lane) {
+            rsc_index = m_ep_config->key.lanes[lane].rsc_index;
+            if (rsc_index == UCP_NULL_RESOURCE) {
+                continue;
+            }
+
+            if (std::string(context->tl_rscs[rsc_index].tl_rsc.tl_name) ==
+                "cuda_ipc") {
+                return context->tl_rscs[rsc_index].md_index;
+            }
+        }
+
+        return UCP_NULL_RESOURCE;
+    }
+
+    /* Return the memory domains which rndv/rtr would pack into the RTR message
+     * for a CUDA receive buffer with the given memory flags. */
+    ucp_md_map_t rtr_md_map(uint8_t mem_flags)
+    {
+        ucp_memory_info_t mem_info = {UCS_MEMORY_TYPE_CUDA,
+                                      UCS_SYS_DEVICE_ID_UNKNOWN, mem_flags};
+        ucp_proto_select_init_protocols_t *proto_init;
+        ucp_proto_select_param_t select_param;
+        ucp_proto_select_elem_t *select_elem;
+        const ucp_proto_rndv_ctrl_priv_t *rpriv;
+        ucp_proto_init_elem_t *proto;
+
+        ucp_proto_select_param_init(&select_param, UCP_OP_ID_RNDV_RECV, 0, 0,
+                                    UCP_DATATYPE_CONTIG, &mem_info, 1);
+
+        select_elem = ucp_proto_select_lookup_slow(sender().worker(),
+                                                   &m_ep_config->proto_select,
+                                                   1,
+                                                   ep_config_index(sender()),
+                                                   UCP_WORKER_CFG_INDEX_NULL,
+                                                   &select_param);
+        if (select_elem == nullptr) {
+            ADD_FAILURE() << "rendezvous receive protocols were not selected";
+            return 0;
+        }
+
+        proto_init = &select_elem->proto_init;
+        ucs_array_for_each(proto, &proto_init->protocols) {
+            if (std::string(ucp_proto_id_field(proto->proto_id, name)) !=
+                "rndv/rtr") {
+                continue;
+            }
+
+            rpriv = reinterpret_cast<const ucp_proto_rndv_ctrl_priv_t*>(
+                    &ucs_array_elem(&proto_init->priv_buf,
+                                    proto->priv_offset));
+            return rpriv->md_map;
+        }
+
+        ADD_FAILURE() << "rndv/rtr protocol was not initialized";
+        return 0;
+    }
+
+private:
+    ucp_ep_config_t *m_ep_config;
+    unsigned         m_ep_config_flags;
+};
+
+UCS_TEST_P(test_ucp_proto_mock_cuda_ipc_inter_node, rtr_md_map,
+           "IB_NUM_PATHS?=1")
+{
+    ucp_md_index_t md_index = cuda_ipc_md_index();
+
+    ASSERT_NE(UCP_NULL_RESOURCE, md_index) << "no cuda_ipc lane";
+
+    EXPECT_FALSE(rtr_md_map(UCS_MEM_FLAG_REGISTRABLE) & UCS_BIT(md_index));
+    EXPECT_TRUE(rtr_md_map(UCS_MEM_FLAG_REGISTRABLE |
+                           UCS_MEM_FLAG_RKEY_PTR_INTER_NODE) &
+                UCS_BIT(md_index));
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_proto_mock_cuda_ipc_inter_node,
                                         shm_rc_ipc, "rc_x,cuda_ipc,rocm_ipc")
 
 class test_ucp_proto_mock_rcx_twins : public test_ucp_proto_mock {
