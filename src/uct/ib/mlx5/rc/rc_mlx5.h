@@ -46,7 +46,7 @@ enum {
 
 enum {
     /* The caller owns outstanding operations after EP invalidation. */
-    UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS = UCS_BIT(0)
+    UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS = UCS_BIT(0)
 };
 
 

@@ -508,12 +508,7 @@ uct_rc_mlx5_common_post_send(uct_rc_mlx5_iface_common_t *iface, int qp_type,
 
     res_count = uct_ib_mlx5_post_send(txwq, ctrl, wqe_size, 1);
 
-#if HAVE_MLX5_MMO
-    if ((qp_type == IBV_QPT_RC) && (opcode != MLX5_OPCODE_NOP) &&
-        (opcode != MLX5_OPCODE_MMO)) {
-#else
     if ((qp_type == IBV_QPT_RC) && (opcode != MLX5_OPCODE_NOP)) {
-#endif
         uct_rc_mlx5_txwq_record_token(iface, txwq, message_length);
     }
 
@@ -1966,7 +1961,7 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface, int poll_flags)
     ucs_trace_poll("rc_mlx5 iface %p tx_cqe: ep %p qpn 0x%x hw_ci %d", iface,
                    ep, qp_num, hw_ci);
 
-    ucs_assert(!(ep->flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS));
+    ucs_assert(!(ep->flags & UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS));
     uct_rc_mlx5_txqp_process_tx_cqe(&ep->super.txqp, cqe, hw_ci);
     ucs_arbiter_group_schedule(&iface->super.tx.arbiter, &ep->super.arb_group);
     uct_rc_mlx5_iface_update_tx_res(&iface->super, ep, hw_ci);
