@@ -348,6 +348,71 @@ UCS_TEST_P(test_ucp_rma, proto_disabled_unsupported, "PROTO_ENABLE=n")
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_rma)
 
 
+class test_ucp_rma_cuda_ipc : public test_ucp_memheap {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant>& variants)
+    {
+        add_variant(variants, UCP_FEATURE_RMA);
+    }
+};
+
+UCS_TEST_P(test_ucp_rma_cuda_ipc, put_after_rkey_unpack_different_device)
+{
+    static constexpr uint64_t seed = 0x1111111111111111lu;
+    static constexpr size_t size   = 4096;
+
+    if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
+        UCS_TEST_SKIP_R("CUDA memory is not supported");
+    }
+
+    if (mem_buffer::get_device_count() < 2) {
+        UCS_TEST_SKIP_R("need at least two CUDA devices");
+    }
+
+    const int orig_device     = mem_buffer::get_device();
+    ucp_request_param_t param = {0};
+    ucs_status_t status       = UCS_OK;
+    ucs_status_ptr_t sptr;
+
+    mem_buffer::set_device(0);
+    {
+        mem_buffer sbuf(size, UCS_MEMORY_TYPE_CUDA);
+
+        sbuf.pattern_fill(seed);
+        mem_buffer::set_device(1);
+        {
+            mapped_buffer rbuf(size, receiver(), 0, UCS_MEMORY_TYPE_CUDA);
+            ucs::handle<ucp_rkey_h> rkey = rbuf.rkey(sender());
+
+            mem_buffer::set_device(0);
+            sptr   = ucp_put_nbx(sender().ep(), sbuf.ptr(), sbuf.size(),
+                                 (uint64_t)rbuf.ptr(), rkey, &param);
+            status = request_wait(sptr);
+            if (status == UCS_OK) {
+                status = request_wait(sender().flush_ep_nb());
+            }
+
+            mem_buffer::set_device(1);
+            if ((status == UCS_OK) &&
+                !mem_buffer::compare(sbuf.ptr(), rbuf.ptr(), sbuf.size(),
+                                     UCS_MEMORY_TYPE_CUDA,
+                                     UCS_MEMORY_TYPE_CUDA)) {
+                ADD_FAILURE() << "data validation failed";
+            }
+        }
+
+        mem_buffer::set_device(0);
+    }
+
+    mem_buffer::set_device(orig_device);
+
+    EXPECT_UCS_OK(status);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_rma_cuda_ipc, tcp_ipc,
+                                        "tcp,cuda_ipc,rocm_ipc")
+
+
 class test_ucp_rma_dmabuf : public test_ucp_rma {
 public:
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
