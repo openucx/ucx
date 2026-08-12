@@ -2730,14 +2730,14 @@ ucp_version_check(unsigned api_major_version, unsigned api_minor_version)
     if (ucs_log_is_enabled(log_level)) {
         ret = dladdr(ucp_init_version, &dl_info);
         if (ret != 0) {
-            ucs_string_buffer_appendf(&strb, " (loaded from %s)",
-                                      dl_info.dli_fname);
+            ucs_string_buffer_appendf(
+                    &strb, " (loaded from %s, git branch %s, revision %s)",
+                    dl_info.dli_fname, UCT_SCM_BRANCH, UCT_SCM_VERSION);
         }
         ucs_log(log_level, "%s", ucs_string_buffer_cstr(&strb));
     }
 
-    ucs_debug("git branch '%s', revision %s", UCT_SCM_BRANCH, UCT_SCM_VERSION);
-    ucs_debug("configured with: %s", UCX_CONFIGURE_FLAGS);
+    ucs_debug("Configured with: %s", UCX_CONFIGURE_FLAGS);
 }
 
 ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_version,
