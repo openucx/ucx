@@ -48,7 +48,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_rndv_mtype_request_init(ucp_request_t *req,
                                   ucs_memory_type_t frag_mem_type,
                                   ucs_sys_device_t frag_sys_dev,
-                                  int fc_op)
+                                  unsigned fc_op)
 {
     ucp_worker_h worker = req->send.ep->worker;
 
@@ -202,7 +202,7 @@ unsigned ucp_proto_rndv_mtype_fc_reschedule_cb(void *arg)
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_mtype_fc_reschedule_pending(ucp_request_t *req)
 {
-    ucp_worker_h worker    = req->send.ep->worker;
+    ucp_worker_h worker = req->send.ep->worker;
     ucs_queue_elem_t *elem;
     ucp_request_t *pending_req;
 

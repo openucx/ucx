@@ -9,7 +9,6 @@
 #endif
 
 #include "proto_rndv.inl"
-#include "rndv_mtype.inl"
 
 #include <ucp/proto/proto_init.h>
 #include <ucp/proto/proto_debug.h>
@@ -678,6 +677,13 @@ ucs_status_t ucp_proto_rndv_rts_reset(ucp_request_t *req)
     }
 
     return ucp_proto_request_zcopy_id_reset(req);
+}
+
+static int
+ucp_context_rndv_mtype_mem_limit_enabled(ucp_context_h context)
+{
+    const size_t max_mem = context->config.ext.rndv_mtype_worker_max_mem;
+    return (max_mem != UCS_MEMUNITS_INF) && (max_mem != UCS_MEMUNITS_AUTO);
 }
 
 unsigned ucp_proto_rndv_mtype_fc_max_elems(ucp_context_h context,

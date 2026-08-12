@@ -416,7 +416,7 @@ typedef struct ucp_worker {
         ucs_queue_head_t             pending_q[UCP_WORKER_RNDV_FC_OP_LAST];
         /* Index of highest-priority non-empty queue
          * (UCP_WORKER_RNDV_FC_OP_LAST if all queues are empty) */
-        int                          best_q;
+        unsigned                     best_q;
     } rndv_mtype_fc;
 
     struct {
