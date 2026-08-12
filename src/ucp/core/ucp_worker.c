@@ -2596,7 +2596,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     unsigned name_length;
     ucp_worker_h worker;
     ucs_status_t status;
-    int q_index;
+    unsigned q_index;
 
     worker = ucs_calloc(1, sizeof(*worker), "ucp worker");
     if (worker == NULL) {

@@ -2196,31 +2196,6 @@ protected:
         uint64_t receiver_throttled;
     };
 
-    void check_stats_ge(const entity &e, uint64_t cntr, uint64_t min_value)
-    {
-        auto stats_node = e.worker()->stats;
-        auto value      = UCS_STATS_GET_COUNTER(stats_node, cntr);
-
-        EXPECT_GE(value, min_value)
-                << "counter " << stats_node->cls->counter_names[cntr]
-                << " expected >= " << min_value << " but got " << value;
-    }
-
-    void check_pending_queues_empty(const entity &e)
-    {
-        ucp_worker_h worker = e.worker();
-        for (int i = 0; i < UCP_WORKER_RNDV_FC_OP_LAST; i++) {
-            EXPECT_TRUE(ucs_queue_is_empty(&worker->rndv_mtype_fc.pending_q[i]))
-                    << "pending_q[" << i << "] should be empty";
-        }
-    }
-
-    void send_message(size_t num_frags)
-    {
-        set_mem_type(UCS_MEMORY_TYPE_CUDA_MANAGED);
-        test_am_send_recv(get_rndv_frag_size(UCS_MEMORY_TYPE_CUDA) * num_frags);
-    }
-
     void verify_clean_fc_state()
     {
         for (auto *ep : {&sender(), &receiver()}) {
@@ -2245,6 +2220,34 @@ protected:
         fc.receiver_throttled =
                 UCS_STATS_GET_COUNTER(receiver().worker()->stats,
                                       UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED);
+    }
+
+private:
+    static void check_stats_ge(const entity &e, uint64_t cntr,
+                               uint64_t min_value)
+    {
+        const auto stats_node = e.worker()->stats;
+        const auto value      = UCS_STATS_GET_COUNTER(stats_node, cntr);
+
+        EXPECT_GE(value, min_value)
+                << "counter " << stats_node->cls->counter_names[cntr]
+                << " expected >= " << min_value << " but got " << value;
+    }
+
+    static void check_pending_queues_empty(const entity &e)
+    {
+        const ucp_worker_h worker = e.worker();
+
+        for (unsigned i = 0; i < UCP_WORKER_RNDV_FC_OP_LAST; i++) {
+            EXPECT_TRUE(ucs_queue_is_empty(&worker->rndv_mtype_fc.pending_q[i]))
+                    << "pending_q[" << i << "] should be empty";
+        }
+    }
+
+    void send_message(size_t num_frags)
+    {
+        set_mem_type(UCS_MEMORY_TYPE_CUDA_MANAGED);
+        test_am_send_recv(get_rndv_frag_size(UCS_MEMORY_TYPE_CUDA) * num_frags);
     }
 };
 

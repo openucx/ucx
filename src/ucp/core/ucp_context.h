@@ -738,13 +738,6 @@ ucp_context_rndv_is_enabled(ucp_context_h context)
            (context->config.ext.rndv_inter_thresh != UCS_MEMUNITS_INF);
 }
 
-static UCS_F_ALWAYS_INLINE int
-ucp_context_rndv_mtype_mem_limit_enabled(ucp_context_h context)
-{
-    size_t max_mem = context->config.ext.rndv_mtype_worker_max_mem;
-    return (max_mem != UCS_MEMUNITS_INF) && (max_mem != UCS_MEMUNITS_AUTO);
-}
-
 void ucp_context_memaccess_tl_bitmap(ucp_context_h context,
                                      uint64_t mem_type_bitmap,
                                      uint64_t md_reg_flags,
