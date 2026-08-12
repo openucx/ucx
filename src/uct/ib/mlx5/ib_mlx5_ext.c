@@ -244,6 +244,46 @@ uct_ib_mlx5_ext_ep_put_sgl_zcopy(uct_ep_h ep, void * const *buffers,
     return UCS_ERR_UNSUPPORTED;
 }
 
+size_t uct_ib_mlx5_ext_max_get_sgl_zcopy_count(void)
+{
+    uct_ib_mlx5_ext_plugin_t *plugin;
+
+    ucs_list_for_each(plugin, &uct_ib_mlx5_ext_plugins, list) {
+        if (ucs_unlikely(uct_ib_mlx5_ext_is_unsupported_op(
+                    (const void*)plugin->ops.max_get_sgl_zcopy_count))) {
+            continue;
+        }
+
+        return plugin->ops.max_get_sgl_zcopy_count();
+    }
+
+    return 0;
+}
+
+ucs_status_t
+uct_ib_mlx5_ext_ep_get_sgl_zcopy(uct_ep_h ep, void * const *buffers,
+                                 const size_t *lengths, uct_mem_h const *memhs,
+                                 const uint64_t *remote_addrs,
+                                 uct_rkey_t const *rkeys, const size_t *counts,
+                                 const size_t *strides, size_t count,
+                                 uct_completion_t *comp)
+{
+    uct_ib_mlx5_ext_plugin_t *plugin;
+
+    ucs_list_for_each(plugin, &uct_ib_mlx5_ext_plugins, list) {
+        if (ucs_unlikely(uct_ib_mlx5_ext_is_unsupported_op(
+                    (const void*)plugin->ops.ep_get_sgl_zcopy))) {
+            continue;
+        }
+
+        return plugin->ops.ep_get_sgl_zcopy(ep, buffers, lengths, memhs,
+                                            remote_addrs, rkeys, counts,
+                                            strides, count, comp);
+    }
+
+    return UCS_ERR_UNSUPPORTED;
+}
+
 static ucs_status_t uct_ib_mlx5_ext_ep_outstanding_purge_check_param(
         const uct_ep_outstanding_purge_params_t *params)
 {
@@ -344,8 +384,8 @@ ucs_status_t uct_ib_mlx5_ext_register(const uct_ib_mlx5_ext_ops_t *ops)
     num_plugins = ucs_list_length(&uct_ib_mlx5_ext_plugins);
 
     ucs_debug("ib mlx5 ext: registered plugin name=%s iface_query=%s "
-              "ep_query=%s put_sgl_zcopy=%s outstanding_purge=%s "
-              "(total=%u)",
+              "ep_query=%s put_sgl_zcopy=%s get_sgl_zcopy=%s "
+              "outstanding_purge=%s (total=%u)",
               plugin->ops.name,
               uct_ib_mlx5_ext_is_unsupported_op(
                       (const void*)plugin->ops.iface_query) ?
@@ -357,6 +397,10 @@ ucs_status_t uct_ib_mlx5_ext_register(const uct_ib_mlx5_ext_ops_t *ops)
                       "supported",
               uct_ib_mlx5_ext_is_unsupported_op(
                       (const void*)plugin->ops.ep_put_sgl_zcopy) ?
+                      "unsupported" :
+                      "supported",
+              uct_ib_mlx5_ext_is_unsupported_op(
+                      (const void*)plugin->ops.ep_get_sgl_zcopy) ?
                       "unsupported" :
                       "supported",
               uct_ib_mlx5_ext_is_unsupported_op(

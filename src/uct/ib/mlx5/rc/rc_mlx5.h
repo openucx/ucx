@@ -141,6 +141,14 @@ ucs_status_t uct_rc_mlx5_base_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
                                            uct_rkey_t rkey,
                                            uct_completion_t *comp);
 
+ucs_status_t
+uct_rc_mlx5_base_ep_get_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
+                                  const size_t *lengths, uct_mem_h const *memhs,
+                                  const uint64_t *remote_addrs,
+                                  uct_rkey_t const *rkeys, const size_t *counts,
+                                  const size_t *strides, size_t count,
+                                  uct_completion_t *comp);
+
 ucs_status_t uct_rc_mlx5_base_ep_am_short(uct_ep_h tl_ep, uint8_t id,
                                           uint64_t header, const void *payload,
                                           unsigned length);
