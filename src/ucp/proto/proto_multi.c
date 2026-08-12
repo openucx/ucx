@@ -605,6 +605,8 @@ ucp_proto_multi_init_priv(const ucp_proto_multi_init_params_t *params,
     const ucp_proto_common_tl_perf_t *lane_perf;
     ucp_proto_multi_lane_priv_t *lpriv;
     uct_iface_attr_v2_t iface_attr_v2;
+    uint64_t v2_cap_flags;
+    int sgl_is_put;
     size_t min_length;
     size_t max_frag, min_end_offset, min_chunk;
     uint32_t weight_sum;
@@ -613,6 +615,9 @@ ucp_proto_multi_init_priv(const ucp_proto_multi_init_params_t *params,
     ucp_md_map_t reg_md_map;
     ucs_status_t status;
 
+    v2_cap_flags        = params->first.tl_v2_cap_flags |
+                          params->middle.tl_v2_cap_flags;
+    sgl_is_put          = v2_cap_flags & UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY;
     reg_md_map          = ucp_proto_common_reg_md_map(&params->super,
                                                       selection->lane_map);
     mpriv->reg_md_map   = reg_md_map | params->initial_reg_md_map;
@@ -707,12 +712,14 @@ ucp_proto_multi_init_priv(const ucp_proto_multi_init_params_t *params,
         lpriv->flush_sys_dev_mask =
                 ucp_proto_multi_init_flush_sys_dev_mask(params, lane);
 
-        if ((params->first.tl_v2_cap_flags | params->middle.tl_v2_cap_flags) &
-            UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY) {
+        if (v2_cap_flags & (UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY |
+                            UCT_IFACE_FLAG_V2_GET_SGL_ZCOPY)) {
             rsc_index = ucp_proto_common_get_rsc_index(&params->super.super,
                                                        lane);
             iface_attr_v2.field_mask =
-                    UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT;
+                    sgl_is_put ?
+                    UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT :
+                    UCT_IFACE_ATTR_FIELD_MAX_GET_SGL_ZCOPY_COUNT;
             status                   = uct_iface_query_v2(
                     ucp_worker_iface(params->super.super.worker,
                                      rsc_index)->iface,
@@ -721,10 +728,11 @@ ucp_proto_multi_init_priv(const ucp_proto_multi_init_params_t *params,
                 return status;
             }
 
-            lpriv->max_put_sgl_zcopy_count =
-                    iface_attr_v2.max_put_sgl_zcopy_count;
+            lpriv->max_sgl_zcopy_count =
+                    sgl_is_put ? iface_attr_v2.max_put_sgl_zcopy_count :
+                                 iface_attr_v2.max_get_sgl_zcopy_count;
         } else {
-            lpriv->max_put_sgl_zcopy_count = 0;
+            lpriv->max_sgl_zcopy_count = 0;
         }
     }
     ucs_assert(mpriv->num_lanes == ucs_popcount(selection->lane_map));
