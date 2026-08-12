@@ -98,6 +98,12 @@
                 goto out_unlock; \
             } \
             \
+            if (ucs_unlikely(_remote->rkeys[0] == NULL)) { \
+                ucs_error("sgl put: sgl[0] rkey must not be NULL"); \
+                ret = UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
+                goto out_unlock; \
+            } \
+            \
             if (ucs_unlikely(((_param)->op_attr_mask & \
                               UCP_OP_ATTR_FIELD_REMOTE_COUNT) && \
                              ((_param)->remote_count != (_count)))) { \

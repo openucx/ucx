@@ -1470,6 +1470,24 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_rkeys_mismatched_cfg,
     ctx.rkeys[1]->cfg_index = saved_cfg_index;
 }
 
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_single_elem_rkey_null,
+                     !ENABLE_PARAMS_CHECK) {
+    sgl_ctx ctx;
+    init_sgl_ctx(ctx, 1, 64);
+    ctx.rkeys[0] = NULL;
+    expect_sgl_put_invalid_param_ctx(ctx, LOCAL_MASK_DEFAULT,
+                                     REMOTE_MASK_DEFAULT, 1);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_remote_lengths_mismatch,
+                     !ENABLE_PARAMS_CHECK) {
+    sgl_ctx ctx;
+    init_sgl_ctx(ctx, 2, 64);
+    ctx.remote_lengths[1] = 32;
+    expect_sgl_put_invalid_param_ctx(ctx, LOCAL_MASK_DEFAULT,
+                                     REMOTE_MASK_DEFAULT, 2);
+}
+
 UCS_TEST_P(test_ucp_rma_sgl, put_zero_count) {
     test_put_sgl(0, 64, true, false, true, true);
 }
