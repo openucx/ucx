@@ -85,7 +85,7 @@ void uct_rc_mlx5_ep_update_tx_res(uct_ep_h tl_ep)
     uct_ib_mlx5_txwq_t *txwq = &ep->tx.wq;
     uint16_t available;
 
-    ucs_assert(ep->flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS);
+    ucs_assert(ep->flags & UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS);
     available = txwq->bb_max - (txwq->prev_sw_pi - txwq->hw_ci);
     ucs_assert(available >= uct_rc_txqp_available(&ep->super.txqp));
     if (available > uct_rc_txqp_available(&ep->super.txqp)) {
@@ -779,7 +779,7 @@ ucs_status_t uct_rc_mlx5_base_ep_flush(uct_ep_h tl_ep, unsigned flags,
     int already_canceled = ep->super.flags & UCT_RC_EP_FLAG_FLUSH_CANCEL;
     ucs_status_t status;
 
-    if (ep->flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS) {
+    if (ep->flags & UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS) {
         ucs_diag("ep %p flush while completions are deferred; outstanding "
                  "operations must be purged first",
                  ep);
@@ -843,11 +843,10 @@ uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
         return status;
     }
 
-    if ((params != NULL) &&
-        (params->field_mask & UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS) &&
-        (params->flags & UCT_EP_INVALIDATE_FLAG_DEFER_COMPLETIONS) &&
-        !(ep->super.flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS)) {
-        ep->super.flags |= UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS;
+    if ((params->field_mask & UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS) &&
+        (params->flags & UCT_EP_INVALIDATE_FLAG_NO_COMPLETIONS)) {
+        ucs_assert(!(ep->super.flags & UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS));
+        ep->super.flags |= UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS;
         txwq->ft_ci      = txwq->hw_ci;
         ucs_debug("ep %p defer completions WQE range (%u, %u) next token %u",
                   ep, txwq->ft_ci, txwq->sw_pi, txwq->next_token);
@@ -863,11 +862,12 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
     ucs_status_t status;
 
     status = uct_ib_mlx5_ext_ep_outstanding_purge(tl_ep, params);
-    if (status == UCS_OK) {
-        ep->flags &= ~UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS;
+    if (status != UCS_OK) {
+        return status;
     }
 
-    return status;
+    ep->flags &= ~UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS;
+    return UCS_OK;
 }
 
 ucs_status_t uct_rc_mlx5_base_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,

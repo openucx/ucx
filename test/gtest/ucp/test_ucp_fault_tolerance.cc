@@ -248,7 +248,9 @@ protected:
             std::vector<ucs_status_ptr_t> status_ptrs;
             ucp_lane_index_t lane = lanes[lane_idx];
             uct_ep_h uct_ep_for_injection = ucp_ep_get_lane(ucp_ep_for_injection, lane);
-            ucs_status_t status = uct_ep_invalidate(uct_ep_for_injection, 0);
+            uct_ep_invalidate_params_t invalidate_params = {};
+            ucs_status_t status = uct_ep_invalidate(uct_ep_for_injection,
+                                                    &invalidate_params);
             if (status == UCS_ERR_UNSUPPORTED) {
                 UCS_TEST_SKIP_R("uct_ep_invalidate is not supported");
             }
@@ -312,6 +314,7 @@ protected:
              lane_idx = 0; lane_idx < num_lanes_to_fail; ++lane_idx) {
             ucp_lane_index_t lane = am_bw_lanes[lane_idx];
             uct_ep_h uct_ep_for_injection = ucp_ep_get_lane(ucp_ep_for_injection, lane);
+            uct_ep_invalidate_params_t invalidate_params = {};
             const bool last_lane = (lane_idx == (am_bw_lanes.size() - 1));
             if (last_lane && has_any_transport({"ud_v", "ud_x"}) &&
                 (failure_side == FAILURE_SIDE_INITIATOR)) {
@@ -322,7 +325,8 @@ protected:
                 break;
             }
 
-            status = uct_ep_invalidate(uct_ep_for_injection, 0);
+            status = uct_ep_invalidate(uct_ep_for_injection,
+                                       &invalidate_params);
             if (status == UCS_ERR_UNSUPPORTED) {
                 UCS_TEST_SKIP_R("uct_ep_invalidate is not supported");
             }

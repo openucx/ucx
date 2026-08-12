@@ -413,12 +413,11 @@ typedef enum {
  */
 typedef enum {
     /**
-     * Defer completion of outstanding operations to the caller. The normal
-     * endpoint error path will not complete these operations; the caller must
-     * purge them with @ref uct_ep_outstanding_purge. A successful purge returns
-     * ownership of subsequent operations to UCT.
+     * Do not complete outstanding operations. UCT will not invoke completion
+     * callbacks for issued operations when the endpoint is invalidated;
+     * the caller must complete them with @ref uct_ep_outstanding_purge.
      */
-    UCT_EP_INVALIDATE_FLAG_DEFER_COMPLETIONS = UCS_BIT(0)
+    UCT_EP_INVALIDATE_FLAG_NO_COMPLETIONS = UCS_BIT(0)
 } uct_ep_invalidate_flags_t;
 
 
@@ -1387,9 +1386,8 @@ ucs_status_t uct_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr);
  * @brief Invalidate the endpoint.
  *
  * This routine invalidates the endpoint and moves it to the error state.
- * Incomplete operations are completed with error unless
- * @ref UCT_EP_INVALIDATE_FLAG_DEFER_COMPLETIONS transfers their ownership to
- * the caller.
+ * All the incomplete and subsequent operations on the endpoint will be
+ * completed with error.
  *
  * @param [in]  ep         Endpoint to invalidate.
  * @param [in]  params     Operation parameters, see @ref
@@ -1973,9 +1971,7 @@ typedef enum {
  */
 typedef struct {
     /** Mask of valid fields, using bits from @ref
-     *  uct_ep_outstanding_purge_field_t. @ref
-     *  UCT_EP_OUTSTANDING_FIELD_RX_TOKEN and @ref
-     *  UCT_EP_OUTSTANDING_FIELD_CB are required for token-based purging. */
+     *  uct_ep_outstanding_purge_field_t. */
     uint64_t                            field_mask;
 
     /**
