@@ -208,7 +208,6 @@ static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_mtype_fc_reschedule_pending(ucp_request_t *req)
 {
     ucp_worker_h worker = req->send.ep->worker;
-    ucs_queue_elem_t *elem;
     ucp_request_t *pending_req;
     unsigned q_index;
 
@@ -218,11 +217,11 @@ ucp_proto_rndv_mtype_fc_reschedule_pending(ucp_request_t *req)
             continue;
         }
 
-        elem = ucs_queue_pull(&worker->rndv_mtype_fc.pending_q[q_index]);
-        ucs_assert(elem != NULL);
-
-        pending_req = ucs_container_of(elem, ucp_request_t,
-                                       send.rndv.ppln.queue_elem);
+        pending_req = ucs_queue_pull_elem_non_empty(
+                &worker->rndv_mtype_fc.pending_q[q_index], ucp_request_t,
+                send.rndv.ppln.queue_elem);
+        ucp_trace_req(pending_req, "mtype_fc: dequeue %s",
+                      (q_index == UCP_WORKER_RNDV_FC_OP_RTR) ? "rtr" : "put/get");
         ucs_callbackq_add_oneshot(&worker->uct->progress_q, pending_req,
                                   ucp_proto_rndv_mtype_fc_reschedule_cb,
                                   pending_req);
