@@ -2705,7 +2705,7 @@ static void ucp_context_create_vfs(ucp_context_h context)
 static void
 ucp_version_check(unsigned api_major_version, unsigned api_minor_version)
 {
-    UCS_STRING_BUFFER_ONSTACK(strb, 256);
+    UCS_STRING_BUFFER_ONSTACK(strb, 512);
     unsigned major_version, minor_version, release_number;
     ucs_log_level_t log_level;
     Dl_info dl_info;
