@@ -388,6 +388,12 @@ ucp_proto_put_sgl_offload_post(ucp_request_t *req,
     return status;
 }
 
+static UCS_F_ALWAYS_INLINE int
+ucp_proto_put_sgl_elem_fits(size_t length, size_t max_frag_length)
+{
+    return (length > 0) && (length <= max_frag_length);
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_put_sgl_offload_send_frag(ucp_request_t *req,
                                     const ucp_proto_multi_lane_priv_t *lpriv,
@@ -450,15 +456,14 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
     size_t elem_count, idx;
 
     ucs_assert(max_frag_length > 0);
+    ucs_assert(max_elem_count > 0);
 
     /* Silence compiler warning, in case of an early return below */
     next_iter->offset               = start_index;
     next_iter->type.sgl.frag_offset = dt_iter->type.sgl.frag_offset;
 
-    /* Whole elements are taken directly from the user arrays, while a fragment
-     * has to be described separately, so it is sent on its own */
-    if ((max_elem_count == 0) || (dt_iter->type.sgl.frag_offset != 0) ||
-        (lengths[start_index] > max_frag_length)) {
+    if ((dt_iter->type.sgl.frag_offset != 0) ||
+        !ucp_proto_put_sgl_elem_fits(lengths[start_index], max_frag_length)) {
         return ucp_proto_put_sgl_offload_send_frag(req, lpriv, max_frag_length,
                                                   next_iter);
     }
@@ -476,7 +481,7 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
 
     for (elem_count = 0; elem_count < max_elem_count; elem_count++) {
         idx = start_index + elem_count;
-        if (lengths[idx] > max_frag_length) {
+        if (!ucp_proto_put_sgl_elem_fits(lengths[idx], max_frag_length)) {
             break;
         }
 
