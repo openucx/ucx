@@ -876,7 +876,9 @@ static void ucp_worker_iface_async_cb_event(void *arg, unsigned flags)
     ucs_trace_func("async_cb for iface=%p flags=%u", wiface->iface, flags);
 
     if (flags & UCT_EVENT_SPEED_CHANGE) {
+        UCS_ASYNC_BLOCK(&wiface->worker->async);
         ucp_worker_iface_handle_port_speed_event(wiface);
+        UCS_ASYNC_UNBLOCK(&wiface->worker->async);
         return;
     }
 

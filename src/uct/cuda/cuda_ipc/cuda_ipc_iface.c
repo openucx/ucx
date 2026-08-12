@@ -51,11 +51,6 @@ static ucs_config_field_t uct_cuda_ipc_iface_config_table[] = {
      "Max number of CUDA streams to make concurrent progress on",
       ucs_offsetof(uct_cuda_ipc_iface_config_t, params.max_streams), UCS_CONFIG_TYPE_UINT},
 
-    {"CACHE", "y",
-     "Enable remote endpoint IPC memhandle mapping cache",
-     ucs_offsetof(uct_cuda_ipc_iface_config_t, params.enable_cache),
-     UCS_CONFIG_TYPE_BOOL},
-
     {"ENABLE_GET_ZCOPY", "auto",
      "Enable get operations except for platforms known to have slower performance",
      ucs_offsetof(uct_cuda_ipc_iface_config_t, params.enable_get_zcopy),
@@ -370,16 +365,14 @@ static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
 static void uct_cuda_ipc_complete_event(uct_iface_h tl_iface,
                                         uct_cuda_event_desc_t *cuda_event)
 {
-    uct_cuda_ipc_iface_t *iface               = ucs_derived_of(tl_iface,
-                                                               uct_cuda_ipc_iface_t);
     uct_cuda_ipc_event_desc_t *cuda_ipc_event = ucs_derived_of(cuda_event,
                                                                uct_cuda_ipc_event_desc_t);
 
 #if CUDA_VERSION >= 13000
     if (cuda_ipc_event->sgl_mapping != NULL) {
-        uct_cuda_ipc_sgl_mapping_destroy(cuda_ipc_event->sgl_mapping,
-                                         cuda_ipc_event->cuda_device,
-                                         iface->config.enable_cache);
+        uct_cuda_ipc_sgl_mapping_destroy(
+                cuda_ipc_event->sgl_mapping, cuda_ipc_event->cuda_device,
+                uct_cuda_ipc_component.enable_remote_cache);
         return;
     }
 #endif
@@ -388,7 +381,7 @@ static void uct_cuda_ipc_complete_event(uct_iface_h tl_iface,
                                  cuda_ipc_event->d_bptr,
                                  cuda_ipc_event->mapped_addr,
                                  cuda_ipc_event->cuda_device,
-                                 iface->config.enable_cache);
+                                 uct_cuda_ipc_component.enable_remote_cache);
 }
 
 static uct_iface_ops_t uct_cuda_ipc_iface_ops = {
@@ -507,10 +500,11 @@ static uct_iface_internal_ops_t uct_cuda_ipc_iface_internal_ops = {
     .ep_is_connected        = uct_cuda_ipc_ep_is_connected,
     .ep_get_device_ep       = uct_cuda_ipc_ep_get_device_ep,
 #if CUDA_VERSION >= 13000
-    .ep_put_sgl_zcopy       = uct_cuda_ipc_ep_put_sgl_zcopy
+    .ep_put_sgl_zcopy       = uct_cuda_ipc_ep_put_sgl_zcopy,
 #else
-    .ep_put_sgl_zcopy       = (uct_ep_put_sgl_zcopy_func_t)ucs_empty_function_return_unsupported
+    .ep_put_sgl_zcopy       = (uct_ep_put_sgl_zcopy_func_t)ucs_empty_function_return_unsupported,
 #endif
+    .ep_outstanding_purge   = (uct_ep_outstanding_purge_func_t)ucs_empty_function_return_unsupported
 };
 
 static uct_cuda_ctx_rsc_t * uct_cuda_ipc_ctx_rsc_create(uct_iface_h tl_iface)
