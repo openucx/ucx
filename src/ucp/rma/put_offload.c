@@ -433,7 +433,7 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
     ucp_datatype_iter_t *dt_iter = &req->send.state.dt_iter;
     ucp_md_index_t md_index      = ucp_ep_md_index(ep, lpriv->super.lane);
     ucp_rsc_index_t rkey_index   = lpriv->super.rkey_index;
-    size_t max_frag_length       = ucs_max(lpriv->max_frag, 1);
+    size_t max_frag_length       = lpriv->max_frag;
     ucp_mem_h *sgl_memhs         = dt_iter->type.sgl.memhs;
     ucp_rkey_h const *sgl_rkeys  = req->send.rma.sgl.rkeys;
     void *const *buffers         = dt_iter->type.sgl.buffers;
@@ -448,6 +448,8 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
     uct_mem_h *uct_memhs;
     ucs_status_t status;
     size_t elem_count, idx;
+
+    ucs_assert(max_frag_length > 0);
 
     /* Silence compiler warning, in case of an early return below */
     next_iter->offset               = start_index;
@@ -543,7 +545,7 @@ ucp_proto_put_sgl_offload_sw_send_func(ucp_request_t *req,
     uct_ep_h uct_ep              = ucp_ep_get_lane(ep, lane);
     ucp_md_index_t md_index      = ucp_ep_md_index(ep, lane);
     ucp_rsc_index_t rkey_index   = lpriv->super.rkey_index;
-    size_t max_frag_length       = ucs_max(lpriv->max_frag, 1);
+    size_t max_frag_length       = lpriv->max_frag;
     ucp_mem_h *sgl_memhs         = dt_iter->type.sgl.memhs;
     ucp_rkey_h const *sgl_rkeys  = req->send.rma.sgl.rkeys;
     void *buffer                 = NULL;
@@ -554,6 +556,8 @@ ucp_proto_put_sgl_offload_sw_send_func(ucp_request_t *req,
     uct_rkey_t tl_rkey;
     uct_iov_t iov;
     ucs_status_t status;
+
+    ucs_assert(max_frag_length > 0);
 
     desc_count = ucp_datatype_iter_next_sgl_frags(
             dt_iter, req->send.rma.sgl.remote_addrs, 1, max_frag_length,
