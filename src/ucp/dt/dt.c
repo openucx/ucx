@@ -60,6 +60,35 @@ ucs_status_t ucp_dt_mem_info_verify(const char *dt_name, size_t index,
 }
 
 
+/*
+ * Select the memory type endpoint lane which can access the buffer. A memory
+ * domain such as gdr_copy cannot register memory which is not registrable, so
+ * fall back to the next lane (for example cuda_copy) in that case.
+ */
+static ucp_lane_index_t
+ucp_mem_type_ep_lane(ucp_worker_h worker, ucp_ep_h ep, const void *address,
+                     size_t length)
+{
+    ucp_context_h context          = worker->context;
+    const ucp_ep_config_key_t *key = &ucp_ep_config(ep)->key;
+    const uct_md_attr_v2_t *md_attr;
+    ucp_memory_info_t mem_info;
+    ucp_lane_index_t lane;
+    unsigned i;
+
+    ucp_memory_detect(context, address, length, &mem_info);
+
+    for (i = 0; key->rma_lanes[i] != UCP_NULL_LANE; ++i) {
+        lane    = key->rma_lanes[i];
+        md_attr = &context->tl_mds[ucp_ep_md_index(ep, lane)].attr;
+        if (ucs_test_all_flags(mem_info.flags, md_attr->required_mem_flags)) {
+            return lane;
+        }
+    }
+
+    return key->rma_lanes[0];
+}
+
 UCS_PROFILE_FUNC_VOID(ucp_mem_type_unpack,
                       (worker, buffer, recv_data, recv_length, mem_type),
                       ucp_worker_h worker, void *buffer, const void *recv_data,
@@ -75,7 +104,7 @@ UCS_PROFILE_FUNC_VOID(ucp_mem_type_unpack,
         return;
     }
 
-    lane     = ucp_ep_config(ep)->key.rma_lanes[0];
+    lane     = ucp_mem_type_ep_lane(worker, ep, buffer, recv_length);
     md_index = ucp_ep_md_index(ep, lane);
 
     status = ucp_mem_type_reg_buffers(worker, buffer, recv_length, mem_type,
@@ -110,7 +139,7 @@ UCS_PROFILE_FUNC_VOID(ucp_mem_type_pack,
         return;
     }
 
-    lane     = ucp_ep_config(ep)->key.rma_lanes[0];
+    lane     = ucp_mem_type_ep_lane(worker, ep, src, length);
     md_index = ucp_ep_md_index(ep, lane);
 
     status = ucp_mem_type_reg_buffers(worker, (void *)src, length, mem_type,
