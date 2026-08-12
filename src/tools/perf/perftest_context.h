@@ -73,12 +73,14 @@ static inline ucs_status_t
 perftest_params_merge(perftest_params_t *dst, const perftest_params_t *src)
 {
     char uct_dev_name[UCT_DEVICE_NAME_MAX];
+    ucp_err_handling_mode_t needed_err_mode;
     unsigned needed_flags;
 
     /* backup required dst parameters */
     ucs_strncpy_safe(uct_dev_name, dst->super.uct.dev_name,
                      UCT_DEVICE_NAME_MAX);
-    needed_flags = (dst->super.flags & UCX_PERF_TEST_FLAG_ERR_HANDLING);
+    needed_err_mode = dst->super.ucp.err_mode;
+    needed_flags    = (dst->super.flags & UCX_PERF_TEST_FLAG_ERR_HANDLING);
 
     perftest_params_release_msg_size_list(dst);
 
@@ -99,6 +101,9 @@ perftest_params_merge(perftest_params_t *dst, const perftest_params_t *src)
     ucs_strncpy_safe(dst->super.uct.dev_name, uct_dev_name,
                      UCT_DEVICE_NAME_MAX);
     dst->super.flags |= needed_flags;
+    if (needed_flags) {
+        dst->super.ucp.err_mode = needed_err_mode;
+    }
     return UCS_OK;
 }
 

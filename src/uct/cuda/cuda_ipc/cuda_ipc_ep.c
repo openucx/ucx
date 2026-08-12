@@ -164,7 +164,7 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
     CUdevice cuda_device;
     int is_ctx_pushed;
     void *mapped_rem_addr;
-    void *mapped_addr;
+    const void *mapped_addr;
     uct_cuda_ipc_event_desc_t *cuda_ipc_event;
     uct_cuda_queue_desc_t *q_desc;
     ucs_status_t status;
@@ -292,7 +292,8 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_ep_put_sgl_zcopy,
     uct_cuda_ipc_sgl_mapping_t *mapping;
     uct_cuda_queue_desc_t *q_desc;
     CUmemcpyAttributes attr;
-    void *mapped_rem_addr, *mapped_addr;
+    void *mapped_rem_addr;
+    const void *mapped_addr;
     CUdeviceptr *cuda_dsts;
     size_t attrs_idx;
     size_t i, total_length;
@@ -400,8 +401,8 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_ep_put_sgl_zcopy,
     goto out_ctx;
 
 out_unmap:
-    uct_cuda_ipc_sgl_mapping_destroy(mapping, cuda_device,
-                                     iface->config.enable_cache);
+    uct_cuda_ipc_sgl_mapping_destroy(
+            mapping, cuda_device, uct_cuda_ipc_component.enable_remote_cache);
 
 out_ctx:
     uct_cuda_ipc_check_and_pop_ctx(is_ctx_pushed);
