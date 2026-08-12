@@ -2735,6 +2735,9 @@ ucp_version_check(unsigned api_major_version, unsigned api_minor_version)
         }
         ucs_log(log_level, "%s", ucs_string_buffer_cstr(&strb));
     }
+
+    ucs_debug("git branch '%s', revision %s", UCT_SCM_BRANCH, UCT_SCM_VERSION);
+    ucs_debug("configured with: %s", UCX_CONFIGURE_FLAGS);
 }
 
 ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_version,
