@@ -107,7 +107,7 @@ static uct_allocated_memory_t ucp_device_mem_handle_hash_remove(void *handle)
 }
 
 static ucs_status_t
-ucp_device_detect_local_sys_dev(const ucp_context_h context,
+ucp_device_detect_local_sys_dev(ucp_context_h context,
                                 const ucs_memory_type_t mem_type,
                                 ucs_sys_device_t *local_sys_dev)
 {
@@ -240,7 +240,7 @@ static ucs_status_t ucp_device_mem_list_export_handle(
 
 static ucs_status_t ucp_device_local_mem_list_create_handle(
         const ucp_device_mem_list_params_t *params, ucs_memory_type_t mem_type,
-        uct_allocated_memory_t *mem, ucs_sys_device_t local_sys_dev)
+        ucs_sys_device_t local_sys_dev, uct_allocated_memory_t *mem)
 {
     const ucp_worker_h worker   = UCS_PARAM_VALUE(
             UCP_DEVICE_MEM_LIST_PARAMS_FIELD, params, worker, WORKER, NULL);
@@ -315,8 +315,6 @@ static ucs_status_t ucp_device_local_mem_list_params_check(
 {
     const ucp_device_mem_list_elem_t *local_elements = UCS_PARAM_VALUE(
             UCP_DEVICE_MEM_LIST_PARAMS_FIELD, params, elements, ELEMENTS, NULL);
-    const ucp_worker_h worker                        = UCS_PARAM_VALUE(
-            UCP_DEVICE_MEM_LIST_PARAMS_FIELD, params, worker, WORKER, NULL);
     size_t element_size = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_PARAMS_FIELD,
                                           params, element_size, ELEMENT_SIZE,
                                           0);
@@ -327,11 +325,12 @@ static ucs_status_t ucp_device_local_mem_list_params_check(
     ucp_mem_h memh;
     size_t i;
 
+    /* worker is validated by the caller before it is dereferenced */
     if ((local_elements == NULL) || (element_size == 0) ||
-        (num_elements == 0) || (worker == NULL)) {
+        (num_elements == 0)) {
         ucs_error("invalid local mem list params: local_elements=%p, "
-                  "element_size=%zu, num_elements=%zu, worker=%p",
-                  local_elements, element_size, num_elements, worker);
+                  "element_size=%zu, num_elements=%zu",
+                  local_elements, element_size, num_elements);
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -405,7 +404,7 @@ ucp_device_local_mem_list_create(const ucp_device_mem_list_params_t *params,
     }
 
     status = ucp_device_local_mem_list_create_handle(params, export_mem_type,
-                                                     &mem, local_sys_dev);
+                                                     local_sys_dev, &mem);
     if (status != UCS_OK) {
         ucs_error("failed to create local mem list handle: %s",
                   ucs_status_string(status));
@@ -562,8 +561,8 @@ ucp_device_remote_mem_list_fill(const ucp_device_mem_list_elem_t *ucp_element,
 
 static ucs_status_t ucp_device_remote_mem_list_create_handle(
         const ucp_device_mem_list_params_t *params, const ucp_ep_h ep,
-        const ucs_memory_type_t mem_type, uct_allocated_memory_t *mem,
-        const ucs_sys_device_t local_sys_dev)
+        const ucs_memory_type_t mem_type, const ucs_sys_device_t local_sys_dev,
+        uct_allocated_memory_t *mem)
 {
     size_t uct_elem_size;
     size_t handle_size         = 0;
@@ -721,8 +720,8 @@ ucp_device_remote_mem_list_create(const ucp_device_mem_list_params_t *params,
     }
 
     status = ucp_device_remote_mem_list_create_handle(params, ep,
-                                                      export_mem_type,
-                                                      &mem, sys_dev);
+                                                      export_mem_type, sys_dev,
+                                                      &mem);
     if (status != UCS_OK) {
         /*
          * Do not log error for UCS_ERR_NOT_CONNECTED because it is expected
