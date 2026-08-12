@@ -679,10 +679,10 @@ ucs_status_t ucp_proto_rndv_rts_reset(ucp_request_t *req)
     return ucp_proto_request_zcopy_id_reset(req);
 }
 
-unsigned ucp_proto_rndv_mtype_fc_max_elems(ucp_context_h context,
-                                           ucs_memory_type_t frag_mem_type)
+unsigned ucp_proto_rndv_frag_max_elems(ucp_context_h context,
+                                       ucs_memory_type_t frag_mem_type)
 {
-    const size_t max_mem = context->config.ext.rndv_mtype_worker_max_mem;
+    const size_t max_mem = context->config.ext.rndv_frag_worker_max_mem;
     size_t frag_size;
     size_t frags_in_chunk;
     size_t max_frags;
@@ -698,7 +698,7 @@ unsigned ucp_proto_rndv_mtype_fc_max_elems(ucp_context_h context,
     max_frags = max_mem / frag_size;
     if (max_frags < frags_in_chunk) {
         /* mpool requires max_elems >= elems_per_chunk */
-        ucs_warn("RNDV_MTYPE_WORKER_MAX_MEM (%zu) is too low for %s "
+        ucs_warn("RNDV_FRAG_WORKER_MAX_MEM (%zu) is too low for %s "
                  "(frag_size=%zu, frags_per_alloc=%zu), using minimum %zu "
                  "frags",
                  max_mem, ucs_memory_type_names[frag_mem_type], frag_size,

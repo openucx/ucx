@@ -191,10 +191,10 @@ void ucp_proto_rndv_rts_abort(ucp_request_t *req, ucs_status_t status);
 ucs_status_t ucp_proto_rndv_rts_reset(ucp_request_t *req);
 
 
-/* Convert UCX_RNDV_MTYPE_WORKER_MAX_MEM to mpool max_elems (frag count), or
+/* Convert UCX_RNDV_FRAG_WORKER_MAX_MEM to mpool max_elems (frag count), or
  * UINT_MAX if unlimited. */
-unsigned ucp_proto_rndv_mtype_fc_max_elems(ucp_context_h context,
-                                           ucs_memory_type_t frag_mem_type);
+unsigned ucp_proto_rndv_frag_max_elems(ucp_context_h context,
+                                      ucs_memory_type_t frag_mem_type);
 
 
 ucs_status_t
