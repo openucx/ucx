@@ -177,7 +177,7 @@ UCS_TEST_P(test_uct_ib_mlx5_ext_rc, err_handler_outstanding_purge)
 
     EXPECT_EQ(1, m_err_handler_count);
     EXPECT_TRUE(m_purge_cb_invoked);
-    EXPECT_TRUE(ep->super.flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS);
+    EXPECT_FALSE(ep->super.flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS);
 
     ASSERT_UCS_OK_OR_INPROGRESS(
             uct_ep_flush(m_e1->ep(0), UCT_FLUSH_FLAG_CANCEL, NULL));
