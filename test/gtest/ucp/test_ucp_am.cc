@@ -2252,7 +2252,7 @@ private:
 };
 
 UCS_TEST_P(test_ucp_am_nbx_rndv_mtype_fc, fc_enabled_cap_reached,
-           "RNDV_MTYPE_WORKER_MAX_MEM=600mb", "RNDV_FRAG_MEM_TYPE=cuda")
+           "RNDV_FRAG_WORKER_MAX_MEM=600mb", "RNDV_FRAG_MEM_TYPE=cuda")
 {
     fc_counters fc;
 
