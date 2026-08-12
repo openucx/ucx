@@ -693,7 +693,7 @@ unsigned ucp_proto_rndv_frag_max_elems(ucp_context_h context,
 
     frag_size      = context->config.ext.rndv_frag_size[frag_mem_type];
     frags_in_chunk = context->config.ext.rndv_num_frags[frag_mem_type];
-    ucs_assert(frag_size > 0);
+    ucs_assert_always(frag_size > 0);
 
     max_frags = max_mem / frag_size;
     if (max_frags < frags_in_chunk) {
