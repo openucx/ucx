@@ -226,8 +226,7 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
     uct_ib_mlx5_completion_with_err(ib_iface, arg, &ep->tx.wq, log_lvl);
 
 purge:
-    if ((ep->super.flags & UCT_RC_EP_FLAG_FLUSH_CANCEL) ||
-        !(ep->flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS)) {
+    if (!(ep->flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS)) {
         uct_rc_mlx5_iface_update_tx_res(iface, ep, pi);
         uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status, pi, 0);
     }
@@ -1140,7 +1139,7 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
             .ep_is_connected        = uct_rc_mlx5_base_ep_is_connected,
             .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported,
             .ep_put_sgl_zcopy       = uct_rc_mlx5_ep_put_sgl_zcopy,
-            .ep_outstanding_purge   = uct_ib_mlx5_ext_ep_outstanding_purge
+            .ep_outstanding_purge   = uct_rc_mlx5_ep_outstanding_purge
         },
         .create_cq      = uct_rc_mlx5_iface_common_create_cq,
         .destroy_cq     = uct_rc_mlx5_iface_common_destroy_cq,
@@ -1174,7 +1173,7 @@ static uct_iface_ops_t uct_rc_mlx5_iface_tl_ops = {
     .ep_atomic32_fetch        = uct_rc_mlx5_base_ep_atomic32_fetch,
     .ep_pending_add           = uct_rc_ep_pending_add,
     .ep_pending_purge         = uct_rc_ep_pending_purge,
-    .ep_flush                 = uct_rc_mlx5_ep_flush,
+    .ep_flush                 = uct_rc_mlx5_base_ep_flush,
     .ep_fence                 = uct_rc_mlx5_base_ep_fence,
     .ep_check                 = uct_rc_ep_check,
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_rc_mlx5_ep_t),
