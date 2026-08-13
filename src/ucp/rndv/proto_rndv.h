@@ -26,6 +26,19 @@
     (UCS_BIT(UCP_OP_ID_RNDV_SEND) | UCS_BIT(UCP_OP_ID_RNDV_RECV))
 
 
+enum {
+    UCP_PROTO_RNDV_CTRL_FLAG_FORCE_SHM_PIPELINE_CHILD = UCS_BIT(0)
+};
+
+
+static UCS_F_ALWAYS_INLINE uint8_t
+ucp_proto_rndv_rts_tag_op_flags(ucp_rndv_rts_opcode_t opcode)
+{
+    return (opcode == UCP_RNDV_RTS_TAG_OK) ?
+           UCP_PROTO_SELECT_OP_FLAG_TAG_RNDV : 0;
+}
+
+
 /**
  * Rendezvous protocol which sends a control message to the remote peer, and not
  * actually transferring bulk data. The remote peer is expected to perform the
@@ -48,6 +61,9 @@ typedef struct {
 
     /* Lane for sending the "remote_op" message */
     ucp_lane_index_t        lane;
+
+    /* Operation flags used for selecting sender-side RNDV_SEND after RTR */
+    uint8_t                 remote_op_flags;
 
     /* Config of the remote protocol, which is expected to be selected by peer.
        Used for performance estimation and reporting purpose */
@@ -91,6 +107,12 @@ typedef struct {
 
     /* Which operation the remote peer is expected to perform */
     ucp_operation_id_t             remote_op_id;
+
+    /* Operation flags for the remote peer protocol selection */
+    uint8_t                        remote_op_flags;
+
+    /* Internal rendezvous control flags */
+    unsigned                       flags;
 
     /* Lane to send control message */
     ucp_lane_index_t               lane;
@@ -151,7 +173,8 @@ ucp_lane_index_t
 ucp_proto_rndv_find_ctrl_lane(const ucp_proto_init_params_t *params);
 
 
-void ucp_proto_rndv_rts_probe(const ucp_proto_init_params_t *init_params);
+void ucp_proto_rndv_rts_probe(const ucp_proto_init_params_t *init_params,
+                              uint8_t remote_op_flags);
 
 
 void ucp_proto_rndv_set_variant_config(
@@ -206,6 +229,7 @@ ucp_proto_rndv_handle_rtr(void *arg, void *data, size_t length, unsigned flags);
 ucs_status_t ucp_proto_rndv_send_start(ucp_worker_h worker,
                                        ucp_request_t *req,
                                        uint32_t op_attr_mask,
+                                       uint8_t op_flags,
                                        const ucp_rndv_rtr_hdr_t *rtr,
                                        const void *rkey_buffer,
                                        size_t rkey_length,
