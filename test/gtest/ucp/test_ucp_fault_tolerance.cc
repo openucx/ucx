@@ -409,7 +409,8 @@ protected:
             ucp_lane_index_t lane = rma_bw_lanes[lane_idx];
             uct_ep_h uct_ep_for_injection = ucp_ep_get_lane(ucp_ep_for_injection, lane);
             uct_ep_invalidate_params_t invalidate_params = {};
-            status = uct_ep_invalidate(uct_ep_for_injection, &invalidate_params);
+            status = uct_ep_invalidate(uct_ep_for_injection,
+                                       &invalidate_params);
             if (status == UCS_ERR_UNSUPPORTED) {
                 UCS_TEST_SKIP_R("uct_ep_invalidate is not supported");
             }
