@@ -16,6 +16,18 @@
 #include <uct/api/v2/uct_v2.h>
 
 
+static int
+ucp_proto_rndv_ctrl_skip_inter_node_md(
+        const ucp_proto_rndv_ctrl_init_params_t *params,
+        const uct_iface_attr_t *iface_attr, const uct_md_attr_v2_t *md_attr)
+{
+    return (md_attr->flags & UCT_MD_FLAG_MEMTYPE_COPY) &&
+           (iface_attr->cap.flags & UCT_IFACE_FLAG_INTER_NODE) &&
+           ucp_ep_config_is_inter_node(params->super.super.ep_config_key) &&
+           !(params->super.reg_mem_info.flags &
+             UCS_MEM_FLAG_MEMTYPE_COPY_INTER_NODE);
+}
+
 static void
 ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
                                ucp_md_map_t *md_map,
@@ -88,19 +100,10 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
             continue;
         }
 
-        /* A remote key of a memory domain which accesses memory by rkey_ptr
-         * (for example cuda_ipc) can be opened by a peer on a different node
-         * only if the memory is exportable to that node. Do not advertise a
-         * remote key which the peer would fail to open. Both the deprecated MD
-         * flag and the component flag are checked, since cuda_ipc reports only
-         * the former.
-         */
-        if (((md_attr->flags & UCT_MD_FLAG_RKEY_PTR) ||
-             (cmpt_attr->flags & UCT_COMPONENT_FLAG_RKEY_PTR)) &&
-            ucp_ep_config_is_inter_node(ep_config_key) &&
-            !(params->super.reg_mem_info.flags &
-              UCS_MEM_FLAG_RKEY_PTR_INTER_NODE)) {
-            ucs_trace_req("lane[%d]: md %s rkey_ptr is not usable inter-node, "
+        /* Inter-node memory-type copy requires an exportable memory handle. */
+        if (ucp_proto_rndv_ctrl_skip_inter_node_md(params, iface_attr,
+                                                   md_attr)) {
+            ucs_trace_req("lane[%d]: md %s cannot copy memory inter-node, "
                           "mem_flags 0x%x",
                           lane, context->tl_mds[md_index].rsc.md_name,
                           params->super.reg_mem_info.flags);
@@ -190,7 +193,7 @@ ucp_proto_rndv_rkey_mem_flags_estimate(const ucp_proto_init_params_t *params)
          * Derive UCS_MEM_FLAG_REGISTRABLE from matching local MDs which
          * require it and whose remote MDs are present in the rkey.
          *
-         * UCS_MEM_FLAG_RKEY_PTR_INTER_NODE is intentionally not inferred
+         * UCS_MEM_FLAG_MEMTYPE_COPY_INTER_NODE is intentionally not inferred
          * here: unlike REGISTRABLE it is not an MD required_mem_flags bit,
          * and is checked only when packing keys in
          * ucp_proto_rndv_ctrl_get_md_map(). Runtime packing uses the real

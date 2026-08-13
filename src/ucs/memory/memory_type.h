@@ -55,11 +55,10 @@ typedef enum ucs_mem_flags {
     UCS_MEM_FLAG_REGISTRABLE = UCS_BIT(0), /**< Memory is registrable by MDs */
 
     /**
-     * Memory can be accessed by @ref uct_rkey_ptr on a peer which resides on a
-     * different node (for example CUDA IPC over MNNVL). Checked only by users
-     * which know the peer is on a different node.
+     * Memory can be copied by a memory-type transport on a peer which resides
+     * on a different node (for example CUDA IPC over MNNVL).
      */
-    UCS_MEM_FLAG_RKEY_PTR_INTER_NODE = UCS_BIT(1)
+    UCS_MEM_FLAG_MEMTYPE_COPY_INTER_NODE = UCS_BIT(1)
 } ucs_mem_flags_t;
 
 

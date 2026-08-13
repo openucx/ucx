@@ -14,7 +14,6 @@
 
 extern "C" {
 #include <ucp/core/ucp_rkey.h>
-#include <ucp/core/ucp_ep.inl>
 #include <ucp/dt/datatype_iter.inl>
 #include <ucp/proto/proto.h>
 #include <ucp/proto/proto_debug.h>
