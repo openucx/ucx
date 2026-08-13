@@ -760,7 +760,7 @@ ucp_ep_failover_on_lane_state(ucp_ep_h ep,
 static ucs_status_t
 ucp_ep_failover_extract_lane(ucp_ep_failover_lane_ctx_t *lane)
 {
-    uct_ep_outstanding_extract_params_t params;
+    uct_ep_outstanding_purge_params_t params;
     ucp_ep_failover_extract_arg_t extract_arg;
     ucs_status_t status;
 
@@ -774,13 +774,12 @@ ucp_ep_failover_extract_lane(ucp_ep_failover_lane_ctx_t *lane)
 
     params.field_mask = UCT_EP_OUTSTANDING_FIELD_RX_TOKEN |
                         UCT_EP_OUTSTANDING_FIELD_CB |
-                        UCT_EP_OUTSTANDING_FIELD_FLAGS;
+                        UCT_EP_OUTSTANDING_FIELD_ARG;
     params.rx_token   = lane->rx_token;
     params.cb         = ucp_ep_failover_extract_cb;
     params.arg        = &extract_arg;
-    params.flags      = UCT_EP_OUTSTANDING_FLAG_COMPLETE_DELIVERED;
 
-    status = uct_ep_outstanding_extract(lane->uct_ep, &params);
+    status = uct_ep_outstanding_purge(lane->uct_ep, &params);
     if (status != UCS_OK) {
         ucs_debug("ep %p: lane %u outstanding extract failed: %s", lane->ep,
                   lane->lane, ucs_status_string(status));

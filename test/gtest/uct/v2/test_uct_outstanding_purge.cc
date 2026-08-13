@@ -13,9 +13,9 @@ extern "C" {
 #endif
 }
 
-class test_uct_outstanding_extract : public uct_p2p_test {
+class test_uct_outstanding_purge : public uct_p2p_test {
 public:
-    test_uct_outstanding_extract() : uct_p2p_test(0) {
+    test_uct_outstanding_purge() : uct_p2p_test(0) {
     }
 
     static void extract_cb(const uct_ep_op_info_t *op_info, void *arg)
@@ -25,9 +25,9 @@ public:
     }
 };
 
-UCS_TEST_P(test_uct_outstanding_extract, unsupported_on_self)
+UCS_TEST_P(test_uct_outstanding_purge, unsupported_on_self)
 {
-    uct_ep_outstanding_extract_params_t params = {};
+    uct_ep_outstanding_purge_params_t params = {};
     uint64_t rx_token = 0;
     ucs_status_t status;
 
@@ -37,12 +37,12 @@ UCS_TEST_P(test_uct_outstanding_extract, unsupported_on_self)
     params.cb         = extract_cb;
     params.arg        = NULL;
 
-    status = uct_ep_outstanding_extract(sender().ep(0), &params);
+    status = uct_ep_outstanding_purge(sender().ep(0), &params);
     EXPECT_EQ(UCS_ERR_UNSUPPORTED, status);
 }
 
 #if HAVE_MLX5_DV
-class test_uct_ib_mlx5_ext_outstanding_extract : public ucs::test {
+class test_uct_ib_mlx5_ext_outstanding_purge : public ucs::test {
 public:
     static void extract_cb(const uct_ep_op_info_t *op_info, void *arg)
     {
@@ -51,41 +51,35 @@ public:
     }
 };
 
-UCS_TEST_F(test_uct_ib_mlx5_ext_outstanding_extract, invalid_params) {
-    uct_ep_outstanding_extract_params_t params = {};
+UCS_TEST_F(test_uct_ib_mlx5_ext_outstanding_purge, invalid_params) {
+    uct_ep_outstanding_purge_params_t params = {};
     uint64_t rx_token = 0;
 
     EXPECT_EQ(UCS_ERR_INVALID_PARAM,
-              uct_ib_mlx5_ext_ep_outstanding_extract(NULL, NULL));
+              uct_ib_mlx5_ext_ep_outstanding_purge(NULL, NULL));
 
     params.field_mask = UCT_EP_OUTSTANDING_FIELD_RX_TOKEN;
     params.rx_token   = &rx_token;
     params.cb         = extract_cb;
     EXPECT_EQ(UCS_ERR_INVALID_PARAM,
-              uct_ib_mlx5_ext_ep_outstanding_extract(NULL, &params));
+              uct_ib_mlx5_ext_ep_outstanding_purge(NULL, &params));
 
     params.field_mask = UCT_EP_OUTSTANDING_FIELD_CB;
     EXPECT_EQ(UCS_ERR_INVALID_PARAM,
-              uct_ib_mlx5_ext_ep_outstanding_extract(NULL, &params));
+              uct_ib_mlx5_ext_ep_outstanding_purge(NULL, &params));
 
     params.field_mask = UCT_EP_OUTSTANDING_FIELD_RX_TOKEN |
                         UCT_EP_OUTSTANDING_FIELD_CB;
     params.rx_token   = NULL;
     params.cb         = extract_cb;
     EXPECT_EQ(UCS_ERR_INVALID_PARAM,
-              uct_ib_mlx5_ext_ep_outstanding_extract(NULL, &params));
+              uct_ib_mlx5_ext_ep_outstanding_purge(NULL, &params));
 
     params.rx_token = &rx_token;
     params.cb       = NULL;
     EXPECT_EQ(UCS_ERR_INVALID_PARAM,
-              uct_ib_mlx5_ext_ep_outstanding_extract(NULL, &params));
-
-    params.field_mask |= UCT_EP_OUTSTANDING_FIELD_FLAGS;
-    params.cb          = extract_cb;
-    params.flags       = UCT_EP_OUTSTANDING_FLAG_COMPLETE_DELIVERED << 1;
-    EXPECT_EQ(UCS_ERR_INVALID_PARAM,
-              uct_ib_mlx5_ext_ep_outstanding_extract(NULL, &params));
+              uct_ib_mlx5_ext_ep_outstanding_purge(NULL, &params));
 }
 #endif
 
-_UCT_INSTANTIATE_TEST_CASE(test_uct_outstanding_extract, self)
+_UCT_INSTANTIATE_TEST_CASE(test_uct_outstanding_purge, self)
