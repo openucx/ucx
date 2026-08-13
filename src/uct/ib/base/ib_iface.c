@@ -29,6 +29,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <poll.h>
+#include <errno.h>
 #include <float.h>
 
 
@@ -1840,14 +1841,14 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
 
     self->addr_size  = uct_ib_iface_address_size(self);
 
-#if HAVE_DECL_IBV_EVENT_PORT_SPEED_CHANGE
+#if HAVE_DECL_IBV_EVENT_DEVICE_SPEED_CHANGE
     uct_iface_set_async_event_params(params, &self->async_ctx.cb,
                                      &self->async_ctx.arg);
     if (self->async_ctx.cb != NULL) {
         self->async_ctx.super.cbq = &self->super.worker->super.progress_q;
         self->async_ctx.super.cb  = uct_ib_iface_port_speed_change_progress;
-        status = uct_ib_device_async_event_wait(dev, IBV_EVENT_PORT_SPEED_CHANGE,
-                                                self->config.port_num,
+        status = uct_ib_device_async_event_wait(dev, IBV_EVENT_DEVICE_SPEED_CHANGE,
+                                                0,
                                                 &self->async_ctx.super);
         if (status != UCS_OK) {
             goto err_destroy_send_cq;
@@ -1887,11 +1888,11 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ib_iface_t)
         ucs_warn("ibv_destroy_comp_channel(comp_channel) returned %d: %m", ret);
     }
 
-#if HAVE_DECL_IBV_EVENT_PORT_SPEED_CHANGE
+#if HAVE_DECL_IBV_EVENT_DEVICE_SPEED_CHANGE
     if (self->async_ctx.cb != NULL) {
         uct_ib_device_async_event_cancel(uct_ib_iface_device(self),
-                                         IBV_EVENT_PORT_SPEED_CHANGE,
-                                         self->config.port_num,
+                                         IBV_EVENT_DEVICE_SPEED_CHANGE,
+                                         0,
                                          &self->async_ctx.super);
     }
 #endif
@@ -2091,6 +2092,7 @@ uct_ib_iface_estimate_bandwidth(uct_ib_iface_t *iface,
 {
 #if HAVE_DECL_IBV_QUERY_PORT_SPEED
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
+    ucs_log_level_t log_level;
     uint64_t port_speed;
     double wire_speed;
     int ret;
@@ -2098,8 +2100,13 @@ uct_ib_iface_estimate_bandwidth(uct_ib_iface_t *iface,
     ret = ibv_query_port_speed(dev->ibv_context, iface->config.port_num,
                                &port_speed);
     if (ret != 0) {
-        ucs_warn("ibv_query_port_speed("UCT_IB_IFACE_FMT", port_num=%d) failed:"
-                 " %m", UCT_IB_IFACE_ARG(iface), iface->config.port_num);
+        log_level = ((errno == EOPNOTSUPP) ||
+                     (errno == EPROTONOSUPPORT) ||
+                     (errno == ENOSYS)) ? UCS_LOG_LEVEL_DEBUG :
+                                          UCS_LOG_LEVEL_DIAG;
+        ucs_log(log_level,
+                "ibv_query_port_speed("UCT_IB_IFACE_FMT", port_num=%d) failed:"
+                " %m", UCT_IB_IFACE_ARG(iface), iface->config.port_num);
         return iface_attr->bandwidth;
     }
 

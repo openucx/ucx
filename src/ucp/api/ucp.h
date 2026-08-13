@@ -875,9 +875,9 @@ enum ucp_am_handler_param_field {
  * - When passed via @ref ucp_request_param_t::remote_datatype, the
  *   @ref ucp_request_param_t::remote field should point to a
  *   @ref ucp_dt_remote_sgl_t descriptor.
- * The @a count parameter of @ref ucp_put_nbx specifies the number of
- * local elements, and @ref ucp_request_param_t::remote_count specifies
- * the number of remote elements.
+ * The @a count parameter of @ref ucp_put_nbx or @ref ucp_get_nbx specifies
+ * the number of local elements, and @ref ucp_request_param_t::remote_count
+ * specifies the number of remote elements.
  *
  * @return Data-type identifier.
  */
@@ -908,7 +908,9 @@ typedef struct ucp_dt_iov {
 enum ucp_dt_local_sgl_field {
     UCP_DT_LOCAL_SGL_FIELD_BUFFERS = UCS_BIT(0), /**< buffers array is valid */
     UCP_DT_LOCAL_SGL_FIELD_LENGTHS = UCS_BIT(1), /**< lengths array is valid */
-    UCP_DT_LOCAL_SGL_FIELD_MEMHS   = UCS_BIT(2)  /**< memhs array is valid */
+    UCP_DT_LOCAL_SGL_FIELD_MEMHS   = UCS_BIT(2), /**< memhs array is valid */
+    UCP_DT_LOCAL_SGL_FIELD_COUNTS  = UCS_BIT(3), /**< counts array is valid */
+    UCP_DT_LOCAL_SGL_FIELD_STRIDES = UCS_BIT(4)  /**< strides array is valid */
 };
 
 
@@ -931,13 +933,19 @@ enum ucp_dt_remote_sgl_field {
  * handles. Element @a i describes a local buffer at @a buffers[i] of
  * @a lengths[i] bytes with memory handle @a memhs[i].
  *
+ * Optionally, the @a counts and @a strides arrays describe a repeating
+ * pattern for each element: element @a i represents @a counts[i] blocks
+ * of @a lengths[i] bytes, each separated by @a strides[i] bytes, starting
+ * at @a buffers[i]. When @a counts and @a strides are not set, each
+ * element is transferred once (equivalent to count=1, stride=0).
+ *
  * The descriptor @ref ucp_dt_local_sgl_t itself is copied by the library,
  * so the caller may release it after the call returns. However, the arrays
- * @a buffers, @a lengths, and @a memhs are not copied and must remain valid
- * until the data transfer request is completed.
+ * @a buffers, @a lengths, @a memhs, @a counts, and @a strides are not copied
+ * and must remain valid until the data transfer request is completed.
  *
- * Pass as the @a buffer parameter to @ref ucp_put_nbx with
- * @ref ucp_request_param_t::datatype set to @ref ucp_dt_make_sgl().
+ * Pass as the @a buffer parameter to @ref ucp_put_nbx or @ref ucp_get_nbx
+ * with @ref ucp_request_param_t::datatype set to @ref ucp_dt_make_sgl().
  *
  * @note Currently only N->N mapping is supported: both sides must use
  *       the SGL datatype with equal counts and matching lengths.
@@ -952,6 +960,8 @@ typedef struct {
     void * const    *buffers;   /**< Array of local buffer pointers */
     const size_t    *lengths;   /**< Array of transfer lengths in bytes */
     ucp_mem_h const *memhs;     /**< Array of local memory handles */
+    const size_t    *counts;    /**< Array of repetition counts */
+    const size_t    *strides;   /**< Array of strides in bytes */
 } ucp_dt_local_sgl_t;
 
 
@@ -3891,8 +3901,17 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
  *                           corresponds to byte elements.
  * @param [in]  remote_addr  Pointer to the source remote memory address
  *                           to read from.
+ *                           When @ref ucp_request_param_t::remote_datatype is
+ *                           @ref ucp_dt_make_sgl(), this should be set to
+ *                           @ref UCP_REMOTE_ADDR_INVALID, as remote addresses
+ *                           are specified in @ref ucp_request_param_t::remote
+ *                           instead.
  * @param [in]  rkey         Remote memory key associated with the
  *                           remote memory address.
+ *                           When @ref ucp_request_param_t::remote_datatype is
+ *                           @ref ucp_dt_make_sgl(), this should be set to
+ *                           @ref UCP_RKEY_INVALID, as remote keys are specified
+ *                           in @ref ucp_request_param_t::remote instead.
  * @param [in]  param        Operation parameters, see @ref ucp_request_param_t.
  *
  * @return UCS_OK               - The operation was completed immediately.
@@ -3904,8 +3923,8 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
  *                                responsible for releasing the handle using
  *                                @ref ucp_request_free "ucp_request_free()" routine.
  *
- * @note Only the datatype ucp_dt_make_contig(1) is supported
- * for @a param->datatype, see @ref ucp_dt_make_contig.
+ * @note Supported datatypes for @a param->datatype are
+ * @ref ucp_dt_make_contig, @ref ucp_dt_make_iov, and @ref ucp_dt_make_sgl.
  */
 ucs_status_ptr_t ucp_get_nbx(ucp_ep_h ep, void *buffer, size_t count,
                              uint64_t remote_addr, ucp_rkey_h rkey,

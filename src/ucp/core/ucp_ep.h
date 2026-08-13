@@ -169,6 +169,7 @@ enum {
                                                            transports for AM lane */
     UCP_EP_INIT_ERR_MODE_FAILOVER      = UCS_BIT(11), /**< Endpoint requires an
                                                            @ref UCP_ERR_HANDLING_MODE_FAILOVER */
+    UCP_EP_INIT_RECOVERY               = UCS_BIT(12),
 
     /**
      * For consistency with @ref UCP_SA_DATA_MASK_ERR_MODE_FAILOVER
@@ -492,6 +493,30 @@ typedef struct {
 } ucp_ep_flush_state_t;
 
 
+typedef struct ucp_ep_recovery_probe {
+    uct_completion_t  comp;
+    ucp_ep_h          ep;
+    ucp_lane_index_t  lane;
+} ucp_ep_recovery_probe_t;
+
+
+enum {
+    UCP_EP_RECOVERY_STATE_IDLE,
+    UCP_EP_RECOVERY_STATE_WAIT_REPLY,
+    UCP_EP_RECOVERY_STATE_PROBING,
+    UCP_EP_RECOVERY_STATE_PROBE_OK
+};
+
+
+/* Per-EP recovery retry state. */
+typedef struct ucp_ep_recovery_arg {
+    /* number of retries left before giving up */
+    unsigned                retries_left;
+    uint8_t                 state;
+    ucp_ep_recovery_probe_t probe[UCP_MAX_LANES];
+} ucp_ep_recovery_arg_t;
+
+
 /**
  * Endpoint extension
  */
@@ -503,7 +528,13 @@ typedef struct ucp_ep_ext {
     ucs_ptr_map_key_t             local_ep_id;   /* Local EP ID */
     ucs_ptr_map_key_t             remote_ep_id;  /* Remote EP ID */
     ucp_err_handler_cb_t          err_cb;        /* Error handler */
-    ucp_request_t                 *close_req;    /* Close protocol request */
+    union {
+        ucp_request_t             *close_req;    /* Close protocol request */
+        ucp_ep_recovery_arg_t     *recovery_arg; /* Lanes recovery state object.
+                                                    United with close request since:
+                                                    1) recovery is not supported for connected to sockaddr EPs
+                                                    2) it does not make sense to recover lanes during close protocol */
+    };
     khash_t(ucp_ep_peer_mem_hash) *peer_mem;     /* Hash of remote memory segments
                                                     used by 2-stage ppln rndv proto */
     /* List of requests which are waiting for remote completion */
@@ -585,6 +616,8 @@ typedef struct ucp_ep {
         /* How many UCT EP discarding operations are in-progress scheduled for
          * the EP */
         unsigned                      discard;
+        /* How many recovery aux probes are in-progress on the EP */
+        unsigned                      probe;
     } refcounts;
 #endif
 
@@ -968,6 +1001,61 @@ ucs_status_t ucp_ep_flush_mem_progress(uct_pending_req_t *self);
  * @return Bitmask of failed lanes.
  */
 ucp_lane_map_t ucp_ep_config_get_failed_lanes(const ucp_ep_config_key_t *key);
+
+
+/**
+ * @brief Clear UCP_LANE_TYPE_FAILED for a subset of previously failed lanes
+ *        that have just been recovered and reconfigure the endpoint.
+ *
+ * @param [in] ep     Endpoint object.
+ * @param [in] lanes  Lanes to clear UCP_LANE_TYPE_FAILED for. Must be a
+ *                    subset of ucp_ep_get_failed_lanes(ep); the caller is
+ *                    responsible for intersecting with the currently-failed
+ *                    set. Passing 0 is a no-op.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_ep_reconfig_clear_failed_lanes(ucp_ep_h ep,
+                                                ucp_lane_map_t lanes);
+
+
+/**
+ * Arm (or re-arm) failed-lane recovery for an endpoint.
+ */
+ucs_status_t ucp_ep_recovery_arm(ucp_ep_h ep);
+
+
+/**
+ * Notify recovery progress that a lanes-address reply was received.
+ */
+void ucp_ep_recovery_on_reply_received(ucp_ep_h ep);
+
+
+/**
+ * Progress function for failed lanes recovery.
+ *
+ * @return 0 if the @a ep is recovered, continue normal keep alive checks,
+ *         otherwise non-zero - the @a ep is under recovery, fully failed or
+ *         other reason to skip keepalive round.
+ */
+int ucp_ep_recovery_progress(ucp_ep_h ep);
+
+
+/**
+ * Rebuild UCT endpoints for the given set of currently-failed lanes using the
+ * peer addresses in @a remote_address. Returns the bitmap of lanes rebuilt.
+ */
+ucp_lane_map_t
+ucp_ep_recovery_rebuild_lanes(ucp_ep_h ep, ucp_lane_map_t lanes_to_rebuild,
+                              const ucp_unpacked_address_t *remote_address);
+
+
+/**
+ * Mark a subset of lanes as UCP_LANE_TYPE_FAILED and arm recovery.
+ */
+ucs_status_t ucp_ep_failover_reconfig(ucp_ep_h ucp_ep,
+                                      ucp_lane_map_t failed_lanes,
+                                      ucs_status_t discard_status);
 
 
 /**

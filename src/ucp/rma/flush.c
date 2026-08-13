@@ -659,6 +659,9 @@ static void ucp_worker_flush_ep_flushed_cb(ucp_request_t *req)
     ucp_request_put(req);
 }
 
+/* Drive the worker flush state machine one step. Returns the number of
+ * completed operations in this invocation (0 means no work was done;
+ * non-zero advertises progress to the UCT worker progress engine). */
 static unsigned ucp_worker_flush_progress(void *arg)
 {
     ucp_request_t *req        = arg;
@@ -676,13 +679,13 @@ static unsigned ucp_worker_flush_progress(void *arg)
              * endpoints, no need to progress this request actively anymore
              * and we complete the flush operation with UCS_OK status. */
             ucp_worker_flush_complete_one(req, UCS_OK, 1);
-            goto out;
+            return 1;
         } else if (status != UCS_INPROGRESS) {
             /* Error returned from uct iface flush, no need to progress
              * this request actively anymore and we complete the flush
              * operation with an error status. */
             ucp_worker_flush_complete_one(req, status, 1);
-            goto out;
+            return 1;
         }
     }
 
@@ -693,7 +696,7 @@ static unsigned ucp_worker_flush_progress(void *arg)
          * and start flush operation on it. */
         ep = ucp_worker_flush_req_set_next_ep(req, 1, next_ep_ext->ep_list.next);
         if (ep == NULL) {
-            goto out;
+            return 1;
         }
 
         ep_flush_request = ucp_ep_flush_internal(ep, UCP_REQUEST_FLAG_RELEASED,
@@ -702,17 +705,21 @@ static unsigned ucp_worker_flush_progress(void *arg)
                                                  "flush_worker",
                                                  req->flush_worker.uct_flags);
         if (UCS_PTR_IS_ERR(ep_flush_request)) {
-            /* endpoint flush resulted in an error */
+            /* Endpoint flush resulted in an error which will be reported by
+             * the EP error callback accordingly to the error handling mode of
+             * the EP but doesn't affect the worker flush. */
             status = UCS_PTR_STATUS(ep_flush_request);
             ucs_diag("ucp_ep_flush_internal() failed: %s",
                      ucs_status_string(status));
-        } else if (ep_flush_request != NULL) {
+        } else if (UCS_PTR_IS_PTR(ep_flush_request)) {
             /* endpoint flush started, increment refcount */
             ++req->flush_worker.comp_count;
         }
+
+        return 1;
     }
 
-out:
+    /* no work was done */
     return 0;
 }
 

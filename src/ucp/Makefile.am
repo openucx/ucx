@@ -10,7 +10,7 @@ lib_LTLIBRARIES     = libucp.la
 libucp_la_CFLAGS   = $(BASE_CFLAGS) $(LT_CFLAGS)
 libucp_la_LIBS     =
 libucp_la_CPPFLAGS = $(BASE_CPPFLAGS)
-libucp_la_LDFLAGS  = -ldl -version-info $(SOVERSION)
+libucp_la_LDFLAGS  = -ldl -version-info $(SOVERSION) $(UCX_LT_RELEASE)
 libucp_la_LIBADD   = ../ucs/libucs.la ../uct/libuct.la
 libucp_ladir       = $(includedir)/ucp
 
@@ -28,6 +28,7 @@ noinst_HEADERS = \
 	am/ucp_am.inl \
 	core/ucp_am.h \
 	core/ucp_context.h \
+	core/ucp_tl_info.h \
 	core/ucp_ep.h \
 	core/ucp_ep.inl \
 	core/ucp_ep_vfs.h \
@@ -69,6 +70,7 @@ noinst_HEADERS = \
 	proto/proto.h \
 	rma/rma.h \
 	rma/rma.inl \
+	rma/rma_rndv.h \
 	rndv/proto_rndv.h \
 	rndv/proto_rndv.inl \
 	rndv/rndv_mtype.inl \
@@ -84,6 +86,7 @@ noinst_HEADERS = \
 	wireup/ep_match.h \
 	wireup/wireup_ep.h \
 	wireup/wireup.h \
+	wireup/wireup_lane_info.h \
 	wireup/wireup_cm.h \
 	stream/stream.h
 
@@ -107,6 +110,7 @@ libucp_la_SOURCES = \
 	am/eager_multi.c \
 	am/rndv.c \
 	core/ucp_context.c \
+	core/ucp_tl_info.c \
 	core/ucp_am.c \
 	core/ucp_ep.c \
 	core/ucp_ep_vfs.c \
@@ -143,6 +147,7 @@ libucp_la_SOURCES = \
 	rma/get_offload.c \
 	rma/put_am.c \
 	rma/put_offload.c \
+	rma/rma_rndv.c \
 	rma/rma_send.c \
 	rma/rma_sw.c \
 	rma/flush.c \
@@ -175,4 +180,5 @@ libucp_la_SOURCES = \
 	wireup/select.c \
 	wireup/wireup_ep.c \
 	wireup/wireup.c \
+	wireup/wireup_lane_info.c \
 	wireup/wireup_cm.c

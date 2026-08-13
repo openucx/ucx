@@ -161,6 +161,12 @@ static uct_ib_device_spec_t uct_ib_builtin_device_specs[] = {
   {"ConnectX-9", {0x15b3, 4133},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V2, 90},
+  {"ConnectX-10", {0x15b3, 4135},
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
+   UCT_IB_DEVICE_FLAG_DC_V2, 100},
+  {"ConnectX-10 GRS", {0x15b3, 0x2101},
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
+   UCT_IB_DEVICE_FLAG_DC_V2, 100},
   {"BlueField", {0x15b3, 0xa2d2},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V2, 41},
@@ -221,7 +227,9 @@ uct_ib_device_async_event_schedule_callback(uct_ib_device_t *dev,
                                             uct_ib_async_event_wait_t *wait_ctx)
 {
     ucs_assert(ucs_spinlock_is_held(&dev->async_event_lock));
-    ucs_assert(wait_ctx->cb_id == UCS_CALLBACKQ_ID_NULL);
+    if (wait_ctx->cb_id != UCS_CALLBACKQ_ID_NULL) {
+        return;
+    }
     wait_ctx->cb_id = ucs_callbackq_add_safe(wait_ctx->cbq, wait_ctx->cb,
                                              wait_ctx);
 }
@@ -413,14 +421,16 @@ static void uct_ib_async_event_handler(int fd, ucs_event_set_types_t events,
     case IBV_EVENT_SRQ_LIMIT_REACHED:
         event.cookie = ibevent.element.srq;
         break;
+#if HAVE_DECL_IBV_EVENT_DEVICE_SPEED_CHANGE
+    case IBV_EVENT_DEVICE_SPEED_CHANGE:
+        event.resource_id = 0;
+        break;
+#endif
     case IBV_EVENT_DEVICE_FATAL:
     case IBV_EVENT_PORT_ERR:
     case IBV_EVENT_PORT_ACTIVE:
 #if HAVE_DECL_IBV_EVENT_GID_CHANGE
     case IBV_EVENT_GID_CHANGE:
-#endif
-#if HAVE_DECL_IBV_EVENT_PORT_SPEED_CHANGE
-    case IBV_EVENT_PORT_SPEED_CHANGE:
 #endif
     case IBV_EVENT_LID_CHANGE:
     case IBV_EVENT_PKEY_CHANGE:
@@ -501,10 +511,10 @@ void uct_ib_handle_async_event(uct_ib_device_t *dev, uct_ib_async_event_t *event
                  ibv_event_type_str(event->event_type), event->port_num);
         level = UCS_LOG_LEVEL_WARN;
         break;
-#if HAVE_DECL_IBV_EVENT_PORT_SPEED_CHANGE
-    case IBV_EVENT_PORT_SPEED_CHANGE:
-        snprintf(event_info, sizeof(event_info), "%s on port %d",
-                 ibv_event_type_str(event->event_type), event->port_num);
+#if HAVE_DECL_IBV_EVENT_DEVICE_SPEED_CHANGE
+    case IBV_EVENT_DEVICE_SPEED_CHANGE:
+        snprintf(event_info, sizeof(event_info), "%s",
+                 ibv_event_type_str(event->event_type));
         uct_ib_device_async_event_dispatch(dev, event);
         level = UCS_LOG_LEVEL_DIAG;
         break;
@@ -537,6 +547,20 @@ uct_ib_device_set_pci_id(uct_ib_device_t *dev, const char *sysfs_path)
 
     ucs_debug("%s: vendor_id 0x%x device_id %d", uct_ib_device_name(dev),
               dev->pci_id.vendor, dev->pci_id.device);
+}
+
+int uct_ib_device_has_active_port(uct_ib_device_t *dev)
+{
+    uint8_t port_num;
+
+    for (port_num = dev->first_port;
+         port_num < dev->first_port + dev->num_ports; ++port_num) {
+        if (uct_ib_device_port_attr(dev, port_num)->state == IBV_PORT_ACTIVE) {
+            return 1;
+        }
+    }
+
+    return 0;
 }
 
 ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
@@ -594,6 +618,9 @@ ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
     sysfs_path   = ucs_topo_resolve_sysfs_path(dev_path, path_buffer);
     dev->sys_dev = ucs_topo_get_sysfs_dev(dev_name, sysfs_path,
                                           sys_device_priority);
+    if (dev->sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
+        ucs_topo_sys_device_set_class(dev->sys_dev, UCS_TOPO_DEVICE_CLASS_NET);
+    }
     uct_ib_device_set_pci_id(dev, sysfs_path);
     dev->pci_bw = ucs_topo_get_pci_bw(dev_name, sysfs_path);
 
@@ -603,15 +630,11 @@ out:
 }
 
 static void
-uct_ib_device_cleanup_async_events(uct_ib_device_t *dev, uint8_t num_ports)
+uct_ib_device_cleanup_async_events(uct_ib_device_t *dev)
 {
-#if HAVE_DECL_IBV_EVENT_PORT_SPEED_CHANGE
-    uint8_t port_num;
-
-    for (port_num = 0; port_num < num_ports; ++port_num) {
-        uct_ib_device_async_event_unregister(dev, IBV_EVENT_PORT_SPEED_CHANGE,
-                                             port_num + dev->first_port);
-    }
+#if HAVE_DECL_IBV_EVENT_DEVICE_SPEED_CHANGE
+    uct_ib_device_async_event_unregister(
+            dev, IBV_EVENT_DEVICE_SPEED_CHANGE, 0);
 #endif
 
     if (kh_size(&dev->async_events_hash) != 0) {
@@ -625,7 +648,6 @@ uct_ib_device_cleanup_async_events(uct_ib_device_t *dev, uint8_t num_ports)
 static ucs_status_t uct_ib_device_init_async_events(uct_ib_device_t *dev)
 {
     ucs_status_t status;
-    uint8_t UCS_V_UNUSED port_num;
 
     kh_init_inplace(uct_ib_async_event, &dev->async_events_hash);
     status = ucs_spinlock_init(&dev->async_event_lock, 0);
@@ -633,15 +655,11 @@ static ucs_status_t uct_ib_device_init_async_events(uct_ib_device_t *dev)
         return status;
     }
 
-#if HAVE_DECL_IBV_EVENT_PORT_SPEED_CHANGE
-    for (port_num = 0; port_num < dev->num_ports; ++port_num) {
-        status = uct_ib_device_async_event_register(dev,
-                                                    IBV_EVENT_PORT_SPEED_CHANGE,
-                                                    dev->first_port + port_num);
-        if (status != UCS_OK) {
-            uct_ib_device_cleanup_async_events(dev, port_num);
-            break;
-        }
+#if HAVE_DECL_IBV_EVENT_DEVICE_SPEED_CHANGE
+    status = uct_ib_device_async_event_register(
+            dev, IBV_EVENT_DEVICE_SPEED_CHANGE, 0);
+    if (status != UCS_OK) {
+        uct_ib_device_cleanup_async_events(dev);
     }
 #endif
 
@@ -718,7 +736,7 @@ void uct_ib_device_cleanup(uct_ib_device_t *dev)
 {
     ucs_debug("destroying ib device %s", uct_ib_device_name(dev));
 
-    uct_ib_device_cleanup_async_events(dev, dev->num_ports);
+    uct_ib_device_cleanup_async_events(dev);
     uct_ib_device_cleanup_ah_cached(dev);
     ucs_recursive_spinlock_destroy(&dev->ah_lock);
 

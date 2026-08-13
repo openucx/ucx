@@ -19,6 +19,10 @@
 #define UCP_PROTO_TIME_FMT(_time_var) " " #_time_var ": %.2f ns"
 #define UCP_PROTO_TIME_ARG(_time_val) ((_time_val) * 1e9)
 
+/* Format string to display a protocol bandwidth */
+#define UCP_PROTO_BW_FMT(_bw_var) " " #_bw_var ": %.2f MB/s"
+#define UCP_PROTO_BW_ARG(_bw_val) ((_bw_val) / UCS_MBYTE)
+
 /* Format string to display a protocol performance function time */
 #define UCP_PROTO_PERF_FUNC_TIME_FMT "%.2f+%.3f*N"
 #define UCP_PROTO_PERF_FUNC_TIME_ARG(_perf_func) \

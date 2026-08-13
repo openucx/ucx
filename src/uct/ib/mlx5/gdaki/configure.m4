@@ -9,11 +9,13 @@ AC_ARG_WITH([gda],
             [AS_HELP_STRING([--without-gda], [Disable GDA-KI])],
             [], [with_gda=yes])
 
-AS_IF([test "x$with_gda" = "xyes"] && [test "x$cuda_happy" = "xyes"],
+AS_IF([test "x$with_gda" = "xyes"] && [test "x$cuda_happy" = "xyes"] &&
+      [test "x$have_mlx5" = "xyes"],
       [gda_happy=yes], [gda_happy=no])
 
 AS_IF([test "x$gda_happy" = "xyes"],
-      [uct_ib_mlx5_modules="${uct_ib_mlx5_modules}:gda"])
+      [uct_ib_mlx5_modules="${uct_ib_mlx5_modules}:gda"
+       AC_DEFINE([HAVE_GDA], [1], [Enable GDA-KI support])])
 
 AM_CONDITIONAL([HAVE_GDA], [test "x$gda_happy" != "xno"])
 AC_CONFIG_FILES([src/uct/ib/mlx5/gdaki/Makefile

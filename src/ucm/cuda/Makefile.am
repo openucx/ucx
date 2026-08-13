@@ -12,7 +12,7 @@ libucm_cuda_la_CFLAGS   = $(BASE_CFLAGS) $(CUDA_CFLAGS) $(LT_CFLAGS)
 libucm_cuda_la_LIBADD   = ../libucm.la $(CUDA_LIBS) $(CUDART_LIBS)
 libucm_cuda_la_LDFLAGS  = $(UCM_MODULE_LDFLAGS) \
                           $(patsubst %, -Xlinker %, $(CUDA_LDFLAGS)) \
-                          -version-info $(SOVERSION)
+                          -version-info $(SOVERSION) $(UCX_LT_RELEASE)
 
 noinst_HEADERS = \
 	cudamem.h

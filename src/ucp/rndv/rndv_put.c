@@ -47,7 +47,8 @@ ucp_proto_rndv_put_common_complete(ucp_request_t *req)
     UCS_STATS_UPDATE_COUNTER(req->send.ep->worker->stats, rpriv->stat_counter,
                              +1);
     ucp_proto_rndv_rkey_destroy(req);
-    ucp_proto_request_zcopy_complete(req, req->send.state.uct_comp.status);
+    ucp_proto_rndv_request_zcopy_complete(req,
+                                          req->send.state.uct_comp.status);
 }
 
 static void ucp_proto_rndv_put_zcopy_completion(uct_completion_t *uct_comp)
@@ -245,7 +246,8 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
         .super.super         = *init_params,
         .super.overhead      = 0,
         .super.latency       = 0,
-        .super.cfg_thresh    = ucp_proto_rndv_cfg_thresh(context, rndv_modes),
+        .super.cfg_thresh    = ucp_proto_rndv_cfg_thresh(init_params,
+                                                        rndv_modes),
         .super.cfg_priority  = 80,
         .super.min_length    = 0,
         .super.max_length    = max_length,
@@ -279,7 +281,7 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
     int send_atp, use_fence;
     ucp_proto_perf_t *perf;
     ucs_status_t status;
-    unsigned atp_map;
+    ucp_lane_map_t atp_map;
 
     if (!ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_SEND,
                                  support_ppln) ||
@@ -425,7 +427,8 @@ ucp_proto_rndv_put_zcopy_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_memory_info_t reg_mem_info = {
         .type    = init_params->select_param->mem_type,
-        .sys_dev = init_params->select_param->sys_dev
+        .sys_dev = init_params->select_param->sys_dev,
+        .flags   = init_params->select_param->op.mem_flags
     };
 
     ucp_proto_rndv_put_common_probe(

@@ -21,7 +21,8 @@ static void ucp_rndv_am_probe_common(ucp_proto_multi_init_params_t *params)
     }
 
     params->super.cfg_thresh   = ucp_proto_rndv_cfg_thresh(
-                                         context, UCS_BIT(UCP_RNDV_MODE_AM)),
+                                         &params->super.super,
+                                         UCS_BIT(UCP_RNDV_MODE_AM)),
     params->super.cfg_priority = 80;
     params->super.exclude_map  = 0;
     params->super.min_length   = 0;
@@ -87,6 +88,7 @@ ucp_proto_rndv_am_bcopy_complete(ucp_request_t *req)
 {
     ucp_rndv_am_destroy_rkey(req);
     ucp_datatype_iter_mem_dereg(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
+    ucp_request_rndv_flush_complete(req);
     return ucp_proto_request_bcopy_complete_success(req);
 }
 
@@ -128,7 +130,8 @@ ucp_proto_rndv_am_bcopy_abort(ucp_request_t *req, ucs_status_t status)
 {
     ucp_rndv_am_destroy_rkey(req);
     ucp_datatype_iter_mem_dereg(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
-    ucp_proto_request_bcopy_abort(req,status);
+    ucp_request_rndv_flush_complete(req);
+    ucp_proto_request_bcopy_abort(req, status);
 }
 
 ucp_proto_t ucp_rndv_am_bcopy_proto = {
@@ -174,7 +177,7 @@ static ucs_status_t ucp_rndv_am_zcopy_proto_progress(uct_pending_req_t *uct_req)
                                           UCP_DT_MASK_CONTIG_IOV,
                                           ucp_rndv_am_zcopy_send_func,
                                           ucp_rndv_am_zcopy_complete,
-                                          ucp_proto_request_zcopy_completion);
+                                          ucp_proto_rndv_request_zcopy_completion);
 }
 
 static void ucp_rndv_am_zcopy_probe(const ucp_proto_init_params_t *init_params)
