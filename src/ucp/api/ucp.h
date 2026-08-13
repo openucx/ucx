@@ -872,8 +872,8 @@ enum ucp_am_handler_param_field {
  * identifier is used for both local and remote SGL descriptors:
  * - When passed via @ref ucp_request_param_t::datatype, the @a buffer
  *   parameter should point to a @ref ucp_dt_local_sgl_t descriptor.
- * - When passed via @ref ucp_request_param_t::remote_datatype, the
- *   @ref ucp_request_param_t::remote field should point to a
+ * - When passed via the @a remote_datatype field of
+ *   @ref ucp_request_param_t, the @a remote field should point to a
  *   @ref ucp_dt_remote_sgl_t descriptor.
  * The @a count parameter of @ref ucp_put_nbx or @ref ucp_get_nbx specifies
  * the number of local elements, and @ref ucp_request_param_t::remote_count
@@ -978,8 +978,8 @@ typedef struct {
  * @a remote_addrs, @a lengths, and @a rkeys are not copied and must remain
  * valid until the data transfer request is completed.
  *
- * Pass via @ref ucp_request_param_t::remote with
- * @ref ucp_request_param_t::remote_datatype set to @ref ucp_dt_make_sgl().
+ * Pass via the @a remote field of @ref ucp_request_param_t, with the
+ * @a remote_datatype field set to @ref ucp_dt_make_sgl().
  */
 typedef struct {
     uint64_t         field_mask;    /**< Valid fields, using bits from
@@ -1918,11 +1918,22 @@ typedef struct {
      */
     void          *user_data;
 
-    /**
-     * Reply buffer. Can be used for storing operation result, for example by
-     * @ref ucp_atomic_op_nbx.
-     */
-    void          *reply_buffer;
+    union {
+        /**
+         * Reply buffer. Can be used for storing operation result, for example
+         * by @ref ucp_atomic_op_nbx.
+         */
+        void           *reply_buffer;
+
+        /**
+         * Remote datatype identifier for SGL operations. When set (along
+         * with @ref UCP_OP_ATTR_FIELD_REMOTE_DATATYPE), specifies the datatype
+         * of the remote side. Currently only @ref ucp_dt_make_sgl() is
+         * supported. When this field is set, @a remote and @a remote_count
+         * should also be set.
+         */
+        ucp_datatype_t remote_datatype;
+    };
 
     /**
      * Memory type of the buffer. see @ref ucs_memory_type_t for possible memory types.
@@ -1933,20 +1944,31 @@ typedef struct {
      */
     ucs_memory_type_t memory_type;
 
-    /**
-     * Pointer to the information where received data details are stored
-     * in case of an immediate completion of receive operation. The user has to
-     * provide a pointer to valid memory/variable which will be updated on function
-     * return.
-     */
     union {
-        size_t              *length;   /* Length of received message in bytes.
-                                          Relevant for non-tagged receive
-                                          operations. */
-        ucp_tag_recv_info_t *tag_info; /* Information about received message.
-                                          Relevant for @a ucp_tag_recv_nbx
-                                          function. */
-    } recv_info;
+        /**
+         * Pointer to the information where received data details are stored
+         * in case of an immediate completion of receive operation. The user has
+         * to provide a pointer to valid memory/variable which will be updated
+         * on function return.
+         */
+        struct {
+            size_t              *length;   /* Length of received message in
+                                              bytes. Relevant for non-tagged
+                                              receive operations. */
+            ucp_tag_recv_info_t *tag_info; /* Information about received
+                                              message. Relevant for @a
+                                              ucp_tag_recv_nbx function.
+                                              function. */
+        } recv_info;
+
+        /**
+         * Remote data descriptor. The type is determined by @a remote_datatype.
+         * Used together with @a remote_datatype and @a remote_count to specify
+         * the remote side of SGL operations. Needs to be set only when the
+         * @ref UCP_OP_ATTR_FIELD_REMOTE bit is set in @a op_attr_mask.
+         */
+        const void *remote;
+    };
 
     /**
      * Memory handle for pre-registered buffer.
@@ -1956,23 +1978,6 @@ typedef struct {
      * The memory handle should be obtained by calling @ref ucp_mem_map.
      */
     ucp_mem_h memh;
-
-    /**
-     * Remote datatype identifier for SGL operations. When set (along
-     * with @ref UCP_OP_ATTR_FIELD_REMOTE_DATATYPE), specifies the datatype
-     * of the remote side. Currently only @ref ucp_dt_make_sgl() is
-     * supported. When this field is set, @a remote and @a remote_count
-     * should also be set.
-     */
-    ucp_datatype_t remote_datatype;
-
-    /**
-     * Remote data descriptor. The type is determined by @a remote_datatype.
-     * Used together with @a remote_datatype and @a remote_count to specify
-     * the remote side of SGL operations. This field is used when
-     * @ref UCP_OP_ATTR_FIELD_REMOTE is set in @a op_attr_mask.
-     */
-    const void *remote;
 
     /**
      * Number of elements in the remote descriptor. When set (along with
@@ -3834,18 +3839,16 @@ ucs_status_ptr_t ucp_tag_msg_recv_nbx(ucp_worker_h worker, void *buffer,
  *                           the type defaults to ucp_dt_make_contig(1), which
  *                           corresponds to byte elements.
  * @param [in]  remote_addr  Pointer to the destination remote memory address
- *                           to write to. When
- *                           @ref ucp_request_param_t::remote_datatype is
+ *                           to write to. When @a param->remote_datatype is
  *                           @ref ucp_dt_make_sgl(), this should be set to
  *                           @ref UCP_REMOTE_ADDR_INVALID, as remote addresses
- *                           are specified in @ref ucp_request_param_t::remote
- *                           instead.
+ *                           are specified in @a param->remote instead.
  * @param [in]  rkey         Remote memory key associated with the
  *                           remote memory address. When
- *                           @ref ucp_request_param_t::remote_datatype is
+ *                           @a param->remote_datatype is
  *                           @ref ucp_dt_make_sgl(), this should be set to
  *                           @ref UCP_RKEY_INVALID, as remote keys are specified
- *                           in @ref ucp_request_param_t::remote instead.
+ *                           in @a param->remote instead.
  * @param [in]  param       Operation parameters, see @ref ucp_request_param_t
  *
  * @return UCS_OK               - The operation was completed immediately.
@@ -3901,17 +3904,16 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
  *                           corresponds to byte elements.
  * @param [in]  remote_addr  Pointer to the source remote memory address
  *                           to read from.
- *                           When @ref ucp_request_param_t::remote_datatype is
+ *                           When @a param->remote_datatype is
  *                           @ref ucp_dt_make_sgl(), this should be set to
  *                           @ref UCP_REMOTE_ADDR_INVALID, as remote addresses
- *                           are specified in @ref ucp_request_param_t::remote
- *                           instead.
+ *                           are specified in @a param->remote instead.
  * @param [in]  rkey         Remote memory key associated with the
  *                           remote memory address.
- *                           When @ref ucp_request_param_t::remote_datatype is
+ *                           When @a param->remote_datatype is
  *                           @ref ucp_dt_make_sgl(), this should be set to
  *                           @ref UCP_RKEY_INVALID, as remote keys are specified
- *                           in @ref ucp_request_param_t::remote instead.
+ *                           in @a param->remote instead.
  * @param [in]  param        Operation parameters, see @ref ucp_request_param_t.
  *
  * @return UCS_OK               - The operation was completed immediately.

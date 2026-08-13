@@ -1408,6 +1408,28 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_count_mismatch,
                                  0, false, 4, 3);
 }
 
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_recv_info_conflict,
+                     !ENABLE_PARAMS_CHECK) {
+    static constexpr size_t NUM_ELEMS = 2;
+
+    sgl_ctx ctx;
+    init_sgl_ctx(ctx, NUM_ELEMS, 64);
+    expect_sgl_put_status_ctx(ctx, LOCAL_MASK_DEFAULT, REMOTE_MASK_DEFAULT,
+                              NUM_ELEMS, UCS_ERR_INVALID_PARAM,
+                              UCP_OP_ATTR_FIELD_RECV_INFO);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_reply_buffer_conflict,
+                     !ENABLE_PARAMS_CHECK) {
+    static constexpr size_t NUM_ELEMS = 2;
+
+    sgl_ctx ctx;
+    init_sgl_ctx(ctx, NUM_ELEMS, 64);
+    expect_sgl_put_status_ctx(ctx, LOCAL_MASK_DEFAULT, REMOTE_MASK_DEFAULT,
+                              NUM_ELEMS, UCS_ERR_INVALID_PARAM,
+                              UCP_OP_ATTR_FIELD_REPLY_BUFFER);
+}
+
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_mixed_mem_types,
                      !ENABLE_PARAMS_CHECK ||
                              !mem_buffer::is_mem_type_supported(

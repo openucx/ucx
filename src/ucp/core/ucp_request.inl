@@ -203,6 +203,23 @@ UCS_PTR_MAP_IMPL(request, 0);
                           "UCP_OP_ATTR_FLAG_MULTI_SEND are mutually exclusive"); \
                 return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
             } \
+            \
+            if (ucs_test_all_flags((_param)->op_attr_mask, \
+                                   (UCP_OP_ATTR_FIELD_REPLY_BUFFER | \
+                                    UCP_OP_ATTR_FIELD_REMOTE_DATATYPE))) { \
+                ucs_error("UCP_OP_ATTR_FIELD_REPLY_BUFFER and " \
+                          "UCP_OP_ATTR_FIELD_REMOTE_DATATYPE are mutually " \
+                          "exclusive"); \
+                return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
+            } \
+            \
+            if (ucs_test_all_flags((_param)->op_attr_mask, \
+                                   (UCP_OP_ATTR_FIELD_RECV_INFO | \
+                                    UCP_OP_ATTR_FIELD_REMOTE))) { \
+                ucs_error("UCP_OP_ATTR_FIELD_RECV_INFO and " \
+                          "UCP_OP_ATTR_FIELD_REMOTE are mutually exclusive"); \
+                return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
+            } \
         } \
     } while (0)
 
