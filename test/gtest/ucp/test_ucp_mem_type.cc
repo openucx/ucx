@@ -13,8 +13,8 @@
 extern "C" {
 #include <uct/api/uct.h>
 #include <ucp/core/ucp_context.h>
-#include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_mm.h>
+#include <ucp/core/ucp_worker.h>
 #include <ucp/dt/dt.h>
 }
 
@@ -188,12 +188,9 @@ UCS_TEST_P(test_ucp_cuda, sparse_regions) {
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_cuda, all, "all")
 
 /*
- * gdr_copy cannot pin non-REGISTRABLE CUDA memory. Async CUDA allocations are
- * naturally non-REGISTRABLE (same property as localized device memory).
- * ucp_mem_type_pack/unpack must fall back from the preferred CUDA mem-type RMA
- * lane (gdr_copy) to cuda_copy. Pack is exercised on the CUDA mem_type_ep
- * because that is where gdr_copy is present; async buffers are detected as
- * CUDA_MANAGED.
+ * Async CUDA allocations are not REGISTRABLE, same as localized device memory,
+ * and cannot be pinned by gdr_copy. Round-trip such a buffer through the CUDA
+ * mem-type endpoint, which is where gdr_copy is used when available.
  */
 class test_ucp_mem_type_pack_non_reg : public ucp_test {
 public:
@@ -205,89 +202,42 @@ public:
 protected:
     static constexpr size_t BUF_SIZE = 65536;
     static constexpr uint64_t SEED   = 0xdeadbeefcafebabeull;
-
-    ucp_ep_h cuda_mem_type_ep()
-    {
-        return sender().worker()->mem_type_ep[UCS_MEMORY_TYPE_CUDA];
-    }
-
-    /* True when lane 0 needs REGISTRABLE and a later lane does not. */
-    bool has_registrable_fallback(ucp_ep_h ep)
-    {
-        ucp_context_h context          = sender().ucph();
-        const ucp_ep_config_key_t *key = &ucp_ep_config(ep)->key;
-        ucp_lane_index_t lane;
-        ucp_md_index_t md_index;
-        unsigned i;
-
-        if (key->rma_lanes[0] == UCP_NULL_LANE) {
-            return false;
-        }
-
-        md_index = ucp_ep_md_index(ep, key->rma_lanes[0]);
-        if (!(context->tl_mds[md_index].attr.required_mem_flags &
-              UCS_MEM_FLAG_REGISTRABLE)) {
-            return false;
-        }
-
-        for (i = 1; key->rma_lanes[i] != UCP_NULL_LANE; ++i) {
-            lane     = key->rma_lanes[i];
-            md_index = ucp_ep_md_index(ep, lane);
-            if (!(context->tl_mds[md_index].attr.required_mem_flags &
-                  UCS_MEM_FLAG_REGISTRABLE)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
 };
 
-UCS_TEST_P(test_ucp_mem_type_pack_non_reg, pack_unpack_fallback)
+UCS_TEST_P(test_ucp_mem_type_pack_non_reg, pack_unpack)
 {
-    ucp_memory_info_t mem_info;
-    ucp_ep_h ep;
     std::vector<uint8_t> host_buf(BUF_SIZE);
+    ucs_memory_type_t buf_mem_type;
+    ucp_memory_info_t mem_info;
 
     if (!mem_buffer::is_async_supported(UCS_MEMORY_TYPE_CUDA)) {
         UCS_TEST_SKIP_R("CUDA async allocation is not supported");
     }
 
-    ep = cuda_mem_type_ep();
-    if (ep == NULL) {
-        UCS_TEST_SKIP_R("no CUDA mem_type endpoint");
-    }
-
-    if (!has_registrable_fallback(ep)) {
-        UCS_TEST_SKIP_R("mem_type EP has no gdr_copy->cuda_copy RMA fallback");
+    if (sender().worker()->mem_type_ep[UCS_MEMORY_TYPE_CUDA] == NULL) {
+        UCS_TEST_SKIP_R("no CUDA mem type endpoint");
     }
 
     scoped_async_cuda_buffer src(BUF_SIZE);
     scoped_async_cuda_buffer dst(BUF_SIZE);
 
     ucp_memory_detect(sender().ucph(), src.ptr(), BUF_SIZE, &mem_info);
-    if (mem_info.type != UCS_MEMORY_TYPE_CUDA_MANAGED) {
-        UCS_TEST_SKIP_R("CUDA async memory is not classified as CUDA managed");
+    if (mem_info.flags & UCS_MEM_FLAG_REGISTRABLE) {
+        UCS_TEST_SKIP_R("CUDA async memory is registrable");
     }
-    ASSERT_EQ(0, mem_info.flags & UCS_MEM_FLAG_REGISTRABLE);
 
-    mem_buffer::pattern_fill(src.ptr(), BUF_SIZE, SEED,
-                             UCS_MEMORY_TYPE_CUDA_MANAGED);
-    mem_buffer::pattern_fill(dst.ptr(), BUF_SIZE, 0,
-                             UCS_MEMORY_TYPE_CUDA_MANAGED);
+    buf_mem_type = static_cast<ucs_memory_type_t>(mem_info.type);
+    mem_buffer::pattern_fill(src.ptr(), BUF_SIZE, SEED, buf_mem_type);
+    mem_buffer::pattern_fill(dst.ptr(), BUF_SIZE, 0, buf_mem_type);
     memset(host_buf.data(), 0, BUF_SIZE);
 
-    /* Use the CUDA mem_type_ep (where gdr_copy is preferred). Lane selection
-     * still sees the buffer as non-REGISTRABLE via memory detect. */
     ucp_mem_type_pack(sender().worker(), host_buf.data(), src.ptr(), BUF_SIZE,
                       UCS_MEMORY_TYPE_CUDA);
     mem_buffer::pattern_check(host_buf.data(), BUF_SIZE, SEED);
 
-    ucp_mem_type_unpack(sender().worker(), dst.ptr(), host_buf.data(),
-                        BUF_SIZE, UCS_MEMORY_TYPE_CUDA);
-    mem_buffer::pattern_check(dst.ptr(), BUF_SIZE, SEED,
-                              UCS_MEMORY_TYPE_CUDA_MANAGED);
+    ucp_mem_type_unpack(sender().worker(), dst.ptr(), host_buf.data(), BUF_SIZE,
+                        UCS_MEMORY_TYPE_CUDA);
+    mem_buffer::pattern_check(dst.ptr(), BUF_SIZE, SEED, buf_mem_type);
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_mem_type_pack_non_reg, cuda,
-                              "all")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_mem_type_pack_non_reg, all, "all")
