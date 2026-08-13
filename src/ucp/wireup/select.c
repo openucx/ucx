@@ -427,19 +427,19 @@ static ucp_wireup_tl_scope_t
 ucp_wireup_feature_tl_scope(ucp_context_h context, uint64_t features)
 {
     if ((context->config.features & features) ||
-        !(context->config.extra_features & features)) {
+        !(context->config.ctrl_features & features)) {
         return UCP_WIREUP_TL_SCOPE_DATA;
     }
 
-    return UCP_WIREUP_TL_SCOPE_EXTRA;
+    return UCP_WIREUP_TL_SCOPE_CTRL;
 }
 
 static const ucp_tl_bitmap_t*
 ucp_wireup_tl_scope_bitmap(ucp_context_h context,
                            const ucp_wireup_criteria_t *criteria)
 {
-    return (criteria->tl_scope == UCP_WIREUP_TL_SCOPE_EXTRA) ?
-                   &context->extra_tl_bitmap :
+    return (criteria->tl_scope == UCP_WIREUP_TL_SCOPE_CTRL) ?
+                   &context->ctrl_tl_bitmap :
                    &context->data_tl_bitmap;
 }
 
@@ -573,8 +573,8 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
         cmpt_attr      = ucp_cmpt_attr_by_md_index(context, md_index);
 
         if ((context->tl_rscs[rsc_index].flags &
-             ((criteria->tl_scope == UCP_WIREUP_TL_SCOPE_EXTRA) ?
-                      UCP_TL_RSC_FLAG_EXTRA_AUX : UCP_TL_RSC_FLAG_AUX)) &&
+             ((criteria->tl_scope == UCP_WIREUP_TL_SCOPE_CTRL) ?
+                      UCP_TL_RSC_FLAG_CTRL_AUX : UCP_TL_RSC_FLAG_AUX)) &&
             !(criteria->tl_rsc_flags & UCP_TL_RSC_FLAG_AUX)) {
             continue;
         }
@@ -1066,7 +1066,6 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_add_memaccess_lanes(
         }
 
         select_ctx->ucp_ep_init_flags |= UCP_EP_INIT_CREATE_AM_LANE;
-        select_ctx->am_tl_scope        = UCP_WIREUP_TL_SCOPE_DATA;
     }
 
     if (!(ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) &&
@@ -2457,6 +2456,7 @@ ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
     ucp_lane_index_t lane;
     unsigned addr_index;
     size_t seg_size;
+    const ucp_tl_bitmap_t *scope_bitmap;
 
     if (context->config.ext.wireup_via_am_lane) {
         ucs_assert(am_lane != UCP_NULL_LANE);
@@ -2465,6 +2465,9 @@ ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
 
     ucp_wireup_fill_aux_criteria(&criteria, ep_init_flags,
                                  UCP_ADDR_IFACE_FLAG_CB_ASYNC);
+
+    criteria.tl_scope = ucp_wireup_feature_tl_scope(context, UCP_FEATURE_AM);
+    scope_bitmap = ucp_wireup_tl_scope_bitmap(context, &criteria);
     for (lane = 0; lane < num_lanes; ++lane) {
         if (lane_descs[lane].rsc_index == UCP_NULL_RESOURCE) {
             continue;
@@ -2475,6 +2478,10 @@ ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
         resource   = &context->tl_rscs[rsc_index].tl_rsc;
         attrs      = ucp_worker_iface_get_attr(worker, rsc_index);
         seg_size   = ucp_wireup_aux_seg_size(attrs, &address_list[addr_index]);
+
+        if (!UCS_STATIC_BITMAP_GET(*scope_bitmap, rsc_index)) {
+            continue;
+        }
 
         /* Select a lane which satisfies the wireup criteria and with the
          * highest effective seg_size and use it for wireup.
@@ -3121,8 +3128,8 @@ ucp_wireup_select_aux_transport(ucp_ep_h ep, unsigned ep_init_flags,
     /* Select auxiliary transport that supports async active message callback */
     ucp_wireup_fill_aux_criteria(&criteria, ep_init_flags,
                                  UCP_ADDR_IFACE_FLAG_CB_ASYNC);
-    if (ep->worker->context->config.extra_features != 0) {
-        criteria.tl_scope = UCP_WIREUP_TL_SCOPE_EXTRA;
+    if (ep->worker->context->config.ctrl_features != 0) {
+        criteria.tl_scope = UCP_WIREUP_TL_SCOPE_CTRL;
     }
 
     status = ucp_wireup_select_aux_transport_by_seg_size(&select_ctx,
@@ -3136,8 +3143,8 @@ ucp_wireup_select_aux_transport(ucp_ep_h ep, unsigned ep_init_flags,
     /* Fallback to an auxiliary transport without async active message callback
      * requirement */
     ucp_wireup_fill_aux_criteria(&criteria, ep_init_flags, 0);
-    if (ep->worker->context->config.extra_features != 0) {
-        criteria.tl_scope = UCP_WIREUP_TL_SCOPE_EXTRA;
+    if (ep->worker->context->config.ctrl_features != 0) {
+        criteria.tl_scope = UCP_WIREUP_TL_SCOPE_CTRL;
     }
 
     return ucp_wireup_select_aux_transport_by_seg_size(&select_ctx,

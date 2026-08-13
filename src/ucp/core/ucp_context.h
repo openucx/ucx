@@ -41,8 +41,8 @@ KHASH_IMPL(ucp_context_imported_mem_hash, uint64_t, ucs_rcache_t*, 1,
 enum {
     /* The flag indicates that the resource may be used for auxiliary
      * wireup communications only */
-    UCP_TL_RSC_FLAG_AUX       = UCS_BIT(0),
-    UCP_TL_RSC_FLAG_EXTRA_AUX = UCS_BIT(1)
+    UCP_TL_RSC_FLAG_AUX      = UCS_BIT(0),
+    UCP_TL_RSC_FLAG_CTRL_AUX = UCS_BIT(1)
 };
 
 #define UCP_OP_ATTR_INDEX_MASK (UCP_OP_ATTR_FLAG_NO_IMM_CMPL    | \
@@ -278,6 +278,8 @@ struct ucp_config {
     ucs_config_allow_list_t                devices[UCT_DEVICE_TYPE_LAST];
     /** Array of transport names to use */
     ucs_config_allow_list_t                tls;
+    /** Array of transport names available to control features */
+    ucs_config_allow_list_t                ctrl_features_tls;
     /** Array of protocol names to use */
     ucs_config_allow_list_t                protos;
     /** Array of memory allocation methods */
@@ -448,7 +450,7 @@ typedef struct ucp_context {
                                                * mode is enabled. */
     ucp_tl_bitmap_t               data_tl_bitmap; /* Map of resources selected by data
                                                    * transport policy */
-    ucp_tl_bitmap_t               extra_tl_bitmap;/* Map of resources selected by extra
+    ucp_tl_bitmap_t               ctrl_tl_bitmap; /* Map of resources selected by control
                                                    * transport policy */
     ucp_rsc_index_t               num_tls;    /* Number of resources in the array */
     ucp_proto_id_mask_t           proto_bitmap;  /* Enabled protocols */
@@ -462,8 +464,8 @@ typedef struct ucp_context {
     struct {
 
         uint64_t                  features;       /* Data features */
-        uint64_t                  extra_features; /* Extra/control features */
-        uint64_t                  all_features;   /* Data and extra features */
+        uint64_t                  ctrl_features;  /* Control features */
+        uint64_t                  all_features;   /* Data and control features */
         uint64_t                  tag_sender_mask;
 
         /* How many endpoints are expected to be created */
