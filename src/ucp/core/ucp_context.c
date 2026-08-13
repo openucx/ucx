@@ -2534,7 +2534,7 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     if (context->config.ctrl_features & ~((uint64_t)UCP_FEATURE_AM)) {
         ucs_error("unsupported control features 0x%" PRIx64
                   ": only UCP_FEATURE_AM is supported",
-                   context->config.ctrl_features);
+                  context->config.ctrl_features);
         return UCS_ERR_INVALID_PARAM;
     }
 
