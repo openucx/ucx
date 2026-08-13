@@ -442,12 +442,6 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
         uct_ib_mlx5_devx_set_qpc_port_affinity(md, path_index, qpc,
                                                &opt_param_mask);
 
-        /*
-         * The mlx5 address vector is copied by value into the QPC command.
-         * Do not retain this AH: a RoCE GID/IP can move to another MAC while
-         * this UCX process remains alive, so a later RC QP must resolve it
-         * again.
-         */
         ret = ibv_destroy_ah(ah);
         if (ret != 0) {
             ucs_warn("ibv_destroy_ah() returned %d: %m", ret);

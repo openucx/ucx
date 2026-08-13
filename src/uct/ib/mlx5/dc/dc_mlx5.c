@@ -1372,7 +1372,6 @@ uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
             ucs_diag("fc_ep %p: failed to send %s: %s", ep,
                      uct_dc_mlx5_fc_req_str(dc_req, buf, sizeof(buf)),
                      ucs_status_string(status));
-            ucs_mpool_put(dc_req);
         }
     } else if (fc_hdr == UCT_RC_EP_FC_PURE_GRANT) {
         sender = (uct_dc_fc_sender_data_t*)(hdr + 1);
