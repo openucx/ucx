@@ -96,6 +96,15 @@ void uct_rc_mlx5_ep_update_tx_res(uct_ep_h tl_ep)
 }
 
 
+
+ucs_status_t uct_rc_mlx5_ep_failover_enable(uct_ep_h tl_ep)
+{
+    uct_rc_mlx5_base_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_base_ep_t);
+
+    ep->super.failover_flags |= UCT_RC_EP_FAILOVER_FLAG_ENABLED;
+    return UCS_OK;
+}
+
 static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_base_ep_put_short_inline(
         uct_ep_h tl_ep, const void *buffer, unsigned length,
         uint64_t remote_addr, uct_rkey_t rkey)

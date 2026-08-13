@@ -20,23 +20,67 @@
 #include <string.h>
 
 
+/* Contiguous payload accessors matching onto uct_ep_op_info nested layout. */
+static void *
+ucp_proto_failover_op_data_buffer(const uct_ep_op_info_t *op_info)
+{
+    switch (op_info->operation) {
+    case UCT_EP_OP_AM_BCOPY:
+        return op_info->am.payload.data.buffer;
+    case UCT_EP_OP_PUT_SHORT:
+    case UCT_EP_OP_PUT_BCOPY:
+        return op_info->rma.payload.data.buffer;
+    default:
+        return NULL;
+    }
+}
+
+static size_t
+ucp_proto_failover_op_data_length(const uct_ep_op_info_t *op_info)
+{
+    switch (op_info->operation) {
+    case UCT_EP_OP_AM_BCOPY:
+        return op_info->am.payload.data.length;
+    case UCT_EP_OP_PUT_SHORT:
+    case UCT_EP_OP_PUT_BCOPY:
+        return op_info->rma.payload.data.length;
+    default:
+        return 0;
+    }
+}
+
+static void
+ucp_proto_failover_op_set_data_buffer(uct_ep_op_info_t *op_info, void *buffer)
+{
+    switch (op_info->operation) {
+    case UCT_EP_OP_AM_BCOPY:
+        op_info->am.payload.data.buffer = buffer;
+        break;
+    case UCT_EP_OP_PUT_SHORT:
+    case UCT_EP_OP_PUT_BCOPY:
+        op_info->rma.payload.data.buffer = buffer;
+        break;
+    default:
+        break;
+    }
+}
+
+
 static int
 ucp_proto_failover_replay_op_supported(const uct_ep_op_info_t *op_info)
 {
-    const uint64_t data_mask = UCT_EP_OP_INFO_FIELD_DATA;
-
     if (!(op_info->field_mask & UCT_EP_OP_INFO_FIELD_OPERATION)) {
         return 0;
     }
 
     switch (op_info->operation) {
     case UCT_EP_OP_AM_BCOPY:
-        return ucs_test_all_flags(op_info->field_mask,
-                                  UCT_EP_OP_INFO_FIELD_AM | data_mask);
+        return (op_info->field_mask & UCT_EP_OP_INFO_FIELD_AM) &&
+               (op_info->am.field_mask & UCT_EP_OP_INFO_AM_FIELD_PAYLOAD_DATA);
     case UCT_EP_OP_PUT_SHORT:
     case UCT_EP_OP_PUT_BCOPY:
-        return ucs_test_all_flags(op_info->field_mask,
-                                  UCT_EP_OP_INFO_FIELD_RMA | data_mask);
+        return (op_info->field_mask & UCT_EP_OP_INFO_FIELD_RMA) &&
+               (op_info->rma.field_mask & UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_DATA);
     default:
         return 0;
     }
@@ -49,13 +93,15 @@ ucp_proto_failover_replay_op_create(const uct_ep_op_info_t *op_info,
 {
     ucp_proto_failover_replay_op_t *op;
     size_t length;
+    void *src;
 
     if (!ucp_proto_failover_replay_op_supported(op_info)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
-    length = op_info->data.length;
-    if ((length > 0) && (op_info->data.buffer == NULL)) {
+    length = ucp_proto_failover_op_data_length(op_info);
+    src    = ucp_proto_failover_op_data_buffer(op_info);
+    if ((length > 0) && (src == NULL)) {
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -67,10 +113,10 @@ ucp_proto_failover_replay_op_create(const uct_ep_op_info_t *op_info,
     op->req  = NULL;
     op->info = *op_info;
     if (length > 0) {
-        memcpy(op->data, op_info->data.buffer, length);
-        op->info.data.buffer = op->data;
+        memcpy(op->data, src, length);
+        ucp_proto_failover_op_set_data_buffer(&op->info, op->data);
     } else {
-        op->info.data.buffer = NULL;
+        ucp_proto_failover_op_set_data_buffer(&op->info, NULL);
     }
 
     *replay_op_p = op;
@@ -98,10 +144,11 @@ void ucp_proto_failover_replay_op_destroy(ucp_proto_failover_replay_op_t *op,
 static size_t ucp_proto_failover_pack(void *dest, void *arg)
 {
     const uct_ep_op_info_t *op_info = arg;
-    size_t length                   = op_info->data.length;
+    size_t length                   = ucp_proto_failover_op_data_length(op_info);
+    void *src                       = ucp_proto_failover_op_data_buffer(op_info);
 
     if (length > 0) {
-        memcpy(dest, op_info->data.buffer, length);
+        memcpy(dest, src, length);
     }
 
     return length;
@@ -120,7 +167,7 @@ static ucs_status_t ucp_proto_failover_bcopy_status(ssize_t packed_size)
 
 static unsigned ucp_proto_failover_am_flags(const uct_ep_op_info_t *op_info)
 {
-    return (op_info->field_mask & UCT_EP_OP_INFO_FIELD_AM_FLAGS) ?
+    return (op_info->am.field_mask & UCT_EP_OP_INFO_AM_FIELD_FLAGS) ?
                    op_info->am.flags :
                    0;
 }
@@ -277,7 +324,8 @@ ucp_proto_failover_replay_put_short(ucp_request_t *req)
     const uct_ep_op_info_t *op_info = req->send.failover.op_info;
 
     return uct_ep_put_short(ucp_ep_get_lane(req->send.ep, req->send.lane),
-                            op_info->data.buffer, op_info->data.length,
+                            ucp_proto_failover_op_data_buffer(op_info),
+                            ucp_proto_failover_op_data_length(op_info),
                             op_info->rma.remote_addr,
                             req->send.failover.tl_rkey);
 }
