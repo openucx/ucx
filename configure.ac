@@ -31,13 +31,19 @@ valgrind_libpath=""
 AC_USE_SYSTEM_EXTENSIONS
 AC_CONFIG_HEADERS([config.h])
 
+SCM_BRANCH=
+SCM_VERSION=
 AC_CHECK_PROG(GITBIN, git, yes)
 AS_IF([test x"${GITBIN}" = x"yes"],
       [# remove preceding "refs/heads/" (11 characters) for symbolic ref
-       AC_SUBST(SCM_BRANCH,  esyscmd([sh -c 'git symbolic-ref --quiet   HEAD | sed "s/^.\{11\}//"']))
-       AC_SUBST(SCM_VERSION, esyscmd([sh -c 'git rev-parse    --short=7 HEAD']))],
-      [AC_SUBST(SCM_BRANCH,  "<unknown>")
-       AC_SUBST(SCM_VERSION, "0000000")])
+       SCM_BRANCH=esyscmd([sh -c 'git symbolic-ref --quiet   HEAD | sed "s/^.\{11\}//"'])
+       SCM_VERSION=esyscmd([sh -c 'git rev-parse --short=7 HEAD'])])
+
+SCM_BRANCH="${SCM_BRANCH:-"<unknown>"}"
+SCM_VERSION="${SCM_VERSION:-"0000000"}"
+
+AC_SUBST(SCM_BRANCH)
+AC_SUBST(SCM_VERSION)
 
 AH_TOP([
 #ifndef UCX_CONFIG_H
@@ -69,7 +75,6 @@ AC_SUBST(MAJOR_VERSION)
 AC_SUBST(MINOR_VERSION)
 AC_SUBST(PATCH_VERSION)
 AC_SUBST(EXTRA_VERSION)
-AC_SUBST(SCM_VERSION)
 AC_SUBST(SOVERSION)
 
 UCX_LT_RELEASE=
