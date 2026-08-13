@@ -49,21 +49,6 @@ ucs_status_t uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep, uct_ep_attr_t *ep_attr)
 }
 
 
-void uct_rc_mlx5_ep_update_tx_res(uct_ep_h tl_ep)
-{
-    UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
-    uct_ib_mlx5_txwq_t *txwq = &ep->tx.wq;
-    uint16_t available;
-
-    ucs_assert(ep->flags & UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS);
-    available = txwq->bb_max - (txwq->prev_sw_pi - txwq->hw_ci);
-    ucs_assert(available >= uct_rc_txqp_available(&ep->super.txqp));
-    if (available > uct_rc_txqp_available(&ep->super.txqp)) {
-        uct_rc_mlx5_iface_update_tx_res(&iface->super, ep, txwq->hw_ci);
-    }
-}
-
-
 static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_base_ep_put_short_inline(
         uct_ep_h tl_ep, const void *buffer, unsigned length,
         uint64_t remote_addr, uct_rkey_t rkey)
@@ -836,6 +821,7 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
         return status;
     }
 
+    uct_rc_mlx5_ep_update_tx_res(ep, ep->tx.wq.hw_ci, ep->tx.wq.ft_ci);
     ep->flags &= ~UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS;
     return UCS_OK;
 }

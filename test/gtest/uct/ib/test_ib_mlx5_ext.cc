@@ -112,11 +112,16 @@ protected:
     }
 
     static ucs_status_t
-    purge(uct_ep_h, const uct_ep_outstanding_purge_params_t *params)
+    purge(uct_ep_h tl_ep, const uct_ep_outstanding_purge_params_t *params)
     {
         uct_ep_op_info_t op_info = {};
+        uct_rc_mlx5_base_ep_t *ep = ucs_derived_of(tl_ep,
+                                                   uct_rc_mlx5_base_ep_t);
 
         EXPECT_EQ(rx_token(), *static_cast<const uint64_t*>(params->rx_token));
+        if (ep->flags & UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS) {
+            ep->tx.wq.ft_ci = ep->tx.wq.prev_sw_pi;
+        }
         params->cb(&op_info, params->arg);
         return UCS_OK;
     }
