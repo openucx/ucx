@@ -15,6 +15,7 @@ extern "C" {
 #include <ucs/datastruct/queue.h>
 #include <ucs/arch/atomic.h>
 #include <ucs/arch/bitops.h>
+#include <uct/ib/base/ib_iface.h>
 #include <uct/ib/ud/base/ud_ep.h>
 #include <uct/ib/ud/verbs/ud_verbs.h>
 }
@@ -920,6 +921,40 @@ UCS_TEST_SKIP_COND_P(test_ud, ctls_loss,
 
 UCT_INSTANTIATE_UD_TEST_CASE(test_ud)
 
+
+class test_ud_mlx5_ah_cache : public ud_base_test {
+protected:
+    static size_t ah_cache_size(entity *e)
+    {
+        uct_ib_iface_t *iface = ucs_derived_of(e->iface(), uct_ib_iface_t);
+
+        return kh_size(&uct_ib_iface_device(iface)->ah_hash);
+    }
+};
+
+UCS_TEST_P(test_ud_mlx5_ah_cache, connect_uses_uncached_ah)
+{
+    size_t ah_count_before[] = {ah_cache_size(m_e1), ah_cache_size(m_e2)};
+
+    connect();
+    EXPECT_EQ(ah_count_before[0], ah_cache_size(m_e1));
+    EXPECT_EQ(ah_count_before[1], ah_cache_size(m_e2));
+    EXPECT_UCS_OK(tx(m_e1));
+    flush();
+
+    m_e1->destroy_ep(0);
+    m_e2->destroy_ep(0);
+    connect();
+
+    EXPECT_EQ(ah_count_before[0], ah_cache_size(m_e1));
+    EXPECT_EQ(ah_count_before[1], ah_cache_size(m_e2));
+    EXPECT_UCS_OK(tx(m_e1));
+    flush();
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_ud_mlx5_ah_cache, ud_mlx5)
+
+
 #if UCT_UD_EP_DEBUG_HOOKS
 class test_ud_stale_ack : public test_ud {
 public:
@@ -1178,4 +1213,3 @@ UCS_TEST_P(test_ud_iface_attrs, iface_attrs)
 }
 
 UCT_INSTANTIATE_UD_TEST_CASE(test_ud_iface_attrs)
-

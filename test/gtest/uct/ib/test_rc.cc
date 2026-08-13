@@ -16,6 +16,13 @@ extern "C" {
 }
 #endif
 
+extern "C" {
+#include <uct/ib/base/ib_iface.h>
+#if HAVE_MLX5_DV && HAVE_DEVX
+#include <uct/ib/mlx5/ib_mlx5.h>
+#endif
+}
+
 
 void test_rc::init()
 {
@@ -143,6 +150,70 @@ UCS_TEST_P(test_rc, fence_am_short_consumed, "RC_FENCE=weak")
 }
 
 UCT_INSTANTIATE_RC_TEST_CASE(test_rc)
+
+
+#if HAVE_MLX5_DV && HAVE_DEVX
+
+class test_rc_mlx5_ah_cache : public test_rc {
+public:
+    virtual void init()
+    {
+        uct_test::init();
+
+        m_e1 = uct_test::create_entity(0);
+        m_entities.push_back(m_e1);
+        check_skip_test();
+
+        uct_ib_iface_t *iface = ib_iface(m_e1);
+        uct_ib_mlx5_md_t *md  = ucs_derived_of(m_e1->md(),
+                                               uct_ib_mlx5_md_t);
+        if (!uct_ib_iface_is_roce(iface) ||
+            !(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP)) {
+            UCS_TEST_SKIP_R("requires RoCE and DevX RC QPs");
+        }
+
+        m_e2 = uct_test::create_entity(0);
+        m_entities.push_back(m_e2);
+
+        m_ah_count_before[0] = ah_cache_size(m_e1);
+        m_ah_count_before[1] = ah_cache_size(m_e2);
+        connect();
+    }
+
+protected:
+    static uct_ib_iface_t *ib_iface(entity *e)
+    {
+        return ucs_derived_of(e->iface(), uct_ib_iface_t);
+    }
+
+    static size_t ah_cache_size(entity *e)
+    {
+        return kh_size(&uct_ib_iface_device(ib_iface(e))->ah_hash);
+    }
+
+    size_t m_ah_count_before[2];
+};
+
+UCS_TEST_P(test_rc_mlx5_ah_cache, connect_uses_uncached_ah)
+{
+    EXPECT_EQ(m_ah_count_before[0], ah_cache_size(m_e1));
+    EXPECT_EQ(m_ah_count_before[1], ah_cache_size(m_e2));
+    send_am_messages(m_e1, 1, UCS_OK);
+    flush();
+
+    m_e1->destroy_ep(0);
+    m_e2->destroy_ep(0);
+    connect();
+
+    EXPECT_EQ(m_ah_count_before[0], ah_cache_size(m_e1));
+    EXPECT_EQ(m_ah_count_before[1], ah_cache_size(m_e2));
+    send_am_messages(m_e1, 1, UCS_OK);
+    flush();
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_rc_mlx5_ah_cache, rc_mlx5)
+
+#endif
 
 
 class test_rc_max_wr : public test_rc {

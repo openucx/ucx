@@ -398,6 +398,7 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
     ucs_status_t status;
     struct ibv_ah *ah;
     void *qpc;
+    int ret;
 
     UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, opcode,
                       UCT_IB_MLX5_CMD_OP_INIT2RTR_QP);
@@ -412,8 +413,9 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
     uct_ib_mlx5_devx_set_qpc_dp_ordering(md, qpc, iface);
 
     if (uct_ib_iface_is_roce(&iface->super.super)) {
-        status = uct_ib_iface_create_ah(&iface->super.super, ah_attr,
-                                        "RC DEVX QP connect", &ah);
+        status = uct_ib_device_create_ah_uncached(
+                &md->super.dev, ah_attr, md->super.pd,
+                "RC DEVX QP connect", &ah);
         if (status != UCS_OK) {
             return status;
         }
@@ -439,6 +441,17 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
 
         uct_ib_mlx5_devx_set_qpc_port_affinity(md, path_index, qpc,
                                                &opt_param_mask);
+
+        /*
+         * The mlx5 address vector is copied by value into the QPC command.
+         * Do not retain this AH: a RoCE GID/IP can move to another MAC while
+         * this UCX process remains alive, so a later RC QP must resolve it
+         * again.
+         */
+        ret = ibv_destroy_ah(ah);
+        if (ret != 0) {
+            ucs_warn("ibv_destroy_ah() returned %d: %m", ret);
+        }
     } else {
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.grh, ah_attr->is_global);
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.rlid, ah_attr->dlid);
@@ -515,4 +528,3 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
               iface->super.config.max_rd_atomic);
     return UCS_OK;
 }
-

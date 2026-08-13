@@ -1098,6 +1098,7 @@ ucs_status_t uct_dc_mlx5_ep_fc_pure_grant_send(uct_dc_mlx5_ep_t *ep,
     struct ibv_ah *ah;
     size_t av_size;
     ucs_status_t status;
+    int ret;
 
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
 
@@ -1128,13 +1129,18 @@ ucs_status_t uct_dc_mlx5_ep_fc_pure_grant_send(uct_dc_mlx5_ep_t *ep,
                 ucs_unaligned_ptr(&fc_req->sender.payload.gid),
                 iface->super.super.super.gid_info.gid_index, 0, &ah_attr);
 
-        status = uct_ib_iface_create_ah(ib_iface, &ah_attr, "DC pure grant",
-                                        &ah);
+        status = uct_ib_device_create_ah_uncached(
+                uct_ib_iface_device(ib_iface), &ah_attr,
+                uct_ib_iface_md(ib_iface)->pd, "DC pure grant", &ah);
         if (status != UCS_OK) {
             goto err_dci_put;
         }
 
         uct_ib_mlx5_get_av(ah, &mlx5_av);
+        ret = ibv_destroy_ah(ah);
+        if (ret != 0) {
+            ucs_warn("ibv_destroy_ah() returned %d: %m", ret);
+        }
     }
 
     /* lid in fc_req is in BE already  */
