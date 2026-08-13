@@ -716,6 +716,15 @@ ucp_memory_info_set_host(ucp_memory_info_t *mem_info)
     mem_info->flags   = UCS_MEM_FLAG_REGISTRABLE;
 }
 
+/* True when a memtype-cache entry is complete enough to skip MD slowpath. */
+static UCS_F_ALWAYS_INLINE int
+ucp_memory_info_is_complete(const ucs_memory_info_t *mem_info)
+{
+    return (mem_info->type != UCS_MEMORY_TYPE_UNKNOWN) &&
+           ((mem_info->sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) ||
+            (mem_info->mem_flags != 0));
+}
+
 static UCS_F_ALWAYS_INLINE void
 ucp_memory_detect_internal(ucp_context_h context, const void *address,
                            size_t length, ucs_memory_info_t *mem_info)
@@ -740,10 +749,7 @@ ucp_memory_detect_internal(ucp_context_h context, const void *address,
                       address, length);
         goto out_host_mem;
     } else if (ucs_likely(status == UCS_OK)) {
-        if (ucs_unlikely(
-                    (mem_info->type == UCS_MEMORY_TYPE_UNKNOWN) ||
-                    ((mem_info->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) &&
-                     (mem_info->mem_flags == 0)))) {
+        if (ucs_unlikely(!ucp_memory_info_is_complete(mem_info))) {
             ucs_trace_req("address %p length %zu: querying memory attributes",
                     address, length);
             ucp_memory_detect_slowpath(context, address, length, mem_info);
