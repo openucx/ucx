@@ -10,6 +10,7 @@
 
 #include "cuda_ipc_cache.h"
 #include "cuda_ipc_iface.h"
+#include "cuda_ipc_vmm_multi.h"
 #include "cuda_ipc.inl"
 
 #include <ucs/datastruct/khash.h>
@@ -177,6 +178,8 @@ static ucs_status_t uct_cuda_ipc_close_memhandle(uct_cuda_ipc_cache_region_t *re
     ucs_status_t status;
 
     if ((region->key.ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM) ||
+        (region->key.ph.handle_type ==
+         UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM_MULTI) ||
         (region->key.ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD)) {
         status = UCT_CUDADRV_FUNC_LOG_WARN(cuMemUnmap(
                     (CUdeviceptr)region->mapped_addr, region->key.b_len));
@@ -296,12 +299,14 @@ uct_cuda_ipc_open_memhandle_legacy(CUipcMemHandle memh, CUdevice cu_dev,
 }
 
 #if HAVE_CUDA_FABRIC || HAVE_DECL_SYS_PIDFD_GETFD
-static void
-uct_cuda_ipc_init_access_desc(CUmemAccessDesc *access_desc, CUdevice cu_dev)
+static ucs_status_t uct_cuda_ipc_set_memaccess(CUdeviceptr dptr, size_t size,
+                                               CUdevice cu_dev,
+                                               ucs_log_level_t log_level)
 {
-    access_desc->location.type = CU_MEM_LOCATION_TYPE_DEVICE;
-    access_desc->flags         = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
-    access_desc->location.id   = cu_dev;
+    CUmemAccessDesc access;
+
+    uct_cuda_ipc_init_access_desc(&access, cu_dev);
+    return UCT_CUDADRV_FUNC(cuMemSetAccess(dptr, size, &access, 1), log_level);
 }
 
 static ucs_status_t
@@ -311,7 +316,6 @@ uct_cuda_ipc_open_memhandle_vmm(const uct_cuda_ipc_rkey_t *key, CUdevice cu_dev,
                                 CUmemAllocationHandleType handle_type,
                                 ucs_log_level_t log_level)
 {
-    CUmemAccessDesc access_desc = {};
     ucs_status_t status;
     CUdeviceptr dptr;
     CUmemGenericAllocationHandle handle;
@@ -336,10 +340,7 @@ uct_cuda_ipc_open_memhandle_vmm(const uct_cuda_ipc_rkey_t *key, CUdevice cu_dev,
         goto release_va_range;
     }
 
-    uct_cuda_ipc_init_access_desc(&access_desc, cu_dev);
-
-    status = UCT_CUDADRV_FUNC(cuMemSetAccess(dptr, key->b_len, &access_desc, 1),
-                              log_level);
+    status = uct_cuda_ipc_set_memaccess(dptr, key->b_len, cu_dev, log_level);
     if (status != UCS_OK) {
         goto unmap_range;
     }
@@ -454,6 +455,76 @@ err:
     pthread_rwlock_unlock(&uct_cuda_ipc_rem_mpool_cache.lock);
     return status;
 }
+
+static ucs_status_t uct_cuda_ipc_open_memhandle_vmm_multi(
+        const uct_cuda_ipc_unpacked_rkey_t *unpacked, CUdevice cu_dev,
+        CUdeviceptr *mapped_addr, ucs_log_level_t log_level)
+{
+    const uct_cuda_ipc_rkey_t *key = &unpacked->super.super;
+    CUmemGenericAllocationHandle imp_handle;
+    ucs_status_t status;
+    uint16_t i, mapped;
+    ptrdiff_t chunk_offset;
+
+    status = UCT_CUDADRV_FUNC(cuMemAddressReserve(mapped_addr, key->b_len, 0, 0,
+                                                  0),
+                              log_level);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    for (i = 0; i < unpacked->num_chunks; i++) {
+        if (unpacked->chunks[i].vmm_handle.handle_type !=
+            UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM) {
+            ucs_error("VMM_MULTI chunk %u: unsupported handle type %d", i,
+                      unpacked->chunks[i].vmm_handle.handle_type);
+            mapped = i;
+            status = UCS_ERR_UNSUPPORTED;
+            goto err_unmap;
+        }
+
+        status = UCT_CUDADRV_FUNC(
+                cuMemImportFromShareableHandle(
+                        &imp_handle,
+                        (void*)&unpacked->chunks[i].vmm_handle.handle.fabric,
+                        CU_MEM_HANDLE_TYPE_FABRIC),
+                log_level);
+        if (status != UCS_OK) {
+            mapped = i;
+            goto err_unmap;
+        }
+
+        chunk_offset = unpacked->chunks[i].d_bptr - key->d_bptr;
+        status       = UCT_CUDADRV_FUNC(cuMemMap(*mapped_addr + chunk_offset,
+                                                 unpacked->chunks[i].b_len, 0,
+                                                 imp_handle, 0),
+                                        log_level);
+        UCT_CUDADRV_FUNC_LOG_WARN(cuMemRelease(imp_handle));
+        if (status != UCS_OK) {
+            mapped = i;
+            goto err_unmap;
+        }
+    }
+    mapped = unpacked->num_chunks;
+
+    status = uct_cuda_ipc_set_memaccess(*mapped_addr, key->b_len, cu_dev,
+                                        log_level);
+    if (status != UCS_OK) {
+        goto err_unmap;
+    }
+
+    return UCS_OK;
+
+err_unmap:
+    if (mapped > 0) {
+        ptrdiff_t mapped_len = (unpacked->chunks[mapped - 1].d_bptr +
+                                unpacked->chunks[mapped - 1].b_len) -
+                               key->d_bptr;
+        UCT_CUDADRV_FUNC_LOG_WARN(cuMemUnmap(*mapped_addr, mapped_len));
+    }
+    UCT_CUDADRV_FUNC_LOG_WARN(cuMemAddressFree(*mapped_addr, key->b_len));
+    return status;
+}
 #endif /* HAVE_CUDA_FABRIC */
 
 #if HAVE_DECL_SYS_PIDFD_GETFD
@@ -509,11 +580,12 @@ close_pidfd:
 #endif /* HAVE_DECL_SYS_PIDFD_GETFD */
 
 static ucs_status_t
-uct_cuda_ipc_open_memhandle(uct_cuda_ipc_extended_rkey_t *ext_key,
+uct_cuda_ipc_open_memhandle(uct_cuda_ipc_unpacked_rkey_t *unpacked_key,
                             CUdevice cu_dev, CUdeviceptr *mapped_addr,
                             ucs_log_level_t log_level)
 {
-    uct_cuda_ipc_rkey_t *key = &ext_key->super;
+    uct_cuda_ipc_extended_rkey_t *ext_key = &unpacked_key->super;
+    uct_cuda_ipc_rkey_t *key              = &ext_key->super;
     ucs_log_level_t level;
 
     ucs_trace("key handle type %u", key->ph.handle_type);
@@ -530,6 +602,9 @@ uct_cuda_ipc_open_memhandle(uct_cuda_ipc_extended_rkey_t *ext_key,
     case UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL:
         return uct_cuda_ipc_open_memhandle_mempool(key, cu_dev, mapped_addr,
                                                    log_level);
+    case UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM_MULTI:
+        return uct_cuda_ipc_open_memhandle_vmm_multi(unpacked_key, cu_dev,
+                                                     mapped_addr, log_level);
 #endif
 #if HAVE_DECL_SYS_PIDFD_GETFD
     case UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD:
@@ -687,11 +762,11 @@ void uct_cuda_ipc_unmap_memhandle(pid_t pid, ucs_sys_ns_t pid_ns,
 
 static ucs_status_t
 uct_cuda_ipc_cache_put_region(uct_cuda_ipc_cache_t *cache,
-                              uct_cuda_ipc_extended_rkey_t *ext_key,
+                              uct_cuda_ipc_unpacked_rkey_t *unpacked_key,
                               CUdevice cu_dev, void **mapped_addr,
                               ucs_log_level_t log_level)
 {
-    uct_cuda_ipc_rkey_t *key = &ext_key->super;
+    uct_cuda_ipc_rkey_t *key = &unpacked_key->super.super;
     ucs_pgt_region_t *pgt_region;
     uct_cuda_ipc_cache_region_t *region;
     ucs_status_t status;
@@ -729,7 +804,7 @@ uct_cuda_ipc_cache_put_region(uct_cuda_ipc_cache_t *cache,
         }
     }
 
-    status = uct_cuda_ipc_open_memhandle(ext_key, cu_dev,
+    status = uct_cuda_ipc_open_memhandle(unpacked_key, cu_dev,
                                          (CUdeviceptr*)mapped_addr, log_level);
     if (ucs_unlikely(status != UCS_OK)) {
         if (ucs_likely(status == UCS_ERR_ALREADY_EXISTS)) {
@@ -737,7 +812,7 @@ uct_cuda_ipc_cache_put_region(uct_cuda_ipc_cache_t *cache,
             uct_cuda_ipc_cache_invalidate_regions(cache, (void *)key->d_bptr,
                                                   UCS_PTR_BYTE_OFFSET(key->d_bptr,
                                                                       key->b_len));
-            status = uct_cuda_ipc_open_memhandle(ext_key, cu_dev,
+            status = uct_cuda_ipc_open_memhandle(unpacked_key, cu_dev,
                                                  (CUdeviceptr*)mapped_addr,
                                                  log_level);
             if (ucs_unlikely(status != UCS_OK)) {
@@ -745,7 +820,7 @@ uct_cuda_ipc_cache_put_region(uct_cuda_ipc_cache_t *cache,
                     /* unmap all cache entries and retry */
                     uct_cuda_ipc_cache_purge(cache);
                     status = uct_cuda_ipc_open_memhandle(
-                            ext_key, cu_dev, (CUdeviceptr*)mapped_addr,
+                            unpacked_key, cu_dev, (CUdeviceptr*)mapped_addr,
                             log_level);
                     if (status != UCS_OK) {
                         ucs_fatal("%s: failed to open ipc mem handle. addr:%p "
@@ -824,10 +899,11 @@ err:
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
-                 (ext_key, cu_dev, mapped_addr, log_level),
-                 uct_cuda_ipc_extended_rkey_t *ext_key, CUdevice cu_dev,
+                 (unpacked_key, cu_dev, mapped_addr, log_level),
+                 uct_cuda_ipc_unpacked_rkey_t *unpacked_key, CUdevice cu_dev,
                  void **mapped_addr, ucs_log_level_t log_level)
 {
+    uct_cuda_ipc_extended_rkey_t *ext_key        = &unpacked_key->super;
     uct_cuda_ipc_rkey_t *key                     = &ext_key->super;
     const uct_cuda_ipc_cache_hash_key_t hash_key = {key->pid, ext_key->pid_ns,
                                                     cu_dev};
@@ -854,7 +930,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
     ucs_rw_spinlock_write_lock(&uct_cuda_ipc_remote_cache.lock);
     status = uct_cuda_ipc_remote_cache_put(hash_key, &cache);
     if (status == UCS_OK) {
-        status = uct_cuda_ipc_cache_put_region(cache, ext_key, cu_dev,
+        status = uct_cuda_ipc_cache_put_region(cache, unpacked_key, cu_dev,
                                                mapped_addr, log_level);
     }
 

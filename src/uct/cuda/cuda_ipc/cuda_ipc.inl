@@ -107,7 +107,7 @@ uct_cuda_ipc_rkey_get_local_address(const uct_cuda_ipc_rkey_t *rkey,
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_ipc_get_remote_address(
-        uct_cuda_ipc_extended_rkey_t *rkey, uint64_t raddr, CUdevice cu_dev,
+        uct_cuda_ipc_unpacked_rkey_t *rkey, uint64_t raddr, CUdevice cu_dev,
         void **laddr_p, const void **base_addr_p)
 {
     ucs_status_t status;
@@ -120,8 +120,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_cuda_ipc_get_remote_address(
     }
 
     *base_addr_p = mapped_addr;
-    *laddr_p     = uct_cuda_ipc_rkey_get_local_address(&rkey->super, raddr,
-                                                       mapped_addr);
+    *laddr_p     = uct_cuda_ipc_rkey_get_local_address(&rkey->super.super,
+                                                       raddr, mapped_addr);
 
     return UCS_OK;
 }
