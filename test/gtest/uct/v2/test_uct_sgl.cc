@@ -22,21 +22,6 @@ protected:
         SGL_OP_GET
     };
 
-    struct sgl_arrays {
-        std::vector<std::unique_ptr<mapped_buffer>> local;
-        std::vector<std::unique_ptr<mapped_buffer>> remote;
-        std::vector<void*>                          buffers;
-        std::vector<size_t>                         lengths;
-        std::vector<uct_mem_h>                      memhs;
-        std::vector<uint64_t>                       remote_addrs;
-        std::vector<uct_rkey_t>                     rkeys;
-    };
-
-    struct sgl_completion {
-        uct_completion_t uct;
-        unsigned         done;
-    };
-
     void init() override
     {
         uct_test::init();
@@ -62,6 +47,87 @@ protected:
 
         return m_sgl_attr;
     }
+
+    void test_sgl_various_counts(sgl_op_t op)
+    {
+        static const size_t counts[] = {1, 2, 4, 10, 1024};
+        size_t length;
+        size_t max;
+
+        connect_or_skip(op);
+        length = elem_size(op, 2 * UCS_KBYTE);
+        max    = max_count(op);
+
+        for (size_t count : counts) {
+            UCS_TEST_MESSAGE << "count " << ucs_min(count, max) << " length "
+                             << length;
+            test_sgl(op, std::vector<size_t>(ucs_min(count, max), length));
+
+            if (HasFailure() || (count >= max)) {
+                break;
+            }
+        }
+    }
+
+    void test_sgl_various_lengths(sgl_op_t op)
+    {
+        static const size_t sizes[] = {64, 256, UCS_KBYTE, 4 * UCS_KBYTE,
+                                       16 * UCS_KBYTE};
+        std::vector<size_t> lengths;
+
+        connect_or_skip(op);
+
+        for (size_t size : sizes) {
+            lengths.push_back(elem_size(op, size));
+        }
+
+        test_sgl(op, std::vector<size_t>(lengths.begin(),
+                                         lengths.begin() +
+                                                 ucs_min(lengths.size(),
+                                                         max_count(op))));
+    }
+
+    void test_sgl_zero_count(sgl_op_t op)
+    {
+        sgl_arrays sgl;
+
+        connect_or_skip(op);
+
+        EXPECT_EQ(UCS_OK, sgl_op(op, sgl));
+        m_sender->flush();
+    }
+
+    void test_sgl_with_callback(sgl_op_t op)
+    {
+        sgl_completion comp = {};
+        size_t count;
+
+        connect_or_skip(op);
+
+        comp.uct.func   = completion_cb;
+        comp.uct.count  = 1;
+        comp.uct.status = UCS_OK;
+
+        count = ucs_min(size_t(10), max_count(op));
+        test_sgl(op, std::vector<size_t>(count, elem_size(op, UCS_KBYTE)),
+                 &comp);
+    }
+
+private:
+    struct sgl_arrays {
+        std::vector<std::unique_ptr<mapped_buffer>> local;
+        std::vector<std::unique_ptr<mapped_buffer>> remote;
+        std::vector<void*>                          buffers;
+        std::vector<size_t>                         lengths;
+        std::vector<uct_mem_h>                      memhs;
+        std::vector<uint64_t>                       remote_addrs;
+        std::vector<uct_rkey_t>                     rkeys;
+    };
+
+    struct sgl_completion {
+        uct_completion_t uct;
+        unsigned         done;
+    };
 
     /* Skip unless the transport reports SGL zcopy support for @a op, and
        connect the endpoint otherwise */
@@ -190,71 +256,6 @@ protected:
 
         m_sender->flush();
         check_sgl(op, sgl);
-    }
-
-    void test_sgl_various_counts(sgl_op_t op)
-    {
-        static const size_t counts[] = {1, 2, 4, 10, 1024};
-        size_t length;
-        size_t max;
-
-        connect_or_skip(op);
-        length = elem_size(op, 2 * UCS_KBYTE);
-        max    = max_count(op);
-
-        for (size_t count : counts) {
-            UCS_TEST_MESSAGE << "count " << ucs_min(count, max) << " length "
-                             << length;
-            test_sgl(op, std::vector<size_t>(ucs_min(count, max), length));
-
-            if (HasFailure() || (count >= max)) {
-                break;
-            }
-        }
-    }
-
-    void test_sgl_various_lengths(sgl_op_t op)
-    {
-        static const size_t sizes[] = {64, 256, UCS_KBYTE, 4 * UCS_KBYTE,
-                                       16 * UCS_KBYTE};
-        std::vector<size_t> lengths;
-
-        connect_or_skip(op);
-
-        for (size_t size : sizes) {
-            lengths.push_back(elem_size(op, size));
-        }
-
-        test_sgl(op, std::vector<size_t>(lengths.begin(),
-                                         lengths.begin() +
-                                                 ucs_min(lengths.size(),
-                                                         max_count(op))));
-    }
-
-    void test_sgl_zero_count(sgl_op_t op)
-    {
-        sgl_arrays sgl;
-
-        connect_or_skip(op);
-
-        EXPECT_EQ(UCS_OK, sgl_op(op, sgl));
-        m_sender->flush();
-    }
-
-    void test_sgl_with_callback(sgl_op_t op)
-    {
-        sgl_completion comp = {};
-        size_t count;
-
-        connect_or_skip(op);
-
-        comp.uct.func   = completion_cb;
-        comp.uct.count  = 1;
-        comp.uct.status = UCS_OK;
-
-        count = ucs_min(size_t(10), max_count(op));
-        test_sgl(op, std::vector<size_t>(count, elem_size(op, UCS_KBYTE)),
-                 &comp);
     }
 
     static void completion_cb(uct_completion_t *self)
