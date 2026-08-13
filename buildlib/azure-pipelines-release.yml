@@ -90,6 +90,7 @@ stages:
           clean: all
         steps:
           - checkout: self
+            submodules: true
             fetchDepth: 100
             clean: true
             retryCountOnTaskFailure: 5
