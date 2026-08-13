@@ -89,9 +89,10 @@ protected:
 
     void test_sgl_zero_count(sgl_op_t op)
     {
-        sgl_arrays sgl;
-
         connect_or_skip(op);
+
+        sgl_arrays sgl(*m_sender, *m_receiver, mem_type(), op,
+                       std::vector<size_t>());
 
         EXPECT_EQ(UCS_OK, sgl_op(op, sgl));
         m_sender->flush();
@@ -115,6 +116,34 @@ protected:
 
 private:
     struct sgl_arrays {
+        sgl_arrays(const entity &local_ent, const entity &remote_ent,
+                   ucs_memory_type_t type, sgl_op_t op,
+                   const std::vector<size_t> &sizes)
+        {
+            size_t count = sizes.size();
+
+            buffers.resize(count);
+            lengths.resize(count);
+            memhs.resize(count);
+            remote_addrs.resize(count);
+            rkeys.resize(count);
+
+            for (size_t i = 0; i < count; ++i) {
+                uint64_t local_seed  = (op == SGL_OP_PUT) ? (SEED1 + i) : SEED2;
+                uint64_t remote_seed = (op == SGL_OP_PUT) ? SEED2 : (SEED1 + i);
+
+                local.emplace_back(new mapped_buffer(sizes[i], local_seed,
+                                                     local_ent, 0, type));
+                remote.emplace_back(new mapped_buffer(sizes[i], remote_seed,
+                                                      remote_ent, 0, type));
+                buffers[i]      = local[i]->ptr();
+                lengths[i]      = sizes[i];
+                memhs[i]        = local[i]->memh();
+                remote_addrs[i] = remote[i]->addr();
+                rkeys[i]        = remote[i]->rkey();
+            }
+        }
+
         std::vector<std::unique_ptr<mapped_buffer>> local;
         std::vector<std::unique_ptr<mapped_buffer>> remote;
         std::vector<void*>                          buffers;
@@ -182,34 +211,6 @@ private:
         return UCS_MEMORY_TYPE_LAST;
     }
 
-    void init_sgl(sgl_arrays &sgl, sgl_op_t op,
-                  const std::vector<size_t> &sizes)
-    {
-        ucs_memory_type_t type = mem_type();
-        size_t count           = sizes.size();
-
-        sgl.buffers.resize(count);
-        sgl.lengths.resize(count);
-        sgl.memhs.resize(count);
-        sgl.remote_addrs.resize(count);
-        sgl.rkeys.resize(count);
-
-        for (size_t i = 0; i < count; ++i) {
-            uint64_t local_seed  = (op == SGL_OP_PUT) ? (SEED1 + i) : SEED2;
-            uint64_t remote_seed = (op == SGL_OP_PUT) ? SEED2 : (SEED1 + i);
-
-            sgl.local.emplace_back(new mapped_buffer(sizes[i], local_seed,
-                                                     *m_sender, 0, type));
-            sgl.remote.emplace_back(new mapped_buffer(sizes[i], remote_seed,
-                                                      *m_receiver, 0, type));
-            sgl.buffers[i]      = sgl.local[i]->ptr();
-            sgl.lengths[i]      = sizes[i];
-            sgl.memhs[i]        = sgl.local[i]->memh();
-            sgl.remote_addrs[i] = sgl.remote[i]->addr();
-            sgl.rkeys[i]        = sgl.remote[i]->rkey();
-        }
-    }
-
     ucs_status_t sgl_op(sgl_op_t op, const sgl_arrays &sgl,
                         uct_completion_t *comp = NULL)
     {
@@ -241,11 +242,10 @@ private:
     void test_sgl(sgl_op_t op, const std::vector<size_t> &sizes,
                   sgl_completion *comp = NULL)
     {
-        sgl_arrays sgl;
-        ucs_status_t status;
+        sgl_arrays sgl(*m_sender, *m_receiver, mem_type(), op, sizes);
+        ucs_status_t status = sgl_op(op, sgl,
+                                     (comp == NULL) ? NULL : &comp->uct);
 
-        init_sgl(sgl, op, sizes);
-        status = sgl_op(op, sgl, (comp == NULL) ? NULL : &comp->uct);
         ASSERT_UCS_OK_OR_INPROGRESS(status);
 
         if ((comp != NULL) && (status == UCS_INPROGRESS)) {
