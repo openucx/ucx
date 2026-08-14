@@ -1263,8 +1263,7 @@ typedef struct ucp_params {
      * OpenSHMEM libraries, this number will specify the local identificator on
      * a single node in the job. Does not affect semantics, only transport
      * selection criteria and the resulting performance.
-     * The value can be also set by the UCX_LOCAL_NODE_ID environment variable,
-     * which will override the id set by @e node_local_id
+     * A numeric UCX_NODE_LOCAL_ID environment value overrides @e node_local_id.
      */
     size_t                             node_local_id;
 } ucp_params_t;
