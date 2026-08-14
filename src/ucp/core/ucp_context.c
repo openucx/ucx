@@ -2717,7 +2717,7 @@ static void ucp_context_create_vfs(ucp_context_h context)
 static void
 ucp_version_check(unsigned api_major_version, unsigned api_minor_version)
 {
-    UCS_STRING_BUFFER_ONSTACK(strb, 256);
+    UCS_STRING_BUFFER_ONSTACK(strb, 512);
     unsigned major_version, minor_version, release_number;
     ucs_log_level_t log_level;
     Dl_info dl_info;
@@ -2740,13 +2740,20 @@ ucp_version_check(unsigned api_major_version, unsigned api_minor_version)
     }
 
     if (ucs_log_is_enabled(log_level)) {
+        ucs_string_buffer_appendf(&strb, " (");
+
         ret = dladdr(ucp_init_version, &dl_info);
         if (ret != 0) {
-            ucs_string_buffer_appendf(&strb, " (loaded from %s)",
+            ucs_string_buffer_appendf(&strb, "loaded from %s, ",
                                       dl_info.dli_fname);
         }
+
+        ucs_string_buffer_appendf(&strb, "git branch %s, revision %s)",
+                                  UCT_SCM_BRANCH, UCT_SCM_VERSION);
         ucs_log(log_level, "%s", ucs_string_buffer_cstr(&strb));
     }
+
+    ucs_debug("Configured with: %s", UCX_CONFIGURE_FLAGS);
 }
 
 ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_version,
