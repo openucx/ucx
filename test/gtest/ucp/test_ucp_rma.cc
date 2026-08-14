@@ -1361,6 +1361,32 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_missing_remote_field,
                                  UCP_OP_ATTR_FIELD_REMOTE);
 }
 
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_missing_remote_datatype_field,
+                     !ENABLE_PARAMS_CHECK) {
+    expect_sgl_put_invalid_param(LOCAL_MASK_DEFAULT, REMOTE_MASK_DEFAULT,
+                                 UCP_REMOTE_ADDR_INVALID, UCP_RKEY_INVALID,
+                                 UCP_OP_ATTR_FIELD_REMOTE_DATATYPE);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_invalid_remote_datatype,
+                     !ENABLE_PARAMS_CHECK) {
+    static constexpr size_t NUM_ELEMS = 2;
+
+    sgl_ctx ctx;
+    init_sgl_ctx(ctx, NUM_ELEMS, 64);
+
+    ucp_dt_local_sgl_t local   = make_local_sgl(ctx, LOCAL_MASK_DEFAULT);
+    ucp_dt_remote_sgl_t remote = make_remote_sgl(ctx, REMOTE_MASK_DEFAULT);
+    ucp_request_param_t param  = make_sgl_param(&remote, NUM_ELEMS);
+    param.remote_datatype      = ucp_dt_make_contig(1);
+
+    scoped_log_handler wrap_err(wrap_errors_logger);
+    ucs_status_ptr_t sptr = ucp_put_nbx(sender().ep(), &local, NUM_ELEMS,
+                                        UCP_REMOTE_ADDR_INVALID,
+                                        UCP_RKEY_INVALID, &param);
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, UCS_PTR_STATUS(sptr));
+}
+
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_null_remote,
                      !ENABLE_PARAMS_CHECK) {
     expect_sgl_put_invalid_param(LOCAL_MASK_DEFAULT, REMOTE_MASK_DEFAULT,
