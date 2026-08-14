@@ -182,9 +182,8 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
         return status;
     }
 
-    status = uct_cuda_ipc_get_remote_address(&key->super, remote_addr,
-                                             cuda_device, &mapped_rem_addr,
-                                             &mapped_addr);
+    status = uct_cuda_ipc_get_remote_address(key, remote_addr, cuda_device,
+                                             &mapped_rem_addr, &mapped_addr);
     if (ucs_unlikely(status != UCS_OK)) {
         goto out;
     }
@@ -345,7 +344,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_ep_put_sgl_zcopy,
     for (i = 0; i < count; i++) {
         key = (uct_cuda_ipc_unpacked_rkey_t *)rkeys[i];
 
-        status = uct_cuda_ipc_get_remote_address(&key->super, remote_addrs[i],
+        status = uct_cuda_ipc_get_remote_address(key, remote_addrs[i],
                                                  cuda_device, &mapped_rem_addr,
                                                  &mapped_addr);
         if (ucs_unlikely(status != UCS_OK)) {
