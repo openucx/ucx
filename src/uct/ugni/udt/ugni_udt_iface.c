@@ -1,6 +1,6 @@
 /**
  * Copyright (c) UT-Battelle, LLC. 2014-2017. ALL RIGHTS RESERVED.
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -17,18 +17,20 @@
 
 extern ucs_class_t UCS_CLASS_DECL_NAME(uct_ugni_udt_iface_t);
 
+/* clang-format off */
 static ucs_config_field_t uct_ugni_udt_iface_config_table[] = {
     {"", "ALLOC=huge,thp,mmap,heap", NULL,
-    ucs_offsetof(uct_ugni_iface_config_t, super),
-    UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
+     ucs_offsetof(uct_ugni_iface_config_t, super),
+     UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
     UCT_IFACE_MPOOL_CONFIG_FIELDS("UDT", -1, 0, 128m, 1.0, "udt",
                                   ucs_offsetof(uct_ugni_iface_config_t, mpool),
-                                  "\nAttention: Setting this param with value != -1 is a dangerous thing\n"
-                                  "and could cause deadlock or performance degradation."),
+                                  "\nAttention: Setting this param with a value other than '-1' is a\n"
+                                  "dangerous thing and could cause deadlock or performance degradation."),
 
     {NULL}
 };
+/* clang-format on */
 
 static ucs_status_t processs_datagram(uct_ugni_udt_iface_t *iface, uct_ugni_udt_desc_t *desc)
 {

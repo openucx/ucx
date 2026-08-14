@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -610,16 +610,19 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_srd_iface_t, uct_iface_t, uct_md_h,
 
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_srd_iface_t, uct_iface_t);
 
+/* clang-format off */
 ucs_config_field_t uct_srd_iface_config_table[] = {
     {UCT_IB_CONFIG_PREFIX, "", NULL,
      ucs_offsetof(uct_srd_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_ib_iface_config_table)},
 
-    {"SRD_", "", NULL, ucs_offsetof(uct_srd_iface_config_t, ud_common),
+    {"SRD_", "", NULL,
+     ucs_offsetof(uct_srd_iface_config_t, ud_common),
      UCS_CONFIG_TYPE_TABLE(uct_ud_iface_common_config_table)},
 
     {NULL}
 };
+/* clang-format on */
 
 static UCS_F_ALWAYS_INLINE unsigned
 uct_srd_iface_poll_tx(uct_srd_iface_t *iface)

@@ -1,6 +1,6 @@
 /*
  * Copyright (C) Advanced Micro Devices, Inc. 2019-2026. ALL RIGHTS RESERVED.
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -15,31 +15,36 @@
 #include <uct/rocm/base/rocm_base.h>
 #include <uct/rocm/base/rocm_signal.h>
 
+/* clang-format off */
 static ucs_config_field_t uct_rocm_ipc_iface_config_table[] = {
-
-    {"", "", NULL, ucs_offsetof(uct_rocm_ipc_iface_config_t, super),
+    {"", "", NULL,
+     ucs_offsetof(uct_rocm_ipc_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
-    {"MIN_ZCOPY", "128", "Minimum data size for ROCm/IPC zcopy protocols",
+    {"MIN_ZCOPY", "128",
+     "Minimum data size for ROCm/IPC zcopy protocols.",
      ucs_offsetof(uct_rocm_ipc_iface_config_t, params.min_zcopy),
      UCS_CONFIG_TYPE_MEMUNITS},
 
-    {"LAT", "1e-7", "Latency",
+    {"LAT", "1e-7",
+     "Latency.",
      ucs_offsetof(uct_rocm_ipc_iface_config_t, params.latency),
      UCS_CONFIG_TYPE_TIME},
 
     {"CACHE_IPC_HANDLES", "y",
-     "Enable caching IPC handles (Note: caching is always enabled for device "
-     "initiated communication)",
+     "Enable caching IPC handles.\n"
+     "Note: caching is always enabled for device-initiated communication.",
      ucs_offsetof(uct_rocm_ipc_iface_config_t, params.enable_ipc_handle_cache),
      UCS_CONFIG_TYPE_BOOL},
 
-    {"SIGPOOL_MAX_ELEMS", "1024", "Maximum number of elements in signal pool",
+    {"SIGPOOL_MAX_ELEMS", "1024",
+     "Maximum number of elements in signal pool.",
      ucs_offsetof(uct_rocm_ipc_iface_config_t, params.sigpool_max_elems),
      UCS_CONFIG_TYPE_UINT},
 
     {NULL}
 };
+/* clang-format on */
 
 static double uct_rocm_ipc_iface_get_bw()
 {

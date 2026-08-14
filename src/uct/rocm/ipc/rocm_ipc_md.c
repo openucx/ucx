@@ -1,6 +1,6 @@
 /*
  * Copyright (C) Advanced Micro Devices, Inc. 2019-2026. ALL RIGHTS RESERVED.
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -16,6 +16,7 @@
 #include <uct/api/device/uct_device_types.h>
 
 
+/* clang-format off */
 static ucs_config_field_t uct_rocm_ipc_md_config_table[] = {
     {"", "", NULL,
      ucs_offsetof(uct_rocm_ipc_md_config_t, super),
@@ -23,6 +24,7 @@ static ucs_config_field_t uct_rocm_ipc_md_config_table[] = {
 
     {NULL}
 };
+/* clang-format on */
 
 static ucs_status_t uct_rocm_ipc_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
 {

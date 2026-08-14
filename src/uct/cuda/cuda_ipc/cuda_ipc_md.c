@@ -33,21 +33,23 @@
  * purposes. */
 #define UCT_CUDA_IPC_RKEY_FLAG_PID_NS UCS_BIT(31)
 
-#define UCT_CUDA_IPC_IMEX_CHANNELS_PATH \
-    "/dev/nvidia-caps-imex-channels"
+#define UCT_CUDA_IPC_IMEX_CHANNELS_PATH "/dev/nvidia-caps-imex-channels"
 
 typedef struct {
     const void *mapped_addr;
     CUdevice   cu_dev;
 } uct_cuda_ipc_rkey_handle_t;
 
+/* clang-format off */
 static ucs_config_field_t uct_cuda_ipc_md_config_table[] = {
     {"", "", NULL,
-     ucs_offsetof(uct_cuda_ipc_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
+     ucs_offsetof(uct_cuda_ipc_md_config_t, super),
+     UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
 
     {"ENABLE_MNNVL", "try",
      "Enable multi-node NVLINK capabilities.",
-     ucs_offsetof(uct_cuda_ipc_md_config_t, enable_mnnvl), UCS_CONFIG_TYPE_TERNARY},
+     ucs_offsetof(uct_cuda_ipc_md_config_t, enable_mnnvl),
+     UCS_CONFIG_TYPE_TERNARY},
 
     {"CACHE_MAX_REGIONS", "inf",
      "Maximum number of regions in each per-peer CUDA IPC remote handle cache.\n"
@@ -63,12 +65,14 @@ static ucs_config_field_t uct_cuda_ipc_md_config_table[] = {
      ucs_offsetof(uct_cuda_ipc_md_config_t, cache_max_size),
      UCS_CONFIG_TYPE_MEMUNITS},
 
-    {"CACHE", "y", "Enable remote IPC memory handle mapping cache",
+    {"CACHE", "y",
+     "Enable remote IPC memory handle mapping cache.",
      ucs_offsetof(uct_cuda_ipc_md_config_t, enable_remote_cache),
      UCS_CONFIG_TYPE_BOOL},
 
     {NULL}
 };
+/* clang-format on */
 
 static uct_cuda_ipc_dev_cache_t *uct_cuda_ipc_create_dev_cache(int dev_num)
 {

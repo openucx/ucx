@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -37,18 +37,22 @@ typedef struct uct_cma_md_config {
     int                 mem_invalidate;
 } uct_cma_md_config_t;
 
+/* clang-format off */
 static ucs_config_field_t uct_cma_md_config_table[] = {
     {"", "", NULL,
      ucs_offsetof(uct_cma_md_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
 
-    {"MEMORY_INVALIDATE", "n", "Expose memory invalidate support capability.\n"
+    {"MEMORY_INVALIDATE", "n",
+     "Expose memory invalidate support capability.\n"
      "Note: this capability is not really supported yet. This variable will\n"
      "be deprecated, when memory invalidation support is implemented.",
-     ucs_offsetof(uct_cma_md_config_t, mem_invalidate), UCS_CONFIG_TYPE_BOOL},
+     ucs_offsetof(uct_cma_md_config_t, mem_invalidate),
+     UCS_CONFIG_TYPE_BOOL},
 
     {NULL}
 };
+/* clang-format on */
 
 static int uct_cma_test_ptrace_scope()
 {

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2017. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -13,6 +13,7 @@
 #include <ucs/sys/compiler.h>
 
 
+/* clang-format off */
 ucs_config_field_t uct_ud_iface_common_config_table[] = {
   {"RX_QUEUE_LEN_INIT", "128",
    "Initial length of receive queue, before the interface is activated.",
@@ -21,3 +22,4 @@ ucs_config_field_t uct_ud_iface_common_config_table[] = {
 
   {NULL}
 };
+/* clang-format on */

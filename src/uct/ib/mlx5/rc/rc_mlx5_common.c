@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2018. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -17,6 +17,7 @@
 #include <ucs/profile/profile.h>
 
 
+/* clang-format off */
 ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
   {UCT_IB_CONFIG_PREFIX, "", NULL,
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, super),
@@ -25,18 +26,25 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
   {"TX_MAX_BB", "-1",
    "Limits the number of outstanding WQE building blocks. The actual limit is\n"
    "a minimum between this value and the number of building blocks in the TX QP.\n"
-   "-1 means no limit.",
-   ucs_offsetof(uct_rc_mlx5_iface_common_config_t, tx_max_bb), UCS_CONFIG_TYPE_UINT},
+   "'-1' means no limit.",
+   ucs_offsetof(uct_rc_mlx5_iface_common_config_t, tx_max_bb),
+   UCS_CONFIG_TYPE_UINT},
 
   {"TM_ENABLE", "n",
-   "Enable HW tag matching",
-   ucs_offsetof(uct_rc_mlx5_iface_common_config_t, tm.enable), UCS_CONFIG_TYPE_BOOL},
+   "Enable HW tag matching.",
+   ucs_offsetof(uct_rc_mlx5_iface_common_config_t, tm.enable),
+   UCS_CONFIG_TYPE_BOOL},
 
   {"TM_LIST_SIZE", "1024",
-   "Limits the number of tags posted to the HW for matching. The actual limit \n"
-   "is a minimum between this value and the maximum value supported by the HW. \n"
-   "-1 means no limit.",
-   ucs_offsetof(uct_rc_mlx5_iface_common_config_t, tm.list_size), UCS_CONFIG_TYPE_UINT},
+   "Limits the number of tags posted to the HW for matching. The actual limit\n"
+   "is a minimum between this value and the maximum value supported by the HW.\n"
+   "'-1' means no limit.",
+   ucs_offsetof(uct_rc_mlx5_iface_common_config_t, tm.list_size),
+   UCS_CONFIG_TYPE_UINT},
+
+  {"TM_MAX_BCOPY", NULL, "",
+   ucs_offsetof(uct_rc_mlx5_iface_common_config_t, tm.seg_size),
+   UCS_CONFIG_TYPE_MEMUNITS},
 
   {"TM_SEG_SIZE", "48k",
    "Maximal size of copy-out sends when tag-matching offload is enabled.",
@@ -54,26 +62,19 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, tm.mp_num_strides),
    UCS_CONFIG_TYPE_ULUNITS},
 
-  {"TM_MAX_BCOPY", NULL, "",
-   ucs_offsetof(uct_rc_mlx5_iface_common_config_t, tm.seg_size),
-   UCS_CONFIG_TYPE_MEMUNITS},
-
   {"EXP_BACKOFF", "0",
-   "Exponential Backoff Timeout Multiplier. ACK timeout will be multiplied \n"
+   "Exponential Backoff Timeout Multiplier. ACK timeout will be multiplied\n"
    "by 2^EXP_BACKOFF every consecutive retry.",
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, exp_backoff),
    UCS_CONFIG_TYPE_UINT},
 
   {"SRQ_TOPO", "cyclic,cyclic_emulated,list",
    "List of SRQ topology types in order of preference. Supported types are:\n"
-   "\n"
-   "list              SRQ is organized as a buffer containing linked list of WQEs.\n"
-   "\n"
-   "cyclic            SRQ is organized as a continuous array of WQEs. Requires DEVX.\n"
-   "                  cannot be used with DDP enabled.\n"
-   "\n"
-   "cyclic_emulated   SRQ is organized as a continuous array of WQEs, but HW\n"
-   "                  treats it as a linked list. Doesn`t require DEVX.",
+   " list            - SRQ is organized as a buffer containing linked list of WQEs.\n"
+   " cyclic          - SRQ is organized as a continuous array of WQEs. Requires DEVX.\n"
+   "                   Cannot be used with DDP enabled.\n"
+   " cyclic_emulated - SRQ is organized as a continuous array of WQEs, but HW\n"
+   "                   treats it as a linked list. Doesn't require DEVX.",
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, srq_topo),
    UCS_CONFIG_TYPE_STRING_ARRAY},
 
@@ -84,12 +85,13 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
    UCS_CONFIG_TYPE_UINT},
 
   {"DDP_ENABLE", "try",
-   "Enable direct data placement\n",
-   ucs_offsetof(uct_rc_mlx5_iface_common_config_t, ddp_enable), 
+   "Enable direct data placement.",
+   ucs_offsetof(uct_rc_mlx5_iface_common_config_t, ddp_enable),
    UCS_CONFIG_TYPE_TERNARY},
 
   {NULL}
 };
+/* clang-format on */
 
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
