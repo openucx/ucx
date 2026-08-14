@@ -710,3 +710,28 @@ UCS_TEST_F(test_cuda_ipc_cache_lru, stale_destroy_while_in_use) {
     EXPECT_EQ(0UL, m_cache->total_size);
     EXPECT_TRUE(ucs_list_is_empty(&m_cache->lru_list));
 }
+
+
+class test_cuda_copy_md : public test_md {
+};
+
+UCS_TEST_P(test_cuda_copy_md, vmm_multi_handle_range) {
+    /* A single byte per chunk is rounded up to the allocation granularity, so
+     * the buffer is backed by 3 distinct physical handles */
+    cuda_vmm_mem_buffer buffer(1, UCS_MEMORY_TYPE_CUDA, 3);
+    uct_md_mem_attr_t mem_attr;
+
+    mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE |
+                          UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH;
+
+    /* Query the full multi-handle range; the guard preserves the caller's
+     * requested extent instead of shrinking to the single chunk that
+     * contains the base pointer. */
+    ASSERT_UCS_OK(uct_md_mem_query(md(), buffer.ptr(), buffer.size(),
+                                   &mem_attr));
+
+    EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, mem_attr.mem_type);
+    EXPECT_GE(mem_attr.alloc_length, buffer.size());
+}
+
+_UCT_MD_INSTANTIATE_TEST_CASE(test_cuda_copy_md, cuda_cpy);
