@@ -630,7 +630,7 @@ ucp_wireup_process_pre_request(ucp_worker_h worker, ucp_ep_h ep,
     ucs_status_t status;
 
     UCP_WIREUP_MSG_CHECK(msg, ep, UCP_WIREUP_MSG_PRE_REQUEST);
-    ucs_trace("got wireup pre_request from 0x%"PRIx64" src_ep_id 0x%"PRIx64
+    ucs_debug("got wireup pre_request from 0x%"PRIx64" src_ep_id 0x%"PRIx64
               " dst_ep_id 0x%"PRIx64" conn_sn %u address version %u/%u",
               remote_address->uuid, msg->src_ep_id, msg->dst_ep_id,
               msg->conn_sn, remote_address->addr_version,
@@ -678,7 +678,7 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
     int has_cm_lane, am_need_flush, full_handshake_required;
 
     UCP_WIREUP_MSG_CHECK(msg, ep, UCP_WIREUP_MSG_REQUEST);
-    ucs_trace("got wireup request from 0x%"PRIx64" src_ep_id 0x%"PRIx64
+    ucs_debug("got wireup request from 0x%"PRIx64" src_ep_id 0x%"PRIx64
               " dst_ep_id 0x%"PRIx64" conn_sn %d address version %u/%u",
               remote_address->uuid, msg->src_ep_id, msg->dst_ep_id,
               msg->conn_sn, remote_address->addr_version,
@@ -791,7 +791,7 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
     }
 
     if (send_reply) {
-        ucs_trace("ep %p: sending wireup reply", ep);
+        ucs_debug("ep %p: sending wireup reply", ep);
         ucp_wireup_msg_send(ep,
                             am_need_flush ? UCP_WIREUP_MSG_REPLY_RECONFIG :
                                             UCP_WIREUP_MSG_REPLY,
@@ -810,7 +810,7 @@ static unsigned ucp_wireup_send_msg_ack(void *arg)
     ucs_status_t status;
 
     /* Send ACK without any address, we've already sent it as part of the request */
-    ucs_trace("ep %p: sending wireup ack", ep);
+    ucs_debug("ep %p: sending wireup ack", ep);
 
     status = ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_ACK, &ucp_tl_bitmap_min,
                                  NULL);
@@ -830,7 +830,7 @@ ucp_wireup_process_reply_common(ucp_worker_h worker, ucp_ep_h ep,
     ucs_status_t status;
     int ack;
 
-    ucs_trace("ep %p: got wireup reply src_ep_id 0x%"PRIx64
+    ucs_debug("ep %p: got wireup reply src_ep_id 0x%"PRIx64
               " dst_ep_id 0x%"PRIx64" sn %d", ep, msg->src_ep_id,
               msg->dst_ep_id, msg->conn_sn);
 
@@ -965,7 +965,7 @@ void ucp_wireup_process_ack(ucp_worker_h worker, ucp_ep_h ep,
                             const ucp_wireup_msg_t *msg)
 {
     UCP_WIREUP_MSG_CHECK(msg, ep, UCP_WIREUP_MSG_ACK);
-    ucs_trace("ep %p: got wireup ack", ep);
+    ucs_debug("ep %p: got wireup ack", ep);
 
     ucs_assert(ep->flags & UCP_EP_FLAG_REMOTE_ID);
     ucs_assert(ep->flags & UCP_EP_FLAG_CONNECT_REP_SENT);
