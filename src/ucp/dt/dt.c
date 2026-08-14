@@ -62,7 +62,7 @@ ucs_status_t ucp_dt_mem_info_verify(const char *dt_name, size_t index,
 
 /*
  * Select an RMA lane whose MD accepts the buffer mem_flags, starting the search
- * from the given lane index.
+ * from the given lane index. Returns UCP_NULL_LANE if no lane is compatible.
  */
 static ucp_lane_index_t
 ucp_mem_type_ep_lane_by_flags(ucp_ep_h ep, uint8_t mem_flags, unsigned first)
@@ -81,7 +81,7 @@ ucp_mem_type_ep_lane_by_flags(ucp_ep_h ep, uint8_t mem_flags, unsigned first)
         }
     }
 
-    return key->rma_lanes[0];
+    return UCP_NULL_LANE;
 }
 
 /* Select the mem-type endpoint lane which can access the buffer and register */
@@ -105,8 +105,8 @@ ucp_mem_type_lane_reg(ucp_worker_h worker, ucp_ep_h ep, void *address,
         goto out_reg;
     }
 
-    /* The memory flags are already known, for example set by a memory hook on
-     * allocation */
+    /* The memory flags may already be known, for example set by a memory hook
+     * on allocation, use them to pick a compatible lane */
     status = ucs_memtype_cache_lookup(address, length, &cache_info);
     if ((status == UCS_OK) && ucp_memory_info_is_complete(&cache_info)) {
         lane = ucp_mem_type_ep_lane_by_flags(ep, cache_info.mem_flags, 0);
@@ -123,12 +123,19 @@ ucp_mem_type_lane_reg(ucp_worker_h worker, ucp_ep_h ep, void *address,
         return UCS_OK;
     }
 
-    /* Query the memory attributes to fall back to another lane, skipping the
-     * preferred one which just failed to register */
+    /* Preferred MD rejected the buffer: detect attributes for a fallback lane
+     * (also warms the memtype cache). Coverity fnptr model false positive. */
+    /* coverity[use_after_free] */
     ucp_memory_detect(context, address, length, &mem_info);
     lane = ucp_mem_type_ep_lane_by_flags(ep, mem_info.flags, 1);
 
 out_reg:
+    if (lane == UCP_NULL_LANE) {
+        ucs_error("no mem type rma lane can register %s buffer %p length %zu",
+                  ucs_memory_type_names[mem_type], address, length);
+        return UCS_ERR_UNSUPPORTED;
+    }
+
     md_index = ucp_ep_md_index(ep, lane);
     *lane_p  = lane;
     return ucp_mem_type_reg_buffers(worker, address, length, mem_type, md_index,
