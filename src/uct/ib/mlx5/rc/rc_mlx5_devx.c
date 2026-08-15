@@ -434,7 +434,7 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
             UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.udp_sport,
                               ah_attr->dlid);
             UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.dscp,
-                              uct_ib_iface_roce_dscp(&iface->super.super));
+                              ah_attr->grh.traffic_class >> 2);
         }
 
         uct_ib_mlx5_devx_set_qpc_port_affinity(md, path_index, qpc,
@@ -457,7 +457,7 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
                    UCT_IB_MLX5DV_FLD_SZ_BYTES(qpc, primary_address_path.rgid_rip));
             /* TODO add flow_label support */
             UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.tclass,
-                              iface->super.super.config.traffic_class);
+                              ah_attr->grh.traffic_class);
         }
     }
 
