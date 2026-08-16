@@ -108,7 +108,7 @@ protected:
     {
         connect_or_skip();
 
-        sgl_arrays sgl(*m_sender, *m_receiver, mem_type(), op(),
+        sgl_arrays sgl(*m_sender, *m_receiver, first_supported_mem_type(), op(),
                        std::vector<size_t>());
 
         EXPECT_EQ(UCS_OK, sgl_op(sgl));
@@ -199,7 +199,7 @@ private:
             UCS_TEST_SKIP_R("sgl zcopy is not supported");
         }
 
-        if (mem_type() == UCS_MEMORY_TYPE_LAST) {
+        if (first_supported_mem_type() == UCS_MEMORY_TYPE_LAST) {
             UCS_TEST_SKIP_R("no registrable memory type");
         }
 
@@ -226,7 +226,7 @@ private:
         return ucs_min(ucs_max(size, min_zcopy), max_zcopy);
     }
 
-    ucs_memory_type_t mem_type()
+    ucs_memory_type_t first_supported_mem_type()
     {
         static const ucs_memory_type_t mem_types[] = {UCS_MEMORY_TYPE_HOST,
                                                       UCS_MEMORY_TYPE_CUDA,
@@ -272,7 +272,8 @@ private:
     void test_sgl(const std::vector<size_t> &sizes,
                   sgl_completion *comp = NULL)
     {
-        sgl_arrays sgl(*m_sender, *m_receiver, mem_type(), op(), sizes);
+        sgl_arrays sgl(*m_sender, *m_receiver, first_supported_mem_type(),
+                       op(), sizes);
         ucs_status_t status = sgl_op(sgl, (comp == NULL) ? NULL : &comp->uct);
 
         ASSERT_UCS_OK_OR_INPROGRESS(status);
