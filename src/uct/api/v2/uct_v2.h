@@ -1540,15 +1540,28 @@ ucs_status_t uct_rkey_unpack_v2(uct_component_h component,
  * @ingroup UCT_MD
  * @brief Pack a memh and rkey into a device memory element structure.
  *
- * @param [in]  md           Memory domain.
- * @param [in]  memh         Memory handle to pack (can be NULL).
- * @param [in]  rkey         Remote key to pack (can be UCT_INVALID_RKEY).
- * @param [out] mem_elem     Filled with the packed memh and rkey.
+ * @param [in]  md                Memory domain.
+ * @param [in]  memh              Memory handle to pack (can be NULL).
+ * @param [in]  rkey              Remote key to pack (can be UCT_INVALID_RKEY).
+ * @param [out] mem_elem          Filled with the packed memh and rkey.
+ * @param [out] release_handle_p  Handle for releasing resources allocated
+ *                                during packing.
  *
  * @return UCS_OK on success or error code in case of failure.
  */
 ucs_status_t uct_md_mem_elem_pack(uct_md_h md, uct_mem_h memh, uct_rkey_t rkey,
-                                  uct_device_mem_elem_t *mem_elem);
+                                  uct_device_mem_elem_t *mem_elem,
+                                  void **release_handle_p);
+
+
+/**
+ * @ingroup UCT_MD
+ * @brief Release resources allocated by @ref uct_md_mem_elem_pack.
+ *
+ * @param [in] md              Memory domain.
+ * @param [in] release_handle  Handle for releasing resources.
+ */
+void uct_md_mem_elem_release(uct_md_h md, void *release_handle);
 
 END_C_DECLS
 
