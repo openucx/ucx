@@ -201,7 +201,7 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
 static double uct_cuda_ipc_iface_get_bw()
 {
     CUdevice cu_device;
-    int major_version;
+    int major_version, minor_version = 0;
     ucs_status_t status;
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&cu_device, 0));
@@ -217,6 +217,16 @@ static double uct_cuda_ipc_iface_get_bw()
         return 0;
     }
 
+    if (major_version == UCT_CUDA_BASE_GEN_B100) {
+        status = UCT_CUDADRV_FUNC_LOG_ERR(
+                cuDeviceGetAttribute(&minor_version,
+                                     CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR,
+                                     cu_device));
+        if (status != UCS_OK) {
+            return 0;
+        }
+    }
+
     /*
      * TODO: Detect nvswitch
      */
@@ -230,6 +240,10 @@ static double uct_cuda_ipc_iface_get_bw()
     case UCT_CUDA_BASE_GEN_H100:
         return 400000.0 * UCS_MBYTE;
     case UCT_CUDA_BASE_GEN_B100:
+        if (minor_version == 7) {
+            return 1800000.0 * UCS_MBYTE;
+        }
+
         return 800000.0 * UCS_MBYTE;
     default:
         return 6911.0  * UCS_MBYTE;

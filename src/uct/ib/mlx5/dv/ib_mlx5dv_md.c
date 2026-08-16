@@ -3200,7 +3200,8 @@ uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
 static ucs_status_t
 uct_ib_md_mlx5_devx_md_mem_elem_pack(uct_md_h md, uct_mem_h memh,
                                      uct_rkey_t rkey,
-                                     uct_device_mem_elem_t *mem_elem_p)
+                                     uct_device_mem_elem_t *mem_elem_p,
+                                     void **pack_resources_p)
 {
     uct_ib_md_device_mem_element_t *mem_elem = (uct_ib_md_device_mem_element_t*)
             mem_elem_p;
@@ -3233,7 +3234,8 @@ static uct_ib_md_ops_t uct_ib_mlx5_devx_md_ops = {
         .mkey_pack          = uct_ib_mlx5_devx_mkey_pack,
         .mem_attach         = uct_ib_mlx5_devx_mem_attach,
         .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported,
-        .mem_elem_pack      = uct_ib_md_mlx5_devx_md_mem_elem_pack
+        .mem_elem_pack      = uct_ib_md_mlx5_devx_md_mem_elem_pack,
+        .mem_elem_release   = (uct_md_mem_elem_release_func_t)ucs_empty_function
     },
     .open = uct_ib_mlx5_devx_md_open,
 };
@@ -3464,7 +3466,8 @@ static uct_ib_md_ops_t uct_ib_mlx5_md_ops = {
         .mkey_pack          = uct_ib_verbs_mkey_pack,
         .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
         .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported,
-        .mem_elem_pack      = (uct_md_mem_elem_pack_func_t)ucs_empty_function_return_unsupported
+        .mem_elem_pack      = (uct_md_mem_elem_pack_func_t)ucs_empty_function_return_unsupported,
+        .mem_elem_release   = (uct_md_mem_elem_release_func_t)ucs_empty_function
     },
     .open = uct_ib_mlx5dv_md_open,
 };

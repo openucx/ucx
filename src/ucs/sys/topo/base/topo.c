@@ -1053,7 +1053,7 @@ unsigned ucs_topo_sys_device_get_bdf_class_ordinal(ucs_sys_device_t sys_dev)
 {
     ucs_topo_device_class_t device_class;
     ucs_bus_id_bit_rep_t ref_key, key;
-    unsigned ordinal, d;
+    unsigned ordinal, d, prev_d;
 
     if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
         return UCS_SYS_DEVICE_ORDINAL_INVALID;
@@ -1078,10 +1078,8 @@ unsigned ucs_topo_sys_device_get_bdf_class_ordinal(ucs_sys_device_t sys_dev)
         goto out_unlock;
     }
 
-    /* The ordinal is the rank of the device's bus id (BDF) among all devices
-     * of the same class. Counting devices with a smaller BDF is equivalent to
-     * sorting the class by BDF and taking the index, and yields a stable,
-     * name-independent ordering. */
+    /* The ordinal is the rank of the device's bus id (BDF) among all unique
+     * BDFs of the same class. */
     ref_key = ucs_topo_get_bus_id_bit_repr(
             &ucs_topo_global_ctx.devices[sys_dev].bus_id);
     ordinal = 0;
@@ -1092,7 +1090,21 @@ unsigned ucs_topo_sys_device_get_bdf_class_ordinal(ucs_sys_device_t sys_dev)
 
         key = ucs_topo_get_bus_id_bit_repr(
                 &ucs_topo_global_ctx.devices[d].bus_id);
-        if (key < ref_key) {
+        if (key >= ref_key) {
+            continue;
+        }
+
+        /* Count only the first same-class record for this BDF. */
+        for (prev_d = 0; prev_d < d; ++prev_d) {
+            if ((ucs_topo_global_ctx.devices[prev_d].device_class ==
+                 device_class) &&
+                (ucs_topo_get_bus_id_bit_repr(
+                         &ucs_topo_global_ctx.devices[prev_d].bus_id) == key)) {
+                break;
+            }
+        }
+
+        if (prev_d == d) {
             ++ordinal;
         }
     }
