@@ -70,39 +70,57 @@
             \
             _local = (const ucp_dt_local_sgl_t*)(_buffer); \
             \
-            if (ucs_unlikely((_local->field_mask & \
-                              UCP_DT_LOCAL_SGL_FIELD_BUFFERS) == 0)) { \
-                ucs_error("sgl put: local buffers field must be set"); \
+            if (ucs_unlikely(!(_local->field_mask & \
+                               UCP_DT_LOCAL_SGL_FIELD_BUFFERS) || \
+                             (_local->buffers == NULL))) { \
+                ucs_error("sgl put: local buffers field must be set to a " \
+                          "valid array"); \
+                ret = UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
+                goto out_unlock; \
+            } \
+            \
+            if (ucs_unlikely(!(_local->field_mask & \
+                               UCP_DT_LOCAL_SGL_FIELD_LENGTHS) || \
+                             (_local->lengths == NULL))) { \
+                ucs_error("sgl put: local lengths field must be set to a " \
+                          "valid array"); \
                 ret = UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
                 goto out_unlock; \
             } \
             \
             if (ucs_unlikely((_local->field_mask & \
-                              UCP_DT_LOCAL_SGL_FIELD_LENGTHS) == 0)) { \
-                ucs_error("sgl put: local lengths field must be set"); \
+                              UCP_DT_LOCAL_SGL_FIELD_MEMHS) && \
+                             (_local->memhs == NULL))) { \
+                ucs_error("sgl put: local memhs array must not be NULL"); \
                 ret = UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
                 goto out_unlock; \
             } \
             \
             _remote = (_param)->remote; \
             \
-            if (ucs_unlikely((_remote->field_mask & \
-                              UCP_DT_REMOTE_SGL_FIELD_REMOTE_ADDRS) == 0)) { \
-                ucs_error("sgl put: remote addrs field must be set"); \
+            if (ucs_unlikely(!(_remote->field_mask & \
+                               UCP_DT_REMOTE_SGL_FIELD_REMOTE_ADDRS) || \
+                             (_remote->remote_addrs == NULL))) { \
+                ucs_error("sgl put: remote addrs field must be set to a " \
+                          "valid array"); \
                 ret = UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
                 goto out_unlock; \
             } \
             \
-            if (ucs_unlikely((_remote->field_mask & \
-                              UCP_DT_REMOTE_SGL_FIELD_LENGTHS) == 0)) { \
-                ucs_error("sgl put: remote lengths field must be set"); \
+            if (ucs_unlikely(!(_remote->field_mask & \
+                               UCP_DT_REMOTE_SGL_FIELD_LENGTHS) || \
+                             (_remote->lengths == NULL))) { \
+                ucs_error("sgl put: remote lengths field must be set to a " \
+                          "valid array"); \
                 ret = UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
                 goto out_unlock; \
             } \
             \
-            if (ucs_unlikely((_remote->field_mask & \
-                              UCP_DT_REMOTE_SGL_FIELD_RKEYS) == 0)) { \
-                ucs_error("sgl put: remote rkeys field must be set"); \
+            if (ucs_unlikely(!(_remote->field_mask & \
+                               UCP_DT_REMOTE_SGL_FIELD_RKEYS) || \
+                             (_remote->rkeys == NULL))) { \
+                ucs_error("sgl put: remote rkeys field must be set to a " \
+                          "valid array"); \
                 ret = UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
                 goto out_unlock; \
             } \
