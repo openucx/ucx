@@ -53,6 +53,15 @@
                 goto out_unlock; \
             } \
             \
+            if (ucs_unlikely(!((_param)->op_attr_mask & \
+                               UCP_OP_ATTR_FIELD_REMOTE_DATATYPE) || \
+                             !UCP_DT_IS_SGL((_param)->remote_datatype))) { \
+                ucs_error("sgl put: remote_datatype must be set to " \
+                          "ucp_dt_make_sgl()"); \
+                ret = UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
+                goto out_unlock; \
+            } \
+            \
             if (ucs_unlikely((_param)->remote == NULL)) { \
                 ucs_error("sgl put: remote descriptor must not be NULL"); \
                 ret = UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \

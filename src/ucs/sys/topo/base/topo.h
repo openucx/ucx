@@ -398,13 +398,14 @@ ucs_topo_sys_device_set_class(ucs_sys_device_t sys_dev,
                               ucs_topo_device_class_t device_class);
 
 /**
- * Get the ordinal of a given system device: its rank among all system devices
- * of the same class, ordered by PCI bus id (BDF).
+ * Get the ordinal of a given system device: the rank of its PCI bus id (BDF)
+ * among all unique BDFs of the same class.
  *
  * For example, with GPUs (class @ref UCS_TOPO_DEVICE_CLASS_ACC) registered, the
  * device with the smallest BDF returns 0, the next returns 1, and so on. The
  * ordering depends only on the bus id, not on the device name or discovery
- * order.
+ * order. Multiple system device records of the same class that share a BDF
+ * also share the same ordinal.
  *
  * @param [in]  sys_dev System device to query.
  *
