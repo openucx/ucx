@@ -313,9 +313,9 @@ uct_cuda_ipc_post_cuda_sgl_async_copy(uct_ep_h tl_ep, void * const *buffers,
         total_length += lengths[i];
     }
 
-    *total_length_p = total_length;
     if (ucs_unlikely(total_length == 0)) {
         ucs_trace_data("Zero length sgl_zcopy: skip it");
+        *total_length_p = 0;
         return UCS_OK;
     }
 
@@ -402,7 +402,8 @@ uct_cuda_ipc_post_cuda_sgl_async_copy(uct_ep_h tl_ep, void * const *buffers,
     ucs_trace("cuMemcpyBatchAsync issued: count=%zu total_length=%zu",
               count, total_length);
 
-    status = UCS_INPROGRESS;
+    *total_length_p = total_length;
+    status          = UCS_INPROGRESS;
     goto out_ctx;
 
 out_unmap:
