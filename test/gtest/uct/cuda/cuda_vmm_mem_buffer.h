@@ -9,6 +9,7 @@
 
 #include <common/test_helpers.h>
 #include <cuda.h>
+#include <vector>
 
 extern "C" {
 #include <ucs/sys/ptr_arith.h>
@@ -30,16 +31,17 @@ class cuda_vmm_mem_buffer {
 public:
     cuda_vmm_mem_buffer() = default;
 
-    cuda_vmm_mem_buffer(size_t size, ucs_memory_type_t mem_type)
+    /* Reserve one virtual range and back it by @a num_chunks separate physical
+     * allocations, each of the granularity-aligned chunk size */
+    cuda_vmm_mem_buffer(size_t size, ucs_memory_type_t mem_type,
+                        size_t num_chunks = 1)
     {
-        init(size, 0);
+        init(size, 0, CU_MEM_LOCATION_TYPE_DEVICE, num_chunks);
     }
 
     virtual ~cuda_vmm_mem_buffer()
     {
-        cuMemUnmap(m_ptr, m_size);
-        cuMemAddressFree(m_ptr, m_size);
-        cuMemRelease(m_alloc_handle);
+        cleanup();
     }
 
     void *ptr() const
@@ -47,6 +49,7 @@ public:
         return (void*)m_ptr;
     }
 
+    /* total mapped length, which is the chunk size times the chunk count */
     size_t size() const
     {
         return m_size;
@@ -54,7 +57,8 @@ public:
 
 protected:
     void init(size_t size, unsigned handle_type,
-              CUmemLocationType location_type = CU_MEM_LOCATION_TYPE_DEVICE)
+              CUmemLocationType location_type = CU_MEM_LOCATION_TYPE_DEVICE,
+              size_t num_chunks               = 1)
     {
         size_t granularity             = 0;
         CUmemAllocationProp prop       = {};
@@ -79,17 +83,30 @@ protected:
             goto err;
         }
 
-        m_size = ucs_align_up(size, granularity);
-        if (cuMemCreate(&m_alloc_handle, m_size, &prop, 0) != CUDA_SUCCESS) {
+        m_chunk_size = ucs_align_up(size, granularity);
+        m_size       = m_chunk_size * num_chunks;
+
+        if (cuMemAddressReserve(&m_ptr, m_size, 0, 0, 0) != CUDA_SUCCESS) {
+            m_ptr = 0;
             goto err;
         }
 
-        if (cuMemAddressReserve(&m_ptr, m_size, 0, 0, 0) != CUDA_SUCCESS) {
-            goto err_mem_release;
-        }
+        for (size_t i = 0; i < num_chunks; ++i) {
+            CUmemGenericAllocationHandle alloc_handle;
 
-        if (cuMemMap(m_ptr, m_size, 0, m_alloc_handle, 0) != CUDA_SUCCESS) {
-            goto err_address_free;
+            if (cuMemCreate(&alloc_handle, m_chunk_size, &prop, 0) !=
+                CUDA_SUCCESS) {
+                goto err;
+            }
+
+            m_alloc_handles.push_back(alloc_handle);
+
+            if (cuMemMap(m_ptr + (i * m_chunk_size), m_chunk_size, 0,
+                         alloc_handle, 0) != CUDA_SUCCESS) {
+                goto err;
+            }
+
+            ++m_num_mapped;
         }
 
         access_desc[0].location.type = CU_MEM_LOCATION_TYPE_DEVICE;
@@ -103,25 +120,43 @@ protected:
         }
         if (cuMemSetAccess(m_ptr, m_size, access_desc, num_access) !=
             CUDA_SUCCESS) {
-            goto err_mem_unmap;
+            goto err;
         }
 
         return;
 
-    err_mem_unmap:
-        cuMemUnmap(m_ptr, m_size);
-    err_address_free:
-        cuMemAddressFree(m_ptr, m_size);
-    err_mem_release:
-        cuMemRelease(m_alloc_handle);
     err:
+        cleanup();
         UCS_TEST_SKIP_R("failed to allocate CUDA VMM memory");
     }
 
 private:
-    size_t m_size                               = 0;
-    CUmemGenericAllocationHandle m_alloc_handle = 0;
-    CUdeviceptr m_ptr                           = 0;
+    /* Unmap only the chunks which were actually mapped, so this is also the
+     * unwind path of a partially completed init() */
+    void cleanup()
+    {
+        for (size_t i = 0; i < m_num_mapped; ++i) {
+            cuMemUnmap(m_ptr + (i * m_chunk_size), m_chunk_size);
+        }
+
+        for (auto alloc_handle : m_alloc_handles) {
+            cuMemRelease(alloc_handle);
+        }
+
+        if (m_ptr != 0) {
+            cuMemAddressFree(m_ptr, m_size);
+        }
+
+        m_alloc_handles.clear();
+        m_num_mapped = 0;
+        m_ptr        = 0;
+    }
+
+    size_t m_chunk_size = 0;
+    size_t m_size       = 0;
+    size_t m_num_mapped = 0;
+    std::vector<CUmemGenericAllocationHandle> m_alloc_handles;
+    CUdeviceptr m_ptr = 0;
 };
 
 #if HAVE_CUDA_FABRIC

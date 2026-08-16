@@ -988,6 +988,11 @@ public:
     }
 
 protected:
+    enum sgl_op_t {
+        SGL_OP_PUT,
+        SGL_OP_GET
+    };
+
     struct sgl_ctx {
         std::vector<mapped_buffer>           src;
         std::vector<mapped_buffer>           dst;
@@ -1000,7 +1005,8 @@ protected:
         std::vector<ucp_rkey_h>              rkeys;
     };
 
-    void init_sgl_ctx(sgl_ctx &ctx, const std::vector<size_t> &elem_sizes) {
+    void init_sgl_ctx(sgl_ctx &ctx, const std::vector<size_t> &elem_sizes,
+                      sgl_op_t op = SGL_OP_PUT) {
         ucs_memory_type_t mtype = mem_type();
         size_t num              = elem_sizes.size();
 
@@ -1019,8 +1025,10 @@ protected:
         }
 
         for (size_t i = 0; i < num; i++) {
-            ctx.src[i].memset(static_cast<uint8_t>(i + 1));
-            ctx.dst[i].memset(0);
+            uint8_t pattern = static_cast<uint8_t>(i + 1);
+
+            ctx.src[i].memset((op == SGL_OP_PUT) ? pattern : 0);
+            ctx.dst[i].memset((op == SGL_OP_PUT) ? 0 : pattern);
             ctx.dst[i].rkey(sender(), ctx.rkey_handles[i]);
 
             ctx.buffers[i]      = ctx.src[i].ptr();
@@ -1033,8 +1041,9 @@ protected:
         ctx.remote_lengths = ctx.lengths;
     }
 
-    void init_sgl_ctx(sgl_ctx &ctx, size_t num_elems, size_t buf_size) {
-        init_sgl_ctx(ctx, std::vector<size_t>(num_elems, buf_size));
+    void init_sgl_ctx(sgl_ctx &ctx, size_t num_elems, size_t buf_size,
+                      sgl_op_t op = SGL_OP_PUT) {
+        init_sgl_ctx(ctx, std::vector<size_t>(num_elems, buf_size), op);
     }
 
     void init_sgl_ctx_mixed_mem_types(sgl_ctx &ctx) {
@@ -1110,18 +1119,31 @@ protected:
         return param;
     }
 
-    void test_put_sgl(const std::vector<size_t> &elem_sizes,
-                      bool use_memhs = true, bool use_callback = false,
-                      bool set_remote_count = true,
-                      bool expect_immediate_completion = false) {
+    ucs_status_ptr_t sgl_op_nbx(sgl_op_t op, void *local_sgl, size_t count,
+                                uint64_t remote_addr, ucp_rkey_h rkey,
+                                const ucp_request_param_t *param) {
+        if (op == SGL_OP_PUT) {
+            return ucp_put_nbx(sender().ep(), local_sgl, count, remote_addr,
+                               rkey, param);
+        }
+
+        return ucp_get_nbx(sender().ep(), local_sgl, count, remote_addr, rkey,
+                           param);
+    }
+
+    void test_sgl(sgl_op_t op, const std::vector<size_t> &elem_sizes,
+                  bool use_memhs, bool use_callback, bool set_remote_count,
+                  bool expect_immediate_completion) {
         ASSERT_FALSE(expect_immediate_completion && use_callback);
 
-        if (!sender().has_lane_with_caps(UCT_IFACE_FLAG_PUT_ZCOPY)) {
-            UCS_TEST_SKIP_R("put_zcopy is not supported");
+        uint64_t zcopy_cap = (op == SGL_OP_PUT) ? UCT_IFACE_FLAG_PUT_ZCOPY :
+                                                  UCT_IFACE_FLAG_GET_ZCOPY;
+        if (!sender().has_lane_with_caps(zcopy_cap)) {
+            UCS_TEST_SKIP_R("zcopy is not supported");
         }
 
         sgl_ctx ctx;
-        init_sgl_ctx(ctx, elem_sizes);
+        init_sgl_ctx(ctx, elem_sizes, op);
 
         uint64_t local_mask = LOCAL_MASK_DEFAULT;
         if (use_memhs) {
@@ -1154,9 +1176,9 @@ protected:
             param.user_data = &cb;
         }
 
-        ucs_status_ptr_t sptr = ucp_put_nbx(sender().ep(), &local, num,
-                                            UCP_REMOTE_ADDR_INVALID,
-                                            UCP_RKEY_INVALID, &param);
+        ucs_status_ptr_t sptr = sgl_op_nbx(op, &local, num,
+                                           UCP_REMOTE_ADDR_INVALID,
+                                           UCP_RKEY_INVALID, &param);
         if (expect_immediate_completion) {
             EXPECT_FALSE(UCS_PTR_IS_ERR(sptr));
             EXPECT_FALSE(UCS_PTR_IS_PTR(sptr));
@@ -1166,13 +1188,15 @@ protected:
 
         ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
 
-        auto verify_sgl_put_buffers = [&]() {
+        auto verify_sgl_buffers = [&]() {
             ucs_memory_type_t mtype = mem_type();
             for (size_t i = 0; i < num; i++) {
                 uint8_t expected = static_cast<uint8_t>(i + 1);
+                void *result     = (op == SGL_OP_PUT) ? ctx.dst[i].ptr() :
+                                                        ctx.src[i].ptr();
                 std::vector<uint8_t> host_buf(ctx.lengths[i]);
-                mem_buffer::copy_from(host_buf.data(), ctx.dst[i].ptr(),
-                                      ctx.lengths[i], mtype);
+                mem_buffer::copy_from(host_buf.data(), result, ctx.lengths[i],
+                                      mtype);
                 for (size_t j = 0; j < ctx.lengths[i]; j++) {
                     ASSERT_EQ(expected, host_buf[j])
                         << "Mismatch at element " << i << " byte " << j;
@@ -1195,7 +1219,15 @@ protected:
 
         ucp_request_release(sptr);
         flush_ep(sender());
-        verify_sgl_put_buffers();
+        verify_sgl_buffers();
+    }
+
+    void test_put_sgl(const std::vector<size_t> &elem_sizes,
+                      bool use_memhs = true, bool use_callback = false,
+                      bool set_remote_count = true,
+                      bool expect_immediate_completion = false) {
+        test_sgl(SGL_OP_PUT, elem_sizes, use_memhs, use_callback,
+                 set_remote_count, expect_immediate_completion);
     }
 
     void test_put_sgl(size_t num_elems, size_t buf_size,
@@ -1215,14 +1247,12 @@ protected:
             UCP_DT_REMOTE_SGL_FIELD_LENGTHS |
             UCP_DT_REMOTE_SGL_FIELD_RKEYS;
 
-    void expect_sgl_put_status_ctx(
-            sgl_ctx &ctx, uint64_t local_mask, uint64_t remote_mask,
-            size_t count, ucs_status_t expected_status,
-            uint32_t extra_param_mask = 0,
-            uint64_t remote_addr = UCP_REMOTE_ADDR_INVALID,
-            ucp_rkey_h rkey = UCP_RKEY_INVALID,
-            uint32_t clear_param_mask = 0, bool null_remote = false,
-            size_t remote_count = 0)
+    void expect_sgl_status_ctx(sgl_op_t op, sgl_ctx &ctx, uint64_t local_mask,
+                               uint64_t remote_mask, size_t count,
+                               ucs_status_t expected_status,
+                               uint32_t extra_param_mask, uint64_t remote_addr,
+                               ucp_rkey_h rkey, uint32_t clear_param_mask,
+                               bool null_remote, size_t remote_count)
     {
         size_t effective_remote_count = remote_count ? remote_count : count;
         ucp_dt_local_sgl_t local      = make_local_sgl(ctx, local_mask);
@@ -1237,9 +1267,24 @@ protected:
         }
 
         scoped_log_handler wrap_err(wrap_errors_logger);
-        ucs_status_ptr_t sptr = ucp_put_nbx(sender().ep(), &local, count,
-                                            remote_addr, rkey, &param);
+        ucs_status_ptr_t sptr = sgl_op_nbx(op, &local, count, remote_addr,
+                                           rkey, &param);
         EXPECT_EQ(expected_status, UCS_PTR_STATUS(sptr));
+    }
+
+    void expect_sgl_put_status_ctx(
+            sgl_ctx &ctx, uint64_t local_mask, uint64_t remote_mask,
+            size_t count, ucs_status_t expected_status,
+            uint32_t extra_param_mask = 0,
+            uint64_t remote_addr = UCP_REMOTE_ADDR_INVALID,
+            ucp_rkey_h rkey = UCP_RKEY_INVALID,
+            uint32_t clear_param_mask = 0, bool null_remote = false,
+            size_t remote_count = 0)
+    {
+        expect_sgl_status_ctx(SGL_OP_PUT, ctx, local_mask, remote_mask, count,
+                              expected_status, extra_param_mask, remote_addr,
+                              rkey, clear_param_mask, null_remote,
+                              remote_count);
     }
 
     void expect_sgl_put_invalid_param_ctx(
@@ -1359,6 +1404,32 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_missing_remote_field,
     expect_sgl_put_invalid_param(LOCAL_MASK_DEFAULT, REMOTE_MASK_DEFAULT,
                                  UCP_REMOTE_ADDR_INVALID, UCP_RKEY_INVALID,
                                  UCP_OP_ATTR_FIELD_REMOTE);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_missing_remote_datatype_field,
+                     !ENABLE_PARAMS_CHECK) {
+    expect_sgl_put_invalid_param(LOCAL_MASK_DEFAULT, REMOTE_MASK_DEFAULT,
+                                 UCP_REMOTE_ADDR_INVALID, UCP_RKEY_INVALID,
+                                 UCP_OP_ATTR_FIELD_REMOTE_DATATYPE);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_invalid_remote_datatype,
+                     !ENABLE_PARAMS_CHECK) {
+    static constexpr size_t NUM_ELEMS = 2;
+
+    sgl_ctx ctx;
+    init_sgl_ctx(ctx, NUM_ELEMS, 64);
+
+    ucp_dt_local_sgl_t local   = make_local_sgl(ctx, LOCAL_MASK_DEFAULT);
+    ucp_dt_remote_sgl_t remote = make_remote_sgl(ctx, REMOTE_MASK_DEFAULT);
+    ucp_request_param_t param  = make_sgl_param(&remote, NUM_ELEMS);
+    param.remote_datatype      = ucp_dt_make_contig(1);
+
+    scoped_log_handler wrap_err(wrap_errors_logger);
+    ucs_status_ptr_t sptr = ucp_put_nbx(sender().ep(), &local, NUM_ELEMS,
+                                        UCP_REMOTE_ADDR_INVALID,
+                                        UCP_RKEY_INVALID, &param);
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, UCS_PTR_STATUS(sptr));
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_null_remote,

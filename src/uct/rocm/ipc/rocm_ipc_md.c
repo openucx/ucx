@@ -122,7 +122,8 @@ uct_rocm_ipc_mem_dereg(uct_md_h md,
 
 static ucs_status_t
 uct_rocm_ipc_md_mem_elem_pack(uct_md_h md_h, uct_mem_h memh, uct_rkey_t rkey,
-                              uct_device_mem_elem_t *mem_elem_p)
+                              uct_device_mem_elem_t *mem_elem_p,
+                              void **release_handle_p)
 {
     uct_md_t *md = (uct_md_t*)md_h;
     uct_rocm_ipc_component_t *rocm_comp =
@@ -180,7 +181,8 @@ uct_rocm_ipc_md_open(uct_component_h component, const char *md_name,
         .mem_attach         = (uct_md_mem_attach_func_t)
                 ucs_empty_function_return_unsupported,
         .detect_memory_type = (uct_md_detect_memory_type_func_t)
-                ucs_empty_function_return_unsupported
+                ucs_empty_function_return_unsupported,
+        .mem_elem_release = (uct_md_mem_elem_release_func_t)ucs_empty_function
     };
     static uct_md_t md         = {
         .ops       = &md_ops,
