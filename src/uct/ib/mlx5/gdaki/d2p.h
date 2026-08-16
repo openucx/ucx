@@ -26,7 +26,7 @@ typedef struct {
 typedef struct {
     uct_device_ep_t        super;
     uct_ib_d2p_gpu_iface_t *iface;
-    uint64_t               ep_idx;
+    uint64_t               ep_id;
     uint8_t                pad[8];
 } uct_ib_d2p_gpu_ep_t;
 
