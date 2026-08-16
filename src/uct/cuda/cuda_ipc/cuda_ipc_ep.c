@@ -424,7 +424,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_ep_put_sgl_zcopy,
                  const size_t *counts, const size_t *strides,
                  size_t count, uct_completion_t *comp)
 {
-    size_t total_length;
+    size_t total_length = 0;
     ucs_status_t status;
 
     status = uct_cuda_ipc_post_cuda_sgl_async_copy(tl_ep, buffers, lengths,
@@ -432,12 +432,8 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_ep_put_sgl_zcopy,
                                                    strides, count, comp,
                                                    UCT_CUDA_IPC_PUT,
                                                    &total_length);
-    if (UCS_STATUS_IS_ERR(status)) {
-        return status;
-    }
-
-    UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), PUT, ZCOPY,
-                      total_length);
+    UCT_TL_EP_STAT_OP_IF_SUCCESS(status, ucs_derived_of(tl_ep, uct_base_ep_t),
+                                 PUT, ZCOPY, total_length);
     return status;
 }
 
@@ -450,7 +446,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_ep_get_sgl_zcopy,
                  const size_t *counts, const size_t *strides,
                  size_t count, uct_completion_t *comp)
 {
-    size_t total_length;
+    size_t total_length = 0;
     ucs_status_t status;
 
     status = uct_cuda_ipc_post_cuda_sgl_async_copy(tl_ep, buffers, lengths,
@@ -458,12 +454,8 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_ep_get_sgl_zcopy,
                                                    strides, count, comp,
                                                    UCT_CUDA_IPC_GET,
                                                    &total_length);
-    if (UCS_STATUS_IS_ERR(status)) {
-        return status;
-    }
-
-    UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), GET, ZCOPY,
-                      total_length);
+    UCT_TL_EP_STAT_OP_IF_SUCCESS(status, ucs_derived_of(tl_ep, uct_base_ep_t),
+                                 GET, ZCOPY, total_length);
     return status;
 }
 #endif /* CUDA_VERSION >= 13000 */
