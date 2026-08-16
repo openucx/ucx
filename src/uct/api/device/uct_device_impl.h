@@ -98,8 +98,9 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_put(
 #endif
 #if UCT_D2P_SUPPORTED
     if (device_ep->uct_tl_id == UCT_DEVICE_TL_D2P) {
-        return uct_ib_d2p_ep_put<level>(device_ep, src_uct_elem, mem_elem, address,
-                                        remote_address, length, flags, comp);
+        return uct_ib_d2p_ep_put<level>(device_ep, src_uct_elem, mem_elem,
+                                        address, remote_address, length,
+                                        channel_id, flags, comp);
     }
 #endif
 
@@ -156,7 +157,8 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_atomic_add(
 #if UCT_D2P_SUPPORTED
     if (device_ep->uct_tl_id == UCT_DEVICE_TL_D2P) {
         return uct_ib_d2p_ep_atomic_add<level>(device_ep, mem_elem, inc_value,
-                                               remote_address, flags, comp);
+                                               remote_address, channel_id,
+                                               flags, comp);
     }
 #endif
 
