@@ -446,7 +446,7 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
     const size_t *lengths        = dt_iter->type.sgl.lengths;
     const uint64_t *remote_addrs = req->send.rma.sgl.remote_addrs;
     size_t start_index           = dt_iter->offset;
-    size_t max_elem_count        = ucs_min(lpriv->max_put_sgl_zcopy_count,
+    size_t max_elem_count        = ucs_min(lpriv->max_sgl_zcopy_count,
                                            dt_iter->length - start_index);
     size_t uct_rkeys_size        = max_elem_count * sizeof(uct_rkey_t);
     size_t uct_memhs_size        = max_elem_count * sizeof(uct_mem_h);

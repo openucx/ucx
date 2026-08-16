@@ -34,6 +34,7 @@ AC_DEFUN([UCX_CUDA_CHECK_NVCC], [
     ARCH124_CODE="-gencode=arch=compute_89,code=sm_89"
     ARCH128_CODE="-gencode=arch=compute_100,code=sm_100 -gencode=arch=compute_120,code=sm_120"
     ARCH130_CODE="-gencode=arch=compute_110,code=sm_110"
+    ARCH134_CODE="-gencode=arch=compute_107,code=sm_107"
 
 
     ARCH9_PTX="-gencode=arch=compute_70,code=compute_70"
@@ -44,6 +45,7 @@ AC_DEFUN([UCX_CUDA_CHECK_NVCC], [
     ARCH124_PTX="-gencode=arch=compute_90,code=compute_90"
     ARCH128_PTX="-gencode=arch=compute_120,code=compute_120"
     ARCH130_PTX="-gencode=arch=compute_120,code=compute_120"
+    ARCH134_PTX="-gencode=arch=compute_107,code=compute_107"
 
     AS_IF([test "x$NVCC" != "x"], [
         CUDA_VERSION=$($NVCC --version | grep release | sed 's/.*release //' | sed 's/\,.*//')
@@ -75,7 +77,9 @@ AC_DEFUN([UCX_CUDA_CHECK_NVCC], [
                         [AS_CASE([$CUDA_MAJOR_VERSION],
                                  [13],
                                      [# offline compilation support for architectures before '<compute/sm/lto>_75' is discontinued
-                                      NVCC_ARCH="${ARCH10_CODE} ${ARCH110_CODE} ${ARCH111_CODE} ${ARCH120_CODE} ${ARCH124_CODE} ${ARCH128_CODE} ${ARCH130_CODE} ${ARCH130_PTX}"],
+                                      NVCC_ARCH="${ARCH10_CODE} ${ARCH110_CODE} ${ARCH111_CODE} ${ARCH120_CODE} ${ARCH124_CODE} ${ARCH128_CODE} ${ARCH130_CODE} ${ARCH130_PTX}"
+                                      AS_CASE([$CUDA_MINOR_VERSION],
+                                              [4], [NVCC_ARCH="${NVCC_ARCH} ${ARCH134_CODE} ${ARCH134_PTX}"])],
                                  [12],
                                      [AS_CASE([$CUDA_MINOR_VERSION],
                                               [0|1|2|3],
