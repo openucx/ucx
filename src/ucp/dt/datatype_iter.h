@@ -44,8 +44,8 @@ typedef struct {
     ucp_dt_class_t    dt_class; /* Datatype class (contig/iov/...) */
     ucp_memory_info_t mem_info; /* Memory type and locality, needed to
                                    pack/unpack */
-    size_t            length; /* Total packed flat length */
-    size_t            offset; /* Current flat offset */
+    size_t            length; /* Packed byte length, or SGL element count */
+    size_t            offset; /* Byte offset, or SGL element index */
     union {
         struct {
             void                  *buffer;    /* Contiguous buffer pointer */

@@ -11,6 +11,7 @@
 
 extern "C" {
 #include <ucp/dt/dt.h>
+#include <ucp/dt/dt_sgl.h>
 #include <ucp/dt/datatype_iter.inl>
 #include <ucp/core/ucp_rkey.h>
 }
@@ -374,6 +375,28 @@ UCS_TEST_F(test_ucp_dt_sgl, iter_next_chunked) {
 
     EXPECT_EQ(NUM_ELEMS, total_advanced);
     EXPECT_TRUE(ucp_datatype_iter_is_end(&m_dt_iter));
+}
+
+UCS_TEST_F(test_ucp_dt_sgl, total_length) {
+    const size_t lengths[] = {2 * UCS_KBYTE, 2 * UCS_KBYTE, 2 * UCS_KBYTE,
+                              2 * UCS_KBYTE};
+    size_t total_length;
+
+    EXPECT_UCS_OK(ucp_dt_sgl_get_length(lengths,
+                                        ucs_static_array_size(lengths),
+                                        &total_length));
+    EXPECT_EQ(8 * UCS_KBYTE, total_length);
+}
+
+UCS_TEST_F(test_ucp_dt_sgl, total_length_overflow) {
+    const size_t lengths[] = {SIZE_MAX, 1};
+    size_t total_length;
+
+    scoped_log_handler wrap_err(wrap_errors_logger);
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+              ucp_dt_sgl_get_length(lengths,
+                                    ucs_static_array_size(lengths),
+                                    &total_length));
 }
 
 UCS_TEST_F(test_ucp_dt_sgl, iter_next_single_step) {

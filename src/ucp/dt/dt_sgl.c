@@ -15,6 +15,25 @@
 #include <ucp/core/ucp_rkey.h>
 
 
+ucs_status_t ucp_dt_sgl_get_length(const size_t *lengths, size_t count,
+                                   size_t *total_length_p)
+{
+    size_t total_length = 0;
+    size_t i;
+
+    for (i = 0; i < count; ++i) {
+        if (ucs_unlikely(lengths[i] > (SIZE_MAX - total_length))) {
+            ucs_error("sgl total length overflows at element %zu", i);
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        total_length += lengths[i];
+    }
+
+    *total_length_p = total_length;
+    return UCS_OK;
+}
+
 ucs_status_t ucp_dt_sgl_check_same_mem_info(ucp_context_h context,
                                             void * const *buffers,
                                             const size_t *lengths,

@@ -17,6 +17,20 @@
 
 
 /**
+ * Calculate the total byte length of an SGL
+ *
+ * @param [in]     lengths        Array of buffer lengths
+ * @param [in]     count          Number of entries in @a lengths
+ * @param [out]    total_length_p Total byte length
+ *
+ * @return UCS_OK if the total length can be represented by size_t, otherwise
+ *         return UCS_ERR_INVALID_PARAM
+ */
+ucs_status_t ucp_dt_sgl_get_length(const size_t *lengths, size_t count,
+                                   size_t *total_length_p);
+
+
+/**
  * Check that all SGL entries match the given memory info
  *
  * @param [in]     context        Context for memory detection

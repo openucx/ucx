@@ -855,7 +855,7 @@ ucp_proto_request_init(ucp_request_t *req,
         return UCS_OK;
     }
 
-    msg_length = req->send.state.dt_iter.length;
+    msg_length = ucp_proto_request_data_length(req);
     if (ucp_proto_config_is_am(req->send.proto_config)) {
         msg_length += req->send.msg_proto.am.header.length;
     }

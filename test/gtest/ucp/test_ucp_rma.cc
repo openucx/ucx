@@ -974,11 +974,6 @@ public:
     }
 
     virtual void init() override {
-        /* FIXME: sporadic failure on CUDA memory type. re-enable once fixed */
-        if (mem_type() == UCS_MEMORY_TYPE_CUDA) {
-            UCS_TEST_SKIP_R("sporadic failure on CUDA memory type");
-        }
-
         modify_config("MAX_RMA_RAILS", "2");
         test_ucp_rma::init();
     }
@@ -1133,7 +1128,8 @@ protected:
 
     void test_sgl(sgl_op_t op, const std::vector<size_t> &elem_sizes,
                   bool use_memhs, bool use_callback, bool set_remote_count,
-                  bool expect_immediate_completion) {
+                  bool expect_immediate_completion,
+                  bool check_request_length = false) {
         ASSERT_FALSE(expect_immediate_completion && use_callback);
 
         uint64_t zcopy_cap = (op == SGL_OP_PUT) ? UCT_IFACE_FLAG_PUT_ZCOPY :
@@ -1154,9 +1150,24 @@ protected:
         ucp_dt_local_sgl_t local   = make_local_sgl(ctx, local_mask);
         ucp_dt_remote_sgl_t remote = make_remote_sgl(ctx, REMOTE_MASK_DEFAULT);
         ucp_request_param_t param  = make_sgl_param(&remote, num);
+        std::unique_ptr<uint8_t[]> request_mem;
+        ucp_request_t *req = nullptr;
 
         if (!set_remote_count) {
             param.op_attr_mask &= ~UCP_OP_ATTR_FIELD_REMOTE_COUNT;
+        }
+
+        if (check_request_length) {
+            ucp_context_attr_t attr = {};
+
+            /* Make the value before protocol selection deterministic. */
+            attr.field_mask = UCP_ATTR_FIELD_REQUEST_SIZE;
+            ASSERT_UCS_OK(ucp_context_query(sender().ucph(), &attr));
+            request_mem.reset(new uint8_t[attr.request_size + 1]);
+            param.op_attr_mask |= UCP_OP_ATTR_FIELD_REQUEST;
+            param.request    = request_mem.get() + attr.request_size;
+            req              = static_cast<ucp_request_t*>(param.request) - 1;
+            req->send.length = 0;
         }
 
         struct cb_state {
@@ -1179,6 +1190,16 @@ protected:
         ucs_status_ptr_t sptr = sgl_op_nbx(op, &local, num,
                                            UCP_REMOTE_ADDR_INVALID,
                                            UCP_RKEY_INVALID, &param);
+        if (check_request_length) {
+            size_t expected_length = 0;
+
+            for (size_t elem_size : elem_sizes) {
+                expected_length += elem_size;
+            }
+
+            EXPECT_EQ(expected_length, req->send.length);
+        }
+
         if (expect_immediate_completion) {
             EXPECT_FALSE(UCS_PTR_IS_ERR(sptr));
             EXPECT_FALSE(UCS_PTR_IS_PTR(sptr));
@@ -1217,7 +1238,10 @@ protected:
             }
         }
 
-        ucp_request_release(sptr);
+        if (!check_request_length) {
+            ucp_request_release(sptr);
+        }
+
         flush_ep(sender());
         verify_sgl_buffers();
     }
@@ -1237,6 +1261,11 @@ protected:
         test_put_sgl(std::vector<size_t>(num_elems, buf_size),
                      use_memhs, use_callback, set_remote_count,
                      expect_immediate_completion);
+    }
+
+    void test_put_sgl_request_length(size_t num_elems, size_t buf_size) {
+        test_sgl(SGL_OP_PUT, std::vector<size_t>(num_elems, buf_size), true,
+                 false, true, false, true);
     }
 
     static constexpr uint64_t LOCAL_MASK_DEFAULT =
@@ -1341,6 +1370,10 @@ UCS_TEST_P(test_ucp_rma_sgl, put_various_sizes) {
             break;
         }
     }
+}
+
+UCS_TEST_P(test_ucp_rma_sgl, put_protocol_byte_length) {
+    test_put_sgl_request_length(4, 2 * UCS_KBYTE);
 }
 
 UCS_TEST_P(test_ucp_rma_sgl, put_various_lengths) {
