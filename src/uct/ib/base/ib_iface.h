@@ -836,14 +836,9 @@ uct_ib_iface_port_is_ndr(uct_ib_iface_t *iface)
 static UCS_F_ALWAYS_INLINE int
 uct_ib_iface_port_is_xdr(uct_ib_iface_t *iface)
 {
-    const uint32_t active_speed = uct_ib_iface_port_active_speed(iface);
-    const uint8_t active_width  = uct_ib_iface_is_roce(iface) ?
-                                  uct_ib_iface_port_active_width(iface) : 1;
-
-    /*
-     * ConnectX-8 RoCE LAG reports each 200Gb/s plane as width times
-     * per-lane speed (for example, 2x NDR), not as XDR active_speed.
-     */
+    uint32_t active_speed = uct_ib_iface_port_active_speed(iface);
+    uint8_t active_width  = uct_ib_iface_is_roce(iface) ?
+                            uct_ib_iface_port_active_width(iface) : 1;
 
     return (active_width * active_speed) == UCT_IB_SPEED_XDR;
 }
