@@ -53,23 +53,48 @@
         githubHelper = GithubHelper.getInstance("${{GIT_PASSWORD}}", VARIABLE_FROM_POST)
       }}
 
-      // Abort previous dispatcher runs for the same PR
+      // Abort previous dispatcher runs for the same PR and their leaf jobs
       def currentPrNumber = githubHelper.getPRNumber()?.toString()
       if (currentPrNumber) {{
         def slurper = new groovy.json.JsonSlurper()
         try {{
-          Jenkins.instance.getItemByFullName(env.JOB_NAME).builds.findAll {{
+          def staleBuilds = Jenkins.instance.getItemByFullName(env.JOB_NAME).builds.findAll {{
             it.isBuilding() && it.number < currentBuild.number
-          }}.each {{ b ->
+          }}.findAll {{ b ->
             def gd = b.getAction(hudson.model.ParametersAction)?.getParameters()?.find {{ it.name == 'VARIABLE_FROM_POST' }}?.value
             def otherPr = gd ? slurper.parseText(gd)?.issue?.number?.toString() : null
-            if (otherPr == currentPrNumber) {{
-              echo "Aborting dispatcher #${{b.number}} for same PR #${{currentPrNumber}}"
-              b.doStop()
+            otherPr == currentPrNumber
+          }}
+
+          if (staleBuilds) {{
+            echo "PR #${{currentPrNumber}}: found ${{staleBuilds.size()}} stale dispatcher(s) to abort"
+          }}
+
+          // Collect leaf builds from each stale dispatcher's console log
+          def leafBuilds = []
+          staleBuilds.each {{ b ->
+            b.getLog(1000).each {{ line ->
+              def m = (line =~ /Starting building: (\S+) #(\d+)/)
+              if (m) {{
+                def child = Jenkins.instance.getItemByFullName(m[0][1])?.getBuildByNumber(m[0][2] as int)
+                if (child) leafBuilds.add(child)
+              }}
             }}
           }}
+
+          // Kill leaf jobs first (unblocks dispatcher), then dispatchers
+          def allTargets = leafBuilds + staleBuilds
+          for (int attempt = 1; attempt <= 3; attempt++) {{
+            def alive = allTargets.findAll {{ it.isBuilding() }}
+            if (!alive) break
+            alive.each {{ target ->
+              echo "${{attempt > 1 ? 'Retry ' + attempt + ': ' : ''}}Killing ${{target.fullDisplayName}}"
+              target.doKill()
+            }}
+            if (attempt < 3) sleep 5
+          }}
         }} catch(Exception e) {{
-          echo "Could not abort previous dispatchers: ${{e.message}}"
+          echo "Could not abort previous builds: ${{e.message}}"
         }}
       }}
 
