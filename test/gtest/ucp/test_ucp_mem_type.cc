@@ -188,9 +188,9 @@ UCS_TEST_P(test_ucp_cuda, sparse_regions) {
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_cuda, all, "all")
 
 /*
- * Async CUDA allocations are not REGISTRABLE, same as localized device memory,
- * and cannot be pinned by gdr_copy. Round-trip such a buffer through the CUDA
- * mem-type endpoint, which is where gdr_copy is used when available.
+ * Async CUDA allocations are not REGISTRABLE, so gdr_copy cannot pin them.
+ * Pack/unpack via the CUDA mem-type endpoint must fall back from a preferred
+ * gdr_copy RMA lane to cuda_copy.
  */
 class test_ucp_mem_type_pack_non_reg : public ucp_test {
 public:
