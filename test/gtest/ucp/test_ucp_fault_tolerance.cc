@@ -377,7 +377,7 @@ protected:
             }
 
             status = do_am_send_and_wait(sender().ep(0, INJECTED_EP_INDEX), am_msg_size(),
-                                         op_mask & TEST_OP_FLUSH);
+                                         op_mask & TEST_OP_FLUSH, last_lane);
             if (!last_lane) {
                 EXPECT_EQ(UCS_OK, status) << op_str << " operation returned status: "
                                           << ucs_status_string(status);
@@ -520,7 +520,11 @@ private:
         return name;
     }
 
-    ucs_status_t do_am_send_and_wait(ucp_ep_h ep, size_t size, bool flush_after) {
+    /* @param expect_failure  Caller knows the send cannot be delivered (e.g. no
+     *                        healthy lane is left), so only the status is
+     *                        returned and delivery is not verified. */
+    ucs_status_t do_am_send_and_wait(ucp_ep_h ep, size_t size, bool flush_after,
+                                     bool expect_failure = false) {
         m_am_expected_size  = size;
         m_am_expected_count = 1;
         m_am_recv_count     = 0;
@@ -543,7 +547,7 @@ private:
         }
 
         ucs_status_t status = request_wait(sptr);
-        if (status != UCS_OK) {
+        if ((status != UCS_OK) || expect_failure) {
             return status;
         }
 
