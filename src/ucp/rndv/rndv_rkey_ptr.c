@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2021, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * Copyright (c) 2021-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * See file LICENSE for terms.
  */
@@ -75,7 +75,8 @@ ucp_proto_rndv_rkey_ptr_probe(const ucp_proto_init_params_t *init_params)
     uint64_t rndv_modes                   = UCS_BIT(UCP_RNDV_MODE_RKEY_PTR);
     ucp_proto_single_init_params_t params = {
         .super.super         = *init_params,
-        .super.cfg_thresh    = ucp_proto_rndv_cfg_thresh(context, rndv_modes),
+        .super.cfg_thresh    = ucp_proto_rndv_cfg_thresh(init_params,
+                                                        rndv_modes),
         .super.cfg_priority  = 80,
         .super.overhead      = context->config.ext.proto_overhead_rkey_ptr,
         .super.latency       = 0,
@@ -237,6 +238,7 @@ ucp_proto_t ucp_rndv_rkey_ptr_proto = {
     .name     = "rndv/rkey_ptr",
     .desc     = "copy from mapped remote memory",
     .flags    = 0,
+    .dt_mask  = UCP_PROTO_DT_MASK_DEFAULT,
     .probe    = ucp_proto_rndv_rkey_ptr_probe,
     .query    = ucp_proto_rndv_rkey_ptr_query,
     .progress = {
@@ -247,18 +249,40 @@ ucp_proto_t ucp_rndv_rkey_ptr_proto = {
     .reset    = ucp_proto_rndv_rkey_ptr_reset
 };
 
+#define UCP_PROTO_RNDV_RKEY_PTR_MTYPE_CFG_PRIORITY       80
+#define UCP_PROTO_RNDV_RKEY_PTR_MTYPE_FORCE_CFG_PRIORITY 81
+
+static UCS_F_ALWAYS_INLINE size_t
+ucp_proto_rndv_rkey_ptr_mtype_cfg_thresh(
+        const ucp_proto_init_params_t *init_params)
+{
+    return ucp_proto_rndv_shm_pipeline_force_rkey_ptr_mtype(init_params) ?
+           0 : ucp_proto_rndv_cfg_thresh(
+                   init_params, UCS_BIT(UCP_RNDV_MODE_PUT_PIPELINE));
+}
+
+static UCS_F_ALWAYS_INLINE unsigned
+ucp_proto_rndv_rkey_ptr_mtype_cfg_priority(
+        const ucp_proto_init_params_t *init_params)
+{
+    return ucp_proto_rndv_shm_pipeline_force_rkey_ptr_mtype(init_params) ?
+           UCP_PROTO_RNDV_RKEY_PTR_MTYPE_FORCE_CFG_PRIORITY :
+           UCP_PROTO_RNDV_RKEY_PTR_MTYPE_CFG_PRIORITY;
+}
+
 static void
 ucp_proto_rndv_rkey_ptr_mtype_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_context_t *context                = init_params->worker->context;
-    uint64_t rndv_modes                   = UCS_BIT(UCP_RNDV_MODE_PUT_PIPELINE);
     ucp_lane_index_t rkey_ptr_lane        = init_params->ep_config_key->rkey_ptr_lane;
     ucp_proto_single_init_params_t params = {
         .super.super         = *init_params,
         .super.overhead      = 0,
         .super.latency       = 0,
-        .super.cfg_thresh    = ucp_proto_rndv_cfg_thresh(context, rndv_modes),
-        .super.cfg_priority  = 80,
+        .super.cfg_thresh    = ucp_proto_rndv_rkey_ptr_mtype_cfg_thresh(
+                               init_params),
+        .super.cfg_priority  = ucp_proto_rndv_rkey_ptr_mtype_cfg_priority(
+                               init_params),
         .super.min_length    = 0,
         .super.min_iov       = 0,
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
@@ -316,7 +340,7 @@ static ucs_status_t ucp_proto_rndv_rkey_ptr_mtype_completion(ucp_request_t *req)
 {
     ucp_trace_req(req, "ucp_proto_rndv_rkey_ptr_mtype_completion");
     ucp_proto_rndv_rkey_destroy(req);
-    ucp_proto_request_zcopy_complete(req, UCS_OK);
+    ucp_proto_rndv_request_zcopy_complete(req, UCS_OK);
     return UCS_OK;
 }
 
@@ -396,7 +420,8 @@ ucp_proto_t ucp_rndv_rkey_ptr_mtype_proto = {
     .name     = "rndv/rkey_ptr/mtype",
     .desc     = "copy to mapped remote memory",
     .flags    = 0,
-    .probe     = ucp_proto_rndv_rkey_ptr_mtype_probe,
+    .dt_mask  = UCS_BIT(UCP_DATATYPE_CONTIG),
+    .probe    = ucp_proto_rndv_rkey_ptr_mtype_probe,
     .query    = ucp_proto_rndv_rkey_ptr_mtype_query,
     .progress = {
         [UCP_PROTO_RNDV_RKEY_PTR_STAGE_COPY] = ucp_proto_rndv_rkey_ptr_mtype_copy_progress,

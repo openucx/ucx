@@ -1,6 +1,6 @@
 /**
  * Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -14,17 +14,6 @@
 
 #include <uct/base/uct_md.h>
 #include <ucs/sys/string.h>
-
-
-typedef struct {
-    pid_t                            id;
-} ucs_cma_iface_base_device_addr_t;
-
-typedef struct {
-    ucs_cma_iface_base_device_addr_t super;
-    ucs_sys_ns_t                     pid_ns;
-} ucs_cma_iface_ext_device_addr_t;
-
 
 static ucs_config_field_t uct_cma_iface_config_table[] = {
     {"SCOPY_", "ALLOC=huge,thp,mmap,heap;SM_BW=11145MBs", NULL,
@@ -73,7 +62,7 @@ uct_cma_iface_is_reachable_v2(const uct_iface_h tl_iface,
                               const uct_iface_is_reachable_params_t *params)
 {
     struct iovec iov = {
-        .iov_base = &iov,
+        .iov_base = NULL,
         .iov_len  = sizeof(iov),
     };
     ucs_cma_iface_ext_device_addr_t *iface_addr;
@@ -106,7 +95,7 @@ uct_cma_iface_is_reachable_v2(const uct_iface_h tl_iface,
     }
 
     if (ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID) != remote_pid_ns) {
-        uct_iface_fill_info_str_buf(params, "pid_ns local %lu remote %lu",
+        uct_iface_fill_info_str_buf(params, "pid_ns local %u remote %u",
                                     ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID),
                                     remote_pid_ns);
         return 0;
@@ -161,7 +150,8 @@ static uct_scopy_iface_ops_t uct_cma_iface_ops = {
         .ep_connect_to_ep_v2    = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
         .iface_is_reachable_v2  = uct_cma_iface_is_reachable_v2,
         .ep_is_connected        = uct_cma_ep_is_connected,
-        .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported
+        .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported,
+        .ep_outstanding_purge   = (uct_ep_outstanding_purge_func_t)ucs_empty_function_return_unsupported
     },
     .ep_tx = uct_cma_ep_tx,
 };

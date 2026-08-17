@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2022, NVIDIA CORPORATION & AFFILIATES. ALL RIGHTS RESERVED.
+ * Copyright (C) 2022-2026, NVIDIA CORPORATION & AFFILIATES. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -66,13 +66,14 @@ static void ucp_am_rndv_rts_probe(const ucp_proto_init_params_t *init_params)
         return;
     }
 
-    ucp_proto_rndv_rts_probe(init_params);
+    ucp_proto_rndv_rts_probe(init_params, 0);
 }
 
 ucp_proto_t ucp_am_rndv_proto = {
     .name     = "am/rndv",
     .desc     = NULL,
     .flags    = 0,
+    .dt_mask  = UCP_PROTO_DT_MASK_DEFAULT,
     .probe    = ucp_am_rndv_rts_probe,
     .query    = ucp_proto_rndv_rts_query,
     .progress = {ucp_am_rndv_proto_progress},

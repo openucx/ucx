@@ -45,6 +45,7 @@ typedef enum ucs_cpu_model {
     UCS_CPU_MODEL_ZHAOXIN_LUJIAZUI,
     UCS_CPU_MODEL_RV64G,
     UCS_CPU_MODEL_NVIDIA_GRACE,
+    UCS_CPU_MODEL_NVIDIA_VERA,
     UCS_CPU_MODEL_FUJITSU_A64FX,
     UCS_CPU_MODEL_FUJITSU_MONAKA,
     UCS_CPU_MODEL_LAST
@@ -160,19 +161,15 @@ static inline void ucs_clear_cache(void *start, void *end)
 }
 
 
-static inline int ucs_cpu_prefer_relaxed_order()
+static inline int ucs_cpu_model_prefer_relaxed_order(
+        ucs_cpu_vendor_t cpu_vendor, ucs_cpu_model_t cpu_model)
 {
-    ucs_cpu_vendor_t cpu_vendor = ucs_arch_get_cpu_vendor();
-    ucs_cpu_model_t cpu_model   = ucs_arch_get_cpu_model();
-
     return ((cpu_vendor == UCS_CPU_VENDOR_AMD) &&
             ((cpu_model == UCS_CPU_MODEL_AMD_NAPLES) ||
              (cpu_model == UCS_CPU_MODEL_AMD_ROME) ||
              (cpu_model == UCS_CPU_MODEL_AMD_MILAN) ||
              (cpu_model == UCS_CPU_MODEL_AMD_GENOA) ||
-             (cpu_model == UCS_CPU_MODEL_AMD_TURIN))) ||
-           ((cpu_vendor == UCS_CPU_VENDOR_INTEL) &&
-            (cpu_model == UCS_CPU_MODEL_INTEL_EMERALD_RAPIDS));
+             (cpu_model == UCS_CPU_MODEL_AMD_TURIN)));
 }
 
 

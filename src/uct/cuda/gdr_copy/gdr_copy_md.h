@@ -17,10 +17,12 @@ extern uct_component_t uct_gdr_copy_component;
  * @brief gdr_copy MD descriptor
  */
 typedef struct {
-    uct_md_t            super;      /**< Domain info */
-    gdr_t               gdrcpy_ctx; /**< gdr copy context */
-    ucs_linear_func_t   reg_cost;   /**< Memory registration cost */
-    ucs_rcache_t        *rcache;    /**< Registration cache */
+    uct_md_t          super;             /**< Domain info */
+    gdr_t             gdrcpy_ctx;        /**< gdr copy context */
+    ucs_linear_func_t reg_cost;          /**< Memory registration cost */
+    ucs_rcache_t      *rcache;           /**< Registration cache */
+    uint32_t          pin_gdr_flags;     /**< First gdr_pin_buffer_v2 flags (0 if v2 absent) */
+    int               pin_pcie_fallback; /**< If nonzero, retry pin with default flags on failure */
 } uct_gdr_copy_md_t;
 
 
@@ -28,12 +30,13 @@ typedef struct {
  * gdr copy domain configuration.
  */
 typedef struct uct_gdr_copy_md_config {
-    uct_md_config_t     super;
-    int                 shared;        /**< Shared MD instance */
-    int                 enable_rcache; /**< Enable registration cache */
-    ucs_linear_func_t   uc_reg_cost;   /**< Memory registration cost estimation
-                                            without using the cache */
-    ucs_rcache_config_t rcache_config; /**< Registration cache configuration */
+    uct_md_config_t          super;
+    int                      shared;        /**< Shared MD instance */
+    int                      enable_rcache; /**< Enable registration cache */
+    ucs_linear_func_t        uc_reg_cost;   /**< Memory registration cost estimation
+                                                 without using the cache */
+    ucs_rcache_config_t      rcache_config; /**< Registration cache configuration */
+    ucs_ternary_auto_value_t use_pcie;      /**< UCS_CONFIG_TYPE_TERNARY_AUTO; see USE_PCIE */
 } uct_gdr_copy_md_config_t;
 
 

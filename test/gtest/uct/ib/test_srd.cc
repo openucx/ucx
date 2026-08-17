@@ -488,7 +488,7 @@ UCS_TEST_P(test_srd, get_bcopy_no_resource)
     int i, count = 400;
     mapped_buffer srcbuf(4096, 0ul, *m_e2);
     mapped_buffer dstbuf(4096, 0ul, *m_e1);
-    ucs_status_t status;
+    ucs_status_t status = UCS_OK;
 
     progress_ctl();
 
@@ -510,7 +510,7 @@ UCS_TEST_P(test_srd, am_short_no_resource)
 {
     int count = 400;
     int i;
-    ucs_status_t status;
+    ucs_status_t status = UCS_OK;
 
     for (i = 0; i < count; i++) {
         status = uct_ep_am_short(m_e1->ep(0), 30, 0x0, "test", 4);

@@ -176,14 +176,13 @@ public:
     ucp_mem_h import_memh(ucp_mem_h exported_memh);
 
 protected:
-    bool resolve_rma(entity *e, ucp_rkey_h rkey);
     bool resolve_amo(entity *e, ucp_rkey_h rkey);
     bool resolve_rma_bw_get_zcopy(entity *e, ucp_rkey_h rkey);
     bool resolve_rma_bw_put_zcopy(entity *e, ucp_rkey_h rkey);
     void test_length0(unsigned flags);
     void test_rereg(unsigned map_flags = 0, bool import_mem = false);
     void
-    test_rkey_management(ucp_mem_h memh, bool is_dummy, bool expect_rma_offload,
+    test_rkey_management(ucp_mem_h memh, bool is_dummy,
                          ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST);
     void check_rkey_lanes_distance(ucp_rkey_h rkey,
                                    const ucp_memory_info_t &mem_info,
@@ -255,26 +254,6 @@ ucp_rkey_h test_ucp_mmap::mem_chunk::unpack(ucp_ep_h ep, ucp_md_map_t md_map)
     return rkey;
 }
 
-bool test_ucp_mmap::resolve_rma(entity *e, ucp_rkey_h rkey)
-{
-    ucs_status_t status;
-
-    {
-        scoped_log_handler slh(hide_errors_logger);
-        status = UCP_RKEY_RESOLVE(rkey, e->ep(), rma);
-    }
-
-    if (status == UCS_OK) {
-        EXPECT_NE(UCP_NULL_LANE, rkey->cache.rma_lane);
-        return true;
-    } else if (status == UCS_ERR_UNREACHABLE) {
-        EXPECT_EQ(UCP_NULL_LANE, rkey->cache.rma_lane);
-        return false;
-    } else {
-        UCS_TEST_ABORT("Invalid status from UCP_RKEY_RESOLVE");
-    }
-}
-
 bool test_ucp_mmap::resolve_amo(entity *e, ucp_rkey_h rkey)
 {
     ucs_status_t status;
@@ -328,7 +307,6 @@ bool test_ucp_mmap::resolve_rma_bw_put_zcopy(entity *e, ucp_rkey_h rkey)
 }
 
 void test_ucp_mmap::test_rkey_management(ucp_mem_h memh, bool is_dummy,
-                                         bool expect_rma_offload,
                                          ucs_memory_type_t mem_type)
 {
     size_t rkey_size;
@@ -368,7 +346,6 @@ void test_ucp_mmap::test_rkey_management(ucp_mem_h memh, bool is_dummy,
     if (is_proto_enabled()) {
         test_rkey_proto(memh);
     } else {
-        bool have_rma              = resolve_rma(&receiver(), rkey);
         bool have_amo              = resolve_amo(&receiver(), rkey);
         bool have_rma_bw_get_zcopy = resolve_rma_bw_get_zcopy(&receiver(),
                                                               rkey);
@@ -377,31 +354,18 @@ void test_ucp_mmap::test_rkey_management(ucp_mem_h memh, bool is_dummy,
 
         /* Test that lane resolution on the remote key returns consistent results */
         for (int i = 0; i < 10; ++i) {
-            switch (ucs::rand() % 4) {
+            switch (ucs::rand() % 3) {
             case 0:
-                EXPECT_EQ(have_rma, resolve_rma(&receiver(), rkey));
-                break;
-            case 1:
                 EXPECT_EQ(have_amo, resolve_amo(&receiver(), rkey));
                 break;
-            case 2:
+            case 1:
                 EXPECT_EQ(have_rma_bw_get_zcopy,
                           resolve_rma_bw_get_zcopy(&receiver(), rkey));
                 break;
-            case 3:
+            case 2:
                 EXPECT_EQ(have_rma_bw_put_zcopy,
                           resolve_rma_bw_put_zcopy(&receiver(), rkey));
                 break;
-            }
-        }
-
-        if (expect_rma_offload) {
-            if (is_dummy) {
-                EXPECT_EQ(&ucp_rma_sw_proto,
-                          UCP_RKEY_RMA_PROTO(rkey->cache.rma_proto_index));
-            } else {
-                EXPECT_EQ(&ucp_rma_basic_proto,
-                          UCP_RKEY_RMA_PROTO(rkey->cache.rma_proto_index));
             }
         }
     }
@@ -547,7 +511,6 @@ UCS_TEST_P(test_ucp_mmap, alloc_mem_type) {
             mem_buffer::supported_mem_types();
     ucs_status_t status;
     bool is_dummy;
-    bool expect_rma_offload;
 
     for (auto mem_type : mem_types) {
         for (int i = 0; i < (100 / ucs::test_time_multiplier()); ++i) {
@@ -569,10 +532,8 @@ UCS_TEST_P(test_ucp_mmap, alloc_mem_type) {
             ASSERT_UCS_OK(status);
 
             is_dummy           = (size == 0);
-            expect_rma_offload = (is_tl_rdma() || is_tl_shm()) &&
-                                 check_reg_mem_types(sender(), mem_type);
 
-            test_rkey_management(memh, is_dummy, expect_rma_offload, mem_type);
+            test_rkey_management(memh, is_dummy, mem_type);
 
             status = ucp_mem_unmap(sender().ucph(), memh);
             ASSERT_UCS_OK(status);
@@ -585,7 +546,6 @@ UCS_TEST_P(test_ucp_mmap, reg_mem_type) {
             mem_buffer::supported_mem_types();
     ucs_status_t status;
     bool is_dummy;
-    bool expect_rma_offload;
     ucs_memory_type_t alloc_mem_type;
 
     for (int i = 0; i < 1000 / ucs::test_time_multiplier(); ++i) {
@@ -618,11 +578,7 @@ UCS_TEST_P(test_ucp_mmap, reg_mem_type) {
             EXPECT_EQ(alloc_mem_type, memh->mem_type);
         }
 
-        expect_rma_offload = !UCP_MEM_IS_ROCM_MANAGED(alloc_mem_type) &&
-                             is_tl_rdma() &&
-                             check_reg_mem_types(sender(), alloc_mem_type);
-        test_rkey_management(memh, is_dummy, expect_rma_offload,
-                             alloc_mem_type);
+        test_rkey_management(memh, is_dummy, alloc_mem_type);
 
         status = ucp_mem_unmap(sender().ucph(), memh);
         ASSERT_UCS_OK(status);
@@ -838,12 +794,8 @@ void test_ucp_mmap::test_length0(unsigned flags)
     status = ucp_mem_map(sender().ucph(), &params, &memh[1]);
     ASSERT_UCS_OK(status);
 
-    bool expect_rma_offload = is_tl_rdma() ||
-                              ((flags & UCP_MEM_MAP_ALLOCATE) &&
-                               is_tl_shm());
-
     for (i = 0; i < buf_num; i++) {
-        test_rkey_management(memh[i], true, expect_rma_offload);
+        test_rkey_management(memh[i], true);
         test_rkey_proto(memh[i]);
         status = ucp_mem_unmap(sender().ucph(), memh[i]);
         ASSERT_UCS_OK(status);
@@ -897,7 +849,7 @@ UCS_TEST_P(test_ucp_mmap, alloc_advise) {
     ASSERT_UCS_OK(status);
 
     is_dummy = (size == 0);
-    test_rkey_management(memh, is_dummy, is_tl_rdma() || is_tl_shm());
+    test_rkey_management(memh, is_dummy);
 
     status = ucp_mem_unmap(sender().ucph(), memh);
     ASSERT_UCS_OK(status);
@@ -940,7 +892,7 @@ UCS_TEST_P(test_ucp_mmap, reg_advise) {
     status = ucp_mem_advise(sender().ucph(), memh, &advise_params);
     ASSERT_UCS_OK(status);
     is_dummy = (size == 0);
-    test_rkey_management(memh, is_dummy, is_tl_rdma());
+    test_rkey_management(memh, is_dummy);
 
     status = ucp_mem_unmap(sender().ucph(), memh);
     ASSERT_UCS_OK(status);
@@ -983,7 +935,7 @@ UCS_TEST_P(test_ucp_mmap, fixed) {
         EXPECT_GE(ucp_memh_length(memh), size);
 
         is_dummy = (size == 0);
-        test_rkey_management(memh, is_dummy, is_tl_rdma());
+        test_rkey_management(memh, is_dummy);
 
         ptr.detach();
         status = ucp_mem_unmap(sender().ucph(), memh);
@@ -1397,3 +1349,120 @@ UCS_TEST_P(test_ucp_mmap_export, export_import) {
 }
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_mmap_export)
+
+
+class test_ucp_mmap_max_hca : public ucp_test {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant(variants, UCP_FEATURE_TAG);
+    }
+};
+
+UCS_TEST_P(test_ucp_mmap_max_hca, limits_memh_md_map)
+{
+    if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
+        UCS_TEST_SKIP_R("CUDA is not supported");
+    }
+
+    modify_config("MAX_HCA_PER_GPU", "inf");
+    entity *e_all         = create_entity();
+    ucp_context_h ctx_all = e_all->ucph();
+
+    ucp_md_map_t net_md_map = ucp_context_get_net_md_map(ctx_all);
+
+    if (ucs_popcount(net_md_map) < 2) {
+        UCS_TEST_SKIP_R("need at least 2 network MDs");
+    }
+
+    const size_t size = 4096;
+    void *ptr         = mem_buffer::allocate(size, UCS_MEMORY_TYPE_CUDA);
+
+    ucp_mem_map_params_t params;
+    params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                        UCP_MEM_MAP_PARAM_FIELD_LENGTH;
+    params.address    = ptr;
+    params.length     = size;
+
+    ucp_mem_h memh;
+    ASSERT_UCS_OK(ucp_mem_map(ctx_all, &params, &memh));
+    ucp_md_map_t net_all     = memh->md_map & net_md_map;
+    ucp_md_map_t non_net_all = memh->md_map & ~net_md_map;
+    ASSERT_UCS_OK(ucp_mem_unmap(ctx_all, memh));
+
+    /* LIMIT=1: at most 1 network MD */
+    modify_config("MAX_HCA_PER_GPU", "1");
+    entity *e_lim         = create_entity();
+    ucp_context_h ctx_lim = e_lim->ucph();
+
+    ASSERT_UCS_OK(ucp_mem_map(ctx_lim, &params, &memh));
+    ucp_md_map_t net_lim     = memh->md_map & net_md_map;
+    ucp_md_map_t non_net_lim = memh->md_map & ~net_md_map;
+    ASSERT_UCS_OK(ucp_mem_unmap(ctx_lim, memh));
+
+    /* CLOSEST: subset of all */
+    modify_config("MAX_HCA_PER_GPU", "auto");
+    entity *e_close         = create_entity();
+    ucp_context_h ctx_close = e_close->ucph();
+
+    ASSERT_UCS_OK(ucp_mem_map(ctx_close, &params, &memh));
+    ucp_md_map_t net_close = memh->md_map & net_md_map;
+    ASSERT_UCS_OK(ucp_mem_unmap(ctx_close, memh));
+
+    mem_buffer::release(ptr, UCS_MEMORY_TYPE_CUDA);
+
+    EXPECT_GT(ucs_popcount(net_all), 0);
+    EXPECT_LE(ucs_popcount(net_lim), 1);
+    EXPECT_GT(ucs_popcount(net_close), 0);
+    EXPECT_LE(ucs_popcount(net_close), ucs_popcount(net_all));
+    EXPECT_EQ(non_net_all, non_net_lim);
+}
+
+UCS_TEST_P(test_ucp_mmap_max_hca, limits_per_gpu)
+{
+    if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
+        UCS_TEST_SKIP_R("CUDA is not supported");
+    }
+
+    int num_gpus = mem_buffer::get_device_count();
+    if (num_gpus < 2) {
+        UCS_TEST_SKIP_R("need at least 2 CUDA devices");
+    }
+
+    modify_config("MAX_HCA_PER_GPU", "1");
+    entity *e         = create_entity();
+    ucp_context_h ctx = e->ucph();
+
+    ucp_md_map_t net_md_map = ucp_context_get_net_md_map(ctx);
+
+    if (ucs_popcount(net_md_map) < 2) {
+        UCS_TEST_SKIP_R("need at least 2 network MDs");
+    }
+
+    int orig_dev = mem_buffer::get_device();
+
+    const size_t size = 4096;
+    ucp_mem_map_params_t params;
+    params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                        UCP_MEM_MAP_PARAM_FIELD_LENGTH;
+
+    for (int gpu = 0; gpu < ucs_min(num_gpus, 4); gpu++) {
+        mem_buffer::set_device(gpu);
+
+        void *ptr      = mem_buffer::allocate(size, UCS_MEMORY_TYPE_CUDA);
+        params.address = ptr;
+        params.length  = size;
+
+        ucp_mem_h memh;
+        ASSERT_UCS_OK(ucp_mem_map(ctx, &params, &memh));
+        ucp_md_map_t net_map = memh->md_map & net_md_map;
+        EXPECT_LE(ucs_popcount(net_map), 1)
+                << "GPU " << gpu << " should have at most 1 network MD";
+        ASSERT_UCS_OK(ucp_mem_unmap(ctx, memh));
+        mem_buffer::release(ptr, UCS_MEMORY_TYPE_CUDA);
+    }
+
+    mem_buffer::set_device(orig_dev);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_mmap_max_hca, all, "all")

@@ -951,6 +951,13 @@ UCS_TEST_P(test_ucp_peer_failure_rndv_abort, get_zcopy_memory_invalidation,
     rndv_progress_failure_test(rndv_mode::rndv_get, false);
 }
 
+UCS_TEST_P(test_ucp_peer_failure_rndv_abort,
+           get_zcopy_memory_invalidation_no_rcache, "RNDV_SCHEME=get_zcopy",
+           "RCACHE_ENABLE=n")
+{
+    rndv_progress_failure_test(rndv_mode::rndv_get, false);
+}
+
 UCS_TEST_P(test_ucp_peer_failure_rndv_abort, put_zcopy_memory_invalidation,
            "RNDV_SCHEME=put_zcopy")
 {

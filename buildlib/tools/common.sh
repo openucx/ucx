@@ -10,7 +10,7 @@ JDK_MODULE="dev/jdk"
 MVN_MODULE="dev/mvn"
 XPMEM_MODULE="dev/xpmem-90a95a4"
 PGI_MODULE="hpc-sdk/nvhpc/21.2"
-GCC_MODULE="dev/gcc-10.1.0"
+GCC_MODULE="${GCC_MODULE:-dev/gcc-10.1.0}"
 ARM_MODULE="arm-compiler/armcc-22.1"
 INTEL_MODULE="intel/ics-19.1.1"
 FUSE3_MODULE="dev/fuse-3.10.5"
@@ -179,7 +179,7 @@ get_ib_devices() {
 	set +x
 	for ibdev in $device_list
 	do
-		[[ "$device" =~ ^smi[0-9]*:.$ ]] && continue
+		[[ "$ibdev" =~ ^smi[0-9]*$ ]] && continue
 		num_ports=$(ibv_devinfo -d $ibdev| awk '/phys_port_cnt:/ {print $2}')
 		for port in $(seq 1 $num_ports)
 		do
@@ -267,6 +267,16 @@ get_active_ib_devices() {
 }
 
 #
+# Get active IB device names without port suffix
+#
+get_active_ib_devnames() {
+	for ibdev_port in $(get_active_ib_devices)
+	do
+		echo "${ibdev_port%:*}"
+	done | sort -u
+}
+
+#
 # Filter in BlueField IB devices from the device list
 #
 get_ib_bf_devices() {
@@ -298,7 +308,7 @@ check_machine() {
 	lscpu
 	uname -a
 	free -m
-	ofed_info -s || true
+	apt info doca-networking doca-devel 2>/dev/null || yum info doca-networking doca-devel 2>/dev/null || true
 	ibv_devinfo -v || true
 	show_gids || true
 }

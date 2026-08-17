@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  * Copyright (C) Huawei Technologies Co., Ltd. 2020.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
@@ -77,6 +77,8 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
   UCT_TCP_SEND_RECV_BUF_FIELDS(ucs_offsetof(uct_tcp_iface_config_t, sockopt)),
 
   UCT_TCP_SYN_CNT(ucs_offsetof(uct_tcp_iface_config_t, syn_cnt)),
+
+  UCT_TCP_USER_TIMEOUT(ucs_offsetof(uct_tcp_iface_config_t, user_timeout)),
 
   UCT_IFACE_MPOOL_CONFIG_FIELDS("TX_", -1, 8, 128m, 1.0, "send",
                                 ucs_offsetof(uct_tcp_iface_config_t, tx_mpool), ""),
@@ -533,7 +535,12 @@ ucs_status_t uct_tcp_iface_set_sockopt(uct_tcp_iface_t *iface, int fd,
         return status;
     }
 
-    return ucs_tcp_base_set_syn_cnt(fd, iface->config.syn_cnt);
+    status = ucs_tcp_base_set_syn_cnt(fd, iface->config.syn_cnt);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return ucs_tcp_base_set_user_timeout(fd, iface->config.user_timeout);
 }
 
 static uct_iface_ops_t uct_tcp_iface_ops = {
@@ -680,7 +687,8 @@ static uct_iface_internal_ops_t uct_tcp_iface_internal_ops = {
     .ep_connect_to_ep_v2    = uct_tcp_ep_connect_to_ep_v2,
     .iface_is_reachable_v2  = uct_tcp_iface_is_reachable_v2,
     .ep_is_connected        = uct_tcp_ep_is_connected,
-    .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported
+    .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported,
+    .ep_outstanding_purge   = (uct_ep_outstanding_purge_func_t)ucs_empty_function_return_unsupported
 };
 
 static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
@@ -762,6 +770,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     self->config.max_poll          = config->max_poll;
     self->config.max_conn_retries  = config->max_conn_retries;
     self->config.syn_cnt           = config->syn_cnt;
+    self->config.user_timeout      = config->user_timeout;
     self->sockopt.nodelay          = config->sockopt_nodelay;
     self->sockopt.sndbuf           = config->sockopt.sndbuf;
     self->sockopt.rcvbuf           = config->sockopt.rcvbuf;
@@ -1036,6 +1045,9 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
                                                   path_buffer);
         sys_dev    = ucs_topo_get_sysfs_dev((*entry)->d_name, sysfs_path,
                                             sys_device_priority);
+        if (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
+            ucs_topo_sys_device_set_class(sys_dev, UCS_TOPO_DEVICE_CLASS_NET);
+        }
 
         ucs_snprintf_zero(devices[num_devices].name,
                           sizeof(devices[num_devices].name), "%s",

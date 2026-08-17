@@ -16,6 +16,7 @@
 
 #include <ucs/sys/preprocessor.h>
 #include <ucs/sys/string.h>
+#include <ucs/type/status.h>
 #include <limits>
 
 
@@ -153,7 +154,7 @@ public:
     {
         *total_length = ucx_perf_get_message_size(&m_perf.params);
 
-        if (CMD == UCX_PERF_CMD_PUT) {
+        if ((CMD == UCX_PERF_CMD_PUT) || (CMD == UCX_PERF_CMD_GET)) {
             ucs_assert(*total_length >= sizeof(psn_t));
         }
 
@@ -599,6 +600,7 @@ public:
     void send_last_iter(ucp_ep_h ep, void *buffer, size_t size,
                         uint64_t remote_addr, ucp_rkey_h rkey)
     {
+        psn_t last_sn         = LAST_ITER_SN;
         uint64_t atomic_value = 0;
         ucs_status_ptr_t status_p;
         ucp_request_param_t atomic_param;
@@ -648,6 +650,12 @@ public:
             atomic_param.reply_buffer  = &atomic_value;
             status_p = ucp_atomic_op_nbx(ep, m_atomic_op, buffer, 1,
                                          remote_addr, rkey, &atomic_param);
+            break;
+        case UCX_PERF_CMD_GET:
+            /* Set remotely LAST_ITER_SN */
+            status_p = ucp_put_nbx(ep, &last_sn, sizeof(last_sn),
+                                   remote_addr + size - sizeof(last_sn), rkey,
+                                   &m_send_params);
             break;
         default:
             status_p = NULL;
@@ -710,7 +718,8 @@ public:
 
     inline bool use_psn() const
     {
-        return (CMD == UCX_PERF_CMD_PUT) || is_atomic();
+        return (CMD == UCX_PERF_CMD_PUT) || (CMD == UCX_PERF_CMD_GET) ||
+               is_atomic();
     }
 
     void reset_buffers(size_t length, psn_t sn)
@@ -736,6 +745,9 @@ public:
         ucp_rkey_h rkey;
         size_t length, send_length, recv_length;
         psn_t sn;
+        bool validate;
+        void *validate_buffer = NULL;
+        ucs_status_t status;
 
         send_buffer = m_perf.send_buffer;
         recv_buffer = m_perf.recv_buffer;
@@ -751,6 +763,21 @@ public:
 
         reset_buffers(length, UNKNOWN_SN);
 
+        validate = m_perf.params.flags & UCX_PERF_TEST_FLAG_VALIDATE;
+        status   = UCS_OK;
+
+        if (validate) {
+            if (m_perf.params.ucp.recv_datatype == UCP_PERF_DATATYPE_IOV) {
+                validate_buffer = alloc_validate_buffer(
+                    reinterpret_cast<ucp_dt_iov_t*>(recv_buffer), recv_length);
+            } else {
+                validate_buffer = alloc_validate_buffer(recv_length);
+            }
+            if (validate_buffer == NULL) {
+                return UCS_ERR_NO_MEMORY;
+            }
+        }
+
         ucp_perf_barrier(&m_perf);
 
         my_index = rte_call(&m_perf, group_index);
@@ -761,9 +788,24 @@ public:
 
         if (my_index == 0) {
             UCX_PERF_TEST_FOREACH(&m_perf) {
+
+                if (validate) {
+                    fill_sn(send_buffer, m_perf.params.ucp.send_datatype,
+                            m_perf.send_allocator, send_length, sn);
+                }
+
                 send(ep, send_buffer, send_length, send_datatype, sn, remote_addr, rkey);
                 recv(worker, ep, recv_buffer, recv_length, recv_datatype, sn);
                 wait_recv_window(m_max_outstanding);
+
+                if (validate) {
+                    status = validate_recv_buffer(recv_buffer, recv_length, sn,
+                                                  validate_buffer);
+                    if (status != UCS_OK) {
+                        goto out;
+                    }
+                }
+
                 ucx_perf_update(&m_perf, 1, 1, length);
                 ++sn;
             }
@@ -771,6 +813,17 @@ public:
             UCX_PERF_TEST_FOREACH(&m_perf) {
                 recv(worker, ep, recv_buffer, recv_length, recv_datatype, sn);
                 wait_recv_window(m_max_outstanding);
+
+                if (validate) {
+                    status = validate_recv_buffer(recv_buffer, recv_length, sn,
+                                                  validate_buffer);
+                    if (status != UCS_OK) {
+                        goto out;
+                    }
+                    fill_sn(send_buffer, m_perf.params.ucp.send_datatype,
+                            m_perf.send_allocator, send_length, sn);
+                }
+
                 send(ep, send_buffer, send_length, send_datatype, sn,
                      remote_addr, rkey, m_perf.current.iters == 0);
                 ucx_perf_update(&m_perf, 1, 1, length);
@@ -786,7 +839,10 @@ public:
 
         ucx_perf_get_time(&m_perf);
         ucp_perf_barrier(&m_perf);
-        return UCS_OK;
+
+out:
+        free(validate_buffer);
+        return status;
     }
 
     ucs_status_t run_stream_uni()
@@ -826,7 +882,7 @@ public:
         if (m_perf.params.flags & UCX_PERF_TEST_FLAG_LOOPBACK) {
             UCX_PERF_TEST_FOREACH(&m_perf) {
                 send(ep, send_buffer, send_length, send_datatype,
-                     sn, remote_addr, rkey);
+                    sn, remote_addr, rkey);
                 recv(worker, ep, recv_buffer, recv_length, recv_datatype, sn);
                 ucx_perf_update(&m_perf, 1, 1, length);
                 ++sn;
@@ -948,6 +1004,47 @@ private:
                               "<failed to query: %s>",
                               ucs_status_string(status));
         }
+    }
+
+    ucs_status_t validate_recv_buffer(void *recv_buffer, size_t length,
+                                      psn_t sn, void *host_buffer)
+    {
+        if (CMD == UCX_PERF_CMD_PUT) {
+            fence();
+        }
+
+        return validate_sn(recv_buffer, m_perf.params.ucp.recv_datatype,
+                            m_perf.params.recv_mem_type, m_perf.recv_allocator,
+                            length, sn, host_buffer);
+    }
+
+    void *alloc_validate_common(size_t buffer_length)
+    {
+        void *buffer = NULL;
+
+        buffer = malloc(buffer_length);
+        if (buffer == NULL) {
+            ucs_error("failed to allocate validation buffer of %zu bytes",
+                      buffer_length);
+        }
+
+        return buffer;
+    }
+
+    void *alloc_validate_buffer(size_t recv_length)
+    {
+        return alloc_validate_common(recv_length);
+    }
+
+    void *alloc_validate_buffer(ucp_dt_iov_t *iov, size_t iov_cnt)
+    {
+        size_t buffer_length = 0;
+
+        for (size_t i = 0; i < iov_cnt; ++i) {
+            buffer_length = ucs_max(buffer_length, iov[i].length);
+        }
+
+        return alloc_validate_common(buffer_length);
     }
 
     int                m_recvs_outstanding;

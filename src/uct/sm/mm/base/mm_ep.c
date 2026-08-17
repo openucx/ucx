@@ -560,7 +560,7 @@ uct_mm_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
 {
     uct_mm_ep_t *ep = ucs_derived_of(tl_ep, uct_mm_ep_t);
 
-    UCT_EP_KEEPALIVE_CHECK_PARAM(flags, comp);
+    UCT_EP_KEEPALIVE_CHECK_PARAM(flags);
     uct_ep_keepalive_check(tl_ep, &ep->keepalive, ep->fifo_ctl->pid, flags,
                            comp);
     return UCS_OK;

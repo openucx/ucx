@@ -265,6 +265,9 @@ public:
         /* gdr_copy test supports from host to GPU mem case only */
         if (has_transport("gdr_copy")) {
             result.push_back(input);
+        } else if (has_transport("cuda_ipc")) {
+            /* cuda_ipc test only supports GPU-GPU case */
+            result.push_back({UCS_MEMORY_TYPE_CUDA, UCS_MEMORY_TYPE_CUDA});
         } else {
             result = ucs::make_pairs(input);
         }

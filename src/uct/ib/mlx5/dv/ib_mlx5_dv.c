@@ -133,6 +133,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp_common(uct_ib_iface_t *iface,
 {
     uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.md, uct_ib_mlx5_md_t);
     uct_ib_device_t *dev = &md->super.dev;
+    uint64_t bf_size     = 0;
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(create_qp_in)]           = {};
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(create_qp_out)]         = {};
     char in_2init[UCT_IB_MLX5DV_ST_SZ_BYTES(rst2init_qp_in)]   = {};
@@ -144,8 +145,12 @@ ucs_status_t uct_ib_mlx5_devx_create_qp_common(uct_ib_iface_t *iface,
 
     uct_ib_iface_fill_attr(iface, &attr->super);
 
+    if (md->flags & UCT_IB_MLX5_MD_FLAG_UAR_USE_WC) {
+        bf_size = UCT_IB_MLX5_BF_REG_SIZE;
+    }
+
     status = uct_ib_mlx5_get_mmio_mode(iface->super.worker, attr->mmio_mode, 0,
-                                       UCT_IB_MLX5_BF_REG_SIZE, &mmio_mode);
+                                       bf_size, &mmio_mode);
     if (status != UCS_OK) {
         goto err;
     }
@@ -178,7 +183,8 @@ ucs_status_t uct_ib_mlx5_devx_create_qp_common(uct_ib_iface_t *iface,
     UCT_IB_MLX5DV_SET(qpc, qpc, pm_state, UCT_IB_MLX5_QPC_PM_STATE_MIGRATED);
     UCT_IB_MLX5DV_SET(qpc, qpc, rdma_wr_disabled, !!attr->rdma_wr_disabled);
     UCT_IB_MLX5DV_SET(qpc, qpc, pd, uct_ib_mlx5_devx_md_get_pdn(md));
-    UCT_IB_MLX5DV_SET(qpc, qpc, uar_page, uar->uar->page_id);
+    UCT_IB_MLX5DV_SET(qpc, qpc, uar_page,
+                      attr->uar_page_id ? attr->uar_page_id : uar->uar->page_id);
     ucs_assert((attr->super.srq == NULL) || (attr->super.srq_num != 0));
     UCT_IB_MLX5DV_SET(qpc, qpc, rq_type, attr->super.srq_num ? 1 /* SRQ */ :
                                                                3 /* no RQ */);
@@ -192,8 +198,15 @@ ucs_status_t uct_ib_mlx5_devx_create_qp_common(uct_ib_iface_t *iface,
             uct_ib_mlx5_qpc_cs_req(attr->super.max_inl_cqe[UCT_IB_DIR_TX]));
     UCT_IB_MLX5DV_SET(qpc, qpc, cs_res,
             uct_ib_mlx5_qpc_cs_res(attr->super.max_inl_cqe[UCT_IB_DIR_RX], 0));
-    UCT_IB_MLX5DV_SET64(qpc, qpc, dbr_addr, qp->devx.dbrec->offset);
-    UCT_IB_MLX5DV_SET(qpc, qpc, dbr_umem_id, qp->devx.dbrec->mem_id);
+    if (attr->sq_no_dbr) {
+        UCT_IB_MLX5DV_SET(qpc, qpc, send_dbr_mode,
+                          UCT_IB_MLX5_QPC_SQ_NO_DBR_INT);
+    } else {
+        UCT_IB_MLX5DV_SET(qpc, qpc, send_dbr_mode,
+                          UCT_IB_MLX5_QPC_SQ_DBR_VALID);
+        UCT_IB_MLX5DV_SET64(qpc, qpc, dbr_addr, qp->devx.dbrec->offset);
+        UCT_IB_MLX5DV_SET(qpc, qpc, dbr_umem_id, qp->devx.dbrec->mem_id);
+    }
     UCT_IB_MLX5DV_SET(qpc, qpc, user_index, attr->uidx);
     UCT_IB_MLX5DV_SET(qpc, qpc, ts_format, UCT_IB_MLX5_QPC_TS_FORMAT_DEFAULT);
 

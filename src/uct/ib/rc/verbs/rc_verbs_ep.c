@@ -44,7 +44,10 @@ uct_rc_verbs_ep_post_send(uct_rc_verbs_iface_t* iface, uct_rc_verbs_ep_t* ep,
         send_flags |= uct_rc_iface_tx_moderation(&iface->super, &ep->super.txqp,
                                                  IBV_SEND_SIGNALED);
     }
-    if (wr->opcode == IBV_WR_RDMA_READ) {
+
+    if (wr->opcode == IBV_WR_SEND) {
+        uct_rc_ep_fm(&iface->super, &ep->fi, 0);
+    } else if (wr->opcode == IBV_WR_RDMA_READ) {
         send_flags |= uct_rc_ep_fm(&iface->super, &ep->fi, IBV_SEND_FENCE);
     }
 
@@ -519,11 +522,20 @@ ucs_status_t uct_rc_verbs_ep_fence(uct_ep_h tl_ep, unsigned flags)
     return uct_rc_ep_fence(tl_ep, &ep->fi);
 }
 
-void uct_rc_verbs_ep_post_check(uct_ep_h tl_ep)
+ucs_status_t uct_rc_verbs_ep_post_check(uct_ep_h tl_ep, uct_completion_t *comp)
 {
-    uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
+    uct_rc_verbs_ep_t *ep       = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
+    uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface,
+                                                 uct_rc_verbs_iface_t);
 
-    uct_rc_verbs_ep_post_flush(ep, 0);
+    if (comp == NULL) {
+        uct_rc_verbs_ep_post_flush(ep, 0);
+        return UCS_OK;
+    }
+
+    uct_rc_verbs_ep_post_flush(ep, IBV_SEND_SIGNALED);
+    return uct_rc_txqp_add_flush_comp(&iface->super, &ep->super.super,
+                                      &ep->super.txqp, comp, ep->txcnt.pi);
 }
 
 void uct_rc_verbs_ep_vfs_populate(uct_rc_ep_t *rc_ep)

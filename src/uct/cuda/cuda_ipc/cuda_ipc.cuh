@@ -13,7 +13,6 @@
 #include <ucs/type/status.h>
 #include <cuda/atomic>
 
-#define UCT_CUDA_IPC_IS_ALIGNED_POW2(_n, _p) (!((_n) & ((_p) - 1)))
 #define UCT_CUDA_IPC_WARP_SIZE 32
 #define UCT_CUDA_IPC_COPY_LOOP_UNROLL 8
 
@@ -129,8 +128,8 @@ void uct_cuda_ipc_copy_level<UCS_DEVICE_LEVEL_WARP>(void *dst, const void *src, 
     auto d1 = reinterpret_cast<char *>(dst);
 
     /* 16B-aligned fast path using vec4 */
-    if (UCT_CUDA_IPC_IS_ALIGNED_POW2((intptr_t)s1, sizeof(vec4)) &&
-        UCT_CUDA_IPC_IS_ALIGNED_POW2((intptr_t)d1, sizeof(vec4))) {
+    if (UCS_DEVICE_IS_ALIGNED_POW2((intptr_t)s1, sizeof(vec4)) &&
+        UCS_DEVICE_IS_ALIGNED_POW2((intptr_t)d1, sizeof(vec4))) {
         const vec4 *s4 = reinterpret_cast<const vec4*>(s1);
         vec4 *d4       = reinterpret_cast<vec4*>(d1);
         size_t n4 = len / sizeof(vec4);
@@ -149,8 +148,8 @@ void uct_cuda_ipc_copy_level<UCS_DEVICE_LEVEL_WARP>(void *dst, const void *src, 
     }
 
     /* 8B-aligned fast path using vec2 */
-    if (UCT_CUDA_IPC_IS_ALIGNED_POW2((intptr_t)s1, sizeof(vec2)) &&
-        UCT_CUDA_IPC_IS_ALIGNED_POW2((intptr_t)d1, sizeof(vec2))) {
+    if (UCS_DEVICE_IS_ALIGNED_POW2((intptr_t)s1, sizeof(vec2)) &&
+        UCS_DEVICE_IS_ALIGNED_POW2((intptr_t)d1, sizeof(vec2))) {
         const vec2 *s2 = reinterpret_cast<const vec2*>(s1);
         vec2 *d2       = reinterpret_cast<vec2*>(d1);
         size_t n2 = len / sizeof(vec2);
@@ -186,8 +185,8 @@ void uct_cuda_ipc_copy_level<UCS_DEVICE_LEVEL_BLOCK>(void *dst, const void *src,
     int warp, num_warps, idx;
     size_t num_lines;
 
-    if (UCT_CUDA_IPC_IS_ALIGNED_POW2((intptr_t)s1, sizeof(vec4)) &&
-        UCT_CUDA_IPC_IS_ALIGNED_POW2((intptr_t)d1, sizeof(vec4))) {
+    if (UCS_DEVICE_IS_ALIGNED_POW2((intptr_t)s1, sizeof(vec4)) &&
+        UCS_DEVICE_IS_ALIGNED_POW2((intptr_t)d1, sizeof(vec4))) {
         vec4 tmp[UCT_CUDA_IPC_COPY_LOOP_UNROLL];
         warp      = threadIdx.x / UCT_CUDA_IPC_WARP_SIZE;
         num_warps = blockDim.x / UCT_CUDA_IPC_WARP_SIZE;
@@ -232,8 +231,8 @@ void uct_cuda_ipc_copy_level<UCS_DEVICE_LEVEL_BLOCK>(void *dst, const void *src,
     }
 
     /* If not 16B-aligned, try 8B-aligned fast path using vec2 */
-    if (UCT_CUDA_IPC_IS_ALIGNED_POW2((intptr_t)s1, sizeof(vec2)) &&
-        UCT_CUDA_IPC_IS_ALIGNED_POW2((intptr_t)d1, sizeof(vec2))) {
+    if (UCS_DEVICE_IS_ALIGNED_POW2((intptr_t)s1, sizeof(vec2)) &&
+        UCS_DEVICE_IS_ALIGNED_POW2((intptr_t)d1, sizeof(vec2))) {
         const vec2 *s2;
         vec2 *d2;
         vec2 tmp2[UCT_CUDA_IPC_COPY_LOOP_UNROLL];
@@ -292,7 +291,7 @@ void uct_cuda_ipc_copy_level<UCS_DEVICE_LEVEL_GRID>(void *dst, const void *src, 
 
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_BLOCK>
 UCS_F_DEVICE ucs_status_t uct_cuda_ipc_ep_put(
-        uct_device_ep_h device_ep, const uct_device_mem_element_t *mem_elem,
+        uct_device_ep_h device_ep, const uct_device_mem_elem_t *mem_elem,
         const void *address, uint64_t remote_address, size_t length,
         uint64_t flags, uct_device_completion_t *comp)
 {
@@ -310,7 +309,7 @@ UCS_F_DEVICE ucs_status_t uct_cuda_ipc_ep_put(
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_BLOCK>
 UCS_F_DEVICE ucs_status_t
 uct_cuda_ipc_ep_atomic_add(uct_device_ep_h device_ep,
-                           const uct_device_mem_element_t *mem_elem,
+                           const uct_device_mem_elem_t *mem_elem,
                            uint64_t inc_value, uint64_t remote_address,
                            uint64_t flags, uct_device_completion_t *comp)
 {
@@ -332,7 +331,7 @@ uct_cuda_ipc_ep_atomic_add(uct_device_ep_h device_ep,
 }
 
 UCS_F_DEVICE ucs_status_t uct_cuda_ipc_ep_get_ptr(
-        uct_device_ep_h device_ep, const uct_device_mem_element_t *mem_elem,
+        uct_device_ep_h device_ep, const uct_device_mem_elem_t *mem_elem,
         uint64_t remote_address, void **addr_p)
 {
     auto cuda_ipc_mem_element =

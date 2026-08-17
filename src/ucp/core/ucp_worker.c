@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2021. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -20,6 +20,7 @@
 #include <ucp/wireup/address.h>
 #include <ucp/wireup/wireup_cm.h>
 #include <ucp/wireup/wireup_ep.h>
+#include <ucp/wireup/wireup_lane_info.h>
 #include <ucp/tag/eager.h>
 #include <ucp/tag/offload.h>
 #include <ucp/stream/stream.h>
@@ -471,7 +472,8 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
         !ucp_ep_is_local_connected(ucp_ep)) {
         /* Failure on NON-AUX EP or failure on AUX EP before it sent its address
          * means failure on the UCP EP */
-        return ucp_ep_set_lanes_failed(ucp_ep, UCS_BIT(lane), status);
+        ucp_ep_set_lanes_failed(ucp_ep, UCS_BIT(lane), status);
+        return UCS_OK;
     }
 
     if (wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY) {
@@ -798,6 +800,10 @@ static uint8_t ucp_worker_iface_port_speed(const ucp_worker_iface_t *wiface)
     ucs_status_t status;
     double ratio;
 
+    if (wiface->attr.bandwidth.shared == 0.0) {
+        return 0;
+    }
+
     perf_attr.field_mask = UCT_PERF_ATTR_FIELD_BANDWIDTH;
     status = uct_iface_estimate_perf(wiface->iface, &perf_attr);
     if (status != UCS_OK) {
@@ -870,7 +876,9 @@ static void ucp_worker_iface_async_cb_event(void *arg, unsigned flags)
     ucs_trace_func("async_cb for iface=%p flags=%u", wiface->iface, flags);
 
     if (flags & UCT_EVENT_SPEED_CHANGE) {
+        UCS_ASYNC_BLOCK(&wiface->worker->async);
         ucp_worker_iface_handle_port_speed_event(wiface);
+        UCS_ASYNC_UNBLOCK(&wiface->worker->async);
         return;
     }
 
@@ -1334,7 +1342,12 @@ ucp_worker_iface_get_memory_distance(const ucp_worker_iface_t *wiface,
 
     if ((md_attr->access_mem_types | md_attr->reg_mem_types) &
         UCS_BIT(UCS_MEMORY_TYPE_HOST)) {
-        ucs_topo_get_memory_distance(sys_dev, distance);
+        if (ucs_cpu_set_is_empty(&wiface->worker->cpu_mask)) {
+            ucs_topo_get_memory_distance(sys_dev, distance);
+        } else {
+            ucs_topo_get_memory_distance_for_cpuset(
+                    sys_dev, &wiface->worker->cpu_mask, distance);
+        }
     } else {
         *distance = ucs_topo_default_distance;
     }
@@ -2224,6 +2237,7 @@ ucs_status_t ucp_worker_get_ep_config(ucp_worker_h worker,
     }
 
     ucp_worker_print_used_tls(worker, ep_cfg_index);
+    ucp_wireup_log_ep_lanes(worker, key, ep_cfg_index);
 
 out:
     *cfg_index_p = ep_cfg_index;
@@ -3565,8 +3579,15 @@ static int ucp_worker_do_ep_keepalive(ucp_worker_h worker, ucs_time_t now)
 
     ep = ucs_container_of(worker->keepalive.iter, ucp_ep_ext_t, ep_list)->ep;
     if ((ep->cfg_index == UCP_WORKER_CFG_INDEX_NULL) ||
-        (ep->flags & UCP_EP_FLAG_FAILED) ||
-        (ucp_ep_config(ep)->key.keepalive_lane == UCP_NULL_LANE)) {
+        (ep->flags & UCP_EP_FLAG_FAILED)) {
+        goto out_done;
+    }
+
+    if (ucp_ep_recovery_progress(ep)) {
+        goto out_done;
+    }
+
+    if (ucp_ep_config(ep)->key.keepalive_lane == UCP_NULL_LANE) {
         goto out_done;
     }
 
@@ -3590,7 +3611,7 @@ static int ucp_worker_do_ep_keepalive(ucp_worker_h worker, ucs_time_t now)
 
     if (status == UCS_ERR_NO_RESOURCE) {
         return 0;
-    } else if (status != UCS_OK) {
+    } else if (UCS_STATUS_IS_ERR(status)) {
         ucs_diag("worker %p: keepalive failed on ep %p lane[%d]=%p: %s", worker,
                  ep, lane, uct_ep, ucs_status_string(status));
     } else {
@@ -3744,8 +3765,9 @@ ucp_worker_discard_tl_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
     khiter_t iter;
 
     if (ucp_is_uct_ep_failed(uct_ep)) {
-        /* No need to discard failed TL EP, because it may lead to adding the
-         * same UCT EP to the hash of discarded UCT EPs */
+        /* Failed TL EPs do not enter the worker discard hash; destroy
+         * directly to take ownership of uct_ep from the caller. */
+        uct_ep_destroy(uct_ep);
         return UCS_OK;
     }
 

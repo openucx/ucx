@@ -1,0 +1,38 @@
+jobs:
+  - job: basic_compile
+    displayName: Basic compile
+    pool:
+      name: MLNX
+      demands:
+        - ucx_docker
+    container: ubuntu2404
+    workspace:
+      clean: all
+    timeoutInMinutes: 60
+
+    steps:
+      - checkout: self
+        clean: true
+        fetchDepth: 100
+        fetchTags: false
+        retryCountOnTaskFailure: 5
+
+      - bash: |
+          set -eEx
+          BUILD_ID="${BUILD_BUILDID}-${BUILD_BUILDNUMBER}"
+          source buildlib/tools/common.sh
+          prepare_build
+          "${WORKSPACE}/contrib/configure-devel" \
+              --disable-gtest \
+              --disable-examples \
+              --disable-test-apps \
+              --disable-dependency-tracking \
+              --disable-static \
+              --without-go \
+              --without-java \
+              --without-valgrind \
+              --enable-compiler-opt=0 \
+              CFLAGS="-g0" \
+              CXXFLAGS="-g0"
+          make -j${parallel_jobs}
+        displayName: Basic compile

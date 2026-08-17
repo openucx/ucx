@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2012. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  * Copyright (c) UT-Battelle, LLC. 2014-2019. ALL RIGHTS RESERVED.
  * Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
  *
@@ -1448,8 +1448,9 @@ ucs_sys_ns_t ucs_sys_get_default_ns(ucs_sys_namespace_type_t name)
 ucs_sys_ns_t ucs_sys_get_ns(ucs_sys_namespace_type_t ns)
 {
     char filename[MAXPATHLEN];
-    int res;
-    struct stat st;
+    char link_target[64];
+    ssize_t symlink_len;
+    char *p;
 
     if (ns >= UCS_SYS_NS_TYPE_LAST) {
         return 0;
@@ -1459,11 +1460,20 @@ ucs_sys_ns_t ucs_sys_get_ns(ucs_sys_namespace_type_t ns)
         snprintf(filename, sizeof(filename), "%s/%s", UCS_PROCESS_NS_DIR,
                  ucs_sys_namespace_info[ns].name);
 
-        res = stat(filename, &st);
-        if (res == 0) {
-            ucs_sys_namespace_info[ns].value = (ucs_sys_ns_t)st.st_ino;
+        symlink_len = readlink(filename, link_target, sizeof(link_target) - 1);
+        if (symlink_len < 0) {
+            ucs_debug("failed to readlink(%s): %m", filename);
         } else {
-            ucs_debug("failed to stat(%s): %m", filename);
+            link_target[symlink_len] = '\0';
+            p                        = strchr(link_target, '[');
+            if (p != NULL) {
+                ucs_sys_namespace_info[ns].value = (ucs_sys_ns_t)strtoul(p + 1,
+                                                                         NULL,
+                                                                         10);
+            } else {
+                ucs_debug("failed to parse link target for %s: %s", filename,
+                          link_target);
+            }
         }
     }
 

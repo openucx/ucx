@@ -140,6 +140,11 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
      ucs_offsetof(uct_dc_mlx5_iface_config_t, dcis_initial_capacity),
      UCS_CONFIG_TYPE_ULUNITS},
 
+    {"FULL_HANDSHAKE_LATENCY", "140ns",
+     "DC Full Handshake extra latency",
+     ucs_offsetof(uct_dc_mlx5_iface_config_t, fhs_latency),
+     UCS_CONFIG_TYPE_TIME},
+
     {NULL}
 };
 
@@ -205,6 +210,55 @@ uct_dc_mlx5_ep_create_connected(const uct_ep_params_t *params, uct_ep_h* ep_p)
     }
 }
 
+/*
+ * Decide whether DCIs must use the full handshake (FHS) connection flow:
+ * - RoCE: always use the reduced handshake.
+ * - Non-DevX DCIs: ordering follows the SL, so use FHS for OOO SLs and the
+ *   reduced handshake otherwise.
+ * - DevX DCIs: force FHS if explicitly requested before querying SL OOO
+ *   support; use the reduced handshake for strict IBTA ordering or SLs without
+ *   OOO support; otherwise (OOO SL, non-IBTA ordering) FHS is needed for
+ *   OOO_ALL (DDP) or unless RDMA-write-disabled is supported and PUT is
+ *   disabled.
+ */
+static int uct_dc_mlx5_iface_is_full_handshake(uct_dc_mlx5_iface_t *iface)
+{
+    uct_ib_iface_t *ib_iface = &iface->super.super.super;
+    uct_ib_mlx5_md_t *md     = uct_ib_mlx5_iface_md(ib_iface);
+    uint16_t ooo_sl_mask     = 0;
+
+    if (uct_ib_iface_is_roce(ib_iface)) {
+        return 0;
+    }
+
+    if ((md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_DCI) &&
+        (iface->flags & UCT_DC_MLX5_IFACE_FLAG_DCI_FULL_HANDSHAKE)) {
+        return 1;
+    }
+
+#if HAVE_DEVX
+    if (uct_ib_mlx5_devx_query_ooo_sl_mask(md, ib_iface->config.port_num,
+                                           &ooo_sl_mask) != UCS_OK) {
+        return 0;
+    }
+#endif
+
+    if (!(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_DCI)) {
+        return !!(UCS_BIT(ib_iface->config.sl) & ooo_sl_mask);
+    }
+
+    if ((iface->super.config.dp_ordering_devx ==
+         UCT_IB_MLX5_DP_ORDERING_IBTA) ||
+        !(UCS_BIT(ib_iface->config.sl) & ooo_sl_mask)) {
+        return 0;
+    }
+
+    return (iface->super.config.dp_ordering_devx ==
+            UCT_IB_MLX5_DP_ORDERING_OOO_ALL) ||
+           !(md->flags & UCT_IB_MLX5_MD_FLAG_NO_RDMA_WR_OPTIMIZED) ||
+           !(iface->flags & UCT_DC_MLX5_IFACE_FLAG_DISABLE_PUT);
+}
+
 static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
@@ -241,6 +295,11 @@ static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
                                  sizeof(uct_dc_mlx5_iface_flush_addr_t) :
                                  sizeof(uct_dc_mlx5_iface_addr_t);
     iface_attr->latency.c     += 60e-9; /* connect packet + cqe */
+
+    if (uct_dc_mlx5_iface_is_full_handshake(iface)) {
+        /* FHS adds extra round trip */
+        iface_attr->latency.c += iface->tx.fhs_latency;
+    }
 
     uct_rc_mlx5_iface_common_query(&iface->super.super.super, iface_attr,
                                    max_am_inline,
@@ -1313,6 +1372,7 @@ uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
             ucs_diag("fc_ep %p: failed to send %s: %s", ep,
                      uct_dc_mlx5_fc_req_str(dc_req, buf, sizeof(buf)),
                      ucs_status_string(status));
+            ucs_mpool_put(dc_req);
         }
     } else if (fc_hdr == UCT_RC_EP_FC_PURE_GRANT) {
         sender = (uct_dc_fc_sender_data_t*)(hdr + 1);
@@ -1393,7 +1453,8 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
             .ep_connect_to_ep_v2    = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
             .iface_is_reachable_v2  = uct_dc_mlx5_iface_is_reachable_v2,
             .ep_is_connected        = uct_dc_mlx5_ep_is_connected,
-            .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported
+            .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported,
+            .ep_outstanding_purge   = (uct_ep_outstanding_purge_func_t)ucs_empty_function_return_unsupported
         },
         .create_cq      = uct_rc_mlx5_iface_common_create_cq,
         .destroy_cq     = uct_rc_mlx5_iface_common_destroy_cq,
@@ -1662,6 +1723,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     self->tx.fc_hard_req_progress_cb_id = UCS_CALLBACKQ_ID_NULL;
     self->tx.num_dci_pools              = 0;
     self->flags                         = 0;
+    self->tx.fhs_latency                = config->fhs_latency;
     self->tx.av_fl_mlid = self->super.super.super.path_bits[0] & 0x7f;
 
     kh_init_inplace(uct_dc_mlx5_fc_hash, &self->tx.fc_hash);

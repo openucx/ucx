@@ -22,9 +22,11 @@ noinst_LTLIBRARIES    = libtest_memhooks.la
 
 if HAVE_CUDA
 noinst_PROGRAMS      += test_mpi_cuda \
-                        test_rma_cuda
+                        test_rma_cuda \
+                        test_ucp_rkey_destroy
 
-noinst_LTLIBRARIES   += libtest_cuda_common.la
+noinst_LTLIBRARIES   += libtest_cuda_common.la \
+                        libtest_ucp.la
 endif
 endif
 
@@ -50,6 +52,12 @@ libtest_cuda_common_la_CFLAGS   = $(BASE_CFLAGS)
 libtest_cuda_common_la_LDFLAGS  = $(CUDA_LDFLAGS)
 libtest_cuda_common_la_LIBADD   = $(CUDA_LIBS) $(top_builddir)/src/ucs/libucs.la
 
+libtest_ucp_la_SOURCES  = test_ucp.c
+libtest_ucp_la_CPPFLAGS = $(BASE_CPPFLAGS)
+libtest_ucp_la_CFLAGS   = $(BASE_CFLAGS)
+libtest_ucp_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
+                          $(top_builddir)/src/ucp/libucp.la
+
 test_mpi_cuda_SOURCES  = test_mpi_cuda.c
 test_mpi_cuda_CPPFLAGS = $(BASE_CPPFLAGS) $(CUDA_CPPFLAGS)
 test_mpi_cuda_CFLAGS   = $(BASE_CFLAGS)
@@ -63,7 +71,16 @@ test_rma_cuda_CFLAGS   = $(BASE_CFLAGS)
 test_rma_cuda_LDFLAGS  = $(CUDA_LDFLAGS)
 test_rma_cuda_LDADD    = $(CUDA_LIBS) $(top_builddir)/src/ucs/libucs.la \
                          $(top_builddir)/src/ucp/libucp.la \
-                         libtest_cuda_common.la
+                         libtest_cuda_common.la  \
+                         libtest_ucp.la
+
+test_ucp_rkey_destroy_SOURCES  = test_ucp_rkey_destroy.c
+test_ucp_rkey_destroy_CPPFLAGS = $(BASE_CPPFLAGS) $(CUDA_CPPFLAGS)
+test_ucp_rkey_destroy_CFLAGS   = $(BASE_CFLAGS)
+test_ucp_rkey_destroy_LDFLAGS  = $(CUDA_LDFLAGS)
+test_ucp_rkey_destroy_LDADD    = $(CUDA_LIBS) $(top_builddir)/src/ucs/libucs.la \
+                                 $(top_builddir)/src/ucp/libucp.la  \
+                                 libtest_ucp.la
 endif
 
 libtest_memhooks_la_SOURCES = test_memhooks_lib.c

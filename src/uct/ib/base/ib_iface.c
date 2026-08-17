@@ -29,6 +29,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <poll.h>
+#include <errno.h>
 #include <float.h>
 
 
@@ -700,9 +701,11 @@ uct_ib_iface_roce_is_routable(uct_ib_iface_t *iface, uint8_t gid_index,
 {
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
     uint8_t port_num     = iface->config.port_num;
-    char ndev_ifname[IFNAMSIZ], lo_ifname[IFNAMSIZ];
+    unsigned lo_ndev_index = 0;
+    char ndev_ifname[IFNAMSIZ], lo_ifname[IFNAMSIZ], local_ifname[IFNAMSIZ];
     char remote_str[128];
-    unsigned ndev_index, lo_ndev_index;
+    int local_ndev_index;
+    unsigned ndev_index;
 
     if (uct_ib_device_get_roce_ndev_index(dev, port_num, gid_index,
                                           &ndev_index) != UCS_OK) {
@@ -729,8 +732,22 @@ uct_ib_iface_roce_is_routable(uct_ib_iface_t *iface, uint8_t gid_index,
         return 1;
     }
 
+    /* A same-host RoCE address can have the most specific route through a VRF
+     * master instead of the RoCE netdev or loopback. Accept only kernel local
+     * routes, which keeps this narrower than reachability_mode=all. */
+    local_ndev_index = ucs_netlink_get_local_route_ndev_index(sa_remote);
+    if (local_ndev_index >= 0) {
+        ucs_trace(UCT_IB_IFACE_FMT ": found local route via %s to %s",
+                  UCT_IB_IFACE_ARG(iface),
+                  ucs_ndev_index_to_ifname(local_ndev_index, local_ifname,
+                                           sizeof(local_ifname)),
+                  ucs_sockaddr_str(sa_remote, remote_str, sizeof(remote_str)));
+        return 1;
+    }
+
     uct_iface_fill_info_str_buf(
-            params, "no route to %s from %s (idx %u) or %s (idx %u)",
+            params, "no route to %s from %s (idx %u), %s (idx %u), or local "
+                    "route",
             ucs_sockaddr_str(sa_remote, remote_str, sizeof(remote_str)),
             ucs_ndev_index_to_ifname(ndev_index, ndev_ifname,
                                      sizeof(ndev_ifname)),
@@ -1824,14 +1841,14 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
 
     self->addr_size  = uct_ib_iface_address_size(self);
 
-#if HAVE_DECL_IBV_EVENT_PORT_SPEED_CHANGE
+#if HAVE_DECL_IBV_EVENT_DEVICE_SPEED_CHANGE
     uct_iface_set_async_event_params(params, &self->async_ctx.cb,
                                      &self->async_ctx.arg);
     if (self->async_ctx.cb != NULL) {
         self->async_ctx.super.cbq = &self->super.worker->super.progress_q;
         self->async_ctx.super.cb  = uct_ib_iface_port_speed_change_progress;
-        status = uct_ib_device_async_event_wait(dev, IBV_EVENT_PORT_SPEED_CHANGE,
-                                                self->config.port_num,
+        status = uct_ib_device_async_event_wait(dev, IBV_EVENT_DEVICE_SPEED_CHANGE,
+                                                0,
                                                 &self->async_ctx.super);
         if (status != UCS_OK) {
             goto err_destroy_send_cq;
@@ -1871,11 +1888,11 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ib_iface_t)
         ucs_warn("ibv_destroy_comp_channel(comp_channel) returned %d: %m", ret);
     }
 
-#if HAVE_DECL_IBV_EVENT_PORT_SPEED_CHANGE
+#if HAVE_DECL_IBV_EVENT_DEVICE_SPEED_CHANGE
     if (self->async_ctx.cb != NULL) {
         uct_ib_device_async_event_cancel(uct_ib_iface_device(self),
-                                         IBV_EVENT_PORT_SPEED_CHANGE,
-                                         self->config.port_num,
+                                         IBV_EVENT_DEVICE_SPEED_CHANGE,
+                                         0,
                                          &self->async_ctx.super);
     }
 #endif
@@ -2075,6 +2092,7 @@ uct_ib_iface_estimate_bandwidth(uct_ib_iface_t *iface,
 {
 #if HAVE_DECL_IBV_QUERY_PORT_SPEED
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
+    ucs_log_level_t log_level;
     uint64_t port_speed;
     double wire_speed;
     int ret;
@@ -2082,8 +2100,13 @@ uct_ib_iface_estimate_bandwidth(uct_ib_iface_t *iface,
     ret = ibv_query_port_speed(dev->ibv_context, iface->config.port_num,
                                &port_speed);
     if (ret != 0) {
-        ucs_warn("ibv_query_port_speed("UCT_IB_IFACE_FMT", port_num=%d) failed:"
-                 " %m", UCT_IB_IFACE_ARG(iface), iface->config.port_num);
+        log_level = ((errno == EOPNOTSUPP) ||
+                     (errno == EPROTONOSUPPORT) ||
+                     (errno == ENOSYS)) ? UCS_LOG_LEVEL_DEBUG :
+                                          UCS_LOG_LEVEL_DIAG;
+        ucs_log(log_level,
+                "ibv_query_port_speed("UCT_IB_IFACE_FMT", port_num=%d) failed:"
+                " %m", UCT_IB_IFACE_ARG(iface), iface->config.port_num);
         return iface_attr->bandwidth;
     }
 
