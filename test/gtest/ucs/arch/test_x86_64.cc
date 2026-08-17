@@ -186,8 +186,12 @@ UCS_TEST_SKIP_COND_F(test_arch, memcpy, RUNNING_ON_VALGRIND || !ucs::perf_retry_
 }
 
 UCS_TEST_F(test_arch, nt_buffer_transfer_nt_src) {
-    /* Skip the ERMS (rep movsb) branch so the NT_SOURCE kernel is exercised */
+    /* Exercise the vectorized NT_SOURCE path */
     ucs_global_opts.arch.builtin_memcpy_min = UCS_MEMUNITS_INF;
+    nt_buffer_transfer_test(UCS_ARCH_MEMCPY_NT_SOURCE);
+
+    /* Exercise the ERMS NT_SOURCE path */
+    ucs_global_opts.arch.builtin_memcpy_min = 0;
     nt_buffer_transfer_test(UCS_ARCH_MEMCPY_NT_SOURCE);
 }
 
