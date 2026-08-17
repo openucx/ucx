@@ -10,6 +10,7 @@
 
 #include "datatype_iter.h"
 #include "dt.inl"
+#include "dt_sgl.h"
 
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_worker.h>
@@ -140,6 +141,8 @@ ucp_datatype_iter_init(ucp_context_h context, void *buffer, size_t count,
                        int is_pack, ucp_datatype_iter_t *dt_iter,
                        uint8_t *sg_count, const ucp_request_param_t *param)
 {
+    const ucp_dt_local_sgl_t *local_sgl;
+    const ucp_dt_remote_sgl_t *remote_sgl;
     size_t length;
 
     dt_iter->dt_class = ucp_datatype_class(datatype);
@@ -155,11 +158,12 @@ ucp_datatype_iter_init(ucp_context_h context, void *buffer, size_t count,
         return ucp_datatype_iov_iter_init(context, buffer, count, length,
                                           dt_iter, param);
     } else if (dt_iter->dt_class == UCP_DATATYPE_SGL) {
-        *sg_count = 0;
-        return ucp_datatype_iter_sgl_init(context, dt_iter,
-                                          (const ucp_dt_local_sgl_t*)buffer,
-                                          (const ucp_dt_remote_sgl_t*)param->remote,
-                                          count, param);
+        local_sgl  = (const ucp_dt_local_sgl_t*)buffer;
+        remote_sgl = (const ucp_dt_remote_sgl_t*)param->remote;
+        *sg_count  = 0;
+        length     = ucp_dt_sgl_length(local_sgl->lengths, count);
+        return ucp_datatype_iter_sgl_init(context, dt_iter, local_sgl,
+                                          remote_sgl, count, length, param);
     } else if (!ENABLE_PARAMS_CHECK ||
                (dt_iter->dt_class == UCP_DATATYPE_GENERIC)) {
         *sg_count = 0;
@@ -623,8 +627,20 @@ ucp_datatype_iter_next_sgl(const ucp_datatype_iter_t *dt_iter,
                            size_t max_elem_count,
                            ucp_datatype_iter_t *next_iter)
 {
+    size_t index, elem_count;
+
     ucs_assert(dt_iter->dt_class == UCP_DATATYPE_SGL);
-    return ucp_datatype_iter_next(dt_iter, max_elem_count, next_iter);
+    index      = dt_iter->type.sgl.index;
+    ucs_assert(index <= dt_iter->type.sgl.count);
+    elem_count = ucs_min(max_elem_count, dt_iter->type.sgl.count - index);
+
+    next_iter->offset = dt_iter->offset +
+                        ucp_dt_sgl_length(dt_iter->type.sgl.lengths + index,
+                                          elem_count);
+    next_iter->type.sgl.index = index + elem_count;
+    ucs_assert(next_iter->offset <= dt_iter->length);
+
+    return elem_count;
 }
 
 /*
@@ -643,6 +659,9 @@ ucp_datatype_iter_copy_position(ucp_datatype_iter_t *dt_iter,
     if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_IOV, dt_mask)) {
         dt_iter->type.iov.iov_index  = src_dt_iter->type.iov.iov_index;
         dt_iter->type.iov.iov_offset = src_dt_iter->type.iov.iov_offset;
+    } else if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_SGL,
+                                          dt_mask)) {
+        dt_iter->type.sgl.index = src_dt_iter->type.sgl.index;
     }
 }
 
@@ -665,6 +684,9 @@ ucp_datatype_iter_rewind(ucp_datatype_iter_t *dt_iter, unsigned dt_mask)
     if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_IOV, dt_mask)) {
         dt_iter->type.iov.iov_index  = 0;
         dt_iter->type.iov.iov_offset = 0;
+    } else if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_SGL,
+                                          dt_mask)) {
+        dt_iter->type.sgl.index = 0;
     }
 }
 

@@ -21,13 +21,20 @@
  *
  * @param [in]     lengths        Array of buffer lengths
  * @param [in]     count          Number of entries in @a lengths
- * @param [out]    total_length_p Total byte length
  *
- * @return UCS_OK if the total length can be represented by size_t, otherwise
- *         return UCS_ERR_INVALID_PARAM
+ * @return Total byte length
  */
-ucs_status_t ucp_dt_sgl_get_length(const size_t *lengths, size_t count,
-                                   size_t *total_length_p);
+static inline size_t ucp_dt_sgl_length(const size_t *lengths, size_t count)
+{
+    size_t total_length = 0;
+    size_t i;
+
+    for (i = 0; i < count; ++i) {
+        total_length += lengths[i];
+    }
+
+    return total_length;
+}
 
 
 /**

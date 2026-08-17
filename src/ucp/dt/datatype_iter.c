@@ -287,7 +287,7 @@ ucs_status_t ucp_datatype_iter_sgl_init(ucp_context_h context,
                                         ucp_datatype_iter_t *dt_iter,
                                         const ucp_dt_local_sgl_t *local,
                                         const ucp_dt_remote_sgl_t *remote,
-                                        size_t count,
+                                        size_t count, size_t length,
                                         const ucp_request_param_t *param)
 {
     ucs_status_t status;
@@ -296,12 +296,14 @@ ucs_status_t ucp_datatype_iter_sgl_init(ucp_context_h context,
     ucs_assert(remote != NULL);
 
     dt_iter->dt_class              = UCP_DATATYPE_SGL;
-    dt_iter->length                = count;
+    dt_iter->length                = length;
     dt_iter->offset                = 0;
     dt_iter->type.sgl.buffers      = local->buffers;
     dt_iter->type.sgl.lengths      = local->lengths;
     dt_iter->type.sgl.remote_addrs = remote->remote_addrs;
     dt_iter->type.sgl.rkeys        = remote->rkeys;
+    dt_iter->type.sgl.count        = count;
+    dt_iter->type.sgl.index        = 0;
 
     if (ucs_unlikely(count == 0)) {
         dt_iter->type.sgl.memhs = NULL;
@@ -347,7 +349,7 @@ ucs_status_t ucp_datatype_iter_sgl_mem_reg(ucp_context_h context,
                                            ucp_md_map_t md_map,
                                            unsigned uct_flags)
 {
-    size_t count = dt_iter->length;
+    size_t count = dt_iter->type.sgl.count;
     ucs_status_t status;
     ucp_mem_h *memhs;
     size_t i;
@@ -381,7 +383,7 @@ ucs_status_t ucp_datatype_iter_sgl_mem_reg(ucp_context_h context,
 
 void ucp_datatype_iter_sgl_mem_dereg(ucp_datatype_iter_t *dt_iter)
 {
-    size_t count = dt_iter->length;
+    size_t count = dt_iter->type.sgl.count;
     size_t i;
 
     ucs_assert(ucp_datatype_iter_sgl_owns_memhs(dt_iter));
@@ -407,7 +409,7 @@ void ucp_datatype_iter_sgl_cleanup(ucp_datatype_iter_t *dt_iter, int dereg)
     }
 
     if (UCS_ENABLE_ASSERT) {
-        for (i = 0; i < dt_iter->length; ++i) {
+        for (i = 0; i < dt_iter->type.sgl.count; ++i) {
             ucp_datatatype_iter_memh_cleanup_check(dt_iter->type.sgl.memhs[i]);
         }
     }
@@ -505,7 +507,7 @@ int ucp_datatype_iter_is_user_memh_valid(const ucp_datatype_iter_t *dt_iter,
         break;
     case UCP_DATATYPE_SGL:
         ref = ucp_memory_info_from_memh(memh);
-        for (i = 0; i < dt_iter->length; ++i) {
+        for (i = 0; i < dt_iter->type.sgl.count; ++i) {
             sgl_memh = dt_iter->type.sgl.memhs[i];
             if (sgl_memh == NULL) {
                 ucs_error("sgl[%zu]: got NULL memory handle", i);
@@ -525,7 +527,7 @@ int ucp_datatype_iter_is_user_memh_valid(const ucp_datatype_iter_t *dt_iter,
 
             cur = ucp_memory_info_from_memh(sgl_memh);
             if (ucp_dt_mem_info_verify("sgl", i, &cur, &ref,
-                                       dt_iter->length) != UCS_OK) {
+                                       dt_iter->type.sgl.count) != UCS_OK) {
                 return 0;
             }
         }

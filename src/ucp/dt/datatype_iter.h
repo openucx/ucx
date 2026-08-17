@@ -44,8 +44,8 @@ typedef struct {
     ucp_dt_class_t    dt_class; /* Datatype class (contig/iov/...) */
     ucp_memory_info_t mem_info; /* Memory type and locality, needed to
                                    pack/unpack */
-    size_t            length; /* Packed byte length, or SGL element count */
-    size_t            offset; /* Byte offset, or SGL element index */
+    size_t            length; /* Packed byte length */
+    size_t            offset; /* Current byte offset */
     union {
         struct {
             void                  *buffer;    /* Contiguous buffer pointer */
@@ -79,7 +79,8 @@ typedef struct {
             ucp_mem_h        *memhs;
             const uint64_t   *remote_addrs;
             ucp_rkey_h const *rkeys;
-            /* length = element count, offset = current element index */
+            size_t            count;
+            size_t            index;
         } sgl;
     } type;
 } ucp_datatype_iter_t;
@@ -119,7 +120,7 @@ ucs_status_t ucp_datatype_iter_sgl_init(ucp_context_h context,
                                         ucp_datatype_iter_t *dt_iter,
                                         const ucp_dt_local_sgl_t *local,
                                         const ucp_dt_remote_sgl_t *remote,
-                                        size_t count,
+                                        size_t count, size_t length,
                                         const ucp_request_param_t *param);
 
 ucs_status_t ucp_datatype_iter_sgl_mem_reg(ucp_context_h context,

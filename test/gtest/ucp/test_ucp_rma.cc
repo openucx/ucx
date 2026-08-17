@@ -12,6 +12,7 @@ extern "C" {
 #include <ucp/core/ucp_mm.h> /* for UCP_MEM_IS_ACCESSIBLE_FROM_CPU */
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_rkey.h>
+#include <ucp/proto/proto_select.inl>
 #include <ucs/sys/sys.h>
 #include <uct/api/v2/uct_v2.h>
 }
@@ -1126,10 +1127,28 @@ protected:
                            param);
     }
 
+    void check_protocol_selection(ucp_request_t *req, size_t msg_length) {
+        ucp_worker_h worker = sender().worker();
+        ucp_worker_cfg_index_t rkey_cfg_index;
+        ucp_proto_select_t *proto_select = ucp_proto_select_get(
+                worker, sender().ep()->cfg_index,
+                req->send.proto_config->rkey_cfg_index, &rkey_cfg_index);
+        ASSERT_NE(nullptr, proto_select);
+
+        const ucp_proto_threshold_elem_t *expected = ucp_proto_select_lookup(
+                worker, proto_select, sender().ep()->cfg_index,
+                rkey_cfg_index, &req->send.proto_config->select_param,
+                msg_length);
+        ASSERT_NE(nullptr, expected);
+        EXPECT_EQ(&expected->proto_config, req->send.proto_config)
+                << "expected " << expected->proto_config.proto->name
+                << ", selected " << req->send.proto_config->proto->name;
+    }
+
     void test_sgl(sgl_op_t op, const std::vector<size_t> &elem_sizes,
                   bool use_memhs, bool use_callback, bool set_remote_count,
                   bool expect_immediate_completion,
-                  bool check_request_length = false) {
+                  bool check_proto_selection = false) {
         ASSERT_FALSE(expect_immediate_completion && use_callback);
 
         uint64_t zcopy_cap = (op == SGL_OP_PUT) ? UCT_IFACE_FLAG_PUT_ZCOPY :
@@ -1157,17 +1176,15 @@ protected:
             param.op_attr_mask &= ~UCP_OP_ATTR_FIELD_REMOTE_COUNT;
         }
 
-        if (check_request_length) {
+        if (check_proto_selection) {
             ucp_context_attr_t attr = {};
 
-            /* Make the value before protocol selection deterministic. */
             attr.field_mask = UCP_ATTR_FIELD_REQUEST_SIZE;
             ASSERT_UCS_OK(ucp_context_query(sender().ucph(), &attr));
             request_mem.reset(new uint8_t[attr.request_size + 1]);
             param.op_attr_mask |= UCP_OP_ATTR_FIELD_REQUEST;
             param.request    = request_mem.get() + attr.request_size;
             req              = static_cast<ucp_request_t*>(param.request) - 1;
-            req->send.length = 0;
         }
 
         struct cb_state {
@@ -1190,16 +1207,6 @@ protected:
         ucs_status_ptr_t sptr = sgl_op_nbx(op, &local, num,
                                            UCP_REMOTE_ADDR_INVALID,
                                            UCP_RKEY_INVALID, &param);
-        if (check_request_length) {
-            size_t expected_length = 0;
-
-            for (size_t elem_size : elem_sizes) {
-                expected_length += elem_size;
-            }
-
-            EXPECT_EQ(expected_length, req->send.length);
-        }
-
         if (expect_immediate_completion) {
             EXPECT_FALSE(UCS_PTR_IS_ERR(sptr));
             EXPECT_FALSE(UCS_PTR_IS_PTR(sptr));
@@ -1208,6 +1215,16 @@ protected:
         }
 
         ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
+
+        if (check_proto_selection) {
+            size_t expected_length = 0;
+
+            for (size_t elem_size : elem_sizes) {
+                expected_length += elem_size;
+            }
+
+            check_protocol_selection(req, expected_length);
+        }
 
         auto verify_sgl_buffers = [&]() {
             ucs_memory_type_t mtype = mem_type();
@@ -1238,7 +1255,7 @@ protected:
             }
         }
 
-        if (!check_request_length) {
+        if (!check_proto_selection) {
             ucp_request_release(sptr);
         }
 
@@ -1263,7 +1280,7 @@ protected:
                      expect_immediate_completion);
     }
 
-    void test_put_sgl_request_length(size_t num_elems, size_t buf_size) {
+    void test_put_sgl_protocol_selection(size_t num_elems, size_t buf_size) {
         test_sgl(SGL_OP_PUT, std::vector<size_t>(num_elems, buf_size), true,
                  false, true, false, true);
     }
@@ -1373,7 +1390,7 @@ UCS_TEST_P(test_ucp_rma_sgl, put_various_sizes) {
 }
 
 UCS_TEST_P(test_ucp_rma_sgl, put_protocol_byte_length) {
-    test_put_sgl_request_length(4, 2 * UCS_KBYTE);
+    test_put_sgl_protocol_selection(4, 2 * UCS_KBYTE);
 }
 
 UCS_TEST_P(test_ucp_rma_sgl, put_various_lengths) {

@@ -376,7 +376,7 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
     uct_ep_h uct_ep              = ucp_ep_get_lane(ep, lane);
     ucp_md_index_t md_index      = ucp_ep_md_index(ep, lane);
     ucp_rsc_index_t rkey_index   = lpriv->super.rkey_index;
-    size_t start_index           = dt_iter->offset;
+    size_t start_index           = dt_iter->type.sgl.index;
     size_t max_sgl_count         = lpriv->max_sgl_zcopy_count;
     size_t elem_count            = ucp_datatype_iter_next_sgl(dt_iter,
                                                               max_sgl_count,
@@ -477,7 +477,7 @@ ucp_proto_put_sgl_offload_sw_send_func(ucp_request_t *req,
     uct_ep_h uct_ep              = ucp_ep_get_lane(ep, lane);
     ucp_md_index_t md_index      = ucp_ep_md_index(ep, lane);
     ucp_rsc_index_t rkey_index   = lpriv->super.rkey_index;
-    size_t index                 = dt_iter->offset;
+    size_t index                 = dt_iter->type.sgl.index;
     ucp_mem_h *sgl_memhs         = dt_iter->type.sgl.memhs;
     uint64_t remote_addr         = dt_iter->type.sgl.remote_addrs[index];
     uct_rkey_t tl_rkey;

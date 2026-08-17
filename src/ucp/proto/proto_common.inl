@@ -11,16 +11,7 @@
 #include "proto_select.inl"
 
 #include <ucp/dt/datatype_iter.inl>
-#include <ucp/dt/dt_sgl.h>
 #include <ucp/core/ucp_request.inl>
-
-
-static UCS_F_ALWAYS_INLINE size_t
-ucp_proto_request_data_length(const ucp_request_t *req)
-{
-    return (req->send.state.dt_iter.dt_class == UCP_DATATYPE_SGL) ?
-           req->send.length : req->send.state.dt_iter.length;
-}
 
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -322,21 +313,11 @@ ucp_proto_request_send_op(ucp_ep_h ep, ucp_proto_select_t *proto_select,
         return UCS_STATUS_PTR(status);
     }
 
-    if (req->send.state.dt_iter.dt_class == UCP_DATATYPE_SGL) {
-        status = ucp_dt_sgl_get_length(req->send.state.dt_iter.type.sgl.lengths,
-                                       req->send.state.dt_iter.length,
-                                       &req->send.length);
-        if (status != UCS_OK) {
-            ucp_request_put_param(param, req);
-            return UCS_STATUS_PTR(status);
-        }
-    }
-
     ucp_proto_select_param_init(&sel_param, op_id, param->op_attr_mask,
                                 op_flags, req->send.state.dt_iter.dt_class,
                                 &req->send.state.dt_iter.mem_info, sg_count);
 
-    msg_length = ucp_proto_request_data_length(req) + header_length;
+    msg_length = req->send.state.dt_iter.length + header_length;
     return ucp_proto_request_send_op_common(worker, ep, proto_select,
                                             rkey_cfg_index, req, param,
                                             &sel_param, msg_length);

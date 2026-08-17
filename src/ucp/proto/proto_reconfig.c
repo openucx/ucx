@@ -72,7 +72,7 @@ ucp_proto_reconfig_report_no_rma_emulation_no_proto(ucp_request_t *req,
               ucs_memory_type_names[local_mem_type],
               (op_id == UCP_OP_ID_PUT) ? "to" : "from",
               ucs_memory_type_names[remote_mem_type],
-              ucp_proto_request_data_length(req));
+              req->send.state.dt_iter.length);
     return 1;
 }
 
@@ -103,7 +103,7 @@ static ucs_status_t ucp_proto_reconfig_progress(uct_pending_req_t *self)
                                   ucp_operation_names, &strb);
         ucs_error("cannot find remote protocol for: %s, %zu bytes",
                   ucs_string_buffer_cstr(&strb),
-                  ucp_proto_request_data_length(req));
+                  req->send.state.dt_iter.length);
 
         /* No protocol can serve this op on the current lane set - fail
          * the EP so the user error callback fires. */
