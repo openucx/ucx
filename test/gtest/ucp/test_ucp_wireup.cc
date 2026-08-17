@@ -24,6 +24,21 @@ extern "C" {
 #include <ucs/sys/math.h>
 }
 
+class test_ucp_wireup_err_mode : public ucs::test {
+};
+
+UCS_TEST_F(test_ucp_wireup_err_mode, init_flags_self)
+{
+    EXPECT_EQ(UCP_EP_INIT_ERR_MODE_PEER_FAILURE,
+              ucp_ep_err_mode_init_flags(UCP_ERR_HANDLING_MODE_PEER, 0));
+    EXPECT_EQ(0,
+              ucp_ep_err_mode_init_flags(UCP_ERR_HANDLING_MODE_PEER, 1));
+    EXPECT_EQ(UCP_EP_INIT_ERR_MODE_FAILOVER_MASK,
+              ucp_ep_err_mode_init_flags(UCP_ERR_HANDLING_MODE_FAILOVER, 0));
+    EXPECT_EQ(UCP_EP_INIT_ERR_MODE_FAILOVER,
+              ucp_ep_err_mode_init_flags(UCP_ERR_HANDLING_MODE_FAILOVER, 1));
+}
+
 class test_ucp_wireup : public ucp_test {
 public:
     static void get_test_variants(std::vector<ucp_test_variant>& variants,
@@ -960,6 +975,28 @@ public:
 
     static void err_cb(void *, ucp_ep_h, ucs_status_t) {}
 };
+
+class test_ucp_wireup_errh_peer_self : public test_ucp_wireup_errh_peer
+{
+public:
+    void init() override {
+        test_ucp_wireup::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_wireup_errh_peer_self, config)
+{
+    EXPECT_FALSE(ep_iface_has_caps(sender(), "self",
+                                   UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE));
+
+    sender().connect(&receiver(), get_ep_params());
+
+    const ucp_ep_config_key_t &key = ucp_ep_config(sender().ep())->key;
+    EXPECT_EQ(UCP_ERR_HANDLING_MODE_PEER, key.err_mode);
+    EXPECT_TRUE(key.flags & UCP_EP_CONFIG_KEY_FLAG_SELF);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_errh_peer_self, self, "self")
 
 UCS_TEST_P(test_ucp_wireup_errh_peer, msg_after_ep_create) {
     receiver().connect(&sender(), get_ep_params());
