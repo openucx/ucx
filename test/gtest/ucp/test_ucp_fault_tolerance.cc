@@ -202,6 +202,17 @@ protected:
                receiver().ep(0, INJECTED_EP_INDEX);
     }
 
+    /* HW-PSN extract requires DEFER_COMPLETIONS so outstanding_purge can take
+     * ownership of in-flight WQEs instead of the CQ error path completing them. */
+    ucs_status_t invalidate_uct_ep(uct_ep_h uct_ep)
+    {
+        uct_ep_invalidate_params_t params = {};
+
+        params.field_mask = UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS;
+        params.flags      = UCT_EP_INVALIDATE_FLAG_DEFER_COMPLETIONS;
+        return uct_ep_invalidate(uct_ep, &params);
+    }
+
     std::vector<ucp_lane_index_t> get_lanes(unsigned op_mask) {
         std::set<ucp_lane_index_t> tmp_lanes;
         std::string lane_type_str;
@@ -277,7 +288,7 @@ protected:
             std::vector<ucs_status_ptr_t> status_ptrs;
             ucp_lane_index_t lane = lanes[lane_idx];
             uct_ep_h uct_ep_for_injection = ucp_ep_get_lane(ucp_ep_for_injection, lane);
-            ucs_status_t status = uct_ep_invalidate(uct_ep_for_injection, 0);
+            ucs_status_t status = invalidate_uct_ep(uct_ep_for_injection);
             if (status == UCS_ERR_UNSUPPORTED) {
                 UCS_TEST_SKIP_R("uct_ep_invalidate is not supported");
             }
@@ -349,7 +360,7 @@ protected:
                 break;
             }
 
-            status = uct_ep_invalidate(uct_ep_for_injection, 0);
+            status = invalidate_uct_ep(uct_ep_for_injection);
             if (status == UCS_ERR_UNSUPPORTED) {
                 UCS_TEST_SKIP_R("uct_ep_invalidate is not supported");
             }
@@ -430,7 +441,7 @@ protected:
         for (size_t lane_idx = 0; lane_idx < rma_bw_lanes.size() - 1; ++lane_idx) {
             ucp_lane_index_t lane = rma_bw_lanes[lane_idx];
             uct_ep_h uct_ep_for_injection = ucp_ep_get_lane(ucp_ep_for_injection, lane);
-            status = uct_ep_invalidate(uct_ep_for_injection, 0);
+            status = invalidate_uct_ep(uct_ep_for_injection);
             if (status == UCS_ERR_UNSUPPORTED) {
                 UCS_TEST_SKIP_R("uct_ep_invalidate is not supported");
             }
@@ -803,7 +814,7 @@ protected:
         ucp_lane_index_t lane = is_single_proto(proto) ?
                                         get_request_lane_single(req) :
                                         get_request_lane_multi(req);
-        ucs_status_t status = uct_ep_invalidate(ucp_ep_get_lane(ep, lane), 0);
+        ucs_status_t status = invalidate_uct_ep(ucp_ep_get_lane(ep, lane));
         if (status == UCS_ERR_UNSUPPORTED) {
             request_wait(request);
             UCS_TEST_SKIP_R("uct_ep_invalidate is not supported");
@@ -879,9 +890,7 @@ protected:
         ASSERT_GT(pending_count, 0ul);
         m_am_expected_count = completed_count;
 
-        ucs_status_t status = uct_ep_invalidate(ucp_ep_get_lane(ep,
-                                                                request_lane),
-                                                0);
+        ucs_status_t status = invalidate_uct_ep(ucp_ep_get_lane(ep, request_lane));
         ASSERT_UCS_OK(status);
         ASSERT_UCS_OK(requests_wait(requests));
         ASSERT_UCS_OK(request_wait(ucp_ep_flush_nbx(ep, &m_req_empty_param)));
@@ -913,7 +922,7 @@ protected:
         ucp_lane_index_t lane = is_single_proto(proto) ?
                                         get_request_lane_single(req) :
                                         get_request_lane_multi(req);
-        ucs_status_t status = uct_ep_invalidate(ucp_ep_get_lane(ep, lane), 0);
+        ucs_status_t status = invalidate_uct_ep(ucp_ep_get_lane(ep, lane));
         if (status == UCS_ERR_UNSUPPORTED) {
             request_wait(request);
             UCS_TEST_SKIP_R("uct_ep_invalidate is not supported");

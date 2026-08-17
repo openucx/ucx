@@ -49,6 +49,10 @@ ucp_ep_failover_on_lane_state(ucp_ep_h ep,
                               const ucp_wireup_lane_state_t *lane_state,
                               size_t length);
 
+/** Notify that one extracted outstanding op finished (reposted or aborted). */
+void ucp_ep_failover_replay_completed(ucp_ep_h ep, ucp_lane_index_t failed_lane,
+                                      ucs_status_t status);
+
 ucp_lane_map_t ucp_ep_failover_test_query_lane_map(ucp_ep_h ep);
 
 ucs_status_t

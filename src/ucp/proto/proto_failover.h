@@ -27,9 +27,14 @@ ucs_status_t ucp_proto_failover_replay_op_create(
 void ucp_proto_failover_replay_op_destroy(ucp_proto_failover_replay_op_t *op,
                                           ucs_status_t status);
 
+/* Start replaying an extracted op via a pending-capable request. */
 ucs_status_t
-ucp_proto_failover_replay_op_progress(ucp_ep_h ep, ucp_lane_index_t failed_lane,
-                                      ucp_request_t *super_req,
-                                      ucp_proto_failover_replay_op_t *op);
+ucp_proto_failover_replay_op_start(ucp_ep_h ep, ucp_lane_index_t failed_lane,
+                                   ucp_request_t *super_req,
+                                   ucp_proto_failover_replay_op_t *op);
+
+ucs_status_t ucp_proto_failover_replay_progress(uct_pending_req_t *self);
+
+void ucp_proto_failover_replay_abort(ucp_request_t *req, ucs_status_t status);
 
 #endif
