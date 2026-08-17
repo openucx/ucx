@@ -804,15 +804,15 @@ void ucs_x86_nt_buffer_transfer(void *dst, const void *src, size_t len,
      * UCS_ARCH_MEMCPY_NT_SOURCE hint is therefore serviced as a plain
      * cache-respecting copy-out with two possible implementations:
      *
-     *   - rep movsb (ERMS): UCX's built-in copy, whose size window is
-     *     already tuned per platform via the BUILTIN_MEMCPY knobs.
+     *   - rep movsb (ERMS), selected when len exceeds builtin_memcpy_min.
      *   - an optimized vectorized copy routine (fallback when ERMS is
      *     disabled for this size).
      *
-     * ERMS is gated in two places. When NT_BUFFER_TRANSFER_MIN is set
-     * explicitly, initialization closes the outer ERMS window in
-     * ucs_memcpy_relaxed(). The inner gate here then selects rep movsb,
-     * otherwise the vectorized routine runs.
+     * ERMS is gated in two places. The outer size window in
+     * ucs_memcpy_relaxed() may return before this function is reached.
+     * Setting NT_BUFFER_TRANSFER_MIN explicitly closes that window during
+     * initialization. The inner gate here then selects rep movsb; otherwise
+     * the vectorized routine runs.
      */
     if (len > ucs_global_opts.arch.builtin_memcpy_min) {
         ucs_x86_memcpy_erms(dst, src, len);
