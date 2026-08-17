@@ -1042,18 +1042,9 @@ static double ucp_wireup_rma_score_func(const ucp_worker_iface_t *wiface,
 }
 
 static void ucp_wireup_fill_peer_err_criteria(ucp_wireup_criteria_t *criteria,
-                                              unsigned ep_init_flags,
-                                              ucp_worker_h worker,
-                                              const ucp_unpacked_address_t *unpacked_addr)
+                                              unsigned ep_init_flags)
 {
     if (ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE) {
-        /* No independent remote worker when connecting an EP to itself (loopback,
-         * memtype EPs, etc.): peer-failure iface caps and MD invalidation are
-         * relaxed in wireup; see ucp_request_get_invalidation_map(). */
-        if ((unpacked_addr != NULL) && (unpacked_addr->uuid == worker->uuid)) {
-            return;
-        }
-
         criteria->local_iface_flags.mandatory |=
                 UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
         /* transport selection procedure will check additionally for KA or EP check
@@ -1077,9 +1068,7 @@ static double ucp_wireup_aux_score_func(const ucp_worker_iface_t *wiface,
 
 static void ucp_wireup_fill_aux_criteria(ucp_wireup_criteria_t *criteria,
                                          unsigned ep_init_flags,
-                                         uint64_t mandatory_flags,
-                                         ucp_worker_h worker,
-                                         const ucp_unpacked_address_t *unpacked_addr)
+                                         uint64_t mandatory_flags)
 {
     criteria->title          = "auxiliary";
     criteria->local_md_flags = 0;
@@ -1103,8 +1092,7 @@ static void ucp_wireup_fill_aux_criteria(ucp_wireup_criteria_t *criteria,
     criteria->tl_rsc_flags       = UCP_TL_RSC_FLAG_AUX; /* Can use aux transports */
     criteria->lane_type          = UCP_LANE_TYPE_LAST;
 
-    ucp_wireup_fill_peer_err_criteria(criteria, ep_init_flags, worker,
-                                      unpacked_addr);
+    ucp_wireup_fill_peer_err_criteria(criteria, ep_init_flags);
 }
 
 static void ucp_wireup_criteria_init(ucp_wireup_criteria_t *criteria)
@@ -1197,9 +1185,7 @@ ucp_wireup_add_rma_lanes(const ucp_wireup_select_params_t *select_params,
                                      UCT_IFACE_FLAG_PENDING, 0);
     }
     criteria.calc_score             = ucp_wireup_rma_score_func;
-    ucp_wireup_fill_peer_err_criteria(&criteria, ep_init_flags,
-                                      select_params->ep->worker,
-                                      select_params->address);
+    ucp_wireup_fill_peer_err_criteria(&criteria, ep_init_flags);
 
     tl_bitmap = ucp_tl_bitmap_max;
     ucs_memory_type_for_each(mem_type) {
@@ -1253,9 +1239,7 @@ ucp_wireup_add_amo_lanes(const ucp_wireup_select_params_t *select_params,
     criteria.calc_score         = ucp_wireup_amo_score_func;
     ucp_wireup_init_select_flags(&criteria.local_iface_flags,
                                  UCT_IFACE_FLAG_PENDING, 0);
-    ucp_wireup_fill_peer_err_criteria(&criteria, ep_init_flags,
-                                      select_params->ep->worker,
-                                      select_params->address);
+    ucp_wireup_fill_peer_err_criteria(&criteria, ep_init_flags);
     ucp_context_uct_atomic_iface_flags(context, &criteria.remote_atomic_flags);
 
     /* We can use only non-p2p resources or resources which are explicitly
@@ -1503,10 +1487,9 @@ ucp_wireup_add_am_lane(const ucp_wireup_select_params_t *select_params,
                                      UCT_IFACE_FLAG_AM_BCOPY, 0);
         ucp_wireup_init_select_flags(&criteria.remote_iface_flags,
                                      UCP_ADDR_IFACE_FLAG_AM_SYNC, 0);
-        ucp_wireup_fill_peer_err_criteria(
-                &criteria,
-                ucp_wireup_ep_init_flags(select_params, select_ctx),
-                select_params->ep->worker, select_params->address);
+        ucp_wireup_fill_peer_err_criteria(&criteria,
+                                          ucp_wireup_ep_init_flags(select_params,
+                                                                   select_ctx));
 
         if (ucs_test_all_flags(ucp_ep_get_context_features(select_params->ep),
                                UCP_FEATURE_TAG | UCP_FEATURE_WAKEUP)) {
@@ -1942,8 +1925,7 @@ ucp_wireup_add_am_bw_lanes(const ucp_wireup_select_params_t *select_params,
                                  UCP_ADDR_IFACE_FLAG_AM_SYNC, 0);
     ucp_wireup_init_select_flags(&bw_info.criteria.local_iface_flags,
                                  UCT_IFACE_FLAG_AM_BCOPY, 0);
-    ucp_wireup_fill_peer_err_criteria(&bw_info.criteria, ep_init_flags,
-                                      ep->worker, select_params->address);
+    ucp_wireup_fill_peer_err_criteria(&bw_info.criteria, ep_init_flags);
 
     if (ucs_test_all_flags(ucp_ep_get_context_features(ep),
                            UCP_FEATURE_TAG | UCP_FEATURE_WAKEUP)) {
@@ -2108,8 +2090,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
     bw_info.criteria.calc_score = ucp_wireup_rma_bw_score_func;
     ucp_wireup_init_select_flags(&bw_info.criteria.local_iface_flags,
                                  UCT_IFACE_FLAG_PENDING, 0);
-    ucp_wireup_fill_peer_err_criteria(&bw_info.criteria, ep_init_flags,
-                                       ep->worker, select_params->address);
+    ucp_wireup_fill_peer_err_criteria(&bw_info.criteria, ep_init_flags);
 
     if (ucs_test_all_flags(ucp_ep_get_context_features(ep),
                            UCP_FEATURE_TAG | UCP_FEATURE_WAKEUP)) {
@@ -2158,11 +2139,9 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
 
     /* If error handling is requested and we have RNDV, we require memory
      * invalidation support to provide correct data integrity in case of error.
-     * Skip for endpoints wired to the same worker (loopback / memtype EPs).
      */
     if ((ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE) &&
-        ucp_context_rndv_is_enabled(context) &&
-        (select_params->address->uuid != ep->worker->uuid)) {
+        ucp_context_rndv_is_enabled(context)) {
         bw_info.criteria.local_md_flags |= UCT_MD_FLAG_INVALIDATE_RMA;
     }
 
@@ -2311,8 +2290,7 @@ ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
                                   const ucp_address_entry_t *address_list,
                                   const ucp_wireup_lane_desc_t *lane_descs,
                                   ucp_lane_index_t num_lanes,
-                                  ucp_lane_index_t am_lane,
-                                  const ucp_unpacked_address_t *unpacked_addr)
+                                  ucp_lane_index_t am_lane)
 {
     ucp_context_h context          = worker->context;
     ucp_lane_index_t p2p_lane      = UCP_NULL_LANE;
@@ -2329,8 +2307,7 @@ ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
     }
 
     ucp_wireup_fill_aux_criteria(&criteria, ep_init_flags,
-                                 UCP_ADDR_IFACE_FLAG_CB_ASYNC, worker,
-                                 unpacked_addr);
+                                 UCP_ADDR_IFACE_FLAG_CB_ASYNC);
     for (lane = 0; lane < num_lanes; ++lane) {
         if (lane_descs[lane].rsc_index == UCP_NULL_RESOURCE) {
             continue;
@@ -2444,8 +2421,7 @@ ucp_wireup_add_keepalive_lane(const ucp_wireup_select_params_t *select_params,
     /* Keepalive can also use auxiliary transports */
     criteria.tl_rsc_flags       = UCP_TL_RSC_FLAG_AUX;
     criteria.lane_type          = UCP_LANE_TYPE_KEEPALIVE;
-    ucp_wireup_fill_peer_err_criteria(&criteria, ep_init_flags, worker,
-                                      select_params->address);
+    ucp_wireup_fill_peer_err_criteria(&criteria, ep_init_flags);
 
     status = ucp_wireup_select_transport(select_ctx, select_params, &criteria,
                                          *tl_bitmap, UINT64_MAX, UINT64_MAX,
@@ -2794,8 +2770,7 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
                                                                    select_ctx),
                                           select_params->address->address_list,
                                           select_ctx->lane_descs,
-                                          key->num_lanes, key->am_lane,
-                                          select_params->address);
+                                          key->num_lanes, key->am_lane);
     }
 
     for (i = 0; key->rma_bw_lanes[i] != UCP_NULL_LANE; i++) {
@@ -2900,8 +2875,7 @@ ucp_wireup_select_aux_transport(ucp_ep_h ep, unsigned ep_init_flags,
 
     /* Select auxiliary transport that supports async active message callback */
     ucp_wireup_fill_aux_criteria(&criteria, ep_init_flags,
-                                 UCP_ADDR_IFACE_FLAG_CB_ASYNC, ep->worker,
-                                 remote_address);
+                                 UCP_ADDR_IFACE_FLAG_CB_ASYNC);
     status = ucp_wireup_select_transport(&select_ctx, &select_params, &criteria,
                                          ucp_tl_bitmap_max, UINT64_MAX,
                                          UINT64_MAX, UINT64_MAX, 0,
@@ -2912,8 +2886,7 @@ ucp_wireup_select_aux_transport(ucp_ep_h ep, unsigned ep_init_flags,
 
     /* Fallback to an auxiliary transport without async active message callback
      * requirement */
-    ucp_wireup_fill_aux_criteria(&criteria, ep_init_flags, 0, ep->worker,
-                                 remote_address);
+    ucp_wireup_fill_aux_criteria(&criteria, ep_init_flags, 0);
     return ucp_wireup_select_transport(&select_ctx, &select_params, &criteria,
                                        ucp_tl_bitmap_max, UINT64_MAX,
                                        UINT64_MAX, UINT64_MAX, 1, select_info);
