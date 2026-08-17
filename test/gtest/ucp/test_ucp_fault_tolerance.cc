@@ -74,7 +74,6 @@ protected:
         TEST_FAILOVER_PROTO_AM_EGR_SINGLE_BCOPY_REPLY,
         TEST_FAILOVER_PROTO_AM_EGR_MULTI_BCOPY,
         TEST_FAILOVER_PROTO_PUT_OFFLOAD_SHORT,
-        TEST_FAILOVER_PROTO_PUT_OFFLOAD_BCOPY_FT,
         TEST_FAILOVER_PROTO_PUT_AM_BCOPY,
         TEST_FAILOVER_PROTO_LAST
     };
@@ -631,7 +630,6 @@ protected:
             {"am/egr/single/bcopy/reply", UCT_IFACE_FLAG_AM_BCOPY, UCS_KBYTE},
             {"am/egr/multi/bcopy", UCT_IFACE_FLAG_AM_BCOPY, 64 * UCS_KBYTE},
             {"put/offload/short", UCT_IFACE_FLAG_PUT_SHORT, 8},
-            {"put/offload/bcopy", UCT_IFACE_FLAG_PUT_BCOPY, 64 * UCS_KBYTE},
             {"put/am/bcopy", UCT_IFACE_FLAG_AM_BCOPY, 64 * UCS_KBYTE}
         };
 
@@ -653,7 +651,6 @@ protected:
     static bool is_put_proto(failover_proto_t proto)
     {
         return (proto == TEST_FAILOVER_PROTO_PUT_OFFLOAD_SHORT) ||
-               (proto == TEST_FAILOVER_PROTO_PUT_OFFLOAD_BCOPY_FT) ||
                (proto == TEST_FAILOVER_PROTO_PUT_AM_BCOPY);
     }
 
@@ -1035,15 +1032,6 @@ UCS_TEST_SKIP_COND_P(test_ucp_fault_tolerance,
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_fault_tolerance,
-           initiator_failure_put_offload_bcopy_ft_outstanding,
-           !(get_variant_value() & TEST_OP_PUT),
-           "MAX_EAGER_LANES=8", "MAX_RMA_LANES=8", "MAX_RMA_RAILS=8",
-           "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
-{
-    test_outstanding_put(TEST_FAILOVER_PROTO_PUT_OFFLOAD_BCOPY_FT);
-}
-
-UCS_TEST_SKIP_COND_P(test_ucp_fault_tolerance,
            initiator_failure_am_egr_single_bcopy_reply_outstanding,
            !(get_variant_value() & TEST_OP_AM),
            "MAX_EAGER_LANES=8", "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
@@ -1088,24 +1076,6 @@ UCS_TEST_SKIP_COND_P(test_ucp_fault_tolerance, target_failure_am_egr_bcopy,
                 !((get_variant_value() & TEST_OP_AM) &&
                   !(get_variant_value() & TEST_OP_PUT)),
                 "MAX_EAGER_LANES=8", "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
-{
-    do_test(FAILURE_SIDE_TARGET);
-}
-
-UCS_TEST_SKIP_COND_P(test_ucp_fault_tolerance, initiator_failure_put_offload_bcopy_ft,
-                !((get_variant_value() & TEST_OP_PUT) &&
-                  !(get_variant_value() & (TEST_OP_AM | TEST_OP_GET))),
-           "MAX_EAGER_LANES=8", "MAX_RMA_LANES=8", "MAX_RMA_RAILS=8",
-           "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
-{
-    do_test(FAILURE_SIDE_INITIATOR);
-}
-
-UCS_TEST_SKIP_COND_P(test_ucp_fault_tolerance, target_failure_put_offload_bcopy_ft,
-                !((get_variant_value() & TEST_OP_PUT) &&
-                  !(get_variant_value() & (TEST_OP_AM | TEST_OP_GET))),
-           "MAX_EAGER_LANES=8", "MAX_RMA_LANES=8", "MAX_RMA_RAILS=8",
-           "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
 {
     do_test(FAILURE_SIDE_TARGET);
 }

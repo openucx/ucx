@@ -202,11 +202,9 @@ ucs_status_t uct_rc_mlx5_base_ep_put_short(uct_ep_h tl_ep, const void *buffer,
 #endif
 }
 
-static ssize_t
-uct_rc_mlx5_base_ep_put_bcopy_common(uct_ep_h tl_ep,
-                                     uct_pack_callback_t pack_cb, void *arg,
-                                     uint64_t remote_addr, uct_rkey_t rkey,
-                                     uct_completion_t *comp)
+ssize_t uct_rc_mlx5_base_ep_put_bcopy(uct_ep_h tl_ep,
+                                      uct_pack_callback_t pack_cb, void *arg,
+                                      uint64_t remote_addr, uct_rkey_t rkey)
 {
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
     uct_rc_iface_send_desc_t *desc;
@@ -216,10 +214,6 @@ uct_rc_mlx5_base_ep_put_bcopy_common(uct_ep_h tl_ep,
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_IFACE_GET_TX_PUT_BCOPY_DESC(&iface->super, &iface->super.tx.mp,
                                        desc, pack_cb, arg, length);
-    if (comp != NULL) {
-        desc->super.handler   = uct_rc_ep_put_bcopy_handler;
-        desc->super.user_comp = comp;
-    }
     uct_rc_mlx5_ep_fence_put(iface, &ep->tx.wq, &rkey, &remote_addr,
                              ep->super.atomic_mr_offset, &fm_ce_se);
     uct_rc_mlx5_common_txqp_bcopy_post(iface, IBV_QPT_RC, &ep->super.txqp,
@@ -231,24 +225,6 @@ uct_rc_mlx5_base_ep_put_bcopy_common(uct_ep_h tl_ep,
     UCT_TL_EP_STAT_OP(&ep->super.super, PUT, BCOPY, length);
 
     return length;
-}
-
-ssize_t uct_rc_mlx5_base_ep_put_bcopy(uct_ep_h tl_ep,
-                                      uct_pack_callback_t pack_cb, void *arg,
-                                      uint64_t remote_addr, uct_rkey_t rkey)
-{
-    return uct_rc_mlx5_base_ep_put_bcopy_common(tl_ep, pack_cb, arg,
-                                                remote_addr, rkey, NULL);
-}
-
-ssize_t uct_rc_mlx5_base_ep_put_bcopy_ft(uct_ep_h tl_ep,
-                                         uct_pack_callback_t pack_cb, void *arg,
-                                         uint64_t remote_addr, uct_rkey_t rkey,
-                                         uct_completion_t *comp)
-{
-    ucs_assert(comp != NULL);
-    return uct_rc_mlx5_base_ep_put_bcopy_common(tl_ep, pack_cb, arg,
-                                                remote_addr, rkey, comp);
 }
 
 ucs_status_t uct_rc_mlx5_base_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
