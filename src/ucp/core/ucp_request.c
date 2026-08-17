@@ -385,7 +385,7 @@ static ucp_md_map_t ucp_request_get_invalidation_map(ucp_ep_h ep)
     ucp_lane_index_t i;
     ucp_md_map_t inv_map;
 
-    /* Same-worker EPs (loopback, memtype): no cross-worker RMA to invalidate. */
+    /* Same-process EPs do not require cross-process RMA invalidation. */
     if (key->flags & UCP_EP_CONFIG_KEY_FLAG_SELF) {
         return 0;
     }
