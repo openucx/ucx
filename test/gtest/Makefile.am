@@ -14,7 +14,7 @@
 if HAVE_GTEST
 
 # Set default configuration for running tests
-UCX_HANDLE_ERRORS        ?= freeze
+UCX_HANDLE_ERRORS        ?= bt
 UCX_LOG_LEVEL            ?= warn
 UCX_LOG_PRINT_ENABLE     ?= y
 GTEST_FILTER             ?= *

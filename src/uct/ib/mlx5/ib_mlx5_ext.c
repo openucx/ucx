@@ -159,8 +159,14 @@ uct_ib_mlx5_ext_iface_query(uct_iface_h iface,
 
         status = plugin->ops.iface_query(iface, attr);
         if (status != UCS_OK) {
-            ucs_error("ib mlx5 ext: iface query failed: %s",
-                      ucs_status_string(status));
+            /* UNSUPPORTED is expected when the peer EP was already closed. */
+            if (status == UCS_ERR_UNSUPPORTED) {
+                ucs_debug("ib mlx5 ext: iface query failed: %s",
+                          ucs_status_string(status));
+            } else {
+                ucs_error("ib mlx5 ext: iface query failed: %s",
+                          ucs_status_string(status));
+            }
             return status;
         }
     }
