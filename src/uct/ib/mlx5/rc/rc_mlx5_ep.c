@@ -815,6 +815,9 @@ ucs_status_t uct_rc_mlx5_base_ep_flush(uct_ep_h tl_ep, unsigned flags,
     ucs_status_t status;
 
     if (ep->flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS) {
+        /* Deferred completions are not processed from the CQ, so this flush can
+         * never be satisfied. A lane whose operations were taken over by
+         * failover must be closed instead of flushed. */
         ucs_diag("ep %p flush while completions are deferred; outstanding "
                  "operations must be purged first",
                  ep);
@@ -870,22 +873,30 @@ uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
 {
     UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
     uct_ib_mlx5_txwq_t *txwq = &ep->super.tx.wq;
+    int defer_requested;
     ucs_status_t status;
+
+    defer_requested = (params != NULL) &&
+                      (params->field_mask &
+                       UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS) &&
+                      (params->flags &
+                       UCT_EP_INVALIDATE_FLAG_DEFER_COMPLETIONS);
 
     status = uct_ib_mlx5_modify_qp_state(&iface->super.super, &txwq->super,
                                          IBV_QPS_ERR);
-    if (status != UCS_OK) {
-        return status;
-    }
 
-    if ((params != NULL) &&
-        (params->field_mask & UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS) &&
-        (params->flags & UCT_EP_INVALIDATE_FLAG_DEFER_COMPLETIONS) &&
+    /* Arm DEFER even if the QP was already ERR (e.g. prior invalidate without
+     * DEFER, or a second arm from failover_add_lanes). */
+    if (defer_requested &&
         !(ep->super.flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS)) {
         ep->super.flags |= UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS;
         txwq->ft_ci      = txwq->hw_ci;
         ucs_debug("ep %p defer completions WQE range (%u, %u) next token %u",
                   ep, txwq->ft_ci, txwq->sw_pi, txwq->next_token);
+    }
+
+    if ((status != UCS_OK) && !defer_requested) {
+        return status;
     }
 
     return UCS_OK;
@@ -1408,6 +1419,14 @@ UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
             self->super.super.super.super.iface, uct_rc_mlx5_iface_common_t);
     uct_rc_mlx5_iface_qp_cleanup_ctx_t *cleanup_ctx;
     uint16_t outstanding, wqe_count;
+
+    if (self->super.flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS) {
+        /* A failover-owned endpoint is closed directly after purge instead of
+         * being flushed. Reconcile the CQ completion boundary before cleanup
+         * derives the outstanding WQE count from TXQP resources. Keep DEFER
+         * armed: endpoint destruction, not normal CQ progress, owns teardown. */
+        uct_rc_mlx5_ep_update_tx_res(&self->super.super.super.super);
+    }
 
     cleanup_ctx = ucs_malloc(sizeof(*cleanup_ctx), "mlx5_qp_cleanup_ctx");
     ucs_assert_always(cleanup_ctx != NULL);

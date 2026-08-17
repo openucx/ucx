@@ -15,6 +15,7 @@
 
 #include <ucp/proto/proto_am.h>
 #include <ucp/proto/proto_debug.h>
+#include <ucp/proto/proto_failover.h>
 #include <ucp/tag/tag_rndv.h>
 #include <uct/api/v2/uct_v2.h>
 #include <ucs/datastruct/mpool.inl>
@@ -681,6 +682,8 @@ void ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status)
 
     if (req->send.uct.func == ucp_proto_progress_am_single) {
         req->send.proto.comp_cb(req);
+    } else if (req->send.uct.func == ucp_proto_failover_replay_progress) {
+        ucp_proto_failover_replay_abort(req, status);
     } else if (req->send.uct.func == ucp_wireup_msg_progress) {
         ucs_free(req->send.buffer);
         ucp_request_mem_free(req);
