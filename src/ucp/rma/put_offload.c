@@ -118,31 +118,6 @@ static size_t ucp_proto_put_offload_bcopy_pack(void *dest, void *arg)
     return ucp_proto_multi_data_pack(pack_ctx, dest);
 }
 
-static void ucp_proto_put_offload_bcopy_ft_completion(uct_completion_t *comp)
-{
-    ucp_rma_op_t *op = ucs_container_of(comp, ucp_rma_op_t, comp);
-
-    ucp_rkey_release(op->rkey);
-    ucs_free(op);
-}
-
-static ucp_rma_op_t *
-ucp_proto_put_offload_bcopy_ft_op_create(ucp_rkey_h rkey)
-{
-    ucp_rma_op_t *op = ucs_malloc(sizeof(*op), "rma_op");
-
-    if (op == NULL) {
-        return NULL;
-    }
-
-    ucp_rkey_retain(rkey);
-    op->comp.func   = ucp_proto_put_offload_bcopy_ft_completion;
-    op->comp.count  = 1;
-    op->comp.status = UCS_OK;
-    op->rkey        = rkey;
-    return op;
-}
-
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_put_offload_update_remote_flush(ucp_ep_h ep,
                                           ucp_sys_dev_map_t flush_sys_dev_mask,
@@ -191,48 +166,8 @@ ucp_proto_put_offload_bcopy_send_func(ucp_request_t *req,
     return status;
 }
 
-static UCS_F_INLINE_OPTIMIZED ucs_status_t
-ucp_proto_put_offload_bcopy_ft_send_func(
-        ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
-        ucp_datatype_iter_t *next_iter, ucp_lane_index_t *lane_shift)
-{
-    ucp_ep_h ep        = req->send.ep;
-    uct_ep_h uct_ep    = ucp_ep_get_lane(ep, lpriv->super.lane);
-    uint64_t address   = req->send.rma.remote_addr +
-                         req->send.state.dt_iter.offset;
-    uct_rkey_t tl_rkey = ucp_rkey_get_tl_rkey(req->send.rma.rkey,
-                                              lpriv->super.rkey_index);
-    ucp_rma_op_t *rma_op;
-    ucp_proto_multi_pack_ctx_t pack_ctx = {
-        .req         = req,
-        .max_payload = ucp_proto_multi_max_payload(req, lpriv, 0),
-        .next_iter   = next_iter
-    };
-    ssize_t packed_size;
-    ucs_status_t status;
-
-    rma_op = ucp_proto_put_offload_bcopy_ft_op_create(req->send.rma.rkey);
-    if (rma_op == NULL) {
-        return UCS_ERR_NO_MEMORY;
-    }
-
-    packed_size = uct_ep_put_bcopy_ft(uct_ep, ucp_proto_put_offload_bcopy_pack,
-                                      &pack_ctx, address, tl_rkey,
-                                      &rma_op->comp);
-    status      = ucp_proto_bcopy_send_func_status(packed_size);
-    if (packed_size <= 0) {
-        uct_invoke_completion(&rma_op->comp, status);
-    } else {
-        ucp_proto_put_offload_update_remote_flush(ep, lpriv->flush_sys_dev_mask,
-                                                  tl_rkey, uct_ep, address);
-    }
-
-    return status;
-}
-
 static ucs_status_t
-ucp_proto_put_offload_bcopy_progress_common(uct_pending_req_t *self,
-                                            ucp_proto_send_multi_cb_t send_func)
+ucp_proto_put_offload_bcopy_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req                  = ucs_container_of(self, ucp_request_t,
                                                            send.uct);
@@ -253,28 +188,9 @@ ucp_proto_put_offload_bcopy_progress_common(uct_pending_req_t *self,
 
     /* coverity[tainted_data_downcast] */
     return ucp_proto_multi_progress(req, req->send.proto_config->priv,
-                                    send_func,
+                                    ucp_proto_put_offload_bcopy_send_func,
                                     ucp_proto_request_bcopy_complete_success,
                                     UCP_DT_MASK_ALL);
-}
-
-static ucs_status_t
-ucp_proto_put_offload_bcopy_progress(uct_pending_req_t *self)
-{
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-    int is_failover    = ucp_ep_err_mode_eq(req->send.ep,
-                                            UCP_ERR_HANDLING_MODE_FAILOVER);
-
-    if (is_failover &&
-        !(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) &&
-        (req->flags & UCP_REQUEST_FLAG_FENCE_REQUIRED)) {
-        ucp_proto_request_abort(req, UCS_ERR_UNSUPPORTED);
-        return UCS_OK;
-    }
-
-    return ucp_proto_put_offload_bcopy_progress_common(
-            self, is_failover ? ucp_proto_put_offload_bcopy_ft_send_func :
-                                ucp_proto_put_offload_bcopy_send_func);
 }
 
 static void
