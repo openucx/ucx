@@ -1372,6 +1372,7 @@ uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
             ucs_diag("fc_ep %p: failed to send %s: %s", ep,
                      uct_dc_mlx5_fc_req_str(dc_req, buf, sizeof(buf)),
                      ucs_status_string(status));
+            ucs_mpool_put(dc_req);
         }
     } else if (fc_hdr == UCT_RC_EP_FC_PURE_GRANT) {
         sender = (uct_dc_fc_sender_data_t*)(hdr + 1);
@@ -1452,7 +1453,8 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
             .ep_connect_to_ep_v2    = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
             .iface_is_reachable_v2  = uct_dc_mlx5_iface_is_reachable_v2,
             .ep_is_connected        = uct_dc_mlx5_ep_is_connected,
-            .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported
+            .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported,
+            .ep_outstanding_purge   = (uct_ep_outstanding_purge_func_t)ucs_empty_function_return_unsupported
         },
         .create_cq      = uct_rc_mlx5_iface_common_create_cq,
         .destroy_cq     = uct_rc_mlx5_iface_common_destroy_cq,

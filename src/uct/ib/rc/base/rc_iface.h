@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -22,6 +22,7 @@
 #define UCT_RC_QP_TABLE_SIZE        UCS_BIT(UCT_RC_QP_TABLE_ORDER)
 #define UCT_RC_QP_TABLE_MEMB_ORDER  (UCT_IB_QPN_ORDER - UCT_RC_QP_TABLE_ORDER)
 #define UCT_RC_QP_MAX_RETRY_COUNT   7
+#define UCT_RC_TX_CQ_RESERVED       2
 
 #define UCT_RC_CHECK_AM_SHORT(_am_id, _length, _header_t, _max_inline) \
      UCT_CHECK_AM_ID(_am_id); \
@@ -485,6 +486,12 @@ static UCS_F_ALWAYS_INLINE int
 uct_rc_iface_have_tx_cqe_avail(uct_rc_iface_t* iface)
 {
     return iface->tx.cq_available > 0;
+}
+
+static UCS_F_ALWAYS_INLINE unsigned
+uct_rc_iface_tx_cq_capacity(unsigned tx_cq_len)
+{
+    return tx_cq_len - UCT_RC_TX_CQ_RESERVED;
 }
 
 /**

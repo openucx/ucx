@@ -191,8 +191,11 @@ UCS_TEST_P(test_cuda_ipc_rma, get_mem_elem_pack)
     mapped_buffer recvbuf(length, SEED2, *m_receiver, 0, UCS_MEMORY_TYPE_CUDA);
 
     uct_device_mem_elem_t mem_elem_host;
+    void *release_handle;
     EXPECT_UCS_OK(uct_md_mem_elem_pack(m_sender->md(), sendbuf.memh(),
-                                       recvbuf.rkey(), &mem_elem_host));
+                                       recvbuf.rkey(), &mem_elem_host,
+                                       &release_handle));
+    uct_md_mem_elem_release(m_sender->md(), release_handle);
 }
 
 UCS_TEST_P(test_cuda_ipc_rma, get_device_ep)
@@ -223,8 +226,10 @@ UCS_TEST_P(test_cuda_ipc_rma_device, put_device)
     mapped_buffer recvbuf(length, SEED2, *m_receiver, 0, UCS_MEMORY_TYPE_CUDA);
 
     uct_device_mem_elem_t src_elem_host;
+    void *release_handle;
     ASSERT_UCS_OK(uct_md_mem_elem_pack(m_sender->md(), sendbuf.memh(),
-                                       recvbuf.rkey(), &src_elem_host));
+                                       recvbuf.rkey(), &src_elem_host,
+                                       &release_handle));
 
 
     uct_device_mem_elem_t *src_elem;
@@ -249,6 +254,7 @@ UCS_TEST_P(test_cuda_ipc_rma_device, put_device)
     recvbuf.pattern_check(SEED1);
     cuMemFree((CUdeviceptr)src_elem);
     cuMemFree((CUdeviceptr)mem_elem);
+    uct_md_mem_elem_release(m_sender->md(), release_handle);
 }
 
 UCS_TEST_P(test_cuda_ipc_rma_device, atomic_add_device)
@@ -273,9 +279,10 @@ UCS_TEST_P(test_cuda_ipc_rma_device, atomic_add_device)
     ASSERT_UCS_OK(uct_ep_get_device_ep(m_sender->ep(0), &device_ep));
 
     uct_device_mem_elem_t mem_elem_host;
+    void *release_handle;
     ASSERT_EQ(CUDA_SUCCESS, cuMemAlloc((CUdeviceptr*)&mem_elem, mem_elem_size));
     ASSERT_UCS_OK(uct_md_mem_elem_pack(m_sender->md(), nullptr, signal.rkey(),
-                                       &mem_elem_host));
+                                       &mem_elem_host, &release_handle));
     ASSERT_EQ(CUDA_SUCCESS, cuMemcpyHtoD((CUdeviceptr)mem_elem, &mem_elem_host,
                                          mem_elem_size));
 
@@ -287,6 +294,7 @@ UCS_TEST_P(test_cuda_ipc_rma_device, atomic_add_device)
                                   UCS_MEMORY_TYPE_CUDA),
               1);
     cuMemFree((CUdeviceptr)mem_elem);
+    uct_md_mem_elem_release(m_sender->md(), release_handle);
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_cuda_ipc_rma_device, cuda_ipc)

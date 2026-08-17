@@ -399,6 +399,7 @@ static UCS_CLASS_INIT_FUNC(uct_gga_mlx5_ep_t, const uct_ep_params_t *params)
     uct_iface_t *tl_iface   = UCT_EP_PARAM_VALUE(params, iface, IFACE, NULL);
     uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
     uct_ib_mlx5_md_t *md    = ucs_derived_of(iface->md, uct_ib_mlx5_md_t);
+    uint64_t access_flags;
     int ret;
     ucs_status_t status;
 
@@ -413,15 +414,17 @@ static UCS_CLASS_INIT_FUNC(uct_gga_mlx5_ep_t, const uct_ep_params_t *params)
         goto err;
     }
 
+    access_flags        = uct_ib_md_access_flags(&md->super,
+                                                 IBV_ACCESS_LOCAL_WRITE);
     self->dma_opaque.mr = ibv_reg_mr(md->super.pd, self->dma_opaque.buf,
                                      UCT_GGA_MLX5_OPAQUE_BUF_LEN,
-                                     IBV_ACCESS_LOCAL_WRITE);
+                                     access_flags);
 
     if (self->dma_opaque.mr == NULL) {
-        ucs_error("ibv_reg_mr(pd=%p, buf=%p, len=%d, 0x%x) failed to register "
-                  "DMA/MMO opaque buffer: %m", md->super.pd,
+        ucs_error("ibv_reg_mr(pd=%p, buf=%p, len=%d, 0x%" PRIx64 ") failed "
+                  "to register DMA/MMO opaque buffer: %m", md->super.pd,
                   self->dma_opaque.buf, UCT_GGA_MLX5_OPAQUE_BUF_LEN,
-                  IBV_ACCESS_LOCAL_WRITE);
+                  access_flags);
         status = UCS_ERR_IO_ERROR;
         goto err_free_buf;
     }
@@ -737,7 +740,8 @@ static uct_rc_iface_ops_t uct_gga_mlx5_iface_ops = {
             .ep_connect_to_ep_v2    = uct_gga_mlx5_ep_connect_to_ep_v2,
             .iface_is_reachable_v2  = uct_gga_mlx5_iface_is_reachable_v2,
             .ep_is_connected        = uct_gga_mlx5_ep_is_connected,
-            .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported
+            .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported,
+            .ep_outstanding_purge   = (uct_ep_outstanding_purge_func_t)ucs_empty_function_return_unsupported
         },
         .create_cq      = uct_rc_mlx5_iface_common_create_cq,
         .destroy_cq     = uct_rc_mlx5_iface_common_destroy_cq,
@@ -891,7 +895,8 @@ static uct_md_ops_t uct_mlx5_gga_md_ops = {
     .mkey_pack          = uct_ib_mlx5_gga_mkey_pack,
     .mem_attach         = uct_ib_mlx5_gga_mem_attach,
     .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported,
-    .mem_elem_pack      = (uct_md_mem_elem_pack_func_t)ucs_empty_function_return_unsupported
+    .mem_elem_pack      = (uct_md_mem_elem_pack_func_t)ucs_empty_function_return_unsupported,
+    .mem_elem_release   = (uct_md_mem_elem_release_func_t)ucs_empty_function
 };
 
 static ucs_status_t

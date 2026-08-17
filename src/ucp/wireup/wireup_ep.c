@@ -277,6 +277,7 @@ ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep, unsigned ep_init_flags,
      */
     status = ucp_wireup_select_aux_transport(ucp_ep, ep_init_flags,
                                              ucp_tl_bitmap_max, remote_address,
+                                             UINT64_MAX, UINT64_MAX,
                                              &select_info);
     if (status != UCS_OK) {
         return status;
@@ -333,6 +334,30 @@ void ucp_wireup_ep_discard_aux_ep(ucp_wireup_ep_t *wireup_ep,
     if (worker->context->config.ext.proto_enable) {
         ucp_worker_iface_unprogress_ep(ucp_worker_iface(worker, rsc_index));
     }
+}
+
+void ucp_wireup_ep_destroy_aux_ep(ucp_wireup_ep_t *wireup_ep)
+{
+    ucp_ep_h ucp_ep     = wireup_ep->super.ucp_ep;
+    ucp_worker_h worker = ucp_ep->worker;
+    uct_ep_h aux_ep     = wireup_ep->aux_ep;
+    ucp_rsc_index_t rsc_index;
+
+    if (aux_ep == NULL) {
+        return;
+    }
+
+    rsc_index                = wireup_ep->aux_rsc_index;
+    wireup_ep->aux_ep        = NULL;
+    wireup_ep->aux_rsc_index = UCP_NULL_RESOURCE;
+    wireup_ep->flags        &= ~UCP_WIREUP_EP_FLAG_AUX_P2P;
+
+    ucp_ep_unprogress_uct_ep(ucp_ep, aux_ep, rsc_index);
+    if (worker->context->config.ext.proto_enable) {
+        ucp_worker_iface_unprogress_ep(ucp_worker_iface(worker, rsc_index));
+    }
+
+    uct_ep_destroy(aux_ep);
 }
 
 static ucs_status_t ucp_wireup_ep_flush(uct_ep_h uct_ep, unsigned flags,
