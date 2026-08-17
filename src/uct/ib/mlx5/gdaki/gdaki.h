@@ -44,6 +44,11 @@ typedef struct uct_rc_gdaki_iface {
     unsigned                   ep_alloc_mode;
     pthread_mutex_t            ep_init_lock;
     ucs_mpool_t                channel_pool;
+    struct {
+        void        *hptr;
+        CUdeviceptr dptr;
+        unsigned    refcount;
+    } devx_uar;
 } uct_rc_gdaki_iface_t;
 
 

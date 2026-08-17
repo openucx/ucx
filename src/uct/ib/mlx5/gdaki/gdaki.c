@@ -757,6 +757,52 @@ static void uct_rc_gdaki_ep_cleanup_channels(uct_rc_gdaki_iface_t *iface,
     uct_rc_gdaki_cleanup_channels_direct(iface, ep);
 }
 
+static ucs_status_t
+uct_rc_gdaki_iface_devx_uar_get(uct_rc_gdaki_iface_t *iface,
+                                void *devx_uar_hptr,
+                                CUdeviceptr *devx_uar_dptr_p)
+{
+    ucs_status_t status;
+    CUdeviceptr devx_uar_dptr;
+
+    if (iface->devx_uar.refcount > 0) {
+        ucs_assertv(iface->devx_uar.hptr == devx_uar_hptr,
+                    "registration of multiple devx_uar_ptr is not allowed");
+        goto out;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuMemHostRegister(devx_uar_hptr, UCT_IB_MLX5_BF_REG_SIZE * 2,
+                              UCT_GDAKI_CUDA_REG_FLAGS));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuMemHostGetDevicePointer(&devx_uar_dptr, devx_uar_hptr, 0));
+    if (status != UCS_OK) {
+        (void)UCT_CUDADRV_FUNC_LOG_WARN(cuMemHostUnregister(devx_uar_hptr));
+        return status;
+    }
+
+    iface->devx_uar.hptr = devx_uar_hptr;
+    iface->devx_uar.dptr = devx_uar_dptr;
+
+out:
+    ++iface->devx_uar.refcount;
+    *devx_uar_dptr_p = iface->devx_uar.dptr;
+    return UCS_OK;
+}
+
+static void uct_rc_gdaki_iface_devx_uar_put(uct_rc_gdaki_iface_t *iface)
+{
+    if ((iface->devx_uar.refcount == 0) || (--iface->devx_uar.refcount > 0)) {
+        return;
+    }
+
+    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuMemHostUnregister(iface->devx_uar.hptr));
+}
+
 static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
 {
     uct_rc_gdaki_iface_t *iface = ucs_derived_of(params->iface,
@@ -786,12 +832,14 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_gdaki_ep_t)
                                                  uct_rc_gdaki_iface_t);
     unsigned i;
 
+    pthread_mutex_lock(&iface->ep_init_lock);
     if (self->dev_ep_init) {
-        uct_rc_gdaki_channel_t *channels = self->channel_block->channels;
         for (i = 0; i < iface->num_channels; i++) {
-            (void)cuMemHostUnregister(channels[i].qp.reg->addr.ptr);
+            uct_rc_gdaki_iface_devx_uar_put(iface);
         }
     }
+
+    pthread_mutex_unlock(&iface->ep_init_lock);
     uct_rc_gdaki_ep_cleanup_channels(iface, self);
 }
 
@@ -1001,13 +1049,9 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
 
         for (i = 0; i < iface->num_channels; ++i) {
             channel = &ep->channel_block->channels[i];
-            (void)cuMemHostRegister(channel->qp.reg->addr.ptr,
-                                    UCT_IB_MLX5_BF_REG_SIZE * 2,
-                                    UCT_GDAKI_CUDA_REG_FLAGS);
-
-            status = UCT_CUDADRV_FUNC_LOG_ERR(
-                    cuMemHostGetDevicePointer(&sq_db, channel->qp.reg->addr.ptr,
-                                              0));
+            status  = uct_rc_gdaki_iface_devx_uar_get(iface,
+                                                      channel->qp.reg->addr.ptr,
+                                                      &sq_db);
             if (status != UCS_OK) {
                 goto out_unreg;
             }
@@ -1037,10 +1081,9 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
     return UCS_OK;
 
 out_unreg:
-    do {
-        (void)cuMemHostUnregister(
-                ep->channel_block->channels[i].qp.reg->addr.ptr);
-    } while (i-- > 0);
+    while (i-- > 0) {
+        uct_rc_gdaki_iface_devx_uar_put(iface);
+    }
 out_free:
     ucs_free(dev_ep);
 out_ctx:
@@ -1167,7 +1210,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
         return status;
     }
 
-    self->cuda_ctx = NULL;
+    self->cuda_ctx          = NULL;
+    self->devx_uar.refcount = 0;
 
     ret = ucs_posix_memalign((void**)&self->atomic_buff,
                              UCS_SYS_CACHE_LINE_SIZE, sizeof(uint64_t),
