@@ -1973,7 +1973,9 @@ ucp_ep_recovery_create_aux(ucp_ep_h ep, ucp_lane_index_t lane,
     ucp_context_h context    = worker->context;
     ucp_rsc_index_t lane_rsc = ucp_ep_get_rsc_index(ep, lane);
     unsigned ep_init_flags   =
-            ucp_ep_err_mode_init_flags(ucp_ep_config(ep)->key.err_mode) |
+            ucp_ep_err_mode_init_flags(
+                    ucp_ep_config(ep)->key.err_mode,
+                    remote_address->uuid == worker->uuid) |
             UCP_EP_INIT_RECOVERY;
     ucp_wireup_select_info_t select_info;
     const ucp_address_entry_t *peer_ae;
