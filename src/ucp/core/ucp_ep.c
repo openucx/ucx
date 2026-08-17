@@ -4807,8 +4807,7 @@ unsigned ucp_ep_err_mode_init_flags(ucp_err_handling_mode_t err_mode,
     case UCP_ERR_HANDLING_MODE_PEER:
         return is_self ? 0 : UCP_EP_INIT_ERR_MODE_PEER_FAILURE;
     case UCP_ERR_HANDLING_MODE_FAILOVER:
-        return is_self ? UCP_EP_INIT_ERR_MODE_FAILOVER :
-                         UCP_EP_INIT_ERR_MODE_FAILOVER_MASK;
+        return UCP_EP_INIT_ERR_MODE_FAILOVER_MASK;
     default:
         ucs_fatal("invalid error handling mode: %d", err_mode);
     }
