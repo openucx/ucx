@@ -190,9 +190,11 @@ UCS_TEST_F(test_arch, nt_buffer_transfer_nt_src) {
     ucs_global_opts.arch.builtin_memcpy_min = UCS_MEMUNITS_INF;
     nt_buffer_transfer_test(UCS_ARCH_MEMCPY_NT_SOURCE);
 
+#if ENABLE_BUILTIN_MEMCPY
     /* Exercise the ERMS NT_SOURCE path */
     ucs_global_opts.arch.builtin_memcpy_min = 0;
     nt_buffer_transfer_test(UCS_ARCH_MEMCPY_NT_SOURCE);
+#endif
 }
 
 UCS_TEST_F(test_arch, nt_buffer_transfer_nt_dst) {

@@ -802,7 +802,8 @@ void ucs_x86_nt_buffer_transfer(void *dst, const void *src, size_t len,
      * a copy-out would generate writes for both the source (evicted) and the
      * destination and double the receiver's memory-write pressure.  The
      * UCS_ARCH_MEMCPY_NT_SOURCE hint is therefore serviced as a plain
-     * cache-respecting copy-out with two possible implementations:
+     * cache-respecting copy-out with a vectorized implementation and,
+     * when built-in memcpy is enabled, an ERMS implementation:
      *
      *   - rep movsb (ERMS), selected when len exceeds builtin_memcpy_min.
      *   - an optimized vectorized copy routine (fallback when ERMS is
@@ -814,10 +815,12 @@ void ucs_x86_nt_buffer_transfer(void *dst, const void *src, size_t len,
      * initialization. The inner gate here then selects rep movsb; otherwise
      * the vectorized routine runs.
      */
+#if ENABLE_BUILTIN_MEMCPY
     if (len > ucs_global_opts.arch.builtin_memcpy_min) {
         ucs_x86_memcpy_erms(dst, src, len);
         return;
     }
+#endif
 
     ucs_x86_nt_src_buffer_transfer(dst, src, len);
 }

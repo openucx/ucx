@@ -100,6 +100,7 @@ static inline void ucs_arch_clear_cache(void *start, void *end)
 }
 #endif
 
+#if ENABLE_BUILTIN_MEMCPY
 /* ERMS (rep movsb) copy; returns dst advanced by len. */
 static UCS_F_ALWAYS_INLINE void *
 ucs_x86_memcpy_erms(void *dst, const void *src, size_t len)
@@ -114,6 +115,7 @@ ucs_x86_memcpy_erms(void *dst, const void *src, size_t len)
                   : "memory");
     return dst;
 }
+#endif
 
 static inline void *ucs_memcpy_relaxed(void *dst, const void *src, size_t len,
                                        ucs_arch_memcpy_hint_t hint,
