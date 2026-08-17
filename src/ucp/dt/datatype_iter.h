@@ -80,7 +80,8 @@ typedef struct {
             const uint64_t   *remote_addrs;
             ucp_rkey_h const *rkeys;
             size_t            count;
-            size_t            index;
+            size_t           elem_count;
+            size_t           elem_index;
         } sgl;
     } type;
 } ucp_datatype_iter_t;
