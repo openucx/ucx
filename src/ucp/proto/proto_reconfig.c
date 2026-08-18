@@ -101,9 +101,6 @@ static ucs_status_t ucp_proto_reconfig_progress(uct_pending_req_t *self)
                                   req->send.proto_config->rkey_cfg_index,
                                   &req->send.proto_config->select_param,
                                   ucp_operation_names, &strb);
-        ucs_error("cannot find remote protocol for: %s, %zu bytes",
-                  ucs_string_buffer_cstr(&strb),
-                  req->send.state.dt_iter.length);
 
         /* No protocol can serve this op on the current lane set - fail
          * the EP so the user error callback fires. */

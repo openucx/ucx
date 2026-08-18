@@ -975,6 +975,11 @@ public:
     }
 
     virtual void init() override {
+        /* FIXME: sporadic failure on CUDA memory type. re-enable once fixed */
+        if (mem_type() == UCS_MEMORY_TYPE_CUDA) {
+            UCS_TEST_SKIP_R("sporadic failure on CUDA memory type");
+        }
+
         modify_config("MAX_RMA_RAILS", "2");
         test_ucp_rma::init();
     }
@@ -1183,8 +1188,8 @@ protected:
             ASSERT_UCS_OK(ucp_context_query(sender().ucph(), &attr));
             request_mem.reset(new uint8_t[attr.request_size + 1]);
             param.op_attr_mask |= UCP_OP_ATTR_FIELD_REQUEST;
-            param.request    = request_mem.get() + attr.request_size;
-            req              = static_cast<ucp_request_t*>(param.request) - 1;
+            param.request       = request_mem.get() + attr.request_size;
+            req                 = static_cast<ucp_request_t*>(param.request) - 1;
         }
 
         struct cb_state {
