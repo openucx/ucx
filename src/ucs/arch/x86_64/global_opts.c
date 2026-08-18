@@ -55,7 +55,7 @@ void ucs_arch_print_memcpy_limits(ucs_arch_global_opts_t *config)
                                 &config->nt_buffer_transfer_min, NULL);
     ucs_config_sprintf_memunits(dest_thresh_str, sizeof(dest_thresh_str),
                                 &config->nt_dest_threshold, NULL);
-    printf("# Using nt-buffer-transfer for sizes above %s\n", min_thresh_str);
+    printf("# Using nt-buffer-transfer for sizes from %s\n", min_thresh_str);
     printf("# Using nt-destination-hint for sizes above %s\n", dest_thresh_str);
 }
 #endif
