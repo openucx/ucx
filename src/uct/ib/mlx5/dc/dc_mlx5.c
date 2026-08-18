@@ -1892,6 +1892,16 @@ uct_dc_mlx5_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_
         return UCS_ERR_NO_DEVICE;
     }
 
+    if (ib_md->relaxed_order_required &&
+        !uct_ib_md_is_flush_rkey_valid(ib_md->flush_rkey)) {
+        ucs_debug("%s: dc_mlx5 does not support relaxed-only memory keys "
+                  "without a valid flush rkey",
+                  uct_ib_device_name(&ib_md->dev));
+        *tl_devices_p     = NULL;
+        *num_tl_devices_p = 0;
+        return UCS_OK;
+    }
+
     flags = UCT_IB_DEVICE_FLAG_SRQ | UCT_IB_DEVICE_FLAG_MLX5_PRM |
             UCT_IB_DEVICE_FLAG_DC |
             (ib_md->config.eth_pause ? 0 : UCT_IB_DEVICE_FLAG_LINK_IB);

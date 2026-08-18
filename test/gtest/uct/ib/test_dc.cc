@@ -198,6 +198,32 @@ UCS_TEST_P(test_dc, relaxed_order_required_unreachable_without_flush_rkey,
     EXPECT_FALSE(uct_iface_is_reachable_v2(m_e1->iface(), &params));
 }
 
+UCS_TEST_P(test_dc, relaxed_order_required_hides_invalid_flush_rkey,
+           "IB_PCI_RELAXED_ORDERING=yes")
+{
+    uct_ib_md_t *md = uct_ib_iface_md(&dc_iface(m_e1)->super.super.super);
+    uint32_t flush_rkey = md->flush_rkey;
+    uct_tl_resource_desc_t *tl_resources;
+    unsigned num_tl_resources;
+    ucs_status_t status;
+    unsigned i;
+
+    ASSERT_TRUE(md->relaxed_order_required);
+    ASSERT_TRUE(uct_ib_md_is_flush_rkey_valid(flush_rkey));
+
+    md->flush_rkey = UCT_IB_MD_INVALID_FLUSH_RKEY;
+    status = uct_md_query_tl_resources(&md->super, &tl_resources,
+                                       &num_tl_resources);
+    md->flush_rkey = flush_rkey;
+    ASSERT_UCS_OK(status);
+
+    for (i = 0; i < num_tl_resources; ++i) {
+        EXPECT_STRNE("dc_mlx5", tl_resources[i].tl_name);
+    }
+
+    uct_release_tl_resource_list(tl_resources);
+}
+
 UCS_TEST_P(test_dc, fence_am_short_consumed, "RC_FENCE=weak")
 {
     uct_dc_mlx5_iface_t *iface = dc_iface(m_e1);
@@ -252,9 +278,12 @@ UCS_TEST_P(test_dc, fence_flush_without_dci, "IB_PCI_RELAXED_ORDERING=yes")
     ASSERT_EQ(UCT_DC_MLX5_EP_NO_DCI, ep->dci);
     ASSERT_EQ(UCT_RC_FENCE_MODE_WEAK, rc_iface(m_e1)->config.fence_mode);
 
+    ep->flags |= UCT_DC_MLX5_EP_FLAG_FLUSH_REMOTE;
     ASSERT_UCS_OK(uct_ep_fence(m_e1->ep(0), 0));
     EXPECT_NE(rc_iface(m_e1)->tx.fi.fence_beat, ep->fi.fence_beat);
-    EXPECT_EQ(UCS_ERR_NO_RESOURCE, uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE,
+              uct_ep_flush(m_e1->ep(0), UCT_FLUSH_FLAG_REMOTE, NULL));
+    EXPECT_FALSE(ep->flags & UCT_DC_MLX5_EP_FLAG_FLUSH_REMOTE);
 
     ASSERT_NE(UCT_DC_MLX5_EP_NO_DCI, ep->dci);
     deadline = ucs::get_deadline(DEFAULT_TIMEOUT_SEC);
@@ -264,7 +293,7 @@ UCS_TEST_P(test_dc, fence_flush_without_dci, "IB_PCI_RELAXED_ORDERING=yes")
     }
 
     ASSERT_FALSE(ep->flags & UCT_DC_MLX5_EP_FLAG_FENCE_PENDING);
-    ASSERT_UCS_OK(uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
+    ASSERT_UCS_OK(uct_ep_flush(m_e1->ep(0), UCT_FLUSH_FLAG_REMOTE, NULL));
 }
 
 UCS_TEST_P(test_dc, fence_flush_hybrid_ep_destroy,

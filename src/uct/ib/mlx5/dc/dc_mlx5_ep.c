@@ -758,8 +758,6 @@ static ucs_status_t uct_dc_mlx5_ep_flush_remote_post(
                                  UCT_IB_MD_FLUSH_REMOTE_LENGTH, 0,
                                  flush_rkey, desc, 0, 0, desc + 1, NULL);
 
-    ep->flags &= ~UCT_DC_MLX5_EP_FLAG_FLUSH_REMOTE;
-
     return UCS_INPROGRESS;
 }
 
@@ -823,6 +821,9 @@ uct_dc_mlx5_ep_check_fence(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
             ep, uct_dc_mlx5_ep_fence_flush_handler, NULL, ep,
             iface->super.super.tx.fi.fence_beat);
     if (status == UCS_INPROGRESS) {
+        /* The fence barrier is an ordered remote read over the flush rkey, so
+         * it also satisfies a pending remote flush. */
+        ep->flags &= ~UCT_DC_MLX5_EP_FLAG_FLUSH_REMOTE;
         ep->flags |= UCT_DC_MLX5_EP_FLAG_FENCE_PENDING;
         return UCS_ERR_NO_RESOURCE;
     }
@@ -835,11 +836,17 @@ uct_dc_mlx5_ep_flush_remote(uct_dc_mlx5_ep_t *ep, uct_completion_t *comp)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                                 uct_dc_mlx5_iface_t);
+    ucs_status_t status;
 
     UCT_DC_MLX5_CHECK_RES(iface, ep);
 
-    return uct_dc_mlx5_ep_flush_remote_post(ep, uct_rc_ep_flush_remote_handler,
-                                            comp, NULL, 0);
+    status = uct_dc_mlx5_ep_flush_remote_post(
+            ep, uct_rc_ep_flush_remote_handler, comp, NULL, 0);
+    if (status == UCS_INPROGRESS) {
+        ep->flags &= ~UCT_DC_MLX5_EP_FLAG_FLUSH_REMOTE;
+    }
+
+    return status;
 }
 
 ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
