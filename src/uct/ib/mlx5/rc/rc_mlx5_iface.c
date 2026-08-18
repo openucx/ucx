@@ -194,6 +194,8 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
                                                                       qp_num),
                                                uct_rc_mlx5_base_ep_t);
     uint16_t pi               = ntohs(cqe->wqe_counter);
+    uint16_t last_completed;
+    int was_deferred;
     ucs_log_level_t log_lvl;
     ucs_status_t status;
 
@@ -205,8 +207,12 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
 
     ucs_arbiter_group_purge(&iface->tx.arbiter, &ep->super.arb_group,
                             uct_rc_ep_arbiter_purge_internal_cb, NULL);
-    /* Persist the CQE completion boundary before invoking the error handler.
-     * When completions are deferred, the invalidate caller will purge them. */
+    /* Remember the last truly completed WQE before advancing hw_ci to the
+     * failed in-flight WQE. If the error handler arms DEFER_COMPLETIONS,
+     * invalidate snapshots ft_ci from hw_ci; restore the pre-failure value so
+     * outstanding_purge still walks the failed WQE. */
+    last_completed = ep->tx.wq.hw_ci;
+    was_deferred   = ep->flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS;
     uct_ib_mlx5_txwq_update_bb(&ep->tx.wq, pi);
     uct_ib_mlx5_txwq_update_flags(&ep->tx.wq, UCT_IB_MLX5_TXWQ_FLAG_FAILED, 0);
 
@@ -226,7 +232,14 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
     uct_ib_mlx5_completion_with_err(ib_iface, arg, &ep->tx.wq, log_lvl);
 
 purge:
-    if (!(ep->flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS)) {
+    if (ep->flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS) {
+        if (!was_deferred) {
+            ep->tx.wq.ft_ci = last_completed;
+            ucs_debug("ep %p defer completions WQE range (%u, %u) next token %u",
+                      ep, ep->tx.wq.ft_ci, ep->tx.wq.sw_pi,
+                      ep->tx.wq.next_token);
+        }
+    } else {
         uct_rc_mlx5_iface_update_tx_res(iface, ep, pi);
         uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status, pi, 0);
     }
