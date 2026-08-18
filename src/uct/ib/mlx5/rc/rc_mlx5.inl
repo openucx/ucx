@@ -454,10 +454,19 @@ uct_rc_mlx5_ep_fm_cq_update(uct_rc_mlx5_iface_common_t *iface,
 
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_txwq_add_psn(uct_ib_mlx5_txwq_t *txwq,
-                                   uint32_t num_packets)
+                         uint32_t num_packets)
 {
     txwq->next_first_psn =
             (txwq->next_first_psn + num_packets) & UCS_MASK(24);
+}
+
+static UCS_F_ALWAYS_INLINE uint32_t
+uct_rc_mlx5_num_packets(uct_rc_mlx5_iface_common_t *iface,
+                        size_t message_length)
+{
+    size_t mtu = iface->super.super.config.path_mtu_bytes;
+
+    return ucs_max(1ul, ucs_div_round_up(message_length, mtu));
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -465,10 +474,8 @@ uct_rc_mlx5_txwq_update_psn(
         uct_rc_mlx5_iface_common_t *iface, uct_ib_mlx5_txwq_t *txwq,
         size_t message_length)
 {
-    size_t mtu = iface->super.super.config.path_mtu_bytes;
-
-    uct_rc_mlx5_txwq_add_psn(
-            txwq, ucs_max(1ul, ucs_div_round_up(message_length, mtu)));
+    uct_rc_mlx5_txwq_add_psn(txwq,
+                             uct_rc_mlx5_num_packets(iface, message_length));
 }
 
 static UCS_F_ALWAYS_INLINE void
