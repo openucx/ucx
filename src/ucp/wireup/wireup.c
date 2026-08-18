@@ -1509,25 +1509,9 @@ ucp_wireup_process_lanes_addr_request(
         }
     }
 
-    /* Apply RX derived from peer TX for peer-initiated asymmetric failover. */
-    if ((lanes_info->tx_token_map != 0) && (peer_tx_lengths != NULL)) {
-        uint8_t rx_lengths[UCP_MAX_LANES];
-        void *rx_tokens       = NULL;
-        size_t rx_tokens_size = 0;
-
-        status = ucp_wireup_derive_rx_tokens(ep, lanes_info->tx_token_map,
-                                             peer_tx_lengths, peer_tx_tokens,
-                                             rx_lengths, &rx_tokens,
-                                             &rx_tokens_size);
-        if (status == UCS_OK) {
-            ucp_ep_failover_set_request_id(ep, lanes_info->request_id);
-            (void)ucp_ep_failover_apply_rx_tokens(ep, lanes_info->request_id,
-                                                  lanes_info->tx_token_map,
-                                                  rx_lengths, rx_tokens);
-        }
-        ucs_free(rx_tokens);
-    }
-
+    /* RX tokens derived from the peer TX tokens describe what this side
+     * received, so they are only valid for the peer's purge and are sent back
+     * in the reply. Our own lanes are covered by the ACK trailer. */
     to_rebuild    = lanes_info->provided_lane_map & ucp_ep_get_failed_lanes(ep);
     peer_provided = ucp_ep_recovery_rebuild_lanes(ep, to_rebuild,
                                                   remote_address);
