@@ -1174,22 +1174,9 @@ protected:
         ucp_dt_local_sgl_t local   = make_local_sgl(ctx, local_mask);
         ucp_dt_remote_sgl_t remote = make_remote_sgl(ctx, REMOTE_MASK_DEFAULT);
         ucp_request_param_t param  = make_sgl_param(&remote, num);
-        std::unique_ptr<uint8_t[]> request_mem;
-        ucp_request_t *req = nullptr;
 
         if (!set_remote_count) {
             param.op_attr_mask &= ~UCP_OP_ATTR_FIELD_REMOTE_COUNT;
-        }
-
-        if (check_proto_selection) {
-            ucp_context_attr_t attr = {};
-
-            attr.field_mask = UCP_ATTR_FIELD_REQUEST_SIZE;
-            ASSERT_UCS_OK(ucp_context_query(sender().ucph(), &attr));
-            request_mem.reset(new uint8_t[attr.request_size + 1]);
-            param.op_attr_mask |= UCP_OP_ATTR_FIELD_REQUEST;
-            param.request       = request_mem.get() + attr.request_size;
-            req                 = static_cast<ucp_request_t*>(param.request) - 1;
         }
 
         struct cb_state {
@@ -1223,6 +1210,7 @@ protected:
 
         if (check_proto_selection) {
             size_t expected_length = 0;
+            auto *req              = static_cast<ucp_request_t*>(sptr) - 1;
 
             for (size_t elem_size : elem_sizes) {
                 expected_length += elem_size;
@@ -1260,9 +1248,7 @@ protected:
             }
         }
 
-        if (!check_proto_selection) {
-            ucp_request_release(sptr);
-        }
+        ucp_request_release(sptr);
 
         flush_ep(sender());
         verify_sgl_buffers();
