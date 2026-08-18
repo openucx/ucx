@@ -395,9 +395,9 @@ protected:
                     }
 
                     // Initiator EP should invoke error callback only once
-                    ASSERT_EQ(1, m_initiator_err_count) << "Error callback invoked " << m_initiator_err_count << " times";
+                    EXPECT_EQ(1, m_initiator_err_count) << "Error callback invoked " << m_initiator_err_count << " times";
                     // Remote side may detect failure by keepalive or other control messages but not more than 1 time
-                    ASSERT_LE(m_total_err_count - m_initiator_err_count, 1)
+                    EXPECT_LE(m_total_err_count - m_initiator_err_count, 1)
                             << "Error callback invoked " << m_total_err_count << " times";
                 }
             }
