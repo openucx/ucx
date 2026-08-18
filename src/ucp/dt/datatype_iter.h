@@ -79,7 +79,6 @@ typedef struct {
             ucp_mem_h        *memhs;
             const uint64_t   *remote_addrs;
             ucp_rkey_h const *rkeys;
-            size_t            count;
             size_t           elem_count;
             size_t           elem_index;
         } sgl;

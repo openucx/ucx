@@ -376,7 +376,7 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
     uct_ep_h uct_ep              = ucp_ep_get_lane(ep, lane);
     ucp_md_index_t md_index      = ucp_ep_md_index(ep, lane);
     ucp_rsc_index_t rkey_index   = lpriv->super.rkey_index;
-    size_t start_index           = dt_iter->type.sgl.index;
+    size_t start_elem_index      = dt_iter->type.sgl.elem_index;
     size_t max_sgl_count         = lpriv->max_sgl_zcopy_count;
     size_t elem_count            = ucp_datatype_iter_next_sgl(dt_iter,
                                                               max_sgl_count,
@@ -402,18 +402,19 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
 
     for (i = 0; i < elem_count; i++) {
         uct_memhs[i] = (sgl_memhs != NULL) ?
-                       sgl_memhs[start_index + i]->uct[md_index] :
+                       sgl_memhs[start_elem_index + i]->uct[md_index] :
                        UCT_MEM_HANDLE_NULL;
         uct_rkeys[i] = ucp_rkey_get_tl_rkey(
-                           dt_iter->type.sgl.rkeys[start_index + i], rkey_index);
+                           dt_iter->type.sgl.rkeys[start_elem_index + i],
+                           rkey_index);
     }
 
     status = uct_ep_put_sgl_zcopy(
                  uct_ep,
-                 &dt_iter->type.sgl.buffers[start_index],
-                 &dt_iter->type.sgl.lengths[start_index],
+                 &dt_iter->type.sgl.buffers[start_elem_index],
+                 &dt_iter->type.sgl.lengths[start_elem_index],
                  uct_memhs,
-                 &dt_iter->type.sgl.remote_addrs[start_index],
+                 &dt_iter->type.sgl.remote_addrs[start_elem_index],
                  uct_rkeys,
                  NULL, NULL,
                  elem_count, &req->send.state.uct_comp);
@@ -424,10 +425,10 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
     if (!UCS_STATUS_IS_ERR(status)) {
         ucp_proto_put_offload_update_remote_flush(
                 ep, lpriv->flush_sys_dev_mask,
-                ucp_rkey_get_tl_rkey(dt_iter->type.sgl.rkeys[start_index],
+                ucp_rkey_get_tl_rkey(dt_iter->type.sgl.rkeys[start_elem_index],
                                      rkey_index),
                 uct_ep,
-                dt_iter->type.sgl.remote_addrs[start_index]);
+                dt_iter->type.sgl.remote_addrs[start_elem_index]);
     }
 
     return status;
@@ -477,9 +478,9 @@ ucp_proto_put_sgl_offload_sw_send_func(ucp_request_t *req,
     uct_ep_h uct_ep              = ucp_ep_get_lane(ep, lane);
     ucp_md_index_t md_index      = ucp_ep_md_index(ep, lane);
     ucp_rsc_index_t rkey_index   = lpriv->super.rkey_index;
-    size_t index                 = dt_iter->type.sgl.index;
+    size_t elem_index            = dt_iter->type.sgl.elem_index;
     ucp_mem_h *sgl_memhs         = dt_iter->type.sgl.memhs;
-    uint64_t remote_addr         = dt_iter->type.sgl.remote_addrs[index];
+    uint64_t remote_addr         = dt_iter->type.sgl.remote_addrs[elem_index];
     uct_rkey_t tl_rkey;
     uct_iov_t iov;
     ucs_status_t status;
@@ -487,11 +488,11 @@ ucp_proto_put_sgl_offload_sw_send_func(ucp_request_t *req,
     /* TODO: fragment elements larger than cap.put.max_zcopy */
     ucp_datatype_iter_next_sgl(dt_iter, 1, next_iter);
 
-    tl_rkey     = ucp_rkey_get_tl_rkey(dt_iter->type.sgl.rkeys[index],
+    tl_rkey     = ucp_rkey_get_tl_rkey(dt_iter->type.sgl.rkeys[elem_index],
                                        rkey_index);
-    iov.buffer  = dt_iter->type.sgl.buffers[index];
-    iov.length  = dt_iter->type.sgl.lengths[index];
-    iov.memh    = (sgl_memhs != NULL) ? sgl_memhs[index]->uct[md_index] :
+    iov.buffer  = dt_iter->type.sgl.buffers[elem_index];
+    iov.length  = dt_iter->type.sgl.lengths[elem_index];
+    iov.memh    = (sgl_memhs != NULL) ? sgl_memhs[elem_index]->uct[md_index] :
                                         UCT_MEM_HANDLE_NULL;
     iov.stride  = 0;
     iov.count   = 1;

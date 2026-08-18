@@ -627,17 +627,18 @@ ucp_datatype_iter_next_sgl(const ucp_datatype_iter_t *dt_iter,
                            size_t max_elem_count,
                            ucp_datatype_iter_t *next_iter)
 {
-    size_t index, elem_count;
+    size_t elem_index, elem_count;
 
     ucs_assert(dt_iter->dt_class == UCP_DATATYPE_SGL);
-    index      = dt_iter->type.sgl.index;
-    ucs_assert(index <= dt_iter->type.sgl.count);
-    elem_count = ucs_min(max_elem_count, dt_iter->type.sgl.count - index);
+    elem_index = dt_iter->type.sgl.elem_index;
+    ucs_assert(elem_index <= dt_iter->type.sgl.elem_count);
+    elem_count = ucs_min(max_elem_count,
+                         dt_iter->type.sgl.elem_count - elem_index);
 
     next_iter->offset = dt_iter->offset +
-                        ucp_dt_sgl_length(dt_iter->type.sgl.lengths + index,
-                                          elem_count);
-    next_iter->type.sgl.index = index + elem_count;
+                        ucp_dt_sgl_length(dt_iter->type.sgl.lengths +
+                                          elem_index, elem_count);
+    next_iter->type.sgl.elem_index = elem_index + elem_count;
     ucs_assert(next_iter->offset <= dt_iter->length);
 
     return elem_count;
@@ -661,7 +662,7 @@ ucp_datatype_iter_copy_position(ucp_datatype_iter_t *dt_iter,
         dt_iter->type.iov.iov_offset = src_dt_iter->type.iov.iov_offset;
     } else if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_SGL,
                                           dt_mask)) {
-        dt_iter->type.sgl.index = src_dt_iter->type.sgl.index;
+        dt_iter->type.sgl.elem_index = src_dt_iter->type.sgl.elem_index;
     }
 }
 
@@ -686,7 +687,7 @@ ucp_datatype_iter_rewind(ucp_datatype_iter_t *dt_iter, unsigned dt_mask)
         dt_iter->type.iov.iov_offset = 0;
     } else if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_SGL,
                                           dt_mask)) {
-        dt_iter->type.sgl.index = 0;
+        dt_iter->type.sgl.elem_index = 0;
     }
 }
 

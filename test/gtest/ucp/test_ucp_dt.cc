@@ -340,7 +340,7 @@ protected:
                 &param);
         ASSERT_UCS_OK(status);
         EXPECT_EQ(length, m_dt_iter.length);
-        EXPECT_EQ(count, m_dt_iter.type.sgl.count);
+        EXPECT_EQ(count, m_dt_iter.type.sgl.elem_count);
     }
 
 private:
@@ -376,7 +376,7 @@ UCS_TEST_F(test_ucp_dt_sgl, iter_next_chunked) {
     }
 
     EXPECT_EQ(NUM_ELEMS, total_advanced);
-    EXPECT_EQ(NUM_ELEMS, m_dt_iter.type.sgl.index);
+    EXPECT_EQ(NUM_ELEMS, m_dt_iter.type.sgl.elem_index);
     EXPECT_TRUE(ucp_datatype_iter_is_end(&m_dt_iter));
 }
 
@@ -405,7 +405,7 @@ UCS_TEST_F(test_ucp_dt_sgl, iter_next_one_by_one) {
         size_t advanced = ucp_datatype_iter_next_sgl(&m_dt_iter, 1,
                                                      &next_iter);
         EXPECT_EQ(1u, advanced);
-        EXPECT_EQ(i + 1, next_iter.type.sgl.index);
+        EXPECT_EQ(i + 1, next_iter.type.sgl.elem_index);
         EXPECT_EQ(ucp_dt_sgl_length(m_dt_iter.type.sgl.lengths, i + 1),
                   next_iter.offset);
         ucp_datatype_iter_copy_position(&m_dt_iter, &next_iter, UINT_MAX);
@@ -421,11 +421,11 @@ UCS_TEST_F(test_ucp_dt_sgl, iter_rewind) {
     EXPECT_EQ(2u, ucp_datatype_iter_next_sgl(&m_dt_iter, 2, &next_iter));
     ucp_datatype_iter_copy_position(&m_dt_iter, &next_iter, UINT_MAX);
     EXPECT_NE(0u, m_dt_iter.offset);
-    EXPECT_EQ(2u, m_dt_iter.type.sgl.index);
+    EXPECT_EQ(2u, m_dt_iter.type.sgl.elem_index);
 
     ucp_datatype_iter_rewind(&m_dt_iter, UINT_MAX);
     EXPECT_EQ(0u, m_dt_iter.offset);
-    EXPECT_EQ(0u, m_dt_iter.type.sgl.index);
+    EXPECT_EQ(0u, m_dt_iter.type.sgl.elem_index);
 }
 
 UCS_TEST_F(test_ucp_dt_sgl, init_zero_count) {
