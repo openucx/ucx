@@ -124,8 +124,10 @@ ucp_mem_type_lane_reg(ucp_worker_h worker, ucp_ep_h ep, void *address,
     }
 
     /* Preferred MD rejected the buffer: detect attributes for a fallback lane
-     * (also warms the memtype cache). Coverity fnptr model false positive. */
-    /* coverity[use_after_free] */
+     * (also warms the memtype cache) */
+    /* Coverity wrongly resolves the memory domain deregister function pointer
+     * to 'uct_cuda_ipc_mem_dereg' and considers 'address' as freed */
+    /* coverity[pass_freed_arg] */
     ucp_memory_detect(context, address, length, &mem_info);
     lane = ucp_mem_type_ep_lane_by_flags(ep, mem_info.flags, 1);
 
