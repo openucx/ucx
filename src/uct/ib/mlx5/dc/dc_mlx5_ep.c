@@ -14,7 +14,7 @@
 #include <ucs/time/time.h>
 
 
-#define REVERSE_SL_MASK UCS_MASK(4)
+#define REVERSE_SL_MASK   UCS_MASK(4)
 
 
 static UCS_F_ALWAYS_INLINE void

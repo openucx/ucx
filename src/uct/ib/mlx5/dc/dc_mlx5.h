@@ -205,7 +205,7 @@ typedef void (*uct_dc_dci_handle_failure_func_t)(uct_dc_mlx5_iface_t *iface,
 
 typedef enum {
     /* Indicates that this specific dci is shared, regardless of policy */
-    UCT_DC_DCI_FLAG_SHARED = UCS_BIT(0)
+    UCT_DC_DCI_FLAG_SHARED = UCS_BIT(0),
 } uct_dc_dci_flags_t;
 
 
