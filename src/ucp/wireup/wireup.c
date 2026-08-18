@@ -139,8 +139,8 @@ ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
 
     if (req->send.wireup.msg_hdr.type == UCP_WIREUP_MSG_REQUEST) {
         if (ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED) {
-            ucs_trace("ep %p: not sending wireup message - remote already connected",
-                      ep);
+            ucs_debug("ep %p: not sending %s, remote already connected", ep,
+                      ucp_wireup_msg_str(req->send.wireup.msg_hdr.type));
             status = UCS_OK;
             goto out_free_req;
         }
@@ -205,6 +205,14 @@ ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
     } else {
         status = UCS_OK;
     }
+
+    ucs_debug("ep %p: sent %s src_ep_id 0x%" PRIx64
+              " dst_ep_id 0x%" PRIx64 " conn_sn %d lane %u rsc %u length %zd",
+              ep, ucp_wireup_msg_str(req->send.wireup.msg_hdr.type),
+              req->send.wireup.msg_hdr.src_ep_id,
+              req->send.wireup.msg_hdr.dst_ep_id,
+              req->send.wireup.msg_hdr.conn_sn, req->send.lane, rsc_index,
+              packed_len);
 
     switch (req->send.wireup.msg_hdr.type) {
     case UCP_WIREUP_MSG_PRE_REQUEST:
@@ -531,6 +539,9 @@ unsigned ucp_wireup_eps_progress(void *arg)
 
     /* If we still have pending wireup messages, send them out first */
     if (ucp_ep_has_wireup_msg_pending(ucp_ep)) {
+        ucs_debug("ep %p local_id 0x%" PRIx64 " conn_sn %d: "
+                  "delay wireup switch, messages are pending",
+                  ucp_ep, ucp_ep->ext->local_ep_id, ucp_ep->conn_sn);
         /* Reschedule the progress since it's one-shot */
         ucp_wireup_eps_progress_sched(ucp_ep);
         goto out_unblock;
@@ -541,8 +552,9 @@ unsigned ucp_wireup_eps_progress(void *arg)
      * ep state, and let the error handler take care of cleanup.
      */
     if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
-        ucs_debug("ep %p: not switching wireup eps to ready state because of "
-                  "error", ucp_ep);
+        ucs_debug("ep %p local_id 0x%" PRIx64 " conn_sn %d: "
+                  "not switching wireup eps to ready state because of error",
+                  ucp_ep, ucp_ep->ext->local_ep_id, ucp_ep->conn_sn);
         goto out_unblock;
     }
 
@@ -558,8 +570,12 @@ unsigned ucp_wireup_eps_progress(void *arg)
         }
 
         ucs_assert(wireup_ep->super.uct_ep != NULL);
-        ucs_debug("ep %p: switching wireup_ep %p to ready state", ucp_ep,
-                  wireup_ep);
+        ucs_debug("ep %p local_id 0x%" PRIx64 " conn_sn %d: switching "
+                  "wireup_ep %p lane %u flags 0x%x next_ep %p aux_ep %p "
+                  "to ready state",
+                  ucp_ep, ucp_ep->ext->local_ep_id, ucp_ep->conn_sn,
+                  wireup_ep, lane, wireup_ep->flags, wireup_ep->super.uct_ep,
+                  wireup_ep->aux_ep);
 
         /* Switch to real transport and destroy proxy endpoint (aux_ep as well) */
         ucp_proxy_ep_replace(&wireup_ep->super);
@@ -587,8 +603,9 @@ void ucp_wireup_update_flags(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
             continue;
         }
 
-        ucs_trace("ep %p: wireup_ep=%p flags=0x%x new_flags=0x%x", ucp_ep,
-                  wireup_ep, wireup_ep->flags, new_flags);
+        ucs_debug("ep %p: wireup_ep %p lane %u flags 0x%x -> 0x%x",
+                  ucp_ep, wireup_ep, lane, wireup_ep->flags,
+                  wireup_ep->flags | new_flags);
         wireup_ep->flags |= new_flags;
     }
 }
@@ -599,7 +616,10 @@ void ucp_wireup_remote_connected(ucp_ep_h ep)
         return;
     }
 
-    ucs_debug("ep %p: remote connected, ep_cfg[%u]", ep, ep->cfg_index);
+    ucs_debug("ep %p local_id 0x%" PRIx64 " remote_id 0x%" PRIx64
+              " conn_sn %d flags 0x%x: remote connected ep_cfg[%u]",
+              ep, ep->ext->local_ep_id, ep->ext->remote_ep_id, ep->conn_sn,
+              ep->flags, ep->cfg_index);
     if (!(ep->flags & UCP_EP_FLAG_CLOSED)) {
         /* set REMOTE_CONNECTED flag if an EP is not closed, otherwise -
          * just make UCT EPs remote connected to remove WIREUP_EP for them
@@ -630,9 +650,10 @@ ucp_wireup_process_pre_request(ucp_worker_h worker, ucp_ep_h ep,
     ucs_status_t status;
 
     UCP_WIREUP_MSG_CHECK(msg, ep, UCP_WIREUP_MSG_PRE_REQUEST);
-    ucs_debug("got wireup pre_request from 0x%"PRIx64" src_ep_id 0x%"PRIx64
-              " dst_ep_id 0x%"PRIx64" conn_sn %u address version %u/%u",
-              remote_address->uuid, msg->src_ep_id, msg->dst_ep_id,
+    ucs_debug("ep %p: got wireup pre_request from 0x%" PRIx64
+              " src_ep_id 0x%" PRIx64 " dst_ep_id 0x%" PRIx64
+              " conn_sn %u address version %u/%u",
+              ep, remote_address->uuid, msg->src_ep_id, msg->dst_ep_id,
               msg->conn_sn, remote_address->addr_version,
               remote_address->dst_version);
 
@@ -678,9 +699,10 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
     int has_cm_lane, am_need_flush, full_handshake_required;
 
     UCP_WIREUP_MSG_CHECK(msg, ep, UCP_WIREUP_MSG_REQUEST);
-    ucs_debug("got wireup request from 0x%"PRIx64" src_ep_id 0x%"PRIx64
-              " dst_ep_id 0x%"PRIx64" conn_sn %d address version %u/%u",
-              remote_address->uuid, msg->src_ep_id, msg->dst_ep_id,
+    ucs_debug("ep %p: got wireup request from 0x%" PRIx64
+              " src_ep_id 0x%" PRIx64 " dst_ep_id 0x%" PRIx64
+              " conn_sn %d address version %u/%u",
+              ep, remote_address->uuid, msg->src_ep_id, msg->dst_ep_id,
               msg->conn_sn, remote_address->addr_version,
               remote_address->dst_version);
 
@@ -733,11 +755,19 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
          */
         if ((ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED) &&
             (remote_uuid > worker->uuid)) {
-            ucs_trace("ep %p: ignoring simultaneous connect request", ep);
+            ucs_debug("ep %p: ignoring simultaneous connect request "
+                      "local_uuid 0x%" PRIx64 " remote_uuid 0x%" PRIx64
+                      " conn_sn %d flags 0x%x",
+                      ep, worker->uuid, remote_uuid, msg->conn_sn, ep->flags);
             ucp_ep_update_flags(ep, UCP_EP_FLAG_CONNECT_REQ_IGNORED, 0);
             return;
         }
     }
+
+    ucs_debug("ep %p local_id 0x%" PRIx64 " remote_id 0x%" PRIx64
+              " conn_sn %d flags 0x%x: processing wireup request",
+              ep, ep->ext->local_ep_id, ep->ext->remote_ep_id, ep->conn_sn,
+              ep->flags);
 
     has_cm_lane = ucp_ep_has_cm_lane(ep);
     if (has_cm_lane) {
@@ -766,6 +796,18 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
      */
     send_reply = (msg->dst_ep_id == UCS_PTR_MAP_KEY_INVALID) ||
                  full_handshake_required;
+
+    ucs_debug("ep %p: request decision send_reply %d full_handshake %d "
+              "am_need_flush %d p2p_lanes 0x%" PRIx64 " flags 0x%x "
+              "reply_type %s",
+              ep, send_reply, full_handshake_required, am_need_flush,
+              (uint64_t)ucp_ep_config(ep)->p2p_lanes, ep->flags,
+              send_reply ?
+                      ucp_wireup_msg_str(
+                              am_need_flush ?
+                                      UCP_WIREUP_MSG_REPLY_RECONFIG :
+                                      UCP_WIREUP_MSG_REPLY) :
+                      "none");
 
     /* Connect p2p addresses to remote endpoint, if at least one is true: */
     if (/* - EP has not been connected locally yet */
@@ -827,6 +869,7 @@ ucp_wireup_process_reply_common(ucp_worker_h worker, ucp_ep_h ep,
                                 const ucp_wireup_msg_t *msg,
                                 const ucp_unpacked_address_t *remote_address)
 {
+    int was_local_connected = !!(ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED);
     ucs_status_t status;
     int ack;
 
@@ -857,6 +900,12 @@ ucp_wireup_process_reply_common(ucp_worker_h worker, ucp_ep_h ep,
     } else {
         ack = 0;
     }
+
+    ucs_debug("ep %p: reply decision type %s ack %d local_connected %d "
+              "cm_lane %d schedule_ack %d flags 0x%x",
+              ep, ucp_wireup_msg_str(msg->type), ack, was_local_connected,
+              ucp_ep_has_cm_lane(ep),
+              ack || (msg->type == UCP_WIREUP_MSG_REPLY_RECONFIG), ep->flags);
 
     ucp_wireup_remote_connected(ep);
 
@@ -965,7 +1014,9 @@ void ucp_wireup_process_ack(ucp_worker_h worker, ucp_ep_h ep,
                             const ucp_wireup_msg_t *msg)
 {
     UCP_WIREUP_MSG_CHECK(msg, ep, UCP_WIREUP_MSG_ACK);
-    ucs_debug("ep %p: got wireup ack", ep);
+    ucs_debug("ep %p: got wireup ack src_ep_id 0x%" PRIx64
+              " dst_ep_id 0x%" PRIx64 " conn_sn %d flags 0x%x",
+              ep, msg->src_ep_id, msg->dst_ep_id, msg->conn_sn, ep->flags);
 
     ucs_assert(ep->flags & UCP_EP_FLAG_REMOTE_ID);
     ucs_assert(ep->flags & UCP_EP_FLAG_CONNECT_REP_SENT);
@@ -1136,8 +1187,8 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
         UCP_WORKER_GET_EP_BY_ID(
                 &ep, worker, msg->dst_ep_id,
                 if (msg->type != UCP_WIREUP_MSG_EP_CHECK) { goto out; },
-                "WIREUP message (%d src_ep_id 0x%" PRIx64 " sn %d)", msg->type,
-                msg->src_ep_id, msg->conn_sn);
+                " WIREUP message (%d src_ep_id 0x%" PRIx64 " sn %d)",
+                msg->type, msg->src_ep_id, msg->conn_sn);
 
         if ((msg->type == UCP_WIREUP_MSG_EP_CHECK) && (ep != NULL)) {
             /* UCP EP is valid, no need for any other actions when handling
@@ -1216,6 +1267,9 @@ ucp_wireup_replay_pending_request(uct_pending_req_t *self, ucp_ep_h ucp_ep)
 
     ucs_assert(req->send.ep == ucp_ep);
 
+    ucs_debug("ep %p: replay wireup pending req %p lane %u flags 0x%x",
+              ucp_ep, req + 1, req->send.lane, req->flags);
+
     if ((req->flags & UCP_REQUEST_FLAG_PROTO_SEND) &&
         ((ucp_ep->cfg_index != req->send.proto_config->ep_cfg_index) ||
          ucp_ep->worker->context->config.ext.proto_request_reset)) {
@@ -1248,7 +1302,7 @@ static void
 ucp_wireup_ep_lane_set_next_ep(ucp_ep_h ep, ucp_lane_index_t lane,
                                uct_ep_h uct_ep)
 {
-    ucs_trace("ep %p: wireup uct_ep[%d]=%p next set to %p", ep, lane,
+    ucs_debug("ep %p: wireup uct_ep[%d]=%p next set to %p", ep, lane,
               ucp_ep_get_lane(ep, lane), uct_ep);
     ucp_wireup_ep_set_next_ep(ucp_ep_get_lane(ep, lane), uct_ep,
                               ucp_ep_get_rsc_index(ep, lane));
@@ -1368,7 +1422,7 @@ ucp_wireup_connect_lane_to_ep(ucp_ep_h ep, unsigned ep_init_flags,
             return status;
         }
 
-        ucs_trace("ep %p: assign uct_ep[%d]=%p wireup", ep, lane, uct_ep);
+        ucs_debug("ep %p: assign uct_ep[%d]=%p wireup", ep, lane, uct_ep);
         ucp_ep_set_lane(ep, lane, uct_ep);
     } else {
         uct_ep = ucp_ep_get_lane(ep, lane);
@@ -2037,8 +2091,9 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
                                    const ucp_unpacked_address_t *remote_address,
                                    unsigned *addr_indices, int *am_need_flush_p)
 {
-    ucp_worker_h worker    = ep->worker;
-    ucp_rsc_index_t cm_idx = UCP_NULL_RESOURCE;
+    ucp_worker_h worker                = ep->worker;
+    ucp_rsc_index_t cm_idx             = UCP_NULL_RESOURCE;
+    ucp_worker_cfg_index_t old_cfg_idx = ep->cfg_index;
     ucp_tl_bitmap_t tl_bitmap, current_tl_bitmap;
     ucp_rsc_index_t rsc_idx;
     ucp_lane_map_t connect_lane_bitmap;
@@ -2124,6 +2179,13 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     if (status != UCS_OK) {
         goto out;
     }
+
+    ucs_debug("ep %p local_id 0x%" PRIx64 " conn_sn %d: cfg[%u] -> cfg[%u] "
+              "connect_lanes 0x%" PRIx64 " reconfigurable %d "
+              "am_need_flush %d flags 0x%x",
+              ep, ep->ext->local_ep_id, ep->conn_sn, old_cfg_idx,
+              new_cfg_index, (uint64_t)connect_lane_bitmap, is_reconfigurable,
+              *am_need_flush_p, ep->flags);
 
     if (ep->cfg_index == new_cfg_index) {
 #if UCS_ENABLE_ASSERT

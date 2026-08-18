@@ -449,7 +449,10 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, unsigned ep_init_flags,
     ucp_ep_refcount_add(ep, create);
 
     *ep_p = ep;
-    ucs_debug("created ep %p to %s %s", ep, ucp_ep_peer_name(ep), message);
+    ucs_debug("created ep %p local_id 0x%" PRIx64 " remote_id 0x%" PRIx64
+              " conn_sn %u cfg_index %u flags 0x%x to %s %s",
+              ep, ep->ext->local_ep_id, ep->ext->remote_ep_id, ep->conn_sn,
+              ep->cfg_index, ep->flags, ucp_ep_peer_name(ep), message);
     return UCS_OK;
 
 err_ep_deallocate:
@@ -1162,6 +1165,12 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
             goto err_destroy_ep;
         }
 
+        ucs_debug("ep %p local_id 0x%" PRIx64 " remote_id 0x%" PRIx64
+                  " conn_sn %u flags 0x%x: API adopted unexpected ep "
+                  "uuid 0x%" PRIx64,
+                  ep, ep->ext->local_ep_id, ep->ext->remote_ep_id,
+                  ep->conn_sn, ep->flags, remote_address.uuid);
+
         ucp_stream_ep_activate(ep);
         goto out_resolve_remote_id;
     }
@@ -1356,7 +1365,10 @@ ucp_ep_purge_lanes(ucp_ep_h ep, uct_pending_purge_callback_t purge_cb,
 
 void ucp_ep_destroy_internal(ucp_ep_h ep)
 {
-    ucs_debug("ep %p: destroy", ep);
+    ucs_debug("ep %p local_id 0x%" PRIx64 " remote_id 0x%" PRIx64
+              " conn_sn %u cfg_index %u flags 0x%x: destroy",
+              ep, ep->ext->local_ep_id, ep->ext->remote_ep_id, ep->conn_sn,
+              ep->cfg_index, ep->flags);
     ucp_ep_cleanup_lanes(ep);
     ucp_ep_delete(ep);
 }
