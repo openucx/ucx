@@ -301,7 +301,7 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
     uct_ib_mlx5_txwq_ring_doorbell(txwq, ctrl, txwq->sw_pi, 1);
 
     for (i = 0; i < count; i++) {
-        uct_rc_mlx5_txwq_record_token(iface, txwq, lengths[i]);
+        uct_rc_mlx5_txwq_update_psn(iface, txwq, lengths[i]);
     }
 
     uct_rc_txqp_add_send_comp(&iface->super, &ep->super.txqp,
@@ -802,9 +802,12 @@ uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
         (params->flags & UCT_EP_INVALIDATE_FLAG_NO_COMPLETIONS)) {
         ucs_assert(!(ep->super.flags & UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS));
         ep->super.flags |= UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS;
-        txwq->ft_ci      = txwq->hw_ci;
-        ucs_debug("ep %p defer completions WQE range (%u, %u) next token %u",
-                  ep, txwq->ft_ci, txwq->sw_pi, txwq->next_token);
+        txwq->ft_ci      = txwq->prev_sw_pi -
+                           (txwq->bb_max -
+                            uct_rc_txqp_available(&ep->super.super.txqp));
+        ucs_debug("ep %p defer completions WQE range (%u, %u) "
+                  "next_first_psn %u",
+                  ep, txwq->ft_ci, txwq->sw_pi, txwq->next_first_psn);
     }
 
     return UCS_OK;
@@ -821,7 +824,8 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
         return status;
     }
 
-    uct_rc_mlx5_ep_update_tx_res(ep, ep->tx.wq.hw_ci, ep->tx.wq.ft_ci);
+    uct_rc_mlx5_ep_update_tx_res(ep, ep->tx.wq.prev_sw_pi,
+                                 ep->tx.wq.prev_sw_pi);
     ep->flags &= ~UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS;
     return UCS_OK;
 }

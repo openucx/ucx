@@ -1635,6 +1635,8 @@ static void uct_ib_iface_set_path_mtu(uct_ib_iface_t *iface,
     } else {
         iface->config.path_mtu = port_mtu;
     }
+
+    iface->config.path_mtu_bytes = uct_ib_mtu_value(iface->config.path_mtu);
 }
 
 uint8_t uct_ib_iface_config_select_sl(const uct_ib_iface_config_t *ib_config)

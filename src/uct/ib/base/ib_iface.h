@@ -372,6 +372,7 @@ struct uct_ib_iface {
         uint8_t                          force_global_addr;
         uint8_t                          flid_enabled;
         enum ibv_mtu                     path_mtu;
+        size_t                           path_mtu_bytes;
         uint8_t                          counter_set_id;
         uct_ib_iface_send_overhead_t     send_overhead;
         uct_ib_iface_reachability_mode_t reachability_mode;
