@@ -192,7 +192,9 @@ static UCS_F_ALWAYS_INLINE uint16_t
 uct_ib_mlx5_txwq_update_bb(uct_ib_mlx5_txwq_t *wq, uint16_t hw_ci,
                            uint16_t sw_ci)
 {
+#if UCS_ENABLE_ASSERT
     wq->hw_ci = hw_ci;
+#endif
     return wq->bb_max - (wq->prev_sw_pi - sw_ci);
 }
 
