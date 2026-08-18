@@ -73,7 +73,6 @@ protected:
         TEST_FAILOVER_PROTO_AM_EGR_SINGLE_BCOPY,
         TEST_FAILOVER_PROTO_AM_EGR_SINGLE_BCOPY_REPLY,
         TEST_FAILOVER_PROTO_AM_EGR_MULTI_BCOPY,
-        TEST_FAILOVER_PROTO_PUT_OFFLOAD_SHORT,
         TEST_FAILOVER_PROTO_PUT_AM_BCOPY,
         TEST_FAILOVER_PROTO_LAST
     };
@@ -633,7 +632,6 @@ protected:
             {"am/egr/single/bcopy", UCT_IFACE_FLAG_AM_BCOPY, UCS_KBYTE},
             {"am/egr/single/bcopy/reply", UCT_IFACE_FLAG_AM_BCOPY, UCS_KBYTE},
             {"am/egr/multi/bcopy", UCT_IFACE_FLAG_AM_BCOPY, 64 * UCS_KBYTE},
-            {"put/offload/short", UCT_IFACE_FLAG_PUT_SHORT, 8},
             {"put/am/bcopy", UCT_IFACE_FLAG_AM_BCOPY, 64 * UCS_KBYTE}
         };
 
@@ -654,8 +652,7 @@ protected:
 
     static bool is_put_proto(failover_proto_t proto)
     {
-        return (proto == TEST_FAILOVER_PROTO_PUT_OFFLOAD_SHORT) ||
-               (proto == TEST_FAILOVER_PROTO_PUT_AM_BCOPY);
+        return (proto == TEST_FAILOVER_PROTO_PUT_AM_BCOPY);
     }
 
     static bool is_single_proto(failover_proto_t proto)
@@ -663,8 +660,7 @@ protected:
         return (proto == TEST_FAILOVER_PROTO_AM_EGR_SHORT) ||
                (proto == TEST_FAILOVER_PROTO_AM_EGR_SHORT_REPLY) ||
                (proto == TEST_FAILOVER_PROTO_AM_EGR_SINGLE_BCOPY) ||
-               (proto == TEST_FAILOVER_PROTO_AM_EGR_SINGLE_BCOPY_REPLY) ||
-               (proto == TEST_FAILOVER_PROTO_PUT_OFFLOAD_SHORT);
+               (proto == TEST_FAILOVER_PROTO_AM_EGR_SINGLE_BCOPY_REPLY);
     }
 
     static bool is_reply_proto(failover_proto_t proto)
@@ -1007,15 +1003,6 @@ UCS_TEST_SKIP_COND_P(test_ucp_fault_tolerance,
                      "BCOPY_THRESH=inf", "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
 {
     test_outstanding_am(TEST_FAILOVER_PROTO_AM_EGR_SHORT);
-}
-
-UCS_TEST_SKIP_COND_P(test_ucp_fault_tolerance,
-                     initiator_failure_put_offload_short_outstanding,
-                     !(get_variant_value() & TEST_OP_PUT),
-                     "MAX_EAGER_LANES=8", "MAX_RMA_LANES=8", "MAX_RMA_RAILS=8",
-                     "BCOPY_THRESH=inf", "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
-{
-    test_outstanding_put(TEST_FAILOVER_PROTO_PUT_OFFLOAD_SHORT);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_fault_tolerance,
