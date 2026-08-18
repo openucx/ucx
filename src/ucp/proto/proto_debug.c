@@ -241,6 +241,7 @@ ucp_proto_select_elem_info(ucp_worker_h worker,
     /* One body row per valid protocol range. */
     range_end = -1;
     do {
+        /* coverity[overflow_const] */
         range_start = range_end + 1;
         proto_valid = ucp_proto_select_elem_query(worker, select_elem,
                                                   range_start, &proto_attr);

@@ -296,6 +296,7 @@ perftest_mad_recv_magic(perftest_mad_rte_group_t *group, unsigned value)
     size_t size    = sizeof(magic);
     ucs_status_t status;
 
+    /* coverity[overrun-buffer-val] */
     status = perftest_mad_recv_from_remote(group, &magic, &size,
                                            &group->dst_port);
     if (status == UCS_ERR_UNREACHABLE) {
@@ -452,11 +453,15 @@ static ucs_status_t perftest_mad_path_query(const char *ca, int ca_port,
     }
 
     memset(&sm_id, 0, sizeof(sm_id));
+    /* coverity[uninit_use] */
     sm_id.lid = port.sm_lid;
+    /* coverity[uninit_use] */
     sm_id.sl  = port.sm_sl;
 
     memset(selfgid, 0, sizeof(selfgid)); /* uint8_t[] */
+    /* coverity[uninit_use_in_call] */
     gid_prefix = be64toh(port.gid_prefix);
+    /* coverity[uninit_use_in_call] */
     port_guid  = be64toh(port.port_guid);
 
     umad_release_port(&port);
@@ -546,6 +551,7 @@ static ucs_status_t perftest_mad_accept(perftest_mad_rte_group_t *rte_group,
 
     do {
         size   = sizeof(peer.buf);
+        /* coverity[overrun-buffer-val] */
         status = perftest_mad_recv(rte_group, peer.buf, &size,
                                    &rte_group->dst_port);
 

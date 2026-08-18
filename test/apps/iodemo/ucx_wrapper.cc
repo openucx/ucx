@@ -283,6 +283,7 @@ void UcxContext::connect_callback(ucp_conn_request_h conn_req, void *arg)
                                UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ID;
     ucs_status_t status = ucp_conn_request_query(conn_req, &conn_req_attr);
     if (status == UCS_OK) {
+        /* coverity[uninit_use_in_call] */
         UCX_LOG << "got new connection request " << conn_req << " from client "
                 << UcxContext::sockaddr_str(
                            (const struct sockaddr*)&conn_req_attr.client_address,
@@ -846,6 +847,7 @@ void UcxConnection::accept(ucp_conn_request_h conn_req, UcxCallback *callback)
 
     ucs_status_t status = ucp_conn_request_query(conn_req, &conn_req_attr);
     if (status == UCS_OK) {
+        /* coverity[uninit_use_in_call] */
         set_log_prefix((const struct sockaddr*)&conn_req_attr.client_address,
                        sizeof(conn_req_attr.client_address));
     } else {
@@ -968,6 +970,7 @@ bool UcxConnection::send_am(const void *meta, size_t meta_length,
         param.memh          = memh;
     }
 
+    /* coverity[uninit_use_in_call] */
     ucs_status_ptr_t sptr = ucp_am_send_nbx(_ep, AM_MSG_ID, meta, meta_length,
                                             buffer, length, &param);
     return process_request("ucp_am_send_nbx", sptr, callback);
@@ -1139,6 +1142,7 @@ void UcxConnection::connect_tag(UcxCallback *callback)
     param.cb.send = (ucp_send_nbx_callback_t)common_request_callback;
     param.flags   = 0;
 
+    /* coverity[uninit_use_in_call] */
     void *sreq = ucp_stream_send_nbx(_ep, &_conn_id, 1, &param);
 
     // we do not have to check the status here, in case if the endpoint is
@@ -1205,9 +1209,11 @@ void UcxConnection::established(ucs_status_t status)
             UCX_CONN_LOG << "ucp_ep_query() failed: "
                          << ucs_status_string(status);
         } else {
+            /* coverity[uninit_use_in_call] */
             local_address  = UcxContext::sockaddr_str(
                                  (const struct sockaddr*)&ep_attr.local_sockaddr,
                                  sizeof(ep_attr.local_sockaddr));
+            /* coverity[uninit_use_in_call] */
             remote_address = UcxContext::sockaddr_str(
                                  (const struct sockaddr*)&ep_attr.remote_sockaddr,
                                  sizeof(ep_attr.remote_sockaddr));
@@ -1252,6 +1258,7 @@ bool UcxConnection::send_common(const void *buffer, size_t length,
         param.memh          = memh;
     }
 
+    /* coverity[uninit_use_in_call] */
     ucs_status_ptr_t status_ptr = ucp_tag_send_nbx(_ep, buffer, length, tag,
                                                    &param);
     return process_request("ucp_tag_send_nbx", status_ptr, callback);
