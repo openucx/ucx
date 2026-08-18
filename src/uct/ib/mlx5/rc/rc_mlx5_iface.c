@@ -207,8 +207,8 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
                             uct_rc_ep_arbiter_purge_internal_cb, NULL);
     uct_ib_mlx5_txwq_update_flags(&ep->tx.wq, UCT_IB_MLX5_TXWQ_FLAG_FAILED, 0);
 
-    if ((ep->super.flags & UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED) ||
-        (ep->super.flags & UCT_RC_EP_FLAG_FLUSH_CANCEL)) {
+    if (ep->super.flags & (UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED |
+                           UCT_RC_EP_FLAG_FLUSH_CANCEL)) {
         goto purge;
     }
 
