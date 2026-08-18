@@ -758,15 +758,6 @@ ucs_status_t uct_rc_mlx5_base_ep_flush(uct_ep_h tl_ep, unsigned flags,
     int already_canceled = ep->super.flags & UCT_RC_EP_FLAG_FLUSH_CANCEL;
     ucs_status_t status;
 
-    if (ep->flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS) {
-        /* Deferred completions are not processed from the CQ, so this flush can
-         * never be satisfied. A lane whose operations were taken over by
-         * failover must be closed instead of flushed. */
-        ucs_diag("ep %p flush while completions are deferred; outstanding "
-                 "operations must be purged first",
-                 ep);
-    }
-
     UCT_CHECK_PARAM(!ucs_test_all_flags(flags, UCT_FLUSH_FLAG_CANCEL |
                                                UCT_FLUSH_FLAG_REMOTE),
                     "flush flags CANCEL and REMOTE are mutually exclusive");
@@ -783,6 +774,16 @@ ucs_status_t uct_rc_mlx5_base_ep_flush(uct_ep_h tl_ep, unsigned flags,
     status = uct_rc_ep_flush(&ep->super, ep->tx.wq.bb_max, flags);
     if (status != UCS_INPROGRESS) {
         return status;
+    }
+
+    if ((flags & UCT_FLUSH_FLAG_CANCEL) &&
+        (ep->flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS)) {
+        /* The in-flight operations are owned by the caller which armed
+         * DEFER_COMPLETIONS and are not completed from the CQ, so this flush
+         * could never be satisfied. Report the operations as canceled, since
+         * that is what destroying the endpoint does to them. */
+        ucs_debug("ep %p cancel flush while completions are deferred", ep);
+        return UCS_ERR_CANCELED;
     }
 
     if (uct_rc_txqp_unsignaled(&ep->super.txqp) != 0) {
@@ -1361,10 +1362,11 @@ UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(
             self->super.super.super.super.iface, uct_rc_mlx5_iface_common_t);
+    int deferred = self->super.flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS;
     uct_rc_mlx5_iface_qp_cleanup_ctx_t *cleanup_ctx;
     uint16_t outstanding, wqe_count;
 
-    if (self->super.flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS) {
+    if (deferred) {
         /* A failover-owned endpoint is closed directly after purge instead of
          * being flushed. Reconcile the CQ completion boundary before cleanup
          * derives the outstanding WQE count from TXQP resources. Keep DEFER
@@ -1378,8 +1380,11 @@ UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
     cleanup_ctx->tm_qp = self->tm_qp;
     cleanup_ctx->reg   = self->super.tx.wq.reg;
 
+    /* Operations still owned by a deferred-completions caller are canceled here
+     * by the endpoint destruction itself, so they are not an accounting error. */
     uct_rc_txqp_purge_outstanding(&iface->super, &self->super.super.txqp,
-                                  UCS_ERR_CANCELED, self->super.tx.wq.sw_pi, 1);
+                                  UCS_ERR_CANCELED, self->super.tx.wq.sw_pi,
+                                  !deferred);
 #if IBV_HW_TM
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
         uct_rc_iface_remove_qp(&iface->super, self->tm_qp.qp_num);

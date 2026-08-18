@@ -53,8 +53,7 @@ enum {
     UCP_WIREUP_MSG_REPLY_RECONFIG,
     UCP_WIREUP_MSG_LANES_ADDR_REQUEST,
     UCP_WIREUP_MSG_LANES_ADDR_REPLY,
-    UCP_WIREUP_MSG_QUERY_LANE_STATE,
-    UCP_WIREUP_MSG_LANE_STATE,
+    UCP_WIREUP_MSG_LANES_ADDR_ACK,
     UCP_WIREUP_MSG_LAST
 };
 
@@ -156,7 +155,13 @@ typedef struct ucp_wireup_msg {
 typedef struct ucp_wireup_msg_lanes_info_t {
     ucp_lane_map_t         requested_lane_map; /* lanes the sender asked about */
     ucp_lane_map_t         provided_lane_map;  /* lanes actually carried here */
-    /* packed addresses follow */
+    uint64_t               request_id;         /* recovery generation id */
+    ucp_lane_map_t         tx_token_map;       /* lanes with TX tokens in payload */
+    ucp_lane_map_t         rx_token_map;       /* lanes with RX tokens in payload */
+    uint32_t               address_length;     /* packed address size after tokens */
+    /* uint8_t tx_token_lengths[popcount(tx_token_map)] + tx tokens[],
+     * then uint8_t rx_token_lengths[popcount(rx_token_map)] + rx tokens[],
+     * then packed addresses of address_length follow */
 } UCS_S_PACKED ucp_wireup_msg_lanes_info_t;
 
 typedef struct {
@@ -169,15 +174,9 @@ typedef struct {
 } ucp_wireup_select_info_t;
 
 
-typedef struct ucp_wireup_lane_state {
-    uint64_t       request_id; /**< Query identifier, echoed by the reply */
-    ucp_lane_map_t lane_map; /**< Lanes included in this message */
-    /* uint8_t token_lengths[] follow, one per lane in lane_map order.
-     * uint8_t tokens[] follow, each entry uses its matching token length. */
-} UCS_S_PACKED ucp_wireup_lane_state_t;
-
-
-#define UCP_WIREUP_LANE_STATE_MIN_VERSION 22
+/* ADDR_REQ/REP/ACK carry TX/RX tokens (replaces QUERY_LANE_STATE/LANE_STATE). */
+#define UCP_WIREUP_ADDR_TOKEN_MIN_VERSION 23
+#define UCP_WIREUP_LANE_STATE_MIN_VERSION UCP_WIREUP_ADDR_TOKEN_MIN_VERSION
 
 
 ucs_status_t ucp_wireup_send_request(ucp_ep_h ep);
@@ -271,12 +270,19 @@ unsigned ucp_wireup_eps_progress(void *arg);
 
 
 /**
- * Send a LANES_ADDR_REQUEST/REPLY wireup message over the AM lane, packing
- * addresses for the lanes in @a provided_lane_map.
+ * Send a LANES_ADDR_REQUEST/REPLY/ACK over the AM lane.
+ * @a peer_tx_map / lengths / tokens are the peer's TX from the prior message,
+ * used to derive local RX tokens for REP/ACK (may be empty).
  */
 void ucp_wireup_send_lanes_addr_msg(ucp_ep_h ep, uint8_t msg_type,
                                     ucp_lane_map_t requested_lane_map,
-                                    ucp_lane_map_t provided_lane_map);
+                                    ucp_lane_map_t provided_lane_map,
+                                    uint64_t request_id,
+                                    ucp_lane_map_t tx_token_map,
+                                    ucp_lane_map_t rx_token_map,
+                                    ucp_lane_map_t peer_tx_map,
+                                    const uint8_t *peer_tx_lengths,
+                                    const void *peer_tx_tokens);
 
 
 /**
@@ -307,26 +313,6 @@ double ucp_wireup_iface_bw_distance(const ucp_worker_iface_t *wiface);
 
 int ucp_wireup_is_lane_connected(ucp_ep_h ep, ucp_lane_index_t lane,
                                  const ucp_address_entry_t *addr_entry);
-
-/**
- * Send a @ref UCP_WIREUP_MSG_QUERY_LANE_STATE message. TX tokens are
- * queried from the selected @a lane_map lanes and sent to the peer.
- */
-ucs_status_t ucp_wireup_send_query_lane_state(ucp_ep_h ep, uint64_t request_id,
-                                              ucp_lane_map_t lane_map);
-
-unsigned ucp_wireup_lane_state_num_tokens(const ucp_wireup_lane_state_t *msg);
-
-const uint8_t *
-ucp_wireup_lane_state_token_lengths(const ucp_wireup_lane_state_t *lane_state);
-
-const void *
-ucp_wireup_lane_state_tokens(const ucp_wireup_lane_state_t *lane_state);
-
-ucs_status_t
-ucp_wireup_lane_state_validate(ucp_ep_h ep,
-                               const ucp_wireup_lane_state_t *lane_state,
-                               size_t length);
 
 static inline int ucp_wireup_lane_types_has_fast_path(ucp_lane_map_t lane_types)
 {

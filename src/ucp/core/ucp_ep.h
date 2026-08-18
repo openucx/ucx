@@ -515,6 +515,8 @@ typedef struct ucp_ep_recovery_arg {
     /* number of retries left before giving up */
     unsigned                retries_left;
     uint8_t                 state;
+    /* ADDR handshake generation for TX/RX token correlation */
+    uint64_t                request_id;
     ucp_ep_recovery_probe_t probe[UCP_MAX_LANES];
 } ucp_ep_recovery_arg_t;
 

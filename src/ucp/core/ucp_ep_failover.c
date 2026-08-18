@@ -30,7 +30,8 @@ enum ucp_ep_failover_lane_flags {
 
 enum ucp_ep_failover_flags {
     UCP_EP_FAILOVER_FLAG_FLUSH_STARTED = UCS_BIT(0),
-    UCP_EP_FAILOVER_FLAG_FLUSH_DONE    = UCS_BIT(1)
+    UCP_EP_FAILOVER_FLAG_FLUSH_DONE    = UCS_BIT(1),
+    UCP_EP_FAILOVER_FLAG_ABORTED       = UCS_BIT(2)
 };
 
 
@@ -63,8 +64,7 @@ typedef struct {
 
 struct ucp_ep_failover_ctx {
     ucp_lane_map_t             lane_map;
-    uint64_t                   query_id;
-    unsigned                   query_retries;
+    uint64_t                   request_id;
     unsigned                   flags;
     ucs_status_t               status;
     ucp_request_t              *super_req;
@@ -77,26 +77,32 @@ static void ucp_ep_failover_schedule(ucp_ep_h ep);
 static unsigned ucp_ep_failover_progress_cb(void *arg);
 static ucs_status_t ucp_ep_failover_flush_start(ucp_ep_h ep);
 
-static int ucp_ep_failover_lane_token_supported(ucp_ep_h ep, uct_ep_h uct_ep,
-                                                ucp_lane_index_t lane)
+static int ucp_ep_failover_iface_token_supported(uct_iface_h iface)
 {
     uct_iface_attr_v2_t attr;
     ucs_status_t status;
 
-    if ((uct_ep == NULL) || ucp_wireup_ep_test(uct_ep) ||
-        (ucp_ep_get_rsc_index(ep, lane) == UCP_NULL_RESOURCE)) {
-        return 0;
-    }
-
     attr.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS |
                       UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH;
-    status          = uct_iface_query_v2(uct_ep->iface, &attr);
+    status          = uct_iface_query_v2(iface, &attr);
     if (status != UCS_OK) {
         return 0;
     }
 
     return (attr.cap.flags & UCT_IFACE_FLAG_V2_QUERY_TOKEN) &&
            (attr.tx_token_length > 0) && (attr.tx_token_length <= UINT8_MAX);
+}
+
+
+static int ucp_ep_failover_lane_token_supported(ucp_ep_h ep, uct_ep_h uct_ep,
+                                                ucp_lane_index_t lane)
+{
+    if ((uct_ep == NULL) || ucp_wireup_ep_test(uct_ep) ||
+        (ucp_ep_get_rsc_index(ep, lane) == UCP_NULL_RESOURCE)) {
+        return 0;
+    }
+
+    return ucp_ep_failover_iface_token_supported(uct_ep->iface);
 }
 
 
@@ -298,6 +304,25 @@ int ucp_ep_failover_is_uct_ep(ucp_ep_h ep, ucp_lane_index_t lane,
 }
 
 
+/* Release the context after its last armed lane is gone. An EP flush posted for
+ * replayed operations owns super_req, so in that case the flush completion
+ * callback releases the context instead. */
+static void ucp_ep_failover_ctx_release(ucp_ep_h ep, ucp_ep_failover_ctx_t *ctx)
+{
+    ucs_assert(ctx->lane_map == 0);
+    ucs_assert(ucs_queue_is_empty(&ctx->pending_queue));
+
+    if ((ctx->flags & UCP_EP_FAILOVER_FLAG_FLUSH_STARTED) &&
+        !(ctx->flags & UCP_EP_FAILOVER_FLAG_FLUSH_DONE)) {
+        return;
+    }
+
+    ep->ext->failover.ctx = NULL;
+    ucp_request_put(ctx->super_req);
+    ucs_free(ctx);
+}
+
+
 static int ucp_ep_failover_lane_complete(ucp_ep_failover_ctx_t *ctx,
                                          ucp_lane_index_t lane_index,
                                          ucs_status_t status)
@@ -321,10 +346,7 @@ static int ucp_ep_failover_lane_complete(ucp_ep_failover_ctx_t *ctx,
     failover_done = (ctx->lane_map == 0);
     if (failover_done) {
         ucs_assert(ctx->flags & UCP_EP_FAILOVER_FLAG_FLUSH_DONE);
-        ucs_assert(ucs_queue_is_empty(&ctx->pending_queue));
-        ep->ext->failover.ctx = NULL;
-        ucp_request_put(ctx->super_req);
-        ucs_free(ctx);
+        ucp_ep_failover_ctx_release(ep, ctx);
     }
 
     ucp_worker_flush_ops_count_add(worker, -1);
@@ -342,6 +364,7 @@ static void ucp_ep_failover_lane_close(ucp_ep_h ep,
                                        ucs_status_t discard_status)
 {
     ucp_ep_failover_ctx_t *ctx = ep->ext->failover.ctx;
+    ucp_worker_h worker        = ep->worker;
     ucp_ep_failover_lane_ctx_t *lane;
     ucp_ep_failover_lane_done_cb_t done_cb;
     ucp_ep_failover_lane_failed_cb_t failed_cb;
@@ -367,13 +390,6 @@ static void ucp_ep_failover_lane_close(ucp_ep_h ep,
     ucs_free(lane->rx_token);
     memset(lane, 0, sizeof(*lane));
     ctx->lane_map &= ~UCS_BIT(lane_index);
-    if (ctx->lane_map == 0) {
-        ucs_assert(!(ctx->flags & UCP_EP_FAILOVER_FLAG_FLUSH_STARTED));
-        ucp_ep_failover_pending_purge(ctx, discard_status);
-        ep->ext->failover.ctx = NULL;
-        ucp_request_put(ctx->super_req);
-        ucs_free(ctx);
-    }
 
     if (failed_cb != NULL) {
         failed_cb(discard_status, done_arg);
@@ -381,16 +397,25 @@ static void ucp_ep_failover_lane_close(ucp_ep_h ep,
 
     /* The lane owns in-flight WQEs whose completions are deferred, so it cannot
      * be discarded through a flush - the flush would never complete. Release
-     * the pending requests and close the endpoint instead. */
-    uct_ep_pending_purge(uct_ep, ucp_ep_err_pending_purge,
-                         UCS_STATUS_PTR(discard_status));
-    ucp_ep_unprogress_uct_ep(ep, uct_ep, rsc_index);
-    uct_ep_destroy(uct_ep);
+     * the pending requests and close the endpoint instead. Extraction already
+     * destroyed the endpoint of an extracted lane. */
+    if (uct_ep != NULL) {
+        uct_ep_pending_purge(uct_ep, ucp_ep_err_pending_purge,
+                             UCS_STATUS_PTR(discard_status));
+        ucp_ep_unprogress_uct_ep(ep, uct_ep, rsc_index);
+        uct_ep_destroy(uct_ep);
+    }
+
+    if (ctx->lane_map == 0) {
+        ucp_ep_failover_pending_purge(ctx, discard_status);
+        ucp_ep_failover_ctx_release(ep, ctx);
+    }
+
     if (done_cb != NULL) {
         done_cb(NULL, discard_status, done_arg);
     }
 
-    ucp_worker_flush_ops_count_add(ep->worker, -1);
+    ucp_worker_flush_ops_count_add(worker, -1);
     ucp_ep_refcount_remove(ep, discard);
 }
 
@@ -446,8 +471,7 @@ ucp_ep_failover_add_lanes(ucp_ep_h ep, ucp_lane_map_t lane_map,
         ep->ext->failover.ctx = ctx;
     }
 
-    ctx->query_id      = 0;
-    ctx->query_retries = 0;
+    ctx->request_id = 0;
     ucs_for_each_bit(lane, lane_map) {
         uct_ep = uct_eps[lane];
         lane_ctx            = &ctx->lanes[lane];
@@ -504,7 +528,7 @@ void ucp_ep_failover_cancel_lanes(ucp_ep_h ep, ucp_lane_map_t lane_map)
     }
 
     ctx           = ep->ext->failover.ctx;
-    ctx->query_id = 0;
+    ctx->request_id = 0;
     ucs_debug("ep %p: canceling failover for lanes 0x%" PRIx64, ep,
               (uint64_t)(lane_map & ctx->lane_map));
     ucs_for_each_bit(lane, lane_map & ctx->lane_map) {
@@ -522,17 +546,14 @@ void ucp_ep_failover_cancel_lanes(ucp_ep_h ep, ucp_lane_map_t lane_map)
     }
 
     if (ctx->lane_map == 0) {
-        ucs_assert(!(ctx->flags & UCP_EP_FAILOVER_FLAG_FLUSH_STARTED));
         ucp_ep_failover_pending_purge(ctx, UCS_ERR_CANCELED);
-        ep->ext->failover.ctx = NULL;
-        ucp_request_put(ctx->super_req);
-        ucs_free(ctx);
+        ucp_ep_failover_ctx_release(ep, ctx);
     }
 }
 
 
 static ucp_lane_map_t
-ucp_ep_failover_query_lanes(const ucp_ep_failover_ctx_t *ctx)
+ucp_ep_failover_pending_rx_lanes_internal(const ucp_ep_failover_ctx_t *ctx)
 {
     ucp_lane_map_t lane_map = 0;
     ucp_lane_index_t lane;
@@ -547,97 +568,127 @@ ucp_ep_failover_query_lanes(const ucp_ep_failover_ctx_t *ctx)
 }
 
 
-static uint64_t ucp_ep_failover_query_id_alloc(ucp_worker_h worker)
+ucp_lane_map_t ucp_ep_failover_pending_rx_lanes(ucp_ep_h ep)
 {
-    uint64_t id;
-
-    do {
-        id = worker->am_message_id++;
-    } while (id == 0);
-
-    return id;
-}
-
-
-static ucs_status_t ucp_ep_failover_query_send(ucp_ep_h ep)
-{
-    ucp_ep_failover_ctx_t *ctx = ep->ext->failover.ctx;
-    ucp_lane_map_t lane_map;
-    uint64_t request_id;
-    ucs_status_t status;
-
-    lane_map = ucp_ep_failover_query_lanes(ctx);
-    if (lane_map == 0) {
-        ctx->query_id = 0;
-        return UCS_OK;
+    if ((ep->ext == NULL) || (ep->ext->failover.ctx == NULL)) {
+        return 0;
     }
 
-    request_id    = ucp_ep_failover_query_id_alloc(ep->worker);
-    status        = ucp_wireup_send_query_lane_state(ep, request_id, lane_map);
-    ctx->query_id = (status == UCS_OK) ? request_id : 0;
-    return status;
+    return ucp_ep_failover_pending_rx_lanes_internal(ep->ext->failover.ctx);
 }
 
 
-ucs_status_t ucp_ep_failover_query_lane_state(ucp_ep_h ep)
+void ucp_ep_failover_set_request_id(ucp_ep_h ep, uint64_t request_id)
 {
-    ucs_status_t status;
-
-    ucs_assert(ep->ext != NULL);
-    ucs_assert(ep->ext->failover.ctx != NULL);
-
-    status = ucp_ep_failover_query_send(ep);
-    if (status == UCS_ERR_NO_RESOURCE) {
-        ucp_ep_failover_schedule(ep);
-        return UCS_OK;
-    }
-
-    return status;
-}
-
-
-void ucp_ep_failover_retry_lane_state(ucp_ep_h ep)
-{
-    ucp_ep_failover_ctx_t *ctx;
-    ucp_lane_map_t lane_map;
-    ucp_lane_index_t lane;
-    ucs_status_t status;
-
     if ((ep->ext == NULL) || (ep->ext->failover.ctx == NULL)) {
         return;
     }
 
-    ctx      = ep->ext->failover.ctx;
-    lane_map = ucp_ep_failover_query_lanes(ctx);
-    if (lane_map == 0) {
-        return;
+    ep->ext->failover.ctx->request_id = request_id;
+}
+
+
+uint64_t ucp_ep_failover_get_request_id(ucp_ep_h ep)
+{
+    if ((ep->ext == NULL) || (ep->ext->failover.ctx == NULL)) {
+        return 0;
     }
 
-    /* TODO: Drive retries by a dedicated deadline anchored to the last query
-     * send time, with backoff, instead of the endpoint recovery tick. */
-    if (ctx->query_retries >=
-        ep->worker->context->config.ext.recovery_retries) {
-        ucs_diag("ep %p: failover lane state query retries exhausted for "
-                 "lanes 0x%" PRIx64,
-                 ep, (uint64_t)lane_map);
-        ctx->query_id = 0;
-        ucs_for_each_bit(lane, lane_map) {
-            ucp_ep_failover_lane_close(ep, lane, UCS_ERR_ENDPOINT_TIMEOUT);
+    return ep->ext->failover.ctx->request_id;
+}
+
+
+ucs_status_t
+ucp_ep_failover_apply_rx_tokens(ucp_ep_h ep, uint64_t request_id,
+                                ucp_lane_map_t lane_map,
+                                const uint8_t *token_lengths,
+                                const void *tokens)
+{
+    ucp_ep_failover_ctx_t *ctx;
+    ucp_ep_failover_lane_ctx_t *lane_ctx;
+    void *rx_tokens[UCP_MAX_LANES]          = {NULL};
+    uint8_t rx_token_lengths[UCP_MAX_LANES] = {0};
+    ucs_status_t fallback_status[UCP_MAX_LANES];
+    ucp_lane_map_t expected_lanes;
+    ucp_lane_map_t apply_lanes;
+    ucp_lane_map_t fallback_lanes = 0;
+    ucp_lane_index_t lane;
+    unsigned token_index = 0;
+    size_t token_offset  = 0;
+
+    if ((ep->ext == NULL) || (ep->ext->failover.ctx == NULL) ||
+        (lane_map == 0) || (token_lengths == NULL)) {
+        return UCS_OK;
+    }
+
+    ctx            = ep->ext->failover.ctx;
+    expected_lanes = ucp_ep_failover_pending_rx_lanes_internal(ctx);
+    apply_lanes    = lane_map & expected_lanes;
+    if (apply_lanes == 0) {
+        return UCS_OK;
+    }
+
+    if ((request_id != 0) && (ctx->request_id != 0) &&
+        (request_id != ctx->request_id)) {
+        ucs_debug("ep %p: ignoring ADDR RX tokens id 0x%" PRIx64
+                  ", expected 0x%" PRIx64,
+                  ep, request_id, ctx->request_id);
+        return UCS_OK;
+    }
+
+    if (request_id != 0) {
+        ctx->request_id = request_id;
+    }
+
+    ucs_debug("ep %p: applying ADDR RX tokens id 0x%" PRIx64
+              " for lanes 0x%" PRIx64,
+              ep, request_id, (uint64_t)apply_lanes);
+
+    /* Lengths/tokens are ordered by the full lane_map from the wire message. */
+    ucs_for_each_bit(lane, lane_map) {
+        if (!(apply_lanes & UCS_BIT(lane))) {
+            token_offset += token_lengths[token_index++];
+            continue;
         }
-        return;
+
+        rx_token_lengths[lane] = token_lengths[token_index];
+        if (rx_token_lengths[lane] == 0) {
+            fallback_lanes       |= UCS_BIT(lane);
+            fallback_status[lane] = UCS_ERR_UNSUPPORTED;
+        } else {
+            rx_tokens[lane] = ucs_malloc(rx_token_lengths[lane],
+                                         "ep_failover_rx_token");
+            if (rx_tokens[lane] == NULL) {
+                fallback_lanes       |= UCS_BIT(lane);
+                fallback_status[lane] = UCS_ERR_NO_MEMORY;
+            } else if (tokens != NULL) {
+                memcpy(rx_tokens[lane],
+                       UCS_PTR_BYTE_OFFSET(tokens, token_offset),
+                       rx_token_lengths[lane]);
+            }
+        }
+
+        token_offset += token_lengths[token_index];
+        ++token_index;
     }
 
-    ++ctx->query_retries;
-    ucs_debug("ep %p: retrying failover lane state query for lanes 0x%" PRIx64,
-              ep, (uint64_t)lane_map);
-    status = ucp_ep_failover_query_send(ep);
-    if (status == UCS_ERR_NO_RESOURCE) {
+    ucs_for_each_bit(lane, apply_lanes & ~fallback_lanes) {
+        lane_ctx = &ctx->lanes[lane];
+        ucs_free(lane_ctx->rx_token);
+        lane_ctx->rx_token        = rx_tokens[lane];
+        lane_ctx->rx_token_length = rx_token_lengths[lane];
+        lane_ctx->flags          |= UCP_EP_FAILOVER_LANE_FLAG_RX_TOKEN;
+        rx_tokens[lane]           = NULL;
+    }
+
+    ucs_for_each_bit(lane, fallback_lanes) {
+        ucp_ep_failover_lane_close(ep, lane, fallback_status[lane]);
+    }
+
+    if (ep->ext->failover.ctx != NULL) {
         ucp_ep_failover_schedule(ep);
-    } else if (status != UCS_OK) {
-        ucs_for_each_bit(lane, lane_map) {
-            ucp_ep_failover_lane_close(ep, lane, status);
-        }
     }
+    return UCS_OK;
 }
 
 
@@ -674,115 +725,6 @@ void ucp_ep_failover_cleanup(ucp_ep_h ep)
         ucs_free(ctx);
         ep->ext->failover.ctx = NULL;
     }
-}
-
-
-ucs_status_t
-ucp_ep_failover_on_lane_state(ucp_ep_h ep,
-                              const ucp_wireup_lane_state_t *lane_state,
-                              size_t length)
-{
-    ucp_ep_failover_ctx_t *ctx;
-    ucp_ep_failover_lane_ctx_t *lane_ctx;
-    void *rx_tokens[UCP_MAX_LANES]          = {NULL};
-    uint8_t rx_token_lengths[UCP_MAX_LANES] = {0};
-    ucs_status_t fallback_status[UCP_MAX_LANES];
-    const uint8_t *token_lengths;
-    const void *tokens;
-    ucp_lane_map_t expected_lanes;
-    ucp_lane_map_t fallback_lanes = 0;
-    ucp_lane_index_t lane;
-    unsigned token_index = 0;
-    size_t token_offset  = 0;
-    unsigned num_tokens;
-    ucs_status_t status;
-
-    if ((ep->ext == NULL) || (ep->ext->failover.ctx == NULL)) {
-        return UCS_OK;
-    }
-
-    ctx = ep->ext->failover.ctx;
-    if (ctx->query_id == 0) {
-        ucs_debug("ep %p: ignoring stale failover lane state id 0x%" PRIx64, ep,
-                  lane_state->request_id);
-        return UCS_OK;
-    }
-
-    if (lane_state->request_id != ctx->query_id) {
-        ucs_debug("ep %p: ignoring failover lane state id 0x%" PRIx64
-                  ", expected 0x%" PRIx64,
-                  ep, lane_state->request_id, ctx->query_id);
-        return UCS_OK;
-    }
-
-    status = ucp_wireup_lane_state_validate(ep, lane_state, length);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    expected_lanes = ucp_ep_failover_query_lanes(ctx);
-    if (lane_state->lane_map != expected_lanes) {
-        ucs_debug("ep %p: ignoring failover lane state id 0x%" PRIx64
-                  " for lanes 0x%" PRIx64 ", expected lanes 0x%" PRIx64,
-                  ep, lane_state->request_id, (uint64_t)lane_state->lane_map,
-                  (uint64_t)expected_lanes);
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    num_tokens    = ucp_wireup_lane_state_num_tokens(lane_state);
-    token_lengths = ucp_wireup_lane_state_token_lengths(lane_state);
-    tokens = UCS_PTR_BYTE_OFFSET(lane_state, sizeof(*lane_state) + num_tokens);
-
-    ucs_debug("ep %p: processing failover lane state id 0x%" PRIx64
-              " for lanes 0x%" PRIx64 " with %u tokens",
-              ep, lane_state->request_id, (uint64_t)lane_state->lane_map,
-              num_tokens);
-
-    ucs_for_each_bit(lane, lane_state->lane_map) {
-        rx_token_lengths[lane] = token_lengths[token_index];
-        if (rx_token_lengths[lane] == 0) {
-            ucs_debug("ep %p: lane %u missing rx token in lane_state reply", ep,
-                      lane);
-            fallback_lanes       |= UCS_BIT(lane);
-            fallback_status[lane] = UCS_ERR_UNSUPPORTED;
-        } else {
-            rx_tokens[lane] = ucs_malloc(rx_token_lengths[lane],
-                                         "ep_failover_rx_token");
-            if (rx_tokens[lane] == NULL) {
-                fallback_lanes       |= UCS_BIT(lane);
-                fallback_status[lane] = UCS_ERR_NO_MEMORY;
-            } else {
-                memcpy(rx_tokens[lane],
-                       UCS_PTR_BYTE_OFFSET(tokens, token_offset),
-                       rx_token_lengths[lane]);
-            }
-        }
-
-        token_offset    += token_lengths[token_index];
-        ++token_index;
-    }
-
-    /* Commit only after the complete correlated reply has been parsed. */
-    ucs_for_each_bit(lane, lane_state->lane_map & ~fallback_lanes) {
-        lane_ctx = &ctx->lanes[lane];
-        ucs_free(lane_ctx->rx_token);
-        lane_ctx->rx_token        = rx_tokens[lane];
-        lane_ctx->rx_token_length = rx_token_lengths[lane];
-        lane_ctx->flags          |= UCP_EP_FAILOVER_LANE_FLAG_RX_TOKEN;
-        rx_tokens[lane]           = NULL;
-    }
-
-    ctx->query_id      = 0;
-    ctx->query_retries = 0;
-
-    ucs_for_each_bit(lane, fallback_lanes) {
-        ucp_ep_failover_lane_close(ep, lane, fallback_status[lane]);
-    }
-
-    if (ep->ext->failover.ctx != NULL) {
-        ucp_ep_failover_schedule(ep);
-    }
-    return UCS_OK;
 }
 
 
@@ -942,14 +884,27 @@ void ucp_ep_failover_replay_completed(ucp_ep_h ep, ucp_lane_index_t failed_lane,
         lane->status = status;
     }
 
+    if ((ctx->flags & UCP_EP_FAILOVER_FLAG_ABORTED) &&
+        (lane->undelivered_count == 0)) {
+        ucp_ep_failover_lane_close(ep, failed_lane, ctx->status);
+        return;
+    }
+
     ucp_ep_failover_schedule(ep);
+}
+
+
+static void ucp_ep_failover_abort_all(ucp_ep_h ep, ucs_status_t status);
+
+
+void ucp_ep_failover_abort(ucp_ep_h ep, ucs_status_t status)
+{
+    ucp_ep_failover_abort_all(ep, status);
 }
 
 
 static void ucp_ep_failover_abort_all(ucp_ep_h ep, ucs_status_t status)
 {
-    ucp_lane_map_t fallback_lanes = 0;
-    int complete_lanes            = 0;
     ucp_ep_failover_ctx_t *ctx;
     ucp_ep_failover_lane_ctx_t *lane_ctx;
     ucp_lane_map_t lane_map;
@@ -960,29 +915,27 @@ static void ucp_ep_failover_abort_all(ucp_ep_h ep, ucs_status_t status)
     if (ctx == NULL) {
         return;
     }
-    ctx->query_id = 0;
+
+    ctx->request_id = 0;
+    ctx->status     = status;
+    ctx->flags     |= UCP_EP_FAILOVER_FLAG_ABORTED;
 
     lane_map = ctx->lane_map;
     ucs_debug("ep %p: aborting failover for lanes 0x%" PRIx64 " status %s", ep,
               (uint64_t)lane_map, ucs_status_string(status));
+
+    /* Release the lanes here rather than from the failover progress: an armed
+     * lane cannot be handed to a flush-based discard, and waiting for the replay
+     * flush would keep the worker flush operations pinned if that flush cannot
+     * complete. Lanes with replayed operations still in flight are closed from
+     * ucp_ep_failover_replay_completed(). */
     ucs_for_each_bit(lane, lane_map) {
-        lane_ctx = &ctx->lanes[lane];
-        if (lane_ctx->flags & UCP_EP_FAILOVER_LANE_FLAG_EXTRACTED) {
-            lane_ctx->status = status;
-            lane_ctx->flags  |= UCP_EP_FAILOVER_LANE_FLAG_RX_TOKEN;
-            ucp_ep_failover_replay_purge(lane_ctx, status);
-            complete_lanes = 1;
-        } else {
-            fallback_lanes |= UCS_BIT(lane);
+        lane_ctx         = &ctx->lanes[lane];
+        lane_ctx->status = status;
+        ucp_ep_failover_replay_purge(lane_ctx, status);
+        if (lane_ctx->undelivered_count == 0) {
+            ucp_ep_failover_lane_close(ep, lane, status);
         }
-    }
-
-    ucs_for_each_bit(lane, fallback_lanes) {
-        ucp_ep_failover_lane_close(ep, lane, status);
-    }
-
-    if (complete_lanes) {
-        ucp_ep_failover_schedule(ep);
     }
 }
 
@@ -1025,8 +978,19 @@ ucp_ep_failover_flush_complete(ucp_ep_failover_ctx_t *ctx, ucs_status_t status)
     ucs_assert(ctx->flags & UCP_EP_FAILOVER_FLAG_FLUSH_STARTED);
     ucs_assert(!(ctx->flags & UCP_EP_FAILOVER_FLAG_FLUSH_DONE));
 
-    ctx->status = status;
     ctx->flags |= UCP_EP_FAILOVER_FLAG_FLUSH_DONE;
+    if (ctx->flags & UCP_EP_FAILOVER_FLAG_ABORTED) {
+        /* Failover was aborted while this flush was in flight and the flush
+         * owned super_req until now. Lanes which still have replayed operations
+         * in flight are released when those complete. */
+        if (ctx->lane_map == 0) {
+            ucp_ep_failover_ctx_release(ep, ctx);
+        }
+
+        return;
+    }
+
+    ctx->status = status;
     if (status == UCS_OK) {
         ucp_wireup_replay_pending_requests(ep, &ctx->pending_queue);
     } else {
@@ -1099,7 +1063,7 @@ static int ucp_ep_failover_lanes_complete(ucp_ep_h ep)
     ucs_status_t status;
 
     ctx = ep->ext->failover.ctx;
-    if ((ctx == NULL) || (ctx->query_id != 0)) {
+    if ((ctx == NULL)) {
         return 0;
     }
 
@@ -1132,27 +1096,6 @@ static int ucp_ep_failover_lanes_complete(ucp_ep_h ep)
 }
 
 
-static ucs_status_t ucp_ep_failover_query_progress(ucp_ep_h ep)
-{
-    ucp_ep_failover_ctx_t *ctx = ep->ext->failover.ctx;
-    ucs_status_t status;
-
-    if ((ctx == NULL) || (ctx->query_id != 0)) {
-        return UCS_OK;
-    }
-
-    status = ucp_ep_failover_query_send(ep);
-    if (status == UCS_ERR_NO_RESOURCE) {
-        ucp_ep_failover_schedule(ep);
-    } else if (status != UCS_OK) {
-        ucs_debug("ep %p: failed to query failover lane state: %s", ep,
-                  ucs_status_string(status));
-    }
-
-    return status;
-}
-
-
 static unsigned ucp_ep_failover_progress_cb(void *arg)
 {
     ucp_ep_h ep         = arg;
@@ -1162,9 +1105,10 @@ static unsigned ucp_ep_failover_progress_cb(void *arg)
     UCS_ASYNC_BLOCK(&worker->async);
     ep->ext->failover.progress_scheduled = 0;
 
-    status = ucp_ep_failover_query_progress(ep);
-    if ((status != UCS_OK) && (status != UCS_ERR_NO_RESOURCE)) {
-        ucp_ep_failover_abort_all(ep, status);
+    if ((ep->ext->failover.ctx != NULL) &&
+        (ep->ext->failover.ctx->flags & UCP_EP_FAILOVER_FLAG_ABORTED)) {
+        /* Aborted lanes are released by ucp_ep_failover_abort_all() and by the
+         * completion of their replayed operations. */
         goto out;
     }
 
@@ -1200,18 +1144,7 @@ static void ucp_ep_failover_schedule(ucp_ep_h ep)
 }
 
 
-ucp_lane_map_t ucp_ep_failover_test_query_lane_map(ucp_ep_h ep)
+ucp_lane_map_t ucp_ep_failover_test_pending_rx_lane_map(ucp_ep_h ep)
 {
-    return ((ep->ext == NULL) || (ep->ext->failover.ctx == NULL)) ?
-                   0 :
-                   ucp_ep_failover_query_lanes(ep->ext->failover.ctx);
-}
-
-
-ucs_status_t
-ucp_ep_failover_test_validate_lane_state(ucp_ep_h ep,
-                                         const ucp_wireup_lane_state_t *state,
-                                         size_t length)
-{
-    return ucp_wireup_lane_state_validate(ep, state, length);
+    return ucp_ep_failover_pending_rx_lanes(ep);
 }
