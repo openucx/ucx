@@ -530,25 +530,6 @@ void uct_ib_handle_async_event(uct_ib_device_t *dev, uct_ib_async_event_t *event
     ucs_log(level, "IB Async event on %s: %s", uct_ib_device_name(dev), event_info);
 }
 
-static void
-uct_ib_device_set_pci_id(uct_ib_device_t *dev, const char *sysfs_path)
-{
-    const char *dev_name = uct_ib_device_name(dev);
-    char pci_id_str[16];
-    ucs_status_t status;
-
-    status = ucs_sys_read_sysfs_file(dev_name, sysfs_path, "vendor", pci_id_str,
-                                     sizeof(pci_id_str), UCS_LOG_LEVEL_WARN);
-    dev->pci_id.vendor = (status == UCS_OK) ? strtol(pci_id_str, NULL, 0) : 0;
-
-    status = ucs_sys_read_sysfs_file(dev_name, sysfs_path, "device", pci_id_str,
-                                     sizeof(pci_id_str), UCS_LOG_LEVEL_WARN);
-    dev->pci_id.device = (status == UCS_OK) ? strtol(pci_id_str, NULL, 0) : 0;
-
-    ucs_debug("%s: vendor_id 0x%x device_id %d", uct_ib_device_name(dev),
-              dev->pci_id.vendor, dev->pci_id.device);
-}
-
 int uct_ib_device_has_active_port(uct_ib_device_t *dev)
 {
     uint8_t port_num;
@@ -621,7 +602,7 @@ ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
     if (dev->sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
         ucs_topo_sys_device_set_class(dev->sys_dev, UCS_TOPO_DEVICE_CLASS_NET);
     }
-    uct_ib_device_set_pci_id(dev, sysfs_path);
+    ucs_topo_sys_device_get_pci_id(dev->sys_dev, &dev->pci_id);
     dev->pci_bw = ucs_topo_get_pci_bw(dev_name, sysfs_path);
 
     ucs_free(path_buffer);
@@ -746,13 +727,6 @@ void uct_ib_device_cleanup(uct_ib_device_t *dev)
     UCS_STATS_NODE_FREE(dev->stats);
 }
 
-static inline int uct_ib_device_spec_match(uct_ib_device_t *dev,
-                                           const uct_ib_device_spec_t *spec)
-{
-    return (spec->pci_id.vendor == dev->pci_id.vendor) &&
-           (spec->pci_id.device == dev->pci_id.device);
-}
-
 const uct_ib_device_spec_t* uct_ib_device_spec(uct_ib_device_t *dev)
 {
     uct_ib_md_t *md = ucs_container_of(dev, uct_ib_md_t, dev);
@@ -761,14 +735,15 @@ const uct_ib_device_spec_t* uct_ib_device_spec(uct_ib_device_t *dev)
     /* search through devices specified in the configuration */
     for (spec = md->custom_devices.specs;
          spec < md->custom_devices.specs + md->custom_devices.count; ++spec) {
-        if (uct_ib_device_spec_match(dev, spec)) {
+        if (ucs_topo_pci_id_equal(&dev->pci_id, &spec->pci_id)) {
             return spec;
         }
     }
 
     /* search through built-in list of device specifications */
     spec = uct_ib_builtin_device_specs;
-    while ((spec->name != NULL) && !uct_ib_device_spec_match(dev, spec)) {
+    while ((spec->name != NULL) &&
+           !ucs_topo_pci_id_equal(&dev->pci_id, &spec->pci_id)) {
         ++spec;
     }
     return spec; /* if no match is found, return the last entry, which contains
