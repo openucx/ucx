@@ -1353,21 +1353,18 @@ out_unlock:
 static void ucs_topo_release_group(ucs_topo_group_t *group)
 {
     ucs_topo_nics_board_t *nics_board;
-    ucs_topo_nic_t *nic;
-    size_t index;
+    size_t board_index, nic_index;
 
-    for (index = 0; index < group->num_nics; ++index) {
-        nic = &group->nics[index];
-        ucs_free(nic->ports);
-    }
+    for (board_index = 0; board_index < group->num_nics_boards; ++board_index) {
+        nics_board = &group->nics_boards[board_index];
+        for (nic_index = 0; nic_index < nics_board->num_nics; ++nic_index) {
+            ucs_free(nics_board->nics[nic_index].ports);
+        }
 
-    for (index = 0; index < group->num_nics_boards; ++index) {
-        nics_board = &group->nics_boards[index];
-        ucs_free(nics_board->nics_indices);
+        ucs_free(nics_board->nics);
     }
 
     ucs_free(group->nics_boards);
-    ucs_free(group->nics);
     ucs_free(group->gpus);
 }
 

@@ -115,8 +115,8 @@ typedef struct {
  * Board containing physical NICs represented by indices in a topology group.
  */
 typedef struct {
-    unsigned *nics_indices;
-    size_t   num_nics;
+    ucs_topo_nic_t *nics;
+    size_t         num_nics;
 } ucs_topo_nics_board_t;
 
 
@@ -128,8 +128,6 @@ typedef struct {
     ucs_numa_node_t       numa_node;
     ucs_topo_gpu_t        *gpus;
     size_t                num_gpus;
-    ucs_topo_nic_t        *nics;
-    size_t                num_nics;
     ucs_topo_nics_board_t *nics_boards;
     size_t                num_nics_boards;
 } ucs_topo_group_t;
