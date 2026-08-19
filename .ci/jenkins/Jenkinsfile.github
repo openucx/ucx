@@ -12,16 +12,15 @@ def matrix = new com.mellanox.cicd.Matrix()
 import ipp.blossom.*
 
 def githubHelper = null
-def blueOceanUrl = ""
+def pipelineOverviewUrl = ""
 
 if (params.githubData) {
   withCredentials([usernamePassword(credentialsId: 'github-token', passwordVariable: 'GIT_PASSWORD', usernameVariable: 'GIT_USERNAME')]) {
     githubHelper = GithubHelper.getInstance("${GIT_PASSWORD}", params.githubData)
   }
 
-  def blueOceanJobPath = env.JOB_NAME.replace('/', '%2F')
-  blueOceanUrl = "${JENKINS_URL}blue/organizations/jenkins/${blueOceanJobPath}/detail/${env.JOB_BASE_NAME}/${env.BUILD_NUMBER}/pipeline/"
-  githubHelper.updateCommitStatus(blueOceanUrl, "CI started", GitHubCommitState.PENDING, env.JOB_BASE_NAME)
+  pipelineOverviewUrl = "${env.BUILD_URL}/pipeline-overview/"
+  githubHelper.updateCommitStatus(pipelineOverviewUrl, "CI started", GitHubCommitState.PENDING, env.JOB_BASE_NAME)
   currentBuild.description = githubHelper.getBuildDescription()
 }
 
@@ -34,7 +33,7 @@ try {
 } finally {
   if (params.githubData) {
     githubHelper.updateCommitStatus(
-      blueOceanUrl,
+      pipelineOverviewUrl,
       "CI completed",
       currentBuild.resultIsBetterOrEqualTo('SUCCESS') ? GitHubCommitState.SUCCESS : GitHubCommitState.FAILURE,
       env.JOB_BASE_NAME
