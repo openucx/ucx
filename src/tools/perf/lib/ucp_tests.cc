@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) The University of Tennessee and The University
 *               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2020.  ALL RIGHTS RESERVED.
@@ -38,6 +38,9 @@ public:
         m_recvs_outstanding(0),
         m_sends_outstanding(0),
         m_max_outstanding(m_perf.params.max_outstanding),
+        m_length(0ul),
+        m_send_sn_buffer(NULL),
+        m_send_sn_length(0ul),
         m_am_rx_buffer(NULL),
         m_am_rx_length(0ul)
     {
@@ -154,11 +157,8 @@ public:
     {
         *total_length = ucx_perf_get_message_size(&m_perf.params);
 
-        if ((CMD == UCX_PERF_CMD_PUT) || (CMD == UCX_PERF_CMD_GET)) {
-            ucs_assert(*total_length >= sizeof(psn_t));
-        }
-
         ucp_perf_test_prepare_iov_buffers();
+        init_sn_location(*total_length);
 
         *send_length = *recv_length = *total_length;
 
@@ -469,8 +469,7 @@ public:
             switch (TYPE) {
             case UCX_PERF_TEST_TYPE_PINGPONG:
             case UCX_PERF_TEST_TYPE_PINGPONG_WAIT_MEM:
-                write_sn(buffer, m_perf.params.send_mem_type, length, sn,
-                         m_perf.ucp.self_send_rkey);
+                write_send_sn(sn);
                 break;
             case UCX_PERF_TEST_TYPE_STREAM_UNI:
                 break;
@@ -542,13 +541,13 @@ public:
             /* coverity[switch_selector_expr_is_constant] */
             switch (TYPE) {
             case UCX_PERF_TEST_TYPE_PINGPONG:
-                while (read_sn(buffer, length) != sn) {
+                while (read_recv_sn() != sn) {
                     progress_responder();
                 }
                 return UCS_OK;
             case UCX_PERF_TEST_TYPE_PINGPONG_WAIT_MEM:
-                ptr = sn_ptr(buffer, length);
-                while (read_sn(buffer, length) != sn) {
+                ptr = recv_sn_ptr();
+                while (read_recv_sn() != sn) {
                     ucp_worker_wait_mem(worker, ptr);
                     progress_responder();
                 }
@@ -585,10 +584,10 @@ public:
     /* wait for the last iteration to be completed in case of
      * unidirectional PUT test, since it need to progress responder
      * for SW-based RMA implementations */
-    void wait_last_iter(void *buffer, size_t size)
+    void wait_last_iter()
     {
         if (use_psn()) {
-            while (read_sn(buffer, size) != LAST_ITER_SN) {
+            while (read_recv_sn() != LAST_ITER_SN) {
                 progress_responder();
             }
         }
@@ -603,7 +602,7 @@ public:
         psn_t last_sn         = LAST_ITER_SN;
         uint64_t atomic_value = 0;
         ucs_status_ptr_t status_p;
-        ucp_request_param_t atomic_param;
+        ucp_request_param_t param;
 
         if (use_psn()) {
             fence();
@@ -612,18 +611,22 @@ public:
         /* Make sure that doing the last opetarion will write 1 to the end of
            the remote buffer */
         if (CMD == UCX_PERF_CMD_PUT) {
-            write_sn(buffer, m_perf.params.send_mem_type, size, LAST_ITER_SN,
-                     m_perf.ucp.self_send_rkey);
+            write_send_sn(LAST_ITER_SN);
+        } else if (CMD == UCX_PERF_CMD_GET) {
+            param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
+                                 UCP_OP_ATTR_FIELD_USER_DATA;
+            param.cb.send      = send_cb;
+            param.user_data    = this;
         } else if (is_atomic()) {
             atomic_value = 0;
             write_sn(&atomic_value, UCS_MEMORY_TYPE_HOST, size, LAST_ITER_SN,
                      NULL);
-            atomic_param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE |
-                                        UCP_OP_ATTR_FIELD_CALLBACK |
-                                        UCP_OP_ATTR_FIELD_USER_DATA;
-            atomic_param.datatype     = ucp_dt_make_contig(size);
-            atomic_param.cb.send      = send_cb;
-            atomic_param.user_data    = this;
+            param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE |
+                                 UCP_OP_ATTR_FIELD_CALLBACK |
+                                 UCP_OP_ATTR_FIELD_USER_DATA;
+            param.datatype     = ucp_dt_make_contig(size);
+            param.cb.send      = send_cb;
+            param.user_data    = this;
         }
 
         /* coverity[switch_selector_expr_is_constant] */
@@ -634,28 +637,28 @@ public:
             break;
         case UCX_PERF_CMD_ADD:
             status_p = ucp_atomic_op_nbx(ep, m_atomic_op, &atomic_value, 1,
-                                         remote_addr, rkey, &atomic_param);
+                                         remote_addr, rkey, &param);
             break;
         case UCX_PERF_CMD_FADD:
         case UCX_PERF_CMD_SWAP:
             /* Atomic argument to add/swap with contains LAST_ITER_SN */
-            atomic_param.op_attr_mask |= UCP_OP_ATTR_FIELD_REPLY_BUFFER;
-            atomic_param.reply_buffer  = buffer;
+            param.op_attr_mask |= UCP_OP_ATTR_FIELD_REPLY_BUFFER;
+            param.reply_buffer  = buffer;
             status_p = ucp_atomic_op_nbx(ep, m_atomic_op, &atomic_value, 1,
-                                         remote_addr, rkey, &atomic_param);
+                                         remote_addr, rkey, &param);
             break;
         case UCX_PERF_CMD_CSWAP:
             /* Buffer to swap with contains LAST_ITER_SN */
-            atomic_param.op_attr_mask |= UCP_OP_ATTR_FIELD_REPLY_BUFFER;
-            atomic_param.reply_buffer  = &atomic_value;
+            param.op_attr_mask |= UCP_OP_ATTR_FIELD_REPLY_BUFFER;
+            param.reply_buffer  = &atomic_value;
             status_p = ucp_atomic_op_nbx(ep, m_atomic_op, buffer, 1,
-                                         remote_addr, rkey, &atomic_param);
+                                         remote_addr, rkey, &param);
             break;
         case UCX_PERF_CMD_GET:
             /* Set remotely LAST_ITER_SN */
             status_p = ucp_put_nbx(ep, &last_sn, sizeof(last_sn),
-                                   remote_addr + size - sizeof(last_sn), rkey,
-                                   &m_send_params);
+                                   remote_addr + m_length - sizeof(last_sn),
+                                   rkey, &param);
             break;
         default:
             status_p = NULL;
@@ -722,16 +725,55 @@ public:
                is_atomic();
     }
 
-    void reset_buffers(size_t length, psn_t sn)
+    void reset_buffers(psn_t sn)
     {
         if (!use_psn()) {
             return;
         }
 
-        write_sn(m_perf.send_buffer, m_perf.params.send_mem_type, length, sn,
-                 m_perf.ucp.self_send_rkey);
-        write_sn(m_perf.recv_buffer, m_perf.params.recv_mem_type, length, sn,
+        write_send_sn(sn);
+        write_sn(m_perf.recv_buffer, m_perf.params.recv_mem_type, m_length, sn,
                  m_perf.ucp.self_recv_rkey);
+    }
+
+    void init_sn_location(size_t total_length)
+    {
+        m_length         = total_length;
+        m_send_sn_buffer = m_perf.send_buffer;
+        m_send_sn_length = total_length;
+
+        if (m_perf.params.ucp.send_datatype == UCP_PERF_DATATYPE_IOV) {
+            const ucp_dt_iov_t *iov = m_perf.ucp.send_iov;
+            size_t last             = m_perf.params.msg_size_cnt - 1;
+
+            while ((last > 0) && (iov[last].length == 0)) {
+                --last;
+            }
+
+            m_send_sn_buffer = iov[last].buffer;
+            m_send_sn_length = iov[last].length;
+        }
+
+        if ((CMD == UCX_PERF_CMD_PUT) || (CMD == UCX_PERF_CMD_GET)) {
+            ucs_assert(m_length >= sizeof(psn_t));
+            ucs_assert(m_send_sn_length >= sizeof(psn_t));
+        }
+    }
+
+    UCS_F_ALWAYS_INLINE void write_send_sn(psn_t sn)
+    {
+        write_sn(m_send_sn_buffer, m_perf.params.send_mem_type,
+                 m_send_sn_length, sn, m_perf.ucp.self_send_rkey);
+    }
+
+    UCS_F_ALWAYS_INLINE psn_t read_recv_sn()
+    {
+        return read_sn(m_perf.recv_buffer, m_length);
+    }
+
+    UCS_F_ALWAYS_INLINE psn_t *recv_sn_ptr()
+    {
+        return sn_ptr(m_perf.recv_buffer, m_length);
     }
 
     ucs_status_t run_pingpong()
@@ -761,7 +803,7 @@ public:
                                     &send_buffer, &recv_length, &recv_datatype,
                                     &recv_buffer);
 
-        reset_buffers(length, UNKNOWN_SN);
+        reset_buffers(UNKNOWN_SN);
 
         validate = m_perf.params.flags & UCX_PERF_TEST_FLAG_VALIDATE;
         status   = UCS_OK;
@@ -869,7 +911,7 @@ out:
                                     &send_buffer, &recv_length, &recv_datatype,
                                     &recv_buffer);
 
-        reset_buffers(send_length, sn);
+        reset_buffers(sn);
 
         ucp_perf_barrier(&m_perf);
 
@@ -897,7 +939,7 @@ out:
                 ++sn;
             }
 
-            wait_last_iter(recv_buffer, send_length);
+            wait_last_iter();
             wait_recv_window(m_max_outstanding);
             send_ack(send_buffer, send_datatype);
         } else if (my_index == 1) {
@@ -1050,6 +1092,9 @@ private:
     int                m_recvs_outstanding;
     int                m_sends_outstanding;
     const int          m_max_outstanding;
+    size_t             m_length;
+    void               *m_send_sn_buffer;
+    size_t             m_send_sn_length;
     /*
      * These fields are used by UCP AM flow only, because receive operation is
      * initiated from the data receive callback.
