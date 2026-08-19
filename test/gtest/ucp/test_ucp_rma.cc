@@ -1247,8 +1247,8 @@ protected:
                 ucp_worker_progress(receiver().worker());
             }
         }
-        ucp_request_release(sptr);
 
+        ucp_request_release(sptr);
         flush_ep(sender());
         verify_sgl_buffers();
     }
