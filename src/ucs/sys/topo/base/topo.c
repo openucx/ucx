@@ -9,7 +9,7 @@
 #endif
 
 #include "topo_int.h"
-#include "../vr.h"
+#include <ucs/sys/topo/vr.h>
 
 #include <ucs/arch/cpu.h>
 #include <ucs/memory/numa.h>
