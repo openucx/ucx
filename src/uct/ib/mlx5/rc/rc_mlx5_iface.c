@@ -184,6 +184,22 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
     return UCS_OK;
 }
 
+/* Error CQEs release iface credits while purge owns QP WQE resources. */
+static UCS_F_ALWAYS_INLINE void
+uct_rc_mlx5_iface_update_err_tx_res(uct_rc_iface_t *iface,
+                                    uct_rc_mlx5_base_ep_t *ep, uint16_t hw_ci)
+{
+    uct_ib_mlx5_txwq_t *txwq = &ep->tx.wq;
+    uint16_t prev_hw_ci      = txwq->hw_ci;
+    uint16_t bb_num          = hw_ci - prev_hw_ci;
+
+    txwq->hw_ci = hw_ci;
+    ucs_assertv(bb_num > 0, "hw_ci=%d prev_hw_ci=%d ft_ci=%d bb_num=%d", hw_ci,
+                prev_hw_ci, txwq->ft_ci, bb_num);
+    uct_rc_iface_update_reads(iface);
+    uct_rc_iface_add_cq_credits(iface, bb_num);
+}
+
 void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
                                       ucs_status_t ep_status)
 {
@@ -224,9 +240,9 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
 
 purge:
     if (ep->flags & UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS) {
-        uct_rc_mlx5_iface_update_tx_res(iface, ep, pi, ep->tx.wq.ft_ci);
+        uct_rc_mlx5_iface_update_err_tx_res(iface, ep, pi);
     } else {
-        uct_rc_mlx5_iface_update_tx_res(iface, ep, pi, pi);
+        uct_rc_mlx5_iface_update_tx_res(iface, ep, pi);
         uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status, pi, 0);
     }
 

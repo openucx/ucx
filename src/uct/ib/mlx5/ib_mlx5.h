@@ -694,9 +694,11 @@ typedef struct uct_ib_mlx5_txwq {
     void                        *qend;
     uint16_t                    bb_max;
     uint16_t                    sig_pi;     /* PI for last signaled WQE */
-    uint16_t                    ft_ci;      /* Last completed/recovered WQE start */
+    uint16_t                    ft_ci;      /* FT resource-release boundary */
+    /* Non-FT: last completed WQE start, updated only with assertions enabled.
+     * FT: last processed error CQE boundary, always updated. */
+    uint16_t                    hw_ci;
 #if UCS_ENABLE_ASSERT
-    uint16_t                    hw_ci; /* First BB index of last completed WQE */
     uint8_t                     flags; /* Debug flags */
 #endif
     uct_ib_fence_info_t         fi;
