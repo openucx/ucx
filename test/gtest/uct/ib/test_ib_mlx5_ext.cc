@@ -196,7 +196,7 @@ UCS_TEST_P(test_uct_ib_mlx5_ext_rc, ep_outstanding_purge)
     {
         scoped_log_handler wrap_err(wrap_errors_logger);
         EXPECT_EQ(UCS_ERR_INVALID_PARAM,
-                  uct_ep_outstanding_purge(m_e1->ep(0), &params));
+                  uct_ib_mlx5_ext_ep_outstanding_purge(m_e1->ep(0), &params));
     }
 
     register_plugin("stub",
@@ -213,7 +213,7 @@ UCS_TEST_P(test_uct_ib_mlx5_ext_rc, ep_outstanding_purge)
     params.cb         = purge_cb;
     params.arg        = &callback_invoked;
 
-    ASSERT_UCS_OK(uct_ep_outstanding_purge(m_e1->ep(0), &params));
+    ASSERT_UCS_OK(uct_ib_mlx5_ext_ep_outstanding_purge(m_e1->ep(0), &params));
     EXPECT_TRUE(callback_invoked);
 }
 
