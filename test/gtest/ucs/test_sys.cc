@@ -16,6 +16,7 @@ extern "C" {
 }
 
 #include <sys/mman.h>
+#include <sys/stat.h>
 #include <set>
 
 class test_sys : public ucs::test {
@@ -42,6 +43,7 @@ protected:
     {
         char filename[PATH_MAX];
         long value = LONG_MIN;
+        mode_t orig_umask;
         size_t length;
         ssize_t nwritten;
         ucs_status_t status;
@@ -50,8 +52,13 @@ protected:
         /* Create a temporary file to write the contents to */
         snprintf(filename, sizeof(filename), "%s/ucx_read_number_XXXXXX",
                  ucs_get_tmpdir());
-        fd = mkstemp(filename);
-        ASSERT_GE(fd, 0);
+        orig_umask = umask(S_IRWXG | S_IRWXO);
+        fd         = mkstemp(filename);
+        umask(orig_umask);
+        if (fd < 0) {
+            FAIL() << "failed to create temporary file";
+            return;
+        }
 
         length   = strlen(contents);
         nwritten = write(fd, contents, length);
