@@ -745,7 +745,8 @@ protected:
     enum class rndv_mode {
         rndv_get,
         rndv_put,
-        put_ppln
+        put_ppln,
+        rtr_mtype_fc_pending
     };
 
     void init()
@@ -837,6 +838,8 @@ protected:
         auto *req   = ucs_container_of(uct_req, ucp_request_t, send.uct);
         auto stage  = req->send.proto_stage;
         auto *proto = req->send.proto_config->proto;
+        auto *worker = req->send.ep->worker;
+        ucs_status_t status;
         ucs::mock mock;
 
         if (proto->name == self->m_proto_name) {
@@ -844,14 +847,42 @@ protected:
                 mock_rndv_ops(req->send.ep, mock);
             }
 
-            if (stage == self->m_proto_xfer_stage) {
+            if ((stage == self->m_proto_xfer_stage) &&
+                !self->m_close_on_fc_pending) {
                 self->close_peer();
             }
         }
 
         /* Call original proto progress */
-        return self->m_progress_mock.orig_func(&proto->progress[stage],
-                                               uct_req);
+        status = self->m_progress_mock.orig_func(&proto->progress[stage],
+                                                 uct_req);
+
+        if ((proto->name == self->m_proto_name) &&
+            (stage == self->m_proto_xfer_stage) &&
+            self->m_close_on_fc_pending &&
+            self->has_fc_pending(worker)) {
+            self->m_fc_was_pending = true;
+            self->close_peer();
+        }
+
+        return status;
+    }
+
+    static bool has_fc_pending(ucp_worker_h worker)
+    {
+        for (unsigned i = 0; i < UCP_WORKER_RNDV_FC_OP_LAST; ++i) {
+            if (!ucs_queue_is_empty(&worker->rndv_mtype_fc.pending_q[i])) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    void verify_fc_queues_empty()
+    {
+        EXPECT_FALSE(has_fc_pending(sender().worker()));
+        EXPECT_FALSE(has_fc_pending(receiver().worker()));
     }
 
     virtual void cleanup()
@@ -863,7 +894,8 @@ protected:
 
     void define_test_settings(rndv_mode mode, bool replace_ops)
     {
-        m_replace_ops = replace_ops;
+        m_replace_ops         = replace_ops;
+        m_close_on_fc_pending = false;
 
         switch (mode) {
         case rndv_mode::rndv_get:
@@ -880,6 +912,12 @@ protected:
             m_proto_name       = "rndv/put/mtype";
             m_proto_xfer_stage = UCP_PROTO_RNDV_PUT_MTYPE_STAGE_SEND;
             m_peer_to_close    = &self->receiver();
+            break;
+        case rndv_mode::rtr_mtype_fc_pending:
+            m_proto_name          = "rndv/rtr/mtype";
+            m_proto_xfer_stage    = 0;
+            m_peer_to_close       = &self->sender();
+            m_close_on_fc_pending = true;
             break;
         default:
             EXPECT_TRUE(false) << "Wrong RNDV mode";
@@ -920,6 +958,8 @@ protected:
 
     ucs::mock         m_progress_mock;
     bool              m_is_peer_closed{false};
+    bool              m_close_on_fc_pending{false};
+    bool              m_fc_was_pending{false};
     std::string       m_proto_name{};
     /* Protocol stage during which data transfer happens */
     uint8_t           m_proto_xfer_stage{};
@@ -1017,6 +1057,16 @@ UCS_TEST_P(test_ucp_peer_failure_rndv_put_ppln_abort, pipeline,
            "RNDV_FRAG_SIZE=host:8K,cuda:8K")
 {
     rndv_progress_failure_test(rndv_mode::put_ppln, true);
+}
+
+UCS_TEST_P(test_ucp_peer_failure_rndv_put_ppln_abort, rtr_mtype_fc_pending,
+           "RNDV_FRAG_SIZE=host:8K,cuda:8K",
+           "RNDV_FRAG_WORKER_MAX_MEM=8K")
+{
+    rndv_progress_failure_test(rndv_mode::rtr_mtype_fc_pending, false);
+
+    EXPECT_TRUE(m_fc_was_pending);
+    verify_fc_queues_empty();
 }
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_peer_failure_rndv_put_ppln_abort);
