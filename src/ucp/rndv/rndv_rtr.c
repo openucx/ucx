@@ -375,6 +375,7 @@ ucp_proto_rndv_rtr_mtype_abort(ucp_request_t *req, ucs_status_t status)
 {
     ucp_request_t *super_req = ucp_request_get_super(req);
 
+    ucp_proto_rndv_mtype_fc_cancel(req, UCP_WORKER_RNDV_FC_OP_RTR);
     super_req->status = status;
 
     /* When pipeline is used, there is a top-level 'recv' request that we also
