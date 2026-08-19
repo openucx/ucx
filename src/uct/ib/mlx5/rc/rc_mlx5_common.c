@@ -17,6 +17,10 @@
 #include <ucs/profile/profile.h>
 
 
+/* ibv_query_port_speed() reports speed in units of 100 Mb/s. */
+#define UCT_RC_MLX5_FULL_BW_EFFECTIVE_SPEED 8000
+
+
 ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
   {UCT_IB_CONFIG_PREFIX, "", NULL,
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, super),
@@ -692,10 +696,23 @@ int uct_rc_mlx5_iface_can_single_qp_use_full_bw(
             (iface->config.dp_ordering_devx ==
              UCT_IB_MLX5_DP_ORDERING_OOO_ALL) ||
             iface->config.ddp_enabled_dv;
+#if HAVE_DECL_IBV_QUERY_PORT_SPEED
+    uint64_t effective_speed;
+#endif
 
-    return uct_ib_iface_is_roce(ib_iface) &&
-           uct_ib_iface_port_is_xdr(ib_iface) && ddp_enabled &&
-           (md->port_select_mode == UCT_IB_MLX5_LAG_MULTI_PORT_ESW);
+    if (!ddp_enabled ||
+        (md->port_select_mode != UCT_IB_MLX5_LAG_MULTI_PORT_ESW)) {
+        return 0;
+    }
+
+#if HAVE_DECL_IBV_QUERY_PORT_SPEED
+    return (ibv_query_port_speed(uct_ib_iface_device(ib_iface)->ibv_context,
+                                 ib_iface->config.port_num,
+                                 &effective_speed) == 0) &&
+           (effective_speed == UCT_RC_MLX5_FULL_BW_EFFECTIVE_SPEED);
+#else
+    return 0;
+#endif
 }
 
 #if IBV_HW_TM
