@@ -884,6 +884,40 @@ UCS_TEST_P(test_ud, ep_destroy_creq) {
     EXPECT_EQ(1U, ud_ep->ep_id);
 }
 
+/* A CREP which was delayed until the ep_id of its connection was released and
+ * reused must not be applied to the endpoint which took that ep_id */
+UCS_TEST_P(test_ud, stale_crep_on_reused_ep_id, "UD_LINGER_TIMEOUT=1s") {
+    entity *e3 = uct_test::create_entity(0);
+    m_entities.push_back(e3);
+
+    /* keep the reused ep_id non-zero */
+    m_e1->create_ep(0);
+
+    /* no peer may reply while its tx is blocked */
+    iface(m_e2)->tx.available = 0;
+    iface(e3)->tx.available   = 0;
+
+    m_e1->connect_to_iface(1, *m_e2);
+    short_progress_loop();
+
+    uint32_t ep_id = ep(m_e1, 1)->ep_id;
+    m_e1->destroy_ep(1);
+    wait_for_ep_destroyed(iface(m_e1), ep_id);
+
+    m_e1->connect_to_iface(1, *e3);
+    short_progress_loop();
+    ASSERT_EQ(ep_id, ep(m_e1, 1)->ep_id);
+    ASSERT_EQ(UCT_UD_EP_NULL_ID, ep(m_e1, 1)->dest_ep_id);
+
+    /* release the CREP owed to the previous incarnation of the ep_id */
+    iface(m_e2)->tx.available = 128;
+    short_progress_loop(100.0);
+
+    EXPECT_EQ(UCT_UD_EP_NULL_ID, ep(m_e1, 1)->dest_ep_id);
+    EXPECT_EQ(UCT_UD_INITIAL_PSN - 1, ep(m_e1, 1)->tx.acked_psn);
+    EXPECT_FALSE(ucs_queue_is_empty(&ep(m_e1, 1)->tx.window));
+}
+
 #if UCT_UD_EP_DEBUG_HOOKS
 /* Simulate loss of ctl packets during simultaneous CREQs.
  * Use-case: CREQ and CREP packets from m_e2 to m_e1 are lost.

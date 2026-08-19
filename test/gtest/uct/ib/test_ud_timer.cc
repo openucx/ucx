@@ -58,17 +58,6 @@ public:
         }
     }
 
-    void wait_for_ep_destroyed(uct_ud_iface_t *iface, uint32_t ep_idx)
-    {
-        ucs_time_t deadline = ucs_get_time() +
-                              ucs_time_from_sec(60) * ucs::test_time_multiplier();
-        void *ud_ep_tmp GTEST_ATTRIBUTE_UNUSED_;
-
-        while ((ucs_get_time() < deadline) &&
-               ucs_ptr_array_lookup(&iface->eps, ep_idx, ud_ep_tmp)) {
-            usleep(1000);
-        }
-    }
 };
 
 int test_ud_timer::rx_limit = 10;
