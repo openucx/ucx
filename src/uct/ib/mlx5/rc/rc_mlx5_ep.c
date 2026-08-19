@@ -831,11 +831,13 @@ uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
     if ((params->field_mask & UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS) &&
         (params->flags & UCT_EP_INVALIDATE_FLAG_NO_COMPLETIONS)) {
         ucs_assert(!(ep->super.flags & UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS));
+
         txwq->ft_ci      = txwq->prev_sw_pi -
                            (txwq->bb_max -
                             uct_rc_txqp_available(&ep->super.super.txqp));
         txwq->hw_ci      = txwq->ft_ci;
         ep->super.flags |= UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS;
+
         ucs_debug("ep %p disable completions WQE range (%u, %u) "
                   "next_first_psn %u",
                   ep, txwq->ft_ci, txwq->sw_pi, txwq->next_first_psn);
