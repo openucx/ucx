@@ -1957,35 +1957,35 @@ uct_ib_iface_get_bandwidth(uct_ib_iface_t *iface, double wire_speed)
     return bandwidth;
 }
 
-uint8_t uct_ib_iface_port_active_width(uct_ib_iface_t *iface)
-{
-    static const uint8_t ib_port_widths[] =
-            {[1] = 1, [2] = 4, [4] = 8, [8] = 12, [16] = 2};
-    uint8_t active_width = uct_ib_iface_port_attr(iface)->active_width;
-
-    if ((active_width >= ucs_static_array_size(ib_port_widths)) ||
-        (ib_port_widths[active_width] == 0)) {
-        ucs_warn("invalid active width on " UCT_IB_IFACE_FMT ": %d, "
-                 "assuming 1x", UCT_IB_IFACE_ARG(iface), active_width);
-        return 1;
-    }
-
-    return ib_port_widths[active_width];
-}
-
 ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface,
                                 uct_iface_attr_t *iface_attr)
 {
+    static const uint8_t ib_port_widths[] =
+            {[1] = 1, [2] = 4, [4] = 8, [8] = 12, [16] = 2};
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
-    uint8_t width;
+    uint8_t active_width, width;
     uint32_t active_speed;
     double encoding, signal_rate, wire_speed;
     unsigned num_path;
 
     uct_base_iface_query(&iface->super, iface_attr);
 
+    active_width = uct_ib_iface_port_attr(iface)->active_width;
     active_speed = uct_ib_iface_port_active_speed(iface);
-    width        = uct_ib_iface_port_active_width(iface);
+
+    /*
+     * Parse active width.
+     * See IBTA section 14.2.5.6 "PortInfo", Table 164, field
+     * "LinkWidthEnabled".
+     */
+    if ((active_width >= ucs_static_array_size(ib_port_widths)) ||
+        (ib_port_widths[active_width] == 0)) {
+        ucs_warn("invalid active width on " UCT_IB_IFACE_FMT ": %d, "
+                 "assuming 1x", UCT_IB_IFACE_ARG(iface), active_width);
+        width = 1;
+    } else {
+        width = ib_port_widths[active_width];
+    }
 
     iface_attr->device_addr_len = iface->addr_size;
     iface_attr->dev_num_paths   = iface->num_paths;
