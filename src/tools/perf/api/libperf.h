@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) The University of Tennessee and The University
 *               of Tennessee Research Foundation. 2015. ALL RIGHTS RESERVED.
@@ -56,6 +56,7 @@ typedef enum {
 typedef enum {
     UCP_PERF_DATATYPE_CONTIG,
     UCP_PERF_DATATYPE_IOV,
+    UCP_PERF_DATATYPE_SGL,
 } ucp_perf_datatype_t;
 
 

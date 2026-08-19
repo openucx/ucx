@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) The University of Tennessee and The University
 *               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
 *
@@ -84,6 +84,18 @@ typedef struct {
     size_t length;
 } ucx_perf_exported_mem_t;
 
+typedef struct {
+    ucp_request_param_t send_params;
+    ucp_request_param_t send_get_info_params;
+    ucp_dt_local_sgl_t  local_sgl;
+    ucp_dt_remote_sgl_t remote_sgl;
+    void                **buffers;
+    size_t              *lengths;
+    ucp_mem_h           *memhs;
+    uint64_t            *remote_addrs;
+    ucp_rkey_h          *rkeys;
+} ucp_sgl_state_t;
+
 struct ucx_perf_context {
     ucx_perf_params_t            params;
 
@@ -142,6 +154,7 @@ struct ucx_perf_context {
             ucp_perf_daemon_req_t      daemon_req;
             ucp_dt_iov_t               *send_iov;
             ucp_dt_iov_t               *recv_iov;
+            ucp_sgl_state_t            sgl;
             void                       *am_hdr;
             ucp_ep_h                   self_ep;
             ucp_rkey_h                 self_send_rkey;
