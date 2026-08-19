@@ -276,11 +276,11 @@ static void ucs_topo_bus_id_str(const ucs_sys_bus_id_t *bus_id, int abbreviate,
                                 char *str, size_t max)
 {
     if (abbreviate && (bus_id->domain == 0)) {
-        ucs_snprintf_safe(str, max, "%02x:%02x.%d", bus_id->bus, bus_id->slot,
-                          bus_id->function);
+        ucs_snprintf_safe(str, max, UCS_SYS_BUS_ID_ABBREVIATED_FMT,
+                          UCS_SYS_BUS_ID_ABBREVIATED_ARG(bus_id));
     } else {
-        ucs_snprintf_safe(str, max, "%04x:%02x:%02x.%d", bus_id->domain,
-                          bus_id->bus, bus_id->slot, bus_id->function);
+        ucs_snprintf_safe(str, max, UCS_SYS_BUS_ID_FMT,
+                          UCS_SYS_BUS_ID_ARG(bus_id));
     }
 }
 

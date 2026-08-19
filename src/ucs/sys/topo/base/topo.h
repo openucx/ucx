@@ -34,6 +34,17 @@ BEGIN_C_DECLS
 /* Maximal size of BDF string */
 #define UCS_SYS_BDF_NAME_MAX 16
 
+/* Bus ID string formatting */
+#define UCS_SYS_BUS_ID_ABBREVIATED_FMT "%02x:%02x.%u"
+#define UCS_SYS_BUS_ID_ABBREVIATED_ARG(_bus_id) \
+    (unsigned)(_bus_id)->bus, (unsigned)(_bus_id)->slot, \
+            (unsigned)(_bus_id)->function
+
+#define UCS_SYS_BUS_ID_FMT "%04x:%02x:%02x.%u"
+#define UCS_SYS_BUS_ID_ARG(_bus_id) \
+    (unsigned)(_bus_id)->domain, (unsigned)(_bus_id)->bus, \
+            (unsigned)(_bus_id)->slot, (unsigned)(_bus_id)->function
+
 
 typedef struct ucs_sys_bus_id {
     uint16_t domain;   /* range: 0 to ffff */
