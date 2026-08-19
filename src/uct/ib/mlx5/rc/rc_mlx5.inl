@@ -464,7 +464,7 @@ static UCS_F_ALWAYS_INLINE uint32_t
 uct_rc_mlx5_num_packets(uct_rc_mlx5_iface_common_t *iface,
                         size_t message_length)
 {
-    size_t mtu = iface->super.super.config.path_mtu_bytes;
+    size_t mtu = uct_ib_mtu_value(iface->super.super.config.path_mtu);
 
     return ucs_max(1ul, ucs_div_round_up(message_length, mtu));
 }
@@ -995,8 +995,7 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_mlx5_iface_common_t *iface, int qp_ty
                                  fm_ce_se, dci_channel, wqe_size, ib_imm_be,
                                  max_log_sge, NULL);
     if (qp_type == IBV_QPT_RC) {
-        uct_rc_mlx5_txwq_update_psn(iface, txwq,
-                                                      message_length);
+        uct_rc_mlx5_txwq_update_psn(iface, txwq, message_length);
     }
 }
 
@@ -1945,6 +1944,7 @@ uct_rc_mlx5_ep_update_tx_res(uct_rc_mlx5_base_ep_t *ep, uint16_t hw_ci,
         bb_num = available - prev_available;
         uct_rc_txqp_available_add(txqp, bb_num);
     }
+
     ucs_assert(uct_rc_txqp_available(txqp) <= txwq->bb_max);
 
     return hw_bb_num;

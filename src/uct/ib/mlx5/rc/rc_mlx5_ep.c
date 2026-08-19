@@ -735,9 +735,9 @@ ucs_status_t uct_rc_mlx5_base_ep_flush(uct_ep_h tl_ep, unsigned flags,
     ucs_status_t status;
 
     if (ep->flags & UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS) {
-        ucs_diag("ep %p flush while completions are deferred; outstanding "
-                 "operations must be purged first",
-                 ep);
+        ucs_diag(
+                "ep %p flushing in invalidated state with disabled completions",
+                ep);
     }
 
     UCT_CHECK_PARAM(!ucs_test_all_flags(flags, UCT_FLUSH_FLAG_CANCEL |
@@ -805,7 +805,7 @@ uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
         txwq->ft_ci      = txwq->prev_sw_pi -
                            (txwq->bb_max -
                             uct_rc_txqp_available(&ep->super.super.txqp));
-        ucs_debug("ep %p defer completions WQE range (%u, %u) "
+        ucs_debug("ep %p disable completions WQE range (%u, %u) "
                   "next_first_psn %u",
                   ep, txwq->ft_ci, txwq->sw_pi, txwq->next_first_psn);
     }
@@ -826,7 +826,6 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
 
     uct_rc_mlx5_ep_update_tx_res(ep, ep->tx.wq.prev_sw_pi,
                                  ep->tx.wq.prev_sw_pi);
-    ep->flags &= ~UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS;
     return UCS_OK;
 }
 
