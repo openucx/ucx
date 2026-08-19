@@ -55,6 +55,7 @@ ucp_proto_rndv_mtype_request_init(ucp_request_t *req,
     ucp_worker_h worker = req->send.ep->worker;
     ucs_status_t status;
 
+    UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED_CONDITIONAL(worker);
     status = ucp_rndv_mpool_get(worker, frag_mem_type, frag_sys_dev,
                                 &req->send.rndv.mdesc);
     if (status != UCS_ERR_NO_RESOURCE) {
@@ -71,6 +72,10 @@ ucp_proto_rndv_mtype_request_init(ucp_request_t *req,
                   ucs_topo_sys_device_get_name(frag_sys_dev));
     UCS_STATS_UPDATE_COUNTER(worker->stats,
                              UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED, 1);
+    ucs_assert(!(req->flags &
+                 (UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED |
+                  UCP_REQUEST_FLAG_RNDV_MTYPE_FC_SCHEDULED)));
+    req->flags |= UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED;
     ucs_queue_push(&worker->rndv_mtype_fc.pending_q[fc_op],
                    &req->send.rndv.ppln.queue_elem);
 
@@ -185,13 +190,39 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_mtype_copy(
     return status;
 }
 
-/* Reschedule callback for throttled mtype requests */
-static UCS_F_ALWAYS_INLINE
-unsigned ucp_proto_rndv_mtype_fc_reschedule_cb(void *arg)
+static UCS_F_ALWAYS_INLINE int
+ucp_proto_rndv_mtype_fc_reschedule_pred(const ucs_callbackq_elem_t *elem,
+                                        void *arg)
 {
-    ucp_request_t *req = arg;
-    ucp_request_send(req);
-    return 1;
+    return (elem->cb == ucp_proto_rndv_mtype_fc_reschedule_cb) &&
+           (elem->arg == arg);
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_rndv_mtype_fc_cancel(ucp_request_t *req, unsigned fc_op)
+{
+    ucp_worker_h worker = req->send.ep->worker;
+
+    UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED_CONDITIONAL(worker);
+    ucs_assert(fc_op < UCP_WORKER_RNDV_FC_OP_LAST);
+    ucs_assert(!ucs_test_all_flags(req->flags,
+                                   UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED |
+                                   UCP_REQUEST_FLAG_RNDV_MTYPE_FC_SCHEDULED));
+
+    if (req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED) {
+        ucp_trace_req(req, "mtype_fc: remove aborted request from queue");
+        ucs_queue_remove(&worker->rndv_mtype_fc.pending_q[fc_op],
+                         &req->send.rndv.ppln.queue_elem);
+        req->flags &= ~UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED;
+    }
+
+    if (req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC_SCHEDULED) {
+        ucp_trace_req(req, "mtype_fc: remove aborted reschedule callback");
+        ucs_callbackq_remove_oneshot(
+                &worker->uct->progress_q, req,
+                ucp_proto_rndv_mtype_fc_reschedule_pred, req);
+        req->flags &= ~UCP_REQUEST_FLAG_RNDV_MTYPE_FC_SCHEDULED;
+    }
 }
 
 /**
@@ -211,6 +242,8 @@ ucp_proto_rndv_mtype_fc_reschedule_pending(ucp_request_t *req)
     ucp_request_t *pending_req;
     unsigned q_index;
 
+    UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED_CONDITIONAL(worker);
+
     /* Dequeue from highest-priority non-empty queue (PUT/GET before RTR) */
     for (q_index = 0; q_index < UCP_WORKER_RNDV_FC_OP_LAST; q_index++) {
         if (ucs_queue_is_empty(&worker->rndv_mtype_fc.pending_q[q_index])) {
@@ -220,6 +253,12 @@ ucp_proto_rndv_mtype_fc_reschedule_pending(ucp_request_t *req)
         pending_req = ucs_queue_pull_elem_non_empty(
                 &worker->rndv_mtype_fc.pending_q[q_index], ucp_request_t,
                 send.rndv.ppln.queue_elem);
+        ucs_assert(pending_req->flags &
+                   UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED);
+        ucs_assert(!(pending_req->flags &
+                     UCP_REQUEST_FLAG_RNDV_MTYPE_FC_SCHEDULED));
+        pending_req->flags &= ~UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED;
+        pending_req->flags |= UCP_REQUEST_FLAG_RNDV_MTYPE_FC_SCHEDULED;
         ucp_trace_req(pending_req, "mtype_fc: dequeue %s",
                       (q_index == UCP_WORKER_RNDV_FC_OP_RTR) ? "rtr" : "put/get");
         ucs_callbackq_add_oneshot(&worker->uct->progress_q, pending_req,

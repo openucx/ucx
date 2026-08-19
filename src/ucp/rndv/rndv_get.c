@@ -380,6 +380,13 @@ static ucs_status_t ucp_proto_rndv_get_mtype_reset(ucp_request_t *req)
     return UCS_OK;
 }
 
+static void
+ucp_proto_rndv_get_mtype_abort(ucp_request_t *req, ucs_status_t status)
+{
+    ucp_proto_rndv_mtype_fc_cancel(req, UCP_WORKER_RNDV_FC_OP_GET);
+    ucp_proto_abort_fatal_not_implemented(req, status);
+}
+
 ucp_proto_t ucp_rndv_get_mtype_proto = {
     .name     = "rndv/get/mtype",
     .desc     = NULL,
@@ -390,6 +397,6 @@ ucp_proto_t ucp_rndv_get_mtype_proto = {
         [UCP_PROTO_RNDV_GET_STAGE_FETCH] = ucp_proto_rndv_get_mtype_fetch_progress,
         [UCP_PROTO_RNDV_GET_STAGE_ATS]   = ucp_proto_rndv_ats_progress
     },
-    .abort    = ucp_proto_abort_fatal_not_implemented,
+    .abort    = ucp_proto_rndv_get_mtype_abort,
     .reset    = ucp_proto_rndv_get_mtype_reset
 };
