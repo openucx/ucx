@@ -99,8 +99,79 @@ public:
         }
     }
 
+    void fill_sn(void *buffer, ucp_perf_datatype_t datatype,
+                 const ucx_perf_allocator_t *allocator, size_t length, PSN sn)
+    {
+        if (datatype == UCP_PERF_DATATYPE_IOV) {
+            const ucp_dt_iov_t *iov = reinterpret_cast<const ucp_dt_iov_t*>(buffer);
+            for (size_t i = 0; i < length; ++i) {
+                fill_sn_region(iov[i].buffer, iov[i].length, allocator, sn);
+            }
+        } else {
+            fill_sn_region(buffer, length, allocator, sn);
+        }
+    }
+
+    ucs_status_t validate_sn(const void *buffer, ucp_perf_datatype_t datatype,
+                             ucs_memory_type_t mem_type,
+                             const ucx_perf_allocator_t *allocator,
+                             size_t length, PSN sn, void *host_buffer)
+    {
+        if (datatype == UCP_PERF_DATATYPE_IOV) {
+            const ucp_dt_iov_t *iov = reinterpret_cast<const ucp_dt_iov_t*>(buffer);
+            for (size_t i = 0; i < length; ++i) {
+                ucs_status_t status = validate_sn_region(iov[i].buffer,
+                                                         mem_type, allocator,
+                                                         iov[i].length, sn,
+                                                         host_buffer);
+                if (status != UCS_OK) {
+                    ucs_error("data validation failed in iov element %zu", i);
+                    return status;
+                }
+            }
+            return UCS_OK;
+        }
+
+        return validate_sn_region(buffer, mem_type, allocator, length, sn,
+                                  host_buffer);
+    }
+
 protected:
     ucx_perf_context_t &m_perf;
+
+private:
+    void fill_sn_region(void *buffer, size_t length, const ucx_perf_allocator_t *allocator,
+                        PSN sn)
+    {
+        allocator->memset(buffer, sn, length);
+    }
+
+    ucs_status_t validate_sn_region(const void *buffer,
+                                    ucs_memory_type_t mem_type,
+                                    const ucx_perf_allocator_t *allocator,
+                                    size_t length, PSN sn, void *host_buffer)
+    {
+        const uint8_t *data;
+
+        if (mem_type == UCS_MEMORY_TYPE_HOST) {
+            data = reinterpret_cast<const uint8_t*>(buffer);
+        } else {
+            allocator->memcpy(host_buffer, UCS_MEMORY_TYPE_HOST, buffer,
+                              mem_type, length);
+            data = reinterpret_cast<const uint8_t*>(host_buffer);
+        }
+
+        for (size_t i = 0; i < length; ++i) {
+            if (data[i] != static_cast<uint8_t>(sn)) {
+                ucs_error("data validation failed at offset %zu: "
+                          "got 0x%x expected 0x%x",
+                          i, data[i], static_cast<uint8_t>(sn));
+                return UCS_ERR_IO_ERROR;
+            }
+        }
+
+        return UCS_OK;
+    }
 };
 
 #endif /* UCP_TESTS_H */

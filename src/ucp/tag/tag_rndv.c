@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -155,18 +155,25 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_rndv_rts_progress, (self),
 
 static void ucp_tag_rndv_rts_probe(const ucp_proto_init_params_t *init_params)
 {
+    ucp_context_h context;
+    uint8_t remote_op_flags;
+
     if (!ucp_tag_rndv_check_op_id(init_params) ||
         ucp_ep_config_key_has_tag_lane(init_params->ep_config_key)) {
         return;
     }
 
-    ucp_proto_rndv_rts_probe(init_params);
+    context         = init_params->worker->context;
+    remote_op_flags = ucp_proto_rndv_shm_pipeline_force_enabled(context) ?
+                      UCP_PROTO_SELECT_OP_FLAG_TAG_RNDV : 0;
+    ucp_proto_rndv_rts_probe(init_params, remote_op_flags);
 }
 
 ucp_proto_t ucp_tag_rndv_proto = {
     .name     = "tag/rndv",
     .desc     = NULL,
     .flags    = 0,
+    .dt_mask  = UCP_PROTO_DT_MASK_DEFAULT,
     .probe    = ucp_tag_rndv_rts_probe,
     .query    = ucp_proto_rndv_rts_query,
     .progress = {ucp_tag_rndv_rts_progress},

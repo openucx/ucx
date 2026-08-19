@@ -9,7 +9,6 @@
 #endif
 
 #include <ucs/config/global_opts.h>
-#include <ucs/datastruct/queue.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/string.h>
@@ -26,13 +25,13 @@ static void ucs_rcache_vfs_read_inv_q_length(void *obj,
                                              void *arg_ptr, uint64_t arg_u64)
 {
     ucs_rcache_t *rcache = obj;
-    size_t rcache_inv_q_length;
+    size_t inv_tree_count;
 
     ucs_spin_lock(&rcache->lock);
-    rcache_inv_q_length = ucs_queue_length(&rcache->inv_q);
+    inv_tree_count = ucs_interval_tree_count(&rcache->inv_tree);
     ucs_spin_unlock(&rcache->lock);
 
-    ucs_string_buffer_appendf(strb, "%zu\n", rcache_inv_q_length);
+    ucs_string_buffer_appendf(strb, "%zu\n", inv_tree_count);
 }
 
 static void ucs_rcache_vfs_read_gc_list_length(void *obj,

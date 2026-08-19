@@ -1,7 +1,7 @@
 Source: @PACKAGE@
 Section: libs
 Priority: extra
-Maintainer: ucx-group@elist.ornl.gov
+Maintainer: UCX Team <ucx-group@elist.ornl.gov>
 Build-Depends: debhelper (>= 9.0),
  libibverbs-dev,
  librdmacm-dev,

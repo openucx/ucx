@@ -297,6 +297,12 @@ AC_CHECK_HEADERS([endian.h, sys/endian.h])
 
 
 #
+# IEEE 754 floating-point helpers (glibc extension, absent on musl/FreeBSD)
+#
+AC_CHECK_HEADERS([ieee754.h])
+
+
+#
 # Linux-only headers
 #
 AC_CHECK_HEADERS([linux/mman.h])

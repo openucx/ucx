@@ -34,7 +34,9 @@
 
 
 #define UCT_CUDA_NVML_FOR_EACH(_macro) \
+    _macro(nvmlDeviceGetCount_v2, unsigned*); \
     _macro(nvmlDeviceGetHandleByIndex, unsigned, nvmlDevice_t*); \
+    _macro(nvmlDeviceGetPciInfo_v3, nvmlDevice_t, nvmlPciInfo_t*); \
     _macro(nvmlDeviceGetFieldValues, nvmlDevice_t, int, nvmlFieldValue_t*); \
     _macro(nvmlDeviceGetNvLinkRemotePciInfo, nvmlDevice_t, unsigned int, \
            nvmlPciInfo_t*)

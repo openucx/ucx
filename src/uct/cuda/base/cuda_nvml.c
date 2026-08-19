@@ -49,7 +49,9 @@
 
 #define UCT_CUDA_NVML_FOR_EACH_ACTION(_macro, _fail_action) \
     _macro(nvmlInit_v2, _fail_action); \
+    _macro(nvmlDeviceGetCount_v2, _fail_action); \
     _macro(nvmlDeviceGetHandleByIndex, _fail_action); \
+    _macro(nvmlDeviceGetPciInfo_v3, _fail_action); \
     _macro(nvmlDeviceGetFieldValues, _fail_action); \
     _macro(nvmlDeviceGetNvLinkRemotePciInfo, _fail_action); \
     _macro(nvmlShutdown, _fail_action)

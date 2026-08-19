@@ -142,6 +142,15 @@ static inline int ucp_ep_is_lane_p2p(ucp_ep_h ep, ucp_lane_index_t lane)
     return !!(ucp_ep_config(ep)->p2p_lanes & UCS_BIT(lane));
 }
 
+/* NULL-safe check whether the lane currently holds a failed-stub UCT EP. */
+static UCS_F_ALWAYS_INLINE int
+ucp_ep_is_lane_failed_stub(ucp_ep_h ep, ucp_lane_index_t lane)
+{
+    uct_ep_h uct_ep = ucp_ep_get_lane(ep, lane);
+
+    return (uct_ep != NULL) && ucp_is_uct_ep_failed(uct_ep);
+}
+
 static inline ucp_md_index_t ucp_ep_md_index(ucp_ep_h ep, ucp_lane_index_t lane)
 {
     return ucp_ep_config(ep)->md_index[lane];
@@ -305,6 +314,21 @@ static UCS_F_ALWAYS_INLINE int ucp_ep_config_err_handling_enabled(ucp_ep_h ep)
 static UCS_F_ALWAYS_INLINE ucp_lane_map_t ucp_ep_get_failed_lanes(ucp_ep_h ep)
 {
     return ucp_ep_config_get_failed_lanes(&ucp_ep_config(ep)->key);
+}
+
+static UCS_F_ALWAYS_INLINE ucp_lane_map_t ucp_ep_get_live_lanes(ucp_ep_h ep)
+{
+    ucp_lane_map_t lane_map = UCS_MASK(ucp_ep_num_lanes(ep));
+
+    if (ucp_ep_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_FAILOVER)) {
+        /* Only error handling mode failover supports the EP state with subset
+         * of operational lanes. In all other cases we can assume that all lanes
+         * are operational to avoid unnecessary overhead in flush.
+         */
+        return lane_map & ~ucp_ep_get_failed_lanes(ep);
+    }
+
+    return lane_map;
 }
 
 #endif

@@ -31,9 +31,6 @@ typedef enum {
 typedef enum {
     UCX_PERF_CMD_AM,
     UCX_PERF_CMD_PUT,
-    UCX_PERF_CMD_PUT_SINGLE,
-    UCX_PERF_CMD_PUT_MULTI,
-    UCX_PERF_CMD_PUT_PARTIAL,
     UCX_PERF_CMD_GET,
     UCX_PERF_CMD_ADD,
     UCX_PERF_CMD_FADD,
@@ -323,6 +320,7 @@ typedef struct ucx_perf_params {
         ucp_perf_datatype_t     recv_datatype;
         size_t                  am_hdr_size; /* UCP Active Message header size
                                                 (not included in message size) */
+        ucp_err_handling_mode_t err_mode;    /* UCP endpoint error handling mode */
         int                     is_daemon_mode;  /* Whether DPU offloading daemon
                                                     is configured */
         struct sockaddr_storage dmn_local_addr;  /* IP and port of local daemon,

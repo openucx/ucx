@@ -19,9 +19,19 @@ noinst_PROGRAMS = \
 	test_dlopen_cfg_print \
 	test_init_mt \
 	test_memtrack_limit \
-	test_hooks
+	test_hooks \
+	test_ucx_dlopen_isolation
+
+noinst_LTLIBRARIES = libtest_ucx_isolation_plugin.la
 
 objdir_apps = $(shell sed -n -e 's/^objdir=\(.*\)$$/\1/p' $(LIBTOOL))
+
+libtest_ucx_isolation_plugin_la_SOURCES  = test_ucx_isolation_plugin.c
+libtest_ucx_isolation_plugin_la_CPPFLAGS = $(BASE_CPPFLAGS)
+libtest_ucx_isolation_plugin_la_CFLAGS   = $(BASE_CFLAGS) $(LT_CFLAGS)
+libtest_ucx_isolation_plugin_la_LDFLAGS  = -module -avoid-version \
+                                           -rpath $(abs_builddir)
+libtest_ucx_isolation_plugin_la_LIBADD   = $(top_builddir)/src/ucp/libucp.la
 
 test_hooks_SOURCES  = test_hooks.c
 test_hooks_CPPFLAGS = $(BASE_CPPFLAGS) \
@@ -62,6 +72,11 @@ test_dlopen_cfg_print_CPPFLAGS = $(BASE_CPPFLAGS) -g \
 	-DUCT_LIB_PATH=$(abs_top_builddir)/src/uct/$(objdir_apps)/libuct.so
 test_dlopen_cfg_print_CFLAGS   = $(BASE_CFLAGS)
 test_dlopen_cfg_print_LDADD    = -ldl
+
+test_ucx_dlopen_isolation_SOURCES  = test_ucx_dlopen_isolation.c
+test_ucx_dlopen_isolation_CPPFLAGS = $(BASE_CPPFLAGS)
+test_ucx_dlopen_isolation_CFLAGS   = $(BASE_CFLAGS)
+test_ucx_dlopen_isolation_LDADD    = -ldl
 
 test_init_mt_SOURCES  = test_init_mt.c
 test_init_mt_CPPFLAGS = $(BASE_CPPFLAGS)

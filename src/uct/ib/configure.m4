@@ -7,18 +7,7 @@
 #
 
 
-AC_ARG_WITH([verbs],
-        [AS_HELP_STRING([--with-verbs(=DIR)],
-            [Build OpenFabrics support, adding DIR/include, DIR/lib, and DIR/lib64 to the search path for headers and libraries])],
-        [],
-        [with_verbs=/usr])
-
-AS_IF([test "x$with_verbs" = "xyes"], [with_verbs=/usr])
-AS_IF([test -d "$with_verbs"], [with_ib=yes; str="with verbs support from $with_verbs"], [with_ib=no; str="without verbs support"])
-AS_IF([test -d "$with_verbs/lib64"],[libsuff="64"],[libsuff=""])
-
-AC_MSG_NOTICE([Compiling $str])
-
+UCX_CHECK_VERBS
 
 #
 # MLX5 DV support, provides accelerated RC/UD/DC transports
@@ -57,6 +46,14 @@ AC_ARG_WITH([dc],
             [],
             [with_dc=yes])
 
+#
+# GGA Support
+#
+AC_ARG_WITH([gga],
+            [AS_HELP_STRING([--with-gga], [Compile with GGA DPU transport support])],
+            [],
+            [with_gga=guess])
+
 
 #
 # TM (IB Tag Matching) Support
@@ -82,53 +79,6 @@ AC_ARG_WITH([devx],
             [AS_HELP_STRING([--with-devx], [Compile with DEVX support])],
             [],
             [with_devx=check])
-
-#
-# Check basic IB support: User wanted at least one IB transport, and we found
-# verbs header file and library.
-#
-AS_IF([test "x$with_ib" = "xyes"],
-        [
-        save_LDFLAGS="$LDFLAGS"
-        save_CFLAGS="$CFLAGS"
-        save_CPPFLAGS="$CPPFLAGS"
-        AS_IF([test "x/usr" = "x$with_verbs"],
-          [],
-          [verbs_incl="-I$with_verbs/include"
-           verbs_libs="-L$with_verbs/lib$libsuff"])
-        LDFLAGS="$verbs_libs $LDFLAGS"
-        CFLAGS="$verbs_incl $CFLAGS"
-        CPPFLAGS="$verbs_incl $CPPFLAGS"
-        AC_CHECK_HEADER([infiniband/verbs.h], [],
-                        [AC_MSG_WARN([ibverbs header files not found]); with_ib=no])
-        AC_CHECK_LIB([ibverbs], [ibv_get_device_list],
-            [
-            AC_SUBST(IBVERBS_LDFLAGS,  ["$verbs_libs -libverbs"])
-            AC_SUBST(IBVERBS_DIR,      ["$with_verbs"])
-            AC_SUBST(IBVERBS_CPPFLAGS, ["$verbs_incl"])
-            AC_SUBST(IBVERBS_CFLAGS,   ["$verbs_incl"])
-            ],
-            [AC_MSG_WARN([libibverbs not found]); with_ib=no])
-
-        have_ib_funcs=yes
-        LDFLAGS="$LDFLAGS $IBVERBS_LDFLAGS"
-        AC_CHECK_DECLS([ibv_wc_status_str,
-                        ibv_event_type_str,
-                        ibv_query_gid,
-                        ibv_get_device_name,
-                        ibv_create_srq,
-                        ibv_get_async_event],
-                       [],
-                       [have_ib_funcs=no],
-                       [#include <infiniband/verbs.h>])
-        AS_IF([test "x$have_ib_funcs" != xyes],
-              [AC_MSG_WARN([Some IB verbs are not found. Please make sure OFED version is 1.5 or above.])
-               with_ib=no])
-
-        LDFLAGS="$save_LDFLAGS"
-        CFLAGS="$save_CFLAGS"
-        CPPFLAGS="$save_CPPFLAGS"
-        ],[:])
 
 AS_IF([test "x$with_ib" = "xyes"],
       [
@@ -205,10 +155,21 @@ AS_IF([test "x$with_ib" = "xyes"],
        AS_IF([test x$with_devx = xyes -a x$have_devx != xyes], [
                AC_MSG_ERROR([devx requested but not found])])
 
+       AS_IF([test "x$with_gga" != xno], [
+               AS_IF([test "x$have_mlx5" = xyes -a "x$has_mlx5_mmo" = xyes -a "x$have_devx" = xyes -a "x$with_rc" != xno],
+                     [have_gga=yes
+                      AC_DEFINE([HAVE_TL_GGA], 1, [GGA transport support])],
+                     [AS_IF([test "x$with_gga" = xyes],
+                            [AC_MSG_ERROR([GGA requested but MLX5, MLX5 MMO, DEVX, or RC support is not available])])
+                      have_gga=no])
+             ],
+             [have_gga=no])
+
        AC_CHECK_DECLS([IBV_LINK_LAYER_INFINIBAND,
                        IBV_LINK_LAYER_ETHERNET,
                        IBV_EVENT_GID_CHANGE,
-                       IBV_EVENT_PORT_SPEED_CHANGE,
+                       IBV_EVENT_DEVICE_SPEED_CHANGE,
+                       IBV_FORK_UNNEEDED,
                        IBV_TRANSPORT_USNIC,
                        IBV_TRANSPORT_USNIC_UDP,
                        IBV_TRANSPORT_UNSPECIFIED,
@@ -216,7 +177,8 @@ AS_IF([test "x$with_ib" = "xyes"],
                        ibv_create_cq_ex,
                        ibv_create_srq_ex,
                        ibv_reg_dmabuf_mr,
-                       ibv_query_port_speed],
+                       ibv_query_port_speed,
+                       ibv_is_fork_initialized],
                       [], [], [[#include <infiniband/verbs.h>]])
 
        # Check ECE operation APIs are supported by rdma-core package
@@ -335,9 +297,13 @@ AS_IF([test "x$with_ib" = "xyes"],
        uct_modules="${uct_modules}:ib"
     ],
     [
+        AS_IF([test "x$with_gga" = xyes],
+              [AC_MSG_ERROR([GGA requested but IB/verbs support is not available])])
         with_dc=no
         with_rc=no
         with_ud=no
+        with_gga=no
+        have_gga=no
         with_mlx5=no
     ])
 
@@ -351,6 +317,7 @@ AM_CONDITIONAL([HAVE_TL_DC],   [test "x$with_dc" != xno])
 AM_CONDITIONAL([HAVE_DC_DV],   [test -n "$have_dc_dv"])
 AM_CONDITIONAL([HAVE_TL_UD],   [test "x$with_ud" != xno])
 AM_CONDITIONAL([HAVE_DEVX],    [test -n "$have_devx"])
+AM_CONDITIONAL([HAVE_TL_GGA],  [test "x$have_gga" = xyes])
 AM_CONDITIONAL([HAVE_MLX5_HW_UD], [test "x$have_mlx5" = xyes -a "x$has_get_av" != xno])
 AM_CONDITIONAL([HAVE_MLX5_MMO],   [test -n "$has_mlx5_mmo"])
 

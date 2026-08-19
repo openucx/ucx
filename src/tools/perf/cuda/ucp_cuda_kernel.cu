@@ -9,7 +9,9 @@
 #endif
 
 #include "cuda_kernel.cuh"
+#ifdef HAVE_CURAND
 #include "curand_kernel.h"
+#endif
 
 #include <ucp/api/device/ucp_host.h>
 #include <ucp/api/device/ucp_device_impl.h>
@@ -25,16 +27,21 @@ public:
     __device__
     ucp_perf_cuda_request_manager(const ucx_perf_cuda_context &ctx,
                                   ucp_device_request_t *requests,
-                                  curandState *rand_state)
+                                  unsigned global_thread_id)
         : m_size(ctx.max_outstanding),
           m_fc_window(ctx.device_fc_window),
           m_reqs_count(ucs_div_round_up(m_size, m_fc_window)),
           m_channel_mode(ctx.channel_mode),
           m_pending_count(0),
           m_requests(requests),
-          m_pending_map(0),
-          m_rand_state(rand_state)
+          m_pending_map(0)
     {
+#ifdef HAVE_CURAND
+        if (ctx.channel_mode == UCX_PERF_CHANNEL_MODE_RANDOM) {
+            curand_init(ctx.channel_rand_seed, global_thread_id, 0,
+                        &m_rand_state);
+        }
+#endif
         assert(m_size <= CAPACITY);
         for (size_type i = 0; i < m_reqs_count; ++i) {
             m_pending[i] = 0;
@@ -106,7 +113,11 @@ public:
         case UCX_PERF_CHANNEL_MODE_SINGLE:
             return 0;
         case UCX_PERF_CHANNEL_MODE_RANDOM:
-            return curand(m_rand_state) % (gridDim.x * blockDim.x);
+#ifdef HAVE_CURAND
+            return curand(&m_rand_state) % (gridDim.x * blockDim.x);
+#else
+            [[fallthrough]];
+#endif
         case UCX_PERF_CHANNEL_MODE_PER_THREAD:
         default:
             return ucx_perf_cuda_thread_index<level>(threadIdx.x +
@@ -125,7 +136,9 @@ private:
     ucp_device_request_t          *m_requests;
     uint32_t                      m_pending_map;
     uint8_t                       m_pending[CAPACITY];
-    curandState                   *m_rand_state;
+#ifdef HAVE_CURAND
+    mutable curandState           m_rand_state;
+#endif
 };
 
 struct ucp_perf_cuda_params {
@@ -345,13 +358,8 @@ ucp_perf_cuda_put_bw_kernel(ucx_perf_cuda_context &ctx,
     unsigned global_thread_id  = ucx_perf_cuda_thread_index<level>(
         thread_index + blockIdx.x * blockDim.x);
     ucp_device_request_t *reqs = &shared_requests[reqs_count * thread_index];
-    curandState rand_state;
 
-    if (ctx.channel_mode == UCX_PERF_CHANNEL_MODE_RANDOM) {
-        curand_init(ctx.channel_rand_seed, global_thread_id, 0, &rand_state);
-    }
-
-    ucp_perf_cuda_request_manager req_mgr(ctx, reqs, &rand_state);
+    ucp_perf_cuda_request_manager req_mgr(ctx, reqs, global_thread_id);
 
     if (ctx.device_fc_window > 1) {
         ctx.status = ucp_perf_cuda_put_bw_kernel_impl<level, cmd, true>(
@@ -374,13 +382,8 @@ ucp_perf_cuda_put_latency_kernel(ucx_perf_cuda_context &ctx,
     unsigned global_thread_id    = ucx_perf_cuda_thread_index<level>(
         thread_index + blockIdx.x * blockDim.x);
     ucp_device_request_t *req    = &shared_requests[thread_index];
-    curandState rand_state;
 
-    if (ctx.channel_mode == UCX_PERF_CHANNEL_MODE_RANDOM) {
-        curand_init(ctx.channel_rand_seed, global_thread_id, 0, &rand_state);
-    }
-
-    ucp_perf_cuda_request_manager req_mgr(ctx, req, &rand_state);
+    ucp_perf_cuda_request_manager req_mgr(ctx, req, global_thread_id);
     ucx_perf_cuda_reporter reporter(ctx);
 
     for (ucx_perf_counter_t idx = 0; idx < max_iters; idx++) {

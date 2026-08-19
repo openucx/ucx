@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2013. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -11,9 +11,11 @@
 #include <ucs/stats/stats.h>
 #include <ucs/sys/sys.h>
 
-#include <memory>
+#include <fnmatch.h>
 
 namespace ucs {
+
+constexpr size_t TOTAL_FD_INCREASE_THRESHOLD = 2;
 
 pthread_mutex_t test_base::m_logger_mutex = PTHREAD_MUTEX_INITIALIZER;
 unsigned test_base::m_total_warnings = 0;
@@ -21,15 +23,17 @@ unsigned test_base::m_total_errors   = 0;
 std::vector<std::string> test_base::m_errors;
 std::vector<std::string> test_base::m_warnings;
 std::vector<std::string> test_base::m_first_warns_and_errors;
+std::set<int> test_base::m_prev_open_fds;
+size_t test_base::m_total_fd_increases = 0;
 
 test_base::test_base() :
-                m_state(NEW),
-                m_initialized(false),
-                m_num_threads(1),
-                m_num_valgrind_errors_before(0),
-                m_num_errors_before(0),
-                m_num_warnings_before(0),
-                m_num_log_handlers_before(0)
+    m_state(NEW),
+    m_initialized(false),
+    m_num_threads(1),
+    m_num_valgrind_errors_before(0),
+    m_num_errors_before(0),
+    m_num_warnings_before(0),
+    m_num_log_handlers_before(0)
 {
     push_config();
 }
@@ -38,12 +42,84 @@ test_base::~test_base() {
     while (!m_config_stack.empty()) {
         pop_config();
     }
+
+    check_fd_leaks();
+
     ucs_assertv_always(m_state == FINISHED ||
                        m_state == SKIPPED ||
                        m_state == NEW ||
                        m_state == INITIALIZING ||
                        m_state == ABORTED,
                        "state=%d", m_state);
+}
+
+bool test_base::is_open_file_whitelisted(const std::string &path) const
+{
+    /* fd targets for external libraries (rdma-core, CUDA driver, etc.) */
+    static const std::string targets_whitelist[] = {
+        "/dev/infiniband/uverbs*",
+        "*anon_inode:\\[infinibandevent\\]",
+        "/dev/nvidia*",
+        "/proc/*/pagemap",
+    };
+
+    for (const auto &str : targets_whitelist) {
+        if (fnmatch(str.c_str(), path.c_str(), 0) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Compare open file descriptors against the previous test's post-cleanup
+ * state via set-difference. New fds whose targets match the whitelist
+ * (e.g. from external libraries) are logged but not counted as leaks.
+ * Non-whitelisted new fds increment a total-increase counter and
+ * trigger a failure once TOTAL_FD_INCREASE_THRESHOLD is reached. */
+void test_base::check_fd_leaks()
+{
+    std::set<int> open_fds = get_open_fds();
+
+    if (!m_prev_open_fds.empty()) {
+        std::stringstream ss;
+        size_t num_leaked      = 0;
+        size_t num_whitelisted = 0;
+        const std::string padding(13, ' ');
+
+        for (const int fd : open_fds) {
+            if (m_prev_open_fds.find(fd) == m_prev_open_fds.end()) {
+                const std::string target = readlink_proc_fd(fd);
+                ss << "\n" << padding << "  fd " << fd << " -> " << target;
+                if (is_open_file_whitelisted(target)) {
+                    ss << " (whitelisted)";
+                    ++num_whitelisted;
+                } else {
+                    ++num_leaked;
+                }
+            }
+        }
+
+        if (num_leaked > 0) {
+            ++m_total_fd_increases;
+
+            ss << "\n"
+               << padding << "total open fds: " << open_fds.size() << "\n"
+               << padding << "total fd increases: " << m_total_fd_increases
+               << "\n";
+
+            UCS_TEST_MESSAGE << "new open fds (" << num_leaked << " leaked, "
+                             << num_whitelisted << " whitelisted):" << ss.str();
+
+            if (m_total_fd_increases >= TOTAL_FD_INCREASE_THRESHOLD) {
+                ADD_FAILURE()
+                        << "fd leaks detected in " << m_total_fd_increases
+                        << " tests (threshold: " << TOTAL_FD_INCREASE_THRESHOLD
+                        << ")";
+            }
+        }
+    }
+
+    m_prev_open_fds = std::move(open_fds);
 }
 
 void test_base::set_num_threads(unsigned num_threads) {

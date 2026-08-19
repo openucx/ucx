@@ -133,6 +133,13 @@ uct_ze_copy_mem_reg(uct_md_h md, void *address, size_t length,
     return UCS_OK;
 }
 
+static ucs_status_t
+uct_ze_copy_mem_dereg(uct_md_h md, const uct_md_mem_dereg_params_t *params)
+{
+    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
+    return UCS_OK;
+}
+
 static void uct_ze_copy_md_close(uct_md_h uct_md)
 {
     uct_ze_copy_md_t *md = ucs_derived_of(uct_md, uct_ze_copy_md_t);
@@ -155,11 +162,12 @@ uct_ze_copy_md_query_attributes(uct_md_h md, const void *addr, size_t length,
         .stype = ZE_STRUCTURE_TYPE_MEMORY_ALLOCATION_PROPERTIES,
         .pNext = dmabuf_fd ? &export_fd : NULL
     };
+    ze_device_handle_t ze_device             = NULL;
     ze_result_t ret;
     void *base_address;
     size_t alloc_length;
 
-    ret = zeMemGetAllocProperties(ze_md->ze_context, addr, &props, NULL);
+    ret = zeMemGetAllocProperties(ze_md->ze_context, addr, &props, &ze_device);
     if ((ret != ZE_RESULT_SUCCESS) || (props.type == ZE_MEMORY_TYPE_UNKNOWN)) {
         return UCS_ERR_INVALID_ADDR;
     }
@@ -179,7 +187,7 @@ uct_ze_copy_md_query_attributes(uct_md_h md, const void *addr, size_t length,
     }
     mem_info->base_address = base_address;
     mem_info->alloc_length = alloc_length;
-    mem_info->sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
+    mem_info->sys_dev      = uct_ze_base_get_sys_dev_from_handle(ze_device);
     if (dmabuf_fd) {
         *dmabuf_fd = export_fd.fd;
     }
@@ -188,14 +196,14 @@ uct_ze_copy_md_query_attributes(uct_md_h md, const void *addr, size_t length,
 
 static ucs_status_t uct_ze_copy_md_mem_query(uct_md_h md, const void *addr,
                                              const size_t length,
-                                             uct_md_mem_attr_t *mem_attr_p)
+                                             uct_md_mem_attr_v2_t *mem_attr_p)
 {
     int dmabuf_fd    = UCT_DMABUF_FD_INVALID;
     int *dmabuf_fd_p = NULL;
     ucs_memory_info_t mem_info;
     ucs_status_t status;
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD) {
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD) {
         mem_attr_p->dmabuf_fd = UCT_DMABUF_FD_INVALID;
         dmabuf_fd_p           = &dmabuf_fd;
     }
@@ -207,41 +215,42 @@ static ucs_status_t uct_ze_copy_md_mem_query(uct_md_h md, const void *addr,
     }
 
     ucs_memtype_cache_update(mem_info.base_address, mem_info.alloc_length,
-                             mem_info.type, mem_info.sys_dev);
+                             mem_info.type, mem_info.sys_dev,
+                             UCS_MEM_FLAG_REGISTRABLE);
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_MEM_TYPE) {
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE) {
         mem_attr_p->mem_type = mem_info.type;
     }
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_SYS_DEV) {
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_SYS_DEV) {
         mem_attr_p->sys_dev = mem_info.sys_dev;
     }
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS) {
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_BASE_ADDRESS) {
         mem_attr_p->base_address = mem_info.base_address;
     }
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH) {
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_ALLOC_LENGTH) {
         mem_attr_p->alloc_length = mem_info.alloc_length;
     }
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD) {
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD) {
         if (dmabuf_fd == UCT_DMABUF_FD_INVALID) {
-            return UCS_ERR_UNSUPPORTED;
-        }
+            mem_attr_p->dmabuf_fd = UCT_DMABUF_FD_INVALID;
+        } else {
+            mem_attr_p->dmabuf_fd = dup(dmabuf_fd);
+            if (mem_attr_p->dmabuf_fd < 0) {
+                return UCS_ERR_IO_ERROR;
+            }
 
-        mem_attr_p->dmabuf_fd = dup(dmabuf_fd);
-        if (mem_attr_p->dmabuf_fd < 0) {
-            return UCS_ERR_IO_ERROR;
+            /* NOTE: Do not close(dmabuf_fd) here. Level Zero caches this fd
+             * internally per allocation. Closing it can invalidate the cache
+             * and lead to fd reuse conflicts with other transports.
+             */
         }
-
-        /* NOTE: Do not close(dmabuf_fd) here. Level Zero caches this fd
-         * internally per allocation. Closing it can invalidate the cache and
-         * lead to fd reuse conflicts with other transports.
-         */
     }
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET) {
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_OFFSET) {
         mem_attr_p->dmabuf_offset = UCS_PTR_BYTE_DIFF(mem_info.base_address,
                                                       addr);
     }
@@ -253,10 +262,10 @@ static ucs_status_t
 uct_ze_copy_md_detect_memory_type(uct_md_h md, const void *addr, size_t length,
                                   ucs_memory_type_t *mem_type_p)
 {
-    uct_md_mem_attr_t mem_attr;
+    uct_md_mem_attr_v2_t mem_attr;
     ucs_status_t status;
 
-    mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE;
+    mem_attr.field_mask = UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE;
     status = uct_ze_copy_md_mem_query(md, addr, length, &mem_attr);
     if (status != UCS_OK) {
         return status;
@@ -273,12 +282,13 @@ static uct_md_ops_t md_ops = {
     .mem_free           = uct_ze_copy_mem_free,
     .mem_advise         = (uct_md_mem_advise_func_t)ucs_empty_function_return_unsupported,
     .mem_reg            = uct_ze_copy_mem_reg,
-    .mem_dereg          = (uct_md_mem_dereg_func_t)ucs_empty_function_return_success,
+    .mem_dereg          = uct_ze_copy_mem_dereg,
     .mem_query          = uct_ze_copy_md_mem_query,
     .mkey_pack          = (uct_md_mkey_pack_func_t)ucs_empty_function_return_success,
     .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
     .detect_memory_type = uct_ze_copy_md_detect_memory_type,
-    .mem_elem_pack      = (uct_md_mem_elem_pack_func_t)ucs_empty_function_return_unsupported
+    .mem_elem_pack      = (uct_md_mem_elem_pack_func_t)ucs_empty_function_return_unsupported,
+    .mem_elem_release   = (uct_md_mem_elem_release_func_t)ucs_empty_function
 };
 
 static ucs_status_t
@@ -341,6 +351,7 @@ uct_component_t uct_ze_copy_component = {
     .rkey_unpack        = uct_ze_copy_rkey_unpack,
     .rkey_ptr           = (uct_component_rkey_ptr_func_t)ucs_empty_function_return_unsupported,
     .rkey_release       = (uct_component_rkey_release_func_t)ucs_empty_function_return_success,
+    .rkey_compare       = uct_base_rkey_compare,
     .name               = "ze_cpy",
     .md_config = {
         .name       = "ze-copy memory domain",

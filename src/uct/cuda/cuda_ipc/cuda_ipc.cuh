@@ -13,7 +13,6 @@
 #include <ucs/type/status.h>
 #include <cuda/atomic>
 
-#define UCT_CUDA_IPC_IS_ALIGNED_POW2(_n, _p) (!((_n) & ((_p) - 1)))
 #define UCT_CUDA_IPC_WARP_SIZE 32
 #define UCT_CUDA_IPC_COPY_LOOP_UNROLL 8
 
@@ -129,8 +128,8 @@ void uct_cuda_ipc_copy_level<UCS_DEVICE_LEVEL_WARP>(void *dst, const void *src, 
     auto d1 = reinterpret_cast<char *>(dst);
 
     /* 16B-aligned fast path using vec4 */
-    if (UCT_CUDA_IPC_IS_ALIGNED_POW2((intptr_t)s1, sizeof(vec4)) &&
-        UCT_CUDA_IPC_IS_ALIGNED_POW2((intptr_t)d1, sizeof(vec4))) {
+    if (UCS_DEVICE_IS_ALIGNED_POW2((intptr_t)s1, sizeof(vec4)) &&
+        UCS_DEVICE_IS_ALIGNED_POW2((intptr_t)d1, sizeof(vec4))) {
         const vec4 *s4 = reinterpret_cast<const vec4*>(s1);
         vec4 *d4       = reinterpret_cast<vec4*>(d1);
         size_t n4 = len / sizeof(vec4);
@@ -149,8 +148,8 @@ void uct_cuda_ipc_copy_level<UCS_DEVICE_LEVEL_WARP>(void *dst, const void *src, 
     }
 
     /* 8B-aligned fast path using vec2 */
-    if (UCT_CUDA_IPC_IS_ALIGNED_POW2((intptr_t)s1, sizeof(vec2)) &&
-        UCT_CUDA_IPC_IS_ALIGNED_POW2((intptr_t)d1, sizeof(vec2))) {
+    if (UCS_DEVICE_IS_ALIGNED_POW2((intptr_t)s1, sizeof(vec2)) &&
+        UCS_DEVICE_IS_ALIGNED_POW2((intptr_t)d1, sizeof(vec2))) {
         const vec2 *s2 = reinterpret_cast<const vec2*>(s1);
         vec2 *d2       = reinterpret_cast<vec2*>(d1);
         size_t n2 = len / sizeof(vec2);
@@ -186,8 +185,8 @@ void uct_cuda_ipc_copy_level<UCS_DEVICE_LEVEL_BLOCK>(void *dst, const void *src,
     int warp, num_warps, idx;
     size_t num_lines;
 
-    if (UCT_CUDA_IPC_IS_ALIGNED_POW2((intptr_t)s1, sizeof(vec4)) &&
-        UCT_CUDA_IPC_IS_ALIGNED_POW2((intptr_t)d1, sizeof(vec4))) {
+    if (UCS_DEVICE_IS_ALIGNED_POW2((intptr_t)s1, sizeof(vec4)) &&
+        UCS_DEVICE_IS_ALIGNED_POW2((intptr_t)d1, sizeof(vec4))) {
         vec4 tmp[UCT_CUDA_IPC_COPY_LOOP_UNROLL];
         warp      = threadIdx.x / UCT_CUDA_IPC_WARP_SIZE;
         num_warps = blockDim.x / UCT_CUDA_IPC_WARP_SIZE;
@@ -232,8 +231,8 @@ void uct_cuda_ipc_copy_level<UCS_DEVICE_LEVEL_BLOCK>(void *dst, const void *src,
     }
 
     /* If not 16B-aligned, try 8B-aligned fast path using vec2 */
-    if (UCT_CUDA_IPC_IS_ALIGNED_POW2((intptr_t)s1, sizeof(vec2)) &&
-        UCT_CUDA_IPC_IS_ALIGNED_POW2((intptr_t)d1, sizeof(vec2))) {
+    if (UCS_DEVICE_IS_ALIGNED_POW2((intptr_t)s1, sizeof(vec2)) &&
+        UCS_DEVICE_IS_ALIGNED_POW2((intptr_t)d1, sizeof(vec2))) {
         const vec2 *s2;
         vec2 *d2;
         vec2 tmp2[UCT_CUDA_IPC_COPY_LOOP_UNROLL];
@@ -291,8 +290,8 @@ void uct_cuda_ipc_copy_level<UCS_DEVICE_LEVEL_GRID>(void *dst, const void *src, 
 {/* not implemented */}
 
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_BLOCK>
-UCS_F_DEVICE ucs_status_t uct_cuda_ipc_ep_put_single(
-        uct_device_ep_h device_ep, const uct_device_mem_element_t *mem_elem,
+UCS_F_DEVICE ucs_status_t uct_cuda_ipc_ep_put(
+        uct_device_ep_h device_ep, const uct_device_mem_elem_t *mem_elem,
         const void *address, uint64_t remote_address, size_t length,
         uint64_t flags, uct_device_completion_t *comp)
 {
@@ -308,97 +307,9 @@ UCS_F_DEVICE ucs_status_t uct_cuda_ipc_ep_put_single(
 }
 
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_BLOCK>
-UCS_F_DEVICE ucs_status_t uct_cuda_ipc_ep_put_multi(
-        uct_device_ep_h device_ep, const uct_device_mem_element_t *mem_list,
-        unsigned mem_list_count, void *const *addresses,
-        const uint64_t *remote_addresses, const size_t *lengths,
-        uint64_t counter_inc_value, uint64_t counter_remote_address,
-        uint64_t flags, uct_device_completion_t *comp)
-{
-    unsigned int num_put_ops = (counter_remote_address != 0) ? mem_list_count - 1 : mem_list_count;
-    unsigned int lane_id, num_lanes;
-
-    uct_cuda_ipc_get_lane<level>(lane_id, num_lanes);
-    for (int i = 0; i < num_put_ops; i++) {
-        auto cuda_ipc_mem_element =
-                reinterpret_cast<const uct_cuda_ipc_md_device_mem_element_t*>(
-                        UCS_PTR_BYTE_OFFSET(
-                                mem_list,
-                                sizeof(uct_cuda_ipc_md_device_mem_element_t) *
-                                        i));
-        auto mapped_rem_addr = uct_cuda_ipc_map_remote(cuda_ipc_mem_element,
-                                                       remote_addresses[i]);
-        uct_cuda_ipc_copy_level<level>(mapped_rem_addr, addresses[i],
-                                       lengths[i]);
-    }
-
-    if ((counter_remote_address != 0) && (lane_id == 0)) {
-        auto cuda_ipc_mem_element =
-                reinterpret_cast<const uct_cuda_ipc_md_device_mem_element_t*>(
-                        UCS_PTR_BYTE_OFFSET(
-                                mem_list,
-                                sizeof(uct_cuda_ipc_md_device_mem_element_t) *
-                                        num_put_ops));
-        auto mapped_counter_rem_addr = reinterpret_cast<uint64_t*>(
-                uct_cuda_ipc_map_remote(cuda_ipc_mem_element,
-                                        counter_remote_address));
-        uct_cuda_ipc_atomic_inc(mapped_counter_rem_addr, counter_inc_value);
-    }
-
-    uct_cuda_ipc_level_sync<level>();
-    return UCS_OK;
-}
-
-template<ucs_device_level_t level = UCS_DEVICE_LEVEL_BLOCK>
-UCS_F_DEVICE ucs_status_t uct_cuda_ipc_ep_put_multi_partial(
-        uct_device_ep_h device_ep, const uct_device_mem_element_t *mem_list,
-        const unsigned *mem_list_indices, unsigned mem_list_count,
-        void *const *addresses, const uint64_t *remote_addresses,
-        const size_t *local_offsets, const size_t *remote_offsets,
-        const size_t *lengths, unsigned counter_index,
-        uint64_t counter_inc_value, uint64_t counter_remote_address,
-        uint64_t flags, uct_device_completion_t *comp)
-{
-    unsigned int lane_id, num_lanes;
-
-    uct_cuda_ipc_get_lane<level>(lane_id, num_lanes);
-    for (int i = 0; i < mem_list_count; i++) {
-        unsigned idx = mem_list_indices[i];
-        auto cuda_ipc_mem_element =
-                reinterpret_cast<const uct_cuda_ipc_md_device_mem_element_t*>(
-                        UCS_PTR_BYTE_OFFSET(
-                                mem_list,
-                                sizeof(uct_cuda_ipc_md_device_mem_element_t) *
-                                        idx));
-        auto src_addr = UCS_PTR_BYTE_OFFSET(addresses[idx], local_offsets[i]);
-        auto mapped_rem_addr = uct_cuda_ipc_map_remote(
-                cuda_ipc_mem_element,
-                remote_addresses[idx] + remote_offsets[i]);
-        uct_cuda_ipc_copy_level<level>(mapped_rem_addr, src_addr, lengths[i]);
-    }
-
-
-    if ((counter_inc_value != 0) && (lane_id == 0)) {
-        auto cuda_ipc_mem_element =
-                reinterpret_cast<const uct_cuda_ipc_md_device_mem_element_t*>(
-                        UCS_PTR_BYTE_OFFSET(
-                                mem_list,
-                                sizeof(uct_cuda_ipc_md_device_mem_element_t) *
-                                        counter_index));
-        auto mapped_counter_rem_addr = reinterpret_cast<uint64_t*>(
-                uct_cuda_ipc_map_remote(cuda_ipc_mem_element,
-                                        counter_remote_address));
-        uct_cuda_ipc_atomic_inc(mapped_counter_rem_addr, counter_inc_value);
-    }
-
-    uct_cuda_ipc_level_sync<level>();
-    return UCS_OK;
-}
-
-template<ucs_device_level_t level = UCS_DEVICE_LEVEL_BLOCK>
 UCS_F_DEVICE ucs_status_t
 uct_cuda_ipc_ep_atomic_add(uct_device_ep_h device_ep,
-                           const uct_device_mem_element_t *mem_elem,
+                           const uct_device_mem_elem_t *mem_elem,
                            uint64_t inc_value, uint64_t remote_address,
                            uint64_t flags, uct_device_completion_t *comp)
 {
@@ -420,7 +331,7 @@ uct_cuda_ipc_ep_atomic_add(uct_device_ep_h device_ep,
 }
 
 UCS_F_DEVICE ucs_status_t uct_cuda_ipc_ep_get_ptr(
-        uct_device_ep_h device_ep, const uct_device_mem_element_t *mem_elem,
+        uct_device_ep_h device_ep, const uct_device_mem_elem_t *mem_elem,
         uint64_t remote_address, void **addr_p)
 {
     auto cuda_ipc_mem_element =

@@ -1,5 +1,5 @@
 /**_t
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2017. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -24,7 +24,10 @@
 #include <ucs/time/timer_wheel.h>
 #include <ucs/type/class.h>
 #include <uct/base/uct_md.h>
+#include <uct/api/device/uct_device_types.h>
 #include <uct/base/uct_iface.h>
+#include <uct/sm/scopy/cma/cma_ep.h>
+#include <uct/sm/scopy/cma/cma_iface.h>
 #include <uct/sm/self/self.h>
 #include <uct/tcp/tcp.h>
 #include <ucp/core/ucp_context.h>
@@ -44,8 +47,12 @@
 #  include <uct/ib/rc/base/rc_iface.h>
 #  include <uct/ib/rc/base/rc_ep.h>
 #  include <uct/ib/rc/verbs/rc_verbs.h>
-#  ifdef HAVE_MLX5_DV
+#  if HAVE_MLX5_DV
 #    include <uct/ib/mlx5/rc/rc_mlx5.h>
+#    if HAVE_CUDA
+#      include <uct/ib/mlx5/gdaki/gdaki.h>
+#      include <uct/ib/mlx5/gdaki/gdaki_dev.h>
+#    endif
 #  endif
 #endif
 
@@ -60,6 +67,12 @@
 #  ifdef HAVE_MLX5_HW_UD
 #    include <uct/ib/mlx5/ud/ud_mlx5.h>
 #  endif
+#endif
+
+#if HAVE_CUDA
+#  include <uct/cuda/cuda_ipc/cuda_ipc_ep.h>
+#  include <uct/cuda/cuda_ipc/cuda_ipc_iface.h>
+#  include <uct/cuda/cuda_ipc/cuda_ipc_md.h>
 #endif
 
 
@@ -86,6 +99,11 @@ static void print_size(const char *name, size_t size)
 #define PRINT_FIELD_SIZE(_type, _field) \
     print_size(UCS_PP_QUOTE(_type) "." UCS_PP_QUOTE(_field), \
                ucs_field_sizeof(_type, _field))
+
+static int check_tl(const char *tl_name, const char *tl_name_to_check)
+{
+    return (tl_name == NULL) || !strcasecmp(tl_name, tl_name_to_check);
+}
 
 void print_type_info(const char * tl_name)
 {
@@ -131,6 +149,7 @@ void print_type_info(const char * tl_name)
         PRINT_SIZE(ucs_rcache_region_t);
         PRINT_SIZE(ucs_conn_match_elem_t);
         PRINT_SIZE(ucs_memory_info_t);
+        PRINT_SIZE(ucs_sys_ns_t);
 
         printf("\nUCT:\n");
         PRINT_SIZE(uct_am_handler_t);
@@ -152,6 +171,10 @@ void print_type_info(const char * tl_name)
         PRINT_SIZE(uct_rkey_bundle_t);
         PRINT_SIZE(uct_tcp_ep_t);
         PRINT_SIZE(uct_self_ep_t);
+        PRINT_SIZE(uct_device_ep_t);
+        PRINT_SIZE(uct_device_mem_elem_t);
+        PRINT_SIZE(uct_device_local_mem_elem_t);
+        PRINT_SIZE(uct_device_remote_mem_elem_t);
 
 #ifdef HAVE_TL_UGNI
         PRINT_SIZE(uct_sockaddr_ugni_t);
@@ -173,10 +196,16 @@ void print_type_info(const char * tl_name)
         printf("\n");
     }
 
+    if (check_tl(tl_name, "cma")) {
+        printf("CMA:\n");
+        PRINT_SIZE(uct_cma_ep_t);
+        PRINT_SIZE(uct_cma_iface_t);
+        PRINT_SIZE(ucs_cma_iface_base_device_addr_t);
+        PRINT_SIZE(ucs_cma_iface_ext_device_addr_t);
+    }
+
 #if HAVE_TL_RC
-    if (tl_name == NULL || !strcasecmp(tl_name, "rc_verbs") ||
-        !strcasecmp(tl_name, "rc_mlx5"))
-    {
+    if (check_tl(tl_name, "rc_verbs") || check_tl(tl_name, "rc_mlx5")) {
         printf("RC:\n");
         PRINT_SIZE(uct_rc_am_short_hdr_t);
         PRINT_SIZE(uct_rc_ep_t);
@@ -187,14 +216,14 @@ void print_type_info(const char * tl_name)
         PRINT_SIZE(uct_rc_iface_send_desc_t);
 
         PRINT_SIZE(uct_rc_iface_send_desc_t);
-        if (tl_name == NULL || !strcasecmp(tl_name, "rc_verbs")) {
+        if (check_tl(tl_name, "rc_verbs")) {
             PRINT_SIZE(uct_rc_verbs_ep_t);
             PRINT_SIZE(uct_rc_verbs_iface_config_t);
             PRINT_SIZE(uct_rc_verbs_iface_t);
         }
 
 #ifdef HAVE_MLX5_DV
-        if (tl_name == NULL || !strcasecmp(tl_name, "rc_mlx5")) {
+        if (check_tl(tl_name, "rc_mlx5")) {
             PRINT_SIZE(uct_rc_mlx5_am_short_hdr_t);
             PRINT_SIZE(uct_rc_mlx5_ep_t);
             PRINT_SIZE(uct_rc_mlx5_hdr_t);
@@ -204,11 +233,23 @@ void print_type_info(const char * tl_name)
 #endif
         printf("\n");
     }
-#endif
+
+#if HAVE_MLX5_DV && HAVE_CUDA
+    if (check_tl(tl_name, "rc_gda")) {
+        printf("RC_GDA:\n");
+        PRINT_SIZE(uct_rc_gdaki_ep_t);
+        PRINT_SIZE(uct_rc_gdaki_channel_t);
+        PRINT_SIZE(uct_rc_gdaki_iface_t);
+        PRINT_SIZE(uct_rc_gdaki_dev_qp_t);
+        PRINT_SIZE(uct_rc_gdaki_dev_ep_t);
+        PRINT_SIZE(uct_rc_gda_completion_t);
+        printf("\n");
+    }
+#endif /* HAVE_MLX5_DV && HAVE_CUDA*/
+#endif /* HAVE_TL_RC*/
 
 #if HAVE_TL_DC
-    if (tl_name == NULL || !strcasecmp(tl_name, "dc_mlx5"))
-    {
+    if (check_tl(tl_name, "dc") || check_tl(tl_name, "dc_mlx5")) {
         printf("DC:\n");
         PRINT_SIZE(uct_dc_mlx5_ep_t);
         PRINT_SIZE(uct_dc_mlx5_iface_t);
@@ -219,9 +260,7 @@ void print_type_info(const char * tl_name)
 #endif
 
 #if HAVE_TL_UD
-    if (tl_name == NULL || !strcasecmp(tl_name, "ud_verbs") ||
-        !strcasecmp(tl_name, "ud_mlx5"))
-    {
+    if (check_tl(tl_name, "ud_verbs") || check_tl(tl_name, "ud_mlx5")) {
         printf("UD:\n");
         PRINT_SIZE(uct_ud_ep_t);
         PRINT_SIZE(uct_ud_neth_t);
@@ -232,13 +271,13 @@ void print_type_info(const char * tl_name)
         PRINT_SIZE(uct_ud_recv_skb_t);
 
         PRINT_SIZE(uct_rc_iface_send_desc_t);
-        if (tl_name == NULL || !strcasecmp(tl_name, "ud_verbs")) {
+        if (check_tl(tl_name, "ud_verbs")) {
             PRINT_SIZE(uct_ud_verbs_ep_t);
             PRINT_SIZE(uct_ud_verbs_iface_t);
         }
 
 #ifdef HAVE_MLX5_HW_UD
-        if (tl_name == NULL || !strcasecmp(tl_name, "ud_mlx5")) {
+        if (check_tl(tl_name, "ud_mlx5")) {
             PRINT_SIZE(uct_ud_mlx5_ep_t);
             PRINT_SIZE(uct_ud_mlx5_iface_t);
         }
@@ -247,8 +286,23 @@ void print_type_info(const char * tl_name)
     }
 #endif
 
+#if HAVE_CUDA
+    if (check_tl(tl_name, "cuda_ipc")) {
+        printf("CUDA_IPC:\n");
+        PRINT_SIZE(uct_cuda_ipc_ep_t);
+        PRINT_SIZE(uct_cuda_ipc_iface_t);
+        PRINT_SIZE(uct_cuda_ipc_event_desc_t);
+        PRINT_SIZE(uct_cuda_ipc_ctx_rsc_t);
+        PRINT_SIZE(uct_cuda_ipc_md_handle_t);
+        PRINT_SIZE(uct_cuda_ipc_memh_t);
+        PRINT_SIZE(uct_cuda_ipc_lkey_t);
+        PRINT_SIZE(uct_cuda_ipc_rkey_t);
+        PRINT_SIZE(uct_cuda_ipc_extended_rkey_t);
+    }
+#endif
+
 #ifdef HAVE_TL_UGNI
-    if (tl_name == NULL || !strcasecmp(tl_name, "ugni")) {
+    if (check_tl(tl_name, "ugni")) {
         printf("UGNI:\n");
         PRINT_SIZE(uct_ugni_device_t);
         PRINT_SIZE(uct_ugni_ep_t);

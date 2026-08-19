@@ -87,9 +87,7 @@ static int uct_cuda_copy_iface_is_reachable_v2(
     }
 
     if (iface->id != *addr) {
-        uct_iface_fill_info_str_buf(
-                params, "different iface id %"PRIx64" vs %"PRIx64"",
-                iface->id, *addr);
+        uct_iface_fill_info_str_buf(params, "iface mismatch");
         return 0;
     }
 
@@ -266,6 +264,7 @@ uct_cuda_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
 }
 
 static uct_iface_internal_ops_t uct_cuda_copy_iface_internal_ops = {
+    .iface_query_v2        = uct_iface_base_query_v2,
     .iface_estimate_perf   = uct_cuda_copy_estimate_perf,
     .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
     .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
@@ -273,7 +272,8 @@ static uct_iface_internal_ops_t uct_cuda_copy_iface_internal_ops = {
     .ep_connect_to_ep_v2   = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
     .iface_is_reachable_v2 = uct_cuda_copy_iface_is_reachable_v2,
     .ep_is_connected       = uct_base_ep_is_connected,
-    .ep_get_device_ep      = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported
+    .ep_get_device_ep      = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported,
+    .ep_outstanding_purge  = (uct_ep_outstanding_purge_func_t)ucs_empty_function_return_unsupported
 };
 
 static uct_cuda_ctx_rsc_t * uct_cuda_copy_ctx_rsc_create(uct_iface_h tl_iface)
@@ -311,7 +311,7 @@ static void uct_cuda_copy_ctx_rsc_destroy(uct_iface_h tl_iface,
         }
     }
 
-    uct_cuda_base_stream_destroy(&ctx_rsc->short_stream);
+    uct_cuda_base_stream_destroy(cuda_ctx_rsc, &ctx_rsc->short_stream);
     ucs_free(ctx_rsc);
 }
 

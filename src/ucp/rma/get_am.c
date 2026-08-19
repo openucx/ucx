@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -111,6 +111,10 @@ ucp_proto_get_am_bcopy_probe(const ucp_proto_init_params_t *init_params)
         return;
     }
 
+    if (!init_params->worker->context->config.ext.proto_emulation_enable) {
+        return;
+    }
+
     ucp_proto_single_probe(&params);
 }
 
@@ -118,6 +122,7 @@ ucp_proto_t ucp_get_am_bcopy_proto = {
     .name     = "get/am/bcopy",
     .desc     = UCP_PROTO_RMA_EMULATION_DESC,
     .flags    = 0,
+    .dt_mask  = UCP_DT_MASK_CONTIG_IOV,
     .probe    = ucp_proto_get_am_bcopy_probe,
     .query    = ucp_proto_single_query,
     .progress = {ucp_proto_get_am_bcopy_progress},

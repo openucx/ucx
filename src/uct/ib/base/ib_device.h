@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) Huawei Technologies Co., Ltd. 2020.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -69,7 +69,6 @@
 #define UCT_IB_DEVICE_SYSFS_GID_TYPE_FMT  UCT_IB_DEVICE_SYSFS_GID_ATTR_PFX "/types/%d"
 #define UCT_IB_DEVICE_SYSFS_GID_NDEV_FMT  UCT_IB_DEVICE_SYSFS_GID_ATTR_PFX "/ndevs/%d"
 #define UCT_IB_DEVICE_SYSFS_ROCE_TC_FMT   UCT_IB_DEVICE_SYSFS_PFX "/tc/%d/traffic_class"
-#define UCT_IB_DEVICE_ECE_DEFAULT         0x0         /* default ECE */
 #define UCT_IB_DEVICE_ECE_MAX             0xffffffffU /* max ECE */
 #define UCT_IB_DEVICE_DEFAULT_GID_INDEX 0   /* The gid index used by default for an IB/RoCE port */
 #define UCT_IB_DEVICE_ROUTABLE_FLID_GID_INDEX 1 /* The gid index used by default
@@ -278,25 +277,6 @@ typedef struct {
 extern const double uct_ib_qp_rnr_time_ms[];
 
 
-/**
- * Check if a port on a device is active and supports the given flags.
- */
-ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
-                                      unsigned flags);
-
-
-/**
- * Helper function to set ECE to qp.
- *
- * @param dev              IB device use to create qp.
- * @param qp               The qp to be set with ECE.
- * @param ece_val          The ece value to be set to qp.
- */
-ucs_status_t
-uct_ib_device_set_ece(uct_ib_device_t *dev, struct ibv_qp *qp,
-                      uint32_t ece_val);
-
-
 /*
  * Helper function to list IB transport resources.
  *
@@ -311,6 +291,11 @@ ucs_status_t uct_ib_device_query_ports(uct_ib_device_t *dev, unsigned flags,
 
 ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
                                  struct ibv_device *ibv_device);
+
+/**
+ * @return Nonzero if the device has at least one active (IBV_PORT_ACTIVE) port.
+ */
+int uct_ib_device_has_active_port(uct_ib_device_t *dev);
 
 ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
                                 struct ibv_device *ibv_device, int async_events
@@ -345,7 +330,7 @@ uct_ib_device_select_gid(uct_ib_device_t *dev, uint8_t port_num,
 /**
  * @return device name.
  */
-const char *uct_ib_device_name(uct_ib_device_t *dev);
+const char *uct_ib_device_name(const uct_ib_device_t *dev);
 
 
 /**
@@ -411,8 +396,6 @@ ucs_status_t uct_ib_device_get_roce_ndev_name(uct_ib_device_t *dev,
                                               uint8_t port_num,
                                               uint8_t gid_index,
                                               char *ndev_name, size_t max);
-
-ucs_status_t uct_ib_iface_get_loopback_ndev_index(unsigned *ndev_index_p);
 
 ucs_status_t
 uct_ib_device_get_roce_ndev_index(uct_ib_device_t *dev, uint8_t port_num,

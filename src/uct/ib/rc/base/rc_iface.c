@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2021. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -93,10 +93,10 @@ ucs_config_field_t uct_rc_iface_common_config_table[] = {
    "Otherwise poll TX completions only if no RX completions found.",
    ucs_offsetof(uct_rc_iface_common_config_t, tx.poll_always), UCS_CONFIG_TYPE_BOOL},
 
-  {"ECE", "0",
+  {"ECE", "auto",
    "config Enhanced Connection Establishment to establish connection.\n"
-   "  0         : Use default ECE.\n"
-   "  auto      : Use maximal supported ECE.\n"
+   "  auto      : Use default ECE.\n"
+   "  inf       : Use maximal supported ECE.\n"
    "  otherwise : Set the ECE to the given numeric 32-bit value.\n"
    "              This value is used as best-effort and can be adjusted by\n"
    "              the transport implementation.\n",
@@ -587,7 +587,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
     tx_cq_size                  = uct_ib_cq_size(&self->super, init_attr,
                                                  UCT_IB_DIR_TX);
     /* Prevent title CQE overwriting */
-    self->tx.cq_available       = tx_cq_size - 2;
+    self->tx.cq_available       = uct_rc_iface_tx_cq_capacity(tx_cq_size);
     self->rx.srq.available      = 0;
     self->rx.srq.quota          = 0;
     self->config.tx_qp_len      = config->super.tx.queue_len;
@@ -611,20 +611,14 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
 #endif
     max_ib_msg_size             = uct_ib_iface_port_attr(&self->super)->max_msg_sz;
 
-    if (md->ece_enable) {
-        if (config->ece == UCS_ULUNITS_AUTO) {
-            self->config.ece = UCT_IB_DEVICE_ECE_MAX;
-        } else {
-            self->config.ece = config->ece;
-        }
-    } else if ((config->ece == UCS_ULUNITS_AUTO) || (config->ece == 0)) {
-        self->config.ece = UCT_IB_DEVICE_ECE_DEFAULT;
-    } else {
+    if (!md->ece_enable && (config->ece != UCS_ULUNITS_AUTO)) {
         ucs_error("%s: cannot set ECE value to 0x%lx since the device does not "
                   "support ECE", uct_ib_device_name(dev), config->ece);
         status = UCS_ERR_INVALID_PARAM;
         goto err;
     }
+
+    self->config.ece = config->ece;
 
     status = uct_rc_iface_init_max_rd_atomic(self, config, init_attr);
     if (status != UCS_OK) {
@@ -866,12 +860,55 @@ ucs_status_t uct_rc_iface_qp_init(uct_rc_iface_t *iface, struct ibv_qp *qp)
     return UCS_OK;
 }
 
+ucs_status_t uct_rc_iface_set_ece(uct_rc_iface_t *iface, struct ibv_qp *qp)
+{
+    unsigned long ece_val = iface->config.ece;
+#if HAVE_DECL_IBV_SET_ECE
+    uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
+    uct_ib_md_t *md      = ucs_container_of(dev, uct_ib_md_t, dev);
+    struct ibv_ece ece;
+    ucs_log_level_t log_level;
+
+    if (!md->ece_enable) {
+        return UCS_OK;
+    }
+
+    if (ibv_query_ece(qp, &ece)) {
+        ucs_error("ibv_query_ece(device=%s qpn=0x%x) failed: %m",
+                  uct_ib_device_name(dev), qp->qp_num);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    if (ece_val == UCS_ULUNITS_INF) {
+        ece.options = UCT_IB_DEVICE_ECE_MAX;
+    } else if (ece_val != UCS_ULUNITS_AUTO) {
+        ece.options = ece_val;
+    }
+
+    if (ibv_set_ece(qp, &ece)) {
+        log_level = (ece_val == UCS_ULUNITS_AUTO) ? UCS_LOG_LEVEL_DIAG :
+                                                    UCS_LOG_LEVEL_ERROR;
+        ucs_log(log_level,
+                "ibv_set_ece(device=%s qpn=0x%x vendor_id=0x%x "
+                "options=0x%x comp_mask=0x%x) failed: %m",
+                uct_ib_device_name(dev), qp->qp_num, ece.vendor_id, ece.options,
+                ece.comp_mask);
+        if (ece_val != UCS_ULUNITS_AUTO) {
+            return UCS_ERR_INVALID_PARAM;
+        }
+    }
+
+    return UCS_OK;
+#else
+    return (ece_val == UCS_ULUNITS_AUTO) ? UCS_OK : UCS_ERR_UNSUPPORTED;
+#endif
+}
+
 ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
                                      const uint32_t dest_qp_num,
                                      struct ibv_ah_attr *ah_attr,
                                      enum ibv_mtu path_mtu)
 {
-    uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
     struct ibv_qp_attr qp_attr;
     long qp_attr_mask;
     ucs_status_t status;
@@ -879,7 +916,7 @@ ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
 
     ucs_assert(path_mtu != 0);
 
-    status = uct_ib_device_set_ece(dev, qp, iface->config.ece);
+    status = uct_rc_iface_set_ece(iface, qp);
     if (status != UCS_OK) {
         return status;
     }
@@ -1095,4 +1132,3 @@ static void ucp_send_op_mpool_obj_str(ucs_mpool_t *mp, void *obj,
     ucs_string_buffer_appendf(strb, " name:%s", op->name);
 #endif
 }
-

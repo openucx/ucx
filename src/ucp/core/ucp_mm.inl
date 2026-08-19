@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2022, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * Copyright (c) 2022-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * See file LICENSE for terms.
  */
@@ -113,6 +113,17 @@ static UCS_F_ALWAYS_INLINE int ucp_memh_is_user_memh(ucp_mem_h memh)
     return (memh->parent != NULL) && !ucp_memh_is_zero_length(memh);
 }
 
+static UCS_F_ALWAYS_INLINE ucp_memory_info_t
+ucp_memory_info_from_memh(ucp_mem_h memh)
+{
+    ucp_memory_info_t mem_info;
+
+    mem_info.type    = memh->mem_type;
+    mem_info.sys_dev = memh->sys_dev;
+    mem_info.flags   = memh->mem_flags;
+    return mem_info;
+}
+
 static UCS_F_ALWAYS_INLINE int ucp_memh_is_buffer_in_range(const ucp_mem_h memh,
                                                            const void *buffer,
                                                            size_t length)
@@ -169,8 +180,11 @@ ucp_memh_get_or_update(ucp_context_h context, void *address, size_t length,
     }
 
     ucs_assert((*memh_p)->parent == NULL);
-    ucs_assert((context->rcache == NULL) ||
-               ucs_test_all_flags(context->cache_md_map[mem_type], md_map));
+    ucs_assertv((context->rcache == NULL) ||
+                ucs_test_all_flags(context->cache_md_map[mem_type], md_map),
+                "mem_type=%s cache_md_map=0x%" PRIx64 " md_map=0x%" PRIx64,
+                ucs_memory_type_names[mem_type],
+                context->cache_md_map[mem_type], md_map);
 
     status = ucp_memh_register(context, *memh_p, md_map, uct_flags, alloc_name);
 out:

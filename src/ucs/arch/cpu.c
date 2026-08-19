@@ -200,6 +200,7 @@ const char *ucs_cpu_model_name()
         [UCS_CPU_MODEL_ZHAOXIN_LUJIAZUI]     = "Lujiazui",
         [UCS_CPU_MODEL_RV64G]                = "RV64G",
         [UCS_CPU_MODEL_NVIDIA_GRACE]         = "Grace",
+        [UCS_CPU_MODEL_NVIDIA_VERA]          = "Vera",
         [UCS_CPU_MODEL_FUJITSU_A64FX]        = "FUJITSU-A64FX",
         [UCS_CPU_MODEL_FUJITSU_MONAKA]       = "FUJITSU-MONAKA"
     };

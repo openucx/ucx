@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2021, NVIDIA CORPORATION & AFFILIATES. ALL RIGHTS RESERVED.
+ * Copyright (C) 2021-2026, NVIDIA CORPORATION & AFFILIATES. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -139,6 +139,7 @@ ucp_proto_t ucp_am_eager_short_proto = {
     .name     = "am/egr/short",
     .desc     = UCP_PROTO_SHORT_DESC,
     .flags    = UCP_PROTO_FLAG_AM_SHORT,
+    .dt_mask  = UCS_BIT(UCP_DATATYPE_CONTIG),
     .probe    = ucp_am_eager_short_probe,
     .query    = ucp_proto_single_query,
     .progress = {ucp_am_eager_short_proto_progress},
@@ -162,6 +163,7 @@ ucp_proto_t ucp_am_eager_short_reply_proto = {
     .name     = "am/egr/short/reply",
     .desc     = UCP_PROTO_SHORT_DESC,
     .flags    = UCP_PROTO_FLAG_AM_SHORT,
+    .dt_mask  = UCS_BIT(UCP_DATATYPE_CONTIG),
     .probe    = ucp_am_eager_short_reply_probe,
     .query    = ucp_proto_single_query,
     .progress = {ucp_am_eager_short_reply_proto_progress},
@@ -264,6 +266,7 @@ ucp_proto_t ucp_am_eager_single_bcopy_proto = {
     .name     = "am/egr/single/bcopy",
     .desc     = UCP_PROTO_COPY_IN_DESC,
     .flags    = 0,
+    .dt_mask  = UCP_PROTO_DT_MASK_DEFAULT,
     .probe    = ucp_am_eager_single_bcopy_probe,
     .query    = ucp_proto_single_query,
     .progress = {ucp_am_eager_single_bcopy_proto_progress},
@@ -301,6 +304,7 @@ ucp_proto_t ucp_am_eager_single_bcopy_reply_proto = {
     .name     = "am/egr/single/bcopy/reply",
     .desc     = UCP_PROTO_COPY_IN_DESC,
     .flags    = 0,
+    .dt_mask  = UCP_PROTO_DT_MASK_DEFAULT,
     .probe    = ucp_am_eager_single_bcopy_reply_probe,
     .query    = ucp_proto_single_query,
     .progress = {ucp_am_eager_single_bcopy_reply_proto_progress},
@@ -339,8 +343,7 @@ static void ucp_am_eager_single_zcopy_probe_common(
     };
 
     if (!ucp_am_check_init_params(init_params, UCS_BIT(op_id),
-                                  UCP_PROTO_SELECT_OP_FLAG_AM_RNDV) ||
-        (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG)) {
+                                  UCP_PROTO_SELECT_OP_FLAG_AM_RNDV)) {
         return;
     }
 
@@ -402,6 +405,7 @@ ucp_proto_t ucp_am_eager_single_zcopy_proto = {
     .name     = "am/egr/single/zcopy",
     .desc     = UCP_PROTO_ZCOPY_DESC,
     .flags    = 0,
+    .dt_mask  = UCS_BIT(UCP_DATATYPE_CONTIG),
     .probe    = ucp_am_eager_single_zcopy_probe,
     .query    = ucp_proto_single_query,
     .progress = {ucp_am_eager_single_zcopy_proto_progress},
@@ -458,6 +462,7 @@ ucp_proto_t ucp_am_eager_single_zcopy_reply_proto = {
     .name     = "am/egr/single/zcopy/reply",
     .desc     = UCP_PROTO_ZCOPY_DESC,
     .flags    = 0,
+    .dt_mask  = UCS_BIT(UCP_DATATYPE_CONTIG),
     .probe    = ucp_am_eager_single_zcopy_reply_probe,
     .query    = ucp_proto_single_query,
     .progress = {ucp_am_eager_single_zcopy_reply_proto_progress},

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2021. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2021-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -11,6 +11,7 @@
 
 #include <ucp/core/ucp_types.h>
 #include <ucs/datastruct/linear_func.h>
+#include <ucs/datastruct/static_bitmap.h>
 #include <ucs/datastruct/string_buffer.h>
 
 
@@ -23,7 +24,7 @@
 
 
 /* Maximal number of protocols in total */
-#define UCP_PROTO_MAX_COUNT         64
+#define UCP_PROTO_MAX_COUNT         128
 
 
 /* Special value for non-existent protocol */
@@ -47,7 +48,7 @@ typedef unsigned ucp_proto_id_t;
 
 
 /* Bitmap of protocols */
-typedef uint64_t ucp_proto_id_mask_t;
+typedef ucs_static_bitmap_s(UCP_PROTO_MAX_COUNT) ucp_proto_id_mask_t;
 
 
 /* Performance calculation tree node */
@@ -200,6 +201,11 @@ struct ucp_proto {
     const char               *name; /* Protocol name */
     const char               *desc; /* Protocol description */
     unsigned                 flags; /* Protocol flags for special handling */
+
+    /* Bitmap of UCS_BIT(UCP_DATATYPE_xxx) classes this protocol supports.
+     * Probe is skipped for any other dt_class. Must be non-zero.
+     */
+    unsigned                 dt_mask;
 
     /* Probe and add protocol instances */
     ucp_proto_probe_func_t   probe;

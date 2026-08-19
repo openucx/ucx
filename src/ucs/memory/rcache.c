@@ -12,7 +12,6 @@
 #include <ucs/arch/atomic.h>
 #include <ucs/async/pipe.h>
 #include <ucs/type/class.h>
-#include <ucs/datastruct/queue.h>
 #include <ucs/debug/log.h>
 #include <ucs/profile/profile.h>
 #include <ucs/debug/memtrack_int.h>
@@ -54,13 +53,6 @@ enum {
     UCS_RCACHE_REGION_PUT_FLAG_IN_PGTABLE   = 0
 #endif
 };
-
-
-typedef struct ucs_rcache_inv_entry {
-    ucs_queue_elem_t         queue;
-    ucs_pgt_addr_t           start;
-    ucs_pgt_addr_t           end;
-} ucs_rcache_inv_entry_t;
 
 
 typedef struct ucs_rcache_comp_entry {
@@ -545,15 +537,14 @@ static void ucs_rcache_remove_from_unreleased(ucs_rcache_t *rcache,
 /* Lock must be held in write mode */
 static void ucs_rcache_check_inv_queue(ucs_rcache_t *rcache, unsigned flags)
 {
-    ucs_rcache_inv_entry_t *entry;
+    ucs_interval_tree_range_t range;
 
     ucs_trace_func("rcache=%s", rcache->name);
 
     ucs_spin_lock(&rcache->lock);
-    while (!ucs_queue_is_empty(&rcache->inv_q)) {
-        entry = ucs_queue_pull_elem_non_empty(&rcache->inv_q,
-                                              ucs_rcache_inv_entry_t, queue);
-        ucs_rcache_remove_from_unreleased(rcache, entry->start, entry->end);
+    while (ucs_interval_tree_pop_any(&rcache->inv_tree, &range)) {
+        ucs_rcache_remove_from_unreleased(rcache, (ucs_pgt_addr_t)range.start,
+                                          (ucs_pgt_addr_t)range.end);
 
         /* We need to drop the lock since the following code may trigger memory
          * operations, which could trigger vm_unmapped event which also takes
@@ -561,11 +552,10 @@ static void ucs_rcache_check_inv_queue(ucs_rcache_t *rcache, unsigned flags)
          */
         ucs_spin_unlock(&rcache->lock);
 
-        ucs_rcache_invalidate_range(rcache, entry->start, entry->end, flags);
+        ucs_rcache_invalidate_range(rcache, (ucs_pgt_addr_t)range.start,
+                                    (ucs_pgt_addr_t)range.end, flags);
 
         ucs_spin_lock(&rcache->lock);
-
-        ucs_mpool_put(entry); /* Must be done with the lock held */
     }
     ucs_spin_unlock(&rcache->lock);
 }
@@ -600,14 +590,14 @@ static void ucs_rcache_unmapped_callback(ucm_event_type_t event_type,
                                          ucm_event_t *event, void *arg)
 {
     ucs_rcache_t *rcache = arg;
-    ucs_rcache_inv_entry_t *entry;
     ucs_pgt_addr_t start, end;
+    size_t old_tree_size;
+    ucs_status_t status;
 
     ucs_assert(event_type == UCM_EVENT_VM_UNMAPPED ||
                event_type == UCM_EVENT_MEM_TYPE_FREE);
 
     if (rcache->unreleased_size > rcache->params.max_unreleased) {
-        /* Trigger a cleanup when the pending size exceeds the threshold */
         ucs_async_pipe_push(&ucs_rcache_global_context.pipe);
     }
 
@@ -626,7 +616,7 @@ static void ucs_rcache_unmapped_callback(ucm_event_type_t event_type,
 
     /*
      * Try to lock the page table and invalidate the region immediately.
-     * This way we avoid queuing endless events on the invalidation queue when
+     * This way we avoid queuing endless events on the invalidation tree when
      * no rcache operations are performed to clean it.
      */
     if (!(rcache->params.flags & UCS_RCACHE_FLAG_SYNC_EVENTS) &&
@@ -642,18 +632,20 @@ static void ucs_rcache_unmapped_callback(ucm_event_type_t event_type,
         return;
     }
 
-    /* Could not lock - add region to invalidation queue */
+    /* Could not lock - add range to pending invalidation tree (overlaps merged) */
     ucs_spin_lock(&rcache->lock);
-    entry = ucs_mpool_get(&rcache->mp);
-    if (entry != NULL) {
-        entry->start             = start;
-        entry->end               = end;
-        rcache->unreleased_size += (entry->end - entry->start);
-        ucs_queue_push(&rcache->inv_q, &entry->queue);
+    old_tree_size = rcache->inv_tree.total_size;
+    status        = ucs_interval_tree_insert(&rcache->inv_tree,
+                                             (ucs_interval_tree_range_t)
+                                             {start, end});
+    if (status == UCS_OK) {
+        rcache->unreleased_size += (rcache->inv_tree.total_size - 
+                                    old_tree_size);
         UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_UNMAPS, 1);
     } else {
-        ucs_error("Failed to allocate invalidation entry for 0x%lx..0x%lx, "
-                  "data corruption may occur", start, end);
+        ucs_error("Failed to add invalidation range 0x%lx..0x%lx, "
+                  "data corruption may occur", 
+                  start, end);
     }
     ucs_spin_unlock(&rcache->lock);
 }
@@ -1077,7 +1069,7 @@ ucs_status_t ucs_rcache_get(ucs_rcache_t *rcache, void *address, size_t length,
 
     ucs_rw_spinlock_read_lock(&rcache->pgt_lock);
     UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_GETS, 1);
-    if (ucs_queue_is_empty(&rcache->inv_q)) {
+    if (ucs_interval_tree_is_empty(&rcache->inv_tree)) {
         pgt_region = UCS_PROFILE_CALL(ucs_pgtable_lookup, &rcache->pgtable,
                                       start);
         if (ucs_likely(pgt_region != NULL)) {
@@ -1310,7 +1302,7 @@ static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
         goto err_destroy_inv_q_lock;
     }
 
-    mp_obj_size = ucs_max(sizeof(ucs_pgt_dir_t), sizeof(ucs_rcache_inv_entry_t));
+    mp_obj_size = ucs_max(sizeof(ucs_pgt_dir_t), sizeof(ucs_interval_node_t));
     mp_obj_size = ucs_max(mp_obj_size, sizeof(ucs_rcache_comp_entry_t));
 
     mp_align    = ucs_max(sizeof(void *), UCS_PGT_ENTRY_MIN_ALIGN);
@@ -1327,7 +1319,7 @@ static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
         goto err_cleanup_pgtable;
     }
 
-    ucs_queue_head_init(&self->inv_q);
+    ucs_interval_tree_init(&self->inv_tree, &self->mp);
 
     /* coverity[missing_lock] */
     self->unreleased_size = 0;
@@ -1390,6 +1382,7 @@ static UCS_CLASS_CLEANUP_FUNC(ucs_rcache_t)
     ucs_vfs_obj_remove(self);
     ucs_rcache_global_list_remove(self);
     ucs_rcache_check_inv_queue(self, 0);
+    ucs_interval_tree_cleanup(&self->inv_tree);
     ucs_rcache_check_gc_list(self, 0);
     ucs_rcache_purge(self);
 

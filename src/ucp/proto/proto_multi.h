@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -84,6 +84,11 @@ typedef struct {
 
     /* Map of system devices that require a flush operation */
     ucp_sys_dev_map_t            flush_sys_dev_mask;
+
+    /* Maximal number of SGL elements per uct_ep_put_sgl_zcopy or
+     * uct_ep_get_sgl_zcopy on this lane, cached from uct_iface_attr_v2 at
+     * protocol init when SGL zcopy is selected, otherwise zero */
+     size_t                      max_sgl_zcopy_count;
 } ucp_proto_multi_lane_priv_t;
 
 
@@ -118,6 +123,10 @@ typedef struct {
      * several parts. The goal is to not split below this limit */
     size_t                         min_chunk;
 
+    /* Use the largest per-lane minimum as the protocol minimum, allowing short
+     * messages that do not use all selected lanes */
+    int                            use_single_lane_min_length;
+
     /* MDs on which the buffer is expected to be already registered, so no need
        to account for the overhead of registering on them */
     ucp_md_map_t                   initial_reg_md_map;
@@ -130,6 +139,9 @@ typedef struct {
     struct {
         /* Required iface capabilities */
         uint64_t        tl_cap_flags;
+
+        /* Required v2 iface capabilities */
+        uint64_t        tl_v2_cap_flags;
 
         /* Required lane type */
         ucp_lane_type_t lane_type;

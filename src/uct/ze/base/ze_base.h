@@ -63,6 +63,8 @@ const uct_ze_subdevice_t *uct_ze_base_get_subdevice_by_global_id(int global_id);
 ze_device_handle_t uct_ze_base_get_device_handle_from_subdevice(
         const uct_ze_subdevice_t *subdevice);
 
+ucs_sys_device_t uct_ze_base_get_sys_dev_from_handle(ze_device_handle_t device);
+
 ucs_status_t
 uct_ze_base_query_md_resources(uct_component_h component,
                                uct_md_resource_desc_t **resources_p,
