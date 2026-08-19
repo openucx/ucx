@@ -58,14 +58,14 @@ enum uct_dc_mlx5_ep_flags {
 
 #if UCS_ENABLE_ASSERT
     /* EP was invalidated without DCI */
-    UCT_DC_MLX5_EP_FLAG_INVALIDATED = UCS_BIT(12),
+    UCT_DC_MLX5_EP_FLAG_INVALIDATED         = UCS_BIT(12),
 #else
-    UCT_DC_MLX5_EP_FLAG_INVALIDATED = 0,
+    UCT_DC_MLX5_EP_FLAG_INVALIDATED         = 0,
 #endif
 
-    UCT_DC_MLX5_EP_FLAG_FENCE_FLUSH = UCS_BIT(13),
+    UCT_DC_MLX5_EP_FLAG_FENCE_FLUSH         = UCS_BIT(13),
 
-    UCT_DC_MLX5_EP_FLAG_FENCE_PENDING = UCS_BIT(14)
+    UCT_DC_MLX5_EP_FLAG_FENCE_PENDING       = UCS_BIT(14)
 };
 
 /* Address-vector for link-local scope */
