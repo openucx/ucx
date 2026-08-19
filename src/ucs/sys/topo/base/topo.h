@@ -123,7 +123,7 @@ typedef struct {
 
 /**
  * @ingroup UCS_RESOURCE
- * Board containing physical NICs represented by indices in a topology group.
+ * Board containing physical NICs represented in a topology group.
  */
 typedef struct {
     ucs_topo_nic_t *nics;
