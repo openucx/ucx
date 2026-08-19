@@ -571,6 +571,14 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface,
                                 uct_iface_attr_t *iface_attr);
 
 
+/**
+ * Query the effective port speed.
+ *
+ * @return Effective port speed in Gb/s, or 0.0 if unavailable.
+ */
+double uct_ib_iface_query_port_speed_gbps(uct_ib_iface_t *iface);
+
+
 ucs_status_t
 uct_ib_iface_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr);
 

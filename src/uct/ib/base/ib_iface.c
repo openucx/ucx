@@ -40,6 +40,9 @@
 #define UCT_IB_XDR_READ_PATH_BANDWIDTH 35e9
 #define UCT_IB_HIGH_SPEED_NUM_PATHS    2
 
+/* ibv_query_port_speed() reports speed in units of 100 Mb/s. */
+#define UCT_IB_PORT_SPEED_UNIT_GBPS 0.1
+
 /**
  * Minimal NDR single path ratio.
  * The minimal ratio is used to calculate the ratio for the first device path,
@@ -2088,15 +2091,13 @@ uct_ib_iface_estimate_path_bw(uct_ib_iface_t *iface,
     return ucs_min(iface_attr->bandwidth.shared * path_ratio, max_path_bandwidth);
 }
 
-static uct_ppn_bandwidth_t
-uct_ib_iface_estimate_bandwidth(uct_ib_iface_t *iface,
-                                const uct_iface_attr_t *iface_attr)
+double uct_ib_iface_query_port_speed_gbps(
+        uct_ib_iface_t *iface UCS_V_UNUSED)
 {
 #if HAVE_DECL_IBV_QUERY_PORT_SPEED
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
     ucs_log_level_t log_level;
     uint64_t port_speed;
-    double wire_speed;
     int ret;
 
     ret = ibv_query_port_speed(dev->ibv_context, iface->config.port_num,
@@ -2109,15 +2110,27 @@ uct_ib_iface_estimate_bandwidth(uct_ib_iface_t *iface,
         ucs_log(log_level,
                 "ibv_query_port_speed("UCT_IB_IFACE_FMT", port_num=%d) failed:"
                 " %m", UCT_IB_IFACE_ARG(iface), iface->config.port_num);
+        return 0.0;
+    }
+
+    return port_speed * UCT_IB_PORT_SPEED_UNIT_GBPS;
+#else
+    return 0.0;
+#endif
+}
+
+static uct_ppn_bandwidth_t
+uct_ib_iface_estimate_bandwidth(uct_ib_iface_t *iface,
+                                const uct_iface_attr_t *iface_attr)
+{
+    const double port_speed_gbps = uct_ib_iface_query_port_speed_gbps(iface);
+
+    if (port_speed_gbps == 0.0) {
         return iface_attr->bandwidth;
     }
 
-    /* Convert port speed (in 100 Mb/s granularity) to bandwidth in bytes/s. */
-    wire_speed = (double)port_speed * 1e8 / 8.0;
-    return uct_ib_iface_get_bandwidth(iface, wire_speed);
-#else
-    return iface_attr->bandwidth;
-#endif
+    return uct_ib_iface_get_bandwidth(iface,
+                                      port_speed_gbps * 1e9 / 8.0);
 }
 
 ucs_status_t

@@ -17,8 +17,7 @@
 #include <ucs/profile/profile.h>
 
 
-/* ibv_query_port_speed() reports speed in units of 100 Mb/s. */
-#define UCT_RC_MLX5_FULL_BW_EFFECTIVE_SPEED 8000
+#define UCT_RC_MLX5_FULL_BW_SPEED_GBPS 800.0
 
 
 ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
@@ -692,27 +691,15 @@ int uct_rc_mlx5_iface_can_single_qp_use_full_bw(
 {
     uct_ib_iface_t *ib_iface = &iface->super.super;
     uct_ib_mlx5_md_t *md     = uct_ib_mlx5_iface_md(ib_iface);
-    int ddp_enabled           =
+    const int ddp_enabled     =
             (iface->config.dp_ordering_devx ==
              UCT_IB_MLX5_DP_ORDERING_OOO_ALL) ||
             iface->config.ddp_enabled_dv;
-#if HAVE_DECL_IBV_QUERY_PORT_SPEED
-    uint64_t effective_speed;
-#endif
 
-    if (!ddp_enabled ||
-        (md->port_select_mode != UCT_IB_MLX5_LAG_MULTI_PORT_ESW)) {
-        return 0;
-    }
-
-#if HAVE_DECL_IBV_QUERY_PORT_SPEED
-    return (ibv_query_port_speed(uct_ib_iface_device(ib_iface)->ibv_context,
-                                 ib_iface->config.port_num,
-                                 &effective_speed) == 0) &&
-           (effective_speed == UCT_RC_MLX5_FULL_BW_EFFECTIVE_SPEED);
-#else
-    return 0;
-#endif
+    return ddp_enabled &&
+           (md->port_select_mode == UCT_IB_MLX5_LAG_MULTI_PORT_ESW) &&
+           (uct_ib_iface_query_port_speed_gbps(ib_iface) ==
+            UCT_RC_MLX5_FULL_BW_SPEED_GBPS);
 }
 
 #if IBV_HW_TM
