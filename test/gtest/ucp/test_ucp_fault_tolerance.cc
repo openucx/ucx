@@ -375,30 +375,64 @@ protected:
                 slh.reset(new scoped_log_handler(hide_errors_logger));
             }
 
-            status = do_am_send_and_wait(sender().ep(0, INJECTED_EP_INDEX), am_msg_size(),
+            status = do_am_send_and_wait(sender().ep(0, INJECTED_EP_INDEX),
+                                         am_msg_size(),
                                          op_mask & TEST_OP_FLUSH, last_lane);
             if (!last_lane) {
                 EXPECT_EQ(UCS_OK, status) << op_str << " operation returned status: "
                                           << ucs_status_string(status);
                 ASSERT_EQ(0, m_total_err_count) << "Error callback invoked " << m_total_err_count << " times";
             } else {
-                // The last lane is expected to fail
+                /* Last lane: either the initiator EP fails, or it still has a
+                 * live AM path and the message is delivered. */
                 short_progress_loop();
                 if ((failure_side == FAILURE_SIDE_TARGET) &&
                     has_transport("dc_x")) {
-                    // DC transport is not able to detect failure of remote DCI since DC is a connect2iface transport.
-                    // This is a test limitation.
+                    /* DC cannot detect remote DCI failure (connect2iface). */
                 } else {
                     ucs_time_t deadline = ucs::get_deadline();
-                    while ((m_initiator_err_count == 0) && (ucs_get_time() < deadline)) {
+
+                    while ((m_initiator_err_count == 0) &&
+                           (m_am_recv_count == 0) &&
+                           (ucs_get_time() < deadline)) {
                         short_progress_loop();
                     }
 
-                    // Initiator EP should invoke error callback only once
-                    EXPECT_EQ(1, m_initiator_err_count) << "Error callback invoked " << m_initiator_err_count << " times";
-                    // Remote side may detect failure by keepalive or other control messages but not more than 1 time
-                    EXPECT_LE(m_total_err_count - m_initiator_err_count, 1)
-                            << "Error callback invoked " << m_total_err_count << " times";
+                    if (m_initiator_err_count == 0) {
+                        ucp_ep_h sender_ep = sender().ep(0, INJECTED_EP_INDEX);
+                        const ucp_ep_config_key_t &key =
+                                ucp_ep_config(sender_ep)->key;
+
+                        EXPECT_EQ(UCS_OK, status)
+                                << op_str << " operation returned status: "
+                                << ucs_status_string(status);
+                        EXPECT_EQ(0, sender_ep->flags & UCP_EP_FLAG_FAILED)
+                                << "Initiator EP is failed without error "
+                                   "callback";
+                        EXPECT_NE(0, ucp_ep_get_live_lanes(sender_ep))
+                                << "Initiator has no live lanes";
+                        EXPECT_NE(UCP_NULL_LANE, key.am_lane)
+                                << "Initiator has no AM lane";
+                        if (key.am_lane != UCP_NULL_LANE) {
+                            EXPECT_FALSE(key.lanes[key.am_lane].lane_types &
+                                         UCS_BIT(UCP_LANE_TYPE_FAILED))
+                                    << "AM lane " << size_t(key.am_lane)
+                                    << " is marked failed";
+                        }
+
+                        wait_for_value(&m_am_recv_count, 1ul);
+                        EXPECT_EQ(1ul, m_am_recv_count);
+                        EXPECT_EQ(am_msg_size(), m_am_rbuf.size());
+                        mem_buffer::pattern_check(m_am_rbuf.data(),
+                                                  am_msg_size(), m_seed);
+                    } else {
+                        EXPECT_EQ(1, m_initiator_err_count)
+                                << "Error callback invoked "
+                                << m_initiator_err_count << " times";
+                        EXPECT_LE(m_total_err_count - m_initiator_err_count, 1)
+                                << "Error callback invoked "
+                                << m_total_err_count << " times";
+                    }
                 }
             }
         }
