@@ -2205,8 +2205,10 @@ public:
         attrs   = ucp_worker_iface_get_attr(worker, rsc_index);
         has_cm  = ucp_ep_init_flags_has_cm(ep_init_flags);
 
+        /* Keep in sync with ucp_wireup_select_transport() */
         if (!context->config.ext.memtype_copy_enable &&
-            (md_attr->flags & UCT_MD_FLAG_MEMTYPE_COPY) &&
+            ucs_test_all_flags(md_attr->flags, UCT_MD_FLAG_MEMTYPE_COPY |
+                                               UCT_MD_FLAG_NEED_RKEY) &&
             (md_attr->access_mem_types & ~UCS_BIT(UCS_MEMORY_TYPE_HOST))) {
             return 0;
         }

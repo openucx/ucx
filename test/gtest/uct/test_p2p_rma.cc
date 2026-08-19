@@ -153,7 +153,7 @@ UCS_TEST_SKIP_COND_P(test_p2p_rma_madvise, madvise,
                      /* Allocate with mmap to avoid pinning other heap memory */
                      "IB_ALLOC?=mmap")
 {
-    const auto access_mem_types = sender().md_attr().access_mem_types;
+    const auto access_mem_types = sender().xfer_mem_types();
 
     ASSERT_NE(access_mem_types, 0);
     const ucs_memory_type_t mem_type = (ucs_memory_type_t)ucs_ffs64(
