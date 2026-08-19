@@ -171,6 +171,7 @@ uct_dc_mlx5_ep_create_connected(const uct_ep_params_t *params, uct_ep_h* ep_p)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(params->iface,
                                                 uct_dc_mlx5_iface_t);
+    uct_ib_md_t *md = uct_ib_iface_md(&iface->super.super.super);
     const uct_ib_address_t *ib_addr;
     const uct_dc_mlx5_iface_addr_t *if_addr;
     uct_dc_mlx5_dci_config_t dci_config;
@@ -201,13 +202,23 @@ uct_dc_mlx5_ep_create_connected(const uct_ep_params_t *params, uct_ep_h* ep_p)
         return UCS_ERR_INVALID_ADDR;
     }
 
+    if (md->relaxed_order_required) {
+        if (is_global) {
+            return UCS_CLASS_NEW(uct_dc_mlx5_fence_grh_ep_t, ep_p, iface,
+                                 if_addr, &av, path_index, &grh_av, &dci_config);
+        }
+
+        return UCS_CLASS_NEW(uct_dc_mlx5_fence_ep_t, ep_p, iface, if_addr, &av,
+                             path_index, &dci_config);
+    }
+
     if (is_global) {
         return UCS_CLASS_NEW(uct_dc_mlx5_grh_ep_t, ep_p, iface, if_addr, &av,
                              path_index, &grh_av, &dci_config);
-    } else {
-        return UCS_CLASS_NEW(uct_dc_mlx5_ep_t, ep_p, iface, if_addr, &av,
-                             path_index, &dci_config);
     }
+
+    return UCS_CLASS_NEW(uct_dc_mlx5_ep_t, ep_p, iface, if_addr, &av,
+                         path_index, &dci_config);
 }
 
 /*

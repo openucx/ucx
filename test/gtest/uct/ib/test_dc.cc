@@ -241,7 +241,7 @@ UCS_TEST_P(test_dc, fence_am_short_consumed, "RC_FENCE=weak")
 
     ASSERT_UCS_OK(uct_ep_fence(m_e1->ep(0), 0));
     if (ep->flags & UCT_DC_MLX5_EP_FLAG_FENCE_FLUSH) {
-        EXPECT_NE(rc_iface(m_e1)->tx.fi.fence_beat, ep->fi.fence_beat);
+        EXPECT_NE(rc_iface(m_e1)->tx.fi.fence_beat, uct_dc_mlx5_ep_fence_state(ep)->fi.fence_beat);
     } else {
         EXPECT_NE(rc_iface(m_e1)->tx.fi.fence_beat, dci->txwq.fi.fence_beat);
     }
@@ -261,7 +261,7 @@ UCS_TEST_P(test_dc, fence_am_short_consumed, "RC_FENCE=weak")
     }
 
     if (ep->flags & UCT_DC_MLX5_EP_FLAG_FENCE_FLUSH) {
-        EXPECT_EQ(rc_iface(m_e1)->tx.fi.fence_beat, ep->fi.fence_beat);
+        EXPECT_EQ(rc_iface(m_e1)->tx.fi.fence_beat, uct_dc_mlx5_ep_fence_state(ep)->fi.fence_beat);
     } else {
         EXPECT_EQ(rc_iface(m_e1)->tx.fi.fence_beat, dci->txwq.fi.fence_beat);
     }
@@ -280,7 +280,7 @@ UCS_TEST_P(test_dc, fence_flush_without_dci, "IB_PCI_RELAXED_ORDERING=yes")
 
     ep->flags |= UCT_DC_MLX5_EP_FLAG_FLUSH_REMOTE;
     ASSERT_UCS_OK(uct_ep_fence(m_e1->ep(0), 0));
-    EXPECT_NE(rc_iface(m_e1)->tx.fi.fence_beat, ep->fi.fence_beat);
+    EXPECT_NE(rc_iface(m_e1)->tx.fi.fence_beat, uct_dc_mlx5_ep_fence_state(ep)->fi.fence_beat);
     EXPECT_EQ(UCS_ERR_NO_RESOURCE,
               uct_ep_flush(m_e1->ep(0), UCT_FLUSH_FLAG_REMOTE, NULL));
     EXPECT_FALSE(ep->flags & UCT_DC_MLX5_EP_FLAG_FLUSH_REMOTE);
