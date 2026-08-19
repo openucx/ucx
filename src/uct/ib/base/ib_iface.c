@@ -1962,7 +1962,7 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface,
 {
     static const uint8_t ib_port_widths[] =
             {[1] = 1, [2] = 4, [4] = 8, [8] = 12, [16] = 2};
-    uct_ib_device_t *dev = uct_ib_iface_device(iface);
+    uct_ib_device_t *dev                 = uct_ib_iface_device(iface);
     uint8_t active_width, width;
     uint32_t active_speed;
     double encoding, signal_rate, wire_speed;
@@ -1975,13 +1975,13 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface,
 
     /*
      * Parse active width.
-     * See IBTA section 14.2.5.6 "PortInfo", Table 164, field
-     * "LinkWidthEnabled".
+     * See IBTA section 14.2.5.6 "PortInfo", Table 164, field "LinkWidthEnabled"
      */
     if ((active_width >= ucs_static_array_size(ib_port_widths)) ||
         (ib_port_widths[active_width] == 0)) {
         ucs_warn("invalid active width on " UCT_IB_IFACE_FMT ": %d, "
-                 "assuming 1x", UCT_IB_IFACE_ARG(iface), active_width);
+                 "assuming 1x",
+                 UCT_IB_IFACE_ARG(iface), active_width);
         width = 1;
     } else {
         width = ib_port_widths[active_width];
