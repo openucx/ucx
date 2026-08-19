@@ -47,7 +47,7 @@ typedef struct {
     pid_t        pid;
     ucs_sys_ns_t pid_ns;
     uintptr_t    d_bptr;
-    void         *mapped_addr;
+    const void   *mapped_addr;
 } uct_cuda_ipc_sgl_entry_t;
 
 
