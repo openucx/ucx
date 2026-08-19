@@ -900,13 +900,15 @@ UCS_TEST_P(test_ud, stale_crep_on_reused_ep_id, "UD_LINGER_TIMEOUT=1s") {
     m_e1->connect_to_iface(1, *m_e2);
     short_progress_loop();
 
-    uint32_t ep_id = ep(m_e1, 1)->ep_id;
+    uint32_t ep_id    = ep(m_e1, 1)->ep_id;
+    uint32_t ep_index = uct_ud_ep_id_index(ep_id);
     m_e1->destroy_ep(1);
-    wait_for_ep_destroyed(iface(m_e1), ep_id);
+    wait_for_ep_destroyed(iface(m_e1), ep_index);
 
     m_e1->connect_to_iface(1, *e3);
     short_progress_loop();
-    ASSERT_EQ(ep_id, ep(m_e1, 1)->ep_id);
+    ASSERT_EQ(ep_index, uct_ud_ep_id_index(ep(m_e1, 1)->ep_id));
+    ASSERT_NE(ep_id, ep(m_e1, 1)->ep_id);
     ASSERT_EQ(UCT_UD_EP_NULL_ID, ep(m_e1, 1)->dest_ep_id);
 
     /* release the CREP owed to the previous incarnation of the ep_id */

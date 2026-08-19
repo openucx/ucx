@@ -21,6 +21,15 @@
 #define UCT_UD_EP_ID_MAX      UCT_UD_EP_NULL_ID
 #define UCT_UD_EP_CONN_ID_MAX UCT_UD_EP_ID_MAX
 
+/* The endpoint id which is put on the wire consists of a generation counter in
+ * the high bits and an index in uct_ud_iface_t::eps in the low bits. The last
+ * index is never used, so that no id can be equal to UCT_UD_EP_NULL_ID */
+#define UCT_UD_EP_GEN_SHIFT   22
+#define UCT_UD_EP_INDEX_MASK  UCS_MASK(UCT_UD_EP_GEN_SHIFT)
+#define UCT_UD_EP_GEN_MASK \
+    UCS_MASK(UCT_UD_PACKET_DEST_ID_SHIFT - UCT_UD_EP_GEN_SHIFT)
+#define UCT_UD_EP_INDEX_MAX   (UCT_UD_EP_INDEX_MASK - 1)
+
 typedef uint32_t uct_ud_ep_conn_sn_t;
 
 #if UCT_UD_EP_DEBUG_HOOKS
@@ -386,6 +395,17 @@ uct_ud_ep_ctl_op_check_ex(uct_ud_ep_t *ep, uint32_t ops)
      * all ops not given are not set */
     return (ep->tx.pending.ops & ops) &&
            ((ep->tx.pending.ops & ~ops) == 0);
+}
+
+static UCS_F_ALWAYS_INLINE uint32_t uct_ud_ep_id_index(uint32_t dest_id)
+{
+    return dest_id & UCT_UD_EP_INDEX_MASK;
+}
+
+static UCS_F_ALWAYS_INLINE uint32_t
+uct_ud_ep_id_pack(uint32_t ep_index, uint8_t gen)
+{
+    return ((uint32_t)gen << UCT_UD_EP_GEN_SHIFT) | ep_index;
 }
 
 /* TODO: rely on window check instead. max_psn = psn  */

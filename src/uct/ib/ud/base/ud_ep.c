@@ -403,6 +403,8 @@ timer_backoff:
 UCS_CLASS_INIT_FUNC(uct_ud_ep_t, uct_ud_iface_t *iface,
                     const uct_ep_params_t* params)
 {
+    ucs_status_t status;
+
     ucs_trace_func("");
 
     memset(self, 0, sizeof(*self));
@@ -410,10 +412,17 @@ UCS_CLASS_INIT_FUNC(uct_ud_ep_t, uct_ud_iface_t *iface,
 
     uct_ud_enter(iface);
 
+    self->ep_id      = UCT_UD_EP_NULL_ID;
     self->dest_ep_id = UCT_UD_EP_NULL_ID;
     self->path_index = UCT_EP_PARAMS_GET_PATH_INDEX(params);
     uct_ud_ep_reset(self);
-    uct_ud_iface_add_ep(iface, self);
+
+    status = uct_ud_iface_add_ep(iface, self);
+    if (status != UCS_OK) {
+        uct_ud_leave(iface);
+        return status;
+    }
+
     self->tx.tick = iface->tx.tick;
     ucs_wtimer_init(&self->timer, uct_ud_ep_timer);
     ucs_arbiter_group_init(&self->tx.pending.group);
@@ -1026,8 +1035,14 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
         /* must be connection request packet */
         uct_ud_ep_rx_creq(iface, neth);
         goto out;
-    } else if (ucs_unlikely(!ucs_ptr_array_lookup(&iface->eps, dest_id, ep))) {
+    } else if (ucs_unlikely(!ucs_ptr_array_lookup(&iface->eps,
+                                                  uct_ud_ep_id_index(dest_id),
+                                                  ep))) {
         ucs_trace("iface %p: dropping packet with dest_id %u", iface, dest_id);
+        goto out;
+    } else if (ucs_unlikely(ep->ep_id != dest_id)) {
+        ucs_debug("iface %p: dropping packet of a closed connection, dest_id %u"
+                  " ep %p ep_id %u", iface, dest_id, ep, ep->ep_id);
         goto out;
     } else if (ucs_unlikely(ucs_test_all_flags(
                                     ep->flags,
@@ -1038,8 +1053,6 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
         goto out;
     }
 
-    ucs_assertv(ep->ep_id == dest_id, "ep=%p ep_id=%u dest_id=%u", ep,
-                ep->ep_id, dest_id);
     UCT_UD_EP_HOOK_CALL_RX(ep, neth, byte_len);
 
     uct_ud_ep_process_ack(iface, ep, neth->ack_psn, is_async);
