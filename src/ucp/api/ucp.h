@@ -1405,6 +1405,7 @@ typedef struct ucp_worker_attr {
 
     /**
      * Device name whose resources should be included in the worker address.
+     * @note This is an input parameter.
      */
     const char            *address_device_name;
 } ucp_worker_attr_t;
