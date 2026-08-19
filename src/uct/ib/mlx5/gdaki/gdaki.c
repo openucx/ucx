@@ -981,13 +981,6 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
             goto out_ctx;
         }
 
-        status = UCT_CUDADRV_FUNC_LOG_ERR(
-                cuMemsetD8((CUdeviceptr)ep->channel_block->gpu_ptr, 0,
-                           dev_ep_host_size));
-        if (status != UCS_OK) {
-            goto out_free;
-        }
-
         dev_ep->atomic_va    = iface->atomic_buff;
         dev_ep->atomic_lkey  = htonl(iface->atomic_mr->lkey);
         dev_ep->sq_wqe_num   = uct_ib_mlx5_devx_sq_length(
@@ -1041,7 +1034,7 @@ out_unreg:
         (void)cuMemHostUnregister(
                 ep->channel_block->channels[i].qp.reg->addr.ptr);
     } while (i-- > 0);
-out_free:
+
     ucs_free(dev_ep);
 out_ctx:
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
