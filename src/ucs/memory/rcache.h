@@ -155,6 +155,8 @@ struct ucs_rcache_params {
     unsigned long          max_regions;         /**< Maximal number of regions */
     size_t                 max_size;            /**< Maximal total size of regions */
     size_t                 max_unreleased;      /**< Threshold for triggering a cleanup */
+    size_t                 max_adjacent_size;   /**< Maximal adjacent merged region
+                                                     size */
 };
 
 
@@ -167,6 +169,8 @@ struct ucs_rcache_config {
     unsigned long max_regions;    /**< Maximal number of rcache regions */
     size_t        max_size;       /**< Maximal size of mapped memory */
     size_t        max_unreleased; /**< Threshold for triggering a cleanup */
+    size_t        max_adjacent_size; /**< Maximal size of a region created by
+                                          merging adjacent regions */
     int           purge_on_fork;  /**< Enable/disable rcache purge on fork */
 };
 

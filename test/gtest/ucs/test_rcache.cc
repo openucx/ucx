@@ -19,14 +19,12 @@ extern "C" {
 static ucs_rcache_params_t
 get_default_rcache_params(void *context, const ucs_rcache_ops_t *ops)
 {
-    ucs_rcache_params_t params = {sizeof(ucs_rcache_region_t),
-                                  UCM_EVENT_VM_UNMAPPED,
-                                  1000,
-                                  ops,
-                                  context,
-                                  0,
-                                  ULONG_MAX,
-                                  SIZE_MAX};
+    ucs_rcache_params_t params;
+    ucs_rcache_set_default_params(&params);
+    params.ucm_events        = UCM_EVENT_VM_UNMAPPED;
+    params.ops               = ops;
+    params.context           = context;
+    params.max_unreleased    = 0;
 
     return params;
 }
@@ -74,7 +72,9 @@ protected:
         uint32_t            id;
     };
 
-    test_rcache() : m_reg_count(0), m_ptr(NULL), m_comp_count(0)
+    test_rcache(bool lock_memory = true) : m_reg_count(0), m_reg_bytes(0),
+                                           m_ptr(NULL), m_comp_count(0),
+                                           m_lock_memory(lock_memory)
     {
     }
 
@@ -129,20 +129,26 @@ protected:
             return UCS_ERR_IO_ERROR;
         }
 
-        mlock((const void*)region->super.super.start,
-              region->super.super.end - region->super.super.start);
+        if (m_lock_memory) {
+            mlock((const void*)region->super.super.start,
+                  region->super.super.end - region->super.super.start);
+        }
         EXPECT_NE(uint32_t(MAGIC), region->magic);
         region->magic = MAGIC;
         region->id    = ucs_atomic_fadd32(&next_id, 1);
 
         ucs_atomic_add32(&m_reg_count, +1);
+        ucs_atomic_add64(&m_reg_bytes, region->super.super.end -
+                                      region->super.super.start);
         return UCS_OK;
     }
 
     virtual void mem_dereg(region *region)
     {
-        munlock((const void*)region->super.super.start,
-                region->super.super.end - region->super.super.start);
+        if (m_lock_memory) {
+            munlock((const void*)region->super.super.start,
+                    region->super.super.end - region->super.super.start);
+        }
         EXPECT_EQ(uint32_t(MAGIC), region->magic);
         region->magic = 0;
         uint32_t prev = ucs_atomic_fsub32(&m_reg_count, 1);
@@ -177,6 +183,29 @@ protected:
         return ptr;
     }
 
+    void test_merge_adjacent(bool first_is_lower)
+    {
+        const size_t size = ucs_get_page_size();
+        void *mem         = alloc_pages(2 * size, PROT_READ | PROT_WRITE);
+        void *lower       = mem;
+        void *upper       = UCS_PTR_BYTE_OFFSET(mem, size);
+        void *first       = first_is_lower ? lower : upper;
+        void *second      = first_is_lower ? upper : lower;
+        region *region1, *region2, *region1_2;
+        region1 = get(first, size);
+        region2 = get(second, size);
+        EXPECT_NE(region1, region2);
+        EXPECT_EQ((uintptr_t)mem, region2->super.super.start);
+        EXPECT_EQ((uintptr_t)mem + (2 * size), region2->super.super.end);
+        region1_2 = get(first, size);
+        EXPECT_EQ(region2, region1_2);
+
+        put(region1_2);
+        put(region1);
+        put(region2);
+        munmap(mem, 2 * size);
+    }
+
     static void completion_cb(void *arg)
     {
         test_rcache *test = (test_rcache*)arg;
@@ -187,9 +216,11 @@ protected:
     static const uint32_t MAGIC = 0x05e905e9;
     static volatile uint32_t next_id;
     volatile uint32_t m_reg_count;
+    volatile uint64_t m_reg_bytes;
     ucs::handle<ucs_rcache_t*> m_rcache;
     void * volatile m_ptr;
     size_t m_comp_count;
+    const bool m_lock_memory;
 
 private:
 
@@ -218,6 +249,13 @@ private:
     {
         reinterpret_cast<test_rcache*>(context)->dump_region(
                         ucs_derived_of(r, struct region), buf, max);
+    }
+};
+
+class test_rcache_adjacent : public test_rcache {
+protected:
+    test_rcache_adjacent() : test_rcache(false)
+    {
     }
 };
 
@@ -405,6 +443,172 @@ UCS_MT_TEST_F(test_rcache, merge, 6) {
     put(region3);
 
     munmap(mem, size1 + pad + size2);
+}
+
+UCS_TEST_F(test_rcache_adjacent, merge_adjacent_after) {
+    test_merge_adjacent(true);
+}
+
+UCS_TEST_F(test_rcache_adjacent, merge_adjacent_before) {
+    test_merge_adjacent(false);
+}
+
+UCS_MT_TEST_F(test_rcache_adjacent, merge_adjacent_mt, 6)
+{
+    const size_t size = ucs_get_page_size();
+    region *lower_region, *upper_region, *lower_region_2;
+    void *upper;
+
+    if (barrier()) {
+        m_ptr = alloc_pages(2 * size, PROT_READ | PROT_WRITE);
+    }
+    barrier();
+
+    upper        = UCS_PTR_BYTE_OFFSET(m_ptr, size);
+    lower_region = get(m_ptr, size);
+    barrier();
+
+    upper_region = get(upper, size);
+    barrier();
+
+    lower_region_2 = get(m_ptr, size);
+    EXPECT_EQ(upper_region, lower_region_2);
+
+    put(lower_region_2);
+    put(lower_region);
+    put(upper_region);
+    if (barrier()) {
+        munmap(m_ptr, 2 * size);
+    }
+    barrier();
+}
+
+UCS_TEST_F(test_rcache_adjacent, merge_adjacent_chain)
+{
+    static const size_t num_regions = 16;
+    const size_t page_size          = ucs_get_page_size();
+    const size_t total_size         = num_regions * page_size;
+    std::vector<region*> regions;
+    std::set<region*> unique_regions;
+    void *mem;
+    region *merged;
+    size_t index;
+
+    mem = alloc_pages(total_size, PROT_READ | PROT_WRITE);
+    for (index = 0; index < num_regions; ++index) {
+        merged = get(UCS_PTR_BYTE_OFFSET(mem, index * page_size), page_size);
+        regions.push_back(merged);
+        unique_regions.insert(merged);
+    }
+
+    EXPECT_EQ(5ul, unique_regions.size());
+    EXPECT_EQ((2 * num_regions - 1) * page_size, m_reg_bytes);
+
+    merged = get(mem, total_size);
+    EXPECT_EQ(regions.back(), merged);
+    put(merged);
+
+    for (auto region : regions) {
+        put(region);
+    }
+
+    munmap(mem, total_size);
+}
+
+UCS_TEST_F(test_rcache_adjacent, do_not_merge_adjacent_when_disabled)
+{
+    const size_t size = ucs_get_page_size();
+    void *mem         = alloc_pages(2 * size, PROT_READ | PROT_WRITE);
+    void *upper       = UCS_PTR_BYTE_OFFSET(mem, size);
+    region *lower_region, *upper_region;
+    m_rcache->params.max_adjacent_size = 0;
+    lower_region = get(mem, size);
+    upper_region = get(upper, size);
+    EXPECT_NE(lower_region, upper_region);
+    EXPECT_EQ((uintptr_t)mem, lower_region->super.super.start);
+    EXPECT_EQ((uintptr_t)upper, upper_region->super.super.start);
+    put(lower_region);
+    put(upper_region);
+    munmap(mem, 2 * size);
+}
+
+UCS_TEST_F(test_rcache_adjacent, do_not_merge_adjacent_protection) {
+    const size_t size = ucs_get_page_size();
+    void *mem         = alloc_pages(2 * size, PROT_READ | PROT_WRITE);
+    void *upper       = UCS_PTR_BYTE_OFFSET(mem, size);
+    region *region1, *region2, *region1_2;
+    region1 = get(mem, size, PROT_READ);
+    region2 = get(upper, size, PROT_WRITE);
+    EXPECT_EQ((uintptr_t)upper, region2->super.super.start);
+    EXPECT_EQ((uintptr_t)upper + size, region2->super.super.end);
+    EXPECT_EQ(PROT_WRITE, region2->super.prot);
+    region1_2 = get(mem, size, PROT_READ);
+    EXPECT_EQ(region1, region1_2);
+    put(region1_2);
+    put(region1);
+    put(region2);
+    munmap(mem, 2 * size);
+}
+
+UCS_TEST_F(test_rcache, merge_different_protection_after_alignment)
+{
+    const size_t page_size = ucs_get_page_size();
+    const size_t alignment = 2 * page_size;
+    const size_t size      = 4 * page_size;
+    region *read_region, *write_region, *merged, *read_region_2;
+    void *mem = NULL;
+
+    ASSERT_EQ(0, posix_memalign(&mem, alignment, size));
+    memset(mem, 0, size);
+
+    read_region  = get(mem, page_size, PROT_READ);
+    write_region = get(UCS_PTR_BYTE_OFFSET(mem, 2 * page_size), page_size,
+                       PROT_WRITE, alignment);
+    merged       = get(UCS_PTR_BYTE_OFFSET(mem, page_size), page_size,
+                       PROT_WRITE, size);
+
+    EXPECT_EQ((uintptr_t)mem, merged->super.super.start);
+    EXPECT_EQ((uintptr_t)mem + size, merged->super.super.end);
+    EXPECT_EQ(PROT_READ | PROT_WRITE, merged->super.prot);
+
+    read_region_2 = get(mem, page_size, PROT_READ);
+    EXPECT_EQ(merged, read_region_2);
+
+    put(read_region_2);
+    put(read_region);
+    put(write_region);
+    put(merged);
+    free(mem);
+}
+
+UCS_TEST_F(test_rcache_adjacent, do_not_merge_separate_adjacent_mappings)
+{
+    const size_t size = ucs_get_page_size();
+    void *mem         = alloc_pages(2 * size, PROT_NONE);
+    void *upper       = UCS_PTR_BYTE_OFFSET(mem, size);
+    void *lower_mapping, *upper_mapping;
+    region *lower_region, *upper_region;
+    int fd;
+    ASSERT_EQ(0, munmap(mem, 2 * size));
+    fd = open("/dev/zero", O_RDWR);
+    ASSERT_GE(fd, 0);
+
+    lower_mapping = mmap(mem, size, PROT_READ | PROT_WRITE,
+                         MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    ASSERT_EQ(mem, lower_mapping);
+    upper_mapping = mmap(upper, size, PROT_READ | PROT_WRITE,
+                         MAP_FIXED | MAP_PRIVATE, fd, 0);
+    close(fd);
+    ASSERT_EQ(upper, upper_mapping);
+
+    lower_region = get(lower_mapping, size);
+    upper_region = get(upper_mapping, size);
+    EXPECT_NE(lower_region, upper_region);
+
+    put(lower_region);
+    put(upper_region);
+    munmap(lower_mapping, size);
+    munmap(upper_mapping, size);
 }
 
 UCS_TEST_F(test_rcache, merge_aligned)
@@ -1014,15 +1218,16 @@ UCS_TEST_F(test_rcache_stats, merge) {
 
 UCS_TEST_F(test_rcache_stats, hits_slow) {
     static const size_t size1 = 1024 * 1024;
-    region *r1, *r2;
+    region *r1, *r2, *neighbor;
     void *mem1, *mem2;
 
     mem1 = alloc_pages(size1, PROT_READ|PROT_WRITE);
     r1 = get(mem1, size1);
     put(r1);
 
-    mem2 = alloc_pages(size1, PROT_READ|PROT_WRITE);
-    r1 = get(mem2, size1);
+    mem2     = alloc_pages(2 * size1, PROT_READ | PROT_WRITE);
+    r1       = get(mem2, size1, PROT_READ);
+    neighbor = get(UCS_PTR_BYTE_OFFSET(mem2, size1), size1, PROT_WRITE);
 
     /* generate unmap event under lock, to roce using invalidation queue */
     ucs_rw_spinlock_read_lock(&m_rcache->pgt_lock);
@@ -1031,20 +1236,21 @@ UCS_TEST_F(test_rcache_stats, hits_slow) {
 
     EXPECT_EQ(1, get_counter(UCS_RCACHE_UNMAPS));
 
-    EXPECT_EQ(2, get_counter(UCS_RCACHE_GETS));
+    EXPECT_EQ(3, get_counter(UCS_RCACHE_GETS));
     EXPECT_EQ(1, get_counter(UCS_RCACHE_PUTS));
-    EXPECT_EQ(2, get_counter(UCS_RCACHE_MISSES));
+    EXPECT_EQ(3, get_counter(UCS_RCACHE_MISSES));
     EXPECT_EQ(0, get_counter(UCS_RCACHE_UNMAP_INVALIDATES));
     EXPECT_EQ(0, get_counter(UCS_RCACHE_DEREGS));
     /* it should produce a slow hit because there is
      * a pending unmap event
      */
-    r2 = get(mem2, size1);
+    r2 = get(mem2, size1, PROT_READ);
     EXPECT_EQ(1, get_counter(UCS_RCACHE_HITS_SLOW));
+    EXPECT_EQ(0, get_counter(UCS_RCACHE_MERGES));
 
-    EXPECT_EQ(3, get_counter(UCS_RCACHE_GETS));
+    EXPECT_EQ(4, get_counter(UCS_RCACHE_GETS));
     EXPECT_EQ(1, get_counter(UCS_RCACHE_PUTS));
-    EXPECT_EQ(2, get_counter(UCS_RCACHE_MISSES));
+    EXPECT_EQ(3, get_counter(UCS_RCACHE_MISSES));
     EXPECT_EQ(1, get_counter(UCS_RCACHE_UNMAPS));
     /* unmap event processed */
     EXPECT_EQ(1, get_counter(UCS_RCACHE_UNMAP_INVALIDATES));
@@ -1052,7 +1258,8 @@ UCS_TEST_F(test_rcache_stats, hits_slow) {
 
     put(r1);
     put(r2);
-    munmap(mem2, size1);
+    put(neighbor);
+    munmap(mem2, 2 * size1);
 }
 #endif
 

@@ -24,6 +24,7 @@
 #include <ucs/type/rwlock.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <ucm/api/ucm.h>
+#include <ucm/util/sys.h>
 
 #include "rcache.h"
 #include "rcache_int.h"
@@ -110,6 +111,12 @@ ucs_config_field_t ucs_config_rcache_table[] = {
      ucs_offsetof(ucs_rcache_config_t, max_unreleased),
      UCS_CONFIG_TYPE_MEMUNITS},
 
+    {"RCACHE_MAX_ADJACENT_SIZE", "1G",
+     "Maximal size of a registration cache region created by merging directly\n"
+     "adjacent regions. A value of 0 disables merging adjacent regions.",
+     ucs_offsetof(ucs_rcache_config_t, max_adjacent_size),
+     UCS_CONFIG_TYPE_MEMUNITS},
+
     {"RCACHE_PURGE_ON_FORK", "y",
      "Purge registration cache upon fork",
      ucs_offsetof(ucs_rcache_config_t, purge_on_fork), UCS_CONFIG_TYPE_BOOL},
@@ -180,6 +187,7 @@ void ucs_rcache_set_default_params(ucs_rcache_params_t *rcache_params)
     rcache_params->max_regions        = UCS_MEMUNITS_INF;
     rcache_params->max_size           = UCS_MEMUNITS_INF;
     rcache_params->max_unreleased     = UCS_MEMUNITS_INF;
+    rcache_params->max_adjacent_size  = UCS_GBYTE;
 }
 
 void ucs_rcache_set_params(ucs_rcache_params_t *rcache_params,
@@ -191,6 +199,7 @@ void ucs_rcache_set_params(ucs_rcache_params_t *rcache_params,
     rcache_params->max_regions        = rcache_config->max_regions;
     rcache_params->max_size           = rcache_config->max_size;
     rcache_params->max_unreleased     = rcache_config->max_unreleased;
+    rcache_params->max_adjacent_size  = rcache_config->max_adjacent_size;
     rcache_params->flags              = !rcache_config->purge_on_fork ? 0 :
                                         UCS_RCACHE_FLAG_PURGE_ON_FORK;
 }
@@ -361,6 +370,55 @@ static void ucs_rcache_find_regions(ucs_rcache_t *rcache, ucs_pgt_addr_t from,
     ucs_trace("%s: find regions in 0x%lx..0x%lx", rcache->name, from, to);
     ucs_pgtable_search_range(&rcache->pgtable, from, to,
                              ucs_rcache_region_collect_callback, list);
+}
+
+typedef struct {
+    ucs_pgt_addr_t request_start;
+    ucs_pgt_addr_t request_end;
+    ucs_pgt_addr_t start;
+    ucs_pgt_addr_t end;
+    int            prot;
+    int            found;
+} ucs_rcache_vma_info_t;
+
+static int ucs_rcache_get_vma_cb(void *arg, void *address, size_t length,
+                                 int prot, const char *path)
+{
+    ucs_rcache_vma_info_t *info = arg;
+    ucs_pgt_addr_t start        = (uintptr_t)address;
+    ucs_pgt_addr_t end          = start + length;
+
+    if (info->request_start >= end) {
+        return 0;
+    }
+
+    if ((info->request_start >= start) && (info->request_end <= end)) {
+        info->start = start;
+        info->end   = end;
+        info->prot  = prot;
+        info->found = 1;
+    }
+
+    return 1;
+}
+
+static int ucs_rcache_get_vma(ucs_pgt_addr_t start, ucs_pgt_addr_t end,
+                              int prot, ucs_pgt_addr_t *vma_start_p,
+                              ucs_pgt_addr_t *vma_end_p)
+{
+    ucs_rcache_vma_info_t info = {
+        .request_start = start,
+        .request_end   = end
+    };
+
+    ucm_parse_proc_self_maps(ucs_rcache_get_vma_cb, &info);
+    if (!info.found || !ucs_test_all_flags(info.prot, prot)) {
+        return 0;
+    }
+
+    *vma_start_p = info.start;
+    *vma_end_p   = info.end;
+    return 1;
 }
 
 static ucs_rcache_distribution_t *
@@ -818,39 +876,19 @@ ucs_rcache_check_overlap_one(ucs_rcache_t *rcache, ucs_pgt_addr_t *start,
 }
 
 /* Lock must be held */
-static ucs_status_t
-ucs_rcache_check_overlap(ucs_rcache_t *rcache, void *arg, ucs_pgt_addr_t *start,
-                         ucs_pgt_addr_t *end, size_t *alignment, int *prot,
-                         int *merged, ucs_rcache_region_t **region_p)
+static void
+ucs_rcache_merge_overlaps(ucs_rcache_t *rcache, void *arg,
+                          ucs_pgt_addr_t *start, ucs_pgt_addr_t *end,
+                          size_t *alignment, int *prot, int *merged)
 {
     ucs_rcache_region_t *region, *tmp;
     ucs_pgt_addr_t old_start, old_end;
     ucs_list_link_t region_list;
     ucs_status_t status;
 
-    ucs_trace_func("rcache=%s, *start=0x%lx, *end=0x%lx", rcache->name, *start,
-                   *end);
-
-    ucs_rcache_check_inv_queue(rcache, 0);
-    /* coverity[double_unlock] */
-    ucs_rcache_check_gc_list(rcache, 1);
-
     ucs_list_head_init(&region_list);
     ucs_rcache_find_regions(rcache, *start, *end - 1, &region_list);
 
-    if (!ucs_list_is_empty(&region_list)) {
-        region = ucs_list_next(&region_list, ucs_rcache_region_t, tmp_list);
-        if (ucs_list_is_only(&region_list, &region->tmp_list) &&
-            (*start >= region->super.start) && (*end <= region->super.end) &&
-            ucs_rcache_region_test(region, *prot, *alignment)) {
-            /* Found a region which contains the given address range */
-            ucs_rcache_region_hold(rcache, region);
-            *region_p = region;
-            return UCS_ERR_ALREADY_EXISTS;
-        }
-    }
-
-    /* TODO check if any of the regions is locked */
     do {
         old_start = *start;
         old_end   = *end;
@@ -872,9 +910,211 @@ ucs_rcache_check_overlap(ucs_rcache_t *rcache, void *arg, ucs_pgt_addr_t *start,
          * in turn, can result in even more overlapping regions.
          */
         ucs_list_head_init(&region_list);
-        ucs_rcache_find_regions(rcache, *start, old_start - 1, &region_list);
-        ucs_rcache_find_regions(rcache, old_end, *end - 1, &region_list);
+        if (*start < old_start) {
+            ucs_rcache_find_regions(rcache, *start, old_start - 1,
+                                    &region_list);
+        }
+
+        if (*end > old_end) {
+            ucs_rcache_find_regions(rcache, old_end, *end - 1, &region_list);
+        }
     } while (!ucs_list_is_empty(&region_list));
+}
+
+static int
+ucs_rcache_can_merge_adjacent(ucs_rcache_t *rcache,
+                              ucs_rcache_region_t *region,
+                              ucs_pgt_addr_t start, ucs_pgt_addr_t end,
+                              size_t alignment, int prot,
+                              ucs_pgt_addr_t vma_start,
+                              ucs_pgt_addr_t vma_end)
+{
+    size_t merged_alignment = ucs_max(alignment, region->alignment);
+    ucs_pgt_addr_t merged_start, merged_end;
+
+    if (((region->super.end != start) && (region->super.start != end)) ||
+        (region->prot != prot)) {
+        return 0;
+    }
+
+    merged_start = ucs_align_down_pow2(ucs_min(start, region->super.start),
+                                       merged_alignment);
+    merged_end   = ucs_max(end, region->super.end);
+    if (merged_end > (UCS_PGT_ADDR_MAX - (merged_alignment - 1))) {
+        return 0;
+    }
+
+    merged_end = ucs_align_up_pow2(merged_end, merged_alignment);
+    return (merged_start >= vma_start) && (merged_end <= vma_end) &&
+           ((merged_end - merged_start) <=
+            rcache->params.max_adjacent_size);
+}
+
+static size_t
+ucs_rcache_adjacent_target_size(size_t size, size_t alignment, size_t max_size)
+{
+    size_t target_size = alignment;
+
+    max_size = ucs_align_down_pow2(max_size, alignment);
+    ucs_assert(size <= max_size);
+
+    while (target_size < size) {
+        if (target_size > (max_size / 2)) {
+            return max_size;
+        }
+
+        target_size *= 2;
+    }
+
+    return target_size;
+}
+
+static void
+ucs_rcache_expand_adjacent(ucs_rcache_t *rcache, ucs_pgt_addr_t *start,
+                           ucs_pgt_addr_t *end, size_t alignment,
+                           ucs_pgt_addr_t vma_start, ucs_pgt_addr_t vma_end,
+                           int merged_left, int merged_right)
+{
+    size_t current_size = *end - *start;
+    size_t target_size;
+    size_t extra;
+    size_t grow;
+    int grow_right;
+
+    vma_start   = ucs_align_up_pow2(vma_start, alignment);
+    vma_end     = ucs_align_down_pow2(vma_end, alignment);
+    target_size = ucs_rcache_adjacent_target_size(
+            current_size, alignment, rcache->params.max_adjacent_size);
+    target_size = ucs_min(target_size, vma_end - vma_start);
+    if (target_size <= current_size) {
+        return;
+    }
+
+    if (merged_left && merged_right) {
+        grow_right = (vma_end - *end) >= (*start - vma_start);
+    } else {
+        grow_right = merged_right;
+    }
+
+    extra = target_size - current_size;
+    if (grow_right) {
+        grow  = ucs_min(extra, vma_end - *end);
+        *end += grow;
+        extra -= grow;
+        *start -= extra;
+    } else {
+        grow    = ucs_min(extra, *start - vma_start);
+        *start -= grow;
+        extra  -= grow;
+        *end   += extra;
+    }
+}
+
+static int
+ucs_rcache_merge_adjacent(ucs_rcache_t *rcache, void *arg,
+                          ucs_pgt_addr_t *start, ucs_pgt_addr_t *end,
+                          size_t *alignment, int *prot)
+{
+    ucs_pgt_addr_t adjacent_start = *start;
+    ucs_pgt_addr_t adjacent_end   = *end;
+    ucs_pgt_addr_t vma_start, vma_end;
+    ucs_pgt_region_t *pgt_region;
+    ucs_rcache_region_t *left  = NULL;
+    ucs_rcache_region_t *right = NULL;
+    ucs_status_t status;
+    int merged_left  = 0;
+    int merged_right = 0;
+
+    if (rcache->params.max_adjacent_size == 0) {
+        return 0;
+    }
+
+    if (adjacent_start > 0) {
+        pgt_region = ucs_pgtable_lookup(&rcache->pgtable,
+                                        adjacent_start - 1);
+        if ((pgt_region != NULL) && (pgt_region->end == adjacent_start)) {
+            left = ucs_derived_of(pgt_region, ucs_rcache_region_t);
+        }
+    }
+
+    if (adjacent_end < UCS_PGT_ADDR_MAX) {
+        pgt_region = ucs_pgtable_lookup(&rcache->pgtable, adjacent_end);
+        if ((pgt_region != NULL) && (pgt_region->start == adjacent_end)) {
+            right = ucs_derived_of(pgt_region, ucs_rcache_region_t);
+        }
+    }
+
+    if ((left == NULL) && (right == NULL)) {
+        return 0;
+    }
+
+    if (!ucs_rcache_get_vma(adjacent_start, adjacent_end, *prot, &vma_start,
+                            &vma_end)) {
+        return 0;
+    }
+
+    if ((left != NULL) &&
+        ucs_rcache_can_merge_adjacent(rcache, left, *start, *end, *alignment,
+                                      *prot, vma_start, vma_end)) {
+        status = ucs_rcache_check_overlap_one(rcache, start, end, alignment,
+                                              prot, arg, left);
+        merged_left = status == UCS_OK;
+    }
+
+    if ((right != NULL) &&
+        ucs_rcache_can_merge_adjacent(rcache, right, *start, *end, *alignment,
+                                      *prot, vma_start, vma_end)) {
+        status = ucs_rcache_check_overlap_one(rcache, start, end, alignment,
+                                              prot, arg, right);
+        merged_right = status == UCS_OK;
+    }
+
+    if (!merged_left && !merged_right) {
+        return 0;
+    }
+
+    *start = ucs_align_down_pow2(*start, *alignment);
+    *end   = ucs_align_up_pow2(*end, *alignment);
+    ucs_rcache_expand_adjacent(rcache, start, end, *alignment, vma_start,
+                               vma_end, merged_left, merged_right);
+    return 1;
+}
+
+/* Lock must be held */
+static ucs_status_t
+ucs_rcache_check_overlap(ucs_rcache_t *rcache, void *arg, ucs_pgt_addr_t *start,
+                         ucs_pgt_addr_t *end, size_t *alignment, int *prot,
+                         int *merged, ucs_rcache_region_t **region_p)
+{
+    ucs_pgt_region_t *pgt_region;
+    ucs_rcache_region_t *region;
+
+    ucs_trace_func("rcache=%s, *start=0x%lx, *end=0x%lx", rcache->name, *start,
+                   *end);
+
+    ucs_rcache_check_inv_queue(rcache, 0);
+    /* coverity[double_unlock] */
+    ucs_rcache_check_gc_list(rcache, 1);
+
+    pgt_region = ucs_pgtable_lookup(&rcache->pgtable, *start);
+    if (pgt_region != NULL) {
+        region = ucs_derived_of(pgt_region, ucs_rcache_region_t);
+        if ((*end <= region->super.end) &&
+            ucs_rcache_region_test(region, *prot, *alignment)) {
+            /* Found a region which contains the given address range */
+            ucs_rcache_region_hold(rcache, region);
+            *region_p = region;
+            return UCS_ERR_ALREADY_EXISTS;
+        }
+    }
+
+    ucs_rcache_merge_overlaps(rcache, arg, start, end, alignment, prot,
+                              merged);
+    if (ucs_rcache_merge_adjacent(rcache, arg, start, end, alignment, prot)) {
+        *merged = 1;
+        ucs_rcache_merge_overlaps(rcache, arg, start, end, alignment, prot,
+                                  merged);
+    }
 
     return UCS_OK;
 }
