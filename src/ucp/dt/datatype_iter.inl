@@ -276,8 +276,9 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_datatype_iter_mem_reg_single(
     ucp_mem_h memh = *memh_p;
     ucs_status_t status;
 
-    /* Iterator may work with cacheable MDs only */
+    /* With rcache, only a user memh may use non-cacheable MDs. */
     ucs_assertv((context->rcache == NULL) ||
+                ((memh != NULL) && ucp_memh_is_user_memh(memh)) ||
                 ucs_test_all_flags(context->cache_md_map[mem_type], md_map),
                 "iterator mem_type=%s cache_md_map=0x%" PRIx64
                 " md_map=0x%" PRIx64,

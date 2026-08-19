@@ -1623,6 +1623,8 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_receive, (worker, rreq, rndv_rts_hdr, rkey_buf),
     ucp_context_h context      = worker->context;
     ucs_memory_type_t mem_type = rreq->recv.dt_iter.mem_info.type;
     ucp_md_map_t rtr_md_map    = 0;
+    ucp_mem_h memh;
+    ucp_md_map_t reg_md_map;
     ucp_rndv_mode_t rndv_mode;
     ucp_request_t *rndv_req;
     ucp_ep_h ep;
@@ -1732,9 +1734,17 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_receive, (worker, rreq, rndv_rts_hdr, rkey_buf),
              * non-host memory type
              */
             ucs_assert(rndv_rts_hdr->size <= rreq->recv.dt_iter.length);
-            ucp_datatype_iter_mem_reg(context, &rreq->recv.dt_iter,
-                                      context->reg_md_map[mem_type] &
-                                              ep_config->key.rma_bw_md_map,
+            reg_md_map = context->reg_md_map[mem_type] &
+                         ep_config->key.rma_bw_md_map;
+            memh = rreq->recv.dt_iter.type.contig.memh;
+
+            /* With rcache, only a user memh may use non-cacheable MDs. */
+            if ((context->rcache != NULL) &&
+                ((memh == NULL) || !ucp_memh_is_user_memh(memh))) {
+                reg_md_map &= context->cache_md_map[mem_type];
+            }
+
+            ucp_datatype_iter_mem_reg(context, &rreq->recv.dt_iter, reg_md_map,
                                       0, UCS_BIT(UCP_DATATYPE_CONTIG));
 
             rtr_md_map = ep_config->key.rma_bw_md_map;

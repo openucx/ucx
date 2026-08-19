@@ -53,6 +53,66 @@ UCS_TEST_F(test_ucp_dt_iov, seek)
     }
 };
 
+class test_ucp_dt_mem_reg : public ucs::test {
+protected:
+    void init() override
+    {
+        ucp_params_t ctx_params;
+
+        modify_config("RCACHE_ENABLE", "y");
+        ctx_params.field_mask = UCP_PARAM_FIELD_FEATURES;
+        ctx_params.features   = UCP_FEATURE_RMA;
+        UCS_TEST_CREATE_HANDLE(ucp_context_h, m_ucph, ucp_cleanup, ucp_init,
+                               &ctx_params, NULL);
+    }
+
+    void cleanup() override
+    {
+        m_ucph.reset();
+    }
+
+    ucs::handle<ucp_context_h> m_ucph;
+};
+
+UCS_TEST_F(test_ucp_dt_mem_reg, user_memh_noncacheable_md)
+{
+    std::vector<char> buffer(UCS_KBYTE);
+    ucp_mem_map_params_t params = {};
+    ucp_context_h context        = m_ucph.get();
+    ucp_mem_h memh;
+    ucp_mem_h iter_memh;
+    ucp_md_map_t orig_cache_md_map;
+    ucp_md_map_t md_map;
+    ucs_status_t status;
+
+    ASSERT_NE(NULL, context->rcache);
+    params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                        UCP_MEM_MAP_PARAM_FIELD_LENGTH;
+    params.address    = buffer.data();
+    params.length     = buffer.size();
+    status            = ucp_mem_map(context, &params, &memh);
+    ASSERT_UCS_OK(status);
+
+    md_map = memh->md_map & context->reg_md_map[UCS_MEMORY_TYPE_HOST];
+    if (md_map == 0) {
+        EXPECT_UCS_OK(ucp_mem_unmap(context, memh));
+        UCS_TEST_SKIP_R("no host memory registration MDs");
+    }
+
+    md_map            = UCS_BIT(ucs_ffs64(md_map));
+    iter_memh         = memh;
+    orig_cache_md_map = context->cache_md_map[UCS_MEMORY_TYPE_HOST];
+    context->cache_md_map[UCS_MEMORY_TYPE_HOST] &= ~md_map;
+    status = ucp_datatype_iter_mem_reg_single(
+            context, buffer.data(), buffer.size(), UCS_MEMORY_TYPE_HOST,
+            md_map, 0, &iter_memh);
+    context->cache_md_map[UCS_MEMORY_TYPE_HOST] = orig_cache_md_map;
+
+    EXPECT_UCS_OK(status);
+    EXPECT_EQ(memh, iter_memh);
+    EXPECT_UCS_OK(ucp_mem_unmap(context, memh));
+}
+
 class test_ucp_dt_iter : public ucs::test_with_param<ucp_datatype_t> {
 protected:
     virtual void init() {
