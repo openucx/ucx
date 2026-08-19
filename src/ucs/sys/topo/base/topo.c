@@ -8,9 +8,12 @@
 #  include "config.h"
 #endif
 
+#include "topo_int.h"
+#include "../vr.h"
+
+#include <ucs/arch/cpu.h>
 #include <ucs/memory/numa.h>
 #include <ucs/sys/math.h>
-#include <ucs/sys/topo/base/topo.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
 
@@ -41,39 +44,6 @@ typedef struct ucs_sys_topo_provider {
 
     ucs_list_link_t    list;
 } ucs_sys_topo_provider_t;
-
-/* Possible role of a current device wrt its sibling */
-typedef enum {
-    /* No sibling capability */
-    UCS_TOPO_SIBLING_ROLE_NONE,
-
-    /* Memory device, a sibling device could access its memory */
-    UCS_TOPO_SIBLING_ROLE_MEM,
-
-    /* Device that could access memory from its sibling */
-    UCS_TOPO_SIBLING_ROLE_DEV
-} ucs_topo_sibling_role_t;
-
-typedef struct {
-    ucs_sys_bus_id_t        bus_id;
-    char                    *name;
-    unsigned                name_priority;
-    ucs_numa_node_t         numa_node;
-    uintptr_t               user_value;
-    ucs_topo_device_class_t device_class;
-
-    /* Cached rank of the device's BDF within its class, or
-     * UCS_SYS_DEVICE_ORDINAL_INVALID if not yet computed. 
-     * Invalidated when any device's class changes. */
-    unsigned                class_ordinal;
-
-    /* Secondary device for the current device */
-    ucs_sys_device_t        sys_dev_aux;
-
-    ucs_topo_sibling_role_t sibling_role; /* Role of the current device */
-    /* MEM role: matched DEV. DEV role: one representative matched MEM. */
-    ucs_sys_device_t        sibling_sys_dev;
-} ucs_topo_sys_device_info_t;
 
 typedef struct {
     ucs_bus_id_bit_rep_t    bus_id_bit_rep;
@@ -1332,6 +1302,91 @@ static void ucs_topo_release_devices()
         ucs_free(device->name);
     }
 }
+
+static const char *ucs_topo_groups_type_str(ucs_topo_groups_type_t type)
+{
+    switch (type) {
+    case UCS_TOPO_GROUPS_TYPE_UNKNOWN:
+        return "unknown";
+    case UCS_TOPO_GROUPS_TYPE_VERA_RUBIN:
+        return "vera-rubin";
+    default:
+        return "<invalid>";
+    }
+}
+
+ucs_status_t ucs_topo_init_groups(ucs_topo_groups_t *groups_p)
+{
+    ucs_cpu_model_t cpu_model   = ucs_arch_get_cpu_model();
+    ucs_topo_groups_type_t type = UCS_TOPO_GROUPS_TYPE_UNKNOWN;
+    ucs_topo_group_t *groups    = NULL;
+    size_t num_groups           = 0;
+    ucs_status_t status         = UCS_OK;
+
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+    if (cpu_model == UCS_CPU_MODEL_NVIDIA_VERA) {
+        status = ucs_topo_vr_init_groups(ucs_topo_global_ctx.devices,
+                                         ucs_topo_global_ctx.num_devices,
+                                         &groups, &num_groups);
+        type   = UCS_TOPO_GROUPS_TYPE_VERA_RUBIN;
+    }
+
+    if (status != UCS_OK) {
+        goto out_unlock;
+    }
+
+    ucs_debug("initialized groups of type %s with %zu groups",
+              ucs_topo_groups_type_str(type), num_groups);
+
+out_unlock:
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+
+    if (status == UCS_OK) {
+        groups_p->type       = type;
+        groups_p->groups     = groups;
+        groups_p->num_groups = num_groups;
+    }
+
+    return status;
+}
+
+static void ucs_topo_release_group(ucs_topo_group_t *group)
+{
+    ucs_topo_nics_board_t *nics_board;
+    ucs_topo_nic_t *nic;
+    size_t index;
+
+    for (index = 0; index < group->num_nics; ++index) {
+        nic = &group->nics[index];
+        ucs_free(nic->ports);
+    }
+
+    for (index = 0; index < group->num_nics_boards; ++index) {
+        nics_board = &group->nics_boards[index];
+        ucs_free(nics_board->nics_indices);
+    }
+
+    ucs_free(group->nics_boards);
+    ucs_free(group->nics);
+    ucs_free(group->gpus);
+}
+
+
+void ucs_topo_release_groups(ucs_topo_groups_t *groups)
+{
+    size_t i;
+
+    for (i = 0; i < groups->num_groups; ++i) {
+        ucs_topo_release_group(&groups->groups[i]);
+    }
+
+    ucs_free(groups->groups);
+
+    groups->type       = UCS_TOPO_GROUPS_TYPE_UNKNOWN;
+    groups->groups     = NULL;
+    groups->num_groups = 0;
+}
+
 
 ucs_global_state_t *ucs_topo_extract_state(void)
 {

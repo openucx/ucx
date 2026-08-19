@@ -72,6 +72,82 @@ typedef enum {
 
 /**
  * @ingroup UCS_RESOURCE
+ * Type of system topology represented by topology groups.
+ */
+typedef enum {
+    UCS_TOPO_GROUPS_TYPE_UNKNOWN,
+    UCS_TOPO_GROUPS_TYPE_VERA_RUBIN
+} ucs_topo_groups_type_t;
+
+
+/**
+ * @ingroup UCS_RESOURCE
+ * GPU represented in a topology group.
+ */
+typedef struct {
+    ucs_sys_bus_id_t bus_id;
+    ucs_sys_device_t sys_dev;
+} ucs_topo_gpu_t;
+
+
+/**
+ * @ingroup UCS_RESOURCE
+ * Port of a physical NIC represented in a topology group.
+ */
+typedef struct {
+    ucs_sys_bus_id_t bus_id;
+    ucs_sys_device_t sys_dev;
+} ucs_topo_nic_port_t;
+
+
+/**
+ * @ingroup UCS_RESOURCE
+ * Physical NIC represented in a topology group.
+ */
+typedef struct {
+    ucs_topo_nic_port_t *ports;
+    size_t              num_ports;
+} ucs_topo_nic_t;
+
+
+/**
+ * @ingroup UCS_RESOURCE
+ * Board containing physical NICs represented by indices in a topology group.
+ */
+typedef struct {
+    unsigned *nics_indices;
+    size_t   num_nics;
+} ucs_topo_nics_board_t;
+
+
+/**
+ * @ingroup UCS_RESOURCE
+ * Group of GPUs, NICs, and NIC boards sharing a topology locality.
+ */
+typedef struct {
+    ucs_numa_node_t       numa_node;
+    ucs_topo_gpu_t        *gpus;
+    size_t                num_gpus;
+    ucs_topo_nic_t        *nics;
+    size_t                num_nics;
+    ucs_topo_nics_board_t *nics_boards;
+    size_t                num_nics_boards;
+} ucs_topo_group_t;
+
+
+/**
+ * @ingroup UCS_RESOURCE
+ * Collection of system topology groups.
+ */
+typedef struct {
+    ucs_topo_groups_type_t type;
+    ucs_topo_group_t       *groups;
+    size_t                 num_groups;
+} ucs_topo_groups_t;
+
+
+/**
+ * @ingroup UCS_RESOURCE
  * Global state of the topology subsystem.
  */
 typedef struct ucs_global_state ucs_global_state_t;
@@ -497,6 +573,28 @@ int ucs_topo_device_has_sibling(ucs_sys_device_t sys_dev);
  * @return Number of system devices.
  */
 unsigned ucs_topo_num_devices(void);
+
+
+/**
+ * Initialize system topology groups for the current CPU model.
+ *
+ * The caller takes ownership of the returned group data and must release it
+ * with @ref ucs_topo_release_groups.
+ *
+ * @param [out] groups_p  Initialized topology groups.
+ *
+ * @return UCS_OK on success, or an error status if topology group
+ *         initialization failed.
+ */
+ucs_status_t ucs_topo_init_groups(ucs_topo_groups_t *groups_p);
+
+
+/**
+ * Release topology groups returned by @ref ucs_topo_init_groups.
+ *
+ * @param [inout] groups  Topology groups to release and reset.
+ */
+void ucs_topo_release_groups(ucs_topo_groups_t *groups);
 
 
 /**
