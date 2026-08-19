@@ -30,6 +30,7 @@
 #include <initializer_list>
 #include <algorithm>
 #include <set>
+#include <map>
 #include <unordered_map>
 #include <sys/socket.h>
 #include <dirent.h>
@@ -369,9 +370,16 @@ public:
     void* operator*() const { return m_ptr; }
     void detach() { m_ptr = NULL; }
 
+    /* Report a sub-range which was already unmapped by the caller. Such a range
+     * must not be unmapped again on destruction, since an unrelated mapping may
+     * have been placed there in the meanwhile */
+    void mark_unmapped(void *address, size_t length);
+
 private:
     void *m_ptr;
     size_t m_length;
+    /* Holes [start, end) already released inside the reservation */
+    std::map<char*, char*> m_holes;
 };
 
 
