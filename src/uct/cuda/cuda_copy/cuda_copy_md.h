@@ -8,8 +8,6 @@
 
 #include <uct/base/uct_md.h>
 #include <uct/cuda/base/cuda_md.h>
-#include <cuda.h>
-
 
 extern uct_component_t uct_cuda_copy_component;
 
@@ -52,18 +50,6 @@ typedef struct uct_cuda_copy_md_config {
     ucs_memory_type_t           cuda_async_mem_type;
     int                         retain_primary_ctx;
 } uct_cuda_copy_md_config_t;
-
-/**
- * copy alloc handle.
- */
-typedef struct uct_cuda_copy_alloc_handle {
-    CUdeviceptr                 ptr;
-    size_t                      length;
-    uint8_t                     is_vmm;
-#if HAVE_CUDA_FABRIC
-    CUmemGenericAllocationHandle generic_handle;
-#endif
-} uct_cuda_copy_alloc_handle_t;
 
 
 typedef struct {
