@@ -847,6 +847,130 @@ void *uct_ib_mlx5_txwq_get_wqe(const uct_ib_mlx5_txwq_t *txwq, uint16_t pi)
     return UCS_PTR_BYTE_OFFSET(txwq->qstart, (pi % num_bb) * MLX5_SEND_WQE_BB);
 }
 
+ucs_status_t uct_ib_mlx5_txwq_next(const uct_ib_mlx5_txwq_t *txwq, uint16_t ci,
+                                   uint16_t end_ci,
+                                   const struct mlx5_wqe_ctrl_seg **ctrl_p,
+                                   size_t *wqe_size_p, uint16_t *next_ci_p)
+{
+    const struct mlx5_wqe_ctrl_seg *ctrl;
+    size_t wqe_size;
+    uint16_t num_bb;
+    uint8_t ds;
+
+    if (ci == end_ci) {
+        return UCS_ERR_NO_ELEM;
+    }
+
+    ctrl     = uct_ib_mlx5_txwq_get_wqe(txwq, ci);
+    ds       = ntohl(ctrl->qpn_ds) & UINT8_MAX;
+    wqe_size = ds * UCT_IB_MLX5_WQE_SEG_SIZE;
+
+    ucs_assert(ds > 0);
+    ucs_assert(wqe_size <= UCT_IB_MLX5_MAX_SEND_WQE_SIZE);
+
+    num_bb = ucs_div_round_up(wqe_size, MLX5_SEND_WQE_BB);
+
+    ucs_assert(UCS_CIRCULAR_COMPARE16((uint16_t)(ci + num_bb), <=, end_ci));
+
+    *ctrl_p     = ctrl;
+    *wqe_size_p = wqe_size;
+    *next_ci_p  = ci + num_bb;
+    return UCS_OK;
+}
+
+void uct_ib_mlx5_txwq_copy(const uct_ib_mlx5_txwq_t *txwq, const void *src,
+                           void *dst, size_t length)
+{
+    size_t copy_len = ucs_min(length, UCS_PTR_BYTE_DIFF(src, txwq->qend));
+
+    memcpy(dst, src, copy_len);
+
+    if (copy_len < length) {
+        memcpy(UCS_PTR_BYTE_OFFSET(dst, copy_len), txwq->qstart,
+               length - copy_len);
+    }
+}
+
+ucs_status_t
+uct_ib_mlx5_wqe_payload_length(const uct_ib_mlx5_txwq_t *txwq,
+                               const struct mlx5_wqe_ctrl_seg *ctrl,
+                               size_t wqe_size, size_t *length_p)
+{
+    uint8_t opcode = uct_ib_mlx5_wqe_opcode(ctrl);
+    const struct mlx5_wqe_inl_data_seg *seg;
+    size_t remaining, seg_size, length, total;
+    uint32_t byte_count;
+
+    if ((opcode != MLX5_OPCODE_SEND) && (opcode != MLX5_OPCODE_SEND_IMM) &&
+        (opcode != MLX5_OPCODE_RDMA_WRITE) &&
+        (opcode != MLX5_OPCODE_RDMA_READ)) {
+        *length_p = 0;
+        return UCS_OK;
+    }
+
+    seg       = uct_ib_mlx5_txwq_wrap_any((uct_ib_mlx5_txwq_t*)txwq,
+                                          (void*)(ctrl + 1));
+    remaining = wqe_size - sizeof(*ctrl);
+    if ((opcode == MLX5_OPCODE_RDMA_WRITE) ||
+        (opcode == MLX5_OPCODE_RDMA_READ)) {
+        ucs_assert(remaining >= sizeof(struct mlx5_wqe_raddr_seg));
+
+        seg        = uct_ib_mlx5_txwq_wrap_any(
+                (uct_ib_mlx5_txwq_t*)txwq,
+                (void*)((const struct mlx5_wqe_raddr_seg*)seg + 1));
+        remaining -= sizeof(struct mlx5_wqe_raddr_seg);
+    }
+
+    total = 0;
+    while (remaining >= sizeof(*seg)) {
+        byte_count = ntohl(seg->byte_count);
+        if (byte_count & MLX5_INLINE_SEG) {
+            length   = byte_count & ~MLX5_INLINE_SEG;
+            seg_size = ucs_align_up_pow2(sizeof(*seg) + length,
+                                         UCT_IB_MLX5_WQE_SEG_SIZE);
+        } else {
+            length   = byte_count;
+            seg_size = sizeof(struct mlx5_wqe_data_seg);
+        }
+
+        ucs_assert(seg_size <= remaining);
+
+        total     += length;
+        remaining -= seg_size;
+        seg        = uct_ib_mlx5_txwq_wrap_any((uct_ib_mlx5_txwq_t*)txwq,
+                                               UCS_PTR_BYTE_OFFSET((void*)seg,
+                                                                   seg_size));
+    }
+
+    ucs_assert(remaining == 0);
+
+    *length_p = total;
+    return UCS_OK;
+}
+
+ucs_status_t uct_ib_mlx5_psn_delivery_status(uint32_t first_psn,
+                                             uint32_t receiver_next_psn,
+                                             uint32_t num_packets)
+{
+    const uint32_t psn_half = UCS_BIT(UCT_IB_MLX5_PSN_BITS - 1);
+    uint32_t diff;
+
+    ucs_assert(num_packets > 0);
+
+    diff = uct_ib_mlx5_psn_24b(receiver_next_psn - first_psn);
+    if (diff == psn_half) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    /* delivered */
+    if ((diff > 0) && (diff < psn_half) && (diff >= num_packets)) {
+        return UCS_OK;
+    }
+
+    /* undelivered or partial */
+    return UCS_INPROGRESS;
+}
+
 uint16_t uct_ib_mlx5_txwq_num_posted_wqes(const uct_ib_mlx5_txwq_t *txwq,
                                           uint16_t outstanding)
 {

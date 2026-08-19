@@ -708,6 +708,13 @@ uct_rc_mlx5_am_hdr_fill(uct_rc_mlx5_hdr_t *rch, uint8_t id)
     rch->rc_hdr.am_id = id;
 }
 
+ucs_status_t uct_rc_mlx5_fill_am_op_info(const uct_ib_mlx5_txwq_t *txwq,
+                                         uct_rc_iface_send_op_t *op,
+                                         const struct mlx5_wqe_ctrl_seg *ctrl,
+                                         size_t wqe_size, int *skip_p,
+                                         uct_ep_op_info_t *info,
+                                         void *callback_data);
+
 #if HAVE_DECL_MLX5DV_CREATE_QP
 void uct_rc_mlx5_common_fill_dv_qp_attr(uct_rc_mlx5_iface_common_t *iface,
                                         uct_ib_qp_init_attr_t *qp_attr,
