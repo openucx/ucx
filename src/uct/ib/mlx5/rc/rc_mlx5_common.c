@@ -683,6 +683,21 @@ uct_rc_mlx5_dp_ordering_ooo_init(uct_ib_mlx5_md_t *md,
     return UCS_OK;
 }
 
+int uct_rc_mlx5_iface_can_single_qp_use_full_bw(
+        uct_rc_mlx5_iface_common_t *iface)
+{
+    uct_ib_iface_t *ib_iface = &iface->super.super;
+    uct_ib_mlx5_md_t *md     = uct_ib_mlx5_iface_md(ib_iface);
+    int ddp_enabled           =
+            (iface->config.dp_ordering_devx ==
+             UCT_IB_MLX5_DP_ORDERING_OOO_ALL) ||
+            iface->config.ddp_enabled_dv;
+
+    return uct_ib_iface_is_roce(ib_iface) &&
+           uct_ib_iface_port_is_xdr(ib_iface) && ddp_enabled &&
+           (md->port_select_mode == UCT_IB_MLX5_LAG_MULTI_PORT_ESW);
+}
+
 #if IBV_HW_TM
 /* tag is passed as parameter, because some (but not all!) transports may need
  * to translate TMH to LE */
