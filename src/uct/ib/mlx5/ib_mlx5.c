@@ -698,8 +698,8 @@ void uct_ib_mlx5_txwq_reset(uct_ib_mlx5_txwq_t *txwq)
     txwq->prev_sw_pi     = UINT16_MAX;
     txwq->ft_ci          = UINT16_MAX;
     txwq->next_first_psn = 0;
-#if UCS_ENABLE_ASSERT
     txwq->hw_ci          = UINT16_MAX;
+#if UCS_ENABLE_ASSERT
     txwq->flags          = 0;
 #endif
     uct_ib_fence_info_init(&txwq->fi);

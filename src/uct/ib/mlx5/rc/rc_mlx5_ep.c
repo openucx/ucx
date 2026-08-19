@@ -831,10 +831,11 @@ uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
     if ((params->field_mask & UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS) &&
         (params->flags & UCT_EP_INVALIDATE_FLAG_NO_COMPLETIONS)) {
         ucs_assert(!(ep->super.flags & UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS));
-        ep->super.flags |= UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS;
         txwq->ft_ci      = txwq->prev_sw_pi -
                            (txwq->bb_max -
                             uct_rc_txqp_available(&ep->super.super.txqp));
+        txwq->hw_ci      = txwq->ft_ci;
+        ep->super.flags |= UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS;
         ucs_debug("ep %p disable completions WQE range (%u, %u) "
                   "next_first_psn %u",
                   ep, txwq->ft_ci, txwq->sw_pi, txwq->next_first_psn);
@@ -847,16 +848,22 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
         uct_ep_h tl_ep, const uct_ep_outstanding_purge_params_t *params)
 {
     uct_rc_mlx5_base_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_base_ep_t);
+    uct_ib_mlx5_txwq_t *txwq  = &ep->tx.wq;
+    uct_rc_txqp_t *txqp       = &ep->super.txqp;
+    int16_t prev_available;
+    uint16_t available;
     ucs_status_t status;
 
     status = uct_ib_mlx5_ext_ep_outstanding_purge(tl_ep, params);
-    if (status != UCS_OK) {
-        return status;
+
+    prev_available = uct_rc_txqp_available(txqp);
+    available      = txwq->bb_max - (txwq->prev_sw_pi - txwq->ft_ci);
+    if (available > prev_available) {
+        uct_rc_txqp_available_add(txqp, available - prev_available);
     }
 
-    uct_rc_mlx5_ep_update_tx_res(ep, ep->tx.wq.prev_sw_pi,
-                                 ep->tx.wq.prev_sw_pi);
-    return UCS_OK;
+    ucs_assert(uct_rc_txqp_available(txqp) <= txwq->bb_max);
+    return status;
 }
 
 ucs_status_t uct_rc_mlx5_base_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
