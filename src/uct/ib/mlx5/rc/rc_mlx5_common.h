@@ -490,9 +490,6 @@ uct_rc_mlx5_dp_ordering_ooo_init(uct_ib_mlx5_md_t *md,
                                  uct_rc_mlx5_iface_common_config_t *config,
                                  const char *tl_name);
 
-int uct_rc_mlx5_iface_is_ddp_enabled(
-        const uct_rc_mlx5_iface_common_t *iface);
-
 #if IBV_HW_TM
 void uct_rc_mlx5_handle_unexp_rndv(uct_rc_mlx5_iface_common_t *iface,
                                    struct ibv_tmh *tmh, uct_tag_t tag,

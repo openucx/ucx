@@ -385,14 +385,6 @@ ucs_status_t uct_ib_device_find_port(uct_ib_device_t *dev,
                                      const char *resource_dev_name,
                                      uint8_t *p_port_num);
 
-/**
- * Query the effective port speed.
- *
- * @return Effective port speed in Gb/s, or 0.0 if unavailable.
- */
-double uct_ib_device_query_port_speed_gbps(uct_ib_device_t *dev,
-                                           uint8_t port_num);
-
 const char *uct_ib_wc_status_str(enum ibv_wc_status wc_status);
 
 ucs_status_t

@@ -683,14 +683,6 @@ uct_rc_mlx5_dp_ordering_ooo_init(uct_ib_mlx5_md_t *md,
     return UCS_OK;
 }
 
-int uct_rc_mlx5_iface_is_ddp_enabled(
-        const uct_rc_mlx5_iface_common_t *iface)
-{
-    return (iface->config.dp_ordering_devx ==
-            UCT_IB_MLX5_DP_ORDERING_OOO_ALL) ||
-           iface->config.ddp_enabled_dv;
-}
-
 #if IBV_HW_TM
 /* tag is passed as parameter, because some (but not all!) transports may need
  * to translate TMH to LE */

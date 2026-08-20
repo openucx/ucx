@@ -1397,30 +1397,57 @@ static unsigned uct_ib_iface_roce_lag_level(uct_ib_iface_t *iface)
                                             iface->gid_info.gid_index);
 }
 
+static double
+uct_ib_iface_query_port_speed_gbps(uct_ib_iface_t *iface)
+{
+#if HAVE_DECL_IBV_QUERY_PORT_SPEED
+    /* ibv_query_port_speed() reports speed in units of 100 Mb/s. */
+    const double port_speed_unit_gbps = 0.1;
+    uct_ib_device_t *dev              = uct_ib_iface_device(iface);
+    ucs_log_level_t log_level;
+    uint64_t port_speed;
+    int ret;
+
+    ret = ibv_query_port_speed(dev->ibv_context, iface->config.port_num,
+                               &port_speed);
+    if (ret != 0) {
+        log_level = ((errno == EOPNOTSUPP) ||
+                     (errno == EPROTONOSUPPORT) ||
+                     (errno == ENOSYS)) ? UCS_LOG_LEVEL_DEBUG :
+                                          UCS_LOG_LEVEL_DIAG;
+        ucs_log(log_level, "ibv_query_port_speed(%s:%d) failed: %m",
+                uct_ib_device_name(dev), iface->config.port_num);
+        return 0.0;
+    }
+
+    return port_speed * port_speed_unit_gbps;
+#else
+    (void)iface;
+    return 0.0;
+#endif
+}
+
 static int
 uct_ib_iface_can_single_qp_use_full_bw(uct_ib_iface_t *iface)
 {
-#define UCT_IB_FULL_BW_SPEED_GBPS 800.0
+    const double full_bandwidth_speed_gbps = 800.0;
 
-    return iface->config.ddp_enabled &&
-           (uct_ib_device_query_port_speed_gbps(
-                    uct_ib_iface_device(iface), iface->config.port_num) ==
-            UCT_IB_FULL_BW_SPEED_GBPS);
-
-#undef UCT_IB_FULL_BW_SPEED_GBPS
+    return iface->config.ddp_enabled && iface->config.multiplane &&
+           (uct_ib_iface_query_port_speed_gbps(iface) ==
+            full_bandwidth_speed_gbps);
 }
 
 static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
                                        const uct_ib_iface_config_t *config)
 {
-#define UCT_IB_HIGH_SPEED_NUM_PATHS 2
+    const unsigned high_speed_num_paths = 2;
 
     if (config->num_paths == UCS_ULUNITS_AUTO) {
         if (uct_ib_iface_is_roce(iface)) {
             /* RoCE - number of paths is RoCE LAG level */
             iface->num_paths = uct_ib_iface_roce_lag_level(iface);
             if (uct_ib_iface_can_single_qp_use_full_bw(iface)) {
-                iface->num_paths = UCT_IB_HIGH_SPEED_NUM_PATHS;
+                iface->num_paths = high_speed_num_paths;
             }
         } else {
             /* IB - number of paths is LMC level */
@@ -1430,13 +1457,11 @@ static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
 
         if ((iface->num_paths == 1) &&
             (uct_ib_iface_port_active_speed(iface) >= UCT_IB_SPEED_NDR)) {
-            iface->num_paths = UCT_IB_HIGH_SPEED_NUM_PATHS;
+            iface->num_paths = high_speed_num_paths;
         }
     } else {
         iface->num_paths = config->num_paths;
     }
-
-#undef UCT_IB_HIGH_SPEED_NUM_PATHS
 }
 
 int uct_ib_iface_is_roce_v2(uct_ib_iface_t *iface)
@@ -1767,6 +1792,8 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
     self->config.flid_enabled       = config->flid_enabled;
     self->config.ddp_enabled        =
             !!(init_attr->flags & UCT_IB_DDP_ENABLED);
+    self->config.multiplane         =
+            !!(init_attr->flags & UCT_IB_MULTIPLANE);
     uct_ib_iface_set_path_mtu(self, config);
 
     self->config.send_overhead = config->send_overhead;
@@ -2118,8 +2145,8 @@ static uct_ppn_bandwidth_t
 uct_ib_iface_estimate_bandwidth(uct_ib_iface_t *iface,
                                 const uct_iface_attr_t *iface_attr)
 {
-    const double port_speed_gbps = uct_ib_device_query_port_speed_gbps(
-            uct_ib_iface_device(iface), iface->config.port_num);
+    const double port_speed_gbps =
+            uct_ib_iface_query_port_speed_gbps(iface);
 
     if (port_speed_gbps == 0.0) {
         return iface_attr->bandwidth;

@@ -1403,36 +1403,6 @@ err:
     return UCS_ERR_NO_DEVICE;
 }
 
-double uct_ib_device_query_port_speed_gbps(
-        uct_ib_device_t *dev UCS_V_UNUSED, uint8_t port_num UCS_V_UNUSED)
-{
-/* ibv_query_port_speed() reports speed in units of 100 Mb/s. */
-#define UCT_IB_PORT_SPEED_UNIT_GBPS 0.1
-
-#if HAVE_DECL_IBV_QUERY_PORT_SPEED
-    ucs_log_level_t log_level;
-    uint64_t port_speed;
-    int ret;
-
-    ret = ibv_query_port_speed(dev->ibv_context, port_num, &port_speed);
-    if (ret != 0) {
-        log_level = ((errno == EOPNOTSUPP) ||
-                     (errno == EPROTONOSUPPORT) ||
-                     (errno == ENOSYS)) ? UCS_LOG_LEVEL_DEBUG :
-                                          UCS_LOG_LEVEL_DIAG;
-        ucs_log(log_level, "ibv_query_port_speed(%s:%d) failed: %m",
-                uct_ib_device_name(dev), port_num);
-        return 0.0;
-    }
-
-    return port_speed * UCT_IB_PORT_SPEED_UNIT_GBPS;
-#else
-    return 0.0;
-#endif
-
-#undef UCT_IB_PORT_SPEED_UNIT_GBPS
-}
-
 ucs_status_t uct_ib_device_mtu(const char *dev_name, uct_md_h md, int *p_mtu)
 {
     uct_ib_device_t *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
