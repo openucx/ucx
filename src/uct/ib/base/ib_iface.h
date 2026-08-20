@@ -316,6 +316,7 @@ typedef void (*uct_ib_iface_handle_failure_func_t)(uct_ib_iface_t *iface, void *
 typedef ucs_status_t (*uct_ib_iface_set_ep_failed_func_t)(uct_ib_iface_t *iface, uct_ep_h ep,
                                                           ucs_status_t status);
 
+
 struct uct_ib_iface_ops {
     uct_iface_internal_ops_t           super;
     uct_ib_iface_create_cq_func_t      create_cq;

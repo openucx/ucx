@@ -793,6 +793,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
                     uct_ib_iface_init_attr_t *init_attr)
 {
     uct_ib_mlx5_md_t *md = ucs_derived_of(tl_md, uct_ib_mlx5_md_t);
+    uct_ib_device_t *dev;
     ucs_status_t status;
 
     if (rc_config->super.seg_size > UCT_IB_MLX5_MP_RQ_BYTE_CNT_MASK) {
@@ -826,6 +827,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, tl_ops, ops, tl_md, worker,
                               params, rc_config, init_attr);
 
+    dev                       = uct_ib_iface_device(&self->super.super);
     self->tx.mmio_mode        = mlx5_config->super.mmio_mode;
     self->tx.bb_max           = ucs_min(mlx5_config->tx_max_bb, UINT16_MAX);
     self->tm.am_desc.super.cb = uct_rc_mlx5_release_desc;
