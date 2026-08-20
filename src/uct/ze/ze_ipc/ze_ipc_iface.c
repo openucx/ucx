@@ -262,6 +262,9 @@ uct_ze_ipc_iface_progress(uct_iface_h tl_iface)
             if (ret == ZE_RESULT_NOT_READY) {
                 continue;
             }
+            if (ret != ZE_RESULT_SUCCESS) {
+                ucs_error("zeEventQueryStatus failed with error 0x%x", ret);
+            }
 
             ucs_queue_del_iter(&q_desc->event_queue, iter);
 
@@ -282,7 +285,9 @@ uct_ze_ipc_iface_progress(uct_iface_h tl_iface)
 
             /* Invoke completion callback */
             if (event_desc->comp != NULL) {
-                uct_invoke_completion(event_desc->comp, UCS_OK);
+                uct_invoke_completion(event_desc->comp,
+                                      (ret == ZE_RESULT_SUCCESS) ?
+                                              UCS_OK : UCS_ERR_IO_ERROR);
             }
 
             /* Free event back to shared pool or destroy private pool */
@@ -533,6 +538,11 @@ static UCS_CLASS_INIT_FUNC(uct_ze_ipc_iface_t, uct_md_h md, uct_worker_h worker,
     }
 
     /* Validate final count */
+    if (self->num_cmd_lists == 0) {
+        ucs_error("ze_ipc_iface: MAX_CMD_LISTS=0 is invalid, at least 1 "
+                  "command list is required");
+        return UCS_ERR_INVALID_PARAM;
+    }
     if (self->num_cmd_lists > UCT_ZE_IPC_MAX_PEERS) {
         ucs_error("ze_ipc_iface: computed num_cmd_lists (%u) exceeds maximum (%u)",
                   self->num_cmd_lists, UCT_ZE_IPC_MAX_PEERS);
