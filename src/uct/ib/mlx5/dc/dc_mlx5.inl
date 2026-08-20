@@ -18,8 +18,7 @@ uct_dc_mlx5_update_tx_res(uct_dc_mlx5_iface_t *iface, uint16_t dci_index, uint16
 {
     uct_dc_dci_t *dci = uct_dc_mlx5_iface_dci(iface, dci_index);
 
-    uct_rc_txqp_available_set(
-            &dci->txqp, uct_ib_mlx5_txwq_update_bb(&dci->txwq, hw_ci, hw_ci));
+    uct_rc_txqp_available_set(&dci->txqp, uct_ib_mlx5_txwq_update_bb(&dci->txwq, hw_ci));
     ucs_assert(uct_rc_txqp_available(&dci->txqp) <= dci->txwq.bb_max);
 
     uct_rc_iface_update_reads(&iface->super.super);
