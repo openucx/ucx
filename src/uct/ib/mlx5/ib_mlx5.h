@@ -694,9 +694,8 @@ typedef struct uct_ib_mlx5_txwq {
     void                        *qend;
     uint16_t                    bb_max;
     uint16_t                    sig_pi;     /* PI for last signaled WQE */
-    uint16_t                    ft_ci;      /* CI for last FT-completed WQE */
-    /* First BB index of the last HW-completed WQE.
-     * Updated under assert on the normal path; always on the FT path. */
+    uint16_t                    ft_ci;      /* CI for last FT-classified WQE */
+    /* First BB index of the last HW-completed WQE. */
     uint16_t                    hw_ci;
 #if UCS_ENABLE_ASSERT
     uint8_t                     flags; /* Debug flags */

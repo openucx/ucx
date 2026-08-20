@@ -1936,6 +1936,7 @@ uct_rc_mlx5_iface_update_tx_res(uct_rc_iface_t *rc_iface,
 
     bb_num = uct_ib_mlx5_txwq_update_bb(txwq, hw_ci) -
              uct_rc_txqp_available(txqp);
+    txwq->hw_ci = hw_ci;
 
     /* Must always have positive number of released resources. The first
      * completion will report bb_num=1 (because prev_sw_pi is initialized to -1)
