@@ -4,6 +4,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include <common/test.h>
 #include <gtest/uct/uct_p2p_test.h>
 
@@ -113,12 +117,19 @@ UCS_TEST_P(test_uct_query, query_perf)
 UCS_TEST_P(test_uct_query, query_token_support)
 {
     uct_iface_attr_v2_t attr = {};
+    uint64_t iface_cap_flags = 0;
 
     attr.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS;
     attr.cap.flags  = UINT64_MAX;
 
     ASSERT_UCS_OK(uct_iface_query_v2(get_iface(), &attr));
-    EXPECT_EQ(0ul, attr.cap.flags & UCT_IFACE_FLAG_V2_QUERY_TOKEN);
+
+#if HAVE_DEVX
+    if (has_transport("rc_mlx5")) {
+        iface_cap_flags = UCT_IFACE_FLAG_V2_QUERY_TOKEN;
+    }
+#endif
+    EXPECT_EQ(iface_cap_flags, attr.cap.flags & UCT_IFACE_FLAG_V2_QUERY_TOKEN);
 }
 
 UCT_INSTANTIATE_TEST_CASE(test_uct_query)
