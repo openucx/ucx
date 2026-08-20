@@ -827,6 +827,7 @@ ucs_status_t uct_ud_iface_add_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 {
     unsigned max_index = iface->eps.size;
     unsigned ep_index;
+    uint32_t ep_gen;
 
     if (max_index > UCT_UD_EP_INDEX_MAX) {
         ucs_error("iface %p: reached the maximal number of endpoints (%lu)",
@@ -840,8 +841,8 @@ ucs_status_t uct_ud_iface_add_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
     }
 
     ep_index  = ucs_ptr_array_insert(&iface->eps, ep);
-    ep->ep_id = uct_ud_ep_id_pack(ep_index,
-                                  ucs_array_elem(&iface->ep_gen, ep_index));
+    ep_gen    = ucs_array_elem(&iface->ep_gen, ep_index);
+    ep->ep_id = (ep_gen << UCT_UD_EP_INDEX_BITS) | ep_index;
     return UCS_OK;
 }
 
