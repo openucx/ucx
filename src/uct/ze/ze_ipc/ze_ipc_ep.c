@@ -178,6 +178,7 @@ uct_ze_ipc_post_copy(uct_ep_h tl_ep, uint64_t remote_addr,
     uct_ze_ipc_event_desc_t *event_desc;
     uct_ze_ipc_queue_desc_t *q_desc;
     ze_event_handle_t event = NULL;
+    ze_device_handle_t remote_device;
     void *mapped_addr = NULL;
     void *mapped_rem_addr;
     void *dst, *src;
@@ -205,8 +206,18 @@ uct_ze_ipc_post_copy(uct_ep_h tl_ep, uint64_t remote_addr,
         return UCS_ERR_INVALID_PARAM;
     }
 
+    /* Resolve the local device matching the remote allocation's device
+     * ordinal - on multi-GPU nodes this may differ from the iface's own
+     * device */
+    remote_device = uct_ze_base_get_device(key->dev_num);
+    if (remote_device == NULL) {
+        ucs_error("ze_ipc_ep: failed to get local device for ordinal %d",
+                  key->dev_num);
+        return UCS_ERR_NO_DEVICE;
+    }
+
     /* Use cache to map IPC handle */
-    status = uct_ze_ipc_map_memhandle(key, iface->ze_context, iface->ze_device,
+    status = uct_ze_ipc_map_memhandle(key, iface->ze_context, remote_device,
                                       &mapped_addr, &local_fd);
     if (status != UCS_OK) {
         ucs_error("ze_ipc_ep: uct_ze_ipc_map_memhandle failed");
