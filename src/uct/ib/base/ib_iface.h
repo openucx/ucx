@@ -316,12 +316,16 @@ typedef void (*uct_ib_iface_handle_failure_func_t)(uct_ib_iface_t *iface, void *
 typedef ucs_status_t (*uct_ib_iface_set_ep_failed_func_t)(uct_ib_iface_t *iface, uct_ep_h ep,
                                                           ucs_status_t status);
 
+typedef int (*uct_ib_iface_single_qp_full_bw_func_t)(uct_ib_iface_t *iface);
+
 struct uct_ib_iface_ops {
     uct_iface_internal_ops_t           super;
     uct_ib_iface_create_cq_func_t      create_cq;
     uct_ib_iface_destroy_cq_func_t     destroy_cq;
     uct_ib_iface_event_cq_func_t       event_cq;
     uct_ib_iface_handle_failure_func_t handle_failure;
+    uct_ib_iface_single_qp_full_bw_func_t
+                                       can_single_qp_use_full_bw;
 };
 
 
@@ -568,6 +572,14 @@ int uct_ib_iface_is_reachable_v2(const uct_iface_h tl_iface,
 
 ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface,
                                 uct_iface_attr_t *iface_attr);
+
+
+/**
+ * Query the effective port speed.
+ *
+ * @return Effective port speed in Gb/s, or 0.0 if unavailable.
+ */
+double uct_ib_iface_query_port_speed_gbps(uct_ib_iface_t *iface);
 
 
 ucs_status_t

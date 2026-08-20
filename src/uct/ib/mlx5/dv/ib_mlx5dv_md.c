@@ -1888,13 +1888,6 @@ uct_ib_mlx5_devx_query_port_select(uct_ib_mlx5_md_t *md)
     return port_select_mode;
 }
 
-static int uct_ib_mlx5_md_is_multi_port(uct_ib_md_t *ib_md)
-{
-    const uct_ib_mlx5_md_t *md = ucs_derived_of(ib_md, uct_ib_mlx5_md_t);
-
-    return md->port_select_mode == UCT_IB_MLX5_LAG_MULTI_PORT_ESW;
-}
-
 static ucs_status_t
 uct_ib_mlx5_devx_query_lag(uct_ib_mlx5_md_t *md, uint8_t *state)
 {
@@ -3216,8 +3209,7 @@ static uct_ib_md_ops_t uct_ib_mlx5_devx_md_ops = {
         .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported,
         .mem_elem_pack      = uct_ib_md_mlx5_devx_md_mem_elem_pack
     },
-    .open          = uct_ib_mlx5_devx_md_open,
-    .is_multi_port = uct_ib_mlx5_md_is_multi_port,
+    .open = uct_ib_mlx5_devx_md_open,
 };
 
 UCT_IB_MD_DEFINE_ENTRY(devx, uct_ib_mlx5_devx_md_ops);
