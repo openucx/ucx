@@ -257,11 +257,7 @@ enum {
      * TX CQ len by the number of IB paths (when it is properly initialized). */
     UCT_IB_TX_OPS_PER_PATH           = UCS_BIT(2),
     /* Whether device and transport supports DDP */
-    UCT_IB_DDP_SUPPORTED             = UCS_BIT(3),
-    /* Whether DDP is enabled on the interface */
-    UCT_IB_DDP_ENABLED               = UCS_BIT(4),
-    /* Whether the interface uses multiplane port selection */
-    UCT_IB_MULTIPLANE                = UCS_BIT(5)
+    UCT_IB_DDP_SUPPORTED             = UCS_BIT(3)
 };
 
 
@@ -374,8 +370,6 @@ struct uct_ib_iface {
         uint8_t                          qp_type;
         uint8_t                          force_global_addr;
         uint8_t                          flid_enabled;
-        uint8_t                          ddp_enabled;
-        uint8_t                          multiplane;
         enum ibv_mtu                     path_mtu;
         uint8_t                          counter_set_id;
         uct_ib_iface_send_overhead_t     send_overhead;

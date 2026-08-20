@@ -807,16 +807,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    if ((self->config.dp_ordering_devx ==
-         UCT_IB_MLX5_DP_ORDERING_OOO_ALL) ||
-        self->config.ddp_enabled_dv) {
-        init_attr->flags |= UCT_IB_DDP_ENABLED;
-    }
-
-    if (md->port_select_mode == UCT_IB_MLX5_LAG_MULTI_PORT_ESW) {
-        init_attr->flags |= UCT_IB_MULTIPLANE;
-    }
-
     init_attr->flags |= UCT_IB_CQ_IGNORE_OVERRUN;
     uct_ib_mlx5_parse_cqe_zipping(md, &mlx5_config->super, init_attr);
 

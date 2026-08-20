@@ -1432,9 +1432,8 @@ uct_ib_iface_can_single_qp_use_full_bw(uct_ib_iface_t *iface)
 {
     const double full_bandwidth_speed_gbps = 800.0;
 
-    return iface->config.ddp_enabled && iface->config.multiplane &&
-           (uct_ib_iface_query_port_speed_gbps(iface) ==
-            full_bandwidth_speed_gbps);
+    return uct_ib_iface_query_port_speed_gbps(iface) ==
+           full_bandwidth_speed_gbps;
 }
 
 static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
@@ -1790,10 +1789,6 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
     self->release_desc.cb           = uct_ib_iface_release_desc;
     self->config.qp_type            = init_attr->qp_type;
     self->config.flid_enabled       = config->flid_enabled;
-    self->config.ddp_enabled        =
-            !!(init_attr->flags & UCT_IB_DDP_ENABLED);
-    self->config.multiplane         =
-            !!(init_attr->flags & UCT_IB_MULTIPLANE);
     uct_ib_iface_set_path_mtu(self, config);
 
     self->config.send_overhead = config->send_overhead;
