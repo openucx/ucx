@@ -200,14 +200,10 @@ protected:
                receiver().ep(0, INJECTED_EP_INDEX);
     }
 
-    /* HW-PSN extract requires DEFER_COMPLETIONS so outstanding_purge can take
-     * ownership of in-flight WQEs instead of the CQ error path completing them. */
     ucs_status_t invalidate_uct_ep(uct_ep_h uct_ep)
     {
         uct_ep_invalidate_params_t params = {};
 
-        params.field_mask = UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS;
-        params.flags      = UCT_EP_INVALIDATE_FLAG_DEFER_COMPLETIONS;
         return uct_ep_invalidate(uct_ep, &params);
     }
 
