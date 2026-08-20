@@ -101,22 +101,16 @@ CUdevice uct_cuda_get_cuda_device(ucs_sys_device_t sys_dev);
 
 
 /**
- * Enumerate all physical GPUs and register them in the topology, ignoring
- * CUDA_VISIBLE_DEVICES. Uses NVML when available; otherwise falls back to
- * CUDA-visible devices only.
+ * Initialize CUDA devices in the system topology.
  *
- * The enumeration is performed once and the resulting system device array is
- * cached; subsequent calls return the cached result without re-enumerating.
+ * Register and name all CUDA-visible devices, then use NVML to register
+ * physical GPUs hidden by CUDA_VISIBLE_DEVICES. Initialization is performed
+ * once and its result is cached.
  *
- * @param [out] sys_devs_p  If non-NULL, set to point to an internally cached,
- *                          read-only array holding the system device of all
- *                          GPUs. The array is owned by this module and remains
- *                          valid for the lifetime of the process.
- * @param [out] count_p     Number of GPUs in the array.
+ * @param [out] num_visible_gpus_p Number of CUDA-visible devices.
  *
  * @return UCS_OK on success, or an error code otherwise.
  */
-ucs_status_t
-uct_cuda_enum_gpus(const ucs_sys_device_t **sys_devs_p, unsigned *count_p);
+ucs_status_t uct_cuda_init_devices(int *num_visible_gpus_p);
 
 #endif
