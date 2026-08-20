@@ -34,16 +34,26 @@ BEGIN_C_DECLS
 /* Maximal size of BDF string */
 #define UCS_SYS_BDF_NAME_MAX 16
 
-/* Bus ID string formatting */
-#define UCS_SYS_BUS_ID_ABBREVIATED_FMT "%02x:%02x.%u"
-#define UCS_SYS_BUS_ID_ABBREVIATED_ARG(_bus_id) \
-    (unsigned)(_bus_id)->bus, (unsigned)(_bus_id)->slot, \
-            (unsigned)(_bus_id)->function
+/* Maximal number of ports per NIC */
+#define UCS_TOPO_MAX_PORTS_PER_NIC 2
 
+/* Maximal number of NICs per board */
+#define UCS_TOPO_MAX_NICS_PER_BOARD 2
+
+/* Maximal number of uGPUs per physical GPU */
+#define UCS_TOPO_MAX_UGPUS_PER_GPU 2
+
+/* Bus ID string formatting */
 #define UCS_SYS_BUS_ID_FMT "%04x:%02x:%02x.%u"
 #define UCS_SYS_BUS_ID_ARG(_bus_id) \
     (unsigned)(_bus_id)->domain, (unsigned)(_bus_id)->bus, \
             (unsigned)(_bus_id)->slot, (unsigned)(_bus_id)->function
+
+/* Bus ID string formatting (abbreviated) */
+#define UCS_SYS_BUS_ID_ABBREVIATED_FMT "%02x:%02x.%u"
+#define UCS_SYS_BUS_ID_ABBREVIATED_ARG(_bus_id) \
+    (unsigned)(_bus_id)->bus, (unsigned)(_bus_id)->slot, \
+            (unsigned)(_bus_id)->function
 
 
 typedef struct ucs_sys_bus_id {
@@ -93,22 +103,12 @@ typedef enum {
 
 /**
  * @ingroup UCS_RESOURCE
- * GPU represented in a topology group.
+ * Physical GPU represented in a topology group.
  */
 typedef struct {
-    ucs_sys_bus_id_t bus_id;
-    ucs_sys_device_t sys_dev;
+    ucs_sys_device_t ugpus[UCS_TOPO_MAX_UGPUS_PER_GPU];
+    size_t           num_ugpus;
 } ucs_topo_gpu_t;
-
-
-/**
- * @ingroup UCS_RESOURCE
- * Port of a physical NIC represented in a topology group.
- */
-typedef struct {
-    ucs_sys_bus_id_t bus_id;
-    ucs_sys_device_t sys_dev;
-} ucs_topo_nic_port_t;
 
 
 /**
@@ -116,8 +116,8 @@ typedef struct {
  * Physical NIC represented in a topology group.
  */
 typedef struct {
-    ucs_topo_nic_port_t *ports;
-    size_t              num_ports;
+    ucs_sys_device_t ports[UCS_TOPO_MAX_PORTS_PER_NIC];
+    size_t           num_ports;
 } ucs_topo_nic_t;
 
 
@@ -126,7 +126,7 @@ typedef struct {
  * Board containing physical NICs represented in a topology group.
  */
 typedef struct {
-    ucs_topo_nic_t *nics;
+    ucs_topo_nic_t nics[UCS_TOPO_MAX_NICS_PER_BOARD];
     size_t         num_nics;
 } ucs_topo_nics_board_t;
 
