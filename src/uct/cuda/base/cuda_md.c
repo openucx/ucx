@@ -47,9 +47,9 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
             continue;
         }
 
-        sys_dev = uct_cuda_get_sys_dev(cuda_device);
-        if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
-            continue;
+        status = uct_cuda_get_sys_dev(cuda_device, &sys_dev);
+        if (status != UCS_OK) {
+            return status;
         }
 
         ucs_snprintf_safe(device_name, sizeof(device_name), "GPU%d",
