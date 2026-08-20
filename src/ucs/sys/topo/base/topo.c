@@ -284,9 +284,8 @@ static void ucs_topo_bus_id_str(const ucs_sys_bus_id_t *bus_id, int abbreviate,
     }
 }
 
-static ucs_status_t
-ucs_topo_bus_id_to_sysfs_path(const ucs_sys_bus_id_t *bus_id, char *path,
-                              size_t max)
+ucs_status_t ucs_topo_bus_id_to_sysfs_path(const ucs_sys_bus_id_t *bus_id,
+                                           char *path, size_t max)
 {
     const size_t prefix_length = strlen(UCS_TOPO_SYSFS_PCI_PREFIX);
     ucs_status_t status;

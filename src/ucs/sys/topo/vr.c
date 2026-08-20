@@ -5,7 +5,7 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+#  include "config.h"
 #endif
 
 #include "vr.h"
@@ -13,10 +13,17 @@
 #include <ucs/algorithm/qsort_r.h>
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
+#include <ucs/sys/string.h>
+#include <ucs/sys/sys.h>
+
+#include <dirent.h>
+#include <string.h>
 
 
-#define UCS_TOPO_VR_PCI_VENDOR_ID 0x15b3
-#define UCS_TOPO_VR_CX9_DEVICE_ID 0x1025
+#define UCS_TOPO_VR_PCI_VENDOR_ID     0x15b3
+#define UCS_TOPO_VR_CX9_DEVICE_ID     0x1025
+#define UCS_TOPO_VR_MLX5_VF_DEVICE_ID 0x101e
+#define UCS_TOPO_VR_FW_VER_MAX        64
 
 
 static int
@@ -114,30 +121,118 @@ ucs_topo_vr_gpu_aliases_filter(ucs_topo_vr_sys_dev_array_t *gpus,
 }
 
 
+static ucs_status_t ucs_topo_vr_read_fw_ver(const ucs_sys_bus_id_t *bus_id,
+                                            char *fw_ver, size_t max)
+{
+    char *sysfs_path;
+    struct dirent *entry;
+    ucs_status_t status;
+    size_t path_len;
+    DIR *dir;
+
+    status = ucs_string_alloc_path_buffer(&sysfs_path, "sysfs_path");
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = ucs_topo_bus_id_to_sysfs_path(bus_id, sysfs_path, PATH_MAX);
+    if (status != UCS_OK) {
+        goto out_free_sysfs_path;
+    }
+
+    path_len = strlen(sysfs_path);
+    ucs_strncpy_safe(sysfs_path + path_len, "/infiniband", PATH_MAX - path_len);
+
+    dir = opendir(sysfs_path);
+    if (dir == NULL) {
+        status = UCS_ERR_NO_ELEM;
+        goto out_free_sysfs_path;
+    }
+
+    /* Find the device name directory (e.g. mlx5_0) */
+    do {
+        entry = readdir(dir);
+    } while ((entry != NULL) && (entry->d_name[0] == '.'));
+
+    if (entry == NULL) {
+        status = UCS_ERR_NO_ELEM;
+        goto out_close_dir;
+    }
+
+    if (ucs_read_file_str(fw_ver, max, 1, "%s/%s/fw_ver", sysfs_path,
+                          entry->d_name) < 0) {
+        status = UCS_ERR_IO_ERROR;
+        goto out_close_dir;
+    }
+
+    ucs_strtrim(fw_ver);
+    status = UCS_OK;
+
+out_close_dir:
+    closedir(dir);
+out_free_sysfs_path:
+    ucs_free(sysfs_path);
+    return status;
+}
+
+
 static void
 ucs_topo_vr_cx9_ports_filter(const ucs_topo_sys_device_info_t *devices,
                              ucs_topo_vr_sys_dev_array_t *cx9_ports)
 {
+    char fw_ver[UCS_TOPO_VR_FW_VER_MAX];
     uint16_t vendor_id, device_id;
     ucs_sys_device_t sys_dev;
+    ucs_status_t status;
     size_t i;
+
+    ucs_log_indent(1);
 
     for (i = 0; i < ucs_array_length(cx9_ports); ++i) {
         sys_dev = ucs_array_elem(cx9_ports, i);
 
+        ucs_log_indent(-1);
+
+        ucs_trace("cx9_ports_filter: processing network "
+                  "device " UCS_SYS_BUS_ID_FMT,
+                  UCS_SYS_BUS_ID_ARG(&devices[sys_dev].bus_id));
+
+        ucs_log_indent(1);
+
         /* TODO: Read directly from devices[sys_dev].pci_id when available. */
         vendor_id = UCS_TOPO_VR_PCI_VENDOR_ID;
-        device_id = UCS_TOPO_VR_CX9_DEVICE_ID;
+        device_id = UCS_TOPO_VR_MLX5_VF_DEVICE_ID;
 
-        if ((vendor_id != UCS_TOPO_VR_PCI_VENDOR_ID) ||
-            (device_id != UCS_TOPO_VR_CX9_DEVICE_ID)) {
-            ucs_trace("ignoring network device " UCS_SYS_BUS_ID_FMT
-                      " with pci id %04x:%04x",
-                      UCS_SYS_BUS_ID_ARG(&devices[sys_dev].bus_id), vendor_id,
-                      device_id);
-            ucs_array_elem(cx9_ports, i) = UCS_SYS_DEVICE_ID_UNKNOWN;
+        if (vendor_id == UCS_TOPO_VR_PCI_VENDOR_ID) {
+            if (device_id == UCS_TOPO_VR_CX9_DEVICE_ID) {
+                ucs_trace("cx9 device found (device id)");
+                continue;
+            } else if (device_id == UCS_TOPO_VR_MLX5_VF_DEVICE_ID) {
+                ucs_trace("mlx5 VF device found");
+                status = ucs_topo_vr_read_fw_ver(&devices[sys_dev].bus_id,
+                                                 fw_ver, sizeof(fw_ver));
+                if (status == UCS_OK) {
+                    if (strncmp(fw_ver, "82.", 3) == 0) {
+                        ucs_trace("cx9 device found (firmware version)");
+                        continue;
+                    } else {
+                        ucs_trace("firmware version mismatch: %s", fw_ver);
+                    }
+                } else {
+                    ucs_trace("could not read firmware version (error: %s)",
+                              ucs_status_string(status));
+                }
+            }
         }
+
+        ucs_trace("ignoring network device " UCS_SYS_BUS_ID_FMT
+                  " (pci id %04x:%04x)",
+                  UCS_SYS_BUS_ID_ARG(&devices[sys_dev].bus_id), vendor_id,
+                  device_id);
+        ucs_array_elem(cx9_ports, i) = UCS_SYS_DEVICE_ID_UNKNOWN;
     }
+
+    ucs_log_indent(-1);
 
     ucs_topo_vr_sys_dev_compact(cx9_ports);
 }
