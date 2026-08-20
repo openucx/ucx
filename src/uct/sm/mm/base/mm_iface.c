@@ -169,6 +169,18 @@ ucs_status_t uct_mm_iface_flush(uct_iface_h tl_iface, unsigned flags,
     return UCS_OK;
 }
 
+static void uct_mm_iface_progress_enable(uct_iface_h tl_iface, unsigned flags)
+{
+    uct_mm_iface_t *iface = ucs_derived_of(tl_iface, uct_mm_iface_t);
+
+    if (flags & UCT_PROGRESS_DISCARD) {
+        return;
+    }
+
+    uct_base_iface_progress_enable_cb(&iface->super.super,
+                (ucs_callback_t)iface->super.super.super.ops.iface_progress, flags);
+}
+
 static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
                                        uct_iface_attr_t *iface_attr)
 {
@@ -523,7 +535,7 @@ static uct_iface_ops_t uct_mm_iface_ops = {
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_mm_ep_t),
     .iface_flush              = uct_mm_iface_flush,
     .iface_fence              = uct_sm_iface_fence,
-    .iface_progress_enable    = uct_base_iface_progress_enable,
+    .iface_progress_enable    = uct_mm_iface_progress_enable,
     .iface_progress_disable   = uct_base_iface_progress_disable,
     .iface_progress           = uct_mm_iface_progress,
     .iface_event_fd_get       = uct_mm_iface_event_fd_get,
