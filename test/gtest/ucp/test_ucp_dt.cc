@@ -59,7 +59,7 @@ protected:
     {
         ucp_params_t ctx_params;
 
-        modify_config("RCACHE_ENABLE", "y");
+        modify_config("RCACHE_ENABLE", "y", SETENV_IF_NOT_EXIST);
         ctx_params.field_mask = UCP_PARAM_FIELD_FEATURES;
         ctx_params.features   = UCP_FEATURE_RMA;
         UCS_TEST_CREATE_HANDLE(ucp_context_h, m_ucph, ucp_cleanup, ucp_init,
