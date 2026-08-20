@@ -6,7 +6,6 @@
 
 #include "test_ucp_memheap.h"
 #include <algorithm>
-#include <cinttypes>
 #include <random>
 #include <string>
 
@@ -129,13 +128,6 @@ protected:
         EXPECT_EQ(self->m_am_expect_reply, param->reply_ep != nullptr);
         if (param->recv_attr & UCP_AM_RECV_ATTR_FLAG_DATA) {
             const size_t msg_index = self->m_am_recv_count;
-            ucs_debug("ft psn test receive ep %p index %zu expected_count %zu "
-                      "length %zu expected_seed 0x%" PRIx64,
-                      self->receiver().ep(0), msg_index,
-                      self->m_am_expected_count, length,
-                      m_seed + ((self->m_am_expected_count > 1) ?
-                                        msg_index :
-                                        0));
             if (self->m_am_expected_count > 0) {
                 EXPECT_LT(msg_index, self->m_am_expected_count);
             }
@@ -907,10 +899,6 @@ protected:
             ASSERT_NE(nullptr, req);
 
             ucp_lane_index_t lane = get_request_lane_single(req);
-            ucs_debug("ft psn test send index %zu request %p ep %p lane %u "
-                      "completed %d flags 0x%x",
-                      msg_index, req, ep, lane,
-                      !!(req->flags & UCP_REQUEST_FLAG_COMPLETED), req->flags);
             if (request_lane == UCP_NULL_LANE) {
                 request_lane = lane;
             } else {

@@ -216,13 +216,6 @@ ucp_ep_failover_extract_cb(const uct_ep_op_info_t *op_info, void *arg)
         goto err;
     }
 
-    ucs_debug("ft psn ucp extracted ep %p failed_lane %u operation %d "
-              "field_mask 0x%" PRIx64 " comp %p",
-              extract_arg->lane->ep, extract_arg->lane->lane,
-              (int)op_info->operation, op_info->field_mask,
-              (op_info->field_mask & UCT_EP_OP_INFO_FIELD_COMP) ?
-                      op_info->comp : NULL);
-
     status = ucp_proto_failover_replay_op_create(op_info, &op);
     if (status == UCS_ERR_UNSUPPORTED) {
         /* Only AM short/bcopy WQEs are re-posted. RMA and zcopy operations own
@@ -246,11 +239,6 @@ ucp_ep_failover_extract_cb(const uct_ep_op_info_t *op_info, void *arg)
      * starts only after outstanding_purge returns OK. */
     ucs_queue_push(&extract_arg->lane->replay_queue, &op->queue);
     ++extract_arg->lane->undelivered_count;
-    ucs_debug("ft psn ucp replay queued ep %p failed_lane %u replay_op %p "
-              "operation %d undelivered %u",
-              extract_arg->lane->ep, extract_arg->lane->lane, op,
-              (int)op_info->operation,
-              extract_arg->lane->undelivered_count);
     return;
 
 err:
@@ -627,7 +615,6 @@ ucp_ep_failover_apply_rx_tokens(ucp_ep_h ep, uint64_t request_id,
     ucp_lane_index_t lane;
     unsigned token_index = 0;
     size_t token_offset  = 0;
-    uint64_t token_value;
 
     if ((ep->ext == NULL) || (ep->ext->failover.ctx == NULL) ||
         (lane_map == 0) || (token_lengths == NULL)) {
@@ -681,16 +668,6 @@ ucp_ep_failover_apply_rx_tokens(ucp_ep_h ep, uint64_t request_id,
             }
         }
 
-        token_value = 0;
-        if ((tokens != NULL) && (rx_token_lengths[lane] != 0)) {
-            memcpy(&token_value, UCS_PTR_BYTE_OFFSET(tokens, token_offset),
-                   ucs_min(rx_token_lengths[lane], sizeof(token_value)));
-        }
-
-        ucs_debug("ft psn ucp apply rx token ep %p id 0x%" PRIx64
-                  " lane %u length %u raw 0x%" PRIx64 " fallback %d",
-                  ep, request_id, lane, rx_token_lengths[lane], token_value,
-                  !!(fallback_lanes & UCS_BIT(lane)));
         token_offset += token_lengths[token_index];
         ++token_index;
     }
