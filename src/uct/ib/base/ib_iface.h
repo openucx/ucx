@@ -571,6 +571,13 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface,
                                 uct_iface_attr_t *iface_attr);
 
 
+/**
+ * @return Nonzero if a multiplane interface can use its full bandwidth with a
+ *         single QP.
+ */
+int uct_ib_iface_is_multiplane_full_bw(uct_ib_iface_t *iface);
+
+
 ucs_status_t
 uct_ib_iface_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr);
 
@@ -814,8 +821,6 @@ uct_ib_wc_to_ucs_status(enum ibv_wc_status status)
     }
 }
 
-uint8_t uct_ib_iface_port_active_width(uct_ib_iface_t *iface);
-
 static UCS_F_ALWAYS_INLINE uint32_t
 uct_ib_iface_port_active_speed(uct_ib_iface_t *iface)
 {
@@ -836,11 +841,7 @@ uct_ib_iface_port_is_ndr(uct_ib_iface_t *iface)
 static UCS_F_ALWAYS_INLINE int
 uct_ib_iface_port_is_xdr(uct_ib_iface_t *iface)
 {
-    uint32_t active_speed = uct_ib_iface_port_active_speed(iface);
-    uint8_t active_width  = uct_ib_iface_is_roce(iface) ?
-                            uct_ib_iface_port_active_width(iface) : 1;
-
-    return (active_width * active_speed) == UCT_IB_SPEED_XDR;
+    return uct_ib_iface_port_active_speed(iface) == UCT_IB_SPEED_XDR;
 }
 
 #endif

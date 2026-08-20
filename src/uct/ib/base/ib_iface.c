@@ -38,7 +38,6 @@
  */
 #define UCT_IB_NDR_READ_PATH_BANDWIDTH 38e9
 #define UCT_IB_XDR_READ_PATH_BANDWIDTH 35e9
-#define UCT_IB_HIGH_SPEED_NUM_PATHS    2
 
 /**
  * Minimal NDR single path ratio.
@@ -1398,15 +1397,55 @@ static unsigned uct_ib_iface_roce_lag_level(uct_ib_iface_t *iface)
                                             iface->gid_info.gid_index);
 }
 
+static double
+uct_ib_iface_query_port_speed_gbps(uct_ib_iface_t *iface)
+{
+#if HAVE_DECL_IBV_QUERY_PORT_SPEED
+    const double port_speed_unit_gbps = 0.1;
+    uct_ib_device_t *dev              = uct_ib_iface_device(iface);
+    ucs_log_level_t log_level;
+    uint64_t port_speed;
+    int ret;
+
+    ret = ibv_query_port_speed(dev->ibv_context, iface->config.port_num,
+                               &port_speed);
+    if (ret != 0) {
+        log_level = ((errno == EOPNOTSUPP) ||
+                     (errno == EPROTONOSUPPORT) ||
+                     (errno == ENOSYS)) ? UCS_LOG_LEVEL_DEBUG :
+                                          UCS_LOG_LEVEL_DIAG;
+        ucs_log(log_level, "ibv_query_port_speed(%s:%d) failed: %m",
+                uct_ib_device_name(dev), iface->config.port_num);
+        return 0.0;
+    }
+
+    return port_speed * port_speed_unit_gbps;
+#else
+    return 0.0;
+#endif
+}
+
+int uct_ib_iface_is_multiplane_full_bw(uct_ib_iface_t *iface)
+{
+    const double full_bandwidth_speed_gbps = 800.0;
+    uct_ib_device_t *dev                   = uct_ib_iface_device(iface);
+
+    return (dev->flags & UCT_IB_DEVICE_FLAG_MULTIPLANE) &&
+           (uct_ib_iface_query_port_speed_gbps(iface) ==
+            full_bandwidth_speed_gbps);
+}
+
 static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
                                        const uct_ib_iface_config_t *config)
 {
+    const unsigned high_speed_num_paths = 2;
+
     if (config->num_paths == UCS_ULUNITS_AUTO) {
         if (uct_ib_iface_is_roce(iface)) {
             /* RoCE - number of paths is RoCE LAG level */
             iface->num_paths = uct_ib_iface_roce_lag_level(iface);
-            if (uct_ib_iface_port_is_xdr(iface)) {
-                iface->num_paths = UCT_IB_HIGH_SPEED_NUM_PATHS;
+            if (uct_ib_iface_is_multiplane_full_bw(iface)) {
+                iface->num_paths = high_speed_num_paths;
             }
         } else {
             /* IB - number of paths is LMC level */
@@ -1416,7 +1455,7 @@ static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
 
         if ((iface->num_paths == 1) &&
             (uct_ib_iface_port_active_speed(iface) >= UCT_IB_SPEED_NDR)) {
-            iface->num_paths = UCT_IB_HIGH_SPEED_NUM_PATHS;
+            iface->num_paths = high_speed_num_paths;
         }
     } else {
         iface->num_paths = config->num_paths;
@@ -1957,35 +1996,35 @@ uct_ib_iface_get_bandwidth(uct_ib_iface_t *iface, double wire_speed)
     return bandwidth;
 }
 
-uint8_t uct_ib_iface_port_active_width(uct_ib_iface_t *iface)
-{
-    static const uint8_t ib_port_widths[] =
-            {[1] = 1, [2] = 4, [4] = 8, [8] = 12, [16] = 2};
-    uint8_t active_width = uct_ib_iface_port_attr(iface)->active_width;
-
-    if ((active_width >= ucs_static_array_size(ib_port_widths)) ||
-        (ib_port_widths[active_width] == 0)) {
-        ucs_warn("invalid active width on " UCT_IB_IFACE_FMT ": %d, "
-                 "assuming 1x", UCT_IB_IFACE_ARG(iface), active_width);
-        return 1;
-    }
-
-    return ib_port_widths[active_width];
-}
-
 ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface,
                                 uct_iface_attr_t *iface_attr)
 {
-    uct_ib_device_t *dev = uct_ib_iface_device(iface);
-    uint8_t width;
+    static const uint8_t ib_port_widths[] =
+            {[1] = 1, [2] = 4, [4] = 8, [8] = 12, [16] = 2};
+    uct_ib_device_t *dev                 = uct_ib_iface_device(iface);
+    uint8_t active_width, width;
     uint32_t active_speed;
     double encoding, signal_rate, wire_speed;
     unsigned num_path;
 
     uct_base_iface_query(&iface->super, iface_attr);
 
+    active_width = uct_ib_iface_port_attr(iface)->active_width;
     active_speed = uct_ib_iface_port_active_speed(iface);
-    width        = uct_ib_iface_port_active_width(iface);
+
+    /*
+     * Parse active width.
+     * See IBTA section 14.2.5.6 "PortInfo", Table 164, field "LinkWidthEnabled"
+     */
+    if ((active_width >= ucs_static_array_size(ib_port_widths)) ||
+        (ib_port_widths[active_width] == 0)) {
+        ucs_warn("invalid active width on " UCT_IB_IFACE_FMT ": %d, "
+                 "assuming 1x",
+                 UCT_IB_IFACE_ARG(iface), active_width);
+        width = 1;
+    } else {
+        width = ib_port_widths[active_width];
+    }
 
     iface_attr->device_addr_len = iface->addr_size;
     iface_attr->dev_num_paths   = iface->num_paths;
@@ -2074,15 +2113,23 @@ uct_ib_iface_estimate_path_bw(uct_ib_iface_t *iface,
     uct_ep_operation_t op     = UCT_ATTR_VALUE(PERF, perf_attr, operation,
                                                OPERATION, UCT_EP_OP_LAST);
 
-    if (uct_ep_op_is_get(op) && uct_ib_iface_port_is_xdr(iface)) {
-        max_path_bandwidth = UCT_IB_XDR_READ_PATH_BANDWIDTH;
-        path_ratio         = UCT_IB_XDR_READ_PATH_RATIO;
-    } else if (uct_ib_iface_is_roce(iface) &&
-               (uct_ib_iface_roce_lag_level(iface) > 1)) {
-        path_ratio = 1.0 / iface_attr->dev_num_paths;
-    } else if (uct_ep_op_is_get(op) && uct_ib_iface_port_is_ndr(iface)) {
-        max_path_bandwidth = UCT_IB_NDR_READ_PATH_BANDWIDTH;
-        path_ratio         = UCT_IB_NDR_READ_PATH_RATIO;
+    if (uct_ib_iface_is_roce(iface) &&
+        (uct_ib_iface_roce_lag_level(iface) > 1)) {
+        if (uct_ep_op_is_get(op) &&
+            uct_ib_iface_is_multiplane_full_bw(iface)) {
+            max_path_bandwidth = UCT_IB_XDR_READ_PATH_BANDWIDTH;
+            path_ratio         = UCT_IB_XDR_READ_PATH_RATIO;
+        } else {
+            path_ratio = 1.0 / iface_attr->dev_num_paths;
+        }
+    } else if (uct_ep_op_is_get(op)) {
+        if (uct_ib_iface_port_is_ndr(iface)) {
+            max_path_bandwidth = UCT_IB_NDR_READ_PATH_BANDWIDTH;
+            path_ratio         = UCT_IB_NDR_READ_PATH_RATIO;
+        } else if (uct_ib_iface_port_is_xdr(iface)) {
+            max_path_bandwidth = UCT_IB_XDR_READ_PATH_BANDWIDTH;
+            path_ratio         = UCT_IB_XDR_READ_PATH_RATIO;
+        }
     }
 
     return ucs_min(iface_attr->bandwidth.shared * path_ratio, max_path_bandwidth);
@@ -2092,32 +2139,15 @@ static uct_ppn_bandwidth_t
 uct_ib_iface_estimate_bandwidth(uct_ib_iface_t *iface,
                                 const uct_iface_attr_t *iface_attr)
 {
-#if HAVE_DECL_IBV_QUERY_PORT_SPEED
-    uct_ib_device_t *dev = uct_ib_iface_device(iface);
-    ucs_log_level_t log_level;
-    uint64_t port_speed;
-    double wire_speed;
-    int ret;
+    const double port_speed_gbps =
+            uct_ib_iface_query_port_speed_gbps(iface);
 
-    ret = ibv_query_port_speed(dev->ibv_context, iface->config.port_num,
-                               &port_speed);
-    if (ret != 0) {
-        log_level = ((errno == EOPNOTSUPP) ||
-                     (errno == EPROTONOSUPPORT) ||
-                     (errno == ENOSYS)) ? UCS_LOG_LEVEL_DEBUG :
-                                          UCS_LOG_LEVEL_DIAG;
-        ucs_log(log_level,
-                "ibv_query_port_speed("UCT_IB_IFACE_FMT", port_num=%d) failed:"
-                " %m", UCT_IB_IFACE_ARG(iface), iface->config.port_num);
+    if (port_speed_gbps == 0.0) {
         return iface_attr->bandwidth;
     }
 
-    /* Convert port speed (in 100 Mb/s granularity) to bandwidth in bytes/s. */
-    wire_speed = (double)port_speed * 1e8 / 8.0;
-    return uct_ib_iface_get_bandwidth(iface, wire_speed);
-#else
-    return iface_attr->bandwidth;
-#endif
+    return uct_ib_iface_get_bandwidth(iface,
+                                      port_speed_gbps * 1e9 / 8.0);
 }
 
 ucs_status_t
