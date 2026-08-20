@@ -368,7 +368,7 @@ public:
     mmap_fixed_address(size_t length);
     ~mmap_fixed_address();
     void* operator*() const { return m_ptr; }
-    void detach() { m_ptr = NULL; }
+    void detach() { m_ptr = nullptr; }
 
     /* Report a sub-range which was already unmapped by the caller. Such a range
      * must not be unmapped again on destruction, since an unrelated mapping may
@@ -378,8 +378,8 @@ public:
 private:
     void *m_ptr;
     size_t m_length;
-    /* Holes [start, end) already released inside the reservation */
-    std::map<char*, char*> m_holes;
+    /* Holes already released inside the reservation: start -> length */
+    std::map<void*, size_t> m_holes;
 };
 
 

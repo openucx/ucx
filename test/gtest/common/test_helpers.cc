@@ -713,30 +713,31 @@ mmap_fixed_address::mmap_fixed_address(size_t length) :
 void mmap_fixed_address::mark_unmapped(void *address, size_t length)
 {
     if (length > 0) {
-        m_holes[(char*)address] = (char*)address + length;
+        m_holes[address] = length;
     }
 }
 
 mmap_fixed_address::~mmap_fixed_address()
 {
-    char *start, *region_end;
+    void *start, *end;
 
-    if (m_ptr == NULL) {
+    if (m_ptr == nullptr) {
         return;
     }
 
     /* Unmap mapped spans between holes; skip holes that may have been reused */
-    start      = (char*)m_ptr;
-    region_end = (char*)UCS_PTR_BYTE_OFFSET(m_ptr, m_length);
+    start = m_ptr;
+    end   = UCS_PTR_BYTE_OFFSET(m_ptr, m_length);
     for (const auto &hole : m_holes) {
         if (hole.first > start) {
-            munmap(start, hole.first - start);
+            munmap(start, UCS_PTR_BYTE_DIFF(start, hole.first));
         }
-        start = hole.second;
+
+        start = UCS_PTR_BYTE_OFFSET(hole.first, hole.second);
     }
 
-    if (region_end > start) {
-        munmap(start, region_end - start);
+    if (end > start) {
+        munmap(start, UCS_PTR_BYTE_DIFF(start, end));
     }
 }
 
