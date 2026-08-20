@@ -1323,6 +1323,72 @@ UCT_INSTANTIATE_RC_TEST_CASE(test_rc_keepalive)
 
 #ifdef HAVE_MLX5_DV
 
+class test_rc_mlx5_token_query : public test_rc {
+protected:
+    static ucs_status_t am_handler(void *arg, void*, size_t, unsigned)
+    {
+        ++*static_cast<uint32_t*>(arg);
+        return UCS_OK;
+    }
+
+    static void query_tx_token(uct_ep_h ep, uct_rc_mlx5_tx_token_t *tx_token)
+    {
+        uct_ep_attr_t attr = {};
+
+        attr.field_mask = UCT_EP_ATTR_FIELD_TX_TOKEN;
+        attr.tx_token   = tx_token;
+        ASSERT_UCS_OK(uct_ep_query(ep, &attr));
+    }
+
+    static void query_rx_token(uct_iface_h iface,
+                               const uct_rc_mlx5_tx_token_t *tx_token,
+                               uct_rc_mlx5_rx_token_t *rx_token)
+    {
+        uct_iface_attr_v2_t attr = {};
+
+        attr.field_mask = UCT_IFACE_ATTR_FIELD_TX_TOKEN |
+                          UCT_IFACE_ATTR_FIELD_RX_TOKEN;
+        attr.tx_token   = tx_token;
+        attr.rx_token   = rx_token;
+        ASSERT_UCS_OK(uct_iface_query_v2(iface, &attr));
+    }
+};
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_token_query, am_short,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT))
+{
+    uct_rc_mlx5_tx_token_t tx_token = {};
+    uct_rc_mlx5_rx_token_t rx_token = {};
+    const uint32_t num_message      = 10;
+    uint32_t ep1_rx_count           = 0;
+    uint32_t ep2_rx_count           = 0;
+
+    ASSERT_UCS_OK(uct_iface_set_am_handler(m_e1->iface(), 0, am_handler,
+                                           &ep1_rx_count, 0));
+    ASSERT_UCS_OK(uct_iface_set_am_handler(m_e2->iface(), 0, am_handler,
+                                           &ep2_rx_count, 0));
+
+    for (uint32_t i = 0; i < num_message; ++i) {
+        ucs_status_t status;
+
+        UCT_TEST_CALL_AND_TRY_AGAIN(uct_ep_am_short(m_e1->ep(0), 0, i, NULL, 0),
+                                    status);
+        ASSERT_UCS_OK(status);
+        UCT_TEST_CALL_AND_TRY_AGAIN(uct_ep_am_short(m_e2->ep(0), 0, i, NULL, 0),
+                                    status);
+        ASSERT_UCS_OK(status);
+    }
+
+    wait_for_value(&ep1_rx_count, num_message, true);
+    wait_for_value(&ep2_rx_count, num_message, true);
+
+    query_tx_token(m_e1->ep(0), &tx_token);
+    query_rx_token(m_e2->iface(), &tx_token, &rx_token);
+    EXPECT_EQ(num_message, rx_token.receiver_next_psn - 1);
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_rc_mlx5_token_query, rc_mlx5)
+
 class test_rc_srq : public test_rc {
 public:
     test_rc_srq() : m_buf8b(NULL), m_buf8k(NULL)
