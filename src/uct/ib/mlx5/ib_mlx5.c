@@ -847,39 +847,28 @@ void *uct_ib_mlx5_txwq_get_wqe(const uct_ib_mlx5_txwq_t *txwq, uint16_t pi)
     return UCS_PTR_BYTE_OFFSET(txwq->qstart, (pi % num_bb) * MLX5_SEND_WQE_BB);
 }
 
-ucs_status_t uct_ib_mlx5_txwq_next(const uct_ib_mlx5_txwq_t *txwq, uint16_t ci,
-                                   uint16_t end_ci,
-                                   const struct mlx5_wqe_ctrl_seg **ctrl_p,
-                                   size_t *wqe_size_p, uint16_t *next_ci_p)
+uint8_t uct_ib_mlx5_wqe_opcode(const struct mlx5_wqe_ctrl_seg *ctrl)
 {
-    const struct mlx5_wqe_ctrl_seg *ctrl;
-    size_t wqe_size;
-    uint16_t num_bb;
-    uint8_t ds;
-
-    if (ci == end_ci) {
-        return UCS_ERR_NO_ELEM;
-    }
-
-    ctrl     = uct_ib_mlx5_txwq_get_wqe(txwq, ci);
-    ds       = ntohl(ctrl->qpn_ds) & UINT8_MAX;
-    wqe_size = ds * UCT_IB_MLX5_WQE_SEG_SIZE;
-
-    ucs_assert(ds > 0);
-    ucs_assert(wqe_size <= UCT_IB_MLX5_MAX_SEND_WQE_SIZE);
-
-    num_bb = ucs_div_round_up(wqe_size, MLX5_SEND_WQE_BB);
-
-    ucs_assert(UCS_CIRCULAR_COMPARE16((uint16_t)(ci + num_bb), <=, end_ci));
-
-    *ctrl_p     = ctrl;
-    *wqe_size_p = wqe_size;
-    *next_ci_p  = ci + num_bb;
-    return UCS_OK;
+    return ctrl->opmod_idx_opcode >> 24;
 }
 
-void uct_ib_mlx5_txwq_copy(const uct_ib_mlx5_txwq_t *txwq, const void *src,
-                           void *dst, size_t length)
+size_t uct_ib_mlx5_wqe_size(const struct mlx5_wqe_ctrl_seg *ctrl)
+{
+    uint8_t ds = ntohl(ctrl->qpn_ds) & UINT8_MAX;
+
+    ucs_assert(ds > 0);
+    ucs_assert((ds * UCT_IB_MLX5_WQE_SEG_SIZE) <=
+               UCT_IB_MLX5_MAX_SEND_WQE_SIZE);
+    return ds * UCT_IB_MLX5_WQE_SEG_SIZE;
+}
+
+uint16_t uct_ib_mlx5_txwq_next_ci(uint16_t ci, size_t wqe_size)
+{
+    return ci + ucs_div_round_up(wqe_size, MLX5_SEND_WQE_BB);
+}
+
+void uct_ib_mlx5_txwq_copy_segs(const uct_ib_mlx5_txwq_t *txwq, const void *src,
+                                void *dst, size_t length)
 {
     size_t copy_len = ucs_min(length, UCS_PTR_BYTE_DIFF(src, txwq->qend));
 
@@ -891,10 +880,9 @@ void uct_ib_mlx5_txwq_copy(const uct_ib_mlx5_txwq_t *txwq, const void *src,
     }
 }
 
-ucs_status_t
-uct_ib_mlx5_wqe_payload_length(const uct_ib_mlx5_txwq_t *txwq,
-                               const struct mlx5_wqe_ctrl_seg *ctrl,
-                               size_t wqe_size, size_t *length_p)
+size_t uct_ib_mlx5_wqe_payload_length(const uct_ib_mlx5_txwq_t *txwq,
+                                      const struct mlx5_wqe_ctrl_seg *ctrl,
+                                      size_t wqe_size)
 {
     uint8_t opcode = uct_ib_mlx5_wqe_opcode(ctrl);
     const struct mlx5_wqe_inl_data_seg *seg;
@@ -904,8 +892,7 @@ uct_ib_mlx5_wqe_payload_length(const uct_ib_mlx5_txwq_t *txwq,
     if ((opcode != MLX5_OPCODE_SEND) && (opcode != MLX5_OPCODE_SEND_IMM) &&
         (opcode != MLX5_OPCODE_RDMA_WRITE) &&
         (opcode != MLX5_OPCODE_RDMA_READ)) {
-        *length_p = 0;
-        return UCS_OK;
+        return 0;
     }
 
     seg       = uct_ib_mlx5_txwq_wrap_any((uct_ib_mlx5_txwq_t*)txwq,
@@ -944,8 +931,7 @@ uct_ib_mlx5_wqe_payload_length(const uct_ib_mlx5_txwq_t *txwq,
 
     ucs_assert(remaining == 0);
 
-    *length_p = total;
-    return UCS_OK;
+    return total;
 }
 
 ucs_status_t uct_ib_mlx5_psn_delivery_status(uint32_t first_psn,
@@ -986,8 +972,8 @@ uint16_t uct_ib_mlx5_txwq_num_posted_wqes(const uct_ib_mlx5_txwq_t *txwq,
     ucs_assert(pi == txwq->hw_ci);
     do {
         ctrl     = uct_ib_mlx5_txwq_get_wqe(txwq, pi);
-        wqe_size = (ctrl->qpn_ds >> 24) * UCT_IB_MLX5_WQE_SEG_SIZE;
-        pi      += (wqe_size + MLX5_SEND_WQE_BB - 1) / MLX5_SEND_WQE_BB;
+        wqe_size = uct_ib_mlx5_wqe_size(ctrl);
+        pi       = uct_ib_mlx5_txwq_next_ci(pi, wqe_size);
         ++count;
     } while (pi != txwq->sw_pi);
 

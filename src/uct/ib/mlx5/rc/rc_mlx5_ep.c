@@ -924,8 +924,8 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
     uct_rc_iface_send_op_t *op;
     uint8_t callback_data[UCT_IB_MLX5_MAX_SEND_WQE_SIZE];
     uct_ep_op_info_t info;
-    uint16_t ci, end_ci, start_ci, next_ci;
-    uint32_t first_psn, receiver_next_psn, num_packets, psn_diff;
+    uint16_t ci, end_ci, start_ci;
+    uint32_t first_psn, receiver_next_psn, num_packets, total_packets;
     uint8_t opcode;
     size_t payload_length, wqe_size;
     int skip;
@@ -945,93 +945,67 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
     rx_token          = params->rx_token;
     end_ci            = txwq->sw_pi;
     receiver_next_psn = uct_ib_mlx5_psn_24b(rx_token->receiver_next_psn);
-    status = uct_ib_mlx5_txwq_next(txwq, txwq->ft_ci, end_ci, &ctrl, &wqe_size,
-                                   &start_ci);
-    ucs_assertv(status == UCS_OK, "ft_ci %u end_ci %u status %s", txwq->ft_ci,
-                end_ci, ucs_status_string(status));
 
-    ci = start_ci;
-    if (ci == end_ci) {
+    ucs_assertv(txwq->ft_ci != end_ci, "ft_ci %u end_ci %u", txwq->ft_ci,
+                end_ci);
+    ctrl     = uct_ib_mlx5_txwq_get_wqe(txwq, txwq->ft_ci);
+    wqe_size = uct_ib_mlx5_wqe_size(ctrl);
+    start_ci = uct_ib_mlx5_txwq_next_ci(txwq->ft_ci, wqe_size);
+    ucs_assert(UCS_CIRCULAR_COMPARE16(start_ci, <=, end_ci));
+
+    if (start_ci == end_ci) {
         ucs_debug("no outstanding ops ep %p ft_ci %u end_ci %u", tl_ep,
                   txwq->ft_ci, end_ci);
-        status = UCS_OK;
-        goto update_available;
+        return UCS_OK;
     }
 
-    psn_diff = 0;
-    while (ci != end_ci) {
-        status = uct_ib_mlx5_txwq_next(txwq, ci, end_ci, &ctrl, &wqe_size,
-                                       &next_ci);
-        if (status != UCS_OK) {
-            ucs_diag("failed to get next WQE ep %p ci %u end_ci %u status %s",
-                     tl_ep, ci, end_ci, ucs_status_string(status));
-            return status;
+    total_packets = 0;
+    for (ci = start_ci; ci != end_ci;
+         ci = uct_ib_mlx5_txwq_next_ci(ci, wqe_size)) {
+        ctrl     = uct_ib_mlx5_txwq_get_wqe(txwq, ci);
+        wqe_size = uct_ib_mlx5_wqe_size(ctrl);
+        if (uct_ib_mlx5_wqe_opcode(ctrl) == MLX5_OPCODE_NOP) {
+            continue;
         }
 
-        if (uct_ib_mlx5_wqe_opcode(ctrl) != MLX5_OPCODE_NOP) {
-            status = uct_ib_mlx5_wqe_payload_length(txwq, ctrl, wqe_size,
-                                                    &payload_length);
-            if (status != UCS_OK) {
-                ucs_diag("failed to get WQE payload length ep %p ci %u "
-                         "end_ci %u status %s",
-                         tl_ep, ci, end_ci, ucs_status_string(status));
-                return status;
-            }
-
-            num_packets = uct_rc_mlx5_num_packets(mlx5_iface, payload_length);
-            psn_diff   += num_packets;
-        }
-
-        ci = next_ci;
+        payload_length = uct_ib_mlx5_wqe_payload_length(txwq, ctrl, wqe_size);
+        total_packets += uct_rc_mlx5_num_packets(mlx5_iface, payload_length);
     }
 
-    first_psn = uct_ib_mlx5_psn_24b(txwq->next_first_psn - psn_diff);
+    first_psn = uct_ib_mlx5_psn_24b(txwq->next_first_psn - total_packets);
 
     ucs_debug("purge outstanding ops ep %p WQE range [%u, %u) "
               "receiver_next_psn %u first_psn %u sender_next_psn %u",
               tl_ep, start_ci, end_ci, receiver_next_psn, first_psn,
               txwq->next_first_psn);
 
-    ci = start_ci;
-    while (ci != end_ci) {
-        status = uct_ib_mlx5_txwq_next(txwq, ci, end_ci, &ctrl, &wqe_size,
-                                       &next_ci);
-        if (status != UCS_OK) {
-            ucs_diag("failed to get next WQE ep %p ci %u end_ci %u status %s",
-                     tl_ep, ci, end_ci, ucs_status_string(status));
-            return status;
-        }
-
-        opcode = uct_ib_mlx5_wqe_opcode(ctrl);
+    for (ci = start_ci; ci != end_ci;
+         ci = uct_ib_mlx5_txwq_next_ci(ci, wqe_size)) {
+        ctrl     = uct_ib_mlx5_txwq_get_wqe(txwq, ci);
+        wqe_size = uct_ib_mlx5_wqe_size(ctrl);
+        opcode   = uct_ib_mlx5_wqe_opcode(ctrl);
         if (opcode == MLX5_OPCODE_NOP) {
             txwq->ft_ci = ci;
-            goto next_wqe;
+            continue;
         }
 
-        status = uct_ib_mlx5_wqe_payload_length(txwq, ctrl, wqe_size,
-                                                &payload_length);
-        if (status != UCS_OK) {
-            ucs_diag("failed to get WQE payload length ep %p ci %u end_ci %u "
-                     "status %s",
-                     tl_ep, ci, end_ci, ucs_status_string(status));
-            return status;
-        }
-
-        num_packets = uct_rc_mlx5_num_packets(mlx5_iface, payload_length);
+        payload_length = uct_ib_mlx5_wqe_payload_length(txwq, ctrl, wqe_size);
+        num_packets    = uct_rc_mlx5_num_packets(mlx5_iface, payload_length);
         status = uct_ib_mlx5_psn_delivery_status(first_psn, receiver_next_psn,
                                                  num_packets);
         if (status == UCS_ERR_INVALID_PARAM) {
             ucs_diag("invalid PSN interval ep %p first_psn %u num_packets %u "
                      "receiver_next_psn %u ci %u",
                      tl_ep, first_psn, num_packets, receiver_next_psn, ci);
-            return status;
+            goto out;
         }
 
         first_psn = uct_ib_mlx5_psn_24b(first_psn + num_packets);
         if (status == UCS_OK) {
-            txwq->ft_ci = ci;
             uct_rc_mlx5_ep_release_send_ops(iface, txqp, ci, UCS_OK, 1);
-            goto next_wqe;
+
+            txwq->ft_ci = ci;
+            continue;
         }
 
         op = uct_rc_mlx5_ep_get_send_op(txqp, ci);
@@ -1046,12 +1020,8 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
             ucs_error("failed to fill outstanding op info ep %p ci %u "
                       "opcode 0x%x op %p status %s",
                       tl_ep, ci, opcode, op, ucs_status_string(status));
-            return status;
+            goto out;
         }
-
-        /* Commit the cursor before invoking callbacks so a reentrant or later
-         * retry cannot process it twice. */
-        txwq->ft_ci = ci;
 
         if (!skip) {
             params->cb(&info, params->arg);
@@ -1059,19 +1029,19 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
 
         uct_rc_mlx5_ep_release_send_ops(iface, txqp, ci, UCS_OK, 0);
 
-    next_wqe:
-        ci = next_ci;
+        txwq->ft_ci = ci;
     }
 
     status = UCS_OK;
-update_available:
+
+out:
     prev_available = uct_rc_txqp_available(txqp);
     available      = txwq->bb_max - (txwq->prev_sw_pi - txwq->ft_ci);
     if (available > prev_available) {
         uct_rc_txqp_available_add(txqp, available - prev_available);
+        ucs_assert(uct_rc_txqp_available(txqp) <= txwq->bb_max);
     }
 
-    ucs_assert(uct_rc_txqp_available(txqp) <= txwq->bb_max);
     return status;
 }
 
