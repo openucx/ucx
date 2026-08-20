@@ -15,7 +15,6 @@
 #include <ucs/type/class.h>
 #include <ucs/sys/string.h>
 #include <ucs/debug/assert.h>
-#include <ucs/async/eventfd.h>
 
 #include <sys/types.h>
 #include <unistd.h>
@@ -62,45 +61,6 @@ static ucs_config_field_t uct_ze_ipc_iface_config_table[] = {
 
 /* Forward declaration for the delete function */
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_ze_ipc_iface_t)(uct_iface_t*);
-
-
-static ucs_status_t
-uct_ze_ipc_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p)
-{
-    uct_ze_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_ze_ipc_iface_t);
-    ucs_status_t status;
-
-    if (iface->eventfd == UCS_ASYNC_EVENTFD_INVALID_FD) {
-        status = ucs_async_eventfd_create(&iface->eventfd);
-        if (status != UCS_OK) {
-            return status;
-        }
-    }
-
-    *fd_p = iface->eventfd;
-    return UCS_OK;
-}
-
-
-static ucs_status_t
-uct_ze_ipc_iface_event_arm(uct_iface_h tl_iface, unsigned events)
-{
-    uct_ze_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_ze_ipc_iface_t);
-    ucs_status_t status;
-
-    /* Poll the eventfd to clear any pending signals */
-    if (iface->eventfd != UCS_ASYNC_EVENTFD_INVALID_FD) {
-        status = ucs_async_eventfd_poll(iface->eventfd);
-        if (status == UCS_OK) {
-            /* There was a pending event, return BUSY */
-            return UCS_ERR_BUSY;
-        } else if (status == UCS_ERR_IO_ERROR) {
-            return status;
-        }
-    }
-
-    return UCS_OK;
-}
 
 
 static ucs_status_t
@@ -167,8 +127,7 @@ uct_ze_ipc_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
                                           UCT_IFACE_FLAG_PUT_ZCOPY;
 
     iface_attr->cap.event_flags         = UCT_IFACE_FLAG_EVENT_SEND_COMP |
-                                          UCT_IFACE_FLAG_EVENT_RECV      |
-                                          UCT_IFACE_FLAG_EVENT_FD;
+                                          UCT_IFACE_FLAG_EVENT_RECV;
 
     iface_attr->cap.put.max_short       = 0;
     iface_attr->cap.put.max_bcopy       = 0;
@@ -389,8 +348,8 @@ static uct_iface_ops_t uct_ze_ipc_iface_ops = {
     .iface_progress_enable    = uct_base_iface_progress_enable,
     .iface_progress_disable   = uct_base_iface_progress_disable,
     .iface_progress           = uct_ze_ipc_iface_progress,
-    .iface_event_fd_get       = uct_ze_ipc_iface_event_fd_get,
-    .iface_event_arm          = uct_ze_ipc_iface_event_arm,
+    .iface_event_fd_get       = (uct_iface_event_fd_get_func_t)ucs_empty_function_return_unsupported,
+    .iface_event_arm          = (uct_iface_event_arm_func_t)ucs_empty_function_return_unsupported,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_ze_ipc_iface_t),
     .iface_query              = uct_ze_ipc_iface_query,
     .iface_get_device_address = uct_ze_ipc_iface_get_device_address,
@@ -532,7 +491,6 @@ static UCS_CLASS_INIT_FUNC(uct_ze_ipc_iface_t, uct_md_h md, uct_worker_h worker,
     self->ze_context     = ze_md->ze_context;
     self->ze_device      = ze_md->ze_device;
     self->config         = *config;
-    self->eventfd        = UCS_ASYNC_EVENTFD_INVALID_FD;
     self->next_cmd_list  = 0;
 
     /* Find copy engine queue group ordinal and available queue count */
@@ -698,10 +656,11 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ze_ipc_iface_t)
                                                        uct_ze_ipc_event_desc_t,
                                                        queue);
             if (event_desc->mapped_addr != NULL) {
-                zeMemCloseIpcHandle(self->ze_context, event_desc->mapped_addr);
-            }
-            if (event_desc->dup_fd >= 0) {
-                close(event_desc->dup_fd);
+                uct_ze_ipc_unmap_memhandle(event_desc->pid, event_desc->address,
+                                           event_desc->mapped_addr,
+                                           self->ze_context,
+                                           event_desc->dup_fd,
+                                           self->config.enable_cache);
             }
             if (event_desc->event != NULL) {
                 zeEventDestroy(event_desc->event);
@@ -731,11 +690,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ze_ipc_iface_t)
 
     /* Destroy spinlock */
     ucs_spinlock_destroy(&self->event_lock);
-
-    /* Close eventfd if created */
-    if (self->eventfd != UCS_ASYNC_EVENTFD_INVALID_FD) {
-        close(self->eventfd);
-    }
 }
 
 
