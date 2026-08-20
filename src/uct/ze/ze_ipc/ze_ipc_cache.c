@@ -4,7 +4,7 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#  include "config.h"
+#include "config.h"
 #endif
 
 #include "ze_ipc_cache.h"
@@ -22,7 +22,7 @@
 
 typedef struct uct_ze_ipc_cache_hash_key {
     pid_t               pid;
-    uint32_t            _pad;  /* Ensure 8-byte alignment for ze_context */
+    uint32_t            _pad; /* Ensure 8-byte alignment for ze_context */
     ze_context_handle_t ze_context;
 } UCS_S_PACKED uct_ze_ipc_cache_hash_key_t;
 
@@ -42,9 +42,8 @@ uct_ze_ipc_cache_hash_func(uct_ze_ipc_cache_hash_key_t key)
 }
 
 
-KHASH_INIT(ze_ipc_rem_cache, uct_ze_ipc_cache_hash_key_t,
-           uct_ze_ipc_cache_t*, 1, uct_ze_ipc_cache_hash_func,
-           uct_ze_ipc_cache_hash_equal);
+KHASH_INIT(ze_ipc_rem_cache, uct_ze_ipc_cache_hash_key_t, uct_ze_ipc_cache_t*,
+           1, uct_ze_ipc_cache_hash_func, uct_ze_ipc_cache_hash_equal);
 
 
 typedef struct uct_ze_ipc_remote_cache {
@@ -56,13 +55,14 @@ typedef struct uct_ze_ipc_remote_cache {
 static uct_ze_ipc_remote_cache_t uct_ze_ipc_remote_cache;
 
 
-static ucs_pgt_dir_t *uct_ze_ipc_cache_pgt_dir_alloc(const ucs_pgtable_t *pgtable)
+static ucs_pgt_dir_t *
+uct_ze_ipc_cache_pgt_dir_alloc(const ucs_pgtable_t *pgtable)
 {
     void *ptr;
     int ret;
 
     ret = ucs_posix_memalign(&ptr,
-                             ucs_max(sizeof(void *), UCS_PGT_ENTRY_MIN_ALIGN),
+                             ucs_max(sizeof(void*), UCS_PGT_ENTRY_MIN_ALIGN),
                              sizeof(ucs_pgt_dir_t), "ze_ipc_cache_pgdir");
     return (ret == 0) ? ptr : NULL;
 }
@@ -123,11 +123,10 @@ static void uct_ze_ipc_cache_purge(uct_ze_ipc_cache_t *cache)
 }
 
 
-static ucs_status_t
-uct_ze_ipc_open_memhandle(uct_ze_ipc_key_t *key,
-                          ze_context_handle_t ze_context,
-                          ze_device_handle_t ze_device,
-                          void **mapped_addr, int *dup_fd)
+static ucs_status_t uct_ze_ipc_open_memhandle(uct_ze_ipc_key_t *key,
+                                              ze_context_handle_t ze_context,
+                                              ze_device_handle_t ze_device,
+                                              void **mapped_addr, int *dup_fd)
 {
     ze_ipc_mem_handle_t local_handle;
     int remote_fd;
@@ -141,7 +140,8 @@ uct_ze_ipc_open_memhandle(uct_ze_ipc_key_t *key,
     if (key->pid != getpid() && remote_fd > 0 && remote_fd < 65536) {
         *dup_fd = uct_ze_ipc_dup_fd_from_pid(key->pid, remote_fd);
         if (*dup_fd < 0) {
-            ucs_error("failed to duplicate fd %d from pid %d", remote_fd, key->pid);
+            ucs_error("failed to duplicate fd %d from pid %d", remote_fd,
+                      key->pid);
             return UCS_ERR_IO_ERROR;
         }
         /* Update handle with local fd */
@@ -150,8 +150,8 @@ uct_ze_ipc_open_memhandle(uct_ze_ipc_key_t *key,
         *dup_fd = -1;
     }
 
-    ret = zeMemOpenIpcHandle(ze_context, ze_device, local_handle,
-                             0, mapped_addr);
+    ret = zeMemOpenIpcHandle(ze_context, ze_device, local_handle, 0,
+                             mapped_addr);
     if (ret != ZE_RESULT_SUCCESS) {
         ucs_error("zeMemOpenIpcHandle failed with error 0x%x", ret);
         if (*dup_fd >= 0) {
@@ -181,25 +181,25 @@ static void uct_ze_ipc_cache_invalidate_regions(uct_ze_ipc_cache_t *cache,
         status = ucs_pgtable_remove(&cache->pgtable, &region->super);
         if (status != UCS_OK) {
             ucs_error("failed to remove address:%p from cache (%s)",
-                      (void *)region->key.address, ucs_status_string(status));
+                      (void*)region->key.address, ucs_status_string(status));
         }
 
         status = uct_ze_ipc_close_memhandle(region);
         if (status != UCS_OK) {
             ucs_error("failed to close memhandle for base addr:%p (%s)",
-                      (void *)region->key.address, ucs_status_string(status));
+                      (void*)region->key.address, ucs_status_string(status));
         }
 
         ucs_free(region);
     }
-    ucs_trace("%s: closed memhandles in the range [%p..%p]",
-              cache->name, from, to);
+    ucs_trace("%s: closed memhandles in the range [%p..%p]", cache->name, from,
+              to);
 }
 
 
-static ucs_status_t
-uct_ze_ipc_get_remote_cache(pid_t pid, ze_context_handle_t ze_context,
-                            uct_ze_ipc_cache_t **cache)
+static ucs_status_t uct_ze_ipc_get_remote_cache(pid_t pid,
+                                                ze_context_handle_t ze_context,
+                                                uct_ze_ipc_cache_t **cache)
 {
     ucs_status_t status = UCS_OK;
     char target_name[64];
@@ -271,7 +271,7 @@ ucs_status_t uct_ze_ipc_unmap_memhandle(pid_t pid, uintptr_t address,
         status = ucs_pgtable_remove(&cache->pgtable, &region->super);
         if (status != UCS_OK) {
             ucs_error("failed to remove address:%p from cache (%s)",
-                      (void *)region->key.address, ucs_status_string(status));
+                      (void*)region->key.address, ucs_status_string(status));
         }
         ucs_assert(region->mapped_addr == mapped_addr);
         status = uct_ze_ipc_close_memhandle(region);
@@ -285,10 +285,8 @@ ucs_status_t uct_ze_ipc_unmap_memhandle(pid_t pid, uintptr_t address,
 
 UCS_PROFILE_FUNC(ucs_status_t, uct_ze_ipc_map_memhandle,
                  (key, ze_context, ze_device, mapped_addr, dup_fd),
-                 uct_ze_ipc_key_t *key,
-                 ze_context_handle_t ze_context,
-                 ze_device_handle_t ze_device,
-                 void **mapped_addr, int *dup_fd)
+                 uct_ze_ipc_key_t *key, ze_context_handle_t ze_context,
+                 ze_device_handle_t ze_device, void **mapped_addr, int *dup_fd)
 {
     uct_ze_ipc_cache_t *cache;
     ucs_status_t status;
@@ -302,18 +300,19 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_ze_ipc_map_memhandle,
     }
 
     pthread_rwlock_wrlock(&cache->lock);
-    pgt_region = UCS_PROFILE_CALL(ucs_pgtable_lookup,
-                                  &cache->pgtable, key->address);
+    pgt_region = UCS_PROFILE_CALL(ucs_pgtable_lookup, &cache->pgtable,
+                                  key->address);
     if (ucs_likely(pgt_region != NULL)) {
         region = ucs_derived_of(pgt_region, uct_ze_ipc_cache_region_t);
 
         if (ucs_likely((region->key.length == key->length) &&
-                        !memcmp(&region->key.ipc_handle, &key->ipc_handle,
+                       !memcmp(&region->key.ipc_handle, &key->ipc_handle,
                                sizeof(key->ipc_handle)))) {
             /* cache hit */
-            ucs_trace("%s: ze_ipc cache hit addr:%p size:%lu region:"
-                      UCS_PGT_REGION_FMT, cache->name, (void *)key->address,
-                      key->length, UCS_PGT_REGION_ARG(&region->super));
+            ucs_trace("%s: ze_ipc cache hit addr:%p size:%lu "
+                      "region:" UCS_PGT_REGION_FMT,
+                      cache->name, (void*)key->address, key->length,
+                      UCS_PGT_REGION_ARG(&region->super));
 
             *mapped_addr = region->mapped_addr;
             *dup_fd      = region->dup_fd;
@@ -326,24 +325,25 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_ze_ipc_map_memhandle,
         /* remote allocation at this address was freed and a different one
          * reused the same VA - drop the stale mapping and remap below */
         ucs_trace("%s: ze_ipc cache stale mapping addr:%p, invalidating",
-                  cache->name, (void *)key->address);
+                  cache->name, (void*)key->address);
         status = ucs_pgtable_remove(&cache->pgtable, &region->super);
         if (status != UCS_OK) {
             ucs_error("failed to remove address:%p from cache (%s)",
-                      (void *)region->key.address, ucs_status_string(status));
+                      (void*)region->key.address, ucs_status_string(status));
         }
         uct_ze_ipc_close_memhandle(region);
         ucs_free(region);
     }
 
-    status = uct_ze_ipc_open_memhandle(key, ze_context, ze_device, mapped_addr, dup_fd);
+    status = uct_ze_ipc_open_memhandle(key, ze_context, ze_device, mapped_addr,
+                                       dup_fd);
     if (ucs_unlikely(status != UCS_OK)) {
         goto err;
     }
 
     /* create new cache entry */
-    ret = ucs_posix_memalign((void **)&region,
-                             ucs_max(sizeof(void *), UCS_PGT_ENTRY_MIN_ALIGN),
+    ret = ucs_posix_memalign((void**)&region,
+                             ucs_max(sizeof(void*), UCS_PGT_ENTRY_MIN_ALIGN),
                              sizeof(uct_ze_ipc_cache_region_t),
                              "uct_ze_ipc_cache_region");
     if (ret != 0) {
@@ -353,34 +353,34 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_ze_ipc_map_memhandle,
     }
 
     region->super.start = ucs_align_down_pow2((uintptr_t)key->address,
-                                               UCS_PGT_ADDR_ALIGN);
-    region->super.end   = ucs_align_up_pow2((uintptr_t)key->address + key->length,
-                                             UCS_PGT_ADDR_ALIGN);
-    region->key         = *key;
+                                              UCS_PGT_ADDR_ALIGN);
+    region->super.end = ucs_align_up_pow2((uintptr_t)key->address + key->length,
+                                          UCS_PGT_ADDR_ALIGN);
+    region->key       = *key;
     region->mapped_addr = *mapped_addr;
     region->refcount    = 1;
     region->ze_context  = ze_context;
     region->dup_fd      = *dup_fd;
 
-    status = UCS_PROFILE_CALL(ucs_pgtable_insert,
-                              &cache->pgtable, &region->super);
+    status = UCS_PROFILE_CALL(ucs_pgtable_insert, &cache->pgtable,
+                              &region->super);
     if (status == UCS_ERR_ALREADY_EXISTS) {
         /* overlapped region means memory freed at source. remove and try insert */
-        uct_ze_ipc_cache_invalidate_regions(cache,
-                                            (void *)region->super.start,
-                                            (void *)region->super.end);
-        status = UCS_PROFILE_CALL(ucs_pgtable_insert,
-                                  &cache->pgtable, &region->super);
+        uct_ze_ipc_cache_invalidate_regions(cache, (void*)region->super.start,
+                                            (void*)region->super.end);
+        status = UCS_PROFILE_CALL(ucs_pgtable_insert, &cache->pgtable,
+                                  &region->super);
     }
     if (status != UCS_OK) {
-        ucs_error("%s: failed to insert region:"UCS_PGT_REGION_FMT" size:%lu :%s",
+        ucs_error("%s: failed to insert region:" UCS_PGT_REGION_FMT
+                  " size:%lu :%s",
                   cache->name, UCS_PGT_REGION_ARG(&region->super), key->length,
                   ucs_status_string(status));
         ucs_free(region);
         goto err;
     }
 
-    ucs_trace("%s: ze_ipc cache new region:"UCS_PGT_REGION_FMT" size:%lu",
+    ucs_trace("%s: ze_ipc cache new region:" UCS_PGT_REGION_FMT " size:%lu",
               cache->name, UCS_PGT_REGION_ARG(&region->super), key->length);
 
     status = UCS_OK;
@@ -391,8 +391,8 @@ err:
 }
 
 
-ucs_status_t uct_ze_ipc_create_cache(uct_ze_ipc_cache_t **cache,
-                                     const char *name)
+ucs_status_t
+uct_ze_ipc_create_cache(uct_ze_ipc_cache_t **cache, const char *name)
 {
     ucs_status_t status;
     uct_ze_ipc_cache_t *cache_desc;
@@ -467,18 +467,19 @@ void uct_ze_ipc_purge_cache_by_context(ze_context_handle_t ze_context)
 }
 
 
-UCS_STATIC_INIT {
+UCS_STATIC_INIT
+{
     ucs_recursive_spinlock_init(&uct_ze_ipc_remote_cache.lock, 0);
     kh_init_inplace(ze_ipc_rem_cache, &uct_ze_ipc_remote_cache.hash);
 }
 
 
-UCS_STATIC_CLEANUP {
+UCS_STATIC_CLEANUP
+{
     uct_ze_ipc_cache_t *rem_cache;
 
-    kh_foreach_value(&uct_ze_ipc_remote_cache.hash, rem_cache, {
-        uct_ze_ipc_destroy_cache(rem_cache);
-    })
-    kh_destroy_inplace(ze_ipc_rem_cache, &uct_ze_ipc_remote_cache.hash);
+    kh_foreach_value(&uct_ze_ipc_remote_cache.hash, rem_cache,
+                     { uct_ze_ipc_destroy_cache(rem_cache); })
+        kh_destroy_inplace(ze_ipc_rem_cache, &uct_ze_ipc_remote_cache.hash);
     ucs_recursive_spinlock_destroy(&uct_ze_ipc_remote_cache.lock);
 }

@@ -77,8 +77,8 @@ UCS_TEST_F(test_ze_base, get_device_ordinal_unknown_handle) {
     }
 
     /* Bogus pointer that cannot be a registered device handle. */
-    ze_device_handle_t bogus =
-            reinterpret_cast<ze_device_handle_t>(uintptr_t(0xdead));
+    ze_device_handle_t bogus = reinterpret_cast<ze_device_handle_t>(
+            uintptr_t(0xdead));
     EXPECT_EQ(-1, uct_ze_base_get_device_ordinal(bogus));
     EXPECT_EQ(-1, uct_ze_base_get_device_ordinal(NULL));
 }

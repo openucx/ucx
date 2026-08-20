@@ -4,7 +4,7 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#  include "config.h"
+#include "config.h"
 #endif
 
 #include "ze_ipc_iface.h"
@@ -21,39 +21,31 @@
 
 
 static ucs_config_field_t uct_ze_ipc_iface_config_table[] = {
-    {"", "", NULL,
-     ucs_offsetof(uct_ze_ipc_iface_config_t, super),
+    {"", "", NULL, ucs_offsetof(uct_ze_ipc_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
     {"MAX_POLL", "16",
      "Max number of event completions to pick during ze events polling",
-     ucs_offsetof(uct_ze_ipc_iface_config_t, max_poll),
-     UCS_CONFIG_TYPE_UINT},
+     ucs_offsetof(uct_ze_ipc_iface_config_t, max_poll), UCS_CONFIG_TYPE_UINT},
 
     {"MAX_CMD_LISTS", UCS_PP_MAKE_STRING(UCT_ZE_IPC_MAX_PEERS),
-     "Max number of command lists (upper limit, actual count matches copy engine queues)",
+     "Max number of command lists (upper limit, actual count matches copy "
+     "engine queues)",
      ucs_offsetof(uct_ze_ipc_iface_config_t, max_cmd_lists),
      UCS_CONFIG_TYPE_UINT},
 
-    {"ENABLE_CACHE", "yes",
-     "Enable IPC handle caching to improve performance",
+    {"ENABLE_CACHE", "yes", "Enable IPC handle caching to improve performance",
      ucs_offsetof(uct_ze_ipc_iface_config_t, enable_cache),
      UCS_CONFIG_TYPE_BOOL},
 
-    {"BW", "50000MBs",
-     "Effective p2p memory bandwidth",
-     ucs_offsetof(uct_ze_ipc_iface_config_t, bandwidth),
-     UCS_CONFIG_TYPE_BW},
+    {"BW", "50000MBs", "Effective p2p memory bandwidth",
+     ucs_offsetof(uct_ze_ipc_iface_config_t, bandwidth), UCS_CONFIG_TYPE_BW},
 
-    {"LAT", "1.8us",
-     "Estimated latency",
-     ucs_offsetof(uct_ze_ipc_iface_config_t, latency),
-     UCS_CONFIG_TYPE_TIME},
+    {"LAT", "1.8us", "Estimated latency",
+     ucs_offsetof(uct_ze_ipc_iface_config_t, latency), UCS_CONFIG_TYPE_TIME},
 
-    {"OVERHEAD", "4.0us",
-     "Estimated CPU overhead for transferring GPU memory",
-     ucs_offsetof(uct_ze_ipc_iface_config_t, overhead),
-     UCS_CONFIG_TYPE_TIME},
+    {"OVERHEAD", "4.0us", "Estimated CPU overhead for transferring GPU memory",
+     ucs_offsetof(uct_ze_ipc_iface_config_t, overhead), UCS_CONFIG_TYPE_TIME},
 
     {NULL}
 };
@@ -63,9 +55,8 @@ static ucs_config_field_t uct_ze_ipc_iface_config_table[] = {
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_ze_ipc_iface_t)(uct_iface_t*);
 
 
-static ucs_status_t
-uct_ze_ipc_iface_get_device_address(uct_iface_t *tl_iface,
-                                    uct_device_addr_t *addr)
+static ucs_status_t uct_ze_ipc_iface_get_device_address(uct_iface_t *tl_iface,
+                                                        uct_device_addr_t *addr)
 {
     *(uint64_t*)addr = ucs_get_system_id();
     return UCS_OK;
@@ -91,7 +82,7 @@ uct_ze_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
         return 0;
     }
 
-    dev_addr   = (uint64_t *)params->device_addr;
+    dev_addr   = (uint64_t*)params->device_addr;
     remote_pid = *(pid_t*)params->iface_addr;
 
     /* Reject same process */
@@ -116,18 +107,17 @@ uct_ze_ipc_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 
     uct_base_iface_query(&iface->super, iface_attr);
 
-    iface_attr->iface_addr_len          = sizeof(pid_t);
-    iface_attr->device_addr_len         = sizeof(uint64_t);
-    iface_attr->ep_addr_len             = 0;
-    iface_attr->max_conn_priv           = 0;
-    iface_attr->cap.flags               = UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE |
-                                          UCT_IFACE_FLAG_CONNECT_TO_IFACE |
-                                          UCT_IFACE_FLAG_PENDING          |
-                                          UCT_IFACE_FLAG_GET_ZCOPY        |
-                                          UCT_IFACE_FLAG_PUT_ZCOPY;
+    iface_attr->iface_addr_len  = sizeof(pid_t);
+    iface_attr->device_addr_len = sizeof(uint64_t);
+    iface_attr->ep_addr_len     = 0;
+    iface_attr->max_conn_priv   = 0;
+    iface_attr->cap.flags       = UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE |
+                                  UCT_IFACE_FLAG_CONNECT_TO_IFACE |
+                                  UCT_IFACE_FLAG_PENDING | UCT_IFACE_FLAG_GET_ZCOPY |
+                                  UCT_IFACE_FLAG_PUT_ZCOPY;
 
-    iface_attr->cap.event_flags         = UCT_IFACE_FLAG_EVENT_SEND_COMP |
-                                          UCT_IFACE_FLAG_EVENT_RECV;
+    iface_attr->cap.event_flags = UCT_IFACE_FLAG_EVENT_SEND_COMP |
+                                  UCT_IFACE_FLAG_EVENT_RECV;
 
     iface_attr->cap.put.max_short       = 0;
     iface_attr->cap.put.max_bcopy       = 0;
@@ -144,11 +134,11 @@ uct_ze_ipc_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     iface_attr->cap.get.align_mtu       = iface_attr->cap.get.opt_zcopy_align;
     iface_attr->cap.get.max_iov         = 1;
 
-    iface_attr->latency                 = ucs_linear_func_make(1e-6, 0);
-    iface_attr->bandwidth.dedicated     = 0;
-    iface_attr->bandwidth.shared        = iface->config.bandwidth;
-    iface_attr->overhead                = 7.0e-6;
-    iface_attr->priority                = 0;
+    iface_attr->latency             = ucs_linear_func_make(1e-6, 0);
+    iface_attr->bandwidth.dedicated = 0;
+    iface_attr->bandwidth.shared    = iface->config.bandwidth;
+    iface_attr->overhead            = 7.0e-6;
+    iface_attr->priority            = 0;
 
     return UCS_OK;
 }
@@ -158,7 +148,8 @@ uct_ze_ipc_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
  * Allocate an event from the shared event pool
  * Returns event index on success, -1 on failure
  */
-int uct_ze_ipc_alloc_event(uct_ze_ipc_iface_t *iface, ze_event_handle_t *event_p)
+int uct_ze_ipc_alloc_event(uct_ze_ipc_iface_t *iface,
+                           ze_event_handle_t *event_p)
 {
     unsigned i, word_idx, bit_idx;
     uint64_t mask;
@@ -207,8 +198,7 @@ int uct_ze_ipc_alloc_event(uct_ze_ipc_iface_t *iface, ze_event_handle_t *event_p
 /**
  * Free an event back to the shared event pool
  */
-void uct_ze_ipc_free_event(uct_ze_ipc_iface_t *iface,
-                           ze_event_handle_t event,
+void uct_ze_ipc_free_event(uct_ze_ipc_iface_t *iface, ze_event_handle_t event,
                            unsigned event_index)
 {
     unsigned word_idx, bit_idx;
@@ -229,14 +219,13 @@ void uct_ze_ipc_free_event(uct_ze_ipc_iface_t *iface,
     }
 }
 
-static unsigned
-uct_ze_ipc_iface_progress(uct_iface_h tl_iface)
+static unsigned uct_ze_ipc_iface_progress(uct_iface_h tl_iface)
 {
     uct_ze_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_ze_ipc_iface_t);
     uct_ze_ipc_event_desc_t *event_desc;
     uct_ze_ipc_queue_desc_t *q_desc;
     ucs_queue_iter_t iter;
-    unsigned count = 0;
+    unsigned count    = 0;
     unsigned max_poll = iface->config.max_poll;
     ze_result_t ret;
 
@@ -287,13 +276,15 @@ uct_ze_ipc_iface_progress(uct_iface_h tl_iface)
             if (event_desc->comp != NULL) {
                 uct_invoke_completion(event_desc->comp,
                                       (ret == ZE_RESULT_SUCCESS) ?
-                                              UCS_OK : UCS_ERR_IO_ERROR);
+                                              UCS_OK :
+                                              UCS_ERR_IO_ERROR);
             }
 
             /* Free event back to shared pool or destroy private pool */
             if (event_desc->event_index != (unsigned)-1) {
                 /* Using shared event pool */
-                uct_ze_ipc_free_event(iface, event_desc->event, event_desc->event_index);
+                uct_ze_ipc_free_event(iface, event_desc->event,
+                                      event_desc->event_index);
             } else {
                 /* Using private event pool (backward compatibility) */
                 if (event_desc->event != NULL) {
@@ -318,9 +309,8 @@ uct_ze_ipc_iface_progress(uct_iface_h tl_iface)
 }
 
 
-static ucs_status_t
-uct_ze_ipc_iface_flush(uct_iface_h tl_iface, unsigned flags,
-                       uct_completion_t *comp)
+static ucs_status_t uct_ze_ipc_iface_flush(uct_iface_h tl_iface, unsigned flags,
+                                           uct_completion_t *comp)
 {
     uct_ze_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_ze_ipc_iface_t);
     unsigned i;
@@ -328,7 +318,8 @@ uct_ze_ipc_iface_flush(uct_iface_h tl_iface, unsigned flags,
     /* Check if all command list queues are empty */
     for (i = 0; i < iface->num_cmd_lists; i++) {
         if (!ucs_queue_is_empty(&iface->queue_desc[i].event_queue)) {
-            UCT_TL_IFACE_STAT_FLUSH_WAIT(ucs_derived_of(tl_iface, uct_base_iface_t));
+            UCT_TL_IFACE_STAT_FLUSH_WAIT(
+                    ucs_derived_of(tl_iface, uct_base_iface_t));
             return UCS_INPROGRESS;
         }
     }
@@ -339,22 +330,24 @@ uct_ze_ipc_iface_flush(uct_iface_h tl_iface, unsigned flags,
 
 
 static uct_iface_ops_t uct_ze_ipc_iface_ops = {
-    .ep_get_zcopy             = uct_ze_ipc_ep_get_zcopy,
-    .ep_put_zcopy             = uct_ze_ipc_ep_put_zcopy,
-    .ep_pending_add           = (uct_ep_pending_add_func_t)ucs_empty_function_return_busy,
-    .ep_pending_purge         = (uct_ep_pending_purge_func_t)ucs_empty_function,
-    .ep_flush                 = uct_base_ep_flush,
-    .ep_fence                 = uct_base_ep_fence,
-    .ep_check                 = (uct_ep_check_func_t)ucs_empty_function_return_unsupported,
-    .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_ze_ipc_ep_t),
-    .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_ze_ipc_ep_t),
-    .iface_flush              = uct_ze_ipc_iface_flush,
-    .iface_fence              = uct_base_iface_fence,
+    .ep_get_zcopy   = uct_ze_ipc_ep_get_zcopy,
+    .ep_put_zcopy   = uct_ze_ipc_ep_put_zcopy,
+    .ep_pending_add = (uct_ep_pending_add_func_t)ucs_empty_function_return_busy,
+    .ep_pending_purge = (uct_ep_pending_purge_func_t)ucs_empty_function,
+    .ep_flush         = uct_base_ep_flush,
+    .ep_fence         = uct_base_ep_fence,
+    .ep_check    = (uct_ep_check_func_t)ucs_empty_function_return_unsupported,
+    .ep_create   = UCS_CLASS_NEW_FUNC_NAME(uct_ze_ipc_ep_t),
+    .ep_destroy  = UCS_CLASS_DELETE_FUNC_NAME(uct_ze_ipc_ep_t),
+    .iface_flush = uct_ze_ipc_iface_flush,
+    .iface_fence = uct_base_iface_fence,
     .iface_progress_enable    = uct_base_iface_progress_enable,
     .iface_progress_disable   = uct_base_iface_progress_disable,
     .iface_progress           = uct_ze_ipc_iface_progress,
-    .iface_event_fd_get       = (uct_iface_event_fd_get_func_t)ucs_empty_function_return_unsupported,
-    .iface_event_arm          = (uct_iface_event_arm_func_t)ucs_empty_function_return_unsupported,
+    .iface_event_fd_get       = (uct_iface_event_fd_get_func_t)
+            ucs_empty_function_return_unsupported,
+    .iface_event_arm          = (uct_iface_event_arm_func_t)
+            ucs_empty_function_return_unsupported,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_ze_ipc_iface_t),
     .iface_query              = uct_ze_ipc_iface_query,
     .iface_get_device_address = uct_ze_ipc_iface_get_device_address,
@@ -406,22 +399,25 @@ uct_ze_ipc_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
 }
 
 static uct_iface_internal_ops_t uct_ze_ipc_iface_internal_ops = {
-    .iface_query_v2         = uct_iface_base_query_v2,
-    .iface_estimate_perf    = uct_ze_ipc_estimate_perf,
-    .iface_vfs_refresh      = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
-    .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
-    .ep_invalidate          = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
-    .ep_connect_to_ep_v2    = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
-    .iface_is_reachable_v2  = uct_ze_ipc_iface_is_reachable_v2,
-    .ep_is_connected        = uct_ze_ipc_ep_is_connected,
-    .ep_outstanding_purge   = (uct_ep_outstanding_purge_func_t)ucs_empty_function_return_unsupported
+    .iface_query_v2      = uct_iface_base_query_v2,
+    .iface_estimate_perf = uct_ze_ipc_estimate_perf,
+    .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+    .ep_query = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+    .ep_invalidate         = (uct_ep_invalidate_func_t)
+            ucs_empty_function_return_unsupported,
+    .ep_connect_to_ep_v2   = (uct_ep_connect_to_ep_v2_func_t)
+            ucs_empty_function_return_unsupported,
+    .iface_is_reachable_v2 = uct_ze_ipc_iface_is_reachable_v2,
+    .ep_is_connected       = uct_ze_ipc_ep_is_connected,
+    .ep_outstanding_purge  = (uct_ep_outstanding_purge_func_t)
+            ucs_empty_function_return_unsupported
 };
 
 
 /* Find the copy engine queue group ordinal for a device */
-static ucs_status_t
-uct_ze_ipc_find_copy_ordinal(ze_device_handle_t device, uint32_t *ordinal_p,
-                              uint32_t *num_queues_p)
+static ucs_status_t uct_ze_ipc_find_copy_ordinal(ze_device_handle_t device,
+                                                 uint32_t *ordinal_p,
+                                                 uint32_t *num_queues_p)
 {
     ze_command_queue_group_properties_t queue_props[16];
     uint32_t num_queue_groups = 16;
@@ -436,20 +432,24 @@ uct_ze_ipc_find_copy_ordinal(ze_device_handle_t device, uint32_t *ordinal_p,
 
     /* Get queue group properties */
     ret = zeDeviceGetCommandQueueGroupProperties(device, &num_queue_groups,
-                                                  queue_props);
+                                                 queue_props);
     if (ret != ZE_RESULT_SUCCESS) {
-        ucs_error("ze_ipc_iface: zeDeviceGetCommandQueueGroupProperties failed: 0x%x",
+        ucs_error("ze_ipc_iface: zeDeviceGetCommandQueueGroupProperties "
+                  "failed: 0x%x",
                   ret);
         return UCS_ERR_IO_ERROR;
     }
 
     /* First pass: find dedicated copy engine (COPY flag but NOT COMPUTE) */
     for (i = 0; i < num_queue_groups; i++) {
-        if ((queue_props[i].flags & ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COPY) &&
-            !(queue_props[i].flags & ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COMPUTE)) {
-            *ordinal_p = i;
+        if ((queue_props[i].flags &
+             ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COPY) &&
+            !(queue_props[i].flags &
+              ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COMPUTE)) {
+            *ordinal_p    = i;
             *num_queues_p = queue_props[i].numQueues;
-            ucs_debug("ze_ipc_iface: using dedicated copy engine queue group %u (numQueues=%u)",
+            ucs_debug("ze_ipc_iface: using dedicated copy engine queue group "
+                      "%u (numQueues=%u)",
                       i, queue_props[i].numQueues);
             return UCS_OK;
         }
@@ -458,9 +458,10 @@ uct_ze_ipc_find_copy_ordinal(ze_device_handle_t device, uint32_t *ordinal_p,
     /* Second pass: find any queue group that supports COPY */
     for (i = 0; i < num_queue_groups; i++) {
         if (queue_props[i].flags & ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COPY) {
-            *ordinal_p = i;
+            *ordinal_p    = i;
             *num_queues_p = queue_props[i].numQueues;
-            ucs_debug("ze_ipc_iface: using copy-capable queue group %u (numQueues=%u)",
+            ucs_debug("ze_ipc_iface: using copy-capable queue group %u "
+                      "(numQueues=%u)",
                       i, queue_props[i].numQueues);
             return UCS_OK;
         }
@@ -479,7 +480,7 @@ static UCS_CLASS_INIT_FUNC(uct_ze_ipc_iface_t, uct_md_h md, uct_worker_h worker,
     ze_command_queue_desc_t queue_desc = {};
     ze_event_pool_desc_t event_pool_desc;
     uint32_t copy_ordinal = 0;
-    uint32_t num_queues = 0;
+    uint32_t num_queues   = 0;
     ucs_status_t status;
     ze_result_t ret;
     unsigned i;
@@ -490,17 +491,18 @@ static UCS_CLASS_INIT_FUNC(uct_ze_ipc_iface_t, uct_md_h md, uct_worker_h worker,
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_ze_ipc_iface_ops,
                               &uct_ze_ipc_iface_internal_ops, md, worker,
-                              params, tl_config
-                              UCS_STATS_ARG(params->stats_root)
-                              UCS_STATS_ARG(UCT_ZE_IPC_TL_NAME));
+                              params,
+                              tl_config UCS_STATS_ARG(params->stats_root)
+                                      UCS_STATS_ARG(UCT_ZE_IPC_TL_NAME));
 
-    self->ze_context     = ze_md->ze_context;
-    self->ze_device      = ze_md->ze_device;
-    self->config         = *config;
-    self->next_cmd_list  = 0;
+    self->ze_context    = ze_md->ze_context;
+    self->ze_device     = ze_md->ze_device;
+    self->config        = *config;
+    self->next_cmd_list = 0;
 
     /* Find copy engine queue group ordinal and available queue count */
-    status = uct_ze_ipc_find_copy_ordinal(self->ze_device, &copy_ordinal, &num_queues);
+    status = uct_ze_ipc_find_copy_ordinal(self->ze_device, &copy_ordinal,
+                                          &num_queues);
     if (status != UCS_OK) {
         return status;
     }
@@ -521,19 +523,24 @@ static UCS_CLASS_INIT_FUNC(uct_ze_ipc_iface_t, uct_md_h md, uct_worker_h worker,
     if (num_queues == 0) {
         /* No copy engines available, use single command list on compute engine */
         self->num_cmd_lists = 1;
-        ucs_info("ze_ipc_iface: no dedicated copy engines found, using 1 command list "
-                 "on queue group %u (compute engine fallback)", copy_ordinal);
+        ucs_info("ze_ipc_iface: no dedicated copy engines found, using 1 "
+                 "command list "
+                 "on queue group %u (compute engine fallback)",
+                 copy_ordinal);
     } else {
         /* Match command list count to available Copy Engine queues */
         self->num_cmd_lists = ucs_min(num_queues, config->max_cmd_lists);
 
         if (self->num_cmd_lists < num_queues) {
-            ucs_info("ze_ipc_iface: limiting command lists to %u (hardware has %u copy queues, "
-                     "config limit is %u)", self->num_cmd_lists, num_queues,
-                     config->max_cmd_lists);
+            ucs_info("ze_ipc_iface: limiting command lists to %u (hardware has "
+                     "%u copy queues, "
+                     "config limit is %u)",
+                     self->num_cmd_lists, num_queues, config->max_cmd_lists);
         } else {
-            ucs_info("ze_ipc_iface: creating %u command list(s) to match %u copy engine queue(s) "
-                     "on queue group %u", self->num_cmd_lists, num_queues, copy_ordinal);
+            ucs_info("ze_ipc_iface: creating %u command list(s) to match %u "
+                     "copy engine queue(s) "
+                     "on queue group %u",
+                     self->num_cmd_lists, num_queues, copy_ordinal);
         }
     }
 
@@ -544,7 +551,8 @@ static UCS_CLASS_INIT_FUNC(uct_ze_ipc_iface_t, uct_md_h md, uct_worker_h worker,
         return UCS_ERR_INVALID_PARAM;
     }
     if (self->num_cmd_lists > UCT_ZE_IPC_MAX_PEERS) {
-        ucs_error("ze_ipc_iface: computed num_cmd_lists (%u) exceeds maximum (%u)",
+        ucs_error("ze_ipc_iface: computed num_cmd_lists (%u) exceeds maximum "
+                  "(%u)",
                   self->num_cmd_lists, UCT_ZE_IPC_MAX_PEERS);
         return UCS_ERR_INVALID_PARAM;
     }
@@ -569,16 +577,18 @@ static UCS_CLASS_INIT_FUNC(uct_ze_ipc_iface_t, uct_md_h md, uct_worker_h worker,
     queue_desc.stype    = ZE_STRUCTURE_TYPE_COMMAND_QUEUE_DESC;
     queue_desc.ordinal  = copy_ordinal;
     queue_desc.mode     = ZE_COMMAND_QUEUE_MODE_ASYNCHRONOUS;
-    queue_desc.index    = 0;  /* MUST be 0 for immediate command lists */
+    queue_desc.index    = 0; /* MUST be 0 for immediate command lists */
     queue_desc.flags    = 0;
     queue_desc.priority = ZE_COMMAND_QUEUE_PRIORITY_NORMAL;
 
     for (i = 0; i < self->num_cmd_lists; i++) {
         ret = zeCommandListCreateImmediate(self->ze_context, self->ze_device,
-                                           &queue_desc, &self->queue_desc[i].cmd_list);
+                                           &queue_desc,
+                                           &self->queue_desc[i].cmd_list);
         if (ret != ZE_RESULT_SUCCESS) {
             unsigned j;
-            ucs_error("ze_ipc_iface: zeCommandListCreateImmediate[%u] failed with error 0x%x",
+            ucs_error("ze_ipc_iface: zeCommandListCreateImmediate[%u] failed "
+                      "with error 0x%x",
                       i, ret);
             /* Clean up previously created command lists */
             for (j = 0; j < i; j++) {
@@ -604,7 +614,7 @@ static UCS_CLASS_INIT_FUNC(uct_ze_ipc_iface_t, uct_md_h md, uct_worker_h worker,
      * - Event reuse via bitmap tracking
      * - Typical pool size: 1024 events (configurable)
      */
-    self->event_pool_size = 1024;  /* TODO: make this configurable */
+    self->event_pool_size = 1024; /* TODO: make this configurable */
 
     event_pool_desc.stype = ZE_STRUCTURE_TYPE_EVENT_POOL_DESC;
     event_pool_desc.pNext = NULL;
@@ -614,7 +624,8 @@ static UCS_CLASS_INIT_FUNC(uct_ze_ipc_iface_t, uct_md_h md, uct_worker_h worker,
     ret = zeEventPoolCreate(self->ze_context, &event_pool_desc, 1,
                             &self->ze_device, &self->ze_event_pool);
     if (ret != ZE_RESULT_SUCCESS) {
-        ucs_error("ze_ipc_iface: zeEventPoolCreate failed with error 0x%x", ret);
+        ucs_error("ze_ipc_iface: zeEventPoolCreate failed with error 0x%x",
+                  ret);
         /* Clean up command lists */
         for (i = 0; i < self->num_cmd_lists; i++) {
             zeCommandListDestroy(self->queue_desc[i].cmd_list);
@@ -623,8 +634,10 @@ static UCS_CLASS_INIT_FUNC(uct_ze_ipc_iface_t, uct_md_h md, uct_worker_h worker,
     }
 
     /* Initialize event bitmap for tracking free events */
-    bitmap_size = (self->event_pool_size + 63) / 64;  /* Round up to 64-bit words */
-    self->event_bitmap = ucs_calloc(bitmap_size, sizeof(uint64_t), "ze_ipc_event_bitmap");
+    bitmap_size        = (self->event_pool_size + 63) /
+                         64; /* Round up to 64-bit words */
+    self->event_bitmap = ucs_calloc(bitmap_size, sizeof(uint64_t),
+                                    "ze_ipc_event_bitmap");
     if (self->event_bitmap == NULL) {
         ucs_error("ze_ipc_iface: failed to allocate event bitmap");
         zeEventPoolDestroy(self->ze_event_pool);
@@ -666,14 +679,13 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ze_ipc_iface_t)
     /* Clean up outstanding events from all command list queues */
     for (i = 0; i < self->num_cmd_lists; i++) {
         while (!ucs_queue_is_empty(&self->queue_desc[i].event_queue)) {
-            event_desc = ucs_queue_pull_elem_non_empty(&self->queue_desc[i].event_queue,
-                                                       uct_ze_ipc_event_desc_t,
-                                                       queue);
+            event_desc = ucs_queue_pull_elem_non_empty(
+                    &self->queue_desc[i].event_queue, uct_ze_ipc_event_desc_t,
+                    queue);
             if (event_desc->mapped_addr != NULL) {
                 uct_ze_ipc_unmap_memhandle(event_desc->pid, event_desc->address,
                                            event_desc->mapped_addr,
-                                           self->ze_context,
-                                           event_desc->dup_fd,
+                                           self->ze_context, event_desc->dup_fd,
                                            self->config.enable_cache);
             }
             if (event_desc->event != NULL) {
@@ -708,7 +720,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ze_ipc_iface_t)
 
 
 static ucs_status_t
-uct_ze_ipc_query_devices(uct_md_h uct_md, uct_tl_device_resource_t **tl_devices_p,
+uct_ze_ipc_query_devices(uct_md_h uct_md,
+                         uct_tl_device_resource_t **tl_devices_p,
                          unsigned *num_tl_devices_p)
 {
     return uct_ze_base_query_devices_common(uct_md, UCT_DEVICE_TYPE_ACC,
@@ -717,10 +730,11 @@ uct_ze_ipc_query_devices(uct_md_h uct_md, uct_tl_device_resource_t **tl_devices_
 
 
 UCS_CLASS_DEFINE(uct_ze_ipc_iface_t, uct_base_iface_t);
-UCS_CLASS_DEFINE_NEW_FUNC(uct_ze_ipc_iface_t, uct_iface_t, uct_md_h, uct_worker_h,
-                          const uct_iface_params_t*, const uct_iface_config_t*);
+UCS_CLASS_DEFINE_NEW_FUNC(uct_ze_ipc_iface_t, uct_iface_t, uct_md_h,
+                          uct_worker_h, const uct_iface_params_t*,
+                          const uct_iface_config_t*);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_ze_ipc_iface_t, uct_iface_t);
 
-UCT_TL_DEFINE(&uct_ze_ipc_component, ze_ipc,
-              uct_ze_ipc_query_devices, uct_ze_ipc_iface_t, "ZE_IPC_",
-              uct_ze_ipc_iface_config_table, uct_ze_ipc_iface_config_t);
+UCT_TL_DEFINE(&uct_ze_ipc_component, ze_ipc, uct_ze_ipc_query_devices,
+              uct_ze_ipc_iface_t, "ZE_IPC_", uct_ze_ipc_iface_config_table,
+              uct_ze_ipc_iface_config_t);

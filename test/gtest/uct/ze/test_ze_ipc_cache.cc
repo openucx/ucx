@@ -20,7 +20,8 @@ extern "C" {
  */
 class test_ze_ipc_cache : public ucs::test {
 protected:
-    void SetUp() override {
+    void SetUp() override
+    {
         ucs::test::SetUp();
         if (uct_ze_base_init() != ZE_RESULT_SUCCESS) {
             UCS_TEST_SKIP_R("Level Zero runtime not available");
@@ -92,7 +93,7 @@ UCS_TEST_F(test_ze_ipc_cache, create_destroy_repeated) {
 
 
 UCS_TEST_F(test_ze_ipc_cache, multiple_instances) {
-    const int N = 8;
+    const int N                   = 8;
     uct_ze_ipc_cache_t *caches[N] = {};
 
     for (int i = 0; i < N; ++i) {
@@ -186,8 +187,8 @@ UCS_TEST_F(test_ze_ipc_cache, purge_by_context_then_remap) {
     }
     auto *ze_md = ucs_derived_of(md, uct_ze_ipc_md_t);
 
-    const size_t size = 4096;
-    void *ptr = NULL;
+    const size_t size                   = 4096;
+    void *ptr                           = NULL;
     ze_device_mem_alloc_desc_t dev_desc = {};
     dev_desc.stype = ZE_STRUCTURE_TYPE_DEVICE_MEM_ALLOC_DESC;
 
