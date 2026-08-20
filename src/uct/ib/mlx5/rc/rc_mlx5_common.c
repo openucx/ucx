@@ -26,21 +26,16 @@ uct_rc_mlx5_fill_am_inline_info(const uct_ib_mlx5_txwq_t *txwq,
                                 size_t wqe_size, uct_ep_op_info_t *info,
                                 int *skip_p, void *callback_data)
 {
+    size_t inline_length = ntohl(inl->byte_count) & ~MLX5_INLINE_SEG;
     uct_rc_mlx5_am_short_hdr_t *am;
-    size_t inline_length;
-    size_t inl_wqe_size;
-
-    inline_length = ntohl(inl->byte_count) & ~MLX5_INLINE_SEG;
-    inl_wqe_size  = sizeof(struct mlx5_wqe_ctrl_seg) +
-                    ucs_align_up_pow2(sizeof(*inl) + inline_length,
-                                      UCT_IB_MLX5_WQE_SEG_SIZE);
-    if (inl_wqe_size != wqe_size) {
-        return UCS_ERR_UNSUPPORTED;
-    }
 
     ucs_assert(inline_length >= sizeof(uct_rc_mlx5_hdr_t));
+    ucs_assert(wqe_size ==
+               sizeof(struct mlx5_wqe_ctrl_seg) +
+                       ucs_align_up_pow2(sizeof(*inl) + inline_length,
+                                         UCT_IB_MLX5_WQE_SEG_SIZE));
 
-    uct_ib_mlx5_txwq_copy(txwq, inl + 1, callback_data, inline_length);
+    uct_ib_mlx5_txwq_copy_segs(txwq, inl + 1, callback_data, inline_length);
 
     am = callback_data;
     if ((am->rc_hdr.rc_hdr.am_id & UCT_RC_EP_FC_MASK) ==
