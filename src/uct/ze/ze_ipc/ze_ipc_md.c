@@ -189,13 +189,21 @@ uct_ze_ipc_mem_reg(uct_md_h uct_md, void *address, size_t length,
 
 
 static ucs_status_t
-uct_ze_ipc_mem_dereg(uct_md_h md, const uct_md_mem_dereg_params_t *params)
+uct_ze_ipc_mem_dereg(uct_md_h uct_md, const uct_md_mem_dereg_params_t *params)
 {
+    uct_ze_ipc_md_t *md = ucs_derived_of(uct_md, uct_ze_ipc_md_t);
     uct_ze_ipc_key_t *key;
+    ze_result_t ret;
 
     UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
 
     key = params->memh;
+
+    ret = zeMemPutIpcHandle(md->ze_context, key->ipc_handle);
+    if (ret != ZE_RESULT_SUCCESS) {
+        ucs_warn("zeMemPutIpcHandle failed with error 0x%x", ret);
+    }
+
     ucs_free(key);
     return UCS_OK;
 }
