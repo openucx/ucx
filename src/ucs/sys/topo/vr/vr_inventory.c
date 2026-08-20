@@ -8,7 +8,7 @@
 #  include "config.h"
 #endif
 
-#include "vr.h"
+#include "vr_inventory.h"
 
 #include <ucs/algorithm/qsort_r.h>
 #include <ucs/debug/assert.h>
@@ -264,7 +264,7 @@ ucs_topo_vr_devices_collect(const ucs_topo_sys_device_info_t *devices,
 }
 
 
-static ucs_status_t
+ucs_status_t
 ucs_topo_vr_inventory_build(const ucs_topo_sys_device_info_t *devices,
                             unsigned num_devices,
                             ucs_topo_vr_inventory_t *inventory_p)
@@ -301,36 +301,8 @@ err_free_arrays:
 }
 
 
-static void ucs_topo_vr_inventory_cleanup(ucs_topo_vr_inventory_t *inventory)
+void ucs_topo_vr_inventory_cleanup(ucs_topo_vr_inventory_t *inventory)
 {
     ucs_array_cleanup_dynamic(&inventory->cx9_ports);
     ucs_array_cleanup_dynamic(&inventory->gpus);
-}
-
-
-ucs_status_t ucs_topo_vr_init_groups(const ucs_topo_sys_device_info_t *devices,
-                                     unsigned num_devices,
-                                     ucs_topo_group_t **groups_p,
-                                     size_t *num_groups_p)
-{
-    ucs_topo_vr_inventory_t inventory;
-    ucs_status_t status;
-
-    status = ucs_topo_vr_inventory_build(devices, num_devices, &inventory);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    ucs_debug("built vera-rubin inventory with %zu gpus and %zu cx9 functions",
-              (size_t)ucs_array_length(&inventory.gpus),
-              (size_t)ucs_array_length(&inventory.cx9_ports));
-
-    /* TODO: Build groups from inventory. */
-
-    ucs_topo_vr_inventory_cleanup(&inventory);
-
-    *groups_p     = NULL;
-    *num_groups_p = 0;
-
-    return UCS_OK;
 }
