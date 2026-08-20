@@ -1401,7 +1401,6 @@ static double
 uct_ib_iface_query_port_speed_gbps(uct_ib_iface_t *iface)
 {
 #if HAVE_DECL_IBV_QUERY_PORT_SPEED
-    /* ibv_query_port_speed() reports speed in units of 100 Mb/s. */
     const double port_speed_unit_gbps = 0.1;
     uct_ib_device_t *dev              = uct_ib_iface_device(iface);
     ucs_log_level_t log_level;
@@ -1422,7 +1421,6 @@ uct_ib_iface_query_port_speed_gbps(uct_ib_iface_t *iface)
 
     return port_speed * port_speed_unit_gbps;
 #else
-    (void)iface;
     return 0.0;
 #endif
 }
