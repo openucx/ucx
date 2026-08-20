@@ -591,7 +591,9 @@ UCS_TEST_F(test_rcache_adjacent, do_not_merge_separate_adjacent_mappings)
     int fd;
     ASSERT_EQ(0, munmap(mem, 2 * size));
     fd = open("/dev/zero", O_RDWR);
-    ASSERT_GE(fd, 0);
+    if (fd < 0) {
+        UCS_TEST_ABORT("failed to open /dev/zero");
+    }
 
     lower_mapping = mmap(mem, size, PROT_READ | PROT_WRITE,
                          MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
