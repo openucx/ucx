@@ -497,10 +497,11 @@ static ucp_lane_index_t ucp_device_ep_find_lane(const ucp_ep_h ep, ucp_rsc_index
     return UCP_NULL_LANE;
 }
 
-static int
-ucp_device_ep_check_lanes(const ucp_ep_h ep, ucp_tl_bitmap_t *tl_bitmap)
+static int ucp_device_ep_check_lanes(const ucp_device_mem_list_elem_t *elem,
+                                     ucp_tl_bitmap_t *tl_bitmap)
 {
-    ucp_ep_config_t *ep_config = ucp_ep_config(ep);
+    ucp_ep_h ep                      = elem->ep;
+    const ucp_ep_config_t *ep_config = ucp_ep_config(ep);
     ucp_lane_index_t lane;
     ucp_rsc_index_t tl_id;
 
@@ -514,7 +515,8 @@ ucp_device_ep_check_lanes(const ucp_ep_h ep, ucp_tl_bitmap_t *tl_bitmap)
             return 0;
         }
 
-        if (ep_config->key.lanes[lane].dst_md_index == UCP_NULL_RESOURCE) {
+        if (!(UCS_BIT(ep_config->key.lanes[lane].dst_md_index) &
+              elem->rkey->md_map)) {
             return 0;
         }
     }
@@ -688,7 +690,7 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
         if (!UCP_DEVICE_MEM_ELEMENT_IS_GAP(ucp_element)) {
             for (tl_type = UCP_DEVICE_TL_TYPE_FIRST;
                  tl_type < UCP_DEVICE_TL_TYPE_LAST; tl_type++) {
-                if (ucp_device_ep_check_lanes(ucp_element->ep,
+                if (ucp_device_ep_check_lanes(ucp_element,
                                               &tl_bitmap[tl_type])) {
                     break;
                 }
