@@ -94,5 +94,14 @@ ucs_status_t uct_ze_ipc_unmap_memhandle(pid_t pid, uintptr_t address,
                                         ze_context_handle_t ze_context,
                                         int dup_fd, int cache_enabled);
 
-#endif /* UCT_ZE_IPC_CACHE_H_ */
 
+/**
+ * Purge and destroy all remote caches keyed by the given local Level Zero
+ * context, so that closed contexts do not leave behind cache entries that
+ * would later be used with a destroyed context.
+ *
+ * @param ze_context   Level Zero context being closed
+ */
+void uct_ze_ipc_purge_cache_by_context(ze_context_handle_t ze_context);
+
+#endif /* UCT_ZE_IPC_CACHE_H_ */
