@@ -388,7 +388,7 @@ int uct_ze_base_get_device_ordinal(ze_device_handle_t device)
         }
     }
 
-    return -1;  /* not found */
+    return -1; /* not found */
 }
 
 ze_device_handle_t uct_ze_base_get_device(int ordinal)

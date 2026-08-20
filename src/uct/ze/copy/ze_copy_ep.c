@@ -51,7 +51,7 @@ ucs_status_t uct_ze_copy_ep_zcopy(uct_ep_h tl_ep, uint64_t remote_addr,
     void *src, *dst;
 
     ucs_trace("ze_copy_ep: zcopy %s remote_addr=%p local_buf=%p size=%zu",
-             is_put ? "PUT" : "GET", (void*)remote_addr, iov->buffer, size);
+              is_put ? "PUT" : "GET", (void*)remote_addr, iov->buffer, size);
 
     if (is_put) {
         src = iov->buffer;
@@ -148,7 +148,7 @@ ucs_status_t uct_ze_copy_ep_put_short(uct_ep_h tl_ep, const void *buffer,
     ucs_status_t status;
 
     ucs_trace("ze_copy_ep: PUT_SHORT buffer=%p length=%u remote_addr=%p",
-             buffer, length, (void*)remote_addr);
+              buffer, length, (void*)remote_addr);
 
     status = uct_ze_copy_ep_zcopy(tl_ep, remote_addr, &iov, rkey, 1);
 
@@ -170,7 +170,7 @@ ucs_status_t uct_ze_copy_ep_get_short(uct_ep_h tl_ep, void *buffer,
     ucs_status_t status;
 
     ucs_trace("ze_copy_ep: GET_SHORT buffer=%p length=%u remote_addr=%p",
-             buffer, length, (void*)remote_addr);
+              buffer, length, (void*)remote_addr);
 
     status = uct_ze_copy_ep_zcopy(tl_ep, remote_addr, &iov, rkey, 0);
 
