@@ -196,6 +196,15 @@ uct_ze_ipc_post_copy(uct_ep_h tl_ep, uint64_t remote_addr,
         return UCS_OK;
     }
 
+    if (ucs_unlikely((remote_addr < key->address) ||
+                      ((offset = remote_addr - key->address) > key->length) ||
+                      (iov[0].length > (key->length - offset)))) {
+        ucs_error("ze_ipc_ep: remote_addr 0x%"PRIx64" length %zu is out of "
+                  "rkey range [0x%lx..0x%lx)", remote_addr, iov[0].length,
+                  key->address, key->address + key->length);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
     /* Use cache to map IPC handle */
     status = uct_ze_ipc_map_memhandle(key, iface->ze_context, iface->ze_device,
                                       &mapped_addr, &local_fd);
@@ -207,8 +216,6 @@ uct_ze_ipc_post_copy(uct_ep_h tl_ep, uint64_t remote_addr,
 
     ucs_debug("ze_ipc_ep: IPC handle mapped (cached), mapped_addr=%p", mapped_addr);
 
-    /* Calculate offset within the allocation */
-    offset          = remote_addr - key->address;
     mapped_rem_addr = (void *)((uintptr_t)mapped_addr + offset);
 
     /* Allocate event from shared pool for performance */
@@ -317,6 +324,8 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_ze_ipc_ep_get_zcopy,
 {
     ucs_status_t status;
 
+    UCT_CHECK_IOV_SIZE(iovcnt, 1ul, "uct_ze_ipc_ep_get_zcopy");
+
     status = uct_ze_ipc_post_copy(tl_ep, remote_addr, iov, rkey, comp,
                                   UCT_ZE_IPC_GET);
     if (UCS_STATUS_IS_ERR(status)) {
@@ -339,6 +348,8 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_ze_ipc_ep_put_zcopy,
                  uct_completion_t *comp)
 {
     ucs_status_t status;
+
+    UCT_CHECK_IOV_SIZE(iovcnt, 1ul, "uct_ze_ipc_ep_put_zcopy");
 
     status = uct_ze_ipc_post_copy(tl_ep, remote_addr, iov, rkey, comp,
                                   UCT_ZE_IPC_PUT);
