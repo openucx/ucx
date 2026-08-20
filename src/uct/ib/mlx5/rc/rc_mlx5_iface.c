@@ -793,8 +793,9 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
                     uct_ib_iface_init_attr_t *init_attr)
 {
     uct_ib_mlx5_md_t *md = ucs_derived_of(tl_md, uct_ib_mlx5_md_t);
-    uct_ib_device_t *dev;
+    uct_ib_device_t *dev  = &md->super.dev;
     ucs_status_t status;
+    uint8_t port_num;
 
     if (rc_config->super.seg_size > UCT_IB_MLX5_MP_RQ_BYTE_CNT_MASK) {
         ucs_error("IB segment size is too big %ld, it must not exceed %d",
@@ -817,6 +818,15 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
         return status;
     }
 
+    status = uct_ib_device_find_port(dev, init_attr->dev_name, &port_num);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    init_attr->full_bw_single_qp =
+            uct_rc_mlx5_iface_can_single_qp_use_full_bw(
+                    self, md, init_attr->qp_type, port_num);
+
     self->rx.srq.type                = UCT_IB_MLX5_OBJ_TYPE_LAST;
     self->tm.cmd_wq.super.super.type = UCT_IB_MLX5_OBJ_TYPE_LAST;
     init_attr->rx_hdr_len            = UCT_RC_MLX5_MP_ENABLED(self) ?
@@ -827,7 +837,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, tl_ops, ops, tl_md, worker,
                               params, rc_config, init_attr);
 
-    dev                       = uct_ib_iface_device(&self->super.super);
     self->tx.mmio_mode        = mlx5_config->super.mmio_mode;
     self->tx.bb_max           = ucs_min(mlx5_config->tx_max_bb, UINT16_MAX);
     self->tm.am_desc.super.cb = uct_rc_mlx5_release_desc;
@@ -1042,12 +1051,10 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
             .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported,
             .ep_put_sgl_zcopy       = uct_ib_mlx5_ext_ep_put_sgl_zcopy
         },
-        .create_cq                 = uct_rc_mlx5_iface_common_create_cq,
-        .destroy_cq                = uct_rc_mlx5_iface_common_destroy_cq,
-        .event_cq                  = uct_rc_mlx5_iface_common_event_cq,
-        .handle_failure            = uct_rc_mlx5_iface_handle_failure,
-        .can_single_qp_use_full_bw =
-                uct_rc_mlx5_iface_can_single_qp_use_full_bw,
+        .create_cq      = uct_rc_mlx5_iface_common_create_cq,
+        .destroy_cq     = uct_rc_mlx5_iface_common_destroy_cq,
+        .event_cq       = uct_rc_mlx5_iface_common_event_cq,
+        .handle_failure = uct_rc_mlx5_iface_handle_failure,
     },
     .init_rx         = uct_rc_mlx5_iface_init_rx,
     .cleanup_rx      = uct_rc_mlx5_iface_cleanup_rx,

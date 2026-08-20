@@ -687,19 +687,24 @@ uct_rc_mlx5_dp_ordering_ooo_init(uct_ib_mlx5_md_t *md,
 }
 
 int uct_rc_mlx5_iface_can_single_qp_use_full_bw(
-        uct_ib_iface_t *ib_iface)
+        uct_rc_mlx5_iface_common_t *iface, uct_ib_mlx5_md_t *md, int qp_type,
+        uint8_t port_num)
 {
-    uct_rc_mlx5_iface_common_t *iface =
-            ucs_derived_of(ib_iface, uct_rc_mlx5_iface_common_t);
-    uct_ib_mlx5_md_t *md = uct_ib_mlx5_iface_md(ib_iface);
+    const uint32_t devx_qp_flag =
+            (qp_type == UCT_IB_QPT_DCI) ?
+                    UCT_IB_MLX5_MD_FLAG_DEVX_DCI :
+                    UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP;
     const int ddp_enabled =
-            (iface->config.dp_ordering_devx ==
-             UCT_IB_MLX5_DP_ORDERING_OOO_ALL) ||
-            iface->config.ddp_enabled_dv;
+            (md->flags & devx_qp_flag) ?
+                    (iface->config.dp_ordering_devx ==
+                     UCT_IB_MLX5_DP_ORDERING_OOO_ALL) :
+                    iface->config.ddp_enabled_dv;
+
+    ucs_assert((qp_type == UCT_IB_QPT_DCI) || (qp_type == IBV_QPT_RC));
 
     return ddp_enabled &&
            (md->port_select_mode == UCT_IB_MLX5_LAG_MULTI_PORT_ESW) &&
-           (uct_ib_iface_query_port_speed_gbps(ib_iface) ==
+           (uct_ib_device_query_port_speed_gbps(&md->super.dev, port_num) ==
             UCT_RC_MLX5_FULL_BW_SPEED_GBPS);
 }
 

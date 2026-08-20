@@ -40,9 +40,6 @@
 #define UCT_IB_XDR_READ_PATH_BANDWIDTH 35e9
 #define UCT_IB_HIGH_SPEED_NUM_PATHS    2
 
-/* ibv_query_port_speed() reports speed in units of 100 Mb/s. */
-#define UCT_IB_PORT_SPEED_UNIT_GBPS 0.1
-
 /**
  * Minimal NDR single path ratio.
  * The minimal ratio is used to calculate the ratio for the first device path,
@@ -1408,8 +1405,7 @@ static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
         if (uct_ib_iface_is_roce(iface)) {
             /* RoCE - number of paths is RoCE LAG level */
             iface->num_paths = uct_ib_iface_roce_lag_level(iface);
-            if ((iface->ops->can_single_qp_use_full_bw != NULL) &&
-                iface->ops->can_single_qp_use_full_bw(iface)) {
+            if (iface->config.full_bw_single_qp) {
                 iface->num_paths = UCT_IB_HIGH_SPEED_NUM_PATHS;
             }
         } else {
@@ -1753,6 +1749,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
     self->release_desc.cb           = uct_ib_iface_release_desc;
     self->config.qp_type            = init_attr->qp_type;
     self->config.flid_enabled       = config->flid_enabled;
+    self->config.full_bw_single_qp  = init_attr->full_bw_single_qp;
     uct_ib_iface_set_path_mtu(self, config);
 
     self->config.send_overhead = config->send_overhead;
@@ -2094,39 +2091,12 @@ uct_ib_iface_estimate_path_bw(uct_ib_iface_t *iface,
     return ucs_min(iface_attr->bandwidth.shared * path_ratio, max_path_bandwidth);
 }
 
-double uct_ib_iface_query_port_speed_gbps(
-        uct_ib_iface_t *iface UCS_V_UNUSED)
-{
-#if HAVE_DECL_IBV_QUERY_PORT_SPEED
-    uct_ib_device_t *dev = uct_ib_iface_device(iface);
-    ucs_log_level_t log_level;
-    uint64_t port_speed;
-    int ret;
-
-    ret = ibv_query_port_speed(dev->ibv_context, iface->config.port_num,
-                               &port_speed);
-    if (ret != 0) {
-        log_level = ((errno == EOPNOTSUPP) ||
-                     (errno == EPROTONOSUPPORT) ||
-                     (errno == ENOSYS)) ? UCS_LOG_LEVEL_DEBUG :
-                                          UCS_LOG_LEVEL_DIAG;
-        ucs_log(log_level,
-                "ibv_query_port_speed("UCT_IB_IFACE_FMT", port_num=%d) failed:"
-                " %m", UCT_IB_IFACE_ARG(iface), iface->config.port_num);
-        return 0.0;
-    }
-
-    return port_speed * UCT_IB_PORT_SPEED_UNIT_GBPS;
-#else
-    return 0.0;
-#endif
-}
-
 static uct_ppn_bandwidth_t
 uct_ib_iface_estimate_bandwidth(uct_ib_iface_t *iface,
                                 const uct_iface_attr_t *iface_attr)
 {
-    const double port_speed_gbps = uct_ib_iface_query_port_speed_gbps(iface);
+    const double port_speed_gbps = uct_ib_device_query_port_speed_gbps(
+            uct_ib_iface_device(iface), iface->config.port_num);
 
     if (port_speed_gbps == 0.0) {
         return iface_attr->bandwidth;

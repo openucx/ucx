@@ -491,7 +491,8 @@ uct_rc_mlx5_dp_ordering_ooo_init(uct_ib_mlx5_md_t *md,
                                  const char *tl_name);
 
 int uct_rc_mlx5_iface_can_single_qp_use_full_bw(
-        uct_ib_iface_t *ib_iface);
+        uct_rc_mlx5_iface_common_t *iface, uct_ib_mlx5_md_t *md, int qp_type,
+        uint8_t port_num);
 
 #if IBV_HW_TM
 void uct_rc_mlx5_handle_unexp_rndv(uct_rc_mlx5_iface_common_t *iface,
