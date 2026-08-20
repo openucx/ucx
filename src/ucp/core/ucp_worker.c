@@ -2246,7 +2246,7 @@ out:
 
 static void
 ucp_worker_dump_rkey_config_key(ucs_string_buffer_t *log_strb,
-                                ucp_rkey_config_key_t *key)
+                                const ucp_rkey_config_key_t *key)
 {
     ucs_string_buffer_appendf(
             log_strb,
@@ -2265,6 +2265,7 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
     const ucp_ep_config_t *ep_config = &ucs_array_elem(&worker->ep_config,
                                                        key->ep_cfg_index);
     ucp_worker_cfg_index_t rkey_cfg_index;
+    ucp_proto_select_short_t put_short;
     ucp_rkey_config_t *rkey_config;
     ucp_lane_index_t lane;
     ucs_status_t status;
@@ -2349,10 +2350,14 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
         ucp_proto_select_short_init(worker, &rkey_config->proto_select,
                                     key->ep_cfg_index, rkey_cfg_index,
                                     UCP_OP_ID_PUT, UCP_PROTO_FLAG_PUT_SHORT,
-                                    &rkey_config->put_short);
+                                    &put_short);
     } else {
-        ucp_proto_select_short_disable(&rkey_config->put_short);
+        ucp_proto_select_short_disable(&put_short);
     }
+
+    /* Protocol selection above can add rkey configurations, which reallocates
+     * the array and invalidates 'rkey_config' */
+    ucs_array_elem(&worker->rkey_config, rkey_cfg_index).put_short = put_short;
 
     return UCS_OK;
 
