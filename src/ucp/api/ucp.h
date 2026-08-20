@@ -1410,13 +1410,13 @@ typedef struct ucp_worker_attr {
      * worker's context. The selector can name network, shared-memory,
      * accelerator, or loopback devices.
      *
-     * If @ref UCP_WORKER_ATTR_FIELD_ADDRESS_DEVICE_NAME and
-     * @ref UCP_WORKER_ATTR_FIELD_ADDRESS are set in @ref field_mask, the
-     * resulting address is restricted to resources with this device name. If
-     * @ref UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS is also set, its filters are
-     * applied in addition to this one. Consequently, combining
-     * @ref UCP_WORKER_ADDRESS_FLAG_NET_ONLY with a non-network device name
-     * matches no resources.
+     * Setting @ref UCP_WORKER_ATTR_FIELD_ADDRESS_DEVICE_NAME without
+     * @ref UCP_WORKER_ATTR_FIELD_ADDRESS has no effect. If both fields are set
+     * in @ref field_mask, the resulting address is restricted to resources
+     * with this device name. If @ref UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS is
+     * also set, its filters are applied in addition to this one. Consequently,
+     * combining @ref UCP_WORKER_ADDRESS_FLAG_NET_ONLY with a non-network
+     * device name matches no resources.
      *
      * @note This is an input attribute.
      */
