@@ -11,6 +11,7 @@
 
 extern "C" {
 #include <ucp/dt/dt.h>
+#include <ucp/dt/dt_sgl.h>
 #include <ucp/dt/datatype_iter.inl>
 #include <ucp/core/ucp_rkey.h>
 }
@@ -333,11 +334,13 @@ protected:
         param.datatype     = ucp_dt_make_sgl();
         param.remote       = &m_remote;
 
-        ucs_status_t status = ucp_datatype_iter_sgl_init(m_ucph.get(),
-                                                         &m_dt_iter, &m_local,
-                                                         &m_remote, count,
-                                                         &param);
+        size_t length = ucp_dt_sgl_length(m_lengths.data(), count);
+        ucs_status_t status = ucp_datatype_iter_sgl_init(
+                m_ucph.get(), &m_dt_iter, &m_local, &m_remote, count, length,
+                &param);
         ASSERT_UCS_OK(status);
+        ASSERT_EQ(length, m_dt_iter.length);
+        ASSERT_EQ(count, m_dt_iter.type.sgl.elem_count);
     }
 
 private:
@@ -366,13 +369,14 @@ UCS_TEST_F(test_ucp_dt_sgl, iter_next_chunked) {
         size_t advanced = ucp_datatype_iter_next_sgl(&m_dt_iter,
                                                      MAX_PER_STEP,
                                                      &next_iter);
-        EXPECT_LE(advanced, MAX_PER_STEP);
-        EXPECT_GT(advanced, 0u);
+        ASSERT_LE(advanced, MAX_PER_STEP);
+        ASSERT_GT(advanced, 0u);
         total_advanced += advanced;
         ucp_datatype_iter_copy_position(&m_dt_iter, &next_iter, UINT_MAX);
     }
 
     EXPECT_EQ(NUM_ELEMS, total_advanced);
+    EXPECT_EQ(NUM_ELEMS, m_dt_iter.type.sgl.elem_index);
     EXPECT_TRUE(ucp_datatype_iter_is_end(&m_dt_iter));
 }
 
@@ -384,7 +388,7 @@ UCS_TEST_F(test_ucp_dt_sgl, iter_next_single_step) {
         ucp_datatype_iter_t next_iter = {};
         size_t advanced = ucp_datatype_iter_next_sgl(&m_dt_iter, count,
                                                      &next_iter);
-        EXPECT_EQ(count, advanced);
+        ASSERT_EQ(count, advanced);
         ucp_datatype_iter_copy_position(&m_dt_iter, &next_iter, UINT_MAX);
         EXPECT_TRUE(ucp_datatype_iter_is_end(&m_dt_iter));
     }
@@ -396,16 +400,33 @@ UCS_TEST_F(test_ucp_dt_sgl, iter_next_one_by_one) {
     init_sgl_iter(NUM_ELEMS);
 
     for (size_t i = 0; i < NUM_ELEMS; i++) {
-        EXPECT_FALSE(ucp_datatype_iter_is_end(&m_dt_iter));
+        ASSERT_FALSE(ucp_datatype_iter_is_end(&m_dt_iter));
         ucp_datatype_iter_t next_iter = {};
         size_t advanced = ucp_datatype_iter_next_sgl(&m_dt_iter, 1,
                                                      &next_iter);
-        EXPECT_EQ(1u, advanced);
-        EXPECT_EQ(i + 1, next_iter.offset);
+        ASSERT_EQ(1u, advanced);
+        ASSERT_EQ(i + 1, next_iter.type.sgl.elem_index);
+        ASSERT_EQ(ucp_dt_sgl_length(m_dt_iter.type.sgl.lengths, i + 1),
+                  next_iter.offset);
         ucp_datatype_iter_copy_position(&m_dt_iter, &next_iter, UINT_MAX);
     }
 
     EXPECT_TRUE(ucp_datatype_iter_is_end(&m_dt_iter));
+}
+
+UCS_TEST_F(test_ucp_dt_sgl, iter_rewind) {
+    ucp_datatype_iter_t next_iter = {};
+
+    init_sgl_iter(3);
+    ASSERT_EQ(2u, ucp_datatype_iter_next_sgl(&m_dt_iter, 2, &next_iter));
+    ucp_datatype_iter_copy_position(&m_dt_iter, &next_iter, UINT_MAX);
+    ASSERT_EQ(ucp_dt_sgl_length(m_dt_iter.type.sgl.lengths, 2),
+              m_dt_iter.offset);
+    ASSERT_EQ(2u, m_dt_iter.type.sgl.elem_index);
+
+    ucp_datatype_iter_rewind(&m_dt_iter, UINT_MAX);
+    ASSERT_EQ(0u, m_dt_iter.offset);
+    ASSERT_EQ(0u, m_dt_iter.type.sgl.elem_index);
 }
 
 UCS_TEST_F(test_ucp_dt_sgl, init_zero_count) {

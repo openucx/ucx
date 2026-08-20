@@ -79,7 +79,8 @@ typedef struct {
             ucp_mem_h        *memhs;
             const uint64_t   *remote_addrs;
             ucp_rkey_h const *rkeys;
-            /* length = element count, offset = current element index */
+            size_t           elem_count;
+            size_t           elem_index;
         } sgl;
     } type;
 } ucp_datatype_iter_t;
@@ -119,7 +120,7 @@ ucs_status_t ucp_datatype_iter_sgl_init(ucp_context_h context,
                                         ucp_datatype_iter_t *dt_iter,
                                         const ucp_dt_local_sgl_t *local,
                                         const ucp_dt_remote_sgl_t *remote,
-                                        size_t count,
+                                        size_t count, size_t length,
                                         const ucp_request_param_t *param);
 
 ucs_status_t ucp_datatype_iter_sgl_mem_reg(ucp_context_h context,
