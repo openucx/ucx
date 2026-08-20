@@ -650,6 +650,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ze_ipc_iface_t)
     uct_ze_ipc_event_desc_t *event_desc;
     unsigned i;
 
+    uct_base_iface_progress_disable(&self->super.super,
+                                    UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
+
     /* Clean up outstanding events from all command list queues */
     for (i = 0; i < self->num_cmd_lists; i++) {
         while (!ucs_queue_is_empty(&self->queue_desc[i].event_queue)) {
