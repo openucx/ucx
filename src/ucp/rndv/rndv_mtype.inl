@@ -73,7 +73,7 @@ ucp_proto_rndv_mtype_request_init(ucp_request_t *req,
                              UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED, 1);
     ucs_assert(!(req->flags &
                  (UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED |
-                  UCP_REQUEST_FLAG_RNDV_MTYPE_FC_SCHEDULED)));
+                  UCP_REQUEST_FLAG_RNDV_MTYPE_FC_RESCHED)));
     req->flags |= UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED;
     ucs_queue_push(&worker->rndv_mtype_fc.pending_q[fc_op],
                    &req->send.rndv.ppln.queue_elem);
@@ -206,7 +206,7 @@ ucp_proto_rndv_mtype_fc_cancel(ucp_request_t *req, unsigned fc_op)
     ucs_assert(fc_op < UCP_WORKER_RNDV_FC_OP_LAST);
     ucs_assert(!ucs_test_all_flags(req->flags,
                                    UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED |
-                                   UCP_REQUEST_FLAG_RNDV_MTYPE_FC_SCHEDULED));
+                                   UCP_REQUEST_FLAG_RNDV_MTYPE_FC_RESCHED));
 
     if (req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED) {
         ucp_trace_req(req, "mtype_fc: remove aborted request from queue");
@@ -215,12 +215,12 @@ ucp_proto_rndv_mtype_fc_cancel(ucp_request_t *req, unsigned fc_op)
         req->flags &= ~UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED;
     }
 
-    if (req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC_SCHEDULED) {
+    if (req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC_RESCHED) {
         ucp_trace_req(req, "mtype_fc: remove aborted reschedule callback");
         ucs_callbackq_remove_oneshot(
                 &worker->uct->progress_q, req,
                 ucp_proto_rndv_mtype_fc_reschedule_pred, req);
-        req->flags &= ~UCP_REQUEST_FLAG_RNDV_MTYPE_FC_SCHEDULED;
+        req->flags &= ~UCP_REQUEST_FLAG_RNDV_MTYPE_FC_RESCHED;
     }
 }
 
@@ -255,9 +255,9 @@ ucp_proto_rndv_mtype_fc_reschedule_pending(ucp_request_t *req)
         ucs_assert(pending_req->flags &
                    UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED);
         ucs_assert(!(pending_req->flags &
-                     UCP_REQUEST_FLAG_RNDV_MTYPE_FC_SCHEDULED));
+                     UCP_REQUEST_FLAG_RNDV_MTYPE_FC_RESCHED));
         pending_req->flags &= ~UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED;
-        pending_req->flags |= UCP_REQUEST_FLAG_RNDV_MTYPE_FC_SCHEDULED;
+        pending_req->flags |= UCP_REQUEST_FLAG_RNDV_MTYPE_FC_RESCHED;
         ucp_trace_req(pending_req, "mtype_fc: dequeue %s",
                       (q_index == UCP_WORKER_RNDV_FC_OP_RTR) ? "rtr" : "put/get");
         ucs_callbackq_add_oneshot(&worker->uct->progress_q, pending_req,

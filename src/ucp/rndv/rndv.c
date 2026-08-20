@@ -27,8 +27,8 @@ unsigned ucp_proto_rndv_mtype_fc_reschedule_cb(void *arg)
     ucp_request_t *req = arg;
 
     UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED_CONDITIONAL(req->send.ep->worker);
-    ucs_assert(req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC_SCHEDULED);
-    req->flags &= ~UCP_REQUEST_FLAG_RNDV_MTYPE_FC_SCHEDULED;
+    ucs_assert(req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC_RESCHED);
+    req->flags &= ~UCP_REQUEST_FLAG_RNDV_MTYPE_FC_RESCHED;
     ucp_request_send(req);
     return 1;
 }
