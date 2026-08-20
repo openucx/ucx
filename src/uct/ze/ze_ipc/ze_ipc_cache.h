@@ -36,8 +36,11 @@ struct uct_ze_ipc_cache_region {
  * Cache structure for managing IPC handle mappings
  */
 struct uct_ze_ipc_cache {
-    pthread_rwlock_t lock; /**< Protects the page table */
+    pthread_rwlock_t lock; /**< Protects the page table and orphan list */
     ucs_pgtable_t    pgtable; /**< Page table to hold the regions */
+    ucs_list_link_t  orphan_list; /**< Regions dropped from the page table
+                                       while still referenced by in-flight
+                                       operations */
     char             *name; /**< Name for debugging */
 };
 
