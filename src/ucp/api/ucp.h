@@ -509,8 +509,12 @@ enum ucp_conn_request_attr_field {
 enum ucp_dt_type {
     UCP_DATATYPE_CONTIG  = 0,      /**< Contiguous datatype */
     UCP_DATATYPE_STRIDED = 1,      /**< Strided datatype */
-    UCP_DATATYPE_IOV     = 2,      /**< Scatter-gather list with multiple pointers */
-    UCP_DATATYPE_SGL     = 4,      /**< Scatter-gather list datatype */
+    UCP_DATATYPE_IOV     = 2,      /**< List of local buffers, see
+                                        @ref ucp_dt_iov_t */
+    UCP_DATATYPE_SGL     = 4,      /**< Scatter-gather list of both local and
+                                        remote buffers, see
+                                        @ref ucp_dt_local_sgl_t and
+                                        @ref ucp_dt_remote_sgl_t */
     UCP_DATATYPE_GENERIC = 7,      /**< Generic datatype with
                                         user-defined pack/unpack routines */
     UCP_DATATYPE_SHIFT   = 3,      /**< Number of bits defining
@@ -851,16 +855,22 @@ enum ucp_am_handler_param_field {
 
 /**
  * @ingroup UCP_DATATYPE
- * @brief Generate an identifier for Scatter-gather IOV data type.
+ * @brief Generate an identifier for IOV data type.
  *
- * This macro creates an identifier for datatype of scatter-gather list
- * with multiple pointers
+ * This macro creates an identifier for datatype of a list of local buffers,
+ * passed as an array of @ref ucp_dt_iov_t elements
  *
  * @return Data-type identifier.
  *
  * @note In the event of partial receive, @ref ucp_dt_iov_t::buffer can be
  *       filled with any number of bytes according to its
  *       @ref ucp_dt_iov_t::length.
+ *
+ * @note In RMA operations, all the buffers in the list are transferred to or
+ *       from a single remote memory region, described by the @a remote_addr
+ *       and @a rkey parameters of the operation. In order to provide a
+ *       separate remote address and remote key per buffer, use
+ *       @ref ucp_dt_make_sgl().
  */
 #define ucp_dt_make_iov() ((ucp_datatype_t)UCP_DATATYPE_IOV)
 
@@ -1264,8 +1274,7 @@ typedef struct ucp_params {
      * OpenSHMEM libraries, this number will specify the local identificator on
      * a single node in the job. Does not affect semantics, only transport
      * selection criteria and the resulting performance.
-     * The value can be also set by the UCX_LOCAL_NODE_ID environment variable,
-     * which will override the id set by @e node_local_id
+     * A numeric UCX_NODE_LOCAL_ID environment value overrides @e node_local_id.
      */
     size_t                             node_local_id;
 

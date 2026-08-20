@@ -377,7 +377,7 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
     ucp_md_index_t md_index      = ucp_ep_md_index(ep, lane);
     ucp_rsc_index_t rkey_index   = lpriv->super.rkey_index;
     size_t start_index           = dt_iter->offset;
-    size_t max_sgl_count         = lpriv->max_put_sgl_zcopy_count;
+    size_t max_sgl_count         = lpriv->max_sgl_zcopy_count;
     size_t elem_count            = ucp_datatype_iter_next_sgl(dt_iter,
                                                               max_sgl_count,
                                                               next_iter);
