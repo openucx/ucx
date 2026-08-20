@@ -488,13 +488,16 @@ UCS_TEST_F(test_rcache_adjacent, merge_adjacent_chain)
     static const size_t num_regions = 16;
     const size_t page_size          = ucs_get_page_size();
     const size_t total_size         = num_regions * page_size;
+    const size_t mapping_size       = total_size + (2 * page_size);
     std::vector<region*> regions;
     std::set<region*> unique_regions;
-    void *mem;
+    void *mapping, *mem;
     region *merged;
     size_t index;
 
-    mem = alloc_pages(total_size, PROT_READ | PROT_WRITE);
+    mapping = alloc_pages(mapping_size, PROT_NONE);
+    mem     = UCS_PTR_BYTE_OFFSET(mapping, page_size);
+    ASSERT_EQ(0, mprotect(mem, total_size, PROT_READ | PROT_WRITE));
     for (index = 0; index < num_regions; ++index) {
         merged = get(UCS_PTR_BYTE_OFFSET(mem, index * page_size), page_size);
         regions.push_back(merged);
@@ -512,7 +515,7 @@ UCS_TEST_F(test_rcache_adjacent, merge_adjacent_chain)
         put(region);
     }
 
-    munmap(mem, total_size);
+    munmap(mapping, mapping_size);
 }
 
 UCS_TEST_F(test_rcache_adjacent, do_not_merge_adjacent_when_disabled)
