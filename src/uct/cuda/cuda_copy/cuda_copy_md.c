@@ -851,13 +851,58 @@ uct_cuda_copy_md_dmabuf_t uct_cuda_copy_md_get_dmabuf(const void *address,
     return dmabuf;
 }
 
+/*
+ * Detect whether the allocation can be opened by a peer residing on a different
+ * node, following the same handle type selection as
+ * uct_cuda_ipc_mem_add_reg(): legacy IPC handles are node-local, while fabric
+ * handles can be exported over MNNVL.
+ */
 static uint8_t
-uct_cuda_copy_md_detect_mem_flags(uct_cuda_copy_md_t *md,
-                                  const ucs_memory_info_t *mem_info,
-                                  int is_async_managed, int is_host_located,
-                                  const uct_cuda_copy_md_dmabuf_t *dmabuf)
+uct_cuda_copy_md_detect_memtype_copy_flags(const ucs_memory_info_t *mem_info)
+{
+#if HAVE_CUDA_FABRIC
+    CUpointer_attribute attr_type[2];
+    void *attr_data[2];
+    uint64_t allowed_handle_types;
+    int legacy_capable;
+    ucs_status_t status;
+
+    /* Only memory which cuda_ipc can register is relevant */
+    if (mem_info->type != UCS_MEMORY_TYPE_CUDA) {
+        return 0;
+    }
+
+    attr_type[0] = CU_POINTER_ATTRIBUTE_IS_LEGACY_CUDA_IPC_CAPABLE;
+    attr_data[0] = &legacy_capable;
+    attr_type[1] = CU_POINTER_ATTRIBUTE_ALLOWED_HANDLE_TYPES;
+    attr_data[1] = &allowed_handle_types;
+
+    status = UCT_CUDADRV_FUNC_LOG_WARN(
+            cuPointerGetAttributes(ucs_static_array_size(attr_data), attr_type,
+                                   attr_data,
+                                   (CUdeviceptr)mem_info->base_address));
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    if (legacy_capable || !(allowed_handle_types & CU_MEM_HANDLE_TYPE_FABRIC)) {
+        return 0;
+    }
+
+    return UCS_MEM_FLAG_MEMTYPE_COPY_INTER_NODE;
+#else
+    return 0;
+#endif
+}
+
+static int
+uct_cuda_copy_md_is_registrable(uct_cuda_copy_md_t *md,
+                                const ucs_memory_info_t *mem_info,
+                                int is_async_managed, int is_host_located,
+                                const uct_cuda_copy_md_dmabuf_t *dmabuf)
 {
     int close_dmabuf = 0;
+    int registrable;
     uct_cuda_copy_md_dmabuf_t local_dmabuf;
 
     if (is_async_managed) {
@@ -865,16 +910,9 @@ uct_cuda_copy_md_detect_mem_flags(uct_cuda_copy_md_t *md,
     }
 
     /* Host-located CUDA VMM is registerable even if dmabuf export fails. */
-    if (is_host_located) {
-        return UCS_MEM_FLAG_REGISTRABLE;
-    }
-
-    if (mem_info->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
-        return UCS_MEM_FLAG_REGISTRABLE;
-    }
-
-    if (!md->config.dmabuf_supported) {
-        return UCS_MEM_FLAG_REGISTRABLE;
+    if (is_host_located || (mem_info->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) ||
+        !md->config.dmabuf_supported) {
+        return 1;
     }
 
     if (dmabuf == NULL) {
@@ -885,15 +923,28 @@ uct_cuda_copy_md_detect_mem_flags(uct_cuda_copy_md_t *md,
         close_dmabuf = 1;
     }
 
-    if (dmabuf->fd == UCT_DMABUF_FD_INVALID) {
-        return 0;
-    }
-
+    registrable = (dmabuf->fd != UCT_DMABUF_FD_INVALID);
     if (close_dmabuf) {
         ucs_close_fd(&local_dmabuf.fd);
     }
 
-    return UCS_MEM_FLAG_REGISTRABLE;
+    return registrable;
+}
+
+static uint8_t
+uct_cuda_copy_md_detect_mem_flags(uct_cuda_copy_md_t *md,
+                                  const ucs_memory_info_t *mem_info,
+                                  int is_async_managed, int is_host_located,
+                                  const uct_cuda_copy_md_dmabuf_t *dmabuf)
+{
+    uint8_t mem_flags = 0;
+
+    if (uct_cuda_copy_md_is_registrable(md, mem_info, is_async_managed,
+                                         is_host_located, dmabuf)) {
+        mem_flags |= UCS_MEM_FLAG_REGISTRABLE;
+    }
+
+    return mem_flags | uct_cuda_copy_md_detect_memtype_copy_flags(mem_info);
 }
 
 ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
