@@ -8,7 +8,6 @@
 
 #include <uct/base/uct_iface.h>
 #include <ucs/arch/cpu.h>
-#include <ucs/async/eventfd.h>
 #include <ucs/type/spinlock.h>
 #include <level_zero/ze_api.h>
 
@@ -46,7 +45,6 @@ typedef struct uct_ze_ipc_iface {
     ze_context_handle_t          ze_context;
     ze_device_handle_t           ze_device;
     uct_ze_ipc_iface_config_t    config;
-    int                          eventfd;        /* event fd for async notifications */
 
     /* Multi-command-list support for parallel progress */
     uct_ze_ipc_queue_desc_t      queue_desc[UCT_ZE_IPC_MAX_PEERS];  /* array of queue descriptors */
