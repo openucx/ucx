@@ -385,8 +385,9 @@ static ucp_md_map_t ucp_request_get_invalidation_map(ucp_ep_h ep)
     ucp_lane_index_t i;
     ucp_md_map_t inv_map;
 
-    /* Same-process EPs do not require cross-process RMA invalidation. */
-    if (key->flags & UCP_EP_CONFIG_KEY_FLAG_SELF) {
+    /* Same-process PEER EPs do not require cross-process RMA invalidation. */
+    if ((key->flags & UCP_EP_CONFIG_KEY_FLAG_SELF) &&
+        (key->err_mode == UCP_ERR_HANDLING_MODE_PEER)) {
         return 0;
     }
 
