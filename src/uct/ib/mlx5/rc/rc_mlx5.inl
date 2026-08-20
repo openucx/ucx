@@ -454,15 +454,24 @@ uct_rc_mlx5_ep_fm_cq_update(uct_rc_mlx5_iface_common_t *iface,
 
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_txwq_record_token(uct_rc_mlx5_iface_common_t *iface,
-                              uct_ib_mlx5_txwq_t *txwq, size_t message_length)
+                              uct_ib_mlx5_txwq_t *txwq, uint16_t wqe_ci,
+                              uint8_t opcode, size_t message_length)
 {
     size_t mtu;
+    uint32_t first_token;
     uint32_t num_packets;
 
     mtu         = uct_ib_mtu_value(iface->super.super.config.path_mtu);
     num_packets = ucs_max(1ul, ucs_div_round_up(message_length, mtu));
 
+    first_token       = txwq->next_token;
     txwq->next_token = (txwq->next_token + num_packets) & UCS_MASK(24);
+
+    ucs_debug("ft psn post txwq %p qp 0x%x wqe_ci %u opcode 0x%x len %zu "
+              "mtu %zu packets %u token [%u,%u) sw_pi %u hw_ci %u ft_ci %u",
+              txwq, txwq->super.qp_num, wqe_ci, opcode, message_length, mtu,
+              num_packets, first_token, txwq->next_token, txwq->sw_pi,
+              txwq->hw_ci, txwq->ft_ci);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -475,6 +484,7 @@ uct_rc_mlx5_common_post_send(uct_rc_mlx5_iface_common_t *iface, int qp_type,
                              uct_ib_log_sge_t *log_sge)
 {
     struct mlx5_wqe_ctrl_seg *ctrl;
+    uint16_t wqe_ci;
     uint16_t res_count;
 
     if (opcode != MLX5_OPCODE_NOP) {
@@ -487,7 +497,8 @@ uct_rc_mlx5_common_post_send(uct_rc_mlx5_iface_common_t *iface, int qp_type,
         uct_rc_ep_fm(&iface->super, &txwq->fi, 0);
     }
 
-    ctrl = txwq->curr;
+    ctrl   = txwq->curr;
+    wqe_ci = txwq->sw_pi;
 
     if (opcode == MLX5_OPCODE_SEND_IMM) {
         uct_ib_mlx5_set_ctrl_seg_with_imm(ctrl, txwq->sw_pi, opcode, opmod,
@@ -514,7 +525,8 @@ uct_rc_mlx5_common_post_send(uct_rc_mlx5_iface_common_t *iface, int qp_type,
 #else
     if ((qp_type == IBV_QPT_RC) && (opcode != MLX5_OPCODE_NOP)) {
 #endif
-        uct_rc_mlx5_txwq_record_token(iface, txwq, message_length);
+        uct_rc_mlx5_txwq_record_token(iface, txwq, wqe_ci, opcode,
+                                      message_length);
     }
 
     if (fm_ce_se & MLX5_WQE_CTRL_CQ_UPDATE) {
@@ -1965,6 +1977,11 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface, int poll_flags)
     hw_ci = ntohs(cqe->wqe_counter);
     ucs_trace_poll("rc_mlx5 iface %p tx_cqe: ep %p qpn 0x%x hw_ci %d", iface,
                    ep, qp_num, hw_ci);
+    ucs_debug("ft psn cqe ep %p txwq %p qp 0x%x cqe_ci %u old_hw_ci %u "
+              "sw_pi %u ft_ci %u next_token %u deferred %d",
+              ep, &ep->tx.wq, qp_num, hw_ci, ep->tx.wq.hw_ci,
+              ep->tx.wq.sw_pi, ep->tx.wq.ft_ci, ep->tx.wq.next_token,
+              !!(ep->flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS));
 
     if (ucs_unlikely(ep->flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS)) {
         /* Failover owns the in-flight WQEs and completes them from
