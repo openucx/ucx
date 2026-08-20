@@ -683,23 +683,12 @@ uct_rc_mlx5_dp_ordering_ooo_init(uct_ib_mlx5_md_t *md,
     return UCS_OK;
 }
 
-int uct_rc_mlx5_iface_can_single_qp_use_full_bw(
-        uct_rc_mlx5_iface_common_t *iface, uct_ib_mlx5_md_t *md,
-        uint8_t port_num)
+int uct_rc_mlx5_iface_is_ddp_enabled(
+        const uct_rc_mlx5_iface_common_t *iface)
 {
-#define UCT_RC_MLX5_FULL_BW_SPEED_GBPS 800.0
-
-    const int ddp_enabled =
-            (iface->config.dp_ordering_devx ==
-             UCT_IB_MLX5_DP_ORDERING_OOO_ALL) ||
-            iface->config.ddp_enabled_dv;
-
-    return ddp_enabled &&
-           (md->port_select_mode == UCT_IB_MLX5_LAG_MULTI_PORT_ESW) &&
-           (uct_ib_device_query_port_speed_gbps(&md->super.dev, port_num) ==
-            UCT_RC_MLX5_FULL_BW_SPEED_GBPS);
-
-#undef UCT_RC_MLX5_FULL_BW_SPEED_GBPS
+    return (iface->config.dp_ordering_devx ==
+            UCT_IB_MLX5_DP_ORDERING_OOO_ALL) ||
+           iface->config.ddp_enabled_dv;
 }
 
 #if IBV_HW_TM

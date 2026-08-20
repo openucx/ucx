@@ -793,9 +793,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
                     uct_ib_iface_init_attr_t *init_attr)
 {
     uct_ib_mlx5_md_t *md = ucs_derived_of(tl_md, uct_ib_mlx5_md_t);
-    uct_ib_device_t *dev  = &md->super.dev;
     ucs_status_t status;
-    uint8_t port_num;
 
     if (rc_config->super.seg_size > UCT_IB_MLX5_MP_RQ_BYTE_CNT_MASK) {
         ucs_error("IB segment size is too big %ld, it must not exceed %d",
@@ -817,15 +815,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
     if (status != UCS_OK) {
         return status;
     }
-
-    status = uct_ib_device_find_port(dev, init_attr->dev_name, &port_num);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    init_attr->full_bw_single_qp =
-            uct_rc_mlx5_iface_can_single_qp_use_full_bw(
-                    self, md, port_num);
 
     self->rx.srq.type                = UCT_IB_MLX5_OBJ_TYPE_LAST;
     self->tm.cmd_wq.super.super.type = UCT_IB_MLX5_OBJ_TYPE_LAST;
@@ -991,6 +980,10 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
                                               "rc_mlx5");
     if (status != UCS_OK) {
         return status;
+    }
+
+    if (uct_rc_mlx5_iface_is_ddp_enabled(&self->super)) {
+        init_attr.flags |= UCT_IB_DDP_ENABLED;
     }
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,

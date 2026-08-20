@@ -257,7 +257,9 @@ enum {
      * TX CQ len by the number of IB paths (when it is properly initialized). */
     UCT_IB_TX_OPS_PER_PATH           = UCS_BIT(2),
     /* Whether device and transport supports DDP */
-    UCT_IB_DDP_SUPPORTED             = UCS_BIT(3)
+    UCT_IB_DDP_SUPPORTED             = UCS_BIT(3),
+    /* Whether DDP is enabled on the interface */
+    UCT_IB_DDP_ENABLED               = UCS_BIT(4)
 };
 
 
@@ -271,7 +273,6 @@ typedef struct uct_ib_iface_init_attr {
     unsigned    fc_req_size;             /* Flow control request size */
     int         qp_type;                 /* IB QP type */
     int         flags;                   /* Various flags (see enum) */
-    int         full_bw_single_qp;       /* A single QP can use full bandwidth */
     /* The maximum number of outstanding RDMA Read/Atomic operations per QP */
     unsigned    max_rd_atomic;
     uint8_t     cqe_zip_sizes[UCT_IB_DIR_LAST];
@@ -371,7 +372,7 @@ struct uct_ib_iface {
         uint8_t                          qp_type;
         uint8_t                          force_global_addr;
         uint8_t                          flid_enabled;
-        uint8_t                          full_bw_single_qp;
+        uint8_t                          ddp_enabled;
         enum ibv_mtu                     path_mtu;
         uint8_t                          counter_set_id;
         uct_ib_iface_send_overhead_t     send_overhead;

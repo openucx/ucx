@@ -1397,6 +1397,19 @@ static unsigned uct_ib_iface_roce_lag_level(uct_ib_iface_t *iface)
                                             iface->gid_info.gid_index);
 }
 
+static int
+uct_ib_iface_can_single_qp_use_full_bw(uct_ib_iface_t *iface)
+{
+#define UCT_IB_FULL_BW_SPEED_GBPS 800.0
+
+    return iface->config.ddp_enabled &&
+           (uct_ib_device_query_port_speed_gbps(
+                    uct_ib_iface_device(iface), iface->config.port_num) ==
+            UCT_IB_FULL_BW_SPEED_GBPS);
+
+#undef UCT_IB_FULL_BW_SPEED_GBPS
+}
+
 static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
                                        const uct_ib_iface_config_t *config)
 {
@@ -1406,7 +1419,7 @@ static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
         if (uct_ib_iface_is_roce(iface)) {
             /* RoCE - number of paths is RoCE LAG level */
             iface->num_paths = uct_ib_iface_roce_lag_level(iface);
-            if (iface->config.full_bw_single_qp) {
+            if (uct_ib_iface_can_single_qp_use_full_bw(iface)) {
                 iface->num_paths = UCT_IB_HIGH_SPEED_NUM_PATHS;
             }
         } else {
@@ -1752,7 +1765,8 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
     self->release_desc.cb           = uct_ib_iface_release_desc;
     self->config.qp_type            = init_attr->qp_type;
     self->config.flid_enabled       = config->flid_enabled;
-    self->config.full_bw_single_qp  = init_attr->full_bw_single_qp;
+    self->config.ddp_enabled        =
+            !!(init_attr->flags & UCT_IB_DDP_ENABLED);
     uct_ib_iface_set_path_mtu(self, config);
 
     self->config.send_overhead = config->send_overhead;
@@ -2080,7 +2094,8 @@ uct_ib_iface_estimate_path_bw(uct_ib_iface_t *iface,
 
     if (uct_ib_iface_is_roce(iface) &&
         (uct_ib_iface_roce_lag_level(iface) > 1)) {
-        if (uct_ep_op_is_get(op) && iface->config.full_bw_single_qp) {
+        if (uct_ep_op_is_get(op) &&
+            uct_ib_iface_can_single_qp_use_full_bw(iface)) {
             max_path_bandwidth = UCT_IB_XDR_READ_PATH_BANDWIDTH;
             path_ratio         = UCT_IB_XDR_READ_PATH_RATIO;
         } else {
