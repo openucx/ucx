@@ -88,22 +88,64 @@ uct_ze_ipc_cache_region_collect_callback(const ucs_pgtable_t *pgtable,
 }
 
 
-static ucs_status_t
-uct_ze_ipc_close_memhandle(uct_ze_ipc_cache_region_t *region)
+static ucs_status_t uct_ze_ipc_close_mapping(ze_context_handle_t ze_context,
+                                             void *mapped_addr, int dup_fd)
 {
     ze_result_t ret;
 
-    ret = zeMemCloseIpcHandle(region->ze_context, region->mapped_addr);
+    ret = zeMemCloseIpcHandle(ze_context, mapped_addr);
+    if (dup_fd >= 0) {
+        close(dup_fd);
+    }
+
     if (ret != ZE_RESULT_SUCCESS) {
         ucs_warn("zeMemCloseIpcHandle failed with error 0x%x", ret);
         return UCS_ERR_IO_ERROR;
     }
 
-    if (region->dup_fd >= 0) {
-        close(region->dup_fd);
+    return UCS_OK;
+}
+
+
+static ucs_status_t
+uct_ze_ipc_close_memhandle(uct_ze_ipc_cache_region_t *region)
+{
+    return uct_ze_ipc_close_mapping(region->ze_context, region->mapped_addr,
+                                    region->dup_fd);
+}
+
+
+/*
+ * Drop a region that has already been unlinked from the page table. If an
+ * operation is still in flight on the mapping, closing it here would pull the
+ * memory out from under the running copy, so keep it on the orphan list and let
+ * the matching uct_ze_ipc_unmap_memhandle() close it.
+ */
+static void uct_ze_ipc_cache_region_put(uct_ze_ipc_cache_t *cache,
+                                        uct_ze_ipc_cache_region_t *region)
+{
+    if (region->refcount > 0) {
+        ucs_list_add_tail(&cache->orphan_list, &region->list);
+        return;
     }
 
-    return UCS_OK;
+    uct_ze_ipc_close_memhandle(region);
+    ucs_free(region);
+}
+
+
+static uct_ze_ipc_cache_region_t *
+uct_ze_ipc_cache_find_orphan(uct_ze_ipc_cache_t *cache, void *mapped_addr)
+{
+    uct_ze_ipc_cache_region_t *region;
+
+    ucs_list_for_each(region, &cache->orphan_list, list) {
+        if (region->mapped_addr == mapped_addr) {
+            return region;
+        }
+    }
+
+    return NULL;
 }
 
 
@@ -119,6 +161,17 @@ static void uct_ze_ipc_cache_purge(uct_ze_ipc_cache_t *cache)
         uct_ze_ipc_close_memhandle(region);
         ucs_free(region);
     }
+
+    /* the context backing these mappings is going away, so orphans cannot be
+     * left for their in-flight operations to reclaim: closing them later would
+     * pass a destroyed context to zeMemCloseIpcHandle(). This is only safe
+     * because the caller must be quiesced - see uct_ze_ipc_purge_cache_by_context() */
+    ucs_list_for_each_safe(region, tmp, &cache->orphan_list, list) {
+        ucs_list_del(&region->list);
+        uct_ze_ipc_close_memhandle(region);
+        ucs_free(region);
+    }
+
     ucs_trace("%s: ze ipc cache purged", cache->name);
 }
 
@@ -184,13 +237,8 @@ static void uct_ze_ipc_cache_invalidate_regions(uct_ze_ipc_cache_t *cache,
                       (void*)region->key.address, ucs_status_string(status));
         }
 
-        status = uct_ze_ipc_close_memhandle(region);
-        if (status != UCS_OK) {
-            ucs_error("failed to close memhandle for base addr:%p (%s)",
-                      (void*)region->key.address, ucs_status_string(status));
-        }
-
-        ucs_free(region);
+        ucs_list_del(&region->list);
+        uct_ze_ipc_cache_region_put(cache, region);
     }
     ucs_trace("%s: closed memhandles in the range [%p..%p]", cache->name, from,
               to);
@@ -249,6 +297,7 @@ ucs_status_t uct_ze_ipc_unmap_memhandle(pid_t pid, uintptr_t address,
     uct_ze_ipc_cache_t *cache;
     ucs_pgt_region_t *pgt_region;
     uct_ze_ipc_cache_region_t *region;
+    int orphaned;
 
     status = uct_ze_ipc_get_remote_cache(pid, ze_context, &cache);
     if (status != UCS_OK) {
@@ -258,8 +307,25 @@ ucs_status_t uct_ze_ipc_unmap_memhandle(pid_t pid, uintptr_t address,
     /* use write lock because cache maybe modified */
     pthread_rwlock_wrlock(&cache->lock);
     pgt_region = UCS_PROFILE_CALL(ucs_pgtable_lookup, &cache->pgtable, address);
-    ucs_assert(pgt_region != NULL);
-    region = ucs_derived_of(pgt_region, uct_ze_ipc_cache_region_t);
+    region     = NULL;
+    if (pgt_region != NULL) {
+        region = ucs_derived_of(pgt_region, uct_ze_ipc_cache_region_t);
+    }
+
+    /* the cached region may have been replaced by a remap of a reused remote
+     * address while this operation was in flight, in which case the mapping it
+     * used was moved to the orphan list */
+    orphaned = (region == NULL) || (region->mapped_addr != mapped_addr);
+    if (orphaned) {
+        region = uct_ze_ipc_cache_find_orphan(cache, mapped_addr);
+    }
+
+    if (region == NULL) {
+        pthread_rwlock_unlock(&cache->lock);
+        ucs_error("%s: no ze_ipc cache region for mapped address %p",
+                  cache->name, mapped_addr);
+        return UCS_ERR_NO_ELEM;
+    }
 
     ucs_assert(region->refcount >= 1);
     region->refcount--;
@@ -267,13 +333,18 @@ ucs_status_t uct_ze_ipc_unmap_memhandle(pid_t pid, uintptr_t address,
     /*
      * check refcount to see if an in-flight transfer is using the same mapping
      */
-    if (!region->refcount && !cache_enabled) {
-        status = ucs_pgtable_remove(&cache->pgtable, &region->super);
-        if (status != UCS_OK) {
-            ucs_error("failed to remove address:%p from cache (%s)",
-                      (void*)region->key.address, ucs_status_string(status));
+    if ((region->refcount == 0) && (orphaned || !cache_enabled)) {
+        if (orphaned) {
+            ucs_list_del(&region->list);
+        } else {
+            status = ucs_pgtable_remove(&cache->pgtable, &region->super);
+            if (status != UCS_OK) {
+                ucs_error("failed to remove address:%p from cache (%s)",
+                          (void*)region->key.address,
+                          ucs_status_string(status));
+            }
         }
-        ucs_assert(region->mapped_addr == mapped_addr);
+
         status = uct_ze_ipc_close_memhandle(region);
         ucs_free(region);
     }
@@ -331,8 +402,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_ze_ipc_map_memhandle,
             ucs_error("failed to remove address:%p from cache (%s)",
                       (void*)region->key.address, ucs_status_string(status));
         }
-        uct_ze_ipc_close_memhandle(region);
-        ucs_free(region);
+        uct_ze_ipc_cache_region_put(cache, region);
     }
 
     status = uct_ze_ipc_open_memhandle(key, ze_context, ze_device, mapped_addr,
@@ -423,6 +493,8 @@ uct_ze_ipc_create_cache(uct_ze_ipc_cache_t **cache, const char *name)
         status = UCS_ERR_NO_MEMORY;
         goto err_destroy_rwlock;
     }
+
+    ucs_list_head_init(&cache_desc->orphan_list);
 
     *cache = cache_desc;
     return UCS_OK;

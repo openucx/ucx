@@ -155,11 +155,14 @@ UCS_TEST_F(test_ze_ipc_cache, stale_address_is_remapped) {
     EXPECT_NE(mapped_a, mapped_b)
             << "cache returned a's stale mapping for a different allocation";
 
-    /* the second map_memhandle() already invalidated and freed a's region
-     * (both keys alias the same address), so only b's mapping is still
-     * live in the cache to unmap */
-    uct_ze_ipc_unmap_memhandle(key_b.pid, key_b.address, mapped_b,
-                               ze_md->ze_context, dup_fd_b, 0);
+    /* the second map_memhandle() unlinked a's region from the pgtable, but a
+     * still holds a reference, so its mapping must survive on the orphan list
+     * and be reclaimed by its own unmap - looked up by mapped address, since
+     * the pgtable entry for this address now belongs to b */
+    EXPECT_UCS_OK(uct_ze_ipc_unmap_memhandle(key_a.pid, key_a.address, mapped_a,
+                                             ze_md->ze_context, dup_fd_a, 0));
+    EXPECT_UCS_OK(uct_ze_ipc_unmap_memhandle(key_b.pid, key_b.address, mapped_b,
+                                             ze_md->ze_context, dup_fd_b, 0));
 
     uct_md_mem_dereg_params_t dereg_params = {};
     dereg_params.field_mask                = UCT_MD_MEM_DEREG_FIELD_MEMH;
