@@ -419,7 +419,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_ze_ipc_map_memhandle,
     if (ret != 0) {
         ucs_warn("failed to allocate uct_ze_ipc_cache region");
         status = UCS_ERR_NO_MEMORY;
-        goto err;
+        goto err_close;
     }
 
     region->super.start = ucs_align_down_pow2((uintptr_t)key->address,
@@ -447,14 +447,19 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_ze_ipc_map_memhandle,
                   cache->name, UCS_PGT_REGION_ARG(&region->super), key->length,
                   ucs_status_string(status));
         ucs_free(region);
-        goto err;
+        goto err_close;
     }
 
     ucs_trace("%s: ze_ipc cache new region:" UCS_PGT_REGION_FMT " size:%lu",
               cache->name, UCS_PGT_REGION_ARG(&region->super), key->length);
 
-    status = UCS_OK;
+    pthread_rwlock_unlock(&cache->lock);
+    return UCS_OK;
 
+err_close:
+    uct_ze_ipc_close_mapping(ze_context, *mapped_addr, *dup_fd);
+    *mapped_addr = NULL;
+    *dup_fd      = -1;
 err:
     pthread_rwlock_unlock(&cache->lock);
     return status;
