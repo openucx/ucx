@@ -85,7 +85,7 @@ UCS_TEST_F(test_ucp_dt_mem_reg, user_memh_noncacheable_md)
     ucp_md_map_t md_map;
     ucs_status_t status;
 
-    ASSERT_NE(NULL, context->rcache);
+    ASSERT_NE(nullptr, context->rcache);
     params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
                         UCP_MEM_MAP_PARAM_FIELD_LENGTH;
     params.address    = buffer.data();
