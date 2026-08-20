@@ -1352,18 +1352,6 @@ out_unlock:
 
 static void ucs_topo_release_group(ucs_topo_group_t *group)
 {
-    ucs_topo_nics_board_t *nics_board;
-    size_t board_index, nic_index;
-
-    for (board_index = 0; board_index < group->num_nics_boards; ++board_index) {
-        nics_board = &group->nics_boards[board_index];
-        for (nic_index = 0; nic_index < nics_board->num_nics; ++nic_index) {
-            ucs_free(nics_board->nics[nic_index].ports);
-        }
-
-        ucs_free(nics_board->nics);
-    }
-
     ucs_free(group->nics_boards);
     ucs_free(group->gpus);
 }
