@@ -73,6 +73,21 @@ ucp_proto_select_op_flags(const ucp_proto_select_param_t *select_param)
     return select_param->op_id_flags & ~(UCP_PROTO_SELECT_OP_FLAGS_BASE - 1);
 }
 
+static UCS_F_ALWAYS_INLINE ucp_proto_select_t *
+ucp_ep_config_proto_select(ucp_worker_h worker,
+                           ucp_worker_cfg_index_t ep_cfg_index)
+{
+    return &ucs_array_elem(&worker->ep_config, ep_cfg_index).proto_select;
+}
+
+static UCS_F_ALWAYS_INLINE ucp_proto_select_t *
+ucp_rkey_config_proto_select(ucp_worker_h worker,
+                             ucp_worker_cfg_index_t rkey_cfg_index)
+{
+    ucs_assert(rkey_cfg_index != UCP_WORKER_CFG_INDEX_NULL);
+    return &ucs_array_elem(&worker->rkey_config, rkey_cfg_index).proto_select;
+}
+
 static UCS_F_ALWAYS_INLINE const ucp_proto_threshold_elem_t*
 ucp_proto_select_lookup(ucp_worker_h worker, ucp_proto_select_t *proto_select,
                         ucp_worker_cfg_index_t ep_cfg_index,
@@ -101,6 +116,15 @@ ucp_proto_select_lookup(ucp_worker_h worker, ucp_proto_select_t *proto_select,
                                                        &key.param);
             if (ucs_unlikely(select_elem == NULL)) {
                 return NULL;
+            }
+
+            /* lookup_slow may add a configuration and reallocate the array */
+            if (rkey_cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
+                proto_select = ucp_ep_config_proto_select(worker,
+                                                          ep_cfg_index);
+            } else {
+                proto_select = ucp_rkey_config_proto_select(worker,
+                                                            rkey_cfg_index);
             }
         }
 
