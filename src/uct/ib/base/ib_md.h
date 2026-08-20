@@ -233,10 +233,13 @@ typedef ucs_status_t (*uct_ib_md_open_func_t)(struct ibv_device *ibv_device,
                                               const uct_ib_md_config_t *md_config,
                                               struct uct_ib_md **md_p);
 
+typedef int (*uct_ib_md_is_multi_port_func_t)(uct_ib_md_t *md);
+
 
 typedef struct uct_ib_md_ops {
-    uct_md_ops_t          super;
-    uct_ib_md_open_func_t open;
+    uct_md_ops_t                       super;
+    uct_ib_md_open_func_t              open;
+    uct_ib_md_is_multi_port_func_t     is_multi_port;
 } uct_ib_md_ops_t;
 
 

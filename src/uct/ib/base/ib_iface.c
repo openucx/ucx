@@ -1429,9 +1429,12 @@ static int
 uct_ib_iface_can_single_qp_use_full_bw(uct_ib_iface_t *iface)
 {
     const double full_bandwidth_speed_gbps = 800.0;
+    uct_ib_md_t *md                        = uct_ib_iface_md(iface);
+    const uct_ib_md_ops_t *md_ops          = uct_ib_md_ops(md);
 
-    return uct_ib_iface_query_port_speed_gbps(iface) ==
-           full_bandwidth_speed_gbps;
+    return (md_ops->is_multi_port != NULL) && md_ops->is_multi_port(md) &&
+           (uct_ib_iface_query_port_speed_gbps(iface) ==
+            full_bandwidth_speed_gbps);
 }
 
 static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
