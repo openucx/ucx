@@ -32,6 +32,22 @@ Before editing or judging code:
 6. Report the build/test commands used and any hardware, optional dependency,
    or coverage gaps.
 
+## Mandatory Revert Verification
+
+After reverting a change, file, or subset of hunks, do not finish until all of
+the following checks pass:
+
+1. Inspect the complete working-tree diff, not only the explicitly reverted
+   files or hunks.
+2. Use `rg` to search for every identifier introduced by the reverted work and
+   remove stale declarations, definitions, call sites, initializers, flags,
+   includes, tests, comments, and formatting artifacts.
+3. Verify that dependent code remains internally consistent and compilable;
+   never leave a partial revert that relies on a removed symbol or field.
+4. Run `git diff --check` and the relevant build or focused tests. If the build
+   cannot run, report the limitation and perform the strongest available
+   static consistency checks.
+
 ## Build
 
 The two main helpers are `configure-devel` and `configure-release`: pick `configure-devel` for failure investigation, debug-oriented and feature work (logging, assertions, gtest, and valgrind enabled), `configure-release` for performance work (those checks disabled and optimized for speed).
