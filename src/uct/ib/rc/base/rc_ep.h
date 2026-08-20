@@ -452,30 +452,52 @@ uct_rc_txqp_add_flush_comp(uct_rc_iface_t *iface, uct_base_ep_t *ep,
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_rc_txqp_completion_op(uct_rc_iface_send_op_t *op, const void *resp)
+uct_rc_txqp_no_completion_cb(uct_completion_t *comp)
 {
+    (void)comp;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_txqp_completion_op(uct_rc_iface_send_op_t *op, const void *resp,
+                          int suppress_completion)
+{
+    uct_completion_t dummy_comp = {uct_rc_txqp_no_completion_cb, 1, UCS_OK};
+
     ucs_trace_poll("complete op %p sn %d handler %s", op, op->sn,
                    ucs_debug_get_symbol_name((void*)op->handler));
     ucs_assert(op->flags & UCT_RC_IFACE_SEND_OP_FLAG_INUSE);
     op->flags &= ~(UCT_RC_IFACE_SEND_OP_FLAG_INUSE |
                    UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY);
+
+    /* Send handlers invoke user_comp synchronously. Let them perform their
+     * internal response processing and cleanup without completing the
+     * operation after completion ownership has moved to recovery. */
+    if (suppress_completion) {
+        op->user_comp = &dummy_comp;
+    }
+
     op->handler(op, resp);
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_rc_txqp_completion_desc(uct_rc_txqp_t *txqp, uint16_t sn)
+uct_rc_txqp_completion_desc(uct_rc_txqp_t *txqp, uint16_t sn,
+                            int suppress_completion)
 {
     uct_rc_iface_send_op_t *op;
 
     ucs_trace_poll("txqp %p complete ops up to sn %d", txqp, sn);
     ucs_queue_for_each_extract(op, &txqp->outstanding, queue,
                                UCS_CIRCULAR_COMPARE16(op->sn, <=, sn)) {
-        uct_rc_txqp_completion_op(op, ucs_derived_of(op, uct_rc_iface_send_desc_t) + 1);
+        uct_rc_txqp_completion_op(op,
+                                  ucs_derived_of(op, uct_rc_iface_send_desc_t) +
+                                          1,
+                                  suppress_completion);
     }
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_rc_txqp_completion_inl_resp(uct_rc_txqp_t *txqp, const void *resp, uint16_t sn)
+uct_rc_txqp_completion_inl_resp(uct_rc_txqp_t *txqp, const void *resp,
+                                uint16_t sn, int suppress_completion)
 {
     uct_rc_iface_send_op_t *op;
 
@@ -483,7 +505,7 @@ uct_rc_txqp_completion_inl_resp(uct_rc_txqp_t *txqp, const void *resp, uint16_t 
     ucs_queue_for_each_extract(op, &txqp->outstanding, queue,
                                UCS_CIRCULAR_COMPARE16(op->sn, <=, sn)) {
         ucs_assert(!(op->flags & UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY));
-        uct_rc_txqp_completion_op(op, resp);
+        uct_rc_txqp_completion_op(op, resp, suppress_completion);
     }
 }
 

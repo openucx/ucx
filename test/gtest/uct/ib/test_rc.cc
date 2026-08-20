@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2016. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016.All rights reserved.
 * See file LICENSE for terms.
@@ -14,6 +14,8 @@ extern "C" {
 #include <uct/ib/mlx5/rc/rc_mlx5_common.h>
 #include <uct/ib/mlx5/rc/rc_mlx5.h>
 }
+
+#include <sched.h>
 #endif
 
 
@@ -228,6 +230,406 @@ UCS_TEST_P(test_rc_mlx5_invalidate, null_params)
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_rc_mlx5_invalidate, rc_mlx5)
+
+
+class test_rc_mlx5_late_cqe : public test_rc {
+public:
+    void init() override
+    {
+        modify_config("IB_TX_CQE_ZIP_ENABLE", "no");
+        modify_config("IB_TX_INLINE_RESP", "64");
+        test_rc::init();
+    }
+
+protected:
+    struct tracked_completion {
+        uct_completion_t uct;
+        unsigned         callback_count;
+    };
+
+    struct error_context {
+        uct_rc_mlx5_base_ep_t *ep;
+        uint16_t              observed_hw_ci;
+        unsigned              observed_outstanding;
+        unsigned              callback_count;
+    };
+
+    class ep_cleanup_guard {
+    public:
+        ep_cleanup_guard(entity *test_entity) : m_entity(test_entity)
+        {
+        }
+
+        ~ep_cleanup_guard()
+        {
+            uct_rc_mlx5_iface_common_t *iface =
+                    reinterpret_cast<uct_rc_mlx5_iface_common_t*>(
+                            m_entity->iface());
+            uct_rc_mlx5_base_ep_t *ep =
+                    reinterpret_cast<uct_rc_mlx5_base_ep_t*>(m_entity->ep(0));
+            uct_ib_mlx5_txwq_t *txwq = &ep->tx.wq;
+            uct_rc_txqp_t *txqp      = &ep->super.txqp;
+
+            /* This fixture validates CQE processing, not EP retirement. */
+            if (!ucs_queue_is_empty(&txqp->outstanding)) {
+                uct_rc_txqp_purge_outstanding(&iface->super, txqp,
+                                              UCS_ERR_CANCELED, txwq->sw_pi, 0);
+            }
+
+            if (txwq->hw_ci == txwq->prev_sw_pi) {
+                uct_rc_txqp_available_set(txqp, txwq->bb_max);
+            }
+
+            uct_iface_progress_enable(m_entity->iface(), UCT_PROGRESS_SEND);
+            scoped_log_handler hide_warn(hide_warns_logger);
+            m_entity->destroy_ep(0);
+        }
+
+    private:
+        entity *m_entity;
+    };
+
+    static void completion_cb(uct_completion_t *comp)
+    {
+        tracked_completion *tracked = ucs_container_of(comp, tracked_completion,
+                                                       uct);
+
+        ++tracked->callback_count;
+    }
+
+    static struct mlx5_cqe64 make_error_cqe(uint32_t qpn, uint16_t pi)
+    {
+        uct_ib_mlx5_err_cqe_t err_cqe = {};
+        struct mlx5_cqe64 cqe;
+
+        UCS_STATIC_ASSERT(sizeof(cqe) == sizeof(err_cqe));
+
+        err_cqe.s_wqe_opcode_qpn = htonl((MLX5_OPCODE_RDMA_READ << 24) | qpn);
+        err_cqe.wqe_counter      = htons(pi);
+        err_cqe.syndrome         = MLX5_CQE_SYNDROME_WR_FLUSH_ERR;
+        err_cqe.op_own           = MLX5_CQE_REQ_ERR << 4;
+        memcpy(&cqe, &err_cqe, sizeof(cqe));
+        return cqe;
+    }
+
+    static ucs_status_t
+    observe_error_cb(void *arg, uct_ep_h ep, ucs_status_t status)
+    {
+        error_context *context = static_cast<error_context*>(arg);
+
+        EXPECT_EQ(&context->ep->super.super.super, ep);
+        EXPECT_EQ(UCS_ERR_CANCELED, status);
+        context->observed_hw_ci       = context->ep->tx.wq.hw_ci;
+        context->observed_outstanding = ucs_queue_length(
+                &context->ep->super.txqp.outstanding);
+        ++context->callback_count;
+        return UCS_OK;
+    }
+
+    static uint16_t logical_ci(uct_rc_mlx5_base_ep_t *ep)
+    {
+        uct_ib_mlx5_txwq_t *txwq = &ep->tx.wq;
+
+        return txwq->prev_sw_pi -
+               (txwq->bb_max - uct_rc_txqp_available(&ep->super.txqp));
+    }
+
+    static struct mlx5_cqe64 *get_cqe(uct_ib_mlx5_cq_t *cq, unsigned cqe_index)
+    {
+        return reinterpret_cast<struct mlx5_cqe64*>(
+                static_cast<char*>(cq->cq_buf) +
+                ((cqe_index & cq->cq_length_mask) << cq->cqe_size_log));
+    }
+
+    static int cqe_is_hw_owned(uct_ib_mlx5_cq_t *cq, struct mlx5_cqe64 *cqe,
+                               unsigned cqe_index)
+    {
+        uint8_t sw_it_count = cqe_index >> cq->cq_length_log;
+
+        return (sw_it_count ^ cqe->op_own) & MLX5_CQE_OWNER_MASK;
+    }
+
+    static int cqe_is_error_or_zipped(uint8_t op_own)
+    {
+        const uint8_t mask = UCT_IB_MLX5_CQE_FORMAT_MASK |
+                             UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK;
+
+        return (op_own & mask) >= UCT_IB_MLX5_CQE_FORMAT_MASK;
+    }
+
+    static struct mlx5_cqe64 *
+    wait_for_cqe(uct_ib_mlx5_cq_t *cq, unsigned cqe_index)
+    {
+        struct mlx5_cqe64 *cqe = get_cqe(cq, cqe_index);
+        ucs_time_t deadline    = ucs::get_deadline(10.0);
+
+        while (cqe_is_hw_owned(cq, cqe, cqe_index) &&
+               (ucs_get_time() < deadline)) {
+            sched_yield();
+        }
+
+        return cqe;
+    }
+};
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_late_cqe, success_after_no_completions,
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY))
+{
+    uct_rc_mlx5_iface_common_t *iface =
+            reinterpret_cast<uct_rc_mlx5_iface_common_t*>(m_e1->iface());
+    uct_rc_mlx5_base_ep_t *ep = reinterpret_cast<uct_rc_mlx5_base_ep_t*>(
+            m_e1->ep(0));
+    uct_ib_mlx5_txwq_t *txwq  = &ep->tx.wq;
+    uct_rc_txqp_t *txqp       = &ep->super.txqp;
+    uct_ib_mlx5_cq_t *cq      = &iface->cq[UCT_IB_DIR_TX];
+    mapped_buffer sendbuf(64, 0ul, *m_e1);
+    mapped_buffer recvbuf(64, 0ul, *m_e2);
+    tracked_completion completion     = {};
+    uct_ep_invalidate_params_t params = {};
+    struct mlx5_cqe64 *cqe;
+    unsigned old_cq_ci;
+    uint16_t old_hw_ci, old_logical_ci, cqe_pi;
+    int16_t post_available;
+    signed post_cq_available;
+
+    flush();
+    memset(sendbuf.ptr(), 0xa5, sendbuf.length());
+    memset(recvbuf.ptr(), 0, recvbuf.length());
+
+    completion.uct.func   = completion_cb;
+    completion.uct.count  = 1;
+    completion.uct.status = UCS_OK;
+
+    uct_iface_progress_disable(m_e1->iface(), UCT_PROGRESS_SEND);
+    ep_cleanup_guard cleanup(m_e1);
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
+                            sendbuf.memh(), m_e1->iface_attr().cap.put.max_iov);
+    ASSERT_EQ(UCS_INPROGRESS,
+              uct_ep_put_zcopy(m_e1->ep(0), iov, iovcnt, recvbuf.addr(),
+                               recvbuf.rkey(), &completion.uct));
+
+    old_cq_ci = cq->cq_ci;
+    cqe       = wait_for_cqe(cq, old_cq_ci);
+    ASSERT_FALSE(cqe_is_hw_owned(cq, cqe, old_cq_ci));
+    ucs_memory_cpu_load_fence();
+    ASSERT_FALSE(cqe_is_error_or_zipped(cqe->op_own));
+
+    cqe_pi            = ntohs(cqe->wqe_counter);
+    old_hw_ci         = txwq->hw_ci;
+    old_logical_ci    = logical_ci(ep);
+    post_available    = txqp->available;
+    post_cq_available = iface->super.tx.cq_available;
+
+    params.field_mask = UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS;
+    params.flags      = UCT_EP_INVALIDATE_FLAG_NO_COMPLETIONS;
+    ASSERT_UCS_OK(uct_ep_invalidate(m_e1->ep(0), &params));
+    ASSERT_EQ(old_logical_ci, txwq->ft_ci);
+
+    EXPECT_GT(uct_iface_progress(m_e1->iface()), 0u);
+    EXPECT_EQ(old_cq_ci + 1, cq->cq_ci);
+    EXPECT_EQ(cqe_pi, txwq->hw_ci);
+    EXPECT_EQ(old_logical_ci, logical_ci(ep));
+    EXPECT_EQ(old_logical_ci, txwq->ft_ci);
+    EXPECT_EQ(post_available, txqp->available);
+    EXPECT_EQ(post_cq_available + (uint16_t)(cqe_pi - old_hw_ci),
+              iface->super.tx.cq_available);
+    EXPECT_TRUE(ucs_queue_is_empty(&txqp->outstanding));
+    EXPECT_EQ(1, completion.uct.count);
+    EXPECT_EQ(0u, completion.callback_count);
+    EXPECT_EQ(0, memcmp(sendbuf.ptr(), recvbuf.ptr(), sendbuf.length()));
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_late_cqe, get_bcopy_after_no_completions,
+                     !check_caps(UCT_IFACE_FLAG_GET_BCOPY))
+{
+    uct_rc_mlx5_iface_common_t *iface =
+            reinterpret_cast<uct_rc_mlx5_iface_common_t*>(m_e1->iface());
+    uct_rc_mlx5_base_ep_t *ep = reinterpret_cast<uct_rc_mlx5_base_ep_t*>(
+            m_e1->ep(0));
+    uct_ib_mlx5_txwq_t *txwq  = &ep->tx.wq;
+    uct_rc_txqp_t *txqp       = &ep->super.txqp;
+    uct_ib_mlx5_cq_t *cq      = &iface->cq[UCT_IB_DIR_TX];
+    const size_t length       = 32;
+    mapped_buffer localbuf(length, 0ul, *m_e1);
+    mapped_buffer remotebuf(length, 0ul, *m_e2);
+    tracked_completion completion     = {};
+    uct_ep_invalidate_params_t params = {};
+    struct mlx5_cqe64 *cqe;
+    unsigned old_cq_ci;
+    uint16_t old_logical_ci, cqe_pi;
+    ssize_t initial_reads_available, initial_reads_completed;
+
+    if (iface->super.super.config.max_inl_cqe[UCT_IB_DIR_TX] < length) {
+        UCS_TEST_SKIP_R("TX inline response is unavailable");
+    }
+
+    flush();
+    memset(localbuf.ptr(), 0, length);
+    memset(remotebuf.ptr(), 0xa5, length);
+    completion.uct.func     = completion_cb;
+    completion.uct.count    = 1;
+    completion.uct.status   = UCS_OK;
+    initial_reads_available = iface->super.tx.reads_available;
+    initial_reads_completed = iface->super.tx.reads_completed;
+
+    uct_iface_progress_disable(m_e1->iface(), UCT_PROGRESS_SEND);
+    ep_cleanup_guard cleanup(m_e1);
+    old_cq_ci = cq->cq_ci;
+    ASSERT_EQ(UCS_INPROGRESS,
+              uct_ep_get_bcopy(m_e1->ep(0), (uct_unpack_callback_t)memcpy,
+                               localbuf.ptr(), length, remotebuf.addr(),
+                               remotebuf.rkey(), &completion.uct));
+    old_logical_ci = logical_ci(ep);
+    ASSERT_EQ(1ul, ucs_queue_length(&txqp->outstanding));
+    ASSERT_LT(iface->super.tx.reads_available, initial_reads_available);
+
+    cqe = wait_for_cqe(cq, old_cq_ci);
+    ASSERT_FALSE(cqe_is_hw_owned(cq, cqe, old_cq_ci));
+    ucs_memory_cpu_load_fence();
+    ASSERT_FALSE(cqe_is_error_or_zipped(cqe->op_own));
+    ASSERT_TRUE(cqe->op_own &
+                (MLX5_INLINE_SCATTER_32 | MLX5_INLINE_SCATTER_64));
+    cqe_pi = ntohs(cqe->wqe_counter);
+
+    params.field_mask = UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS;
+    params.flags      = UCT_EP_INVALIDATE_FLAG_NO_COMPLETIONS;
+    ASSERT_UCS_OK(uct_ep_invalidate(m_e1->ep(0), &params));
+
+    EXPECT_GT(uct_iface_progress(m_e1->iface()), 0u);
+    EXPECT_EQ(old_cq_ci + 1, cq->cq_ci);
+    EXPECT_EQ(0, memcmp(localbuf.ptr(), remotebuf.ptr(), length));
+    EXPECT_TRUE(ucs_queue_is_empty(&txqp->outstanding));
+    EXPECT_EQ(1, completion.uct.count);
+    EXPECT_EQ(0u, completion.callback_count);
+    EXPECT_EQ(initial_reads_available, iface->super.tx.reads_available);
+    EXPECT_EQ(initial_reads_completed, iface->super.tx.reads_completed);
+    EXPECT_EQ(old_logical_ci, logical_ci(ep));
+    EXPECT_EQ(cqe_pi, txwq->hw_ci);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_late_cqe, error_cqe_state_before_callback,
+                     !check_caps(UCT_IFACE_FLAG_GET_BCOPY))
+{
+    uct_rc_mlx5_iface_common_t *iface =
+            reinterpret_cast<uct_rc_mlx5_iface_common_t*>(m_e1->iface());
+    uct_rc_mlx5_base_ep_t *ep    = reinterpret_cast<uct_rc_mlx5_base_ep_t*>(
+            m_e1->ep(0));
+    uct_base_iface_t *base_iface = &iface->super.super.super;
+    uct_ib_mlx5_txwq_t *txwq     = &ep->tx.wq;
+    uct_rc_txqp_t *txqp          = &ep->super.txqp;
+    uct_ib_mlx5_cq_t *cq         = &iface->cq[UCT_IB_DIR_TX];
+    const size_t length          = 32;
+    mapped_buffer localbuf(length, 0ul, *m_e1);
+    mapped_buffer remotebuf(length, 0ul, *m_e2);
+    tracked_completion completion     = {};
+    uct_ep_invalidate_params_t params = {};
+    error_context context             = {};
+    struct mlx5_cqe64 error_cqe;
+    struct mlx5_cqe64 *cqe;
+    uct_error_handler_t saved_err_handler;
+    void *saved_err_handler_arg;
+    unsigned old_cq_ci;
+    uint16_t old_hw_ci, old_logical_ci, cqe_pi;
+    int16_t post_available, observed_available;
+    signed post_cq_available, observed_cq_available;
+    ssize_t initial_reads_available;
+    ssize_t post_reads_available, post_reads_completed;
+    ssize_t observed_reads_available, observed_reads_completed;
+    uint8_t saved_ep_flags;
+    int16_t saved_fc_wnd;
+    uint64_t saved_fc_wnd_stat;
+    bool outstanding_preserved;
+#if UCS_ENABLE_ASSERT
+    uint8_t saved_txwq_flags;
+#endif
+
+    flush();
+    completion.uct.func     = completion_cb;
+    completion.uct.count    = 1;
+    completion.uct.status   = UCS_OK;
+    initial_reads_available = iface->super.tx.reads_available;
+
+    uct_iface_progress_disable(m_e1->iface(), UCT_PROGRESS_SEND);
+    ep_cleanup_guard cleanup(m_e1);
+    old_cq_ci = cq->cq_ci;
+    ASSERT_EQ(UCS_INPROGRESS,
+              uct_ep_get_bcopy(m_e1->ep(0), (uct_unpack_callback_t)memcpy,
+                               localbuf.ptr(), length, remotebuf.addr(),
+                               remotebuf.rkey(), &completion.uct));
+    ASSERT_EQ(1ul, ucs_queue_length(&txqp->outstanding));
+    ASSERT_LT(iface->super.tx.reads_available, initial_reads_available);
+
+    cqe = wait_for_cqe(cq, old_cq_ci);
+    ASSERT_FALSE(cqe_is_hw_owned(cq, cqe, old_cq_ci));
+    ucs_memory_cpu_load_fence();
+    ASSERT_FALSE(cqe_is_error_or_zipped(cqe->op_own));
+
+    cqe_pi               = ntohs(cqe->wqe_counter);
+    old_hw_ci            = txwq->hw_ci;
+    old_logical_ci       = logical_ci(ep);
+    post_available       = txqp->available;
+    post_cq_available    = iface->super.tx.cq_available;
+    post_reads_available = iface->super.tx.reads_available;
+    post_reads_completed = iface->super.tx.reads_completed;
+
+    params.field_mask = UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS;
+    params.flags      = UCT_EP_INVALIDATE_FLAG_NO_COMPLETIONS;
+    ASSERT_UCS_OK(uct_ep_invalidate(m_e1->ep(0), &params));
+    ASSERT_EQ(old_logical_ci, txwq->ft_ci);
+
+    saved_err_handler     = base_iface->err_handler;
+    saved_err_handler_arg = base_iface->err_handler_arg;
+    saved_ep_flags        = ep->super.flags;
+    saved_fc_wnd          = ep->super.fc.fc_wnd;
+    saved_fc_wnd_stat     = UCS_STATS_GET_COUNTER(ep->super.fc.stats,
+                                                  UCT_RC_FC_STAT_FC_WND);
+#if UCS_ENABLE_ASSERT
+    saved_txwq_flags = txwq->flags;
+#endif
+
+    context.ep                  = ep;
+    base_iface->err_handler     = observe_error_cb;
+    base_iface->err_handler_arg = &context;
+
+    error_cqe         = make_error_cqe(txwq->super.qp_num, cqe_pi);
+    error_cqe.op_own |= cqe->op_own & MLX5_CQE_OWNER_MASK;
+    memcpy(cqe, &error_cqe, sizeof(*cqe));
+    uct_ib_mlx5_check_completion_with_err(&iface->super.super, cq, cqe);
+
+    observed_cq_available    = iface->super.tx.cq_available;
+    observed_available       = txqp->available;
+    observed_reads_available = iface->super.tx.reads_available;
+    observed_reads_completed = iface->super.tx.reads_completed;
+    outstanding_preserved    = ucs_queue_length(&txqp->outstanding) == 1;
+
+    base_iface->err_handler     = saved_err_handler;
+    base_iface->err_handler_arg = saved_err_handler_arg;
+    ep->super.flags             = saved_ep_flags;
+    ep->super.fc.fc_wnd         = saved_fc_wnd;
+    UCS_STATS_SET_COUNTER(ep->super.fc.stats, UCT_RC_FC_STAT_FC_WND,
+                          saved_fc_wnd_stat);
+#if UCS_ENABLE_ASSERT
+    txwq->flags = saved_txwq_flags;
+#endif
+
+    EXPECT_EQ(1u, context.callback_count);
+    EXPECT_EQ(cqe_pi, context.observed_hw_ci);
+    EXPECT_EQ(1u, context.observed_outstanding);
+    EXPECT_EQ(old_cq_ci + 1, cq->cq_ci);
+    EXPECT_EQ(cqe_pi, txwq->hw_ci);
+    EXPECT_EQ(old_logical_ci, logical_ci(ep));
+    EXPECT_EQ(old_logical_ci, txwq->ft_ci);
+    EXPECT_EQ(post_cq_available + (uint16_t)(cqe_pi - old_hw_ci),
+              observed_cq_available);
+    EXPECT_EQ(post_available, observed_available);
+    EXPECT_EQ(post_reads_available, observed_reads_available);
+    EXPECT_EQ(post_reads_completed, observed_reads_completed);
+    EXPECT_TRUE(outstanding_preserved);
+    EXPECT_EQ(1, completion.uct.count);
+    EXPECT_EQ(0u, completion.callback_count);
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_rc_mlx5_late_cqe, rc_mlx5)
 
 
 class test_gga_mlx5_invalidate : public test_rc {
