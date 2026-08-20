@@ -751,7 +751,6 @@ void ucp_proto_select_short_init(ucp_worker_h worker,
     const ucp_proto_threshold_elem_t *thresh;
     ucp_proto_select_param_t select_param;
     const ucp_proto_single_priv_t *spriv;
-    ucp_proto_select_t *proto_select;
     ucp_memory_info_t mem_info;
     ssize_t max_short_signed;
     const uint32_t *op_attribute;
