@@ -788,6 +788,12 @@ typedef struct ucp_ep_params {
      */
     ucs_sock_addr_t         local_sockaddr;
 
+    /**
+     * Traffic class for this endpoint.
+     * This setting is optional. To enable it, the corresponding - @ref
+     * UCP_EP_PARAM_FIELD_EP_TRAFFIC_CLASS bit in the field mask must be set.
+     */
+    uint8_t                 ep_traffic_class;
 } ucp_ep_params_t;
 
 
