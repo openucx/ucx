@@ -687,11 +687,12 @@ uct_rc_mlx5_dp_ordering_ooo_init(uct_ib_mlx5_md_t *md,
 }
 
 int uct_rc_mlx5_iface_can_single_qp_use_full_bw(
-        uct_rc_mlx5_iface_common_t *iface)
+        uct_ib_iface_t *ib_iface)
 {
-    uct_ib_iface_t *ib_iface = &iface->super.super;
-    uct_ib_mlx5_md_t *md     = uct_ib_mlx5_iface_md(ib_iface);
-    const int ddp_enabled     =
+    uct_rc_mlx5_iface_common_t *iface =
+            ucs_derived_of(ib_iface, uct_rc_mlx5_iface_common_t);
+    uct_ib_mlx5_md_t *md = uct_ib_mlx5_iface_md(ib_iface);
+    const int ddp_enabled =
             (iface->config.dp_ordering_devx ==
              UCT_IB_MLX5_DP_ORDERING_OOO_ALL) ||
             iface->config.ddp_enabled_dv;

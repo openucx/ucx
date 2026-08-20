@@ -316,6 +316,8 @@ typedef void (*uct_ib_iface_handle_failure_func_t)(uct_ib_iface_t *iface, void *
 typedef ucs_status_t (*uct_ib_iface_set_ep_failed_func_t)(uct_ib_iface_t *iface, uct_ep_h ep,
                                                           ucs_status_t status);
 
+typedef int (*uct_ib_iface_single_qp_full_bw_func_t)(uct_ib_iface_t *iface);
+
 
 struct uct_ib_iface_ops {
     uct_iface_internal_ops_t           super;
@@ -323,6 +325,8 @@ struct uct_ib_iface_ops {
     uct_ib_iface_destroy_cq_func_t     destroy_cq;
     uct_ib_iface_event_cq_func_t       event_cq;
     uct_ib_iface_handle_failure_func_t handle_failure;
+    uct_ib_iface_single_qp_full_bw_func_t
+                                       can_single_qp_use_full_bw;
 };
 
 
