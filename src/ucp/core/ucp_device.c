@@ -51,8 +51,8 @@ static ucs_spinlock_t ucp_device_handle_hash_lock;
 
 enum {
     UCP_DEVICE_TL_TYPE_FIRST,
-    UCP_DEVICE_TL_TYPE_LKEY = UCP_DEVICE_TL_TYPE_FIRST,
-    UCP_DEVICE_TL_TYPE_NOLKEY,
+    UCP_DEVICE_TL_TYPE_NOLKEY = UCP_DEVICE_TL_TYPE_FIRST,
+    UCP_DEVICE_TL_TYPE_LKEY,
     UCP_DEVICE_TL_TYPE_LAST,
 };
 
@@ -500,6 +500,7 @@ static ucp_lane_index_t ucp_device_ep_find_lane(const ucp_ep_h ep, ucp_rsc_index
 static int
 ucp_device_ep_check_lanes(const ucp_ep_h ep, ucp_tl_bitmap_t *tl_bitmap)
 {
+    ucp_ep_config_t *ep_config = ucp_ep_config(ep);
     ucp_lane_index_t lane;
     ucp_rsc_index_t tl_id;
 
@@ -510,6 +511,10 @@ ucp_device_ep_check_lanes(const ucp_ep_h ep, ucp_tl_bitmap_t *tl_bitmap)
     UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, tl_bitmap) {
         lane = ucp_device_ep_find_lane(ep, tl_id);
         if (lane == UCP_NULL_LANE) {
+            return 0;
+        }
+
+        if (ep_config->key.lanes[lane].dst_md_index == UCP_NULL_RESOURCE) {
             return 0;
         }
     }
