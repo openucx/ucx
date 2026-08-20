@@ -1425,8 +1425,7 @@ uct_ib_iface_query_port_speed_gbps(uct_ib_iface_t *iface)
 #endif
 }
 
-static int
-uct_ib_iface_can_single_qp_use_full_bw(uct_ib_iface_t *iface)
+int uct_ib_iface_is_multiplane_full_bw(uct_ib_iface_t *iface)
 {
     const double full_bandwidth_speed_gbps = 800.0;
     uct_ib_device_t *dev                   = uct_ib_iface_device(iface);
@@ -1445,7 +1444,7 @@ static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
         if (uct_ib_iface_is_roce(iface)) {
             /* RoCE - number of paths is RoCE LAG level */
             iface->num_paths = uct_ib_iface_roce_lag_level(iface);
-            if (uct_ib_iface_can_single_qp_use_full_bw(iface)) {
+            if (uct_ib_iface_is_multiplane_full_bw(iface)) {
                 iface->num_paths = high_speed_num_paths;
             }
         } else {
@@ -2117,7 +2116,7 @@ uct_ib_iface_estimate_path_bw(uct_ib_iface_t *iface,
     if (uct_ib_iface_is_roce(iface) &&
         (uct_ib_iface_roce_lag_level(iface) > 1)) {
         if (uct_ep_op_is_get(op) &&
-            uct_ib_iface_can_single_qp_use_full_bw(iface)) {
+            uct_ib_iface_is_multiplane_full_bw(iface)) {
             max_path_bandwidth = UCT_IB_XDR_READ_PATH_BANDWIDTH;
             path_ratio         = UCT_IB_XDR_READ_PATH_RATIO;
         } else {

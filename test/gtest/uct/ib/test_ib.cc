@@ -124,7 +124,7 @@ UCS_TEST_P(test_uct_ib_perf, get_path_bandwidth, "IB_NUM_PATHS?=auto")
     ASSERT_UCS_OK(uct_iface_estimate_perf(m_e1->iface(), &get_perf));
     ASSERT_UCS_OK(uct_iface_estimate_perf(m_e1->iface(), &put_perf));
 
-    if (uct_ib_iface_port_is_xdr(iface)) {
+    if (uct_ib_iface_is_multiplane_full_bw(iface)) {
         EXPECT_GT(put_perf.bandwidth.shared, get_perf.bandwidth.shared);
         EXPECT_GT(put_perf.path_bandwidth.shared,
                   get_perf.path_bandwidth.shared);
