@@ -38,7 +38,6 @@
  */
 #define UCT_IB_NDR_READ_PATH_BANDWIDTH 38e9
 #define UCT_IB_XDR_READ_PATH_BANDWIDTH 35e9
-#define UCT_IB_HIGH_SPEED_NUM_PATHS    2
 
 /**
  * Minimal NDR single path ratio.
@@ -1401,6 +1400,8 @@ static unsigned uct_ib_iface_roce_lag_level(uct_ib_iface_t *iface)
 static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
                                        const uct_ib_iface_config_t *config)
 {
+#define UCT_IB_HIGH_SPEED_NUM_PATHS 2
+
     if (config->num_paths == UCS_ULUNITS_AUTO) {
         if (uct_ib_iface_is_roce(iface)) {
             /* RoCE - number of paths is RoCE LAG level */
@@ -1421,6 +1422,8 @@ static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
     } else {
         iface->num_paths = config->num_paths;
     }
+
+#undef UCT_IB_HIGH_SPEED_NUM_PATHS
 }
 
 int uct_ib_iface_is_roce_v2(uct_ib_iface_t *iface)
@@ -2077,7 +2080,12 @@ uct_ib_iface_estimate_path_bw(uct_ib_iface_t *iface,
 
     if (uct_ib_iface_is_roce(iface) &&
         (uct_ib_iface_roce_lag_level(iface) > 1)) {
-        path_ratio = 1.0 / iface_attr->dev_num_paths;
+        if (uct_ep_op_is_get(op) && iface->config.full_bw_single_qp) {
+            max_path_bandwidth = UCT_IB_XDR_READ_PATH_BANDWIDTH;
+            path_ratio         = UCT_IB_XDR_READ_PATH_RATIO;
+        } else {
+            path_ratio = 1.0 / iface_attr->dev_num_paths;
+        }
     } else if (uct_ep_op_is_get(op)) {
         if (uct_ib_iface_port_is_ndr(iface)) {
             max_path_bandwidth = UCT_IB_NDR_READ_PATH_BANDWIDTH;

@@ -825,7 +825,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
 
     init_attr->full_bw_single_qp =
             uct_rc_mlx5_iface_can_single_qp_use_full_bw(
-                    self, md, init_attr->qp_type, port_num);
+                    self, md, port_num);
 
     self->rx.srq.type                = UCT_IB_MLX5_OBJ_TYPE_LAST;
     self->tm.cmd_wq.super.super.type = UCT_IB_MLX5_OBJ_TYPE_LAST;

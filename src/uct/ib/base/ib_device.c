@@ -32,10 +32,6 @@
 #endif
 
 
-/* ibv_query_port_speed() reports speed in units of 100 Mb/s. */
-#define UCT_IB_PORT_SPEED_UNIT_GBPS 0.1
-
-
 /* This table is according to "Encoding for RNR NAK Timer Field"
  * in IBTA specification */
 const double uct_ib_qp_rnr_time_ms[] = {
@@ -1410,6 +1406,9 @@ err:
 double uct_ib_device_query_port_speed_gbps(
         uct_ib_device_t *dev UCS_V_UNUSED, uint8_t port_num UCS_V_UNUSED)
 {
+/* ibv_query_port_speed() reports speed in units of 100 Mb/s. */
+#define UCT_IB_PORT_SPEED_UNIT_GBPS 0.1
+
 #if HAVE_DECL_IBV_QUERY_PORT_SPEED
     ucs_log_level_t log_level;
     uint64_t port_speed;
@@ -1430,6 +1429,8 @@ double uct_ib_device_query_port_speed_gbps(
 #else
     return 0.0;
 #endif
+
+#undef UCT_IB_PORT_SPEED_UNIT_GBPS
 }
 
 ucs_status_t uct_ib_device_mtu(const char *dev_name, uct_md_h md, int *p_mtu)

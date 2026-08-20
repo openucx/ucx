@@ -17,9 +17,6 @@
 #include <ucs/profile/profile.h>
 
 
-#define UCT_RC_MLX5_FULL_BW_SPEED_GBPS 800.0
-
-
 ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
   {UCT_IB_CONFIG_PREFIX, "", NULL,
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, super),
@@ -687,25 +684,22 @@ uct_rc_mlx5_dp_ordering_ooo_init(uct_ib_mlx5_md_t *md,
 }
 
 int uct_rc_mlx5_iface_can_single_qp_use_full_bw(
-        uct_rc_mlx5_iface_common_t *iface, uct_ib_mlx5_md_t *md, int qp_type,
+        uct_rc_mlx5_iface_common_t *iface, uct_ib_mlx5_md_t *md,
         uint8_t port_num)
 {
-    const uint32_t devx_qp_flag =
-            (qp_type == UCT_IB_QPT_DCI) ?
-                    UCT_IB_MLX5_MD_FLAG_DEVX_DCI :
-                    UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP;
-    const int ddp_enabled =
-            (md->flags & devx_qp_flag) ?
-                    (iface->config.dp_ordering_devx ==
-                     UCT_IB_MLX5_DP_ORDERING_OOO_ALL) :
-                    iface->config.ddp_enabled_dv;
+#define UCT_RC_MLX5_FULL_BW_SPEED_GBPS 800.0
 
-    ucs_assert((qp_type == UCT_IB_QPT_DCI) || (qp_type == IBV_QPT_RC));
+    const int ddp_enabled =
+            (iface->config.dp_ordering_devx ==
+             UCT_IB_MLX5_DP_ORDERING_OOO_ALL) ||
+            iface->config.ddp_enabled_dv;
 
     return ddp_enabled &&
            (md->port_select_mode == UCT_IB_MLX5_LAG_MULTI_PORT_ESW) &&
            (uct_ib_device_query_port_speed_gbps(&md->super.dev, port_num) ==
             UCT_RC_MLX5_FULL_BW_SPEED_GBPS);
+
+#undef UCT_RC_MLX5_FULL_BW_SPEED_GBPS
 }
 
 #if IBV_HW_TM
