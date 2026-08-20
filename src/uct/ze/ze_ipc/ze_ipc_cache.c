@@ -376,9 +376,18 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_ze_ipc_map_memhandle,
     if (ucs_likely(pgt_region != NULL)) {
         region = ucs_derived_of(pgt_region, uct_ze_ipc_cache_region_t);
 
-        if (ucs_likely((region->key.length == key->length) &&
-                       !memcmp(&region->key.ipc_handle, &key->ipc_handle,
-                               sizeof(key->ipc_handle)))) {
+        /* the IPC handle itself cannot discriminate here: on Linux it carries
+         * an fd number in the exporting process, and fd numbers are reused as
+         * eagerly as virtual addresses. The driver allocation id is a better
+         * discriminator, though ZE only defines it as an allocation identifier
+         * and does not specify its uniqueness scope; the Intel compute runtime
+         * increments it per process. Since that counter restarts in a fresh
+         * process, pid alone does not separate a dead peer from a new one that
+         * reused its PID - the creation time supplies that generation. */
+        if (ucs_likely(
+                    (region->key.alloc_id == key->alloc_id) &&
+                    (region->key.proc_create_time == key->proc_create_time) &&
+                    (region->key.length == key->length))) {
             /* cache hit */
             ucs_trace("%s: ze_ipc cache hit addr:%p size:%lu "
                       "region:" UCS_PGT_REGION_FMT,
