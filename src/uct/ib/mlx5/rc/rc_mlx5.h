@@ -54,6 +54,14 @@ typedef struct uct_rc_mlx5_base_ep {
     } tx;
 } uct_rc_mlx5_base_ep_t;
 
+typedef struct {
+    uint32_t remote_qpn;
+} uct_rc_mlx5_tx_token_t;
+
+typedef struct {
+    uint32_t receiver_next_psn;
+} uct_rc_mlx5_rx_token_t;
+
 
 /**
  * Generic RC remote endpoint with HW TM support

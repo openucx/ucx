@@ -9,6 +9,7 @@
 extern "C" {
 #include <ucs/sys/stubs.h>
 #include <uct/ib/mlx5/ib_mlx5_ext.h>
+#include <uct/ib/mlx5/rc/rc_mlx5.h>
 
 extern ucs_list_link_t uct_ib_mlx5_ext_plugins;
 }
@@ -30,6 +31,34 @@ public:
     }
 
 protected:
+    static ucs_status_t am_counter(void *arg, void*, size_t, unsigned)
+    {
+        ++*static_cast<uint32_t*>(arg);
+        return UCS_OK;
+    }
+
+    static void query_tx_token(uct_ep_h ep, uct_rc_mlx5_ft_tx_token_t *tx_token)
+    {
+        uct_ep_attr_t attr = {};
+
+        attr.field_mask = UCT_EP_ATTR_FIELD_TX_TOKEN;
+        attr.tx_token   = tx_token;
+        ASSERT_UCS_OK(uct_ep_query(ep, &attr));
+    }
+
+    static void query_rx_token(uct_iface_h iface,
+                               const uct_rc_mlx5_ft_tx_token_t *tx_token,
+                               uct_rc_mlx5_ft_rx_token_t *rx_token)
+    {
+        uct_iface_attr_v2_t attr = {};
+
+        attr.field_mask = UCT_IFACE_ATTR_FIELD_TX_TOKEN |
+                          UCT_IFACE_ATTR_FIELD_RX_TOKEN;
+        attr.tx_token   = tx_token;
+        attr.rx_token   = rx_token;
+        ASSERT_UCS_OK(uct_iface_query_v2(iface, &attr));
+    }
+
     static uint64_t tx_token()
     {
         return 0x1234;
@@ -140,11 +169,9 @@ private:
 
 UCS_TEST_P(test_uct_ib_mlx5_ext_rc, iface_query)
 {
-    uint64_t tx_token_value  = tx_token();
-    uint64_t rx_token_value  = 0;
+    uct_rc_mlx5_ft_tx_token_t tx_token_value = {};
+    uct_rc_mlx5_ft_rx_token_t rx_token_value = {};
     uct_iface_attr_v2_t attr = {};
-
-    register_plugin("token", iface_query, ep_query, purge);
 
     {
         scoped_log_handler wrap_err(wrap_errors_logger);
@@ -162,19 +189,19 @@ UCS_TEST_P(test_uct_ib_mlx5_ext_rc, iface_query)
     attr.tx_token   = &tx_token_value;
     attr.rx_token   = &rx_token_value;
 
-    ASSERT_UCS_OK(uct_iface_query_v2(m_e1->iface(), &attr));
+    query_tx_token(m_e1->ep(0), &tx_token_value);
+    ASSERT_UCS_OK(uct_iface_query_v2(m_e2->iface(), &attr));
     EXPECT_TRUE(attr.cap.flags & UCT_IFACE_FLAG_V2_QUERY_TOKEN);
-    EXPECT_EQ(sizeof(uint64_t), attr.tx_token_length);
-    EXPECT_EQ(sizeof(uint64_t), attr.rx_token_length);
-    EXPECT_EQ(rx_token(), rx_token_value);
+    EXPECT_EQ(sizeof(tx_token_value), attr.tx_token_length);
+    EXPECT_EQ(sizeof(rx_token_value), attr.rx_token_length);
 }
 
 UCS_TEST_P(test_uct_ib_mlx5_ext_rc, ep_query)
 {
-    uint64_t tx_token_value = 0;
-    uct_ep_attr_t attr      = {};
-
-    register_plugin("token", iface_query, ep_query, purge);
+    uct_rc_mlx5_ft_tx_token_t tx_token_value = {};
+    uct_rc_mlx5_base_ep_t *remote_ep         = ucs_derived_of(m_e2->ep(0),
+                                                              uct_rc_mlx5_base_ep_t);
+    uct_ep_attr_t attr                       = {};
 
     {
         scoped_log_handler wrap_err(wrap_errors_logger);
@@ -184,7 +211,52 @@ UCS_TEST_P(test_uct_ib_mlx5_ext_rc, ep_query)
 
     attr.tx_token = &tx_token_value;
     ASSERT_UCS_OK(uct_ep_query(m_e1->ep(0), &attr));
-    EXPECT_EQ(tx_token(), tx_token_value);
+    EXPECT_EQ(remote_ep->tx.wq.super.qp_num, tx_token_value.remote_qpn);
+}
+
+UCS_TEST_P(test_uct_ib_mlx5_ext_rc, token_query_psn)
+{
+    uct_rc_mlx5_ft_tx_token_t tx_token_value = {};
+    uct_rc_mlx5_ft_rx_token_t rx_token_pre   = {};
+    uct_rc_mlx5_ft_rx_token_t rx_token_post  = {};
+    uct_rc_mlx5_base_ep_t *sender_ep         = ucs_derived_of(m_e1->ep(0),
+                                                              uct_rc_mlx5_base_ep_t);
+    const uint32_t num_messages = UCS_PTR_BYTE_DIFF(sender_ep->tx.wq.qstart,
+                                                    sender_ep->tx.wq.qend) /
+                                          MLX5_SEND_WQE_BB +
+                                  1;
+    uint32_t rx_count           = 0;
+
+    ASSERT_UCS_OK(uct_iface_set_am_handler(m_e2->iface(), 0, am_counter,
+                                           &rx_count, 0));
+    query_tx_token(m_e1->ep(0), &tx_token_value);
+    query_rx_token(m_e2->iface(), &tx_token_value, &rx_token_pre);
+
+    EXPECT_EQ(sender_ep->tx.wq.next_first_psn, rx_token_pre.receiver_next_psn)
+            << "initial HW receive PSN must match SW send PSN";
+
+    for (uint32_t i = 0; i < num_messages; ++i) {
+        ucs_status_t status;
+
+        do {
+            status = uct_ep_am_short(m_e1->ep(0), 0, i, NULL, 0);
+            if (status == UCS_ERR_NO_RESOURCE) {
+                progress();
+            }
+        } while (status == UCS_ERR_NO_RESOURCE);
+        ASSERT_UCS_OK(status);
+    }
+
+    while (rx_count < num_messages) {
+        progress();
+    }
+
+    query_rx_token(m_e2->iface(), &tx_token_value, &rx_token_post);
+    EXPECT_EQ((rx_token_pre.receiver_next_psn + num_messages) &
+                      UCS_MASK(UCT_IB_MLX5_PSN_BITS),
+              rx_token_post.receiver_next_psn);
+    EXPECT_EQ(sender_ep->tx.wq.next_first_psn, rx_token_post.receiver_next_psn)
+            << "updated HW receive PSN must match SW send PSN";
 }
 
 UCS_TEST_P(test_uct_ib_mlx5_ext_rc, ep_outstanding_purge)
