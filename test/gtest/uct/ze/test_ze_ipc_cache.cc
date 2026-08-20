@@ -203,20 +203,30 @@ UCS_TEST_F(test_ze_ipc_cache, purge_by_context_then_remap) {
     ASSERT_UCS_OK(md->ops->mkey_pack(md, memh, ptr, size, NULL, &key));
 
     void *mapped = NULL;
-    int dup_fd = -1;
-    ASSERT_UCS_OK(uct_ze_ipc_map_memhandle(&key, ze_md->ze_context,
-                                           ze_md->ze_device, &mapped,
-                                           &dup_fd));
+    int dup_fd   = -1;
 
+    /* quiesced purge, which is what md_close() guarantees: drop the reference
+     * first, then purge */
+    ASSERT_UCS_OK(uct_ze_ipc_map_memhandle(&key, ze_md->ze_context,
+                                           ze_md->ze_device, &mapped, &dup_fd));
+    ASSERT_UCS_OK(uct_ze_ipc_unmap_memhandle(key.pid, key.address, mapped,
+                                             ze_md->ze_context, dup_fd, 1));
     uct_ze_ipc_purge_cache_by_context(ze_md->ze_context);
 
-    /* the purged region must not be referenced again; a fresh map/unmap
-     * must succeed cleanly */
+    /* purge freed the cache descriptor as well, so this must rebuild it and go
+     * through a fresh open rather than reuse a freed region */
     ASSERT_UCS_OK(uct_ze_ipc_map_memhandle(&key, ze_md->ze_context,
-                                           ze_md->ze_device, &mapped,
-                                           &dup_fd));
-    uct_ze_ipc_unmap_memhandle(key.pid, key.address, mapped, ze_md->ze_context,
-                               dup_fd, 0);
+                                           ze_md->ze_device, &mapped, &dup_fd));
+    ASSERT_UCS_OK(uct_ze_ipc_unmap_memhandle(key.pid, key.address, mapped,
+                                             ze_md->ze_context, dup_fd, 0));
+
+    /* purging with a reference still outstanding is deliberately destructive:
+     * md_close() destroys the context immediately afterwards, so the mapping
+     * cannot be left for the in-flight operation to reclaim. Nothing may call
+     * unmap for this mapping afterwards - the region is already gone. */
+    ASSERT_UCS_OK(uct_ze_ipc_map_memhandle(&key, ze_md->ze_context,
+                                           ze_md->ze_device, &mapped, &dup_fd));
+    uct_ze_ipc_purge_cache_by_context(ze_md->ze_context);
 
     uct_md_mem_dereg_params_t dereg_params = {};
     dereg_params.field_mask                = UCT_MD_MEM_DEREG_FIELD_MEMH;

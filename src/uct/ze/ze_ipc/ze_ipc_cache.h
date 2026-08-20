@@ -94,11 +94,18 @@ ucs_status_t uct_ze_ipc_unmap_memhandle(pid_t pid, uintptr_t address,
                                         int dup_fd, int cache_enabled);
 
 
-
 /**
- * Purge and destroy all remote caches keyed by the given local Level Zero
- * context, so that closed contexts do not leave behind cache entries that
+ * Purge and free all remote cache entries keyed by the given local Level Zero
+ * context, so that a closed context does not leave behind cache entries that
  * would later be used with a destroyed context.
+ *
+ * Mappings are closed regardless of refcount, and cache descriptors are freed.
+ * The caller must therefore have quiesced this context: all operations issued
+ * against it must have completed, and no thread may enter map/unmap for it
+ * concurrently. This matches the UCT requirement that a memory domain have no
+ * outstanding operations at uct_md_close(), which is the only caller - and it is
+ * not an extra constraint, since md_close() destroys the context immediately
+ * afterwards and would invalidate any in-flight copy anyway.
  *
  * @param ze_context   Level Zero context being closed
  */
