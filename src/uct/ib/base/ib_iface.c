@@ -1397,7 +1397,7 @@ static unsigned uct_ib_iface_roce_lag_level(uct_ib_iface_t *iface)
                                             iface->gid_info.gid_index);
 }
 
-double
+static double
 uct_ib_iface_query_port_speed_gbps(uct_ib_iface_t *iface)
 {
 #if HAVE_DECL_IBV_QUERY_PORT_SPEED
@@ -1428,8 +1428,12 @@ uct_ib_iface_query_port_speed_gbps(uct_ib_iface_t *iface)
 static int
 uct_ib_iface_can_single_qp_use_full_bw(uct_ib_iface_t *iface)
 {
-    return (iface->ops->can_single_qp_use_full_bw != NULL) &&
-           iface->ops->can_single_qp_use_full_bw(iface);
+    const double full_bandwidth_speed_gbps = 800.0;
+    uct_ib_device_t *dev                   = uct_ib_iface_device(iface);
+
+    return (dev->flags & UCT_IB_DEVICE_FLAG_MULTIPLANE) &&
+           (uct_ib_iface_query_port_speed_gbps(iface) ==
+            full_bandwidth_speed_gbps);
 }
 
 static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,

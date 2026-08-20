@@ -1040,12 +1040,10 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
             .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported,
             .ep_put_sgl_zcopy       = uct_ib_mlx5_ext_ep_put_sgl_zcopy
         },
-        .create_cq                 = uct_rc_mlx5_iface_common_create_cq,
-        .destroy_cq                = uct_rc_mlx5_iface_common_destroy_cq,
-        .event_cq                  = uct_rc_mlx5_iface_common_event_cq,
-        .handle_failure            = uct_rc_mlx5_iface_handle_failure,
-        .can_single_qp_use_full_bw =
-                uct_rc_mlx5_iface_can_single_qp_use_full_bw,
+        .create_cq      = uct_rc_mlx5_iface_common_create_cq,
+        .destroy_cq     = uct_rc_mlx5_iface_common_destroy_cq,
+        .event_cq       = uct_rc_mlx5_iface_common_event_cq,
+        .handle_failure = uct_rc_mlx5_iface_handle_failure,
     },
     .init_rx         = uct_rc_mlx5_iface_init_rx,
     .cleanup_rx      = uct_rc_mlx5_iface_cleanup_rx,
