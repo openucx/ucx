@@ -103,6 +103,7 @@ static ucs_status_t uct_ze_ipc_pack_key(uct_ze_ipc_md_t *md, void *address,
     ze_device_handle_t alloc_device         = NULL;
     void *base_address;
     size_t alloc_size;
+    unsigned long proc_create_time;
     ze_result_t ret;
     ucs_status_t status;
     int dev_ordinal;
@@ -132,6 +133,15 @@ static ucs_status_t uct_ze_ipc_pack_key(uct_ze_ipc_md_t *md, void *address,
         return UCS_ERR_INVALID_ADDR;
     }
 
+    /* Resolve this before exporting the handle: without it the importer cannot
+     * tell our allocations from those of a dead process whose PID we reused,
+     * and exporting a key it must then distrust is worse than failing here */
+    proc_create_time = ucs_sys_get_proc_create_time(getpid());
+    if (proc_create_time == 0) {
+        ucs_error("failed to get process creation time for pid %d", getpid());
+        return UCS_ERR_IO_ERROR;
+    }
+
     /* Get IPC handle for the memory */
     status = UCT_ZE_FUNC_LOG_ERR(
             zeMemGetIpcHandle(md->ze_context, base_address, &key->ipc_handle));
@@ -140,10 +150,12 @@ static ucs_status_t uct_ze_ipc_pack_key(uct_ze_ipc_md_t *md, void *address,
         return status;
     }
 
-    key->pid     = getpid();
-    key->address = (uintptr_t)base_address;
-    key->length  = alloc_size;
-    key->dev_num = dev_ordinal;
+    key->pid              = getpid();
+    key->address          = (uintptr_t)base_address;
+    key->length           = alloc_size;
+    key->dev_num          = dev_ordinal;
+    key->alloc_id         = props.id;
+    key->proc_create_time = proc_create_time;
 
     ucs_trace("packed IPC handle for %p base=%p len=%zu dev=%d pid=%d", address,
               base_address, alloc_size, dev_ordinal, key->pid);
