@@ -203,6 +203,10 @@ ucp_am_eager_single_bcopy_pack_common(void *dest, void *arg, int is_reply)
 
     ucs_assert(req->send.state.dt_iter.offset == 0);
 
+    ucs_debug("ft psn ucp pack req %p ep %p proto %s payload %zu reply %d",
+              req, req->send.ep, req->send.proto_config->proto->name,
+              req->send.state.dt_iter.length, is_reply);
+
     ucp_am_fill_header(hdr, req);
 
     length = ucp_am_eager_bcopy_pack(hdr + 1, req,
@@ -234,6 +238,10 @@ ucp_am_eager_single_bcopy_proto_progress(uct_pending_req_t *self)
     const ucp_proto_single_priv_t *spriv = req->send.proto_config->priv;
     ucs_status_t status;
 
+    ucs_debug("ft psn ucp send req %p ep %p proto %s lane %u payload %zu "
+              "flags 0x%x",
+              req, req->send.ep, req->send.proto_config->proto->name,
+              spriv->super.lane, req->send.state.dt_iter.length, req->flags);
     status = ucp_proto_am_bcopy_single_progress(
             req, UCP_AM_ID_AM_SINGLE, spriv->super.lane,
             ucp_am_eager_single_bcopy_pack, req, SIZE_MAX,

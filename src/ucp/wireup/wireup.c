@@ -1073,6 +1073,15 @@ ucp_wireup_augment_aux_tls(ucp_ep_h ep, ucp_lane_map_t lane_map,
     }
 }
 
+static uint64_t
+ucp_wireup_token_debug_value(const void *token, size_t length)
+{
+    uint64_t value = 0;
+
+    memcpy(&value, token, ucs_min(length, sizeof(value)));
+    return value;
+}
+
 /* Collect TX tokens for @a lane_map into contiguous length+blob buffers. */
 static ucs_status_t
 ucp_wireup_collect_tx_tokens(ucp_ep_h ep, ucp_lane_map_t lane_map,
@@ -1151,6 +1160,11 @@ ucp_wireup_collect_tx_tokens(ucp_ep_h ep, ucp_lane_map_t lane_map,
             return status;
         }
 
+        ucs_debug("ft psn ucp tx token ep %p lane %u uct_ep %p length %u "
+                  "raw 0x%" PRIx64,
+                  ep, lane, uct_ep, lengths[token_index],
+                  ucp_wireup_token_debug_value(ep_attr.tx_token,
+                                               lengths[token_index]));
         token_offset += lengths[token_index++];
     }
 
@@ -1247,6 +1261,14 @@ ucp_wireup_derive_rx_tokens(ucp_ep_h ep, ucp_lane_map_t lane_map,
             continue;
         }
 
+        ucs_debug("ft psn ucp rx token ep %p lane %u tx_length %u "
+                  "tx_raw 0x%" PRIx64 " rx_length %u rx_raw 0x%" PRIx64,
+                  ep, lane, tx_lengths[token_index],
+                  ucp_wireup_token_debug_value(attr.tx_token,
+                                               tx_lengths[token_index]),
+                  rx_lengths[token_index],
+                  ucp_wireup_token_debug_value(attr.rx_token,
+                                               rx_lengths[token_index]));
         tx_token_offset += tx_lengths[token_index];
         rx_token_offset += rx_lengths[token_index];
         ++token_index;
@@ -1756,6 +1778,16 @@ ucp_wireup_replay_pending_request(uct_pending_req_t *self, ucp_ep_h ucp_ep)
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
 
     ucs_assert(req->send.ep == ucp_ep);
+
+    ucs_debug("ft psn ucp pending replay req %p ep %p old_lane %u proto %s "
+              "ep_cfg %u req_cfg %u",
+              req, ucp_ep, req->send.lane,
+              (req->flags & UCP_REQUEST_FLAG_PROTO_SEND) ?
+                      req->send.proto_config->proto->name : "N/A",
+              ucp_ep->cfg_index,
+              (req->flags & UCP_REQUEST_FLAG_PROTO_SEND) ?
+                      req->send.proto_config->ep_cfg_index :
+                      UCP_WORKER_CFG_INDEX_NULL);
 
     if ((req->flags & UCP_REQUEST_FLAG_PROTO_SEND) &&
         ((ucp_ep->cfg_index != req->send.proto_config->ep_cfg_index) ||

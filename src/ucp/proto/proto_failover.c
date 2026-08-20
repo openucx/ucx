@@ -344,6 +344,10 @@ ucs_status_t ucp_proto_failover_replay_progress(uct_pending_req_t *self)
     }
 
     op_info = req->send.failover.op_info;
+    ucs_debug("ft psn ucp replay post req %p ep %p failed_lane %u "
+              "selected_lane %u operation %d",
+              req, req->send.ep, req->send.failover.failed_lane,
+              req->send.lane, (int)op_info->operation);
     switch (op_info->operation) {
     case UCT_EP_OP_AM_SHORT:
         status = ucp_proto_failover_replay_am_short(req);
@@ -357,9 +361,15 @@ ucs_status_t ucp_proto_failover_replay_progress(uct_pending_req_t *self)
     }
 
     if (status == UCS_ERR_NO_RESOURCE) {
+        ucs_debug("ft psn ucp replay post result req %p ep %p lane %u "
+                  "status %s",
+                  req, req->send.ep, req->send.lane,
+                  ucs_status_string(status));
         return status;
     }
 
+    ucs_debug("ft psn ucp replay post result req %p ep %p lane %u status %s",
+              req, req->send.ep, req->send.lane, ucs_status_string(status));
     if (status == UCS_OK) {
         ucs_trace("ep %p: replayed failover op %d on lane %u", req->send.ep,
                   (int)op_info->operation, req->send.lane);
