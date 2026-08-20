@@ -9,15 +9,25 @@
 #include <uct/api/device/uct_device_types.h>
 
 typedef struct {
-    uct_device_ep_t    super;
     unsigned long long *pi;
     unsigned long long *ci;
     void               *queue_base;
-    uint64_t           qp_idx;
-    uint64_t           atomic_result_va;
-    uint32_t           atomic_result_lkey;
-    uint8_t            log_depth;
-    uint8_t            pad[3];
+} uct_ib_d2p_gpu_channel_t;
+
+typedef struct {
+    uint8_t                  channel_mask;
+    uint8_t                  log_depth;
+    uint8_t                  pad[2];
+    uint32_t                 atomic_result_lkey;
+    uint64_t                 atomic_result_va;
+    uct_ib_d2p_gpu_channel_t channels[];
+} uct_ib_d2p_gpu_iface_t;
+
+typedef struct {
+    uct_device_ep_t        super;
+    uct_ib_d2p_gpu_iface_t *iface;
+    uint64_t               ep_idx;
+    uint8_t                pad[8];
 } uct_ib_d2p_gpu_ep_t;
 
 #endif /* UCT_D2P_H_ */
