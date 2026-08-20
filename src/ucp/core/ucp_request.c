@@ -338,11 +338,6 @@ int ucp_request_pending_add(ucp_request_t *req)
     if (status == UCS_OK) {
         ucs_trace_data("ep %p: added pending uct request %p to lane[%d]=%p",
                        req->send.ep, req, req->send.lane, uct_ep);
-        ucs_debug("ft psn ucp pending add req %p ep %p lane %u uct_ep %p "
-                  "proto %s",
-                  req, req->send.ep, req->send.lane, uct_ep,
-                  (req->flags & UCP_REQUEST_FLAG_PROTO_SEND) ?
-                          req->send.proto_config->proto->name : "N/A");
         req->send.pending_lane = req->send.lane;
         return 1;
     } else if (status == UCS_ERR_BUSY) {

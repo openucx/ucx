@@ -83,10 +83,6 @@ ucp_proto_am_bcopy_single_progress(ucp_request_t *req, ucp_am_id_t am_id,
 
     status = ucp_proto_am_bcopy_single_send(req, am_id, lane, pack_func,
                                             pack_arg, max_packed_size, fast_path);
-    ucs_debug("ft psn ucp post result req %p ep %p proto %s lane %u "
-              "status %s flags 0x%x",
-              req, req->send.ep, req->send.proto_config->proto->name, lane,
-              ucs_status_string(status), req->flags);
     return ucp_proto_single_status_handle(req, 0, complete_func, lane, status);
 }
 
