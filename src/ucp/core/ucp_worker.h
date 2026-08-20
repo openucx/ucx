@@ -293,7 +293,7 @@ UCS_PTR_MAP_TYPE(ep, 1);
 UCS_PTR_MAP_TYPE(request, 0);
 
 /* rkey configuration storage */
-UCS_ARRAY_DECLARE_TYPE(ucp_rkey_config_arr_t, unsigned, ucp_rkey_config_t);
+UCS_ARRAY_DECLARE_TYPE(ucp_rkey_config_arr_t, unsigned, ucp_rkey_config_t*);
 
 
 /**

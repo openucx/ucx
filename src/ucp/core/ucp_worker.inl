@@ -35,14 +35,21 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_worker_rkey_config_get(
         const ucs_sys_dev_distance_t *lanes_distance,
         ucp_worker_cfg_index_t *cfg_index_p)
 {
-    khiter_t khiter = kh_get(ucp_worker_rkey_config, &worker->rkey_config_hash,
-                             *key);
+    khiter_t khiter;
+    ucs_status_t status;
+
+    UCS_ASYNC_BLOCK(&worker->async);
+    khiter = kh_get(ucp_worker_rkey_config, &worker->rkey_config_hash, *key);
     if (ucs_likely(khiter != kh_end(&worker->rkey_config_hash))) {
         *cfg_index_p = kh_val(&worker->rkey_config_hash, khiter);
+        UCS_ASYNC_UNBLOCK(&worker->async);
         return UCS_OK;
     }
 
-    return ucp_worker_add_rkey_config(worker, key, lanes_distance, cfg_index_p);
+    status = ucp_worker_add_rkey_config(worker, key, lanes_distance,
+                                        cfg_index_p);
+    UCS_ASYNC_UNBLOCK(&worker->async);
+    return status;
 }
 
 static UCS_F_ALWAYS_INLINE khint_t
