@@ -525,6 +525,26 @@ UCS_TEST_SKIP_COND_P(test_dc, stress_iface_ops,
     test_iface_ops(dc_iface(m_e1)->tx.bb_max);
 }
 
+UCS_TEST_P(test_dc, invalidate_no_completions_unsupported)
+{
+    uct_ep_invalidate_params_t params = {};
+    uct_dc_mlx5_ep_t *ep;
+    uint16_t initial_flags;
+
+    m_e1->connect_to_iface(0, *m_e2);
+    ep            = dc_ep(m_e1, 0);
+    initial_flags = ep->flags;
+
+    params.field_mask = UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS;
+    params.flags      = UCT_EP_INVALIDATE_FLAG_NO_COMPLETIONS;
+
+    ASSERT_EQ(UCS_ERR_UNSUPPORTED, uct_ep_invalidate(m_e1->ep(0), &params));
+    EXPECT_EQ(initial_flags, ep->flags);
+
+    ASSERT_UCS_OK(send_am_message(m_e1));
+    flush();
+}
+
 UCT_DC_INSTANTIATE_TEST_CASE(test_dc)
 
 

@@ -144,6 +144,122 @@ UCS_TEST_P(test_rc, fence_am_short_consumed, "RC_FENCE=weak")
 
 UCT_INSTANTIATE_RC_TEST_CASE(test_rc)
 
+#ifdef HAVE_MLX5_DV
+
+class test_rc_mlx5_invalidate : public test_rc {
+};
+
+UCS_TEST_P(test_rc_mlx5_invalidate, no_completions)
+{
+    uct_rc_mlx5_base_ep_t *ep =
+            reinterpret_cast<uct_rc_mlx5_base_ep_t*>(m_e1->ep(0));
+    uct_ep_invalidate_params_t params = {};
+
+    params.field_mask = UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS;
+    params.flags      = UCT_EP_INVALIDATE_FLAG_NO_COMPLETIONS;
+
+    ASSERT_UCS_OK(uct_ep_invalidate(m_e1->ep(0), &params));
+    EXPECT_TRUE(ep->flags & UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS);
+
+    {
+        scoped_log_handler wrap_err(wrap_errors_logger);
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+                  uct_ep_invalidate(m_e1->ep(0), &params));
+    }
+}
+
+UCS_TEST_P(test_rc_mlx5_invalidate,
+           no_completions_unsupported_with_hw_tag_matching)
+{
+    uct_rc_mlx5_iface_common_t *iface =
+            reinterpret_cast<uct_rc_mlx5_iface_common_t*>(m_e1->iface());
+    uct_rc_mlx5_base_ep_t *ep =
+            reinterpret_cast<uct_rc_mlx5_base_ep_t*>(m_e1->ep(0));
+    uct_ep_invalidate_params_t params = {};
+    uint8_t initial_tm_enabled        = iface->tm.enabled;
+    uint8_t initial_ep_flags          = ep->flags;
+    ucs_status_t status;
+
+    iface->tm.enabled = 1;
+
+    params.field_mask = UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS;
+    params.flags      = UCT_EP_INVALIDATE_FLAG_NO_COMPLETIONS;
+    status            = uct_ep_invalidate(m_e1->ep(0), &params);
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, status);
+    EXPECT_EQ(initial_ep_flags, ep->flags);
+
+    iface->tm.enabled = initial_tm_enabled;
+    if (status != UCS_ERR_UNSUPPORTED) {
+        scoped_log_handler hide_warn(hide_warns_logger);
+        m_e1->destroy_ep(0);
+        return;
+    }
+
+    ASSERT_UCS_OK(send_am_message(m_e1));
+    flush();
+}
+
+UCS_TEST_P(test_rc_mlx5_invalidate, unknown_flags_is_atomic)
+{
+    uct_ep_invalidate_params_t params = {};
+    ucs_status_t status;
+
+    params.field_mask = UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS;
+    params.flags      = UCS_BIT(31);
+
+    {
+        scoped_log_handler wrap_err(wrap_errors_logger);
+        status = uct_ep_invalidate(m_e1->ep(0), &params);
+    }
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+    if (status != UCS_ERR_INVALID_PARAM) {
+        scoped_log_handler hide_warn(hide_warns_logger);
+        m_e1->destroy_ep(0);
+        return;
+    }
+
+    ASSERT_UCS_OK(send_am_message(m_e1));
+    flush();
+}
+
+UCS_TEST_P(test_rc_mlx5_invalidate, null_params)
+{
+    ASSERT_UCS_OK(uct_ep_invalidate(m_e1->ep(0), NULL));
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_rc_mlx5_invalidate, rc_mlx5)
+
+
+class test_gga_mlx5_invalidate : public test_rc {
+};
+
+UCS_TEST_P(test_gga_mlx5_invalidate, no_completions_unsupported)
+{
+    mapped_buffer sendbuf(64, 0ul, *m_e1);
+    mapped_buffer recvbuf(64, 0ul, *m_e2);
+    uct_ep_invalidate_params_t params = {};
+    uct_completion_t comp             = {};
+
+    params.field_mask = UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS;
+    params.flags      = UCT_EP_INVALIDATE_FLAG_NO_COMPLETIONS;
+
+    ASSERT_EQ(UCS_ERR_UNSUPPORTED, uct_ep_invalidate(m_e1->ep(0), &params));
+
+    comp.func  = [](uct_completion_t*) {};
+    comp.count = 1;
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
+                            sendbuf.memh(),
+                            m_e1->iface_attr().cap.put.max_iov);
+    ASSERT_UCS_OK_OR_INPROGRESS(
+            uct_ep_put_zcopy(m_e1->ep(0), iov, iovcnt, recvbuf.addr(),
+                             recvbuf.rkey(), &comp));
+    flush();
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_gga_mlx5_invalidate, gga_mlx5)
+
+#endif
+
 
 class test_rc_max_wr : public test_rc {
 protected:

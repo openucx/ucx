@@ -846,6 +846,12 @@ ucs_status_t uct_dc_mlx5_ep_invalidate(uct_ep_h tl_ep,
                                        const uct_ep_invalidate_params_t *params)
 {
     uct_dc_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
+    ucs_status_t status;
+
+    status = uct_ep_invalidate_params_check(tl_ep, params, 0, NULL);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
         ep->flags |= UCT_DC_MLX5_EP_FLAG_INVALIDATED;

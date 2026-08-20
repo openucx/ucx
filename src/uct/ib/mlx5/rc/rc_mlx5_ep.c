@@ -788,9 +788,27 @@ ucs_status_t
 uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
                                const uct_ep_invalidate_params_t *params)
 {
-    UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
-    uct_ib_mlx5_txwq_t *txwq = &ep->super.tx.wq;
+    UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
+    uct_ib_mlx5_txwq_t *txwq = &ep->tx.wq;
+    unsigned flags;
     ucs_status_t status;
+
+    status = uct_ep_invalidate_params_check(
+            tl_ep, params, UCT_EP_INVALIDATE_FLAG_NO_COMPLETIONS, &flags);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (flags & UCT_EP_INVALIDATE_FLAG_NO_COMPLETIONS) {
+        if (ep->flags & UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS) {
+            ucs_error("ep %p: completions are already disabled", ep);
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        if (UCT_RC_MLX5_TM_ENABLED(iface)) {
+            return UCS_ERR_UNSUPPORTED;
+        }
+    }
 
     status = uct_ib_mlx5_modify_qp_state(&iface->super.super, &txwq->super,
                                          IBV_QPS_ERR);
@@ -798,15 +816,12 @@ uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
         return status;
     }
 
-    if ((params->field_mask & UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS) &&
-        (params->flags & UCT_EP_INVALIDATE_FLAG_NO_COMPLETIONS)) {
-        ucs_assert(!(ep->super.flags & UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS));
-
+    if (flags & UCT_EP_INVALIDATE_FLAG_NO_COMPLETIONS) {
         txwq->ft_ci      = txwq->prev_sw_pi -
                            (txwq->bb_max -
-                            uct_rc_txqp_available(&ep->super.super.txqp));
+                            uct_rc_txqp_available(&ep->super.txqp));
         txwq->hw_ci      = txwq->ft_ci;
-        ep->super.flags |= UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS;
+        ep->flags       |= UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS;
 
         ucs_debug("ep %p disable completions WQE range (%u, %u) "
                   "next_first_psn %u",

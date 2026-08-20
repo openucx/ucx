@@ -1870,6 +1870,12 @@ ucs_status_t uct_ud_ep_invalidate(uct_ep_h tl_ep,
     uct_ud_ep_t *ep       = ucs_derived_of(tl_ep, uct_ud_ep_t);
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                            uct_ud_iface_t);
+    ucs_status_t status;
+
+    status = uct_ep_invalidate_params_check(tl_ep, params, 0, NULL);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     uct_ud_enter(iface);
     uct_ud_ep_handle_timeout(ep);
