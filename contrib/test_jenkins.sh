@@ -1428,6 +1428,9 @@ run_configure_tests() {
 # Run all tests
 #
 run_tests() {
+
+	ibv_devinfo || true
+
 	export UCX_PROTO_REQUEST_RESET=y
 
 	# all are running mpi tests
