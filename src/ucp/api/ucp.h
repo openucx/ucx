@@ -1404,8 +1404,21 @@ typedef struct ucp_worker_attr {
     size_t                max_debug_string;
 
     /**
-     * Device name whose resources should be included in the worker address.
-     * @note This is an input parameter.
+     * Name of the communication device whose resources should be included in
+     * the worker address. It must exactly match the full name reported in the
+     * "Device:" field by @c ucx_info @c -d for a resource enabled in the
+     * worker's context. The selector can name network, shared-memory,
+     * accelerator, or loopback devices.
+     *
+     * If @ref UCP_WORKER_ATTR_FIELD_ADDRESS_DEVICE_NAME and
+     * @ref UCP_WORKER_ATTR_FIELD_ADDRESS are set in @ref field_mask, the
+     * resulting address is restricted to resources with this device name. If
+     * @ref UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS is also set, its filters are
+     * applied in addition to this one. Consequently, combining
+     * @ref UCP_WORKER_ADDRESS_FLAG_NET_ONLY with a non-network device name
+     * matches no resources.
+     *
+     * @note This is an input attribute.
      */
     const char            *address_device_name;
 } ucp_worker_attr_t;
