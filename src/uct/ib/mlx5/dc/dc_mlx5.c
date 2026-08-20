@@ -1691,10 +1691,6 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
         return status;
     }
 
-    if (uct_rc_mlx5_iface_is_ddp_enabled(&self->super)) {
-        init_attr.flags |= UCT_IB_DDP_ENABLED;
-    }
-
     /* TODO check caps instead */
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
                               &uct_dc_mlx5_iface_tl_ops, &uct_dc_mlx5_iface_ops,

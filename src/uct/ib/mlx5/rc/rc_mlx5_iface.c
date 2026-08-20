@@ -807,6 +807,10 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
         return UCS_ERR_INVALID_PARAM;
     }
 
+    if (uct_rc_mlx5_iface_is_ddp_enabled(self)) {
+        init_attr->flags |= UCT_IB_DDP_ENABLED;
+    }
+
     init_attr->flags |= UCT_IB_CQ_IGNORE_OVERRUN;
     uct_ib_mlx5_parse_cqe_zipping(md, &mlx5_config->super, init_attr);
 
@@ -980,10 +984,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
                                               "rc_mlx5");
     if (status != UCS_OK) {
         return status;
-    }
-
-    if (uct_rc_mlx5_iface_is_ddp_enabled(&self->super)) {
-        init_attr.flags |= UCT_IB_DDP_ENABLED;
     }
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
