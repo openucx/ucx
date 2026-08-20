@@ -149,7 +149,7 @@ protected:
 
     void sleep()
     {
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 
     void measure_one(int iter_count, int thread_count, int writers,
