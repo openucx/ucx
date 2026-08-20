@@ -307,17 +307,33 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_ze_ipc_map_memhandle,
     if (ucs_likely(pgt_region != NULL)) {
         region = ucs_derived_of(pgt_region, uct_ze_ipc_cache_region_t);
 
-        /* cache hit */
-        ucs_trace("%s: ze_ipc cache hit addr:%p size:%lu region:"
-                  UCS_PGT_REGION_FMT, cache->name, (void *)key->address,
-                  key->length, UCS_PGT_REGION_ARG(&region->super));
+        if (ucs_likely((region->key.length == key->length) &&
+                        !memcmp(&region->key.ipc_handle, &key->ipc_handle,
+                               sizeof(key->ipc_handle)))) {
+            /* cache hit */
+            ucs_trace("%s: ze_ipc cache hit addr:%p size:%lu region:"
+                      UCS_PGT_REGION_FMT, cache->name, (void *)key->address,
+                      key->length, UCS_PGT_REGION_ARG(&region->super));
 
-        *mapped_addr = region->mapped_addr;
-        *dup_fd      = region->dup_fd;
-        ucs_assert(region->refcount < UINT64_MAX);
-        region->refcount++;
-        pthread_rwlock_unlock(&cache->lock);
-        return UCS_OK;
+            *mapped_addr = region->mapped_addr;
+            *dup_fd      = region->dup_fd;
+            ucs_assert(region->refcount < UINT64_MAX);
+            region->refcount++;
+            pthread_rwlock_unlock(&cache->lock);
+            return UCS_OK;
+        }
+
+        /* remote allocation at this address was freed and a different one
+         * reused the same VA - drop the stale mapping and remap below */
+        ucs_trace("%s: ze_ipc cache stale mapping addr:%p, invalidating",
+                  cache->name, (void *)key->address);
+        status = ucs_pgtable_remove(&cache->pgtable, &region->super);
+        if (status != UCS_OK) {
+            ucs_error("failed to remove address:%p from cache (%s)",
+                      (void *)region->key.address, ucs_status_string(status));
+        }
+        uct_ze_ipc_close_memhandle(region);
+        ucs_free(region);
     }
 
     status = uct_ze_ipc_open_memhandle(key, ze_context, ze_device, mapped_addr, dup_fd);
@@ -429,6 +445,28 @@ void uct_ze_ipc_destroy_cache(uct_ze_ipc_cache_t *cache)
 }
 
 
+void uct_ze_ipc_purge_cache_by_context(ze_context_handle_t ze_context)
+{
+    uct_ze_ipc_cache_t *cache;
+    khint_t khiter;
+
+    ucs_recursive_spin_lock(&uct_ze_ipc_remote_cache.lock);
+    for (khiter = kh_begin(&uct_ze_ipc_remote_cache.hash);
+         khiter != kh_end(&uct_ze_ipc_remote_cache.hash); ++khiter) {
+        if (!kh_exist(&uct_ze_ipc_remote_cache.hash, khiter) ||
+            (kh_key(&uct_ze_ipc_remote_cache.hash, khiter).ze_context !=
+             ze_context)) {
+            continue;
+        }
+
+        cache = kh_val(&uct_ze_ipc_remote_cache.hash, khiter);
+        kh_del(ze_ipc_rem_cache, &uct_ze_ipc_remote_cache.hash, khiter);
+        uct_ze_ipc_destroy_cache(cache);
+    }
+    ucs_recursive_spin_unlock(&uct_ze_ipc_remote_cache.lock);
+}
+
+
 UCS_STATIC_INIT {
     ucs_recursive_spinlock_init(&uct_ze_ipc_remote_cache.lock, 0);
     kh_init_inplace(ze_ipc_rem_cache, &uct_ze_ipc_remote_cache.hash);
@@ -444,5 +482,3 @@ UCS_STATIC_CLEANUP {
     kh_destroy_inplace(ze_ipc_rem_cache, &uct_ze_ipc_remote_cache.hash);
     ucs_recursive_spinlock_destroy(&uct_ze_ipc_remote_cache.lock);
 }
-
-

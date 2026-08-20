@@ -8,6 +8,7 @@
 #endif
 
 #include "ze_ipc_md.h"
+#include "ze_ipc_cache.h"
 
 #include <uct/ze/base/ze_base.h>
 #include <uct/api/v2/uct_v2.h>
@@ -250,6 +251,7 @@ static void uct_ze_ipc_md_close(uct_md_h uct_md)
     uct_ze_ipc_md_t *md = ucs_derived_of(uct_md, uct_ze_ipc_md_t);
 
     if (md->ze_context != NULL) {
+        uct_ze_ipc_purge_cache_by_context(md->ze_context);
         zeContextDestroy(md->ze_context);
     }
     ucs_free(md);
