@@ -100,7 +100,9 @@ enum {
     UCT_IB_DEVICE_FLAG_AV       = UCS_BIT(8),   /* Device supports compact AV */
     UCT_IB_DEVICE_FLAG_DC       = UCT_IB_DEVICE_FLAG_DC_V1 |
                                   UCT_IB_DEVICE_FLAG_DC_V2, /* Device supports DC */
-    UCT_IB_DEVICE_FAILED        = UCS_BIT(9)    /* Got fatal error */
+    UCT_IB_DEVICE_FAILED        = UCS_BIT(9),    /* Got fatal error */
+
+    UCT_IB_DEVICE_FLAG_MULTIPLANE = UCS_BIT(10) /* Supports multiplane */
 };
 
 

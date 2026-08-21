@@ -571,6 +571,13 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface,
                                 uct_iface_attr_t *iface_attr);
 
 
+/**
+ * @return Nonzero if a multiplane interface can use its full bandwidth with a
+ *         single QP.
+ */
+int uct_ib_iface_is_multiplane_full_bw(uct_ib_iface_t *iface);
+
+
 ucs_status_t
 uct_ib_iface_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr);
 
