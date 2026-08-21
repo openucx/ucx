@@ -164,6 +164,22 @@ public:
         EXPECT_EQ(3, ep(m_e1)->tx.acked_psn);
     }
 
+    uct_ud_ep_t *find_private_ep(entity *e, uint32_t dest_ep_id) {
+        unsigned index;
+        void *elem;
+
+        ucs_ptr_array_for_each(elem, index, &iface(e)->eps) {
+            uct_ud_ep_t *ud_ep = static_cast<uct_ud_ep_t*>(elem);
+
+            if ((ud_ep->flags & UCT_UD_EP_FLAG_PRIVATE) &&
+                (ud_ep->dest_ep_id == dest_ep_id)) {
+                return ud_ep;
+            }
+        }
+
+        return NULL;
+    }
+
 
     static volatile uint32_t     rx_ack_count;
     static volatile uint32_t     rx_drop_count;
@@ -912,6 +928,72 @@ UCS_TEST_P(test_ud, stale_crep_on_reused_ep_id, "UD_LINGER_TIMEOUT=1s") {
     EXPECT_EQ(UCT_UD_EP_NULL_ID, ep(m_e1)->dest_ep_id);
     EXPECT_EQ(UCT_UD_INITIAL_PSN - 1, ep(m_e1)->tx.acked_psn);
     EXPECT_FALSE(ucs_queue_is_empty(&ep(m_e1)->tx.window));
+}
+
+/* Stale private endpoint must be released after its peer is gone, so that it is
+ * not reused by a connection which is matched by the same conn_sn. */
+UCS_TEST_P(test_ud, stale_private_ep_reuse, "UD_LINGER_TIMEOUT=1s",
+           "UD_TIMEOUT=1s") {
+    void *ud_ep GTEST_ATTRIBUTE_UNUSED_;
+
+    m_e1->connect_to_iface(0, *m_e2);
+    flush();
+
+    /* m_e2 has a private endpoint which is connected to the endpoint of m_e1 */
+    uint32_t old_id         = ep(m_e1)->ep_id;
+    uct_ud_ep_t *private_ep = find_private_ep(m_e2, old_id);
+    ASSERT_TRUE(private_ep != NULL);
+
+    uint32_t private_index = uct_ud_ep_id_index(private_ep->ep_id);
+    m_e1->destroy_ep(0);
+
+    /* The second connection makes m_e2 hold 2 private endpoints, where the
+     * stale one is matched by the next conn_sn of m_e2 */
+    m_e1->connect_to_iface(0, *m_e2);
+    flush();
+    ASSERT_NE(old_id, ep(m_e1)->ep_id);
+
+    wait_for_ep_destroyed(iface(m_e1), uct_ud_ep_id_index(old_id));
+
+    /* The peer of the stale private endpoint is gone, so it must be released */
+    wait_for_ep_destroyed(iface(m_e2), private_index);
+    EXPECT_FALSE(ucs_ptr_array_lookup(&iface(m_e2)->eps, private_index, ud_ep));
+
+    /* The private endpoint of the live connection must be kept */
+    EXPECT_TRUE(find_private_ep(m_e2, ep(m_e1)->ep_id) != NULL);
+
+    m_e2->connect_to_iface(0, *m_e1);
+    flush();
+
+    EXPECT_NE(UCT_UD_EP_NULL_ID, ep(m_e2)->dest_ep_id);
+    EXPECT_NE(old_id, ep(m_e2)->dest_ep_id);
+}
+
+/* Private endpoint must be kept as long as its peer is alive. */
+UCS_TEST_P(test_ud, private_ep_keepalive, "UD_TIMEOUT=1s") {
+    ucs_time_t deadline = ucs_get_time() + ucs_time_from_sec(3);
+    void *ud_ep GTEST_ATTRIBUTE_UNUSED_;
+
+    m_e1->connect_to_iface(0, *m_e2);
+    flush();
+
+    uct_ud_ep_t *private_ep = find_private_ep(m_e2, ep(m_e1)->ep_id);
+    ASSERT_TRUE(private_ep != NULL);
+
+    uint32_t private_index = uct_ud_ep_id_index(private_ep->ep_id);
+
+    /* Stay idle for several peer timeouts, the peer is alive and must be
+     * detected as such */
+    while (ucs_get_time() < deadline) {
+        short_progress_loop();
+    }
+
+    ASSERT_TRUE(ucs_ptr_array_lookup(&iface(m_e2)->eps, private_index, ud_ep));
+    EXPECT_EQ(ep(m_e1)->ep_id, private_ep->dest_ep_id);
+
+    /* The connection is still usable */
+    EXPECT_UCS_OK(tx(m_e1));
+    flush();
 }
 
 #if UCT_UD_EP_DEBUG_HOOKS
