@@ -22,7 +22,7 @@
 
 
 typedef struct uct_rocm_ipc_cache_hash_key {
-    pid_t        pid;    /* PID of the process that owns the memory */
+    pid_t        pid; /* PID of the process that owns the memory */
     ucs_sys_ns_t pid_ns; /* PID namespace of the owner process */
     int          dev_num; /* Device number the memory was allocated on */
 } uct_rocm_ipc_cache_hash_key_t;
@@ -132,9 +132,9 @@ static void uct_rocm_ipc_cache_invalidate_regions(uct_rocm_ipc_cache_t *cache,
               cache->name, from, to);
 }
 
-static ucs_status_t
-uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
-                             uct_rocm_ipc_key_t *key, void **mapped_addr)
+static ucs_status_t uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
+                                                  uct_rocm_ipc_key_t *key,
+                                                  void **mapped_addr)
 {
     ucs_status_t status;
     ucs_pgt_region_t *pgt_region;
@@ -311,8 +311,8 @@ uct_rocm_ipc_remote_cache_get(uct_rocm_ipc_cache_hash_key_t key,
     return UCS_OK;
 }
 
-ucs_status_t uct_rocm_ipc_cache_map_memhandle(uct_rocm_ipc_key_t *key,
-                                              void **mapped_addr)
+ucs_status_t
+uct_rocm_ipc_cache_map_memhandle(uct_rocm_ipc_key_t *key, void **mapped_addr)
 {
     uct_rocm_ipc_cache_hash_key_t hash_key = {key->pid, key->pid_ns,
                                               key->dev_num};
@@ -338,17 +338,18 @@ void uct_rocm_ipc_destroy_cache(uct_rocm_ipc_cache_t *cache)
     ucs_free(cache);
 }
 
-UCS_STATIC_INIT {
+UCS_STATIC_INIT
+{
     ucs_rw_spinlock_init(&uct_rocm_ipc_remote_cache.lock);
     kh_init_inplace(rocm_ipc_rem_cache, &uct_rocm_ipc_remote_cache.hash);
 }
 
-UCS_STATIC_CLEANUP {
+UCS_STATIC_CLEANUP
+{
     uct_rocm_ipc_cache_t *cache;
 
-    kh_foreach_value(&uct_rocm_ipc_remote_cache.hash, cache, {
-        uct_rocm_ipc_destroy_cache(cache);
-    })
+    kh_foreach_value(&uct_rocm_ipc_remote_cache.hash, cache,
+                     { uct_rocm_ipc_destroy_cache(cache); })
     kh_destroy_inplace(rocm_ipc_rem_cache, &uct_rocm_ipc_remote_cache.hash);
     ucs_rw_spinlock_cleanup(&uct_rocm_ipc_remote_cache.lock);
 }

@@ -33,7 +33,7 @@ typedef struct uct_rocm_ipc_key {
     uintptr_t            address;
     size_t               length;
     int                  dev_num;
-    pid_t                pid;    /* PID of the process that owns the memory */
+    pid_t                pid; /* PID of the process that owns the memory */
     ucs_sys_ns_t         pid_ns; /* PID namespace of the owner process */
 } uct_rocm_ipc_key_t;
 
