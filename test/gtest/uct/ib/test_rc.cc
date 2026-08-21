@@ -1384,7 +1384,7 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_token_query, am_short,
 
     query_tx_token(m_e1->ep(0), &tx_token);
     query_rx_token(m_e2->iface(), &tx_token, &rx_token);
-    EXPECT_EQ(num_message, rx_token.receiver_next_psn - 1);
+    EXPECT_EQ(num_message, rx_token.receiver_next_psn);
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_rc_mlx5_token_query, rc_mlx5)
