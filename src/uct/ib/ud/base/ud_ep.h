@@ -26,6 +26,19 @@
 #define UCT_UD_EP_GEN_MASK       UCS_MASK(UCT_UD_EP_GEN_BITS)
 #define UCT_UD_EP_INDEX_MAX      (UCT_UD_EP_INDEX_MASK - 1)
 
+#define UCT_UD_EP_ID_FMT "0x%x(gen_id=%u ep_index=%u)"
+#define UCT_UD_EP_ID_ARG(_id) \
+    (unsigned)(_id), (unsigned)((_id) >> UCT_UD_EP_INDEX_BITS), \
+    (unsigned)((_id) & UCT_UD_EP_INDEX_MASK)
+
+#define UCT_UD_EP_FMT "ep=%p(id=" UCT_UD_EP_ID_FMT " conn_sn=%u)"
+#define UCT_UD_EP_ARG(_ep) \
+    (_ep), UCT_UD_EP_ID_ARG((_ep)->ep_id), (unsigned)((_ep)->conn_sn)
+
+#define UCT_UD_EP_DEST_FMT UCT_UD_EP_FMT " -> dest_ep_id=" UCT_UD_EP_ID_FMT
+#define UCT_UD_EP_DEST_ARG(_ep) \
+    UCT_UD_EP_ARG(_ep), UCT_UD_EP_ID_ARG((_ep)->dest_ep_id)
+
 typedef uint32_t uct_ud_ep_conn_sn_t;
 
 #if UCT_UD_EP_DEBUG_HOOKS
