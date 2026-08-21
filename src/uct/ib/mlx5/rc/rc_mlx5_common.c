@@ -102,6 +102,7 @@ ucs_status_t uct_rc_mlx5_fill_am_op_info(const uct_ib_mlx5_txwq_t *txwq,
                                          void *callback_data)
 {
     const struct mlx5_wqe_inl_data_seg *inl;
+    size_t inline_length, inline_wqe_size;
 
     memset(info, 0, sizeof(*info));
     *skip_p = 0;
@@ -109,8 +110,18 @@ ucs_status_t uct_rc_mlx5_fill_am_op_info(const uct_ib_mlx5_txwq_t *txwq,
     inl = uct_ib_mlx5_txwq_wrap_any((uct_ib_mlx5_txwq_t*)txwq,
                                     (void*)(ctrl + 1));
     if (inl->byte_count & htonl(MLX5_INLINE_SEG)) {
-        return uct_rc_mlx5_fill_am_inline_info(txwq, inl, wqe_size, info,
-                                               skip_p, callback_data);
+        inline_length   = ntohl(inl->byte_count) & ~MLX5_INLINE_SEG;
+        inline_wqe_size = sizeof(*ctrl) +
+                          ucs_align_up_pow2(sizeof(*inl) + inline_length,
+                                            UCT_IB_MLX5_WQE_SEG_SIZE);
+        ucs_assert(inline_wqe_size <= wqe_size);
+
+        if (inline_wqe_size == wqe_size) {
+            return uct_rc_mlx5_fill_am_inline_info(txwq, inl, wqe_size, info,
+                                                   skip_p, callback_data);
+        }
+
+        return UCS_ERR_UNSUPPORTED;
     }
 
     if ((op != NULL) && ((void*)op->handler == (void*)ucs_mpool_put)) {
