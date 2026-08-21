@@ -34,6 +34,15 @@ BEGIN_C_DECLS
 /* Maximal size of BDF string */
 #define UCS_SYS_BDF_NAME_MAX 16
 
+/* Maximal number of ports per NIC */
+#define UCS_TOPO_MAX_PORTS_PER_NIC 2
+
+/* Maximal number of NICs per board */
+#define UCS_TOPO_MAX_NICS_PER_BOARD 2
+
+/* Maximal number of devices (uGPUs) per physical GPU */
+#define UCS_TOPO_MAX_DEVICES_PER_GPU 2
+
 
 typedef struct ucs_sys_bus_id {
     uint16_t domain;   /* range: 0 to ffff */
@@ -68,6 +77,72 @@ typedef enum {
     UCS_TOPO_DEVICE_CLASS_NET, /**< Network device */
     UCS_TOPO_DEVICE_CLASS_ACC /**< Acceleration device (e.g. GPU) */
 } ucs_topo_device_class_t;
+
+
+/**
+ * @ingroup UCS_RESOURCE
+ * Type of system topology represented by topology groups.
+ */
+typedef enum {
+    UCS_TOPO_GROUPS_TYPE_UNKNOWN,
+    UCS_TOPO_GROUPS_TYPE_VERA_RUBIN
+} ucs_topo_groups_type_t;
+
+
+/**
+ * @ingroup UCS_RESOURCE
+ * Physical GPU represented in a topology group.
+ * WHen MPS MLOParts is enabled, the list contains the uGPUs under the same GPU.
+ * When MPS MLOParts is disabled, the list contains only one device.
+ */
+typedef struct {
+    ucs_sys_device_t devices[UCS_TOPO_MAX_DEVICES_PER_GPU];
+    size_t           num_devices;
+} ucs_topo_gpu_t;
+
+
+/**
+ * @ingroup UCS_RESOURCE
+ * Physical NIC represented in a topology group.
+ */
+typedef struct {
+    ucs_sys_device_t ports[UCS_TOPO_MAX_PORTS_PER_NIC];
+    size_t           num_ports;
+} ucs_topo_nic_t;
+
+
+/**
+ * @ingroup UCS_RESOURCE
+ * Board containing physical NICs represented in a topology group.
+ */
+typedef struct {
+    ucs_topo_nic_t nics[UCS_TOPO_MAX_NICS_PER_BOARD];
+    size_t         num_nics;
+} ucs_topo_nics_board_t;
+
+
+/**
+ * @ingroup UCS_RESOURCE
+ * Group of GPUs, NICs, and NIC boards sharing a topology locality.
+ */
+typedef struct {
+    ucs_numa_node_t       numa_node;
+    ucs_topo_gpu_t        *gpus;
+    size_t                num_gpus;
+    ucs_topo_nics_board_t *nics_boards;
+    size_t                num_nics_boards;
+} ucs_topo_group_t;
+
+
+/**
+ * @ingroup UCS_RESOURCE
+ * Collection of system topology groups.
+ */
+typedef struct {
+    ucs_topo_groups_type_t type;
+    ucs_topo_group_t       *groups;
+    size_t                 num_groups;
+} ucs_topo_groups_t;
 
 
 /**
@@ -497,6 +572,28 @@ int ucs_topo_device_has_sibling(ucs_sys_device_t sys_dev);
  * @return Number of system devices.
  */
 unsigned ucs_topo_num_devices(void);
+
+
+/**
+ * Initialize system topology groups for the current CPU model.
+ *
+ * The caller takes ownership of the returned group data and must release it
+ * with @ref ucs_topo_release_groups.
+ *
+ * @param [out] groups_p  Initialized topology groups.
+ *
+ * @return UCS_OK on success, or an error status if topology group
+ *         initialization failed.
+ */
+ucs_status_t ucs_topo_init_groups(ucs_topo_groups_t *groups_p);
+
+
+/**
+ * Release topology groups returned by @ref ucs_topo_init_groups.
+ *
+ * @param [inout] groups  Topology groups to release and reset.
+ */
+void ucs_topo_release_groups(ucs_topo_groups_t *groups);
 
 
 /**

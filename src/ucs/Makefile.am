@@ -133,6 +133,8 @@ noinst_HEADERS = \
 	sys/module.h \
 	sys/module_int.h \
 	sys/sys.h \
+	sys/topo/base/topo_int.h \
+	sys/topo/vr/vr.h \
 	sys/iovec.h \
 	sys/iovec.inl \
 	sys/ptr_arith.h \
@@ -213,6 +215,7 @@ libucs_la_SOURCES = \
 	sys/lib.c \
 	sys/sock.c \
 	sys/topo/base/topo.c \
+	sys/topo/vr/vr.c \
 	sys/stubs.c \
 	sys/netlink.c \
 	sys/uid.c \
