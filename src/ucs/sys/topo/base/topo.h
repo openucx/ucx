@@ -40,8 +40,8 @@ BEGIN_C_DECLS
 /* Maximal number of NICs per board */
 #define UCS_TOPO_MAX_NICS_PER_BOARD 2
 
-/* Maximal number of uGPUs per physical GPU */
-#define UCS_TOPO_MAX_UGPUS_PER_GPU 2
+/* Maximal number of devices (uGPUs) per physical GPU */
+#define UCS_TOPO_MAX_DEVICES_PER_GPU 2
 
 /* Bus ID string formatting */
 #define UCS_SYS_BUS_ID_FMT "%04x:%02x:%02x.%u"
@@ -104,10 +104,12 @@ typedef enum {
 /**
  * @ingroup UCS_RESOURCE
  * Physical GPU represented in a topology group.
+ * WHen MPS MLOParts is enabled, the list contains the uGPUs under the same GPU.
+ * When MPS MLOParts is disabled, the list contains only one device.
  */
 typedef struct {
-    ucs_sys_device_t ugpus[UCS_TOPO_MAX_UGPUS_PER_GPU];
-    size_t           num_ugpus;
+    ucs_sys_device_t devices[UCS_TOPO_MAX_DEVICES_PER_GPU];
+    size_t           num_devices;
 } ucs_topo_gpu_t;
 
 
