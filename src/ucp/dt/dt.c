@@ -60,6 +60,90 @@ ucs_status_t ucp_dt_mem_info_verify(const char *dt_name, size_t index,
 }
 
 
+/*
+ * Select an RMA lane whose MD accepts the buffer mem_flags, starting the search
+ * from the given lane index. Returns UCP_NULL_LANE if no lane is compatible.
+ */
+static ucp_lane_index_t
+ucp_mem_type_ep_lane_by_flags(ucp_ep_h ep, uint8_t mem_flags, unsigned first)
+{
+    ucp_context_h context          = ep->worker->context;
+    const ucp_ep_config_key_t *key = &ucp_ep_config(ep)->key;
+    const uct_md_attr_v2_t *md_attr;
+    ucp_lane_index_t lane;
+    unsigned i;
+
+    for (i = first; key->rma_lanes[i] != UCP_NULL_LANE; ++i) {
+        lane    = key->rma_lanes[i];
+        md_attr = &context->tl_mds[ucp_ep_md_index(ep, lane)].attr;
+        if (ucs_test_all_flags(mem_flags, md_attr->required_mem_flags)) {
+            return lane;
+        }
+    }
+
+    return UCP_NULL_LANE;
+}
+
+/* Select the mem-type endpoint lane which can access the buffer and register */
+static ucs_status_t
+ucp_mem_type_lane_reg(ucp_worker_h worker, ucp_ep_h ep, void *address,
+                      size_t length, ucs_memory_type_t mem_type,
+                      ucp_lane_index_t *lane_p,
+                      ucp_mtype_pack_context_t *pack_context)
+{
+    ucp_context_h context            = worker->context;
+    const ucp_ep_config_key_t *key   = &ucp_ep_config(ep)->key;
+    ucp_lane_index_t lane            = key->rma_lanes[0];
+    ucp_md_index_t md_index          = ucp_ep_md_index(ep, lane);
+    const uct_md_attr_v2_t *md_attr  = &context->tl_mds[md_index].attr;
+    ucs_memory_info_t cache_info;
+    ucp_memory_info_t mem_info;
+    ucs_status_t status;
+
+    /* The preferred MD accepts any memory, no need to know the buffer flags */
+    if (md_attr->required_mem_flags == 0) {
+        goto out_reg;
+    }
+
+    /* The memory flags may already be known, for example set by a memory hook
+     * on allocation, use them to pick a compatible lane */
+    status = ucs_memtype_cache_lookup(address, length, &cache_info);
+    if ((status == UCS_OK) && ucp_memory_info_is_complete(&cache_info)) {
+        lane = ucp_mem_type_ep_lane_by_flags(ep, cache_info.mem_flags, 0);
+        goto out_reg;
+    }
+
+    /* Unknown memory: attempt the preferred MD instead of querying attributes,
+     * a memory domain such as gdr_copy fails on non-registrable memory */
+    status = ucp_mem_type_reg_buffers(worker, address, length, mem_type,
+                                      md_index, UCT_MD_MEM_FLAG_HIDE_ERRORS,
+                                      pack_context);
+    if (status == UCS_OK) {
+        *lane_p = lane;
+        return UCS_OK;
+    }
+
+    /* Preferred MD rejected the buffer: detect attributes for a fallback lane
+     * (also warms the memtype cache) */
+    /* Coverity wrongly resolves the memory domain deregister function pointer
+     * to 'uct_cuda_ipc_mem_dereg' and considers 'address' as freed */
+    /* coverity[pass_freed_arg] */
+    ucp_memory_detect(context, address, length, &mem_info);
+    lane = ucp_mem_type_ep_lane_by_flags(ep, mem_info.flags, 1);
+
+out_reg:
+    if (lane == UCP_NULL_LANE) {
+        ucs_error("no mem type rma lane can register %s buffer %p length %zu",
+                  ucs_memory_type_names[mem_type], address, length);
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    md_index = ucp_ep_md_index(ep, lane);
+    *lane_p  = lane;
+    return ucp_mem_type_reg_buffers(worker, address, length, mem_type, md_index,
+                                    0, pack_context);
+}
+
 UCS_PROFILE_FUNC_VOID(ucp_mem_type_unpack,
                       (worker, buffer, recv_data, recv_length, mem_type),
                       ucp_worker_h worker, void *buffer, const void *recv_data,
@@ -67,7 +151,6 @@ UCS_PROFILE_FUNC_VOID(ucp_mem_type_unpack,
 {
     ucp_ep_h ep = worker->mem_type_ep[mem_type];
     ucp_lane_index_t lane;
-    unsigned md_index;
     ucs_status_t status;
     ucp_mtype_pack_context_t pack_context;
 
@@ -75,11 +158,8 @@ UCS_PROFILE_FUNC_VOID(ucp_mem_type_unpack,
         return;
     }
 
-    lane     = ucp_ep_config(ep)->key.rma_lanes[0];
-    md_index = ucp_ep_md_index(ep, lane);
-
-    status = ucp_mem_type_reg_buffers(worker, buffer, recv_length, mem_type,
-                                      md_index, &pack_context);
+    status = ucp_mem_type_lane_reg(worker, ep, buffer, recv_length, mem_type,
+                                   &lane, &pack_context);
     if (status != UCS_OK) {
         ucs_fatal("failed to register buffer with mem type domain %s",
                   ucs_memory_type_names[mem_type]);
@@ -102,7 +182,6 @@ UCS_PROFILE_FUNC_VOID(ucp_mem_type_pack,
 {
     ucp_ep_h ep = worker->mem_type_ep[mem_type];
     ucp_lane_index_t lane;
-    ucp_md_index_t md_index;
     ucs_status_t status;
     ucp_mtype_pack_context_t pack_context;
 
@@ -110,11 +189,8 @@ UCS_PROFILE_FUNC_VOID(ucp_mem_type_pack,
         return;
     }
 
-    lane     = ucp_ep_config(ep)->key.rma_lanes[0];
-    md_index = ucp_ep_md_index(ep, lane);
-
-    status = ucp_mem_type_reg_buffers(worker, (void *)src, length, mem_type,
-                                      md_index, &pack_context);
+    status = ucp_mem_type_lane_reg(worker, ep, (void*)src, length, mem_type,
+                                   &lane, &pack_context);
     if (status != UCS_OK) {
         ucs_fatal("failed to register buffer with mem type domain %s",
                   ucs_memory_type_names[mem_type]);
