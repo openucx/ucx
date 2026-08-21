@@ -1363,8 +1363,8 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_token_query, am_short,
 {
     uct_rc_mlx5_tx_token_t tx_token = {};
     uct_rc_mlx5_rx_token_t rx_token = {};
-    uct_rc_mlx5_base_ep_t *e2_ep;
     uint32_t rx_count = 0;
+    uct_rc_mlx5_base_ep_t *e2_ep;
     ucs_status_t status;
 
     ASSERT_UCS_OK(uct_iface_set_am_handler(m_e2->iface(), 0, am_handler,
