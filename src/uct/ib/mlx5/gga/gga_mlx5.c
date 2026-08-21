@@ -729,6 +729,19 @@ uct_gga_mlx5_ep_is_connected(uct_ep_h tl_ep,
            uct_rc_mlx5_base_ep_is_connected(tl_ep, params);
 }
 
+static ucs_status_t uct_gga_mlx5_ep_invalidate(
+        uct_ep_h tl_ep, const uct_ep_invalidate_params_t *params)
+{
+    ucs_status_t status;
+
+    status = uct_ep_invalidate_params_check(tl_ep, params, 0, NULL);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return uct_rc_mlx5_base_ep_invalidate(tl_ep, params);
+}
+
 static uct_rc_iface_ops_t uct_gga_mlx5_iface_ops = {
     .super = {
         .super = {
@@ -736,7 +749,7 @@ static uct_rc_iface_ops_t uct_gga_mlx5_iface_ops = {
             .iface_estimate_perf    = uct_rc_iface_estimate_perf,
             .iface_vfs_refresh      = uct_rc_iface_vfs_refresh,
             .ep_query               = (uct_ep_query_func_t)ucs_empty_function,
-            .ep_invalidate          = uct_rc_mlx5_base_ep_invalidate,
+            .ep_invalidate          = uct_gga_mlx5_ep_invalidate,
             .ep_connect_to_ep_v2    = uct_gga_mlx5_ep_connect_to_ep_v2,
             .iface_is_reachable_v2  = uct_gga_mlx5_iface_is_reachable_v2,
             .ep_is_connected        = uct_gga_mlx5_ep_is_connected,

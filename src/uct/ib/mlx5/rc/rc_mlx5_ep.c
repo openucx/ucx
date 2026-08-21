@@ -13,8 +13,8 @@
 #  include <infiniband/driver.h>
 #endif
 
-#include <uct/ib/mlx5/ib_mlx5_log.h>
 #include <uct/ib/mlx5/ib_mlx5_ext.h>
+#include <uct/ib/mlx5/ib_mlx5_log.h>
 #include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <ucs/arch/cpu.h>
@@ -211,6 +211,7 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
     uct_ib_mlx5_txwq_t *txwq       = &ep->tx.wq;
     size_t total                   = 0;
+    uint32_t num_packets           = 0;
     struct mlx5_wqe_ctrl_seg *ctrl = NULL;
     struct mlx5_wqe_raddr_seg *raddr;
     struct mlx5_wqe_data_seg *dptr;
@@ -288,7 +289,8 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
         curr = UCS_PTR_BYTE_OFFSET(ctrl, MLX5_SEND_WQE_BB);
         curr = uct_ib_mlx5_txwq_wrap_exact(txwq, curr);
         pi++;
-        total += lengths[i];
+        total       += lengths[i];
+        num_packets += uct_rc_mlx5_num_packets(iface, lengths[i]);
     }
 
     res_count         = pi - 1 - txwq->prev_sw_pi;
@@ -299,6 +301,8 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
 
     uct_rc_txqp_posted(&ep->super.txqp, &iface->super, res_count, 1);
     uct_ib_mlx5_txwq_ring_doorbell(txwq, ctrl, txwq->sw_pi, 1);
+
+    uct_rc_mlx5_txwq_add_psn(txwq, num_packets);
 
     uct_rc_txqp_add_send_comp(&iface->super, &ep->super.txqp,
                               uct_rc_ep_send_op_completion_handler, comp, sn,
@@ -730,6 +734,12 @@ ucs_status_t uct_rc_mlx5_base_ep_flush(uct_ep_h tl_ep, unsigned flags,
     int already_canceled = ep->super.flags & UCT_RC_EP_FLAG_FLUSH_CANCEL;
     ucs_status_t status;
 
+    if (ep->flags & UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS) {
+        ucs_diag(
+                "ep %p flushing in invalidated state with disabled completions",
+                ep);
+    }
+
     UCT_CHECK_PARAM(!ucs_test_all_flags(flags, UCT_FLUSH_FLAG_CANCEL |
                                                UCT_FLUSH_FLAG_REMOTE),
                     "flush flags CANCEL and REMOTE are mutually exclusive");
@@ -774,13 +784,72 @@ ucs_status_t uct_rc_mlx5_base_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                       &ep->super.txqp, comp, ep->tx.wq.sig_pi);
 }
 
-ucs_status_t uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
-                                            const uct_ep_invalidate_params_t *params)
+ucs_status_t
+uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
+                               const uct_ep_invalidate_params_t *params)
 {
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
+    uct_ib_mlx5_txwq_t *txwq = &ep->tx.wq;
+    unsigned flags;
+    ucs_status_t status;
 
-    return uct_ib_mlx5_modify_qp_state(&iface->super.super, &ep->tx.wq.super,
-                                       IBV_QPS_ERR);
+    status = uct_ep_invalidate_params_check(
+            tl_ep, params, UCT_EP_INVALIDATE_FLAG_NO_COMPLETIONS, &flags);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (flags & UCT_EP_INVALIDATE_FLAG_NO_COMPLETIONS) {
+        if (ep->flags & UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS) {
+            ucs_error("ep %p: completions are already disabled", ep);
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        if (UCT_RC_MLX5_TM_ENABLED(iface)) {
+            return UCS_ERR_UNSUPPORTED;
+        }
+    }
+
+    status = uct_ib_mlx5_modify_qp_state(&iface->super.super, &txwq->super,
+                                         IBV_QPS_ERR);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (flags & UCT_EP_INVALIDATE_FLAG_NO_COMPLETIONS) {
+        txwq->ft_ci      = txwq->prev_sw_pi -
+                           (txwq->bb_max -
+                            uct_rc_txqp_available(&ep->super.txqp));
+        ep->flags       |= UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS;
+
+        ucs_debug("ep %p disable completions WQE range (%u, %u) "
+                  "next_first_psn %u",
+                  ep, txwq->ft_ci, txwq->sw_pi, txwq->next_first_psn);
+    }
+
+    return UCS_OK;
+}
+
+ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
+        uct_ep_h tl_ep, const uct_ep_outstanding_purge_params_t *params)
+{
+    uct_rc_mlx5_base_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_base_ep_t);
+    uct_ib_mlx5_txwq_t *txwq  = &ep->tx.wq;
+    uct_rc_txqp_t *txqp       = &ep->super.txqp;
+    int16_t prev_available;
+    uint16_t available;
+    ucs_status_t status;
+
+    status = uct_ib_mlx5_ext_ep_outstanding_purge(tl_ep, params);
+
+    prev_available = uct_rc_txqp_available(txqp);
+    available      = txwq->bb_max - (txwq->prev_sw_pi - txwq->ft_ci);
+    if (available > prev_available) {
+        uct_rc_txqp_available_add(txqp, available - prev_available);
+    }
+
+    ucs_assert(uct_rc_txqp_available(txqp) <= txwq->bb_max);
+    return status;
 }
 
 ucs_status_t uct_rc_mlx5_base_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
@@ -1219,6 +1288,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_base_ep_t, const uct_ep_params_t *params)
     }
 
     self->tx.wq.bb_max = ucs_min(self->tx.wq.bb_max, iface->tx.bb_max);
+    self->flags        = 0;
     uct_rc_txqp_available_set(&self->super.txqp, self->tx.wq.bb_max);
     uct_rc_mlx5_iface_common_prepost_recvs(iface);
     return UCS_OK;

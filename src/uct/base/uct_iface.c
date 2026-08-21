@@ -835,6 +835,38 @@ ucs_status_t uct_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr)
     return iface->internal_ops->ep_query(ep, ep_attr);
 }
 
+ucs_status_t uct_ep_invalidate_params_check(
+        uct_ep_h ep, const uct_ep_invalidate_params_t *params,
+        unsigned supported_flags, unsigned *flags_p)
+{
+    unsigned flags = 0;
+
+    if ((params != NULL) &&
+        (params->field_mask & UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS)) {
+        flags = params->flags;
+    }
+
+    ucs_assert((supported_flags &
+                ~UCT_EP_INVALIDATE_FLAG_NO_COMPLETIONS) == 0);
+
+    if (flags & ~UCT_EP_INVALIDATE_FLAG_NO_COMPLETIONS) {
+        ucs_error("ep %p: invalid invalidate flags 0x%x", ep, flags);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (flags & ~supported_flags) {
+        ucs_debug("ep %p: unsupported invalidate flags 0x%x", ep,
+                  flags & ~supported_flags);
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    if (flags_p != NULL) {
+        *flags_p = flags;
+    }
+
+    return UCS_OK;
+}
+
 ucs_status_t uct_ep_invalidate(uct_ep_h ep,
                                const uct_ep_invalidate_params_t *params)
 {
