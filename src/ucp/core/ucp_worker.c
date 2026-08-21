@@ -800,6 +800,10 @@ static uint8_t ucp_worker_iface_port_speed(const ucp_worker_iface_t *wiface)
     ucs_status_t status;
     double ratio;
 
+    if (wiface->attr.bandwidth.shared == 0.0) {
+        return 0;
+    }
+
     perf_attr.field_mask = UCT_PERF_ATTR_FIELD_BANDWIDTH;
     status = uct_iface_estimate_perf(wiface->iface, &perf_attr);
     if (status != UCS_OK) {
@@ -872,7 +876,9 @@ static void ucp_worker_iface_async_cb_event(void *arg, unsigned flags)
     ucs_trace_func("async_cb for iface=%p flags=%u", wiface->iface, flags);
 
     if (flags & UCT_EVENT_SPEED_CHANGE) {
+        UCS_ASYNC_BLOCK(&wiface->worker->async);
         ucp_worker_iface_handle_port_speed_event(wiface);
+        UCS_ASYNC_UNBLOCK(&wiface->worker->async);
         return;
     }
 

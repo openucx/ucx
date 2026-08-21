@@ -16,13 +16,12 @@ jobs:
 
       - bash: |
           set -eE
-          source ./buildlib/az-helpers.sh
           source ./buildlib/tools/codestyle.sh
 
-          BASE_SOURCEVERSION=$(azure_pr_base_sha)
-          range="$BASE_SOURCEVERSION..$(Build.SourceVersion)"
+          base_revision=$(git rev-parse "$(Build.SourceVersion)^1")
+          head_revision=$(git rev-parse "$(Build.SourceVersion)^2")
 
-          codestyle_check_commit_title "$range"
+          codestyle_check_commit_title "$base_revision..$head_revision"
           if [[ $? -ne 0 ]]
           then
               url="https://github.com/openucx/ucx/wiki/Guidance-for-contributors#general-guidelines"
@@ -50,11 +49,10 @@ jobs:
       - bash: |
           source ./buildlib/az-helpers.sh
           set -x
-          git log -1 HEAD
-          git log -1 HEAD^
-          BASE_SOURCEVERSION=$(azure_pr_base_sha)
-          echo "Checking code format on diff ${BASE_SOURCEVERSION}..${BUILD_SOURCEVERSION}"
-          git-clang-format --diff ${BASE_SOURCEVERSION} ${BUILD_SOURCEVERSION} > format.patch
+          base_revision=$(git rev-parse "${BUILD_SOURCEVERSION}^1")
+          head_revision=$(git rev-parse "${BUILD_SOURCEVERSION}^2")
+          echo "Checking code format on diff ${base_revision}..${head_revision}"
+          git-clang-format --diff ${base_revision} ${head_revision} > format.patch
           echo "Generated patch file:"
           cat format.patch
           if [ "`cat format.patch`" = "no modified files to format" ]; then
@@ -85,13 +83,11 @@ jobs:
 
       - bash: |
           set -eEx
-          source ./buildlib/az-helpers.sh
 
-          BASE_SOURCEVERSION=$(azure_pr_base_sha)
-          range="$BASE_SOURCEVERSION..$(Build.SourceVersion)"
+          base_revision=$(git rev-parse "$(Build.SourceVersion)^1")
+          head_revision=$(git rev-parse "$(Build.SourceVersion)^2")
 
-          echo "Looking for missing AUTHORS on commit range ${range}"
-          ./contrib/authors_update.sh "$range"
+          ./contrib/authors_update.sh "$base_revision..$head_revision"
           git diff --exit-code
         displayName: AUTHORS file check
 

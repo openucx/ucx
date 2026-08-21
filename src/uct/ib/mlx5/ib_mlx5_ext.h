@@ -60,28 +60,28 @@ typedef struct uct_ib_mlx5_ext_iface_query_attr {
     } cap;
 
     /** TX token length in bytes. */
-    size_t tx_token_len;
+    size_t     tx_token_len;
 
     /** RX token length in bytes. */
-    size_t rx_token_len;
+    size_t     rx_token_len;
 
     /** 
-      * TX token input buffer.
-      * Valid when @ref UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_TX_TOKEN is set.
-      * Caller sets this to a buffer of @ref tx_token_len bytes containing
-      * the TX token received from the sender.
-      * @ref UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_RX_TOKEN must be set together.
-      */
-    void   *tx_token;
+     * TX token input buffer.
+     * Valid when @ref UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_TX_TOKEN is set.
+     * Caller sets this to a buffer of @ref tx_token_len bytes containing
+     * the TX token received from the sender.
+     * @ref UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_RX_TOKEN must be set together.
+     */
+    const void *tx_token;
 
     /**
-      * RX token output buffer.
-      * Valid when @ref UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_RX_TOKEN is set.
-      * Caller sets this to a pre-allocated buffer of @ref rx_token_len
-      * bytes; callee fills it with RX token.
-      * @ref UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_TX_TOKEN must be set together.
-      */
-    void   *rx_token;
+     * RX token output buffer.
+     * Valid when @ref UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_RX_TOKEN is set.
+     * Caller sets this to a pre-allocated buffer of @ref rx_token_len
+     * bytes; callee fills it with RX token.
+     * @ref UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_TX_TOKEN must be set together.
+     */
+    void       *rx_token;
 } uct_ib_mlx5_ext_iface_query_attr_t;
 
 /**
@@ -165,6 +165,13 @@ typedef struct uct_ib_mlx5_ext_ops {
 void uct_ib_mlx5_ext_cleanup(void);
 
 /**
+ * @brief Unregister the first external plugin matching a name.
+ *
+ * @param [in] name Plugin name.
+ */
+void uct_ib_mlx5_ext_unregister(const char *name);
+
+/**
  * @brief Register an external plugin.
  *
  * @param [in] ops Plugin operations.
@@ -192,6 +199,9 @@ ucs_status_t uct_ib_mlx5_ext_ep_put_sgl_zcopy(uct_ep_h ep,
                                               const size_t *strides,
                                               size_t count,
                                               uct_completion_t *comp);
+
+ucs_status_t uct_ib_mlx5_ext_ep_outstanding_purge(
+        uct_ep_h ep, const uct_ep_outstanding_purge_params_t *params);
 
 END_C_DECLS
 

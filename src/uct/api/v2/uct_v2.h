@@ -1155,14 +1155,17 @@ enum uct_iface_attr_field {
     /** Enables @ref uct_iface_attr_v2_t::max_put_sgl_zcopy_count */
     UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT = UCS_BIT(0),
 
+    /** Enables @ref uct_iface_attr_v2_t::max_get_sgl_zcopy_count */
+    UCT_IFACE_ATTR_FIELD_MAX_GET_SGL_ZCOPY_COUNT = UCS_BIT(1),
+
     /** Enables @ref uct_iface_attr_v2_t::cap */
-    UCT_IFACE_ATTR_FIELD_CAP_FLAGS               = UCS_BIT(1),
+    UCT_IFACE_ATTR_FIELD_CAP_FLAGS               = UCS_BIT(2),
 
     /** Enables @ref uct_iface_attr_v2_t::tx_token_length. */
-    UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH         = UCS_BIT(2),
+    UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH         = UCS_BIT(3),
 
     /** Enables @ref uct_iface_attr_v2_t::rx_token_length. */
-    UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH         = UCS_BIT(3),
+    UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH         = UCS_BIT(4),
 
     /**
      * Enables the RX token derivation path.
@@ -1170,7 +1173,7 @@ enum uct_iface_attr_field {
      * When both set, @ref uct_iface_attr_v2_t::tx_token is input (from sender),
      * and @ref uct_iface_attr_v2_t::rx_token is output (derived by receiver).
      */
-    UCT_IFACE_ATTR_FIELD_TX_TOKEN                = UCS_BIT(4),
+    UCT_IFACE_ATTR_FIELD_TX_TOKEN                = UCS_BIT(5),
 
     /**
      * Enables the RX token derivation path.
@@ -1178,7 +1181,7 @@ enum uct_iface_attr_field {
      * when both set, @ref uct_iface_attr_v2_t::tx_token is input (from sender),
      * and @ref uct_iface_attr_v2_t::rx_token is output (derived by receiver).
      */
-    UCT_IFACE_ATTR_FIELD_RX_TOKEN                = UCS_BIT(5)
+    UCT_IFACE_ATTR_FIELD_RX_TOKEN                = UCS_BIT(6)
 };
 
 
@@ -1195,7 +1198,14 @@ enum uct_iface_attr_field {
  */
         /* PUT capabilities */
 #define UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY       UCS_BIT(0)  /**< Zero-copy SGL put */
-#define UCT_IFACE_FLAG_V2_QUERY_TOKEN         UCS_BIT(1)  /**< Interface supports token query */
+        /* GET capabilities */
+#define UCT_IFACE_FLAG_V2_GET_SGL_ZCOPY       UCS_BIT(1)  /**< Zero-copy SGL get */
+        /* Interface capabilities */
+#define UCT_IFACE_FLAG_V2_QUERY_TOKEN         UCS_BIT(2)  /**< @ref uct_iface_query_v2
+                                                               and @ref uct_ep_query
+                                                               support token query, and
+                                                               @ref uct_ep_outstanding_purge
+                                                               is supported. */
 /**
  * @}
  */
@@ -1217,6 +1227,12 @@ typedef struct {
      * @anchor uct_iface_attr_v2_max_put_sgl_zcopy_count
      */
     size_t   max_put_sgl_zcopy_count;
+
+    /**
+     * Maximal number of elements in @ref uct_ep_get_sgl_zcopy.
+     * @anchor uct_iface_attr_v2_max_get_sgl_zcopy_count
+     */
+    size_t   max_get_sgl_zcopy_count;
 
     /** Interface capabilities (v2 flags) */
     struct {
@@ -1478,6 +1494,49 @@ uct_ep_put_sgl_zcopy(uct_ep_h ep, void * const *buffers,
 
 
 /**
+ * @ingroup UCT_RMA
+ * @brief Scatter-gather list (SGL) zero-copy get: read multiple remote
+ *        addresses into multiple local buffers while avoiding local memory
+ *        copy.
+ *
+ * Each element @a i transfers @a lengths[i] bytes from remote address
+ * @a remote_addrs[i] (with remote key @a rkeys[i]) to local buffer
+ * @a buffers[i] (with memory handle @a memhs[i]).
+ *
+ * @param [in] ep           Destination endpoint handle.
+ * @param [in] buffers      Array of local buffer pointers.
+ * @param [in] lengths      Array of transfer lengths in bytes.
+ * @param [in] memhs        Array of local memory handles, obtained from
+ *                          @ref ::uct_md_mem_reg.
+ * @param [in] remote_addrs Array of remote addresses.
+ * @param [in] rkeys        Array of remote keys, obtained from
+ *                          @ref ::uct_rkey_unpack.
+ * @param [in] counts       Array of repetition counts per element, or NULL.
+ *                          When provided, element @a i represents @a counts[i]
+ *                          blocks of @a lengths[i] bytes, each separated by
+ *                          @a strides[i] bytes, starting at @a buffers[i] /
+ *                          @a remote_addrs[i]. When NULL, each element is
+ *                          transferred once (equivalent to count=1, stride=0).
+ * @param [in] strides      Array of strides in bytes per element, or NULL.
+ * @param [in] count        Number of elements in the arrays. Must not exceed
+ *                          @ref uct_iface_attr_v2_max_get_sgl_zcopy_count
+ *                          "uct_iface_attr_v2_t::max_get_sgl_zcopy_count".
+ * @param [in] comp         Completion handle as defined by
+ *                          @ref ::uct_completion_t.
+ *
+ * @return UCS_INPROGRESS   Some communication operations are still in progress.
+ *                          If non-NULL @a comp is provided, it will be updated
+ *                          upon completion of these operations.
+ */
+ucs_status_t
+uct_ep_get_sgl_zcopy(uct_ep_h ep, void * const *buffers,
+                     const size_t *lengths, uct_mem_h const *memhs,
+                     const uint64_t *remote_addrs, uct_rkey_t const *rkeys,
+                     const size_t *counts, const size_t *strides,
+                     size_t count, uct_completion_t *comp);
+
+
+/**
  * @ingroup UCT_MD
  *
  * @brief This routine compares two remote keys.
@@ -1531,15 +1590,28 @@ ucs_status_t uct_rkey_unpack_v2(uct_component_h component,
  * @ingroup UCT_MD
  * @brief Pack a memh and rkey into a device memory element structure.
  *
- * @param [in]  md           Memory domain.
- * @param [in]  memh         Memory handle to pack (can be NULL).
- * @param [in]  rkey         Remote key to pack (can be UCT_INVALID_RKEY).
- * @param [out] mem_elem     Filled with the packed memh and rkey.
+ * @param [in]  md                Memory domain.
+ * @param [in]  memh              Memory handle to pack (can be NULL).
+ * @param [in]  rkey              Remote key to pack (can be UCT_INVALID_RKEY).
+ * @param [out] mem_elem          Filled with the packed memh and rkey.
+ * @param [out] release_handle_p  Handle for releasing resources allocated
+ *                                during packing.
  *
  * @return UCS_OK on success or error code in case of failure.
  */
 ucs_status_t uct_md_mem_elem_pack(uct_md_h md, uct_mem_h memh, uct_rkey_t rkey,
-                                  uct_device_mem_elem_t *mem_elem);
+                                  uct_device_mem_elem_t *mem_elem,
+                                  void **release_handle_p);
+
+
+/**
+ * @ingroup UCT_MD
+ * @brief Release resources allocated by @ref uct_md_mem_elem_pack.
+ *
+ * @param [in] md              Memory domain.
+ * @param [in] release_handle  Handle for releasing resources.
+ */
+void uct_md_mem_elem_release(uct_md_h md, void *release_handle);
 
 
 /**
@@ -1886,6 +1958,18 @@ typedef struct {
      */
     void                                *arg;
 } uct_ep_outstanding_purge_params_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Purge outstanding (undelivered) operations from an endpoint.
+ *
+ * @ref uct_ep_outstanding_purge_params_t::cb is invoked once for each
+ * undelivered outstanding operation, in the original endpoint posting order.
+ */
+ucs_status_t
+uct_ep_outstanding_purge(uct_ep_h ep,
+                         const uct_ep_outstanding_purge_params_t *params);
 
 
 END_C_DECLS
