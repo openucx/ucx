@@ -14,9 +14,12 @@
 #include <uct/cuda/base/cuda_iface.h>
 #include <uct/cuda/base/cuda_md.h>
 #include <ucs/type/class.h>
+#include <ucs/type/init_once.h>
 #include <ucs/sys/string.h>
 #include <ucs/async/eventfd.h>
 #include <ucs/arch/cpu.h>
+
+#include <unistd.h>
 
 
 #define UCT_CUDA_COPY_IFACE_OVERHEAD 0
@@ -54,6 +57,19 @@ static ucs_config_field_t uct_cuda_copy_iface_config_table[] = {
 
     {NULL}
 };
+
+
+static uct_cuda_copy_iface_addr_t uct_cuda_copy_iface_get_uuid(void)
+{
+    static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
+    static uct_cuda_copy_iface_addr_t uuid;
+
+    UCS_INIT_ONCE(&init_once) {
+        uuid = ucs_generate_uuid((uintptr_t)getpid());
+    }
+
+    return uuid;
+}
 
 /* Forward declaration for the delete function */
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_copy_iface_t)(uct_iface_t*);
@@ -338,7 +354,7 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
         return status;
     }
 
-    self->id                           = ucs_generate_uuid((uintptr_t)self);
+    self->id                           = uct_cuda_copy_iface_get_uuid();
     self->config.bw                    = config->bw;
     self->super.ops                    = &uct_cuda_iface_ops;
     self->super.config.max_events      = config->max_cuda_events;
